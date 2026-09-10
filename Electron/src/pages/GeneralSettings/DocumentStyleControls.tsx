@@ -109,6 +109,17 @@ export function DocumentStyleControls({
         />
       </div>
 
+      {/* A5 TUZAĞI (2026-09-10 saha) — Chromium `@page size: A5`i A4 kâğıda
+          BÜYÜTMEZ, olduğu gibi ortalar: yazı alanı 130mm, A4'ün 210mm'sinde %62
+          eder ve iki yandan ~40mm boşluk kalır. Sahada tam bu yaşandı ve
+          "yazıcı bozuldu" diye geldi. Uyarı yalnız A5 seçiliyken çizilir. */}
+      {style.pageSize === "A5" && (
+        <p className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-700 dark:text-amber-400">
+          Yazıcınızda <b>A5 kağıt yoksa</b> çıktı A4'ün ortasına küçük basılır — kâğıdın
+          yaklaşık %60'ı kullanılır. A4 kağıda basıyorsanız sayfa boyutunu A4 bırakın.
+        </p>
+      )}
+
       {/* Kenar boşlukları KENAR KENAR — eskiden tek alan vardı ve dördüne aynı
           değeri yazıyordu, yani "üstten şu kadar, alttan bu kadar" denemiyordu
           (saha isteği). Backend `sanitizeDocStyleConfig` zaten kenar bazlıydı. */}

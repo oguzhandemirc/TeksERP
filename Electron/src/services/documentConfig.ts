@@ -208,11 +208,8 @@ export interface DocSectionDef {
    *  gösterirken renderer'ı basmaya devam ettirir (ya da tersi — panel "açık" der,
    *  belge boş çıkar).
    *
-   *  BUGÜN HİÇBİR BÖLÜM KULLANMIYOR (parti no 2026-08-05'te varsayılan AÇIK'a
-   *  çevrildi). Alan yine de duruyor, çünkü asıl değeri `resolveDocConfig`'teki
-   *  düzeltmede: orası bölümleri koşulsuz "kayıt yoksa AÇIK" diye çözüyordu, yani
-   *  opt-in bir bölüm YAZILAMIYORDU. Kolon tarafındaki ikizi (`sackNote`) aktif
-   *  kullanımda — kavram spekülatif değil. */
+   *  Kullanan: sevk irsaliyesi `listHeader` (kimlik şeridi). Kolon tarafındaki
+   *  ikizi `sackNote`/`tag`. */
   defaultHidden?: boolean;
 }
 
@@ -661,6 +658,16 @@ export const DOC_DEFS: DocDef[] = [
       { key: "urun", label: "Ürün listesi tablosu" },
       { key: "cuval", label: "Çuval listesi tablosu" },
       { key: "ceki", label: "Çeki listesi tablosu" },
+      // KİMLİK ŞERİDİ (2026-09-10 saha) — her liste kendi sayfasından başladığı
+      // için 2. ve 3. sayfa antetsiz kalıyordu; şerit onlara kimlik verir.
+      // ⚠️ `defaultHidden` LOAD-BEARING: `sections` bir BLOCKLIST'tir, işaretsiz
+      // bırakmak bugüne kadar donmuş HER irsaliyenin yeniden baskısını sormadan
+      // değiştirirdi. Renderer karşılığı `cfg.sections?.listHeader === true`.
+      {
+        key: "listHeader",
+        label: "Liste sayfalarında kimlik şeridi (firma · irsaliye no · tarih)",
+        defaultHidden: true,
+      },
     ],
     tables: [
       {

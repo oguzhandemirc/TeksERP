@@ -92,6 +92,10 @@ const SECTION_GROUP: Record<string, Record<string, DocFieldGroup>> = {
     dyehouseNote: "boxes",
     gridWidth: "grid",
   },
+  // Kimlik şeridi tabloların thead'inde yaşıyor → satırı TABLOLAR grubunda
+  // listelenmeli; eşleşmemiş bölüm dalının varsayılanı `header` ve yazılmazsa
+  // ayar ilgisiz biçimde başlık bandının altında çıkardı (`gridWidth` emsali).
+  shipmentDispatch: { listHeader: "table" },
   fasonDirectShip: { directShipInfo: "boxes" },
   fasonKabul: { appliedInfo: "boxes" },
   iadeIrsaliyesi: { reason: "boxes" },

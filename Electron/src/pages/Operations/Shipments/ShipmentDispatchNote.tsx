@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Printer, Undo2 } from "lucide-react";
 import {
@@ -10,6 +10,11 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { printHtmlString } from "@/lib/print";
+import {
+  PrintPageSizeToggle,
+  readDocPageSize,
+  type DocPageSize,
+} from "@/components/print/PrintPageSizeToggle";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { DocVersionBar } from "@/components/print/DocVersionBar";
@@ -80,6 +85,11 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange, returns }
   // Hiçbiri Belge Kişiselleştirme ayarına ya da donmuş snapshot'a YAZILMAZ ve yeni
   // belge versiyonu doğurmaz; diyalog kapanınca sıfırlanır.
   const [printOpts, setPrintOpts] = useState<DispatchPrintOpts>(DEFAULT_DISPATCH_PRINT_OPTS);
+  // Tek seferlik kâğıt boyu — `undefined` = belgenin kendi (donmuş) boyutu.
+  // Sayfa boyutu freeze anında snapshot'a donduğu için ayar sonradan düzeltilse
+  // bile eski irsaliyeler eski boyutta basılırdı; bu seçici donmuş katmana HİÇ
+  // dokunmadan o baskıyı doğru kâğıda çıkarır (2026-09-10 saha).
+  const [pageSize, setPageSize] = useState<DocPageSize | undefined>(undefined);
   const { sections, merge, rowNotes, rowTags } = printOpts;
   // Üçü de seçiliyse "seçim yok" demektir → backend kalıcı ayarı uygular.
   const sectionParam = sections.length === DISPATCH_LISTS.length ? undefined : sections;
@@ -115,6 +125,7 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange, returns }
       rowTags,
       sections.join(","),
       merge,
+      pageSize ?? "doc",
     ],
     queryFn: () =>
       selectedVersion != null
@@ -124,6 +135,7 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange, returns }
             rowTags,
             sections: sectionParam,
             merge,
+            pageSize,
           })
         : printedDocumentService.getHtml(DOC_TYPE, shipmentId!, undefined, {
             draft: true,
@@ -132,11 +144,28 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange, returns }
             rowTags,
             sections: sectionParam,
             merge,
+            pageSize,
           }),
     enabled: open && Boolean(shipmentId),
     staleTime: 0,
   });
   const html = htmlQuery.data ?? null;
+
+  /**
+   * Belgenin KENDİ boyutu — "ezmesiz" düğmenin hangisi olduğunu belirler.
+   * ⚠️ YALNIZ ezme YOKKEN okunur: ezmeli HTML'in `@page`i EZMEYİ yansıtır ve
+   * onu belgenin boyutu sanmak düğmeyi kilitlerdi (dönüş yolu kalmaz).
+   */
+  const [docPageSize, setDocPageSize] = useState<DocPageSize | undefined>(undefined);
+  useEffect(() => {
+    if (pageSize) return;
+    const read = readDocPageSize(html);
+    if (read) setDocPageSize(read);
+  }, [html, pageSize]);
+  useEffect(() => {
+    setPageSize(undefined);
+    setDocPageSize(undefined);
+  }, [shipmentId]);
 
   const shownMeta =
     selectedVersion != null
@@ -204,6 +233,15 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange, returns }
                 Listeler aynı sayfada akıyor
               </span>
             )}
+            {/* Kâğıt boyu diğer tek-seferlik seçeneklerin YANINDA duruyor —
+                hepsi aynı rejimde (kalıcı ayara ve donmuş belgeye yazılmaz). */}
+            <PrintPageSizeToggle
+              value={pageSize}
+              onChange={setPageSize}
+              docPageSize={docPageSize}
+              disabled={!html || htmlQuery.isFetching}
+              label="Kâğıt:"
+            />
           </div>
         )}
 

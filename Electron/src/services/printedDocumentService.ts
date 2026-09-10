@@ -143,6 +143,9 @@ export const printedDocumentService = {
       sections?: string[];
       /** Listeleri aynı sayfada akıt. Varsayılan: her liste kendi sayfasında. */
       merge?: boolean;
+      /** Tek seferlik kâğıt boyu — belgenin donmuş `style.pageSize`ını EZER.
+       *  `undefined` = belgenin kendi boyutu (parametre hiç gönderilmez). */
+      pageSize?: "A4" | "A5";
     },
   ): Promise<string> =>
     apiClient
@@ -163,6 +166,9 @@ export const printedDocumentService = {
           // Tek seferlik liste seçimi / sayfa birleştirme — ikisi de persist EDİLMEZ.
           ...(opts?.sections?.length ? { sections: opts.sections.join(",") } : {}),
           ...(opts?.merge ? { merge: 1 } : {}),
+          // Tek seferlik kâğıt boyu. Backend `withPageSize` snapshot'ın KOPYASINI
+          // kurar — kenar boşluğu ve yazı ölçeği korunur, hiçbir yere yazılmaz.
+          ...(opts?.pageSize ? { pageSize: opts.pageSize } : {}),
         },
         responseType: "text",
         headers: { Accept: "text/html" },

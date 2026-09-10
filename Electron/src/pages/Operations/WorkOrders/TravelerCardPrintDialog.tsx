@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DocVersionHistory } from "@/components/print/DocVersionBar";
 import { printHtmlString } from "@/lib/print";
+import { PrintPageSizeToggle, readDocPageSize } from "@/components/print/PrintPageSizeToggle";
 import { workOrderService } from "./service";
 import type { WorkOrder, TravelerCard } from "./types";
 
@@ -79,8 +80,7 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
   const html = htmlQuery.data ?? null;
   // Kartın kendi (donmuş) boyutu — segmentte hangi düğmenin "varsayılan" olduğunu
   // göstermek için HTML'in @page kuralından okunur; ayrı bir istek açmaya değmez.
-  const cardPageSize = /@page \{ size: (A4|A5)/.exec(html ?? "")?.[1] as "A4" | "A5" | undefined;
-  const effectiveSize = pageSize ?? cardPageSize;
+  const cardPageSize = readDocPageSize(html);
 
   const handleRefresh = () => {
     void cardQuery.refetch();
@@ -218,27 +218,12 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
 
         <DialogFooter className="sm:justify-between">
           {/* Tek seferlik sayfa boyutu — kalıcı ayarı DEĞİŞTİRMEZ (etiket bunu söyler). */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Bu baskı için:</span>
-            <div className="inline-flex overflow-hidden rounded-md border">
-              {(["A5", "A4"] as const).map((sz) => (
-                <button
-                  key={sz}
-                  type="button"
-                  onClick={() => setPageSize(sz === cardPageSize ? undefined : sz)}
-                  disabled={!html}
-                  className={
-                    "px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50 " +
-                    (effectiveSize === sz
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background hover:bg-muted")
-                  }
-                >
-                  {sz}
-                </button>
-              ))}
-            </div>
-          </div>
+          <PrintPageSizeToggle
+            value={pageSize}
+            onChange={setPageSize}
+            docPageSize={cardPageSize}
+            disabled={!html}
+          />
           <div className="flex gap-2">
           {activeCard && (
             <DocVersionHistory

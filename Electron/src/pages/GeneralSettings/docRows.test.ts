@@ -133,6 +133,36 @@ describe("görünürlük — bölüm (blocklist)", () => {
   });
 });
 
+// Kimlik şeridi, `defaultHidden` taşıyan İLK bölüm (2026-09-10). Bölümlerde
+// allowlist dalı bugüne kadar hiç kullanılmamıştı — bu blok onu da ölçüyor.
+describe("görünürlük — bölüm (ALLOWLIST, defaultHidden)", () => {
+  const listHeaderRow = () => rowById(SEVK, "s:listHeader");
+
+  it("panel tarafı opt-in işaretli (renderer `=== true` okuyor)", () => {
+    expect(listHeaderRow().sectionOptIn).toBe(true);
+  });
+  it("kayıt yoksa KAPALI sayılır — blocklist'in tersi", () => {
+    expect(read("shipmentDispatch", {}, listHeaderRow()).visible).toBe(false);
+  });
+  it("`false` yazılıysa da kapalı", () => {
+    const cfg: DocumentConfig = { sections: { listHeader: false } };
+    expect(read("shipmentDispatch", cfg, listHeaderRow()).visible).toBe(false);
+  });
+  it("yalnız `true` açar", () => {
+    const cfg: DocumentConfig = { sections: { listHeader: true } };
+    expect(read("shipmentDispatch", cfg, listHeaderRow()).visible).toBe(true);
+  });
+  it("açınca sections'a true yazılır", () => {
+    const out = write("shipmentDispatch", {}, listHeaderRow(), { visible: true });
+    expect(out.sections?.listHeader).toBe(true);
+  });
+  it("satır TABLOLAR grubunda listeleniyor (şerit tabloların içinde yaşıyor)", () => {
+    const groups = buildDocRowGroups(SEVK);
+    const g = groups.find((x) => x.rows.some((r) => r.id === "s:listHeader"));
+    expect(g?.key).toBe("table");
+  });
+});
+
 describe("görünürlük — kolon (blocklist ↔ allowlist)", () => {
   const noteCol = () => {
     const r = allRows(SEVK).find((x) => x.column?.table === "cuval" && x.column.defaultHidden);

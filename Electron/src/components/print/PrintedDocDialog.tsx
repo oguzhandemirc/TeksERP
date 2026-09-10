@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MessageSquareText, Printer, Tag } from "lucide-react";
 import {
@@ -17,6 +17,11 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { DocVersionBar } from "@/components/print/DocVersionBar";
 import { PrintNoteField } from "@/components/print/PrintNoteField";
 import { PdfSaveButton } from "@/components/print/PdfSaveButton";
+import {
+  PrintPageSizeToggle,
+  readDocPageSize,
+  type DocPageSize,
+} from "@/components/print/PrintPageSizeToggle";
 import {
   printedDocumentService,
   type PrintedDocType,
@@ -66,6 +71,12 @@ export function PrintedDocDialog({
   // ⚠️ `rowNotes` ile birleştirilmez: iz iç takip işaretidir ve bu belge MÜŞTERİYE
   // gider; tek kutucuk "notu bas" diyene sessizce izleri de bastırırdı.
   const [rowTags, setRowTags] = useState(false);
+  // Tek seferlik kâğıt boyu — `undefined` = belgenin kendi (donmuş) boyutu.
+  // Sayfa boyutu freeze anında snapshot'a donduğu için, ayar sonradan
+  // düzeltilse bile eski belgeler eski boyutta basılırdı; bu seçici donmuş
+  // katmana HİÇ dokunmadan o baskıyı doğru kâğıda çıkarır (2026-09-10 saha:
+  // A5 ayarı A4 kâğıda küçük basıyordu).
+  const [pageSize, setPageSize] = useState<DocPageSize | undefined>(undefined);
   const docDef = DOC_DEFS.find((d) => d.key === DOC_TYPE_TO_KEY[docType]);
   const supportsRowNotes = docDef?.supportsRowNotes ?? false;
   const supportsRowTags = docDef?.supportsRowTags ?? false;
@@ -86,15 +97,36 @@ export function PrintedDocDialog({
   });
 
   const htmlQuery = useQuery({
-    queryKey: ["printed-doc-html", docType, sourceId, selectedVersion, currentTemplate, debouncedNote, rowNotes, rowTags],
+    queryKey: ["printed-doc-html", docType, sourceId, selectedVersion, currentTemplate, debouncedNote, rowNotes, rowTags, pageSize ?? "doc"],
     queryFn: () =>
       selectedVersion != null
-        ? printedDocumentService.getHtml(docType, sourceId!, selectedVersion, { currentTemplate, printNote: debouncedNote, rowNotes, rowTags })
-        : printedDocumentService.getHtml(docType, sourceId!, undefined, { draft: allowDraft, currentTemplate, printNote: debouncedNote, rowNotes, rowTags }),
+        ? printedDocumentService.getHtml(docType, sourceId!, selectedVersion, { currentTemplate, printNote: debouncedNote, rowNotes, rowTags, pageSize })
+        : printedDocumentService.getHtml(docType, sourceId!, undefined, { draft: allowDraft, currentTemplate, printNote: debouncedNote, rowNotes, rowTags, pageSize }),
     enabled: open && Boolean(sourceId),
     staleTime: 0,
   });
   const html = htmlQuery.data ?? null;
+
+  /**
+   * Belgenin KENDİ (donmuş/ayarlı) boyutu — "ezmesiz" düğmenin hangisi olduğunu
+   * belirler.
+   *
+   * ⚠️ YALNIZ ezme YOKKEN okunur ve akılda tutulur: ezmeli HTML'in `@page`
+   * kuralı EZMEYİ yansıtır, onu belgenin boyutu sanmak düğmeyi kilitlerdi
+   * (A5 belge → A4 seç → A4 "kendi boyutu" olur → A5'e dönüş yolu kalmaz).
+   */
+  const [docPageSize, setDocPageSize] = useState<DocPageSize | undefined>(undefined);
+  useEffect(() => {
+    if (pageSize) return;
+    const read = readDocPageSize(html);
+    if (read) setDocPageSize(read);
+  }, [html, pageSize]);
+  // Başka bir belgeye geçildiğinde ezme de okunan boyut da sıfırlanır — aksi
+  // hâlde A5 belgede seçilen A4, sonraki belgeye sessizce taşınırdı.
+  useEffect(() => {
+    setPageSize(undefined);
+    setDocPageSize(undefined);
+  }, [sourceId]);
 
   const shownMeta =
     selectedVersion != null
@@ -164,7 +196,19 @@ export function PrintedDocDialog({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="sm:justify-between">
+          {/* Tek seferlik kâğıt boyu — kalıcı ayarı da donmuş belgeyi de DEĞİŞTİRMEZ. */}
+          {!loading && html ? (
+            <PrintPageSizeToggle
+              value={pageSize}
+              onChange={setPageSize}
+              docPageSize={docPageSize}
+              disabled={htmlQuery.isFetching}
+            />
+          ) : (
+            <span />
+          )}
+          <div className="flex gap-2">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Kapat
           </Button>
@@ -172,6 +216,7 @@ export function PrintedDocDialog({
           <Button type="button" className="gap-1" disabled={!html} onClick={() => html && printHtmlString(html)}>
             <Printer className="h-4 w-4" /> Yazdır
           </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
