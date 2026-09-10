@@ -120,6 +120,66 @@ function part1Pure() {
   check("imza kapatıldı", !cfgHtml.includes("Teslim Eden"));
 }
 
+// ── §3 KİMLİK ŞERİDİ (sections.listHeader, 2026-09-10) ──────────────────────
+// Her liste kendi sayfasından başlıyor ama antet yalnız 1. sayfada; şerit 2. ve
+// 3. sayfaya kimlik verir. OPT-IN — bugüne kadar donmuş belgeler değişmemeli.
+function part3ListHeader() {
+  console.log("\n[3] Kimlik şeridi — sections.listHeader (opt-in)");
+  const snap = makeSnapshot();
+  const withHeader = (cfg: Record<string, unknown>) =>
+    renderShipmentDispatchHtml(
+      { ...snap, docConfigOverride: cfg } as unknown as PrintedDocSnapshot,
+      {},
+    );
+  /** Şerit hücresi sayısı — `<th class="ident l">` kaç tabloda basıldı. */
+  const identCount = (html: string) => (html.match(/class="ident l"/g) ?? []).length;
+
+  // 1) VARSAYILAN KAPALI — anahtar yokken tek bayt eklenmez.
+  const base = renderShipmentDispatchHtml(snap, {});
+  check("§3.1 anahtar yok → şerit BASILMAZ", identCount(base) === 0);
+  check("§3.1 anahtar yok → 'Sevk Edilen Firma' geçmiyor", !base.includes("Sevk Edilen Firma"));
+
+  // 2) `false` de kapalı, `true` olmadıkça açılmaz (blocklist'e DÜŞMEZ).
+  check("§3.2 listHeader:false → kapalı", identCount(withHeader({ sections: { listHeader: false } })) === 0);
+
+  // 3) AÇIK — üç liste basılıyorken şerit İKİ tabloda (ilk liste hariç).
+  const on = withHeader({ sections: { listHeader: true } });
+  check("§3.3 listHeader:true → şerit 2 tabloda (ilk liste hariç)", identCount(on) === 2);
+  check("§3.3 şerit müşteri adını taşıyor (kaçışlı)", on.includes("MÜŞTERİ &lt;A&gt; A.Ş."));
+  check("§3.3 şerit irsaliye no'yu taşıyor", on.includes("Sevk Edilen Firma") && on.includes("SVK-1024"));
+  // ⚠️ EN ÖNEMLİ SONDA: şerit ÜRÜN listesinde YOK (1. sayfada antet zaten var),
+  // ÇUVAL ve ÇEKİ'de VAR. Konum ölçüsü — düz `includes` bunu ayırt edemez.
+  const iUrun = on.indexOf("ÜRÜN LİSTESİ");
+  const iCuval = on.indexOf("ÇUVAL LİSTESİ");
+  const iCeki = on.indexOf("ÇEKİ LİSTESİ");
+  const firstIdent = on.indexOf('class="ident l"');
+  check("§3.3 ilk şerit ÜRÜN listesinden SONRA (ürün tablosunda yok)", firstIdent > iCuval);
+  check("§3.3 şerit ÇUVAL ve ÇEKİ arasında + sonrasında", iUrun < iCuval && iCuval < iCeki);
+
+  // 4) Şerit `thead` İÇİNDE — taşan sayfada tekrar etmesinin TEK koşulu bu.
+  const cuvalThead = on.slice(iCuval, on.indexOf("</thead>", iCuval));
+  check("§3.4 şerit thead içinde (devam sayfasında tekrar eder)", cuvalThead.includes('class="ident l"'));
+
+  // 5) MERGE — listeler tek sayfada akıyorsa hiçbiri antetten kopmaz → şerit yok.
+  const merged = renderShipmentDispatchHtml(
+    { ...snap, docConfigOverride: { sections: { listHeader: true } } } as unknown as PrintedDocSnapshot,
+    { mergeSections: true },
+  );
+  check("§3.5 ?merge=1 → şerit BASILMAZ", identCount(merged) === 0);
+
+  // 6) Tek liste basılıyorsa o liste İLK'tir → şerit yok (antet aynı sayfada).
+  const onlyCeki = withHeader({ sections: { listHeader: true, urun: false, cuval: false } });
+  check("§3.6 yalnız ÇEKİ basılıyor → şerit yok (ilk liste)", identCount(onlyCeki) === 0);
+
+  // 7) Şerit alanları başlık toggle'larına saygılı (docNo/date kapalıysa girmez).
+  const noDocNo = withHeader({ sections: { listHeader: true, docNo: false, date: false } });
+  check("§3.7 docNo kapalı → şeritte irsaliye no yok", !noDocNo.includes("SVK-1024"));
+  check("§3.7 docNo kapalı → şeritte firma adı DURUYOR", identCount(noDocNo) === 2);
+
+  // 8) EN kapsamlı: şerit kolon başlığına BENZEMEZ (kendi CSS sınıfı var).
+  check("§3.8 şerit için ayrı CSS kuralı basıldı", on.includes(".sec thead th.ident"));
+}
+
 async function part2Db() {
   console.log("\n[2] getHtml ?draft — PLANNED sevkiyat (DB)");
   const ts = Date.now();
@@ -204,6 +264,7 @@ async function part2Db() {
 
 async function main() {
   part1Pure();
+  part3ListHeader();
   await part2Db();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();

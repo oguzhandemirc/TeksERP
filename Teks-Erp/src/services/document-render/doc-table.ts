@@ -105,6 +105,18 @@ export function applyColumnCfg<R>(cols: DocCol<R>[], cfg?: DocColumnCfg): DocCol
 export function buildDocTable<R>(opts: {
   className: string;
   caption?: string;
+  /**
+   * KİMLİK ŞERİDİ — caption ile kolon başlıkları arasına giren satır
+   * ("Sevk Edilen Firma: X · İrsaliye No: Y" + sağda tarih).
+   *
+   * ⚠️ `thead` İÇİNDE olması LOAD-BEARING: `DOC_PAGINATION_CSS`in
+   * `table-header-group` kuralı sayesinde tablo sayfa sınırını aştığında
+   * devam sayfasında da tekrar eder. Tablonun DIŞINA bir blok koymak aynı
+   * şeyi vermez — orada şerit yalnız ilk sayfada kalır.
+   *
+   * İçerik ÇAĞIRAN tarafından escape edilir (caption ile aynı sözleşme).
+   */
+  identityRow?: { left: string; right: string };
   cols: DocCol<R>[];
   rows: R[];
   colCfg?: DocColumnCfg;
@@ -116,6 +128,15 @@ export function buildDocTable<R>(opts: {
   const captionRow = opts.caption
     ? `<tr><th class="caption" colspan="${cols.length}">${opts.caption}</th></tr>`
     : "";
+  // Tek kolonlu tabloda iki hücreye bölünemez → ikisi tek hücrede birleşir.
+  const identRow = !opts.identityRow
+    ? ""
+    : cols.length > 1
+      ? `<tr class="ident"><th class="ident l" colspan="${cols.length - 1}">${opts.identityRow.left}</th>` +
+        `<th class="ident r">${opts.identityRow.right}</th></tr>`
+      : `<tr class="ident"><th class="ident l">${[opts.identityRow.left, opts.identityRow.right]
+          .filter(Boolean)
+          .join(" &nbsp;·&nbsp; ")}</th></tr>`;
   const headRow =
     "<tr>" +
     cols
@@ -158,5 +179,5 @@ export function buildDocTable<R>(opts: {
       "</tr>";
   }
 
-  return `<table class="${opts.className}"><thead>${captionRow}${headRow}</thead><tbody>${body}${footRow}</tbody></table>`;
+  return `<table class="${opts.className}"><thead>${captionRow}${identRow}${headRow}</thead><tbody>${body}${footRow}</tbody></table>`;
 }

@@ -4059,3 +4059,280 @@ başlayınca boşalır ve istemcinin ilk isteğiyle geri dolar. Saha vakası bun
 GEREKTİRMEDİ (o panel 1s40dk boyunca 226 istek attı, yani defterde olacaktı);
 kalıcılık ancak "haftada bir açılan makine" için gerekir. `Device`a kolon
 eklemek o gün ölçülerek yapılır, bugün değil.
+
+## 2026-09-10 — Sevk irsaliyesi: liste sayfalarına kimlik şeridi + tek seferlik kâğıt boyu [PROFİL/ÇEKİRDEK karma]
+
+**Saha bildirimi (adnansahin, WhatsApp).** İki şikâyet geldi: ① *"listeleri
+yazdırdığımda kağıdın ufak bir bölümüne yazdırıyor ve yazılar küçük kalıyor"*
+② *"hangi firmanın malı olduğu, sevk no vs. bilgilerin olduğu bölüm senin listede
+sadece ürün listesinde var; onu ürün/çuval/çeki her listenin başında görünecek
+şekilde ayarlayabilir misin"*. Ekli iki fotoğrafta bizim çıktımız ile eski
+sistemin çıktısı yan yanaydı.
+
+### ① Kök sebep: A5 ayarı, A4 kâğıt — KOD HATASI DEĞİL [PROFİL]
+
+Fotoğraftaki oran ölçüldü: içerik kâğıdın %62'sini kaplıyor, iki yanda ~%19
+boşluk var. A5 yazı alanı = 148mm − 2×9mm kenar = **130mm**; A4'ün 210mm'sinde
+bu tam %62 eder. Chromium `@page size: A5`i A4 kâğıda **büyütmez**, olduğu gibi
+ortalar. Üstüne `doc-density.ts` A5 profili puntoyu ×0.85 küçültüyor — "yazılar
+küçük kalıyor" da buradan.
+
+Doğrulandı: Belge Kişiselleştirme → Sevk İrsaliyesi → Sayfa boyutu **A5**
+seçiliydi. Tablolar zaten `width:100%`; genişlik hatası yoktu.
+
+**Bunun iki ikincil sonucu var ve ikisi de koda iş çıkardı:**
+
+- Sayfa boyutu `DocumentConfig.style`in parçası ve freeze anında snapshot'a
+  donuyor (`printed-document.service.ts:278` `docConfigOverride`). Yani ayarı
+  A4'e çevirmek **eski irsaliyeleri düzeltmiyor**. Panelde tek çare
+  "Güncel görünüm"dü ve o düğme yalnız `templateStale` iken beliriyor, üstelik
+  yalnız `PrintedDocDialog`ta var — muhasebedeki "Fiş" penceresinde yok.
+- Backend'de tek seferlik ezme **zaten vardı** (`?pageSize=A4|A5`,
+  `printed-document.controller.ts:203` → `service.ts:584` `withPageSize`,
+  snapshot'ın KOPYASINI kurar) ama panelde düğmesi yoktu; yalnız refakat kartı
+  kullanıyordu. Ürün kararı: donmuş katmana hiç dokunmadan doğru kâğıda basmak
+  için **her belge penceresine kâğıt boyu seçici** konur.
+
+Ayrıca panelde A5 seçilince uyarı basılır (`DocumentStyleControls.tsx`) —
+aynı tuzağa bir daha düşülmesin.
+
+### ② Kimlik şeridi — `sections.listHeader` (OPT-IN) [PROFİL]
+
+`shipment-dispatch.html.ts`te `splitPages = meta.mergeSections !== true` üç
+listeyi ayrı sayfaya bölüyor (`.pgb { break-before: page }`) ama `<header>`
+`.sheet`in tepesinde **bir kez** basılıyor → 2. ve 3. sayfa çıplak tablo.
+
+**Sektör standardı** (SAP SmartForms "first page header ↔ next page header",
+Oracle Reports, Logo/Netsis/Mikro): 1. sayfa tam antet, sonraki sayfaların
+TEPESİNDE kısaltılmış devam başlığı, altta sayfa numarası. Müşterinin eski
+sistemi de tam olarak böyle basıyor (başlık kutusu → `Sevk Edilen Firma /
+Sevkiyat Fiş No` → tarih sağda → tablo) ve talebin kelimesi de "her listenin
+**başında**" idi.
+
+**Karar:** şerit tabloların `thead`'ine, caption ile kolon başlıkları arasına
+girer; İLK basılan listeye KONMAZ.
+
+- `thead` içinde olması LOAD-BEARING: `DOC_PAGINATION_CSS`in
+  `table-header-group` kuralı sayesinde tablo sayfa sınırını aşınca şerit
+  **devam sayfasında da tekrar eder**. Tablonun dışına blok koymak bunu vermez.
+- İlk listeye konmaması sahanın istemediği tekrarı önler (o sayfada zaten tam
+  antet var). Kalan tek açık: ilk liste tek başına sayfayı taşarsa devam sayfası
+  şeritsiz kalır. Ürün listesi ürün+renk+en bazında gruplandığı için bunun için
+  ~50+ farklı ürün satırı gerekir; kabul edildi. Gerekirse `position:fixed`
+  sayfa altı şeridi EK olarak konur (filigranın kanıtlanmış mekanizması).
+- `?merge=1` ile listeler tek sayfada aktığında şerit hiç basılmaz — orada
+  hiçbir liste antetten kopmuyor, şerit yalnız gürültü olurdu.
+- Şeridin alanları başlık toggle'larına saygılı: `sections.docNo` / `date`
+  kapalıysa şeride de girmez.
+
+**OPT-IN olması ZORUNLUYDU.** `sectionOn` bir BLOCKLIST'tir (`!== false`,
+anahtar yoksa AÇIK); işaretsiz bırakmak bugüne kadar donmuş HER irsaliyenin
+yeniden baskısını sormadan değiştirirdi. Renderer `cfg.sections?.listHeader
+=== true` okur, panel `DocSectionDef.defaultHidden: true` taşır. Bu, bölümlerde
+**allowlist dalının ilk gerçek kullanıcısı** — alan 2026-08-05'ten beri
+tanımlıydı ama hiçbir bölüm kullanmıyordu (`documentConfig.ts:211` yorumu artık
+bayat, güncellendi).
+
+Kapsam bilerek DAR: yalnız sevk irsaliyesi. Diğer belgelerde çok listeli sayfa
+bölme yok. Müşteri bazına inmek gerekirse ek kod istemez — `DocumentProfile.config`
+genel ayarın üstüne biniyor (`printed-document.service.ts:253-271`).
+
+### Donmuş katman ≠ donmuş kod (bu işin asıl dersi) [ÇEKİRDEK]
+
+`PrintedDocument.snapshot` HTML tutmaz; `{ company, docConfigOverride, doc }`
+JSON'u tutar ve HTML her baskıda renderer'dan yeniden üretilir. Yani **donan şey
+AYAR, kod DEĞİL**: `renderShipmentDispatchHtml`teki her değişiklik eski
+belgelerin çıktısını da değiştirir, `docConfigOverride` bunu durdurmaz. Belgeye
+görünür bir şey ekleyen her iş bu yüzden opt-in doğmak zorundadır.
+
+### Kod çapaları
+
+- `doc-table.ts` — `buildDocTable`a `identityRow?: {left,right}`; thead'e
+  caption'dan sonra basılır, tek kolonlu tabloda iki değer tek hücrede birleşir.
+- `shipment-dispatch.html.ts` — `showListHeader` (`=== true`), `identityRow`,
+  `secClass()` → `secOpts()` (sayfa sınıfı + şerit tek yerden), `.sec thead
+  th.ident` CSS'i (`:not(.caption)` kuralından SONRA — eşit özgüllük, sonra gelen
+  kazanır; sıra bozulursa şerit kolon başlığına benzer).
+- `LABELS.tr.identTo = "Sevk Edilen Firma"` / `en.identTo = "Consignee"`.
+- `Electron/src/components/print/PrintPageSizeToggle.tsx` — YENİ, tek kaynak.
+  `readDocPageSize(html)` belgenin kendi boyutunu `@page`ten okur.
+  `PrintedDocDialog`, `ShipmentDispatchNote` ve `TravelerCardPrintDialog`
+  (kopyası silindi) bunu kullanır.
+- `PrintedDocDialog` / `ShipmentDispatchNote` — `docPageSize` YALNIZ ezme
+  YOKKEN okunur; ezmeli HTML'in `@page`i ezmeyi yansıtır ve onu "belgenin
+  boyutu" sanmak düğmeyi kilitlerdi (A5 belge → A4 seç → dönüş yolu kalmaz).
+- `documentConfig.ts` — `listHeader` bölümü `defaultHidden: true`;
+  `docRows.ts` `SECTION_GROUP.shipmentDispatch = { listHeader: "table" }`
+  (eşleşmemiş bölüm dalının varsayılanı `header`, yazılmazsa ayar ilgisiz
+  biçimde başlık bandının altında çıkardı — `gridWidth` emsali).
+- `DocumentStyleControls.tsx` — A5 seçiliyken uyarı şeridi.
+
+### Bekçiler
+
+- `scripts/test_shipment_dispatch_document.ts §3` (8 yeni kontrol, toplam 50):
+  varsayılan kapalı · `false` da kapalı · açıkken 2 tabloda · ÜRÜN'de YOK
+  (konum ölçüsü, düz `includes` ayırt edemez) · `thead` içinde · `?merge=1`
+  kapalı · tek liste seçiliyse kapalı · docNo kapalıyken şeritte yok.
+  **Negatif sonda:** opt-in `!== false`e çevrilince 2 kırmızı; ilk-liste
+  atlaması kaldırılınca 4 kırmızı.
+- `Electron/src/components/print/PrintPageSizeToggle.test.tsx` (8 vaka) —
+  en önemlisi "belgenin kendi boyutuna basmak ezmeyi KALDIRIR".
+- `Electron/src/pages/GeneralSettings/docRows.test.ts` — yeni "bölüm ALLOWLIST"
+  bloğu (6 vaka). **Negatif sonda:** `defaultHidden` kaldırılınca 2 kırmızı.
+- Backend `?pageSize=` ucu zaten `test_doc_pagesize_override.ts` ile korunuyordu.
+
+### Üç kapı
+
+Migration **yok** (ayar `SystemSetting` JSON'unda). Yeni izin **yok** (mevcut
+`document-template:write` yeterli — `DOCUMENT_DESIGN_FLAG_KEYS` testinden geçer:
+"yanlış girilirse etkisi belge çıktısıyla sınırlı mı?" → evet). APK **yok**
+(mobil sevk irsaliyesi basmıyor).
+
+---
+
+## 2026-09-10 — Paketleme grubu: çuvalları sevk hazırlığına göre ayıran çalışma yaftası [ÇEKİRDEK/PROFİL]
+
+### Saha sorusu
+
+"Paketleme/çuvallar ekranında partilere ayırmalı mıyız? Bir carinin birden fazla
+zamanda yapılacak sevkiyatı hazırda bekliyorsa?"
+
+### Ölçüm — dert gerçek ve tehlikeli yarısı sessiz
+
+`PaketlemeScreen` cari-kapsamlı: `/pool/sacks?customerId` o carinin BÜTÜN havuz
+çuvallarını tek düz liste veriyor. Üç somut sonuç ölçüldü:
+
+- Liste 20'den uzunsa yalnız **son 20 çuval** çiziliyor (`SACK_WINDOW = 20`),
+  gerisi gizli.
+- **"Hemen Sevk Et" seçim TANIMIYOR**: `shippableSacks` = içi dolu her havuz
+  çuvalı. Salı tırı için basılan buton gelecek haftanın çuvallarını da aynı
+  sevkiyata koyuyor. Bu bir ekran rahatsızlığı değil, **sessiz yanlış sevk**.
+- Ayırt edici tek imkân `sackNo` araması — yani operatörün aklında tuttuğu numara.
+
+Yani sorunun kaynağı "gruplama yok" değil, **"gruplama yok + toplu buton var"**
+birleşimi. Dilim 2'de buton daraltması yaftanın İÇİNE gömülüyor.
+
+### Karar — yafta, rezervasyon DEĞİL
+
+**[ÇEKİRDEK]** `PackingGroup`: bir carinin havuz çuvallarını "aynı sevke
+hazırlananlar" diye ayıran çalışma nesnesi. Stok düşmez, çuvalı kilitlemez,
+deftere yazmaz, başka bir sevkin o çuvalı almasını ENGELLEMEZ. Gerçek
+rezervasyon ayrı karardır ve dokunulmadı (`shipping.reservationEnabled` — kendi
+append-only defteriyle kurulur, `SackAllocation`a DOKUNMAZ).
+
+**[ÇEKİRDEK] Üyelik çuvalın üstünde** (`Sack.packingGroupId`), ayrı pivot tablo
+DEĞİL. Gerekçe mimari: çuvalı havuzdan çıkaran her MEVCUT yol (sevk · dağıtma ·
+storno · çuval silme) grubu kendiliğinden doğru tutuyor. Ayrı üyelik listesi
+olsaydı o yolların hepsine birer temizlik kancası gerekirdi ve unutulan biri
+hayalet üyelik bırakırdı — bu depoda adı konmuş "ayrışan yüzey" sınıfı.
+
+**[ÇEKİRDEK] Grup SİLİNMEZ, GÖRÜNMEZ olur.** "Canlı grup" = havuzda en az bir
+çuvalı olan grup (`sacks.some(shipmentId: null)`, tek kaynak `LIVE_GROUP_WHERE`).
+Son çuval çıkınca grup listelenmez ve numarası sayaçta sayılmaz. Ölümü SİLME ile
+kurmak yukarıdaki beş yola kanca takmak demekti; bu tasarımda silme yolu hiç
+doğmuyor.
+
+**[ÇEKİRDEK] Sevkte `packingGroupId` TEMİZLENMEZ.** İki kazancı var: sevk anında
+"grubun notu sevkiyata kopyalansın mı?" sorulabiliyor (kullanıcı kararı: SORULUR,
+onaylanırsa kopyalanır — Dilim 2), ve `undoDispatch({releaseSacks})` çuvalı havuza
+geri koyduğunda hazırlık grubu OLDUĞU GİBİ geri geliyor. Storno'nun sözleşmesi
+"mal HİÇ ÇIKMADI"dır; hazırlığın da hiç bozulmamış olması doğru cevaptır.
+
+**[ÇEKİRDEK] Numara KİMLİK DEĞİL, PARK YERİDİR.** Görünen ad ekrandan ibarettir:
+belgeye, etikete, irsaliyeye BASILMAZ — bu yüzden geri kullanılabilir. Kimlik
+`PackingGroup.id`dir (`Batch` ile aynı karar: P01…P99 sarar, kimlik UUID). Saha
+"Excel/PDF çıktısı da olsun" dedi; çelişki ÇALIŞMA KÂĞIDI ayrımıyla çözüldü —
+çıktının başlığı **cari + grup + üretim anı** taşır ve belge numarası yoktur, o
+yüzden iki kâğıt yan yana geldiğinde hangisinin hangisi olduğu okunur (Dilim 3).
+
+**[PROFİL] Sayaç rejimi `artan`** (`packing.groupNumbering`, varsayılan): yeni
+grup CANLI grupların en büyüğünün bir fazlasını alır. "3. Grup sevk edildi, 5.
+Grup duruyor" → yeni grup 6. Kullanıcı kararı; boşluğu doldurmanın yan etkisi
+aynı gün aynı cari için iki farklı "3. Grup" dolaşmasıydı. ⚠️ İki rejim de
+YALNIZ canlı gruplara baktığı için carinin havuzu tamamen boşaldığında sayaç
+kendiliğinden 1'e döner — `artan` rejiminde bile numara sonsuza büyümez.
+Alternatif rejim `bosluk-doldur` yazıldı ve panelden seçilebilir.
+
+**[PROFİL] Görünen ad `"1. Grup"`** (`formatPackingGroupName`, tek satır).
+"P1" YAZILMADI ve bu bilinçli: fabrikada "parti" bugün ÜRETİM partisidir
+(`Batch`, refakat kartına basılı, KK1'de geçiyor). Çuvala da "P3" deseydik aynı
+fabrikada iki farklı P3 dolaşır ve telefonda "P3'ü yükle" cümlesi belirsizleşirdi.
+Saha "parti" demeye devam edebilir; YAZILAN şey ayrışıyor.
+
+**[ÇEKİRDEK] Bir çuval TEK grupta** (kullanıcı kararı). `packingGroupId` tekil
+kolon; başka gruptaki çuval seçilirse TAŞINIR. Aksi hâlde "sevk butonu grubu
+gönderir" cümlesi bozulurdu.
+
+**[PROFİL] Gruplanmamış çuval bugünkü gibi davranır** (kullanıcı kararı): ekranda
+"Gruplanmamış" başlığı altında durur, bir grup gibi sevk edilebilir. Sevk için
+grup ZORUNLU DEĞİL.
+
+**[ÇEKİRDEK] Ad tekilliği yalnız CANLI gruplar arasında** ve UYGULAMA katmanında.
+DB'de partial unique KURULAMAZ: "canlı" tanımı ÇOCUK satıra bakıyor ve bir unique
+index başka tabloyu okuyamaz. Yarışı kapatan şey aşağıdaki advisory kilittir.
+
+### Eşzamanlılık
+
+**[ÇEKİRDEK] Advisory uzay 8031** (`PACKING_GROUP_LOCK_NS`,
+`services/helpers/packing-group.helper.ts`) — parti no'nun 8022'sinden AYRI
+tutuldu; aynı uzayda olsalardı üretim partisi üreteci ile paketleme sayacı
+birbirini sessizce serileştirirdi. Kilit `nextPackingGroupSeqTx`in **İLK
+İFADESİ**dir, anahtarı `hashtext(customerId)` (gruplar cariye özel olduğu için
+iki cari birbirini beklemez). Sonraya alınsaydı klasik TOCTOU: iki tablet aynı
+saniyede "Parti Ata"ya basar, ikisi de aynı numarayı alır — hata yok, log yok.
+
+**[ÇEKİRDEK] Çuval bağlama ATOMİK CLAIM**: yüklem `updateMany`nin WHERE'inde
+yaşıyor (`shipmentId: null` + `customerId`), `findUnique→if→update` DEĞİL.
+Sayı tutmazsa tanı **tx içinde taze okumayla** konuyor ve mesaj "kaç tanesi"
+değil "hangisi ve neden" söylüyor (sevkiyata girmiş / başka cariye ait /
+bulunamadı, çuval numaralarıyla).
+
+**[ÇEKİRDEK] İdempotency**: `PackingGroup.clientToken @unique`. Replay'in
+DÖRDÜNCÜ DURUMU ele alındı — token'lı grup bu arada BOŞALMIŞSA cached kaydı
+dönmek yanlış cevaptır (operatöre boş grup gösterirdi), 409 verilir.
+
+### Kapı
+
+**[ÇEKİRDEK]** `packing.groupsEnabled` varsayılan **KAPALI** = bugünkü davranış
+(düz liste + "hepsini sevk et"). Yazma uçları TEK noktadan fail-closed kapılı
+(`assertPackingGroupsEnabled` → 403 `PACKING_GROUPS_DISABLED`); okuma kapılı
+DEĞİL (kapalıyken zaten boş döner). Yazma ucu açık bırakılsaydı eski/başıboş bir
+istemci GÖRÜNMEYEN grup yaratabilirdi: çuvallar bir gruba bağlanır, hiçbir ekran
+çizmez, operatör "çuvalım nerede" derdi.
+
+### Kod çapaları
+
+- `prisma/schema.prisma` — `model PackingGroup` + `Sack.packingGroupId`
+- `src/services/packing-group.service.ts` (5 genel metot) ·
+  `src/services/helpers/packing-group.helper.ts` (sayaç · canlı yüklem · claim ·
+  ad tekilliği; servis 300 satır lint tavanına çekilirken ayrıldı)
+- `src/services/helpers/period-guard.helper.ts` — 8031 envanter satırı
+- `src/services/shipping.service.ts` — `listCustomerPoolSacks` artık
+  `packingGroupId` ve `groups[]` döner (istemci ikinci tur atmasın)
+- `src/routes/shipping.routes.ts` — `/api/shipping/packing-groups` ailesi;
+  ⚠️ sabit `/remove-sacks` yolu `/:id`li yollardan ÖNCE mount edilir
+- İzin: YENİ İZİN YOK — mevcut `READ`/`WRITE` (paketleme işi)
+
+### Bekçi
+
+`scripts/test_packing_group.ts` — 24 kontrol, §1-§12.
+**Negatif sonda (beşi de ölçüldü, 2026-09-10):** kilit okumalardan sonraya
+alındı → 1 kırmızı · `artan` dalı `seqs.length + 1` yapıldı → dosya kırmızı ·
+`LIVE_GROUP_WHERE` boşaltıldı → 5 kırmızı · kapı gövdesi `return` yapıldı →
+7 kırmızı · claim WHERE'inden `shipmentId: null` silindi → 1 kırmızı.
+
+### Üç kapı
+
+**Migration VAR** — iki dosya: `20260910120000_paketleme_grubu` (tablo + kolon +
+index + FK) ve `20260910123000_paketleme_grubu_client_token`. İkincisi ayrı,
+çünkü birincisi uygulanmıştı ve uygulanmış migration dosyası düzenlenmez.
+İkisi de ADDITIVE ve idempotent. **Yeni izin YOK.** **APK GEREKİR** (Dilim 2 —
+tablet Paketleme ekranı); backend tek başına gidebilir, eski tablet bayrağı
+görmez ve bugünkü düz listede kalır.
+
+### Dilimler
+
+① backend (BU NOT — bitti) → ② tablet Paketleme ekranı: grup blokları, "Parti
+Ata", not, filtre, sevk butonunun DARALTILMASI, sevkte "notu sevkiyata kopyala?"
+sorusu → ③ Excel/PDF çalışma kâğıdı (mevcut çuval-içeriği üreticisinden doğar,
+ikinci rakam üretmez) → ④ panel aynası.

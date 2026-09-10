@@ -61,6 +61,8 @@ const LABELS = {
     export: "Yurtdışı",
     customsNo: "Gümrük/İhracat No",
     orders: "Sipariş",
+    /** Kimlik şeridi (sections.listHeader) — sahanın eski sistemindeki adlandırma. */
+    identTo: "Sevk Edilen Firma",
     plate: "Plaka",
     driver: "Şoför",
     carrier: "Taşıyıcı",
@@ -111,6 +113,7 @@ const LABELS = {
     export: "Export",
     customsNo: "Customs/Export No",
     orders: "Orders",
+    identTo: "Consignee",
     plate: "Plate",
     driver: "Driver",
     carrier: "Carrier",
@@ -480,11 +483,38 @@ export function renderShipmentDispatchHtml(
   // Sayaç yalnız gerçekten render edilen bölümde artar (kapalı bölüm sayfa
   // açmaz) — üç bölüm kaynak sırasıyla değerlendirildiği için sıra garantili.
   const splitPages = meta.mergeSections !== true;
+
+  // ── KİMLİK ŞERİDİ (`sections.listHeader`, 2026-09-10) ─────────────────────
+  // OPT-IN: `sectionOn` blocklist'i (anahtar yoksa AÇIK) burada YANLIŞ olurdu —
+  // bugüne kadar donmuş her irsaliyenin yeniden baskısı sormadan değişirdi.
+  // Bu yüzden açık `=== true`.
+  //
+  // Şerit İLK basılan listeye KONMAZ: o listenin sayfasında zaten tam antet var
+  // ve aynı bilgiyi iki kez basmak sahanın istemediği tekrarı üretirdi. Sonraki
+  // listeler kendi sayfalarında antetsiz kaldıkları için şeridi alırlar.
+  //
+  // `splitPages` koşulu da load-bearing: ?merge=1 ile listeler tek sayfada
+  // aktığında hiçbiri antetten kopmuyor, şerit yalnız gürültü olurdu.
+  const showListHeader = cfg.sections?.listHeader === true;
+  const identityRow = {
+    left: [
+      `${L.identTo}: <b>${esc(h.customerName)}</b>`,
+      showDocNo ? `${L.docNo}: <b>${esc(h.shipmentNo)}</b>` : "",
+    ]
+      .filter(Boolean)
+      .join(" &nbsp;·&nbsp; "),
+    right: showDate ? esc(fmtDate(h.date)) : "",
+  };
+
   let renderedSections = 0;
-  const secClass = (): string => {
-    const cls = splitPages && renderedSections > 0 ? "sec pgb" : "sec";
+  /** Bir liste tablosunun sayfa/şerit ayarları — `...secOpts()` ile yayılır. */
+  const secOpts = (): { className: string; identityRow?: { left: string; right: string } } => {
+    const first = renderedSections === 0;
     renderedSections++;
-    return cls;
+    return {
+      className: splitPages && !first ? "sec pgb" : "sec",
+      ...(showListHeader && splitPages && !first ? { identityRow } : {}),
+    };
   };
 
   // ── ÜRÜN ADI REJİMİ (`shipping.docItemNameMode`, 2026-09-04) ───────────────
@@ -525,7 +555,7 @@ export function renderShipmentDispatchHtml(
   // 1) ÜRÜN LİSTESİ — kolonlar cfg.columns.urun ile aç/kapa + sıralanır.
   const urunSection = listSectionOn(cfg, meta, "urun")
     ? buildDocTable<ShipmentDocProduct>({
-        className: secClass(),
+        ...secOpts(),
         caption: L.urunCaption,
         colCfg: cfg.columns?.urun,
         footLabel: L.toplam,
@@ -579,7 +609,7 @@ export function renderShipmentDispatchHtml(
 
   const cuvalSection = listSectionOn(cfg, meta, "cuval")
     ? buildDocTable<ShipmentDocSack>({
-        className: secClass(),
+        ...secOpts(),
         caption: L.cuvalCaption,
         colCfg: cuvalColCfg,
         footLabel: L.toplam,
@@ -627,7 +657,7 @@ export function renderShipmentDispatchHtml(
   // 3) ÇEKİ LİSTESİ
   const cekiSection = listSectionOn(cfg, meta, "ceki")
     ? buildDocTable<ShipmentDocCeki>({
-        className: secClass(),
+        ...secOpts(),
         caption: L.cekiCaption,
         colCfg: cfg.columns?.ceki,
         footLabel: L.toplam,
@@ -699,6 +729,12 @@ export function renderShipmentDispatchHtml(
   /* :not(.caption) — başlık hücresi bilerek DAHA BÜYÜK kalır; ortak kuraldan
      daha özgül olduğu için punto/arka planı o kazanır. */
   .sec thead th:not(.caption) { background: #f1f5f9; font-weight: 700; font-size: ${d.secHead}px; }
+  /* Kimlik şeridi — kolon başlığı DEĞİL, o yüzden zemini beyaz ve yazısı düz
+     (ortak kural th'leri gri + BÜYÜK HARF yapıyor). Seçici eşit özgüllükte ve
+     SONRA geldiği için kazanır; sırası bozulursa şerit kolon başlığına benzer. */
+  .sec thead th.ident { background: #fff; font-weight: 400; font-size: ${d.sub}px;
+                        text-transform: none; letter-spacing: 0; white-space: nowrap; }
+  .sec thead th.ident b { font-weight: 700; }
   /* Serbest metin hücresi (çuval yorumu) — uzun/çok satırlı not tablo düzenini
      bozmasın: satır sonları korunur, uzun kelime kırılır. */
   .sec td.wrap { white-space: pre-wrap; word-break: break-word; font-size: ${scaleF(d, 10)}px; }
