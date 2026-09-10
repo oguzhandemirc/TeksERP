@@ -93,6 +93,14 @@ export interface ClientRecord {
    * kimliksiz istekler). "Kimse yok" DEMEK DEĞİL.
    */
   lastUserId: string | null;
+  /**
+   * Sürüm/tür AÇIK BEYANDAN mı geldi (`X-Client-*`), yoksa User-Agent'tan mı
+   * ÇIKARILDI? Ekran bunu söyler — çıkarılmış bir sürümü beyan edilmiş gibi
+   * göstermek okuyucuyu yanıltır. `false` aynı zamanda kendi başına bir
+   * bulgudur: künye başlıkları 2026-09-04'te geldi, yani beyan etmeyen istemci
+   * ZATEN eskidir.
+   */
+  declared: boolean;
   firstSeenAt: number;
   lastSeenAt: number;
 }
@@ -129,6 +137,8 @@ export interface TouchInput {
   kind?: string | null;
   version?: string | null;
   userId?: string | null;
+  /** Künye başlığı yoksa UA'dan çıkarıldı — varsayılan `true` (beyan). */
+  declared?: boolean;
 }
 
 /** Kaydı kur/güncelle. Çağrı `shouldTouchClient` kapısından SONRA gelir. */
@@ -149,12 +159,17 @@ export function touchClient(input: TouchInput, now = Date.now()): void {
     if (kind) existing.kind = kind;
     if (version) existing.version = version;
     if (input.userId) existing.lastUserId = input.userId;
+    // Beyan TEK YÖNLÜ yükselir: künyesini bildirmeye BAŞLAYAN istemci (güncellendi)
+    // "çıkarıldı" damgasını üstünden atar; tersi olmaz — beyan eden bir istemcinin
+    // tek künyesiz isteği (varsa) onu eski göstermemeli.
+    if (input.declared === true) existing.declared = true;
   } else {
     clients.set(instanceId, {
       instanceId,
       kind,
       version,
       lastUserId: input.userId ?? null,
+      declared: input.declared !== false,
       firstSeenAt: now,
       lastSeenAt: now,
     });

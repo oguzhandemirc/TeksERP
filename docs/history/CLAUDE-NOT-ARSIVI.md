@@ -4002,3 +4002,60 @@ görmez ve bugünkü düz listede kalır.
 Ata", not, filtre, sevk butonunun DARALTILMASI, sevkte "notu sevkiyata kopyala?"
 sorusu → ③ Excel/PDF çalışma kâğıdı (mevcut çuval-içeriği üreticisinden doğar,
 ikinci rakam üretmez) → ④ panel aynası.
+
+## 2026-09-10 — KÜNYESİZ İSTEMCİ GÖRÜNMEZDİ: sürüm UA'dan okunuyor [ÇEKİRDEK]
+
+Saha vakası: `192.168.1.56`daki panel **2.5.0**'da kalmıştı, rapor menüsünün
+TAMAMI 404 veriyordu (11 uç) ve bu **haftalarca** fark edilmedi.
+
+**ÖNCE YANLIŞ TEŞHİS KOYDUM, ÖLÇÜMLE DÜZELTTİM** — kayda geçsin:
+"sistemde hangi makinenin hangi sürümü koştuğunu gösteren yüzey yok, `Device`a
+sürüm kolonu ekleyelim" dedim. **Yanlıştı ve neredeyse var olanı yeniden
+yazıyordum:** `486dfb0e` (2026-09-04) ile *Sistem → Bağlı İstemciler* ekranı
+ZATEN var — kurulum, sürüm, beklenen sürüm, "güncel değil" rozeti, son
+kullanıcı. Üstelik sektör standardına uygun: sürüm **User-Agent'tan
+ayıklanmıyor, `X-Client-Version` başlığıyla BEYAN EDİLİYOR**.
+
+**GERÇEK BOŞLUK ÇOK DAHA DARDI** (`client-info.middleware.ts` satır 42):
+`X-Client-Instance` yoksa middleware hiç kayıt açmadan çıkıyordu. Künye
+başlıkları 2026-09-04'te geldi → ondan eski panel onları GÖNDERMEZ → makine
+listede *"sürümü bilinmiyor"* olarak DEĞİL, **HİÇ** görünmüyordu.
+
+**Kural bu vakadan çıkıyor: görülmesi en gereken istemci, kendini tanıtamayacak
+kadar eski olandır.** Bir envanter ekranı yalnız kendini bildirenleri
+listeliyorsa, tam da aradığı kitleyi kaçırır.
+
+**ÇÖZÜM — beyan tercih, UA yedek** (Sentry SDK etiketi ↔ UA, Datadog agent ↔ UA
+ile aynı düzen): başlık varsa yedek yola hiç gelinmez. Gelindiğinde satır
+`declared:false` damgası taşır ve ekran *"sürümünü bildirmiyor — adres
+bilgisinden okundu"* yazar. Çıkarılmış sürümü beyan edilmiş gibi göstermek
+okuyucuyu yanıltır; ayrıca damganın kendisi bir bulgudur (beyan etmeyen kurulum
+zaten 2026-09-04 öncesidir). Damga TEK YÖNLÜ kalkar: güncellenen istemci
+künyesini bildirmeye başlayınca "beyan"a yükselir, tersi olmaz.
+
+**KAPSAM BİLEREK DAR — yalnız Electron paneli.** Tablet UA'sı `okhttp/4.12.0`
+yani KÜTÜPHANE sürümüdür; onu uygulama sürümü saymak sahada "tablet 4.12.0"
+gibi var olmayan bir sürüm gösterirdi — **yanlış bilgi, bilgisizlikten
+kötüdür**. Tablet OTA alır, tarayıcı her açılışta taze gelir; "aylardır eski
+sürümde" durumuna yalnız elden kurulum isteyen panel düşer.
+
+Ad **kara listeyle** ayrıştırılır, beyaz listeyle değil: uygulama adı müşteri
+markasıdır (paket adı argümandan gelir) ve önceden bilinemez. Motor jetonları
+(`Chrome/`, `Electron/`, `AppleWebKit/`, `okhttp/`, `curl/`…) elenir, kalan
+jeton uygulamanındır. Yedek kimlik `legacy:<sha1(ip|ua)>` — IP **soketten**
+okunur, başlıktan DEĞİL (`CLIENT_IP_HEADER` dersi: uydurulabilir başlık deftere
+sınırsız sahte satır açtırırdı).
+
+**UÇTAN UCA ÖLÇÜLDÜ:** gerçek sunucuya fabrikanın tam UA'sıyla künyesiz istek
+atıldı → defterde `kind=electron version=2.5.0 declared=false`; aynı turda
+`okhttp/4.12.0` satır AÇMADI. Değişiklikten önce o satır hiç yoktu.
+Bekçi `test_client_registry.ts §5` fabrikanın GERÇEK UA'larını kullanır —
+Türkçe karakterin bozulmuş hâli (`Adnan?ahinERP`) bilerek korunur, çünkü UA
+taşımada bozuluyor ve ayrıştırma buna dayanmamalı.
+Negatif sonda: motor jetonu elemesi kaldırılınca 2 kırmızı.
+
+⚠️ **KALAN SINIR (bilinçli):** defter süreç belleğindedir, backend yeniden
+başlayınca boşalır ve istemcinin ilk isteğiyle geri dolar. Saha vakası bunu
+GEREKTİRMEDİ (o panel 1s40dk boyunca 226 istek attı, yani defterde olacaktı);
+kalıcılık ancak "haftada bir açılan makine" için gerekir. `Device`a kolon
+eklemek o gün ölçülerek yapılır, bugün değil.

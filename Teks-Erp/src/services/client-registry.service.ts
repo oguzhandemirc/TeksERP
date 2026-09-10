@@ -80,6 +80,12 @@ export const ClientRegistryService = {
                 isSystemAccount: u.isSystemAccount,
               }
             : null,
+          /**
+           * false = sürüm AÇIK BEYANDAN değil, User-Agent'tan ÇIKARILDI. Ekran
+           * bunu söylemeli; ayrıca kendi başına bir bulgudur (künye başlıkları
+           * 2026-09-04'te geldi → beyan etmeyen istemci zaten eskidir).
+           */
+          declared: r.declared,
           firstSeenAt: new Date(r.firstSeenAt).toISOString(),
           lastSeenAt: new Date(r.lastSeenAt).toISOString(),
           active: isClientActive(r, now),

@@ -125,6 +125,14 @@ export function ClientsPage() {
                               güncel değil (yayında {c.expectedVersion})
                             </div>
                           )}
+                          {/* Çıkarılmış sürümü beyan edilmiş gibi göstermek okuyucuyu
+                              yanıltır. Ayrıca kendi başına bulgu: künye başlıkları
+                              2026-09-04'te geldi → beyan etmeyen kurulum zaten eski. */}
+                          {!c.declared && (
+                            <div className="text-[11px] text-muted-foreground">
+                              sürümünü bildirmiyor — adres bilgisinden okundu
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="text-sm">
                           {c.lastUser ? (

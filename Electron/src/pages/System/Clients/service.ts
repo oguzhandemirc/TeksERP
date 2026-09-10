@@ -21,6 +21,12 @@ export interface ConnectedClient {
   deviceKind: string | null;
   /** null = BİLİNMİYOR (kimliksiz istek), "kimse yok" DEĞİL. */
   lastUser: ConnectedClientUser | null;
+  /**
+   * false = sürüm beyan EDİLMEDİ, User-Agent'tan çıkarıldı. Künye başlıkları
+   * 2026-09-04'te geldiği için bu satır "istemci o tarihten eski" demektir —
+   * yani kendi kendine güncellenemeyen kurulum tam olarak budur.
+   */
+  declared: boolean;
   firstSeenAt: string;
   lastSeenAt: string;
   active: boolean;

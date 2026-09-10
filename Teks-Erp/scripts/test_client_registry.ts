@@ -30,6 +30,7 @@ import {
   shouldTouchClient,
   touchClient,
 } from "../src/lib/client-registry";
+import { parseLegacyClientFromUserAgent } from "../src/lib/legacy-client-ua";
 
 let pass = 0;
 let fail = 0;
@@ -236,6 +237,75 @@ shouldTouchClient(ID2, t1);
 touchClient({ instanceId: ID2, kind: "electron" }, t1);
 check("retention dolunca satır listeden düşüyor",
   listClients(t1 + CLIENT_RETENTION_MS + 1).length === 0);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §5 KÜNYESİZ İSTEMCİ — sürüm User-Agent'tan okunuyor mu (2026-09-10)
+// ─────────────────────────────────────────────────────────────────────────────
+// SAHA VAKASI: 192.168.1.56'daki panel 2.5.0'da kalmıştı, rapor menüsünün
+// TAMAMI 404 veriyordu ve HAFTALARCA fark edilmedi. Sebebi "bayat rozeti
+// basılmadı" DEĞİL: künye başlıkları 2026-09-04'te geldiği için o panel onları
+// hiç göndermiyordu ve defter künyesiz isteği hiç yazmıyordu → makine listede
+// GÖRÜNMÜYORDU. Görülmesi en gereken kitle, kendini tanıtamayacak kadar
+// eskilerdir; bu blok o yedek yolu kilitler.
+console.log("\n§5 künyesiz istemci — UA yedeği");
+
+// Fabrikanın GERÇEK UA'ları (errorlogs 04-10.09). Türkçe karakterin bozulmuş
+// hâli ("Adnan?ahinERP") BİLEREK korunuyor: UA metni taşımada bozuluyor ve
+// ayrıştırma buna DAYANMAMALI — uygulama adı beyaz listeye alınamaz.
+const UA_ESKI_PANEL =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+  "Adnan?ahinERP/2.5.0 Chrome/148.0.7778.280 Electron/42.7.0 Safari/537.36";
+const UA_GUNCEL_PANEL =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
+  "Adnan?ahinERP/1.3.1 Chrome/148.0.7778.280 Electron/42.7.0 Safari/537.36";
+
+const eski = parseLegacyClientFromUserAgent(UA_ESKI_PANEL);
+check("⭐ saha vakası: 2.5.0 paneli UA'dan ÇÖZÜLÜYOR", eski?.version === "2.5.0");
+check("türü tahmin edilmiyor, KESİN olarak electron", eski?.kind === "electron");
+check("güncel panel de çözülüyor", parseLegacyClientFromUserAgent(UA_GUNCEL_PANEL)?.version === "1.3.1");
+
+// Motor jetonları uygulama sanılmamalı — bu ayrıştırmanın en kolay hatasıdır.
+check("Chrome sürümü uygulama sanılmıyor", eski?.version !== "148.0.7778.280");
+check("Electron sürümü uygulama sanılmıyor", eski?.version !== "42.7.0");
+check("AppleWebKit sürümü uygulama sanılmıyor", eski?.version !== "537.36");
+
+// Kapsam DAR ve bu bilinçli: yanlış bilgi, bilgisizlikten kötüdür.
+check(
+  "tablet (okhttp) NULL — kütüphane sürümü uygulama sürümü DEĞİL",
+  parseLegacyClientFromUserAgent("okhttp/4.12.0") === null,
+);
+check(
+  "düz tarayıcı NULL (Electron değil)",
+  parseLegacyClientFromUserAgent(
+    "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+  ) === null,
+);
+check("curl NULL", parseLegacyClientFromUserAgent("curl/8.4.0") === null);
+check("UA yok → NULL", parseLegacyClientFromUserAgent(undefined) === null);
+check(
+  "aşırı uzun UA reddediliyor (bellek savunması)",
+  parseLegacyClientFromUserAgent("Electron/1.0 " + "x".repeat(600)) === null,
+);
+
+// Defterde beyan ↔ çıkarım ayrımı: ekran ikisini KARIŞTIRMAMALI.
+resetClientRegistryForTest();
+const ID_ESKI = "legacy:aaaaaaaabbbbbbbbcccccccc";
+shouldTouchClient(ID_ESKI, t1);
+touchClient({ instanceId: ID_ESKI, kind: "electron", version: "2.5.0", declared: false }, t1);
+const esk = listClients(t1)[0];
+check("çıkarılmış sürüm defterde 'beyan değil' damgalı", esk?.declared === false);
+check("çıkarılmış sürüm yine de okunuyor", esk?.version === "2.5.0");
+
+// Panel güncellenince künyesini bildirmeye başlar — damga TEK YÖNLÜ kalkar.
+shouldTouchClient(ID_ESKI, t1 + CLIENT_TOUCH_THROTTLE_MS + 1);
+touchClient({ instanceId: ID_ESKI, version: "1.3.2", declared: true }, t1 + CLIENT_TOUCH_THROTTLE_MS + 1);
+check("güncellenen istemci 'beyan' damgasına yükseliyor", listClients(t1)[0]?.declared === true);
+
+resetClientRegistryForTest();
+const ID_BEYAN = "beyan-eden-kurulum-0001";
+shouldTouchClient(ID_BEYAN, t1);
+touchClient({ instanceId: ID_BEYAN, kind: "electron", version: "1.3.2" }, t1);
+check("başlıkla gelen kayıt varsayılan olarak BEYAN", listClients(t1)[0]?.declared === true);
 
 console.log(`\n${fail === 0 ? "✅ TÜMÜ GEÇTİ" : "❌ BAŞARISIZ"} — ${pass} geçti, ${fail} kaldı\n`);
 process.exit(fail === 0 ? 0 : 1);
