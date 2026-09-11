@@ -31,6 +31,18 @@ metresinden) · `LoomStopEvent` (çözgü/atkı kopuş ADEDİ) · `MachineSetupE
 (levent bağlama, tahar, tarak değişimi) · `Shift` (vardiya bazlı üretim) ·
 `FabricInspectionLine` (4-punto muayene).
 
+### ✅ SAHA KAYNAĞI GELDİ — `DOKUMA-DEVERE-SAHA-KAYNAGI.md`
+
+2026-09-11: bir dokumacının sekiz belgesi okundu (desen kartı, devere formülü,
+akış şeması, iplik irsaliyesi, çeki listesi) ve `docs/design/DOKUMA-DEVERE-SAHA-KAYNAGI.md`'ye
+çevrildi. Aşağıdaki boşluğun bir kısmını KAPATIR — devere formülü, levent tanımı
+ve desen kartının yapısı artık elimizde. **Tasarım yapmadan önce o belge okunur.**
+
+İki bulgu tasarımı sadeleştiriyor: (1) `Desen` yeni bir üst düzey varlık DEĞİL,
+kumaş `Item`'ının arkasındaki teknik reçetedir (sevk listesinde ürün desen+renk
+ile anılıyor, zaten `Item`+`Color`). (2) Dokuma ve devere mevcut rotanın ÖNÜNE
+eklenen iki adımdır, mevcut akışı bozmaz.
+
 ### ⚠️ TARAMA BOŞLUĞU — devere/leventleme AYRICA TARANMADI
 
 Ajan istemi "çözgü hazırlama, levent" diyordu ama dönen bulgular TEZGAH
