@@ -10,8 +10,9 @@
 // Üç kaynağın üçü de değişmezdir: `PaymentAllocation.amount` (fatura para
 // biriminde), faturanın kur damgası (onayla donar — kapama yalnız CONFIRMED
 // faturaya yazılabilir) ve tahsilat/çekin kur damgası (kayıtta donar; düzeltme
-// iptal + yeniden kayıttır). Kapama çözülünce (release) satır silinir → kur
-// farkı da kendiliğinden listeden düşer; ayrı bir storno bacağı GEREKMEZ.
+// iptal + yeniden kayıttır). Kapama çözülünce satır `revokedAt` ile damgalanır
+// (2026-09-11'e kadar SİLİNİYORDU) ve evren `ACTIVE_ALLOCATION` ile süzüldüğü için
+// kur farkı yine kendiliğinden listeden düşer; ayrı bir storno bacağı GEREKMEZ.
 // Saklanan bir kolon, release yollarının her birine "farkı da tersle" yükü
 // bindirir ve unutulan tek yol sessiz drift olurdu.
 //
@@ -46,6 +47,7 @@
 import { Prisma, ChequeKind, PaymentDirection } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { invoiceLedgerSide } from "../helpers/finance.helper";
+import { ACTIVE_ALLOCATION } from "../payment-allocation.service";
 import type { DateRange } from "./_shared";
 
 const D = (v: Prisma.Decimal.Value): Prisma.Decimal => new Prisma.Decimal(v);
@@ -96,6 +98,9 @@ export async function getFxDiffReport(opts: {
 }): Promise<FxDiffReport> {
   const rows = await prisma.paymentAllocation.findMany({
     where: {
+      // ÇÖZÜLMÜŞ kapama kur farkı üretmez — damga 2026-09-11'de geldi, bu süzme
+      // olmadan geri alınmış bir kapama raporda yaşamaya devam ederdi.
+      ...ACTIVE_ALLOCATION,
       createdAt: { gte: opts.range.from, lte: opts.range.to },
       invoice: {
         // TRY faturada kur farkı tanım gereği yok (iki damga da 1) — evrenin

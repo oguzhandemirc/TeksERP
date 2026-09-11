@@ -43,7 +43,7 @@ Tartı bir ÖLÇÜMDÜR, ölçüm defteri tutulur (emsal: `RollVariance` — çe
 
 ---
 
-## B-3 · `PaymentAllocation` — çözme hard delete
+## B-3 · `PaymentAllocation` — çözme hard delete ✅ **BİTTİ (2026-09-11)**
 
 **Bulgu.** Tahsisi çözmek satırı fiziksel siliyor (iki yer: toplu storno ve tekil `deallocate`). Üç sayaç düşüyor (`Invoice.paidTotal`, `Payment.allocatedTotal`, `Cheque.allocatedTotal`), geriye hiçbir satır kalmıyor: "fatura ne zaman kapandı, ne zaman kim açtı" cevapsız.
 
@@ -83,7 +83,7 @@ Dördü de `prisma/schema.prisma` + migration istiyor. **Ortak çalışma ağac�
 
 | # | İş | Boyut | Not |
 |---|---|---|---|
-| 1 | B-3 `PaymentAllocation` | küçük | Kolon + süzme; unique yok, en ucuzu. Isınma işi. |
+| 1 | ~~B-3 `PaymentAllocation`~~ | ✅ **BİTTİ** | Migration `20260911120000`; 7+1 okuma yüzeyi süzüldü, §15s tripwire'ı eklendi. Sürpriz: yaşlandırma raporunun 7 ham SQL'i de süzülmek zorundaydı ve o raporun bekçisi YOK. |
 | 2 | B-1 `Shipment` | orta | Yeni model + 4 kolon; `ChequeEvent`i birebir emsal al. |
 | 3 | B-2 `Sack` tartı | orta | Yeni model; B-1 ile aynı dosyaya (`shipping.service.ts`) dokunur → **B-1 ile aynı oturumda, arka arkaya**. |
 | 4 | B-4 Faz 1 | orta-büyük | Partial unique riski burada; en son, tek başına. |

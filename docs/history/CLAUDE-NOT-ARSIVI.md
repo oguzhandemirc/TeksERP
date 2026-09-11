@@ -4964,3 +4964,103 @@ unutulsa ilk ödeme stornosunda o yüzey sessiz drift basardı.
 - Yeni izin **yok**. APK **yok**. Backend ÖNCE, panel sonra.
 - **Eski istemci:** yeni uçları çağırmaz; yeni olay tipini detayda etiketsiz basar (kırılma
   değil). Olay satırındaki `createdAt` additive. `minVersion` gerekmez.
+
+
+---
+
+## 2026-09-11 — B-3: fatura kapamasını çözmek artık silmiyor, damgalıyor [ÇEKİRDEK]
+
+Defter doktrini B bölümünün ilk maddesi. `PaymentAllocation` satırı çözülürken
+FİZİKSEL siliniyordu (iki yol: toplu storno `releaseRowsTx` ve tekil
+`deallocate`). Üç sayaç düşüyor (`Invoice.paidTotal` · `Payment.allocatedTotal` ·
+`Cheque.allocatedTotal`), geriye hiçbir satır kalmıyordu: **"fatura ne zaman
+kapandı, ne zaman kim açtı" cevapsızdı.**
+
+### Neden DAMGA, neden negatif ters satır DEĞİL
+
+`CariTransaction`ın `reversesTxnId` deseni buraya **uygulanamaz**: DB'de
+`payment_allocations_amount_positive` CHECK'i var (`test_db_invariants.ts`
+envanterinde kayıtlı), yani negatif tutarlı karşı satır yazılamaz. Gerekçe
+tercih değil, seddin kendisi. Doğru yol `revokedAt`/`revokedById`/`revokeReason`
+damgasıdır — bu, doktrinin "ters kaydın BİÇİMİ deftere göre değişir" maddesini
+doğuran ilk somut vakadır.
+
+### Atomik claim KORUNDU
+
+Eski kod `deleteMany`i bilerek claim olarak kullanıyordu ("`findUnique → if →
+delete` deseninde iki eşzamanlı istek aynı satırı iki kez çözer"). Yeni kod aynı
+disiplini sürdürür: `updateMany({ where: { …, revokedAt: null } })` + `count`
+kontrolü. Yani değişiklik claim'i zayıflatmadı, ev kuralına daha da uygun hâle
+getirdi.
+
+### SÜRPRİZ — okuma yüzeyi sandığımdan çok daha genişti
+
+Plan "6 okuma yeri" diyordu. Gerçek: **servis içinde 5 + kur farkı raporu 1 +
+YAŞLANDIRMA RAPORUNDA 7 HAM SQL**. `finance-aging.report.ts` `payment_allocations`
+tablosunu ham `$queryRaw` ile yedi yerde okuyor ve **o raporun kendi bekçisi
+YOK** — süzmeyi unutan tek bir kopya, geri alınmış kapamayı yaşlandırmada
+yaşatırdı ve bunu hiçbir kontrol göremezdi. Bu, "ayrışan yüzey" sınıfının en
+pahalı hâli.
+
+Bu yüzden `test_payment_allocation.ts`e **§15s tripwire'ı** eklendi: yaşlandırma
+dosyasının metnini okuyup `payment_allocations` geçen HER SQL parçasında
+`revokedAt` arıyor (7/7), kur farkı raporunda `ACTIVE_ALLOCATION` kullanımını
+ölçüyor, ve serviste `paymentAllocation.delete*` kalmadığını doğruluyor.
+
+### AS-OF İNCELİĞİ — bilinçli olarak ALINMADI
+
+Yaşlandırma bir as-of raporudur. Damga sayesinde artık `revokedAt > asOf`
+("o tarihte aktifti") kurulabilir ve bu DAHA DOĞRU olurdu — silinen satırla bu
+mümkün değildi. Ama rapor rakamlarını sessizce değiştirirdi. Kural: yeni
+davranışın varsayılanı BUGÜNKÜ davranıştır (silinmiş satır her yerde yok
+sayılıyordu) → düz `revokedAt IS NULL` kondu, iyileştirme ayrı iş olarak
+`finance-aging.report.ts` başlığına yazıldı.
+
+### SÖZLEŞME DEĞİŞİKLİĞİ
+
+İkinci kez `deallocate` çağrısı **404 → 409** oldu. Eskiden satır silindiği için
+"bulunamadı" dönüyordu; artık satır DURUYOR ve "bulunamadı" demek yalan olurdu.
+Doğru cevap çakışmadır: kayıt var, zaten çözülmüş.
+
+### Kod çapaları
+
+- `prisma/migrations/20260911120000_payment_allocation_revoke/` — üç nullable
+  kolon + üç composite index (`(x, revokedAt)`), eski tek kolonlu index'ler düştü
+- `src/services/payment-allocation.service.ts` — `ACTIVE_ALLOCATION` tek kaynağı,
+  `releaseRowsTx` damgaya çevrildi (sebep+aktör `ReleaseOptions`tan akıyor),
+  `deallocate` claim'i korunarak damgaya çevrildi
+- `src/services/reports/finance-aging.report.ts` — 7 ham SQL süzüldü + başlık notu
+- `src/services/reports/finance-fx-diff.report.ts` — süzme + başlıktaki "satır
+  silinir" cümlesi düzeltildi (artık yalandı)
+
+### Bekçi
+
+`scripts/test_payment_allocation.ts` **185 kontrol** (önce 181): dört bayat
+beklenti güncellendi (§7b3 · §7f3 · §11c · §11d), iki yeni damga kontrolü
+(§7b3b sebep `PAYMENT_CANCEL`, §11c2 sebep `DEALLOCATE`), §15s tripwire'ı,
+ve §16 mutabakat sorgularının üçü de `revokedAt IS NULL` ile süzüldü.
+
+**NEGATİF SONDA (ikisi de ölçüldü, geri alındı):**
+① `ACTIVE_ALLOCATION` boşaltıldı (`{}`) → bekçi ÇÖKTÜ: çözülmüş satır yeniden
+çözülüyor, sayaç iki kez düşüyor, `paidTotal` tutarsızlığı 409 veriyor. Yani tek
+kaynak gerçekten yük taşıyor.
+② Yaşlandırmadan BİR süzgeç silindi → §15s kırmızı (`süzgeçsiz=1/7`).
+
+**YEŞİL:** payment_allocation 185/185 · consistency 2/2 · finance_reports ·
+invoice 3/3 · cheque 2/2 · schema_drift · identifier_language · tam paket
+473/474 (tek kırmızı `test_identifier_language` idi ve o da bu turda düzeltildi:
+`damga`/`AKTIF_KAPAMA` → `revoked`/`ACTIVE_ALLOCATION`, ev konvansiyonu İngilizce).
+
+### Üç kapı
+
+Migration **var** (`20260911120000`, üç nullable kolon — canlıda tablo yeniden
+yazımı YOK). Yeni izin **yok**. APK **yok**.
+
+### Not — `apply-migration.ts` bu makinede koşmuyor
+
+Betik `psql`i host'ta arıyor; bu makinede `psql` yalnız Docker container'ında
+var. `prisma db execute` de sessizce yardım metni bastı ve **`migrate resolve`
+yine "uygulandı" işaretledi** — `CLAUDE.md`'nin uyardığı "resolve SQL'in
+koştuğunu doğrulamaz" tuzağı birebir yaşandı. SQL `docker exec … psql` ile
+koşuldu ve kolonlar/index'ler `information_schema`dan TEK TEK doğrulandı.
+Betiğin container'a düşen bir yolu olmalı — ayrı iş.

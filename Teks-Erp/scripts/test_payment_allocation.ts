@@ -514,7 +514,12 @@ async function main(): Promise<void> {
     const rel = await prisma.$transaction(async (tx) => releaseAllocationsForPaymentTx(tx, payP, { reason: "PAYMENT_CANCEL" }));
     check("§7b1 releaseAllocationsForPaymentTx kapamaları çözdü", rel.count === 1 && rel.total.equals(800), `count=${rel.count} total=${rel.total.toString()}`);
     check("§7b2 Fatura sayacı SIFIRLANDI", (await invoiceCounters(invP)).paid.isZero());
-    check("§7b3 Kapama satırları SİLİNDİ", (await prisma.paymentAllocation.count({ where: { paymentId: payP } })) === 0);
+    check("§7b3 Kapama satırı SİLİNMEDİ, REVOKE damgası aldı (defter doktrini)",
+      (await prisma.paymentAllocation.count({ where: { paymentId: payP } })) === 1 &&
+        (await prisma.paymentAllocation.count({ where: { paymentId: payP, revokedAt: null } })) === 0);
+    const revP = await prisma.paymentAllocation.findFirst({ where: { paymentId: payP }, select: { revokeReason: true, revokedAt: true } });
+    check("§7b3b Damga SEBEBİ taşıyor (bu fatura neden yeniden açıldı)",
+      revP?.revokeReason === "PAYMENT_CANCEL" && revP.revokedAt != null, String(revP?.revokeReason));
     const openFixed = await paymentAllocationService.listOpenInvoices({ cariId: cari.id, currency: "TRY", direction: PaymentDirection.IN });
     check("§7b4 Fatura AÇIK listeye GERİ DÖNDÜ", openFixed.data.some((r) => r.id === invP));
 
@@ -577,7 +582,9 @@ async function main(): Promise<void> {
       (await invoiceCounters(invE)).paid.isZero(),
       `paidTotal=${(await invoiceCounters(invE)).paid.toString()}`,
     );
-    check("§7f3 Kapama satırı silindi", (await prisma.paymentAllocation.count({ where: { paymentId: payE } })) === 0);
+    check("§7f3 Kapama satırı REVOKE edildi (silinmedi)",
+      (await prisma.paymentAllocation.count({ where: { paymentId: payE } })) === 1 &&
+        (await prisma.paymentAllocation.count({ where: { paymentId: payE, revokedAt: null } })) === 0);
     const openE = await paymentAllocationService.listOpenInvoices({ cariId: cari.id, currency: "TRY", direction: PaymentDirection.IN });
     check("§7f4 Fatura AÇIK listeye döndü (yaşlandırma onu yine sayar)", openE.data.some((r) => r.id === invE));
 
@@ -781,9 +788,16 @@ async function main(): Promise<void> {
     await paymentAllocationService.deallocate(a.data.id);
     check("§11a Kapama çözüldü — fatura sayacı sıfır", (await invoiceCounters(invD)).paid.isZero());
     check("§11b Kaynak sayacı sıfır", (await paymentAllocated(payD)).isZero());
-    check("§11c Satır silindi", (await prisma.paymentAllocation.count({ where: { id: a.data.id } })) === 0);
+    check("§11c Satır DURUYOR ama aktif değil",
+      (await prisma.paymentAllocation.count({ where: { id: a.data.id } })) === 1 &&
+        (await prisma.paymentAllocation.count({ where: { id: a.data.id, revokedAt: null } })) === 0);
+    const revD = await prisma.paymentAllocation.findUnique({ where: { id: a.data.id }, select: { revokeReason: true } });
+    check("§11c2 Elle çözmenin sebebi DEALLOCATE", revD?.revokeReason === "DEALLOCATE", String(revD?.revokeReason));
     const m = await err(() => paymentAllocationService.deallocate(a.data.id));
-    check("§11d İkinci çözme → 404 (sayaç İKİNCİ KEZ düşmez)", /bulunamadı/i.test(m), m.slice(0, 60));
+    // ⚠️ 404 → 409 (2026-09-11): satır artık DURUYOR, "bulunamadı" demek YALAN
+    // olurdu. Doğru cevap çakışmadır: kayıt var, zaten çözülmüş.
+    check("§11d İkinci çözme → 409 'zaten çözülmüş' (sayaç İKİNCİ KEZ düşmez)",
+      /zaten çözülmüş/i.test(m), m.slice(0, 60));
   }
 
   // ── §12 SINIF 4 — TERMİNAL ÇEK SÜZGECİ ATOMİK + count-0 TANISI ──────────
@@ -1802,6 +1816,39 @@ async function main(): Promise<void> {
     );
   }
 
+  // ── §15s ÇÖZÜLMÜŞ KAPAMA SÜZGECİ — ayrışan yüzey tripwire'ı ───────────────
+  // `revokedAt` damgası 2026-09-11'de geldi; `payment_allocations`a HAM SQL ile
+  // bakan her sorgu `revokedAt IS NULL` süzmeli. Yaşlandırma raporunun KENDİ
+  // bekçisi YOK — süzmeyi unutan bir kopya, geri alınmış kapamayı raporda
+  // yaşatır ve bunu hiçbir kontrol göremez. Bu yüzden dosya metninden ölçülür.
+  {
+    const agingSrc = readFileSync(
+      join(__dirname, "..", "src", "services", "reports", "finance-aging.report.ts"),
+      "utf8",
+    );
+    // `payment_allocations` geçen her SQL parçasını kabaca kes ve süzgeci ara.
+    const parcalar = agingSrc.split("payment_allocations").slice(1);
+    const suzgecsiz = parcalar.filter((p) => !/revokedAt/.test(p.slice(0, 400)));
+    check(
+      `§15s yaşlandırmada ${parcalar.length} ham kapama sorgusunun HEPSİ revokedAt süzüyor`,
+      parcalar.length >= 6 && suzgecsiz.length === 0,
+      `süzgeçsiz=${suzgecsiz.length}/${parcalar.length}`,
+    );
+    const fxSrc = readFileSync(
+      join(__dirname, "..", "src", "services", "reports", "finance-fx-diff.report.ts"),
+      "utf8",
+    );
+    check("§15s2 kur farkı raporu ACTIVE_ALLOCATION kullanıyor", /ACTIVE_ALLOCATION/.test(fxSrc));
+    const svcSrc = readFileSync(
+      join(__dirname, "..", "src", "services", "payment-allocation.service.ts"),
+      "utf8",
+    );
+    check(
+      "§15s3 kapama servisinde fiziksel silme KALMADI (delete/deleteMany yok)",
+      !/paymentAllocation\.delete(Many)?\(/.test(svcSrc),
+    );
+  }
+
   // ── §16 MUTABAKAT (TÜM DB) ───────────────────────────────────────────────
   // Üç sayacın da kapama satırlarıyla birebir olması gerekir. Bu, C2'nin
   // `test_consistency`ye taşınacak çekirdeğidir: sayaçlar defterden bağımsız
@@ -1811,7 +1858,7 @@ async function main(): Promise<void> {
     const invDrift = await prisma.$queryRaw<Array<{ docNo: string; stored: string; summed: string }>>`
       SELECT i."docNo", i."paidTotal"::text AS stored, COALESCE(a.total, 0)::text AS summed
         FROM "invoices" i
-        LEFT JOIN (SELECT "invoiceId", SUM("amount") AS total FROM "payment_allocations" GROUP BY "invoiceId") a
+        LEFT JOIN (SELECT "invoiceId", SUM("amount") AS total FROM "payment_allocations" WHERE "revokedAt" IS NULL GROUP BY "invoiceId") a
                ON a."invoiceId" = i."id"
        WHERE i."paidTotal" <> COALESCE(a.total, 0)
     `;
@@ -1823,7 +1870,7 @@ async function main(): Promise<void> {
     const payDrift = await prisma.$queryRaw<Array<{ docNo: string; stored: string; summed: string }>>`
       SELECT p."docNo", p."allocatedTotal"::text AS stored, COALESCE(a.total, 0)::text AS summed
         FROM "payments" p
-        LEFT JOIN (SELECT "paymentId", SUM("amount") AS total FROM "payment_allocations" WHERE "paymentId" IS NOT NULL GROUP BY "paymentId") a
+        LEFT JOIN (SELECT "paymentId", SUM("amount") AS total FROM "payment_allocations" WHERE "revokedAt" IS NULL AND "paymentId" IS NOT NULL GROUP BY "paymentId") a
                ON a."paymentId" = p."id"
        WHERE p."allocatedTotal" <> COALESCE(a.total, 0)
     `;
@@ -1835,7 +1882,7 @@ async function main(): Promise<void> {
     const chqDrift = await prisma.$queryRaw<Array<{ docNo: string; stored: string; summed: string }>>`
       SELECT c."docNo", c."allocatedTotal"::text AS stored, COALESCE(a.total, 0)::text AS summed
         FROM "cheques" c
-        LEFT JOIN (SELECT "chequeId", SUM("amount") AS total FROM "payment_allocations" WHERE "chequeId" IS NOT NULL GROUP BY "chequeId") a
+        LEFT JOIN (SELECT "chequeId", SUM("amount") AS total FROM "payment_allocations" WHERE "revokedAt" IS NULL AND "chequeId" IS NOT NULL GROUP BY "chequeId") a
                ON a."chequeId" = c."id"
        WHERE c."allocatedTotal" <> COALESCE(a.total, 0)
     `;

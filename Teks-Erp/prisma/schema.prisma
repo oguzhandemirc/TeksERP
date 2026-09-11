@@ -7287,6 +7287,18 @@ model PaymentAllocation {
   notes       String? @db.VarChar(300)
   createdById String? @db.Uuid
 
+  /// KAPAMAYI GERİ ALMA — satır SİLİNMEZ, damgalanır (defter doktrini, 2026-09-11).
+  /// Eskiden çözme fiziksel DELETE'ti: üç sayaç düşüyor, geriye hiçbir satır
+  /// kalmıyordu; "fatura ne zaman kapandı, ne zaman kim açtı" cevapsızdı.
+  /// ⚠️ NEGATİF TERS SATIR YAZILAMAZ — `payment_allocations_amount_positive`
+  /// CHECK'i var; `CariTransaction`ın `reversesTxnId` deseni buraya UYGULANAMAZ,
+  /// doğru yol damgadır. Okuyan her yol `revokedAt: null` süzer (tek helper).
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  /// Neden çözüldü — `PAYMENT_CANCEL` / `INVOICE_CANCEL` / `CHEQUE_BOUNCE` /
+  /// `DEALLOCATE` gibi kaynak etiketi ya da operatörün yazdığı serbest metin.
+  revokeReason String?   @db.VarChar(300)
+
   invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
   payment Payment? @relation(fields: [paymentId], references: [id], onDelete: Restrict)
   cheque  Cheque?  @relation(fields: [chequeId], references: [id], onDelete: Restrict)
@@ -7297,9 +7309,11 @@ model PaymentAllocation {
   // aynı faturaya birden çok kez kısmi kapaması meşrudur (düzeltme/bölme) ve
   // toplamı zaten sayaç CHECK'leri sınırlar. Unique koymak, mükerrer tıklamayı
   // engellemek yerine meşru düzeltmeyi bloklardı.
-  @@index([invoiceId])
-  @@index([paymentId])
-  @@index([chequeId])
+  // Aktif kapama sorguları `revokedAt IS NULL` ile süzer; çözülmüş satır zamanla
+  // birikir ve tek kolonlu index onu her turda taramaya bırakırdı.
+  @@index([invoiceId, revokedAt])
+  @@index([paymentId, revokedAt])
+  @@index([chequeId, revokedAt])
   @@map("payment_allocations")
 }
 

@@ -4,6 +4,14 @@
 // YENİ TABLO YOK: bu rapor tamamen salt-okumadır. Kaynakları `invoices`,
 // `payments`, `payment_allocations`, `cari_transactions`, `cari_balances`.
 //
+// ⚠️ ÇÖZÜLMÜŞ KAPAMA (2026-09-11): kapama artık silinmiyor, `revokedAt` ile
+// damgalanıyor — buradaki ALTI ham sorgunun hepsi `"revokedAt" IS NULL` süzer.
+// Süzmeyen tek sorgu, geri alınmış bir kapamayı yaşlandırmada yaşatır.
+// ⚠️ AS-OF İNCELİĞİ, BİLİNÇLİ OLARAK ALINMADI: `revokedAt > asOf` olsaydı
+// "o tarihte aktifti" doğru kurulurdu ve damga bunu MÜMKÜN kılıyor; ama rapor
+// rakamlarını sessizce değiştirirdi. Yeni davranışın varsayılanı BUGÜNKÜ
+// davranıştır (silinmiş satır her yerde yok sayılıyordu) — iyileştirme ayrı iş.
+//
 // ── EFEKTİF VADE: UYDURMA VADE BASILMAZ ───────────────────────────────────────
 // Sıra: `Invoice.dueDate` → yoksa `issueDate + CariAccount.paymentTermDays` →
 // ikisi de yoksa satır **"Vadesiz" kovasına** düşer. Boş vadeye "bugün" ya da
@@ -349,7 +357,7 @@ export async function collectAgingRows(params: AgingRowsParams): Promise<AgingCa
   const allocAfterInvoice = Prisma.sql`
     LEFT JOIN (
       SELECT "invoiceId", SUM(amount) AS amt
-        FROM payment_allocations WHERE "createdAt" > ${asOf} GROUP BY 1
+        FROM payment_allocations WHERE "revokedAt" IS NULL AND "createdAt" > ${asOf} GROUP BY 1
     ) al ON al."invoiceId" = i.id`;
 
   const [cariRows, invoiceRows, invoiceAgg, paymentAgg, ledgerRows, balanceRows, chequeAlloc] =
@@ -381,7 +389,8 @@ export async function collectAgingRows(params: AgingRowsParams): Promise<AgingCa
          WHERE ${invoiceActive} ${fCari} ${fKind} ${fCurInv}
            AND (i."paidTotal" < i."grandTotal"
                 OR EXISTS (SELECT 1 FROM payment_allocations pa
-                            WHERE pa."invoiceId" = i.id AND pa."createdAt" > ${asOf}))
+                            WHERE pa."invoiceId" = i.id AND pa."revokedAt" IS NULL
+                              AND pa."createdAt" > ${asOf}))
       `),
 
       // TÜM aktif faturaların işaretli toplamı — mutabakatın fatura ayağı.
@@ -413,7 +422,7 @@ export async function collectAgingRows(params: AgingRowsParams): Promise<AgingCa
           LEFT JOIN (
             SELECT "paymentId", SUM(amount) AS amt
               FROM payment_allocations
-             WHERE "createdAt" > ${asOf} AND "paymentId" IS NOT NULL GROUP BY 1
+             WHERE "revokedAt" IS NULL AND "createdAt" > ${asOf} AND "paymentId" IS NOT NULL GROUP BY 1
           ) al ON al."paymentId" = p.id
          WHERE p."paymentDate" <= ${asOf}
            AND (p.status = 'ACTIVE' OR (p.status = 'CANCELLED' AND p."cancelledAt" > ${asOf}))
@@ -459,7 +468,7 @@ export async function collectAgingRows(params: AgingRowsParams): Promise<AgingCa
           FROM payment_allocations pa
           JOIN invoices i ON i.id = pa."invoiceId"
           JOIN cari_accounts ca ON ca.id = i."cariId"
-         WHERE pa."chequeId" IS NOT NULL AND pa."createdAt" <= ${asOf} ${fCari} ${fKind} ${fCurInv}
+         WHERE pa."revokedAt" IS NULL AND pa."chequeId" IS NOT NULL AND pa."createdAt" <= ${asOf} ${fCari} ${fKind} ${fCurInv}
          GROUP BY 1, 2
       `),
     ]);
@@ -794,14 +803,15 @@ export async function getAgingReport(params: AgingParams): Promise<AgingReport> 
   const [invDrift, payDrift] = await Promise.all([
     prisma.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`
       SELECT COUNT(*)::bigint AS n FROM invoices i
-        LEFT JOIN (SELECT "invoiceId", SUM(amount) AS amt FROM payment_allocations GROUP BY 1) a
+        LEFT JOIN (SELECT "invoiceId", SUM(amount) AS amt FROM payment_allocations
+                    WHERE "revokedAt" IS NULL GROUP BY 1) a
                ON a."invoiceId" = i.id
        WHERE i."paidTotal" <> COALESCE(a.amt, 0)
     `),
     prisma.$queryRaw<Array<{ n: bigint }>>(Prisma.sql`
       SELECT COUNT(*)::bigint AS n FROM payments p
         LEFT JOIN (SELECT "paymentId", SUM(amount) AS amt FROM payment_allocations
-                    WHERE "paymentId" IS NOT NULL GROUP BY 1) a
+                    WHERE "revokedAt" IS NULL AND "paymentId" IS NOT NULL GROUP BY 1) a
                ON a."paymentId" = p.id
        WHERE p."allocatedTotal" <> COALESCE(a.amt, 0)
     `),

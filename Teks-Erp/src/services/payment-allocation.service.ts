@@ -95,12 +95,21 @@ export interface ReleaseSummary {
   invoiceIds: string[];
 }
 
+/**
+ * AKTİF KAPAMA YÜKLEMİ — tek kaynak (defter doktrini, 2026-09-11).
+ *
+ * Çözülmüş kapama artık SİLİNMİYOR, `revokedAt` ile damgalanıyor; satırı okuyan
+ * HER yol bu yüklemden geçer. Elle kopyalanan `revokedAt: null` bir gün unutulur
+ * ve çözülmüş kapama sayaca/rapora geri sızar (ayrışan yüzey sınıfı).
+ */
+export const ACTIVE_ALLOCATION = { revokedAt: null } as const;
+
 export interface ReleaseOptions {
   /**
-   * Audit'e yazılacak SEBEP etiketi (`PAYMENT_CANCEL` / `INVOICE_CANCEL` /
-   * `CHEQUE_BOUNCE` …). Kapama satırı FİZİKSEL olarak silindiği için (aşağıdaki
-   * nota bak) izin kalacağı tek yer audit'tir — etiketsiz bırakmak "bu fatura
-   * neden yeniden açıldı" sorusunu cevapsız yapardı.
+   * SEBEP etiketi (`PAYMENT_CANCEL` / `INVOICE_CANCEL` / `CHEQUE_BOUNCE` …).
+   * Artık satırın KENDİSİNE de yazılır (`revokeReason`) — eskiden kapama satırı
+   * fiziksel silindiği için tek yer audit'ti, o da 6 ayda arşivleniyordu ve
+   * "bu fatura neden yeniden açıldı" sorusu kalıcı olarak cevapsız kalıyordu.
    */
   reason?: string;
   userId?: string;
@@ -335,7 +344,8 @@ async function dropChequeAllocated(
 // Kapamanın izi ayrıca audit'e yazılır.
 
 /**
- * Verilen kapama satırlarını çözer: fatura sayaçlarını düşürür, satırları siler.
+ * Verilen kapama satırlarını çözer: fatura sayaçlarını düşürür, satırları
+ * REVOKE DAMGASIYLA işaretler (silmez — defter doktrini).
  *
  * Ortak gövde — üç storno yolu da buradan geçer ki "faturayı düş ama kaynağı
  * düşme" gibi yarım bir çözülme yazılamasın.
@@ -343,7 +353,9 @@ async function dropChequeAllocated(
 async function releaseRowsTx(
   tx: Prisma.TransactionClient,
   rows: Array<{ id: string; invoiceId: string; amount: Prisma.Decimal }>,
+  opts: ReleaseOptions = {},
 ): Promise<{ total: Prisma.Decimal; invoiceIds: string[] }> {
+  const { reason, userId } = opts;
   // Fatura BAŞINA topla: aynı kaynağın aynı faturaya birden çok kısmi kapaması
   // meşrudur (unique yok — migration notu). Satır satır düşmek de doğru sonucu
   // verirdi ama tek UPDATE hem daha az kilit hem daha az tur.
@@ -366,7 +378,17 @@ async function releaseRowsTx(
       );
     }
   }
-  await tx.paymentAllocation.deleteMany({ where: { id: { in: rows.map((r) => r.id) } } });
+  // ATOMİK CLAIM korunur: `revokedAt: null` yüklemi eski `deleteMany`in yerini
+  // tutar — eşzamanlı iki storno aynı satırı iki kez çözemez, kaybeden 0 sayar.
+  const revoked = await tx.paymentAllocation.updateMany({
+    where: { id: { in: rows.map((r) => r.id) }, ...ACTIVE_ALLOCATION },
+    data: { revokedAt: new Date(), revokedById: userId ?? null, revokeReason: reason ?? null },
+  });
+  if (revoked.count !== rows.length) {
+    throw AppError.conflict(
+      "Kapama satırlarından biri bu sırada zaten çözülmüş — işlem geri alındı, listeyi yenileyin.",
+    );
+  }
   return { total, invoiceIds: [...byInvoice.keys()] };
 }
 
@@ -383,12 +405,12 @@ export async function releaseAllocationsForPaymentTx(
   opts: ReleaseOptions = {},
 ): Promise<ReleaseSummary> {
   const rows = await tx.paymentAllocation.findMany({
-    where: { paymentId },
+    where: { paymentId, ...ACTIVE_ALLOCATION },
     select: { id: true, invoiceId: true, amount: true },
   });
   if (rows.length === 0) return { count: 0, total: D0(), invoiceIds: [] };
 
-  const { total, invoiceIds } = await releaseRowsTx(tx, rows);
+  const { total, invoiceIds } = await releaseRowsTx(tx, rows, opts);
   const n = await dropPaymentAllocated(tx, paymentId, total);
   if (n === 0) {
     throw AppError.conflict(
@@ -434,12 +456,12 @@ export async function releaseAllocationsForChequeTx(
   opts: ReleaseOptions = {},
 ): Promise<ReleaseSummary> {
   const rows = await tx.paymentAllocation.findMany({
-    where: { chequeId },
+    where: { chequeId, ...ACTIVE_ALLOCATION },
     select: { id: true, invoiceId: true, amount: true },
   });
   if (rows.length === 0) return { count: 0, total: D0(), invoiceIds: [] };
 
-  const { total, invoiceIds } = await releaseRowsTx(tx, rows);
+  const { total, invoiceIds } = await releaseRowsTx(tx, rows, opts);
   const n = await dropChequeAllocated(tx, chequeId, total);
   if (n === 0) {
     throw AppError.conflict("Çek kapama sayacı tutarsız (allocatedTotal beklenenden az) — işlem geri alındı.");
@@ -473,7 +495,7 @@ export async function releaseAllocationsForInvoiceTx(
   opts: ReleaseOptions = {},
 ): Promise<ReleaseSummary> {
   const rows = await tx.paymentAllocation.findMany({
-    where: { invoiceId },
+    where: { invoiceId, ...ACTIVE_ALLOCATION },
     select: { id: true, invoiceId: true, paymentId: true, chequeId: true, amount: true },
   });
   if (rows.length === 0) return { count: 0, total: D0(), invoiceIds: [] };
@@ -486,7 +508,7 @@ export async function releaseAllocationsForInvoiceTx(
     else if (r.chequeId) byCheque.set(r.chequeId, (byCheque.get(r.chequeId) ?? D0()).plus(amt));
   }
 
-  const { total } = await releaseRowsTx(tx, rows);
+  const { total } = await releaseRowsTx(tx, rows, opts);
   for (const [pid, sum] of byPayment) {
     if ((await dropPaymentAllocated(tx, pid, sum)) === 0) {
       throw AppError.conflict("Tahsilat kapama sayacı tutarsız — işlem geri alındı.");
@@ -856,17 +878,20 @@ export class PaymentAllocationService {
    */
   async deallocate(id: string, userId?: string): Promise<ApiResponse<{ id: string; invoiceId: string; amount: string }>> {
     const result = await prisma.$transaction(async (tx) => {
-      // ⚠️ ATOMİK CLAIM: satırı ÖNCE sil, sonra sayaçları düş. `findUnique →
-      // if → delete` deseninde iki eşzamanlı istek aynı satırı iki kez
-      // "çözer" ve sayaçları İKİ KEZ düşürürdü (fatura sahte açık kalırdı).
-      // `deleteMany` etkilenen satır sayısını döner → gerçek claim.
+      // ⚠️ ATOMİK CLAIM: satırı ÖNCE damgala, sonra sayaçları düş. `findUnique →
+      // if → update` deseninde iki eşzamanlı istek aynı satırı iki kez "çözer"
+      // ve sayaçları İKİ KEZ düşürürdü (fatura sahte açık kalırdı). `updateMany`
+      // + `revokedAt: null` yüklemi etkilenen satır sayısını döner → gerçek claim.
       const row = await tx.paymentAllocation.findUnique({
         where: { id },
         select: { id: true, invoiceId: true, paymentId: true, chequeId: true, amount: true },
       });
       if (!row) throw AppError.notFound("Kapama kaydı bulunamadı.");
-      const deleted = await tx.paymentAllocation.deleteMany({ where: { id } });
-      if (deleted.count === 0) throw AppError.conflict("Kapama kaydı bu sırada zaten çözülmüş.");
+      const revoked = await tx.paymentAllocation.updateMany({
+        where: { id, ...ACTIVE_ALLOCATION },
+        data: { revokedAt: new Date(), revokedById: userId ?? null, revokeReason: "DEALLOCATE" },
+      });
+      if (revoked.count === 0) throw AppError.conflict("Kapama kaydı bu sırada zaten çözülmüş.");
 
       const amount = D(row.amount);
       if ((await dropInvoicePaid(tx, row.invoiceId, amount)) === 0) {
@@ -882,10 +907,11 @@ export class PaymentAllocationService {
 
     void AuditService.log({
       userId,
-      action: "DELETE",
+      action: "UPDATE",
       tableName: "PAYMENT_ALLOCATION",
       recordId: result.id,
-      oldData: { event: "DEALLOCATE", invoiceId: result.invoiceId, amount: result.amount },
+      oldData: { revokedAt: null },
+      newData: { event: "DEALLOCATE", invoiceId: result.invoiceId, amount: result.amount },
     });
     return { success: true, data: result, message: `${result.amount} tutarlı kapama çözüldü.` };
   }
@@ -906,7 +932,7 @@ export class PaymentAllocationService {
       throw AppError.badRequest("Fatura, tahsilat veya çek seçilmeli.");
     }
     const data = await prisma.paymentAllocation.findMany({
-      where,
+      where: { ...where, ...ACTIVE_ALLOCATION },
       select: {
         id: true,
         amount: true,
