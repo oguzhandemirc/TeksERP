@@ -5647,6 +5647,7 @@ Migration **yok** · izin **yok** · APK **yok**. Panel sürümü önerilir (alt
 export kolonu + tanım cümlesi), zorunlu değil. Sözleşme: yanıta `deliveredQty` EKLENDİ
 (kırıcı değil); karne "giden" rakamı tam doğrudan sevki artık içerir (anlam değişikliği,
 fabrikada veri yok). Sıra: backend önce.
+
 ---
 
 ## 2026-09-11 — Sayım stornosu: tamamlanmış sayım artık terminal değil [ÇEKİRDEK]
@@ -6128,3 +6129,73 @@ topa atıldı → ALREADY_REVERSED topun damgası düştü · (iv) panel olay li
 
 Migration **yok** (şema dokunuşu yalnız yorum). İzin **yok**. APK **yok**; panel
 sürümü gerekir (tazeleme kümesi + önizleme dalları + "Belge" sütunu).
+
+---
+
+## 2026-09-12 — Karne teslim atfı ve geri alma kapısı: denetim turunun sekiz düzeltmesi [ÇEKİRDEK]
+
+İki commit'in (karne B kararı, reopen kapısı) bağımsız denetimi beş ORTA + üç
+DÜŞÜK bulgu çıkardı; hepsi doğrudan sevk (DSK) yollarında, fabrikada 0 olay →
+canlı rakam etkilenmedi, düzeltme önleyici.
+
+### Karne: teslim atfı TOP düzeyine indi
+
+Teslim yüklemi `sd."directShippedAt" IS NOT NULL OR …` ile SEVK düzeyinden
+başlıyordu; damga kalemin kendi topuna bakmadan uygulanınca iki sonuç doğuyordu:
+(1) kalan-kapamasıyla deftere yazılmış FİRE, kardeş top müşteriye gidip sevk
+damgalanınca karnede SİLİNİYOR; (2) aynı iki işlem TERS SIRADA yapılınca karne
+farklı oran veriyordu — yani rakam operatörün tuş sırasına bağlıydı.
+
+Yeni yüklem üç durumludur: `ownDirectShip` (topu BU sevkin DSK'sıyla çıktı →
+kapanır, tamamı teslim) · `foreignDirectShip` (DSK başka sevke ait → ÖLÇÜLEMEZ
+kovası: ne fire, ne açık bakiye; sayısı `unattributedItems/Qty` ile basılır) ·
+`legacyStampDelivered` (DSK kaydı olmayan eski damga; yalnız kabul ve kapama
+GÖRMEMİŞ kalemde teslim sayılır). Kapanış ve atıf artık AYNI yüklemden gelir —
+ayrıştıkları için kalem "kapandı ama teslimi 0" olup firmaya %100 fire yazıyordu.
+
+Çekme sapmasının atfı da kaleme bağlandı (`sourceRefId` → makbuz kalemi): aynı
+top aynı adımda iki kez sevk edildiyse sapma iki kaleme de yazılıyor, dönen
+metraj çift sayılıyordu. Eski (sourceRefId'siz) satırlarda davranış korunur.
+
+`getCancelImpact.fasonRemainders` yüklemi `AND` ile yazıldı: spread aynı anahtarı
+(`receiptItems`) ikinci kez yazdığı için helper'ın `none` koşulunu EZİYOR ve
+tamamen dönmüş kalemler "fasonda kalan" sayılıp iptal diyaloğunda gereksiz fire
+onayı istiyordu.
+
+### Geri alma: iş emri ve refakat kartı da dirilir
+
+`reopenRemainder` topu diriltirken yalnız adımı elle ACTIVE'e çekiyordu. Son adımı
+fason olan rotada `closeRemainder` WO'yu ve kartı COMPLETED yapar; sonuç "mal
+fasonda ama iş emri kapalı" — ikinci sevk 409, kabul iptali 409, kart okutulamaz.
+Artık repodaki diriltme sözleşmesi uygulanıyor (emsal `tambur-manual` / manuel
+taşıma): `recomputeStepStatus` + `ensureWorkOrderInProgress` + WO
+COMPLETED→IN_PROGRESS + `setWorkOrderCardStatusesTx(COMPLETED→ACTIVE)` + karta
+INFO izi.
+
+Kapama kalemi aramasından `dispatch.directShippedAt: null` süzgeci DÜŞTÜ: kardeş
+top müşteriye gidince sevk damgalanır ve damgayı kapıya koymak MEŞRU bir kapamanın
+geri alınmasını sonsuza dek imkânsız kılıyordu. "Mal müşteriye gitti" vakasını
+topun kendi geçmişi (`roll.directShipmentId`) tutuyor.
+
+Üç 409 artık üç ayrı kod taşıyor: `REMAINDER_NOT_CLOSED` (topun durumu uygun
+değil) · `REMAINDER_NOT_CLOSED_AT_STEP` (bu adımda kapama damgası yok) ·
+`REMAINDER_ALREADY_REOPENED` (eşzamanlı geri alma). Swagger açıklaması da onları
+sayıyor.
+
+### Bekçiler
+
+- `test_subcontract_scorecard.ts` §9 — kapama + damga karışımı ve İKİ İŞLEM SIRASI
+  aynı rakamı vermeli (9a ≡ 9b: fire 200 m / %50); §10 — yabancı DSK ölçülemez
+  kovası. 36 kontrol.
+- `test_fason_reopen_remainder_guard.ts` — G1'e yan etki kontrolleri (hareket
+  yeniden açıldı: `exitedAt`/`qtyOut` null + `REMAINDER_REOPENED` notu; adım
+  ACTIVE), G5 tek adımlı rotada WO + kart + kart izi, G6 damgalı sevkte meşru
+  kapamanın geri alınabilmesi. 26 kontrol.
+- Bekçi haritasında üst özet ile bölüm başlığı sayacı eşitlendi; `consistency-check-derived`
+  §24a yorumu hangi koşulu UYGULAMADIĞINI söylüyor.
+
+### Üç kapı
+
+Migration **yok** · izin **yok** · APK **yok**. Sözleşme: karne satırına iki alan
+EKLENDİ (`unattributedItems`, `unattributedQty`); panel tipleri ve dışa aktarım
+açıklaması güncellendi, eski panel alanları yok sayar.

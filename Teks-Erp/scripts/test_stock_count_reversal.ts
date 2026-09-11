@@ -241,10 +241,25 @@ async function main(): Promise<void> {
 
   // §7
   const svc = readFileSync(join(__dirname, "../src/services/stock-count-reversal.service.ts"), "utf8");
+  // Plan katmanı AYRI dosyada (karar ↔ yazım ayrımı): tarama İKİSİNİ birden okur,
+  // yoksa kural bölünmeyle sessizce kapsam dışına çıkar.
+  const planHelper = readFileSync(
+    join(__dirname, "../src/services/helpers/stock-count-reversal-plan.helper.ts"),
+    "utf8",
+  );
   const countSvc = readFileSync(join(__dirname, "../src/services/stock-count.service.ts"), "utf8");
   const route = readFileSync(join(__dirname, "../src/routes/stock-count.routes.ts"), "utf8");
-  check("§7a İptal metni tek kaynaktan (servislerde elle `sayımında bulunamadı` literali yok)", !/`\$\{[^}]+\} sayımında bulunamadı`/.test(countSvc.replace(/export function stockCountCancelReason[\s\S]*?\n\}/, "")) && !svc.includes("sayımında bulunamadı"));
-  check("§7b Storno servisinde defter silme/güncelleme yok", !/(warehouseMovement|yarnMovement|rollVariance)\.delete|stockCountLine\.update/.test(svc));
+  check(
+    "§7a İptal metni tek kaynaktan (storno servisi ve plan helper'ı literal taşımaz)",
+    !/`\$\{[^}]+\} sayımında bulunamadı`/.test(countSvc.replace(/export function stockCountCancelReason[\s\S]*?\n\}/, "")) &&
+      !svc.includes("sayımında bulunamadı") &&
+      !planHelper.includes("sayımında bulunamadı"),
+  );
+  check(
+    "§7b Storno servisinde VE plan helper'ında defter silme/satır güncelleme yok",
+    !/(warehouseMovement|yarnMovement|rollVariance)\.delete|stockCountLine\.update/.test(svc) &&
+      !/(warehouseMovement|yarnMovement|rollVariance)\.(delete|update)|stockCountLine\.update/.test(planHelper),
+  );
   check("§7c Rota: reverse iki izni birden ister", /"\/:id\/reverse"[\s\S]{0,200}roll:manual-adjust[\s\S]{0,80}yarn:write/.test(route));
 }
 
