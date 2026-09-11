@@ -19,6 +19,7 @@ Durum tabloları **"şu an ne"**yi tutar; defterler **"ne oldu"**yu tutar ve "ne
 - **[ÇEKİRDEK]** Append-only defter satırı GÜNCELLENMEZ ve SİLİNMEZ; bu yüzden `updatedAt` almaz ve kronolojisi `createdAt`'tir. Bir tablo hem defter hem durum kaynağı OLAMAZ — ikisi gerekiyorsa iki tablodur. · bekçi: `test_db_invariants.ts (kısmi)` <sub>(arşiv:2026-09-10, [DB-09])</sub>
 - **[ÇEKİRDEK]** Ters kaydın BİÇİMİ deftere göre değişir: negatif/karşı satır ancak DB izin veriyorsa yazılır — `payment_allocations_amount_positive` gibi bir CHECK varsa doğru yol `revokedAt`/`revokedById`/`revokeReason` DAMGASIDIR. Damgalı defterde okuyan HER yol aktif yüklemi TEK helper'dan alır (`ACTIVE_ALLOCATION`). · bekçi: `test_payment_allocation.ts` §15s <sub>(arşiv:2026-09-11)</sub>
 - **[ÇEKİRDEK]** Tekrar edebilen bir çevrimin izi TEK KOLONA sığmaz: sevk → geri al → sevk turunda `undispatchedAt` gibi tek damga ikinci turda birincisini ezer. Böyle çevrimler OLAY DEFTERİ ister (`ShipmentEvent`, `ChequeEvent` emsali); durum kolonu güncel gerçeği, defter geçmişi taşır. <sub>(arşiv:2026-09-11)</sub>
+- **[ÇEKİRDEK]** Tekil kısıt taşıyan bir defteri damgaya çevirirken kısıt PARTIAL'a döner (`WHERE "revokedAt" IS NULL`) — yoksa geri alınmış satır dururken aynı anahtar yeniden yazılamaz ve iş TEKRARLANAMAZ hâle gelir. ⚠️ Prisma'nın `@@unique`i CONSTRAINT değil INDEX üretir: düşürmek için `DROP INDEX` gerekir, `DROP CONSTRAINT IF EXISTS` SESSİZCE hiçbir şey yapmaz. Şemada `@@unique` `map:` ile adlandırılır ki drift yalnız predicate farkını görsün. · bekçi: `test_roll_operation_revoke.ts` §2/§4 <sub>(arşiv:2026-09-11)</sub>
 - **[ÇEKİRDEK]** Defter İŞ VERİSİDİR: arşivlenmez, budanmaz. Büyüme index/partition ile karşılanır, satır silerek değil. <sub>(arşiv:2026-09-10)</sub>
 - **[ÇEKİRDEK]** Çalışma oturumu (`WorkSession`) geçmişi hiçbir yoldan silinmez; oturumu olan istasyon/makine kalıcı silinemez (409 `workSessionCount`), pasife alınır. · bekçi: `test_work_session_history_guard.ts` <sub>(arşiv:2026-09-11)</sub>
 - **[ÇEKİRDEK]** Çekin her ileri olayının tipli stornosu vardır (`CANCELLED` hariç her terminalden tek çıkış): ters cari satır orijinaline `reversesTxnId` ile bağlanır, bugüne yazılır, durum en yeni ileri olayın (`createdAt`) `fromStatus`una döner; olay/satır bulunamazsa 409. · bekçi: `test_cheque_reversal.ts` <sub>(arşiv:2026-09-11)</sub>
@@ -72,7 +73,7 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 | `CashTransaction` `:6898` | kasa/banka | yarı (`status: CANCELLED`) | ✅ |
 | `YarnMovement` `:7399` | iplik stoğu | ✅ | ✅ ADJUST_IN/OUT |
 | `RollMovement` `:3569` | topun adım içi giriş/çıkışı | ❌ `updatedAt` + 4 `deleteMany` | ❌ |
-| `RollOperation` `:3108` | kurşun/QC2/tambur/fason kanıtı | ❌ 7 `deleteMany` | ❌ |
+| `RollOperation` `:3108` | kurşun/QC2/tambur/fason kanıtı | ✅ `revokedAt` damgası | ✅ damga + PARTIAL unique |
 | `RollVariance` `:3175` | fire · düzeltme · aşım | ✅ | ✅ `reversedAt` |
 | `SwatchStockReduction` `:4159` | kartela düşümü | ✅ | ❌ |
 | `PaymentAllocation` `:7249` | fatura kapama | ✅ `revokedAt` damgası | ✅ damga (negatif satır CHECK yüzünden yasak) |

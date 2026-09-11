@@ -18,6 +18,7 @@
 // workorder-split.service.ts (redye rewind + repoint + recompute).
 // =============================================================================
 
+import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
 import prisma from "../lib/prisma";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { Prisma, RollStatus, WorkOrderStatus, TravelerCardStatus, RollOperationType, StepStatus } from "@prisma/client";
@@ -294,7 +295,7 @@ export class WorkOrderManualMoveService {
     //     edilir (grade → Belirsiz). Yanlış girilen grade/kurşun süpervizörün düzelttiği şeydir.
     const selIds = ctx.selected.map((r) => r.id);
     const opRows = await prisma.rollOperation.findMany({
-      where: { rollId: { in: selIds }, operationType: { in: BLOCKING_OPS }, step: { stepSequence: { gt: t.stepSequence } } },
+      where: { ...ACTIVE_OPERATION, rollId: { in: selIds }, operationType: { in: BLOCKING_OPS }, step: { stepSequence: { gt: t.stepSequence } } },
       select: { rollId: true },
     });
     const opRollIds = new Set(opRows.map((o) => o.rollId));
@@ -700,18 +701,20 @@ export class WorkOrderManualMoveService {
         });
 
         // 2b) QC REVERSAL: hedef-sonrası salt QC2/Kurşun kararlarını VOID et — kesim yok
-        //     (yukarıda hard-stop). BLOCKING_OPS log'ları silinir + kalite Belirsiz'e döner;
-        //     top o adımı yeniden işleyince grade'i tekrar kazanır. Movement zaten silindi (2).
+        //     (yukarıda hard-stop). BLOCKING_OPS izleri GERİ ALINIR (silinmez —
+        //     defter doktrini) + kalite Belirsiz'e döner; top o adımı yeniden
+        //     işleyince grade'i tekrar kazanır. Partial unique sayesinde geri
+        //     alınmış satır dururken aynı üçlü yeniden yazılabilir.
         let qcVoided = false;
         if (laterStepIds.length > 0) {
-          const del = await tx.rollOperation.deleteMany({
-            where: {
-              rollId: { in: selectedIds },
-              workOrderStepId: { in: laterStepIds },
-              operationType: { in: BLOCKING_OPS },
-            },
+          const revokedCount = await revokeRollOperations(tx, {
+            rollIds: selectedIds,
+            workOrderStepIds: laterStepIds,
+            operationTypes: [...BLOCKING_OPS],
+            reason: "MANUAL_MOVE_QC_VOID",
+            userId,
           });
-          if (del.count > 0) {
+          if (revokedCount > 0) {
             await tx.roll.updateMany({
               where: { id: { in: selectedIds } },
               data: { qualityGrade: null },

@@ -31,6 +31,7 @@ import {
   StepStatus,
   type PrismaClient,
 } from "@prisma/client";
+import { ACTIVE_OPERATION } from "./roll-operation.helper";
 import { AppError } from "../../utils/app-error";
 import { resolveKursunBypassEnabled } from "../system-setting.service";
 import {
@@ -122,7 +123,7 @@ export async function loadBypassEligibilitySignals(
   });
 
   const qc2Ops = await db.rollOperation.findMany({
-    where: {
+    where: { ...ACTIVE_OPERATION,
       workOrderStepId: { in: stepIds },
       operationType: RollOperationType.QC2_COMPLETED,
       // Tambur kalıtımı (inheritedFromParentRollId) FİİLEN yapılmış QC2 değildir.

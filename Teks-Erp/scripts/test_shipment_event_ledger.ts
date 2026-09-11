@@ -28,6 +28,7 @@ import {
   ShipmentStatus,
 } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
+import { ensureTestAdmin } from "./fixture-test-user";
 import { ShippingService } from "../src/services/shipping.service";
 
 let pass = 0;
@@ -101,7 +102,9 @@ async function main(): Promise<void> {
     return v.id;
   };
   itemId = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS");
-  adminId = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
+  // ⚠️ Seed kullanıcı adına HAM yaslanılmaz (ortam bağımlılığı tavanı) —
+  // bekçi kendi yöneticisini fixture'dan çözer.
+  adminId = (await ensureTestAdmin()).id;
   // ⚠️ "herhangi bir aktif müşteri" ARAMAYIZ: temiz CI DB'sinde düşer, dolu
   // DB'de ise başkasının verisine yaslanır (ortam bağımlılığı tavanı).
   const musteri = await prisma.customer.upsert({

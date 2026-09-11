@@ -200,6 +200,8 @@ const COUNT_SPECS: CountSpec[] = [
     label: "Top işlemi (KK1/KK2/kurşun/tambur)",
     group: "production",
     timestampField: "createdAt",
+    // ⚠️ `revokedAt` SÜZÜLMEZ (bilinçli): burada ölçülen "kaç iz geçerli" değil
+    // "yedekten beri kaç satır YAZILDI" — geri alınmış satır da yazılmıştır.
     run: (c) => prisma.rollOperation.count({ where: { createdAt: { gte: c } } }),
   },
   {

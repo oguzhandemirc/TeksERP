@@ -15,6 +15,7 @@
 // Bu modül tüm çağrıcılar için ortak transaction client (Prisma.TransactionClient)
 // kabul eder; atomik işlemler bozulmaz.
 // =============================================================================
+import { ACTIVE_OPERATION } from "./roll-operation.helper";
 import { Prisma, RollStatus, StationKind, StepStatus, WorkOrderStatus } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
@@ -305,7 +306,7 @@ export async function canRollGoBackFromStep(
   }
 
   const operation = await tx.rollOperation.findFirst({
-    where: { rollId, workOrderStepId: nextStepId },
+    where: { ...ACTIVE_OPERATION, rollId, workOrderStepId: nextStepId },
     select: { id: true, operationType: true },
   });
   if (operation) {

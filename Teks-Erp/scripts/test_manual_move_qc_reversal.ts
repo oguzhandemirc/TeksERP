@@ -51,8 +51,13 @@ const ok = (c: boolean, m: string) => { console.log(`${c ? "  ✓" : "  ✗ FAIL
     const after = await p.roll.findMany({ where: { id: { in: rollIds } }, select: { qualityGrade: true, currentStepId: true } });
     ok(after.every((r) => r.currentStepId === kursun.id), "toplar Kurşun'a geri taşındı");
     ok(after.every((r) => r.qualityGrade === null), "kalite VOID edildi (grade → Belirsiz/null)");
-    const tamburOps = await p.rollOperation.count({ where: { rollId: { in: rollIds }, workOrderStepId: tambur.id, operationType: "TAMBUR_PROCESSED" } });
-    ok(tamburOps === 0, `Tambur işlem log'ları silindi (kalan ${tamburOps})`);
+    // ⚠️ 2026-09-11 (defter doktrini): iz SİLİNMEZ, `revokedAt` ile damgalanır —
+    // "bu topa tambur kararı uygulandı mı" sorusunun cevabı geriye dönük
+    // değişmesin. Ölçülen şey artık AKTİF iz sayısıdır.
+    const tamburOpsAktif = await p.rollOperation.count({ where: { rollId: { in: rollIds }, workOrderStepId: tambur.id, operationType: "TAMBUR_PROCESSED", revokedAt: null } });
+    const tamburOpsHepsi = await p.rollOperation.count({ where: { rollId: { in: rollIds }, workOrderStepId: tambur.id, operationType: "TAMBUR_PROCESSED" } });
+    ok(tamburOpsAktif === 0, `Tambur işlem izleri GERİ ALINDI (aktif kalan ${tamburOpsAktif})`);
+    ok(tamburOpsHepsi > 0, `⭐ İzler SİLİNMEDİ, defterde duruyor (${tamburOpsHepsi} damgalı satır)`);
 
     const audit = await p.systemLog.findFirst({ where: { tableName: "ROLL", action: "UPDATE", recordId: { in: rollIds } }, orderBy: { createdAt: "desc" }, select: { newData: true } });
     const nd = audit?.newData as Record<string, unknown> | null;

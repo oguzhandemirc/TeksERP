@@ -10,6 +10,7 @@
 
 ### Değişmezler
 
+- **[ÇEKİRDEK]** `RollOperation` izi geri alınırken SİLİNMEZ, `revokedAt`/`revokedById`/`revokeReason` ile damgalanır (tambur-undo · fason iptal · manuel taşıma QC void — yedi yol). Okuyan her yol `ACTIVE_OPERATION` tek kaynağından süzer; üç bilinçli istisna (yedek etki ölçümü + iki silme guard'ı) gerekçesiyle koda yazılıdır. · bekçi: `test_roll_operation_revoke.ts` <sub>(arşiv:2026-09-11)</sub>
 - **[ÇEKİRDEK]** Her rotanın SON adımı topu finalize eder (`finalizeRollsAtLastStep`) — Tambur özel değil; top⟺Tambur, açık kumaş⟺diğer istasyonlar; `Roll.form` otomatik; `qualityGrade` NULLABLE (yalnız kalite istasyonları belirler, `finalizedAt` kaliteyle aynı olaydan). · bekçi: `scripts/test_finalize_last_step.ts` <sub>(CLAUDE.md:113, arşiv:333)</sub>
 - **[ÇEKİRDEK]** Finalize, iş emrini topun `currentStep`'inden çözer — köken `producedInStep`'ten DEĞİL (Top Kesme çocuğu `producedInStepId=null` doğar). · bekçi: `scripts/test_tambur_finalize_wo_guard.ts §4` <sub>(CLAUDE.md:180)</sub>
 - **[ÇEKİRDEK]** İş emri kapaması YALNIZ terminal-guard'lı `completeWorkOrderIfStepsDone` ile (COMPLETED/CANCELLED/SUPERSEDED notIn); CANCELLED/SUPERSEDED asla COMPLETED'a dirilmez; iptal/devredilmiş WO adımındaki topun finalize/kesimi reddedilir (pre-tx + kilit altı taze guard). · bekçi: `scripts/test_wo_terminal_guard.ts + test_tambur_finalize_wo_guard.ts §1` <sub>(CLAUDE.md:180)</sub>

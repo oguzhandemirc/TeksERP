@@ -72,6 +72,7 @@
 // HER kaydı somut listeler; apply tx-içi TAZE guard'larla (atomik claim) korunur.
 // =============================================================================
 
+import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import {
@@ -633,7 +634,7 @@ export class TamburUndoService {
     // Kapanışın adımı + iş emri — FULL ile aynı çözüm (depo kesiminde ikisi de
     // yok ve bu meşru: kaynak, kapanış-öncesi rafına döner).
     const op = await prisma.rollOperation.findFirst({
-      where: { rollId: parentId, operationType: RollOperationType.TAMBUR_PROCESSED },
+      where: { ...ACTIVE_OPERATION, rollId: parentId, operationType: RollOperationType.TAMBUR_PROCESSED },
       orderBy: { createdAt: "desc" },
       select: { workOrderStepId: true },
     });
@@ -714,7 +715,7 @@ export class TamburUndoService {
   ): Promise<{ option: UndoOption; ctx: Omit<UndoContext, "mode" | "options" | "defaultMode" | "parentArchived" | "parentId" | "parent"> }> {
     const warnings: string[] = [];
     const op = await prisma.rollOperation.findFirst({
-      where: { rollId: parentId, operationType: RollOperationType.TAMBUR_PROCESSED },
+      where: { ...ACTIVE_OPERATION, rollId: parentId, operationType: RollOperationType.TAMBUR_PROCESSED },
       orderBy: { createdAt: "desc" },
       select: { workOrderStepId: true, createdAt: true },
     });
@@ -943,7 +944,7 @@ export class TamburUndoService {
     if (!blockReason) {
       const [childCount, opCount, movementCount] = await Promise.all([
         prisma.roll.count({ where: { parentRollId: rollId } }),
-        prisma.rollOperation.count({ where: { rollId } }),
+        prisma.rollOperation.count({ where: { ...ACTIVE_OPERATION, rollId } }),
         prisma.rollMovement.count({ where: { rollId } }),
       ]);
       if (childCount > 0) {
@@ -1309,7 +1310,7 @@ export class TamburUndoService {
 
       // Kapanışın adımı + iş emri (depo kesiminde ikisi de yok — meşru).
       const op = await tx.rollOperation.findFirst({
-        where: { rollId: parentId, operationType: RollOperationType.TAMBUR_PROCESSED },
+        where: { ...ACTIVE_OPERATION, rollId: parentId, operationType: RollOperationType.TAMBUR_PROCESSED },
         orderBy: { createdAt: "desc" },
         select: { workOrderStepId: true },
       });
@@ -1439,8 +1440,12 @@ export class TamburUndoService {
 
       // 4) TAMBUR_PROCESSED izini sil (gerekçe fonksiyon yorumunda).
       if (stepId) {
-        await tx.rollOperation.deleteMany({
-          where: { rollId: parentId, workOrderStepId: stepId, operationType: RollOperationType.TAMBUR_PROCESSED },
+        await revokeRollOperations(tx, {
+          rollIds: [parentId],
+          workOrderStepIds: [stepId],
+          operationTypes: [RollOperationType.TAMBUR_PROCESSED],
+          reason: "TAMBUR_UNDO",
+          userId,
         });
       }
 
@@ -1526,7 +1531,7 @@ export class TamburUndoService {
       // ⚠️ TX'İN İLK İŞİ (2026-08-29 / BULGU-T1-003) — gerekçe helper'da.
       await this.lockAndAssertWorkOrderLive(tx, workOrderId);
       const op = await tx.rollOperation.findFirst({
-        where: { rollId: parentId, operationType: RollOperationType.TAMBUR_PROCESSED },
+        where: { ...ACTIVE_OPERATION, rollId: parentId, operationType: RollOperationType.TAMBUR_PROCESSED },
         orderBy: { createdAt: "desc" },
         select: { workOrderStepId: true },
       });
@@ -1702,8 +1707,12 @@ export class TamburUndoService {
       //    geri alınmış iş üretim raporunda görünmeye devam ederdi. Terslemenin
       //    kalıcı izi (a) aşağıdaki sapma işareti, (b) audit TAMBUR_UNDO_FULL.
       if (stepId) {
-        await tx.rollOperation.deleteMany({
-          where: { rollId: parentId, workOrderStepId: stepId, operationType: RollOperationType.TAMBUR_PROCESSED },
+        await revokeRollOperations(tx, {
+          rollIds: [parentId],
+          workOrderStepIds: [stepId],
+          operationTypes: [RollOperationType.TAMBUR_PROCESSED],
+          reason: "TAMBUR_UNDO",
+          userId,
         });
       }
 

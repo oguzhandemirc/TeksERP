@@ -13,6 +13,7 @@
 //                     Step COMPLETED olur. Refakat kartı ARRIVAL.
 // =============================================================================
 
+import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
@@ -564,7 +565,7 @@ async function createFasonShipChild(
     });
   }
   const ops = await tx.rollOperation.findMany({
-    where: {
+    where: { ...ACTIVE_OPERATION,
       rollId: parent.id,
       operationType: { in: [RollOperationType.KURSUN_APPLIED, RollOperationType.QC2_COMPLETED] },
     },
@@ -2100,13 +2101,13 @@ export class SubcontractorService {
           AND "exitedAt" IS NULL
       `;
 
-      // 4) SUBCONTRACTOR_SENT operation log'larını sil (idempotent — yoksa atla)
-      await tx.rollOperation.deleteMany({
-        where: {
-          rollId: { in: rollIds },
-          workOrderStepId: dispatch.stepId,
-          operationType: RollOperationType.SUBCONTRACTOR_SENT,
-        },
+      // 4) SUBCONTRACTOR_SENT izini GERİ AL (silme değil — defter doktrini).
+      await revokeRollOperations(tx, {
+        rollIds,
+        workOrderStepIds: [dispatch.stepId],
+        operationTypes: [RollOperationType.SUBCONTRACTOR_SENT],
+        reason: "FASON_SEVK_IPTAL",
+        userId,
       });
 
       // 5) Adım durumunu yeniden değerlendir. Eski sayaç KABUL EDİLMİŞ sevkleri
@@ -5269,13 +5270,13 @@ export class SubcontractorService {
         }
       }
 
-      // 4) SUBCONTRACTOR_RETURNED operation log'larını sil
-      await tx.rollOperation.deleteMany({
-        where: {
-          rollId: { in: rollIds },
-          workOrderStepId: receipt.stepId,
-          operationType: RollOperationType.SUBCONTRACTOR_RETURNED,
-        },
+      // 4) SUBCONTRACTOR_RETURNED izini GERİ AL (silme değil).
+      await revokeRollOperations(tx, {
+        rollIds,
+        workOrderStepIds: [receipt.stepId],
+        operationTypes: [RollOperationType.SUBCONTRACTOR_RETURNED],
+        reason: "FASON_KABUL_IPTAL",
+        userId,
       });
 
       // 5) Receipt'in property listesini sil (cancel ⇒ uygulanan kimlik geri alınır)
@@ -5672,12 +5673,12 @@ export class SubcontractorService {
 
       // Born topların boyahane izini sil (op + movement + inherit property), sonra
       // CANCELLED'a çek (atomik claim).
-      await tx.rollOperation.deleteMany({
-        where: {
-          rollId: { in: bornRollIds },
-          workOrderStepId: targetStep.id,
-          operationType: RollOperationType.SUBCONTRACTOR_SENT,
-        },
+      await revokeRollOperations(tx, {
+        rollIds: bornRollIds,
+        workOrderStepIds: [targetStep.id],
+        operationTypes: [RollOperationType.SUBCONTRACTOR_SENT],
+        reason: "FASON_TRANSFER_GERI_AL",
+        userId,
       });
       await tx.rollMovement.deleteMany({
         where: { rollId: { in: bornRollIds }, workOrderStepId: targetStep.id },
@@ -5758,12 +5759,12 @@ export class SubcontractorService {
           );
         }
 
-        await tx.rollOperation.deleteMany({
-          where: {
-            rollId: { in: origRollIds },
-            workOrderStepId: receipt.stepId,
-            operationType: RollOperationType.SUBCONTRACTOR_RETURNED,
-          },
+        await revokeRollOperations(tx, {
+          rollIds: origRollIds,
+          workOrderStepIds: [receipt.stepId],
+          operationTypes: [RollOperationType.SUBCONTRACTOR_RETURNED],
+          reason: "FASON_KABUL_IPTAL",
+          userId,
         });
         await tx.subcontractorReceiptProperty.deleteMany({ where: { receiptId } });
 

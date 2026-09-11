@@ -6,6 +6,7 @@
 // are excluded from inventory queries unless explicitly filtered.
 // =============================================================================
 
+import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import prisma from "../lib/prisma";
 import { normalizeScanCode } from "../utils/code-format";
 import { AuditService } from "./audit.service";
@@ -2613,7 +2614,7 @@ export class InventoryService {
     const [movementCount, operationCount, childCount, dispatchItemCount, kartelaItemCount] =
       await Promise.all([
         prisma.rollMovement.count({ where: { rollId: roll.id } }),
-        prisma.rollOperation.count({ where: { rollId: roll.id } }),
+        prisma.rollOperation.count({ where: { ...ACTIVE_OPERATION, rollId: roll.id } }),
         prisma.roll.count({ where: { parentRollId: roll.id } }),
         prisma.subcontractorDispatchItem.count({ where: { rollId: roll.id } }),
         prisma.kartelaDispatchItem.count({ where: { rollId: roll.id } }),
@@ -2882,7 +2883,7 @@ export class InventoryService {
           orderBy: { enteredAt: "asc" },
         }),
         prisma.rollOperation.findMany({
-          where: { rollId: id },
+          where: { ...ACTIVE_OPERATION, rollId: id },
           include: {
             step: { include: { station: true } },
             operator: { select: { id: true, username: true, fullName: true } },
@@ -3799,7 +3800,7 @@ export class InventoryService {
     const [movementCount, operationCount, childCount, dispatchItemCount, kartelaItemCount] =
       await Promise.all([
         prisma.rollMovement.count({ where: { rollId: id } }),
-        prisma.rollOperation.count({ where: { rollId: id } }),
+        prisma.rollOperation.count({ where: { ...ACTIVE_OPERATION, rollId: id } }),
         prisma.roll.count({ where: { parentRollId: id } }),
         prisma.subcontractorDispatchItem.count({ where: { rollId: id } }),
         prisma.kartelaDispatchItem.count({ where: { rollId: id } }),
@@ -5223,7 +5224,7 @@ export class InventoryService {
     // ileri taşınmış).
     if (!roll.currentStep || !stepCanApplyQuality(roll.currentStep.station)) {
       const priorFinish = await prisma.rollOperation.findFirst({
-        where: {
+        where: { ...ACTIVE_OPERATION,
           rollId,
           operationType: RollOperationType.QC2_COMPLETED,
           step: { station: { ...QUALITY_STATION_WHERE } },

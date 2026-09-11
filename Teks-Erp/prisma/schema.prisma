@@ -3120,6 +3120,18 @@ model RollOperation {
   /// ile filtreleyerek çift sayımı önler.
   inheritedFromParentRollId String?           @db.Uuid
 
+  /// GERİ ALMA (2026-09-11, defter doktrini) — satır SİLİNMEZ, damgalanır.
+  /// Eskiden yedi yerde `deleteMany` ile siliniyordu: "bu topa kurşun uygulandı
+  /// mı / QC2'den geçti mi" sorusunun cevabı geriye dönük değişiyordu, yani
+  /// izlenebilirlik iddiası çürüktü.
+  /// ⚠️ `@@unique([rollId, workOrderStepId, operationType])` bu yüzden DB'de
+  /// PARTIAL'dır (`WHERE "revokedAt" IS NULL`): geri alınmış satır dururken aynı
+  /// üçlü yeniden yazılabilsin. Şemada `@@unique` olarak bırakılır — index↔unique
+  /// farkı drift sayılır; partial predicate sayılmaz (DB kuralı 3).
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  revokeReason String?   @db.VarChar(300)
+
   // Relations
   roll                Roll          @relation(fields: [rollId], references: [id])
   step                WorkOrderStep @relation(fields: [workOrderStepId], references: [id])
@@ -3132,9 +3144,15 @@ model RollOperation {
   /// (`update: {}` — no-op) ve WO klonunda `workOrderStepId` taşıması.
   createdAt DateTime @default(now()) @db.Timestamptz
 
-  @@unique([rollId, workOrderStepId, operationType])
+  // → DB'de PARTIAL'dır (`WHERE "revokedAt" IS NULL`, migration 20260911180000):
+  // geri alınmış iz dururken aynı üçlü yeniden yazılabilsin. `map:` ile ad
+  // eşitlenir ki drift bekçisi yalnız predicate farkını görsün (o fark sayılmaz).
+  @@unique([rollId, workOrderStepId, operationType], map: "roll_operations_active_triple_uq")
   // O-13: @@index([rollId]) (unique sol-prefix'i) ve @@index([operationType]) (tek başına
   // sürücü değil) kaldırıldı. O-14: rapor için operationType+createdAt (operationType-only'yi de kapsar).
+  // Aktif iz sorguları `revokedAt IS NULL` ile süzer; geri alınmış satır zamanla
+  // birikir. Kısıt PARTIAL olduğu için sol-prefix'i artık kapsamıyor (O-13 notu).
+  @@index([rollId, revokedAt])
   @@index([operationType, createdAt])
   @@index([operatorId])
   @@index([machineId])

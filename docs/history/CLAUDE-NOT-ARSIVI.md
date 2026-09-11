@@ -5161,3 +5161,82 @@ yetmeyeceğini VERİYLE gösteriyor.
 ### Üç kapı
 
 Migration **var** (`20260911140000`). Yeni izin **yok**. APK **yok**.
+
+
+---
+
+## 2026-09-11 — B-4a: top operasyon izi geri alınır, silinmez [ÇEKİRDEK]
+
+`RollOperation` şema başlığında append-only'ydi, kod YEDİ yerde `deleteMany` ile
+siliyordu: "bu topa kurşun uygulandı mı / QC2'den geçti mi / fasona gitti mi"
+sorusunun cevabı geriye dönük DEĞİŞİYORDU. İronisi: `tambur-undo.service.ts`
+doğru ilkeyi bir satır aşağıda yazıyordu — *"SİLİNMEZ — append-only defterde
+satır silmek geçmişi değiştirmek olurdu; işaretlenir"* (RollVariance için) — ve
+hemen üstünde `RollOperation`ı siliyordu.
+
+### PARTIAL UNIQUE — maddenin asıl işi ve İKİ migration'lık ders
+
+`@@unique([rollId, workOrderStepId, operationType])` TAM kısıttı. Damgaya
+geçince geri alınmış satır dururken aynı üçlü yeniden yazılamaz — yani **top o
+adımı bir daha işleyemezdi.** Kısıt `WHERE "revokedAt" IS NULL` partial'ına
+çevrildi.
+
+⚠️ **İlk migration bunu YAPAMADI ve sessizce geçti.** `ALTER TABLE … DROP
+CONSTRAINT IF EXISTS "…_key"` yazılmıştı; Prisma'nın `@@unique`i CONSTRAINT
+DEĞİL **INDEX** üretiyor, dolayısıyla `IF EXISTS` hiçbir şey bulamayıp sessizce
+başarılı döndü. Tam kısıt ayakta kaldı, partial olan da kuruldu ve B-4a'nın asıl
+kazanımı çalışmıyordu. **Bekçi §2 yakaladı** (ikinci yazım P2002 aldı); ikinci
+migration `DROP INDEX` ile düşürdü.
+
+Ders tek cümle: *Prisma'nın `@@unique`i INDEX'tir — düşürmek için `DROP INDEX`
+gerekir, `DROP CONSTRAINT IF EXISTS` sessizce hiçbir şey yapmaz.*
+
+Şemada `@@unique` `map: "roll_operations_active_triple_uq"` ile adlandırıldı ki
+drift bekçisi yalnız predicate farkını görsün (o fark sayılmaz, DB kuralı 3);
+partial unique `test_db_invariants.ts` envanterine yazıldı ([DB-30]).
+
+### Tek kaynak ve okuma yüzeyleri
+
+`helpers/roll-operation.helper.ts` hem yüklemi hem yazımı taşır:
+`ACTIVE_OPERATION` (`{ revokedAt: null }`) ve `revokeRollOperations()`. Dönen
+sayı damgalanan satır sayısıdır — eski `deleteMany().count` ile aynı anlamı
+taşıdığı için çağıranların sayaç mantığı bozulmadı.
+
+**29 okuma yüzeyinin 26'sı süzüldü. ÜÇ BİLİNÇLİ İSTİSNA** (gerekçesi koda yazılı,
+bekçi §6 sessiz muaf olmadığını ölçüyor):
+
+- `backup-impact.service.ts` — ölçülen "kaç iz geçerli" değil "yedekten beri kaç
+  satır YAZILDI"; geri alınmış satır da yazılmıştır.
+- `guarded-hard-remove.ts` ×2 — geri alınmış iz de o makinede ÜRETİM YAPILDIĞININ
+  kanıtıdır; silme guard'ı muhafazakâr olmalı.
+
+### Bekçi
+
+`scripts/test_roll_operation_revoke.ts` — 8 kontrol. En kritik ikisi §2 (geri
+alınmış satır dururken aynı üçlü YENİDEN yazılabiliyor) ve §4 (iki AKTİF satır
+hâlâ reddediliyor — sed görevde).
+
+**NEGATİF SONDA:** `ACTIVE_OPERATION` boşaltıldı (`{}`) → §3 kırmızı
+(`aktif=2 toplam=2`), geri alındı.
+
+**BAYAT BEKLENTİ GÜNCELLENDİ:** `test_manual_move` ve
+`test_manual_move_qc_reversal` "log silindi (kalan 0)" bekliyordu; artık AKTİF
+sayı 0 ölçülüyor ve ayrıca "iz SİLİNMEDİ, damgalı duruyor" kontrolü eklendi.
+
+### B-4b AYRILDI — `RollMovement` bu turda YAPILMADI
+
+Plan Faz 1'i ikisini birlikte öngörüyordu; ölçüm ayırmayı gerektirdi:
+`RollMovement`ın **47 okuma yüzeyi** var ve `recompute` adım DURUMUNU bu
+tablodan türetiyor. Kaçırılan tek süzme yanlış adım durumu üretir — bu, geç
+saatte tek turda kapatılacak bir iş değil. Taze oturuma bırakıldı.
+
+### Yol boyunca iki kural ihlali (kendi bekçileri yakaladı)
+
+Yeni bekçiler önce ham `username: "admin"` kullanıyordu → ortam bağımlılığı
+tavanı (129) kırmızı verdi, `ensureTestAdmin` fixture'ına çevrildi. ⚠️ Tripwire
+YORUMDAKİ literali de sayıyor — gerekçe cümlesi literalsiz yazılmak zorunda.
+
+### Üç kapı
+
+Migration **var** (`20260911170000` + `20260911180000`). Yeni izin **yok**.
+APK **yok**.

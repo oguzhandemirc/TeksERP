@@ -196,7 +196,9 @@ async function main(): Promise<void> {
     await svc.manualMove(wo.id, { rollIds: [rollIds[0]], targetStepId: s1, reason: "geri" }, c.ADMIN);
     const rQc = await prisma.roll.findUnique({ where: { id: rollIds[0] }, select: { currentStepId: true, qualityGrade: true } });
     check("salt-QC: geri taşındı + kalite VOID (Belirsiz)", rQc?.currentStepId === s1 && rQc?.qualityGrade === null);
-    check("salt-QC: TAMBUR_PROCESSED op silindi", (await prisma.rollOperation.count({ where: { rollId: rollIds[0] } })) === 0);
+    // ⚠️ 2026-09-11 (defter doktrini): iz SİLİNMEZ, damgalanır — ölçülen AKTİF sayı.
+    check("salt-QC: TAMBUR_PROCESSED izi GERİ ALINDI (aktif 0)", (await prisma.rollOperation.count({ where: { rollId: rollIds[0], revokedAt: null } })) === 0);
+    check("salt-QC: ⭐ iz SİLİNMEDİ, defterde damgalı duruyor", (await prisma.rollOperation.count({ where: { rollId: rollIds[0] } })) > 0);
 
     // CUT hard-stop: kesim (çocuk) topu olan top geri taşınamaz.
     const wo2 = await mkWo(c, [{ stationId: c.ST_INT }, { stationId: c.ST_TAMBUR }]);

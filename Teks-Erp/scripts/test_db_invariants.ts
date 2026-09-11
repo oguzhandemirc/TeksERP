@@ -104,6 +104,16 @@ const PARTIAL_INDEXES: Array<{
   predicate: string;
   why: string;
 }> = [
+  // roll_operations — defter doktrini (2026-09-11): iz artık silinmiyor, `revokedAt`
+  // ile damgalanıyor. Tam unique, geri alınmış satır dururken aynı üçlünün YENİDEN
+  // yazılmasını engellerdi (top adımı bir daha işleyemezdi) → PARTIAL.
+  {
+    table: "roll_operations",
+    index: "roll_operations_active_triple_uq",
+    uniq: true,
+    predicate: `("revokedAt" IS NULL)`,
+    why: "geri alınmış iz dururken aynı (top, adım, tip) yeniden yazılabilsin",
+  },
   // rolls — null-yoğun FK'lar (migration 20260606001717 → 20260612100000 onarımı)
   { table: "rolls", index: "rolls_sackId_idx", uniq: false, predicate: `("sackId" IS NOT NULL)`, why: "null-yoğun FK" },
   { table: "rolls", index: "rolls_shipmentId_idx", uniq: false, predicate: `("shipmentId" IS NOT NULL)`, why: "null-yoğun FK" },

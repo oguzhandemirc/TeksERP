@@ -14,6 +14,7 @@
 // Tespitte `detectedAtStepId` + `detectedByUserId` + `detectedAt` doldurulur.
 // =============================================================================
 
+import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import prisma from "../lib/prisma";
 import { normalizeScanCode } from "../utils/code-format";
 import { randomUUID } from "crypto";
@@ -437,7 +438,7 @@ export class KursunQcService {
     // (updatedAt YOK) → no-op'ta hiçbir şey değişmez; audit'i CREATE olarak TEKRAR
     // yazma (createInitialEntry replay-skip deseni).
     const existedBefore = await prisma.rollOperation.findUnique({
-      where: {
+      where: { ...ACTIVE_OPERATION,
         rollId_workOrderStepId_operationType: {
           rollId: data.rollId,
           workOrderStepId: data.stepId,
@@ -822,7 +823,7 @@ export class KursunQcService {
     // Tambur kalıtım kayıtları sayılmaz — sadece bu step'te fiilen yapılan QC2.
     const rollIds = openMovements.map((m) => m.rollId);
     const completedQc2 = await prisma.rollOperation.findMany({
-      where: {
+      where: { ...ACTIVE_OPERATION,
         workOrderStepId: step.id,
         operationType: RollOperationType.QC2_COMPLETED,
         rollId: { in: rollIds },
@@ -1389,7 +1390,7 @@ export class KursunQcService {
     const [qc2Ops, errors, stationCaps, bypass] = await Promise.all([
       // Tambur kalıtım kayıtları sayılmaz — bu step'te fiilen yapılan QC2.
       prisma.rollOperation.findMany({
-        where: {
+        where: { ...ACTIVE_OPERATION,
           workOrderStepId: stepId,
           rollId: { in: rollIds },
           operationType: RollOperationType.QC2_COMPLETED,

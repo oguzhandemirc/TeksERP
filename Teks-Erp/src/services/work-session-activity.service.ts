@@ -40,6 +40,7 @@
 // MAX+1 satır, birleşik MAX'ı aşarsa `truncated=true` ile dürüstçe işaretlenir.
 // =============================================================================
 
+import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { SESSION_INCLUDE } from "./work-session.service";
@@ -225,7 +226,7 @@ export class WorkSessionActivityService {
         },
       }),
       prisma.rollOperation.findMany({
-        where: {
+        where: { ...ACTIVE_OPERATION,
           AND: [
             { createdAt: window },
             // Tambur bölünmesinin parent'tan kopyalanan satırları — çift sayım filtresi.

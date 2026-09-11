@@ -143,6 +143,8 @@ export const stationHardRemove = makeGuardedHardRemove({
     // hepsi SetNull → guard olmadan makine silinince üretim atfı SESSİZCE NULL'lanır.
     {
       key: "machineOperationCount",
+      // ⚠️ `revokedAt` SÜZÜLMEZ (bilinçli): geri alınmış iz de o makinede ÜRETİM
+      // YAPILDIĞININ kanıtıdır; silme guard'ı daha muhafazakâr olmalı.
       count: (id) => prisma.rollOperation.count({ where: { machine: { stationId: id } } }),
       message: (n) =>
         `İstasyonun makinelerine damgalı ${n} üretim işlemi (kurşun/QC2) var — kalıcı silinemez. Pasife alın.`,
@@ -232,6 +234,7 @@ export const routeHardRemove = makeGuardedHardRemove({
 const MACHINE_DELETE_GUARDS: DependencyGuard[] = [
   {
     key: "rollOperationCount",
+    // ⚠️ `revokedAt` SÜZÜLMEZ — yukarıdaki istasyon guard'ıyla aynı gerekçe.
     count: (id) => prisma.rollOperation.count({ where: { machineId: id } }),
     message: (n) => `Bu makineye damgalı ${n} üretim işlemi var — kalıcı silinemez. Pasife alın.`,
   },

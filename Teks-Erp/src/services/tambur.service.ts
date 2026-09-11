@@ -14,6 +14,7 @@
 //   - Tambur'dan sonraki akış: Depo (WAREHOUSE) → Tartı/Paket → Sevkiyat.
 // =============================================================================
 
+import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import prisma from "../lib/prisma";
 import { normalizeScanCode } from "../utils/code-format";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
@@ -626,7 +627,7 @@ export class TamburService {
       // yazar; yoksa (legacy kayıt / metadata öncesi finalize) tüm TAMBUR_SPLIT
       // çocuklara düşülür (eski davranış).
       const tamburOp = await prisma.rollOperation.findFirst({
-        where: {
+        where: { ...ACTIVE_OPERATION,
           rollId: data.rollId,
           operationType: RollOperationType.TAMBUR_PROCESSED,
         },
@@ -805,7 +806,7 @@ export class TamburService {
     // Filter YOK: zincirleme inherit destekle (parent depo topundaysa op'lar
     // zaten kendi parent'tan inherit'lidir; sadece orijinal'e bakmak chain'i koparır).
     const inheritedOps = await prisma.rollOperation.findMany({
-      where: {
+      where: { ...ACTIVE_OPERATION,
         rollId: data.rollId,
         operationType: { in: [RollOperationType.KURSUN_APPLIED, RollOperationType.QC2_COMPLETED] },
       },
@@ -2247,7 +2248,7 @@ export class TamburService {
       // set). Sadece "orijinal" op'lara bakarsak chain kopar, child'da hiç op
       // kalmaz. Çoklu kayıt olabilir; sorun değil — UI find() ilki bulur.
       const inheritedOps = await tx.rollOperation.findMany({
-        where: {
+        where: { ...ACTIVE_OPERATION,
           rollId: parent.id,
           operationType: {
             in: [RollOperationType.KURSUN_APPLIED, RollOperationType.QC2_COMPLETED],
@@ -2698,7 +2699,7 @@ export class TamburService {
         // Kalan child'a da KURSUN/QC2 kalıtımı uygula. Filter YOK — zincirleme
         // inherit (depo topundaki op'lar zaten inherit'li).
         const inheritedOps = await tx.rollOperation.findMany({
-          where: {
+          where: { ...ACTIVE_OPERATION,
             rollId: parent.id,
             operationType: {
               in: [RollOperationType.KURSUN_APPLIED, RollOperationType.QC2_COMPLETED],
@@ -3031,7 +3032,7 @@ export class TamburService {
       // set). Sadece "orijinal" op'lara bakarsak chain kopar, child'da hiç op
       // kalmaz. Çoklu kayıt olabilir; sorun değil — UI find() ilki bulur.
       const inheritedOps = await tx.rollOperation.findMany({
-        where: {
+        where: { ...ACTIVE_OPERATION,
           rollId: parent.id,
           operationType: {
             in: [RollOperationType.KURSUN_APPLIED, RollOperationType.QC2_COMPLETED],
@@ -3284,7 +3285,7 @@ export class TamburService {
     // response döner — duplicate child roll yaratılmaz.
     if (parent.status === RollStatus.TAMBUR_CONSUMED) {
       const tamburOp = await prisma.rollOperation.findFirst({
-        where: {
+        where: { ...ACTIVE_OPERATION,
           rollId: parent.id,
           operationType: RollOperationType.TAMBUR_PROCESSED,
         },
