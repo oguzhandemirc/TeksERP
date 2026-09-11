@@ -6578,10 +6578,14 @@ model InvoiceLine {
 ///     söyler. **`CHEQUE_BOUNCE` bunun içine KATLANMADI** çünkü "karşılıksız",
 ///     muhasebecinin ekstrede aktif olarak ARADIĞI olaydır — iptalle aynı ada
 ///     düşerse aranamaz hâle gelir.
+///   • `CHEQUE_ENDORSE_CANCEL` · `CHEQUE_BOUNCE_CANCEL` · `CHEQUE_RETURN_CANCEL` —
+///     yanlış girilmiş ciro/karşılıksız/iade kaydının tipli ters satırı; orijinale
+///     `reversesTxnId` ile bağlanır, tarihi daima bugündür.
 ///
 /// ⚠️ TAHSİL (COLLECT) ve KENDİ ÇEKİMİZİN ÖDENMESİ (PAY) burada YOKTUR ve bu
 /// bilinçlidir: o anlarda yalnız banka/kasa bakiyesi oynar, cari İKİNCİ kez
-/// hareket görmez (görseydi aynı borç iki kez kapanmış sayılırdı).
+/// hareket görmez (görseydi aynı borç iki kez kapanmış sayılırdı). Stornoları
+/// (`COLLECT_CANCEL` · `PAY_CANCEL`) da bu yüzden cari kaynağı almaz.
 enum CariTxnSource {
   INVOICE
   INVOICE_CANCEL
@@ -6598,6 +6602,14 @@ enum CariTxnSource {
   /// var olmayan bir yolu gösteriyordu. SONA eklendi (ADD VALUE aynı-tx kuralı,
   /// kendi migration'ında).
   ADJUSTMENT_CANCEL
+  /// Ciro stornosu — ciro edilen cariye yazılan BORÇ satırının tersi (ALACAK).
+  CHEQUE_ENDORSE_CANCEL
+  /// Karşılıksız stornosu — `CHEQUE_BOUNCE` satır(lar)ının tersi; ciro edilmiş
+  /// çekte iki cari birden terslenir.
+  CHEQUE_BOUNCE_CANCEL
+  /// İade stornosu — iadenin yazdığı `CHEQUE_CANCEL` satırının tersi. İptalin
+  /// tersiyle karışmasın diye ayrı değer: ekstre hangi olayın geri alındığını söyler.
+  CHEQUE_RETURN_CANCEL
 }
 
 /// Cari hareket defteri — APPEND-ONLY.
@@ -7018,8 +7030,11 @@ enum ChequeDocType {
 /// — aksi halde iki eşzamanlı "tahsil et" iki kez banka bakiyesi artırırdı.
 ///
 /// TERMİNAL: `COLLECTED` · `BOUNCED` · `RETURNED` · `PAID` · `CANCELLED`.
+/// Terminal = normal akış olayı yok; `CANCELLED` dışındakilerin her birinden
+/// TİPLİ STORNO ile çıkılır (`*_CANCEL` olayı, durum ileri olayın `fromStatus`una
+/// döner). `CANCELLED` stornonun kendisidir, tersi yoktur.
 /// `ENDORSED` terminal DEĞİLDİR: ciro edilen çek de karşılıksız çıkabilir ve o
-/// zaman İKİ cari birden ters kayıt alır.
+/// zaman İKİ cari birden ters kayıt alır; yanlış ciro `ENDORSE_CANCEL` ile döner.
 enum ChequeStatus {
   /// Alınan çek elimizde (kind=RECEIVED doğuş durumu).
   PORTFOLIO
@@ -7029,7 +7044,8 @@ enum ChequeStatus {
   ENDORSED
   /// Tahsil edildi — banka/kasa +amount.
   COLLECTED
-  /// Karşılıksız çıktı — defter TERS KAYITLA geri alınır.
+  /// Karşılıksız çıktı — alışın kapattığı alacak müşteriye BORÇ ile geri açılır.
+  /// Kayıt yanlışsa `BOUNCE_CANCEL` o borcu ters satırla kapatır.
   BOUNCED
   /// Sahibine iade edildi (müşteri nakit ödedi, çeki geri istedi).
   RETURNED
@@ -7173,6 +7189,15 @@ enum ChequeEventType {
   /// portföy yalan söylerdi. Bu olay banka/kasa ters hareketi + durumu geri
   /// (DEPOSITED→ya da PORTFOLIO) çeker; olay defterinde KENDİ adıyla durur.
   COLLECT_CANCEL
+  /// Ciro stornosu: ciro carisine ters ALACAK, durum ENDORSE'un `fromStatus`una.
+  /// `counterCariId` DOLU — "kimden geri alındı" defterden okunur.
+  ENDORSE_CANCEL
+  /// Karşılıksız stornosu: BOUNCE'un cari satır(lar)ı terslenir, durum geri döner.
+  BOUNCE_CANCEL
+  /// İade stornosu: RETURN'ün cari satırı terslenir, durum geri döner.
+  RETURN_CANCEL
+  /// Ödeme stornosu: PAY'in düştüğü para AYNI hesaba geri girer (+), cari oynamaz.
+  PAY_CANCEL
 }
 
 /// Çekin durum defteri — APPEND-ONLY (`CariTransaction` emsali: `updatedAt` YOK).
@@ -7193,10 +7218,12 @@ model ChequeEvent {
 
   eventDate DateTime @db.Timestamptz
 
-  /// ENDORSE'ta ciro edilen cari — olayın karşı tarafı.
+  /// Ciro carisi — ENDORSE · ENDORSE_CANCEL ve ciro edilmiş çekin BOUNCE ·
+  /// BOUNCE_CANCEL satırlarında olayın karşı tarafı.
   counterCariId String? @db.Uuid
-  /// COLLECT/PAY/DEPOSIT hesabı. Tahsil elden de olabildiği için kasa da meşru;
-  /// ikisi BİRDEN dolu olamaz (CHECK).
+  /// COLLECT/PAY/DEPOSIT hesabı; stornoları (COLLECT_CANCEL · PAY_CANCEL) aynı
+  /// hesabı taşır. Tahsil elden de olabildiği için kasa da meşru; ikisi BİRDEN
+  /// dolu olamaz (CHECK).
   bankAccountId String? @db.Uuid
   cashBoxId     String? @db.Uuid
 

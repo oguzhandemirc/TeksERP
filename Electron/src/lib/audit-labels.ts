@@ -574,6 +574,9 @@ export const ENUM_LABELS: Record<string, string> = {
   CHEQUE_CANCEL: "Çek/senet iptali",
   ADJUSTMENT: "Düzeltme kaydı",
   ADJUSTMENT_CANCEL: "Düzeltme iptali",
+  CHEQUE_ENDORSE_CANCEL: "Çek/senet ciro stornosu",
+  CHEQUE_BOUNCE_CANCEL: "Çek/senet karşılıksız stornosu",
+  CHEQUE_RETURN_CANCEL: "Çek/senet iade stornosu",
   // ── Çek/senet olayı (ChequeEventType)
   ISSUE: "Düzenlendi",
   RECEIVE: "Alındı",
@@ -583,6 +586,10 @@ export const ENUM_LABELS: Record<string, string> = {
   ENDORSE: "Ciro edildi",
   BOUNCE: "Karşılıksız çıktı",
   PAY: "Ödendi",
+  ENDORSE_CANCEL: "Ciro stornosu",
+  BOUNCE_CANCEL: "Karşılıksız stornosu",
+  RETURN_CANCEL: "İade stornosu",
+  PAY_CANCEL: "Ödeme stornosu",
   // ── Çek/senet türü (ChequeDocType)
   CHEQUE: "Çek",
   PROMISSORY_NOTE: "Senet",

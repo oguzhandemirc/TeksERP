@@ -55,6 +55,7 @@ export const CASH_KIND_LABEL: Record<string, string> = {
   // K-2 tahsil stornosu — backend defteri 2026-08-14'ten beri bu olayı da
   // basıyor (measureTx/§23-§24 evren eşitliği); etiketsiz kalsa HAM enum çıkardı.
   COLLECT_CANCEL: "Çek tahsil stornosu",
+  PAY_CANCEL: "Çek ödeme stornosu",
 };
 
 /**

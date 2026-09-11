@@ -8,8 +8,8 @@
 // Kasa/banka bakiyesinin ÜÇ yazarı vardır ve şema bunu açıkça söyler:
 //   1) `Payment`         — carili tahsilat/ödeme
 //   2) `CashTransaction` — carisiz masraf/gelir/virman/açılış
-//   3) `ChequeEvent`     — COLLECT (tahsil, +) · PAY (kendi çekimiz, −) ·
-//                          COLLECT_CANCEL (tahsil stornosu K-2, −)
+//   3) `ChequeEvent`     — COLLECT (+) · PAY (−) · stornoları COLLECT_CANCEL (−) ·
+//                          PAY_CANCEL (+); küme `cheque-cash-events.helper`
 // Üçüncüyü atlayan bir defter, ilk çek tahsilatında bakiyeyle ayrışır ve
 // operatöre "para nereden geldi" sorusunu cevaplayamaz. (`test_consistency`
 // §23/§24 mutabakat formülü de aynı üçlüyü toplar — bu rapor onun EKRAN
@@ -107,6 +107,11 @@ import prisma from "../../lib/prisma";
 import { D, D0 } from "../helpers/finance.helper";
 import { cashPeriodCloseService } from "../cash-period-close.service";
 import { formatDayKeyTr, periodDayKey } from "../helpers/period-guard.helper";
+import {
+  chequeCashEventTypesSql,
+  chequeCashInflowSql,
+  chequeCashReversalSql,
+} from "../helpers/cheque-cash-events.helper";
 import type { DateRange } from "./_shared";
 
 /** Tek sayfada basılabilir satır tavanı — aşılırsa kırpılır ve SÖYLENİR. */
@@ -311,22 +316,20 @@ function movementsCte(): Prisma.Sql {
          AND COALESCE(ct."cashBoxId", ct."bankAccountId") IS NOT NULL
 
       UNION ALL
-      -- 3) ÇEK OLAYI — yalnız PARA HAREKETİ olanlar: COLLECT (+) · PAY (−) ·
-      -- COLLECT_CANCEL (−, tahsil stornosu K-2 — measureTx/§23-§24 ile AYNI
-      -- evren; dışarıda kalsaydı ilk collect-stornosunda defter hem bakiyeyle
-      -- hem dönem kapanışı devriyle ayrışırdı). Storno satırı cancelled işareti
-      -- taşır — Payment/CashTransaction iptal satırlarıyla aynı görsel sözleşme.
+      -- 3) ÇEK OLAYI — yalnız PARA HAREKETİ olanlar; küme, yön ve storno işareti
+      -- CHEQUE_EVENT_CASH_EFFECT'ten (measureTx/§23-§24 ile AYNI evren). Storno
+      -- satırı cancelled işareti taşır — Payment/CashTransaction iptaliyle aynı.
       SELECT e.id::text, 'CHEQUE', ch."docNo", e."eventDate",
              COALESCE(e."cashBoxId", e."bankAccountId")::text,
-             CASE WHEN e.type = 'COLLECT' THEN 'IN' ELSE 'OUT' END,
+             CASE WHEN ${Prisma.raw(chequeCashInflowSql("e"))} THEN 'IN' ELSE 'OUT' END,
              ch.amount, e.type::text, COALESCE(cu2.name, sc2.name),
-             e.notes, ch."serialNo", (e.type = 'COLLECT_CANCEL'), NULL::text
+             e.notes, ch."serialNo", (${Prisma.raw(chequeCashReversalSql("e"))}), NULL::text
         FROM cheque_events e
         JOIN cheques ch ON ch.id = e."chequeId"
         JOIN cari_accounts ca2 ON ca2.id = ch."cariId"
         LEFT JOIN customers cu2 ON cu2.id = ca2."customerId"
         LEFT JOIN subcontractors sc2 ON sc2.id = ca2."subcontractorId"
-       WHERE e.type IN ('COLLECT', 'PAY', 'COLLECT_CANCEL')
+       WHERE e.type IN (${Prisma.raw(chequeCashEventTypesSql())})
          AND COALESCE(e."cashBoxId", e."bankAccountId") IS NOT NULL
     )`;
 }

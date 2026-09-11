@@ -20,10 +20,11 @@
 // tamamen kaldırır ve kimse sebebini göremez (hata yok, log yok).
 //
 // KAPSAM DIŞI (bilinçli): ENDORSED bir çek iade/iptal EDİLEMEZ — kâğıt fiziksel
-// olarak üçüncü tarafın elindedir. Ondan çıkışın tek yolu BOUNCE'tır ve backend
-// listeleri tam olarak böyle yazılmıştır.
+// olarak üçüncü tarafın elindedir. Çıkışı BOUNCE ya da (ciro kaydı yanlışsa)
+// ciro stornosudur. Terminal durumların CANCELLED dışındaki her birinin tek
+// çıkışı kendi tipli stornosudur.
 // =============================================================================
-import type { ChequeKind, ChequeStatus, DecimalLike } from "./service";
+import type { ChequeEventType, ChequeKind, ChequeStatus, DecimalLike } from "./service";
 import { toNum } from "./service";
 
 export type ChequeAction =
@@ -31,9 +32,13 @@ export type ChequeAction =
   | "collect"
   | "collect-cancel"
   | "endorse"
+  | "endorse-cancel"
   | "bounce"
+  | "bounce-cancel"
   | "return"
+  | "return-cancel"
   | "pay"
+  | "pay-cancel"
   | "cancel";
 
 export interface ChequeActionDef {
@@ -52,7 +57,13 @@ export interface ChequeActionDef {
   blockedByAllocation: boolean;
   /** Geri alınamayan / kötü sonuç bildiren işlem → onay kırmızı. */
   destructive: boolean;
+  /** Storno ise terslediği ileri olay — onay metni o olaydan somutlanır. */
+  reverses?: ChequeEventType;
 }
+
+/** Storno sebebi soran ortak metin — beş storno ucu da aynı sözleşmeyi taşır. */
+const REVERSAL_TAIL =
+  "Asıl kayıt SİLİNMEZ; bugüne ters kayıt yazılır. Sebep zorunludur ve olay defterine yazılır.";
 
 export const CHEQUE_ACTIONS: readonly ChequeActionDef[] = [
   {
@@ -92,6 +103,7 @@ export const CHEQUE_ACTIONS: readonly ChequeActionDef[] = [
     // çekin varlığını yok etmez, kapama meşru kalır) — burada da engellenmez.
     blockedByAllocation: false,
     destructive: true,
+    reverses: "COLLECT",
   },
   {
     action: "endorse",
@@ -105,6 +117,18 @@ export const CHEQUE_ACTIONS: readonly ChequeActionDef[] = [
     destructive: false,
   },
   {
+    action: "endorse-cancel",
+    label: "Ciroyu Geri Al",
+    effect: `CİRO STORNOSU — ciro edilen cariye yazılan borç ters kayıtla kapanır ve çek ciro öncesi durumuna döner. ${REVERSAL_TAIL}`,
+    kind: "RECEIVED",
+    from: ["ENDORSED"],
+    needs: "reason",
+    // Backend `cancelEndorse` kapama kontrolü yapmaz: müşterinin ödemesi geçerli kalır.
+    blockedByAllocation: false,
+    destructive: true,
+    reverses: "ENDORSE",
+  },
+  {
     action: "bounce",
     label: "Karşılıksız Kaydet",
     effect:
@@ -114,6 +138,18 @@ export const CHEQUE_ACTIONS: readonly ChequeActionDef[] = [
     needs: "none",
     blockedByAllocation: true,
     destructive: true,
+  },
+  {
+    action: "bounce-cancel",
+    label: "Karşılıksızı Geri Al",
+    effect: `KARŞILIKSIZ STORNOSU — müşteriye yazılan borç (çek ciro edilmişse ciro carisinin satırı da) ters kayıtla kapanır ve çek karşılıksız öncesi durumuna döner. ${REVERSAL_TAIL}`,
+    kind: "RECEIVED",
+    from: ["BOUNCED"],
+    needs: "reason",
+    // BOUNCED çekte kapama DB CHECK'iyle zaten sıfırdır.
+    blockedByAllocation: false,
+    destructive: true,
+    reverses: "BOUNCE",
   },
   {
     action: "return",
@@ -127,6 +163,18 @@ export const CHEQUE_ACTIONS: readonly ChequeActionDef[] = [
     destructive: true,
   },
   {
+    action: "return-cancel",
+    label: "İadeyi Geri Al",
+    effect: `İADE STORNOSU — iadenin cari satırı ters kayıtla kapanır ve çek/senet iade öncesi durumuna döner. ${REVERSAL_TAIL}`,
+    kind: null,
+    from: ["RETURNED"],
+    needs: "reason",
+    // RETURNED çekte kapama DB CHECK'iyle zaten sıfırdır.
+    blockedByAllocation: false,
+    destructive: true,
+    reverses: "RETURN",
+  },
+  {
     action: "pay",
     label: "Ödendi İşaretle",
     effect:
@@ -136,6 +184,17 @@ export const CHEQUE_ACTIONS: readonly ChequeActionDef[] = [
     needs: "account",
     blockedByAllocation: false,
     destructive: false,
+  },
+  {
+    action: "pay-cancel",
+    label: "Ödemeyi Geri Al",
+    effect: `ÖDEME STORNOSU — çek tutarı, ödendiği kasa/banka hesabına geri girer ve çek "verildi" durumuna döner. Cari deftere dokunulmaz (ödeme de dokunmamıştı). ${REVERSAL_TAIL}`,
+    kind: "ISSUED",
+    from: ["PAID"],
+    needs: "reason",
+    blockedByAllocation: false,
+    destructive: true,
+    reverses: "PAY",
   },
   {
     action: "cancel",
@@ -153,10 +212,9 @@ export const CHEQUE_ACTIONS: readonly ChequeActionDef[] = [
 /**
  * Bu satırda MEŞRU olan işlemler.
  *
- * Boş dizi dönmesi bir hata değil bir CEVAPTIR: terminal durumdaki (karşılıksız
- * / iade / ödenmiş / iptal) çekte yapılacak bir şey YOKTUR. Çağıran, gri düğme
- * çizmek yerine menüyü HİÇ çizmez. TEK istisna COLLECTED (K-2): oradan tek çıkış
- * "Tahsili Geri Al" stornosudur ve menüde yalnız o görünür.
+ * Boş dizi dönmesi bir hata değil bir CEVAPTIR: İPTAL edilmiş çekte yapılacak
+ * bir şey YOKTUR ve çağıran menüyü HİÇ çizmez. Diğer terminal durumlarda menüde
+ * yalnız o durumun tipli stornosu görünür.
  */
 export function availableActions(row: { kind: ChequeKind; status: ChequeStatus }): ChequeActionDef[] {
   return CHEQUE_ACTIONS.filter(

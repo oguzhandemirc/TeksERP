@@ -4870,3 +4870,97 @@ kalemi KAPANMIŞ sayılmalı. Bekçiye kısmi ve alt küme senaryoları eklenmel
 ### Üç kapı
 
 Migration yok · izin yok · APK yok. (Düzeltme yapılmadı; bu not yalnız bulguyu kaydeder.)
+
+
+---
+
+## 2026-09-11 — Çek defterinin dört ters yolu + çek-olayı kasa etkisi tek kaynakta [ÇEKİRDEK]
+
+### Soru / ölçüm
+
+Defter B bölümünün çek maddesi (kodda doğrulandı): `TERMINAL_STATUSES = [COLLECTED,
+BOUNCED, RETURNED, PAID, CANCELLED]` içinde yalnız COLLECTED'ın tipli stornosu vardı
+(`COLLECT_CANCEL`, K-2). BOUNCED/RETURNED/PAID çıkışsız terminaldi; ENDORSED terminal
+değil ama tek çıkışı BOUNCE'tı. Yanlış girilmiş karşılıksız/ciro/iade kaydı CARİ
+BAKİYEYİ, yanlış ödendi damgası KASA/BANKA bakiyesini kalıcı yanlış bırakıyordu.
+Şemadaki `ChequeStatus.BOUNCED` yorumu ("defter TERS KAYITLA geri alınır") kodun
+tutmadığı bir vaatti.
+
+Yan bulgu: kasa/banka bakiyesinin üçüncü yazarı (`ChequeEvent`) için "hangi olay para
+oynatır" kümesi BEŞ yerde elle kopyalanmıştı (`cash-period-close` ×2 · `cash-book.report`
+· `test_consistency` §23/§24 · `test_cheque_portfolio` §13). `PAY_CANCEL` eklenip biri
+unutulsa ilk ödeme stornosunda o yüzey sessiz drift basardı.
+
+### Karar
+
+- Dört yeni olay `ENDORSE_CANCEL · BOUNCE_CANCEL · RETURN_CANCEL · PAY_CANCEL`; üç yeni
+  cari kaynak `CHEQUE_ENDORSE_CANCEL · CHEQUE_BOUNCE_CANCEL · CHEQUE_RETURN_CANCEL`.
+  `CHEQUE_PAY_CANCEL` YOK: `pay()` `writeChequeLedgerTx` çağırmaz (borç doğuşta
+  `CHEQUE_ISSUE` ile kapandı), tersi de çağırmaz — bekçi ölçer.
+- `COLLECT_CANCEL` deseni genelleşti: storno TİPLİ olaydır · ileri satırı silmez · her
+  ters cari satır orijinaline `reversesTxnId` ile bağlanır (borç↔alacak, TL karşılığı ve
+  kur orijinalden) · `txnDate = now` · durum en yeni ileri olayın `fromStatus`una döner
+  (`createdAt desc` — `eventDate` geriye tarihlenebilir) · olay/satır/hesap bulunamazsa
+  FAIL-CLOSED 409 · sebep zorunlu · atomik claim ikinci stornoyu keser, `reversesTxnId
+  @unique` DB seddi.
+- `cancel()` ENDORSED'ı almaya GENİŞLETİLMEDİ: ciro gerçek ticari olaydır, "hiç olmamış"
+  sayılamaz; tipli `cancelEndorse` yazıldı.
+- Ciro stornosunda `endorsedToCariId` null'a döner — damga değil "çek şu an kimde"
+  işaretçisi. Bu tercih değil DB zorunluluğu: `cheques_endorsed_cari` CHECK'i
+  PORTFOLIO/AT_BANK/ISSUED'da alanın NULL olmasını ister. Ciro gerçeği defterde kalır:
+  ENDORSE ve ENDORSE_CANCEL satırlarının ikisi de `counterCariId` taşır.
+- Ödeme stornosunda başlık `bankAccountId` null'a döner (verilen çekte yalnız PAY yazar).
+  Para AYNI hesaba girer; hesap pasif olsa da geçer; eksi kasa guard'ı sorulmaz (para giriyor).
+- Karşılıksız stornosu ciro edilmiş çekte iki cariyi birden tersler; iki dönem kilidi
+  deterministik sırayla önden alınır (SINIF 3, `bounce()` ile aynı).
+- Kapama: BOUNCED/RETURNED'da `cheques_terminal_not_allocated` CHECK'i kapamayı zaten
+  sıfır tutar; ciro/ödeme stornosu kapamaya dokunmaz. Panel aynası `blockedByAllocation:false`.
+- İzin YENİ DEĞİL: `finance:cheque` (ileri geçişi yapan tersini de yapar, K-2 emsali).
+- Yapılamaz mesajı çıkış yolunu gösterir (`REVERSAL_HINT`): "Kayıt HATALIYSA önce
+  «Karşılıksızı Geri Al» yapın".
+- **Tek kaynak:** `CHEQUE_EVENT_CASH_EFFECT` — `Record<ChequeEventType, {sign, reversal}>`
+  tam kapsamlı; enum'a değer eklenince derleme bu tabloda karar ister. SQL parçaları
+  (`chequeCashEventTypesSql` · `chequeCashInflowSql` · `chequeCashReversalSql`) beş
+  tüketicinin hepsine bağlandı; elle literal AST-benzeri tripwire ile yasak.
+- Panel: detay ucunun olay satırına `createdAt` eklendi (additive) — storno onay metni
+  backend gibi en yeni YAZIMI seçsin.
+
+### Kod çapaları
+
+- `Teks-Erp/src/services/cheque.service.ts:463` `loadForwardEventTx` · `:489`
+  `loadReversibleTxnTx` · `:515` `writeChequeReversalTx` · `:1316` `cancelEndorse` ·
+  `:1476` `cancelBounce` · `:1608` `cancelReturn` · `:1724` `cancelPay` · `:147` `REVERSAL_HINT`
+- `Teks-Erp/src/services/helpers/cheque-cash-events.helper.ts:17`
+- `Teks-Erp/src/routes/cheque-reversal.routes.ts` — `cheque.routes.ts:36`'da gate'ten sonra
+  bağlanan alt router (kapıyı miras alır; `cheque.routes.ts` lint `max-lines` tavanını
+  aşmasın diye ayrıldı)
+- `Electron/src/pages/Finance/Cheques/transitions.ts` (dört aksiyon + `reverses`) ·
+  `reversal.ts` · `ChequeReversalSummary.tsx` · `ChequeActionDialog.tsx`
+
+### Bekçi
+
+- `Teks-Erp/scripts/test_cheque_reversal.ts` (65): dört storno × bakiye/durum/bağ/kronoloji,
+  ciro→karşılıksız→storno zinciri, geriye tarihli ödeme zinciri, kasa defteri + dönem
+  kapanışı önizlemesi + §23 formülü PAY_CANCEL sonrası saklı bakiyeyle eşit, eşzamanlı çift
+  storno, orijinali kapalı dönemde kalan storno geçer, tek kaynak tripwire (src+scripts
+  1.040 dosya) + enum↔tablo birebir.
+- Negatif sondalar (10, hepsi md5 ile geri): taraf çevrilmedi 15 ❌ · `endorsedToCariId`
+  null'lanmadı → DB CHECK ile çöktü · counterCariId yok 1 · PAY_CANCEL sign 0 → 4 ·
+  ciro carisi terslenmedi 4 · `eventDate` sıralaması 3 · ters satır geçmişe 2 · kasa
+  defterine literal 3 · başlık bankası 1 (ilk turda YEŞİL kaldı → §5i eklendi) ·
+  `reversesTxnId` yok 5 + çöktü.
+- Panel: `transitions.test.ts` (storno aynası; eski "BOUNCED/RETURNED/PAID menüsüz" testi
+  yerine yalnız CANCELLED menüsüz) · `reversal.test.ts` (geriye tarihli zincir). Sondalar:
+  `bounce-cancel` silindi 2 · kapama engeli 1 · yön kapısı 1 · createdAt yok sayıldı 1.
+- Yeşil: `cheque` 114+65 · `payment_allocation` 181 · `consistency` 32+8 · `cash` 37+61 ·
+  route auth/mount/swagger · `finance_regime_gate` · `feature_flag_contract` ·
+  `audit_labels` · schema drift/hijyen/db_invariants; Electron typecheck + 223 dosya /
+  2.371 test; üç projede lint tavanı aşılmadı.
+
+### Üç kapı
+
+- **Migration VAR** (iki dosya, yalnız `ADD VALUE IF NOT EXISTS`, kendi dosyalarında):
+  `20260911100000_cheque_reversal_cari_sources` · `20260911100100_cheque_reversal_event_types`.
+- Yeni izin **yok**. APK **yok**. Backend ÖNCE, panel sonra.
+- **Eski istemci:** yeni uçları çağırmaz; yeni olay tipini detayda etiketsiz basar (kırılma
+  değil). Olay satırındaki `createdAt` additive. `minVersion` gerekmez.

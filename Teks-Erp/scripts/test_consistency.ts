@@ -30,6 +30,10 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { DISPOSITION_NOTE_PREFIXES } from "../src/services/helpers/roll-disposition.helper";
+import { chequeCashEventTypesSql, chequeCashInflowSql } from "../src/services/helpers/cheque-cash-events.helper";
+
+const CHEQUE_CASH_TYPES = chequeCashEventTypesSql();
+const CHEQUE_CASH_INFLOW = chequeCashInflowSql("e");
 
 let pass = 0,
   fail = 0;
@@ -646,16 +650,12 @@ LEFT JOIN (
     SELECT "cashBoxId", SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS t
       FROM cash_transactions WHERE status <> 'CANCELLED' AND "cashBoxId" IS NOT NULL GROUP BY "cashBoxId"
     UNION ALL
-    -- ⚠️ 'COLLECT', 'PAY' ve 'COLLECT_CANCEL' para oynatır. 'DEPOSIT' de
-    -- banka/kasa alanı taşır ama o yalnız "çek nereye teslim edildi" izidir —
-    -- henüz tahsil edilmemiştir; dahil edilseydi vadesi gelmemiş çek nakit
-    -- sayılırdı. COLLECT_CANCEL (K-2, 2026-08-14) tahsil stornosudur: para
-    -- hesaptan GERİ çıkar → ELSE dalının -amount'ı doğru işareti verir (PAY ile
-    -- aynı yön). Listeye eklenmeseydi ilk stornoda bu mutabakat sahte drift
-    -- basardı (kasa yazıcısının dikiş notu, madde 8).
-    SELECT e."cashBoxId", SUM(CASE WHEN e.type = 'COLLECT' THEN ch.amount ELSE -ch.amount END) AS t
+    -- ⚠️ Para oynatan olay kümesi ve işareti TEK KAYNAKTAN
+    -- (cheque-cash-events.helper): kasa defteri ve dönem kapanışı da aynısını
+    -- okur. DEPOSIT dışarıda — tahsile verilen çek henüz para değildir.
+    SELECT e."cashBoxId", SUM(CASE WHEN ${CHEQUE_CASH_INFLOW} THEN ch.amount ELSE -ch.amount END) AS t
       FROM cheque_events e JOIN cheques ch ON ch.id = e."chequeId"
-      WHERE e.type IN ('COLLECT', 'PAY', 'COLLECT_CANCEL') AND e."cashBoxId" IS NOT NULL GROUP BY e."cashBoxId"
+      WHERE e.type IN (${CHEQUE_CASH_TYPES}) AND e."cashBoxId" IS NOT NULL GROUP BY e."cashBoxId"
   ) u GROUP BY "cashBoxId"
 ) p ON p."cashBoxId" = c.id
 WHERE c.balance <> COALESCE(p.toplam, 0)`,
@@ -678,11 +678,10 @@ LEFT JOIN (
     SELECT "bankAccountId", SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS t
       FROM cash_transactions WHERE status <> 'CANCELLED' AND "bankAccountId" IS NOT NULL GROUP BY "bankAccountId"
     UNION ALL
-    -- 'DEPOSIT' hariç (§23 notu): tahsile verilen çek henüz para değildir.
-    -- COLLECT_CANCEL dahil — kasa dalıyla (§23) aynı gerekçe.
-    SELECT e."bankAccountId", SUM(CASE WHEN e.type = 'COLLECT' THEN ch.amount ELSE -ch.amount END) AS t
+    -- Çek olay kümesi §23 ile aynı tek kaynaktan.
+    SELECT e."bankAccountId", SUM(CASE WHEN ${CHEQUE_CASH_INFLOW} THEN ch.amount ELSE -ch.amount END) AS t
       FROM cheque_events e JOIN cheques ch ON ch.id = e."chequeId"
-      WHERE e.type IN ('COLLECT', 'PAY', 'COLLECT_CANCEL') AND e."bankAccountId" IS NOT NULL GROUP BY e."bankAccountId"
+      WHERE e.type IN (${CHEQUE_CASH_TYPES}) AND e."bankAccountId" IS NOT NULL GROUP BY e."bankAccountId"
   ) u GROUP BY "bankAccountId"
 ) p ON p."bankAccountId" = a.id
 WHERE a.balance <> COALESCE(p.toplam, 0)`,

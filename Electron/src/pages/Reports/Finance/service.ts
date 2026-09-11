@@ -298,6 +298,9 @@ export const CARI_TXN_SOURCE_LABEL: Record<string, string> = {
   CHEQUE_ENDORSE: "Çek cirosu",
   CHEQUE_BOUNCE: "Karşılıksız çek",
   CHEQUE_CANCEL: "Çek iptali",
+  CHEQUE_ENDORSE_CANCEL: "Çek ciro stornosu",
+  CHEQUE_BOUNCE_CANCEL: "Karşılıksız stornosu",
+  CHEQUE_RETURN_CANCEL: "Çek iade stornosu",
 };
 
 export async function getStatementReport(p: {

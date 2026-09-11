@@ -19,6 +19,7 @@ Durum tabloları **"şu an ne"**yi tutar; defterler **"ne oldu"**yu tutar ve "ne
 - **[ÇEKİRDEK]** Append-only defter satırı GÜNCELLENMEZ ve SİLİNMEZ; bu yüzden `updatedAt` almaz ve kronolojisi `createdAt`'tir. Bir tablo hem defter hem durum kaynağı OLAMAZ — ikisi gerekiyorsa iki tablodur. · bekçi: `test_db_invariants.ts (kısmi)` <sub>(arşiv:2026-09-10, [DB-09])</sub>
 - **[ÇEKİRDEK]** Defter İŞ VERİSİDİR: arşivlenmez, budanmaz. Büyüme index/partition ile karşılanır, satır silerek değil. <sub>(arşiv:2026-09-10)</sub>
 - **[ÇEKİRDEK]** Çalışma oturumu (`WorkSession`) geçmişi hiçbir yoldan silinmez; oturumu olan istasyon/makine kalıcı silinemez (409 `workSessionCount`), pasife alınır. · bekçi: `test_work_session_history_guard.ts` <sub>(arşiv:2026-09-11)</sub>
+- **[ÇEKİRDEK]** Çekin her ileri olayının tipli stornosu vardır (`CANCELLED` hariç her terminalden tek çıkış): ters cari satır orijinaline `reversesTxnId` ile bağlanır, bugüne yazılır, durum en yeni ileri olayın (`createdAt`) `fromStatus`una döner; olay/satır bulunamazsa 409. · bekçi: `test_cheque_reversal.ts` <sub>(arşiv:2026-09-11)</sub>
 
 ### Yasaklar
 
@@ -65,7 +66,7 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 |---|---|---|---|
 | `WarehouseMovement` `schema.prisma:6099` | depo giriş/çıkış, 7 olay | ✅ | TRANSFER ✅ · SHIPMENT ✅ · **RETURN ❌** · **CANCEL ❌** |
 | `CariTransaction` `:6611` | cari borç/alacak, 11 kaynak | ✅ | ✅ `reversesTxnId` |
-| `ChequeEvent` `:7183` | çek durum defteri, 10 olay | ✅ | kısmi — **ENDORSE/PAY/BOUNCE/RETURN ❌** |
+| `ChequeEvent` `:7208` | çek durum defteri, 14 olay | ✅ | ✅ `*_CANCEL` (2026-09-11) — CANCEL'ın tersi yok (kendisi storno) |
 | `CashTransaction` `:6898` | kasa/banka | yarı (`status: CANCELLED`) | ✅ |
 | `YarnMovement` `:7399` | iplik stoğu | ✅ | ✅ ADJUST_IN/OUT |
 | `RollMovement` `:3569` | topun adım içi giriş/çıkışı | ❌ `updatedAt` + 4 `deleteMany` | ❌ |
@@ -85,9 +86,10 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 
 ## Bekçiler
 
-**Bu alanın genel kapısı YOK — kuralların çoğu bugün ölçülmemiştir** ([DB-35]: kapısız kural bir niyet beyanıdır). Ölçüldü:
+**Bu alanın genel kapısı YOK — kuralların çoğu bugün ölçülmemiştir** ([DB-35]: kapısız kural bir niyet beyanıdır). Tek tek ölçülen kurallar:
 
-- `scripts/test_work_session_history_guard.ts` — TEK ölçülen kural: oturum geçmişi silinmez (istasyon/makine 409 + önizleme dökümü + AST: `src/`de `workSession.delete*` ve ham `DELETE work_sessions` yok). Panel metni: `Electron/src/pages/Stations/machineDeleteDescription.test.ts`.
+- `scripts/test_cheque_reversal.ts` — çek ters yolları: bağ (`reversesTxnId`), bugüne yazım, `createdAt` kronolojisi, kasa/cari mutabakatı, tek kaynak tripwire.
+- `scripts/test_work_session_history_guard.ts` — oturum geçmişi silinmez (istasyon/makine 409 + önizleme dökümü + AST: `src/`de `workSession.delete*` ve ham `DELETE work_sessions` yok). Panel metni: `Electron/src/pages/Stations/machineDeleteDescription.test.ts`.
 - `scripts/test_warehouse_ledger.ts` ve `test_warehouse_movements.ts` yalnız OKUMA/süzme yüzeyini ölçüyor, "hangi olay satır yazmalı" invariant'ını DEĞİL.
 - `scripts/consistency-check.sql`'de `warehouse_movements` mutabakatı HİÇ YOK.
 

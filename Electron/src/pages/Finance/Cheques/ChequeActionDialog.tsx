@@ -1,8 +1,8 @@
 // =============================================================================
-// ÇEK GEÇİŞ DİYALOĞU — TEK DİYALOG, YEDİ İŞLEM
+// ÇEK GEÇİŞ DİYALOĞU — TEK DİYALOG, TÜM GEÇİŞLER VE STORNOLAR
 // =============================================================================
-// ⚠️ NEDEN TEK DOSYA: yedi geçişin ortak iskeleti aynıdır (ne olacağını söyle ·
-// gereken tek ek bilgiyi sor · onayla). Yedi ayrı diyalog yazmak, yedi ayrı
+// ⚠️ NEDEN TEK DOSYA: geçişlerin ortak iskeleti aynıdır (ne olacağını söyle ·
+// gereken tek ek bilgiyi sor · onayla). Ayrı diyaloglar yazmak, ayrı ayrı
 // yerde "para birimi uyuşmazlığı" ya da "tarih sözleşmesi" hatası yapma imkânı
 // demekti; farklılık zaten `transitions.ts`'te VERİ olarak duruyor.
 //
@@ -18,12 +18,12 @@
 // kaldırın") ve onay düğmesi o cümle ekrandayken kapalıdır — kullanıcıyı
 // kesin bir 409'a göndermenin kimseye faydası yok.
 //
-// ⚠️ İPTAL ve TAHSİL STORNOSU'nun gövdesi FARKLIDIR: iki uç da yalnız `reason`
-// kabul eder (`.strict()`), `eventDate`/`notes` göndermek 400'dür. Bu yüzden o
-// dallarda tarih/not alanı ÇİZİLMEZ — çizilse kullanıcı doldurur ve değeri
-// sessizce kaybolurdu. Stornoda hesap da SORULMAZ: backend parayı son COLLECT
-// olayının hesabından geri çeker (kullanıcıya seçtirmek yanlış hesaptan geri
-// çekme imkânı açardı); diyalog o hesabı onay metninde GÖSTERİR.
+// ⚠️ İPTAL ve STORNOLARIN gövdesi FARKLIDIR: uçlar yalnız `reason` kabul eder
+// (`.strict()`), `eventDate`/`notes` göndermek 400'dür. Bu yüzden o dallarda
+// tarih/not alanı ÇİZİLMEZ — çizilse kullanıcı doldurur ve değeri sessizce
+// kaybolurdu. Stornoda hesap/cari da SORULMAZ: backend onları terslenen ileri
+// olaydan çözer (seçtirmek yanlış hesaba ters kayıt imkânı açardı); diyalog
+// aynı olayı onay metninde GÖSTERİR (`ChequeReversalSummary`).
 //
 // ⚠️ İŞLEM TARİHİ BOŞSA ONAY KAPALIDIR, "bugün" VARSAYILMAZ. Tarih kutusu
 // temizlenebiliyor ve bu olay hem `ChequeEvent.eventDate`'e hem cari defter
@@ -33,6 +33,7 @@
 // =============================================================================
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { ChequeReversalSummary } from "./ChequeReversalSummary";
 import { toast } from "sonner";
 import { AlertTriangle } from "lucide-react";
 import {
@@ -49,10 +50,10 @@ import type { Customer } from "@/pages/Customers/types";
 import { listBankAccounts, listCashBoxes, money } from "../service";
 import type { Currency } from "../service";
 import {
-  chequeBounce, chequeCancel, chequeCollect, chequeCollectCancel, chequeDeposit, chequeEndorse,
-  chequePay, chequeReturn, getCheque, toNum, type ChequeRow,
+  chequeBounce, chequeCancel, chequeCollect, chequeDeposit, chequeEndorse,
+  chequePay, chequeReturn, chequeReverse, toNum, type ChequeRow,
 } from "./service";
-import { DOCTYPE_LABEL, STATUS_LABEL, cariName } from "./labels";
+import { DOCTYPE_LABEL, cariName } from "./labels";
 import { dayStartIso, fmtDate, ymd } from "./dates";
 import { allocationBlockReason, type ChequeActionDef } from "./transitions";
 
@@ -74,27 +75,7 @@ export function ChequeActionDialog({ row, def, open, onOpenChange, onDone }: Pro
   const [subcontractorId, setSubcontractorId] = useState<string | null>(null);
 
   const needsAccount = def.needs === "bank" || def.needs === "account";
-  const isCollectCancel = def.action === "collect-cancel";
-
-  // TAHSİL STORNOSU onayı SOMUT konuşmak zorunda: hangi hesaptan ne kadar geri
-  // çekilecek, durum neye dönecek. Bu bilgi liste satırında YOK (kasadan tahsil
-  // başlığa hesap yazmaz) — son COLLECT olayından okunur; backend de stornoyu
-  // AYNI olaydan çözer, yani ekran ile sunucu aynı kaynağa bakar.
-  const detailQ = useQuery({
-    queryKey: ["finance", "cheque", row.id],
-    queryFn: () => getCheque(row.id),
-    enabled: open && isCollectCancel,
-  });
-  const lastCollect = useMemo(() => {
-    // Olaylar kronolojik ASC gelir; storno + yeniden tahsil zincirinde birden
-    // çok COLLECT meşrudur → EN YENİSİ alınır (backend `cancelCollect` ile aynı).
-    const events = detailQ.data?.events ?? [];
-    for (let i = events.length - 1; i >= 0; i--) {
-      const e = events[i];
-      if (e?.type === "COLLECT") return e;
-    }
-    return null;
-  }, [detailQ.data]);
+  const isReversal = def.reverses !== undefined;
 
   const cashQ = useQuery({
     queryKey: ["finance", "cash-boxes"],
@@ -181,9 +162,13 @@ export function ChequeActionDialog({ row, def, open, onOpenChange, onDone }: Pro
           // ⚠️ Yalnız `reason` — tarih/not bu uçta YOK (dosya başlığı).
           return chequeCancel(row.id, reason.trim());
         case "collect-cancel":
-          // ⚠️ Yalnız `reason` (zorunlu) — hesap/tarih GÖNDERİLMEZ, backend son
-          // COLLECT olayından çözer; ters satır BUGÜNE düşer (storno sözleşmesi).
-          return chequeCollectCancel(row.id, reason.trim());
+        case "endorse-cancel":
+        case "bounce-cancel":
+        case "return-cancel":
+        case "pay-cancel":
+          // ⚠️ Yalnız `reason` (zorunlu) — hesap/cari/tarih GÖNDERİLMEZ, backend
+          // terslenen ileri olaydan çözer; ters satır BUGÜNE düşer.
+          return chequeReverse(row.id, def.action, reason.trim());
         default:
           throw new Error("Tanımsız çek işlemi.");
       }
@@ -221,34 +206,7 @@ export function ChequeActionDialog({ row, def, open, onOpenChange, onDone }: Pro
           </div>
         )}
 
-        {isCollectCancel && (
-          // Yıkıcı-işlem onayı SOMUT söyler: hangi hesap, ne kadar, hangi duruma
-          // dönüş. Okunamazsa bunu da SÖYLERİZ — backend fail-closed'dur ve kendi
-          // kesin cevabını verir (mesajı olduğu gibi ekrana düşer, ezilmez).
-          <div className="rounded-md border px-3 py-2 text-xs">
-            {detailQ.isLoading ? (
-              <span className="text-muted-foreground">Tahsil kaydı okunuyor…</span>
-            ) : lastCollect && (lastCollect.bankAccount || lastCollect.cashBox) ? (
-              <span>
-                {money(toNum(row.amount), row.currency as Currency)} tutar{" "}
-                <strong>
-                  {lastCollect.cashBox
-                    ? `"${lastCollect.cashBox.name}" kasasından`
-                    : `"${lastCollect.bankAccount?.name}" banka hesabından`}
-                </strong>{" "}
-                geri çekilecek; çek{" "}
-                <strong>{STATUS_LABEL[lastCollect.fromStatus ?? "PORTFOLIO"]}</strong> durumuna dönecek.
-                Hesap sonradan pasifleştirilmiş olsa da para geri çekilir (para gerçeği ekran kuralından
-                önce gelir).
-              </span>
-            ) : (
-              <span className="text-amber-700 dark:text-amber-500">
-                Tahsil olayının hesap kaydı buradan okunamadı — işlem denenirse sunucu kesin cevabı verir
-                (hesap kaydı yoksa stornoyu reddeder ve sebebini söyler).
-              </span>
-            )}
-          </div>
-        )}
+        {def.reverses && <ChequeReversalSummary row={row} reverses={def.reverses} open={open} />}
 
         {needsAccount && (
           <div>
@@ -325,18 +283,16 @@ export function ChequeActionDialog({ row, def, open, onOpenChange, onDone }: Pro
 
         {def.needs === "reason" ? (
           <div>
-            <Label>{isCollectCancel ? "Storno sebebi" : "İptal sebebi"}</Label>
+            <Label>{isReversal ? "Storno sebebi" : "İptal sebebi"}</Label>
             <Input
               className="mt-1"
-              placeholder={
-                isCollectCancel ? "Örn: yanlış çek tahsil işaretlendi" : "Örn: yanlış tutar girildi"
-              }
+              placeholder={isReversal ? "Örn: işlem yanlış çeke girildi" : "Örn: yanlış tutar girildi"}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
             />
             <p className="mt-1 text-xs text-muted-foreground">
-              {isCollectCancel
-                ? "Sebep zorunludur ve olay defterine yazılır — para hareketi geri alınıyor. Cari deftere ve fatura kapamalarına dokunulmaz."
+              {isReversal
+                ? "Sebep zorunludur ve olay defterine yazılır — asıl kayıt silinmez, bugüne ters kayıt düşer."
                 : "Sebep cari deftere ve denetim kaydına yazılır; iptal edilen kayıt listede kalır."}
             </p>
           </div>

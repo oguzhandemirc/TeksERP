@@ -25,11 +25,15 @@ import { requireAnyPermission, requirePermission } from "../middlewares/rbac.mid
 import { requireFinanceEnabled } from "../middlewares/finance.middleware";
 import { chequeService } from "../services/cheque.service";
 import { resolveDateRange } from "../services/reports/_shared";
+import chequeReversalRoutes from "./cheque-reversal.routes";
 
 const router = Router();
 
 // Modül kapısı — bu router'daki HER uç için.
 router.use(verifyToken, requireFinanceEnabled);
+
+// Storno alt router'ı kapıyı BURADAN miras alır (app.ts'e bağlanmaz).
+router.use("/", chequeReversalRoutes);
 
 const decimalString = z.union([z.number(), z.string()]);
 const isoDate = z.string().datetime({ offset: true }).or(z.string().date());

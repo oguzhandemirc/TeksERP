@@ -47,7 +47,11 @@ export type ChequeEventType =
   | "BOUNCE"
   | "RETURN"
   | "PAY"
-  | "CANCEL";
+  | "CANCEL"
+  | "ENDORSE_CANCEL"
+  | "BOUNCE_CANCEL"
+  | "RETURN_CANCEL"
+  | "PAY_CANCEL";
 
 /** Decimal kolonun JSON karşılığı — number DA string DE gelebilir (dosya başlığı). */
 export type DecimalLike = number | string;
@@ -102,6 +106,8 @@ export interface ChequeEventRow {
   fromStatus: ChequeStatus | null;
   toStatus: ChequeStatus;
   eventDate: string;
+  /** Yazım anı — storno zincirinin kronolojisi (eventDate geriye tarihlenebilir). Eski backend göndermez. */
+  createdAt?: string;
   notes: string | null;
   counterCari: CariRef | null;
   bankAccount: { id: string; name: string } | null;
@@ -240,9 +246,21 @@ export async function chequeCollect(
  * dönülecek durumu backend son COLLECT olayından kendisi çözer, ters satır
  * BUGÜNE düşer (storno sözleşmesi).
  */
-export async function chequeCollectCancel(id: string, reason: string): Promise<MutationResult> {
-  const res = await apiClient.post(`/api/finance/cheques/${id}/collect-cancel`, { reason });
+/** Tipli storno uçları — beşi de yalnız `reason` kabul eder (`.strict()`). */
+export type ChequeReversalPath =
+  | "collect-cancel"
+  | "endorse-cancel"
+  | "bounce-cancel"
+  | "return-cancel"
+  | "pay-cancel";
+
+export async function chequeReverse(id: string, path: ChequeReversalPath, reason: string): Promise<MutationResult> {
+  const res = await apiClient.post(`/api/finance/cheques/${id}/${path}`, { reason });
   return res.data as MutationResult;
+}
+
+export async function chequeCollectCancel(id: string, reason: string): Promise<MutationResult> {
+  return chequeReverse(id, "collect-cancel", reason);
 }
 
 export async function chequeEndorse(

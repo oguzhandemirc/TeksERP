@@ -11,16 +11,14 @@
 // ── FOTOĞRAFIN KAYNAĞI: ÜÇ YAZAR (test_consistency §23/§24 ile AYNI evren) ──
 //   1. `payments`          — carili tahsilat/ödeme       (çıpa: paymentDate)
 //   2. `cash_transactions` — masraf/gelir/virman/açılış  (çıpa: txnDate)
-//   3. `cheque_events`     — COLLECT / PAY / COLLECT_CANCEL (çıpa: eventDate)
+//   3. `cheque_events`     — para oynatan olaylar, küme `cheque-cash-events.helper` (çıpa: eventDate)
 // Yalnız birine bakan bir ölçüm diğer yazarların hareketini "drift" sanırdı;
 // §23/§24 mutabakat sorgularının UNION'ı buradaki `measureTx` ile aynı kümeyi
 // toplamak ZORUNDADIR — ayrışırlarsa aynı kasa için iki "doğru" rakam doğar.
 //
-// ⚠️ `COLLECT_CANCEL` (K-2) BİLİNÇLİ İÇERİDE: tahsil stornosu ters kasa
-// hareketini OLAY SATIRIYLA taşır (COLLECT'in kendisi gibi — ayrı
-// CashTransaction doğmaz). Dışarıda bırakılsaydı ilk collect-stornosu, hem
-// kapanış fotoğrafını hem `verify`i sahte drift'e düşürürdü. Bugün 0 satır →
-// davranış birebir; K-2 indiği gün formül hazır.
+// ⚠️ ÇEK STORNOLARI (`COLLECT_CANCEL` · `PAY_CANCEL`) BİLİNÇLİ İÇERİDE: ters kasa
+// hareketini OLAY SATIRIYLA taşırlar (ayrı CashTransaction doğmaz). Dışarıda
+// kalsalar ilk storno hem kapanış fotoğrafını hem `verify`i sahte drift'e düşürürdü.
 //
 // ⚠️ CARİ İKİZİNDEN FARKLAR:
 //   • Boyut HESAP — para birimi YOK (hesap tek para birimli, şema kararı).
@@ -47,7 +45,11 @@ import {
   resolveCashAccountScope,
 } from "./helpers/cash-period-guard.helper";
 import { periodDayKey, periodEndCutExclusive, formatDayKeyTr } from "./helpers/period-guard.helper";
+import { chequeCashEventTypesSql, chequeCashInflowSql } from "./helpers/cheque-cash-events.helper";
 import type { ApiResponse } from "../types/api.types";
+
+const CHEQUE_CASH_TYPES = Prisma.raw(chequeCashEventTypesSql());
+const CHEQUE_CASH_INFLOW = Prisma.raw(chequeCashInflowSql("e"));
 
 /** Bir dönemin ölçülmüş fotoğrafı — önizleme, kapanış ve doğrulama bunu döner. */
 export interface CashPeriodSnapshot {
@@ -122,13 +124,11 @@ async function measureTx(
         FROM cash_transactions
         WHERE status <> 'CANCELLED' AND ${col} = ${scope.accountId}::uuid AND "txnDate" < ${cut}
       UNION ALL
-      -- YALNIZ para oynatan olaylar: COLLECT (+) · PAY (−) · COLLECT_CANCEL (−,
-      -- COLLECT'in stornosu). DEPOSIT bilinçli DIŞARIDA (§23 notu: tahsile
-      -- verilen çek henüz para değildir). CANCELLED süzgeci YOK — olay defteri
-      -- append-only, "iptal edilmiş olay" diye bir şey yoktur.
-      SELECT CASE WHEN e.type = 'COLLECT' THEN ch.amount ELSE -ch.amount END AS t
+      -- YALNIZ para oynatan olaylar — küme ve işaret CHEQUE_EVENT_CASH_EFFECT'ten.
+      -- CANCELLED süzgeci YOK: olay defteri append-only, storno kendi satırıdır.
+      SELECT CASE WHEN ${CHEQUE_CASH_INFLOW} THEN ch.amount ELSE -ch.amount END AS t
         FROM cheque_events e JOIN cheques ch ON ch.id = e."chequeId"
-        WHERE e.type IN ('COLLECT', 'PAY', 'COLLECT_CANCEL')
+        WHERE e.type IN (${CHEQUE_CASH_TYPES})
           AND ${eCol} = ${scope.accountId}::uuid AND e."eventDate" < ${cut}
     ) u
   `);
@@ -530,7 +530,7 @@ export class CashPeriodCloseService {
    *
    * ⚠️ PENCERE TOPLAMI ZAMAN-ÇIPALIDIR, measureTx'in status-süzgeci DEĞİL.
    * Evren aynı ÜÇ YAZARDIR (payments · cash_transactions · cheque_events
-   * COLLECT/PAY/COLLECT_CANCEL; DEPOSIT dışarıda) ama iptal, kasa defteri
+   * para oynatan olaylar — `cheque-cash-events.helper`) ama iptal, kasa defteri
    * raporundaki gibi İKİ satırla temsil edilir: asıl hareket belge tarihinde,
    * ters hareket `cancelledAt` anında. Nedeni raporla TUTARLILIK: pencerede
    * doğmuş bir belge rapor dönemi İÇİNDE iptal edilirse parası `from` anında
@@ -635,11 +635,11 @@ export class CashPeriodCloseService {
           WHERE status = 'CANCELLED' AND "cancelledAt" IS NOT NULL
             AND ${col} = ${scope.accountId}::uuid AND "cancelledAt" < ${from} ${cLow} ${kOrigInWindow}
         UNION ALL
-        -- 3) ÇEK OLAYI — defter append-only, olay kendi anında (COLLECT + ·
-        -- PAY − · COLLECT_CANCEL −); DEPOSIT bilinçli dışarıda (§23 notu)
-        SELECT CASE WHEN e.type = 'COLLECT' THEN ch.amount ELSE -ch.amount END AS t
+        -- 3) ÇEK OLAYI — defter append-only, olay kendi anında; küme ve işaret
+        -- CHEQUE_EVENT_CASH_EFFECT'ten (measureTx ile aynı evren)
+        SELECT CASE WHEN ${CHEQUE_CASH_INFLOW} THEN ch.amount ELSE -ch.amount END AS t
           FROM cheque_events e JOIN cheques ch ON ch.id = e."chequeId"
-          WHERE e.type IN ('COLLECT', 'PAY', 'COLLECT_CANCEL')
+          WHERE e.type IN (${CHEQUE_CASH_TYPES})
             AND ${eCol} = ${scope.accountId}::uuid AND e."eventDate" < ${from} ${eLow}
       ) u
     `);

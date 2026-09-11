@@ -2,7 +2,7 @@
 
 > Üretilmiş (anlama turu 2026-09-05, +10 bekçi 2026-09-06/07; 467 backend bekçisi + 296 istemci testi — Electron 211, mobil 85). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı; 455 dosya, **~6,5 dakika** — 369 sn koşum + 28 sn tip geçidi, ölçüldü 2026-09-05 — 'saatler sürer' cümlesi YANLIŞTI, `docs/standart/TEST-VE-DERLEME.md` [TD-02]). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
 
-Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `diger` (91), `sevkiyat` (87), `etiket` (83), `finans` (79), `siparis` (72), `modul-bayrak` (68), `belge` (65), `ayar` (58), `cuval` (59), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (40), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (29), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (11), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
+Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `diger` (91), `sevkiyat` (87), `etiket` (83), `finans` (81), `siparis` (72), `modul-bayrak` (68), `belge` (65), `ayar` (58), `cuval` (59), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (40), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (29), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (11), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
 
 
 ## yetki-izin (98)
@@ -679,7 +679,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `mobil/src/services/btPrinter.service.test.ts` | Isınma + parçalama disiplini: soğuk hatta ilk giden şey asıl yük olmaz (2026-08-19'da PPLB akışının BAŞI yutuluyordu). Her test AYRI MAC kullanır — ma |  | ✓ |  |
 | `mobil/src/services/tambur.service.test.ts` | Kesim çağrılarında etiket NİYETİ (targetCustomerId / targetOrderLineId) POST gövdesine geçer — ulaşmazsa kesimde lastLabelSnapshot seed edilemez ('eti |  |  |  |
 
-## finans (79)
+## finans (81)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
@@ -694,7 +694,8 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `Electron/src/pages/Finance/Cheques/chequeBordro.test.ts` | §1 Excel kolonları ile PDF/Yazdır başlıkları BİREBİR (tek spec) · §2 kolon kümesi+SIRA+satır değerleri (sıra 1..N, boş alan "") · §3 AYNI YÖN kuralı:  |  | ✓ |  |
 | `Electron/src/pages/Finance/Cheques/chequeDeliveryNote.test.ts` | §1 resmî bordro kapı yüklemi anlık bordronun `bordroBlockReason`ını AYNEN kullanır (kopya yok) · §2 tarih zorunlu ve MUTLAK AN; bozuk/boşta gövde hiç  |  | ✓ |  |
 | `Electron/src/pages/Finance/Cheques/chequeExport.test.ts` | §1 Excel ↔ PDF kolon eşitliği (tek spec) · §2 EKRAN↔SPEC eşlemesi: `ChequeTable.tsx` <thead> KAYNAKTAN okunur, her ekran başlığı hangi dosya kolonuna  |  | ✓ |  |
-| `Electron/src/pages/Finance/Cheques/transitions.test.ts` | transitions.ts backend `loadForTransition` listelerinin aynası: COLLECTED çekte TEK işlem 'Tahsili Geri Al' · `collect-cancel` tanımı backend sözleşme |  | ✓ |  |
+| `Electron/src/pages/Finance/Cheques/reversal.test.ts` | Storno onayı: terslenen ileri olay EN YENİ yazımdan (`createdAt`, geriye tarihli zincir) · onay cümlesi hesap/cari/dönüş durumunu somut söyler · okunamayan kayıtta null |  | ✓ |  |
+| `Electron/src/pages/Finance/Cheques/transitions.test.ts` | transitions.ts backend `loadForTransition` listelerinin aynası: beş storno tanımı (kaynak durum, yön, sebep, kapama engeli yok) · her terminalde yalnız kendi stornosu, CANCELLED menüsüz |  | ✓ |  |
 | `Electron/src/pages/Finance/InvoiceFormDialog.test.tsx` | Uçtan uca: 0 fiyatlı otomatik taslak açılır, fiyat girilir, kaydedilir ve panel gerçekten `PATCH /invoices/:id` çağırır · PATCH gövdesi .strict(): tür |  |  |  |
 | `Electron/src/pages/Finance/PeriodClose/cashService.test.ts` | 1) HESAP XOR (`cashAccountParams`): iki anahtar birden giderse backend 400, hiçbir liste/önizleme gelmez — tek kaynak bu fonksiyon · 2) hesap kimliği  |  |  |  |
 | `Electron/src/pages/Finance/invoiceDetail.test.ts` | ① kapama toplamı KURUŞTA (float 1 kuruşluk hayali fark → sağlam faturayı 'defter tutmuyor' diye gösterir) · ② kaynak XOR'a güvenilmez: `paidTotal`/`Pa |  | ✓ |  |
@@ -734,6 +735,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `Teks-Erp/scripts/test_cash_negative_guard.ts` | finance.blockNegativeCashEnabled: kapalıyken sıfır fark, açıkken 4 ileri yol 409 (somut mesaj, iz bırakmaz), ters yollar ve BANKA muaf, TOCTOU + eşzam | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_cash_period_close.ts` | Kasa/banka dönem kapanışı: üç yazarlı fotoğraf, hesap XOR (DB CHECK dahil), 8028 kilit uzayı, reopen LIFO, AST kablolama taraması ve kilit sırası kura | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_cheque_portfolio.ts` | Çek/senet portföyü: defter anı, durum↔olay mutabakatı, eşzamanlı çift tahsil, ciro/karşılıksız simetrisi, posting çıpası, ayna-ciro deadlock ve tahsil | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_cheque_reversal.ts` | Çek ters yolları (ciro/karşılıksız/iade/ödeme stornosu): `reversesTxnId` bağı, bugüne yazım, `createdAt` kronolojisi, kasa defteri + dönem kapanışı mutabakatı, eşzamanlı çift storno, çek-olayı kasa kümesi tek kaynak tripwire | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_consistency.ts` | consistency-check.sql'in mekanik ikizi: denormalize defter alanları + 24 bölümlük drift taraması (§20 WorkOrderStep.status ve §21-24 ön muhasebe SQL'd | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_dispatch_report_gross.ts` | Sevk fişi BRÜT: getDispatchReport donmuş snapshot'tan okur, iade rakamı değiştirmez; iade yalnız dipnot; muhasebe export'unda sevk brüt + ayrı iade bö | ✓ |  |  |
 | `Teks-Erp/scripts/test_exchange_rate_fetch.ts` | TCMB kur işi: XML ayrıştırma (bülten tarihi + Unit normalizasyonu), yazma kuralı (MANUAL satıra dokunmaz), finance.enabled kapalıyken tam no-op. | ✓ | ✓ |  |

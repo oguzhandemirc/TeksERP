@@ -30,6 +30,13 @@
 //   COLLECT_CANCEL → YALNIZ banka/kasa −amount (tahsil stornosu, K-2); cari
 //                    yine OYNAMAZ — COLLECT oynatmamıştı, tersi de oynatmaz
 //
+// STORNOLAR — her ileri olayın tipli tersi; ileri satırı SİLMEZ, bugüne ters
+// satır yazar (`reversesTxnId`), durumu ileri olayın `fromStatus`una döndürür:
+//   ENDORSE_CANCEL → ciro carisine ALACAK (CHEQUE_ENDORSE_CANCEL)
+//   BOUNCE_CANCEL  → BOUNCE'un bir ya da iki satırının tersi (CHEQUE_BOUNCE_CANCEL)
+//   RETURN_CANCEL  → RETURN'ün satırının tersi (CHEQUE_RETURN_CANCEL)
+//   PAY_CANCEL     → YALNIZ banka/kasa +amount; PAY cari yazmamıştı, tersi de yazmaz
+//
 // ⚠️ KASA/BANKA BAKİYESİNİN ÜÇÜNCÜ YAZARI BURASIDIR (Payment · CashTransaction ·
 // ChequeEvent). `scripts/test_consistency.ts` §23/§24 formülü bu üçünü BİRLİKTE
 // toplar — genişletilmezse İLK çek tahsilatında mevcut bekçi "drift" raporlar.
@@ -104,14 +111,9 @@ async function nextChequeNo(
 /**
  * TERMİNAL durumlar — normal AKIŞ olayları bunlardan sonra YOKTUR.
  *
- * TEK bilinçli istisna (K-2, 2026-08-14): `COLLECTED`'dan `cancelCollect`
- * (tahsil stornosu) ile çıkılır. Yanlış COLLECT işaretlenen çek eskiden
- * SONSUZA DEK "tahsil edildi" kalıyordu — kasa tarafındaki storno kasayı
- * düzeltir ama çekin durumunu düzeltemezdi ve çek sonradan GERÇEKTEN
- * karşılıksız çıkarsa portföy yalan söylerdi. Storno TİPLİ olaydır
- * (`COLLECT_CANCEL`): parayı AYNI hesaptan geri çeker ve durumu COLLECT'in
- * tükettiği duruma döndürür; `loadForTransition` onu `allowedFrom=[COLLECTED]`
- * ile AÇIKÇA ister, yani bu liste "genel geçiş kapısı" olma işini sürdürür.
+ * Tek çıkış TİPLİ STORNODUR (`*_CANCEL`) ve `loadForTransition`'a durumu AÇIKÇA
+ * `allowedFrom` olarak verir; bu liste "genel geçiş kapısı" olmayı sürdürür.
+ * `CANCELLED` stornonun kendisidir, çıkışı yoktur.
  */
 const TERMINAL_STATUSES: readonly ChequeStatus[] = [
   ChequeStatus.COLLECTED,
@@ -139,6 +141,15 @@ export const CHEQUE_STATUS_LABEL: Record<ChequeStatus, string> = {
   ISSUED: "verildi",
   PAID: "ödendi",
   CANCELLED: "iptal edildi",
+};
+
+/** Yanlış kaydın çıkış yolu — "yapılamaz" mesajı yolu gösterir (çıkmaz 409 yasak). */
+const REVERSAL_HINT: Partial<Record<ChequeStatus, string>> = {
+  COLLECTED: '"Tahsilatı Geri Al" (tahsil stornosu)',
+  ENDORSED: '"Ciroyu Geri Al" (ciro stornosu)',
+  BOUNCED: '"Karşılıksızı Geri Al" (karşılıksız stornosu)',
+  RETURNED: '"İadeyi Geri Al" (iade stornosu)',
+  PAID: '"Ödemeyi Geri Al" (ödeme stornosu)',
 };
 
 /** Belge türü etiketi — hata mesajı "çek" mi "senet" mi demeli. */
@@ -233,6 +244,8 @@ const DETAIL_SELECT = {
       fromStatus: true,
       toStatus: true,
       eventDate: true,
+      // Storno onayı "en yeni ileri olayı" backend gibi yazım sırasıyla seçsin.
+      createdAt: true,
       notes: true,
       counterCari: CARI_REF_SELECT,
       bankAccount: { select: { id: true, name: true } },
@@ -361,6 +374,8 @@ async function writeChequeLedgerTx(
     chequeId: string;
     description: string;
     userId?: string;
+    /** Storno satırında terslenen orijinal — `@unique`, bir satır bir kez terslenir. */
+    reversesTxnId?: string;
   },
 ): Promise<void> {
   // ⚠️ DÖNEM KİLİDİ — satır YAZILMADAN ÖNCE, ve çek tarafında TEK yer burasıdır
@@ -385,6 +400,7 @@ async function writeChequeLedgerTx(
       exchangeRate: input.exchangeRate,
       sourceType: input.sourceType,
       chequeId: input.chequeId,
+      reversesTxnId: input.reversesTxnId ?? null,
       description: input.description.slice(0, 300),
       createdById: input.userId ?? null,
     },
@@ -427,6 +443,103 @@ async function writeEventTx(
       createdById: input.userId ?? null,
     },
   });
+}
+
+// -----------------------------------------------------------------------------
+// STORNO YARDIMCILARI — dört ters yolun ortak parçaları
+// -----------------------------------------------------------------------------
+
+function requireReversalReason(reason: string | undefined, label: string): string {
+  const trimmed = reason?.trim() ?? "";
+  if (!trimmed) throw AppError.badRequest(`${label} için sebep zorunludur — defter ters kayıtla düzeltiliyor.`);
+  return trimmed;
+}
+
+/**
+ * Terslenecek ileri olay — EN YENİSİ `createdAt` ile: `eventDate` kullanıcı
+ * girdisidir ve geriye tarihlenebilir, zincirin gerçek sırası yazım sırasıdır.
+ * FAIL-CLOSED: olay ya da tükettiği durum yoksa neyin geri kurulacağı bilinemez.
+ */
+async function loadForwardEventTx(
+  tx: Prisma.TransactionClient,
+  row: TransitionRow,
+  type: ChequeEventType,
+  label: string,
+): Promise<{ fromStatus: ChequeStatus; counterCariId: string | null; cashBoxId: string | null; bankAccountId: string | null }> {
+  const event = await tx.chequeEvent.findFirst({
+    where: { chequeId: row.id, type },
+    orderBy: { createdAt: "desc" },
+    select: { fromStatus: true, counterCariId: true, cashBoxId: true, bankAccountId: true },
+  });
+  if (!event?.fromStatus) {
+    throw AppError.conflict(
+      `${row.docNo} için geri alınacak olay kaydı bulunamadı — ${label} otomatik yapılamaz, kaydı süpervizörle inceleyin.`,
+    );
+  }
+  return { ...event, fromStatus: event.fromStatus };
+}
+
+const REVERSIBLE_TXN_SELECT = {
+  id: true, cariId: true, currency: true, debit: true, credit: true, amountTry: true, exchangeRate: true,
+} satisfies Prisma.CariTransactionSelect;
+
+type ReversibleTxn = Prisma.CariTransactionGetPayload<{ select: typeof REVERSIBLE_TXN_SELECT }>;
+
+/** İleri olayın cari satırı: terslenmemiş, beklenen tarafta, en yenisi. FAIL-CLOSED. */
+async function loadReversibleTxnTx(
+  tx: Prisma.TransactionClient,
+  row: TransitionRow,
+  ref: { sourceType: CariTxnSource; cariId: string; side: "debit" | "credit" },
+  label: string,
+): Promise<ReversibleTxn> {
+  const txn = await tx.cariTransaction.findFirst({
+    where: {
+      chequeId: row.id,
+      cariId: ref.cariId,
+      sourceType: ref.sourceType,
+      reversedBy: { is: null },
+      ...(ref.side === "debit" ? { debit: { gt: 0 } } : { credit: { gt: 0 } }),
+    },
+    orderBy: { createdAt: "desc" },
+    select: REVERSIBLE_TXN_SELECT,
+  });
+  if (!txn) {
+    throw AppError.conflict(
+      `${row.docNo} için terslenecek cari defter satırı bulunamadı — ${label} otomatik yapılamaz, kaydı süpervizörle inceleyin.`,
+    );
+  }
+  return txn;
+}
+
+/** Birebir ters satır: borç↔alacak yer değiştirir, TL karşılığı ve kur orijinalden. */
+async function writeChequeReversalTx(
+  tx: Prisma.TransactionClient,
+  original: ReversibleTxn,
+  input: { sourceType: CariTxnSource; chequeId: string; txnDate: Date; description: string; userId?: string },
+): Promise<void> {
+  const wasDebit = D(original.debit).gt(0);
+  try {
+    await writeChequeLedgerTx(tx, {
+      cariId: original.cariId,
+      currency: original.currency,
+      txnDate: input.txnDate,
+      side: wasDebit ? "credit" : "debit",
+      amount: wasDebit ? D(original.debit) : D(original.credit),
+      amountTry: D(original.amountTry),
+      exchangeRate: D(original.exchangeRate),
+      sourceType: input.sourceType,
+      chequeId: input.chequeId,
+      reversesTxnId: original.id,
+      description: input.description,
+      userId: input.userId,
+    });
+  } catch (e) {
+    // Atomik claim ikinci stornoyu önden keser; bu, claim atlanırsa kalan DB seddi.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      throw AppError.conflict("Bu defter satırı zaten terslenmiş. Ekranı yenileyip tekrar deneyin.");
+    }
+    throw e;
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -806,16 +919,12 @@ export class ChequeService {
       // durumu, ikincisi eksik bir adımı anlatır. Tek mesaj kullanıcıyı yanlış
       // yöne (destek çağırmaya) gönderirdi.
       const isTerminal = TERMINAL_STATUSES.includes(row.status);
-      // COLLECTED'ın artık tipli bir çıkışı var (K-2) — çıkmaz 409 yasak
-      // kuralı gereği yol GÖSTERİLİR: yanlış tahsil kaydının çözümü stornodur.
-      const collectedHint =
-        row.status === ChequeStatus.COLLECTED
-          ? ' Tahsil kaydı HATALIYSA önce "Tahsilatı Geri Al" (tahsil stornosu) yapın.'
-          : "";
+      const hint = REVERSAL_HINT[row.status];
+      const hintText = hint ? ` Kayıt HATALIYSA önce ${hint} yapın.` : "";
       throw AppError.conflict(
         isTerminal
-          ? `${row.docNo} zaten ${CHEQUE_STATUS_LABEL[row.status]} — bu kayıt kapanmıştır, "${action}" yapılamaz.${collectedHint}`
-          : `${row.docNo} şu an ${CHEQUE_STATUS_LABEL[row.status]}; "${action}" bu durumda yapılamaz.`,
+          ? `${row.docNo} zaten ${CHEQUE_STATUS_LABEL[row.status]} — bu kayıt kapanmıştır, "${action}" yapılamaz.${hintText}`
+          : `${row.docNo} şu an ${CHEQUE_STATUS_LABEL[row.status]}; "${action}" bu durumda yapılamaz.${hintText}`,
       );
     }
     return row;
@@ -1197,7 +1306,64 @@ export class ChequeService {
   }
 
   /**
-   * KARŞILIKSIZ — defter TERS KAYITLA geri alınır.
+   * CİRO STORNOSU — yanlış girilen ciro geri alınır; `cancel()` genişletilmedi
+   * çünkü ciro gerçek bir ticari olaydır ve "hiç olmamış" sayılamaz.
+   *
+   * ⚠️ `endorsedToCariId` null'a döner: o alan damga değil "çek şu an kimde"
+   * işaretçisidir. Ciro gerçeği defterde kalır — ENDORSE ve ENDORSE_CANCEL
+   * satırlarının ikisi de `counterCariId` taşır.
+   */
+  async cancelEndorse(id: string, reason: string, userId?: string): Promise<ApiResponse<{ id: string; docNo: string }>> {
+    const why = requireReversalReason(reason, "Ciro stornosu");
+    const now = new Date();
+    const result = await prisma.$transaction(async (tx) => {
+      const row = await this.loadForTransition(tx, id, [ChequeStatus.ENDORSED], ChequeKind.RECEIVED, "ciro stornosu");
+      if (!row.endorsedToCariId) {
+        throw AppError.conflict(`${row.docNo} ciro edilmiş görünüyor ama ciro carisi yok — kaydı süpervizörle inceleyin.`);
+      }
+      const endorsee = row.endorsedToCariId;
+      const event = await loadForwardEventTx(tx, row, ChequeEventType.ENDORSE, "ciro stornosu");
+      const original = await loadReversibleTxnTx(
+        tx, row, { sourceType: CariTxnSource.CHEQUE_ENDORSE, cariId: endorsee, side: "debit" }, "ciro stornosu",
+      );
+
+      await this.claimTx(tx, row, event.fromStatus, { endorsedToCariId: null });
+      await writeChequeReversalTx(tx, original, {
+        sourceType: CariTxnSource.CHEQUE_ENDORSE_CANCEL,
+        chequeId: row.id,
+        txnDate: now,
+        description: `${row.docNo} ciro stornosu — ${why}`,
+        userId,
+      });
+      await writeEventTx(tx, {
+        chequeId: row.id,
+        type: ChequeEventType.ENDORSE_CANCEL,
+        fromStatus: ChequeStatus.ENDORSED,
+        toStatus: event.fromStatus,
+        eventDate: now,
+        counterCariId: endorsee,
+        notes: why,
+        userId,
+      });
+      return { id: row.id, docNo: row.docNo, backTo: event.fromStatus };
+    });
+
+    void AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "CHEQUE",
+      recordId: id,
+      newData: { event: "ENDORSE_CANCEL", docNo: result.docNo, reason: why },
+    });
+    return {
+      success: true,
+      data: { id: result.id, docNo: result.docNo },
+      message: `${result.docNo} ciro stornosu yapıldı — ciro carisine ters kayıt yazıldı, çek ${CHEQUE_STATUS_LABEL[result.backTo]} durumuna döndü.`,
+    };
+  }
+
+  /**
+   * KARŞILIKSIZ — alışın kapattığı alacak geri açılır; kayıt yanlışsa `cancelBounce`.
    *
    * ⚠️ İKİ CARİ BİRDEN etkilenebilir: çeki veren müşterinin borcu geri doğar
    * (DEBIT) ve çek CİRO EDİLMİŞSE ciro ettiğimiz cariye olan borcumuz da geri
@@ -1301,6 +1467,71 @@ export class ChequeService {
   }
 
   /**
+   * KARŞILIKSIZ STORNOSU — yanlış girilen karşılıksız kaydı geri alınır.
+   *
+   * BOUNCE'un yazdığı her cari satır tersiyle kapanır (ciro edilmişse iki cari)
+   * ve durum BOUNCE'un tükettiği duruma döner. Kapama kontrolü gerekmez:
+   * BOUNCED çekte kapama DB CHECK'iyle zaten sıfırdır.
+   */
+  async cancelBounce(id: string, reason: string, userId?: string): Promise<ApiResponse<{ id: string; docNo: string }>> {
+    const why = requireReversalReason(reason, "Karşılıksız stornosu");
+    const now = new Date();
+    const label = "karşılıksız stornosu";
+    const result = await prisma.$transaction(async (tx) => {
+      const row = await this.loadForTransition(tx, id, [ChequeStatus.BOUNCED], ChequeKind.RECEIVED, label);
+      const event = await loadForwardEventTx(tx, row, ChequeEventType.BOUNCE, label);
+      const endorsee = event.fromStatus === ChequeStatus.ENDORSED ? row.endorsedToCariId : null;
+      if (event.fromStatus === ChequeStatus.ENDORSED && !endorsee) {
+        throw AppError.conflict(`${row.docNo} cirodan karşılıksız dönmüş ama ciro carisi yok — kaydı süpervizörle inceleyin.`);
+      }
+      const drawerTxn = await loadReversibleTxnTx(
+        tx, row, { sourceType: CariTxnSource.CHEQUE_BOUNCE, cariId: row.cariId, side: "debit" }, label,
+      );
+      const endorseeTxn = endorsee
+        ? await loadReversibleTxnTx(tx, row, { sourceType: CariTxnSource.CHEQUE_BOUNCE, cariId: endorsee, side: "credit" }, label)
+        : null;
+
+      await this.claimTx(tx, row, event.fromStatus);
+      // SINIF 3 — iki cari varsa dönem kilitleri deterministik sırayla ÖNDEN (bounce ile aynı).
+      if (endorsee) {
+        await assertPeriodsOpenTx(tx, [
+          { cariId: row.cariId, currency: row.currency, txnDate: now },
+          { cariId: endorsee, currency: row.currency, txnDate: now },
+        ]);
+      }
+      const base = { sourceType: CariTxnSource.CHEQUE_BOUNCE_CANCEL, chequeId: row.id, txnDate: now, userId };
+      await writeChequeReversalTx(tx, drawerTxn, { ...base, description: `${row.docNo} karşılıksız stornosu — ${why}` });
+      if (endorseeTxn) {
+        await writeChequeReversalTx(tx, endorseeTxn, { ...base, description: `${row.docNo} karşılıksız stornosu — ciro borcu geri kapandı` });
+      }
+      await writeEventTx(tx, {
+        chequeId: row.id,
+        type: ChequeEventType.BOUNCE_CANCEL,
+        fromStatus: ChequeStatus.BOUNCED,
+        toStatus: event.fromStatus,
+        eventDate: now,
+        counterCariId: endorsee,
+        notes: why,
+        userId,
+      });
+      return { id: row.id, docNo: row.docNo, backTo: event.fromStatus };
+    });
+
+    void AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "CHEQUE",
+      recordId: id,
+      newData: { event: "BOUNCE_CANCEL", docNo: result.docNo, reason: why },
+    });
+    return {
+      success: true,
+      data: { id: result.id, docNo: result.docNo },
+      message: `${result.docNo} karşılıksız stornosu yapıldı — cari satırları ters kayıtla kapandı, çek ${CHEQUE_STATUS_LABEL[result.backTo]} durumuna döndü.`,
+    };
+  }
+
+  /**
    * SAHİBİNE İADE — çek geri verildi (müşteri nakit ödedi ve çekini geri istedi,
    * ya da verdiğimiz çeki tedarikçi bize geri verdi).
    *
@@ -1370,6 +1601,58 @@ export class ChequeService {
   }
 
   /**
+   * İADE STORNOSU — yanlış girilen iade geri alınır (alınan ve verilen çekte).
+   * RETURN'ün `CHEQUE_CANCEL` satırı tersiyle kapanır, durum RETURN'ün tükettiği
+   * duruma döner. BOUNCED gibi RETURNED'da da kapama DB CHECK'iyle sıfırdır.
+   */
+  async cancelReturn(id: string, reason: string, userId?: string): Promise<ApiResponse<{ id: string; docNo: string }>> {
+    const why = requireReversalReason(reason, "İade stornosu");
+    const now = new Date();
+    const label = "iade stornosu";
+    const result = await prisma.$transaction(async (tx) => {
+      const row = await this.loadForTransition(tx, id, [ChequeStatus.RETURNED], null, label);
+      const event = await loadForwardEventTx(tx, row, ChequeEventType.RETURN, label);
+      // İade doğuşu tersine çevirmişti: alınan çekte BORÇ, verilen çekte ALACAK.
+      const side = row.kind === ChequeKind.RECEIVED ? "debit" : "credit";
+      const original = await loadReversibleTxnTx(
+        tx, row, { sourceType: CariTxnSource.CHEQUE_CANCEL, cariId: row.cariId, side }, label,
+      );
+
+      await this.claimTx(tx, row, event.fromStatus);
+      await writeChequeReversalTx(tx, original, {
+        sourceType: CariTxnSource.CHEQUE_RETURN_CANCEL,
+        chequeId: row.id,
+        txnDate: now,
+        description: `${row.docNo} iade stornosu — ${why}`,
+        userId,
+      });
+      await writeEventTx(tx, {
+        chequeId: row.id,
+        type: ChequeEventType.RETURN_CANCEL,
+        fromStatus: ChequeStatus.RETURNED,
+        toStatus: event.fromStatus,
+        eventDate: now,
+        notes: why,
+        userId,
+      });
+      return { id: row.id, docNo: row.docNo, backTo: event.fromStatus };
+    });
+
+    void AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "CHEQUE",
+      recordId: id,
+      newData: { event: "RETURN_CANCEL", docNo: result.docNo, reason: why },
+    });
+    return {
+      success: true,
+      data: { id: result.id, docNo: result.docNo },
+      message: `${result.docNo} iade stornosu yapıldı — cari satırı ters kayıtla kapandı, çek ${CHEQUE_STATUS_LABEL[result.backTo]} durumuna döndü.`,
+    };
+  }
+
+  /**
    * KENDİ ÇEKİMİZ ÖDENDİ — banka/kasa −amount.
    *
    * ⚠️ CARİ DEFTERE SATIR YAZILMAZ: borcumuz çeki VERDİĞİMİZDE kapandı. Burada
@@ -1432,14 +1715,66 @@ export class ChequeService {
   }
 
   /**
+   * ÖDEME STORNOSU — yanlış PAY geri alınır: para AYNI hesaba geri girer.
+   *
+   * ⚠️ CARİ DEFTERE DOKUNULMAZ: `pay()` `writeChequeLedgerTx` çağırmaz (borç
+   * doğuşta `CHEQUE_ISSUE` ile kapandı), tersi de çağırmaz. Hesap pasifleşmiş
+   * olsa da geçer ve eksi kasa guard'ı sorulmaz — para GİRİYOR (cancelCollect emsali).
+   */
+  async cancelPay(id: string, reason: string, userId?: string): Promise<ApiResponse<{ id: string; docNo: string }>> {
+    const why = requireReversalReason(reason, "Ödeme stornosu");
+    const now = new Date();
+    const label = "ödeme stornosu";
+    const result = await prisma.$transaction(async (tx) => {
+      const row = await this.loadForTransition(tx, id, [ChequeStatus.PAID], ChequeKind.ISSUED, label);
+      const event = await loadForwardEventTx(tx, row, ChequeEventType.PAY, label);
+      if (!event.cashBoxId && !event.bankAccountId) {
+        throw AppError.conflict(`${row.docNo} ödeme olayının hesap kaydı yok — ${label} otomatik yapılamaz, kaydı süpervizörle inceleyin.`);
+      }
+      const ref: AccountRef = { cashBoxId: event.cashBoxId, bankAccountId: event.bankAccountId };
+
+      // Ters hareket BUGÜNE düşer — kapalı kasa sayfası değişmez, guard bugünü sorar.
+      await assertCashPeriodOpenTx(tx, { ...ref, txnDate: now });
+      // Verilen çekin başlık bankası yalnız PAY'den doğar; PAY öncesi boştu.
+      await this.claimTx(tx, row, event.fromStatus, { bankAccountId: null });
+      await moveAccountBalanceTx(tx, ref, D(row.amount));
+      await writeEventTx(tx, {
+        chequeId: row.id,
+        type: ChequeEventType.PAY_CANCEL,
+        fromStatus: ChequeStatus.PAID,
+        toStatus: event.fromStatus,
+        eventDate: now,
+        bankAccountId: ref.bankAccountId,
+        cashBoxId: ref.cashBoxId,
+        notes: why,
+        userId,
+      });
+      return { id: row.id, docNo: row.docNo, backTo: event.fromStatus };
+    });
+
+    void AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "CHEQUE",
+      recordId: id,
+      newData: { event: "PAY_CANCEL", docNo: result.docNo, reason: why },
+    });
+    return {
+      success: true,
+      data: { id: result.id, docNo: result.docNo },
+      message: `${result.docNo} ödeme stornosu yapıldı — para hesaba geri girdi, çek ${CHEQUE_STATUS_LABEL[result.backTo]} durumuna döndü.`,
+    };
+  }
+
+  /**
    * KAYIT HATASI STORNOSU — çek hiç var olmamış gibi defter geri alınır.
    *
    * ⚠️ SATIR SİLİNMEZ (fiziksel DELETE yok): iptal edilmiş çek portföyde
    * "İPTAL" olarak durur; kayıt hatasının kendisi de denetimde görülmelidir.
    *
    * ⚠️ CİRO EDİLMİŞ çek iptal EDİLEMEZ: kâğıt fiziksel olarak üçüncü tarafın
-   * elindedir ve "hiç olmamış" sayılamaz. Doğru yol o çeki geri almak (iade)
-   * ya da karşılıksız kaydıdır.
+   * elindedir ve "hiç olmamış" sayılamaz. Ciro kaydı yanlışsa `cancelEndorse`,
+   * doğruysa karşılıksız kaydı.
    */
   async cancel(
     id: string,

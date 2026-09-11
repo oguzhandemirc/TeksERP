@@ -66,6 +66,7 @@ import { ChequeStatus, Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { chequeService } from "../src/services/cheque.service";
 import { D, resolveExchangeRateTx } from "../src/services/helpers/finance.helper";
+import { chequeCashEventTypesSql, chequeCashInflowSql } from "../src/services/helpers/cheque-cash-events.helper";
 import { periodDayKey } from "../src/services/helpers/period-guard.helper";
 import { dailyCodePrefix } from "../src/utils/code-format";
 import { factoryDayStart, factoryYmd } from "../src/constants/time";
@@ -483,9 +484,8 @@ async function main(): Promise<void> {
   // ⚠️ Bu bölüm, ürün kodundaki bakiye yazımını DEĞİL bekçinin FORMÜLÜNÜ ölçer.
   // Formül çek olaylarını saymazsa banka bakiyesi "drift" görünür ve ilk çek
   // tahsilatında §24 kırmızıya döner — genişletme unutulamaz.
-  // ⚠️ COLLECT_CANCEL formülde NEGATİF sayılır (K-2): tahsil stornosu parayı
-  // geri çeker; formül onu görmezse İLK stornoda bekçi "drift" raporlar.
-  // §19k bu satırı storno SONRASI yeniden koşarak yükü taşıtır.
+  // ⚠️ Çek olay kümesi ve işareti `cheque-cash-events.helper`'dan (§23/§24 ile
+  // aynı tek kaynak). §19k bu satırı storno SONRASI yeniden koşarak yükü taşıtır.
   const bankDriftRows = () => prisma.$queryRaw<Array<{ hesap: string; fark: Prisma.Decimal }>>`
     SELECT a.id::text AS hesap, a.balance - COALESCE(p.toplam, 0) AS fark
     FROM bank_accounts a
@@ -497,9 +497,9 @@ async function main(): Promise<void> {
         SELECT "bankAccountId", SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS t
           FROM cash_transactions WHERE status <> 'CANCELLED' AND "bankAccountId" IS NOT NULL GROUP BY "bankAccountId"
         UNION ALL
-        SELECT e."bankAccountId", SUM(CASE WHEN e.type = 'COLLECT' THEN ch.amount ELSE -ch.amount END) AS t
+        SELECT e."bankAccountId", SUM(CASE WHEN ${Prisma.raw(chequeCashInflowSql("e"))} THEN ch.amount ELSE -ch.amount END) AS t
           FROM cheque_events e JOIN cheques ch ON ch.id = e."chequeId"
-          WHERE e.type IN ('COLLECT', 'PAY', 'COLLECT_CANCEL') AND e."bankAccountId" IS NOT NULL GROUP BY e."bankAccountId"
+          WHERE e.type IN (${Prisma.raw(chequeCashEventTypesSql())}) AND e."bankAccountId" IS NOT NULL GROUP BY e."bankAccountId"
       ) u GROUP BY "bankAccountId"
     ) p ON p."bankAccountId" = a.id
     WHERE a.id = ${bank.id}::uuid AND a.balance <> COALESCE(p.toplam, 0)`;
@@ -1332,7 +1332,7 @@ async function main(): Promise<void> {
       "§23d olay satırı anahtarları panel ChequeEventRow ile birebir",
       events.length > 0 &&
         JSON.stringify(Object.keys(events[0] as object).sort()) ===
-          JSON.stringify(["bankAccount", "cashBox", "counterCari", "eventDate", "fromStatus", "id", "notes", "toStatus", "type"]),
+          JSON.stringify(["bankAccount", "cashBox", "counterCari", "createdAt", "eventDate", "fromStatus", "id", "notes", "toStatus", "type"]),
       events[0] ? Object.keys(events[0]).join(",") : "(olay yok)",
     );
   }
