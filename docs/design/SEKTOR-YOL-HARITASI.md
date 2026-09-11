@@ -4,6 +4,42 @@
 
 > ⚠️ Bu belge **karar vermez, seçenek sunar.** Hiçbir madde onaylanmış iş değildir. `kim için` sütunu dürüsttür: `sektör geneli` = bugünkü fabrikanın hiç yapmadığı iş.
 
+## ⬛ HEDEF KİTLE KARARI — 2026-09-11 (kullanıcı)
+
+Bu belge 13 alanı eşit ağırlıkta taradı. Karar sonrası **ağırlık değişti**:
+
+**HEDEF SEKTÖR: PERDE.** Kapsamdaki üretim alanları:
+- **Dokuma — armür ve jakar** (fabrika bugün yapmıyor, ürün hedefi yapıyor)
+- **Devere / leventleme** (çözgü hazırlama → levent → tezgaha bağlama → tüketim)
+- **Boyahane FASON SÜREÇ olarak** kalır — iç boyahane defteri (kimyasal/reçete)
+  öncelik DEĞİL; fason sevk/kabul zinciri zaten var.
+
+**KAPSAM DIŞI: konfeksiyon / giyim.** Beden boyutu (`OrderLine`'a beden kırılımı,
+pastal, demet, hat çıkışı) bu turda AÇILMAZ — sipariş/üretim/sevkiyat/faturalama
+zincirinin tamamına dokunur ve perde işi beden taşımaz.
+
+⚠️ **Kök `CLAUDE.md`'deki "Fabrika çözgü/dokuma yapmaz — kumaş hazır gelir"
+cümlesiyle ÇELİŞMEZ**: o cümle BUGÜNKÜ FABRİKANIN PROFİLİDİR (adnansahin),
+ürünün hedefi değil. Dokuma yetenekleri bayrakla açılır; referans profilde
+kapalı kalır. "Tek gövde, çok fabrika" ilkesi korunur.
+
+### Bu kararın taramada karşılığı
+
+`dokuma-orme` alanının beş bulgusu (aşağıda) artık **birinci öncelik**:
+`DoffEvent` (tezgah çıkışında top doğuşu — hangi levent, sayacın hangi
+metresinden) · `LoomStopEvent` (çözgü/atkı kopuş ADEDİ) · `MachineSetupEvent`
+(levent bağlama, tahar, tarak değişimi) · `Shift` (vardiya bazlı üretim) ·
+`FabricInspectionLine` (4-punto muayene).
+
+### ⚠️ TARAMA BOŞLUĞU — devere/leventleme AYRICA TARANMADI
+
+Ajan istemi "çözgü hazırlama, levent" diyordu ama dönen bulgular TEZGAH
+olaylarına odaklandı. **`WarpBeam`/Levent varlığı ve yaşam döngüsü hiç
+incelenmedi** (çözgü hazırlama → levent → tezgaha bağlama → tüketim → boşalma;
+levent başına iplik tüketimi, kalan metre, hangi tezgahta). Sistemde bugün levent
+kavramı HİÇ YOK. Bu, ayrı bir tarama turu hak eder — kullanıcı devereyi özellikle
+önemli saydı.
+
 ## Nasıl okunur
 
 | Ciddiyet | Anlamı |
