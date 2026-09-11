@@ -3510,20 +3510,63 @@ export class SubcontractorService {
   ): Promise<ApiResponse<{ rollId: string; restoredQty: number }>> {
     const roll = await prisma.roll.findUnique({
       where: { id: data.rollId },
-      select: { id: true, barcode: true, status: true, currentQty: true },
+      select: { id: true, barcode: true, status: true, currentQty: true, directShipmentId: true },
     });
     if (!roll) throw AppError.notFound("Top bulunamadı");
+    // Mal müşteride: geri alma "kararı" değil, olmayan malı fasona yazmak olurdu.
+    if (roll.directShipmentId !== null) {
+      throw AppError.conflict(
+        "Bu top fasondan doğrudan müşteriye sevk edilmiş — fasona geri alınamaz.",
+        { code: "ROLL_DIRECT_SHIPPED" },
+      );
+    }
     if (roll.status !== RollStatus.SUBCONTRACTOR_CONSUMED) {
       throw AppError.conflict(
         "Bu topun kalanı 'gelmeyecek' olarak kapatılmamış (ya da kapama zaten geri alınmış).",
         { code: "REMAINDER_NOT_CLOSED" },
       );
     }
+    // ⚠️ DURUM TEK KANIT DEĞİLDİR: `SUBCONTRACTOR_CONSUMED` topun TAM KABULLE de
+    // tüketilmiş olabileceğini söyler ve `stepId` gövdeden gelir. Geri alınacak
+    // karar, bu adımın kapama DAMGASIDIR — yoksa geri alınacak bir şey de yoktur
+    // (eski kapı bu yüzden kabul görmüş topu da fasona diriltiyordu).
+    const closedItem = await prisma.subcontractorDispatchItem.findFirst({
+      where: {
+        rollId: data.rollId,
+        remainderClosedAt: { not: null },
+        dispatch: { stepId: data.stepId, cancelledAt: null, directShippedAt: null },
+      },
+      select: { id: true, dispatch: { select: { workOrderId: true } } },
+    });
+    if (!closedItem) {
+      throw AppError.conflict(
+        "Bu adımda bu topun 'kalan gelmeyecek' kapaması yok — geri alınacak bir karar bulunamadı.",
+        { code: "REMAINDER_NOT_CLOSED" },
+      );
+    }
 
     await prisma.$transaction(async (tx) => {
-      // Atomik claim — iki eşzamanlı geri alma birbirini ezmesin.
+      // Kilit closeRemainder ile AYNI (fason completion yarışı) ve tx'in İLK ifadesi.
+      await touchWorkOrderTx(tx, closedItem.dispatch.workOrderId);
+
+      // Damganın kaldırılması atomik claim'dir: iki eşzamanlı geri almadan yalnız
+      // biri kazanır (eski kod `updateMany` sayısını okumuyordu, ikisi de "başarılı").
+      const unstamped = await tx.subcontractorDispatchItem.updateMany({
+        where: { id: closedItem.id, remainderClosedAt: { not: null } },
+        data: { remainderClosedAt: null },
+      });
+      if (unstamped.count !== 1) {
+        throw AppError.conflict(
+          "Kalan kapaması bu sırada başka bir işlemle geri alınmış. Listeyi yenileyin.",
+        );
+      }
+
       const claimed = await tx.roll.updateMany({
-        where: { id: data.rollId, status: RollStatus.SUBCONTRACTOR_CONSUMED },
+        where: {
+          id: data.rollId,
+          status: RollStatus.SUBCONTRACTOR_CONSUMED,
+          directShipmentId: null,
+        },
         data: { status: RollStatus.AT_SUBCONTRACTOR, currentStepId: data.stepId },
       });
       if (claimed.count !== 1) {
@@ -3543,16 +3586,7 @@ export class SubcontractorService {
         data: { reversedAt: new Date(), reversedById: userId ?? null },
       });
 
-      // Açık sevk kaleminin kapama damgasını kaldır → outstanding filtreleri
-      // topu yeniden "fasonda bekliyor" sayar.
-      await tx.subcontractorDispatchItem.updateMany({
-        where: {
-          rollId: data.rollId,
-          remainderClosedAt: { not: null },
-          dispatch: { stepId: data.stepId, cancelledAt: null, directShippedAt: null },
-        },
-        data: { remainderClosedAt: null },
-      });
+      // (Kapama damgası YUKARIDA kaldırıldı — claim'in kendisi o.)
 
       // Movement'ı yeniden AÇ — mal tekrar bu istasyonda bekliyor.
       await tx.$executeRaw`

@@ -308,7 +308,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `mobil/src/utils/relativeTime.test.ts` | formatRelativeWait: boş/geçersiz → '—', 1 dk altı 'şimdi', dakika/saat+dakika/tam saat biçimleri. |  |  |  |
 | `mobil/src/utils/searchFold.test.ts` | Arama katlaması: canakkale ≡ çanakkale iki yönlü; tr-küçültmenin TEK BAŞINA yetmediği eski PickerModal eksiği kanıtla ölçülür (foldSearchText/Term/Tok |  |  |  |
 
-## fason (89)
+## fason (90)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
@@ -355,6 +355,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `Teks-Erp/scripts/test_fason_receipt_color_width.ts` | Fason kabulünde renk seçimi ve en ölçümü: renksiz WO'da appliedColorId kabulü geçirir, appliedWidth tüm doğan toplara yazılır, üç kabul ucu ŞEKİL EŞİT | ✓ |  |  |
 | `Teks-Erp/scripts/test_fason_receive_cancel_rereceive.ts` | Kabul iptali born'u CANCELLED yapıp orijinali AT_SUBCONTRACTOR'a döndürür, yeniden kabul TAM 1 canlı born üretir; işlenmiş born'un iptali reddedilir. | ✓ |  |  |
 | `Teks-Erp/scripts/test_fason_receive_crossstep_firm.ts` | F74 regresyonu: aynı parti iki fason adımından geçmişse receive() firmayı batchId+stepId ile çözer; stepId scope'u kalkarsa bayat firma 'farklı firma' | ✓ |  |  |
+| `Teks-Erp/scripts/test_fason_reopen_remainder_guard.ts` | Kalan kapaması geri alma kapısı: kanıt bu adımın kapama damgasıdır — tam kabulle tüketilmiş, doğrudan sevk edilmiş ya da başka adımın topu fasona diriltilemez | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_fason_receive_idempotency_concurrency.ts` | Fason kabulde replay (cached, ikinci makbuz yok), eşzamanlı aynı-top kabulünde atomik claim (born=1), çoklu parti izolasyonu, COMPLETED adım reopen. | ✓ |  |  |
 | `Teks-Erp/scripts/test_fason_step_note_flow.ts` | Her fason ADIMININ kendi notu (WorkOrderStep.notes) sevkin instruction'ına default kopyalanır ve o adımın çeki listesine basılır; global tek not YOK. | ✓ |  |  |
 | `Teks-Erp/scripts/test_fason_transfer_rollids.ts` | transferToNextFason rollIds alt-kümesi: yalnız seçilen topların doğan çocukları sevk edilir, adımda duran ilgisiz IN_PRODUCTION top süpürülmez. | ✓ |  |  |

@@ -5864,3 +5864,59 @@ AYRI bir enum migration'ı (`ADD VALUE` tek ifadeli, aynı tx'te kullanılamaz).
 Yeni izin kodu gerekecek (`devere:read`/`devere:write`) — katalog koda, atama
 panele. Eski panel yeni iplik türünü görürse hareket listesi çöker; geri düşüş
 etiketi devere yazmaya başlamadan ÖNCE yayınlanır, `minVersion` yükseltilmez.
+
+---
+
+## 2026-09-12 — Kalan kapaması geri alma kapısı topun GEÇMİŞİNDEN kurulur [ÇEKİRDEK]
+
+Fason karnesi turunun tüketici ölçümünde çıkan en ağır yan bulgu (yönetici sırası 1).
+
+### Bulgu
+
+`SubcontractorService.reopenRemainder`in tek kapısı `roll.status ===
+SUBCONTRACTOR_CONSUMED`ti ve `stepId` istek gövdesinden geliyordu. Bu durum
+"kalan gelmeyecek" kararının kanıtı DEĞİL: aynı statüyü TAM KABUL de üretir,
+doğrudan müşteriye sevk de. Sonuç: uç (izinler `workorder:write` ∨
+`roll:manual-adjust` ∨ `mobile:fason-kabul`) kabul görmüş ya da müşteriye gitmiş
+bir topu istenen ADIMDA fasona geri diriltebiliyordu — sistemde olmayan mal
+"fasonda bekliyor" görünür, açık sevk yeniden açılır, adım COMPLETED'dan
+ACTIVE'e döner. Panel ve tablet bu ucu çağırmıyor (API-only), canlıda iz yok.
+
+### Karar
+
+Kapı topun GEÇMİŞİNDEN kurulur: geri alınacak şey, bu adımda o topun
+`remainderClosedAt` damgalı (iptal edilmemiş, doğrudan-sevk edilmemiş) sevk
+kalemidir. Yoksa 409 `REMAINDER_NOT_CLOSED` ("bu adımda bu topun kapaması yok").
+Topu doğrudan müşteriye sevk edilmişse (`roll.directShipmentId` dolu) 409
+`ROLL_DIRECT_SHIPPED`. Damganın kaldırılması ATOMİK CLAIM'dir (`updateMany` +
+`count===1`; eski kod sayıyı okumuyordu, iki eşzamanlı geri alma da "başarılı"
+dönüyordu) ve WO kilidi tx'in İLK ifadesidir (`closeRemainder` ile aynı sıra).
+Top claim'i ayrıca `directShipmentId: null` taşır (ikinci sed).
+
+Ölçüt sırası: ① "geri alma" tanım gereği VERİLMİŞ bir kararı geri alır — kanıtı
+kararın damgasıdır; ② yeni izin kodu / migration açmadan kapatılabiliyor (küçük
+ekip, sahada atanacak bir adım daha yok); ③ `closeRemainder`ın aynası + atomik
+claim kuralı.
+
+### Bekçi ve negatif sonda
+
+`scripts/test_fason_reopen_remainder_guard.ts` (15 kontrol): G1 meşru geri alma
+(korunan davranış: top fasona döner, damga kalkar, sapma satırı terslenir, sevk
+yeniden OPEN_OUTSTANDING, ikinci geri alma 409) · G2 alt küme doğrudan sevk →
+409 `ROLL_DIRECT_SHIPPED` · G3 tam kabulle tüketilmiş top → 409
+`REMAINDER_NOT_CLOSED` · G4 gövdeden gelen YANLIŞ adım → 409, top taşınmaz.
+Negatif sonda (ayrı worktree): kapı silinince G2b/G3b/G4a kırmızı. Not: tx
+içindeki claim'ler ikinci sed olarak veriyi yine koruyor — yani kapı kaldırılınca
+hata KODU ve gerekçesi kayboluyor, veri bozulmuyor; asıl kayıp operatörün
+okuduğu cevap.
+
+### Kod çapaları
+
+- `src/services/subcontractor.service.ts` — `reopenRemainder` (kanıt sorgusu +
+  iki claim), Swagger gerekçesi `src/routes/subcontractor.routes.ts`
+- Bekçi: `scripts/test_fason_reopen_remainder_guard.ts`
+
+### Üç kapı
+
+Migration **yok** · izin **yok** · APK **yok**. Sözleşme: uç iki yeni `details.code`
+döndürebilir; bugün çağıran istemci yok (panel/tablet bu ucu kullanmıyor).

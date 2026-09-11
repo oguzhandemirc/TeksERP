@@ -319,6 +319,11 @@ router.post(
  *       DB müdahalesi). Bu uç topu AT_SUBCONTRACTOR'a döndürür, sevk kaleminin
  *       remainderClosedAt damgasını kaldırır, movement'ı yeniden açar ve sapma
  *       satırını SİLMEZ - reversedAt ile işaretler (append-only defter).
+ *
+ *       Kapı topun GEÇMİŞİNDEN kurulur, durumundan değil: bu adımda o topun
+ *       kapama damgalı sevk kalemi YOKSA 409 (tam kabulle tüketilmiş top ya da
+ *       baska adimin stepId'si bu yoldan fasona diriltilemez); doğrudan müşteriye
+ *       sevk edilmiş top 409 ROLL_DIRECT_SHIPPED.
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
