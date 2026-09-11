@@ -22,6 +22,7 @@
 
 import { Prisma, StationKind, StepStatus, type PrismaClient } from "@prisma/client";
 import { QUALITY_STATION_WHERE } from "./quality-station.helper";
+import { ACTIVE_MOVEMENT } from "./roll-movement.helper";
 import { AppError } from "../../utils/app-error";
 
 /** Hem havuz client'ı hem transaction client'ı kabul eden okuma tipi (any YOK). */
@@ -109,6 +110,7 @@ export async function hasBypassClosureOnQualityStepTx(
 ): Promise<boolean> {
   const row = await db.rollMovement.findFirst({
     where: {
+      ...ACTIVE_MOVEMENT,
       rollId,
       exitedAt: { not: null },
       notes: { startsWith: KURSUN_BYPASS_MARKER_PREFIX },

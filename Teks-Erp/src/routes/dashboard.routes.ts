@@ -48,7 +48,7 @@ router.get(
  *       ve bugün biten roll sayılarını döner.
  *
  *       - queueCount = `Roll.currentStepId` bu istasyondaki step'lere bağlı tüm rolls
- *       - activeCount = açık RollMovement (exitedAt IS NULL) ile bu istasyonda işlenmekte olan distinct rolls
+ *       - activeCount = açık, geri alınmamış RollMovement (exitedAt IS NULL, revokedAt IS NULL) ile bu istasyonda işlenmekte olan distinct rolls
  *       - todayCompletedCount =
  *           - INTERNAL: bugün exitedAt'i dolan distinct rolls (FINISH/SKIP)
  *           - EXTERNAL: bugün fason kabul ile doğan açık kumaş parça sayısı

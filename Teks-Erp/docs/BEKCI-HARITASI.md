@@ -207,6 +207,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `mobil/src/screens/Modules/HizliIsEmri/reworkPayload.test.ts` | buildReworkPlan sebebi İKİ hedefe ayırır: etiket → 1. adım notu (fason çekisine talimat), kod → parameters.rework rapor anahtarı; bitmiş top yoksa hiç |  |  |  |
 | `mobil/src/screens/Modules/HizliIsEmri/scanClassify.test.ts` | Okutma kararı saf: ATTACHABLE_STATUSES = STOCK/WAREHOUSE/A1_STOCK (backend quickStart.attachable aynası), isReworkStatus rozeti, statü kontrolü çuvald |  |  |  |
 | `mobil/src/screens/Modules/Tambur/canUnlinkOrderLine.test.ts` | Backend son-bağ kuralının istemci aynası: ORDER_PRODUCTION + tek bağ + hedef kumaş varsa kaldırılabilir (becomesStock uyarısı); hedef kumaş yoksa enge |  |  |  |
+| `Teks-Erp/scripts/test_roll_movement_revoke.ts` | Top hareketinin geri alınırken SİLİNMEDİĞİNİ damgalandığını; partial unique sayesinde geri alınmış AÇIK satır dururken aynı (top, adım) için yeni açık hareket yazılabildiğini, iki AKTİF açık hareketin reddedildiğini; kurşun yeniden açma ve geri manuel taşıma sonrası `recomputeStepStatus`un silme davranışıyla AYNI adım durumunu ürettiğini; AST+tip denetleyicisiyle her okuma/güncelleme/ilişki/ham SQL erişiminin `ACTIVE_MOVEMENT` taşıdığını (istisna kümesi iki yönlü) | ✓ | ✓ |  |
 
 ## ui-bilesen (94)
 
@@ -402,6 +403,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `mobil/src/screens/Modules/FasonKabul/receiveAttempt.test.ts` | Fason kabul replay kimliği iki yönlü: aynı teslimat yeniden gönderilirse AYNI token; farklı/sonraki teslimat YENİ token (sunucu yükü karşılaştırmadan  |  | ✓ |  |
 | `mobil/src/screens/Modules/FasonKabul/receivePayload.helper.test.ts` | Kabul yükü: parseNewRolls/buildReceivePayload, uygulanan en, tüketilen toplam, resolveReturns (büyük toptan dağıtım), çekme toleransı (shrinkExceedsTo |  |  |  |
 | `mobil/src/test/segmented-buttons-row.guard.test.ts` | TS AST taraması: her <SegmentedButtons> için en yakın sarmalayan JSX elemanının style'ı çözülür (StyleSheet anahtarı ya da satır içi nesne); flexDirec |  | ✓ |  |
+| `Teks-Erp/scripts/test_roll_movement_revoke.ts` | Top hareketinin geri alınırken SİLİNMEDİĞİNİ damgalandığını; partial unique sayesinde geri alınmış AÇIK satır dururken aynı (top, adım) için yeni açık hareket yazılabildiğini, iki AKTİF açık hareketin reddedildiğini; kurşun yeniden açma ve geri manuel taşıma sonrası `recomputeStepStatus`un silme davranışıyla AYNI adım durumunu ürettiğini; AST+tip denetleyicisiyle her okuma/güncelleme/ilişki/ham SQL erişiminin `ACTIVE_MOVEMENT` taşıdığını (istisna kümesi iki yönlü) | ✓ | ✓ |  |
 
 ## diger (91)
 
@@ -1278,6 +1280,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `mobil/src/screens/Modules/Tambur/resolveShortCutConfig.test.ts` | Kısa kesim eşiğinde fabrika ayarı ↔ cihaz override birleşimi: 'server' fabrikayı aynen geçirir, 'off' cihazda kapatır (thresholdM null), 'on' fabrika  |  | ✓ |  |
 | `mobil/src/screens/Modules/Tambur/shortCutQuality.test.ts` | Kısa kesim → otomatik A1 kuralı tek dosyada: shortCutOverride/shortCutRevert sınırları (eşik altı uzunluk, mevcut/varsayılan kalite kodu, katalogdan A |  |  |  |
 | `mobil/src/services/tambur.service.test.ts` | Kesim çağrılarında etiket NİYETİ (targetCustomerId / targetOrderLineId) POST gövdesine geçer — ulaşmazsa kesimde lastLabelSnapshot seed edilemez ('eti |  |  |  |
+| `Teks-Erp/scripts/test_roll_movement_revoke.ts` | Top hareketinin geri alınırken SİLİNMEDİĞİNİ damgalandığını; partial unique sayesinde geri alınmış AÇIK satır dururken aynı (top, adım) için yeni açık hareket yazılabildiğini, iki AKTİF açık hareketin reddedildiğini; kurşun yeniden açma ve geri manuel taşıma sonrası `recomputeStepStatus`un silme davranışıyla AYNI adım durumunu ürettiğini; AST+tip denetleyicisiyle her okuma/güncelleme/ilişki/ham SQL erişiminin `ACTIVE_MOVEMENT` taşıdığını (istisna kümesi iki yönlü) | ✓ | ✓ |  |
 
 ## depo (40)
 

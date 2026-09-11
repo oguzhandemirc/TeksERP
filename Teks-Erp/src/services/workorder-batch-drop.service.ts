@@ -448,6 +448,7 @@ class WorkOrderBatchDropService {
               AND m."rollId" = ANY(${residualIds}::uuid[])
               AND m."workOrderStepId" = ANY(${stepIds}::uuid[])
               AND m."exitedAt" IS NULL
+              AND m."revokedAt" IS NULL
           `;
         }
 

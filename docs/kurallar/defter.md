@@ -20,6 +20,9 @@ Durum tabloları **"şu an ne"**yi tutar; defterler **"ne oldu"**yu tutar ve "ne
 - **[ÇEKİRDEK]** Ters kaydın BİÇİMİ deftere göre değişir: negatif/karşı satır ancak DB izin veriyorsa yazılır — `payment_allocations_amount_positive` gibi bir CHECK varsa doğru yol `revokedAt`/`revokedById`/`revokeReason` DAMGASIDIR. Damgalı defterde okuyan HER yol aktif yüklemi TEK helper'dan alır (`ACTIVE_ALLOCATION`). · bekçi: `test_payment_allocation.ts` §15s <sub>(arşiv:2026-09-11)</sub>
 - **[ÇEKİRDEK]** Tekrar edebilen bir çevrimin izi TEK KOLONA sığmaz: sevk → geri al → sevk turunda `undispatchedAt` gibi tek damga ikinci turda birincisini ezer. Böyle çevrimler OLAY DEFTERİ ister (`ShipmentEvent`, `ChequeEvent` emsali); durum kolonu güncel gerçeği, defter geçmişi taşır. <sub>(arşiv:2026-09-11)</sub>
 - **[ÇEKİRDEK]** Tekil kısıt taşıyan bir defteri damgaya çevirirken kısıt PARTIAL'a döner (`WHERE "revokedAt" IS NULL`) — yoksa geri alınmış satır dururken aynı anahtar yeniden yazılamaz ve iş TEKRARLANAMAZ hâle gelir. ⚠️ Prisma'nın `@@unique`i CONSTRAINT değil INDEX üretir: düşürmek için `DROP INDEX` gerekir, `DROP CONSTRAINT IF EXISTS` SESSİZCE hiçbir şey yapmaz. Şemada `@@unique` `map:` ile adlandırılır ki drift yalnız predicate farkını görsün. · bekçi: `test_roll_operation_revoke.ts` §2/§4 <sub>(arşiv:2026-09-11)</sub>
+- **[ÇEKİRDEK]** Durumu defterden SAYARAK türeten yol (`recomputeStepStatus`) her sayımında — açık, kapalı, bekleyen aday, giriş noktası — aktif yüklemi taşır; geri alınmış satır sayılırsa adım hata vermeden yanlış duruma geçer. · bekçi: `test_roll_movement_revoke.ts` §5 <sub>(arşiv:2026-09-11 B-4b)</sub>
+- **[ÇEKİRDEK]** Geri alınmış defter satırı bir daha DEĞİŞTİRİLMEZ — kapatılmaz, yeniden açılmaz, damgası silinmez; tek istisna izin yeniden bağlanmasıdır (iş emri bölmede hareket/operasyon izi, geri alınmışlar dahil, topla birlikte aynı istasyonlu klon adıma taşınır). · bekçi: `test_roll_movement_revoke.ts` §5e/§6e <sub>(arşiv:2026-09-11 B-4b)</sub>
+- **[ÇEKİRDEK]** Bir kaydın GEÇMİŞİNİ koruyan guard (adım silme, başlamış adımın istasyon/sıra değişimi, makine/istasyon kalıcı silme) geri alınmış defter satırını da SAYAR: geri alma "hiç olmadı" demez, "yapıldı ve geri alındı" der. · bekçi: `test_roll_movement_revoke.ts` §6e · `test_roll_operation_revoke.ts` §7d <sub>(arşiv:2026-09-11 B-4b)</sub>
 - **[ÇEKİRDEK]** Defter İŞ VERİSİDİR: arşivlenmez, budanmaz. Büyüme index/partition ile karşılanır, satır silerek değil. <sub>(arşiv:2026-09-10)</sub>
 - **[ÇEKİRDEK]** Çalışma oturumu (`WorkSession`) geçmişi hiçbir yoldan silinmez; oturumu olan istasyon/makine kalıcı silinemez (409 `workSessionCount`), pasife alınır. · bekçi: `test_work_session_history_guard.ts` <sub>(arşiv:2026-09-11)</sub>
 - **[ÇEKİRDEK]** Çekin her ileri olayının tipli stornosu vardır (`CANCELLED` hariç her terminalden tek çıkış): ters cari satır orijinaline `reversesTxnId` ile bağlanır, bugüne yazılır, durum en yeni ileri olayın (`createdAt`) `fromStatus`una döner; olay/satır bulunamazsa 409. · bekçi: `test_cheque_reversal.ts` <sub>(arşiv:2026-09-11)</sub>
@@ -47,6 +50,9 @@ Eski dört sınıf 2026-09-10'da ikiye indi. Diğer her "sil" bir DURUM GEÇİŞ
 
 - **[ÇEKİRDEK]** Silmeyi bırakınca UNIQUE kısıtları kırılır: geçersiz satır yaşayanla çakışır. Kısıt `WHERE "revokedAt" IS NULL` partial'ına çevrilir ve `scripts/test_db_invariants.ts` envanterine YAZILIR (iki yönlü, [DB-30]). Emsal: `item_price_default_uq`. <sub>(arşiv:2026-09-10)</sub>
 - **[ÇEKİRDEK]** Yeni "geçersiz" kolonu açan her model, o kolonu süzen okuma yolunu TEK helper'a bağlar; elle kopyalanan `WHERE` bir gün unutulur ve geçersiz satır listeye sızar (ayrışan yüzey sınıfı). <sub>(arşiv:2026-09-10)</sub>
+- **[ÇEKİRDEK]** Süzgeç yalnız delegate çağrısında aranmaz: İLİŞKİ okumaları (`include`/`select`/`_count`, `some`/`none`, tipsiz include sabitleri) ve ham SQL'deki HER tablo başvurusu (alias'ıyla) aynı yüklemi taşır; `every` yazılmaz (`none: { ...ACTIVE, NOT: X }`). Ölçüm tip denetleyicili tarama ile yapılır (`scripts/revoke-ast-tarama.ts`). · bekçi: `test_roll_movement_revoke.ts` §6 · `test_roll_operation_revoke.ts` §7 <sub>(arşiv:2026-09-11 B-4b)</sub>
+- **[ÇEKİRDEK]** Partial unique'li damgalı defterde tekil anahtarla `upsert` yazan her çağrı `where`e aktif yüklemi koyar (`{ <üçlü>, ...ACTIVE_OPERATION }`); koymazsa anahtar geri alınmış satırı bulur, `update: {}` hiçbir şey yazmaz ve iş TEKRARLANAMAZ — birden çok geri alınmış satırda Prisma hata atar. · bekçi: `test_roll_operation_revoke.ts` §7a/§8 <sub>(arşiv:2026-09-11 B-4b)</sub>
+- **[ÇEKİRDEK]** Şema-dışı partial unique'in predicate'i değişirken sed kesintisiz takas edilir: yeni index geçici adla kurulur → eskisi `DROP INDEX` → `ALTER INDEX … RENAME`; `test_db_invariants.ts` envanterindeki predicate aynı commit'te güncellenir. <sub>(arşiv:2026-09-11 B-4b, migration 20260911190000)</sub>
 - **[ÇEKİRDEK]** Bir defter "var" diye yeterli değildir: ileri yolu yazıp geri yolu yazmayan defter, hiç olmayandan daha tehlikelidir — toplamı sessizce kayar. Ters yol yazılmadan ileri yol sürüme çıkmaz. <sub>(arşiv:2026-09-10)</sub>
 
 ### Reçeteler
@@ -72,7 +78,7 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 | `ChequeEvent` `:7208` | çek durum defteri, 14 olay | ✅ | ✅ `*_CANCEL` (2026-09-11) — CANCEL'ın tersi yok (kendisi storno) |
 | `CashTransaction` `:6898` | kasa/banka | yarı (`status: CANCELLED`) | ✅ |
 | `YarnMovement` `:7399` | iplik stoğu | ✅ | ✅ ADJUST_IN/OUT |
-| `RollMovement` `:3569` | topun adım içi giriş/çıkışı | ❌ `updatedAt` + 4 `deleteMany` | ❌ |
+| `RollMovement` `:3587` | topun adım içi giriş/çıkışı | yarı — `updatedAt` (açık satır çıkışta kapanır, Faz 2 açık) · `revokedAt` damgası | ✅ damga + PARTIAL unique (`exitedAt IS NULL AND revokedAt IS NULL`) |
 | `RollOperation` `:3108` | kurşun/QC2/tambur/fason kanıtı | ✅ `revokedAt` damgası | ✅ damga + PARTIAL unique |
 | `RollVariance` `:3175` | fire · düzeltme · aşım | ✅ | ✅ `reversedAt` |
 | `SwatchStockReduction` `:4159` | kartela düşümü | ✅ | ❌ |
@@ -93,6 +99,8 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 
 **Bu alanın genel kapısı YOK — kuralların çoğu bugün ölçülmemiştir** ([DB-35]: kapısız kural bir niyet beyanıdır). Tek tek ölçülen kurallar:
 
+- `scripts/test_roll_movement_revoke.ts` — hareket damgası, partial unique, geri alma sonrası adım durumu (recompute), AST+tip taraması (§6).
+- `scripts/test_roll_operation_revoke.ts` — operasyon damgası, partial unique, upsert tuzağı (§8), AST+tip taraması (§7).
 - `scripts/test_cheque_reversal.ts` — çek ters yolları: bağ (`reversesTxnId`), bugüne yazım, `createdAt` kronolojisi, kasa/cari mutabakatı, tek kaynak tripwire.
 - `scripts/test_work_session_history_guard.ts` — oturum geçmişi silinmez (istasyon/makine 409 + önizleme dökümü + AST: `src/`de `workSession.delete*` ve ham `DELETE work_sessions` yok). Panel metni: `Electron/src/pages/Stations/machineDeleteDescription.test.ts`.
 - `scripts/test_warehouse_ledger.ts` ve `test_warehouse_movements.ts` yalnız OKUMA/süzme yüzeyini ölçüyor, "hangi olay satır yazmalı" invariant'ını DEĞİL.

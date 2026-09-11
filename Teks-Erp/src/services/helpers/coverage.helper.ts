@@ -21,6 +21,7 @@
 // =============================================================================
 
 import { Prisma, RollStatus } from "@prisma/client";
+import { ACTIVE_MOVEMENT } from "./roll-movement.helper";
 
 type Client = Prisma.TransactionClient | {
   orderLine: Prisma.TransactionClient["orderLine"];
@@ -194,7 +195,7 @@ export async function computeWoInput(
 
   // A: bu WO'ların HERHANGİ adımına movement'ı olan toplar → rollId ⇒ {woId}
   const moves = await client.rollMovement.findMany({
-    where: { workOrderStepId: { in: stepIds } },
+    where: { workOrderStepId: { in: stepIds }, ...ACTIVE_MOVEMENT },
     select: { rollId: true, workOrderStepId: true },
     distinct: ["rollId", "workOrderStepId"],
   });

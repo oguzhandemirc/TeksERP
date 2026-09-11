@@ -129,6 +129,8 @@ export const stationHardRemove = makeGuardedHardRemove({
     },
     {
       key: "machineHistoryCount",
+      // ⚠️ `revokedAt` SÜZÜLMEZ (bilinçli): geri alınmış hareket de o makinede ÜRETİM
+      // YAPILDIĞININ kanıtıdır; silme guard'ı daha muhafazakâr olmalı.
       count: (id) => prisma.rollMovement.count({ where: { machine: { stationId: id } } }),
       message: (n) =>
         `İstasyonun makinelerinde ${n} üretim hareketi kayıtlı — kalıcı silinemez. Pasife alın.`,
@@ -240,6 +242,7 @@ const MACHINE_DELETE_GUARDS: DependencyGuard[] = [
   },
   {
     key: "rollMovementCount",
+    // ⚠️ `revokedAt` SÜZÜLMEZ (bilinçli): istasyon guard'ıyla aynı gerekçe — geri alınmış hareket de üretim kanıtı.
     count: (id) => prisma.rollMovement.count({ where: { machineId: id } }),
     message: (n) => `Bu makinede ${n} üretim hareketi kayıtlı — kalıcı silinemez. Pasife alın.`,
   },

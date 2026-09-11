@@ -32,6 +32,7 @@ import {
   type PrismaClient,
 } from "@prisma/client";
 import { ACTIVE_OPERATION } from "./roll-operation.helper";
+import { ACTIVE_MOVEMENT } from "./roll-movement.helper";
 import { AppError } from "../../utils/app-error";
 import { resolveKursunBypassEnabled } from "../system-setting.service";
 import {
@@ -67,8 +68,8 @@ export function nextNonSkippedStep(
 }
 
 /**
- * Uygunluk kuralının okuduğu adım şekli. `movements` AÇIK hareketlerdir
- * (`exitedAt: null`) — kapanmış hareketler ayrı bir sinyaldir (aşağı).
+ * Uygunluk kuralının okuduğu adım şekli. `movements` geri alınmamış AÇIK
+ * hareketlerdir (`exitedAt: null`) — kapanmış hareketler ayrı bir sinyaldir (aşağı).
  */
 export interface BypassEligibilityStep {
   id: string;
@@ -111,6 +112,7 @@ export async function loadBypassEligibilitySignals(
   // seri çalıştırır; ESLint kuralı da yakalar). Üç sorgu da indexli ve `distinct`.
   const closedNonBypass = await db.rollMovement.findMany({
     where: {
+      ...ACTIVE_MOVEMENT,
       workOrderStepId: { in: stepIds },
       exitedAt: { not: null },
       OR: [
@@ -203,7 +205,7 @@ export async function resolveStepBypassEligibility(
       // genişletilmezse Prisma tipi tutmaz.
       station: { select: STEP_QUALITY_SELECT },
       movements: {
-        where: { exitedAt: null },
+        where: { ...ACTIVE_MOVEMENT, exitedAt: null },
         select: { qtyIn: true },
       },
       workOrder: {

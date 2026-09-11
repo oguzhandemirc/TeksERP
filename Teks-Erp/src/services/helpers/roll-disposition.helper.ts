@@ -391,6 +391,7 @@ export async function closeOpenMovementsTx(
     ? Prisma.sql`0`
     : Prisma.sql`COALESCE(m."weightOut", m."weightIn", r."weightKg")`;
 
+  // Geri alınmış açık hareket "hiç olmamış"tır — kapatılmaz (`ACTIVE_MOVEMENT` ikizi).
   await tx.$executeRaw`
     UPDATE roll_movements m
     SET "exitedAt" = now(), -- tz-ok: kolon timestamptz, oturum UTC
@@ -402,6 +403,7 @@ export async function closeOpenMovementsTx(
     WHERE m."rollId" = r.id
       AND m."rollId" = ANY(${rollIds}::uuid[])
       AND m."exitedAt" IS NULL
+      AND m."revokedAt" IS NULL
       ${stepFilter}
   `;
 }

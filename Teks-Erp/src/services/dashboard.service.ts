@@ -94,6 +94,7 @@ export class DashboardService {
         FROM "roll_movements" rm
         JOIN "work_order_steps" wos ON wos."id" = rm."workOrderStepId"
         WHERE rm."exitedAt" IS NULL
+          AND rm."revokedAt" IS NULL
         GROUP BY wos."stationId"
       ) a ON a."stationId" = s."id"
       LEFT JOIN (
@@ -101,6 +102,7 @@ export class DashboardService {
         FROM "roll_movements" rm
         JOIN "work_order_steps" wos ON wos."id" = rm."workOrderStepId"
         WHERE rm."exitedAt" IS NOT NULL AND rm."exitedAt" >= ${today}
+          AND rm."revokedAt" IS NULL
         GROUP BY wos."stationId"
       ) t ON t."stationId" = s."id"
       LEFT JOIN (

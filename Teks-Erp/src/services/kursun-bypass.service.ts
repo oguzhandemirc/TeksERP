@@ -42,6 +42,7 @@
 // =============================================================================
 
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
+import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { randomUUID } from "crypto";
 import { normalizeScanCode } from "../utils/code-format";
 import {
@@ -145,7 +146,7 @@ const PENDING_ASSIGNMENT_WHERE = {
  */
 const WAITING_STEP_BASE_WHERE = {
   station: { ...QUALITY_STATION_WHERE },
-  movements: { some: { exitedAt: null } },
+  movements: { some: { ...ACTIVE_MOVEMENT, exitedAt: null } },
   workOrder: { status: { in: ASSIGNABLE_WO_STATUSES } },
 } satisfies Prisma.WorkOrderStepWhereInput;
 
@@ -417,7 +418,7 @@ async function loadDistributionSteps(
         },
       },
       movements: {
-        where: { exitedAt: null },
+        where: { ...ACTIVE_MOVEMENT, exitedAt: null },
         select: {
           enteredAt: true,
           qtyIn: true,
@@ -683,6 +684,7 @@ export class KursunBypassService {
     );
     const rows = await prisma.rollMovement.findMany({
       where: {
+        ...ACTIVE_MOVEMENT,
         exitedAt: { gte: since },
         notes: { startsWith: KURSUN_BYPASS_UNASSIGNED_MARKER_PREFIX },
       },
@@ -841,7 +843,7 @@ export class KursunBypassService {
         // 6) UYGUNLUK — hepsi tx içinde TAZE okunur (ön-kontrol ile atama arasında
         //    sahada iş değişmiş olabilir).
         const openMovements = await tx.rollMovement.findMany({
-          where: { workOrderStepId: step.id, exitedAt: null },
+          where: { ...ACTIVE_MOVEMENT, workOrderStepId: step.id, exitedAt: null },
           select: { rollId: true, qtyIn: true },
         });
         // 6a
@@ -861,7 +863,7 @@ export class KursunBypassService {
         //      Kendi marker'ımız MUAF: çok-parti 2. turunda aynı adım yeniden
         //      dağıtılabilmeli.
         const closedMovements = await tx.rollMovement.findMany({
-          where: { workOrderStepId: step.id, exitedAt: { not: null } },
+          where: { ...ACTIVE_MOVEMENT, workOrderStepId: step.id, exitedAt: { not: null } },
           select: { notes: true },
         });
         if (closedMovements.some((m) => !isBypassClosure(m.notes))) {
@@ -1283,7 +1285,7 @@ export class KursunBypassService {
     const isLastStep = next === null;
 
     const movements = await prisma.rollMovement.findMany({
-      where: { workOrderStepId: a.workOrderStepId, exitedAt: null },
+      where: { ...ACTIVE_MOVEMENT, workOrderStepId: a.workOrderStepId, exitedAt: null },
       select: {
         roll: { select: { id: true, barcode: true, currentQty: true } },
       },
@@ -1503,7 +1505,7 @@ export class KursunBypassService {
       where: {
         workOrderId,
         station: { ...QUALITY_STATION_WHERE },
-        movements: { some: { exitedAt: null } },
+        movements: { some: { ...ACTIVE_MOVEMENT, exitedAt: null } },
       },
       orderBy: { stepSequence: "asc" },
       select: {
@@ -1511,7 +1513,7 @@ export class KursunBypassService {
         status: true,
         stationId: true,
         station: { select: { name: true } },
-        movements: { where: { exitedAt: null }, select: { qtyIn: true } },
+        movements: { where: { ...ACTIVE_MOVEMENT, exitedAt: null }, select: { qtyIn: true } },
         workOrder: {
           select: {
             status: true,
@@ -1574,7 +1576,7 @@ export class KursunBypassService {
     stepId: string,
   ): Promise<{ rolls: KursunBypassTamburRoll[]; totalMeters: number }> {
     const movements = await prisma.rollMovement.findMany({
-      where: { workOrderStepId: stepId, exitedAt: null },
+      where: { ...ACTIVE_MOVEMENT, workOrderStepId: stepId, exitedAt: null },
       select: {
         roll: {
           select: {
@@ -1628,7 +1630,7 @@ export class KursunBypassService {
       where: {
         workOrderId,
         station: { ...QUALITY_STATION_WHERE },
-        movements: { some: { exitedAt: null } },
+        movements: { some: { ...ACTIVE_MOVEMENT, exitedAt: null } },
       },
       orderBy: { stepSequence: "asc" },
       select: { id: true, station: { select: { name: true } } },
@@ -2128,7 +2130,7 @@ export class KursunBypassService {
     if (!done) return null;
 
     const stillOpen = await prisma.rollMovement.count({
-      where: { workOrderStepId: done.workOrderStepId, exitedAt: null },
+      where: { ...ACTIVE_MOVEMENT, workOrderStepId: done.workOrderStepId, exitedAt: null },
     });
     if (stillOpen > 0) return null;
 
@@ -2159,6 +2161,7 @@ export class KursunBypassService {
         station: { ...QUALITY_STATION_WHERE },
         movements: {
           some: {
+            ...ACTIVE_MOVEMENT,
             exitedAt: { not: null },
             notes: { startsWith: KURSUN_BYPASS_UNASSIGNED_MARKER_PREFIX },
           },
@@ -2185,7 +2188,7 @@ export class KursunBypassService {
     if (!step) return null;
 
     const stillOpen = await prisma.rollMovement.count({
-      where: { workOrderStepId: step.id, exitedAt: null },
+      where: { ...ACTIVE_MOVEMENT, workOrderStepId: step.id, exitedAt: null },
     });
     if (stillOpen > 0) return null;
 
@@ -2299,7 +2302,7 @@ export class KursunBypassService {
     // Zaten tamamlanmış: adımda açık top KALMADIYSA işi gerçekten biten bir
     // tekrar isteğidir (offline resume / çift dokunuş) → idempotent başarı.
     const stillOpen = await tx.rollMovement.count({
-      where: { workOrderStepId: stepId, exitedAt: null },
+      where: { ...ACTIVE_MOVEMENT, workOrderStepId: stepId, exitedAt: null },
     });
     if (stillOpen === 0) return false;
     throw AppError.conflict(
@@ -2316,6 +2319,8 @@ export class KursunBypassService {
    * • `exitedAt IS NULL` guard'ı: movement seti tx DIŞINDA seçildiği için bu
    *   koşul olmasa iki eşzamanlı istek aynı satırları kapatıp topu sonraki adıma
    *   İKİ kez ilerletirdi. Guard ile her satır tek tx'e düşer.
+   * • `revokedAt IS NULL`: geri alınmış hareket hiç olmamış sayılır; kapatılmaz,
+   *   makine damgası ve marker almaz (`ACTIVE_MOVEMENT`ın ham SQL ikizi).
    * • `rollId = ANY(...)`: kapsam DARALTMASI — önizleme ile onay arasında adıma
    *   yeni top girmişse (fason kabul / önceki adım FINISH) o top süpürülmez.
    * • Marker uuid'si UYGULAMADA üretilir: `gen_random_uuid()` VOLATILE olup
@@ -2357,6 +2362,7 @@ export class KursunBypassService {
           "notes" = ${marker}
       WHERE "workOrderStepId" = ${stepId}::uuid
         AND "exitedAt" IS NULL
+        AND "revokedAt" IS NULL
         AND "rollId" = ANY(${rollIds}::uuid[])
       RETURNING "rollId", "qtyIn", "weightIn"
     `;
@@ -2371,7 +2377,7 @@ export class KursunBypassService {
     // Adımda BAŞKA açık top kaldıysa adım COMPLETED olamaz; yarım kapanış
     // bırakmak yerine tümünü geri al ve operatöre yeni durumu göster.
     const leftover = await tx.rollMovement.count({
-      where: { workOrderStepId: stepId, exitedAt: null },
+      where: { ...ACTIVE_MOVEMENT, workOrderStepId: stepId, exitedAt: null },
     });
     if (leftover > 0) {
       throw AppError.conflict(

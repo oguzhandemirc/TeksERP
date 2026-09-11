@@ -4,6 +4,7 @@
 // Çalıştır: npx tsx scripts/test_manual_move.ts
 import prisma from "../src/lib/prisma";
 import { WorkOrderService } from "../src/services/workorder.service";
+import { ACTIVE_MOVEMENT } from "../src/services/helpers/roll-movement.helper";
 import { RollStatus, WorkOrderStatus, RollOperationType } from "@prisma/client";
 
 const WIDTH = 250;
@@ -90,7 +91,7 @@ async function main(): Promise<void> {
     check("ileri: IN_PRODUCTION", at3.every((r) => r.status === RollStatus.IN_PRODUCTION));
     check("ileri: parti kimliği korundu (keep)", at3.every((r) => r.batchId === batchId));
     check("ileri: boyahane atlandı → renk WO hedef renginden sentezlendi", at3.every((r) => r.colorId === c.COLOR));
-    check("ileri: Tambur'da taze açık movement", (await prisma.rollMovement.count({ where: { rollId: { in: rollIds }, workOrderStepId: s3, exitedAt: null } })) === 3);
+    check("ileri: Tambur'da taze açık movement", (await prisma.rollMovement.count({ where: { ...ACTIVE_MOVEMENT, rollId: { in: rollIds }, workOrderStepId: s3, exitedAt: null } })) === 3);
 
     // ⚠️ KAPANAN MOVEMENT `qtyOut` YAZAR (2026-09-01, canlı demoda ölçüldü).
     // Invariant: kapanmış movement'ta `qtyOut = qtyIn` (commit 64263fc);
@@ -100,7 +101,7 @@ async function main(): Promise<void> {
     // hesapları taşınan topun metrajını hiç görmez ve hata da vermez. Bu kontrol
     // ölçümü çıkış anına taşır (mutabakat taraması ancak kirlenmiş DB'de görür).
     const kapanan = await prisma.rollMovement.findMany({
-      where: { rollId: { in: rollIds }, exitedAt: { not: null } },
+      where: { ...ACTIVE_MOVEMENT, rollId: { in: rollIds }, exitedAt: { not: null } },
       select: { qtyIn: true, qtyOut: true },
     });
     check("ileri: kapanan movement sayısı > 0 (körlük zemini)", kapanan.length > 0, `n=${kapanan.length}`);
@@ -114,9 +115,15 @@ async function main(): Promise<void> {
 
     await svc.manualMove(wo.id, { batchId, targetStepId: s1, reason: "manuel geri" }, c.ADMIN);
     check("geri: 3 top tekrar 1. adımda", (await prisma.roll.findMany({ where: { batchId }, select: { currentStepId: true } })).every((r) => r.currentStepId === s1));
-    // B4: geri taşımada kaynak (Tambur) adımı hayalet-COMPLETED değil, PENDING olmalı (movement izi silindi).
+    // B4: geri taşımada kaynak (Tambur) adımı hayalet-COMPLETED değil, PENDING olmalı (movement izi geri alındı).
     const s3back = (await prisma.workOrderStep.findUnique({ where: { id: s3 }, select: { status: true } }))?.status;
     check("geri: kaynak Tambur PENDING (hayalet COMPLETED yok · B4)", s3back === "PENDING", s3back);
+    // Hareket izi SİLİNMEZ, damgalanır (defter doktrini); PENDING ancak recompute
+    // geri alınmış satırı saymadığı için doğrudur.
+    const s3Aktif = await prisma.rollMovement.count({ where: { ...ACTIVE_MOVEMENT, rollId: { in: rollIds }, workOrderStepId: s3 } });
+    const s3Damgali = await prisma.rollMovement.count({ where: { rollId: { in: rollIds }, workOrderStepId: s3, revokedAt: { not: null } } });
+    check("geri: Tambur hareketi GERİ ALINDI (aktif 0)", s3Aktif === 0, `aktif=${s3Aktif}`);
+    check("geri: ⭐ hareket izi SİLİNMEDİ, defterde damgalı duruyor", s3Damgali === rollIds.length, `damgalı=${s3Damgali}`);
   }
 
   // ═══ Kısmi → yeni parti ═══
@@ -187,7 +194,7 @@ async function main(): Promise<void> {
   {
     // Yeni davranış (Faz 3 QC reversal, dc7ce1b): salt QC/kurşun/tambur KARARI
     // (çocuk top YOK) geri taşımayı artık ENGELLEMEZ — karar VOID edilir (op
-    // silinir, grade → Belirsiz); yalnız fiziksel KESİM (parentRollId'li çocuk)
+    // silinmez, damgalanır; grade → Belirsiz); yalnız fiziksel KESİM (parentRollId'li çocuk)
     // hard-stop'tur. Testin eski "her işlem engeller" beklentisi buna onarıldı.
     const wo = await mkWo(c, [{ stationId: c.ST_INT }, { stationId: c.ST_TAMBUR }]);
     const [s1, s2] = wo.stepIds;
@@ -216,7 +223,7 @@ async function main(): Promise<void> {
     const wo = await mkWo(c, [{ stationId: c.ST_INT }, { stationId: c.ST_TAMBUR }]);
     const [s1, s2] = wo.stepIds;
     const { batchId, rollIds } = await mkParty(c, wo.id, s2, 1);
-    await prisma.rollMovement.updateMany({ where: { rollId: { in: rollIds }, exitedAt: null }, data: { exitedAt: new Date() } });
+    await prisma.rollMovement.updateMany({ where: { ...ACTIVE_MOVEMENT, rollId: { in: rollIds }, exitedAt: null }, data: { exitedAt: new Date() } });
     await prisma.roll.updateMany({ where: { id: { in: rollIds } }, data: { status: RollStatus.WAREHOUSE, currentStepId: null, producedInStepId: s2 } });
     await prisma.workOrder.update({ where: { id: wo.id }, data: { status: WorkOrderStatus.COMPLETED } });
 
@@ -233,7 +240,7 @@ async function main(): Promise<void> {
     const wo = await mkWo(c, [{ stationId: c.ST_INT }, { stationId: c.ST_TAMBUR }]);
     const [s1, s2] = wo.stepIds;
     const { batchId, rollIds } = await mkParty(c, wo.id, s2, 1);
-    await prisma.rollMovement.updateMany({ where: { rollId: { in: rollIds }, exitedAt: null }, data: { exitedAt: new Date() } });
+    await prisma.rollMovement.updateMany({ where: { ...ACTIVE_MOVEMENT, rollId: { in: rollIds }, exitedAt: null }, data: { exitedAt: new Date() } });
     await prisma.roll.updateMany({ where: { id: { in: rollIds } }, data: { status: RollStatus.STOCK, currentStepId: null, producedInStepId: s2 } });
     await prisma.workOrder.update({ where: { id: wo.id }, data: { status: WorkOrderStatus.COMPLETED } });
 

@@ -16,7 +16,13 @@
    ve `reset-operational.ts` bu hedefte KOŞAR. Artık gerçek fabrika verisi
    olduğu için ikisi de ELLE ONAY olmadan çalıştırılmaz. (2026-09-11'de
    `clean_test_residue --apply` demo DB'de 468 fason sevkinin kalemlerini
-   silmişti — betik başlığı silip başlığı bırakıyor.) <sub>(Teks-Erp/.env:4-8 (PORT=4000, DATABASE_URL=...@localhost:55433/tekserp_demo, JWT_SECRET, BACKUP_DIR))</sub> — atlanırsa: src/lib/prisma.ts:19 'DATABASE_URL is not set' ile ÇÖKER (gürültülü); ama .env yanlış DB gösterirse bekçiler o DB'ye 1.539 deleteMany gönderir.
+   silmişti — betik başlığı silip başlığı bırakıyor.)
+   ⚠️ **BEKÇİ PAKETİ bu hedefte anlamsızdır:** fabrika verisinde `PATOS`/`MAVI`/
+   `MUS-001` fixture'ları YOK → ~70 bekçi "Seed fixture eksik" ile çöker ve tam
+   da akış bekçileri (manuel taşıma, fason iptal/geri alma, bölme) hiç koşmaz;
+   yeşil sayı yanıltır. Paket fixture'lı AYRI bir DB'de koşulur: `CREATE DATABASE
+   <ad>_test` → `DATABASE_URL=… npx prisma migrate deploy` → `npm run seed` +
+   `npm run seed:fixtures` → `DATABASE_URL=… npm test` (arşiv 2026-09-11 B-4b). <sub>(Teks-Erp/.env:4-8 (PORT=4000, DATABASE_URL=...@localhost:55433/tekserp_demo, JWT_SECRET, BACKUP_DIR))</sub> — atlanırsa: src/lib/prisma.ts:19 'DATABASE_URL is not set' ile ÇÖKER (gürültülü); ama .env yanlış DB gösterirse bekçiler o DB'ye 1.539 deleteMany gönderir.
 4. Komutlar `Teks-Erp/` dizini İÇİNDEN koşulur — dotenv CWD'ye bakar. <sub>(Teks-Erp/src/lib/prisma.ts:14 dotenv.config(); Teks-Erp/prisma.config.ts:14 loadEnv({ path: path.join(__dirname, ".env"))</sub> — atlanırsa: Kökten koşulan prisma komutu 'The datasource.url property is required in your Prisma config file' verir; mesaj config'i suçlar, gerçek sebep .env bulunamamasıdı
 5. Şema/pull sonrası: npm install → npm run prisma:generate → npm run prisma:migrate (migrate deploy). <sub>(Teks-Erp/package.json:19-20 (prisma:generate = prisma generate, prisma:migrate = prisma migrate deploy); Teks-Erp/CLAUDE)</sub> — atlanırsa: generate atlanırsa TS 'Property X does not exist'; migrate atlanırsa runtime P2022 ve audit best-effort olduğu için log SESSİZCE kaybolur, sunucu ayakta kalır (
 6. Pull'lanmış migration'ı `migrate deploy` uygular; `npx prisma migrate dev` KULLANILMAZ. <sub>(Teks-Erp/CLAUDE.md:112; Teks-Erp/CLAUDE.md:257 (`migrate dev` iki DEFERRABLE composite FK'yı her diff'te DROP etmek iste)</sub> — atlanırsa: migrate dev üretilen diff'te rolls_sackId_shipmentId_consistency + swatches FK'larını düşürür; bütünlük seddi sessizce kalkar.

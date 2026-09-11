@@ -3599,6 +3599,13 @@ model RollMovement {
   machineId       String?   @db.Uuid
   notes           String?
 
+  /// GERİ ALMA (defter doktrini) — satır SİLİNMEZ, damgalanır. Geri alınmış
+  /// hareket adım durumuna, konuma ve raporlara GİRMEZ; okuyan her yol
+  /// `ACTIVE_MOVEMENT`tan geçer (`helpers/roll-movement.helper.ts`).
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  revokeReason String?   @db.VarChar(300)
+
   // Relations
   roll     Roll          @relation(fields: [rollId], references: [id])
   step     WorkOrderStep @relation(fields: [workOrderStepId], references: [id])
@@ -3618,10 +3625,13 @@ model RollMovement {
   @@index([machineId])
   // Bir topun hareket geçmişi (rollId filtreli + zaman sıralı)
   @@index([rollId, enteredAt(sort: Desc)])
+  // Aktif hareket sorguları `revokedAt IS NULL` ile süzer.
+  @@index([rollId, revokedAt])
   // DB'de ayrıca ŞEMA-DIŞI partial unique var: roll_movements_one_open_per_roll_step_uq
-  // (rollId, workOrderStepId) WHERE "exitedAt" IS NULL — "bir top bir adımda en
-  // fazla BİR açık movement" invariant'ının DB seddi (çift START/SKIP/FINISH
-  // yarışlarının kaybedeni P2002 alır). Migration 20260612101000. Partial UNIQUE
+  // (rollId, workOrderStepId) WHERE "exitedAt" IS NULL AND "revokedAt" IS NULL —
+  // "bir top bir adımda en fazla BİR AKTİF açık movement" invariant'ının DB seddi
+  // (çift START/SKIP/FINISH yarışlarının kaybedeni P2002 alır). Geri alınmış açık
+  // satır sedde yer işgal etmez (migration 20260911190000). Partial UNIQUE
   // @@index ile eşleşmediğinden şemada karşılığı bilinçli olarak YOK.
   @@map("roll_movements")
 }

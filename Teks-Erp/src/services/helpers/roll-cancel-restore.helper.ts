@@ -48,7 +48,8 @@ export interface RollRestoreSignals {
   sackId: string | null;
   shipmentId: string | null;
   currentStepId: string | null;
-  /** TÜM hareketler (açık + kapalı). Kapalı olanlar da "bu top üretime girdi" der. */
+  /** Geri alınmamış TÜM hareketler (açık + kapalı). Kapalı olanlar da "bu top üretime
+   *  girdi" der; geri alınmış hareket adım sayaçlarına girmediği için sayılmaz. */
   movementCount: number;
   /** İstasyon işlem log'u satırları (kurşun/QC2/tambur…). */
   operationCount: number;

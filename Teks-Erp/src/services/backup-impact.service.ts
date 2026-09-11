@@ -209,6 +209,8 @@ const COUNT_SPECS: CountSpec[] = [
     label: "İstasyon giriş/çıkış hareketi",
     group: "production",
     timestampField: "enteredAt",
+    // ⚠️ `revokedAt` SÜZÜLMEZ (bilinçli): ölçülen yedekten beri YAZILAN hareket
+    // sayısıdır — geri alınmış satır da yazılmıştır (yukarıdaki top işlemiyle aynı).
     run: (c) => prisma.rollMovement.count({ where: { enteredAt: { gte: c } } }),
   },
   {

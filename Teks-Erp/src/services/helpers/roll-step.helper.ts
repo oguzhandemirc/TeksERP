@@ -12,10 +12,14 @@
 //                 üretim içindeki rol sayısıyla eşit
 //   - SKIPPED   → recompute değiştirmez; SKIPPED terminaldir, öyle kalır.
 //
+// Geri alınmış (`revokedAt` dolu) hareket HİÇBİR sayıma girmez — ne açık ne
+// kapalı sayılır, giriş noktası da olamaz (`ACTIVE_MOVEMENT`).
+//
 // Bu modül tüm çağrıcılar için ortak transaction client (Prisma.TransactionClient)
 // kabul eder; atomik işlemler bozulmaz.
 // =============================================================================
 import { ACTIVE_OPERATION } from "./roll-operation.helper";
+import { ACTIVE_MOVEMENT } from "./roll-movement.helper";
 import { Prisma, RollStatus, StationKind, StepStatus, WorkOrderStatus } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
@@ -54,8 +58,11 @@ export async function recomputeStepStatus(
   // hesabına dahil edilmez (operatör iptal ettiyse step PENDING'e döner).
   // SCRAP (gerçek fire — Tambur kalite reddi vb.) sayılır: o top istasyondan
   // gerçekten geçmiş, audit kalır.
+  // Geri alınmış hareket sayılırsa adım yanlış duruma geçer: açık sayılan
+  // ACTIVE'de, kapalı sayılan COMPLETED'ta takılı kalır.
   const openCount = await tx.rollMovement.count({
     where: {
+      ...ACTIVE_MOVEMENT,
       workOrderStepId: stepId,
       exitedAt: null,
       roll: { status: { not: RollStatus.CANCELLED } },
@@ -63,6 +70,7 @@ export async function recomputeStepStatus(
   });
   const closedCount = await tx.rollMovement.count({
     where: {
+      ...ACTIVE_MOVEMENT,
       workOrderStepId: stepId,
       exitedAt: { not: null },
       roll: { status: { not: RollStatus.CANCELLED } },
@@ -97,9 +105,9 @@ export async function recomputeStepStatus(
   const candidates = await tx.roll.findMany({
     where: {
       // İş emrine bağlı = en az bir movement'i bu iş emrinin adımlarından birinde
-      movements: { some: { step: { workOrderId: step.workOrderId } } },
-      // Bu step için movement yok
-      NOT: { movements: { some: { workOrderStepId: stepId } } },
+      movements: { some: { ...ACTIVE_MOVEMENT, step: { workOrderId: step.workOrderId } } },
+      // Bu step için AKTİF movement yok (geri alınmış hareket "hiç girmedi" sayılır)
+      NOT: { movements: { some: { ...ACTIVE_MOVEMENT, workOrderStepId: stepId } } },
       // Hâlâ aktif üretimdeyse
       status: {
         in: [
@@ -112,7 +120,7 @@ export async function recomputeStepStatus(
     select: {
       id: true,
       movements: {
-        where: { step: { workOrderId: step.workOrderId } },
+        where: { ...ACTIVE_MOVEMENT, step: { workOrderId: step.workOrderId } },
         select: { step: { select: { stepSequence: true } } },
         orderBy: { enteredAt: "asc" },
         take: 1,
@@ -295,7 +303,7 @@ export async function canRollGoBackFromStep(
   }
 
   const closedMovement = await tx.rollMovement.findFirst({
-    where: { rollId, workOrderStepId: nextStepId, exitedAt: { not: null } },
+    where: { ...ACTIVE_MOVEMENT, rollId, workOrderStepId: nextStepId, exitedAt: { not: null } },
     select: { id: true },
   });
   if (closedMovement) {
@@ -366,7 +374,7 @@ export async function assertWoAtStepKind(
   }
 
   const openRollCount = await prisma.rollMovement.count({
-    where: { workOrderStepId: targetStep.id, exitedAt: null },
+    where: { ...ACTIVE_MOVEMENT, workOrderStepId: targetStep.id, exitedAt: null },
   });
 
   if (openRollCount > 0) {

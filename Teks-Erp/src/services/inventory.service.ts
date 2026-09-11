@@ -7,6 +7,7 @@
 // =============================================================================
 
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
+import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { normalizeScanCode } from "../utils/code-format";
 import { AuditService } from "./audit.service";
@@ -452,7 +453,7 @@ function nonCancelableRollReason(status: RollStatus): string {
 const ROLL_LIST_INCLUDE = {
   item: { select: { id: true, code: true, name: true, itemType: true, unit: true } },
   color: { select: { id: true, code: true, name: true, hex: true } },
-  operations: { select: { operationType: true } },
+  operations: { where: ACTIVE_OPERATION, select: { operationType: true } },
   createdBy: { select: { id: true, username: true, fullName: true } },
   // 2026-08-05: "Ekleyen" sütunu kişinin altına MAKİNEYİ de yazıyor. Bu satır
   // olmasaydı sütun makine kısmını HİÇ basamazdı ve kimse fark etmezdi — aynı
@@ -1911,7 +1912,7 @@ export class InventoryService {
               },
             },
             movements: {
-              where: { exitedAt: null },
+              where: { ...ACTIVE_MOVEMENT, exitedAt: null },
               select: { roll: { select: { currentQty: true } } },
             },
           },
@@ -2459,6 +2460,7 @@ export class InventoryService {
           },
         },
         operations: {
+          where: ACTIVE_OPERATION,
           select: {
             id: true,
             operationType: true,
@@ -2613,7 +2615,7 @@ export class InventoryService {
     if (roll.status !== RollStatus.CANCELLED) return null;
     const [movementCount, operationCount, childCount, dispatchItemCount, kartelaItemCount] =
       await Promise.all([
-        prisma.rollMovement.count({ where: { rollId: roll.id } }),
+        prisma.rollMovement.count({ where: { ...ACTIVE_MOVEMENT, rollId: roll.id } }),
         prisma.rollOperation.count({ where: { ...ACTIVE_OPERATION, rollId: roll.id } }),
         prisma.roll.count({ where: { parentRollId: roll.id } }),
         prisma.subcontractorDispatchItem.count({ where: { rollId: roll.id } }),
@@ -2875,7 +2877,7 @@ export class InventoryService {
     const [movements, operations, dispatchItems, receiptItems] =
       await Promise.all([
         prisma.rollMovement.findMany({
-          where: { rollId: id },
+          where: { ...ACTIVE_MOVEMENT, rollId: id },
           include: {
             step: { include: { station: true } },
             operator: { select: { id: true, username: true, fullName: true } },
@@ -3179,7 +3181,7 @@ export class InventoryService {
     // Açık (kapanmamış) hareket sayısı — currentStepId null olsa bile aktiflik
     // sinyali olabilir. [rollId, enteredAt desc] indeksli.
     const openMovementCount = await prisma.rollMovement.count({
-      where: { rollId: id, exitedAt: null },
+      where: { ...ACTIVE_MOVEMENT, rollId: id, exitedAt: null },
     });
 
     // activeAt: öncelik currentStep; yoksa en güncel açık movement'ın step'i.
@@ -3194,7 +3196,7 @@ export class InventoryService {
       };
     } else if (openMovementCount > 0) {
       const mv = await prisma.rollMovement.findFirst({
-        where: { rollId: id, exitedAt: null },
+        where: { ...ACTIVE_MOVEMENT, rollId: id, exitedAt: null },
         orderBy: { enteredAt: "desc" },
         select: {
           step: {
@@ -3398,7 +3400,7 @@ export class InventoryService {
       let activeAtStation = existing.currentStepId != null;
       if (!activeAtStation) {
         const openMv = await prisma.rollMovement.count({
-          where: { rollId: id, exitedAt: null },
+          where: { ...ACTIVE_MOVEMENT, rollId: id, exitedAt: null },
         });
         activeAtStation = openMv > 0;
       }
@@ -3529,7 +3531,7 @@ export class InventoryService {
 
       // Açık RollMovement'ları topla — kapatmak için (kapsam yukarıda çözüldü).
       const openMovements = await tx.rollMovement.findMany({
-        where: { rollId: id, exitedAt: null },
+        where: { ...ACTIVE_MOVEMENT, rollId: id, exitedAt: null },
         select: {
           id: true,
           workOrderStepId: true,
@@ -3559,7 +3561,8 @@ export class InventoryService {
       const closeNote = isScrap ? "SCRAPPED" : "CANCELLED";
       for (const m of openMovements) {
         await tx.rollMovement.update({
-          where: { id: m.id },
+          // Geri alınmış satır kapatılmaz; araya giren geri alma P2025 verir (silinmiş satırla aynı).
+          where: { id: m.id, ...ACTIVE_MOVEMENT },
           data: {
             exitedAt: new Date(),
             qtyOut: isScrap ? m.qtyIn ?? existing.currentQty : 0,
@@ -3756,7 +3759,7 @@ export class InventoryService {
    *
    * ⚠️⚠️ ADIM DURUMU BURADA YENİDEN HESAPLANMAZ — ve bu bir EKSİK DEĞİL, kapsam
    * guard'ının sonucudur (2026-08-15 denetimi). `resolveRollRestoreBlockReason`
-   * `movementCount > 0` (AÇIK + KAPALI tüm hareketler) olan topu reddediyor;
+   * `movementCount > 0` (geri alınmamış AÇIK + KAPALI tüm hareketler) olan topu reddediyor;
    * hareketi olmayan top ise `recomputeStepStatus`'un hiçbir sayacına girmez
    * (üç sayacın üçü de "bu iş emrinde hareketi olan top" üzerinden çalışır) →
    * geri alınabilen bir topun geri alınması hiçbir adımın türetilen değerini
@@ -3799,7 +3802,7 @@ export class InventoryService {
     // Sinyaller tek turda toplanır; yüklem hiçbir şey okumaz.
     const [movementCount, operationCount, childCount, dispatchItemCount, kartelaItemCount] =
       await Promise.all([
-        prisma.rollMovement.count({ where: { rollId: id } }),
+        prisma.rollMovement.count({ where: { ...ACTIVE_MOVEMENT, rollId: id } }),
         prisma.rollOperation.count({ where: { ...ACTIVE_OPERATION, rollId: id } }),
         prisma.roll.count({ where: { parentRollId: id } }),
         prisma.subcontractorDispatchItem.count({ where: { rollId: id } }),
@@ -3963,12 +3966,12 @@ export class InventoryService {
       // `softDelete`'te 2026-08-04'te düzeltilen not-ezme hatasının hâlâ açık
       // kopyasıydı (elle eklenen topun "TAMBUR_MANUAL_ROLL: <sebep>" izi siliniyordu).
       const openMovements = await tx.rollMovement.findMany({
-        where: { rollId: id, exitedAt: null },
+        where: { ...ACTIVE_MOVEMENT, rollId: id, exitedAt: null },
         select: { id: true, notes: true },
       });
       for (const m of openMovements) {
         await tx.rollMovement.update({
-          where: { id: m.id },
+          where: { id: m.id, ...ACTIVE_MOVEMENT },
           data: {
             exitedAt: new Date(),
             qtyOut: 0,
@@ -4976,7 +4979,7 @@ export class InventoryService {
       blockReasons.push("Top açık bir fason sevkine bağlı — önce fasonu kapatın");
     }
     const openMovementCount = await prisma.rollMovement.count({
-      where: { rollId, exitedAt: null },
+      where: { ...ACTIVE_MOVEMENT, rollId, exitedAt: null },
     });
     eligible = eligible && blockReasons.length === 0;
 
@@ -5045,7 +5048,7 @@ export class InventoryService {
     const rescued = await prisma.$transaction(async (tx) => {
       // Açık hareketler + bağlı adımlar (+ currentStep) — recompute hedefleri.
       const openMoves = await tx.rollMovement.findMany({
-        where: { rollId, exitedAt: null },
+        where: { ...ACTIVE_MOVEMENT, rollId, exitedAt: null },
         select: { id: true, workOrderStepId: true },
       });
       const affectedStepIds = Array.from(
@@ -5073,12 +5076,12 @@ export class InventoryService {
       // kesilmişse (currentQty < qtyIn) `currentQty` ile kapatmak aradaki farkı
       // istasyon iş-hacmi raporunda HAYALET KAYIP gösterirdi. qtyIn 0/null ise kalan.
       const openForClose = await tx.rollMovement.findMany({
-        where: { rollId, exitedAt: null },
+        where: { ...ACTIVE_MOVEMENT, rollId, exitedAt: null },
         select: { id: true, qtyIn: true, weightIn: true },
       });
       for (const m of openForClose) {
         await tx.rollMovement.update({
-          where: { id: m.id },
+          where: { id: m.id, ...ACTIVE_MOVEMENT },
           data: {
             exitedAt: new Date(),
             qtyOut:
@@ -5433,6 +5436,7 @@ export class InventoryService {
       //    mükerrer RollError üretirdi. 0 satır = kaybeden → tx geri sar.
       const closedMove = await tx.rollMovement.updateMany({
         where: {
+          ...ACTIVE_MOVEMENT,
           rollId,
           workOrderStepId: stepId,
           exitedAt: null,

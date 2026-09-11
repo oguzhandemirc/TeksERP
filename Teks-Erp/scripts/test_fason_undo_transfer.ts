@@ -8,6 +8,7 @@ import { SubcontractorService } from "../src/services/subcontractor.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { AppError } from "../src/utils/app-error";
+import { ACTIVE_MOVEMENT } from "../src/services/helpers/roll-movement.helper";
 import { RollStatus } from "@prisma/client";
 
 let ITEM = "", GRADE = "", ADMIN = "", ST_ZIMPARA = "", ST_BOYA = "", ST_TAMBUR = "", SUB_KESTEL = "", SUB_BOYER = "";
@@ -113,6 +114,14 @@ async function main(): Promise<void> {
   check("Boyahane sevki CANCELLED", boyaD?.cancelledAt !== null, String(boyaD?.cancelledAt !== null));
   const bornAfter = await prisma.roll.findMany({ where: { id: { in: bornBefore.map((r) => r.id) } }, select: { status: true } });
   check("Born toplar CANCELLED", bornAfter.every((r) => r.status === RollStatus.CANCELLED), bornAfter.map((r) => r.status).join(","));
+  // Aktarım geri alma born'un boyahane hareketini SİLMEZ, damgalar (defter doktrini).
+  // Boyahane PENDING'i born'ların CANCELLED olmasından gelir; recompute süzgecini
+  // ölçen kontrol test_manual_move "geri: kaynak Tambur PENDING"dir.
+  const bornIds = bornBefore.map((r) => r.id);
+  const bornMvAktif = await prisma.rollMovement.count({ where: { ...ACTIVE_MOVEMENT, rollId: { in: bornIds }, workOrderStepId: boyaStep } });
+  const bornMvDamgali = await prisma.rollMovement.count({ where: { rollId: { in: bornIds }, workOrderStepId: boyaStep, revokedAt: { not: null } } });
+  check("Born topların boyahane hareketi GERİ ALINDI (aktif 0)", bornMvAktif === 0, `aktif=${bornMvAktif}`);
+  check("⭐ Born hareket izi SİLİNMEDİ, defterde damgalı duruyor", bornMvDamgali > 0, `damgalı=${bornMvDamgali}`);
   const aAfter = await prisma.roll.findUnique({ where: { id: A }, select: { status: true, currentStepId: true, batchId: true } });
   const bAfter = await prisma.roll.findUnique({ where: { id: B }, select: { status: true, currentStepId: true } });
   check("A geri döndü: AT_SUBCONTRACTOR @ zımpara", aAfter?.status === RollStatus.AT_SUBCONTRACTOR && aAfter?.currentStepId === zimparaStep, `${aAfter?.status}`);

@@ -19,6 +19,7 @@
 // =============================================================================
 
 import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
+import { ACTIVE_MOVEMENT, revokeRollMovements } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { Prisma, RollStatus, WorkOrderStatus, TravelerCardStatus, RollOperationType, StepStatus } from "@prisma/client";
@@ -659,12 +660,15 @@ export class WorkOrderManualMoveService {
           );
         }
 
-        // 2) Movement izi. Önce hedef-sonrası adımların movement'larını SİL (B4: konum izini
-        //    geri al — op-block sayesinde orada iş yok), sonra kalan açık movement'ı kapat,
-        //    en son hedefte taze aç. recompute bu movement'lardan status türetir.
+        // 2) Movement izi. Önce hedef-sonrası adımların movement'larını GERİ AL (B4: silinmez,
+        //    damgalanır — op-block sayesinde orada iş yok), sonra kalan AKTİF açık movement'ı
+        //    kapat, en son hedefte taze aç. recompute yalnız aktif movement'lardan türetir.
         if (laterStepIds.length > 0) {
-          await tx.rollMovement.deleteMany({
-            where: { rollId: { in: selectedIds }, workOrderStepId: { in: laterStepIds } },
+          await revokeRollMovements(tx, {
+            rollIds: selectedIds,
+            workOrderStepIds: laterStepIds,
+            reason: "MANUAL_MOVE",
+            userId,
           });
         }
         // ⚠️ KAPANAN MOVEMENT `qtyOut`/`weightOut` YAZMAK ZORUNDA (2026-09-01).
@@ -688,7 +692,8 @@ export class WorkOrderManualMoveService {
                  "weightOut" = "weightIn",
                  "notes"     = 'MANUAL_MOVE_OUT'
            WHERE "rollId" = ANY(${selectedIds}::uuid[])
-             AND "exitedAt" IS NULL`;
+             AND "exitedAt" IS NULL
+             AND "revokedAt" IS NULL`;
         await tx.rollMovement.createMany({
           data: ctx.selected.map((r) => ({
             rollId: r.id,
@@ -817,8 +822,8 @@ export class WorkOrderManualMoveService {
                     RollStatus.RETURNED_FROM_SUBCONTRACTOR,
                   ],
                 },
-                movements: { some: { step: { workOrderId } } },
-                NOT: { movements: { some: { workOrderStepId: s.id } } },
+                movements: { some: { ...ACTIVE_MOVEMENT, step: { workOrderId } } },
+                NOT: { movements: { some: { ...ACTIVE_MOVEMENT, workOrderStepId: s.id } } },
                 currentStep: { stepSequence: { lte: s.stepSequence } },
               },
             });
@@ -846,7 +851,7 @@ export class WorkOrderManualMoveService {
           data: { status: StepStatus.PENDING, skipReason: null },
         });
 
-        // 4) Etkilenen adımları recompute (hedef + kaynak + silinen movement'lı sonraki adımlar)
+        // 4) Etkilenen adımları recompute (hedef + kaynak + geri alınan movement'lı sonraki adımlar)
         //    + WO'yu üretime çek. B1: WO COMPLETED ise topun statüsünden BAĞIMSIZ geri aç —
         //    top artık IN_PRODUCTION @ ACTIVE adım; kart flip olmazsa operatör okutamaz, kilitlenir.
         //    SKIPPED damgalanan ara adımları recompute'a SOKMA (recompute dokunmaz ama gereksiz).

@@ -157,8 +157,8 @@ export const DuplicateRollsService = {
              r."colorId", c.name AS "colorName", r."initialQty", r.width, r.status,
              r."clientToken", r."createdById", u."fullName" AS "operatorName",
              r."createdMachineId", r."labelPrintedAt", r."sackId", r."shipmentId",
-             (SELECT COUNT(*)::int FROM roll_movements m WHERE m."rollId" = r.id) AS moves,
-             (SELECT COUNT(*)::int FROM roll_operations o WHERE o."rollId" = r.id) AS ops
+             (SELECT COUNT(*)::int FROM roll_movements m WHERE m."rollId" = r.id AND m."revokedAt" IS NULL) AS moves,
+             (SELECT COUNT(*)::int FROM roll_operations o WHERE o."rollId" = r.id AND o."revokedAt" IS NULL) AS ops
       FROM rolls r
       LEFT JOIN items i ON i.id = r."itemId"
       LEFT JOIN colors c ON c.id = r."colorId"

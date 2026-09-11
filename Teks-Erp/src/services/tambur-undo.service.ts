@@ -57,11 +57,10 @@
 // gerçekten iş kalmıştır ve WO durumu kalan gerçeklerden türetilir. Kusur,
 // operatörün onu İSTEMEMİŞ olmasıydı (madde 1).
 //
-// ⚠️ `TAMBUR_PROCESSED` izi FULL'de hâlâ SİLİNİR ve bu ölçülmüş bir tercihtir:
-// `reports/production.report.service.ts:109` o satırları SAYIYOR — bırakılsaydı
-// geri alınmış iş üretim raporunda görünmeye devam ederdi. Terslemenin kalıcı
-// izi: (a) sapma satırlarının `reversedAt` işareti, (b) audit `TAMBUR_UNDO_FULL`
-// (arşivlenir ama SİLİNMEZ — `system_log_archives`).
+// ⚠️ `TAMBUR_PROCESSED` izi FULL'de SİLİNMEZ, geri alınır (`revokedAt` damgası):
+// üretim raporu ve adım okumaları `ACTIVE_OPERATION` ile süzdüğü için geri alınmış
+// iş sayılmaz. Terslemenin kalıcı izi: (a) bu damga, (b) sapma satırlarının
+// `reversedAt` işareti, (c) audit `TAMBUR_UNDO_FULL`.
 //
 // Kapsam SINIRLARI (bilinçli):
 //   • Kısmi FULL yok (bazı çocuklar kalsın) — metraj muhasebesini bozar.
@@ -73,6 +72,7 @@
 // =============================================================================
 
 import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
+import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import {
@@ -945,7 +945,7 @@ export class TamburUndoService {
       const [childCount, opCount, movementCount] = await Promise.all([
         prisma.roll.count({ where: { parentRollId: rollId } }),
         prisma.rollOperation.count({ where: { ...ACTIVE_OPERATION, rollId } }),
-        prisma.rollMovement.count({ where: { rollId } }),
+        prisma.rollMovement.count({ where: { ...ACTIVE_MOVEMENT, rollId } }),
       ]);
       if (childCount > 0) {
         blockReason = "Bu top kesilmiş (parçaları var) — önce kesimi geri alın";
@@ -1280,9 +1280,9 @@ export class TamburUndoService {
    *    (discard/scrap) hâlâ doğrudur, yalnız bu parça geri dönüyor.
    *  • `RollError` kayıtları YENİDEN AÇILMAZ — kapanıştaki kalite kararları
    *    diğer parçalar üzerinden ayakta; yeniden finalize açık hata istemez.
-   *  • TAMBUR_PROCESSED izi yine SİLİNİR — kaynak adıma geri döndü, iş henüz
-   *    bitmedi; iz kalsaydı üretim raporu açık işi "kapanmış" sayardı ve
-   *    yeniden finalize ikinci bir iz yazıp çift sayım üretirdi.
+   *  • TAMBUR_PROCESSED izi yine GERİ ALINIR (damga) — kaynak adıma geri döndü,
+   *    iş henüz bitmedi; aktif kalsaydı üretim raporu açık işi "kapanmış" sayardı
+   *    ve yeniden finalize ikinci bir iz yazıp çift sayım üretirdi.
    */
   private async applySingleRestore(
     parentId: string,
@@ -1393,15 +1393,16 @@ export class TamburUndoService {
       }
 
       // 2) Kaynağın hareketini yeniden aç (üretim akışı) — FULL ile aynı.
+      //    Geri alınmış kapalı hareket seçilmez ve yeniden açılmaz.
       if (stepId) {
         const closedMove = await tx.rollMovement.findFirst({
-          where: { rollId: parentId, workOrderStepId: stepId, exitedAt: { not: null } },
+          where: { ...ACTIVE_MOVEMENT, rollId: parentId, workOrderStepId: stepId, exitedAt: { not: null } },
           orderBy: { exitedAt: "desc" },
           select: { id: true },
         });
         if (closedMove) {
           await tx.rollMovement.update({
-            where: { id: closedMove.id },
+            where: { id: closedMove.id, ...ACTIVE_MOVEMENT },
             data: { exitedAt: null, qtyOut: null, weightOut: null, notes: "TAMBUR_UNDO_REOPEN" },
           });
         } else {
@@ -1438,7 +1439,7 @@ export class TamburUndoService {
         throw AppError.conflict("Kaynak top bu sırada değişti — geri alma iptal edildi");
       }
 
-      // 4) TAMBUR_PROCESSED izini sil (gerekçe fonksiyon yorumunda).
+      // 4) TAMBUR_PROCESSED izini geri al (gerekçe fonksiyon yorumunda).
       if (stepId) {
         await revokeRollOperations(tx, {
           rollIds: [parentId],
@@ -1646,15 +1647,16 @@ export class TamburUndoService {
 
       // 2) Parent movement'ı yeniden aç (finalize kapatmıştı). Yoksa taze aç.
       //    Depo kesiminde adım YOK → hareket de yok; bu blok atlanır.
+      //    Geri alınmış kapalı hareket seçilmez ve yeniden açılmaz.
       if (stepId) {
         const closedMove = await tx.rollMovement.findFirst({
-          where: { rollId: parentId, workOrderStepId: stepId, exitedAt: { not: null } },
+          where: { ...ACTIVE_MOVEMENT, rollId: parentId, workOrderStepId: stepId, exitedAt: { not: null } },
           orderBy: { exitedAt: "desc" },
           select: { id: true },
         });
         if (closedMove) {
           await tx.rollMovement.update({
-            where: { id: closedMove.id },
+            where: { id: closedMove.id, ...ACTIVE_MOVEMENT },
             data: { exitedAt: null, qtyOut: null, weightOut: null, notes: "TAMBUR_UNDO_REOPEN" },
           });
         } else {
@@ -1701,11 +1703,9 @@ export class TamburUndoService {
           })
         : { count: 0 };
 
-      // 5) TAMBUR_PROCESSED izini sil — finalize yeniden yapılabilir (idempotency
-      //    sıfırlanır). ⚠️ İZİ BIRAKMAK CAZİP AMA YANLIŞ: `reports/
-      //    production.report.service.ts:109` bu satırları SAYIYOR — bırakılsaydı
-      //    geri alınmış iş üretim raporunda görünmeye devam ederdi. Terslemenin
-      //    kalıcı izi (a) aşağıdaki sapma işareti, (b) audit TAMBUR_UNDO_FULL.
+      // 5) TAMBUR_PROCESSED izini geri al (damga) — finalize yeniden yapılabilir:
+      //    upsert ve rapor yalnız aktif ize bakar. Terslemenin kalıcı izi bu damga,
+      //    aşağıdaki sapma işareti ve audit TAMBUR_UNDO_FULL.
       if (stepId) {
         await revokeRollOperations(tx, {
           rollIds: [parentId],

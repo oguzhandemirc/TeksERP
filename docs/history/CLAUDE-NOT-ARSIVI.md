@@ -5167,6 +5167,8 @@ Migration **var** (`20260911140000`). Yeni izin **yok**. APK **yok**.
 
 ## 2026-09-11 — B-4a: top operasyon izi geri alınır, silinmez [ÇEKİRDEK]
 
+> ⚠️ **KISMEN (2026-09-11)** — "29 okuma yüzeyi" eksikti: üçlü anahtarlı dört `upsert` geri alınmış satırı buluyordu (iş tekrarlanamıyordu) ve `Roll.operations` ilişki okumaları süzülmüyordu → bkz. "B-4b: top hareketi geri alınır, silinmez + B-4a'nın iki kalıntısı".
+
 `RollOperation` şema başlığında append-only'ydi, kod YEDİ yerde `deleteMany` ile
 siliyordu: "bu topa kurşun uygulandı mı / QC2'den geçti mi / fasona gitti mi"
 sorusunun cevabı geriye dönük DEĞİŞİYORDU. İronisi: `tambur-undo.service.ts`
@@ -5305,3 +5307,134 @@ koşulmaz.** `docs/GELISTIRME-DONGUSU.md`'ye yazıldı.
 ### Üç kapı
 
 Migration yok (bu not veri/ortam kararıdır). İzin yok. APK yok.
+
+
+---
+
+## 2026-09-11 — B-4b: top hareketi geri alınır, silinmez + B-4a'nın iki kalıntısı [ÇEKİRDEK]
+
+`RollMovement` dört yerde `deleteMany` ile siliniyordu (kurşun/QC2 yeniden açma
+`kursun-qc.service.ts` reopenStep · fason kabul iptali `subcontractor.service.ts`
+cancelReceipt · fason aktarım geri alma undoTransfer · manuel taşıma
+`workorder-manual-move.service.ts` manualMove). Tablo aynı zamanda adım DURUMUNUN
+kaynağı: `recomputeStepStatus` açık/kapalı hareketleri SAYARAK türetiyor. Yani
+kaçırılan tek süzgeç "hata yok, log yok, adım yanlış durumda" demekti.
+
+### Karar
+
+- Şemaya `revokedAt`/`revokedById`/`revokeReason` + `@@index([rollId, revokedAt])`
+  (migration `20260911190000_roll_movement_revoke`). Satır şekli DEĞİŞMEDİ
+  (açık satır çıkışta kapanır) — defter/durum ayrımı Faz 2, ayrı proje.
+- Tek kaynak `helpers/roll-movement.helper.ts`: `ACTIVE_MOVEMENT` +
+  `revokeRollMovements()` (dönen sayı = damgalanan satır; eski `count` anlamı).
+- **Eşdeğerlik ilkesi:** bugün silinen satırı hiçbir okuma görmüyordu → "revoke +
+  süzme ≡ silme" hedeflendi; varsayılan SÜZ, istisna yalnız "bu satır HİÇ yazıldı
+  mı / geçmiş var mı" sorusu.
+- **Şema-dışı partial unique** `roll_movements_one_open_per_roll_step_uq`
+  predicate'i `"exitedAt" IS NULL AND "revokedAt" IS NULL` oldu — yoksa geri
+  alınmış AÇIK satır dururken top o adıma bir daha giremezdi. Takas sed
+  kesintisiz: yeni index geçici adla → eski `DROP INDEX` → `RENAME`. Mevcut satırların
+  hepsi `revokedAt IS NULL` olduğu için küme aynı kaldı. `test_db_invariants`
+  envanteri güncellendi.
+
+### "47 okuma yüzeyi" eksikti
+
+Devir notu 47 diyordu; tip denetleyicili tarama **~62 delegate çağrısı + 22 ilişki
+okuması + 22 ham SQL başvurusu** buldu (`roll-disposition`, `coverage`,
+`roll-step-scope`, `kursun-bypass-*` helper'ları ve `wip-scorecard`/`dashboard`
+ham SQL'i listede yoktu). Uygulama 9 dosya grubunda paralel yapıldı, her grup iki
+bağımsız doğrulayıcıdan (eksiksizlik + eşdeğerlik) geçti.
+
+Bilinen üç tuzak kodda kapatıldı: manuel taşımanın ham `UPDATE … "exitedAt" IS
+NULL`ı az önce geri alınmış AÇIK satırları kapatıp notlarını ezecekti; reopenStep'in
+"son tur" okuması ve id'yle yeniden açan `updateMany`i geri alınmış kapalı satırı
+yeniden açabilirdi; tambur-undo'nun "son kapalı hareket" okuması aynı sınıftı.
+
+### Gerekçeli istisnalar (4 dosya, bekçi iki yönlü ölçüyor)
+
+- `guarded-hard-remove.ts` ×2 — makine/istasyon kalıcı silme guard'ı; geri alınmış
+  hareket de üretim kanıtı.
+- `backup-impact.service.ts` — yedekten beri YAZILAN satır hacmi.
+- `workorder.service.ts` rota düzenleme `_count.movements`/`operations` —
+  adımın defter geçmişi. ⚠️ **Bilinen yan etki:** yalnız geri alınmış hareketi olan
+  PENDING adım artık rotadan SİLİNEMEZ, istasyonu ve sırası değişmez (409). Silme
+  eskiden geçiyordu çünkü geçmiş siliniyordu; şimdi hem RESTRICT FK engelliyor hem
+  de istasyon değişimi "ne oldu"yu yalan söyletirdi. İlk doğrulayıcı turu burada
+  yalnız aktifi saymayı önermişti; guard'ın kendi gerekçe yorumu ("geçmiş kayıt")
+  bu yüzden reddedildi.
+- `workorder-clone.helper.ts` repoint — bölmede hareket VE operasyon izi, geri
+  alınmışlar dahil, topla birlikte aynı istasyonlu klon adıma taşınır; kaynakta
+  bırakılsa topun defteri iki iş emrine bölünür.
+
+### B-4a kalıntısı ① — upsert geri alınmış satırı buluyordu (ÜRETİMİ KİLİTLER)
+
+`rollOperation.upsert` dört yerde (`kursun-qc.service.ts` QC2_COMPLETED +
+KURSUN_APPLIED, `tambur.service.ts` TAMBUR_PROCESSED ×2) üçlü anahtarla
+çağrılıyordu. B-4a unique'i partial yaptı ama upsert `where`ine aktif yüklem
+konmadı. **Ölçüldü** (geri alınan tx içinde): geri alınmış tek satır varsa upsert
+onu DÖNDÜRÜYOR ve yeni aktif satır YAZMIYOR; iki geri alınmış satır varsa Prisma
+"Expected zero or one element, got 2" ATIYOR. Saha senaryosu: KK2'si geçmiş top
+"Konumu Düzelt" ile geri taşınır (QC2 damgalanır) → KK2 yeniden yapılır → aktif
+QC2 yazılmaz → `finishStep` "QC2 tamamlanmamış top var" der → top adımda takılır.
+Düzeltme `where: { <üçlü>, ...ACTIVE_OPERATION }` — ölçüldü: yeni aktif satır
+yazılıyor, tekrar çağrı idempotent. c45f8b28 origin'de ama son saha etiketi
+`backend-v2.9.8`in atası DEĞİL (ölçüldü) — hata sahaya çıkmadan kapandı; bir sonraki
+backend paketi B-4a ile B-4b'yi BİRLİKTE taşımalı, B-4a tek başına paketlenmemeli.
+
+### B-4a kalıntısı ② — ilişki okumaları süzülmüyordu
+
+B-4a'nın bekçisi regex'le yalnız delegate çağrılarına bakıyordu; `Roll.operations`
+ilişki okumaları görünmüyordu: fason born-top blok nedenleri (6 yer), kesim
+listesinde `kursunFinishedAt`, top listesi (`ROLL_LIST_INCLUDE` — tipsiz sabit) ve
+detay yanıtı, operatör verim raporu ham SQL'i, mükerrer top taraması `ops` sayımı.
+Hepsi `ACTIVE_OPERATION` aldı.
+
+### Bekçi — tip denetleyicili tarama
+
+`scripts/revoke-ast-tarama.ts` (yardımcı, test değil): TypeScript programı kurar
+(~1,5 sn) ve `getContextualType(…, ContextFlags.Completions)` ile Prisma kısıt
+tipini okur — `movements` adı WarehouseMovement ilişkilerinde de var, ayrım tipten.
+Tipsiz include sabitinde model kardeş anahtarlardan şemadan çözülür. Ham SQL alias
+bazında ölçülür (bir literalde iki tablonun süzgeci birbirini örtmez).
+
+- `test_roll_movement_revoke.ts` (19): §1 damga · §2 partial unique yeniden yazım ·
+  §3 iki aktif açık red · §4 aktif okuma · §5 kurşun reopen + geri manuel taşıma
+  sonrası adım durumları · §6 tarama + istisna kümesi.
+- `test_roll_operation_revoke.ts` +§7 tarama +§8 upsert davranışı; `PATOS` seed
+  fixture'ına yaslanıyordu, fabrika DB'sinde hiç koşmuyordu → kendi TEST ürününü
+  kuruyor.
+- Servis düzeyi: `test_p2_kk2reopen` iki adımlı reopen senaryosu (nextStep dalı hiç
+  koşmuyordu) + geri alınmış tur; `test_manual_move_qc_reversal` "damgalı açık
+  satır kapatılmadı".
+
+**NEGATİF SONDALAR (hepsi kırmızı, hepsi geri yüklendi, sha256 eşit):**
+`ACTIVE_MOVEMENT = {}` → 5 kırmızı · recompute `openCount` süzgeci yok → §5b
+Tambur **ACTIVE** (beklenen PENDING) · `closedCount` süzgeci yok → §5f ara adım
+**ACTIVE** (beklenen PENDING) · manuel taşıma ham UPDATE süzgeci yok →
+`test_manual_move_qc_reversal` kırmızı + §6d · KK2 upsert'ten `ACTIVE_OPERATION`
+yok → §7a.
+
+### Test ortamı — fabrika DB'sinde paket YANILTIYOR
+
+`npm test` `tekserp_fabrika_dev`de 399/477: kırmızı 78'in **70'i** "Seed fixture
+eksik: PATOS" ile çöktü — ve bunlar tam da bu değişikliği ölçen akış bekçileri
+(manual_move, fason undo/cancel, split, batch). Fixture'lı ayrı DB kuruldu
+(`tekserp_b4b_test`: migrate deploy + seed + seed:fixtures): **472/477**. Kalan
+5'in (audit_depth, order_cancellation — paket sırasına bağlı, tek başına yeşil;
+module_flag_off, module_grandfathering, module_profile — taze DB'de modül satırı)
+HEAD worktree'sinde aynı DB'ye karşı koşumu **birebir aynı** → değişiklikten değil.
+Kural `docs/GELISTIRME-DONGUSU.md` madde 3'e yazıldı.
+
+Fabrika verisine özgü, değişiklikten bağımsız kırmızılar (geri alınmış satır
+DB'de 0 iken süzgeçli sorgu eskisiyle özdeş): `test_consistency` §1c/§1d (bilinçli
+tercih), §13 (2 top), **§20 — `IE0608260004` 2. adımı 2026-08-06'dan beri hiç
+hareketi olmadan COMPLETED** (yeni veri bulgusu, kaynağı ölçülmedi);
+`test_roll_warehouse_stamp`, `test_traveler_card_a5_batches` C3/C9/C10,
+`test_recent_output_filters`, `test_sack_label` §0, `test_recipe` ('TUP' kat) —
+hepsi fixture DB'de yeşil.
+
+### Üç kapı
+
+Migration **var** (`20260911190000`). İzin **yok**. APK/Electron **yok** —
+sözleşme değişmedi; yanıtlar yalnız geri alınmış satırı artık döndürmüyor (B-4a
+öncesi davranış).

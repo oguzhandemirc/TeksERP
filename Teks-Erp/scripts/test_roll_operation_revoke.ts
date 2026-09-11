@@ -17,12 +17,19 @@
 //   §5 AST: `src/`de `rollOperation.deleteMany` KALMADI
 //   §6 AST: okuma yüzeyleri `ACTIVE_OPERATION` kullanıyor; üç bilinçli istisna
 //      gerekçesiyle işaretli
+//   §8 ⭐ UPSERT: geri alınmış iz dururken üçlü anahtarlı upsert yalnız aktif
+//      yüklemle yeni satır yazar (süzgeçsiz hâli geri alınmış satırı döndürür)
+//   §7 ⭐ AST + tip denetleyicisi (`revoke-ast-tarama.ts`): delegate çağrıları
+//      (upsert DAHİL — üçlü anahtarla upsert geri alınmış satırı bulur ve yeni
+//      aktif satır YAZMAZ), ilişki okumaları (`operations`, `_count`) ve
+//      `roll_operations` ham SQL'i aktif yüklemi taşır; istisna kümesi iki yönlü
 // =============================================================================
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { RollOperationType, RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { aktifYuklemTara } from "./revoke-ast-tarama";
 import {
   ACTIVE_OPERATION,
   revokeRollOperations,
@@ -45,6 +52,7 @@ const TAG = `TST-ROR-${ts}`;
 let rollId = "";
 let stepId = "";
 let woId = "";
+let itemId = "";
 
 async function main(): Promise<void> {
   console.log("\n=== Top operasyon izi: geri alınır, silinmez ===\n");
@@ -53,10 +61,13 @@ async function main(): Promise<void> {
     if (!v) throw new Error(`Seed fixture eksik: ${label} (önce 'npm run seed')`);
     return v.id;
   };
-  const itemId = need(
-    await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }),
-    "PATOS",
-  );
+  // Ürün fixture'ı bekçinin kendisinindir — seed fixture'ı olmayan kurulumda da koşar.
+  itemId = (
+    await prisma.item.create({
+      data: { code: TAG, name: `${TAG} kumaş`, itemType: "FABRIC" },
+      select: { id: true },
+    })
+  ).id;
   // ⚠️ Seed kullanıcı adına HAM yaslanılmaz (ortam bağımlılığı tavanı) —
   // bekçi kendi yöneticisini fixture'dan çözer.
   const adminId = (await ensureTestAdmin()).id;
@@ -161,6 +172,55 @@ async function main(): Promise<void> {
     ucuncuHata ? "P2002/unique" : "YAZILDI — sed düşmüş!",
   );
 
+  // ── §8 UPSERT — geri alınmış iz dururken yalnız AKTİF satıra bakmalı ───────
+  // Servislerdeki upsert'ler (KK2 tamamlama, Tambur finalize) üçlü anahtarla
+  // çağrılır; §7a hepsinin ACTIVE_OPERATION taşıdığını ölçer, burası NEDENİNİ.
+  await prisma.$transaction((tx) =>
+    revokeRollOperations(tx, {
+      rollIds: [rollId],
+      workOrderStepIds: [stepId],
+      operationTypes: [RollOperationType.QC2_COMPLETED],
+      reason: "BEKCI_TEST",
+      userId: adminId,
+    }),
+  );
+  const uclu = { rollId, workOrderStepId: stepId, operationType: RollOperationType.QC2_COMPLETED };
+  // Süzgeçsiz hâl: tek geri alınmış satırı döndürür; birden çoksa Prisma hata atar.
+  let ciplakSonuc = "";
+  try {
+    const r = await prisma.rollOperation.upsert({
+      where: { rollId_workOrderStepId_operationType: uclu },
+      create: { ...uclu, operatorId: adminId },
+      update: {},
+      select: { revokedAt: true },
+    });
+    ciplakSonuc = r.revokedAt === null ? "AKTİF YAZDI" : "geri alınmışı döndürdü";
+  } catch (e) {
+    ciplakSonuc = `hata: ${(e instanceof Error ? e.message : String(e)).split("\n").pop()?.slice(0, 60)}`;
+  }
+  check(
+    "§8a Tuzak belgeli: aktif süzgeçsiz upsert yeni AKTİF satır YAZMAZ",
+    ciplakSonuc !== "AKTİF YAZDI",
+    ciplakSonuc,
+  );
+  const aktifUpsert = await prisma.rollOperation.upsert({
+    where: { rollId_workOrderStepId_operationType: uclu, ...ACTIVE_OPERATION },
+    create: { ...uclu, operatorId: adminId },
+    update: {},
+    select: { id: true, revokedAt: true },
+  });
+  const tekrar = await prisma.rollOperation.upsert({
+    where: { rollId_workOrderStepId_operationType: uclu, ...ACTIVE_OPERATION },
+    create: { ...uclu, operatorId: adminId },
+    update: {},
+    select: { id: true },
+  });
+  check(
+    "§8b ⭐ ACTIVE_OPERATION'lı upsert yeni AKTİF satır yazar, tekrarı idempotenttir",
+    aktifUpsert.revokedAt === null && tekrar.id === aktifUpsert.id,
+    `aktif=${aktifUpsert.revokedAt === null} idempotent=${tekrar.id === aktifUpsert.id}`,
+  );
+
   // ── §5-§6 AST ─────────────────────────────────────────────────────────────
   {
     const SRC = join(__dirname, "..", "src");
@@ -188,8 +248,53 @@ async function main(): Promise<void> {
     );
   }
 
+  // ── §7 AST + tip denetleyicisi ────────────────────────────────────────────
+  {
+    const r = aktifYuklemTara(join(__dirname, ".."), [
+      {
+        delegate: "rollOperation",
+        model: "RollOperation",
+        sabit: "ACTIVE_OPERATION",
+        tablo: "roll_operations",
+        helper: join("src", "services", "helpers", "roll-operation.helper.ts"),
+      },
+    ]).get("rollOperation")!;
+    check(
+      "§7a ⭐ Her okuma/güncelleme/upsert çağrısı ACTIVE_OPERATION taşır ya da gerekçeli istisnadır",
+      r.cagriSayisi >= 25 && r.cagriIhlal.length === 0,
+      `çağrı=${r.cagriSayisi}${r.cagriIhlal.length ? " İHLAL: " + r.cagriIhlal.join(", ") : ""}`,
+    );
+    check(
+      "§7b ⭐ Her RollOperation ilişki okuması aktif yüklemi taşır (every YOK)",
+      r.iliskiSayisi >= 5 && r.iliskiIhlal.length === 0,
+      `ilişki=${r.iliskiSayisi}${r.iliskiIhlal.length ? " İHLAL: " + r.iliskiIhlal.join(", ") : ""}`,
+    );
+    check(
+      "§7c ⭐ Her `roll_operations` ham SQL başvurusu kendi alias'ıyla `\"revokedAt\" IS NULL` taşır",
+      r.sqlSayisi >= 2 && r.sqlIhlal.length === 0,
+      `sql=${r.sqlSayisi}${r.sqlIhlal.length ? " İHLAL: " + r.sqlIhlal.join(", ") : ""}`,
+    );
+    console.log(`   istisnalar (${r.istisnalar.length}): ${r.istisnalar.join(", ") || "—"}`);
+    const dosyalar = new Set(r.istisnalar.map((y) => y.split(":")[0]));
+    const beklenmeyen = [...dosyalar].filter((d) => !OPERASYON_ISTISNA_DOSYALARI.has(d));
+    const olu = [...OPERASYON_ISTISNA_DOSYALARI].filter((d) => !dosyalar.has(d));
+    check(
+      "§7d İstisna kümesi iki yönlü: sessiz yeni muaf yok, ölü muaf yok",
+      beklenmeyen.length === 0 && olu.length === 0,
+      `beklenmeyen=[${beklenmeyen.join(", ")}] ölü=[${olu.join(", ")}]`,
+    );
+  }
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
+
+/** "Bu satır HİÇ YAZILDI MI" sorusunu soran ya da izi taşıyan yüzeyler. */
+const OPERASYON_ISTISNA_DOSYALARI = new Set<string>([
+  "src/services/helpers/guarded-hard-remove.ts", // kalıcı silme guard'ı — üretim kanıtı
+  "src/services/backup-impact.service.ts", // yedekten beri YAZILAN satır hacmi
+  "src/services/workorder.service.ts", // rota düzenleme: adımın defter geçmişi + RESTRICT FK
+  "src/services/helpers/workorder-clone.helper.ts", // bölmede iz topla birlikte taşınır
+]);
 
 async function cleanup(): Promise<void> {
   try {
@@ -200,6 +305,7 @@ async function cleanup(): Promise<void> {
     }
     if (stepId) await prisma.workOrderStep.deleteMany({ where: { id: stepId } });
     if (woId) await prisma.workOrder.deleteMany({ where: { id: woId } });
+    if (itemId) await prisma.item.deleteMany({ where: { id: itemId } });
     console.log("(test verisi temizlendi)");
   } catch (e) {
     console.error("cleanup hata:", e instanceof Error ? e.message : e);

@@ -10,6 +10,7 @@
 // =============================================================================
 
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
+import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { SHRINK_REASON_CODE } from "../constants/variance-reasons";
 import { AuditService } from "./audit.service";
@@ -2708,7 +2709,7 @@ export class WorkOrderService {
         select: { id: true, stepSequence: true, station: { select: { name: true, type: true } } },
       }),
       prisma.rollMovement.findMany({
-        where: { rollId: { in: rollIds } },
+        where: { ...ACTIVE_MOVEMENT, rollId: { in: rollIds } },
         select: { workOrderStepId: true, rollId: true, enteredAt: true, exitedAt: true },
       }),
       prisma.rollOperation.findMany({
@@ -3768,6 +3769,7 @@ export class WorkOrderService {
           WHERE m."rollId" = r.id
             AND m."workOrderStepId" = ANY(${stepIds}::uuid[])
             AND m."exitedAt" IS NULL
+            AND m."revokedAt" IS NULL
         `;
         // Başlamamış/yarım adımlar terminal duruma (SKIPPED) — ölü WO'nun
         // adımları kuyruk/WIP istatistiklerinde "içeride" sayılmasın.
@@ -4294,6 +4296,7 @@ export class WorkOrderService {
           WHERE m."rollId" = r.id
             AND m."workOrderStepId" = ANY(${stepIds}::uuid[])
             AND m."exitedAt" IS NULL
+            AND m."revokedAt" IS NULL
         `;
 
         // Kalan PENDING/ACTIVE adımları SKIPPED — kapatılan WO adımları kuyruk/WIP
@@ -4582,6 +4585,7 @@ export class WorkOrderService {
           WHERE m."rollId" = r.id
             AND m."workOrderStepId" = ANY(${stepIds}::uuid[])
             AND m."exitedAt" IS NULL
+            AND m."revokedAt" IS NULL
         `;
         await tx.workOrderStep.updateMany({
           where: { workOrderId: id, status: { in: [StepStatus.PENDING, StepStatus.ACTIVE] } },
@@ -5638,11 +5642,14 @@ export class WorkOrderService {
           stationId: true,
           _count: {
             select: {
+              // ⚠️ `revokedAt` SÜZÜLMEZ (bilinçli): geri alınmış hareket ve operasyon da
+              // adımın defter geçmişidir — istasyonu/sırası değişirse "ne oldu" yalan
+              // söyler; silmeyi de RESTRICT FK'ları engeller.
               movements: true,
+              operations: true,
               cardScans: true,
               dispatches: true,
               receipts: true,
-              operations: true,
               currentRolls: true,
               producedRolls: true,
               detectedErrors: true,
@@ -5674,7 +5681,7 @@ export class WorkOrderService {
         const refCount = Object.values(old._count).reduce((a, b) => a + (b as number), 0);
         if (refCount > 0) {
           throw AppError.conflict(
-            `${old.stepSequence}. adım silinemez — bu adıma bağlı rulo, hareket, sevk veya kurşun dağıtım kaydı var.`,
+            `${old.stepSequence}. adım silinemez — bu adıma bağlı rulo, hareket (geri alınmışlar dahil), sevk veya kurşun dağıtım kaydı var.`,
           );
         }
         await tx.workOrderStep.delete({ where: { id: old.id } });
@@ -6310,6 +6317,7 @@ export class WorkOrderService {
           AND m."rollId" = ANY(${detachableIds}::uuid[])
           AND m."workOrderStepId" = ANY(${stepIds}::uuid[])
           AND m."exitedAt" IS NULL
+          AND m."revokedAt" IS NULL
       `;
 
       // 3) Boşalan adımların durumunu yeniden hesapla (tüm toplar çıkarıldıysa

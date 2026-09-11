@@ -224,11 +224,14 @@ WHERE r.status = 'IN_PRODUCTION'
 
 \echo ''
 \echo '== 11) Açık movement + top artık orada değil / ölü statüde (hayalet movement) =='
+-- Geri alınmış hareket (`revokedAt` dolu) "hiç olmamış" sayılır; canlı durumu ölçen
+-- §11/§12 onu görmez — yoksa her geri alma bir hayalet satır olarak kırmızı yakar.
 SELECT rm.id AS movement_id, rm."rollId", r.barcode, r.status AS top_durumu,
        rm."workOrderStepId", r."currentStepId", rm."enteredAt"
 FROM roll_movements rm
 JOIN rolls r ON r.id = rm."rollId"
 WHERE rm."exitedAt" IS NULL
+  AND rm."revokedAt" IS NULL
   AND (r.status IN ('SUBCONTRACTOR_CONSUMED','TAMBUR_CONSUMED','KARTELA_CONSUMED','CANCELLED')
        OR r."currentStepId" IS DISTINCT FROM rm."workOrderStepId");
 
@@ -239,6 +242,7 @@ WHERE rm."exitedAt" IS NULL
 SELECT rm.id, rm."rollId", rm."workOrderStepId", rm."qtyIn", rm."qtyOut", rm."exitedAt"
 FROM roll_movements rm
 WHERE rm."exitedAt" IS NOT NULL
+  AND rm."revokedAt" IS NULL
   AND rm."qtyOut" IS DISTINCT FROM rm."qtyIn"
 ORDER BY rm."exitedAt" DESC;
 

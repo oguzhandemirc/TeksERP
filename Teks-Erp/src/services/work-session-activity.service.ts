@@ -41,6 +41,7 @@
 // =============================================================================
 
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
+import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { SESSION_INCLUDE } from "./work-session.service";
@@ -250,7 +251,7 @@ export class WorkSessionActivityService {
       }),
       // GİRİŞ: movement create anında machineId YAZILMAZ — atıf yalnız operatör dalı.
       prisma.rollMovement.findMany({
-        where: { AND: [{ enteredAt: window }, { operatorId: session.userId }] },
+        where: { ...ACTIVE_MOVEMENT, AND: [{ enteredAt: window }, { operatorId: session.userId }] },
         orderBy: [{ enteredAt: "asc" }, { id: "asc" }],
         take,
         select: {
@@ -266,7 +267,7 @@ export class WorkSessionActivityService {
       }),
       // ÇIKIŞ: machineId işin yapıldığı makine olarak kapanışta damgalanır.
       prisma.rollMovement.findMany({
-        where: { AND: [{ exitedAt: window }, opAttribution] },
+        where: { ...ACTIVE_MOVEMENT, AND: [{ exitedAt: window }, opAttribution] },
         orderBy: [{ exitedAt: "asc" }, { id: "asc" }],
         take,
         select: {

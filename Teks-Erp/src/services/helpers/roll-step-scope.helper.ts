@@ -51,6 +51,7 @@
 // =============================================================================
 
 import { StepStatus } from "@prisma/client";
+import { ACTIVE_MOVEMENT } from "./roll-movement.helper";
 import type { TxClient } from "./roll-step.helper";
 
 export interface RollStepScopeEntry {
@@ -100,10 +101,11 @@ export async function collectRollStepScopeTx(
 
   // (a) Topun TÜM hareketleri — AÇIK ve KAPALI. Kapalı olanları atlamak, tam da
   // saha vakasını doğuran hataydı. `roll_movements(rollId, enteredAt DESC)`
-  // index'i bu sorguyu karşılar.
+  // index'i bu sorguyu karşılar. Geri alınmış hareket sayaçlara girmediği için
+  // kümeye de girmez.
   if (rolls.length > 0) {
     const movements = await tx.rollMovement.findMany({
-      where: { rollId: { in: rolls } },
+      where: { rollId: { in: rolls }, ...ACTIVE_MOVEMENT },
       select: { step: { select: { workOrderId: true } } },
     });
     for (const m of movements) workOrderIds.add(m.step.workOrderId);

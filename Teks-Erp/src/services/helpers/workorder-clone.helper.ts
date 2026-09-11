@@ -213,10 +213,14 @@ export async function repointRollsTx(
       where: { id: { in: rollIds }, producedInStepId: oldId },
       data: { producedInStepId: newId },
     });
+    // ⚠️ `revokedAt` SÜZÜLMEZ (bilinçli): hareket ve operasyon izi — geri alınmışlar
+    // dahil — topla birlikte aynı istasyonlu klon adıma taşınır; kaynakta bırakılırsa
+    // topun defteri iki iş emrine bölünür.
     await tx.rollMovement.updateMany({
       where: { rollId: { in: rollIds }, workOrderStepId: oldId },
       data: { workOrderStepId: newId },
     });
+    // ⚠️ `revokedAt` SÜZÜLMEZ (bilinçli): yukarıdaki hareket taşımasıyla aynı gerekçe.
     await tx.rollOperation.updateMany({
       where: { rollId: { in: rollIds }, workOrderStepId: oldId },
       data: { workOrderStepId: newId },

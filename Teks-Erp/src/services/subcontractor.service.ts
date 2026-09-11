@@ -14,6 +14,7 @@
 // =============================================================================
 
 import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
+import { ACTIVE_MOVEMENT, revokeRollMovements } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
@@ -1355,7 +1356,7 @@ export class SubcontractorService {
       // 2) Açık movement'ı olan topları tek sorguda bul; OLMAYANLAR için yeni
       //    movement aç (açık movement kapanmasın — operatör START atmamış olabilir).
       const openMovements = await tx.rollMovement.findMany({
-        where: { rollId: { in: dispatchRollIds }, workOrderStepId: data.stepId, exitedAt: null },
+        where: { ...ACTIVE_MOVEMENT, rollId: { in: dispatchRollIds }, workOrderStepId: data.stepId, exitedAt: null },
         select: { rollId: true },
       });
       const hasOpenMovement = new Set(openMovements.map((m) => m.rollId));
@@ -2099,6 +2100,7 @@ export class SubcontractorService {
         WHERE "rollId" = ANY(${rollIds}::uuid[])
           AND "workOrderStepId" = ${dispatch.stepId}::uuid
           AND "exitedAt" IS NULL
+          AND "revokedAt" IS NULL
       `;
 
       // 4) SUBCONTRACTOR_SENT izini GERİ AL (silme değil — defter doktrini).
@@ -2951,6 +2953,7 @@ export class SubcontractorService {
           WHERE rm."rollId" = r."id"
             AND rm."workOrderStepId" = ${data.stepId}::uuid
             AND rm."exitedAt" IS NULL
+            AND rm."revokedAt" IS NULL
             AND rm."rollId" = ANY(${fullIds}::uuid[])
         `;
       }
@@ -3558,6 +3561,7 @@ export class SubcontractorService {
         WHERE "workOrderStepId" = ${data.stepId}::uuid
           AND "rollId" = ${data.rollId}::uuid
           AND "notes" LIKE 'REMAINDER_CLOSED%'
+          AND "revokedAt" IS NULL
       `;
 
       // Adım kapanmışsa yeniden aç (mal geri geldi).
@@ -3707,6 +3711,7 @@ export class SubcontractorService {
         WHERE rm."rollId" = r."id"
           AND rm."workOrderStepId" = ${data.stepId}::uuid
           AND rm."exitedAt" IS NULL
+          AND rm."revokedAt" IS NULL
           AND rm."rollId" = ${data.rollId}::uuid
       `;
 
@@ -4508,8 +4513,8 @@ export class SubcontractorService {
     // ile ifade ediliyor ki count + findMany pagination doğru olsun.
     const blockingCondition: Prisma.RollWhereInput = {
       OR: [
-        { operations: { some: {} } },
-        { movements: { some: { exitedAt: { not: null } } } },
+        { operations: { some: ACTIVE_OPERATION } },
+        { movements: { some: { ...ACTIVE_MOVEMENT, exitedAt: { not: null } } } },
         { children: { some: {} } },
         { dispatchItems: { some: {} } },
         {
@@ -4818,8 +4823,8 @@ export class SubcontractorService {
   //     ("renk veren" ya da "özellik veren" kategori bu adımdaydı diye).
   //   - Sonraki adımda her rulo için: kapalı movement, RollOperation veya
   //     yeni dispatch varsa REDDET ("önce o işlemi geri al"). Aksi halde
-  //     sonraki adımdaki açık movement silinir.
-  //   - Bu adımdaki SUBCONTRACTOR_RETURNED operation log'ları silinir.
+  //     sonraki adımdaki açık movement geri alınır (silinmez, damgalanır).
+  //   - Bu adımdaki SUBCONTRACTOR_RETURNED operation log'ları geri alınır (damga).
   //   - Step status recompute (genelde COMPLETED → ACTIVE'e döner).
   //   - WO COMPLETED iken iptal yasak.
   //
@@ -4913,10 +4918,10 @@ export class SubcontractorService {
             status: true,
             item: { select: { code: true, name: true } },
             color: { select: { name: true } },
-            // Downstream check: bu roll üzerinde herhangi bir RollOperation var mı
-            operations: { select: { id: true }, take: 1 },
+            // Downstream check: bu roll üzerinde geri alınmamış RollOperation var mı
+            operations: { where: ACTIVE_OPERATION, select: { id: true }, take: 1 },
             // Sonraki istasyona çıkmış mı (exitedAt set olmuş RollMovement)
-            movements: { select: { exitedAt: true } },
+            movements: { where: ACTIVE_MOVEMENT, select: { exitedAt: true } },
             // Tambur'da bölünmüş mü (çocuk roll türemiş)
             children: { select: { id: true }, take: 1 },
             // Başka fason sevkinde mi
@@ -5039,8 +5044,8 @@ export class SubcontractorService {
             barcode: true,
             currentStepId: true,
             status: true,
-            operations: { select: { id: true }, take: 1 },
-            movements: { select: { exitedAt: true } },
+            operations: { where: ACTIVE_OPERATION, select: { id: true }, take: 1 },
+            movements: { where: ACTIVE_MOVEMENT, select: { exitedAt: true } },
             children: { select: { id: true }, take: 1 },
             dispatchItems: { select: { id: true }, take: 1 },
           },
@@ -5127,8 +5132,8 @@ export class SubcontractorService {
             barcode: true,
             currentStepId: true,
             status: true,
-            operations: { select: { id: true }, take: 1 },
-            movements: { select: { exitedAt: true } },
+            operations: { where: ACTIVE_OPERATION, select: { id: true }, take: 1 },
+            movements: { where: ACTIVE_MOVEMENT, select: { exitedAt: true } },
             children: { select: { id: true }, take: 1 },
             dispatchItems: { select: { id: true }, take: 1 },
           },
@@ -5141,12 +5146,13 @@ export class SubcontractorService {
             );
           }
         }
-        // RollMovement: bu roll'lara ait, receipt'in açtığı open-fabric movement
-        await tx.rollMovement.deleteMany({
-          where: {
-            rollId: { in: bornRollIds },
-            notes: `RECEIPT_OPEN_FABRIC:${receipt.receiptNo}`,
-          },
+        // RollMovement: receipt'in açtığı open-fabric hareketi GERİ AL (silme değil —
+        // defter doktrini; geri alınmış satır adım durumuna girmez).
+        await revokeRollMovements(tx, {
+          rollIds: bornRollIds,
+          notes: `RECEIPT_OPEN_FABRIC:${receipt.receiptNo}`,
+          reason: "FASON_KABUL_IPTAL",
+          userId,
         });
         // RollProperty: receipt'ten inherit edilmişti, sil
         await tx.rollProperty.deleteMany({
@@ -5191,6 +5197,7 @@ export class SubcontractorService {
       //    notuyla kapatılmıştı)
       await tx.rollMovement.updateMany({
         where: {
+          ...ACTIVE_MOVEMENT,
           workOrderStepId: receipt.stepId,
           rollId: { in: rollIds },
           notes: `RETURNED_VIA_RECEIPT:${receipt.receiptNo}`,
@@ -5386,8 +5393,8 @@ export class SubcontractorService {
                 status: true,
                 currentStepId: true,
                 parentReceiptId: true,
-                operations: { select: { id: true, workOrderStepId: true, operationType: true } },
-                movements: { select: { exitedAt: true } },
+                operations: { where: ACTIVE_OPERATION, select: { id: true, workOrderStepId: true, operationType: true } },
+                movements: { where: ACTIVE_MOVEMENT, select: { exitedAt: true } },
                 children: { select: { id: true }, take: 1 },
                 dispatchItems: {
                   where: { dispatch: { is: { cancelledAt: null, id: { not: dispatchId } } } },
@@ -5594,8 +5601,8 @@ export class SubcontractorService {
           status: true,
           currentStepId: true,
           batchId: true,
-          operations: { select: { id: true, workOrderStepId: true, operationType: true } },
-          movements: { select: { exitedAt: true } },
+          operations: { where: ACTIVE_OPERATION, select: { id: true, workOrderStepId: true, operationType: true } },
+          movements: { where: ACTIVE_MOVEMENT, select: { exitedAt: true } },
           children: { select: { id: true }, take: 1 },
           dispatchItems: {
             where: { dispatch: { is: { cancelledAt: null, id: { not: dispatchId } } } },
@@ -5671,8 +5678,8 @@ export class SubcontractorService {
         trimmedReason,
       );
 
-      // Born topların boyahane izini sil (op + movement + inherit property), sonra
-      // CANCELLED'a çek (atomik claim).
+      // Born topların boyahane izini geri al (op + movement damgalanır, inherit
+      // property silinir), sonra CANCELLED'a çek (atomik claim).
       await revokeRollOperations(tx, {
         rollIds: bornRollIds,
         workOrderStepIds: [targetStep.id],
@@ -5680,8 +5687,11 @@ export class SubcontractorService {
         reason: "FASON_TRANSFER_GERI_AL",
         userId,
       });
-      await tx.rollMovement.deleteMany({
-        where: { rollId: { in: bornRollIds }, workOrderStepId: targetStep.id },
+      await revokeRollMovements(tx, {
+        rollIds: bornRollIds,
+        workOrderStepIds: [targetStep.id],
+        reason: "FASON_TRANSFER_GERI_AL",
+        userId,
       });
       await tx.rollProperty.deleteMany({ where: { rollId: { in: bornRollIds } } });
       const cancelledBorn = await tx.roll.updateMany({
@@ -5737,6 +5747,7 @@ export class SubcontractorService {
         // Kapatılmış dönüş movement'larını geri aç (RETURNED_VIA_RECEIPT notuyla).
         await tx.rollMovement.updateMany({
           where: {
+            ...ACTIVE_MOVEMENT,
             workOrderStepId: receipt.stepId,
             rollId: { in: origRollIds },
             notes: `RETURNED_VIA_RECEIPT:${receipt.receiptNo}`,
@@ -6434,6 +6445,7 @@ export class SubcontractorService {
         WHERE rm."rollId" = r."id"
           AND rm."workOrderStepId" = ${dispatch.stepId}::uuid
           AND rm."exitedAt" IS NULL
+          AND rm."revokedAt" IS NULL
           AND rm."rollId" = ANY(${effectiveShipRollIds}::uuid[])
       `;
 
@@ -6523,6 +6535,7 @@ export class SubcontractorService {
                 AND "stepSequence" > ${dispatch.step.stepSequence}
                 AND "status" IN ('PENDING','ACTIVE')
             ) AND "exitedAt" IS NULL
+              AND "revokedAt" IS NULL
           `;
           await tx.workOrderStep.updateMany({
             where: {

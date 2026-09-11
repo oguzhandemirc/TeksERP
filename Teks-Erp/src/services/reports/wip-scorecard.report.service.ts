@@ -102,6 +102,7 @@ export async function getWipScorecard(range: DateRange): Promise<WipScorecard> {
       JOIN work_order_steps wos ON wos.id = rm."workOrderStepId"
       JOIN stations s           ON s.id = wos."stationId"
       WHERE rm."exitedAt" IS NULL
+        AND rm."revokedAt" IS NULL
       GROUP BY s.id, s.name, s.kind
     `),
     // ── DÖNEM: kapanan hareketler (istasyondan geçen mal) ───────────────────
@@ -115,6 +116,7 @@ export async function getWipScorecard(range: DateRange): Promise<WipScorecard> {
       FROM roll_movements rm
       JOIN work_order_steps wos ON wos.id = rm."workOrderStepId"
       WHERE rm."exitedAt" IS NOT NULL
+        AND rm."revokedAt" IS NULL
         AND rm."exitedAt" >= ${range.from} AND rm."exitedAt" <= ${range.to}
       GROUP BY wos."stationId"
     `),
@@ -139,6 +141,7 @@ export async function getWipScorecard(range: DateRange): Promise<WipScorecard> {
       JOIN items i              ON i.id = r."itemId"
       LEFT JOIN colors c        ON c.id = r."colorId"
       WHERE rm."exitedAt" IS NULL
+        AND rm."revokedAt" IS NULL
       ORDER BY rm."enteredAt" ASC
       LIMIT 25
     `),
@@ -160,6 +163,7 @@ export async function getWipScorecard(range: DateRange): Promise<WipScorecard> {
           SELECT 1 FROM roll_movements m
           JOIN work_order_steps s ON s.id = m."workOrderStepId"
           WHERE s."workOrderId" = wo.id
+            AND m."revokedAt" IS NULL
         )
       ORDER BY wo."createdAt" ASC
       LIMIT 25
@@ -174,6 +178,7 @@ export async function getWipScorecard(range: DateRange): Promise<WipScorecard> {
           SELECT 1 FROM roll_movements m
           JOIN work_order_steps s ON s.id = m."workOrderStepId"
           WHERE s."workOrderId" = wo.id
+            AND m."revokedAt" IS NULL
         )
     `),
   ]);

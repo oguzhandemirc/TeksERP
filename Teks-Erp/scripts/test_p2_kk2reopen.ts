@@ -1,12 +1,14 @@
 // =============================================================================
 // P2 kk2-tambur testi — reopenStep F159 (son-adım geri çekme) + F161 (yalnız SON
-// finish turu). Doğrudan prisma ile 'finish edilmiş' durum kurulur.  Koşum:
+// finish turu) + sonraki adımın açık hareketi geri alınır (silinmez) + geri alınmış
+// tur yeniden açılmaz. Doğrudan prisma ile 'finish edilmiş' durum kurulur.  Koşum:
 //   DATABASE_URL="...adnansahin_p2_test..." npx tsx scripts/test_p2_kk2reopen.ts
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
 import { randomUUID } from "crypto";
 import { KursunQcService } from "../src/services/kursun-qc.service";
+import { ACTIVE_MOVEMENT, revokeRollMovements } from "../src/services/helpers/roll-movement.helper";
 import { RollStatus, StepStatus, WorkOrderStatus } from "@prisma/client";
 
 const svc = new KursunQcService();
@@ -103,10 +105,89 @@ async function main(): Promise<void> {
       check("F161: ESKİ tur A WAREHOUSE kaldı (dokunulmadı)", st.get(a) === RollStatus.WAREHOUSE);
       check("F161: ESKİ tur B WAREHOUSE kaldı (dokunulmadı)", st.get(b) === RollStatus.WAREHOUSE);
       // Eski turun movement'leri hâlâ kapalı; son turunkiler açıldı.
-      const closedA = await prisma.rollMovement.count({ where: { rollId: a, exitedAt: { not: null } } });
-      const openC = await prisma.rollMovement.count({ where: { rollId: c, exitedAt: null } });
+      const closedA = await prisma.rollMovement.count({ where: { ...ACTIVE_MOVEMENT, rollId: a, exitedAt: { not: null } } });
+      const openC = await prisma.rollMovement.count({ where: { ...ACTIVE_MOVEMENT, rollId: c, exitedAt: null } });
       check("F161: eski tur movement'i hâlâ kapalı", closedA === 1);
       check("F161: son tur movement'i açıldı (exitedAt=null)", openC === 1);
+    }
+
+    // === SONRAKİ ADIM VAR: reopen sonraki adımın AÇIK hareketini geri alır, silmez ===
+    {
+      const wo = await prisma.workOrder.create({
+        data: { workOrderNumber: `${tag}-WO-${woIds.length}`, status: WorkOrderStatus.IN_PROGRESS },
+        select: { id: true },
+      });
+      woIds.push(wo.id);
+      const s1 = await prisma.workOrderStep.create({
+        data: { workOrderId: wo.id, stationId: station.id, stepSequence: 1, status: StepStatus.COMPLETED },
+        select: { id: true },
+      });
+      // Sonraki adımın istasyon türü reopen için önemsiz; ikinci fixture istasyonu aranmaz.
+      const s2 = await prisma.workOrderStep.create({
+        data: { workOrderId: wo.id, stationId: station.id, stepSequence: 2, status: StepStatus.ACTIVE },
+        select: { id: true },
+      });
+      const r = await prisma.roll.create({
+        data: {
+          barcode: `${tag}-R-${rollIds.length}`, itemId: item.id, initialQty: 100, currentQty: 100,
+          status: RollStatus.IN_PRODUCTION, entrySource: "SUPPLIER_RECEIPT", createdById: admin.id, currentStepId: s2.id,
+        },
+        select: { id: true },
+      });
+      rollIds.push(r.id);
+      await mkClosedMove(s1.id, r.id, `QC2_STEP_FINISHED:${randomUUID()}`, new Date(Date.now() - 30000));
+      const acik = await prisma.rollMovement.create({
+        data: { rollId: r.id, workOrderStepId: s2.id, qtyIn: 100, operatorId: admin.id },
+        select: { id: true },
+      });
+
+      await svc.reopenStep({ stepId: s1.id }, admin.id);
+      const rAfter = await prisma.roll.findUniqueOrThrow({ where: { id: r.id }, select: { status: true, currentStepId: true } });
+      check("SONRAKİ: top bu adıma geri çekildi", rAfter.status === RollStatus.IN_PRODUCTION && rAfter.currentStepId === s1.id, rAfter.status);
+      const s2Aktif = await prisma.rollMovement.count({ where: { ...ACTIVE_MOVEMENT, rollId: r.id, workOrderStepId: s2.id } });
+      check("SONRAKİ: sonraki adımda aktif hareket kalmadı", s2Aktif === 0, `aktif=${s2Aktif}`);
+      const acikSonra = await prisma.rollMovement.findUnique({
+        where: { id: acik.id },
+        select: { revokedAt: true, revokedById: true, revokeReason: true, exitedAt: true },
+      });
+      check(
+        "SONRAKİ: ⭐ sonraki adımın açık hareketi SİLİNMEDİ, KURSUN_REOPEN ile damgalandı",
+        acikSonra?.revokedAt != null && acikSonra.revokeReason === "KURSUN_REOPEN" &&
+          acikSonra.revokedById === admin.id && acikSonra.exitedAt === null,
+        String(acikSonra?.revokeReason),
+      );
+      const s1AktifAcik = await prisma.rollMovement.count({ where: { ...ACTIVE_MOVEMENT, rollId: r.id, workOrderStepId: s1.id, exitedAt: null } });
+      check("SONRAKİ: bu adımın kapalı hareketi yeniden açıldı", s1AktifAcik === 1, `açık=${s1AktifAcik}`);
+      const adimlar = await prisma.workOrderStep.findMany({ where: { id: { in: [s1.id, s2.id] } }, select: { id: true, status: true } });
+      const adim = new Map(adimlar.map((x) => [x.id, x.status]));
+      check(
+        "SONRAKİ: ⭐ bu adım ACTIVE, sonraki adım PENDING (geri alınmış açık hareket sayılmadı)",
+        adim.get(s1.id) === StepStatus.ACTIVE && adim.get(s2.id) === StepStatus.PENDING,
+        `${adim.get(s1.id)}/${adim.get(s2.id)}`,
+      );
+    }
+
+    // === GERİ ALINMIŞ TUR: son tur geri alınmışsa reopen onu değil önceki AKTİF turu açar ===
+    {
+      const { stepId, rolls } = await mkFinishedWo(2);
+      const [a, b] = rolls;
+      await mkClosedMove(stepId, a, `QC2_STEP_FINISHED:${randomUUID()}`, new Date(Date.now() - 120000));
+      await mkClosedMove(stepId, b, `QC2_STEP_FINISHED:${randomUUID()}`, new Date(Date.now() - 10000));
+      await prisma.$transaction(async (tx) => {
+        await revokeRollMovements(tx, { rollIds: [b], workOrderStepIds: [stepId], reason: "BEKCI_TEST", userId: admin.id });
+      });
+
+      await svc.reopenStep({ stepId }, admin.id);
+      const after = await prisma.roll.findMany({ where: { id: { in: rolls } }, select: { id: true, status: true } });
+      const st = new Map(after.map((x) => [x.id, x.status]));
+      check("GERİ ALINMIŞ TUR: önceki aktif tur (A) IN_PRODUCTION'a çekildi", st.get(a) === RollStatus.IN_PRODUCTION, String(st.get(a)));
+      check("GERİ ALINMIŞ TUR: ⭐ geri alınmış tur (B) WAREHOUSE kaldı", st.get(b) === RollStatus.WAREHOUSE, String(st.get(b)));
+      const bMv = await prisma.rollMovement.findMany({ where: { rollId: b, workOrderStepId: stepId }, select: { exitedAt: true, revokedAt: true } });
+      check(
+        "GERİ ALINMIŞ TUR: geri alınmış kapalı satır yeniden AÇILMADI",
+        bMv.length === 1 && bMv[0].revokedAt !== null && bMv[0].exitedAt !== null,
+        `n=${bMv.length}`,
+      );
     }
   } finally {
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});

@@ -25,6 +25,7 @@ import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { getSubcontractScorecard } from "../src/services/reports/subcontract-scorecard.report.service";
 import { VARIANCE_SOURCES } from "../src/constants/variance-reasons";
+import { ACTIVE_MOVEMENT } from "../src/services/helpers/roll-movement.helper";
 import { RollStatus, RollVarianceKind } from "@prisma/client";
 import { randomUUID } from "crypto";
 
@@ -126,7 +127,7 @@ async function main(): Promise<void> {
     const item1 = await prisma.subcontractorReceiptItem.findFirst({ where: { receiptId: receipt1.id }, select: { receivedQty: true, isPartial: true, sourceDispatchItemId: true } });
     check("P1: defter satırı receivedQty=51 + isPartial", Number(item1?.receivedQty) === 51 && item1?.isPartial === true);
     check("P1: kalem bağı (sourceDispatchItemId) yazıldı", !!item1?.sourceDispatchItemId);
-    const mv = await prisma.rollMovement.findFirst({ where: { rollId, workOrderStepId: boyaStep }, select: { exitedAt: true } });
+    const mv = await prisma.rollMovement.findFirst({ where: { ...ACTIVE_MOVEMENT, rollId, workOrderStepId: boyaStep }, select: { exitedAt: true } });
     check("P1: movement AÇIK kaldı (son teslimata kadar)", mv?.exitedAt === null);
   }
 
@@ -184,7 +185,7 @@ async function main(): Promise<void> {
 
   console.log("\n=== P4: movement son teslimatta kapandı, qtyOut = qtyIn (100) ===");
   {
-    const mv = await prisma.rollMovement.findFirst({ where: { rollId, workOrderStepId: boyaStep }, select: { qtyIn: true, qtyOut: true, exitedAt: true, notes: true } });
+    const mv = await prisma.rollMovement.findFirst({ where: { ...ACTIVE_MOVEMENT, rollId, workOrderStepId: boyaStep }, select: { qtyIn: true, qtyOut: true, exitedAt: true, notes: true } });
     check("P4: movement kapandı", mv?.exitedAt != null);
     check("P4: qtyOut = qtyIn = 100 (kalan 49 değil — hacim sözleşmesi)",
       Number(mv?.qtyIn) === 100 && Number(mv?.qtyOut) === 100, `in ${mv?.qtyIn} out ${mv?.qtyOut}`);
@@ -241,7 +242,7 @@ async function main(): Promise<void> {
     check("P6: sevk kalemi remainderClosedAt ile damgalandı", di?.remainderClosedAt != null);
     const step = await prisma.workOrderStep.findUnique({ where: { id: s2.boyaStep }, select: { status: true } });
     check("P6: fason adımı COMPLETED (bekleyen kalmadı)", step?.status === "COMPLETED");
-    const mv = await prisma.rollMovement.findFirst({ where: { rollId: s2.rollId, workOrderStepId: s2.boyaStep }, select: { exitedAt: true, notes: true } });
+    const mv = await prisma.rollMovement.findFirst({ where: { ...ACTIVE_MOVEMENT, rollId: s2.rollId, workOrderStepId: s2.boyaStep }, select: { exitedAt: true, notes: true } });
     check("P6: movement kapandı, notu REMAINDER_CLOSED", mv?.exitedAt != null && mv?.notes === "REMAINDER_CLOSED:BOYA_HATASI");
     await expectErr("P6: ikinci kapama 409 (idempotent değil, claim korur)", 409, () =>
       sub.closeRemainder({ stepId: s2.boyaStep, rollId: s2.rollId, reasonCode: "BOYA_HATASI" }, ADMIN));

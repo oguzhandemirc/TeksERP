@@ -14,6 +14,7 @@ import prisma from "../src/lib/prisma";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
+import { ACTIVE_MOVEMENT } from "../src/services/helpers/roll-movement.helper";
 import { RollStatus, StepStatus } from "@prisma/client";
 
 let ITEM = "", GRADE = "", ADMIN = "", ST_BOYA = "", ST_KURSUN = "", SUB_BOYER = "";
@@ -130,6 +131,11 @@ async function main(): Promise<void> {
   const receiptAfter = await prisma.subcontractorReceipt.findUnique({ where: { id: born1.parentReceiptId! }, select: { cancelledAt: true } });
   check("CR1: receipt.cancelledAt set", !!receiptAfter?.cancelledAt);
   check("CR1: iptal sonrası canlı born = 0", (await bornLive(a)) === 0);
+  // Kabul iptali born'un açık-kumaş hareketini SİLMEZ, damgalar (defter doktrini).
+  const born1MvAktif = await prisma.rollMovement.count({ where: { ...ACTIVE_MOVEMENT, rollId: born1.id, workOrderStepId: a.kursunStep } });
+  const born1MvDamgali = await prisma.rollMovement.count({ where: { rollId: born1.id, workOrderStepId: a.kursunStep, revokedAt: { not: null } } });
+  check("CR1: iptal → born'un Kurşun hareketi GERİ ALINDI (aktif 0)", born1MvAktif === 0, `aktif=${born1MvAktif}`);
+  check("CR1: ⭐ hareket izi SİLİNMEDİ, defterde damgalı duruyor", born1MvDamgali > 0, `damgalı=${born1MvDamgali}`);
 
   // Yeniden kabul (cancelledAt:null idempotency filtresi sayesinde cached SANILMAZ)
   await sub.receive({ workOrderId: a.woId, stepId: a.boyaStep, subcontractorId: SUB_BOYER,
@@ -144,7 +150,7 @@ async function main(): Promise<void> {
     returns: [{ rollId: b.rollIds[0] }], newRolls: [{ qty: 290 }] }, ADMIN);
   const born2 = await latestBorn(b);
   // Born roll'u "sonraki istasyona geçmiş" işaretle (movement exitedAt) → blockingReason
-  await prisma.rollMovement.updateMany({ where: { rollId: born2.id, workOrderStepId: b.kursunStep }, data: { exitedAt: new Date() } });
+  await prisma.rollMovement.updateMany({ where: { ...ACTIVE_MOVEMENT, rollId: born2.id, workOrderStepId: b.kursunStep }, data: { exitedAt: new Date() } });
   await checkThrows("CR2: işlenmiş born roll'lu receipt iptali reddedilir", () =>
     sub.cancelReceipt(born2.parentReceiptId!, "iptal denemesi", ADMIN, [born2.id]));
   const born2After = await prisma.roll.findUnique({ where: { id: born2.id }, select: { status: true } });

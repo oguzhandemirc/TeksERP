@@ -180,8 +180,8 @@ const PARTIAL_INDEXES: Array<{
     table: "roll_movements",
     index: "roll_movements_one_open_per_roll_step_uq",
     uniq: true,
-    predicate: `("exitedAt" IS NULL)`,
-    why: "TEK açık movement seddi — eşzamanlı çift ilerletmeyi DB'de bloklar",
+    predicate: `(("exitedAt" IS NULL) AND ("revokedAt" IS NULL))`,
+    why: "TEK AKTİF açık movement seddi — eşzamanlı çift ilerletmeyi DB'de bloklar; geri alınmış açık satır yer işgal etmez",
   },
   // roll_errors
   { table: "roll_errors", index: "roll_errors_isProcessed_idx", uniq: false, predicate: `("isProcessed" = false)`, why: "açık hata kuyruğu" },

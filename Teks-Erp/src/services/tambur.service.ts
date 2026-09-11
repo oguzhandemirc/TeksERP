@@ -15,6 +15,7 @@
 // =============================================================================
 
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
+import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { normalizeScanCode } from "../utils/code-format";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
@@ -362,7 +363,7 @@ export class TamburService {
     // İkincil anahtar id: toplu taşıma (finishStep createMany) aynı timestamp'i
     // yazar — tie-break'siz sıra refetch'ler arasında zıplıyordu (deterministik olsun).
     const openMovements = await prisma.rollMovement.findMany({
-      where: { workOrderStepId: step.id, exitedAt: null },
+      where: { ...ACTIVE_MOVEMENT, workOrderStepId: step.id, exitedAt: null },
       orderBy: [{ enteredAt: "desc" }, { id: "desc" }],
       select: {
         roll: {
@@ -1204,7 +1205,7 @@ export class TamburService {
       const oldStepId = roll.currentStepId;
       if (oldStepId) {
         const openMove = await tx.rollMovement.findFirst({
-          where: { rollId: data.rollId, workOrderStepId: oldStepId, exitedAt: null },
+          where: { ...ACTIVE_MOVEMENT, rollId: data.rollId, workOrderStepId: oldStepId, exitedAt: null },
           select: { qtyIn: true },
         });
         const qtyOutD =
@@ -1213,6 +1214,7 @@ export class TamburService {
             : new Prisma.Decimal(totalQty);
         await tx.rollMovement.updateMany({
           where: {
+            ...ACTIVE_MOVEMENT,
             rollId: data.rollId,
             workOrderStepId: oldStepId,
             exitedAt: null,
@@ -1250,6 +1252,8 @@ export class TamburService {
 
       // Per-roll Tambur işlem log'u (parent üzerinde — kopyalanmaz).
       if (oldStepId) {
+        // Geri alınmış iz dururken üçlü anahtar onu bulur ve yeni satır YAZILMAZ —
+        // unique PARTIAL'dır, upsert de yalnız aktif satıra bakmalı.
         await tx.rollOperation.upsert({
           where: {
             rollId_workOrderStepId_operationType: {
@@ -1257,6 +1261,7 @@ export class TamburService {
               workOrderStepId: oldStepId,
               operationType: RollOperationType.TAMBUR_PROCESSED,
             },
+            ...ACTIVE_OPERATION,
           },
           create: {
             rollId: data.rollId,
@@ -1973,7 +1978,7 @@ export class TamburService {
           select: { currentQty: true },
         },
         movements: {
-          where: { exitedAt: null },
+          where: { ...ACTIVE_MOVEMENT, exitedAt: null },
           select: { enteredAt: true },
         },
       },
@@ -3523,7 +3528,7 @@ export class TamburService {
           ? `TAMBUR_FINALIZED:REMAINING_${remainingQty}_${childQualityGrade}`
           : "TAMBUR_FINALIZED";
       const openMove = await tx.rollMovement.findFirst({
-        where: { rollId: parent.id, workOrderStepId: tamburStepId, exitedAt: null },
+        where: { ...ACTIVE_MOVEMENT, rollId: parent.id, workOrderStepId: tamburStepId, exitedAt: null },
         select: { qtyIn: true },
       });
       const qtyOutD =
@@ -3532,6 +3537,7 @@ export class TamburService {
           : new Prisma.Decimal(parent.initialQty);
       await tx.rollMovement.updateMany({
         where: {
+          ...ACTIVE_MOVEMENT,
           rollId: parent.id,
           workOrderStepId: tamburStepId,
           exitedAt: null,
@@ -3545,7 +3551,8 @@ export class TamburService {
         },
       });
 
-      // TAMBUR_PROCESSED log
+      // TAMBUR_PROCESSED log — upsert yalnız aktif satıra bakar (partial unique;
+      // geri alınmış iz bulunursa yeniden finalize yeni satır yazmazdı).
       await tx.rollOperation.upsert({
         where: {
           rollId_workOrderStepId_operationType: {
@@ -3553,6 +3560,7 @@ export class TamburService {
             workOrderStepId: tamburStepId,
             operationType: RollOperationType.TAMBUR_PROCESSED,
           },
+          ...ACTIVE_OPERATION,
         },
         create: {
           rollId: parent.id,
@@ -3887,6 +3895,7 @@ export class TamburService {
     // sayılar çelişiyordu. Barkod payload'a eklendi (UI etiketleyebilsin).
     const openMovements = await prisma.rollMovement.findMany({
       where: {
+        ...ACTIVE_MOVEMENT,
         workOrderStepId: stepId,
         exitedAt: null,
         roll: {
@@ -3919,7 +3928,7 @@ export class TamburService {
               },
             },
             operations: {
-              where: { operationType: RollOperationType.QC2_COMPLETED },
+              where: { ...ACTIVE_OPERATION, operationType: RollOperationType.QC2_COMPLETED },
               orderBy: { createdAt: "desc" },
               take: 1,
               select: { createdAt: true },

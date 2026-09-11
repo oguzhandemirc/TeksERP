@@ -13,6 +13,7 @@
 // =============================================================================
 
 import { ACTIVE_OPERATION } from "./../helpers/roll-operation.helper";
+import { ACTIVE_MOVEMENT } from "../helpers/roll-movement.helper";
 import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
@@ -57,6 +58,7 @@ export async function getOperatorPerformance(range: DateRange, limit = 50): Prom
     JOIN users u ON ro."operatorId" = u.id
     WHERE ro."createdAt" >= ${range.from} AND ro."createdAt" <= ${range.to}
       AND ro."inheritedFromParentRollId" IS NULL
+      AND ro."revokedAt" IS NULL
     GROUP BY u.id, u.username, u."fullName"
     ORDER BY "totalOps" DESC
     LIMIT ${limit}
@@ -124,7 +126,7 @@ export async function getTravelerTrace(rollId: string): Promise<TravelerTraceRes
 
   const [movements, operations] = await Promise.all([
     prisma.rollMovement.findMany({
-      where: { rollId },
+      where: { ...ACTIVE_MOVEMENT, rollId },
       orderBy: { enteredAt: "asc" },
       select: {
         enteredAt: true,

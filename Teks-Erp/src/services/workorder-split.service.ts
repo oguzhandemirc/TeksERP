@@ -31,6 +31,7 @@ import { recomputeStepStatus, ensureWorkOrderInProgress } from "./helpers/roll-s
 import { stepCanApplyColor } from "./helpers/step-capability.helper";
 import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { cloneWorkOrderTx, repointRollsTx } from "./helpers/workorder-clone.helper";
+import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { voidStalePendingBypassAssignmentsTx } from "./helpers/kursun-bypass-guard.helper";
 import { ApiResponse } from "../types/api.types";
 import { OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
@@ -365,7 +366,7 @@ export class WorkOrderSplitService {
 
         // 3) Movement rewind: açık movement'leri kapat + boyahanede taze aç.
         await tx.rollMovement.updateMany({
-          where: { rollId: { in: selectedIds }, exitedAt: null },
+          where: { ...ACTIVE_MOVEMENT, rollId: { in: selectedIds }, exitedAt: null },
           data: { exitedAt: new Date(), notes: "REDYE_REWIND" },
         });
         await tx.rollMovement.createMany({
@@ -482,7 +483,7 @@ export class WorkOrderSplitService {
 
         // 4) Yeni WO boyahane adımına geri sar: açık movement kapat + taze aç.
         await tx.rollMovement.updateMany({
-          where: { rollId: { in: selectedIds }, exitedAt: null },
+          where: { ...ACTIVE_MOVEMENT, rollId: { in: selectedIds }, exitedAt: null },
           data: { exitedAt: new Date(), notes: "REDYE_REWIND" },
         });
         await tx.rollMovement.createMany({

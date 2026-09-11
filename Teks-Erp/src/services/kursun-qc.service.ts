@@ -15,6 +15,7 @@
 // =============================================================================
 
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
+import { ACTIVE_MOVEMENT, revokeRollMovements } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { normalizeScanCode } from "../utils/code-format";
 import { randomUUID } from "crypto";
@@ -457,6 +458,8 @@ export class KursunQcService {
       // görürse dağıtımı reddediyor — iki yön birbirini eler.)
       await assertKursunTabletMayWrite(tx, data.stepId, "KK2 tamamlama");
 
+      // Upsert yalnız AKTİF satıra bakar: unique partial'dır; geri alınmış iz
+      // bulunursa yeniden yapılan KK2 yeni satır yazmaz ve top adımda takılırdı.
       const qc2Op = await tx.rollOperation.upsert({
         where: {
           rollId_workOrderStepId_operationType: {
@@ -464,6 +467,7 @@ export class KursunQcService {
             workOrderStepId: data.stepId,
             operationType: RollOperationType.QC2_COMPLETED,
           },
+          ...ACTIVE_OPERATION,
         },
         create: {
           rollId: data.rollId,
@@ -484,6 +488,7 @@ export class KursunQcService {
               workOrderStepId: data.stepId,
               operationType: RollOperationType.KURSUN_APPLIED,
             },
+            ...ACTIVE_OPERATION,
           },
           create: {
             rollId: data.rollId,
@@ -795,7 +800,7 @@ export class KursunQcService {
     }
 
     const openMovements = await prisma.rollMovement.findMany({
-      where: { workOrderStepId: step.id, exitedAt: null },
+      where: { ...ACTIVE_MOVEMENT, workOrderStepId: step.id, exitedAt: null },
       select: { id: true, rollId: true, weightIn: true, qtyIn: true },
     });
 
@@ -905,6 +910,7 @@ export class KursunQcService {
             "notes" = ${finishMarker}
         WHERE "workOrderStepId" = ${step.id}::uuid
           AND "exitedAt" IS NULL
+          AND "revokedAt" IS NULL
           AND "rollId" = ANY(${rollIds}::uuid[])
         RETURNING "rollId", "qtyIn", "weightIn"
       `;
@@ -997,7 +1003,9 @@ export class KursunQcService {
     latestMarker: string | null;
   }> {
     const finishMoves = await prisma.rollMovement.findMany({
+      // Geri alınmış tur "son tur" sayılmaz — yoksa reopen onu yeniden açardı.
       where: {
+        ...ACTIVE_MOVEMENT,
         workOrderStepId: stepId,
         exitedAt: { not: null },
         notes: { startsWith: "QC2_STEP_FINISHED" },
@@ -1024,7 +1032,8 @@ export class KursunQcService {
   /**
    * Daha önce `finishStep` ile kapatılmış bir PROCESS_QC adımını yeniden açar.
    *   - Bu adımda QC2_STEP_FINISHED notuyla kapatılmış movement'ler exitedAt=null'a döner
-   *   - Bu hareketler için sonraki step'te oluşturulmuş açık movement'ler silinir
+   *   - Bu hareketler için sonraki step'te oluşturulmuş açık movement'ler geri alınır
+   *     (silinmez, `revokedAt` ile damgalanır)
    *   - Roll.currentStepId geriye (bu step'e) çekilir
    *   - Her iki step için recomputeStepStatus çağrılır
    *
@@ -1100,13 +1109,14 @@ export class KursunQcService {
       await touchWorkOrderTx(tx, step.workOrderId);
 
       if (nextStep) {
-        // Sonraki adımda finishStep'in oluşturduğu açık movement'leri sil
-        await tx.rollMovement.deleteMany({
-          where: {
-            workOrderStepId: nextStep.id,
-            exitedAt: null,
-            rollId: { in: rollIds },
-          },
+        // Sonraki adımda finishStep'in açtığı hareketleri geri al — silinmez,
+        // damgalanır; geri alınmış satır adım durumuna ve açık-hareket seddine girmez.
+        await revokeRollMovements(tx, {
+          rollIds,
+          workOrderStepIds: [nextStep.id],
+          onlyOpen: true,
+          reason: "KURSUN_REOPEN",
+          userId,
         });
         // Roll.currentStepId'yi bu step'e geri al — ATOMİK CLAIM: yukarıdaki
         // güvenlik kontrolleri tx DIŞINDA okunuyor; onay penceresinde Tambur
@@ -1155,9 +1165,10 @@ export class KursunQcService {
         await setWorkOrderCardStatusesTx(tx, step.workOrderId, "COMPLETED", "ACTIVE");
       }
 
-      // Bu step'in kapatılmış movement'lerini geri aç
+      // Bu step'in kapatılmış movement'lerini geri aç — id'ler tx DIŞINDA okundu;
+      // arada geri alınmış bir satır yeniden AÇILMAZ.
       await tx.rollMovement.updateMany({
-        where: { id: { in: movementIds } },
+        where: { ...ACTIVE_MOVEMENT, id: { in: movementIds } },
         data: { qtyOut: null, weightOut: null, exitedAt: null, notes: null },
       });
 
@@ -1379,7 +1390,7 @@ export class KursunQcService {
     // WO-level priority/acil rozeti `open-cards` listesinde yer alır,
     // tek bir kart açıldığında ruloların kendi içinde sıralama önemsiz.
     const openMovements = await prisma.rollMovement.findMany({
-      where: { workOrderStepId: stepId, exitedAt: null },
+      where: { ...ACTIVE_MOVEMENT, workOrderStepId: stepId, exitedAt: null },
       select: {
         roll: { select: { id: true, barcode: true, currentQty: true } },
       },
@@ -1565,7 +1576,7 @@ export class KursunQcService {
           },
         },
         movements: {
-          where: { exitedAt: null },
+          where: { ...ACTIVE_MOVEMENT, exitedAt: null },
           select: {
             enteredAt: true,
             roll: {

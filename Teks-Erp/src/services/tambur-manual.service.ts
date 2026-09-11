@@ -17,7 +17,7 @@
 // NEDEN AYRI SERVİS — ve neden burada TAŞIMA MANTIĞI YOK
 // -----------------------------------------------------------------------------
 // "Buraya al" tek satır bile taşıma kodu yazmaz: `WorkOrderManualMoveService`e
-// delege eder (movement kapatma/açma, hedef-sonrası hayalet movement temizliği,
+// delege eder (movement kapatma/açma, hedef-sonrası hayalet movement'ın geri alınması,
 // kalite VOID'i, parti kararı, adım recompute, COMPLETED WO + refakat kartı
 // diriltme). Paralel bir taşıma yolu yazmak, iki yolun zamanla ayrışması demekti;
 // saha yolu sessizce eksik guard'lı kalırdı. Bu dosyanın işi yalnız ÜÇ şey:
@@ -91,6 +91,7 @@ import {
   manualMoveWoBlockReason,
 } from "./workorder-manual-move.service";
 import { ensureWorkOrderInProgress, recomputeStepStatus } from "./helpers/roll-step.helper";
+import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { resolveLabelIntent } from "./helpers/label-intent.helper";
@@ -1140,7 +1141,7 @@ export class TamburManualService {
       // İdempotent tekrar: top zaten bu adımda üretimde → hareketi garanti et, çık.
       if (fresh.status === RollStatus.IN_PRODUCTION && fresh.currentStepId === step.id) {
         const open = await tx.rollMovement.findFirst({
-          where: { rollId: roll.id, workOrderStepId: step.id, exitedAt: null },
+          where: { ...ACTIVE_MOVEMENT, rollId: roll.id, workOrderStepId: step.id, exitedAt: null },
           select: { id: true },
         });
         if (!open) {

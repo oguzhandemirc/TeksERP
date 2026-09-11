@@ -319,12 +319,15 @@ WHERE r.status = 'IN_PRODUCTION'
   {
     id: "11",
     title: "Açık movement + top artık orada değil / ölü statüde (hayalet movement)",
+    // Geri alınmış hareket "hiç olmamış" sayılır (`ACTIVE_MOVEMENT`ın SQL aynası);
+    // §11/§12/§20'deki her `roll_movements` referansı `"revokedAt" IS NULL` taşır.
     sql: `
 SELECT rm.id AS movement_id, rm."rollId", r.barcode, r.status AS top_durumu,
        rm."workOrderStepId", r."currentStepId", rm."enteredAt"
 FROM roll_movements rm
 JOIN rolls r ON r.id = rm."rollId"
 WHERE rm."exitedAt" IS NULL
+  AND rm."revokedAt" IS NULL
   AND (r.status IN ('SUBCONTRACTOR_CONSUMED','TAMBUR_CONSUMED','KARTELA_CONSUMED','CANCELLED')
        OR r."currentStepId" IS DISTINCT FROM rm."workOrderStepId")`,
   },
@@ -335,6 +338,7 @@ WHERE rm."exitedAt" IS NULL
 SELECT rm.id, rm."rollId", rm."workOrderStepId", rm."qtyIn", rm."qtyOut", rm."exitedAt"
 FROM roll_movements rm
 WHERE rm."exitedAt" IS NOT NULL
+  AND rm."revokedAt" IS NULL
   AND rm."qtyOut" IS DISTINCT FROM rm."qtyIn"`,
     noise: {
       // Bu kapanışlar İSTASYON BİTİRMESİ DEĞİLDİR, dolayısıyla "qtyOut = qtyIn"
@@ -374,6 +378,7 @@ WHERE rm."exitedAt" IS NOT NULL
       where: `WHERE NOT EXISTS (
                 SELECT 1 FROM roll_movements rm_n
                 WHERE rm_n.id = drift.id
+                  AND rm_n."revokedAt" IS NULL
                   AND (${DISPOSITION_NOTE_PREFIXES.map(
                     (p) => `rm_n.notes LIKE '${p}\\_%'`,
                   ).join("\n                       OR ")}
@@ -534,6 +539,9 @@ HAVING ds."totalQty" <> COALESCE(SUM(dsa.qty), 0)`,
   //        closed > 0 ve pending > 0       → ACTIVE
   //   NOT: `roll: { status: { not: CANCELLED } }` zorunlu relation üzerinde
   //        INNER JOIN + `<>` üretir; SQL karşılığı birebir odur.
+  //   NOT: helper'daki her sorgu `ACTIVE_MOVEMENT` süzer (açık/kapalı sayım, bekleyen
+  //        adayı, giriş noktası) → buradaki her `roll_movements` referansı da
+  //        `"revokedAt" IS NULL` taşır; biri eksik kalırsa geri alma sahte drift üretir.
   // ───────────────────────────────────────────────────────────────────────────
   {
     id: "20",
@@ -542,16 +550,16 @@ HAVING ds."totalQty" <> COALESCE(SUM(dsa.qty), 0)`,
 WITH adim AS (
   SELECT s.id, s.status::text AS kayitli, s."workOrderId", wo."workOrderNumber",
     (SELECT COUNT(*) FROM roll_movements rm JOIN rolls r ON r.id = rm."rollId"
-      WHERE rm."workOrderStepId" = s.id AND rm."exitedAt" IS NULL AND r.status <> 'CANCELLED') AS acik,
+      WHERE rm."workOrderStepId" = s.id AND rm."exitedAt" IS NULL AND rm."revokedAt" IS NULL AND r.status <> 'CANCELLED') AS acik,
     (SELECT COUNT(*) FROM roll_movements rm JOIN rolls r ON r.id = rm."rollId"
-      WHERE rm."workOrderStepId" = s.id AND rm."exitedAt" IS NOT NULL AND r.status <> 'CANCELLED') AS kapali,
+      WHERE rm."workOrderStepId" = s.id AND rm."exitedAt" IS NOT NULL AND rm."revokedAt" IS NULL AND r.status <> 'CANCELLED') AS kapali,
     (SELECT COUNT(*) FROM rolls r
       WHERE r.status IN ('IN_PRODUCTION','AT_SUBCONTRACTOR','RETURNED_FROM_SUBCONTRACTOR')
         AND EXISTS (SELECT 1 FROM roll_movements rm2
                     JOIN work_order_steps s2 ON s2.id = rm2."workOrderStepId"
-                    WHERE rm2."rollId" = r.id AND s2."workOrderId" = s."workOrderId")
+                    WHERE rm2."rollId" = r.id AND rm2."revokedAt" IS NULL AND s2."workOrderId" = s."workOrderId")
         AND NOT EXISTS (SELECT 1 FROM roll_movements rm3
-                        WHERE rm3."rollId" = r.id AND rm3."workOrderStepId" = s.id)
+                        WHERE rm3."rollId" = r.id AND rm3."revokedAt" IS NULL AND rm3."workOrderStepId" = s.id)
         -- FASON DÖNÜŞÜ ÇOCUĞU: bu adımın makbuzundan doğan top o adımın ÇIKTISIDIR,
         -- adıma hiç girmez, dolayısıyla "bekleyen" DEĞİLDİR. Ürün kodundaki aynı
         -- istisnanın aynası: roll-step.helper.ts icindeki pendingRolls sorgusu
@@ -564,7 +572,7 @@ WITH adim AS (
         AND COALESCE((
               SELECT s2."stepSequence" FROM roll_movements rm4
               JOIN work_order_steps s2 ON s2.id = rm4."workOrderStepId"
-              WHERE rm4."rollId" = r.id AND s2."workOrderId" = s."workOrderId"
+              WHERE rm4."rollId" = r.id AND rm4."revokedAt" IS NULL AND s2."workOrderId" = s."workOrderId"
               ORDER BY rm4."enteredAt" ASC LIMIT 1
             ), -1) <= s."stepSequence") AS bekleyen
   FROM work_order_steps s

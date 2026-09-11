@@ -64,11 +64,11 @@ Tartı bir ÖLÇÜMDÜR, ölçüm defteri tutulur (emsal: `RollVariance` — çe
 
 **KARAR: İKİ FAZ. Aynı turda ikisini birden yapma.**
 
-### Faz 1 — silmeyi durdur · `RollOperation` ✅ **BİTTİ (2026-09-11)** · `RollMovement` ⏳ BEKLİYOR
+### Faz 1 — silmeyi durdur · `RollOperation` ✅ **BİTTİ (2026-09-11)** · `RollMovement` ✅ **BİTTİ (2026-09-11, B-4b)**
 
 ---
 
-## ▶ B-4b DEVİR NOTU — `RollMovement` (sıradaki iş, taze oturum için)
+## B-4b DEVİR NOTU — `RollMovement` ✅ **UYGULANDI (2026-09-11)** — sonuç: arşiv "B-4b" notu
 
 > Bu bölüm tek başına yeterlidir: yeni oturum başka hiçbir yeri okumadan buradan başlayabilir. Önce `docs/kurallar/defter.md` (doktrin), sonra burası.
 
@@ -152,7 +152,7 @@ Dördü de `prisma/schema.prisma` + migration istiyor. **Ortak çalışma ağac�
 | 2 | ~~B-1 `Shipment`~~ | ✅ **BİTTİ** | `ShipmentEvent` 6 olay + 4 iptal kolonu; damgalar artık null'lanmıyor. Doğuş (PLANNED) olayı da yazılıyor. |
 | 3 | ~~B-2 `Sack` tartı~~ | ✅ **BİTTİ** | `SackWeighing` (WEIGHED/REWEIGHED/CLEARED); sıfırlama artık olay. |
 | 4a | ~~B-4a `RollOperation`~~ | ✅ **BİTTİ** | 7 `deleteMany` → revoke; 26 okuma süzüldü, 3 bilinçli istisna. Partial unique İKİ migration aldı: Prisma'nın `@@unique`i INDEX'tir, `DROP CONSTRAINT` sessizce geçti ve bekçi §2 yakaladı. |
-| 4b | B-4b `RollMovement` | ⏳ **BEKLİYOR** | 4 `deleteMany` + **47 okuma yüzeyi**; üstelik `recompute` adım durumunu BU tablodan türetiyor. Kaçırılan tek süzme yanlış adım durumu üretir → taze oturum işi. |
+| 4b | ~~B-4b `RollMovement`~~ | ✅ **BİTTİ** | Migration `20260911190000`; 4 `deleteMany` → revoke. "47" eksikti: ~62 çağrı + 22 ilişki + 22 ham SQL süzüldü, 4 dosyada gerekçeli istisna. Partial unique predicate'i `AND "revokedAt" IS NULL`. B-4a kalıntıları da kapandı: 4 upsert geri alınmış satırı buluyordu (iş tekrarlanamıyordu) + ilişki okumaları süzülmüyordu. |
 
 B-1 ve B-2 aynı serviste ve aynı migration turunda birleştirilir. B-3 ve B-4 ayrı oturumlar olabilir ama **şema kilidi sırayla devredilir**.
 

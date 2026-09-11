@@ -1,11 +1,12 @@
 // Faz 3 doğrulama — Konumu Düzelt geri-taşıma QC reversal.
-// A) Salt QC/Kurşun (çocuk yok): geri taşınır, op VOID edilir (silinir), grade Belirsiz olur.
+// A) Salt QC/Kurşun (çocuk yok): geri taşınır, op VOID edilir (silinmez, damgalanır), grade Belirsiz olur.
 // B) CUT (parentRollId'li çocuk top var): HARD-STOP.
 //
 // 2026-07-27: hardcoded WO/parti UUID fixture'ı (reseed'de P2025) dinamik
 // createManualMoveFixture'a taşındı; teardown fixture içinde.
 import p from "../src/lib/prisma";
 import { WorkOrderManualMoveService } from "../src/services/workorder-manual-move.service";
+import { ACTIVE_MOVEMENT } from "../src/services/helpers/roll-movement.helper";
 import { createManualMoveFixture } from "./fixture-manual-move";
 
 const svc = new WorkOrderManualMoveService();
@@ -58,6 +59,13 @@ const ok = (c: boolean, m: string) => { console.log(`${c ? "  ✓" : "  ✗ FAIL
     const tamburOpsHepsi = await p.rollOperation.count({ where: { rollId: { in: rollIds }, workOrderStepId: tambur.id, operationType: "TAMBUR_PROCESSED" } });
     ok(tamburOpsAktif === 0, `Tambur işlem izleri GERİ ALINDI (aktif kalan ${tamburOpsAktif})`);
     ok(tamburOpsHepsi > 0, `⭐ İzler SİLİNMEDİ, defterde duruyor (${tamburOpsHepsi} damgalı satır)`);
+    // Hareket izi de damgalanır; ardından gelen MANUAL_MOVE_OUT kapanışı geri
+    // alınmış AÇIK satıra düşerse ileri kayıt (exitedAt/qtyOut/notes) ezilir.
+    const tamburMvAktif = await p.rollMovement.count({ where: { ...ACTIVE_MOVEMENT, rollId: { in: rollIds }, workOrderStepId: tambur.id } });
+    const tamburMvDamgali = await p.rollMovement.findMany({ where: { rollId: { in: rollIds }, workOrderStepId: tambur.id, revokedAt: { not: null } }, select: { exitedAt: true } });
+    ok(tamburMvAktif === 0, `Tambur hareketleri GERİ ALINDI (aktif kalan ${tamburMvAktif})`);
+    ok(tamburMvDamgali.length === rollIds.length, `⭐ Hareket izi SİLİNMEDİ, defterde damgalı (${tamburMvDamgali.length}/${rollIds.length})`);
+    ok(tamburMvDamgali.length > 0 && tamburMvDamgali.every((m) => m.exitedAt === null), "⭐ Geri alınmış AÇIK hareket sonradan KAPATILMADI (ileri kayıt ezilmedi)");
 
     const audit = await p.systemLog.findFirst({ where: { tableName: "ROLL", action: "UPDATE", recordId: { in: rollIds } }, orderBy: { createdAt: "desc" }, select: { newData: true } });
     const nd = audit?.newData as Record<string, unknown> | null;
