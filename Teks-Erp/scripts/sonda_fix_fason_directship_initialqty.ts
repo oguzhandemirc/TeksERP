@@ -18,6 +18,7 @@ import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { onar, siniflandir, teshis, type EbeveynBulgusu } from "./fix_fason_directship_initialqty";
+import { assertGelistirmeVeritabani } from "./db-guard";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 const sub = new SubcontractorService();
@@ -95,6 +96,8 @@ function eskiImza(b: EbeveynBulgusu): boolean {
 }
 
 async function main(): Promise<void> {
+  // Sonda HER koşumda fixture YAZAR ve siler — yıkıcı betik kapısı koşulsuz.
+  assertGelistirmeVeritabani("sonda_fix_fason_directship_initialqty");
   const engel = hedefDbEngeli();
   if (engel) throw new Error(engel);
   const need = (v: { id: string } | null, label: string): string => {

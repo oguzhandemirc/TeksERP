@@ -11,6 +11,7 @@ import { getSubcontractScorecard } from "../src/services/reports/subcontract-sco
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
+import { assertGelistirmeVeritabani } from "./db-guard";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 const sub = new SubcontractorService();
@@ -193,6 +194,10 @@ async function main(): Promise<void> {
     await veritabaniOlcumu();
     return;
   }
+  // Buradan sonrası SENARYO kurar (fixture yazar + siler) → yıkıcı betik kapısı.
+  // ⚠️ `--salt-okuma` dalı YUKARIDA döndü: o dal yalnız OKUR ve canlı kopyada
+  // koşmak İÇİN vardır; kapıyı oraya koymak teşhisi canlıda imkânsız kılardı.
+  assertGelistirmeVeritabani("olcum_scorecard_kismi_dogrudan_sevk");
   const engel = hedefDbEngeli();
   if (engel) throw new Error(engel);
   const need = (v: { id: string } | null, label: string): string => {
