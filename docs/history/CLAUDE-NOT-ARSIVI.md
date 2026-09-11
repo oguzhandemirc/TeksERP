@@ -5266,10 +5266,14 @@ istedi. `dump/tekserp_yeni_20260911_030001.dump` → `tekserp_fabrika_dev`
 
 Mutabakatın 20 bölümünden 17'si temiz. Üç bulgu:
 
-- **§1d — 45 sevkiyat / 11.855,3 m siparişe yazılmamış.** Hafızadaki not 42
-  sevkiyat / 11.384 m diyordu: **boşluk BÜYÜMÜŞ**, yani teşhis/onarım modülü
-  hazır olmasına rağmen hiç koşulmamış.
-- **§1c — 5 sevkiyat sipariş beyan ediyor ama tahsis satırı yok.**
+- **§1d — 45 sevkiyat / 11.855,3 m siparişe yazılmamış** ve **§1c — 5 sevkiyat
+  sipariş beyan ediyor ama tahsis satırı yok.** Hafızadaki not 42 sevkiyat /
+  11.384 m diyordu, yani boşluk büyümüş.
+  ⚠️ **KARAR (2026-09-11, kullanıcı): BU BİR KUSUR DEĞİL, FABRİKANIN BİLİNÇLİ
+  TERCİHİ — onarım YAPILMAYACAK.** Elemanlar sipariş olsa bile işaretlemeden
+  sevk ediyor ve fabrika bunu böyle sürdürüyor. Sonuç: onarım modülü koşulmaz
+  (teşhis aracı ölçmek için durur), `test_consistency` §1c/§1d kırmızısı
+  BEKLENEN DURUMDUR ve kovalanmaz, sayının büyümesi de alarm değildir.
 - **§13 — 2 topta `currentQty > initialQty`** (492→698,9 ve 500→520,5; ikisi de
   barkodsuz, `IN_PRODUCTION`, Ağustos). Kaynağı ölçülmedi.
 
