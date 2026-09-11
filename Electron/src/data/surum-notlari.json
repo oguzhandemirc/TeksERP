@@ -16,8 +16,8 @@
   ],
   "yayinlar": [
     {
-      "id": "2026-09-10",
-      "baslik": "Sevk irsaliyesi tek pencerede toplandı, çıktıları düzeldi, eski paneller envanterde görünüyor",
+      "id": "2026-09-12",
+      "baslik": "Yanlış yapılan işlemler geri alınabiliyor: kartela düşümü, sayım, çek; sevk irsaliyesi tek pencerede toplandı",
       "surumler": {
         "panel": "1.3.2"
       },
@@ -56,6 +56,56 @@
           "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Makine dışı yedek hedefi artık yanlış yazılamıyor. Hedefi iki nokta üst üste olmadan (örneğin “gdrive”) kaydetmek, yedeklerin sunucudaki bir klasöre kopyalanmasına yol açıyordu — yani veritabanıyla aynı diske — ve ekran buna “başarılı” diyordu. Artık böyle bir hedef kaydedilemiyor, kayıtlı olan varsa uyarı veriliyor ve “Bağlantıyı test et” düğmesi de yanılmıyor. Hedef gerçekten uzaktaysa hiçbir şey değişmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Kartela Stoğu ekranına “Düşüm Geçmişi” geldi: yanlış düşülen kartela geri alınabiliyor. Önceden düşüm tek yönlüydü — yanlışlıkla 50 kartela düşüldüyse stok bir daha geri gelmiyor, hangi kartelaların düşüldüğü de hiçbir ekranda görünmüyordu. Artık her düşümün hangi kartelaları kapsadığı listede duruyor ve geri alınabiliyor. Düşülen kartela sevkiyata girmiş, çuvala konmuş ya da kabulü iptal edilmişse geri alma yapılmaz ve sebebi yazılır. Bu ekrandan önce yapılmış eski düşümlerde hangi kartelaların düşüldüğü kayıtlı olmadığı için onlar geri alınamaz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Tamamlanmış bir stok sayımı stornolanabiliyor (Stok Sayımı → sayım detayı → “Stornola”). Yanlış “bulunamadı” işaretiyle tamamlanan bir sayım o topları iptal ediyordu ve tek çıkış yolu topları tek tek geri almaktı — o yol da depo hareketine ve sapma kaydına ters satır yazmıyordu. Artık tek belgeden dönülüyor: onaydan önce hangi topların ve hangi iplik kalemlerinin geri geleceği tek tek listeleniyor, sayım listesinin kendisi silinmiyor ve satırda “Stornolandı” rozeti çıkıyor. Yalnız deponun EN SON tamamlanmış sayımı stornolanabilir; araya başka sayım girdiyse ya da düşülen toplardan biri artık başka bir sebeple duruyorsa uyarı verilir ve o top gerekçesiyle listelenir. Yetki gerekir: top düzeltme ve iplik yazma yetkisi birlikte aranır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Çeklerde karşılıksız, ciro, ödendi ve iade işlemleri geri alınabiliyor. Önceden yalnız tahsilatın geri alması vardı; yanlış girilen bir “karşılıksız” ya da “ciro” damgası cari bakiyeyi KALICI yanlış bırakıyordu ve düzeltmenin hiçbir yolu yoktu. Artık dördünün de geri alması var: para aynı kasadan/bankadan geri çekilir, cari satırı ters kayıtla kapanır ve çek bir önceki durumuna döner. Onay penceresi işlemden önce hangi tutarın nereye döneceğini ve çekin hangi duruma geçeceğini cümleyle yazar. Eski kayıt silinmez, ters kayıt bugünün tarihine yazılır — kapanmış dönemin rakamı değişmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Depo hareketleri ekranı (Depolar → bir depo → Hareketler) tanımadığı bir hareket türüyle karşılaşınca boş sayfaya düşüyordu; artık türü ham adıyla basıyor ve ekran çalışmaya devam ediyor. Ayrıca sayım stornosuyla depoya geri dönen toplar listede “İptal stornosu” olarak görünüyor, yani topun neden geri geldiği hareketin kendisinden okunuyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Konumu Düzelt ile geri taşınan bir top KK2'yi yeniden yaptığında adım kapanmıyor, top adımda takılı kalıyordu. Sebebi şuydu: geri alınan işlem ve hareket kayıtları siliniyordu ve adımın “bitti mi” sorusunun cevabı bu kayıtlardan sayılıyordu, yani silinmiş bir iz adımı yanlış durumda bırakıyordu. Artık geri alınan kayıt SİLİNMİYOR, geri alındı diye işaretleniyor — böylece “bu topa kurşun uygulandı mı, KK2'den geçti mi, fasona gitti mi” sorusunun cevabı geriye dönük değişmiyor ve top adımı yeniden işleyebiliyor. Yan etkisi şu: geçmişinde geri alınmış hareket bulunan bir adım artık iş emri rotasından silinemiyor ve istasyonu değiştirilemiyor; o adımın defter geçmişi vardır, gerekiyorsa iş emri üzerinden ilerletilir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Mal kabulde sarf malzemesi kaleminden barkodlu KUMAŞ TOPU doğuyordu. Yalnız iplik ayrı tutuluyordu, geri kalan her kalem türü top üretme yoluna düşüyordu; renk ve en bilgisi zorunlu olmadığı için de kontrolden geçiyordu. Artık yalnız kumaş kalemi top doğurur, diğer türler sebebiyle birlikte reddedilir. Aynı engel elle top ekleme ve tambur ekranlarındaki girişler için de geçerli."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Fasona giden bir toptan kısmi doğrudan sevk yapıldığında ana topun GİRİŞ metrajı geriye dönük düşürülüyordu; iş emrinin “üretilen/giriş” metrajı olduğundan az görünüyor ve bu kalıcı kalıyordu. Artık ana topun giriş metrajı olduğu gibi kalır, yalnız kalan metraj düşer. Fabrikada daha önce bu yolla sevk yapılmışsa eski kayıtların düzeltilmesi ayrı bir işlemdir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "İstasyon ya da makine kalıcı silinirken o istasyonda/makinede kimin ne zaman çalıştığı bilgisi de siliniyordu. Artık çalışma oturumu geçmişi korunuyor ve kalıcı silmeyi ENGELLİYOR: onay penceresi engeli, en yeni oturumları tek tek ve boşa çıkacak donanımları kayıt kayıt yazıyor, “bunun yerine pasife alın” diyor. Pasife alınan istasyon/makine listelerden düşer, geçmişi durur."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Geri alınan işlemlerin izi artık kalıcı: bir tahsilatın faturaya kapaması çözüldüğünde kayıt siliniyordu, sevkiyat geri alındığında “sevk edildi” bilgisi siliniyordu, çuval yeniden tartıldığında önceki kilo hiçbir yerde kalmıyordu. Üçü de artık “ne zaman, kim, hangi gerekçeyle” bilgisiyle saklanıyor. Yaşlandırma, kur farkı ve kasa raporlarının rakamları DEĞİŞMEZ — geri alınan satırlar bu hesaplara girmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Sevkiyatlar listesindeki “Tarih” sütunu, sevkiyatı geri aldığınızda artık son sevk anını göstermeye devam ediyor; eskiden kaydın oluşturulma tarihine dönüyordu. Sebebi şu: sevk damgası artık geri almada silinmiyor, geri alma ayrı bir satır olarak yazılıyor. Belgenin kendisi ve rakamlar değişmez."
         }
       ]
     },
