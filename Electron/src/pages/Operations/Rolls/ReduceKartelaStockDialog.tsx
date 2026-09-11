@@ -56,6 +56,7 @@ export function ReduceKartelaStockDialog({ group, open, onOpenChange }: Props) {
     onSuccess: (res) => {
       toast.success(res.message ?? `${res.data.reduced} kartela düşüldü`);
       void qc.invalidateQueries({ queryKey: ["kartela", "stock"] });
+      void qc.invalidateQueries({ queryKey: ["kartela", "stock-reductions"] });
       onOpenChange(false);
     },
   });

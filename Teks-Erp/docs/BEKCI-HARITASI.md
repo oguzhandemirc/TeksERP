@@ -308,7 +308,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `mobil/src/utils/relativeTime.test.ts` | formatRelativeWait: boş/geçersiz → '—', 1 dk altı 'şimdi', dakika/saat+dakika/tam saat biçimleri. |  |  |  |
 | `mobil/src/utils/searchFold.test.ts` | Arama katlaması: canakkale ≡ çanakkale iki yönlü; tr-küçültmenin TEK BAŞINA yetmediği eski PickerModal eksiği kanıtla ölçülür (foldSearchText/Term/Tok |  |  |  |
 
-## fason (90)
+## fason (91)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
@@ -345,6 +345,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `Teks-Erp/scripts/test_fason_ceki_draft.ts` | previewDownstreamFasonCeki erken TASLAK boyahane çekisi üretir ve hiçbir durumu DEĞİŞTİRMEZ; önceki fasonda mal yoksa reddedilir. | ✓ |  |  |
 | `Teks-Erp/scripts/test_fason_ceki_html.ts` | Fason çeki 'KUMAŞ İRSALİYESİ' HTML renderer'ının saf format sözleşmesi (alanlar, kolon yapılandırması, A5 yoğunluk, parti no). |  | ✓ |  |
 | `Teks-Erp/scripts/test_fason_desk_dispatch.ts` | Masaüstü toplu fason sevki: bulkDispatchStep (adımda bekleyen tüm topları planlı firmaya) + transferToNextFason (fasondan fasona doğrudan aktarım). | ✓ |  |  |
+| `Teks-Erp/scripts/test_fason_direct_ship_dispatch_lock.ts` | DSK'lı fason sevki kilidi: sevk iptal edilemez (uç + önizleme aynı yüklem), WO iptali kalan-kapamayla ilerler, K15 konsolidasyonu atlar, K16 cerrahisi 409 | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_fason_dispatch_picker.ts` | filter[dispatchableForStepId] picker'ı yalnız o fason adımına FİİLEN sevk edilebilen topları döner (serbest STOCK + o adımdaki top). | ✓ |  | ⚠️ Başlık satır 9 statü listesinde 'FIRE' sayıyor ama RollStatus enum'unda FIRE yok — kozmeti |
 | `Teks-Erp/scripts/test_fason_kabul_partial_overlap.ts` | Fason kabul idempotency guard'ı TAM-küme eşitliği ister: kısmi örtüşen payload cached DÖNMEZ, atomik claim 409 verir; ayrık küme normal kabul eder. | ✓ |  |  |
 | `Teks-Erp/scripts/test_fason_open_dispatch_semantics.ts` | 'Açık + outstanding fason sevk' koşulunun DAVRANIŞI: kabul iptali sonrası yeniden outstanding, tam ve alt küme doğrudan-sevk sonrası kapalı — üç yüzeyde (WO liste | ✓ | ✓ |  |
@@ -1846,7 +1847,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `Teks-Erp/scripts/test_printed_documents.ts` | Donmuş belge defterinin yaşam döngüsünü kilitler: v1 freeze · kaynak değişse de snapshot sabit · reissue v1 SUPERSEDED+v2 ACTIVE · yeni sevk = yeni be | ✓ |  |  |
 | `Teks-Erp/scripts/test_sack_content_dump.ts` | getContentDump'ın top bazlı dökümünü: Decimal→number, çuval başlık alanları, kartela ayrı dizi, hayalet topların düşmesi, sevkiyata göre gruplu sıra v | ✓ |  |  |
 | `Teks-Erp/scripts/test_sack_status_invariant.ts` | "Çuvaldaki top başka yere ALINAMAZ" invariantını dört akışta birden (kartela dispatch, tambur depo kesimi/finalize, fason auto-attach) — depo çuvalınd | ✓ |  |  |
-| `Teks-Erp/scripts/test_swatch_stock_reduction_reversal.ts` | Kartela stok düşümü stornosu: kalem = iptal kümesi, düşüm satırı değişmez + ters damga, çift storno 409, ölü kabulün kartelası dirilmez, kalemsiz eski düşüm 409, silen çağrı yok | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_swatch_stock_reduction_reversal.ts` | Kartela stok düşümü stornosu: kalem = iptal kümesi, düşüm satırı değişmez + ters damga, çift storno 409, ölü kabulün kartelası dirilmez, kalemsiz düşüm listede de engelli, sayfa sınırı (cursor), İKİ YÖNLÜ YARIŞ (kabul iptali ↔ storno, FOR SHARE), silen çağrı yok (üç biçim) | ✓ | ✓ |  |
 
 ## sebep-katalogu (11)
 

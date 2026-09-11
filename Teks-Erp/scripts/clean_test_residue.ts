@@ -126,10 +126,28 @@ async function main() {
     await phase("kartela sevk kalemleri", async () =>
       (await prisma.kartelaDispatchItem.deleteMany({ where: { rollId: { in: rollIds } } })).count,
     );
+    // Kalemler + KALEMSİZ KALAN BAŞLIK: kalemi silip başlığı bırakmak, fason
+    // sevklerinde aynı sınıf hasarı doğurmuştu (başlık duruyor, kalemi yok).
+    // Kapsam TEST damgasıyla sınırlı: yalnız bu topların kartelalarını düşen düşümler.
+    const dusumIds = [
+      ...new Set(
+        (
+          await prisma.swatchStockReductionItem.findMany({
+            where: { swatch: { parentRollId: { in: rollIds } } },
+            select: { reductionId: true },
+          })
+        ).map((i) => i.reductionId),
+      ),
+    ];
     await phase("kartela düşüm kalemleri", async () =>
       (await prisma.swatchStockReductionItem.deleteMany({
         where: { swatch: { parentRollId: { in: rollIds } } },
       })).count,
+    );
+    await phase("kalemsiz kalan kartela düşümleri (başlık)", async () =>
+      dusumIds.length === 0
+        ? 0
+        : (await prisma.swatchStockReduction.deleteMany({ where: { id: { in: dusumIds }, items: { none: {} } } })).count,
     );
     await phase("kartelalar", async () =>
       (await prisma.swatch.deleteMany({ where: { parentRollId: { in: rollIds } } })).count,

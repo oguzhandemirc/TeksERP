@@ -47,8 +47,10 @@ describe("swatchService — kartela ADET stok", () => {
   });
 
   it("listStockReductions filtreleri query'ye koyar", async () => {
-    await swatchService.listStockReductions({ itemId: "i1", colorId: "c1" });
-    expect(mockGet).toHaveBeenCalledWith("/api/kartela/stock/reductions?itemId=i1&colorId=c1");
+    await swatchService.listStockReductions({ itemId: "i1", colorId: "c1", cursor: "k1", limit: 30 });
+    expect(mockGet).toHaveBeenCalledWith(
+      "/api/kartela/stock/reductions?itemId=i1&colorId=c1&cursor=k1&limit=30",
+    );
   });
 
   it("reverseStockReduction → POST /reductions/:id/reverse, gövdede yalnız gerekçe", async () => {

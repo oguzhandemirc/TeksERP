@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Undo2 } from "lucide-react";
 import {
@@ -13,6 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PermissionGate } from "@/components/PermissionGate";
+import { AutoLoadMore } from "@/components/data-table/AutoLoadMore";
+import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { swatchService, type KartelaStockReduction } from "./swatchService";
 
 interface Props {
@@ -23,19 +26,30 @@ interface Props {
 }
 
 const DATE_FMT = new Intl.DateTimeFormat("tr-TR", { dateStyle: "short", timeStyle: "short" });
+const PAGE_SIZE = 30;
+const REDUCTIONS_KEY = ["kartela", "stock-reductions"] as const;
 
 /**
  * Kartela stok düşüm geçmişi. Geri alma düşümü silmez: düşüm satırı kalır, üstüne
  * ters damga yazılır ve kalemlerdeki kartelalar stoğa döner. Geri alınamayan
- * düşümün gerekçesi (kartelası sevkiyatta / kabulü iptal) satırda listelenir.
+ * düşümün gerekçesi (kalemsiz / sevkiyatta / kabulü iptal) satırda listelenir.
  */
 export function KartelaReductionHistoryDialog({ open, onOpenChange, itemId, colorId }: Props) {
-  const query = useQuery({
-    queryKey: ["kartela", "stock-reductions", itemId, colorId],
-    queryFn: () => swatchService.listStockReductions({ itemId, colorId }),
+  const q = useInfiniteQuery({
+    queryKey: [...REDUCTIONS_KEY, itemId, colorId],
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) =>
+      swatchService.listStockReductions({ itemId, colorId, cursor: pageParam, limit: PAGE_SIZE }),
+    getNextPageParam: (last) => (last.hasMore ? (last.nextCursor ?? undefined) : undefined),
     enabled: open,
   });
-  const rows = query.data?.data ?? [];
+  const rows = q.data?.pages.flatMap((p) => p.data) ?? [];
+  const { rootRef, sentinelRef } = useInfiniteScroll({
+    hasMore: Boolean(q.hasNextPage),
+    isLoading: q.isFetchingNextPage,
+    onLoadMore: () => void q.fetchNextPage(),
+    enabled: open,
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -47,14 +61,19 @@ export function KartelaReductionHistoryDialog({ open, onOpenChange, itemId, colo
             stoğa döner.
           </DialogDescription>
         </DialogHeader>
-        <div className="max-h-[60vh] space-y-2 overflow-y-auto">
-          {query.isLoading ? (
+        <div ref={rootRef} className="max-h-[60vh] space-y-2 overflow-y-auto">
+          {q.isLoading ? (
             <div className="py-8 text-center text-sm text-muted-foreground">Yükleniyor…</div>
+          ) : q.isError ? (
+            <div className="py-8 text-center text-sm text-destructive">
+              Düşüm geçmişi yüklenemedi — pencereyi kapatıp yeniden açın.
+            </div>
           ) : rows.length === 0 ? (
             <div className="py-8 text-center text-sm text-muted-foreground">Düşüm kaydı yok.</div>
           ) : (
             rows.map((r) => <ReductionRow key={r.id} row={r} />)
           )}
+          <AutoLoadMore ref={sentinelRef} hasMore={Boolean(q.hasNextPage)} isFetchingMore={q.isFetchingNextPage} count={rows.length} />
         </div>
       </DialogContent>
     </Dialog>
@@ -103,21 +122,28 @@ function ReductionRow({ row }: { row: KartelaStockReduction }) {
           {row.reverseReason}
         </div>
       )}
-      {!row.reversedAt && row.blockingReasons.length > 0 && (
-        <ul className="list-disc pl-5 text-xs text-destructive">
-          {row.blockingReasons.map((b) => (
-            <li key={b}>{b}</li>
-          ))}
-        </ul>
-      )}
-      {!row.reversedAt && row.cardNumbers.length === 0 && (
-        <div className="text-xs text-muted-foreground">
-          Kalem dökümü yok (eski düşüm) — geri alınamaz.
-        </div>
-      )}
+      {!row.reversedAt && <BlockingList reasons={row.blockingReasons} />}
       {confirming && <ReverseConfirm row={row} onClose={() => setConfirming(false)} />}
     </div>
   );
+}
+
+function BlockingList({ reasons }: { reasons: string[] }) {
+  if (reasons.length === 0) return null;
+  return (
+    <ul className="list-disc pl-5 text-xs text-destructive">
+      {reasons.map((b) => (
+        <li key={b}>{b}</li>
+      ))}
+    </ul>
+  );
+}
+
+/** 409 gövdesindeki `details.blocked` — backend engel dökümü (kart no + gerekçe). */
+function blockedFromError(error: unknown): string[] {
+  if (!axios.isAxiosError(error)) return [];
+  const blocked = (error.response?.data as { details?: { blocked?: unknown } } | undefined)?.details?.blocked;
+  return Array.isArray(blocked) ? blocked.filter((b): b is string => typeof b === "string") : [];
 }
 
 function ReverseConfirm({ row, onClose }: { row: KartelaStockReduction; onClose: () => void }) {
@@ -130,26 +156,33 @@ function ReverseConfirm({ row, onClose }: { row: KartelaStockReduction; onClose:
     onSuccess: (res) => {
       toast.success(res.message ?? "Düşüm geri alındı");
       onClose();
+    },
+    // Başarı da 409 da listeyi değiştirebilir (başka biri geri almış / kabul iptal) — ikisinde de tazele.
+    onSettled: () => {
       void qc.invalidateQueries({ queryKey: ["kartela", "stock"] });
-      void qc.invalidateQueries({ queryKey: ["kartela", "stock-reductions"] });
+      void qc.invalidateQueries({ queryKey: REDUCTIONS_KEY });
     },
   });
+  const blocked = mut.isError ? blockedFromError(mut.error) : [];
 
   return (
-    <div className="flex items-center gap-2 pt-1">
-      <Input
-        autoFocus
-        value={reason}
-        onChange={(e) => setReason(e.target.value)}
-        placeholder="Geri alma gerekçesi…"
-        className="h-8 text-xs"
-      />
-      <Button variant="ghost" size="sm" onClick={onClose} disabled={mut.isPending}>
-        Vazgeç
-      </Button>
-      <Button size="sm" onClick={() => mut.mutate()} disabled={!reasonValid || mut.isPending}>
-        {mut.isPending ? "Geri alınıyor…" : `${row.count} kartelayı stoğa döndür`}
-      </Button>
+    <div className="space-y-1 pt-1">
+      <div className="flex items-center gap-2">
+        <Input
+          autoFocus
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Geri alma gerekçesi…"
+          className="h-8 text-xs"
+        />
+        <Button variant="ghost" size="sm" onClick={onClose} disabled={mut.isPending}>
+          Vazgeç
+        </Button>
+        <Button size="sm" onClick={() => mut.mutate()} disabled={!reasonValid || mut.isPending}>
+          {mut.isPending ? "Geri alınıyor…" : `${row.count} kartelayı stoğa döndür`}
+        </Button>
+      </div>
+      <BlockingList reasons={blocked} />
     </div>
   );
 }

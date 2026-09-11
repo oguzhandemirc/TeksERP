@@ -786,7 +786,8 @@ export class KartelaService {
     }
 
     const rollIds = receipt.items.map((i) => i.consumedRollId);
-    const swatchIds = receipt.swatches.map((s) => s.id);
+    /** Tx içinde ölçülür (dış okuma yalnız HIZLI RET için) — audit gerçek sayıyı basar. */
+    let cancelledSwatchCount = 0;
 
     await prisma.$transaction(async (tx) => {
       // Kabul soft-cancel — ATOMİK CLAIM: cancelledAt kontrolü tx DIŞINDA;
@@ -802,18 +803,34 @@ export class KartelaService {
       if (receiptClaim.count === 0) {
         throw AppError.conflict("Bu kabul az önce başka bir kullanıcı tarafından iptal edilmiş.");
       }
-      // Doğan kartelalar soft-delete — downstream guard'ı tx DIŞINDA okunduğu
-      // için pencerede sevkiyata/çuvala bağlanan kartela varsa iptal etme.
-      if (swatchIds.length > 0) {
+      // ⚠️ KARTELA KÜMESİ TX İÇİNDE, CLAIM'İN ARKASINDA ÇÖZÜLÜR. Dışarıda okunan
+      // liste bayatlayabiliyordu: düşüm stornosu (`reverseStockReduction`) aradaki
+      // pencerede bir kartelayı stoğa döndürürse o kartela listede OLMADIĞI için
+      // iptal edilmeden kalıyor ve ÖLÜ kabulün altında canlı kartela doğuyordu.
+      // Claim belgeyi kilitlediği için storno (FOR SHARE) ya öncesinde ya sonrasında
+      // sıralanır; buradaki taze sorgu hangi kartelaların canlı olduğunu kesin görür.
+      const liveSwatches = await tx.swatch.findMany({
+        where: { parentReceiptId: receiptId, cancelledAt: null },
+        select: { id: true, cardNumber: true, shipmentId: true, sackId: true },
+      });
+      const blockedNow = liveSwatches.filter((s) => s.shipmentId || s.sackId);
+      if (blockedNow.length > 0) {
+        throw AppError.conflict(
+          `${blockedNow.length} kartela sevkiyatta/çuvalda — kabul iptal edilemez. Önce sevkiyattan çıkarın.`,
+          { code: "SWATCHES_DOWNSTREAM", blocked: blockedNow.map((s) => s.cardNumber) }
+        );
+      }
+      if (liveSwatches.length > 0) {
         const cancelledSwatches = await tx.swatch.updateMany({
-          where: { id: { in: swatchIds }, shipmentId: null, sackId: null, cancelledAt: null },
+          where: { id: { in: liveSwatches.map((s) => s.id) }, shipmentId: null, sackId: null, cancelledAt: null },
           data: { cancelledAt: new Date(), cancelReason: trimmed },
         });
-        if (cancelledSwatches.count !== swatchIds.length) {
+        if (cancelledSwatches.count !== liveSwatches.length) {
           throw AppError.conflict(
             "Kartelalardan biri bu sırada sevkiyata/çuvala bağlanmış — kabul iptal edilemedi. Önce sevkiyattan çıkarın."
           );
         }
+        cancelledSwatchCount = cancelledSwatches.count;
       }
       // Tüketilen toplar AT_KARTELA'ya döner (firma hâlâ malı işlemiş sayılır).
       // ATOMİK CLAIM: beklenen statüde değilse (eşzamanlı işlem) 409 + rollback.
@@ -839,7 +856,7 @@ export class KartelaService {
         cancelled: true,
         cancelReason: trimmed,
         revertedRollCount: rollIds.length,
-        cancelledSwatchCount: swatchIds.length,
+        cancelledSwatchCount,
       },
     });
 
@@ -1463,22 +1480,29 @@ export class KartelaService {
     };
   }
 
-  /** Stok düşüm geçmişi — en yeni önce; geri alınabilirlik satırda hesaplanır. */
+  /**
+   * Stok düşüm geçmişi — en yeni önce, KEYSET cursor. Sessiz kesme yok: sayfa
+   * sınırında `hasMore`/`nextCursor` döner (offset'li liste 50. satırdan sonra
+   * kalan düşümleri gizliyordu ve ekran "hepsi bu" diye okunuyordu).
+   */
   async listStockReductions(params?: {
     itemId?: string;
     colorId?: string;
+    cursor?: string;
     limit?: number;
-  }): Promise<ApiResponse<StockReductionRow[]>> {
+  }): Promise<{ success: true; data: StockReductionRow[]; nextCursor: string | null; hasMore: boolean }> {
     const itemCond = readIdCondition(params?.itemId);
     const colorCond = readIdCondition(params?.colorId);
     const take = Math.min(Math.max(params?.limit ?? 50, 1), 200);
+    const cursor = decodeDynamicCursor(params?.cursor);
     const rows = await prisma.swatchStockReduction.findMany({
       where: {
         ...(itemCond && { itemId: itemCond }),
         ...(colorCond && { colorId: colorCond }),
+        ...(cursor ? dynamicCursorWhere(cursor, "createdAt", "desc") : {}),
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      take,
+      take: take + 1,
       select: {
         id: true,
         count: true,
@@ -1506,7 +1530,9 @@ export class KartelaService {
       },
     });
 
-    const data: StockReductionRow[] = rows.map((r) => {
+    const hasMore = rows.length > take;
+    const page = hasMore ? rows.slice(0, take) : rows;
+    const data: StockReductionRow[] = page.map((r) => {
       const blockingReasons = r.reversedAt ? [] : reductionBlockingReasons(r.items.map((i) => i.swatch));
       return {
         id: r.id,
@@ -1524,7 +1550,12 @@ export class KartelaService {
         blockingReasons,
       };
     });
-    return { success: true, data };
+    return {
+      success: true,
+      data,
+      nextCursor: hasMore ? buildNextDynamicCursor(page[page.length - 1], "createdAt") : null,
+      hasMore,
+    };
   }
 
   /**
@@ -1587,6 +1618,21 @@ async function reverseStockReductionTx(
     throw AppError.conflict("Bu stok düşümü zaten geri alınmış.", { code: "REDUCTION_ALREADY_REVERSED" });
   }
 
+  // ⚠️ TOCTOU: kabul iptali (`cancelReceipt`) kartela listesini kendi tx'inde
+  // belgeyi UPDATE ederek kilitler. Kilitsiz okursak ÖLÜ kabulün kartelasını
+  // diriltebiliriz — kalemlerin kabul belgelerini ÖNCE (id sırasıyla) kilitle,
+  // engel kararını kilitten SONRAKİ taze okumaya dayandır.
+  const itemReceipts = await tx.swatchStockReductionItem.findMany({
+    where: { reductionId },
+    select: { swatch: { select: { parentReceiptId: true } } },
+  });
+  const receiptIds = [
+    ...new Set(itemReceipts.map((i) => i.swatch.parentReceiptId).filter((v): v is string => v !== null)),
+  ].sort();
+  if (receiptIds.length > 0) {
+    await tx.$queryRaw`SELECT id FROM kartela_receipts WHERE id = ANY(${receiptIds}::uuid[]) ORDER BY id FOR SHARE`;
+  }
+
   const reduction = await tx.swatchStockReduction.findUniqueOrThrow({
     where: { id: reductionId },
     select: {
@@ -1609,17 +1655,12 @@ async function reverseStockReductionTx(
       },
     },
   });
-  if (reduction.items.length === 0) {
-    throw AppError.conflict(
-      "Bu düşümün kalem dökümü yok (kalem defterinden önce yapılmış) — geri alınamaz.",
-      { code: "REDUCTION_WITHOUT_ITEMS" }
-    );
-  }
   const blockingReasons = reductionBlockingReasons(reduction.items.map((i) => i.swatch));
   if (blockingReasons.length > 0) {
+    const empty = reduction.items.length === 0;
     throw AppError.conflict(
-      `Düşüm geri alınamaz — ${blockingReasons.length} kartela stoğa dönemez.`,
-      { code: "REDUCTION_NOT_REVERSIBLE", blocked: blockingReasons }
+      empty ? `${REDUCTION_WITHOUT_ITEMS_REASON}.` : `Düşüm geri alınamaz — ${blockingReasons.length} kartela stoğa dönemez.`,
+      { code: empty ? "REDUCTION_WITHOUT_ITEMS" : "REDUCTION_NOT_REVERSIBLE", blocked: blockingReasons }
     );
   }
 
@@ -1650,6 +1691,9 @@ export interface StockReductionRow {
   blockingReasons: string[];
 }
 
+/** Kalem dökümü olmayan (kalem defterinden önceki) düşümün engel metni — tek kaynak. */
+const REDUCTION_WITHOUT_ITEMS_REASON = "Kalem dökümü yok (kalem defterinden önce yapılmış düşüm) — geri alınamaz";
+
 /** Düşülmüş kartelanın stoğa dönebilmesi: hâlâ iptal, sevkiyat/çuval bağı yok, kabulü yaşıyor. */
 const RESTORABLE_REDUCED_SWATCH = {
   cancelledAt: { not: null },
@@ -1666,8 +1710,12 @@ interface ReducedSwatchSignals {
   parentReceipt: { receiptNo: string; cancelledAt: Date | null } | null;
 }
 
-/** `RESTORABLE_REDUCED_SWATCH`in bellek-içi ikizi — ikisi birlikte değişir. */
+/**
+ * `RESTORABLE_REDUCED_SWATCH`in bellek-içi ikizi — ikisi birlikte değişir.
+ * KALEMSİZLİK de burada: liste "geri alınabilir" derken tx 409 atmasın (ayrışan yüzey).
+ */
 function reductionBlockingReasons(swatches: ReducedSwatchSignals[]): string[] {
+  if (swatches.length === 0) return [REDUCTION_WITHOUT_ITEMS_REASON];
   const out: string[] = [];
   for (const s of swatches) {
     if (!s.cancelledAt) out.push(`${s.cardNumber}: iptal değil`);

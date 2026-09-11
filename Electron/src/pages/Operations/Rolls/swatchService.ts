@@ -68,6 +68,13 @@ export interface KartelaStockReduction {
   blockingReasons: string[];
 }
 
+export interface KartelaStockReductionPage {
+  success: boolean;
+  data: KartelaStockReduction[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
 export interface KartelaStockGroup {
   itemId: string;
   itemCode: string;
@@ -153,17 +160,21 @@ export const swatchService = {
       .then((r) => r.data);
   },
 
-  /** Stok düşüm geçmişi — en yeni önce; `reversible` ve engel gerekçesi backend'den. */
+  /** Stok düşüm geçmişi — en yeni önce, keyset cursor; `reversible` ve engel gerekçesi backend'den. */
   listStockReductions(params?: {
     itemId?: string;
     colorId?: string;
-  }): Promise<ApiResponse<KartelaStockReduction[]>> {
+    cursor?: string;
+    limit?: number;
+  }): Promise<KartelaStockReductionPage> {
     const sp = new URLSearchParams();
     if (params?.itemId) sp.set("itemId", params.itemId);
     if (params?.colorId) sp.set("colorId", params.colorId);
+    if (params?.cursor) sp.set("cursor", params.cursor);
+    if (params?.limit) sp.set("limit", String(params.limit));
     const qs = sp.toString();
     return apiClient
-      .get<ApiResponse<KartelaStockReduction[]>>(`/api/kartela/stock/reductions${qs ? `?${qs}` : ""}`)
+      .get<KartelaStockReductionPage>(`/api/kartela/stock/reductions${qs ? `?${qs}` : ""}`)
       .then((r) => r.data);
   },
 

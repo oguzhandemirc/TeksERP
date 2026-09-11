@@ -5920,3 +5920,144 @@ okuduğu cevap.
 
 Migration **yok** · izin **yok** · APK **yok**. Sözleşme: uç iki yeni `details.code`
 döndürebilir; bugün çağıran istemci yok (panel/tablet bu ucu kullanmıyor).
+
+---
+
+## 2026-09-12 — ①-b: kartela düşüm stornosunun altı pürüzü (denetim turu) [ÇEKİRDEK]
+
+①'in (kartela stok düşümü ters kaydı) bağımsız denetiminde çıkan ve hepsi DÜŞÜK
+sınıflanan altı bulgu kapatıldı. Hiçbiri şema istemedi.
+
+### ① TOCTOU — ölü kabulün kartelası dirilebiliyordu
+
+Geri alma, kartelanın kabul belgesini (`KartelaReceipt`) KİLİTSİZ okuyordu;
+`cancelReceipt` ise kartela listesini tx DIŞINDA okuyordu. READ COMMITTED'da iki
+yol birbirini görmüyordu: iptal belgeyi claim etmişken (commit yok) storno
+"kabul yaşıyor" görüp kartelayı stoğa döndürüyor, ya da tersi yönde storno'nun
+dirilttiği kartela iptalin BAYAT listesinde olmadığı için iptal edilmeden
+kalıyordu — ölü kabulün altında canlı kartela.
+
+- Storno artık claim'den sonra kalemlerin kabul belgelerini `ORDER BY id FOR SHARE`
+  ile kilitler ve engel kararını KİLİTTEN SONRAKİ taze okumaya dayandırır.
+- `cancelReceipt` kartela kümesini tx İÇİNDE, belge claim'inin ARKASINDA çözer
+  (`parentReceiptId` üzerinden); downstream (sevkiyat/çuval) kontrolü de oraya
+  taşındı, dış okuma yalnız hızlı ret için kaldı. Audit artık tx içinde ölçülen
+  gerçek sayıyı basar.
+- Claim belgeyi UPDATE ile kilitlediği için iki yol HER ZAMAN sıralanır; hangisi
+  önce girerse diğeri bekler ve taze gerçeği görür.
+
+### ② Kalemsiz (defter öncesi) düşüm listede "geri alınabilir" görünüyordu
+
+Panel düğmeyi açık bırakıyor, tıklayınca 409 geliyordu. Kalemsizlik artık
+`reductionBlockingReasons`ın İÇİNDE (tek kaynak) — liste ve tx dalı boğaz ikizi;
+tx hata kodunu `REDUCTION_WITHOUT_ITEMS` olarak korur.
+
+### ③ Liste sessizce 50'de kesiliyordu
+
+Keyset cursor (`createdAt desc, id desc`) + `hasMore`/`nextCursor`; panel sonsuz
+kaydırmaya geçti (`useInfiniteQuery` + `AutoLoadMore`, "Daha Fazla Yükle" yok).
+Sessiz kesme, ekranda "hepsi bu" diye okunuyordu.
+
+### ④ Panel önbelleği ve hata yüzeyi
+
+Düşüm diyaloğu başarıda geçmiş listesini de tazeler; geçmiş diyaloğunda `isError`
+dalı ("Düşüm kaydı yok" yalnız BAŞARILI ve boş yanıtta); geri alma mutasyonu
+`onSettled` ile iki anahtarı tazeler ve 409'un `details.blocked` dökümünü satırın
+altında listeler.
+
+### ⑤ Artık temizleyici başlığı bırakıyordu
+
+`clean_test_residue` düşüm KALEMLERİNİ silip başlığı bırakıyordu (468 fason
+sevkinde aynı sınıf hasar yaşanmıştı). Artık kalemi silinen düşümün başlığı da
+silinir — kapsam TEST damgasıyla sınırlı (yalnız o topların kartelalarını düşen
+düşümler) ve yalnız KALEMSİZ KALAN başlıklar.
+
+### ⑥ Bekçi taraması üç silme biçimini de arıyor
+
+§9a: delegate çağrısı · `swatch_stock_reduction*` tablolarına ham SQL silme
+ifadesi · ilişki üzerinden `items: { deleteMany`. §9b artık TÜM `src/`i tarar
+(diriltme yazımı başka servise kopyalanırsa da yakalanır).
+
+### Bekçi
+
+`test_swatch_stock_reduction_reversal.ts` 25 → **34 kontrol**: §7d kalemsiz satır,
+§7e sayfa sınırı (iki sayfa ayrık), §10 İKİ YÖNLÜ YARIŞ (açık tutulan tx ile) +
+iki körlük zemini (kalemin kabul bağı, rakip tx'in claim'i).
+
+⚠️ Yarış sondası ilk yazımda YANILTICI kırmızı verdi: `reduceStock` FIFO'su
+(ürün+renk genelinde en eski müsait kartela) başka bir kabulün kartelasını
+seçiyordu, yani kilitlenen belge ile düşülen kartelanın belgesi farklıydı. Her
+yarış bölümü artık KENDİ rengini alıyor — kurgu hatası, kod hatası değildi.
+
+**NEGATİF SONDA (dördü de kırmızı, sha256 eşit geri yüklendi):** (i) `FOR SHARE`
+kilidi kaldırıldı → §10a/§10b/§10c (ölü kabulün kartelası dirildi) · (ii) kabul
+iptali bayat dış listeyi kullandı → §10e (dirilen kartela iptalden kaçtı) ·
+(iii) kalemsizlik engeli kaldırıldı → §6a/§6b/§7d · (iv) `take + 1` kaldırıldı →
+§7e (hasMore her zaman false).
+
+### Üç kapı
+
+Migration **yok**. İzin **yok**. APK **yok**; panel sürümü gerekir (sonsuz
+kaydırma + hata dalı). Sözleşme: liste yanıtı artık `{data, nextCursor, hasMore}`
+— eski panel `data`yı aynı yerde bulur, yalnız sayfalamayı kullanmaz.
+
+---
+
+## 2026-09-12 — Müşteriye doğrudan sevk yapılmış fason sevki kilitlenir (iptal yok, kalem taşıma yok) [ÇEKİRDEK]
+
+Fason karnesi turunun ikinci yan bulgusu (yönetici sırası 2).
+
+### Bulgu
+
+Kısmi/alt küme doğrudan sevkte sevk DAMGALANMAZ (`directShippedAt` yalnız TÜM
+toplar gidince basılır) ve bölünme çocuğu sevk kalemi değildir; kalan top fasonda
+`AT_SUBCONTRACTOR` durur. Sonuç: sevkin "müşteriye mal çıkardığı" bilgisini
+YALNIZ `DirectShipment` kaydı taşır ve onu görmeyen üç yol sevki serbest sanıyordu:
+
+- `cancel()` — engel yüklemi yalnız iptal/kabul/taşınmış-top sinyallerine bakıyor;
+  kısmi sevkte üçü de boş → sevk storno olur, irsaliye VOID alır, DSK ve tahsisler
+  İPTAL EDİLMİŞ sevke bağlı kalır. Müşteriye gitmiş mal "hiç sevk edilmedi" olur.
+- K15 parti birleştirme konsolidasyonu — kalemleri keeper'a taşır, kaynağı
+  `K15_MERGE` ile kapatır.
+- K16 cerrahisi (taşıma/bölme) — aynı şeyi Dal 1/2b'den yapar.
+
+Kalem taşımanın ikinci zararı: fason karnesi teslim metresini DSK'nın SEVKİNDEN
+okur (`direct_shipments.dispatchId = sd.id`); kalem başka sevke giderse o metre
+atfını kaybeder (payda kalemle taşınır, teslim metresi kalmaz → sahte fire).
+
+### Karar
+
+**DSK taşıyan sevk iptal edilmez ve kalemleri taşınmaz.** Tek yüklem, üç yüzey:
+`resolveDispatchCancelBlockReason`a `directShipmentNo` sinyali eklendi (uç + iptal
+önizlemesi aynı kaynaktan okur); K15 konsolidasyonu DSK'lı sevki ne keeper ne loser
+yapar ve atladığını audit'e yazar (`skippedDirectShip` — sessiz kırpma yok); K16
+`performDispatchSurgeryTx` DSK'lı kaynak sevkte 409 verir.
+
+Ölçüt: ① müşteriye teslim edilmiş mal geri alınamaz — sevk belgesi de storno
+edilemez (defter doktrini: geri alma ters kayıttır, silme değil) ② tek fabrika /
+küçük ekip: kilit yerine "atla + söyle" konsolidasyonu bloke etmez ③ mevcut desen:
+yüklem tek kaynakta, guard'lar mutasyondan ÖNCE, mesajlar Türkçe ve somut.
+
+Çıkmaz sokak YOK: WO iptali DSK'lı sevki `cancelBulk`ta atlar, mevcut
+`FASON_REMAINDER_DECISION_REQUIRED` akışı devreye girer ve fasonda kalan mal
+"kalan gelmeyecek" kapamasıyla kapanır (bekçi D2 bunu ölçer).
+
+### Bekçi ve negatif sonda
+
+`scripts/test_fason_direct_ship_dispatch_lock.ts` (20 kontrol): D1 sevk iptali 409
++ gerekçede DSK no + önizleme aynı cevabı verir · D2 WO iptali kararla ilerler,
+sevk iptal edilmez, kalan kapanır · D3 K15 birleştirme patlamaz, DSK'lı sevk
+dokunulmadan kalır · D4 K16 bölme 409, kalemler yerinde. Negatif sonda (ayrı
+worktree): üç kapı birden silinince D1a/D1b/D1f, D3b/D3c, D4a/D4b/D4c kırmızı.
+
+### Kod çapaları
+
+- `src/services/helpers/subcontractor-cancel.helper.ts` — `directShipmentNo` sinyali
+- `src/services/subcontractor.service.ts` `cancel()` · `src/services/workorder.service.ts`
+  `getCancelImpact` (önizleme aynası)
+- `src/services/batch.service.ts` K15 konsolidasyonu · `src/services/helpers/batch-dispatch-surgery.helper.ts` K16
+
+### Üç kapı
+
+Migration **yok** · izin **yok** · APK **yok**. Sözleşme: iki yol yeni 409 verebilir
+(panelde iptal butonu zaten `cancellable` bayrağını okuyor, aynı yüklemden gelir).

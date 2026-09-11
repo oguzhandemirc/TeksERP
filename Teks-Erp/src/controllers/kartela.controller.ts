@@ -274,6 +274,7 @@ export class KartelaController {
       const result = await this.service.listStockReductions({
         itemId: qStr(req.query.itemId),
         colorId: qStr(req.query.colorId),
+        cursor: qStr(req.query.cursor),
         limit: qNum(req.query.limit),
       });
       res.status(200).json(result);

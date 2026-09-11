@@ -15,7 +15,11 @@
 //   §6 Kalemsiz (defter öncesi) düşüm 409 + claim geri sarılır
 //   §7 Liste: geri alınabilirlik bayrağı ve engel gerekçesi
 //   §8 Bilinmeyen id 404 · kısa gerekçe 400
-//   §9 Kaynak: `src/`de düşüm defterini silen çağrı yok; geri alma tek yüklemi kullanır
+//   §9 Kaynak: `src/`de düşüm defterini silen çağrı yok (ham SQL + ilişki silmesi
+//      dahil); kartelayı dirilten TEK yazım aktif yüklemi taşır
+//   §10 ⭐ YARIŞ — kabul iptali ile storno aynı kabul belgesinde: hangisi önce
+//      claim ederse diğeri KİLİTTE bekler; ölü kabulün kartelası dirilmez,
+//      storno'nun dirilttiği kartela kabul iptalinden kaçmaz
 // =============================================================================
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -44,6 +48,8 @@ let ADMIN = "";
 let FIRM = "";
 let ITEM = "";
 let COLOR = "";
+/** Yarış bölümleri kendi rengini alır: FIFO düşümü başka kabulün kartelasını seçmesin. */
+const colorIds: string[] = [];
 
 function errCode(e: unknown): { status?: number; code?: string } {
   if (!(e instanceof AppError)) return {};
@@ -56,12 +62,21 @@ async function stock(): Promise<number> {
   return (res.data ?? []).find((g) => g.itemId === ITEM && g.colorId === COLOR)?.count ?? 0;
 }
 
-async function birthSwatches(count: number): Promise<string> {
+async function freshColor(label: string): Promise<string> {
+  const c = await prisma.color.create({
+    data: { code: `TEST-SSR-${label}-${TS}`, name: `TEST SSR ${label} ${TS}`, hex: "#223344" },
+    select: { id: true },
+  });
+  colorIds.push(c.id);
+  return c.id;
+}
+
+async function birthSwatches(count: number, colorId: string = COLOR): Promise<string> {
   const roll = await prisma.roll.create({
     data: {
       barcode: `TEST-SSR-${TS}-${rollIds.length}`,
       itemId: ITEM,
-      colorId: COLOR,
+      colorId,
       initialQty: 100,
       currentQty: 100,
       qualityGrade: "A1",
@@ -201,6 +216,21 @@ async function main(): Promise<void> {
   check("§7a Geri alınmış düşüm: reversible=false, künye dolu", row(red1)?.reversible === false && row(red1)?.reversedAt != null);
   check("§7b Kabulü ölü düşüm: reversible=false + engel gerekçesi", row(red2)?.reversible === false && (row(red2)?.blockingReasons.length ?? 0) === 5, JSON.stringify(row(red2)?.blockingReasons));
   check("§7c Sağlam düşüm: reversible=true, kart no listeli", row(red3)?.reversible === true && row(red3)?.cardNumbers.length === 1);
+  check(
+    "§7d ⭐ Kalemsiz (defter öncesi) düşüm listede de reversible=false + gerekçeli",
+    row(legacy.id)?.reversible === false && (row(legacy.id)?.blockingReasons[0] ?? "").includes("Kalem dökümü yok"),
+    JSON.stringify(row(legacy.id)?.blockingReasons),
+  );
+  const page1 = await kartelaService.listStockReductions({ itemId: ITEM, limit: 2 });
+  const page2 = page1.nextCursor
+    ? await kartelaService.listStockReductions({ itemId: ITEM, limit: 2, cursor: page1.nextCursor })
+    : null;
+  check(
+    "§7e Liste sessizce kesmiyor: hasMore + nextCursor ile sonraki sayfa AYRI satırlar",
+    page1.data.length === 2 && page1.hasMore && page1.nextCursor != null && (page2?.data.length ?? 0) > 0 &&
+      !page2!.data.some((r) => page1.data.some((p) => p.id === r.id)),
+    `sayfa1=${page1.data.length} hasMore=${page1.hasMore} sayfa2=${page2?.data.length}`,
+  );
 
   // §8
   let notFound: { status?: number } = {};
@@ -230,15 +260,128 @@ async function main(): Promise<void> {
     }
   };
   walk(SRC);
-  const deleters = files.filter((f) => /swatchStockReduction(Item)?\.delete(Many)?\(/.test(readFileSync(f, "utf8")));
-  check("§9a `src/`de düşüm defterini silen çağrı YOK", deleters.length === 0, deleters.join(", "));
+  // Üç silme biçimi: delegate · ham SQL · ilişki üzerinden (`items: { deleteMany`).
+  const DELETE_DESENLERI = [
+    /swatchStockReduction(Item)?\.delete(Many)?\(/,
+    /DELETE\s+FROM\s+"?swatch_stock_reduction/i,
+    /items:\s*\{\s*delete(Many)?\b/,
+  ];
+  const deleters = files.filter((f) => {
+    const t = readFileSync(f, "utf8");
+    return DELETE_DESENLERI.some((re) => re.test(t));
+  });
+  check("§9a `src/`de düşüm defterini silen çağrı YOK (delegate · ham SQL · ilişki)", deleters.length === 0, deleters.map((f) => f.replace(SRC, "src")).join(", "));
+  // §9b TÜM `src/` taranır: diriltme yazımı başka bir servise kopyalanırsa da yakalanır.
+  const restoreSites = files.flatMap((f) => {
+    const t = readFileSync(f, "utf8");
+    return (t.match(/data:\s*\{\s*cancelledAt:\s*null/g) ?? []).map(() => f.replace(SRC, "src"));
+  });
   const svc = readFileSync(join(SRC, "services", "kartela.service.ts"), "utf8");
-  const restoreCalls = svc.match(/data:\s*\{\s*cancelledAt:\s*null/g) ?? [];
   check(
-    "§9b Kartelayı dirilten TEK yazım var ve `RESTORABLE_REDUCED_SWATCH` yüklemini taşıyor",
-    restoreCalls.length === 1 && /\.\.\.RESTORABLE_REDUCED_SWATCH\s*\}/.test(svc),
-    `diriltme=${restoreCalls.length}`,
+    "§9b Kartelayı dirilten TEK yazım `src/`de var ve `RESTORABLE_REDUCED_SWATCH` yüklemini taşıyor",
+    restoreSites.length === 1 && restoreSites[0] === "src/services/kartela.service.ts" && /\.\.\.RESTORABLE_REDUCED_SWATCH\s*\}/.test(svc),
+    `diriltme=${restoreSites.length} → ${restoreSites.join(", ")}`,
   );
+
+  // §10 — YARIŞ (iki yön, açık tutulan tx ile)
+  await raceCancelFirst();
+  await raceReverseFirst();
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** (a) Kabul iptali belgeyi claim etti (commit YOK) → storno kilitte beklemeli, sonra 409. */
+async function raceCancelFirst(): Promise<void> {
+  const raceColor = await freshColor("YA");
+  const receiptId = await birthSwatches(2, raceColor);
+  await kartelaService.reduceStock({ itemId: ITEM, colorId: raceColor, count: 1, reason: "yarış a" }, ADMIN);
+  const red = await latestReductionId();
+  let release = (): void => {};
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  // Körlük zemini: kalemler gerçekten bir kabul belgesine bağlı mı (bağ yoksa
+  // kilit hiç alınmaz ve §10a yanıltıcı şekilde yeşil/kırmızı olur).
+  const itemReceipts = await prisma.swatchStockReductionItem.findMany({
+    where: { reductionId: red },
+    select: { swatch: { select: { parentReceiptId: true } } },
+  });
+  check(
+    "§10 zemin: düşüm kalemlerinin kabul belgesi bağı var",
+    itemReceipts.length > 0 && itemReceipts.every((i) => i.swatch.parentReceiptId === receiptId),
+    JSON.stringify(itemReceipts.map((i) => i.swatch.parentReceiptId)),
+  );
+  let claimCount = -1;
+  const holder = prisma.$transaction(
+    async (tx) => {
+      // `cancelReceipt`in claim + kartela iptali adımlarının ikizi (commit gecikir).
+      claimCount = (await tx.kartelaReceipt.updateMany({
+        where: { id: receiptId, cancelledAt: null },
+        data: { cancelledAt: new Date(), cancelledById: ADMIN, cancelReason: "yarış iptali" },
+      })).count;
+      await tx.swatch.updateMany({
+        where: { parentReceiptId: receiptId, cancelledAt: null },
+        data: { cancelledAt: new Date(), cancelReason: "yarış iptali" },
+      });
+      await gate;
+    },
+    { timeout: 30_000 },
+  );
+  holder.catch(() => {});
+  await sleep(200);
+  check("§10 zemin: rakip tx kabul belgesini claim etti (commit YOK)", claimCount === 1, String(claimCount));
+  const rev = kartelaService.reverseStockReduction(red, "yarışta geri alma", ADMIN);
+  let settled = false;
+  rev.then(
+    () => (settled = true),
+    () => (settled = true),
+  );
+  await sleep(500);
+  check("§10a ⭐ Storno, kabul belgesinin kilidinde BEKLEDİ (FOR SHARE)", settled === false);
+  release();
+  await holder;
+  const err = await rev.then(() => null).catch((e) => errCode(e));
+  check("§10b Kilit çözülünce storno 409 REDUCTION_NOT_REVERSIBLE", err?.status === 409 && err.code === "REDUCTION_NOT_REVERSIBLE", JSON.stringify(err));
+  const alive = await prisma.swatch.count({ where: { parentReceiptId: receiptId, cancelledAt: null } });
+  check("§10c Ölü kabulün kartelası DİRİLMEDİ", alive === 0, String(alive));
+}
+
+/** (b) Storno belgeyi FOR SHARE ile tutup kartelayı diriltti → kabul iptali beklemeli ve onu da iptal etmeli. */
+async function raceReverseFirst(): Promise<void> {
+  const raceColor = await freshColor("YB");
+  const receiptId = await birthSwatches(2, raceColor);
+  await kartelaService.reduceStock({ itemId: ITEM, colorId: raceColor, count: 1, reason: "yarış b" }, ADMIN);
+  const red = await latestReductionId();
+  const swatchIds = (
+    await prisma.swatchStockReductionItem.findMany({ where: { reductionId: red }, select: { swatchId: true } })
+  ).map((i) => i.swatchId);
+  let release = (): void => {};
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  const holder = prisma.$transaction(
+    async (tx) => {
+      await tx.$queryRaw`SELECT id FROM kartela_receipts WHERE id = ${receiptId}::uuid FOR SHARE`;
+      await tx.swatch.updateMany({ where: { id: { in: swatchIds } }, data: { cancelledAt: null, cancelReason: null } });
+      await gate;
+    },
+    { timeout: 30_000 },
+  );
+  holder.catch(() => {});
+  await sleep(200);
+  const cancel = kartelaService.cancelReceipt(receiptId, "yarışta kabul iptali", ADMIN);
+  let settled = false;
+  cancel.then(
+    () => (settled = true),
+    () => (settled = true),
+  );
+  await sleep(500);
+  check("§10d Kabul iptali, storno'nun kilidinde BEKLEDİ", settled === false);
+  release();
+  await holder;
+  const res = await cancel.then(() => null).catch((e) => errCode(e));
+  const alive = await prisma.swatch.count({ where: { parentReceiptId: receiptId, cancelledAt: null } });
+  check("§10e ⭐ Storno'nun dirilttiği kartela da iptal edildi (liste tx İÇİNDE çözüldü)", res === null && alive === 0, `${JSON.stringify(res)} canlı=${alive}`);
 }
 
 async function cleanup(): Promise<void> {
@@ -251,7 +394,8 @@ async function cleanup(): Promise<void> {
     await prisma.kartelaReceipt.deleteMany({ where: { items: { some: { consumedRollId: { in: rollIds } } } } });
     await prisma.kartelaDispatch.deleteMany({ where: { items: { some: { rollId: { in: rollIds } } } } });
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
-    if (COLOR) await prisma.color.deleteMany({ where: { id: COLOR } });
+    const allColors = [COLOR, ...colorIds].filter(Boolean);
+    if (allColors.length) await prisma.color.deleteMany({ where: { id: { in: allColors } } });
     if (ITEM) await prisma.item.deleteMany({ where: { id: ITEM } });
   } catch (e) {
     console.warn("cleanup uyarı:", (e as Error).message);

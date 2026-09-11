@@ -168,8 +168,13 @@ router.post(
  * /api/kartela/stock/reductions:
  *   get:
  *     tags: [Kartela]
- *     summary: Stok düşüm geçmişi — en yeni önce, geri alınabilirlik satırda
+ *     summary: Stok düşüm geçmişi — en yeni önce, keyset cursor, geri alınabilirlik satırda
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: itemId, schema: { type: string } }
+ *       - { in: query, name: colorId, schema: { type: string } }
+ *       - { in: query, name: cursor, schema: { type: string }, description: "Önceki yanıtın nextCursor'ı" }
+ *       - { in: query, name: limit, schema: { type: integer, default: 50, maximum: 200 } }
  */
 router.get(
   "/stock/reductions",
