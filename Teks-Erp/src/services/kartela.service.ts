@@ -1401,6 +1401,10 @@ export class KartelaService {
           // rollback (reduction kaydı dahil — yarım olay kaydı kalmaz, token boşa gitmez).
           throw AppError.conflict("Kartelalardan biri az önce değişti — tekrar deneyin.");
         }
+        // Kalemler defterde: geri alma hangi kartelaları döndüreceğini buradan okur.
+        await tx.swatchStockReductionItem.createMany({
+          data: claimIds.map((swatchId) => ({ reductionId: reduction.id, swatchId })),
+        });
         return { ids: claimIds, reductionId: reduction.id };
       }));
     } catch (err) {
@@ -1458,6 +1462,219 @@ export class KartelaService {
       message: `${ids.length} kartela stoktan düşüldü`,
     };
   }
+
+  /** Stok düşüm geçmişi — en yeni önce; geri alınabilirlik satırda hesaplanır. */
+  async listStockReductions(params?: {
+    itemId?: string;
+    colorId?: string;
+    limit?: number;
+  }): Promise<ApiResponse<StockReductionRow[]>> {
+    const itemCond = readIdCondition(params?.itemId);
+    const colorCond = readIdCondition(params?.colorId);
+    const take = Math.min(Math.max(params?.limit ?? 50, 1), 200);
+    const rows = await prisma.swatchStockReduction.findMany({
+      where: {
+        ...(itemCond && { itemId: itemCond }),
+        ...(colorCond && { colorId: colorCond }),
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take,
+      select: {
+        id: true,
+        count: true,
+        reason: true,
+        createdAt: true,
+        reversedAt: true,
+        reverseReason: true,
+        item: { select: { id: true, code: true, name: true } },
+        color: { select: { id: true, name: true, hex: true } },
+        createdBy: { select: { fullName: true, username: true } },
+        reversedBy: { select: { fullName: true, username: true } },
+        items: {
+          select: {
+            swatch: {
+              select: {
+                cardNumber: true,
+                cancelledAt: true,
+                shipmentId: true,
+                sackId: true,
+                parentReceipt: { select: { receiptNo: true, cancelledAt: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const data: StockReductionRow[] = rows.map((r) => {
+      const blockingReasons = r.reversedAt ? [] : reductionBlockingReasons(r.items.map((i) => i.swatch));
+      return {
+        id: r.id,
+        count: r.count,
+        reason: r.reason,
+        createdAt: r.createdAt,
+        createdBy: r.createdBy?.fullName ?? r.createdBy?.username ?? null,
+        item: r.item,
+        color: r.color,
+        cardNumbers: r.items.map((i) => i.swatch.cardNumber),
+        reversedAt: r.reversedAt,
+        reversedBy: r.reversedBy?.fullName ?? r.reversedBy?.username ?? null,
+        reverseReason: r.reverseReason,
+        reversible: !r.reversedAt && blockingReasons.length === 0,
+        blockingReasons,
+      };
+    });
+    return { success: true, data };
+  }
+
+  /**
+   * Stok düşümünün STORNOSU — düşümün kalemlerindeki kartelalar stoğa döner.
+   * Düşüm satırı ve kalemleri DEĞİŞMEZ; başlığa ters damga yazılır. Kartelanın
+   * `cancelledAt`i durum kolonudur: geçmiş düşüm defterinde kalır.
+   */
+  async reverseStockReduction(
+    reductionId: string,
+    reason: string,
+    userId?: string
+  ): Promise<ApiResponse<{ id: string; restored: number }>> {
+    const trimmed = reason?.trim();
+    if (!trimmed || trimmed.length < 3) {
+      throw AppError.badRequest("Geri alma gerekçesi en az 3 karakter olmalı");
+    }
+
+    const result = await prisma.$transaction((tx) => reverseStockReductionTx(tx, reductionId, trimmed, userId));
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "SWATCH_STOCK_REDUCTION",
+      recordId: reductionId,
+      newData: {
+        kind: "KARTELA_STOCK_REDUCE_REVERSAL",
+        itemId: result.itemId,
+        colorId: result.colorId,
+        count: result.count,
+        swatchIds: result.swatchIds.slice(0, 100),
+        reason: trimmed,
+      },
+    });
+
+    return {
+      success: true,
+      data: { id: reductionId, restored: result.restored },
+      message: `Düşüm geri alındı — ${result.restored} kartela stoğa döndü`,
+    };
+  }
+}
+
+/** Düşüm stornosunun tx gövdesi: claim → kalem okuma → engel → kartelaları döndür. */
+async function reverseStockReductionTx(
+  tx: Prisma.TransactionClient,
+  reductionId: string,
+  reason: string,
+  userId?: string
+) {
+  const claim = await tx.swatchStockReduction.updateMany({
+    where: { id: reductionId, reversedAt: null },
+    data: { reversedAt: new Date(), reversedById: userId ?? null, reverseReason: reason.slice(0, 500) },
+  });
+  if (claim.count === 0) {
+    const fresh = await tx.swatchStockReduction.findUnique({
+      where: { id: reductionId },
+      select: { id: true },
+    });
+    if (!fresh) throw AppError.notFound("Stok düşümü bulunamadı");
+    throw AppError.conflict("Bu stok düşümü zaten geri alınmış.", { code: "REDUCTION_ALREADY_REVERSED" });
+  }
+
+  const reduction = await tx.swatchStockReduction.findUniqueOrThrow({
+    where: { id: reductionId },
+    select: {
+      itemId: true,
+      colorId: true,
+      count: true,
+      items: {
+        select: {
+          swatchId: true,
+          swatch: {
+            select: {
+              cardNumber: true,
+              cancelledAt: true,
+              shipmentId: true,
+              sackId: true,
+              parentReceipt: { select: { receiptNo: true, cancelledAt: true } },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (reduction.items.length === 0) {
+    throw AppError.conflict(
+      "Bu düşümün kalem dökümü yok (kalem defterinden önce yapılmış) — geri alınamaz.",
+      { code: "REDUCTION_WITHOUT_ITEMS" }
+    );
+  }
+  const blockingReasons = reductionBlockingReasons(reduction.items.map((i) => i.swatch));
+  if (blockingReasons.length > 0) {
+    throw AppError.conflict(
+      `Düşüm geri alınamaz — ${blockingReasons.length} kartela stoğa dönemez.`,
+      { code: "REDUCTION_NOT_REVERSIBLE", blocked: blockingReasons }
+    );
+  }
+
+  const swatchIds = reduction.items.map((i) => i.swatchId);
+  const restored = await tx.swatch.updateMany({
+    where: { id: { in: swatchIds }, ...RESTORABLE_REDUCED_SWATCH },
+    data: { cancelledAt: null, cancelReason: null },
+  });
+  if (restored.count !== swatchIds.length) {
+    throw AppError.conflict("Kartelalardan biri az önce değişti — tekrar deneyin.");
+  }
+  return { restored: restored.count, itemId: reduction.itemId, colorId: reduction.colorId, count: reduction.count, swatchIds };
+}
+
+export interface StockReductionRow {
+  id: string;
+  count: number;
+  reason: string;
+  createdAt: Date;
+  createdBy: string | null;
+  item: { id: string; code: string; name: string };
+  color: { id: string; name: string; hex: string | null } | null;
+  cardNumbers: string[];
+  reversedAt: Date | null;
+  reversedBy: string | null;
+  reverseReason: string | null;
+  reversible: boolean;
+  blockingReasons: string[];
+}
+
+/** Düşülmüş kartelanın stoğa dönebilmesi: hâlâ iptal, sevkiyat/çuval bağı yok, kabulü yaşıyor. */
+const RESTORABLE_REDUCED_SWATCH = {
+  cancelledAt: { not: null },
+  shipmentId: null,
+  sackId: null,
+  OR: [{ parentReceiptId: null }, { parentReceipt: { is: { cancelledAt: null } } }],
+} satisfies Prisma.SwatchWhereInput;
+
+interface ReducedSwatchSignals {
+  cardNumber: string;
+  cancelledAt: Date | null;
+  shipmentId: string | null;
+  sackId: string | null;
+  parentReceipt: { receiptNo: string; cancelledAt: Date | null } | null;
+}
+
+/** `RESTORABLE_REDUCED_SWATCH`in bellek-içi ikizi — ikisi birlikte değişir. */
+function reductionBlockingReasons(swatches: ReducedSwatchSignals[]): string[] {
+  const out: string[] = [];
+  for (const s of swatches) {
+    if (!s.cancelledAt) out.push(`${s.cardNumber}: iptal değil`);
+    else if (s.shipmentId || s.sackId) out.push(`${s.cardNumber}: sevkiyatta/çuvalda`);
+    else if (s.parentReceipt?.cancelledAt) out.push(`${s.cardNumber}: kabulü iptal edilmiş (${s.parentReceipt.receiptNo})`);
+  }
+  return out;
 }
 
 export const kartelaService = new KartelaService();

@@ -126,6 +126,11 @@ async function main() {
     await phase("kartela sevk kalemleri", async () =>
       (await prisma.kartelaDispatchItem.deleteMany({ where: { rollId: { in: rollIds } } })).count,
     );
+    await phase("kartela düşüm kalemleri", async () =>
+      (await prisma.swatchStockReductionItem.deleteMany({
+        where: { swatch: { parentRollId: { in: rollIds } } },
+      })).count,
+    );
     await phase("kartelalar", async () =>
       (await prisma.swatch.deleteMany({ where: { parentRollId: { in: rollIds } } })).count,
     );

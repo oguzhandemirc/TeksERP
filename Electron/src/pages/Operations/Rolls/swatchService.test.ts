@@ -46,6 +46,18 @@ describe("swatchService — kartela ADET stok", () => {
     expect(mockPost).toHaveBeenCalledWith("/api/kartela/stock/reduce", body);
   });
 
+  it("listStockReductions filtreleri query'ye koyar", async () => {
+    await swatchService.listStockReductions({ itemId: "i1", colorId: "c1" });
+    expect(mockGet).toHaveBeenCalledWith("/api/kartela/stock/reductions?itemId=i1&colorId=c1");
+  });
+
+  it("reverseStockReduction → POST /reductions/:id/reverse, gövdede yalnız gerekçe", async () => {
+    await swatchService.reverseStockReduction("r1", "yanlış düşüm");
+    expect(mockPost).toHaveBeenCalledWith("/api/kartela/stock/reductions/r1/reverse", {
+      reason: "yanlış düşüm",
+    });
+  });
+
   it("reduceStock renksiz grup (colorId null) gönderebilir", async () => {
     const body = { itemId: "i1", colorId: null, count: 1, reason: "hasar" };
     await swatchService.reduceStock(body);

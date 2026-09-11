@@ -5438,3 +5438,73 @@ hepsi fixture DB'de yeşil.
 Migration **var** (`20260911190000`). İzin **yok**. APK/Electron **yok** —
 sözleşme değişmedi; yanıtlar yalnız geri alınmış satırı artık döndürmüyor (B-4a
 öncesi davranış).
+
+---
+
+## 2026-09-11 — Kartela stok düşümünün ters yolu: tek yönlü defter kapandı [ÇEKİRDEK]
+
+Defter doktrini kalan borç ①. `SwatchStockReduction` yalnız DÜŞÜM satırı
+yazıyordu: yanlış düşülen kartela geri gelmiyordu, hangi kartelaların düşüldüğü
+yalnız audit yükündeydi (`swatchIds`, 6 ayda arşivlenir). "Deftere yazan her
+ileri kaynağın ters yolu olmalı" kuralının doğrudan ihlaliydi.
+
+### Karar
+
+- **Ters kaydın biçimi DAMGA:** başlığa `reversedAt` · `reversedById` ·
+  `reverseReason`. Negatif karşı satır `swatch_stock_reductions_count_pos`
+  CHECK'i yüzünden yazılamaz (B-3 emsali). Bir düşüm bir kez geri alınır —
+  yeniden düşüm YENİ satırdır, yani tek damga çevrimi ezmez (RollVariance
+  `reversedAt` emsali).
+- **Kalem tablosu `SwatchStockReductionItem`** (append-only, `@@unique([reductionId,
+  swatchId])`): geri alma hangi kartelaları döndüreceğini audit'ten değil
+  defterden okur. Kartela başına tekil DEĞİL — aynı kartela düşülüp geri alınıp
+  yeniden düşülebilir.
+- **`Swatch.cancelledAt` durum kolonudur**, defter değil: geri alma onu boşaltır,
+  geçmiş düşüm satırında + kalemde + ters damgada kalır. (Yasak listesindeki
+  "ileri damgayı null'lama" iş-yapıldı beyanlarıdır — `dispatchedAt` gibi;
+  kartelanın iptal bayrağı stok sorgusunun kendisidir, 20+ okuma onu süzer.)
+- **Kabul iptali ayrı satır yazmaz:** kabulle iptal edilen kartelayı belge
+  künyesi açıklar (`KartelaReceipt.cancelledAt` + `Swatch.parentReceiptId`). İptal
+  edilmiş kartelanın kaynağı deterministiktir: aktif düşüm kaleminde ise düşüm,
+  değilse kabul iptali.
+- **Geri alma kapısı** (`reverseStockReduction`): atomik claim
+  `updateMany({id, reversedAt:null})` → kalemler taze okunur → her kartela hâlâ
+  iptal, sevkiyat/çuval bağı yok, kabulü yaşıyor olmalı; biri bile değilse 409
+  `REDUCTION_NOT_REVERSIBLE` + kart no listesi ve claim geri sarılır. Kabulü
+  iptal edilmiş kartela "hiç gelmemiş" maldır — diriltilmez. Kalemsiz eski düşüm
+  409 `REDUCTION_WITHOUT_ITEMS` (geçmiş uydurulmaz; fabrikada düşüm 0 satır).
+- Yüklem boğaz-ikiz: `RESTORABLE_REDUCED_SWATCH` (WHERE) ↔
+  `reductionBlockingReasons` (bellek-içi, liste + 409 gerekçesi).
+- İzin: geri alma `kartela:write` (panel); düşümü yapabilen `mobile:depo`
+  geri alamaz — düzeltmenin düzeltmesi masada. Yeni izin kodu yok.
+
+### Kod çapaları
+
+- `prisma/migrations/20260912090000_swatch_stock_reduction_reversal/`
+- `src/services/kartela.service.ts` — `reduceStock` kalem yazar;
+  `listStockReductions` · `reverseStockReduction` · `reverseStockReductionTx`
+- `src/routes/kartela.routes.ts` — `GET /stock/reductions` · `POST /stock/reductions/:id/reverse`
+- Panel: `Electron/src/pages/Operations/Rolls/KartelaReductionHistoryDialog.tsx`
+  (Kartela Stoğu → "Düşüm Geçmişi"); düşüm diyaloğundaki "geri alınamaz" cümlesi düzeltildi.
+
+### Bekçi
+
+`scripts/test_swatch_stock_reduction_reversal.ts` — 25 kontrol (§1 kalem =
+iptal kümesi · §2 stoğa dönüş + satır değişmedi + ters damga + kalem silinmedi ·
+§3 çift geri alma 409 · §4 yeniden düşüm · §5 kabulü ölü kartela 409 + claim
+geri sarıldı + dirilmedi · §6 kalemsiz 409 · §7 liste bayrakları · §8 404/400 ·
+§9 kaynak: silen çağrı yok, tek diriltme yazımı yüklemi taşıyor).
+
+**NEGATİF SONDA (üçü de kırmızı, dosya sha256 eşit geri yüklendi):**
+① kalem `createMany` kaldırıldı → §1a/§1b kırmızı + §2 çöktü ·
+② kabul-iptal engeli iki ikizden kaldırıldı → §5a/§5b/§5c/§7b kırmızı (5 ölü
+kartela dirildi) · ③ claim'den `reversedAt: null` kaldırıldı → §3a kırmızı.
+
+Yol boyunca: §4 ilk yazımda "FIFO en eski üç" varsaydı; tek `createMany`de doğan
+kartelaların `createdAt`i eşit, sıra belirsiz — beklenti düzeltildi (kod değil).
+
+### Üç kapı
+
+Migration **var** (`20260912090000`: üç nullable kolon + yeni tablo). İzin
+**yok** (mevcut `kartela:write`). APK **yok**; panel sürümü gerekir (geri alma
+düğmesi). Eski panel: yeni uçları çağırmaz, davranışı değişmez.

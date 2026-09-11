@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { Minus } from "lucide-react";
+import { History, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ScanField } from "@/components/scanner/ScanField";
@@ -12,6 +12,7 @@ import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
 import { swatchService, type KartelaStockGroup } from "./swatchService";
 import { ReduceKartelaStockDialog } from "./ReduceKartelaStockDialog";
+import { KartelaReductionHistoryDialog } from "./KartelaReductionHistoryDialog";
 
 const NUM_FMT = new Intl.NumberFormat("tr-TR", { useGrouping: false });
 
@@ -37,11 +38,13 @@ interface Props {
  * Kartela Stoğu — kartelalar sahada tek tek okutulup düşülmediğinden envanter
  * ADET bazlı gösterilir: kumaş+renk grubu → kaç adet müsait. "Depoda Patos Mavi
  * karteladan kaç tane var" sorusunun tek-bakış cevabı. Stok yalnız kabulde (+)
- * ve sevkiyatta (−) değişir; kayıp/hasar/sayım için "Düş" ile elle azaltılır.
+ * ve sevkiyatta (−) değişir; kayıp/hasar/sayım için "Düş" ile elle azaltılır,
+ * yanlış düşüm "Düşüm Geçmişi"nden geri alınır.
  */
 export function SwatchesPanel({ onScanSwatch, swatchLookupPending }: Props) {
   const [search, setSearch] = useState("");
   const [reduceGroup, setReduceGroup] = useState<KartelaStockGroup | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const debounced = useDebouncedValue(search.trim(), 300);
   const [searchParams] = useSearchParams();
   const itemId = searchParams.get("filter[itemId]") ?? undefined;
@@ -89,6 +92,9 @@ export function SwatchesPanel({ onScanSwatch, swatchLookupPending }: Props) {
         />
         <FilterBar filters={FILTERS} inline />
         <div className="ml-auto flex items-center gap-3 text-xs">
+          <Button variant="ghost" size="sm" className="h-7 gap-1" onClick={() => setHistoryOpen(true)}>
+            <History className="h-3.5 w-3.5" /> Düşüm Geçmişi
+          </Button>
           <Stat label="Toplam" value={NUM_FMT.format(totals.count)} unit="adet" />
           <span className="h-3 w-px bg-border" aria-hidden />
           <Stat label="Çeşit" value={NUM_FMT.format(totals.kinds)} unit="grup" />
@@ -149,6 +155,12 @@ export function SwatchesPanel({ onScanSwatch, swatchLookupPending }: Props) {
         group={reduceGroup}
         open={Boolean(reduceGroup)}
         onOpenChange={(open) => !open && setReduceGroup(null)}
+      />
+      <KartelaReductionHistoryDialog
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        itemId={itemId}
+        colorId={colorId}
       />
     </div>
   );

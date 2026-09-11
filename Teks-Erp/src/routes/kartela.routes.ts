@@ -6,7 +6,7 @@
 import { Router } from "express";
 import { KartelaController } from "../controllers/kartela.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requireAnyPermission } from "../middlewares/rbac.middleware";
+import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 
 const controller = new KartelaController();
 const router = Router();
@@ -161,6 +161,46 @@ router.post(
   // Depo personeli (mobil Depo ekranı) ve kartela yetkilisi elle düşebilir.
   requireAnyPermission("kartela:write", "mobile:depo"),
   controller.reduceStock
+);
+
+/**
+ * @openapi
+ * /api/kartela/stock/reductions:
+ *   get:
+ *     tags: [Kartela]
+ *     summary: Stok düşüm geçmişi — en yeni önce, geri alınabilirlik satırda
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/stock/reductions",
+  verifyToken,
+  requireAnyPermission("kartela:read", "mobile:depo"),
+  controller.listStockReductions
+);
+
+/**
+ * @openapi
+ * /api/kartela/stock/reductions/{id}/reverse:
+ *   post:
+ *     tags: [Kartela]
+ *     summary: Stok düşümünü geri al (storno) — kalemlerdeki kartelalar stoğa döner
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               reason: { type: string }
+ */
+router.post(
+  "/stock/reductions/:id/reverse",
+  verifyToken,
+  // Düzeltmenin düzeltmesi masada yapılır: depo tableti düşer, geri almayı kartela yetkilisi yapar.
+  requirePermission("kartela:write"),
+  controller.reverseStockReduction
 );
 
 /**

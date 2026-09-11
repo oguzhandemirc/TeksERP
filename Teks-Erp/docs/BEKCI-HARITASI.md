@@ -2,7 +2,7 @@
 
 > Üretilmiş (anlama turu 2026-09-05, +10 bekçi 2026-09-06/07; 467 backend bekçisi + 296 istemci testi — Electron 211, mobil 85). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı; 455 dosya, **~6,5 dakika** — 369 sn koşum + 28 sn tip geçidi, ölçüldü 2026-09-05 — 'saatler sürer' cümlesi YANLIŞTI, `docs/standart/TEST-VE-DERLEME.md` [TD-02]). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
 
-Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `diger` (91), `sevkiyat` (87), `etiket` (83), `finans` (81), `siparis` (72), `modul-bayrak` (68), `belge` (65), `ayar` (58), `cuval` (59), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (40), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (29), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (11), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
+Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `diger` (91), `sevkiyat` (87), `etiket` (83), `finans` (81), `siparis` (72), `modul-bayrak` (68), `belge` (65), `ayar` (58), `cuval` (59), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (40), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (29), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (12), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
 
 
 ## yetki-izin (98)
@@ -1828,7 +1828,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `Teks-Erp/scripts/test_station_property_mode.ts` | StationProperty davranış modunu (AUTO/OPTIONAL/REQUIRED) ve varsayılanın OPTIONAL kaldığını, mod korunumunu, kurşun bypass AUTO süzgecini kilitler. | ✓ |  |  |
 | `Teks-Erp/scripts/test_workorder_order_link.ts` | Sipariş bağlama MİRAS ALMAZ (hedef renk/en siparişten yazılmaz), uyuşmazsa bağlanmaz; renk/en değişimi izli, applyAttributeToRolls BAYRAK özelliklerin | ✓ | ✓ |  |
 
-## kartela (11)
+## kartela (12)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
@@ -1843,6 +1843,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `Teks-Erp/scripts/test_printed_documents.ts` | Donmuş belge defterinin yaşam döngüsünü kilitler: v1 freeze · kaynak değişse de snapshot sabit · reissue v1 SUPERSEDED+v2 ACTIVE · yeni sevk = yeni be | ✓ |  |  |
 | `Teks-Erp/scripts/test_sack_content_dump.ts` | getContentDump'ın top bazlı dökümünü: Decimal→number, çuval başlık alanları, kartela ayrı dizi, hayalet topların düşmesi, sevkiyata göre gruplu sıra v | ✓ |  |  |
 | `Teks-Erp/scripts/test_sack_status_invariant.ts` | "Çuvaldaki top başka yere ALINAMAZ" invariantını dört akışta birden (kartela dispatch, tambur depo kesimi/finalize, fason auto-attach) — depo çuvalınd | ✓ |  |  |
+| `Teks-Erp/scripts/test_swatch_stock_reduction_reversal.ts` | Kartela stok düşümü stornosu: kalem = iptal kümesi, düşüm satırı değişmez + ters damga, çift storno 409, ölü kabulün kartelası dirilmez, kalemsiz eski düşüm 409, silen çağrı yok | ✓ | ✓ |  |
 
 ## sebep-katalogu (11)
 

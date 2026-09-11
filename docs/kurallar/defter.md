@@ -25,6 +25,7 @@ Durum tabloları **"şu an ne"**yi tutar; defterler **"ne oldu"**yu tutar ve "ne
 - **[ÇEKİRDEK]** Bir kaydın GEÇMİŞİNİ koruyan guard (adım silme, başlamış adımın istasyon/sıra değişimi, makine/istasyon kalıcı silme) geri alınmış defter satırını da SAYAR: geri alma "hiç olmadı" demez, "yapıldı ve geri alındı" der. · bekçi: `test_roll_movement_revoke.ts` §6e · `test_roll_operation_revoke.ts` §7d <sub>(arşiv:2026-09-11 B-4b)</sub>
 - **[ÇEKİRDEK]** Defter İŞ VERİSİDİR: arşivlenmez, budanmaz. Büyüme index/partition ile karşılanır, satır silerek değil. <sub>(arşiv:2026-09-10)</sub>
 - **[ÇEKİRDEK]** Çalışma oturumu (`WorkSession`) geçmişi hiçbir yoldan silinmez; oturumu olan istasyon/makine kalıcı silinemez (409 `workSessionCount`), pasife alınır. · bekçi: `test_work_session_history_guard.ts` <sub>(arşiv:2026-09-11)</sub>
+- **[ÇEKİRDEK]** Sayaç-bazlı düşüm belgesi ("N adet düş") etkilediği kayıtları KALEM satırına yazar ve stornosu kalemden okur; kalemsiz düşüm geri alınamaz (409), geçmişi audit'ten uydurulmaz. · bekçi: `test_swatch_stock_reduction_reversal.ts` §1/§6 <sub>(arşiv:2026-09-11)</sub>
 - **[ÇEKİRDEK]** Çekin her ileri olayının tipli stornosu vardır (`CANCELLED` hariç her terminalden tek çıkış): ters cari satır orijinaline `reversesTxnId` ile bağlanır, bugüne yazılır, durum en yeni ileri olayın (`createdAt`) `fromStatus`una döner; olay/satır bulunamazsa 409. · bekçi: `test_cheque_reversal.ts` <sub>(arşiv:2026-09-11)</sub>
 
 ### Yasaklar
@@ -81,7 +82,7 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 | `RollMovement` `:3587` | topun adım içi giriş/çıkışı | yarı — `updatedAt` (açık satır çıkışta kapanır, Faz 2 açık) · `revokedAt` damgası | ✅ damga + PARTIAL unique (`exitedAt IS NULL AND revokedAt IS NULL`) |
 | `RollOperation` `:3108` | kurşun/QC2/tambur/fason kanıtı | ✅ `revokedAt` damgası | ✅ damga + PARTIAL unique |
 | `RollVariance` `:3175` | fire · düzeltme · aşım | ✅ | ✅ `reversedAt` |
-| `SwatchStockReduction` `:4159` | kartela düşümü | ✅ | ❌ |
+| `SwatchStockReduction` + `SwatchStockReductionItem` | kartela düşümü + kalemleri | ✅ `reversedAt` damgası | ✅ damga (negatif satır CHECK yüzünden yasak); kalemi ölü kabule bağlı kartela dönmez (2026-09-11) |
 | `PaymentAllocation` `:7249` | fatura kapama | ✅ `revokedAt` damgası | ✅ damga (negatif satır CHECK yüzünden yasak) |
 | `SackAllocation` `:4939` | sipariş karşılama | ❌ sil-yaz (rebalance) | ❌ |
 | `PrintedDocument` `:4388` | belge versiyonu | ✅ | ✅ SUPERSEDED/VOIDED |
@@ -102,6 +103,7 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 - `scripts/test_roll_movement_revoke.ts` — hareket damgası, partial unique, geri alma sonrası adım durumu (recompute), AST+tip taraması (§6).
 - `scripts/test_roll_operation_revoke.ts` — operasyon damgası, partial unique, upsert tuzağı (§8), AST+tip taraması (§7).
 - `scripts/test_cheque_reversal.ts` — çek ters yolları: bağ (`reversesTxnId`), bugüne yazım, `createdAt` kronolojisi, kasa/cari mutabakatı, tek kaynak tripwire.
+- `scripts/test_swatch_stock_reduction_reversal.ts` — kartela düşüm stornosu: kalem = iptal kümesi, satır değişmez + ters damga, çift storno 409, ölü kabulün kartelası dirilmez, kalemsiz eski düşüm 409.
 - `scripts/test_work_session_history_guard.ts` — oturum geçmişi silinmez (istasyon/makine 409 + önizleme dökümü + AST: `src/`de `workSession.delete*` ve ham `DELETE work_sessions` yok). Panel metni: `Electron/src/pages/Stations/machineDeleteDescription.test.ts`.
 - `scripts/test_warehouse_ledger.ts` ve `test_warehouse_movements.ts` yalnız OKUMA/süzme yüzeyini ölçüyor, "hangi olay satır yazmalı" invariant'ını DEĞİL.
 - `scripts/consistency-check.sql`'de `warehouse_movements` mutabakatı HİÇ YOK.

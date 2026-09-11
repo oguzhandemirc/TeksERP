@@ -52,6 +52,22 @@ export interface SwatchListParams {
 }
 
 /** Kartela stoğu: müsait (sevke girmemiş, iptalsiz) kartelaların kumaş+renk bazında adedi. */
+export interface KartelaStockReduction {
+  id: string;
+  count: number;
+  reason: string;
+  createdAt: string;
+  createdBy: string | null;
+  item: { id: string; code: string; name: string };
+  color: { id: string; name: string; hex: string | null } | null;
+  cardNumbers: string[];
+  reversedAt: string | null;
+  reversedBy: string | null;
+  reverseReason: string | null;
+  reversible: boolean;
+  blockingReasons: string[];
+}
+
 export interface KartelaStockGroup {
   itemId: string;
   itemCode: string;
@@ -134,6 +150,33 @@ export const swatchService = {
     const qs = sp.toString();
     return apiClient
       .get<ApiResponse<KartelaStockGroup[]>>(`/api/kartela/stock${qs ? `?${qs}` : ""}`)
+      .then((r) => r.data);
+  },
+
+  /** Stok düşüm geçmişi — en yeni önce; `reversible` ve engel gerekçesi backend'den. */
+  listStockReductions(params?: {
+    itemId?: string;
+    colorId?: string;
+  }): Promise<ApiResponse<KartelaStockReduction[]>> {
+    const sp = new URLSearchParams();
+    if (params?.itemId) sp.set("itemId", params.itemId);
+    if (params?.colorId) sp.set("colorId", params.colorId);
+    const qs = sp.toString();
+    return apiClient
+      .get<ApiResponse<KartelaStockReduction[]>>(`/api/kartela/stock/reductions${qs ? `?${qs}` : ""}`)
+      .then((r) => r.data);
+  },
+
+  /** Düşümün stornosu — kalemlerdeki kartelalar stoğa döner, düşüm satırı kalır. */
+  reverseStockReduction(
+    id: string,
+    reason: string,
+  ): Promise<ApiResponse<{ id: string; restored: number }>> {
+    return apiClient
+      .post<ApiResponse<{ id: string; restored: number }>>(
+        `/api/kartela/stock/reductions/${id}/reverse`,
+        { reason },
+      )
       .then((r) => r.data);
   },
 

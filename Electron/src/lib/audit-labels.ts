@@ -80,6 +80,7 @@ export const TABLE_LABELS: Record<string, string> = {
   SWATCH_SACK_ASSIGN: "Kartela → Çuval",
   KARTELA_DISPATCH: "Kartela Sevki",
   KARTELA_RECEIPT: "Kartela Mal Kabul",
+  SWATCH_STOCK_REDUCTION: "Kartela Stok Düşümü",
 
   // Paketleme & Sevkiyat
   SACK: "Çuval",

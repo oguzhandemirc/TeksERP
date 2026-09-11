@@ -69,7 +69,7 @@ export function ReduceKartelaStockDialog({ group, open, onOpenChange }: Props) {
           </DialogTitle>
           <DialogDescription>
             Kayıp / hasar / numune / sayım düzeltmesi için kartela stoğunu elle
-            düşürür. Bu işlem geri alınamaz.
+            düşürür. Yanlış düşüm "Düşüm Geçmişi"nden geri alınabilir.
           </DialogDescription>
         </DialogHeader>
 

@@ -298,6 +298,8 @@ async function cleanup(): Promise<void> {
     // Roll-tabanlı (dönen id şekline güvenme): allocation → swatch → receipt → dispatch →
     // roll-unset → sack → shipment → roll → master-data sırası.
     await prisma.sackAllocation.deleteMany({ where: { sackId: { in: sackIds } } });
+    // Düşüm kalemleri kartelaya RESTRICT FK ile bağlı → kartelalardan önce.
+    if (ITEM) await prisma.swatchStockReductionItem.deleteMany({ where: { reduction: { itemId: ITEM } } });
     await prisma.swatch.deleteMany({ where: { parentRollId: { in: rollIds } } });
     await prisma.kartelaReceipt.deleteMany({
       where: { items: { some: { consumedRollId: { in: rollIds } } } }, // receiptItems cascade

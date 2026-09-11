@@ -209,6 +209,7 @@ async function cleanup(): Promise<void> {
     await prisma.batch.deleteMany({ where: { workOrderId: { in: createdWoIds } } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: createdWoIds } } });
     await prisma.workOrder.deleteMany({ where: { id: { in: createdWoIds } } });
+    await prisma.swatchStockReductionItem.deleteMany({ where: { reduction: { itemId: ITEM } } });
     await prisma.swatchStockReduction.deleteMany({ where: { itemId: ITEM } });
     await prisma.swatch.deleteMany({ where: { id: { in: createdSwatchIds } } });
     for (const id of createdOrderIds) {

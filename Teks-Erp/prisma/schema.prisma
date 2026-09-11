@@ -472,6 +472,7 @@ model User {
   weighedSacks               Sack[]                   @relation("SackWeighedBy")
   sackTagAssignments         SackTagAssignment[]      @relation("SackTagAssignmentCreatedBy")
   swatchStockReductions      SwatchStockReduction[]   @relation("SwatchStockReductionCreatedBy")
+  swatchStockReductionsReversed SwatchStockReduction[] @relation("SwatchStockReductionReversedBy")
   kursunBypassAssigned       KursunBypassAssignment[] @relation("KursunBypassAssignedBy")
   kursunBypassCompleted      KursunBypassAssignment[] @relation("KursunBypassCompletedBy")
   kursunBypassCancelled      KursunBypassAssignment[] @relation("KursunBypassCancelledBy")
@@ -4161,6 +4162,7 @@ model Swatch {
   createdBy     User?           @relation("SwatchCreatedBy", fields: [createdById], references: [id])
   shipment      Shipment?       @relation(fields: [shipmentId], references: [id])
   sack          Sack?           @relation(fields: [sackId], references: [id])
+  stockReductionItems SwatchStockReductionItem[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -4182,7 +4184,7 @@ model Swatch {
 /// Kartela stok düşüm OLAYI — reduceStock'un doğal kaydı + idempotency çapası.
 /// Sayaç-bazlı işlem (FIFO N kartela iptal) tek olay kaydına bağlanır: replay'de
 /// clientToken @unique P2002 → tx rollback → FARKLI N kartela daha iptal OLMAZ,
-/// cached { reduced } döner. Kalem listesi audit'te (swatchIds) — ayrı pivot yok.
+/// cached { reduced } döner. Hangi kartelaların düşüldüğü `items` kalemlerinde.
 /// Append-only olay kaydı — updatedAt bilinçli yok (kök CLAUDE.md istisnası).
 model SwatchStockReduction {
   id          String  @id @default(uuid()) @db.Uuid
@@ -4194,17 +4196,44 @@ model SwatchStockReduction {
   reason      String
   createdById String? @db.Uuid
 
-  item      Item   @relation(fields: [itemId], references: [id])
-  color     Color? @relation(fields: [colorId], references: [id])
-  createdBy User?  @relation("SwatchStockReductionCreatedBy", fields: [createdById], references: [id])
+  /// TERS DAMGA — düşümün stornosu; kalemlerdeki kartelalar stoğa döner.
+  /// Negatif karşı satır `swatch_stock_reductions_count_pos` CHECK'i yüzünden
+  /// yazılamaz (B-3 emsali). Bir düşüm bir kez geri alınır; yeniden düşüm yeni satırdır.
+  reversedAt    DateTime? @db.Timestamptz
+  reversedById  String?   @db.Uuid
+  reverseReason String?   @db.VarChar(500)
+
+  item       Item                       @relation(fields: [itemId], references: [id])
+  color      Color?                     @relation(fields: [colorId], references: [id])
+  createdBy  User?                      @relation("SwatchStockReductionCreatedBy", fields: [createdById], references: [id])
+  reversedBy User?                      @relation("SwatchStockReductionReversedBy", fields: [reversedById], references: [id])
+  items      SwatchStockReductionItem[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
 
   // Düşüm geçmişi (itemId eşitlik + createdAt sıralama); sol-prefix itemId FK'yı kapsar
   @@index([itemId, createdAt(sort: Desc)])
   @@index([colorId])
-  // createdById bilinçli indexsiz — düşük-trafik "kim yaptı" audit FK istisnası
+  // createdById/reversedById bilinçli indexsiz — düşük-trafik "kim yaptı" audit FK istisnası
   @@map("swatch_stock_reductions")
+}
+
+/// Düşüm KALEMİ — düşümün iptal ettiği kartela. Append-only; geri alma satırı
+/// silmez, başlıktaki `reversedAt` damgası kalemleri de kapsar. Aynı kartela
+/// düşülüp geri alınıp yeniden düşülebildiği için kartela başına tekil DEĞİLDİR.
+model SwatchStockReductionItem {
+  id          String @id @default(uuid()) @db.Uuid
+  reductionId String @db.Uuid
+  swatchId    String @db.Uuid
+
+  reduction SwatchStockReduction @relation(fields: [reductionId], references: [id])
+  swatch    Swatch               @relation(fields: [swatchId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@unique([reductionId, swatchId])
+  @@index([swatchId])
+  @@map("swatch_stock_reduction_items")
 }
 
 // =============================================================================

@@ -59,6 +59,10 @@ const reduceStockSchema = z.object({
   clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
 });
 
+const reverseReductionSchema = z.object({
+  reason: z.string().trim().min(3, "Gerekçe en az 3 karakter").max(500),
+});
+
 const qStr = (v: unknown): string | undefined =>
   typeof v === "string" && v.length > 0 ? v : undefined;
 
@@ -119,6 +123,8 @@ export class KartelaController {
     this.outstandingRolls = this.outstandingRolls.bind(this);
     this.getStock = this.getStock.bind(this);
     this.reduceStock = this.reduceStock.bind(this);
+    this.listStockReductions = this.listStockReductions.bind(this);
+    this.reverseStockReduction = this.reverseStockReduction.bind(this);
     this.setRollMarked = this.setRollMarked.bind(this);
   }
 
@@ -256,6 +262,35 @@ export class KartelaController {
     try {
       const body = reduceStockSchema.parse(req.body);
       const result = await this.service.reduceStock(body, req.user?.userId);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/kartela/stock/reductions — stok düşüm geçmişi (geri alınabilirlik dahil) */
+  async listStockReductions(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await this.service.listStockReductions({
+        itemId: qStr(req.query.itemId),
+        colorId: qStr(req.query.colorId),
+        limit: qNum(req.query.limit),
+      });
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/kartela/stock/reductions/:id/reverse — düşümün stornosu */
+  async reverseStockReduction(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { reason } = reverseReductionSchema.parse(req.body);
+      const result = await this.service.reverseStockReduction(
+        req.params.id as string,
+        reason,
+        req.user?.userId
+      );
       res.status(200).json(result);
     } catch (err) {
       next(err);
