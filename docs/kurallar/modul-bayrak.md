@@ -49,7 +49,7 @@
 
 ### Reçeteler
 
-- **[ÇEKİRDEK]** Grandfathering migration KOŞULLU (`EXISTS rolls` / aktif depo>1) ve değer = DÜNKÜ DAVRANIŞ (ticaret/iplik := finance.enabled, depo := aktif depo>1) — sabit `false` yasak. `readProductionEnabled` satır-yok sigortası (satır yok → true) KORUNUR, `asBoolean`a sadeleştirme yasak. · bekçi: `test_module_grandfathering (SQL VALUES ayrıştırma)` <sub>(CLAUDE.md:96)</sub>
+- **[ÇEKİRDEK]** Grandfathering migration KOŞULLU (`EXISTS rolls` / aktif depo>1) ve değer = DÜNKÜ DAVRANIŞ (ticaret/iplik := finance.enabled, depo := aktif depo>1); dünkü davranışı OLAN modülde sabit `false` yasak. Dünkü davranışı OLMAYAN (sıfırdan doğan, yüzeysiz) modülde dünkü davranış tanım gereği kapalıdır: değer sabit `false` yazılır, koşul aranmaz; anahtar kendi migration'ında damgalanır ve tek dosyaya sabitlenmiş bekçiler dosya LİSTESİNE genişletilir. `readProductionEnabled` satır-yok sigortası (satır yok → true) KORUNUR, `asBoolean`a sadeleştirme yasak. · bekçi: `test_module_grandfathering (SQL VALUES ayrıştırma)` <sub>(CLAUDE.md:96, arşiv:2026-09-12)</sub>
 - **[ÇEKİRDEK]** DB'ye YAZAN bekçiler hedef-DB env-override kapısından geçer (`scripts/lib/hedef-db-kapisi`); `Teks-Erp/.env` `tekserp_demo`yu gösterir; hedef `tekserp` (fabrika prod) ise `BEKCI_PROD_ONAY=1` olmadan durur; global durum yazan bekçiler eşzamanlı koşmaz, ajan başına port. · bekçi: `hedef-db-kapisi (koşum kapısı)` <sub>(CLAUDE.md:96)</sub>
 - **[ÇEKİRDEK]** Profil job'ı `TEKSERP_PROFIL` yoksa HİÇ yazmaz; satır varsa dokunmaz (tek `createMany skipDuplicates`); bağımlılık/audit/K7 job'da saf ikizle yeniden kurulur; açıklama metinleri üç yazarda birebir; profil uygulama yazma ucu YOK — `GET /admin/module-profile` salt okuma. · bekçi: `test_module_profile (§6 açıklama üçlüsü)` <sub>(CLAUDE.md:101)</sub>
 
@@ -92,6 +92,8 @@
 - **[?]** Mobilde `MODULE_DISABLED`'ın kullanıcı yüzü HÂLÂ YOK (`useVisibleScreens.conditional` boş, `announceFailure` dalı yazılmadı) — P1'in açık maddesi; tablet kapalı modülün ekranını çizer, istek 403 alır. <sub>(CLAUDE.md:96)</sub>
 
 ## Geçersiz kılınan kurallar — bunlara UYMA
+
+- **KISMI** `R:2026-09-02__2026-09-02-03-modul-anahtarlari` (grandfathering "sabit `false` YASAK") → `2026-09-12 — Devere · levent`: yasak yalnız dünkü davranışı OLAN modüller içindir. Sıfırdan doğan, yüzeyi olmayan modülde değer sabit `false` yazılır — kod ve bekçi `kumasTeknik`/`tezgah` için zaten böyle yapıyordu (`20260902230000` migration'ı, `test_module_grandfathering` false'u şart koşuyor). GEÇERSİZ → 2026-09-12.
 
 - **KISMI** `R:2026-09-03__2026-09-03-panel-modul-kapilari` → `R:2026-09-04__2026-09-04-cekirdek-kapali-modulun`: P5'in 'ayar kategorisinde modül = KİLİT, gizleme DEĞİL' kararı tersine döndü: kapalı modülün bayrak satırı fabrika yöneticisine HİÇ çizilmez (satır bazlı `filterCategoryByModules`), kategoriden satır kalmazsa sekme düşer; kilit bandı yalnız satıcı görünümünde kalır. Gerekçe: modül anahtarları aynı gün kendi ekranına taşındı, geri dönüş yolu orada. ✅ çürütmeden geçti
 - **KISMI** `R:2026-09-03__2026-09-03-superadmin-p2-satici` → `R:2026-09-04__2026-09-04-profil-sistem-hub`: P2 Q5 'Modüller sekmesi fabrika adminine GÖRÜNÜR ama SALT-OKUNUR + bant' geçersiz: Genel Ayarlar → Modüller sekmesi KALDIRILDI; modül anahtarlarının tek evi Sistem → Modüller (`/system/module-profile`). Süperadmin hesabı doğmuşsa fabrika yöneticisi sayfayı hiç AÇAMAZ; hesap yoksa (supap) görür VE yazar. ✅ çürütmeden geçti

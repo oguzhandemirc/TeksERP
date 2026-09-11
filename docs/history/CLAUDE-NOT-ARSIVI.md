@@ -5744,3 +5744,123 @@ Panel sürümü gerekir (Stornola). ⚠️ Eski panel `CANCEL_REVERSAL` satırı
 depo hareketleri ekranında çöker (`WAREHOUSE_EVENT_META[kind]` undefined); satır
 yalnız yeni paneldeki storno ile doğar ve fabrikada sayım yok → `minVersion`
 yükseltilmedi, panel backend'le birlikte yayınlanmalı.
+
+## 2026-09-12 — Devere · levent: levent kendi tablosunu ve defterini ister [ÇEKİRDEK] + [PROFİL]
+
+2026-09-11 sektör taraması devere/leventlemeyi AYRICA taramamıştı (ajan istemi
+"çözgü hazırlama" diyordu, dönen bulgular tezgah olaylarına kaymıştı). Bu tur o
+boşluğu kapattı: şema ve kod elle okundu, dört soru paralel ajanlarla kanıtlandı.
+Çıktı **`docs/design/DEVERE-LEVENT-TARAMASI.md`** (öneri; kod ve migration YOK).
+Saha kaynağı `DOKUMA-DEVERE-SAHA-KAYNAGI.md`.
+
+### Ölçüm
+
+- Levent sistemde HİÇ yok (`warpBeam` şema/backend/panel/mobil grep'i 0). 15 eksik
+  varlık/defter çıktı, hepsi "sektör geneli" — adnansahin çözgü yapmaz.
+- **Devere bir iş emri ADIMI olamaz:** içinden top geçmeyen adımı `recompute`
+  PENDING bırakır (`roll-step.helper.ts:140-151`) ve iş emri ancak tüm adımlar
+  COMPLETED/SKIPPED iken kendiliğinden kapanır (`:202-221`) → Devere adımlı her iş
+  emri sonsuza dek IN_PROGRESS kalırdı. Üstelik quickStart topları daima
+  `steps[0]`'a bağlar (`workorder.service.ts:4672-4677`), yani Devere 1. adımsa
+  kumaş topu devereye girerdi. `allowAsWorkOrderStep` backend'de UYGULANMIYOR;
+  yalnız panel seçici süzgeci (`route.service.ts:162-171`).
+- **Devere formülünün ölçeği çözüldü:** denye 9.000 m'nin gramı olduğu için
+  `tel × denye × metre / 9.000` GRAM verir; kg için bölen 9.000.000. Kâğıttaki
+  `/9000` yanlış değil, eksik: sonuç gramdır. Örnek `3500 × 300 × 7000` → 816,67 kg
+  ve 300 cm iş eninde levent çapı ≈ 95 cm, yani 1000–1100 mm flanşa sığar. Sıra
+  sorusu sonucu etkilemez (çarpma değişmeli). ⚠️ Formül NOMİNALDİR (haşıl, yağ,
+  numara toleransı yok) — defter tartıdan beslenir, formül ön-dolumdur.
+- **İki sessiz sayım tuzağı ölçüldü** (devere'den bağımsız, bugün de mayın):
+  `test_consistency.ts:742,751` (§27) ve `purchase-order.service.ts:261-270` iplik
+  hareket yönünü elle yazılmış `kind IN ('IN','ADJUST_IN')` listesiyle sayıyor;
+  yeni bir "artıran" tür eklenince sessizce ters sayarlar. `yarnMovementSign`
+  tek kaynağına bağlanmaları devere Faz 1'in zorunlu maddesi.
+- Panelde `YARN_KIND_META[m.kind]` tanımadığı türde TypeError veriyor
+  (`YarnMovementsSheet.tsx:206-217`) — yeni tür gelmeden geri düşüş etiketi şart.
+
+### Karar — tasarım (ajan; itiraza açık)
+
+- **[ÇEKİRDEK]** Levent `Roll` DEĞİLDİR: `Roll` kumaş dünyasının merkezidir
+  (ölü statü kümesi, çuval/sevkiyat, Tambur, kalite, envanter ekranları); levent
+  satırı her okumaya süzülmesi gereken sahte bir top olurdu ("ayrışan yüzey"
+  sınıfı). Emsal: `yarn.service.ts:4-8` ipliği aynı gerekçeyle `Roll` yapmadı.
+- **[ÇEKİRDEK]** Çözgü emri `WorkOrder` DEĞİLDİR, `WarpBeam.PLANNED` satırıdır:
+  bir levent tek iş emrine ait değildir, haftalarca birçok desene/siparişe dokunur.
+  Deftere hiç yazmadığı için ④ taslak sınıfıyla claim'li silinir.
+- **[ÇEKİRDEK]** Durum/defter ayrımı: `WarpBeam` (durum) + `WarpBeamEvent`
+  (append-only defter, `updatedAt` YOK). Doğuş gerçekleri durum tablosunda değil
+  `WOUND` satırında durur — değişmezliği DB verir. Kalan metre KOLON DEĞİL,
+  `Σ işaret(kind) × lengthM` ile türetilir (durum↔sayaç çifti açılmaz).
+- **[ÇEKİRDEK]** Ters yol tipli: her ileri olayın `*_CANCEL`i, `reversesEventId`
+  `@unique` (çift iptal DB'de imkânsız), LIFO (yalnız en yeni aktif ileri olay).
+  İplikte `WARP_ISSUE_REVERSAL` — `ADJUST_IN` kullanılmadı, çünkü sayım fazlasıyla
+  aynı kovaya düşerdi.
+- **[ÇEKİRDEK]** Olay türü pg enum DEĞİL, `VarChar(32)` + CHECK ([DB-15]: küme
+  fazlarla büyüyor); TS tuple tek kaynak, CHECK listesi ondan türer.
+- **[ÇEKİRDEK]** "Fire 0" ile "fire ölçülmedi" ayrışsın diye sarım kg'ı kaynak
+  beyanı taşır (`kgSource: WEIGHED|THEORETICAL`, `Sack.weightSource` emsali).
+- **[ÇEKİRDEK]** Ad ASLA ayrıştırılmaz: "600 KAR İPİ 70 DN" kartından denye
+  okunmaz; `Item.linearDensityDen` elle girilir, öneri/ipucu bile üretilmez.
+- **[PROFİL]** Çözgü kartı (`WarpSpec`) ayrı tablodur: bir levent N deseni besler
+  (saha kartında "Çözgü = UA6007"). `ProductRecipe` renge bağlı olduğu için
+  reddedildi; `Item` öz-referansı çözgüyü bir kumaşın kolonlarına hapsederdi.
+- **[PROFİL]** Lot yolu şemanın kendi notundaki yol: `YarnLot` + `YarnMovement.lotId`,
+  lot bakiyesi TÜRETİLİR (ayrı bakiye tablosu açılmaz). Levent içi lot karışımı
+  **çözgü yolu** (boyuna) üretir; **barre enine hatadır ve atkı lotuyla ilgilidir** —
+  sebep kataloğunda karıştırılırsa kök neden yanlış atanır.
+- **[PROFİL]** Fazlandırma "defter yazıyor mu" çizgisinden bölündü: **1a** katalog
+  + bayrak + kolonlar (hiç defter satırı doğmaz, ters yol borcu doğmaz), **1b**
+  levent doğuşu ileri VE geri yoluyla birlikte. `WOUND` bilerek 1a'ya alınmadı:
+  iplik çıkışı olmadan doğan leventin ipliği sonradan deftere bağlanamaz.
+
+### Karar — yönetici (`teks-erp-1e`, 2026-09-12)
+
+- **[ÇEKİRDEK]** Rota ↔ devere: Dokuma rotada ADIM + topun giriş noktası (Faz 4,
+  tezgah çıkışı motoruyla); Devere yalnız istasyon KATALOĞUNDA. Gerekçe: çözgü top
+  doğmadan önceki hazırlıktır; çekirdek adım koduna dokunmak orantısız risktir.
+  ⚠️ Kök `CLAUDE.md`'deki "devere/çözgü/haşıl yeni mimari istemez" cümlesi bu
+  kararla DARALIR (top rotası için doğru, levent için eksik); kök dosya bu turda
+  DEĞİŞTİRİLMEDİ, kullanıcı onayına bırakıldı.
+- **[ÇEKİRDEK]** Bayrak adı: `tezgah.enabled` monitörizasyon olarak kalır,
+  `dokuma.enabled` Faz 4'te doğar. Var olan DB anahtarının anlamı genişletilmez —
+  anahtar kimliktir.
+- **[ÇEKİRDEK]** `devere.enabled` varsayılan KAPALI; bağımlılık `iplikEnabled`
+  (zincir: ticaret → iplik → devere). Yazma doğrulaması gövdenin dokunmadığı çifti
+  atladığı için OKUMA kapısı zinciri ELLE ölçer; `effectiveModuleValue` switch'ine
+  case eklemek zorunludur, yoksa iplik'e dokunan her PATCH 400 alır.
+- **[PROFİL]** Profil: mevcut `perde` DEĞİŞMEZ (kumaşı hazır alan kurulum); hedef
+  kitle için ayrı `perde-dokuma` profili doğar. Canlı kurulumun profil içeriğini
+  değiştirmek sessiz davranış değişikliğidir.
+- **[PROFİL]** Raşel ayrı modül değildir: `Station.consumesWarpBeam` +
+  `Machine.warpBeamSlots` yeterlidir (raşelde kılavuz barı başına levent). Levent
+  tüketen makine dokuma tezgahıyla sınırlanmaz.
+
+### GEÇERSİZ → 2026-09-12
+
+**ESKİ:** "Grandfathering değeri = dünkü davranış; sabit `false` YASAK"
+(`docs/kurallar/modul-bayrak.md` reçete satırı, 2026-09-02 P1 notundan).
+**YENİ:** yasak yalnız dünkü davranışı OLAN modüller içindir. Sıfırdan doğan,
+yüzeyi olmayan modülde dünkü davranış tanım gereği kapalıdır ve değer sabit
+`false` yazılır. Ölçüm: `20260902230000` grandfathering migration'ı `kumasTeknik`
+ve `tezgah` için tam da bunu yapıyor ve `test_module_grandfathering` false'u ŞART
+koşuyor — kural satırı düz okununca kodun yaptığını yasaklıyor görünüyordu.
+⚠️ Devere, o migration'dan SONRA doğan ilk modül: kendi migration'ında damgalanır
+ve tek dosyaya sabitlenmiş üç bekçi (`test_module_flags §6c`,
+`test_module_profile §6c/§6d`, `test_module_grandfathering`) dosya LİSTESİNE
+genişletilir. `MIGRASYON_DISI` yolu reddedildi (migration başlığı `finance`ı
+olumsuz emsal sayıyor).
+
+### Kod çapaları
+
+Yok — bu tur tasarımdır. Tasarım belgesi: `docs/design/DEVERE-LEVENT-TARAMASI.md`
+(§4 şema parçacıkları, §5 bayrak dokunuş listesi, §6 adnansahin sıfır-fark kanıtı,
+§7 fazlandırma, §8 dokumacıya 22 soru, §9 yönetici kararları).
+
+### Üç kapı
+
+Migration **yok**, izin **yok**, APK **yok** (uygulama başlamadı). Uygulanınca:
+Faz 1a bir migration (tablo + kolon + bayrak satırı), Faz 1b ikinci migration +
+AYRI bir enum migration'ı (`ADD VALUE` tek ifadeli, aynı tx'te kullanılamaz).
+Yeni izin kodu gerekecek (`devere:read`/`devere:write`) — katalog koda, atama
+panele. Eski panel yeni iplik türünü görürse hareket listesi çöker; geri düşüş
+etiketi devere yazmaya başlamadan ÖNCE yayınlanır, `minVersion` yükseltilmez.
