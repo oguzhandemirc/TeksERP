@@ -7976,11 +7976,11 @@ model ChequeDeliveryNoteItem {
 /// yazmaz), `COMPLETED` fark fişinin YAZILDIĞI andır, `CANCELLED` sayımdan
 /// vazgeçildiğini söyler.
 ///
-/// ⚠️ `COMPLETED` TERMİNALDİR — geri alma v1'de YOKTUR ve bu bilinçlidir:
-/// tamamlama iki ayrı deftere (top iptali + iplik hareketi) yazar ve o
-/// yazımların doğru geri alma yolu kendi ters kayıtlarıdır (topta "iptali geri
-/// al", iplikte ADJUST tersi). Sayıma "geri al" eklemek, iki defteri sayım
-/// belgesi üzerinden ikinci kez oynatan üçüncü bir yol açardı.
+/// ⚠️ `COMPLETED` TERMİNAL DEĞİLDİR (2026-09-12): fark fişi TEK BELGEDE
+/// stornolanır (`stock-count-reversal.service`) — statü COMPLETED KALIR
+/// ("tamamlandı" gerçeği değişmez), storno `reversedAt`/`reversedById`/
+/// `reverseReason` damgasıdır. `cancel` yine yalnız DRAFT'ta çalışır (o aşamada
+/// donmuş belge doğmamıştır).
 enum StockCountStatus {
   DRAFT
   COMPLETED

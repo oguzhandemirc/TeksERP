@@ -46,6 +46,7 @@ function row(over: Partial<WarehouseMovementRow> = {}): WarehouseMovementRow {
     goodsReceipt: null,
     shipment: null,
     rollReturn: null,
+    stockCount: null,
     user: null,
     ...over,
   };

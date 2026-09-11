@@ -10,8 +10,15 @@
 // Sonraki sayım bu sayımın sonucunu fiziksel olarak doğruladı; eskisini geri almak
 // onun iplik bakiyesini ve raf gerçeğini yalanlardı (fason LIFO iptal emsali).
 //
-// ⚠️ HEP-YA-HİÇ: sayımın düşürdüğü her top hâlâ BU sayımın iptaliyle durmalı.
-// Arada tek tek geri alınmış top varsa storno reddedilir ve önizleme onu listeler.
+// ⚠️ HEP-YA-HİÇ, AMA ÇIKIŞSIZ DEĞİL: sayımın düşürdüğü top arada ELLE geri
+// alınmışsa (`inventory.restoreCancelledRoll` — o yol defter yazmaz) storno
+// REDDEDİLMEZ; o top `LEDGER_ONLY` dalına düşer: statüsüne DOKUNULMAZ, yalnız
+// defter karşılığı (CANCEL_REVERSAL + sapma damgası) yazılır. Reddetmek, LIFO ile
+// birleşince o deponun TÜM eski sayımlarının storno yolunu kalıcı kapatıyordu.
+// ⚠️ ÇİFT YAZIM SEDDİ: ters satır zaten varsa (ister bu storno, ister elle geri
+// alma yazmış olsun) satır YAZILMAZ — yalnız sapma damgası atılır. Geçici kural
+// (rollId + stockCountId + tip ∪ sayım tamamlamasından SONRA yazılmış ters satır);
+// `reversesMovementId` alanı gelince tek sorguya iner (6e sözleşmesi).
 // =============================================================================
 import { GoodsReceiptStatus, Prisma, PrintedDocType, RollStatus, StockCountLineKind } from "@prisma/client";
 import { StockCountStatus, WarehouseEventType, YarnMovementKind } from "@prisma/client";
@@ -32,13 +39,20 @@ import { stockCountCancelReason, stockCountVoidReason } from "./stock-count.serv
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
+/** Topun stornoda göreceği işlem — önizleme bunu satır satır basar. */
+export type ReversalRollAction = "RESTORE" | "LEDGER_ONLY" | "ALREADY_REVERSED";
+
 export interface ReversalRollPlan {
   rollId: string;
   barcode: string | null;
   qty: Prisma.Decimal;
   varianceId: string | null;
+  /** `RESTORE`da dönülecek raf; diğer dallarda null (statüye dokunulmaz). */
   targetStatus: RollStatus | null;
   goodsReceiptId: string | null;
+  action: ReversalRollAction;
+  /** Dalın gerekçesi (LEDGER_ONLY/ALREADY_REVERSED) — önizlemede görünür. */
+  note: string | null;
   blocker: string | null;
 }
 
@@ -117,6 +131,23 @@ async function planRolls(db: Db, count: CountHead): Promise<ReversalRollPlan[]> 
     },
     select: { id: true, rollId: true, qty: true },
   });
+  // Ters satırı ZATEN yazılmış toplar: bu sayıma bağlı olanlar + sayım
+  // tamamlandıktan SONRA yazılmış olanlar (elle geri alma bağ yazmıyor).
+  const alreadyReversed = new Set(
+    (
+      await db.warehouseMovement.findMany({
+        where: {
+          rollId: { in: rollIds },
+          eventType: WarehouseEventType.CANCEL_REVERSAL,
+          OR: [
+            { stockCountId: count.id },
+            ...(count.completedAt ? [{ createdAt: { gte: count.completedAt } }] : []),
+          ],
+        },
+        select: { rollId: true },
+      })
+    ).map((w) => w.rollId),
+  );
   const byRoll = new Map(rolls.map((r) => [r.id, r]));
   const expectedReason = stockCountCancelReason(count.countNo);
 
@@ -125,17 +156,30 @@ async function planRolls(db: Db, count: CountHead): Promise<ReversalRollPlan[]> 
     const own = variances.filter((v) => v.rollId === rollId);
     let blocker: string | null = null;
     if (!roll) blocker = "Top kaydı bulunamadı";
-    else if (roll.status !== RollStatus.CANCELLED || roll.cancelReason !== expectedReason) {
-      blocker = `Sayımdan sonra iptali geri alınmış ya da başka işlem görmüş (şu an: ${ROLL_STATUS_TR[roll.status]})`;
-    } else if (roll.warehouseId !== count.warehouseId) blocker = "Deposu değişmiş";
     else if (own.length !== 1) blocker = own.length === 0 ? "Sayımın sapma kaydı bulunamadı" : "Birden çok sapma kaydı var";
+
+    const cancelledByThisCount =
+      roll?.status === RollStatus.CANCELLED && roll.cancelReason === expectedReason;
+    if (!blocker && cancelledByThisCount && roll && roll.warehouseId !== count.warehouseId) {
+      blocker = "Deposu değişmiş";
+    }
+    let action: ReversalRollAction = cancelledByThisCount ? "RESTORE" : "LEDGER_ONLY";
+    let note: string | null = cancelledByThisCount
+      ? null
+      : `Sayımdan sonra elle geri alınmış ya da başka işlem görmüş (şu an: ${roll ? ROLL_STATUS_TR[roll.status] : "—"}) — yalnız defter karşılığı yazılır`;
+    if (alreadyReversed.has(rollId)) {
+      action = "ALREADY_REVERSED";
+      note = "Defter karşılığı zaten yazılmış — yalnız sapma damgası atılır";
+    }
     return {
       rollId,
       barcode: roll?.barcode ?? null,
       qty: own[0] ? D(own[0].qty) : D(0),
       varianceId: own[0]?.id ?? null,
-      targetStatus: roll && !blocker ? resolveRestoreTargetStatus(roll.preCancelStatus) : null,
+      targetStatus: action === "RESTORE" && roll && !blocker ? resolveRestoreTargetStatus(roll.preCancelStatus) : null,
       goodsReceiptId: roll?.goodsReceiptId ?? null,
+      action,
+      note,
       blocker,
     };
   });
@@ -204,7 +248,9 @@ export class StockCountReversalService {
     stockCountId: string,
     reason: string,
     userId?: string,
-  ): Promise<ApiResponse<{ id: string; countNo: string; restoredRolls: number; yarnReversals: number }>> {
+  ): Promise<
+    ApiResponse<{ id: string; countNo: string; restoredRolls: number; ledgerOnlyRolls: number; yarnReversals: number }>
+  > {
     const trimmed = reason?.trim() ?? "";
     if (trimmed.length < 3) throw AppError.badRequest("Storno gerekçesi en az 3 karakter olmalı.");
 
@@ -221,14 +267,26 @@ export class StockCountReversalService {
         countNo: outcome.countNo,
         reason: trimmed,
         restoredRolls: outcome.restoredRolls,
+        ledgerOnlyRolls: outcome.ledgerOnlyRolls,
         yarnReversals: outcome.yarnReversals,
         barcodes: outcome.barcodes,
       },
     });
     return {
       success: true,
-      data: { id: stockCountId, countNo: outcome.countNo, restoredRolls: outcome.restoredRolls, yarnReversals: outcome.yarnReversals },
-      message: `${outcome.countNo} stornolandı — ${outcome.restoredRolls} top rafına döndü, ${outcome.yarnReversals} iplik düzeltmesi geri alındı.`,
+      data: {
+        id: stockCountId,
+        countNo: outcome.countNo,
+        restoredRolls: outcome.restoredRolls,
+        ledgerOnlyRolls: outcome.ledgerOnlyRolls,
+        yarnReversals: outcome.yarnReversals,
+      },
+      message:
+        `${outcome.countNo} stornolandı — ${outcome.restoredRolls} top rafına döndü, ` +
+        `${outcome.yarnReversals} iplik düzeltmesi geri alındı` +
+        (outcome.ledgerOnlyRolls > 0
+          ? `; ${outcome.ledgerOnlyRolls} top zaten elle geri alınmıştı, yalnız defteri kapatıldı.`
+          : "."),
     };
   }
 }
@@ -271,9 +329,10 @@ async function reverseTx(tx: Prisma.TransactionClient, stockCountId: string, rea
   const plan = await claimAndPlanTx(tx, stockCountId, reason, userId);
   const note = `${plan.countNo} sayım stornosu`;
 
-  // Toplar rafına: hedef statü topa göre değiştiği için gruplu claim.
+  // Yalnız RESTORE dalı statüye dokunur; hedef statü topa göre değiştiği için gruplu claim.
+  const restoring = plan.rolls.filter((r) => r.action === "RESTORE");
   const groups = new Map<RollStatus, string[]>();
-  for (const r of plan.rolls) groups.set(r.targetStatus as RollStatus, [...(groups.get(r.targetStatus as RollStatus) ?? []), r.rollId]);
+  for (const r of restoring) groups.set(r.targetStatus as RollStatus, [...(groups.get(r.targetStatus as RollStatus) ?? []), r.rollId]);
   for (const [target, ids] of groups) {
     const res = await tx.roll.updateMany({
       where: { id: { in: ids }, status: RollStatus.CANCELLED, cancelReason: stockCountCancelReason(plan.countNo), warehouseId: plan.warehouseId },
@@ -282,12 +341,14 @@ async function reverseTx(tx: Prisma.TransactionClient, stockCountId: string, rea
     if (res.count !== ids.length) throw AppError.conflict("Toplardan biri bu sırada değişti — tekrar deneyin.");
   }
 
-  if (plan.rolls.length > 0) {
+  // Ters satır yazılacak toplar: ALREADY_REVERSED dışındakiler (çift yazım seddi).
+  const needLedger = plan.rolls.filter((r) => r.action !== "ALREADY_REVERSED");
+  if (needLedger.length > 0) {
     // ⚠️ Dönen sayı DENETLENİR: helper qty<0 ya da depo boşsa satırı SESSİZCE atlar
     // (`warehouse-ledger.helper`). Atlanan satır = yazılmamış ters kayıt.
     const written = await writeWarehouseMovements(
       tx,
-      plan.rolls.map((r) => ({
+      needLedger.map((r) => ({
         rollId: r.rollId,
         eventType: WarehouseEventType.CANCEL_REVERSAL,
         qty: r.qty,
@@ -297,9 +358,13 @@ async function reverseTx(tx: Prisma.TransactionClient, stockCountId: string, rea
         notes: note,
       })),
     );
-    if (written !== plan.rolls.length) {
-      throw AppError.internal(`Depo defterine ${written}/${plan.rolls.length} storno satırı yazıldı — geri sarıldı.`);
+    if (written !== needLedger.length) {
+      throw AppError.internal(`Depo defterine ${written}/${needLedger.length} storno satırı yazıldı — geri sarıldı.`);
     }
+  }
+  if (plan.rolls.length > 0) {
+    // Sapma damgası HER dalda atılır (defter satırını başkası yazmış olsa bile
+    // "bu metraj yoktu" iddiası geri alınmıştır) — 6e ile iş bölümü.
     const varianceIds = plan.rolls.map((r) => r.varianceId as string);
     const rev = await tx.rollVariance.updateMany({
       where: { id: { in: varianceIds }, reversedAt: null },
@@ -324,7 +389,8 @@ async function reverseTx(tx: Prisma.TransactionClient, stockCountId: string, rea
 
   return {
     countNo: plan.countNo,
-    restoredRolls: plan.rolls.length,
+    restoredRolls: restoring.length,
+    ledgerOnlyRolls: plan.rolls.filter((r) => r.action === "LEDGER_ONLY").length,
     yarnReversals: plan.yarn.length,
     barcodes: plan.rolls.map((r) => r.barcode),
     receiptIds: [...new Set(plan.rolls.map((r) => r.goodsReceiptId).filter(Boolean))] as string[],

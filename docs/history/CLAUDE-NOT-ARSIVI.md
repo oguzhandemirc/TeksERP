@@ -6061,3 +6061,70 @@ worktree): üç kapı birden silinince D1a/D1b/D1f, D3b/D3c, D4a/D4b/D4c kırmı
 
 Migration **yok** · izin **yok** · APK **yok**. Sözleşme: iki yol yeni 409 verebilir
 (panelde iptal butonu zaten `cancellable` bayrağını okuyor, aynı yüklemden gelir).
+
+---
+
+## 2026-09-12 — ②-b: sayım stornosunun çıkışsız kapısı açıldı (denetim turu) [ÇEKİRDEK]
+
+②'nin (sayım stornosu) bağımsız denetiminde 1 ORTA + 3 DÜŞÜK bulgu doğrulandı;
+hepsi kapatıldı, şema dokunuşu yalnız ŞERH düzeltmesi.
+
+### ASIL KARAR — LEDGER_ONLY dalı (çıkışsız kapı kalktı)
+
+LIFO + hep-ya-hiç birleşimi bir kilit üretiyordu: sayımın düşürdüğü toplardan
+biri elle geri alınmışsa (`inventory.restoreCancelledRoll`) o sayım BİR DAHA
+stornolanamıyor, LIFO yüzünden o deponun TÜM eski sayımlarının storno yolu da
+kalıcı kapanıyordu — ve 409 metni operatöre imkânsız bir adım söylüyordu.
+
+Üç seçenek tartıldı: (a) "stornolanamayan sonrakini engel saymama" — REDDEDİLDİ,
+fiziksel gerçeği doğrulamış sayımı görmezden gelir; (b) kısmi storno — REDDEDİLDİ,
+belgeyi ikiye böler; (c) **ÇIKIŞ DALI** — kabul edildi: elle geri alınmış top
+stornoyu bloklamaz, `LEDGER_ONLY` dalına düşer. Statüsüne DOKUNULMAZ (zaten
+rafında), yalnız defter karşılığı yazılır: `CANCEL_REVERSAL` + sapma damgası.
+Gerekçe: elle geri alma defter YAZMIYOR (bilinen delik), yani storno o topun
+defterini KAPATIR — iş hem tamamlanır hem mutabakat düzelir.
+
+**ÇİFT YAZIM SEDDİ (6e sözleşmesi).** 6e `restoreCancelledRoll`u da
+`CANCEL_REVERSAL` yazacak hâle getiriyor; ikisi birlikte sahaya çıkarsa aynı top
+için İKİ ters satır doğardı. Üçüncü dal eklendi: ters satırı zaten yazılmış top
+`ALREADY_REVERSED` — satır YAZILMAZ, yalnız sapma damgası atılır (iş bölümü:
+defter satırı 6e'de, sapma damgası burada). Tespit bugün ARA KURAL ile yapılır
+(`rollId` + `stockCountId` ∪ sayım tamamlamasından sonra yazılmış ters satır) ve
+6e'nin `reversesMovementId` alanı gelince tek sorguya iner; ara dönemde yazılan
+satırlar bağsız (grandfathered) ve fabrikada CANCEL_REVERSAL satırı bugün SIFIR.
+
+### Diğer bulgular
+
+- **Panel tazeleme kümesi:** storno üç yüzeyi oynatıyor; `["rolls"]`, `["yarn"]`,
+  `["warehouses","movements"]` eklendi (kardeş tamamlama diyaloğuyla simetri).
+  Belirti: Envanter sekmesi storno sonrası beş dakika bayat kalıyordu.
+- **Önizleme hata dalı:** istek düşerse diyalog artık "bu bir 'storno yapılamaz'
+  cevabı DEĞİLDİR" + Tekrar dene basıyor; eskiden düğme gerekçesiz disabled kalıyordu.
+- **Şema şerhi:** `StockCountStatus` üzerindeki "COMPLETED TERMİNALDİR" paragrafı
+  SİLİNDİ (iki cümle yan yana bırakılmaz); yerine bugünkü gerçek yazıldı ve
+  `defter.md` "Geçersiz kılınan kurallar"a ESKİ → YENİ satırı girdi.
+- **"Belge" sütunu:** depo hareket listesi `stockCountId`yi okuyor; sayım kaynaklı
+  satır artık "Sayım SAY…" basıyor (eskiden "—").
+- **Olay sözlüğü paritesi mekanikleşti:** `test_warehouse_movements` §8 panel
+  aynasını (liste + META) `schema.prisma` enum'uyla İKİ YÖNLÜ karşılaştırır —
+  sekiz değeri elle saymak bitti.
+- **Bekçi aktörü ölçüyor:** `reversedById` damgası artık kontrol ediliyor
+  (düşseydi yeşil kalırdı).
+
+### Bekçi
+
+`test_stock_count_reversal.ts` 26 → 31 kontrol: §6 yeniden yazıldı (LEDGER_ONLY
+dalı + yanıtın iki dalı ayrı sayması + statüye dokunulmaması + iki topun da
+defter karşılığı + iki sapma damgası), §6h-§6j ALREADY_REVERSED (ters satır
+tekrar yazılmaz, damga yine atılır). `test_warehouse_movements` §8a-§8c parite.
+
+**NEGATİF SONDA (dördü de kırmızı, sha256 eşit geri yüklendi):** (i) LEDGER_ONLY
+dalı kaldırıldı → claim eşleşmedi, storno 409 · (ii) ALREADY_REVERSED tespiti
+kapatıldı → ikinci ters satır yazıldı · (iii) sapma damgası yalnız defter yazılan
+topa atıldı → ALREADY_REVERSED topun damgası düştü · (iv) panel olay listesinden
+`CANCEL_REVERSAL` çıkarıldı → parite kırmızı.
+
+### Üç kapı
+
+Migration **yok** (şema dokunuşu yalnız yorum). İzin **yok**. APK **yok**; panel
+sürümü gerekir (tazeleme kümesi + önizleme dalları + "Belge" sütunu).

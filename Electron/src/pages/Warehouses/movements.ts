@@ -64,6 +64,7 @@ export interface WarehouseMovementRow {
   goodsReceipt: { id: string; receiptNo: string } | null;
   shipment: { id: string; shipmentNo: string } | null;
   rollReturn: { id: string } | null;
+  stockCount: { id: string; countNo: string } | null;
   user: { id: string; fullName: string | null; username: string } | null;
 }
 
@@ -203,6 +204,7 @@ export function movementSource(row: WarehouseMovementRow): string {
   if (row.goodsReceipt) return `Mal kabul ${row.goodsReceipt.receiptNo}`;
   if (row.shipment) return `Sevk ${row.shipment.shipmentNo}`;
   if (row.rollReturn) return "İade kaydı";
+  if (row.stockCount) return `Sayım ${row.stockCount.countNo}`;
   return "—";
 }
 

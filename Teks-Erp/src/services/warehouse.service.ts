@@ -287,6 +287,8 @@ class WarehouseService extends BaseService {
         goodsReceipt: { select: { id: true, receiptNo: true } },
         shipment: { select: { id: true, shipmentNo: true } },
         rollReturn: { select: { id: true } },
+        // Sayım fark fişi / stornosu — "Belge" sütunu boş kalmasın (satırın kaynağı sayımdır).
+        stockCount: { select: { id: true, countNo: true } },
         user: { select: { id: true, fullName: true, username: true } },
       },
     });

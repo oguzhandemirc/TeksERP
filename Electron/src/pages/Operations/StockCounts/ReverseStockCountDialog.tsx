@@ -38,8 +38,13 @@ export function ReverseStockCountDialog({ count, onOpenChange, onReversed }: Pro
     mutationFn: () => reverseStockCount(count.id, reason.trim()),
     onSuccess: (res) => {
       toast.success(res.message ?? `${res.data.countNo} stornolandı.`);
+      // Storno ÜÇ yüzeyi oynatır: toplar rafına döner, iplik bakiyesi değişir ve
+      // depo defterine satır yazılır. Kardeş `CompleteStockCountDialog` ile aynı küme.
       void qc.invalidateQueries({ queryKey: ["stock-counts"] });
       void qc.invalidateQueries({ queryKey: ["stock-count", count.id] });
+      void qc.invalidateQueries({ queryKey: ["rolls"] });
+      void qc.invalidateQueries({ queryKey: ["yarn"] });
+      void qc.invalidateQueries({ queryKey: ["warehouses", "movements"] });
       onOpenChange(false);
       onReversed();
     },
@@ -58,6 +63,18 @@ export function ReverseStockCountDialog({ count, onOpenChange, onReversed }: Pro
         </DialogHeader>
         {preview.isLoading ? (
           <p className="text-sm text-muted-foreground">Önizleme yükleniyor…</p>
+        ) : preview.isError ? (
+          // ⚠️ Bu bir "storno yapılamaz" CEVABI DEĞİLDİR: istek düştü. Sessiz
+          // kalsaydı düğme gerekçesiz kalıcı disabled görünürdü.
+          <div className="space-y-2 rounded-md border border-destructive/40 p-3 text-sm text-destructive">
+            <p>
+              Önizleme yüklenemedi — bu bir “storno yapılamaz” cevabı DEĞİLDİR, istek
+              tamamlanmadı. Bağlantıyı kontrol edip tekrar deneyin.
+            </p>
+            <Button variant="outline" size="sm" onClick={() => void preview.refetch()}>
+              Tekrar dene
+            </Button>
+          </div>
         ) : plan ? (
           <PlanBody plan={plan} />
         ) : null}
@@ -101,7 +118,10 @@ function PlanBody({ plan }: { plan: StockCountReversalPlan }) {
         </ul>
       )}
       <section>
-        <h3 className="mb-1 font-semibold">Rafına dönecek toplar ({plan.rolls.length})</h3>
+        <h3 className="mb-1 font-semibold">
+          Toplar ({plan.rolls.filter((r) => r.action === "RESTORE").length} rafına döner ·{" "}
+          {plan.rolls.filter((r) => r.action !== "RESTORE").length} yalnız defter)
+        </h3>
         {plan.rolls.length === 0 ? (
           <p className="text-muted-foreground">Bu sayım top düşürmemiş.</p>
         ) : (
@@ -112,9 +132,15 @@ function PlanBody({ plan }: { plan: StockCountReversalPlan }) {
                 <span>{qty(r.qty)} m</span>
                 {r.blocker ? (
                   <span className="text-destructive">{r.blocker}</span>
-                ) : (
+                ) : r.action === "RESTORE" ? (
                   <span className="text-muted-foreground">
                     → {r.targetStatus ? (rollStatusLabels[r.targetStatus as RollStatus] ?? r.targetStatus) : "—"}
+                  </span>
+                ) : (
+                  // Elle geri alınmış / defteri kapanmış top: statüye dokunulmaz.
+                  <span className="text-muted-foreground">
+                    {r.action === "LEDGER_ONLY" ? "yalnız defter kaydı" : "defteri zaten kapanmış"}
+                    {r.note ? ` — ${r.note}` : ""}
                   </span>
                 )}
               </li>

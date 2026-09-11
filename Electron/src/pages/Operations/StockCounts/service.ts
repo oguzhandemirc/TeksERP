@@ -104,7 +104,10 @@ export interface StockCountReversalPlan {
     rollId: string;
     barcode: string | null;
     qty: DecimalLike;
+    /** RESTORE: rafına döner · LEDGER_ONLY: elle geri alınmış, yalnız defter · ALREADY_REVERSED: defter kapanmış. */
+    action: "RESTORE" | "LEDGER_ONLY" | "ALREADY_REVERSED";
     targetStatus: string | null;
+    note: string | null;
     blocker: string | null;
   }>;
   yarn: Array<{
@@ -201,7 +204,7 @@ export async function getStockCountReversePreview(countId: string): Promise<Stoc
 export async function reverseStockCount(countId: string, reason: string) {
   const res = await apiClient.post(`/api/stock-counts/${countId}/reverse`, { reason });
   return res.data as {
-    data: { id: string; countNo: string; restoredRolls: number; yarnReversals: number };
+    data: { id: string; countNo: string; restoredRolls: number; ledgerOnlyRolls: number; yarnReversals: number };
     message?: string;
   };
 }

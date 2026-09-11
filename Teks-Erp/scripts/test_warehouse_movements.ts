@@ -319,6 +319,33 @@ async function main(): Promise<void> {
     /requireAnyPermission\("warehouse:read", "warehouse:write", "warehouse:transfer"\)/.test(whSrc),
   );
 
+  // ── §8 ⭐ OLAY SÖZLÜĞÜ PARİTESİ (backend enum ↔ panel aynası) ───────────
+  // Panel `WarehouseEventType`i ELLE aynalıyor (Electron backend'i import edemez).
+  // Yeni bir olay eklenip ayna güncellenmezse ekran ham enum basar ya da rozet
+  // haritasında undefined'a düşer — bu kontrol o ayrışmayı MEKANİK yakalar.
+  const schemaSrc = readFileSync(path.join(__dirname, "..", "prisma", "schema.prisma"), "utf8");
+  const enumBlock = /enum WarehouseEventType \{([\s\S]*?)\n\}/.exec(schemaSrc)?.[1] ?? "";
+  const schemaValues = enumBlock
+    .split("\n")
+    .map((l) => l.trim().split(/\s|\/\//)[0] ?? "")
+    .filter((v) => /^[A-Z_]+$/.test(v));
+  const panelSrc = readFileSync(
+    path.join(__dirname, "..", "..", "Electron", "src", "pages", "Warehouses", "movements.ts"),
+    "utf8",
+  );
+  const listBlock = /WAREHOUSE_EVENT_TYPES: WarehouseEventType\[\] = \[([\s\S]*?)\]/.exec(panelSrc)?.[1] ?? "";
+  const panelList = [...listBlock.matchAll(/"([A-Z_]+)"/g)].map((m) => m[1] as string);
+  const metaBlock = /WAREHOUSE_EVENT_META[\s\S]*?= \{([\s\S]*?)\n\};/.exec(panelSrc)?.[1] ?? "";
+  const panelMeta = [...metaBlock.matchAll(/\n  ([A-Z_]+):/g)].map((m) => m[1] as string);
+  check("§8a Körlük zemini: enum ve panel aynası okundu", schemaValues.length >= 7 && panelList.length >= 7 && panelMeta.length >= 7,
+    `enum=${schemaValues.length} liste=${panelList.length} meta=${panelMeta.length}`);
+  const eksikListe = schemaValues.filter((v) => !panelList.includes(v));
+  const fazlaListe = panelList.filter((v) => !schemaValues.includes(v));
+  check("§8b ⭐ Panel olay LİSTESİ backend enum'uyla birebir (iki yönlü)", eksikListe.length === 0 && fazlaListe.length === 0,
+    `eksik=${eksikListe.join(",")} fazla=${fazlaListe.join(",")}`);
+  const eksikMeta = schemaValues.filter((v) => !panelMeta.includes(v));
+  check("§8c ⭐ Panel olay SÖZLÜĞÜ (label+hint+ton) her enum değerini taşıyor", eksikMeta.length === 0, `eksik=${eksikMeta.join(",")}`);
+
   // ── §7 Körlük zemini ───────────────────────────────────────────────────
   const total = await prisma.warehouseMovement.count({ where: { rollId: { in: rollIds } } });
   check("§7 Körlük zemini: fixture 5 defter satırı üretti (hepsi 0 olsaydı §1-§5 vakumen geçerdi)", total === 5, `n=${total}`);

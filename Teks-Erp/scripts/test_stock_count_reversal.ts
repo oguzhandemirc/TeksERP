@@ -15,8 +15,9 @@
 //   §4 İkinci storno 409; önizleme "zaten stornolanmış" der
 //   §5 ⭐ LIFO: sonraki tamamlanmış sayım varken eskisi 409 ve damga geri sarılır;
 //      sıra korunursa ikisi de stornolanır (eski bağsız sapma metinle bulunur)
-//   §6 ⭐ HEP-YA-HİÇ: tek topu elle geri alınmış sayım 409, diğer top İPTAL KALIR,
-//      hiçbir ters satır yazılmaz
+//   §6 ⭐ ÇIKIŞ DALLARI: elle geri alınmış top stornoyu BLOKLAMAZ — statüsüne
+//      dokunulmaz, yalnız defter karşılığı yazılır (LEDGER_ONLY); ters satırı
+//      zaten yazılmış topta satır TEKRAR YAZILMAZ, yalnız sapma damgalanır
 //   §7 Kaynak: iptal metni tek kaynaktan; storno servisinde defter silme yok;
 //      rota iki izni birden ister
 // =============================================================================
@@ -30,6 +31,7 @@ import { stockCountReversalService } from "../src/services/stock-count-reversal.
 import { yarnService } from "../src/services/yarn.service";
 import { AppError } from "../src/utils/app-error";
 import { ensureIplikModuluAcik } from "./fixture-module-flags";
+import { ensureTestAdmin } from "./fixture-test-user";
 
 let modulGeriAl: (() => Promise<void>) | null = null;
 const inventory = new InventoryService();
@@ -49,6 +51,8 @@ const TAG = `TEST-SSTR-${Date.now()}`;
 const warehouseIds: string[] = [];
 const itemIds: string[] = [];
 const rollIds: string[] = [];
+/** Aktör ölçülür: damga `reversedById` boş kalırsa "kim geri aldı" cevapsız olur. */
+let ADMIN = "";
 
 function errOf(e: unknown): { status?: number; code?: string; message: string } {
   if (e instanceof AppError) return { status: e.statusCode, code: (e.details as { code?: string } | undefined)?.code, message: e.message };
@@ -93,6 +97,7 @@ async function balance(itemId: string, warehouseId: string): Promise<number> {
 
 async function main(): Promise<void> {
   modulGeriAl = await ensureIplikModuluAcik();
+  ADMIN = (await ensureTestAdmin()).id;
   console.log("\n=== Sayım stornosu ===\n");
   const wh = await prisma.warehouse.create({ data: { code: `${TAG}-A`, name: `${TAG} Depo` }, select: { id: true } });
   warehouseIds.push(wh.id);
@@ -121,7 +126,7 @@ async function main(): Promise<void> {
 
   // §3
   const linesBefore = await prisma.stockCountLine.findMany({ where: { stockCountId: c1.id }, select: { id: true, found: true, countedQty: true, outOfScopeReason: true, updatedAt: true }, orderBy: { id: "asc" } });
-  await stockCountReversalService.reverse(c1.id, "yanlış eksik işareti");
+  await stockCountReversalService.reverse(c1.id, "yanlış eksik işareti", ADMIN);
   const rolls = await prisma.roll.findMany({ where: { id: { in: [r1, r2] } }, select: { id: true, status: true, cancelledAt: true, cancelReason: true, preCancelStatus: true, warehouseId: true } });
   const rr = (id: string) => rolls.find((r) => r.id === id)!;
   check("§3a Toplar önceki rafında, iptal alanları boş, deposu aynı", rr(r1).status === RollStatus.WAREHOUSE && rr(r2).status === RollStatus.A1_STOCK && rolls.every((r) => !r.cancelledAt && !r.cancelReason && !r.preCancelStatus && r.warehouseId === wh.id));
@@ -139,7 +144,11 @@ async function main(): Promise<void> {
   const linesAfter = await prisma.stockCountLine.findMany({ where: { stockCountId: c1.id }, select: { id: true, found: true, countedQty: true, outOfScopeReason: true, updatedAt: true }, orderBy: { id: "asc" } });
   check("§3f Sayım satırları DEĞİŞMEDİ", JSON.stringify(linesAfter) === JSON.stringify(linesBefore));
   const head = await prisma.stockCount.findUniqueOrThrow({ where: { id: c1.id } });
-  check("§3g Sayım COMPLETED kaldı + storno damgası", head.status === "COMPLETED" && head.reversedAt != null && head.reverseReason === "yanlış eksik işareti");
+  check(
+    "§3g Sayım COMPLETED kaldı + storno damgası (tarih + AKTÖR + gerekçe)",
+    head.status === "COMPLETED" && head.reversedAt != null && head.reversedById === ADMIN && head.reverseReason === "yanlış eksik işareti",
+    `aktör=${head.reversedById}`,
+  );
   const doc = await prisma.printedDocument.findFirst({ where: { docType: PrintedDocType.STOCK_COUNT, sourceId: c1.id }, orderBy: { version: "desc" } });
   check("§3h Tutanak VOIDED, gerekçe 'Storno: …'", doc?.status === PrintedDocStatus.VOIDED && (doc?.voidReason ?? "").startsWith("Storno:"), `${doc?.status} ${doc?.voidReason}`);
 
@@ -163,18 +172,72 @@ async function main(): Promise<void> {
   const r13 = await prisma.roll.findMany({ where: { id: { in: [r1, r3] } }, select: { status: true } });
   check("§5c LIFO sırasıyla ikisi de stornolandı; bağsız sapma metinle bulundu", r13.every((r) => r.status === RollStatus.WAREHOUSE));
 
-  // §6 HEP-YA-HİÇ
+  // §6 ÇIKIŞ DALLARI (LEDGER_ONLY + ALREADY_REVERSED)
   const c4 = await runCount(wh.id, [r1, r2]);
   await inventory.restoreCancelledRoll(r1, undefined, { reason: "elle geri alındı" });
-  const partial = await expectErr(() => stockCountReversalService.reverse(c4.id, "elle karışmış"));
-  const r2State = await prisma.roll.findUniqueOrThrow({ where: { id: r2 }, select: { status: true } });
-  const c4Rev = await prisma.warehouseMovement.count({ where: { stockCountId: c4.id, eventType: WarehouseEventType.CANCEL_REVERSAL } });
-  const c4Head = await prisma.stockCount.findUniqueOrThrow({ where: { id: c4.id } });
-  check("§6a ⭐ Elle geri alınmış topu olan sayım 409 BLOCKED", partial?.status === 409 && partial.code === "STOCK_COUNT_REVERSAL_BLOCKED", JSON.stringify(partial));
-  check("§6b Diğer top İPTAL KALDI (kısmi storno yok)", r2State.status === RollStatus.CANCELLED);
-  check("§6c Hiçbir ters satır yazılmadı + damga yok", c4Rev === 0 && c4Head.reversedAt === null);
   const prev4 = (await stockCountReversalService.preview(c4.id)).data!;
-  check("§6d Önizleme engelli topu gerekçesiyle listeler", prev4.rolls.some((r) => r.rollId === r1 && (r.blocker ?? "").includes("iptali geri alınmış")));
+  const p4 = (id: string) => prev4.rolls.find((r) => r.rollId === id);
+  check(
+    "§6a ⭐ Elle geri alınmış top BLOKLAMIYOR: dalı LEDGER_ONLY, gerekçesi yazılı",
+    prev4.blockers.length === 0 && p4(r1)?.action === "LEDGER_ONLY" && (p4(r1)?.note ?? "").includes("yalnız defter"),
+    `${p4(r1)?.action} / ${p4(r1)?.note}`,
+  );
+  check("§6b Diğer top RESTORE dalında", p4(r2)?.action === "RESTORE" && p4(r2)?.targetStatus === RollStatus.A1_STOCK);
+  const rev4 = await stockCountReversalService.reverse(c4.id, "elle karışmış sayım", ADMIN);
+  check(
+    "§6c Yanıt iki dalı ayrı sayıyor (1 rafa döndü, 1 yalnız defter)",
+    rev4.data?.restoredRolls === 1 && rev4.data?.ledgerOnlyRolls === 1,
+    JSON.stringify(rev4.data),
+  );
+  const r1After = await prisma.roll.findUniqueOrThrow({ where: { id: r1 }, select: { status: true, cancelledAt: true } });
+  const r2After = await prisma.roll.findUniqueOrThrow({ where: { id: r2 }, select: { status: true } });
+  check("§6d LEDGER_ONLY topun STATÜSÜNE dokunulmadı", r1After.status === RollStatus.WAREHOUSE && r1After.cancelledAt === null);
+  check("§6e RESTORE topu önceki rafına döndü", r2After.status === RollStatus.A1_STOCK);
+  const revRows4 = await prisma.warehouseMovement.findMany({
+    where: { stockCountId: c4.id, eventType: WarehouseEventType.CANCEL_REVERSAL },
+    select: { rollId: true },
+  });
+  check("§6f İKİ topun da defter karşılığı yazıldı", revRows4.length === 2 && new Set(revRows4.map((r) => r.rollId)).size === 2, String(revRows4.length));
+  const var4 = await prisma.rollVariance.findMany({ where: { rollId: { in: [r1, r2] }, sourceRefId: c4.id }, select: { reversedAt: true } });
+  check("§6g İki sapma satırı da damgalandı", var4.length === 2 && var4.every((v) => v.reversedAt != null));
+
+  // §6h ALREADY_REVERSED: ters satırı BAŞKA yol (elle geri alma) yazmışsa storno
+  // satırı TEKRAR YAZMAZ — yalnız sapma damgasını atar (6e ile iş bölümü).
+  const c5 = await runCount(wh.id, [r3]);
+  await prisma.warehouseMovement.create({
+    data: {
+      rollId: r3,
+      eventType: WarehouseEventType.CANCEL_REVERSAL,
+      qty: 70,
+      toWarehouseId: wh.id,
+      notes: "elle geri almanın yazdığı ters satır (taklit)",
+    },
+  });
+  // r3'ün GEÇMİŞ turlardan (§5 stornosu) gelen ters satırları da var — ölçüm
+  // "yeni satır yazıldı mı" sorusuna bakar, toplam sayıya değil.
+  const revBefore5 = await prisma.warehouseMovement.count({
+    where: { rollId: r3, eventType: WarehouseEventType.CANCEL_REVERSAL },
+  });
+  const prev5 = (await stockCountReversalService.preview(c5.id)).data!;
+  check(
+    "§6h ⭐ Ters satırı zaten yazılmış top: dal ALREADY_REVERSED",
+    prev5.rolls.find((r) => r.rollId === r3)?.action === "ALREADY_REVERSED",
+    JSON.stringify(prev5.rolls.map((r) => r.action)),
+  );
+  await stockCountReversalService.reverse(c5.id, "zaten kapanmış defter", ADMIN);
+  const revRows5 = await prisma.warehouseMovement.count({
+    where: { rollId: r3, eventType: WarehouseEventType.CANCEL_REVERSAL },
+  });
+  const revOfThisCount = await prisma.warehouseMovement.count({
+    where: { rollId: r3, stockCountId: c5.id, eventType: WarehouseEventType.CANCEL_REVERSAL },
+  });
+  const var5 = await prisma.rollVariance.findFirst({ where: { rollId: r3, sourceRefId: c5.id }, select: { reversedAt: true } });
+  check(
+    "§6i ⭐ Ters satır TEKRAR yazılmadı (yeni satır yok, bu sayıma bağlı satır yok)",
+    revRows5 === revBefore5 && revOfThisCount === 0,
+    `once=${revBefore5} sonra=${revRows5} busayim=${revOfThisCount}`,
+  );
+  check("§6j Sapma damgası yine atıldı", var5?.reversedAt != null);
 
   // §7
   const svc = readFileSync(join(__dirname, "../src/services/stock-count-reversal.service.ts"), "utf8");

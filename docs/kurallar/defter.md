@@ -96,6 +96,7 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 
 - **ESKİ → YENİ:** "Hard delete DÖRT ölçülmüş sınıfla sınırlıdır (① bağımlılık-guard'lı · ② alias/karar satırı · ③ pivot replace · ④ taslak)" → **İKİ sınıf** (④ taslak · ③b yapılandırma pivotu); ① ve ② kalktı, ③ ticari/yapılandırma diye bölündü. Kaynak: kök `CLAUDE.md` (2026-09-10'da düzeltildi) ve `docs/standart/VERITABANI.md` §9.
 - **ESKİ → YENİ:** "Yalnız oturum izi olan makine/istasyon kalıcı silinebilir, oturum satırları tx içinde temizlenir (denetim SystemLog'da kalır)" (`guarded-hard-remove.ts` yorumu) → oturum geçmişi silinmez ve kalıcı silmeyi ENGELLER; audit arşivlendiği için gerekçe geçersizdi. Kaynak: arşiv 2026-09-11.
+- **ESKİ → YENİ:** "Tamamlanmış sayım (`StockCount.COMPLETED`) TERMİNALDİR; geri alma yolu kendi ters kayıtlarıdır (topta 'iptali geri al', iplikte ADJUST tersi)" (şema şerhi + servis yorumu, 2026-08-15) → fark fişi TEK BELGEDE stornolanır; statü COMPLETED kalır, storno `reversedAt` damgasıdır. Eski gerekçe "üçüncü bir yol açardı" diyordu; ölçüldü ki mevcut iki yol da defter yazmıyordu (elle geri alma hâlâ yazmıyor). Kaynak: arşiv 2026-09-11 sayım stornosu notu.
 - **ESKİ → YENİ:** `VERITABANI.md` §9 "sekiz hard delete sitesinin sekizi de meşru" ölçümü BAYAT çıktı — 2026-09-10'da 87 site sayıldı (17 `.delete()` + 70 `.deleteMany()`); eski ölçüm `.deleteMany()`i hiç görmemişti.
 
 ## Bekçiler
