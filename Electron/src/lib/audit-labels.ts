@@ -379,6 +379,14 @@ export const ENUM_LABELS: Record<string, string> = {
   ADMIN: "Panelden Kapatıldı",
   // ShipmentStatus / Destination
   DISPATCHED: "Sevk Edildi",
+  // Sevkiyat olay defteri (2026-09-11) — ters yolu olan çiftler.
+  UNDISPATCHED: "Sevk Geri Alındı",
+  INVOICED: "Faturalandı",
+  INVOICE_CLEARED: "Fatura İşareti Kaldırıldı",
+  // Çuval tartı defteri (2026-09-11).
+  WEIGHED: "Tartıldı",
+  REWEIGHED: "Yeniden Tartıldı",
+  CLEARED: "Tartı Sıfırlandı",
   DOMESTIC: "Yurtiçi",
   EXPORT: "İhracat",
   // PrintedDocType

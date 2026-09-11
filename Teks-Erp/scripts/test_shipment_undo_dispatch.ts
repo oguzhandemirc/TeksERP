@@ -216,7 +216,16 @@ async function main() {
       select: { status: true, dispatchedAt: true, plateNumber: true, driverName: true },
     });
     check("sevkiyat PLANNED", sh?.status === "PLANNED", String(sh?.status));
-    check("dispatchedAt temizlendi", sh?.dispatchedAt === null);
+    // ⚠️ 2026-09-11 (defter doktrini): `dispatchedAt` ARTIK TEMİZLENMEZ —
+    // "sevk edildi" olmuş bir gerçektir ve storno onu silmez. Anlamı "EN SON ne
+    // zaman sevk edildi"dir; güncel gerçeği `status` taşır. Geri almanın izi
+    // `ShipmentEvent.UNDISPATCHED` satırındadır.
+    check("dispatchedAt KORUNDU (ileri damga silinmez)", sh?.dispatchedAt !== null, String(sh?.dispatchedAt));
+    const undoEv = await prisma.shipmentEvent.findFirst({
+      where: { shipmentId: shipment.id, type: "UNDISPATCHED" },
+      select: { reason: true, toStatus: true },
+    });
+    check("UNDISPATCHED olayı deftere yazıldı", undoEv != null && undoEv.toStatus === "PLANNED", String(undoEv?.toStatus));
     check("plaka/şoför KORUNDU (ürün kararı)", sh?.plateNumber === "34TEST01" && sh?.driverName === "TEST ŞOFÖR");
 
     const so = await prisma.shipmentOrder.findUnique({
@@ -326,7 +335,10 @@ async function main() {
     check("2 top geri alındı", rel.data.restoredRolls === 2, String(rel.data.restoredRolls));
     check("mesaj kapanışı söylüyor", /kapatıldı/i.test(rel.message ?? ""), String(rel.message));
     const shRel = await prisma.shipment.findUnique({ where: { id: shipment.id }, select: { status: true, dispatchedAt: true } });
-    check("sevkiyat CANCELLED (PLANNED'da BEKLEMİYOR)", shRel?.status === "CANCELLED" && shRel?.dispatchedAt === null, String(shRel?.status));
+    // `dispatchedAt` burada da KORUNUR (yukarıdaki not) — iptal edilmiş bir
+    // sevkiyatın da bir zamanlar sevk edildiği bilgisi kalıcıdır.
+    check("sevkiyat CANCELLED (PLANNED'da BEKLEMİYOR)", shRel?.status === "CANCELLED", String(shRel?.status));
+    check("iptal sonrası da dispatchedAt KORUNDU", shRel?.dispatchedAt !== null, String(shRel?.dispatchedAt));
     const sackRel = await prisma.sack.findUnique({ where: { id: sack.id }, select: { shipmentId: true, seq: true } });
     check("çuval havuza döndü (shipmentId + seq null)", sackRel?.shipmentId === null && sackRel?.seq === null, JSON.stringify(sackRel));
     const rollsRel = await prisma.roll.findMany({

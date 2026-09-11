@@ -12,7 +12,7 @@ Sektör dayanağı, hepsi için tek cümle: SAP'de bir belge silinmez — storno
 
 ---
 
-## B-1 · `Shipment` — iptal kolonu yok, geri alma damgayı siliyor
+## B-1 · `Shipment` — iptal kolonu yok, geri alma damgayı siliyor ✅ **BİTTİ (2026-09-11)**
 
 **Bulgu.** `Shipment` modelinde `cancelledAt`/`cancelledById`/`cancelReason` **hiç yok** (şemada 37 modelde var, iptal edilebilen tek belgede yok). `shipping.service.ts` geri almada `{ status: PLANNED, dispatchedAt: null, dispatchedById: null }` yazıyor — **sevk edildiği gerçeğini siliyor**. Kod yorumu doktrinle açıkça çelişiyor: *"Storno 'mal HİÇ ÇIKMADI' der."* SoD izni `shipping:undo-dispatch`ın kalıcı izi yok.
 
@@ -29,7 +29,7 @@ Seçilen desen `ChequeEvent` (evde çalışan, olgun, `fromStatus`/`toStatus` ta
 
 ---
 
-## B-2 · `Sack.weightKg` — tartı üzerine yazılıyor, sıfırlama siliyor
+## B-2 · `Sack.weightKg` — tartı üzerine yazılıyor, sıfırlama siliyor ✅ **BİTTİ (2026-09-11)**
 
 **Bulgu.** Yeniden tartı `weightKg`in üzerine yazıyor; tartı sıfırlama `weightKg`/`weightSource`/`weighedById`/`weighedAt` dördünü birden `null`'luyor. **İrsaliyeye ve faturaya giden brüt kg'ın önceki değeri hiçbir kalıcı kolonda yok** — tek iz audit, o da 6 ayda arşivleniyor.
 
@@ -84,8 +84,8 @@ Dördü de `prisma/schema.prisma` + migration istiyor. **Ortak çalışma ağac�
 | # | İş | Boyut | Not |
 |---|---|---|---|
 | 1 | ~~B-3 `PaymentAllocation`~~ | ✅ **BİTTİ** | Migration `20260911120000`; 7+1 okuma yüzeyi süzüldü, §15s tripwire'ı eklendi. Sürpriz: yaşlandırma raporunun 7 ham SQL'i de süzülmek zorundaydı ve o raporun bekçisi YOK. |
-| 2 | B-1 `Shipment` | orta | Yeni model + 4 kolon; `ChequeEvent`i birebir emsal al. |
-| 3 | B-2 `Sack` tartı | orta | Yeni model; B-1 ile aynı dosyaya (`shipping.service.ts`) dokunur → **B-1 ile aynı oturumda, arka arkaya**. |
+| 2 | ~~B-1 `Shipment`~~ | ✅ **BİTTİ** | `ShipmentEvent` 6 olay + 4 iptal kolonu; damgalar artık null'lanmıyor. Doğuş (PLANNED) olayı da yazılıyor. |
+| 3 | ~~B-2 `Sack` tartı~~ | ✅ **BİTTİ** | `SackWeighing` (WEIGHED/REWEIGHED/CLEARED); sıfırlama artık olay. |
 | 4 | B-4 Faz 1 | orta-büyük | Partial unique riski burada; en son, tek başına. |
 
 B-1 ve B-2 aynı serviste ve aynı migration turunda birleştirilir. B-3 ve B-4 ayrı oturumlar olabilir ama **şema kilidi sırayla devredilir**.

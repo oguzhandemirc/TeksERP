@@ -18,6 +18,7 @@ Durum tabloları **"şu an ne"**yi tutar; defterler **"ne oldu"**yu tutar ve "ne
 - **[ÇEKİRDEK]** Bir varlığın durumunu/miktarını değiştiren HER kod yolu o varlığın defterine satır yazar; tek-kayıt yolu yazıp toplu yol yazmıyorsa bu bir DELİKTİR, üslup farkı değil. Ham `updateMany` ile durum değiştirip defter kapısını atlamak yasaktır. · bekçi: `YOK (yazılacak)` <sub>(arşiv:2026-09-10)</sub>
 - **[ÇEKİRDEK]** Append-only defter satırı GÜNCELLENMEZ ve SİLİNMEZ; bu yüzden `updatedAt` almaz ve kronolojisi `createdAt`'tir. Bir tablo hem defter hem durum kaynağı OLAMAZ — ikisi gerekiyorsa iki tablodur. · bekçi: `test_db_invariants.ts (kısmi)` <sub>(arşiv:2026-09-10, [DB-09])</sub>
 - **[ÇEKİRDEK]** Ters kaydın BİÇİMİ deftere göre değişir: negatif/karşı satır ancak DB izin veriyorsa yazılır — `payment_allocations_amount_positive` gibi bir CHECK varsa doğru yol `revokedAt`/`revokedById`/`revokeReason` DAMGASIDIR. Damgalı defterde okuyan HER yol aktif yüklemi TEK helper'dan alır (`ACTIVE_ALLOCATION`). · bekçi: `test_payment_allocation.ts` §15s <sub>(arşiv:2026-09-11)</sub>
+- **[ÇEKİRDEK]** Tekrar edebilen bir çevrimin izi TEK KOLONA sığmaz: sevk → geri al → sevk turunda `undispatchedAt` gibi tek damga ikinci turda birincisini ezer. Böyle çevrimler OLAY DEFTERİ ister (`ShipmentEvent`, `ChequeEvent` emsali); durum kolonu güncel gerçeği, defter geçmişi taşır. <sub>(arşiv:2026-09-11)</sub>
 - **[ÇEKİRDEK]** Defter İŞ VERİSİDİR: arşivlenmez, budanmaz. Büyüme index/partition ile karşılanır, satır silerek değil. <sub>(arşiv:2026-09-10)</sub>
 - **[ÇEKİRDEK]** Çalışma oturumu (`WorkSession`) geçmişi hiçbir yoldan silinmez; oturumu olan istasyon/makine kalıcı silinemez (409 `workSessionCount`), pasife alınır. · bekçi: `test_work_session_history_guard.ts` <sub>(arşiv:2026-09-11)</sub>
 - **[ÇEKİRDEK]** Çekin her ileri olayının tipli stornosu vardır (`CANCELLED` hariç her terminalden tek çıkış): ters cari satır orijinaline `reversesTxnId` ile bağlanır, bugüne yazılır, durum en yeni ileri olayın (`createdAt`) `fromStatus`una döner; olay/satır bulunamazsa 409. · bekçi: `test_cheque_reversal.ts` <sub>(arşiv:2026-09-11)</sub>
@@ -77,6 +78,8 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 | `PaymentAllocation` `:7249` | fatura kapama | ✅ `revokedAt` damgası | ✅ damga (negatif satır CHECK yüzünden yasak) |
 | `SackAllocation` `:4939` | sipariş karşılama | ❌ sil-yaz (rebalance) | ❌ |
 | `PrintedDocument` `:4388` | belge versiyonu | ✅ | ✅ SUPERSEDED/VOIDED |
+| `ShipmentEvent` **(yeni)** | sevkiyat durum defteri, 6 olay | ✅ | ✅ DISPATCHED↔UNDISPATCHED · INVOICED↔INVOICE_CLEARED |
+| `SackWeighing` **(yeni)** | çuval tartı ölçümü | ✅ | ✅ CLEARED olayı |
 | `RollPlanDeviation` `:3278` · `TravelerCardScan` `:3538` | karar / okutma | ✅ | — |
 
 ## Geçersiz kılınan kurallar

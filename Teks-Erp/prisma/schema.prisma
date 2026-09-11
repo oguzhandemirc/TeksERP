@@ -4587,8 +4587,9 @@ model Sack {
   rolls              Roll[] // Bu çuvaldaki toplar (içerik)
   swatches           Swatch[] // Bu çuvaldaki kartelalar (içerik)
   allocations        SackAllocation[] // Sevkte yazılan sipariş-satırı tahsisi (hangi çuval → hangi satır)
-  warehouseMovements WarehouseMovement[] // Çuval-bütün transfer izleri
+  warehouseMovements WarehouseMovement[]
   tags               SackTagAssignment[] // Çuval izleri (annotation — bkz. SackTag)
+  weighings          SackWeighing[] // Tartı ölçüm defteri (append-only)
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -4834,6 +4835,10 @@ model Shipment {
   driverName  String? @db.VarChar(100)
   carrier     String? @db.VarChar(100)
 
+  /// ⚠️ GERİ ALMADA NULL'LANMAZ (2026-09-11, defter doktrini). Anlamı "EN SON ne
+  /// zaman sevk edildi"dir; güncel gerçeği `status` taşır. Eskiden undo-dispatch
+  /// bu iki damgayı siliyordu — sevk edildiği gerçeği yok oluyordu ve SoD izni
+  /// `shipping:undo-dispatch`ın kalıcı izi kalmıyordu. Tam geçmiş `ShipmentEvent`te.
   dispatchedAt   DateTime? @db.Timestamptz // Kamyona yüklenip çıktığı an
   // O-19: operatör izi — kim sevk etti (kalıcı, best-effort audit yerine).
   dispatchedById String?   @db.Uuid
@@ -4842,6 +4847,13 @@ model Shipment {
   // ERP'de yanıtlasın diye. ERP fatura KESMEZ: burada tutulan yalnız dış muhasebe
   // programındaki belgenin numarası + tarihi (mali alan yok — miktar-odaklı kural).
   // Bir sevk = bir fatura varsayımı; kısmi faturalama modellenmedi.
+  /// İPTAL KÜNYESİ (2026-09-11) — 37 modelin konvansiyonu; iptal edilebilen tek
+  /// belge olmasına rağmen `Shipment`ta YOKTU, iptal yalnız `status`tan okunuyordu.
+  cancelledAt      DateTime? @db.Timestamptz
+  cancelledById    String?   @db.Uuid
+  cancelReason     String?   @db.VarChar(300)
+  cancelReasonCode String?   @db.VarChar(64)
+
   invoiceNo    String?   @db.VarChar(64)
   invoicedAt   DateTime? @db.Timestamptz
   invoicedById String?   @db.Uuid
@@ -4858,6 +4870,7 @@ model Shipment {
   returns            RollReturn[] // Bu sevkiyattan gelen iadeler (izlenebilirlik)
   /// Bu sevkin depo defterindeki izleri (SHIPMENT / SHIPMENT_REVERSAL).
   warehouseMovements WarehouseMovement[]
+  events             ShipmentEvent[] // Durum olay defteri (append-only)
 
   createdAt       DateTime @default(now()) @db.Timestamptz
   updatedAt       DateTime @updatedAt @db.Timestamptz
@@ -5762,6 +5775,89 @@ model StationProperty {
 // =============================================================================
 // 12. SYSTEM LOG - Audit Trail
 // =============================================================================
+
+/// Sevkiyatın durum çevrimindeki olaylar. Her ileri olayın tipli tersi vardır —
+/// tersi olmayan ileri olay, izsiz geri alınan bir iş demektir.
+enum ShipmentEventType {
+  PLANNED // Sevkiyat kuruldu
+  DISPATCHED // Kamyon çıktı
+  UNDISPATCHED // Sevk GERİ ALINDI (DISPATCHED'ın tersi)
+  CANCELLED // Sevkiyat iptal edildi
+  INVOICED // Dış muhasebe belgesi işaretlendi
+  INVOICE_CLEARED // Fatura işareti kaldırıldı (INVOICED'ın tersi)
+}
+
+/// SEVKİYAT OLAY DEFTERİ — "bu sevkiyata ne oldu" (append-only).
+///
+/// ⚠️ `updatedAt` YOK ve OLMAMALI: defter satırı yazıldıktan sonra değişmez.
+/// Emsal ve şekil kardeşi `ChequeEvent` — aynı `fromStatus`/`toStatus` deseni.
+/// Belgenin GÜNCEL gerçeği `Shipment.status`tadır; GEÇMİŞİ burada yaşar.
+model ShipmentEvent {
+  id         String            @id @default(uuid()) @db.Uuid
+  shipmentId String            @db.Uuid
+  type       ShipmentEventType
+  /// Doğuş olayında (PLANNED) null — öncesi yok.
+  fromStatus ShipmentStatus?
+  toStatus   ShipmentStatus
+
+  /// Kullanıcı girdisi olabilen olay tarihi; KRONOLOJİ `createdAt`tir.
+  eventDate  DateTime @db.Timestamptz
+  reason     String?  @db.VarChar(300)
+  reasonCode String?  @db.VarChar(64)
+
+  createdById String? @db.Uuid
+
+  /// ⚠️ `Cascade` BİLİNÇLİ (emsal `WarehouseMovement.roll`): doktrin, defter
+  /// satırını "olayı olmamış göstermek için" silmeyi yasaklar — üst kayıt HARD
+  /// DELETE edilirken çocuğu düşürmeyi değil. `Shipment` canlıda zaten hiç hard
+  /// delete edilmez (iptal bir DURUM GEÇİŞİDİR), yani bu dal üretimde koşmaz;
+  /// `Restrict` olsaydı yalnız bekçi temizliklerini kilitlerdi (66 dosya).
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([shipmentId, createdAt])
+  @@index([type, createdAt])
+  @@map("shipment_events")
+}
+
+/// Çuval tartısının türü. Sıfırlama da bir OLAYDIR — sessiz silme değil.
+enum SackWeighingKind {
+  WEIGHED // İlk tartı
+  REWEIGHED // Yeniden tartı (öncekinin üstüne yazıldı)
+  CLEARED // Tartı sıfırlandı (içerik değişti ya da elle temizlendi)
+}
+
+/// ÇUVAL TARTI ÖLÇÜM DEFTERİ (append-only, 2026-09-11).
+///
+/// Tartı bir ÖLÇÜMDÜR ve ölçümün defteri tutulur (emsal: `RollVariance` — çekme
+/// de ölçümdür). Eskiden yeniden tartı `Sack.weightKg`in ÜSTÜNE yazıyor,
+/// sıfırlama dört alanı birden siliyordu: irsaliyeye ve faturaya giden BRÜT
+/// kg'ın önceki değeri hiçbir kalıcı kolonda kalmıyordu.
+///
+/// `Sack.weightKg` denormalize GÜNCEL değer olarak KALIR — doktrin durum
+/// kolonunu yasaklamaz, defterle DESTEKLENMESİNİ şart koşar.
+/// ⚠️ `updatedAt` YOK.
+model SackWeighing {
+  id     String           @id @default(uuid()) @db.Uuid
+  sackId String           @db.Uuid
+  kind   SackWeighingKind
+
+  /// `CLEARED` olayında NULL — "artık tartı yok" da bir ölçüm sonucudur.
+  weightKg     Decimal?          @db.Decimal(12, 3)
+  weightSource SackWeightSource?
+
+  weighedById String?  @db.Uuid
+  weighedAt   DateTime @db.Timestamptz
+  notes       String?  @db.VarChar(300)
+
+  sack Sack @relation(fields: [sackId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([sackId, createdAt])
+  @@map("sack_weighings")
+}
 
 model SystemLog {
   id        String            @id @default(uuid()) @db.Uuid

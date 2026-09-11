@@ -5074,3 +5074,90 @@ istemcisi host'a kurulu olmayabiliyor. Betiğe `resolvePsql()` eklendi — host'
 `psql` yoksa DB portunu yayınlayan container bulunur ve komut oradan koşar
 (URL container içi `localhost:5432`ye yeniden yazılır, SQL dosyası container'da
 bulunmadığı için `-f` yerine STDIN'den verilir).
+
+
+---
+
+## 2026-09-11 — B-1 + B-2: sevkiyat olay defteri ve çuval tartı defteri [ÇEKİRDEK]
+
+Defter doktrini B bölümünün ikinci turu. İki delik aynı serviste olduğu için tek
+migration turunda kapatıldı.
+
+### B-1 — `Shipment`: damga siliniyordu, iptal künyesi hiç yoktu
+
+**Bulgu.** `shipping.service.ts` geri almada `{ status: PLANNED, dispatchedAt:
+null, dispatchedById: null }` yazıyordu: "sevk edildi" gerçeği siliniyor, SoD
+izni `shipping:undo-dispatch`ın kalıcı izi kalmıyordu. Kodun kendi yorumu
+doktrinle açıkça çelişiyordu — *"Storno 'mal HİÇ ÇIKMADI' der."* Ayrıca
+`Shipment` modelinde `cancelledAt`/`cancelledById`/`cancelReason` **HİÇ YOKTU**
+(37 modelde var, iptal edilebilen tek belgede yok).
+
+**KARAR ve neden tek kolon YETMEZDİ.** `undispatchedAt` gibi tek bir damga
+düşünülebilirdi ama sevk → geri al → sevk turunda **ikinci tur birincisini
+ezerdi**. Bu yüzden `ShipmentEvent` olay defteri açıldı (şekil kardeşi
+`ChequeEvent`): `PLANNED` · `DISPATCHED` · `UNDISPATCHED` · `CANCELLED` ·
+`INVOICED` · `INVOICE_CLEARED`, `fromStatus`/`toStatus` ile. Ters yolu olan iki
+çift: DISPATCHED↔UNDISPATCHED ve INVOICED↔INVOICE_CLEARED.
+
+- `dispatchedAt`/`dispatchedById` artık **NULL'LANMAZ**; anlamları "EN SON ne
+  zaman sevk edildi"dir, güncel gerçeği `status` taşır. Muhasebe listesi
+  `status=DISPATCHED` ile süzdüğü için etkilenmedi (bekçiyle ölçüldü, varsayılmadı).
+- İptal künyesi TEK KAYNAKTA yazılır: `cancelPlannedShipmentTx` — sevkiyat
+  kuralı 70 gereği `cancelShipment` ve `undoDispatch({releaseSacks})` ikisi de
+  oradan geçer, ikinci kopya yazılmadı.
+- Geri alma GEREKÇESİ (zaten zorunlu, ≥3 karakter) deftere de yazılır.
+- Fatura işareti yolu TEK TX'e alındı: damga ile defter satırı birlikte commit
+  olur. Bu işaret aynı zamanda storno kapısıdır ("faturalanmış sevkiyat geri
+  alınamaz"), yani kaldırmak bir YETKİ kararıdır ve izsiz olamaz.
+- Doğuş olayı (`PLANNED`) da yazılır — defter sevkiyatın tüm hayatını taşısın.
+
+### B-2 — `Sack.weightKg`: tartı üzerine yazılıyor, sıfırlama siliyordu
+
+**Bulgu.** Yeniden tartı `weightKg`in üstüne yazıyordu; içerik değişiminde
+`markSackContentChangedTx` dört alanı birden (`weightKg`, `weightSource`,
+`weighedById`, `weighedAt`) `null`'luyordu. **İrsaliyeye ve faturaya giden BRÜT
+kg'ın önceki değeri hiçbir kalıcı kolonda kalmıyordu** — tek iz audit, o da 6
+ayda arşivleniyor.
+
+**KARAR.** `SackWeighing` append-only ÖLÇÜM defteri (emsal `RollVariance` —
+çekme de ölçümdür): `WEIGHED` · `REWEIGHED` · `CLEARED`. `Sack.weightKg`
+denormalize GÜNCEL değer olarak KALIR — doktrin durum kolonunu yasaklamaz,
+defterle DESTEKLENMESİNİ şart koşar.
+
+⚠️ `CLEARED` satırında `weightKg` **NULL**: olayın SONUCU "tartı yok"tur.
+Kaybolan değer defterde bir ÖNCEKİ satırda durur; burada tekrarlamak aynı kg'ı
+iki satırda gösterip toplamı yalanlardı. Kaybolan miktar `notes`ta metin olarak
+anılır.
+
+### Kod çapaları
+
+- `prisma/migrations/20260911140000_shipment_events_sack_weighings/` — iki yeni
+  tablo + iki yeni enum tipi + `shipments`a dört nullable kolon. **Geriye dönük
+  defter satırı ÜRETİLMEDİ**: olmayan geçmişi uydurmak defteri yalanlar; defter
+  bu migration'dan İTİBAREN doludur, eski sevkiyatların geçmişi audit'te kalır.
+- `src/services/helpers/shipment-event.helper.ts` — tek yazma kapısı
+- `src/services/shipping.service.ts` — altı olay noktası + iptal künyesi + tartı defteri
+
+### Bekçi
+
+`scripts/test_shipment_event_ledger.ts` — **17 kontrol**. §3 turu özellikle
+değerli: `PLANNED,DISPATCHED,UNDISPATCHED,DISPATCHED` dizisi tek kolonun neden
+yetmeyeceğini VERİYLE gösteriyor.
+
+**NEGATİF SONDA (ikisi de ölçüldü, geri alındı):**
+① `dispatchedAt: null` geri kondu → §2b · §2c · §7 kırmızı (3/17).
+② `CLEARED` olayı kaldırıldı → §6a · §6b kırmızı (2/17).
+
+### Yol boyunca çıkan iki şey
+
+1. **Şema çapası yanlış modele düştü.** `invoiceNo` hem `DirectShipment`ta hem
+   `Shipment`ta var; iptal kolonları önce yanlışına yazıldı. **Drift bekçisi
+   yakaladı** (`test_schema_drift`: "DB'de shipments'ta var, şemada
+   direct_shipments'ta") — migration aracının bağımsız doğrulama adımı tam da
+   bunun için var ve işini yaptı.
+2. **`apply-migration.ts` bu turda uçtan uca çalıştı** (dünkü Docker düşüşü
+   düzeltmesiyle) ve kendi doğrulaması kırmızı vererek hatayı durdurdu.
+
+### Üç kapı
+
+Migration **var** (`20260911140000`). Yeni izin **yok**. APK **yok**.

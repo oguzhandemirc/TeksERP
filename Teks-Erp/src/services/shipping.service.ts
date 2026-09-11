@@ -28,9 +28,12 @@ import {
   LabelKind,
   OrderStatus,
   WarehouseEventType,
+  ShipmentEventType,
+  SackWeighingKind,
 } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { writeWarehouseMovements } from "./helpers/warehouse-ledger.helper";
+import { writeShipmentEvent } from "./helpers/shipment-event.helper";
 import { AppError } from "../utils/app-error";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { AuditService } from "./audit.service";
@@ -1533,13 +1536,31 @@ export class ShippingService {
 
     await prisma.$transaction(async (tx) => {
       await touchWarehouseSackTx(tx, data.sackId);
+      // ÖLÇÜM DEFTERİ (2026-09-11): yeniden tartı eskiden `weightKg`in ÜSTÜNE
+      // yazıyordu ve irsaliyeye giden BRÜT kg'ın önceki değeri hiçbir kalıcı
+      // kolonda kalmıyordu. Önceki değeri okuyup olay tipini ondan çözüyoruz.
+      const onceki = await tx.sack.findUnique({
+        where: { id: data.sackId },
+        select: { weightKg: true },
+      });
+      const stamp = new Date();
       await tx.sack.update({
         where: { id: data.sackId },
         data: {
           weightKg: new Prisma.Decimal(data.weightKg!),
           weightSource: resolvedSource,
           weighedBy: userId ? { connect: { id: userId } } : { disconnect: true },
-          weighedAt: new Date(),
+          weighedAt: stamp,
+        },
+      });
+      await tx.sackWeighing.create({
+        data: {
+          sackId: data.sackId,
+          kind: onceki?.weightKg == null ? SackWeighingKind.WEIGHED : SackWeighingKind.REWEIGHED,
+          weightKg: new Prisma.Decimal(data.weightKg!),
+          weightSource: resolvedSource,
+          weighedById: userId ?? null,
+          weighedAt: stamp,
         },
       });
     });
@@ -1629,12 +1650,34 @@ export class ShippingService {
   ): Promise<void> {
     const ids = [...new Set(sackIds.filter((s): s is string => !!s))];
     if (ids.length === 0) return;
+    // ÖNCEKİ DEĞERLER ÖNCE OKUNUR: sıfırlama artık sessiz silme değil `CLEARED`
+    // OLAYIDIR (2026-09-11) ve defter satırı neyin kaybolduğunu söylemeli.
+    const temizlenecek = await tx.sack.findMany({
+      where: { id: { in: ids }, weightKg: { not: null } },
+      select: { id: true, weightKg: true, weightSource: true },
+    });
     await tx.sack.updateMany({
       where: { id: { in: ids }, weightKg: { not: null } },
       // `weightSource` de NULL'lanır: kg gidince kaynak bilgisi bayatlar ve
       // "kg yok ama kaynağı SCALE" gibi tutarsız bir çift kalırdı.
       data: { weightKg: null, weightSource: null, weighedById: null, weighedAt: null },
     });
+    if (temizlenecek.length > 0) {
+      const stamp = new Date();
+      await tx.sackWeighing.createMany({
+        data: temizlenecek.map((sk) => ({
+          sackId: sk.id,
+          kind: SackWeighingKind.CLEARED,
+          // ⚠️ `weightKg` NULL: olayın SONUCU "tartı yok"tur. Kaybolan değer
+          // defterde bir ÖNCEKİ satırda durur — burada tekrarlamak, aynı kg'ı
+          // iki satırda gösterip toplamı yalanlardı.
+          weightKg: null,
+          weightSource: sk.weightSource,
+          weighedAt: stamp,
+          notes: `İçerik değişti — önceki tartı ${sk.weightKg?.toString() ?? "?"} kg düştü`,
+        })),
+      });
+    }
     await tx.sack.updateMany({
       where: { id: { in: ids }, labelDirty: false },
       data: { labelDirty: true },
@@ -2293,6 +2336,16 @@ export class ShippingService {
       },
       select: { id: true, shipmentNo: true },
     });
+    // DOĞUŞ OLAYI — defter sevkiyatın TÜM hayatını taşısın; ilk satır yoksa
+    // "bu sevkiyat ne zaman kuruldu" yalnız `createdAt`ten okunur ve defter
+    // yarım başlar.
+    await writeShipmentEvent(tx, {
+      shipmentId: created.id,
+      type: ShipmentEventType.PLANNED,
+      fromStatus: null,
+      toStatus: ShipmentStatus.PLANNED,
+      userId: p.userId ?? null,
+    });
     // Atomik claim + seq ata (+ müşterisiz çuvala müşteri/şube backfill).
     for (let i = 0; i < p.sackIds.length; i++) {
       const claimed = await tx.sack.updateMany({
@@ -2946,9 +2999,26 @@ export class ShippingService {
             })
           )?.invoices[0]?.docNo ?? null
         : null;
-    const updated = await prisma.shipment.updateMany({
-      where: { id: shipmentId, status: ShipmentStatus.DISPATCHED },
-      data: { invoiceNo: value, invoicedAt: stamp, invoicedById: value ? (userId ?? null) : null },
+    // ⚠️ TEK TX: defter satırı damgayla BİRLİKTE commit olmalı. İşaret kalkıp
+    // defterde iz kalmazsa "fatura işaretini kim kaldırdı" cevapsız kalır —
+    // üstelik bu işaret aynı zamanda storno kapısıdır (faturalanmış sevkiyat
+    // geri alınamaz), yani onu kaldırmak bir YETKİ kararıdır.
+    const updated = await prisma.$transaction(async (tx) => {
+      const u = await tx.shipment.updateMany({
+        where: { id: shipmentId, status: ShipmentStatus.DISPATCHED },
+        data: { invoiceNo: value, invoicedAt: stamp, invoicedById: value ? (userId ?? null) : null },
+      });
+      if (u.count > 0) {
+        await writeShipmentEvent(tx, {
+          shipmentId,
+          type: value ? ShipmentEventType.INVOICED : ShipmentEventType.INVOICE_CLEARED,
+          fromStatus: ShipmentStatus.DISPATCHED,
+          toStatus: ShipmentStatus.DISPATCHED,
+          reason: value ? `Fatura no: ${value}` : "Fatura işareti kaldırıldı",
+          userId,
+        });
+      }
+      return u;
     });
     if (updated.count === 0) {
       // Ayrımı kullanıcıya söyle: "bulunamadı" ile "henüz sevk edilmedi" farklı hatalar.
@@ -3170,6 +3240,13 @@ export class ShippingService {
       },
     });
     if (claim.count === 0) throw AppError.conflict("Sevkiyat durumu değişti — yenileyip tekrar deneyin");
+    await writeShipmentEvent(tx, {
+      shipmentId,
+      type: ShipmentEventType.DISPATCHED,
+      fromStatus: ShipmentStatus.PLANNED,
+      toStatus: ShipmentStatus.DISPATCHED,
+      userId,
+    });
 
     // HAYALET GUARD'I — tx İÇİ, sevkiyat satır kilidi ALINDIKTAN sonra, flip'ten ÖNCE.
     // Aşağıdaki flip `status: { not: SHIPPED }` ile ÇUVALDAKİ HER TOPU SHIPPED'e çeker;
@@ -3415,9 +3492,30 @@ export class ShippingService {
     tx: Prisma.TransactionClient,
     shipmentId: string,
     expectedStatus: ShipmentStatus,
+    opts?: { userId?: string; reason?: string | null; reasonCode?: string | null },
   ): Promise<void> {
-    const claim = await tx.shipment.updateMany({ where: { id: shipmentId, status: expectedStatus }, data: { status: ShipmentStatus.CANCELLED } });
+    const claim = await tx.shipment.updateMany({
+      where: { id: shipmentId, status: expectedStatus },
+      // İPTAL KÜNYESİ (2026-09-11): 37 modelin konvansiyonu; iptal edilebilen tek
+      // belge olmasına rağmen burada YOKTU ve iptal yalnız `status`tan okunuyordu.
+      data: {
+        status: ShipmentStatus.CANCELLED,
+        cancelledAt: new Date(),
+        cancelledById: opts?.userId ?? null,
+        cancelReason: opts?.reason?.slice(0, 300) ?? null,
+        cancelReasonCode: opts?.reasonCode?.slice(0, 64) ?? null,
+      },
+    });
     if (claim.count === 0) throw AppError.conflict("Sevkiyat durumu değişti — yenileyip tekrar deneyin");
+    await writeShipmentEvent(tx, {
+      shipmentId,
+      type: ShipmentEventType.CANCELLED,
+      fromStatus: expectedStatus,
+      toStatus: ShipmentStatus.CANCELLED,
+      reason: opts?.reason ?? null,
+      reasonCode: opts?.reasonCode ?? null,
+      userId: opts?.userId ?? null,
+    });
     // Tahsisleri sil (çuval.shipmentId null'lanmadan ÖNCE — yoksa where eşleşmez) + sipariş defteri.
     const orderRows = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
     // Lost-update kilidi (performDispatchTx ile simetrik): defter mutasyonu
@@ -3446,7 +3544,7 @@ export class ShippingService {
     if (shipment.status === ShipmentStatus.DISPATCHED) throw AppError.conflict("Sevk edilmiş sevkiyat iptal edilemez");
 
     await prisma.$transaction(async (tx) => {
-      await this.cancelPlannedShipmentTx(tx, shipmentId, shipment.status);
+      await this.cancelPlannedShipmentTx(tx, shipmentId, shipment.status, { userId });
     });
     await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "CANCEL", freedSacks: shipment._count.sacks } });
     return { success: true, data: { shipmentId, freedSacks: shipment._count.sacks }, message: "Sevkiyat iptal edildi — çuvallar depoya döndü" };
@@ -3629,11 +3727,26 @@ export class ShippingService {
       });
       if (block) throw AppError.conflict(block);
 
+      // ⚠️ `dispatchedAt`/`dispatchedById` NULL'LANMAZ (2026-09-11, defter
+      // doktrini): "sevk edildi" olmuş bir gerçektir, geri alma onu silmez.
+      // Anlamları "EN SON ne zaman sevk edildi"dir; güncel gerçeği `status`
+      // taşır ve muhasebe listesi `status=DISPATCHED` ile süzdüğü için
+      // etkilenmez. Tam geçmiş `ShipmentEvent`te.
       const claim = await tx.shipment.updateMany({
         where: { id: shipmentId, status: ShipmentStatus.DISPATCHED },
-        data: { status: ShipmentStatus.PLANNED, dispatchedAt: null, dispatchedById: null },
+        data: { status: ShipmentStatus.PLANNED },
       });
       if (claim.count === 0) throw AppError.conflict("Sevkiyat durumu değişti — yenileyip tekrar deneyin");
+      await writeShipmentEvent(tx, {
+        shipmentId,
+        type: ShipmentEventType.UNDISPATCHED,
+        fromStatus: ShipmentStatus.DISPATCHED,
+        toStatus: ShipmentStatus.PLANNED,
+        // Gerekçe zaten ZORUNLU (en az 3 karakter) — deftere de yazılır ki
+        // "kim, ne zaman, NEDEN geri aldı" tek satırda cevaplansın.
+        reason: trimmed,
+        userId,
+      });
 
       // `isActive` şemada "sevkiyat PLANNED mı" denormudur (dispatch/cancel false yapar).
       await tx.shipmentOrder.updateMany({ where: { shipmentId }, data: { isActive: true } });
