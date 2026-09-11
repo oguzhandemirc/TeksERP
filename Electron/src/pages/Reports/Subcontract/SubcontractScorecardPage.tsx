@@ -20,6 +20,16 @@ const num = (v: number | null | undefined, unit = "") => (
   </div>
 );
 
+// Müşteriye giden metre fire değildir; yazılmazsa giden − dönen ≠ fire görünür.
+const returnedCell = (r: SubcontractScorecardRow) => (
+  <div className="text-right tabular-nums">
+    {fmtNum(r.returnedQty)} m
+    {r.deliveredQty > 0 && (
+      <div className="text-[10px] text-muted-foreground">+{fmtNum(r.deliveredQty)} m müşteriye</div>
+    )}
+  </div>
+);
+
 function firmColumns(hasCompare: boolean): ColumnDef<SubcontractScorecardRow, unknown>[] {
   const cols: ColumnDef<SubcontractScorecardRow, unknown>[] = [
     { accessorKey: "label", header: "Fason firma" },
@@ -31,7 +41,7 @@ function firmColumns(hasCompare: boolean): ColumnDef<SubcontractScorecardRow, un
     {
       accessorKey: "returnedQty",
       header: () => <div className="text-right">Dönen</div>,
-      cell: ({ row }) => num(row.original.returnedQty, " m"),
+      cell: ({ row }) => returnedCell(row.original),
     },
     {
       accessorKey: "fireQty",
@@ -203,7 +213,7 @@ export function SubcontractScorecardPage() {
 
       <DetailTable
         title="Firma Bazında"
-        description="Fire oranı yalnız DÖNÜŞÜ GELMİŞ kalemlerden hesaplanır; açık bakiye ayrı kolonda durur."
+        description="Fire oranı yalnız KAPANMIŞ (dönmüş ya da fasondan müşteriye teslim edilmiş) kalemlerden hesaplanır; açık bakiye ayrı kolonda durur."
         data={sc?.bySubcontractor ?? []}
         columns={cols}
         isLoading={query.isLoading}

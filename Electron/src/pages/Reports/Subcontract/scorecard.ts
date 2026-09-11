@@ -13,6 +13,8 @@ export interface SubcontractScorecardRow {
   /** Fire PAYDASI — yalnız dönüşü gelmiş kalemler. */
   closedDispatchedQty: number;
   returnedQty: number;
+  /** Fasondan doğrudan müşteriye giden metre — başarılı teslim, fire değil. */
+  deliveredQty: number;
   fireQty: number;
   firePct: number;
   openItems: number;
@@ -27,6 +29,7 @@ export interface SubcontractScorecard {
     dispatchedQty: number;
     closedDispatchedQty: number;
     returnedQty: number;
+    deliveredQty: number;
     fireQty: number;
     firePct: number;
     openItems: number;
@@ -63,9 +66,9 @@ export function buildSubcontractExport(opts: {
   const meta = [
     // Fire oranının tanımı — bu cümle olmadan rakam "giden−dönen / giden" sanılır
     // ve henüz dönmemiş mal yüzünden abartılı okunur.
-    "FİRE = (kapanmış kalemlerin giden metrajı − dönen metraj) / kapanmış kalemlerin giden metrajı.",
+    "FİRE = (kapanmış kalemlerin giden metrajı − dönen metraj − müşteriye giden metraj) / kapanmış kalemlerin giden metrajı.",
     "Henüz dönmemiş (açık) kalemler fire hesabına GİRMEZ; ayrı 'açık bakiye' olarak raporlanır.",
-    "Fasondan doğrudan müşteriye sevk edilen ve iptal edilen sevkler kapsam dışıdır.",
+    "Fasondan doğrudan müşteriye sevk edilen metre başarılı teslimdir: fire sayılmaz, paydadan da düşülmez. İptal edilen sevkler kapsam dışıdır.",
   ];
   if (compareLabel) meta.push(`Karşılaştırma dönemi: ${compareLabel}`);
 
@@ -82,6 +85,7 @@ export function buildSubcontractExport(opts: {
           { header: "Giden (m)", key: "dispatchedQty", width: 13, numFmt: "#,##0.0", align: "right" },
           { header: "Kapanan (m)", key: "closedDispatchedQty", width: 14, numFmt: "#,##0.0", align: "right" },
           { header: "Dönen (m)", key: "returnedQty", width: 13, numFmt: "#,##0.0", align: "right" },
+          { header: "Müşteriye (m)", key: "deliveredQty", width: 14, numFmt: "#,##0.0", align: "right" },
           { header: "Fire (m)", key: "fireQty", width: 12, numFmt: "#,##0.0", align: "right" },
           { header: "Fire %", key: "firePct", width: 10, numFmt: "0.0", align: "right" },
           { header: "Açık (m)", key: "openQty", width: 12, numFmt: "#,##0.0", align: "right" },
@@ -97,6 +101,7 @@ export function buildSubcontractExport(opts: {
           dispatchedQty: sc.summary.dispatchedQty,
           closedDispatchedQty: sc.summary.closedDispatchedQty,
           returnedQty: sc.summary.returnedQty,
+          deliveredQty: sc.summary.deliveredQty,
           fireQty: sc.summary.fireQty,
           firePct: sc.summary.firePct,
           openQty: sc.summary.openQty,
