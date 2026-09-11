@@ -66,6 +66,71 @@ Tartı bir ÖLÇÜMDÜR, ölçüm defteri tutulur (emsal: `RollVariance` — çe
 
 ### Faz 1 — silmeyi durdur · `RollOperation` ✅ **BİTTİ (2026-09-11)** · `RollMovement` ⏳ BEKLİYOR
 
+---
+
+## ▶ B-4b DEVİR NOTU — `RollMovement` (sıradaki iş, taze oturum için)
+
+> Bu bölüm tek başına yeterlidir: yeni oturum başka hiçbir yeri okumadan buradan başlayabilir. Önce `docs/kurallar/defter.md` (doktrin), sonra burası.
+
+### Neden ayrıldı
+
+`RollOperation` ile birlikte yapılacaktı; ölçüm ayırmayı gerektirdi. `RollMovement` **47 okuma yüzeyine** dokunuyor ve — kritik olan — `recomputeStepStatus` adım DURUMUNU bu tablodan **SAYARAK** türetiyor. Kaçırılan tek süzme yanlış adım durumu üretir; bu, üretim akışını bozan bir hatadır.
+
+### Dört silme yeri
+
+| Dosya | Satır | Bağlam |
+|---|---|---|
+| `workorder-manual-move.service.ts` | 666 | manuel taşımada hedef-sonrası hareketler |
+| `subcontractor.service.ts` | 5145 | fason kabul iptali |
+| `subcontractor.service.ts` | 5683 | fason transfer geri alma |
+| `kursun-qc.service.ts` | 1104 | kurşun/QC2 geri alma |
+
+### ⚠️ ASIL TEHLİKE — `recomputeStepStatus`
+
+`helpers/roll-step.helper.ts:30`. Adım durumunu şöyle türetiyor:
+
+```
+openCount   = rollMovement.count({ …, exitedAt: null })
+closedCount = rollMovement.count({ …, exitedAt: { not: null } })
+```
+
+Bugün silinen satır bu sayımlardan da düşüyor. Damgaya geçilince **her iki sayım da `revokedAt: null` süzmek ZORUNDA** — yoksa geri alınmış bir hareket "açık" ya da "kapalı" sayılır ve adım yanlış duruma geçer. Ayrıca aynı dosyadaki "giriş noktası" sorgusu ve `CANCELLED` top dışlaması da aynı yüklemle tutarlı kalmalı.
+
+### Okuma yüzeyi dağılımı (47)
+
+`inventory.service.ts` 15 · `kursun-bypass.service.ts` 9 · `tambur.service.ts` 6 · `tambur-undo.service.ts` 5 · `kursun-qc.service.ts` 4 · `helpers/roll-step.helper.ts` 4 · `subcontractor.service.ts` 3 · `workorder-split.service.ts` 2 · `work-session-activity.service.ts` 2 · `helpers/guarded-hard-remove.ts` 2 · `workorder.service.ts` 1 · `tambur-manual.service.ts` 1
+
+⚠️ Bunların hepsi `findMany/count` DEĞİL: `RollMovement` satırı **girişte açılıp çıkışta ÜZERİNE YAZILIYOR** (`updateMany` ile `exitedAt`/`qtyOut` doluyor). Yani `update` çağrıları da listede ve onların `where`i de aktif satırı hedeflemeli — kapanış geri alınmış bir satırı kapatmamalı.
+
+### Muhtemel istisnalar (B-4a emsali — ölç, varsayma)
+
+- `helpers/guarded-hard-remove.ts` ×2 — silme guard'ı; geri alınmış hareket de "bu makinede üretim yapıldı" kanıtıdır → muhtemelen SÜZÜLMEZ.
+- `backup-impact` benzeri yazma-hacmi ölçümleri varsa → SÜZÜLMEZ.
+- Her istisnanın gerekçesi KODA yazılır ve bekçi "sessiz muaf yok" diye ölçer.
+
+### Adım adım (B-4a'da işe yarayan sıra)
+
+1. Şemaya `revokedAt`/`revokedById`/`revokeReason` — **model bloğuna kapsayarak düzenle**; `warehouseMovements` gibi alan adları birden çok modelde var ve düz string replace ÜÇ KEZ yanlış modele düştü.
+2. Migration: üç nullable kolon + `(rollId, revokedAt)` composite index. `RollMovement`ta `@@unique` YOK, yani partial unique işi YOK — B-4a'nın en zor kısmı burada tekrarlanmıyor. **Ama DB'de şema-dışı bir partial UNIQUE var:** `roll_movements_one_open_per_roll_step_uq` (`WHERE "exitedAt" IS NULL`) — "bir top bir adımda en fazla BİR açık movement". Geri alınmış satır bu kısıtta yer işgal etmemeli → predicate `WHERE "exitedAt" IS NULL AND "revokedAt" IS NULL` olmalı. **Bu, maddenin en kritik tek noktasıdır.**
+3. `helpers/roll-movement.helper.ts` aç: `ACTIVE_MOVEMENT = { revokedAt: null }` + `revokeRollMovements()` (B-4a'daki `roll-operation.helper.ts` birebir emsal).
+4. Dört silmeyi revoke'a çevir.
+5. 47 okuma yüzeyini süz; `recomputeStepStatus`ı ELLE ve DİKKATLE.
+6. Bekçi + negatif sonda: en az iki sonda — (a) `ACTIVE_MOVEMENT` boşalt, (b) `recompute`ın bir sayımından süzmeyi kaldır. İkincisi yanlış adım durumunu göstermeli.
+7. `test_db_invariants` envanterinde `roll_movements_one_open_per_roll_step_uq` predicate'ini güncelle.
+
+### B-4a'dan üç ders (tekrarlama)
+
+1. **Prisma'nın `@@unique`i CONSTRAINT değil INDEX'tir.** `DROP CONSTRAINT IF EXISTS` SESSİZCE hiçbir şey yapar; `DROP INDEX` gerekir. Migration "başarılı" der, drift yeşil kalır, yalnız davranış bekçisi yakalar.
+2. **Ortam bağımlılığı tavanı yorumdaki literali de sayar** — gerekçe cümlesinde ham seed kullanıcı adını yazma; `ensureTestAdmin` fixture'ını kullan.
+3. **Şema düzenlemesini model bloğuna kapsa.** Düz `replace` daha önceki özdeş satıra düşer.
+
+### Faz 2 bu iş DEĞİL
+
+`RollMovement`i "defter" ve "durum" diye ikiye bölmek AYRI ve daha büyük bir projedir; `WarehouseMovement`ın stok defterine dönüşümüyle birlikte planlanmalı. B-4b yalnız SİLMEYİ durdurur; açık/kapalı satır şekli DEĞİŞMEZ.
+
+---
+
+
 - `RollOperation`'a `revokedAt` · `revokedById` · `revokeReason`; 7 `deleteMany` → revoke.
 - ⚠️ **Kritik ve atlanması kolay:** `@@unique([rollId, workOrderStepId, operationType])` var. Revoke edilmiş satır dururken aynı üçlü yeniden yazılamaz → kısıt **partial unique**'e çevrilir: `WHERE "revokedAt" IS NULL`. Şemada `@@unique` olarak BIRAKILIR (index↔unique farkı drift sayılır, [DB kuralı 3]) ve `test_db_invariants.ts` `EXPRESSION_UNIQUES`/`PARTIAL_INDEXES` envanterine satırı yazılır (iki yönlü, [DB-30]).
 - `RollMovement` için de `revokedAt` + 4 `deleteMany` → revoke. Açık/kapalı satır şekli bu fazda DEĞİŞMEZ.
