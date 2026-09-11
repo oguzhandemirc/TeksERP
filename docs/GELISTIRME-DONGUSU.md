@@ -6,7 +6,17 @@
 
 1. Node >= 22 kullan (backend engines şartı). <sub>(Teks-Erp/package.json:4-6 "engines": { "node": ">=22" }; .github/workflows/ci.yml:86 node-version: 22)</sub> — atlanırsa: Eski Node'da tsx/Prisma 7 çalışmaz; hata mesajı sürüm sebebini söylemez.
 2. Dev veritabanı Docker konteyneri `tekserp-local-db` ayakta olmalı (55433->5432). <sub>(docker ps: 'tekserp-local-db  0.0.0.0:55433->5432/tcp  Up 2 days'; Teks-Erp/CLAUDE.md:138 aynı konteyneri adlandırır)</sub> — atlanırsa: Tüm bekçiler ECONNREFUSED'a düşer; run-all-tests bunu 'altyapı hatası' sayıp 1 kez yeniden dener (run-all-tests.ts:180-187), sonra kırmızı.
-3. `Teks-Erp/.env` var olmalı ve DATABASE_URL yerel `tekserp_demo`yu göstermeli (PORT=4000). <sub>(Teks-Erp/.env:4-8 (PORT=4000, DATABASE_URL=...@localhost:55433/tekserp_demo, JWT_SECRET, BACKUP_DIR))</sub> — atlanırsa: src/lib/prisma.ts:19 'DATABASE_URL is not set' ile ÇÖKER (gürültülü); ama .env yanlış DB gösterirse bekçiler o DB'ye 1.539 deleteMany gönderir.
+3. `Teks-Erp/.env` var olmalı ve DATABASE_URL yerel geliştirme DB'sini göstermeli (PORT=4000).
+   ⚠️ **2026-09-11'den beri dev hedefi `tekserp_fabrika_dev`** — fabrikanın
+   `20260911_030001` yedeğinin restore'u (5.784 top, 116 sevkiyat, GERÇEK VERİ).
+   Eski `tekserp_demo` duruyor ama artık kullanılmıyor. DB adı PROFİL değeridir,
+   koda sabitlenmez.
+   ⚠️⚠️ **YIKICI BETİK UYARISI:** `scripts/db-guard.ts` izin listesi SON EKE
+   bakar (`_dev`/`_test`/`_local`/`_demo`), yani `clean_test_residue.ts --apply`
+   ve `reset-operational.ts` bu hedefte KOŞAR. Artık gerçek fabrika verisi
+   olduğu için ikisi de ELLE ONAY olmadan çalıştırılmaz. (2026-09-11'de
+   `clean_test_residue --apply` demo DB'de 468 fason sevkinin kalemlerini
+   silmişti — betik başlığı silip başlığı bırakıyor.) <sub>(Teks-Erp/.env:4-8 (PORT=4000, DATABASE_URL=...@localhost:55433/tekserp_demo, JWT_SECRET, BACKUP_DIR))</sub> — atlanırsa: src/lib/prisma.ts:19 'DATABASE_URL is not set' ile ÇÖKER (gürültülü); ama .env yanlış DB gösterirse bekçiler o DB'ye 1.539 deleteMany gönderir.
 4. Komutlar `Teks-Erp/` dizini İÇİNDEN koşulur — dotenv CWD'ye bakar. <sub>(Teks-Erp/src/lib/prisma.ts:14 dotenv.config(); Teks-Erp/prisma.config.ts:14 loadEnv({ path: path.join(__dirname, ".env"))</sub> — atlanırsa: Kökten koşulan prisma komutu 'The datasource.url property is required in your Prisma config file' verir; mesaj config'i suçlar, gerçek sebep .env bulunamamasıdı
 5. Şema/pull sonrası: npm install → npm run prisma:generate → npm run prisma:migrate (migrate deploy). <sub>(Teks-Erp/package.json:19-20 (prisma:generate = prisma generate, prisma:migrate = prisma migrate deploy); Teks-Erp/CLAUDE)</sub> — atlanırsa: generate atlanırsa TS 'Property X does not exist'; migrate atlanırsa runtime P2022 ve audit best-effort olduğu için log SESSİZCE kaybolur, sunucu ayakta kalır (
 6. Pull'lanmış migration'ı `migrate deploy` uygular; `npx prisma migrate dev` KULLANILMAZ. <sub>(Teks-Erp/CLAUDE.md:112; Teks-Erp/CLAUDE.md:257 (`migrate dev` iki DEFERRABLE composite FK'yı her diff'te DROP etmek iste)</sub> — atlanırsa: migrate dev üretilen diff'te rolls_sackId_shipmentId_consistency + swatches FK'larını düşürür; bütünlük seddi sessizce kalkar.

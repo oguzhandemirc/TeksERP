@@ -5240,3 +5240,64 @@ YORUMDAKİ literali de sayıyor — gerekçe cümlesi literalsiz yazılmak zorun
 
 Migration **var** (`20260911170000` + `20260911180000`). Yeni izin **yok**.
 APK **yok**.
+
+
+---
+
+## 2026-09-11 — Dev veritabanı FABRİKANIN CANLI YEDEĞİ oldu + beş migration canlı şemada doğrulandı [ÇEKİRDEK]
+
+Kullanıcı fabrikanın `20260911_030001` yedeğini getirdi ve dev hedefi olmasını
+istedi. `dump/tekserp_yeni_20260911_030001.dump` → `tekserp_fabrika_dev`
+(5,3 MB custom dump → 54 MB DB). Eski `tekserp_demo` SİLİNMEDİ, duruyor.
+
+### Beş migration GERÇEK ŞEMADA doğrulandı — uyum tam
+
+`migrate deploy` beşini de sorunsuz uyguladı ve tek tek doğrulandı:
+
+| Kontrol | Sonuç |
+|---|---|
+| `roll_operations` tam unique düştü, partial kuruldu | ✅ yalnız `roll_operations_active_triple_uq` |
+| `shipment_events` · `sack_weighings` tabloları | ✅ oluştu, **0 satır** (geriye dönük üretim YOK — doğru) |
+| `roll_operations` satır sayısı | ✅ 3.456, `revokedAt` dolu 0 |
+| Veri kaybı | ✅ yok — 5.784 top, 116 sevkiyat (restore öncesiyle aynı) |
+| `roll_movements_one_open_per_roll_step_uq` | ✅ var, predicate `WHERE "exitedAt" IS NULL` (B-4b devir notundaki iddia DOĞRULANDI) |
+
+### Fabrikanın gerçek veri sağlığı (salt-okunur, test yazmadan ÖNCE ölçüldü)
+
+Mutabakatın 20 bölümünden 17'si temiz. Üç bulgu:
+
+- **§1d — 45 sevkiyat / 11.855,3 m siparişe yazılmamış.** Hafızadaki not 42
+  sevkiyat / 11.384 m diyordu: **boşluk BÜYÜMÜŞ**, yani teşhis/onarım modülü
+  hazır olmasına rağmen hiç koşulmamış.
+- **§1c — 5 sevkiyat sipariş beyan ediyor ama tahsis satırı yok.**
+- **§13 — 2 topta `currentQty > initialQty`** (492→698,9 ve 500→520,5; ikisi de
+  barkodsuz, `IN_PRODUCTION`, Ağustos). Kaynağı ölçülmedi.
+
+### `initialQty` hasarı fabrikada YOK — düzeltme ÖNLEYİCİYDİ
+
+Teşhis script'i canlı şemada koşuldu: `DirectShipment` 0 olay, doğrudan sevk
+edilen 0 top, eski-imza taraması da 0. Fabrika `directShip` yolunu HİÇ
+KULLANMAMIŞ, yani 5980ff06'nın düzelttiği hata sahada hiç ateşlenmemiş. Aynı
+şekilde `payment_allocations` 0 satır → B-3'ün de düzelttiği veri yok.
+
+### ⚠️ YENİ VE CİDDİ TEHLİKE — yıkıcı betik kapısı artık gerçek veriye açık
+
+`scripts/db-guard.ts` izin listesi SON EKE bakar (`_dev` · `_test` · `_local` ·
+`_demo`) ve dosyanın kendi başlığı bunu zaten yazmış: *"tehlike sunucuda değil
+GELİŞTİRİCİ MAKİNESİNDE … dev DB'nin KENDİSİ (bu projede dev DB, prod'un
+kopyasıdır)"*. `tekserp_fabrika_dev` `_dev` ile bittiği için
+`clean_test_residue.ts --apply` ve `reset-operational.ts` bu hedefte KOŞAR.
+
+Bu soyut bir risk değil: aynı gün `clean_test_residue --apply` demo DB'de **468
+fason sevkinin kalemlerini sildi, başlıklarını bıraktı** (betik `rollId`
+üzerinden kalemi siliyor, başlığı bırakıyor → `totalQty` ile kalem toplamı
+ayrışıyor). Fabrika verisinde `TEST-` önekli kayıt YOK (ölçüldü: top 0, müşteri
+0, kalem 0) yani betik bugün gerçek satır silmez — ama bekçiler bu hedefte
+koştukça fixture birikir ve o fixture'lar silinirken aynı sınıf hasar doğar.
+
+**Kural: `tekserp_fabrika_dev` hedefinde yıkıcı betik ELLE ONAY olmadan
+koşulmaz.** `docs/GELISTIRME-DONGUSU.md`'ye yazıldı.
+
+### Üç kapı
+
+Migration yok (bu not veri/ortam kararıdır). İzin yok. APK yok.
