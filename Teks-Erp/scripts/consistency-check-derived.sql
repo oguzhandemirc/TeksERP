@@ -124,8 +124,9 @@ ORDER BY kb."assignedAt";
 \echo ''
 \echo '== 24a) Fason kalemin TEK tam makbuzu İPTAL edilmiş (kalem yeniden AÇIK) =='
 \echo '   (satır varsa: receipt.cancelledAt süzgeci olmayan HER kopya bu kalemi KAPALI sanır)'
--- OPEN_OUTSTANDING dörtlüsü (fason-open-dispatch.helper.ts):
+-- OPEN_OUTSTANDING beşlisi (fason-open-dispatch.helper.ts):
 --   sevk iptal değil ∧ doğrudan-sevk değil ∧ kalem remainderClosedAt null
+--   ∧ kalemin topu doğrudan sevk edilmemiş (directShipmentId null)
 --   ∧ kalemin İPTAL EDİLMEMİŞ tam (isPartial=false) makbuzu YOK
 -- Bu bölüm dördüncü koşulun tam da tuzağa düştüğü şekli arar: kalemin tam makbuzu
 -- VAR ama hepsi iptal edilmiş. Doğru kod bunu "hâlâ dışarıda" sayar (top da öyle
@@ -161,7 +162,7 @@ WHERE sd."cancelledAt" IS NULL
 ORDER BY sd."dispatchedAt";
 
 \echo ''
-\echo '== 24b) DOĞRUDAN SEVK edilmiş sevkin topu HÂLÂ fasonda (AT_SUBCONTRACTOR) =='
+\echo '== 24b) DOĞRUDAN SEVK edilmiş sevkin/topun topu HÂLÂ fasonda (AT_SUBCONTRACTOR) =='
 \echo '   (satır varsa: mal hem "müşteriye çıktı" hem "fasonda bekliyor" — çift sayım)'
 -- ⚠️ `r.status = 'AT_SUBCONTRACTOR'` SÜZGECİ LOAD-BEARING, "fazladan" değil.
 -- `directShippedAt` dolu bir sevkin kalemleri TANIM GEREĞİ makbuzsuz ve
@@ -174,6 +175,8 @@ ORDER BY sd."dispatchedAt";
 -- hâlâ fasonda" AYNI ANDA doğru olamaz. Olduysa tx yarım kalmış ya da statüyü
 -- sonradan geri yazan bir yol var demektir; sonuç, aynı metrajın hem sevk
 -- raporunda hem fason bakiyesinde görünmesidir.
+-- Alt kümeyle doğrudan sevkte sevk damgasız kalır; invariant o zaman topun
+-- `directShipmentId`sinde yaşar (aynı tx'te SUBCONTRACTOR_CONSUMED yazılır).
 SELECT sdi.id      AS dispatch_item_id,
        sd."dispatchNo",
        sd."directShippedAt",
@@ -184,7 +187,7 @@ SELECT sdi.id      AS dispatch_item_id,
 FROM subcontractor_dispatch_items sdi
 JOIN subcontractor_dispatches sd ON sd.id = sdi."dispatchId"
 JOIN rolls r ON r.id = sdi."rollId"
-WHERE sd."directShippedAt" IS NOT NULL
+WHERE (sd."directShippedAt" IS NOT NULL OR r."directShipmentId" IS NOT NULL)
   AND sd."cancelledAt" IS NULL
   AND sdi."remainderClosedAt" IS NULL
   AND r.status = 'AT_SUBCONTRACTOR'
@@ -211,9 +214,9 @@ ORDER BY sd."directShippedAt";
 -- ortada, mal Ham Stok'ta. En sık tetikleyici KISMİ KABUL — kısmi makbuz kalemi
 -- KAPATMAZ (`isPartial=false` aranır) ama `cancel()` "kabul yapılmış" der.
 --
--- ⚠️ `directShippedAt IS NULL` LOAD-BEARING: doğrudan sevkte top MEŞRUEN
--- `SUBCONTRACTOR_CONSUMED` olur (o yön 24b'nin işi). Süzgeç olmasaydı her meşru
--- doğrudan-sevk burada drift sayılırdı.
+-- ⚠️ `directShippedAt IS NULL` ve `r."directShipmentId" IS NULL` LOAD-BEARING:
+-- doğrudan sevkte top MEŞRUEN `SUBCONTRACTOR_CONSUMED` olur (o yön 24b'nin işi).
+-- İkincisi olmasaydı her meşru ALT KÜME doğrudan sevk burada drift sayılırdı.
 -- Ölçüm (2026-08-29): dev 0 satır · saha kopyası 188 kalemin TAMAMI
 -- AT_SUBCONTRACTOR → invariant canlıda tutuyor, bölüm vakumen yeşil değil.
 SELECT sdi.id      AS dispatch_item_id,
@@ -232,6 +235,7 @@ JOIN work_orders w ON w.id = sd."workOrderId"
 WHERE sd."cancelledAt" IS NULL
   AND sd."directShippedAt" IS NULL
   AND sdi."remainderClosedAt" IS NULL
+  AND r."directShipmentId" IS NULL
   AND r.status <> 'AT_SUBCONTRACTOR'
   AND NOT EXISTS (
         SELECT 1 FROM subcontractor_receipt_items sri

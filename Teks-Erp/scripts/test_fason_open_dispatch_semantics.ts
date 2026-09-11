@@ -21,11 +21,20 @@
 //       ⚠️ Eski kod dördünde de "açık" diyordu: mal fasondan müşteriye çıkmıştı
 //          ama kalem hiç kabul görmediği için outstanding sanılıyordu.
 //
+//   S3  ALT KÜME tam doğrudan sevk (sevk damgasız kalır) → topu müşteriye giden
+//       kalem outstanding DEĞİLDİR
+//       (a) diğer top fasondayken kalem-düzeyi sorgu yalnız o topu döndürür
+//       (b) diğer top dönünce sevk AÇIK DEĞİLDİR: liste GÖSTERİR, kart uyarısı
+//           yok, preview grubu yok
+//       ⚠️ Eski kod sevki sonsuza dek "açık" sayıyordu: kalemin topu tüketilmişti
+//          ama makbuzu da kalan-kapaması da olmadığı için outstanding kalıyordu.
+//
 // Çalıştır: npx tsx scripts/test_fason_open_dispatch_semantics.ts
 import type { Request } from "express";
 import prisma from "../src/lib/prisma";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
+import { OPEN_OUTSTANDING, outstandingItemOfOpenDispatch } from "../src/services/helpers/fason-open-dispatch.helper";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { workOrderFasonQuickService } from "../src/services/workorder-fason-quick.service";
@@ -309,6 +318,60 @@ async function main(): Promise<void> {
     const wo = await prisma.workOrder.findUnique({ where: { id: b.woId }, select: { status: true } });
     check("S2-2c: WO iptal edildi", wo?.status === "CANCELLED");
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // S3 — ALT KÜME tam doğrudan sevk: topu müşteriye giden kalem kapanmıştır
+  // ═══════════════════════════════════════════════════════════════════════════
+  console.log("\n=== S3: alt küme doğrudan sevk — kalem kapanır, sevk damgasız kalır ===");
+  const c = await setup("S3");
+  const rollC1 = await makeRoll(100);
+  const rollC2 = await makeRoll(80);
+  const dispC = await sub.dispatch(
+    { workOrderId: c.woId, stepId: c.boyaStep, subcontractorId: SUB_BOYER, rollIds: [rollC1, rollC2] },
+    ADMIN,
+  );
+  const dispCId = (dispC.data as { id: string }).id;
+  await sub.executeDirectShip(
+    { dispatchId: dispCId, reason: "S3 alt küme doğrudan sevk", customerId: CUSTOMER, rollIds: [rollC1] },
+    ADMIN,
+  );
+  {
+    const d = await prisma.subcontractorDispatch.findUnique({ where: { id: dispCId }, select: { directShippedAt: true } });
+    const r1 = await prisma.roll.findUnique({ where: { id: rollC1 }, select: { status: true, directShipmentId: true } });
+    check(
+      "S3-0 ön koşul: sevk damgasız, sevk edilen top tüketildi ve DSK'ya bağlandı",
+      d?.directShippedAt === null && r1?.status === RollStatus.SUBCONTRACTOR_CONSUMED && r1.directShipmentId !== null,
+    );
+  }
+  const outstanding = await prisma.subcontractorDispatchItem.findMany({
+    where: { dispatchId: dispCId, ...outstandingItemOfOpenDispatch() },
+    select: { rollId: true },
+  });
+  check(
+    "S3-1a: diğer top fasondayken outstanding kalem YALNIZ o top (eski kod müşteriye gideni de sayardı)",
+    outstanding.length === 1 && outstanding[0]!.rollId === rollC2,
+    `gelen: ${outstanding.map((o) => (o.rollId === rollC1 ? "C1" : "C2")).join(",")}`,
+  );
+  check("S3-1b: diğer top fasondayken sevk hâlâ AÇIK (liste gizler)", (await listedWithExclude(c.woNumber)) === false);
+
+  await sub.receive(
+    {
+      workOrderId: c.woId,
+      stepId: c.boyaStep,
+      subcontractorId: SUB_BOYER,
+      clientToken: randomUUID(),
+      returns: [{ rollId: rollC2 }],
+      newRolls: [{ qty: 80 }],
+    },
+    ADMIN,
+  );
+  check(
+    "S3-2a: diğer top dönünce sevk OPEN_OUTSTANDING DEĞİL (eski kod sonsuza dek açık sayardı)",
+    (await prisma.subcontractorDispatch.count({ where: { id: dispCId, ...OPEN_OUTSTANDING } })) === 0,
+  );
+  check("S3-2b: liste WO'yu GÖSTERİR", (await listedWithExclude(c.woNumber)) === true);
+  check("S3-2c: hasOpenDispatch = false (hayalet uyarı yok)", (await hasOpenDispatchFlag(c.cardBarcode)) === false);
+  check("S3-2d: preview'de hayalet grup YOK", (await previewGroupCount(c.woId)) === 0);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }

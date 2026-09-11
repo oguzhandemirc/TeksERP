@@ -2263,6 +2263,8 @@ export class InventoryService {
           AND sd."cancelledAt" IS NULL
           AND sd."directShippedAt" IS NULL
           AND sdi."remainderClosedAt" IS NULL
+          -- OUTSTANDING_ITEM ikizi: topu doğrudan sevk edilmiş kalem açık değildir.
+          AND r."directShipmentId" IS NULL
           AND NOT EXISTS (
             SELECT 1
             FROM subcontractor_receipt_items sri

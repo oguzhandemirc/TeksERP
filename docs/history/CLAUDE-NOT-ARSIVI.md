@@ -566,7 +566,7 @@ kelimeydi. Gerekçe bekçinin başlığına yazıldı.
 > • **DÖRT KARNE DAHA + MENÜ SADELEŞTİRMESİ (aynı gün, ikinci tur).** Rapor menüsü **20 → 13**'e indi (17 kaldırıldı, 8 yeni yüzey eklendi). Yeni karneler ve her birinin kilitlediği kural:
 >   - **Fire Karnesi** (`quality/scrap-scorecard`) — hurda metrajı + nedeni. **Kalite Karnesi ile AYNI evren**: `producedQty` ↔ `totalQty` birebir (bekçide kilitli), yoksa aynı ay için iki "üretim" rakamı dolaşıma girerdi. ⚠️ **İKİ ÇIPA, İKİ BİRİM**: hurda `finalizedAt` + METRE, hata tespiti `RollError.detectedAt` + ADET. Farklı birim bilinçli — toplanmaması gereken iki sayı aynı birimde basılmaz. ⚠️ Hata bağı `LATERAL … LIMIT 1`: düz JOIN, iki hatalı 100 m'lik topu **200 m hurda** gösterirdi. ⚠️ **"Kesim kaybı" metriği BİLİNÇLİ OLARAK YOK** — ölçüldü: tüketilen ebeveynin `currentQty`'si sıfırlanıyor, naif `Σ(initial−current)` **2522 m'lik hayali kayıp** raporluyordu; ebeveyn↔çocuk dengesi de tutarsız (0 metrajlı ebeveynler, açıklanamayan ±200/−50 m). Kesim-olayı kaydı doğana kadar yazılmayacak.
 >   - **İade Karnesi** (`sales/return-scorecard`) — `RollReturn` verisinin Raporlar'daki İLK yüzeyi. ⚠️ **Payda BRÜT** (brüt kuralının 5. tüketicisi): net paydayla oran şişer ve **tam da en çok iade alınan dönemde en çok şişer**. ⚠️ Sebep ÜÇ DURUMLU (katalog / serbest metin / boş) ve serbest metinler TEK kovada — sayının kendisi *"katalog eksik"* sinyalidir. ⚠️ Oran KOHORT DEĞİL (bu ay gelen iade geçen ayın malı olabilir) ve bu hem ekranda hem Excel'de yazılı.
->   - **Fason Karnesi** (`subcontract/scorecard`) — sahada tartışılan rakam: **fason firesi**. ⚠️ Fire yalnız **KAPANMIŞ** kalemlerden hesaplanır; açık kalem paydaya girseydi dün sevk edilen parti %100 fire görünürdü (bekçide: %4 ↔ %68). ⚠️ Dönen metraj **TÜM** kabul satırlarının toplamıdır — mevcut `subcontract.report.service`'in `DISTINCT ON`'u orada doğruydu (bool + süre) ama metrajda 100 m'lik topun 2×48 dönüşünü 48 sayıp **52 m sahte fire** yazardı. ⚠️ Doğrudan sevk + iptal kapsam dışı.
+>   - **Fason Karnesi** (`subcontract/scorecard`) — sahada tartışılan rakam: **fason firesi**. ⚠️ Fire yalnız **KAPANMIŞ** kalemlerden hesaplanır; açık kalem paydaya girseydi dün sevk edilen parti %100 fire görünürdü (bekçide: %4 ↔ %68). ⚠️ Dönen metraj **TÜM** kabul satırlarının toplamıdır — mevcut `subcontract.report.service`'in `DISTINCT ON`'u orada doğruydu (bool + süre) ama metrajda 100 m'lik topun 2×48 dönüşünü 48 sayıp **52 m sahte fire** yazardı. ⚠️ Doğrudan sevk + iptal kapsam dışı. ⚠️ **KISMEN GEÇERSİZ (2026-09-11)** — doğrudan sevk artık başarılı teslim olarak kapsamda (iptal dışarıda kalır) → bkz. "2026-09-11 — Fasoncu karnesi: müşteriye giden metre BAŞARILI TESLİM…".
 >   - **Sevk & Termin (OTIF)** (`sales/shipment-scorecard`) — sevk hacmi + zamanında teslim. ⚠️ **Terminsiz sipariş orana GİRMEZ ama gizlenmez**: "zamanında" saymak oranı sahte yükseltir, "geç" saymak haksız düşürür; doğru olan paydadan çıkarıp sayıyı ayrıca göstermektir (bekçide %66,7 ↔ %50).
 >   - ⚠️ **"DÖNEMDE SEVK EDİLEN METRAJ" TEK TANIM: `reports/_shipped.ts`.** İade Karnesi'nin PAYDASI ile OTIF'in BAŞLIK metriği aynı sorudur; ayrı yazılsalardı biri doğrudan sevkleri, diğeri iade geri-eklemesini unuturdu. Doğrudan sevkte metraj **denormalize `totalQty`**'dir (Sevkiyatlar ekranı onu kullanır) ama kırılım topları ister → fark, kumaşı bilinmeyen bir **mutabakat satırı** olarak eklenir: toplam ekranla birebir kalır, kırılım uydurma kumaşa yazılmaz.
 >   - ⚠️ **`_shipped.ts`'teki `status = 'DISPATCHED'` süzgecinin kaybını BEKÇİ GÖREMEZ** (ölçüldü, yeşil kalıyor): storno `dispatchedAt`'i NULL'ladığı için aralık süzgeci PLANNED'ı zaten eliyor. Süzgeç o invariant'a *güvenmemek* için duruyor — silmeden önce onu kimin koruduğunu bil.
@@ -4786,6 +4786,8 @@ Migration **yok** (şemaya dokunulmadı). Yeni izin **yok**. APK **yok**. Backen
 
 ## 2026-09-11 — Fasoncu karnesi kısmi doğrudan sevkte YANLIŞ fire/açık üretiyor (TEŞHİS, düzeltilmedi) [ÇEKİRDEK]
 
+> ✅ **ÇÖZÜLDÜ (2026-09-11)** — B kararı uygulandı, helper tüketici etkisi ölçüldü → bkz. "2026-09-11 — Fasoncu karnesi: müşteriye giden metre BAŞARILI TESLİM; alt küme doğrudan sevk kalemi KAPANIR".
+
 `initialQty` onarım turunun yan gözlemi olarak çıktı, ayrı bir bulgudur ve
 ÖLÇÜLDÜ. Düzeltme YAPILMADI — gerekçe aşağıda.
 
@@ -5511,98 +5513,137 @@ düğmesi). Eski panel: yeni uçları çağırmaz, davranışı değişmez.
 
 ---
 
-## 2026-09-11 — Sayım stornosu: tamamlanmış sayım artık terminal değil [ÇEKİRDEK]
+## 2026-09-11 — Fasoncu karnesi: müşteriye giden metre BAŞARILI TESLİM; alt küme doğrudan sevk kalemi KAPANIR [ÇEKİRDEK]
 
-Defter doktrini kalan borç ②. `StockCount` COMPLETED terminaldi; yanlış
-"bulunamadı" işaretiyle tamamlanan sayım N topu iptal ediyordu ve tek çıkış
-top-top `restoreCancelledRoll`du — o yol da depo defterine (`CANCEL` karşılığı) ve
-sapma defterine (`RECORD_CORRECTION`) ters satır YAZMIYOR. Fabrika dev DB'sinde
-sayım 0 satır (özellik sahada kullanılmamış) — düzeltme önleyici.
+Teşhis notunun ("Fasoncu karnesi kısmi doğrudan sevkte YANLIŞ fire/açık üretiyor")
+uygulamasıdır. Tanım kullanıcının **B kararı**dır; aşağıdaki alt kararlar oturumda
+verildi ve itiraza açıktır (ölçüt sırası: ① sektör standardı ② ölçeğimiz ③ kod deseni).
 
-### Kararlar ve ölçüt (① sektör ② ölçek ③ mevcut desen)
+### Tanım (kullanıcı kararı, 2026-09-11)
 
-- **Tek belgede storno (sektör):** SAP MM'de MI07 fark postalaması bir malzeme
-  belgesidir, stornosu (MBST) aynı belgeye bağlı ters harekettir. Sayım
-  satırları ve ileri defter satırları DEĞİŞMEZ.
-- **Belge DAMGASI, yeni statü DEĞİL (desen):** `reversedAt`/`reversedById`/
-  `reverseReason`; `status` COMPLETED kalır ("tamamlandı" gerçeği değişmez).
-  Enum değeri eklemek panel/rapor aynalarına dokunurdu; storno bir kez yapılır,
-  tek damga çevrimi ezmez.
-- **Depo defteri: `WarehouseEventType.CANCEL_REVERSAL` (desen):** `TRANSFER_REVERSAL`
-  / `SHIPMENT_REVERSAL` emsali. Satır: `toWarehouseId` = sayımın deposu,
-  `fromWarehouseId` NULL, `qty` POZİTİF = sayımın sapma satırındaki metraj (CANCEL
-  satırıyla aynı), `stockCountId` = sayım. Yön sunucuda from/to'dan türer → GİREN.
-  Enum ayrı tek-ifadeli migration (55P04).
-- **Kaynak belge bağı:** `WarehouseMovement.stockCountId` (FK RESTRICT) açıldı;
-  `complete` artık CANCEL satırına `stockCountId`, sapma satırına
-  `sourceRefId = count.id` yazar. Eski satırlar doldurulmaz; storno bağsız eski
-  sapmayı `source=STOCK_COUNT` + iptal metniyle bulur.
-- **Sapma defteri:** ters satır değil `reversedAt`/`reversedById` damgası
-  (`roll_variances_qty_positive` CHECK — tambur-undo emsali).
-- **İplik:** sayımın `stockCountId`'li hareketlerinin kalem başına NET'i tersine
-  ADJUST (mal kabul stornosunun `reverseGoodsReceiptYarnTx` deseni); eksi bakiye
-  REDDEDİLMEZ, önizleme uyarır (aynı emsalin gerekçesi: reddetmek defteri değil
-  ekranı düzeltir). Kapalı iplik modülü önizlemede engel, motorda 403.
-- **LIFO (ölçek + güvenlik):** yalnız deponun EN SON tamamlanmış, stornolanmamış
-  sayımı geri alınır. Sonraki sayım fiziksel gerçeği doğruladı; eskisini geri
-  almak onun iplik bakiyesini yalanlardı. Fason LIFO iptal emsali.
-- **HEP-YA-HİÇ:** sayımın düşürdüğü her top hâlâ BU sayımın iptaliyle
-  (`stockCountCancelReason(countNo)` tek kaynak metni) ve aynı depoda durmalı.
-  Arada tek tek geri alınmış top varsa storno 409 `STOCK_COUNT_REVERSAL_BLOCKED`
-  ve önizleme o topu gerekçesiyle listeler. Kısmi storno defteri iki belgeye
-  bölerdi; elle geri almanın defter deliği ayrı bulgudur (aşağıda).
-- **Kilit:** tx'in ilk ifadesi sayımın ve deponun DRAFT sayımlarının satır kilidi
-  (`FOR UPDATE ORDER BY id`); DRAFT tamamlaması aynı satırı claim ettiği için
-  storno ile sıralanır, sonraki taslak tamamlaması değişen iplik bakiyesini CAS'ıyla
-  kapsam dışına düşürür.
-- **Belge:** tutanak `voidForSource` ile VOIDED (`Storno: <gerekçe>`); builder
-  `voidInfo`'yu `reversedAt`'ten türetir (lazy-init aynı filigranı basar).
-- **İzin:** tamamlamayla aynı çift (`roll:manual-adjust` VE `yarn:write`) — SoD
-  izni; önizleme `roll:manual-adjust`. Yeni izin kodu yok.
+Fasondan doğrudan müşteriye giden metre **başarılı teslimdir**:
+`fire = giden − dönen − müşteriye giden`, payda fasona giden metrenin **tamamı**
+(`dispatchedQty`, küçültülmez). Gerekçe: fasoncu o metreyi işledi ve müşteriye
+gidecek kadar sağlamdı; fire "işlenen metre başına kayıp"tır. Reddedilen A şıkkı
+paydayı küçültüyordu (300 gitti / 100 müşteriye / 180 döndü → A %10, **B %6,7**).
 
-### Kod çapaları
+### Alt kararlar ve gerekçeleri
 
-- Migration'lar: `20260912100000_warehouse_event_cancel_reversal` (tek ifade) ·
-  `20260912100100_stock_count_reversal` · `20260912100200_warehouse_movement_stock_count`
-- `src/services/stock-count-reversal.service.ts` — `preview` · `reverse`
-  (`claimAndPlanTx` → `reverseTx`); plan önizleme ve stornoda AYNI fonksiyon
-- `src/services/stock-count.service.ts` — `stockCountCancelReason` ·
-  `stockCountVoidReason` · `complete` bağları · builder `voidInfo`
-- `src/routes/stock-count.routes.ts` — `GET /:id/reverse-preview` · `POST /:id/reverse`
-- Panel: `ReverseStockCountDialog.tsx` (her top + iplik farkı + engeller),
-  detayda "Stornola", listede/başlıkta "Stornolandı" rozeti; depo hareketleri
-  aynası + bilinmeyen olay tipinde çökmeyen yedek etiket.
+1. **Tam doğrudan sevk de evrene girdi.** Eski karne `directShippedAt` dolu sevki
+   evrenden dışlıyordu. B tanımı gereği o metre de işlenmiş-teslim edilmiş metredir;
+   dışlamak aynı fiziksel sonucu işlem sayısına göre farklı basar: iki topu tek
+   işlemde sevk etmek (damga basılır → firma karneden düşer) ile iki ayrı işlemde
+   sevk etmek (ilki alt küme → paydada) aynı firmanın oranını değiştirirdi
+   ("ayrışan yüzey" sınıfı). ① Sektörde fasoncunun çıktısı kime teslim edildiğinden
+   bağımsızdır. Etki: karnenin "giden" toplamı tam doğrudan sevki de içerir
+   (bekçi §3: 300 → 800); fabrikada `DirectShipment` 0 olay → canlı rakam değişmez.
+2. **Kapanış yüklemi helper'ın ikizi, metre atfı sevke bağlı.** Kalem kapanır:
+   tam makbuz ∨ `remainderClosedAt` ∨ sevk damgası ∨ topun `directShipmentId`si
+   (helper'la aynı, sevkten bağımsız). Teslim metresi ise yalnız bu sevkin DSK'sından
+   sayılır (`direct_shipments.dispatchId = sd.id`): aynı top ardışık fasonda başka
+   sevkten çıkmışsa o metre bu kalemin teslimi değildir. Topu sevk edilen kalemde
+   teslim = `dispatchedQty` (doğrudan sevk kabulden önce gelir; bölünme çocukları
+   dahil tüm metre müşteriye gitti); yalnız bölünmede teslim = çocukların
+   `initialQty` toplamı (değişmez snapshot).
+3. **Dönüş süresi doğrudan sevkte ölçülmez** — kalan-kapama emsali: DSK anı
+   operatörün kayıt anıdır, fasoncunun teslim süresi değildir.
+4. **Helper'a yeni kolon değil `roll: { directShipmentId: null }`.** `directShipmentId`
+   yalnız `executeDirectShip` yazar (topu aynı tx'te `SUBCONTRACTOR_CONSUMED` yapar)
+   ve ters yolu yoktur; türetilmiş koşul migration istemez (şema kilidi başka
+   oturumdaydı), ② küçük ekip için sıfır veri taşıması en düşük risktir. Ham SQL
+   ikizleri aynı süzgeci taşır: karne açık listesi, `consistency-check-derived.sql`
+   §24c (meşru alt küme sevki drift sayılmasın) ve §24b (alt küme sevkinin topu hâlâ
+   fasondaysa drift — aşağıdaki `reopenRemainder` deliğinin izi).
+5. **Panel:** "Dönen" hücresine `+N m müşteriye` alt satırı, dışa aktarıma
+   "Müşteriye (m)" kolonu; export'taki "doğrudan sevk kapsam dışıdır" cümlesi
+   yanlış olduğu için değişti. Eski panel yeni alanı yok sayar; fire/oran backend'den
+   doğru gelir, yalnız "giden − dönen ≠ fire" farkı açıklamasız görünür.
+6. **Dosya bölündü** (lint tavanı `max-lines` 91>90 idi): sorgu
+   `helpers/subcontract-scorecard-query.helper.ts`, saf hesap
+   `helpers/subcontract-scorecard-calc.helper.ts` (tek fire formülü `fireOf`),
+   sözleşme + birleştirme servis dosyasında kaldı.
 
-### Bekçi
+### Ölçüm — düzeltmeden sonra (gerçek servisler, fixture DB)
 
-`scripts/test_stock_count_reversal.ts` — 26 kontrol (§1 ileri bağlar · §2
-önizleme · §3 storno: raf, CANCEL durur + CANCEL_REVERSAL, sapma durur + damga,
-iplik net ters, satırlar değişmez, COMPLETED + damga, VOID · §4 çift storno · §5
-LIFO + bağsız eski sapma · §6 hep-ya-hiç · §7 kaynak). `test_iplik_regime_gate`
-`DEFTER_YAZARLARI`na storno servisi gerekçesiyle eklendi; `test_stock_count`
-temizliği yeni FK sırasına göre.
+| Senaryo | Eski | Yeni |
+|---|---|---|
+| 300 → 100 müşteriye → 200 TAM kabul | fire 100 m (%33,3) | fire 0 |
+| 300 → 100 müşteriye → 180 döndü (karar örneği) | fire 120 m (%40) | fire 20 m (%6,7) |
+| 300 → 100 müşteriye → 100 kısmi kabul → 100 kapama | fire 200 m (%66,7) | fire 100 m (%33,3) |
+| 300 → 100 müşteriye, kalan fasonda | açık 300 m | açık 200 m (açık listesi de 200) |
+| 2×200, biri tamamen müşteriye, diğeri tam kabul | açık 200 m sonsuza dek, `OPEN_OUTSTANDING`=1 | açık 0, `OPEN_OUTSTANDING`=0 |
+| Tam doğrudan sevk 500 m | karnede yok | giden/kapanmış/teslim 500, fire 0 |
 
-**NEGATİF SONDA (beşi de kırmızı, sha256 eşit geri yüklendi):** (a) LIFO
-kontrolü yok → §5a/§5b · (b) top engel yüklemi yok → §6a/§6d · (c) sapma damgası
-yok → §3d · (d) CANCEL_REVERSAL yazımı yok → §3c · (e) `complete` `sourceRefId`
-yok → §1b.
+### Helper tüketici etkisi — ÖLÇÜLDÜ (değişiklikten önce)
 
-Paket (`tekserp_ea_test`, fixture'lı): 473/479; kırmızılar ortam — module_flag_off
-/ module_grandfathering / module_profile (taze DB modül satırı), order_cancellation
-(sıra bağımlı), scan_code_case (küçük tabloda Seq Scan) — ve iplik_regime_gate
-(bu turda düzeltildi).
+"38 tüketici" import ve yorum satırlarını da sayıyordu; gerçek kullanım **25 site /
+9 dosya**. Her site için K4a (diğer top fasonda), K4b (diğer top tam kabul), K4c
+(diğer top kalan-kapama) ve bölünme durumu çözümlendi; her grup bağımsız ikinci
+bir okumayla çürütülmeye çalışıldı (5 ölçüm + 5 doğrulama ajanı).
 
-### Açık bulgu — elle "iptali geri al" defter yazmıyor
+| Hüküm | Site | Nerede |
+|---|---|---|
+| Hatayı düzeltir | 17 | WO listesi `excludeWithOpenDispatch` · WO iptalinde `cancelBulk` seçimi ve kalan kararı (`prepareFasonCancelDecision` ×2) · kart `hasOpenDispatch` · bekleyen dönüşler (liste ×2 + grup detayı; detay kabulün firma bilgisini besler) · hızlı fason kabul önizlemesi (sevk + kalem) · parti kilidi `isBatchLockedTx` + manuel taşıma önizlemesindeki ikizi · parti birleştirme K15 · parti cerrahisi hedef sevki · kabulde firma/ikinci teslimat çözümü · `transferToNextFason` firma haritası · top listesi/detayı `dispatchItems` |
+| Değişmez | 7 | kabulde kaynak kalem bağı · sevk replay bekçisi · `attachOpenDispatchInfo` · top filtresi `buildRollWhere` (hepsi zaten `AT_SUBCONTRACTOR` süzer) · iptal etkisi `fasonRemainders` · `undyedMove` · parti cerrahisi kaynak sevki |
+| İncelenmeli | 1 | `cancel()` adım yeniden değerlendirmesi (`subcontractor.service.ts` ~2128): K4c + kardeş sevk iptali artık "sonsuza dek ACTIVE" yerine mevcut yanlış dala düşer (makbuz yoksa PENDING, `startedAt` silinir). Aynı dal bugün TAM doğrudan sevkte de var; kök kusur `receiptCount`un tek kanıt sayılması. Ağırlık artmadı, düzeltilmedi. |
+| Risk | 0 | Yeni açılan hiçbir yol tüketilmiş topa yazamaz: kabul/iptal/taşıma yolları topu ayrıca `AT_SUBCONTRACTOR` ile claim eder. |
 
-`inventory.restoreCancelledRoll` topu rafına döndürür ama softDelete'in yazdığı
-`CANCEL` satırının karşılığını ve sapma damgasını YAZMAZ; tx de açmaz. Bugün kapsamı
-dar ("hiç yaşamamış top") olduğu için etki küçük, ama `WarehouseMovement` stok
-defterine dönüşürken (6e) bu yol `CANCEL_REVERSAL` yazmak ZORUNDA.
+Canlı veri: `tekserp_fabrika_dev`'de doğrudan sevk operasyonu **0** (DSK 0, damgalı
+sevk 0, `directShipmentId` dolu top 0) → bugün hiçbir rakam değişmez; düzeltme
+önleyicidir. `directShipmentId` kolonundan önceki (2026-07-15 öncesi) alt küme
+sevkleri helper'da açık görünmeye devam ederdi — fabrikada böyle satır yok.
+
+### Bekçiler ve negatif sondalar
+
+- `test_subcontract_scorecard.ts` — §3 yeniden yazıldı (tam sevk = teslim), §7 kısmi
+  (4 senaryo), §8 alt küme (öncesi/sonrası + helper eşliği), açık listesi metrajı.
+  31 kontrol.
+- `test_fason_open_dispatch_semantics.ts` S3 — alt küme sevki: kalem-düzeyi sorgu,
+  WO listesi, kart uyarısı, hızlı kabul önizlemesi. 25 kontrol.
+- `test_consistency_derived.ts --probe` — `§24b-altküme` (drift yanar) ve
+  `§24c-temiz` (meşru alt küme hiçbir bölümü yakmaz).
+- Negatif sondalar (ayrı worktree'de, fixture DB): helper süzgeci silinince S3 5 +
+  karne 8c kırmızı · teslim metresi 0'lanınca 9 kırmızı · alt küme kapanışı
+  silinince 8a/8b kırmızı · açık listesi süzgeci + bölünme düşümü silinince 7d/8a
+  kırmızı · §24b OR ve §24c süzgeci silinince iki sonda kırmızı. Hepsi geri alındı,
+  yeşil.
+- Paket fixture'lı ayrı DB'de koşuldu (`tekserp_fabrika_dev`'de değil).
+
+### Yan bulgular — DÜZELTİLMEDİ (ölçüm sırasında çıktı, yöneticiye bildirildi)
+
+1. **YÜKSEK — `reopenRemainder` topun geçmişine bakmıyor** (`subcontractor.service.ts`
+   ~3507-3572): tek kapı `status === SUBCONTRACTOR_CONSUMED`; kalan-kapama izi,
+   `directShipmentId`, adımın o topun sevkine ait olması denetlenmiyor, `stepId`
+   gövdeden geliyor (izin: `workorder:write` | `roll:manual-adjust` |
+   `mobile:fason-kabul`). Müşteriye doğrudan sevk edilmiş ya da tam kabul görmüş top
+   API'den fasona geri diriltilebilir. Yeni §24b alt küme sondası bu izi yakalar.
+2. **ORTA — bölünmeli kısmi sevkten sonra sevk iptali** (`cancel()` +
+   `subcontractor-cancel.helper.ts`): DSK kontrolü yok; ebeveyn hâlâ fasonda, çocuk
+   kalem değil → sevk iptal edilir, belge VOID olur, ama DSK ve tahsisler iptal
+   edilmiş sevke bağlı kalır (müşteriye gitmiş malın sevki geri alınmış görünür).
+   Aynı sınıf: K15 birleştirme konsolidasyonu ve K16 cerrahisi (`batch.service.ts`
+   ~716-804, `batch-dispatch-surgery.helper.ts` ~253-347) kalemleri DSK'nın sevkinden
+   başka sevke taşıyıp eskisini iptal edebiliyor → karnede teslim metresi atfı düşer.
+3. **ORTA — damga sırası işleme bağlı** (`executeDirectShip` ~6390-6430): önce
+   kalan-kapama sonra alt küme sevki → sevk damgalanır; tersi → hiç damgalanmaz.
+   Helper değişikliği sorgu düzeyinde eşitler; `directShippedAt`i doğrudan okuyan
+   kod (WO şeridi, iptal önizlemesi) hâlâ farklı cevap verir.
+4. **ORTA — `getCancelImpact.fasonRemainders` spread ezmesi**
+   (`workorder.service.ts` ~3218-3224): `receiptItems` anahtarı helper'ın
+   `receiptItems.none`ını EZİYOR → tam kabul görmüş kalemler de "fasonda kalan"
+   sayılır, iptal diyaloğu gereksiz fire onayı ister.
+5. **DÜŞÜK** — WO şeridi sevk durumu/kilit rozeti (`workorder.service.ts` ~2546-2620)
+   ve iptal önizlemesi açık sevk listesi (~3008, ~3116) elle türetiliyor; kalan-kapama
+   ve alt küme sevkini görmüyor. Hızlı kabul önizlemesi `roll.status` seçip
+   denetlemiyor. Top geçmişi doğrudan sevki "Fasondan Döndü" diye basıyor; iptal
+   engeli mesajı "fason kabulde kapatılmış" diyor. Bölünmede ebeveynin açık hareket
+   `qtyIn`i ve bekleyen dönüş rozeti müşteriye giden metreyi hâlâ içeriyor (WIP
+   karnesi fason istasyonunu şişirir). `cancel()` WO iptalinde `fasonAction=SCRAP`
+   ile tutarsızlık; `canSwitchToClose` hiç true olamıyor.
 
 ### Üç kapı
 
-Migration **var** (üç dosya; enum değeri geri alınamaz). İzin **yok**. APK **yok**.
-Panel sürümü gerekir (Stornola). ⚠️ Eski panel `CANCEL_REVERSAL` satırı gördüğü
-depo hareketleri ekranında çöker (`WAREHOUSE_EVENT_META[kind]` undefined); satır
-yalnız yeni paneldeki storno ile doğar ve fabrikada sayım yok → `minVersion`
-yükseltilmedi, panel backend'le birlikte yayınlanmalı.
+Migration **yok** · izin **yok** · APK **yok**. Panel sürümü önerilir (alt satır +
+export kolonu + tanım cümlesi), zorunlu değil. Sözleşme: yanıta `deliveredQty` EKLENDİ
+(kırıcı değil); karne "giden" rakamı tam doğrudan sevki artık içerir (anlam değişikliği,
+fabrikada veri yok). Sıra: backend önce.

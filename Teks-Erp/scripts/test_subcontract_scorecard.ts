@@ -8,11 +8,20 @@
 //      edilmiş bir parti %100 fire görünür.
 //   2. DÖNEN METRAJ TÜM kabul satırlarının TOPLAMIDIR. 100 m'lik top 2×48 m
 //      olarak dönebilir; `DISTINCT ON` ile teke indirmek 52 m'yi sahte fire yazar.
-//   3. DOĞRUDAN SEVK EDİLEN mal fabrikaya DÖNMEZ → fire kümesinin dışındadır.
+//   3. MÜŞTERİYE GİDEN METRE BAŞARILI TESLİMDİR: fire = giden − dönen −
+//      müşteriye giden, payda giden metrenin tamamı. Tam, kısmi (bölünme) ve
+//      alt küme doğrudan sevkin üçü de aynı kuralla ölçülür (§3, §7, §8);
+//      yalnız tam sevki tanıyan eski evren süzgeci kısmi sevkte müşteriye giden
+//      metreyi fire ya da hiç kapanmayan açık bakiye yazıyordu.
 // =============================================================================
+import { RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
-import { getSubcontractScorecard } from "../src/services/reports/subcontract-scorecard.report.service";
+import { OPEN_OUTSTANDING } from "../src/services/helpers/fason-open-dispatch.helper";
+import { getSubcontractScorecard, type SubcontractScorecardRow } from "../src/services/reports/subcontract-scorecard.report.service";
 import { resolveCompareRange, type DateRange } from "../src/services/reports/_shared";
+import { SubcontractorService } from "../src/services/subcontractor.service";
+import { TravelerCardService } from "../src/services/traveler-card.service";
+import { ensureTestDyeHouse } from "./fixture-subcontractor";
 
 let pass = 0;
 let fail = 0;
@@ -176,13 +185,21 @@ async function main(): Promise<void> {
   );
   check("A: fire metrajı 4 m", rowA?.fireQty === 4, `gelen: ${rowA?.fireQty}`);
 
-  // ── 3) DOĞRUDAN SEVK / İPTAL DIŞARIDA ─────────────────────────────────────
-  console.log("\n── 3) Doğrudan sevk ve iptal fire kümesinde değil ──");
+  // ── 3) TAM DOĞRUDAN SEVK = TESLİM, İPTAL DIŞARIDA ─────────────────────────
+  console.log("\n── 3) Tam doğrudan sevk başarılı teslimdir, iptal sayılmaz ──");
   const rowB = sc.bySubcontractor.find((r) => r.key === subB.id);
-  check("B hiç satır üretmez (500 doğrudan + 700 iptal)", rowB === undefined,
-    `gelen: ${JSON.stringify(rowB)}`);
-  check("toplam giden 300 m (1200 değil)", sc.summary.dispatchedQty === 300,
+  check("B: giden 500 m (700 m iptal sayılmaz)", rowB?.dispatchedQty === 500,
+    `gelen: ${rowB?.dispatchedQty}`);
+  check("B: 500 m kapanmış VE müşteriye teslim", rowB?.closedDispatchedQty === 500 && rowB?.deliveredQty === 500,
+    `gelen: kapanmış ${rowB?.closedDispatchedQty} / teslim ${rowB?.deliveredQty}`);
+  check("B: fire 0 m / %0 (dönmeyen ama teslim edilen metre fire DEĞİL)", rowB?.fireQty === 0 && rowB?.firePct === 0,
+    `gelen: ${rowB?.fireQty} m / %${rowB?.firePct}`);
+  check("B: açık bakiye yok", rowB?.openItems === 0 && rowB?.openQty === 0,
+    `gelen: ${rowB?.openItems} kalem / ${rowB?.openQty} m`);
+  check("toplam giden 800 m (300 + 500 teslim; 700 iptal değil)", sc.summary.dispatchedQty === 800,
     `gelen: ${sc.summary.dispatchedQty}`);
+  check("özet: teslim 500 m, fire 4 m", sc.summary.deliveredQty === 500 && sc.summary.fireQty === 4,
+    `gelen: teslim ${sc.summary.deliveredQty} / fire ${sc.summary.fireQty}`);
 
   // ── 4) SÜRE ───────────────────────────────────────────────────────────────
   console.log("\n── 4) Dönüş süresi ──");
@@ -227,11 +244,202 @@ async function main(): Promise<void> {
   check("A: önceki dönem fire %10", rowA?.prevFirePct === 10, `gelen: ${rowA?.prevFirePct}`);
   check("A: önceki dönem giden 100 m", rowA?.prevDispatchedQty === 100, `gelen: ${rowA?.prevDispatchedQty}`);
   check("özet önceki dönem fire %10", sc.summary.prevFirePct === 10, `gelen: ${sc.summary.prevFirePct}`);
+
+  await kismiVeAltKumeSenaryolari();
+}
+
+// =============================================================================
+// §7–§8 — GERÇEK SERVİSLERLE kısmi ve alt küme doğrudan sevk
+// =============================================================================
+// Bölünme çocuğu ve alt küme damgası `executeDirectShip`in yan ürünüdür; elle
+// kurulan fixture servisin hangi kolonu yazdığını ancak TAHMİN ederdi. Her senaryo
+// kendi ayına taşınır ve karne yalnız o ayı okur (yıl koşuma özgü: çökmüş eski
+// koşumun artığı aynı pencereye düşmesin).
+const svc = new SubcontractorService();
+const cardSvc = new TravelerCardService();
+const YIL = 2200 + (Date.now() % 700);
+const svcIds = { wos: [] as string[], dispatches: [] as string[] };
+let svcBc = 0;
+const ctx = { item: "", admin: "", stBoya: "", stKursun: "", sub: "", customer: "" };
+
+async function kurSevk(qtys: number[]): Promise<{ woId: string; stepId: string; dispatchId: string; rollIds: string[] }> {
+  const wo = await prisma.workOrder.create({
+    data: {
+      workOrderNumber: `${TAG}-SVC${svcIds.wos.length}`,
+      type: "STOCK_PRODUCTION",
+      status: "IN_PROGRESS",
+      targetItemId: ctx.item,
+      steps: { create: [{ stationId: ctx.stBoya, stepSequence: 1, status: "PENDING" }, { stationId: ctx.stKursun, stepSequence: 2, status: "PENDING" }] },
+    },
+    include: { steps: { orderBy: { stepSequence: "asc" } } },
+  });
+  svcIds.wos.push(wo.id);
+  await prisma.$transaction((tx) => cardSvc.createForWorkOrder(tx, wo.id, ctx.admin));
+  const rollIds: string[] = [];
+  for (const q of qtys) {
+    svcBc++;
+    const r = await prisma.roll.create({
+      data: { barcode: `TST-FSC-${`${Date.now()}`.slice(-7)}${svcBc}`, itemId: ctx.item, initialQty: q, currentQty: q, status: RollStatus.STOCK, width: 250, createdById: ctx.admin },
+      select: { id: true },
+    });
+    rollIds.push(r.id);
+  }
+  const stepId = wo.steps[0]!.id;
+  const d = await svc.dispatch({ workOrderId: wo.id, stepId, subcontractorId: ctx.sub, rollIds }, ctx.admin);
+  const dispatchId = (d.data as { id: string }).id;
+  svcIds.dispatches.push(dispatchId);
+  return { woId: wo.id, stepId, dispatchId, rollIds };
+}
+
+let sonAcikListe: Awaited<ReturnType<typeof getSubcontractScorecard>>["oldestOpen"] = [];
+
+/** Sevki `ay`a taşır ve karnede firmanın o aydaki satırını okur. */
+async function ayKarnesi(dispatchId: string, ay: number): Promise<SubcontractScorecardRow | undefined> {
+  await prisma.subcontractorDispatch.update({ where: { id: dispatchId }, data: { dispatchedAt: new Date(Date.UTC(YIL, ay, 10)) } });
+  const k = await getSubcontractScorecard({ from: new Date(Date.UTC(YIL, ay, 1)), to: new Date(Date.UTC(YIL, ay + 1, 1) - 1) });
+  sonAcikListe = k.oldestOpen;
+  return k.bySubcontractor.find((x) => x.key === ctx.sub);
+}
+
+/** Açık sevk listesi dönemden bağımsız EN ESKİ 25'tir — liste doluysa fixture giremez, görünür atlanır (§5). */
+async function acikListeMetraji(dispatchId: string, label: string, beklenen: number): Promise<void> {
+  const no = (await prisma.subcontractorDispatch.findUnique({ where: { id: dispatchId }, select: { dispatchNo: true } }))?.dispatchNo;
+  const row = sonAcikListe.find((r) => r.dispatchNo === no);
+  if (row === undefined && sonAcikListe.length >= 25) {
+    atla(label, `açık sevk listesi dolu (${sonAcikListe.length}); uzak-gelecek fixture sevki listeye giremez`);
+    return;
+  }
+  check(label, row?.openQty === beklenen, `gelen: ${row?.openQty}`);
+}
+
+const ozet = (r: SubcontractScorecardRow | undefined): string =>
+  `giden ${r?.dispatchedQty} · kapanmış ${r?.closedDispatchedQty} · dönen ${r?.returnedQty} · teslim ${r?.deliveredQty} · fire ${r?.fireQty} (%${r?.firePct}) · açık ${r?.openItems}/${r?.openQty}`;
+
+async function kismiVeAltKumeSenaryolari(): Promise<void> {
+  const need = (v: { id: string } | null, label: string): string => {
+    if (!v) throw new Error(`Seed fixture eksik: ${label} — önce 'npm run seed:fixtures'`);
+    return v.id;
+  };
+  ctx.item = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS");
+  ctx.admin = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
+  ctx.stBoya = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON");
+  ctx.stKursun = need(await prisma.station.findFirst({ where: { code: "KURSUN_KK2" }, select: { id: true } }), "KURSUN_KK2");
+  ctx.customer = need(await prisma.customer.findFirst({ where: { code: "MUS-001" }, select: { id: true } }), "MUS-001");
+  ctx.sub = (await ensureTestDyeHouse()).id;
+
+  // ── 7) KISMİ DOĞRUDAN SEVK (bölünme) ─────────────────────────────────────
+  console.log("\n── 7) Kısmi doğrudan sevk: müşteriye kesilen metre teslimdir ──");
+  {
+    // 7a: 300 gitti → 100 m müşteriye → kalan 200 m TAM döndü.
+    const z = await kurSevk([300]);
+    await svc.executeDirectShip({ dispatchId: z.dispatchId, reason: "bekci kismi", customerId: ctx.customer, rollIds: z.rollIds, rollShipQtys: { [z.rollIds[0]!]: 100 } }, ctx.admin);
+    const cocuk = await prisma.roll.count({ where: { parentRollId: z.rollIds[0]!, directShipmentId: { not: null } } });
+    check("7a ön koşul: 100 m bölünme çocuğu doğdu, sevk damgasız", cocuk === 1 &&
+      (await prisma.subcontractorDispatch.count({ where: { id: z.dispatchId, directShippedAt: null } })) === 1);
+    await svc.receive({ workOrderId: z.woId, stepId: z.stepId, subcontractorId: ctx.sub, returns: [{ rollId: z.rollIds[0]! }], newRolls: [{ qty: 200 }] }, ctx.admin);
+    const r = await ayKarnesi(z.dispatchId, 0);
+    check("7a: 300 → 100 müşteriye → 200 döndü = fire 0 (eski: 100 m / %33,3)",
+      r?.dispatchedQty === 300 && r.closedDispatchedQty === 300 && r.returnedQty === 200 && r.deliveredQty === 100 && r.fireQty === 0 && r.firePct === 0 && r.openItems === 0,
+      ozet(r));
+  }
+  {
+    // 7b: KARAR ÖRNEĞİ — 300 gitti → 100 müşteriye → kalan 200'den 180 döndü.
+    const z = await kurSevk([300]);
+    await svc.executeDirectShip({ dispatchId: z.dispatchId, reason: "bekci kismi", customerId: ctx.customer, rollIds: z.rollIds, rollShipQtys: { [z.rollIds[0]!]: 100 } }, ctx.admin);
+    await svc.receive({ workOrderId: z.woId, stepId: z.stepId, subcontractorId: ctx.sub, returns: [{ rollId: z.rollIds[0]! }], newRolls: [{ qty: 180 }] }, ctx.admin);
+    const r = await ayKarnesi(z.dispatchId, 1);
+    check("7b: 300 → 100 müşteriye → 180 döndü = fire 20 m / %6,7 (payda 300, küçültülmez)",
+      r?.closedDispatchedQty === 300 && r.returnedQty === 180 && r.deliveredQty === 100 && r.fireQty === 20 && r.firePct === 6.7,
+      ozet(r));
+  }
+  {
+    // 7c: 300 gitti → 100 müşteriye → 100 kısmi kabul → kalan 100 "gelmeyecek".
+    const z = await kurSevk([300]);
+    await svc.executeDirectShip({ dispatchId: z.dispatchId, reason: "bekci kismi", customerId: ctx.customer, rollIds: z.rollIds, rollShipQtys: { [z.rollIds[0]!]: 100 } }, ctx.admin);
+    await svc.receive({ workOrderId: z.woId, stepId: z.stepId, subcontractorId: ctx.sub, returns: [{ rollId: z.rollIds[0]!, receivedQty: 100 }], newRolls: [{ qty: 100 }] }, ctx.admin);
+    await svc.closeRemainder({ stepId: z.stepId, rollId: z.rollIds[0]!, reasonCode: "BOYA_HATASI" }, ctx.admin);
+    const r = await ayKarnesi(z.dispatchId, 2);
+    check("7c: 100 müşteriye + 100 kısmi kabul + 100 kapama = fire 100 m / %33,3 (eski: 200 m / %66,7)",
+      r?.closedDispatchedQty === 300 && r.returnedQty === 100 && r.deliveredQty === 100 && r.fireQty === 100 && r.firePct === 33.3 && r.openItems === 0,
+      ozet(r));
+  }
+  {
+    // 7d: 300 gitti → 100 müşteriye → kalan 200 hâlâ fasonda.
+    const z = await kurSevk([300]);
+    await svc.executeDirectShip({ dispatchId: z.dispatchId, reason: "bekci kismi", customerId: ctx.customer, rollIds: z.rollIds, rollShipQtys: { [z.rollIds[0]!]: 100 } }, ctx.admin);
+    const r = await ayKarnesi(z.dispatchId, 3);
+    check("7d: kalan fasondayken açık 1 kalem / 200 m (eski: 300 m), fire payında değil",
+      r?.openItems === 1 && r.openQty === 200 && r.closedDispatchedQty === 0 && r.fireQty === 0,
+      ozet(r));
+    await acikListeMetraji(z.dispatchId, "7d: açık sevk listesi de 200 m der (müşteriye kesilen düşülür)", 200);
+  }
+
+  // ── 8) ALT KÜME TAM SEVK ──────────────────────────────────────────────────
+  console.log("\n── 8) Alt küme: topu tamamen müşteriye giden kalem KAPANMIŞTIR ──");
+  {
+    const z = await kurSevk([200, 200]);
+    await svc.executeDirectShip({ dispatchId: z.dispatchId, reason: "bekci altkume", customerId: ctx.customer, rollIds: [z.rollIds[0]!] }, ctx.admin);
+    check("8 ön koşul: sevk damgasız kaldı (alt küme)",
+      (await prisma.subcontractorDispatch.count({ where: { id: z.dispatchId, directShippedAt: null } })) === 1);
+    const once = await ayKarnesi(z.dispatchId, 4);
+    check("8a: diğer top fasondayken — 200 m teslim kapanmış, 200 m açık",
+      once?.closedDispatchedQty === 200 && once.deliveredQty === 200 && once.fireQty === 0 && once.openItems === 1 && once.openQty === 200,
+      ozet(once));
+    await acikListeMetraji(z.dispatchId, "8a: açık sevk listesi 200 m der (müşteriye giden top sayılmaz)", 200);
+    await svc.receive({ workOrderId: z.woId, stepId: z.stepId, subcontractorId: ctx.sub, returns: [{ rollId: z.rollIds[1]! }], newRolls: [{ qty: 200 }] }, ctx.admin);
+    const r = await ayKarnesi(z.dispatchId, 4);
+    check("8b: diğer top döndükten sonra açık 0 (eski: sonsuza dek 200 m açık), fire 0",
+      r?.closedDispatchedQty === 400 && r.returnedQty === 200 && r.deliveredQty === 200 && r.fireQty === 0 && r.openItems === 0 && r.openQty === 0,
+      ozet(r));
+    const acik = await prisma.subcontractorDispatch.count({ where: { id: z.dispatchId, ...OPEN_OUTSTANDING } });
+    check("8c: sevk artık OPEN_OUTSTANDING değil (helper karneyle aynı cevabı verir)", acik === 0, `gelen: ${acik}`);
+  }
+}
+
+async function svcTemizle(): Promise<void> {
+  if (svcIds.wos.length === 0) return;
+  const woIds = svcIds.wos;
+  const dispatchIds = svcIds.dispatches;
+  const stepIds = (await prisma.workOrderStep.findMany({ where: { workOrderId: { in: woIds } }, select: { id: true } })).map((s) => s.id);
+  const dsIds = (await prisma.directShipment.findMany({ where: { dispatchId: { in: dispatchIds } }, select: { id: true } })).map((d) => d.id);
+  const receiptIds = (await prisma.subcontractorReceipt.findMany({ where: { workOrderId: { in: woIds } }, select: { id: true } })).map((r) => r.id);
+  const taban = (await prisma.roll.findMany({
+    where: { OR: [{ currentStepId: { in: stepIds } }, { producedInStepId: { in: stepIds } }, { parentReceiptId: { in: receiptIds } }, { directShipmentId: { in: dsIds } }, { barcode: { startsWith: "TST-FSC-" } }] },
+    select: { id: true },
+  })).map((r) => r.id);
+  const cocuk = (await prisma.roll.findMany({ where: { parentRollId: { in: taban } }, select: { id: true } })).map((r) => r.id);
+  const rollIds = [...new Set([...taban, ...cocuk])];
+  await prisma.printedDocument.deleteMany({ where: { sourceId: { in: [...dispatchIds, ...woIds, ...dsIds, ...receiptIds] } } });
+  await prisma.subcontractorDirectShipAllocation.deleteMany({ where: { dispatchId: { in: dispatchIds } } });
+  await prisma.rollVariance.deleteMany({ where: { rollId: { in: rollIds } } });
+  await prisma.rollOperation.deleteMany({ where: { OR: [{ rollId: { in: rollIds } }, { workOrderStepId: { in: stepIds } }] } });
+  await prisma.rollMovement.deleteMany({ where: { OR: [{ rollId: { in: rollIds } }, { workOrderStepId: { in: stepIds } }] } });
+  await prisma.rollProperty.deleteMany({ where: { rollId: { in: rollIds } } });
+  await prisma.subcontractorReceiptItem.deleteMany({ where: { receiptId: { in: receiptIds } } });
+  await prisma.subcontractorReceiptProperty.deleteMany({ where: { receiptId: { in: receiptIds } } });
+  await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: { in: dispatchIds } } });
+  await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
+  await prisma.directShipment.deleteMany({ where: { id: { in: dsIds } } });
+  await prisma.subcontractorReceipt.deleteMany({ where: { id: { in: receiptIds } } });
+  await prisma.subcontractorDispatch.deleteMany({ where: { id: { in: dispatchIds } } });
+  const cardIds = (await prisma.travelerCard.findMany({ where: { workOrderId: { in: woIds } }, select: { id: true } })).map((c) => c.id);
+  await prisma.travelerCardScan.deleteMany({ where: { cardId: { in: cardIds } } });
+  await prisma.travelerCard.deleteMany({ where: { id: { in: cardIds } } });
+  await prisma.batch.deleteMany({ where: { workOrderId: { in: woIds } } });
+  await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } });
+  await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...receiptIds, ...dispatchIds, ...woIds, ...dsIds] } } });
+  await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
 }
 
 main()
   .catch((e) => { console.error("HATA:", e); fail++; })
   .finally(async () => {
+    try {
+      await svcTemizle();
+    } catch (e) {
+      console.error("§7-§8 temizlik hatası:", e instanceof Error ? e.message : e);
+      fail++;
+    }
     if (ids.receiptItems.length) await prisma.subcontractorReceiptItem.deleteMany({ where: { id: { in: ids.receiptItems } } });
     if (ids.receipts.length) await prisma.subcontractorReceipt.deleteMany({ where: { id: { in: ids.receipts } } });
     if (ids.dispatchItems.length) await prisma.subcontractorDispatchItem.deleteMany({ where: { id: { in: ids.dispatchItems } } });

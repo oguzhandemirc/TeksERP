@@ -63,7 +63,7 @@ async function karne(dispatchId: string, ay: number, beklenen: string): Promise<
   const r = k.bySubcontractor.find((x) => x.key === SUB_BOYER);
   const acik = await prisma.subcontractorDispatch.count({ where: { id: dispatchId, ...OPEN_OUTSTANDING } });
   console.log(
-    `   karne: giden ${r?.dispatchedQty} · kapanmış-giden ${r?.closedDispatchedQty} · dönen ${r?.returnedQty} · FİRE ${r?.fireQty} m (%${r?.firePct})` +
+    `   karne: giden ${r?.dispatchedQty} · kapanmış-giden ${r?.closedDispatchedQty} · dönen ${r?.returnedQty} · müşteriye ${r?.deliveredQty} · FİRE ${r?.fireQty} m (%${r?.firePct})` +
       ` · açık ${r?.openItems} kalem / ${r?.openQty} m · OPEN_OUTSTANDING=${acik}`,
   );
   console.log(`   doğrusu: ${beklenen}`);
@@ -79,14 +79,14 @@ async function senaryolar(): Promise<void> {
   const k1 = await kur("K1", [300]);
   await sub.executeDirectShip({ dispatchId: k1.dispatchId, reason: "olcum kismi", customerId: CUSTOMER, rollIds: k1.rollIds, rollShipQtys: { [k1.rollIds[0]!]: 100 } }, ADMIN);
   await sub.receive({ workOrderId: k1.woId, stepId: k1.stepId, subcontractorId: SUB_BOYER, returns: [{ rollId: k1.rollIds[0]! }], newRolls: [{ qty: 200 }] }, ADMIN);
-  await karne(k1.dispatchId, 1, "fire 0 (100 m müşteriye gitti, 200 m döndü) · açık 0");
+  await karne(k1.dispatchId, 1, "fire 0 (100 m müşteriye = teslim, 200 m döndü) · açık 0");
 
   console.log("\n=== K2: 300 gitti → 100 müşteriye → 100 kısmi kabul → kalan 100 'gelmeyecek' kapama ===");
   const k2 = await kur("K2", [300]);
   await sub.executeDirectShip({ dispatchId: k2.dispatchId, reason: "olcum kismi", customerId: CUSTOMER, rollIds: k2.rollIds, rollShipQtys: { [k2.rollIds[0]!]: 100 } }, ADMIN);
   await sub.receive({ workOrderId: k2.woId, stepId: k2.stepId, subcontractorId: SUB_BOYER, returns: [{ rollId: k2.rollIds[0]!, receivedQty: 100 }], newRolls: [{ qty: 100 }] }, ADMIN);
   await sub.closeRemainder({ stepId: k2.stepId, rollId: k2.rollIds[0]!, reasonCode: "BOYA_HATASI" }, ADMIN);
-  await karne(k2.dispatchId, 2, "fire 100 / 200 fabrikaya ait metraj (%50) · açık 0");
+  await karne(k2.dispatchId, 2, "fire 100 / 300 (%33,3 — B kararı: müşteriye giden teslim, payda küçültülmez) · açık 0");
 
   console.log("\n=== K3: 300 gitti → 100 müşteriye → kalan 200 hâlâ fasonda ===");
   const k3 = await kur("K3", [300]);

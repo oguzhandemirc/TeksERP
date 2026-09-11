@@ -22,15 +22,24 @@
 // fasondan 2×48 m olarak dönebilir; DISTINCT ON yalnız birini sayıp 52 m'yi
 // sahte fire yazardı. Burada SUM edilir.
 //
-// ── DOĞRUDAN SEVK EDİLENLER FİRE HESABINA GİRMEZ ───────────────────────────
-// `directShippedAt` dolu sevkler fasondan müşteriye çıkmıştır; fabrikaya hiç
-// dönmezler. Fire kümesinde bırakmak onları %100 fire gösterirdi.
+// ── MÜŞTERİYE GİDEN METRE "BAŞARILI TESLİM"DİR ─────────────────────────────
+// Fasondan doğrudan müşteriye çıkan metre fabrikaya dönmez ama fasoncunun
+// işleyip teslim ettiği sağlam iştir: FİRE = giden − dönen − müşteriye giden,
+// payda giden metrenin TAMAMIDIR (küçültülmez). Üç şekli aynı kural kapsar:
+//   • tam doğrudan sevk (`directShippedAt` dolu) → kalemin tamamı teslim,
+//   • alt kümeyle sevk edilen top (topun `directShipmentId`si dolu) → kalem
+//     KAPANMIŞTIR, tamamı teslim (sevk damgasız kalsa da),
+//   • kısmi metre (bölünme çocuğu, `parentRollId` = kalem topu) → çocuğun
+//     metresi teslim, kalan parça normal kabul/kapama yolundan döner.
+// Doğrudan sevki evrenden dışlamak yalnız TAM sevki görür; kısmi sevkte
+// müşteriye giden metre fire ya da hiç kapanmayan açık bakiye olur.
+// Karar ve gerekçe: docs/kurallar/fason.md.
 // =============================================================================
 
-import prisma from "../../lib/prisma";
-import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
 import { pctOf, round1 } from "./_breakdown";
+import { queryOldestOpenDispatches, queryScorecardItems } from "../helpers/subcontract-scorecard-query.helper";
+import { avgTurnaround, fireOf, groupBySubcontractor, sumCells, type SubCell } from "../helpers/subcontract-scorecard-calc.helper";
 
 // ---------- Tipler -----------------------------------------------------------
 
@@ -43,7 +52,9 @@ export interface SubcontractScorecardRow {
   /** Kapanmış (dönüşü gelmiş) kalemlerin giden metrajı — fire paydası. */
   closedDispatchedQty: number;
   returnedQty: number;
-  /** closedDispatchedQty − returnedQty (negatif olabilir: fazla dönmüş). */
+  /** Kapanmış kalemlerden fasondan doğrudan müşteriye giden metre (başarılı teslim). */
+  deliveredQty: number;
+  /** closedDispatchedQty − returnedQty − deliveredQty (negatif olabilir: fazla dönmüş). */
   fireQty: number;
   firePct: number;
   /** Henüz dönmemiş kalem adedi ve metrajı. */
@@ -60,6 +71,7 @@ export interface SubcontractScorecard {
     dispatchedQty: number;
     closedDispatchedQty: number;
     returnedQty: number;
+    deliveredQty: number;
     fireQty: number;
     firePct: number;
     openItems: number;
@@ -81,144 +93,10 @@ export interface SubcontractScorecard {
   }>;
 }
 
-// ---------- Ham toplama ------------------------------------------------------
-
-interface SubCell {
-  subId: string;
-  subName: string;
-  dispatchItems: number;
-  dispatchedQty: number;
-  closedItems: number;
-  closedDispatchedQty: number;
-  returnedQty: number;
-  openItems: number;
-  openQty: number;
-  turnaroundSum: number;
-  turnaroundCount: number;
-}
-
-/**
- * Kalem başına giden/dönen tek sorguda toplanır, firma kırılımı JS'te.
- *
- * ⚠️ `receivedAt` en ERKEN kabul satırından alınır (süre hesabı için); metraj
- * ise TÜM satırların toplamıdır. İkisi ayrı sorulardır ve tek agregasyonda
- * karıştırılırsa ya süre ya metraj yanlış çıkar.
- */
-async function collectDispatchItems(range: DateRange): Promise<SubCell[]> {
-  const rows = await prisma.$queryRaw<
-    Array<{
-      subId: string;
-      subName: string;
-      dispatchedQty: number;
-      returnedQty: number | null;
-      returnAdjQty: number | null;
-      firstReceivedAt: Date | null;
-      hasFull: boolean | null;
-      remainderClosed: boolean;
-      dispatchedAt: Date;
-    }>
-  >(Prisma.sql`
-    SELECT
-      sub.id   AS "subId",
-      sub.name AS "subName",
-      sdi."dispatchedQty"::float AS "dispatchedQty",
-      ret.qty                    AS "returnedQty",
-      adj."netQty"               AS "returnAdjQty",
-      ret."firstReceivedAt"      AS "firstReceivedAt",
-      ret."hasFull"              AS "hasFull",
-      (sdi."remainderClosedAt" IS NOT NULL) AS "remainderClosed",
-      sd."dispatchedAt"          AS "dispatchedAt"
-    FROM subcontractor_dispatch_items sdi
-    JOIN subcontractor_dispatches sd ON sd.id = sdi."dispatchId"
-    JOIN subcontractors sub          ON sub.id = sd."subcontractorId"
-    LEFT JOIN LATERAL (
-      SELECT
-        -- DÖNEN METRAJ = KABUL DEFTERİ (2026-08-19, kısmi teslimat). receivedQty
-        -- makbuz satırının kabul ettiği metrajdır; eski (NULL) satırlarda topun
-        -- son metrajına düşülür — tüketim anında currentQty = kabul edilen kalan
-        -- olduğundan iki rejim aynı sayıyı verir. Eski initialQty kaynağı YANLIŞTI:
-        -- giden metrajın kendisini "döndü" sayıyor, fire HEP %0 çıkıyordu.
-        SUM(COALESCE(sri."receivedQty", nr."currentQty"))::float AS qty,
-        MIN(sr."receivedAt")        AS "firstReceivedAt",
-        -- Kalem ancak TAM (isPartial=false) bir makbuz satırıyla kapanır;
-        -- kısmi satırlar kalemi AÇIK bırakır (kalan hâlâ fasonda).
-        BOOL_OR(NOT sri."isPartial") AS "hasFull"
-      FROM subcontractor_receipt_items sri
-      JOIN subcontractor_receipts sr ON sr.id = sri."receiptId"
-      JOIN rolls nr                  ON nr.id = sri."newRollId"
-      WHERE sri."sourceDispatchItemId" = sdi.id
-        AND sr."cancelledAt" IS NULL
-    ) ret ON true
-    LEFT JOIN LATERAL (
-      -- ÇEKME DÜZELTMESİ (2026-08-21). ret.qty fasonun hesabından DÜŞÜLEN
-      -- metrajdır; fiziksel olarak GELEN metraj değildir. TAM kabulde defter
-      -- satırı kalanın kendisidir, yani ret.qty = giden ve fark HEP 0 çıkıyordu
-      -- (canlı kopyada doğrulandı: her firmada fire %0). Gerçek dönen metraj
-      -- defter + sapma defterindeki çekme/fazla satırlarıdır.
-      --
-      -- İşaret: SCRAP eksi (metre gitti), OVERAGE artı (fazla döndü).
-      -- reversedAt IS NULL — iptal edilmiş makbuzun sapması hayalet fire olur.
-      SELECT SUM(CASE WHEN rv.kind = 'SCRAP' THEN -rv.qty ELSE rv.qty END)::float AS "netQty"
-      FROM roll_variances rv
-      WHERE rv."rollId" = sdi."rollId"
-        AND rv.source = 'SUBCONTRACTOR_RETURN'
-        AND rv."workOrderStepId" = sd."stepId"
-        AND rv."reversedAt" IS NULL
-    ) adj ON true
-    WHERE sd."dispatchedAt" >= ${range.from}
-      AND sd."dispatchedAt" <= ${range.to}
-      AND sd."cancelledAt" IS NULL
-      -- Fasondan doğrudan müşteriye çıkan mal fabrikaya DÖNMEZ; fire kümesinde
-      -- bırakmak onu %100 fire gösterirdi.
-      AND sd."directShippedAt" IS NULL
-  `);
-
-  const map = new Map<string, SubCell>();
-  for (const r of rows) {
-    let cell = map.get(r.subId);
-    if (!cell) {
-      cell = {
-        subId: r.subId, subName: r.subName,
-        dispatchItems: 0, dispatchedQty: 0,
-        closedItems: 0, closedDispatchedQty: 0, returnedQty: 0,
-        openItems: 0, openQty: 0, turnaroundSum: 0, turnaroundCount: 0,
-      };
-      map.set(r.subId, cell);
-    }
-    const disp = Number(r.dispatchedQty);
-    cell.dispatchItems += 1;
-    cell.dispatchedQty += disp;
-    // "Kapandı" ölçütü (kısmi teslimat, 2026-08-19): TAM makbuz satırı VAR ya da
-    // kalan "gelmeyecek" kararıyla kapatıldı (remainderClosedAt). Kısmi satırlar
-    // kalemi kapatmaz — kalan hâlâ fasondadır, açık bakiyede görünür. Sıfır
-    // metrajlı tam dönüş de kapanıştır ve firesi %100'dür.
-    if (r.hasFull === true || r.remainderClosed) {
-      cell.closedItems += 1;
-      cell.closedDispatchedQty += disp;
-      // Dönen metraj = defter (düşülen) + çekme düzeltmesi (fiziksel fark).
-      cell.returnedQty += Number(r.returnedQty ?? 0) + Number(r.returnAdjQty ?? 0);
-      // Süre = ilk dönüş anı; yalnız kalan-kapamayla kapanan (hiç dönüşsüz)
-      // kalemin süresi ölçülmez (dönüş yok — kapama tarihi teslim süresi değildir).
-      if (r.firstReceivedAt !== null) {
-        cell.turnaroundSum += (r.firstReceivedAt.getTime() - r.dispatchedAt.getTime()) / 86_400_000;
-        cell.turnaroundCount += 1;
-      }
-    } else {
-      cell.openItems += 1;
-      // Açık bakiye = giden − kısmen dönen (kalan fasonda bekleyen gerçek metraj).
-      // ⚠️ Çekme düzeltmesi BURAYA GİRMEZ ve bu bilinçli: fasonda bekleyen bakiye,
-      // onun hesabından DÜŞÜLMEMİŞ metrajdır. Çekme düşülen kısımda yaşandı —
-      // bakiyeden de indirmek, gelmemiş malı gelmiş saymak olurdu.
-      cell.openQty += Math.max(0, disp - Number(r.returnedQty ?? 0));
-    }
-  }
-  return [...map.values()];
-}
-
 // ---------- Ana giriş --------------------------------------------------------
 
 function toRow(c: SubCell): SubcontractScorecardRow {
-  const fire = c.closedDispatchedQty - c.returnedQty;
+  const fire = fireOf(c);
   return {
     key: c.subId,
     label: c.subName,
@@ -226,12 +104,12 @@ function toRow(c: SubCell): SubcontractScorecardRow {
     dispatchedQty: round1(c.dispatchedQty),
     closedDispatchedQty: round1(c.closedDispatchedQty),
     returnedQty: round1(c.returnedQty),
+    deliveredQty: round1(c.deliveredQty),
     fireQty: round1(fire),
     firePct: pctOf(fire, c.closedDispatchedQty),
     openItems: c.openItems,
     openQty: round1(c.openQty),
-    avgTurnaroundDays:
-      c.turnaroundCount > 0 ? Math.round((c.turnaroundSum / c.turnaroundCount) * 10) / 10 : null,
+    avgTurnaroundDays: avgTurnaround(c),
   };
 }
 
@@ -239,61 +117,13 @@ export async function getSubcontractScorecard(
   range: DateRange,
   compareRange: DateRange | null = null,
 ): Promise<SubcontractScorecard> {
-  const [cells, prevCells, openRows] = await Promise.all([
-    collectDispatchItems(range),
-    compareRange ? collectDispatchItems(compareRange) : Promise.resolve<SubCell[]>([]),
-    // AÇIK sevkler + yaş. Yaş MUTLAK penceredir (iki an arası fark), takvim günü
-    // DEĞİL → saat diliminden bağımsızdır ve çıplak now() doğrudur.
-    prisma.$queryRaw<
-      Array<{
-        dispatchId: string;
-        dispatchNo: string;
-        subcontractorName: string;
-        dispatchedAt: Date;
-        daysOpen: number;
-        openItems: bigint;
-        openQty: number | null;
-      }>
-    >(Prisma.sql`
-      SELECT
-        sd.id            AS "dispatchId",
-        sd."dispatchNo"  AS "dispatchNo",
-        sub.name         AS "subcontractorName",
-        sd."dispatchedAt" AS "dispatchedAt",
-        -- tz-ok: iki an arasındaki MUTLAK fark (kaç gündür açık); takvim günü
-        -- sorusu değil, bu yüzden fabrika saat dilimine kesilmez.
-        EXTRACT(EPOCH FROM (now() - sd."dispatchedAt")) / 86400.0 AS "daysOpen",
-        COUNT(*)                          AS "openItems",
-        -- Açık bakiye = giden − kısmen dönen (kısmi teslimat sonrası fasonda
-        -- gerçekten bekleyen metraj; defterden düşülür).
-        SUM(sdi."dispatchedQty" - COALESCE(pret.qty, 0))::float AS "openQty"
-      FROM subcontractor_dispatch_items sdi
-      JOIN subcontractor_dispatches sd ON sd.id = sdi."dispatchId"
-      JOIN subcontractors sub          ON sub.id = sd."subcontractorId"
-      LEFT JOIN LATERAL (
-        SELECT SUM(sri."receivedQty") AS qty
-        FROM subcontractor_receipt_items sri
-        JOIN subcontractor_receipts sr ON sr.id = sri."receiptId"
-        WHERE sri."sourceDispatchItemId" = sdi.id
-          AND sr."cancelledAt" IS NULL AND sri."isPartial"
-      ) pret ON true
-      WHERE sd."cancelledAt" IS NULL
-        AND sd."directShippedAt" IS NULL
-        -- Kalan-kapama kalemi kapatır (fire deftere yazıldı, artık açık değil).
-        AND sdi."remainderClosedAt" IS NULL
-        AND NOT EXISTS (
-          -- Kalem yalnız TAM (isPartial=false) makbuz satırıyla kapanır; kısmi
-          -- satır kalemi AÇIK bırakır (kalan hâlâ fasonda).
-          SELECT 1 FROM subcontractor_receipt_items sri
-          JOIN subcontractor_receipts sr ON sr.id = sri."receiptId"
-          WHERE sri."sourceDispatchItemId" = sdi.id AND sr."cancelledAt" IS NULL
-            AND NOT sri."isPartial"
-        )
-      GROUP BY sd.id, sd."dispatchNo", sub.name, sd."dispatchedAt"
-      ORDER BY sd."dispatchedAt" ASC
-      LIMIT 25
-    `),
+  const [itemRows, prevItemRows, openRows] = await Promise.all([
+    queryScorecardItems(range),
+    compareRange ? queryScorecardItems(compareRange) : Promise.resolve([]),
+    queryOldestOpenDispatches(),
   ]);
+  const cells = groupBySubcontractor(itemRows);
+  const prevCells = groupBySubcontractor(prevItemRows);
 
   const bySubcontractor = cells.map(toRow).sort((a, b) => b.dispatchedQty - a.dispatchedQty);
 
@@ -306,36 +136,22 @@ export async function getSubcontractScorecard(
     }
   }
 
-  const agg = (list: SubCell[]) =>
-    list.reduce(
-      (a, c) => ({
-        dispatchedQty: a.dispatchedQty + c.dispatchedQty,
-        closedDispatchedQty: a.closedDispatchedQty + c.closedDispatchedQty,
-        returnedQty: a.returnedQty + c.returnedQty,
-        openItems: a.openItems + c.openItems,
-        openQty: a.openQty + c.openQty,
-        turnaroundSum: a.turnaroundSum + c.turnaroundSum,
-        turnaroundCount: a.turnaroundCount + c.turnaroundCount,
-      }),
-      { dispatchedQty: 0, closedDispatchedQty: 0, returnedQty: 0, openItems: 0, openQty: 0, turnaroundSum: 0, turnaroundCount: 0 },
-    );
-
-  const t = agg(cells);
-  const fire = t.closedDispatchedQty - t.returnedQty;
+  const t = sumCells(cells);
+  const fire = fireOf(t);
   const summary: SubcontractScorecard["summary"] = {
     dispatchedQty: round1(t.dispatchedQty),
     closedDispatchedQty: round1(t.closedDispatchedQty),
     returnedQty: round1(t.returnedQty),
+    deliveredQty: round1(t.deliveredQty),
     fireQty: round1(fire),
     firePct: pctOf(fire, t.closedDispatchedQty),
     openItems: t.openItems,
     openQty: round1(t.openQty),
-    avgTurnaroundDays:
-      t.turnaroundCount > 0 ? Math.round((t.turnaroundSum / t.turnaroundCount) * 10) / 10 : null,
+    avgTurnaroundDays: avgTurnaround(t),
   };
   if (compareRange) {
-    const p = agg(prevCells);
-    summary.prevFirePct = pctOf(p.closedDispatchedQty - p.returnedQty, p.closedDispatchedQty);
+    const p = sumCells(prevCells);
+    summary.prevFirePct = pctOf(fireOf(p), p.closedDispatchedQty);
     summary.prevDispatchedQty = round1(p.dispatchedQty);
   }
 

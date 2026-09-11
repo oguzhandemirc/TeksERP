@@ -212,7 +212,7 @@ WHERE sd."cancelledAt" IS NULL
     // yapar → "sevk tamamen doğrudan-sevk edildi" ile "topu hâlâ fasonda" AYNI ANDA
     // doğru olamaz. Olduysa aynı metraj hem sevk raporunda hem fason bakiyesinde.
     id: "24b",
-    title: "DOĞRUDAN SEVK edilmiş sevkin topu HÂLÂ fasonda (AT_SUBCONTRACTOR)",
+    title: "DOĞRUDAN SEVK edilmiş sevkin/topun topu HÂLÂ fasonda (AT_SUBCONTRACTOR)",
     sql: `
 SELECT sdi.id      AS dispatch_item_id,
        sd."dispatchNo",
@@ -224,7 +224,7 @@ SELECT sdi.id      AS dispatch_item_id,
 FROM subcontractor_dispatch_items sdi
 JOIN subcontractor_dispatches sd ON sd.id = sdi."dispatchId"
 JOIN rolls r ON r.id = sdi."rollId"
-WHERE sd."directShippedAt" IS NOT NULL
+WHERE (sd."directShippedAt" IS NOT NULL OR r."directShipmentId" IS NOT NULL)
   AND sd."cancelledAt" IS NULL
   AND sdi."remainderClosedAt" IS NULL
   AND r.status = 'AT_SUBCONTRACTOR'
@@ -240,8 +240,9 @@ WHERE sd."directShippedAt" IS NOT NULL
     // görünüyor", burada "mal fasonda ama İÇERİDE görünüyor". 2026-08-29'a dek
     // iş emri iptali `cancelBulk`ın PARÇALI başarısını okumuyordu ve artık-kalan
     // yazımı topu tx DIŞINDA içeri alıyordu → açık sevk ortada kalırken mal Ham
-    // Stok'ta görünüyordu (BULGU-T1-009). ⚠️ `directShippedAt IS NULL` süzgeci
-    // load-bearing: doğrudan sevkte top MEŞRUEN SUBCONTRACTOR_CONSUMED olur.
+    // Stok'ta görünüyordu (BULGU-T1-009). ⚠️ `directShippedAt IS NULL` ve
+    // `r."directShipmentId" IS NULL` load-bearing: doğrudan sevkte (alt küme dahil)
+    // top MEŞRUEN SUBCONTRACTOR_CONSUMED olur.
     id: "24c",
     title: "AÇIK+OUTSTANDING fason kalemi ama top FASONDA DEĞİL (mal iki yerde)",
     sql: `
@@ -261,6 +262,7 @@ JOIN work_orders w ON w.id = sd."workOrderId"
 WHERE sd."cancelledAt" IS NULL
   AND sd."directShippedAt" IS NULL
   AND sdi."remainderClosedAt" IS NULL
+  AND r."directShipmentId" IS NULL
   AND r.status <> 'AT_SUBCONTRACTOR'
   AND NOT EXISTS (
         SELECT 1 FROM subcontractor_receipt_items sri
@@ -480,6 +482,48 @@ async function seedStation(tx: Db, kind: "TAMBUR" | "PROCESS_QC" | "SUBCONTRACTO
   });
   return st.id;
 }
+/**
+ * Alt küme doğrudan sevk şekli: iki toplu sevkin YALNIZ bir topu müşteriye gitti,
+ * sevk `directShippedAt` almadı, top DSK'ya bağlandı. Diğer top fasonda kalır
+ * (sevk gerçekten açık — sonda yalnız sevk edilen kalemi sınar).
+ */
+async function seedSubsetDirectShip(tx: Db, shippedStatus: "AT_SUBCONTRACTOR" | "SUBCONTRACTOR_CONSUMED"): Promise<void> {
+  const itemId = await seedItem(tx);
+  const stationId = await seedStation(tx, "SUBCONTRACTOR");
+  const woId = await seedWo(tx, itemId, { status: "IN_PROGRESS" });
+  const step = await tx.workOrderStep.create({
+    data: { workOrderId: woId, stationId, stepSequence: 1, status: "ACTIVE" },
+  });
+  const batch = await tx.batch.create({ data: { batchNumber: tag("P"), workOrderId: woId } });
+  const sub = await tx.subcontractor.create({ data: { code: tag("FSN"), name: "Sonda Fason altküme" } });
+  const customer = await tx.customer.create({ data: { code: tag("MUS").slice(0, 32), name: "Sonda Müşteri altküme" } });
+  const shipped = await tx.roll.create({
+    data: {
+      barcode: tag("T"), itemId, initialQty: 60, currentQty: 60,
+      status: shippedStatus,
+      currentStepId: shippedStatus === "AT_SUBCONTRACTOR" ? step.id : null,
+    },
+  });
+  const kept = await tx.roll.create({
+    data: { barcode: tag("T"), itemId, initialQty: 40, currentQty: 40, status: "AT_SUBCONTRACTOR", currentStepId: step.id },
+  });
+  const dispatch = await tx.subcontractorDispatch.create({
+    data: {
+      dispatchNo: tag("SD"), workOrderId: woId, batchId: batch.id, stepId: step.id,
+      subcontractorId: sub.id, totalQty: 100,
+    },
+  });
+  await tx.subcontractorDispatchItem.create({ data: { dispatchId: dispatch.id, rollId: shipped.id, dispatchedQty: 60 } });
+  await tx.subcontractorDispatchItem.create({ data: { dispatchId: dispatch.id, rollId: kept.id, dispatchedQty: 40 } });
+  const ds = await tx.directShipment.create({
+    data: {
+      shipmentNo: tag("DSK"), dispatchId: dispatch.id, customerId: customer.id,
+      reason: "sonda alt küme", totalQty: 60, rollCount: 1,
+    },
+  });
+  await tx.roll.update({ where: { id: shipped.id }, data: { directShipmentId: ds.id } });
+}
+
 /** Varsayılan STOK+targetItem: §21'in aynasına UYUMLU (sonda kendi hedefi dışında bölüm doldurmasın). */
 async function seedWo(
   tx: Db,
@@ -706,6 +750,22 @@ const PROBES: Probe[] = [
       await tx.subcontractorDispatchItem.create({
         data: { dispatchId: dispatch.id, rollId: roll.id, dispatchedQty: 100 },
       });
+    },
+  },
+  {
+    id: "24b-altküme",
+    what: "Alt kümeyle doğrudan sevk edilmiş top (sevk damgasız) hâlâ AT_SUBCONTRACTOR",
+    expect: ["24b"],
+    build: async (tx) => {
+      await seedSubsetDirectShip(tx, "AT_SUBCONTRACTOR");
+    },
+  },
+  {
+    id: "24c-temiz",
+    what: "Meşru alt küme doğrudan sevk (top tüketildi, sevk damgasız) HİÇBİR bölümü yakmaz",
+    expect: [],
+    build: async (tx) => {
+      await seedSubsetDirectShip(tx, "SUBCONTRACTOR_CONSUMED");
     },
   },
   {
