@@ -28,8 +28,13 @@ import { join } from "node:path";
 
 const ROOT = join(__dirname, "..");
 
-function run(cmd: string, args: string[], opts: { env?: NodeJS.ProcessEnv } = {}) {
-  const r = spawnSync(cmd, args, { cwd: ROOT, encoding: "utf8", env: { ...process.env, ...opts.env } });
+function run(cmd: string, args: string[], opts: { env?: NodeJS.ProcessEnv; input?: string } = {}) {
+  const r = spawnSync(cmd, args, {
+    cwd: ROOT,
+    encoding: "utf8",
+    env: { ...process.env, ...opts.env },
+    ...(opts.input === undefined ? {} : { input: opts.input }),
+  });
   return { code: r.status ?? 1, out: (r.stdout ?? "") + (r.stderr ?? "") };
 }
 
@@ -46,6 +51,35 @@ function resolveDbUrl(): string {
   const url = new URL(m[1]);
   url.search = "";
   return url.toString();
+}
+
+/**
+ * `psql` ÇÖZÜCÜSÜ — host'ta yoksa Docker'daki Postgres'e düşer.
+ *
+ * Geliştirme makinesinde Postgres bir container'da koşuyor ve `psql` istemcisi
+ * host'a kurulu OLMAYABİLİR; o zaman bu betik "DB'ye bağlanılamadı" ile durur ve
+ * kullanıcı elle `docker exec` yazmak zorunda kalır (2026-09-11'de yaşandı,
+ * migration defterde "uygulandı" görünürken kolonlar yoktu).
+ *
+ * ⚠️ Container'ın İÇİNDE host `localhost:<yayınlanan port>` yoktur — URL
+ * `localhost:5432`ye yeniden yazılır ve SQL dosyası `-f` yerine STDIN'den
+ * verilir (dosya container'da bulunmaz).
+ */
+function resolvePsql(dbUrl: string): { cmd: string; pre: string[]; url: string; useStdin: boolean } | null {
+  if (run("which", ["psql"]).code === 0) {
+    return { cmd: "psql", pre: [], url: dbUrl, useStdin: false };
+  }
+  const hostPort = new URL(dbUrl).port || "5432";
+  const ps = run("docker", ["ps", "--format", "{{.Names}}\t{{.Ports}}"]);
+  if (ps.code !== 0) return null;
+  const line = ps.out.split("\n").find((l) => l.includes(`:${hostPort}->`));
+  if (!line) return null;
+  const container = line.split("\t")[0]?.trim();
+  if (!container) return null;
+  const inner = new URL(dbUrl);
+  inner.hostname = "localhost";
+  inner.port = "5432";
+  return { cmd: "docker", pre: ["exec", "-i", container, "psql"], url: inner.toString(), useStdin: true };
 }
 
 function main(): void {
@@ -78,7 +112,20 @@ function main(): void {
 
   // ── 2) Defter durumu — zaten resolve edilmişse ikinci kez yazılmaz ───────
   const dbUrl = resolveDbUrl();
-  const ledger = run("psql", [dbUrl, "-tAc", `SELECT count(*) FROM _prisma_migrations WHERE migration_name = '${name}'`]);
+  const psql = resolvePsql(dbUrl);
+  if (!psql) {
+    fail(
+      "psql bulunamadı — ne host'ta kurulu ne de DB portunu yayınlayan bir Docker container var.\n" +
+        "   Ya `psql` kur, ya DB container'ını çalıştır.",
+    );
+  }
+  if (psql.cmd === "docker") console.log(`✓ psql host'ta yok → Docker container üzerinden koşulacak`);
+  const ledger = run(psql.cmd, [
+    ...psql.pre,
+    psql.url,
+    "-tAc",
+    `SELECT count(*) FROM _prisma_migrations WHERE migration_name = '${name}'`,
+  ]);
   if (ledger.code !== 0) fail(`DB'ye bağlanılamadı:\n${ledger.out}`);
   const alreadyResolved = ledger.out.trim() === "1";
   console.log(alreadyResolved ? "⚠ defterde ZATEN kayıtlı (resolve atlanacak; SQL idempotentse sorun değil)" : "✓ defterde yok");
@@ -91,7 +138,11 @@ function main(): void {
   // ── 3) SQL'İ KOŞ — gerçek çıkış koduyla ──────────────────────────────────
   // ON_ERROR_STOP olmadan psql hatalı ifadeyi atlayıp devam eder ve exit 0
   // döner — "yarım uygulanmış ama başarılı görünen" migration üretir.
-  const exec = run("psql", [dbUrl, "-v", "ON_ERROR_STOP=1", "-f", sqlPath]);
+  const exec = psql.useStdin
+    ? run(psql.cmd, [...psql.pre, psql.url, "-v", "ON_ERROR_STOP=1"], {
+        input: readFileSync(sqlPath, "utf8"),
+      })
+    : run(psql.cmd, [...psql.pre, psql.url, "-v", "ON_ERROR_STOP=1", "-f", sqlPath]);
   console.log(exec.out.trim().split("\n").slice(-5).join("\n"));
   if (exec.code !== 0) {
     fail(`SQL BAŞARISIZ (exit=${exec.code}) — resolve KOŞULMADI, defter temiz. Hatayı düzeltip tekrar dene.`);

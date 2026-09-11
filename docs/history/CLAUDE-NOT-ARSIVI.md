@@ -5056,11 +5056,21 @@ invoice 3/3 · cheque 2/2 · schema_drift · identifier_language · tam paket
 Migration **var** (`20260911120000`, üç nullable kolon — canlıda tablo yeniden
 yazımı YOK). Yeni izin **yok**. APK **yok**.
 
-### Not — `apply-migration.ts` bu makinede koşmuyor
+### Not — migration aracı: teşhis ve DÜZELTME (aynı gün)
 
-Betik `psql`i host'ta arıyor; bu makinede `psql` yalnız Docker container'ında
-var. `prisma db execute` de sessizce yardım metni bastı ve **`migrate resolve`
-yine "uygulandı" işaretledi** — `CLAUDE.md`'nin uyardığı "resolve SQL'in
-koştuğunu doğrulamaz" tuzağı birebir yaşandı. SQL `docker exec … psql` ile
-koşuldu ve kolonlar/index'ler `information_schema`dan TEK TEK doğrulandı.
-Betiğin container'a düşen bir yolu olmalı — ayrı iş.
+İlk yazımda "`prisma db execute` sessizce yardım metni bastı" denmişti; **bu
+ifade YANLIŞTI ve düzeltildi.** Ölçüldü: Prisma 7'de `db execute` artık
+`--schema` KABUL ETMİYOR (datasource `prisma.config.ts`ten okunur) ve geçersiz
+bayrak görünce yardım basıp **çıkış kodu 1** veriyor — yani Prisma doğru
+davrandı, bozuk değil. Kusur komut zincirindeydi: `db execute` ile
+`migrate resolve` `&&` ile bağlanmamıştı, ikincisi birincinin hatasına rağmen
+koştu. `CLAUDE.md`'nin "resolve SQL'in koştuğunu doğrulamaz" uyarısı yine de
+tam isabet: defter "uygulandı" derken kolonlar yoktu, `information_schema`
+kontrolü yakaladı.
+
+Geriye kalan GERÇEK boşluk araçtaydı ve kapatıldı: `apply-migration.ts` `psql`i
+yalnız host'ta arıyordu, oysa geliştirme Postgres'i Docker'da koşuyor ve `psql`
+istemcisi host'a kurulu olmayabiliyor. Betiğe `resolvePsql()` eklendi — host'ta
+`psql` yoksa DB portunu yayınlayan container bulunur ve komut oradan koşar
+(URL container içi `localhost:5432`ye yeniden yazılır, SQL dosyası container'da
+bulunmadığı için `-f` yerine STDIN'den verilir).
