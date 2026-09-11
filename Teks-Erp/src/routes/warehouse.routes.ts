@@ -73,7 +73,7 @@ router.get(
  *         name: eventType
  *         schema:
  *           type: string
- *           enum: [ENTRY, TRANSFER, TRANSFER_REVERSAL, SHIPMENT, SHIPMENT_REVERSAL, RETURN, CANCEL]
+ *           enum: [ENTRY, TRANSFER, TRANSFER_REVERSAL, SHIPMENT, SHIPMENT_REVERSAL, RETURN, CANCEL, CANCEL_REVERSAL]
  *       - in: query
  *         name: rollId
  *         schema: { type: string, format: uuid }

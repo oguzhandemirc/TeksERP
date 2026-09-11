@@ -167,8 +167,8 @@ describe("kırpma sessiz değil", () => {
 
 describe("sözlük bütünlüğü", () => {
   it("backend enum'unun HER değeri etiketli (eksik değer ekranda ham enum basar)", () => {
-    // Körlük zemini: liste gerçekten yedi olayı taşıyor.
-    expect(WAREHOUSE_EVENT_TYPES.length).toBe(7);
+    // Körlük zemini: liste gerçekten sekiz olayı taşıyor.
+    expect(WAREHOUSE_EVENT_TYPES.length).toBe(8);
     for (const k of WAREHOUSE_EVENT_TYPES) {
       expect(WAREHOUSE_EVENT_META[k].label.trim().length).toBeGreaterThan(0);
       // `hint` gerçekten gerekiyor: ENTRY tek kapı değil, CANCEL iki olay taşıyor.
@@ -180,6 +180,7 @@ describe("sözlük bütünlüğü", () => {
   it("ters (storno) olaylar ayrı tonda okunur", () => {
     expect(eventBadgeClass("TRANSFER_REVERSAL")).not.toBe(eventBadgeClass("TRANSFER"));
     expect(eventBadgeClass("SHIPMENT_REVERSAL")).not.toBe(eventBadgeClass("SHIPMENT"));
+    expect(eventBadgeClass("CANCEL_REVERSAL")).not.toBe(eventBadgeClass("CANCEL"));
   });
 });
 

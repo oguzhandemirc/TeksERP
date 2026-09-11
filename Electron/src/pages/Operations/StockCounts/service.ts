@@ -38,6 +38,8 @@ export interface StockCountListRow {
   createdAt: string;
   completedAt: string | null;
   cancelledAt: string | null;
+  /** Storno damgası — dolu ise fark fişi geri alınmıştır (statü COMPLETED kalır). */
+  reversedAt: string | null;
   warehouse: { id: string; code: string; name: string };
   /** Satır sayısı — top + iplik TOPLAMI (kırılım detaydadır). */
   _count: { lines: number };
@@ -86,8 +88,33 @@ export interface StockCountDetail {
   completedAt: string | null;
   cancelledAt: string | null;
   cancelReason: string | null;
+  reversedAt: string | null;
+  reverseReason: string | null;
   warehouse: { id: string; code: string; name: string };
   lines: StockCountLine[];
+}
+
+/** Storno önizlemesi — backend `stock-count-reversal.service` planının aynası. */
+export interface StockCountReversalPlan {
+  countId: string;
+  countNo: string;
+  warehouseId: string;
+  blockers: string[];
+  rolls: Array<{
+    rollId: string;
+    barcode: string | null;
+    qty: DecimalLike;
+    targetStatus: string | null;
+    blocker: string | null;
+  }>;
+  yarn: Array<{
+    itemId: string;
+    itemName: string;
+    countNetKg: DecimalLike;
+    reversalKind: "ADJUST_IN" | "ADJUST_OUT";
+    balanceKg: DecimalLike;
+    balanceAfterKg: DecimalLike;
+  }>;
 }
 
 export interface StockCountCreated {
@@ -158,10 +185,25 @@ export async function markAllFound(countId: string) {
   return res.data as { data: { updated: number }; message?: string };
 }
 
-/** FARK FİŞİ — TERMİNAL. Geri alma yolu kendi ters kayıtlarıdır. */
+/** FARK FİŞİ. Geri alma yolu tek belgede stornodur (`reverseStockCount`). */
 export async function completeStockCount(countId: string) {
   const res = await apiClient.post(`/api/stock-counts/${countId}/complete`, {});
   return res.data as { data: StockCountCompleted; message?: string };
+}
+
+/** Storno önizlemesi — dönecek her top, geri alınacak her iplik farkı, engeller. */
+export async function getStockCountReversePreview(countId: string): Promise<StockCountReversalPlan> {
+  const res = await apiClient.get(`/api/stock-counts/${countId}/reverse-preview`);
+  return res.data.data as StockCountReversalPlan;
+}
+
+/** Tamamlanmış sayımın fark fişini ters kayıtla geri alır (gerekçe zorunlu, ≥3). */
+export async function reverseStockCount(countId: string, reason: string) {
+  const res = await apiClient.post(`/api/stock-counts/${countId}/reverse`, { reason });
+  return res.data as {
+    data: { id: string; countNo: string; restoredRolls: number; yarnReversals: number };
+    message?: string;
+  };
 }
 
 /** Taslak sayımı iptal eder (satırlar durur, belge doğmamıştır). */

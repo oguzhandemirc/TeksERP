@@ -26,6 +26,7 @@ Durum tabloları **"şu an ne"**yi tutar; defterler **"ne oldu"**yu tutar ve "ne
 - **[ÇEKİRDEK]** Defter İŞ VERİSİDİR: arşivlenmez, budanmaz. Büyüme index/partition ile karşılanır, satır silerek değil. <sub>(arşiv:2026-09-10)</sub>
 - **[ÇEKİRDEK]** Çalışma oturumu (`WorkSession`) geçmişi hiçbir yoldan silinmez; oturumu olan istasyon/makine kalıcı silinemez (409 `workSessionCount`), pasife alınır. · bekçi: `test_work_session_history_guard.ts` <sub>(arşiv:2026-09-11)</sub>
 - **[ÇEKİRDEK]** Sayaç-bazlı düşüm belgesi ("N adet düş") etkilediği kayıtları KALEM satırına yazar ve stornosu kalemden okur; kalemsiz düşüm geri alınamaz (409), geçmişi audit'ten uydurulmaz. · bekçi: `test_swatch_stock_reduction_reversal.ts` §1/§6 <sub>(arşiv:2026-09-11)</sub>
+- **[ÇEKİRDEK]** Tamamlanmış sayımın fark fişi TEK BELGEDE stornolanır: yalnız deponun en son sayımı (LIFO), sayımın düşürdüğü her top hâlâ onun iptaliyle durmalı (hep-ya-hiç); depo defterine `CANCEL_REVERSAL`, sapmaya `reversedAt`, iplikte net ters ADJUST yazılır, sayım satırı değişmez. · bekçi: `test_stock_count_reversal.ts` <sub>(arşiv:2026-09-11)</sub>
 - **[ÇEKİRDEK]** Çekin her ileri olayının tipli stornosu vardır (`CANCELLED` hariç her terminalden tek çıkış): ters cari satır orijinaline `reversesTxnId` ile bağlanır, bugüne yazılır, durum en yeni ileri olayın (`createdAt`) `fromStatus`una döner; olay/satır bulunamazsa 409. · bekçi: `test_cheque_reversal.ts` <sub>(arşiv:2026-09-11)</sub>
 
 ### Yasaklar
@@ -65,7 +66,7 @@ Eski dört sınıf 2026-09-10'da ikiye indi. Diğer her "sil" bir DURUM GEÇİŞ
 
 Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, kural satırına dönüşür.
 
-- **`WarehouseMovement` GERÇEK STOK DEFTERİNE dönüşecek.** `warehouseId` atayan HER yol deftere bağlanır — statü terfisi (`STOCK → WAREHOUSE`) dahil; bugün terfi bilinçli olarak satır yazmıyor ve defter yalnız dışarıdan gelen malı görüyor. Hedef: Σhareket ↔ canlı stok mutabakatı ve as-of kesit. Ön koşul: `CANCEL_REVERSAL` + `RETURN_REVERSAL` ters yolları.
+- **`WarehouseMovement` GERÇEK STOK DEFTERİNE dönüşecek.** `warehouseId` atayan HER yol deftere bağlanır — statü terfisi (`STOCK → WAREHOUSE`) dahil; bugün terfi bilinçli olarak satır yazmıyor ve defter yalnız dışarıdan gelen malı görüyor. Hedef: Σhareket ↔ canlı stok mutabakatı ve as-of kesit. Ön koşul: `RETURN_REVERSAL` ters yolu (`CANCEL_REVERSAL` 2026-09-11'de sayım stornosuyla doğdu; elle "iptali geri al" henüz yazmıyor).
 - **`RollProperty` / `WorkOrderTargetProperty` ③a'dır** (yukarı bak) — 7 site sil-yazdan versiyonlamaya geçecek.
 
 ## Mevcut defter envanteri (2026-09-10 ölçümü)
@@ -74,7 +75,7 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 
 | Defter | Kapsam | Append-only | Ters yol |
 |---|---|---|---|
-| `WarehouseMovement` `schema.prisma:6099` | depo giriş/çıkış, 7 olay | ✅ | TRANSFER ✅ · SHIPMENT ✅ · **RETURN ❌** · **CANCEL ❌** |
+| `WarehouseMovement` | depo giriş/çıkış, 8 olay | ✅ | TRANSFER ✅ · SHIPMENT ✅ · **RETURN ❌** · CANCEL ⚠️ yalnız sayım stornosu (`CANCEL_REVERSAL`, 2026-09-11) — elle "iptali geri al" hâlâ yazmıyor |
 | `CariTransaction` `:6611` | cari borç/alacak, 11 kaynak | ✅ | ✅ `reversesTxnId` |
 | `ChequeEvent` `:7208` | çek durum defteri, 14 olay | ✅ | ✅ `*_CANCEL` (2026-09-11) — CANCEL'ın tersi yok (kendisi storno) |
 | `CashTransaction` `:6898` | kasa/banka | yarı (`status: CANCELLED`) | ✅ |
@@ -103,6 +104,7 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 - `scripts/test_roll_movement_revoke.ts` — hareket damgası, partial unique, geri alma sonrası adım durumu (recompute), AST+tip taraması (§6).
 - `scripts/test_roll_operation_revoke.ts` — operasyon damgası, partial unique, upsert tuzağı (§8), AST+tip taraması (§7).
 - `scripts/test_cheque_reversal.ts` — çek ters yolları: bağ (`reversesTxnId`), bugüne yazım, `createdAt` kronolojisi, kasa/cari mutabakatı, tek kaynak tripwire.
+- `scripts/test_stock_count_reversal.ts` — sayım stornosu: ileri bağlar, CANCEL durur + CANCEL_REVERSAL, sapma damgası, iplik net ters, LIFO, hep-ya-hiç.
 - `scripts/test_swatch_stock_reduction_reversal.ts` — kartela düşüm stornosu: kalem = iptal kümesi, satır değişmez + ters damga, çift storno 409, ölü kabulün kartelası dirilmez, kalemsiz eski düşüm 409.
 - `scripts/test_work_session_history_guard.ts` — oturum geçmişi silinmez (istasyon/makine 409 + önizleme dökümü + AST: `src/`de `workSession.delete*` ve ham `DELETE work_sessions` yok). Panel metni: `Electron/src/pages/Stations/machineDeleteDescription.test.ts`.
 - `scripts/test_warehouse_ledger.ts` ve `test_warehouse_movements.ts` yalnız OKUMA/süzme yüzeyini ölçüyor, "hangi olay satır yazmalı" invariant'ını DEĞİL.

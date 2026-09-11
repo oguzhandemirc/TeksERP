@@ -26,7 +26,8 @@ export type WarehouseEventType =
   | "SHIPMENT"
   | "SHIPMENT_REVERSAL"
   | "RETURN"
-  | "CANCEL";
+  | "CANCEL"
+  | "CANCEL_REVERSAL";
 
 /** Satırın, BAKAN DEPOYA göre yönü. Depo süzgeci yoksa `null` (yön yok). */
 export type MovementDirection = "IN" | "OUT" | null;
@@ -116,6 +117,11 @@ export const WAREHOUSE_EVENT_META: Record<WarehouseEventType, EventMeta> = {
     hint: "Top iptal edildi ya da fireye ayrıldı — depodan düştü.",
     reversal: false,
   },
+  CANCEL_REVERSAL: {
+    label: "İptal stornosu",
+    hint: "Kayıttan düşme geri alındı (sayım stornosu) — top depoya döndü.",
+    reversal: true,
+  },
 };
 
 export const WAREHOUSE_EVENT_TYPES: WarehouseEventType[] = [
@@ -126,11 +132,12 @@ export const WAREHOUSE_EVENT_TYPES: WarehouseEventType[] = [
   "SHIPMENT_REVERSAL",
   "RETURN",
   "CANCEL",
+  "CANCEL_REVERSAL",
 ];
 
 /** Olay rozetinin tonu — ters (storno) olaylar ayrı okunmalı. */
 export function eventBadgeClass(kind: WarehouseEventType): string {
-  if (WAREHOUSE_EVENT_META[kind].reversal) {
+  if (WAREHOUSE_EVENT_META[kind]?.reversal) {
     return "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200";
   }
   return "bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-slate-100";

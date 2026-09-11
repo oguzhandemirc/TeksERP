@@ -35,6 +35,8 @@ export interface WarehouseLedgerEntry {
   /** Top bu harekete bir çuvalın ÜYESİ olarak girdiyse çuvalın kimliği —
    *  transfer iptalinin "top hâlâ AYNI çuvalda mı" guard'ı buradan okur. */
   sackId?: string | null;
+  /** Sayım fark fişi / stornosu — kaynak belge bağı. */
+  stockCountId?: string | null;
   userId?: string | null;
   notes?: string | null;
 }
@@ -61,6 +63,7 @@ export async function writeWarehouseMovement(tx: Tx, entry: WarehouseLedgerEntry
       shipmentId: entry.shipmentId ?? null,
       rollReturnId: entry.rollReturnId ?? null,
       sackId: entry.sackId ?? null,
+      stockCountId: entry.stockCountId ?? null,
       userId: entry.userId ?? null,
       notes: entry.notes ?? null,
     },
@@ -93,6 +96,7 @@ export async function writeWarehouseMovements(tx: Tx, entries: WarehouseLedgerEn
       // bekçi (§1d) ilk koşuda yakaladı. Tekil writeWarehouseMovement ile bu
       // map'i birlikte güncelle.
       sackId: e.sackId ?? null,
+      stockCountId: e.stockCountId ?? null,
       userId: e.userId ?? null,
       notes: e.notes ?? null,
     }));

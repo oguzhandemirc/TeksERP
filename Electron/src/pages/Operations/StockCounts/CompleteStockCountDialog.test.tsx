@@ -83,6 +83,8 @@ function detail(lines: StockCountLine[], status: StockCountDetail["status"] = "D
     completedAt: null,
     cancelledAt: null,
     cancelReason: null,
+    reversedAt: null,
+    reverseReason: null,
     warehouse: { id: "w1", code: "MRK", name: "Merkez" },
     lines,
   };

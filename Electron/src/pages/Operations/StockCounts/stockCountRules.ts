@@ -524,7 +524,7 @@ export function cancelBlockReason(status: StockCountStatus): string | null {
   if (status === "COMPLETED") {
     return (
       "Tamamlanmış sayım iptal edilemez: fark fişi iki deftere işledi. " +
-      "Yanlış düşülen top varsa iptalini geri alın, iplik farkı için ters düzeltme girin."
+      "Farkı geri almak için sayımı stornolayın."
     );
   }
   if (status === "CANCELLED") return "Bu sayım zaten iptal edilmiş.";

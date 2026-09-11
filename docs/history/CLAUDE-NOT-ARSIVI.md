@@ -5508,3 +5508,101 @@ kartelaların `createdAt`i eşit, sıra belirsiz — beklenti düzeltildi (kod d
 Migration **var** (`20260912090000`: üç nullable kolon + yeni tablo). İzin
 **yok** (mevcut `kartela:write`). APK **yok**; panel sürümü gerekir (geri alma
 düğmesi). Eski panel: yeni uçları çağırmaz, davranışı değişmez.
+
+---
+
+## 2026-09-11 — Sayım stornosu: tamamlanmış sayım artık terminal değil [ÇEKİRDEK]
+
+Defter doktrini kalan borç ②. `StockCount` COMPLETED terminaldi; yanlış
+"bulunamadı" işaretiyle tamamlanan sayım N topu iptal ediyordu ve tek çıkış
+top-top `restoreCancelledRoll`du — o yol da depo defterine (`CANCEL` karşılığı) ve
+sapma defterine (`RECORD_CORRECTION`) ters satır YAZMIYOR. Fabrika dev DB'sinde
+sayım 0 satır (özellik sahada kullanılmamış) — düzeltme önleyici.
+
+### Kararlar ve ölçüt (① sektör ② ölçek ③ mevcut desen)
+
+- **Tek belgede storno (sektör):** SAP MM'de MI07 fark postalaması bir malzeme
+  belgesidir, stornosu (MBST) aynı belgeye bağlı ters harekettir. Sayım
+  satırları ve ileri defter satırları DEĞİŞMEZ.
+- **Belge DAMGASI, yeni statü DEĞİL (desen):** `reversedAt`/`reversedById`/
+  `reverseReason`; `status` COMPLETED kalır ("tamamlandı" gerçeği değişmez).
+  Enum değeri eklemek panel/rapor aynalarına dokunurdu; storno bir kez yapılır,
+  tek damga çevrimi ezmez.
+- **Depo defteri: `WarehouseEventType.CANCEL_REVERSAL` (desen):** `TRANSFER_REVERSAL`
+  / `SHIPMENT_REVERSAL` emsali. Satır: `toWarehouseId` = sayımın deposu,
+  `fromWarehouseId` NULL, `qty` POZİTİF = sayımın sapma satırındaki metraj (CANCEL
+  satırıyla aynı), `stockCountId` = sayım. Yön sunucuda from/to'dan türer → GİREN.
+  Enum ayrı tek-ifadeli migration (55P04).
+- **Kaynak belge bağı:** `WarehouseMovement.stockCountId` (FK RESTRICT) açıldı;
+  `complete` artık CANCEL satırına `stockCountId`, sapma satırına
+  `sourceRefId = count.id` yazar. Eski satırlar doldurulmaz; storno bağsız eski
+  sapmayı `source=STOCK_COUNT` + iptal metniyle bulur.
+- **Sapma defteri:** ters satır değil `reversedAt`/`reversedById` damgası
+  (`roll_variances_qty_positive` CHECK — tambur-undo emsali).
+- **İplik:** sayımın `stockCountId`'li hareketlerinin kalem başına NET'i tersine
+  ADJUST (mal kabul stornosunun `reverseGoodsReceiptYarnTx` deseni); eksi bakiye
+  REDDEDİLMEZ, önizleme uyarır (aynı emsalin gerekçesi: reddetmek defteri değil
+  ekranı düzeltir). Kapalı iplik modülü önizlemede engel, motorda 403.
+- **LIFO (ölçek + güvenlik):** yalnız deponun EN SON tamamlanmış, stornolanmamış
+  sayımı geri alınır. Sonraki sayım fiziksel gerçeği doğruladı; eskisini geri
+  almak onun iplik bakiyesini yalanlardı. Fason LIFO iptal emsali.
+- **HEP-YA-HİÇ:** sayımın düşürdüğü her top hâlâ BU sayımın iptaliyle
+  (`stockCountCancelReason(countNo)` tek kaynak metni) ve aynı depoda durmalı.
+  Arada tek tek geri alınmış top varsa storno 409 `STOCK_COUNT_REVERSAL_BLOCKED`
+  ve önizleme o topu gerekçesiyle listeler. Kısmi storno defteri iki belgeye
+  bölerdi; elle geri almanın defter deliği ayrı bulgudur (aşağıda).
+- **Kilit:** tx'in ilk ifadesi sayımın ve deponun DRAFT sayımlarının satır kilidi
+  (`FOR UPDATE ORDER BY id`); DRAFT tamamlaması aynı satırı claim ettiği için
+  storno ile sıralanır, sonraki taslak tamamlaması değişen iplik bakiyesini CAS'ıyla
+  kapsam dışına düşürür.
+- **Belge:** tutanak `voidForSource` ile VOIDED (`Storno: <gerekçe>`); builder
+  `voidInfo`'yu `reversedAt`'ten türetir (lazy-init aynı filigranı basar).
+- **İzin:** tamamlamayla aynı çift (`roll:manual-adjust` VE `yarn:write`) — SoD
+  izni; önizleme `roll:manual-adjust`. Yeni izin kodu yok.
+
+### Kod çapaları
+
+- Migration'lar: `20260912100000_warehouse_event_cancel_reversal` (tek ifade) ·
+  `20260912100100_stock_count_reversal` · `20260912100200_warehouse_movement_stock_count`
+- `src/services/stock-count-reversal.service.ts` — `preview` · `reverse`
+  (`claimAndPlanTx` → `reverseTx`); plan önizleme ve stornoda AYNI fonksiyon
+- `src/services/stock-count.service.ts` — `stockCountCancelReason` ·
+  `stockCountVoidReason` · `complete` bağları · builder `voidInfo`
+- `src/routes/stock-count.routes.ts` — `GET /:id/reverse-preview` · `POST /:id/reverse`
+- Panel: `ReverseStockCountDialog.tsx` (her top + iplik farkı + engeller),
+  detayda "Stornola", listede/başlıkta "Stornolandı" rozeti; depo hareketleri
+  aynası + bilinmeyen olay tipinde çökmeyen yedek etiket.
+
+### Bekçi
+
+`scripts/test_stock_count_reversal.ts` — 26 kontrol (§1 ileri bağlar · §2
+önizleme · §3 storno: raf, CANCEL durur + CANCEL_REVERSAL, sapma durur + damga,
+iplik net ters, satırlar değişmez, COMPLETED + damga, VOID · §4 çift storno · §5
+LIFO + bağsız eski sapma · §6 hep-ya-hiç · §7 kaynak). `test_iplik_regime_gate`
+`DEFTER_YAZARLARI`na storno servisi gerekçesiyle eklendi; `test_stock_count`
+temizliği yeni FK sırasına göre.
+
+**NEGATİF SONDA (beşi de kırmızı, sha256 eşit geri yüklendi):** (a) LIFO
+kontrolü yok → §5a/§5b · (b) top engel yüklemi yok → §6a/§6d · (c) sapma damgası
+yok → §3d · (d) CANCEL_REVERSAL yazımı yok → §3c · (e) `complete` `sourceRefId`
+yok → §1b.
+
+Paket (`tekserp_ea_test`, fixture'lı): 473/479; kırmızılar ortam — module_flag_off
+/ module_grandfathering / module_profile (taze DB modül satırı), order_cancellation
+(sıra bağımlı), scan_code_case (küçük tabloda Seq Scan) — ve iplik_regime_gate
+(bu turda düzeltildi).
+
+### Açık bulgu — elle "iptali geri al" defter yazmıyor
+
+`inventory.restoreCancelledRoll` topu rafına döndürür ama softDelete'in yazdığı
+`CANCEL` satırının karşılığını ve sapma damgasını YAZMAZ; tx de açmaz. Bugün kapsamı
+dar ("hiç yaşamamış top") olduğu için etki küçük, ama `WarehouseMovement` stok
+defterine dönüşürken (6e) bu yol `CANCEL_REVERSAL` yazmak ZORUNDA.
+
+### Üç kapı
+
+Migration **var** (üç dosya; enum değeri geri alınamaz). İzin **yok**. APK **yok**.
+Panel sürümü gerekir (Stornola). ⚠️ Eski panel `CANCEL_REVERSAL` satırı gördüğü
+depo hareketleri ekranında çöker (`WAREHOUSE_EVENT_META[kind]` undefined); satır
+yalnız yeni paneldeki storno ile doğar ve fabrikada sayım yok → `minVersion`
+yükseltilmedi, panel backend'le birlikte yayınlanmalı.

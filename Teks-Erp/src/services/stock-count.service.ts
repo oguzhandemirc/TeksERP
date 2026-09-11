@@ -415,11 +415,10 @@ export class StockCountService {
    * Alternatifi (eski fotoğrafa göre körlemesine iptal) SEVK EDİLMİŞ MALI
    * kayıttan düşmek olurdu — sessiz, kalıcı ve geri alınması pahalı.
    *
-   * ⚠️ COMPLETED TERMİNALDİR (geri alma yok, `cancel` yalnız DRAFT'ta çalışır).
-   * Yanlış tamamlanmış bir sayımın düzeltme yolu kendi ters kayıtlarıdır:
-   * topta "iptali geri al" (`inventory.restoreCancelledRoll`), iplikte ters
-   * ADJUST. İki defteri sayım belgesi üzerinden ikinci kez oynatan bir "geri
-   * al" ucu, tam da bu iki yolun üstüne üçüncü bir yol açardı.
+   * ⚠️ `cancel` yalnız DRAFT'ta çalışır; tamamlanmış sayımın fark fişi TEK
+   * BELGEDE stornolanır (`stock-count-reversal.service`). Storno ileri satırları
+   * bulmak için bu fonksiyonun yazdığı bağlara yaslanır: sapma `sourceRefId`,
+   * depo satırı `stockCountId`, top iptal metni `stockCountCancelReason`.
    */
   async complete(
     stockCountId: string,
@@ -550,7 +549,7 @@ export class StockCountService {
             preCancelStatus: roll.status,
             cancelledAt: new Date(),
             cancelledById: userId ?? null,
-            cancelReason: `${count.countNo} sayımında bulunamadı`,
+            cancelReason: stockCountCancelReason(count.countNo),
             // ⚠️ `warehouseId` BİLEREK temizlenmez ("en son hangi depodaydı"
             // izi + iptal geri alınırsa rafına döner — softDelete ile aynı).
           },
@@ -621,6 +620,7 @@ export class StockCountService {
             eventType: WarehouseEventType.CANCEL,
             qty: a.qty,
             fromWarehouseId: count.warehouseId,
+            stockCountId: count.id,
             userId: userId ?? null,
             notes: `${count.countNo} sayım farkı`,
           })),
@@ -635,7 +635,8 @@ export class StockCountService {
             qty: a.qty,
             source: VARIANCE_SOURCES.STOCK_COUNT,
             reasonCode: STOCK_COUNT_REASON_CODE,
-            reasonText: `${count.countNo} sayımında bulunamadı`,
+            reasonText: stockCountCancelReason(count.countNo),
+            sourceRefId: count.id,
             userId: userId ?? null,
           })),
         );
@@ -806,8 +807,8 @@ export class StockCountService {
    * iptalden sonra da gerekir) ve belge DOĞMAMIŞTIR — donmuş kâğıt yalnız
    * tamamlanmış sayımda vardır.
    *
-   * ⚠️ TAMAMLANMIŞ sayım iptal EDİLEMEZ: fark fişi iki deftere yazdı ve o
-   * yazımların geri alma yolu kendi ters kayıtlarıdır (`complete` notuna bak).
+   * ⚠️ TAMAMLANMIŞ sayım iptal EDİLMEZ, STORNOLANIR: fark fişi iki deftere
+   * yazdı ve geri alma ters kayıttır (`stock-count-reversal.service`).
    */
   async cancel(
     stockCountId: string,
@@ -833,7 +834,7 @@ export class StockCountService {
         if (cur.status === StockCountStatus.COMPLETED) {
           throw AppError.conflict(
             `${cur.countNo} tamamlanmış — fark fişi deftere işledi ve iptal edilemez. ` +
-              "Yanlış düşülen top varsa iptalini geri alın, iplik farkı için ters düzeltme girin.",
+              "Farkı geri almak için sayımı stornolayın.",
           );
         }
         throw AppError.conflict(`${cur.countNo} zaten iptal edilmiş.`);
@@ -897,6 +898,7 @@ export class StockCountService {
           createdAt: true,
           completedAt: true,
           cancelledAt: true,
+          reversedAt: true,
           warehouse: { select: { id: true, code: true, name: true } },
           _count: { select: { lines: true } },
         },
@@ -925,6 +927,8 @@ export class StockCountService {
         completedAt: true,
         cancelledAt: true,
         cancelReason: true,
+        reversedAt: true,
+        reverseReason: true,
         warehouse: { select: { id: true, code: true, name: true } },
         lines: {
           select: {
@@ -1021,6 +1025,19 @@ function toQty(raw: number | string): Prisma.Decimal {
   return dec;
 }
 
+/**
+ * Sayımın düşürdüğü topun iptal metni — TEK KAYNAK. Storno "bu topu hâlâ BU sayım
+ * mı iptal etti" sorusunu bu metinle cevaplar (topta tipli sayım bağı yok).
+ */
+export function stockCountCancelReason(countNo: string): string {
+  return `${countNo} sayımında bulunamadı`;
+}
+
+/** Stornolanan sayım tutanağının VOID gerekçesi — storno ve lazy-init aynı metni basar. */
+export function stockCountVoidReason(reverseReason: string | null): string {
+  return `Storno: ${reverseReason ?? ""}`.trim().slice(0, 300);
+}
+
 function statusLabel(s: StockCountStatus): string {
   switch (s) {
     case StockCountStatus.DRAFT:
@@ -1104,7 +1121,7 @@ async function buildStockCountDoc(
   db: PrintedDocDb,
   sourceId: string,
   allowDraft: boolean,
-): Promise<{ documentNo: string; doc: Record<string, unknown>; voidInfo?: null } | null> {
+): Promise<{ documentNo: string; doc: Record<string, unknown>; voidInfo: { reason: string | null; at: Date } | null } | null> {
   const count = await db.stockCount.findUnique({
     where: { id: sourceId },
     select: {
@@ -1114,6 +1131,8 @@ async function buildStockCountDoc(
       notes: true,
       createdAt: true,
       completedAt: true,
+      reversedAt: true,
+      reverseReason: true,
       createdById: true,
       completedById: true,
       warehouse: { select: { code: true, name: true } },
@@ -1289,8 +1308,9 @@ async function buildStockCountDoc(
   return {
     documentNo: count.countNo,
     doc: doc as unknown as Record<string, unknown>,
-    // Sayım belgesi VOID olmaz: iptal yalnız DRAFT'ta mümkündür ve o aşamada
-    // donmuş belge HİÇ doğmamıştır.
-    voidInfo: null,
+    // İptal yalnız DRAFT'ta (belge doğmamış); VOID yalnız stornodan gelir.
+    voidInfo: count.reversedAt
+      ? { reason: stockCountVoidReason(count.reverseReason), at: count.reversedAt }
+      : null,
   };
 }

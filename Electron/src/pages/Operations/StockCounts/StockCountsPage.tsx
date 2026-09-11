@@ -206,6 +206,11 @@ export function StockCountsPage() {
                         <td className="p-3 text-right tabular-nums">{r._count.lines}</td>
                         <td className="p-3">
                           <Badge variant={STATUS_BADGE[r.status]}>{STATUS_LABEL[r.status]}</Badge>
+                          {r.reversedAt && (
+                            <Badge variant="outline" className="ml-1">
+                              Stornolandı
+                            </Badge>
+                          )}
                         </td>
                         <td className="p-3 text-xs text-muted-foreground">
                           {closedAt ? format(new Date(closedAt), "dd MMM yyyy HH:mm", { locale: tr }) : "—"}

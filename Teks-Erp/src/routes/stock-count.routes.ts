@@ -36,6 +36,7 @@ import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireTicaretEnabled } from "../middlewares/module.middleware";
 import { stockCountService } from "../services/stock-count.service";
+import { stockCountReversalService } from "../services/stock-count-reversal.service";
 import { resolveRangeEnd, resolveRangeStart } from "../constants/time";
 
 const router = Router();
@@ -242,7 +243,7 @@ router.post(
  *       storno + sapma defteri; FİRE DEĞİL), sayılan iplik kalemlerinde fark
  *       ADJUST_IN/ADJUST_OUT olarak yazılır ve belge aynı tx'te donar.
  *       Bu sırada taşınmış/sevk edilmiş satırlar İPTAL EDİLMEZ, "kapsam dışı"
- *       olarak sebebiyle belgeye yazılır. TERMİNALDİR — geri alınamaz.
+ *       olarak sebebiyle belgeye yazılır. Geri alma: `POST /{id}/reverse` (storno).
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Tamamlandı (fark fişi yazıldı, belge v1 ACTIVE) }
@@ -270,8 +271,8 @@ router.post(
  *     tags: [StockCount]
  *     summary: Taslak sayımı iptal et (satırlar durur, belge doğmamıştır)
  *     description: >
- *       TAMAMLANMIŞ sayım iptal EDİLEMEZ (409): fark fişi iki deftere işledi ve
- *       geri alma yolu kendi ters kayıtlarıdır.
+ *       TAMAMLANMIŞ sayım iptal EDİLEMEZ (409): fark fişi iki deftere işledi;
+ *       geri alma yolu stornodur (`POST /{id}/reverse`).
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: İptal edildi }
@@ -288,5 +289,56 @@ router.post("/:id/cancel", requirePermission("warehouse:transfer"), async (req, 
     next(e);
   }
 });
+
+/**
+ * @openapi
+ * /api/stock-counts/{id}/reverse-preview:
+ *   get:
+ *     tags: [StockCount]
+ *     summary: Storno önizlemesi — rafına dönecek her top, geri alınacak her iplik farkı ve engeller
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Plan (blockers boşsa storno uygulanabilir) }
+ *       404: { description: Bulunamadı }
+ */
+router.get("/:id/reverse-preview", requirePermission("roll:manual-adjust"), async (req, res, next) => {
+  try {
+    res.json(await stockCountReversalService.preview(req.params.id as string));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/stock-counts/{id}/reverse:
+ *   post:
+ *     tags: [StockCount]
+ *     summary: Tamamlanmış sayımı stornola — fark fişi tek belgede ters kayıtla geri alınır
+ *     description: >
+ *       Düşülen toplar rafına döner (depo defterine CANCEL_REVERSAL, sapma satırına
+ *       reversedAt), iplik farkı net ters ADJUST ile kapanır, tutanak VOID olur.
+ *       Yalnız deponun EN SON tamamlanmış sayımı; sayımın düşürdüğü her top hâlâ
+ *       onun iptaliyle durmalı (hep-ya-hiç).
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Stornolandı }
+ *       400: { description: Gerekçe eksik }
+ *       409: { description: Engel var (details.code STOCK_COUNT_REVERSAL_BLOCKED) ya da zaten stornolanmış }
+ */
+router.post(
+  "/:id/reverse",
+  // Tamamlamayla aynı çift: storno aynı iki deftere ters yazar.
+  requirePermission("roll:manual-adjust"),
+  requirePermission("yarn:write"),
+  async (req, res, next) => {
+    try {
+      const { reason } = z.object({ reason: z.string().trim().min(3).max(300) }).strict().parse(req.body ?? {});
+      res.json(await stockCountReversalService.reverse(req.params.id as string, reason, req.user?.userId));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 
 export default router;

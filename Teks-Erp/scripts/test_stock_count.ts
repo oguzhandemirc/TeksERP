@@ -925,6 +925,7 @@ main()
       // step → wo → station → yarnStock/yarnMovement → item → warehouse.
       if (countIds.length) {
         await prisma.yarnMovement.deleteMany({ where: { stockCountId: { in: countIds } } });
+        await prisma.warehouseMovement.deleteMany({ where: { stockCountId: { in: countIds } } });
         await prisma.printedDocument.deleteMany({ where: { sourceId: { in: countIds } } });
         await prisma.stockCountLine.deleteMany({ where: { stockCountId: { in: countIds } } });
         await prisma.stockCount.deleteMany({ where: { id: { in: countIds } } });
@@ -941,6 +942,7 @@ main()
         const ids = leaked.map((l) => l.id);
         if (ids.length) {
           await prisma.yarnMovement.deleteMany({ where: { stockCountId: { in: ids } } });
+          await prisma.warehouseMovement.deleteMany({ where: { stockCountId: { in: ids } } });
           await prisma.printedDocument.deleteMany({ where: { sourceId: { in: ids } } });
           await prisma.stockCountLine.deleteMany({ where: { stockCountId: { in: ids } } });
           await prisma.stockCount.deleteMany({ where: { id: { in: ids } } });

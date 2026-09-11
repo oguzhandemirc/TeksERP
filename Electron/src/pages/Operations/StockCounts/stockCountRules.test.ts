@@ -411,7 +411,7 @@ describe("iptal engeli", () => {
   it("tamamlanmış sayım iptal EDİLEMEZ ve çıkış yolu söylenir", () => {
     const r = cancelBlockReason("COMPLETED");
     expect(r).toContain("iptal edilemez");
-    expect(r).toContain("ters düzeltme");
+    expect(r).toContain("stornolayın");
   });
   it("zaten iptal edilmiş sayımda tekrar denenmez", () => {
     expect(cancelBlockReason("CANCELLED")).toContain("zaten iptal");

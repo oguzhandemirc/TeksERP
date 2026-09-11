@@ -78,6 +78,8 @@ function detail(status: StockCountDetail["status"] = "DRAFT"): StockCountDetail 
     completedAt: status === "COMPLETED" ? "2026-08-15T12:00:00Z" : null,
     cancelledAt: null,
     cancelReason: null,
+    reversedAt: null,
+    reverseReason: null,
     warehouse: { id: "w1", code: "MRK", name: "Merkez" },
     lines: [
       {

@@ -193,7 +193,8 @@ export function WarehouseMovementsSheet({ warehouse, onClose }: Props) {
                   </thead>
                   <tbody>
                     {rows.map((m) => {
-                      const meta = WAREHOUSE_EVENT_META[m.eventType];
+                      // Bilinmeyen olay (backend önde) ham adıyla basılır; ekran çökmez.
+                      const meta = WAREHOUSE_EVENT_META[m.eventType] ?? { label: m.eventType, hint: "", reversal: false };
                       const dir = directionMeta(m.direction);
                       return (
                         <tr key={m.id} className="border-t align-top">

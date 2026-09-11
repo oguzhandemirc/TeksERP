@@ -2,7 +2,7 @@
 
 > Üretilmiş (anlama turu 2026-09-05, +10 bekçi 2026-09-06/07; 467 backend bekçisi + 296 istemci testi — Electron 211, mobil 85). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı; 455 dosya, **~6,5 dakika** — 369 sn koşum + 28 sn tip geçidi, ölçüldü 2026-09-05 — 'saatler sürer' cümlesi YANLIŞTI, `docs/standart/TEST-VE-DERLEME.md` [TD-02]). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
 
-Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `diger` (91), `sevkiyat` (87), `etiket` (83), `finans` (81), `siparis` (72), `modul-bayrak` (68), `belge` (65), `ayar` (58), `cuval` (59), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (40), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (29), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (12), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
+Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `diger` (91), `sevkiyat` (87), `etiket` (83), `finans` (81), `siparis` (72), `modul-bayrak` (68), `belge` (65), `ayar` (58), `cuval` (59), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (41), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (30), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (12), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
 
 
 ## yetki-izin (98)
@@ -1282,7 +1282,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `mobil/src/services/tambur.service.test.ts` | Kesim çağrılarında etiket NİYETİ (targetCustomerId / targetOrderLineId) POST gövdesine geçer — ulaşmazsa kesimde lastLabelSnapshot seed edilemez ('eti |  |  |  |
 | `Teks-Erp/scripts/test_roll_movement_revoke.ts` | Top hareketinin geri alınırken SİLİNMEDİĞİNİ damgalandığını; partial unique sayesinde geri alınmış AÇIK satır dururken aynı (top, adım) için yeni açık hareket yazılabildiğini, iki AKTİF açık hareketin reddedildiğini; kurşun yeniden açma ve geri manuel taşıma sonrası `recomputeStepStatus`un silme davranışıyla AYNI adım durumunu ürettiğini; AST+tip denetleyicisiyle her okuma/güncelleme/ilişki/ham SQL erişiminin `ACTIVE_MOVEMENT` taşıdığını (istisna kümesi iki yönlü) | ✓ | ✓ |  |
 
-## depo (40)
+## depo (41)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
@@ -1316,6 +1316,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `Teks-Erp/scripts/test_spec_availability.ts` | `getSpecAvailability` üç kovasını kilitler: Depo renk+en BİREBİR, Ham renk-JOKER + en-agnostik, Üretimde canlı WO in-flight; çuval/sevk edilmiş toplar | ✓ |  |  |
 | `Teks-Erp/scripts/test_status_labels.ts` | Kullanıcıya giden metinlerde ham enum olmamasını: backend↔panel sözlük paritesi + dört ret yolunun Türkçe/sebepli mesaj basması. | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_stock_count.ts` | Tam stok sayımı: fotoğraf kapsamı, işaretsiz satırın dokunulmazlığı, fark fişinin fire olmaması, belgenin tx içinde donması, claim/yarış ve alış sipar | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_stock_count_reversal.ts` | Sayım stornosu: ileri bağlar (stockCountId/sourceRefId), CANCEL durur + CANCEL_REVERSAL doğar, sapma damgası, iplik net ters ADJUST, tutanak VOID, LIFO, hep-ya-hiç | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_stock_scorecard.ts` | Ölü stok tanımının KESİŞİM (eski VE siparişsiz) kalmasını, çıpasız topun yaş kovasına yuvarlanmamasını, sevke/çuvala girmiş topun ölü sayılmamasını. | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_ticaret_links_and_filters.ts` | Ekstre satırının belgeye (invoiceId/paymentId) bağlanmasını, sevkiyatın İÇ fatura bağını (Invoice.shipmentId, iptal fatura görünmez) ve mal kabul / de | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_ticaret_regime_gate.ts` | `ticaret.enabled` kapalıyken ticaret-özel Prisma modellerine dokunan HER router'ın `requireTicaretEnabled` kapısını taşıdığını AST ile türetip ölçer ( |  | ✓ |  |
@@ -1437,7 +1438,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `Teks-Erp/scripts/test_traveler_print_active_card.ts` | traveler_cards(workOrderId) WHERE status='ACTIVE' partial unique'ini kilitler: paralel iki print'te tam 1 başarı + 1×409 ve DB'de tek ACTIVE kart; rep | ✓ |  |  |
 | `Teks-Erp/scripts/test_yarn_stock.ts` | İplik kg-stok defterinin tek mekanik kanıtı: bakiye ↔ Σ(hareket) mutabakatı, negatif bakiye gerçekten yazılır, eşzamanlı hareketler doğru toplanır, DB | ✓ | ✓ |  |
 
-## iptal-fire (29)
+## iptal-fire (30)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
@@ -1464,6 +1465,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `Teks-Erp/scripts/test_scrap_scorecard.ts` | Fire Karnesi'nin producedQty'siyle Kalite Karnesi'nin totalQty'sinin BİREBİR mutabakatını ve çok hatalı topta metrajın çift sayılmamasını (K18 ölü sta | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_shipment_undo_dispatch.ts` | Storno ≠ iade: `preShipStatus` ile raf ayrımı korunur, DISPATCHED→PLANNED, sipariş karşılanması geri alınır, irsaliye VOIDED, yeniden sevk v2 üretir,  | ✓ |  |  |
 | `Teks-Erp/scripts/test_stock_count.ts` | Tam stok sayımı: fotoğraf kapsamı, işaretsiz satırın dokunulmazlığı, fark fişinin fire olmaması, belgenin tx içinde donması, claim/yarış ve alış sipar | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_stock_count_reversal.ts` | Sayım stornosu: ileri bağlar (stockCountId/sourceRefId), CANCEL durur + CANCEL_REVERSAL doğar, sapma damgası, iplik net ters ADJUST, tutanak VOID, LIFO, hep-ya-hiç | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_tambur_undo.ts` | Tambur geri almanın dört kök nedenini: mod sorulması + en dar varsayılan, eski istemcinin tek parça iptaline düşmesi, currentQty<=initialQty değişmezi | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_token_replay_cancelled.ts` | İdempotency'nin dördüncü durumunu kilitler: iptal/fire edilmiş kaydın clientToken'ı replay edilemez (409 ENTRY_CANCELLED / ORDER_CANCELLED / SHIPMENT_ | ✓ |  |  |
 | `Teks-Erp/scripts/test_warehouse_ledger.ts` | Depo hareket defterine doğru olayda doğru satırın yazılmasını kilitler: giriş tek ENTRY, kesim çocuğu satır YAZMAZ (dönüşüm ≠ hareket), iptal CANCEL,  | ✓ |  |  |

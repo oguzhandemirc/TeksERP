@@ -610,6 +610,7 @@ export const ENUM_LABELS: Record<string, string> = {
   SHIPMENT_REVERSAL: "Sevk stornosu",
   RETURN: "İade girişi",
   CANCEL: "Kayıttan düşme",
+  CANCEL_REVERSAL: "Kayıttan düşme stornosu",
   // ── Donmuş belge türü (PrintedDocType) — ticaret paketi
   TRANSFER_DISPATCH: "Depo transfer irsaliyesi",
   GOODS_RECEIPT: "Mal kabul fişi",

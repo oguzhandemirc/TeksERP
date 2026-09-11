@@ -26,7 +26,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
-import { Ban, CheckCheck, Printer, ScanBarcode, Search } from "lucide-react";
+import { Ban, CheckCheck, Printer, ScanBarcode, Search, Undo2 } from "lucide-react";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +44,7 @@ import { getStockCount, markAllFound, markStockCountLine, type StockCountDetail 
 import { STOCK_COUNTS_PATH, stockCountPath } from "./stockCount-regime";
 import { CompleteStockCountDialog } from "./CompleteStockCountDialog";
 import { CancelStockCountDialog } from "./CancelStockCountDialog";
+import { ReverseStockCountDialog } from "./ReverseStockCountDialog";
 import { CountBadge, RollLinesTable, YarnLinesTable } from "./StockCountLines";
 import {
   EMPTY_ROLL_VIEW,
@@ -67,6 +68,7 @@ export function StockCountDetailPage() {
   const [docOpen, setDocOpen] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [reverseOpen, setReverseOpen] = useState(false);
   const [highlight, setHighlight] = useState<string | null>(null);
   const scanRef = useRef<HTMLInputElement>(null);
 
@@ -177,7 +179,12 @@ export function StockCountDetailPage() {
       <PageHeader
         title={count ? `Sayım ${count.countNo}` : "Sayım"}
         titleExtra={
-          count ? <Badge variant={STATUS_BADGE[count.status]}>{STATUS_LABEL[count.status]}</Badge> : null
+          count ? (
+            <>
+              <Badge variant={STATUS_BADGE[count.status]}>{STATUS_LABEL[count.status]}</Badge>
+              {count.reversedAt && <Badge variant="outline">Stornolandı</Badge>}
+            </>
+          ) : null
         }
         description={
           count
@@ -225,6 +232,15 @@ export function StockCountDetailPage() {
                     </Button>
                   </PermissionGate>
                 </>
+              )}
+              {count.status === "COMPLETED" && !count.reversedAt && (
+                // Backend `reverse` ucu tamamlamayla aynı iki izni VE ile ister.
+                <PermissionGate allOf={["roll:manual-adjust", "yarn:write"]}>
+                  <Button variant="outline" onClick={() => setReverseOpen(true)}>
+                    <Undo2 className="mr-1 h-4 w-4" />
+                    Stornola
+                  </Button>
+                </PermissionGate>
               )}
             </div>
           ) : null
@@ -314,8 +330,10 @@ export function StockCountDetailPage() {
                 {count.completedAt
                   ? format(new Date(count.completedAt), "dd MMM yyyy HH:mm", { locale: tr })
                   : ""}{" "}
-                tamamlandı; fark fişi yazıldı ve tutanak donduruldu. Yanlış düşülen top varsa
-                Envanter’den iptali geri alın, iplik farkı için ters düzeltme girin.
+                tamamlandı; fark fişi yazıldı ve tutanak donduruldu.{" "}
+                {count.reversedAt
+                  ? `${format(new Date(count.reversedAt), "dd MMM yyyy HH:mm", { locale: tr })} tarihinde stornolandı${count.reverseReason ? ` — ${count.reverseReason}` : ""}: toplar rafına döndü, iplik farkı geri alındı, tutanak geçersiz.`
+                  : "Yanlış işaret varsa sayımı stornolayın (yalnız deponun en son sayımı)."}
               </p>
             )}
             {count.notes && <p className="text-sm">Not: {count.notes}</p>}
@@ -414,6 +432,13 @@ export function StockCountDetailPage() {
           count={count}
           onOpenChange={setCompleteOpen}
           onCompleted={() => void q.refetch()}
+        />
+      )}
+      {reverseOpen && count && (
+        <ReverseStockCountDialog
+          count={count}
+          onOpenChange={setReverseOpen}
+          onReversed={() => void q.refetch()}
         />
       )}
       {cancelOpen && count && (
