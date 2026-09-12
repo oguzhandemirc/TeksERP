@@ -45,6 +45,8 @@ export interface WarehouseMovementRow {
   id: string;
   eventType: WarehouseEventType;
   direction: MovementDirection;
+  /** BAĞDAN türer (`reversesMovementId !== null`, sunucu) — storno tonunun TEK kaynağı. */
+  isReversal: boolean;
   /** HER ZAMAN POZİTİF — yönü `direction` söyler (backend sözleşmesi). */
   qty: DecimalLike;
   notes: string | null;
@@ -87,42 +89,36 @@ export interface WarehouseMovementListResponse {
 export interface EventMeta {
   label: string;
   hint: string;
-  /** Defter tarafında TERS (storno/iptal) olay mı — ayrı tonda okunmalı. */
-  reversal: boolean;
+  /** Sözlükte YOK (sunucu panelden önde) — ham kod basılır, rozet kesik kenarlı. */
+  unknown?: true;
 }
 
 export const WAREHOUSE_EVENT_META = {
   ENTRY: {
     label: "Giriş",
     hint: "Mal depoya dışarıdan girdi (mal kabul, ham giriş, Tambur çıkışı, fason dönüşü).",
-    reversal: false,
   },
   TRANSFER: {
     label: "Transfer",
     hint: "Depolar arası taşıma — kaynak depoda çıkan, hedef depoda giren olarak görünür.",
-    reversal: false,
   },
   TRANSFER_REVERSAL: {
     label: "Transfer iptali",
     hint: "Transferin ters kaydı — mal geldiği depoya döndü.",
-    reversal: true,
   },
-  SHIPMENT: { label: "Sevk", hint: "Müşteriye sevk edildi — depodan çıktı.", reversal: false },
+  SHIPMENT: { label: "Sevk", hint: "Müşteriye sevk edildi — depodan çıktı." },
   SHIPMENT_REVERSAL: {
     label: "Sevk stornosu",
     hint: "Sevk geri alındı (mal hiç çıkmamıştı) — depoya döndü.",
-    reversal: true,
   },
-  RETURN: { label: "Müşteri iadesi", hint: "Müşteriden iade geldi — depoya girdi.", reversal: false },
+  RETURN: { label: "Müşteri iadesi", hint: "Müşteriden iade geldi — depoya girdi." },
   CANCEL: {
     label: "İptal / fire",
     hint: "Top iptal edildi ya da fireye ayrıldı — depodan düştü.",
-    reversal: false,
   },
   CANCEL_REVERSAL: {
     label: "İptal stornosu",
     hint: "Kayıttan düşme geri alındı (sayım stornosu) — top depoya döndü.",
-    reversal: true,
   },
   // ── Stok defteri olayları (2026-09-12) ────────────────────────────────────
   // Defter artık yalnız "hangi depoda" değil "stokta ne var" sorusunu da
@@ -130,27 +126,22 @@ export const WAREHOUSE_EVENT_META = {
   PRODUCTION: {
     label: "Üretim",
     hint: "Üretimden depoya indi ya da depodan üretime alındı — iş emri hareketi.",
-    reversal: false,
   },
   EXTERNAL: {
     label: "Dış işlem",
     hint: "Mal fasona/kartelaya çıktı ya da oradan döndü — fabrika dışındaki hareket.",
-    reversal: false,
   },
   TRANSFORM: {
     label: "Dönüşüm",
     hint: "Top kesildi ya da bölündü — toplam metraj değişmez, aynı grubun satırları net sıfır verir.",
-    reversal: false,
   },
   ADJUST: {
     label: "Metraj düzeltmesi",
     hint: "Sapma ölçüldü (çekme, sayım farkı) — defter metrajı düzeltildi, mal yer değiştirmedi.",
-    reversal: false,
   },
   OPENING_BALANCE: {
     label: "Açılış bakiyesi",
     hint: "Defterin başlangıç fotoğrafı — gerçek bir hareket değil, mutabakatın sıfır noktası.",
-    reversal: false,
   },
 } satisfies Record<string, EventMeta>;
 
@@ -160,9 +151,22 @@ export const WAREHOUSE_EVENT_META = {
  */
 export const WAREHOUSE_EVENT_TYPES = Object.keys(WAREHOUSE_EVENT_META) as WarehouseEventType[];
 
-/** Olay rozetinin tonu — ters (storno) olaylar ayrı okunmalı. */
-export function eventBadgeClass(kind: WarehouseEventType): string {
-  if (WAREHOUSE_EVENT_META[kind]?.reversal) {
+/** Künye — sözlükte olmayan tür için de döner (backend önde → ham kod, ekran çökmez).
+ *  TEK KAYNAK; bileşen sözlüğü indekslemez (bekçi: …Sheet.unknown-event.test.tsx). */
+export function eventMeta(kind: WarehouseEventType | string): EventMeta {
+  return (
+    (WAREHOUSE_EVENT_META as Record<string, EventMeta>)[kind] ?? {
+      label: kind,
+      hint: "Tanınmayan hareket türü — sunucu panelden önde olabilir; panel güncellenince adı çıkar.",
+      unknown: true,
+    }
+  );
+}
+
+/** Rozet tonu — ters (storno) satır ayrı okunur. KAYNAK BAĞ (`row.isReversal`,
+ *  backend `reversesMovementId`, D2a), olay türü DEĞİL: enum bugün doğru, garanti değil. */
+export function eventBadgeClass(isReversal: boolean): string {
+  if (isReversal) {
     return "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200";
   }
   return "bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-slate-100";

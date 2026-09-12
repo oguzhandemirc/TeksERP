@@ -33,6 +33,7 @@ function row(over: Partial<WarehouseMovementRow> = {}): WarehouseMovementRow {
     id: "m1",
     eventType: "TRANSFER",
     direction: null,
+    isReversal: false,
     qty: "100",
     notes: null,
     createdAt: "2026-08-14T09:00:00.000Z",
@@ -188,7 +189,6 @@ describe("sözlük bütünlüğü", () => {
       expect(WAREHOUSE_EVENT_META[k].label.trim().length).toBeGreaterThan(0);
       // `hint` gerçekten gerekiyor: ENTRY tek kapı değil, CANCEL iki olay taşıyor.
       expect(WAREHOUSE_EVENT_META[k].hint.trim().length).toBeGreaterThan(10);
-      expect(eventBadgeClass(k).length).toBeGreaterThan(0);
     }
   });
 
@@ -198,10 +198,12 @@ describe("sözlük bütünlüğü", () => {
     expect(WAREHOUSE_EVENT_TYPES).toEqual(Object.keys(WAREHOUSE_EVENT_META));
   });
 
-  it("ters (storno) olaylar ayrı tonda okunur", () => {
-    expect(eventBadgeClass("TRANSFER_REVERSAL")).not.toBe(eventBadgeClass("TRANSFER"));
-    expect(eventBadgeClass("SHIPMENT_REVERSAL")).not.toBe(eventBadgeClass("SHIPMENT"));
-    expect(eventBadgeClass("CANCEL_REVERSAL")).not.toBe(eventBadgeClass("CANCEL"));
+  it("ters (storno) satır ayrı tonda okunur — kaynak BAĞ (isReversal), olay türü DEĞİL", () => {
+    // Backend `isReversal = reversesMovementId !== null` (tasarım D2a). Panel bunu
+    // enum'dan türetseydi ikinci kaynak olurdu: bugün doğru, ters satıra eventType
+    // override'ı geldiğinde yalan. Sözlükte artık `reversal` alanı yok.
+    expect(eventBadgeClass(true)).not.toBe(eventBadgeClass(false));
+    expect(Object.values(WAREHOUSE_EVENT_META).some((m) => "reversal" in m)).toBe(false);
   });
 });
 

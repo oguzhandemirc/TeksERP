@@ -36,11 +36,11 @@ import { dayEndIso, dayStartIso } from "@/pages/Finance/Cheques/dates";
 import { listWarehouseMovements } from "./service";
 import {
   EMPTY_MOVEMENT_FILTER,
-  WAREHOUSE_EVENT_META,
   WAREHOUSE_EVENT_TYPES,
   counterpartName,
   directionMeta,
   eventBadgeClass,
+  eventMeta,
   formatInstant,
   isFiltered,
   movementActor,
@@ -129,7 +129,7 @@ export function WarehouseMovementsSheet({ warehouse, onClose }: Props) {
                 <option value="">Tüm hareketler</option>
                 {WAREHOUSE_EVENT_TYPES.map((k) => (
                   <option key={k} value={k}>
-                    {WAREHOUSE_EVENT_META[k].label}
+                    {eventMeta(k).label}
                   </option>
                 ))}
               </select>
@@ -194,7 +194,8 @@ export function WarehouseMovementsSheet({ warehouse, onClose }: Props) {
                   <tbody>
                     {rows.map((m) => {
                       // Bilinmeyen olay (backend önde) ham adıyla basılır; ekran çökmez.
-                      const meta = WAREHOUSE_EVENT_META[m.eventType] ?? { label: m.eventType, hint: "", reversal: false };
+                      // TEK KAYNAK `eventMeta` — sözlük burada DOĞRUDAN indekslenmez (bekçi ölçer).
+                      const meta = eventMeta(m.eventType);
                       const dir = directionMeta(m.direction);
                       return (
                         <tr key={m.id} className="border-t align-top">
@@ -202,7 +203,11 @@ export function WarehouseMovementsSheet({ warehouse, onClose }: Props) {
                             {formatInstant(m.createdAt)}
                           </td>
                           <td className="px-3 py-2">
-                            <Badge className={eventBadgeClass(m.eventType)} title={meta.hint}>
+                            {/* Tanınmayan tür: kesik kenar — "eksik çeviri mi, gerçek tür mü" ipucuyla ayrılır. */}
+                            <Badge
+                              className={cn(eventBadgeClass(m.isReversal), meta.unknown && "border border-dashed opacity-80")}
+                              title={meta.hint}
+                            >
                               {meta.label}
                             </Badge>
                           </td>
