@@ -392,6 +392,55 @@ async function main(): Promise<void> {
     check("§7 sevkiyat PLANNED'a döndü (iptal değil — çuvallar serbest)", durum3 === ShipmentStatus.PLANNED, durum3);
     const sonBrut = Number((await prisma.orderLine.findUniqueOrThrow({ where: { id: lineId }, select: { shippedQty: true } })).shippedQty);
     check("§7 ⭐ storno shippedQty'yi GERİ ALDI (iade almazdı)", sonBrut === 0, `${sevkEdilen} → ${sonBrut}`);
+
+    // ═══ §8 — FAIL-CLOSED DEĞİŞMEZLERİ (HTTP'den) ═══════════════════════════
+    // Kök kural "FAIL-CLOSED varsayılan". Bu gecenin ürün kusuru (varsayılan depo
+    // yokken sessizce "depoda") bu kuralın fail-OPEN ihlaliydi; aşağıdakiler
+    // kuralın BUGÜN TUTAN somut cümleleri ve seddi. Her biri pozitif kontrollü:
+    // aynı uç meşru girdiyle 2xx dönmeli, yoksa "her şeye 400 diyen" bir sabit
+    // ölçmüş oluruz.
+    console.log("\n── §8 fail-closed değişmezleri ──");
+
+    // ①  Tanınmayan liste kapsamı → 400. ⚠️ Filtreler `?filter[alan]=` biçiminde
+    //    gelir; çıplak `?rollScope=` hiç `params.filters`a girmez ve kapıya
+    //    ULAŞMAZ (ölçüldü: çıplak biçim 200 döner — kapı değil, PROB yanlıştır).
+    const kapsamOk = await call("GET", "/api/rolls?filter%5BrollScope%5D=RAW_STOCK&pageSize=1", { token });
+    check("§8a pozitif kontrol: geçerli kapsam (RAW_STOCK) → 200", kapsamOk.status === 200, `status=${kapsamOk.status}`);
+    const kapsamYok = await call("GET", "/api/rolls?filter%5BrollScope%5D=UYDURMA_KAPSAM&pageSize=1", { token });
+    check("§8b ⭐ tanınmayan kapsam → 400 (sessizce TÜM tabloyu döndürmez)",
+      kapsamYok.status === 400, `status=${kapsamYok.status} msg=${String(kapsamYok.body.message ?? "").slice(0, 48)}`);
+
+    // ②  Çözülemeyen şablon → 400; yerleşiğe SAPMA yok. Emsal: bilinmeyen kind'ı
+    //    ROLL_FINISHED'a düşüren eski davranış YANLIŞ belgeyi doğru sanıp bastırıyordu.
+    const etiketYolu = `/api/customers/${customer.id}/standalone-labels`;
+    const bagKaldir = await call("PUT", etiketYolu, { token, body: { templateIds: [] } });
+    check("§8c pozitif kontrol: boş liste (bağı kaldır) → 200", bagKaldir.status === 200, `status=${bagKaldir.status}`);
+    const sablonYok = await call("PUT", etiketYolu, { token, body: { templateIds: ["00000000-0000-4000-8000-000000000000"] } });
+    check("§8d ⭐ çözülemeyen şablon → 400 (yerleşiğe sessizce sapmaz)",
+      sablonYok.status === 400, `status=${sablonYok.status} msg=${String(sablonYok.body.message ?? "").slice(0, 48)}`);
+
+    // ③  Kapalı modül → 403 `MODULE_DISABLED`, kod `details.code` ALTINDA.
+    //    `body.code` hep undefined olmalı: bekçi/istemci orayı okursa sessizce
+    //    `undefined` görür ve SAHTE YEŞİL doğar (module.middleware.ts başlığı).
+    const devereKapali = (await prisma.systemSetting.findUnique({ where: { key: "devere.enabled" }, select: { value: true } }))?.value === false;
+    if (!devereKapali) {
+      atla("§8e/f kapalı modül sözleşmesi", "`devere.enabled` bu kurulumda kapalı DEĞİL — bekçi bayrağı DEĞİŞTİRMEZ, rejimi okur");
+    } else {
+      const modul = await call("GET", "/api/warp-specs", { token });
+      check("§8e ⭐ kapalı modül ucu → 403 + details.code=MODULE_DISABLED",
+        modul.status === 403 && ((modul.body.details ?? {}) as { code?: string }).code === "MODULE_DISABLED",
+        `status=${modul.status} details.code=${String(((modul.body.details ?? {}) as { code?: string }).code)}`);
+      // ⚠️ Bu kontrol TEK BAŞINA vakumen geçer: 200 yanıtta da `body.code`
+      // undefined'dır (negatif sonda ölçtü — modül kapısı olmayan bir uca
+      // bakınca §8e kırmızı verdi ama §8f yeşil kaldı). Bu yüzden yüklem İKİ
+      // koşullu: kod `details` altında VAR ve top-level'da YOK.
+      check("§8f ⭐ hata kodu `details.code` altında VAR, `body.code` YOK (sahte yeşil kapısı)",
+        ((modul.body.details ?? {}) as { code?: string }).code === "MODULE_DISABLED"
+          && (modul.body as { code?: unknown }).code === undefined,
+        `details.code=${String(((modul.body.details ?? {}) as { code?: string }).code)} body.code=${String((modul.body as { code?: unknown }).code)}`);
+    }
+    const acikModul = await call("GET", "/api/stations?pageSize=1", { token });
+    check("§8g pozitif kontrol: açık modül ucu → 200 (her şey 403 değil)", acikModul.status === 200, `status=${acikModul.status}`);
   } finally {
     server.close();
   }
