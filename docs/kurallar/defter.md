@@ -62,6 +62,9 @@ Eski dört sınıf 2026-09-10'da ikiye indi. Diğer her "sil" bir DURUM GEÇİŞ
 - **[ÇEKİRDEK]** Partial unique'li damgalı defterde tekil anahtarla `upsert` yazan her çağrı `where`e aktif yüklemi koyar (`{ <üçlü>, ...ACTIVE_OPERATION }`); koymazsa anahtar geri alınmış satırı bulur, `update: {}` hiçbir şey yazmaz ve iş TEKRARLANAMAZ — birden çok geri alınmış satırda Prisma hata atar. · bekçi: `test_roll_operation_revoke.ts` §7a/§8 <sub>(arşiv:2026-09-11 B-4b)</sub>
 - **[ÇEKİRDEK]** Şema-dışı partial unique'in predicate'i değişirken sed kesintisiz takas edilir: yeni index geçici adla kurulur → eskisi `DROP INDEX` → `ALTER INDEX … RENAME`; `test_db_invariants.ts` envanterindeki predicate aynı commit'te güncellenir. <sub>(arşiv:2026-09-11 B-4b, migration 20260911190000)</sub>
 - **[ÇEKİRDEK]** Bir defter "var" diye yeterli değildir: ileri yolu yazıp geri yolu yazmayan defter, hiç olmayandan daha tehlikelidir — toplamı sessizce kayar. Ters yol yazılmadan ileri yol sürüme çıkmaz. <sub>(arşiv:2026-09-10)</sub>
+- **[ÇEKİRDEK]** Ters kayıt KAPSAM ister ve kapsam tip düzeyinde zorunludur: "topun tüm izini tersle" (yalnız top tümden öldürülüyorsa) ile "şu işlemi geri al" AYRI fonksiyonlardır. Kapsam sorgusu iki adımlıdır (önce damgalı satır, bulunamazsa damgasız); `OR workOrderStepId IS NULL` tek yüklemde YASAK — başka bir iş emrinin girişini aday yapar ve geçmişi değiştirir. · bekçi: `test_stock_ledger_kursun_reopen.ts` §4/§8/§9 <sub>(arşiv:2026-09-12)</sub>
+- **[ÇEKİRDEK]** Defter kapısında yazılamaz satırın davranışı ÇAĞRI YERİNDE beyan edilir (`onZeroQty: "skip" | "throw"`), varsayılanı yoktur: 0 metraj bazı yollarda meşru atlama, bazılarında tutarsızlık sinyalidir. Meşru atlama bile SAYILIR ve bir yüzeye basılır. Depo ucu olmaması politikaya TABİ DEĞİL — defter öncesi doğan topların deposu NULL'dur ve onların sevki çalışmak zorundadır. · bekçi: `test_stock_ledger_helper.ts` §10a/§10b/§10c <sub>(arşiv:2026-09-12)</sub>
+- **[ÇEKİRDEK]** Defter bekçisinin fikstürü GERÇEK yazma yolundan geçmek zorundadır: kendi kurduğu dünyayı doğrulayan bekçi yeşil kalırken hatayı göremez (ölçüldü: aynı bekçi kör fikstürle 7/0, gerçek yolda 3/6). · bekçi: `test_stock_ledger_kursun_reopen.ts` <sub>(arşiv:2026-09-12)</sub>
 
 ### Reçeteler
 
@@ -105,6 +108,10 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 - **ESKİ → YENİ:** `VERITABANI.md` §9 "sekiz hard delete sitesinin sekizi de meşru" ölçümü BAYAT çıktı — 2026-09-10'da 87 site sayıldı (17 `.delete()` + 70 `.deleteMany()`); eski ölçüm `.deleteMany()`i hiç görmemişti.
 
 ## Bekçiler
+
+`cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>`
+
+Backend: `test_stock_ledger_helper`, `test_stock_ledger_issue`, `test_stock_ledger_kursun_reopen`, `test_stock_ledger_production`, `test_stock_ledger_tambur`, `test_stock_ledger_tambur_undo`, `test_roll_movement_revoke`, `test_roll_operation_revoke`, `test_cheque_reversal`, `test_stock_count_reversal`, `test_swatch_stock_reduction_reversal`, `test_work_session_history_guard`, `test_warehouse_ledger`, `test_warehouse_movements`, `test_master_data_merge_revert`
 
 **Bu alanın genel kapısı YOK — kuralların çoğu bugün ölçülmemiştir** ([DB-35]: kapısız kural bir niyet beyanıdır). Tek tek ölçülen kurallar:
 

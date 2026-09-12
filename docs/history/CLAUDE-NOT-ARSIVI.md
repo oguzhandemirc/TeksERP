@@ -6903,3 +6903,183 @@ kullanılabilir ilan ettiği için bu bir SAHA riskiydi.
 
 Migration **yok** · izin **yok** · APK **yok**. Sözleşme: bu betiğin çıktısı artık
 hedefi her koşumda adıyla söyler; sessiz hedef yok.
+
+## 2026-09-12 — Ters kayıt KAPSAM ister; eşik "sessizce geç"e değil "yaz ya da gürültülü dur"a bağlanır [ÇEKİRDEK]
+
+Stok defterinin ters kayıt yolu ve metraj eşiği aynı gün iki KRİTİK verdi. İkisinin
+kökü aynı: **bir kapı iki farklı semantiği taşıyordu** ve hangisinin istendiği çağrı
+yerinde beyan edilmiyordu.
+
+### Ölçüm — kapsamsız ters kayıt hayalet stok üretiyordu
+
+`reopenStep`, `reverseRollStockMoves` ile topun TERSLENMEMİŞ **tüm** ileri satırlarını
+tersliyordu. Senaryo (fikstürle üretildi): 100 m depo topu iş emrine bağlanır
+(A: −100, `PRODUCTION_ISSUE`), son adım kapanır (B: +100, `PRODUCTION_RECEIPT`, net 0),
+adım yeniden açılır → **A ve B'nin İKİSİ de terslenir**, net 0 kalır ama top ÜRETİMDE:
+depoda **100 m hayalet stok**. İkinci finish'te sapma **+100**'e çıkıyor — yani her tur
+büyüyor. Üstelik A satırı `warehouse_movements_reversesMovementId_key` yüzünden kalıcı
+"terslenmiş" damgası yediği için sapma **ileri yolla bir daha kapanmıyor**; telafi ancak
+elle düzeltme kaydıyla olur.
+
+**Bekçi bunu GÖREMİYORDU** ve sebebi bir ders: fikstür topu doğrudan üretimde
+doğuruyordu, yani defterde attach ÇIKIŞI hiç yoktu. Kırmızı/yeşil üçlüsü:
+
+| Bekçi | Sonuç |
+|---|---|
+| eski fikstür (top üretimde doğuyor) | **7/0 — kör** |
+| fikstür gerçek `attachRolls` yolundan geçti, düzeltme ÖNCESİ | **3/6** |
+| aynı bekçi, düzeltme SONRASI | **13/0** |
+
+> **Ders:** bekçinin yeşil olması, doğru yeri ölçtüğünün kanıtı DEĞİLDİR. Fikstür
+> gerçek yazma yolundan geçmiyorsa bekçi kendi kurduğu dünyayı doğrular.
+
+**Somut kaçış yolu (soyut kural değil, bu dosyada olan şey):** fikstür topu
+`prisma.roll.create` ile doğrudan `IN_PRODUCTION` + `currentStepId` yaratıyor ve
+`attachRolls`ı **hiç çağırmıyordu**. Dolayısıyla defterde üretime-alma ÇIKIŞ satırı hiç
+doğmadı; kapsamsız ters kayıt terslemek için o satırı bulamadı ve bekçi "yalnız kendi
+girişini tersledi" sanısıyla yeşil kaldı. Ölçülmeyen şey **ters kaydın kapsamı**ydı:
+bekçi "ters satır yazıldı mı" sorusunu ölçüyordu, "BAŞKA bir satıra dokundu mu"
+sorusunu ölçmüyordu. İkinci soru ancak defterde en az iki ileri satır varken anlam
+kazanır — yani fikstür gerçek yolu kullanmak zorundadır.
+
+### Ölçüm — eşik hizalaması gürültülü hatayı sessiz veri kaybına çevirmişti
+
+`edea91d6`'da eski iki kapının eşiği `qty >= 0`dan `qty > 0`a çekildi (niyet: DB seddi
+`CHECK (qty > 0)` ile hizalanmak). Sonuç istenenin tersi oldu: 0 metrajlı satır artık
+insert'e gitmiyor, **sessizce eleniyor** ve çağıranın tx'i COMMIT oluyor. Transfer
+yolunda bu yalnız eksik satır değil — transfer İPTALİ defterden okuduğu için 0 m'lik
+top hedef depoda **mahsur** kalırdı.
+
+Kendi gerekçem ölçümle çürüdü: susturmayı meşrulaştıran "kurşun açık kumaş 0 m ile
+depoya iniyor" dalı fabrika kopyasında **BOŞ** — stok kümesinde (`warehouseId` dolu +
+STOCK/WAREHOUSE/A1_STOCK/RETURNED) 0 metrajlı top **0 kayıt**, defterde `qty <= 0`
+satır **0**. 0 metrajlılar: TAMBUR_CONSUMED 250 · CANCELLED 52 · WAREHOUSE 2 (ikisinin
+deposu NULL).
+
+> **Ders:** ölçülmemiş gerekçeyle sözleşme yazılmaz; ölçüm gerekçeyi çürütürse
+> sözleşme değişir.
+
+### Karar
+
+1. **İki semantik, iki fonksiyon; kapsam TİP DÜZEYİNDE zorunlu.**
+   `reverseAllRollStockMoves` = "topun TÜM izini tersle" ve yalnız top tümden
+   öldürülüyorsa (CANCELLED + `currentQty: 0`) kullanılır — tambur geri alma.
+   `reverseLatestScopedStockMove(tx, rollIds, scope, args)` = "şu işlemi geri al";
+   `scope` (`reasonCode` + `workOrderStepId`) ZORUNLUDUR, kapsam vermeyi unutmak
+   derleme hatasıdır.
+2. **Kapsam İKİ ADIMLI SORGUDUR, tek WHERE değil:** ① `reasonCode` + damgalı adım,
+   ② bulunamazsa `reasonCode` + `workOrderStepId IS NULL` (geçiş dalı). `OR
+   workOrderStepId IS NULL` tek yüklemde YASAK: o yüklem BAŞKA bir iş emrinin damgalı
+   girişini de aday kümesine sokar ve "geçmişe dönük değiştirme" yasağını çiğner.
+3. **`finalizeRollsAtLastStep` adım damgası yazar** (opsiyonel `workOrderStepId`);
+   kurşun finish ve bypass geçer, kurtarma yolu bir adıma ait olmadığı için geçmez
+   (`machineId=null` kuralının aynı mantığı).
+4. **Eşik politikası çağrı yerinde BEYAN edilir:** `writeWarehouseMovement(s)` üçüncü
+   parametre olarak `{ onZeroQty: "skip" | "throw" }` alır ve **varsayılanı yoktur**.
+   `throw` = tutarsızlık sinyali (top girişi · transfer ileri+ters · fason dönüşü ·
+   iade · sevk ileri+storno). `skip` = meşru atlama (0 metrajlı topun iptali; fabrikada
+   52 böyle top).
+5. **UÇSUZLUK POLİTİKAYA TABİ DEĞİL.** Defter öncesi doğan **4.553** topun
+   `warehouseId`si NULL; "uçsuz satır da tutarsızlıktır" denmesi o topların sevkini ve
+   iadesini kilitlerdi. Politika yalnız METRAJ içindir.
+6. **Atlanan ve terslenemeyen SAYILIR ve GÖRÜNÜR.** Tekil kapı `boolean` döner ve
+   `softDelete`in audit yüküne `ledgerRowWritten` olarak yazılır; reopen'ın
+   `bulunamayan`/`statusuzAtlanan` sayıları ZATEN yazdığı `WORK_ORDER_STEP` kaydına alan
+   olarak girer — yeni audit kaydı açılmaz (kalıcı yüzey geçici metriği kalıcılaştırır).
+7. **`preEpoch` (ZAMANSAL) ≠ `statusuzAtlanan` (SEMANTİK).** İlki "satır fotoğraftan
+   önce mi yazıldı", tek yazarı açılış fotoğrafı script'i; ikincisi "satırın iki ucu da
+   statüsüz mü", `fromStatus IS NULL AND toStatus IS NULL`tan türer. Bugün örtüşüyorlar
+   (721/721), yarın ayrışacaklar. Fotoğraf şerhi D6'ya yazıldı: epoch sonrası yalnız
+   TOPLAM Σ güvenilir; depo×statü kırılımı ve as-of kesiti eski yazıcılar taşınana kadar
+   BEYANLIDIR.
+8. **GEREKÇELİ KAPATMA — ters satırın `eventType`i ileri satırdan kopyalanır.** Panelde
+   "Üretim" satırı gibi görünmesi bulgu olarak açıldı; düzeltme YAZILMADI. Uygun bir enum
+   değeri yok, PostgreSQL enum değeri **geri alınamaz** bir şema kararıdır ve D2a
+   "tespit `reversesMovementId`den, enum yalnız betimleyici" diyor. Panel tarafı rozeti
+   bağdan (`isReversal`) boyadığı için görünen semptom kapandı. Bugün kullanılmayan bir
+   `eventType` override'ı da EKLENMEDİ: ölü yüzey, sonraki okuyucuya "demek ki bazen
+   gerekiyor" der.
+
+### Kod çapaları
+
+`src/services/helpers/warehouse-ledger.helper.ts` (`ZeroQtyPolicy`, `hasWarehouseEnd`,
+`reverseAllRollStockMoves`, `reverseLatestScopedStockMove`) ·
+`src/services/kursun-qc.service.ts` (`finishStep` damgası, `reopenStep` kapsamlı çağrı,
+audit `defter` alanı) · `src/services/kursun-bypass.service.ts` ·
+`src/services/helpers/roll-finalize.helper.ts` · `src/services/inventory.service.ts`
+(`ledgerRowWritten`) · transfer · subcontractor · return · shipping çağrı yerleri.
+
+### Bekçi ve negatif sonda
+
+`test_stock_ledger_kursun_reopen` (13): fikstür gerçek attach yolundan geçer · §2b ters
+satır `workOrderStepId` damgasını taşır (canlı FK) · §3 net −METRAJ · §4 attach ÇIKIŞI
+terslenmemiş kalır · §8 damgasız eski satır (geçiş dalı) · §9 ESKİ iş emrinin girişine
+dokunulmaz · §10 fire dalında ters satır yazılmaz.
+`test_stock_ledger_helper` (19): §4e eşik tripwire'ı İKİ AYAKLI (elle kopya yok **ve**
+tek kaynağın kendisi canlı — vakumen geçme kapalı), kapsamı tek dosya ve çıktıda basılır ·
+§10a/§10b/§10c politikanın üç dalı.
+Negatif sondalar (altısı da kırmızı, geri yükleme sha256 birebir): kapsamsız çağrı →
+6 kontrol · kapsam yanlış adıma → çöküş · toplu kapının `throw` dalı kaldırıldı → 2 ·
+`finalize` damgası kaldırıldı → 1 · elle ikinci eşik → §4e · tek kaynak öldürüldü → §4e.
+
+**Tambur tarafında iki eski borç aynı fikstürle kapandı.** `applySingleRestore` dalı
+ayrı ölçülmüyordu (eski sonda iki `applySingle*` çağrısını BİRLİKTE kaldırıyordu, yani
+hangi dalın ölçüldüğü belirsizdi) ve "her tur hayalet metre ekler" iddiası tambur
+tarafında hiç ölçülmemişti. Senaryo C `{ mode: "SINGLE_RESTORE" }` ile dalı açıkça
+sürüyor; SINGLE_RESTORE metrajı kaynağa geri koyup iş emrini dirilttiği için **ikinci
+tur bu dalda mümkün**. Negatif sonda YALNIZ o dalın ters çağrısını kaldırdı
+(`applySingle`a dokunmadan) ve iddia sayıya döndü: **§8 netler=[200,200] · §9 satır=2
+`net=400` · §7 n=8 · §10 öksüz=2**. Yani iki tur, iki hayalet × 200 m — "anı" değil
+ölçüm. Ayrıca körlük zemini senaryo sayısına bağlı sabitten (`n === 6`) yapısal
+değişmeze çevrildi: **iptal edilmiş HER çocuğun ileri satırı terslenmiş olmak zorunda**
+(öksüz satır yok) + `n >= 10`. Senaryo eklendikçe kırılan zemin, zemin olmaktan çıkar.
+
+### Yeni hata sınıfı — mekanik rename YORUM metnine sızar
+
+`src/` içindeki Türkçe değişken adları İngilizceye çevrilirken kelime-sınırı (`\b`)
+temelli rename **iki Türkçe yorum cümlesini de bozdu** ("malı hedef depoda" → "malı
+targetRow depoda"). İkisi de yakalandı, ama sınıf ilk kez kayda geçiyor.
+**Önlem:** rename'den sonra YENİ adları yorum satırlarında ara
+(`grep -nE "^\s*(//|\*).*\b<yeniAd>\b"`), yoksa kod doğru derlenirken belge yalan söyler.
+
+### Yöntem notu — rebase kapıyı atlar
+
+Bu dilim iki kez bayat tabanda kaldı (main altında ilerledi). Çözüm `git rebase`
+DEĞİLDİ: **rebase hook'ları atlar**, yani kapı yeni taban üzerinde hiç koşmaz ve
+"kapı temiz" cümlesi eski tabanın cümlesi olur. Yapılan: worktree yeni tabanda
+sıfırdan kurulur, dosyalar kopyalanır ve **dosyalardan yeniden commit'lenir** —
+kapı her commit'te gerçekten koşar ve "ölçüm hangi taban üzerinde yapıldı" sorusu
+kendiliğinden cevaplanır.
+
+### Bilinen açık — aynı sınıfın AYNA GÖRÜNTÜSÜ (sıradaki işin 1. maddesi)
+
+Aynı gün ölçüldü (fikstür DB'si, gerçek servis çağrıları): **topun iptalini geri almak
+depo defterini eksik bırakıyor.**
+
+```
+1) Top depoda (75 m, WAREHOUSE)
+2) softDelete → TEK satır: CANCEL, qty 75, from=depo,
+                fromStatus=NULL · toStatus=NULL · reasonCode=NULL   ← STATÜSÜZ (eski kapı)
+3) restoreCancelledRoll → YENİ SATIR YOK;  top WAREHOUSE'a döner
+```
+
+Defter "75 m çıktı" der, geri döndüğünü söyleyen satır yoktur ⇒ stok **EKSİK** görünür.
+Bu, yukarıdaki reopen kusurunun **ayna görüntüsüdür**: orada defter fazla (hayalet
+stok), burada eksik. İkisi de tek sınıf — *ileri yol yazıp geri yol yazmayan defter*.
+
+Düzeltmenin iki ayağı **AYRILAMAZ**: CANCEL satırı statüsüz olduğu için ters kayıt
+yazacak uç yok, yani `restoreCancelledRoll`a ters kayıt yazdırmak ancak iptal çıkışı
+`postStockMove`a taşındıktan sonra mümkün. Bekçi yazıldı ve kırmızı ölçüldü:
+**3 geçti / 5 başarısız** (§1 statü=null sebep=null · §3 bağ yok · §4 net −75 · §7 n=1).
+
+### "Önce kırmızıyı gör" kuralının PARALEL OTURUM kısıtı
+
+Henüz var olmayan sabitlere/imzalara bakan bir `scripts/test_*.ts` **ortak ağaca
+girmez**: tip denetimi `scripts/**`i de tarıyor ve commit kapısı HERKES için kırmızıya
+döner. Kural şöyle okunur: kırmızıyı **kendi ağacında** görmek yeterlidir; bekçi repoya
+**kodla AYNI commit'te** girer. Bugün bu yüzden bekçi scratchpad'de yazıldı ve orada
+koşuldu.
+
+### Üç kapı
+
+Migration **yok** · izin **yok** · APK **yok**.
