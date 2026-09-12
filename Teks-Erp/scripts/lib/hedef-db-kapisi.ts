@@ -11,6 +11,7 @@
 // TÜKETİCİLER: test_module_flag_off (bant + fail) · fixture-module-flags (throw).
 // =============================================================================
 import { Pool } from "pg";
+import { PG_SESSION_OPTIONS } from "../../src/lib/pg-session";
 
 export const YAZILMASI_YASAK_DB: ReadonlySet<string> = new Set([
   "tekserp",
@@ -52,6 +53,17 @@ export function hedefDbEngeli(): string | null {
 // cevaplar ve fixture kümesi bilerek DARDIR.
 const FIXTURE_SON_EKLERI = ["_test"];
 
+/**
+ * Son eki taşımayan ama FİXTURE hedefi olduğu BİLİNEN adlar.
+ *
+ * ⚠️ `teks_ci` — CI'nın veritabanı (`.github/workflows/ci.yml`, `POSTGRES_DB`).
+ * Ad ayağı ilk yazımda yalnız `_test` sonekine baktığı için CI ilk ifadede
+ * duruyordu: 491 bekçinin HİÇBİRİ koşmuyordu ve kapı "çalışıyor" görünüyordu.
+ * CI dosyasına DOKUNULMADI (kullanıcının işi) — kabul kümesine ADIYLA girdi ve
+ * `test_script_guards §6` pozitif sonda ile ölçüyor.
+ */
+const FIXTURE_ADLARI: ReadonlySet<string> = new Set(["teks_ci"]);
+
 /** Fixture olmadığı BİLİNEN adlar — mesajda ayrıca anılır (dev kopya / canlı). */
 export const FIXTURE_OLMAYAN_DB: ReadonlySet<string> = new Set([
   "tekserp_fabrika_dev",
@@ -70,7 +82,7 @@ export const FIXTURE_OLMAYAN_DB: ReadonlySet<string> = new Set([
  */
 export function fixtureHedefEngeli(): string | null {
   const dbAdi = hedefDbAdi();
-  const fixture = FIXTURE_SON_EKLERI.some((ek) => dbAdi.endsWith(ek));
+  const fixture = FIXTURE_SON_EKLERI.some((ek) => dbAdi.endsWith(ek)) || FIXTURE_ADLARI.has(dbAdi);
   if (fixture) return null;
   if (process.env.BEKCI_HEDEF_ONAY === "1") return null;
   const bilinen = FIXTURE_OLMAYAN_DB.has(dbAdi)
@@ -114,18 +126,54 @@ export interface HacimOlcumu {
 
 /** Hedefteki top sayısını ölçer; fabrika ölçeğindeyse Türkçe gerekçe döner. */
 export async function hacimHedefEngeli(): Promise<HacimOlcumu> {
+  // ÖLÇÜLEMEDİ = ENGEL (2026-09-12, ilk yazımdan gün içinde düzeltildi).
+  // İlk sürümde ölçüm düşerse yalnız not basılıp koşum SÜRÜYORDU. Senaryo bunu
+  // çürüttü: fabrikanın yedeği `tekserp_fabrika_test` adıyla kopyalanırsa AD
+  // ayağı tanım gereği geçer; sunucu yüklüyken `count(*)` 5 sn zaman aşımına
+  // takılır ve tek gerçek koruma tam ihtiyaç anında açılırdı. "Ölçemedim"
+  // yokluk değil YANLIŞ HEDEF riskidir → fail-closed.
+  const onay = process.env.BEKCI_HEDEF_ONAY === "1";
   const url = process.env.DATABASE_URL;
-  if (!url) return { engel: null, topSayisi: null, olcumNotu: "DATABASE_URL tanımsız" };
-  const pool = new Pool({ connectionString: url, connectionTimeoutMillis: 5_000 });
+  if (!url) {
+    return onay
+      ? { engel: null, topSayisi: null, olcumNotu: "DATABASE_URL tanımsız" }
+      : { engel: "Hedef hacmi ölçülemedi: DATABASE_URL tanımsız. Bilerek koşuyorsan BEKCI_HEDEF_ONAY=1 ver.", topSayisi: null, olcumNotu: null };
+  }
+  // 15 sn: yüklü bir makinede 5 sn connect bütçesi ölçümü düşürüyordu ve
+  // fail-closed olduğumuz için bu artık koşumu DURDURUR — bütçe cömert olmalı.
+  const pool = new Pool({
+    connectionString: url,
+    connectionTimeoutMillis: 15_000,
+    options: PG_SESSION_OPTIONS,
+  });
   try {
-    const r = await pool.query<{ n: number }>('SELECT count(*)::int AS n FROM rolls');
+    // İki soru AYRI cevaplanır: (a) `rolls` tablosu var mı (b) kaç FABRİKA topu
+    // var. Damgalı fixture artığı sayılmaz — `clean_test_residue` kendi
+    // yorumlarında artığın 313/328/453 topa çıktığını yazıyor; sayılsaydı meşru
+    // bir fixture DB'si eşiği aşar ve artığı temizleyecek betik de dururdu.
+    const r = await pool.query<{ n: number }>(
+      "SELECT CASE WHEN to_regclass('public.rolls') IS NULL THEN -1 ELSE " +
+        "(SELECT count(*)::int FROM rolls WHERE barcode NOT LIKE 'TEST-%' AND barcode NOT LIKE 'TST-%') END AS n",
+    );
     const n = Number(r.rows[0]?.n ?? 0);
-    if (process.env.BEKCI_HEDEF_ONAY === "1") return { engel: null, topSayisi: n, olcumNotu: null };
+    // Tablo YOK ⇒ hedef fabrika kopyası olamaz (fabrikada `rolls` her zaman var).
+    // Bağlanamamaktan AYRI bir cevaptır ve engel değildir: taze bir test DB'si
+    // `migrate deploy` öncesi bu hâldedir, migration kapısı zaten arkada durur.
+    if (n < 0) return { engel: null, topSayisi: null, olcumNotu: "hedefte `rolls` tablosu yok (migration koşmamış)" };
+    if (onay) return { engel: null, topSayisi: n, olcumNotu: null };
     return { engel: hacimEngeliMetni(hedefDbAdi(), n), topSayisi: n, olcumNotu: null };
   } catch (e) {
-    // Ölçülemedi ≠ güvenli. Ad kapısı zaten geçildiği için koşumu düşürmüyoruz
-    // ama not çağırana döner ve log'a basılır.
-    return { engel: null, topSayisi: null, olcumNotu: (e as Error).message.slice(0, 120) };
+    const sebep = (e as Error).message.slice(0, 120);
+    return onay
+      ? { engel: null, topSayisi: null, olcumNotu: sebep }
+      : {
+          engel:
+            `Hedef DB '${hedefDbAdi()}' hacmi ÖLÇÜLEMEDİ (${sebep}). Ad kalıbı doğru olsa bile hedefin ` +
+            "fabrika kopyası olmadığı DOĞRULANAMADI; paket bu hedefe YAZAR ve SİLER. " +
+            "Bilerek koşuyorsan BEKCI_HEDEF_ONAY=1 ver.",
+          topSayisi: null,
+          olcumNotu: null,
+        };
   } finally {
     await pool.end().catch(() => undefined);
   }

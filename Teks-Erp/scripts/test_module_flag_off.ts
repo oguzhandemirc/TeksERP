@@ -86,6 +86,7 @@ import {
   yorumlariSok,
 } from "./lib/regime-gate-scan";
 import { hedefDbAdi, hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { httpBekciKapisi } from "./lib/http-bekci-kapisi";
 
 const BASE = process.env.TEST_API_URL ?? "http://localhost:4101";
 const SRC = join(__dirname, "..", "src");
@@ -267,15 +268,6 @@ const ilkDegerler = new Map<string, boolean>();
  * kendi §3'ünü kırar (ölçüldü 2026-09-12: koşum sonrası altı satır kalıyordu).
  */
 const ilkYokOlanAnahtarlar = new Set<string>();
-
-async function serverUp(): Promise<boolean> {
-  try {
-    const r = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(2000) });
-    return r.ok;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Bayrakları DB'DEN HAM okur — `getFeatureFlags` DEĞİL.
@@ -578,11 +570,18 @@ async function main(): Promise<void> {
   const httpKontrolSayisi =
     MODULLER.length + MODULLER.filter((m) => m.onKosul).length + 1 + MODULLER.length + MODULLER.length;
 
-  if (!(await serverUp())) {
-    console.log(
-      `\n   ⏭️  HTTP ayağı KOŞMADI — ${BASE} ayakta değil (TEST_API_URL ile değiştirilebilir).\n` +
-        `      ${httpKontrolSayisi} kontrol ÖLÇÜLMEDİ (§4/§4b/§5/§6/§7).\n`,
-    );
+  // Kapı YOKLUK ile YABANCIYI ayırır (tek kaynak `lib/http-bekci-kapisi.ts`):
+  // sunucu yoksa beyan edilmiş ATLAMA, sunucu başka veritabanına bakıyorsa
+  // KIRMIZI. Aşağıdaki kendi girişimiz ikinci settir (dar izinli kullanıcı).
+  const kapi = await httpBekciKapisi({ base: BASE, kontrolSayisi: httpKontrolSayisi });
+  if (kapi.kirmizi) {
+    check("HTTP ayağı ölçülebildi", false, kapi.kirmizi);
+    atlanan += httpKontrolSayisi;
+    console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız, ${atlanan} atlandı ===`);
+    return;
+  }
+  if (!kapi.token) {
+    console.log(`\n   ⏭️  HTTP ayağı KOŞMADI — ${kapi.atlaSebebi}\n      (§4/§4b/§5/§6/§7)\n`);
     atlanan += httpKontrolSayisi;
     console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız, ${atlanan} atlandı ===`);
     return;
@@ -612,18 +611,27 @@ async function main(): Promise<void> {
     body: JSON.stringify({ username: TEST_USERNAME, password: TEST_PASSWORD, clientType: "electron" }),
   });
   if (!login.ok) {
-    // ⚠️ `fail++` YOK — bu bir SÖZLEŞME ihlali değil, ÖLÇÜM YAPILAMAMASIDIR.
-    // Giriş kilidi (login-lockout) IP başına ve bellek içidir; art arda koşumda
-    // devreye girer. Gerçek kırmızı sayılsaydı geliştirici kendi ürettiği
-    // kırmızıyı görmezden gelmeyi öğrenirdi — bekçinin en pahalı kaybı budur.
+    // 429 ÖLÇÜM YAPILAMAMASIDIR (giriş kilidi IP başına ve bellek içi; art arda
+    // koşumda doğar) — atlanır. Ama 401/403 ARTIK ATLANMAZ: kullanıcıyı az önce
+    // BİZ yarattık, dolayısıyla porttaki sunucu ya BAŞKA veritabanına bakıyor ya
+    // da kimlik zinciri kırık. İkisi de "ölçtüm" yalanıdır → KIRMIZI.
     const govde = (await login.json().catch(() => ({}))) as { message?: string };
-    console.log(
-      `\n   ⏭️  HTTP ayağı KOŞMADI — bekçi kullanıcısı giriş yapamadı (durum=${login.status}` +
-        `${govde.message ? `, "${govde.message}"` : ""}).\n` +
-        `      ${httpKontrolSayisi} kontrol ÖLÇÜLMEDİ. 429/401 tipik sebep: giriş kilidi ` +
-        "(IP başına, bellek içi) — sunucuyu yeniden başlat ya da birkaç dakika bekle.\n",
-    );
-    atlanan += httpKontrolSayisi;
+    if (login.status === 429) {
+      atla(
+        "HTTP ayağı",
+        `giriş kilidi (429) — ${httpKontrolSayisi} kontrol ölçülmedi; ~60 sn sonra tekrar koş`,
+      );
+      atlanan += httpKontrolSayisi - 1; // `atla()` bir tanesini zaten saydı
+    } else {
+      check(
+        "HTTP ayağı ölçülebildi",
+        false,
+        `${BASE} ayakta ama az önce yarattığımız '${TEST_USERNAME}' giriş ${login.status} verdi` +
+          `${govde.message ? ` ("${govde.message}")` : ""} — porttaki sunucu BAŞKA veritabanına ` +
+          "bakıyor olabilir; kendi sunucunu kendi portunda başlat ve TEST_API_URL ile koş",
+      );
+      atlanan += httpKontrolSayisi;
+    }
     console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız, ${atlanan} atlandı ===`);
     return;
   }

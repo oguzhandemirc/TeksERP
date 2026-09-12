@@ -50,6 +50,7 @@ import {
 } from "../src/jobs/module-profile.job";
 import { migrationDamgaDegerleri, yorumlariSok } from "./lib/regime-gate-scan";
 import { hedefDbAdi, hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { httpBekciKapisi } from "./lib/http-bekci-kapisi";
 
 let pass = 0,
   fail = 0,
@@ -566,29 +567,28 @@ async function canliOlcum(beklenen: string[]): Promise<void> {
   }
 }
 
-/** §10 HTTP ayağı — sunucu ayakta değilse ATLANIR (sözleşme ihlali değil). */
+/**
+ * §10 HTTP ayağı — sunucu yoksa ATLANIR (beyanla), sunucu YABANCIYSA KIRMIZI.
+ *
+ * Kullanıcıyı kapı KENDİ yaratır (`ensureTestAdmin`). Eskiden var olduğu
+ * VARSAYILAN `p2test` ile giriş deneniyordu; o kullanıcıyı repoda yaratan tek
+ * satır yok, yani taze her DB'de dört kontrol sessizce düşüyordu. Sayaç da
+ * yanlıştı: `atla()` bir sayıyor, ölçülmeyen DÖRT kontrol "1 atlandı" görünüyordu.
+ */
+const HTTP_KONTROL = 4;
 async function httpTuru(): Promise<void> {
-  const ayakta = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(2000) })
-    .then((r) => r.ok)
-    .catch(() => false);
-  if (!ayakta) {
-    atla("§10 HTTP turu", `${BASE} ayakta değil — 4 kontrol ölçülmedi`);
+  const kapi = await httpBekciKapisi({ base: BASE, kontrolSayisi: HTTP_KONTROL });
+  if (kapi.kirmizi) {
+    check("§10 HTTP ayağı ölçülebildi", false, kapi.kirmizi);
+    atlanan += HTTP_KONTROL;
     return;
   }
-  // Kullanıcı `p2test` (`admin:settings` taşır) — parolası bilinen, fabrika-dışı
-  // hesap (`test_settings_password` HTTP ayağının aynısı). `admin` KULLANILMAZ:
-  // fabrika dump'ında parolası bilinmiyor ve yanlış deneme giriş kilidi kovasını
-  // yakar.
-  const giris = await fetch(`${BASE}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: "p2test", password: "test123", clientType: "electron" }),
-  });
-  if (!giris.ok) {
-    atla("§10 HTTP turu", `p2test giriş yapamadı (${giris.status}) — 4 kontrol ölçülmedi`);
+  if (!kapi.token) {
+    atla("§10 HTTP turu", kapi.atlaSebebi ?? "ölçüm yapılamadı");
+    atlanan += HTTP_KONTROL - 1; // `atla()` bir tanesini zaten saydı
     return;
   }
-  const token = ((await giris.json()) as { data: { token: string } }).data.token;
+  const token = kapi.token;
   const r = await fetch(`${BASE}/api/admin/module-profile`, {
     headers: { Authorization: `Bearer ${token}` },
   });

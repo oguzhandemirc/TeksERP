@@ -210,10 +210,10 @@ function main(): void {
   // fabrika adı DURMALI, fixture adı GEÇMELİ (yalnız "durur" ölçmek, her şeyi
   // durduran bozuk bir kapıyı da yeşil gösterirdi).
   const kosucu = join(dizin, "run-all-tests.ts");
-  const kos = (db: string) =>
+  const kos = (db: string, url?: string) =>
     spawnSync("npx", ["tsx", kosucu, "__eslesmeyen_ad__"], {
       encoding: "utf8",
-      env: { ...process.env, DATABASE_URL: `postgresql://u:p@localhost:55433/${db}` },
+      env: { ...process.env, DATABASE_URL: url ?? `postgresql://u:p@localhost:55433/${db}` },
       timeout: 120_000,
     });
   const fabrika = kos("tekserp_fabrika_dev");
@@ -229,6 +229,36 @@ function main(): void {
     fabrikaCikti.includes("tekserp_fabrika_dev"),
     "ad çıktıda",
   );
+  // CI'nın veritabanı `teks_ci` — fixture son ekini TAŞIMAZ ve kabul kümesinde
+  // ADIYLA durur. Bu sonda olmadan ad ayağı CI'yı ilk ifadede düşürürdü (491
+  // bekçinin hiçbiri koşmazdı) ve kimse fark etmezdi: kapı "çalışıyor" görünür.
+  // Eski kaçış YENİ ayağı kapatmasın: `ALLOW_NONLOCAL_TEST_DB` "yerel değil"
+  // iddiasını gevşetir, "fixture değil" iddiasını DEĞİL. Ad ayağı bir dalın
+  // içine yazılırsa bu anahtar onu sessizce atlatırdı (ölçüldü, düzeltildi).
+  const uzakKacis = spawnSync("npx", ["tsx", kosucu, "__eslesmeyen_ad__"], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      DATABASE_URL: "postgresql://u:p@192.168.1.250:5432/tekserp",
+      ALLOW_NONLOCAL_TEST_DB: "1",
+    },
+    timeout: 120_000,
+  });
+  const uzakKacisCikti = `${uzakKacis.stdout ?? ""}${uzakKacis.stderr ?? ""}`;
+  check(
+    "§6 ⭐ ALLOW_NONLOCAL_TEST_DB ad ayağını ATLATMIYOR (uzak + fixture olmayan ad → DUR)",
+    uzakKacis.status === 1 && uzakKacisCikti.includes("fixture kalıbına uymuyor"),
+    `exit ${uzakKacis.status}`,
+  );
+
+  const ci = kos("teks_ci");
+  const ciCikti = `${ci.stdout ?? ""}${ci.stderr ?? ""}`;
+  check(
+    "§6 ⭐ CI veritabanı adı (teks_ci) kapıdan GEÇİYOR",
+    !ciCikti.includes("fixture kalıbına uymuyor"),
+    ciCikti.split("\n").find((l) => l.includes("Hedef DB"))?.trim().slice(0, 60) ?? "(satır yok)",
+  );
+
   const fixture = kos("tekserp_kapi_sondasi_test");
   const fixtureCikti = `${fixture.stdout ?? ""}${fixture.stderr ?? ""}`;
   check(
@@ -260,6 +290,30 @@ function main(): void {
     readFileSync(kosucu, "utf8").includes("await hacimGeciti()"),
     "run-all-tests.ts",
   );
+  // Ölçüm DÜŞERSE de durmalı: fabrikanın `..._test` adlı kopyası ad ayağından
+  // geçer ve hacim tek gerçek korumadır — açık kalırsa tam ihtiyaç anında açılır.
+  const olcumSondasi = kos("tekserp_kapi_sondasi_test", "postgresql://u:p@127.0.0.1:1/tekserp_kapi_sondasi_test");
+  const olcumCikti = `${olcumSondasi.stdout ?? ""}${olcumSondasi.stderr ?? ""}`;
+  check(
+    "§7 ⭐ hacim ÖLÇÜLEMEDİĞİNDE de DURUYOR (fail-closed)",
+    olcumSondasi.status === 1 && olcumCikti.includes("hacmi ÖLÇÜLEMEDİ"),
+    `exit ${olcumSondasi.status}`,
+  );
+  const olcumOnay = spawnSync("npx", ["tsx", kosucu, "__eslesmeyen_ad__"], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      DATABASE_URL: "postgresql://u:p@127.0.0.1:1/tekserp_kapi_sondasi_test",
+      BEKCI_HEDEF_ONAY: "1",
+    },
+    timeout: 120_000,
+  });
+  const olcumOnayCikti = `${olcumOnay.stdout ?? ""}${olcumOnay.stderr ?? ""}`;
+  check(
+    "§7: onay anahtarıyla ölçülemeyen hedef GEÇİYOR ve not basılıyor",
+    !olcumOnayCikti.includes("hedef doğrulanamadı") && olcumOnayCikti.includes("BEKCI_HEDEF_ONAY=1 ile geçildi"),
+    "BEKCI_HEDEF_ONAY=1",
+  );
 
   // ═══ §8 — SİLME YOLLARI: --apply OLMADAN da fixture olmayan hedefte durur ═══
   // 07:19 vakası: fixture'lar fabrikanın canlı yedeğinde yaratılıp silindi.
@@ -288,6 +342,41 @@ function main(): void {
     "§8: fixture adıyla bu kapı GEÇİYOR (başka sebeple düşebilir, bu gerekçe çıkmaz)",
     !tFixtureCikti.includes("fixture kalıbına uymuyor"),
     "ad kapısı sessiz",
+  );
+
+  // ═══ §9 — HTTP AYAKLI BEKÇİ SABİT PORTU VARSAYAMAZ ═══════════════════════
+  // Sabit port BAŞKA bir oturumun sunucusunda olabilir ve o sunucu BAŞKA bir
+  // veritabanına bakıyor olabilir; bekçi o hâlde 401 alıp SESSİZCE atlıyordu
+  // (ölçüldü 2026-09-12: beş dosyada 19 "atlandı", gerçek kayıp ≈23). Kapı tek
+  // kaynakta: `lib/http-bekci-kapisi.ts` — yokluk beyan edilmiş atlama, yabancı
+  // sunucu KIRMIZI. Bu tripwire, kapıyı çağırmayan yeni bir HTTP bekçisini
+  // düşürür.
+  const httpBekcileri = readdirSync(dizin)
+    .filter((f) => /^test_.*\.ts$/.test(f))
+    .filter((f) => /TEST_API_URL/.test(readFileSync(join(dizin, f), "utf8")));
+  check(
+    "§9a körlük zemini: HTTP ayaklı bekçi bulundu",
+    httpBekcileri.length >= 5,
+    `${httpBekcileri.length} dosya`,
+  );
+  const kapisizHttp = httpBekcileri.filter(
+    (f) => !readFileSync(join(dizin, f), "utf8").includes("http-bekci-kapisi"),
+  );
+  check(
+    "§9b ⭐ her HTTP ayaklı bekçi hedef kapısını çağırıyor (sabit port varsayımı yok)",
+    kapisizHttp.length === 0,
+    kapisizHttp.join(", ") || "hepsi kapılı",
+  );
+  const kapiKaynak = readFileSync(join(dizin, "lib", "http-bekci-kapisi.ts"), "utf8");
+  check(
+    "§9c kapı YOKLUK ile YABANCIYI ayırıyor (ikisi aynı sonuca çıkmıyor)",
+    kapiKaynak.includes("atlaSebebi") && kapiKaynak.includes("BAŞKA bir veritabanına"),
+    "iki ayrı dönüş alanı",
+  );
+  check(
+    "§9d STRICT koşumda yokluk da kırmızı (paket kararı burada verilir)",
+    kapiKaynak.includes("TEKSERP_STRICT"),
+    "tek anahtar",
   );
 }
 

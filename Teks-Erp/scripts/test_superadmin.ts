@@ -144,6 +144,7 @@ import jwt from "jsonwebtoken";
 import { AuthService } from "../src/services/auth.service";
 import { AppError } from "../src/utils/app-error";
 import { hedefDbAdi, hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { httpBekciKapisi } from "./lib/http-bekci-kapisi";
 import { yorumlariSok } from "./lib/regime-gate-scan";
 
 const BASE = process.env.TEST_API_URL ?? "http://localhost:4104";
@@ -858,9 +859,17 @@ async function main(): Promise<void> {
   // kontrol basıyordu (D3 bulgusu — muhasebe hatası). B1 ile audit maskesi
   // ölçümleri eklendi → 17.
   const HTTP_KONTROL = 17;
-  if (!(await serverUp())) {
-    atla("HTTP turu", `${BASE} ayakta değil — ${HTTP_KONTROL} kontrol ölçülmedi`);
+  // Kapı YOKLUK ile YABANCIYI ayırır: sunucu yoksa beyan edilmiş atlama, sunucu
+  // BAŞKA veritabanına bakıyorsa kırmızı (ölçtüm yalanı). Kapının kendi
+  // kullanıcısı ayrıca "aynı DB mi" kanıtıdır; süperadmin turu kendi fixture
+  // hesabıyla giriş yapmaya devam eder.
+  const kapi = await httpBekciKapisi({ base: BASE, kontrolSayisi: HTTP_KONTROL });
+  if (kapi.kirmizi) {
+    check("HTTP ayağı ölçülebildi", false, kapi.kirmizi);
     atlanan += HTTP_KONTROL;
+  } else if (!kapi.token) {
+    atla("HTTP turu", kapi.atlaSebebi ?? "ölçüm yapılamadı");
+    atlanan += HTTP_KONTROL - 1; // `atla()` bir tanesini zaten saydı
   } else if (!fixtureId) {
     atla("HTTP turu", "fixture süperadmin hesabı yaratılamadı (DB'de zaten bir hesap vardı)");
     atlanan += HTTP_KONTROL;
@@ -1114,15 +1123,6 @@ async function temizleBayatFixtureler(): Promise<void> {
   await prisma.systemLogArchive.deleteMany({
     where: { tableName: "AUTH", recordId: { startsWith: "bekci.superadmin." } },
   });
-}
-
-async function serverUp(): Promise<boolean> {
-  try {
-    const r = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(2000) });
-    return r.ok;
-  } catch {
-    return false;
-  }
 }
 
 main()

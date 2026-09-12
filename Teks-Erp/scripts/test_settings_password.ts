@@ -131,6 +131,7 @@ import {
 import { errorHandler } from "../src/middlewares/error.middleware";
 import bcrypt from "bcryptjs";
 import { hedefDbAdi, hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { httpBekciKapisi } from "./lib/http-bekci-kapisi";
 import { yorumlariSok } from "./lib/regime-gate-scan";
 
 const SRC = path.join(__dirname, "..", "src");
@@ -804,11 +805,17 @@ async function main(): Promise<void> {
   // ═══════════════════════════════════════════════════════════════════════════
   console.log("\n=== L) HTTP turu (sunucu yoksa ATLANIR) ===");
   const httpKontrol = 12;
-  if (!(await sunucuAyakta())) {
-    atla("HTTP turu", `${BASE} ayakta değil — ${httpKontrol} kontrol ölçülmedi`);
+  // Kapı üç durumu AYIRIR: sunucu yok → beyan edilmiş ATLAMA · sunucu var ama
+  // BAŞKA veritabanına bakıyor → KIRMIZI · hazır → token (kullanıcı bize ait).
+  const kapi = await httpBekciKapisi({ base: BASE, kontrolSayisi: httpKontrol });
+  if (kapi.kirmizi) {
+    check("HTTP ayağı ölçülebildi", false, kapi.kirmizi);
     atlanan += httpKontrol;
+  } else if (!kapi.token) {
+    atla("HTTP turu", kapi.atlaSebebi ?? "ölçüm yapılamadı");
+    atlanan += httpKontrol - 1; // `atla()` bir tanesini zaten saydı
   } else {
-    await httpTuru(hashDegeri, httpKontrol);
+    await httpTuru(hashDegeri, httpKontrol, kapi.token);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1152,15 +1159,6 @@ async function main(): Promise<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-async function sunucuAyakta(): Promise<boolean> {
-  try {
-    const r = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(2000) });
-    return r.ok;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * HTTP ayağı — kapıyı UÇTAN UCA ölçer (gerçek Express zinciri + hata
  * middleware'i + gerçek `details.code` gövdesi). In-process ölçüm zinciri
@@ -1179,7 +1177,7 @@ async function sunucuAyakta(): Promise<boolean> {
  *    görülünce kalan kontroller ATLANIR ve bant sebebi yazar. Sessizce
  *    "başarısız" saymak, doğru çalışan bir kapıyı kırmızı gösterirdi.
  */
-async function httpTuru(hashDegeri: string, httpKontrol: number): Promise<void> {
+async function httpTuru(hashDegeri: string, httpKontrol: number, token: string): Promise<void> {
   let basilan = 0;
   const hcheck = (label: string, ok: boolean, detail = ""): void => {
     basilan++;
@@ -1197,17 +1195,6 @@ async function httpTuru(hashDegeri: string, httpKontrol: number): Promise<void> 
   const kilitliMi = (status: number, govde: { details?: { code?: string } }): boolean =>
     status === 429 && govde.details?.code === "SETTINGS_PASSWORD_LOCKED";
 
-  const giris = await fetch(`${BASE}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: "p2test", password: "test123", clientType: "electron" }),
-  });
-  if (!giris.ok) {
-    atla("HTTP turu", `p2test giriş yapamadı (${giris.status}) — ${httpKontrol} kontrol ölçülmedi`);
-    atlanan += httpKontrol;
-    return;
-  }
-  const token = ((await giris.json()) as { data: { token: string } }).data.token;
   const auth: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
@@ -1326,8 +1313,13 @@ async function httpTuru(hashDegeri: string, httpKontrol: number): Promise<void> 
     `${y4.status} ${y4b.details?.code}`,
   );
 
+  // ⚠️ BAYAT BEKLENTİ DÜZELTİLDİ (2026-09-12): burada 404 bekleniyordu ama
+  // in-process ayak (yukarıda) 2026-09-04'ten beri 403 bekliyor — "404, yetkisiz
+  // kullanıcıya 'böyle bir uç yok' diyen bir yalandı" kararı. İki ayak sekiz gün
+  // boyunca ZIT şey iddia etti ve kimse görmedi: HTTP ayağı `p2test` giriş
+  // yapamadığı için hiç koşmuyordu. Sessiz atlamanın bedeli tam olarak budur.
   const y5 = await fetch(`${BASE}/api/admin/settings-password`, { headers: auth });
-  hcheck("HTTP: fabrika admini GET /admin/settings-password → 404", y5.status === 404, `${y5.status}`);
+  hcheck("HTTP: süperadmin olmayan GET /admin/settings-password → 403", y5.status === 403, `${y5.status}`);
 
   const y6 = await fetch(`${BASE}/api/admin/settings-password`);
   hcheck("HTTP: kimliksiz GET /admin/settings-password → 401 (404 DEĞİL)", y6.status === 401, `${y6.status}`);

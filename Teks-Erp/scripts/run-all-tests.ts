@@ -131,10 +131,13 @@ function migrationGate(): boolean {
  * bakıyor); konvansiyon bir sed değildir.
  *
  * KURAL: yalnız YEREL host'a izin verilir. Gerekçe ölçümle seçildi —
- *   • dev  : postgresql://…@localhost:5432/adnansahin_db
+ *   • dev  : postgresql://…@localhost:55433/tekserp_fabrika_dev (FABRİKANIN YEDEĞİ)
  *   • CI   : postgresql://…@localhost:5432/teks_ci   (.github/workflows/ci.yml)
  *   • saha : 192.168.1.250 / SAHINSRV                (docs/ops/DEPLOY-RUNBOOK.md)
- * Yani localhost allowlist'i dev ve CI'yı AYNEN geçirir, sahayı bloklar.
+ * ⚠️ HOST AYAĞI TEK BAŞINA YETMEZ ve bu cümle 2026-09-12'de düzeltildi: dev
+ * hedefi artık fabrikanın canlı yedeği ve O DA localhost'ta. Bu yüzden ad ayağı
+ * (`_test` ya da kabul kümesindeki `teks_ci`) ve hacim ayağı eklendi; CI ADIYLA
+ * kabul kümesindedir, yoksa bu kapı CI'yı ilk ifadede düşürürdü.
  *
  * FAIL-CLOSED: `DATABASE_URL` yoksa ya da çözümlenemiyorsa DURUR. "Bilinmeyen
  * hedef" ile "güvenli hedef" aynı yeşile çıkmamalı.
@@ -184,18 +187,22 @@ function productionDbGate(): void {
     return;
   }
 
+  // ⚠️ AD AYAĞI DAL SEÇİMİNDEN ÖNCE: eskiden yalnız "yerel" dalının içindeydi ve
+  // `ALLOW_NONLOCAL_TEST_DB=1` onu SESSİZCE kapatıyordu — o anahtar "yerel değil"
+  // iddiasını gevşetmek içindir, "fixture değil" iddiasını değil. Unix soket
+  // URL'inde `hostname` boş döndüğü için soketle koşan operatör de o kaçışı
+  // vermek zorunda kalıyor, yani ad ayağını kapatmaya itiliyordu.
+  const adEngeli = fixtureHedefEngeli();
+  if (adEngeli) {
+    console.error(`\n❌ ${adEngeli}\n`);
+    dur();
+  }
+  if (process.env.BEKCI_HEDEF_ONAY === "1") {
+    console.warn(`\n⚠️  FIXTURE OLMAYAN HEDEFE KOŞULUYOR: ${dbName} (BEKCI_HEDEF_ONAY=1)\n`);
+  }
+
   const YEREL = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
   if (YEREL.has(host)) {
-    // ⚠️ YEREL OLMAK YETMEZ: ortak ağaçtaki `.env` fabrikanın canlı yedeğini
-    // gösteriyor ve o da localhost'ta. Ad fixture kalıbına uymuyorsa DUR.
-    const adEngeli = fixtureHedefEngeli();
-    if (adEngeli) {
-      console.error(`\n❌ ${adEngeli}\n`);
-      dur();
-    }
-    if (process.env.BEKCI_HEDEF_ONAY === "1") {
-      console.warn(`\n⚠️  FIXTURE OLMAYAN HEDEFE KOŞULUYOR: ${dbName} (BEKCI_HEDEF_ONAY=1)\n`);
-    }
     console.log(`→ Hedef DB: ${dbName} @ ${host} (yerel) ✅\n`);
     return;
   }
@@ -220,19 +227,20 @@ function productionDbGate(): void {
 }
 
 /**
- * ÜÇÜNCÜ AYAK — HACİM. Ad kapısı yanılabilir (fabrikanın yeni bir kopyası
- * `..._test` adıyla doğabilir); veri hacmi yanılmaz. Ölçülemezse SESSİZ
- * KALINMAZ: not basılır, "ad kapısı geçti" ile "hedef ölçüldü" karışmasın.
+ * ÜÇÜNCÜ AYAK — HACİM ve FAIL-CLOSED. Ad kapısı yanılabilir (fabrikanın bir
+ * kopyası `..._test` adıyla doğabilir); veri hacmi yanılmaz. Ölçüm DÜŞERSE de
+ * durulur: "ölçemedim" yokluk değil YANLIŞ HEDEF riskidir ve tek gerçek koruma
+ * tam ihtiyaç anında açılmamalı. Kaçış `BEKCI_HEDEF_ONAY=1`; o hâlde not basılır.
  */
 async function hacimGeciti(): Promise<void> {
   const { engel, topSayisi, olcumNotu } = await hacimHedefEngeli();
   if (engel) {
     console.error(`\n❌ ${engel}\n`);
-    console.error("⛔ TEST PAKETİ DURDURULDU — hedef fabrika ölçeğinde veri taşıyor.\n");
+    console.error("⛔ TEST PAKETİ DURDURULDU — hedef doğrulanamadı.\n");
     process.exit(1);
   }
   if (olcumNotu) {
-    console.warn(`⚠️  Hedef hacmi ÖLÇÜLEMEDİ (${olcumNotu}) — yalnız ad kapısı geçerli.\n`);
+    console.warn(`⚠️  Hedef hacmi ÖLÇÜLEMEDİ (${olcumNotu}) — BEKCI_HEDEF_ONAY=1 ile geçildi.\n`);
     return;
   }
   if (process.env.BEKCI_HEDEF_ONAY === "1" && (topSayisi ?? 0) > FABRIKA_HACIM_ESIGI) {

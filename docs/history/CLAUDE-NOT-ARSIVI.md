@@ -6664,3 +6664,69 @@ Commit kapısı `--amend`de değişen kümeyi amend TABANINA göre hesaplıyor: 
 değişikliği amend'e sıkıştırmak kapıyı SESSİZCE DARALTIR (ölçüldü 2026-09-12: mobil
 commit'in amend'inde yalnız doküman adımı koştu, beş ayaklı mobil kapı koşmadı; teyit
 elle yapıldı). Mekanikleştirme 5e'de.
+---
+
+## 2026-09-12 — "Sessiz atlama" sınıfı: HTTP bekçisi kendi kullanıcısını yaratır, yabancı sunucu KIRMIZIDIR [ÇEKİRDEK]
+
+### Bulgu
+
+Paket taban koşumunda beş bekçi 19 kontrolü "atlandı" diye bildirdi ve gerekçe
+SUNUCU YOKLUĞU sanıldı. Ölçüldü: dört portta da `/health` 200 dönüyordu. İki ayrı
+delik vardı, ikisi de aynı yerde bitiyordu — sessizlik:
+
+1. `test_settings_password` ve `test_module_profile`, var olduğunu VARSAYDIĞI
+   `p2test` kullanıcısıyla giriş deniyordu. O kullanıcıyı repoda yaratan tek satır
+   yok; taze her fixture DB'sinde 401 gelir ve 16 kontrol düşerdi.
+   `Teks-Erp/CLAUDE.md`'nin "HTTP bekçisi kendi kullanıcısını fixture ile yaratır"
+   kuralı fiilen çiğnenmişti.
+2. Sabit port BAŞKA bir oturumun sunucusunda olabiliyor ve o sunucu BAŞKA bir
+   veritabanına bakıyor olabiliyordu (aynı gün 4101'de yaşandı). Bekçi o hâlde ya
+   yanlış DB'yi ölçer ya 401 alıp "sunucu yok" der.
+
+Sayaç da yanlıştı: `atla()` bir sayıyor, `test_module_profile`ın ölçülmeyen DÖRT
+kontrolü "1 atlandı" görünüyordu — yani "19" gerçek kaybı OLDUĞUNDAN AZ gösteriyordu.
+
+**Sessizliğin somut bedeli:** HTTP ayağı koşar koşmaz sekiz gündür saklanan bir
+çelişki çıktı — `GET /admin/settings-password` in-process ayakta 403 beklenirken
+HTTP ayağında hâlâ 404 bekleniyordu (2026-09-04 kararı yalnız bir ayağa
+uygulanmıştı). Bekçi ölçmediği için kimse görmedi.
+
+### Karar — YOKLUK ≠ YABANCI
+
+Tek kaynak `scripts/lib/http-bekci-kapisi.ts`:
+- **Sunucu yok** → beyan edilmiş ATLAMA; GERÇEK kontrol sayısı sayaca eklenir
+  (`atla()` yalnız birini sayar, kalanı çağıran ekler). Kırmızı yapılmadı: beş
+  sunucuyu her koşumda ayağa kaldırmak beklenmiyor ve paketin yeşil olma yolu
+  kapanırsa "paket yeşil mi" sorusunun cevabı kalmaz.
+- **Sunucu var ama YABANCI** → KIRMIZI: ölçüm yapıldığı sanılırken başka bir
+  veritabanı ölçülüyor olurdu.
+- **`TEKSERP_STRICT=1`** → yokluk da kırmızı. "Yeşil = kapsandı" ancak strict
+  koşumda iddia edilir; anahtar TEK isimdir (ikinci bir strict bayrağı iki koşumu
+  iki farklı şey iddia eder hâle getirir).
+
+**"Aynı DB mi" kanıtı:** bekçi kullanıcısını Prisma ile KENDİ yaratır
+(`ensureTestAdmin`), hemen ardından HTTP'den giriş dener; 200 ⇒ sunucu zorunlu
+olarak aynı `users` tablosunu okumuştur. Kimliksiz `/health` ucuna kurulum damgası
+koyma seçeneği REDDEDİLDİ: o uç LAN'dan görünür ve ürün koduna "yalnız
+geliştirmede" dallanması sokardı. Var olan bir kullanıcıyla giriş denemek de
+yetmez (401 belirsizdir) — kullanıcı AYNI koşumda yaratıldığı için belirsizlik kalkar.
+
+### Ölçüm (öncesi → sonrası, fixture DB + ayakta sunucu)
+
+`test_settings_password` 134/0/13 → 145/1/0 (o 1 kırmızı yukarıdaki bayat
+beklentiydi, düzeltildi) · `test_module_profile` 56/0/1 → 60/0/0 ·
+`test_superadmin` 103/0/3 (üçü veri koşullu: DB'de sistem hesabı yok, meşru) ·
+`test_finance_flag_off` HTTP ayağı koşuyor.
+
+### Bekçi ve negatif sonda
+
+`test_script_guards §9`: `TEST_API_URL` geçen her bekçi kapıyı çağırmak zorunda
+(körlük zemini ≥5 dosya), kapı yokluk ile yabancıyı AYRI alanlarda döndürmek
+zorunda, strict anahtarı kaynakta bulunmak zorunda. Negatif sonda: sunucu kasten
+BAŞKA veritabanına (`tekserp_yabanci_test`) bağlanır, bekçi KIRMIZI verir.
+
+### Üç kapı
+
+Migration **yok** · izin **yok** · APK **yok**. Sözleşme: HTTP ayaklı bekçi artık
+`p2test` gibi ortamdan gelen bir kimliğe yaslanmaz; sabit port varsayımı da bekçi
+sözleşmesinin dışında.

@@ -36,6 +36,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { systemSettingService, readFinanceEnabled } from "../src/services/system-setting.service";
 import { ROLE_TEMPLATE_CATALOG } from "../src/constants/role-template-catalog";
 import { AuthService } from "../src/services/auth.service";
+import { httpBekciKapisi } from "./lib/http-bekci-kapisi";
 
 const BASE = process.env.TEST_API_URL ?? "http://localhost:4100";
 
@@ -48,16 +49,6 @@ function check(label: string, ok: boolean, detail = ""): void {
   } else {
     fail++;
     console.error(`❌ ${label}${detail ? ` — ${detail}` : ""}`);
-  }
-}
-
-/** Sunucu ayakta mı? Değilse HTTP bölümleri atlanır (bekçi çökmez). */
-async function serverUp(): Promise<boolean> {
-  try {
-    const r = await fetch(`${BASE}/health`, { signal: AbortSignal.timeout(2000) });
-    return r.ok;
-  } catch {
-    return false;
   }
 }
 
@@ -121,11 +112,19 @@ async function main(): Promise<void> {
   // §2/§3/§5 içindeki check() sayısı. Sunucu yoksa bu kadar kontrol ÖLÇÜLMEZ;
   // sayı özet satırında beyan edilir ki "yeşil ≠ kapsandı" görünür kalsın.
   const HTTP_KONTROL = 6;
-  if (!(await serverUp())) {
+  // Kapı üç durumu AYIRIR: sunucu yok → beyan edilmiş ATLAMA · sunucu var ama
+  // BAŞKA veritabanına bakıyor → KIRMIZI (ölçtüm yalanı) · hazır → token.
+  const kapi = await httpBekciKapisi({ base: BASE, kontrolSayisi: HTTP_KONTROL });
+  if (kapi.kirmizi) {
+    check("HTTP ayağı ölçülebildi", false, kapi.kirmizi);
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız, ${HTTP_KONTROL} atlandı ===`);
+    return;
+  }
+  if (!kapi.token) {
     // Atlanan sayısı ÖZET SATIRINA yazılır: koşucu kapsam kaybını yalnız oradan
     // okur (run-all-tests.ts, `Sonuç:` satırına demirli regex). Serbest metindeki
     // "§2/§3/§5 atlandı" bir sayı DEĞİLDİR.
-    console.log(`\n   ⏭️  §2/§3/§5 atlandı — ${BASE} ayakta değil (TEST_API_URL ile değiştirilebilir)\n`);
+    console.log(`\n   ⏭️  §2/§3/§5 atlandı — ${kapi.atlaSebebi}\n`);
     console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız, ${HTTP_KONTROL} atlandı ===`);
     return;
   }
