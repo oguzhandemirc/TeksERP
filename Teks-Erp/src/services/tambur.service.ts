@@ -15,6 +15,9 @@
 // =============================================================================
 
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
+import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
+import { postStockMove } from "./helpers/warehouse-ledger.helper";
+import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { normalizeScanCode } from "../utils/code-format";
@@ -34,7 +37,7 @@ import {
   VARIANCE_SOURCES,
   varianceKindForRemainingAction,
 } from "../constants/variance-reasons";
-import { RollVarianceKind } from "@prisma/client";
+import { WarehouseEventType, RollVarianceKind } from "@prisma/client";
 import { factoryDayStart } from "../constants/time";
 import {
   decodeDynamicCursor,
@@ -1154,6 +1157,20 @@ export class TamburService {
               metadata: op.metadata ?? undefined,
               inheritedFromParentRollId: roll.id,
             })),
+          });
+        }
+
+        // DEPO DEFTERİ — çocuk DEPODA doğuyorsa giriş satırı. Ebeveyn satır
+        // YAZMAZ: o IN_PRODUCTION'dı, yani zaten stok dışındaydı — "çift sayım"
+        // korkusunun yapısal cevabı bu, ayrı bir kural değil.
+        if (WAREHOUSE_STOCK_STATUSES.includes(splitRoll.status) && splitRoll.warehouseId) {
+          await postStockMove(tx, {
+            rollId: splitRoll.id,
+            eventType: WarehouseEventType.PRODUCTION,
+            qty: splitRoll.initialQty,
+            to: { warehouseId: splitRoll.warehouseId, status: splitRoll.status },
+            reasonCode: STOCK_MOVE_REASON.TAMBUR_FINALIZE,
+            workOrderStepId: roll.currentStep?.id ?? null,
           });
         }
 
