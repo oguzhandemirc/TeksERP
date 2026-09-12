@@ -153,8 +153,12 @@ const icerik = fs.readFileSync(KAYNAK, "utf8");
 for (const k of KOPYALAR) {
   const ad = path.relative(kok, k);
   const var_ = fs.existsSync(k);
-  check(`${ad} kaynakla aynı`, var_ && fs.readFileSync(k, "utf8") === icerik,
-    var_ ? "" : "dosya yok — node scripts/surum-notlari-kopyala.mjs");
+  // Kırmızı satır NE BULUNDUĞUNU söylemeli: etiket bir İDDİA ("… aynı") ve
+  // detay boş kalırsa `❌ … kaynakla aynı` iddianın kendisini yalanlar.
+  const bayat = var_ && fs.readFileSync(k, "utf8") !== icerik;
+  check(`${ad} kaynakla aynı`, var_ && !bayat,
+    !var_ ? "dosya YOK — node scripts/surum-notlari-kopyala.mjs"
+      : bayat ? "kopya BAYAT (kaynaktan farklı) — node scripts/surum-notlari-kopyala.mjs" : "");
 }
 
 // --- Yayın kapısı (argümanla) -------------------------------------------

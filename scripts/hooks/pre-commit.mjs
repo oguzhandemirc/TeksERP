@@ -91,6 +91,25 @@ if (staged.some((f) => f.endsWith(".md"))) {
   adimlar.push({ ad: "doküman kapısı", cwd: ".", cmd: ["node", ["scripts/check-docs.mjs"]] });
 }
 
+// ⚠️ SÜRÜM NOTU KAPISI: notlar YAYIN KAPISIDIR ama gövdeleri `.json`, ve proje
+// adımları yalnız `.ts/.tsx` değişiminde doğuyor — yani not commit'leri HİÇ adım
+// koşmadan iniyordu (ölçüldü 2026-09-12: notlara dokunan 22 commit'in 16'sı
+// YALNIZ `.json` değiştirmiş). Kapı zaten vardı, tetiği yoktu. Yollar ADIYLA
+// listelenir: `src/data/` altında bugün başka üretilmiş dosya YOK (ölçüldü) ve
+// jenerik bir `.json` deseni ölçülmemiş bir kapsam iddia ederdi.
+const SURUM_NOTU_YOLLARI = new Set([
+  "surum-notlari.json",
+  "Electron/src/data/surum-notlari.json",
+  "mobil/src/data/surum-notlari.json",
+]);
+if (staged.some((f) => SURUM_NOTU_YOLLARI.has(f))) {
+  adimlar.push({
+    ad: "sürüm notu kapısı",
+    cwd: ".",
+    cmd: ["node", ["scripts/check-surum-notlari.mjs"]],
+  });
+}
+
 if (adimlar.length === 0) process.exit(0);
 
 process.stderr.write(`⏳ commit kapısı: ${adimlar.length} adım (${adimlar.map((a) => a.ad).join(" · ")})\n`);
