@@ -2441,6 +2441,10 @@ model OrderLine {
   /// noktası recomputeOrderFulfillment. recomputeOrderStatus/status bunu okur.
   /// Açık miktar = quantity − shippedQty (rezerv/packedQty YOK — düşüş yalnız sevkte).
   shippedQty Decimal  @default(0) @db.Decimal(12, 3)
+  /// Satırın birimi — yaratılırken `Item.unit`ten kopyalanır, satırda düzenlenebilir.
+  /// `MT` dışı satırda karşılama ÖLÇÜLMEZ: sevk defteri metre tutar, `shippedQty`
+  /// yazılmaz ve sipariş kendiliğinden kapanmaz (`recomputeOrderStatusTx`).
+  unit       ItemUnit @default(MT)
   unitPrice  Decimal? @db.Decimal(12, 2) // For future finance module
   width      Decimal? @db.Decimal(12, 3) // İstenen en (cm)
 

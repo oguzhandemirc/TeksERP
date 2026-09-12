@@ -8,6 +8,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import type { ItemUnit } from "@prisma/client";
 import { AuditService } from "./audit.service";
 import { BaseService, BaseServiceConfig, CursorPaginatedResponse } from "./base.service";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
@@ -52,6 +53,9 @@ const ORDER_LINE_WRITABLE = new Set([
   "itemId",
   "colorId",
   "quantity",
+  // Satır birimi (MT/KG/ADET) — gönderilmezse kalem kartından kopyalanır
+  // (`resolveLineUnit`); gönderilirse enum'a karşı doğrulanır.
+  "unit",
   "unitPrice",
   "width",
   "pieceLengthM",
@@ -61,7 +65,12 @@ const ORDER_LINE_WRITABLE = new Set([
 ]);
 import { readOrderDefaultDeadlineDays } from "./system-setting.service";
 import { CURRENCIES } from "../config/currencies";
-import { recomputeOrderStatusTx, touchOrderLinesTx } from "./helpers/order-status.helper";
+import {
+  recomputeOrderStatusTx,
+  touchOrderLinesTx,
+  unmeasuredLineWarnings,
+} from "./helpers/order-status.helper";
+import { isItemUnit } from "../constants/item-unit";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { computeLineCoverage, computeWoMaterial } from "./helpers/coverage.helper";
@@ -841,8 +850,13 @@ export class OrderService extends BaseService {
    * üretim bağı kurulur. KK1/WO ile aynı soft-delete-entry guard sınıfı.
    * (Var-olmayan UUID zaten P2003→400 ile yakalanır; bu guard pasif kayıtları kapatır.)
    */
-  private async validateLineItems(lines: unknown): Promise<void> {
-    if (!Array.isArray(lines)) return;
+  /**
+   * Satır kalemlerini doğrular ve `itemId → Item.unit` haritasını döner: satır
+   * birimi buradan kopyalanır (ikinci bir okuma doğmasın diye aynı sorgu).
+   */
+  private async validateLineItems(lines: unknown): Promise<Map<string, ItemUnit>> {
+    const unitByItem = new Map<string, ItemUnit>();
+    if (!Array.isArray(lines)) return unitByItem;
 
     const itemIds = new Set<string>();
     const propertyIds = new Set<string>();
@@ -876,6 +890,7 @@ export class OrderService extends BaseService {
         select: {
           id: true,
           name: true,
+          unit: true,
           allowedColors: { select: { colorId: true } },
           allowedProperties: { select: { propertyId: true } },
         },
@@ -884,6 +899,7 @@ export class OrderService extends BaseService {
         throw AppError.badRequest("Sipariş kaleminde bulunmayan veya pasif ürün var");
       }
       const itemById = new Map(live.map((i) => [i.id, i]));
+      for (const i of live) unitByItem.set(i.id, i.unit);
       for (const pair of pairs) {
         const item = itemById.get(pair.itemId);
         if (!item) continue;
@@ -905,6 +921,12 @@ export class OrderService extends BaseService {
       }
     }
 
+    await this.assertLineRefsLive(colorIds, propertyIds);
+    return unitByItem;
+  }
+
+  /** Satırın renk/özellik referansları var ve aktif mi (M-23 / denetim Q2). */
+  private async assertLineRefsLive(colorIds: Set<string>, propertyIds: Set<string>): Promise<void> {
     // M-23: satır rengi varlık + isActive (item/property gibi — pasif renk
     // canlı sipariş satırına yazılamaz; assertColorsAssignableToCustomer
     // yalnız atama kuralına bakar, aktifliğe bakmaz).
@@ -931,6 +953,36 @@ export class OrderService extends BaseService {
       // listeye ve oradan doğan toplara değersiz satır olarak yayılırdı.
       await assertTargetablePropertyIds([...propertyIds], "sipariş kalemi özelliği");
     }
+  }
+
+  /**
+   * Satır birimi: gönderildiyse enum'a karşı doğrulanır, gönderilmediyse kalem
+   * kartından kopyalanır. Sessiz `MT` varsayılanı YOK — kalem çözülemediyse 400
+   * (varsayılan, 1000 kg'lık satırı metre saydıran sessiz yanlışın kendisiydi).
+   */
+  private resolveLineUnit(
+    raw: Record<string, unknown>,
+    unitByItem: Map<string, ItemUnit>,
+  ): ItemUnit {
+    if (raw.unit != null && raw.unit !== "") {
+      if (!isItemUnit(raw.unit)) {
+        throw AppError.badRequest(`Geçersiz kalem birimi: ${String(raw.unit)} (MT, KG veya ADET).`);
+      }
+      return raw.unit;
+    }
+    const fromItem = typeof raw.itemId === "string" ? unitByItem.get(raw.itemId) : undefined;
+    if (!fromItem) {
+      throw AppError.badRequest("Sipariş kaleminin birimi çözülemedi — ürün seçilmemiş.");
+    }
+    return fromItem;
+  }
+
+  /** Yanıta MT-dışı satır uyarılarını ekler (engel değil, `warnings`). */
+  private withUnitWarnings<T>(res: ApiResponse<T>): ApiResponse<T> {
+    const lines = (res.data as { lines?: unknown } | null)?.lines;
+    if (!Array.isArray(lines)) return res;
+    const warnings = unmeasuredLineWarnings(lines as Parameters<typeof unmeasuredLineWarnings>[0]);
+    return warnings.length > 0 ? { ...res, warnings } : res;
   }
 
   /**
@@ -1681,6 +1733,11 @@ export class OrderService extends BaseService {
    *     (terminal — hep sevk edilmiş sayılır). Legacy directShipmentId=null → tek toplu satır.
    * Bilgilendirici snapshot (sevk muhasebesini değiştirmez).
    */
+  /** Detay: MT-dışı aktif satır varsa `warnings` ile "karşılama ölçülmüyor". */
+  async findById(id: string): Promise<ApiResponse<unknown>> {
+    return this.withUnitWarnings(await super.findById(id));
+  }
+
   async getOrderShipments(orderId: string): Promise<ApiResponse<OrderShipmentsResult>> {
     // ── Kaynak A: çuval sevkiyatı ──
     const sackAllocs = await prisma.sackAllocation.findMany({
@@ -1832,7 +1889,7 @@ export class OrderService extends BaseService {
       throw AppError.badRequest("Sipariş en az bir kalem içermeli.");
     }
     this.validateLines(data.lines);
-    await this.validateLineItems(data.lines);
+    const unitByItem = await this.validateLineItems(data.lines);
 
     if (data.customerId) {
       await this.validateCustomer(data.customerId as string);
@@ -1904,6 +1961,7 @@ export class OrderService extends BaseService {
         for (const key of Object.keys(rawLine)) {
           if (ORDER_LINE_WRITABLE.has(key)) line[key] = rawLine[key];
         }
+        line.unit = this.resolveLineUnit(rawLine, unitByItem);
         const ids = Array.isArray(rawLine.requiredPropertyIds)
           ? [...new Set((rawLine.requiredPropertyIds as string[]).filter(Boolean))]
           : [];
@@ -2013,11 +2071,11 @@ export class OrderService extends BaseService {
     if (record.__replayOf) {
       const existing = record.__replayOf as Record<string, unknown>;
       // Audit + alias terfisi yalnız gerçek create yolunda (ilk çağrıda yazıldı).
-      return {
+      return this.withUnitWarnings({
         success: true,
         data: existing,
         message: `Sipariş zaten oluşturulmuş (idempotent retry): ${existing.orderNumber}`,
-      };
+      });
     }
     const orderNumber = record.orderNumber as string;
 
@@ -2039,7 +2097,7 @@ export class OrderService extends BaseService {
       userId
     );
 
-    return { success: true, data: record, message: "Sipariş oluşturuldu" };
+    return this.withUnitWarnings({ success: true, data: record, message: "Sipariş oluşturuldu" });
   }
 
   /**
@@ -2263,6 +2321,7 @@ export class OrderService extends BaseService {
         lines: {
           select: {
             id: true,
+            itemId: true,
             // ⚠️ LOAD-BEARING: aşağıdaki `cancelledAt !== null` süzgeci bu alan
             // seçilmezse `undefined !== null` ile TÜM kalemleri iptal sayar ve
             // hiçbir kalem güncellenemez olurdu (sessiz felç).
@@ -2394,6 +2453,7 @@ export class OrderService extends BaseService {
     }
 
     // Lines payload geldiyse: WO bağı kontrolü + diff uygula.
+    let unitByItem: Map<string, ItemUnit> = new Map();
     if (incomingLines) {
       // CANCELLED WO bağları sayılmaz (iptal edilmiş, kalem serbest).
       const hasActiveWoLink = current.lines.some((line) =>
@@ -2405,7 +2465,7 @@ export class OrderService extends BaseService {
         );
       }
       this.validateLines(incomingLines);
-      await this.validateLineItems(incomingLines);
+      unitByItem = await this.validateLineItems(incomingLines);
 
       const effectiveCustomerId = customerChanging
         ? (cleanData.customerId as string | null)
@@ -2513,6 +2573,16 @@ export class OrderService extends BaseService {
 
           const existingLine =
             typeof raw.id === "string" ? existingById.get(raw.id as string) : undefined;
+          // Birim: yeni satırda ve kalem değişiminde kalemden (ya da açık
+          // gönderilen değerden); mevcut satırda gönderilmediyse DOKUNULMAZ.
+          const unitSent = raw.unit != null && raw.unit !== "";
+          const itemChanged =
+            existingLine != null && typeof raw.itemId === "string" && raw.itemId !== existingLine.itemId;
+          if (!existingLine || unitSent || itemChanged) {
+            lineData.unit = this.resolveLineUnit(raw, unitByItem);
+          } else {
+            delete lineData.unit;
+          }
 
           if (existingLine) {
             const lineId = existingLine.id;
@@ -2616,7 +2686,7 @@ export class OrderService extends BaseService {
       await this.promoteCustomerAliases(finalCustomerId, incomingLines, userId);
     }
 
-    return { success: true, data: updated, message: "Sipariş güncellendi" };
+    return this.withUnitWarnings({ success: true, data: updated, message: "Sipariş güncellendi" });
   }
 
   /**

@@ -13,7 +13,8 @@
 // (dispatch / cancel / directShip / sipariş düzenleme) tetiklenir; her şeyi senkronlar.
 // =============================================================================
 
-import { Prisma, OrderStatus, ShipmentStatus } from "@prisma/client";
+import { Prisma, OrderStatus, ShipmentStatus, ItemUnit } from "@prisma/client";
+import { isMeasuredUnit, unitLabel } from "../../constants/item-unit";
 import { readShippingToleranceMeters } from "../system-setting.service";
 
 /**
@@ -105,7 +106,7 @@ export async function recomputeOrderStatusTx(
       status: true,
       completedAt: true,
       manualClosedById: true,
-      lines: { select: { id: true, quantity: true, cancelledAt: true } },
+      lines: { select: { id: true, quantity: true, cancelledAt: true, unit: true } },
     },
   });
   if (!order) return null;
@@ -125,12 +126,27 @@ export async function recomputeOrderStatusTx(
   let shippedQty = new Prisma.Decimal(0);
   let totalRequired = new Prisma.Decimal(0);
   let activeLineCount = 0;
+  // MT-dışı (kg/adet) AKTİF satır var mı: sipariş KENDİLİĞİNDEN KAPANAMAZ.
+  let unmeasuredActive = false;
+  // MT-dışı satıra metre defteri yazılmış mı: "bir şey çıktı" gerçeği (kısmi sevk).
+  let unmeasuredShipped = false;
   for (const l of order.lines) {
-    const led = ledger.get(l.id) ?? { shipped: new Prisma.Decimal(0) };
-    await tx.orderLine.update({
-      where: { id: l.id },
-      data: { shippedQty: led.shipped },
-    });
+    // ── MT-DIŞI SATIR METRE DEFTERİNİN DIŞINDADIR ─────────────────────────
+    // Defter (`SackAllocation.qty`) metre tutar; kg/adet satıra bu Σ yazılırsa
+    // 1000 kg'lık sipariş ~1000 m'de sessizce kapanır. Bu satırda `shippedQty`
+    // YAZILMAZ (yeni satırda 0, eski rakam varsa olduğu gibi kalır) ve header
+    // Σ'ya 0 girer. `unit` seçilmemişse MT — bugünkü davranış.
+    const measured = isMeasuredUnit(l.unit);
+    const ledgerRow = ledger.get(l.id) ?? { shipped: new Prisma.Decimal(0) };
+    const led = measured ? ledgerRow : { shipped: new Prisma.Decimal(0) };
+    if (measured) {
+      await tx.orderLine.update({
+        where: { id: l.id },
+        data: { shippedQty: led.shipped },
+      });
+    } else if (ledgerRow.shipped.greaterThan(0)) {
+      unmeasuredShipped = true;
+    }
     shippedQty = shippedQty.plus(led.shipped);
     // ⚠️ GEVŞEK karşılaştırma (`== null`) BİLİNÇLİ: alanı `select`'ine almayan
     // bir çağıran `undefined` gönderir ve KATI `=== null` orada FALSE döner —
@@ -140,7 +156,8 @@ export async function recomputeOrderStatusTx(
     // ettiremez — belirsizlikte AKTİF kabul edilir (önceki davranış).
     if (l.cancelledAt == null) {
       activeLineCount++;
-      totalRequired = totalRequired.plus(l.quantity);
+      if (measured) totalRequired = totalRequired.plus(l.quantity);
+      else unmeasuredActive = true;
     } else {
       totalRequired = totalRequired.plus(led.shipped);
     }
@@ -165,17 +182,22 @@ export async function recomputeOrderStatusTx(
     toleranceMeters ?? (await readShippingToleranceMeters(tx))
   );
 
+  // "Bir şey sevk edildi" — metre Σ ya da MT-dışı satıra düşmüş defter satırı.
+  const anyShipped = shippedQty.greaterThan(0) || unmeasuredShipped;
+
   let newStatus: OrderStatus = order.status;
   if (!terminal) {
     newStatus = OrderStatus.APPROVED;
-    if (shippedQty.greaterThan(0)) {
-      newStatus = totalRequired.minus(shippedQty).lessThanOrEqualTo(tolerance)
-        ? OrderStatus.COMPLETED
-        : OrderStatus.PARTIAL_SHIPPED;
+    if (anyShipped) {
+      // Ölçülmeyen aktif satır varken COMPLETED yalnız elle (manualComplete).
+      newStatus =
+        !unmeasuredActive && totalRequired.minus(shippedQty).lessThanOrEqualTo(tolerance)
+          ? OrderStatus.COMPLETED
+          : OrderStatus.PARTIAL_SHIPPED;
     }
     // Son aktif kalem de iptal edildiyse sipariş açık kalamaz.
     if (allLinesCancelled) {
-      newStatus = shippedQty.greaterThan(0) ? OrderStatus.COMPLETED : OrderStatus.CANCELLED;
+      newStatus = anyShipped ? OrderStatus.COMPLETED : OrderStatus.CANCELLED;
     }
   }
 
@@ -219,4 +241,29 @@ export async function recomputeOrderStatusForOrdersTx(
   for (const id of unique) {
     await recomputeOrderStatusTx(tx, id, toleranceMeters);
   }
+}
+
+/**
+ * MT-dışı AKTİF satırların "karşılama ölçülmüyor" uyarıları — sipariş
+ * create/update/detay yanıtının `warnings` alanına gider. Sessiz yanlış yerine
+ * görünür-ölçülmemiş: satır kg/adet ise metre defteri onu ölçemez.
+ */
+export function unmeasuredLineWarnings(
+  lines: ReadonlyArray<{
+    unit?: ItemUnit | null;
+    cancelledAt?: Date | null;
+    item?: { name: string } | null;
+    customerItemName?: string | null;
+  }>,
+): string[] {
+  const out: string[] = [];
+  for (const l of lines) {
+    if (l.cancelledAt != null || isMeasuredUnit(l.unit)) continue;
+    const name = l.customerItemName?.trim() || l.item?.name || "Kalem";
+    out.push(
+      `"${name}" kalemi ${unitLabel(l.unit)} birimli — metre defteri karşılamayı ölçemez; ` +
+        "sevk edilen miktar bu satıra yazılmaz ve sipariş kendiliğinden kapanmaz.",
+    );
+  }
+  return out;
 }

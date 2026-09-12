@@ -637,6 +637,7 @@ router.get("/:id", verifyToken, requirePermission("order:read"), controller.find
  *                     itemId: { type: string, format: uuid }
  *                     colorId: { type: string, format: uuid, nullable: true }
  *                     quantity: { type: number }
+ *                     unit: { type: string, enum: [MT, KG, ADET], description: "Satır birimi — boş bırakılırsa kalem kartından kopyalanır; enum dışı 400" }
  *                     unitPrice: { type: number, nullable: true, description: "Opsiyonel — fiyatsız sipariş için boş bırakılabilir" }
  *                     width: { type: number, nullable: true }
  *                     customerItemName: { type: string, nullable: true }

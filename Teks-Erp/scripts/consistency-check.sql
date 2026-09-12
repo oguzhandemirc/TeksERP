@@ -44,7 +44,9 @@ LEFT JOIN (
 ) sa ON sa."orderLineId" = ol.id
 LEFT JOIN (SELECT "orderLineId", SUM(qty) AS toplam FROM subcontractor_direct_ship_allocations GROUP BY "orderLineId") dsa
        ON dsa."orderLineId" = ol.id
-WHERE ol."shippedQty" <> COALESCE(sa.toplam, 0) + COALESCE(dsa.toplam, 0);
+-- MT-dışı (kg/adet) satır metre defterinin DIŞINDADIR: shippedQty yazılmaz, mutabakata girmez.
+WHERE ol."unit" = 'MT'
+  AND ol."shippedQty" <> COALESCE(sa.toplam, 0) + COALESCE(dsa.toplam, 0);
 
 \echo ''
 \echo '== 1c) DEFTERİN KENDİSİ EKSİK: sipariş BEYAN eden sevkiyatın tahsis satırı YOK =='
@@ -105,7 +107,7 @@ ORDER BY (x.icerik - x.tahsis) DESC;
 SELECT o.id AS order_id,
        o."shippedQty" AS shipped_kayitli, COALESCE(SUM(ol."shippedQty"), 0) AS shipped_hesap
 FROM orders o
-LEFT JOIN order_lines ol ON ol."orderId" = o.id
+LEFT JOIN order_lines ol ON ol."orderId" = o.id AND ol."unit" = 'MT'  -- header Σ yalnız metre satırı
 GROUP BY o.id, o."shippedQty"
 HAVING o."shippedQty" <> COALESCE(SUM(ol."shippedQty"), 0);
 
