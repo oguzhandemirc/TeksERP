@@ -19,7 +19,8 @@
       "id": "2026-09-12",
       "baslik": "Yanlış yapılan işlemler geri alınabiliyor: kartela düşümü, sayım, çek; sevk irsaliyesi tek pencerede toplandı",
       "surumler": {
-        "panel": "1.3.2"
+        "panel": "1.3.2",
+        "tablet": "1.0.7"
       },
       "maddeler": [
         {
@@ -126,6 +127,11 @@
           "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Fasondan doğrudan müşteriye sevk yapılmış (fasondan sevk kaydı olan) bir fason sevkiyatı artık iptal edilemiyor; deneyince hangi fasondan-sevk numarası yüzünden kilitli olduğu yazıyor. Önceden mal müşteriye çıkmış olmasına rağmen fason sevki iptal edilebiliyordu ve fasoncu karnesi yanlış çıkıyordu. İş emri iptalinde bu sevkler atlanır; fasonda kalan mal mevcut “kalan gelmeyecek” kararıyla kapatılır."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "Kartela kabulü geri alınamadığında hangi kartelaların engellediği tek tek listeleniyor. Önceden yalnız kaç kartelanın engellediği yazıyordu; operatör hangi kartelayı sevkiyattan ya da çuvaldan çıkaracağını bilemiyordu, şimdi kartela numaraları ekranda sıralanıyor."
         }
       ]
     },

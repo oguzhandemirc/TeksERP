@@ -22,6 +22,7 @@ import {
   type KartelaReceiptListItem,
   type KartelaReceiptStatusFilter,
 } from '../../../services/kartela.service';
+import { blockedSwatchCardNumbers } from './blockedSwatches.helper';
 import { colors, spacing, radius } from '../../../theme';
 import type { MainStackParamList } from '../../../navigation/types';
 
@@ -48,6 +49,8 @@ export default function KartelaKabulGecmisiScreen() {
   const [firmPickerOpen, setFirmPickerOpen] = useState(false);
   const [detailTarget, setDetailTarget] = useState<KartelaReceiptListItem | null>(null);
   const [cancelTarget, setCancelTarget] = useState<KartelaReceiptListItem | null>(null);
+  /** Engel dökümü — dolu olduğu sürece "hangi kartelalar engelliyor" dialogu açık. */
+  const [blockedCards, setBlockedCards] = useState<string[] | null>(null);
 
   const { firms } = useKartelaFirms();
   const firmOptions: PickerOption[] = useMemo(
@@ -85,6 +88,16 @@ export default function KartelaKabulGecmisiScreen() {
       void query.refetch();
     },
     onError: (err: Error) => {
+      // Engel DÖKÜMLÜ geldiyse Toast yerine LİSTE dialogu: yıkıcı işlem
+      // engellenince operatör hangi kayıtların engellediğini görmek zorunda,
+      // "N kartela" soyut sayısı hangi kartelayı çıkaracağını söylemiyor.
+      const cards = blockedSwatchCardNumbers(err);
+      if (cards) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setCancelTarget(null);
+        setBlockedCards(cards);
+        return;
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Geri alınamadı', text2: err.message });
     },
@@ -196,6 +209,37 @@ export default function KartelaKabulGecmisiScreen() {
         onConfirm={({ reason }) => {
           if (cancelTarget) cancelMutation.mutate({ id: cancelTarget.id, reason: reason ?? '' });
         }}
+      />
+
+      {/* Engel dökümü — kartelalar TEK TEK listelenir (liste gövdedeki ScrollView'da
+          akar, kırpılmaz). Emsal: FasonSevk ürün uyuşmazlığı dialogu. */}
+      <ConfirmDialog
+        kind="simple"
+        visible={blockedCards !== null}
+        title="Kabul geri alınamadı"
+        description={
+          blockedCards ? (
+            <View>
+              <Text style={{ fontSize: 14, color: colors.textSecondary, lineHeight: 20 }}>
+                {blockedCards.length} kartela sevkiyatta ya da çuvalda olduğu için kabul geri
+                alınamıyor. Önce aşağıdaki kartelaları sevkiyattan/çuvaldan çıkarın:
+              </Text>
+              <View style={{ marginTop: spacing.sm, gap: 4 }}>
+                {blockedCards.map((card) => (
+                  <Text key={card} style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>
+                    • {card}
+                  </Text>
+                ))}
+              </View>
+            </View>
+          ) : (
+            ''
+          )
+        }
+        confirmLabel="Anladım"
+        cancelLabel="Kapat"
+        onDismiss={() => setBlockedCards(null)}
+        onConfirm={() => setBlockedCards(null)}
       />
     </ScreenChrome>
   );
