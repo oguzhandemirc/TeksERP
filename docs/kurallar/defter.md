@@ -49,6 +49,7 @@ Eski dört sınıf 2026-09-10'da ikiye indi. Diğer her "sil" bir DURUM GEÇİŞ
 - **[ÇEKİRDEK]** ③b'de pivot satırı silinebilir ama DEĞİŞİKLİĞİN KENDİSİ bir karar defterine yazılır; yüzlerce ayar satırını versiyonlamak tabloyu şişirir, sorulan soruyu cevaplamaz. <sub>(arşiv:2026-09-10)</sub>
 - **[ÇEKİRDEK]** ③a TİCARİ pivot (`ItemPrice` · `SackAllocation` · `PaymentAllocation` · `WorkOrderToOrderLine` · `RollProperty` · `WorkOrderTargetProperty` · belge satırları) sil-yaz YAPILMAZ: versiyonlanır (`validFrom`/`validUntil`) ya da ters kayıt alır. `RollProperty`/`WorkOrderTargetProperty` 2026-09-11'de bilinçle ③a'ya kondu — topun özelliği rota kapsamasını belirleyen GERÇEK kısıttır, ayar değil. <sub>(arşiv:2026-09-10)</sub>
 - **[ÇEKİRDEK]** Eski ① (bağımlılık-guard'lı silme) ve ② (alias/karar satırı) sınıfları KALKTI: guard kalır, silme gider — `isActive:false` / `VOIDED` statüsü / `revokedAt`+`revokedById`. <sub>(arşiv:2026-09-10)</sub>
+- **[ÇEKİRDEK]** Kalıcı silme uçlarının izlenen model listesi ELLE tutulmaz: uçlar route dosyalarından keşfedilir, "bu uç fiziksel siliyor" iddiası servis dosyasında çapalanır (mezar taşı yazan uç izlenmez) ve bir modele gelen her FK ya guard'da sayılır ya gerekçeli muaftır — uç adında "permanent" geçmesi fiziksel silme KANITI değildir. · bekçi: `test_hard_delete_guard_coverage.ts` <sub>(arşiv:2026-09-12 K5)</sub>
 
 ### Tuzaklar
 

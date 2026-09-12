@@ -261,6 +261,15 @@ const MACHINE_DELETE_GUARDS: DependencyGuard[] = [
     count: (id) => prisma.device.count({ where: { machineId: id } }),
     message: (n) => `Bu makineye ${n} cihaz (tablet) atanmış — önce cihaz atamasını kaldırın.`,
   },
+  {
+    // `KursunBypassAssignment.machineId` RESTRICT'tir, yani silme zaten P2003'e
+    // düşer — ama operatör jenerik "bağlı kayıt var" yerine HANGİ izin engellediğini
+    // görmeli; atama satırı append-only bypass izidir, silinmez.
+    key: "kursunBypassCount",
+    count: (id) => prisma.kursunBypassAssignment.count({ where: { machineId: id } }),
+    message: (n) =>
+      `Bu makineye ${n} kurşun bypass ataması yapılmış — kalıcı silinemez. Pasife alın.`,
+  },
 ];
 
 export const machineHardRemove = makeGuardedHardRemove({

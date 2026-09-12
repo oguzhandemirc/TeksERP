@@ -6336,3 +6336,65 @@ defterden, operasyon satırı değişmez + damga) · §3 çift geri alma 409 · 
 
 Migration **var** (iki dosya, şema dilimi `03d7b9b2`). İzin **yok** (mevcut
 `master-data:merge`). APK **yok**; panel sürümü gerekir (Birleştirme Geçmişi).
+
+## 2026-09-12 — Kalıcı silme kapsama bekçisi: izlenen model listesi route'tan TÜRÜYOR (K5) [ÇEKİRDEK]
+
+### Saha sorusu ve ölçüm
+
+`test_hard_delete_guard_coverage.ts` yalnız üç modeli izliyordu (`WATCHED = {Item,
+Customer, Device}`) ve liste ELLE tutuluyordu. Sahada `DELETE /:id/permanent` ucu ON
+DÖRT çıktı (13 route dosyası; `station.routes.ts` iki uç taşıyor). İlk grep'im ikisini
+kaçırdı — `peripheral.routes.ts:134` ve `device.routes.ts:123` ayrı router değişkeni
+kullanıyor, `defect-type.routes.ts:46` mount'u ÇOK SATIRLI yazıyor: "grep'le say"
+yöntemi de elle liste kadar kör.
+
+Uçların BEŞİ adına rağmen fiziksel silmiyor: Roll (`status CANCELLED` arşivi),
+WorkOrder (`isActive:false`), LabelTemplate + PeripheralDevice (`deletedAt` mezar
+taşı), Order (`hardDelete()` → `softDelete()` yönlendirmesi). O uçlarda gelen FK'nın
+SetNull/Cascade aksiyonu hiç tetiklenmez. Geriye dokuz model kalıyor ve altısı
+(Station, Machine, Route, ProductRecipe, Warehouse, DefectType) bekçiye hiç
+görünmüyordu — 35 SetNull/Cascade bağının 16'sı ölçüm dışıydı.
+
+### Karar
+
+- `WATCHED` elle liste olmaktan çıktı: `ENDPOINT_TARGETS` (uç → fiziksel silinen
+  model) haritasından TÜRER. Eksiksizlik İKİ YÖNLÜ ölçülür — haritasız yeni uç
+  kırmızı, route'tan kaybolmuş harita satırı kırmızı.
+- "Bu uç silmiyor" iddiası ÇAPALI: `null` eşlenen her uç için ilgili servis dosyasında
+  `(prisma|tx).<model>.delete(Many)?(` BULUNMAMALI. Mezar taşı gerçek silmeye
+  çevrilirse bekçi kırmızı olur ve EXPECTED satırı yazılmaya zorlar.
+- Yeni §D: Machine'e gelen her FK kolonu ya `MACHINE_DELETE_GUARDS`ta sayılır ya
+  `MACHINE_GUARD_EXEMPT`te gerekçelidir; ölü guard satırı ve ölü muaf da kırmızı verir.
+- Ölçüm bir BOŞLUK buldu, aynı commit'te kapatıldı: `KursunBypassAssignment.machine`
+  RESTRICT'ti ama sayımı yoktu — bypass ataması olan makineyi kalıcı silmek operatöre
+  jenerik P2003 veriyordu. `kursunBypassCount` guard'ı eklendi (Türkçe 409 + somut sayı).
+
+### Gerekçe
+
+Elle tutulan izleme listesi sessiz körlük üretir: ilişki eklenince değil, UÇ eklenince
+kör kalır — üç modelden on dörde geçen sürede kimse listeyi büyütmedi. Route keşfi o
+kör noktayı kapatır; "bu uç neyi siliyor" eşlemesi elle kalır çünkü mekanik değildir,
+ama artık ölçülen bir iddiadır. Mezar taşı uçlarının modellerini izlemek YANLIŞ olurdu:
+FK aksiyonu tetiklenmediği için her satır "guard'sız delik" gibi görünür, gerçek
+delikleri gürültüye gömerdi.
+
+### Kod çapaları
+
+- `Teks-Erp/scripts/test_hard_delete_guard_coverage.ts` — §A uç keşfi (yorumlar
+  sökülür), §B mezar taşı çapası, §C SetNull/Cascade envanteri (9 model / 35 bağ),
+  §D Machine guard alt kümesi (7 FK ↔ 6 sayım + 1 gerekçeli muaf).
+- `Teks-Erp/src/services/helpers/guarded-hard-remove.ts` — `kursunBypassCount` guard'ı.
+
+### Bekçi
+
+17 kontrol yeşil. Negatif sondalar (üçü de kırmızı verdi, iki dosya sha256 ile geri
+yüklendi): ① haritadan `machineHardRemove` satırı silindi → §A haritasız uç + §C beş
+bayat Machine satırı · ② `MACHINE_DELETE_GUARDS`tan `kursunBypassAssignment` sayımı
+yoruma alındı → §D sayımsız FK · ③ Order'ın mezar taşı çapası gerçekten silinen pivota
+(`workOrderToOrderLine`) çevrildi → §B kırmızı. Yorum sökme ŞART: sondada yorumlanmış
+satır "var" sayılsaydı ikinci sonda yeşil kalırdı.
+
+### Üç kapı
+
+Migration **yok** (şema değişmedi). İzin **yok**. APK/panel **yok** — değişiklik
+backend guard mesajı + bekçi.
