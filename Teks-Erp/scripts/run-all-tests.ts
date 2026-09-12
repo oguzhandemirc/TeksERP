@@ -24,6 +24,9 @@ import {
   hacimHedefEngeli,
   hedefDbAdi,
 } from "./lib/hedef-db-kapisi";
+// STRICT anahtarı TEK KAYNAKTIR ([TD-10c]): ikinci bir bayrak ya da ikinci bir
+// `process.env` okuması açılmaz — iki koşum iki farklı şey iddia ederdi.
+import { strictMi } from "./lib/http-bekci-kapisi";
 
 const SCRIPTS_DIR = join(__dirname);
 const PER_TEST_TIMEOUT_MS = 180_000;
@@ -446,6 +449,7 @@ async function main() {
   // bölümünü ayrı bir sunucu ister ve sunucu yoksa SESSİZCE atlar. Toplamı burada
   // basılır ki "hepsi yeşil" cümlesi "hepsi ölçüldü" sanılmasın.
   const skippedFiles = results.filter((r) => r.skipped > 0);
+  let strictAtlamaKirmizisi = false;
   if (skippedFiles.length > 0) {
     const total = skippedFiles.reduce((sum, r) => sum + r.skipped, 0);
     console.log(
@@ -453,13 +457,23 @@ async function main() {
     );
     for (const f of skippedFiles) console.log(`  ⚠️  ${f.file} — ${f.skipped} atlandı`);
     console.log("     (HTTP ayaklı bekçiler kendi portunda sunucu ister: 4100/4101/4104/4112/4122)");
+    // STRICT: "yeşil = kapsandı" iddiası ancak SIFIR atlamayla kurulur. Anahtarın
+    // anlamı [TD-10c]'de tanımlı; burada yalnız ATLAMA sayısına bakılır — "sunucu
+    // ayakta ama başka DB'ye bakıyor" sınıfı zaten hedef kapısında, strict'i
+    // beklemeden kırmızıdır.
+    if (strictMi()) {
+      strictAtlamaKirmizisi = true;
+      console.log(
+        "❌ TEKSERP_STRICT=1 — atlanan kontrol KIRMIZIDIR: paket kararı bu koşumdan verilemez.",
+      );
+    }
   }
   // Flake'ler exit kodunu düşürmez ama GİZLENMEZ — hangi test kaç kez koştu görünsün.
   if (flakes.length > 0) {
     console.log(`Altyapı flake'i (2. denemede geçti — DB bağlantı timeout'u): ${flakes.length}`);
     for (const f of flakes) console.log(`  ⚠️  ${f.file}`);
   }
-  process.exit(failed.length > 0 ? 1 : 0);
+  process.exit(failed.length > 0 || strictAtlamaKirmizisi ? 1 : 0);
 }
 
 void main();

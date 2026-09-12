@@ -76,7 +76,12 @@ import { join } from "node:path";
 import prisma, { pool } from "../src/lib/prisma";
 import { systemSettingService } from "../src/services/system-setting.service";
 import { AuthService } from "../src/services/auth.service";
-import { MODULE_DEPENDENCIES, MODULE_LABELS } from "../src/constants/module-flags";
+import {
+  MODULE_DEPENDENCIES,
+  MODULE_FLAG_KEYS,
+  MODULE_LABELS,
+  MODULE_SETTING_KEYS,
+} from "../src/constants/module-flags";
 import {
   dosyaDuzeyiDurumTasiyicilari,
   forbiddenCagrilari,
@@ -829,6 +834,75 @@ async function main(): Promise<void> {
         : `${gozlem.length} sonda beklendiği gibi`,
     );
   }
+
+  // ── §8 ⭐ TERS YÖN: KAPI ↔ ANAHTAR — yeni kapı ya da yeni modül sessizce doğamaz
+  // §1–§7 hep BU dosyadaki `MODULLER` tablosundan gider ve o tablo ELLE yazılır:
+  // `module.middleware.ts`e eklenen adlandırılmış bir kapı ya da
+  // `MODULE_FLAG_KEYS`e eklenen bir modül bu bekçiye GÖRÜNMEZ. `test_module_flags`
+  // anahtar ↔ servis ↔ şema ↔ migration yönlerini ölçer; KAPI yönünü ölçmez.
+  console.log("\n── §8 Ters yön: kapı ↔ anahtar kapsaması ──");
+  const mwMetni = yorumlariSok(readFileSync(MW_YOL, "utf8"));
+  const kesfedilenKapilar = [
+    ...mwMetni.matchAll(/export\s+async\s+function\s+(require[A-Za-z]+Enabled)\b/g),
+  ].map((m) => m[1]!);
+  check(
+    "§8a Körlük zemini: middleware'de kapı bulundu",
+    kesfedilenKapilar.length >= 4,
+    `n=${kesfedilenKapilar.length}`,
+  );
+
+  const tabloKapilari = new Set(MODULLER.map((m) => m.middleware));
+  const tablosuz = kesfedilenKapilar.filter((k) => !tabloKapilari.has(k));
+  check(
+    "§8b ⭐ Keşfedilen HER kapının tabloda satırı var",
+    tablosuz.length === 0,
+    tablosuz.join(", ") || `${kesfedilenKapilar.length} kapı`,
+  );
+  const oluSatir = [...tabloKapilari].filter((k) => !kesfedilenKapilar.includes(k));
+  check(
+    "§8c Tabloda ÖLÜ satır yok (kapı silinince fark edilir)",
+    oluSatir.length === 0,
+    oluSatir.join(", ") || "yok",
+  );
+
+  /** Bu bekçinin KAPSAMADIĞI modüller — gerekçeli ve İKİ YÖNLÜ denetlenir. */
+  const KAPSAM_DISI: Record<string, string> = {
+    financeEnabled:
+      "kapısı ayrı dosyada (finance.middleware.ts) ve ayrı bekçide (test_finance_flag_off)",
+    // Ölçüldü 2026-09-12: `MODULE_DEPENDENCIES`te satırı YOK, adlandırılmış kapısı
+    // YOK, hiçbir route onu okumuyor — bayrak + okuyucu + panel şeması var, YÜZEY
+    // yok. Yüzeyi doğduğu gün kapı da doğar ve §8b onu tabloya girmeye zorlar;
+    // bu satır o gün ölü muaf olarak §8e'den kırmızı alır.
+    kumasTeknikEnabled: "yüzeysiz modül — adlandırılmış kapısı ve route'u YOK",
+  };
+  const yonetilenKume = new Set(YONETILEN);
+  const kapsanmayan = [...MODULE_FLAG_KEYS].filter(
+    (k) => !yonetilenKume.has(k) && !(k in KAPSAM_DISI),
+  );
+  check(
+    "§8d ⭐ Her modül anahtarı ya bu bekçide ya GEREKÇELİ muaf",
+    kapsanmayan.length === 0,
+    kapsanmayan.join(", ") || `${MODULE_FLAG_KEYS.size} anahtar`,
+  );
+  const oluMuaf = Object.keys(KAPSAM_DISI).filter(
+    (k) => !MODULE_FLAG_KEYS.has(k) || yonetilenKume.has(k),
+  );
+  check(
+    "§8e Muaf listesinde ölü satır yok (iki yönlü)",
+    oluMuaf.length === 0,
+    oluMuaf.join(", ") || `${Object.keys(KAPSAM_DISI).length} muaf`,
+  );
+
+  const dbAnahtarlari = new Set(Object.values(ALAN_DB_ANAHTARI));
+  const muafOnEkleri = new Set(Object.keys(KAPSAM_DISI).map((a) => a.replace(/Enabled$/, "")));
+  const kapsanmayanDb = [...MODULE_SETTING_KEYS].filter(
+    (k) => !dbAnahtarlari.has(k) && !muafOnEkleri.has(k.split(".")[0]!),
+  );
+  check(
+    "§8f ⭐ Her modül DB anahtarı ya tabloda ya muaf",
+    kapsanmayanDb.length === 0,
+    kapsanmayanDb.join(", ") || `${MODULE_SETTING_KEYS.size} anahtar`,
+  );
 
   const toplamBandi = atlanan ? `, ${atlanan} atlandı` : "";
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${toplamBandi} ===`);
