@@ -65,29 +65,48 @@ export interface WarehouseLedgerEntry {
 /**
  * Yazılamaz satırda ne olacağı — **ÇAĞRI YERİ BEYAN EDER, varsayılanı YOKTUR.**
  *
- * Satır iki sebeple yazılamaz: metraj 0/geçersiz ya da iki depo ucu da boş.
- * Bu iki durumun anlamı YOLA GÖRE değişir ve tek bir davranış ikisini birden
- * doğru karşılayamaz:
- *   • `"skip"` — MEŞRU atlama: taşınacak mal ya da yazılacak depo yok (0 metrajlı
- *     topun iptali, deposuz topun düşmesi). Atlandığı ÇAĞIRANA DÖNER, sayılır.
+ * Satır İKİ sebeple yazılamaz: metraj 0/geçersiz **ya da** iki depo ucu da boş.
+ * Politika **ikisini birden** kapsar:
+ *   • `"skip"` — MEŞRU atlama: taşınacak mal yok. Atlandığı ÇAĞIRANA DÖNER.
  *   • `"throw"` — TUTARSIZLIK SİNYALİ: bu yolda satırın olmaması bir veri hatası.
- *     Transfer/sevk böyledir; transfer İPTALİ defterden okuduğu için eksik satır
- *     malı hedef depoda MAHSUR bırakır (ölçüldü 2026-09-12: eşiği sessiz atlamaya
- *     çevirmek bu yolu gürültülü hatadan sessiz veri kaybına dönüştürmüştü).
+ *
+ * ⚠️ Alan adı `onZeroQty` DEĞİL: iki sebebi kapsayan bir politikaya yalnız birinin
+ * adını vermek, okuyanı uçsuzluk dalının politikasız olduğuna inandırır — nitekim
+ * öyle oldu (aşağıya bak).
  */
-export interface ZeroQtyPolicy {
-  onZeroQty: "skip" | "throw";
+export interface UnwritableRowPolicy {
+  onUnwritable: "skip" | "throw";
 }
 
 /**
- * Satırın yazılacak bir DEPO UCU var mı. Politikaya TABİ DEĞİL: uçsuzluk her
- * yolda meşru atlamadır, çünkü defter öncesi doğan topların `warehouseId`i NULL
- * (ölçüldü: 4.553 top) ve onların sevki/iadesi çalışmaya devam etmek zorunda.
- * Politika yalnız METRAJ için vardır — uçsuz satırı "tutarsızlık" saymak eski
- * veriyle sevkiyatı kilitlerdi.
+ * Satırın yazılacak bir DEPO UCU var mı — **politikaya TABİDİR** (2026-09-13).
+ *
+ * ⚠️ ESKİ DAVRANIŞ ve neden kalktı: bu dal politikaya bakmadan `false` dönüyordu,
+ * yani deposuz topun sevki defter satırı yazmadan SESSİZCE geçiyordu (ölçüldü:
+ * iki top sevk edilip tek `SHIPMENT` satırı yazıldı). Gerekçesi "defter öncesi
+ * doğan deposuz topların sevki kilitlenmesin"di; o gerekçe iki ayaktan da boşaldı
+ * — popülasyon 0'a indi (backfill) ve yeni deposuz top DOĞAMAZ
+ * (`resolveTargetWarehouseId` artık `null` dönmüyor). Üstelik politikayı geçiren
+ * yedi çağıranın yedisi de `"throw"` diyordu: fonksiyon bu beyanı metraj için
+ * onurlandırıp uçsuzluk için eziyordu.
+ *
+ * ⚠️ Bu satırdaki sayı bir İDDİADIR ve süresi dolar: **ölçüldü 2026-09-13,
+ * `tekserp_fabrika_dev` — deposuz top 0.** Sayı yeniden sıfırdan büyürse (yeni bir
+ * doğuş yolu resolver'ı atlarsa) bu kapı sahada sevki durdurur; o gün doğru iş
+ * kapıyı gevşetmek değil backfill koşmaktır.
  */
 function hasWarehouseEnd(entry: WarehouseLedgerEntry): boolean {
   return Boolean(entry.fromWarehouseId || entry.toWarehouseId);
+}
+
+function isWritable(entry: WarehouseLedgerEntry): boolean {
+  return hasWarehouseEnd(entry) && qtyYazilabilir(entry.qty);
+}
+
+/** Yazılamazlığın sebebini ADIYLA söyler — "yazılamaz" tek başına teşhis değil. */
+function unwritableReason(entry: WarehouseLedgerEntry): string {
+  if (!hasWarehouseEnd(entry)) return "iki depo ucu da boş (deposuz top)";
+  return `metraj ${String(entry.qty)}`;
 }
 
 /**
@@ -97,13 +116,12 @@ function hasWarehouseEnd(entry: WarehouseLedgerEntry): boolean {
 export async function writeWarehouseMovement(
   tx: Tx,
   entry: WarehouseLedgerEntry,
-  policy: ZeroQtyPolicy,
+  policy: UnwritableRowPolicy,
 ): Promise<boolean> {
-  if (!hasWarehouseEnd(entry)) return false;
-  if (!qtyYazilabilir(entry.qty)) {
-    if (policy.onZeroQty === "throw") {
+  if (!isWritable(entry)) {
+    if (policy.onUnwritable === "throw") {
       throw AppError.internal(
-        `Defter satırı yazılamaz (metraj ${String(entry.qty)}) — bu yolda satırın olmaması veri hatasıdır`,
+        `Defter satırı yazılamaz (${unwritableReason(entry)}) — bu yolda satırın olmaması veri hatasıdır`,
       );
     }
     return false;
@@ -139,19 +157,21 @@ export async function writeWarehouseMovement(
 export async function writeWarehouseMovements(
   tx: Tx,
   entries: WarehouseLedgerEntry[],
-  policy: ZeroQtyPolicy,
+  policy: UnwritableRowPolicy,
 ): Promise<number> {
-  if (policy.onZeroQty === "throw") {
-    // ⚠️ Yalnız METRAJ denetlenir; uçsuz satır burada da meşru atlamadır.
-    const invalidIndex = entries.findIndex((e) => hasWarehouseEnd(e) && !qtyYazilabilir(e.qty));
+  if (policy.onUnwritable === "throw") {
+    // ⚠️ HEPSİ YA HİÇ: denetim insert'ten ÖNCE, tekil kapıyla AYNI yüklemle.
+    // Eskiden yalnız metraj denetlenirdi ve uçsuz satır süzgeçte sessizce düşerdi
+    // — sevkte "iki top çıktı, tek satır yazıldı" tam buradan geliyordu.
+    const invalidIndex = entries.findIndex((e) => !isWritable(e));
     if (invalidIndex >= 0) {
       throw AppError.internal(
-        `Defter satırı yazılamaz (küme indeksi ${invalidIndex}, metraj ${String(entries[invalidIndex]?.qty)}) — bu yolda satırın olmaması veri hatasıdır`,
+        `Defter satırı yazılamaz (küme indeksi ${invalidIndex}, ${unwritableReason(entries[invalidIndex]!)}) — bu yolda satırın olmaması veri hatasıdır`,
       );
     }
   }
   const rows = entries
-    .filter((e) => hasWarehouseEnd(e) && qtyYazilabilir(e.qty))
+    .filter(isWritable)
     .map((e) => ({
       rollId: e.rollId,
       eventType: e.eventType,
@@ -213,17 +233,17 @@ export interface StockMoveEnd {
  *   • stok dışı statü + depolu ⇒ mal rafta değilken rafı adlandırmak, Σ'ya
  *     girmeyecek bir depo atfı üretir ve as-of kırılımını yanıltır.
  */
-function assertEndShape(end: StockMoveEnd, hangi: "from" | "to"): void {
+function assertEndShape(end: StockMoveEnd, side: "from" | "to"): void {
   const stokStatusu = WAREHOUSE_STOCK_STATUSES.includes(end.status);
   if (stokStatusu && end.warehouseId === null) {
     throw AppError.internal(
-      `Stok hareketinin ${hangi} ucu stok statüsünde (${end.status}) ama deposuz — ` +
+      `Stok hareketinin ${side} ucu stok statüsünde (${end.status}) ama deposuz — ` +
         `"depoda ama hangi depoda belli değil" defterde yazılamaz`,
     );
   }
   if (!stokStatusu && end.warehouseId !== null) {
     throw AppError.internal(
-      `Stok hareketinin ${hangi} ucu stok dışı statüde (${end.status}) ama depo taşıyor — ` +
+      `Stok hareketinin ${side} ucu stok dışı statüde (${end.status}) ama depo taşıyor — ` +
         `stok dışı uç depo taşımaz`,
     );
   }

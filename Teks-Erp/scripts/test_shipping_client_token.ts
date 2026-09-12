@@ -14,6 +14,7 @@
 import { randomUUID } from "crypto";
 import prisma from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0;
 let fail = 0;
@@ -77,6 +78,7 @@ async function main() {
         currentQty: 100,
         status: "WAREHOUSE",
         sackId: s1.id,
+        warehouseId: await fixtureWarehouseId(),
       },
       select: { id: true },
     });

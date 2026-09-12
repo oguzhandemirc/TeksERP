@@ -128,7 +128,7 @@ async function main(): Promise<void> {
       { rollId: r2.id, eventType: WarehouseEventType.RETURN, qty: 50, toWarehouseId: whB.id },
       // 5) CANCEL → A'dan düştü
       { rollId: r2.id, eventType: WarehouseEventType.CANCEL, qty: 50, fromWarehouseId: whA.id },
-    ], { onZeroQty: "throw" });
+    ], { onUnwritable: "throw" });
   });
 
   // ⚠️ `createdAt` ELLE DAMGALANIR: beş satır tek tx'te doğdu ve milisaniyeleri

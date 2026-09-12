@@ -352,8 +352,8 @@ async function main(): Promise<void> {
   let yazildi: boolean | null = null;
   let topluYazilan: number | null = null;
   try {
-    yazildi = await writeWarehouseMovement(prisma, sifirSatir, { onZeroQty: "skip" });
-    topluYazilan = await writeWarehouseMovements(prisma, [sifirSatir], { onZeroQty: "skip" });
+    yazildi = await writeWarehouseMovement(prisma, sifirSatir, { onUnwritable: "skip" });
+    topluYazilan = await writeWarehouseMovements(prisma, [sifirSatir], { onUnwritable: "skip" });
   } catch { skipPatladi = true; }
   check(
     '§10a ⭐ "skip" politikası: atlar, DB seddine çarpmaz ve atladığını DÖNER',
@@ -363,29 +363,56 @@ async function main(): Promise<void> {
   // ── "throw" → TUTARSIZLIK SİNYALİ: sessizce geçmez ────────────────────────
   let tekilFirlatti = false;
   let topluFirlatti = false;
-  try { await writeWarehouseMovement(prisma, sifirSatir, { onZeroQty: "throw" }); } catch { tekilFirlatti = true; }
-  try { await writeWarehouseMovements(prisma, [sifirSatir], { onZeroQty: "throw" }); } catch { topluFirlatti = true; }
+  try { await writeWarehouseMovement(prisma, sifirSatir, { onUnwritable: "throw" }); } catch { tekilFirlatti = true; }
+  try { await writeWarehouseMovements(prisma, [sifirSatir], { onUnwritable: "throw" }); } catch { topluFirlatti = true; }
   check(
     '§10b ⭐ "throw" politikası: 0 metrajda İKİ kapı da FIRLATIR (sessiz atlama yok)',
     tekilFirlatti && topluFirlatti && (await satirlar(rC)).length === 0,
     `tekil=${tekilFirlatti} toplu=${topluFirlatti}`,
   );
-  // ── Uçsuz satır POLİTİKAYA TABİ DEĞİL: her yolda atlanır ─────────────────
-  // Defter öncesi doğan 4.553 topun deposu NULL; "throw" deseydik o topların
-  // sevki/iadesi kilitlenirdi.
+  // ── §10c — UÇSUZ satır POLİTİKAYA TABİDİR (2026-09-13 hükmü) ─────────────
+  // ⚠️ BU KONTROL TERS ÇEVRİLDİ. Eski hâli "uçsuz satır FIRLATMAZ" diyordu ve
+  // gerekçesi defter öncesi doğan deposuz topların sevkini kilitlememekti. İki
+  // ayak da boşaldı: popülasyon 0'a indi (backfill) ve yeni deposuz top DOĞAMAZ
+  // (`resolveTargetWarehouseId` artık `null` dönmüyor). Sessiz atlamanın ölçülen
+  // bedeli: iki top sevk edildi, tek `SHIPMENT` satırı yazıldı.
   let ucsuzFirlatti = false;
-  let ucsuzYazildi: boolean | null = null;
+  let ucsuzToplu = false;
   try {
-    ucsuzYazildi = await writeWarehouseMovement(
+    await writeWarehouseMovement(
       prisma,
       { rollId: rC, eventType: WarehouseEventType.CANCEL, qty: 50 },
-      { onZeroQty: "throw" },
+      { onUnwritable: "throw" },
     );
   } catch { ucsuzFirlatti = true; }
+  try {
+    await writeWarehouseMovements(
+      prisma,
+      [{ rollId: rC, eventType: WarehouseEventType.CANCEL, qty: 50 }],
+      { onUnwritable: "throw" },
+    );
+  } catch { ucsuzToplu = true; }
   check(
-    "§10c ⭐ Uçsuz satır (deposuz top) FIRLATMAZ — politika yalnız metraj için",
-    !ucsuzFirlatti && ucsuzYazildi === false && (await satirlar(rC)).length === 0,
-    `fırlattı=${ucsuzFirlatti} yazıldı=${String(ucsuzYazildi)}`,
+    '§10c ⭐ "throw" politikasında UÇSUZ satır da FIRLATIR (iki kapı, tek sertlik)',
+    ucsuzFirlatti && ucsuzToplu && (await satirlar(rC)).length === 0,
+    `tekil=${ucsuzFirlatti} toplu=${ucsuzToplu}`,
+  );
+  // Ve `"skip"` diyen çağıran için meşru atlama DURUYOR — hüküm sessizliği değil
+  // POLİTİKASIZLIĞI kaldırdı. İkisi aynı şey olsaydı 0 metrajlı topun iptali de
+  // kilitlenirdi.
+  let ucsuzSkipPatladi = false;
+  let ucsuzSkipYazildi: boolean | null = null;
+  try {
+    ucsuzSkipYazildi = await writeWarehouseMovement(
+      prisma,
+      { rollId: rC, eventType: WarehouseEventType.CANCEL, qty: 50 },
+      { onUnwritable: "skip" },
+    );
+  } catch { ucsuzSkipPatladi = true; }
+  check(
+    '§10d ⭐ "skip" diyen çağıranda uçsuz satır MEŞRU atlama (atladığını döner)',
+    !ucsuzSkipPatladi && ucsuzSkipYazildi === false && (await satirlar(rC)).length === 0,
+    `patladı=${ucsuzSkipPatladi} yazıldı=${String(ucsuzSkipYazildi)}`,
   );
 
   // ── §6..§9 — ters kayıt ───────────────────────────────────────────────────
@@ -451,7 +478,7 @@ async function main(): Promise<void> {
   await writeWarehouseMovement(
     prisma,
     { rollId: rD, eventType: WarehouseEventType.CANCEL, qty: 5, fromWarehouseId: wh.id },
-    { onZeroQty: "throw" },
+    { onUnwritable: "throw" },
   );
   const tersSonuc = await prisma.$transaction(async (tx) =>
     reverseAllRollStockMoves(tx, [rD], { reasonCode: STOCK_MOVE_REASON.STOCK_COUNT }),
@@ -577,7 +604,7 @@ async function main(): Promise<void> {
   await writeWarehouseMovement(
     prisma,
     { rollId: rG, eventType: WarehouseEventType.SHIPMENT, qty: 100, fromWarehouseId: wh.id },
-    { onZeroQty: "throw" },
+    { onUnwritable: "throw" },
   );
   const legacyFwd = (await satirlar(rG))[0]!;
   const legacyTersId = await prisma.$transaction(async (tx) =>
@@ -637,7 +664,7 @@ async function main(): Promise<void> {
   await writeWarehouseMovement(
     prisma,
     { rollId: rI, eventType: WarehouseEventType.SHIPMENT, qty: 30, fromWarehouseId: wh.id },
-    { onZeroQty: "throw" },
+    { onUnwritable: "throw" },
   );
   const epochSonrasiId = (await satirlar(rI))[0]!.id;
   const epochSatiri = await prisma.warehouseMovement.create({

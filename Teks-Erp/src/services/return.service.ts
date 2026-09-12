@@ -19,6 +19,7 @@
 import { Prisma, RollStatus, OrderStatus, PrintedDocType, ShipmentStatus, WarehouseEventType } from "@prisma/client";
 import { normalizeScanCode } from "../utils/code-format";
 import { writeWarehouseMovement } from "./helpers/warehouse-ledger.helper";
+import { assertRollsHaveWarehouse } from "./helpers/warehouse-stock.helper";
 import prisma from "../lib/prisma";
 import {
   printedDocumentService,
@@ -504,6 +505,15 @@ export class ReturnService {
 
     const note = input.note?.trim() || null;
 
+    // K6 ③ — İADENİN HEDEF DEPOSU: topun son deposu (`Roll.warehouseId` sevkte
+    // temizlenmiyor). Zincirin sonu FAIL-CLOSED: depo yoksa iade alınamaz, çünkü
+    // mal stok kümesine girecek ve "depoda ama hangi depoda belli değil" bir
+    // defter satırı yazılamaz. 409, 400 değil: istemci bozuk bir değer
+    // göndermedi, DURUM isteği karşılayamıyor.
+    // ⚠️ Eskiden sessizdi: defter kapısı uçsuz satırı atlıyor, iade tamamlanıyor
+    // ve defter GİRİŞİ hiç görmüyordu.
+    assertRollsHaveWarehouse(orderedRolls, "İade alınamaz");
+
     const created = await prisma.$transaction(async (tx) => {
       // ⚠️ TX'İN İLK İFADESİ — sevkiyat kapsamlı advisory lock (F-SEV-ESZ-001).
       // `undoDispatch` (storno) AYNI kilidi alır. Aksi halde iki akış birbirini
@@ -582,7 +592,7 @@ export class ReturnService {
           userId,
         // İade miktarı uçta doğrulanıyor; 0 metrajlı iade satırı veri hatasıdır.
         // (Deposuz top uçsuz kaldığı için POLİTİKAYA TABİ DEĞİL, atlanır.)
-        }, { onZeroQty: "throw" });
+        }, { onUnwritable: "throw" });
       }
 
       // GRUP anahtarı = LİDERİN id'si. Tekil iadede alan NULL kalır → belge çözümü,

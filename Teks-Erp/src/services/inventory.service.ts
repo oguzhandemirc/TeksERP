@@ -1197,7 +1197,7 @@ export class InventoryService {
         //
         // ⚠️ 0 metrajlı top DOĞMAZ (giriş metrajı uçta doğrulanıyor) ve buradaki
         // 0 bir veri hatasıdır: `postStockMove` FIRLATIR — eski çağrının
-        // `onZeroQty: "throw"` davranışı birebir korunuyor.
+        // `onUnwritable: "throw"` davranışı birebir korunuyor.
         if (targetWarehouseId !== null && WAREHOUSE_STOCK_STATUSES.includes(initialStatus)) {
           await postStockMove(tx, {
             rollId: created.id,

@@ -33,6 +33,7 @@ import {
 } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { writeWarehouseMovements } from "./helpers/warehouse-ledger.helper";
+import { assertRollsHaveWarehouse } from "./helpers/warehouse-stock.helper";
 import { writeShipmentEvent } from "./helpers/shipment-event.helper";
 import { weightWarning } from "./helpers/measurement-threshold.helper";
 import { AppError } from "../utils/app-error";
@@ -3289,6 +3290,17 @@ export class ShippingService {
       );
     }
 
+    // K6 — DEPOSUZ TOP STOK KÜMESİNDEN ÇIKAMAZ. Defter çıkış satırının bir depo
+    // ucu olmak zorunda; yoksa mal çıkar ama defter çıkışı görmez (ölçüldü: iki
+    // top sevk edildi, TEK `SHIPMENT` satırı yazıldı — eski kapı uçsuz satırı
+    // sessizce atlıyordu). Kapı BURADA, kilidin altında ve taze veriyle:
+    // defterdeki `assertEndShape` son ağdır, oraya ulaşmak "kapı atlandı" demek.
+    const warehouseless = await tx.roll.findMany({
+      where: { shipmentId, warehouseId: null },
+      select: { id: true, barcode: true, warehouseId: true },
+    });
+    assertRollsHaveWarehouse(warehouseless, "Sevk edilemez");
+
     await tx.shipmentOrder.updateMany({ where: { shipmentId }, data: { isActive: false } });
 
     // ÇUVAL İZLERİ (ETİKET) TEMİZLENİR — sevk ANINDA, SOFT damgayla (2026-09-04).
@@ -3335,7 +3347,7 @@ export class ShippingService {
           userId: userId ?? null,
         })),
         // Sevk brüt ve defterden türer: 0 metraj veri hatası, uçsuz top atlanır.
-        { onZeroQty: "throw" },
+        { onUnwritable: "throw" },
       );
     }
     // Tahsisler artık DISPATCHED sevkiyatta → shippedQty defterden yeniden hesaplanır.
@@ -3813,7 +3825,7 @@ export class ShippingService {
             toWarehouseId: r.warehouseId,
             shipmentId,
             userId: userId ?? null,
-          })), { onZeroQty: "throw" });
+          })), { onUnwritable: "throw" });
       }
 
       // Tahsisler SİLİNMEZ — `shippedQty` defterden türetilir ve yalnız DISPATCHED

@@ -3263,7 +3263,7 @@ export class SubcontractorService {
             })),
             // Fason dönüşünde 0 metrajlı kabul kalemi veri hatasıdır (kabul
             // miktarı zaten uçta doğrulanıyor) — sessiz atlama defteri eksiltir.
-            { onZeroQty: "throw" },
+            { onUnwritable: "throw" },
           );
         }
 

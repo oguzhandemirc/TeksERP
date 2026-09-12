@@ -39,6 +39,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { returnService } from "../src/services/return.service";
 import { printedDocumentService } from "../src/services/printed-document.service";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0;
 let fail = 0;
@@ -123,7 +124,7 @@ async function main() {
   const sackB = await mkSack("B", shipmentB.id);
   const poolSack = await mkSack("POOL", null); // depoda — iade alınamaz
 
-  const mkRoll = (n: number, qty: number, shipmentId: string | null, sackId: string, status: "SHIPPED" | "WAREHOUSE") =>
+  const mkRoll = async (n: number, qty: number, shipmentId: string | null, sackId: string, status: "SHIPPED" | "WAREHOUSE") =>
     prisma.roll.create({
       data: {
         barcode: `TEST-BRT-R${n}-${ts}`,
@@ -137,6 +138,7 @@ async function main() {
         entrySource: "SUPPLIER_RECEIPT",
         shipmentId,
         sackId,
+        warehouseId: await fixtureWarehouseId(),
       },
       select: { id: true, barcode: true },
     });

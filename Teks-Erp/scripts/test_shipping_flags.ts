@@ -42,6 +42,7 @@ import { AppError } from "../src/utils/app-error";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { Prisma, RollStatus, ShipmentDestination, ShipmentStatus } from "@prisma/client";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 import {
   SETTING_KEYS,
   readShippingOrderRequirement,
@@ -150,6 +151,7 @@ async function makeSack(qty = 100, weigh = false): Promise<string> {
       width: 150,
       status: RollStatus.WAREHOUSE,
       entrySource: "SUPPLIER_RECEIPT",
+      warehouseId: await fixtureWarehouseId(),
     },
     select: { id: true, barcode: true },
   });
@@ -341,6 +343,7 @@ async function run(): Promise<void> {
       width: 150,
       status: RollStatus.WAREHOUSE,
       entrySource: "SUPPLIER_RECEIPT",
+      warehouseId: await fixtureWarehouseId(),
     },
     select: { id: true },
   });
@@ -392,6 +395,7 @@ async function run(): Promise<void> {
       width: 150,
       status: RollStatus.WAREHOUSE,
       entrySource: "SUPPLIER_RECEIPT",
+      warehouseId: await fixtureWarehouseId(),
     },
     select: { id: true },
   });
@@ -453,6 +457,7 @@ async function run(): Promise<void> {
           width: 150,
           status: RollStatus.STOCK,
           createdById: ADMIN,
+          warehouseId: await fixtureWarehouseId(),
         },
         select: { id: true },
       });
@@ -579,6 +584,7 @@ async function run(): Promise<void> {
       width: 150,
       status: RollStatus.WAREHOUSE,
       entrySource: "SUPPLIER_RECEIPT",
+      warehouseId: await fixtureWarehouseId(),
     },
     select: { id: true, barcode: true },
   });
@@ -631,6 +637,7 @@ async function run(): Promise<void> {
       width: 150,
       status: RollStatus.WAREHOUSE,
       entrySource: "SUPPLIER_RECEIPT",
+      warehouseId: await fixtureWarehouseId(),
     },
     select: { id: true },
   });

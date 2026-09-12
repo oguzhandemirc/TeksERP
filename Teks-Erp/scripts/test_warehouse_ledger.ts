@@ -101,25 +101,35 @@ async function main(): Promise<void> {
   check("D) Tüm satırlarda qty >= 0 (yön eventType'ten okunur)", allRows.every((r) => Number(r.qty) >= 0), `satır=${allRows.length}`);
 
   // ── E) Anlamsız satır yazılmaz ──────────────────────────────────────────
+  // ⚠️ E1 2026-09-13'te TERS ÇEVRİLDİ: uçsuzluk artık POLİTİKAYA TABİ. Eski hâli
+  // uçsuz çağrının sessizce geçtiğini doğruluyordu ve gerekçesi "defter öncesi
+  // doğan deposuz topların sevki çalışmalı"ydı — o küme boşaldı (backfill) ve
+  // yeni deposuz top doğamaz. Sessiz atlamanın bedeli ölçüldü: iki top sevk
+  // edildi, tek SHIPMENT satırı yazıldı.
   const before = await prisma.warehouseMovement.count({ where: { rollId: parentId } });
+  let ucsuzFirlatti = false;
+  try {
+    await prisma.$transaction(async (tx) => {
+      await writeWarehouseMovement(tx, {
+        rollId: parentId,
+        eventType: WarehouseEventType.ENTRY,
+        qty: 10,
+        // from + to İKİSİ de boş → "throw" diyen çağıranda TUTARSIZLIK SİNYALİ
+      }, { onUnwritable: "throw" });
+    });
+  } catch { ucsuzFirlatti = true; }
+  check("E1) Uçsuz çağrı FIRLATTI (politika uçsuzluğu da kapsıyor)", ucsuzFirlatti);
   await prisma.$transaction(async (tx) => {
-    await writeWarehouseMovement(tx, {
-      rollId: parentId,
-      eventType: WarehouseEventType.ENTRY,
-      qty: 10,
-      // from + to İKİSİ de boş → satır yazılmamalı (uçsuzluk POLİTİKAYA TABİ
-      // DEĞİL: defter öncesi doğan 4.553 topun deposu NULL ve sevki çalışmalı)
-    }, { onZeroQty: "throw" });
     await writeWarehouseMovement(tx, {
       rollId: parentId,
       eventType: WarehouseEventType.ENTRY,
       qty: -5, // negatif → yazılmamalı
       toWarehouseId: def.id,
       // "skip": bu bölüm anlamsız satırın YAZILMADIĞINI ölçüyor, fırlatmasını değil
-    }, { onZeroQty: "skip" });
+    }, { onUnwritable: "skip" });
   });
   const after = await prisma.warehouseMovement.count({ where: { rollId: parentId } });
-  check("E) Deposuz/negatif çağrı satır ÜRETMEDİ", after === before, `önce=${before} sonra=${after}`);
+  check("E2) Deposuz/negatif çağrı satır ÜRETMEDİ", after === before, `önce=${before} sonra=${after}`);
 
   // Körlük zemini — defter gerçekten yazıyor mu (hepsi 0 olsaydı A-E vakumen geçerdi)
   check("Körlük zemini: bu koşumda en az 2 defter satırı üretildi", allRows.length >= 2, `${allRows.length} satır`);

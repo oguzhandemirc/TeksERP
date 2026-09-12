@@ -20,6 +20,7 @@
 import { RollStatus, ShipmentStatus, RollEntrySource } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { returnService } from "../src/services/return.service";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 const FLAG_KEY = "return.gradingEnabled";
 
@@ -71,6 +72,9 @@ async function makeShippedRoll(itemId: string, width: number, shipmentId: string
       qualityGrade: "1.KALITE",
       entrySource: RollEntrySource.SUPPLIER_RECEIPT,
       shipmentId,
+      // Sevk edilmiş top deposunu KORUR (sevkte temizlenmiyor) — deposuz SHIPPED
+      // top üretimde doğamaz, fikstür de üretmemeli.
+      warehouseId: await fixtureWarehouseId(),
     },
     select: { id: true },
   });
