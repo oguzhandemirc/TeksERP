@@ -6,10 +6,13 @@
 >
 > **Yöntem:** 5 paralel tasarım ajanı → 5 çürütme ajanı → sentez; sonra **İKİ BAĞIMSIZ DENETİM** (**§11**):
 > **① Opus — altı mercek** (kabul şartları/bayrak · defter doktrini/telemetri · çekirdek mimari · çürütme izi · kod gerçekliği · ölçek/fazlandırma): 92 bulgu, 88 işlendi, 4 gerekçeyle reddedildi.
-> **② Fable — düşmanca denetim (2026-09-12):** belgenin YAZILMASINDAN ÖNCEKİ sentez metnini ayrıca denetledi; ana hükmü *"bu hâliyle şemaya dökülemez"* idi ve dört FİZİKSEL ENGEL saydı (PG 55P04 · P1012 karşılıksız ilişkiler · hedefsiz levent kolonu · `perde-dokuma` ad çakışması) + levent çelişkisi. Hükümler önce belgeyle EŞLENDİ (çoğu zaten karşılanmıştı), karşılanmayanlar §11e'de sayılarak işlendi.
+> **② Fable — düşmanca denetim (2026-09-12):** belgenin YAZILMASINDAN ÖNCEKİ sentez metnini ayrıca denetledi; ana hükmü *"bu hâliyle şemaya dökülemez"* idi ve dört FİZİKSEL ENGEL saydı (PG 55P04 · P1012 karşılıksız ilişkiler · hedefsiz levent kolonu · `perde-dokuma` ad çakışması) + levent çelişkisi. Hükümler önce belgeyle EŞLENDİ (çoğu zaten karşılanmıştı), karşılanmayanlar §11b'de sayılarak işlendi.
 > Her kod iddiası `dosya:satır` olarak ölçüldü; **satır numarası kayan tablolarda çapa ADA çevrildi** (§6.2).
 >
-> **Kararları ajan verdi** (ölçüt: ① sektör standardı ② bizim ölçeğimiz — tek fabrika canlı, perde sektörü hedef, küçük ekip ③ mevcut kod deseni) ve **itiraza açıktır**. Kullanıcıya açık soru bırakılmadı; yalnız sahada ölçülmesi gerekenler "saha doğrulaması" olarak işaretlendi ve her birinin varsayılan kararı yazıldı (**§10**).
+> **Kararları ajan verdi** (ölçüt: ① sektör standardı ② bizim ölçeğimiz — tek fabrika canlı, perde sektörü hedef, küçük ekip ③ mevcut kod deseni) ve **itiraza açıktır**. **ÜÇ ONAY KALEMİ + İKİ SAHİPSİZ İŞ KALEMİ dışında** kullanıcıya açık soru bırakılmadı; sahada ölçülmesi gerekenler "saha doğrulaması" olarak işaretlendi ve her birinin varsayılan kararı yazıldı (**§10**).
+>
+> **ONAY KALEMLERİ — kullanıcı karar verir, belge kendiliğinden yazmaz:** ① kök `CLAUDE.md`'ye girecek **«Telemetri ≠ defter»** cümlesi (§4, §11b borç ①) · ② **`AUDIT_EXEMPT_MODELS`** sabiti + kök `CLAUDE.md`'nin *"tek istisna `UserPreference`"* cümlesinin değişmesi (§10/#8, §11b borç ②) · ③ **K2'den sapma:** `dokuma → devere` zinciri KURULMUYOR (§7.1, §11a).
+> **SAHİPSİZ İŞ KALEMLERİ — belgede "istenirse" diye duruyor, sahibi yok:** ④ `deploy/kur.ps1`e **NTP adımı** (§3.5 — bugün `w32tm`/NTP sıfır geçiş) · ⑤ koşucuya **`TEKSERP_STRICT=1`** modu, atlanan kontrol varsa exit ≠ 0 (§8.1 K3-2).
 >
 > **Bağlayıcı kullanıcı kararları:** **(K1)** hard delete yok, izlenebilirlik defterle, geri alma ters kayıt/`revokedAt` — telemetri defter değildir, budanabilir, ama iş kararına giren bilgi defterdedir. **(K2)** dokuma/devere yıkıcı olmayacak: ayrı bayraklar, varsayılan kapalı, adlandırılmış kapı, `Item.name` ASLA ayrıştırılmaz, fork yok. **(K3)** kapalıyken adnansahin'in hiçbir ekranında yeni alan/zorunluluk/adım görünmez; migration yalnız kolon/tablo ekler. **(K4)** soru sorma, karar ver.
 
@@ -18,7 +21,7 @@
 ## 0 · Yöneticiye özet
 
 - **Bu dilim `Machine`'e tek bir skaler kolon eklemez**, `Item`e hiç dokunmaz, `WorkSession`'a hiç dokunmaz. Kapalıyken (adnansahin) DB'ye düşen tek şey **İKİ boot uzlaştırıcısının satırlarıdır** — 23 sistem sebebi + dört `loom:*` izin kodu (~2 KB) — ve hiçbiri hiçbir yüzeyde görünmez (§8.1 K3-7).
-- **Modül anahtarı zaten var:** `tezgah.enabled` / `tezgahEnabled`, varsayılan **false**, bağımlılığı `productionEnabled` (`src/constants/module-flags.ts:40,52,78` — 2026-09-12'de `devereEnabled` araya girdi ve eski `:40,51,69` çapaları kaydı; bu dosyada satır numarası ölçülmeden yazılmaz). Yeni modül anahtarı açılmıyor; açılacak olan **yüzeydir**. K2'nin "yeni modüller aç/kapat olacak" şartı bu dilimde mevcut anahtarla karşılanıyor (§7).
+- **Modül anahtarı zaten var:** `tezgah.enabled` / `tezgahEnabled`, varsayılan **false**, bağımlılığı `productionEnabled` (`src/constants/module-flags.ts:40,52,78` — 2026-09-12'de `devereEnabled` araya girdi ve eski `:40,51,69` çapaları kaydı; bu dosyada satır numarası ölçülmeden yazılmaz). Yeni modül anahtarı açılmıyor; açılacak olan **yüzeydir**. K2'nin "yeni modüller aç/kapat olacak" şartı bu dilimde mevcut anahtarla karşılanıyor (§7.1).
 - **En küçük satılabilir dilim Faz 1a:** hiç donanım yok, 6 tablo, **3 migration** (A · B1 enum · B2 kolon+CHECK — enum kendi dosyasında, §9), 2 panel sayfası + 1 rapor, 4 izin, 2 bayrak, **advisory kilit yok**, 4 yeni bekçi. Kullanıcının dört sorusunun dördünü de cevaplar: duruş nedeni · randıman · devir · çalışma saati (§9).
 - **Telemetri ile defter aynı cümlede ayrışır:** ham örnek silindiğinde raporlanan hiçbir sayı değişmiyorsa o satır telemetridir — ve bunu insan vicdanı değil bir bekçi ölçer (§1, §4). **Telemetri bir hard-delete SINIFI DEĞİLDİR**, defter-olmayan satırın yaşam döngüsüdür; `defter.md`ye üçüncü sınıf açılmaz, açılan şey bir **bölüm + budamayı ölçen manifest bekçisidir** (§4).
 - **Zamanın ve gölge modun tek cümlesi:** *zamanı ajan ölçer, sunucu **DOĞRULAR** ve uydurmaz; kimlik saat değil **token**'dır; mühürden sonra hiçbir telemetri sessizce değişmez; geçici değer geçici olduğunu **kolonda** söyler* (§3.5, §5.1). Devreye alma da bir cümle değil bir kolondur: `LoomSpec.monitoringState` **OFF → SHADOW → LIVE** ve varsayılan **OFF = bugünkü davranış** (§2.3).
@@ -147,7 +150,7 @@ model ReasonPreset {
 
 > **⚠️ Kapalı kurulumda ne oluyor (K3 ölçümü).** `jobs/reason-preset-catalog.job.ts` her boot'ta `REASON_PRESET_KINDS` üzerinde döner ve eksik sistem satırlarını **koşulsuz** yaratır — modül bayrağına BAKMAZ. Yani 23 `LOOM_STOP` satırı adnansahin'in canlı DB'sine de düşer. **Bu bilinçlidir:** izin kataloğu denklemi (katalog koda, uzlaştırma boot'ta), ~2 KB, ve hiçbir yüzeyde görünmez. Görünürlük kapısı paneldedir: Hazır Sebepler ekranının `KIND_TABS` dizisi (`Electron/src/pages/ReasonPresets/service.ts:54`) elle yazılmış bir listedir, sekme kendiliğinden belirmez — **`LOOM_STOP` sekmesi oraya yalnız `tezgahEnabled` açıkken çizilecek biçimde eklenir.** Reçeteyi körlemesine uygulayıp sekmeyi koşulsuz eklemek, tezgahı kapalı fabrikada beşinci bir sekme doğurur ve K3'ü ihlal eder.
 >
-> **Aynı boot turunda İKİNCİ bir uzlaştırıcı daha yazar:** `jobs/permission-catalog.job.ts` Faz 1a'nın **dört `loom:*` izin kodunu** (Faz 2 ile yedi) kapalı kurulumun `permissions` tablosuna da düşürür (§6.4). İkisi birlikte ~2 KB'dir ve görünmezlik ayrıca ölçülür (§8.1 K3-7).
+> **Aynı boot turunda İKİNCİ bir uzlaştırıcı daha yazar:** `jobs/permission-catalog.job.ts` Faz 1a'nın **dört `loom:*` izin kodunu** (Faz 2 ile toplam **yedi izin kodu: altı `loom:*` + bir `mobile:*`** — §6.4) kapalı kurulumun `permissions` tablosuna da düşürür (§6.4). İkisi birlikte ~2 KB'dir ve görünmezlik ayrıca ölçülür (§8.1 K3-7).
 >
 > **⚠️ Tabletin kapısı da ELLEDİR ve panelinkinden ZAYIFTIR.** `mobil/src/services/reasonPreset.service.ts` uca `?kind=` **göndermez** (`list()` yalnız `includeInactive` taşır) — yani `LOOM_STOP` satırları kapalı kurulumda da **cihaza iner**; görünmezlik tümüyle ekranların kendi kind'larıyla süzmesine bağlıdır. Backend süzgeci zaten destekliyor (`routes/reason-preset.routes.ts:75` `req.query.kind`). Faz 2'de tablet sınıflandırma kuyruğu yazılırken çağrı `?kind=`li yapılır — ancak o zaman "kapalı modül iz bırakmaz" cümlesi tablette de kurulmuş olur.
 
@@ -558,15 +561,19 @@ model LoomInterval {
   /// ⚠️ Ajan bu kovanın kaç saniyesini GÖREBİLDİ. Eksik veri %100 randıman gibi
   /// GÖRÜNEMEZ — izleme sistemlerinin en sık sessiz yalanı budur.
   /// ⚠️ SATIR İÇİ DB CHECK (`loom_intervals_observed_chk`, ham SQL + envanter):
-  ///   `runSec + stopSec + microStopSec <= observedSec`  **VE**
+  ///   `runSec + stopSec + minorStopSec <= observedSec`  **VE**
   ///   `observedSec <= bucketMinutes * 60`
   /// — "kova içi terimler kova boyunu aşamaz" değişmezi mutabakat bekçisini
   /// beklemez, satır yazılırken zorlanır (§5.1).
   observedSec Int
 
   /// Eşik ALTI duruşlar burada SAYI olarak yaşar (ayrı defter satırı açılmaz).
-  microStopCount Int @default(0)
-  microStopSec   Int @default(0)
+  /// ⚠️ AD TEKTİR: `minorStop*` — karnenin (`LoomShiftStat.minorStopSec`, §2.10)
+  /// ve `LoomStopLossClass.MINOR`ın adıyla BİREBİR. Eski `microStop*` adı AYNI
+  /// büyüklüğe ikinci bir ad veriyordu ve terim iki tabloda karşılaştırılamıyordu;
+  /// "mikro duruş" yalnız KONUŞMA DİLİDİR, kolon adı değildir.
+  minorStopCount Int @default(0)
+  minorStopSec   Int @default(0)
   /// Makinenin BEYAN ETTİĞİ sinyale göre kopuş adedi (insan sınıflandırması
   /// DEĞİL — §5.4 kopuş/10⁵ atkı KPI'ının payı budur).
   /// ⚠️ NULLABLE ve bu `pickDelta`nın 0/null ayrımının AYNISIDIR: `0` = kanal VAR,
@@ -611,11 +618,21 @@ model LoomInterval {
 // ŞEMA-DIŞI PARTIAL INDEX (anomali kuyruğu — satırların ~%99'u OK):
 //   loom_intervals_anomaly_idx (machineId, bucketStart)
 //     WHERE "deltaQuality" <> 'OK'
+//
+// ŞEMA-DIŞI CHECK (ham SQL + test_db_invariants envanteri):
+//   loom_intervals_bucket_chk:
+//     CHECK ("bucketMinutes" IN (<izin verilen kova boyları>))
+//   ⚠️ Küme migration'da YAZILIDIR ve `tezgah.bucketMinutes` bayrağının kabul
+//      ettiği değerlerle BİREBİRDİR (§3.5): bayat bir ajan ızgara dışı kova boyu
+//      yollarsa 400 `BUCKET_SIZE_MISMATCH` alır, seddin son hattı ise burasıdır.
+//      Küme büyürse CHECK + bayrak doğrulaması AYNI commit'te değişir (boğaz-ikiz).
 ```
 
 > **[DB-12] notu:** `@@id([machineId, bucketStart])` `machineId` önekini zaten kapsıyor — ayrı `@@index([machineId])` YAZILMAZ.
 
-### 2.7 · Duruş (FAZ 2)
+### 2.7 · Duruş (FAZ 1b)
+
+> ⚠️ **Tablo FAZ 1b'de doğar** (§9): duruşları önce vardiya amiri ELLE girer, donanım yoktur. Makine kaynaklı alanlar (`stopKey` · `runId` · `collectorId` · `signalKind` · `rawStopCode` · `provisionalEndedAt`/`endSource`) KOLON olarak Faz 1b'de doğar ama **YAZARLARI Faz 2'dedir**; ingest sözleşmesi (§3.5) ve watchdog Faz 2'nindir.
 
 ```prisma
 /// SPAN — açılır/kapanır, bu yüzden `updatedAt` TAŞIR (`RollMovement` emsali).
@@ -868,10 +885,16 @@ model LoomRun {
 // sedde YER İŞGAL ETMEZ, yoksa yeni koşum açılamaz):
 //   loom_runs_one_open_per_machine_uq (machineId)
 //     WHERE "endedAt" IS NULL AND "revokedAt" IS NULL
+//   loom_runs_natural_uq (machineId, startedAt)
+//     WHERE "revokedAt" IS NULL                    ← §2.11'in DOĞAL ANAHTARI
+//     ⚠️ Beyan edilen doğal anahtarın sedde karşılığı olmazsa aynı makinede aynı
+//        ana İKİ koşum açılır ve karnenin donmuş paydasının hangisinden geldiği
+//        belirsizleşir. PARTIAL yüklemi burada da ŞART: geri alınmış koşum yer
+//        işgal etmez, aynı an meşru biçimde yeniden açılabilir.
 ```
 
 > **⚠️ `WorkOrderStep` GERÇEKTEN hard delete ediliyor ve `LoomRun` o silmenin guard'ında yok.** Ölçüldü: `workorder.service.ts:5697` `await tx.workOrderStep.delete({ where: { id: old.id } })`, guard ise aynı bloktaki `old._count` toplamından kuruluyor (`:5691-5696`) — `loomRuns` o sayıma girmiyor. Restrict FK'sı olmasa bağ sessizce kopar, Restrict FK'sı olunca **P2003 → generic 400** düşer.
-> **Faz 2 iş kalemi (aynı commit):** `_count` kümesine `loomRuns` eklenir ve 409 mesajına *"bu adıma bağlı tezgah koşumu var"* satırı girer · `MACHINE_DELETE_GUARDS` dört Restrict FK'yı (`LoomStopEvent` · `LoomRun` · `LoomCounterEvent` · `LoomShiftStat`) **adıyla** sayar · panel önizlemesi bunları listeler · `test_hard_delete_guard_coverage`in `WATCHED` kümesine `"Machine"` yazılır (§2.1).
+> **Faz 2 iş kalemi (aynı commit):** `_count` kümesine `loomRuns` eklenir ve 409 mesajına *"bu adıma bağlı tezgah koşumu var"* satırı girer · `MACHINE_DELETE_GUARDS` bu fazda **İKİ sayaç** daha alır — `loomRunCount` + `loomCounterEventCount` (fazlama **TEK KAYNAK §2.1'dedir:** Faz 1a → `loomShiftStatCount` · Faz 1b → `loomStopCount` · Faz 2 → bu ikisi), böylece liste Faz 2 sonunda **dört** tezgah Restrict FK'sını (`LoomShiftStat` · `LoomStopEvent` · `LoomRun` · `LoomCounterEvent`) adıyla sayar · panel önizlemesi bunları listeler · `test_hard_delete_guard_coverage`in `EXPECTED` envanterine Faz 2'nin Cascade çocukları yazılır (`WATCHED`a `"Machine"` **Faz 1a'da** eklendi, §2.3).
 
 ### 2.9 · Durum ve sayaç kararı (FAZ 2)
 
@@ -1003,8 +1026,10 @@ model LoomShiftStat {
   picksActual Int @default(0)
   /// ⚠️ COLLECTOR_GAP'in atkısı — ajan sustuğu pencerede sayaç ilerledi ve ilk
   /// kovada SIÇRAMA olarak geldi. **METRE bunu İÇERİR** (kumaş gerçekten
-  /// dokundu), **randıman PAYDASI DIŞLAR** (o süre `unobservedSec`tir; sıçramayı
-  /// P'nin payına koymak gözlenmemiş süreyi ödüllendirirdi — §5.1/§5.2).
+  /// dokundu), **randımanın PAYINDAN DÜŞÜLÜR ve PAYDASINA HİÇ GİRMEZ**
+  /// (`picksActual − gapPicks`; o sürenin karşılığı `unobservedSec`tir ve
+  /// POT'tan zaten düşüldüğü için paydada hiç doğmaz — sıçramayı P'nin payına
+  /// koymak gözlenmemiş süreyi ödüllendirirdi, §5.1/§5.2).
   gapPicks Int @default(0)
   /// ⚠️ WATCHDOG'la GEÇİCİ kapanmış duruşların bu vardiyaya düşen saniyesi.
   /// Terim AYRI basılır: karne "şu kadarı tahmindir" demeden mühürlenemez.
@@ -1045,7 +1070,11 @@ model LoomShiftStat {
   /// süzmeye devam eder. Canlı kolondan süzmek, geçmişi geriye dönük
   /// "yayınlanmış" yapardı (§5.3/8).
   monitoringState LoomMonitoringState
-  /// Anomali (RESET/GAP/ANOMALY) içeren vardiya ONAYSIZ mühürlenemez.
+  /// Anomali (RESET/GAP/ANOMALY) içeren vardiya ONAYSIZ mühürlenemez → **409**.
+  /// ⚠️ KOLON Faz 1a'da doğar, KAPI Faz 2'de yürürlüğe girer: anomalinin tek
+  /// kaynağı `LoomCounterEvent` ve `LoomInterval.deltaQuality`tir, ikisi de Faz
+  /// 2'dedir. Faz 1a'da elle girilen karnede anomali KAYNAĞI YOKTUR; alan
+  /// `false` kalır ve mührü bloke etmez (§9 — "kaynağı olmayan kapı" sınıfı).
   anomalyAck Boolean @default(false)
 
   /// GÜNCEL MÜHÜR DURUMU. ⚠️ `sealedAt` ASLA null'lanmaz — anlamı "EN SON ne
@@ -1138,6 +1167,12 @@ model LoomShiftStatSeal {
   actedBy   User?         @relation("LoomShiftSealBy", fields: [actedById], references: [id])
   createdAt DateTime      @default(now()) @db.Timestamptz
 
+  /// DOĞAL ANAHTAR (§2.11) — bir KUŞAKTA her eylemden EN ÇOK BİR satır olur:
+  /// mühür/aç/yeniden-mühür tekrarlanabilir bir çevrimdir ve her tekrar
+  /// `sealGeneration`ı artırır. Beyan edilen anahtarın sedde karşılığı olmazsa
+  /// mükerrer bir `SEAL` satırı §2.11'in *"son kuşağın terimleri ↔ karnenin
+  /// güncel kolonları BİREBİR"* mutabakatını belirsizleştirirdi.
+  @@unique([statId, sealGeneration, action])
   @@index([statId, createdAt])
   @@map("loom_shift_stat_seals")
 }
@@ -1260,7 +1295,7 @@ export function deriveCounterDelta(i: {
 | **Parti** | `LoomCollector.lastSeq` | `ackSeq`e kadar buda | — |
 
 > **⚠️ Üç denetim düzeltmesi bu tabloda.**
-> **(a) Kimlik DAR olmalı** (`idempotent-replay.helper` başlığı: *"gövdenin tamamı aynı mı DEĞİL"*). Duruş bir SPAN'dir; ajan aynı kalemi iki kez yollar — açılışta `endedAt: null`, kapanışta dolu. Sentezin "aynı anahtar + farklı yük → 409" kuralı **meşru kapanışı sistematik olarak reddediyordu**; duruş `maxOpenStopHours` sonunda WATCHDOG'la kapanır ve süresi persentillerden dışlanırdı. Kimlik = `machineId + startedAt + source`; `endedAt`/`durationSec`/`endSource` **geçiş alanıdır** ve atomik claim ile yazılır (`WHERE {id, …}` — `machineId` yüklemiyle kapatmak TOCTOU'yu geri getirir; açık duruşun id'si `LoomLiveState.openStopId`den okunur). Sınıflandırma alanları ingest yükünde HİÇ kabul edilmez (ajan sebep atamaz).
+> **(a) Kimlik DAR olmalı** (`idempotent-replay.helper` başlığı: *"gövdenin tamamı aynı mı DEĞİL"*). Duruş bir SPAN'dir; ajan aynı kalemi iki kez yollar — açılışta `endedAt: null`, kapanışta dolu. Sentezin "aynı anahtar + farklı yük → 409" kuralı **meşru kapanışı sistematik olarak reddediyordu**; duruş `maxOpenStopHours` sonunda WATCHDOG'la kapanır ve süresi persentillerden dışlanırdı. Kimlik **DAR ve SAATTEN BAĞIMSIZDIR** — `(machineId, stopKey)` (aşağıdaki karar; sentezin `machineId + startedAt + source` üçlüsü KALKTI); `endedAt`/`durationSec`/`endSource` **geçiş alanıdır** ve atomik claim ile yazılır (`WHERE {id, …}` — `machineId` yüklemiyle kapatmak TOCTOU'yu geri getirir; açık duruşun id'si `LoomLiveState.openStopId`den okunur). Sınıflandırma alanları ingest yükünde HİÇ kabul edilmez (ajan sebep atamaz).
 > **Anahtarın KENDİSİ de kırılgandı ve ARTIK SAATTEN KOPARILDI (Faz 2 sözleşmesi, 2026-09-12).** ±120 sn saat sapması kabul edilirken replay seddi ajan saatinin **milisaniye eşitliğine** bağlıydı — 1 sn kayan bir tekrar gönderim İKİNCİ satır açar, kopya KAPALI geldiği için `one_open_per_machine_uq` görmez ve aynı duruş breakdown'da iki kez sayılıp randımanı düşürürdü. Ara çözüm olan **saniyeye kuantizasyon** (`date_trunc('second')`) ve `tezgah.stopMatchToleranceSec` toleransı bir kimlik çözümü değil semptom bastırıcıydı: tolerans ne seçilirse seçilsin, sınırın iki yanında iki farklı yanlış cevap veriyordu (dar tolerans → mükerrer satır, geniş tolerans → iki ayrı duruşun birleşmesi).
 > **Karar: kimlik ajan üretimi bir TOKEN'dır.** `LoomStopEvent.stopKey` (UUID, `clientToken` kalıbı) ajan duruşu ilk gördüğünde üretilir ve kalemin ömrü boyunca DEĞİŞMEZ; sed **PARTIAL UNIQUE `(machineId, stopKey) WHERE revokedAt IS NULL`**tir. `startedAt` **kimlik değil VERİDİR** (ham ajan damgası; sunucu gerçeği `startedAtServer = startedAt + clockSkewMs` ile türetilir), `clockSkewMs` süre şüphesinin izidir ve **kimliğin parçası DEĞİLDİR**. Aynı `stopKey` + FARKLI kimlik yükü (`machineId`/`source`/`startedAt` oynamış) → **409 `STOP_PAYLOAD_CONFLICT`**; sıra dışı açılış (açık duruş dururken farklı `stopKey` ile ikinci açılış) → **409 `STOP_OUT_OF_ORDER`**. `tezgah.stopMatchToleranceSec` bayrağı bu kararla **DÜŞTÜ** (§6.3'ten çıkarıldı) — tolerans penceresi artık gereksizdir.
 > **(b) Replay'in DÖRDÜNCÜ durumu.** Sed PARTIAL olduğu için geri alınmış satır yer işgal etmez: süpervizör hayalet duruşu `revokedAt` ile geri alır, ajan aynı kalemi yeniden yollar, **yeni aktif duruş doğar ve geri alma sessizce iptal olur.** Bu tam olarak `services/helpers/token-replay.helper.ts` başlığındaki ④ durumudur (*"yazıldı, sonra İPTAL EDİLDİ → cached kaydı dönmek YANLIŞ CEVAPTIR"*). Ingest doğal anahtar aramasında geri alınmışları da GÖRÜR → 409 `STOP_REVOKED`.
@@ -1322,7 +1357,7 @@ Envanter bugün 8021→8031'de bitiyor (`src/services/helpers/period-guard.helpe
 
 ### Budama — dört sed
 
-1. **BUDAMA TESTİ (bekçi).** Raporlanabilir her sayı budamadan sonra da aynı değeri vermelidir. `scripts/test_loom_prune_safety.ts` **üç ayaklıdır**: ① **pozitif sed sondası** — budama penceresinin İÇİNE sebepli + `classifiedById` dolu + geri alınmış üç duruş konur, budamadan sonra üçü de DURUYOR olmalı; ② **gerçek negatif sonda** — budayıcının WHERE'inden sebep yüklemi kaldırılır → kırmızı; ③ **yüzey envanteri** — `loom_stop_events`/`loom_intervals` okuyan dosyaların AST listesi sabitlenir; listeye yeni dosya girerse kırmızı (yeni bir rapor, budama güvenliği yeniden ölçülmeden doğamaz). "Oku → buda → yeniden oku → fark 0" kalır ama **tek başına güvence sayılmaz**: bugün var olmayan bir raporun okuduğu kolonu ölçemez.
+1. **BUDAMA TESTİ (bekçi).** Raporlanabilir her sayı budamadan sonra da aynı değeri vermelidir. `scripts/test_loom_prune_safety.ts` **dört ayaklıdır**: ① **pozitif sed sondası** — budama penceresinin İÇİNE sebepli + `classifiedById` dolu + geri alınmış üç duruş konur, budamadan sonra üçü de DURUYOR olmalı; ② **gerçek negatif sonda** — budayıcının WHERE'inden sebep yüklemi kaldırılır → kırmızı; ③ **yüzey envanteri** — `loom_stop_events`/`loom_intervals` okuyan dosyaların AST listesi sabitlenir; listeye yeni dosya girerse kırmızı (yeni bir rapor, budama güvenliği yeniden ölçülmeden doğamaz); ④ **koşum terimi sondası** — budamadan önce ve sonra `LoomRun`ın üretim VE duruş terimleri AYNI (aşağıdaki *"Koşum ekseni kovadan bağımsızdır"* paragrafı). "Oku → buda → yeniden oku → fark 0" kalır ama **tek başına güvence sayılmaz**: bugün var olmayan bir raporun okuduğu kolonu ölçemez.
 2. **Mühür ön koşulu.** Budayıcı yalnız `sealState = SEALED` olan vardiyanın penceresine dokunur.
 3. **Sebep seddi (uygulama) — yüklem İNSAN KARARINA daraltıldı.** Budanmayan duruş = **insan kararı taşıyan** duruştur: `classifiedById IS NOT NULL OR reasonSource IN ('OPERATOR','SUPERVISOR')`. Makineden türeyen sınıflandırma (`reasonSource IN ('MACHINE','INFERRED')` **ve** `classifiedById IS NULL`) **TELEMETRİDİR**: kovayla birlikte budanır, rakamı karnede ve `LoomShiftStopBreakdown`ta zaten donmuştur. Yüklem `src/services/helpers/loom-retention.helper.ts`te TEK kaynaktır ve AST tripwire ile korunur.
    > **Neden daraltıldı (Fable D4, KRİTİK):** eski yüklem (`reasonCode IS NOT NULL OR …`) §10/#11'in *"sinyalden çözülen kısa kopuş otomatik sınıflanır"* kararıyla çarpışıyordu — dokumada duruşların ÇOĞU kopuştur, yani otomatik sınıflama budanan 1,12 M satırı kalıcı 1,12 M satıra çevirir ve *"ilk yıl < 1 GB"* bütçesini **tek tabloyla** aşardı. Sınır artık "sebep var mı" değil, **"bir insan karar verdi mi"**dir.
@@ -1354,7 +1389,7 @@ Envanter bugün 8021→8031'de bitiyor (`src/services/helpers/period-guard.helpe
 
 **Mutabakat bekçisi kapsamı:** değişmez **`Σ observedSec + unobservedSec = calendarSec`**tir — eski *"Σ kova süresi = takvim"* biçimi `unobservedSec > 0` olan **her** vardiyada tanımı gereği kırmızı verirdi (§5.1). Eşitlik yalnız **retention penceresi içindeki** vardiyalar için ölçülür ve körlük zemini basılır (kaç vardiya ölçüldü — *"0 bulgu ≠ hiç bakılmadı"*). Pencere dışı için kovadan bağımsız ikinci değişmez: `Σ LoomShiftStopBreakdown.stopSec + minorStopSec ≤ potSec`.
 
-**Koşum ekseni kovadan bağımsızdır:** `LoomRun` budanmaz ama içinde üretim terimi yoksa boş kabuktur — bu yüzden koşum kapanışında `picksAtClose`/`producedM`/`observedSecAtClose` **ve `stopSecAtClose`/`stopCountAtClose`** donar (§2.8). Duruş terimleri sonradan eklendi ve gerekçesi ölçülmüştür: sebepsiz duruş budandığında **koşum düzeyi duruş da ölüyordu** — karne ekseni vardiya×makine olduğu için *"bu iş emri adımında kaç kez, kaç saat durduk"* sorusunu karne cevaplayamaz. Tek yazar `closeLoomRunTx`, atomik claim `WHERE closedTermsAt IS NULL`. Retention penceresinden sonra koşum ekseninin HER sorusu **koşumun kendi terimlerinden** cevaplanır, kovadan değil. `test_loom_prune_safety`nin pozitif sondasına dördüncü ayak eklenir: **budamadan önce ve sonra koşum üretimi VE duruş terimleri AYNI**.
+**Koşum ekseni kovadan bağımsızdır:** `LoomRun` budanmaz ama içinde üretim terimi yoksa boş kabuktur — bu yüzden koşum kapanışında `picksAtClose`/`producedM`/`observedSecAtClose` **ve `stopSecAtClose`/`stopCountAtClose`** donar (§2.8). Duruş terimleri sonradan eklendi ve gerekçesi ölçülmüştür: sebepsiz duruş budandığında **koşum düzeyi duruş da ölüyordu** — karne ekseni vardiya×makine olduğu için *"bu iş emri adımında kaç kez, kaç saat durduk"* sorusunu karne cevaplayamaz. Tek yazar `closeLoomRunTx`, atomik claim `WHERE closedTermsAt IS NULL`. Retention penceresinden sonra koşum ekseninin HER sorusu **koşumun kendi terimlerinden** cevaplanır, kovadan değil. `test_loom_prune_safety`nin **DÖRDÜNCÜ AYAĞI** tam olarak budur: **budamadan önce ve sonra koşum üretimi VE duruş terimleri AYNI** (§4 madde ① ④).
 
 ---
 
@@ -1379,9 +1414,9 @@ takvim (ShiftInstance penceresi)
 
 > **⚠️ `unobservedSec`in TÜRETME KURALI (Fable D3, KRİTİK).** Dört ayrı bölüm bu terimin *ne olduğunu* söylüyordu, hiçbiri *nasıl hesaplandığını* söylemiyordu — ve ajan sustuğunda kova satırı da doğmadığı için toplanacak `observedSec` hiç yoktur.
 > **Kural:** `unobservedSec = calendarSec − Σ(LoomInterval.observedSec ∩ vardiya penceresi)` — **ARTIK yöntemiyle** hesaplanır, heartbeat aralığından DEĞİL; hiç kova doğmamış pencere bu farkta kendiliğinden görünür. **Heartbeat bir KAYNAK DEĞİLDİR**: nabız ajanın canlılığını söyler, kovanın gözlenmişliğini değil; ikisini karıştırmak "ajan ayaktaydı, demek ki ölçüyordu" yalanını üretir.
-> **Kova içi tutarlılık satır yazılırken zorlanır** (DB CHECK, §2.6): `runSec + stopSec + microStopSec ≤ observedSec ≤ bucketMinutes × 60`. Üst sınır olmadan bir ajan hatası kovaya kova boyundan uzun gözlem yazar ve `unobservedSec` **negatife** düşerdi.
+> **Kova içi tutarlılık satır yazılırken zorlanır** (DB CHECK, §2.6): `runSec + stopSec + minorStopSec ≤ observedSec ≤ bucketMinutes × 60`. Üst sınır olmadan bir ajan hatası kovaya kova boyundan uzun gözlem yazar ve `unobservedSec` **negatife** düşerdi.
 > **MUTABAKATIN DOĞRU BİÇİMİ `Σ observedSec + unobservedSec = calendarSec`tir**, *"Σ kova = takvim"* DEĞİL — ikincisi `unobservedSec > 0` olan her vardiyada tanımı gereği kırmızı verir (§4).
-> **COLLECTOR_GAP'in iki yüzü ve `gapPicks`:** ajan sustuktan sonraki ilk kova `GAP` damgalanır; sayaç o sürede ilerlemiştir ve fark ilk kovada **sıçrama** olarak gelir. Karar **terimi ikiye ayırmaktır**: sıçrayan atkı `gapPicks` kolonuna yazılır (§2.10) ve **metre onu İÇERİR** (kumaş gerçekten dokundu, `Roll` bir gün o metreyi gösterecek), **randıman paydası/payı onu DIŞLAR** (o sürenin karşılığı `unobservedSec`tir; sıçramayı P'ye saymak gözlenmemiş süreyi ödüllendirir, saymamak ise üretimi yok sayar — tek sayı ikisini birden yapamaz).
+> **COLLECTOR_GAP'in iki yüzü ve `gapPicks`:** ajan sustuktan sonraki ilk kova `GAP` damgalanır; sayaç o sürede ilerlemiştir ve fark ilk kovada **sıçrama** olarak gelir. Karar **terimi ikiye ayırmaktır**: sıçrayan atkı `gapPicks` kolonuna yazılır (§2.10) ve **metre onu İÇERİR** (kumaş gerçekten dokundu, `Roll` bir gün o metreyi gösterecek), **randımanın PAYINDAN DÜŞÜLÜR, PAYDAYA HİÇ GİRMEZ** (`picksActual − gapPicks`; o sürenin karşılığı `unobservedSec`tir ve POT'tan zaten düşüldüğü için paydada hiç doğmaz — sıçramayı P'ye saymak gözlenmemiş süreyi ödüllendirir, saymamak ise üretimi yok sayar; tek sayı ikisini birden yapamaz).
 > **Faz 1a'da `unobservedSec = 0`dır ve bu bir BEYANDIR:** telemetri yoktur, gözlemci İNSANDIR ve elle girilen karnede gözlem eksikliği değil **vardiya beyanı** vardır (`source` kolonu ayrımı zaten taşır). Aksi hâlde takvim kadar `unobservedSec` yazılır ve **POT = 0** çıkardı.
 
 ### 5.2 · Formül
@@ -1395,8 +1430,8 @@ P (Performans)        = (picksActual − gapPicks) / targetPickCapacityApt   ←
 RANDIMAN (E)          = (picksActual − gapPicks) / targetPickCapacityPot
 
   ⚠️ gapPicks = ajan susmuşken sayacın ilerlediği, ilk kovada SIÇRAMA olarak gelen
-     atkı. Randımandan DIŞLANIR (karşılığı unobservedSec'tir, POT'a girmez);
-     METREYE DAHİLDİR (§5.6 — kumaş gerçekten dokundu).
+     atkı. PAYDAN DÜŞÜLÜR, PAYDAYA HİÇ GİRMEZ (karşılığı unobservedSec'tir ve
+     POT'tan zaten düşülmüştür); METREYE DAHİLDİR (§5.6 — kumaş gerçekten dokundu).
 
   targetPickCapacityApt = Σ(koşum_i.targetPicksPerMin × koşum_i'nin APT dakikası)
   targetPickCapacityPot = Σ(koşum_i.targetPicksPerMin × koşum_i'nin POT dakikası)
@@ -1434,8 +1469,8 @@ Dokumada `P` tipik olarak 0,97–1,00 bandındadır (tezgah durunca atkı atmaz 
 | | Nerede | Neden |
 |---|---|---|
 | **Anlık devir** | `LoomLiveState.instantPicksPerMin` — tarihçe YOK | 10 sn'lik anlık devir gürültüdür; yılda 63 M satır eder |
-| **Ortalama (çalışırken)** | türetilir: `picksActual / APT_dk` | sayaçtan çıkar, örnekleme hatası yok, toplanabilir |
-| **Ortalama (genel)** | türetilir: `picksActual / POT_dk` | **Kimlik: `randıman = avgOverallPicksPerMin / targetPicksPerMin`** (ikisi de **atkı/dk**; `Rpm` adı devir/dk ile karışıyordu — §3.4 birim seddi) |
+| **Ortalama (çalışırken)** | türetilir: `(picksActual − gapPicks) / APT_dk` | sayaçtan çıkar, örnekleme hatası yok, toplanabilir; `gapPicks` **paydan düşülür** (§5.2) |
+| **Ortalama (genel)** | türetilir: `(picksActual − gapPicks) / POT_dk` | **Kimlik: `randıman = avgOverallPicksPerMin / targetPicksPerMin`** (ikisi de **atkı/dk**; `Rpm` adı devir/dk ile karışıyordu — §3.4 birim seddi). ⚠️ **Kimlik YALNIZ TEK HEDEFLİ vardiyada birebirdir:** birden çok koşum/hedef varsa `targetPicksPerMin` **NULL**'dur (§2.10) ve E bu kimlikten DEĞİL **kendi tanımından** okunur — `(picksActual − gapPicks) / targetPickCapacityPot` (§5.2) |
 | **Hedef** | `LoomRun.targetPicksPerMin` — SAKLANIR | randımanın paydası; işin özelliği, tezgahın değil |
 | **Kopuş yoğunluğu** | `kopuş/10⁵ atkı = (warpStopCount \| weftStopCount) × 100000 / picksActual` | ⚠️ payda ATKIDIR, saat değil — saat bazlı sayım yavaş koşan tezgahı ödüllendirir. **Pay ya da payda NULL ise KPI HESAPLANMAZ** ve rapor "ölçülemedi" der (kanalsız retrofitte sayaç NULL'dır, 0 değil — §2.6) |
 
@@ -1465,7 +1500,7 @@ Dokumada `P` tipik olarak 0,97–1,00 bandındadır (tezgah durunca atkı atmaz 
 **Anahtar zaten var ve açılmıyor:** `tezgah.enabled` / `tezgahEnabled` (`src/constants/module-flags.ts:40,52`), varsayılan **false**, bağımlılığı `productionEnabled` (`:78`). `if (musteri === 'X')` gerekmiyor.
 
 **"Varsayılan = bugünkü davranış" ÖLÇÜMÜ (K2/K3 şartı) — iki bağımsız yoldan:**
-- **Profil yolu:** `tezgah.enabled` **ALTI** yerleşik profilin **DÖRDÜNDE kapalı** (`basit` · `standart` · `perde` · **`perde-dokuma`**), **İKİSİNDE açık** (`dokuma` · `tam`) — `src/constants/module-profiles.ts:32` (profil kimlikleri), `:125-199`. *(Sentez "üç profilden ikisi" diyordu; sonra "beş profilin üçü" yazıldı — ikisi de bayat: `perde-dokuma` 2026-09-12'de doğdu ve tezgah izleme orada bilinçli olarak KAPALIDIR, §7.)*
+- **Profil yolu:** `tezgah.enabled` **ALTI** yerleşik profilin **DÖRDÜNDE kapalı** (`basit` · `standart` · `perde` · **`perde-dokuma`**), **İKİSİNDE açık** (`dokuma` · `tam`) — `src/constants/module-profiles.ts:32` (profil kimlikleri), `:125-199`. *(Sentez "üç profilden ikisi" diyordu; sonra "beş profilin üçü" yazıldı — ikisi de bayat: `perde-dokuma` 2026-09-12'de doğdu ve tezgah izleme orada bilinçli olarak KAPALIDIR, §7.2.)*
 - **Canlı kurulum yolu — asıl kanıt:** profiller yalnız TAZE kurulumda koşar (`jobs/module-profile.job.ts`: `TEKSERP_PROFIL` yoksa hiç yazmaz, satır varsa dokunmaz). adnansahin'de değer profilden değil **grandfathering damgasından** gelir ve `false`'tur: `prisma/migrations/20260902230000_modul_anahtarlari_grandfathering/migration.sql:63` → `('tezgah.enabled','false'::jsonb, …)`. Satır silinse bile `readTezgahEnabled` `asBoolean` ile **false** döner (`system-setting.service.ts:57-61`, `:3602`).
 
 **Adlandırılmış kapı:** `requireTezgahEnabled` (`module.middleware.ts` — `requireIplikEnabled`ın bağımlılık dalıyla aynı şekilde `tezgah → production` ön koşulunu ölçer). Jenerik `requireModule("tezgah")` **YASAK** (`:19-23`).
@@ -1490,7 +1525,7 @@ Dokumada `P` tipik olarak 0,97–1,00 bandındadır (tezgah durunca atkı atmaz 
 
 Ek olarak: `settings-groups.ts` `SettingsModuleState`/`resolveSettingsModuleState` genişler; tezgah ayar kategorisi `moduleKey: "tezgahEnabled"` alır (**`regime` alanına ASLA** — `docs/kurallar/modul-bayrak.md`: *"`regime` yalnız `productionEnabled|financeEnabled` içindir, modül anahtarlarına genişletilmez, §14 kırmızı verir"*).
 
-> **⚠️ İKİ AİDİYET KARIŞTIRILMAZ (yoksa 16 düğme adnansahin'in ayar ekranında belirir).** Modül **ŞALTERİNİN** kendi `FLAG_MODULE` aidiyeti **`"cekirdek"` KALIR** — bir şalter kendi modülüne ait sayılırsa kapatıldığı an **kendi satırını gizler** ve bir daha açılamaz (`flag-modules.ts` `FLAG_MODULE` bloğu). `cekirdek` olan **yalnız `tezgahEnabled` satırıdır**; §6.3'ün **14 DAVRANIŞ bayrağının** sahibi ise `tezgahEnabled`dir (eksikse TS2741). Yani: şalter çekirdeğe ait, şalterin arkasındaki bayraklar modüle ait.
+> **⚠️ İKİ AİDİYET KARIŞTIRILMAZ (yoksa 16 düğme adnansahin'in ayar ekranında belirir).** Modül **ŞALTERİNİN** kendi `FLAG_MODULE` aidiyeti **`"cekirdek"` KALIR** — bir şalter kendi modülüne ait sayılırsa kapatıldığı an **kendi satırını gizler** ve bir daha açılamaz (`flag-modules.ts` `FLAG_MODULE` bloğu). `cekirdek` olan **yalnız `tezgahEnabled` satırıdır**; §6.3'ün **16 DAVRANIŞ bayrağının** sahibi ise `tezgahEnabled`dir (eksikse TS2741) — sayı §6.3 tablosuyla birebirdir: üç bayrak eklendi, `stopMatchToleranceSec` DÜŞTÜ, **14 → 16** (§11c). Yani: şalter çekirdeğe ait, şalterin arkasındaki bayraklar modüle ait.
 
 ### 6.3 · Davranış bayrakları
 
@@ -1504,21 +1539,21 @@ Alt reçeteler (sentezde eksikti): **enum bayrak** üçlü ister (type + değer 
 |---|---|---|---|
 | `tezgah.shiftDayAttribution` | **1a** | **START** (enum) | gece vardiyası BAŞLADIĞI güne (`time.ts` "01:30'da okutulan top BUGÜNDÜR" gerekçesi) |
 | `tezgah.breakOutOfPot` | **1a** | **false** | mola POT'ta kalır → randıman düşer (muhafazakâr yön) |
-| `tezgah.stopEventMinSeconds` | 2 | **20** | eşik altı duruş defter satırı olmaz, kovada+karnede SAYILIR. ⚠️ Faz 1a'da YAZILMAZ: eşikleyeceği tablo Faz 2'de doğuyor |
+| `tezgah.stopEventMinSeconds` | **1b** | **20** | eşik altı duruş defter satırı olmaz, kovada+karnede SAYILIR. ⚠️ Faz 1a'da YAZILMAZ: eşikleyeceği tablo (`LoomStopEvent`) **Faz 1b'de** doğuyor (§2.7, §9) — bayrak tablosuyla AYNI fazda açılır |
 | `tezgah.sealAllowsUnackedAnomaly` | 2 | **false** | ⚠️ ad TERSİNE ÇEVRİLDİ (aşağıdaki kutu) |
 | `tezgah.collectorPairingOptional` | 2 | **false** | ⚠️ ad TERSİNE ÇEVRİLDİ; `device.pairingRequired`in TERSİ davranış, bilinçli: tablet okur, toplayıcı DEFTERE YAZAR |
 | `tezgah.bucketMinutes` | 2 | **15** | değişimi ileriye dönük (§3.5). ⚠️ **YAZIMI KAPILIDIR:** yeni değer AKTİF her `ShiftDefinition`ın `startMinute` ve `durationMinutes`ini bölmüyorsa **400** döner ve ihlal eden HER tanımı adıyla listeler (yıkıcı işlemde "etkilenen her kaydı listele"). Aynı doğrulama TERS yönde de koşar (`ShiftDefinition` yazımı yürürlükteki `bucketMinutes`e göre ölçülür); tek kaynak `assertBucketAlignment(bucketMinutes, definitions)` — iki yazar da onu çağırır (boğaz-ikiz). Tek yönlü doğrulama, bayrak 15→20 olunca "klipleme hiç doğmaz" değişmezini sessizce düşürürdü |
 | ~~`tezgah.stopMatchToleranceSec`~~ | — | — | ⚠️ **DÜŞTÜ (2026-09-12):** duruş kimliği artık ajan üretimi `stopKey` token'ıdır, saat değil — tolerans penceresi gereksizdir ve her iki yönde de yanlış cevap veriyordu (§3.5a) |
 | `tezgah.sampleRetentionDays` | 2 | **180** | budama penceresi — kısaltmak geri alınamaz, uzatmak serbest |
 | `tezgah.simulatedDataEnabled` | 2 | **false** | kapalıyken `SIMULATED` kalem 400 |
-| `tezgah.maxClockSkewSec` | 2 | **120** | aşan paket 400 `CLOCK_SKEW` |
+| `tezgah.maxClockSkewSec` | 2 | **120** | ⚠️ **PAKETİ DEĞİL KALEMİ düşürür:** aşan kalem 400 `CLOCK_SKEW` ile `rejected[]`e yazılır, paketin kalanı işlenmeye devam eder (§3.5 — kalem bazlı cevap sözleşmesi) |
 | `tezgah.maxOpenStopHours` | 2 | **12** | watchdog **GEÇİCİ** kapatması: `endedAt = startedAt + bu değer`, `endSource=WATCHDOG`, `provisionalEndedAt` damgalanır, karnede `watchdogSec` (§3.5) |
 | `tezgah.maxOpenRunDays` | 2 | **7** | aşan **koşum** watchdog ile kapanır ve terimleri donar — açık koşum kendi penceresini süresiz budanmaz kılamaz (§4 madde ③) |
 | `tezgah.shadowMinShifts` | 2 | **15** | `SHADOW → LIVE` kapısı ②: bu kadar MÜHÜRLÜ gölge vardiya yoksa **409 `SHADOW_TOO_SHORT`** ("14/15") |
 | `tezgah.acceptanceMaxAnomalyPct` | 2 | **5** | `SHADOW → LIVE` kapısı ③: gölge dönemin anomali oranı bunu aşarsa **409 `SHADOW_ANOMALY`** |
 | `tezgah.longStopThresholdSec` | 2 | **300** | üstü otomatik sınıflansa bile kuyruğa düşer |
 | `tezgah.fineWindowUntil` | 2 | **null** | makine başına, KENDİLİĞİNDEN SÖNEN **TANI penceresi**: devreye almada 10 sn ham örnek kenarda tutulur ve panelde canlı gösterilir, **DB'ye yine yazılmaz**. ⚠️ **KABUL KAPISI DEĞİLDİR** — kapı `monitoringState` + üç şarttır (§2.3); bu bayrak yalnız kabul sırasında kanalı gözle görmenin aracıdır |
-| `tezgah.shiftCloseRequiresClassification` | 3 | **false** | açıkken mühür, sınıflandırma oranı `tezgah.minClassificationPct` altındayken 409 + **etkilenen HER duruşu listeler**. "Çıkışsız kapı üreten bayrak yazılır ama AÇILMAZ" — önce kuyruk ekranı doğar |
+| `tezgah.shiftCloseRequiresClassification` | 3 | **false** | açıkken mühür, vardiyada **sınıflandırılmamış duruş varken** 409 + **etkilenen HER duruşu listeler**. ⚠️ Oran eşiği (`minClassificationPct` gibi İKİNCİ bir sayısal bayrak) **YAZILMAZ** — bu tablo 16 bayrağın tamamıdır ve çıkışsız bir kapıyı ikiye katlamak onu iki kez açılmaz kılardı. "Çıkışsız kapı üreten bayrak yazılır ama AÇILMAZ" — önce kuyruk ekranı doğar |
 
 > **⚠️ Denetim düzeltmesi — fail-open iki bayrak (kabul/bayrak merceği, KRİTİK).** Sentez `sealRequiresAnomalyAck = true (fail-closed)` ve `collectorPairingRequired = true` yazıyordu. Ama `asBoolean(undefined) → false` (`system-setting.service.ts:57-61`) ve **saha kurulumunda seed HİÇ koşmaz** (grandfathering migration başlığı: *"`deploy/kur.ps1` seed'i HİÇ çağırmaz — yalnız `prisma migrate deploy`"*), davranış bayrakları profile de girmez. Sonuç: satır yok → `false` → **anomalili vardiya onaysız mühürlenir, toplayıcı eşleştirmesiz yazar.** Tam tersi.
 > **Karar: ikisinin de adı tersine çevrilir ve varsayılanı `false` olur** — böylece "satır yok" hâli fail-closed'a düşer ve özel okuyucu sigortası gerekmez. `readProductionEnabled`ın açık `?? true` sigortası (`module.middleware.ts:150-159`) meşru bir emsaldir ama istisnadır; ad tersine çevirmek "bayrak adı yaptığı işi söyler" kuralıyla da hizalıdır. Panel `defaultOn` rozeti ile birebirliği `test_feature_flag_contract §12/§16` ölçer.
@@ -1564,6 +1599,8 @@ Sentezde hiç yoktu; kardeş belge (`docs/design/DEVERE-LEVENT-TARAMASI.md` §5)
 
 ## 7 · Modül ilişkisi — `tezgah.enabled` ↔ `dokuma.enabled` / `devere.enabled`
 
+### 7.1 · Üç anahtarın karar tablosu ve ad uzlaşması
+
 Sentez bu soruyu hiç kurmamıştı (belgede `dokuma.enabled`/`devere` sıfır geçiş). K2 iki yeni bayrağı ve `devere→iplik`, `dokuma→devere` zincirini bağlayıcı sayıyor. Karar tablosu:
 
 | Anahtar | Durum | Ebeveyn | Gerekçe |
@@ -1576,7 +1613,9 @@ Sentez bu soruyu hiç kurmamıştı (belgede `dokuma.enabled`/`devere` sıfır g
 
 **Ad uzlaşması:** `tezgah.enabled` = **tezgah izleme** (telemetri/randıman, `MODULE_LABELS` metni bugün "Tezgah izleme"). `dokuma.enabled` = **dokuma üretim akışı**. İkisi aynı şey değildir ve K2'nin "dokuma bayrağı" dediği yetenek **bu dilimde `tezgah.enabled`tir** — yani bu dilim yeni anahtar borcu doğurmaz, K2'nin "ayrı bayraklar, varsayılan kapalı" şartı mevcut anahtarla zaten karşılanıyor.
 
-**Hedef müşteri profili — KARAR KAPALI (bu tasarım profil içeriğini DEĞİŞTİRMEZ).**
+### 7.2 · Hedef müşteri profili — KARAR KAPALI
+
+**Bu tasarım profil içeriğini DEĞİŞTİRMEZ.**
 
 ⚠️ Sentez *"yeni `perde-dokuma` profili = production + finance + kumasTeknik + tezgah, `MODULE_PROFILES` 5 → 6"* diyordu. **Ölçüldü ve bayat:** profil **repoda ZATEN VAR ve commit'li** (`src/constants/module-profiles.ts:32` kimlik listesi, `:159` tanım; 2026-09-12) — içeriği `production` + `finance` + **`ticaret`** + **`iplik`** + `kumasTeknik` + **`devere`** ve başlığındaki yorum aynen şunu diyor: *"Tezgah izleme BU profilde KAPALI: 'top tezgahtan doğar' motoru **Faz 4**'te gelir."* Yani aynı ada iki uyuşmaz içerik ve tezgah bayrağı iki belgede ters yazılıydı.
 
@@ -1616,7 +1655,7 @@ Bu bölüm sözleşmedir: **her fazın kabul kapısı bu maddelerin ölçülmü�
 | # | Şart | Nasıl ölçülür |
 |---|---|---|
 | K3-1 | Bayrak kapalıyken adnansahin'in hiçbir ekranında **yeni alan / zorunluluk / adım / sekme** görünmez | `test_screen_catalog` (karo `visibleWhen` ↔ manifesto `modul` iki yönlü) · `flag-modules.test.ts` · panelde `KIND_TABS` bayrak süzgeci · `PeripheralDevice.protocol` alanı `kind===SIGNAL_SOURCE && tezgahEnabled` koşullu |
-| K3-2 | **Bayrak kapalıyken değişmezlik bekçisi SUNUCU AYAKTA koşulur** | `PORT=4101 npx tsx src/server.ts` ayakta → `npx tsx scripts/test_module_flag_off.ts` → **`atlandı = 0`** görülür. ⚠️ Sunucusuz koşumda **18 HTTP kontrolü** *(ölçüldü 2026-09-12; eski "14" ölçümü `devere` satırıyla bayatladı)* **sessizce atlanıyor** (`:524-528` — sayı TABLODAN türer: `MODULLER.length (5) + onKosul taşıyan (2) + 1 + 5 + 5`, yani `MODULLER`e satır eklendikçe kendiliğinden büyür) — yani sunucusuz yeşil, K3'ün kanıtı DEĞİLDİR. ⚠️⚠️ **Bu şart `npm test` ile SAĞLANMAZ:** koşucu 4101'i KALDIRMAZ ve "atlanan kontrol" satırı exit kodunu **düşürmez** (`run-all-tests.ts:393-405` — *"yeşil ≠ kapsandı"*). Kabul kapısı bu satırı `npm test` çıktısından değil **AYRI komuttan** okur ve komut `Teks-Erp/docs/BEKCI-HARITASI.md`ye tezgah satırı olarak yazılır. Kalıcı çözüm tercihi (Faz 1a iş kalemi): koşucuya **`TEKSERP_STRICT=1`** modu — atlanan kontrol varsa exit ≠ 0 |
+| K3-2 | **Bayrak kapalıyken değişmezlik bekçisi SUNUCU AYAKTA koşulur** | `PORT=4101 npx tsx src/server.ts` ayakta → `npx tsx scripts/test_module_flag_off.ts` → **`atlandı = 0`** görülür. ⚠️ Sunucusuz koşumda **18 HTTP kontrolü** *(ölçüldü 2026-09-12; eski "14" ölçümü `devere` satırıyla bayatladı)* **sessizce atlanıyor** (`:551-552` — `httpKontrolSayisi` formülü; sayı TABLODAN türer: `MODULLER.length (5) + onKosul taşıyan (2) + 1 + 5 + 5`, yani `MODULLER`e satır eklendikçe kendiliğinden büyür. ⚠️ Üçüncü turda yazılan `:524-528` çapası YANLIŞTI — o aralık profil damgası yorumudur, §11d) — yani sunucusuz yeşil, K3'ün kanıtı DEĞİLDİR. ⚠️⚠️ **Bu şart `npm test` ile SAĞLANMAZ:** koşucu 4101'i KALDIRMAZ ve "atlanan kontrol" satırı exit kodunu **düşürmez** (`run-all-tests.ts:393-405` — *"yeşil ≠ kapsandı"*). Kabul kapısı bu satırı `npm test` çıktısından değil **AYRI komuttan** okur ve komut `Teks-Erp/docs/BEKCI-HARITASI.md`ye tezgah satırı olarak yazılır. Kalıcı çözüm tercihi (Faz 1a iş kalemi): koşucuya **`TEKSERP_STRICT=1`** modu — atlanan kontrol varsa exit ≠ 0 |
 | K3-3 | `MODULLER` tablosunda tezgahın **kendi satırı** var | Bugün `tezgahEnabled` yalnız `MODULE_DEPENDENCIES`ten türeyen bir **yer tutucu**dur (`YONETILEN` türetme bloğu `:216-222`), `MODULLER` tablosunda satırı **yoktur** (`:136-204`, **BEŞ satır**: `ticaret · iplik · devere · depoMulti · production` — ölçüldü 2026-09-12; eski *"`:136-190`, dört satır"* ölçümü `devere` satırı eklenince bayatladı). `requireTezgahEnabled` yazıldığı an 403 gövdesi (`details.code`/`modul`), önbeleksizlik, kapı-`verifyToken` sırası ve bağımlılık dalı **hiç ölçülmez**. **Satırın UNUTULMAMASI da ölçülür:** `test_module_flag_off`a TERS kontrol eklenir — *"`MODULE_SETTING_KEYS`teki (sekiz) her anahtar ya `MODULLER`de bir satırdır ya GEREKÇELİ muaf listesindedir"* (bugün `kumasTeknik` · `tezgah` · `devere` muaf, gerekçe *"backend kapısı yok"*). `requireTezgahEnabled`in export edildiği commit'te tezgah muaftan satıra geçer; geçmezse bekçi kırmızı verir |
 | K3-4 | **Negatif sonda kırmızı görülerek yazılır** | `requireTezgahEnabled` içinde `readTezgahEnabled()` → `readProductionEnabled()` takası yapılır ve §1h kırmızı verdiği ÖLÇÜLÜR (SONDA-20 kalıbı); kapı `verifyToken`dan öne alınır → kırmızı |
 | K3-5 | Migration **yalnız kolon/tablo ekler**, veri yeniden yazılmaz | Yeni kolonların hepsi nullable ya da `@default`lu; CHECK yalnız yeni kind'ı bağlar (`kind <> 'LOOM_STOP' OR …`) → mevcut satırlar doğrulamayı geçer. `UPDATE`/backfill ifadesi **YOK** |
@@ -1633,7 +1672,7 @@ Bu bölüm sözleşmedir: **her fazın kabul kapısı bu maddelerin ölçülmü�
 | K2-4 | **Adlandırılmış kapı**, jenerik `requireModule` yok | `requireTezgahEnabled` (§6.1) |
 | K2-5 | **Fork yok** | `if (musteri === 'X')` hiçbir yerde; fark yalnız bayrak profilinde |
 | K2-6 | Mevcut akış bozulmaz | Rota şablonuna istasyon eklenir; iş emri motoru, `RollStatus` akışı, sevkiyat **dokunulmaz** |
-| K2-7 | Bayraklar ayrı ve varsayılan kapalı | `tezgah.enabled` false; `dokuma.enabled`/`devere.enabled` ayrı ve bu dilimde açılmıyor (§7) |
+| K2-7 | Bayraklar ayrı ve varsayılan kapalı | `tezgah.enabled` false; `dokuma.enabled`/`devere.enabled` ayrı ve bu dilimde açılmıyor (§7.1) |
 
 ### 8.3 · Defter doktrini (K1)
 
@@ -1643,7 +1682,7 @@ Telemetri budanabilir (`LoomInterval`, insan kararı almamış + mühürlü duru
 
 ## 9 · Fazlandırma
 
-> Sentezin "Faz 1"i en küçük anlamlı adım değil, **en küçük eksiksiz mimariydi**: 7 tablo + 2 migration + job + 2 AST-korumalı helper + 4 ekran + 7 izin + 4 bayrak + advisory uzay + 5 bekçi — repoda bugün 128 model var, yani tek dilimde %5,5 büyüme, hiç yüzeyi olmayan bir modül için. Üstelik içinde **kaynağı olmayan parçalar** vardı: `stopEventMinSeconds` Faz 1'de ama eşikleyeceği tablo Faz 2'de; `anomalyAck` kapısı Faz 1'de ama anomali kaynağı Faz 2'de. Ölçek merceğinin kesimi uygulandı.
+> Sentezin "Faz 1"i en küçük anlamlı adım değil, **en küçük eksiksiz mimariydi**: 7 tablo + 2 migration + job + 2 AST-korumalı helper + 4 ekran + 7 izin + 4 bayrak + advisory uzay + 5 bekçi — repoda bugün 128 model var, yani tek dilimde %5,5 büyüme, hiç yüzeyi olmayan bir modül için. Üstelik içinde **kaynağı olmayan parçalar** vardı: `stopEventMinSeconds` Faz 1'de ama eşikleyeceği tablo Faz 2'de; `anomalyAck` kapısı Faz 1'de ama anomali kaynağı Faz 2'de. Ölçek merceğinin kesimi uygulandı ve **iki parça kaynağıyla HİZALANDI:** `stopEventMinSeconds` eşikleyeceği tabloyla (`LoomStopEvent`) birlikte **Faz 1b**'ye taşındı (§2.7, §6.3); `anomalyAck` **kolonu** Faz 1a'da doğar ama **kapısı** anomali kaynağıyla birlikte **Faz 2**'de yürürlüğe girer (§2.10).
 
 ### FAZ 1a — "Elle vardiya girişi" · **en küçük satılabilir dilim**
 
@@ -1666,12 +1705,12 @@ Telemetri budanabilir (`LoomInterval`, insan kararı almamış + mühürlü duru
 
 **Vardiya boşluk politikası:** kapsayan örnek yoksa `shiftInstanceId = NULL` kabul edilir ve satır YİNE yazılır (ingest reddi ajanın kuyruğunu kilitlerdi), ama **NULL bir değer değil bir BOŞLUKTUR**: `/api/admin/health` sayacına düşer, `LoomShiftStat` üretmez ve raporda "vardiya atanmamış N kayıt" şeridiyle beyan edilir. Bu, fail-closed varsayılanından **bilinçli bir sapmadır** ve gerekçesi ingest'in geri basınç üretmemesidir. *(Sentezin `variance-reasons.ts:203` emsali ters okunmuştu: o cümlenin fail-closed dalı `undefined`dır — emsal kaldırıldı, karar kendi gerekçesiyle duruyor.)*
 
-**Bekçiler (4 yeni + 5 mevcut):**
+**Bekçiler (4 yeni + 10 mevcut):**
 - `scripts/test_loom_efficiency_formula.ts` — A×P kimliği · yüzde ortalaması yasağının AST'si · `formulaVersion` donuyor mu · **45 dk'lık `COZGU_KOPUSU` → A düşmeli** (§5.2)
-- `scripts/test_loom_shift_seal.ts` — mühür/aç/yeniden-mühür **atomik claim** mi · `sealedAt` null'lanmıyor mu · `sealGeneration` artıyor mu · anomalili vardiya onaysız mühürleniyor mu → 400
-- `scripts/test_loom_shift_terms.ts` — Σ eşitliği ve vardiya sınırında kırpma (§5.1) · `Σ observedSec + unobservedSec = calendarSec` (§4)
+- `scripts/test_loom_shift_seal.ts` — mühür/aç/yeniden-mühür **atomik claim** mi · `sealedAt` null'lanmıyor mu · `sealGeneration` artıyor mu · anomalili vardiya onaysız mühürlenemiyor mu → **409** *(⚠️ bu ayak Faz 2'de koşar: anomali kaynağı `LoomCounterEvent`/`deltaQuality` orada doğar; Faz 1a'da yalnız kolon + atomik claim ölçülür — §2.10)*
+- `scripts/test_loom_shift_terms.ts` — vardiya sınırında **kırpma** (§5.1) · `Σ LoomShiftStopBreakdown.stopSec + minorStopSec ≤ potSec` (§4). ⚠️ `Σ observedSec + unobservedSec = calendarSec` eşitliği **Faz 1a'da KOŞULMAZ**: kova (`LoomInterval`) Faz 2'de doğar ve Faz 1a `unobservedSec = 0` BEYAN eder (§5.1) — ayak bu fazda doğuşta kırmızı verirdi. İkinci ayak **Faz 2'de** eklenir
 - `scripts/test_reason_preset_kind_parity.ts` — sunucu `ReasonPresetKind` ↔ Electron union + `KIND_TABS` ↔ mobil union + iki `Record` + BUILTIN `switch` **birebir** (§2.1). ⚠️ İlk koşumda bugünkü `ORDER_CANCEL` eksiğini yakalar; o eksik aynı commit'te kapatılır
-- Mevcut: **`test_module_flag_off` (sunucu 4101 AYAKTA, `atlandı=0`, negatif sonda + `MODULE_SETTING_KEYS` ters kontrolü)** · `test_feature_flag_contract` (PANEL_EXEMPT'teki `tezgahEnabled` ANAHTARI silinir, `REGIME_GATES` satırı) · `test_screen_catalog` (§10b kapı↔ekran sırası + ölü muaf + izin↔ekran kapsaması) · `test_module_profile` (§2 tamlık; profil sayısı **6 KALIR**, sekiz anahtar) · `test_role_template_catalog` (§2: dört iznin dördü de bir dar rolde) · `test_timestamptz_contract` (**tek** yeni `@db.Date` muafı: `LoomShiftStat.factoryDay`; ikincisi Faz 1b'de) · `test_module_flags` · Electron `flag-modules.test.ts` + `module-flags.test.ts`
+- Mevcut: **`test_module_flag_off` (sunucu 4101 AYAKTA, `atlandı=0`, negatif sonda + `MODULE_SETTING_KEYS` ters kontrolü)** · `test_feature_flag_contract` (PANEL_EXEMPT'teki `tezgahEnabled` ANAHTARI silinir, `REGIME_GATES` satırı) · `test_screen_catalog` (§10b kapı↔ekran sırası + ölü muaf + izin↔ekran kapsaması) · `test_module_profile` (§2 tamlık; profil sayısı **6 KALIR**, sekiz anahtar) · `test_role_template_catalog` (§2: dört iznin dördü de bir dar rolde) · `test_timestamptz_contract` (**tek** yeni `@db.Date` muafı: `LoomShiftStat.factoryDay`; ikincisi Faz 1b'de) · `test_module_flags` · **`test_hard_delete_guard_coverage`** (`WATCHED`a `"Machine"` + `EXPECTED`e `Machine <- LoomSpec.machine : Cascade` — §2.3; Faz 2 yalnız envanteri büyütür) · Electron `flag-modules.test.ts` + `module-flags.test.ts`
 - **`npx prisma validate` TEMİZ** — §2.1'deki **karşı-ilişki envanterinin HER alanı** yazılmış olmalı (13 alan); biri eksikse **P1012** ile düşer ve şemaya dökme ilk adımda durur
 
 **Kabul kapısı:** ① bekçiler yeşil **ve `test_module_flag_off` AYRI KOMUTTAN ölçüldü** — `PORT=4101 npx tsx src/server.ts` ayakta iken `npx tsx scripts/test_module_flag_off.ts` → **`atlandı = 0`**; `npm test` çıktısı bu şartın kanıtı DEĞİLDİR (§8.1 K3-2) · ② dört yeni bekçi negatif sondayla **kırmızı görülerek** yazıldı · ③ bayrak panelden açılıp kapanıyor (§6.2 altı yer tutucu emekli) · ④ kapalıyken adnansahin'in ekranlarında sıfır fark (§8.1) · ⑤ **`npx prisma validate` temiz** (13 karşı-ilişki) · ⑥ `npm test` tam paket yeşil (~6,5 dk).
@@ -1685,9 +1724,9 @@ Telemetri budanabilir (`LoomInterval`, insan kararı almamış + mühürlü duru
 
 ### FAZ 2 — Otomatik toplama
 
-`LoomCollector` + `LoomCollectorMachine` + `verifyCollectorToken` · `PeripheralDevice.protocol` + `PeripheralSignal` · `LoomInterval` · `LoomRun` · `LoomLiveState` · `LoomCounterEvent` · üç ingest ucu · `loom-retention.job` · `loom-counter.helper` · **ajanın kendisi (`kenar/`)** · canlı pano · tablet sınıflandırma kuyruğu (uç **`?kind=`li** çağrılır) · advisory **8032** (mühür EXCLUSIVE / ingest `_shared`) · `MACHINE_DELETE_GUARDS`a üç sayaç + `workorder.service.ts` adım silme guard'ına `loomRuns` (§2.8) · `loom-read-surfaces.ts` **okuma manifesti** + `loom-telemetry-ast-tarama.ts` (§4) · kalan **13 bayrak** · *(istenirse)* `kur.ps1`e NTP adımı — **bugün yok, ayrı iş kalemi** (§3.5).
+`LoomCollector` + `LoomCollectorMachine` + `verifyCollectorToken` · `PeripheralDevice.protocol` + `PeripheralSignal` · `LoomInterval` · `LoomRun` · `LoomLiveState` · `LoomCounterEvent` · üç ingest ucu · `loom-retention.job` · `loom-counter.helper` · **ajanın kendisi (`kenar/`)** · canlı pano · tablet sınıflandırma kuyruğu (uç **`?kind=`li** çağrılır) · advisory **8032** (mühür EXCLUSIVE / ingest `_shared`) · `MACHINE_DELETE_GUARDS`a **iki sayaç** (`loomRunCount` + `loomCounterEventCount` — §2.1'in yolu) + `workorder.service.ts` adım silme guard'ına `loomRuns` (§2.8) · `loom-read-surfaces.ts` **okuma manifesti** + `loom-telemetry-ast-tarama.ts` (§4) · kalan **12 bayrak** · *(istenirse)* `kur.ps1`e NTP adımı — **bugün yok, ayrı iş kalemi** (§3.5).
 
-**Bekçiler:** `test_loom_prune_safety` (üç ayak, §4) · `test_loom_counter_delta` (taşma/sıfırlama/anomali matrisi) · `test_loom_ingest_contract` (**dört durumlu replay + `STOP_REVOKED` + span kapanışı + sıra dışı 409 + saat sapması 400 + `SOURCE_MISMATCH` 400 + kapsam dışı 403 + uzak istekte 404**) · `test_loom_secret_hygiene` (token log/audit/sürüm notuna sızmıyor mu — kodla ölçülür) · `test_advisory_lock_namespaces` (8032, `_shared` dahil) · `test_remote_access_guard` (iki yeni önek) · `test_route_auth_coverage` (dört `EXEMPT` satırı) · `test_db_invariants` (kalan envanter + `NULLS NOT DISTINCT` breakdown seddi + `loom_counter_events_natural_uq`) · **`test_loom_shadow_mode`** — **S1** `OFF` makineye ingest → 403 · **S2** `SHADOW` karnesi mühürlenir ama DEFTER raporlarında (R1–R5) GÖRÜNMEZ · **S3** `go-live` kabulsüz sinyalle → 409 `SIGNAL_NOT_ACCEPTED` + eksik liste · **S4** 14 gölge vardiyada → 409 `SHADOW_TOO_SHORT` · **S5** anomali oranı aşınca → 409 `SHADOW_ANOMALY` · **S6** LIVE makinede kanal değişikliği → 409 `CHANNEL_CHANGE_REQUIRES_SHADOW`; **beş negatif sonda** (rapor süzgecini kaldır · karnenin donmuş `monitoringState`i yerine canlı künyeden süz · `go-live` kapılarından birini düşür · `signals/:id/accept`in gözlem şartını kaldır (409 `SIGNAL_NOT_OBSERVED` düşer) · kanal alanı değişince kabul damgasını null'lama → hepsi kırmızı vermelidir) · **`test_loom_run_beam_overlap`** (helper ↔ SQL ikizi, üç fixture — §7.3) · `test_hard_delete_guard_coverage` (`WATCHED`a `Machine`) · `test_consistency` (§2.11'in eksik üç mutabakatı).
+**Bekçiler:** `test_loom_prune_safety` (**dört ayak**, §4) · **`test_loom_shift_terms`in İKİNCİ AYAĞI** — `Σ observedSec + unobservedSec = calendarSec` (kova bu fazda doğduğu için eşitlik ancak burada anlamlıdır; §4/§5.1) · `test_loom_counter_delta` (taşma/sıfırlama/anomali matrisi) · `test_loom_ingest_contract` (**dört durumlu replay + `STOP_REVOKED` + span kapanışı + sıra dışı 409 + saat sapması 400 + `SOURCE_MISMATCH` 400 + kapsam dışı 403 + uzak istekte 404**) · `test_loom_secret_hygiene` (token log/audit/sürüm notuna sızmıyor mu — kodla ölçülür) · `test_advisory_lock_namespaces` (8032, `_shared` dahil) · `test_remote_access_guard` (iki yeni önek) · `test_route_auth_coverage` (dört `EXEMPT` satırı) · `test_db_invariants` (kalan envanter + `NULLS NOT DISTINCT` breakdown seddi + `loom_counter_events_natural_uq`) · **`test_loom_shadow_mode`** — **S1** `OFF` makineye ingest → 403 · **S2** `SHADOW` karnesi mühürlenir ama DEFTER raporlarında (R1–R5) GÖRÜNMEZ · **S3** `go-live` kabulsüz sinyalle → 409 `SIGNAL_NOT_ACCEPTED` + eksik liste · **S4** 14 gölge vardiyada → 409 `SHADOW_TOO_SHORT` · **S5** anomali oranı aşınca → 409 `SHADOW_ANOMALY` · **S6** LIVE makinede kanal değişikliği → 409 `CHANNEL_CHANGE_REQUIRES_SHADOW`; **beş negatif sonda** (rapor süzgecini kaldır · karnenin donmuş `monitoringState`i yerine canlı künyeden süz · `go-live` kapılarından birini düşür · `signals/:id/accept`in gözlem şartını kaldır (409 `SIGNAL_NOT_OBSERVED` düşer) · kanal alanı değişince kabul damgasını null'lama → hepsi kırmızı vermelidir) · **`test_loom_run_beam_overlap`** (helper ↔ SQL ikizi, üç fixture — §7.3) · `test_hard_delete_guard_coverage` (`EXPECTED`e Faz 2'nin Cascade çocukları; `WATCHED`a `"Machine"` **Faz 1a'da** eklendi — §2.3) · `test_consistency` (§2.11'in eksik üç mutabakatı).
 
 **Kabul kapısı — üçü birden:**
 1. **«Telemetri ≠ defter» bölümü yazıldı VE budama bekçisi yeşil ölçüldü.** Üçüncü bir hard-delete sınıfı AÇILMAZ (§4): `/karar-notu` ile arşive tam metin + `docs/kurallar/defter.md`ye **bölüm (altı kural) + tek kural satırı**; kök `CLAUDE.md` cümlesi **kullanıcı onayına** bırakılır. Kapının ölçülen yarısı `test_loom_prune_safety`nin **manifest ayağıdır** (`/api/tezgah/**` GET uçları ↔ `loom-read-surfaces.ts`, R1–R7 birebir / T1–T3 `warnings`li) + `loom-telemetry-ast-tarama.ts`nin dört kuralı + **N1–N8 negatif sondaları kırmızı görülerek**. Bölüm yazılmadan ve bekçi yeşil görülmeden **retention job sürüme çıkmaz**.
@@ -1696,7 +1735,7 @@ Telemetri budanabilir (`LoomInterval`, insan kararı almamış + mühürlü duru
 
 ### FAZ 3 — Marka sürücüleri, doff, kalite ayağı
 
-`LoomModel` + `LoomStopCodeMap` (otomatik sınıflandırma — budama yüklemi İNSAN kararına bakar, §4) · `RollEntrySource.WEAVING` + `DoffEvent` · `Q`/OEE · `tezgah.shiftCloseRequiresClassification` · `picksPerCm`in kalıcı evi (kaynak: çözgü/desen kartı — `WarpSpec` ailesi; **sert bağımlılık EKLENMEZ**, §10/#9) · **levent bağı: KOLON YOK, `beamsMountedDuring` türetmesi** (§7.3) ve `Machine.warpBeamSlots` levent belgesinin migration'ında doğar. Levent defterinin kendisi DEVERE belgesinindir; tezgah izlemenin `perde-dokuma` profiline eklenmesi **ayrı bir karar notudur** (§7).
+`LoomModel` + `LoomStopCodeMap` (otomatik sınıflandırma — budama yüklemi İNSAN kararına bakar, §4) · `RollEntrySource.WEAVING` + `DoffEvent` · `Q`/OEE · `tezgah.shiftCloseRequiresClassification` · `picksPerCm`in kalıcı evi (kaynak: çözgü/desen kartı — `WarpSpec` ailesi; **sert bağımlılık EKLENMEZ**, §10/#9) · **levent bağı: KOLON YOK, `beamsMountedDuring` türetmesi** (§7.3) ve `Machine.warpBeamSlots` levent belgesinin migration'ında doğar. Levent defterinin kendisi DEVERE belgesinindir; tezgah izlemenin `perde-dokuma` profiline eklenmesi **ayrı bir karar notudur** (§7.2).
 
 > **⚠️ FAZ 3'ÜN TEK PARÇALI SÜRÜM KURALI — beş kalem AYNI sürümde çıkar.** Levent tarafı üç ayrı yazara bölünebilir bir iştir ve bölünürse **yarım bir defter canlıya çıkar**: olay defteri yazılıp durum kolonları yazılmazsa "şu an hangi levent takılı" sorusu olayları tarayarak cevaplanır (ikinci okuma yolu, ayrışan yüzey); durum kolonları yazılıp sed yazılmazsa iki makine aynı leventi MOUNTED gösterir; `beamsMountedDuring` yazılmazsa tezgah raporları kendi yüklemini kurar ve tek kaynak çöker. **Aynı sürüm:** ① `WarpBeamEvent` olay defteri (append-only, tipli `*_CANCEL`, `reversesEventId @unique`) · ② `WarpBeam.status`/`currentMachineId`/`currentPosition` durum kolonları · ③ partial unique sed (bir levent aynı anda tek makinede) + `Machine.warpBeamSlots` · ④ `beamsMountedDuring` helper'ı **ve** boğaz-ikizi `BEAMS_MOUNTED_DURING_SQL` · ⑤ mutabakat bekçisi. Beşi aynı commit'te olmak zorunda değildir, **aynı SÜRÜMDE olmak zorundadır** (§7.3).
 
@@ -1718,7 +1757,7 @@ Telemetri budanabilir (`LoomInterval`, insan kararı almamış + mühürlü duru
 
 ## 10 · Alınan kararlar
 
-> Her madde: **KARAR** + tek cümle gerekçe (ölçüt ① sektör ② ölçeğimiz ③ kod deseni) + **itiraz edilebilir**. Kullanıcıya açık soru bırakılmadı; sahada ölçülmesi gerekenler **saha doğrulaması** olarak işaretlendi ve varsayılan kararları yazıldı.
+> Her madde: **KARAR** + tek cümle gerekçe (ölçüt ① sektör ② ölçeğimiz ③ kod deseni) + **itiraz edilebilir**. **Üç onay kalemi + iki sahipsiz iş kalemi dışında** kullanıcıya açık soru bırakılmadı — beşi adıyla §0'ın başlığındadır: «Telemetri ≠ defter» cümlesi · `AUDIT_EXEMPT_MODELS` + *"tek istisna `UserPreference`"* · K2 sapması (`dokuma → devere`) · `kur.ps1` NTP adımı · `TEKSERP_STRICT` koşucu. Sahada ölçülmesi gerekenler **saha doğrulaması** olarak işaretlendi ve varsayılan kararları yazıldı.
 
 1. **Toplayıcı kutusu → ayrı mini-PC/RPi, salon başına bir adet, ÜRÜNE DAHİL ("tezgah izleme kiti").** ② Tek standart kutu = tek sürücü matrisi; müşterinin kendi aldığı kutu destek maliyetini fiyatın dışına taşır ama bize geri döner. *(itiraz edilebilir)*
 2. **Gövde → tek gövde, headless Windows servisi (`kenar/` + NSSM); Electron "Toplayıcı Modu" pilotta bile YAZILMAZ.** ③ Panelin main process'i HTTP başlatamaz (`kesif-cihaz.md`) ve toplayıcı, **kapanmasına insanın karar verdiği** bir sürecin içinde yaşayamaz: `electron-updater` kendiliğinden yeniden başlatmaz (`updater.ipc.ts:198` `autoInstallOnAppQuit = false`; `quitAndInstall` yalnız `updater:install` IPC'sinde) ama kurulumu **OPERATÖR** başlatır ve bunu vardiya ortasında yapabilir. *(Eski gerekçe — "her sürümde kendiliğinden yeniden başlatır" — ÖLÇÜLDÜ ve yanlıştı; karar değişmez, üçüncü engel de duruyor: iki ingest istemcisi = ayrışan yüzey.)* *(itiraz edilebilir)*
@@ -1746,11 +1785,13 @@ Telemetri budanabilir (`LoomInterval`, insan kararı almamış + mühürlü duru
 
 ## 11 · Denetim izi
 
+### 11a · Opus — altı mercek (birinci tur)
+
 **Altı mercek · 92 bulgu (26 KRİTİK · 42 ORTA · 24 DÜŞÜK) → 88 işlendi · 4 gerekçeyle reddedildi.**
 
 | Mercek | K/O/D | İşlendi | Reddedildi | Bu belgede nerede |
 |---|---|---|---|---|
-| **Kabul şartları + bayrak (K2/K3)** | 4/8/3 | 15 | — | §6.2 yer tutucu emekliliği · §6.3 fail-open iki bayrağın adı · §7 modül ilişkisi · §8 kabul şartları · §2.1 kapalı kurulum ölçümü |
+| **Kabul şartları + bayrak (K2/K3)** | 4/8/3 | 15 | — | §6.2 yer tutucu emekliliği · §6.3 fail-open iki bayrağın adı · §7.1 modül ilişkisi · §8 kabul şartları · §2.1 kapalı kurulum ölçümü |
 | **Defter doktrini + telemetri (K1)** | 6/6/3 | 15 | — | §2.7 `LoomStopReclass` · §3.5 dört durumlu replay + span kapanışı · §4 trigger + «Telemetri ≠ defter» bölümü · §2.10 `sealState`/`sealGeneration` · §2.8 koşum `revokedAt` · §2.9 `supersededByEventId` |
 | **Çekirdek mimari** | 4/8/6 | 17 | 1 | §3.1 ajan gövdesi · §3.3 uzak/LAN 404 + `EXEMPT` · §6.4 SoD + izin kategorisi · §6.5 panel/mobil ayna · §3.5 `SOURCE_MISMATCH` |
 | **Çürütme izi** | 4/8/5 | 15 | 2 | §5.1 duruşun pay edilmesi · §2.1 üç karşı-ilişki · §5.4 kopuş/10⁵ · §3.5 sıra + `bucketMinutes` · §2.4 `lastSeq` |
@@ -1766,11 +1807,11 @@ Telemetri budanabilir (`LoomInterval`, insan kararı almamış + mühürlü duru
 | 3 | `LoomShiftStat.factoryDay`in kaldırılması / `Timestamptz`e çevrilmesi (çekirdek mimari, ORTA 7'nin ikinci yarısı) | Kolon **donmuş rapor eksenidir**, tek yazarı mühürleyicidir ve `picksPerCmAtClose` ile aynı sınıftadır; her rapor için `ShiftInstance` join'i ödemek pahalıdır. *(Bu satırdaki `Sack.weightKg ↔ SackWeighing` EMSALİ Fable turunda KALDIRILDI — ölçüldü: `shipping.service.ts:461-469` çuval oluşturma yolu defter satırı yazmadan kg yazabiliyor, yani kalıp bir örnek değil bir uyarıdır. Red kararı ayakta; yalnız gerekçesindeki emsal düştü.)* `@db.Date` seçimi `ExchangeRate.rateDate` gerekçesiyle aynıdır (takvim günü anahtarı, an değil). **Muaf sayısı düzeltmesi (Faz 1a'da bir, Faz 1b'de bir) İŞLENDİ.** |
 | 4 | Makine ingest yoluna da `clientToken` eklenmesi (çekirdek mimari, ORTA 12'nin ilk seçeneği) | Makine yolunun tekilliği **doğal anahtardır** ve kalem başına token üretmek ajanın kuyruğuna ikinci bir kimlik ekseni sokardı. Bulgunun ikinci seçeneği (409 alan kalem kuyrukta ölür, retry edilmez, sayacı `/api/admin/health`te) İŞLENDİ (§3.5); **insan yolunun `clientToken`ı ise EKLENDİ.** |
 
-**K2'den bilinçli sapma (kullanıcı onayına açık):** K2 `dokuma → devere` bağımlılığını bağlayıcı sayıyor; bu belge onu **kurmuyor** (§7). Ölçüm: `module-flags.ts:68` `iplikEnabled → ticaretEnabled` zinciri gerçektir, dolayısıyla `dokuma→devere→iplik→ticaret` dokumayı açan her müşteriye ticareti zorla açardı ve **K3'ün "zorlamayacak" şartıyla çelişirdi.** Sapma bu dilimde pratik sonuç doğurmuyor (`dokuma.enabled` açılmıyor); karar, anahtar doğduğu gün geçerlidir ve itiraza açıktır.
+**K2'den bilinçli sapma (kullanıcı onayına açık):** K2 `dokuma → devere` bağımlılığını bağlayıcı sayıyor; bu belge onu **kurmuyor** (§7). Ölçüm: `module-flags.ts:77` `iplikEnabled → ticaretEnabled` zinciri gerçektir (`:78` tezgah, `:79` devere — eski `:68` çapası 2026-09-12'de kaydı), dolayısıyla `dokuma→devere→iplik→ticaret` dokumayı açan her müşteriye ticareti zorla açardı ve **K3'ün "zorlamayacak" şartıyla çelişirdi.** Sapma bu dilimde pratik sonuç doğurmuyor (`dokuma.enabled` açılmıyor); karar, anahtar doğduğu gün geçerlidir ve itiraza açıktır.
 
 **Sentezden silinen/düzeltilen atıflar (kod gerçekliği merceği):** `module-flags.ts:43,52` → `:40,51` → **(Fable turunda yeniden ölçüldü) `:40,52,78`** · *"üç yerleşik profilden ikisinde kapalı"* → *"beş profilin üçünde"* → **(yeniden ölçüldü) ALTI profilin DÖRDÜNDE** *(`devereEnabled` ve `perde-dokuma` 2026-09-12'de araya girdi — bu satırın kendisi çapaların ne kadar hızlı bayatladığının kanıtıdır, §6.2)* · *"`test_production_regime_gate` ölü satır sayar"* → **`REGIME_GATES`** · *"`variance-reasons.ts:203` emsali"* → **kaldırıldı** (o cümlenin fail-closed dalı tersiydi) · *"kapanmış dönem RESMİ bir rakamdır" alıntısı `CashPeriodClose`ta*→ **`services/helpers/period-guard.helper.ts:7-16`** · *"8 adımlı reçete"* → **18 maddelik liste, skalerde ~8 gerçek adım** · *"`AUDIT_EXEMPT_MODELS` sabitiyle kodlanır"* → **⚠️ bugün YOKTUR, yaratılacaktır** · `helpers/period-guard.helper.ts` → **`src/services/helpers/…`** · `RollEntrySource.LOOM_DOFF` → **`WEAVING`** · doğrulanmamış marka ürün adları → **çıkarıldı**.
 
-### 11e · Fable düşmanca denetimi (2026-09-12) — ikinci tur
+### 11b · Fable düşmanca denetimi (2026-09-12) — ikinci tur
 
 Ayrı bir düşmanca denetim, belgenin **yazılmasından önceki sentez metnini** okudu; ana hükmü *"bu hâliyle şemaya dökülemez"* idi. Hükümler önce belgeyle **EŞLENDİ** (çoğu Opus turunda zaten karşılanmıştı), kalan **63 karşılanmamış hüküm** işlendi: **5 ENGEL · 19 KRİTİK · 34 ORTA · 5 DÜŞÜK**. **63'ü işlendi; iki ALT İDDİA ölçümle reddedildi** (aşağıda). Bu tur bir kural daha doğurdu: *satır numarası çapaları ölçülmeden yazılmaz, kayan listelerde çapa ADA çevrilir* (§6.2).
 
@@ -1781,7 +1822,7 @@ Ayrı bir düşmanca denetim, belgenin **yazılmasından önceki sentez metnini*
 | 1 | **PG 55P04** — `ADD VALUE` + kolon + CHECK tek dosyadaydı; `migrate deploy` sürüm gecesi ortada kalırdı | §9 Faz 1a: **B1 (enum, dosyada tek ifade) + B2 (kolon+CHECK)**, B1 önce, aynı commit |
 | 2 | **P1012** — 13 karşı-ilişki beyan edilmemişti; `prisma validate` ilk duvardı | §2.1 **KARŞI-İLİŞKİ ENVANTERİ** + kural cümlesi; kabul kapısına `prisma validate` |
 | 3 | **Hedefsiz levent kolonu** — `LoomRun.warpBeamId` var olmayan tabloya bakıyordu ve yönetici kararına aykırıydı | §2.8'den **SİLİNDİ**; §7.3 `beamsMountedDuring` türetmesi + iki yönlü kapı; §9 Faz 3 |
-| 4 | **`perde-dokuma` ad çakışması** — profil repoda VAR, içeriği farklı, tezgah orada KAPALI | §7 **KARAR KAPALI** · §6.1 altı profil/dördü kapalı · §10/#10 · profil sayısı **6 KALIR** |
+| 4 | **`perde-dokuma` ad çakışması** — profil repoda VAR, içeriği farklı, tezgah orada KAPALI | §7.2 **KARAR KAPALI** · §6.1 altı profil/dördü kapalı · §10/#10 · profil sayısı **6 KALIR** |
 | 5 | **`warpStopCount/weftStopCount NOT NULL`** — tek kontaklı retrofitte *"kopuş yok"* yalanı canlı tabloya Faz 1a'da girerdi | §2.6 · §2.10 **`Int?`** · §5.4 "pay ya da payda NULL → KPI hesaplanmaz" |
 
 **En sert KRİTİK düzeltmeler:** hayalet kova yarışı (ingest artık `_shared`, mühür EXCLUSIVE — §3.5) · kova/duruş yazımının **ON CONFLICT mekanizması** (Prisma `upsert` ve `P2002` yakalama yolu kapatıldı) · **WATCHDOG düzeltmesi** (tahmin mühre kalıcılaşmıyor) · `startedAt`in **saniyeye kuantizasyonu** · **birim seddi** (`maxRevPerMin` ≠ atkı/dk) · vardiya içi **iki koşum paydası** · `unobservedSec`in türetme kuralı · budama yükleminin **insan kararına** daraltılması · mühürlü vardiyada revoke kapısı · `NULLS NOT DISTINCT` · gölge modun **koda** bağlanması.
@@ -1799,22 +1840,22 @@ Ayrı bir düşmanca denetim, belgenin **yazılmasından önceki sentez metnini*
 
 ---
 
-### 11f · Üçüncü tur — sözleşmeler (2026-09-12)
+### 11c · Üçüncü tur — sözleşmeler (2026-09-12)
 
-Bu tur **denetim değil, SÖZLEŞME turudur**: ikinci turun açık bıraktığı dört hüküm yönetici onayıyla belgeye işlendi ve beş bayat ölçüm repoda yeniden ölçülerek düzeltildi. Turun kendi kuralı §11e'den devralındı — *satır numarası çapaları ölçülmeden yazılmaz* — ve bu kez ölçüm sonuçları **değerleriyle** yazıldı.
+Bu tur **denetim değil, SÖZLEŞME turudur**: ikinci turun açık bıraktığı dört hüküm yönetici onayıyla belgeye işlendi ve beş bayat ölçüm repoda yeniden ölçülerek düzeltildi. Turun kendi kuralı §11b'den devralındı — *satır numarası çapaları ölçülmeden yazılmaz* — ve bu kez ölçüm sonuçları **değerleriyle** yazıldı.
 
 **İşlenen dört sözleşme (dördü de KABUL, tamamı işlendi):**
 
 | # | Sözleşme | Belgede nerede |
 |---|---|---|
-| 1 | **Telemetri hükmü** — `defter.md`ye ÜÇÜNCÜ hard-delete sınıfı AÇILMAYACAK | §4 doktrin kutusu (yeniden yazıldı) · §0 · §1 · §2.11 · §8.3 · §9 Faz 2 kapısı ① · §11 tablosu · §11e borç ① |
+| 1 | **Telemetri hükmü** — `defter.md`ye ÜÇÜNCÜ hard-delete sınıfı AÇILMAYACAK | §4 doktrin kutusu (yeniden yazıldı) · §0 · §1 · §2.11 · §8.3 · §9 Faz 2 kapısı ① · §11a tablosu · §11b borç ① |
 | 2 | **Budama bekçisi sözleşmesi** — okuma kümesi MANİFEST | §4 *"Budama bekçisinin SÖZLEŞMESİ"* (yeni alt bölüm: R1–R7 / T1–T3 · dört AST kuralı · N1–N8) · §2.8 `stopSecAtClose`/`stopCountAtClose` · §4 koşum ekseni · §6.3 `maxOpenRunDays` · §9 Faz 2 |
 | 3 | **Faz 2 zaman/eşzamanlılık sözleşmesi** | §1 (ortak cümle) · §2.6 (`restateCount` + observed CHECK) · §2.7 (`stopKey` · `provisionalEndedAt`) · §2.10 (`gapPicks` · `watchdogSec`) · §3.5 (kimlik · ON CONFLICT ×2 · watchdog · kova boyu) · §5.1 · §5.2 · §5.6 |
 | 4 | **Gölge mod: reçete değil KOLON + KAPI** | §2.2 (enum üç değerli) · §2.3 (`OFF` varsayılan + demote + üç kapı) · §2.3 `PeripheralSignal.acceptedAt` · §2.10 (donmuş `monitoringState`) · §3.3/7 · §5.3/8 · §6.3 (iki yeni bayrak) · §6.4 · §9 Faz 1a/Faz 2 · §10/#14, #15 · §12 |
 
 **Tersine çevrilen iki cümle:**
 1. *"Üçüncü bir hard-delete sınıfı (⑤ telemetri budaması) açılır"* → **AÇILMAZ.** Telemetri bir silme sınıfı değil, **defter-olmayan satırın yaşam döngüsüdür**; `defter.md`ye sınıf değil **bölüm** girer ve budama izni bir **bekçiyle ölçülerek** verilir. Gerekçe §4'te: sınıf listesi bir gün "silinebilir şeyler listesi"ne dönüşür.
-2. *"Ingest advisory kilit ALMAZ"* → **ALIR.** Mühür `pg_advisory_xact_lock` (**EXCLUSIVE**, uzay 8032), ingest aynı anahtarda **`pg_advisory_xact_lock_shared`**; emsal `master-data-live.helper.ts:68`. Bu çevirme §11e (Fable C1) turunda yapılmıştı ve bu turda **doğrulandı** — §3.5'in sonundaki karar ile §2.6'nın `NOT EXISTS (<mühürlü pencere>)` yüklemi artık aynı cümlenin iki yarısıdır (kilit yarışı kapatır, yüklem check-then-act'i kapatır).
+2. *"Ingest advisory kilit ALMAZ"* → **ALIR.** Mühür `pg_advisory_xact_lock` (**EXCLUSIVE**, uzay 8032), ingest aynı anahtarda **`pg_advisory_xact_lock_shared`**; emsal `master-data-live.helper.ts:68`. Bu çevirme §11b (Fable C1) turunda yapılmıştı ve bu turda **doğrulandı** — §3.5'in sonundaki karar ile §2.6'nın `NOT EXISTS (<mühürlü pencere>)` yüklemi artık aynı cümlenin iki yarısıdır (kilit yarışı kapatır, yüklem check-then-act'i kapatır).
 
 **Yeniden ölçülen beş çapa (ESKİ → YENİ, ölçüm 2026-09-12):**
 
@@ -1822,7 +1863,7 @@ Bu tur **denetim değil, SÖZLEŞME turudur**: ikinci turun açık bıraktığı
 |---|---|---|---|
 | 1 | `guarded-hard-remove.ts` `MACHINE_DELETE_GUARDS` (§2.1) | `:236-279`, **beş** sayaç | **`:236-273`, ALTI sayaç** — `rollOperationCount · rollMovementCount · rollCreatedCount · workSessionCount · deviceCount · kursunBypassCount` |
 | 2 | `test_module_flag_off.ts` `MODULLER` (§8.1 K3-3) | `:136-190`, **dört** satır · türetme `:196-207` | **`:136-204`, BEŞ satır** (`ticaret · iplik · devere · depoMulti · production`) · türetme bloğu **`:216-222`** |
-| 3 | Aynı bekçide sessizce atlanan HTTP kontrolü (§8.1 K3-2) | **14** (`:517-521`) | **18** (`:524-528`) — sayı tablodan türer: `5 + 2 + 1 + 5 + 5` |
+| 3 | Aynı bekçide sessizce atlanan HTTP kontrolü (§8.1 K3-2) | **14** (`:517-521`) | **18** — sayı tablodan türer: `5 + 2 + 1 + 5 + 5`. ⚠️ Bu turda yazılan `:524-528` çapası YANLIŞTI (orası profil damgası yorumu); doğrusu **`:551-552`** (`httpKontrolSayisi` formülü) ve dördüncü turda düzeltildi — §11d |
 | 4 | `screen-catalog.ts` · `test_feature_flag_contract.ts` (§6.2) | `screen-catalog.ts:387` · `…contract.ts:115` (**yanlış modül**: 115 `kumasTeknik`) | **tezgah nesnesi `:391-396`** (kumasTeknik `:385-390`) · **`:116` `tezgahEnabled`**, `:115` `kumasTeknikEnabled` — talimat yine **ADA** bağlı, numaralar yalnız doğrulama içindir |
 | 5 | `MODULE_PLACEHOLDERS` · `flag-modules.ts` `Exclude` (§6.2/#3, #5) | çapasız | **`module-flags.ts:90-93`, İKİ eleman** · **`flag-modules.ts:65-68`, ÜÇ anahtar** — iki ölçüm de belgenin cümlesini DOĞRULADI, yalnız çapa eklendi |
 
@@ -1831,6 +1872,27 @@ Bu tur **denetim değil, SÖZLEŞME turudur**: ikinci turun açık bıraktığı
 **Eklenen kapı:** **Faz 3'ün kabul kapısı ve bekçi listesi YOKTU** (Faz 1a, 1b ve 2'de vardı) — §9'da diğer fazların kalıbıyla yazıldı: levent olay defteri + durum kolonları + sed + `beamsMountedDuring` + mutabakat bekçisi **AYNI sürümde** çıkar.
 
 **Bu turda düşen bir bayrak:** `tezgah.stopMatchToleranceSec` (§6.3) — duruş kimliği `stopKey`e taşınınca tolerans penceresi gereksizleşti; bayrak sayısı **14 → 16** (üç eklendi, biri düştü).
+
+---
+
+### 11d · Dördüncü tur — tutarlılık (2026-09-12)
+
+Bu tur **yeni karar üretmedi**: bağımsız bir doğrulayıcı belgeyi baştan sona okudu, mimariyi ve sözleşmeleri **yerinde** buldu (sulanma yok) ve yalnız **belge içi çelişkileri** saydı. Bulgular **6 ağır + 17 küçük**; ağır olanların ölçütü *"harfiyen uygulanınca YANLIŞ SONUÇ üretir"*.
+
+| # | Ağır çelişki | Ne değişti |
+|---|---|---|
+| 1 | §2.7 başlığı "(FAZ 2)" diyordu, §9 `LoomStopEvent`i **Faz 1b**'de doğuruyordu | Başlık **FAZ 1b** oldu; makine kaynaklı alanların "KOLON 1b / YAZAR 2" ayrımı başlığın altına yazıldı |
+| 2 | `stopEventMinSeconds` "Faz 2" ve *"eşikleyeceği tablo Faz 2'de doğuyor"* diyordu | Bayrak **Faz 1b** — eşiklediği tabloyla AYNI fazda (§6.3); §9 Faz 2'nin bayrak sayısı **13 → 12** |
+| 3 | `CLOCK_SKEW` bir yerde *"aşan PAKET 400"*, başka yerde *"PAKETİ değil KALEMİ düşürür"* | Tek doğru bırakıldı: **kalem düşer, `rejected[]` ile döner**; §6.3'teki paket cümlesi düzeltildi |
+| 4 | §5.4 kimliği `gapPicks`siz yazılmıştı ve çok koşumlu vardiyada `targetPicksPerMin` NULL olabiliyordu | Kimlik `gapPicks`li hâle getirildi + **"yalnız TEK HEDEFLİ vardiyada birebir"** şerhi; çok hedefli vardiyada E **kendi tanımından** okunur |
+| 5 | Guard fazlaması üç yerde üç farklı sayı veriyordu (1a:1 · 1b:1 · 2:2 ↔ *"dört Restrict adıyla"* ↔ *"üç sayaç"*) | **§2.1'in yolu TEK KAYNAK** ilan edildi; §2.8 ve §9 Faz 2 ona hizalandı (**iki sayaç** eklenir, toplam dört) |
+| 6 | Faz 1a bekçi listesinde `Σ observedSec + unobservedSec = calendarSec` vardı — ama Faz 1a'da **kova YOK** ve `unobservedSec = 0` BEYAN ediliyor | Bekçi doğuşta kırmızı verirdi: eşitlik **Faz 2 ayağına** taşındı, Faz 1a'da **kırpma + `Σ breakdown ≤ POT`** kaldı |
+
+**On yedi küçük hizalamanın hepsi kapandı:** eski duruş kimliği (`machineId + startedAt + source`) düzeltmenin içinden temizlendi → **`(machineId, stopKey)`** · bayrak sayısı tek sayıya (**16**) indi ve `stopMatchToleranceSec`in düştüğü not edildi · `minClassificationPct` metinden çıkarıldı (tablo 16 bayrağın tamamıdır) · `gapPicks` üç yerde **"paydan düşülür, paydaya girmez"** oldu · `test_hard_delete_guard_coverage` Faz 1a bekçi listesine eklendi · `anomalyAck` **kolon 1a / kapı 2** olarak hizalandı · *"onaysız mühür 400"* → **409** · `prune_safety` **dört ayak** · Faz 1a bekçi sayımı listeye göre **4 yeni + 10 mevcut** · `loom_intervals_bucket_chk` §2.6 envanterine yazıldı · `LoomShiftStatSeal`e **`@@unique([statId, sealGeneration, action])`** · `LoomRun`a **`loom_runs_natural_uq`** partial unique · `microStop*` → **`minorStop*`** (tek ad) · bölüm numaraları bitişik yapıldı (**§7.1/§7.2/§7.3** ve **§11a–§11d**) ve atıflar hizalandı · izin sayımı *"yedi `loom:*`"* → **altı `loom:*` + bir `mobile:*`**.
+
+**Düzeltilen çapalar (bu turun tek kod ölçümü):** ① `test_module_flag_off.ts`in 18 HTTP kontrolünü türeten formül **`:551-552`**tedir (`httpKontrolSayisi`); üçüncü turda yazılan **`:524-528` YANLIŞTI** — o aralık profil damgası yorumudur (§8.1 K3-2, §11c tablosu #3). **Sayının kendisi (18) doğruydu.** ② §11a'daki bayat `module-flags.ts:68` → **`:77`** (`:78` tezgah, `:79` devere) — §11c'nin zaten düzelttiği çapa, §11a'da bayat kalmıştı.
+
+**"Açık soru yok" cümlesi neye çevrildi:** belge İKİ yerde *"kullanıcıya açık soru bırakılmadı"* diyordu, oysa **üç ONAY KALEMİ** (kök `CLAUDE.md`'ye girecek «Telemetri ≠ defter» cümlesi · `AUDIT_EXEMPT_MODELS` + *"tek istisna `UserPreference`"* değişimi · K2 sapması `dokuma → devere`) ve **iki SAHİPSİZ İŞ KALEMİ** (`kur.ps1` NTP adımı · `TEKSERP_STRICT` koşucu) açıktı. İki cümle de **"üç onay kalemi + iki sahipsiz iş kalemi dışında"** biçimine çevrildi; beşi §0'ın başlığında **adıyla** listelendi (onay kalemleri ayrı, iş kalemleri ayrı), §10 başlığı oraya atıf veriyor.
 
 ---
 
