@@ -1294,6 +1294,7 @@ Alanlar: bölüm başlıkları aşağıda. **Sayı YAZILMAZ** — güncel dağı
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Teks-Erp/scripts/test_warehouse_resolve_shape.ts` | YAPISAL sonda: `resolveTargetWarehouseId`in 409 dalı BUGÜN ULAŞILAMAZ (depoyu isteğin kendisi doğuruyor), o yüzden davranış değil ŞEKİL ölçülür — üç kademe (`exists/promoted/created`) duruyor mu · uzlaştırma FIRLATMADAN ÖNCE çağrılıyor mu · fırlatma `null` dönüşe geri çevrilmemiş mi. Her terim AYRI negatif sonda taşır (silinmiş kopyaya karşı da koşulur) | | ✓ | 2026-09-13 |
 | `Teks-Erp/scripts/test_barcode_free_flow.ts` | Barkod OKUTMADAN uçtan uca zinciri kilitler: FIFO keşfi, id ile sevk, id ile iade, depo transferi + sevkiyata atanmış çuvalın öneri listesinde çıkmama | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_batch_split_new_wo_modes.ts` | Parti ayırmanın WO klonu üreten modlarını kilitler: NEW_COLOR + UNDYED_MOVE, karma-adımda per-roll uygunluk, depo tebdili (WAREHOUSE) ve boşalan kayna | ✓ |  |  |
 | `Teks-Erp/scripts/test_denetim_s2_paketi.ts` | Üç denetim bulgusu: sipariş iptalinde izinli aksiyon ↔ varsayılan aksiyon ayrışmaz; admin:users kendine admin:* yazamaz (üç yazma yolu); depo topu tek | ✓ |  |  |
