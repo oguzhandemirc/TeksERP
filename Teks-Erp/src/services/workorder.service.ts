@@ -6324,6 +6324,33 @@ export class WorkOrderService {
         );
       }
 
+      // DEPO DEFTERİ — top üretimden çıkıp stoğa döndü: GİRİŞ satırı. Bu yol
+      // `attachRolls`ın ÇIKIŞ satırının karşılığıdır; yazılmazsa iş emrinden
+      // çıkarılan top defterde sonsuza dek "üretimde" kalır.
+      //
+      // ⚠️ TERS KAYIT DEĞİL, yeni bir İLERİ satır — iki ölçülebilir sebeple:
+      //   (a) çıkıştan bu yana metraj üretimde değişmiş olabilir; ters kayıt
+      //       miktarı ileri satırdan kopyalar ve bugün olmayan metrajı stoğa yazardı,
+      //   (b) detach hedef statüyü renk/kaliteden YENİDEN çözüyor (attach öncesi
+      //       statü saklanmıyor), yani mal eski rafa değil bugün hesaplanan rafa
+      //       dönüyor. Defter topun gerçekte gittiği yeri söylemeli.
+      // Statü/metraj claim'den SONRA taze okunur.
+      const defterIcin = await tx.roll.findMany({
+        where: { id: { in: detachableIds } },
+        select: { id: true, warehouseId: true, currentQty: true, status: true },
+      });
+      for (const f of defterIcin) {
+        if (!f.warehouseId || !WAREHOUSE_STOCK_STATUSES.includes(f.status)) continue;
+        if (!qtyYazilabilir(f.currentQty)) continue;
+        await postStockMove(tx, {
+          rollId: f.id,
+          eventType: WarehouseEventType.PRODUCTION,
+          qty: f.currentQty,
+          to: { warehouseId: f.warehouseId, status: f.status },
+          reasonCode: STOCK_MOVE_REASON.WO_DETACH,
+        });
+      }
+
       // 1b) producedInStepId yalnız BU WO'nun adımını gösteriyorsa temizlenir
       //     (attachRolls'un set ettiği işaretin geri alınması). Başka WO'da
       //     üretilmiş topun soy izi korunur.

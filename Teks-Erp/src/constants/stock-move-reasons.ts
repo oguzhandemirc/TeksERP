@@ -18,6 +18,8 @@ export const STOCK_MOVE_REASON = {
   TAMBUR_UNDO: "TAMBUR_UNDO",
   /** Kurşun/KK2 adımının yeniden açılması — son adım girişinin TERSİ. */
   KURSUN_REOPEN: "KURSUN_REOPEN",
+  /** İş emrinden çıkarma — üretimden stoğa geri dönüş. */
+  WO_DETACH: "WO_DETACH",
   /** İş emri kapanış/iptal dispozisyonu. */
   DISPOSITION: "DISPOSITION",
   /** Depo topunun kesimi (ebeveyn çıkışı + çocuk girişi, net sıfır). */

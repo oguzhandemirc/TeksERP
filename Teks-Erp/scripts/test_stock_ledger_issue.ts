@@ -12,6 +12,10 @@
 //   §2 STOCK topu da çıkış yazar — fromStatus topun GERÇEK önceki statüsüdür
 //   §3 Deposuz top satır YAZMAZ
 //   §4 ⭐ Satır claim ÖNCESİ durumu taşır: fromStatus IN_PRODUCTION DEĞİLDİR
+//   §5 ⭐ İş emrinden ÇIKARMA (detach) GİRİŞ yazar — çıkışın karşılığı
+//   §6 ⭐ Giriş metrajı ÇIKARMA ANINDAKİ metrajdır (ters kayıt olsaydı eski
+//      metraj geri yazılır ve üretimde eriyen mal stoğa fazla girerdi)
+//   §7 Deposuz top çıkarmada da satır YAZMAZ
 // =============================================================================
 import { RollStatus, WarehouseEventType } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -85,6 +89,34 @@ async function main(): Promise<void> {
   const stockRows = await rowsOf(rStock.id);
   check("§2 STOCK topu da çıkış yazdı ve fromStatus STOCK", stockRows.length === 1 && stockRows[0]?.fromStatus === RollStatus.STOCK, `satır=${stockRows.length} statü=${String(stockRows[0]?.fromStatus)}`);
   check("§3 Deposuz top satır YAZMADI", (await rowsOf(rNoWh.id)).length === 0);
+
+  // ── §5..§7 — İŞ EMRİNDEN ÇIKARMA (detach) ─────────────────────────────────
+  // Çıkışın karşılığı yazılmazsa iş emrinden çıkarılan top defterde sonsuza dek
+  // "üretimde" kalır ve depo bakiyesi eksik görünür.
+  // ⚠️ Metraj üretimde ERİTİLİYOR: ters kayıt yazılsaydı 120 m geri konurdu,
+  // oysa rafa dönen 90 m. Bu, "detach ters kayıt değil yeni ileri satırdır"
+  // kararının ölçülebilir gerekçesi.
+  await prisma.roll.update({ where: { id: rWh.id }, data: { currentQty: 90 } });
+  const det = await svc.detachRolls(woId, [rWh.id, rNoWh.id]);
+  check("§5a Kurulum: iki top iş emrinden çıkarıldı", det.data?.detached === 2, `çıkarılan=${det.data?.detached} hata=${(det.data?.errors ?? []).join("|")}`);
+
+  const whAfter = await rowsOf(rWh.id);
+  const giris = whAfter.find((r) => r.toWarehouseId !== null);
+  check(
+    "§5b ⭐ Çıkarma GİRİŞ satırı yazdı — yön, hedef depo ve sebep doğru",
+    whAfter.length === 2 && giris?.toWarehouseId === warehouse.id &&
+      giris?.fromWarehouseId === null && giris?.reasonCode === STOCK_MOVE_REASON.WO_DETACH &&
+      giris?.eventType === WarehouseEventType.PRODUCTION,
+    `satır=${whAfter.length} sebep=${String(giris?.reasonCode)}`,
+  );
+  check(
+    "§6 ⭐ Giriş metrajı ÇIKARMA anındaki metraj (120 değil 90)",
+    Number(giris?.qty) === 90,
+    `qty=${String(giris?.qty)}`,
+  );
+  const netWh = whAfter.reduce((a, r) => a + (r.toWarehouseId ? Number(r.qty) : 0) - (r.fromWarehouseId ? Number(r.qty) : 0), 0);
+  check("§6b Net = üretimde eriyen fark (−120 + 90 = −30)", netWh === -30, `net=${netWh}`);
+  check("§7 Deposuz top çıkarmada da satır YAZMADI", (await rowsOf(rNoWh.id)).length === 0);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
