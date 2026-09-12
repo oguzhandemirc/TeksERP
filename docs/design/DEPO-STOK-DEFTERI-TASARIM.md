@@ -187,6 +187,16 @@ bir yol **vardiyayı durdurur**. Bu yüzden sed fabrikada ancak §3.1'deki GO/NO
 3. `warehouseId` backfill + açılış fotoğrafı (D6).
 4. Yedekli panel sahada (D8).
 
+**Onarım ayrı bir iştir — kod düzeltmesi İLERİYE dönüktür.** Geçmişteki 57 yanlış satır **düzeltilmez**
+(defter satırı UPDATE edilmez); ters kayıtla kapanır ve bu bir **veri operasyonudur**:
+`scripts/onarim_fason_donus_entry.ts` — dry-run varsayılan, etkilenen HER satırı listeler, `--apply` ile
+`reversesMovementId` bağlı ters satır yazar. Script A commit'inden sonra doğar (ters kayıt kolonu oradan gelir);
+`--apply` **kullanıcı kararı** (ertelendi). Sürüm notunda "paket sonrası operasyon" maddesi olarak durur.
+
+**Sed ile onarımın sırası (karar):** ertelenmiş trigger **onarımdan SONRA** açılır. O güne kadar mutabakat
+bekçisi bu 57 satırı **adıyla sayar** — "bilinen hatalı fason girişi, onarım bekliyor: N satır / M m" —
+sessiz muafiyet YOKTUR; sayı her koşumda görünür ve onarım bitince sıfıra düşer.
+
 ### D6 — Açılış bakiyesi ve defterin doğruluk başlangıcı
 - `OPENING_BALANCE` olayı + **kesme anı fotoğrafı** (tamamlayıcı açılış değil): kesme anında stok kümesindeki
   her topa bir satır (`to = warehouseId`, `qty = currentQty`). Ölçülen büyüklük **~1.474 satır / 137.124 m**.
@@ -228,7 +238,8 @@ satırsız geçiyor. Sıra bu yüzden: **backfill → sed → fail-loud**.
 
 | # | Commit | Kapsam | Şema kilidi |
 |---|---|---|---|
-| A | Defter işi | kolonlar · enum · CHECK · yazım yollarının bağlanması · mutabakat bekçisi · açılış/as-of | evet (kısa blok) |
+| A1 | Defter ALTYAPISI | kolonlar · enum · CHECK · `postStockMove`/`reverseStockMove` kapısı · envanter | evet (kısa blok) |
+| A2 | Yazım yollarının BAĞLANMASI | ~45 yol + mutabakat bekçisi + açılış/as-of | hayır |
 | B | Ortak temizlik yardımcısı | `scripts/fixture-roll-cleanup.ts` + script/bekçilerin geçişi | hayır |
 | C | FK sertleştirme | CASCADE→RESTRICT · [TD-18] güncellemesi · B'de kaçanlar | evet (dar) |
 
@@ -236,8 +247,8 @@ satırsız geçiyor. Sıra bu yüzden: **backfill → sed → fail-loud**.
 derlenmeyen ara durum bırakılmaz, şema yazımı + `generate` + ona bağlı kod TEK turda biter):
 1. `schema.prisma` — kolonlar + enum değerleri + index'ler (yalnız `WarehouseMovement` bloğu).
 2. Migration'lar, ayrı dosyalar: enum değerleri **tek ifadeli** (`ADD VALUE IF NOT EXISTS`, PG 55P04) ·
-   kolonlar + index'ler · CHECK'ler `NOT VALID` · ayrı `VALIDATE CONSTRAINT`. Damga bandı **`20260912130000`**
-   (01'in `20260912120100` bandından SONRA — dev DB'ye daha küçük damgalı migration sonradan uygulanırsa
+   kolonlar + index'ler · CHECK'ler `NOT VALID` · ayrı `VALIDATE CONSTRAINT`. Damga bandı **`20260912150000`**
+   (bant dağıtımı tek elden yöneticide; 130000/130100 ea'da, 140000 özellik pivotunda, 120100+ 01'de — dev DB'ye daha küçük damgalı migration sonradan uygulanırsa
    `migrate deploy` sırası ile defter sırası ayrışır, hijyen bekçisi bunu görür).
 3. `apply-migration.ts --apply` → `tekserp_fabrika_dev` (şema; **veri backfill'i DEĞİL**, o ertelendi).
 4. `prisma generate`.

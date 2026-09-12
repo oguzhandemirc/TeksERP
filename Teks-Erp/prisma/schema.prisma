@@ -2751,6 +2751,7 @@ model WorkOrderStep {
   operations           RollOperation[]
   variances            RollVariance[]
   planDeviations       RollPlanDeviation[]
+  warehouseMovements   WarehouseMovement[]
   currentRolls         Roll[]                   @relation("RollCurrentStep")
   producedRolls        Roll[]                   @relation("RollProducedInStep")
   detectedErrors       RollError[]              @relation("RollErrorDetectedAt")
@@ -3323,6 +3324,8 @@ model RollVariance {
   step       WorkOrderStep? @relation(fields: [workOrderStepId], references: [id])
   createdBy  User?          @relation(fields: [createdById], references: [id])
   reversedBy User?          @relation("RollVarianceReversedBy", fields: [reversedById], references: [id])
+  /// Sapmanın depo defterindeki etkisi (top stoktayken oluşmuşsa).
+  warehouseMovements WarehouseMovement[]
 
   // Append-only log → `updatedAt` YOK (kök CLAUDE.md konvansiyonu).
   /// Append-only sapma defteri → `updatedAt` YOK (konvansiyon). Satır SİLİNMEZ,
@@ -6403,6 +6406,12 @@ enum WarehouseEventType {
   RETURN // müşteri iadesi girişi
   CANCEL // top iptali/fire (softDelete) — depodan düştü
   CANCEL_REVERSAL // iptalin ters kaydı (sayım stornosu) — mal depoya döndü
+  /// STOK DEFTERİ olayları (2026-09-12) — yön ENUM'A GİRMEZ, from/to taşır.
+  PRODUCTION // üretim karşı tarafı: depodan üretime çıkış / üretimden depoya dönüş
+  EXTERNAL // üçüncü şahıs: fason ve kartela firmasına çıkış / dönüş
+  TRANSFORM // aynı depoda 1:N bölünme (kesim/finalize) — grup net SIFIR
+  ADJUST // sahiplik değişmeden miktar: fire · sayım farkı · çekme · aşım
+  OPENING_BALANCE // kesme anı fotoğrafı (defterin doğruluk başlangıcı)
 }
 
 /// DEPO HAREKET DEFTERİ — append-only: "mal hangi depoya girdi / hangisinden çıktı".
@@ -6446,6 +6455,26 @@ model WarehouseMovement {
   userId String? @db.Uuid
   notes  String? @db.VarChar(300)
 
+  /// Olayın İKİ UCUNDAKİ top statüsü. Satır "o gün stok kümesindeydi" demez,
+  /// "WAREHOUSE'tan SHIPPED'e gitti" der — kapsam kararı değişirse geçmiş okuma
+  /// yeniden hesaplanabilir ve as-of kesiti depo × statü kırılımı verebilir.
+  fromStatus RollStatus?
+  toStatus   RollStatus?
+  /// Sebep ayrıntısı ENUM'a değil kolona (`RollVariance.reasonCode` emsali):
+  /// yeni ayrıntı bir katalog satırıdır, migration değil.
+  reasonCode String? @db.VarChar(64)
+  /// Bir kesim/dönüşümün N+1 satırını bağlar — "grup net SIFIR" ölçülebilir olsun.
+  transformGroupId String? @db.Uuid
+  /// Metraj sapmasının SEBEBİ `RollVariance`ta durur; bu satır onun depo ETKİSİdir.
+  rollVarianceId String? @db.Uuid
+  /// Üretim tarafı olayının belgesi (hangi adıma çıktı / hangisinden döndü).
+  workOrderStepId String? @db.Uuid
+  /// TERS KAYIT BAĞI — "bu satır ters kayıt mıdır" sorusunun TEK cevabı. Enum
+  /// değeri (CANCEL_REVERSAL vb.) yalnız betimleyicidir; tespit bu alandan yapılır.
+  reversesMovementId String? @db.Uuid
+  /// Defterin doğruluk başlangıcından ÖNCE yazılmış tarihsel satır.
+  preEpoch Boolean @default(false)
+
   roll          Roll               @relation(fields: [rollId], references: [id], onDelete: Cascade)
   fromWarehouse Warehouse?         @relation("MovementFrom", fields: [fromWarehouseId], references: [id])
   toWarehouse   Warehouse?         @relation("MovementTo", fields: [toWarehouseId], references: [id])
@@ -6456,6 +6485,11 @@ model WarehouseMovement {
   sack          Sack?              @relation(fields: [sackId], references: [id], onDelete: SetNull)
   stockCount    StockCount?        @relation(fields: [stockCountId], references: [id], onDelete: Restrict)
   user          User?              @relation("WarehouseMovementUser", fields: [userId], references: [id])
+  rollVariance  RollVariance?      @relation(fields: [rollVarianceId], references: [id], onDelete: Restrict)
+  workOrderStep WorkOrderStep?     @relation(fields: [workOrderStepId], references: [id], onDelete: Restrict)
+  /// Ters kayıt zinciri: satır hangi ileri satırı tersliyor (ve tersi).
+  reversesMovement WarehouseMovement?  @relation("WarehouseMovementReversal", fields: [reversesMovementId], references: [id], onDelete: Restrict)
+  reversedBy       WarehouseMovement[] @relation("WarehouseMovementReversal")
 
   /// Append-only log → `updatedAt` YOK (konvansiyon).
   createdAt DateTime @default(now()) @db.Timestamptz
@@ -6471,6 +6505,12 @@ model WarehouseMovement {
   @@index([shipmentId])
   @@index([rollReturnId])
   @@index([stockCountId])
+  @@index([transformGroupId])
+  @@index([rollVarianceId])
+  @@index([workOrderStepId])
+  /// Aynı ileri satır İKİ KEZ terslenemez. Düz unique yeterli: PostgreSQL NULL'ları
+  /// birbirinden ayrı sayar, yani bağsız satırlar yan yana durabilir.
+  @@unique([reversesMovementId])
   @@map("warehouse_movements")
 }
 

@@ -369,6 +369,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string 
   { table: "roll_movements", name: "roll_movements_qtyOut_nonneg" },
   { table: "roll_movements", name: "roll_movements_weightIn_nonneg" },
   { table: "roll_movements", name: "roll_movements_weightOut_nonneg" },
+  // Depo defteri STOK defterine dönüştü (2026-09-12): anlamsız satır artık
+  // helper'ın sessiz atlamasına değil DB seddine takılır (tasarım §D7).
+  { table: "warehouse_movements", name: "warehouse_movements_qty_positive" },
+  { table: "warehouse_movements", name: "warehouse_movements_direction_present" },
   { table: "roll_errors", name: "roll_errors_startMeter_nonneg" },
   { table: "sack_allocations", name: "sack_allocations_qty_pos" },
   { table: "subcontractor_direct_ship_allocations", name: "subcontractor_direct_ship_allocations_qty_pos" },
