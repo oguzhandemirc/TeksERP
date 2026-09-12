@@ -453,10 +453,25 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  console.log(
-    `\n  ✅ 0 ihlal ölçüldü. SON ADIM (ayrı karar):  ALTER TABLE rolls VALIDATE CONSTRAINT ${KISIT};` +
-      `\n     Ardından convalidated'ın f → t olduğunu ÖLÇÜN — bu script'i tekrar koşmak yeterli.`,
-  );
+  // ── SEDDİ AÇ — ÖN KOŞULU SAĞLAYAN ARAÇ KAPIYI DA KAPATIR ────────────────
+  // Migration BİR KEZ koşar: kurulum o gün kirliyse koşullu VALIDATE no-op'a
+  // düşer ve onarım sonradan koşsa bile kısıt SONSUZA DEK `NOT VALID` kalırdı
+  // (bekçi orada kalıcı kırmızı → birkaç hafta içinde biri satırı siler).
+  // Ön koşulu sağlayan burasıdır, kapıyı da burası kapatır.
+  if (sonra.kisitDogrulandi === true) {
+    console.log(`\n  ✅ 0 ihlal ölçüldü. ${KISIT} zaten doğrulanmış (convalidated=t) — sed açık.`);
+    return;
+  }
+  await prisma.$executeRawUnsafe(`ALTER TABLE rolls VALIDATE CONSTRAINT ${KISIT}`);
+  // ⚠️ Komutun hata vermemesi kısıtın VALID OLDUĞUNU söylemez — iddiayı
+  // komutun başarısıyla değil DURUMUN ÖLÇÜMÜYLE kapat.
+  const sedSonra = (await teshis()).kisitDogrulandi;
+  if (sedSonra !== true) {
+    console.log(`\n  ⛔ VALIDATE koştu ama convalidated hâlâ ${sedSonra === null ? "KISIT YOK" : "f"} — sed AÇILMADI.`);
+    process.exitCode = 1;
+    return;
+  }
+  console.log(`\n  ✅ 0 ihlal ölçüldü ve ${KISIT} DOĞRULANDI (convalidated f → t) — sed artık tüm satırları zorluyor.`);
 }
 
 if (require.main === module) {

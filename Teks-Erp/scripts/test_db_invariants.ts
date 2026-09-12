@@ -357,7 +357,7 @@ const PARTIAL_INDEXES: Array<{
 // ama eski ihlalleri geçmişte bırakır. Gerekçesi ZORUNLU (`why`) — çünkü "NOT
 // VALID kalmış, VALIDATE etmeyi unutmuşuz" ile "bilerek yumuşak" arasındaki fark
 // yalnız burada yazılıdır. Temizlik bitince girdiyi sil, `VALIDATE` et.
-const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string }> = [
+const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string; onarim?: string }> = [
   { table: "rolls", name: "rolls_currentQty_nonneg" },
   { table: "rolls", name: "rolls_initialQty_nonneg" },
   { table: "rolls", name: "rolls_weightKg_nonneg" },
@@ -405,8 +405,11 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string 
   // T3-011 · T2-016); kod tarafı düzeltildi, bu DB seddi ikinci hattır.
   // 2026-09-12: iki eski ihlal satırı kanıtlı olarak onarıldı
   // (`scripts/fix_tambur_undo_full_asim.ts`) ve kısıt VALIDATE edildi — yumuşak
-  // kapı KAPANDI, sed artık tüm satırları zorluyor.
-  { table: "rolls", name: "rolls_qty_le_initial" },
+  // kapı KAPANDI, sed artık tüm satırları zorluyor. Doğrulamayı ÜÇ kurulum
+  // sınıfında üç ayrı mekanizma yapar: taze/CI → koşullu migration · temizlenmiş
+  // → zaten VALID · kirli canlı → onarım script'inin kendisi (migration bir kez
+  // koşar, sonradan temizlenen kurulumu o yakalayamaz).
+  { table: "rolls", name: "rolls_qty_le_initial", onarim: "npx tsx scripts/fix_tambur_undo_full_asim.ts" },
   // 2026-08-13 — ön muhasebe (migration 20260813201311_finance_preaccounting).
   // Muhasebe seddleri "veri tutarlı olsun" değil "DEFTER OKUNABİLİR olsun"
   // içindir: yönü iki yerde saklayan (işaretli tutar) ya da yarım durum bırakan
@@ -738,7 +741,14 @@ async function main(): Promise<void> {
         check(exp.name, true, `BİLİNÇLİ NOT VALID — ${exp.notValid.slice(0, 90)}`);
         continue;
       }
-      check(exp.name, false, "mevcut ama NOT VALID — eski satırlar doğrulanmamış");
+      // Kırmızı NE YAPILACAĞINI söyler: "doğrulanmamış" tek başına okuyucuyu
+      // onarım aracına götürmüyordu (ölçüldü 2026-09-12, taze CI kurulumu).
+      check(
+        exp.name,
+        false,
+        "mevcut ama NOT VALID — eski satırlar doğrulanmamış" +
+          (exp.onarim ? ` · önce: ${exp.onarim}` : ""),
+      );
       continue;
     }
     if (exp.notValid) {

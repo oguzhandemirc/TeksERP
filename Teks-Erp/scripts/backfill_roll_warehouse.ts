@@ -31,6 +31,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import prisma, { pool } from "../src/lib/prisma";
+import { AuditService } from "../src/services/audit.service";
 import { WAREHOUSE_STOCK_STATUSES } from "../src/services/helpers/warehouse-stock.helper";
 import { hedefDbAdi } from "./lib/hedef-db-kapisi";
 
@@ -140,6 +141,36 @@ async function main(): Promise<void> {
 
   const left = await prisma.roll.count({ where: { warehouseId: null } });
   console.log(`\n✅ ${written} kayıt güncellendi. Kalan deposuz top: ${left}`);
+
+  // ── İZ — HAM SQL İKİ KAT KÖRDÜR ─────────────────────────────────────────
+  // Yukarıdaki `UPDATE` ne audit yazar ne `updatedAt`i tazeler (Prisma'nın
+  // `@updatedAt`i uygulama katmanındadır, DB trigger'ı yok). Yani bu koşum
+  // olmadan "bu satırlara ne oldu" sorusunun veri üzerinden CEVABI YOKTUR —
+  // ne defterden ne damgadan. Tek satırlık bu kayıt, izin tek yoludur.
+  // Best-effort ve yazmadan SONRA: audit düşerse onarım geri alınmaz, ama
+  // sessiz de kalmaz (aşağıdaki uyarı + konsol dökümü ikinci iz).
+  const izOnce = AuditService.getHealth().failureCount;
+  await AuditService.logEvent({
+    category: "SYSTEM",
+    action: "ROLL_WAREHOUSE_BACKFILL",
+    tableName: "ROLL",
+    payload: {
+      source: "scripts/backfill_roll_warehouse.ts",
+      veritabani: db,
+      hedefDepo: { id: target.id, code: target.code, name: target.name },
+      guncellenen: written,
+      kalanDeposuz: left,
+      kuruKosumdakiToplam: total,
+      dokum: yol,
+    },
+  });
+  if (AuditService.getHealth().failureCount !== izOnce) {
+    console.error(
+      "\n⚠️  AUDIT SATIRI YAZILAMADI — bu koşumun veri üzerinde başka izi YOK (ham SQL).\n" +
+        `   Yukarıdaki dökümü (${yol}) ve bu çıktıyı onarımın tek izi olarak saklayın.`,
+    );
+    process.exitCode = 1;
+  }
 }
 
 main()
