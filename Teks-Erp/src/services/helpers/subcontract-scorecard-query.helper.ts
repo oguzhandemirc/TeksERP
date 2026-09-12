@@ -17,8 +17,12 @@ export interface ScorecardItemRow {
   firstReceivedAt: Date | null;
   hasFull: boolean | null;
   remainderClosed: boolean;
-  directShipClosed: boolean;
-  wholeDelivered: boolean;
+  /** Kalemin TOPU bu sevkin DSK'sıyla müşteriye çıktı (kapanış + tam teslim). */
+  ownDirectShip: boolean;
+  /** Topun DSK'sı BAŞKA sevke ait — metre burada ÖLÇÜLEMEZ (ayrı kova). */
+  foreignDirectShip: boolean;
+  /** DSK kaydı olmayan eski TAM doğrudan sevk damgası (yalnız dokunulmamış kalemde). */
+  legacyStampDelivered: boolean;
   splitDeliveredQty: number | null;
   dispatchedAt: Date;
 }
@@ -52,15 +56,26 @@ export function queryScorecardItems(range: DateRange): Promise<ScorecardItemRow[
       ret."firstReceivedAt"      AS "firstReceivedAt",
       ret."hasFull"              AS "hasFull",
       (sdi."remainderClosedAt" IS NOT NULL) AS "remainderClosed",
-      -- Kapanış yüklemi OUTSTANDING_ITEM'ın ikizi (fason-open-dispatch.helper.ts):
-      -- topu doğrudan sevk edilmiş kalem dönmeyecektir.
-      (sd."directShippedAt" IS NOT NULL OR r."directShipmentId" IS NOT NULL) AS "directShipClosed",
-      -- Metre ATFI ise bu sevkin DSK'sına bağlanır: aynı top ardışık fasonda başka
-      -- sevkten çıkmışsa o metre bu kalemin teslimi değildir.
-      (sd."directShippedAt" IS NOT NULL OR EXISTS (
+      -- ⚠️ KAPANIŞ ve TESLİM ATFI AYNI YÜKLEMDEN gelir; ayrışırlarsa kalem
+      -- "kapandı ama teslimi 0" olur ve firma %100 fire yer. Üç durum:
+      --   ownDirectShip        → topu BU sevkin DSK'sıyla çıktı: kapanır, tamamı teslim
+      --   foreignDirectShip    → DSK başka sevke ait: ölçülemez, ayrı kovaya
+      --   legacyStampDelivered → DSK kaydı olmayan eski damga; yalnız kabul ve
+      --                          kalan-kapaması GÖRMEMİŞ kalemde teslim sayılır
+      --                          (damgayı her keleme uygulamak kalan-kapamasının
+      --                          firesini siler ve sonucu işlem SIRASINA bağlar).
+      EXISTS (
         SELECT 1 FROM direct_shipments ds
         WHERE ds.id = r."directShipmentId" AND ds."dispatchId" = sd.id
-      )) AS "wholeDelivered",
+      ) AS "ownDirectShip",
+      (r."directShipmentId" IS NOT NULL AND NOT EXISTS (
+        SELECT 1 FROM direct_shipments ds2
+        WHERE ds2.id = r."directShipmentId" AND ds2."dispatchId" = sd.id
+      )) AS "foreignDirectShip",
+      (sd."directShippedAt" IS NOT NULL
+        AND sdi."remainderClosedAt" IS NULL
+        AND ret.qty IS NULL
+        AND r."directShipmentId" IS NULL) AS "legacyStampDelivered",
       dlv.qty                    AS "splitDeliveredQty",
       sd."dispatchedAt"          AS "dispatchedAt"
     FROM subcontractor_dispatch_items sdi
@@ -109,6 +124,18 @@ export function queryScorecardItems(range: DateRange): Promise<ScorecardItemRow[
         AND rv.source = 'SUBCONTRACTOR_RETURN'
         AND rv."workOrderStepId" = sd."stepId"
         AND rv."reversedAt" IS NULL
+        -- ATIF KALEME BAĞLI: aynı top aynı adımda iki kez sevk edildiyse (iptal
+        -- sonrası yeniden sevk) sapma İKİ kaleme de yazılıyordu → çift sayım.
+        -- 'sourceRefId' makbuzdur; makbuzun kalemi hangi sevk kalemine bağlıysa
+        -- sapma ODUR. Eski (sourceRefId'siz) satırlarda davranış korunur.
+        AND (
+          rv."sourceRefId" IS NULL
+          OR EXISTS (
+            SELECT 1 FROM subcontractor_receipt_items sri2
+            WHERE sri2."receiptId" = rv."sourceRefId"
+              AND sri2."sourceDispatchItemId" = sdi.id
+          )
+        )
     ) adj ON true
     WHERE sd."dispatchedAt" >= ${range.from}
       AND sd."dispatchedAt" <= ${range.to}

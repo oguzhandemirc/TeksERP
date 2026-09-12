@@ -246,6 +246,7 @@ async function main(): Promise<void> {
   check("özet önceki dönem fire %10", sc.summary.prevFirePct === 10, `gelen: ${sc.summary.prevFirePct}`);
 
   await kismiVeAltKumeSenaryolari();
+  await damgaVeYabanciSenaryolari();
 }
 
 // =============================================================================
@@ -393,6 +394,67 @@ async function kismiVeAltKumeSenaryolari(): Promise<void> {
       ozet(r));
     const acik = await prisma.subcontractorDispatch.count({ where: { id: z.dispatchId, ...OPEN_OUTSTANDING } });
     check("8c: sevk artık OPEN_OUTSTANDING değil (helper karneyle aynı cevabı verir)", acik === 0, `gelen: ${acik}`);
+  }
+}
+
+// =============================================================================
+// §9 — DAMGA × KALAN-KAPAMASI ve YABANCI DSK
+// =============================================================================
+// Denetim bulgusu (2026-09-12): teslim atfı SEVK düzeyinden başlıyordu
+// (`directShippedAt IS NOT NULL OR …`), yani damga kalemin kendi topuna
+// bakmadan uygulanıyordu. İki sonucu vardı: (1) kalan-kapamasıyla yazılan FİRE
+// damga basılınca siliniyor, (2) aynı iki işlem TERS SIRADA yapılınca karne
+// farklı rakam veriyordu — yani oran operatörün tuş sırasına bağlıydı.
+async function damgaVeYabanciSenaryolari(): Promise<void> {
+  console.log("\n── 9) Damga × kalan-kapaması: işlem SIRASI sonucu değiştirmez ──");
+  /** 2×200: biri müşteriye, diğeri 'kalan gelmeyecek' → fire 200 / teslim 200. */
+  const bekle = (r: SubcontractScorecardRow | undefined, etiket: string): void => {
+    check(etiket,
+      r?.dispatchedQty === 400 && r.closedDispatchedQty === 400 && r.returnedQty === 0 &&
+      r.deliveredQty === 200 && r.fireQty === 200 && r.firePct === 50 && r.openItems === 0,
+      ozet(r));
+  };
+  // Damga durumu iki blok arasında karşılaştırılır (blok kapsamı dışında tutulur).
+  let damga9a: Date | null = null;
+  {
+    // 9a: ÖNCE kapama, SONRA doğrudan sevk.
+    const z = await kurSevk([200, 200]);
+    await svc.closeRemainder({ stepId: z.stepId, rollId: z.rollIds[1]!, reasonCode: "BOYA_HATASI" }, ctx.admin);
+    await svc.executeDirectShip({ dispatchId: z.dispatchId, reason: "bekci damga sonra", customerId: ctx.customer, rollIds: [z.rollIds[0]!] }, ctx.admin);
+    damga9a = (await prisma.subcontractorDispatch.findUniqueOrThrow({ where: { id: z.dispatchId }, select: { directShippedAt: true } })).directShippedAt;
+    // Damga ölçütü kalemlerin TOPUNDAN okunur: kalan-kapamasıyla kapanmış kalem
+    // varken sevk "tamamen müşteriye çıkmış" değildir → damga BASILMAZ ve bu karar
+    // işlem sırasından bağımsızdır (9b aynı sonucu verir).
+    bekle(await ayKarnesi(z.dispatchId, 5), "9a: kapama + damga → fire 200 m / %50 (eski: damga fireyi siliyordu, 0)");
+  }
+  {
+    // 9b: TERS SIRA — önce doğrudan sevk (damgasız), sonra kapama.
+    const z = await kurSevk([200, 200]);
+    await svc.executeDirectShip({ dispatchId: z.dispatchId, reason: "bekci damga once", customerId: ctx.customer, rollIds: [z.rollIds[0]!] }, ctx.admin);
+    await svc.closeRemainder({ stepId: z.stepId, rollId: z.rollIds[1]!, reasonCode: "BOYA_HATASI" }, ctx.admin);
+    const damga2 = await prisma.subcontractorDispatch.findUniqueOrThrow({ where: { id: z.dispatchId }, select: { directShippedAt: true } });
+    bekle(await ayKarnesi(z.dispatchId, 6), "9b: TERS SIRA aynı rakamı verir (eski: %40 ↔ %0 ayrışıyordu)");
+    check("9c: damga da işlem sırasından bağımsız (iki sırada da basılmaz)",
+      damga9a === null && damga2.directShippedAt === null,
+      `9a ${damga9a ? "DOLU" : "null"} · 9b ${damga2.directShippedAt ? "DOLU" : "null"}`);
+  }
+
+  console.log("\n── 10) Yabancı DSK: başka sevkten çıkmış top ÖLÇÜLEMEZ ──");
+  {
+    // Topun DSK'sı BAŞKA sevke ait (ardışık fason / tarihsel kalem taşıması).
+    // Kapanmışa yazmak firmaya %100 fire, açığa yazmak "fasonda bekliyor" yalanı
+    // olurdu → ayrı kova, sayısı basılır.
+    const yabanci = await kurSevk([100]);
+    await svc.executeDirectShip({ dispatchId: yabanci.dispatchId, reason: "bekci yabanci dsk", customerId: ctx.customer, rollIds: yabanci.rollIds }, ctx.admin);
+    const yabanciDsk = await prisma.directShipment.findFirstOrThrow({ where: { dispatchId: yabanci.dispatchId }, select: { id: true } });
+
+    const z = await kurSevk([300]);
+    await prisma.roll.update({ where: { id: z.rollIds[0]! }, data: { directShipmentId: yabanciDsk.id } });
+    const r = await ayKarnesi(z.dispatchId, 7);
+    check("10a: ölçülemez kovaya yazıldı (1 kalem / 300 m)",
+      r?.unattributedItems === 1 && r.unattributedQty === 300, `ölçülemez ${r?.unattributedItems}/${r?.unattributedQty}`);
+    check("10b: ne kapanmışa ne açığa girdi (fire ve açık bakiye temiz)",
+      r?.closedDispatchedQty === 0 && r.fireQty === 0 && r.openItems === 0 && r.openQty === 0, ozet(r));
   }
 }
 

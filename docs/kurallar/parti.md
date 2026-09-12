@@ -27,6 +27,8 @@
 
 ### Değişmezler
 
+- **[ÇEKİRDEK]** Müşteriye doğrudan sevk (DSK) yapılmış fason sevki parti cerrahisine GİRMEZ: K15 konsolidasyonunda ne keeper ne loser olur (atlananlar audit'te `skippedDirectShip`), K16 taşıma/bölmede kalemi 409 ile durdurulur — kalemi taşımak karnedeki teslim metrajının atfını koparır, kaynağı kapatmak müşteriye çıkmış malın sevkini storno eder. · bekçi: `scripts/test_fason_direct_ship_dispatch_lock.ts` <sub>(arşiv:2026-09-12)</sub>
+
 - **[ÇEKİRDEK]** Sayaç SAKLANMAZ, veriden türetilir: en son doğan KISA parti (`createdAt DESC LIMIT 1`, destek index `batches_createdAt_idx`). Ayar değişimi mevcut numaraları yeniden hesaplamaz; bayrak kapatılıp açılınca sayaç kaldığı yerden devam eder. · bekçi: `scripts/test_batch_number_format.ts §6 (batches_createdAt_idx VAR)` <sub>(CLAUDE.md:161)</sub>
 - **[ÇEKİRDEK]** `GET /api/batches/number-state`'in 'sıradaki' değeri ÖNİZLEMEDİR, rezervasyon DEĞİL — kilit dışında okunur, arada parti doğarsa gerçekleşen numara farklı olur. Yüzey bunu 'ayrılmış' diye sunmaz. <sub>(CLAUDE.md:161)</sub>
 
@@ -54,13 +56,13 @@
 
 - **[ÇEKİRDEK]** İş Emri No ≠ Parti: `WorkOrder.workOrderNumber` (İE+GGAAYY+NNNN) üretim emridir; `Batch` üretime aynı anda giren top grubudur; bir WO N parti içerir; eski dal/`batchSplitId` kavramı kalktı. Tasarım: `docs/design/PARTI-MODELI-TASARIM.md`. <sub>(kök 2026-07-13)</sub>
 
-## Bekçiler — bu alana dokununca koş (32 backend · 2 istemci)
+## Bekçiler — bu alana dokununca koş (33 backend · 2 istemci)
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_batch_drop`, `test_batch_k15_merge`, `test_batch_k16_split_move`, `test_batch_k8_tools`, `test_batch_multibatch_dispatch`, `test_batch_number_format`, `test_batch_partial_dispatch_autosplit`, `test_batch_redye_three_paths`, `test_batch_split_new_wo_modes`, `test_batch_trace`, `test_branch_no_empty`, `test_bulk_dispatch_rollids`, `test_direct_ship_scenarios`, `test_dispatch_cross_wo_batch_guard`, `test_fason_parti_grouping`, `test_fason_partial_receive`, `test_fason_receive_crossstep_firm`, `test_fason_receive_idempotency_concurrency`, `test_k14_lock_edges`, `test_manual_move`, `test_order_filter_batch_check`⚠️, `test_quality_batch_flags`, `test_quick_start_wo`, `test_shipment_doc_batch_column`, `test_split_card_lineage`, `test_split_per_roll`, `test_tambur_branch_info`, `test_tambur_manual_batch`, `test_traveler_card_a5_batches`, `test_traveler_card_stale`, `test_wo_branch_redye`⚠️, `test_wo_branch_split`⚠️
+Backend: `test_fason_direct_ship_dispatch_lock`, `test_batch_drop`, `test_batch_k15_merge`, `test_batch_k16_split_move`, `test_batch_k8_tools`, `test_batch_multibatch_dispatch`, `test_batch_number_format`, `test_batch_partial_dispatch_autosplit`, `test_batch_redye_three_paths`, `test_batch_split_new_wo_modes`, `test_batch_trace`, `test_branch_no_empty`, `test_bulk_dispatch_rollids`, `test_direct_ship_scenarios`, `test_dispatch_cross_wo_batch_guard`, `test_fason_parti_grouping`, `test_fason_partial_receive`, `test_fason_receive_crossstep_firm`, `test_fason_receive_idempotency_concurrency`, `test_k14_lock_edges`, `test_manual_move`, `test_order_filter_batch_check`⚠️, `test_quality_batch_flags`, `test_quick_start_wo`, `test_shipment_doc_batch_column`, `test_split_card_lineage`, `test_split_per_roll`, `test_tambur_branch_info`, `test_tambur_manual_batch`, `test_traveler_card_a5_batches`, `test_traveler_card_stale`, `test_wo_branch_redye`⚠️, `test_wo_branch_split`⚠️
 
 İstemci: `batch-merge-confirm.test.ts`, `useTebdilWizard.test.tsx`
 

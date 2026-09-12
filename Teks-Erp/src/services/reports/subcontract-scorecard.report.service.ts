@@ -60,6 +60,9 @@ export interface SubcontractScorecardRow {
   /** Henüz dönmemiş kalem adedi ve metrajı. */
   openItems: number;
   openQty: number;
+  /** Topu BAŞKA sevkin DSK'sıyla çıkmış (ölçülemez) kalem adedi ve metrajı. */
+  unattributedItems: number;
+  unattributedQty: number;
   /** Kapanmış kalemlerde ortalama dönüş süresi (gün). */
   avgTurnaroundDays: number | null;
   prevFirePct?: number;
@@ -76,6 +79,8 @@ export interface SubcontractScorecard {
     firePct: number;
     openItems: number;
     openQty: number;
+    unattributedItems: number;
+    unattributedQty: number;
     avgTurnaroundDays: number | null;
     prevFirePct?: number;
     prevDispatchedQty?: number;
@@ -109,6 +114,8 @@ function toRow(c: SubCell): SubcontractScorecardRow {
     firePct: pctOf(fire, c.closedDispatchedQty),
     openItems: c.openItems,
     openQty: round1(c.openQty),
+    unattributedItems: c.unattributedItems,
+    unattributedQty: round1(c.unattributedQty),
     avgTurnaroundDays: avgTurnaround(c),
   };
 }
@@ -147,6 +154,8 @@ export async function getSubcontractScorecard(
     firePct: pctOf(fire, t.closedDispatchedQty),
     openItems: t.openItems,
     openQty: round1(t.openQty),
+    unattributedItems: t.unattributedItems,
+    unattributedQty: round1(t.unattributedQty),
     avgTurnaroundDays: avgTurnaround(t),
   };
   if (compareRange) {

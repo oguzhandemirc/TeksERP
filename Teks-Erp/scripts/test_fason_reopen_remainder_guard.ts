@@ -21,6 +21,7 @@ import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { VARIANCE_SOURCES } from "../src/constants/variance-reasons";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
+import { ensureTestAdmin } from "./fixture-test-user";
 
 let pass = 0;
 let fail = 0;
@@ -55,14 +56,21 @@ async function reopenHatasi(stepId: string, rollId: string): Promise<{ status: n
   }
 }
 
-async function kurSevk(qtys: number[]): Promise<{ woId: string; stepId: string; kursunStepId: string; dispatchId: string; rollIds: string[] }> {
+async function kurSevk(qtys: number[], tekAdim = false): Promise<{ woId: string; stepId: string; kursunStepId: string | null; dispatchId: string; rollIds: string[] }> {
   const wo = await prisma.workOrder.create({
     data: {
       workOrderNumber: `${TAG}-WO${ids.wos.length}`,
       type: "STOCK_PRODUCTION",
       status: "IN_PROGRESS",
       targetItemId: ctx.item,
-      steps: { create: [{ stationId: ctx.stBoya, stepSequence: 1, status: "PENDING" }, { stationId: ctx.stKursun, stepSequence: 2, status: "PENDING" }] },
+      steps: {
+        create: tekAdim
+          ? [{ stationId: ctx.stBoya, stepSequence: 1, status: "PENDING" as const }]
+          : [
+              { stationId: ctx.stBoya, stepSequence: 1, status: "PENDING" as const },
+              { stationId: ctx.stKursun, stepSequence: 2, status: "PENDING" as const },
+            ],
+      },
     },
     include: { steps: { orderBy: { stepSequence: "asc" } } },
   });
@@ -81,7 +89,7 @@ async function kurSevk(qtys: number[]): Promise<{ woId: string; stepId: string; 
   const d = await sub.dispatch({ workOrderId: wo.id, stepId, subcontractorId: ctx.sub, rollIds }, ctx.admin);
   const dispatchId = (d.data as { id: string }).id;
   ids.dispatches.push(dispatchId);
-  return { woId: wo.id, stepId, kursunStepId: wo.steps[1]!.id, dispatchId, rollIds };
+  return { woId: wo.id, stepId, kursunStepId: wo.steps[1]?.id ?? null, dispatchId, rollIds };
 }
 
 const durum = async (rollId: string): Promise<{ status: RollStatus; stepId: string | null; dsId: string | null }> => {
@@ -96,7 +104,9 @@ async function main(): Promise<void> {
     return v.id;
   };
   ctx.item = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS");
-  ctx.admin = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
+  // Aktör FIXTURE'dan çözülür: seed yöneticisini adıyla aramak ortam
+  // bağımlılığıdır (tavan bekçisi `test_ortam_bagimliligi_tavani` sayar).
+  ctx.admin = (await ensureTestAdmin()).id;
   ctx.stBoya = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON");
   ctx.stKursun = need(await prisma.station.findFirst({ where: { code: "KURSUN_KK2" }, select: { id: true } }), "KURSUN_KK2");
   ctx.customer = need(await prisma.customer.findFirst({ where: { code: "MUS-001" }, select: { id: true } }), "MUS-001");
@@ -116,9 +126,19 @@ async function main(): Promise<void> {
     const sapma = await prisma.rollVariance.findMany({ where: { rollId: z.rollIds[0]!, source: VARIANCE_SOURCES.SUBCONTRACTOR_REMAINDER }, select: { reversedAt: true } });
     check("G1d: fire satırı silinmedi, terslendi", sapma.length > 0 && sapma.every((v) => v.reversedAt !== null), `${sapma.length} satır`);
     check("G1e: sevk yeniden OPEN_OUTSTANDING", (await prisma.subcontractorDispatch.count({ where: { id: z.dispatchId, ...OPEN_OUTSTANDING } })) === 1);
+    const hareket = await prisma.rollMovement.findFirst({
+      where: { rollId: z.rollIds[0]!, workOrderStepId: z.stepId, revokedAt: null },
+      select: { exitedAt: true, qtyOut: true, notes: true },
+    });
+    check("G1g: hareket yeniden AÇILDI (exitedAt/qtyOut null, notes REMAINDER_REOPENED)",
+      hareket?.exitedAt === null && hareket.qtyOut === null && hareket.notes === "REMAINDER_REOPENED",
+      `${hareket?.notes} · exitedAt ${hareket?.exitedAt ? "DOLU" : "null"}`);
+    const adim = await prisma.workOrderStep.findUniqueOrThrow({ where: { id: z.stepId }, select: { status: true } });
+    check("G1h: adım ACTIVE", adim.status === "ACTIVE", adim.status);
 
     const ikinci = await reopenHatasi(z.stepId, z.rollIds[0]!);
-    check("G1f: ikinci geri alma 409 (kapama zaten kalkmış)", ikinci?.status === 409, `${ikinci?.status} ${ikinci?.code ?? ""}`);
+    check("G1f: ikinci geri alma 409 REMAINDER_NOT_CLOSED (top artık fasonda)",
+      ikinci?.status === 409 && ikinci.code === "REMAINDER_NOT_CLOSED", `${ikinci?.status} ${ikinci?.code ?? ""}`);
   }
 
   // ── G2) DOĞRUDAN MÜŞTERİYE SEVK EDİLMİŞ TOP ──────────────────────────────
@@ -143,8 +163,8 @@ async function main(): Promise<void> {
     const oncesi = await durum(z.rollIds[0]!);
     check("G3a ön koşul: kaynak top tam kabulle tüketildi", oncesi.status === RollStatus.SUBCONTRACTOR_CONSUMED);
     const hata = await reopenHatasi(z.stepId, z.rollIds[0]!);
-    check("G3b: 409 REMAINDER_NOT_CLOSED (kapama kararı hiç verilmemiş)",
-      hata?.status === 409 && hata.code === "REMAINDER_NOT_CLOSED", `${hata?.status} ${hata?.code ?? ""}`);
+    check("G3b: 409 REMAINDER_NOT_CLOSED_AT_STEP (kapama kararı hiç verilmemiş)",
+      hata?.status === 409 && hata.code === "REMAINDER_NOT_CLOSED_AT_STEP", `${hata?.status} ${hata?.code ?? ""}`);
     const sonrasi = await durum(z.rollIds[0]!);
     check("G3c: top tüketilmiş kaldı", sonrasi.status === RollStatus.SUBCONTRACTOR_CONSUMED && sonrasi.stepId === null);
   }
@@ -154,13 +174,63 @@ async function main(): Promise<void> {
   {
     const z = await kurSevk([120]);
     await sub.closeRemainder({ stepId: z.stepId, rollId: z.rollIds[0]!, reasonCode: "BOYA_HATASI" }, ctx.admin);
-    const hata = await reopenHatasi(z.kursunStepId, z.rollIds[0]!);
-    check("G4a: yanlış adımla 409 (eski kapı topu O adıma taşırdı)",
-      hata?.status === 409 && hata.code === "REMAINDER_NOT_CLOSED", `${hata?.status} ${hata?.code ?? ""}`);
+    // İki adımlı rota → kurşun adımı DAİMA var (tek adımlı varyant yalnız G5'te).
+    const hata = await reopenHatasi(z.kursunStepId!, z.rollIds[0]!);
+    check("G4a: yanlış adımla 409 REMAINDER_NOT_CLOSED_AT_STEP (eski kapı topu O adıma taşırdı)",
+      hata?.status === 409 && hata.code === "REMAINDER_NOT_CLOSED_AT_STEP", `${hata?.status} ${hata?.code ?? ""}`);
     const d = await durum(z.rollIds[0]!);
     check("G4b: top kapalı kaldı, kurşun adımına taşınmadı", d.status === RollStatus.SUBCONTRACTOR_CONSUMED && d.stepId === null, `${d.status} · step ${d.stepId ? "DOLU" : "null"}`);
     const kalem = await prisma.subcontractorDispatchItem.findFirst({ where: { dispatchId: z.dispatchId }, select: { remainderClosedAt: true } });
     check("G4c: kapama damgası duruyor", kalem?.remainderClosedAt !== null);
+    void z.kursunStepId;
+  }
+
+  // ── G5) SON ADIM FASON: geri alma İŞ EMRİNİ ve KARTI da diriltir ─────────
+  console.log("\n── G5) Tek adımlı rota: WO ve refakat kartı da dirilir ──");
+  {
+    const z = await kurSevk([90], true);
+    await sub.closeRemainder({ stepId: z.stepId, rollId: z.rollIds[0]!, reasonCode: "BOYA_HATASI" }, ctx.admin);
+    const kapali = await prisma.workOrder.findUniqueOrThrow({ where: { id: z.woId }, select: { status: true } });
+    const kartKapali = await prisma.travelerCard.findFirstOrThrow({ where: { workOrderId: z.woId }, select: { status: true } });
+    check("G5-0 ön koşul: kapama WO'yu ve kartı COMPLETED yaptı",
+      kapali.status === "COMPLETED" && kartKapali.status === "COMPLETED", `${kapali.status} · kart ${kartKapali.status}`);
+
+    const hata = await reopenHatasi(z.stepId, z.rollIds[0]!);
+    check("G5a: geri alma çalıştı", hata === null, hata?.message ?? "");
+    const wo = await prisma.workOrder.findUniqueOrThrow({ where: { id: z.woId }, select: { status: true } });
+    const kart = await prisma.travelerCard.findFirstOrThrow({ where: { workOrderId: z.woId }, select: { status: true } });
+    const adim = await prisma.workOrderStep.findUniqueOrThrow({ where: { id: z.stepId }, select: { status: true } });
+    check("G5b: WO yeniden IN_PROGRESS (eski kod COMPLETED bırakıyordu → ikinci sevk 409)", wo.status === "IN_PROGRESS", wo.status);
+    check("G5c: refakat kartı yeniden ACTIVE", kart.status === "ACTIVE", kart.status);
+    check("G5d: adım ACTIVE", adim.status === "ACTIVE", adim.status);
+    const iz = await prisma.travelerCardScan.count({
+      where: { card: { workOrderId: z.woId }, notes: { contains: "kalan kapaması geri alındı" } },
+    });
+    check("G5e: kartta geri alma izi var", iz === 1, `${iz} kayıt`);
+  }
+
+  // ── G6) Kardeş top müşteriye gitti → sevk damgalandı; MEŞRU kapama yine geri alınır
+  console.log("\n── G6) Damgalı sevkte meşru kapama geri alınabilir ──");
+  {
+    const z = await kurSevk([200, 200]);
+    await sub.closeRemainder({ stepId: z.stepId, rollId: z.rollIds[1]!, reasonCode: "BOYA_HATASI" }, ctx.admin);
+    await sub.executeDirectShip({ dispatchId: z.dispatchId, reason: "kapı bekçisi damga", customerId: ctx.customer, rollIds: [z.rollIds[0]!] }, ctx.admin);
+    // ⚠️ FIXTURE DAMGASI: damga ölçütü artık kalemlerin topundan okunuyor, yani bu
+    // karışık sevk servis yoluyla DAMGALANMAZ (o düzeltme ayrı iştir). Kapının
+    // kendisi TARİHSEL damgalı satırlarda da tutmalı → damga elle yazılır.
+    await prisma.subcontractorDispatch.update({
+      where: { id: z.dispatchId },
+      data: { directShippedAt: new Date(), directShipReason: "fixture: tarihsel damga" },
+    });
+    const damga = await prisma.subcontractorDispatch.findUniqueOrThrow({ where: { id: z.dispatchId }, select: { directShippedAt: true } });
+    check("G6-0 ön koşul: sevk damgalı (tarihsel satır şekli)", damga.directShippedAt !== null);
+
+    const hata = await reopenHatasi(z.stepId, z.rollIds[1]!);
+    check("G6a: kapama geri alınabiliyor (eski süzgeç sonsuza dek 409 veriyordu)", hata === null, hata?.message.slice(0, 80) ?? "");
+    const d = await durum(z.rollIds[1]!);
+    check("G6b: kapatılmış top yeniden fasonda", d.status === RollStatus.AT_SUBCONTRACTOR && d.stepId === z.stepId, d.status);
+    const sevkEdilen = await durum(z.rollIds[0]!);
+    check("G6c: müşteriye giden top diriltilmedi", sevkEdilen.status === RollStatus.SUBCONTRACTOR_CONSUMED && sevkEdilen.dsId !== null);
   }
 }
 

@@ -3019,6 +3019,9 @@ export class WorkOrderService {
               batch: { select: { id: true, batchNumber: true } },
               step: { select: { stepSequence: true, station: { select: { name: true } } } },
               items: { select: { rollId: true } },
+              // Kısmi/alt küme doğrudan sevkin TEK izi (damga basılmaz) — iptal
+              // edilebilirlik yüklemi bunu okur.
+              directShipments: { select: { shipmentNo: true }, take: 1 },
               _count: { select: { items: true } },
             },
             orderBy: { dispatchedAt: "asc" },
@@ -3067,6 +3070,7 @@ export class WorkOrderService {
       }).length;
       const dispatchBlock = resolveDispatchCancelBlockReason({
         cancelledAt: null,
+        directShipmentNo: d.directShipments[0]?.shipmentNo ?? null,
         activeReceiptNo: receiptNoByDispatch.get(d.id) ?? null,
         movedRollCount: movedCount,
       });
@@ -3216,11 +3220,17 @@ export class WorkOrderService {
     // Kısmi kabul edilmiş (kapatılamayan) sevk kalemleri: iptal bunları
     // `cancelBulk` ile kapatamaz ve operatörden karar ister.
     const fasonRemainders = await prisma.subcontractorDispatchItem.findMany({
+      // ⚠️ `AND` ŞART, spread DEĞİL: `outstandingItemOfOpenDispatch` kendi
+      // `receiptItems: { none: … }` koşulunu taşır ve aynı anahtarı ikinci kez
+      // yazmak onu EZİYORDU → tamamen dönmüş kalemler de "fasonda kalan" sayılıp
+      // iptal diyaloğunda gereksiz fire onayı istiyordu.
       where: {
-        ...outstandingItemOfOpenDispatch({ workOrderId: id }),
-        // Yalnız kabulü BAŞLAMIŞ olanlar: kabulsüz sevk `cancelBulk` ile
-        // sorunsuz kapanır, operatöre sorulacak bir şey yoktur.
-        receiptItems: { some: { receipt: { cancelledAt: null } } },
+        AND: [
+          outstandingItemOfOpenDispatch({ workOrderId: id }),
+          // Yalnız kabulü BAŞLAMIŞ olanlar: kabulsüz sevk `cancelBulk` ile
+          // sorunsuz kapanır, operatöre sorulacak bir şey yoktur.
+          { receiptItems: { some: { receipt: { cancelledAt: null } } } },
+        ],
       },
       select: {
         dispatch: { select: { dispatchNo: true } },

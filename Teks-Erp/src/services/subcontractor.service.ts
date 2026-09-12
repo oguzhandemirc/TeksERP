@@ -78,6 +78,7 @@ import {
 import { generateRollBarcodeTx, reserveRollBarcodesTx } from "./helpers/roll-barcode.helper";
 import { recomputeOrderStatusForOrdersTx, touchOrderLinesTx } from "./helpers/order-status.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 import {
   resolveStepWorkInstructions,
@@ -2006,11 +2007,21 @@ export class SubcontractorService {
       select: { id: true, barcode: true, status: true, currentStepId: true },
     });
 
+    // Bu sevkten müşteriye çıkmış mal var mı (kısmi/alt küme doğrudan sevk).
+    // Damga (`directShippedAt`) yalnız TÜM toplar gidince basılır; kısmi sevkte
+    // iz yalnız DSK kaydıdır.
+    const directShipment = await prisma.directShipment.findFirst({
+      where: { dispatchId },
+      select: { shipmentNo: true },
+      orderBy: { shippedAt: "asc" },
+    });
+
     // Engel kararı TEK KAYNAKTAN (`resolveDispatchCancelBlockReason`) — iptal
     // önizlemesi (`getCancelImpact.openDispatches[].cancellable`) aynı yüklemi
     // çağırır. Kopyalanırsa ekran "iptal edilebilir" der, uç 409 verir.
     const blockReason = resolveDispatchCancelBlockReason({
       cancelledAt: dispatch.cancelledAt,
+      directShipmentNo: directShipment?.shipmentNo ?? null,
       activeReceiptNo: acceptedReceiptItem?.receipt?.receiptNo ?? null,
       movedRollCount: movedRolls.length,
     });
@@ -3534,14 +3545,21 @@ export class SubcontractorService {
       where: {
         rollId: data.rollId,
         remainderClosedAt: { not: null },
-        dispatch: { stepId: data.stepId, cancelledAt: null, directShippedAt: null },
+        // ⚠️ `directShippedAt` SÜZGECİ YOK ve bu bilinçli: kardeş top müşteriye
+        // gidince sevk damgalanır, damgayı kapıya koymak MEŞRU bir kapamanın geri
+        // alınmasını sonsuza dek imkânsız kılardı. "Mal müşteriye gitti" vakasını
+        // topun KENDİ geçmişi tutuyor (yukarıdaki `directShipmentId` kapısı).
+        dispatch: { stepId: data.stepId, cancelledAt: null },
       },
-      select: { id: true, dispatch: { select: { workOrderId: true } } },
+      select: {
+        id: true,
+        dispatch: { select: { workOrderId: true, step: { select: { stationId: true } } } },
+      },
     });
     if (!closedItem) {
       throw AppError.conflict(
         "Bu adımda bu topun 'kalan gelmeyecek' kapaması yok — geri alınacak bir karar bulunamadı.",
-        { code: "REMAINDER_NOT_CLOSED" },
+        { code: "REMAINDER_NOT_CLOSED_AT_STEP" },
       );
     }
 
@@ -3558,6 +3576,7 @@ export class SubcontractorService {
       if (unstamped.count !== 1) {
         throw AppError.conflict(
           "Kalan kapaması bu sırada başka bir işlemle geri alınmış. Listeyi yenileyin.",
+          { code: "REMAINDER_ALREADY_REOPENED" },
         );
       }
 
@@ -3598,11 +3617,36 @@ export class SubcontractorService {
           AND "revokedAt" IS NULL
       `;
 
-      // Adım kapanmışsa yeniden aç (mal geri geldi).
-      await tx.workOrderStep.updateMany({
-        where: { id: data.stepId, status: "COMPLETED" },
-        data: { status: "ACTIVE", completedAt: null },
+      // Adım + İŞ EMRİ + REFAKAT KARTI diriltme sözleşmesi (emsal: manuel taşıma
+      // `tambur-manual` / `manualMove`). Elle adım flip'i YETMEZ: son adımı fason
+      // olan rotada `closeRemainder` WO'yu COMPLETED, kartı COMPLETED yapar; yalnız
+      // adımı açmak "mal fasonda ama iş emri kapalı" durumu bırakır (ikinci sevk ve
+      // kabul iptali 409 verir, kart okutulamaz).
+      await recomputeStepStatus(tx, data.stepId);
+      await ensureWorkOrderInProgress(tx, closedItem.dispatch.workOrderId);
+      const reopen = await tx.workOrder.updateMany({
+        where: { id: closedItem.dispatch.workOrderId, status: WorkOrderStatus.COMPLETED },
+        data: { status: WorkOrderStatus.IN_PROGRESS },
       });
+      if (reopen.count > 0) {
+        await setWorkOrderCardStatusesTx(
+          tx,
+          closedItem.dispatch.workOrderId,
+          TravelerCardStatus.COMPLETED,
+          TravelerCardStatus.ACTIVE,
+        );
+      }
+
+      // Refakat kartı izi — geri alma kartta görünmüyordu (denetim DÜŞÜK bulgusu).
+      await logTravelerScan(
+        tx,
+        closedItem.dispatch.workOrderId,
+        closedItem.dispatch.step.stationId,
+        data.stepId,
+        ScanType.INFO,
+        userId,
+        `Fason kalan kapaması geri alındı: ${roll.barcode ?? "barkodsuz top"} · ${Number(roll.currentQty)} m yeniden fasonda`,
+      );
     });
 
     await AuditService.log({
@@ -6417,14 +6461,10 @@ export class SubcontractorService {
           );
         }
       }
-      // isFullDispatchShip TAZE (F72): WO satırı kilitli olduğundan bu sayım
-      // eşzamanlı değişiklikleri (receive()'in dispatch'ten döndürdüğü toplar)
-      // görür. roll-consume'dan (aşağıda) ÖNCE yapıldığından shipRollIds hâlâ
-      // AT_SUBCONTRACTOR sayılır; biri eşzamanlı taşınmışsa false + roll-claim 409.
-      const dispatchStillAtSub = await tx.roll.count({
-        where: { id: { in: dispatchRollIds }, status: RollStatus.AT_SUBCONTRACTOR },
-      });
-      isFullDispatchShip = dispatchStillAtSub === shipRollIds.length;
+      // ⚠️ DAMGA ÖLÇÜTÜ AŞAĞIDA, kalemlerin TOPUNDAN okunur. Eski ölçüt "hâlâ
+      // fasonda kaç top var" sayımıydı ve İŞLEM SIRASINA bağlıydı: kardeş kalem
+      // kalan-kapamasıyla kapandıysa sayım tutuyor ve damga basılıyordu, ters
+      // sırada ise basılmıyordu — aynı fiziksel sonuç iki farklı belge durumu.
 
       // KISMİ SPLIT: sevk metresi topun kalanından azsa top bölünür (çocuk = sevk
       // edilen, orijinal = kalan, fasonda AT_SUBCONTRACTOR kalır). effectiveShipRollIds
@@ -6438,31 +6478,11 @@ export class SubcontractorService {
         // Sevk adiminin istasyonu — zaten select edilmis, damga icin geciriliyor.
         dispatch.step?.stationId ?? null,
       );
-      if (anySplit) {
-        if (completeWorkOrder) {
-          throw AppError.badRequest(
-            "Kısmi (bölünmüş) sevkte iş emri tamamlanamaz — kalan parça hâlâ fasonda.",
-          );
-        }
-        isFullDispatchShip = false; // bölme → dispatch tam sevk edilmedi
+      if (anySplit && completeWorkOrder) {
+        throw AppError.badRequest(
+          "Kısmi (bölünmüş) sevkte iş emri tamamlanamaz — kalan parça hâlâ fasonda.",
+        );
       }
-      // 1) Dispatch işareti — yalnız dispatch'in TÜMÜ sevk edildiyse directShippedAt
-      //    set edilir (atomik claim). Kısmi sevkte dispatch AÇIK kalır; atomiklik
-      //    aşağıdaki roll claim'iyle (status=AT_SUBCONTRACTOR + count) sağlanır.
-      if (isFullDispatchShip) {
-        const claim = await tx.subcontractorDispatch.updateMany({
-          where: { id: data.dispatchId, directShippedAt: null, cancelledAt: null },
-          data: {
-            directShippedAt: new Date(),
-            directShippedById: userId ?? null,
-            directShipReason: trimmedReason,
-          },
-        });
-        if (claim.count === 0) {
-          throw AppError.conflict("Bu sevk az önce başka bir işlemle değişmiş. Listeyi yenileyin.");
-        }
-      }
-
       // 2) Açık RollMovement'leri kapat (DIRECT_SHIP notu).
       const tag = `DIRECT_SHIP:${dispatch.dispatchNo}`;
       await tx.$executeRaw`
@@ -6523,6 +6543,29 @@ export class SubcontractorService {
         where: { id: { in: effectiveShipRollIds } },
         data: { directShipmentId: directShipment.id },
       });
+
+      // Dispatch işareti: sevkin TÜM kalemlerinin topu müşteriye çıktıysa damga
+      // basılır (atomik claim). Ölçüt kalemlerin topundan okunur — kalan-kapaması
+      // ya da kabul görmüş bir kalem varsa sevk "tamamen müşteriye çıkmış" DEĞİLDİR
+      // ve damga İŞLEM SIRASINDAN bağımsız olarak basılmaz. Bölünmede ebeveyn
+      // kalem fasonda kaldığı için ölçüt kendiliğinden false verir.
+      const notDelivered = await tx.subcontractorDispatchItem.count({
+        where: { dispatchId: data.dispatchId, roll: { directShipmentId: null } },
+      });
+      isFullDispatchShip = notDelivered === 0;
+      if (isFullDispatchShip) {
+        const claim = await tx.subcontractorDispatch.updateMany({
+          where: { id: data.dispatchId, directShippedAt: null, cancelledAt: null },
+          data: {
+            directShippedAt: new Date(),
+            directShippedById: userId ?? null,
+            directShipReason: trimmedReason,
+          },
+        });
+        if (claim.count === 0) {
+          throw AppError.conflict("Bu sevk az önce başka bir işlemle değişmiş. Listeyi yenileyin.");
+        }
+      }
 
       // 4) RollOperation log (SUBCONTRACTOR_RETURNED + directShip metadata).
       await tx.rollOperation.createMany({

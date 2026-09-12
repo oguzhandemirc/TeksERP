@@ -16,6 +16,9 @@ export interface SubCell {
   deliveredQty: number;
   openItems: number;
   openQty: number;
+  /** Topu BAŞKA sevkin DSK'sıyla çıkmış kalemler — ne kapanmış ne açık (ölçülemez). */
+  unattributedItems: number;
+  unattributedQty: number;
   turnaroundSum: number;
   turnaroundCount: number;
 }
@@ -32,21 +35,32 @@ export function groupBySubcontractor(rows: ScorecardItemRow[]): SubCell[] {
         subId: r.subId, subName: r.subName,
         dispatchItems: 0, dispatchedQty: 0,
         closedItems: 0, closedDispatchedQty: 0, returnedQty: 0, deliveredQty: 0,
-        openItems: 0, openQty: 0, turnaroundSum: 0, turnaroundCount: 0,
+        openItems: 0, openQty: 0, unattributedItems: 0, unattributedQty: 0,
+        turnaroundSum: 0, turnaroundCount: 0,
       };
       map.set(r.subId, cell);
     }
     const disp = Number(r.dispatchedQty);
     cell.dispatchItems += 1;
     cell.dispatchedQty += disp;
-    // Topu sevk edilen kalemin tamamı müşteriye gitti (bölünme çocukları dahil —
-    // doğrudan sevk kabulden önce gelir, kalem metresi başka yere dağılmamıştır).
-    const delivered = r.wholeDelivered ? disp : Number(r.splitDeliveredQty ?? 0);
+    // ÖLÇÜLEMEZ kova: topun DSK'sı BAŞKA sevke ait (ardışık fason / tarihsel
+    // kalem taşıması). Ne kapanmışa ne açığa yazılır — kapanmışa yazmak firmaya
+    // %100 fire, açığa yazmak "fasonda bekliyor" yalanı olurdu. Sayısı basılır.
+    if (r.foreignDirectShip) {
+      cell.unattributedItems += 1;
+      cell.unattributedQty += disp;
+      continue;
+    }
+    // Topu bu sevkin DSK'sıyla çıkan kalemin TAMAMI teslimdir (bölünme çocukları
+    // dahil: doğrudan sevk kabulden önce gelir). Yalnız bölünme olduysa teslim =
+    // çocukların metresi.
+    const fullyDelivered = r.ownDirectShip || r.legacyStampDelivered;
+    const delivered = fullyDelivered ? disp : Number(r.splitDeliveredQty ?? 0);
     // "Kapandı" ölçütü: TAM makbuz satırı VAR, kalan "gelmeyecek" kararıyla
     // kapatıldı (remainderClosedAt) ya da topun kendisi doğrudan sevk edildi.
     // Kısmi satırlar kalemi kapatmaz — kalan hâlâ fasondadır, açık bakiyede
     // görünür. Sıfır metrajlı tam dönüş de kapanıştır ve firesi %100'dür.
-    if (r.hasFull === true || r.remainderClosed || r.directShipClosed) {
+    if (r.hasFull === true || r.remainderClosed || fullyDelivered) {
       cell.closedItems += 1;
       cell.closedDispatchedQty += disp;
       // Dönen metraj = defter (düşülen) + çekme düzeltmesi (fiziksel fark).
@@ -85,10 +99,12 @@ export function sumCells(list: SubCell[]): ScorecardTotals {
       deliveredQty: a.deliveredQty + c.deliveredQty,
       openItems: a.openItems + c.openItems,
       openQty: a.openQty + c.openQty,
+      unattributedItems: a.unattributedItems + c.unattributedItems,
+      unattributedQty: a.unattributedQty + c.unattributedQty,
       turnaroundSum: a.turnaroundSum + c.turnaroundSum,
       turnaroundCount: a.turnaroundCount + c.turnaroundCount,
     }),
-    { dispatchedQty: 0, closedDispatchedQty: 0, returnedQty: 0, deliveredQty: 0, openItems: 0, openQty: 0, turnaroundSum: 0, turnaroundCount: 0 },
+    { dispatchedQty: 0, closedDispatchedQty: 0, returnedQty: 0, deliveredQty: 0, openItems: 0, openQty: 0, unattributedItems: 0, unattributedQty: 0, turnaroundSum: 0, turnaroundCount: 0 },
   );
 }
 

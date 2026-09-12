@@ -2,7 +2,7 @@
 
 > Üretilmiş (anlama turu 2026-09-05, +10 bekçi 2026-09-06/07; 467 backend bekçisi + 296 istemci testi — Electron 211, mobil 85). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı; 455 dosya, **~6,5 dakika** — 369 sn koşum + 28 sn tip geçidi, ölçüldü 2026-09-05 — 'saatler sürer' cümlesi YANLIŞTI, `docs/standart/TEST-VE-DERLEME.md` [TD-02]). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
 
-Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `diger` (91), `sevkiyat` (87), `etiket` (83), `finans` (81), `siparis` (72), `modul-bayrak` (68), `belge` (65), `ayar` (58), `cuval` (59), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (41), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (30), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (12), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
+Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (94), `diger` (91), `sevkiyat` (87), `etiket` (83), `finans` (81), `siparis` (72), `modul-bayrak` (68), `belge` (65), `ayar` (58), `cuval` (59), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (41), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (30), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (12), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
 
 
 ## yetki-izin (98)
@@ -308,7 +308,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `mobil/src/utils/relativeTime.test.ts` | formatRelativeWait: boş/geçersiz → '—', 1 dk altı 'şimdi', dakika/saat+dakika/tam saat biçimleri. |  |  |  |
 | `mobil/src/utils/searchFold.test.ts` | Arama katlaması: canakkale ≡ çanakkale iki yönlü; tr-küçültmenin TEK BAŞINA yetmediği eski PickerModal eksiği kanıtla ölçülür (foldSearchText/Term/Tok |  |  |  |
 
-## fason (91)
+## fason (94)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|

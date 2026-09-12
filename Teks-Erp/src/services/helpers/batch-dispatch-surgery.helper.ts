@@ -21,6 +21,9 @@
 //      hedef sevkleri FARKLI firmalara ise 409 + somut çakışma listesi.
 //   4. Savunma: DÖNMÜŞ (kabul edilmiş) kalem taşınamaz — dönen top zaten
 //      SUBCONTRACTOR_CONSUMED olur ve taşınmaz; yine de kalem dönmüşse 409.
+//   5. Savunma: MÜŞTERİYE DOĞRUDAN SEVK (DSK) yapılmış sevkin kalemi taşınamaz —
+//      kısmi sevkte damga basılmadığı için tek iz DSK kaydıdır; taşımak karnedeki
+//      teslim metrajının atfını koparır ve boşalan sevki iptale sürükler (409).
 //
 // DEĞİŞMEZ korunur: her (parti, adım) çiftinde ≤1 açık+outstanding sevk —
 // kaynakta zaten ≤1 vardı; hedefte adım başına TEK alıcı sevk (mevcut /
@@ -37,6 +40,10 @@ import { Prisma, PrintedDocType } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../../utils/code-format";
 import { printedDocumentService } from "../printed-document.service";
+import {
+  assertNoDirectShipmentTx,
+  assertNoReturnedItems,
+} from "./batch-dispatch-surgery-guards.helper";
 import { OPEN_OUTSTANDING } from "./fason-open-dispatch.helper";
 
 export interface DispatchSurgeryResult {
@@ -163,17 +170,14 @@ export async function performDispatchSurgeryTx(
     .filter((x) => x.movedItems.length > 0);
   if (affected.length === 0) return result;
 
-  // ── Savunma (K16 madde 4): dönmüş kalem taşınamaz. Dönen top zaten CONSUMED
-  // olur ve normal akışta seçilemez — yine de sed: kalem dönmüşse 409.
-  for (const { d, movedItems } of affected) {
-    const returned = movedItems.filter((i) => i.receiptItems.length > 0);
-    if (returned.length > 0) {
-      throw AppError.conflict(
-        `Taşınamaz — dönmüş (kabul edilmiş) sevk kalemi taşınamaz: ` +
-          `${returned.map((i) => i.roll.barcode ?? i.rollId).join(", ")} (sevk ${d.dispatchNo}).`,
-      );
-    }
-  }
+  // ── Savunma (K16 madde 4 + 5), HİÇBİR mutasyondan ÖNCE: dönmüş kalem ve
+  // müşteriye doğrudan sevk yapılmış sevkin kalemi TAŞINMAZ. İkisi de
+  // `batch-dispatch-surgery-guards.helper.ts`te (mesajlar orada).
+  assertNoReturnedItems(affected);
+  await assertNoDirectShipmentTx(
+    tx,
+    affected.map((a) => ({ id: a.d.id, dispatchNo: a.d.dispatchNo })),
+  );
 
   // Hedefin açık+outstanding sevkleri — adım başına TEK alıcı sevk haritası.
   // splitBatch'te hedef yeni doğduğundan boş gelir; moveRolls'ta kalem birleştirme

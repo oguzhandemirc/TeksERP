@@ -321,9 +321,13 @@ router.post(
  *       satırını SİLMEZ - reversedAt ile işaretler (append-only defter).
  *
  *       Kapı topun GEÇMİŞİNDEN kurulur, durumundan değil: bu adımda o topun
- *       kapama damgalı sevk kalemi YOKSA 409 (tam kabulle tüketilmiş top ya da
- *       baska adimin stepId'si bu yoldan fasona diriltilemez); doğrudan müşteriye
- *       sevk edilmiş top 409 ROLL_DIRECT_SHIPPED.
+ *       kapama damgalı sevk kalemi yoksa 409 REMAINDER_NOT_CLOSED_AT_STEP (tam
+ *       kabulle tüketilmiş top ya da başka adımın stepId'si bu yoldan fasona
+ *       diriltilemez); doğrudan müşteriye sevk edilmiş top 409 ROLL_DIRECT_SHIPPED;
+ *       topun durumu uygun değilse 409 REMAINDER_NOT_CLOSED; eşzamanlı geri almada
+ *       409 REMAINDER_ALREADY_REOPENED. Geri alma iş emrini ve refakat kartını da
+ *       diriltir (COMPLETED → IN_PROGRESS / ACTIVE).
+ *     responses ek: 409 kodları details.code altında döner.
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true

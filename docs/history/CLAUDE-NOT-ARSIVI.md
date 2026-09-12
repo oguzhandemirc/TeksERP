@@ -6199,3 +6199,48 @@ sayıyor.
 Migration **yok** · izin **yok** · APK **yok**. Sözleşme: karne satırına iki alan
 EKLENDİ (`unattributedItems`, `unattributedQty`); panel tipleri ve dışa aktarım
 açıklaması güncellendi, eski panel alanları yok sayar.
+
+---
+
+## 2026-09-12 — Doğrudan sevk damgası işlem sırasından bağımsızlaştı [ÇEKİRDEK]
+
+Denetimin dördüncü maddesi (yönetici sırası 4).
+
+### Bulgu
+
+`executeDirectShip` damgayı "sevkin hâlâ fasonda kaç topu var" sayımından
+veriyordu: `isFullDispatchShip = dispatchStillAtSub === shipRollIds.length`.
+Kardeş kalem kalan-kapamasıyla kapandıysa o top artık `AT_SUBCONTRACTOR` olmadığı
+için sayım tutuyor ve damga BASILIYOR; aynı iki işlem ters sırada yapılınca damga
+BASILMIYOR. Yani `directShippedAt` — belgeyi donduran, karnede eski satırlar için
+teslim sayılan, outstanding filtresinde sevki kapatan damga — operatörün tuş
+sırasına bağlıydı.
+
+### Karar
+
+Damga ölçütü kalemlerin TOPUNDAN okunur: sevkin her kaleminin topu bu sevkin
+DSK'sıyla müşteriye çıktıysa (`roll.directShipmentId` dolu) damga basılır, aksi
+halde basılmaz. Kalan-kapamalı ya da kabul görmüş kalem varsa sevk "tamamen
+müşteriye çıkmış" DEĞİLDİR — bu, damganın sözlük anlamıyla da örtüşür. Ölçüm
+DSK kaydı yazıldıktan SONRA yapılır (atomik claim korunur); bölünmede ebeveyn
+kalem fasonda kaldığı için ölçüt kendiliğinden false verir ve eski `anySplit`
+geçersiz kılması gereksizleşti.
+
+Ölçüt sırası: ① damga bir BELGE gerçeğidir (irsaliye dondurma) ve belgenin
+doğruluğu işlem sırasına bağlı olamaz; ② tek fabrika: kalan tüketiciler
+(`OPEN_OUTSTANDING`, karne) zaten kalem düzeyine indirilmişti, damga son
+tüketiciydi; ③ atomik claim deseni korunur.
+
+### Bekçi ve negatif sonda
+
+`test_subcontract_scorecard.ts` §9 — aynı iki işlem iki sırada koşulur; 9a ≡ 9b
+(fire 200 m / %50) ve 9c damganın İKİ SIRADA da basılmadığını ölçer. Negatif sonda
+(ayrı worktree): ölçüt eski sayıma döndürülünce 9c kırmızı. Yan etki taraması:
+`test_direct_ship_fason` (tam sevkte damga hâlâ basılıyor), `test_direct_ship_scenarios`,
+`test_input_rolls_directship`, `test_fason_open_dispatch_semantics` yeşil.
+
+### Üç kapı
+
+Migration **yok** · izin **yok** · APK **yok**. Sözleşme: karışık kapanışlı sevkte
+yanıt `partialShip: true` döner (eskiden `false`); panelde bu alan yalnız bilgi
+satırıdır.

@@ -712,8 +712,24 @@ export async function mergeBatches(
     // kayıtlar K15_MERGE sebebiyle kapanır (atomik claim). AÇIK-olmayan sevkler
     // konsolide EDİLMEZ — yalnız retarget edildi (tarihçe bozulmaz).
     const consolidations: Array<{ closedDispatchNo: string; intoDispatchNo: string; stepName: string }> = [];
+    // Müşteriye doğrudan sevk (DSK) TAŞIYAN sevk konsolidasyona GİRMEZ: ne kalemi
+    // taşınır ne de kapatılır. Kalemi taşımak teslim metrajının atfını koparır
+    // (karne DSK'yı kalemin sevkinden okur), kapatmak da müşteriye çıkmış malın
+    // sevkini storno etmek olurdu. Konsolidasyon zaten opsiyonel temizliktir —
+    // atlanan sevk audit'e yazılır, sessiz kalmaz.
+    const dskRows = await tx.directShipment.findMany({
+      where: { dispatchId: { in: openOutstanding.map((d) => d.id) } },
+      select: { dispatchId: true, shipmentNo: true },
+    });
+    const dskByDispatch = new Map(dskRows.map((r) => [r.dispatchId, r.shipmentNo] as const));
+    const skippedDirectShip: Array<{ dispatchNo: string; shipmentNo: string }> = [];
     const now = new Date();
-    for (const dispatches of byStep.values()) {
+    for (const all of byStep.values()) {
+      const dispatches = all.filter((d) => {
+        const no = dskByDispatch.get(d.id);
+        if (no) skippedDirectShip.push({ dispatchNo: d.dispatchNo, shipmentNo: no });
+        return no === undefined;
+      });
       if (dispatches.length < 2) continue;
       const keeper = dispatches[0]; // orderBy dispatchedAt asc — en eski yaşar
       const losers = dispatches.slice(1);
@@ -823,6 +839,7 @@ export async function mergeBatches(
       mergedNumbers: sources.map((s) => s.batchNumber),
       retargetedDispatchNos: sourceDispatches.map((d) => d.dispatchNo),
       consolidations,
+      skippedDirectShip,
     };
   });
 
@@ -838,6 +855,8 @@ export async function mergeBatches(
       // K15: belge cerrahisi izi — retarget edilen sevkler + kapatılan→yaşayan eşlemesi.
       retargetedDispatchNos: result.retargetedDispatchNos,
       consolidations: result.consolidations,
+      // Konsolidasyon dışında bırakılan DSK'lı sevkler — "hepsi birleşti" sanılmasın.
+      skippedDirectShip: result.skippedDirectShip,
       // K17: mergedIntoId = survivor yazılan kaynak partiler.
       mergedIntoSetOn: result.mergedNumbers,
     },

@@ -128,6 +128,9 @@ ORDER BY kb."assignedAt";
 --   sevk iptal değil ∧ doğrudan-sevk değil ∧ kalem remainderClosedAt null
 --   ∧ kalemin topu doğrudan sevk edilmemiş (directShipmentId null)
 --   ∧ kalemin İPTAL EDİLMEMİŞ tam (isPartial=false) makbuzu YOK
+-- Bu bölüm beşlinin YALNIZ dördüncü koşulunun tuzağa düştüğü şekli arar ve
+-- `directShipmentId` süzgecini AYRICA yazmaz: `r.status = 'AT_SUBCONTRACTOR'`
+-- zaten doğrudan sevk edilmiş topu (SUBCONTRACTOR_CONSUMED) dışarıda bırakır.
 -- Bu bölüm dördüncü koşulun tam da tuzağa düştüğü şekli arar: kalemin tam makbuzu
 -- VAR ama hepsi iptal edilmiş. Doğru kod bunu "hâlâ dışarıda" sayar (top da öyle
 -- duruyor: AT_SUBCONTRACTOR), `receipt.cancelledAt` süzgecini taşımayan eski kopya
