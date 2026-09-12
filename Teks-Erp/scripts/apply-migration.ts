@@ -43,14 +43,35 @@ function fail(msg: string): never {
   process.exit(1);
 }
 
-/** .env'deki DATABASE_URL — psql `?schema=public` parametresini tanımaz, atılır. */
-function resolveDbUrl(): string {
-  const env = readFileSync(join(ROOT, ".env"), "utf8");
-  const m = env.match(/^DATABASE_URL="([^"]+)"/m);
-  if (!m || !m[1]) fail(".env içinde DATABASE_URL bulunamadı.");
-  const url = new URL(m[1]);
+/**
+ * Hedef URL — ÖNCE `process.env.DATABASE_URL`, YEDEK olarak `.env` dosyası.
+ *
+ * ⚠️ BÖLÜNMÜŞ YAZMA (2026-09-12 vakası): burada yalnız `.env` DOSYASI okunuyordu,
+ * `process.env`e hiç bakılmıyordu. `migrate resolve` adımı ise Prisma üzerinden
+ * koştuğu için `process.env.DATABASE_URL`i onurlandırıyordu ⇒ SQL bir
+ * veritabanına, defter işareti BAŞKA veritabanına gidiyordu. Vakada DDL
+ * fabrikanın canlı yedeğine uygulandı, oysa hedef bir test DB'siydi.
+ *
+ * `psql` `?schema=public` parametresini tanımaz (arama dizgisi atılır); Prisma
+ * tanır, o yüzden iki biçim de döner ve İKİSİ DE AYNI kaynaktan gelir.
+ */
+function resolveDbUrl(): { psqlUrl: string; prismaUrl: string; kaynak: string } {
+  const ortam = process.env.DATABASE_URL?.trim();
+  let ham: string;
+  let kaynak: string;
+  if (ortam) {
+    ham = ortam;
+    kaynak = "process.env.DATABASE_URL";
+  } else {
+    const env = readFileSync(join(ROOT, ".env"), "utf8");
+    const m = env.match(/^DATABASE_URL="([^"]+)"/m);
+    if (!m || !m[1]) fail("DATABASE_URL ne ortamda ne de .env içinde bulundu.");
+    ham = m[1];
+    kaynak = ".env dosyası (ortamda DATABASE_URL yok)";
+  }
+  const url = new URL(ham);
   url.search = "";
-  return url.toString();
+  return { psqlUrl: url.toString(), prismaUrl: ham, kaynak };
 }
 
 /**
@@ -111,7 +132,10 @@ function main(): void {
   console.log("✓ git'te izleniyor");
 
   // ── 2) Defter durumu — zaten resolve edilmişse ikinci kez yazılmaz ───────
-  const dbUrl = resolveDbUrl();
+  const { psqlUrl: dbUrl, prismaUrl, kaynak: urlKaynagi } = resolveDbUrl();
+  const hedefAd = decodeURIComponent(new URL(dbUrl).pathname.replace(/^\//, "")) || "(isimsiz)";
+  // Geri alınamaz yazma yapan yol hedefini ADIYLA beyan eder — dry-run'da da.
+  console.log(`🎯 Hedef veritabanı: ${hedefAd} @ ${new URL(dbUrl).host}  (kaynak: ${urlKaynagi})`);
   const psql = resolvePsql(dbUrl);
   if (!psql) {
     fail(
@@ -127,6 +151,20 @@ function main(): void {
     `SELECT count(*) FROM _prisma_migrations WHERE migration_name = '${name}'`,
   ]);
   if (ledger.code !== 0) fail(`DB'ye bağlanılamadı:\n${ledger.out}`);
+
+  // ⚠️ BAĞLANILAN veritabanı, HEDEF sanılanla aynı mı? URL'yi okumak yetmez:
+  // Docker dalı host/port'u yeniden yazar ve yanlış container'a düşmek mümkündür.
+  // Bunu SQL'den soruyoruz — cevap URL'nin yolundaki adla birebir olmalı.
+  const gercekDb = run(psql.cmd, [...psql.pre, psql.url, "-tAc", "SELECT current_database()"]);
+  if (gercekDb.code !== 0) fail(`Hedef doğrulanamadı (current_database okunamadı):\n${gercekDb.out}`);
+  if (gercekDb.out.trim() !== hedefAd) {
+    fail(
+      `HEDEF ÇELİŞKİSİ — URL '${hedefAd}' diyor ama bağlanılan veritabanı '${gercekDb.out.trim()}'.\n` +
+        "   SQL bir veritabanına, defter işareti başkasına gidebilirdi; durduruldu.",
+    );
+  }
+  console.log(`✓ bağlanılan veritabanı doğrulandı: ${gercekDb.out.trim()}`);
+
   const alreadyResolved = ledger.out.trim() === "1";
   console.log(alreadyResolved ? "⚠ defterde ZATEN kayıtlı (resolve atlanacak; SQL idempotentse sorun değil)" : "✓ defterde yok");
 
@@ -151,9 +189,15 @@ function main(): void {
 
   // ── 4) RESOLVE ───────────────────────────────────────────────────────────
   if (!alreadyResolved) {
-    const res = run("npx", ["prisma", "migrate", "resolve", "--applied", name]);
+    // ⚠️ AYNI URL ZORUNLU: resolve Prisma üzerinden koşar ve kendi başına
+    // `process.env.DATABASE_URL`i ya da `.env`i çözer. SQL'i uyguladığımız
+    // hedefi AÇIKÇA geçiriyoruz — "SQL bir DB'ye, defter başka DB'ye" ancak
+    // böyle imkânsız olur (2026-09-12 vakasının kök sebebi tam buydu).
+    const res = run("npx", ["prisma", "migrate", "resolve", "--applied", name], {
+      env: { DATABASE_URL: prismaUrl },
+    });
     if (res.code !== 0) fail(`resolve başarısız:\n${res.out}`);
-    console.log("✓ defterde işaretlendi (resolve)");
+    console.log(`✓ defterde işaretlendi (resolve → ${hedefAd})`);
   }
 
   // ── 5) BAĞIMSIZ DOĞRULAMA — hüküm bu scriptin sözü değil, bekçilerin ─────

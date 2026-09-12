@@ -6856,3 +6856,50 @@ Migration **`20260912160000`** (ilk tahsis `130200` idi; ölçümle değişti �
 (`data:import` + varlığın write izni). APK YOK, panel sürümü gerekir.
 Aynı dilimde KAPI BOŞLUĞU kapanacak: `test_migration_hygiene.ts` ad sırası ölçmüyor →
 "yeni migration adı uygulanmış en büyük addan BÜYÜK olmalı" kontrolü + negatif sonda.
+
+---
+
+## 2026-09-12 — BÖLÜNMÜŞ YAZMA: `apply-migration` SQL'i bir DB'ye, defter işaretini başkasına gönderiyordu [ÇEKİRDEK]
+
+### Olay
+
+Şema dilimi yazılırken `scripts/apply-migration.ts` DDL'i (bir kısmi index + iki
+CHECK) **fabrikanın canlı yedeğine** (`tekserp_fabrika_dev`) uyguladı; oysa hedef
+bir test veritabanıydı. Veri etkilenmedi — yalnız DDL.
+
+### Kök sebep
+
+İki yol iki farklı kaynaktan hedef çözüyordu:
+- SQL yolu (`resolveDbUrl`) **yalnız `.env` DOSYASINI** okuyordu, `process.env`e
+  hiç bakmıyordu.
+- `resolve` adımı `npx prisma migrate resolve` ile koştuğu için Prisma'nın kendi
+  çözümlemesini kullanıyor, yani **`process.env.DATABASE_URL`i onurlandırıyordu.**
+
+Sonuç: `DATABASE_URL=<test> npx tsx scripts/apply-migration.ts <ad> --apply`
+komutunda SQL `.env`in gösterdiği veritabanına, defter satırı ortamın gösterdiği
+veritabanına gidiyordu. Betiğin kendi başlığı onu canlı fabrika deploy'unda
+kullanılabilir ilan ettiği için bu bir SAHA riskiydi.
+
+### Karar — üç ayak
+
+1. **Hedef önceliği:** `process.env.DATABASE_URL` varsa O kullanılır; `.env`
+   yalnız YEDEKtir ve hangisinin kullanıldığı çıktıda YAZAR.
+2. **Hedef beyanı:** uygulamadan (dry-run dâhil) önce `🎯 Hedef veritabanı: <ad>
+   @ <host> (kaynak: …)` basılır — `--apply` alan her betiğin hedefini adıyla
+   basma sözleşmesinin (`test_script_guards §11`) parçası; bu betik o ratchet'in
+   içindeydi, artık beyan ediyor ve tavan 21 → 20 indi.
+3. **Tek hedef kilidi:** bağlanılan veritabanı `SELECT current_database()` ile
+   doğrulanır (URL'yi okumak yetmez — Docker dalı host/port'u yeniden yazar) ve
+   `resolve` adımına hedef URL **açıkça** geçirilir. Bölünmüş yazma böylece
+   yapısal olarak imkânsız olur, disipline bırakılmaz.
+
+### Negatif sonda
+
+`DATABASE_URL=<test> … apply-migration <ad>` → hedef TEST veritabanı yazar ve
+`.env`in gösterdiği veritabanına GİTMEZ; `DATABASE_URL` verilmeden aynı komut
+`.env` kaynağını adıyla beyan eder.
+
+### Üç kapı
+
+Migration **yok** · izin **yok** · APK **yok**. Sözleşme: bu betiğin çıktısı artık
+hedefi her koşumda adıyla söyler; sessiz hedef yok.

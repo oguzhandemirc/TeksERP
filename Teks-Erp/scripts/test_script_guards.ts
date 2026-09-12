@@ -81,11 +81,12 @@ const HEDEF_KURAN_TAVAN = 1;
 
 /**
  * `--apply` alıp hedefini BEYAN ETMEYEN betik TAVANI (§11).
- * Ölçüldü 2026-09-12: 24 betik `--apply` alıyor, 21'i hedef veritabanını adıyla
- * basmıyor (`apply-migration` · `setup-ticaret` · backfill/fix ailesi …).
+ * Ölçüldü 2026-09-12: 24 betik `--apply` alıyor, önce 21'i hedef veritabanını
+ * adıyla basmıyordu (`setup-ticaret` · backfill/fix ailesi …). `apply-migration`
+ * aynı gün beyan etmeye başladı (bölünmüş yazma vakası) → tavan 20.
  * ⚠️ Tavan yalnız DÜŞER — devralınan borç dondurulur, yeni borç kırmızı verir.
  */
-const APPLY_BEYANSIZ_TAVAN = 21;
+const APPLY_BEYANSIZ_TAVAN = 20;
 
 const MUAFLAR: Record<string, string> = {
   "test_db_invariants.ts":
@@ -441,7 +442,15 @@ function main(): void {
   // ═══ §11 — `--apply` ALAN HER BETİK HEDEFİ ADIYLA BEYAN EDER ══════════════
   // Geri alınamaz yazma yapan yolun izi, yalnız okuyan yolunkinden zayıf olamaz:
   // operatör hangi veritabanını vurduğunu çıktıdan görmeli.
-  const BEYAN_IZLERI = ["hedefDbAdi(", "assertGelistirmeVeritabani(", "Hedef doğrulandı"];
+  // Sözleşmenin ÇIKTISI ölçülür, çağrı biçimi değil: bir betik hedefi
+  // `hedefDbAdi()` ile de basabilir, `db-guard`ın "Hedef doğrulandı" satırıyla
+  // da, kendi `🎯 Hedef veritabanı:` satırıyla da. Üçü de aynı sözü tutar.
+  const BEYAN_IZLERI = [
+    "hedefDbAdi(",
+    "assertGelistirmeVeritabani(",
+    "Hedef doğrulandı",
+    "Hedef veritabanı",
+  ];
   const applyBetikleri = dosyalar.filter((f) => {
     const kod = kodSatirlari(readFileSync(join(dizin, f), "utf8"));
     return kod.includes('includes("--apply")') || kod.includes("includes('--apply')");
