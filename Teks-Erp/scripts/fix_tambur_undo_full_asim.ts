@@ -58,6 +58,7 @@ import { VARIANCE_SOURCES } from "../src/constants/variance-reasons";
 import prisma, { pool } from "../src/lib/prisma";
 import { AuditService } from "../src/services/audit.service";
 import { recordVarianceTx } from "../src/services/helpers/roll-variance.helper";
+import { hedefDbAdi } from "./lib/hedef-db-kapisi";
 
 const KAYNAK = "scripts/fix_tambur_undo_full_asim.ts";
 const OLAY = "TAMBUR_UNDO_FULL_ASIM_GEC_UYGULAMA";
@@ -342,7 +343,15 @@ function yazdir(r: TeshisRaporu): void {
   const toplamAsim = kesin.reduce((a, b) => a.plus(b.asim), new Prisma.Decimal(0));
 
   console.log('\n=== TARAMA ZEMİNİ — "0 bulgu" ile "hiç bakılmadı" buradan ayırt edilir ===');
-  console.log(`  Veritabanı              : ${r.veritabani}`);
+  // İKİ KAYNAK BİLEREK: `hedefDbAdi()` `DATABASE_URL` metnini, `current_database()`
+  // AÇIK BAĞLANTIYI söyler. Normalde aynıdırlar; ayrıştıklarında okunan şey
+  // beyan edilenden başkasıdır ve bunu görmeden `--apply` verilmemeli.
+  const beyan = hedefDbAdi();
+  console.log(`  HEDEF VERİTABANI        : ${beyan}`);
+  console.log(
+    `  Bağlı veritabanı        : ${r.veritabani}` +
+      (beyan === r.veritabani ? "  (beyanla aynı)" : `  ⚠️ BEYANDAN FARKLI (${beyan})`),
+  );
   console.log(`  rolls tablosu           : ${r.toplamTop} top`);
   console.log(`  currentQty > initialQty : ${r.ihlalSayisi} satır`);
   console.log(`  Hüküm                   : KESİN ${kesin.length} · BELİRSİZ ${belirsiz.length}`);
