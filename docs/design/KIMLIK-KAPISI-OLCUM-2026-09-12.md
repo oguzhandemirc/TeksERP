@@ -203,13 +203,37 @@ kendisini de ölç kuralının kardeşi: **sonda yazarken sondanın kendisini de
 
 ## Yeni kapıların ilk gün getirisi
 
-2026-09-12'de iki kapı doğdu ve **ikisi de doğduğu gün gerçek bir kusur
+2026-09-12'de **dört** kapı doğdu ve **dördü de doğduğu gün gerçek bir kusur
 yakaladı** — kurgu sondayla değil, ağaçta duran gerçek bir eksikle:
 
 | kapı | ilk gün bulduğu GERÇEK kusur |
 |---|---|
 | `test_identity_ledger` | 15 ayrışma; sonrasında üç ayrı oturumda dört yakalama daha (kendisi · `6e`'nin altı stok defteri bekçisi · `01`'in `sebep-katalogu` kalemi) |
 | migration monotonluk kapısı (`ea`) | test DB'sinde `160200` resolve edilmişken `160100` uygulanmamıştı; ayrıca kurgu sonda (`20260101000000_sonda_geriye_dusen`) da kırmızı verdi |
+| `test_reason_preset_kind_parity` (`01`) | ilk koşumda gerçek drift: tabletin `ORDER_CANCEL` aynası eksikti |
+| K6 §8 kapı↔anahtar ters kapsaması (`01`) | `kumasTeknikEnabled` ne yönetilen kümede ne muaf listesindeydi — hiçbir kümeye ait değildi |
+
+### "Eksik olan" değil "hiçbir kümeye ait olmayan"
+
+Son iki satır aynı aileden ve kimlik kapısının **B-c** ayağıyla da aynı: ölçülen
+şey "listede olması gerekip olmayan" değil, **hiçbir listeye ait olmayan**.
+`kumasTeknikEnabled` ne yönetiliyordu ne muaftı; `test_kanban_card_projection`
+gerçekti ama haritanın hiçbir bölümünde yoktu. Bu sınıf tek bir kümeye bakarak
+görünmez — iki kümenin FARKI değil, **birleşiminin dışı** aranır.
+
+Kapı tasarımında tekrar edecek bir kalıp: bir kapsama kontrolü yazarken
+"A'da olup B'de olmayan"ın yanına "ne A'da ne B'de olan"ı da sor.
+
+### Kendi kendini emekliye ayıran işaret
+
+İki ayrı yüzeyde aynı çözüm çıktı ve ikisi de elle bakım istemiyor:
+- `TEKSERP_COMMIT_BASE` yalnız {HEAD, HEAD^} kümesinden bir değer kabul eder;
+  kabukta unutulmuş bir SHA repo bir commit ilerleyince REDDEDİLİR.
+- `01`'in `kumasTeknikEnabled` muafiyeti öyle yazıldı ki yüzey doğduğu gün §8b
+  kapıyı tabloya zorlar, muaf satırı da §8e'den **ölü muaf** olarak kırmızı alır.
+
+Kural: **kendi kendini emekliye ayıran işaret, elle bakım isteyen listeden
+iyidir.** Elle tutulan muaf listesi düzelttiğin her şeyi sonsuza dek affeder.
 
 Ölçüt olarak kayda geçsin: **bir kapı, doğduğu gün gerçek bir kusur
 yakalamıyorsa ölçtüğü şeyin var olduğu kanıtlanmamıştır.** Kurgu sonda kapının
@@ -235,3 +259,28 @@ diye ekler.
 
 Tam koşum **494/494 · 441 sn · sıfır kırmızı**; kimlik kapısı push edilen uçta
 **3/0 · 494 gerçek = 494 haritada**.
+
+## Üçüncü okuma sınıfı: belgenin dünyaya göre bayatlaması
+
+Kullanıcıya sunulan özetin incelemesinde iki sınıf arandı ve bulundu — **iç
+çelişki** (aynı belgede "push tutuluyor" ile "gönderildi" yan yana) ve
+**ölçülmemiş iddia** ("yıllardır yeşil veriyordu" → ölçüldü: repo beş aylık,
+testin kendisi bir aylık). Ama `teks-erp-1e` üçüncü bir sınıf buldu ve bu ikisiyle
+karıştırılmamalı:
+
+> **Belge, kendi kapattığı işi ön şart olarak taşımaya devam ediyor.**
+
+Somut vaka: özet "açılış fotoğrafı, şu iki yol bağlandıktan sonra çekilsin"
+diyordu; o iki yol aynı gün bağlanıp inmişti (`3c15208c` + `27e785ce`). Cümle
+kendi içinde tutarlıydı, yalnız **dünyaya göre** yanlıştı.
+
+Farkı önemli: iç tutarlılık okuması bu sınıfı YAKALAMAZ. Belgeyi kendi içinde
+kaç kez okursan oku çelişki çıkmaz; yakalamak için belgeyi **o gün kapanan işler
+listesiyle** karşılaştırmak gerekir. Yani belge incelemesinin üç ayağı vardır:
+① iç tutarlılık ② her iddianın ölçüsü ③ **belgenin dünyayla hizası**.
+
+Ayrıca ölçmenin yönü hakkında bir not: `140–229 top/gün` rakamı gerçek ölçümdü
+ama beş günlük bir pencereden alınıp genel durum gibi sunulmuştu. Yeniden ölçüm
+(60 gün / 31 üretim günü) **ortanca 134, tepe 262** verdi — yani düzeltme kararı
+zayıflatmadı, GÜÇLENDİRDİ. Dar pencereden ölçmek her zaman abartmaz; bazen
+eksik gösterir ve o da kararı yanlış tarafa çeker.
