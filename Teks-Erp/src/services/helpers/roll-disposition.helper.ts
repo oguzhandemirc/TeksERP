@@ -20,7 +20,10 @@
 // Yeni bir çağıran eklerken bunu "fazladan iş" sanıp devre dışı bırakma — o alan
 // sedsiz/denormalizedir ve §20 bekçisi onu canlı veride ölçüyor.
 // =============================================================================
-import { Prisma, RollStatus } from "@prisma/client";
+import { WarehouseEventType, Prisma, RollStatus } from "@prisma/client";
+import { WAREHOUSE_STOCK_STATUSES } from "./warehouse-stock.helper";
+import { postStockMove } from "./warehouse-ledger.helper";
+import { STOCK_MOVE_REASON } from "../../constants/stock-move-reasons";
 import { AppError } from "../../utils/app-error";
 import { finalBarcodeType } from "./roll-finalize.helper";
 import { reserveRollBarcodesTx } from "./roll-barcode.helper";
@@ -269,6 +272,28 @@ export async function applyRollDispositionsTx(
       throw AppError.conflict(
         `${names || "Bir top"} bu sırada başka bir işleme girdi — yenileyip tekrar deneyin.`,
       );
+    }
+
+    // DEPO DEFTERİ — hedef bir STOK statüsüyse mal üretimden depoya GİRDİ.
+    // Kaynak daima IN_PRODUCTION (claim onu şart koşuyor), yani stok dışı; iptal
+    // ve fire hedefleri de stok dışı olduğu için onlarda satır doğmaz.
+    // `warehouseId`/`currentQty` çağıranın anlık görüntüsünden DEĞİL, claim'den
+    // SONRA taze okunur — araya giren bir işlem metrajı değiştirmiş olabilir.
+    if (WAREHOUSE_STOCK_STATUSES.includes(target)) {
+      const fresh = await tx.roll.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, warehouseId: true, currentQty: true },
+      });
+      for (const f of fresh) {
+        if (!f.warehouseId) continue;
+        await postStockMove(tx, {
+          rollId: f.id,
+          eventType: WarehouseEventType.PRODUCTION,
+          qty: f.currentQty,
+          to: { warehouseId: f.warehouseId, status: target },
+          reasonCode: STOCK_MOVE_REASON.DISPOSITION,
+        });
+      }
     }
 
     // 2b) `preCancelStatus` — geri almanın döneceği raf. Gözlenen statüden yazılır,

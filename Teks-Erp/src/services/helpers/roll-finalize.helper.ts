@@ -7,7 +7,10 @@
 // limbosu yok. Tambur kendi çocuk-üretim akışını korur; bu helper yalnız MEVCUT
 // topları son adımda finalize eder.
 // =============================================================================
-import { Prisma, RollStatus, RollForm, type PrismaClient } from "@prisma/client";
+import { WarehouseEventType, Prisma, RollStatus, RollForm, type PrismaClient } from "@prisma/client";
+import { WAREHOUSE_STOCK_STATUSES } from "./warehouse-stock.helper";
+import { postStockMove } from "./warehouse-ledger.helper";
+import { STOCK_MOVE_REASON } from "../../constants/stock-move-reasons";
 import { reserveRollBarcodesInOrderTx, type RollBarcodeType } from "./roll-barcode.helper";
 
 export type TxClient = Prisma.TransactionClient;
@@ -148,7 +151,11 @@ export async function finalizeRollsAtLastStep(
   if (rollIds.length === 0) return [];
   const rolls = await tx.roll.findMany({
     where: { id: { in: rollIds } },
-    select: { id: true, barcode: true, qualityGrade: true, qualityGradeId: true },
+    select: {
+      id: true, barcode: true, qualityGrade: true, qualityGradeId: true,
+      // Defter satırı için: mal hangi depoya, ne kadar giriyor.
+      warehouseId: true, currentQty: true,
+    },
   });
   const { statusByCode, idByCode } = await loadQualityTargetMaps(
     tx,
@@ -198,6 +205,17 @@ export async function finalizeRollsAtLastStep(
           : {}),
       },
     });
+    // DEPO DEFTERİ — üretimden depoya GİRİŞ. Fire (SCRAP) satır yazmaz: top
+    // üretime girerken zaten stoktan çıkmıştı, geri gelmiyor.
+    if (r.warehouseId && WAREHOUSE_STOCK_STATUSES.includes(status)) {
+      await postStockMove(tx, {
+        rollId: r.id,
+        eventType: WarehouseEventType.PRODUCTION,
+        qty: r.currentQty,
+        to: { warehouseId: r.warehouseId, status },
+        reasonCode: STOCK_MOVE_REASON.PRODUCTION_RECEIPT,
+      });
+    }
     out.push({ rollId: r.id, status, barcode: barcode as string, barcodeGenerated });
   }
   return out;
