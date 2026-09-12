@@ -81,12 +81,17 @@ const HEDEF_KURAN_TAVAN = 1;
 
 /**
  * `--apply` alıp hedefini BEYAN ETMEYEN betik TAVANI (§11).
- * Ölçüldü 2026-09-12: 24 betik `--apply` alıyor, önce 21'i hedef veritabanını
- * adıyla basmıyordu (`setup-ticaret` · backfill/fix ailesi …). `apply-migration`
- * aynı gün beyan etmeye başladı (bölünmüş yazma vakası) → tavan 20.
+ *
+ * Ölçüm günlüğü (hepsi 2026-09-12): kural konduğunda 24 betiğin 21'i hedefi
+ * basmıyordu → tavan 21. `apply-migration` beyan etmeye başladı (bölünmüş yazma
+ * vakası) → 20. Günün son inişinden sonra (main `27e785ce`) yeniden ölçüldü:
+ * **26 betik `--apply` alıyor, 18'i beyan etmiyor** → tavan 18. Yani taban
+ * BÜYÜRKEN borç küçüldü: ratchet yalnız borcu dondurmuyor, davranışı da çekiyor.
+ * Kalanlar: `setup-ticaret` + backfill/fix/repair ailesi (başkalarının dosyaları).
+ *
  * ⚠️ Tavan yalnız DÜŞER — devralınan borç dondurulur, yeni borç kırmızı verir.
  */
-const APPLY_BEYANSIZ_TAVAN = 20;
+const APPLY_BEYANSIZ_TAVAN = 18;
 
 const MUAFLAR: Record<string, string> = {
   "test_db_invariants.ts":
@@ -508,6 +513,29 @@ function main(): void {
     "§13c bağlanılan veritabanı SQL'den doğrulanıyor (URL okumak yetmez)",
     applyMigKod.includes("SELECT current_database()") && applyMigKod.includes("HEDEF ÇELİŞKİSİ"),
     "current_database() + durdurma",
+  );
+
+  // ═══ §14 — `prisma generate` İZOLE WORKTREE'DE ORTAK CLIENT'I EZEMEZ ══════
+  // Şemada generator `output` yok ⇒ client `node_modules/.prisma/client`a yazılır
+  // ve worktree'ler o dizini ORTAK ağaca symlink ediyor (2026-09-12: symlink
+  // taşıyan altı ağaç). Bir worktree'de generate koşarsa ortak client o ağacın
+  // İNMEMİŞ şemasıyla ezilir; başkalarının typecheck'i yanıltıcı yeşil verir.
+  const paket = readFileSync(join(dizin, "..", "package.json"), "utf8");
+  check(
+    "§14a ⭐ `prisma:generate` kapıdan geçiyor (npm yolu korumasız değil)",
+    /"prisma:generate":\s*"[^"]*prisma-generate-kapisi\.mjs[^"]*"/.test(paket),
+    "package.json",
+  );
+  const genKapi = readFileSync(join(dizin, "prisma-generate-kapisi.mjs"), "utf8");
+  check(
+    "§14b kapı worktree'yi git'ten ölçüyor (dizin adı tahmini değil)",
+    genKapi.includes("--git-common-dir") && genKapi.includes("isSymbolicLink"),
+    "git-common-dir + symlink ölçümü",
+  );
+  check(
+    "§14c kaçış anahtarı TEK ve adıyla anılıyor",
+    genKapi.includes("PRISMA_GENERATE_WORKTREE_ONAY"),
+    "bilinçli karar yolu açık",
   );
 }
 

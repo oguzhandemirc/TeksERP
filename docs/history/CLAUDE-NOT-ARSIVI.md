@@ -7280,3 +7280,69 @@ satırına yazılabilen tek güncelleme, kim/niçin/miktar taşımayan bir sın�
 **İlgili ölçümler (fabrika kopyası, 2026-09-12):** fason dönüşü ENTRY onarımı adayı 69, 12'si
 `TST-` test artığı → gerçek 57 / 32.044 m (tasarım belgesi doğruydu); açılış fotoğrafı backfill
 öncesi 625 top / 30.108,9 m, deposuz 588 (engel ①), preEpoch'a düşecek 721 satır.
+
+---
+
+## 2026-09-12 — ORTAK AĞACIN ÜÇ SESSİZ SINIFI: ölü ağacın canlı süreci, ortak Prisma client'ı, borç tavanı [ÇEKİRDEK]
+
+Gün boyunca beş-altı oturum tek çalışma ağacında koştu ve üç ayrı "sessiz" sınıf
+ölçüldü. Üçü de aynı aileden: **ölçüm yapıldığı sanılırken başka bir şey ölçülüyor.**
+
+### ① Ağacı kaldırmak süreci ÖLDÜRMEZ
+
+`git worktree remove` dizini siler, o ağaçtan başlatılmış süreç **silinmiş
+dizinde koşmaya devam eder.** Ölçüldü: kaldırılmış bir ağacın `tsx src/server.ts`
+süreci 4101'i saatlerce tuttu; o port `test_module_flag_off`un portudur ve sunucu
+BAŞKA bir veritabanına bakıyordu. Hedef kapısı bunu gerçek pozitif olarak
+yakaladı ("az önce Prisma ile yarattığımız kullanıcıyla giriş 401 ⇒ başka DB"),
+yoksa bekçi sessizce atlayacak ve 18 kontrol ölçülmemiş sayılacaktı.
+**Kural (29. madde eki):** işi biten oturum ağacını kaldırır VE o ağaçtan
+başlattığı süreçleri AÇIK PID ile kapatır, kapandığını PORTLA doğrular.
+`pkill` yasağı aynen durur.
+
+### ② İzole worktree'de `prisma generate` ORTAK client'ı ezer
+
+`schema.prisma`da generator `output` yok ⇒ client `node_modules/.prisma/client`a
+yazılır; worktree'ler `Teks-Erp/node_modules`ü ortak ağaca SYMLINK ediyor
+(ölçüldü: symlink taşıyan altı ağaç). Bir worktree'de generate koşulursa o ağacın
+HENÜZ İNMEMİŞ şemasıyla ortak client ezilir ve diğer oturumların `typecheck`i ile
+bekçileri var olmayan modellere göre ya kırmızı ya **yanıltıcı yeşil** verir.
+Isırmadan yakalandı.
+
+**Karar — EYLEM kapısı, düzen değişikliği DEĞİL.** Üç seçenek ölçüldü:
+`.prisma` (33 MB) + `@prisma/client` (71 MB) kopyalamak → ağaç başına ~104 MB ve
+"kopya bayatladı" diye yeni bir borç · generator `output` → şema + paketleme + CI
+yüzeyi (`PRISMA_CLI_BINARY_TARGETS`, `deploy/paketle.ps1`, dist) · **eylemi
+durdurmak → sıfır yüzey.** Üçüncüsü seçildi: `npm run prisma:generate` artık
+`scripts/prisma-generate-kapisi.mjs`ten geçer; kapı worktree'yi git'ten ölçer
+(`--git-common-dir` ≠ `--absolute-git-dir`) ve `node_modules`ün symlink olduğunu
+`lstat` ile doğrular — gerçek dizinse engel yoktur, çünkü kimseyi ezmez.
+Doğrudan `npx prisma generate` (deploy/kurulum) KAPSAM DIŞI ve öyle kalmalı:
+orada ortak client diye bir şey yok. Kaçış `PRISMA_GENERATE_WORKTREE_ONAY=1`.
+Bekçi `test_script_guards §14` (npm yolu kapılı · kapı git'ten ölçüyor · kaçış tek).
+
+### ③ Borç tavanı davranışı da çeker
+
+`--apply` beyan tavanı (§11) konduktan sonra taban 24 → 26 betiğe çıkarken
+beyansız sayı 21 → 18'e indi: ratchet yalnız borcu DONDURMUYOR, davranışı
+ÇEKİYOR. Tavan, borç düştükçe o anki gerçek sayıya indirilir (bu commit'te de
+indirildi).
+
+### ④ Komut sırası ve bastırılan çıktı
+
+İki küçük ama üç kez ısıran kalem:
+- **`prune`, `rm -rf`ten SONRA koşulur.** Dizin dururken `prune` hiçbir şey
+  temizlemez; dizin elle silinip aynı yola `add` denenirse git
+  `missing but already registered worktree` ile düşer. Ölçüldü: silme → `add`
+  (düşer) → `prune` → `add` (geçer). Tercih edilen yol `git worktree remove
+  --force` (ikisini birden yapar).
+- **Çıktıyı BASTIRAN betik teşhisi de bastırır.** `>/dev/null` ile koşulan bir
+  komutun HATA SEBEBİ de kaybolur; `docs/RECETELER.md` (c) maddesinin
+  ("boru çıkış kodunu yutar") kardeşi. Bu ölçümün kendisi örnek oldu: yukarıdaki
+  sıra sondasında `git worktree add`ın çıkışını `| tail`a soktuğumuz için kabuk
+  `0` gördü, oysa git düşmüştü — yani (c) tam o satırda kendini gösterdi.
+
+### Üç kapı
+
+Migration **yok** · izin **yok** · APK **yok**. Sözleşme: `npm run prisma:generate`
+izole worktree'de artık çalışmaz; şema işi ana ağaçta yürütülür.

@@ -16,7 +16,7 @@
     "setup:ticaret": "tsx scripts/setup-ticaret.ts",
     "superadmin:kur": "node dist/tools/superadmin-olustur.cjs",
     "superadmin:kur:kaynak": "tsx scripts/superadmin-olustur.ts",
-    "prisma:generate": "npx prisma generate",
+    "prisma:generate": "node scripts/prisma-generate-kapisi.mjs && npx prisma generate",
     "prisma:migrate": "npx prisma migrate deploy",
     "prisma:studio": "npx prisma studio",
     "lint": "eslint src scripts prisma",
