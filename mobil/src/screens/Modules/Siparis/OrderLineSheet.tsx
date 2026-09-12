@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
+import { unitLabel } from '../../../lib/item-unit';
 import { Surface, Text, Button, TouchableRipple, IconButton, ActivityIndicator } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 
@@ -168,6 +169,7 @@ export default function OrderLineSheet({ target, customerId, onDismiss, onSave, 
     colorId,
     colorName,
     quantity: qty,
+    unit: selectedItem?.unit,
     width,
   });
 
@@ -242,7 +244,7 @@ export default function OrderLineSheet({ target, customerId, onDismiss, onSave, 
             <View style={styles.numRow}>
               <NumpadInput
                 mode="outlined"
-                label="Metraj (m) *"
+                label={`Miktar (${unitLabel(selectedItem?.unit)}) *`}
                 value={qtyText}
                 onChangeText={setQtyText}
                 allowDecimal

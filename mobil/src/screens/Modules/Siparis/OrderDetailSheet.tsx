@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
+import { isMeasuredUnit, unitLabel } from '../../../lib/item-unit';
 import { Surface, Text, Button, Divider } from 'react-native-paper';
 import dayjs from 'dayjs';
 
@@ -73,7 +74,10 @@ export default function OrderDetailSheet({ order, onClose }: Props) {
                       </Text>
                     </View>
                     <View style={styles.lineQtyCol}>
-                      <Text style={styles.lineQty}>{q.toLocaleString('tr-TR')} m</Text>
+                      <Text style={styles.lineQty}>{q.toLocaleString('tr-TR')} {unitLabel(l.unit)}</Text>
+                      {!isMeasuredUnit(l.unit) && (
+                        <Text style={styles.lineShipped}>karşılama ölçülmüyor</Text>
+                      )}
                       {s > 0 && (
                         <Text style={styles.lineShipped}>
                           sevk {s.toLocaleString('tr-TR')} · açık{' '}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
+import { unitLabel } from '../../../lib/item-unit';
 import { Text, Button, TouchableRipple, IconButton, Surface, Icon } from 'react-native-paper';
 // paper `Menu` YERİNE — Fabric "Maximum update depth exceeded" ailesi. Bkz. AppMenu.tsx.
 import AppMenu from '../../../components/AppMenu';
@@ -47,7 +48,7 @@ export default function StepLines({ state, onAdd, onEdit }: Props) {
                       {l.width != null ? ` · ${l.width} cm` : ''}
                     </Text>
                   </View>
-                  <Text style={styles.cardQty}>{l.quantity.toLocaleString('tr-TR')} m</Text>
+                  <Text style={styles.cardQty}>{l.quantity.toLocaleString('tr-TR')} {unitLabel(l.unit)}</Text>
                   <AppMenu
                     visible={menuFor === l.clientId}
                     onDismiss={() => setMenuFor(null)}

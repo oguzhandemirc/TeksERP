@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
+import { isMeasuredUnit } from '../../../lib/item-unit';
 import { Text, TextInput, TouchableRipple, ActivityIndicator, Icon } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import { useInfiniteQuery, keepPreviousData } from '@tanstack/react-query';
@@ -40,7 +41,9 @@ export function num(v: number | string | null | undefined): number {
 
 export function orderTotals(o: Order): { requested: number; shipped: number; open: number } {
   const lines = o.lines ?? [];
-  const requested = lines.reduce((s, l) => s + num(l.quantity), 0);
+  // Yalnız METRE satırları: kg/adet satırın karşılaması ölçülmez (shippedQty 0),
+  // paydaya girse "açık" hep şişer ve kg + m toplanamaz.
+  const requested = lines.filter((l) => isMeasuredUnit(l.unit)).reduce((s, l) => s + num(l.quantity), 0);
   // Sipariş başlığındaki denormalize toplam tek yazma noktalıdır
   // (recomputeOrderFulfillment); satırları toplamak yerine onu tercih et.
   const shipped = o.shippedQty != null ? num(o.shippedQty) : lines.reduce((s, l) => s + num(l.shippedQty), 0);

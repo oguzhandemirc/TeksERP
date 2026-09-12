@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { isMeasuredUnit } from '../../../lib/item-unit';
 import Toast from 'react-native-toast-message';
 
 import { orderService, type CreatedOrder, type NewOrderPayload } from '../../../services/order.service';
@@ -32,8 +33,10 @@ export interface DraftLine {
   colorId: string | null;
   /** Gösterim için çözülmüş ad; null = ham (renksiz) talep. */
   colorName: string | null;
-  /** Metre. */
+  /** Kalemin biriminde miktar (`unit`). */
   quantity: number;
+  /** Kalem kartından; gösterim için. Sunucuya GİTMEZ — sunucu kalemden kopyalar. */
+  unit?: string;
   /** İstenen en (cm) — opsiyonel. */
   width: number | null;
 }
@@ -124,7 +127,11 @@ export function useNewOrder() {
     });
   }, []);
 
-  const totalQty = useMemo(() => lines.reduce((s, l) => s + l.quantity, 0), [lines]);
+  // Yalnız metre satırları toplanır: kg + m toplanamaz.
+  const totalQty = useMemo(
+    () => lines.filter((l) => isMeasuredUnit(l.unit)).reduce((s, l) => s + l.quantity, 0),
+    [lines],
+  );
   const duplicateSpecs = useMemo(() => duplicateSpecCount(lines), [lines]);
 
   /** Termin ISO damgası — `null` seçiliyse alan HİÇ gönderilmez (backend default'u koşsun). */

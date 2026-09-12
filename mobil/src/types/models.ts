@@ -192,6 +192,8 @@ export interface Item {
   code: string;
   name: string;
   itemType?: string;
+  /** Kalem kartının birimi (MT/KG/ADET) — sipariş satırı buradan kopyalanır. */
+  unit?: string;
   isActive?: boolean;
   /** Saha (KK1) "yeni desen" olarak açtı → admin gözden geçirmesi bekleniyor. */
   pendingReview?: boolean;
@@ -1368,8 +1370,10 @@ export interface OrderLine {
   id: string;
   itemId: string;
   colorId: string | null;
-  /** İstenen metraj. Prisma Decimal → JSON'da string gelebilir. */
+  /** İstenen miktar (birimi `unit`). Prisma Decimal → JSON'da string gelebilir. */
   quantity: number | string;
+  /** Satır birimi; eski backend göndermez → metre. MT dışı: karşılama ölçülmez. */
+  unit?: string;
   width: number | string | null;
   /** Denormalize SEVK toplamı. Açık = quantity − shippedQty (rezerv YOK). */
   shippedQty?: number | string;
