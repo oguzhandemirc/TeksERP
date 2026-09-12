@@ -2,7 +2,7 @@
 
 > Üretilmiş (anlama turu 2026-09-05, +10 bekçi 2026-09-06/07; 467 backend bekçisi + 296 istemci testi — Electron 211, mobil 85). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı; 455 dosya, **~6,5 dakika** — 369 sn koşum + 28 sn tip geçidi, ölçüldü 2026-09-05 — 'saatler sürer' cümlesi YANLIŞTI, `docs/standart/TEST-VE-DERLEME.md` [TD-02]). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
 
-Alanlar: `yetki-izin` (98), `is-emri` (96), `ui-bilesen` (94), `fason` (94), `diger` (92), `sevkiyat` (87), `etiket` (83), `finans` (81), `siparis` (72), `modul-bayrak` (69), `belge` (65), `ayar` (58), `cuval` (59), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (41), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (30), `refakat-karti` (29), `audit` (29), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (23), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (12), `sebep-katalogu` (12), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
+Alanlar: `yetki-izin` (98), `is-emri` (96), `ui-bilesen` (94), `fason` (94), `diger` (92), `sevkiyat` (87), `etiket` (83), `finans` (81), `siparis` (72), `modul-bayrak` (69), `belge` (65), `ayar` (58), `cuval` (59), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (47), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (30), `refakat-karti` (29), `audit` (29), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (23), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (12), `sebep-katalogu` (12), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
 
 
 ## yetki-izin (98)
@@ -1287,7 +1287,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (96), `ui-bilesen` (94), `fason` (94), `di
 | `mobil/src/services/tambur.service.test.ts` | Kesim çağrılarında etiket NİYETİ (targetCustomerId / targetOrderLineId) POST gövdesine geçer — ulaşmazsa kesimde lastLabelSnapshot seed edilemez ('eti |  |  |  |
 | `Teks-Erp/scripts/test_roll_movement_revoke.ts` | Top hareketinin geri alınırken SİLİNMEDİĞİNİ damgalandığını; partial unique sayesinde geri alınmış AÇIK satır dururken aynı (top, adım) için yeni açık hareket yazılabildiğini, iki AKTİF açık hareketin reddedildiğini; kurşun yeniden açma ve geri manuel taşıma sonrası `recomputeStepStatus`un silme davranışıyla AYNI adım durumunu ürettiğini; AST+tip denetleyicisiyle her okuma/güncelleme/ilişki/ham SQL erişiminin `ACTIVE_MOVEMENT` taşıdığını (istisna kümesi iki yönlü) | ✓ | ✓ |  |
 
-## depo (41)
+## depo (47)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
@@ -1332,6 +1332,12 @@ Alanlar: `yetki-izin` (98), `is-emri` (96), `ui-bilesen` (94), `fason` (94), `di
 | `Teks-Erp/scripts/test_warehouse_transfer.ts` | Depolar arası transferin atomikliğini (tek uygunsuz top tümünü düşürür), guard mesajlarının somut barkod söylemesini, iptalde TRANSFER_REVERSAL ile ap | ✓ |  |  |
 | `Teks-Erp/scripts/test_wo_warehouse_attach.ts` | WAREHOUSE/STOCK topu iş emrine bağlanır ve detach'te kendi statüsüne döner; çuvaldaki WAREHOUSE topun attach'i reddedilir. | ✓ |  |  |
 | `Teks-Erp/scripts/test_yarn_stock.ts` | İplik kg-stok defterinin tek mekanik kanıtı: bakiye ↔ Σ(hareket) mutabakatı, negatif bakiye gerçekten yazılır, eşzamanlı hareketler doğru toplanır, DB | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_stock_ledger_helper.ts` | Stok defteri kapısının sözleşmesi: toplu yazımda HEPSİ YA HİÇ (doğrulama insert'ten önce), satır map'i TEK yerde (AST), ters kayıt `eventType` override'ı ve ileri satırın HER bağ alanını taşıması, aynı satır iki kez terslenemez (P2002), eski kapıların 0 metrajda DB seddine çarpmadan atlaması | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_stock_ledger_issue.ts` | Üretime alma depodan ÇIKIŞ, iş emrinden çıkarma (detach) GİRİŞ yazar; satır claim ÖNCESİ statüyü taşır (IN_PRODUCTION değil) ve giriş metrajı ÇIKARMA anındaki metrajdır (ters kayıt olsaydı eriyen mal fazla girerdi) | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_stock_ledger_kursun_reopen.ts` | Adımı yeniden açma defterden ÇIKIŞ yazar: iki tam turda 2 giriş + 1 çıkış, net = METRAJ (iki katı değil); ikinci ters satır İKİNCİ ileri satıra bağlanır, aynı satır iki kez terslenmez | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_stock_ledger_production.ts` | Son adım finalize ve WO kapanış dispozisyonu depoya GİRİŞ yazar; fire (SCRAP), deposuz top ve iptal satır YAZMAZ (stok dışından stok dışına) | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_stock_ledger_tambur.ts` | Tambur finalize çocuğu depoya giriş yazar, EBEVEYN yazmaz — ebeveyn IN_PRODUCTION'dı, yani zaten stok dışıydı (çift sayım korkusunun yapısal cevabı) | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_stock_ledger_tambur_undo.ts` | Tambur geri alma ileri satırı TERSLER: net sıfır, metraj ileri satırdan (canlı 0'a çekilmişken), FULL dalında iki çocuğun ikisi de terslenir, SCRAP çocuk hiç satır yazmaz | ✓ | ✓ |  |
 
 ## parti (34)
 
