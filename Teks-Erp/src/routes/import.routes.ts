@@ -4,6 +4,7 @@ import { BUYUK_GOVDE_LIMITI } from "../constants/body-limits";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { matchesPermission, requirePermission } from "../middlewares/rbac.middleware";
+import { ImportRevertService } from "../services/import/import-revert.service";
 import { AppError } from "../utils/app-error";
 import { ImportService } from "../services/import/import.service";
 import { getImportAdapter } from "../services/import/import-registry";
@@ -190,6 +191,83 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       res.json({ success: true, data: await ImportService.getRunRecords(String(req.params.id)) });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/import/runs/{id}/revert-preview:
+ *   get:
+ *     tags: [Import]
+ *     summary: Geri sarma planı — HİÇBİR ŞEY yazmaz, etkilenen HER satırı döner
+ *     description: >
+ *       Atlanacak satırlar GEREKÇESİYLE görünür; yan etkiler ayrı bölümde
+ *       "kalacak" diye listelenir. Yeni izin kodu YOK: `data:import` + varlığın
+ *       kendi write izni (varlık koşumun kendisinden çözülür, `:entity`den değil).
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Geri sarma planı }
+ *       403: { description: Varlığın write izni yok }
+ *       404: { description: Koşum bulunamadı }
+ */
+router.get(
+  "/runs/:id/revert-preview",
+  verifyToken,
+  requirePermission("data:import"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json({
+        success: true,
+        data: await ImportRevertService.preview(
+          String(req.params.id),
+          req.user?.permissions ?? [],
+        ),
+      });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+const revertSchema = z.object({
+  // Gerekçe ZORUNLU ve kısa olamaz: geri sarma bir İŞ KARARIdır, defterde durur.
+  reason: z.string().trim().min(10, "Geri sarma gerekçesi en az 10 karakter olmalı"),
+  // Seçim ZORUNLU: boş gövdeyi "hepsini geri sar" diye okumak sessiz yıkım olurdu.
+  selectedRowNos: z.array(z.number().int().min(1)).min(1, "Geri sarılacak satır seçilmedi"),
+});
+
+/**
+ * @openapi
+ * /api/import/runs/{id}/revert:
+ *   post:
+ *     tags: [Import]
+ *     summary: Seçilen satırları geri sarar (ters kayıt — ileri satır DEĞİŞMEZ)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Geri sarılan + atlanan satırlar }
+ *       400: { description: Gerekçe/seçim eksik }
+ *       409: { description: Seçilen satırlar zaten geri sarıldı }
+ */
+router.post(
+  "/runs/:id/revert",
+  verifyToken,
+  requirePermission("data:import"),
+  jsonBig,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = revertSchema.parse(req.body);
+      res.json({
+        success: true,
+        data: await ImportRevertService.revert(String(req.params.id), {
+          reason: body.reason,
+          selectedRowNos: body.selectedRowNos,
+          permissions: req.user?.permissions ?? [],
+          userId: req.user?.userId,
+        }),
+      });
     } catch (e) {
       next(e);
     }

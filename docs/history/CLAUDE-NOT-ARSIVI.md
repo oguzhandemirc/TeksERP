@@ -7346,3 +7346,80 @@ indirildi).
 
 Migration **yok** · izin **yok** · APK **yok**. Sözleşme: `npm run prisma:generate`
 izole worktree'de artık çalışmaz; şema işi ana ağaçta yürütülür.
+
+---
+
+## 2026-09-12 — ③ İçe aktarım geri sarma UYGULAMASI: tek kaynak bölüşümü, çocuğun claim'i, kendini doğrulayan geri yazım [ÇEKİRDEK]
+
+Sözleşme (§8, `b8de60ef`) ve şema (`ac474d10`) inmişti; bu not KODUN indirdiği kararları ve
+sözleşmeyi DARALTAN ölçümleri tutar. Tasarım: `docs/design/IMPORT-EXPORT-TASARIM.md` §8.7.
+
+**① TEK KAYNAK BÖLÜŞÜMÜ — çocuk anahtarları `changedFields`ten ÇIKARILDI.**
+Ölçüm: motorun diff'i `changes[k] = {from: found[k], to: v}` yazıyor (`import.service.ts:272-274`)
+ve `findExisting` beş replace varlığında eski çocuk kümesini KOD LİSTESİ olarak zaten sunuyor
+(`item.adapter.ts:121-122` · `fabric-property.adapter.ts:106-107` · `product-recipe.adapter.ts:113`
+· `subcontractor.adapter.ts:131` · `route.adapter.ts:188-196`). Yani ilk yazdığım `childSnapshot`
+bir KOPYAYDI: aynı gerçek iki kolonda dururdu ve §8.3'ün kendi (i) gerekçesi bunu yasaklıyor.
+Karar: skaler alanlar `changedFields`te, REPLACE koleksiyonları `childSnapshot`ta — her gerçek
+TEK kolonda. Bu ayrım aynı zamanda geri sarma servisine tek okuma noktası verir.
+
+**② ÇOCUĞUN CLAIM'İ — `to` tarafı saklanmak ZORUNDA.** Bölüşümün ilk hâli yalnız `from`u
+saklıyordu (fotoğraf "yok edilen küme"dir diye). Sonra ölçtüm: skaler alanın atomik claim'inin
+çocuktaki karşılığı "küme hâlâ import'un YAZDIĞI mı?" sorusudur ve o soru `to` olmadan
+sorulamaz ⇒ geri yazım kör üzerine yazardı (başkasının araya giren değişikliğini ezer).
+`childSnapshot` bu yüzden `{from,to}` çifti saklar. **Ders:** "fotoğraf" sözcüğü eksiltici
+düşündürdü; geri almanın ön koşulu yalnız ESKİ değer değil, ARADA DEĞİŞMEMİŞ OLMA kanıtıdır.
+
+**③ DEFTER SATIRI KOŞUM SATIRIYLA AYNI İFADEDE.** `ImportRunLine` satırları
+`prisma.importRun.upsert` İÇİNDE iç içe `createMany` ile yazılır. Gerekçe: ayrı bir `createMany`
+düşerse "koşum var ama defteri yok" doğar ve geri sarma "hiçbir şey yazılmamış" diye YANLIŞ
+cevap verir. Tek ifade o durumu temsil edilemez kılar; FK'yi Prisma ebeveynden türettiği için
+yük FK'sizdir. (Dosya başlığındaki "tek `$transaction`a alınamaz" kısıtı SERVİS yazımları
+içindir — bu ikisi doğrudan prisma istemcisiyle yazılıyor.)
+
+**④ `REVIVE` YALNIZ GÖZLENEBİLİR OLANI İDDİA EDER.** Şema yorumu "kodu dosyadan gelen dört
+varlıkta servis pasif kaydı diriltir" diyor. Ölçüm: `findExisting` pasif kaydı da döndürüyor, bu
+yüzden o satır normalde UPDATE'e düşer ve `REVIVE` ancak `changedFields.isActive` `false→true`
+olduğunda GÖRÜLÜR; servisin CREATE yolundaki `REACTIVATE` dikişi (`base.service.ts` ~1040-1070)
+motordan görünmez ve bugün `CREATE` kaydedilir. Uydurma tespit YAZILMADI; kapatılması servisin
+"dirilttim" bilgisini döndürmesini gerektirir (ayrı iş, kod yorumunda duruyor).
+
+**⑤ ÇOCUK GERİ YAZIMI KENDİNİ DOĞRULAR.** Geri yazım adaptörün `updateOne`'ından geçer (guard'lar
+ve kod→id çözümü korunur), SONRA sonuç `findExisting` ile okunur; beklenen kümeye eşit değilse
+`AppError.internal` ile tx düşer ve satır gerekçesiyle atlanır. Gerekçe: beş varlığın çocuk yazımı
+beş ayrı pivot kurgusudur; "yazdım, olmuştur" varsayımı sessiz yanlış geri yazım üretirdi.
+Ayrıca geri yazım KODLARLA yapılır, id'lerle değil — id'ler silinmiş olabilir, kod insan anahtarıdır.
+
+**⑥ SİPARİŞ DALI MEVCUT İPTAL YOLUNU KULLANIR, ters bağımlılık AÇMADAN.** `OrderService.softDelete`
+(atomik claim + iş emri/sevkiyat guard'ları) çağrılır. Tek örnek `routes/order.routes.ts:29`ta
+yaşıyor ve servis katmanının route'tan import ettiği TEK emsal olurdu (grep: yok) ⇒ yerel örnek
+`{modelName:"order", tableName:"ORDER"}` ile kuruldu; ölçüm: iptal yolu `this.config`ten yalnız
+`tableName` okuyor (`order.service.ts:2899`).
+
+**⑦ ÇİFT GERİ SARMA SATIR BAZLI.** Koşum değil SATIR claim'lenir (`updateMany WHERE {id,
+revertedAt:null}`); seçilenlerin HEPSİ geri sarılmışsa 409. Kısmi seçim meşru olduğu için
+(5 satır şimdi, 5 satır sonra) koşum damgası ancak geri sarılmamış satır kalmadığında konur.
+
+**Kod çapaları:** `src/services/import/import-run-line.helper.ts` (saf yük kurucusu) ·
+`import-revert.service.ts` (`REVERT_PLAN` 17 varlık + `preview`/`revert`) ·
+`import-revert.branches.ts` (dal yazımları) · `import.service.ts` (defter toplayıcı + iç içe
+`createMany`) · `routes/import.routes.ts` (`runs/:id/revert-preview` + `runs/:id/revert`) ·
+`Electron/.../ImportRevertDialog.tsx`.
+
+**Bekçi:** `test_import_revert.ts` **40/0** (`tekserp_ea_test`); kırmızısı ÖNCE ölçüldü — servis
+yokken 3 kontrol kırmızı, saf yük + motor kontrolleri yeşildi (yani harness'ın kendisi ölçüyor).
+**Körlük zemini bekçinin çıktısında basılır:** route adım ağacının ve alias pivotunun DB geri
+yazımı fixture'la koşulmuyor (istasyon/müşteri fixture'ı gerekir) ⇒ "yeşil = kapsandı" sanılmasın.
+Bekçi yazarken bir fixture dersi de çıktı: `color` **autoCode**'dur (`RNK`) ve `code` sütunu
+`createOnly` + "BOŞ BIRAKIN" — elle kod veren ilk fixture'ım DOĞRU şekilde reddedildi; kod
+sistemden okunur.
+
+**Üç kapı:** migration YOK (şema `ac474d10`'da indi) · yeni izin kodu YOK (`data:import` +
+varlığın write izni; varlık koşumun KENDİSİNDEN çözülür, `:entity` parametresinden değil) ·
+APK YOK, panel sürümü gerekir.
+
+**Reçete dersi (aynı gün, `4d9a7dcf`):** `ac474d10` enum'u indirdi ama Electron `ENUM_LABELS`
+aynasını atladı; sözlük `Record<string,string>` olduğu için derleyici sustu, `test_audit_labels`
+yakaladı (16/1 → 17/0). `types/enums.ts` const aynası BİLEREK eklenmedi: panel o enum'a göre
+dallanmıyor, yalnız gösteriyor ⇒ kullanılmayan ayna iki sözlüğü drift ettirir; etiket audit
+sözlüğünden okunur.

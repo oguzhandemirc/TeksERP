@@ -159,6 +159,45 @@ export interface ImportExportPayload {
   truncated: boolean;
 }
 
+/** Geri sarma planının BİR satırı. Değerler DEĞİL, alan ADLARI döner (kişisel veri). */
+export interface ImportRevertPlanRow {
+  lineId: string;
+  rowNo: number;
+  rowNos?: number[];
+  entity: string;
+  recordId: string;
+  keyValue: string | null;
+  label: string | null;
+  lineAction: "CREATE" | "UPDATE" | "REVIVE";
+  action:
+    | "DEACTIVATE"
+    | "RESTORE_FIELDS"
+    | "RESTORE_CHILDREN"
+    | "CANCEL_DOCUMENT"
+    | "DELETE_PIVOT"
+    | "SKIP";
+  fields: string[];
+  children: string[];
+  skipReason?: string;
+  alreadyReverted: boolean;
+}
+
+export interface ImportRevertPlan {
+  runId: string;
+  entity: string;
+  entityLabel: string;
+  runRevertedAt: string | null;
+  rows: ImportRevertPlanRow[];
+  /** "Bunlar KALACAK" — başka varlığa yazılmış yan satırlar silinmez. */
+  sideEffects: Array<{ rowNo: number; note: string }>;
+}
+
+export interface ImportRevertResult {
+  runId: string;
+  reverted: number;
+  skipped: Array<{ rowNo: number; reason: string }>;
+}
+
 const base = "/api/import";
 
 export const importService = {
@@ -191,6 +230,21 @@ export const importService = {
 
   run: (id: string): Promise<ApiResponse<ImportRunDetail>> =>
     apiClient.get<ApiResponse<ImportRunDetail>>(`${base}/runs/${id}`).then((r) => r.data),
+
+  /** Geri sarma planı — hiçbir şey yazmaz; etkilenen HER satırı gerekçesiyle döner. */
+  revertPreview: (id: string): Promise<ApiResponse<ImportRevertPlan>> =>
+    apiClient
+      .get<ApiResponse<ImportRevertPlan>>(`${base}/runs/${id}/revert-preview`)
+      .then((r) => r.data),
+
+  /** Seçilen satırları geri sarar. Seçim ve gerekçe ZORUNLU (sunucu da doğrular). */
+  revertRun: (
+    id: string,
+    body: { reason: string; selectedRowNos: number[] },
+  ): Promise<ApiResponse<ImportRevertResult>> =>
+    apiClient
+      .post<ApiResponse<ImportRevertResult>>(`${base}/runs/${id}/revert`, body)
+      .then((r) => r.data),
 
   /**
    * Round-trip veri dışa aktarımı (içe aktarım şablonuyla aynı sütunlar).

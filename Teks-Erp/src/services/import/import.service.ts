@@ -31,6 +31,8 @@ import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 import { getImportAdapter, listAdapters } from "./import-registry";
 import { applyNameGuard, checkDuplicateNamesInFile } from "./import-name-guard";
+import { buildImportRunLine } from "./import-run-line.helper";
+import type { ImportRunLinePayload } from "./import-run-line.helper";
 import {
   assertRowLimit,
   isClearLiteral,
@@ -567,6 +569,10 @@ export class ImportService {
         recordId: string;
         newData: Record<string, unknown>;
       }> = [];
+      // Defter satırları burada TOPLANIR, koşum satırı yazıldıktan SONRA basılır:
+      // `ImportRunLine.importRunId` RESTRICT FK'dir ve token'sız koşumun `ImportRun`
+      // satırı ancak aşağıdaki `upsert`te doğar.
+      const ledgerLines: ImportRunLinePayload[] = [];
   
       for (const p of prepared) {
         if (p.result.action === "ERROR") continue;
@@ -592,6 +598,17 @@ export class ImportService {
             // geri alınamaz (hangi kayıtların yazıldığı bilinmez).
             newData: { ...p.values, _source: "IMPORT", importRunId: runId },
           });
+          // Audit DENETİM izidir (6 ayda arşivlenir, `oldData` yok); geri sarma bir İŞ
+          // KARARIdır ve kalıcı kolondan okunur — bu yüzden aynı olay deftere de yazılır.
+          ledgerLines.push(
+            buildImportRunLine({
+              entity,
+              tableName: adapter.tableName,
+              recordId: out.id,
+              row: p,
+              engineAction: p.result.action === "CREATE" ? "CREATE" : "UPDATE",
+            }),
+          );
         } catch (e) {
           // Doğrulama geçmişti ama yazma düştü (yarış / DB). DURUYORUZ: devam etmek
           // hasarı büyütür ve kullanıcı nerede kaldığını bilemez.
@@ -618,6 +635,10 @@ export class ImportService {
       const run = await prisma.importRun.upsert({
         where: { id: runId },
         update: {
+          // Defter satırları koşum satırıyla AYNI ifadede yazılır: ayrı bir
+          // `createMany` düşerse "koşum var ama defteri yok" doğar ve geri sarma
+          // "hiçbir şey yazılmamış" diye YANLIŞ cevap verir.
+          lines: { createMany: { data: ledgerLines } },
           rowCount: rows.length,
           created,
           updated,
@@ -634,6 +655,7 @@ export class ImportService {
         },
         create: {
           id: runId,
+          lines: { createMany: { data: ledgerLines } },
           finishedAt: new Date(),
           entity,
           userId: userId ?? null,

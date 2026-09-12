@@ -442,3 +442,55 @@ atlandı" sorusu da deftere düşer.
   işlem aynı planı görür. Negatif sondalar: atomik claim'i `findUnique→if→update` yap →
   atlama dalı kırmızı · `childSnapshot` yazımını kaldır → route adım geri yazımı kırmızı ·
   `REVIVE` dalını `CREATE`e düşür → diriltme kontrolü kırmızı.
+
+### 8.7 Uygulama kararları — kod indiğinde ÖLÇÜLEN, sözleşmeyi DARALTAN noktalar
+
+> §8.0–§8.6 koddan ÖNCE yazıldı. Aşağıdakiler yazarken ölçüldü ve bazıları yukarıyı
+> daraltıyor; çelişen cümle bırakılmadı.
+
+1. **Çocuk anahtarları `changedFields`ten ÇIKARILIR**, `childSnapshot`a **`{from,to}`
+   çifti** olarak girer. Ölçüm: motorun diff'i `changes[k] = {from: found[k], to: v}`
+   yazıyor (`import.service.ts:272-274`) ve `findExisting` beş varlıkta eski çocuk
+   kümesini KOD LİSTESİ olarak zaten sunuyor (`item.adapter.ts:121-122`,
+   `fabric-property.adapter.ts:106-107`, `product-recipe.adapter.ts:113`,
+   `subcontractor.adapter.ts:131`, `route.adapter.ts:188-196`) ⇒ aynı gerçek İKİ
+   kolonda dururdu, §8.3'ün (i) gerekçesi bunu yasaklıyor. `to` tarafı SAKLANIR
+   çünkü **çocuğun claim'i odur**: "küme hâlâ import'un yazdığı mı?" sorusu onsuz
+   sorulamaz ve geri yazım körleşirdi.
+2. **Adaptör sözleşmesi DEĞİŞMEDİ.** Fotoğraf `PreparedRow.existing`ten türüyor;
+   yeni bir `childSnapshot()` kancası gerekmedi. Geri yazım da KODLARLA yapılır
+   (id'lerle değil) — adaptörün kendi yolu kodu id'ye çeviriyor, id'ler ise silinmiş
+   olabilir.
+3. **Defter satırları koşum satırının `upsert`i İÇİNDE** iç içe `createMany` ile
+   yazılır. Tek ifade ⇒ "koşum var ama defteri yok" durumu TEMSİL EDİLEMEZ (ayrı bir
+   `createMany` düşerse geri sarma "hiçbir şey yazılmamış" diye yanlış cevap verirdi).
+   FK'yi Prisma ebeveynden türettiği için yük FK'sizdir.
+4. **`REVIVE` yalnız GÖZLENEBİLİR durumda yazılır** (`changedFields.isActive`
+   `false → true`). Ölçüm: `findExisting` pasif kaydı da döndürüyor, bu yüzden
+   diriltme normalde UPDATE'e düşer; servisin CREATE yolundaki `REACTIVATE` dikişi
+   (`base.service.ts` ~1040-1070) motordan GÖRÜNMÜYOR ve o dal bugün `CREATE`
+   kaydedilir. Uydurma tespit yazılmadı — kapatılması servisin "dirilttim" bilgisini
+   DÖNDÜRMESİNİ gerektirir (ayrı iş). §8.1/6'nın "önizleme CREATE der" cümlesi bu
+   ölçümle sınırlanır.
+5. **Çocuk geri yazımı KENDİNİ DOĞRULAYAN yazımdır:** adaptörün `updateOne`'ı koşar
+   (guard'lar + kod→id çözümü korunur), sonra sonuç `findExisting` ile OKUNUR;
+   beklenen kümeye eşit değilse tx düşer ve satır gerekçesiyle atlanır. Sessiz yanlış
+   geri yazım imkânsız.
+6. **Sipariş dalı `OrderService.softDelete`** (mevcut iptal yolu: atomik claim +
+   iş emri/sevkiyat guard'ları). Servis katmanı route'tan import ETMEZ — yerel örnek
+   `{modelName:"order", tableName:"ORDER"}` ile kurulur; iptal yolu `this.config`ten
+   YALNIZ `tableName` okuyor (ölçüldü `order.service.ts:2899`).
+7. Plan tablosu **`REVERT_PLAN` (17 varlık)** `import-revert.service.ts`te; dal
+   yazımları `import-revert.branches.ts`te.
+8. **Çift geri sarma SATIR bazlıdır** (`updateMany WHERE {id, revertedAt:null}`):
+   seçilenlerin HEPSİ geri sarılmışsa 409. Kısmi seçim meşru olduğu için (5 satır
+   şimdi, 5 satır sonra) koşum damgası ancak geri sarılmamış satır kalmadığında konur.
+9. Bekçi **`test_import_revert.ts` 40/0** (`tekserp_ea_test`); kırmızısı ÖNCE ölçüldü
+   (servis yokken 3 kontrol kırmızı, saf yük + motor kontrolleri yeşil).
+   **KÖRLÜK ZEMİNİ:** route adım ağacının ve alias pivotunun DB geri yazımı fixture'la
+   KOŞULMUYOR (istasyon/müşteri fixture'ı gerekir) — o iki dal plan tablosu ve saf yük
+   üzerinden ölçülür ve bu cümle bekçinin ÇIKTISINDA da basılır.
+10. Panel: `ImportRevertDialog` koşum geçmişinden açılır (yeni ekran yok).
+    `ImportLineAction` etiketleri **audit sözlüğünden** okunur (`enumValueLabel`);
+    ikinci bir etiket haritası AÇILMADI — reçetenin `types/enums.ts` aynası yalnız
+    panel o enum'a göre DALLANDIĞINDA gerekir, burada yalnız gösteriliyor.

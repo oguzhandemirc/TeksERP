@@ -9,6 +9,7 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { ImportDialog } from "@/components/import/ImportDialog";
 import { ListExportMenu } from "@/components/data-table/ListExportMenu";
 import { ConfigBundleCard } from "./ConfigBundleCard";
+import { ImportRevertDialog } from "./ImportRevertDialog";
 import { EntityPreviewDialog } from "@/components/import/EntityPreviewDialog";
 import { importService, type ImportEntityInfo, type ImportRunRow } from "@/services/importService";
 import { safeFormat } from "@/lib/format";
@@ -31,6 +32,9 @@ export function DataImportPage() {
   // önizleme açılıyor, indirme düğmesi onun içinde. Bir tık ekliyor, yanlış
   // dosyayı indirip Excel'de açma turunu kaldırıyor.
   const [preview, setPreview] = useState<{ entity: string; mode: "template" | "data" } | null>(null);
+  // Geri sarma koşum geçmişinden açılır: "kim ne yükledi" ile "onu nasıl geri
+  // alırım" aynı yüzeyde durmalı, ayrı ekran açılmaz.
+  const [revertRunId, setRevertRunId] = useState<string | null>(null);
 
   const entitiesQuery = useQuery({
     queryKey: ["import-entities"],
@@ -145,6 +149,7 @@ export function DataImportPage() {
                 <th className="px-2 py-1.5 text-right">Güncel</th>
                 <th className="px-2 py-1.5 text-right">Hata</th>
                 <th className="px-2 py-1.5 text-left">Durum</th>
+                <th className="px-2 py-1.5 text-right">Geri Sarma</th>
               </tr>
             </thead>
             <tbody>
@@ -163,6 +168,24 @@ export function DataImportPage() {
                   <td className="px-2 py-1.5">
                     <StatusBadge run={r} />
                   </td>
+                  <td className="px-2 py-1.5 text-right">
+                    {/* Hiçbir şey yazmamış koşumun geri sarılacak satırı yok. */}
+                    {r.created + r.updated > 0 ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!entities.find((e) => e.entity === r.entity)?.canWrite}
+                        title={
+                          entities.find((e) => e.entity === r.entity)?.canWrite
+                            ? undefined
+                            : "Bu veriye yazma yetkiniz yok"
+                        }
+                        onClick={() => setRevertRunId(r.id)}
+                      >
+                        Geri sar
+                      </Button>
+                    ) : null}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -176,6 +199,14 @@ export function DataImportPage() {
           onOpenChange={(o) => !o && setPreview(null)}
           entity={preview.entity}
           mode={preview.mode}
+        />
+      ) : null}
+
+      {revertRunId ? (
+        <ImportRevertDialog
+          runId={revertRunId}
+          onOpenChange={(open) => !open && setRevertRunId(null)}
+          onReverted={() => void runsQuery.refetch()}
         />
       ) : null}
 
