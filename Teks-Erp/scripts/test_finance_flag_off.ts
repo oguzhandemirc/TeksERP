@@ -53,6 +53,8 @@ function check(label: string, ok: boolean, detail = ""): void {
 }
 
 let originalFlag = false;
+/** Bekçi başlarken `finance.enabled` SATIRI var mıydı — "yoktu" da bir durumdur. */
+let satirVardi = false;
 let testUserId: string | null = null;
 const TEST_USERNAME = `bekci.finance.${process.pid}`;
 const TEST_PASSWORD = "test123456";
@@ -66,6 +68,11 @@ async function main(): Promise<void> {
     where: { key: "finance.enabled" },
     select: { value: true },
   });
+  // ⚠️ SATIRIN VARLIĞI da geri yüklenecek DURUMUN parçası. `readFinanceEnabled()`
+  // satır yokken `false` döner; `finally` o değeri geri yazınca satır DOĞAR ve
+  // taze kurulumda kalır. Sonuç ölçüldü (2026-09-12, CI-biçimli koşum): boş bir
+  // DB'de bu bekçi `finance.enabled` satırını bırakıyor.
+  satirVardi = setting !== null;
   check(
     "§1 Bayrak varsayılan KAPALI (hiç yazılmamışsa da kapalı okunur)",
     setting === null || (await readFinanceEnabled()) === false || originalFlag === true,
@@ -237,8 +244,15 @@ main()
   .finally(async () => {
     // ⚠️ Bayrağı BULDUĞU GİBİ bırak — bekçi kurulumun ayarını değiştirip
     // gitmemeli (parity bekçisinin "varsayılan depoyu geri koy" dersi).
+    // "Bulduğu gibi" DEĞER değil DURUM demektir: satır yoktuysa geri yükleme
+    // onu SİLMEKTİR. Değeri yazmak satırı doğurur ve taze kurulumda "boş
+    // kurulumda modül satırı yok" diyen bekçileri kırmızıya düşürür.
     try {
-      await systemSettingService.setFeatureFlags({ financeEnabled: originalFlag }, testUserId ?? undefined);
+      if (satirVardi) {
+        await systemSettingService.setFeatureFlags({ financeEnabled: originalFlag }, testUserId ?? undefined);
+      } else {
+        await prisma.systemSetting.delete({ where: { key: "finance.enabled" } });
+      }
     } catch {
       /* ayar geri yazılamadıysa da testi düşürme */
     }

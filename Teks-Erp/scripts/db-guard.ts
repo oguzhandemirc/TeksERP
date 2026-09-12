@@ -21,12 +21,16 @@
 // koşmadı" (dakikalar), diğer tarafın bedeli "fabrikanın verisi gitti".
 // =============================================================================
 
+import { BILINEN_GUVENLI_DB_ADLARI } from "./lib/bilinen-guvenli-db";
+
 /**
  * Adı BİREBİR bu olan veritabanı geliştirme hedefi sayılır.
- * ⚠️ BOŞ BIRAKILDI ve öyle kalmalı: DB adı bir PROFİL değeridir, koda sabitlenmez
- * (kök CLAUDE.md). Hedef, ADIN SON EKİNDEN tanınır.
+ * ⚠️ Liste burada YAZILMAZ — `lib/bilinen-guvenli-db.ts` iki kapının ortak
+ * kaynağıdır. Eskiden burası boştu ve `teks_ci` yalnız fixture kapısına eklendi;
+ * sonuç: CI'da `test_manual_move_fason_receive` her koşumda "TANINMAYAN AD" ile
+ * düştü. Son ek listesi ise ortak DEĞİLDİR (aşağıya bak) — iki kapı ayrı soru sorar.
  */
-const IZINLI_DB_ADLARI = new Set<string>([]);
+const IZINLI_DB_ADLARI = BILINEN_GUVENLI_DB_ADLARI;
 /**
  * Bu son eklerle biten adlar geliştirme/test hedefi sayılır.
  * `_demo` 2026-09-05'te eklendi: geliştirme DB'si `adnansahin_db` → `tekserp_demo`

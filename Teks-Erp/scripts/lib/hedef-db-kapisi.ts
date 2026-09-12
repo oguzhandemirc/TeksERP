@@ -12,6 +12,7 @@
 // =============================================================================
 import { Pool } from "pg";
 import { PG_SESSION_OPTIONS } from "../../src/lib/pg-session";
+import { BILINEN_GUVENLI_DB_ADLARI } from "./bilinen-guvenli-db";
 
 export const YAZILMASI_YASAK_DB: ReadonlySet<string> = new Set([
   "tekserp",
@@ -56,13 +57,13 @@ const FIXTURE_SON_EKLERI = ["_test"];
 /**
  * Son eki taşımayan ama FİXTURE hedefi olduğu BİLİNEN adlar.
  *
- * ⚠️ `teks_ci` — CI'nın veritabanı (`.github/workflows/ci.yml`, `POSTGRES_DB`).
- * Ad ayağı ilk yazımda yalnız `_test` sonekine baktığı için CI ilk ifadede
- * duruyordu: 491 bekçinin HİÇBİRİ koşmuyordu ve kapı "çalışıyor" görünüyordu.
- * CI dosyasına DOKUNULMADI (kullanıcının işi) — kabul kümesine ADIYLA girdi ve
- * `test_script_guards §6` pozitif sonda ile ölçüyor.
+ * ⚠️ Liste burada YAZILMAZ — `lib/bilinen-guvenli-db.ts` bu kapı ile
+ * `scripts/db-guard.ts`in ORTAK kaynağıdır. `teks_ci` yalnız buraya eklendiği
+ * sürece diğer kapı onu "TANINMAYAN AD" sayıyordu (ölçüldü 2026-09-12, CI-biçimli
+ * koşum). SON EK listesi ortak DEĞİLDİR ve olmamalı: bu kapı `_dev`/`_demo`yu
+ * REDDETMEK için var. `test_script_guards §6` her iki ayağı da sondalar.
  */
-const FIXTURE_ADLARI: ReadonlySet<string> = new Set(["teks_ci"]);
+const FIXTURE_ADLARI: ReadonlySet<string> = BILINEN_GUVENLI_DB_ADLARI;
 
 /** Fixture olmadığı BİLİNEN adlar — mesajda ayrıca anılır (dev kopya / canlı). */
 export const FIXTURE_OLMAYAN_DB: ReadonlySet<string> = new Set([

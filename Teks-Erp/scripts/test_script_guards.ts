@@ -289,6 +289,34 @@ function main(): void {
     ciCikti.split("\n").find((l) => l.includes("Hedef DB"))?.trim().slice(0, 60) ?? "(satır yok)",
   );
 
+  // §6c ⭐ TEK KAYNAK — iki kapı da "bilinen güvenli ad" kümesini AYNI dosyadan
+  // okumalı. `teks_ci` yalnız fixture kapısına eklendiği için CI'da
+  // `test_manual_move_fason_receive` her koşumda "TANINMAYAN AD" ile düştü
+  // (ölçüldü 2026-09-12, CI-biçimli koşum). Elle kopya yeniden doğarsa burası kırmızı.
+  // ⚠️ SON EK listeleri KASTEN ayrıdır (fixture kapısı `_dev`/`_demo`yu reddeder);
+  //    bu kontrol yalnız AD kümesini bağlar, son ekleri DEĞİL.
+  const ORTAK_KAYNAK = "bilinen-guvenli-db";
+  for (const [ad, yol] of [
+    ["db-guard.ts", join(__dirname, "db-guard.ts")],
+    ["lib/hedef-db-kapisi.ts", join(__dirname, "lib/hedef-db-kapisi.ts")],
+  ] as const) {
+    const kaynak = readFileSync(yol, "utf8");
+    const kodSatirlari = kaynak
+      .split("\n")
+      .filter((l) => !l.trimStart().startsWith("//") && !l.trimStart().startsWith("*"));
+    const importEdiyor = kodSatirlari.some((l) => l.includes(ORTAK_KAYNAK));
+    const elleAdYaziyor = kodSatirlari.some((l) => /new Set[^)]*["']teks_ci["']/.test(l));
+    check(
+      `§6c ⭐ ${ad} "bilinen güvenli ad" kümesini ORTAK kaynaktan okuyor`,
+      importEdiyor && !elleAdYaziyor,
+      importEdiyor
+        ? elleAdYaziyor
+          ? "ortak kaynağı import ediyor AMA elle de ad yazıyor — ikinci kopya"
+          : `import: ${ORTAK_KAYNAK}`
+        : `ortak kaynak import EDİLMEMİŞ — kabul kümesi yine ayrışır`,
+    );
+  }
+
   const fixture = kos("tekserp_kapi_sondasi_test");
   const fixtureCikti = `${fixture.stdout ?? ""}${fixture.stderr ?? ""}`;
   check(
