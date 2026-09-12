@@ -27,8 +27,12 @@
 // var. Eşik TAHMİN DEĞİL ÖLÇÜM: `docs/design/KIMLIK-KAPISI-OLCUM-2026-09-12.md`
 // (55 commit / 40 olay). Ham eğri 0.80 diyordu; 40 olayın 40'ı **başlığa gömülü
 // elle sayaç** çıktı, yani eşiği 0.80'e çekmek kapıyı gürültüye uydurmak olurdu.
-// Sayaçlar başlıktan ÇIKARILDI (var olmayan sayı bayatlamaz) ve eşik 0.95'te
-// kaldı — gürültüye ödün değil, gelecekteki yazım düzeltmesi için sigorta.
+// Sayaçların başlıktan ÇIKARILMASINA karar verildi (var olmayan sayı bayatlamaz)
+// ama HENÜZ UYGULANMADI — 2026-09-12 gecesi ölçüldü, üç yüzeyde de duruyorlar.
+// ⚠️ BU KAPI ONU ÖLÇEMEZ: `normBaslik` parantezli sayıyı atar, yani sayaç dursa
+// da silinse de aynı yeşil döner. Başlıktaki iddianın doğruluğu kapının kapsamı
+// DIŞINDADIR; kaldırma inince bu yorum da güncellenecek.
+// Eşik 0.95'te kaldı — gürültüye ödün değil, gelecekteki yazım düzeltmesi için sigorta.
 // Normalizasyon yine de duruyor: yarın başka bir türetilmiş parça başlığa girerse.
 //
 // KOD KİMLİĞİNDE TOLERANS YOKTUR (izin/ekran anahtarı · model/alan · bekçi adı ·

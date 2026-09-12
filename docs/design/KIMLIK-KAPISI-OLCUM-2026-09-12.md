@@ -104,7 +104,7 @@ dokunmaz). Kapıya çevrildiğinde `scripts/test_identity_ledger.ts` içinde ayn
 mantık TypeScript'e taşınır ve `utils/string-similarity.ts` içe aktarılır —
 mesafe fonksiyonu ikinci kez YAZILMAZ (tek kaynak kuralı).
 
-## Kararın sonucu — sayaç başlıktan çıkarıldı
+## Kararın sonucu — sayaç başlıktan ÇIKARILACAK (henüz çıkarılmadı)
 
 Bu ölçümün doğrudan sonucu: **40 olayın 40'ı sayaç gürültüsüydü**, yani başlığa
 gömülü elle sayaç kimliği sürekli çalkalıyordu. Çözüm eşiği düşürmek (kapıyı
@@ -115,7 +115,23 @@ gürültüye uydurmak) değil, **sayıyı kimlikten çıkarmak** oldu:
 - `docs/kurallar/README.md` sayacı belgede yaşamaz, kapının çıktısından okunur.
 
 **Var olmayan bir sayı bayatlayamaz.** Normalizasyon mantığı ve bu ölçüm yine de
-saklandı: yarın başka bir türetilmiş parça bir başlığa girerse gerekçe hazır olsun.
+saklanıyor: yarın başka bir türetilmiş parça bir başlığa girerse gerekçe hazır olsun.
+
+> ⚠️ **DURUM: KARAR ALINDI, UYGULANMADI** (ölçüm 2026-09-12 gecesi, `teks-erp-d9`
+> buldu). Sayaçlar üç yüzeyde de DURUYOR: `BEKCI-HARITASI.md` 39/39 başlık ·
+> `docs/kurallar/*.md` 25/26 · `docs/kurallar/README.md` sayaç sütunları.
+> `5190e8a1` onları bilerek BÜTTÜ ("bilerek bayat sayaç üretmemek için";
+> kaldırma ayrı iş olarak bırakıldı) ve bu bölüm sonradan geçmiş zamanla yazıldı.
+>
+> **Kapı bunu ölçemez ve ölçemeyeceği yazılıdır:** `normBaslik` karşılaştırmadan
+> önce parantezli sayıyı atar, yani sayaç dursa da silinse de kapı AYNI yeşili
+> verir. Yani bu beyanın yanlışlığını görebilecek tek otomatik göz, tam da onu
+> görünmez kılan normalizasyondur — çatı tablosundaki *"yeşil bekçi: ihlal yok ↔
+> hiçbir şeye bakılmadı"* satırının belge tarafındaki ikizi.
+>
+> Üçüncü okuma sınıfının TERS yönü: belge kendi kapattığı işi ön şart saymıyor,
+> **kapatmadığı işi kapanmış beyan ediyor.** İç tutarlılık okuması ikisini de
+> yakalamaz; ikisi de dünyaya karşı ölçülür.
 
 ## Kapı yazarken kapının kendisini de ölç
 
