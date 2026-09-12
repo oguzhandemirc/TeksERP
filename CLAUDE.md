@@ -21,7 +21,9 @@ Stok (Roll) → İş Emri → KK1 (RAW_QC) → [opsiyonel Fason] → Kurşun + K
   Depo (RollStatus.WAREHOUSE) → Çuval (Sack; müşteri opsiyonel, rezerv YOK) → Sevkiyat (PLANNED → DISPATCHED)
 ```
 
-Her adım istasyon kataloğu + rota şablonundan kurulur; devere/çözgü/haşıl yeni mimari istemez. Her rotanın SON adımı topu finalize eder (Tambur özel değil); depo bir istasyon değil bekleme statüsüdür; `PRODUCED` limbosu yok. Fabrika çözgü/dokuma yapmaz — kumaş hazır gelir. Ayrıntı: `docs/kurallar/tambur.md`, `kalite.md`, `sevkiyat.md`.
+Her adım istasyon kataloğu + rota şablonundan kurulur; **TOPUN rotası için** devere/çözgü/haşıl yeni mimari istemez — istasyon kataloğuna istasyon, rotaya adım eklenir. Her rotanın SON adımı topu finalize eder (Tambur özel değil); depo bir istasyon değil bekleme statüsüdür; `PRODUCED` limbosu yok. Ayrıntı: `docs/kurallar/tambur.md`, `kalite.md`, `sevkiyat.md`.
+
+⚠️ **Ama rota mimarisi TOPA aittir, fabrikanın tamamına değil.** Kendi nesnesi, kendi yaşam döngüsü ve kendi defteri olan üretim alanları **kendi tablolarını, kendi tx sınırlarını ve kendi mimarilerini taşıyabilir** — levent (`WarpBeam`) ve tezgah telemetrisi bunun ilk örnekleri. Ölçüt: *nesne topun rotasında bir ADIM mı, yoksa kendi kimliği ve defteri olan ayrı bir VARLIK mı?* İlkinde istasyon/adım eklenir, ikincisinde yeni model meşrudur (kullanıcı kararı 2026-09-13). Çekirdek kurallar (defter semantiği, ters yol, atomik claim, fail-closed) yeni alanda da aynen geçerlidir. [PROFİL] `adnansahin` bugün çözgü/dokuma yapmıyor, kumaş hazır geliyor — bu fabrikanın durumudur, sistemin kısıtı değil.
 
 ## Çekirdek değişmezler — her kurulumda, her oturumda
 
