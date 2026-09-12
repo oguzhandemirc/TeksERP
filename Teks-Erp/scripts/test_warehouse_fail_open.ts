@@ -18,10 +18,27 @@
 // ikna edici, ama TERFİ yolları için (aşağıda §4) hiç konuşmuyor; orada üretim
 // kaydı zaten var, yalnız statü değişiyor.
 //
-// ⚠️ ÖLÇÜLMEYEN DAL — kapsam olduğundan geniş görünmesin: "HİÇ DEPO YOKKEN ne
-// olur" bu dosyada SONDALANMADI. `rolls_warehouseId_fkey` RESTRICT olduğu için
-// topu olan bir veritabanında son depo silinemiyor; dal ancak TEMİZ bir fikstürde
-// ölçülebilir. Buradaki üç bölüm "depo VAR ama VARSAYILAN yok" rejimini ölçer.
+// ⚠️ "HİÇ DEPO YOK" DALI: ÖLÇÜLDÜ, BEKÇİYE BAĞLANMADI — ikisi farklı şeydir.
+// Buradaki üç bölüm "depo VAR ama VARSAYILAN yok" rejimini ölçer; "hiç depo yok"
+// rejimi AYRI ve bu dosyada kilitli DEĞİL.
+//
+// ÖLÇÜLDÜ (2026-09-12, boş fikstür: top=0 · depo=0 · uzlaştırma hiç koşmamış):
+// `POST /api/rolls/initial-entry` → 201, top `warehouseId` DOLU doğdu ve depo
+// sayısı 0→1 oldu: `DP-MERKEZ`i boot işi değil İSTEĞİN KENDİSİ yarattı
+// (`ensureDefaultWarehouse` sonradan çağrıldığında "exists" dedi). Yani
+// uzlaştırma ihtiyaç anında koşuyor ve "hiç depo yok" durumu İLK YAZMA
+// İSTEĞİNDEN SONRA ulaşılamaz — `resolveTargetWarehouseId`in reddetme dalı KÖK
+// YOLDA basılamaz kapıdır. ⚠️ Kapsam: tek giriş noktasında ölçüldü; "dokuz
+// `roll.create` noktası aynı fonksiyonu çağırıyor" ile "aynı ilk-yazma
+// davranışını gösteriyor" FARKLI iki iddiadır ve ikincisi ölçülmedi.
+//
+// NEDEN BEKÇİ YOK: davranışsal bir sonda ön koşulunu KENDİSİ yok eder — "hiç
+// depo yok"u kilitleyen kontrol, koştuğu anda depo doğurur ve ikinci koşumda
+// ölçeceği durum kalmaz. Her koşumda taze fikstür kuran bir altyapı gerekir.
+// SIRADAKİ (d5, yapısal sonda): `ensureDefaultWarehouse`in ÜÇÜNCÜ kademesinin
+// ("hiç yoksa yarat") varlığını ölç — ulaşılamazlığın tek sebebi odur; kaldırılırsa
+// reddetme dalı basılabilir hâle gelir ve bunu söyleyen hiçbir şey yoktur.
+// Kapı çürümez, ULAŞILAMAZLIĞI çürür.
 //
 // MEVCUT BEKÇİYLE İLİŞKİ — `test_roll_warehouse_stamp` bu deliği KAPATMIYOR:
 // `main()` ilk iş `ensureDefaultWarehouse()` çağırıyor, yani "varsayılan depo
