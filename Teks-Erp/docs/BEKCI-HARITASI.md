@@ -1287,7 +1287,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (96), `ui-bilesen` (94), `fason` (94), `di
 | `mobil/src/services/tambur.service.test.ts` | Kesim çağrılarında etiket NİYETİ (targetCustomerId / targetOrderLineId) POST gövdesine geçer — ulaşmazsa kesimde lastLabelSnapshot seed edilemez ('eti |  |  |  |
 | `Teks-Erp/scripts/test_roll_movement_revoke.ts` | Top hareketinin geri alınırken SİLİNMEDİĞİNİ damgalandığını; partial unique sayesinde geri alınmış AÇIK satır dururken aynı (top, adım) için yeni açık hareket yazılabildiğini, iki AKTİF açık hareketin reddedildiğini; kurşun yeniden açma ve geri manuel taşıma sonrası `recomputeStepStatus`un silme davranışıyla AYNI adım durumunu ürettiğini; AST+tip denetleyicisiyle her okuma/güncelleme/ilişki/ham SQL erişiminin `ACTIVE_MOVEMENT` taşıdığını (istisna kümesi iki yönlü) | ✓ | ✓ |  |
 
-## depo (47)
+## depo (48)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
@@ -1332,6 +1332,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (96), `ui-bilesen` (94), `fason` (94), `di
 | `Teks-Erp/scripts/test_warehouse_transfer.ts` | Depolar arası transferin atomikliğini (tek uygunsuz top tümünü düşürür), guard mesajlarının somut barkod söylemesini, iptalde TRANSFER_REVERSAL ile ap | ✓ |  |  |
 | `Teks-Erp/scripts/test_wo_warehouse_attach.ts` | WAREHOUSE/STOCK topu iş emrine bağlanır ve detach'te kendi statüsüne döner; çuvaldaki WAREHOUSE topun attach'i reddedilir. | ✓ |  |  |
 | `Teks-Erp/scripts/test_yarn_stock.ts` | İplik kg-stok defterinin tek mekanik kanıtı: bakiye ↔ Σ(hareket) mutabakatı, negatif bakiye gerçekten yazılır, eşzamanlı hareketler doğru toplanır, DB | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_stock_ledger_cancel_restore.ts` | İptal STATÜLÜ çıkış yazar (yalnız stok kümesinden düşen mal için; IN_PRODUCTION/AT_SUBCONTRACTOR iptalinde satır YOK), iptali geri alma BAĞLI ters kayıt yazar (yön aynalanmış, metraj ileri satırdan, net 0) ve ileri satır ne silinir ne değişir; 0 metrajlı top satır yazmadan iptal edilebilir | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_stock_ledger_helper.ts` | Stok defteri kapısının sözleşmesi: toplu yazımda HEPSİ YA HİÇ (doğrulama insert'ten önce), satır map'i TEK yerde (AST), ters kayıt `eventType` override'ı ve ileri satırın HER bağ alanını taşıması, aynı satır iki kez terslenemez (P2002), eski kapıların 0 metrajda DB seddine çarpmadan atlaması | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_stock_ledger_issue.ts` | Üretime alma depodan ÇIKIŞ, iş emrinden çıkarma (detach) GİRİŞ yazar; satır claim ÖNCESİ statüyü taşır (IN_PRODUCTION değil) ve giriş metrajı ÇIKARMA anındaki metrajdır (ters kayıt olsaydı eriyen mal fazla girerdi) | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_stock_ledger_kursun_reopen.ts` | Adımı yeniden açma defterden ÇIKIŞ yazar: iki tam turda 2 giriş + 1 çıkış, net = METRAJ (iki katı değil); ikinci ters satır İKİNCİ ileri satıra bağlanır, aynı satır iki kez terslenmez | ✓ | ✓ |  |
