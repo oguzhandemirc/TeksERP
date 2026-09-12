@@ -6591,3 +6591,76 @@ kırmızı vermiyorsa ya kural ölçülmüyordur ya senaryo eksiktir — ikisi d
 
 Migration **yok** (alan 6e'nin diliminde geldi). İzin **yok**. APK **yok**; panel
 rozeti `isReversal`a bağlanacak (6e, ayrı commit).
+
+## 2026-09-12 — 0 metrajlı top sayım farkıyla kapatılamaz: kapsam kararı KURAL, defter süzgeci KEMER [ÇEKİRDEK]
+
+### Saha sorusu ve ölçüm
+
+②-c sayımın ileri CANCEL yazımını `postStockMoves`a taşıdı. O kapı `qty <= 0`da
+SESSİZCE ATLAMAZ, `AppError.internal` FIRLATIR (DB seddi `warehouse_movements_qty_positive`
+ikizi `qtyYazilabilir`) ve `createMany` tek sorgu olduğu için tüm tx geri sarılır.
+Aynı gün `edea91d6` bu sınıf için DÖRT kardeş yazıcıya süzgeç ekledi; sayım çağrısı
+dışarıda kalmıştı. Sonuç: depoda 0 metrajlı bir top "eksik" işaretlenirse sayım
+tamamlama 500 veriyordu ve o sayım BİR DAHA KAPANMIYORDU.
+
+Ölçümler (2026-09-12, fabrika kopyası, salt okunur):
+- Sayılabilir statüde `currentQty <= 0` top: **2** — ama **ikisinin de deposu NULL**,
+  sayım fotoğrafı `warehouseId = sayımın deposu` süzdüğü için bugün sayıma giremiyorlar.
+- 6e'nin bağımsız ölçümü aynı yere çıktı: stok kümesinde (depo dolu + STOCK/WAREHOUSE/
+  A1_STOCK/RETURNED) 0 metrajlı top **YOK**; defterde `qty <= 0` satır **0**.
+- `warehouse_movements_qty_positive` CHECK'i canlı: push ÖNCESİ de aynı girdi 23514 ile
+  düşüyordu, yani REGRESYON DEĞİL — değişen yalnız hatanın şekli.
+- ⚠️ "Bugün ulaşılamaz" ile "imkânsız" AYNI ŞEY DEĞİL: `warehouse-ledger.helper`in kendi
+  notu yolun gerçek olduğunu söylüyor ("Kurşun açık kumaşın `currentQty: 0` ile depoya
+  inmesi bu yolu bayraksız tetikliyordu").
+
+### Karar
+
+- **0 metrajlı top "eksik stok" değil BOŞ KAYITTIR.** Sayım onu farkla kapatmaz: satır
+  KAPSAM DIŞI kalır, gerekçesi metrajı VE çıkışı söyler ("Metrajı 0 — sayım farkı
+  yazılamaz; topu kayıttan düşmek için top ekranından iptal/fire kullanın"), top İPTAL
+  EDİLMEZ, ne defter ne sapma satırı doğar.
+- Karar claim'den ÖNCE, tx içindeki TAZE okumanın `currentQty`si ile verilir (fotoğrafa
+  güvenilmez; kapsam kontrolü CAS'tan ayrıdır ve ikisi de gereklidir).
+- Eşik TEK yüklemden ithal edilir (`qtyYazilabilir`), ikinci bir eşik yazılmaz.
+- **KURAL kapsam kararı, defter yazımındaki süzgeç yalnız KEMER** ve kemer SESSİZCE
+  ATLAMAZ: `kapsam kararı atlanmış: <barkod>` diye ADIYLA fırlatır, tx geri sarılır.
+
+### Gerekçe — önerilen düzeltmenin KENDİ SONUCU ölçüldü
+
+İlk öneri "defter yazımını `qtyYazilabilir` ile süz" idi. Ölçüm onu çürüttü:
+`recordVariancesTx` 0 metrajı ZATEN sessizce atlıyor (`if (!qtyD.greaterThan(0)) return null`).
+Yalnız defteri süzmek, topu SAPMA KAYDI OLMADAN iptal ederdi; sayım stornosunun plan
+katmanı her top için tam bir sapma kaydı aradığı için ("Sayımın sapma kaydı bulunamadı")
+o sayım KALICI olarak stornolanamaz hâle gelirdi — bir kusuru kapatıp daha kötüsünü
+açardı. Aynı nedenle KEMER de sessiz olamaz: sessiz kemer, kapattığımız sınıfın
+(sessiz atlama) ikinci kopyasıdır.
+
+Ders: **önerilen düzeltmeyi uygulamadan önce o düzeltmenin kendi sonucunu ölç.**
+
+### Kod çapaları
+
+- `Teks-Erp/src/services/stock-count.service.ts` — kapsam dalı (claim'den önce) +
+  kemer iddiası (defter map'inden önce), ikisinin ayrımı yorumda yazılı.
+
+### Bekçi
+
+`test_stock_count.ts` §14 (6 kontrol): fotoğrafa girdi · tamamlama BAŞARILI · satır
+kapsam dışı + gerekçe metrajı söylüyor · gerekçe çıkışı söylüyor · top iptal edilmedi ·
+ne defter ne sapma satırı doğdu. Toplam 104/104 yeşil.
+Negatif sonda (e): kapsam dalı kaldırıldı → §14b/14c/14c2 KIRMIZI ve hata mesajı
+kemerin adını bastı ("Kapsam kararı atlanmış: … 0 metrajlı top defter yazımına ulaştı"),
+yani kemerin ulaşılabilir ve ADLANDIRILMIŞ olduğu da ölçüldü. Dosya sha256 ile geri
+yüklendi.
+
+### Üç kapı
+
+Migration **yok**. İzin **yok**. APK/panel **yok** — kapsam dışı gerekçesi zaten
+tutanakta ve sayım ekranında basılıyor.
+
+### Yan ölçüm (kayda geçsin)
+
+Commit kapısı `--amend`de değişen kümeyi amend TABANINA göre hesaplıyor: büyük bir
+değişikliği amend'e sıkıştırmak kapıyı SESSİZCE DARALTIR (ölçüldü 2026-09-12: mobil
+commit'in amend'inde yalnız doküman adımı koştu, beş ayaklı mobil kapı koşmadı; teyit
+elle yapıldı). Mekanikleştirme 5e'de.

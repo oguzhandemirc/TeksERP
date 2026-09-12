@@ -424,8 +424,13 @@ async function main(): Promise<void> {
       !planHelper.includes("sayımında bulunamadı"),
   );
   check(
-    "§7b Storno servisinde VE plan helper'ında defter silme/satır güncelleme yok",
-    !/(warehouseMovement|yarnMovement|rollVariance)\.delete|stockCountLine\.update/.test(svc) &&
+    // ⚠️ ETİKET ÖLÇTÜĞÜNDEN FAZLASINI İDDİA ETMEZ (denetim B23, 2026-09-12): servis
+    // yüklemi eskiden yalnız `.delete` yasaklıyordu ama etiket "satır güncelleme yok"
+    // diyordu. Doğru ayrım: İLERİ DEFTER satırı (`warehouseMovement`/`yarnMovement`)
+    // ne silinir ne GÜNCELLENİR; `rollVariance.updateMany` ise MEŞRU damgadır (sapma
+    // satırı duruyor, üstüne `reversedAt` yazılıyor) ve yasaklanamaz.
+    "§7b Storno servisi ileri defter satırını silmiyor/GÜNCELLEMİYOR (sapma damgası istisna), plan helper'ı hiçbirine dokunmuyor",
+    !/(warehouseMovement|yarnMovement)\.(delete|deleteMany|update|updateMany)|rollVariance\.delete|stockCountLine\.update/.test(svc) &&
       !/(warehouseMovement|yarnMovement|rollVariance)\.(delete|update)|stockCountLine\.update/.test(planHelper),
   );
   // ⚠️ PLAN KATMANI HİÇ YAZMAZ: karar ↔ yazım ayrımı mekanik ölçülür, yoksa bir

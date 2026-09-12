@@ -53,7 +53,7 @@ import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { closeOpenMovementsTx } from "./helpers/roll-disposition.helper";
-import { postStockMoves } from "./helpers/warehouse-ledger.helper";
+import { postStockMoves, qtyYazilabilir } from "./helpers/warehouse-ledger.helper";
 import { recordVariancesTx } from "./helpers/roll-variance.helper";
 import { applyYarnMovementTx } from "./yarn.service";
 import { syncPurchaseOrderSafely } from "./purchase-order.service";
@@ -534,6 +534,22 @@ export class StockCountService {
           continue;
         }
 
+        // ⚠️ 0 METRAJLI TOP "EKSİK STOK" DEĞİL, BOŞ KAYITTIR ve sayım farkı onu
+        // kapatamaz: defter kapısı 0 metrajda FIRLATIR (`qtyYazilabilir` sözleşmesi
+        // + DB seddi `warehouse_movements_qty_positive`), sapma yazıcısı ise 0'ı
+        // SESSİZCE atlar. İkisi birlikte şu tuzağı kurar: süzmezsem tamamlama 500
+        // verir ve sayım hiç kapanmaz; yalnız defteri süzerim diye geçersem top
+        // SAPMA KAYDI OLMADAN iptal olur ve o sayımın stornosu kalıcı kilitlenir
+        // ("sapma kaydı bulunamadı" engeli). Doğru yer kapsam kararı: satır
+        // gerekçesiyle kapsam dışı kalır, top iptal EDİLMEZ.
+        if (!qtyYazilabilir(roll.currentQty)) {
+          outOfScope.push({
+            lineId: line.id,
+            reason: "Metrajı 0 — sayım farkı yazılamaz; topu kayıttan düşmek için top ekranından iptal/fire kullanın",
+          });
+          continue;
+        }
+
         // ATOMİK CLAIM (check-then-act YASAK): gözlenen statü + depo + serbestlik
         // tek WHERE'de. Kaybeden satır HATA FIRLATMAZ — sayımın geri kalanı
         // geçerlidir ve bu satır sebebiyle birlikte belgeye yazılır.
@@ -620,6 +636,16 @@ export class StockCountService {
         // stornonun yönü bu satırdan aynalanıyor, `fromStatus` boş kalırsa ters kayıt
         // kurulamaz. Toplu kapı id DÖNMEZ ama gerekmiyor — storno ileri satırı
         // `(stockCountId, eventType, rollId, reversesMovementId IS NULL)` ile bulur.
+        // KEMER (kural DEĞİL): kural yukarıdaki KAPSAM kararıdır — 0 metrajlı top
+        // buraya hiç gelmemeli. Gelirse SESSİZCE ATLAMAYIZ: atlanan satır, topun
+        // sapma kaydı olmadan iptal edilmesi demektir ve o sayımın stornosunu
+        // kalıcı kilitler. Bunun yerine tanıyı ADLANDIRIRIZ; tx geri sarılır.
+        const sifirMetrajli = applied.filter((a) => !qtyYazilabilir(a.qty));
+        if (sifirMetrajli.length > 0) {
+          throw AppError.internal(
+            `Kapsam kararı atlanmış: ${sifirMetrajli.map((a) => a.barcode ?? a.rollId).join(", ")} 0 metrajlı top defter yazımına ulaştı.`,
+          );
+        }
         const ledgerWritten = await postStockMoves(
           tx,
           applied.map((a) => ({

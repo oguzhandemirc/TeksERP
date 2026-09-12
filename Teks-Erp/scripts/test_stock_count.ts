@@ -40,6 +40,9 @@
 //      düşer (CLOSED → OPEN); rapor "tamamı geldi" demeye devam etmez
 //   §13 ⭐ METRAJ PİNLEME (GERÇEK YARIŞ): okuma ile claim ARASINDA commit eden
 //      bir metraj düzeltmesinden sonra iki defter + tutanak TEK rakam söyler
+//   §14 ⭐ 0 METRAJLI TOP: "eksik" işaretlenirse tamamlama 500 VERMEZ — satır
+//      kapsam dışı kalır (gerekçesi metrajı ve çıkışı söyler), top iptal EDİLMEZ,
+//      ne defter ne sapma satırı doğar (0 metrajlı top boş kayıttır, eksik stok değil)
 //   körlük zemini: her bölümde "hiçbir şeye bakılmadı" ile "ihlal yok" ayrılır
 //
 // ÇAPRAZ İNCELEME EKLERİ (2026-08-15) — hepsi gerçek bulgu, hepsi bekçili:
@@ -58,6 +61,8 @@
 //       KIRMIZI (sayılmamış top kayıttan düşüldü)
 //   (d) `lockDraftCountTx` kaldırılınca → §11b KIRMIZI ("gecti": işaretleme
 //       rakip tx açıkken 3 ms'de geçti — ilişki filtresinin kilitlemediğinin ispatı)
+//   (e) 0-metraj KAPSAM dalı kaldırılınca → §14b KIRMIZI: tamamlama `AppError.internal`
+//       ile düşüyor (stok defteri kapısı 0 metrajda fırlatıyor) ve sayım hiç kapanmıyor
 //   (e) belge builder'ı yine `=== DRAFT` elemesine döndürülünce → §8j2/j3/j6
 //       KIRMIZI (iptal edilmiş sayımda v1/ACTIVE belge doğdu)
 //   (e2) durum etiketi `finalized`den bağımsız sabitlenince → §8j5/j5b KIRMIZI
@@ -905,6 +910,51 @@ async function main(): Promise<void> {
   const appSrc = readFileSync(join(__dirname, "../src/app.ts"), "utf8");
   check("10k) router app.ts'e BAĞLI", appSrc.includes('app.use("/api/stock-counts", stockCountRoutes)'));
   check("Körlük zemini §10: kaynak dosyaları gerçekten okundu", routeSrc.length > 1000 && appSrc.length > 1000);
+
+  // ── §14 ⭐ 0 METRAJLI TOP: sayım farkı yazılamaz, KAPSAM DIŞI kalır ──────
+  // 0 metrajlı top "eksik stok" DEĞİL, BOŞ KAYITTIR. İki yazıcı zıt davranıyor:
+  // stok defteri kapısı 0 metrajda FIRLATIR (DB seddi `warehouse_movements_qty_positive`
+  // ikizi `qtyYazilabilir`), sapma yazıcısı ise 0'ı SESSİZCE atlar. Süzmezsek
+  // tamamlama 500 verir ve sayım HİÇ kapanmaz; yalnız defteri süzersek top SAPMA
+  // KAYDI OLMADAN iptal olur ve o sayımın stornosu kalıcı kilitlenir ("sapma kaydı
+  // bulunamadı" engeli). Doğru yer KAPSAM kararıdır (denetim 2026-09-12).
+  const rollZero = await makeRoll(whB.id, fabric.id, 40);
+  await prisma.roll.update({ where: { id: rollZero }, data: { currentQty: 0 } });
+  const zeroCreated = await stockCountService.create({ warehouseId: whB.id, notes: `${TAG} sıfır metraj` });
+  const zeroId = (zeroCreated.data as { id: string }).id;
+  const zeroLines = await linesOf(zeroId);
+  const zeroLine = zeroLines.find((l) => l.rollId === rollZero);
+  check("14a) Körlük zemini: 0 metrajlı top fotoğrafa GİRDİ (satır var)", Boolean(zeroLine), `satır=${zeroLines.length}`);
+  await stockCountService.markLine({ stockCountId: zeroId, lineId: zeroLine!.id, found: false });
+  const zeroErr = await expectReject(() => stockCountService.complete(zeroId));
+  check("14b) ⭐ tamamlama BAŞARILI — 0 metrajlı eksik top sayımı 500'e düşürmüyor", zeroErr === null, String(zeroErr));
+  const zeroLineAfter = (await linesOf(zeroId)).find((l) => l.rollId === rollZero);
+  check(
+    "14c) ⭐ satır KAPSAM DIŞI ve gerekçesi metrajı söylüyor (soyut değil)",
+    (zeroLineAfter?.outOfScopeReason ?? "").includes("Metrajı 0"),
+    zeroLineAfter?.outOfScopeReason ?? "",
+  );
+  check(
+    "14c2) gerekçe ÇIKIŞ söylüyor (ne yapılacağı yazılı)",
+    (zeroLineAfter?.outOfScopeReason ?? "").includes("iptal/fire"),
+    zeroLineAfter?.outOfScopeReason ?? "",
+  );
+  const zeroRoll = await prisma.roll.findUniqueOrThrow({
+    where: { id: rollZero },
+    select: { status: true, cancelledAt: true },
+  });
+  check(
+    "14d) ⭐ top İPTAL EDİLMEDİ (boş kaydın çözümü sayım farkı değil)",
+    zeroRoll.status === RollStatus.WAREHOUSE && zeroRoll.cancelledAt === null,
+    `${zeroRoll.status} / ${String(zeroRoll.cancelledAt)}`,
+  );
+  const zeroLedger = await prisma.warehouseMovement.count({ where: { rollId: rollZero, stockCountId: zeroId } });
+  const zeroVar = await prisma.rollVariance.count({ where: { rollId: rollZero } });
+  check(
+    "14e) ⭐ ne defter ne sapma satırı doğdu (0 metrajlı satır hiçbir deftere girmez)",
+    zeroLedger === 0 && zeroVar === 0,
+    `defter=${zeroLedger} sapma=${zeroVar}`,
+  );
 }
 
 main()
