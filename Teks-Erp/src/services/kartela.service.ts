@@ -826,8 +826,23 @@ export class KartelaService {
           data: { cancelledAt: new Date(), cancelReason: trimmed },
         });
         if (cancelledSwatches.count !== liveSwatches.length) {
+          // Kısmi claim TANISI TAZE OKUMAYLA: claim'in WHERE'i üç koşul taşıyor
+          // (sevkiyat · çuval · zaten iptal), yani "sevkiyata bağlandı" demek
+          // körlemesine suçlamaktır — başka bir yol iptal etmiş de olabilir.
+          const stillLive = await tx.swatch.findMany({
+            where: { id: { in: liveSwatches.map((s) => s.id) }, cancelledAt: null },
+            select: { cardNumber: true, shipmentId: true, sackId: true },
+          });
+          const downstream = stillLive.filter((s) => s.shipmentId || s.sackId);
+          if (downstream.length > 0) {
+            throw AppError.conflict(
+              `${downstream.length} kartela bu sırada sevkiyata/çuvala bağlandı — kabul iptal edilemedi. Önce sevkiyattan çıkarın.`,
+              { code: "SWATCHES_DOWNSTREAM", blocked: downstream.map((s) => s.cardNumber) }
+            );
+          }
           throw AppError.conflict(
-            "Kartelalardan biri bu sırada sevkiyata/çuvala bağlanmış — kabul iptal edilemedi. Önce sevkiyattan çıkarın."
+            "Kartelalardan biri bu sırada başka bir işlemle değişti — kabul iptali yapılamadı. Listeyi yenileyip tekrar deneyin.",
+            { code: "SWATCH_RACE" }
           );
         }
         cancelledSwatchCount = cancelledSwatches.count;
