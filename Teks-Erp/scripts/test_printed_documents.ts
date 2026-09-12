@@ -30,8 +30,30 @@ function check(name: string, cond: boolean, extra?: unknown): void {
   }
 }
 
-const TAG = "PDTEST";
-const u = (s: string): string => `${TAG}-${s}-${Math.floor(performance.now())}`;
+/**
+ * ⚠️ DAMGA `TEST-` ÖN EKLİ OLMAK ZORUNDA: `clean_test_residue.ts` artığı yalnız
+ * `TEST-`/`TST-` deseninden tanır. Eski damga (`PDTEST`) o desene UYMUYORDU —
+ * bekçi çöktüğünde (aşağıdaki anahtar çakışması tam bunu yaptı) bıraktığı satır
+ * hiçbir temizlik yolundan görünmüyordu. Damga yalnız bu dosyada geçiyor ve
+ * bekçinin kendi temizliği ID tabanlı, yani yeniden adlandırma davranışı
+ * değiştirmez; kazandığı şey artığın GÖRÜNÜR olması.
+ */
+const TAG = "TEST-PD";
+/**
+ * Çakışmasız fixture anahtarı — ZAMANA DEĞİL SÜREÇ+SAYAÇA dayanır.
+ *
+ * ÖNCE: `${TAG}-${s}-${Math.floor(performance.now())}` — milisaniye
+ * çözünürlüklü. Ölçüldü (2026-09-12 tam paket koşumu): iki `mkRoll` AYNI
+ * milisaniyede koştu, aynı barkodu üretti ve bekçi 21/21 yeşil bastıktan SONRA
+ * `Unique constraint failed on the fields: (barcode)` ile çöktü. Koşucu bunu
+ * kırmızı gösterdi ama sebep regresyon değil kendi anahtarıydı — "kırmızı ≠
+ * regresyon" sınıfı, "yeşil ≠ kapsandı"nın kardeşi.
+ *
+ * ŞİMDİ: `pid` süreçler arasında, sayaç süreç İÇİNDE tekilliği garanti eder;
+ * zaman hiç kullanılmaz, yani hızlı makinede de çakışmaz.
+ */
+let sayac = 0;
+const u = (s: string): string => `${TAG}-${s}-${process.pid}-${++sayac}`;
 
 async function main(): Promise<void> {
   const created = { rolls: [] as string[], dispatchIds: [] as string[], shipmentIds: [] as string[], sackIds: [] as string[] };
