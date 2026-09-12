@@ -21,8 +21,79 @@ function check(label: string, ok: boolean, extra = ""): void {
   else { fail++; console.error(`❌ ${label}${extra ? ` — ${extra}` : ""}`); }
 }
 
+// ⚠️ PLAN EŞİĞİ — bekçi ön koşulunu ORTAMDAN beklemez, KENDİ kurar (2026-09-13).
+//
+// §2'nin sorusu ("bu sorgu INDEX kullanıyor mu") PLANLAYICIYA sorulur ve planlayıcı
+// KÜÇÜK TABLODA HAKLI OLARAK Seq Scan seçer: birkaç sayfalık tabloyu taramak
+// indeksten ucuzdur. Yani boş bir DB'de kırmızı olan şey kod değil, ORTAMDI.
+//
+// ÖLÇÜM (2026-09-13, gerçek merdiven, PG 17 / bu kurulumun ayarları):
+//   220 satır → Seq · 260 satır → Index   (ANALYZE'lı, 40'lık adımlarla)
+//   220 satır → Seq · 520 satır → Index   (ANALYZE HİÇ koşmadan)
+// ⚠️ Yani eşiği belirleyen ANALYZE TAZELİĞİ DEĞİL, tablonun SAYFA SAYISIDIR —
+//    istatistiksiz de planlayıcı fiziksel boyuttan tahmin eder. Hipotez ölçülünce
+//    zayıf çıktı; eşik ~240-260 ve iki rejimde de aynı mertebede.
+// EŞİK 600: ölçülen dönüş noktasının ~2,4 katı. Pay, PG sürümü / `random_page_cost`
+// / satır genişliği değişince eşiğin kayabilmesi için.
+//
+// BEDEL (3 koşum, ölçüldü): tohum + ANALYZE + temizlik **0,12 sn**. Paket 6,5 dk;
+// yani maliyet ölçülebilir değil. "Satır sayısı ↔ saniye" reçetesinin ikinci yarısı
+// budur ve tohumlamayı tartışmasız kılar.
+//
+// ⚠️ TEMİZLİK MEŞRU ARŞİV YOLUNDAN: `system_logs` üzerinde `audit_block_tamper`
+//    DELETE'i durdurur; tek kapı aynı tx içinde `SET LOCAL teks.audit_purge='on'`.
+//
+// ⚠️ NEGATİF SONDA "TOHUMLAMAYI KAPAT" DEĞİLDİR — bu sondayı ilk denediğimde
+//    ISIRMADI ve sebebi öğreticiydi: tohum silinir ama SAYFALAR hemen geri gelmez,
+//    planlayıcı tabloyu bir süre daha büyük sanır; autovacuum koşunca `relpages`
+//    1'e döner. Yani o sonda ORTAMI ölçer ve zamanlamaya göre yeşil/kırmızı olur.
+//    KORUNAN ŞEY İNDEKSTİR: doğru sonda indeksi düşürmektir. Ölçüldü (2026-09-13,
+//    aynı taban: 20 satır / relpages=1) — `DROP INDEX system_logs_tableName_recordId_idx`
+//    → 63/1 KIRMIZI, indeks geri gelince 64/0. Eski sürüm aynı tabanda 62/1.
+const PLAN_ESIK = 600;
+const TOHUM_ETIKETI = "TEST_AUDIT_PLAN_SEED";
+
+async function planOnKosuluKur(): Promise<number> {
+  const [{ n }] = await prisma.$queryRaw<{ n: bigint }[]>`SELECT count(*) AS n FROM system_logs`;
+  const eksik = PLAN_ESIK - Number(n);
+  if (eksik > 0) {
+    await prisma.$executeRaw`
+      INSERT INTO system_logs (id, category, action, "tableName", "recordId", "createdAt")
+      SELECT gen_random_uuid(), 'DOMAIN', ${TOHUM_ETIKETI}, ${TOHUM_ETIKETI},
+             gen_random_uuid()::text, now() - (i || ' seconds')::interval
+        FROM generate_series(1, ${eksik}) AS i`;
+  }
+  await prisma.$executeRawUnsafe("ANALYZE system_logs");
+  return Math.max(0, eksik);
+}
+
+async function planOnKosuluKaldir(): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe("SET LOCAL teks.audit_purge='on'");
+    await tx.$executeRaw`DELETE FROM system_logs WHERE action = ${TOHUM_ETIKETI}`;
+  });
+}
+
 async function main(): Promise<void> {
   console.log("=== Audit derinliği bekçisi ===\n");
+
+  const tohumlanan = await planOnKosuluKur();
+  try {
+    await bolum1ve2(tohumlanan);
+  } finally {
+    if (tohumlanan > 0) await planOnKosuluKaldir();
+  }
+  await bolum3veSonrasi();
+}
+
+async function bolum1ve2(tohumlanan: number): Promise<void> {
+  check(
+    "§0 ⭐ Plan ön koşulu KURULDU (eşik ortamdan beklenmez)",
+    Number(
+      (await prisma.$queryRaw<{ n: bigint }[]>`SELECT count(*) AS n FROM system_logs`)[0]!.n,
+    ) >= PLAN_ESIK,
+    tohumlanan > 0 ? `${tohumlanan} satır tohumlandı (eşik ${PLAN_ESIK})` : "ortamda zaten yeterli",
+  );
 
   // ── 1) recordId filtresi ÇALIŞIYOR mu ───────────────────────────────────
   const sample = await prisma.systemLog.findFirst({
@@ -65,6 +136,9 @@ async function main(): Promise<void> {
     planText.slice(0, 70),
   );
 
+}
+
+async function bolum3veSonrasi(): Promise<void> {
   // ── 3) Audit satırı DEĞİŞTİRİLEMEZ ──────────────────────────────────────
   const hasUpdatedAt = await prisma.$queryRaw<{ n: bigint }[]>`
     SELECT count(*) AS n FROM information_schema.columns

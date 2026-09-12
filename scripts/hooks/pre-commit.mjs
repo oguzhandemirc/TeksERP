@@ -69,7 +69,10 @@ for (const proje of etkilenenProjeler(REPO, staged)) {
     adimlar.push({
       ad: `${proje.ad} · lint tavanı`,
       cwd: ".",
-      cmd: ["node", ["scripts/check-lint-baseline.mjs", `--proje=${anahtar}`]],
+      // Tavan da commit kapısı kipinde: SAYIM proje geneli kalır (tabanla
+      // karşılaştırılabilir olmalı), yalnız VERDİKT bu commit'in dosyalarına bakar.
+      cmd: ["node", ["scripts/check-lint-baseline.mjs", `--proje=${anahtar}`, "--commit-kapisi"]],
+      stdin: `${staged.join("\n")}\n`,
     });
   }
   if (proje.test) adimlar.push({ ad: `${proje.ad} · test`, cwd: proje.ad, cmd: proje.test });

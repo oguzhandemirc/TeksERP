@@ -260,6 +260,20 @@ tripwire(
   (k) => k.replace(/"--commit-kapisi"/g, '"--x"'),
 );
 
+tripwire(
+  "pre-commit lint TAVANINI `--commit-kapisi` + stdin ile çağırıyor",
+  "scripts/hooks/pre-commit.mjs",
+  (k) => /check-lint-baseline\.mjs"[^\]]*"--commit-kapisi"/.test(k),
+  (k) => k.replace(/"--commit-kapisi"/g, '"--x"'),
+);
+
+tripwire(
+  "tavan verdikti STAGED kümesine bakıyor ve kural→dosya atfını tutuyor",
+  "scripts/check-lint-baseline.mjs",
+  (k) => /kuralDosyalari/.test(k) && /asan\.filter\([\s\S]{0,120}STAGED\.has/.test(k),
+  (k) => k.replace(/STAGED\.has\(f\)/g, "true"),
+);
+
 // ⚠️ CI KÖRLÜĞÜ SEDDİ: `--commit-kapisi` kapıyı yumuşatır ve CI'da hiçbir şey
 // staged olmadığı için orada takipsiz kapılar yapısal olarak hep yumuşak olurdu.
 // Bayrağın CI'ya sızmadığı AYRICA ölçülür — bayrağı yazmak yetmez, YERİ de kural.

@@ -55,6 +55,37 @@ const PROJELER = {
 //   · normal dosya silinmesi     → ~126 dosyalık pay, gürültü yapmaz
 const EN_AZ_DOSYA = { backend: 900, electron: 600, mobil: 200 };
 
+// =============================================================================
+// COMMIT KAPISI KİPİ (`--commit-kapisi` + staged liste stdin'den)
+// =============================================================================
+// VAKA (2026-09-13): tavan, ortak çalışma ağacında ÜÇÜNCÜ "yanlış kişiyi durduran"
+// mekanizmaydı — commit dışı tek bir dosyadaki üç ihlal (`scripts/out/`, başka bir
+// oturumun `.gitignore`lu scratch dizini) tavanı aşırıp commit'i reddetti.
+// ⚠️ `.gitignore` bir dosyayı GİT'ten gizler, DERLEYİCİDEN ve LINTER'DAN gizlemez.
+//
+// KARAR (kullanıcı onaylı): **SAYIM proje geneli KALIR, yalnız VERDİKT daralır.**
+// Kümeyi commit dosyalarına indirmek başka bir metrik üretirdi ve `lint-baseline.json`
+// ile KARŞILAŞTIRILAMAZDI ([TD-23]/[TD-24]: tavan ile kapı aynı kümeyi ölçmeli).
+//   · aşımı yapan ihlal BU COMMIT'in dosyasındaysa  → KIRMIZI
+//   · yalnız yabancı dosyadaysa                     → UYARI + çıkış 0, adıyla
+//   · karışıksa                                     → KIRMIZI (kendi payın varsa sorumlusun)
+//
+// ⚠️ BAYRAK HOOK YOLUNA ÖZGÜDÜR. CI'da hiçbir şey staged değildir; bayrak oraya
+// sızarsa her ihlal "yabancı" olur ve tavan yapısal olarak KÖR kalır. Sızmadığı
+// ayrıca ölçülür (test_commit_gate_scope.ts §3).
+const KOMIT_KIPI = process.argv.includes("--commit-kapisi");
+const STAGED = KOMIT_KIPI
+  ? new Set(
+      (() => {
+        try {
+          return readFileSync(0, "utf8").split("\n").map((s) => s.trim()).filter(Boolean);
+        } catch {
+          return [];
+        }
+      })(),
+    )
+  : null;
+
 const argv = process.argv.slice(2);
 const YAZ = argv.includes("--yaz");
 const projeArg = argv.find((a) => a.startsWith("--proje="))?.split("=")[1];
@@ -89,8 +120,14 @@ function olc(proje) {
 
   const dosyalar = JSON.parse(ham);
   const sayim = {};
+  // Kural → o kuralı ihlal eden DOSYALAR (repo köküne göre). Sayım değişmez;
+  // bu harita yalnız VERDİKT için — "aşımı kim getirdi" sorusunu cevaplar.
+  const kuralDosyalari = {};
   let hata = 0;
   for (const d of dosyalar) {
+    const repoRel = d.filePath.startsWith(REPO_ROOT)
+      ? d.filePath.slice(REPO_ROOT.length + 1).replace(/\\/g, "/")
+      : d.filePath;
     for (const m of d.messages ?? []) {
       // ruleId null = parse hatası (config/sözdizimi). Baseline'a giremez, ARIZADIR.
       if (!m.ruleId) {
@@ -98,10 +135,11 @@ function olc(proje) {
         process.exit(2);
       }
       sayim[m.ruleId] = (sayim[m.ruleId] ?? 0) + 1;
+      (kuralDosyalari[m.ruleId] ??= new Set()).add(repoRel);
       if (m.severity === 2) hata++;
     }
   }
-  return { sayim, dosyaSayisi: dosyalar.length, hata };
+  return { sayim, kuralDosyalari, dosyaSayisi: dosyalar.length, hata };
 }
 
 let kirmizi = false;
@@ -112,7 +150,7 @@ for (const proje of SECILEN) {
     console.error(`Bilinmeyen proje: ${proje} (${Object.keys(PROJELER).join(", ")})`);
     process.exit(2);
   }
-  const { sayim, dosyaSayisi, hata } = olc(proje);
+  const { sayim, kuralDosyalari, dosyaSayisi, hata } = olc(proje);
 
   if (dosyaSayisi < EN_AZ_DOSYA[proje]) {
     console.error(
@@ -157,14 +195,39 @@ for (const proje of SECILEN) {
   }
 
   if (asan.length > 0) {
-    kirmizi = true;
-    console.error(`❌ ${proje}: ${asan.length} kural TAVANI AŞTI (${dosyaSayisi} dosya, ${hata} error)`);
-    for (const a of asan) console.error(`   ${a.kural}: ${a.adet} > ${a.tavan}`);
-    console.error(
-      `   Bu kurallar YENİ KODDA ZORUNLU. Devralınan kodu düzeltmen gerekmiyor —\n` +
-        `   eklediğin/dokunduğun yeri sınıra çek. Tavanı yükseltmek bir KARARDIR,\n` +
-        `   gerekçesiyle birlikte yapılır (${PROJELER[proje].dizin}/lint-baseline.json).`,
+    // VERDİKT: aşımı yapan kuralın ihlalleri BU COMMIT'in dosyalarında da var mı?
+    // Bayraksız kipte (CI · elle koşum) soru sorulmaz, hepsi sert.
+    const benim = STAGED
+      ? asan.filter((a) => [...(kuralDosyalari[a.kural] ?? [])].some((f) => STAGED.has(f)))
+      : asan;
+    const yaz = benim.length > 0 ? console.error : console.log;
+    if (benim.length > 0) kirmizi = true;
+    yaz(
+      `${benim.length > 0 ? "❌" : "⚠️ "} ${proje}: ${asan.length} kural TAVANI AŞTI ` +
+        `(${dosyaSayisi} dosya, ${hata} error)`,
     );
+    for (const a of asan) {
+      const dosyalar = [...(kuralDosyalari[a.kural] ?? [])];
+      const bende = dosyalar.filter((f) => !STAGED || STAGED.has(f));
+      // Etiket YALNIZ commit kipinde anlamlıdır: bayraksız koşumda "commit" diye
+      // bir küme yoktur ve "BU COMMIT'TE" yazmak uydurma bir iddia olurdu.
+      const etiket = STAGED ? `  [${benim.includes(a) ? "BU COMMIT'TE" : "commit dışı"}]` : "";
+      yaz(`   ${a.kural}: ${a.adet} > ${a.tavan}${etiket}`);
+      for (const f of (bende.length ? bende : dosyalar).slice(0, 5)) yaz(`     · ${f}`);
+    }
+    if (benim.length > 0) {
+      console.error(
+        `   Bu kurallar YENİ KODDA ZORUNLU. Devralınan kodu düzeltmen gerekmiyor —\n` +
+          `   eklediğin/dokunduğun yeri sınıra çek. Tavanı yükseltmek bir KARARDIR,\n` +
+          `   gerekçesiyle birlikte yapılır (${PROJELER[proje].dizin}/lint-baseline.json).`,
+      );
+    } else {
+      // Sahip UYDURULMAZ: "commit dışı" yalnız "bu commit'e girmiyor" demektir.
+      console.log(
+        `   Aşımı yapan ihlallerin hiçbiri BU COMMIT'in dosyasında değil — kapı geçti.\n` +
+          `   Arka durak: CI'ın 'Lint tavanı' adımı tam ağacı ölçer ve orada SERTTİR.`,
+      );
+    }
   } else {
     console.log(`✅ ${proje}: tavan aşılmadı (${dosyaSayisi} dosya, ${hata} error)`);
   }
