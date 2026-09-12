@@ -1,6 +1,8 @@
 # Reçeteler — "X eklerken şu yerleri güncelle"
 
 > Koddan çıkarılmış adım listeleri (anlama turu 2026-09-05: 9 prosedür; standart turu 2026-09-05: +5 — servis metodu · Prisma modeli · ESLint kuralı · bağımlılık · ölü paket kaldırma). Her adımın kanıtı `dosya:satır`. ⚠️ işaretli adımlar yazıldıkları güne dek HİÇBİR belgede yoktu — atlandığında sessiz düşen adımlar bunlar. Rutin yazım konvansiyonlarının kendisi `docs/standart/` altındadır; buradaki reçeteler ADIM listesidir, kural metni değil. Alan-özgü küçük reçeteler en altta.
+>
+> **Her reçetede geçerli tek kural:** backend'de yeni bir DEĞER doğuyorsa (Prisma enum üyesi · `logEvent` action'ı · bayrak/ayar anahtarı), istemcideki karşılığını tutan sözlük **MEKANİK olarak ölçülür** — bu sözlükler gevşek tiplidir (`Record<string, string>`) ve derleyici SUSAR. Aynı sınıfın üç ailesi: `ReasonPresetKind`in on iki aynası · modül bayrağının dört kapısı · audit etiketleri (`ENUM_LABELS` · `EVENT_ACTION_LABELS`). ⚠️ Bu ölçüm COMMIT KAPISINDA KOŞMAZ (kapı: tip · lint · lint tavanı · proje testi · migration hijyeni · tanımlayıcı dili · doküman kapısı) ⇒ eksik ayna ancak TAM PAKETTE görünür; 2026-09-12'de aynı gün iki kez ısırdı (`ImportLineAction` değerleri · `IMPORT_REVERT` olayı).
 
 
 ## Yeni backend route + izin kodu

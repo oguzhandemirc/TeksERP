@@ -211,6 +211,19 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   LOGIN_CONFLICT: "Giriş engellendi (oturum açık)",
   LOGOUT: "Çıkış yapıldı",
 
+  // ── SYSTEM · ayar şifresi (süperadmin yönetir) ──
+  // ⚠️ Bu altı olayı `test_audit_labels` §3 İSTEMEDİ ve istemesi de beklenmez:
+  // çağrılar sabit üzerinden yazılıyor (`action: SETTINGS_PASSWORD_EVENTS.FAILED`)
+  // ve §3 yalnız dizge literalini tarar ⇒ etiketleri ELLE eklendi. Metinler
+  // servisin kendi Türkçesinden alındı. Etiket yalnız olay ADIDIR: şifre/hash
+  // ne burada ne audit yükünde durur (sır hijyeni).
+  SETTINGS_PASSWORD_SET: "Ayar şifresi ilk kez tanımlandı",
+  SETTINGS_PASSWORD_ROTATED: "Ayar şifresi değiştirildi",
+  SETTINGS_PASSWORD_REVOKED: "Ayar şifresi kaldırıldı",
+  SETTINGS_PASSWORD_USED: "Ayar şifresi kullanıldı",
+  SETTINGS_PASSWORD_FAILED: "Ayar şifresi hatalı girildi",
+  SETTINGS_PASSWORD_LOCKED: "Ayar şifresi denemeleri kilitlendi",
+
   // ── SYSTEM · çalışma ──
   STARTUP: "Sunucu başlatıldı",
   ERROR: "Beklenmeyen hata",
@@ -241,6 +254,9 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
 
   // ── SYSTEM · içe aktarım & katalog uzlaştırması ──
   IMPORT_RUN: "İçe aktarım çalıştırıldı",
+  // Koşumun YAZDIĞI satırların ters kaydı. Koşum silinmez: üstüne damga yazılır,
+  // o yüzden olay adı "geri alındı" değil "geri sarıldı".
+  IMPORT_REVERT: "İçe aktarım geri sarıldı",
   CONFIG_BUNDLE_IMPORT: "Ayar paketi içe aktarıldı",
   PERMISSION_CATALOG_RECONCILED: "Yetki kataloğu eşitlendi",
   PERMISSION_CATALOG_RECONCILE_FAILED: "Yetki kataloğu eşitlenemedi",
