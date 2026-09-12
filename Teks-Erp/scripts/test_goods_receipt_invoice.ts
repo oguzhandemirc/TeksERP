@@ -580,7 +580,7 @@ async function main(): Promise<void> {
       {
         type: "PURCHASE",
         customerId: supplier.id,
-        lines: [{ description: "yarış-eski", qty: 10, unitPrice: 2, vatRate: 0 }],
+        lines: [{ description: "yarış-eski", qty: 10, unit: "m", unitPrice: 2, vatRate: 0 }],
       },
       undefined,
     );
@@ -601,7 +601,7 @@ async function main(): Promise<void> {
 
     let updSettled = false;
     const updP = settle(
-      invoiceService.updateDraft(dA.data.id, { lines: [{ description: "yarış-yeni", qty: 999, unitPrice: 5 }] }, undefined),
+      invoiceService.updateDraft(dA.data.id, { lines: [{ description: "yarış-yeni", qty: 999, unit: "m", unitPrice: 5 }] }, undefined),
       () => {
         updSettled = true;
       },
@@ -631,7 +631,7 @@ async function main(): Promise<void> {
       {
         type: "PURCHASE",
         customerId: supplier.id,
-        lines: [{ description: "eski", qty: 10, unitPrice: 2, vatRate: 0 }],
+        lines: [{ description: "eski", qty: 10, unit: "m", unitPrice: 2, vatRate: 0 }],
       },
       undefined,
     );

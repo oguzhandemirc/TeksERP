@@ -99,8 +99,8 @@ const extraBankIds: string[] = [];
 let usdRateCreated = false;
 
 /** Tek satırlık, KDV'siz fatura — grandTotal tam olarak `amount` olur. */
-function lines(amount: number): Array<{ description: string; qty: number; unitPrice: number }> {
-  return [{ description: "Bekçi kalemi", qty: 1, unitPrice: amount }];
+function lines(amount: number): Array<{ description: string; qty: number; unit: string; unitPrice: number }> {
+  return [{ description: "Bekçi kalemi", qty: 1, unit: "m", unitPrice: amount }];
 }
 
 async function newCustomer(suffix: string): Promise<string> {

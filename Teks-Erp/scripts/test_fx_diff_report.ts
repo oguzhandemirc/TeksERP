@@ -82,7 +82,7 @@ async function makeFxInvoice(opts: {
     subcontractorId: opts.subcontractorId ?? null,
     currency: opts.currency ?? "USD",
     exchangeRate: opts.rate,
-    lines: [{ description: `${TAG} satır`, qty: 1, unitPrice: opts.total, vatRate: 0 }],
+    lines: [{ description: `${TAG} satır`, qty: 1, unit: "m", unitPrice: opts.total, vatRate: 0 }],
   });
   invoiceIds.push(r.data.id);
   invoiceDocNos.add(r.data.docNo);
@@ -161,7 +161,7 @@ async function main(): Promise<void> {
     type: "SALES",
     customerId: customer.id,
     currency: "TRY",
-    lines: [{ description: `${TAG} TL satır`, qty: 1, unitPrice: 400, vatRate: 0 }],
+    lines: [{ description: `${TAG} TL satır`, qty: 1, unit: "m", unitPrice: 400, vatRate: 0 }],
   });
   invoiceIds.push(invTry.data.id);
   invoiceDocNos.add(invTry.data.docNo);

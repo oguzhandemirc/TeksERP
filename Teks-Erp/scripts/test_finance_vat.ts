@@ -73,6 +73,7 @@ const invoiceIds: string[] = [];
 interface LineIn {
   description: string;
   qty: number;
+  unit: string;
   unitPrice: number;
   vatRate?: number;
   withholdingRate?: number;
@@ -125,7 +126,7 @@ async function main(): Promise<void> {
     type: "SALES",
     customerId: cust.id,
     issueDate: BASE,
-    lines: [{ description: "S1", qty: 1, unitPrice: 2000, vatRate: 20 }],
+    lines: [{ description: "S1", qty: 1, unit: "m", unitPrice: 2000, vatRate: 20 }],
   });
   // S2 — satış USD, KARIŞIK ORAN + kur damgası 40.004. Değerler bilinçli:
   // grup bazlı TL çeviri toplamı (102.82) damgalı grandTotalTry'den (102.81)
@@ -139,8 +140,8 @@ async function main(): Promise<void> {
     exchangeRate: 40.004,
     issueDate: BASE,
     lines: [
-      { description: "S2a", qty: 1, unitPrice: 1.26, vatRate: 1 },
-      { description: "S2b", qty: 1, unitPrice: 1.26, vatRate: 3 },
+      { description: "S2a", qty: 1, unit: "m", unitPrice: 1.26, vatRate: 1 },
+      { description: "S2b", qty: 1, unit: "m", unitPrice: 1.26, vatRate: 3 },
     ],
   });
   // R1 — satış İADESİ TRY.
@@ -148,14 +149,14 @@ async function main(): Promise<void> {
     type: "SALES_RETURN",
     customerId: cust.id,
     issueDate: BASE,
-    lines: [{ description: "R1", qty: 1, unitPrice: 500, vatRate: 20 }],
+    lines: [{ description: "R1", qty: 1, unit: "m", unitPrice: 500, vatRate: 20 }],
   });
   // C1 — onaylanıp İPTAL edilen satış (rapora girmemeli).
   const c1 = await mkInvoice({
     type: "SALES",
     customerId: cust.id,
     issueDate: BASE,
-    lines: [{ description: "C1", qty: 1, unitPrice: 7777, vatRate: 20 }],
+    lines: [{ description: "C1", qty: 1, unit: "m", unitPrice: 7777, vatRate: 20 }],
   });
   await invoiceService.cancel(c1, "bekçi iptali");
   // D1 — TASLAK (hiç onaylanmaz; rapora girmemeli).
@@ -163,7 +164,7 @@ async function main(): Promise<void> {
     type: "SALES",
     customerId: cust.id,
     issueDate: BASE,
-    lines: [{ description: "D1", qty: 1, unitPrice: 5555, vatRate: 20 }],
+    lines: [{ description: "D1", qty: 1, unit: "m", unitPrice: 5555, vatRate: 20 }],
     confirm: false,
   });
   // OUT — pencere DIŞI satış (issueDate +10 gün; girmemeli).
@@ -171,21 +172,21 @@ async function main(): Promise<void> {
     type: "SALES",
     customerId: cust.id,
     issueDate: new Date(BASE.getTime() + 10 * DAY),
-    lines: [{ description: "OUT", qty: 1, unitPrice: 3333, vatRate: 20 }],
+    lines: [{ description: "OUT", qty: 1, unit: "m", unitPrice: 3333, vatRate: 20 }],
   });
   // P1 — alış TRY, TEVKİFATLI (fason: KDV üzerinden %50).
   const p1 = await mkInvoice({
     type: "PURCHASE",
     subcontractorId: sub.id,
     issueDate: BASE,
-    lines: [{ description: "P1", qty: 1, unitPrice: 1000, vatRate: 20, withholdingRate: 50 }],
+    lines: [{ description: "P1", qty: 1, unit: "m", unitPrice: 1000, vatRate: 20, withholdingRate: 50 }],
   });
   // P2 — alış İADESİ TRY, tevkifatlı.
   await mkInvoice({
     type: "PURCHASE_RETURN",
     subcontractorId: sub.id,
     issueDate: BASE,
-    lines: [{ description: "P2", qty: 1, unitPrice: 200, vatRate: 20, withholdingRate: 50 }],
+    lines: [{ description: "P2", qty: 1, unit: "m", unitPrice: 200, vatRate: 20, withholdingRate: 50 }],
   });
 
   // ── §1 KÖRLÜK ZEMİNİ: fixture DB'de gerçekten doğdu mu ────────────────────

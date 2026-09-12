@@ -54,6 +54,7 @@ import {
 import { D0 } from "./allocation.helper";
 import { deriveInvoiceDueDate } from "./finance.helper";
 import { SACK_ABSENT_STATUSES } from "./sack-invariants.helper";
+import { LEDGER_UNIT, unitLabel } from "../../constants/item-unit";
 import { uyari } from "../../lib/logger";
 
 /**
@@ -105,6 +106,12 @@ export interface ShipmentDraftLinesResult {
   orderPriced: number;
   /** Çelişkili sipariş fiyatı yüzünden D2'ye düşen satır sayısı — mesajda söylenir. */
   orderConflicts: number;
+  /**
+   * MT-dışı (kg/adet) sipariş satırına yazılmış sevk: taslak miktarı metre
+   * defterinden gelir ve "m" kalır — birim miktarın kaynağını izler, satırın
+   * birimi değil. Muhasebeci satırı elle düzeltir; sessiz "kg" basılmaz.
+   */
+  warnings: string[];
 }
 
 /**
@@ -132,7 +139,8 @@ export async function collectShipmentInvoiceDraftLines(
       color: { select: { name: true } },
     },
   });
-  if (rolls.length === 0) return { lines: [], orderPriced: 0, orderConflicts: 0 };
+  if (rolls.length === 0) return { lines: [], orderPriced: 0, orderConflicts: 0, warnings: [] };
+  const warnings = await collectUnmeasuredAllocationWarnings(shipmentId);
 
   // Gruplama anahtarı `itemId` + görünen ad. Ad TEK BAŞINA anahtar olamaz:
   // fiyat kalem KARTINDAN çözülüyor ve aynı ada sahip iki farklı kart tek
@@ -236,7 +244,31 @@ export async function collectShipmentInvoiceDraftLines(
       vatRate,
     };
   });
-  return { lines, orderPriced, orderConflicts };
+  return { lines, orderPriced, orderConflicts, warnings };
+}
+
+/** Bu sevkiyatın tahsis aldığı MT-dışı sipariş satırları → taslak uyarısı (satır başına bir). */
+async function collectUnmeasuredAllocationWarnings(shipmentId: string): Promise<string[]> {
+  const allocs = await prisma.sackAllocation.findMany({
+    where: { sack: { shipmentId }, orderLine: { unit: { not: LEDGER_UNIT } } },
+    select: {
+      orderLine: {
+        select: { id: true, unit: true, customerItemName: true, item: { select: { name: true } } },
+      },
+    },
+  });
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const a of allocs) {
+    if (seen.has(a.orderLine.id)) continue;
+    seen.add(a.orderLine.id);
+    const name = a.orderLine.customerItemName?.trim() || a.orderLine.item.name;
+    out.push(
+      `"${name}" sipariş satırı ${unitLabel(a.orderLine.unit)} birimli — taslak miktarı metre defterinden ("m"); ` +
+        "fatura satırının miktar ve birimini elle düzeltin.",
+    );
+  }
+  return out;
 }
 
 /**
@@ -329,7 +361,7 @@ export async function autoDraftInvoiceAfterDispatch(
     });
     const currency = cari?.defaultCurrency ?? Currency.TRY;
 
-    const { lines, orderConflicts } = await collectShipmentInvoiceDraftLines(sh.id, sh.customerId, currency);
+    const { lines, orderConflicts, warnings } = await collectShipmentInvoiceDraftLines(sh.id, sh.customerId, currency);
     if (lines.length === 0) return null;
 
     // Tahakkuk tarihi = malın çıktığı an. `new Date()` yazmak, gece yarısını
@@ -346,7 +378,9 @@ export async function autoDraftInvoiceAfterDispatch(
         // ekran aynı faturaya iki cevap veriyordu. Kural TEK KAYNAKTA
         // (`deriveInvoiceDueDate`); cari vade taşımıyorsa vade YAZILMAZ.
         dueDate: deriveInvoiceDueDate(issueDate, cari?.paymentTermDays),
-        notes: `${sh.shipmentNo} sevkiyatından üretildi.`,
+        // MT-dışı satır uyarısı taslağın notuna yazılır: muhasebeci taslağı
+        // açtığında görür; sessiz kalırsa kg satırına metre fiyatı çarpılırdı.
+        notes: `${sh.shipmentNo} sevkiyatından üretildi.${warnings.length > 0 ? ` ⚠ ${warnings.join(" ")}` : ""}`,
         shipmentId: sh.id,
         lines,
       },

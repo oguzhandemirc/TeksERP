@@ -93,8 +93,8 @@ let customerId: string | null = null;
 let subcontractorId: string | null = null;
 
 const LINES = [
-  { description: "Perde kumaşı", qty: 100, unitPrice: 25, vatRate: 20 },
-  { description: "Fason işçilik", qty: 2, unitPrice: 150, vatRate: 20, discountRate: 10 },
+  { description: "Perde kumaşı", qty: 100, unit: "m", unitPrice: 25, vatRate: 20 },
+  { description: "Fason işçilik", qty: 2, unit: "m", unitPrice: 150, vatRate: 20, discountRate: 10 },
 ];
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -308,7 +308,7 @@ async function main(): Promise<void> {
   const zeroDraft = await invoiceService.createDraft({
     type: "SALES",
     customerId,
-    lines: [{ description: "Fiyatı sonra girilecek", qty: 10, unitPrice: 0 }],
+    lines: [{ description: "Fiyatı sonra girilecek", qty: 10, unit: "m", unitPrice: 0 }],
   });
   invoiceIds.push(zeroDraft.data.id);
   check("§8a Fiyatsız satır TASLAKTA serbest", Boolean(zeroDraft.data.id));
@@ -359,7 +359,7 @@ async function main(): Promise<void> {
     const purchase = await invoiceService.createDraft({
       type: "PURCHASE",
       subcontractorId: sub.id,
-      lines: [{ description: "Boya hizmeti", qty: 500, unitPrice: 3, vatRate: 20 }],
+      lines: [{ description: "Boya hizmeti", qty: 500, unit: "m", unitPrice: 3, vatRate: 20 }],
     });
     invoiceIds.push(purchase.data.id);
     await invoiceService.confirm(purchase.data.id);

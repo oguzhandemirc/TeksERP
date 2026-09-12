@@ -289,7 +289,7 @@ async function makeInvoice(opts: {
     currency: "TRY",
     issueDate: opts.issueDate,
     dueDate: opts.dueDate ?? null,
-    lines: [{ description: `${TAG} satır`, qty: 1, unitPrice: opts.total, vatRate: 0 }],
+    lines: [{ description: `${TAG} satır`, qty: 1, unit: "m", unitPrice: opts.total, vatRate: 0 }],
   });
   invoiceIds.push(r.data.id);
   if (opts.confirm !== false) await invoiceService.confirm(r.data.id);
@@ -1478,7 +1478,7 @@ async function main(): Promise<void> {
       customerId: fxCustomer.id,
       currency: "USD",
       exchangeRate: 40,
-      lines: [{ description: `${TAG} USD satır`, qty: 1, unitPrice: 500, vatRate: 0 }],
+      lines: [{ description: `${TAG} USD satır`, qty: 1, unit: "m", unitPrice: 500, vatRate: 0 }],
     });
     invoiceIds.push(usdDraft.data.id);
     await invoiceService.confirm(usdDraft.data.id);

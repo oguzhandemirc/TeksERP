@@ -71,12 +71,14 @@ import { assertPeriodOpenTx } from "./helpers/period-guard.helper";
 import { buildTurkishSearch } from "../utils/query-parser";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import type { ApiResponse } from "../types/api.types";
+import { unitLabel } from "../constants/item-unit";
 
 export interface InvoiceLineInput {
   itemId?: string | null;
   description: string;
   qty: Prisma.Decimal.Value;
-  unit?: string;
+  /** Zorunlu — birim miktarın kaynağını izler, sessiz "m" fallback'i yok. */
+  unit: string;
   unitPrice: Prisma.Decimal.Value;
   discountRate?: Prisma.Decimal.Value;
   vatRate?: Prisma.Decimal.Value;
@@ -396,7 +398,7 @@ export class InvoiceService {
                   itemId: l.itemId ?? null,
                   description: l.description,
                   qty: D(l.qty),
-                  unit: l.unit ?? "m",
+                  unit: l.unit,
                   unitPrice: D(l.unitPrice),
                   discountRate: D(l.discountRate ?? 0),
                   vatRate: D(l.vatRate ?? 0),
@@ -621,7 +623,8 @@ export class InvoiceService {
           description: r.colorName ? `${r.itemName} · ${r.colorName}` : r.itemName,
           qty: D(r.initialQty),
           unitPrice: price,
-          unit: r.itemUnit ?? "m",
+          // Etiket tek sözlükten: "MT" enum kodu belgeye "m" olarak basılır.
+          unit: unitLabel(r.itemUnit),
         });
       }
     }
@@ -812,7 +815,7 @@ export class InvoiceService {
               itemId: l.itemId ?? null,
               description: l.description,
               qty: D(l.qty),
-              unit: l.unit ?? "m",
+              unit: l.unit,
               unitPrice: D(l.unitPrice),
               discountRate: D(l.discountRate ?? 0),
               vatRate: D(l.vatRate ?? 0),
@@ -850,12 +853,13 @@ export class InvoiceService {
   private async loadLinesForTotals(tx: Prisma.TransactionClient, invoiceId: string): Promise<InvoiceLineInput[]> {
     const rows = await tx.invoiceLine.findMany({
       where: { invoiceId },
-      select: { qty: true, unitPrice: true, discountRate: true, vatRate: true, withholdingRate: true, description: true },
+      select: { qty: true, unit: true, unitPrice: true, discountRate: true, vatRate: true, withholdingRate: true, description: true },
       orderBy: { lineNo: "asc" },
     });
     return rows.map((r) => ({
       description: r.description,
       qty: r.qty,
+      unit: r.unit,
       unitPrice: r.unitPrice,
       discountRate: r.discountRate,
       vatRate: r.vatRate,

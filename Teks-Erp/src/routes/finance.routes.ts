@@ -375,7 +375,8 @@ const lineSchema = z.object({
   itemId: z.string().uuid().nullable().optional(),
   description: z.string().min(1).max(300),
   qty: decimalString,
-  unit: z.string().max(16).optional(),
+  // Birim ZORUNLU: sessiz "m" varsayılanı kg satırını metre gibi bastırırdı.
+  unit: z.string().trim().min(1, "Satır birimi gerekli.").max(16),
   unitPrice: decimalString,
   discountRate: decimalString.optional(),
   vatRate: decimalString.optional(),
@@ -792,7 +793,12 @@ router.get("/shipments/:id/invoice-draft-lines", requirePermission("finance:read
     // ⚠️ Sevkiyat okuması + para birimi çözümü SERVİS KATMANINDA (katman kuralı;
     // route'ta `prisma` import etmek ESLint `no-restricted-imports` ile yasak).
     // Para birimi kuralı otomatik kancayla AYNI kaynaktan gelir.
-    res.json({ success: true, data: await buildShipmentInvoiceDraftPreview(id) });
+    const preview = await buildShipmentInvoiceDraftPreview(id);
+    res.json({
+      success: true,
+      data: preview,
+      ...(preview.warnings.length > 0 ? { warnings: preview.warnings } : {}),
+    });
   } catch (e) {
     next(e);
   }

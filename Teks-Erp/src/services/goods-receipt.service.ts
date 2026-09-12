@@ -29,6 +29,7 @@ import {
   GoodsReceiptStatus,
   InvoiceStatus,
   ItemType,
+  ItemUnit,
   PriceKind,
   PrintedDocType,
   Prisma,
@@ -37,6 +38,7 @@ import {
   RollStatus,
   YarnMovementKind,
 } from "@prisma/client";
+import { unitLabel } from "../constants/item-unit";
 import { registerPrintedDocBuilder } from "./printed-document.service";
 import { renderGoodsReceiptHtml, type GoodsReceiptDoc } from "./document-render/warehouse-doc.html";
 import prisma from "../lib/prisma";
@@ -213,8 +215,8 @@ export interface ReceiptFabricLine {
   itemId: string;
   itemName: string;
   itemCode: string | null;
-  /** `Item.unit` (ItemUnit enum kodu: MT/KG/ADET) — fatura satırının birimi. */
-  itemUnit: string;
+  /** `Item.unit` (ItemUnit enum kodu: MT/KG/ADET) — fatura satırı etiketi `unitLabel` ile. */
+  itemUnit: ItemUnit;
   colorName: string | null;
   width: Prisma.Decimal | null;
   weightKg: Prisma.Decimal | null;
@@ -342,9 +344,6 @@ export function describeOverReceipt(sync: PurchaseOrderSyncResult | null | undef
 // =============================================================================
 
 const D0 = new Prisma.Decimal(0);
-
-/** Mesajda basılan birim — SUNUM amaçlı (kolon/karar değil). */
-const UNIT_LABEL: Record<string, string> = { MT: "m", KG: "kg", ADET: "adet" };
 
 /** Kullanıcıya basılan miktar: decimal.js sondaki sıfırları zaten atar. */
 const qtyText = (v: Prisma.Decimal, unit: string): string => `${v.toString()} ${unit}`;
@@ -910,7 +909,7 @@ export class GoodsReceiptService {
     // kapısı farklı cevap veriyorsa hangisinin doğru olduğu sorulamaz.
     // ⚠️ `unit` de okunur: guard mesajları miktarı BİRİMİYLE basar (kumaş m,
     // iplik kg) — aynı sorgu, ek maliyet yok.
-    const itemInfo = new Map<string, { itemType: ItemType; isActive: boolean; name: string; unit: string }>();
+    const itemInfo = new Map<string, { itemType: ItemType; isActive: boolean; name: string; unit: ItemUnit }>();
     const ids = [...new Set(lines.map((l) => l.itemId))];
     if (ids.length > 0) {
       const rows = await prisma.item.findMany({
@@ -1004,7 +1003,7 @@ export class GoodsReceiptService {
         // burada farklı bir cümleyle önden yakalamak, aynı durumu iki farklı
         // şekilde okutur.
         if (info) {
-          const unit = UNIT_LABEL[info.unit] ?? info.unit;
+          const unit = unitLabel(info.unit);
           if (requirePrice) assertLinePriceResolved(priceFor(line), info.name, receipt.currency);
           if (overCtx) {
             assertNotOverReceipt(overCtx, line.itemId, info.name, new Prisma.Decimal(line.initialQty), unit);

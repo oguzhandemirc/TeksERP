@@ -30,6 +30,11 @@
 //   §6 KÖRLÜK ZEMİNİ — fixture gerçekten kuruldu mu (yeşil ≠ "hiç bakılmadı")
 //   §8 ⭐ VADE ÖN-DOLUMU — `dueDate = issueDate + CariAccount.paymentTermDays`;
 //      cari vade taşımıyorsa dueDate NULL (uydurma vade YAZILMAZ)
+//   §9 BİRİM MİKTARIN KAYNAĞINI İZLER — KG sipariş satırına yazılan sevkin
+//      taslak satırı "m" KALIR (defter metre), `warnings` + taslak notu uyarır;
+//      "kg" basılmaz (1000 m'ye kg etiketi aynı yalanın tersi olurdu)
+//      NEGATİF SONDA (2026-09-13, ölçüldü): `collectUnmeasuredAllocationWarnings`
+//      `[]`e sabitlendi → §9b/§9c kırmızı (2 ❌); sha256 ile birebir geri yüklendi.
 //
 // NEGATİF SONDA (2026-08-14 — koşuldu, kırmızı GÖRÜLDÜ, dosya shasum ile
 // birebir geri yüklendi: dc724ae3…). `shipping.service.
@@ -54,6 +59,7 @@
 import { Currency, InvoiceStatus, InvoiceType, PriceKind, RollStatus, ShipmentStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { shippingService } from "../src/services/shipping.service";
+import { collectShipmentInvoiceDraftLines } from "../src/services/helpers/shipment-auto-draft.helper";
 import { InventoryService } from "../src/services/inventory.service";
 import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
 import { SETTING_KEYS, readFinanceDefaultVatRate } from "../src/services/system-setting.service";
@@ -446,6 +452,41 @@ async function main(): Promise<void> {
         `issue=${dInv?.issueDate.toISOString()} due=${dInv?.dueDate?.toISOString() ?? "(yok)"}`,
       );
     }
+  }
+
+  // ── §9 BİRİM MİKTARIN KAYNAĞINI İZLER (OrderLine.unit, 2026-09-13) ───────
+  {
+    const itemKG = await prisma.item.create({
+      data: { code: `${TAG}-KG`, name: `${TAG} Örme KG`, itemType: "FABRIC", unit: "KG" },
+      select: { id: true },
+    });
+    itemIds.push(itemKG.id);
+    const ordKG = await prisma.order.create({
+      data: {
+        orderNumber: `${TAG}-SIPKG`,
+        customerId: customer.id,
+        lines: { create: [{ itemId: itemKG.id, quantity: 100, unit: "KG" }] },
+      },
+      select: { id: true },
+    });
+    orderIds.push(ordKG.id);
+    const kgRoll = await makeRoll(itemKG.id, 30, wh.id);
+    const kgShip = (await shippingService.createShipmentFromRolls({
+      rollIds: [kgRoll],
+      customerId: customer.id,
+      orderIds: [ordKG.id],
+      clientToken: crypto.randomUUID(),
+    })) as QuickResult;
+    shipmentIds.push(kgShip.data.id);
+    const preview = await collectShipmentInvoiceDraftLines(kgShip.data.id, customer.id, Currency.TRY);
+    check("§9a Taslak satırı birimi 'm' KALDI (defter metre; satır kg olsa da)",
+      preview.lines.length === 1 && preview.lines[0]!.unit === "m", JSON.stringify(preview.lines.map((l) => l.unit)));
+    check("§9b Önizleme `warnings` KG satırını adıyla söylüyor",
+      preview.warnings.length === 1 && /kg birimli/.test(preview.warnings[0]!), JSON.stringify(preview.warnings));
+    const kgInv = await prisma.invoice.findFirst({ where: { shipmentId: kgShip.data.id }, select: { notes: true, lines: { select: { unit: true } } } });
+    check("§9c Otomatik taslağın notu uyarıyı taşıyor (⚠ … kg birimli)",
+      kgInv != null && /⚠/.test(kgInv.notes ?? "") && /kg birimli/.test(kgInv.notes ?? ""), JSON.stringify(kgInv?.notes));
+    check("§9d Otomatik taslağın satırı da 'm'", kgInv?.lines[0]?.unit === "m", String(kgInv?.lines[0]?.unit));
   }
 
   // ── §6 KÖRLÜK ZEMİNİ ────────────────────────────────────────────────────
