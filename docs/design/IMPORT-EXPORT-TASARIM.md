@@ -420,11 +420,13 @@ atlandı" sorusu da deftere düşer.
 
 ### 8.6 Migration bandı, izin, kapılar
 
-- Migration **`20260912160000`**: `ImportRunLine` + `ImportRun`a `revertedAt`/
+- Migration **`20260912160200`**: `ImportRunLine` + `ImportRun`a `revertedAt`/
   `revertedById`/`revertReason`. İlk tahsis `130200` idi, ölçümle değişti: dizinde
   `20260912150300` vardı ⇒ `130200` uygulanmış migration'ların ADINDAN önce gelir,
   Prisma'nın sırası ad tabanlı olduğu için temiz DB'de önce, canlıda sonra uygulanır
-  (aynı şema iki farklı sırayla kurulur).
+  (aynı şema iki farklı sırayla kurulur). İkinci tahsis (`160000`) da tutmadı:
+  01'in `20260912160100`ü araya girdi ⇒ bant ÜÇÜNCÜ kez taşındı. Aynı bandın üç kez
+  kayması, sorunun tahsis disiplini değil KAPI YOKLUĞU olduğunun ölçümüdür.
 - **Aynı dilimde kapatılacak KAPI BOŞLUĞU:** `test_migration_hygiene.ts` pending /
   elle-resolve / dizin okunabilirliği soruyor ama AD SIRASI sormuyor. Eklenecek
   kontrol: *dizindeki uygulanmamış bir migration'ın adı, uygulanmış en büyük addan

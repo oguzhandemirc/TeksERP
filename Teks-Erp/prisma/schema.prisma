@@ -6306,6 +6306,15 @@ model ImportRun {
   /// Yalnız hatalı/uyarılı satır sonuçları.
   errorReport Json?
 
+  /// GERİ SARMA DAMGASI — koşum satırı "OLDU" kaydıdır: geri sarma onu ne siler
+  /// ne değiştirir, üstüne damga yazar (tasarım `IMPORT-EXPORT-TASARIM.md` §8).
+  revertedAt   DateTime? @db.Timestamptz
+  revertedById String?   @db.Uuid
+  revertReason String?   @db.VarChar(500)
+
+  /// Koşumun YAZDIĞI satırların defteri — geri sarmanın tek kaynağı.
+  lines ImportRunLine[]
+
   createdAt DateTime @default(now()) @db.Timestamptz
   /// DURUM TAŞIYAN kayıt (defter değil): token'lı koşumun satırı BAŞTA yazılır,
   /// koşum bitince status/finishedAt/errorReport ile GÜNCELLENİR — "en son ne
@@ -6325,6 +6334,77 @@ enum ImportRunStatus {
   PARTIAL
   /// Hiçbir şey yazılamadı.
   FAILED
+}
+
+/// İçe aktarımda BİR SATIRIN yazdığı kayıt — geri sarmanın TEK kaynağı.
+/// Bugüne kadar bu iz yalnız audit'te duruyordu (`getRunRecords` → `system_logs`,
+/// `archivedAfterMonths: 6`); iş kararına giren bilgi KALICI kolonda durmalı.
+/// Sözleşme: `docs/design/IMPORT-EXPORT-TASARIM.md` §8.
+model ImportRunLine {
+  id          String @id @default(uuid()) @db.Uuid
+  importRunId String @db.Uuid
+
+  /// Registry anahtarı ("item", "customer", "route"…) — FK YOK, polimorfik kimlik
+  /// (`MergeOperation.entity` emsali). `tableName` audit ile aynı değeri taşır.
+  entity    String @db.VarChar(40)
+  tableName String @db.VarChar(63)
+  /// Yazılan/değiştirilen kaydın kimliği. FK YOK: 17 ayrı tabloya bakıyor.
+  recordId  String @db.Uuid
+
+  /// Dosyadaki satır numarası — kullanıcı hatayı DOSYADA bulabilmeli.
+  rowNo Int
+  /// Gruplu şablonda (route · order) gruba giren TÜM satır numaraları: `[4,5,6]`.
+  /// `Int[]` DEĞİL: şemada emsali yok, Prisma skaler listesi NOT NULL + DEFAULT
+  /// doğuruyor (`MergeOperationRef.rowIds`te P2011'e patlamıştı) ve bu alan yalnız
+  /// gösterim verisidir, sorgulanmıyor.
+  rowNos Json?
+
+  /// Eşleşme anahtarı (genelde kod) + insan-okunur ad: önizleme satırı tanıtır.
+  keyValue String? @db.VarChar(120)
+  label    String? @db.VarChar(200)
+
+  action ImportLineAction
+
+  /// YALNIZ DOKUNULAN alanlar: `{alan: {from, to}}`. Tam satır fotoğrafı DEĞİL —
+  /// import'un dokunmadığı alanı geri yazmak aradaki meşru değişikliği ezer.
+  changedFields Json?
+  /// REPLACE edilen çocuk koleksiyonunun YOK EDİLEN hali (item izin listeleri ·
+  /// fabricProperty istasyon linkleri · subcontractor kategorileri · productRecipe
+  /// özellikleri · route adım ağacı). Bu beş varlıkta eski küme hiçbir audit
+  /// yükünde YOK; fotoğraf olmadan geri dönüş imkânsız. Yeniden kurmaya yetecek
+  /// kadar (id + kuruluma giren alanlar), satırın kopyası değil.
+  childSnapshot Json?
+  /// Başka varlığa yazılan yan satırlar (sipariş → `promoteCustomerAliases`).
+  /// Geri sarma bunları SİLMEZ; önizlemede "kalacak" diye listeler.
+  sideEffects Json?
+
+  /// GERİ SARMA DAMGASI — ileri satır değişmez.
+  revertedAt   DateTime? @db.Timestamptz
+  revertedById String?   @db.Uuid
+  /// Atlandıysa GEREKÇE ("kayıt içe aktarımdan sonra değişti" gibi): "neden
+  /// atlandı" sorusu da deftere düşer, ekrana özgü bilgi olarak kalmaz.
+  revertSkipReason String? @db.VarChar(300)
+
+  importRun ImportRun @relation(fields: [importRunId], references: [id], onDelete: Restrict)
+
+  /// Append-only defter → `updatedAt` YOK (konvansiyon); damga satırı güncellemez,
+  /// damga KOLONLARINI doldurur (kartela düşüm defteri emsali).
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([importRunId, rowNo])
+  @@index([entity, recordId])
+  @@index([recordId])
+  @@map("import_run_lines")
+}
+
+/// `REVIVE` ZORUNLU üçüncü değer: kodu DOSYADAN gelen dört varlıkta (item manuel
+/// kod · qualityGrade · subcontractorCategory · subcontractor) pasif kaydın kodu
+/// gelince servis onu DİRİLTİYOR. Önizleme "CREATE" der ama yapılan UPDATE+REVIVE'dır;
+/// tersi `isActive:false` DEĞİL, "önceki alan değerleri + önceki aktif/pasif durum".
+enum ImportLineAction {
+  CREATE
+  UPDATE
+  REVIVE
 }
 
 // =============================================================================

@@ -6822,7 +6822,7 @@ audit satırında `oldData` YOK (`import.service.ts:585-594`). Yani iş kararın
 
 ### Kararlar
 
-1. **`ImportRunLine` append-only defteri** (bant `20260912160000`): satır başına
+1. **`ImportRunLine` append-only defteri** (bant `20260912160200`): satır başına
    `action (CREATE|UPDATE|REVIVE)` · `changedFields {alan:{from,to}}` · REPLACE edilen
    çocukların `childSnapshot`ı · `sideEffects` · geri sarma damgası/atlama gerekçesi.
    Tam satır fotoğrafı SAKLANMAZ (dokunulmayan alanı geri yazmak aradaki meşru
@@ -6851,7 +6851,7 @@ audit satırında `oldData` YOK (`import.service.ts:585-594`). Yani iş kararın
 
 ### Üç kapı
 
-Migration **`20260912160000`** (ilk tahsis `130200` idi; ölçümle değişti — dizinde
+Migration **`20260912160200`** (tahsis ÜÇ kez kaydı: `130200` → `160000` → `160200`; her kayma ölçümle — dizinde
 `20260912150300` vardı, sıra-dışı ad aynı şemayı iki farklı sırayla kurardı). İzin YOK
 (`data:import` + varlığın write izni). APK YOK, panel sürümü gerekir.
 Aynı dilimde KAPI BOŞLUĞU kapanacak: `test_migration_hygiene.ts` ad sırası ölçmüyor →

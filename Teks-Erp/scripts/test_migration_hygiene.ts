@@ -90,6 +90,33 @@ async function main() {
     check("Dizindeki her migration dev DB'ye uygulanmış (pending yok)", true);
   }
 
+  // --- 2b) AD SIRASI: bekleyen migration, uygulanmışların SONRASINDA olmalı --
+  // Prisma'nın uygulama sırası AD tabanlıdır. Geriye düşen bir ad temiz DB'de
+  // ötekilerden ÖNCE, canlıda SONRA uygulanır ⇒ aynı şema iki farklı sırayla
+  // kurulur. Hata vermez, DRIFT verir — bu yüzden kapı gerekiyor.
+  // ⚠️ Bu kontrol 2026-09-12'de yazıldı çünkü ELLE bant tahsisi aynı gün ÜÇ KEZ
+  // sıra-dışına düştü (③ için `130200` → `160000` → `160200`; 01 için `120200`);
+  // sorun tahsis disiplini değil kapı yokluğuydu.
+  // ⚠️ KAPSAM: bu kontrol BEKLEYEN migration'ın ADINI korur — yani sıra-dışı bir
+  // adın ÜRETİLMESİNİ engeller. HÂLİHAZIRDA sıra-dışı uygulanmış olmayı ÖLÇMEZ:
+  // bekleyen kalmayınca yeşile döner, oysa o DB'de uygulama sırası hâlâ ad
+  // sırasına uymuyor olabilir. Onun yeri `test_schema_drift` ve şema provasıdır
+  // (en eski canlı dump üzerinde restore → migrate deploy). "Kapı yeşil, demek
+  // ki sıra doğru" diye okunmasın.
+  // ⚠️ KÖRLÜK ZEMİNİ: bekleyen yoksa "ihlal yok" ile "hiçbir şeye bakılmadı"
+  // aynı yeşile çıkar — sayı AYNI satırda beyan edilir.
+  const maxApplied = dbActive.length
+    ? dbActive.map((a) => a.migration_name).sort().slice(-1)[0]!
+    : "";
+  const geriyeDusen = maxApplied ? pending.filter((d) => d < maxApplied) : [];
+  check(
+    `Bekleyen migration adı uygulanmış en büyük addan BÜYÜK (${pending.length} bekleyen · en büyük uygulanmış: ${maxApplied || "yok"})`,
+    geriyeDusen.length === 0,
+    geriyeDusen.length
+      ? `sıra-dışı ad: ${geriyeDusen.join(", ")} < ${maxApplied} → bandı dizindeki en son addan BÜYÜK seç (Prisma sırası ad tabanlı)`
+      : ""
+  );
+
   // --- 3) applied_steps_count = 0 → uyarı (resolve SQL'i doğrulamaz) --------
   const resolvedOnly = dbActive.filter((a) => a.applied_steps_count === 0);
   if (resolvedOnly.length) {
