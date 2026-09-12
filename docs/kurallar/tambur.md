@@ -114,7 +114,7 @@
 - N1 kök notunun yeniden yazımı: 'Sadece Tambur'da (CUT kararı)' cümlesi kod tarafından ezildi (fason kısmi sevk split'i 2026-07-15); bu kümede ezen NOT yok — arşiv A:2026-08-10 satır 326 yalnız 'fason kısmi sevk çocuğu' diye anıyor. Kararı kök dizin satırına taşımak için kullanıcı onayı gerekir.
 - N22 `quality.gradeRequiredEnabled` kapsam bekçisinin adı notta yazılı değil; `git grep gradeRequired` → scripts/test_quality_batch_flags.ts (adı çıkarım, içeriği okunmadı).
 
-## Bekçiler — bu alana dokununca koş (51 backend · 18 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

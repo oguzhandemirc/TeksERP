@@ -114,7 +114,7 @@
 
 - **[PROFİL]** Belge Şablonu önizlemesinde sayfa-sığma göstergesi vardır — ayarı yapan taşmayı kaydetmeden görür (A5'te en ağır kart %75 doluluk; taşma 8 adım + 6 sipariş + 6 partide). <sub>(kök 2026-08-03)</sub>
 
-## Bekçiler — bu alana dokununca koş (27 backend · 2 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

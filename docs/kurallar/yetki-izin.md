@@ -119,7 +119,7 @@
 
 - **[ÇEKİRDEK]** `/users/:id/credentials` kapısının hedef yüklemi SERVİSTEDİR (`AuthService.isSystemAccountUser`), kapının kendisi route'ta kalır — route/controller `lib/prisma`ya inmez (ESLint `no-restricted-imports`). ⚠️ İki bekçi bu kapıyı METİN tarayarak ölçüyor (`test_superadmin.ts`, `test_superadmin_visible.ts` §5) ve her iki yazımı da kabul eder; kapının şeklini değiştirirsen İKİSİNİ birlikte güncelle.
 
-## Bekçiler — bu alana dokununca koş (61 backend · 36 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

@@ -114,7 +114,7 @@
 
 - **[ÇEKİRDEK]** Geri yükleme KOPYALARINDA otomatik retention YOKTUR ve `_old_` veritabanlarının silme ucu YOK — temizlik elle yapılır (silme allowlist'i `isRestoreCopyName`). <sub>(eski Teks-Erp/CLAUDE.md Operasyonel Bakım)</sub>
 
-## Bekçiler — bu alana dokununca koş (34 backend · 12 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

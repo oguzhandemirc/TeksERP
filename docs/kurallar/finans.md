@@ -68,7 +68,7 @@
 - Küme dışı üyeler burada HAKEMLENMEDİ (başka kümede primary): R:undated__phase-1, M:undated__simulasyon__3, kesif ×2 → kesif-cihaz-ag; Sürüm Yayınlama, mobil güncelleme, APK → surum-yayin; ortak-konvansiyonlar, kapalı-modül → modul-bayraklari-profiller; soft-delete (kök+mobil) → top-duzeltme; tık hedefi → refakat-karti. Bu kümede yalnız ItemPrice ve bölüm başlığı parçası alındı.
 - M2 başlığı 'tamamı ÇEKİRDEK' ↔ M10 içindeki PROFİL bayrakları: kod bayrak olduğunu doğruluyor; etiket/taşıma kararı orkestratöre (modul-bayraklari kümesiyle çakışabilir).
 
-## Bekçiler — bu alana dokununca koş (35 backend · 48 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

@@ -94,7 +94,7 @@
 - 2026-08-02 renk notu 'StationColor … okuyan kod yok' der; station-capability.service.ts:185/:368 findMany + :386-390 replace hâlâ var (DTO geriye-uyum, filtre değil — :7-10). Cümle 'filtre olarak okuyan kod yok' diye daraltılmalı; Electron StationCard.tsx:59 iddiası (fazA) bu turda doğrulanmadı → BELİRSİZ.
 - Faz A'nın 'ikinci KK noktası' vaadi (Electron/src/data/surum-notlari.json:337) ile bypass R3 üçlü-rota kısıtı (kursun-bypass-eligibility.helper.ts:178) yan yana yaşıyor; kısıt yalnız StationFormDialog.tsx:135-139 yorumunda, bekçisi yok — hangi belgeye (kural kitabı mı, sürüm notu mu) yazılacağı kullanıcı kararı ister.
 
-## Bekçiler — bu alana dokununca koş (19 backend · 2 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

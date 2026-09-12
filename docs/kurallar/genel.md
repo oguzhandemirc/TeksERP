@@ -71,7 +71,7 @@
 
 - Tarihsiz dört sözleşme üyesinin (izinli paketler · Electron ağacı · audit · TR mesaj) kök dizinde SATIRI YOK ve olmamalı — bunlar alt-CLAUDE / Ortak Konvansiyonlar metinleridir; archiveOnly listesi 'dizin satırı gerekmez' anlamındadır, 'arşive taşı' değil.
 
-## Bekçiler — bu alana dokununca koş (36 backend · 0 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

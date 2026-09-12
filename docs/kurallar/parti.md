@@ -56,7 +56,7 @@
 
 - **[ÇEKİRDEK]** İş Emri No ≠ Parti: `WorkOrder.workOrderNumber` (İE+GGAAYY+NNNN) üretim emridir; `Batch` üretime aynı anda giren top grubudur; bir WO N parti içerir; eski dal/`batchSplitId` kavramı kalktı. Tasarım: `docs/design/PARTI-MODELI-TASARIM.md`. <sub>(kök 2026-07-13)</sub>
 
-## Bekçiler — bu alana dokununca koş (33 backend · 2 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

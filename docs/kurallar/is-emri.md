@@ -99,7 +99,7 @@
 
 - **[ÇEKİRDEK]** Türetilmiş alan mutabakatı ikiz çift: `consistency-check-derived.sql` + `test_consistency_derived.ts` §21–§26 (`--probe`; §26 bilgi, §26b `PLAN_GATE_SINCE`). <sub>(arşiv 2026-08-21 akşam)</sub>
 
-## Bekçiler — bu alana dokununca koş (116 backend · 26 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

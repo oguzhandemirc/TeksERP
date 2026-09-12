@@ -121,7 +121,7 @@
 - Mobil `routeApplyCaps` (useQuickWorkOrder.ts:117-131) rota adımının `requiredCategory`sine değil istasyonun `defaultCategory`sine bakar; sunucu `route.service.ts:349-351` adım kategorisini önceler. Rota şablonunda adım kategorisi varsayılandan farklıysa tablet ön-doldurma ile sunucu kararı ayrışabilir — ölçülmedi, BELİRSİZ.
 - Bayat yorumlar (kod doğru, metin eski): workorder-locks.helper.ts:17 ('requiredCategory.appliesColor=true'), test_route_step_targets.ts:18 ve :101 (bileşik `hasDefaultCategory && appliesColor`). Düzeltme kararı ayrı iş.
 
-## Bekçiler — bu alana dokununca koş (47 backend · 3 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

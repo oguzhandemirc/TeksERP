@@ -141,7 +141,7 @@
 
 - **[PROFİL]** Sipariş görünümü üç kolon: İstenen | Sevk | Açık (PLANNED tahsis sayılmaz). Tasarım: `docs/design/CUVAL-HAVUZU-TASARIM.md`. <sub>(kök 2026-07)</sub>
 
-## Bekçiler — bu alana dokununca koş (119 backend · 21 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

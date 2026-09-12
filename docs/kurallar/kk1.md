@@ -95,7 +95,7 @@
 - kök CLAUDE.md:105 ve :107 aynı tarihli/aynı konulu iki 'Süperadmin doğuşu P8' satırı taşıyor (:107 :105'in alt kümesi). Hangisinin silineceği süperadmin kümesinin kararı — bu kümede çözülmedi.
 - R:2026-08-12 kayıt kuyruğu notundaki 'toast metni kayıt oluşmadı DİYEMEZ' kuralının ekransız çakışma dalındaki güncel metni okunmadı (failureToastText'in ilk dalı kısaltılmış görüldü); metin sözleşmesinin bugünkü tam hâli doğrulanmadı.
 
-## Bekçiler — bu alana dokununca koş (15 backend · 24 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

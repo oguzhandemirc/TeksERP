@@ -110,7 +110,7 @@
 - R:2026-08-12 kök dizin satırı 'FilterBar "Sonuç yok" yutar' ŞİMDİKİ ZAMAN yazılmış; kod FilterBar.tsx:420-422,515 'Sonuç yok. YALNIZ başarılı+boş yanıtta' — yutma kapatılmış. Dizin satırı bayat (tuzak: 404 hâlâ öneksiz yolda doğar, ama artık 'Sonuç yok' değil hata olarak görünür); hangi commit'te kapandığı ölçülmedi.
 - mobil FasonSevkScreen.tsx:569-570 ve FasonSevkGecmisiScreen.tsx:87-88 `page:1, pageSize:500` offset ile fason firma listesi çekiyor — master-data olduğu için M:liste-sayfalama istisnasına giriyor, ama Electron'daki `loadAllForPicker` (500 aşınca açık hata) karşılığı mobilde YOK: liste 500'ü aşarsa sessiz kesilir. Kural ihlali değil, bekçisiz sınır.
 
-## Bekçiler — bu alana dokununca koş (0 backend · 0 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

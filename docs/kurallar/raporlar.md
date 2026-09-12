@@ -80,7 +80,7 @@
 
 - **[ÇEKİRDEK]** Üretilen metraj kovası (`loadProducedBuckets`) katalogdan çözülürken `isActive` süzgeci UYGULANMAZ ve `notIn: []` yazılmaz — pasifleştirilen kalite sınıfının topları üretilen metrajdan düşmez. · bekçi: `test_produced_buckets` <sub>(arşiv 2026-08-21 akşam)</sub>
 
-## Bekçiler — bu alana dokununca koş (37 backend · 13 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

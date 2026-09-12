@@ -161,7 +161,7 @@
 
 - **[ÇEKİRDEK]** Toplu belgede PDF Kaydet yolu birleştirme motorunu HİÇ kullanmaz — `pdf:saveBatch` her belgeyi kendi gizli penceresinde render eder; arşiv çıktısı tekil baskıyla birebirdir. <sub>(eski Electron/CLAUDE.md toplu belge)</sub>
 
-## Bekçiler — bu alana dokununca koş (112 backend · 32 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

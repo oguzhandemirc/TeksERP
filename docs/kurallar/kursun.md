@@ -96,7 +96,7 @@
 
 - **[ÇEKİRDEK]** `repointPendingBypassAssignmentsTx`: kapanış dispozisyonu TRANSFER'de bekleyen bypass ataması yeni WO'ya taşınır, split'te void edilir; force-void'den ÖNCE koşar ve `workOrderId`+step birlikte eşlenir. · bekçi: `test_kursun_bypass_repoint` <sub>(arşiv 2026-08-21 akşam)</sub>
 
-## Bekçiler — bu alana dokununca koş (16 backend · 5 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

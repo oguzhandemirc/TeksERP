@@ -150,7 +150,7 @@
 
 - **[ÇEKİRDEK]** Tek cihazlı istasyonlarda çevre birimi seçimi `primaryMeterFor`/`primaryScaleFor` ile: role PRIMARY ?? rolesiz ?? ilk satır ?? null — kat rolüyle eşleşen `meterPeripheralFor(rows, foldType)`ten AYRI seçici. <sub>(eski mobil/CLAUDE.md HAL)</sub>
 
-## Bekçiler — bu alana dokununca koş (27 backend · 25 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

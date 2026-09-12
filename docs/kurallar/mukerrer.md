@@ -55,7 +55,7 @@
 
 - **[PROFİL]** Mükerrer paneli P3a/b (şube · istasyon · makine · kategori sekmeleri) ÖLÇÜMLE ERTELENDİ — canlıda 0 mükerrer; reçete `docs/design/MUKERRER-PANELI-TASARIM.md` §9; yeniden önerilmeden önce ölçüm tekrarlanır. Bulanık eşleme ayarları `duplicatesFuzzyEnabled` / `duplicatesFuzzyThresholdPct` (Ayarlar → Müşteriler; dört kapı). <sub>(kök 2026-08-22)</sub>
 
-## Bekçiler — bu alana dokununca koş (20 backend · 3 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

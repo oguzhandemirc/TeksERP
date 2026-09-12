@@ -122,7 +122,7 @@
 - Teks-Erp/CLAUDE.md:315 'tünelde 404' — kodda karşılığı yok (module.middleware.ts:76-83 koşulsuz 403; remote-access 404 listesi sabit). Sil.
 - P5 (2026-09-03) satıcı kapısı 'iki yüklem' ayrımı yalnız 2026-09-04 arşivinde (2233) anlatılıyor; P5'in kendi kök/arşiv metni `isSystemAccountIdentity` adını hiç anmıyor — silinen yüklemin doğuş notu eksik, tarihsel iz yalnız superadmin-gate.ts:43 yorumunda.
 
-## Bekçiler — bu alana dokununca koş (57 backend · 51 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

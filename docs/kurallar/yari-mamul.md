@@ -72,7 +72,7 @@
 - 2026-08-26 ve 3. turun 'prod'da SEMI_FINISHED kaydı SIFIR' ölçümü bugün geçerli mi bilinmiyor; yüzeyler o günden sonra açıldı, sayı değişmiş olabilir.
 - 2026-08-26'nın 'tablette üçüncü bir sekme YOK' gerekçesi kısmen bayat: mobil DEPO'ya Yarı Mamul sekmesi eklendi (DepoScreen.tsx:78), ama Hızlı İş Emri top seçicisi hâlâ birleşik RAW_STOCK kullanıyor (NewWorkOrderView.tsx:365) — yani DARALTMA yasağı aynen geçerli, gerekçe cümlesi güncellenmeli.
 
-## Bekçiler — bu alana dokununca koş (3 backend · 0 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

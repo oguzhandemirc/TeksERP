@@ -105,7 +105,7 @@
 - **[ÇEKİRDEK]** APK derlemesinden ÖNCE backend `<kök>/health` yoklanır; sonuç UYARIDIR, derlemeyi DURDURMAZ (derleyen Mac fabrika ağında olmayabilir) — 'ölü IP de geçerli IP'dir' tuzağının karşılığı. <sub>(eski mobil/CLAUDE.md APK tuzak tablosu)</sub>
 - **[ÇEKİRDEK]** `versionCode` ayrışmasında ölçüm: `git log tablet-v<son>..HEAD -- mobil/android mobil/app.json mobil/package.json` — native gerçekten değişti mi? Değişmediyse `app.json` değeri yayındakine GERİ ALINIR. <sub>(kök sürüm yayınlama §5)</sub>
 
-## Bekçiler — bu alana dokununca koş (7 backend · 12 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

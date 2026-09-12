@@ -90,7 +90,7 @@
 
 - Kök notlar ve kod yorumları hâlâ 'metin saklayan İKİ kind' diyor (CLAUDE.md:73, reason-preset.service.ts:211-215 başlığı), oysa `KIND_STORES_TEXT` bugün ÜÇ true taşıyor (ORDER_CANCEL, order.service.ts:495,3138 üzerinden canlı). Metin drift'i — kural değişmedi, sayı bayat.
 
-## Bekçiler — bu alana dokununca koş (6 backend · 6 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

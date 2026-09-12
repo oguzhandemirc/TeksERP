@@ -108,7 +108,7 @@
 - **[ÇEKİRDEK]** Top düzeltme audit ayrımı korunur: `reason` varsa olay `MANUAL_ATTRIBUTE`, yoksa `RELABEL`; tablo `ROLL_MANUAL_OVERRIDE`. <sub>(arşiv 2026-07-30 top düzeltme tek sözleşme)</sub>
 - **[ÇEKİRDEK]** Soft delete'in bilinçli istisnaları: bağımlılık-guard'lı master-data `DELETE /:id/permanent`, boş çuval silme, cihaz unpair, pivot replace, `ItemPrice` satırı silme (şemada `isActive` yok — pasif fiyat üçüncü durum üretirdi; geçmiş belgeler donmuş). <sub>(kök 2026-08-14)</sub>
 
-## Bekçiler — bu alana dokununca koş (43 backend · 10 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

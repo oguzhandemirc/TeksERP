@@ -110,7 +110,7 @@
 
 - **[ÇEKİRDEK]** Mobil fason adımı `dispatchWithoutColor` kutusu: değer HER fason adımı için AÇIKÇA gider (true DE false DA) — alan gönderilmezse kapatma niyeti yutulur; bekçi `test_dispatch_without_color` §1 bilerek METİN tarar (servisi çağıran test yeşil kalır). <sub>(arşiv 2026-08-25)</sub>
 
-## Bekçiler — bu alana dokununca koş (88 backend · 13 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 

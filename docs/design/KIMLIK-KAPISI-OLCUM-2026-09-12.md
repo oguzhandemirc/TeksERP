@@ -104,7 +104,7 @@ dokunmaz). Kapıya çevrildiğinde `scripts/test_identity_ledger.ts` içinde ayn
 mantık TypeScript'e taşınır ve `utils/string-similarity.ts` içe aktarılır —
 mesafe fonksiyonu ikinci kez YAZILMAZ (tek kaynak kuralı).
 
-## Kararın sonucu — sayaç başlıktan ÇIKARILACAK (henüz çıkarılmadı)
+## Kararın sonucu — sayaç başlıktan çıkarıldı (karar 2026-09-12, uygulama aynı gece)
 
 Bu ölçümün doğrudan sonucu: **40 olayın 40'ı sayaç gürültüsüydü**, yani başlığa
 gömülü elle sayaç kimliği sürekli çalkalıyordu. Çözüm eşiği düşürmek (kapıyı
@@ -117,21 +117,25 @@ gürültüye uydurmak) değil, **sayıyı kimlikten çıkarmak** oldu:
 **Var olmayan bir sayı bayatlayamaz.** Normalizasyon mantığı ve bu ölçüm yine de
 saklanıyor: yarın başka bir türetilmiş parça bir başlığa girerse gerekçe hazır olsun.
 
-> ⚠️ **DURUM: KARAR ALINDI, UYGULANMADI** (ölçüm 2026-09-12 gecesi, `teks-erp-d9`
-> buldu). Sayaçlar üç yüzeyde de DURUYOR: `BEKCI-HARITASI.md` 39/39 başlık ·
-> `docs/kurallar/*.md` 25/26 · `docs/kurallar/README.md` sayaç sütunları.
-> `5190e8a1` onları bilerek BÜTTÜ ("bilerek bayat sayaç üretmemek için";
-> kaldırma ayrı iş olarak bırakıldı) ve bu bölüm sonradan geçmiş zamanla yazıldı.
+> ⚠️ **BU CÜMLE BİR SÜRE KARŞILIKSIZ DURDU — kayda geçsin.** Cümle `74553624` ile
+> geçmiş zamanla yazıldı, ama o commit **hiçbir sayaca dokunmamıştı** (2 dosya:
+> kapı + bu belge). Dahası belgenin *"kaldırıldı"* diye ÖRNEK VERDİĞİ satır
+> gerçekte TERS yöne gitmişti: `5190e8a1` `(85 backend)` → `(88 backend)` yaptı ve
+> aynı commit sekiz alan dosyasında sekiz sayacı ELLE güncelledi. Yani kaldırıldığı
+> beyan edilen bakım borcu o gün **ödendi**. `teks-erp-d9` ölçtü, hüküm ①:
+> *karar alındı, hiç uygulanmadı* — tarihçede sayaç DÜŞÜREN tek diff yok.
 >
-> **Kapı bunu ölçemez ve ölçemeyeceği yazılıdır:** `normBaslik` karşılaştırmadan
-> önce parantezli sayıyı atar, yani sayaç dursa da silinse de kapı AYNI yeşili
-> verir. Yani bu beyanın yanlışlığını görebilecek tek otomatik göz, tam da onu
-> görünmez kılan normalizasyondur — çatı tablosundaki *"yeşil bekçi: ihlal yok ↔
-> hiçbir şeye bakılmadı"* satırının belge tarafındaki ikizi.
+> **Kapı bunu ölçemezdi:** `normBaslik` karşılaştırmadan önce parantezli sayıyı
+> atar; sayaç dursa da silinse de kapı AYNI yeşili verir. Beyanın yanlışlığını
+> görebilecek tek otomatik göz, tam da onu görünmez kılan normalizasyondu.
 >
-> Üçüncü okuma sınıfının TERS yönü: belge kendi kapattığı işi ön şart saymıyor,
-> **kapatmadığı işi kapanmış beyan ediyor.** İç tutarlılık okuması ikisini de
-> yakalamaz; ikisi de dünyaya karşı ölçülür.
+> **Sınıf — üçüncü okuma sınıfının TERS yönü:** belge kendi kapattığı işi ön şart
+> saymıyor, **kapatmadığı işi kapanmış beyan ediyor.** Kardeş kural (`teks-erp-d9`):
+> *geçmiş zamanla yazılmış her "yapıldı" cümlesi ölçülmemiş bir iddiadır.*
+>
+> Borç aynı gece kapatıldı: harita 39 bölüm sayacı + `Alanlar:` dizini · 25 alan
+> dosyası · `README.md`nin üç sayaç sütunu (`Kural`/`Ezilme`/`Bekçi`). Kapı
+> kaldırmadan sonra 3/0, `496 = 496`. Cümle artık karşılığını taşıyor.
 
 ## Kapı yazarken kapının kendisini de ölç
 

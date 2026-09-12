@@ -96,7 +96,7 @@
 - Küme dışı üyeler — bu hakem karar vermedi: E:undated__tek-belge-verilirse-html-aynen-doner (print-merge), B:2026-08-01__sema-tip-konvansiyonu-o-11-2026 (timestamptz), R:2026-08-26__2026-08-26-aksam-sebep-adimi, R:2026-08-26__2026-08-26-yari-mamul-kendi.
 - E:undated__rbac'ın süperadmin dışı kuralları (canEnterApp, document-template izinleri, visibleSettingsCategories) C2-yetki-izin-rol kümesine aittir; burada yalnız `*` körlüğü/hasAdminAccess alındı.
 
-## Bekçiler — bu alana dokununca koş (6 backend · 10 istemci)
+## Bekçiler — bu alana dokununca koş
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 
