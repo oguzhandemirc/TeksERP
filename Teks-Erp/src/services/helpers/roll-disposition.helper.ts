@@ -22,7 +22,7 @@
 // =============================================================================
 import { WarehouseEventType, Prisma, RollStatus } from "@prisma/client";
 import { WAREHOUSE_STOCK_STATUSES } from "./warehouse-stock.helper";
-import { postStockMove } from "./warehouse-ledger.helper";
+import { postStockMove, qtyYazilabilir } from "./warehouse-ledger.helper";
 import { STOCK_MOVE_REASON } from "../../constants/stock-move-reasons";
 import { AppError } from "../../utils/app-error";
 import { finalBarcodeType } from "./roll-finalize.helper";
@@ -285,7 +285,9 @@ export async function applyRollDispositionsTx(
         select: { id: true, warehouseId: true, currentQty: true },
       });
       for (const f of fresh) {
-        if (!f.warehouseId) continue;
+        // 0 metrajlı top için hareket YAZILMAZ (deposuz dalla aynı sınıf) —
+        // aksi halde WO kapanışı kapının haklı fırlatmasıyla 500'e düşerdi.
+        if (!f.warehouseId || !qtyYazilabilir(f.currentQty)) continue;
         await postStockMove(tx, {
           rollId: f.id,
           eventType: WarehouseEventType.PRODUCTION,

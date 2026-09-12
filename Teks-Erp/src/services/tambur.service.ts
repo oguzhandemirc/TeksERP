@@ -16,7 +16,7 @@
 
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
-import { postStockMove } from "./helpers/warehouse-ledger.helper";
+import { postStockMove, qtyYazilabilir } from "./helpers/warehouse-ledger.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
@@ -1163,7 +1163,11 @@ export class TamburService {
         // DEPO DEFTERİ — çocuk DEPODA doğuyorsa giriş satırı. Ebeveyn satır
         // YAZMAZ: o IN_PRODUCTION'dı, yani zaten stok dışındaydı — "çift sayım"
         // korkusunun yapısal cevabı bu, ayrı bir kural değil.
-        if (WAREHOUSE_STOCK_STATUSES.includes(splitRoll.status) && splitRoll.warehouseId) {
+        if (
+          WAREHOUSE_STOCK_STATUSES.includes(splitRoll.status) &&
+          splitRoll.warehouseId &&
+          qtyYazilabilir(splitRoll.initialQty)
+        ) {
           await postStockMove(tx, {
             rollId: splitRoll.id,
             eventType: WarehouseEventType.PRODUCTION,

@@ -9,7 +9,7 @@
 // =============================================================================
 import { WarehouseEventType, Prisma, RollStatus, RollForm, type PrismaClient } from "@prisma/client";
 import { WAREHOUSE_STOCK_STATUSES } from "./warehouse-stock.helper";
-import { postStockMove } from "./warehouse-ledger.helper";
+import { postStockMove, qtyYazilabilir } from "./warehouse-ledger.helper";
 import { STOCK_MOVE_REASON } from "../../constants/stock-move-reasons";
 import { reserveRollBarcodesInOrderTx, type RollBarcodeType } from "./roll-barcode.helper";
 
@@ -207,7 +207,11 @@ export async function finalizeRollsAtLastStep(
     });
     // DEPO DEFTERİ — üretimden depoya GİRİŞ. Fire (SCRAP) satır yazmaz: top
     // üretime girerken zaten stoktan çıkmıştı, geri gelmiyor.
-    if (r.warehouseId && WAREHOUSE_STOCK_STATUSES.includes(status)) {
+    // ⚠️ 0 metraj kapıya GİRMEZ: taşınacak mal yok, yani hareket de yok — bu
+    // SCRAP/deposuz dallarıyla aynı sınıf meşru atlama. Süzülmezse kapı haklı
+    // olarak fırlatır ve kurşun açık kumaşın (`currentQty: 0`) depoya inmesi
+    // adım kapatmayı 500'e düşürürdü.
+    if (r.warehouseId && WAREHOUSE_STOCK_STATUSES.includes(status) && qtyYazilabilir(r.currentQty)) {
       await postStockMove(tx, {
         rollId: r.id,
         eventType: WarehouseEventType.PRODUCTION,

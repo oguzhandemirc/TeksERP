@@ -12,7 +12,7 @@
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
-import { postStockMove } from "./helpers/warehouse-ledger.helper";
+import { postStockMove, qtyYazilabilir } from "./helpers/warehouse-ledger.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import prisma from "../lib/prisma";
 import { SHRINK_REASON_CODE } from "../constants/variance-reasons";
@@ -4804,7 +4804,7 @@ export class WorkOrderService {
         // metraj claim ÖNCESİ durumdan okunur (`candidates` tx içinde tazedir);
         // claim sonrası statü artık IN_PRODUCTION'dır ve "nereden çıktı"yı söylemez.
         for (const r of succeeded) {
-          if (r.warehouseId && WAREHOUSE_STOCK_STATUSES.includes(r.status)) {
+          if (r.warehouseId && WAREHOUSE_STOCK_STATUSES.includes(r.status) && qtyYazilabilir(r.currentQty)) {
             await postStockMove(tx, {
               rollId: r.id,
               eventType: WarehouseEventType.PRODUCTION,

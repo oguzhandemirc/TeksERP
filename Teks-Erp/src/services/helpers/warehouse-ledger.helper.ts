@@ -22,6 +22,25 @@ import { AppError } from "../../utils/app-error";
 
 type Tx = Prisma.TransactionClient;
 
+/**
+ * Satır yazılabilir mi — ÜÇ kapının ORTAK eşiği ve DB seddinin ikizi
+ * (`CHECK (qty > 0)`, VALIDATE edilmiş, tüm yazıcılar için canlı).
+ *
+ * ⚠️ Eşik üç yerde elle tekrarlandığında ayrıştı: eski kapılar `qty = 0`ı
+ * GEÇİRİYOR, sed ise reddediyordu. Sonuç 23514 idi ve `createMany` tek sorgu
+ * olduğu için TÜM küme düşüp çağıranın (sevkiyat · transfer · sayım) tx'ini
+ * ham Postgres hatasıyla geri sarıyordu. Kurşun açık kumaşın `currentQty: 0`
+ * ile depoya inmesi bu yolu bayraksız tetikliyordu.
+ *
+ * ⚠️ 0 metraj "yazılamaz" demek "hata" demek DEĞİL: taşınacak mal yok, yani
+ * hareket de yok. Eski kapılar bunu ATLAR (konum defteri), stok defteri kapısı
+ * ise FIRLATIR — orada 0 metraj çağıranın hesap hatasıdır.
+ */
+export function qtyYazilabilir(qty: Prisma.Decimal | number | string): boolean {
+  const q = Number(qty);
+  return Number.isFinite(q) && q > 0;
+}
+
 export interface WarehouseLedgerEntry {
   rollId: string;
   eventType: WarehouseEventType;
@@ -48,8 +67,7 @@ export interface WarehouseLedgerEntry {
  * kötüdür — "bu depoya ne girdi" toplamını kirletir.
  */
 export async function writeWarehouseMovement(tx: Tx, entry: WarehouseLedgerEntry): Promise<void> {
-  const qtyNum = Number(entry.qty);
-  if (!Number.isFinite(qtyNum) || qtyNum < 0) return;
+  if (!qtyYazilabilir(entry.qty)) return;
   if (!entry.fromWarehouseId && !entry.toWarehouseId) return;
 
   await tx.warehouseMovement.create({
@@ -77,10 +95,7 @@ export async function writeWarehouseMovement(tx: Tx, entry: WarehouseLedgerEntry
  */
 export async function writeWarehouseMovements(tx: Tx, entries: WarehouseLedgerEntry[]): Promise<number> {
   const rows = entries
-    .filter((e) => {
-      const q = Number(e.qty);
-      return Number.isFinite(q) && q >= 0 && (e.fromWarehouseId || e.toWarehouseId);
-    })
+    .filter((e) => qtyYazilabilir(e.qty) && (e.fromWarehouseId || e.toWarehouseId))
     .map((e) => ({
       rollId: e.rollId,
       eventType: e.eventType,
@@ -153,8 +168,7 @@ export interface StockMoveInput {
  * `sackId`i sessizce düşüren allowlist hatası stok defterinde tekrarlanır.
  */
 function stockMoveRow(input: StockMoveInput): Prisma.WarehouseMovementCreateManyInput {
-  const qty = Number(input.qty);
-  if (!Number.isFinite(qty) || qty <= 0) {
+  if (!qtyYazilabilir(input.qty)) {
     throw AppError.internal(`Stok hareketi metrajı pozitif olmalı (gelen: ${String(input.qty)})`);
   }
   if (!input.from && !input.to) {
@@ -239,6 +253,11 @@ export async function reverseStockMove(
       rollId: true, eventType: true, qty: true,
       fromWarehouseId: true, toWarehouseId: true,
       fromStatus: true, toStatus: true,
+      // ⚠️ BAĞ ALANLARININ HEPSİ taşınır. Üçü (transformGroupId · rollVarianceId ·
+      // workOrderStepId) eksikti ve ters satır NULL doğuyordu; defter append-only
+      // olduğu için o atıf KALICI kayboluyordu (en görünür zararı: tambur ve
+      // üretime alma satırlarının `workOrderStepId`i).
+      transformGroupId: true, rollVarianceId: true, workOrderStepId: true,
       transferId: true, goodsReceiptId: true, shipmentId: true,
       rollReturnId: true, sackId: true, stockCountId: true,
       reversesMovementId: true,
@@ -255,6 +274,9 @@ export async function reverseStockMove(
     to: fwd.fromWarehouseId && fwd.fromStatus ? { warehouseId: fwd.fromWarehouseId, status: fwd.fromStatus } : undefined,
     reasonCode: args.reasonCode,
     reversesMovementId: movementId,
+    transformGroupId: fwd.transformGroupId,
+    rollVarianceId: fwd.rollVarianceId,
+    workOrderStepId: fwd.workOrderStepId,
     transferId: fwd.transferId,
     goodsReceiptId: fwd.goodsReceiptId,
     shipmentId: fwd.shipmentId,
@@ -278,16 +300,22 @@ export async function reverseStockMove(
  * metrajından DEĞİL: iptal yolları `currentQty`yi 0'a çekiyor ve canlıdan okumak
  * 0 m'lik bir ters satır yazıp depoda hayalet metraj bırakırdı.
  *
- * ⚠️ A1 ÖNCESİ satırlar (iki statü de NULL) terslenemez — ucu kurulamayan satırın
- * tersi de kurulamaz. Sessizce yutulmaz, sayısı AYRICA döner; kalıcı çözüm açılış
- * bakiyesi backfill'idir (tasarım §D6).
+ * ⚠️ STATÜSÜZ satır (iki uç statüsü de NULL) terslenemez — ucu kurulamayan satırın
+ * tersi de kurulamaz. Sessizce yutulmaz, sayısı AYRICA döner.
+ *
+ * ⚠️ Adı "A1 öncesi" DEĞİL: ölçüm (fabrika kopyası, 721 satır) bu kümenin yalnız
+ * tarihsel olmadığını gösterdi — ESKİ KAPILAR (transfer · sevk · sayım) bugün de
+ * statüsüz satır yazıyor. Yani sayının sıfırdan büyük çıkması "eski veri" değil,
+ * "o yolu henüz stok defterine taşımadık" demek. Eski yazıcılar taşındıktan ve
+ * açılış bakiyesi backfill'i indikten SONRA bu dal tanım gereği boşalır; o commit'te
+ * sayı > 0 bir HATA SİNYALİ hâline gelir ve bekçiye çevrilir (tasarım §D6).
  */
 export async function reverseRollStockMoves(
   tx: Tx,
   rollIds: string[],
   args: { reasonCode: string; userId?: string | null; notes?: string | null },
-): Promise<{ reversed: number; preEpochSkipped: number }> {
-  if (rollIds.length === 0) return { reversed: 0, preEpochSkipped: 0 };
+): Promise<{ reversed: number; statusuzAtlanan: number }> {
+  if (rollIds.length === 0) return { reversed: 0, statusuzAtlanan: 0 };
   const forwards = await tx.warehouseMovement.findMany({
     where: {
       rollId: { in: rollIds },
@@ -299,14 +327,14 @@ export async function reverseRollStockMoves(
     select: { id: true, fromStatus: true, toStatus: true },
   });
   let reversed = 0;
-  let preEpochSkipped = 0;
+  let statusuzAtlanan = 0;
   for (const f of forwards) {
     if (f.fromStatus === null && f.toStatus === null) {
-      preEpochSkipped++;
+      statusuzAtlanan++;
       continue;
     }
     await reverseStockMove(tx, f.id, args);
     reversed++;
   }
-  return { reversed, preEpochSkipped };
+  return { reversed, statusuzAtlanan };
 }

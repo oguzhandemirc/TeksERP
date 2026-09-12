@@ -31,6 +31,8 @@ import {
   postStockMove,
   postStockMoves,
   reverseStockMove,
+  writeWarehouseMovement,
+  writeWarehouseMovements,
 } from "../src/services/helpers/warehouse-ledger.helper";
 import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
 
@@ -48,7 +50,13 @@ let itemId = "";
 const HELPER_YOLU = join(__dirname, "..", "src", "services", "helpers", "warehouse-ledger.helper.ts");
 
 /** `data:` argümanı inline nesne literali olan stok-defteri yazımları + map sayısı. */
-function astTekKaynak(): { inlineYazim: string[]; mapSayisi: number; mapAnahtarlari: Set<string>; girdiAnahtarlari: string[] } {
+function astTekKaynak(): {
+  inlineYazim: string[];
+  mapSayisi: number;
+  mapAnahtarlari: Set<string>;
+  girdiAnahtarlari: string[];
+  tersSelect: Set<string>;
+} {
   const metin = readFileSync(HELPER_YOLU, "utf8");
   const src = ts.createSourceFile(HELPER_YOLU, metin, ts.ScriptTarget.ES2022, true);
   const inlineYazim: string[] = [];
@@ -108,7 +116,25 @@ function astTekKaynak(): { inlineYazim: string[]; mapSayisi: number; mapAnahtarl
       gezYazim(st);
     }
   }
-  return { inlineYazim, mapSayisi, mapAnahtarlari, girdiAnahtarlari };
+
+  // (d) `reverseStockMove`un OKUMA tarafı: ileri satırdan taşınacak her bağ alanı
+  //     `select`te olmalı. Burası map'in İKİNCİ kopyasıdır — üç alan (transformGroupId,
+  //     rollVarianceId, workOrderStepId) burada eksikti ve ters satır NULL doğuyordu.
+  const tersSelect = new Set<string>();
+  for (const st of src.statements) {
+    if (!(ts.isFunctionDeclaration(st) && st.name?.text === "reverseStockMove")) continue;
+    const gezSelect = (n: ts.Node): void => {
+      if (
+        ts.isPropertyAssignment(n) && ts.isIdentifier(n.name) && n.name.text === "select" &&
+        ts.isObjectLiteralExpression(n.initializer)
+      ) {
+        anahtarlariOku(n.initializer).forEach((k) => tersSelect.add(k));
+      }
+      ts.forEachChild(n, gezSelect);
+    };
+    gezSelect(st);
+  }
+  return { inlineYazim, mapSayisi, mapAnahtarlari, girdiAnahtarlari, tersSelect };
 }
 
 async function satirlar(rollId: string) {
@@ -144,6 +170,20 @@ async function main(): Promise<void> {
     "§4c ⭐ `StockMoveInput`un her alanı map'te (allowlist sessizce düşürmüyor)",
     ast.girdiAnahtarlari.length >= 10 && eksik.length === 0 && ucKolonlari.length === 0,
     `alan=${ast.girdiAnahtarlari.length} eksik=[${eksik.join(",")}] uç=[${ucKolonlari.join(",")}]`,
+  );
+
+  // Satırın "taşınan bağ" alanları: map'te olup yön/metraj/sebep'ten türemeyenler.
+  // Ters kayıt bunların HEPSİNİ ileri satırdan kopyalamak zorunda.
+  const TURETILEN = new Set([
+    "rollId", "eventType", "qty", "fromWarehouseId", "toWarehouseId",
+    "fromStatus", "toStatus", "reasonCode", "userId", "notes", "reversesMovementId",
+  ]);
+  const tasinanBaglar = [...ast.mapAnahtarlari].filter((k) => !TURETILEN.has(k));
+  const tersEksik = tasinanBaglar.filter((k) => !ast.tersSelect.has(k));
+  check(
+    "§4d ⭐ Ters kayıt ileri satırın HER bağ alanını okuyor (ikinci kopya ayrışmıyor)",
+    tasinanBaglar.length >= 8 && tersEksik.length === 0,
+    `bağ=${tasinanBaglar.length} eksik=[${tersEksik.join(",")}]`,
   );
 
   // ── Fikstür ───────────────────────────────────────────────────────────────
@@ -223,6 +263,27 @@ async function main(): Promise<void> {
 
   // ── §5 — boş küme ─────────────────────────────────────────────────────────
   check("§5 Boş küme 0 döner", (await postStockMoves(prisma, [])) === 0);
+
+  // ── §10 — ESKİ kapıların eşiği DB seddiyle hizalı ─────────────────────────
+  // `CHECK (qty > 0)` tüm yazıcılar için canlı. Eski kapılar 0'ı GEÇİRİYORDU:
+  // satır insert'e gidip 23514 alıyor, `createMany` tek sorgu olduğu için TÜM
+  // küme düşüyor ve çağıranın (sevk · transfer · sayım) tx'i ham Postgres
+  // hatasıyla geri sarılıyordu. Kurşun açık kumaşı (`currentQty: 0`) bu yolu
+  // bayrak gerektirmeden tetikliyordu.
+  let eskiPatladi = false;
+  try {
+    await writeWarehouseMovement(prisma, {
+      rollId: rC, eventType: WarehouseEventType.CANCEL, qty: 0, fromWarehouseId: wh.id,
+    });
+    await writeWarehouseMovements(prisma, [
+      { rollId: rC, eventType: WarehouseEventType.CANCEL, qty: 0, fromWarehouseId: wh.id },
+    ]);
+  } catch { eskiPatladi = true; }
+  check(
+    "§10 ⭐ Eski kapılar 0 metrajda ATLIYOR (DB seddine çarpıp tx düşürmüyor)",
+    !eskiPatladi && (await satirlar(rC)).length === 0,
+    eskiPatladi ? "23514 ile düştü" : "temiz",
+  );
 
   // ── §6..§9 — ters kayıt ───────────────────────────────────────────────────
   const fwd1 = await prisma.$transaction(async (tx) =>
