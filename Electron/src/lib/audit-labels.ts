@@ -405,6 +405,11 @@ export const ENUM_LABELS: Record<string, string> = {
   APPLIED: "Uygulandı",
   PARTIAL: "Kısmi",
   FAILED: "Başarısız",
+  // ImportLineAction — koşumun YAZDIĞI satırın türü. `REVIVE` ayrı değerdir:
+  // pasif kaydın kodu gelince servis onu diriltir, tersi "pasife al" DEĞİLDİR.
+  CREATE: "Oluşturma",
+  UPDATE: "Güncelleme",
+  REVIVE: "Diriltme",
   // DuplicateReviewDecision
   MERGED: "Birleştirildi",
   NOT_DUPLICATE: "Mükerrer değil",
