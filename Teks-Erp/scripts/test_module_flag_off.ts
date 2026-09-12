@@ -215,6 +215,7 @@ const ALAN_DB_ANAHTARI: Record<string, string> = {
   productionEnabled: "production.enabled",
   kumasTeknikEnabled: "kumasTeknik.enabled",
   tezgahEnabled: "tezgah.enabled",
+  devereEnabled: "devere.enabled",
 };
 
 /** HTTP sondalarının 200 alabilmesi için gereken izinler. */

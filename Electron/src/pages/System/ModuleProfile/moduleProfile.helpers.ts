@@ -87,9 +87,23 @@ export function screensHiddenByModule(
  * kapatma sırasını TERS söylerdi.
  */
 export function modulesThatDependOn(moduleKey: ModuleFlagKey): ModuleFlagKey[] {
-  return (Object.entries(MODULE_DEPENDENCIES) as [ModuleFlagKey, ModuleFlagKey][])
-    .filter(([, requires]) => requires === moduleKey)
-    .map(([dependent]) => dependent);
+  // ⚠️ GEÇİŞLİ KAPANIŞ (2026-09-12, devere): zincir üç halkaya çıktı
+  // (devere → iplik → ticaret). Yalnız DOĞRUDAN bağımlıyı döndürmek, "Ticaret'i
+  // kapatırsan İplik de kapanır" derken Devere'yi SUSARDI — kullanıcı iki adım
+  // sonra 400 yerdi. Kapanış BFS ile alınır; tablo çevrimsizdir (ön koşul
+  // zinciri), `gorulen` yine de sonsuz döngüye karşı tutulur.
+  const girisler = Object.entries(MODULE_DEPENDENCIES) as [ModuleFlagKey, ModuleFlagKey][];
+  const out: ModuleFlagKey[] = [];
+  const kuyruk: ModuleFlagKey[] = [moduleKey];
+  while (kuyruk.length > 0) {
+    const cur = kuyruk.shift()!;
+    for (const [dependent, requires] of girisler) {
+      if (requires !== cur || out.includes(dependent)) continue;
+      out.push(dependent);
+      kuyruk.push(dependent);
+    }
+  }
+  return out;
 }
 
 /** Bu modülün AÇILABİLMESİ için önce açık olması gereken modül (varsa). */

@@ -58,6 +58,7 @@ import {
   readTicaretEnabled,
   readIplikEnabled,
   readDepoMultiEnabled,
+  readDevereEnabled,
   readKumasTeknikEnabled,
   readTezgahEnabled,
   // §16 — ENUM ayağı (2026-09-03, Dilim 2). Aynı derleme bağı gerekçesi: okuyucu
@@ -113,6 +114,10 @@ const PANEL_EXEMPT: Record<string, string> = {
   // (muaf listesi iki yönlü denetlenir — panele girip muafta kalırsa kırmızı).
   kumasTeknikEnabled: "yer tutucu — arkasında yüzey YOK; Dilim 3'te panele girer",
   tezgahEnabled: "yer tutucu — arkasında yüzey YOK; Dilim 4'te panele girer",
+  // GEÇİCİ (Faz 1a, 2026-09-12): anahtar + `requireDevereEnabled` kapısı doğdu,
+  // panel yüzeyi (Çözgü Kartları ekranı) AYNI fazın son adımında geliyor. Ekran
+  // doğduğu commit'te bu satır ve Electron `MODULE_PLACEHOLDERS` karşılığı SİLİNİR.
+  devereEnabled: "yüzeyi Faz 1a'nın son adımında doğuyor — ekran gelince panele girer",
 };
 
 const ELECTRON_CONFIG = path.resolve(
@@ -1164,6 +1169,7 @@ async function main() {
     "depoMultiEnabled",
     "kumasTeknikEnabled",
     "tezgahEnabled",
+    "devereEnabled",
   ] as const;
 
   const moduleGaps = MODULE_FLAGS.flatMap((k) => {
@@ -1212,6 +1218,7 @@ async function main() {
     depoMultiEnabled: await readDepoMultiEnabled(emptyClient3),
     kumasTeknikEnabled: await readKumasTeknikEnabled(emptyClient3),
     tezgahEnabled: await readTezgahEnabled(emptyClient3),
+    devereEnabled: await readDevereEnabled(emptyClient3),
   };
   // ⚠️ `productionEnabled` TEK İSTİSNA ve bu kalıcı bir karardır: damgası
   // OLMAYAN bir kopyada (eski dump, dev DB, prova) fabrika üretimsiz kalmasın.
@@ -1224,6 +1231,7 @@ async function main() {
     depoMultiEnabled: false,
     kumasTeknikEnabled: false,
     tezgahEnabled: false,
+    devereEnabled: false,
   };
   const varsayilanSapma = MODULE_FLAGS.filter(
     (k) => moduleDefaults[k] !== beklenenVarsayilan[k],

@@ -203,6 +203,11 @@ export const SETTING_KEYS = {
    *  ÜRETİME BAĞIMLI (`MODULE_DEPENDENCIES`): üretim kapalıyken izlenecek iş
    *  emri yoktur. */
   TEZGAH_ENABLED: "tezgah.enabled",
+  /** Devere / levent modülü: çözgü kartı · levent stoğu · levent olay defteri.
+   *  ⚠️ İPLİĞE BAĞIMLI (`MODULE_DEPENDENCIES`), o da ticarete: levent doğarken
+   *  iplik kg defterine çıkış yazılır (`WARP_ISSUE`). Zincir OKUMA kapısında
+   *  ELLE ölçülür (`requireDevereEnabled`), tablo geçişli kapanış üretmez. */
+  DEVERE_ENABLED: "devere.enabled",
   /** İş emrinde "hedef metraj" alanı gösterilsin mi. Default false (proses-only fabrika). */
   WORKORDER_TARGET_QUANTITY_ENABLED: "workorder.targetQuantityEnabled",
   /** KK1 ham kumaş girişinde "en" alanı gösterilsin mi. Default false (ham en önemsiz). */
@@ -1383,6 +1388,11 @@ export interface FeatureFlags {
   /** Dokuma tezgah izleme modülü. YER TUTUCU — arkasında henüz yüzey yok.
    *  ÜRETİME BAĞIMLI (üretim kapalıyken açılamaz). */
   tezgahEnabled: boolean;
+  /** Devere / levent modülü (çözgü kartı · levent stoğu · levent defteri).
+   *  Varsayılan KAPALI. ⚠️ İPLİĞE BAĞIMLI, iplik de ticarete: bu alan HAM
+   *  değerdir (panel toggle'ı kendi yazdığını geri okusun diye); etkin değer
+   *  `ticaret && iplik && devere` ve kapının içinde çözülür. */
+  devereEnabled: boolean;
   targetQuantityEnabled: boolean;
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı gösterilsin mi. Default false;
@@ -1790,6 +1800,7 @@ export class SystemSettingService {
       depoMultiEnabled: await readDepoMultiEnabled(cacheClient),
       kumasTeknikEnabled: await readKumasTeknikEnabled(cacheClient),
       tezgahEnabled: await readTezgahEnabled(cacheClient),
+      devereEnabled: await readDevereEnabled(cacheClient),
       targetQuantityEnabled: await readTargetQuantityEnabled(cacheClient),
       rawWidthEnabled: await readRawWidthEnabled(cacheClient),
       kk1WeightEntryEnabled: await readKk1WeightEntryEnabled(cacheClient),
@@ -1900,6 +1911,8 @@ export class SystemSettingService {
         return readProductionEnabled();
       case "tezgahEnabled":
         return readTezgahEnabled();
+      case "devereEnabled":
+        return readDevereEnabled();
       case "depoMultiEnabled":
         return readDepoMultiEnabled();
       case "kumasTeknikEnabled":
@@ -2231,6 +2244,18 @@ export class SystemSettingService {
         SETTING_KEYS.TEZGAH_ENABLED,
         input.tezgahEnabled,
         "Dokuma tezgah izleme modülü",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "devereEnabled")) {
+      if (typeof input.devereEnabled !== "boolean") {
+        throw AppError.badRequest("devereEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.DEVERE_ENABLED,
+        input.devereEnabled,
+        "Devere / levent modülü (çözgü kartı · levent stoğu · levent defteri)",
         userId
       );
     }
@@ -3605,6 +3630,20 @@ export async function readTezgahEnabled(
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.TEZGAH_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Devere / levent modülü açık mı? Default FALSE (satır yoksa kapalı — dünkü
+ *  davranış: devere yoktu). HAM değer döner; zinciri (ticaret → iplik → devere)
+ *  `requireDevereEnabled` ölçer. */
+export async function readDevereEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.DEVERE_ENABLED },
     select: { value: true },
   });
   return asBoolean(setting?.value);

@@ -94,14 +94,15 @@ describe("kapatırsan gizlenecek ekranlar", () => {
 });
 
 describe("bağımlılık oku", () => {
-  it("⭐ TERS yön: Ticaret kapanırsa İplik de kapanır", () => {
-    expect(modulesThatDependOn("ticaretEnabled")).toEqual(["iplikEnabled"]);
+  it("⭐ TERS yön + GEÇİŞLİ: Ticaret kapanırsa İplik VE Devere kapanır", () => {
+    expect(modulesThatDependOn("ticaretEnabled")).toEqual(["iplikEnabled", "devereEnabled"]);
     expect(modulesThatDependOn("productionEnabled")).toEqual(["tezgahEnabled"]);
+    expect(modulesThatDependOn("iplikEnabled")).toEqual(["devereEnabled"]);
   });
 
   it("bağımlısı olmayan modülde liste boş", () => {
     expect(modulesThatDependOn("financeEnabled")).toEqual([]);
-    expect(modulesThatDependOn("iplikEnabled")).toEqual([]);
+    expect(modulesThatDependOn("devereEnabled")).toEqual([]);
   });
 
   it("düz yön: İplik açılmadan önce Ticaret açık olmalı", () => {

@@ -46,7 +46,8 @@ export type ModulKey =
   | "iplikEnabled"
   | "depoMultiEnabled"
   | "kumasTeknikEnabled"
-  | "tezgahEnabled";
+  | "tezgahEnabled"
+  | "devereEnabled";
 
 /**
  * Kapatılamaz çekirdek bloklar (MODUL-BAYRAK-TASARIM §2).
@@ -85,6 +86,7 @@ export const EKRAN_MODUL_DEGERLERI: ReadonlySet<string> = new Set<EkranModul>([
   "depoMultiEnabled",
   "kumasTeknikEnabled",
   "tezgahEnabled",
+  "devereEnabled",
   "cekirdek:ana-veri",
   "cekirdek:stok-giris",
   "cekirdek:siparis-musteri",
@@ -388,6 +390,13 @@ export const EKRANSIZ_MODULLER: ReadonlyArray<{ modul: ModulKey; reason: string 
     reason:
       "Dokuma tezgah izleme yer tutucu bir anahtar — arkasında henüz hiçbir " +
       "yüzey (ne route ne karo) yok. Dilim 4.",
+  },
+  {
+    modul: "devereEnabled",
+    reason:
+      "Devere/levent anahtarı Faz 1a'nın İLK adımında (bayrak + kapı) doğdu; " +
+      "yüzeyi olan Çözgü Kartları ekranı AYNI fazın son adımında gelecek. " +
+      "⚠️ Ekran doğduğu commit'te bu satır SİLİNİR (ölü muaf → kırmızı).",
   },
 ];
 

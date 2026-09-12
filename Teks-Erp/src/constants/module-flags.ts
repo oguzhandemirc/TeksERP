@@ -38,9 +38,10 @@ export const MODULE_FLAG_KEYS: ReadonlySet<string> = new Set([
   "depoMultiEnabled",
   "kumasTeknikEnabled",
   "tezgahEnabled",
+  "devereEnabled",
 ]);
 
-/** Aynı yedi modülün DB anahtarı (`system_settings.key`). */
+/** Aynı sekiz modülün DB anahtarı (`system_settings.key`). */
 export const MODULE_SETTING_KEYS: ReadonlySet<string> = new Set([
   "production.enabled",
   "finance.enabled",
@@ -49,6 +50,7 @@ export const MODULE_SETTING_KEYS: ReadonlySet<string> = new Set([
   "depo.multiEnabled",
   "kumasTeknik.enabled",
   "tezgah.enabled",
+  "devere.enabled",
 ]);
 
 /**
@@ -59,14 +61,22 @@ export const MODULE_SETTING_KEYS: ReadonlySet<string> = new Set([
  *   fiyat listesi hepsi ticarette).
  * • Tezgah izleme üretimin bir alt yüzeyidir — üretim kapalıyken izlenecek
  *   iş emri yoktur.
+ * • Devere (çözgü hazırlama/levent) iplik kg defterini TÜKETİR: levent doğarken
+ *   `WARP_ISSUE` hareketi yazılır, yani iplik kapalıyken levent doğamaz.
  *
  * İKİ YERDE UYGULANIR ve ikisi de gerekli: yazma yolunda (`setFeatureFlags`
  * 400 verir — tutarsız çift hiç DOĞMAZ) ve okuma yolunda (middleware; elle
  * SQL/eski satır yüzünden tutarsız bir çift zaten varsa kapı yine kapalıdır).
+ *
+ * ⚠️ ZİNCİR (devere → iplik → ticaret): bu tablo TEK ön koşul taşır, geçişli
+ * kapanışı KENDİ ÜRETMEZ. Yazma yolu zinciri dolaylı kapatır (her çift ayrı
+ * ölçülür), OKUMA kapısı ise zinciri ELLE ölçmek zorundadır — bkz.
+ * `requireDevereEnabled` (ticaret → iplik → devere sırasıyla, eksik OLANI söyler).
  */
 export const MODULE_DEPENDENCIES: Readonly<Record<string, string>> = {
   iplikEnabled: "ticaretEnabled",
   tezgahEnabled: "productionEnabled",
+  devereEnabled: "iplikEnabled",
 };
 
 /** Hata mesajlarında ve panelde kullanılan Türkçe modül adı. */
@@ -78,4 +88,5 @@ export const MODULE_LABELS: Readonly<Record<string, string>> = {
   depoMultiEnabled: "Çoklu depo",
   kumasTeknikEnabled: "Kumaş teknik kartı",
   tezgahEnabled: "Tezgah izleme",
+  devereEnabled: "Devere / levent",
 };

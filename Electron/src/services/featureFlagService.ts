@@ -295,6 +295,11 @@ export interface FeatureFlags {
   kumasTeknikEnabled: boolean;
   /** Dokuma tezgah izleme modülü. YER TUTUCU — üretime bağımlı; panelde satırı yok. */
   tezgahEnabled: boolean;
+  /** Devere / levent modülü (çözgü kartı · levent stoğu · levent defteri).
+   *  Varsayılan KAPALI. ⚠️ İPLİĞE BAĞIMLI, iplik de TİCARETE: bu alan HAM değerdir;
+   *  etkin değer `ticaret && iplik && devere`. Faz 1a'da panel satırı YOK (yüzey
+   *  aynı fazın son adımında gelir). */
+  devereEnabled: boolean;
   targetQuantityEnabled: boolean;
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı — default false; backend ENFORCE eder. */

@@ -263,6 +263,7 @@ export const updateSchema = z.strictObject({
   depoMultiEnabled: z.boolean().optional(),
   kumasTeknikEnabled: z.boolean().optional(),
   tezgahEnabled: z.boolean().optional(),
+  devereEnabled: z.boolean().optional(),
   targetQuantityEnabled: z.boolean().optional(),
   rawWidthEnabled: z.boolean().optional(),
   kk1WeightEntryEnabled: z.boolean().optional(),

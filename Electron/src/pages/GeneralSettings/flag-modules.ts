@@ -62,7 +62,10 @@ export type PlanlananModulSahibi = "planlanan:fason" | "planlanan:kartela";
  * satır yok). Sahibi o iki anahtar olan bir bayrak doğarsa `SettingsModuleState`
  * genişletilmeden derleme geçmez — istenen budur.
  */
-export type HideableModule = Exclude<ModuleFlagKey, "kumasTeknikEnabled" | "tezgahEnabled">;
+export type HideableModule = Exclude<
+  ModuleFlagKey,
+  "kumasTeknikEnabled" | "tezgahEnabled" | "devereEnabled"
+>;
 
 export type FlagOwner = HideableModule | "cekirdek" | PlanlananModulSahibi;
 
@@ -90,6 +93,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   depoMultiEnabled: "cekirdek",
   kumasTeknikEnabled: "cekirdek",
   tezgahEnabled: "cekirdek",
+  devereEnabled: "cekirdek",
 
   // --- ÜRETİM (`operations/work-orders` · KK1 · Tambur · Kurşun · Parti) -----
   targetQuantityEnabled: "productionEnabled",

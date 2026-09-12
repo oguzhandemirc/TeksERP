@@ -78,8 +78,21 @@ function check(label: string, ok: boolean, extra = ""): void {
 }
 
 const KOK = path.resolve(__dirname, "..");
-const MIG_DIZIN = "20260902230000_modul_anahtarlari_grandfathering";
-const MIG = path.join(KOK, "prisma/migrations", MIG_DIZIN, "migration.sql");
+/**
+ * DAMGA MIGRATION'LARI — LİSTE (2026-09-12).
+ *
+ * ⚠️ `20260902230000` uygulanmıştır, değiştirilemez. O tarihten SONRA doğan
+ * modüller (ilki `devere.enabled`) kendi dosyalarında damgalanır; bekçi metinleri
+ * BİRLEŞTİREREK okur. Tek dosyaya sabit kalsaydı yeni modül ya ölçüsüz kalırdı
+ * ya da muaf listesine yazılırdı.
+ */
+const MIG_DIZINLERI: string[] = [
+  "20260902230000_modul_anahtarlari_grandfathering",
+  "20260912120000_devere_modul_anahtari",
+];
+const MIGLER: string[] = MIG_DIZINLERI.map((d) =>
+  path.join(KOK, "prisma/migrations", d, "migration.sql"),
+);
 
 /**
  * Damganın yazdığı anahtarlar, CANLI DB'de beklenen değerleri ve MIGRATION
@@ -110,6 +123,10 @@ const BEKLENEN: Array<{
   { key: "iplik.enabled", deger: "gecmisten", sqlIcerir: ["finance.enabled", "to_jsonb("] },
   { key: "kumasTeknik.enabled", deger: false, sqlIcerir: ["'false'::jsonb"], sqlIcermez: ["'true'"] },
   { key: "tezgah.enabled", deger: false, sqlIcerir: ["'false'::jsonb"], sqlIcermez: ["'true'"] },
+  // 2026-09-12 — damgadan SONRA doğan ilk modül; kendi dosyasında (20260912120000).
+  // Dünkü davranışı YOK (ne yüzey ne veri) → sabit `false` MEŞRU, türetilecek
+  // bir veri de yok. Kural satırı aynı gün bu ayrımla daraltıldı.
+  { key: "devere.enabled", deger: false, sqlIcerir: ["'false'::jsonb"], sqlIcermez: ["'true'"] },
   {
     key: "depo.multiEnabled",
     deger: "veriden",
@@ -122,8 +139,13 @@ async function main(): Promise<void> {
   console.log("=== GRANDFATHERING DAMGASI (modül anahtarları) ===\n");
 
   // ── §1 MIGRATION METNİ ───────────────────────────────────────────────────
-  check("§1 Körlük zemini: migration dosyası okunabildi", fs.existsSync(MIG), MIG);
-  const ham = fs.readFileSync(MIG, "utf8");
+  const migEksik = MIGLER.filter((p) => !fs.existsSync(p));
+  check(
+    "§1 Körlük zemini: damga migration'larının hepsi okunabildi",
+    migEksik.length === 0,
+    migEksik.length === 0 ? MIGLER.join(", ") : `EKSİK: ${migEksik.join(", ")}`,
+  );
+  const ham = MIGLER.map((p) => fs.readFileSync(p, "utf8")).join("\n");
   check("§1a Körlük zemini: dosya dolu", ham.length > 1000, `${ham.length} karakter`);
   // ⚠️ SQL YORUMLARI SÖKÜLÜR — `test_item_price` §7'nin dersinin birebir ikizi:
   // bu migration'ın BAŞLIĞI, kaçınılan kalıbı (`now() AT TIME ZONE 'UTC'`)
@@ -211,15 +233,21 @@ async function main(): Promise<void> {
   }
 
   // ── §2 CANLI DB ──────────────────────────────────────────────────────────
-  const uygulandi = await prisma.$queryRawUnsafe<Array<{ n: bigint }>>(
-    `SELECT count(*)::bigint AS n FROM "_prisma_migrations" WHERE migration_name = $1`,
-    MIG_DIZIN,
-  );
-  const migVar = Number(uygulandi[0]?.n ?? 0) > 0;
+  const uygulanmayan: string[] = [];
+  for (const dizin of MIG_DIZINLERI) {
+    const uygulandi = await prisma.$queryRawUnsafe<Array<{ n: bigint }>>(
+      `SELECT count(*)::bigint AS n FROM "_prisma_migrations" WHERE migration_name = $1`,
+      dizin,
+    );
+    if (Number(uygulandi[0]?.n ?? 0) === 0) uygulanmayan.push(dizin);
+  }
+  const migVar = uygulanmayan.length === 0;
   check(
-    "§2a Migration bu veritabanına uygulanmış (`_prisma_migrations` defterinde)",
+    "§2a Damga migration'larının HEPSİ bu veritabanına uygulanmış (`_prisma_migrations`)",
     migVar,
-    migVar ? MIG_DIZIN : "`npx prisma migrate deploy` koşulmamış — §2 sonuçları anlamsız olurdu",
+    migVar
+      ? MIG_DIZINLERI.join(", ")
+      : `UYGULANMAMIŞ: ${uygulanmayan.join(", ")} — \`npx prisma migrate deploy\` koşulmamış, §2 sonuçları anlamsız olurdu`,
   );
 
   const topVar = (await prisma.roll.count({ take: 1 })) > 0;

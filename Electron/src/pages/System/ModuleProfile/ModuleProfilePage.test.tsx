@@ -143,11 +143,20 @@ describe("Sistem Profili ekranı", () => {
     // ⭐ Tablet ekranları AYRI ve ANILIR — modül kapanınca tablet DURUR
     // (backend `requireProductionEnabled` 403), satıcı bunu görmeden karar veremez.
     expect(screen.getByText(/ekranlar \(1\): KK1 \(Ham Giriş\)/)).toBeTruthy();
-    // Bağımlılık oku TERS yönde anlatılır — İKİ modülde (üretim→tezgah,
-    // ticaret→iplik), yani sayı da ölçülüyor.
-    expect(screen.getAllByText(/Kapatılırsa birlikte kapanır:/)).toHaveLength(2);
-    // Düz yön de İKİ modülde (iplik←ticaret, tezgah←üretim).
-    expect(screen.getAllByText(/Açılabilmesi için önce/)).toHaveLength(2);
+    // Bağımlılık oku TERS yönde anlatılır — ÜÇ modülde (üretim→tezgah,
+    // ticaret→[iplik, devere], iplik→devere), yani sayı da ölçülüyor.
+    expect(screen.getAllByText(/Kapatılırsa birlikte kapanır:/)).toHaveLength(3);
+    // Düz yön de ÜÇ modülde (iplik←ticaret, tezgah←üretim, devere←iplik).
+    expect(screen.getAllByText(/Açılabilmesi için önce/)).toHaveLength(3);
+    // ⭐ GEÇİŞLİ KAPANIŞ (2026-09-12, devere): Ticaret'in satırı İplik'i VE
+    // Devere'yi birlikte anmalı. Yalnız doğrudan bağımlıyı listeleyen bir
+    // önizleme, kullanıcıya kapatma sırasını EKSİK söylerdi (iki adım sonra
+    // 400 `MODULE_DEPENDENCY` yerdi).
+    const ticaretSatiri = screen
+      .getAllByText(/Kapatılırsa birlikte kapanır:/)
+      .map((el) => el.textContent ?? "")
+      .find((t) => t.includes("İplik"));
+    expect(ticaretSatiri).toMatch(/Devere/);
   });
 
   it("§2 fabrika yöneticisi: salt-okunur bandı + Uygula PASİF", async () => {

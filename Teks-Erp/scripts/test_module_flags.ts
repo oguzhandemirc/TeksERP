@@ -81,10 +81,19 @@ const SRC = path.join(KOK, "src");
 const SERVIS = path.join(SRC, "services/system-setting.service.ts");
 const MW = path.join(SRC, "middlewares/module.middleware.ts");
 const ADMIN_ROUTES = path.join(SRC, "routes/admin.routes.ts");
-const MIGRASYON = path.join(
-  KOK,
-  "prisma/migrations/20260902230000_modul_anahtarlari_grandfathering/migration.sql",
-);
+/**
+ * MODÜL ANAHTARINI DAMGALAYAN MIGRATION'LAR — TEK DOSYA DEĞİL LİSTE (2026-09-12).
+ *
+ * ⚠️ NEDEN LİSTE: `20260902230000` UYGULANMIŞTIR ve değiştirilemez (checksum).
+ * O damgadan sonra doğan her modül (ilki `devere.enabled`) kendi migration'ında
+ * damgalanmak ZORUNDA. Tek dosyaya sabitlenmiş bekçi, yeni modülü "damgasız"
+ * sayıp kırmızı verirdi ve tek çıkış yolu onu muaf listesine yazmak olurdu —
+ * yani kuralı ölçmeyi bırakmak. Metinler BİRLEŞTİRİLEREK okunur.
+ */
+const MIGRASYONLAR: string[] = [
+  "20260902230000_modul_anahtarlari_grandfathering",
+  "20260912120000_devere_modul_anahtari",
+].map((d) => path.join(KOK, "prisma/migrations", d, "migration.sql"));
 
 /**
  * `<modül>.enabled` biçiminde OLUP modül anahtarı OLMAYAN ayarlar.
@@ -147,7 +156,14 @@ function main(): void {
     `alan=${flagKeys.length} dbAnahtar=${settingKeys.length}`,
   );
   check("§1c Körlük zemini: servis kaynağı okunabildi", servisMetni().length > 10000);
-  check("§1d Körlük zemini: migration dosyası var", fs.existsSync(MIGRASYON), MIGRASYON);
+  const migrasyonEksik = MIGRASYONLAR.filter((p) => !fs.existsSync(p));
+  check(
+    "§1d Körlük zemini: damga migration'larının hepsi var",
+    migrasyonEksik.length === 0,
+    migrasyonEksik.length === 0
+      ? `${MIGRASYONLAR.length} dosya`
+      : `EKSİK: ${migrasyonEksik.join(", ")}`,
+  );
 
   // ── §2 ⭐ İKİ AD UZAYI AYRIŞMIYOR (dairesel bağımlılık bedeli) ────────────
   const sk = SETTING_KEYS as unknown as Record<string, string>;
@@ -244,7 +260,7 @@ function main(): void {
   // ── §6 ⭐ MIGRATION AÇIKLAMALARI SERVİSLE BİREBİR ─────────────────────────
   // Ayrışırsa AYNI satır, damgayı atan kurulumda bir açıklamayla, panelden ilk
   // düzenlemeden sonra BAŞKASIYLA görünür.
-  const sql = fs.readFileSync(MIGRASYON, "utf8");
+  const sql = MIGRASYONLAR.map((p) => fs.readFileSync(p, "utf8")).join("\n");
   const aciklamalar = servisAciklamalari();
   check(
     "§6a Körlük zemini: servis açıklamaları ayrıştırıldı",

@@ -29,7 +29,7 @@
 import { MODULE_SETTING_KEYS } from "./module-flags";
 
 /** Tasarım §10'un satırları (boyahane BUGÜN SATILMIYOR → profil yok). */
-export type ModuleProfileId = "basit" | "standart" | "perde" | "dokuma" | "tam";
+export type ModuleProfileId = "basit" | "standart" | "perde" | "perde-dokuma" | "dokuma" | "tam";
 
 export interface ModuleProfile {
   /** Panelde görünen ad. */
@@ -67,6 +67,7 @@ export const MODULE_FIELD_BY_SETTING_KEY: Readonly<Record<string, string>> = {
   "depo.multiEnabled": "depoMultiEnabled",
   "kumasTeknik.enabled": "kumasTeknikEnabled",
   "tezgah.enabled": "tezgahEnabled",
+  "devere.enabled": "devereEnabled",
 };
 
 /**
@@ -89,6 +90,7 @@ export const MODULE_DESCRIPTIONS: Readonly<Record<string, string>> = {
   "depo.multiEnabled": "Çoklu depo modülü (depo seçici · depo kolonu · depolar arası transfer)",
   "kumasTeknik.enabled": "Kumaş teknik kartı modülü (en · gramaj · kompozisyon · atkı/çözgü)",
   "tezgah.enabled": "Dokuma tezgah izleme modülü",
+  "devere.enabled": "Devere / levent modülü (çözgü kartı · levent stoğu · levent defteri)",
 };
 
 /** Yedi anahtarı `false` doğuran taban — profil satırları yalnız AÇTIKLARINI yazar. */
@@ -145,11 +147,35 @@ export const MODULE_PROFILES: Readonly<Record<ModuleProfileId, ModuleProfile>> =
     moduller: acik("production.enabled", "finance.enabled", "kumasTeknik.enabled"),
     bayraklar: {},
   },
+  /**
+   * PERDE + DOKUMA (2026-09-12) — hedef kitle kararının profili.
+   *
+   * ⚠️ Mevcut `perde` profili DEĞİŞTİRİLMEDİ: o, kumaşı HAZIR ALAN bir kurulumun
+   * kimliğidir ve canlı bir kurulumun profil içeriğini değiştirmek sessiz bir
+   * davranış değişikliğidir. Dokuyan perdeci ayrı bir satırdır.
+   * Tezgah izleme BU profilde KAPALI: "top tezgahtan doğar" motoru Faz 4'te gelir
+   * (devere levent üretir, tezgah izleme ayrı bir yetenektir).
+   */
+  "perde-dokuma": {
+    ad: "Perde üreticisi — dokuyan",
+    aciklama:
+      "Üretim + ön muhasebe + ticaret + iplik kg defteri + teknik kart + devere " +
+      "(çözgü hazırlama/levent). Tezgah izleme kapalı — Faz 4'te açılır.",
+    moduller: acik(
+      "production.enabled",
+      "finance.enabled",
+      "ticaret.enabled",
+      "iplik.enabled",
+      "kumasTeknik.enabled",
+      "devere.enabled",
+    ),
+    bayraklar: {},
+  },
   dokuma: {
     ad: "Dokuma / örme",
     aciklama:
-      "Üretim + ön muhasebe + ticaret + iplik kg defteri + teknik kart + tezgah " +
-      "izleme. Çoklu depo kapalı (tek depo).",
+      "Üretim + ön muhasebe + ticaret + iplik kg defteri + teknik kart + devere + " +
+      "tezgah izleme. Çoklu depo kapalı (tek depo).",
     moduller: acik(
       "production.enabled",
       "finance.enabled",
@@ -157,6 +183,7 @@ export const MODULE_PROFILES: Readonly<Record<ModuleProfileId, ModuleProfile>> =
       "iplik.enabled",
       "kumasTeknik.enabled",
       "tezgah.enabled",
+      "devere.enabled",
     ),
     bayraklar: {},
   },

@@ -28,6 +28,7 @@ export const MODULE_FLAG_KEYS = [
   "depoMultiEnabled",
   "kumasTeknikEnabled",
   "tezgahEnabled",
+  "devereEnabled",
 ] as const;
 
 export type ModuleFlagKey = (typeof MODULE_FLAG_KEYS)[number];
@@ -42,6 +43,7 @@ export type ModuleFlagKey = (typeof MODULE_FLAG_KEYS)[number];
 export const MODULE_DEPENDENCIES: Readonly<Partial<Record<ModuleFlagKey, ModuleFlagKey>>> = {
   iplikEnabled: "ticaretEnabled",
   tezgahEnabled: "productionEnabled",
+  devereEnabled: "iplikEnabled",
 };
 
 /** Hata mesajlarında ve panelde kullanılan Türkçe modül adı. */
@@ -53,6 +55,7 @@ export const MODULE_LABELS: Readonly<Record<ModuleFlagKey, string>> = {
   depoMultiEnabled: "Çoklu depo",
   kumasTeknikEnabled: "Kumaş teknik kartı",
   tezgahEnabled: "Tezgah izleme",
+  devereEnabled: "Devere / levent",
 };
 
 /**
@@ -73,6 +76,7 @@ export const MODULE_FIELD_BY_SETTING_KEY: Readonly<Record<string, ModuleFlagKey>
   "depo.multiEnabled": "depoMultiEnabled",
   "kumasTeknik.enabled": "kumasTeknikEnabled",
   "tezgah.enabled": "tezgahEnabled",
+  "devere.enabled": "devereEnabled",
 };
 
 /**
@@ -86,4 +90,8 @@ export const MODULE_FIELD_BY_SETTING_KEY: Readonly<Record<string, ModuleFlagKey>
 export const MODULE_PLACEHOLDERS: readonly ModuleFlagKey[] = [
   "kumasTeknikEnabled",
   "tezgahEnabled",
+  // ⚠️ GEÇİCİ (Faz 1a): devere anahtarı + kapısı doğdu, yüzeyi (Çözgü Kartları
+  // ekranı) AYNI fazın son adımında geliyor. Ekran doğduğu commit'te bu satır
+  // ve backend `PANEL_EXEMPT` karşılığı SİLİNİR — liste iki yönlü denetlenir.
+  "devereEnabled",
 ];
