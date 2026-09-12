@@ -29,6 +29,7 @@ import bcrypt from "bcryptjs";
 import prisma from "../lib/prisma";
 import { AuditService } from "../services/audit.service";
 import { SETTINGS_PASSWORD_HASH_KEY } from "../constants/reserved-settings";
+import type { SystemEventName } from "../constants/system-events";
 import { AppError } from "../utils/app-error";
 
 /** bcrypt maliyeti — kullanıcı parolalarıyla AYNI (auth.service `hash(p, 10)`). */
@@ -53,7 +54,14 @@ const BCRYPT_COST = 10;
 export const SETTINGS_PASSWORD_MIN_LENGTH = 8;
 export const SETTINGS_PASSWORD_MAX_LENGTH = 72;
 
-/** Audit olayları — tek yerde, bekçi ve reçete bu adları arar. */
+/**
+ * Audit olayları — tek yerde, bekçi ve reçete bu adları arar.
+ * ⚠️ `satisfies` BİLEREK: bu sabit olay adlarını SABİTTEN kuruyor ve kaynakta dizge
+ * arayan tarama o çağrıları GÖREMEZ (altı olayın Türkçesi bu yüzden aylarca eksik
+ * kaldı). Birliğe `satisfies` ile bağlı olduğu için artık yeni bir ad buraya
+ * eklenemez — önce `constants/system-events.ts`e girer, etiket kapısı da onu görür.
+ * Bağ koparsa aynı kaçak yeniden doğar; `test_system_event_names` §5 o bağı ölçer.
+ */
 export const SETTINGS_PASSWORD_EVENTS = {
   SET: "SETTINGS_PASSWORD_SET",
   ROTATED: "SETTINGS_PASSWORD_ROTATED",
@@ -61,7 +69,7 @@ export const SETTINGS_PASSWORD_EVENTS = {
   USED: "SETTINGS_PASSWORD_USED",
   FAILED: "SETTINGS_PASSWORD_FAILED",
   LOCKED: "SETTINGS_PASSWORD_LOCKED",
-} as const;
+} as const satisfies Record<string, SystemEventName>;
 
 /**
  * Kayıtlı hash (yoksa `null`). CACHE'SİZ — gerekçe dosya başlığında.

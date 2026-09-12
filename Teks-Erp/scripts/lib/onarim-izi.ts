@@ -27,14 +27,20 @@
 // =============================================================================
 import { AuditService } from "../../src/services/audit.service";
 import { hedefDbAdi } from "./hedef-db-kapisi";
+import type { SystemEventName } from "../../src/constants/system-events";
 
 const pkg = require("../../package.json") as { version?: string };
 
 export interface OnarimIzi {
   /** Betiğin repo içi yolu — `scripts/x.ts`. */
   script: string;
-  /** `SystemLog.action` — ETKİYİ söyler, dosya adını değil. */
-  action: string;
+  /**
+   * `SystemLog.action` — ETKİYİ söyler, dosya adını değil.
+   * ⚠️ KAPALI BİRLİK (`src/constants/system-events.ts`): serbest `string`ti ve bu
+   * yüzden yedi onarım izinin Türkçesi hiç eklenmemişti — ekran ham kod basıyordu.
+   * Yeni bir iz adı önce birliğe + etiket aynasına girer, sonra burada kullanılır.
+   */
+  action: SystemEventName;
   /** Etkilenen ana tablo (varsa). */
   tableName?: string;
   /**

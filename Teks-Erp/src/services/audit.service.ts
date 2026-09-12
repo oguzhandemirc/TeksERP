@@ -10,6 +10,7 @@ import { Prisma } from "@prisma/client";
 
 import { currentOrigin } from "../lib/request-context";
 import { diffCommonFields } from "./helpers/audit-diff.helper";
+import type { SystemEventName } from "../constants/system-events";
 import { hata } from "../lib/logger";
 type JsonValue = Prisma.InputJsonValue | typeof Prisma.JsonNull;
 
@@ -168,7 +169,13 @@ export class AuditService {
    */
   static async logEvent(params: {
     category: "AUTH" | "SYSTEM";
-    action: string;
+    /**
+     * Olay adı KAPALI BİRLİKTİR (`constants/system-events.ts`). Eskiden `string`ti:
+     * yeni bir olay adı hiçbir katmanda itiraz görmüyordu ve Türkçe etiketi
+     * unutuluyordu — ekran ham kod basıyordu. Birlik, 51 çağrı yerini birden
+     * derleyiciye bağlar (adı SABİTTEN kuran çağrılar dâhil).
+     */
+    action: SystemEventName;
     userId?: string | null;
     tableName?: string;
     recordId?: string;

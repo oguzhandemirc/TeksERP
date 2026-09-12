@@ -262,6 +262,18 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   PERMISSION_CATALOG_RECONCILE_FAILED: "Yetki kataloğu eşitlenemedi",
   ROLE_TEMPLATE_CATALOG_RECONCILED: "Rol kataloğu eşitlendi",
 
+  // ── SYSTEM · onarım / backfill izleri ──
+  // Bunlar `scripts/*.ts --apply` koşumlarının bıraktığı izdir: operatör "bu veriyi
+  // kim değiştirdi" diye sorduğunda cevabı bu satırlar verir. ⚠️ Türkçeleri birlik
+  // (`system-events.ts`) kurulurken eklendi — o güne dek ekran ham kod basıyordu.
+  DENETIM_ONARIM: "Denetim bulgusu onarıldı (betik)",
+  MASTER_DATA_NAME_NORMALIZE: "Ana veri adları normalize edildi (betik)",
+  ROLL_FOLD_AND_REASON_BACKFILL: "Top kat/sebep alanları geriye dönük dolduruldu (betik)",
+  ROLL_LABEL_CUSTOMER_BACKFILL: "Top etiket müşterisi geriye dönük dolduruldu (betik)",
+  ROLL_PRODUCTION_TIMESTAMPS_BACKFILL: "Top üretim damgaları geriye dönük dolduruldu (betik)",
+  ROLL_WAREHOUSE_BACKFILL: "Top depo bağı geriye dönük dolduruldu (betik)",
+  TAMBUR_UNDO_CANCEL_MARKER_BACKFILL: "Tambur geri alma iptal işareti dolduruldu (betik)",
+
   // ── SYSTEM · servis keşfi (kurulum kimliği) ──
   INSTALLATION_ID_CREATED: "Kurulum kimliği oluşturuldu",
   // ⚠️ Bu satırı görmek NORMAL DEĞİLDİR: kimlik yalnız kayıt bozulduğunda
