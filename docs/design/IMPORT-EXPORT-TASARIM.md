@@ -250,3 +250,193 @@ yalnız oluşturur)
 
 Yapılandırma paketi türleri (5): `LABEL_TEMPLATE` · `TRAVELER_TEMPLATE` ·
 `DOCUMENT_PROFILE` · `FREE_DOCUMENT` · `PERMISSION_TEMPLATE`
+
+## 8. ③ İÇE AKTARIM GERİ SARMA SÖZLEŞMESİ (2026-09-12, migration'dan ÖNCE)
+
+> Kod yazılmadan önce okunur. Kullanıcı kapsamı onayladı ("defter + güvenli geri sarma").
+> Doktrin çerçevesi `docs/kurallar/defter.md`. Ölçümler 17 adaptörün tamamı okunarak
+> yapıldı (2026-09-12); her iddianın yanında `dosya:satır` çapası vardır.
+
+### 8.0 Doktrin çerçevesi (değişmez)
+
+- `ImportRun` satırı "OLDU" kaydıdır: geri sarma onu NE SİLER NE DEĞİŞTİRİR. Geri sarma
+  BUGÜNE yazılan karşı kayıttır (`revertedAt`/`revertedById`/`revertReason` + satır
+  bazında ters kayıt).
+- `importedAt` benzeri ileri damgalar `null`'lanmaz.
+- Master data bir DURUM tablosudur; önceki değere dönmesi meşrudur — ama o dönüşün
+  KENDİSİ defterde satır olarak görünür ("kim geri sardı, hangi alanı neye döndürdü"
+  sorusu audit'e uzanmaz).
+
+### 8.1 Motor gerçekleri (hepsine uygulanır)
+
+1. **Tek tx YOK:** yazım döngüsü satır satır `createOne`/`updateOne` çağırır
+   (`import.service.ts:571-607`); ilk yazma hatasında döngü KIRILIR, koşum `PARTIAL`
+   olur ve `stoppedAtRowNo` yazılır. Yani bir koşumun yazdığı küme dosyanın ÖN EKİ
+   olabilir — geri sarma "tüm dosya" değil YAZILAN SATIRLAR üzerinden çalışır.
+2. **Motorun audit satırında `oldData` YOK** (`import.service.ts:585-594`): önceki
+   değerler yalnız SERVİSLERİN kendi audit satırlarında var, onlar da 6 ayda arşivlenir.
+3. Bir koşumun yazdığı kayıtların izi bugün TEK yerde: audit. `getRunRecords`
+   `system_logs`u `newData.importRunId` + ±10 dk penceresiyle okuyor ve dönüşünde
+   `archivedAfterMonths: 6` taşıyor (`import.service.ts:733-779`). Kök kuralın tanımı:
+   *audit'e uzanma ihtiyacı bir defter eksikliğinin işaretidir.*
+4. `/api/import/runs/:id/records` ucu VAR ama panelde tüketicisi YOK → "motor var,
+   çıkış yüzeyi yok" ⇒ o yetenek bugün **VAR SAYILMAZ**. Geri sarma önizlemesi bu ucu
+   yüzeye çıkarır, yeni bir per-record kavramı icat etmez.
+5. `nameFold`/`aliasFold`/`cityFold` DB-üretimlidir (`@default(dbgenerated())`) —
+   uygulama yazmaz, geri de yazamaz; geri sarma onlara dokunmaz.
+6. **DİRİLTME TUZAĞI:** kodu DOSYADAN gelen varlıklarda (item manuel kodla,
+   qualityGrade, subcontractorCategory, subcontractor) pasif bir kaydın kodu gelirse
+   servis onu DİRİLTİR ve bazı yollarda çocuk pivotlarını SİLER
+   (`item.service.ts:252-264`, `base.service.ts:1052-1062`,
+   `subcontractor-management.service.ts:533-542`). Önizleme "CREATE" der ama yapılan
+   şey UPDATE+REVIVE'dır ⇒ geri sarma `isActive:false` ile YANLIŞ olur.
+
+### 8.2 17 varlık × ters yol matrisi
+
+| # | entity | yaratılan satırın tersi | güncellenen satırın tersi | GERİ ALINAMAZ / risk |
+|---|---|---|---|---|
+| 1 | item | `isActive:false` (hard delete RESTRICT'lerle reddedilir) | alan-bazlı EVET | izin listesi (`ItemAllowedColor/Property`) REPLACE ediliyor ve eski küme hiçbir audit yükünde YOK (`item.service.ts:470-483`, 495-505) → **`ImportRunLine` yazım anında fotoğraflamalı**; diriltme dalı pivotları siler |
+| 2 | customer | `isActive:false` | EVET (BaseService `oldData`+`changes`) | kod dizisi yanar (kod yeniden kullanılmaz) — zararsız |
+| 3 | customerBranch | `isActive:false` — **hard delete YASAK** | EVET (tam `oldData`) | ona bakan FK'ların HEPSİ opsiyonel (`Order.branchId` 2382, `Shipment` 5094, `Sack` 4805, `DirectShipment` 3984) ⇒ hard delete reddedilmez, canlı belgeleri SESSİZCE null'lar |
+| 4 | color | `isActive:false` | EVET | ad yazımda yeniden normalize edilir (`055 BEYAZ`), dosya hücresiyle birebir değil; `Roll.colorId` opsiyonel ⇒ hard delete tarihi boyar |
+| 5 | fabricProperty | `isActive:false` | skaler EVET · `values` EVET (soft) · **istasyon linkleri HAYIR** | `StationProperty` replace eski kümeyi yok eder ve audit'te yok (`fabric-property.service.ts:384-390`) |
+| 6 | qualityGrade | dirilttiyse `isActive:false` YANLIŞ → önceki alan değerleri geri yazılır | EVET | `targetStatus` üretim davranışıdır (Tambur topu nereye düşürür); kod insan anahtarı ("A1") ve araya başkası girebilir |
+| 7 | defectType | `isActive:false` | EVET | `RollError.defectTypeId` opsiyonel ⇒ hard delete geçmiş atfı null'lar |
+| 8 | returnReason | `isActive:false` | EVET | `RollReturn.reasonId` opsiyonel ⇒ aynı sınıf |
+| 9 | station | `isActive:false` (hard delete reddedilir) | EVET | `appliesColor/Quality` kapanırken açıkken doğmuş satırlar geri alınmaz |
+| 10 | machine | `isActive:false` (kullanılmışsa hard delete reddedilir) | EVET | istasyon taşımasını geri almak `@@unique([stationId,nameFold])`e çarpabilir |
+| 11 | subcontractorCategory | `isActive:false` — **hard delete YASAK** | kısmi (`oldData` 6 alan) | hiçbir zorunlu FK bakmıyor ⇒ hard delete reddedilmez ve firma-kategori linklerini CASCADE siler |
+| 12 | subcontractor | `isActive:false` (hard delete reddedilir) | skaler kısmi · **kategori kümesi HAYIR** | diriltme dalı mevcut linkleri siler; `oldData` kategorileri taşımıyor (`…:607-610`) |
+| 13 | customerItemAlias | pivot, soft-delete YOK ⇒ **fiziksel silme** (FK-güvenli, yalnız KOŞUMUN YARATTIĞI satır) | `alias` EVET (kolon NOT NULL, eski değer audit'te `oldData:{alias}`) | import bu tabloda silme yüzeyi sunmuyor; fiziksel silme ③b sınıfıyla AÇIKÇA sahiplenilir (§8.3a) |
+| 14 | customerColorAlias | pivot, soft-delete YOK ⇒ **fiziksel silme** (yalnız koşumun yarattığı satır; ölçüm: import yalnız `alias` yazar, `assigned` varsayılan `false` kalır ⇒ yarattığı satır HER ZAMAN `assigned:false`) | `alias` EVET — kolon **nullable** (`String?`), yani önceki değer `null` ise ona da dönülür | koşumdan ÖNCE var olan satır (ör. `assigned:true`, alias boş) import tarafından yalnız GÜNCELLENİR; tersi "alias'ı eski haline (null'a) döndür"dür, satır SİLİNMEZ — silmek müşteriye özel rengi kamuya açardı |
+| 15 | productRecipe | `isActive:false` | skaler EVET · **özellik kümesi HAYIR** | `properties: { deleteMany: {}, create: … }` eski kümeyi yok eder (`product-recipe.service.ts:147-150`) |
+| 16 | route | `isActive:false` | başlık skalerleri EVET · **adım ağacı HAYIR** | `steps: { deleteMany: {}, create: … }` TÜM adımları siler, id'ler değişir, eski ağaç audit'te yok (`route.adapter.ts:294-298`) |
+| 17 | order | `isActive` YOK ⇒ mevcut İPTAL yolu (`status=CANCELLED` + `cancelledAt/cancelReason`, satırlarda `OrderLine.cancelled*`) | — (adaptör UPDATE yapmaz, her grup CREATE) | sevkiyat/WO/tahsis bağı varsa hard delete reddedilir ve iptal İŞ KARARIDIR; ayrıca `promoteCustomerAliases` BAŞKA varlığın master satırlarını yazar (`order.service.ts:683-755`) ve sipariş iptalinden sonra da YAŞAR |
+
+**Hiçbir kutu BOŞ kalmadı** (1e'nin durma koşulu): her varlık için hem yaratma hem
+güncelleme tersi tanımlı. Ama beş varlıkta (item · fabricProperty · subcontractor ·
+productRecipe · route) "güncellemenin tersi" ANCAK yazım anında fotoğraf alınırsa
+mümkündür — bu yüzden `ImportRunLine` fotoğrafı ZORUNLU alandır, opsiyonel değil.
+
+**Fiziksel silmenin YASAK olduğu varlıklar** (hard delete reddedilmez ama canlı
+belgeleri sessizce null'lar/cascade'ler): `customerBranch` · `qualityGrade` ·
+`defectType` · `returnReason` · `subcontractorCategory` · `route` · `productRecipe`.
+Geri sarma bu yedisinde YALNIZ `isActive:false` yazar.
+
+### 8.2a İki alias pivotunda FİZİKSEL SİLME — sınıf ③b (yapılandırma pivotu)
+
+`customerItemAlias` ve `customerColorAlias` soft-delete kolonu TAŞIMIYOR
+(`schema.prisma` `customer_item_aliases` / `customer_color_aliases`), bu yüzden
+koşumun YARATTIĞI bir alias satırını geri almanın tek yolu fiziksel silmedir. Bu,
+hard delete'in ③b sınıfına (**saf yapılandırma pivotu**) girer ve üç sınırla sahiplenilir:
+
+1. **Yalnız O KOŞUMUN YARATTIĞI satır silinir.** Koşumdan önce var olan satıra
+   dokunulmaz: import onu yalnız GÜNCELLEMİŞTİR (`alias` yazmıştır) ve tersi eski
+   değeri geri yazmaktır — `customerColorAlias.alias` NULLABLE olduğu için eski değer
+   `null` olsa bile dönülebilir; `customerItemAlias.alias` NOT NULL'dur ve eski değer
+   her zaman bir metindir. Yani "geri alınamaz" kovası bu iki tabloda BOŞ.
+2. **Geçmiş belge bozulmaz:** müşteri belgesindeki ad DONMUŞTUR (`docs/kurallar/belge-etiket.md`
+   "müşterideki ad donar, rejim donmaz") — alias satırı silinse bile basılmış/dondurulmuş
+   belgelerdeki ad değişmez. Alias satırı yalnız BUNDAN SONRAKİ belgelerin adını seçer.
+3. Satırın parasal/ticari/kalite sonucu yoktur (yalnız müşterinin bizim kayda verdiği ad)
+   ve değişikliğin KENDİSİ `ImportRunLine`da defterli kalır — ③b'nin "değişiklik karar
+   defterine yazılır" şartı böyle karşılanır.
+
+⚠️ `assigned` ile `alias` BAĞIMSIZDIR (şema yorumu üç kombinasyonu sayıyor). Ölçüm:
+import yalnız `alias` yazar (`customer-alias.service.ts` upsert), `assigned` varsayılan
+`false` kalır ⇒ koşumun yarattığı satır HER ZAMAN `assigned:false`'tur; müşteriye özel
+renk (`assigned:true`) satırı import tarafından yaratılmış OLAMAZ, dolayısıyla geri sarma
+onu hiç silmez.
+
+### 8.3 `ImportRunLine` ne saklar — TAM SATIR DEĞİL, DOKUNULAN ALANLAR + YOK EDİLEN ÇOCUKLAR
+
+| Alan | Neden |
+|---|---|
+| `importRunId` | koşum bağı (RESTRICT) |
+| `rowNo` (+ `rowNos` gruplu şablonda) | kullanıcı satırı DOSYADA bulabilsin (`ImportRowResult` ile aynı kimlik) |
+| `entity`, `tableName`, `recordId` | hangi kayıt, hangi tablo |
+| `action`: `CREATE` · `UPDATE` · **`REVIVE`** | ters yol dalı bundan seçilir; `REVIVE` §8.1/6 tuzağının tek dürüst karşılığıdır |
+
+**`REVIVE`ın tersi PASİFE ATMA DEĞİLDİR.** `CREATE`in tersi "kaydı pasife al"dır; `REVIVE`ın
+tersi **"önceki alan değerlerini geri yaz + kaydı import'tan ÖNCEKİ pasif/aktif durumuna
+döndür"**dür. İkisini karıştırmak, import'tan önce de VAR OLAN bir kaydı pasife atmak
+demektir — yani geri sarma, geri almadığı bir şeyi bozar. Diriltme dalında çocuk pivotları
+da silinmiş olabileceği için (`item.service.ts:252-264`,
+`subcontractor-management.service.ts:533-542`) `childSnapshot` bu dalda da ZORUNLUDUR.
+| `keyValue`, `label` | anahtar + insan-okunur ad (önizleme satırı tanıtır) |
+| `changedFields Json` | **yalnız dokunulan alanlar**: `{alan: {from, to}}` |
+| `childSnapshot Json?` | REPLACE edilen çocuk koleksiyonunun YOK EDİLEN hali (item izin listeleri · fabricProperty istasyon linkleri · subcontractor kategorileri · productRecipe özellikleri · route adım ağacı). **YENİDEN KURMAYA YETECEK KADAR**, satırın kopyası DEĞİL: id + kuruluma giren alanlar. Ölçüm (2026-09-12, fabrika kopyası): en büyük fotoğraf `route` adım ağacı — `RouteStep` 17 alanlı, rota başına EN ÇOK 4 adım (3 rota / 9 adım toplam) ve adım-özelliği 0 ⇒ fotoğraf ~1 KB mertebesinde. **Audit'e GİRMEZ**, `ImportRunLine`da yaşar (audit 6 ayda arşivlenir, geri sarma ondan sonra da mümkün olmalı). Kişisel veri taşıyan alanlar fotoğrafta da aynı izin kuralına tabidir. |
+| `sideEffects Json?` | başka varlığa yazılan yan satırlar (sipariş → `promoteCustomerAliases`) |
+| `revertedAt`, `revertedById`, `revertSkipReason` | geri sarma damgası / atlanma gerekçesi |
+
+**Tam satır fotoğrafı SAKLANMAZ:** (i) önizleme katmanı zaten alan-bazlı farkı üretiyor
+(`ImportRowResult.changes: Record<string, {from,to}>`) — aynı soruyu iki biçimde saklamak
+tek-kaynak kuralını kırar; (ii) tam fotoğraf, import'un DOKUNMADIĞI alanları da geri
+yazma riskini getirir (aradaki meşru değişiklik sessizce ezilir); (iii) satır şişer.
+ÇOCUK koleksiyonu istisnadır: replace semantiği eski satırları YOK ETTİĞİ için fotoğraf
+olmadan geri dönüş imkânsızdır (ölçüm: beş varlıkta eski küme hiçbir audit yükünde yok).
+
+**Sır hijyeni:** 17 adaptörün hiçbiri parola/PIN/token sütunu taşımıyor (tüm `COLUMNS`
+dizileri okundu). Kural yine yazılı: `changedFields`e sır alanı YAZILMAZ; böyle bir sütun
+bir gün import'a girerse defterde MASKELENİR (`"***"`). ⚠️ KİŞİSEL VERİ vardır
+(`taxNumber`, `phone`, `email`, `address`): önizleme ve dışa aktarım bunları yeni bir
+sızma yüzeyine çevirmez — geri sarma önizlemesi yalnız ALAN ADI + "değişti" bilgisini
+basar, değerleri yalnız ilgili varlığın write iznine sahip kullanıcıya gösterir.
+
+### 8.4 "Yalnız o alan hâlâ aynıysa" — ATOMİK CLAIM
+
+```ts
+const claim = await tx.<model>.updateMany({
+  where: { id: line.recordId, <alan>: line.changedFields[<alan>].to },  // hâlâ import'un yazdığı değer
+  data: { <alan>: line.changedFields[<alan>].from },                    // önceki değere dön
+});
+if (claim.count === 0) skipped.push({ line, reason: "Kayıt içe aktarımdan sonra değişti" });
+```
+
+`findUnique→if→update` YASAK. `count === 0` bir HATA değil bir DALDIR: satır "atlandı"
+listesine GEREKÇESİYLE girer, geri sarma devam eder (tek değişmiş alan tüm koşumu geri
+alınamaz yapmamalı) ve gerekçe `ImportRunLine.revertSkipReason`a YAZILIR — "neden
+atlandı" sorusu da deftere düşer.
+
+### 8.5 Önizleme ucu ve per-record seçim
+
+- `GET /api/import/runs/:id/revert-preview` — izin `data:import` + varlığın kendi write
+  izni (mevcut çift-kapı düzeni; YENİ izin kodu AÇILMAZ).
+- Dönüş satır satır: `rowNo`, `entity`, `recordId`, `label`, `action`, yapılacak işlem
+  (`DEACTIVATE` · `RESTORE_FIELDS` · `RESTORE_CHILDREN` · `CANCEL_DOCUMENT` ·
+  `DELETE_PIVOT`) ve geri alınamayanlar için `blocker` metni.
+- **Atlama gerekçeleri AYRI AYRI** görünür ("kayıt sonradan değişti" · "sipariş sevk
+  edildi" · "kayıt zaten pasif" · "çocuk satırlarını başkası değiştirdi" · "satırın
+  yazarı import değil"). Tek bir "atlandı" kovası kullanılmaz; "12 satır atlanacak"
+  ÖZETİ YETMEZ (emsal: `ReverseStockCountDialog`, `MergeHistoryDialog`, kartela
+  `blocked` listesi).
+- `sideEffects` satırları önizlemede AYRI BÖLÜM: sipariş geri sarılırken doğan alias
+  master satırları ne silinir ne sessizce bırakılır — kullanıcıya "bunlar kalacak"
+  denir (silmek başka varlığın ana verisini import kararıyla yok etmek olurdu).
+- `POST /api/import/runs/:id/revert` gövdesi: `reason` (≥10 karakter) + `selectedRowNos`
+  — seçim BOŞSA 400 (sessiz tam-geri-sarma riski).
+- Yüzey `DataImportPage` koşum geçmişinde; bugünkü `ImportRunDetail`
+  (`options`/`errorReport`/`clientToken`) genişletilir, yeni ekran açılmaz.
+
+### 8.6 Migration bandı, izin, kapılar
+
+- Migration **`20260912160000`**: `ImportRunLine` + `ImportRun`a `revertedAt`/
+  `revertedById`/`revertReason`. İlk tahsis `130200` idi, ölçümle değişti: dizinde
+  `20260912150300` vardı ⇒ `130200` uygulanmış migration'ların ADINDAN önce gelir,
+  Prisma'nın sırası ad tabanlı olduğu için temiz DB'de önce, canlıda sonra uygulanır
+  (aynı şema iki farklı sırayla kurulur).
+- **Aynı dilimde kapatılacak KAPI BOŞLUĞU:** `test_migration_hygiene.ts` pending /
+  elle-resolve / dizin okunabilirliği soruyor ama AD SIRASI sormuyor. Eklenecek
+  kontrol: *dizindeki uygulanmamış bir migration'ın adı, uygulanmış en büyük addan
+  BÜYÜK olmalı.* Negatif sonda: bilerek geriye düşen ad → kırmızı. (Ölçüm: bugün
+  pending migration yok, en büyük ad `20260912150300` — kontrol yeşil başlar.)
+- İzin: YENİ KOD YOK (`data:import` + varlığın write izni).
+- APK: YOK. Panel sürümü gerekir (geri sarma diyaloğu).
+- Bekçi `test_import_revert.ts`: her uygulanan satır bir `ImportRunLine` (CREATE ·
+  UPDATE · REVIVE) · yaratılan kayıt pasife alınır · güncellenen kayıt alan-bazlı döner ·
+  çocuk fotoğrafı geri yazılır (route adım ağacı) · "alan değişmiş" atlama dalı ·
+  diriltme dalı `isActive:false` YAPMAZ · sipariş dalı mevcut iptal yolunu kullanır ·
+  alias pivotunda `assigned:true` satır SİLİNMEZ · çift geri sarma 409 · önizleme ↔
+  işlem aynı planı görür. Negatif sondalar: atomik claim'i `findUnique→if→update` yap →
+  atlama dalı kırmızı · `childSnapshot` yazımını kaldır → route adım geri yazımı kırmızı ·
+  `REVIVE` dalını `CREATE`e düşür → diriltme kontrolü kırmızı.

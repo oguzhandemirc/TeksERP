@@ -6787,3 +6787,72 @@ kursun). Kod tarafında yapılacak bir şey yok.
 
 Migration **yok** · izin **yok** · APK **yok**. Sözleşme: bekçi kapsamı artık
 dizin derinliğine bağlı değil; yeni bir alt dizin açmak denetimi daraltmaz.
+## 2026-09-12 — ③ İçe aktarım geri sarma SÖZLEŞMESİ; hard delete ③b sınıfı iki alias pivotuyla genişledi [ÇEKİRDEK]
+
+### Saha sorusu
+
+"Yanlış dosya yükledim" bugün geri alınamıyor: `ImportRun` yalnız SAYAÇ tutuyor, hangi
+kaydın yazıldığı yalnız AUDIT'te duruyor (`getRunRecords` → `system_logs`,
+`newData.importRunId` + ±10 dk penceresi, dönüşte `archivedAfterMonths: 6`) ve motorun
+audit satırında `oldData` YOK (`import.service.ts:585-594`). Yani iş kararına giren bilgi
+6 ayda arşivlenen bir tabloda — kök kuralın tanımı.
+
+### Ölçüm (17 adaptörün tamamı okundu)
+
+- Yazım döngüsünde TEK TX YOK: ilk hatada kırılıyor, koşum `PARTIAL` + `stoppedAtRowNo`
+  (`import.service.ts:571-607`) ⇒ geri sarma "dosya" değil YAZILAN SATIRLAR üzerinden.
+- BEŞ varlıkta güncellemenin tersi bugün İMKÂNSIZ, çünkü çocuk koleksiyonu REPLACE
+  ediliyor ve yok edilen küme hiçbir audit yükünde yok: `item` izin listeleri
+  (`item.service.ts:470-483`) · `fabricProperty` istasyon linkleri (384-390) ·
+  `subcontractor` kategorileri (`oldData` taşımıyor, 607-610) · `productRecipe`
+  özellikleri (147-150) · `route` TÜM adım ağacı (`route.adapter.ts:294-298`).
+- DÖRT varlıkta "CREATE" görünen satır DİRİLTME olabiliyor (kod dosyadan gelenler:
+  item manuel kod · qualityGrade · subcontractorCategory · subcontractor) —
+  `base.service.ts:1052-1062`, `item.service.ts:252-264`,
+  `subcontractor-management.service.ts:533-542`.
+- YEDİ varlıkta fiziksel silme reddedilMİYOR ama canlı belgeleri sessizce null'lar /
+  cascade'ler (`customerBranch` · `qualityGrade` · `defectType` · `returnReason` ·
+  `subcontractorCategory` · `route` · `productRecipe`).
+- `order` dalında `promoteCustomerAliases` BAŞKA varlığın master satırlarını yazıyor
+  (`order.service.ts:683-755`) ve sipariş iptalinden sonra da yaşıyor.
+- Sır alanı YOK (17 adaptörün `COLUMNS` dizileri tarandı); kişisel veri VAR (vergi no,
+  telefon, e-posta, adres).
+- `/api/import/runs/:id/records` ucu var, panelde tüketicisi yok ⇒ o yetenek bugün
+  "VAR SAYILMAZ" (motor + yüzey + izin üçlüsü).
+
+### Kararlar
+
+1. **`ImportRunLine` append-only defteri** (bant `20260912160000`): satır başına
+   `action (CREATE|UPDATE|REVIVE)` · `changedFields {alan:{from,to}}` · REPLACE edilen
+   çocukların `childSnapshot`ı · `sideEffects` · geri sarma damgası/atlama gerekçesi.
+   Tam satır fotoğrafı SAKLANMAZ (dokunulmayan alanı geri yazmak aradaki meşru
+   değişikliği ezer); çocuk koleksiyonu İSTİSNADIR çünkü yok edilen küme başka hiçbir
+   yerde yok. Fotoğraf "yeniden kurmaya yetecek kadar"dır; ölçüm: en büyüğü `route`
+   adım ağacı (`RouteStep` 17 alan, fabrikada rota başına en çok 4 adım) ⇒ ~1 KB.
+2. **`REVIVE` üçüncü eylemdir** ve tersi PASİFE ATMA DEĞİL, "önceki alan değerleri +
+   import'tan önceki aktif/pasif durum"dur. Karıştırmak, import'tan önce de var olan
+   kaydı pasife atmak demektir.
+3. **Hard delete ③b (yapılandırma pivotu) sınıfı `CustomerItemAlias` ve
+   `CustomerColorAlias` ile genişledi.** Gerekçe üç ayaklı: (i) fiziksel silme YALNIZ o
+   koşumun YARATTIĞI satırda olur — önceden var olan satır yalnız güncellenmiştir ve
+   tersi eski değeri geri yazmaktır (`customerColorAlias.alias` NULLABLE olduğu için
+   `null`a da dönülür; `customerItemAlias.alias` NOT NULL ve eski değer her zaman metin);
+   (ii) geçmiş belge BOZULMAZ çünkü müşteri belgesindeki ad DONMUŞTUR (`belge-etiket.md`),
+   alias yalnız bundan sonraki belgelerin adını seçer; (iii) satırın parasal/ticari/kalite
+   sonucu yok ve değişikliğin KENDİSİ `ImportRunLine`da defterli kalıyor.
+   ⚠️ Ölçüm: import yalnız `alias` yazıyor, `assigned` varsayılan `false` kalıyor ⇒
+   koşumun yarattığı renk alias'ı HER ZAMAN `assigned:false`; müşteriye özel renk
+   (`assigned:true`) satırı import tarafından yaratılmış olamaz, geri sarma onu silmez.
+4. "Yalnız o alan hâlâ aynıysa" ATOMİK CLAIM ile yazılır (`findUnique→if→update` yasak);
+   `count===0` hata değil DALDIR, satır gerekçesiyle ATLANDI listesine girer ve gerekçe
+   `revertSkipReason`a yazılır.
+5. Önizleme ucu yıkıcı-işlem kuralına uyar: her satır tek tek, atlama gerekçeleri AYRI
+   AYRI, `sideEffects` ayrı bölüm ("bunlar kalacak"), seçim boşsa 400.
+
+### Üç kapı
+
+Migration **`20260912160000`** (ilk tahsis `130200` idi; ölçümle değişti — dizinde
+`20260912150300` vardı, sıra-dışı ad aynı şemayı iki farklı sırayla kurardı). İzin YOK
+(`data:import` + varlığın write izni). APK YOK, panel sürümü gerekir.
+Aynı dilimde KAPI BOŞLUĞU kapanacak: `test_migration_hygiene.ts` ad sırası ölçmüyor →
+"yeni migration adı uygulanmış en büyük addan BÜYÜK olmalı" kontrolü + negatif sonda.
