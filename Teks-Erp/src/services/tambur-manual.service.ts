@@ -97,6 +97,7 @@ import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { resolveLabelIntent } from "./helpers/label-intent.helper";
 import { resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { STEP_CAPABILITY_SELECT, stepCanApplyColor } from "./helpers/step-capability.helper";
+import { lengthWarning } from "./helpers/measurement-threshold.helper";
 import { buildIntentSnapshot } from "./label.service";
 
 /**
@@ -1275,6 +1276,9 @@ export class TamburManualService {
       },
     });
 
+    // GERÇEKÇİLİK EŞİĞİ — UYARI, blok DEĞİL (ağırlık tarafıyla aynı gerekçe:
+    // metraj elle de cihazdan da girebiliyor, sert tavan meşru yükü reddeder).
+    const thresholdWarning = lengthWarning(input.initialQty);
     return {
       success: true,
       data: {
@@ -1295,6 +1299,7 @@ export class TamburManualService {
         batchId: resolvedBatchId,
         batchNumber: resolvedBatchNumber,
       },
+      ...(thresholdWarning ? { warnings: [thresholdWarning] } : {}),
       message: `Top elle eklendi ve "${step.station.name}" adımına alındı${
         resolvedBatchNumber ? ` (parti: ${resolvedBatchNumber})` : ""
       }. Barkod: ${roll.barcode}`,

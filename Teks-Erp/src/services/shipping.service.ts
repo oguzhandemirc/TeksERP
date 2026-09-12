@@ -34,6 +34,7 @@ import {
 import prisma from "../lib/prisma";
 import { writeWarehouseMovements } from "./helpers/warehouse-ledger.helper";
 import { writeShipmentEvent } from "./helpers/shipment-event.helper";
+import { weightWarning } from "./helpers/measurement-threshold.helper";
 import { AppError } from "../utils/app-error";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { AuditService } from "./audit.service";
@@ -1566,8 +1567,24 @@ export class ShippingService {
     });
     // Kaynak hem KOLONA (sorgulanabilir, kalıcı) hem AUDİT'e (kim/ne zaman bağlamıyla)
     // yazılır. Kolon iç izdir: belgeye/etikete BASILMAZ (bkz. schema.prisma doc).
-    await AuditService.log({ userId, action: "UPDATE", tableName: "SACK", recordId: data.sackId, newData: { kind: "WEIGH", weightKg: data.weightKg, source: resolvedSource } });
-    return { success: true, data: {}, message: "Çuval tartısı güncellendi" };
+    return this.finishWeigh(data, resolvedSource, userId);
+  }
+
+  /**
+   * Tartının kuyruğu: audit + gerçekçilik eşiği uyarısı.
+   * ⚠️ AYRI METOT, bilinçli: `weighSack` tam 80 satır sınırındaydı ve lint tavanı
+   * yeni kodda ZORUNLU. Tavanı yükseltmek bir karardır; doğru çözüm eklenen yeri
+   * sınıra çekmek — o yüzden kuyruk buraya taşındı, davranış birebir aynı.
+   * Eşik UYARIR, BLOKLAMAZ (gerekçe `helpers/measurement-threshold.helper.ts`).
+   */
+  private async finishWeigh(
+    data: { sackId: string; weightKg?: number | null },
+    resolvedSource: SackWeightSource,
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    const thresholdWarning = weightWarning(data.weightKg!);
+    await AuditService.log({ userId, action: "UPDATE", tableName: "SACK", recordId: data.sackId, newData: { kind: "WEIGH", weightKg: data.weightKg, source: resolvedSource, ...(thresholdWarning ? { thresholdWarning } : {}) } });
+    return { success: true, data: {}, message: "Çuval tartısı güncellendi", ...(thresholdWarning ? { warnings: [thresholdWarning] } : {}) };
   }
 
   /**

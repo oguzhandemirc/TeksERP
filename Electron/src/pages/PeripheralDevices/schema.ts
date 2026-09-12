@@ -91,7 +91,9 @@ export function buildPeripheralPayload(v: PeripheralFormValues) {
     terminator: v.terminator ? v.terminator : null,
     decimals: v.decimals.trim() ? Number(v.decimals) : null,
     scale: v.scale.trim() ? Number(v.scale) : null,
-    unit: nn(v.unit),
+    // `unit` GÖNDERİLMEZ: süs alandı (çarpan yalnız `scale`) ve kolon bir sonraki
+    // sürümde düşüyor. Form state'inde kalıyor — "Cihazın ham birimi" seçicisi onu
+    // göstermek için değil ÖLÇEĞİ YAZMAK için kullanıyor.
     timeoutMs: v.timeoutMs.trim() ? Number(v.timeoutMs) : null,
     role: nn(v.role),
     simulate: v.simulate,

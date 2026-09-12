@@ -20,6 +20,7 @@
 import p from "../src/lib/prisma";
 import { TamburManualService } from "../src/services/tambur-manual.service";
 import { createManualMoveFixture } from "./fixture-manual-move";
+import { lengthWarning, LENGTH_WARN_M } from "../src/services/helpers/measurement-threshold.helper";
 import { randomUUID } from "crypto";
 
 const svc = new TamburManualService();
@@ -206,6 +207,23 @@ interface PreviewData {
       { machineId: null, stationId: null },
     )).data as { rollId: string; barcode: string | null; alreadyAttached: boolean; colorSource: string };
     manualRollId = created.rollId;
+
+    // ── GERÇEKÇİLİK EŞİĞİ (metraj) — UYARI, blok DEĞİL ─────────────────────────
+    // `createManualRoll` dönüşüne `warnings` ekleniyor; eşik altı metrajda (bu
+    // fikstürün 123,5'i) uyarı ÇIKMAMALI.
+    // ⚠️ SERVİS DÜZEYİNDE eşik-aşan bir çağrı BİLEREK eklenmedi: bu bekçinin
+    // temizliği TEK `manualRollId` izliyor, ikinci bir top kalıntı bırakır ve
+    // kalıntı sonraki koşumları kirletir. Aynı mekanizmanın servis düzeyindeki
+    // kanıtı ağırlık tarafında duruyor (`test_sack_weigh_source` §3b: warnings
+    // DOLU **ve** kayıt YAZILMIŞ) — eşik yardımcısı ikisinde de aynı dosyadır.
+    ok(
+      lengthWarning(123.5) === null,
+      `eşik altı metraj uyarı ÜRETMEZ (123,5 m < ${LENGTH_WARN_M})`,
+    );
+    ok(
+      lengthWarning(LENGTH_WARN_M + 1) !== null,
+      `eşik üstü metraj uyarı ÜRETİR (${LENGTH_WARN_M + 1} m)`,
+    );
 
     const mRoll = await p.roll.findUniqueOrThrow({
       where: { id: created.rollId },

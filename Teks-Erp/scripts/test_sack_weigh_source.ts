@@ -18,6 +18,7 @@
 import prisma, { pool } from "../src/lib/prisma";
 import { shippingService } from "../src/services/shipping.service";
 import { AppError } from "../src/utils/app-error";
+import { weightWarning } from "../src/services/helpers/measurement-threshold.helper";
 import { Prisma, RollStatus } from "@prisma/client";
 
 let pass = 0,
@@ -137,6 +138,20 @@ async function run(): Promise<void> {
   const s3 = await makeSack();
   await shippingService.weighSack({ sackId: s3, weightKg: 9.9 }, ADMIN);
   check("beyansız çağrı kaydedildi (eski APK kırılmaz)", (await kgOf(s3)) === 9.9, `${await kgOf(s3)}`);
+
+  // ───────────────────────────── 3b) GERÇEKÇİLİK EŞİĞİ — UYARI, RED DEĞİL
+  // ⚠️ SERTLİK AYRIMI: bu dosyanın §1/§4'ü SİMÜLE kantarı 400 ile REDDEDER.
+  // Buradaki eşik başka bir sertliktedir: UYARIR ve kaydı YAZAR. İkisi
+  // karıştırılıp eşik "niye 400 vermiyor" diye bloğa çevrilirse, yanlış ölçekli
+  // cihazın 14,5 tonu geçmesi engellenmiş olmaz — yalnız meşru ağır yük reddedilir.
+  console.log("\n=== 3b) Eşik: UYARI verir, kaydı ENGELLEMEZ ===");
+  check("saf eşik: 1001 kg uyarı metni döner", weightWarning(1001) !== null);
+  check("saf eşik: 999 kg uyarı YOK (tek yönlü kontrol değil)", weightWarning(999) === null);
+  const sBig = await makeSack();
+  const bigRes = await shippingService.weighSack({ sackId: sBig, weightKg: 14_500, source: "MANUAL" }, ADMIN);
+  check("eşik aşıldı → warnings DOLU", (bigRes.warnings?.length ?? 0) > 0, JSON.stringify(bigRes.warnings ?? []));
+  check("eşik aşıldı ama KAYIT YAZILDI (blok değil)", (await kgOf(sBig)) === 14_500, `${await kgOf(sBig)}`);
+  check("eşik altı tartıda warnings YOK", ((await shippingService.weighSack({ sackId: sBig, weightKg: 12.5, source: "MANUAL" }, ADMIN)).warnings?.length ?? 0) === 0);
 
   // ────────────── 4) SCALE beyanı + oturum cihazı SİMÜLE → sunucu yakalar (400)
   console.log("\n=== 4) SCALE beyanı ama oturumun kantarı SİMÜLE → sunucu REDDEDER ===");

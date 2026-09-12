@@ -31,6 +31,33 @@ interface Props {
 
 const SELECT_CLS = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm";
 
+// CİHAZIN HAM BİRİMİ → mühendislik çarpanı. Saklanan TEK yüklem `scale`; birim
+// yalnız çarpanı seçmek için sorulur. Eskiden "Birim" serbest metindi ve hiçbir
+// yer onu okumuyordu: "g" yazıp Ölçek'i 1 bırakmak 14,5 kg'ı 14,5 TON yapıyordu
+// ve sevk irsaliyesine öyle basılıyordu. Seçici o çelişkiyi KURULAMAZ hâle getirir.
+const RAW_UNITS = ["kg", "g", "m", "cm", "mm"] as const;
+type RawUnit = (typeof RAW_UNITS)[number];
+const RAW_UNIT_SCALE: Record<RawUnit, string> = {
+  kg: "1",
+  g: "0.001",
+  m: "1",
+  cm: "0.01",
+  mm: "0.001",
+};
+
+/**
+ * Ölçekten ham birimi GERİ çözer (kayıt açılırken seçicinin başlangıcı).
+ * ⚠️ `0.001` hem `g` hem `mm` olabilir, `1` de hem `kg` hem `m` — belirsizlik
+ * cihaz TÜRÜNDEN kapanır (kantar → ağırlık, metre → uzunluk). Tür bakılmazsa
+ * metre cihazı "kg" gösterir ve kimse fark etmez.
+ */
+function resolveRawUnit(scale: string | undefined, kind: string | undefined): RawUnit {
+  const s = (scale ?? "").trim();
+  if (s === "0.01") return "cm";
+  if (s === "0.001") return kind === "SCALE" ? "g" : "mm";
+  return kind === "SCALE" ? "kg" : "m";
+}
+
 // Metre/kantar "rol" ayrımı — mobil HAL bunu BİREBİR string eşleştirir
 // (Tambur foldType→kat kodu, tek-metre istasyonu→PRIMARY). Serbest metin +
 // typo = sahada sessiz "yanlış/eksik cihaz" hatası olduğundan seçenekli;
@@ -270,8 +297,22 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                   <FormField label="Ölçek" hint="cm→m: 0.01">
                     <Input {...form.register("scale")} placeholder="1" />
                   </FormField>
-                  <FormField label="Birim">
-                    <Input {...form.register("unit")} placeholder="m / kg" />
+                  <FormField label="Cihazın ham birimi" hint="seçim Ölçek'i yazar">
+                    <select
+                      className={SELECT_CLS}
+                      value={resolveRawUnit(form.watch("scale"), kind)}
+                      onChange={(e) => {
+                        form.setValue("scale", RAW_UNIT_SCALE[e.target.value as RawUnit], {
+                          shouldDirty: true,
+                        });
+                      }}
+                    >
+                      {RAW_UNITS.map((b) => (
+                        <option key={b} value={b}>
+                          {b}
+                        </option>
+                      ))}
+                    </select>
                   </FormField>
                   <FormField label="Zaman Aşımı (ms)" hint="boş→2500">
                     <Input {...form.register("timeoutMs")} placeholder="2500" />

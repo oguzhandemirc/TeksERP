@@ -5,6 +5,8 @@
 // tablet auto-discovery'i (getForDevice) doğrular. Seed'in giriş-cihazı bloğunun
 // canlı eşdeğeri; reset gerekmeden DB'ye config'i koyar.
 // =============================================================================
+import * as fs from "node:fs";
+import * as path from "node:path";
 import prisma from "../src/lib/prisma";
 import { PeripheralDeviceService } from "../src/services/peripheral.service";
 import { DeviceService } from "../src/services/device.service";
@@ -122,6 +124,30 @@ async function main() {
   const d1c = (await svc.getForDevice({ deviceId: testDev.id }, "METER")).data as unknown[];
   const d2c = (await svc.getForDevice({ deviceId: testDev2.id }, "METER")).data as unknown[];
   check("kaldırınca diğer cihazda kalır (paylaşım korunur)", d1c.length === 0 && d2c.length === 1, `dev1=${d1c.length} dev2=${d2c.length}`);
+
+  // ── `unit` ESKİ İSTEMCİ TOLERANSI (kaynak tripwire) ────────────────────────
+  // `PeripheralDevice.unit` süs alandı (çarpan yalnız `scale`; hiçbir yer okumuyor,
+  // hiçbir yer doğrulamıyordu) ve kolon bir SONRAKİ sürümde düşecek. Gövde
+  // `super.create/update`e OLDUĞU GİBİ gittiği için tolerans ÖNCE sahada olmalı:
+  // yoksa kolon düştüğü gün `unit` gönderen eski panel bilinmeyen argümana çarpar
+  // ve cihaz kaydı DÜZENLENEMEZ olur.
+  // ⚠️ NEDEN KAYNAK TRIPWIRE, NEDEN SERVİS ÇAĞRISI DEĞİL: servis route'ta kendi
+  // config'iyle örnekleniyor (`peripheral.routes.ts:37`); bekçide ikinci bir config
+  // yazmak aynı gerçeği iki yerde tutmak olurdu ve ikisi sessizce ayrışır.
+  const peripheralSrc = fs.readFileSync(
+    path.resolve(__dirname, "../src/services/peripheral.service.ts"),
+    "utf8",
+  );
+  const unitToleransSayisi = (peripheralSrc.match(/delete\s+data\.unit\s*;/g) ?? []).length;
+  check(
+    "create ve update, `unit`i eski istemci toleransı olarak DÜŞÜRÜYOR (2 yer)",
+    unitToleransSayisi === 2,
+    `${unitToleransSayisi} yerde bulundu`,
+  );
+  check(
+    "körlük zemini: tolerans emsali (`printerModelId`) hâlâ duruyor",
+    /delete\s+data\.printerModelId\s*;/.test(peripheralSrc),
+  );
 
   // cleanup (TEST- kayıtları)
   await prisma.devicePeripheral.deleteMany({ where: { peripheral: { code: "TEST-DEV-METRE" } } });
