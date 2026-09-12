@@ -131,6 +131,13 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // katalogla karşılaştırır ve registry boşalırsa körlük zemini düşer.
   // Bu yüzden burada delegasyon beyan ediyoruz — muafiyet DEĞİL, devir.
   "src/routes/import.routes.ts": [`${DELEGE}scripts/test_import_framework.ts`],
+  // GERİ SARMA (2026-09-12): `assertEntityPermission` ikinci kapıyı yine
+  // `adapter.writePermission`den çözüyor — varlık KOŞUMUN KENDİSİNDEN
+  // (`ImportRun.entity`) bulunuyor, `:entity` parametresinden değil. Desen ve
+  // gerekçe `import.routes.ts` ile BİREBİR aynı: ikinci bir varlık→izin listesi
+  // tutmamak. Kapsam aynı yere devredilir — `test_import_framework.ts §11`
+  // registry'deki HER adaptörün iki iznini de katalogla karşılaştırır.
+  "src/services/import/import-revert.service.ts": [`${DELEGE}scripts/test_import_framework.ts`],
   // Aynı desen: izinler `BUNDLE_PERMISSIONS` haritasından (config-bundle.service)
   // TÜRE göre çözülür. `test_config_bundle.ts` her türün iki iznini de katalogla
   // karşılaştırır ve tür sayısı zeminini korur.

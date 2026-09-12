@@ -182,7 +182,16 @@ async function main(): Promise<void> {
 
 async function cleanup(): Promise<void> {
   await prisma.color.deleteMany({ where: { name: { startsWith: "TSTIMP-" } } }).catch(() => {});
-  await prisma.importRun.deleteMany({ where: { clientToken: { in: tokens } } }).catch(() => {});
+  // ⚠️ SIRA ZORUNLU: `ImportRunLine.importRun` RESTRICT'tir; koşum satırı ÖNCE
+  // silinemez. Eskiden bu iki satır tek `importRun.deleteMany` idi ve hatayı
+  // `.catch(() => {})` SESSİZCE yutuyordu ⇒ temizlik başarısız oluyor, kalıntı
+  // DB'de kalıyor ve KOMŞU bekçiyi düşürüyordu. Yutma kalktı: best-effort ama SESSİZ DEĞİL.
+  await prisma.importRunLine
+    .deleteMany({ where: { importRun: { clientToken: { in: tokens } } } })
+    .catch((e: unknown) => console.log(`⚠️  temizlik: defter satırları silinemedi — ${String(e).slice(0, 140)}`));
+  await prisma.importRun
+    .deleteMany({ where: { clientToken: { in: tokens } } })
+    .catch((e: unknown) => console.log(`⚠️  temizlik: koşum satırları silinemedi — ${String(e).slice(0, 140)}`));
 }
 
 main()

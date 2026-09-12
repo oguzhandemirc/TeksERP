@@ -178,6 +178,8 @@ main()
         await prisma.orderLine.deleteMany({ where: { orderId: { in: orderIds } } });
         await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
       }
+      // ⚠️ `ImportRunLine.importRun` RESTRICT: defter satırı ÖNCE silinir.
+      await prisma.importRunLine.deleteMany({ where: { importRun: { fileName: FILE_STAMP } } });
       const runs = await prisma.importRun.deleteMany({ where: { fileName: FILE_STAMP } });
       await prisma.itemAllowedColor.deleteMany({ where: { itemId: { in: itemIds } } });
       await prisma.itemAllowedProperty.deleteMany({ where: { itemId: { in: itemIds } } });

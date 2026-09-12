@@ -41,6 +41,20 @@ function check(label: string, ok: boolean, extra?: string): void {
 const PREFIX = "TEST-IMP";
 const row = (rowNo: number, cells: Record<string, string>) => ({ rowNo, cells });
 
+/**
+ * FİKSTÜR DAMGASI — her `apply` koşumu bu dosya adını taşır.
+ * ⚠️ Damgasız koşum TEMİZLENEMEZ: motor her koşuma `ImportRunLine` yazıyor ve o
+ * satırlar RESTRICT ile bağlı, yani damgasız kalan koşum hem kendisi hem defter
+ * satırıyla DB'de kalır ve sonraki koşumları (başka bekçileri de) kirletir.
+ */
+const FIXTURE_FILE = "bekçi.xlsx";
+const baseApply = ImportService.apply.bind(ImportService);
+const applyStamped = (
+  entity: Parameters<typeof baseApply>[0],
+  rows: Parameters<typeof baseApply>[1],
+  opts: Parameters<typeof baseApply>[2] = {},
+) => baseApply(entity, rows, { ...opts, fileName: FIXTURE_FILE });
+
 async function main(): Promise<void> {
   console.log("=== İçe aktarım çerçevesi bekçisi ===\n");
 
@@ -163,7 +177,7 @@ async function main(): Promise<void> {
     // --- 6. Hata varsa hiçbir şey yazılmaz (abort) ---
     let aborted = false;
     try {
-      await ImportService.apply(
+      await applyStamped(
         "color",
         [row(2, { name: nameA }), row(3, { code: "SAHTE-KOD-2", name: nameB })],
         {},
@@ -176,7 +190,7 @@ async function main(): Promise<void> {
     check("ABORT'ta HİÇBİR kayıt yazılmaz (kısmi yazma yok)", afterAbort === 0, `bulunan=${afterAbort}`);
 
     // --- Gerçek uygulama ---
-    const applied = await ImportService.apply(
+    const applied = await applyStamped(
       "color",
       [row(2, { name: nameA, hex: "#112233" }), row(3, { name: nameB })],
       { fileName: "bekçi.xlsx" },
@@ -202,7 +216,7 @@ async function main(): Promise<void> {
     check("değişmeyen satır SKIP (gereksiz UPDATE yok)", same.summary.skip === 1, JSON.stringify(same.rows[0]));
 
     // --- 2. Boş hücre = DOKUNMA ---
-    const untouched = await ImportService.apply(
+    const untouched = await applyStamped(
       "color",
       [row(2, { code: colA!.code, name: "", hex: "" })],
       {},
@@ -212,7 +226,7 @@ async function main(): Promise<void> {
     check("değişiklik yoksa skipped sayılır", untouched.skipped === 1, JSON.stringify(untouched));
 
     // --- 3. NULL = temizle ---
-    await ImportService.apply("color", [row(2, { code: colA!.code, hex: "NULL" })], {});
+    await applyStamped("color", [row(2, { code: colA!.code, hex: "NULL" })], {});
     const cleared = await prisma.color.findUnique({ where: { id: colA!.id } });
     check("NULL yazılan alan TEMİZLENİR", cleared?.hex === null, String(cleared?.hex));
 
@@ -270,12 +284,12 @@ async function main(): Promise<void> {
     // Uygulama tarafı: artık doğrulamada durur (yazma denemesine bile gitmez).
     let dupAborted = false;
     try {
-      await ImportService.apply("color", [row(2, { name: nameB })], {});
+      await applyStamped("color", [row(2, { name: nameB })], {});
     } catch {
       dupAborted = true;
     }
     check("ad çakışması UYGULAMAYI doğrulamada durdurur", dupAborted);
-    const guarded = await ImportService.apply("color", [row(2, { name: nameB })], { onError: "skip" });
+    const guarded = await applyStamped("color", [row(2, { name: nameB })], { onError: "skip" });
     check(
       "AD MÜKERRER kaydı YAZILMAZ",
       guarded.created === 0 && guarded.failed === 1,
@@ -292,7 +306,7 @@ async function main(): Promise<void> {
     // `tr_fold` bunu yapmaz — renk o yüzden DB gölge kolonuna bağlanmadı.
     // (Token sırası korunur; test tam da katlamanın YAPTIĞI şeyi ölçer.)
     const colorFoldName = `${uniq} 055 GRI`;
-    await ImportService.apply("color", [row(2, { name: colorFoldName })], {});
+    await applyStamped("color", [row(2, { name: colorFoldName })], {});
     const foldColor = await prisma.color.findFirst({ where: { name: colorFoldName } });
     if (foldColor) created.push(foldColor.id);
     const reordered = await ImportService.preview("color", [row(2, { name: `055-${uniq}-GRI` })], {});
@@ -305,8 +319,8 @@ async function main(): Promise<void> {
     // --- 10. clientToken idempotent ---
     const token = crypto.randomUUID();
     const nameC = `${uniq}-C`;
-    const first = await ImportService.apply("color", [row(2, { name: nameC })], { clientToken: token });
-    const second = await ImportService.apply("color", [row(2, { name: nameC })], { clientToken: token });
+    const first = await applyStamped("color", [row(2, { name: nameC })], { clientToken: token });
+    const second = await applyStamped("color", [row(2, { name: nameC })], { clientToken: token });
     const cRows = await prisma.color.findMany({ where: { name: nameC } });
     created.push(...cRows.map((c) => c.id));
     check("aynı clientToken ikinci kez YAZMAZ", cRows.length === 1, `bulunan=${cRows.length}`);
@@ -353,7 +367,12 @@ async function main(): Promise<void> {
     })());
   } finally {
     // Cleanup — testin kendi yarattığı her şey.
-    await prisma.importRun.deleteMany({ where: { fileName: "bekçi.xlsx" } });
+    // ⚠️ SIRA ZORUNLU: `ImportRunLine.importRun` ilişkisi RESTRICT'tir ve motor
+    // her koşumda defter satırı yazar ⇒ koşum satırı ÖNCE silinemez (P2003).
+    // Süzgeç `fileName` üzerinden: önceki başarısız temizliklerin bıraktığı
+    // kalıntıyı da toplar, yalnız bu koşumun yazdıklarını değil.
+    await prisma.importRunLine.deleteMany({ where: { importRun: { fileName: FIXTURE_FILE } } });
+    await prisma.importRun.deleteMany({ where: { fileName: FIXTURE_FILE } });
     if (created.length > 0) {
       await prisma.color.deleteMany({ where: { id: { in: created } } });
     }
