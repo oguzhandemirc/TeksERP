@@ -28,6 +28,7 @@ Karar hikâyeleri (tarih, ölçüm, hangi alternatif neden reddedildi) `docs/his
 | [`KUTUPHANELER.md`](KUTUPHANELER.md) | Katman × ihtiyaç → kütüphane tablosu, yeni bağımlılık karar kaydı, ölü paket teşhisi |
 | [`ESZAMANLILIK.md`](ESZAMANLILIK.md) | Yarış ve idempotency tutumu, karar tablosu, mekanizma envanteri, bilinen boşluklar |
 | [`TEST-VE-DERLEME.md`](TEST-VE-DERLEME.md) | Ne zaman ne koşar, hangi kapı nerede, bilinen sınırlar |
+| [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | Ölçüm aracının kendisi: yedi arıza sınıfı, pozitif kontrol ↔ örnekle doğrulama, kapının üç ölüm biçimi |
 
 ## Kural biçimi
 
