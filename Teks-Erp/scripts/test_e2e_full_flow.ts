@@ -44,6 +44,7 @@ import { WorkOrderService } from "../src/services/workorder.service";
 import { KursunQcService } from "../src/services/kursun-qc.service";
 import { TamburService } from "../src/services/tambur.service";
 import { ShippingService } from "../src/services/shipping.service";
+import { ensureTestAdmin } from "./fixture-test-user";
 
 const inv = new InventoryService();
 const wos = new WorkOrderService();
@@ -78,6 +79,7 @@ const createdWoIds: string[] = [];
 const createdOrderIds: string[] = [];
 const createdShipmentIds: string[] = [];
 const createdSackIds: string[] = [];
+const createdCustomerIds: string[] = [];
 
 // ── Yardımcılar ─────────────────────────────────────────────────────────────
 const rollState = async (id: string) =>
@@ -108,36 +110,34 @@ const allocOf = async (lineId: string) =>
  * rejimi AÇIKÇA BEYAN EDER ve çıkışta eski değeri geri yükler. Bypass rejiminin
  * kendi kapsamlı testleri ayrıdır (`test_kursun_bypass`, `test_kursun_regime_lock`).
  */
-let originalKursunFlag: Prisma.JsonValue | null | undefined;
+// Pinlenen her anahtarın ESKİ hâli: `null` = satır YOKTU (geri yükleme = SİL).
+// Tek kap: ikinci bir ayar pinlendiğinde geri yükleme kendiliğinden kapsar —
+// `shipping.confirmationEnabled` tam olarak bu kaba girmediği için koşulsuz
+// `false`a yazılıyordu ve ayarı AÇIK olan kurulumu sessizce değiştiriyordu.
+const pinlenenAyarlar = new Map<string, Prisma.JsonValue | null>();
 
-async function pinKursunBypassFlag(enabled: boolean): Promise<void> {
-  const existing = await prisma.systemSetting.findUnique({
-    where: { key: SETTING_KEYS.KURSUN_BYPASS_ENABLED },
-    select: { value: true },
-  });
-  originalKursunFlag = existing ? existing.value : null;
+async function pinAyar(key: string, deger: boolean, aciklama: string): Promise<void> {
+  if (!pinlenenAyarlar.has(key)) {
+    const existing = await prisma.systemSetting.findUnique({ where: { key }, select: { value: true } });
+    pinlenenAyarlar.set(key, existing ? existing.value : null);
+  }
   await prisma.systemSetting.upsert({
-    where: { key: SETTING_KEYS.KURSUN_BYPASS_ENABLED },
-    create: {
-      key: SETTING_KEYS.KURSUN_BYPASS_ENABLED,
-      value: enabled,
-      description: "TEST — kurşun bypass bayrağı",
-    },
-    update: { value: enabled },
+    where: { key },
+    create: { key, value: deger, description: aciklama },
+    update: { value: deger },
   });
 }
 
-async function restoreKursunBypassFlag(): Promise<void> {
-  if (originalKursunFlag === undefined) return; // hiç pinlenmedi
-  if (originalKursunFlag === null) {
-    await prisma.systemSetting
-      .delete({ where: { key: SETTING_KEYS.KURSUN_BYPASS_ENABLED } })
-      .catch(() => {});
-  } else {
-    await prisma.systemSetting.update({
-      where: { key: SETTING_KEYS.KURSUN_BYPASS_ENABLED },
-      data: { value: originalKursunFlag as Prisma.InputJsonValue },
-    });
+/** Pinlenen HER ayarı BİREBİR eski hâline döndürür (yoktuysa satırı siler). */
+async function restoreAyarlar(): Promise<void> {
+  for (const [key, eski] of pinlenenAyarlar) {
+    if (eski === null) {
+      await prisma.systemSetting.delete({ where: { key } }).catch(() => {});
+    } else {
+      await prisma.systemSetting
+        .update({ where: { key }, data: { value: eski as Prisma.InputJsonValue } })
+        .catch(() => {});
+    }
   }
 }
 
@@ -145,7 +145,7 @@ async function main(): Promise<void> {
   console.log("=== Üretim Hattı Uçtan Uca (E2E) Testi ===\n");
 
   // Ölçülen rejim: TABLET akışı → kurşun bypass KAPALI olmalı (bkz. üst not).
-  await pinKursunBypassFlag(false);
+  await pinAyar(SETTING_KEYS.KURSUN_BYPASS_ENABLED, false, "TEST — kurşun bypass bayrağı");
 
   // ===========================================================================
   // HOP 0 — Master data'yı BUSINESS-KEY ile çöz (hardcoded UUID yok)
@@ -160,15 +160,21 @@ async function main(): Promise<void> {
     where: { kind: StationKind.TAMBUR, isActive: true },
     select: { id: true, code: true },
   });
-  const customer = await prisma.customer.findFirst({ where: { isActive: true }, select: { id: true } });
-  const admin = await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } });
+  // Müşteri ve kullanıcı ORTAMDAN ÇÖZÜLMEZ — test kendi damgalı kaydını kurar.
+  // "Herhangi bir aktif müşteri" temiz bir CI DB'sinde düşer, dolu bir DB'de ise
+  // fabrikanın gerçek müşterisine sipariş/çuval/sevkiyat yazardı.
+  const customer = await prisma.customer.create({
+    data: { code: `TST-E2E-${STAMP}`, name: `TST-E2E Müşteri ${STAMP}`, isActive: true },
+    select: { id: true },
+  });
+  createdCustomerIds.push(customer.id);
+  const userId = (await ensureTestAdmin()).id;
 
-  if (!item || !grade || !processStation || !tamburStation || !customer) {
+  if (!item || !grade || !processStation || !tamburStation) {
     throw new Error(
-      "Seed fixture eksik (Item PATOS / 1.KALITE / PROCESS_QC / TAMBUR / Customer). Önce 'npm run seed'.",
+      "Seed fixture eksik (Item PATOS / 1.KALITE / PROCESS_QC / TAMBUR). Önce 'npm run seed'.",
     );
   }
-  const userId = admin?.id;
 
   check("HOP0 fixtures çözüldü (item/grade/process/tambur/customer)", true,
     `process=${processStation.code} tambur=${tamburStation.code}`);
@@ -378,11 +384,7 @@ async function main(): Promise<void> {
   // PLANNED'de shippedQty=0 + ayrı dispatchShipment ile DISPATCHED'e terfi granülerliği
   // test edilir. (Onay kapalı olsaydı createShipment tek adımda DISPATCHED ederdi — bkz.
   // test_sack_pool_lifecycle.) Kapı önü / AT_DOOR ara adımı YOK.
-  await prisma.systemSetting.upsert({
-    where: { key: "shipping.confirmationEnabled" },
-    update: { value: true },
-    create: { key: "shipping.confirmationEnabled", value: true },
-  });
+  await pinAyar("shipping.confirmationEnabled", true, "TEST — sevk onayı bayrağı");
 
   // 7.1 — Müşteriye çuval aç (çuval MÜŞTERİYE ait) + kesilen topu çuvala okut.
   const openRes = (await ship.openSack({ customerId: customer.id }, userId)) as { data: { id: string } };
@@ -444,10 +446,8 @@ async function main(): Promise<void> {
 async function cleanup(): Promise<void> {
   console.log("\n🧹 Temizlik...");
   try {
-    // HOP7 için açtığımız sevk onayı bayrağını varsayılana (KAPALI) döndür — paylaşımlı dev DB.
-    await prisma.systemSetting
-      .upsert({ where: { key: "shipping.confirmationEnabled" }, update: { value: false }, create: { key: "shipping.confirmationEnabled", value: false } })
-      .catch(() => {});
+    // Ayarlar `restoreAyarlar()` ile BİREBİR geri yüklenir (finally'de) — burada
+    // sabit bir değere yazmak "geri yükleme" değil, sessiz bir ayar değişikliğidir.
     // Ters bağımlılık sırası (çuval havuzu): SackAllocation (Restrict) → roll↔çuval/sevkiyat
     // bağını çöz → sack → ShipmentOrder (Restrict) → shipment → roll → WO → orderLine → order.
     await prisma.sackAllocation.deleteMany({ where: { sackId: { in: createdSackIds } } }).catch(() => {});
@@ -482,6 +482,10 @@ async function cleanup(): Promise<void> {
       await prisma.orderLine.deleteMany({ where: { orderId } }).catch(() => {});
       await prisma.order.delete({ where: { id: orderId } }).catch(() => {});
     }
+    // Müşteri EN SON: sipariş/çuval/sevkiyat ona bağlı (FK sırası).
+    for (const customerId of createdCustomerIds) {
+      await prisma.customer.delete({ where: { id: customerId } }).catch(() => {});
+    }
     console.log("🧹 Temizlik tamam.");
   } catch (e) {
     console.error("Temizlik hatası:", e instanceof Error ? e.message : e);
@@ -495,8 +499,8 @@ main()
   })
   .finally(async () => {
     await cleanup();
-    // Global ayarı ESKİ HÂLİNE getir — dev DB konfigürasyonu bozulmasın.
-    await restoreKursunBypassFlag().catch(() => {});
+    // Global ayarları ESKİ HÂLİNE getir — dev DB konfigürasyonu bozulmasın.
+    await restoreAyarlar().catch(() => {});
     await prisma.$disconnect();
     process.exit(fail > 0 ? 1 : 0);
   });
