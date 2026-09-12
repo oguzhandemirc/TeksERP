@@ -5,9 +5,9 @@
 // Çalıştır: npx tsx scripts/test_system_event_names.ts
 //
 // ⚠️ BU BEKÇİ KÜMEYİ KEŞFETMEZ. Küme ölçülerek bulunamıyor: kaynakta dizge arayan
-// tarama adı SABİTTEN kurulan çağrıyı görmez (6 ad), DB yalnız KOŞMUŞ yolu görür
-// (15 meşru ad hiç yazılmamış), ikisinin birleşimi bile eksikti. Bu yüzden küme
-// BEYAN edilir, bekçi yalnız UYUMU ölçer.
+// tarama adı SABİTTEN kurulan çağrıyı görmez (6 ad) ve `src/` ile sınırlıysa
+// betiklerden yazılanı görmez (7 onarım izi), DB yalnız KOŞMUŞ yolu görür, ikisinin
+// birleşimi bile eksikti. Bu yüzden küme BEYAN edilir, bekçi yalnız UYUMU ölçer.
 //
 // ⚠️ TİPİN YAKALADIĞINI BEKÇİ TEKRAR YAKALAMAZ. `action: SystemEventName` imzası
 // 51 çağrı yerinin tamamını derleyiciye bağlar (ölçüldü: `system_logs`a yazan TEK
@@ -21,9 +21,11 @@
 //   §5 BAĞ       — sabitler birliğe `satisfies` ile bağlı mı (bağ koparsa kaçak döner)
 //
 // ⚠️ NE YAKALAMAZ (bilerek; bir sonraki okuyan temizlemeye kalkmasın):
-//   • Bir kod yolunun KOŞUP koşmadığını. Birliğin 15 adı hiç yazılmamış ve hepsi
+//   • Bir kod yolunun KOŞUP koşmadığını. ÖLÇÜLDÜ 2026-09-13: 52 adın **34'ü** iki
+//     DB'de de hiç yazılmamış (`fabrika_dev` 16 + `demo` 12, birleşim 18) ve hepsi
 //     meşru (`AUDIT_ARCHIVE` 6 ayda bir · `UNCAUGHT_EXCEPTION` felaket yolu).
-//     **"DB'de yok" BİR BULGU DEĞİLDİR.**
+//     **"DB'de yok" BİR BULGU DEĞİLDİR.** Ters yön de ölçüldü: DB'de olup
+//     sözleşmede olmayan ad 0 — yani sözleşme geride kalmış değil.
 //   • Türkçe etiketin DOĞRU olduğunu — yalnız VAR olduğunu ölçer.
 //   • Arşiv kararının kendisini: bir adın yazan kodunun gerçekten kaldırıldığı
 //     insan ölçümüdür (§3 "çağrı yeri yok"u görür, "olmalı mıydı"yı görmez).

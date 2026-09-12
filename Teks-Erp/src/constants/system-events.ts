@@ -4,14 +4,18 @@
 // `AuditService.logEvent({ action })` yalnız buradaki adlardan birini yazabilir.
 //
 // ⚠️ NEDEN BEYAN, NEDEN TÜRETME: küme ölçülerek bulunamıyor (ölçüldü 2026-09-12).
-// Kaynakta dizge arayan tarama, adı SABİTTEN kurulan çağrıları göremez (6 ad);
-// DB'den `DISTINCT action` okumak ise yalnız KOŞMUŞ yolları görür (15 meşru ad hiç
-// yazılmamış). İkisinin BİRLEŞİMİ bile gerçek kümeyi vermedi. Ölçülebilen bir
-// gerçeklik yoksa beyan edilmiş bir sözleşme kurulur; kapı sonra UYUMU ölçer.
+// Kaynakta dizge arayan tarama, adı SABİTTEN kurulan çağrıları göremez (6 ad) ve
+// yalnız `src/` tararsa betiklerden yazılan adları da göremez (7 onarım izi);
+// DB'den `DISTINCT action` okumak ise yalnız KOŞMUŞ yolları görür. İkisinin
+// BİRLEŞİMİ bile gerçek kümeyi vermedi. Ölçülebilen bir gerçeklik yoksa beyan
+// edilmiş bir sözleşme kurulur; kapı sonra UYUMU ölçer.
 //
-// ⚠️ "DB'de yok" BİR BULGU DEĞİLDİR: aşağıdaki adların 15'i hiç yazılmamış ve hepsi
-// meşru kod yolu (`AUDIT_ARCHIVE` 6 ayda bir · `UNCAUGHT_EXCEPTION` felaket yolu ·
-// `DB_COPY_*` elle tetiklenen tur). Temizlemeye kalkma.
+// ⚠️ "DB'de yok" BİR BULGU DEĞİLDİR ve oran şaşırtıcı: ÖLÇÜLDÜ 2026-09-13 —
+// `tekserp_fabrika_dev` 16, `tekserp_demo` 12 farklı ad yazmış, BİRLEŞİM 18 ⇒
+// aşağıdaki 52 adın **34'ü hiç yazılmamış** ve hepsi meşru kod yolu
+// (`AUDIT_ARCHIVE` 6 ayda bir · `UNCAUGHT_EXCEPTION` felaket yolu · `DB_COPY_*`
+// elle tetiklenen tur · `SETTINGS_PASSWORD_*` fabrika kapıyı hiç kurmadı).
+// Ters yön de ölçüldü: DB'de olup sözleşmede OLMAYAN ad **0**. Temizlemeye kalkma.
 //
 // ⚠️ ARŞİV: yazan kodu kalmamış ad SİLİNMEZ. Bir olay adı bir kez yazıldıysa adı
 // sonsuza kadar OKUNABİLİR kalmalıdır — yazan kodun ölmesi, yazılmış satırın ölmesi
