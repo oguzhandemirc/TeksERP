@@ -169,6 +169,7 @@ export const TABLE_LABELS: Record<string, string> = {
   WAREHOUSE: "Depo",
   WAREHOUSE_TRANSFER: "Depo Transferi",
   YARN_MOVEMENT: "İplik Hareketi",
+  WARP_SPEC: "Çözgü Kartı",
 
   // Fabrika tarafında da etiketsiz kalmış olanlar (aynı tarama).
   ROLL_QTY_ADJUST: "Top Metraj Düzeltmesi",

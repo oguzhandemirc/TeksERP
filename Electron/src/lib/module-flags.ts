@@ -90,8 +90,4 @@ export const MODULE_FIELD_BY_SETTING_KEY: Readonly<Record<string, ModuleFlagKey>
 export const MODULE_PLACEHOLDERS: readonly ModuleFlagKey[] = [
   "kumasTeknikEnabled",
   "tezgahEnabled",
-  // ⚠️ GEÇİCİ (Faz 1a): devere anahtarı + kapısı doğdu, yüzeyi (Çözgü Kartları
-  // ekranı) AYNI fazın son adımında geliyor. Ekran doğduğu commit'te bu satır
-  // ve backend `PANEL_EXEMPT` karşılığı SİLİNİR — liste iki yönlü denetlenir.
-  "devereEnabled",
 ];

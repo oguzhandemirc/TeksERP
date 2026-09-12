@@ -7,6 +7,7 @@ import { BossPage } from "@/pages/Boss/BossPage";
 import { BOSS_PATH } from "@/lib/boss-path";
 import { SettingsPage } from "@/pages/Settings/SettingsPage";
 import { DefinitionsHubPage } from "@/pages/Definitions/DefinitionsHubPage";
+import { WarpSpecsPage } from "@/pages/WarpSpecs/WarpSpecsPage";
 import { AccessHubPage } from "@/pages/Access/AccessHubPage";
 import { AccessUsersPage } from "@/pages/Access/Users/AccessUsersPage";
 import { UserFootprintPage } from "@/pages/Access/Users/footprint/UserFootprintPage";
@@ -251,6 +252,16 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="quality:read">
         <DefectTypesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // ÇÖZGÜ KARTLARI (devere modülü) — modül kapalıyken karo çizilmez ve uçlar
+    // 403 verir; route guard'ı İZİN sorusunu cevaplar (iki ayrı kapı).
+    path: "definitions/warp-specs",
+    element: (
+      <ProtectedRoute requirePermission="warpspec:read">
+        <WarpSpecsPage />
       </ProtectedRoute>
     ),
   },

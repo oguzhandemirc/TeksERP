@@ -188,6 +188,9 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // AİDİYETİ sevkiyat/depo (yeni izin kodu YOK: okuma READ, yazma WRITE).
   { key: "definitions/sack-tags", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Çuval İzleri", requires: ["shipping:read"], capabilities: ["shipping:write"] },
   { key: "definitions/defect-types", app: "desktop", modul: "cekirdek:ana-veri", title: "Hata Tipleri", requires: ["quality:read"], capabilities: ["quality:write"] },
+  // ÇÖZGÜ KARTLARI (devere Faz 1a) — bir çözgü tanımı N deseni besler; levent
+  // bu karta göre sarılır. Modül kapalıyken karo çizilmez, uçlar 403 verir.
+  { key: "definitions/warp-specs", app: "desktop", modul: "devereEnabled", title: "Çözgü Kartları", requires: ["warpspec:read"], capabilities: ["warpspec:write"] },
   { key: "definitions/quality-grades", app: "desktop", modul: "cekirdek:ana-veri", title: "Kalite Sınıfları", requires: ["quality:read"], capabilities: [] },
   { key: "definitions/colors", app: "desktop", modul: "cekirdek:ana-veri", title: "Renkler", requires: ["property:read"], capabilities: ["property:write"] },
   { key: "definitions/return-reasons", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "İade Nedenleri", requires: ["return:read"], capabilities: ["return:write"] },
@@ -390,13 +393,6 @@ export const EKRANSIZ_MODULLER: ReadonlyArray<{ modul: ModulKey; reason: string 
     reason:
       "Dokuma tezgah izleme yer tutucu bir anahtar — arkasında henüz hiçbir " +
       "yüzey (ne route ne karo) yok. Dilim 4.",
-  },
-  {
-    modul: "devereEnabled",
-    reason:
-      "Devere/levent anahtarı Faz 1a'nın İLK adımında (bayrak + kapı) doğdu; " +
-      "yüzeyi olan Çözgü Kartları ekranı AYNI fazın son adımında gelecek. " +
-      "⚠️ Ekran doğduğu commit'te bu satır SİLİNİR (ölü muaf → kırmızı).",
   },
 ];
 

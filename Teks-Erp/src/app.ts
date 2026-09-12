@@ -39,6 +39,7 @@ import customerBranchListRoutes from "./routes/customer-branch-list.routes";
 import stationRoutes, { machineRouter } from "./routes/station.routes";
 import routeRoutes from "./routes/route.routes";
 import productRecipeRoutes from "./routes/product-recipe.routes";
+import warpSpecRoutes from "./routes/warp-spec.routes";
 import inventoryRoutes from "./routes/inventory.routes";
 import orderRoutes from "./routes/order.routes";
 import recordInfoRoutes from "./routes/record-info.routes";
@@ -821,6 +822,9 @@ app.use("/api/machines", machineRouter);
 app.use("/api/peripherals", peripheralRouter);
 app.use("/api/routes", routeRoutes);
 app.use("/api/product-recipes", productRecipeRoutes);
+// Çözgü kartları (devere modülü) — router'ın kendi kapısı: verifyToken +
+// requireDevereEnabled (ticaret → iplik → devere zinciri) + requirePermission.
+app.use("/api/warp-specs", warpSpecRoutes);
 app.use("/api/rolls", inventoryRoutes);
 app.use("/api/orders", orderRoutes);
 // ⚠️ MOUNT — "yazıldı ama mount edilmedi" sınıfı hata için bkz. reboot-kurtarma notu.

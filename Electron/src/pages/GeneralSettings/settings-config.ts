@@ -595,6 +595,18 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Kapalıyken (varsayılan) iplik kg defteri uçları 403 verir ve karo çizilmez. ⚠️ TİCARET MODÜLÜNE BAĞLIDIR: Ticaret kapalıyken bu anahtar açılamaz (kaydetmede hata verir) ve açık bırakılmış olsa bile ekran çalışmaz. Kapatma sırası da terstir — önce İplik, sonra Ticaret kapatılır.",
       },
       {
+        // ⚠️ SIRA LOAD-BEARING: Devere, İplik'in ALTINDA durur — zincir üç
+        // halkadır (devere → iplik → ticaret) ve kullanıcı listeyi yukarıdan
+        // aşağı okuyup açtığında doğru sırayı kendiliğinden uygular.
+        key: "devereEnabled",
+        title: "Devere / levent modülünü aç",
+        summary:
+          "Çözgü kartları ekranı açılır; levent stoğu ve levent defteri sonraki dilimde gelir.",
+        defaultOn: false,
+        audience: ["Planlamacı", "Yönetim"],
+        desc: "Kapalıyken (varsayılan) çözgü kartı uçları 403 verir ve karo çizilmez; kumaş/iplik kartlarındaki devere alanları (denye · çözgü kartı) gösterilmez. ⚠️ İPLİK MODÜLÜNE BAĞLIDIR, o da TİCARETE: levent doğarken iplik kg defterine çıkış yazılır, yani iplik kapalıyken bu anahtar açılamaz (kaydetmede hata verir). Kapatma sırası terstir — önce Devere, sonra İplik, sonra Ticaret. Kumaşı hazır alan kurulumlarda kapalı kalır.",
+      },
+      {
         key: "depoMultiEnabled",
         title: "Çoklu depo modülünü aç",
         summary:

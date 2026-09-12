@@ -273,6 +273,20 @@ export const definitionTiles: DefinitionTile[] = [
     permission: "quality:read",
   },
   {
+    // ÇÖZGÜ KARTLARI — devere modülü. `visibleWhen` ETKİN değeri okur
+    // (ticaret && iplik && devere, `useOperationsVisibilityContext`te tek yerde
+    // çözülür): ham değere bağlansaydı ticaret kapalı bir kurulumda karo çizilir,
+    // tıklayan kullanıcı backend kapısından 403 yerdi.
+    key: "warp-specs",
+    title: "Çözgü Kartları",
+    description: "Çözgü tanımı: tel adedi · iplik · tarak (bir kart çok deseni besler)",
+    icon: Ruler,
+    to: "/definitions/warp-specs",
+    group: "production",
+    permission: "warpspec:read",
+    visibleWhen: (ctx) => ctx.devereEnabled,
+  },
+  {
     key: "document-templates",
     title: "Belge Şablonları",
     description: "İrsaliye/çeki içeriği: bölüm aç-kapa, başlık, künye, imza, alt not (canlı önizleme)",

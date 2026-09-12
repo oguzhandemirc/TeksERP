@@ -46,6 +46,9 @@ function ctx(
     ticaretEnabled: false,
     // ⚠️ ETKİN değer (ticaret && iplik) — bağlamı kuran hook zinciri çözer.
     iplikEnabled: false,
+    // Devere de ETKİN değer (ticaret && iplik && devere); fabrikada KAPALI →
+    // Çözgü Kartları karosu çizilmemeli.
+    devereEnabled: false,
     ...over,
   };
 }

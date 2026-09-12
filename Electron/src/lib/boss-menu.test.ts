@@ -32,6 +32,7 @@ function ctx(over: Partial<OperationsVisibilityContext> = {}): OperationsVisibil
     productionEnabled: true,
     ticaretEnabled: false,
     iplikEnabled: false,
+    devereEnabled: false,
     ...over,
   };
 }

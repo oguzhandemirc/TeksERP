@@ -102,10 +102,6 @@ describe("aynanın kendi tutarlılığı", () => {
   it("yer tutucular gerçek anahtar ve Genel Ayarlar'da YOK", () => {
     for (const k of MODULE_PLACEHOLDERS) expect(MODULE_FLAG_KEYS).toContain(k);
     // Backend sözleşme bekçisinin `PANEL_EXEMPT` listesiyle aynı iki anahtar.
-    expect([...MODULE_PLACEHOLDERS]).toEqual([
-      "kumasTeknikEnabled",
-      "tezgahEnabled",
-      "devereEnabled",
-    ]);
+    expect([...MODULE_PLACEHOLDERS]).toEqual(["kumasTeknikEnabled", "tezgahEnabled"]);
   });
 });

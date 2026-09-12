@@ -41,6 +41,11 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
   // depo listesi sorgusunun bu ekranda hiç gerekmemesi (hub her açılışta
   // kimsenin okumadığı bir istek atıyordu — 2026-09-01 sondasının aynısı).
   const depoMultiEnabled = flagsQuery.data?.data?.depoMultiEnabled ?? false;
+  // ⚠️ ETKİN DEĞER (üç halka): devere → iplik → ticaret. `iplikEnabled` yukarıda
+  // zaten etkin hâle geldiği için zincir burada tek çarpımla kapanır. Ham değeri
+  // karo yüklemine vermek, ticaret kapalıyken Çözgü Kartları karosunu çizer ve
+  // tıklayan kullanıcı 403 yerdi (backend kapısı zinciri ölçüyor).
+  const devereEnabled = iplikEnabled && (flagsQuery.data?.data?.devereEnabled ?? false);
 
   // ⚠️ ÇIKIŞ BEKLEYEN SEVKİYAT SONDASI KALDIRILDI (2026-09-01, birleştirme).
   // 2026-08-22 kararı Sevk Kapısı karosunu SAF BAYRAĞA bağladı ve `sack-store/
@@ -55,5 +60,6 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
     ticaretEnabled,
     iplikEnabled,
     depoMultiEnabled,
+    devereEnabled,
   };
 }

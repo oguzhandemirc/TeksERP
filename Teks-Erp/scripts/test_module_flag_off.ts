@@ -111,7 +111,13 @@ function atla(label: string, sebep: string): void {
   console.log(`⏭️  ATLANDI ${label} — ${sebep}`);
 }
 
-type ModulAlani = "ticaretEnabled" | "iplikEnabled" | "depoMultiEnabled" | "productionEnabled";
+type ModulAlani =
+  | "ticaretEnabled"
+  | "iplikEnabled"
+  | "depoMultiEnabled"
+  | "productionEnabled"
+  // 2026-09-12: zincirin üçüncü halkası (devere → iplik → ticaret).
+  | "devereEnabled";
 
 interface ModulTanimi {
   /** `FeatureFlags` alanı (PATCH gövdesinde kullanılan ad). */
@@ -157,6 +163,20 @@ const MODULLER: ModulTanimi[] = [
     routeDosyalari: ["routes/yarn.routes.ts"],
     sondalar: ["/api/yarn/stocks"],
     onKosul: { alan: "ticaretEnabled", beklenenModulKodu: "ticaret" },
+  },
+  {
+    // DEVERE (2026-09-12): zincirin ÜÇÜNCÜ halkası. `onKosul` doğrudan ön koşulu
+    // (iplik) söyler; kapının kendisi ticaret → iplik → devere sırasını ELLE
+    // ölçer ve eksik OLANI raporlar, çünkü `MODULE_DEPENDENCIES` geçişli kapanış
+    // üretmez (`requireDevereEnabled` başlığı).
+    alan: "devereEnabled",
+    dbAnahtari: "devere.enabled",
+    middleware: "requireDevereEnabled",
+    okuyucu: "readDevereEnabled",
+    modulKodu: "devere",
+    routeDosyalari: ["routes/warp-spec.routes.ts"],
+    sondalar: ["/api/warp-specs"],
+    onKosul: { alan: "iplikEnabled", beklenenModulKodu: "iplik" },
   },
   {
     alan: "depoMultiEnabled",
@@ -360,10 +380,17 @@ async function main(): Promise<void> {
 
     // ⭐ §1e — İKİ YÖNLÜ: gövde YABANCI bir bayrak okumamalı.
     // Yalnız bağımlılık ön koşulu meşrudur (`MODULE_DEPENDENCIES`ten türetilir).
+    // ⚠️ ZİNCİR (2026-09-12): ön koşul TEK SEVİYE DEĞİL. `MODULE_DEPENDENCIES`
+    // her satırda bir ön koşul taşır ama zincir üç halkaya çıktı
+    // (devere → iplik → ticaret) ve kapı ZİNCİRİN TAMAMINI ölçmek ZORUNDA:
+    // tutarsız bir DB'de (elle SQL/eski dump) "ticaret kapalı + iplik açık +
+    // devere açık" mümkündür ve yalnız doğrudan ön koşulu okuyan bir kapı o
+    // kurulumda açık kalırdı. Bu yüzden izinli okuyucu kümesi de GEÇİŞLİ
+    // KAPANIŞTIR — aksi halde doğru davranan kapı "yabancı bayrak okuyor"
+    // diye kırmızı verirdi (ölçüldü: devere eklenince §1e patladı).
     const izinli = new Set<string>([m.okuyucu]);
-    const onKosulAlani = MODULE_DEPENDENCIES[m.alan];
-    if (onKosulAlani) {
-      izinli.add(`read${onKosulAlani.charAt(0).toUpperCase()}${onKosulAlani.slice(1)}`);
+    for (let cur = MODULE_DEPENDENCIES[m.alan]; cur; cur = MODULE_DEPENDENCIES[cur]) {
+      izinli.add(`read${cur.charAt(0).toUpperCase()}${cur.slice(1)}`);
     }
     const yabanci = [...new Set(analiz.okuyucular.map((o) => o.ad))].filter((a) => !izinli.has(a));
     check(
@@ -383,8 +410,19 @@ async function main(): Promise<void> {
     // `AppError.forbidden` çağrısının `modul`u yalnız ÖN KOŞULUN kodu olabilir.
     const izler = modulKoduIzleri(MW_YOL, m.middleware);
     const kendiKodlari = [...new Set(izler.modulKapali)];
-    const izinliOnKosul = m.onKosul?.beklenenModulKodu;
-    const yabanciForbidden = izler.forbiddenModul.filter((k) => k !== izinliOnKosul);
+    // Ön koşul kodları da ZİNCİRDEN türer (§1e ile aynı gerekçe): üç halkalı bir
+    // kapı, eksik olan EN DIŞTAKİ halkayı söylemek zorundadır — devere kapısı
+    // ticaret kapalıyken `modul:"ticaret"` döner ve bu DOĞRUDUR; tek seviyeli
+    // beklenti onu "yanlış modülü söylüyor" diye kırmızıya düşürürdü.
+    const alanKodu = new Map(MODULLER.map((x) => [x.alan, x.modulKodu] as const));
+    const izinliOnKosullar = new Set<string>();
+    for (let cur = MODULE_DEPENDENCIES[m.alan]; cur; cur = MODULE_DEPENDENCIES[cur]) {
+      const kod = alanKodu.get(cur as ModulAlani);
+      if (kod) izinliOnKosullar.add(kod);
+    }
+    if (m.onKosul) izinliOnKosullar.add(m.onKosul.beklenenModulKodu);
+    const izinliOnKosul = [...izinliOnKosullar].join(", ") || undefined;
+    const yabanciForbidden = izler.forbiddenModul.filter((k) => !izinliOnKosullar.has(k));
     check(
       `§1h ⭐ ${m.middleware} 403 gövdesinde KENDİ modül kodunu söylüyor (${m.modulKodu})`,
       kendiKodlari.length === 1 && kendiKodlari[0] === m.modulKodu && yabanciForbidden.length === 0,

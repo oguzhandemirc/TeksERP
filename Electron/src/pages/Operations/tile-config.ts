@@ -72,6 +72,14 @@ export interface OperationsVisibilityContext {
    */
   depoMultiEnabled: boolean;
   /**
+   * DEVERE / LEVENT modülü (`devere.enabled`) — ETKİN değer
+   * (`ticaret && iplik && devere`), ham değil. Zincir üç halkadır ve panelde
+   * TEK yerde çözülür (`useOperationsVisibilityContext`); backend kapısı
+   * `requireDevereEnabled` aynı sırayı ölçer. Ham değer yalnız Modüller
+   * ekranındaki toggle'ın kendi yazdığını geri okuması için döner.
+   */
+  devereEnabled: boolean;
+  /**
    * Ön muhasebe modülü açık mı (`finance.enabled`) — fiilen "bu bir TİCARET
    * kurulumu" anahtarı. Tanımlar menüsünün cari rejimi buna bakar: bayrak
    * AÇIKKEN tek "Cariler" karosu, KAPALIYKEN (fabrika) bugünkü Müşteriler +

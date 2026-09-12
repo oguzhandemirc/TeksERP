@@ -114,10 +114,6 @@ const PANEL_EXEMPT: Record<string, string> = {
   // (muaf listesi iki yönlü denetlenir — panele girip muafta kalırsa kırmızı).
   kumasTeknikEnabled: "yer tutucu — arkasında yüzey YOK; Dilim 3'te panele girer",
   tezgahEnabled: "yer tutucu — arkasında yüzey YOK; Dilim 4'te panele girer",
-  // GEÇİCİ (Faz 1a, 2026-09-12): anahtar + `requireDevereEnabled` kapısı doğdu,
-  // panel yüzeyi (Çözgü Kartları ekranı) AYNI fazın son adımında geliyor. Ekran
-  // doğduğu commit'te bu satır ve Electron `MODULE_PLACEHOLDERS` karşılığı SİLİNİR.
-  devereEnabled: "yüzeyi Faz 1a'nın son adımında doğuyor — ekran gelince panele girer",
 };
 
 const ELECTRON_CONFIG = path.resolve(

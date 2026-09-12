@@ -67,6 +67,13 @@ export const PERMISSION_CATALOG = [
   { code: "station:write", module: "PRODUCTION", category: "web", description: "Üretim istasyonu tanımlama/düzenleme" },
   { code: "item:read", module: "MASTER_DATA", category: "web", description: "Ürün/kumaş tanımı listesi/detay görüntüleme" },
   { code: "item:write", module: "MASTER_DATA", category: "web", description: "Ürün/kumaş tanımı oluşturma/düzenleme" },
+  // ── Devere / levent (2026-09-12, Faz 1a) ───────────────────────────────────
+  // Çözgü kartı ANA VERİDİR (kalem/renk ile aynı sınıf): bir çözgü tanımı N
+  // kumaş desenini besler. Ayrı kod açıldı çünkü `item:write` kumaş/iplik
+  // kartını yeniden adlandıran kişidir; çözgü telini/ipliğini belirleyen
+  // dokuma planlamacısı aynı kişi olmak zorunda değil.
+  { code: "warpspec:read", module: "MASTER_DATA", category: "web", description: "Çözgü kartı (tel · iplik · tarak) listesi/detay görüntüleme" },
+  { code: "warpspec:write", module: "MASTER_DATA", category: "web", description: "Çözgü kartı oluşturma/düzenleme" },
   { code: "quality:read", module: "QUALITY", category: "web", description: "Kalite derecesi tanımlarını görüntüleme" },
   { code: "quality:write", module: "QUALITY", category: "web", description: "Kalite derecesi tanımlama/düzenleme" },
   { code: "property:read", module: "QUALITY", category: "web", description: "Özellik (renk/desen vb.) tanımlarını görüntüleme" },
