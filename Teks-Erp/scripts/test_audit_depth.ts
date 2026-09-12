@@ -13,6 +13,17 @@
 import { Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { SystemLogService } from "../src/services/system-log.service";
+import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+
+// ⚠️ Bu bekçi artık YAZIYOR ve SİLİYOR (plan ön koşulu: 600 satırlık tohum +
+// `teks.audit_purge` ile temizlik). Koşucunun kapısı yalnız `run-all-tests`
+// yolunu korur; `npx tsx scripts/test_audit_depth.ts` doğrudan koşulduğunda
+// hiçbir ayak çalışmaz — o yüzden kapı DOSYANIN İLK İFADESİ.
+const engel = hedefDbEngeli();
+if (engel) {
+  console.error(`⛔ DURDURULDU — ${engel}`);
+  process.exit(1);
+}
 
 let pass = 0;
 let fail = 0;

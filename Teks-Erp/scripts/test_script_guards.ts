@@ -23,7 +23,7 @@
 // =============================================================================
 import { readFileSync } from "fs";
 import { join, relative } from "path";
-import { spawnSync } from "child_process";
+import { execFileSync, spawnSync } from "child_process";
 import { walkTs } from "./lib/ts-tarama";
 import { FABRIKA_HACIM_ESIGI, hacimEngeliMetni } from "./lib/hedef-db-kapisi";
 
@@ -156,7 +156,40 @@ function main(): void {
   // `scripts/lib/` altı hiçbir bölüme girmiyordu — kapının KENDİ dosyası bile
   // denetim dışıydı. Tarama derinliği bekçinin kapsamını sessizce belirler; tek
   // kaynak `lib/ts-tarama.ts`.
-  const dosyalar = walkTs(dizin).map((p) => relative(dizin, p));
+  // ⚠️ YALNIZ İZLENEN DOSYALAR (2026-09-13). Bu bölümlerin tavanları birer
+  // MANDALDIR (yalnız düşer). Takipsiz taslaklar — başka bir oturumun
+  // `.gitignore`lu scratch dizini gibi — tavanı GEÇİCİ olarak şişirir; şişme
+  // mandala KALICI yazılırsa taslaklar silindiğinde tavan bir daha düşürülemez
+  // ve "neden 50" sorusunun cevabı kaybolur. Ölçüm (2026-09-13): `scripts/out/`
+  // 8 dosya, 8'i de yıkıcı desen taşıyor ⇒ §6b 42 → 50, §11b 18 → 19.
+  //
+  // ⚠️ `.gitignore` bir dosyayı GİT'ten gizler, bu bekçiden gizlemez — dosya
+  // diskte durduğu sürece `walkTs` onu görür. Filtre GİT'e sorar.
+  //
+  // ⚠️ GEVŞETME DEĞİL: CI checkout'unda hiçbir şey takipsiz değildir ⇒ CI'da
+  // SIFIR fark. Commit edilmiş kapısız bir betik sayılmaya DEVAM eder; takipsiz
+  // bir `test_*.ts` ise `check-migrations.mjs` GATE 4'ün konusudur.
+  //
+  // Git okunamazsa TÜM dosyalara düşülür — hata yönü GENİŞ tarafa.
+  const izlenen = (() => {
+    try {
+      return new Set(
+        execFileSync("git", ["ls-files", "-z", "--", "."], { cwd: dizin, encoding: "utf8" })
+          .split("\0")
+          .filter(Boolean),
+      );
+    } catch {
+      return null;
+    }
+  })();
+  const hepsi = walkTs(dizin).map((p) => relative(dizin, p));
+  const dosyalar = izlenen ? hepsi.filter((f) => izlenen.has(f)) : hepsi;
+  if (izlenen && hepsi.length !== dosyalar.length) {
+    console.log(
+      `   ℹ️ ${hepsi.length - dosyalar.length} takipsiz dosya sayımın DIŞINDA ` +
+        `(tavan bir mandaldır; taslak onu kalıcı şişiremez)`,
+    );
+  }
 
   // KÖRLÜK ZEMİNİ: tarama boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı"
   // aynı yeşile çıkar.
