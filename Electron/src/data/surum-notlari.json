@@ -135,6 +135,21 @@
           "metin": "Fasondan doğrudan müşteriye sevk yapılmış (fasondan sevk kaydı olan) bir fason sevkiyatı artık iptal edilemiyor; deneyince hangi fasondan-sevk numarası yüzünden kilitli olduğu yazıyor. Önceden mal müşteriye çıkmış olmasına rağmen fason sevki iptal edilebiliyordu ve fasoncu karnesi yanlış çıkıyordu. İş emri iptalinde bu sevkler atlanır; fasonda kalan mal mevcut “kalan gelmeyecek” kararıyla kapatılır."
         },
         {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Çevre Birimleri ekranında cihazın “Birim” alanı serbest yazı değil, listeden seçim oldu (kg · g · m · cm · mm). Önceden bu kutuya ne yazılırsa yazılıyordu ve yazılan şey hesaba HİÇ girmiyordu: cihazdan gelen değeri çeviren tek alan “Ölçek”ti. Yani kurulumcu “Birim: g” yazıp Ölçek'i 1 bıraktığında kantardan gelen 14.500 gram 14.500 KİLO olarak kaydediliyordu — 14,5 kiloluk bir çuval sevk irsaliyesinde 14,5 TON görünürdü. Ekran bir şey söylüyor, sistem başka bir şey hesaplıyordu. Artık birimi seçtiğinizde Ölçek kendiliğinden doğru değere ayarlanır (g seçilirse 0,001; cm seçilirse 0,01) ve isterseniz Ölçek'i elle değiştirmeye devam edebilirsiniz — yarım kiloluk adımlarla çalışan tuhaf bir cihaz için bu kapı kapanmadı. Mevcut cihaz kayıtlarında bir değişiklik yapılmadı; ayarları olduğu gibi çalışmaya devam eder."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Çuval tartısı ve elle top girişinde gerçek dışı büyük değerler artık uyarı veriyor. 1.000 kilogramın üzerinde bir çuval tartısı ya da 10.000 metrenin üzerinde bir top metresi girildiğinde ekranda “bu değer beklenenden çok büyük, cihaz ölçeği yanlış olabilir” uyarısı çıkar. Uyarı kaydı ENGELLEMEZ: değer yazılır, çünkü gerçekten büyük bir parti olabilir ve tartı üç ayrı yoldan girilebiliyor (kantardan, elle, simülasyonla) — sert bir sınır meşru işi de reddeder ve o gün sınır tamamen kaldırılır. Uyarı ayrıca işlemin denetim kaydına da yazılır, yani sonradan “bu rakam neden böyle” diye bakan kişi uyarının o an görüldüğünü görür."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Sistem → Sistem Kayıtları ekranında veri düzeltme işlemlerinin adı Türkçe görünüyor. Fabrikada bir veri eksikliği sonradan tamamlandığında (örneğin eski topların depo bağı ya da üretim tarihleri geriye dönük dolduruluyor) bu işlem kendi kaydını bırakır. O kayıtların yedisinin Türkçe karşılığı yoktu: ekran “ROLL_WAREHOUSE_BACKFILL” gibi ham kod basacaktı. Bu satırlardan henüz hiç oluşmadı, yani kimse ham kod görmedi — eksiklik ilk düzeltme koşmadan önce kapatıldı. Artık her biri “Top depo bağı geriye dönük dolduruldu (betik)” gibi okunur bir ifadeyle listelenir."
+        },
+        {
           "kapsam": "tablet",
           "tip": "iyilestirme",
           "metin": "Kartela kabulü geri alınamadığında hangi kartelaların engellediği tek tek listeleniyor. Önceden yalnız kaç kartelanın engellediği yazıyordu; operatör hangi kartelayı sevkiyattan ya da çuvaldan çıkaracağını bilemiyordu, şimdi kartela numaraları ekranda sıralanıyor."
