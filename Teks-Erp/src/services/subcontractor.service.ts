@@ -2049,8 +2049,13 @@ export class SubcontractorService {
       // 1) Dispatch'i soft-cancel — ATOMİK CLAIM: yukarıdaki guard'lar tx
       //    DIŞINDA; eşzamanlı çift iptal ikisinde de geçerdi. cancelledAt:null
       //    koşuluyla kaybeden burada 409 alır.
+      // ⚠️ DSK KOŞULU CLAIM'İN İÇİNDE: yukarıdaki `directShipment` okuması tx
+      // DIŞINDA ve bayat olabilir — eşzamanlı `executeDirectShip` kısmi sevk
+      // yaparsa (çocuk toplar tüketilir, EBEVEYNLER fasonda kalır, damga basılmaz)
+      // iptalin top claim'i ebeveynleri bulur ve iptal BAŞARIRDI: DSK ile tahsisler
+      // iptal edilmiş sevke asılı kalır, karne müşteriye çıkmış metreyi kaybederdi.
       const cancelClaim = await tx.subcontractorDispatch.updateMany({
-        where: { id: dispatchId, cancelledAt: null },
+        where: { id: dispatchId, cancelledAt: null, directShipments: { none: {} } },
         data: {
           cancelledAt: new Date(),
           cancelledById: userId ?? null,
@@ -2058,7 +2063,23 @@ export class SubcontractorService {
         },
       });
       if (cancelClaim.count === 0) {
-        throw AppError.conflict("Bu sevk az önce başka bir kullanıcı tarafından iptal edilmiş.");
+        // Tanı TX İÇİNDE taze okunur ve mesaj TEK KAYNAKTAN gelir (önizlemeyle
+        // simetri): "zaten iptal" ile "arada DSK oluştu" ayrı cümlelerdir.
+        const taze = await tx.subcontractorDispatch.findUnique({
+          where: { id: dispatchId },
+          select: {
+            cancelledAt: true,
+            directShipments: { select: { shipmentNo: true }, orderBy: { shippedAt: "asc" }, take: 1 },
+          },
+        });
+        throw AppError.conflict(
+          resolveDispatchCancelBlockReason({
+            cancelledAt: taze?.cancelledAt ?? new Date(),
+            directShipmentNo: taze?.directShipments[0]?.shipmentNo ?? null,
+            activeReceiptNo: null,
+            movedRollCount: 0,
+          }) ?? "Bu sevk az önce başka bir kullanıcı tarafından iptal edilmiş.",
+        );
       }
       // Sevk iptal edildi → kartın parti bloğundaki "Sevk" sütunu boşalır (ya da
       // varsa bir önceki sevke düşer). Basılı kâğıt iptal edilmiş sevki gösteriyor.
@@ -3556,13 +3577,31 @@ export class SubcontractorService {
       },
       select: {
         id: true,
-        dispatch: { select: { workOrderId: true, step: { select: { stationId: true } } } },
+        dispatch: {
+          select: {
+            workOrderId: true,
+            step: { select: { stationId: true } },
+            workOrder: { select: { status: true } },
+          },
+        },
       },
     });
     if (!closedItem) {
       throw AppError.conflict(
         "Bu adımda bu topun 'kalan gelmeyecek' kapaması yok — geri alınacak bir karar bulunamadı.",
         { code: "REMAINDER_NOT_CLOSED_AT_STEP" },
+      );
+    }
+
+    // İŞ EMRİ TERMİNALSE FAIL-CLOSED: iptal/superseded WO'nun adımına canlı top
+    // geri konarsa çıkış yolu kalmaz (kart diriltilmez, iz yazılmaz, ikinci sevk
+    // ve kabul iptali 409). DSK kilidi operatörü "WO iptal + kalan kapaması"
+    // yoluna ittiği için bu şekle kolayca düşülüyordu.
+    const woStatus = closedItem.dispatch.workOrder.status;
+    if (woStatus === WorkOrderStatus.CANCELLED || woStatus === WorkOrderStatus.SUPERSEDED) {
+      throw AppError.conflict(
+        `İş emri ${woStatus === WorkOrderStatus.CANCELLED ? "iptal edilmiş" : "yenisiyle değiştirilmiş"} — kalan kapaması geri alınamaz; top yeni bir iş emrine alınmalı.`,
+        { code: "WORK_ORDER_TERMINAL" },
       );
     }
 
@@ -6562,8 +6601,18 @@ export class SubcontractorService {
       // ya da kabul görmüş bir kalem varsa sevk "tamamen müşteriye çıkmış" DEĞİLDİR
       // ve damga İŞLEM SIRASINDAN bağımsız olarak basılmaz. Bölünmede ebeveyn
       // kalem fasonda kaldığı için ölçüt kendiliğinden false verir.
+      // ⚠️ ÖLÇÜT `ownDirectShip` İKİZİDİR (karne sorgusu): topun DSK'sı BU sevke
+      // ait olmalı; başka sevkten çıkmış top bu sevkin teslimi değildir.
       const notDelivered = await tx.subcontractorDispatchItem.count({
-        where: { dispatchId: data.dispatchId, roll: { directShipmentId: null } },
+        where: {
+          dispatchId: data.dispatchId,
+          roll: {
+            OR: [
+              { directShipmentId: null },
+              { directShipment: { dispatchId: { not: data.dispatchId } } },
+            ],
+          },
+        },
       });
       isFullDispatchShip = notDelivered === 0;
       if (isFullDispatchShip) {

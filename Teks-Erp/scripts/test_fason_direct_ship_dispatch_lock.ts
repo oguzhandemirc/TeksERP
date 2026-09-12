@@ -15,6 +15,9 @@
 // KURAL: DSK taşıyan sevk iptal EDİLMEZ ve kalemleri TAŞINMAZ. Fasonda kalan mal
 // normal kabul ya da "kalan gelmeyecek" kapamasıyla kapanır.
 // =============================================================================
+import * as fs from "node:fs";
+import * as path from "node:path";
+
 import { RollStatus } from "@prisma/client";
 
 import prisma, { pool } from "../src/lib/prisma";
@@ -217,6 +220,49 @@ async function main(): Promise<void> {
       const dRow = await prisma.subcontractorDispatch.findUniqueOrThrow({ where: { id: d.id }, select: { cancelledAt: true } });
       check("D4d: sevk iptal edilmedi", dRow.cancelledAt === null);
     }
+  }
+
+  // ── D5) YARIŞ: iptal ile kısmi doğrudan sevk aynı anda ───────────────────
+  console.log("\n── D5) Eşzamanlı iptal + kısmi doğrudan sevk: ikisi birden olmaz ──");
+  {
+    const wo = await woKur();
+    const roll = await topKur(300);
+    const d = await sevkEt(wo.woId, wo.stepId, [roll]);
+    // İki yol AYNI ANDA: guard okuması tx DIŞINDA olduğu için eski kod ikisini de
+    // başarıyordu (DSK iptal edilmiş sevke asılı kalıyordu). Artık DSK koşulu
+    // iptal CLAIM'inin içinde: kaybeden taraf 409 alır.
+    const [iptal, sevk] = await Promise.allSettled([
+      sub.cancel(d.id, "bekçi yarış iptali", ctx.admin),
+      kismiMusteriyeSevk(d.id, roll, 100),
+    ]);
+    const row = await prisma.subcontractorDispatch.findUniqueOrThrow({
+      where: { id: d.id }, select: { cancelledAt: true, _count: { select: { directShipments: true } } },
+    });
+    const iptalOldu = row.cancelledAt !== null;
+    const dskVar = row._count.directShipments > 0;
+    check("D5a: iptal ve DSK AYNI ANDA olamaz (biri 409 aldı)", !(iptalOldu && dskVar),
+      `iptal=${iptalOldu} · dsk=${dskVar} · sonuçlar=${iptal.status}/${sevk.status}`);
+    check("D5b: en az biri başarılı (ikisi birden düşmedi)", iptalOldu || dskVar,
+      `iptal=${iptalOldu} · dsk=${dskVar}`);
+    if (dskVar) {
+      const kalan = await prisma.roll.findUniqueOrThrow({ where: { id: roll }, select: { status: true } });
+      check("D5c: DSK kazandıysa kalan top hâlâ fasonda (iptal ebeveyni stoğa indirmedi)",
+        kalan.status === RollStatus.AT_SUBCONTRACTOR, kalan.status);
+    } else {
+      check("D5c: iptal kazandıysa DSK kaydı hiç doğmadı", row._count.directShipments === 0);
+    }
+  }
+
+  // ── D6) Kapı CLAIM'de mi (metin sondası) ─────────────────────────────────
+  console.log("\n── D6) İptal claim'i DSK koşulunu taşıyor ──");
+  {
+    const kaynak = fs.readFileSync(
+      path.resolve(__dirname, "..", "src", "services", "subcontractor.service.ts"),
+      "utf8",
+    );
+    check("D6a: cancel claim'inde `directShipments: { none: {} }` var (tx-içi kapı)",
+      /cancelledAt: null, directShipments: \{ none: \{\} \}/.test(kaynak),
+      "claim yüklemi");
   }
 }
 

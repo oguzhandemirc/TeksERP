@@ -325,9 +325,9 @@ router.post(
  *       kabulle tüketilmiş top ya da başka adımın stepId'si bu yoldan fasona
  *       diriltilemez); doğrudan müşteriye sevk edilmiş top 409 ROLL_DIRECT_SHIPPED;
  *       topun durumu uygun değilse 409 REMAINDER_NOT_CLOSED; eşzamanlı geri almada
- *       409 REMAINDER_ALREADY_REOPENED. Geri alma iş emrini ve refakat kartını da
- *       diriltir (COMPLETED → IN_PROGRESS / ACTIVE).
- *     responses ek: 409 kodları details.code altında döner.
+ *       409 REMAINDER_ALREADY_REOPENED; iş emri iptal/yenilenmişse 409
+ *       WORK_ORDER_TERMINAL. Geri alma iş emrini ve refakat kartını da diriltir
+ *       (COMPLETED → IN_PROGRESS / ACTIVE).
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -341,7 +341,13 @@ router.post(
  *               rollId: { type: string, format: uuid }
  *     responses:
  *       200: { description: Kapama geri alındı, top yeniden fasonda }
- *       409: { description: Kalan kapatılmamış / eşzamanlı işlem }
+ *       409:
+ *         description: |
+ *           details.code ile ayrışır — REMAINDER_NOT_CLOSED (topun durumu uygun değil) ·
+ *           REMAINDER_NOT_CLOSED_AT_STEP (bu adımda kapama işareti yok) ·
+ *           ROLL_DIRECT_SHIPPED (top müşteriye sevk edilmiş) ·
+ *           REMAINDER_ALREADY_REOPENED (eşzamanlı geri alma) ·
+ *           WORK_ORDER_TERMINAL (iş emri iptal/yenilenmiş)
  */
 router.post(
   "/reopen-remainder",

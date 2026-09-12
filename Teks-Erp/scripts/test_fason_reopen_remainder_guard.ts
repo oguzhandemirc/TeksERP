@@ -236,6 +236,19 @@ async function main(): Promise<void> {
     check("G6c: müşteriye giden top diriltilmedi", sevkEdilen.status === RollStatus.SUBCONTRACTOR_CONSUMED && sevkEdilen.dsId !== null);
   }
 
+  // ── G10) İŞ EMRİ TERMİNAL: geri alma fail-closed ─────────────────────────
+  console.log("\n── G10) İptal edilmiş iş emrinde kapama geri alınamaz ──");
+  {
+    const z = await kurSevk([110]);
+    await sub.closeRemainder({ stepId: z.stepId, rollId: z.rollIds[0]!, reasonCode: "BOYA_HATASI" }, ctx.admin);
+    await prisma.workOrder.update({ where: { id: z.woId }, data: { status: "CANCELLED" } });
+    const hata = await reopenHatasi(z.stepId, z.rollIds[0]!);
+    check("G10a: 409 WORK_ORDER_TERMINAL (eski kod topu iptalli WO'ya geri koyardı)",
+      hata?.status === 409 && hata.code === "WORK_ORDER_TERMINAL", `${hata?.status} ${hata?.code ?? ""}`);
+    const d = await durum(z.rollIds[0]!);
+    check("G10b: top kapalı kaldı", d.status === RollStatus.SUBCONTRACTOR_CONSUMED && d.stepId === null, d.status);
+  }
+
   // ── G7) KAPAT → AÇ → KAPAT → AÇ: defter büyür, damga gidip gelir ─────────
   console.log("\n── G7) İki tur kapama/geri alma: iki sapma satırı, ikisi de terslenmiş ──");
   {

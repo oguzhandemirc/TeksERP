@@ -725,11 +725,15 @@ export async function mergeBatches(
     const skippedDirectShip: Array<{ dispatchNo: string; shipmentNo: string }> = [];
     const now = new Date();
     for (const all of byStep.values()) {
-      const dispatches = all.filter((d) => {
-        const no = dskByDispatch.get(d.id);
-        if (no) skippedDirectShip.push({ dispatchNo: d.dispatchNo, shipmentNo: no });
-        return no === undefined;
-      });
+      // Konsolidasyon zaten 2+ açık sevk isteyen bir temizlik: tek sevkli adımda
+      // "atlandı" yazmak audit'i gürültüyle doldurur (atlanacak bir iş yoktu).
+      const dskliler = all.filter((d) => dskByDispatch.has(d.id));
+      if (all.length >= 2 && dskliler.length > 0) {
+        for (const d of dskliler) {
+          skippedDirectShip.push({ dispatchNo: d.dispatchNo, shipmentNo: dskByDispatch.get(d.id)! });
+        }
+      }
+      const dispatches = all.filter((d) => !dskByDispatch.has(d.id));
       if (dispatches.length < 2) continue;
       const keeper = dispatches[0]; // orderBy dispatchedAt asc — en eski yaşar
       const losers = dispatches.slice(1);
