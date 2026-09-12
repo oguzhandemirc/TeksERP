@@ -73,6 +73,40 @@ farkta** yaşar, tek koşumun içinde değil.
 **Savunma:** **geçmiş zamanla yazılmış her "yapıldı" cümlesi ölçülmemiş bir
 iddiadır** — yazmadan önce ağaçta ara.
 
+### 8 · Ölçülen değişken SABİT
+Araç çalışır, soru doğrudur, kontrol grubu temizdir — ama **kontrolün baktığı şey
+iki değer alamaz**. Cevap her zaman aynıdır, yeşil kalır, kimse şüphelenmez.
+
+> **Bir kontrolün anlamlı olması için, ölçtüğü şeyin İKİ DEĞER alabilmesi gerekir.**
+
+Vaka: bir bekçiye *"varsayılan depo var mı"* kontrolü yazılmak üzereydi — ama
+`main()`in ilk işi `ensureDefaultWarehouse()` çağırmaktı. Cevap her koşumda "var"
+olurdu. Ölçülebilir sinyal **durum değil EYLEM**ti (`action=promoted/created`).
+
+**Teşhis yöntemi — kuralın en kullanışlı yarısı:**
+> **Negatif sondayı KURAMIYORSAN, kontrol bir sabiti ölçüyordur. Kuramamak zaten
+> teşhistir.**
+
+Yani sonda yalnız bekçiyi doğrulamaz, **kontrolün anlamlı olup olmadığını da
+ortaya çıkarır.** Sondayı kuramadığın an düzeltilecek şey sonda değil kontroldür.
+
+## Teşhis mesajı da bir yüklemdir
+
+Bir bekçi iki şey söyler: **kırmızı mı** ve **neden kırmızı**. İkincisi de bir
+yüklem taşır ve birincisinden ayrışabilir.
+
+Vaka: bir bekçinin teşhis mesajı `isDefault + isActive` diyordu; ürün yalnız
+`isDefault`e bakıyordu. Bekçi, ürün DOĞRU çalışırken **yanlış teşhis** yazdıracaktı
+— kırmızı doğru, sebebi yanlış. Bu, hatayı arayan kişiyi var olmayan bir soruna
+gönderir.
+
+> **Aynı soruyu cevaplayan HER yüklem — kod yolu, sorgu ve TEŞHİS MESAJI —
+> birlikte değişir.**
+
+Üçüncüsü bugüne kadar yazılı değildi; ilk ikisi kök `CLAUDE.md` § Tek kaynak'ta
+"boğaz-ikiz" olarak duruyor. O cümlenin genişletilmesi kullanıcının yetkisindedir;
+burada bekçi yüzeyi için yazılıdır.
+
 ## Asenkron eylemde tek ölçüm yetmez
 
 `port serbest ≠ süreç ölü` · `PID öldü ≠ dinleyen ölü` · `kill gitti ≠ süreç gitti`.
