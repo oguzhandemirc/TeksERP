@@ -178,9 +178,19 @@ export const MERGE_MAP: Record<MergeEntity, MoveRule[]> = {
     { kind: "MOVE", model: "OrderLine", table: "order_lines", column: "itemId", label: "Sipariş kalemi" },
     { kind: "MOVE", model: "WorkOrder", table: "work_orders", column: "targetItemId", label: "İş emri (hedef kumaş)" },
     { kind: "MOVE", model: "ProductRecipe", table: "product_recipes", column: "itemId", label: "Reçete" },
-    { kind: "MOVE", model: "Swatch", table: "swatches", column: "itemId", label: "Kartela" },
+    // ⚠️ SIRA LOAD-BEARING (kilit sırası sınıfı, 2026-09-12): düşüm defteri
+    // kartelalardan ÖNCE gelir. Kartela stok düşümü/stornosu da ilk önce düşüm
+    // BAŞLIĞINI claim edip sonra kartelaya yazıyor; ters sıra iki tx arasında
+    // 40P01 (deadlock) üretirdi. İki yolda tek sıra: düşüm → kartela.
     { kind: "MOVE", model: "SwatchStockReduction", table: "swatch_stock_reductions", column: "itemId", label: "Kartela stok düşümü" },
+    { kind: "MOVE", model: "Swatch", table: "swatches", column: "itemId", label: "Kartela" },
     { kind: "MOVE", model: "RollReturn", table: "roll_returns", column: "itemId", label: "İade" },
+    // 2026-09-12 (devere Faz 1a) — çözgü kartının İPLİĞİ. MOVE, CONFLICT değil:
+    // bağ bir REFERANSTIR (parasal/ticari/kalite sonucu yok) ve `warp_specs`te
+    // `yarnItemId` üzerinde tekillik kısıtı YOK, yani taşımak çakışma üretemez.
+    // Taşınmazsa çözgü kartı mezar taşına bakmaya devam eder ve levent doğarken
+    // denye ölü karttan okunurdu. `YarnMovement.itemId` emsali.
+    { kind: "MOVE", model: "WarpSpec", table: "warp_specs", column: "yarnItemId", label: "Çözgü kartı (iplik)" },
     {
       kind: "CONFLICT",
       model: "ItemAllowedColor",
@@ -263,8 +273,9 @@ export const MERGE_MAP: Record<MergeEntity, MoveRule[]> = {
     { kind: "MOVE", model: "RouteStep", table: "route_steps", column: "plannedColorId", label: "Rota adımı (hedef renk)" },
     { kind: "MOVE", model: "ProductRecipe", table: "product_recipes", column: "colorId", label: "Reçete" },
     { kind: "MOVE", model: "SubcontractorReceipt", table: "subcontractor_receipts", column: "appliedColorId", label: "Fason kabul (uygulanan renk)" },
-    { kind: "MOVE", model: "Swatch", table: "swatches", column: "colorId", label: "Kartela" },
+    // Kilit sırası: düşüm defteri kartelalardan ÖNCE (yukarıdaki gerekçe).
     { kind: "MOVE", model: "SwatchStockReduction", table: "swatch_stock_reductions", column: "colorId", label: "Kartela stok düşümü" },
+    { kind: "MOVE", model: "Swatch", table: "swatches", column: "colorId", label: "Kartela" },
     { kind: "MOVE", model: "RollReturn", table: "roll_returns", column: "colorId", label: "İade" },
     {
       kind: "CONFLICT",

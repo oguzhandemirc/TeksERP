@@ -508,6 +508,8 @@ model User {
   updatedPeripheralDevices PeripheralDevice[] @relation("PeripheralDeviceUpdatedBy")
   createdProductRecipes    ProductRecipe[]    @relation("ProductRecipeCreatedBy")
   updatedProductRecipes    ProductRecipe[]    @relation("ProductRecipeUpdatedBy")
+  createdWarpSpecs         WarpSpec[]         @relation("WarpSpecCreatedBy")
+  updatedWarpSpecs         WarpSpec[]         @relation("WarpSpecUpdatedBy")
   createdQualityGrades     QualityGrade[]     @relation("QualityGradeCreatedBy")
   updatedQualityGrades     QualityGrade[]     @relation("QualityGradeUpdatedBy")
   createdReturnReasons     ReturnReason[]     @relation("ReturnReasonCreatedBy")
@@ -845,6 +847,15 @@ model Station {
   /// doğar). Bu yüzden `seedCapabilityFromCategory` bu alana DOKUNMAZ ve ortak
   /// yüklem `stepCanApplyQuality` tek argümanlıdır.
   appliesQuality Boolean @default(false)
+
+  /// Bu istasyonun makinelerinde LEVENT DOĞAR mı? (devere makinesi, 2026-09-12)
+  ///
+  /// ⚠️ VARSAYILAN FALSE — bugünkü davranışı BİREBİR korumak için: hiçbir mevcut
+  /// istasyon devere değildir. Yetenek kalıbı `appliesQuality` emsalidir: soru
+  /// istasyonun TÜRÜNDEN (`StationKind`) türetilmez, kendi alanıdır — yoksa
+  /// "devere" bir tür adı olur ve ikinci bir devere istasyonu tanımlanamazdı.
+  /// Yüzeyi devere modülü açıkken çizilir; kapalıyken form alanı yoktur.
+  producesWarpBeam Boolean @default(false)
 
   // Relations
   machines             Machine[]
@@ -1400,6 +1411,59 @@ model ProductRecipeProperty {
   @@map("product_recipe_properties")
 }
 
+/// ÇÖZGÜ KARTI (saha adı "çözgü föyü") — devere/levent modülünün ana verisi.
+///
+/// ⚠️ NEDEN AYRI TABLO, `ProductRecipe` DEĞİL: bir çözgü tanımı N kumaş desenini
+/// besler (saha kartında el yazısıyla "Çözgü = UA6007"). `ProductRecipe` renge
+/// bağlıdır (item + renk + en + rota) ve çözgü ham/beyaz sarılıp renk SONRA
+/// geldiği için her renk kopya bir çözgü üretirdi. `Item` öz-referansı ise çözgü
+/// tanımını bir KUMAŞIN kolonlarına hapsederdi (kaynak desen pasifleşince çözgü
+/// de giderdi). Tasarım: `docs/design/DEVERE-LEVENT-TARAMASI.md` §3.4.
+///
+/// ⚠️ Levent doğarken tel/denye bu karttan KOPYALANIR (`WarpBeamEvent.WOUND`,
+/// Faz 1b): kart sonradan düzeltilse bile geçmiş leventin kg'ı değişmez.
+model WarpSpec {
+  id     String @id @default(uuid()) @db.Uuid
+  code   String @unique @db.VarChar(32)
+  name   String @db.VarChar(100)
+  /// Çözgü ipliği — `ItemType.YARN` ve `linearDensityDen` DOLU olmalı (servis 400).
+  yarnItemId String @db.Uuid
+  /// Toplam tel (kenar dahil). CHECK > 0 — devere formülünün ilk çarpanı.
+  endsCount Int
+  /// Kenar teli — bilgi; toplam telin İÇİNDEDİR, ayrıca eklenmez.
+  selvedgeEnds Int?
+  /// Tarak numarası. ⚠️ BİRİMİ PROFİLDİR (diş/cm ya da diş/10 cm) ve ölçülmeden
+  /// hesaba GİRMEZ; bugün yalnız ekranda gösterilir.
+  reedNo      Decimal? @db.Decimal(6, 2)
+  /// Dişe tel — bilgi.
+  endsPerDent Int?
+  /// Tarak eni (cm) — bilgi.
+  reedWidthCm Decimal? @db.Decimal(6, 2)
+  notes       String?  @db.VarChar(500)
+  isActive    Boolean  @default(true)
+
+  yarnItem    Item   @relation("WarpSpecYarn", fields: [yarnItemId], references: [id], onDelete: Restrict)
+  fabricItems Item[] @relation("ItemWarpSpec")
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ
+  /// (`GENERATED ALWAYS AS (public.tr_fold("name")) STORED`; Station emsali).
+  nameFold  String?  @default(dbgenerated())
+
+  // ── KAYIT KÜNYESİ (docs/design/KAYIT-KUNYESI-TASARIM.md) ──
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("WarpSpecCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("WarpSpecUpdatedBy", fields: [updatedById], references: [id])
+
+  /// AD SEDDİ — uygulama guard'ı kilitsiz check-then-act'tir; bu index onun
+  /// kapatamadığı yarış/ham-SQL/içe-aktarım yollarına karşı sessiz son hattır.
+  @@unique([nameFold])
+  @@index([yarnItemId])
+  @@map("warp_specs")
+}
+
 // =============================================================================
 // 3. ITEM (Stock Card) & INVENTORY
 // =============================================================================
@@ -1420,6 +1484,17 @@ model Item {
   /// Admin normal düzenleme/onay ile temizler. Normal admin create'te false kalır.
   pendingReview Boolean  @default(false)
 
+  /// İPLİK NUMARASI — denye (`ItemType.YARN`). Devere formülünün girdisi:
+  /// `kg = tel × denye × metre / 9.000.000` (denye = 9.000 m'nin gramı).
+  /// ⚠️ ELLE GİRİLİR: stok kartı ADI ("600 KAR İPİ 70 DN") ASLA ayrıştırılmaz ve
+  /// bu alana otomatik taşınmaz — ad satın alınan malın tanımlayıcısıdır, sayı
+  /// değildir. Devere kapalıyken hiçbir yüzeyde çizilmez.
+  linearDensityDen Decimal? @db.Decimal(10, 4)
+
+  /// KUMAŞ → ÇÖZGÜ KARTI (N:1) — "bu deseni hangi çözgü besliyor".
+  /// Yalnız `ItemType.FABRIC` için anlamlıdır (servis 400 verir).
+  warpSpecId String? @db.Uuid
+
   // Relations
   rolls              Roll[]
   orderLines         OrderLine[]
@@ -1434,6 +1509,10 @@ model Item {
   productRecipes     ProductRecipe[]
   rollReturns        RollReturn[]
   swatchReductions   SwatchStockReduction[]
+  /// Bu KUMAŞI besleyen çözgü kartı (N:1) — devere modülü.
+  warpSpec           WarpSpec?              @relation("ItemWarpSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
+  /// Bu İPLİĞİ kullanan çözgü kartları (1:N) — silme kapısının bağımlılık kaynağı.
+  warpSpecsAsYarn    WarpSpec[]             @relation("WarpSpecYarn")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -1507,6 +1586,9 @@ model Item {
   @@index([nameFold])
   @@index([nameFold(ops: raw("gin_trgm_ops"))], map: "items_nameFold_trgm_idx", type: Gin)
   @@index([mergedIntoId])
+  /// Çözgü kartının "bu çözgü hangi desenleri besliyor" sorgusu + kalıcı silme
+  /// kapısının bağımlılık sayımı bu index'ten okur (devere Faz 1a).
+  @@index([warpSpecId])
   @@map("items")
 }
 

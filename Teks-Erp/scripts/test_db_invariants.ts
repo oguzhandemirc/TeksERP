@@ -373,6 +373,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string 
   { table: "sack_allocations", name: "sack_allocations_qty_pos" },
   { table: "subcontractor_direct_ship_allocations", name: "subcontractor_direct_ship_allocations_qty_pos" },
   { table: "work_order_to_order_lines", name: "work_order_to_order_lines_allocatedQty_nonneg" },
+  // 2026-09-12 (devere Faz 1a) — migration 20260912120100_devere_warp_spec:
+  // tel adedi devere formülünün ilk çarpanıdır (`kg = tel × denye × metre / 9e6`);
+  // sıfır/negatif tel sessizce sıfır kg üretirdi.
+  { table: "warp_specs", name: "warp_specs_ends_positive" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_dispatchedQty_pos" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_dispatchedWeight_nonneg" },
   { table: "kartela_dispatch_items", name: "kartela_dispatch_items_dispatchedQty_pos" },
