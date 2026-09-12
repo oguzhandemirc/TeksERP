@@ -95,6 +95,7 @@ export function buildSubcontractExport(opts: {
           { header: "Fire (m)", key: "fireQty", width: 12, numFmt: "#,##0.0", align: "right" },
           { header: "Fire %", key: "firePct", width: 10, numFmt: "0.0", align: "right" },
           { header: "Açık (m)", key: "openQty", width: 12, numFmt: "#,##0.0", align: "right" },
+          { header: "Ölçülemez (m)", key: "unattributedQty", width: 14, numFmt: "#,##0.0", align: "right" },
           { header: "Süre (gün)", key: "avgTurnaroundDays", width: 12, numFmt: "0.0", align: "right" },
           ...(hasCompare
             ? [{ header: "Önceki fire %", key: "prevFirePct", width: 14, numFmt: "0.0", align: "right" as const }]
@@ -111,6 +112,7 @@ export function buildSubcontractExport(opts: {
           fireQty: sc.summary.fireQty,
           firePct: sc.summary.firePct,
           openQty: sc.summary.openQty,
+          unattributedQty: sc.summary.unattributedQty,
           avgTurnaroundDays: sc.summary.avgTurnaroundDays,
           ...(hasCompare ? { prevFirePct: sc.summary.prevFirePct ?? 0 } : {}),
         },

@@ -20,6 +20,28 @@ const num = (v: number | null | undefined, unit = "") => (
   </div>
 );
 
+const openCell = (r: SubcontractScorecardRow) =>
+  r.openQty > 0 ? (
+    <div className="text-right tabular-nums text-warning">
+      {fmtNum(r.openQty)} m
+      <div className="text-[10px] text-muted-foreground">{fmtInt(r.openItems)} kalem</div>
+    </div>
+  ) : (
+    <div className="text-right text-muted-foreground">—</div>
+  );
+
+// Topu BAŞKA sevkin doğrudan sevkiyle çıkmış kalemler: ne fire ne açık bakiye —
+// basılmazsa "Giden ≠ Kapanan + Açık" farkı açıklamasız kalır.
+const unattributedCell = (r: SubcontractScorecardRow) =>
+  r.unattributedQty > 0 ? (
+    <div className="text-right tabular-nums text-muted-foreground">
+      {fmtNum(r.unattributedQty)} m
+      <div className="text-[10px]">{fmtInt(r.unattributedItems)} kalem</div>
+    </div>
+  ) : (
+    <div className="text-right text-muted-foreground">—</div>
+  );
+
 // Müşteriye giden metre fire değildir; yazılmazsa giden − dönen ≠ fire görünür.
 const returnedCell = (r: SubcontractScorecardRow) => (
   <div className="text-right tabular-nums">
@@ -71,15 +93,12 @@ function firmColumns(hasCompare: boolean): ColumnDef<SubcontractScorecardRow, un
     {
       accessorKey: "openQty",
       header: () => <div className="text-right">Açık</div>,
-      cell: ({ row }) =>
-        row.original.openQty > 0 ? (
-          <div className="text-right tabular-nums text-warning">
-            {fmtNum(row.original.openQty)} m
-            <div className="text-[10px] text-muted-foreground">{fmtInt(row.original.openItems)} kalem</div>
-          </div>
-        ) : (
-          <div className="text-right text-muted-foreground">—</div>
-        ),
+      cell: ({ row }) => openCell(row.original),
+    },
+    {
+      accessorKey: "unattributedQty",
+      header: () => <div className="text-right">Ölçülemez</div>,
+      cell: ({ row }) => unattributedCell(row.original),
     },
     {
       accessorKey: "avgTurnaroundDays",

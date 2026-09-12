@@ -11,7 +11,7 @@ export const subcontractReportTiles: HubTile[] = [
   {
     key: "scorecard",
     title: "Fason Karnesi",
-    description: "Fason firesi (giden ↔ dönen metraj), dönüş süresi ve açık bakiye",
+    description: "Fason firesi (giden ↔ dönen ↔ müşteriye teslim), dönüş süresi ve açık bakiye",
     icon: Scissors,
     to: "/reports/subcontract/scorecard",
   },
