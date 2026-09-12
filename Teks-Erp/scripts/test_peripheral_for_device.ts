@@ -34,10 +34,61 @@ async function upsertMeter(code: string, name: string, machineId: string, role: 
   });
 }
 
+/**
+ * `unit` ESKİ İSTEMCİ TOLERANSI — kaynak sondası, DB'ye DOKUNMAZ.
+ *
+ * `PeripheralDevice.unit` süs alandı (çarpan yalnız `scale`; hiçbir yer okumuyor,
+ * hiçbir yer doğrulamıyordu) ve kolon bir SONRAKİ sürümde düşecek. Gövde
+ * `super.create/update`e OLDUĞU GİBİ gittiği için tolerans ÖNCE sahada olmalı:
+ * yoksa kolon düştüğü gün `unit` gönderen eski panel bilinmeyen argümana çarpar ve
+ * cihaz kaydı DÜZENLENEMEZ olur.
+ *
+ * ⚠️ NEDEN KAYNAK SONDASI, NEDEN SERVİS ÇAĞRISI DEĞİL: servis route'ta kendi
+ * config'iyle örnekleniyor (`peripheral.routes.ts:37`); bekçide ikinci bir config
+ * yazmak aynı gerçeği iki yerde tutmak olurdu ve ikisi sessizce ayrışır.
+ *
+ * ⚠️ DB ÖN KOŞULUNDAN ÖNCE ÇAĞRILIR ve bu SIRA ÖLÇÜLDÜ: `main()` seed'siz DB'de
+ * "makine yok" diyip `exit(0)` veriyor, yani arkada kalan her kontrol SESSİZCE
+ * atlanıyor ve bekçi YEŞİL görünüyordu (ölçüldü: `tekserp_fabrika_dev`te sonuç
+ * satırı hiç basılmadı). DB'ye ihtiyacı olmayan sonda, DB ön koşuluna bağlanmaz.
+ */
+function unitToleransSondasi(): void {
+  const peripheralSrc = fs.readFileSync(
+    path.resolve(__dirname, "../src/services/peripheral.service.ts"),
+    "utf8",
+  );
+  // ⚠️ YORUMLAR SÖKÜLÜR ve bu SATIR BİR SONDANIN ÜRÜNÜ: ilk negatif sondamda
+  // satırı `// delete data.unit;` diye yorumladım ve kapı YEŞİL kaldı — yorumlanmış
+  // tolerans ÇALIŞMAYAN toleranstır. Dizge arayan sonda yorumu koddan ayırmazsa
+  // "kaldırıldı"yı "duruyor" okur.
+  const kod = peripheralSrc
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:"'`])\/\/[^\n]*/g, "$1");
+  const unitToleransSayisi = (kod.match(/delete\s+data\.unit\s*;/g) ?? []).length;
+  check(
+    "create ve update, `unit`i eski istemci toleransı olarak DÜŞÜRÜYOR (2 yer)",
+    unitToleransSayisi === 2,
+    `${unitToleransSayisi} yerde bulundu`,
+  );
+  check(
+    "körlük zemini: tolerans emsali (`printerModelId`) hâlâ duruyor",
+    /delete\s+data\.printerModelId\s*;/.test(kod),
+  );
+}
+
 async function main() {
+  unitToleransSondasi();
   const tambur = await prisma.machine.findFirst({ where: { code: "TAMBUR-M1" }, select: { id: true } });
   const kk1 = await prisma.machine.findFirst({ where: { code: "KK1-M1" }, select: { id: true } });
-  if (!tambur || !kk1) { console.log("⚠️ TAMBUR-M1/KK1-M1 makineleri yok — önce seed gerekli"); process.exit(0); }
+  // ⚠️ ERKEN ÇIKIŞ `fail`E BAĞLI: düz `exit(0)` idi ve kaynak sondası kırmızı
+  // verse bile bekçi YEŞİL dönüyordu (çıkış kodu ölçümden kopmuştu). DB senaryoları
+  // burada atlanıyor, ama atlandığı ÇIKTIDA yazılı ve karar sayaca bağlı.
+  if (!tambur || !kk1) {
+    console.log("⚠️ TAMBUR-M1/KK1-M1 makineleri yok — DB senaryoları ATLANDI (seed gerekli)");
+    console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız (DB bölümü atlandı) ===`);
+    await prisma.$disconnect();
+    process.exit(fail > 0 ? 1 : 0);
+  }
 
   await upsertMeter("TAMBUR-METRE-2KAT", "Tambur 2 Kat Metre", tambur.id, "2-KAT", "00:23:09:01:05:5E");
   await upsertMeter("TAMBUR-METRE-4KAT", "Tambur 4 Kat Metre", tambur.id, "4-KAT", "00:23:09:01:1E:1B");
@@ -124,30 +175,6 @@ async function main() {
   const d1c = (await svc.getForDevice({ deviceId: testDev.id }, "METER")).data as unknown[];
   const d2c = (await svc.getForDevice({ deviceId: testDev2.id }, "METER")).data as unknown[];
   check("kaldırınca diğer cihazda kalır (paylaşım korunur)", d1c.length === 0 && d2c.length === 1, `dev1=${d1c.length} dev2=${d2c.length}`);
-
-  // ── `unit` ESKİ İSTEMCİ TOLERANSI (kaynak tripwire) ────────────────────────
-  // `PeripheralDevice.unit` süs alandı (çarpan yalnız `scale`; hiçbir yer okumuyor,
-  // hiçbir yer doğrulamıyordu) ve kolon bir SONRAKİ sürümde düşecek. Gövde
-  // `super.create/update`e OLDUĞU GİBİ gittiği için tolerans ÖNCE sahada olmalı:
-  // yoksa kolon düştüğü gün `unit` gönderen eski panel bilinmeyen argümana çarpar
-  // ve cihaz kaydı DÜZENLENEMEZ olur.
-  // ⚠️ NEDEN KAYNAK TRIPWIRE, NEDEN SERVİS ÇAĞRISI DEĞİL: servis route'ta kendi
-  // config'iyle örnekleniyor (`peripheral.routes.ts:37`); bekçide ikinci bir config
-  // yazmak aynı gerçeği iki yerde tutmak olurdu ve ikisi sessizce ayrışır.
-  const peripheralSrc = fs.readFileSync(
-    path.resolve(__dirname, "../src/services/peripheral.service.ts"),
-    "utf8",
-  );
-  const unitToleransSayisi = (peripheralSrc.match(/delete\s+data\.unit\s*;/g) ?? []).length;
-  check(
-    "create ve update, `unit`i eski istemci toleransı olarak DÜŞÜRÜYOR (2 yer)",
-    unitToleransSayisi === 2,
-    `${unitToleransSayisi} yerde bulundu`,
-  );
-  check(
-    "körlük zemini: tolerans emsali (`printerModelId`) hâlâ duruyor",
-    /delete\s+data\.printerModelId\s*;/.test(peripheralSrc),
-  );
 
   // cleanup (TEST- kayıtları)
   await prisma.devicePeripheral.deleteMany({ where: { peripheral: { code: "TEST-DEV-METRE" } } });
