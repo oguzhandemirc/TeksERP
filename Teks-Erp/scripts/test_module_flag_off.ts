@@ -354,6 +354,31 @@ function eksikHalka(alan: string, acik: string[]): string {
   return disaridanIceri.find((a) => !acik.includes(a)) ?? alan;
 }
 
+/** Grandfathering damgasını atan migration — adı `_prisma_migrations`'takiyle birebir. */
+const GRANDFATHERING_MIG = "20260902230000_modul_anahtarlari_grandfathering";
+
+/**
+ * §3 kırmızısının gerekçesini TAHMİN ETMEZ, ÖLÇER. "migration koşmamış olabilir"
+ * cümlesi okuyanı yanlış yöne gönderiyordu: migration koşmuş ama damgalayacak
+ * geçmiş bulamamış olabilir. İki teşhis ayrı yerlere bakmayı gerektirir.
+ */
+async function eksikTanisi(): Promise<string> {
+  const [mig] = await prisma.$queryRaw<Array<{ bitti: Date | null }>>`
+    SELECT finished_at AS bitti FROM "_prisma_migrations" WHERE migration_name = ${GRANDFATHERING_MIG}
+  `;
+  const topSayisi = await prisma.roll.count();
+  if (!mig) {
+    return `ÖLÇÜLDÜ: ${GRANDFATHERING_MIG} bu DB'de KAYITLI DEĞİL → \`prisma migrate deploy\` koşulmamış`;
+  }
+  if (!mig.bitti) {
+    return `ÖLÇÜLDÜ: ${GRANDFATHERING_MIG} kayıtlı ama finished_at BOŞ → migration YARIDA kalmış`;
+  }
+  return (
+    `ÖLÇÜLDÜ: migration ${mig.bitti.toISOString()} tarihinde KOŞTU · şu an ${topSayisi} top var → ` +
+    "damga anında `rolls` BOŞTU (damgalayacak geçmiş yoktu) ya da satırlar sonradan SİLİNDİ"
+  );
+}
+
 async function main(): Promise<void> {
   console.log("=== MODÜL KAPALI-REJİM BEKÇİSİ (ticaret · iplik · çoklu depo · üretim) ===\n");
 
@@ -539,7 +564,7 @@ async function main(): Promise<void> {
       "§3 ⭐ Geçmişi olan kurulumda HER modül anahtarının satırı VAR (grandfathering damgası)",
       eksik.length === 0,
       eksik.length
-        ? `satırsız: ${eksik.join(", ")} — migration 20260902230000 bu DB'de koşmamış olabilir`
+        ? `satırsız: ${eksik.join(", ")} · ${await eksikTanisi()}`
         : `${bulunan.size}/${MODULLER.length} satır`,
     );
   } else {

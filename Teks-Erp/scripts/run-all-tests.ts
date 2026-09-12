@@ -253,7 +253,14 @@ async function hacimGeciti(): Promise<void> {
     );
     return;
   }
-  console.log(`→ Hedef hacim: ${topSayisi} top (eşik ${FABRIKA_HACIM_ESIGI}) ✅\n`);
+  // Bu kapı TEK soruya cevap verir: "yazmak yıkıcı mı". Sayıyı "hedef güvenli"
+  // diye okumak ayrı bir soruya (plan/performans bekçileri anlamlı mı) yanlış
+  // cevap üretir — 1 satırlık tabloda PostgreSQL index seçmez. İkinci sert eşik
+  // EKLENMEZ: güvenlik kapısına kalite kontrolü eklemek kaçışı ucuzlatır.
+  console.log(
+    `→ Hedef hacim: yıkıcı değil (eşik ${FABRIKA_HACIM_ESIGI}) ✅ · ` +
+      `TEMSİLİLİK ölçülmedi: ${topSayisi} top\n`,
+  );
 }
 
 async function main() {

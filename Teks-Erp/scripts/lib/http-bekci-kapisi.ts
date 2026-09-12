@@ -28,8 +28,15 @@
 // dallanması sokardı. Var olan bir kullanıcıyla giriş denemek ise bu tuzağın
 // ta kendisiydi (401 belirsizdi); kullanıcıyı AYNI koşumda biz yarattığımız
 // için 401 artık belirsiz değil, kanıttır.
+//
+// ⚠️ PAROLA KOŞUMA ÖZGÜ OLMAK ZORUNDA (ölçüldü 2026-09-12, iki-DB sondası):
+// fixture SABİT parolayla yaratılınca `TEST-ADMIN` her fixture DB'sinde AYNI
+// kimliğe sahip olur; yabancı sunucu da giriş 200 verir ve kapı onu "aynı DB"
+// sayardı (sonda: DB_a'ya yazıp DB_b sunucusuna giriş → 200). Rastgele parola
+// YALNIZ bizim yazdığımız satırda geçerlidir; yabancı DB 401 verir. Kanıtın
+// dayanağı "kullanıcı var mı" değil, "az önce YAZDIĞIMIZ parola geçiyor mu".
 // =============================================================================
-import { ensureTestAdmin, TEST_ADMIN_PASSWORD, TEST_ADMIN_USERNAME } from "../fixture-test-user";
+import { ensureTestAdmin, kosumaOzguParola, TEST_ADMIN_USERNAME } from "../fixture-test-user";
 
 export interface HttpKapiSonucu {
   /** Doluysa HTTP ayağı koşabilir (sunucu ayakta VE aynı veritabanına bakıyor). */
@@ -109,8 +116,8 @@ export async function httpBekciKapisi(opts: {
     };
   }
 
-  // ── 2) Kendi kullanıcımızı YARAT (varsayma) ───────────────────────────────
-  await ensureTestAdmin();
+  // ── 2) Kendi kullanıcımızı KOŞUMA ÖZGÜ PAROLAYLA yarat (varsayma) ─────────
+  const { password } = await ensureTestAdmin({ password: kosumaOzguParola() });
 
   // ── 3) Giriş = "aynı veritabanı mı" kanıtı ────────────────────────────────
   let durum = 0;
@@ -120,7 +127,7 @@ export async function httpBekciKapisi(opts: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         username: TEST_ADMIN_USERNAME,
-        password: TEST_ADMIN_PASSWORD,
+        password,
         clientType: "electron",
       }),
       signal: AbortSignal.timeout(10_000),
@@ -154,7 +161,7 @@ export async function httpBekciKapisi(opts: {
   return {
     token: null,
     kirmizi:
-      `${base} AYAKTA ama az önce PRİSMA ile yarattığımız '${TEST_ADMIN_USERNAME}' kullanıcısıyla giriş ${durum} verdi. ` +
+      `${base} AYAKTA ama az önce PRİSMA ile '${TEST_ADMIN_USERNAME}' satırına YAZDIĞIMIZ koşuma özgü parolayla giriş ${durum} verdi. ` +
       `Porttaki sunucu BAŞKA bir veritabanına bakıyor (ya da kimlik zinciri kırık): ${port} portunu başka bir oturum tutuyor olabilir. ` +
       "Kendi sunucunu kendi portunda başlat ve TEST_API_URL=<adres> ile koş.",
     atlaSebebi: null,

@@ -29,12 +29,22 @@
 // Silmek gerekirse: panelden pasife al ya da elle sil — fixture bir sonraki
 // koşumda yeniden üretir.
 // -----------------------------------------------------------------------------
+import { randomUUID } from "node:crypto";
 import * as bcrypt from "bcryptjs";
 import prisma from "../src/lib/prisma";
 
 /** Sabit kimlik — üç HTTP testi de bunu kullanır. */
 export const TEST_ADMIN_USERNAME = "TEST-ADMIN";
 export const TEST_ADMIN_PASSWORD = "TestAdmin2026!";
+
+/**
+ * Koşuma özgü parola üretir. Sabit parola HER veritabanında aynı olduğu için
+ * "giriş 200" sorusunu AYNI DB'ye bağlamaz; rastgele parola yalnız bizim
+ * yazdığımız DB'de geçerlidir (bkz. `lib/http-bekci-kapisi.ts`).
+ */
+export function kosumaOzguParola(): string {
+  return `TestAdmin-${randomUUID()}!`;
+}
 
 /**
  * Tam yetkili test kullanıcısını garanti eder (idempotent).
@@ -76,8 +86,12 @@ export const TEST_ADMIN_PASSWORD = "TestAdmin2026!";
  * her iki yolla da yetkilidir).
  * ───────────────────────────────────────────────────────────────────────────
  */
-export async function ensureTestAdmin(): Promise<{ id: string; username: string; password: string }> {
-  const passwordHash = await bcrypt.hash(TEST_ADMIN_PASSWORD, 10);
+export async function ensureTestAdmin(opts?: {
+  /** Verilirse bu koşumun parolası olur; verilmezse sabit `TEST_ADMIN_PASSWORD`. */
+  password?: string;
+}): Promise<{ id: string; username: string; password: string }> {
+  const password = opts?.password ?? TEST_ADMIN_PASSWORD;
+  const passwordHash = await bcrypt.hash(password, 10);
 
   const user = await prisma.user.upsert({
     where: { username: TEST_ADMIN_USERNAME },
@@ -122,5 +136,5 @@ export async function ensureTestAdmin(): Promise<{ id: string; username: string;
   // "işlemi yapan kişi" FK'sı olarak da kullanır (ör. `Roll.createdById`).
   // Döndürmezsek çağıran taraf `admin` satırını aramaya geri döner — kurtulmaya
   // çalıştığımız seed bağımlılığının ta kendisi.
-  return { id: user.id, username: TEST_ADMIN_USERNAME, password: TEST_ADMIN_PASSWORD };
+  return { id: user.id, username: TEST_ADMIN_USERNAME, password };
 }
