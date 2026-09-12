@@ -580,7 +580,9 @@ export class ReturnService {
           toWarehouseId: r.warehouseId ?? null,
           rollReturnId: rr.id,
           userId,
-        });
+        // İade miktarı uçta doğrulanıyor; 0 metrajlı iade satırı veri hatasıdır.
+        // (Deposuz top uçsuz kaldığı için POLİTİKAYA TABİ DEĞİL, atlanır.)
+        }, { onZeroQty: "throw" });
       }
 
       // GRUP anahtarı = LİDERİN id'si. Tekil iadede alan NULL kalır → belge çözümü,

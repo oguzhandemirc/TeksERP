@@ -106,14 +106,16 @@ async function main(): Promise<void> {
       rollId: parentId,
       eventType: WarehouseEventType.ENTRY,
       qty: 10,
-      // from + to İKİSİ de boş → satır yazılmamalı
-    });
+      // from + to İKİSİ de boş → satır yazılmamalı (uçsuzluk POLİTİKAYA TABİ
+      // DEĞİL: defter öncesi doğan 4.553 topun deposu NULL ve sevki çalışmalı)
+    }, { onZeroQty: "throw" });
     await writeWarehouseMovement(tx, {
       rollId: parentId,
       eventType: WarehouseEventType.ENTRY,
       qty: -5, // negatif → yazılmamalı
       toWarehouseId: def.id,
-    });
+      // "skip": bu bölüm anlamsız satırın YAZILMADIĞINI ölçüyor, fırlatmasını değil
+    }, { onZeroQty: "skip" });
   });
   const after = await prisma.warehouseMovement.count({ where: { rollId: parentId } });
   check("E) Deposuz/negatif çağrı satır ÜRETMEDİ", after === before, `önce=${before} sonra=${after}`);

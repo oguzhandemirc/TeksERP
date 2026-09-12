@@ -62,13 +62,51 @@ export interface WarehouseLedgerEntry {
 }
 
 /**
- * Tek satır yazar. `qty` NEGATİF ya da depo bilgisi TAMAMEN boş ise satır
- * YAZILMAZ (sessizce atlanır): anlamsız bir defter satırı, satır olmamasından
- * kötüdür — "bu depoya ne girdi" toplamını kirletir.
+ * Yazılamaz satırda ne olacağı — **ÇAĞRI YERİ BEYAN EDER, varsayılanı YOKTUR.**
+ *
+ * Satır iki sebeple yazılamaz: metraj 0/geçersiz ya da iki depo ucu da boş.
+ * Bu iki durumun anlamı YOLA GÖRE değişir ve tek bir davranış ikisini birden
+ * doğru karşılayamaz:
+ *   • `"skip"` — MEŞRU atlama: taşınacak mal ya da yazılacak depo yok (0 metrajlı
+ *     topun iptali, deposuz topun düşmesi). Atlandığı ÇAĞIRANA DÖNER, sayılır.
+ *   • `"throw"` — TUTARSIZLIK SİNYALİ: bu yolda satırın olmaması bir veri hatası.
+ *     Transfer/sevk böyledir; transfer İPTALİ defterden okuduğu için eksik satır
+ *     malı hedef depoda MAHSUR bırakır (ölçüldü 2026-09-12: eşiği sessiz atlamaya
+ *     çevirmek bu yolu gürültülü hatadan sessiz veri kaybına dönüştürmüştü).
  */
-export async function writeWarehouseMovement(tx: Tx, entry: WarehouseLedgerEntry): Promise<void> {
-  if (!qtyYazilabilir(entry.qty)) return;
-  if (!entry.fromWarehouseId && !entry.toWarehouseId) return;
+export interface ZeroQtyPolicy {
+  onZeroQty: "skip" | "throw";
+}
+
+/**
+ * Satırın yazılacak bir DEPO UCU var mı. Politikaya TABİ DEĞİL: uçsuzluk her
+ * yolda meşru atlamadır, çünkü defter öncesi doğan topların `warehouseId`i NULL
+ * (ölçüldü: 4.553 top) ve onların sevki/iadesi çalışmaya devam etmek zorunda.
+ * Politika yalnız METRAJ için vardır — uçsuz satırı "tutarsızlık" saymak eski
+ * veriyle sevkiyatı kilitlerdi.
+ */
+function hasWarehouseEnd(entry: WarehouseLedgerEntry): boolean {
+  return Boolean(entry.fromWarehouseId || entry.toWarehouseId);
+}
+
+/**
+ * Tek satır yazar. Yazılamaz satırda davranış `policy`den gelir; dönen değer
+ * satırın YAZILIP YAZILMADIĞIDIR — meşru atlama bile sayılabilsin diye.
+ */
+export async function writeWarehouseMovement(
+  tx: Tx,
+  entry: WarehouseLedgerEntry,
+  policy: ZeroQtyPolicy,
+): Promise<boolean> {
+  if (!hasWarehouseEnd(entry)) return false;
+  if (!qtyYazilabilir(entry.qty)) {
+    if (policy.onZeroQty === "throw") {
+      throw AppError.internal(
+        `Defter satırı yazılamaz (metraj ${String(entry.qty)}) — bu yolda satırın olmaması veri hatasıdır`,
+      );
+    }
+    return false;
+  }
 
   await tx.warehouseMovement.create({
     data: {
@@ -87,15 +125,32 @@ export async function writeWarehouseMovement(tx: Tx, entry: WarehouseLedgerEntry
       notes: entry.notes ?? null,
     },
   });
+  return true;
 }
 
 /**
  * Çok satırlı yazım (sevk, transfer, toplu iptal). `createMany` ile TEK sorgu —
  * yüzlerce topluk sevkte satır-satır insert perf kuralı 9 ihlalidir.
+ *
+ * Dönen değer YAZILAN satır sayısıdır; `"skip"` politikasında atlanan sayısı
+ * `entries.length - dönen` ile okunur (çağıran onu bir yüzeye basar).
  */
-export async function writeWarehouseMovements(tx: Tx, entries: WarehouseLedgerEntry[]): Promise<number> {
+export async function writeWarehouseMovements(
+  tx: Tx,
+  entries: WarehouseLedgerEntry[],
+  policy: ZeroQtyPolicy,
+): Promise<number> {
+  if (policy.onZeroQty === "throw") {
+    // ⚠️ Yalnız METRAJ denetlenir; uçsuz satır burada da meşru atlamadır.
+    const invalidIndex = entries.findIndex((e) => hasWarehouseEnd(e) && !qtyYazilabilir(e.qty));
+    if (invalidIndex >= 0) {
+      throw AppError.internal(
+        `Defter satırı yazılamaz (küme indeksi ${invalidIndex}, metraj ${String(entries[invalidIndex]?.qty)}) — bu yolda satırın olmaması veri hatasıdır`,
+      );
+    }
+  }
   const rows = entries
-    .filter((e) => qtyYazilabilir(e.qty) && (e.fromWarehouseId || e.toWarehouseId))
+    .filter((e) => hasWarehouseEnd(e) && qtyYazilabilir(e.qty))
     .map((e) => ({
       rollId: e.rollId,
       eventType: e.eventType,
@@ -289,8 +344,16 @@ export async function reverseStockMove(
 }
 
 /**
- * Topun TERSLENMEMİŞ ileri satırlarını tersler — "bu top iptal edildi, defterdeki
- * izi de sıfırlansın" yolunun tek kapısı (tambur geri alma, iptali geri alma).
+ * Topun TERSLENMEMİŞ ileri satırlarının **HEPSİNİ** tersler — "bu top iptal
+ * edildi, defterdeki izi tümden sıfırlansın" yolunun kapısı.
+ *
+ * ⚠️⚠️ YALNIZ TOP TÜMDEN ÖLDÜRÜLÜYORSA KULLANILIR (CANCELLED + `currentQty: 0`).
+ * "Şu işlemi geri al" anlamında KULLANILAMAZ — kapsamsız olduğu için başka bir
+ * işlemin satırını da tersler. Ölçüldü (2026-09-12): reopen bu kapıyı kullanınca
+ * `attachRolls`ın ÇIKIŞ satırını da tersledi ve depoda 100 m HAYALET stok doğdu;
+ * üstelik o çıkış `reversesMovementId` unique'i yüzünden kalıcı "terslenmiş"
+ * damgası yediği için sapma ileri yolla BİR DAHA kapanmıyordu. Tek satır terslemek
+ * için `reverseLatestScopedStockMove` kullan — kapsamı tip düzeyinde zorunludur.
  *
  * ⚠️ Satır SİLİNMEZ: her ileri satıra bugüne yazılan bir ters satır eşlik eder ve
  * bağ `reversesMovementId`e düşer. Aynı satır iki kez terslenemez (DB unique),
@@ -310,7 +373,7 @@ export async function reverseStockMove(
  * açılış bakiyesi backfill'i indikten SONRA bu dal tanım gereği boşalır; o commit'te
  * sayı > 0 bir HATA SİNYALİ hâline gelir ve bekçiye çevrilir (tasarım §D6).
  */
-export async function reverseRollStockMoves(
+export async function reverseAllRollStockMoves(
   tx: Tx,
   rollIds: string[],
   args: { reasonCode: string; userId?: string | null; notes?: string | null },
@@ -337,4 +400,70 @@ export async function reverseRollStockMoves(
     reversed++;
   }
   return { reversed, statusuzAtlanan };
+}
+
+/** Hangi ileri satırın terslendiği — TİP DÜZEYİNDE zorunlu, unutulamaz. */
+export interface StockMoveScope {
+  /** İleri satırın sebep kodu: hangi yazıcının satırını tersliyoruz. */
+  reasonCode: string;
+  /** İleri satırın adım damgası (bugünden sonraki satırlarda dolu). */
+  workOrderStepId: string;
+}
+
+/**
+ * Kapsam içindeki TEK ileri satırı tersler — "şu işlemi geri al" yolunun kapısı
+ * (adımı yeniden açma). Top başına EN YENİ uygun satır seçilir.
+ *
+ * ⚠️ KAPSAM İKİ ADIMLI SORGUDUR, tek WHERE değil:
+ *   ① `reasonCode` + `workOrderStepId = scope.workOrderStepId` (bugünkü yol),
+ *   ② bulunamazsa `reasonCode` + `workOrderStepId IS NULL` (GEÇİŞ dalı: damga
+ *      eklenmeden önce yazılmış satırlar).
+ * `OR workOrderStepId IS NULL` diye TEK yüklemde yazılamaz: o yüklem BAŞKA bir iş
+ * emrinin damgalı girişini de aday kümesine sokar ve "geçmişe dönük değiştirme"
+ * yasağını çiğner (top daha önce başka WO bitirmişse onun girişi terslenirdi).
+ *
+ * ⚠️ Satır bulunamazsa SESSİZCE GEÇİLMEZ: `bulunamayan` listesi döner. O durum
+ * "defterde olması gereken giriş yok" demektir — gerçek bir tutarsızlık sinyali.
+ */
+export async function reverseLatestScopedStockMove(
+  tx: Tx,
+  rollIds: string[],
+  scope: StockMoveScope,
+  args: { reasonCode: string; userId?: string | null; notes?: string | null },
+): Promise<{ reversed: number; statusuzAtlanan: number; bulunamayan: string[] }> {
+  const bulunamayan: string[] = [];
+  let reversed = 0;
+  let statusuzAtlanan = 0;
+  for (const rollId of rollIds) {
+    const baseWhere = {
+      rollId,
+      reasonCode: scope.reasonCode,
+      reversesMovementId: null,
+      reversedBy: { none: {} },
+    } satisfies Prisma.WarehouseMovementWhereInput;
+    const selectFields = { id: true, fromStatus: true, toStatus: true };
+    const stampedRow = await tx.warehouseMovement.findFirst({
+      where: { ...baseWhere, workOrderStepId: scope.workOrderStepId },
+      orderBy: { createdAt: "desc" },
+      select: selectFields,
+    });
+    const targetRow =
+      stampedRow ??
+      (await tx.warehouseMovement.findFirst({
+        where: { ...baseWhere, workOrderStepId: null },
+        orderBy: { createdAt: "desc" },
+        select: selectFields,
+      }));
+    if (!targetRow) {
+      bulunamayan.push(rollId);
+      continue;
+    }
+    if (targetRow.fromStatus === null && targetRow.toStatus === null) {
+      statusuzAtlanan++;
+      continue;
+    }
+    await reverseStockMove(tx, targetRow.id, args);
+    reversed++;
+  }
+  return { reversed, statusuzAtlanan, bulunamayan };
 }

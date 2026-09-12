@@ -289,7 +289,9 @@ export class WarehouseTransferService {
             userId: userId ?? null,
           })),
           ...memberRows,
-        ]);
+          // Transfer İPTALİ defterden okuyor: eksik satır malı hedef depoda
+          // MAHSUR bırakır. Bu yolda 0 metraj tutarsızlık sinyalidir.
+        ], { onZeroQty: "throw" });
 
         // Resmi belge — transfer irsaliyesi v1 BURADA, aynı tx içinde donar
         // (sevk irsaliyesi emsali): içerik "taşıma anı"dır.
@@ -551,6 +553,8 @@ export class WarehouseTransferService {
           userId: userId ?? null,
           notes: reason?.trim() || null,
         })),
+        // İleri transfer satırı gürültülü yazıldı; tersi de öyle olmalı.
+        { onZeroQty: "throw" },
       );
 
       // Belge İPTAL filigranıyla VOIDED'e çekilir — silinmez: transfer gerçekten

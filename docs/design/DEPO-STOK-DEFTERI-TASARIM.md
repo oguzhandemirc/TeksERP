@@ -130,7 +130,10 @@ var/aktif bakar · `GoodsReceipt.warehouseId` NOT NULL + `YarnStock` `@@unique` 
 unique gerçek depoya "Üretim" adını yasaklar · 11 panel çağrı sitesi yalnız `isActive` süzer (blocklist mantığı).
 Karşı taraf bu yüzden **`eventType` + `reasonCode`** ile taşınır, sahte depo satırıyla değil.
 
-**⑤ Eski 709 satır:** `preEpoch` işaretiyle korunur, yeniden yorumlanmaz (D6).
+**⑤ Eski satırlar:** korunur, yeniden yorumlanmaz (D6). ⚠️ 2026-09-12 ölçümü bu maddenin adını düzeltti:
+statüsüz satır kümesi **tarihsel değil, canlı büyüyor** — fabrika kopyasındaki 721 satırın 721'i statüsüz ve
+eski kapılar (transfer · sevk · sayım) bugün de statüsüz yazıyor. Bu yüzden kod tarafındaki sayaç
+`preEpochSkipped` değil **`statusuzAtlanan`**: "eski veri" değil, "o yolu henüz stok defterine taşımadık".
 
 ### D3 — Metraj değişimi deftere GİRER
 - **Dönüşüm (kesim/finalize) net sıfırdır:** ebeveyn çıkışı + çocuk girişi aynı olay kimliğiyle yazılır.
@@ -210,6 +213,22 @@ sessiz muafiyet YOKTUR; sayı her koşumda görünür ve onarım bitince sıfır
   varsayılan kalır; fabrika verisine `--apply` **kullanıcı kararı** (ertelendi). Dağıtım yolu önerisi: tek seferlik
   operasyon adımı — paket içine alınmaz (`dist/tools`a yalnız süperadmin aracı derleniyor).
 - Mevcut 709 satır **yeniden yorumlanmaz**: defterin doğruluk başlangıcı açılış anıdır, öncesi tarihsel izdir.
+- **`statusuzAtlanan` bugün BİLGİ, backfill'den sonra HATA SİNYALİ.** `reverseRollStockMoves` iki ucu da
+  statüsüz olan satırı tersleyemez (ucu kurulamayan satırın tersi kurulamaz) ve bu satırları **sayar**. Sayı
+  bugün sıfırdan büyük olabilir ve bu normaldir: eski kapılar hâlâ statüsüz satır yazıyor. **Eski yazıcılar stok
+  defterine taşındıktan ve açılış fotoğrafı indikten sonra bu dal tanım gereği boşalır** — o commit'te sayının
+  sıfırdan büyük çıkması bir hatadır ve bekçiye çevrilir (bugün "bilgi", yarın "kırmızı"). Sayı ölçülmeden
+  bırakılmaz: `test_stock_ledger_helper` §11 hem davranışı ölçer hem o DB'deki canlı statüsüz satır sayısını basar.
+- **`preEpoch` ZAMANSAL, `statusuzAtlanan` SEMANTİK — aynı şey değil.** `preEpoch` "satır fotoğraf anından
+  ÖNCE mi yazıldı" sorusunu cevaplar; tek yazarı açılış fotoğrafı script'idir, çalışma zamanı ona dokunmaz ve
+  hiçbir iş kararına girdi değildir. `statusuzAtlanan` ise "satırın iki ucu da statüsüz mü, yani ucu kurulabilir
+  mi" sorusunu `fromStatus IS NULL AND toStatus IS NULL` yükleminden türetir. Bugün iki küme neredeyse birebir
+  örtüşüyor (721/721), **yarın ayrışacaklar**: fotoğraftan SONRA eski kapıdan yazılan satır `preEpoch=false`
+  ama statüsüzdür.
+- **⚠️ FOTOĞRAF ŞERHİ (bu cümle olmadan fotoğraf inmez):** epoch sonrası yalnız **TOPLAM Σ** güvenilirdir.
+  **Depo × statü kırılımı ve as-of kesiti**, eski yazıcılar stok defterine taşınıp `statusuzAtlanan` sıfıra
+  düşene kadar **BEYANLIDIR** — o satırlar hangi statüden hangi statüye gittiğini söylemiyor. "Epoch sonrası
+  her şey doğru" sanısı, düzeltmesi en pahalı yanlış olur.
 
 ### D7 — Defterin DB seddi (bugün hiç yok)
 

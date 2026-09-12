@@ -3317,6 +3317,8 @@ export class ShippingService {
           shipmentId,
           userId: userId ?? null,
         })),
+        // Sevk brüt ve defterden türer: 0 metraj veri hatası, uçsuz top atlanır.
+        { onZeroQty: "throw" },
       );
     }
     // Tahsisler artık DISPATCHED sevkiyatta → shippedQty defterden yeniden hesaplanır.
@@ -3794,8 +3796,7 @@ export class ShippingService {
             toWarehouseId: r.warehouseId,
             shipmentId,
             userId: userId ?? null,
-          })),
-        );
+          })), { onZeroQty: "throw" });
       }
 
       // Tahsisler SİLİNMEZ — `shippedQty` defterden türetilir ve yalnız DISPATCHED

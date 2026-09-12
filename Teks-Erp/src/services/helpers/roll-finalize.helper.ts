@@ -147,6 +147,13 @@ export interface FinalizedRoll {
 export async function finalizeRollsAtLastStep(
   tx: TxClient,
   rollIds: string[],
+  /**
+   * Girişi yazan ADIM. Defter satırına damgalanır ki "hangi finish turunun
+   * girişi" sorusu defterden cevaplanabilsin — adımı yeniden açma yalnız KENDİ
+   * girişini terslemek için bu damgayı kullanır. Adımı bilmeyen çağıran
+   * (kurtarma yolu) geçmez; o satırlar damgasız kalır ve geçiş dalıyla bulunur.
+   */
+  opts?: { workOrderStepId?: string | null },
 ): Promise<FinalizedRoll[]> {
   if (rollIds.length === 0) return [];
   const rolls = await tx.roll.findMany({
@@ -218,6 +225,7 @@ export async function finalizeRollsAtLastStep(
         qty: r.currentQty,
         to: { warehouseId: r.warehouseId, status },
         reasonCode: STOCK_MOVE_REASON.PRODUCTION_RECEIPT,
+        workOrderStepId: opts?.workOrderStepId ?? null,
       });
     }
     out.push({ rollId: r.id, status, barcode: barcode as string, barcodeGenerated });

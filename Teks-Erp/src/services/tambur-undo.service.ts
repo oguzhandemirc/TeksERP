@@ -74,7 +74,7 @@
 import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
-import { reverseRollStockMoves } from "./helpers/warehouse-ledger.helper";
+import { reverseAllRollStockMoves } from "./helpers/warehouse-ledger.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import {
@@ -1158,7 +1158,7 @@ export class TamburUndoService {
       // DEPO DEFTERİ — çocuğun doğarken yazdığı GİRİŞ satırı terslenir. Yoksa
       // iptal edilen metraj defterde depoda kalır ve her geri alma turu depoya
       // hayalet metre ekler (yeniden finalize ikinci bir giriş yazar).
-      await reverseRollStockMoves(tx, [childId], {
+      await reverseAllRollStockMoves(tx, [childId], {
         reasonCode: STOCK_MOVE_REASON.TAMBUR_UNDO,
         userId: userId ?? null,
         notes: TAMBUR_UNDO_CANCEL_TEXT,
@@ -1371,7 +1371,7 @@ export class TamburUndoService {
       }
 
       // DEPO DEFTERİ — applySingle ile aynı: giriş satırı terslenir (bkz. orası).
-      await reverseRollStockMoves(tx, [childId], {
+      await reverseAllRollStockMoves(tx, [childId], {
         reasonCode: STOCK_MOVE_REASON.TAMBUR_UNDO,
         userId: userId ?? null,
         notes: TAMBUR_UNDO_CANCEL_TEXT,
@@ -1631,7 +1631,7 @@ export class TamburUndoService {
 
       // DEPO DEFTERİ — TÜM çocukların giriş satırları terslenir. FULL'de öksüz
       // satır sayısı çocuk sayısı kadar olurdu (2026-08-09 vakasında 14 top).
-      await reverseRollStockMoves(tx, ids, {
+      await reverseAllRollStockMoves(tx, ids, {
         reasonCode: STOCK_MOVE_REASON.TAMBUR_UNDO,
         userId: userId ?? null,
         notes: TAMBUR_UNDO_CANCEL_TEXT,

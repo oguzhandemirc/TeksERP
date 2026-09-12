@@ -1187,7 +1187,9 @@ export class InventoryService {
           toWarehouseId: targetWarehouseId,
           goodsReceiptId: opts?.goodsReceiptId ?? null,
           userId: userId ?? null,
-        });
+        // 0 metrajlı top DOĞMAZ (giriş metrajı uçta doğrulanıyor); buradaki 0
+        // bir veri hatasıdır ve topun defter izi doğuştan eksik kalırdı.
+        }, { onZeroQty: "throw" });
         return created;
       });
     } catch (err) {
@@ -3619,14 +3621,22 @@ export class InventoryService {
       // DEPO DEFTERİ — mal depodan DÜŞTÜ (kayıt hatalıydı ya da fire).
       // `warehouseId` BİLEREK temizlenmez: "en son hangi depodaydı" izi kalsın ve
       // iptal geri alınırsa (restoreCancelled) top rafına dönebilsin.
-      await writeWarehouseMovement(tx, {
-        rollId: id,
-        eventType: WarehouseEventType.CANCEL,
-        qty: r.currentQty,
-        fromWarehouseId: r.warehouseId,
-        userId: userId ?? null,
-        notes: cancelReasonText ? cancelReasonText.slice(0, 300) : null,
-      });
+      // ⚠️ Politika "skip": 0 metrajlı topun iptalinde yazılacak hareket YOKTUR
+      // (stoktan düşen mal yok) ve iptal yine de mümkün olmalı — fabrika
+      // kopyasında 0 metrajlı 52 iptal topu var. Atlandığı SESSİZ KALMAZ: dönen
+      // değer audit yüküne yazılır.
+      const ledgerRowWritten = await writeWarehouseMovement(
+        tx,
+        {
+          rollId: id,
+          eventType: WarehouseEventType.CANCEL,
+          qty: r.currentQty,
+          fromWarehouseId: r.warehouseId,
+          userId: userId ?? null,
+          notes: cancelReasonText ? cancelReasonText.slice(0, 300) : null,
+        },
+        { onZeroQty: "skip" },
+      );
 
       // Etkilenen step'lerin status'unu recompute et.
       //
@@ -3670,7 +3680,7 @@ export class InventoryService {
       // etkisi değil. Planlamacı isterse eklenecek tek satır:
       //   for (const woId of scope.workOrderIds) await completeWorkOrderIfStepsDone(tx, woId);
       // (fonksiyon zaten terminal-guard'lı; emsal `rescueStuckRoll`.)
-      return { roll: r, stepChanges };
+      return { roll: r, stepChanges, ledgerRowWritten };
     });
 
     await AuditService.log({
@@ -3694,6 +3704,10 @@ export class InventoryService {
         // COMPLETED'tan düşen adım o damgayı satırında kaybediyor (yukarıdaki
         // gerekçeye bak) — tek izi bu kayıt.
         stepStatusChanges: updated.stepChanges.length ? updated.stepChanges : undefined,
+        // Defter satırı MEŞRU olarak atlanmış olabilir (0 metrajlı ya da deposuz
+        // top): atlama sessiz kalmasın diye sonucu burada beyan ediyoruz.
+        // `false` → "bu iptalin defter karşılığı yok, çünkü düşecek mal yoktu".
+        ledgerRowWritten: updated.ledgerRowWritten,
       },
     });
 

@@ -1407,7 +1407,11 @@ export class KursunBypassService {
         await copyStationCapabilitiesToRoll(tx, { stationId: a.machineStationId, rollId });
       }
 
-      const finalized = await finalizeRollsAtLastStep(tx, closedRollIds);
+      // Adım damgası (kurşun finish ile aynı gerekçe): yeniden açma yalnız KENDİ
+      // girişini terslesin diye defter satırı adımını taşır.
+      const finalized = await finalizeRollsAtLastStep(tx, closedRollIds, {
+        workOrderStepId: a.workOrderStepId,
+      });
       await recomputeStepStatus(tx, a.workOrderStepId);
       await completeWorkOrderIfStepsDone(tx, a.workOrderId);
 

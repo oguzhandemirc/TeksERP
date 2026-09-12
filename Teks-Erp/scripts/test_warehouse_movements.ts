@@ -123,11 +123,12 @@ async function main(): Promise<void> {
       },
       // 3) SHIPMENT → B'den çıktı
       { rollId: r1.id, eventType: WarehouseEventType.SHIPMENT, qty: 100, fromWarehouseId: whB.id },
+      // (politika aşağıda: bu kümenin her satırı geçerli, 0 metraj beklenmiyor)
       // 4) RETURN → B'ye girdi
       { rollId: r2.id, eventType: WarehouseEventType.RETURN, qty: 50, toWarehouseId: whB.id },
       // 5) CANCEL → A'dan düştü
       { rollId: r2.id, eventType: WarehouseEventType.CANCEL, qty: 50, fromWarehouseId: whA.id },
-    ]);
+    ], { onZeroQty: "throw" });
   });
 
   // ⚠️ `createdAt` ELLE DAMGALANIR: beş satır tek tx'te doğdu ve milisaniyeleri

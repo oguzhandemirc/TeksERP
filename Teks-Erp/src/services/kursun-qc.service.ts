@@ -50,7 +50,7 @@ import {
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { finalizeRollsAtLastStep } from "./helpers/roll-finalize.helper";
-import { reverseRollStockMoves } from "./helpers/warehouse-ledger.helper";
+import { reverseLatestScopedStockMove } from "./helpers/warehouse-ledger.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import {
   assertKursunTabletMayWrite,
@@ -948,7 +948,9 @@ export class KursunQcService {
         // kaliteye göre WAREHOUSE (finalizeRollsAtLastStep — Tambur ile aynı mantık;
         // artık PRODUCED limbosu YOK). currentStepId=null, form=ACIK, barkodsuz açık
         // kumaşa barkod üretilir. Ardından completeWorkOrderIfStepsDone WO/kartı kapatır.
-        await finalizeRollsAtLastStep(tx, closedRollIds);
+        // Adım damgası: "hangi finish turunun girişi" sorusu defterden
+        // cevaplanabilsin — yeniden açma yalnız KENDİ girişini tersler.
+        await finalizeRollsAtLastStep(tx, closedRollIds, { workOrderStepId: step.id });
       }
 
       await recomputeStepStatus(tx, step.id);
@@ -1105,6 +1107,9 @@ export class KursunQcService {
     const rollIds = closedMovements.map((m) => m.rollId);
     const movementIds = closedMovements.map((m) => m.id);
 
+    /** Defter özeti — audit yüküne yazılır (yeni kayıt AÇILMAZ, alan eklenir). */
+    let ledgerSummary: { reversed: number; statusuzAtlanan: number; bulunamayan: string[] } | null = null;
+
     await prisma.$transaction(async (tx) => {
       // F159: O-2 write-skew guard (finishStep paritesi) — son-adım WO/kart geri
       // alma ile eşzamanlı finish/finalize'ı serileştir.
@@ -1162,13 +1167,26 @@ export class KursunQcService {
         // DEPO DEFTERİ — `finalizeRollsAtLastStep`in yazdığı GİRİŞ satırı terslenir:
         // top stok kümesinden çıkıp üretime geri döndü. Yazılmazsa finish → yeniden
         // aç → finish turunda İKİ giriş bir çıkışsız kalır ve sapma topun metrajı ×
-        // tur kadar birikir. Ters kayıt ileri satıra BAĞLANIR (`reversesMovementId`),
-        // böylece asimetri DB'den de ölçülebilir.
-        await reverseRollStockMoves(tx, rollIds, {
-          reasonCode: STOCK_MOVE_REASON.KURSUN_REOPEN,
-          userId: userId ?? null,
-          notes: "Kurşun/KK2 adımı yeniden açıldı",
-        });
+        // tur kadar birikir.
+        //
+        // ⚠️ KAPSAM ZORUNLU: "topun tüm izini tersle" kapısı BURADA KULLANILAMAZ.
+        // Ölçüldü (2026-09-12): kapsamsız çağrı `attachRolls`ın ÇIKIŞ satırını da
+        // tersliyordu — top üretime dönmesine rağmen defter neti 0 çıkıyor, yani
+        // depoda HAYALET stok kalıyordu; üstelik o çıkış kalıcı "terslenmiş"
+        // damgası yediği için sapma ileri yolla bir daha kapanmıyordu.
+        const ledgerResult = await reverseLatestScopedStockMove(
+          tx,
+          rollIds,
+          { reasonCode: STOCK_MOVE_REASON.PRODUCTION_RECEIPT, workOrderStepId: step.id },
+          {
+            reasonCode: STOCK_MOVE_REASON.KURSUN_REOPEN,
+            userId: userId ?? null,
+            notes: "Kurşun/KK2 adımı yeniden açıldı",
+          },
+        );
+        // Terslenemeyen top SESSİZCE geçilmez: "defterde olması gereken giriş yok"
+        // demektir. Sayı audit yüküne yazılır (aşağıda) — yeni kayıt açılmaz.
+        ledgerSummary = ledgerResult;
         // finishStep son-adım dalı WO/kartı COMPLETED yapmış olabilir → geri al.
         await tx.workOrder.updateMany({
           where: { id: step.workOrderId, status: WorkOrderStatus.COMPLETED },
@@ -1202,6 +1220,10 @@ export class KursunQcService {
         status: "REOPENED_FROM_COMPLETED",
         reopenedRollCount: rollIds.length,
         prevStatus: StepStatus.COMPLETED,
+        // Terslenemeyen satırlar sessizce kaybolmasın: "defterde olması gereken
+        // giriş yok" (bulunamayan) ve "ucu kurulamayan eski satır" (statüsüz)
+        // sayıları burada görünür.
+        ...(ledgerSummary ? { defter: ledgerSummary } : {}),
       },
     });
 

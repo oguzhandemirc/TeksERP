@@ -30,6 +30,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import {
   postStockMove,
   postStockMoves,
+  reverseAllRollStockMoves,
   reverseStockMove,
   writeWarehouseMovement,
   writeWarehouseMovements,
@@ -137,6 +138,48 @@ function astTekKaynak(): {
   return { inlineYazim, mapSayisi, mapAnahtarlari, girdiAnahtarlari, tersSelect };
 }
 
+/**
+ * ELLE YAZILMIŞ metraj eşiği taşıyan fonksiyonların adları: 0 ile ilişkisel
+ * karşılaştırma (`<`, `<=`, `>`, `>=`) yapan VE karşı tarafında `qty` geçen
+ * ifadeler. Tek kaynak kuralı gereği bu liste BOŞ olmalı — eşik yalnız
+ * `qtyYazilabilir`in içinde, kendi yerel değişkeniyle (`q > 0`) yaşar.
+ *
+ * ⚠️ KÖR NOKTASI BİLİNÇLİ ve yazılı: eşiği `qty` geçmeyen bir yerel değişkenle
+ * yazan kopya yakalanmaz (`const n = Number(x); if (n > 0)`). Daha geniş yüklem
+ * `bozuk >= 0` gibi indeks kontrollerini de yakalayıp tripwire'ı gürültüye
+ * boğuyordu — ilk koşumda tam bu oldu. Gürültülü tripwire devre dışı bırakılır,
+ * kör noktası yazılı olan tripwire yaşar.
+ */
+function astEsikSahipleri(): string[] {
+  const metin = readFileSync(HELPER_YOLU, "utf8");
+  const src = ts.createSourceFile(HELPER_YOLU, metin, ts.ScriptTarget.ES2022, true);
+  const sahipler = new Set<string>();
+  const yigin: string[] = [];
+  const gez = (n: ts.Node): void => {
+    let itildi = false;
+    if (ts.isFunctionDeclaration(n) && n.name) { yigin.push(n.name.text); itildi = true; }
+    if (ts.isBinaryExpression(n)) {
+      const op = n.operatorToken.kind;
+      const iliskisel =
+        op === ts.SyntaxKind.LessThanToken || op === ts.SyntaxKind.LessThanEqualsToken ||
+        op === ts.SyntaxKind.GreaterThanToken || op === ts.SyntaxKind.GreaterThanEqualsToken;
+      const sifirVar = [n.left, n.right].some((t) => ts.isNumericLiteral(t) && t.text === "0");
+      // ⚠️ YALNIZ METRAJ eşiği aranır: karşı taraf `qty` geçmiyorsa bu bir indeks
+      // ya da uzunluk kontrolüdür (`bozuk >= 0`), eşik değil. İlk koşumda tam bu
+      // fark kırmızı verdi — kapsamı daraltmayan tripwire ilk haftasında devre
+      // dışı bırakılır.
+      const metrajTarafi = [n.left, n.right].some(
+        (t) => !(ts.isNumericLiteral(t) && t.text === "0") && /qty/i.test(t.getText(src)),
+      );
+      if (iliskisel && sifirVar && metrajTarafi) sahipler.add(yigin[yigin.length - 1] ?? "(modül gövdesi)");
+    }
+    ts.forEachChild(n, gez);
+    if (itildi) yigin.pop();
+  };
+  gez(src);
+  return [...sahipler].sort();
+}
+
 async function satirlar(rollId: string) {
   return prisma.warehouseMovement.findMany({
     where: { rollId },
@@ -170,6 +213,25 @@ async function main(): Promise<void> {
     "§4c ⭐ `StockMoveInput`un her alanı map'te (allowlist sessizce düşürmüyor)",
     ast.girdiAnahtarlari.length >= 10 && eksik.length === 0 && ucKolonlari.length === 0,
     `alan=${ast.girdiAnahtarlari.length} eksik=[${eksik.join(",")}] uç=[${ucKolonlari.join(",")}]`,
+  );
+
+  // §4e — METRAJ EŞİĞİ TEK KAYNAK. Eşik üç kapıda elle tekrarlandığında ayrıştı
+  // (eski toplu kapı qty=0'ı geçiriyordu, sed reddediyordu → 23514 ile tx düşüyordu).
+  // Bu tripwire eşiğin tek yüklemde kalmasını zorlar: 0 ile sayısal karşılaştırma
+  // YALNIZ `qtyYazilabilir` içinde olabilir.
+  // ⚠️ KAPSAM BİLEREK DAR: yalnız defter kapısının kendi dosyası taranır. Repo
+  // geneline yayılsa alakasız kodda kırmızı verir ve ilk haftasında devre dışı
+  // bırakılır — tripwire'ın en yaygın ölüm biçimi. Kapsam çıktıda BASILIR ki
+  // "neyin taranmadığı" görünür olsun.
+  const esikSahipleri = astEsikSahipleri();
+  // İkinci ayak: tek kaynağın KENDİSİ hâlâ orada mı? Yoksa "kopya yok" cümlesi
+  // eşiğin tamamen silindiği durumda da yeşil kalırdı (vakumen geçme).
+  const yuklemCanli = /function qtyYazilabilir\([\s\S]*?>\s*0/.test(readFileSync(HELPER_YOLU, "utf8"));
+  console.log(`   ℹ️ §4e kapsamı: 1 dosya taranmıştır — ${HELPER_YOLU.split("/").slice(-1)[0]}`);
+  check(
+    "§4e ⭐ Metraj eşiği TEK yüklemde: `qtyYazilabilir` canlı ve elle kopyası yok",
+    yuklemCanli && esikSahipleri.length === 0,
+    `yüklem=${yuklemCanli} elle_kopya=[${esikSahipleri.join(",")}]`,
   );
 
   // Satırın "taşınan bağ" alanları: map'te olup yön/metraj/sebep'ten türemeyenler.
@@ -270,19 +332,46 @@ async function main(): Promise<void> {
   // küme düşüyor ve çağıranın (sevk · transfer · sayım) tx'i ham Postgres
   // hatasıyla geri sarılıyordu. Kurşun açık kumaşı (`currentQty: 0`) bu yolu
   // bayrak gerektirmeden tetikliyordu.
-  let eskiPatladi = false;
+  const sifirSatir = { rollId: rC, eventType: WarehouseEventType.CANCEL, qty: 0, fromWarehouseId: wh.id };
+  // ── "skip" → MEŞRU atlama: fırlatmaz, satır yazmaz, ATLADIĞINI DÖNER ──────
+  let skipPatladi = false;
+  let yazildi: boolean | null = null;
+  let topluYazilan: number | null = null;
   try {
-    await writeWarehouseMovement(prisma, {
-      rollId: rC, eventType: WarehouseEventType.CANCEL, qty: 0, fromWarehouseId: wh.id,
-    });
-    await writeWarehouseMovements(prisma, [
-      { rollId: rC, eventType: WarehouseEventType.CANCEL, qty: 0, fromWarehouseId: wh.id },
-    ]);
-  } catch { eskiPatladi = true; }
+    yazildi = await writeWarehouseMovement(prisma, sifirSatir, { onZeroQty: "skip" });
+    topluYazilan = await writeWarehouseMovements(prisma, [sifirSatir], { onZeroQty: "skip" });
+  } catch { skipPatladi = true; }
   check(
-    "§10 ⭐ Eski kapılar 0 metrajda ATLIYOR (DB seddine çarpıp tx düşürmüyor)",
-    !eskiPatladi && (await satirlar(rC)).length === 0,
-    eskiPatladi ? "23514 ile düştü" : "temiz",
+    '§10a ⭐ "skip" politikası: atlar, DB seddine çarpmaz ve atladığını DÖNER',
+    !skipPatladi && yazildi === false && topluYazilan === 0 && (await satirlar(rC)).length === 0,
+    `patladı=${skipPatladi} yazıldı=${String(yazildi)} toplu=${String(topluYazilan)}`,
+  );
+  // ── "throw" → TUTARSIZLIK SİNYALİ: sessizce geçmez ────────────────────────
+  let tekilFirlatti = false;
+  let topluFirlatti = false;
+  try { await writeWarehouseMovement(prisma, sifirSatir, { onZeroQty: "throw" }); } catch { tekilFirlatti = true; }
+  try { await writeWarehouseMovements(prisma, [sifirSatir], { onZeroQty: "throw" }); } catch { topluFirlatti = true; }
+  check(
+    '§10b ⭐ "throw" politikası: 0 metrajda İKİ kapı da FIRLATIR (sessiz atlama yok)',
+    tekilFirlatti && topluFirlatti && (await satirlar(rC)).length === 0,
+    `tekil=${tekilFirlatti} toplu=${topluFirlatti}`,
+  );
+  // ── Uçsuz satır POLİTİKAYA TABİ DEĞİL: her yolda atlanır ─────────────────
+  // Defter öncesi doğan 4.553 topun deposu NULL; "throw" deseydik o topların
+  // sevki/iadesi kilitlenirdi.
+  let ucsuzFirlatti = false;
+  let ucsuzYazildi: boolean | null = null;
+  try {
+    ucsuzYazildi = await writeWarehouseMovement(
+      prisma,
+      { rollId: rC, eventType: WarehouseEventType.CANCEL, qty: 50 },
+      { onZeroQty: "throw" },
+    );
+  } catch { ucsuzFirlatti = true; }
+  check(
+    "§10c ⭐ Uçsuz satır (deposuz top) FIRLATMAZ — politika yalnız metraj için",
+    !ucsuzFirlatti && ucsuzYazildi === false && (await satirlar(rC)).length === 0,
+    `fırlattı=${ucsuzFirlatti} yazıldı=${String(ucsuzYazildi)}`,
   );
 
   // ── §6..§9 — ters kayıt ───────────────────────────────────────────────────
@@ -340,6 +429,30 @@ async function main(): Promise<void> {
     );
   } catch (e) { p2002 = e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"; }
   check("§9 ⭐ Aynı ileri satır iki kez terslenemedi (DB unique)", p2002);
+
+  // ── §11 — STATÜSÜZ satır terslenemez ama SAYILIR ──────────────────────────
+  // Eski kapılar (transfer · sevk · sayım) hâlâ statüsüz satır yazıyor; ucu
+  // kurulamayan satırın tersi de kurulamaz. Sessizce yutulursa geri alma
+  // "temiz" görünür ve mal defterde asılı kalır — bu yüzden sayı DÖNER.
+  await writeWarehouseMovement(
+    prisma,
+    { rollId: rD, eventType: WarehouseEventType.CANCEL, qty: 5, fromWarehouseId: wh.id },
+    { onZeroQty: "throw" },
+  );
+  const tersSonuc = await prisma.$transaction(async (tx) =>
+    reverseAllRollStockMoves(tx, [rD], { reasonCode: STOCK_MOVE_REASON.STOCK_COUNT }),
+  );
+  check(
+    "§11 ⭐ Statüsüz satır terslenmedi ama SAYILDI (sessiz yutma yok)",
+    tersSonuc.reversed === 0 && tersSonuc.statusuzAtlanan === 1,
+    `terslenen=${tersSonuc.reversed} statüsüz=${tersSonuc.statusuzAtlanan}`,
+  );
+  // Sayı bir yüzeye BASILIR: bu DB'de stok defterine henüz taşınmamış satır kaç
+  // tane. Küme küçülmeli; büyüyorsa yeni bir yol eski kapıdan yazıyor demektir.
+  const canliStatusuz = await prisma.warehouseMovement.count({
+    where: { fromStatus: null, toStatus: null },
+  });
+  console.log(`   ℹ️ Bu DB'de statüsüz (stok defterine taşınmamış) satır: ${canliStatusuz}`);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
