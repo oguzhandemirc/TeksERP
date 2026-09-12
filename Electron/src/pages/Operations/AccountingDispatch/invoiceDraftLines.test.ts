@@ -47,12 +47,24 @@ describe("toPrefillLines", () => {
   it("bozuk sayı NaN yazmaz (form alanı sessizce ölmesin)", () => {
     const lines = toPrefillLines({
       ...DTO,
-      lines: [{ itemId: "", description: "X", qty: "abc", unit: "", unitPrice: null as never, vatRate: 20 }],
+      lines: [{ itemId: "", description: "X", qty: "abc", unit: "m", unitPrice: null as never, vatRate: 20 }],
     });
     expect(lines[0]?.qty).toBe(0);
     expect(lines[0]?.unitPrice).toBe(0);
     expect(lines[0]?.itemId).toBeNull();
     expect(lines[0]?.unit).toBe("m");
+  });
+
+  it("⭐ birim OLDUĞU GİBİ geçer — 'kg' 'm'e çevrilmez, boş 'm' UYDURULMAZ (birim miktarın kaynağını izler)", () => {
+    const lines = toPrefillLines({
+      ...DTO,
+      lines: [
+        { itemId: "i1", description: "X", qty: 1, unit: "kg", unitPrice: 1, vatRate: 20 },
+        { itemId: "i2", description: "Y", qty: 1, unit: "", unitPrice: 1, vatRate: 20 },
+      ],
+    });
+    expect(lines[0]?.unit).toBe("kg");
+    expect(lines[1]?.unit).toBe("");
   });
 
   it("yanıt yoksa boş dizi (diyalog satırsız açılmaz, çağıran bekler)", () => {

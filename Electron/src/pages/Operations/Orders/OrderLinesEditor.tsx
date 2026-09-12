@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
 import { Plus, Trash2, PackagePlus, Package, Info, StickyNote, X } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ITEM_UNIT_CODES, ITEM_UNIT_LABEL, isMeasuredUnit, type ItemUnitCode } from "@/lib/item-unit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -205,6 +207,8 @@ export function OrderLinesEditor({ value, onChange, error, lineErrors, customerI
                           itemId: v ?? "",
                           colorId: null,
                           requiredPropertyIds: [],
+                          // Birim kalemi izler: yeni kalemde açık seçim sıfırlanır.
+                          unit: undefined,
                         })
                       }
                       service={itemService}
@@ -259,6 +263,11 @@ export function OrderLinesEditor({ value, onChange, error, lineErrors, customerI
                   {lineErrors?.[idx]?.quantity?.message && (
                     <p className="text-xs text-destructive">{lineErrors[idx]!.quantity!.message}</p>
                   )}
+                  <LineUnitSelect
+                    itemId={line.itemId}
+                    value={line.unit}
+                    onChange={(u) => updateLine(line.clientId, { unit: u })}
+                  />
                 </div>
                 <Input
                   className={`col-span-4 sm:col-span-2 text-sm ${pulseClass(Boolean(line.itemId && !line.width))}`}
@@ -375,6 +384,54 @@ export function OrderLinesEditor({ value, onChange, error, lineErrors, customerI
           await createItemMutation.mutateAsync(payload);
         }}
       />
+    </div>
+  );
+}
+
+/**
+ * Satır birimi. Seçilmemişse kalem kartının birimi GÖSTERİLİR ama GÖNDERİLMEZ
+ * (sunucu kopyalar — tek yazar). Kullanıcı değiştirirse açık değer gider.
+ * kg/adet: karşılama metre defterinden ölçülmez — sipariş kendiliğinden kapanmaz.
+ */
+function LineUnitSelect({
+  itemId,
+  value,
+  onChange,
+}: {
+  itemId: string;
+  value: ItemUnitCode | undefined;
+  onChange: (u: ItemUnitCode | undefined) => void;
+}) {
+  const itemQ = useQuery({
+    queryKey: ["order-line-item", itemId],
+    queryFn: () => itemService.getById(itemId),
+    enabled: Boolean(itemId),
+    staleTime: 60_000,
+  });
+  const itemUnit = (itemQ.data?.data as { unit?: string } | undefined)?.unit;
+  const effective = (value ?? itemUnit ?? "MT") as ItemUnitCode;
+  return (
+    <div className="flex items-center gap-1">
+      <Select
+        value={effective}
+        onValueChange={(u) => onChange(u === itemUnit ? undefined : (u as ItemUnitCode))}
+      >
+        <SelectTrigger className="h-7 w-[84px] text-xs" aria-label="Birim">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {ITEM_UNIT_CODES.map((c) => (
+            <SelectItem key={c} value={c} className="text-xs">
+              {ITEM_UNIT_LABEL[c]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {!isMeasuredUnit(effective) && (
+        <span className="text-[10px] text-amber-700" title="Sevk defteri metre tutar; bu satırın karşılaması ölçülmez, sipariş kendiliğinden kapanmaz.">
+          ölçülmez
+        </span>
+      )}
     </div>
   );
 }

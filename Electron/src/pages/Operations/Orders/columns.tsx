@@ -1,5 +1,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle } from "lucide-react";
+import { isMeasuredUnit } from "@/lib/item-unit";
 import { safeFormat } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -272,7 +273,11 @@ export const orderColumns: ColumnDef<Order>[] = [
     meta: { label: "Sevk" },
     cell: ({ row }) => {
       const o = row.original;
-      const requested = (o.lines ?? []).reduce((s, l) => s + Number(l.quantity ?? 0), 0);
+      // Yalnız METRE satırları toplanır: kg/adet satırın karşılaması ölçülmez,
+      // paydaya girseydi sipariş asla %100 görünmezdi (ve kg + m toplanamaz).
+      const requested = (o.lines ?? [])
+        .filter((l) => isMeasuredUnit(l.unit))
+        .reduce((s, l) => s + Number(l.quantity ?? 0), 0);
       if (requested === 0) {
         return <span className="text-muted-foreground text-xs">—</span>;
       }

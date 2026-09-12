@@ -56,6 +56,7 @@ function orderToFormValues(order: Order): OrderFormValues {
       itemId: l.itemId,
       colorId: l.colorId,
       quantity: l.quantity,
+      unit: l.unit,
       width: l.width,
       unitPrice: l.unitPrice ?? "",
       customerItemName: l.customerItemName ?? "",

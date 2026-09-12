@@ -69,7 +69,8 @@ export function toPrefillLines(dto: ShipmentDraftLinesDto | null | undefined): D
     itemId: l.itemId || null,
     description: l.description,
     qty: num(l.qty),
-    unit: l.unit || "m",
+    // Fallback YOK: birim miktarın kaynağını izler ve sunucu her satırda gönderir.
+    unit: l.unit,
     unitPrice: num(l.unitPrice),
   }));
 }

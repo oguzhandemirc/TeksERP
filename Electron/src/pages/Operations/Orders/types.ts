@@ -1,4 +1,5 @@
 import type { OrderStatus, WorkOrderStatus } from "@/types/enums";
+import type { ItemUnitCode } from "@/lib/item-unit";
 
 export interface OrderLineColor {
   id: string;
@@ -11,6 +12,8 @@ export interface OrderLineItem {
   id: string;
   code: string;
   name: string;
+  /** Kalem kartının birimi — satır birimi buradan kopyalanır. */
+  unit?: ItemUnitCode;
   /** Item'ın olası özellikleri (allowed). Boşsa = serbest. */
   allowedProperties?: {
     propertyId: string;
@@ -33,6 +36,11 @@ export interface OrderLine {
   itemId: string;
   colorId: string | null;
   quantity: number;
+  /**
+   * Satır birimi (MT/KG/ADET). Eski backend göndermez → metre sayılır.
+   * MT dışı satırda karşılama ÖLÇÜLMEZ (`isMeasuredUnit`): shippedQty 0, Σ'ya girmez.
+   */
+  unit?: ItemUnitCode;
   width: number | null;
   unitPrice: string | null;
   /** Müşteri-bazlı kumaş adı override (1-shot). Boşsa master alias veya default'a düşer. */

@@ -5,6 +5,8 @@ export const orderLineSchema = z.object({
   itemId: z.string().min(1, "Kumaş seçilmeli"),
   colorId: z.string().nullable().optional(),
   quantity: z.coerce.number().positive("Miktar 0'dan büyük olmalı"),
+  // Boş = kalem kartından kopyalanır (sunucu); seçilirse açık gönderilir.
+  unit: z.enum(["MT", "KG", "ADET"]).optional(),
   width: z
     .union([
       z.coerce.number().positive("En 0'dan büyük olmalı"),

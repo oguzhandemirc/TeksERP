@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import type { ItemUnitCode } from "@/lib/item-unit";
 import { Ban, PanelRight, Pencil, Plus, Wrench } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
@@ -121,6 +122,8 @@ interface CreatePayload {
     itemId: string;
     colorId: string | null;
     quantity: number;
+    /** Gönderilmezse sunucu kalem kartından kopyalar. */
+    unit?: ItemUnitCode;
     width: number | null;
     unitPrice?: string | null;
     customerItemName?: string | null;
@@ -136,6 +139,7 @@ interface UpdateLinePayload {
   itemId: string;
   colorId: string | null;
   quantity: number;
+  unit?: ItemUnitCode;
   width: number | null;
   unitPrice?: string | null;
   customerItemName?: string | null;
@@ -172,6 +176,7 @@ function buildCreatePayload(
       itemId: l.itemId,
       colorId: l.colorId ?? null,
       quantity: l.quantity,
+      ...(l.unit ? { unit: l.unit } : {}),
       width: l.width ?? null,
       ...(pricingEnabled
         ? { unitPrice: l.unitPrice ? String(l.unitPrice) : null }
@@ -182,6 +187,15 @@ function buildCreatePayload(
       requiredPropertyIds: l.requiredPropertyIds ?? [],
     })),
   };
+}
+
+/**
+ * Sunucu `warnings` (engel değil): kg/adet satırda karşılama ölçülmüyor.
+ * Sessiz kalırsa kullanıcı siparişin neden kendiliğinden kapanmadığını anlayamaz.
+ */
+function showUnitWarnings(res: unknown): void {
+  const w = (res as { warnings?: string[] } | null | undefined)?.warnings ?? [];
+  for (const msg of w) toast.warning(msg, { duration: 8000 });
 }
 
 function buildUpdatePayload(
@@ -214,6 +228,7 @@ function buildUpdatePayload(
             itemId: l.itemId,
             colorId: l.colorId ?? null,
             quantity: l.quantity,
+            ...(l.unit ? { unit: l.unit } : {}),
             width: l.width ?? null,
             ...(pricingEnabled
               ? { unitPrice: l.unitPrice ? String(l.unitPrice) : null }
@@ -346,8 +361,9 @@ export function OrdersPage() {
   const createMut = useMutation({
     mutationFn: (payload: CreatePayload) =>
       orderService.create(payload as unknown as Partial<Order>),
-    onSuccess: () => {
+    onSuccess: (res) => {
       toast.success("Sipariş oluşturuldu.");
+      showUnitWarnings(res);
       void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
       setFormOpen(false);
     },
@@ -356,8 +372,9 @@ export function OrdersPage() {
   const updateMut = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: UpdatePayload }) =>
       orderService.update(id, payload as unknown as Partial<Order>),
-    onSuccess: () => {
+    onSuccess: (res) => {
       toast.success("Sipariş güncellendi.");
+      showUnitWarnings(res);
       void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
       setFormOpen(false);
       setEditing(null);

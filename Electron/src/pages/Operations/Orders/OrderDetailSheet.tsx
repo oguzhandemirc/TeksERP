@@ -28,6 +28,7 @@ import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { orderStatusLabels } from "@/types/enums";
 import { CoveragePanel } from "@/pages/Operations/WorkOrders/CoveragePanel";
 import { lineOpen } from "@/pages/Operations/WorkOrders/order-fulfillment";
+import { isMeasuredUnit, unitLabel } from "@/lib/item-unit";
 import { buildPicked, type PickedOrderLine } from "@/pages/Operations/WorkOrders/OrderPickerDialog";
 import { orderService } from "./service";
 import { returnsService } from "@/pages/Operations/Returns/service";
@@ -156,7 +157,12 @@ export function OrderDetailSheet({
   // görünmezdi (backend statüyü COMPLETED yaparken ekran "kısmi" derdi).
   const activeLines = order?.lines.filter((l) => l.cancelledAt == null) ?? [];
   const cancelledLineCount = (order?.lines.length ?? 0) - activeLines.length;
-  const totalQty = activeLines.reduce((acc, l) => acc + Number(l.quantity), 0);
+  // Toplam ve ilerleme YALNIZ metre satırlarından: kg/adet satırın karşılaması
+  // metre defterinden ölçülmez (shippedQty 0) — paydaya girse yüzde yalan olurdu.
+  const unmeasuredLineCount = activeLines.filter((l) => !isMeasuredUnit(l.unit)).length;
+  const totalQty = activeLines
+    .filter((l) => isMeasuredUnit(l.unit))
+    .reduce((acc, l) => acc + Number(l.quantity), 0);
   const isEditable = order && (order.status === "APPROVED" || order.status === "PARTIAL_SHIPPED");
   const isCancellable = order && order.status !== "COMPLETED" && order.status !== "CANCELLED";
   const canClose = order && (order.status === "PENDING" || order.status === "APPROVED" || order.status === "PARTIAL_SHIPPED");
@@ -250,6 +256,11 @@ export function OrderDetailSheet({
                   <div className="font-medium tabular-nums">
                     {totalQty.toLocaleString("tr-TR", { useGrouping: false })} m
                   </div>
+                  {unmeasuredLineCount > 0 && (
+                    <div className="mt-1 text-[11px] text-amber-700">
+                      {unmeasuredLineCount} kalem kg/adet — karşılama ölçülmüyor
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -427,7 +438,10 @@ export function OrderDetailSheet({
                               <span className="font-medium text-foreground">
                                 {line.quantity.toLocaleString("tr-TR", { useGrouping: false })}
                               </span>{" "}
-                              metre
+                              {unitLabel(line.unit)}
+                              {!isMeasuredUnit(line.unit) && (
+                                <span className="ml-1 text-amber-700">· karşılama ölçülmüyor</span>
+                              )}
                             </span>
                             {line.width != null && <span>En: {line.width} cm</span>}
                             {line.unitPrice && (
