@@ -19,7 +19,16 @@
 //   §5 `KIND_STORES_TEXT` DEĞER eşitliği (yalnız anahtar değil) — bir kind
 //      sunucuda metin saklarken tablette saklamıyorsa satır metinsiz gider.
 //   §6 Negatif sonda (bellek içi): ayrıştırıcıların gerçekten kırmızı verdiği
-//      ölçülür — eksik değer, fazla değer ve bozuk blok.
+//      ölçülür — eksik değer, fazla değer, bozuk blok, ön-ek çapası, belirsiz çapa.
+//
+// NEGATİF SONDA — ÜRETİLEBİLİR TARİF (sayı değil, işlem yazılır; ara ölçümdeki
+// "N geçti / M kaldı" rakamı aynanın o günkü sayısına bağlıdır ve tekrarlanmaz):
+//   ① `schema.prisma`daki enum'a 7. bir değer ekle → ON İKİ aynanın hepsi kırmızı.
+//   ② Tabletin union'ından bir değer sil → o tek ayna kırmızı, diğerleri yeşil.
+//   ③ Panelin `KIND_STORES_TEXT`inde bir `true`yu `false` yap → §5 kırmızı.
+//   ④ Gerçek bir tablonun ÜSTÜNE aynı adın `_V2` ön ekli ikizini koy → §6i kırmızı
+//      (yamadan önce bekçi bunu GÖREMİYORDU: sahte tabloya kilitleniyordu).
+// Her sonda sonrası dosya `git checkout --` ile geri alınır.
 // =============================================================================
 
 import { readFileSync } from "fs";
@@ -66,10 +75,36 @@ function govdeBasi(temiz: string, basla: number, acilisKarakteri: string): numbe
   return temiz.indexOf(acilisKarakteri, aramaBasi);
 }
 
+/**
+ * Çapayı BİLDİRİM düzeyinde arar ve TEKİLLİĞİNİ ölçer.
+ *
+ * Düz `indexOf(ad)` kelime sınırı tanımıyordu: gerçek tablonun ÜSTÜNE
+ * `KIND_STORES_TEXT_V2` koymak ayrıştırıcıyı o sahte bildirime kilitliyor,
+ * gerçek tablodan silinen değer görünmüyor ve bekçi SAHTE YEŞİL veriyordu.
+ * Belirsiz çapa (aynı adın birden çok bildirimi) da sessiz kalmaz: -1 döner,
+ * küme boşalır ve §1 körlük zemini kırmızıya düşer.
+ */
+function capaKonumu(temiz: string, ad: string): number {
+  const adi = ad
+    .replace(/^(?:export\s+)?(?:const|let|var|type|function|enum|interface)\s+/, "")
+    .trim();
+  const re = new RegExp(
+    `(?:^|[^A-Za-z0-9_$])(?:export\\s+)?(?:const|let|var|type|function|enum|interface)\\s+${adi}\\b`,
+    "g",
+  );
+  const eslesmeler = [...temiz.matchAll(re)];
+  if (eslesmeler.length !== 1) return -1;
+  // ADIN konumu döner, eşleşmenin başı DEĞİL: eşleşme önündeki ayraç karakterini
+  // de yutuyor ve `govdeBasi` o konumdan "bildirim satırı"nı okurken bir önceki
+  // satırın kuyruğunu görüp `=` bulamıyordu (ölçüldü: KIND_TABS 0 anahtar).
+  const m = eslesmeler[0]!;
+  return m.index + m[0].length - adi.length;
+}
+
 /** `ad` ile başlayan bildirimin `{...}` gövdesini dengeleyerek alır. */
 export function blokAl(metin: string, ad: string): string | null {
   const temiz = yorumsuz(metin);
-  const basla = temiz.indexOf(ad);
+  const basla = capaKonumu(temiz, ad);
   if (basla < 0) return null;
   const acilis = govdeBasi(temiz, basla, "{");
   if (acilis < 0) return null;
@@ -97,7 +132,7 @@ export function enumDegerleri(metin: string, ad: string): string[] {
 /** `export type X = | 'A' | 'B';` — tırnaklı literaller. */
 export function unionDegerleri(metin: string, ad: string): string[] {
   const temiz = yorumsuz(metin);
-  const basla = temiz.indexOf(`type ${ad} =`);
+  const basla = capaKonumu(temiz, `type ${ad}`);
   if (basla < 0) return [];
   const son = temiz.indexOf(";", basla);
   if (son < 0) return [];
@@ -125,7 +160,7 @@ export function haritaAnahtarlari(metin: string, ad: string): string[] {
 /** `const X = [{ kind: "A" }, ...]` — dizi içindeki `kind:` alanları. */
 export function kindAlanlari(metin: string, ad: string): string[] {
   const temiz = yorumsuz(metin);
-  const basla = temiz.indexOf(ad);
+  const basla = capaKonumu(temiz, ad);
   if (basla < 0) return [];
   const acilis = govdeBasi(temiz, basla, "[");
   if (acilis < 0) return [];
@@ -238,11 +273,21 @@ async function main(): Promise<void> {
   const bBool = boolHaritasi(backend, "KIND_STORES_TEXT");
   const pBool = boolHaritasi(panel, "KIND_STORES_TEXT");
   const tBool = boolHaritasi(tabletServis, "KIND_STORES_TEXT");
+  // ⚠️ ÜÇ ZEMİN, tek değil: yalnız backend'e zemin koymak §5'i SESSİZCE
+  // geçirilebilir kılıyordu — panel ya da tablet ayrıştırıcısı tümden körleşse
+  // (çapa kayması, dosya taşınması) o taraf boş küme döner ve aşağıdaki
+  // karşılaştırma hiçbir şey bulamadan yeşil verirdi.
   check("körlük zemini: backend tablosunda boolean okundu", Object.keys(bBool).length >= 5, `${Object.keys(bBool).length} satır`);
+  check("körlük zemini: PANEL tablosunda boolean okundu", Object.keys(pBool).length >= 5, `${Object.keys(pBool).length} satır`);
+  check("körlük zemini: TABLET tablosunda boolean okundu", Object.keys(tBool).length >= 5, `${Object.keys(tBool).length} satır`);
   for (const kind of enumDeger) {
+    // Anahtarın YOKLUĞU da ihlaldir: "okunamadı"yı sessizce atlamak, ölçtüğünü
+    // iddia eden yeşil üretir. Eksik anahtar = ayna o kind'ı hiç tanımıyor.
     const sapan: string[] = [];
-    if (kind in pBool && pBool[kind] !== bBool[kind]) sapan.push(`panel=${pBool[kind]}`);
-    if (kind in tBool && tBool[kind] !== bBool[kind]) sapan.push(`tablet=${tBool[kind]}`);
+    if (!(kind in pBool)) sapan.push("panel=OKUNAMADI");
+    else if (pBool[kind] !== bBool[kind]) sapan.push(`panel=${pBool[kind]}`);
+    if (!(kind in tBool)) sapan.push("tablet=OKUNAMADI");
+    else if (tBool[kind] !== bBool[kind]) sapan.push(`tablet=${tBool[kind]}`);
     check(`${kind}: metin saklama bayrağı aynı`, sapan.length === 0, sapan.length ? `backend=${bBool[kind]} ↔ ${sapan.join(", ")}` : `${bBool[kind]}`);
   }
 
@@ -263,6 +308,20 @@ async function main(): Promise<void> {
   check("§6g switch case ayrıştırıcısı çalışıyor", caseDegerleri(sahteSwitch, "function builtin").join(",") === "A,B");
   const sahteBool = "export const M: R = {\n  A: true,\n  B: false,\n};\n";
   check("§6h boolean haritası değer okuyor", boolHaritasi(sahteBool, "const M").A === true && boolHaritasi(sahteBool, "const M").B === false);
+  // §6i/§6j — ÇAPA SINIFI (2026-09-12 K4 denetimi): ön-ek eşleşmesi sahte yeşil
+  // üretiyordu. Tek örneği (`BUILTIN_${i}`) yamamak sınıfı kapatmaz.
+  const onEk = "export const M_V2: R = {\n  ZZZ: 1,\n};\nexport const M: R = {\n  A: 2,\n};\n";
+  check(
+    "§6i ÖN-EK bildirimi çapayı çalmıyor (M_V2 varken M gerçek tabloyu verir)",
+    haritaAnahtarlari(onEk, "const M").join(",") === "A",
+    haritaAnahtarlari(onEk, "const M").join(",") || "(boş)",
+  );
+  const ikiKez = "export const M: R = {\n  A: 1,\n};\nexport const M: R = {\n  B: 2,\n};\n";
+  check(
+    "§6j BELİRSİZ çapa (iki bildirim) BOŞ küme döndürüyor — sessiz yeşil değil",
+    haritaAnahtarlari(ikiKez, "const M").length === 0,
+    `${haritaAnahtarlari(ikiKez, "const M").length} anahtar`,
+  );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);
