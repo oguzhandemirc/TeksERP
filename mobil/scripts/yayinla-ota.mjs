@@ -54,6 +54,7 @@ import {
   yayindakiApkKunyesi,
   yayindakiTabletSurumu,
 } from '../../scripts/lib/surum.mjs';
+import { surumNotlariniOku, tavanUyarisi } from '../../scripts/lib/surum-notu-tavan.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(HERE, '..');
@@ -439,10 +440,8 @@ async function main() {
       );
     }
     // Etiket KARAR verir, sunucu DOĞRULAR — gerekçe: scripts/lib/surum.mjs.
-    const kiyas = etiketDefteriKiyasla(
-      karar.surum,
-      await yayindakiTabletSurumu(manifestUrl(feed, runtimeVersion), runtimeVersion),
-    );
+    const yayinda = await yayindakiTabletSurumu(manifestUrl(feed, runtimeVersion), runtimeVersion);
+    const kiyas = etiketDefteriKiyasla(karar.surum, yayinda);
     if (kiyas.durum === 'zaten-yayinda') {
       dur(
         `${karar.surum} ZATEN YAYINDA`,
@@ -470,6 +469,9 @@ async function main() {
     if (kiyas.durum === 'olculemedi') {
       uyari('Yayındaki sürüm okunamadı; etiket defteri DOĞRULANMADI (internet?).');
     }
+    // Yayınlanmamış tur sayısı açılış modalinin tavanını aşıyorsa söyle (uyarı, blok değil).
+    const tavan = tavanUyarisi(surumNotlariniOku(), 'tablet', yayinda, karar.surum);
+    if (tavan) uyari(tavan);
     hedefSurum = karar.surum;
     bilgi(`Sürüm             : ${karar.surum} — ${karar.gerekce}`);
   }

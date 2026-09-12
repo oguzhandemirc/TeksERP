@@ -161,6 +161,23 @@ for (const k of KOPYALAR) {
       : bayat ? "kopya BAYAT (kaynaktan farklı) — node scripts/surum-notlari-kopyala.mjs" : "");
 }
 
+console.log("\n§7 — Modal tavanı tek kaynak");
+// Üç sabit aynı olmalı: paketleme uyarısı istemcinin gerçek tavanını söylesin.
+{
+  const tavanOku = (rel) => {
+    const m = /MODAL_TAVAN = (\d+)/.exec(fs.readFileSync(path.join(kok, rel), "utf8"));
+    return m ? Number(m[1]) : null;
+  };
+  const degerler = {
+    "scripts/lib/surum-notu-tavan.mjs": tavanOku("scripts/lib/surum-notu-tavan.mjs"),
+    "Electron/src/lib/surum-notlari.ts": tavanOku("Electron/src/lib/surum-notlari.ts"),
+    "mobil/src/services/surumNotlari.ts": tavanOku("mobil/src/services/surumNotlari.ts"),
+  };
+  const kume = new Set(Object.values(degerler));
+  check("MODAL_TAVAN üç dosyada aynı ve okunabilir", kume.size === 1 && !kume.has(null),
+    Object.entries(degerler).map(([k, v]) => `${k}=${v}`).join(" · "), true);
+}
+
 // --- Yayın kapısı (argümanla) -------------------------------------------
 const panelSurum = arg("panel");
 const tabletSurum = arg("tablet");

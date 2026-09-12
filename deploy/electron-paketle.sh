@@ -61,6 +61,7 @@ if [ -z "$istenen_surum" ]; then
     import {
       etiketDefteriKiyasla, sonrakiSurumEtiketten, yayindakiPanelSurumu,
     } from '$kok/scripts/lib/surum.mjs';
+    import { surumNotlariniOku, tavanUyarisi } from '$kok/scripts/lib/surum-notu-tavan.mjs';
     const k = sonrakiSurumEtiketten('panel');
     if (!k.surum) {
       console.error('  ✖ Sıradaki sürüm belirlenemedi: ' + k.gerekce);
@@ -90,6 +91,9 @@ if [ -z "$istenen_surum" ]; then
     if (kiyas.durum === 'olculemedi') {
       console.error('  ⚠  Yayındaki sürüm okunamadı; etiket defteri DOĞRULANMADI (internet?).');
     }
+    // Yayınlanmamış tur sayısı modal tavanını aşıyorsa söyle (uyarı, blok değil).
+    const tavan = tavanUyarisi(surumNotlariniOku('$kok'), 'panel', yayinda, k.surum);
+    if (tavan) console.error('  ⚠  ' + tavan);
     console.error('  Sürüm: ' + k.surum + ' — ' + k.gerekce);
     console.log(k.surum);
   ") || hata "Sıradaki sürüm hesaplanamadı."
