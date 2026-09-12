@@ -8089,3 +8089,81 @@ olur): `RETURN` · `SackAllocation` · `RollPlanDeviation` · `ShipmentOrder` (a
 `status: DRAFT`** arkasında ⇒ hard-delete sınıf ④ (*fark CLAIM'dir*, "bağımsız sil-yaz" ile karıştırılmaz);
 `ShipmentOrder` + `SackTagAssignment` `SackAllocation` ailesinde ⇒ **borç**; `subcontractorDispatchItem`
 sınırda ve **sınırda olduğu söylenerek** geçirildi (5 bağımsız yazım, 0 silme).
+
+## 2026-09-13 — Karar ② UYGULANDI: `OrderLine.unit`, "birim miktarın kaynağını izler", üç çürütme [ÇEKİRDEK]
+
+**Saha sorusu / ölçüm.** Miktar zinciri metre varsayıyordu; `Item.unit` (MT/KG/ADET) mal kabul
+dışında hiç okunmuyordu. Kiloyla satan bir örmecide 1000 kg'lık satır ~1000 m sevkte sessizce
+KAPANIYOR ve kg'a metre fiyatı çarpılıyordu. Ölçüldü (`tekserp_fabrika_dev`, `8ce92cb3`):
+245/245 kalem MT · 474/474 sipariş satırı MT · `order_lines.unit` yok · `invoice_lines` 0 satır
+(finans bu fabrikada hiç yazmamış) · d9'un HTTP sondası: MT kalem ve KG kalem 100 m sevkte
+**birebir aynı** sonucu veriyordu (shippedQty 100, COMPLETED, uyarı yok).
+
+**Karar (1e onayı, `docs/design/CAKILI-VARSAYIM-KARAR.md` §②):** `OrderLine.unit ItemUnit
+@default(MT)` SATIR düzeyinde; yaratılırken kalem kartından kopyalanır, satırda düzenlenebilir.
+MT satır = bugünkü Σ; KG/ADET satırda karşılama ÖLÇÜLMEZ (`shippedQty` yazılmaz, header Σ
+yalnız MT, sipariş kendiliğinden kapanmaz, yanıt `warnings` taşır). Kilo karşılamanın KENDİSİ
+bu kararın DIŞINDA — top başına net kg yok, KK1 metre; "örme dilimi" ayrı tasarım. Bu karar
+sessiz yanlışı DURDURUR, örmeciyi çalıştırmaz.
+
+**Uygulamada üç çürütme (planı ölçüm düzeltti, 1e kabul etti):**
+- **Ç1 — "fatura/taslak satırı `unit`i satırdan alır" yanlış genellenmişti.** Sevk taslağı
+  (`shipment-auto-draft.helper.ts`) ve irsaliye (`shipping.service.ts` sevk belgesi) miktarı
+  Σ `Roll.currentQty` / `SackAllocation.qty` = METRE'dir; KG satırdan birim alınsaydı 1000 m'ye
+  "kg" basılırdı — aynı yalan ters yönde. **Kural: birim MİKTARIN KAYNAĞINI izler.** Defterden
+  türeyen miktar "m" KALIR; MT-dışı satırdan doğan taslağa `warnings` + taslak notuna "⚠" gider.
+  İrsaliyeye uyarı GÖMÜLMEZ (donmuş müşteri belgesinde iç veri opt-in kuralı); uyarı kanalı
+  sipariş detayı + taslak. Yan bulgu: `InvoiceLine.unit` iki sözlük taşıyordu (mal kabul "MT"
+  enum kodu, sevk taslağı "m") — 0 satırda gizli; tek etiket haritası `src/constants/item-unit.ts`.
+- **Ç2 — `fulfillmentMeasured` KOLON DEĞİL, türev** (`unit === MT`). İşaret birimin kendisidir;
+  migration hiçbir rakam yazmaz, MT-dışı + şişmiş `shippedQty` satırını `RAISE NOTICE` ile SAYAR.
+  İstemciler `unit`ten hesaplar (panel/tablet `lib/item-unit.ts` ikizleri).
+- **Ç3 — mutabakat §1/§2 `unit = 'MT'` süzgeci:** metre defterinin dışındaki satır metre
+  mutabakatına girmez; SQL (`consistency-check.sql`) ve TS ikizi aynı commit'te.
+- Ayrıca: satır yaratan kod sitesi beş değil İKİ (`order.service.ts` create whitelist map ve
+  update yeni satır); beş çağıran (panel, tablet, `quickOrderFromRolls`, içe aktarım, —) hepsi
+  `create()`e akar. Sipariş uçlarında Zod YOK: "route şeması" = `ORDER_LINE_WRITABLE` allowlist'i;
+  **allowlist alanı GEÇİRİR, doğrulamaz** — `unit` allowlist'e girdi + `resolveLineUnit` enum'a
+  karşı 400 TR. HTTP ile ölçüldü: `unit:"LB"` → 400 · MT kalem + `unit:"KG"` → 201 satır KG ·
+  unit'siz → kalemden kopya. Tolerans tuzağı yakalandı: 3 kg'lık satır 5 m toleransın altında
+  kalsa da sipariş kapanmaz (`unmeasuredActive` COMPLETED'ı kilitler). KG satıra defter satırı
+  düşmüşse "bir şey çıktı" = PARTIAL_SHIPPED.
+- **İçe aktarım başlığı "Miktar (m)" KORUNDU** (plan "Miktar" diyordu): panel Excel başlığını
+  ETİKETLE eşler (`Electron/src/lib/import/parse.ts` byLabel) — yeniden adlandırmak indirilmiş
+  şablonları kırardı. Yeni "Birim" çocuk sütunu (Metre/Kilogram/Adet), boş = gönderilmez.
+  Kural: kullanıcının indirdiği şablon bir sözleşmenin dondurulmuş kopyasıdır; başlık/sütun
+  adı değişikliği sürüm kırıcıdır ve `minVersion` uygulanamaz.
+
+**Kod çapaları:** `prisma/schema.prisma` OrderLine.unit · migration
+`20260913020000_order_line_unit` (ADDITIVE: kolon + `items.unit` backfill + NOTICE) ·
+`src/constants/item-unit.ts` · `services/helpers/order-status.helper.ts` (`isMeasuredUnit` dalı,
+`unmeasuredLineWarnings`) · `services/order.service.ts` (`validateLineItems` → unit haritası,
+`resolveLineUnit`, `withUnitWarnings`, `findById`) · `routes/finance.routes.ts` (fatura satırı
+`unit` zorunlu) · `services/invoice.service.ts` (fallback'ler kalktı, `unitLabel`) ·
+`services/goods-receipt.service.ts` (yerel `UNIT_LABEL` kalktı) ·
+`services/helpers/shipment-auto-draft.helper.ts` (`warnings`) · `import/adapters/order.adapter.ts`
+· panel `Electron/src/lib/item-unit.ts` + `Orders/*` + `invoiceDraftLines.ts` · tablet
+`mobil/src/lib/item-unit.ts` + `Siparis/*`.
+
+**Bekçiler:** `test_order_line_unit_ledger` (23; negatif sonda: kopya MT'ye sabit → 11 ❌,
+`isMeasuredUnit` true → 9 ❌, adaptör geçişi kapalı → 1 ❌) · `test_auto_draft_shipment` §9 (4;
+toplayıcı [] → 2 ❌) · `test_consistency` §1/§2 süzgeç · d9'un HTTP sondası
+`test_order_line_unit.ts` (§1c/§1d/§3c/§3d, ayrı katman) · panel `invoiceDraftLines.test.ts`
+("kg" çevrilmez, boş "m" uydurulmaz).
+
+**Üç kapı:** migration EVET (additive, backend ÖNCE) · izin HAYIR · APK/OTA: tablet etiket
+değişikliği OTA'ya sığar; eski APK KG satırda " m" basar (veri doğru, etiket yanlış) → sürüm
+notu. `minVersion` GEREKMEZ.
+
+**Bilinen eksik (kuyruk, 1e hükmü — #7 "kapsam b"):** metre-Σ okuyucular (`production-balance`,
+`stock-scorecard`, `coverage.helper`, `allocation.helper` need, `workorder-link` openQty, panel
+`order-fulfillment.ts`, tablet `OrderLinkPicker`) 1000 kg'ı hâlâ 1000 m açık talep sayar —
+`order-line-scope.helper.ts`e `MEASURED_LINE` tek-kaynak süzgeci ayrı commit'te; tahsis
+DEĞİŞMEZ (defter satırı gerçektir, örme dilimi kg'a çevirecek). Bu fabrikada 0 satır etkilenir.
+
+**Ortam dersi:** `tekserp_e2e_test` şablonu gün içinde ileri migration aldı (ea'nın
+`quality_grade_role`); HEAD worktree'sinden klon drift kırmızısı verdi — hizalı şablon
+`tekserp_6e_test`. `TEMPLATE` klonu başka oturumun yarım fixture'ını da kopyalayabiliyor
+(§1/§20 sahte kırmızı). `tekserp_9b_test` + `tekserp_9b2_test` DROP bekliyor (kapı DROP'u
+kullanıcıya bırakır). Tablet `update-feed-url.test.ts` worktree'de ignore edilen `keystore/`
+olmadan kırmızı — sembolik bağ.

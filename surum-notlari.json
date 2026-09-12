@@ -17,6 +17,31 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-09-13",
+      "baslik": "Sipariş kalemine birim geldi: metre, kilo, adet — kilo/adet kalemde karşılama ölçülmez, sipariş kendiliğinden kapanmaz",
+      "surumler": {
+        "panel": "1.3.3",
+        "tablet": "1.0.8"
+      },
+      "maddeler": [
+        {
+          "kapsam": "her-ikisi",
+          "tip": "yeni",
+          "metin": "Sipariş kalemine artık birim yazılıyor: metre, kilo ya da adet. Kalem eklerken birim ürün kartından kendiliğinden gelir; gerekirse panelde satırda değiştirilir. Metreyle satılan kumaşta hiçbir şey değişmedi. Kiloyla ya da adetle yazılmış bir kalemde ise sistem sevk edilen miktarı ÖLÇMEZ: o satır “karşılama ölçülmüyor” uyarısıyla görünür ve sipariş kendiliğinden kapanmaz; kapatma kararı sizindir. Önceden kilo yazılan bir sipariş metre sayılarak sessizce kapanabiliyordu — artık kapanmaz. Eski tablet sürümü böyle bir kalemi “m” etiketiyle gösterir; rakam doğrudur, etiket güncellemeyle düzelir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Sevkiyattan üretilen fatura taslağı, kilo ya da adet birimli bir sipariş kalemine mal yazılmışsa bunu söylüyor: taslağın notunda ve önizleme uyarısında “satır kg birimli — taslak miktarı metre defterinden, elle düzeltin” yazar. Taslak satırı yine metre gösterir; çünkü sevk defteri metre tutar, kiloya çevirip basmak yanlış rakam olurdu. Fatura formunda satır birimi artık boş bırakılamaz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Toplu sipariş yükleme şablonuna “Birim” sütunu eklendi (Metre / Kilogram / Adet). Boş bırakılırsa kalemin kartındaki birim kullanılır. Mevcut “Miktar (m)” başlığı değişmedi; indirilmiş eski şablonlar aynen çalışır. Üretim dengesi ve stok karnesi gibi metre toplayan ekranlar kilo/adet kalemi henüz ayırt etmiyor — o kalemler oralarda hâlâ metre gibi toplanır; ayrı bir güncellemede düzelecek."
+        }
+      ]
+    },
+    {
       "id": "2026-09-12",
       "baslik": "Yanlış yapılan işlemler geri alınabiliyor: kartela düşümü, sayım, çek, toplu aktarım; sevk irsaliyesi tek pencerede toplandı",
       "surumler": {

@@ -43,6 +43,7 @@
 - **[ÇEKİRDEK]** Ekstre satırı ters-kayıt bağını KENDİSİ taşır (`reversedByTxnId`, `reverses` ilişkisinden türer) — panel yüklemleri kesin bilgiyle çalışır; sezgisel sayım yalnız eski-backend fallback'idir. <sub>(CLAUDE.md:286)</sub>
 - **[ÇEKİRDEK]** Negatif kasa guard'ında asıl serileştirici 8028 advisory kilididir (kasa/banka dönem kilidi uzayı); `FOR UPDATE` yalnız derinlik savunmasıdır. Storno/ters yollar guard'dan MUAF — muafiyet bekçinin asıl negatif sondasıdır. · bekçi: `test_cash_negative_guard.ts` <sub>(CLAUDE.md:286)</sub>
 - **[ÇEKİRDEK]** Kasa/banka bakiyesini okuyan her yüzey çek olayının para etkisini `CHEQUE_EVENT_CASH_EFFECT`ten (`helpers/cheque-cash-events.helper.ts`) alır; `e.type IN ('COLLECT', …)` kümesi elle yazılmaz. · bekçi: `test_cheque_reversal.ts` §10 <sub>(arşiv:2026-09-11)</sub>
+- **[ÇEKİRDEK]** Fatura satırında `unit` ZORUNLUDUR (Zod `min(1)`, panel formu her satırda gönderir); servis `?? "m"` fallback'i taşımaz. Enum kodu (MT/KG/ADET) belgeye TEK sözlükten basılır (`constants/item-unit.ts` `unitLabel`: m/kg/adet) — mal kabul faturasının "MT" yazıp sevk taslağının "m" yazdığı ikili sözlük 0 satırda gizliydi, kalktı. · bekçi: `test_finance_invoice.ts`, `test_goods_receipt_invoice.ts` <sub>(arşiv:2026-09-13)</sub>
 
 ### Tuzaklar
 

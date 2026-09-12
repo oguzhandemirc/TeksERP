@@ -5,13 +5,13 @@
 | Alan | Dosya | Arşiv tarihleri |
 |---|---|---|
 | **Defter · Hareket tablosu · Ters kayıt · Hard delete** | `docs/kurallar/defter.md` | 2026-09-10 |
-| Sevkiyat · Çuval · Brüt · Storno/İade | `docs/kurallar/sevkiyat.md` | 2026-08-02, 2026-08-03, 2026-08-05, 2026-08-21, 2026-08-22, 2026-08-25 |
+| Sevkiyat · Çuval · Brüt · Storno/İade | `docs/kurallar/sevkiyat.md` | 2026-08-02, 2026-08-03, 2026-08-05, 2026-08-21, 2026-08-22, 2026-08-25, 2026-09-13 |
 | Fason · Kartela | `docs/kurallar/fason.md` | 2026-08-04, 2026-08-19 |
 | Tambur · Finalize · Kesim · Geri alma | `docs/kurallar/tambur.md` | 2026-08-04, 2026-08-12, 2026-08-13, 2026-09-03 |
 | Top düzeltme · İptal · Fire · Geri alma | `docs/kurallar/top-duzeltme.md` | 2026-07-13, 2026-08-05, 2026-08-06, 2026-08-12, 2026-08-19, 2026-08-21, 2026-08- |
 | KK1 · İdempotency · Çevrimdışı kuyruk | `docs/kurallar/kk1.md` | 2026-08-05, 2026-08-12 |
 | Kurşun planlama · Bypass | `docs/kurallar/kursun.md` | 2026-08-05, 2026-08-06 |
-| İş emri · Sipariş bağı | `docs/kurallar/is-emri.md` | 2026-08-04, 2026-08-21, 2026-08-25 |
+| İş emri · Sipariş bağı | `docs/kurallar/is-emri.md` | 2026-08-04, 2026-08-21, 2026-08-25, 2026-09-13 |
 | Rota · Renk · Özellik · Kapsama | `docs/kurallar/rota-renk.md` | 2026-08-06, 2026-08-10, 2026-08-19, 2026-08-21, 2026-08-27 |
 | Kalite · İstasyon yeteneği | `docs/kurallar/kalite.md` | 2026-08-02, 2026-08-06, 2026-09-03 |
 | Parti (Batch) | `docs/kurallar/parti.md` |  |
@@ -29,5 +29,5 @@
 | Yetki · İzin · Rol | `docs/kurallar/yetki-izin.md` | 2026-08-06, 2026-08-26, 2026-09-03 |
 | Filtre · Liste · Arama · Sıralama | `docs/kurallar/filtre-liste.md` | 2026-08-06, 2026-08-12, 2026-08-27 |
 | Raporlar · Karneler | `docs/kurallar/raporlar.md` | 2026-08-09 |
-| Finans · Sağlamlık sınıfları | `docs/kurallar/finans.md` | 2026-08-02 |
-| Genel · Uzak erişim · Konvansiyon | `docs/kurallar/genel.md` | 2026-09-01 |
+| Finans · Sağlamlık sınıfları | `docs/kurallar/finans.md` | 2026-08-02, 2026-09-13 |
+| Genel · Uzak erişim · Konvansiyon | `docs/kurallar/genel.md` | 2026-09-01, 2026-09-13 |

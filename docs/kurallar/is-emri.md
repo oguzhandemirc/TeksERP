@@ -22,6 +22,7 @@
 - **[ÇEKİRDEK]** WO kapsamı yalnız üretim; tartı/paket/sevkiyat ayrı domain (`shipping.service.ts`) ve depoya/çuvala bağlanır. Top→sipariş bağı YOKTUR — sipariş karşılama `SackAllocation` ile sevk ANINDA yazılır, stok yalnız DISPATCH'te `SHIPPED` düşer (PLANNED tahsis sayılmaz). <sub>(CLAUDE.md:123, CLAUDE.md:41, arşiv:24)</sub>
 - **[ÇEKİRDEK]** Manuel taşıma ('Konumu Düzelt'): CANCELLED/SUPERSEDED iş emrinde 409 (`manualMoveWoBlockReason` tek kaynak, önizlemede `woBlocked`); doğru yol topu yeni iş emrine almak — iptalde toplar STOCK'a çekildiği için `quick-start` alır. Fason adımına taşıma `AT_SUBCONTRACTOR` yapmaz; çıkış Fason Sevk'ten. <sub>(CLAUDE.md:127, arşiv:756)</sub>
 - **[ÇEKİRDEK]** Yıkıcı işlemde (iptal/sil/scrap) backend preview ucu döner, arayüz etkilenen HER kaydı (WO, top, sipariş) somut listeler ve per-record seçim sunar; 'X kayıt etkilenecek' soyut sayısı YETMEZ. <sub>(CLAUDE.md:299)</sub>
+- **[ÇEKİRDEK]** Sipariş satırının birimi `OrderLine.unit`tir (MT/KG/ADET): yaratılırken kalem kartından KOPYALANIR (tek yazar `resolveLineUnit`, sessiz MT varsayılanı YOK, enum dışı 400), satırda düzenlenebilir. MT dışı satırda karşılama ÖLÇÜLMEZ — `shippedQty` yazılmaz, header Σ yalnız MT, sipariş kendiliğinden KAPANMAZ (tolerans dahil), yanıt `warnings` taşır; `fulfillmentMeasured` kolon değil türevdir (`unit === MT`, istemci ikizi `lib/item-unit.ts`). Kilo karşılamanın kendisi ayrı tasarımdır ("örme dilimi"). · bekçi: `test_order_line_unit_ledger.ts`, d9 `test_order_line_unit.ts` (HTTP) <sub>(arşiv:2026-09-13)</sub>
 
 ### Kararlar
 

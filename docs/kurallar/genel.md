@@ -22,6 +22,7 @@
 - **[ÇEKİRDEK]** `users.quickPin` 6 hane, DÜZ METİN ve sistem genelinde `@unique` — PIN tek başına kimliği belirler. PIN/kart uçları internete açılmaz; PIN repoya, log'a, sürüm notuna ve audit diff'ine girmez. · bekçi: `scripts/test_remote_access_guard.ts (denylist sondası)` <sub>(CLAUDE.md:95)</sub>
 - **[ÇEKİRDEK]** İki dinleyici İKİ PROCESS DEĞİLDİR: presence Map'i, feature-flag cache'i ve zamanlayıcı bayrakları process-local'dir; aynı `app`i ikinci bir sokette dinletmek invariantı bozmaz — İKİNCİ BİR NODE SÜRECİ hâlâ YASAK. <sub>(CLAUDE.md:95)</sub>
 - **[ÇEKİRDEK]** TOTP kurulumunun TEK yolu yöneticinin açtığı 15 dk'lık tek kullanımlık penceredir (TOFU REDDEDİLDİ: parola sızmışsa saldırgan 2FA'yı kendi telefonuna bağlar); ikinci faktör `issueToken`den ÖNCE koşar; üç hata üç ayrı statü (403/409/401) ve giriş kilidi yalnız 401'i sayar. · bekçi: `scripts/test_totp.ts (RFC 4226/6238 dış vektörleri)` <sub>(CLAUDE.md:95)</sub>
+- **[ÇEKİRDEK]** Kullanıcının indirdiği içe aktarım şablonu bir SÖZLEŞMENİN DONDURULMUŞ KOPYASIDIR: panel Excel başlığını etiketle eşler, başlık/sütun adı değişikliği sürüm kırıcıdır ve `minVersion` uygulanamaz — mevcut başlık korunur, bilgi yeni sütunla/yardım metniyle eklenir ("Miktar (m)" + "Birim" emsali). <sub>(arşiv:2026-09-13)</sub>
 
 ### Yasaklar
 
