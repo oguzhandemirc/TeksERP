@@ -10,7 +10,8 @@
 //     • currentQty <= initialQty  (test_consistency §13 invariantı)
 //     • initialQty yukarı çekildiyse defterde TAMBUR_UNDO_RESTORE/OVERAGE satırı VAR
 //
-// Gözlenen: <çalıştırınca doldur — log audit/repro/S-3-01.log>
+// Gözlenen: HENÜZ KOŞULMADI (2026-09-12 itibarıyla). Bu satır doldurulana kadar
+//   aşağıdaki mekanizma bir HİPOTEZDİR — ölçülmüş bir bulgu değil.
 //
 // NEDEN BU SENARYO (Tur 3, S3b):
 //   `tambur-undo.applySingle` ÜRETİM dalı (satır 1124-1149) aşım korumasını
@@ -22,10 +23,29 @@
 //   Yani `initialBump` **okuma ile yazma arasında** hesaplanıyor; satır kilidi
 //   ancak `updateMany`de alınıyor. İki/üç kardeş çocuk aynı anda geri alınırsa
 //   hepsi AYNI bayat `currentQty`yi okur, hepsi `bump=0` hesaplar, ama
-//   `increment` DB-side olduğu için hepsi birikir. Sonuç tam olarak 2026-08-22'de
-//   kapatıldığı sanılan §13 ihlali: canlıda 2 satır bu şekilde doğmuştu.
+//   `increment` DB-side olduğu için hepsi birikir. Sonuç 2026-08-22'de kapatıldığı
+//   sanılan §13 ihlali olurdu.
 //   Mevcut bekçi `scripts/test_tambur_undo.ts §11` aynı fixture'ı kurar ama
 //   undo'ları `for … await` ile SIRALI koşar — kör noktası tam burası.
+//
+// ⚠️ ATIF DÜZELTMESİ (2026-09-12) — MEKANİZMA GERÇEK, ATIF YANLIŞTI:
+//   Bu dosya "canlıda 2 satır BU ŞEKİLDE doğmuştu" diyordu. O cümle ÇÜRÜTÜLDÜ;
+//   fabrika kopyasındaki iki `currentQty > initialQty` satırının kaynağı
+//   `applySingle` yarışı DEĞİL, `applyFull`ün mutlak yazımıydı. Üç ölçüm:
+//     ① audit: iki satırın da olayı `TAMBUR_UNDO_FULL` ve `restoredQty`
+//        (520,5 / 698,9) `currentQty` ile BİREBİR — applyFull'ün mutlak yazım
+//        imzası, increment birikmesinin değil.
+//     ② bu senaryonun öngördüğü `TAMBUR_UNDO_RESTORE` sapması DB'de 0 satır
+//        (hiçbir `TAMBUR_UNDO_*` sapması yoktu).
+//     ③ eski satır 2026-08-08'de doğdu; o günün ağacında (`ef49bbc3`)
+//        `initialBump` HİÇ YOKTU — düşecek bir koruma yoktu.
+//   Kök sebep: koruma 2026-08-10'da commit'lendi ama sapma defterinin sahadaki
+//   ilk satırı 2026-08-15 → iki olay da dağıtımdan ÖNCE. İki satır 2026-09-12'de
+//   onarıldı (`scripts/fix_tambur_undo_full_asim.ts`) ve `rolls_qty_le_initial`
+//   VALIDATE edildi.
+//   BURADAKİ YARIŞ BUNUNLA ÇÜRÜMEZ: kod şekli (okuma-sonra-increment) bugün hâlâ
+//   duruyor (`tambur-undo.service.ts:1206-1231` ve `:1396-1444`) ve AÇIK bir
+//   risktir — yalnız sahadaki o iki satırı o üretmedi. Repro hâlâ koşulmayı bekliyor.
 //
 // Çalıştır:
 //   cd Teks-Erp && npx tsx scripts/audit_repro_S-3-01.ts 2>&1 \

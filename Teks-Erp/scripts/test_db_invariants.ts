@@ -403,14 +403,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string 
   // "Topun kalan metrajı giriş metrajını aşamaz." Depo kesimi `initialQty`ye
   // dokunduğu için yıllarca ihlal edilebiliyordu (T1-044 · T1-001 · T1-002 ·
   // T3-011 · T2-016); kod tarafı düzeltildi, bu DB seddi ikinci hattır.
-  {
-    table: "rolls",
-    name: "rolls_qty_le_initial",
-    notValid:
-      "Fabrika verisinde 2 ESKİ ihlal satırı var (ölçüldü). Toplu UPDATE ile " +
-      "'düzeltmek' kök nedeni gizler ve kapıyı görünmez yapar — satırlar bilerek " +
-      "duruyor. Temizlik yapılınca: ALTER TABLE rolls VALIDATE CONSTRAINT rolls_qty_le_initial;",
-  },
+  // 2026-09-12: iki eski ihlal satırı kanıtlı olarak onarıldı
+  // (`scripts/fix_tambur_undo_full_asim.ts`) ve kısıt VALIDATE edildi — yumuşak
+  // kapı KAPANDI, sed artık tüm satırları zorluyor.
+  { table: "rolls", name: "rolls_qty_le_initial" },
   // 2026-08-13 — ön muhasebe (migration 20260813201311_finance_preaccounting).
   // Muhasebe seddleri "veri tutarlı olsun" değil "DEFTER OKUNABİLİR olsun"
   // içindir: yönü iki yerde saklayan (işaretli tutar) ya da yarım durum bırakan
