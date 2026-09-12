@@ -18,7 +18,9 @@ import {
   ESKI_KAPI_HELPER,
   eskiKapiCagiranlari,
   eskiKapiVeriIzi,
+  kapisizYolOlcumu,
   sevkBagiKarari,
+  type KapisizYolOlcumu,
   type KodOlcumu,
   type VeriOlcumu,
 } from "./lib/stok-defteri-bag-olcumu";
@@ -129,19 +131,64 @@ async function main(): Promise<void> {
     const kodTemiz: KodOlcumu = { aracSaglam: true, aracNotu: null, taranan: 100, cagiranlar: [], agac: "test" };
     const kodKirli: KodOlcumu = { ...kodTemiz, cagiranlar: [{ dosya: "src/services/shipping.service.ts", satir: 1, fonksiyon: "writeWarehouseMovements" }] };
     const kodBozuk: KodOlcumu = { ...kodTemiz, aracSaglam: false, aracNotu: "tanım yok" };
-    check("§3a K=0 ∧ V kanıt → BAĞLI", sevkBagiKarari(kodTemiz, veri(t1, t2)).bagli);
-    check("§3b K>0 → bağlı değil (V kanıt olsa da)", !sevkBagiKarari(kodKirli, veri(t1, t2)).bagli);
-    check("§3c K=0 ∧ V kanıt yok → bağlı değil", !sevkBagiKarari(kodTemiz, veri(t2, t1)).bagli);
-    check("§3d araç bozuk → bağlı değil (fail-closed)", !sevkBagiKarari(kodBozuk, veri(t1, t2)).bagli);
-    check("§3e defter boş → K karar verir (bilgi satırı, engel değil)", sevkBagiKarari(kodTemiz, veri(null, null, 0)).bagli);
-    const g = sevkBagiKarari(kodKirli, veri(t1, t2)).gerekceler.join("\n");
+    // Kapısız yol kümesi (ii) — karar iki kümenin TOPLAMINA bakar.
+    const kyTemiz: KapisizYolOlcumu = {
+      aracSaglam: true,
+      aracNotu: null,
+      yollar: [{ dosya: "src/services/kartela.service.ts", fonksiyon: "dispatch", ad: "kartela sevki", bagli: true, bulunanKapi: "postStockMove" }],
+    };
+    const kyKirli: KapisizYolOlcumu = {
+      ...kyTemiz,
+      yollar: [{ ...kyTemiz.yollar[0]!, bagli: false, bulunanKapi: null }],
+    };
+    const kyBozuk: KapisizYolOlcumu = { aracSaglam: false, aracNotu: "`dispatch` yok", yollar: [] };
+    check("§3a K=0 ∧ V kanıt → BAĞLI", sevkBagiKarari(kodTemiz, kyTemiz, veri(t1, t2)).bagli);
+    check("§3b K>0 (eski kapı) → bağlı değil (V kanıt olsa da)", !sevkBagiKarari(kodKirli, kyTemiz, veri(t1, t2)).bagli);
+    check("§3c K=0 ∧ V kanıt yok → bağlı değil", !sevkBagiKarari(kodTemiz, kyTemiz, veri(t2, t1)).bagli);
+    check("§3d araç bozuk (eski kapı ayağı) → bağlı değil (fail-closed)", !sevkBagiKarari(kodBozuk, kyTemiz, veri(t1, t2)).bagli);
+    check("§3e defter boş → K karar verir (bilgi satırı, engel değil)", sevkBagiKarari(kodTemiz, kyTemiz, veri(null, null, 0)).bagli);
+    const g = sevkBagiKarari(kodKirli, kyTemiz, veri(t1, t2)).gerekceler.join("\n");
     check("§3f gerekçe çağıran dosyayı adıyla basar", g.includes("shipping.service.ts:1"));
+    // ── §3g–§3i — İKİNCİ KÜME kararı kendi başına verebilir ──────────────────
+    // Eski kapı temiz olsa bile kapısız bir yol K'yı sıfırdan büyük tutar; bu
+    // bekçinin eski hâli bunu ÖLÇEMİYORDU, çünkü karar tek kümeye bakıyordu.
+    check(
+      "§3g ⭐ eski kapı 0 ama kapısız yol var → bağlı DEĞİL (ikinci küme kararı tek başına verir)",
+      !sevkBagiKarari(kodTemiz, kyKirli, veri(t1, t2)).bagli,
+    );
+    check(
+      "§3h ⭐ kapısız yol ayağı bozuk → bağlı değil (fail-closed, iki ayak simetrik)",
+      !sevkBagiKarari(kodTemiz, kyBozuk, veri(t1, t2)).bagli,
+    );
+    const gKy = sevkBagiKarari(kodTemiz, kyKirli, veri(t1, t2)).gerekceler.join("\n");
+    check(
+      "§3i ⭐ sayı KAPSADIĞI KÜMEYİ basar (K=1 + iki küme ayrışık + yolun adı)",
+      gKy.includes("K = 1") && gKy.includes("eski kapı çağıranı 0") && gKy.includes("kartela sevki"),
+      gKy,
+    );
 
     // §4 körlük zemini — gerçek ağaç
     const gercek = eskiKapiCagiranlari(path.resolve(__dirname, ".."));
     check("§4a gerçek ağaçta araç sağlam", gercek.aracSaglam, gercek.aracNotu ?? "");
     check("§4b gerçek ağaçta ≥80 dosya tarandı", gercek.taranan >= 80, `taranan=${gercek.taranan}`);
-    console.log(`   bilgi: gerçek ağaçta (${gercek.agac}) eski kapı çağıranı ${gercek.cagiranlar.length}: ${gercek.cagiranlar.map((c) => `${c.dosya}:${c.satir}`).join(", ") || "yok"}`);
+    const gercekKy = kapisizYolOlcumu(path.resolve(__dirname, ".."));
+    check(
+      "§4c ⭐ gerçek ağaçta kapısız yol ayağı sağlam (fonksiyonlar yerinde)",
+      gercekKy.aracSaglam,
+      gercekKy.aracNotu ?? "",
+    );
+    check(
+      "§4d ⭐ kapısız yol listesi BOŞ DEĞİL — boş liste 'hepsi bağlı' ile aynı çıktıyı verir",
+      gercekKy.yollar.length >= 2,
+      `ölçülen yol=${gercekKy.yollar.length}`,
+    );
+    const kTotal = gercek.cagiranlar.length + gercekKy.yollar.filter((y) => !y.bagli).length;
+    console.log(
+      `   bilgi: gerçek ağaçta (${gercek.agac}) K = ${kTotal} — eski kapı ${gercek.cagiranlar.length} ` +
+        `[${gercek.cagiranlar.map((c) => `${c.dosya}:${c.satir}`).join(", ") || "yok"}] + kapısız yol ` +
+        `${gercekKy.yollar.filter((y) => !y.bagli).length}/${gercekKy.yollar.length} ` +
+        `[${gercekKy.yollar.filter((y) => !y.bagli).map((y) => y.ad).join(", ") || "yok"}]`,
+    );
   } finally {
     for (const d of gecici) fs.rmSync(d, { recursive: true, force: true });
   }

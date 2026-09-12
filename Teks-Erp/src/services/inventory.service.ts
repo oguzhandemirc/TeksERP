@@ -17,10 +17,10 @@ import { resolveTargetWarehouseId, warehouseStampTx } from "./helpers/warehouse.
 import {
   postStockMove,
   qtyYazilabilir,
-  reverseLatestScopedStockMove,
   writeWarehouseMovement,
   writeWarehouseMovements,
 } from "./helpers/warehouse-ledger.helper";
+import { reverseLatestScopedStockMove } from "./helpers/warehouse-ledger-reverse.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { AppError } from "../utils/app-error";

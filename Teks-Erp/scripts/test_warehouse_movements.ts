@@ -38,9 +38,9 @@ import prisma, { pool } from "../src/lib/prisma";
 import { warehouseService, warehouseMovementDirection } from "../src/services/warehouse.service";
 import {
   postStockMove,
-  reverseStockMove,
   writeWarehouseMovements,
 } from "../src/services/helpers/warehouse-ledger.helper";
+import { reverseStockMove } from "../src/services/helpers/warehouse-ledger-reverse.helper";
 import warehouseRouter from "../src/routes/warehouse.routes";
 
 let pass = 0;

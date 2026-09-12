@@ -94,7 +94,7 @@ import { WAREHOUSE_STOCK_STATUSES } from "../src/services/helpers/warehouse-stoc
 import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
 import { AuditService } from "../src/services/audit.service";
 import { hedefDbAdi } from "./lib/hedef-db-kapisi";
-import { eskiKapiCagiranlari, eskiKapiVeriIzi, sevkBagiKarari } from "./lib/stok-defteri-bag-olcumu";
+import { eskiKapiCagiranlari, eskiKapiVeriIzi, kapisizYolOlcumu, sevkBagiKarari } from "./lib/stok-defteri-bag-olcumu";
 import * as path from "node:path";
 
 const argv = process.argv.slice(2);
@@ -197,7 +197,11 @@ async function main(): Promise<void> {
   console.log(`④ SESSİZ PENCERE — son ${SESSIZ_PENCERE_SN} sn'de defter yazımı: ${sonYazim} ${sonYazim > 0 ? "⚠️ TRAFİK VAR — --apply reddedilir; backend durdurulmalı / vardiya dışı" : "✓ sessiz"}`);
 
   // ⑥ sevk bağı — iki bağımsız araç (kod yolu + veri izi), fail-closed.
-  const bag = sevkBagiKarari(eskiKapiCagiranlari(BACKEND_KOK), await eskiKapiVeriIzi(prisma));
+  const bag = sevkBagiKarari(
+    eskiKapiCagiranlari(BACKEND_KOK),
+    kapisizYolOlcumu(BACKEND_KOK),
+    await eskiKapiVeriIzi(prisma),
+  );
   const engel6 = !KIRILIM_BEYAN && !bag.bagli;
   console.log(`⑥ SEVK BAĞI — sevk/storno/iade/transfer stok defterine bağlı mı: ${bag.bagli ? "✓ BAĞLI" : `✗ BAĞLI DEĞİL${KIRILIM_BEYAN ? " (GEVŞEK mod: engel değil, beyan)" : " — SIKI modda --apply reddedilir"}`}`);
   for (const satir of bag.gerekceler) console.log(`  ${satir}`);

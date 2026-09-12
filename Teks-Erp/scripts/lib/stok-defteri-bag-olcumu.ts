@@ -18,6 +18,18 @@
 //       durumu BİLGİ olarak da döner.
 //
 // Sıkı mod geçer ⇔ K = 0 ∧ V "kanıt var / eski satır yok".
+//
+// ⚠️ K İKİ KÜMENİN TOPLAMIDIR ve sayı KAPSADIĞI KÜMEYİ de basar. Tek kümeyle
+// ölçmek körlüktü: eski kapıyı çağırmayan ama hiçbir kapıya da bağlı olmayan bir
+// yol (kartela sevki) sayıya HİÇ girmiyordu, yani "6" bir ölçüm değil eksik bir
+// paydaydı. Bugünkü kümeler:
+//   (i)  eski kapı çağıranları — AST ile bulunur, kendini ilan eder.
+//   (ii) BİLİNEN KAPISIZ YOLLAR — kendini ilan ETMEZ, bu yüzden elle adlandırılır
+//        (`BILINEN_KAPISIZ_YOLLAR`) ve gövdesinde yeni kapı çağrısı ARANIR.
+// (ii)'nin bedeli: liste elle tutulur. Bedeli ödeyen sed ise POZİTİF KONTROL —
+// listedeki fonksiyon dosyada bulunamazsa araç "bozuk" der, "0 kapısız yol" DEMEZ
+// (çift terimli tripwire'da tek terimin yeniden adlandırılmasıyla bekçinin yeşil
+// kalıp korumayı bırakması sınıfı).
 // =============================================================================
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -29,6 +41,58 @@ import { Prisma, WarehouseEventType } from "@prisma/client";
 /** Konum defteri kapısı — statüsüz satır yazan iki fonksiyon. */
 export const ESKI_KAPI_FONKSIYONLARI: readonly string[] = ["writeWarehouseMovement", "writeWarehouseMovements"];
 export const ESKI_KAPI_HELPER = "src/services/helpers/warehouse-ledger.helper.ts";
+
+/**
+ * Stok defteri kapısı — bir yolun "bağlı" sayılması için gövdesinde bunlardan
+ * BİRİ bulunmalı. Ters yazıcılar da listededir: yalnız geri alma yapan bir yol
+ * (kartela sevk iptali) ileri satır yazmaz ama deftere bağlıdır.
+ */
+/** Yeni kapı İKİ dosyada yaşar: yazma kapısı + ters kayıt kapısı. */
+export const YENI_KAPI_HELPERLARI: readonly string[] = [
+  ESKI_KAPI_HELPER,
+  "src/services/helpers/warehouse-ledger-reverse.helper.ts",
+];
+
+export const YENI_KAPI_FONKSIYONLARI: readonly string[] = [
+  "postStockMove",
+  "postStockMoves",
+  "reverseStockMove",
+  "reverseLegacyStockMove",
+  "reverseLatestScopedStockMove",
+  "reverseAllRollStockMoves",
+];
+
+/**
+ * Topu stok kümesine sokan/çıkaran ama HİÇBİR defter kapısını çağırmayan yol.
+ * Kendini ilan etmediği için elle adlandırılır; `fonksiyon` dosyada bulunamazsa
+ * ölçüm GEÇERSİZdir (araç bozuk), "kapısız yol yok" değil.
+ */
+export interface KapisizYol {
+  dosya: string;
+  /** Metot ya da fonksiyon adı — gövdesinde yeni kapı çağrısı aranır. */
+  fonksiyon: string;
+  /** Sayacın bastığı kümede görünen ad. */
+  ad: string;
+}
+
+/**
+ * ⚠️ Kartela sevki hiçbir kayıt bırakmıyor — ne eski ne yeni kapıyla. Bu yüzden
+ * AST "eski kapı çağıranı" taramasına GÖRÜNMEZ ve K'yı eksik gösterir.
+ * `receive`/`cancelReceipt` burada YOK: kartela tüketimi (`AT_KARTELA →
+ * KARTELA_CONSUMED`) stok dışından stok dışınadır ve satır yazmaz (tasarım §64).
+ */
+export const BILINEN_KAPISIZ_YOLLAR: readonly KapisizYol[] = [
+  {
+    dosya: "src/services/kartela.service.ts",
+    fonksiyon: "dispatch",
+    ad: "kartela sevki (WAREHOUSE → AT_KARTELA)",
+  },
+  {
+    dosya: "src/services/kartela.service.ts",
+    fonksiyon: "cancelDispatch",
+    ad: "kartela sevk iptali (AT_KARTELA → WAREHOUSE)",
+  },
+];
 /** Eski kapının bugün yazdığı olay aileleri (V'nin aile bazlı bilgi satırı). */
 export const ESKI_KAPI_AILELERI: readonly WarehouseEventType[] = [
   WarehouseEventType.SHIPMENT,
@@ -131,6 +195,107 @@ export function eskiKapiCagiranlari(kok: string): KodOlcumu {
   return { aracSaglam: true, aracNotu: null, taranan: dosyalar.length, cagiranlar, agac };
 }
 
+export interface KapisizYolBulgusu extends KapisizYol {
+  /** Gövdede yeni kapı çağrısı bulundu mu — bulunduysa yol BAĞLI, sayılmaz. */
+  bagli: boolean;
+  /** Bağlıysa hangi kapıyla (gerekçe satırına basılır). */
+  bulunanKapi: string | null;
+}
+
+export interface KapisizYolOlcumu {
+  /** Listedeki her fonksiyon dosyasında BULUNDU — araç bir şeye bakıyor. */
+  aracSaglam: boolean;
+  aracNotu: string | null;
+  yollar: KapisizYolBulgusu[];
+}
+
+/** Adı verilen metot/fonksiyon bildirimini bul (sınıf metodu da dâhil). */
+function govdeBul(sf: ts.SourceFile, ad: string): ts.Node | null {
+  let bulunan: ts.Node | null = null;
+  const gez = (n: ts.Node): void => {
+    if (bulunan) return;
+    const isimli =
+      (ts.isMethodDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === ad) ||
+      (ts.isFunctionDeclaration(n) && n.name?.text === ad) ||
+      (ts.isPropertyDeclaration(n) &&
+        ts.isIdentifier(n.name) &&
+        n.name.text === ad &&
+        n.initializer !== undefined &&
+        (ts.isArrowFunction(n.initializer) || ts.isFunctionExpression(n.initializer)));
+    if (isimli) {
+      bulunan = n;
+      return;
+    }
+    n.forEachChild(gez);
+  };
+  sf.forEachChild(gez);
+  return bulunan;
+}
+
+/**
+ * K'nın İKİNCİ kümesi — kendini ilan etmeyen kapısız yollar. Her yolun gövdesinde
+ * yeni kapı çağrısı aranır; yoksa yol SAYILIR.
+ *
+ * ⚠️ POZİTİF KONTROL: listedeki fonksiyon dosyada bulunamazsa sonuç "0 kapısız
+ * yol" DEĞİL "araç bozuk"tur. Fonksiyon yeniden adlandırıldığında sessizce yeşile
+ * dönen bir bekçi, korumadığı şeyi koruduğunu söyler.
+ */
+export function kapisizYolOlcumu(kok: string): KapisizYolOlcumu {
+  const yollar: KapisizYolBulgusu[] = [];
+  const sorunlar: string[] = [];
+  // Pozitif kontrolün ilk yarısı: "bağlı" kararını veren kapı adları GERÇEK mi.
+  // Hepsi tanımlı olmalı, yoksa her yol sessizce "kapısız" görünür. Yazma ve ters
+  // kayıt kapıları AYRI dosyalarda yaşıyor; ikisi birden taranır.
+  const tanimli = new Set<string>();
+  let okunan = 0;
+  for (const rel of YENI_KAPI_HELPERLARI) {
+    const p = path.join(kok, rel);
+    if (!fs.existsSync(p)) {
+      sorunlar.push(`helper bulunamadı: ${rel}`);
+      continue;
+    }
+    okunan++;
+    const sf = ts.createSourceFile(p, fs.readFileSync(p, "utf8"), ts.ScriptTarget.Latest, true);
+    sf.forEachChild((n) => {
+      if (ts.isFunctionDeclaration(n) && n.name) tanimli.add(n.name.text);
+    });
+  }
+  if (okunan > 0) {
+    const eksik = YENI_KAPI_FONKSIYONLARI.filter((f) => !tanimli.has(f));
+    if (eksik.length > 0) {
+      sorunlar.push(`yeni kapı tanımı yok: ${eksik.join(", ")} — "kapısız" kararı GEÇERSİZ`);
+    }
+  }
+  for (const yol of BILINEN_KAPISIZ_YOLLAR) {
+    const tamYol = path.join(kok, yol.dosya);
+    if (!fs.existsSync(tamYol)) {
+      sorunlar.push(`${yol.dosya} bulunamadı (yol: ${yol.ad})`);
+      continue;
+    }
+    const sf = ts.createSourceFile(tamYol, fs.readFileSync(tamYol, "utf8"), ts.ScriptTarget.Latest, true);
+    const govde = govdeBul(sf, yol.fonksiyon);
+    if (!govde) {
+      sorunlar.push(`${yol.dosya} içinde \`${yol.fonksiyon}\` yok — yeniden adlandırılmış ya da taşınmış (yol: ${yol.ad})`);
+      continue;
+    }
+    let bulunanKapi: string | null = null;
+    const gez = (n: ts.Node): void => {
+      if (bulunanKapi) return;
+      if (ts.isCallExpression(n)) {
+        const ad = callee(n);
+        if (ad && YENI_KAPI_FONKSIYONLARI.includes(ad)) bulunanKapi = ad;
+      }
+      n.forEachChild(gez);
+    };
+    govde.forEachChild(gez);
+    yollar.push({ ...yol, bagli: bulunanKapi !== null, bulunanKapi });
+  }
+  if (sorunlar.length > 0) {
+    return { aracSaglam: false, aracNotu: sorunlar.join(" · "), yollar };
+  }
+  return { aracSaglam: true, aracNotu: null, yollar };
+}
+
 export interface AileSonSatiri {
   aile: WarehouseEventType;
   /** Ailede hiç satır yoksa null. */
@@ -186,19 +351,44 @@ export interface BagKarari {
   gerekceler: string[];
 }
 
-/** K ∧ V → sıkı modun kapısı. Sıralı gerekçe üretir; karar fail-closed. */
-export function sevkBagiKarari(kod: KodOlcumu, veri: VeriOlcumu): BagKarari {
+/**
+ * K ∧ V → sıkı modun kapısı. Sıralı gerekçe üretir; karar fail-closed.
+ *
+ * ⚠️ K iki kümenin TOPLAMIDIR ve gerekçe her iki kümeyi AYRI basar: "K = 8" tek
+ * başına hangi yolların sayıldığını söylemez, ve söylemeyen bir sayı bir sonraki
+ * okuyucuda eksik paydaya döner.
+ */
+export function sevkBagiKarari(kod: KodOlcumu, kapisiz: KapisizYolOlcumu, veri: VeriOlcumu): BagKarari {
   const g: string[] = [];
   let bagli = true;
+  const sayilanKapisiz = kapisiz.yollar.filter((y) => !y.bagli);
+  const kTotal = kod.cagiranlar.length + sayilanKapisiz.length;
+
   if (!kod.aracSaglam) {
     bagli = false;
-    g.push(`K ARAÇ BOZUK: ${kod.aracNotu} — ölçüm yapılamadı, fail-closed.`);
-  } else if (kod.cagiranlar.length > 0) {
+    g.push(`K ARAÇ BOZUK (eski kapı ayağı): ${kod.aracNotu} — ölçüm yapılamadı, fail-closed.`);
+  } else if (!kapisiz.aracSaglam) {
     bagli = false;
-    g.push(`K KOD YOLU (ağaç ${kod.agac}): eski kapı ${kod.cagiranlar.length} yerden çağrılıyor (${kod.taranan} dosya tarandı):`);
-    for (const c of kod.cagiranlar) g.push(`    ${c.dosya}:${c.satir} → ${c.fonksiyon}()`);
+    g.push(`K ARAÇ BOZUK (kapısız yol ayağı): ${kapisiz.aracNotu} — ölçüm yapılamadı, fail-closed.`);
   } else {
-    g.push(`K KOD YOLU (ağaç ${kod.agac}): eski kapı çağıranı 0 (${kod.taranan} dosya tarandı) ✓`);
+    g.push(
+      `K = ${kTotal} (ağaç ${kod.agac}) — İKİ küme: eski kapı çağıranı ${kod.cagiranlar.length} + kapısız yol ${sayilanKapisiz.length}/${kapisiz.yollar.length}`,
+    );
+    if (kTotal > 0) bagli = false;
+    if (kod.cagiranlar.length > 0) {
+      g.push(`  (i) eski kapı çağıranları (${kod.taranan} dosya tarandı):`);
+      for (const c of kod.cagiranlar) g.push(`      ${c.dosya}:${c.satir} → ${c.fonksiyon}()`);
+    } else {
+      g.push(`  (i) eski kapı çağıranı 0 (${kod.taranan} dosya tarandı) ✓`);
+    }
+    g.push(`  (ii) bilinen kapısız yollar (${kapisiz.yollar.length} yol ölçüldü — kapsanan küme):`);
+    for (const y of kapisiz.yollar) {
+      g.push(
+        y.bagli
+          ? `      ✓ ${y.ad} — ${y.dosya}:${y.fonksiyon} → ${y.bulunanKapi}()`
+          : `      ✗ ${y.ad} — ${y.dosya}:${y.fonksiyon} hiçbir defter kapısını çağırmıyor`,
+      );
+    }
   }
   if (veri.toplamSatir === 0) {
     g.push("V VERİ: defterde hiç satır yok — veri ayağı ölçülemez (bilgi).");

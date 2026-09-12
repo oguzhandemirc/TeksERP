@@ -33,7 +33,8 @@ import { printedDocumentService } from "./printed-document.service";
 import { syncPurchaseOrderSafely } from "./purchase-order.service";
 import { readIplikEnabled } from "./system-setting.service";
 import { applyYarnMovementTx, yarnMovementSign } from "./yarn.service";
-import { postStockMove, reverseStockMove } from "./helpers/warehouse-ledger.helper";
+import { postStockMove } from "./helpers/warehouse-ledger.helper";
+import { reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { stockCountCancelReason, stockCountVoidReason } from "./stock-count.service";
 import {

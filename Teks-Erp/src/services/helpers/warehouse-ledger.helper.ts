@@ -19,6 +19,7 @@
 // =============================================================================
 import { WarehouseEventType, type Prisma, type RollStatus } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
+import { WAREHOUSE_STOCK_STATUSES } from "./warehouse-stock.helper";
 
 type Tx = Prisma.TransactionClient;
 
@@ -186,10 +187,46 @@ export async function writeWarehouseMovements(
 // Tasarım: `docs/design/DEPO-STOK-DEFTERI-TASARIM.md` §D2/§D5.
 // -----------------------------------------------------------------------------
 
-/** Hareketin bir ucu: fiziksel depo + topun O UÇTAKİ statüsü. */
+/**
+ * Hareketin bir ucu: fiziksel depo + topun O UÇTAKİ statüsü. İKİ BİÇİM alır ve
+ * ikisini TEK kural ayırır (`assertEndShape`):
+ *
+ *   • STOK UCU      — `warehouseId` dolu ∧ `status ∈ WAREHOUSE_STOCK_STATUSES`
+ *   • STOK DIŞI UÇ  — `warehouseId` NULL ∧ `status ∉ WAREHOUSE_STOCK_STATUSES`
+ *
+ * Stok dışı uç DEPO TAŞIMAZ ama STATÜ TAŞIR: `SHIPPED` · `AT_KARTELA` ·
+ * `CANCELLED` bir rafta değildir, ama satır "nereye gitti"yi söylemek zorundadır
+ * — "WAREHOUSE'tan SHIPPED'e gitti" cümlesi eski tipe yazılamıyordu.
+ */
 export interface StockMoveEnd {
-  warehouseId: string;
+  warehouseId: string | null;
   status: RollStatus;
+}
+
+/**
+ * K1 — uç biçiminin TEK kuralı: `warehouseId === null ⇔ status ∉ stok kümesi`.
+ *
+ * İki yön İKİ AYRI hatayı kapatır ve ikisi de sessiz olmamalı:
+ *   • stok statüsü + deposuz ⇒ "depoda ama neresi belli değil" bir defter satırı
+ *     olamaz. Deposuz top stok kümesine giremez (tasarım K6); eski kapının bu
+ *     satırı SESSİZCE atlayan süzgeci (`hasWarehouseEnd`) yeni kapıya taşınmaz.
+ *   • stok dışı statü + depolu ⇒ mal rafta değilken rafı adlandırmak, Σ'ya
+ *     girmeyecek bir depo atfı üretir ve as-of kırılımını yanıltır.
+ */
+function assertEndShape(end: StockMoveEnd, hangi: "from" | "to"): void {
+  const stokStatusu = WAREHOUSE_STOCK_STATUSES.includes(end.status);
+  if (stokStatusu && end.warehouseId === null) {
+    throw AppError.internal(
+      `Stok hareketinin ${hangi} ucu stok statüsünde (${end.status}) ama deposuz — ` +
+        `"depoda ama hangi depoda belli değil" defterde yazılamaz`,
+    );
+  }
+  if (!stokStatusu && end.warehouseId !== null) {
+    throw AppError.internal(
+      `Stok hareketinin ${hangi} ucu stok dışı statüde (${end.status}) ama depo taşıyor — ` +
+        `stok dışı uç depo taşımaz`,
+    );
+  }
 }
 
 export interface StockMoveInput {
@@ -228,6 +265,20 @@ function stockMoveRow(input: StockMoveInput): Prisma.WarehouseMovementCreateMany
   }
   if (!input.from && !input.to) {
     throw AppError.internal("Stok hareketinin en az bir ucu (çıkış ya da giriş) dolu olmalı");
+  }
+  if (input.from) assertEndShape(input.from, "from");
+  if (input.to) assertEndShape(input.to, "to");
+  // STOK DIŞINDAN STOK DIŞINA SATIR YOK (tasarım §64'ün mekanik hâli). Uçlar
+  // nullable olduğu andan itibaren "en az bir uç dolu" kontrolü bunu ARTIK
+  // karşılamıyor: `SHIPPED → AT_KARTELA` gibi bir satır tipçe yazılabilir hâle
+  // gelir, Σ'ya hiç girmez ve defteri stok dışı hareketlerle şişirir. Doğrudan
+  // fason sevki · kartela tüketimi · PLANNED sevkiyat iptali bu sınıftadır ve
+  // satırsız kalmaları bilinçlidir.
+  if (input.from?.warehouseId == null && input.to?.warehouseId == null) {
+    throw AppError.internal(
+      "Stok hareketinin en az bir ucu STOK KÜMESİNDE olmalı — stok dışından stok dışına satır yazılmaz " +
+        `(from: ${input.from?.status ?? "yok"} → to: ${input.to?.status ?? "yok"})`,
+    );
   }
   return {
     rollId: input.rollId,
@@ -279,198 +330,4 @@ export async function postStockMoves(tx: Tx, inputs: StockMoveInput[]): Promise<
   const rows = inputs.map(stockMoveRow);
   const res = await tx.warehouseMovement.createMany({ data: rows });
   return res.count;
-}
-
-/**
- * İleri satırın TERSİNİ bugüne yazar: yön aynalanır, `qty` İLERİ SATIRDAN
- * kopyalanır (canlı metrajdan değil — ileri kayıttan sonra metraj değişmiş
- * olabilir) ve bağ `reversesMovementId`e yazılır. Aynı satırın iki kez
- * terslenmesini DB'deki unique kapatır.
- *
- * `eventType` verilmezse ileri satırınki KOPYALANIR. Verilirse o yazılır — bazı
- * yollar ters satırı panelde kendi adıyla göstermek ister (`CANCEL_REVERSAL`).
- * Bu yalnız BETİMLEYİCİDİR: "bu satır ters kayıt mıdır" sorusunun tek cevabı
- * `reversesMovementId IS NOT NULL`tır, enum değeri değil (tasarım §D2a).
- */
-export async function reverseStockMove(
-  tx: Tx,
-  movementId: string,
-  args: {
-    reasonCode: string;
-    eventType?: WarehouseEventType;
-    userId?: string | null;
-    notes?: string | null;
-  },
-): Promise<string> {
-  const fwd = await tx.warehouseMovement.findUniqueOrThrow({
-    where: { id: movementId },
-    select: {
-      rollId: true, eventType: true, qty: true,
-      fromWarehouseId: true, toWarehouseId: true,
-      fromStatus: true, toStatus: true,
-      // ⚠️ BAĞ ALANLARININ HEPSİ taşınır. Üçü (transformGroupId · rollVarianceId ·
-      // workOrderStepId) eksikti ve ters satır NULL doğuyordu; defter append-only
-      // olduğu için o atıf KALICI kayboluyordu (en görünür zararı: tambur ve
-      // üretime alma satırlarının `workOrderStepId`i).
-      transformGroupId: true, rollVarianceId: true, workOrderStepId: true,
-      transferId: true, goodsReceiptId: true, shipmentId: true,
-      rollReturnId: true, sackId: true, stockCountId: true,
-      reversesMovementId: true,
-    },
-  });
-  if (fwd.reversesMovementId !== null) {
-    throw AppError.conflict("Ters kaydın tersi yazılamaz — gerekiyorsa yeni bir ileri hareket yazılır");
-  }
-  return postStockMove(tx, {
-    rollId: fwd.rollId,
-    eventType: args.eventType ?? fwd.eventType,
-    qty: fwd.qty,
-    from: fwd.toWarehouseId && fwd.toStatus ? { warehouseId: fwd.toWarehouseId, status: fwd.toStatus } : undefined,
-    to: fwd.fromWarehouseId && fwd.fromStatus ? { warehouseId: fwd.fromWarehouseId, status: fwd.fromStatus } : undefined,
-    reasonCode: args.reasonCode,
-    reversesMovementId: movementId,
-    transformGroupId: fwd.transformGroupId,
-    rollVarianceId: fwd.rollVarianceId,
-    workOrderStepId: fwd.workOrderStepId,
-    transferId: fwd.transferId,
-    goodsReceiptId: fwd.goodsReceiptId,
-    shipmentId: fwd.shipmentId,
-    rollReturnId: fwd.rollReturnId,
-    sackId: fwd.sackId,
-    stockCountId: fwd.stockCountId,
-    userId: args.userId ?? null,
-    notes: args.notes ?? null,
-  });
-}
-
-/**
- * Topun TERSLENMEMİŞ ileri satırlarının **HEPSİNİ** tersler — "bu top iptal
- * edildi, defterdeki izi tümden sıfırlansın" yolunun kapısı.
- *
- * ⚠️⚠️ YALNIZ TOP TÜMDEN ÖLDÜRÜLÜYORSA KULLANILIR (CANCELLED + `currentQty: 0`).
- * "Şu işlemi geri al" anlamında KULLANILAMAZ — kapsamsız olduğu için başka bir
- * işlemin satırını da tersler. Ölçüldü (2026-09-12): reopen bu kapıyı kullanınca
- * `attachRolls`ın ÇIKIŞ satırını da tersledi ve depoda 100 m HAYALET stok doğdu;
- * üstelik o çıkış `reversesMovementId` unique'i yüzünden kalıcı "terslenmiş"
- * damgası yediği için sapma ileri yolla BİR DAHA kapanmıyordu. Tek satır terslemek
- * için `reverseLatestScopedStockMove` kullan — kapsamı tip düzeyinde zorunludur.
- *
- * ⚠️ Satır SİLİNMEZ: her ileri satıra bugüne yazılan bir ters satır eşlik eder ve
- * bağ `reversesMovementId`e düşer. Aynı satır iki kez terslenemez (DB unique),
- * yani tekrarlayan geri alma turu sessizce ikinci bir ters satır yazmaz.
- *
- * ⚠️ Metraj İLERİ SATIRDAN kopyalanır (`reverseStockMove`), topun canlı
- * metrajından DEĞİL: iptal yolları `currentQty`yi 0'a çekiyor ve canlıdan okumak
- * 0 m'lik bir ters satır yazıp depoda hayalet metraj bırakırdı.
- *
- * ⚠️ STATÜSÜZ satır (iki uç statüsü de NULL) terslenemez — ucu kurulamayan satırın
- * tersi de kurulamaz. Sessizce yutulmaz, sayısı AYRICA döner.
- *
- * ⚠️ Adı "A1 öncesi" DEĞİL: ölçüm (fabrika kopyası, 721 satır) bu kümenin yalnız
- * tarihsel olmadığını gösterdi — ESKİ KAPILAR (transfer · sevk · sayım) bugün de
- * statüsüz satır yazıyor. Yani sayının sıfırdan büyük çıkması "eski veri" değil,
- * "o yolu henüz stok defterine taşımadık" demek. Eski yazıcılar taşındıktan ve
- * açılış bakiyesi backfill'i indikten SONRA bu dal tanım gereği boşalır; o commit'te
- * sayı > 0 bir HATA SİNYALİ hâline gelir ve bekçiye çevrilir (tasarım §D6).
- */
-export async function reverseAllRollStockMoves(
-  tx: Tx,
-  rollIds: string[],
-  args: { reasonCode: string; userId?: string | null; notes?: string | null },
-): Promise<{ reversed: number; statusuzAtlanan: number }> {
-  if (rollIds.length === 0) return { reversed: 0, statusuzAtlanan: 0 };
-  const forwards = await tx.warehouseMovement.findMany({
-    where: {
-      rollId: { in: rollIds },
-      // İleri satır: kendisi ters kayıt DEĞİL ve henüz terslenmemiş.
-      reversesMovementId: null,
-      reversedBy: { none: {} },
-    },
-    orderBy: { createdAt: "asc" },
-    select: { id: true, fromStatus: true, toStatus: true },
-  });
-  let reversed = 0;
-  let statusuzAtlanan = 0;
-  for (const f of forwards) {
-    if (f.fromStatus === null && f.toStatus === null) {
-      statusuzAtlanan++;
-      continue;
-    }
-    await reverseStockMove(tx, f.id, args);
-    reversed++;
-  }
-  return { reversed, statusuzAtlanan };
-}
-
-/** Hangi ileri satırın terslendiği — TİP DÜZEYİNDE zorunlu, unutulamaz. */
-export interface StockMoveScope {
-  /** İleri satırın sebep kodu: hangi yazıcının satırını tersliyoruz. */
-  reasonCode: string;
-  /**
-   * İleri satırın adım damgası (bugünden sonraki adım satırlarında dolu).
-   *
-   * ⚠️ Bir ADIMA AİT OLMAYAN yollar (topun iptali gibi) açıkça `null` geçer —
-   * alan opsiyonel DEĞİL, çünkü "unutuldu" ile "adımı yok" ayrımı kaybolursa
-   * kapsamsız ters kayıt sınıfı geri döner. Prisma'da `workOrderStepId: null`
-   * zaten "damgasız satır" demek, yani sorgu dalı değişmez.
-   */
-  workOrderStepId: string | null;
-}
-
-/**
- * Kapsam içindeki TEK ileri satırı tersler — "şu işlemi geri al" yolunun kapısı
- * (adımı yeniden açma). Top başına EN YENİ uygun satır seçilir.
- *
- * ⚠️ KAPSAM İKİ ADIMLI SORGUDUR, tek WHERE değil:
- *   ① `reasonCode` + `workOrderStepId = scope.workOrderStepId` (bugünkü yol),
- *   ② bulunamazsa `reasonCode` + `workOrderStepId IS NULL` (GEÇİŞ dalı: damga
- *      eklenmeden önce yazılmış satırlar).
- * `OR workOrderStepId IS NULL` diye TEK yüklemde yazılamaz: o yüklem BAŞKA bir iş
- * emrinin damgalı girişini de aday kümesine sokar ve "geçmişe dönük değiştirme"
- * yasağını çiğner (top daha önce başka WO bitirmişse onun girişi terslenirdi).
- *
- * ⚠️ Satır bulunamazsa SESSİZCE GEÇİLMEZ: `bulunamayan` listesi döner. O durum
- * "defterde olması gereken giriş yok" demektir — gerçek bir tutarsızlık sinyali.
- */
-export async function reverseLatestScopedStockMove(
-  tx: Tx,
-  rollIds: string[],
-  scope: StockMoveScope,
-  args: { reasonCode: string; userId?: string | null; notes?: string | null },
-): Promise<{ reversed: number; statusuzAtlanan: number; bulunamayan: string[] }> {
-  const bulunamayan: string[] = [];
-  let reversed = 0;
-  let statusuzAtlanan = 0;
-  for (const rollId of rollIds) {
-    const baseWhere = {
-      rollId,
-      reasonCode: scope.reasonCode,
-      reversesMovementId: null,
-      reversedBy: { none: {} },
-    } satisfies Prisma.WarehouseMovementWhereInput;
-    const selectFields = { id: true, fromStatus: true, toStatus: true };
-    const stampedRow = await tx.warehouseMovement.findFirst({
-      where: { ...baseWhere, workOrderStepId: scope.workOrderStepId },
-      orderBy: { createdAt: "desc" },
-      select: selectFields,
-    });
-    const targetRow =
-      stampedRow ??
-      (await tx.warehouseMovement.findFirst({
-        where: { ...baseWhere, workOrderStepId: null },
-        orderBy: { createdAt: "desc" },
-        select: selectFields,
-      }));
-    if (!targetRow) {
-      bulunamayan.push(rollId);
-      continue;
-    }
-    if (targetRow.fromStatus === null && targetRow.toStatus === null) {
-      statusuzAtlanan++;
-      continue;
-    }
-    await reverseStockMove(tx, targetRow.id, args);
-    reversed++;
-  }
-  return { reversed, statusuzAtlanan, bulunamayan };
 }

@@ -30,11 +30,14 @@ import prisma, { pool } from "../src/lib/prisma";
 import {
   postStockMove,
   postStockMoves,
-  reverseAllRollStockMoves,
-  reverseStockMove,
   writeWarehouseMovement,
   writeWarehouseMovements,
 } from "../src/services/helpers/warehouse-ledger.helper";
+import {
+  reverseAllRollStockMoves,
+  reverseLegacyStockMove,
+  reverseStockMove,
+} from "../src/services/helpers/warehouse-ledger-reverse.helper";
 import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
 
 let pass = 0;
@@ -49,6 +52,10 @@ const rollIds: string[] = [];
 let itemId = "";
 
 const HELPER_YOLU = join(__dirname, "..", "src", "services", "helpers", "warehouse-ledger.helper.ts");
+const TERS_YOLU = join(__dirname, "..", "src", "services", "helpers", "warehouse-ledger-reverse.helper.ts");
+/** İKİ dosya taranır: yazma kapısı + ters kayıt kapısı. Tek dosya tarayan bir
+ *  sürüm, ters kayıt kapısı ayrıldığı gün §4d'yi SESSİZCE boşa düşürürdü. */
+const TARANAN_HELPERLAR = [HELPER_YOLU, TERS_YOLU];
 
 /** `data:` argümanı inline nesne literali olan stok-defteri yazımları + map sayısı. */
 function astTekKaynak(): {
@@ -58,8 +65,9 @@ function astTekKaynak(): {
   girdiAnahtarlari: string[];
   tersSelect: Set<string>;
 } {
-  const metin = readFileSync(HELPER_YOLU, "utf8");
-  const src = ts.createSourceFile(HELPER_YOLU, metin, ts.ScriptTarget.ES2022, true);
+  const kaynaklar = TARANAN_HELPERLAR.map((y) =>
+    ts.createSourceFile(y, readFileSync(y, "utf8"), ts.ScriptTarget.ES2022, true),
+  );
   const inlineYazim: string[] = [];
   let mapSayisi = 0;
   const mapAnahtarlari = new Set<string>();
@@ -89,10 +97,10 @@ function astTekKaynak(): {
     }
     ts.forEachChild(n, gezMap);
   };
-  gezMap(src);
+  for (const src of kaynaklar) gezMap(src);
 
   // (c) Stok defteri fonksiyonlarının İÇİNDE inline `data:` literali olmamalı.
-  const gezYazim = (n: ts.Node): void => {
+  const gezYazim = (src: ts.SourceFile) => (n: ts.Node): void => {
     if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression)) {
       const ad = n.expression.name.text;
       const hedef = n.expression.expression.getText(src);
@@ -110,11 +118,13 @@ function astTekKaynak(): {
         }
       }
     }
-    ts.forEachChild(n, gezYazim);
+    ts.forEachChild(n, gezYazim(src));
   };
-  for (const st of src.statements) {
-    if (ts.isFunctionDeclaration(st) && st.name && ["postStockMove", "postStockMoves"].includes(st.name.text)) {
-      gezYazim(st);
+  for (const src of kaynaklar) {
+    for (const st of src.statements) {
+      if (ts.isFunctionDeclaration(st) && st.name && ["postStockMove", "postStockMoves"].includes(st.name.text)) {
+        gezYazim(src)(st);
+      }
     }
   }
 
@@ -122,7 +132,7 @@ function astTekKaynak(): {
   //     `select`te olmalı. Burası map'in İKİNCİ kopyasıdır — üç alan (transformGroupId,
   //     rollVarianceId, workOrderStepId) burada eksikti ve ters satır NULL doğuyordu.
   const tersSelect = new Set<string>();
-  for (const st of src.statements) {
+  for (const st of kaynaklar.flatMap((s) => [...s.statements])) {
     if (!(ts.isFunctionDeclaration(st) && st.name?.text === "reverseStockMove")) continue;
     const gezSelect = (n: ts.Node): void => {
       if (
@@ -151,11 +161,12 @@ function astTekKaynak(): {
  * kör noktası yazılı olan tripwire yaşar.
  */
 function astEsikSahipleri(): string[] {
-  const metin = readFileSync(HELPER_YOLU, "utf8");
-  const src = ts.createSourceFile(HELPER_YOLU, metin, ts.ScriptTarget.ES2022, true);
+  const kaynaklar = TARANAN_HELPERLAR.map((y) =>
+    ts.createSourceFile(y, readFileSync(y, "utf8"), ts.ScriptTarget.ES2022, true),
+  );
   const sahipler = new Set<string>();
   const yigin: string[] = [];
-  const gez = (n: ts.Node): void => {
+  const gez = (src: ts.SourceFile) => (n: ts.Node): void => {
     let itildi = false;
     if (ts.isFunctionDeclaration(n) && n.name) { yigin.push(n.name.text); itildi = true; }
     if (ts.isBinaryExpression(n)) {
@@ -173,10 +184,10 @@ function astEsikSahipleri(): string[] {
       );
       if (iliskisel && sifirVar && metrajTarafi) sahipler.add(yigin[yigin.length - 1] ?? "(modül gövdesi)");
     }
-    ts.forEachChild(n, gez);
+    ts.forEachChild(n, gez(src));
     if (itildi) yigin.pop();
   };
-  gez(src);
+  for (const src of kaynaklar) gez(src)(src);
   return [...sahipler].sort();
 }
 
@@ -227,7 +238,10 @@ async function main(): Promise<void> {
   // İkinci ayak: tek kaynağın KENDİSİ hâlâ orada mı? Yoksa "kopya yok" cümlesi
   // eşiğin tamamen silindiği durumda da yeşil kalırdı (vakumen geçme).
   const yuklemCanli = /function qtyYazilabilir\([\s\S]*?>\s*0/.test(readFileSync(HELPER_YOLU, "utf8"));
-  console.log(`   ℹ️ §4e kapsamı: 1 dosya taranmıştır — ${HELPER_YOLU.split("/").slice(-1)[0]}`);
+  console.log(
+    `   ℹ️ §4e kapsamı: ${TARANAN_HELPERLAR.length} dosya taranmıştır — ` +
+      TARANAN_HELPERLAR.map((y) => y.split("/").slice(-1)[0]).join(", "),
+  );
   check(
     "§4e ⭐ Metraj eşiği TEK yüklemde: `qtyYazilabilir` canlı ve elle kopyası yok",
     yuklemCanli && esikSahipleri.length === 0,
@@ -453,6 +467,203 @@ async function main(): Promise<void> {
     where: { fromStatus: null, toStatus: null },
   });
   console.log(`   ℹ️ Bu DB'de statüsüz (stok defterine taşınmamış) satır: ${canliStatusuz}`);
+
+  // ── §12 — K1: UÇ BİÇİMİ (stok dışı uç depo taşımaz, stok ucu depo ister) ───
+  // Eski tip `warehouseId: string` zorunluydu, yani "WAREHOUSE'tan SHIPPED'e
+  // gitti" cümlesi YAZILAMIYORDU: sevk satırı `to`suz doğuyor ve "nereye gitti"
+  // kalıcı olarak kayboluyordu. Kural tek bir iff'tir ve İKİ YÖNÜ de sessiz
+  // olmamalı — bu yüzden §12b/§12c/§12d birer NEGATİF SONDA.
+  const rE = await mkRoll("E");
+  const sevkId = await prisma.$transaction(async (tx) =>
+    postStockMove(tx, {
+      rollId: rE, eventType: WarehouseEventType.SHIPMENT, qty: 100,
+      from: { warehouseId: wh.id, status: RollStatus.WAREHOUSE },
+      to: { warehouseId: null, status: RollStatus.SHIPPED },
+      reasonCode: STOCK_MOVE_REASON.STOCK_COUNT,
+    }),
+  );
+  const sE = await satirlar(rE);
+  check(
+    "§12a ⭐ Stok dışı uç YAZILDI: depo NULL ama statü dolu (`→ SHIPPED` artık yazılabiliyor)",
+    sE.length === 1 && sE[0]?.fromWarehouseId === wh.id && sE[0]?.fromStatus === RollStatus.WAREHOUSE &&
+      sE[0]?.toWarehouseId === null && sE[0]?.toStatus === RollStatus.SHIPPED,
+    `from=${String(sE[0]?.fromStatus)}/${sE[0]?.fromWarehouseId === wh.id} to=${String(sE[0]?.toStatus)}/${String(sE[0]?.toWarehouseId)}`,
+  );
+
+  // ⚠️ MESAJI DA DÖNER, yalnız "fırlattı mı"yı değil: `warehouse_movements`ta
+  // `warehouse_movements_direction_present` CHECK'i ZATEN var (en az bir depo ucu)
+  // ve aynı fikstürü o da reddediyor. "Fırlattı" ile yetinen bir kontrol hangi
+  // seddin tuttuğunu söylemez — kod kapısı silinse bile DB'ye çarpıp yeşil kalır
+  // (ölçüldü: §64 bloğu silindi, kontrol yeşil kaldı; tutan sed DB'ydi).
+  const hata = async (input: Parameters<typeof postStockMove>[1]): Promise<string | null> => {
+    try {
+      await prisma.$transaction(async (tx) => postStockMove(tx, input));
+      return null;
+    } catch (e) { return e instanceof Error ? e.message : String(e); }
+  };
+  const firlatirMi = async (input: Parameters<typeof postStockMove>[1]): Promise<boolean> =>
+    (await hata(input)) !== null;
+  const rF = await mkRoll("F");
+  // ⚠️ FİKSTÜR K1'İN A YÖNÜNÜ İZOLE ETMEK ZORUNDA: karşı uç GEÇERLİ bir stok ucu
+  // olmalı. Tek uçlu (`to` yalnız) bir fikstür §64 seddine de takılır ve iki sed
+  // aynı satırı yakaladığı için A yönü silinse bile kontrol yeşil kalır — negatif
+  // sonda bunu ilk koşuda yakaladı (ölçüldü: `assertEndShape` silindi, §12b yeşil).
+  check(
+    "§12b ⭐ NEGATİF: stok statüsü + DEPOSUZ uç FIRLATIR (deposuz top stok kümesine giremez)",
+    await firlatirMi({
+      rollId: rF, eventType: WarehouseEventType.TRANSFER, qty: 10,
+      from: { warehouseId: wh.id, status: RollStatus.WAREHOUSE },
+      to: { warehouseId: null, status: RollStatus.WAREHOUSE },
+      reasonCode: STOCK_MOVE_REASON.ENTRY_RECEIPT,
+    }),
+  );
+  check(
+    "§12c ⭐ NEGATİF: stok DIŞI statü + depolu uç FIRLATIR (stok dışı uç depo taşımaz)",
+    await firlatirMi({
+      rollId: rF, eventType: WarehouseEventType.SHIPMENT, qty: 10,
+      from: { warehouseId: wh.id, status: RollStatus.WAREHOUSE },
+      to: { warehouseId: wh.id, status: RollStatus.SHIPPED },
+      reasonCode: STOCK_MOVE_REASON.STOCK_COUNT,
+    }),
+  );
+  // §12d KOD KAPISINI izole eder: mesaj bizim Türkçe cümlemiz olmalı. DB'nin ham
+  // 23514'ü de satırı durdurur ama çağırana teşhis edilebilir bir şey söylemez.
+  const ikiUcDisi = await hata({
+    rollId: rF, eventType: WarehouseEventType.EXTERNAL, qty: 10,
+    from: { warehouseId: null, status: RollStatus.SHIPPED },
+    to: { warehouseId: null, status: RollStatus.AT_KARTELA },
+    reasonCode: STOCK_MOVE_REASON.KARTELA_DISPATCH,
+  });
+  check(
+    "§12d ⭐ NEGATİF: iki uç da stok dışı KOD KAPISINDA durdu (DB'nin 23514'üne düşmeden)",
+    ikiUcDisi !== null && ikiUcDisi.includes("en az bir ucu STOK KÜMESİNDE"),
+    `mesaj=${ikiUcDisi?.slice(0, 120) ?? "fırlatmadı"}`,
+  );
+  // Ve DB ikizi DE yerinde: kod kapısı bir gün kaldırılırsa satır yine yazılamaz.
+  // (`warehouse_movements_direction_present`, K1'in iff'i altında §64'ün DB hâli.)
+  const dbSeddi = await prisma.$queryRaw<{ conname: string }[]>`
+    SELECT conname FROM pg_constraint
+    WHERE conrelid = 'warehouse_movements'::regclass AND contype = 'c'
+      AND conname = 'warehouse_movements_direction_present'`;
+  check(
+    "§12g ⭐ §64'ün DB ikizi yerinde (`warehouse_movements_direction_present`)",
+    dbSeddi.length === 1,
+    `bulunan=${dbSeddi.length}`,
+  );
+  check("§12e ⭐ Üç negatif sonda HİÇBİR satır yazmadı", (await satirlar(rF)).length === 0);
+
+  // Ters kayıt stok dışı ucu AYNALIYOR mu: eski koşul `toWarehouseId && toStatus`
+  // olduğu için sevk satırının tersi `from`suz doğuyordu, yani "mal SHIPPED'ten
+  // geri geldi" ucu kayboluyordu.
+  const sevkTersId = await prisma.$transaction(async (tx) =>
+    reverseStockMove(tx, sevkId, {
+      reasonCode: STOCK_MOVE_REASON.STOCK_COUNT,
+      eventType: WarehouseEventType.SHIPMENT_REVERSAL,
+    }),
+  );
+  const sevkTers = (await satirlar(rE)).find((r) => r.id === sevkTersId);
+  check(
+    "§12f ⭐ Ters kayıt STOK DIŞI ucu aynaladı (`from = {∅, SHIPPED}` korundu)",
+    sevkTers?.fromStatus === RollStatus.SHIPPED && sevkTers?.fromWarehouseId === null &&
+      sevkTers?.toStatus === RollStatus.WAREHOUSE && sevkTers?.toWarehouseId === wh.id,
+    `from=${String(sevkTers?.fromStatus)}/${String(sevkTers?.fromWarehouseId)} to=${String(sevkTers?.toStatus)}/${String(sevkTers?.toWarehouseId)}`,
+  );
+
+  // ── §13 — K4: LEGACY (statüsüz) ileri satırın BAĞLI tersi ─────────────────
+  // Statüsüz satır `reverseStockMove` ile terslenemez (aynalanacak uç yok) ve
+  // atlanırsa Σ eksik kalır: storno malı rafa döndürür, defter girişi görmez.
+  // `reverseLegacyStockMove` bağı ileri satıra kurar, ucu CANLI veriden alır.
+  const rG = await mkRoll("G");
+  await writeWarehouseMovement(
+    prisma,
+    { rollId: rG, eventType: WarehouseEventType.SHIPMENT, qty: 100, fromWarehouseId: wh.id },
+    { onZeroQty: "throw" },
+  );
+  const legacyFwd = (await satirlar(rG))[0]!;
+  const legacyTersId = await prisma.$transaction(async (tx) =>
+    reverseLegacyStockMove(tx, legacyFwd.id, {
+      reasonCode: STOCK_MOVE_REASON.STOCK_COUNT,
+      eventType: WarehouseEventType.SHIPMENT_REVERSAL,
+      from: { warehouseId: null, status: RollStatus.SHIPPED },
+      to: { warehouseId: wh.id, status: RollStatus.WAREHOUSE },
+    }),
+  );
+  const legacyTers = (await satirlar(rG)).find((r) => r.id === legacyTersId);
+  check(
+    "§13a ⭐ Legacy ters BAĞLI doğdu · uç canlıdan · metraj İLERİ SATIRDAN",
+    legacyTers?.reversesMovementId === legacyFwd.id && Number(legacyTers?.qty) === 100 &&
+      legacyTers?.toWarehouseId === wh.id && legacyTers?.toStatus === RollStatus.WAREHOUSE,
+    `bağ=${String(legacyTers?.reversesMovementId === legacyFwd.id)} metraj=${String(legacyTers?.qty)}`,
+  );
+  let legacyP2002 = false;
+  try {
+    await prisma.$transaction(async (tx) =>
+      reverseLegacyStockMove(tx, legacyFwd.id, {
+        reasonCode: STOCK_MOVE_REASON.STOCK_COUNT,
+        to: { warehouseId: wh.id, status: RollStatus.WAREHOUSE },
+      }),
+    );
+  } catch (e) { legacyP2002 = e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"; }
+  check("§13b ⭐ NEGATİF: legacy dal çift stornoyu DB unique'ine çarptırdı", legacyP2002);
+
+  const legacyFirlatirMi = async (movementId: string): Promise<boolean> => {
+    try {
+      await prisma.$transaction(async (tx) =>
+        reverseLegacyStockMove(tx, movementId, {
+          reasonCode: STOCK_MOVE_REASON.STOCK_COUNT,
+          to: { warehouseId: wh.id, status: RollStatus.WAREHOUSE },
+        }),
+      );
+      return false;
+    } catch { return true; }
+  };
+  // STATÜLÜ satır legacy dala girmez — iki fonksiyonun kapsamı örtüşmemeli,
+  // yoksa legacy dal statülü satırların ucunu da "canlıdan" yazmaya başlar.
+  const rH = await mkRoll("H");
+  const statuluId = await prisma.$transaction(async (tx) =>
+    postStockMove(tx, {
+      rollId: rH, eventType: WarehouseEventType.CANCEL, qty: 20,
+      from: { warehouseId: wh.id, status: RollStatus.WAREHOUSE },
+      reasonCode: STOCK_MOVE_REASON.ROLL_CANCEL,
+    }),
+  );
+  check("§13c ⭐ NEGATİF: STATÜLÜ satır legacy dala girmez, FIRLATIR", await legacyFirlatirMi(statuluId));
+
+  // ⚠️ §13d KAÇIŞ KAPISININ KAPANDIĞINI ölçer (yönetici şartı): legacy dalın
+  // `preEpoch=false`a izin vermesi YALNIZ epoch henüz çizilmemişken geçerli bir
+  // gevşetmedir. Epoch çizildikten sonra statüsüz satır bir HATA SİNYALİDİR ve
+  // dal onu susturmamalı. Ulaşılamazlığı ölçülmemiş bir dal, ulaşılabilir sayılır.
+  const rI = await mkRoll("I");
+  await writeWarehouseMovement(
+    prisma,
+    { rollId: rI, eventType: WarehouseEventType.SHIPMENT, qty: 30, fromWarehouseId: wh.id },
+    { onZeroQty: "throw" },
+  );
+  const epochSonrasiId = (await satirlar(rI))[0]!.id;
+  const epochSatiri = await prisma.warehouseMovement.create({
+    data: {
+      rollId: rI, eventType: WarehouseEventType.OPENING_BALANCE, qty: 1,
+      toWarehouseId: wh.id, toStatus: RollStatus.WAREHOUSE,
+      reasonCode: STOCK_MOVE_REASON.OPENING, notes: `${TAG} epoch sondası`,
+    },
+    select: { id: true },
+  });
+  try {
+    check(
+      "§13d ⭐ NEGATİF: epoch ÇİZİLDİKTEN sonra preEpoch=false statüsüz satır legacy dala GİRMEZ (kaçış kapısı kapalı)",
+      await legacyFirlatirMi(epochSonrasiId),
+    );
+    // Ve aynı epoch altında `preEpoch=true` satır HÂLÂ terslenebilir: gevşetme
+    // kalkmıyor, yalnız tarihsel satıra daralıyor.
+    await prisma.warehouseMovement.update({ where: { id: epochSonrasiId }, data: { preEpoch: true } });
+    check(
+      "§13e ⭐ Epoch varken preEpoch=TRUE satır legacy dala girer (damga ayrımı çalışıyor)",
+      !(await legacyFirlatirMi(epochSonrasiId)),
+    );
+  } finally {
+    await prisma.warehouseMovement.deleteMany({ where: { reversesMovementId: epochSonrasiId } });
+    await prisma.warehouseMovement.deleteMany({ where: { id: epochSatiri.id } });
+  }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }

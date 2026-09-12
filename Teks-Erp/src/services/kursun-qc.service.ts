@@ -50,7 +50,7 @@ import {
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { finalizeRollsAtLastStep } from "./helpers/roll-finalize.helper";
-import { reverseLatestScopedStockMove } from "./helpers/warehouse-ledger.helper";
+import { reverseLatestScopedStockMove } from "./helpers/warehouse-ledger-reverse.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import {
   assertKursunTabletMayWrite,

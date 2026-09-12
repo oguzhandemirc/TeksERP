@@ -74,7 +74,7 @@
 import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
-import { reverseAllRollStockMoves } from "./helpers/warehouse-ledger.helper";
+import { reverseAllRollStockMoves } from "./helpers/warehouse-ledger-reverse.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import {
