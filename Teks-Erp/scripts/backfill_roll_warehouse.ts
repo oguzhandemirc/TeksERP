@@ -1,8 +1,16 @@
 // =============================================================================
 // GERİYE DOLDURMA — mevcut topların deposu (Roll.warehouseId)
 // =============================================================================
-//   npx tsx scripts/backfill_roll_warehouse.ts            → KURU ANLATIM (varsayılan)
-//   npx tsx scripts/backfill_roll_warehouse.ts --apply     → gerçekten yazar
+//   npx tsx scripts/backfill_roll_warehouse.ts                                  → KURU ANLATIM (varsayılan)
+//   npx tsx scripts/backfill_roll_warehouse.ts --apply --onay=<N> --hedef=<db>  → gerçekten yazar
+//   [--dokum=<yol>]  etkilenen HER topun CSV dökümü (varsayılan scripts/out/…csv; kuru koşumda da yazılır)
+//
+// KAPI (2026-09-12, yönetici kararı): `--apply` iki teyit ister — `--onay=<N>` (N = kuru
+// koşumdaki deposuz top sayısı, birebir) ve `--hedef=<db-adı>` (DATABASE_URL'den çözülen adla
+// birebir; başlık her koşumda DB adı + host basar). Biri tutmazsa yazma YOK. "Etkilenen her
+// kayıt listelenir" kuralı: konsolda depo × statü kırılımı + STOK KÜMESİNDEKİ topların TAMAMI;
+// terminal statülü toplar (sevk edilmiş, tüketilmiş, iptal) konsolda özet, ama HEPSİ CSV
+// dökümünde — "hangi topa hangi depo verildi" sorusu sonradan dosyadan cevaplanır.
 //
 // NEDEN GÜVENLİ (bu bir TAHMİN DEĞİL): çoklu depodan önce sistemde depo kavramı
 // tek bir yerdi — fabrikanın TEK deposu. Dolayısıyla "bu top hangi depoydu"
@@ -20,14 +28,32 @@
 //
 // İdempotent: yalnız `warehouseId IS NULL` satırlara dokunur, tekrar koşulabilir.
 // =============================================================================
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import prisma, { pool } from "../src/lib/prisma";
+import { WAREHOUSE_STOCK_STATUSES } from "../src/services/helpers/warehouse-stock.helper";
+import { hedefDbAdi } from "./lib/hedef-db-kapisi";
 
-const APPLY = process.argv.includes("--apply");
+const argv = process.argv.slice(2);
+const APPLY = argv.includes("--apply");
+const ONAY = Number((argv.find((a) => a.startsWith("--onay=")) ?? "").split("=")[1] ?? NaN);
+const HEDEF = (argv.find((a) => a.startsWith("--hedef=")) ?? "").split("=")[1] ?? "";
+const DOKUM = (argv.find((a) => a.startsWith("--dokum=")) ?? "").split("=")[1] ?? "";
 const BATCH = 500;
-const SAMPLE = 20;
+
+function dbHost(): string {
+  try { const u = new URL(process.env.DATABASE_URL ?? ""); return `${u.hostname}:${u.port || "5432"}`; } catch { return "(okunamadı)"; }
+}
+function dokumYolu(db: string): string {
+  if (DOKUM) return resolve(DOKUM);
+  const damga = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15);
+  return resolve(__dirname, "out", `backfill_roll_warehouse-${db}-${damga}.csv`);
+}
 
 async function main(): Promise<void> {
-  console.log(`=== Roll.warehouseId geriye doldurma — ${APPLY ? "UYGULAMA" : "KURU ANLATIM"} ===\n`);
+  const db = hedefDbAdi();
+  console.log(`=== Roll.warehouseId geriye doldurma — ${APPLY ? `UYGULAMA (onay=${ONAY}, hedef=${HEDEF})` : "KURU ANLATIM"} ===`);
+  console.log(`HEDEF VERİTABANI: ${db} @ ${dbHost()}\n`);
 
   const target = await prisma.warehouse.findFirst({
     where: { isDefault: true },
@@ -63,25 +89,37 @@ async function main(): Promise<void> {
     console.log(`  ${r.status.padEnd(28)} ${r._count._all}`);
   }
 
-  const sample = await prisma.roll.findMany({
+  // ETKİLENEN HER KAYIT: konsolda stok kümesindekilerin TAMAMI (depoya dokunan
+  // gerçek yük), terminal statülüler özetle; HEPSİ CSV dökümünde.
+  const hepsi = await prisma.roll.findMany({
     where: { warehouseId: null },
-    select: { barcode: true, status: true, currentQty: true, createdAt: true },
-    orderBy: { createdAt: "desc" },
-    take: SAMPLE,
+    select: { id: true, barcode: true, status: true, currentQty: true, createdAt: true },
+    orderBy: [{ status: "asc" }, { createdAt: "asc" }],
   });
-  console.log(`\nÖrnek ilk ${sample.length} kayıt (en yeni):`);
-  for (const r of sample) {
+  const stokta = hepsi.filter((r) => WAREHOUSE_STOCK_STATUSES.includes(r.status));
+  const terminal = hepsi.length - stokta.length;
+  console.log(`\nDepo × statü kırılımı (hedef ${target.code}): stok kümesinde ${stokta.length} top, terminal/üretim statülü ${terminal} top`);
+  console.log(`\nSTOK KÜMESİNDEKİ TOPLARIN TAMAMI (${stokta.length}) — barkod · statü · metre · doğum:`);
+  for (const r of stokta) {
     console.log(
-      `  ${(r.barcode ?? "(barkodsuz)").padEnd(16)} ${r.status.padEnd(24)} ` +
-        `${String(r.currentQty).padStart(9)} m  ${r.createdAt.toISOString().slice(0, 10)}`,
+      `  ${(r.barcode ?? r.id).padEnd(16)} ${r.status.padEnd(12)} ${String(r.currentQty).padStart(9)} m  ${r.createdAt.toISOString().slice(0, 10)}`,
     );
   }
-  if (total > SAMPLE) console.log(`  … ve ${total - SAMPLE} kayıt daha`);
+  const yol = dokumYolu(db);
+  mkdirSync(dirname(yol), { recursive: true });
+  writeFileSync(
+    yol,
+    ["rollId;barcode;status;currentQty;createdAt;hedefDepo", ...hepsi.map((r) => [r.id, r.barcode ?? "", r.status, String(r.currentQty), r.createdAt.toISOString(), target.code].join(";"))].join("\n") + "\n",
+    "utf8",
+  );
+  console.log(`\nDÖKÜM: ${hepsi.length} topun tamamı → ${yol}`);
 
   if (!APPLY) {
-    console.log("\nKURU ANLATIM — hiçbir şey yazılmadı. Uygulamak için: --apply");
+    console.log(`\nKURU ANLATIM — hiçbir şey yazılmadı. Uygulamak için (kullanıcı onayıyla, HEDEF adı birebir):\n  npx tsx scripts/backfill_roll_warehouse.ts --apply --onay=${total} --hedef=${db}`);
     return;
   }
+  if (!HEDEF || HEDEF !== db) { console.error(`❌ --hedef=${HEDEF || "(yok)"} ≠ çözülen veritabanı "${db}". Yazma YOK.`); process.exitCode = 1; return; }
+  if (!Number.isFinite(ONAY) || ONAY !== total) { console.error(`❌ ONAY UYUŞMUYOR: kuru koşum ${total} top, --onay=${ONAY}. Yazma YOK.`); process.exitCode = 1; return; }
 
   console.log("\nYazılıyor…");
   let written = 0;

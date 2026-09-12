@@ -59,8 +59,17 @@ import prisma, { pool } from "../src/lib/prisma";
 import { RollStatus } from "@prisma/client";
 import { AuditService } from "../src/services/audit.service";
 import { FACTORY_TIMEZONE } from "../src/constants/time";
+import { hedefDbAdi } from "./lib/hedef-db-kapisi";
 
-const APPLY = process.argv.includes("--apply");
+const argv = process.argv.slice(2);
+const APPLY = argv.includes("--apply");
+/** KAPI (2026-09-12): `--apply` sayıyı `--onay=<N>` ve hedef DB adını `--hedef=<db>` ile teyit ettirir
+ *  (dört veri operasyonunun ortak sözleşmesi — kas hafızası tek tip); başlık DB adı + host basar. */
+const HEDEF = (argv.find((a) => a.startsWith("--hedef=")) ?? "").split("=")[1] ?? "";
+const ONAY = Number((argv.find((a) => a.startsWith("--onay=")) ?? "").split("=")[1] ?? NaN);
+function dbHost(): string {
+  try { const u = new URL(process.env.DATABASE_URL ?? ""); return `${u.hostname}:${u.port || "5432"}`; } catch { return "(okunamadı)"; }
+}
 
 /** Satılabilir sayılan statüler — bu script yalnız BUNLARI çeker. */
 const SELLABLE: RollStatus[] = [RollStatus.WAREHOUSE, RollStatus.A1_STOCK, RollStatus.STOCK];
@@ -71,11 +80,13 @@ const fmt = (d: Date | null | undefined): string =>
     : "—";
 
 async function main(): Promise<void> {
+  const db = hedefDbAdi();
   console.log(
     APPLY
-      ? "⚠️  --apply: değişiklikler YAZILACAK"
-      : "ÖNİZLEME (dry-run) — hiçbir şey yazılmaz; uygulamak için --apply",
+      ? `⚠️  --apply: değişiklikler YAZILACAK (hedef=${HEDEF})`
+      : "ÖNİZLEME (dry-run) — hiçbir şey yazılmaz; uygulamak için --apply --hedef=<db-adı>",
   );
+  console.log(`HEDEF VERİTABANI: ${db} @ ${dbHost()}`);
 
   const skipGrades = await prisma.qualityGrade.findMany({
     where: { skipLabel: true },
@@ -157,7 +168,17 @@ async function main(): Promise<void> {
   if (candidates.length === 0) return;
 
   if (!APPLY) {
-    console.log(`\nÖNİZLEME bitti — ${candidates.length} top SCRAP'e çekilecek. Yazmak için --apply.`);
+    console.log(`\nÖNİZLEME bitti — ${candidates.length} top SCRAP'e çekilecek. Yazmak için (sayı ve HEDEF adı birebir):\n  npx tsx scripts/fix_fire_rolls_to_scrap.ts --apply --onay=${candidates.length} --hedef=${db}`);
+    return;
+  }
+  if (!HEDEF || HEDEF !== db) {
+    console.error(`❌ --hedef=${HEDEF || "(yok)"} ≠ çözülen veritabanı "${db}". Yazma YOK.`);
+    process.exitCode = 1;
+    return;
+  }
+  if (!Number.isFinite(ONAY) || ONAY !== candidates.length) {
+    console.error(`❌ ONAY UYUŞMUYOR: önizleme ${candidates.length} top, --onay=${ONAY}. Yazma YOK.`);
+    process.exitCode = 1;
     return;
   }
 

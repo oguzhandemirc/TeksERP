@@ -16,3 +16,6 @@ node_modules
 
 # Docker
 backups/
+
+# Veri operasyonu dökümleri (backfill_roll_warehouse --dokum varsayılanı) — fabrika verisi, repoya GİRMEZ
+scripts/out/
