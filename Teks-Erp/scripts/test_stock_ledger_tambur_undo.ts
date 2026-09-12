@@ -20,6 +20,11 @@
 //   §5 Fire (SCRAP) çocuk: ne ileri ne ters satır
 //   §6 ⭐ FULL dalı İKİ depo çocuğunun İKİSİNİ de tersler (öksüz kalmaz)
 //   §7 Körlük zemini: fikstür gerçekten satır üretti (0 bulgu ≠ bakılmadı)
+//   §8 ⭐ SINGLE_RESTORE dalı da tersler — ayrı ölçülmemişti (sonda iki dalı
+//      birlikte kaldırdığı için hangisinin ölçüldüğü belirsizdi)
+//   §9 ⭐ İKİ TUR: "her tur hayalet metre ekler" iddiası tambur tarafında
+//      ÖLÇÜLDÜ — 2 ileri + 2 ters, toplam net 0
+//   §10 ⭐ YAPISAL değişmez: iptal edilmiş her çocuğun ileri satırı terslenmiş
 // =============================================================================
 import { RollStatus, WarehouseEventType } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -186,9 +191,67 @@ async function main(): Promise<void> {
     `ters=${tersSayisi} netler=[${netler.join(",")}]`,
   );
 
-  // ── §7 Körlük zemini ──────────────────────────────────────────────────────
+  // ── SENARYO C — SINGLE_RESTORE dalı + İKİ TUR ─────────────────────────────
+  // ⚠️ İki eksik aynı fikstürle kapanıyor:
+  //   ① `applySingleRestore` dalı ayrı ölçülmemişti — sonda iki `applySingle*`
+  //      çağrısını birlikte kaldırdığı için hangi dalın ölçüldüğü belirsizdi.
+  //   ② "her tur hayalet metre ekler" iddiası tambur tarafında ÖLÇÜLMEMİŞTİ;
+  //      yalnız reopen bekçisinde iki tur vardı. SINGLE_RESTORE metrajı kaynağa
+  //      geri koyup iş emrini dirilttiği için ikinci tur BU dalda mümkün olur.
+  const parentC = await senaryo("C", warehouse.id, station.id, 200);
+  const turNetleri: number[] = [];
+  const turCocuklari: string[] = [];
+  for (const tur of [1, 2]) {
+    const res = await tambur.finalize({
+      rollId: parentC,
+      decisions: [],
+      cuts: [{ length: 200, qualityGrade: gWh.code, relatedErrorIds: [] }],
+      confirmMismatch: true,
+    });
+    const cocuk = (res.data?.splitRolls ?? []).find((c) => c.status === RollStatus.WAREHOUSE);
+    if (!cocuk) throw new Error(`tur ${tur}: depo çocuğu doğmadı`);
+    rollIds.push(cocuk.id);
+    turCocuklari.push(cocuk.id);
+    const ileri = await satirlar(cocuk.id);
+    if (net(ileri) !== 200) throw new Error(`tur ${tur}: giriş satırı beklenen +200 değil (${net(ileri)})`);
+    // SINGLE_RESTORE: parçayı iptal et, metrajı KAYNAK TOPA geri koy.
+    await undo.applyUndo(cocuk.id, undefined, { mode: "SINGLE_RESTORE", reason: `bekçi: tur ${tur}` });
+    turNetleri.push(net(await satirlar(cocuk.id)));
+  }
+  check(
+    "§8 ⭐ SINGLE_RESTORE dalı da ileri satırı tersler (her iki turda net 0)",
+    turNetleri.length === 2 && turNetleri.every((n) => n === 0),
+    `netler=[${turNetleri.join(",")}]`,
+  );
+  const turSatirlari = (await Promise.all(turCocuklari.map(satirlar))).flat();
+  check(
+    "§9 ⭐ İKİ TUR sonunda hayalet metraj YOK: 2 ileri + 2 ters, toplam net 0",
+    turSatirlari.length === 4 && net(turSatirlari) === 0 &&
+      turSatirlari.filter((r) => r.reversesMovementId !== null).length === 2,
+    `satır=${turSatirlari.length} net=${net(turSatirlari)}`,
+  );
+
+  // ── §7 + §10 Körlük zemini ────────────────────────────────────────────────
+  // Sayı senaryo eklendikçe değişir; onun yerine YAPISAL değişmez ölçülür:
+  // iptal edilmiş her çocuğun ileri satırı terslenmiş olmak zorunda (öksüz yok).
   const toplam = await prisma.warehouseMovement.count({ where: { rollId: { in: rollIds } } });
-  check("§7 Körlük zemini: fikstür 6 defter satırı üretti (3 ileri + 3 ters)", toplam === 6, `n=${toplam}`);
+  check("§7 Körlük zemini: fikstür en az 10 defter satırı üretti", toplam >= 10, `n=${toplam}`);
+  const iptalliCocuklar = await prisma.roll.findMany({
+    where: { id: { in: rollIds }, status: RollStatus.CANCELLED },
+    select: { id: true },
+  });
+  const oksuz: string[] = [];
+  for (const c of iptalliCocuklar) {
+    const s = await satirlar(c.id);
+    const ileri = s.filter((r) => r.reversesMovementId === null);
+    const terslenen = new Set(s.filter((r) => r.reversesMovementId !== null).map((r) => r.reversesMovementId));
+    if (ileri.some((r) => !terslenen.has(r.id))) oksuz.push(c.id);
+  }
+  check(
+    "§10 ⭐ İPTAL EDİLMİŞ her çocuğun ileri satırı terslenmiş (öksüz satır yok)",
+    iptalliCocuklar.length >= 3 && oksuz.length === 0,
+    `iptalli=${iptalliCocuklar.length} öksüz=${oksuz.length}`,
+  );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
