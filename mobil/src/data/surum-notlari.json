@@ -2,7 +2,8 @@
   "_aciklama": [
     "TeksERP sürüm notları — TEK KAYNAK. Operatör diliyle yazılır (fabrika çalışanı okuyacak).",
     "Bu dosya panel ve tablet paketlerine GÖMÜLÜR: Electron/src/data/ ve mobil/src/data/ altındaki",
-    "kopyalar buradan üretilir ve bekçi (scripts/test_surum_notlari.ts) birebir eşitliği kilitler.",
+    "kopyalar buradan üretilir; birebir eşitliği PAKETLEME KAPISI kilitler —",
+    "scripts/check-surum-notlari.mjs §5 'Kopya tazeliği' iki kopyayı da bayt bayt karşılaştırır.",
     "Kopyaları ELLE düzenleme — bu dosyayı düzenle, `node scripts/surum-notlari-kopyala.mjs` çalıştır.",
     "",
     "id      : yayın turunun kimliği, YYYY-AA-GG. Üç ürünün sürümü bağımsız ilerlediği için",
@@ -17,12 +18,17 @@
   "yayinlar": [
     {
       "id": "2026-09-12",
-      "baslik": "Yanlış yapılan işlemler geri alınabiliyor: kartela düşümü, sayım, çek; sevk irsaliyesi tek pencerede toplandı",
+      "baslik": "Yanlış yapılan işlemler geri alınabiliyor: kartela düşümü, sayım, çek, toplu aktarım; sevk irsaliyesi tek pencerede toplandı",
       "surumler": {
         "panel": "1.3.2",
         "tablet": "1.0.7"
       },
       "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Yanlış giden bir toplu aktarımı geri alabiliyorsunuz. Veri Aktarımı ekranındaki Geçmiş listesinde her yüklemenin yanında artık “Geri sar” düğmesi var. Önceden yanlış dosya yüklendiğinde tek yol kayıtları tek tek elle düzeltmekti. Artık her yükleme ne yazdığını kendi kaydında tutuyor: düğmeye bastığınızda etkilenen HER satır, yanında ne yapılacağı yazılı olarak listelenir (yeni oluşturulan kayıt pasife alınacak · güncellenen kayıt eski değerine dönecek). İstediğiniz satırları seçer, gerekçe yazar ve yalnız seçtiklerinizi geri alırsınız; bir kısmını şimdi, kalanını sonra geri sarmak da mümkündür. Yüklemeden SONRA birisi o kaydı değiştirmişse o satıra DOKUNULMAZ — listede gerekçesiyle atlanmış görünür. Atlanan her satırın kendi gerekçesi yazılır; tek bir “12 satır atlandı” özeti verilmez. Geri alma hiçbir şeyi yok etmez: yükleme listede kalır, üzerine “geri sarıldı” damgası ve gerekçeniz yazılır; yeni kayıtlar silinmez, pasife alınır. Aynı satır ikinci kez geri sarılamaz. Sipariş yüklemesi geri sarılırken siparişin kendi iptal yolu kullanılır — sevk edilmiş ya da iş emri açılmış sipariş geri alınmaz ve sebebi satırda yazar. Başka kayıtlara yazılmış yan bilgiler (örneğin müşterinin kendi kumaş adı) silinmez; pencerede “bunlar kalacak” diye ayrıca listelenir. Geri sarma iki yetkiye bağlı: toplu aktarım yetkisi VE o verinin kendi düzenleme yetkisi."
+        },
         {
           "kapsam": "panel",
           "tip": "duzeltme",
