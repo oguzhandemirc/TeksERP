@@ -2,7 +2,7 @@
 
 > Üretilmiş (anlama turu 2026-09-05, +10 bekçi 2026-09-06/07; 467 backend bekçisi + 296 istemci testi — Electron 211, mobil 85). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı; 455 dosya, **~6,5 dakika** — 369 sn koşum + 28 sn tip geçidi, ölçüldü 2026-09-05 — 'saatler sürer' cümlesi YANLIŞTI, `docs/standart/TEST-VE-DERLEME.md` [TD-02]). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
 
-Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (94), `diger` (91), `sevkiyat` (87), `etiket` (83), `finans` (81), `siparis` (72), `modul-bayrak` (69), `belge` (65), `ayar` (58), `cuval` (59), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (41), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (30), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (23), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (12), `sebep-katalogu` (12), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
+Alanlar: `yetki-izin` (98), `is-emri` (96), `ui-bilesen` (94), `fason` (94), `diger` (92), `sevkiyat` (87), `etiket` (83), `finans` (81), `siparis` (72), `modul-bayrak` (69), `belge` (65), `ayar` (58), `cuval` (59), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (41), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (30), `refakat-karti` (29), `audit` (29), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (23), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (12), `sebep-katalogu` (12), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
 
 
 ## yetki-izin (98)
@@ -108,7 +108,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (94), `di
 | `mobil/src/utils/idleLock.test.ts` | computeIdlePhase saf faz hesabı: yeni aktivite → active (tam süre kalır), eşik altı active, uyarı penceresi ve kilit anı; warningSeconds + idleMinutes |  |  |  |
 | `mobil/src/utils/jwtExpiry.test.ts` | decodeJwtExpMs/msUntilExpiry/shouldAutoLogout: yapısal geçerli sahte JWT ile exp okuma, bozuk token dalları ve otomatik çıkış eşiği (sabit epoch). |  |  |  |
 
-## is-emri (95)
+## is-emri (96)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
@@ -208,6 +208,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (94), `di
 | `mobil/src/screens/Modules/HizliIsEmri/scanClassify.test.ts` | Okutma kararı saf: ATTACHABLE_STATUSES = STOCK/WAREHOUSE/A1_STOCK (backend quickStart.attachable aynası), isReworkStatus rozeti, statü kontrolü çuvald |  |  |  |
 | `mobil/src/screens/Modules/Tambur/canUnlinkOrderLine.test.ts` | Backend son-bağ kuralının istemci aynası: ORDER_PRODUCTION + tek bağ + hedef kumaş varsa kaldırılabilir (becomesStock uyarısı); hedef kumaş yoksa enge |  |  |  |
 | `Teks-Erp/scripts/test_roll_movement_revoke.ts` | Top hareketinin geri alınırken SİLİNMEDİĞİNİ damgalandığını; partial unique sayesinde geri alınmış AÇIK satır dururken aynı (top, adım) için yeni açık hareket yazılabildiğini, iki AKTİF açık hareketin reddedildiğini; kurşun yeniden açma ve geri manuel taşıma sonrası `recomputeStepStatus`un silme davranışıyla AYNI adım durumunu ürettiğini; AST+tip denetleyicisiyle her okuma/güncelleme/ilişki/ham SQL erişiminin `ACTIVE_MOVEMENT` taşıdığını (istisna kümesi iki yönlü) | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_kanban_card_projection.ts` | Uretim Akisi (Kanban) kartinin DAR iliski kumesini (ROLL_CARD_INCLUDE) kilitler: dusurulen iliskiler sessizce geri gelmesin (115 -> 66 sorgu) |  |  |  |
 
 ## ui-bilesen (94)
 
@@ -407,7 +408,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (94), `di
 | `mobil/src/test/segmented-buttons-row.guard.test.ts` | TS AST taraması: her <SegmentedButtons> için en yakın sarmalayan JSX elemanının style'ı çözülür (StyleSheet anahtarı ya da satır içi nesne); flexDirec |  | ✓ |  |
 | `Teks-Erp/scripts/test_roll_movement_revoke.ts` | Top hareketinin geri alınırken SİLİNMEDİĞİNİ damgalandığını; partial unique sayesinde geri alınmış AÇIK satır dururken aynı (top, adım) için yeni açık hareket yazılabildiğini, iki AKTİF açık hareketin reddedildiğini; kurşun yeniden açma ve geri manuel taşıma sonrası `recomputeStepStatus`un silme davranışıyla AYNI adım durumunu ürettiğini; AST+tip denetleyicisiyle her okuma/güncelleme/ilişki/ham SQL erişiminin `ACTIVE_MOVEMENT` taşıdığını (istisna kümesi iki yönlü) | ✓ | ✓ |  |
 
-## diger (91)
+## diger (92)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
@@ -502,6 +503,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (94), `di
 | `mobil/src/store/sessionStore.test.ts` | Çalışma oturumu store'u: current/open/close çağrıları ve durum geçişleri (workSession.service mock'lu). |  |  |  |
 | `mobil/src/test/smoke.test.ts` | Altyapı doğrulaması: jest-expo preset + ts transform koşuyor mu (tek assertion). |  |  |  |
 | `mobil/src/utils/queryBuilder.test.ts` | buildQueryString: varsayılanlar yazılmaz, varsayılan-dışı + arama yazılır, filtreler filter[key] ve diziler virgülle, boş filtre atlanır. |  |  |  |
+| `Teks-Erp/scripts/test_identity_ledger.ts` | Bir kimlik kumesi ile gercek kaynagi ayrisamaz: arsiv salt-ekleme, dusen basligin arsivde gerekcesi, bekci adlari harita<->alan kosum listesi hizasi |  |  |  |
 
 ## sevkiyat (87)
 
@@ -1511,7 +1513,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (94), `di
 | `Teks-Erp/scripts/test_traveler_template.ts` | Şablonun üç kademesini (BUILTIN/SECTIONS/RAW_HTML) kilitler: şablonsuz kurulum bayt-bayt aynı, bölüm sırası + eksik bölüm sona eklenir, {{alan}} ikame | ✓ | ✓ | ⚠️ Başlık ve bölüm etiketi 2026-08-06'da tersine çevrilmiş 'şablon karta donar' kuralını hâlâ |
 | `Teks-Erp/scripts/test_workorder_documents.ts` | GET /work-orders/:id/documents dört kaynağı da buluyor, listedeki her satır gerçekten basılabiliyor (liste↔baskı izin hizası) ve iptal edilmiş belge l | ✓ |  |  |
 
-## audit (28)
+## audit (29)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
@@ -1544,6 +1546,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (94), `di
 | `Teks-Erp/scripts/test_work_session_close_all.ts` | Kalıntı oturum öz-onarımı: başka kullanıcının açık oturumu BENİMSENMEZ (NEW_LOGIN ile kapanır), closeForDevice idempotent ve cihaz kapsamlı. | ✓ |  |  |
 | `Teks-Erp/scripts/test_work_session_history_guard.ts` | Oturum geçmişi silinmez (defter.md): oturumlu istasyon/makine kalıcı silme 409 + satırlar yerinde, önizleme engeli döker; AST: src/'de workSession.delete* ve ham DELETE work_sessions yok | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_work_session_stamping.ts` | Üretim atfı: oturum makinesi Roll.createdMachineId / RollOperation / movement'a akar, oturumsuz mobil 409 WORK_SESSION_REQUIRED, web'de null ile işlem | ✓ |  |  |
+| `Teks-Erp/scripts/test_system_log_query_gate.ts` | SistemLog liste ucunda recordId YALNIZ BASINA gonderilemez: composite index'in ilk kolonu tableName, aksi halde planlayici index yazar ama tarar (fail-closed kapi) |  |  |  |
 
 ## tutarlilik (27)
 

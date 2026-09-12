@@ -55,13 +55,13 @@
 
 - **[PROFİL]** Mükerrer paneli P3a/b (şube · istasyon · makine · kategori sekmeleri) ÖLÇÜMLE ERTELENDİ — canlıda 0 mükerrer; reçete `docs/design/MUKERRER-PANELI-TASARIM.md` §9; yeniden önerilmeden önce ölçüm tekrarlanır. Bulanık eşleme ayarları `duplicatesFuzzyEnabled` / `duplicatesFuzzyThresholdPct` (Ayarlar → Müşteriler; dört kapı). <sub>(kök 2026-08-22)</sub>
 
-## Bekçiler — bu alana dokununca koş (19 backend · 3 istemci)
+## Bekçiler — bu alana dokununca koş (20 backend · 3 istemci)
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_color_name_dup`, `test_consistency`, `test_data_integrity_gaps`, `test_db_invariants`, `test_duplicate_detection`⚠️, `test_duplicate_rolls`, `test_fold_contract`, `test_item_code_case_uniqueness`, `test_master_data_merge`, `test_master_data_merge_conflicts`, `test_master_data_merge_fk_coverage`, `test_master_data_merge_race`, `test_master_data_name_dup`, `test_merge_field_picks`, `test_name_normalization`, `test_name_uppercase_storage`, `test_similar_names`, `test_subcontractor_management`, `test_turkish_search_fold`
+Backend: `test_color_name_dup`, `test_consistency`, `test_data_integrity_gaps`, `test_db_invariants`, `test_duplicate_detection`, `test_duplicate_rolls`, `test_fold_contract`, `test_item_code_case_uniqueness`, `test_master_data_merge`, `test_master_data_merge_conflicts`, `test_master_data_merge_fk_coverage`, `test_master_data_merge_race`, `test_master_data_merge_revert`, `test_master_data_name_dup`, `test_merge_field_picks`, `test_name_normalization`, `test_name_uppercase_storage`, `test_similar_names`, `test_subcontractor_management`, `test_turkish_search_fold`
 
 İstemci: `SimilarNamesWarning.test.tsx`⚠️, `similar-names-coverage.test.ts`⚠️, `searchFold.test.ts`
 

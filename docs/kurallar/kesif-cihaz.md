@@ -150,13 +150,13 @@
 
 - **[ÇEKİRDEK]** Tek cihazlı istasyonlarda çevre birimi seçimi `primaryMeterFor`/`primaryScaleFor` ile: role PRIMARY ?? rolesiz ?? ilk satır ?? null — kat rolüyle eşleşen `meterPeripheralFor(rows, foldType)`ten AYRI seçici. <sub>(eski mobil/CLAUDE.md HAL)</sub>
 
-## Bekçiler — bu alana dokununca koş (26 backend · 25 istemci)
+## Bekçiler — bu alana dokununca koş (27 backend · 25 istemci)
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_audit_followups`, `test_boss_overview`, `test_canvas_preview_peripheral_lang`, `test_client_registry`, `test_device_activity`, `test_device_assignment`, `test_device_pairing_flag`, `test_device_transport`, `test_discovery_advertiser`, `test_discovery_identity`, `test_field_address`⚠️, `test_label_format_resolver`, `test_label_routing_resolver`, `test_p2_api`, `test_peripheral_for_device`⚠️, `test_peripheral_registry_crud`, `test_peripheral_station_owner`⚠️, `test_remote_access_guard`, `test_sack_weigh_source`, `test_session_registry`, `test_totp`, `test_web_hardening`, `test_work_session`, `test_work_session_close_all`, `test_work_session_stamping`, `test_workstation_permission`
+Backend: `test_audit_followups`, `test_boss_overview`, `test_canvas_preview_peripheral_lang`, `test_client_registry`, `test_device_activity`, `test_device_assignment`, `test_device_pairing_flag`, `test_device_transport`, `test_discovery_advertiser`, `test_discovery_identity`, `test_field_address`, `test_label_format_resolver`, `test_label_routing_resolver`, `test_p2_api`, `test_peripheral_for_device`, `test_peripheral_registry_crud`, `test_peripheral_station_owner`, `test_remote_access_guard`, `test_sack_weigh_source`, `test_session_registry`, `test_totp`, `test_web_hardening`, `test_work_session`, `test_work_session_close_all`, `test_work_session_history_guard`, `test_work_session_stamping`, `test_workstation_permission`
 
 İstemci: `useServerReachability.test.ts`⚠️, `api-config.test.ts`⚠️, `machine-config.test.ts`⚠️, `scan-framer.test.ts`⚠️, `wedge-detector.test.ts`⚠️, `server-identity.test.ts`⚠️, `weight-codec.test.ts`⚠️, `schema.test.ts`, `clients-utils.test.ts`, `discovery-ipc-contract.test.ts`, `discovery-logic.test.ts`, `ServerDiscoveryList.contract.test.ts`, `ServerDiscoveryList.render.test.tsx`, `useMachinePeripherals.test.ts`, `useSackWeigh.test.tsx`⚠️, `discovery.contract.test.ts`, `discovery.test.ts`, `pairingGate.test.ts`, `serverReachability.test.ts`, `btPrinter.service.test.ts`, `discovery.service.test.ts`, `btClassic.transport.test.ts`, `deviceNameMatch.test.ts`, `meter.codec.test.ts`, `deviceSettingsStore.test.ts`
 
