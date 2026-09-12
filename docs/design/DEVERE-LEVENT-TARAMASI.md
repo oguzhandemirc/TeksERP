@@ -96,7 +96,7 @@ Ciddiyet ölçeği `SEKTOR-YOL-HARITASI.md` ile aynı: 🔴 defter yalanı · �
 | 🔵 | **`WarpBeam`** — levent kimliği + durumu | "Şu an hangi leventler hazır, hangisi hangi tezgahta" | Hiç yok | `WarpSpec`, `Machine` | **EVET.** `Roll`'a gömme reddedildi (§3.1) | 1 |
 | 🔵 | **`WarpSpec`** — çözgü kartı (çözgü föyü) | "Bu levent hangi desenleri besler" (UA6007 ↔ UA6007A); tel/kenar/tarak | Kâğıt kartta el yazısı "Çözgü = UA6007" | `Item` (iplik: `yarnItemId`; kumaş: `Item.warpSpecId`) | **EVET.** N desen tek çözgüyü paylaşır; `ProductRecipe` renge bağlı, `Item` öz-referansı zayıf (§3.4) | 1 |
 | 🟠 | **Devereye iplik çıkışı** (`WARP_ISSUE` + `warpBeamId`) | İplik stoktan düşer ama nereye gittiği yazılmaz. Tüketim, satış ve sayım farkı yalnız kaynak sütunundan ayrışır; iplik tüketim raporu yok | `YarnMovement` `OUT` (bugün yalnız satış faturası ve elle giriş yazar) + serbest `reason` | `YarnMovement` (tipli belge bağı; `goodsReceiptId`/`stockCountId` emsali) | Hayır: enum + nullable FK | 1 |
-| 🟡 | **Denye** (`Item.linearDensityDen`) | Formülün girdisi yalnız stok kartı ADINDA metin ("70 DN"); hesap yapılamaz | `Item.name` | `Item` | Hayır: nullable kolon. **Ad ayrıştırılmaz**, değer elle girilir | 1 |
+| 🟡 | **İplik numarası** (`Item.yarnCountSystem` + `yarnCountValue`) | Formülün girdisi yalnız stok kartı ADINDA metin ("70 DN"); hesap yapılamaz. Ayrıca **denye tek sistem değil**: pamukluda Ne kullanılır ve TERS sistemdir (§3.8b) | `Item.name` | `Item` | Hayır: 1 enum + 1 nullable kolon; denye TÜRETİLİR. **Ad ayrıştırılmaz**, değer elle girilir | 1 |
 | 🔵 | **İstasyon yeteneği** "levent doğar" / "levent tüketilir" | Hangi makine devere, hangisi tezgah ya da raşel | `Station.department` serbest metin ("DEVERE") | `Station` (`appliesQuality` yetenek emsali), `Machine` | Hayır: iki boolean + `Machine.warpBeamSlots` | 1 (doğar) · 3 (tüketilir) |
 | 🟠 | **`YarnLot`** + `YarnMovement.lotId` + `bobbinCount` | Leventte hangi lot(lar) var; levent içi lot farkı → **boyuna çözgü yolu**; ardışık leventte lot değişimi → geçişte ton farkı; lot geri çağırması imkânsız | İrsaliyede var; mal kabul satırı lot/bobin alanını reddediyor (`goods-receipt.service.ts:84-99`) | `YarnMovement` (şema notundaki yükseltme yolu, `schema.prisma:7565-7569`) | **EVET.** Şemanın kendi notu `YarnLot`'u öngörüyor; lot bakiyesi Faz 2'de TÜRETİLİR | 2 |
 | 🟠 | **Kalan metre** | Levent bitmeden plan yapılamaz; yarım leventin değeri bilinmez | Hiç yok | `WarpBeamEvent` | Hayır: türetilir, kolon açılmaz | 3 |
@@ -180,6 +180,34 @@ Ters yol ileri yolla birlikte doğar: `WARP_RETURN_REVERSAL` (`defter.md:56`, "t
 ### 3.8 İplik ters kaydı tipli: `WARP_ISSUE_REVERSAL`, `ADJUST_IN` değil
 
 Bugünkü iplik stornoları `ADJUST_IN/OUT` yazar (fiş/fatura iptali, `yarn.service.ts:279-281`). Devere iptali bu desene uymaz. Doktrin tipli ters değer ister (`defter.md`), ve `ADJUST_IN` sayım fazlasıyla aynı kovadır: `SEKTOR`'ün "fire/kayıt düzeltmesi ayrımı yok" şikâyetinin ta kendisi. Bedeli ölçüldü: elle yazılmış iki yön listesi yeni "artıran" türü yanlış sayar (§4.9). Bu listeler Faz 1'de işaret fonksiyonuna bağlanır.
+
+### 3.8b İPLİK NUMARA SİSTEMİ — denye tek sistem DEĞİLDİR (`yarnCountSystem`, ② VERİ)
+
+`Item.linearDensityDen` (CANLI, `schema.prisma:1492`) yalnız **denye** tutar ve formül `tel × denye × metre / 9.000.000`. Pamuklu dokumacı ise **Ne** kullanır ve Ne **TERS** sistemdir (Ne 30 ince, denye 30 kalın). Operatör Ne değerini denye alanına yazarsa levent kilosu yanlış çıkar ve o değer `WOUND` satırına **kopyalanıp donar** (§1.2) — hata düzeltilse bile geçmiş levent yanlış kalır.
+
+⚠️ **Hata büyüklüğü SABİT DEĞİL, ve bir yerde SIFIRA iniyor:** girilen `N`, doğru `5315/N` ⇒ **hata çarpanı `5315/N²`.** Ne 10 → 53,2× az · Ne 17 → 18,4× az · Ne 30 → 5,9× az · **Ne ≈ 73 → HATA YOK** · Ne 100 → 1,9× **fazla (yön döndü)**. **Sonuç mekanizma seçimini belirliyor:** *"makul aralık"* doğrulaması bu hatayı **yapısal olarak yakalayamaz** — eşik nereye konsa geçiş noktasının çevresi görünmez kalır ve yön sabit olmadığı için "çok küçük" kontrolü de çalışmaz. **Sistemi sormak, değeri denetlemekten daha güvenlidir.**
+
+```prisma
+/// KAPALI küme, pg enum. Aynı fabrika hem denye hem Ne iplik kullanır → KURULUM
+/// anahtarı DEĞİL, KALEM alanı. Bayrağa çevrilseydi ikinci iplik kaleminde çökerdi.
+enum YarnCountSystem { DEN  DTEX  NE  NM }   // DEN/DTEX doğru sistem, NE/NM ters
+```
+
+**KARAR: A′ — `linearDensityDen` DÜŞER, denye TÜRETİLİR** (yönetici 2026-09-12). Saklanan `yarnCountSystem` + `yarnCountValue`; denye tek helper `resolveDenier(system, value)` ile türetilir ve panel/tablet ön hesabı **aynı fonksiyonun aynasıdır**. Gerekçe: `Item`ta hem gireni hem türetileni tutmak **aynı gerçeğin ikinci kaydıdır** ve bu kalıp §9.6'da `remainingLengthM` için zaten reddedildi (iki yazar = "tek kaynak satır" sınıfı). Geçmişin dondurulması `Item` kolonuna değil `WOUND` satırına bağlıdır.
+
+**Sözleşme kıran değişikliğin "eski istemci ne yapar" cevabı — ÖLÇÜLDÜ, ve eski istemci YOK:**
+
+| Ölçüm | Sonuç |
+|---|---|
+| **Veri** — 35 `tekserp*` DB'sinin tamamı | Kolonun bulunduğu 18 DB'de `count("linearDensityDen") = 0`; kalan 17'de kolon HİÇ YOK (`tekserp_demo` dahil). `tekserp_fabrika_dev`: 245 item, 0 dolu denye |
+| **Sözleşme** — alan adıyla arama | **DOLU:** Electron 7 dosya (form + Zod + WarpSpecs) · `item.service.ts` create/update · `warp-spec.routes.ts:27` API cevabı · `item.adapter.ts` round-trip. mobil 0 |
+| **Sahadaki panel** | `linearDensityDen`in Electron'a girdiği commit **1.3.1'in ATASI DEĞİL** (`merge-base --is-ancestor` → HAYIR); `package.json` bugün 1.3.1, 1.3.2 hiç yayınlanmadı ⇒ **7 dosya sahada YOK** |
+
+⇒ *"eski panel gönderir, Zod sessizce siler"* senaryosunun **istemcisi mevcut değildir**; backfill yok, geçiş dönemi yok, iki yazar yok. Kademeli yolun tek kazancı olan geçiş dönemi burada **boş bir dönemdir**.
+
+⚠️ **Tek şart, ve yeri SÜRÜM NOTU DEĞİL PAKETLEME ADIMIDIR:** backend + panel **aynı pencerede** çıkar (bekleyen paketin kuralı zaten bu). Sürüm notu maddesi **gerekmez** — kullanıcının gördüğü hiçbir şey değişmiyor.
+
+⚠️ **Aynı commit'te tazelenecek bayat metinler:** `warp-spec.service.ts:10` (yorum, *"kg = tel × denye × metre / 9.000.000"*) ve `:53` (Türkçe hata mesajı, *"kaleminin denye değeri boş"* → "numara değeri boş" + sistem adı). ⚠️ `prisma/migrations/20260912120100_devere_warp_spec/migration.sql:76` **DOKUNULMAZ** — migration geçmişi yeniden yazılmaz (checksum); bayatlığı yeni migration'ın başlığında açıklanır. **Kat iplikte** SONUÇ numarası girilir (Ne 30/2 → Ne 15); ad ayrıştırılmaz (§1.2 kuralı aynen).
 
 ### 3.9 Levent KÖKENİ bir veri boyutudur — devere içeride yapılmak ZORUNDA değildir
 
@@ -285,7 +313,7 @@ model WarpSpec {
   id           String   @id @default(uuid()) @db.Uuid
   code         String   @unique @db.VarChar(32)
   name         String   @db.VarChar(100)
-  yarnItemId   String   @db.Uuid                 // ItemType.YARN + linearDensityDen dolu (servis 400)
+  yarnItemId   String   @db.Uuid                 // ItemType.YARN + iplik numarası dolu (servis 400)
   endsCount    Int                               // toplam tel, kenar dahil (CHECK > 0)
   selvedgeEnds Int?                              // kenar teli — bilgi
   reedNo       Decimal? @db.Decimal(6, 2)        // tarak no — birimi (diş/cm | diş/10 cm) PROFİL; hesaba girmez
@@ -437,8 +465,12 @@ model WarpBeamEvent {
 ```prisma
 model Item {
   // … mevcut alanlar DEĞİŞMEZ; ad ASLA ayrıştırılmaz
-  /// İPLİK denye'si — devere formülünün girdisi. Elle girilir; adındaki "70 DN" okunmaz.  [Faz 1]
-  linearDensityDen Decimal?  @db.Decimal(10, 2)
+  /// İPLİK NUMARASI — devere formülünün girdisi. Elle girilir; adındaki "70 DN" okunmaz.
+  /// ⚠️ `linearDensityDen` DÜŞER (§3.8b, karar A′): denye TÜRETİLİR (`resolveDenier`),
+  /// saklanan şey OPERATÖRÜN GİRDİĞİDİR. Ölçüldü: kolon 35 DB'nin hepsinde boş ve
+  /// sahadaki panel (1.3.1) onu hiç tanımıyor ⇒ backfill ve geçiş dönemi yok.  [Faz 1]
+  yarnCountSystem  YarnCountSystem @default(DEN)
+  yarnCountValue   Decimal?        @db.Decimal(10, 4)
   /// KUMAŞ → çözgü kartı (N:1). Yalnız FABRIC (servis 400). Devere kapalıyken yazılmaz/çizilmez.  [Faz 1]
   warpSpecId       String?   @db.Uuid
   warpSpec         WarpSpec? @relation("ItemWarpSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
@@ -611,15 +643,15 @@ Yeni mutabakat bölümleri:
   - Mobil: modül alanı yok, dokunuş yok.
   - Bekçiler: `test_module_profile §1b` (===7 → 8) · `test_feature_flag_contract` PANEL_EXEMPT + §15 elle liste (eklenmezse sessiz kapsam boşluğu) · `test_module_flag_off` ALAN_DB_ANAHTARI + §1e/§1h/§7 **tek seviyeye kilitli**, geçişli zincire genişletilir · `test_module_flags §3b/§6c/§9` · `test_screen_catalog` · yeni `test_devere_regime_gate`. `400 MODULE_DEPENDENCY`'yi doğrudan ölçen bekçi bugün YOK; devere ile yazılır.
 - **Yüzeyler kapalıyken.** Menü/karo çizilmez, route 403. Çözgü kartı alanı ve `Station` formundaki iki yetenek kutusu yalnız `devereEnabled` iken görünür.
-  - ⚠️ **`Item.linearDensityDen` (denye) görünürlüğü `iplikEnabled || devereEnabled`dır** — yalnız `iplikEnabled` DEĞİL (2026-09-12 düşmanca denetimi, §9.7d). Eski cümle 2. kararı sessizce iptal ediyordu: bağımlılık kalkınca "iplik KAPALI + devere AÇIK" kurulumu meşrudur, ama denye alanı görünmezse `WarpSpec` açılamaz (servis `linearDensityDen` DOLU ister) ve **hiçbir levent doğamaz**. Alternatif ve daha yalın okuma: görünürlüğü bayrağa hiç bağlamamak, bugünkü gibi **kalem tipine** bağlamak (`ItemType.YARN` ise göster) — denye ipliğin fiziksel özelliğidir, bir modülün mülkü değil.
-  - ⚠️ **AYNI TUZAK içe aktarma adaptörü cümlesindedir:** `item.adapter.ts`teki `linearDensityDen` sütunu "modül kapalıyken şablondan düşürülür" kararı `iplikEnabled`e bağlanırsa aynı kurulumda denye toplu girilemez. Sütun ölçütü de `iplikEnabled || devereEnabled` (ya da bayraksız) olur.
+  - ⚠️ **İplik numarası alanlarının (`yarnCountSystem`/`yarnCountValue`) görünürlüğü `iplikEnabled || devereEnabled`dır** — yalnız `iplikEnabled` DEĞİL (2026-09-12 düşmanca denetimi, §9.7d). Eski cümle 2. kararı sessizce iptal ediyordu: bağımlılık kalkınca "iplik KAPALI + devere AÇIK" kurulumu meşrudur, ama numara alanı görünmezse `WarpSpec` açılamaz (servis numarayı DOLU ister) ve **hiçbir levent doğamaz** — karar bir cümleyle kendini iptal ediyordu. Alternatif ve daha yalın okuma: görünürlüğü bayrağa hiç bağlamamak, **kalem tipine** bağlamak (`ItemType.YARN` ise göster) — iplik numarası ipliğin fiziksel özelliğidir, bir modülün mülkü değil.
+  - ⚠️ **AYNI TUZAK içe aktarma adaptörü cümlesindedir:** `item.adapter.ts`teki numara sütunları "modül kapalıyken şablondan düşürülür" kararı `iplikEnabled`e bağlanırsa aynı kurulumda numara toplu girilemez. Sütun ölçütü de `iplikEnabled || devereEnabled` (ya da bayraksız) olur.
 
 ## 6 · adnansahin sıfır-fark kanıtı (Faz 1)
 
 | Dokunuş | adnansahin'de etkisi |
 |---|---|
 | 3 yeni tablo | Boş kalır; hiçbir mevcut sorgu okumaz |
-| `Item.linearDensityDen`, `Item.warpSpecId`, `YarnMovement.warpBeamId` | Nullable, NULL kalır. Ad kolonu okunmaz, yazılmaz, taşınmaz |
+| `Item.yarnCountSystem`/`yarnCountValue`, `Item.warpSpecId`, `YarnMovement.warpBeamId` | Nullable ya da varsayılanlı, boş kalır. Ad kolonu okunmaz, yazılmaz, taşınmaz |
 | `Station.producesWarpBeam` | `@default(false)`; mevcut satırlar false. Zod'a opsiyonel eklenir (gövde allowlist dersi: iki uçta da sözleşmeye) |
 | `YarnMovementKind` +2 | adnansahin'de iplik KAPALI, satır doğmaz. Derlemede yalnız `yarnMovementSign` kırılır (iyi). Sessiz yanlış sayan iki liste §4.9'da düzeltilir. Electron `YARN_KIND_META[m.kind]` tanımadığı türde **TypeError ile çöker** (`YarnMovementsSheet.tsx:206-217`): aynı sürümde bilinmeyen tür için geri düşüş etiketi eklenir. `YARN_KINDS` filtre ile elle hareket diyaloğunun ORTAK listesidir (`YarnMovementDialog.tsx:169-173`); `WARP_*` yalnız filtreye girer. Kaynak sütunu `warpBeamId`'yi tanır (bugün `stockCountId`'yi bile tanımıyor, "Elle giriş" basıyor) |
 | `devere.enabled` | `false`; iplik + ticaret kapalıyken açılamaz (400) |
@@ -634,6 +666,7 @@ Yeni mutabakat bölümleri:
 
 | Faz | Kapsam | Değer | Şema | Ön koşul |
 |---|---|---|---|---|
+| **1a′ — numara sistemi düzeltmesi** (1a ŞEMADA, bu onun devamı) | `YarnCountSystem` enum + `Item.yarnCountSystem`/`yarnCountValue` · `Item.linearDensityDen` DÜŞER · `resolveDenier` tek helper + panel/tablet aynası · 7 panel + 4 backend dosyası + `item.adapter.ts` **AYNI TURDA** · `warp-spec.service.ts:10`/`:53` bayat metinleri tazelenir | Pamuklu dokumacı (Ne) kayıttan düşmez; hata çarpanı `5315/N²` ve Ne≈73'te sıfırlandığı için aralık denetimiyle yakalanamıyordu (§3.8b) | 1 enum tipi · 2 kolon · 1 kolon kaldırma. **Backfill YOK** (35 DB'de ölçülmüş sıfır veri), eski istemci YOK (alan 1.3.1'in atası değil) | 1a · ⚠️ backend+panel **aynı pencerede** (paketleme adımı, sürüm notu maddesi DEĞİL) |
 | **1a — Katalog ve kimlik** (defter YAZMAZ) | `devere.enabled` + grandfathering migration + `requireDevereEnabled` + bayrak dokunuşları (§5) · **izin kodları + ekran `requires`** · `Item.linearDensityDen` · `WarpSpec` CRUD + `Item.warpSpecId` (⚠️ **BEKLEYEN, ÖLÜ DEĞİL:** kolon 1a'da FK + kısmi index'iyle hazır bırakıldı, ama yazma yüzeyi **1b'de doğar** — o güne kadar tüketicisi yoktur; ölçüldü 2026-09-12: backend 0 · panel 0 · içe aktarım 0 referans) · `Station.producesWarpBeam` · **birleştirme haritası + içe aktarma adaptörleri + kalıcı silme kapıları** · panel "Çözgü Kartları" ekranı (teorik kg hesaplayıcısı dahil) | Çözgü kartları ve denye verisi girilmeye başlanır — 1b'nin veri ön koşulu. **Hiçbir defter satırı doğmaz**, dolayısıyla ters yol borcu da doğmaz | 1 tablo · 3 kolon · 2 şema-dışı nesne · 3 izin kodu | — |
 | **1b — Levent doğar** (EN KÜÇÜK ANLAMLI ÇALIŞAN ADIM) | `WarpBeam` + `WarpBeamEvent` · `WOUND`/`WOUND_CANCEL` (önizlemeli) · **köken üçlüsü** (`originKind` + taraf alanları + XOR seddi, §3.9) · **brüt çıkış + ayrı iade** `WARP_ISSUE`/`WARP_ISSUE_REVERSAL`/`WARP_RETURN`/`WARP_RETURN_REVERSAL` + `YarnMovement.warpBeamId` + `ReasonPresetKind.WARP_RETURN` kataloğu (§3.7) · sarım kg + `kgSource` · **`Machine.warpBeamSlots`** (Faz 3'ten çekildi) · iplik kapısının `applyWarpBeamEventTx`e taşınması (§5) · levent planı · hazır levent listesi (çözgü kartına göre gruplu) · §4.9 sayım düzeltmeleri · bekçiler | "İplik nereye gitti", "hangi leventler hazır", "bu levent nereden geldi" ve "dip nereye gitti" ilk kez cevaplanır; tartılan sarımda devere firesi kg görünür | 2 tablo · 2 yeni pg enum tipi (`WarpBeamStatus`, `WarpBeamOrigin`) · `YarnMovementKind`'a 4 değer · `ReasonPresetKind`'a 1 değer · 4 kolon (`YarnMovement.warpBeamId` · `Machine.warpBeamSlots` · `WarpBeam` taraf alanları) · 11 şema-dışı nesne | 1a |
 | **2 — Lot** | `YarnLot` · mal kabul iplik satırına lot + bobin adedi · sarımda lot seçimi · karışık/lotsuz lot uyarısı · "bobin metrajı kalbaya yeter mi" uyarısı · türetilen lot bakiyesi · levent → lot → irsaliye geri izleme | Çözgü yolu / ton farkının kök nedeni izlenir | 1 tablo · 2 kolon | İlk dokuma müşterisinde **Faz 1 ile aynı sürümde** önerilir: lotsuz sarılan levent kalıcı olarak lotsuz kalır |
