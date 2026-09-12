@@ -409,8 +409,8 @@ async function canliOlcum(beklenen: string[]): Promise<void> {
      WHERE "key" = ANY(${[...beklenen, PROFILE_STAMP_SETTING_KEY]}::text[])`;
   const oncekiHarita = new Map(oncekiler.map((r) => [r.key, r]));
   check(
-    "§7a Körlük zemini: test DB'sinde EN AZ BİR modül satırı var (ölçüm bu tabana kurulu)",
-    beklenen.some((k) => oncekiHarita.has(k)),
+    "§7a Ortamın BULUNAN hâli raporlanıyor (ölçüm buna BAĞLI DEĞİL — ön koşulu bekçi kurar)",
+    true,
     `${oncekiler.filter((r) => r.key !== PROFILE_STAMP_SETTING_KEY).length}/${beklenen.length} satır`,
   );
   // ⚠️ ZEMİN "7/7" DEĞİL "EN AZ BİR" — ve eksik satır ATLAMA SEBEBİ DEĞİL.
@@ -421,20 +421,46 @@ async function canliOlcum(beklenen: string[]): Promise<void> {
   // sözleşmesi FABRİKADA hiç ölçülmüyordu. Dilim 1 kabul provası açığı orada
   // buldu: job 7/7 arayıp eksiği profilden yazıyor ve `tam` profiliyle ön
   // muhasebeyi sessizce açıyordu. Artık kısmi durum da ölçülüyor.
-  if (!beklenen.some((k) => oncekiHarita.has(k))) {
-    atla("§7/§9 canlı ölçüm", "hiç modül satırı yok — önce `prisma migrate deploy` koş");
-    return;
-  }
   const eksikSatirlar = beklenen.filter((k) => !oncekiHarita.has(k));
   check(
     "§7a2 ⭐ KISMİ kurulum da ölçülüyor (eksik satır ATLAMA sebebi değil)",
     true,
     eksikSatirlar.length === 0
-      ? "7/7 satır — tam kurulum"
+      ? `${beklenen.length}/${beklenen.length} satır — tam kurulum`
       : `${eksikSatirlar.length} satır bilinçli yok: ${eksikSatirlar.join(", ")}`,
   );
 
   const HEDEF = "tezgah.enabled";
+  // ⚠️ BEKÇİ ÖN KOŞULUNU ORTAMDAN BEKLEMEZ, KENDİ KURAR (2026-09-13).
+  //
+  // Eski zemin "EN AZ BİR modül satırı var mı" diye soruyordu; gövde ise BELİRLİ
+  // BİR satırın (HEDEF) varlığını varsayıyor. Granülarite uyuşmazlığı: yalnız
+  // `iplik.enabled` taşıyan bir DB'de zemin YEŞİL geçti ve aşağıdaki silme P2025
+  // ile düştü (ölçüldü: `tekserp_d5_a_test`). Zemin DEĞERİ değil VARLIĞI ölçmeliydi
+  // — "satır var ve false" ile "satır YOK" aynı değeri okutur ama aynı DURUM değildir.
+  //
+  // Gerçek ön koşul "≥1 satır" da DEĞİL: §7f, HEDEF silindikten SONRA `exists`
+  // bekler, yani en az bir BAŞKA modül satırının ayakta kalmasını ister. İkisi
+  // birden kurulur; ikisi de `finally`deki geri yüklemeye dahildir (bulunmayan
+  // anahtar orada silinir, yani bekçinin yazdığı satır ortada kalmaz).
+  //
+  // ⚠️ Eski `atla()` dalı KALKTI: 0 modül satırlı temiz bir CI DB'sinde §7/§9'un
+  // TAMAMI sessizce atlanıyordu — yeşil ≠ kapsandı.
+  const ESLIK = beklenen.find((k) => k !== HEDEF);
+  if (!ESLIK) throw new Error(`MODULE_SETTING_KEYS tek anahtar taşıyor (${beklenen.join(",")})`);
+  const bekciKurdu: string[] = [];
+  for (const key of [HEDEF, ESLIK]) {
+    if (oncekiHarita.has(key)) continue;
+    await prisma.systemSetting.create({
+      data: { key, value: false, description: "TEST- bekçi ön koşulu (finally kaldırır)" },
+    });
+    bekciKurdu.push(key);
+  }
+  check(
+    "§7a3 ⭐ Ön koşul KURULDU: HEDEF + en az bir diğer modül satırı ayakta",
+    (await prisma.systemSetting.count({ where: { key: { in: [HEDEF, ESLIK] } } })) === 2,
+    bekciKurdu.length ? `bekçi yazdı: ${bekciKurdu.join(", ")}` : "ortamda zaten vardı",
+  );
   const damgaOnce = oncekiHarita.get(PROFILE_STAMP_SETTING_KEY) ?? null;
   try {
     // (1) SATIRLAR TAM → job DOKUNMAMALI.
@@ -468,7 +494,14 @@ async function canliOlcum(beklenen: string[]): Promise<void> {
     );
 
     // (2) ENV YOK → hiçbir şey yazılmaz (satır silinmiş olsa bile).
-    await prisma.systemSetting.delete({ where: { key: HEDEF } });
+    // `deleteMany` + sayaç: silme SAYISI ön koşulun GERÇEKTEN kurulduğunu ölçer.
+    // Çıplak `delete` bunu ölçmez, yalnız VARSAYAR ve yoklukta P2025 ile düşer.
+    const silinen = await prisma.systemSetting.deleteMany({ where: { key: HEDEF } });
+    check(
+      "§7d0 ⭐ HEDEF satırı GERÇEKTEN vardı ve silindi (yokluk sessizce 'silindi' sayılmaz)",
+      silinen.count === 1,
+      `silinen=${silinen.count}`,
+    );
     const r0 = await ensureModuleProfile({});
     check(
       "§7d ⭐ ENV YOKKEN eksik satır bile YAZILMIYOR (`absent`)",
