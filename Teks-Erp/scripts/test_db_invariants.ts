@@ -323,6 +323,7 @@ const PARTIAL_INDEXES: Array<{
   // satırda bir avuç) ve sorgu yolu daima "şu survivor'ın çocukları".
   { table: "customers", index: "customers_mergedIntoId_idx", uniq: false, predicate: `("mergedIntoId" IS NOT NULL)`, why: "null-yoğun FK (birleştirme tombstone'u seyrek)" },
   { table: "items", index: "items_mergedIntoId_idx", uniq: false, predicate: `("mergedIntoId" IS NOT NULL)`, why: "null-yoğun FK (birleştirme tombstone'u seyrek)" },
+  { table: "items", index: "items_warpSpecId_idx", uniq: false, predicate: `("warpSpecId" IS NOT NULL)`, why: "null-yoğun FK (çözgü kartı bağı Faz 1b'de yazılacak; devere kapalıyken kalıcı olarak boş)" },
   { table: "colors", index: "colors_mergedIntoId_idx", uniq: false, predicate: `("mergedIntoId" IS NOT NULL)`, why: "null-yoğun FK (birleştirme tombstone'u seyrek)" },
   { table: "subcontractors", index: "subcontractors_mergedIntoId_idx", uniq: false, predicate: `("mergedIntoId" IS NOT NULL)`, why: "null-yoğun FK (birleştirme tombstone'u seyrek)" },
   // AD MÜKERRERİ DB SEDDİ (D3/B6, 2026-08-21 — migration 20260821150000_name_fold_unique_live):
@@ -381,6 +382,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string 
   // tel adedi devere formülünün ilk çarpanıdır (`kg = tel × denye × metre / 9e6`);
   // sıfır/negatif tel sessizce sıfır kg üretirdi.
   { table: "warp_specs", name: "warp_specs_ends_positive" },
+  { table: "warp_specs", name: "warp_specs_selvedge_sane" },
+  { table: "warp_specs", name: "warp_specs_reed_positive" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_dispatchedQty_pos" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_dispatchedWeight_nonneg" },
   { table: "kartela_dispatch_items", name: "kartela_dispatch_items_dispatchedQty_pos" },
