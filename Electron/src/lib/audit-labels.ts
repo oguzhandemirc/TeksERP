@@ -612,6 +612,10 @@ export const ENUM_LABELS: Record<string, string> = {
   RETURN: "İade girişi",
   CANCEL: "Kayıttan düşme",
   CANCEL_REVERSAL: "Kayıttan düşme stornosu",
+  PRODUCTION: "Üretim hareketi",
+  TRANSFORM: "Kesim dönüşümü",
+  ADJUST: "Metraj düzeltmesi",
+  OPENING_BALANCE: "Açılış bakiyesi",
   // ── Birleştirme defteri referans tipi (MergeRefKind)
   MOVED: "Taşındı",
   DELETED: "Silindi (çakışma)",

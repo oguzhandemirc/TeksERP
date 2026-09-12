@@ -18,16 +18,17 @@
 // =============================================================================
 import { formatNumber } from "@/lib/format";
 
-/** Backend `WarehouseEventType` enum'unun aynası (Electron backend'i import edemez). */
-export type WarehouseEventType =
-  | "ENTRY"
-  | "TRANSFER"
-  | "TRANSFER_REVERSAL"
-  | "SHIPMENT"
-  | "SHIPMENT_REVERSAL"
-  | "RETURN"
-  | "CANCEL"
-  | "CANCEL_REVERSAL";
+/**
+ * Backend `WarehouseEventType` enum'unun aynası (Electron backend'i import edemez).
+ *
+ * ⚠️ ELLE YAZILMAZ — aşağıdaki SÖZLÜKTEN türetilir. Union ayrı yazıldığında
+ * `WAREHOUSE_EVENT_META`nın `Record<WarehouseEventType, …>` tipi hiçbir şey
+ * kanıtlamaz: sözlük de union da AYNI kopyadan beslenir, yani backend'e yeni bir
+ * değer eklendiğinde panel derlemesi sessiz kalır. Ölçüldü (2026-09-12): beş yeni
+ * olay tipi panele hiç gelmedi ve tek bir tip hatası vermedi. Panelin tek kaynağı
+ * sözlüktür; şemayla paritesini `test_warehouse_movements` §8 mekanik ölçer.
+ */
+export type WarehouseEventType = keyof typeof WAREHOUSE_EVENT_META;
 
 /** Satırın, BAKAN DEPOYA göre yönü. Depo süzgeci yoksa `null` (yön yok). */
 export type MovementDirection = "IN" | "OUT" | null;
@@ -90,7 +91,7 @@ export interface EventMeta {
   reversal: boolean;
 }
 
-export const WAREHOUSE_EVENT_META: Record<WarehouseEventType, EventMeta> = {
+export const WAREHOUSE_EVENT_META = {
   ENTRY: {
     label: "Giriş",
     hint: "Mal depoya dışarıdan girdi (mal kabul, ham giriş, Tambur çıkışı, fason dönüşü).",
@@ -123,18 +124,41 @@ export const WAREHOUSE_EVENT_META: Record<WarehouseEventType, EventMeta> = {
     hint: "Kayıttan düşme geri alındı (sayım stornosu) — top depoya döndü.",
     reversal: true,
   },
-};
+  // ── Stok defteri olayları (2026-09-12) ────────────────────────────────────
+  // Defter artık yalnız "hangi depoda" değil "stokta ne var" sorusunu da
+  // cevaplıyor; bu beş tip malın stok kümesine giriş/çıkışını taşır.
+  PRODUCTION: {
+    label: "Üretim",
+    hint: "Üretimden depoya indi ya da depodan üretime alındı — iş emri hareketi.",
+    reversal: false,
+  },
+  EXTERNAL: {
+    label: "Dış işlem",
+    hint: "Mal fasona/kartelaya çıktı ya da oradan döndü — fabrika dışındaki hareket.",
+    reversal: false,
+  },
+  TRANSFORM: {
+    label: "Dönüşüm",
+    hint: "Top kesildi ya da bölündü — toplam metraj değişmez, aynı grubun satırları net sıfır verir.",
+    reversal: false,
+  },
+  ADJUST: {
+    label: "Metraj düzeltmesi",
+    hint: "Sapma ölçüldü (çekme, sayım farkı) — defter metrajı düzeltildi, mal yer değiştirmedi.",
+    reversal: false,
+  },
+  OPENING_BALANCE: {
+    label: "Açılış bakiyesi",
+    hint: "Defterin başlangıç fotoğrafı — gerçek bir hareket değil, mutabakatın sıfır noktası.",
+    reversal: false,
+  },
+} satisfies Record<string, EventMeta>;
 
-export const WAREHOUSE_EVENT_TYPES: WarehouseEventType[] = [
-  "ENTRY",
-  "TRANSFER",
-  "TRANSFER_REVERSAL",
-  "SHIPMENT",
-  "SHIPMENT_REVERSAL",
-  "RETURN",
-  "CANCEL",
-  "CANCEL_REVERSAL",
-];
+/**
+ * Süzgeçteki sıra = sözlüğün yazım sırası. İKİNCİ BİR LİSTE YAZILMAZ: elle
+ * tutulan liste, sözlükten ayrışabilen üçüncü bir kaynak olurdu.
+ */
+export const WAREHOUSE_EVENT_TYPES = Object.keys(WAREHOUSE_EVENT_META) as WarehouseEventType[];
 
 /** Olay rozetinin tonu — ters (storno) olaylar ayrı okunmalı. */
 export function eventBadgeClass(kind: WarehouseEventType): string {

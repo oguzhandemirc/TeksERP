@@ -333,18 +333,23 @@ async function main(): Promise<void> {
     path.join(__dirname, "..", "..", "Electron", "src", "pages", "Warehouses", "movements.ts"),
     "utf8",
   );
-  const listBlock = /WAREHOUSE_EVENT_TYPES: WarehouseEventType\[\] = \[([\s\S]*?)\]/.exec(panelSrc)?.[1] ?? "";
-  const panelList = [...listBlock.matchAll(/"([A-Z_]+)"/g)].map((m) => m[1] as string);
-  const metaBlock = /WAREHOUSE_EVENT_META[\s\S]*?= \{([\s\S]*?)\n\};/.exec(panelSrc)?.[1] ?? "";
+  const metaBlock = /WAREHOUSE_EVENT_META = \{([\s\S]*?)\n\} satisfies/.exec(panelSrc)?.[1] ?? "";
   const panelMeta = [...metaBlock.matchAll(/\n  ([A-Z_]+):/g)].map((m) => m[1] as string);
-  check("§8a Körlük zemini: enum ve panel aynası okundu", schemaValues.length >= 7 && panelList.length >= 7 && panelMeta.length >= 7,
-    `enum=${schemaValues.length} liste=${panelList.length} meta=${panelMeta.length}`);
-  const eksikListe = schemaValues.filter((v) => !panelList.includes(v));
-  const fazlaListe = panelList.filter((v) => !schemaValues.includes(v));
-  check("§8b ⭐ Panel olay LİSTESİ backend enum'uyla birebir (iki yönlü)", eksikListe.length === 0 && fazlaListe.length === 0,
-    `eksik=${eksikListe.join(",")} fazla=${fazlaListe.join(",")}`);
+  // Panelin TEK kaynağı sözlüktür: union ve süzgeç listesi ondan TÜRETİLİR.
+  // Elle yazılmış bir union, `Record<WarehouseEventType, …>` tipini kendi
+  // kopyasıyla doğrular; backend'e yeni değer eklendiğinde panel derlemesi sessiz
+  // kalır. Ölçüldü 2026-09-12: beş yeni olay tipi panele hiç gelmedi, tip hatası
+  // vermedi — bu yüzden parite kontrolüne "tek kaynak" kontrolü eşlik eder.
+  const unionTuretilmis = /export type WarehouseEventType = keyof typeof WAREHOUSE_EVENT_META;/.test(panelSrc);
+  const listeTuretilmis = /WAREHOUSE_EVENT_TYPES = Object\.keys\(WAREHOUSE_EVENT_META\)/.test(panelSrc);
+  check("§8a Körlük zemini: enum ve panel sözlüğü okundu", schemaValues.length >= 7 && panelMeta.length >= 7,
+    `enum=${schemaValues.length} sözlük=${panelMeta.length}`);
+  check("§8b ⭐ Panelde TEK kaynak: union ve süzgeç listesi sözlükten türetiliyor", unionTuretilmis && listeTuretilmis,
+    `union=${unionTuretilmis} liste=${listeTuretilmis}`);
   const eksikMeta = schemaValues.filter((v) => !panelMeta.includes(v));
-  check("§8c ⭐ Panel olay SÖZLÜĞÜ (label+hint+ton) her enum değerini taşıyor", eksikMeta.length === 0, `eksik=${eksikMeta.join(",")}`);
+  const fazlaMeta = panelMeta.filter((v) => !schemaValues.includes(v));
+  check("§8c ⭐ Panel olay SÖZLÜĞÜ backend enum'uyla birebir (iki yönlü)", eksikMeta.length === 0 && fazlaMeta.length === 0,
+    `eksik=${eksikMeta.join(",")} fazla=${fazlaMeta.join(",")}`);
 
   // ── §7 Körlük zemini ───────────────────────────────────────────────────
   const total = await prisma.warehouseMovement.count({ where: { rollId: { in: rollIds } } });

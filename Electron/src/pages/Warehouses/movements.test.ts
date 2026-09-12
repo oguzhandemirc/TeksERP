@@ -182,14 +182,20 @@ describe("kırpma sessiz değil", () => {
 
 describe("sözlük bütünlüğü", () => {
   it("backend enum'unun HER değeri etiketli (eksik değer ekranda ham enum basar)", () => {
-    // Körlük zemini: liste gerçekten sekiz olayı taşıyor.
-    expect(WAREHOUSE_EVENT_TYPES.length).toBe(8);
+    // Körlük zemini: liste gerçekten on üç olayı taşıyor.
+    expect(WAREHOUSE_EVENT_TYPES.length).toBe(13);
     for (const k of WAREHOUSE_EVENT_TYPES) {
       expect(WAREHOUSE_EVENT_META[k].label.trim().length).toBeGreaterThan(0);
       // `hint` gerçekten gerekiyor: ENTRY tek kapı değil, CANCEL iki olay taşıyor.
       expect(WAREHOUSE_EVENT_META[k].hint.trim().length).toBeGreaterThan(10);
       expect(eventBadgeClass(k).length).toBeGreaterThan(0);
     }
+  });
+
+  it("süzgeç listesi sözlükten TÜRETİLİR — elle tutulan ikinci bir kaynak yok", () => {
+    // Liste elle yazılsaydı sözlükten ayrışabilirdi: süzgeçte görünen bir olayın
+    // rozet haritasında karşılığı olmaz ya da tersi olur.
+    expect(WAREHOUSE_EVENT_TYPES).toEqual(Object.keys(WAREHOUSE_EVENT_META));
   });
 
   it("ters (storno) olaylar ayrı tonda okunur", () => {
