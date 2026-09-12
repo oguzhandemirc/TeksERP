@@ -30,6 +30,7 @@ import { stockCountService } from "../src/services/stock-count.service";
 import { stockCountReversalService } from "../src/services/stock-count-reversal.service";
 import { yarnService } from "../src/services/yarn.service";
 import { AppError } from "../src/utils/app-error";
+import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
 import { ensureIplikModuluAcik } from "./fixture-module-flags";
 import { ensureTestAdmin } from "./fixture-test-user";
 
@@ -137,6 +138,26 @@ async function main(): Promise<void> {
     "§3c ⭐ CANCEL_REVERSAL: top başına bir, hedef depo, sayım bağı, CANCEL ile aynı metraj",
     reversals.length === 2 && reversals.every((w) => w.toWarehouseId === wh.id && !w.fromWarehouseId && w.stockCountId === c1.id && Number(w.qty) === Number(cancelRows.find((c) => c.rollId === w.rollId)?.qty)),
   );
+  // ⭐ İleri satır STOK DEFTERİ sözleşmesini taşır: çıkış ucu + statü + sebep kodu.
+  // `fromStatus` boş olsaydı ters kaydın yönü aynalanamazdı.
+  check(
+    "§3c2 ⭐ İleri CANCEL satırı fromStatus + reasonCode taşıyor",
+    cancelRows.length === 2 &&
+      cancelRows.every(
+        (w) => w.fromWarehouseId === wh.id && w.fromStatus != null && w.reasonCode === STOCK_MOVE_REASON.STOCK_COUNT,
+      ),
+    cancelRows.map((w) => `${String(w.fromStatus)}/${String(w.reasonCode)}`).join(" "),
+  );
+  // ⭐ TESPİT BAĞDAN: her ters satır KENDİ ileri satırını işaret eder, yönü aynalar.
+  check(
+    "§3c3 ⭐ Ters satır reversesMovementId ile ileri CANCEL'a bağlı + toStatus = ileri fromStatus",
+    reversals.length === 2 &&
+      reversals.every((w) => {
+        const fwd = cancelRows.find((c) => c.id === w.reversesMovementId);
+        return Boolean(fwd) && fwd!.rollId === w.rollId && w.toStatus === fwd!.fromStatus;
+      }),
+    reversals.map((w) => `${w.rollId.slice(0, 6)}→${String(w.reversesMovementId).slice(0, 6)}`).join(" "),
+  );
   const var1After = await prisma.rollVariance.findMany({ where: { id: { in: var1.map((v) => v.id) } } });
   check("§3d ⭐ Sapma satırları DURUYOR ve reversedAt dolu", var1After.length === 2 && var1After.every((v) => v.reversedAt != null));
   const ym = await prisma.yarnMovement.findMany({ where: { stockCountId: c1.id }, orderBy: { createdAt: "asc" } });
@@ -201,47 +222,70 @@ async function main(): Promise<void> {
   const var4 = await prisma.rollVariance.findMany({ where: { rollId: { in: [r1, r2] }, sourceRefId: c4.id }, select: { reversedAt: true } });
   check("§6g İki sapma satırı da damgalandı", var4.length === 2 && var4.every((v) => v.reversedAt != null));
 
-  // §6h ALREADY_REVERSED: ters satırı BAŞKA yol (elle geri alma) yazmışsa storno
-  // satırı TEKRAR YAZMAZ — yalnız sapma damgasını atar (6e ile iş bölümü).
+  // §6h ALREADY_REVERSED: ileri satır BAŞKA yol tarafından (elle geri alma)
+  // terslenmişse storno satırı TEKRAR YAZMAZ — yalnız sapma damgasını atar.
+  // ⚠️ Taklit satırın ŞEKLİ ARTIK BAĞLIDIR: elle geri alma yolu terslenmemiş
+  // CANCEL'ı bulup `reversesMovementId`e yazar (tasarım D2b). Tespit yalnız bu
+  // alandan yapıldığı için bağsız satır seddi AÇMAZ — onu §6h2 ölçüyor.
   const c5 = await runCount(wh.id, [r3]);
+  const fwd5 = await prisma.warehouseMovement.findFirstOrThrow({
+    where: { rollId: r3, stockCountId: c5.id, eventType: WarehouseEventType.CANCEL, reversesMovementId: null },
+    select: { id: true },
+  });
   await prisma.warehouseMovement.create({
     data: {
       rollId: r3,
       eventType: WarehouseEventType.CANCEL_REVERSAL,
       qty: 70,
       toWarehouseId: wh.id,
-      // ⚠️ KÖRLÜK ZEMİNİ: satır SAYIM BAĞSIZ (stockCountId null) doğar — elle geri
-      // almanın yazdığı satırın şekli budur. Bağlı bir satır koymak seddi yanlış
-      // yerden onaylardı (kardeş sayımın satırı sedde girmemeli).
-      stockCountId: null,
+      toStatus: RollStatus.WAREHOUSE,
+      reversesMovementId: fwd5.id,
       notes: "elle geri almanın yazdığı ters satır (taklit)",
     },
   });
-  // r3'ün GEÇMİŞ turlardan (§5 stornosu) gelen ters satırları da var — ölçüm
-  // "yeni satır yazıldı mı" sorusuna bakar, toplam sayıya değil.
-  const revBefore5 = await prisma.warehouseMovement.count({
-    where: { rollId: r3, eventType: WarehouseEventType.CANCEL_REVERSAL },
-  });
   const prev5 = (await stockCountReversalService.preview(c5.id)).data!;
   check(
-    "§6h ⭐ Ters satırı zaten yazılmış top: dal ALREADY_REVERSED",
+    "§6h ⭐ İleri satırı terslenmiş top: dal ALREADY_REVERSED",
     prev5.rolls.find((r) => r.rollId === r3)?.action === "ALREADY_REVERSED",
     JSON.stringify(prev5.rolls.map((r) => r.action)),
   );
   await stockCountReversalService.reverse(c5.id, "zaten kapanmış defter", ADMIN);
-  const revRows5 = await prisma.warehouseMovement.count({
-    where: { rollId: r3, eventType: WarehouseEventType.CANCEL_REVERSAL },
-  });
-  const revOfThisCount = await prisma.warehouseMovement.count({
-    where: { rollId: r3, stockCountId: c5.id, eventType: WarehouseEventType.CANCEL_REVERSAL },
-  });
+  const revOfFwd5 = await prisma.warehouseMovement.count({ where: { reversesMovementId: fwd5.id } });
   const var5 = await prisma.rollVariance.findFirst({ where: { rollId: r3, sourceRefId: c5.id }, select: { reversedAt: true } });
   check(
-    "§6i ⭐ Ters satır TEKRAR yazılmadı (yeni satır yok, bu sayıma bağlı satır yok)",
-    revRows5 === revBefore5 && revOfThisCount === 0,
-    `once=${revBefore5} sonra=${revRows5} busayim=${revOfThisCount}`,
+    "§6i ⭐ İleri satırın TEK tersi var (storno ikinci satır yazmadı)",
+    revOfFwd5 === 1,
+    `n=${revOfFwd5}`,
   );
   check("§6j Sapma damgası yine atıldı", var5?.reversedAt != null);
+
+  // §6h2 ⭐ BAĞSIZ ters satır seddi AÇMAZ: tipi `CANCEL_REVERSAL` olan ama hiçbir
+  // ileri satıra bağlanmayan satır "bu sayımın defteri kapandı" demez. Eski kural
+  // (tip + belge bağı sayma) burada yanlış pozitif veriyordu.
+  const r6 = await makeRoll(wh.id, fabric.id, 35, RollStatus.WAREHOUSE);
+  const c6 = await runCount(wh.id, [r6]);
+  await prisma.warehouseMovement.create({
+    data: {
+      rollId: r6,
+      eventType: WarehouseEventType.CANCEL_REVERSAL,
+      qty: 35,
+      toWarehouseId: wh.id,
+      toStatus: RollStatus.WAREHOUSE,
+      stockCountId: c6.id,
+      notes: "bağsız ters satır (sed açmamalı)",
+    },
+  });
+  const prev6 = (await stockCountReversalService.preview(c6.id)).data!;
+  check(
+    "§6h2 ⭐ Bağsız CANCEL_REVERSAL satırı dalı ALREADY_REVERSED YAPMAZ",
+    prev6.rolls.find((r) => r.rollId === r6)?.action === "RESTORE",
+    JSON.stringify(prev6.rolls.map((r) => r.action)),
+  );
+  await stockCountReversalService.reverse(c6.id, "bağsız satıra rağmen storno", ADMIN);
+  const fwd6Rev = await prisma.warehouseMovement.count({
+    where: { rollId: r6, eventType: WarehouseEventType.CANCEL_REVERSAL, reversesMovementId: { not: null } },
+  });
+  check("§6h3 ⭐ Storno kendi bağlı ters satırını yazdı (bağsız satır onu engellemedi)", fwd6Rev === 1, `n=${fwd6Rev}`);
 
   // §6k ⭐ KARDEŞ SAYIMIN ters satırı seddi AÇMAZ (denetim bulgusu 2026-09-12):
   // SAY-A eksik işaretler → top elle geri alınır → SAY-B yine eksik işaretler →
@@ -261,6 +305,107 @@ async function main(): Promise<void> {
     where: { rollId: r4, stockCountId: cB.id, eventType: WarehouseEventType.CANCEL_REVERSAL },
   });
   check("§6k ⭐ Her sayımın CANCEL satırı KENDİ ters satırını aldı (kardeş satır seddi açmadı)", revA === 1 && revB === 1, `A=${revA} B=${revB}`);
+
+  // §6l ⭐ ESKİ KAYIT DALI (grandfathering, tasarım D2b): ②-c öncesi yazılmış ileri
+  // satır `fromStatus` TAŞIMAZ, yani yön aynalanamaz. Storno PATLAMAMALI — uç elle
+  // kurulur ve satır BAĞSIZ kalır (Σ yönden gelir, bağdan değil).
+  const r7 = await makeRoll(wh.id, fabric.id, 25, RollStatus.WAREHOUSE);
+  const cL = await runCount(wh.id, [r7]);
+  await prisma.$executeRaw`UPDATE warehouse_movements SET "fromStatus" = NULL
+    WHERE "stockCountId" = ${cL.id}::uuid AND "eventType" = 'CANCEL'::"WarehouseEventType"`;
+  await stockCountReversalService.reverse(cL.id, "eski satir dali", ADMIN);
+  const legacyRev = await prisma.warehouseMovement.findMany({
+    where: { rollId: r7, stockCountId: cL.id, eventType: WarehouseEventType.CANCEL_REVERSAL },
+    select: { reversesMovementId: true, toWarehouseId: true, toStatus: true },
+  });
+  check(
+    "§6l ⭐ fromStatus'suz ileri satırda storno BAĞSIZ ters satır yazdı (uç elle kuruldu)",
+    legacyRev.length === 1 &&
+      legacyRev[0]!.reversesMovementId === null &&
+      legacyRev[0]!.toWarehouseId === wh.id &&
+      legacyRev[0]!.toStatus === RollStatus.WAREHOUSE,
+    JSON.stringify(legacyRev),
+  );
+  const r7After = await prisma.roll.findUniqueOrThrow({ where: { id: r7 }, select: { status: true } });
+  check("§6l2 Eski satır dalında top yine rafına döndü", r7After.status === RollStatus.WAREHOUSE, r7After.status);
+
+  // §6m ⭐ AYNI SAYIMDA İKİ İLERİ SATIR, biri ZATEN terslenmiş. Plan TERSLENMEMİŞ
+  // olanı seçmek zorunda (yüklemde `reversesMovementId: null`): terslenmiş satırı
+  // seçerse ya "zaten yazılmış" diye satır yazmaz ya ikinci kez terslemeye çalışıp
+  // P2002'yi yanıltıcı hataya çevirir (6e'nin uyarısı, 2026-09-12).
+  const r8 = await makeRoll(wh.id, fabric.id, 15, RollStatus.WAREHOUSE);
+  const cM = await runCount(wh.id, [r8]);
+  const fwdM = await prisma.warehouseMovement.findFirstOrThrow({
+    where: { rollId: r8, stockCountId: cM.id, eventType: WarehouseEventType.CANCEL },
+    select: { id: true },
+  });
+  // İkinci ileri satır SONRA doğar (plan `createdAt` sırasıyla okur, Map'te son kazanır)
+  // ve ZATEN terslenmiştir — yüklem olmadan seçilecek satır BUDUR.
+  const fwdM2 = await prisma.warehouseMovement.create({
+    data: {
+      rollId: r8,
+      eventType: WarehouseEventType.CANCEL,
+      qty: 15,
+      fromWarehouseId: wh.id,
+      fromStatus: RollStatus.WAREHOUSE,
+      stockCountId: cM.id,
+      notes: "ikinci ileri satır (taklit)",
+    },
+    select: { id: true },
+  });
+  await prisma.warehouseMovement.create({
+    data: {
+      rollId: r8,
+      eventType: WarehouseEventType.CANCEL_REVERSAL,
+      qty: 15,
+      toWarehouseId: wh.id,
+      toStatus: RollStatus.WAREHOUSE,
+      stockCountId: cM.id,
+      reversesMovementId: fwdM2.id,
+      notes: "ikinci ileri satırın tersi (taklit)",
+    },
+  });
+  const prevM = (await stockCountReversalService.preview(cM.id)).data!;
+  check(
+    "§6m ⭐ Terslenmiş ileri satır SEÇİLMEDİ (dal ALREADY_REVERSED değil)",
+    prevM.rolls.find((r) => r.rollId === r8)?.action === "RESTORE",
+    JSON.stringify(prevM.rolls.map((r) => r.action)),
+  );
+  await stockCountReversalService.reverse(cM.id, "iki ileri satir dali", ADMIN);
+  const revOfFwdM = await prisma.warehouseMovement.count({ where: { reversesMovementId: fwdM.id } });
+  check("§6m2 ⭐ Storno TERSLENMEMİŞ ileri satırı tersledi", revOfFwdM === 1, `n=${revOfFwdM}`);
+
+  // §6n ⭐ TERS SATIRIN TİPİ `CANCEL` OLABİLİR: `reverseStockMove` override'sız
+  // çağrılınca ileri satırın tipini KOPYALAR (elle "iptali geri al" yolu böyle
+  // yazacak). O satır ileri satır SANILMAMALI — yüklemdeki `reversesMovementId: null`
+  // onu ayırır; ayırmazsa storno bir ters kaydın tersini yazmaya çalışır (409).
+  const r9 = await makeRoll(wh.id, fabric.id, 18, RollStatus.WAREHOUSE);
+  const cN = await runCount(wh.id, [r9]);
+  const fwdN = await prisma.warehouseMovement.findFirstOrThrow({
+    where: { rollId: r9, stockCountId: cN.id, eventType: WarehouseEventType.CANCEL, reversesMovementId: null },
+    select: { id: true },
+  });
+  await prisma.warehouseMovement.create({
+    data: {
+      rollId: r9,
+      eventType: WarehouseEventType.CANCEL, // ⚠️ TİP ters kayıt DEMİYOR
+      qty: 18,
+      toWarehouseId: wh.id,
+      toStatus: RollStatus.WAREHOUSE,
+      stockCountId: cN.id,
+      reversesMovementId: fwdN.id, // BAĞ ters kayıt DİYOR
+      notes: "tipi CANCEL olan ters satır (taklit)",
+    },
+  });
+  const prevN = (await stockCountReversalService.preview(cN.id)).data!;
+  check(
+    "§6n ⭐ Tipi CANCEL olan ters satır ileri satır SANILMADI (dal ALREADY_REVERSED)",
+    prevN.rolls.find((r) => r.rollId === r9)?.action === "ALREADY_REVERSED",
+    JSON.stringify(prevN.rolls.map((r) => r.action)),
+  );
+  await stockCountReversalService.reverse(cN.id, "tipi CANCEL olan ters satir dali", ADMIN);
+  const revOfFwdN = await prisma.warehouseMovement.count({ where: { reversesMovementId: fwdN.id } });
+  check("§6n2 ⭐ Yeni ters satır yazılmadı (ileri satırın tek tersi duruyor)", revOfFwdN === 1, `n=${revOfFwdN}`);
 
   // §7
   const svc = readFileSync(join(__dirname, "../src/services/stock-count-reversal.service.ts"), "utf8");

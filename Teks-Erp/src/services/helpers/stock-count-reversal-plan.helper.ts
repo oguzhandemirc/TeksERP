@@ -34,6 +34,12 @@ export interface ReversalRollPlan {
   /** `RESTORE`da dönülecek raf; diğer dallarda null (statüye dokunulmaz). */
   targetStatus: RollStatus | null;
   goodsReceiptId: string | null;
+  /** Terslenecek İLERİ satır (bu sayımın CANCEL'ı); yoksa null — eski kayıt, bağsız yazılır. */
+  cancelMovementId: string | null;
+  /** İleri satır `fromStatus` taşıyor mu — taşımıyorsa yön aynalanamaz, uç elle kurulur. */
+  cancelHasStatus: boolean;
+  /** Bağsız dalda ters satırın GİRİŞ ucundaki statü (rafına dönen top için hedef raf). */
+  ledgerToStatus: RollStatus | null;
   action: ReversalRollAction;
   /** Dalın gerekçesi (LEDGER_ONLY/ALREADY_REVERSED) — önizlemede görünür. */
   note: string | null;
@@ -115,27 +121,32 @@ async function planRolls(db: Db, count: CountHead): Promise<ReversalRollPlan[]> 
     },
     select: { id: true, rollId: true, qty: true },
   });
-  // Ters satırı ZATEN yazılmış toplar: bu sayıma bağlı olanlar + sayım
-  // tamamlandıktan SONRA yazılmış olanlar (elle geri alma bağ yazmıyor).
-  const alreadyReversed = new Set(
-    (
-      await db.warehouseMovement.findMany({
-        where: {
-          rollId: { in: rollIds },
-          eventType: WarehouseEventType.CANCEL_REVERSAL,
-          // ⚠️ İKİNCİ DAL `stockCountId: null` İLE DARALTILIR: bağsız ters satır
-          // yalnız ELLE geri almanın yazdığı satırdır. Daraltılmazsa KARDEŞ
-          // sayımın (LIFO'da önce stornolanan) satırı da sedde takılır ve bu
-          // sayımın CANCEL satırı sonsuza dek karşılıksız kalır (denetim, 2026-09-12).
-          OR: [
-            { stockCountId: count.id },
-            ...(count.completedAt ? [{ stockCountId: null, createdAt: { gte: count.completedAt } }] : []),
-          ],
-        },
-        select: { rollId: true },
-      })
-    ).map((w) => w.rollId),
-  );
+  // TESPİT TEK ALANDAN: "bu geri alma deftere yazıldı mı" sorusunun cevabı, bu
+  // sayımın İLERİ (CANCEL) satırının terslenmiş olup olmadığıdır (`reversesMovementId`
+  // zinciri — tasarım D2a/D2b). Tip sayma / belge bağıyla eşleme YAKLAŞIKTI ve
+  // kardeş sayımın ters satırını sedde takıyordu (denetim 2026-09-12).
+  const cancelRows = await db.warehouseMovement.findMany({
+    // ⚠️ `reversesMovementId: null` — üçlü (sayım · tip · top) TEKİLLİK GARANTİSİ
+    // DEĞİLDİR; terslenmiş satırı yakalarsak ikinci turda onu tekrar terslemeye
+    // çalışır ve P2002 yanıltıcı hataya dönerdi (6e'nin uyarısı).
+    where: {
+      rollId: { in: rollIds },
+      stockCountId: count.id,
+      eventType: WarehouseEventType.CANCEL,
+      reversesMovementId: null,
+    },
+    select: { id: true, rollId: true, fromStatus: true, reversedBy: { select: { id: true }, take: 1 } },
+    // Sıra TANIMLI olmalı: aşağıdaki Map'te "son kazanır" ve sırasız okuma aynı
+    // girdide farklı satır seçebilirdi (top başına birden çok ileri satır olabilir).
+    orderBy: { createdAt: "asc" },
+  });
+  // ⚠️ TOP BAŞINA BİRDEN ÇOK ileri satır olabilir (eski veri · elle eklenmiş satır).
+  // Seçim kuralı: TERSLENMEMİŞ olanı al; hiçbiri terslenmemişse dal ALREADY_REVERSED.
+  // `reversesMovementId: null` yüklemi "bu satır ters kayıt DEĞİL" der, "terslenmemiş"
+  // DEMEZ — ikisini karıştırmak terslenmiş satırı yeniden terslemeye çalışmaktır
+  // (ölçüldü: §6m senaryosu bu hatayı kırmızı verdi).
+  const cancelByRoll = new Map<string, typeof cancelRows>();
+  for (const w of cancelRows) cancelByRoll.set(w.rollId, [...(cancelByRoll.get(w.rollId) ?? []), w]);
   const byRoll = new Map(rolls.map((r) => [r.id, r]));
   const expectedReason = stockCountCancelReason(count.countNo);
 
@@ -155,17 +166,26 @@ async function planRolls(db: Db, count: CountHead): Promise<ReversalRollPlan[]> 
     let note: string | null = cancelledByThisCount
       ? null
       : `Sayımdan sonra elle geri alınmış ya da başka işlem görmüş (şu an: ${roll ? ROLL_STATUS_TR[roll.status] : "—"}) — yalnız defter karşılığı yazılır`;
-    if (alreadyReversed.has(rollId)) {
+    const fwdRows = cancelByRoll.get(rollId) ?? [];
+    const cancel = fwdRows.find((w) => w.reversedBy.length === 0);
+    if (!cancel && fwdRows.length > 0) {
       action = "ALREADY_REVERSED";
-      note = "Defter karşılığı zaten yazılmış — yalnız sapma damgası atılır";
+      note = "İleri defter satırı zaten terslenmiş — yalnız sapma damgası atılır";
     }
+    const target =
+      action === "RESTORE" && roll && !blocker ? resolveRestoreTargetStatus(roll.preCancelStatus) : null;
     return {
       rollId,
       barcode: roll?.barcode ?? null,
       qty: own[0] ? D(own[0].qty) : D(0),
       varianceId: own[0]?.id ?? null,
-      targetStatus: action === "RESTORE" && roll && !blocker ? resolveRestoreTargetStatus(roll.preCancelStatus) : null,
+      targetStatus: target,
       goodsReceiptId: roll?.goodsReceiptId ?? null,
+      cancelMovementId: cancel?.id ?? null,
+      cancelHasStatus: cancel?.fromStatus != null,
+      // Rafına dönen topta hedef raf; dokunulmayan topta topun BUGÜNKÜ statüsü
+      // (elle geri alınmış top zaten bir rafta duruyor).
+      ledgerToStatus: target ?? roll?.status ?? null,
       action,
       note,
       blocker,

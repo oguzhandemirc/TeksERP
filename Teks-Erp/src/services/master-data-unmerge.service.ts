@@ -35,6 +35,9 @@ import {
   restoreSnapshotRowsTx,
 } from "./helpers/merge-ledger.helper";
 import { type MergeEntity } from "../constants/merge-map";
+// Advisory uzayı TEK YERDE tanımlanır (envanter kuralı, `period-guard.helper` başlığı):
+// geri alma birleştirmeyle AYNI satırlara dokunur, yani aynı uzayı İTHAL EDER.
+import { MERGE_LOCK_KEY, MERGE_LOCK_NS } from "./master-data-merge.service";
 import {
   buildPlan,
   entityOf,
@@ -46,9 +49,6 @@ import {
 
 export type { UnmergePlan, UnmergeSourcePlan };
 
-/** Birleştirme kilidiyle AYNI uzay: geri alma da aynı satırlara dokunur (8030). */
-const MERGE_LOCK_NS: number = 8030;
-const MERGE_LOCK_KEY = 1;
 const UNMERGE_TX_TIMEOUT_MS = 120_000;
 
 export interface UnmergeOutcome {

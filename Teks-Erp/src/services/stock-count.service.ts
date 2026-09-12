@@ -29,7 +29,7 @@
 // ayrı bir tx açmak demektir: dışarıdaki `DRAFT → COMPLETED` claim'i o tx'e
 // GÖRÜNMEZ ve dış tx geri sarılırsa "iptal edilmiş top + sayım kaydı yok"
 // durumu kalıcı olur. Bu yüzden softDelete'in semantiği PARÇA PARÇA yeniden
-// KULLANILIR (aynı helper'lar: `closeOpenMovementsTx` · `writeWarehouseMovements`
+// KULLANILIR (aynı helper'lar: `closeOpenMovementsTx` · `postStockMoves`
 // · `recordVariancesTx` — çoğul kardeşler; semantik tekil ile birebir aynıdır),
 // yeniden YAZILMAZ.
 //
@@ -53,12 +53,13 @@ import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { closeOpenMovementsTx } from "./helpers/roll-disposition.helper";
-import { writeWarehouseMovements } from "./helpers/warehouse-ledger.helper";
+import { postStockMoves } from "./helpers/warehouse-ledger.helper";
 import { recordVariancesTx } from "./helpers/roll-variance.helper";
 import { applyYarnMovementTx } from "./yarn.service";
 import { syncPurchaseOrderSafely } from "./purchase-order.service";
 import { RollVarianceKind } from "@prisma/client";
 import { STOCK_COUNT_REASON_CODE, VARIANCE_SOURCES } from "../constants/variance-reasons";
+import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { ROLL_STATUS_TR } from "../constants/status-labels";
 import { printedDocumentService, registerPrintedDocBuilder } from "./printed-document.service";
 import {
@@ -146,6 +147,9 @@ interface AppliedMissingRoll {
   rollId: string;
   barcode: string | null;
   qty: Prisma.Decimal;
+  /** İptal ÖNCESİ statü — defter satırının çıkış ucu bundan kurulur (stornonun
+   *  yönü ileri satırın `fromStatus`undan aynalanır, yani boş bırakılamaz). */
+  status: RollStatus;
 }
 
 export class StockCountService {
@@ -593,7 +597,7 @@ export class StockCountService {
           where: { id: rollId },
           select: { currentQty: true },
         });
-        applied.push({ rollId, barcode: roll.barcode, qty: pinned.currentQty });
+        applied.push({ rollId, barcode: roll.barcode, qty: pinned.currentQty, status: roll.status });
         if (roll.goodsReceiptId) receiptIds.add(roll.goodsReceiptId);
       }
 
@@ -612,19 +616,28 @@ export class StockCountService {
         // SEMANTİKTİR (kaybedeni taze okumayla ayırt eder) ve orada kalır; buradaki
         // yazımlar ise koşulsuzdur — `applied` kümesi zaten kazananların listesi.
         // Tavanda (200 eksik top) 400 insert yerine 2 sorgu.
-        // DEPO DEFTERİ — mal depodan DÜŞTÜ (softDelete ile aynı olay tipi).
-        await writeWarehouseMovements(
+        // DEPO DEFTERİ — mal STOKTAN DÜŞTÜ. Çıkış ucu topun İPTAL ÖNCESİ statüsüdür:
+        // stornonun yönü bu satırdan aynalanıyor, `fromStatus` boş kalırsa ters kayıt
+        // kurulamaz. Toplu kapı id DÖNMEZ ama gerekmiyor — storno ileri satırı
+        // `(stockCountId, eventType, rollId, reversesMovementId IS NULL)` ile bulur.
+        const ledgerWritten = await postStockMoves(
           tx,
           applied.map((a) => ({
             rollId: a.rollId,
             eventType: WarehouseEventType.CANCEL,
             qty: a.qty,
-            fromWarehouseId: count.warehouseId,
+            from: { warehouseId: count.warehouseId, status: a.status },
+            reasonCode: STOCK_MOVE_REASON.STOCK_COUNT,
             stockCountId: count.id,
             userId: userId ?? null,
             notes: `${count.countNo} sayım farkı`,
           })),
         );
+        if (ledgerWritten !== applied.length) {
+          throw AppError.internal(
+            `Depo defterine ${ledgerWritten}/${applied.length} sayım satırı yazıldı — geri sarıldı.`,
+          );
+        }
 
         // SAPMA DEFTERİ — "bu metraj fiziksel olarak yoktu" (fire DEĞİL).
         await recordVariancesTx(

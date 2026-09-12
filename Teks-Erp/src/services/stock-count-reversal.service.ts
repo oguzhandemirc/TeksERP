@@ -15,10 +15,12 @@
 // REDDEDİLMEZ; o top `LEDGER_ONLY` dalına düşer: statüsüne DOKUNULMAZ, yalnız
 // defter karşılığı (CANCEL_REVERSAL + sapma damgası) yazılır. Reddetmek, LIFO ile
 // birleşince o deponun TÜM eski sayımlarının storno yolunu kalıcı kapatıyordu.
-// ⚠️ ÇİFT YAZIM SEDDİ: ters satır zaten varsa (ister bu storno, ister elle geri
-// alma yazmış olsun) satır YAZILMAZ — yalnız sapma damgası atılır. Geçici kural
-// (rollId + stockCountId + tip ∪ sayım tamamlamasından SONRA yazılmış ters satır);
-// `reversesMovementId` alanı gelince tek sorguya iner (6e sözleşmesi).
+// ⚠️ ÇİFT YAZIM SEDDİ TEK ALANDADIR: "bu geri alma deftere yazıldı mı" sorusunun
+// cevabı, ileri (CANCEL) satırının terslenmiş olup olmadığıdır — `reversesMovementId`
+// zinciri (tasarım D2a/D2b). Satır zaten terslenmişse ters kayıt YAZILMAZ, yalnız
+// sapma damgası atılır; aynı satırın iki kez terslenmesini DB unique'i kapatır.
+// Tip sayma / belge bağıyla eşleme YAKLAŞIKTI ve kardeş sayımın satırını sedde
+// takıyordu (denetim 2026-09-12).
 // =============================================================================
 import { GoodsReceiptStatus, Prisma, PrintedDocType, RollStatus, StockCountLineKind } from "@prisma/client";
 import { StockCountStatus, WarehouseEventType, YarnMovementKind } from "@prisma/client";
@@ -31,7 +33,8 @@ import { printedDocumentService } from "./printed-document.service";
 import { syncPurchaseOrderSafely } from "./purchase-order.service";
 import { readIplikEnabled } from "./system-setting.service";
 import { applyYarnMovementTx, yarnMovementSign } from "./yarn.service";
-import { writeWarehouseMovements } from "./helpers/warehouse-ledger.helper";
+import { postStockMove, reverseStockMove } from "./helpers/warehouse-ledger.helper";
+import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { stockCountCancelReason, stockCountVoidReason } from "./stock-count.service";
 import {
   buildPlan,
@@ -152,25 +155,40 @@ async function reverseTx(tx: Prisma.TransactionClient, stockCountId: string, rea
   }
 
   // Ters satır yazılacak toplar: ALREADY_REVERSED dışındakiler (çift yazım seddi).
+  // TOPLU YAZIM YOK ve olamaz: her ters satır KENDİ ileri satırının id'sine bağlanır,
+  // `createMany` ise id döndürmez. Kapı satır başına FIRLATIR, yani "sessizce atlanan
+  // satır" sınıfı kapandı; eski sayı denetimi gereksiz kaldı.
   const needLedger = plan.rolls.filter((r) => r.action !== "ALREADY_REVERSED");
-  if (needLedger.length > 0) {
-    // ⚠️ Dönen sayı DENETLENİR: helper qty<0 ya da depo boşsa satırı SESSİZCE atlar
-    // (`warehouse-ledger.helper`). Atlanan satır = yazılmamış ters kayıt.
-    const written = await writeWarehouseMovements(
-      tx,
-      needLedger.map((r) => ({
-        rollId: r.rollId,
+  for (const r of needLedger) {
+    if (r.cancelMovementId && r.cancelHasStatus) {
+      await reverseStockMove(tx, r.cancelMovementId, {
+        reasonCode: STOCK_MOVE_REASON.STOCK_COUNT,
+        // Enum BETİMLEYİCİDİR (tespit bağdan yapılır): panel/rapor/audit aynası korunsun
+        // diye ters satır `CANCEL_REVERSAL` yazılır, ileri satırın tipi kopyalanmaz.
         eventType: WarehouseEventType.CANCEL_REVERSAL,
-        qty: r.qty,
-        toWarehouseId: plan.warehouseId,
-        stockCountId: plan.countId,
         userId: userId ?? null,
         notes: note,
-      })),
-    );
-    if (written !== needLedger.length) {
-      throw AppError.internal(`Depo defterine ${written}/${needLedger.length} storno satırı yazıldı — geri sarıldı.`);
+      });
+      continue;
     }
+    // ESKİ KAYIT DALI (grandfathering, tasarım D2b): ileri satır yok ya da `fromStatus`
+    // taşımıyor — yön aynalanamaz, uç elle kurulur ve satır BAĞSIZ kalır. Σ etkilenmez
+    // (katkı yönden gelir, bağdan değil); yeni yazan yol bağı doldurmak zorundadır.
+    if (!r.ledgerToStatus) {
+      throw AppError.internal(
+        `${r.barcode ?? r.rollId}: ters kaydın giriş ucu kurulamadı (statü bilinmiyor).`,
+      );
+    }
+    await postStockMove(tx, {
+      rollId: r.rollId,
+      eventType: WarehouseEventType.CANCEL_REVERSAL,
+      qty: r.qty,
+      to: { warehouseId: plan.warehouseId, status: r.ledgerToStatus },
+      reasonCode: STOCK_MOVE_REASON.STOCK_COUNT,
+      stockCountId: plan.countId,
+      userId: userId ?? null,
+      notes: note,
+    });
   }
   if (plan.rolls.length > 0) {
     // Sapma damgası HER dalda atılır (defter satırını başkası yazmış olsa bile

@@ -287,6 +287,9 @@ class WarehouseService extends BaseService {
         goodsReceipt: { select: { id: true, receiptNo: true } },
         shipment: { select: { id: true, shipmentNo: true } },
         rollReturn: { select: { id: true } },
+        // TERS KAYIT BAĞI — "bu satır storno mudur" sorusunun TEK cevabı. Panel rozeti
+        // bunu okur; olay tipi (`*_REVERSAL`) yalnız varsayılan tondur.
+        reversesMovementId: true,
         // Sayım fark fişi / stornosu — "Belge" sütunu boş kalmasın (satırın kaynağı sayımdır).
         stockCount: { select: { id: true, countNo: true } },
         user: { select: { id: true, fullName: true, username: true } },
@@ -298,8 +301,13 @@ class WarehouseService extends BaseService {
     return {
       success: true,
       // Yön SUNUCUDA türetilir (dosya başlığı) — istemci `eventType`ten kendi
-      // kuralını uydurmasın.
-      data: page.map((r) => ({ ...r, direction: warehouseMovementDirection(r, params.warehouseId) })),
+      // kuralını uydurmasın. `isReversal` de aynı sınıftır: tespit BAĞDAN gelir,
+      // enum'dan değil (tasarım D2a) — iki kaynak olursa biri gün gelir yalan söyler.
+      data: page.map((r) => ({
+        ...r,
+        direction: warehouseMovementDirection(r, params.warehouseId),
+        isReversal: r.reversesMovementId !== null,
+      })),
       nextCursor: hasMore ? buildNextCursor(page[page.length - 1]) : null,
     };
   }

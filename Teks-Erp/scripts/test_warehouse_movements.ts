@@ -30,12 +30,17 @@
 // FIXTURE KENDİ VERİSİNİ ÜRETİR (ortamdaki veriye bağımlı değil) ve `finally`
 // içinde siler.
 // =============================================================================
-import { WarehouseEventType } from "@prisma/client";
+import { RollStatus, WarehouseEventType } from "@prisma/client";
+import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import prisma, { pool } from "../src/lib/prisma";
 import { warehouseService, warehouseMovementDirection } from "../src/services/warehouse.service";
-import { writeWarehouseMovements } from "../src/services/helpers/warehouse-ledger.helper";
+import {
+  postStockMove,
+  reverseStockMove,
+  writeWarehouseMovements,
+} from "../src/services/helpers/warehouse-ledger.helper";
 import warehouseRouter from "../src/routes/warehouse.routes";
 
 let pass = 0;
@@ -354,6 +359,52 @@ async function main(): Promise<void> {
   // ── §7 Körlük zemini ───────────────────────────────────────────────────
   const total = await prisma.warehouseMovement.count({ where: { rollId: { in: rollIds } } });
   check("§7 Körlük zemini: fixture 5 defter satırı üretti (hepsi 0 olsaydı §1-§5 vakumen geçerdi)", total === 5, `n=${total}`);
+
+  // ── §9 ⭐ `isReversal` BAĞDAN türer, OLAY TİPİNDEN değil ────────────────
+  // İki kaynak olursa biri gün gelir yalan söyler (tasarım D2a): "bu satır storno
+  // mudur" sorusunun tek cevabı `reversesMovementId`dir; `*_REVERSAL` tipi yalnız
+  // varsayılan tondur. Satırlar defterin GERÇEK kapılarından yazılır.
+  const s9 = await prisma.$transaction(async (tx) => {
+    const fwd = await postStockMove(tx, {
+      rollId: r2.id,
+      eventType: WarehouseEventType.CANCEL,
+      qty: 50,
+      from: { warehouseId: whA.id, status: RollStatus.WAREHOUSE },
+      reasonCode: STOCK_MOVE_REASON.STOCK_COUNT,
+    });
+    // Ters kayıt: tip KOPYALANIR (CANCEL), storno olduğunu yalnız BAĞ söyler.
+    const rev = await reverseStockMove(tx, fwd, { reasonCode: STOCK_MOVE_REASON.STOCK_COUNT });
+    // Tipi `*_REVERSAL` ama BAĞI YOK — "tipe bakan" bir uygulama buna storno derdi.
+    const unlinked = await postStockMove(tx, {
+      rollId: r2.id,
+      eventType: WarehouseEventType.CANCEL_REVERSAL,
+      qty: 50,
+      to: { warehouseId: whA.id, status: RollStatus.WAREHOUSE },
+      reasonCode: STOCK_MOVE_REASON.STOCK_COUNT,
+    });
+    return { rev, unlinked };
+  });
+  const page9 = (await warehouseService.listMovements({ rollId: r2.id, limit: 200 })).data as Array<{
+    id: string;
+    eventType: WarehouseEventType;
+    isReversal: boolean;
+  }>;
+  const row9 = (id: string) => page9.find((r) => r.id === id);
+  check(
+    "§9a Körlük zemini: iki sonda satırı da listede döndü",
+    Boolean(row9(s9.rev)) && Boolean(row9(s9.unlinked)),
+    `n=${page9.length}`,
+  );
+  check(
+    "§9b ⭐ Bağı DOLU satır isReversal:true (olay tipi CANCEL olmasına rağmen)",
+    row9(s9.rev)?.isReversal === true && row9(s9.rev)?.eventType === WarehouseEventType.CANCEL,
+    `tip=${String(row9(s9.rev)?.eventType)} isReversal=${String(row9(s9.rev)?.isReversal)}`,
+  );
+  check(
+    "§9c ⭐ Bağı BOŞ satır isReversal:false (olay tipi CANCEL_REVERSAL olmasına rağmen)",
+    row9(s9.unlinked)?.isReversal === false,
+    `isReversal=${String(row9(s9.unlinked)?.isReversal)}`,
+  );
 }
 
 main()

@@ -6505,3 +6505,89 @@ kırmızı.
 
 Migration **yok** · izin **yok** · APK **yok**. Sözleşme: açık `DATABASE_URL`
 olmadan paket koşumu artık mümkün değil (kadro kuralı).
+## 2026-09-12 — Sayım stornosu 6e'nin stok defteri kapısına bağlandı; çift yazım seddi tek alana indi (②-c) [ÇEKİRDEK]
+
+### Ölçüm
+
+②'de (2026-09-11) sayım stornosu yazılırken `reversesMovementId` alanı henüz yoktu;
+"bu geri alma deftere yazıldı mı" sorusu ARA KURALLA cevaplanıyordu: `rollId` +
+`stockCountId` + olay tipi ∪ "sayım tamamlamasından sonra yazılmış bağsız ters satır".
+Bu yaklaşıktı ve bir denetim bulgusu üretmişti (kardeş sayımın ters satırı seddi
+yanlış yerden kapatıyordu, §6k ile kapatılmıştı). 6e'nin A2 dilimi (`f3b0ebf8`)
+alanı, `postStockMoves` toplu kapısını ve `reverseStockMove`a `eventType` override'ını
+getirdi; bu not o bağlamayı kaydeder.
+
+Ölçüm (fabrika yedeği, salt okunur): `stockCountId`'li CANCEL satırı 0 · `CANCEL_REVERSAL`
+0 · `reversesMovementId` dolu satır 0 · `fromStatus` dolu satır 0 · stornolanmamış
+tamamlanmış sayım 0. Yani geriye dönük veri taşıma (backfill) GEREKMİYOR; eski-satır
+dalı yalnız savunma olarak duruyor ve sondayla ölçülüyor.
+
+### Karar
+
+- **Tespit tek alandan:** `ALREADY_REVERSED` dalı artık ileri (CANCEL) satırın
+  terslenmiş olup olmadığına bakar (`reversedBy` zinciri). Tip sayma ve belge bağıyla
+  eşleme KALDIRILDI.
+- **İleri yazım stok defteri sözleşmesine geçti:** `writeWarehouseMovements` yerine
+  `postStockMoves`; çıkış ucu `from: { warehouseId, status }` (topun İPTAL ÖNCESİ
+  statüsü) ve `reasonCode: STOCK_COUNT`. `fromStatus` olmadan ters kaydın yönü
+  aynalanamıyordu — eski yazıcı bu veriyi hiç üretmiyordu.
+- **Ters satır tek-tek yazılır** (`reverseStockMove`, `eventType: CANCEL_REVERSAL`
+  override'ı ile): her ters satır KENDİ ileri satırının id'sine bağlanmak zorunda,
+  `createMany` ise id döndürmüyor. İleri yazım toplu kalır ("200 eksik topta 2 sorgu"
+  gerekçesi korunur), ters yazım tekil.
+- **Enum BETİMLEYİCİ:** satırın storno olduğu `reversesMovementId`den okunur; hareket
+  listesi ucu her satırda `isReversal` döner (6e ile ortak karar — panel rozeti bundan
+  okuyacak, `WAREHOUSE_EVENT_META.reversal` yalnız varsayılan ton).
+- **Eski kayıt dalı (grandfathering):** ileri satır yok ya da `fromStatus` taşımıyorsa
+  storno PATLAMAZ; ucu plandan (`ledgerToStatus`) kurar ve satır BAĞSIZ kalır. Σ
+  etkilenmez (katkı yönden gelir, bağdan değil).
+- Yan düzeltme: `master-data-unmerge.service.ts` advisory uzayı 8030'u İKİNCİ KEZ
+  tanımlıyordu; merge servisinden ithal ediyor (envanter kuralı — uzay tek yerde).
+
+### Gerekçe
+
+İki kaynak olan her yerde biri gün gelir yalan söyler: "bu satır storno mudur"
+sorusunun hem enum hem bağ tarafından cevaplanması, paneli ve raporu birbirinden
+ayrı iki gerçeğe bağlardı. Enum'u silmek de doğru değildi — canlıda/testte o tiple
+yazılmış satırlar var ve panel etiketi/ton oradan geliyor. Çözüm ayrım: KARAR bağdan,
+TON enumdan.
+
+### Kod çapaları
+
+- `Teks-Erp/src/services/helpers/stock-count-reversal-plan.helper.ts` — ileri satır
+  araması (`reversesMovementId: null` + `orderBy createdAt`), `cancelMovementId`,
+  `cancelHasStatus`, `ledgerToStatus`.
+- `Teks-Erp/src/services/stock-count-reversal.service.ts` — `reverseStockMove` dalı +
+  bağsız eski-kayıt dalı.
+- `Teks-Erp/src/services/stock-count.service.ts` — ileri CANCEL yazımı `postStockMoves`.
+- `Teks-Erp/src/services/warehouse.service.ts` — liste ucunda `isReversal`.
+
+### Bekçi
+
+`test_stock_count_reversal.ts` 44 kontrol (yeni: §3c2 ileri satır sözleşmesi · §3c3
+bağ + yön aynası · §6h bağlı taklit satır · §6h2 BAĞSIZ satır seddi açmaz · §6l
+eski-satır dalı · §6m terslenmiş ileri satır seçilmez · §6n tipi `CANCEL` olan ters
+satır ileri satır sanılmaz) · `test_warehouse_movements.ts` §9 (`isReversal` bağdan
+türer: bağı dolu `CANCEL` satırı true, bağsız `CANCEL_REVERSAL` false). P2002 (aynı
+satır iki kez terslenemez) 6e'nin helper bekçisinde ölçülüyor, burada tekrarlanmadı.
+
+Negatif sondalar — ALTISI DA kırmızı verdi, dört dosya sha256 ile geri yüklendi:
+① ters satırda `eventType` override'ını kaldır → §3b/§3c/§3c3/§6f · ② ileri satırın
+sebep kodunu boz → §3c2 · ③ listeden `isReversal` alanını kaldır → §9b/§9c · ④ seçim
+kuralını boz (terslenmemiş değil, son satırı al) → §6h + P2002 çökmesi · ⑤
+ALREADY_REVERSED dalını kapat → §6h/§6n · ⑥ plan yükleminden `reversesMovementId: null`
+çıkar → §6n.
+
+⚠️ ÖLÇÜMÜN BULDUĞU KOD HATASI (kayda geçer): ilk yazımda `reversesMovementId: null`
+yüklemini "terslenmemiş satır" sanmıştım; o yüklem "bu satır ters kayıt DEĞİL" der.
+İkisini karıştıran kod, aynı sayımda aynı topun iki ileri satırı varken TERSLENMİŞ
+olanı seçiyordu (dal yanlışlıkla ALREADY_REVERSED). §6m senaryosu bunu ilk koşumda
+kırmızı verdi; doğru model "top başına ileri satırları grupla, TERSLENMEMİŞ olanı seç,
+hiçbiri yoksa ALREADY_REVERSED"dır ve `reversedBy` zincirinden okunur. Yüklem yine
+gerekli (tipi `CANCEL` olan ters satırı ayırır) ve artık §6n onu ölçüyor. Ders: sonda
+kırmızı vermiyorsa ya kural ölçülmüyordur ya senaryo eksiktir — ikisi de niyettir.
+
+### Üç kapı
+
+Migration **yok** (alan 6e'nin diliminde geldi). İzin **yok**. APK **yok**; panel
+rozeti `isReversal`a bağlanacak (6e, ayrı commit).
