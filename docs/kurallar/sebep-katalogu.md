@@ -11,7 +11,7 @@
 ### Değişmezler
 
 - **[ÇEKİRDEK]** Hazır sebep listeleri (fire · kayıt düzeltmesi · elle top ekleme · top iptali · sipariş iptali · yeniden üretim) DB'de yaşar (`ReasonPreset`) ve fabrika kendi diliyle düzenler; `code` doğuşta yazılır ve ASLA düzenlenmez (rapor anahtarı), `label` serbesttir. · bekçi: `test_reason_presets §5` <sub>(CLAUDE.md:73)</sub>
-- **[ÇEKİRDEK]** `ReasonPresetKind` ON İKİ yerde yazılıdır (Prisma enum · backend üç tablo · panel üç · tablet beş) ve üç TypeScript projesi arasında paylaşılan tip YOKTUR — enum'a değer eklemek hiçbir derlemeyi kırmaz, yalnız uzaktaki aynayı sessizce eksik bırakır; yeni kind eklerken on ikisi BİRLİKTE güncellenir. · bekçi: `test_reason_preset_kind_parity` <sub>(CLAUDE.md:73)</sub>
+- **[ÇEKİRDEK]** `ReasonPresetKind` ON İKİ yerde yazılıdır (Prisma enum · backend üç tablo · panel üç · tablet beş) ve üç TypeScript projesi arasında paylaşılan tip YOKTUR; yeni kind eklerken on ikisi BİRLİKTE güncellenir. Dokuzu annotated `Record<ReasonPresetKind,…>` ya da exhaustive switch olduğu için derlemede düşer (backend'in üçü `prisma generate` sonrası anında) — gerçekten SESSİZ olan ÜÇ dikiş vardır: panel union · panel `KIND_TABS` · tablet union. YENİ ayna annotated `Record<ReasonPresetKind,…>` ile yazılır, gevşek `Record<string,…>` ile DEĞİL. · bekçi: `test_reason_preset_kind_parity` <sub>(CLAUDE.md:73)</sub>
 - **[ÇEKİRDEK]** Fason adımına manuel taşıma malı `AT_SUBCONTRACTOR` YAPMAZ; çıkış ayrıca Fason Sevk ekranından yapılır (taşınan top orada kendiliğinden görünür). <sub>(CLAUDE.md:181)</sub>
 
 ### Yasaklar
@@ -57,6 +57,7 @@
 
 - **[ÇEKİRDEK]** Mobil çevrimdışı zemin: metin SAKLAYAN kind'larda kodlar sentetiktir (`BUILTIN_<i>`) ve sunucuya GÖNDERİLMEZ (sunucu metinden türetir); metin SAKLAMAYAN kind'ta (WORK_ORDER_REWORK) zemin GERÇEK katalog kodlarını taşır — uydurma kod rapor anahtarını çöpe çevirir. <sub>(CLAUDE.md:85)</sub>
 - **[ÇEKİRDEK]** Yıkıcı aksiyon taşıyan sebep listesine (top iptal chip'leri: dokununca topu iptal eder) satır içi düzenleme kalemi KONMAZ; düzenleme ayrı yüzeyde (`ReasonPresetManagerSheet`) açılır. <sub>(CLAUDE.md:73)</sub>
+- **[ÇEKİRDEK]** Tablet `ORDER_CANCEL` kind'ını TİP olarak tanır ama çevrimdışı zemini BİLEREK BOŞTUR: sipariş iptali tablette yapılmıyor, gömülü liste yazmak sunucudaki fabrika metinleriyle sessizce ayrışan ikinci bir katalog üretirdi. Tipin tanıması zorunlu — liste ucu TÜM kind'ları döndürüyor, union taşımazsa `KIND_LABELS[kind]` `undefined` verir ve sebep adsız çizilir. · bekçi: `test_reason_preset_kind_parity` <sub>(2026-09-12 K4 denetimi)</sub>
 
 ### Tuzaklar
 
@@ -87,16 +88,15 @@
 
 ## Açık sorular
 
-- 'BEŞ KAPI' reçetesi `ORDER_CANCEL` kind'ında tam uygulanmamış: backend (schema.prisma:146, constants/reason-presets.ts:63) ve Electron (pages/ReasonPresets/service.ts:51) taşıyor, mobil union taşımıyor (mobil/src/services/reasonPreset.service.ts:15-21, 5 kind). Tablette sipariş iptali yüzeyi olmadığı için bilinçli olabilir; notlarda bu muafiyet YAZILI DEĞİL — karar teyidi gerekiyor.
 - Kök notlar ve kod yorumları hâlâ 'metin saklayan İKİ kind' diyor (CLAUDE.md:73, reason-preset.service.ts:211-215 başlığı), oysa `KIND_STORES_TEXT` bugün ÜÇ true taşıyor (ORDER_CANCEL, order.service.ts:495,3138 üzerinden canlı). Metin drift'i — kural değişmedi, sayı bayat.
 
-## Bekçiler — bu alana dokununca koş (5 backend · 6 istemci)
+## Bekçiler — bu alana dokununca koş (6 backend · 6 istemci)
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_iade_enhancements`, `test_order_cancel_reason`, `test_reason_presets`, `test_roll_cancel_undo`⚠️, `test_roll_fold_and_reason`
+Backend: `test_iade_enhancements`, `test_order_cancel_reason`, `test_reason_preset_kind_parity`, `test_reason_presets`, `test_roll_cancel_undo`⚠️, `test_roll_fold_and_reason`
 
 İstemci: `RollCancelModal.test.tsx`, `ReasonPresetPicker.test.tsx`, `varianceReasons.test.ts`⚠️, `useReasonPresets.test.tsx`, `reworkPayload.test.ts`, `reasonPreset.order.test.ts`
 

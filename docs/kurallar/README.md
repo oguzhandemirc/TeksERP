@@ -19,7 +19,7 @@
 | Refakat kartı | `docs/kurallar/refakat-karti.md` | 31 | 7 | 29 | 2026-08-05 |
 | Belge · Etiket · Şablon | `docs/kurallar/belge-etiket.md` | 58 | 8 | 143 | 2026-07-30, 2026-08-05, 2026-08-13, 2026-09-04 |
 | Mükerrer · nameFold seddi | `docs/kurallar/mukerrer.md` | 8 | 6 | 22 | 2026-08-21, 2026-08-22, 2026-08-25 |
-| Sebep katalogları | `docs/kurallar/sebep-katalogu.md` | 26 | 4 | 11 | 2026-08-25, 2026-08-26 |
+| Sebep katalogları | `docs/kurallar/sebep-katalogu.md` | 26 | 4 | 12 | 2026-08-25, 2026-08-26 |
 | Keşif · Cihaz · Ağ · Donanım | `docs/kurallar/kesif-cihaz.md` | 54 | 5 | 51 | 2026-09-04 |
 | Sürüm · Yayın (panel/tablet) | `docs/kurallar/surum-yayin.md` | 23 | 6 | 19 | 2026-08-19, 2026-08-26, 2026-08-27, 2026-09-03 |
 | Deploy · Kurulum · Migration | `docs/kurallar/deploy-kurulum.md` | 33 | 5 | 46 | 2026-08-26, 2026-09-04 |

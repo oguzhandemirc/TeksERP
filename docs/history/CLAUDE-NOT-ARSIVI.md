@@ -7132,3 +7132,115 @@ koşuldu.
 ### Üç kapı
 
 Migration **yok** · izin **yok** · APK **yok**.
+
+## 2026-09-12 — Üç halkalı zincir: kırılan kural değil, bekçinin TEK-SEVİYE varsayımıydı [ÇEKİRDEK]
+
+Devere kapısı (`requireDevereEnabled`) canlı sunucuya karşı altı kırmızı veriyordu
+ve ilk okuma "kapı 403'te yanlış modül adını basıyor" idi. Ölçüm tersini gösterdi:
+**kapı doğru, bekçinin beklentisi yanlıştı.**
+
+### Neden kapı haklı
+
+Ticaret kapalıyken operatöre "İplik'i aç" demek, onu AÇILAMAYAN bir toggle'a
+göndermektir — `assertModuleDependencies` ipliği ticaret kapalıyken zaten 400 ile
+reddediyor. Doğru cevap kişinin İLK açabileceği anahtardır: zincirin dışarıdan
+içeri ilk kapalı halkası.
+
+Asıl tespit şu: **kural zaten "eksik olan EN DIŞ halkayı söyle" idi ve bekçi bunu
+İKİ halkalı zincirlerde doğru kodlayabilmişti, çünkü orada doğrudan ön koşul zaten
+en dış halkadır. Devere ilk ÜÇ halkalı zincir (devere → iplik → ticaret); kırılan
+kural değil, bekçinin tek-seviye varsayımıydı.**
+
+⚠️ **Açık soru — yeni bir üç halkalı zincir doğduğunda bu varsayımı ARAYIN.**
+Bugün tek üç halkalı zincir devere'dir; modül sayısı arttıkça sınıf yeniden doğar.
+`MODULE_DEPENDENCIES` tek ön koşul taşır, geçişli kapanışı üretmez.
+
+Kapıyı "kendi adını söyle"ye çevirmek de yanlış olurdu: tutarsız bir DB'de (elle
+SQL / eski dump: ticaret KAPALI + iplik AÇIK + devere AÇIK) operatöre "devere
+kapalı" derdi — oysa asıl eksik ticarettir.
+
+### Altı kırmızı aslında İKİ ayrı şeydi
+
+(a) "Modül AÇIKKEN 2xx" kontrolleri modülle ilgili DEĞİLDİ: gövde
+`"'warpspec:read' yetkisi gerekli"` diyordu — modül kapısı GEÇMİŞ, arkasındaki
+`requirePermission` reddetmişti. Bekçinin fikstür kullanıcısının izin listesinde
+o izin yoktu. Sınıf adı: **kırmızı ≠ suçlu doğru** — bekçi ölçtüğü şeyi yanlış
+adlandırıyordu ("yeşil ≠ kapsandı"nın kardeşi).
+
+(b) "Modül KAPALIYKEN doğru ad" kontrolleri tek-seviye varsayımı yüzünden
+düşüyordu (yukarıdaki bölüm).
+
+### Bekçinin kendi kirliliği
+
+`test_module_flag_off` §3 "boş kurulumda modül satırı BEKLENMEZ" diyor, ama
+`finally` "satır yoktu" hâlini satır YAZARAK geri yüklüyordu: koşum sonrası DB'de
+altı `*.enabled` satırı kalıyor ve İKİNCİ koşum kendi §3'ünden kırmızı alıyordu.
+Satırsız doğan anahtarlar artık SİLİNEREK geri yükleniyor. Doğru ölçüm biçimi tek
+koşum değildir: üst üste İKİ koşumda da 104/0 ve kalan satır 0.
+
+### Çapa sınıfı — ön-ek eşleşmesi sahte yeşil üretir
+
+`test_reason_preset_kind_parity`in ayrıştırıcısı çapayı `indexOf(ad)` ile
+arıyordu; kelime sınırı yoktu. Ölçüldü (canlı dosyada, sonra geri alındı): gerçek
+tablonun ÜSTÜNE `KIND_STORES_TEXT_V2` konunca **eski bekçi o sahte tabloyu okudu
+(1 değer: `ZZZ_SAHTE`)**, düzeltilmiş bekçi gerçek tabloyu okudu (6 değer, 42/0).
+Anahtar kümesi farklı olduğu için bu denemede kırmızı verdi; anahtarları eşleşen
+bir sahte ile SESSİZ YEŞİL olurdu. Çapa artık bildirim düzeyinde aranıyor ve
+TEKİLLİĞİ ölçülüyor (eşleşme ≠ 1 → boş küme → körlük zemini kırmızı).
+
+Aynı turda §5'in körlük zemini yalnız backend'i ölçüyordu; panel ve tablet
+zeminleri eklendi ve "anahtar yoksa atla" koşulu KALKTI (eksik anahtar artık
+`OKUNAMADI` ihlali).
+
+⚠️ **Migration dosyası UYGULANDIKTAN SONRA düzenlenirse checksum kapısı durdurur
+— başlık ya da yorum eklemek bile "uygulanmış migration değiştirildi" sınıfına
+girer.** Ölçüldü: devere sedlerinin başlığına şema provası cümlesi eklenince
+GATE 2 üç commit'i birden durdurdu ve HAKLIYDI. Düzenleme, uygulamadan ÖNCE
+bitirilir; sonradan gereken her değişiklik YENİ migration'dır. (Sahada checksum
+karşılığı olmadığı — dosya henüz HEAD'de değil — ve etkilenen tek yer kendi test
+veritabanı olduğu durumda dosya yeniden stage'lenip defter hizalanabilir; bu
+istisna canlıda YOKTUR.)
+
+⚠️ **Kör nokta düzeltmesi kör nokta üretir; zemin olmadan düzeltme kendini
+doğrulayamaz.** Canlı kanıt aynı turda çıktı: çapa düzeltmesinin ilk yazımı
+eşleşmenin BAŞINI döndürüyordu (önündeki ayraç karakteri dahil) ve `govdeBasi`
+bildirim satırını bir önceki satırın kuyruğu sanıp `KIND_TABS`i 0 anahtar okudu.
+Kırmızıyı veren §1 körlük zeminiydi — o olmasaydı "düzeltme" sessizce bir aynayı
+körleştirmiş olarak inerdi.
+
+### Faz çıktısı statik bekçiyle ölçülmez
+
+Devere Faz 1a'da kapı · route · izin · ekran ayrı ayrı yeşildi ama faz TEK KART
+üretemiyordu: iplik denyesinin hiçbir YAZMA yüzeyi yoktu, her deneme 400'e
+düşüyordu ve red mesajı ("kalem kartından denyeyi girin") hiç çizilmeyen bir
+kutuya gönderiyordu. `test_devere_regime_gate` §7 artık AKIŞI ölçüyor: kart
+açılabiliyor mu, denyesiz iplikle açılamıyor mu, red mesajının gönderdiği yüzey
+var mı. Negatif sonda izole worktree'de ölçüldü (temiz ağaçta 20/1, düzeltilmişte
+21/0).
+
+### Üç kapı
+
+Migration **yok** · izin **KATALOG DEĞİL ATAMA** (`warpspec:read` üretim +
+süpervizör, `warpspec:write` yalnız süpervizör — motor + ekran + izin vardı,
+eksik olan yalnız atamaydı; muafiyet vakası değildi) · APK **yok** (denye yüzeyi
+panel + backend, tablet dokunulmadı).
+
+### Üç kural bir iniş zincirinden doğdu (aynı gün, iki kez yanlış commit)
+
+Dört dilimlik bir inişte commit zinciri **iki kez** yanlış kuruldu ve üçüncüde
+düzeldi. Üç ayrı sebep çıktı; üçü de o güne kadar yazılı değildi:
+
+1. **`git commit -F <mesaj>` pathspec'siz koşunca index'in TAMAMINI alır.**
+   Index'te önceden stage'lenmiş migration durduğu için ilk commit sekiz dosyayı
+   birden yuttu, sonraki iki commit "değişiklik yok" dedi.
+2. **İzlenmeyen bir migration dizini varken kapı HİÇBİR commit'e izin vermiyor**
+   ("elle yazılan migration `git add` edilmeden…"). Sıfırlayıp tek tek
+   stage'lenince ilk üç commit reddedildi, reddedilenlerin stage'i index'te kaldı
+   ve dördüncü commit yine hepsini aldı. Yani **migration taşıyan dilim İLK
+   sıradadır** — bu bir tercih değil, kapının zorunluluğu.
+3. **`git commit … | tail` çıkış kodunu YUTAR** ve `set -e` durduramaz: kapı
+   kırmızı verdi, boru sonucu yuttu, betik ilerledi. Bu, o gün bütün gün
+   uğraşılan **"ölçtüğünü iddia eden yeşil"** sınıfının kabuk tarafındaki hâlidir
+   — ölçüm yapıldı, sonucu okunmadı.
+
+Kural satırları `docs/RECETELER.md` § migration altında tek blok hâlinde.
