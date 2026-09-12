@@ -58,6 +58,55 @@ function kodSatirlari(src: string): string {
 /** Kapı çağrısının imzası. */
 const KAPI = "assertGelistirmeVeritabani(";
 
+/** `$executeRaw` / `$executeRawUnsafe` çağrısı — argümanı TEK düz literal ise yakalar. */
+const RAW_TEK_LITERAL =
+  /\$executeRaw(?:Unsafe)?(?:<[^>]*>)?\s*\(\s*(`[^`]*`|"[^"]*"|'[^']*')\s*\)/g;
+/** Her `$executeRaw*` geçişi (argüman biçimi ne olursa olsun). */
+const RAW_HERHANGI = /\$executeRaw(?:Unsafe)?\s*[(`<]/g;
+/**
+ * SADECE `ALTER TABLE x VALIDATE CONSTRAINT y` — BAŞTAN SONA, başka ifade yok.
+ * Tablo/kısıt adı yerine tek bir `${sabit}` yer tutucusu kabul edilir (gerçek
+ * kullanım kısıt adını sabitten geçiriyor); yer tutucunun İÇİ düz tanımlayıcı
+ * olmak zorunda — `${"; DROP …"}` bu kalıba UYMAZ.
+ */
+const YALNIZ_VALIDATE =
+  /^\s*ALTER\s+TABLE\s+(?:[\w".]+|\$\{[\w.]+\})\s+VALIDATE\s+CONSTRAINT\s+(?:[\w".]+|\$\{[\w.]+\})\s*;?\s*$/i;
+
+/**
+ * "Bu betik Prisma ile YIKIYOR mu?" — API ADINA değil ETKİYE bakar.
+ *
+ * `ALTER TABLE … VALIDATE CONSTRAINT` hiçbir şey yıkmaz: mevcut satırları tarar ve
+ * kısıtı işaretler; satır silmez, değiştirmez. Prisma'nın tipli API'si olmadığı için
+ * `$executeRawUnsafe` ile yazılır ve eski desen (`/\$executeRaw/`) onu yıkıcı
+ * SAYIYORDU — yanlış pozitif (ölçüldü 2026-09-12: tavan 42→43'e çıktı ve bir
+ * sürüm engeli commit'ini tuttu).
+ *
+ * ⚠️ YÜKLEM BİLEREK DAR: muafiyet yalnız argümanı TEK düz literal olan ve o
+ * literalin BAŞTAN SONA yalnız bir VALIDATE ifadesi olduğu çağrıya tanınır.
+ * `$executeRawUnsafe(\`DELETE …; -- VALIDATE CONSTRAINT\`)` bu kalıba UYMAZ ve
+ * yıkıcı sayılmaya devam eder.
+ * ⚠️ KAÇIRDIĞI (beyan, fail-closed yönde): VALIDATE'i bir DEĞİŞKENDEN geçiren ya
+ * da tek çağrıda birden çok ifade gönderen betik hâlâ YIKICI sayılır. Yanlış
+ * tarafa düşmenin bedeli "kapı ekle" (dakikalar), diğer tarafınki veri kaybıdır.
+ */
+function prismaYikiciMi(kod: string): boolean {
+  if (/\.deleteMany\(/.test(kod)) return true;
+  const rawSayisi = (kod.match(RAW_HERHANGI) ?? []).length;
+  if (rawSayisi === 0) return false;
+  const zararsiz = [...kod.matchAll(RAW_TEK_LITERAL)].filter((m) => {
+    const sql = m[1]!.slice(1, -1);
+    if (!YALNIZ_VALIDATE.test(sql)) return false;
+    // Yer tutucu varsa DEĞERİ de ölçülür: aynı dosyada düz bir string sabiti
+    // olarak tanımlanmış ve tanımlayıcıdan ibaret olmalı. Aksi hâlde muafiyet
+    // YOK — `const K = "x; DROP TABLE …"` ile kapıdan kaçılamaz.
+    return [...sql.matchAll(/\$\{([\w.]+)\}/g)].every(([, ad]) => {
+      const tanim = new RegExp(`\\bconst\\s+${ad}\\s*(?::[^=]+)?=\\s*(\`[^\`]*\`|"[^"]*"|'[^']*')`).exec(kod);
+      return tanim !== null && /^[\w".]+$/.test(tanim[1]!.slice(1, -1));
+    });
+  }).length;
+  return rawSayisi > zararsiz;
+}
+
 /**
  * Gerekçeli muaflar. ⚠️ Muaf, "bu dosya yıkıcı DEĞİL" demektir — "yıkıcı ama
  * geçsin" demek değildir. Bayatlığa karşı §2/§3 ile iki yönlü denetlenir.
@@ -164,7 +213,6 @@ function main(): void {
   // ⚠️ `test_*` ve `fixture-*` KAPSAM DIŞI ve bu bilinçli: bekçi kendi
   // fixture'ını yaratıp siler, hedefi zaten koşucunun üretim-DB kapısıyla
   // korunur (`run-all-tests.ts`). Tek istisna `KAPI_ZORUNLU_TESTLER`.
-  const PRISMA_SILME = /\.deleteMany\(|\$executeRaw/;
   /** ÖLÇÜLDÜ 2026-09-06: 44 yıkıcı betiğin 42'sinde kapı yok. Yalnız DÜŞER. */
   const KAPISIZ_TAVAN = 42;
   const prismaYikicilar: string[] = [];
@@ -172,7 +220,7 @@ function main(): void {
   for (const f of dosyalar) {
     if (f.startsWith("test_") || f.startsWith("fixture-")) continue;
     const kod = kodSatirlari(readFileSync(join(dizin, f), "utf8"));
-    if (!PRISMA_SILME.test(kod)) continue;
+    if (!prismaYikiciMi(kod)) continue;
     prismaYikicilar.push(f);
     if (!kod.includes(KAPI)) prismaKapisizlar.push(f);
   }
