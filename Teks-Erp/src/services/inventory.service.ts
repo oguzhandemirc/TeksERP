@@ -1188,16 +1188,27 @@ export class InventoryService {
         // DEPO DEFTERİ — mal DIŞARIDAN geldi (KK1 ham giriş / elle ekleme / Tambur
         // manuel / Mal Kabul). Kesim çocuğu bu yoldan geçmez ve satır yazmaz:
         // kesim bir dönüşümdür, hareket değil (bkz. warehouse-ledger.helper).
-        await writeWarehouseMovement(tx, {
-          rollId: created.id,
-          eventType: WarehouseEventType.ENTRY,
-          qty: data.initialQty,
-          toWarehouseId: targetWarehouseId,
-          goodsReceiptId: opts?.goodsReceiptId ?? null,
-          userId: userId ?? null,
-        // 0 metrajlı top DOĞMAZ (giriş metrajı uçta doğrulanıyor); buradaki 0
-        // bir veri hatasıdır ve topun defter izi doğuştan eksik kalırdı.
-        }, { onZeroQty: "throw" });
+        // ⚠️ YALNIZ STOK KÜMESİNE doğan top için: `forcedStatus` ile üretime
+        // (`IN_PRODUCTION`) ya da fasona (`AT_SUBCONTRACTOR`) doğan top RAFTA
+        // DEĞİLDİR — ona giriş satırı yazmak depoya girmemiş malı depoda
+        // göstermek olur. Ölçüldü (fabrika kopyası): bu sınıftan 129 top var
+        // (46 + 83). Bu, "koşulsuz yaz" kalıbının ÜÇÜNCÜ kopyasıydı; ilk ikisi
+        // fason dönüşü (`cb1d0304`) ve topun iptali (`3c15208c`).
+        //
+        // ⚠️ 0 metrajlı top DOĞMAZ (giriş metrajı uçta doğrulanıyor) ve buradaki
+        // 0 bir veri hatasıdır: `postStockMove` FIRLATIR — eski çağrının
+        // `onZeroQty: "throw"` davranışı birebir korunuyor.
+        if (targetWarehouseId !== null && WAREHOUSE_STOCK_STATUSES.includes(initialStatus)) {
+          await postStockMove(tx, {
+            rollId: created.id,
+            eventType: WarehouseEventType.ENTRY,
+            qty: data.initialQty,
+            to: { warehouseId: targetWarehouseId, status: initialStatus },
+            reasonCode: STOCK_MOVE_REASON.ENTRY_RECEIPT,
+            goodsReceiptId: opts?.goodsReceiptId ?? null,
+            userId: userId ?? null,
+          });
+        }
         return created;
       });
     } catch (err) {

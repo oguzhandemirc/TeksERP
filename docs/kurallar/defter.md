@@ -111,7 +111,7 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>`
 
-Backend: `test_stock_ledger_cancel_restore`, `test_stock_ledger_helper`, `test_stock_ledger_issue`, `test_stock_ledger_kursun_reopen`, `test_stock_ledger_production`, `test_stock_ledger_tambur`, `test_stock_ledger_tambur_undo`, `test_roll_movement_revoke`, `test_roll_operation_revoke`, `test_cheque_reversal`, `test_stock_count_reversal`, `test_swatch_stock_reduction_reversal`, `test_work_session_history_guard`, `test_warehouse_ledger`, `test_warehouse_movements`, `test_master_data_merge_revert`
+Backend: `test_stock_ledger_cancel_restore`, `test_stock_ledger_entry`, `test_stock_ledger_helper`, `test_stock_ledger_issue`, `test_stock_ledger_kursun_reopen`, `test_stock_ledger_production`, `test_stock_ledger_tambur`, `test_stock_ledger_tambur_undo`, `test_roll_movement_revoke`, `test_roll_operation_revoke`, `test_cheque_reversal`, `test_stock_count_reversal`, `test_swatch_stock_reduction_reversal`, `test_work_session_history_guard`, `test_warehouse_ledger`, `test_warehouse_movements`, `test_master_data_merge_revert`
 
 **Bu alanın genel kapısı YOK — kuralların çoğu bugün ölçülmemiştir** ([DB-35]: kapısız kural bir niyet beyanıdır). Tek tek ölçülen kurallar:
 
