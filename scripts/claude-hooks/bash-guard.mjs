@@ -14,7 +14,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { etkilenenProjeler, stagedFiles } from "../hooks/lib/staged.mjs";
+import { commitTabani, etkilenenProjeler, stagedFiles } from "../hooks/lib/staged.mjs";
 
 // Depo kökü DOSYA KONUMUNDAN çözülür: Bash aracının cwd'si bir alt dizin
 // olabilir ve o zaman `process.cwd()` staged çözümünü sessizce boşa düşürürdü.
@@ -58,7 +58,13 @@ if (/\bgit\s+commit\b/.test(cmd) && !/--no-verify/.test(cmd)) {
   try { hooksPath = execFileSync("git", ["config", "--get", "core.hooksPath"], { cwd: REPO, encoding: "utf8" }).trim(); } catch { hooksPath = ""; }
   const gitKapisiKurulu = hooksPath === ".githooks" && existsSync(join(REPO, ".githooks", "pre-commit"));
 
-  const staged = stagedFiles(REPO);
+  // ⚠️ AMEND'İ BURADA KESİN BİLİYORUZ — komut metni elimizde. Git hook yolunda bu
+  // bilgi yoktur ve `ps`/`GIT_AUTHOR_DATE` ile teşhis edilir; burada tahmine gerek yok.
+  // Değeri spawn edilen kapıya `TEKSERP_COMMIT_BASE` ile geçiyoruz: o taraf değeri
+  // körlemesine yutmaz, ebeveyninin gerçekten bu dosya olduğunu ÖLÇER ve yalnız
+  // {HEAD, HEAD^} kümesinden bir SHA kabul eder (bkz. hooks/lib/staged.mjs).
+  const amend = /--amend\b/.test(cmd);
+  const staged = stagedFiles(REPO, amend);
   if (staged.length === 0 || gitKapisiKurulu) process.exit(0);
 
   const projeler = etkilenenProjeler(REPO, staged).map((p) => p.ad);
@@ -71,7 +77,7 @@ if (/\bgit\s+commit\b/.test(cmd) && !/--no-verify/.test(cmd)) {
     cwd: REPO,
     encoding: "utf8",
     timeout: 600_000,
-    env: process.env,
+    env: { ...process.env, TEKSERP_COMMIT_BASE: commitTabani(REPO, amend) },
   });
   if (r.status !== 0 || r.error) {
     process.stderr.write(
