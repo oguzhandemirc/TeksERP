@@ -456,6 +456,50 @@ async function damgaVeYabanciSenaryolari(): Promise<void> {
     check("10b: ne kapanmışa ne açığa girdi (fire ve açık bakiye temiz)",
       r?.closedDispatchedQty === 0 && r.fireQty === 0 && r.openItems === 0 && r.openQty === 0, ozet(r));
   }
+
+  console.log("\n── 11) Aynı top aynı adımda İKİ kalemde: çekme sapması ÇİFT sayılmaz ──");
+  {
+    // Şekil (fixture): aynı (top, adım) için iki sevk kalemi — biri gerçek kabul
+    // gören sevk, diğeri kapanmış hayalet kalem. Çekme sapması `rollId + stepId`
+    // ile bağlanırsa İKİ kaleme de yazılır ve dönen metraj çift düşülür (fire şişer).
+    // Atıf `sourceRefId` (makbuz) üzerinden KALEME bağlıdır: sapma yalnız kabulü
+    // yapan kalemde sayılır.
+    const z = await kurSevk([250]);
+    const gercekSevk = await prisma.subcontractorDispatch.findUniqueOrThrow({
+      where: { id: z.dispatchId },
+      select: { batchId: true },
+    });
+    const hayaletSevk = await prisma.subcontractorDispatch.create({
+      data: {
+        dispatchNo: `${TAG}-HAYALET`,
+        workOrderId: z.woId,
+        batchId: gercekSevk.batchId,
+        stepId: z.stepId,
+        subcontractorId: ctx.sub,
+        totalQty: 250,
+        dispatchedAt: new Date(Date.UTC(YIL, 8, 10)),
+      },
+      select: { id: true },
+    });
+    svcIds.dispatches.push(hayaletSevk.id);
+    await prisma.subcontractorDispatchItem.create({
+      data: {
+        dispatchId: hayaletSevk.id,
+        rollId: z.rollIds[0]!,
+        dispatchedQty: 250,
+        // Kapanmış: iki kalem de fire paydasına girsin (açık kalemde sapma zaten sayılmaz).
+        remainderClosedAt: new Date(),
+      },
+    });
+    // Gerçek kabul: 250 düşüldü, 230 doğdu → 20 m çekme sapması (sourceRefId = makbuz).
+    await svc.receive({ workOrderId: z.woId, stepId: z.stepId, subcontractorId: ctx.sub, returns: [{ rollId: z.rollIds[0]! }], newRolls: [{ qty: 230 }] }, ctx.admin);
+    await prisma.subcontractorDispatch.update({ where: { id: hayaletSevk.id }, data: { dispatchedAt: new Date(Date.UTC(YIL, 8, 10)) } });
+    const r = await ayKarnesi(z.dispatchId, 8);
+    check("11a: dönen metraj 230 m (çekme bir kez düşüldü; çift sayımda 210 çıkardı)",
+      r?.returnedQty === 230, `gelen: ${r?.returnedQty}`);
+    check("11b: fire 270 m — iki kalem paydada (500), sapma tek kalemde",
+      r?.closedDispatchedQty === 500 && r.fireQty === 270, ozet(r));
+  }
 }
 
 async function svcTemizle(): Promise<void> {
