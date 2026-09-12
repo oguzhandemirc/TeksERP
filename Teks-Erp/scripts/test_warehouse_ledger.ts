@@ -10,10 +10,11 @@
 //
 // ÖLÇÜLENLER:
 //   A) GİRİŞ (createInitialEntry) → TEK `ENTRY` satırı, hedef depo dolu, çıkış boş
-//   B) ⭐ KESİM ÇOCUĞU SATIR YAZMAZ — kesim bir DÖNÜŞÜMDÜR, hareket değil.
-//      Yazsaydı depoya giren mal İKİ KEZ sayılırdı (100 m top 2×50 olunca
-//      depoya 100 m daha girmiş görünürdü). Bu kontrol, "her doğuşa satır at"
-//      şeklindeki en olası yanlış refleksi kilitler.
+//   B) ⭐ KESİM DÖNÜŞÜM ÇİFTİ yazar — kesim bir DÖNÜŞÜMDÜR, hareket değil ve
+//      dönüşümün İKİ ucu vardır: ebeveyn çıkışı + çocuk girişi, aynı
+//      `transformGroupId`, grup neti SIFIR. Eski beklenti ("çocuğa satır
+//      yazılmaz") çift sayımdan korkuyordu; korku yalnız EBEVEYN ÇIKIŞI
+//      yazılmadığında geçerliydi. Kapsamlı ölçüm: `test_stock_ledger_transform`.
 //   C) İPTAL → `CANCEL` satırı, ÇIKIŞ deposu dolu (mal o depodan düştü)
 //   D) `qty` HER ZAMAN POZİTİF — yön `eventType`ten okunur (RollVariance emsali)
 //   E) Anlamsız satır yazılmaz: deposuz (from+to boş) çağrı satır üretmez
@@ -76,12 +77,12 @@ async function main(): Promise<void> {
   const childRows = childId ? await prisma.warehouseMovement.count({ where: { rollId: childId } }) : -1;
   check("B1) Kesim çocuğu doğdu", Boolean(childId));
   check(
-    "B2) ⭐ Kesim çocuğuna defter satırı YAZILMADI (çift sayım yok)",
-    childRows === 0,
+    "B2) ⭐ Kesim çocuğuna TEK giriş satırı yazıldı (dönüşümün bir ucu)",
+    childRows === 1,
     `çocuk satırı=${childRows}`,
   );
   const parentRowsAfterCut = await prisma.warehouseMovement.count({ where: { rollId: parentId } });
-  check("B3) Kesim ebeveynin satır sayısını da değiştirmedi", parentRowsAfterCut === 1, `ebeveyn satırı=${parentRowsAfterCut}`);
+  check("B3) ⭐ Kesim ebeveyne de ÇIKIŞ satırı yazdı (giriş + dönüşüm çıkışı = 2)", parentRowsAfterCut === 2,`ebeveyn satırı=${parentRowsAfterCut}`);
 
   // ── C) İptal → CANCEL ───────────────────────────────────────────────────
   await inventory.softDelete(parentId, undefined, {

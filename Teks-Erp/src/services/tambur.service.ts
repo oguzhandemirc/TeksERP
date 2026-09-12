@@ -18,6 +18,7 @@ import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { postStockMove, qtyYazilabilir } from "./helpers/warehouse-ledger.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
+import { randomUUID } from "node:crypto";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { normalizeScanCode } from "../utils/code-format";
@@ -2210,7 +2211,12 @@ export class TamburService {
     const cutIntentSnapshot = buildIntentSnapshot(cutIntent);
     const cutLabelCustomerId = labelCustomerIdOf(cutIntent);
 
-    let result: { child: Roll; newParentQty: number; updatedParent: Roll };
+    let result: {
+      child: Roll;
+      newParentQty: number;
+      updatedParent: Roll;
+      defter: { pair: boolean; overage: boolean };
+    };
     try {
       result = await prisma.$transaction(async (tx) => {
       const child = await tx.roll.create({
@@ -2397,16 +2403,80 @@ export class TamburService {
       const kesimOncesiQty = Number(parent.currentQty);
 
       // AŞIM DEFTERİ — `cutOpenFabric` ikizi. Depo kesimi adıma bağlı DEĞİL.
+      const overageQty = tazeAsim ? overageOf(data.cutLength, tazeKalan) : new Prisma.Decimal(0);
+      let overageVarianceId: string | null = null;
       if (tazeAsim) {
-        await recordVarianceTx(tx, {
+        overageVarianceId = await recordVarianceTx(tx, {
           rollId: parent.id,
           workOrderStepId: null,
           kind: RollVarianceKind.OVERAGE,
           // Defter payı da TAZE metrajdan (bayat değer 140 m'lik aşımı 20 m yazıyordu).
-          qty: overageOf(data.cutLength, tazeKalan),
+          qty: overageQty,
           source: VARIANCE_SOURCES.TAMBUR_OVERCUT,
           userId,
         });
+      }
+
+      // ── STOK DEFTERİ — KESİM MALI TAŞIMAZ, BÖLER ──────────────────────────
+      // Ebeveynden çıkan metraj çocuğa girer: satır TEK değil ÇİFT yazılır ve
+      // ikisi aynı `transformGroupId` altında toplanır → grup neti SIFIR, depo
+      // toplamı kesimden etkilenmez. "Çocuğa yazmak çift saydırır" korkusu
+      // yalnız EBEVEYN ÇIKIŞI yazılmadığında geçerliydi.
+      //
+      // DEVREDEN metraj ebeveynin GERÇEKTEN kaybettiği kadardır: aşımda ebeveyn
+      // `tazeKalan`ı kaybeder, çocuk `cutLength` ile doğar.
+      const transferQty = tazeAsim ? tazeKalan : new Prisma.Decimal(data.cutLength);
+      let ledgerPairWritten = false;
+      let ledgerOverageWritten = false;
+      // HEPSİ YA HİÇ: bir uç yazılamıyorsa (deposuz defter-öncesi top) hiçbiri
+      // yazılmaz — tek başına çocuk girişi, karşılığı olmayan bir ARTI olurdu.
+      if (
+        parent.warehouseId !== null &&
+        child.warehouseId !== null &&
+        WAREHOUSE_STOCK_STATUSES.includes(parent.status) &&
+        WAREHOUSE_STOCK_STATUSES.includes(child.status) &&
+        qtyYazilabilir(transferQty)
+      ) {
+        const transformGroupId = randomUUID();
+        await postStockMove(tx, {
+          rollId: parent.id,
+          eventType: WarehouseEventType.TRANSFORM,
+          qty: transferQty,
+          from: { warehouseId: parent.warehouseId, status: parent.status },
+          reasonCode: STOCK_MOVE_REASON.CUT_SPLIT,
+          transformGroupId,
+          userId: userId ?? null,
+        });
+        await postStockMove(tx, {
+          rollId: child.id,
+          eventType: WarehouseEventType.TRANSFORM,
+          qty: transferQty,
+          to: { warehouseId: child.warehouseId, status: child.status },
+          reasonCode: STOCK_MOVE_REASON.CUT_SPLIT,
+          transformGroupId,
+          userId: userId ?? null,
+        });
+        ledgerPairWritten = true;
+      }
+      // AŞIM bir DEVİR değil KEŞİF: gruba GİRMEZ, yoksa "grup neti sıfır"
+      // değişmezi aşımda sessizce kırılırdı. Kapı ÇİFTTEN AYRI sorulur çünkü
+      // 0 m'ye inmiş topta ikinci aşım kesimi meşrudur ve orada devredecek
+      // metraj yoktur (2026-08-12 saha vakası).
+      if (
+        child.warehouseId !== null &&
+        WAREHOUSE_STOCK_STATUSES.includes(child.status) &&
+        qtyYazilabilir(overageQty)
+      ) {
+        await postStockMove(tx, {
+          rollId: child.id,
+          eventType: WarehouseEventType.ADJUST,
+          qty: overageQty,
+          to: { warehouseId: child.warehouseId, status: child.status },
+          reasonCode: STOCK_MOVE_REASON.OVERAGE,
+          rollVarianceId: overageVarianceId,
+          userId: userId ?? null,
+        });
+        ledgerOverageWritten = true;
       }
 
       // ── KAYNAK TÜKENDİYSE EMEKLİ ET (2026-08-29 / BULGU-T1-039) ────────────
@@ -2441,7 +2511,12 @@ export class TamburService {
         });
       }
 
-      return { child, newParentQty, updatedParent };
+      return {
+        child,
+        newParentQty,
+        updatedParent,
+        defter: { pair: ledgerPairWritten, overage: ledgerOverageWritten },
+      };
       });
     } catch (err) {
       // Offline/ağ-retry idempotency: aynı clientToken ile 2. çağrı → clientToken @unique
@@ -2499,6 +2574,9 @@ export class TamburService {
         childStatus,
         rawDestination: isRawParent ? (data.rawDestination ?? "STOCK") : null,
         parentRemainingQty: result.newParentQty,
+        // Defter etkisi: çift yazıldı mı, aşım keşfi yazıldı mı. Yazılmayan hâl
+        // (deposuz defter-öncesi top) sessiz kalmasın.
+        defter: result.defter,
         notes: data.notes ?? null,
       },
     });
@@ -2776,8 +2854,9 @@ export class TamburService {
 
       // SAPMA DEFTERİ — depo kesimi kapanışının kalan metraj kararı.
       const varianceKind = varianceKindForRemainingAction(action);
+      let varianceId: string | null = null;
       if (varianceKind) {
-        await recordVarianceTx(tx, {
+        varianceId = await recordVarianceTx(tx, {
           rollId: parent.id,
           // Depo kesimi hiçbir iş emri adımına bağlı DEĞİL — uydurma step yazma.
           workOrderStepId: null,
@@ -2790,7 +2869,74 @@ export class TamburService {
         });
       }
 
-      return { remainingChild, remainingQty };
+      // ── STOK DEFTERİ — KALANIN KARARI ─────────────────────────────────────
+      // Kapanış ebeveynin kalanını her hâlde sıfırlar; defter bu metrajın
+      // NEREYE gittiğini MALIN YERİNDEN okur, kod yolundan değil: kalan çocuk
+      // stok kümesinde doğduysa kesim ÇİFTİ (grup net sıfır), doğmadıysa ya da
+      // stok DIŞINA doğduysa tek ÇIKIŞ satırı.
+      //
+      // ⚠️ BİTMİŞ ebeveynde `scrap` malı stoktan ÇIKARMAZ: çocuk FIRE
+      // kalitesiyle ama WAREHOUSE statüsünde doğar, mal rafta kalır. Sapma
+      // defteri "fire kararı verildi", stok defteri "mal depoda kaldı" der —
+      // bu yüzden sebep `varianceKind`den DEĞİL çocuğun statüsünden türetilir.
+      let ledgerPairWritten = false;
+      let ledgerExitWritten = false;
+      if (
+        parent.warehouseId !== null &&
+        WAREHOUSE_STOCK_STATUSES.includes(parent.status) &&
+        qtyYazilabilir(remainingQty)
+      ) {
+        const exitEnd = { warehouseId: parent.warehouseId, status: parent.status };
+        const childRow = remainingChild;
+        if (
+          childRow !== null &&
+          childRow.warehouseId !== null &&
+          WAREHOUSE_STOCK_STATUSES.includes(childRow.status)
+        ) {
+          const transformGroupId = randomUUID();
+          await postStockMove(tx, {
+            rollId: parent.id,
+            eventType: WarehouseEventType.TRANSFORM,
+            qty: remainingQty,
+            from: exitEnd,
+            reasonCode: STOCK_MOVE_REASON.CUT_SPLIT,
+            transformGroupId,
+            userId: userId ?? null,
+          });
+          await postStockMove(tx, {
+            rollId: childRow.id,
+            eventType: WarehouseEventType.TRANSFORM,
+            qty: remainingQty,
+            to: { warehouseId: childRow.warehouseId, status: childRow.status },
+            reasonCode: STOCK_MOVE_REASON.CUT_SPLIT,
+            transformGroupId,
+            userId: userId ?? null,
+          });
+          ledgerPairWritten = true;
+        } else {
+          // Mal defterden düşüyor: `SCRAP` = mal vardı kullanılamaz (fire
+          // KPI'sına girer), `CUT_DISCARD` = mal hiç yoktu (kayıt düzeltmesi).
+          await postStockMove(tx, {
+            rollId: parent.id,
+            eventType: WarehouseEventType.ADJUST,
+            qty: remainingQty,
+            from: exitEnd,
+            reasonCode:
+              varianceKind === RollVarianceKind.SCRAP
+                ? STOCK_MOVE_REASON.SCRAP
+                : STOCK_MOVE_REASON.CUT_DISCARD,
+            rollVarianceId: varianceId,
+            userId: userId ?? null,
+          });
+          ledgerExitWritten = true;
+        }
+      }
+
+      return {
+        remainingChild,
+        remainingQty,
+        defter: { pair: ledgerPairWritten, exit: ledgerExitWritten },
+      };
     });
 
     await AuditService.log({
@@ -2804,6 +2950,7 @@ export class TamburService {
         remainingAction: action,
         remainingChildId: result.remainingChild?.id ?? null,
         remainingQty: result.remainingQty,
+        defter: result.defter,
         notes: data.notes ?? null,
       },
     });

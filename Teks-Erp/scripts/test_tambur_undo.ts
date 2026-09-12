@@ -773,6 +773,10 @@ async function main(): Promise<void> {
         select: { id: true },
       });
       const ids = all.map((r) => r.id);
+      // Defter satırı sapma satırına `onDelete: Restrict` ile bağlı (sapma =
+      // SEBEP, hareket = onun depo etkisi): kesim/kapanış artık varyansa bağlı
+      // satır yazdığı için hareketler sapmadan ÖNCE silinmeli.
+      await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: ids } } });
       await prisma.rollVariance.deleteMany({ where: { rollId: { in: ids } } });
       await prisma.rollOperation.deleteMany({ where: { rollId: { in: ids } } });
       await prisma.rollMovement.deleteMany({ where: { rollId: { in: ids } } });

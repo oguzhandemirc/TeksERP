@@ -30,6 +30,12 @@ export const STOCK_MOVE_REASON = {
   DISPOSITION: "DISPOSITION",
   /** Depo topunun kesimi (ebeveyn çıkışı + çocuk girişi, net sıfır). */
   CUT_SPLIT: "CUT_SPLIT",
+  /**
+   * Kesim kapanışında kalanın ATILMASI — mal hiç yoktu / kayıt düzeltmesi
+   * (`RollVarianceKind.RECORD_CORRECTION` ikizi). `SCRAP`tan AYRI tutulur:
+   * biri fire KPI'sına girer, bu girmez.
+   */
+  CUT_DISCARD: "CUT_DISCARD",
   /** Fason firmasına çıkış / dönüş. */
   FASON_DISPATCH: "FASON_DISPATCH",
   FASON_RECEIPT: "FASON_RECEIPT",

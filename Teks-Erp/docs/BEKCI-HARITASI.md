@@ -1288,7 +1288,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (96), `ui-bilesen` (94), `fason` (94), `di
 | `mobil/src/services/tambur.service.test.ts` | Kesim çağrılarında etiket NİYETİ (targetCustomerId / targetOrderLineId) POST gövdesine geçer — ulaşmazsa kesimde lastLabelSnapshot seed edilemez ('eti |  |  |  |
 | `Teks-Erp/scripts/test_roll_movement_revoke.ts` | Top hareketinin geri alınırken SİLİNMEDİĞİNİ damgalandığını; partial unique sayesinde geri alınmış AÇIK satır dururken aynı (top, adım) için yeni açık hareket yazılabildiğini, iki AKTİF açık hareketin reddedildiğini; kurşun yeniden açma ve geri manuel taşıma sonrası `recomputeStepStatus`un silme davranışıyla AYNI adım durumunu ürettiğini; AST+tip denetleyicisiyle her okuma/güncelleme/ilişki/ham SQL erişiminin `ACTIVE_MOVEMENT` taşıdığını (istisna kümesi iki yönlü) | ✓ | ✓ |  |
 
-## depo (49)
+## depo (50)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
@@ -1341,6 +1341,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (96), `ui-bilesen` (94), `fason` (94), `di
 | `Teks-Erp/scripts/test_stock_ledger_production.ts` | Son adım finalize ve WO kapanış dispozisyonu depoya GİRİŞ yazar; fire (SCRAP), deposuz top ve iptal satır YAZMAZ (stok dışından stok dışına) | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_stock_ledger_tambur.ts` | Tambur finalize çocuğu depoya giriş yazar, EBEVEYN yazmaz — ebeveyn IN_PRODUCTION'dı, yani zaten stok dışıydı (çift sayım korkusunun yapısal cevabı) | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_stock_ledger_tambur_undo.ts` | Tambur geri alma ileri satırı TERSLER: net sıfır, metraj ileri satırdan (canlı 0'a çekilmişken), FULL dalında iki çocuğun ikisi de terslenir, SCRAP çocuk hiç satır yazmaz | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_stock_ledger_transform.ts` | Kesim bir DÖNÜŞÜMDÜR: ebeveyn çıkışı + çocuk girişi aynı `transformGroupId` altında ve grup neti SIFIR; aşımda devir ebeveynin GERÇEKTEN kaybettiği kadardır ve fazlalık gruba girmeyen ayrı OVERAGE keşfidir (0 m topta devir satırı YOK); kapanışta kalan stok kümesine doğduysa çift, stok DIŞINA (SCRAP) doğduysa tek çıkış — BİTMİŞ ebeveynde `scrap` malı stoktan çıkarmaz (çocuk FIRE kalitesiyle rafta kalır); deposuz defter-öncesi topta çift HEPSİ YA HİÇ; mutabakat iki bağımsız kaynaktan (canlı stok ↔ Σdefter neti) | ✓ | ✓ |  |
 
 ## parti (34)
 

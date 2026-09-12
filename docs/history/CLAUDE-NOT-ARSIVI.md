@@ -7423,3 +7423,69 @@ aynasını atladı; sözlük `Record<string,string>` olduğu için derleyici sus
 yakaladı (16/1 → 17/0). `types/enums.ts` const aynası BİLEREK eklenmedi: panel o enum'a göre
 dallanmıyor, yalnız gösteriyor ⇒ kullanılmayan ayna iki sözlüğü drift ettirir; etiket audit
 sözlüğünden okunur.
+
+## 2026-09-12 — Kesim bir DÖNÜŞÜMDÜR: defter ÇİFT yazar, grup neti sıfır [ÇEKİRDEK]
+
+**Eski beklenti ve neden yanlıştı.** `test_warehouse_ledger` §B2/§B3 "kesim çocuğuna
+defter satırı YAZILMADI" ve "ebeveynin satır sayısı DEĞİŞMEDİ" diyordu; gerekçesi
+"çocuğa ENTRY yazmak depoya gireni iki kez saydırır" korkusuydu. Korku, yalnız
+EBEVEYN ÇIKIŞI yazılmadığı varsayımı altında doğruydu — yani yanlış modellediği
+olgu şuydu: kesim bir HAREKET değil, **iki uçlu bir dönüşüm**dür. Çift yazılınca
+grubun neti sıfır olur ve toplam kesimden etkilenmez; hiç yazmamanın bedeli ise
+sessizdir: 100 m top 40+60'a bölündüğünde defter "hiçbir şey olmadı" der ve as-of
+kesiti çocuğun metrajını hiçbir zaman göremez.
+
+**Karar (beşi birlikte).**
+1. Kesim/kapanış **ÇİFT** satır yazar (ebeveyn çıkışı + çocuk girişi), ikisi aynı
+   `transformGroupId` altında, `eventType: TRANSFORM`, `reasonCode: CUT_SPLIT` —
+   grup neti SIFIR.
+2. **Devreden metraj** ebeveynin GERÇEKTEN kaybettiği kadardır (`tazeKalan`),
+   kesim metresi değil. Aşımda ebeveyn 60 kaybeder, çocuk 100 ile doğar.
+3. **Aşım bir DEVİR değil KEŞİF**tir: gruba GİRMEZ, `eventType: ADJUST` +
+   `reasonCode: OVERAGE` ile ayrı yazılır ve `rollVarianceId` ile sapma
+   defterine bağlanır. Kapısı çiftten AYRI sorulur, çünkü 0 m'ye inmiş topta
+   ikinci aşım kesimi meşrudur (2026-08-12 saha vakası) ve orada devredecek
+   metraj yoktur.
+4. **Sebep kodu malın YERİNDEN türetilir, sapma kararından değil.** Bitmiş
+   ebeveynde `scrap` malı stoktan ÇIKARMAZ: çocuk FIRE kalitesiyle ama
+   WAREHOUSE statüsünde doğar, mal raftadır → yine ÇİFT yazılır. Ham ebeveynde
+   `scrap` çocuğu SCRAP statüsünde doğar (stok kümesi dışı) → tek ÇIKIŞ.
+   `discard` ise `CUT_DISCARD` (mal hiç yoktu; fire KPI'sına girmez).
+   Sapma defteri "fire kararı verildi", stok defteri "mal depoda kaldı" der —
+   ikisi AYNI soruyu cevaplamaz ve biri diğerinden türetilemez.
+5. **HEPSİ YA HİÇ:** çiftin bir ucu yazılamıyorsa (deposuz defter-öncesi top)
+   hiçbiri yazılmaz — tek başına çocuk girişi karşılığı olmayan bir ARTI olurdu.
+
+**Toplam korunuyor — İKİ BAĞIMSIZ KAYNAK.** Canlı metraj toplamı (ebeveyn+çocuk,
+`Roll.currentQty`) ve defter neti (`+to / -from`) ayrı ayrı okunur; tek kaynaktan
+okunan toplam aynı hatayı iki kez okur. Mutabakat ölçümü (bekçi §H1): kırmızıda
+`canlıStok=355 defterNet=405`, yeşilde `355 = 355`. Grup neti her dalda 0
+(normal, aşımlı, kapanış). Çocuk tarafı ayrıca kendi içinde tutuyor: 60 devir +
+40 keşif = 100 = canlı (§B5).
+
+**Kırmızı/yeşil.** Aynı bekçi, kod değişmeden **8 geçti / 20 başarısız**; kod
+indikten sonra **28 / 0**. İki negatif sonda (ikisi de kırmızı tabanın
+KAPSAMADIĞI kararları hedefler, ikisi de sha256 ile birebir geri alındı):
+· devir metrajı naif seçime (`cutLength`) çevrildi → §B1 `100/100`, §B5
+`defter=140 canlı=100`, §B6 sahte devir satırı (3 kırmızı).
+· sebep kodu çocuğun statüsü yerine `varianceKind`den türetildi → §E2 kırmızı.
+
+**Deposuz artık — açılış dilimine devredildi.** Deposuz ebeveynden depolu çocuk
+doğduğu için canlı stok çocuk kadar artar, defter artmaz: kesim YENİ bir mutabakat
+boşluğu açar. Gizlenmedi, ÖLÇÜLDÜ (bekçi §H2: `boşlukΔ=10`, tam olarak çocuğun
+metrajı). Doğru kapanış yeri açılış fotoğrafı dilimidir (defter kapsamına hiç
+girmemiş malın açılışı); tek başına çocuk girişi yazmak bu boşluğu kapatırdı ama
+"grup neti sıfır" değişmezini bir yolda kırardı.
+
+**Kod çapaları.** `src/services/tambur.service.ts` — `cutWarehouseRoll` defter
+bloğu (aşım varyansından sonra, emeklilik dalından önce) · `finalizeWarehouseCut`
+defter bloğu (sapma defterinden sonra). `src/constants/stock-move-reasons.ts` —
+`CUT_DISCARD`. Atlanan hâl audit yükünde `defter: { pair, overage | exit }`.
+
+**Bekçi.** `scripts/test_stock_ledger_transform.ts` (28 kontrol, §A–§H).
+`test_warehouse_ledger` §B2/§B3 beklentisi bu notla ÇEVRİLDİ (eski cümle silindi).
+
+**Üç kapı.** Migration YOK — `WarehouseEventType.TRANSFORM` ve `ADJUST` enum'da
+zaten vardı (2026-09-12 stok defteri dilimi). İzin YOK. APK YOK; panel
+`WAREHOUSE_EVENT_META` iki olayı zaten tanıyor, sebep kodunun panel etiket
+haritası yok.
