@@ -22,7 +22,7 @@
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { assertGelistirmeVeritabani } from "./db-guard";
-import { fixtureHedefEngeli, hacimHedefEngeli } from "./lib/hedef-db-kapisi";
+import { fixtureHedefEngeli, hacimHedefEngeli, hedefDbAdi } from "./lib/hedef-db-kapisi";
 
 // ⚠️ İLK İFADE — bu betik geri alınamaz silme yapar ve hedefini `DATABASE_URL`den
 // okur. Kapı 2026-09-06'da eklendi: betik silmeyi Prisma `deleteMany` ile yaptığı
@@ -39,6 +39,16 @@ const fixtureEngeli = fixtureHedefEngeli();
 if (fixtureEngeli) {
   console.error(`\n⛔ clean_test_residue DURDURULDU — ${fixtureEngeli}\n`);
   process.exit(1);
+}
+// ⚠️ KAÇIŞIN İZİ, OKUYAN YOLUNKİNDEN ZAYIF OLAMAZ: `BEKCI_HEDEF_ONAY=1` ile
+// geçildiğinde `db-guard`ın "🔓 Hedef doğrulandı" satırı ONAYLAYICI görünüyor ve
+// hedefin fixture OLMADIĞI çıktının hiçbir yerinde yazmıyordu. Geri alınamaz
+// silme yapan yol, hedefini her koşumda ADIYLA beyan eder.
+console.log(`\n🎯 Hedef veritabanı: ${hedefDbAdi()}`);
+if (process.env.BEKCI_HEDEF_ONAY === "1") {
+  console.warn(
+    `⚠️  FIXTURE OLMAYAN HEDEFTE SİLME — ${hedefDbAdi()} (BEKCI_HEDEF_ONAY=1 ile geçildi)`,
+  );
 }
 
 const APPLY = process.argv.includes("--apply");

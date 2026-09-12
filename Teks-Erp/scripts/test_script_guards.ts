@@ -21,9 +21,10 @@
 //   §7 hedefin HACMİ fabrika ölçeğinde değil (ad kalıbı yanılabilir, sayı yanılmaz)
 //   §8 silen temizlik yolları da aynı kapıdan geçiyor (`--apply` olmadan bile)
 // =============================================================================
-import { readdirSync, readFileSync } from "fs";
-import { join } from "path";
+import { readFileSync } from "fs";
+import { join, relative } from "path";
 import { spawnSync } from "child_process";
+import { walkTs } from "./lib/ts-tarama";
 import { FABRIKA_HACIM_ESIGI, hacimEngeliMetni } from "./lib/hedef-db-kapisi";
 
 let pass = 0;
@@ -70,6 +71,22 @@ const KAPI = "assertGelistirmeVeritabani(";
  */
 const KAPI_ZORUNLU_TESTLER = ["test_manual_move_fason_receive.ts"];
 
+/**
+ * KENDİ HEDEFİNİ KURAN ama kapı çağırmayan betik TAVANI (§10).
+ * Ölçüldü 2026-09-12: özyinelemeli taramada beş dosya kendi hedefini kuruyor,
+ * dördü gerekçeli muaf, geriye `audit_repro_E-2-00-probe.ts` kalıyor.
+ * ⚠️ Tavan yalnız DÜŞER — yeni bir kapısız betik eklenirse bu bekçi kırmızı verir.
+ */
+const HEDEF_KURAN_TAVAN = 1;
+
+/**
+ * `--apply` alıp hedefini BEYAN ETMEYEN betik TAVANI (§11).
+ * Ölçüldü 2026-09-12: 24 betik `--apply` alıyor, 21'i hedef veritabanını adıyla
+ * basmıyor (`apply-migration` · `setup-ticaret` · backfill/fix ailesi …).
+ * ⚠️ Tavan yalnız DÜŞER — devralınan borç dondurulur, yeni borç kırmızı verir.
+ */
+const APPLY_BEYANSIZ_TAVAN = 21;
+
 const MUAFLAR: Record<string, string> = {
   "test_db_invariants.ts":
     "TRUNCATE bir STRING SABİTİNDE geçiyor (trigger tanımı: 'BEFORE DELETE OR UPDATE OR TRUNCATE') — yorum ayıklaması bunu elemez, çalıştırılan bir ifade de değil",
@@ -80,7 +97,11 @@ const MUAFLAR: Record<string, string> = {
 
 function main(): void {
   const dizin = join(__dirname);
-  const dosyalar = readdirSync(dizin).filter((f) => f.endsWith(".ts"));
+  // ⚠️ ÖZYİNELEMELİ (2026-09-12): eskiden yalnız `scripts/` KÖKÜ taranıyordu ve
+  // `scripts/lib/` altı hiçbir bölüme girmiyordu — kapının KENDİ dosyası bile
+  // denetim dışıydı. Tarama derinliği bekçinin kapsamını sessizce belirler; tek
+  // kaynak `lib/ts-tarama.ts`.
+  const dosyalar = walkTs(dizin).map((p) => relative(dizin, p));
 
   // KÖRLÜK ZEMİNİ: tarama boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı"
   // aynı yeşile çıkar.
@@ -170,7 +191,10 @@ function main(): void {
   const kapisizTest = KAPI_ZORUNLU_TESTLER.filter((f) => {
     const yol = join(dizin, f);
     if (!dosyalar.includes(f)) return true; // dosya kayboldu → liste bayat
-    return !readFileSync(yol, "utf8").includes(KAPI);
+    // ⚠️ YORUM AYIKLANIR (§1 ile aynı disiplin): ham metinde arasaydık, YORUM
+    // SATIRINA ALINMIŞ bir kapı çağrısı bu kontrolü yeşil bırakırdı — kapının
+    // varlığını değil metnin varlığını ölçmüş olurduk.
+    return !kodSatirlari(readFileSync(yol, "utf8")).includes(KAPI);
   });
   check(
     "§5: ortam kapısı eklenmiş testler kapıyı KORUYOR",
@@ -351,7 +375,7 @@ function main(): void {
   // kaynakta: `lib/http-bekci-kapisi.ts` — yokluk beyan edilmiş atlama, yabancı
   // sunucu KIRMIZI. Bu tripwire, kapıyı çağırmayan yeni bir HTTP bekçisini
   // düşürür.
-  const httpBekcileri = readdirSync(dizin)
+  const httpBekcileri = dosyalar
     .filter((f) => /^test_.*\.ts$/.test(f))
     .filter((f) => /TEST_API_URL/.test(readFileSync(join(dizin, f), "utf8")));
   check(
@@ -377,6 +401,80 @@ function main(): void {
     "§9d STRICT koşumda yokluk da kırmızı (paket kararı burada verilir)",
     kapiKaynak.includes("TEKSERP_STRICT"),
     "tek anahtar",
+  );
+
+  // ═══ §10 — KENDİ HEDEFİNİ KURAN BETİK KAPISIZ OLAMAZ ═════════════════════
+  // Yıkıcı iz taramaları yalnız SİLME desenlerine bakıyor. Ama hedefini kendisi
+  // kuran bir betik (`new Pool(` / `new PrismaClient(` / `DATABASE_URL` ataması)
+  // koşucunun kapısını da atlar: `npx tsx scripts/x.ts` doğrudan koşulduğunda
+  // hiçbir ayak çalışmaz. Bu bölüm o sınıfı adıyla arar.
+  const HEDEF_KURAN = ["new Pool(", "new PrismaClient(", "process.env.DATABASE_URL ="];
+  const KAPILAR = [KAPI, "hedefDbEngeli(", "fixtureHedefEngeli(", "hacimHedefEngeli("];
+  const HEDEF_KURAN_MUAF: Record<string, string> = {
+    "lib/hedef-db-kapisi.ts": "kapının KENDİSİ — hedefi ölçmek için havuz kurar",
+    "test_script_guards.ts": "bu dosyanın kendisi — aradığı izleri sabit olarak taşır",
+    "test_timestamptz_contract.ts": "havuz izlerini TARAR; kendi havuzunu kurmaz",
+    "test_pool_health.ts": "havuz TÜKENMESİNİ ölçer (max:1 + 1ms connect timeout); veriye yazmaz",
+  };
+  const hedefKuranlar: string[] = [];
+  const hedefKuranKapisiz: string[] = [];
+  for (const f of dosyalar) {
+    const kod = kodSatirlari(readFileSync(join(dizin, f), "utf8"));
+    if (!HEDEF_KURAN.some((iz) => kod.includes(iz))) continue;
+    hedefKuranlar.push(f);
+    if (f in HEDEF_KURAN_MUAF) continue;
+    if (!KAPILAR.some((k) => kod.includes(k))) hedefKuranKapisiz.push(f);
+  }
+  check(
+    "§10a körlük zemini: kendi hedefini kuran betik bulundu",
+    hedefKuranlar.length >= 3,
+    `${hedefKuranlar.length} betik`,
+  );
+  check(
+    `§10b ⭐ kendi hedefini kuran kapısız betik TAVANI (${HEDEF_KURAN_TAVAN}) aşmadı — tavan yalnız DÜŞER`,
+    hedefKuranKapisiz.length <= HEDEF_KURAN_TAVAN,
+    `${hedefKuranKapisiz.length} kapısız / ${hedefKuranlar.length} hedef kuran`,
+  );
+  const oluHedefMuaf = Object.keys(HEDEF_KURAN_MUAF).filter((f) => !hedefKuranlar.includes(f));
+  check("§10c ölü muaf yok (liste bayat değil)", oluHedefMuaf.length === 0, oluHedefMuaf.join(", ") || "güncel");
+
+  // ═══ §11 — `--apply` ALAN HER BETİK HEDEFİ ADIYLA BEYAN EDER ══════════════
+  // Geri alınamaz yazma yapan yolun izi, yalnız okuyan yolunkinden zayıf olamaz:
+  // operatör hangi veritabanını vurduğunu çıktıdan görmeli.
+  const BEYAN_IZLERI = ["hedefDbAdi(", "assertGelistirmeVeritabani(", "Hedef doğrulandı"];
+  const applyBetikleri = dosyalar.filter((f) => {
+    const kod = kodSatirlari(readFileSync(join(dizin, f), "utf8"));
+    return kod.includes('includes("--apply")') || kod.includes("includes('--apply')");
+  });
+  const beyansiz = applyBetikleri.filter(
+    (f) => !BEYAN_IZLERI.some((iz) => kodSatirlari(readFileSync(join(dizin, f), "utf8")).includes(iz)),
+  );
+  check("§11a körlük zemini: `--apply` alan betik bulundu", applyBetikleri.length >= 2, `${applyBetikleri.length} betik`);
+  check(
+    `§11b ⭐ hedefini BEYAN ETMEYEN \`--apply\` betiği TAVANI (${APPLY_BEYANSIZ_TAVAN}) aşmadı — tavan yalnız DÜŞER`,
+    beyansiz.length <= APPLY_BEYANSIZ_TAVAN,
+    `${beyansiz.length} beyansız / ${applyBetikleri.length} apply betiği`,
+  );
+  if (beyansiz.length < APPLY_BEYANSIZ_TAVAN) {
+    console.log(
+      `\nℹ️  TAVAN DÜŞÜRÜLEBİLİR: ${beyansiz.length} ölçüldü, dosyadaki tavan ${APPLY_BEYANSIZ_TAVAN}.` +
+        `\n   \`APPLY_BEYANSIZ_TAVAN = ${beyansiz.length}\` yaz.`,
+    );
+  }
+  if (beyansiz.length > 0) console.log(`   beyan etmeyenler: ${beyansiz.join(", ")}`);
+
+  // ═══ §12 — ÖZYİNELEMELİ TARAMA TEK YERDE TANIMLANIR ══════════════════════
+  // Tarama derinliği bir bekçinin kapsamını sessizce belirler. İki kopya iki
+  // farklı derinlik demektir: `test_timestamptz_contract` kendi `walkTs`ini
+  // taşıyordu, `test_script_guards` ise hiç inmiyordu. Kopya yeniden doğarsa
+  // fark yine sessiz olur — bu yüzden TANIM sayısı ölçülür (çağrı değil).
+  const tarayiciTanimi = dosyalar.filter((f) =>
+    /function\s+walkTs\s*\(/.test(kodSatirlari(readFileSync(join(dizin, f), "utf8"))),
+  );
+  check(
+    "§12 ⭐ özyinelemeli TS tarayıcısı yalnız TEK dosyada tanımlı",
+    tarayiciTanimi.length === 1 && tarayiciTanimi[0] === "lib/ts-tarama.ts",
+    tarayiciTanimi.join(", ") || "(hiç tanım yok — tek kaynak kayboldu)",
   );
 }
 

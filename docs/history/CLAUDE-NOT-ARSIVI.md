@@ -6730,3 +6730,60 @@ BAŞKA veritabanına (`tekserp_yabanci_test`) bağlanır, bekçi KIRMIZI verir.
 Migration **yok** · izin **yok** · APK **yok**. Sözleşme: HTTP ayaklı bekçi artık
 `p2test` gibi ortamdan gelen bir kimliğe yaslanmaz; sabit port varsayımı da bekçi
 sözleşmesinin dışında.
+
+---
+
+## 2026-09-12 — Kapının kenarları: tarama derinliği, yorum körlüğü, kendi hedefini kuran betik [ÇEKİRDEK]
+
+### Bulgu (denetim turu 2, iki bağımsız mercek)
+
+Hedef kapısı çalışıyordu ama KENARLARI açıktı:
+
+- **Tarama derinliği kapsamı sessizce belirliyordu.** `test_script_guards`
+  `readdirSync(scripts)` ile yalnız KÖKÜ tarıyordu; `scripts/lib/` altı hiçbir
+  bölüme girmiyordu — kapının KENDİ dosyası bile denetim dışıydı.
+- **§5 ham metinde arıyordu:** yorum satırına alınmış bir kapı çağrısı kontrolü
+  YEŞİL bırakırdı. §1 yorumları ayıklıyordu, §5 ayıklamıyordu — aynı bekçide iki
+  farklı disiplin.
+- **Kendi hedefini kuran betik sınıfı hiç aranmıyordu:** `new Pool(` /
+  `new PrismaClient(` / `DATABASE_URL` ataması yapan bir betik koşucunun
+  kapısını da atlar (`npx tsx scripts/x.ts` doğrudan koşulunca hiçbir ayak
+  çalışmaz). 07:19 vakası tam bu yoldan geldi.
+- **Silme yolunun kaçış izi zayıftı:** `BEKCI_HEDEF_ONAY=1` ile geçildiğinde
+  `db-guard`ın "🔓 Hedef doğrulandı" satırı ONAYLAYICI görünüyor, hedefin fixture
+  OLMADIĞI çıktının hiçbir yerinde yazmıyordu.
+- **Belge kendi içinde çelişiyordu:** TD-09 "üç geçit", TD-10b ve
+  GELİŞTİRME-DÖNGÜSÜ "dört geçit" diyordu.
+
+### Karar
+
+`scripts/lib/ts-tarama.ts` (`walkTs`) TEK KAYNAK oldu; `test_script_guards` ve
+`test_timestamptz_contract` aynı tarayıcıyı kullanır (ikincisi kendi kopyasını
+taşıyordu). §5 artık `kodSatirlari()` ile yorumları ayıklar. Yeni **§10**: kendi
+hedefini kuran betik bir kapı çağırmak zorunda — ölçüldü, beş dosya bu sınıfta,
+dördü gerekçeli muaf (kapının kendisi · iki tarayıcı bekçi · havuz tüketim
+testi), tavan `1` ve yalnız DÜŞER. Yeni **§11**: `--apply` alan betik hedef
+veritabanını ADIYLA basar — ölçüldü, 24 betiğin 21'i basmıyor (devralınan borç),
+o yüzden kural RATCHET olarak kondu: tavan 21 ve yalnız düşer, yeni borç kırmızı
+verir. Yeni **§12**: özyinelemeli TS tarayıcısı yalnız TEK dosyada TANIMLI olur
+(çağrı değil TANIM sayılır) — ikinci kopya yeniden doğarsa derinlik farkı yine
+sessiz olurdu. `clean_test_residue` hedefini her koşumda basar ve kaçış anahtarı
+verildiğinde bunu ayrıca uyarır. TD-09 dört geçide hizalandı, TD-10d eklendi.
+
+### Yan bulgu — fixture DB kurulum reçetesinde bir boşluk
+
+Paket ölçümünde `test_module_grandfathering` ve `test_module_flag_off §3`
+kırmızı verdi ve sebebi KOD DEĞİL kurulum sırasıydı: `20260902230000`
+grandfathering migration'ı `WHERE EXISTS (SELECT 1 FROM rolls)` ile koşulludur
+(tanımı gereği yalnız GEÇMİŞİ OLAN kuruluma damga atar). Taze fixture DB'sinde
+sıra "CREATE DATABASE → migrate deploy → seed" olduğu için migration BOŞ tabloda
+koştu (ölçüldü: migration 12:28:08, ilk top 12:48:25) ve damga meşru biçimde
+no-op kaldı; sonra seed topları yaratınca DB "geçmişi var ama damgasız" hâline
+düştü. Reçeteye eklenecek satır: **fixture DB'sinde `seed`den SONRA modül
+anahtarlarını elle damgala** (ya da bekçi "geçmiş" ölçüsünü migration ANINA göre
+kursun). Kod tarafında yapılacak bir şey yok.
+
+### Üç kapı
+
+Migration **yok** · izin **yok** · APK **yok**. Sözleşme: bekçi kapsamı artık
+dizin derinliğine bağlı değil; yeni bir alt dizin açmak denetimi daraltmaz.

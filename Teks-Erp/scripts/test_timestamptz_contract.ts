@@ -49,8 +49,10 @@
 // Salt-okunur: hiçbir veri yazmaz/değiştirmez. Üretim DB'sine karşı güvenle koşar.
 // Koşum: npx tsx scripts/test_timestamptz_contract.ts
 // =============================================================================
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, relative } from "node:path";
+// Tarama derinliği bekçinin kapsamını belirler; tek kaynak (bkz. lib/ts-tarama.ts).
+import { walkTs } from "./lib/ts-tarama";
 import { Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 
@@ -96,21 +98,9 @@ const PRISMA_OWN_TABLE = "_prisma_migrations";
 const POOL_EXEMPT: Record<string, string> = {
   "scripts/test_pool_health.ts":
     "havuz TÜKENMESİNİ ölçer (max:1/max:2 + kasıtlı 1ms connect timeout); tarih okumaz",
+  "scripts/test_script_guards.ts":
+    "havuz KURMAZ — `new Pool(` metnini SABİT olarak taşır (§10 kendi hedefini kuran betiği arar)",
 };
-
-/** `src/`, `prisma/`, `scripts/` ağaçlarındaki .ts dosyalarını topla. */
-function walkTs(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const abs = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (entry.name === "node_modules" || entry.name === "migrations" || entry.name === "generated") continue;
-      walkTs(abs, out);
-    } else if (entry.name.endsWith(".ts")) {
-      out.push(abs);
-    }
-  }
-  return out;
-}
 
 async function main(): Promise<void> {
   console.log("\n=== timestamptz sözleşmesi ===\n");
