@@ -37,6 +37,11 @@ async function hamOku(key: string): Promise<boolean> {
   return s?.value === true || s?.value === "true";
 }
 
+/** Satırın VARLIĞI — değerinden ayrı bir durum ve geri yüklemenin parçası. */
+async function satirVarMi(key: string): Promise<boolean> {
+  return (await prisma.systemSetting.findUnique({ where: { key }, select: { key: true } })) !== null;
+}
+
 /**
  * `setFeatureFlags` bir KULLANICI ister (`if (!userId) throw unauthorized()`) —
  * ayar değişikliği audit'e "kim yaptı" ile yazılır ve o alan opsiyonel değildir.
@@ -76,13 +81,26 @@ export async function ensureIplikModuluAcik(): Promise<() => Promise<void>> {
   const dbEngeli = hedefDbEngeli();
   if (dbEngeli) throw new Error(`fixture-module-flags DURDURULDU: ${dbEngeli}`);
   const uid = await audituKullanici();
+  // ⚠️ İKİ AYRI DURUM: "satır var ve false" ile "satır YOK" aynı DEĞERİ okutur
+  // ama aynı DURUM değildir. Geri yükleme `false` YAZARSA olmayan satır DOĞAR ve
+  // taze kurulumda kalır — "boş kurulumda modül satırı yok" diyen bekçiler
+  // (`test_module_flag_off §3`, `test_module_grandfathering §2b`) kırmızıya döner.
+  // Ölçüldü 2026-09-12 (CI-biçimli koşum): `teks_ci`de tam bu oldu.
   const ilkTicaret = await hamOku("ticaret.enabled");
   const ilkIplik = await hamOku("iplik.enabled");
+  const ticaretSatiriVardi = await satirVarMi("ticaret.enabled");
+  const iplikSatiriVardi = await satirVarMi("iplik.enabled");
   if (!ilkTicaret) await systemSettingService.setFeatureFlags({ ticaretEnabled: true }, uid);
   if (!ilkIplik) await systemSettingService.setFeatureFlags({ iplikEnabled: true }, uid);
 
   return async () => {
-    if (!ilkIplik) await systemSettingService.setFeatureFlags({ iplikEnabled: false }, uid);
-    if (!ilkTicaret) await systemSettingService.setFeatureFlags({ ticaretEnabled: false }, uid);
+    if (!ilkIplik) {
+      if (iplikSatiriVardi) await systemSettingService.setFeatureFlags({ iplikEnabled: false }, uid);
+      else await prisma.systemSetting.deleteMany({ where: { key: "iplik.enabled" } });
+    }
+    if (!ilkTicaret) {
+      if (ticaretSatiriVardi) await systemSettingService.setFeatureFlags({ ticaretEnabled: false }, uid);
+      else await prisma.systemSetting.deleteMany({ where: { key: "ticaret.enabled" } });
+    }
   };
 }
