@@ -1,95 +1,55 @@
 // =============================================================================
-// VARSAYILAN DEPO — boot-time uzlaştırması
+// VARSAYILAN DEPO — açılış uzlaştırması (ARTIK TEK YETKİLİ DEĞİL)
 // =============================================================================
 // NEDEN MIGRATION DEĞİL: migration'a INSERT gömmek uuid'yi ve adı TAŞA yazar;
 // taze kurulumun seed'iyle çatallanır, geri alınamaz ve her ortamda (fabrika,
 // ticaret, dev, CI) aynı satırın iki farklı kopyası doğabilir. İzin kataloğu
 // uzlaştırmasıyla aynı gerekçe ve aynı kalıp: KODU DEPLOY ETMEK = SATIRI GETİRMEK.
 //
-// NEDEN LAZY (ilk kullanımda yarat) DEĞİL: depo çözümü `roll.create` sıcak
-// yolundan çağrılıyor; oraya "yoksa yarat" koymak rastgele bir kullanıcının
-// transaction'ı içinde master-data doğurmak demekti (audit atfı belirsiz,
-// eşzamanlı iki giriş yarışır).
+// ── 2026-09-12: UZLAŞTIRMA İHTİYAÇ ANINA TAŞINDI ────────────────────────────
+// Bu iş eskiden TEK yetkiliydi ve üç deliği vardı — üçü de "boot'ta yapıyoruz"
+// kararının sonucuydu, tek tek kapatılamazlardı:
+//   ① boot + 5 sn'lik pencere (taze kurulumda o aralıkta gelen yazma deposuz),
+//   ② iş DÜŞERSE sunucu ayakta kalır ve o andan sonra HER top deposuz doğar,
+//   ③ `started` bayrağı tek koşum — bir daha denenmez.
+// Kararı kaldırmak üçünü birden sildi: `resolveTargetWarehouseId` varsayılanı
+// bulamazsa `ensureDefaultWarehouse`i KENDİSİ çağırıyor. Bu iş yine koşuyor
+// (açılışta depoyu hazır bulundurmak hâlâ iyi), ama artık TEK yol değil.
 //
-// SÖZLEŞME:
-//   • Varsayılan depo VARSA hiçbir şey yapılmaz.
-//   • Depo(lar) var ama hiçbiri varsayılan DEĞİLSE → EN ESKİSİ varsayılan yapılır
-//     (yeni bir depo doğurmak yerine). Varsayılansız durumda her top deposuz
-//     yazılırdı; sessizce ikinci bir "Merkez Depo" yaratmak ise envanteri ikiye
-//     bölerdi.
-//   • Hiç depo yoksa → "Merkez Depo" (DP-MERKEZ) doğar.
-// Best-effort: hata sunucuyu DÜŞÜRMEZ ama sessizce de yutulmaz.
+// ⚠️ MANTIK BU DOSYADA DEĞİL: `services/helpers/warehouse.helper.ts`te yaşıyor.
+// Sebebi dairesel import — çözümleyici uzlaştırmayı çağırıyor, uzlaştırma da
+// sabitlerini o dosyadan alıyordu. Fonksiyon aşağıda YENİDEN DIŞA AÇILIYOR:
+// 17 çağrı yeri (bekçiler + `setup-ticaret`) bu yoldan import ediyor ve
+// hiçbirinin değişmesi gerekmedi.
 // =============================================================================
-import prisma from "../lib/prisma";
-import { DEFAULT_WAREHOUSE_CODE, DEFAULT_WAREHOUSE_NAME } from "../services/helpers/warehouse.helper";
-import { p2002Mentions } from "../utils/p2002";
-import { bilgi, hata, uyari } from "../lib/logger";
+import { ensureDefaultWarehouse } from "../services/helpers/warehouse.helper";
+import { hata } from "../lib/logger";
 
-export type DefaultWarehouseResult = {
-  action: "exists" | "promoted" | "created";
-  id: string;
-  name: string;
-};
-
-/**
- * Varsayılan deponun varlığını garanti eder. İdempotenttir; iki boot yarışsa bile
- * `warehouses_isDefault_key` partial unique'i ikinciyi bloklar ve sonuç "exists"e döner.
- */
-export async function ensureDefaultWarehouse(): Promise<DefaultWarehouseResult> {
-  const existing = await prisma.warehouse.findFirst({
-    where: { isDefault: true },
-    select: { id: true, name: true },
-  });
-  if (existing) return { action: "exists", id: existing.id, name: existing.name };
-
-  // Depo var ama varsayılan işaretlenmemiş → en eskisini terfi ettir.
-  const oldest = await prisma.warehouse.findFirst({
-    orderBy: { createdAt: "asc" },
-    select: { id: true, name: true },
-  });
-  if (oldest) {
-    await prisma.warehouse.update({ where: { id: oldest.id }, data: { isDefault: true } });
-    uyari("warehouse", `Varsayılan depo işaretli değildi — en eski depo ("${oldest.name}") varsayılan yapıldı.`,
-    );
-    return { action: "promoted", id: oldest.id, name: oldest.name };
-  }
-
-  try {
-    const created = await prisma.warehouse.create({
-      data: { code: DEFAULT_WAREHOUSE_CODE, name: DEFAULT_WAREHOUSE_NAME, isDefault: true },
-      select: { id: true, name: true },
-    });
-    bilgi("warehouse", `Varsayılan depo oluşturuldu: ${created.name} (${DEFAULT_WAREHOUSE_CODE})`);
-    return { action: "created", id: created.id, name: created.name };
-  } catch (err) {
-    // Yarış: başka bir süreç aynı anda yarattı (kod unique VEYA isDefault partial
-    // unique çarptı) → onun yarattığını oku, hata değil.
-    if (p2002Mentions(err, /warehouses_(code_key|isDefault_key)/)) {
-      const now = await prisma.warehouse.findFirst({
-        where: { isDefault: true },
-        select: { id: true, name: true },
-      });
-      if (now) return { action: "exists", id: now.id, name: now.name };
-    }
-    throw err;
-  }
-}
+export { ensureDefaultWarehouse };
+export type { DefaultWarehouseResult } from "../services/helpers/warehouse.helper";
 
 const STARTUP_DELAY_MS = 5 * 1000;
 
 let started = false;
 
-/** Açılışta BİR KEZ koşar (izin kataloğu uzlaştırmasıyla aynı kalıp). */
+/**
+ * Açılışta BİR KEZ koşar (izin kataloğu uzlaştırmasıyla aynı kalıp).
+ *
+ * ⚠️ Bu iş DÜŞERSE artık veri kusuru DOĞMAZ: ilk ihtiyaçta çözümleyici aynı
+ * uzlaştırmayı çağırır ve o da başarısızsa istek 409 alır (fail-closed).
+ * Yani buradaki hata bir UYARIDIR, sessiz bir bozulmanın habercisi değil.
+ */
 export function startDefaultWarehouseReconciler(): void {
   if (started) return;
   started = true;
 
   setTimeout(() => {
     void ensureDefaultWarehouse().catch((err) => {
-      // Buraya düşmek = yeni topların `warehouseId`'si NULL doğacak demektir.
-      // Veri kaybı değil (geri doldurulabilir) ama sessiz kalmamalı.
-      hata("warehouse", "VARSAYILAN DEPO UZLAŞTIRMASI BAŞARISIZ — yeni toplar deposuz yazılabilir. " +
-          "Tanımlar → Depolar'dan elle bir depo açıp varsayılan yapın.",
+      hata(
+        "warehouse",
+        "AÇILIŞ UZLAŞTIRMASI BAŞARISIZ — varsayılan depo hazırlanamadı. " +
+          "Veri kusuru doğurmaz (ilk ihtiyaçta tekrar denenir, olmazsa istek 409 alır), " +
+          "ama DB'de bir sorun olduğunun işaretidir.",
         err,
       );
     });

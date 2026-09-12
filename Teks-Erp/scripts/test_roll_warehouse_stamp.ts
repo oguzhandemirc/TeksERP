@@ -60,9 +60,9 @@ async function deposuzTanisi(runStart: Date, def: DefaultWarehouseResult): Promi
     def.action === "exists"
       ? ""
       : `ÖN KOŞUL BU KOŞUMDA KURULDU (\`ensureDefaultWarehouse\` → ${def.action}) ⇒ bu DB'de ` +
-        "boot uzlaştırması (src/jobs/default-warehouse.job.ts, boot + 5 sn) HİÇ koşmamıştı; " +
-        "`resolveTargetWarehouseId` o hâlde FIRLATMAZ, `null` döndürür — top deposuz doğar ve " +
-        "onu yaratan bekçi YEŞİL kalır. · ";
+        "varsayılan depo YOKTU. 2026-09-12'den beri bu durum sessiz DEĞİL: " +
+        "`resolveTargetWarehouseId` uzlaştırmayı kendisi çağırır, o da başarısızsa 409 FIRLATIR " +
+        "(eski davranış `null` döndürmekti — top deposuz doğar, bekçi yeşil kalırdı). · ";
 
   const enYeni = await prisma.roll.findFirst({
     where: {

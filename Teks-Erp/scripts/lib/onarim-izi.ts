@@ -16,6 +16,14 @@
 // ⚠️ AUDIT BEST-EFFORT'TUR ve yazmadan SONRA çağrılır: iz düşerse onarım geri
 // alınmaz (alınamaz da — zaten commit oldu), ama SESSİZ de kalmaz. Çağıran
 // `false` dönüşünde kendi çıktısını "tek iz" olarak saklamayı söyler.
+//
+// ⚠️ BAŞARI ÖLÇÜSÜNÜN VARSAYIMI — TEK SÜREÇLİ KOŞUM: başarı, `AuditService`in
+// GLOBAL `failureCount` sayacının değişmemesiyle ölçülür. Bu sayaç sürece
+// aittir, çağrıya değil: aynı süreçte PARALEL başka bir audit düşerse burada
+// yanlış negatif çıkar ("yazamadım" der, oysa yazdı). Onarım betikleri tek
+// atışlık ve tek akışlı olduğu için bugün doğru — ama uzun ömürlü bir süreçten
+// (sunucu, kuyruk işçisi) çağrılırsa bu ölçü GEÇERSİZDİR; orada dönüş değerine
+// güvenme, satırı `SystemLog`tan doğrula.
 // =============================================================================
 import { AuditService } from "../../src/services/audit.service";
 import { hedefDbAdi } from "./hedef-db-kapisi";

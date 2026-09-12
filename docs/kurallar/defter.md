@@ -54,6 +54,16 @@ Durum tabloları **"şu an ne"**yi tutar; defterler **"ne oldu"**yu tutar ve "ne
 - **[ÇEKİRDEK]** Eski ① (bağımlılık-guard'lı silme) ve ② (alias/karar satırı) sınıfları KALKTI: guard kalır, silme gider — `isActive:false` / `VOIDED` statüsü / `revokedAt`+`revokedById`. <sub>(arşiv:2026-09-10)</sub>
 - **[ÇEKİRDEK]** Kalıcı silme uçlarının izlenen model listesi ELLE tutulmaz: uçlar route dosyalarından keşfedilir, "bu uç fiziksel siliyor" iddiası servis dosyasında çapalanır (mezar taşı yazan uç izlenmez) ve bir modele gelen her FK ya guard'da sayılır ya gerekçeli muaftır — uç adında "permanent" geçmesi fiziksel silme KANITI değildir. · bekçi: `test_hard_delete_guard_coverage.ts` <sub>(arşiv:2026-09-12 K5)</sub>
 
+### Telemetri ≠ defter — ÜÇÜNCÜ HARD-DELETE SINIFI DEĞİL, ayrı bir eksen
+
+**Bu bölüm bir hard-delete sınıfı AÇMAZ.** Yukarıdaki iki sınıf kanonik kalır. Budanabilirlik bir *silme izni* değil, **satırın yaşam süresidir** — ve yaşam süresi, model sınıfından (`KATALOG` · `DEFTER` · `PİVOT`) **bağımsız bir eksendir**. Dördüncü bir *sınıf* açmak iki ekseni tek listeye bindirir ve *"append-only bir katalog budanabilir mi"* gibi cevapsız sorular doğurur.
+
+- **[ÇEKİRDEK]** Bir satırın telemetri olup olmadığı YARGIYLA değil YANLIŞLANABİLİR BİR SONDAYLA belirlenir: **ham örnek silindiğinde raporlanan hiçbir sayı değişmiyorsa o satır telemetridir.** *"İş kararına girmez"* bir yargıdır ve ölçüt olarak kullanılmaz. · bekçi: `YOK (yazılacak — okuma manifesti üzerinden budama sondası)` <sub>(arşiv:2026-09-12 devere · tasarım: `docs/design/DOKUMA-TEZGAH-IZLEME-TASARIMI.md` §4 "Saklama, budama ve iki sınıfın tek tablodaki bedeli")</sub>
+- **[ÇEKİRDEK]** İş kararına giren her sayı **budamadan ÖNCE kalıcı kolona DONAR**; budayıcı açık koşumun penceresine, açık vardiyaya ve MÜHÜRSÜZ pencereye DOKUNMAZ. Geçmiş bir özet yeniden hesaplandığında değişiyorsa, budama değil o özetin kalıcılığı kusurludur. · bekçi: `YOK (yazılacak — negatif sonda: yüklemden mühür koşulu düşürülünce KIRMIZI vermeli)` <sub>(arşiv:2026-09-12 devere)</sub>
+- **[ÇEKİRDEK]** Aynı ölçüt **audit'i de kapsar**: kalıcı sayaç/rapor `SystemLog`tan değil kalıcı kolondan okunduğu için audit satırı silindiğinde raporlanan hiçbir sayı değişmez ⇒ audit telemetri yaşam süresindedir ve **6 aylık arşivlenmesi bir istisna değil bu kuralın örneğidir.** `DEFTER` "iş defteri / kanıt defteri" diye BÖLÜNMEZ. <sub>(arşiv:2026-09-12 devere)</sub>
+
+⚠️ **Budama izni bekçi yeşil olmadan verilmez** (tasarım §4 kararı): retention işi, yukarıdaki iki sondayı ölçen bekçi yazılıp yeşil vermeden sürüme çıkmaz. Bekçi bugün **YOK** — bu satırlar kuralı sabitler, uygulamayı değil.
+
 ### Tuzaklar
 
 - **[ÇEKİRDEK]** Silmeyi bırakınca UNIQUE kısıtları kırılır: geçersiz satır yaşayanla çakışır. Kısıt `WHERE "revokedAt" IS NULL` partial'ına çevrilir ve `scripts/test_db_invariants.ts` envanterine YAZILIR (iki yönlü, [DB-30]). Emsal: `item_price_default_uq`. <sub>(arşiv:2026-09-10)</sub>

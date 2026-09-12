@@ -80,6 +80,7 @@ import {
 } from "../utils/query-parser";
 import { Request } from "express";
 import { hata } from "../lib/logger";
+import { warehouseStampManyTx } from "./helpers/warehouse.helper";
 
 // ─── Cancel Akışı Karar Matrisi ─────────────────────────────────────────────
 //
@@ -2185,6 +2186,8 @@ export class OrderService extends BaseService {
           where: { id: { in: stockRollIds }, status: RollStatus.STOCK, shipmentId: null, currentStepId: null },
           data: { status: RollStatus.WAREHOUSE },
         });
+        // Depoya GİRİŞ yazan her yolun ortak damgası (bkz. `warehouseStampManyTx`).
+        await warehouseStampManyTx(tx, stockRollIds);
         if (claimed.count !== stockRollIds.length) {
           const escaped = await tx.roll.findMany({
             where: {

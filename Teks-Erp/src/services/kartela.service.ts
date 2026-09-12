@@ -38,6 +38,7 @@ import {
   dynamicCursorWhere,
   buildNextDynamicCursor,
 } from "../utils/cursor";
+import { warehouseStampManyTx } from "./helpers/warehouse.helper";
 
 // Liste filtre/sayfalama parametreleri — hem offset (mobil) hem cursor (admin)
 // modunu besler. cursor||mode==="cursor" → cursor response; aksi halde offset.
@@ -438,6 +439,9 @@ export class KartelaService {
         where: { id: { in: rollIds }, status: RollStatus.AT_KARTELA },
         data: { status: RollStatus.WAREHOUSE },
       });
+      // Depoya GİRİŞ yazan her yolun ortak damgası — deposuz topu "depoda ama
+      // deposuz" bırakmaz; deposu olana dokunmaz (mal taşınmıyor, geri dönüyor).
+      await warehouseStampManyTx(tx, rollIds);
       if (reverted.count !== rollIds.length) {
         throw AppError.conflict(
           "Toplardan biri bu sırada başka bir işlemle değişmiş — sevk iptal edilemedi. Listeyi yenileyip tekrar deneyin."

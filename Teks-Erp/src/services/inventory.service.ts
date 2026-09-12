@@ -13,7 +13,7 @@ import { normalizeScanCode } from "../utils/code-format";
 import { AuditService } from "./audit.service";
 import { normalizeFoldType, resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
-import { resolveTargetWarehouseId } from "./helpers/warehouse.helper";
+import { resolveTargetWarehouseId, warehouseStampTx } from "./helpers/warehouse.helper";
 import {
   postStockMove,
   qtyYazilabilir,
@@ -4746,7 +4746,7 @@ export class InventoryService {
   async prepareRawForSale(rollId: string, userId?: string): Promise<ApiResponse<Record<string, unknown>>> {
     const roll = await prisma.roll.findUnique({
       where: { id: rollId },
-      select: { id: true, barcode: true, status: true, shipmentId: true, currentStepId: true },
+      select: { id: true, barcode: true, status: true, shipmentId: true, currentStepId: true, warehouseId: true },
     });
     if (!roll) throw AppError.notFound("Top bulunamadı");
     if (roll.status === RollStatus.WAREHOUSE) {
@@ -4764,9 +4764,11 @@ export class InventoryService {
     if (openDispatch) throw AppError.conflict("Top açık bir fason sevkiyatında");
 
     // Atomik: hâlâ STOCK + serbest iken WAREHOUSE'a çek.
+    // ⚠️ Depo damgası ORTAK YÜKLEMDEN: terfi yolları `warehouseId`ye hiç
+    // dokunmuyordu ve deposu olmayan top burada "depoda ama deposuz" oluyordu.
     const claimed = await prisma.roll.updateMany({
       where: { id: rollId, status: RollStatus.STOCK, shipmentId: null, currentStepId: null },
-      data: { status: RollStatus.WAREHOUSE },
+      data: { status: RollStatus.WAREHOUSE, ...(await warehouseStampTx(prisma, roll.warehouseId)) },
     });
     if (claimed.count === 0) {
       throw AppError.conflict("Top az önce başka bir akışa girdi — tekrar deneyin");
@@ -5105,6 +5107,7 @@ export class InventoryService {
         weightKg: true,
         currentQty: true,
         barcode: true,
+        warehouseId: true,
         qualityGrade: true,
       },
     });
@@ -5180,7 +5183,12 @@ export class InventoryService {
           shipmentId: null,
           sackId: null,
         },
-        data: { status: RollStatus.WAREHOUSE, currentStepId: null },
+        // Depo damgası ORTAK YÜKLEMDEN (terfi yolu `warehouseId`ye dokunmuyordu).
+        data: {
+          status: RollStatus.WAREHOUSE,
+          currentStepId: null,
+          ...(await warehouseStampTx(tx, roll.warehouseId)),
+        },
       });
       if (claim.count === 0) {
         throw AppError.conflict(
