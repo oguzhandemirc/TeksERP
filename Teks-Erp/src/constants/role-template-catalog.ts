@@ -116,6 +116,10 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "report:production",
       "report:inventory",
       "report:subcontract",
+      // Çözgü kartı bir ANA VERİDİR ve planlamanın okuduğu şeydir (hangi desen
+      // hangi çözgüden dokunuyor). Yazma YOK: kartı süpervizör açar.
+      // Devere modülü kapalı doğduğu için bu izin sahada bir şey AÇMAZ.
+      "warpspec:read",
     ],
   },
   {
@@ -311,6 +315,11 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "item:read",
       "report:production",
       "report:inventory",
+      // Çözgü kartı yazma yetkisi DAR tutuldu: kart tel/denye taşır ve leventin
+      // kg'ı ondan doğar — yanlış bir değer bütün bir levent partisinin hesabını
+      // bozar. Okuma planlamada da var, yazma yalnız burada.
+      "warpspec:read",
+      "warpspec:write",
     ],
   },
   {
