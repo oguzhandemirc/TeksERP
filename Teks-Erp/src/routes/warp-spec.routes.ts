@@ -50,6 +50,21 @@ router.get("/", requirePermission("warpspec:read"), controller.findAll);
 
 /**
  * @openapi
+ * /api/warp-specs/similar-names:
+ *   get:
+ *     tags: [WarpSpecs]
+ *     summary: Benzer ad uyarısı (mükerrer kart açmadan önce)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Benzer adlar }
+ */
+// ⚠️ `/:id`den ÖNCE tanımlı olmalı; sonra gelirse Express "similar-names"i id
+// sanar, `assertValidUuid` 400 verir ve panelde geliştirici jargonlu bir toast
+// çıkar (uyarı ise hiç çizilmez). On üç ana veri router'ında emsali var.
+router.get("/similar-names", requirePermission("warpspec:write"), controller.similarNames);
+
+/**
+ * @openapi
  * /api/warp-specs/{id}:
  *   get:
  *     tags: [WarpSpecs]

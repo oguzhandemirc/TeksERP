@@ -38,6 +38,12 @@ export interface ItemCreateInput {
   itemType: string;
   unit?: string;
   isActive?: boolean;
+  /**
+   * İplik inceliği (denye) — `Decimal(10,4)`. METİN taşınır: Decimal kolona JS
+   * float yazmak yasak (kök kural). Boş/`null` = değer yok; yalnız YARN'da
+   * anlamlıdır ve çözgü kartı açmanın ön koşuludur.
+   */
+  linearDensityDen?: string | number | null;
   allowedColorIds?: string[];
   allowedPropertyIds?: string[];
 }
@@ -261,6 +267,10 @@ export class ItemService extends BaseService {
               data: {
                 name: input.name.trim(),
                 unit: (input.unit ?? "MT") as ItemUnit,
+                // Diriltme de yeni gövdeyi uygular (create ile aynı sözleşme).
+                ...(input.linearDensityDen !== undefined
+                  ? { linearDensityDen: input.linearDensityDen }
+                  : {}),
                 allowedColors:
                   allowedColorIds.length > 0
                     ? { create: allowedColorIds.map((colorId) => ({ colorId })) }
@@ -284,6 +294,11 @@ export class ItemService extends BaseService {
               itemType: input.itemType as never,
               unit: (input.unit ?? "MT") as ItemUnit,
               isActive: input.isActive ?? true,
+              // Denye YALNIZ gönderildiğinde yazılır: `undefined` kolonu olduğu
+              // gibi bırakır, `null` bilinçli temizlemedir (metin → Decimal).
+              ...(input.linearDensityDen !== undefined
+                ? { linearDensityDen: input.linearDensityDen }
+                : {}),
               // Yalnız iç quick-create (saha KK1) opt'u işaretler; public gövde etkisiz.
               ...(opts?.pendingReview ? { pendingReview: true } : {}),
               allowedColors:

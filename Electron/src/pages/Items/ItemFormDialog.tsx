@@ -17,11 +17,9 @@ import { Badge } from "@/components/ui/badge";
 import { FormField } from "@/components/forms/FormField";
 import { EnumSelect } from "@/components/forms/EnumSelect";
 import { cn } from "@/lib/utils";
-import {
-  itemTypeLabels,
-  unitForItemType,
-  type ItemType,
-} from "@/types/enums";
+// `ItemType` DEĞER olarak da gerekli (denye alanı yalnız YARN'da çizilir),
+// bu yüzden `type` import'u değil.
+import { ItemType, itemTypeLabels, unitForItemType } from "@/types/enums";
 import { colorService } from "@/pages/Colors/service";
 import { fabricPropertyService } from "@/pages/FabricProperties/service";
 import type { Item, ItemCreatePayload } from "./types";
@@ -65,6 +63,7 @@ export function ItemFormDialog({
         itemType: initial.itemType,
         unit: initial.unit,
         isActive: initial.isActive,
+        linearDensityDen: initial.linearDensityDen ?? "",
         allowedColorIds: initial.allowedColors?.map((c) => c.colorId) ?? [],
         allowedPropertyIds:
           initial.allowedProperties?.map((p) => p.propertyId) ?? [],
@@ -217,6 +216,26 @@ export function ItemFormDialog({
               />
             </FormField>
           </div>
+
+          {/* Denye yalnız iplikte sorulur: kumaş/sarf kaleminde karşılığı yok.
+              Zorunlu DEĞİL — mevcut iplik kayıtları bu alan olmadan doğdu ve
+              zorunlu yapmak onların düzenlenmesini kilitlerdi; çözgü kartı
+              açarken sunucu zaten anlaşılır bir 400 veriyor. */}
+          {itemType === ItemType.YARN && (
+            <FormField
+              label="Denye (iplik inceliği)"
+              htmlFor="linearDensityDen"
+              error={form.formState.errors.linearDensityDen}
+              hint="Çözgü kartı açmak için gerekli — kg = tel × denye × metre ÷ 9.000.000"
+            >
+              <Input
+                id="linearDensityDen"
+                inputMode="decimal"
+                placeholder="150"
+                {...form.register("linearDensityDen")}
+              />
+            </FormField>
+          )}
 
           <FormField label="İzinli Renkler (opsiyonel)">
             <PickerTrigger

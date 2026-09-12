@@ -36,6 +36,24 @@ export const makeItemFormSchema = (isEdit: boolean) =>
       .min(1, "Birim boş bırakılamaz")
       .max(10, "Birim en fazla 10 karakter olabilir"),
     isActive: z.boolean(),
+    /**
+     * İplik inceliği (denye) — `Item.linearDensityDen`, DB `Decimal(10,4)`.
+     * Çözgü kartı bunu ZORUNLU ister (kg = uç × denye × metre / 9.000.000) ama
+     * kalem kartı istemez: mevcut iplik kayıtları boş doğdu ve zorunlu yapmak
+     * onların düzenlenmesini kilitlerdi. Metin taşınır — Decimal kolona JS
+     * float yazmak yasak.
+     */
+    linearDensityDen: z
+      .string()
+      .trim()
+      .refine(
+        (v) => v === "" || (Number.isFinite(Number(v)) && Number(v) > 0),
+        "Denye pozitif bir sayı olmalı",
+      )
+      .refine(
+        (v) => v === "" || /^\d+(\.\d{1,4})?$/.test(v),
+        "Denye en fazla 4 ondalık basamak taşıyabilir",
+      ),
     allowedColorIds: z.array(z.string()),
     allowedPropertyIds: z.array(z.string()),
   });
@@ -48,6 +66,7 @@ export const itemFormDefaults: ItemFormValues = {
   itemType: ItemType.FABRIC,
   unit: "MT",
   isActive: true,
+  linearDensityDen: "",
   allowedColorIds: [],
   allowedPropertyIds: [],
 };

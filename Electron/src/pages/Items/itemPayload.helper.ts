@@ -19,6 +19,10 @@ export function buildItemPayload(
     name: v.name.trim(),
     unit: unitForItemType[v.itemType] ?? v.unit,
     isActive: v.isActive,
+    // Boş alan `null` gider: "" Decimal kolonunda geçersizdir ve kolonu
+    // temizlemenin tek yolu budur (alan yalnız YARN'da çizilir, diğer
+    // tiplerde zaten boş kalır).
+    linearDensityDen: v.linearDensityDen.trim() === "" ? null : v.linearDensityDen.trim(),
     allowedColorIds: v.allowedColorIds,
     allowedPropertyIds: v.allowedPropertyIds,
   };

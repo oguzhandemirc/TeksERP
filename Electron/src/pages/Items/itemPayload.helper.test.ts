@@ -48,6 +48,19 @@ describe("buildItemPayload", () => {
     const p = buildItemPayload(values(), false);
     expect("pendingReview" in p).toBe(false);
   });
+
+  it("denye boşken null gider — kolonu temizlemenin tek yolu ('' Decimal'de geçersiz)", () => {
+    const p = buildItemPayload(values({ itemType: ItemType.YARN }), false);
+    expect(p.linearDensityDen).toBeNull();
+  });
+
+  it("denye METİN olarak gider (Decimal kolona JS float yazılmaz) ve kırpılır", () => {
+    const p = buildItemPayload(
+      values({ itemType: ItemType.YARN, linearDensityDen: " 150.5 " }),
+      false,
+    );
+    expect(p.linearDensityDen).toBe("150.5");
+  });
 });
 
 describe("makeItemFormSchema — kod validasyonu", () => {
@@ -85,5 +98,15 @@ describe("makeItemFormSchema — kod validasyonu", () => {
   it("edit: legacy (formata uymayan) kod düzenlemeyi bloklamaz", () => {
     expect(edit.safeParse(values({ code: "PATOS 3MM" })).success).toBe(true);
     expect(edit.safeParse(values({ code: "STK-000001" })).success).toBe(true);
+  });
+
+  it("denye: boş serbest, sıfır/negatif red, 4 ondalık sınırı DB ile hizalı", () => {
+    expect(create.safeParse(values({ linearDensityDen: "" })).success).toBe(true);
+    expect(create.safeParse(values({ linearDensityDen: "0" })).success).toBe(false);
+    expect(create.safeParse(values({ linearDensityDen: "-1" })).success).toBe(false);
+    expect(create.safeParse(values({ linearDensityDen: "abc" })).success).toBe(false);
+    expect(create.safeParse(values({ linearDensityDen: "150" })).success).toBe(true);
+    expect(create.safeParse(values({ linearDensityDen: "150.1234" })).success).toBe(true);
+    expect(create.safeParse(values({ linearDensityDen: "150.12345" })).success).toBe(false);
   });
 });

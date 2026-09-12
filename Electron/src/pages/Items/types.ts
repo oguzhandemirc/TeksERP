@@ -24,6 +24,8 @@ export interface Item {
   itemType: ItemType;
   unit: string;
   isActive: boolean;
+  /** İplik inceliği (denye). Yalnız YARN'da dolu; çözgü kartı bunu ister. */
+  linearDensityDen: string | null;
   /** Saha (mobil KK1) "yeni desen" olarak açtı → admin gözden geçirmesi bekleniyor. */
   pendingReview?: boolean;
   /** Item'a uygulanabilir özellikler (kataloğu). Boşsa = serbest. */
@@ -41,6 +43,8 @@ export interface ItemCreatePayload {
   itemType: ItemType;
   unit?: string;
   isActive?: boolean;
+  /** Denye — boş bırakılırsa `null` gider (kolon nullable, FABRIC'te anlamsız). */
+  linearDensityDen?: string | null;
   /** Düzenlemede admin onayı: kaydedince saha işareti temizlenir (false). */
   pendingReview?: boolean;
   allowedPropertyIds?: string[];

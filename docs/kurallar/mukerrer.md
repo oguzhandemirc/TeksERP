@@ -31,6 +31,7 @@
 ### Değişmezler
 
 - **[ÇEKİRDEK]** Mükerrer kararı ÇİFT bazlıdır (`duplicate_reviews`, `pairKey = min(aId,bId):max(aId,bId)`): NOT_DUPLICATE çifti kalıcı gizler, DEFERRED işaretler, MERGED'i motor yazar (`MasterDataMergeService.merge` sonrası best-effort hook). · bekçi: `test_duplicate_detection` <sub>(CLAUDE.md:80)</sub>
+- **[ÇEKİRDEK]** `GET /<kaynak>/similar-names` route dosyasında `/:id`den ÖNCE tanımlanır; sonra gelirse Express onu id sanar, `assertValidUuid` 400 verir ve panelde uyarı ÇİZİLMEZ — yerine geliştirici jargonlu bir hata toast'ı çıkar (apiClient'ın 4xx dalı bileşenin catch'inden önce koşar). `SimilarNamesWarning` çizen her ekranın router'ında bu uç vardır. <sub>(2026-09-12 devere denetimi)</sub>
 
 ## Geçersiz kılınan kurallar — bunlara UYMA
 
