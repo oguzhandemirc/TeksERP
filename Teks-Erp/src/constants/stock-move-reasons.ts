@@ -14,6 +14,8 @@ export const STOCK_MOVE_REASON = {
   PRODUCTION_RECEIPT: "PRODUCTION_RECEIPT",
   /** Tambur finalize çocuğunun doğumu. */
   TAMBUR_FINALIZE: "TAMBUR_FINALIZE",
+  /** Tambur geri alma — finalize çocuğunun giriş satırının TERSİ. */
+  TAMBUR_UNDO: "TAMBUR_UNDO",
   /** İş emri kapanış/iptal dispozisyonu. */
   DISPOSITION: "DISPOSITION",
   /** Depo topunun kesimi (ebeveyn çıkışı + çocuk girişi, net sıfır). */

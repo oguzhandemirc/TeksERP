@@ -265,3 +265,48 @@ export async function reverseStockMove(
     notes: args.notes ?? null,
   });
 }
+
+/**
+ * Topun TERSLENMEMİŞ ileri satırlarını tersler — "bu top iptal edildi, defterdeki
+ * izi de sıfırlansın" yolunun tek kapısı (tambur geri alma, iptali geri alma).
+ *
+ * ⚠️ Satır SİLİNMEZ: her ileri satıra bugüne yazılan bir ters satır eşlik eder ve
+ * bağ `reversesMovementId`e düşer. Aynı satır iki kez terslenemez (DB unique),
+ * yani tekrarlayan geri alma turu sessizce ikinci bir ters satır yazmaz.
+ *
+ * ⚠️ Metraj İLERİ SATIRDAN kopyalanır (`reverseStockMove`), topun canlı
+ * metrajından DEĞİL: iptal yolları `currentQty`yi 0'a çekiyor ve canlıdan okumak
+ * 0 m'lik bir ters satır yazıp depoda hayalet metraj bırakırdı.
+ *
+ * ⚠️ A1 ÖNCESİ satırlar (iki statü de NULL) terslenemez — ucu kurulamayan satırın
+ * tersi de kurulamaz. Sessizce yutulmaz, sayısı AYRICA döner; kalıcı çözüm açılış
+ * bakiyesi backfill'idir (tasarım §D6).
+ */
+export async function reverseRollStockMoves(
+  tx: Tx,
+  rollIds: string[],
+  args: { reasonCode: string; userId?: string | null; notes?: string | null },
+): Promise<{ reversed: number; preEpochSkipped: number }> {
+  if (rollIds.length === 0) return { reversed: 0, preEpochSkipped: 0 };
+  const forwards = await tx.warehouseMovement.findMany({
+    where: {
+      rollId: { in: rollIds },
+      // İleri satır: kendisi ters kayıt DEĞİL ve henüz terslenmemiş.
+      reversesMovementId: null,
+      reversedBy: { none: {} },
+    },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, fromStatus: true, toStatus: true },
+  });
+  let reversed = 0;
+  let preEpochSkipped = 0;
+  for (const f of forwards) {
+    if (f.fromStatus === null && f.toStatus === null) {
+      preEpochSkipped++;
+      continue;
+    }
+    await reverseStockMove(tx, f.id, args);
+    reversed++;
+  }
+  return { reversed, preEpochSkipped };
+}

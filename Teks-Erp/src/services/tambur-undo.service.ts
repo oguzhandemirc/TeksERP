@@ -74,6 +74,8 @@
 import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { reverseRollStockMoves } from "./helpers/warehouse-ledger.helper";
+import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import {
   TAMBUR_UNDO_CANCEL_CODE,
@@ -1153,6 +1155,15 @@ export class TamburUndoService {
         throw AppError.conflict("Parça bu sırada başka bir akışa girdi — geri alınamadı, yenileyin");
       }
 
+      // DEPO DEFTERİ — çocuğun doğarken yazdığı GİRİŞ satırı terslenir. Yoksa
+      // iptal edilen metraj defterde depoda kalır ve her geri alma turu depoya
+      // hayalet metre ekler (yeniden finalize ikinci bir giriş yazar).
+      await reverseRollStockMoves(tx, [childId], {
+        reasonCode: STOCK_MOVE_REASON.TAMBUR_UNDO,
+        userId: userId ?? null,
+        notes: TAMBUR_UNDO_CANCEL_TEXT,
+      });
+
       const len = child.initialQty;
       let restoredTo: string;
       if (parentArchived) {
@@ -1358,6 +1369,13 @@ export class TamburUndoService {
       if (cancelled.count !== 1) {
         throw AppError.conflict("Parça bu sırada başka bir akışa girdi — geri alınamadı, yenileyin");
       }
+
+      // DEPO DEFTERİ — applySingle ile aynı: giriş satırı terslenir (bkz. orası).
+      await reverseRollStockMoves(tx, [childId], {
+        reasonCode: STOCK_MOVE_REASON.TAMBUR_UNDO,
+        userId: userId ?? null,
+        notes: TAMBUR_UNDO_CANCEL_TEXT,
+      });
 
       const restored = child.initialQty;
       const parentRow = await tx.roll.findUnique({
@@ -1610,6 +1628,14 @@ export class TamburUndoService {
       if (cancelled.count !== ids.length) {
         throw AppError.conflict("Parçalardan biri bu sırada başka akışa girdi — geri alma iptal edildi, yenileyin");
       }
+
+      // DEPO DEFTERİ — TÜM çocukların giriş satırları terslenir. FULL'de öksüz
+      // satır sayısı çocuk sayısı kadar olurdu (2026-08-09 vakasında 14 top).
+      await reverseRollStockMoves(tx, ids, {
+        reasonCode: STOCK_MOVE_REASON.TAMBUR_UNDO,
+        userId: userId ?? null,
+        notes: TAMBUR_UNDO_CANCEL_TEXT,
+      });
 
       // ── METRAJ GERİ KOYMA ────────────────────────────────────────────────
       // Formül + gerekçe `computeRestoredQty`'de (TEK KAYNAK — önizleme de onu
