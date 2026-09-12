@@ -21,7 +21,7 @@
 // Kurulum: node scripts/hooks-kur.mjs   (git config core.hooksPath .githooks)
 // =============================================================================
 
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,6 +39,19 @@ if (staged.length === 0) process.exit(0);
 
 const basladi = Date.now();
 const adimlar = [];
+
+const headOku = () => {
+  try {
+    return execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: REPO,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return null;
+  }
+};
+const headBasta = headOku();
 
 for (const proje of etkilenenProjeler(REPO, staged)) {
   adimlar.push({ ad: `${proje.ad} · tip`, cwd: proje.ad, cmd: proje.typecheck });
@@ -102,6 +115,21 @@ for (const adim of adimlar) {
       `⛔ Commit atılmadı. Bilerek geçmek gerekiyorsa: TEKSERP_HOOK_SKIP=1 git commit …\n`,
   );
   process.exit(1);
+}
+
+// ⚠️ Ortak çalışma ağacında başka bir oturum, biz kapıyı koştururken commit atmış
+// olabilir. Git'in ref kilidi ATOMİKTİR — commit sessizce ezilmez, `fatal: cannot
+// lock ref 'HEAD'` ile GÜRÜLTÜLÜ düşer; yani korunması gereken korunuyor. Kaybedilen
+// tek şey bu koşumun süresidir (ölçüm 2026-09-12: 48 sn). İNİŞ KİLİDİ ÖNERİLMEDİ:
+// bayat kilit beş oturumu birden iniş-siz bırakır ve zaman aşımı eşiği seçilemez
+// (kapı 48 sn ↔ `npm test` 6,5 dk). Anlaşma kalır, teşhis eklenir.
+const headSonda = headOku();
+if (headBasta && headSonda && headBasta !== headSonda) {
+  process.stderr.write(
+    `⚠️  HEAD koşum sırasında kaydı (${headBasta.slice(0, 8)} → ${headSonda.slice(0, 8)}).\n` +
+      `   Commit REDDEDİLECEK (ref kilidi). Kayıp yok: staged dosyalar index'te kalır.\n` +
+      `   Yap: git log --oneline -1 ile yeni ucu gör, sonra commit'i TEKRARLA.\n`,
+  );
 }
 
 process.stderr.write(`✅ commit kapısı temiz (${((Date.now() - basladi) / 1000).toFixed(1)}s)\n`);

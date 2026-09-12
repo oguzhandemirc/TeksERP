@@ -164,3 +164,74 @@ yanlış. Düzeltme bekçi tarafında yapıldı, middleware'e dokunulmadı.
 yanlış ② kod yanlış ③ bekçi yeni bir sınıfın varlığından habersiz yazılmış.
 (1) ve (3) bekçi tarafı, (2) kod tarafı; ayrım yapılmadan atılan her adım
 kapıyı gevşetme riskini taşır.
+
+## Kapı doğduğu gün yazarını yakaladı
+
+Kimlik kapısı `74553624` ile **15 gerçek ayrışmayla** doğdu ve düzeltmesi
+(`5190e8a1`) hemen arkasından geldi. Aynı gün üç bağımsız yakalama yaptı:
+
+- **Kendini yakaladı.** İlk koşumda `test_identity_ledger` haritada yoktu —
+  yani yeni yazılan bir bekçi bile haritasız girebiliyormuş, ve kapı bunu ilk
+  koşumunda kendi üzerinde gösterdi.
+- **`6e`'yi İKİ KEZ yakaladı.** Önce altı stok defteri bekçisi HEAD'de
+  commit'liyken harita satırları yoktu; sonra yeni bir bekçi eklenirken harita
+  satırı yine unutuldu (`e5389e2d` ile düzeltildi). Aynı oturumun aynı hataya
+  iki kez düşmesi, kuralın insan dikkatiyle tutulamayacağının kanıtıdır — kapının
+  gerekçesi tam olarak budur.
+- **`01`'i yakaladı.** `sebep-katalogu` koşum listesi `test_reason_preset_kind_parity`yi
+  taşımıyordu.
+
+Kapının varlık sebebi bir daha savunulmak zorunda kalmasın diye yazılıdır:
+doğduğu gün, üç ayrı oturumda, üç gerçek eksik buldurdu.
+
+## Sonda kendi girdisini kirletmemeli
+
+`staged.mjs` amend düzeltmesinin (`b1b7df1b`) negatif sondasında, bash-guard
+yolunu taklit eden sonda süreci komut metnini (`"git commit --amend"`) ARGÜMAN
+olarak alıyordu. O dizge çocuk sürecin `ps` çıktısına sızdı; kapı `--amend`i
+orada gördü ve **doğru cevabı yanlış ayaktan** verdi. Ölçüm yeşil görünüyordu,
+sebebi yanlıştı.
+
+**Kural:** *sonda, ölçtüğü mekanizmanın girdisini kirletmemeli — sonda argümanı,
+ölçülen sinyalin taşıyıcısıyla aynı kanaldan geçmemeli.* Burada ölçülen sinyal
+`ps` çıktısıydı, dolayısıyla senaryo bilgisi `ps`e sızmayan bir kanaldan
+(ortam değişkeni) geçirildi ve sonda tekrarlandı.
+
+Bu, "ölçtüğünü iddia eden yeşil" sınıfının o günkü ALTINCI görünümüydü; ilk
+beşi koddaydı, altıncısı **ölçüm aracının kendisindeydi**. Kapı yazarken kapının
+kendisini de ölç kuralının kardeşi: **sonda yazarken sondanın kendisini de ölç.**
+
+## Yeni kapıların ilk gün getirisi
+
+2026-09-12'de iki kapı doğdu ve **ikisi de doğduğu gün gerçek bir kusur
+yakaladı** — kurgu sondayla değil, ağaçta duran gerçek bir eksikle:
+
+| kapı | ilk gün bulduğu GERÇEK kusur |
+|---|---|
+| `test_identity_ledger` | 15 ayrışma; sonrasında üç ayrı oturumda dört yakalama daha (kendisi · `6e`'nin altı stok defteri bekçisi · `01`'in `sebep-katalogu` kalemi) |
+| migration monotonluk kapısı (`ea`) | test DB'sinde `160200` resolve edilmişken `160100` uygulanmamıştı; ayrıca kurgu sonda (`20260101000000_sonda_geriye_dusen`) da kırmızı verdi |
+
+Ölçüt olarak kayda geçsin: **bir kapı, doğduğu gün gerçek bir kusur
+yakalamıyorsa ölçtüğü şeyin var olduğu kanıtlanmamıştır.** Kurgu sonda kapının
+ÇALIŞTIĞINI gösterir; gerçek bir yakalama kapının GEREKLİ olduğunu gösterir.
+İkisi ayrı sorulardır ve ikisi de sorulmalıdır.
+
+## Ortak ağaçta çarpışma — ölçülen tek vaka
+
+`74553624` (kimlik kapısı) commit'lenirken kapı 48 sn koştu; o sırada `d5`
+`a99a4bc0`'ı indirdi ve HEAD kaydı. Commit `fatal: cannot lock ref 'HEAD'` ile
+**reddedildi** — sessizce ezilmedi. Staged dosyalar index'te kaldı, kayıp olmadı,
+yeni taban üzerinde tekrarlandı.
+
+**Hüküm: iniş kilidi YAPILMAYACAK.** Git'in ref kilidi zaten atomiktir, yani
+korunması gereken korunuyor; kaybedilen tek şey bir kapı koşumunun süresidir
+(48 sn). Kilit dosyasının bedeli daha yüksek: bayat kilit beş oturumu birden
+iniş-siz bırakır ve zaman aşımı eşiği seçilemez (kapı 48 sn ↔ `npm test` 6,5 dk).
+Anlaşma kalır, **teşhis eklenir** — `scripts/hooks/pre-commit.mjs` artık HEAD'in
+koşum sırasında kaydığını söyler ve "kayıp yok, staged dosyalar index'te kalır"
+diye ekler.
+
+## Nihai durum (push `9bfe18cb..fcc773ee`, 42 commit)
+
+Tam koşum **494/494 · 441 sn · sıfır kırmızı**; kimlik kapısı push edilen uçta
+**3/0 · 494 gerçek = 494 haritada**.
