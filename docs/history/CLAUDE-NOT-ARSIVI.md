@@ -7069,7 +7069,7 @@ sıfırdan kurulur, dosyalar kopyalanır ve **dosyalardan yeniden commit'lenir**
 kapı her commit'te gerçekten koşar ve "ölçüm hangi taban üzerinde yapıldı" sorusu
 kendiliğinden cevaplanır.
 
-### Bilinen açık — aynı sınıfın AYNA GÖRÜNTÜSÜ (sıradaki işin 1. maddesi)
+### Aynı sınıfın AYNA GÖRÜNTÜSÜ — ölçüldü ve AYNI GÜN KAPATILDI
 
 Aynı gün ölçüldü (fikstür DB'si, gerçek servis çağrıları): **topun iptalini geri almak
 depo defterini eksik bırakıyor.**
@@ -7089,6 +7089,37 @@ Düzeltmenin iki ayağı **AYRILAMAZ**: CANCEL satırı statüsüz olduğu için
 yazacak uç yok, yani `restoreCancelledRoll`a ters kayıt yazdırmak ancak iptal çıkışı
 `postStockMove`a taşındıktan sonra mümkün. Bekçi yazıldı ve kırmızı ölçüldü:
 **3 geçti / 5 başarısız** (§1 statü=null sebep=null · §3 bağ yok · §4 net −75 · §7 n=1).
+
+**KAPATILDI (aynı gün):** `softDelete` artık `postStockMove` kullanıyor — satır iki
+ucundaki statüyü taşıyor (`from: { warehouseId, status: iptal ÖNCESİ statü }`,
+`reasonCode: ROLL_CANCEL`) ve **yalnız stok kümesinden düşen mal için** yazılıyor:
+`IN_PRODUCTION`/`AT_SUBCONTRACTOR` bir top iptal edilirken stoktan bir şey düşmez,
+oysa eski kapı orada da koşulsuz yazıp depoya girmemiş malı düşmüş gösteriyordu.
+`restoreCancelledRoll` **transaction açıyor** (eskiden hiç açmıyordu) ve claim ile
+ters kayıt aynı işlemde; kapsam `{ reasonCode: ROLL_CANCEL, workOrderStepId: null }`
+ile AÇIKÇA adımsız veriliyor — bu yüzden `StockMoveScope.workOrderStepId` artık
+`string | null`: "unutuldu" ile "adımı yok" ayrımı kaybolsa kapsamsız ters kayıt
+sınıfı geri gelirdi. Ölçüm: bekçi **3/5 → 9/0**; üç negatif sonda (iptal yazımı
+kaldırıldı → 5 kırmızı · geri almadaki ters kayıt kaldırıldı → 3, §4 `net=−75` ·
+stok-dışı kapısı kaldırıldı → 2, §7 `satır=1`).
+
+### Yöntem notu (2) — dilimli iniş ve arşiv birleştirme
+
+Aynı turda iki yöntem kuralı daha çıktı; ikisi de **elle yapılan işin sessizce yalan
+söylemesini** engelliyor:
+
+1. **Dilimli inişi ELLE kurma — betiğe al.** Aynı zinciri üç kez elle kurdum ve iki kez
+   evreleme hatası yaptım: `git apply` belge dosyalarını **stage'de bıraktı** ve arşiv
+   notu 1. commit'e karıştı; sonra yanlış HEAD'de `--amend` bir bekçiyi belge
+   commit'ine karıştırdı. İkisinde de **commit mesajı içeriği yalan söyledi** — kapı
+   bunu göremez, çünkü kapı içeriğin doğruluğunu değil derlenip lint'lendiğini ölçer.
+   Çözüm: her dilimden önce `git reset`, yalnız o dilimin yolları, ve her dilimde
+   `git diff --cached --name-only` sayısını BAS. (01 aynı gün bağımsız olarak aynı
+   çözüme vardı — iki oturumun aynı yerde buluşması kalıbı doğruluyor.)
+2. **Arşiv YAMA ile değil METİN EKLEME (`>>`) ile birleştirilir.** Arşiv salt-ekleme
+   bir dosyadır; `git apply --3way` orada yapısal olarak yanlış araçtır ve ana ağaç 70
+   bloğa çıktığında çakıştı. Notu metin olarak eklemek çakışmaz. Doğrulama her zaman
+   `grep -c '^## '` ile blok sayısı karşılaştırmasıdır (worktree ↔ ana ağaç).
 
 ### "Önce kırmızıyı gör" kuralının PARALEL OTURUM kısıtı
 
