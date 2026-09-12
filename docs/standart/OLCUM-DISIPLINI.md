@@ -62,6 +62,8 @@ taşıyıcısıyla **aynı kanaldan geçmemeli**.
 olduğunu saymak genellikle tek sorgudur.
 **İkinci yüzeyi:** ortam **ölçüm sırasında** değişir. O zaman tek yol, **ölçüm
 öncesi ve sonrası ucu karşılaştırmak**.
+*Vaka: bir bekçi için "zaten kırmızıydı" hükmü, test edilen değişikliğin kendi
+artığını taşıyan DB'de verildi. Temiz ayırt edici koşulunca hüküm değişti.*
 
 ### 6 · Ölçüt doğru ama dar
 Bir davranışı ölçer, değişmezin tamamını değil. Sızıntı **iki koşum arasındaki
@@ -90,6 +92,56 @@ olurdu. Ölçülebilir sinyal **durum değil EYLEM**ti (`action=promoted/created
 Yani sonda yalnız bekçiyi doğrulamaz, **kontrolün anlamlı olup olmadığını da
 ortaya çıkarır.** Sondayı kuramadığın an düzeltilecek şey sonda değil kontroldür.
 
+### 9 · Geç ölçüm — anlık ölçümle pencere iddiası
+İddianın konusu bir **zaman aralığı**, ölçüm ise **şu an**. Sonuç doğru çıkabilir,
+iddia yine de kurulmamıştır.
+**Kurtarma:** ölçümü iddianın aralığını **kuşatacak** biçimde al — aralığın
+başından bir damga (koşum başlangıcı, son commit zamanı) ile karşılaştır.
+Kuşatamıyorsan iddiayı daralt: *"şu an temiz"* de, *"o sırada temizdi"* deme.
+### Çöken sonda, sonda değildir
+Negatif sonda kırmızı verdi diye geçerli değildir; kırmızının **ölçmek istediğin
+KONTROLDEN** geldiği ayrıca doğrulanır.
+**Ayırt edici:** FAIL **satır sayısı** ↔ özet **sayısı**. Uyuşmuyorsa fark bir
+çökmedir. *(Vaka: özet "3 başarısız" dedi, ekranda 2 FAIL vardı; üçüncüsü bir
+`.catch()`ten geliyordu — bölümün hiçbir kontrolü koşmamıştı.)*
+**Kurtarma:** sondayı **sahte nesneyle kurma** — gerçek çağrıyı **gerçek ama
+yanlış girdiyle** koştur. Sahte nesne kod yolunu değil, kod yolunun **kurulumunu**
+kırar.
+
+### Zıt iki cevap = ortam farkı
+Aynı script, aynı ağaç, aynı saniye **zıt iki cevap** veriyorsa bu bir kapı hatası
+değil bir **ortam farkıdır** — ve ortam farkı her zaman bulunabilir. Çelişkiyi
+*"tuhaf"* diye geçmek, teşhisi kaçırmanın en yaygın yolu.
+*(Vaka: aynı kapı elle YEŞİL, hook içinde KIRMIZI. Sebep: kısmi/pathspec commit'te
+git geçici indeks kuruyor ve başkasının sahnelenmiş dosyası hook'a untracked
+görünüyor.)*
+**Kurtarma:** iki ortamın **farkını** ölç (env · cwd · indeks · kullanıcı), sonucu değil.
+
+### Kaçışın asıl maliyeti
+Bir kaçışın asıl maliyeti bir kuralı çiğnemek değil — **bir sorunun sorulmasını
+engellemektir.** Kaçış varken teşhise ihtiyaç duyulmaz; çelişki **ilginç olmaktan
+çıkar.** *(Vaka: aynı kırmızıya üç kez kaçışla yaklaşıldı, dördüncüde ölçümle —
+kök sebep dördüncüde çıktı.)*
+
+### Dolaylılık — desen tabanlı ölçümün varsayılan kör noktası
+Bir desen *"şu metni içeriyor mu"* diye soruyorsa, metnin **bir adım dolaylı** hâli
+için **ayrı bir sonda** yazılır.
+*(Aynı kök bir gecede üç kez: ham SQL içine gömülü `UPDATE` · sabit üzerinden
+verilen olay adı · şablon değişkenine gömülü `DROP TABLE`.)*
+**Kurtarma cümlesi:** *"sondayı kurmasaydım deseni yeterince dar sanacaktım."*
+
+⚠️ Bu sınıfın **ters yönü de var ve bu belge yazılırken yaşandı:** komut kapısı,
+yukarıdaki `DROP TABLE` dizgesini **belge örneği** olarak yazmayı engelledi. Desen
+metni bağlamdan bağımsız eşliyor ⇒ *yasağı anlatan cümle de yasağın kendisi
+sayılıyor.* Yani dolaylılık kör noktasının bedeli iki yönlü: desen bir adım
+dolaylıyı **kaçırır**, düz metni **fazladan yakalar**.
+
+### Çelişki yüklemi ≠ farklılık yüklemi
+Bir çelişki yüklemi kurarken **"hangi değerler birlikte YANLIŞ"** sorusunu,
+**"hangi değerler FARKLI"** sorusundan ayır.
+*(Vaka: `unit <> 'kg' AND scale IS NULL` üç "çelişki" buldu; üçü de metre cihazıydı
+ve m→m çarpanı 1 doğruydu.)*
+
 ## Teşhis mesajı da bir yüklemdir
 
 Bir bekçi iki şey söyler: **kırmızı mı** ve **neden kırmızı**. İkincisi de bir
@@ -107,6 +159,19 @@ gönderir.
 "boğaz-ikiz" olarak duruyor. O cümlenin genişletilmesi kullanıcının yetkisindedir;
 burada bekçi yüzeyi için yazılıdır.
 
+## Doğru çıkması yöntemi doğrulamaz
+Sonuç doğru olduğu için yöntemi aklamak, başlı başına bir ölçüm hatasıdır.
+Yöntem sonuçtan **ayrı** değerlendirilir: *"bu yöntem yanlış bir dünyada da aynı
+cevabı verir miydi?"*
+**Kurtarma:** hükmü verirken yöntemi de yaz; okuyan ikisini ayrı sınayabilsin.
+
+## Aynı numara, farklı şey — yerel kopya ≠ uzak gerçek
+`origin/main` **yerel bir kopyadır**; uzak başı `git ls-remote origin main` söyler.
+İkisi çoğu zaman aynı numarayı gösterir ve bu, **farklı iki şeyi ölçtüklerini**
+gizler.
+**Kurtarma:** uzak hakkında iddia kuracaksan uzağa sor. Genel hâli: **bir vekil
+üzerinden ölçtüğünde, vekilin ne zaman tazelendiğini de ölç.**
+
 ## Asenkron eylemde tek ölçüm yetmez
 
 `port serbest ≠ süreç ölü` · `PID öldü ≠ dinleyen ölü` · `kill gitti ≠ süreç gitti`.
@@ -115,6 +180,26 @@ işlenmesi eylemden SONRA, belirsiz gecikmeyle olur. Hata "ölçmedim" değil, *
 kez ve çok erken ölçtüm"**.
 
 > **Kapatınca ölç, tutmazsa bekle ve yeniden ölç, zaman aşımında sessizce geçme.**
+
+## Atıfta eşik düşmesi
+
+Başkasının belgesi, çıktısı ya da beyanı hakkında kurduğun her cümle bir
+**iddiadır** ve ölçülmeden kurulmaz. Kendi ölçümüne uyguladığın eşiği, başkasının
+işine atıf yaparken düşürmek en sık tekrarlayan hatadır.
+**Kurtarma:** atıf yapmadan önce **kaynağı aç ve ara** — *bir iddiayı sınamanın en
+ucuz yolu, iddianın verdiği örneği ağaçta aramaktır.*
+
+## Yapısal sonda — "gerekçesi ölçülmedi"nin çıkış yolu
+
+Bir sondanın gerekçesi bugün ölçülemiyorsa (`RECETELER.md` md. 20 ②), **"hayır"
+demeden önce sor: bu kusurun YAPISAL bir izi var mı?**
+
+> **Davranışsal sonda, ölçeceği davranış henüz yokken uyur. Yapısal sonda aynı
+> kusuru BUGÜN silahlanarak yakalar — çünkü davranışı değil kodun ŞEKLİNİ ölçer.**
+
+İş bölümü: yapısal sonda yanlış yüklemin **yazılmasını**, davranışsal sonda
+**davranışını** yakalar. İlki bugün, ikincisi koşul doğduğu gün. "Gerekçesi
+ölçülmedi" şerhi ancak **yapısal iz de yoksa** yazılır.
 
 ## Sayı yazma
 
