@@ -233,6 +233,105 @@ if (scriptRefProblems.length) {
   });
 }
 
+// --- [ADVISORY] RESTRICT FK → o ebeveyni silen bekçiler ----------------------
+// KIRMIZI VERMEZ. Kaybolan şey bilgi, karar değil.
+//
+// VAKA (2026-09-12, aynı gün İKİ kez): yeni bir defter tablosu `RESTRICT` ilişkisiyle
+// doğdu, var olan bir bekçinin temizliği ebeveyni ÖNCE siliyordu → P2003. Migration'ı
+// yazan kişi yeni tabloyu düşünüyor, ESKİ temizlikleri düşünmüyor; o listeyi kimse
+// göstermiyordu.
+//
+// ⚠️ NEDEN MIGRATION-TETİKLİ: statik kurgu (şemadaki her RESTRICT ebeveyni × onu silen
+// her bekçi) ölçüldü ve **1621 satır** veriyordu — okunmayan doğru, kapının üçüncü ölüm
+// biçimi. Değişim ölçen kurgu `ImportRun` için **3 ad** basıyor. Fark kapsamda: biri
+// DURUMU, öbürü DEĞİŞİMİ ölçer.
+//
+// ⚠️ ŞERH (2026-09-13): bu dosyanın `git status` okuması kısmi (pathspec) commit'te
+// yanıltıcı olabiliyor — git geçici indeks kuruyor ve başkasının sahnelenmiş dosyası
+// `??` görünüyor (d5 ölçtü, düzeltmesi ayrı iş). Aşağısı `merge-base` ve dosya okumaya
+// dayanır, `status`a değil; yine de d5'in düzeltmesi gelince birlikte gözden geçirilecek.
+const YENI_MIGRATION_TABAN = (() => {
+  try {
+    return git(["merge-base", "HEAD", "origin/main"]).trim();
+  } catch {
+    return "";
+  }
+})();
+
+if (YENI_MIGRATION_TABAN) {
+  let eskiDizinler = new Set();
+  try {
+    eskiDizinler = new Set(
+      git(["ls-tree", "--name-only", `${YENI_MIGRATION_TABAN}:${MIGRATIONS_DIR}`])
+        .split("\n")
+        .map((x) => x.replace(/\/$/, ""))
+        .filter(Boolean)
+    );
+  } catch {
+    eskiDizinler = new Set();
+  }
+
+  const yeniDizinler = existsSync(join(REPO_ROOT, MIGRATIONS_DIR))
+    ? readdirSync(join(REPO_ROOT, MIGRATIONS_DIR)).filter(
+        (d) =>
+          statSync(join(REPO_ROOT, MIGRATIONS_DIR, d)).isDirectory() && !eskiDizinler.has(d)
+      )
+    : [];
+
+  // Yeni migration'larda eklenen RESTRICT/NO ACTION FK'larının EBEVEYN tablosu
+  const ebeveynler = new Set();
+  for (const d of yeniDizinler) {
+    const sqlYol = join(REPO_ROOT, MIGRATIONS_DIR, d, "migration.sql");
+    if (!existsSync(sqlYol)) continue;
+    const sql = readFileSync(sqlYol, "utf8");
+    for (const m of sql.matchAll(
+      /REFERENCES\s+"?(\w+)"?\s*\([^)]*\)\s*ON DELETE (RESTRICT|NO ACTION)/gi
+    )) {
+      ebeveynler.add(m[1]);
+    }
+  }
+
+  if (ebeveynler.size > 0) {
+    const bekciler = existsSync(join(REPO_ROOT, SCRIPTS_DIR))
+      ? readdirSync(join(REPO_ROOT, SCRIPTS_DIR)).filter(
+          (f) => f.startsWith("test_") && f.endsWith(".ts")
+        )
+      : [];
+    const uyarilar = [];
+    for (const tablo of [...ebeveynler].sort()) {
+      // `import_run_lines` → `importRun` (Prisma delegate adı)
+      const tekil = tablo.replace(/s$/, "");
+      const delegate = tekil.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+      const desen = new RegExp(`(?:prisma|tx)\\.${delegate}\\.deleteMany`);
+      const eslesen = bekciler.filter((f) =>
+        desen.test(readFileSync(join(REPO_ROOT, SCRIPTS_DIR, f), "utf8"))
+      );
+      if (eslesen.length > 0) uyarilar.push({ tablo, delegate, eslesen });
+    }
+
+    if (uyarilar.length > 0) {
+      console.log("\n⚠️  [ADVISORY] yeni RESTRICT FK'sı — bu ebeveyni SİLEN bekçiler:");
+      for (const u of uyarilar) {
+        if (u.eslesen.length > 10) {
+          // Uzunluğun kendisi bir bulgudur: bu kadar bekçiyi ilgilendiren bir FK
+          // muhtemelen `Cascade` olmalıydı.
+          console.log(
+            `   ${u.tablo} (${u.delegate}) — ${u.eslesen.length} bekçi. GENİŞ ETKİLİ, ` +
+              `onDelete kararını gözden geçir. İlk beşi:`
+          );
+          for (const f of u.eslesen.slice(0, 5)) console.log(`     · ${f}`);
+        } else {
+          console.log(`   ${u.tablo} (${u.delegate}):`);
+          for (const f of u.eslesen) console.log(`     · ${f}`);
+        }
+      }
+      console.log(
+        "   → Bu bekçilerin temizliği ÇOCUĞU önce silmeli, yoksa P2003. Tavsiyedir, kırmızı değil.\n"
+      );
+    }
+  }
+}
+
 // --- Rapor ------------------------------------------------------------------
 if (problems.length === 0) {
   const count = existsSync(migRoot)
