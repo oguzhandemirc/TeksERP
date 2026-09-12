@@ -3479,6 +3479,90 @@ model DuplicateReview {
   @@map("duplicate_reviews")
 }
 
+/// Referans satırının birleştirmede ne olduğu.
+enum MergeRefKind {
+  MOVED // kaynaktan survivor'a taşındı (geri almada geri yazılır)
+  DELETED // çakışma politikası satırı sildi (geri almada fotoğraftan yeniden yazılır)
+  FIELD_MERGED // survivor satırı kaynağın değerleriyle zenginleşti (alan fotoğrafı saklanır)
+}
+
+/// BİRLEŞTİRME DEFTERİ — "kim neyi neye birleştirdi ve NE TAŞINDI".
+///
+/// Önceden bu bilginin tek izi audit yüküydü (`movedRows` yalnız SAYI) ve audit 6
+/// ayda arşivleniyor: "en yıkıcı işlem"in dökümü kayboluyordu. Geri alma bu
+/// defterden okur; satır SİLİNMEZ, geri alma `revertedAt` damgası yazar.
+model MergeOperation {
+  id         String @id @default(uuid()) @db.Uuid
+  /// customer | item | color | subcontractor — dört varlık tek kolonda, FK YOK
+  /// (`DuplicateReview.aId` emsali: polimorfik kimlik).
+  entity     String @db.VarChar(40)
+  survivorId String @db.Uuid
+  reason     String @db.VarChar(500)
+  conflictsResolved Int @default(0)
+  /// Survivor'a yazılan alan seçimleri: `[{ field, before, after, fromId }]`.
+  fieldPicks Json?
+  createdById String? @db.Uuid
+
+  /// GERİ ALMA DAMGASI — ters kayıt; ileri satır değişmez.
+  revertedAt   DateTime? @db.Timestamptz
+  revertedById String?   @db.Uuid
+  revertReason String?   @db.VarChar(500)
+
+  sources MergeOperationSource[]
+  refs    MergeOperationRef[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([entity, createdAt(sort: Desc)])
+  @@index([survivorId])
+  @@map("merge_operations")
+}
+
+/// Birleştirmenin kaynakları + TOMBSTONE ÖNCESİ hâlleri (geri alma bunları yazar).
+model MergeOperationSource {
+  id          String  @id @default(uuid()) @db.Uuid
+  operationId String  @db.Uuid
+  sourceId    String  @db.Uuid
+  nameBefore  String  @db.VarChar(255)
+  codeBefore  String? @db.VarChar(64)
+  isActiveBefore Boolean
+  /// Geri almada ad hayattaki kayıtla çakıştığı için yeni ad verildiyse.
+  renamedTo   String? @db.VarChar(255)
+
+  operation MergeOperation @relation(fields: [operationId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@unique([operationId, sourceId])
+  @@map("merge_operation_sources")
+}
+
+/// TAŞINAN/SİLİNEN/BİRLEŞEN REFERANSLAR — tablo+kolon+kaynak başına TEK satır.
+/// `rowIds` tek kolonlu PK'lar için (ölçek: tek birleştirme en fazla 200k satır
+/// taşıyabilir, uuid[] bunu ~3 MB'da taşır); composite PK'lı tablo (bugün yalnız
+/// `subcontractor_category_links`) anahtar nesnelerini `rowKeys`te tutar.
+model MergeOperationRef {
+  id          String       @id @default(uuid()) @db.Uuid
+  operationId String       @db.Uuid
+  /// MOVED/DELETED'te kaynak kayıt; FIELD_MERGED'te NULL (satır survivor'ın).
+  sourceId    String?      @db.Uuid
+  tableName   String       @db.VarChar(63)
+  columnName  String       @db.VarChar(63)
+  kind        MergeRefKind
+  count       Int
+  rowIds      String[]     @db.Uuid
+  /// Composite PK anahtarları (`MOVED`) ya da silinen/zenginleşen satırın TAM fotoğrafı.
+  rowKeys     Json?
+  rowData     Json?
+
+  operation MergeOperation @relation(fields: [operationId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([operationId])
+  @@map("merge_operation_refs")
+}
+
 // =============================================================================
 // SYSTEM SETTING — runtime'da güncellenebilir konfigürasyon (key-value)
 // =============================================================================
