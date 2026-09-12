@@ -147,8 +147,12 @@ export interface StockMoveInput {
   notes?: string | null;
 }
 
-/** Tek satır yazar ve id'sini döner. Anlamsız satırda ATLAMAZ, FIRLATIR. */
-export async function postStockMove(tx: Tx, input: StockMoveInput): Promise<string> {
+/**
+ * Satırı kuran TEK yer — doğrulama da burada. Tekil ve toplu kapı aynı map'i
+ * kullanır; ikisine ayrı map yazılırsa `writeWarehouseMovements`in 2026-08-14'te
+ * `sackId`i sessizce düşüren allowlist hatası stok defterinde tekrarlanır.
+ */
+function stockMoveRow(input: StockMoveInput): Prisma.WarehouseMovementCreateManyInput {
   const qty = Number(input.qty);
   if (!Number.isFinite(qty) || qty <= 0) {
     throw AppError.internal(`Stok hareketi metrajı pozitif olmalı (gelen: ${String(input.qty)})`);
@@ -156,32 +160,56 @@ export async function postStockMove(tx: Tx, input: StockMoveInput): Promise<stri
   if (!input.from && !input.to) {
     throw AppError.internal("Stok hareketinin en az bir ucu (çıkış ya da giriş) dolu olmalı");
   }
+  return {
+    rollId: input.rollId,
+    eventType: input.eventType,
+    qty: input.qty as Prisma.Decimal,
+    fromWarehouseId: input.from?.warehouseId ?? null,
+    toWarehouseId: input.to?.warehouseId ?? null,
+    fromStatus: input.from?.status ?? null,
+    toStatus: input.to?.status ?? null,
+    reasonCode: input.reasonCode,
+    transformGroupId: input.transformGroupId ?? null,
+    rollVarianceId: input.rollVarianceId ?? null,
+    workOrderStepId: input.workOrderStepId ?? null,
+    reversesMovementId: input.reversesMovementId ?? null,
+    transferId: input.transferId ?? null,
+    goodsReceiptId: input.goodsReceiptId ?? null,
+    shipmentId: input.shipmentId ?? null,
+    rollReturnId: input.rollReturnId ?? null,
+    sackId: input.sackId ?? null,
+    stockCountId: input.stockCountId ?? null,
+    userId: input.userId ?? null,
+    notes: input.notes ?? null,
+  };
+}
+
+/** Tek satır yazar ve id'sini döner. Anlamsız satırda ATLAMAZ, FIRLATIR. */
+export async function postStockMove(tx: Tx, input: StockMoveInput): Promise<string> {
   const row = await tx.warehouseMovement.create({
-    data: {
-      rollId: input.rollId,
-      eventType: input.eventType,
-      qty: input.qty as Prisma.Decimal,
-      fromWarehouseId: input.from?.warehouseId ?? null,
-      toWarehouseId: input.to?.warehouseId ?? null,
-      fromStatus: input.from?.status ?? null,
-      toStatus: input.to?.status ?? null,
-      reasonCode: input.reasonCode,
-      transformGroupId: input.transformGroupId ?? null,
-      rollVarianceId: input.rollVarianceId ?? null,
-      workOrderStepId: input.workOrderStepId ?? null,
-      reversesMovementId: input.reversesMovementId ?? null,
-      transferId: input.transferId ?? null,
-      goodsReceiptId: input.goodsReceiptId ?? null,
-      shipmentId: input.shipmentId ?? null,
-      rollReturnId: input.rollReturnId ?? null,
-      sackId: input.sackId ?? null,
-      stockCountId: input.stockCountId ?? null,
-      userId: input.userId ?? null,
-      notes: input.notes ?? null,
-    },
+    data: stockMoveRow(input),
     select: { id: true },
   });
   return row.id;
+}
+
+/**
+ * TOPLU kardeş — yazılan satır sayısını döner. Sayım/sevk/transfer gibi yollar
+ * tavanda yüzlerce top taşır ve satır-satır insert perf kuralı 9 ihlalidir;
+ * bu kapı TEK `createMany` atar.
+ *
+ * ⚠️ HEPSİ YA HİÇ: doğrulama TÜM satırlar için insert'ten ÖNCE koşar, yani
+ * kümedeki tek bozuk satır hiçbir şey yazılmadan fırlatır — yarım yazılmış bir
+ * küme, mutabakatı sessizce kaydıran en kötü sonuçtur.
+ *
+ * ⚠️ `createMany` id DÖNMEZ: ters kayıt bağı (`reversesMovementId`) kurulacak
+ * ileri satırlar bu kapıdan GEÇEMEZ, tekil `postStockMove` kullanır.
+ */
+export async function postStockMoves(tx: Tx, inputs: StockMoveInput[]): Promise<number> {
+  if (inputs.length === 0) return 0;
+  const rows = inputs.map(stockMoveRow);
+  const res = await tx.warehouseMovement.createMany({ data: rows });
+  return res.count;
 }
 
 /**
@@ -189,11 +217,21 @@ export async function postStockMove(tx: Tx, input: StockMoveInput): Promise<stri
  * kopyalanır (canlı metrajdan değil — ileri kayıttan sonra metraj değişmiş
  * olabilir) ve bağ `reversesMovementId`e yazılır. Aynı satırın iki kez
  * terslenmesini DB'deki unique kapatır.
+ *
+ * `eventType` verilmezse ileri satırınki KOPYALANIR. Verilirse o yazılır — bazı
+ * yollar ters satırı panelde kendi adıyla göstermek ister (`CANCEL_REVERSAL`).
+ * Bu yalnız BETİMLEYİCİDİR: "bu satır ters kayıt mıdır" sorusunun tek cevabı
+ * `reversesMovementId IS NOT NULL`tır, enum değeri değil (tasarım §D2a).
  */
 export async function reverseStockMove(
   tx: Tx,
   movementId: string,
-  args: { reasonCode: string; userId?: string | null; notes?: string | null },
+  args: {
+    reasonCode: string;
+    eventType?: WarehouseEventType;
+    userId?: string | null;
+    notes?: string | null;
+  },
 ): Promise<string> {
   const fwd = await tx.warehouseMovement.findUniqueOrThrow({
     where: { id: movementId },
@@ -211,7 +249,7 @@ export async function reverseStockMove(
   }
   return postStockMove(tx, {
     rollId: fwd.rollId,
-    eventType: fwd.eventType,
+    eventType: args.eventType ?? fwd.eventType,
     qty: fwd.qty,
     from: fwd.toWarehouseId && fwd.toStatus ? { warehouseId: fwd.toWarehouseId, status: fwd.toStatus } : undefined,
     to: fwd.fromWarehouseId && fwd.fromStatus ? { warehouseId: fwd.fromWarehouseId, status: fwd.fromStatus } : undefined,
