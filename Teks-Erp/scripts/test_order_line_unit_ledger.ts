@@ -20,10 +20,14 @@
 //      sipariş kendiliğinden KAPANMAZ.
 //   ⑦ Mutabakat §1'in fixture'a daraltılmış kopyası KG satırı görmez
 //      (consistency-check.sql'deki `unit = 'MT'` süzgeci; mantık orada değişir).
+//   ⑧ İçe aktarım (order.adapter → orderService.create): "Birim" sütunu boşsa
+//      kalemden kopya (KG kalem → KG), doluysa etiketle ("Kilogram") → KG,
+//      MT kalem + boş → MT.
 //
 // Negatif sonda (2026-09-13, ölçüldü): `resolveLineUnit` kopyası `MT`ye
 // sabitlendi → 11 ❌ (①b ①c ②a ③b–③e ⑤a–⑤c ⑥); `isMeasuredUnit` `true`ya
-// sabitlendi → 9 ❌ (①c ③b–③e ⑤a–⑤c ⑥). sha256 ile birebir geri yüklendi.
+// sabitlendi → 9 ❌ (①c ③b–③e ⑤a–⑤c ⑥); `order.adapter` birim geçişi kapatıldı →
+// 1 ❌ (⑧d). sha256 ile birebir geri yüklendi.
 //
 // Fixture: TST-OLU-* business-key; hardcoded UUID yok; finally'de FK sırasıyla
 // temizlenir. Sipariş numaraları servis üretir → id listesiyle temizlenir.
@@ -31,7 +35,9 @@ import { ItemUnit, OrderStatus, ShipmentStatus } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { OrderService } from "../src/services/order.service";
 import { recomputeOrderStatusTx } from "../src/services/helpers/order-status.helper";
+import { ImportService } from "../src/services/import/import.service";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { randomUUID } from "node:crypto";
 
 const ts = Date.now();
 let pass = 0;
@@ -47,6 +53,7 @@ function check(label: string, ok: boolean, detail = ""): void {
 }
 
 const orderIds: string[] = [];
+const importTokens: string[] = [];
 const TOLERANCE_M = 5;
 
 async function cleanup(): Promise<void> {
@@ -59,6 +66,11 @@ async function cleanup(): Promise<void> {
   if (orderIds.length > 0) {
     await prisma.orderLine.deleteMany({ where: { orderId: { in: orderIds } } });
     await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
+  }
+  if (importTokens.length > 0) {
+    // SIRA ZORUNLU: ImportRunLine.importRun RESTRICT — önce satırlar.
+    await prisma.importRunLine.deleteMany({ where: { importRun: { clientToken: { in: importTokens } } } });
+    await prisma.importRun.deleteMany({ where: { clientToken: { in: importTokens } } });
   }
   await prisma.item.deleteMany({ where: { code: { startsWith: "TST-OLU-ITM-", endsWith: kuyruk } } });
   await prisma.customer.deleteMany({ where: { code: `TST-OLU-CUS-${ts}` } });
@@ -236,6 +248,34 @@ async function main(): Promise<void> {
         AND ol."unit" = 'MT'
         AND ol."shippedQty" <> COALESCE(sa.toplam, 0)`;
     check("⑦ §1 süzgeci: KG satır (tahsis 100, shippedQty 0) mutabakata GİRMEZ", rows.length === 0, `${rows.length} satır`);
+
+    // ── ⑧ içe aktarım yolu ─────────────────────────────────────────────────
+    const admin = await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } });
+    const token = randomUUID();
+    importTokens.push(token);
+    const ref = `TST-OLU-REF-${ts}`;
+    const imp = await ImportService.apply(
+      "order",
+      [
+        { rowNo: 1, cells: { ref, customerCode: `TST-OLU-CUS-${ts}`, itemCode: `TST-OLU-ITM-MT-${ts}`, quantity: "10" } },
+        { rowNo: 2, cells: { ref, customerCode: `TST-OLU-CUS-${ts}`, itemCode: `TST-OLU-ITM-KG-${ts}`, quantity: "20" } },
+        { rowNo: 3, cells: { ref, customerCode: `TST-OLU-CUS-${ts}`, itemCode: `TST-OLU-ITM-MT-${ts}`, quantity: "5", unit: "Kilogram" } },
+      ],
+      { clientToken: token, fileName: `TST-OLU-${ts}.csv`, mode: "upsert" },
+      admin?.id,
+    );
+    const impLines = await prisma.orderLine.findMany({
+      where: { order: { customerId: customer.id, id: { notIn: orderIds } } },
+      select: { orderId: true, itemId: true, unit: true, quantity: true },
+      orderBy: { createdAt: "asc" },
+    });
+    for (const id of new Set(impLines.map((l) => l.orderId))) orderIds.push(id);
+    check("⑧a içe aktarım tek sipariş, 3 satır yazdı", imp.created === 1 && impLines.length === 3,
+      `created=${imp.created} lines=${impLines.length} status=${imp.status} failed=${imp.failed}`);
+    const q = (n: number) => impLines.find((l) => Number(l.quantity) === n);
+    check("⑧b MT kalem + boş Birim → MT", q(10)?.unit === ItemUnit.MT, String(q(10)?.unit));
+    check("⑧c KG kalem + boş Birim → KG (kalemden kopya)", q(20)?.unit === ItemUnit.KG, String(q(20)?.unit));
+    check("⑧d MT kalem + 'Kilogram' → KG (etiketle açık değer)", q(5)?.unit === ItemUnit.KG, String(q(5)?.unit));
   } finally {
     await cleanup();
     await prisma.$disconnect();

@@ -89,7 +89,24 @@ const COLUMNS: ImportColumn[] = [
     help: "Boş = ham talep (renksiz).",
     example: "",
   },
-  { key: "quantity", label: "Miktar (m)", type: "number", required: true, child: true, example: "1200" },
+  // ⚠️ Başlık "Miktar (m)" KORUNDU: panel Excel başlığını ETİKETLE eşler
+  // (`lib/import/parse.ts` byLabel) — yeniden adlandırmak indirilmiş şablonları
+  // kırardı. Birim ayrı sütunda; boşsa kalem kartından kopyalanır.
+  { key: "quantity", label: "Miktar (m)", type: "number", required: true, child: true, example: "1200",
+    help: "Kalemin birimindeki miktar (Birim sütunu boşsa kalem kartının birimi; kumaşta tipik olarak metre)." },
+  {
+    key: "unit",
+    label: "Birim",
+    type: "enum",
+    child: true,
+    enumValues: [
+      { value: "MT", label: "Metre" },
+      { value: "KG", label: "Kilogram" },
+      { value: "ADET", label: "Adet" },
+    ],
+    help: "Boş = kalem kartındaki birim. Kilogram/Adet satırda sevk karşılaması ÖLÇÜLMEZ (defter metre).",
+    example: "",
+  },
   { key: "width", label: "En (cm)", type: "number", child: true, example: "180" },
   { key: "unitPrice", label: "Birim Fiyat", type: "number", child: true, help: "Boş bırakılabilir.", example: "" },
   {
@@ -291,6 +308,8 @@ export const orderImportAdapter: ImportAdapter = {
           quantity: c.values.quantity,
         };
         if (c.values.colorCode__id) line.colorId = c.values.colorCode__id;
+        // Birim: boşsa gönderilmez → servis kalem kartından kopyalar (sessiz MT yok).
+        if (c.values.unit !== undefined && c.values.unit !== null && c.values.unit !== "") line.unit = c.values.unit;
         if (c.values.width !== undefined) line.width = c.values.width;
         if (c.values.unitPrice !== undefined) line.unitPrice = c.values.unitPrice;
         if (c.values.pieceLengthM !== undefined) line.pieceLengthM = c.values.pieceLengthM;

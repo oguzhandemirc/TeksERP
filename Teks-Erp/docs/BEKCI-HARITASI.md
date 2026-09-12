@@ -951,7 +951,7 @@ Kalan atlamalar üç biçimde ve strict hiçbirini görmez:
 | `Teks-Erp/scripts/test_workorder_order_link.ts` | Sipariş bağlama MİRAS ALMAZ (hedef renk/en siparişten yazılmaz), uyuşmazsa bağlanmaz; renk/en değişimi izli, applyAttributeToRolls BAYRAK özelliklerin | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_workorder_search.ts` | İş emri aramasının sipariş no yolu: tam/kısmi sipariş no yalnız bağlı WO'yu döner, İE no ve müşteri adı araması regresyonsuz. | ✓ |  |  |
 | `mobil/src/screens/Modules/Tambur/canUnlinkOrderLine.test.ts` | Backend son-bağ kuralının istemci aynası: ORDER_PRODUCTION + tek bağ + hedef kumaş varsa kaldırılabilir (becomesStock uyarısı); hedef kumaş yoksa enge |  |  |  |
-| `Teks-Erp/scripts/test_order_line_unit_ledger.ts` | OrderLine.unit: satır birimi kalem kartından kopyalanır (create/update, açık değer kazanır, geçersiz 400); MT-dışı satırda metre defteri shippedQty yazmaz, header Σ yalnız MT, sipariş kendiliğinden kapanmaz (tolerans tuzağı dahil), yanıt warnings taşır; yalnız-MT kapanış korunur; §1 süzgeci | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_order_line_unit_ledger.ts` | OrderLine.unit: satır birimi kalem kartından kopyalanır (create/update, açık değer kazanır, geçersiz 400); MT-dışı satırda metre defteri shippedQty yazmaz, header Σ yalnız MT, sipariş kendiliğinden kapanmaz (tolerans tuzağı dahil), yanıt warnings taşır; yalnız-MT kapanış korunur; §1 süzgeci; içe aktarım "Birim" sütunu (boş = kalemden, etiketle açık değer) | ✓ | ✓ |  |
 
 ## modul-bayrak
 
