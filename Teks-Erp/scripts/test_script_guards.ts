@@ -485,6 +485,30 @@ function main(): void {
     tarayiciTanimi.length === 1 && tarayiciTanimi[0] === "lib/ts-tarama.ts",
     tarayiciTanimi.join(", ") || "(hiç tanım yok — tek kaynak kayboldu)",
   );
+
+  // ═══ §13 — HEDEF BİR KEZ ÇÖZÜLÜR, İKİ ADIM DA ONU KULLANIR ════════════════
+  // 2026-09-12 vakası: SQL yolu `.env` DOSYASINI, `resolve` yolu Prisma'nın kendi
+  // çözümlemesini (`process.env`) okuyordu ⇒ SQL bir veritabanına, defter işareti
+  // BAŞKASINA gitti. Düzeltme "hedef tek yerde çözülür"dü; bu bölüm o cümleyi
+  // İDDİA olmaktan çıkarıp ÖLÇÜLEN bir değişmez yapar (yoksa bir sonraki
+  // refactor ikinci bir çözüm noktası ekler ve kimse görmez).
+  const applyMigKod = kodSatirlari(readFileSync(join(dizin, "apply-migration.ts"), "utf8"));
+  const cozumGecisi = (applyMigKod.match(/resolveDbUrl\(\)/g) ?? []).length;
+  check(
+    "§13a ⭐ apply-migration hedefi TEK yerde çözüyor (1 tanım + 1 çağrı)",
+    cozumGecisi === 2,
+    `${cozumGecisi} geçiş`,
+  );
+  check(
+    "§13b ⭐ resolve adımı hedefi AÇIKÇA alıyor (Prisma kendi çözümlemesine düşmüyor)",
+    /"resolve"[\s\S]{0,240}DATABASE_URL:\s*prismaUrl/.test(applyMigKod),
+    "env: { DATABASE_URL: prismaUrl }",
+  );
+  check(
+    "§13c bağlanılan veritabanı SQL'den doğrulanıyor (URL okumak yetmez)",
+    applyMigKod.includes("SELECT current_database()") && applyMigKod.includes("HEDEF ÇELİŞKİSİ"),
+    "current_database() + durdurma",
+  );
 }
 
 try {

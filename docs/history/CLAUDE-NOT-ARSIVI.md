@@ -6899,6 +6899,24 @@ kullanılabilir ilan ettiği için bu bir SAHA riskiydi.
 `.env`in gösterdiği veritabanına GİTMEZ; `DATABASE_URL` verilmeden aynı komut
 `.env` kaynağını adıyla beyan eder.
 
+**Güncelleme (aynı gün, sonda koşuldu):** ilk yazımda "`current_database()`
+uyuşmazlık dalı ölçülmedi" deniyordu — SENTETİK SONDAYLA ölçüldü. Karşılaştırma
+bilerek bozuldu (`hedefAd + "_SONDA"`), betik `HEDEF ÇELİŞKİSİ` basıp **çıkış
+kodu 1** ile durdu ve SQL'e HİÇ geçmedi; dosya `git checkout` ile geri yüklendi,
+sha256 baz değerle birebir. Kural olarak: **kırmızı verdiği görülmemiş kapı,
+ölçtüğünü iddia eden yeşildir.**
+
+"Hedef bir kez çözülür, iki adım da onu kullanır" cümlesi de İDDİA olmaktan
+çıkarıldı: `test_script_guards §13` `resolveDbUrl`ün tek çağrı noktasını, resolve
+adımının hedefi açıkça aldığını ve `current_database()` doğrulamasının varlığını
+ölçer.
+
+### Ratchet gözlemi
+
+`--apply` beyan tavanı (§11) konduktan sonra taban 24 → 26 betiğe çıkarken
+beyansız sayı 21 → 18'e indi: ratchet yalnız borcu DONDURMUYOR, davranışı da
+ÇEKİYOR. Tavan, borç düştükçe kapanışta yeni gerçek sayıya indirilir.
+
 ### Üç kapı
 
 Migration **yok** · izin **yok** · APK **yok**. Sözleşme: bu betiğin çıktısı artık
