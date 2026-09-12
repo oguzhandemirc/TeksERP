@@ -11,6 +11,7 @@
 ### Değişmezler
 
 - **[ÇEKİRDEK]** Hazır sebep listeleri (fire · kayıt düzeltmesi · elle top ekleme · top iptali · sipariş iptali · yeniden üretim) DB'de yaşar (`ReasonPreset`) ve fabrika kendi diliyle düzenler; `code` doğuşta yazılır ve ASLA düzenlenmez (rapor anahtarı), `label` serbesttir. · bekçi: `test_reason_presets §5` <sub>(CLAUDE.md:73)</sub>
+- **[ÇEKİRDEK]** `ReasonPresetKind` ON İKİ yerde yazılıdır (Prisma enum · backend üç tablo · panel üç · tablet beş) ve üç TypeScript projesi arasında paylaşılan tip YOKTUR — enum'a değer eklemek hiçbir derlemeyi kırmaz, yalnız uzaktaki aynayı sessizce eksik bırakır; yeni kind eklerken on ikisi BİRLİKTE güncellenir. · bekçi: `test_reason_preset_kind_parity` <sub>(CLAUDE.md:73)</sub>
 - **[ÇEKİRDEK]** Fason adımına manuel taşıma malı `AT_SUBCONTRACTOR` YAPMAZ; çıkış ayrıca Fason Sevk ekranından yapılır (taşınan top orada kendiliğinden görünür). <sub>(CLAUDE.md:181)</sub>
 
 ### Yasaklar

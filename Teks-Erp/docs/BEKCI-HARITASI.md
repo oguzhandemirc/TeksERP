@@ -2,7 +2,7 @@
 
 > Üretilmiş (anlama turu 2026-09-05, +10 bekçi 2026-09-06/07; 467 backend bekçisi + 296 istemci testi — Electron 211, mobil 85). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı; 455 dosya, **~6,5 dakika** — 369 sn koşum + 28 sn tip geçidi, ölçüldü 2026-09-05 — 'saatler sürer' cümlesi YANLIŞTI, `docs/standart/TEST-VE-DERLEME.md` [TD-02]). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
 
-Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (94), `diger` (91), `sevkiyat` (87), `etiket` (83), `finans` (81), `siparis` (72), `modul-bayrak` (68), `belge` (65), `ayar` (58), `cuval` (59), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (41), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (30), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (23), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (12), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
+Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (94), `diger` (91), `sevkiyat` (87), `etiket` (83), `finans` (81), `siparis` (72), `modul-bayrak` (68), `belge` (65), `ayar` (58), `cuval` (59), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (41), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (30), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (23), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (12), `sebep-katalogu` (12), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
 
 
 ## yetki-izin (98)
@@ -1851,12 +1851,13 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (94), `di
 | `Teks-Erp/scripts/test_sack_status_invariant.ts` | "Çuvaldaki top başka yere ALINAMAZ" invariantını dört akışta birden (kartela dispatch, tambur depo kesimi/finalize, fason auto-attach) — depo çuvalınd | ✓ |  |  |
 | `Teks-Erp/scripts/test_swatch_stock_reduction_reversal.ts` | Kartela stok düşümü stornosu: kalem = iptal kümesi, düşüm satırı değişmez + ters damga, çift storno 409, ölü kabulün kartelası dirilmez, kalemsiz düşüm listede de engelli, sayfa sınırı (cursor), İKİ YÖNLÜ YARIŞ (kabul iptali ↔ storno, FOR SHARE), silen çağrı yok (üç biçim) | ✓ | ✓ |  |
 
-## sebep-katalogu (11)
+## sebep-katalogu (12)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
 | `Teks-Erp/scripts/test_iade_enhancements.ts` | İade sertleştirmesini ölçer: sebep zorunluluğu (reasonId ∨ reasonText), returnGradingEnabled açık/kapalı kalite→raf statüsü (FIRE→SCRAP, A1→A1_STOCK), | ✓ |  |  |
 | `Teks-Erp/scripts/test_order_cancel_reason.ts` | Sipariş iptal sebebinde kodun sunucu tarafından türetilmesi: geçersiz açık kod 400, serbest metinde kod UYDURULMAZ (null), katalog metniyle eşleşen me | ✓ |  |  |
+| `Teks-Erp/scripts/test_reason_preset_kind_parity.ts` | `ReasonPresetKind`in on iki aynası (Prisma enum · backend 3 · panel 3 · tablet 5) iki yönlü küme eşitliğiyle ölçülür; ayrıca KIND_STORES_TEXT DEĞERLER |  | ✓ |  |
 | `Teks-Erp/scripts/test_reason_presets.ts` | Hazır sebep kataloğunun altı cephesini kilitler: boot uzlaştırması + idempotanlık, ad/kod ayrımı, DB'deki yeni ve gizli kodun kabulü, mobil çevrimdışı | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_roll_cancel_undo.ts` | Ölü etiket sözleşmesini ve iptali geri almayı kilitler: labelPrintedAt verisi korunur ama onay artık kapı DEĞİL, eski istemcinin confirmLabelPrinted'i | ✓ | ✓ | ⚠️ Başlık maddesi kaldırılmış guard'ı hâlâ ölçülüyormuş gibi anlatıyor (gövde doğru). |
 | `Teks-Erp/scripts/test_roll_fold_and_reason.ts` | Roll.foldType + entryReason kalıcı kolon sözleşmesini kilitler: kat MİRAS ALINMAZ, alan hiç gönderilmezse parent→plan fallback'i, filtre kanonikleştir | ✓ |  |  |

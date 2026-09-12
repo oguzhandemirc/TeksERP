@@ -18,7 +18,13 @@ export type ReasonPresetKind =
   | 'ROLL_MANUAL_ENTRY'
   | 'ROLL_CANCEL'
   /** Hızlı İş Emri — depodaki BİTMİŞ topu yeniden üretime alma sebebi (2026-08-25). */
-  | 'WORK_ORDER_REWORK';
+  | 'WORK_ORDER_REWORK'
+  /**
+   * Sipariş iptali — tablette YÜZEYİ YOK ama liste ucu TÜM kind'ları döndürür,
+   * yani bu değer cihaza fiilen geliyor. Union'da olmaması bir tip yalanıydı:
+   * `KIND_LABELS[kind]` o satır için `undefined` verir ve sebep adsız çizilir.
+   */
+  | 'ORDER_CANCEL';
 
 export interface ReasonPreset {
   id: string;
@@ -47,6 +53,9 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
   // Yeniden üretimde satır YOK: kod + metin iş emrinin `parameters.rework`una
   // yazılır; metin ayrıca fason çekisine talimat olur. Kod rapor anahtarıdır.
   WORK_ORDER_REWORK: false,
+  // Sipariş iptalinde satıra GÖRÜNEN metin yazılır (`Order.cancelReason`) + kod
+  // (`cancelReasonCode`) — top iptaliyle aynı sözleşme. Sunucudaki tabloyla bir.
+  ORDER_CANCEL: true,
 };
 
 export const KIND_LABELS: Record<ReasonPresetKind, string> = {
@@ -55,6 +64,7 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   ROLL_MANUAL_ENTRY: 'Elle top ekleme sebepleri',
   ROLL_CANCEL: 'Top iptal sebepleri',
   WORK_ORDER_REWORK: 'Yeniden üretim sebepleri',
+  ORDER_CANCEL: 'Sipariş iptal sebepleri',
 };
 
 export const reasonPresetService = {

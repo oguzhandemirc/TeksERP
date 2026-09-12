@@ -75,6 +75,11 @@ function builtin(kind: ReasonPresetKind): ReasonPreset[] {
       // uydurma kod gönderirse rapor anahtarı çöp olur. Sunucu kataloğuyla
       // (`constants/reason-presets.ts` REWORK_REASONS) birebir aynı sıra.
       return REWORK_REASON_PRESETS.map((r) => mk(r.code, r.label, { requiresText: !!r.requiresText }));
+    case 'ORDER_CANCEL':
+      // Sipariş iptali tablette YAPILMIYOR — çevrimdışı zemin bilerek BOŞ.
+      // Gömülü liste yazmak, sunucudaki fabrika metinleriyle sessizce ayrışan
+      // ikinci bir katalog demek olurdu; burada zeminin koruduğu bir karar yok.
+      return [];
   }
 }
 
@@ -84,6 +89,7 @@ const BUILTIN: Record<ReasonPresetKind, ReasonPreset[]> = {
   ROLL_MANUAL_ENTRY: builtin('ROLL_MANUAL_ENTRY'),
   ROLL_CANCEL: builtin('ROLL_CANCEL'),
   WORK_ORDER_REWORK: builtin('WORK_ORDER_REWORK'),
+  ORDER_CANCEL: builtin('ORDER_CANCEL'),
 };
 
 /** Gömülü satır düzenlenemez — henüz sunucudan okunmamış bir zemindir. */
