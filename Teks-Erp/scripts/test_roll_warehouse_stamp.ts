@@ -24,7 +24,7 @@ import { RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { InventoryService } from "../src/services/inventory.service";
 import { TamburService } from "../src/services/tambur.service";
-import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
+import { ensureDefaultWarehouse, type DefaultWarehouseResult } from "../src/jobs/default-warehouse.job";
 
 const inventory = new InventoryService();
 const tambur = new TamburService();
@@ -44,6 +44,44 @@ function check(label: string, ok: boolean, detail = ""): void {
 const createdRollIds: string[] = [];
 const createdWarehouseIds: string[] = [];
 const TAG = `TEST-WH-${Date.now()}`;
+
+/**
+ * Kırmızı satır NE YAPILACAĞINI söylesin: deposuz top iki ayrı sebepten doğar ve
+ * panzehirleri farklıdır. Tahmin edilmez, ÖLÇÜLÜR.
+ *
+ * ⚠️ "Varsayılan depo VAR MI" bu bekçide SORULMAZ: `main()` ilk iş
+ * `ensureDefaultWarehouse()` çağırıyor, yani cevabı kendisi garantiliyor. Sorsaydı
+ * cevabı HER ZAMAN "var" olurdu — yani hiç basılmayacak bir dal yazmış olurduk.
+ * Ön koşulun EKSİK OLDUĞU, `action` ile ölçülür: `promoted`/`created` = bu DB'de
+ * boot uzlaştırması koşmamıştı ve deposuz satırlar oradan gelmiş olabilir.
+ */
+async function deposuzTanisi(runStart: Date, def: DefaultWarehouseResult): Promise<string> {
+  const onKosul =
+    def.action === "exists"
+      ? ""
+      : `ÖN KOŞUL BU KOŞUMDA KURULDU (\`ensureDefaultWarehouse\` → ${def.action}) ⇒ bu DB'de ` +
+        "boot uzlaştırması (src/jobs/default-warehouse.job.ts, boot + 5 sn) HİÇ koşmamıştı; " +
+        "`resolveTargetWarehouseId` o hâlde FIRLATMAZ, `null` döndürür — top deposuz doğar ve " +
+        "onu yaratan bekçi YEŞİL kalır. · ";
+
+  const enYeni = await prisma.roll.findFirst({
+    where: {
+      warehouseId: null,
+      NOT: [{ barcode: { startsWith: "TEST" } }, { barcode: { startsWith: "TST" } }],
+    },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true, barcode: true },
+  });
+  if (!enYeni) return `${onKosul}test-dışı deposuz satır bulunamadı`;
+  const gecmis = enYeni.createdAt < runStart;
+  return (
+    `${onKosul}en yeni test-dışı deposuz satır ${enYeni.createdAt.toISOString()} ` +
+    `(${enYeni.barcode ?? "barkodsuz"}) — ` +
+    (gecmis
+      ? "bu koşumdan ESKİ ⇒ GEÇMİŞ boşluğu: `npx tsx scripts/backfill_roll_warehouse.ts`"
+      : "bu koşumda DOĞMUŞ ⇒ bir create noktası damgalamıyor (`resolveTargetWarehouseId` çağrısı eksik)")
+  );
+}
 
 async function main(): Promise<void> {
   console.log("=== Topun deposu: damga bekçisi ===\n");
@@ -183,7 +221,9 @@ async function main(): Promise<void> {
   check(
     "Bu koşumda doğan her top damgalı",
     unstampedThisRun.length === 0,
-    unstampedThisRun.map((r) => r.barcode ?? "(barkodsuz)").join(", ") || `doğan=${bornThisRun}`,
+    unstampedThisRun.length
+      ? `${unstampedThisRun.map((r) => r.barcode ?? "(barkodsuz)").join(", ")} · ${await deposuzTanisi(runStart, def)}`
+      : `doğan=${bornThisRun}`,
   );
 
   // Gerçek (test ön eki olmayan) veride deposuz top KALMAMALI — backfill + 9
@@ -200,7 +240,8 @@ async function main(): Promise<void> {
   check(
     "Test-dışı deposuz top yok (canlı veri damgalı)",
     nullReal === 0,
-    `deposuz(test-dışı)=${nullReal} · test artığı=${nullTotal - nullReal}`,
+    `deposuz(test-dışı)=${nullReal} · test artığı=${nullTotal - nullReal}` +
+      (nullReal > 0 ? ` · ${await deposuzTanisi(runStart, def)}` : ""),
   );
 }
 

@@ -1,9 +1,9 @@
 # `test_superadmin` — iki dallı koşum tasarımı (2026-09-12)
 
-> **Bu belge bir TASARIM ÖNERİSİDİR, henüz kod değildir.** Hedef "3 atlama"yı
-> sıfırlamak DEĞİL: her atlamanın gerekçesinin ÖLÇÜLMÜŞ olması ve atlanan
-> kontrolün **bir yerde** ölçülmüş olması. Kural satırı kabul edilirse
-> `docs/kurallar/superadmin.md`'ye girer.
+> **Bu belge bir TASARIMDIR; fikstür kararı VERİLDİ (2026-09-12), kod henüz
+> yazılmadı.** Hedef "3 atlama"yı sıfırlamak DEĞİL: her atlamanın gerekçesinin
+> ÖLÇÜLMÜŞ olması ve atlanan kontrolün **bir yerde** ölçülmüş olması. Kural
+> satırı `docs/kurallar/superadmin.md`'ye girer.
 
 ## Soru
 
@@ -71,25 +71,36 @@ Bekçiyi iki `DATABASE_URL` ile ardışık koşar, iki damgayı toplar ve
 kodundadır; "iki kez koştum" beyanı değil.
 
 **C. Dal fixture'ları.** `HESAP_YOK` dalı zaten her taze fixture DB'sidir.
-`HESAP_VAR` dalı bir kuruluma muhtaç ve **açık soru budur** (§ Karar bekleyen).
+`HESAP_VAR` dalı bir kuruluma muhtaç — kararı aşağıda (§ KARAR).
 
-## Karar bekleyen — `HESAP_VAR` fixture'ı nasıl doğar?
+## KARAR (2026-09-12) — `HESAP_VAR` fixture'ı: **(C) dal, DB'nin verisidir**
 
-Üç aday, üçü de bir bedel taşıyor:
+Gerekçe ölçümün kendisinden çıkıyor: dal **koşumun değil HEDEF DB'nin**
+özelliğidir ve üç kural birden tek koşumda çevrilmesini engelliyor. O hâlde
+fixture de **DB düzeyinde bir varlık** olmalı — `HESAP_VAR` hedefi **bir kez**
+kurulur ve öyle kalır.
+
+**Şart:** hesap YAPTIRIMLI yoldan doğar — `superadmin:kur`, **TTY ile**. TTY'siz
+sağlama yasaktır ve bu yasak fixture uğruna delinmez. O yol bir insan
+müdahalesi gerektirdiği için fixture **kullanıcı döndüğünde** kurulur.
+
+**O zamana kadar `HESAP_VAR` dalı BEYANLI ATLANIR, sessiz değil.** Atlama
+gerekçesi birebir şudur: *"sistem hesabı yaratmak TTY ister, kullanıcı kararı"* —
+yani atlama bir eksiklik beyanıdır, bir kapsam iddiası değil.
+
+### Reddedilen iki aday (gerekçeleriyle, tekrar açılmasın diye)
 
 1. **Fixture yazarı** (`fixture-superadmin.ts`) — `isSystemAccount`'a yazma
-   yetkisi `hedefDbEngeli()` geçmiş DB'lerle sınırlı. *Bedel:* "tek yazar
+   yetkisi `hedefDbEngeli()` geçmiş DB'lerle sınırlı. *Bedeli:* "tek yazar
    script" kuralına ikinci yazar eklenir; kuralın mekanik bekçisi zayıflar.
-2. **`superadmin:kur`'a TTY'siz test kipi** — yalnız fixture DB'sinde,
-   parola argümandan. *Bedel:* ürün script'ine test dallanması girer; sır
-   hijyeni yüzeyi genişler.
-3. **Dalı DB'nin verisi olarak kabul et** — `HESAP_VAR` koşumu yalnız zaten
-   sistem hesabı olan bir fixture DB'sinde yapılır, koşucu bunu bulamazsa
-   "doğrulanamadı" beyan eder ve devreder. *Bedel:* tamamlık her koşumda değil,
-   o DB varken garanti edilir.
+2. **`superadmin:kur`'a TTY'siz test kipi** — yalnız fixture DB'sinde, parola
+   argümandan. *Bedeli:* ürün script'ine test dallanması girer; sır hijyeni
+   yüzeyi genişler.
 
-**Öneri: (3) + (A) + (B).** İkisi bugün inebilir ve hiçbir kuralı gevşetmez;
-(1)/(2) ancak (3)'ün yetmediği ölçülürse açılır.
+İkisi de ancak (C)'nin YETMEDİĞİ ÖLÇÜLÜRSE yeniden açılır — tahminle değil.
+
+**Uygulama sırası:** (A) dal damgası ve (B) iki dallı koşucu (C)'den BAĞIMSIZ
+inebilir ve hiçbir kuralı gevşetmez; ikisi olmadan (C) zaten beyan üretmez.
 
 ## Yapılmayacaklar
 
