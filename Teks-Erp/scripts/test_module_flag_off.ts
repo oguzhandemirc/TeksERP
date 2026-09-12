@@ -249,12 +249,24 @@ const SONDA_IZINLERI = [
   "workorder:read",
   "order:read",
   "quality:read",
+  // Devere sondası (`/api/warp-specs`) modül kapısından SONRA izin kapısına
+  // çarpar; bu izin olmadan "modül AÇIKKEN 2xx" körlük zemini modül yüzünden
+  // değil YETKİ yüzünden kırmızı verir ve yanlış hikâye anlatır (ölçüldü).
+  "warpspec:read",
 ];
 
 const TEST_USERNAME = `bekci.modul.${process.pid}`;
 const TEST_PASSWORD = "test123456";
 let testUserId: string | null = null;
 const ilkDegerler = new Map<string, boolean>();
+/**
+ * Başlangıçta SATIRI OLMAYAN anahtarlar. "Satır yok" ile "satır false" aynı şey
+ * DEĞİLDİR: §3 satırın YOKLUĞUNU sözleşme sayar (damgasız kurulumda profil
+ * uygulanmamıştır). `ilkDegerler` boolean'a düzleştirdiği için ayrım burada
+ * saklanır — yoksa geri yükleme olmayan satırı YAZAR ve bekçi ikinci koşumda
+ * kendi §3'ünü kırar (ölçüldü 2026-09-12: koşum sonrası altı satır kalıyordu).
+ */
+const ilkYokOlanAnahtarlar = new Set<string>();
 
 async function serverUp(): Promise<boolean> {
   try {
@@ -328,6 +340,21 @@ function onKosulKapanisi(alan: string): string[] {
     cur = MODULE_DEPENDENCIES[cur];
   }
   return out;
+}
+
+const ALAN_KODU = new Map<string, string>(MODULLER.map((m) => [m.alan as string, m.modulKodu]));
+
+/**
+ * Zincirin EKSİK OLAN EN DIŞTAKİ halkası — kapının 403'te söylemesi gereken ad.
+ *
+ * Üç halkalı bir modülde (devere → iplik → ticaret) tek seviye bakmak YANILIR:
+ * ticaret kapalıyken "İplik'i aç" demek, operatörü AÇILAMAYAN bir toggle'a
+ * gönderir (iplik'in kendisi ticaret'e bağlı). Doğru cevap ilk açılması gereken
+ * anahtardır, o da dışarıdan içeri ilk kapalı halkadır.
+ */
+function eksikHalka(alan: string, acik: string[]): string {
+  const disaridanIceri = [...onKosulKapanisi(alan)].reverse();
+  return disaridanIceri.find((a) => !acik.includes(a)) ?? alan;
 }
 
 async function main(): Promise<void> {
@@ -605,6 +632,17 @@ async function main(): Promise<void> {
 
   // Orijinal değerleri sakla (finally geri yazar) — HAM DB okuması.
   for (const [alan, deger] of await dbBayraklariOku()) ilkDegerler.set(alan, deger);
+  {
+    const varOlan = await prisma.systemSetting.findMany({
+      where: { key: { in: YONETILEN.map((a) => ALAN_DB_ANAHTARI[a]!) } },
+      select: { key: true },
+    });
+    const varKume = new Set(varOlan.map((s) => s.key));
+    for (const alan of YONETILEN) {
+      const anahtar = ALAN_DB_ANAHTARI[alan]!;
+      if (!varKume.has(anahtar)) ilkYokOlanAnahtarlar.add(anahtar);
+    }
+  }
 
   interface SondaSonucu {
     durum: number;
@@ -650,9 +688,12 @@ async function main(): Promise<void> {
         continue;
       }
       // ⚠️ Bağımlı modülde ön koşul DA kapalı olduğu için gövde ÖN KOŞULUN
-      // adını taşır — mesaj EKSİK OLANI söylemeli.
-      const beklenenModul = m.onKosul?.beklenenModulKodu ?? m.modulKodu;
-      const beklenenEtiket = MODULE_LABELS[m.onKosul?.alan ?? m.alan]!;
+      // adını taşır — mesaj EKSİK OLANI söylemeli. Bu turda hepsi kapalı,
+      // yani beklenen ad zincirin EN DIŞTAKİ halkasıdır (üç halkada iplik değil
+      // ticaret; `eksikHalka` başlığı).
+      const eksik = eksikHalka(m.alan, []);
+      const beklenenModul = ALAN_KODU.get(eksik) ?? m.modulKodu;
+      const beklenenEtiket = MODULE_LABELS[eksik]!;
       const kotu = m.sondalar
         .map((yol, i) => ({ yol, s: sonuclar.get(m.alan)![i]! }))
         .filter(
@@ -681,8 +722,8 @@ async function main(): Promise<void> {
       }
       const s = sonuclar.get(m.alan)![0]!;
       check(
-        `§4b ⭐ ${m.alan}: ön koşul (${m.onKosul.alan}) kapalıyken 403 EKSİK OLANI söylüyor`,
-        s.modul === m.onKosul.beklenenModulKodu,
+        `§4b ⭐ ${m.alan}: ön koşul zinciri kapalıyken 403 EN DIŞTAKİ eksiği söylüyor (${eksikHalka(m.alan, [])})`,
+        s.modul === ALAN_KODU.get(eksikHalka(m.alan, [])),
         `modul=${s.modul ?? "—"} — yanlış anahtarı söylemek operatörü yanlış toggle'a gönderir`,
       );
     }
@@ -760,9 +801,10 @@ async function main(): Promise<void> {
         if (g.s.durum < 200 || g.s.durum >= 300) kotu.push(`AÇIK ${g.yol}→${g.s.durum}`);
         continue;
       }
-      // Kapalı modül: ön koşulu AÇIKSA kendi adını, kapalıysa ön koşulun adını söyler.
-      const onKosulAcik = m.onKosul ? acik.includes(m.onKosul.alan) : true;
-      const beklenenModul = onKosulAcik ? m.modulKodu : m.onKosul!.beklenenModulKodu;
+      // Kapalı modül: zincirin EN DIŞTAKİ eksik halkasını söyler. Hangi halka
+      // olduğu BU TURDA neyin açık olduğuna bağlıdır — tek seviye bakmak üç
+      // halkalı modülde yanılır (`eksikHalka` başlığı).
+      const beklenenModul = ALAN_KODU.get(eksikHalka(m.alan, acik))!;
       if (g.s.durum !== 403 || g.s.kod !== "MODULE_DISABLED" || g.s.modul !== beklenenModul) {
         kotu.push(
           `KAPALI ${g.yol}→${g.s.durum}/${g.s.kod ?? "kodsuz"}/modul=${g.s.modul ?? "—"} ` +
@@ -799,6 +841,14 @@ main()
     try {
       if (ilkDegerler.size > 0) {
         await bayraklariUygula(Object.fromEntries(ilkDegerler));
+      }
+      // Satırsız doğan anahtarlar SATIRSIZ bırakılır (`ilkYokOlanAnahtarlar`
+      // başlığı) — `setFeatureFlags` değer yazarak satır üretir, o da §3'ün
+      // ölçtüğü "boş kurulum" hâlini bekçinin kendisi bozar.
+      if (ilkYokOlanAnahtarlar.size > 0) {
+        await prisma.systemSetting.deleteMany({
+          where: { key: { in: [...ilkYokOlanAnahtarlar] } },
+        });
       }
     } catch (e) {
       // ⚠️ Sessizce yutma: geri yazma düşerse bir SONRAKİ bekçi (grandfathering)
