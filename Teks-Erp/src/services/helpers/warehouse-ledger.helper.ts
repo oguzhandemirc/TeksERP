@@ -406,8 +406,15 @@ export async function reverseAllRollStockMoves(
 export interface StockMoveScope {
   /** İleri satırın sebep kodu: hangi yazıcının satırını tersliyoruz. */
   reasonCode: string;
-  /** İleri satırın adım damgası (bugünden sonraki satırlarda dolu). */
-  workOrderStepId: string;
+  /**
+   * İleri satırın adım damgası (bugünden sonraki adım satırlarında dolu).
+   *
+   * ⚠️ Bir ADIMA AİT OLMAYAN yollar (topun iptali gibi) açıkça `null` geçer —
+   * alan opsiyonel DEĞİL, çünkü "unutuldu" ile "adımı yok" ayrımı kaybolursa
+   * kapsamsız ters kayıt sınıfı geri döner. Prisma'da `workOrderStepId: null`
+   * zaten "damgasız satır" demek, yani sorgu dalı değişmez.
+   */
+  workOrderStepId: string | null;
 }
 
 /**

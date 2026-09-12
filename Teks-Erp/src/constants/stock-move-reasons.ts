@@ -20,6 +20,10 @@ export const STOCK_MOVE_REASON = {
   KURSUN_REOPEN: "KURSUN_REOPEN",
   /** İş emrinden çıkarma — üretimden stoğa geri dönüş. */
   WO_DETACH: "WO_DETACH",
+  /** Topun kayıttan düşmesi (iptal) — stoktan çıkış. */
+  ROLL_CANCEL: "ROLL_CANCEL",
+  /** İptalin geri alınması — `ROLL_CANCEL` satırının TERSİ. */
+  CANCEL_RESTORE: "CANCEL_RESTORE",
   /** İş emri kapanış/iptal dispozisyonu. */
   DISPOSITION: "DISPOSITION",
   /** Depo topunun kesimi (ebeveyn çıkışı + çocuk girişi, net sıfır). */

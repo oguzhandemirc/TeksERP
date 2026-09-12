@@ -14,7 +14,15 @@ import { AuditService } from "./audit.service";
 import { normalizeFoldType, resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { resolveTargetWarehouseId } from "./helpers/warehouse.helper";
-import { writeWarehouseMovement, writeWarehouseMovements } from "./helpers/warehouse-ledger.helper";
+import {
+  postStockMove,
+  qtyYazilabilir,
+  reverseLatestScopedStockMove,
+  writeWarehouseMovement,
+  writeWarehouseMovements,
+} from "./helpers/warehouse-ledger.helper";
+import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
+import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { AppError } from "../utils/app-error";
 import { assertMasterDataLiveTx, lockAgainstMergeTx } from "./helpers/master-data-live.helper";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
@@ -3621,22 +3629,34 @@ export class InventoryService {
       // DEPO DEFTERİ — mal depodan DÜŞTÜ (kayıt hatalıydı ya da fire).
       // `warehouseId` BİLEREK temizlenmez: "en son hangi depodaydı" izi kalsın ve
       // iptal geri alınırsa (restoreCancelled) top rafına dönebilsin.
-      // ⚠️ Politika "skip": 0 metrajlı topun iptalinde yazılacak hareket YOKTUR
-      // (stoktan düşen mal yok) ve iptal yine de mümkün olmalı — fabrika
-      // kopyasında 0 metrajlı 52 iptal topu var. Atlandığı SESSİZ KALMAZ: dönen
-      // değer audit yüküne yazılır.
-      const ledgerRowWritten = await writeWarehouseMovement(
-        tx,
-        {
+      // ⚠️ STOK DEFTERİ KAPISI (eski kapı değil): satır artık İKİ UCUNDAKİ
+      // STATÜYÜ taşır. Eski kapı statüsüz satır yazıyordu ve bunun bedeli
+      // ölçüldü — ucu kurulamayan satır TERSLENEMİYOR, dolayısıyla iptali geri
+      // alma defteri kalıcı olarak eksik bırakıyordu (75 m ölçümü, 2026-09-12).
+      //
+      // ⚠️ Satır YALNIZ stok kümesinden düşen mal için yazılır: `IN_PRODUCTION`
+      // ya da `AT_SUBCONTRACTOR` bir top iptal edilirken stoktan bir şey
+      // düşmez (o mal zaten stok dışındaydı) — eski kapı burada da koşulsuz
+      // yazıyordu ve depoya girmemiş malı düşmüş gösteriyordu.
+      //
+      // ⚠️ 0 metrajlı topun iptali MÜMKÜN olmalı (fabrikada 52 böyle top) ve o
+      // durumda yazılacak hareket YOKTUR. Atlandığı SESSİZ KALMAZ: dönen değer
+      // audit yüküne yazılır.
+      const ledgerRowWritten =
+        r.warehouseId !== null && WAREHOUSE_STOCK_STATUSES.includes(existing.status) && qtyYazilabilir(r.currentQty);
+      if (ledgerRowWritten) {
+        await postStockMove(tx, {
           rollId: id,
           eventType: WarehouseEventType.CANCEL,
           qty: r.currentQty,
-          fromWarehouseId: r.warehouseId,
+          // Çıkış ucu: topun İPTAL ÖNCESİ statüsü (`preCancelStatus` ile aynı
+          // kaynak) — "CANCELLED'dan çıktı" demek yanlış olurdu.
+          from: { warehouseId: r.warehouseId!, status: existing.status },
+          reasonCode: STOCK_MOVE_REASON.ROLL_CANCEL,
           userId: userId ?? null,
           notes: cancelReasonText ? cancelReasonText.slice(0, 300) : null,
-        },
-        { onZeroQty: "skip" },
-      );
+        });
+      }
 
       // Etkilenen step'lerin status'unu recompute et.
       //
@@ -3852,21 +3872,49 @@ export class InventoryService {
 
     // ATOMİK CLAIM: guard'lar tx dışında okundu; pencerede başka bir işlem topu
     // değiştirdiyse (ör. arşivleme, yeniden iptal) kaybeden 409 alır.
-    const claim = await prisma.roll.updateMany({
-      where: { id, status: RollStatus.CANCELLED },
-      data: {
-        status: target,
-        // İz TEMİZLENİR: top artık iptal değil. Sebep audit'te kalır (aşağıda),
-        // yani "bir zamanlar iptal edilmişti" bilgisi kaybolmaz — ama satır
-        // "şu an iptal" demeyi bırakır, çünkü değil.
-        cancelledAt: null,
-        cancelledById: null,
-        cancelReason: null,
-        cancelReasonCode: null,
-        preCancelStatus: null,
-      },
+    //
+    // ⚠️ BU YOL ARTIK TRANSACTION AÇIYOR (eskiden hiç açmıyordu): claim ile ters
+    // kayıt AYNI işlemde olmak ZORUNDA. Ayrı olsalardı claim commit olup ters
+    // satır düşebilir ve top rafa dönerken defter dönmediğini söylerdi — ölçüldü
+    // (2026-09-12): bu yol defter satırı hiç yazmadığı için iptali geri alma
+    // depo defterini KALICI olarak 75 m eksik bırakıyordu.
+    //
+    // ⚠️ Claim kaybedilirse tx İÇİNDE fırlatılmaz: dönen 0 ile dışarıda 409
+    // atılır, böylece "kaybeden" ile "gerçek hata" ayrı yollardan geçer.
+    const { claimCount, ledger } = await prisma.$transaction(async (tx) => {
+      const c = await tx.roll.updateMany({
+        where: { id, status: RollStatus.CANCELLED },
+        data: {
+          status: target,
+          // İz TEMİZLENİR: top artık iptal değil. Sebep audit'te kalır (aşağıda),
+          // yani "bir zamanlar iptal edilmişti" bilgisi kaybolmaz — ama satır
+          // "şu an iptal" demeyi bırakır, çünkü değil.
+          cancelledAt: null,
+          cancelledById: null,
+          cancelReason: null,
+          cancelReasonCode: null,
+          preCancelStatus: null,
+        },
+      });
+      if (c.count === 0) return { claimCount: 0, ledger: null };
+      // DEPO DEFTERİ — iptalin ÇIKIŞ satırı terslenir. Kapsam ZORUNLU ve bu yol
+      // bir ADIMA AİT DEĞİL, o yüzden `workOrderStepId: null` AÇIKÇA geçilir:
+      // "unutuldu" ile "adımı yok" ayrımı kaybolursa kapsamsız ters kayıt sınıfı
+      // geri döner. Satır bulunamazsa (0 metrajlı ya da stok dışı iptal) sayı
+      // döner ve audit yüküne yazılır — sessizce geçilmez.
+      const l = await reverseLatestScopedStockMove(
+        tx,
+        [id],
+        { reasonCode: STOCK_MOVE_REASON.ROLL_CANCEL, workOrderStepId: null },
+        {
+          reasonCode: STOCK_MOVE_REASON.CANCEL_RESTORE,
+          userId: userId ?? null,
+          notes: opts?.reason?.trim() || null,
+        },
+      );
+      return { claimCount: c.count, ledger: l };
     });
-    if (claim.count === 0) {
+    if (claimCount === 0) {
       throw AppError.conflict(
         "Top bu sırada başka bir işleme girdi — listeyi yenileyip tekrar deneyin.",
       );
@@ -3888,6 +3936,9 @@ export class InventoryService {
         status: target,
         event: "CANCEL_RESTORED",
         reason: opts?.reason?.trim() || null,
+        // Terslenen/atlanan satır sayıları: "defterde olması gereken çıkış yok"
+        // (bulunamayan) ve "ucu kurulamayan eski satır" (statüsüz) sessiz kalmaz.
+        ...(ledger ? { defter: ledger } : {}),
       },
     });
 
