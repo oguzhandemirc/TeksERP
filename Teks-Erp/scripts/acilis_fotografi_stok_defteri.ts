@@ -1,8 +1,19 @@
 // =============================================================================
 // AÇILIŞ FOTOĞRAFI — stok defterinin doğruluk başlangıcı (OPENING_BALANCE)
 // =============================================================================
-//   npx tsx scripts/acilis_fotografi_stok_defteri.ts                    → KURU KOŞUM (varsayılan)
-//   npx tsx scripts/acilis_fotografi_stok_defteri.ts --apply --onay=<N> → fotoğrafı yazar
+//   npx tsx scripts/acilis_fotografi_stok_defteri.ts                    → KURU KOŞUM (varsayılan, SIKI mod)
+//   npx tsx scripts/acilis_fotografi_stok_defteri.ts --kirilim-beyan    → KURU KOŞUM, GEVŞEK mod
+//   npx tsx scripts/acilis_fotografi_stok_defteri.ts --apply --onay=<N> --hedef=<db> [--kirilim-beyan] → yazar
+//
+// İKİ MOD (kullanıcı kararı 2026-09-12; varsayılan SIKI):
+//   SIKI (bayraksız) — sevk · storno · iade · transfer yolları stok defterine BAĞLI
+//     olmadan fotoğraf çekilmez (ön koşul ⑥). Bağlıysa fotoğraf sonrası toplam Σ DA
+//     depo × durum kırılımı DA güvenilirdir.
+//   GEVŞEK (`--kirilim-beyan`) — ⑥ sağlanmadan, bilerek "şimdi çek" kararı. Fotoğraf
+//     sonrası yalnız TOPLAM Σ güvenilirdir; depo × durum kırılımı ve as-of kesiti
+//     BEYAN kalır (eski kapıdan yazılan sevk satırı hangi durumdan çıktığını söylemez).
+//   Mod hem koşum çıktısına hem yazılan her satırın `notes`una hem audit yüküne girer —
+//   fotoğrafı sonradan okuyan hangi modda çekildiğini deftere bakarak bilir.
 //
 // NEDEN (tasarım docs/design/DEPO-STOK-DEFTERI-TASARIM.md §D6): bugünkü defter
 // depodaki topların çoğunun girişini hiç görmedi (statü terfisi satır yazmıyordu,
@@ -41,6 +52,12 @@
 //   ⑤ HEDEF: `--apply` ayrıca `--hedef=<db-adı>` ister ve DATABASE_URL'den çözülen adla
 //      birebir tutmazsa DURUR; başlık her koşumda DB adı + host basar. `--onay` kaç satır,
 //      `--hedef` nerede sorusunu cevaplar — ikisi birden olmadan geri alınamaz yazma yok.
+//   ⑥ SEVK BAĞI (yalnız SIKI mod engeller; GEVŞEK modda bilgi): "sevkiyat stok defterine
+//      bağlı mı" sorusu beyanla değil iki bağımsız araçla ÖLÇÜLÜR (`lib/stok-defteri-bag-olcumu.ts`):
+//      K — bu ağaçta eski kapıyı (`writeWarehouseMovement(s)`, statü yazmaz) çağıran yol
+//      sayısı AST ile (pozitif kontrol: helper'da tanım bulunmalı); V — hedef DB'de en yeni
+//      statüsüz satırdan SONRA stok defteri kapısından yazılmış satır var mı (sahadaki
+//      backend'in yeni kapıyı kullandığının kanıtı; ağaç ≠ saha olabilir). K=0 ∧ V ⇒ bağlı.
 //
 // EPOCH ANI: fotoğraf satırlarının createdAt'i (tek tx, aynı `now()`). Ayrıca
 //   bir ayar anahtarı YAZMAZ — `warehouseLedgerStartDate` kapısı (D6) 6e'nin
@@ -67,6 +84,8 @@
 //   kırılımlı Σ ve as-of kesiti, eski kapılar stok defterine taşınana kadar GÜVENİLİR
 //   DEĞİL (6e dilim dilim taşıyor). "Epoch sonrası her şey doğru" sanılmasın; dry-run
 //   canlı statüsüz satır sayısını bilgi olarak basar. D6'ya aynı cümle girer (1e).
+//   Bu sınır GEVŞEK modun sınırıdır; SIKI mod ⑥ ile eski kapıların taşınmış olmasını
+//   ŞART koşar ve ancak o zaman kırılım da güvenilir sayılır.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { Prisma, WarehouseEventType } from "@prisma/client";
@@ -75,12 +94,30 @@ import { WAREHOUSE_STOCK_STATUSES } from "../src/services/helpers/warehouse-stoc
 import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
 import { AuditService } from "../src/services/audit.service";
 import { hedefDbAdi } from "./lib/hedef-db-kapisi";
+import { eskiKapiCagiranlari, eskiKapiVeriIzi, sevkBagiKarari } from "./lib/stok-defteri-bag-olcumu";
+import * as path from "node:path";
 
 const argv = process.argv.slice(2);
 const APPLY = argv.includes("--apply");
 const ONAY = Number((argv.find((a) => a.startsWith("--onay=")) ?? "").split("=")[1] ?? NaN);
 const HEDEF = (argv.find((a) => a.startsWith("--hedef=")) ?? "").split("=")[1] ?? "";
+/** GEVŞEK mod: ⑥ sağlanmadan çek, kırılım beyan kalsın. Varsayılan SIKI. */
+const KIRILIM_BEYAN = argv.includes("--kirilim-beyan");
+const MOD = KIRILIM_BEYAN ? "KIRILIM-BEYAN" : "SIKI";
+/**
+ * Yazılan her satırın gerekçesi (≤300): MOD bayraktan, GÜVENİLİRLİK ölçümden gelir —
+ * fotoğrafı sonradan okuyan hem "hangi modda" hem "hangi rakam güvenilir" sorusunu
+ * deftere bakarak cevaplar. Gevşek modda bağ ölçülmüş de olsa not doğruyu söyler.
+ */
+function satirNotu(bagli: boolean): string {
+  return (
+    `Açılış fotoğrafı — stok defterinin doğruluk başlangıcı · mod ${MOD} · sevk/storno/iade/transfer stok defterine ` +
+    `${bagli ? "BAĞLI (ölçüldü)" : "BAĞLI DEĞİL (ölçüldü)"} · güvenilir: toplam Σ` +
+    `${bagli ? " + depo×durum kırılımı + as-of" : "; depo×durum kırılımı ve as-of kesiti BEYAN"}`
+  );
+}
 const BATCH = 500;
+const BACKEND_KOK = path.resolve(__dirname, "..");
 /** ④ sessiz pencere: bu kadar saniye içinde defter yazımı varsa trafik durmamıştır. */
 const SESSIZ_PENCERE_SN = 120;
 
@@ -94,7 +131,12 @@ function dbHost(): string {
 async function main(): Promise<void> {
   const db = hedefDbAdi();
   console.log(`=== Stok defteri AÇILIŞ FOTOĞRAFI — ${APPLY ? `UYGULAMA (onay=${ONAY}, hedef=${HEDEF})` : "KURU KOŞUM (hiçbir şey yazılmaz)"} ===`);
-  console.log(`HEDEF VERİTABANI: ${db} @ ${dbHost()}\n`);
+  console.log(`HEDEF VERİTABANI: ${db} @ ${dbHost()}`);
+  console.log(
+    `MOD: ${MOD} — ${KIRILIM_BEYAN
+      ? "--kirilim-beyan: ⑥ sevk bağı ŞART DEĞİL; fotoğraf sonrası yalnız TOPLAM Σ güvenilir, depo×durum kırılımı BEYAN kalır"
+      : "varsayılan (sıkı): ⑥ sevk bağı sağlanmadan --apply reddedilir; sağlanırsa toplam Σ VE depo×durum kırılımı güvenilir"}\n`,
+  );
 
   // ④ sessiz pencere ölçümü
   const sonYazim = await prisma.warehouseMovement.count({ where: { createdAt: { gte: new Date(Date.now() - SESSIZ_PENCERE_SN * 1000) } } });
@@ -105,9 +147,11 @@ async function main(): Promise<void> {
     const son = await prisma.warehouseMovement.findFirst({
       where: { eventType: WarehouseEventType.OPENING_BALANCE },
       orderBy: { createdAt: "desc" },
-      select: { createdAt: true },
+      select: { createdAt: true, notes: true },
     });
-    console.error(`❌ Fotoğraf ZATEN çekilmiş: ${onceki} OPENING_BALANCE satırı, epoch ${son?.createdAt.toISOString()}. İkinci fotoğraf ayrı karardır — bu script koşmaz.`);
+    // Modu satırın kendi gerekçesinden oku — okuyan hangi modda çekildiğini deftere bakarak bilsin.
+    const cekilenMod = son?.notes?.includes("mod KIRILIM-BEYAN") ? "KIRILIM-BEYAN" : son?.notes?.includes("mod SIKI") ? "SIKI" : "(notta mod yok — bayrak öncesi fotoğraf)";
+    console.error(`❌ Fotoğraf ZATEN çekilmiş: ${onceki} OPENING_BALANCE satırı, epoch ${son?.createdAt.toISOString()}, mod ${cekilenMod}. İkinci fotoğraf ayrı karardır — bu script koşmaz.`);
     process.exitCode = 1;
     return;
   }
@@ -149,8 +193,23 @@ async function main(): Promise<void> {
 
   console.log(`Stok kümesi: ${stokta.length + deposuz.length} top · fotoğraflanacak: ${yazilacak.length} (${fmt(toplamM)} m) · 0 m ATLANAN: ${sifir.length} · DEPOSUZ (engel): ${deposuz.length}`);
   console.log(`preEpoch'a düşecek mevcut satır: ${preEpochSayisi} · açık fason ENTRY adayı (uyarı): ${acikFason}`);
-  console.log(`BİLGİ — iki ucu statüsüz satır (eski kapılar): ${statusuz}; fotoğraf sonrası toplam Σ güvenilir, depo×statü/as-of kesiti eski kapılar taşınana kadar DEĞİL.`);
-  console.log(`④ SESSİZ PENCERE — son ${SESSIZ_PENCERE_SN} sn'de defter yazımı: ${sonYazim} ${sonYazim > 0 ? "⚠️ TRAFİK VAR — --apply reddedilir; backend durdurulmalı / vardiya dışı" : "✓ sessiz"}\n`);
+  console.log(`BİLGİ — iki ucu statüsüz satır (eski kapılar): ${statusuz}.`);
+  console.log(`④ SESSİZ PENCERE — son ${SESSIZ_PENCERE_SN} sn'de defter yazımı: ${sonYazim} ${sonYazim > 0 ? "⚠️ TRAFİK VAR — --apply reddedilir; backend durdurulmalı / vardiya dışı" : "✓ sessiz"}`);
+
+  // ⑥ sevk bağı — iki bağımsız araç (kod yolu + veri izi), fail-closed.
+  const bag = sevkBagiKarari(eskiKapiCagiranlari(BACKEND_KOK), await eskiKapiVeriIzi(prisma));
+  const engel6 = !KIRILIM_BEYAN && !bag.bagli;
+  console.log(`⑥ SEVK BAĞI — sevk/storno/iade/transfer stok defterine bağlı mı: ${bag.bagli ? "✓ BAĞLI" : `✗ BAĞLI DEĞİL${KIRILIM_BEYAN ? " (GEVŞEK mod: engel değil, beyan)" : " — SIKI modda --apply reddedilir"}`}`);
+  for (const satir of bag.gerekceler) console.log(`  ${satir}`);
+
+  // Fotoğraf sonrası hangi rakam güvenilir — okuyan bunu koşum çıktısından ve satır notundan görür.
+  const kirilimGuvenilir = bag.bagli;
+  const SATIR_NOTU = satirNotu(bag.bagli);
+  console.log(`\nFOTOĞRAF SONRASI GÜVENİLİRLİK (mod ${MOD}):`);
+  console.log(`  toplam Σ (depo bazlı metraj)      : ✓ güvenilir`);
+  console.log(`  depo × durum kırılımı              : ${kirilimGuvenilir ? "✓ güvenilir (eski kapılar taşınmış)" : "✗ BEYAN — eski kapıdan yazılan satır durum ucu taşımaz"}`);
+  console.log(`  as-of kesiti (geçmiş tarih)        : ${kirilimGuvenilir ? "✓ güvenilir" : "✗ BEYAN — kırılımla aynı sebep"}`);
+  console.log(`  satır notu${engel6 ? " (SIKI modda ⑥ sağlanmadan satır YAZILMAZ)" : ""}: "${SATIR_NOTU}"\n`);
 
   // Depo kırılımı
   const depoKirilim = new Map<string, { adet: number; m: Prisma.Decimal }>();
@@ -176,14 +235,17 @@ async function main(): Promise<void> {
 
   if (!APPLY) {
     console.log(
-      `\nKURU KOŞUM bitti. ${deposuz.length > 0 ? "ENGEL ① açık — --apply reddedilir. " : ""}${sonYazim > 0 ? "ENGEL ④ (trafik) açık. " : ""}Uygulamak için (kullanıcı onayıyla, HEDEF adı birebir):\n` +
-        `  npx tsx scripts/acilis_fotografi_stok_defteri.ts --apply --onay=${yazilacak.length} --hedef=${db}`,
+      `\nKURU KOŞUM bitti (mod ${MOD}). ${deposuz.length > 0 ? "ENGEL ① açık — --apply reddedilir. " : ""}${sonYazim > 0 ? "ENGEL ④ (trafik) açık. " : ""}` +
+        `${engel6 ? "ENGEL ⑥ (sevk bağı) açık — SIKI modda --apply reddedilir; bilerek gevşek çekmek için --kirilim-beyan. " : ""}` +
+        `Uygulamak için (kullanıcı onayıyla, HEDEF adı birebir):\n` +
+        `  npx tsx scripts/acilis_fotografi_stok_defteri.ts --apply --onay=${yazilacak.length} --hedef=${db}${KIRILIM_BEYAN ? " --kirilim-beyan" : ""}`,
     );
     return;
   }
   if (!HEDEF || HEDEF !== db) { console.error(`❌ ⑤ --hedef=${HEDEF || "(yok)"} ≠ çözülen veritabanı "${db}". Yazma YOK.`); process.exitCode = 1; return; }
   if (deposuz.length > 0) { console.error(`❌ ENGEL ①: ${deposuz.length} deposuz top. Fotoğraf çekilmedi.`); process.exitCode = 1; return; }
   if (sonYazim > 0) { console.error(`❌ ENGEL ④: son ${SESSIZ_PENCERE_SN} sn'de ${sonYazim} defter yazımı — trafik durmadan fotoğraf çekilmez.`); process.exitCode = 1; return; }
+  if (engel6) { console.error("❌ ENGEL ⑥: sevk/storno/iade/transfer stok defterine BAĞLI DEĞİL (gerekçe yukarıda). SIKI mod fotoğraf çekmez; kırılımı beyan bırakmayı bilerek seçiyorsan --kirilim-beyan ver."); process.exitCode = 1; return; }
   if (!Number.isFinite(ONAY)) { console.error("❌ --onay=<sayı> zorunlu."); process.exitCode = 1; return; }
   if (ONAY !== yazilacak.length) { console.error(`❌ ONAY UYUŞMUYOR: kuru koşum ${yazilacak.length}, --onay=${ONAY}.`); process.exitCode = 1; return; }
   if (yazilacak.length === 0) { console.log("\nYapılacak iş yok."); return; }
@@ -201,14 +263,15 @@ async function main(): Promise<void> {
         to: { warehouseId: r.warehouseId as string, status: r.status },
         reasonCode: STOCK_MOVE_REASON.OPENING,
         userId: null,
-        notes: "Açılış fotoğrafı — stok defterinin doğruluk başlangıcı",
+        notes: SATIR_NOTU,
       }));
       yazilan += await postStockMoves(tx, inputs);
     }
     return { damga: damga.count, yazilan };
   }, { timeout: 120_000 });
 
-  console.log(`\n✅ Fotoğraf çekildi: ${sonuc.yazilan} satır / ${fmt(toplamM)} m; ${sonuc.damga} mevcut satır preEpoch damgalandı. ATLANAN 0 m: ${sifir.length}.`);
+  console.log(`\n✅ Fotoğraf çekildi (mod ${MOD}): ${sonuc.yazilan} satır / ${fmt(toplamM)} m; ${sonuc.damga} mevcut satır preEpoch damgalandı. ATLANAN 0 m: ${sifir.length}.`);
+  console.log(`   Güvenilir: toplam Σ ✓ · depo×durum kırılımı ${kirilimGuvenilir ? "✓" : "BEYAN"} · as-of ${kirilimGuvenilir ? "✓" : "BEYAN"}.`);
 
   try {
     await AuditService.log({
@@ -216,7 +279,16 @@ async function main(): Promise<void> {
       action: "CREATE",
       tableName: "WAREHOUSE_MOVEMENT",
       recordId: "OPENING_BALANCE",
-      newData: { source: "acilis_fotografi_stok_defteri", event: "STOCK_LEDGER_OPENING", rows: sonuc.yazilan, meters: fmt(toplamM), preEpochStamped: sonuc.damga, skippedZero: sifir.length },
+      newData: {
+        source: "acilis_fotografi_stok_defteri",
+        event: "STOCK_LEDGER_OPENING",
+        mode: MOD,
+        breakdownReliable: kirilimGuvenilir,
+        rows: sonuc.yazilan,
+        meters: fmt(toplamM),
+        preEpochStamped: sonuc.damga,
+        skippedZero: sifir.length,
+      },
     });
   } catch (e) {
     console.warn("audit yazılamadı (best-effort):", (e as Error).message);

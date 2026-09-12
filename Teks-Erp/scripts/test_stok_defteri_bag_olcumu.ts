@@ -1,0 +1,155 @@
+// =============================================================================
+// BEKÇİ — "sevkiyat stok defterine bağlı mı" ölçüm aracı (lib/stok-defteri-bag-olcumu.ts)
+// =============================================================================
+// Açılış fotoğrafının SIKI modu bu araca güvenir; araç yanlış "bağlı" derse
+// fotoğraf beyan kırılımı "güvenilir" diye damgalar. Üç şeyi ölçer:
+//   §1 K aracı SENTETİK ağaçta çağıranı bulur (pozitif), yorum/import'u saymaz,
+//      helper'da tanım yoksa "araç bozuk" der (fail-closed) — negatif sondalar.
+//   §2 V aracı stub istemcide üç hâli doğru sınıflar (statüsüz yeni / eski / yok).
+//   §3 Karar K ∧ V'dir; araç bozukken "bağlı" DEMEZ.
+//   §4 Körlük zemini: gerçek ağaçta araç sağlam ve ≥80 dosya tarıyor.
+// DB'ye dokunmaz.
+// =============================================================================
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { WarehouseEventType } from "@prisma/client";
+import {
+  ESKI_KAPI_HELPER,
+  eskiKapiCagiranlari,
+  eskiKapiVeriIzi,
+  sevkBagiKarari,
+  type KodOlcumu,
+  type VeriOlcumu,
+} from "./lib/stok-defteri-bag-olcumu";
+
+let pass = 0;
+let fail = 0;
+function check(label: string, ok: boolean, extra = ""): void {
+  if (ok) pass++; else fail++;
+  console.log(`${ok ? "✅" : "❌"} ${label}${extra ? " — " + extra : ""}`);
+}
+
+const HELPER_GOVDE = `
+export async function writeWarehouseMovement(tx: unknown, e: unknown): Promise<boolean> { return true; }
+export async function writeWarehouseMovements(tx: unknown, e: unknown[]): Promise<number> { return e.length; }
+export async function postStockMoves(tx: unknown, e: unknown[]): Promise<number> { return e.length; }
+`;
+
+/** Sentetik backend ağacı: helper + verilen servis dosyaları. Döner: kök. */
+function sentetikAgac(helper: string | null, servisler: Record<string, string>): string {
+  const kok = fs.mkdtempSync(path.join(os.tmpdir(), "bag-olcumu-"));
+  if (helper !== null) {
+    fs.mkdirSync(path.join(kok, path.dirname(ESKI_KAPI_HELPER)), { recursive: true });
+    fs.writeFileSync(path.join(kok, ESKI_KAPI_HELPER), helper);
+  } else {
+    fs.mkdirSync(path.join(kok, "src"), { recursive: true });
+  }
+  for (const [ad, govde] of Object.entries(servisler)) {
+    const p = path.join(kok, "src", ad);
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, govde);
+  }
+  return kok;
+}
+
+function veri(enYeniStatusuz: Date | null, enYeniStatulu: Date | null, toplam = 10): VeriOlcumu {
+  const kanitVar = enYeniStatusuz === null || (enYeniStatulu !== null && enYeniStatulu > enYeniStatusuz);
+  return { toplamSatir: toplam, enYeniStatusuz, enYeniStatulu, kanitVar, aileler: [] };
+}
+
+/** Stub istemci: statüsüz/statülü en yeni tarihleri ve aile satırlarını verir. */
+function stubClient(sonStatusuz: Date | null, sonStatulu: Date | null, toplam: number) {
+  const satir = (d: Date, statulu: boolean) => ({ createdAt: d, fromStatus: statulu ? "WAREHOUSE" : null, toStatus: null });
+  return {
+    warehouseMovement: {
+      count: async (args?: { where?: Record<string, unknown> }) => {
+        if (!args?.where) return toplam;
+        return 0;
+      },
+      findFirst: async (args: { where: Record<string, unknown> }) => {
+        const w = args.where;
+        if ("OR" in w) return sonStatulu ? satir(sonStatulu, true) : null;
+        if ("eventType" in w) return null;
+        return sonStatusuz ? satir(sonStatusuz, false) : null;
+      },
+    },
+  } as unknown as Parameters<typeof eskiKapiVeriIzi>[0];
+}
+
+async function main(): Promise<void> {
+  const gecici: string[] = [];
+  try {
+    // §1 K — kod yolu
+    const k1 = sentetikAgac(HELPER_GOVDE, {
+      "services/sevk.service.ts": `import { writeWarehouseMovements } from "./helpers/warehouse-ledger.helper";\n// yorumda writeWarehouseMovement( geçer, sayılmaz\nexport async function sevk(tx: unknown) { await writeWarehouseMovements(tx, []); }\n`,
+      "services/temiz.service.ts": `import { postStockMoves } from "./helpers/warehouse-ledger.helper";\nexport async function temiz(tx: unknown) { await postStockMoves(tx, []); }\n`,
+      "services/__tests__/sevk.test.ts": `import { writeWarehouseMovements } from "../helpers/warehouse-ledger.helper";\nwriteWarehouseMovements(null, []);\n`,
+    });
+    gecici.push(k1);
+    const o1 = eskiKapiCagiranlari(k1);
+    check("§1a araç sağlam (helper'da iki tanım bulundu)", o1.aracSaglam, o1.aracNotu ?? "");
+    check("§1b çağıran TAM 1 (yorum/import/__tests__ sayılmadı)", o1.cagiranlar.length === 1, JSON.stringify(o1.cagiranlar));
+    check("§1c bulunan satır doğru dosya/fonksiyon", o1.cagiranlar[0]?.dosya === "src/services/sevk.service.ts" && o1.cagiranlar[0]?.fonksiyon === "writeWarehouseMovements");
+    check("§1d helper'ın kendisi taranmadı", o1.taranan === 2, `taranan=${o1.taranan}`);
+
+    const k2 = sentetikAgac(HELPER_GOVDE, {
+      "services/temiz.service.ts": `import { postStockMoves } from "./helpers/warehouse-ledger.helper";\nexport async function temiz(tx: unknown) { await postStockMoves(tx, []); }\n`,
+    });
+    gecici.push(k2);
+    const o2 = eskiKapiCagiranlari(k2);
+    check("§1e taşınmış ağaçta çağıran 0 ve araç sağlam", o2.aracSaglam && o2.cagiranlar.length === 0);
+
+    // NEGATİF SONDA: helper tanımı kaybolursa "0 çağıran" değil "araç bozuk".
+    const k3 = sentetikAgac(`export async function postStockMoves(tx: unknown, e: unknown[]): Promise<number> { return e.length; }\n`, {
+      "services/sevk.service.ts": `export async function sevk(tx: unknown) { await (globalThis as any).writeWarehouseMovements(tx, []); }\n`,
+    });
+    gecici.push(k3);
+    const o3 = eskiKapiCagiranlari(k3);
+    check("§1f helper'da tanım yok → aracSaglam=false (fail-closed)", !o3.aracSaglam && o3.cagiranlar.length === 0, o3.aracNotu ?? "");
+    const k4 = sentetikAgac(null, {});
+    gecici.push(k4);
+    const o4 = eskiKapiCagiranlari(k4);
+    check("§1g helper dosyası yok → aracSaglam=false", !o4.aracSaglam);
+
+    // §2 V — veri izi (stub)
+    const t1 = new Date("2026-09-10T10:00:00Z");
+    const t2 = new Date("2026-09-12T10:00:00Z");
+    const v1 = await eskiKapiVeriIzi(stubClient(t2, t1, 10));
+    check("§2a statüsüz satır statülüden YENİ → kanıt yok", !v1.kanitVar);
+    const v2 = await eskiKapiVeriIzi(stubClient(t1, t2, 10));
+    check("§2b statüsüz satır statülüden ESKİ → kanıt var", v2.kanitVar);
+    const v3 = await eskiKapiVeriIzi(stubClient(null, t2, 10));
+    check("§2c statüsüz satır hiç yok → kanıt var", v3.kanitVar);
+    const v4 = await eskiKapiVeriIzi(stubClient(t2, null, 10));
+    check("§2d statülü satır hiç yok, statüsüz var → kanıt yok", !v4.kanitVar);
+    check("§2e aile listesi beş üyeli", v1.aileler.length === 5 && v1.aileler.some((a) => a.aile === WarehouseEventType.SHIPMENT));
+
+    // §3 karar
+    const kodTemiz: KodOlcumu = { aracSaglam: true, aracNotu: null, taranan: 100, cagiranlar: [], agac: "test" };
+    const kodKirli: KodOlcumu = { ...kodTemiz, cagiranlar: [{ dosya: "src/services/shipping.service.ts", satir: 1, fonksiyon: "writeWarehouseMovements" }] };
+    const kodBozuk: KodOlcumu = { ...kodTemiz, aracSaglam: false, aracNotu: "tanım yok" };
+    check("§3a K=0 ∧ V kanıt → BAĞLI", sevkBagiKarari(kodTemiz, veri(t1, t2)).bagli);
+    check("§3b K>0 → bağlı değil (V kanıt olsa da)", !sevkBagiKarari(kodKirli, veri(t1, t2)).bagli);
+    check("§3c K=0 ∧ V kanıt yok → bağlı değil", !sevkBagiKarari(kodTemiz, veri(t2, t1)).bagli);
+    check("§3d araç bozuk → bağlı değil (fail-closed)", !sevkBagiKarari(kodBozuk, veri(t1, t2)).bagli);
+    check("§3e defter boş → K karar verir (bilgi satırı, engel değil)", sevkBagiKarari(kodTemiz, veri(null, null, 0)).bagli);
+    const g = sevkBagiKarari(kodKirli, veri(t1, t2)).gerekceler.join("\n");
+    check("§3f gerekçe çağıran dosyayı adıyla basar", g.includes("shipping.service.ts:1"));
+
+    // §4 körlük zemini — gerçek ağaç
+    const gercek = eskiKapiCagiranlari(path.resolve(__dirname, ".."));
+    check("§4a gerçek ağaçta araç sağlam", gercek.aracSaglam, gercek.aracNotu ?? "");
+    check("§4b gerçek ağaçta ≥80 dosya tarandı", gercek.taranan >= 80, `taranan=${gercek.taranan}`);
+    console.log(`   bilgi: gerçek ağaçta (${gercek.agac}) eski kapı çağıranı ${gercek.cagiranlar.length}: ${gercek.cagiranlar.map((c) => `${c.dosya}:${c.satir}`).join(", ") || "yok"}`);
+  } finally {
+    for (const d of gecici) fs.rmSync(d, { recursive: true, force: true });
+  }
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  process.exit(fail > 0 ? 1 : 0);
+}
+
+main().catch((e) => {
+  console.error("Beklenmeyen hata:", e);
+  process.exit(1);
+});
