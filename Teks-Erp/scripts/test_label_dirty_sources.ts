@@ -19,9 +19,12 @@
 // TERS YÖNDEKİ İNVARİANT DE ÖLÇÜLÜR (asıl kırılgan taraf): etiket HİÇ basılmamış
 // topta bayrak YAZILMAZ — rozet enflasyonu gerçek uyarıyı da körleştirir.
 //
-// Kapsam dışı (bilinçli): SACK bağlam varsayılanının (`LabelContextDefault`)
-// bulunduğu dal yalnız DB'de böyle bir atama YOKSA ölçülür — global atamayı test
-// için değiştirmek canlıya benzeyen dev DB'sinde başka oturumların baskısını bozar.
+// ÖN KOŞULU BEKÇİ KURAR (2026-09-12 — eski cümle GEÇERSİZ): "şablon çözülemedi"
+// dalı (D2-7) yalnız SACK bağlam varsayılanı YOKKEN ölçülebilir. Eski yazım o
+// satır varsa ATLIYORDU; seed satırı kendisi yarattığı için kontrol pratikte hiç
+// koşmadı. Artık bekçi satırı ÖDÜNÇ ALIR (siler), ölçer ve `finally`de birebir
+// geri koyar — geri yükleme de ölçülür (D2-7b). Ortak fikstür kalıcı değişmez;
+// emsal `test_sack_label` aynı satırı aynı biçimde ödünç alıyor.
 // =============================================================================
 
 import { RollStatus, RollEntrySource, LabelKind } from "@prisma/client";
@@ -36,6 +39,16 @@ const ship = new ShippingService();
 let pass = 0;
 let fail = 0;
 let atlanan = 0;
+/**
+ * D2-7'nin ÖN KOŞULU: o dal ancak SACK bağlam varsayılanı YOKKEN ölçülebilir.
+ * Seed o satırı KENDİSİ yaratıyor (`prisma/seed.ts`), dolayısıyla eski yazımda
+ * kontrol hiç koşmuyor, "atlandı" diye bildiriliyordu. Bekçi artık ön koşulunu
+ * kendisi kuruyor: satırı ödünç alır (siler), ölçer ve `finally`de BİREBİR geri
+ * koyar (emsal `test_sack_label`) — ortak fikstür kalıcı değişmez. Geri
+ * yüklemenin KENDİSİ de ölçülür (D2-7b): sessiz geri yükleme, hiç geri
+ * yüklememekten ayırt edilemez.
+ */
+let sackCtxRestore: string | null = null;
 function check(label: string, ok: boolean, detail = ""): void {
   if (ok) { pass++; console.log(`✅ ${label}${detail ? ` — ${detail}` : ""}`); }
   else { fail++; console.error(`❌ ${label}${detail ? ` — ${detail}` : ""}`); }
@@ -213,24 +226,49 @@ async function main(): Promise<void> {
     check("D2-6) ⭐ şablonda sackNote YOK → bayrak YAZILMADI (sahte uyarı yok)", (await sackDirty(sackNoteOff.id)) === false);
     check("D2-6b) not yine de kaydedildi", (await prisma.sack.findUnique({ where: { id: sackNoteOff.id }, select: { notes: true } }))?.notes === "Bu not kâğıda çıkmıyor");
 
-    // Şablon çözülemeyen dal — YALNIZ ortamda SACK bağlam varsayılanı yoksa ölçülür.
+    // Şablon çözülemeyen dal — ÖN KOŞULU BEKÇİ KENDİSİ KURAR (2026-09-12).
+    // Eskiden "ortamda SACK bağlam varsayılanı VARSA atla" deniyordu; seed o
+    // satırı kendisi yarattığı için (`prisma/seed.ts`) kontrol pratikte HİÇ
+    // koşmuyordu — paket ölçümünde beyan edilmiş bir atlama olarak görünüyordu.
+    // Artık satır ÖDÜNÇ ALINIR (silinir), ölçülür ve `finally`de birebir geri
+    // konur; ortak fikstür kalıcı değişmez. Emsal: `test_sack_label` aynı satırı
+    // aynı biçimde ödünç alıyor.
     const ctxDefault = await prisma.labelContextDefault.findUnique({ where: { kind: LabelKind.SACK }, select: { templateId: true } });
-    if (!ctxDefault) {
-      const sackNoTpl = (await ship.openSack({})).data as { id: string };
-      sackIds.push(sackNoTpl.id);
-      await clearSack(sackNoTpl.id);
-      await ship.setSackNotes(sackNoTpl.id, "Müşterisiz çuval notu", undefined);
-      check("D2-7) ⭐ şablon çözülemedi → bayrak YAZILMADI", (await sackDirty(sackNoTpl.id)) === false);
-    } else {
-      atlanan += 1;
-      console.log("ℹ️  D2-7 atlandı: DB'de SACK bağlam varsayılanı var (global atamaya dokunulmaz).");
+    if (ctxDefault) {
+      sackCtxRestore = ctxDefault.templateId;
+      await prisma.labelContextDefault.delete({ where: { kind: LabelKind.SACK } });
     }
+    const sackNoTpl = (await ship.openSack({})).data as { id: string };
+    sackIds.push(sackNoTpl.id);
+    await clearSack(sackNoTpl.id);
+    await ship.setSackNotes(sackNoTpl.id, "Müşterisiz çuval notu", undefined);
+    check("D2-7) ⭐ şablon çözülemedi → bayrak YAZILMADI", (await sackDirty(sackNoTpl.id)) === false);
 
     // Kontrol grubu: not yazımı İÇERİK guard'ını (touchWarehouseSackTx) hâlâ atlıyor —
     // D2 değişikliği o bilinçli istisnayı bozmadı (test_sack_notes 8b/9 ile aynı kural).
     check("D2-8) kontrol: not yazımı çuvalın kg'sine dokunmadı",
       (await prisma.sack.findUnique({ where: { id: sackNoteOn.id }, select: { weightKg: true } }))?.weightKg === null);
   } finally {
+    // ÖN KOŞUL GERİ YÜKLEMESİ — ödünç alınan GLOBAL atama birebir geri konur ve
+    // geri konduğu ÖLÇÜLÜR: sessiz geri yükleme, hiç geri yüklememekten ayırt
+    // edilemez ("ölçülmemiş kapı" sınıfı). Negatif sonda: bu blok devre dışı
+    // bırakılınca D2-7b düşer ve ortamda satır EKSİK kalır (ölçüldü).
+    if (sackCtxRestore) {
+      await prisma.labelContextDefault.upsert({
+        where: { kind: LabelKind.SACK },
+        update: { templateId: sackCtxRestore },
+        create: { kind: LabelKind.SACK, templateId: sackCtxRestore },
+      });
+      const geri = await prisma.labelContextDefault.findUnique({
+        where: { kind: LabelKind.SACK },
+        select: { templateId: true },
+      });
+      check(
+        "D2-7b) ⭐ ödünç alınan SACK bağlam varsayılanı BİREBİR geri yüklendi",
+        geri?.templateId === sackCtxRestore,
+        geri?.templateId ?? "satır yok",
+      );
+    }
     // Cleanup — test kendi yarattığını siler (RESTRICT FK'lar sırayı dikte eder).
     if (sackIds.length) await prisma.roll.updateMany({ where: { sackId: { in: sackIds } }, data: { sackId: null } });
     if (rollIds.length) {
