@@ -7244,3 +7244,39 @@ düzeldi. Üç ayrı sebep çıktı; üçü de o güne kadar yazılı değildi:
    — ölçüm yapıldı, sonucu okunmadı.
 
 Kural satırları `docs/RECETELER.md` § migration altında tek blok hâlinde.
+
+## 2026-09-12 — Defter satırına yazılan TEK güncelleme: `warehouse_movements.preEpoch` (açılış fotoğrafı) [ÇEKİRDEK]
+
+**Bağlam.** Stok defteri açılış fotoğrafı (`scripts/acilis_fotografi_stok_defteri.ts`, `efcce328`)
+kesme anında stok kümesindeki her topa `OPENING_BALANCE` satırı yazar ve AYNI transaction'da
+fotoğraftan önceki her satıra `preEpoch = true` damgalar. Bu, append-only defter satırına
+yazılan tek güncellemedir; gerekçesi ve sınırı yönetici (`teks-erp-1e`) onayıyla şöyle:
+
+- **`preEpoch` bir DAMGA değil SINIFLANDIRMA BAYRAĞIDIR** — kim/niçin/miktar taşımaz,
+  olayın kendisini değiştirmez; ölçüt K10 emsalidir ("durum bayrağı ≠ damga": kolon kim/neden/
+  miktar taşımıyor ve "ne oldu" başka bir defter satırında duruyorsa durum kolonudur).
+- **Bir kez yazılır; ikinci koşum reddedilir** (script ③ ön koşulu: `OPENING_BALANCE` satırı
+  varsa durur). Damga ve fotoğraf satırları tek `$transaction`tadır: `--apply` yarıda kesilirse
+  ikisi de geri sarılır, kısmi işaretli defter kalmaz.
+- **Hiçbir iş kararına girdi değildir** — yalnız Σ/as-of okumalarının epoch sınırını anlatır;
+  epoch = fotoğraf satırlarının `createdAt`i (ayar anahtarı yazılmaz; D6 kapısı 6e'nin).
+- **`statusuzAtlanan` ile karıştırılmaz** (6e teyidi): `preEpoch` ZAMANSAL ("fotoğraftan önce"),
+  `statusuzAtlanan` SEMANTİK (`fromStatus IS NULL AND toStatus IS NULL`, ucu kurulamayan satır).
+  Bugün örtüşürler (721/721), ileride ayrışırlar: fotoğraftan sonra eski kapıdan yazılan satır
+  `preEpoch=false` ama statüsüzdür. Kolonun tek yazarı fotoğraf script'idir; 6e'nin helper,
+  bekçi ve ters kayıt yolları ona ne yazar ne okur.
+- **Fotoğraf sonrası güvenilirlik sınırı:** toplam Σ (qty) güvenilir; depo × STATÜ kırılımlı Σ ve
+  as-of kesiti, eski kapılar (transfer · sevk · sayım-dışı iptal) stok defterine taşınana kadar
+  güvenilir DEĞİL — "epoch sonrası her şey doğru" sanılmasın (D6 şerhi 6e'de; script başlığı ve
+  dry-run çıktısı statüsüz satır sayısını bilgi olarak basar).
+- **Sessiz pencere ön koşulu (④):** fotoğraf yazma trafiği durmuşken çekilir; script son 120 sn'de
+  defter yazımı görürse `--apply`yi reddeder — aksi hâlde damga ile fotoğraf arasında yazılan satır
+  epoch'u ilk günden deler.
+
+**Kural satırı** `docs/kurallar/defter.md`ye (D6 şerhiyle birlikte, 6e): "Append-only defter
+satırına yazılabilen tek güncelleme, kim/niçin/miktar taşımayan bir sınıflandırma bayrağıdır
+(`preEpoch`); bir kez, tek tx'te, iş kararına girmeden; ölçüt K10 'durum bayrağı ≠ damga'."
+
+**İlgili ölçümler (fabrika kopyası, 2026-09-12):** fason dönüşü ENTRY onarımı adayı 69, 12'si
+`TST-` test artığı → gerçek 57 / 32.044 m (tasarım belgesi doğruydu); açılış fotoğrafı backfill
+öncesi 625 top / 30.108,9 m, deposuz 588 (engel ①), preEpoch'a düşecek 721 satır.

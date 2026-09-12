@@ -64,6 +64,9 @@ ya metraj (kesim, çekme, düzeltme, aşım) ekseninde.
 Fason dönüşünde doğan toplar ara adımda **üretime** doğuyor (`bornStatus = IN_PRODUCTION`) ama defter koşulsuz
 `ENTRY` yazıyor. Bu fabrikada fason-dönüşü ENTRY'lerinin **57/57'si** böyle: 34 IN_PRODUCTION + 23 TAMBUR_CONSUMED,
 **32.044 m**. Yani bugünkü defter yalnız eksik değil, bir yerde de **fazla** sayıyor. Ayrıntı ve sıra: §3.1.
+⚠️ `tekserp_fabrika_dev` kopyasında 2026-09-12'de 69 / 33.148 m görünür: fazladan 12 satır `TST-` iş emirli TEST
+ARTIĞIDIR (bekçi koşumlarının fixture'ları, `clean_test_residue.ts` kapsamı), fabrika verisi değil — onarım script'i
+(`scripts/onarim_fason_donus_entry.ts`) bunları "TEST ARTIĞI" diye ayırır ve terslemez; gerçek sayı 57 / 32.044 m.
 
 ## 2. "Depoda" kümesi — bugün 16+ kopya, ikisi çelişiyor
 
