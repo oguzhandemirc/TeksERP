@@ -6398,3 +6398,58 @@ satır "var" sayılsaydı ikinci sonda yeşil kalırdı.
 
 Migration **yok** (şema değişmedi). İzin **yok**. APK/panel **yok** — değişiklik
 backend guard mesajı + bekçi.
+---
+
+## 2026-09-12 — DSK kilidi tx'e indi; kalan-kapama geri alma terminal iş emrinde kapalı [ÇEKİRDEK]
+
+`fb0ad67e` denetiminin iki ORTA'sı ve beş DÜŞÜK'ü.
+
+### ORTA-1 — kilit doğruydu, yeri yanlıştı
+
+`cancel()` DSK sinyalini tx DIŞINDA okuyordu; tx içindeki claim yalnız
+`cancelledAt: null` ile korunuyordu. Yarış: iptal guard'ı geçer, eşzamanlı
+`executeDirectShip` KISMİ sevk yapar (çocuk toplar tüketilir, EBEVEYNLER fasonda
+kalır, `notDelivered ≥ 1` olduğu için damga da basılmaz), iptal tx'i uyanır, roll
+claim'i ebeveynleri bulur ve İPTAL BAŞARIR — DSK ile tahsisler iptal edilmiş
+sevke asılı kalır, karne `cancelledAt IS NULL` süzgeciyle müşteriye çıkmış metreyi
+kaybeder. Pencere dar değildi: iki yol da aynı WO satırını kilitliyor ama kilit
+guard okumasından SONRA alınıyordu (kök kuralın "kilit tx'in İLK ifadesidir"
+maddesinin ihlali).
+
+Düzeltme: koşul CLAIM'İN İÇİNDE (`directShipments: { none: {} }`); `count===0`'da
+tanı tx içinde taze okunur ve mesaj `resolveDispatchCancelBlockReason`dan gelir
+(önizlemeyle simetri). Tx dışı okuma önizleme olarak kaldı.
+
+### ORTA-2 — terminal iş emrinde geri alma
+
+`reopenRemainder` iş emrinin durumunu hiç sormuyordu. DSK kilidi operatörü "WO
+iptal + kalan kapaması" yoluna ittiği için şu şekle kolayca düşülüyordu: iptal
+edilmiş WO'nun adımına canlı top geri konur, kart diriltilmez, iz yazılmaz ve
+çıkış yolu kalmaz (DB müdahalesi). Artık `closedItem` sorgusu WO durumunu okur;
+CANCELLED/SUPERSEDED'de 409 `WORK_ORDER_TERMINAL` (fail-closed).
+
+### Beş DÜŞÜK
+
+1. Damga ölçütü yabancı DSK'yı "teslim" sayıyordu → ölçüt `ownDirectShip` ikizi
+   oldu (topun DSK'sı BU sevke ait olmalı).
+2. K15 "atlanan DSK'lı sevk" audit'i tek sevkli adımda da yazılıyordu (gürültü) →
+   yalnız konsolidasyon imkânı olan (2+ sevk) adımda yazılır.
+3. "Ölçülemez" kovası motorda vardı, yüzeyi yoktu → panelde kolon + dışa aktarım
+   (ayrı commit).
+4. Swagger bloğunda OpenAPI dışı `responses ek:` anahtarı vardı → beş 409 kodu
+   gerçek `responses` bölümüne taşındı.
+5. İptal önizlemesi DSK numarasını sırasız `take: 1` ile seçiyordu → uçla aynı
+   `orderBy: shippedAt asc`.
+
+### Bekçiler
+
+`test_fason_direct_ship_dispatch_lock` D5 (eşzamanlı iptal + kısmi sevk: ikisi
+birden olamaz, kazanan hangisiyse veri onunla tutarlı) ve D6 (claim yükleminin
+metin sondası) · `test_fason_reopen_remainder_guard` G10 (terminal WO → 409).
+24 + 42 kontrol.
+
+### Üç kapı
+
+Migration **yok** · izin **yok** · APK **yok**. Sözleşme: iptal ucu yeni bir 409
+metni döndürebilir (aynı yüklemden), geri alma ucu yeni `WORK_ORDER_TERMINAL`
+kodunu ekler.
