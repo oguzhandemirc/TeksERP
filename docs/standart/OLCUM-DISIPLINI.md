@@ -17,7 +17,7 @@ Buradaki kurallar **mekanik değildir ve mekanikleştirilemez** — tek kullanı
 
 > **Her ölçümü raporlarken NEYİ ölçtüğünü ve NASIL doğruladığını yaz.**
 
-## İki kurtarıcı kural — birbirinin tersi, ikisi de üç saniye
+## Kurtarıcı kurallar — birbirinin tersi, ikisi de üç saniye
 
 ```
 sıfır dönen ölçüm      → POZİTİF KONTROL ile doğrula   (desen TUTMUYOR olabilir)
@@ -34,7 +34,7 @@ Ortak hâli: **sayıya değil örneğe bak.**
 Ve en ucuzu: **bir iddiayı sınamanın en ucuz yolu, iddianın verdiği ÖRNEĞİ ağaçta
 aramaktır.**
 
-## Yedi arıza sınıfı
+## Arıza sınıfları
 
 ### 1 · Araç bozuk
 Çıktı boş ya da anlamsız gelir; fark edilir, en ucuz sınıf.
@@ -215,10 +215,11 @@ mi, "bugün böyle" mi?*
 
 > **Var olmayan bir sayı bayatlayamaz.**
 
-## Kapının üç ölüm biçimi
+## Kapının ölüm biçimleri
 
-Ölçümü kapıya çevirirken üçünü birden gözet; üçü de kapıyı **kaldırmadan**
-işlevsizleştirir.
+Ölçümü kapıya çevirirken hepsini birden gözet; hepsi kapıyı **kaldırmadan**
+işlevsizleştirir. Bugüne kadar altı tanesi adlandırıldı — **numaralanmıyorlar**,
+çünkü sıra iki oturumda çakıştı ve başlıktaki sayı zaten borçtur.
 
 1. **Yanlış kırmızı** — doğru işte kırmızı verirse ilk hafta devre dışı bırakılır.
 2. **Yavaşlık** — bedel değişenle orantılı olmaktan çıkarsa kaçış kullanılmaya
@@ -226,9 +227,17 @@ işlevsizleştirir.
 3. **Gürültü** — çıktısı okunmayacak kadar uzunsa ikinci gün göz ardı edilir.
    **Doğru olması kurtarmaz.**
 
-İlk ikisinde kapı yanlış davranır; üçüncüsünde **doğru davranır ve yine ölür**.
+4. **Erken sertlik** — tavsiye olması gereken bir ölçüm kapıya çevrilirse kural
+   tümden sökülür.
+5. **Okunmayan tavsiye** — çıktısı kimsenin bakmadığı yere düşen tavsiye hiç yoktur.
+6. **Doğru davranışı pahalı kılmak** — başka bir kurala uyanı cezalandıran kapı,
+   o kuralın terk edilmesini öğretir. *(Vaka: ortak ağaç disiplini gereği pathspec
+   ile commit atan kişiyi, kapının kendisi durduruyordu.)*
 
-## Kırmızıyı sınıflandırma — dört kova
+İlk üçünde kapı yanlış davranır; 3'te doğru davranır ve yine ölür; 6'da **kapı
+doğru, kurban haklı** — en sinsisi budur.
+
+## Kırmızıyı sınıflandırma
 
 `gerçek kusur · testin kendi hatası · çevresel · yapısal olarak ölçülemez`
 

@@ -47,7 +47,9 @@ Referans model `prisma/schema.prisma:4580` (SackTag, 2026-09-04) — katalog sı
 - **[DB-05]** Her UUID kolona `@db.Uuid`, her metin kolonuna `@db.VarChar(n)` koy — sınırsız `String` yazma · zorlama: insan:VarChar'sız `String` geçerli Prisma'dır ve `text` olarak doğar; drift bekçisi bunu sapma saymaz · kanıt: 545 `@db.Uuid` kolon; metin emsali `schema.prisma:4584-4586` · devralınan: yok
 - **[DB-06]** İdempotent yaratma ucu olan modele `clientToken String? @unique @db.Uuid` ekle (birebir bu yazım) · zorlama: insan:kolonun varlığı değil UCUN idempotent olup olmadığı bir karardır; mekanizma ve replay sözleşmesi `ESZAMANLILIK.md` · kanıt: 15 model, 15/15 aynı yazım · devralınan: 4 tablet ucu token'sız (ES-02 — §12)
 
-## 2 · Üç model sınıfı
+## 2 · Model sınıfları
+
+> ⚠️ Telemetri dördüncü sınıf DEĞİL — budanabilirlik ayrı eksen (tezgah izleme tasarımı §4).
 
 | Sınıf | Zaman damgası | Künye | Ayırt edici alanlar | Emsal |
 |---|---|---|---|---|
