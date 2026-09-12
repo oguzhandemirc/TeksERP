@@ -203,6 +203,41 @@ if (sizeFails.length) {
   process.exit(1);
 }
 
+// --- GATE: TARİHSİZ BEKÇİ SAYISI (2026-09-13) ---
+// "Sayı taşıyan her belge satırı bir bakım borcudur" kuralı BEYAN EDİLMİŞTİ ama
+// ÖLÇÜLMÜYORDU: `docs/SOZLUK.md` ve `docs/GELISTIRME-DONGUSU.md` "455 dosya" derken
+// gerçek 502'ydi (ölçüldü 2026-09-13). Sayıyı yasaklamıyoruz — TARİHSİZİNİ
+// yasaklıyoruz: tarihli bir sayı ÖLÇÜMDÜR ve paydası okunur, tarihsiz bir sayı
+// bugüne dair bir İDDİADIR ve sessizce bayatlar.
+//
+// ⚠️ KAPSAM DAR VE BİLİNÇLİ: yalnız "<N> ... (test_*.ts|bekçi|test) dosya" kalıbı.
+// Genel bir "sayı arama" yanlış pozitif patlatırdı (sürüm numarası, port, eşik).
+// `docs/history/` ve `docs/akademik/` zaten SKIP_PATHS'te — arşiv donuk olmalıdır.
+//
+// NEGATİF SONDA (ölçüldü 2026-09-13): canlı bir belgeye tarihsiz "455 test_*.ts
+// dosyası" satırı konunca KIRMIZI; aynı satıra "ölçüldü 2026-09-05" eklenince yeşil.
+const SAYI_RE = /\b(\d{3,4})\s*(?:adet\s+)?`?(?:test_\*\.ts|bekçi|test)`?\s*dosya/i;
+const TARIH_RE = /\b20\d{2}-\d{2}-\d{2}\b/;
+const tarihsizSayilar = [];
+for (const file of mdFiles) {
+  const rel = file.replace(`${REPO_ROOT}/`, "");
+  if (SKIP_PATHS.some((p) => rel.startsWith(p)) || SKIP_FILES.has(rel.split("/").pop())) continue;
+  readFileSync(file, "utf8").split("\n").forEach((line, i) => {
+    if (SAYI_RE.test(line) && !TARIH_RE.test(line)) {
+      tarihsizSayilar.push({ rel, line: i + 1, text: line.trim().slice(0, 120) });
+    }
+  });
+}
+if (tarihsizSayilar.length) {
+  console.error(
+    `❌ Doküman bekçisi ${tarihsizSayilar.length} TARİHSİZ bekçi sayısı buldu — sayı bugüne dair bir\n` +
+      `   iddiadır ve sessizce bayatlar. Ya sayıyı KALDIR (koşucu her koşumda kendisi basar:\n` +
+      `   '=== Backend test suite — N dosya ==='), ya da ÖLÇÜM olarak tarihlendir:\n`,
+  );
+  for (const t of tarihsizSayilar) console.error(`  ${t.rel}:${t.line}\n      ${t.text}\n`);
+  process.exit(1);
+}
+
 // --- GATE: ölü-link (CI FAIL) ---
 if (deadLinks.length === 0) {
   console.log(`✅ Doküman bekçisi: ölü doküman-link yok (${mdFiles.length} .md tarandı).`);
