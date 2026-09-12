@@ -328,6 +328,70 @@ async function main(): Promise<void> {
         atla("HOP15 SoD negatifi", "dar yetkili token alınamadı");
       }
     }
+
+    // ═══ §5 — İDEMPOTENCY REPLAY: dört durum + "kesin 4xx'te token YAPIŞMAZ" ═
+    // `token-replay.helper.ts` sözleşmesi bugüne kadar HTTP'den hiç ölçülmedi.
+    // Dördüncü durum saha vakasıdır: çevrimdışı kuyruk aynı token'ı saklar, bu
+    // arada süpervizör topu iptal eder; "cached başarı" dönmek 100 m kumaşı
+    // sistemde yok eder ve hiçbir ekranda hata görünmez.
+    console.log("\n── §5 clientToken replay (dört durum) ──");
+    const rt = randomUUID();
+    const rp1 = await call("POST", "/api/rolls/initial-entry", { token, body: { clientToken: rt, itemId: item.id, initialQty: 40, width: 180, qualityGrade: grade.code } });
+    const rpId = String((veri(rp1) as { id?: string }).id ?? "");
+    if (rpId) olusturulan.roll.push(rpId);
+    const rp2 = await call("POST", "/api/rolls/initial-entry", { token, body: { clientToken: rt, itemId: item.id, initialQty: 40, width: 180, qualityGrade: grade.code } });
+    check("§5② aynı token + AYNI yük → cached AYNI top (yeni top DOĞMAZ)",
+      rp2.status === 201 && String((veri(rp2) as { id?: string }).id ?? "") === rpId, `status=${rp2.status}`);
+    const rp3 = await call("POST", "/api/rolls/initial-entry", { token, body: { clientToken: rt, itemId: item.id, initialQty: 999, width: 180, qualityGrade: grade.code } });
+    check("§5③ aynı token + BAŞKA yük → 409 CLIENT_TOKEN_COLLISION",
+      rp3.status === 409 && ((rp3.body.details ?? {}) as { code?: string }).code === "CLIENT_TOKEN_COLLISION",
+      `status=${rp3.status} code=${String(((rp3.body.details ?? {}) as { code?: string }).code)}`);
+    await call("DELETE", `/api/rolls/${rpId}?reason=${encodeURIComponent(`${PRE} replay sondası`)}&confirmActive=true`, { token });
+    const rp4 = await call("POST", "/api/rolls/initial-entry", { token, body: { clientToken: rt, itemId: item.id, initialQty: 40, width: 180, qualityGrade: grade.code } });
+    check("§5④ ⭐ token'lı top İPTAL edildikten sonra aynı token → 409 ENTRY_CANCELLED (cached BAŞARI değil)",
+      rp4.status === 409 && ((rp4.body.details ?? {}) as { code?: string }).code === "ENTRY_CANCELLED",
+      `status=${rp4.status} code=${String(((rp4.body.details ?? {}) as { code?: string }).code)}`);
+    // AYRIM: token yalnız sonucu BELİRSİZ bırakan hatada yapışır. Kesin 4xx'te
+    // hiçbir şey yazılmamıştır; token yapışsaydı istemci o denemeyi bir daha
+    // gönderemez ve giriş kalıcı olarak kaybolurdu.
+    const kt = randomUUID();
+    const kesin4xx = await call("POST", "/api/rolls/initial-entry", { token, body: { clientToken: kt, itemId: item.id, initialQty: -5, qualityGrade: grade.code } });
+    const tekrar = await call("POST", "/api/rolls/initial-entry", { token, body: { clientToken: kt, itemId: item.id, initialQty: 40, width: 180, qualityGrade: grade.code } });
+    const tekrarId = String((veri(tekrar) as { id?: string }).id ?? "");
+    if (tekrarId) olusturulan.roll.push(tekrarId);
+    check("§5⭐ kesin 4xx (Zod 400) token'ı YAPIŞTIRMAZ — aynı token tekrar kullanılabilir",
+      kesin4xx.status === 400 && tekrar.status === 201, `400=${kesin4xx.status} tekrar=${tekrar.status}`);
+
+    // ═══ §6 — ATOMİK CLAIM YARIŞI (HTTP üzerinden) ══════════════════════════
+    // `updateMany WHERE {id, beklenen-durum}` + `count===0 → 409` kalıbı bugüne
+    // kadar yalnız servis katmanından sınandı. İki EŞZAMANLI HTTP isteğinden tam
+    // biri geçmeli; ikisi de geçerse claim kalıbı kırılmış demektir.
+    console.log("\n── §6 atomik claim (eşzamanlı iki istek) ──");
+    const yr = await call("POST", "/api/rolls/initial-entry", { token, body: { clientToken: randomUUID(), itemId: item.id, initialQty: 30, width: 180, qualityGrade: grade.code } });
+    const yrId = String((veri(yr) as { id?: string }).id ?? "");
+    if (yrId) olusturulan.roll.push(yrId);
+    const [y1, y2] = await Promise.all([
+      call("POST", `/api/rolls/${yrId}/prepare-for-sale`, { token }),
+      call("POST", `/api/rolls/${yrId}/prepare-for-sale`, { token }),
+    ]);
+    const statuler = [y1.status, y2.status].sort((a, b) => a - b);
+    check("§6 ⭐ aynı topa eşzamanlı iki geçiş → tam biri 200, diğeri 409",
+      statuler[0] === 200 && statuler[1] === 409, `statüler=${statuler.join("/")}`);
+    check("§6 top tek kez terfi etti (WAREHOUSE)",
+      (await prisma.roll.findUniqueOrThrow({ where: { id: yrId }, select: { status: true } })).status === RollStatus.WAREHOUSE);
+
+    // ═══ §7 — SEVK STORNOSU: brütü DÜŞÜRÜR (iadeden farkı) ══════════════════
+    // HOP13 iadenin brütü DEĞİŞTİRMEDİĞİNİ ölçtü. Storno ters yönde çalışır ve
+    // farkın tamamı budur: iade "mal geri geldi" (çıkış belgesi durur), storno
+    // "çıkış hiç olmadı" (belge iptal, karşılama geri alınır). Aynı sayının iki
+    // farklı cevabı olduğu yer burasıdır.
+    console.log("\n── §7 sevk stornosu ≠ iade ──");
+    const undo = await call("POST", `/api/shipping/shipments/${shipmentId}/undo-dispatch`, { token, body: { reason: `${PRE} sevk stornosu` } });
+    check("§7 POST /api/shipping/shipments/:id/undo-dispatch → 200", undo.status === 200, `status=${undo.status} ${JSON.stringify(undo.body.details ?? undo.body.message ?? "")}`);
+    const durum3 = (await prisma.shipment.findUniqueOrThrow({ where: { id: shipmentId }, select: { status: true } })).status;
+    check("§7 sevkiyat PLANNED'a döndü (iptal değil — çuvallar serbest)", durum3 === ShipmentStatus.PLANNED, durum3);
+    const sonBrut = Number((await prisma.orderLine.findUniqueOrThrow({ where: { id: lineId }, select: { shippedQty: true } })).shippedQty);
+    check("§7 ⭐ storno shippedQty'yi GERİ ALDI (iade almazdı)", sonBrut === 0, `${sevkEdilen} → ${sonBrut}`);
   } finally {
     server.close();
   }
