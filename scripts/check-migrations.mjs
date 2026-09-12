@@ -50,8 +50,33 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MIGRATIONS_DIR = "Teks-Erp/prisma/migrations";
 const SCRIPTS_DIR = "Teks-Erp/scripts";
 
+// ⚠️ GERÇEK İNDEKS — bu bekçinin sorduğu her soru ("izleniyor mu", "untracked mı")
+// GELİŞTİRİCİNİN AĞACINA aittir, oluşmakta olan commit'e değil.
+//
+// VAKA (2026-09-13, dört kez): kısmi (pathspec) commit'te — `git commit -- <yol>` —
+// git GEÇİCİ bir indeks kurar (`GIT_INDEX_FILE=<gitdir>/next-index-<pid>.lock`) ve
+// pathspec dışındaki her şeyi HEAD'e geri sarar. Başkasının SAHNELENMİŞ dosyası o
+// indekste YOKTUR, dolayısıyla hook'a `??` görünür ve GATE 1/4 YANLIŞ KİŞİYİ durdurur.
+// Ölçüm (sandbox): miras alınan env'de `?? theirs.txt`, gerçek indeks zorlandığında
+// `A  theirs.txt`; gerçekten takipsiz dosya iki koşumda da `??` kalır — yani düzeltme
+// kapıyı körleştirmez, yalnız doğru ağacı okutur.
+//
+// `--no-optional-locks`: status gerçek indeksi tazelemek için yazmaya kalkmasın —
+// ortak çalışma ağacında altı oturum aynı indekse bakıyor.
+const GIT_DIR = (() => {
+  try {
+    return execFileSync("git", ["rev-parse", "--absolute-git-dir"], {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+    }).trim();
+  } catch {
+    return "";
+  }
+})();
+const GIT_ENV = GIT_DIR ? { ...process.env, GIT_INDEX_FILE: join(GIT_DIR, "index") } : process.env;
+
 function git(args) {
-  return execFileSync("git", args, { cwd: REPO_ROOT, encoding: "utf8" });
+  return execFileSync("git", args, { cwd: REPO_ROOT, encoding: "utf8", env: GIT_ENV });
 }
 
 // `git status --porcelain` satırı: "XY <yol>". Untracked "??", değişmiş " M"/"M ",
@@ -59,14 +84,55 @@ function git(args) {
 // (yoksa yeni bir migration dizini tek "?? .../dizin/" satırına çöker ve içindeki
 // dosyaları göremeyiz).
 function statusEntries(pathspec) {
-  const out = git(["status", "--porcelain", "--untracked-files=all", "--", pathspec]);
+  const out = git(["--no-optional-locks", "status", "--porcelain", "--untracked-files=all", "--", pathspec]);
   return out
     .split("\n")
     .filter(Boolean)
     .map((l) => ({ code: l.slice(0, 2), path: l.slice(3).trim().replace(/^"|"$/g, "") }));
 }
 
+// =============================================================================
+// COMMIT KAPISI KİPİ (`--commit-kapisi` + staged liste stdin'den)
+// =============================================================================
+// VAKA (2026-09-13, beş kez): takipsiz kapılar (GATE 1/4) commit'i atanın kendi
+// işiyle ilgisi olmayan bir dosya yüzünden kırmızı verdi. `GIT_INDEX_FILE`
+// düzeltmesi yalnız SAHNELENMİŞ yabancı dosyayı kurtarır; GERÇEKTEN takipsiz
+// yabancı dosya hâlâ yanlış kişiyi durduruyordu.
+//
+// KARAR (kullanıcı onaylı): commit `prisma/migrations`a **dokunuyorsa** takipsiz
+// kapılar SERT kalır — migration gönderiyorsan temiz bir migration durumu görmek
+// ZORUNDASIN. Dokunmuyorsa UYARI + çıkış 0, dosya ADIYLA ve SAHİP UYDURMADAN.
+//
+// ⚠️ KORUMA KAYBOLMUYOR, DOĞRU KİŞİYE TAŞINIYOR: takipsiz bir migration prod'a
+// zaten hiç gitmez; asıl risk SAHİBİNİN unutmasıdır ve o kişi kendi commit'inde
+// (migrations'a dokunduğu an) sert kapıya çarpar.
+//
+// ⚠️ BAYRAK HOOK YOLUNA ÖZGÜDÜR. Bayraksız çağrı (CI, `npm run check:migrations`,
+// `npm test`in migration geçidi) bugünkü SERT davranışı aynen korur — orada soru
+// "ağacım temiz mi", commit kapısında ise "bu commit'i durdurmalı mıyım".
+// CI'ın bayrağı KULLANMADIĞI ayrıca ölçülür (test_commit_gate_scope.ts §3).
+const KOMIT_KIPI = process.argv.includes("--commit-kapisi");
+const KOMIT_KUMESI = KOMIT_KIPI
+  ? (() => {
+      try {
+        return readFileSync(0, "utf8").split("\n").map((s) => s.trim()).filter(Boolean);
+      } catch {
+        return []; // stdin okunamadı → küme boş → takipsiz kapılar yumuşak
+      }
+    })()
+  : null;
+// Takipsiz kapıların SERTLİĞİ: bayraksız her zaman sert; commit kipinde yalnız
+// commit migration'a dokunuyorsa.
+const TAKIPSIZ_SERT =
+  KOMIT_KUMESI === null || KOMIT_KUMESI.some((f) => f.startsWith(`${MIGRATIONS_DIR}/`));
+
 const problems = [];
+const uyarilar = [];
+
+/** Takipsiz kapı bulgusu: kipe göre kırmızı ya da uyarı. */
+function takipsizBulgu(kayit) {
+  (TAKIPSIZ_SERT ? problems : uyarilar).push(kayit);
+}
 
 // --- GATE 1 + 2: migration dizini git durumu -------------------------------
 const migEntries = existsSync(join(REPO_ROOT, MIGRATIONS_DIR))
@@ -86,7 +152,7 @@ const untrackedMig = migEntries.filter((e) => e.code === "??");
 const changedMig = migEntries.filter((e) => e.code !== "??" && e.code !== "A ");
 
 if (untrackedMig.length) {
-  problems.push({
+  takipsizBulgu({
     gate: "GATE 1 — COMMIT EDİLMEMİŞ MIGRATION",
     why:
       "Bu dosyalar git'te YOK. `prisma migrate deploy` yalnız dizindeki dosyaları\n" +
@@ -133,14 +199,17 @@ const untrackedTests = existsSync(join(REPO_ROOT, SCRIPTS_DIR))
   : [];
 
 if (untrackedTests.length) {
-  problems.push({
+  takipsizBulgu({
     gate: "GATE 4 — COMMIT EDİLMEMİŞ TEST",
     why:
       "Testler CI'ın gerçek şema gate'idir: boş DB'ye `migrate deploy` + `npm test`\n" +
       "  koşuluyor, yeni kolonu okuyan bir test migration'sız kalırsa CI KIRMIZI olur.\n" +
-      "  Test de commit edilmezse o gate kaybolur ve hata production'da bulunur.",
+      "  Test de commit edilmezse o gate kaybolur ve hata production'da bulunur.\n" +
+      "  ⚠️ Kapı UNTRACKED arar, COMMIT'Lİ değil: `git add` YETER — testi bu commit'e\n" +
+      "  sokmak ZORUNDA DEĞİLSİN, bir sonraki commit'e bırakabilirsin (ölçüldü: 'A '\n" +
+      "  durumundaki dosya GATE 4'e hiç girmez, pathspec commit'te de girmez).",
     items: untrackedTests.map((e) => e.path),
-    fix: `git add ${SCRIPTS_DIR}/test_*.ts`,
+    fix: `git add ${SCRIPTS_DIR}/test_*.ts   (commit etmek şart değil, sahnelemek yeter)`,
   });
 }
 
@@ -175,7 +244,8 @@ function isTracked(repoRelPath) {
  */
 function isIgnored(repoRelPath) {
   try {
-    execFileSync("git", ["check-ignore", "-q", "--", repoRelPath], { cwd: REPO_ROOT });
+    // GIT_ENV: `check-ignore` indekse de bakar (izlenen dosya yok sayılmaz).
+    execFileSync("git", ["check-ignore", "-q", "--", repoRelPath], { cwd: REPO_ROOT, env: GIT_ENV });
     return true;
   } catch {
     return false; // çıkış kodu 1 = yok sayılmıyor
@@ -246,10 +316,8 @@ if (scriptRefProblems.length) {
 // biçimi. Değişim ölçen kurgu `ImportRun` için **3 ad** basıyor. Fark kapsamda: biri
 // DURUMU, öbürü DEĞİŞİMİ ölçer.
 //
-// ⚠️ ŞERH (2026-09-13): bu dosyanın `git status` okuması kısmi (pathspec) commit'te
-// yanıltıcı olabiliyor — git geçici indeks kuruyor ve başkasının sahnelenmiş dosyası
-// `??` görünüyor (d5 ölçtü, düzeltmesi ayrı iş). Aşağısı `merge-base` ve dosya okumaya
-// dayanır, `status`a değil; yine de d5'in düzeltmesi gelince birlikte gözden geçirilecek.
+// (Bu bölüm `merge-base` ve dosya okumaya dayanır, `status`a değil; kısmi commit'in
+// geçici indeksinden etkilenmez — yine de `git()` artık gerçek indeksi zorluyor.)
 const YENI_MIGRATION_TABAN = (() => {
   try {
     return git(["merge-base", "HEAD", "origin/main"]).trim();
@@ -333,6 +401,23 @@ if (YENI_MIGRATION_TABAN) {
 }
 
 // --- Rapor ------------------------------------------------------------------
+// Uyarılar GÜRÜLTÜ OLMAMALI: yalnız gerçekten bekleyen dosya varsa basılır, dosya
+// ADIYLA söylenir ve sahibi hakkında TAHMİN YÜRÜTÜLMEZ ("başka bir oturumun açık
+// işi" gibi bir cümle ölçülmemiş bir iddiadır).
+if (uyarilar.length > 0) {
+  console.log(
+    "\n⚠️  Ağaçta commit edilmemiş dosya var ama BU COMMIT migration'a dokunmuyor — kapı geçti.",
+  );
+  for (const u of uyarilar) {
+    console.log(`   [${u.gate}]`);
+    for (const it of u.items) console.log(`     • ${it}`);
+  }
+  console.log(
+    "   Senin dosyansa: `git add` yeter (commit etmek şart değil). Bir sonraki\n" +
+      "   migration commit'inde bu kapı SERT davranır.\n",
+  );
+}
+
 if (problems.length === 0) {
   const count = existsSync(migRoot)
     ? readdirSync(migRoot).filter((d) => statSync(join(migRoot, d)).isDirectory()).length

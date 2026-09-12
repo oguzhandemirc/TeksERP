@@ -55,7 +55,15 @@ const headBasta = headOku();
 
 for (const proje of etkilenenProjeler(REPO, staged)) {
   adimlar.push({ ad: `${proje.ad} · tip`, cwd: proje.ad, cmd: proje.typecheck });
-  adimlar.push({ ad: `${proje.ad} · lint`, cwd: proje.ad, cmd: proje.lint });
+  // Lint doğrudan değil KAPI üzerinden: taranan küme aynı kalır (tavan aynı kümeyi
+  // ölçmek zorunda), yalnız verdikt commit'in kendi dosyalarına daralır. Staged liste
+  // stdin'den geçer — kapı tabanı yeniden türetmesin (bkz. lint-gate.mjs § KÜME).
+  adimlar.push({
+    ad: `${proje.ad} · lint`,
+    cwd: ".",
+    cmd: ["node", ["scripts/hooks/lint-gate.mjs", `--proje=${proje.ad}`]],
+    stdin: `${staged.join("\n")}\n`,
+  });
   const anahtar = { "Teks-Erp": "backend", Electron: "electron", mobil: "mobil" }[proje.ad];
   if (existsSync(join(REPO, proje.ad, "lint-baseline.json"))) {
     adimlar.push({
@@ -70,7 +78,15 @@ for (const proje of etkilenenProjeler(REPO, staged)) {
 // Migration/bekçi hijyeni: bu bekçinin değeri YERELDEDİR (CI'da temiz checkout
 // yüzünden "untracked migration" gibi kapıları yapısal olarak hep yeşildir).
 if (staged.some((f) => f.startsWith("Teks-Erp/prisma/") || f.startsWith("Teks-Erp/scripts/"))) {
-  adimlar.push({ ad: "migration hijyeni", cwd: ".", cmd: ["node", ["scripts/check-migrations.mjs"]] });
+  // `--commit-kapisi` + stdin: takipsiz kapılar (GATE 1/4) yalnız commit
+  // migration'a dokunuyorsa SERT; yoksa uyarı (bkz. check-migrations.mjs § COMMIT
+  // KAPISI KİPİ). Bayraksız çağrı — CI, `npm test` — sert davranışı korur.
+  adimlar.push({
+    ad: "migration hijyeni",
+    cwd: ".",
+    cmd: ["node", ["scripts/check-migrations.mjs", "--commit-kapisi"]],
+    stdin: `${staged.join("\n")}\n`,
+  });
 }
 
 // TANIMLAYICI DİLİ ([IL-16]): üretim kodunda İngilizce. ESLint bunu ölçemiyor —
@@ -121,6 +137,7 @@ for (const adim of adimlar) {
     encoding: "utf8",
     timeout: 600_000,
     env: process.env,
+    ...(adim.stdin === undefined ? {} : { input: adim.stdin }),
   });
   const sn = ((Date.now() - t0) / 1000).toFixed(1);
   if (r.status === 0 && !r.error) {

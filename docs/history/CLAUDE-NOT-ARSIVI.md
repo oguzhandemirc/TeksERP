@@ -21,6 +21,96 @@
 
 ---
 
+## 2026-09-13 — Commit kapısı dört kez yanlış kişiyi durdurdu: İKİ mekanizma, iki farklı düzeltme [ÇEKİRDEK]
+
+Bir gecede dört kez commit kapısı, commit'i atan kişinin **kendi işiyle ilgisi olmayan**
+bir dosya yüzünden kırmızı verdi. "Ortak çalışma ağacının bedeli" diye okunmuştu; ölçüm
+iki AYRI mekanizma gösterdi ve ikisi de kapının KENDİ kusuruydu.
+
+**(a) GATE 1/4 yanlış AĞACI okuyordu.** Kısmi (pathspec) commit'te — `git commit -- <yol>` —
+git **geçici bir indeks** kurar ve `GIT_INDEX_FILE`ı ona çevirir; pathspec dışındaki her şey
+HEAD'e geri sarılır. Başkasının **sahnelenmiş** dosyası o indekste yoktur, dolayısıyla
+`git status --porcelain` ona `??` der ve `check-migrations.mjs` "commit edilmemiş migration/
+test" kırmızısı basar. Kum havuzu ölçümü:
+
+| | miras alınan env | `GIT_INDEX_FILE` = gerçek index |
+|---|---|---|
+| başkasının SAHNELENMİŞ dosyası | `?? theirs.txt` | `A  theirs.txt` |
+| gerçekten takipsiz dosya | `?? loose.txt` | `?? loose.txt` |
+
+Yani düzeltme kapıyı körleştirmez, yalnız **doğru ağacı** okutur. `git()` yardımcısı artık
+`GIT_INDEX_FILE=<gitdir>/index` zorluyor (+`--no-optional-locks`: altı oturum aynı indekse
+bakarken status tazeleme yazması yapmasın).
+
+**(b) lint DOĞRU ağacı okuyordu; kusur VERDİKTTEYDİ.** `npm run lint` → `eslint src scripts
+prisma`, yani **dizin** alır ve git'e hiç sormaz. Ölçüldü: ağaca takipsiz bir dosya kondu,
+1114 dosya tarandı ve sonda dosyası **tarandı**. Okuma doğruydu; yanlış olan, başkasının
+yarım kalmış dosyasındaki hatanın benim commit'imi durdurmasıydı. Düzeltme **kapsamı değil
+verdikti** daraltır (`scripts/hooks/lint-gate.mjs`): taranan küme aynı kalır — çünkü
+`check-lint-baseline.mjs` aynı kümeyi ölçmek zorundadır — commit'e giren dosyada hata
+KIRMIZI, yalnız yabancı dosyada UYARI + çıkış 0, **sahip uydurulmaz** ("yabancı" yalnız "bu
+commit'e girmiyor" demektir; unutulmuş kendi düzenlemen de olabilir).
+
+⚠️ **Bu mantık CI'ya taşınamaz** ve `lint-gate.mjs` CI'da koşmaz: CI checkout'unda hiçbir şey
+staged değildir → her dosya "yabancı" olur → kapı yapısal olarak hep yeşil olurdu. Arka durak
+**yeni bir kapı değil**, CI'ın mevcut Lint adımıdır (üç projede de tam ağaç). `.githooks/`
+altında **pre-push YOKTUR** — bu varsayılmıştı, ölçülünce yanlış çıktı.
+
+⚠️ **Sinyal `staged.mjs`ten alınır, `git status`tan değil**: `git diff --cached` kısmi
+commit'in geçici indeksine karşı koşar ve TAM OLARAK commit'e giren kümeyi verir — (a)'nın
+zehri (b)'nin panzehiridir. Küme **çağırandan** gelir (stdin), lint kapısı yeniden türetmez:
+kapı bash-guard'ın torunudur, `TEKSERP_COMMIT_BASE` guard'ı orada tutmaz ve `--amend`de küme
+HEAD'e göre dar çıkardı; commit'e giren bir dosya "yabancı" sayılıp kırmızı yerine uyarı alırdı.
+
+**GATE 4'ün üçüncü vakası (ea, tek oturumlu izole worktree) ayrı bir sonuç verdi:** orada
+takipsiz olan dosya ea'nın KENDİ bir sonraki commit'inin testiydi, yani gerçek indekste de
+takipsizdi — (a)'nın düzeltmesi onu kurtarmaz. Ama kapı UNTRACKED arar, COMMIT'Lİ değil:
+**`git add` yeter**, test bu commit'e girmek zorunda değil. Bu zaten kapının `fix:` satırının
+söylediği şeydi ama "commit et" diye okunuyordu; mesaj bunu artık açıkça yazıyor. ⚠️ Ve
+**düzeltmeden önce `git add` bile yetmiyordu** — pathspec commit'te sahnelenen dosya yine `??`
+görünürdü; (a) ile birlikte bu yol gerçekten açıldı.
+
+**GERÇEKTEN takipsiz yabancı dosya — ayrı bir dal, ayrı bir hüküm.** (a) yalnız
+**sahnelenmiş** yabancı dosyayı kurtarır; ağaçta gerçekten takipsiz duran başkasının
+migration'ı/testi hâlâ yanlış kişiyi durduruyordu (aynı gün iki kez daha: ea'nın
+`20260913120000_quality_grade_role` migration'ı ve `test_quality_code_literal.ts`).
+Karar: commit kapısında takipsiz kapılar yalnız commit **`prisma/migrations`a
+dokunuyorsa** sert; dokunmuyorsa uyarı. ⚠️ **Koruma kaybolmaz, doğru kişiye taşınır:**
+takipsiz bir migration prod'a zaten hiç gitmez — asıl risk sahibinin unutmasıdır ve o
+kişi kendi migration commit'inde sert kapıya çarpar. Bayrak (`--commit-kapisi` + stdin)
+**hook yoluna özgüdür**; CI, `npm run check:migrations` ve `npm test` geçidi bayraksız
+çağırır ve sert kalır — bayrağın CI'ya sızmadığı ayrıca ölçülür, çünkü CI'da hiçbir şey
+staged değildir ve bayrak oraya sızsa kapı yapısal olarak yumuşardı. ⚠️ Bu dalın CI'da
+arka durağı **yoktur** (takipsiz dosya temiz checkout'ta hiç görünmez); bilinçli kabul.
+
+**DÖRDÜNCÜ mekanizma — tip kapısı — BİLEREK DOKUNULMADI.** Aynı gün `tsc` de yanlış
+kişiyi durdurdu (`label.service.ts:1075`, başkasının yarım düzenlemesi). Ama (b)'nin
+kalıbı buraya UYGULANAMAZ: `tsc` **ağacı** derler ve tip hatası dosyalar ARASINDA doğar
+— "yalnız staged dosyaları tiple" ne ses olarak doğrudur (staged dosyam başkasınınkini
+bozabilir) ne sessizlik olarak. Sağlam olan tek soru *"commit'in KENDİ içeriği
+derleniyor mu"*, yani çalışma ağacı değil **indeks**; `git checkout-index` ile geçici bir
+ağaçta `tsc` bunu birebir cevaplar (+~10 sn). Karar: **yalnız anomali varken** — ağaçta
+sahnelenmemiş değişiklik yoksa ağaç = indeks ve bugünkü kontrol bedava doğru cevabı
+verir. *Ölçümün maliyeti, ölçümü gerektiren durumun sıklığıyla orantılı olmalı.*
+(Uygulanmadı; hüküm kayıtlı.)
+
+**ÖLÇÜLDÜ AMA KAPATILMADI — üçüncü mekanizma:** `lint tavanı` (`check-lint-baseline.mjs`)
+**aynı sınıfta**. Sonda: commit dışı bir dosyada tek bir `no-explicit-any` → `❌ backend:
+1 kural TAVANI AŞTI (1117 dosya) · @typescript-eslint/no-explicit-any: 1 > 0`. Yani lint
+düzeltilse bile commit tavandan reddedilir. Kapatılmadı çünkü bu betik **CI'da da koşar** ve
+kapsamı commit'e daraltan bir bayrak oraya sızarsa tavan yapısal olarak kör kalır; çözüm ancak
+hook yoluna özgü olabilir ve bu bir karar gerektirir.
+
+Bekçi: `test_commit_gate_scope.ts` (§1 gerçek git kum havuzu · §2 sentetik ESLint raporu ·
+§3 kablolama tripwire'ları). Negatif sonda ölçüldü: düzeltmesiz `check-migrations.mjs` ile
+19/2 kırmızı (yabancı-sahnelenmiş dalı + tripwire), düzeltmeliyle 19/0. §3'ün her tripwire'ı
+ayrıca **bozulmuş kopyaya** karşı ölçülür — çift terimli tripwire'da tek terim yeniden
+adlandırılınca bekçi yeşil kalır ama korumaz (kapının dördüncü ölüm biçimi, 2026-09-12).
+
+Kural satırları: `docs/standart/TEST-VE-DERLEME.md` [TD-35] ve [TD-36].
+
+---
+
 ## 2026-09-06 (2) — §1d'nin gerçek sebebi ölçüldü: dört tahmin de yanlıştı [ÇEKİRDEK]
 
 Kullanıcı "bu siparişlerin gerçek sorununu nokta atışı tespit etmeliyiz" dedi. Teşhis aracı
