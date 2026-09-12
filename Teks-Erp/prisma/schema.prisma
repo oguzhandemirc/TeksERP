@@ -3886,11 +3886,13 @@ model SubcontractorDispatchItem {
   dispatchedWeight Decimal? @db.Decimal(12, 3)
 
   /// "Kalan gelmeyecek" kapaması (fasonda zayi) — kalemi kabul BEKLEMEDEN kapatır.
-  /// Kısmi teslimat sonrası (ya da hiç dönüş olmadan) fasonda kalan metraj fire
-  /// kararıyla kapatıldığında damgalanır; sebep+metraj `RollVariance`
-  /// (source=SUBCONTRACTOR_REMAINDER), kim/ne `SystemLog` audit'inde. Outstanding
-  /// filtreleri bu damgayı "kalem kapandı" sayar — damgasız + tam-makbuzsuz kalem
-  /// sonsuza dek açık görünür ve parti kilidi (isBatchLockedTx b) hiç açılmazdı.
+  /// ⚠️ DAMGA DEĞİL, DURUM BAYRAĞI: kim/neden/miktar taşımaz, kararın kendisi
+  /// append-only sapma defterinde satırdır (`RollVariance`
+  /// source=SUBCONTRACTOR_REMAINDER; geri almada satır SİLİNMEZ, `reversedAt` alır)
+  /// ve bu kolon `null`'a döner (`reopenRemainder`). Kim/ne `SystemLog` audit'inde.
+  /// Outstanding filtreleri bunu "kalem kapandı" sayar — işaretsiz + tam-makbuzsuz
+  /// kalem sonsuza dek açık görünür, parti kilidi (isBatchLockedTx b) açılmazdı.
+  /// Ayna bekçisi: consistency §24d (işaret ⇔ aktif sapma satırı).
   remainderClosedAt DateTime? @db.Timestamptz
 
   // Relations
@@ -3898,9 +3900,10 @@ model SubcontractorDispatchItem {
   roll         Roll                       @relation(fields: [rollId], references: [id])
   receiptItems SubcontractorReceiptItem[] @relation("ReceiptItemSource")
 
-  /// Sevk kalemi defteri → `updatedAt` YOK (konvansiyon). Güncellemeler DAMGA
-  /// (`remainderClosedAt`) ya da parti cerrahisinde kalemin `dispatchId`
-  /// taşınmasıdır; ikisi de ölçüm/metraj satırını yeniden yazmaz.
+  /// Sevk kalemi defteri → `updatedAt` YOK (konvansiyon). Güncellemeler DURUM
+  /// bayrağı (`remainderClosedAt`; defteri `RollVariance`) ya da parti
+  /// cerrahisinde kalemin `dispatchId` taşınmasıdır; ikisi de ölçüm/metraj
+  /// satırını yeniden yazmaz.
   createdAt DateTime @default(now()) @db.Timestamptz
 
   // Derinlemesine savunma: aynı top aynı sevke iki kez yazılamaz (uygulama

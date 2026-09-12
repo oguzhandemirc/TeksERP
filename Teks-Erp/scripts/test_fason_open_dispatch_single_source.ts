@@ -108,6 +108,12 @@ type TaramaSonucu = {
 // AST yardımcıları
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Özelliğin değeri LİTERAL `null` mı (ör. `remainderClosedAt: null`)? */
+function ozellikNull(obj: ts.ObjectLiteralExpression, ad: string): boolean {
+  const deger = ozellik(obj, ad);
+  return deger !== null && deger.kind === ts.SyntaxKind.NullKeyword;
+}
+
 /** `x as const`, `(x)`, `x satisfies T` sarmalarını soyar. */
 function soy(node: ts.Expression): ts.Expression {
   let n = node;
@@ -185,6 +191,10 @@ function dosyaTara(goreliAd: string, kaynak: string): TaramaSonucu {
         }
       }
 
+      // ⚠️ `remainderClosedAt: { not: null }` KAPANMIŞ kalem aramasıdır (kalan
+      // kapamasının GERİ ALINMASI); outstanding yüklemi değildir ve doğrudan-sevk
+      // süzgeci ORADA YANLIŞ OLUR (damgalı sevkte meşru kapama geri alınamazdı).
+      // Bu yüzden B kuralı yalnız `remainderClosedAt: null` yazımını arar.
       // (B1) sevk-düzeyi: `cancelledAt` + `items.some.remainderClosedAt`,
       //      `directShippedAt` YOK.
       if (ozellikVar(node, "cancelledAt") && !ozellikVar(node, "directShippedAt")) {
@@ -193,7 +203,7 @@ function dosyaTara(goreliAd: string, kaynak: string): TaramaSonucu {
         if (
           some &&
           ts.isObjectLiteralExpression(some) &&
-          ozellikVar(some, "remainderClosedAt") &&
+          ozellikNull(some, "remainderClosedAt") &&
           !tekKaynakKullaniyor(node)
         ) {
           eksikDsk.push(bulguYap(node));
@@ -202,7 +212,7 @@ function dosyaTara(goreliAd: string, kaynak: string): TaramaSonucu {
 
       // (B2) kalem-düzeyi: `remainderClosedAt` + `dispatch: { cancelledAt … }`,
       //      `dispatch.directShippedAt` YOK.
-      if (ozellikVar(node, "remainderClosedAt")) {
+      if (ozellikNull(node, "remainderClosedAt")) {
         const dispatch = ozellik(node, "dispatch");
         if (
           dispatch &&
@@ -253,6 +263,12 @@ const v = { rollId, ...outstandingItemOfOpenDispatch({ stepId }) };`,
       eksik: 0,
     },
     {
+      ad: "B-negatif — KAPANMIŞ kalem araması (`remainderClosedAt: { not: null }`) YAKALANMAZ",
+      kaynak: `const w = { rollId, remainderClosedAt: { not: null }, dispatch: { stepId, cancelledAt: null } };`,
+      kopya: 0,
+      eksik: 0,
+    },
+    {
       ad: "B1 — cancelledAt + items.some.remainderClosedAt, directShippedAt YOK → YAKALANIR",
       kaynak: `const w = { workOrderId, cancelledAt: null, items: { some: { remainderClosedAt: null } } };`,
       kopya: 0,
@@ -298,6 +314,45 @@ const s = "receiptItems: { none: { isPartial: false } }";`,
     `export const OUTSTANDING_ITEM = { remainderClosedAt: null, receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } } };`,
   );
   check("MUAF ŞEKLİ — helper kalıbı tarayıcıya görünüyor", muafSekli.kopyalar.length === 1);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// (C) KALAN-KAPAMA DURUM BAYRAĞININ HAM SQL İKİZLERİ — ALLOWLIST
+// ─────────────────────────────────────────────────────────────────────────────
+// `remainderClosedAt` bir DURUM bayrağıdır ve "kalem kapandı mı" sorusunun ham SQL
+// yazımları TEK TEK bilinmek zorundadır: Prisma tarafı helper'dan okur, ham SQL
+// okumaz. Yeni bir ham SQL kopyası eklenirse (yeni rapor, yeni script) bu bekçi
+// kırmızı verir — kopya yasak değil, GÖRÜNMEZ kopya yasak.
+const REMAINDER_HAM_SQL_MUAF = new Set([
+  "scripts/consistency-check-derived.sql",
+  "src/services/helpers/subcontract-scorecard-query.helper.ts",
+  "src/services/inventory.service.ts",
+  "scripts/test_consistency_derived.ts",
+  // Teşhis script'i (canlıda `--salt-okuma` ile koşar) — kural değil ÖLÇÜM yazar.
+  "scripts/olcum_scorecard_kismi_dogrudan_sevk.ts",
+]);
+
+function remainderHamSqlTara(): { muaflarda: string[]; kacaklar: string[] } {
+  const kokDizinler = ["src", "scripts"];
+  const muaflarda: string[] = [];
+  const kacaklar: string[] = [];
+  const gez = (dizin: string): void => {
+    for (const girdi of fs.readdirSync(dizin, { withFileTypes: true })) {
+      const tam = path.join(dizin, girdi.name);
+      if (girdi.isDirectory()) {
+        gez(tam);
+        continue;
+      }
+      if (!girdi.name.endsWith(".ts") && !girdi.name.endsWith(".sql")) continue;
+      const rel = goreli(tam);
+      const metin = fs.readFileSync(tam, "utf8");
+      if (!/"remainderClosedAt"\s+IS/.test(metin)) continue;
+      if (REMAINDER_HAM_SQL_MUAF.has(rel)) muaflarda.push(rel);
+      else kacaklar.push(rel);
+    }
+  };
+  for (const d of kokDizinler) gez(path.join(KOK, d));
+  return { muaflarda, kacaklar };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -390,8 +445,25 @@ function main(): void {
 }
 
 function ozet(): void {
+  remainderIkizKontrolu();
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);
+}
+
+// (C) çağrıları — muafiyet İKİ YÖNLÜ: muaf dosya kalıbı kaybettiyse de kırmızı.
+function remainderIkizKontrolu(): void {
+  const { muaflarda, kacaklar } = remainderHamSqlTara();
+  check(
+    "(C) ham SQL `remainderClosedAt IS` yazımı yalnız bilinen dosyalarda",
+    kacaklar.length === 0,
+    kacaklar.length ? `KAÇAK: ${kacaklar.join(", ")}` : `${muaflarda.length} muaf dosyada`,
+  );
+  check(
+    "(C) körlük zemini — muaf dosyalar kalıbı hâlâ taşıyor",
+    muaflarda.length >= 3,
+    `bulunan: ${muaflarda.join(", ") || "(yok)"}`,
+  );
 }
 
 main();

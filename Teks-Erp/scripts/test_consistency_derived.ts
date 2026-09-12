@@ -10,7 +10,8 @@
 //   §21  WorkOrder.type                  ← sipariş bağının VARLIĞI
 //   §22  WorkOrder.status                ← adım durumlarının TAMAMLANMIŞLIĞI
 //   §23  KursunBypassAssignment açıklığı ← sahibi iş emrinin CANLILIĞI
-//   §24  Fason kalemin açık/kapalılığı   ← OPEN_OUTSTANDING dörtlüsü (a/b/c)
+//   §24  Fason kalemin açık/kapalılığı   ← OPEN_OUTSTANDING beşlisi (a/b/c) +
+//        kalan-kapama DURUM bayrağı ↔ sapma defteri aynası (d)
 //   §25  Roll.labelDirty                 ← etiketi etkileyen son değişimin ANI
 //   §26  Roll.colorId                    ← iş emrinin hedef rengi (+ sapma defteri)
 //
@@ -270,6 +271,31 @@ WHERE sd."cancelledAt" IS NULL
         WHERE sri."sourceDispatchItemId" = sdi.id
           AND sri."isPartial" = false
           AND sr."cancelledAt" IS NULL)`,
+  },
+  {
+    // `remainderClosedAt` DAMGA DEĞİL DURUM BAYRAĞIDIR (2026-09-12): kararın kendisi
+    // append-only sapma defterinde satırdır (`SUBCONTRACTOR_REMAINDER`, geri almada
+    // `reversedAt`). İkisi birbirinin aynası olmak zorunda: damga var + aktif satır
+    // yok (kalan 0'da sessiz atlanan satır) ya da damga yok + aktif satır var (geri
+    // alma satırı terslememiş). İki yön TEK bölümde, `IS DISTINCT FROM` ile.
+    id: "24d",
+    title: "Kalan-kapama DURUM bayrağı ile sapma defteri ayrışmış (damga ⇔ aktif satır)",
+    sql: `
+SELECT sdi.id      AS dispatch_item_id,
+       sd."dispatchNo",
+       r.barcode,
+       sdi."remainderClosedAt",
+       CASE WHEN sdi."remainderClosedAt" IS NOT NULL
+            THEN 'DAMGA VAR, aktif sapma satiri YOK'
+            ELSE 'aktif sapma satiri VAR, damga YOK' END AS sapma
+FROM subcontractor_dispatch_items sdi
+JOIN subcontractor_dispatches sd ON sd.id = sdi."dispatchId"
+JOIN rolls r ON r.id = sdi."rollId"
+WHERE sd."cancelledAt" IS NULL
+  AND (sdi."remainderClosedAt" IS NOT NULL) IS DISTINCT FROM EXISTS (
+        SELECT 1 FROM roll_variances rv
+        WHERE rv."rollId" = sdi."rollId" AND rv."workOrderStepId" = sd."stepId"
+          AND rv.source = 'SUBCONTRACTOR_REMAINDER' AND rv."reversedAt" IS NULL)`,
   },
   {
     // ⚠️ Kanıt AUDIT'ten okunur ve bu bölümün BİLİNEN sınırıdır: `archive-scheduler`
@@ -749,6 +775,41 @@ const PROBES: Probe[] = [
       });
       await tx.subcontractorDispatchItem.create({
         data: { dispatchId: dispatch.id, rollId: roll.id, dispatchedQty: 100 },
+      });
+    },
+  },
+  {
+    id: "24d",
+    what: "Kapama damgası duruyor ama sapma satırı terslenmiş (defterde aktif satır yok)",
+    expect: ["24d"],
+    build: async (tx) => {
+      const itemId = await seedItem(tx);
+      const stationId = await seedStation(tx, "SUBCONTRACTOR");
+      const woId = await seedWo(tx, itemId, { status: "IN_PROGRESS" });
+      const step = await tx.workOrderStep.create({
+        data: { workOrderId: woId, stationId, stepSequence: 1, status: "ACTIVE" },
+      });
+      const batch = await tx.batch.create({ data: { batchNumber: tag("P"), workOrderId: woId } });
+      const sub = await tx.subcontractor.create({ data: { code: tag("FSN"), name: "Sonda Fason 24d" } });
+      const roll = await tx.roll.create({
+        data: { barcode: tag("T"), itemId, initialQty: 60, currentQty: 60, status: "SUBCONTRACTOR_CONSUMED" },
+      });
+      const dispatch = await tx.subcontractorDispatch.create({
+        data: {
+          dispatchNo: tag("SD"), workOrderId: woId, batchId: batch.id, stepId: step.id,
+          subcontractorId: sub.id, totalQty: 60,
+        },
+      });
+      await tx.subcontractorDispatchItem.create({
+        data: { dispatchId: dispatch.id, rollId: roll.id, dispatchedQty: 60, remainderClosedAt: new Date() },
+      });
+      // Sondanın bozduğu şey: sapma satırı VAR ama TERSLENMİŞ → aktif satır yok.
+      await tx.rollVariance.create({
+        data: {
+          rollId: roll.id, workOrderStepId: step.id, kind: "SCRAP", qty: 60,
+          source: "SUBCONTRACTOR_REMAINDER", reasonCode: "BOYA_HATASI",
+          reversedAt: new Date(),
+        },
       });
     },
   },

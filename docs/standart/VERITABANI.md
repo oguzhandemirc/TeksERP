@@ -121,7 +121,7 @@ Varsayılan silme SOFT'tur (kök `CLAUDE.md` § Veri ve defter). Bugün geçerli
 
 - **[DB-31]** Hard delete yalnız bu İKİ sınıftan birine girerek yazılır; girmiyorsa DURUM GEÇİŞİ yaz (`isActive:false` / `VOIDED` / `revokedAt`+`revokedById`) · zorlama: insan:sınıf sorusudur — allowlist'li tripwire YAZILACAK · kanıt: 87 site (2026-09-10) · devralınan: 87 sitenin tamamı
 - **[DB-32]** Yeni hard delete yolu açmak KARARDIR ve varsayılan cevap HAYIR'dır: `defter.md` sınıf tablosuna gerekçesiyle girer, audit yazar, guard'ı/claim'i ÖNCE yazılır · zorlama: insan:liste elle tutulur · kanıt: `invoice.service.ts:883` · devralınan: yok
-- **[DB-38]** Defter satırı SİLİNMEZ ve GÜNCELLENMEZ; geri alma ters satır yazar, ileri damgayı (`dispatchedAt` · `weighedAt` · `invoicedAt` · `remainderClosedAt`) `null`'lamaz · zorlama: bekçi:YOK — defter mutabakatı bekçisi yazılacak · kanıt: `RollOperation` 7 · `RollMovement` 4 · `PaymentAllocation` 2 `deleteMany` (2026-09-10) · devralınan: 13 site
+- **[DB-38]** Defter satırı SİLİNMEZ ve GÜNCELLENMEZ; geri alma ters satır yazar, ileri damgayı (`dispatchedAt` · `weighedAt` · `invoicedAt`) `null`'lamaz — DURUM BAYRAĞI (`remainderClosedAt`) bu kuralın DIŞINDADIR, defteri `RollVariance`tır · zorlama: bekçi:§24d (`test_consistency_derived.ts`) · kanıt: `RollOperation` 7 · `RollMovement` 4 · `PaymentAllocation` 2 `deleteMany` (2026-09-10) · devralınan: 13 site
 
 ## 10 · Sorgu, Decimal, zaman
 

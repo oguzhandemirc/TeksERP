@@ -9,7 +9,8 @@
 --   §21  WorkOrder.type                ← sipariş bağının VARLIĞI
 --   §22  WorkOrder.status              ← adım durumlarının TAMAMLANMIŞLIĞI
 --   §23  KursunBypassAssignment açıklığı ← sahibi iş emrinin CANLILIĞI
---   §24  Fason kalemin "açık/kapalı"lığı ← OPEN_OUTSTANDING dörtlüsü (a/b/c)
+--   §24  Fason kalemin "açık/kapalı"lığı ← OPEN_OUTSTANDING beşlisi (a/b/c) +
+--        kalan-kapama DURUM bayrağı ↔ sapma defteri aynası (d)
 --   §25  Roll.labelDirty               ← etiketi etkileyen son değişikliğin ANI
 --   §26  Roll.colorId                  ← iş emrinin hedef rengi (+ sapma defteri)
 --
@@ -247,6 +248,39 @@ WHERE sd."cancelledAt" IS NULL
           AND sri."isPartial" = false
           AND sr."cancelledAt" IS NULL)
 ORDER BY sd."dispatchedAt";
+
+\echo ''
+\echo '== 24d) Kalan-kapama DURUM bayrağı ile sapma defteri AYRIŞMIŞ =='
+\echo '   (satır varsa: damga var defter satırı yok — ya da tersi; geri alma tersleyecek satırı bulamaz)'
+-- `remainderClosedAt` bir DAMGA değil DURUM BAYRAĞIDIR (2026-09-12 kararı): kim/neden/
+-- miktar taşımaz, kararın kendisi append-only sapma defterinde satırdır
+-- (`RollVariance` source=SUBCONTRACTOR_REMAINDER, geri almada `reversedAt`). İkisi
+-- birbirinin AYNASI olmak zorundadır:
+--   • damga var + aktif sapma satırı yok  → kapama defterde YOK (kalan 0'da sessiz
+--     atlanan satır; geri alma tersleyecek bir şey bulamaz),
+--   • damga yok + aktif sapma satırı var  → geri alma damgayı kaldırmış ama defter
+--     satırını terslememiş.
+-- İki yön TEK bölümde aranır (`IS DISTINCT FROM`) çünkü ikisi de aynı eşitliğin
+-- bozulmasıdır; ayrı bölüm iki ayrı kural izlenimi verirdi.
+SELECT sdi.id      AS dispatch_item_id,
+       sd."dispatchNo",
+       r.barcode,
+       sdi."remainderClosedAt",
+       (SELECT COUNT(*) FROM roll_variances rv
+         WHERE rv."rollId" = sdi."rollId" AND rv."workOrderStepId" = sd."stepId"
+           AND rv.source = 'SUBCONTRACTOR_REMAINDER' AND rv."reversedAt" IS NULL) AS aktif_sapma,
+       CASE WHEN sdi."remainderClosedAt" IS NOT NULL
+            THEN 'DAMGA VAR, aktif sapma satırı YOK'
+            ELSE 'aktif sapma satırı VAR, damga YOK' END AS sapma
+FROM subcontractor_dispatch_items sdi
+JOIN subcontractor_dispatches sd ON sd.id = sdi."dispatchId"
+JOIN rolls r ON r.id = sdi."rollId"
+WHERE sd."cancelledAt" IS NULL
+  AND (sdi."remainderClosedAt" IS NOT NULL) IS DISTINCT FROM EXISTS (
+        SELECT 1 FROM roll_variances rv
+        WHERE rv."rollId" = sdi."rollId" AND rv."workOrderStepId" = sd."stepId"
+          AND rv.source = 'SUBCONTRACTOR_REMAINDER' AND rv."reversedAt" IS NULL)
+ORDER BY sdi."remainderClosedAt";
 
 \echo ''
 \echo '== 25) Kartelalık işareti etiket BASILDIKTAN SONRA değişmiş ama etiket BAYAT değil =='

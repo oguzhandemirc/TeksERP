@@ -13,6 +13,9 @@
 // damgalı sevk kalemi VAR MI? Damga aynı zamanda atomik claim'dir (iki eşzamanlı
 // geri almadan biri 409 alır).
 // =============================================================================
+import * as fs from "node:fs";
+import * as path from "node:path";
+
 import { RollStatus } from "@prisma/client";
 
 import prisma, { pool } from "../src/lib/prisma";
@@ -231,6 +234,82 @@ async function main(): Promise<void> {
     check("G6b: kapatılmış top yeniden fasonda", d.status === RollStatus.AT_SUBCONTRACTOR && d.stepId === z.stepId, d.status);
     const sevkEdilen = await durum(z.rollIds[0]!);
     check("G6c: müşteriye giden top diriltilmedi", sevkEdilen.status === RollStatus.SUBCONTRACTOR_CONSUMED && sevkEdilen.dsId !== null);
+  }
+
+  // ── G7) KAPAT → AÇ → KAPAT → AÇ: defter büyür, damga gidip gelir ─────────
+  console.log("\n── G7) İki tur kapama/geri alma: iki sapma satırı, ikisi de terslenmiş ──");
+  {
+    const z = await kurSevk([120]);
+    for (const tur of [1, 2]) {
+      await sub.closeRemainder({ stepId: z.stepId, rollId: z.rollIds[0]!, reasonCode: "BOYA_HATASI" }, ctx.admin);
+      const acik = await prisma.rollVariance.count({
+        where: { rollId: z.rollIds[0]!, source: VARIANCE_SOURCES.SUBCONTRACTOR_REMAINDER, reversedAt: null },
+      });
+      check(`G7-${tur}a: kapama AKTİF sapma satırı yazdı (tur ${tur})`, acik === 1, `${acik} aktif satır`);
+      const hata = await reopenHatasi(z.stepId, z.rollIds[0]!);
+      check(`G7-${tur}b: geri alma çalıştı (tur ${tur})`, hata === null, hata?.message.slice(0, 60) ?? "");
+    }
+    const sapmalar = await prisma.rollVariance.findMany({
+      where: { rollId: z.rollIds[0]!, source: VARIANCE_SOURCES.SUBCONTRACTOR_REMAINDER },
+      select: { reversedAt: true },
+    });
+    check("G7c: defter BÜYÜDÜ — iki satır, hiçbiri silinmedi", sapmalar.length === 2, `${sapmalar.length} satır`);
+    check("G7d: iki satır da terslenmiş (aktif satır yok)", sapmalar.every((v) => v.reversedAt !== null));
+    const kalem = await prisma.subcontractorDispatchItem.findFirstOrThrow({
+      where: { dispatchId: z.dispatchId }, select: { remainderClosedAt: true },
+    });
+    check("G7e: DURUM bayrağı null'a döndü", kalem.remainderClosedAt === null);
+    const izler = await prisma.travelerCardScan.count({
+      where: { card: { workOrderId: z.woId }, notes: { contains: "kalan" } },
+    });
+    check("G7f: kartta dört iz var (iki kapama + iki geri alma)", izler === 4, `${izler} iz`);
+  }
+
+  // ── G8) KALAN 0 İKEN KAPAMA: çıkışsız damga yasak ────────────────────────
+  console.log("\n── G8) Kalan 0 iken kapama 409 (damga var defter yok olmasın) ──");
+  {
+    const z = await kurSevk([80]);
+    // Ölçülmüş boşluğun şekli: `recordVarianceTx` 0 metrajda satır YAZMAZ, yani
+    // kapama damgayı basar ama defterde satır olmaz. Kalan metreyi fixture ile
+    // 0'a indiriyoruz (servis yolu 0'a indirmiyor).
+    await prisma.roll.update({ where: { id: z.rollIds[0]! }, data: { currentQty: 0 } });
+    let kod: string | null = null;
+    let statu: number | null = null;
+    try {
+      await sub.closeRemainder({ stepId: z.stepId, rollId: z.rollIds[0]!, reasonCode: "BOYA_HATASI" }, ctx.admin);
+    } catch (e) {
+      const k = hataKimligi(e);
+      kod = k.code;
+      statu = k.status;
+    }
+    check("G8a: 409 REMAINDER_NOTHING_TO_CLOSE", statu === 409 && kod === "REMAINDER_NOTHING_TO_CLOSE", `${statu} ${kod ?? ""}`);
+    const kalem = await prisma.subcontractorDispatchItem.findFirstOrThrow({
+      where: { dispatchId: z.dispatchId }, select: { remainderClosedAt: true },
+    });
+    check("G8b: damga BASILMADI (çıkışsız kapama yok)", kalem.remainderClosedAt === null);
+    const sapma = await prisma.rollVariance.count({
+      where: { rollId: z.rollIds[0]!, source: VARIANCE_SOURCES.SUBCONTRACTOR_REMAINDER },
+    });
+    check("G8c: defterde de satır yok", sapma === 0, `${sapma} satır`);
+  }
+
+  // ── G9) src'de sapma satırı SİLEN kod yok (defter append-only) ───────────
+  console.log("\n── G9) src taraması: rollVariance.delete* yok ──");
+  {
+    const kok = path.resolve(__dirname, "..", "src");
+    const dosyalar: string[] = [];
+    const gez = (d: string): void => {
+      for (const g of fs.readdirSync(d, { withFileTypes: true })) {
+        const tam = path.join(d, g.name);
+        if (g.isDirectory()) gez(tam);
+        else if (g.name.endsWith(".ts")) dosyalar.push(tam);
+      }
+    };
+    gez(kok);
+    const ihlal = dosyalar.filter((f) => /rollVariance\.delete/.test(fs.readFileSync(f, "utf8")));
+    check("G9a: körlük zemini — src taraması dosya buldu", dosyalar.length > 100, `${dosyalar.length} dosya`);
+    check("G9b: hiçbir serviste rollVariance.delete* yok (geri alma TERSLER)", ihlal.length === 0,
+      ihlal.map((f) => path.relative(kok, f)).join(", "));
   }
 }
 

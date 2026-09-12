@@ -4448,6 +4448,8 @@ web'e de taşır.
 
 ## 2026-09-10 — DEFTER-ÖNCELİKLİ MİMARİ: hard delete yok · izlenebilirlik defterle · geri alma ters kayıttır [ÇEKİRDEK]
 
+> ⚠️ **KISMEN GEÇERSİZ (2026-09-12)** — "ileri damgayı null'lamak yasaktır" cümlesinin `remainderClosedAt` örneği DÜŞTÜ: o kolon damga değil DURUM bayrağıdır (defteri `RollVariance(SUBCONTRACTOR_REMAINDER)`), null'a dönebilir → bkz. "2026-09-12 — DURUM BAYRAĞI ≠ DAMGA: `remainderClosedAt` yasak listesinden çıktı".
+
 Kullanıcı üç ilke koydu ve bunlar tek bir doktrinin üç yüzüdür:
 
 1. **Programda hard delete istemiyorum.**
@@ -6114,7 +6116,7 @@ satırlar bağsız (grandfathered) ve fabrikada CANCEL_REVERSAL satırı bugün 
 
 ### Bekçi
 
-`test_stock_count_reversal.ts` 26 → 31 kontrol: §6 yeniden yazıldı (LEDGER_ONLY
+`test_stock_count_reversal.ts` 26 → 32 kontrol: §6 yeniden yazıldı (LEDGER_ONLY
 dalı + yanıtın iki dalı ayrı sayması + statüye dokunulmaması + iki topun da
 defter karşılığı + iki sapma damgası), §6h-§6j ALREADY_REVERSED (ters satır
 tekrar yazılmaz, damga yine atılır). `test_warehouse_movements` §8a-§8c parite.
