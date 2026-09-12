@@ -36,6 +36,15 @@ export const STOCK_MOVE_REASON = {
    * biri fire KPI'sına girer, bu girmez.
    */
   CUT_DISCARD: "CUT_DISCARD",
+  /** Müşteri iadesi — mal SHIPPED'ten rafa döndü. */
+  CUSTOMER_RETURN: "CUSTOMER_RETURN",
+  /**
+   * İade kabulünün geri alınması — `CUSTOMER_RETURN` satırının TERSİ.
+   *
+   * ⚠️ Storno ≠ iade: bu satır SEVKİ geri almaz, malı tekrar "müşteride" sayar.
+   * Sevkin `SHIPMENT` satırına DOKUNULMAZ.
+   */
+  RETURN_CANCEL: "RETURN_CANCEL",
   /** Fason firmasına çıkış / dönüş. */
   FASON_DISPATCH: "FASON_DISPATCH",
   FASON_RECEIPT: "FASON_RECEIPT",

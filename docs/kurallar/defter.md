@@ -105,7 +105,7 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 
 | Defter | Kapsam | Append-only | Ters yol |
 |---|---|---|---|
-| `WarehouseMovement` | depo giriş/çıkış, **13 olay** (`EXTERNAL` hiçbir yerden yazılmıyor; `OPENING_BALANCE` yalnız açılış fotoğrafı script'inden) | ✅ ölçüldü (`update`/`delete` yolu yok) | ✅ `reversesMovementId` + üç ters helper (`reverseStockMove` · `reverseAllRollStockMoves` · `reverseLatestScopedStockMove`) · **BORÇ: `RETURN` ters yolsuz** — `cancelReturn` defterin hiçbir yoluna dokunmuyor |
+| `WarehouseMovement` | depo giriş/çıkış, **13 olay** (`EXTERNAL` hiçbir yerden yazılmıyor; `OPENING_BALANCE` yalnız açılış fotoğrafı script'inden) | ✅ ölçüldü (`update`/`delete` yolu yok) | ✅ `reversesMovementId` + dört ters helper (`reverseStockMove` · `reverseLegacyStockMove` · `reverseAllRollStockMoves` · `reverseLatestScopedStockMove`) · **`RETURN` ✅ kapandı** (`RETURN_CANCEL`, bağlı, 2026-09-13) · TRANSFER ✅ bağsız · SHIPMENT ✅ bağsız · CANCEL ⚠️ yalnız sayım stornosu bağlı (elle "iptali geri al" `ROLL_CANCEL` kapsamıyla yazar, sayımın satırını bulamaz) · **BORÇ: `EXTERNAL` (fason doğumu · kartela) ters yolsuz** |
 | `CariTransaction` `:6611` | cari borç/alacak, 11 kaynak | ✅ | ✅ `reversesTxnId` |
 | `ChequeEvent` `:7208` | çek durum defteri, 14 olay | ✅ | ✅ `*_CANCEL` (2026-09-11) — CANCEL'ın tersi yok (kendisi storno) |
 | `CashTransaction` `:6898` | kasa/banka | yarı (`status: CANCELLED`) | ✅ |

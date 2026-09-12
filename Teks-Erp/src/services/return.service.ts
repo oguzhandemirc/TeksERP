@@ -18,8 +18,10 @@
 
 import { Prisma, RollStatus, OrderStatus, PrintedDocType, ShipmentStatus, WarehouseEventType } from "@prisma/client";
 import { normalizeScanCode } from "../utils/code-format";
-import { writeWarehouseMovement } from "./helpers/warehouse-ledger.helper";
-import { assertRollsHaveWarehouse } from "./helpers/warehouse-stock.helper";
+import { postStockMove } from "./helpers/warehouse-ledger.helper";
+import { reverseLegacyStockMove, reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
+import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
+import { assertRollsHaveWarehouse, WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import prisma from "../lib/prisma";
 import {
   printedDocumentService,
@@ -579,20 +581,26 @@ export class ReturnService {
         });
         createdIds.push(rr.id);
 
-        // DEPO DEFTERİ — mal müşteriden GERİ GELDİ ve depoya girdi. Hedef depo,
-        // topun sevkten önce durduğu depodur: `Roll.warehouseId` sevkte
-        // temizlenmiyor, dolayısıyla iade malı geldiği rafa döner (SCRAP'a düşse
-        // bile "hangi depoya girdi" izi doğru kalır).
-        await writeWarehouseMovement(tx, {
-          rollId: r.id,
-          eventType: WarehouseEventType.RETURN,
-          qty,
-          toWarehouseId: r.warehouseId ?? null,
-          rollReturnId: rr.id,
-          userId,
-        // İade miktarı uçta doğrulanıyor; 0 metrajlı iade satırı veri hatasıdır.
-        // (Deposuz top uçsuz kaldığı için POLİTİKAYA TABİ DEĞİL, atlanır.)
-        }, { onUnwritable: "throw" });
+        // STOK DEFTERİ — mal müşteriden GERİ GELDİ. İki uçlu: `from` stok dışı
+        // (`SHIPPED`, depo taşımaz), `to` topun sevkten önce durduğu raf
+        // (`Roll.warehouseId` sevkte temizlenmiyor).
+        //
+        // ⚠️ SATIR YALNIZ MAL STOK KÜMESİNE GİRİYORSA yazılır: FİRE hedefli iade
+        // (`appliedStatus = SCRAP`) stok dışından stok dışınadır ve satırsız
+        // kalır — `RollReturn` o durumu kendi taşır (tasarım §64). İptali de
+        // simetrik olarak satırsızdır.
+        if (WAREHOUSE_STOCK_STATUSES.includes(appliedStatus)) {
+          await postStockMove(tx, {
+            rollId: r.id,
+            eventType: WarehouseEventType.RETURN,
+            qty,
+            from: { warehouseId: null, status: RollStatus.SHIPPED },
+            to: { warehouseId: r.warehouseId, status: appliedStatus },
+            reasonCode: STOCK_MOVE_REASON.CUSTOMER_RETURN,
+            rollReturnId: rr.id,
+            userId,
+          });
+        }
       }
 
       // GRUP anahtarı = LİDERİN id'si. Tekil iadede alan NULL kalır → belge çözümü,
@@ -872,7 +880,7 @@ export class ReturnService {
         appliedStatus: true,
         // Çok kalemli iade belgesinin kaynağı — iptalde void mi revize mi kararı bununla.
         returnGroupId: true,
-        roll: { select: { barcode: true, status: true, shipmentId: true, sackId: true } },
+        roll: { select: { barcode: true, status: true, shipmentId: true, sackId: true, warehouseId: true } },
       },
     });
     if (!rr) throw AppError.notFound("İade kaydı bulunamadı");
@@ -953,6 +961,41 @@ export class ReturnService {
         where: { id: rr.id },
         data: { cancelledAt: new Date(), cancelReason: trimmedReason, cancelledById: userId },
       });
+
+      // STOK DEFTERİ — iade kabulünün BAĞLI ters kaydı. Bugüne kadar bu yol
+      // defter satırı YAZMIYORDU: mal rafa girmiş sayılıyor, geri alınınca defter
+      // girişi duruyordu ⇒ Σ sessizce şişiyordu.
+      //
+      // ⚠️ İleri satır BAĞDAN bulunur (`rollReturnId`), tipten değil: `RETURN`
+      // tipi sayarak eşleme aynı topun başka bir iadesinin satırını seçebilir.
+      // ⚠️ Storno ≠ iade: sevkin `SHIPMENT` satırına DOKUNULMAZ — iade iptali
+      // sevki geri almaz, malı tekrar "müşteride" sayar.
+      const ileri = await tx.warehouseMovement.findFirst({
+        where: { rollReturnId: rr.id, reversesMovementId: null, reversedBy: { none: {} } },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, fromStatus: true, toStatus: true },
+      });
+      if (ileri) {
+        const notes = `İade iptali: ${trimmedReason}`.slice(0, 300);
+        if (ileri.fromStatus === null && ileri.toStatus === null) {
+          // Eski kapıdan yazılmış statüsüz satır: uçlar aynalanamaz, canlıdan kurulur.
+          await reverseLegacyStockMove(tx, ileri.id, {
+            reasonCode: STOCK_MOVE_REASON.RETURN_CANCEL,
+            from: { warehouseId: rr.roll.warehouseId, status: expectedStatus },
+            to: { warehouseId: null, status: RollStatus.SHIPPED },
+            userId,
+            notes,
+          });
+        } else {
+          await reverseStockMove(tx, ileri.id, {
+            reasonCode: STOCK_MOVE_REASON.RETURN_CANCEL,
+            userId,
+            notes,
+          });
+        }
+      }
+      // İleri satır YOKSA ters satır da yazılmaz — FİRE hedefli iade (satırsız)
+      // ve defter yazımından ÖNCEKİ iadeler bu dala düşer. Simetri bilinçli.
       // BELGE — iki dal, çünkü belge artık ÇOK KALEMLİ olabilir (`returnGroupId`):
       //  • Gruptaki SON aktif kalem iptal edildiyse → belge VOIDED (İPTAL filigranı).
       //  • Hâlâ aktif kalem varsa → belge REVİZE (v+1): iptal edilen satır düşer,
