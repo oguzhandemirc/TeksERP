@@ -185,6 +185,17 @@ const yeniler = bugun.filter((k) => !tabanKume.has(k));
 const kalkanlar = taban.adlar.filter((k) => !bugun.includes(k));
 
 console.log("\n§1 — körlük zemini");
+// ⚠️ KAPSAM SINIRI ÇIKTIYA BASILIR (2026-09-13, 6e'nin ölçümü). Bu kapı Türkçe
+// adı SÖZLÜKTEN tanır: listede olmayan bir kök GÖRÜNMEZ. Ölçüldü — aynı commit'te
+// ALTI yeni Türkçe ad vardı (`BARKODSUZ` · `barkodlar` · `deposuz` · `gosterilen`
+// · `kuyruk` · `baglam`) ve kapı yalnız BİRİNİ gördü.
+// ⚠️ "Kapı görmedi" ≠ "uygun". Sınır basılmazsa yeşil, KAPSAM sanılır — listeyi
+// genişletmek bu cümleyi geçersiz kılmaz, çünkü sınır ne kadar genişlerse
+// genişlesin SINIR KALIR. Basmak listeyi genişletmekten ÖNCE gelir.
+console.log(
+  `   ⚠️ KAPSAM: sözlükte ${TR_KOKLER.length} kök var; kapı YALNIZ bu kökleri taşıyan adı görür.\n` +
+    `      Listede olmayan bir Türkçe kök SESSİZCE geçer — yeşil "tarandı" demektir, "temiz" değil.`,
+);
 check("dosyalar tarandı", bulgular.length >= 0);
 check("Türkçe kök listesi dolu", TR_KOKLER.length > 20, `${TR_KOKLER.length} kök`);
 check(

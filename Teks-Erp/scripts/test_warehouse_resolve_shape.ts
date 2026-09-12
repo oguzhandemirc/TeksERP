@@ -24,6 +24,17 @@
 //
 // ⚠️ FAIL-OPEN KAPANDI (2026-09-12): helper artık `null` DÖNMEZ, 409 FIRLATIR.
 //    Bu dosya o kararın geri alınmadığını ölçer — davranışını değil.
+//
+// ⚠️⚠️ KAPSAM — BUGÜN İKİ AYRI 409 VAR, KARIŞTIRMA:
+//    · `resolveTargetWarehouseId` 409 = "VARSAYILAN DEPO çözülemiyor" → ULAŞILAMAZ
+//      (üçüncü kademe depoyu yaratır). Bu dosyanın konusu YALNIZ budur.
+//    · `assertRollsHaveWarehouse` 409 = "BU TOPUN deposu yok" → **ULAŞILABİLİR**
+//      ve ölçüldü (6e, 2026-09-13): 11 terfi yolu deposuz bir topu stok kümesine
+//      çekerken `warehouseId`ye hiç dokunmuyor, ve `backfill_roll_warehouse`
+//      hiçbir migration/deploy/boot zincirinde çağrılmıyor — "popülasyon 0" bir
+//      KOD ÖZELLİĞİ değil, birinin bir kez elle koşturduğu bir OLAY.
+//    Yukarıdaki "409 ulaşılamaz" cümlesi o kapıya UYGULANAMAZ; uygulanırsa
+//    gerçek bir kapı gevşetilir. Yazılı olmayan bir kapsam, uyarıdan da kötüdür.
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
