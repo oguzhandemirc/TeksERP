@@ -67,11 +67,13 @@ export function MergeConfirmGate({
 
   return (
     <div className="space-y-4">
-      <Callout tone="danger" title="Bu işlem geri alınamaz">
+      <Callout tone="danger" title="Bu işlem geri alınabilir ama kolay değil">
         <b>{preview.sources.length}</b> kayıt <b>{preview.survivor?.name}</b> altına birleşecek.
         Birleşen kayıtlar silinmez — pasifleşir ve “→ {preview.survivor?.name} altına birleşti”
-        olarak görünmeye devam eder. Ancak <b>geri alınamaz</b>: referanslar hedefe taşındıktan
-        sonra hangi satırın hangi kayıttan geldiği ayrıştırılamaz.
+        olarak görünmeye devam eder. Birleştirme <b>deftere yazılır</b> (hangi satır hangi kayıttan
+        taşındı) ve “Birleştirme Geçmişi”nden geri alınabilir; ancak geri alma <b>sıralıdır</b>
+        (aynı kayıtlar sonra yeniden birleştirildiyse önce o geri alınır) ve adlar çakışıyorsa
+        yeni ad ister. Basılmış belgeler hiçbir hâlde değişmez.
       </Callout>
 
       {preview.warnings.map((w) => (

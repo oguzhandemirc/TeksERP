@@ -2,7 +2,7 @@
 
 > Üretilmiş (anlama turu 2026-09-05, +10 bekçi 2026-09-06/07; 467 backend bekçisi + 296 istemci testi — Electron 211, mobil 85). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı; 455 dosya, **~6,5 dakika** — 369 sn koşum + 28 sn tip geçidi, ölçüldü 2026-09-05 — 'saatler sürer' cümlesi YANLIŞTI, `docs/standart/TEST-VE-DERLEME.md` [TD-02]). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
 
-Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (94), `diger` (91), `sevkiyat` (87), `etiket` (83), `finans` (81), `siparis` (72), `modul-bayrak` (68), `belge` (65), `ayar` (58), `cuval` (59), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (41), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (30), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (12), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
+Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (94), `diger` (91), `sevkiyat` (87), `etiket` (83), `finans` (81), `siparis` (72), `modul-bayrak` (68), `belge` (65), `ayar` (58), `cuval` (59), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (41), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (30), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (23), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (12), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
 
 
 ## yetki-izin (98)
@@ -1424,6 +1424,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (94), `di
 | `Teks-Erp/scripts/test_master_data_merge_fk_coverage.ts` | MERGE_MAP'in şema metninden türetilen FK kümesiyle iki yönlü örtüşmesi — bilinmeyen FK de ölü harita girişi de kırmızı verir. |  | ✓ |  |
 | `Teks-Erp/scripts/test_master_data_merge_race.ts` | Birleştirme × yazma yarışı: §1 tx içinde taze mezar-taşı okuması, §2 pg_advisory_xact_lock(8027,1) EXCLUSIVE↔SHARED serileştirmesi — canlı top mezar t | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_master_data_name_dup.ts` | Master-data'da ad-mükerrer koruması: servis 409'u (renk/ürün/istasyon/makine/müşteri/fason/şube) + customers-items-subcontractors'ta servisi atlayan y | ✓ | ✓ |  |
+| `Teks-Erp/scripts/test_migration_enum_add_value.ts` | `ALTER TYPE … ADD VALUE` üç kuralı: `IF NOT EXISTS` var, dosya YALNIZ ADD VALUE taşır, eklenen literal aynı dosyada kullanılmaz (PG 55P04 = canlıda ya |  | ✓ |  |
 | `Teks-Erp/scripts/test_migration_hygiene.ts` | _prisma_migrations defteri ile prisma/migrations dizini arasındaki mutabakat: DB'de var-dizinde yok FAIL, dizinde var-DB'de yok UYARI, applied_steps_c | ✓ |  |  |
 | `Teks-Erp/scripts/test_module_grandfathering.ts` | 20260902230000 grandfathering migration'ının metnini (koşul/idempotentlik/veri türevi) ve canlı DB'deki damga satırlarını, migration'ınkiyle AYNI yükl | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_phase6_reporterror_concurrency.ts` | roll_errors(rollId,startMeter,defectTypeId) partial unique'inin fiilen çalıştığını ölçer: iki paralel reportError → 1 başarı + 1×409 ve DB'de TEK satı | ✓ |  |  |
@@ -1634,10 +1635,11 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (94), `di
 | `mobil/src/screens/Modules/KK1/EntryConflictModal.test.tsx` | Modal dört durumda da FİİLEN çizilir — 2026-08-12'de TouchableRipple iki çocukla React.Children.only fırlatıp uygulamayı kapatmıştı; metin sabiti bekç |  |  |  |
 | `mobil/src/store/sessionEntriesStore.test.ts` | 'Bu oturumda girilenler' kovası: addPending sayacı, confirmRoll pending→onaylı geçişi, başarısızlık akışı ve logout temizliği; liste ekran değil GİRİŞ |  |  |  |
 
-## mukerrer (22)
+## mukerrer (23)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Teks-Erp/scripts/test_master_data_merge_revert.ts` | Birleştirmeyi geri alma: defter yazımı (kaynak künyesi + taşınan satır kimliği), referansın kaynağına dönüşü, tombstone kalkması, operasyon satırının değişmemesi + ters damga, çift geri alma 409, LIFO, ad çakışmasında yeni ad, referanssız birleştirmenin geri alınabilmesi, kilit sırası değişmezi | ✓ | ✓ |  |
 | `Electron/src/components/forms/SimilarNamesWarning.test.tsx` | Benzer ad uyarısı: <3 harfte sunucuya sormaz, debounce ile tek istek, birebir eşleşme ayrı başlık + 'kaydedilemez', birleştirilmiş ad işaretlenir, son |  |  | ⚠️ yok |
 | `Electron/src/components/forms/similar-names-coverage.test.ts` | Statik kapsam bekçisi: pages ağacında register("name") taşıyan her form ya SimilarNamesWarning çizer ya MUAF listesinde; muaf listesi bayatlık kontrol |  |  | ⚠️ yok |
 | `Teks-Erp/scripts/test_color_name_dup.ts` | ColorService aynı normalize adlı rengi 409 ile reddeder (harf varyantı ve pasif kayıt dahil); kendi adını değiştirmeyen update serbest. | ✓ |  |  |

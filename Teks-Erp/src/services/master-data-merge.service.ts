@@ -11,8 +11,12 @@
 //    12 aliası olan iki müşteride satır satır seçim, operatörün gerçekten
 //    okumadığı 12 soru üretir ("onay yorgunluğu"); politika yazılı ve
 //    önizlemede somut gösteriliyor, karar noktası TEK: birleştir / vazgeç.
-// 3) GERİ ALINAMAZ ve bu açıkça söylenir. Emniyet ağı gece yedeği + kopyaya
-//    geri yükleme (`db-copy.service.ts`); önizleme son yedeğin saatini gösterir.
+// 3) GERİ ALINABİLİR AMA SIRAYLA (2026-09-12): her birleştirme `MergeOperation`
+//    defterine yazılır — taşınan satırın KİMLİĞİ, silinen çakışma satırının TAM
+//    fotoğrafı, survivor'a yazılan alanların önceki değeri. Geri alma
+//    `master-data-unmerge.service.ts`tedir ve LIFO'dur (kaydı ilgilendiren daha
+//    sonraki birleştirme varsa önce o geri alınır). Defter ÖNCESİ birleştirmeler
+//    geri alınamaz; emniyet ağı onlar için gece yedeği + kopyaya geri yüklemedir.
 //
 // ⚠️ `PrintedDocument` / snapshot'lara DOKUNULMAZ ve bu `mergeBatches`'ten
 // BİLİNÇLİ AYRILIKTIR: orada belge VOID edilir çünkü OLAY iptal edilmiştir.
@@ -39,6 +43,14 @@ import {
   type MergeEntity,
   type MoveRule,
 } from "../constants/merge-map";
+import { MergeRefKind } from "@prisma/client";
+import {
+  deleteCapturingTx,
+  movePerSourceTx,
+  newPkCache,
+  snapshotRowsTx,
+  type PkCache,
+} from "./helpers/merge-ledger.helper";
 
 /**
  * GLOBAL advisory kilit. Kaynak/survivor id'lerine göre değil TEK anahtarla
@@ -625,11 +637,35 @@ export class MasterDataMergeService {
           );
         }
 
+        // 3c) BİRLEŞTİRME DEFTERİ — mutasyonlardan ÖNCE doğar (geri almanın tek
+        // kaynağı). Kaynakların tombstone ÖNCESİ hâli de burada donar: geri alma
+        // adı/aktifliği buradan yazar, audit'ten OKUMAZ (audit 6 ayda arşivlenir).
+        const operation = await tx.mergeOperation.create({
+          data: {
+            entity,
+            survivorId: survivor.id,
+            reason: params.reason.trim().slice(0, 500),
+            createdById: params.userId ?? null,
+          },
+          select: { id: true },
+        });
+        await tx.mergeOperationSource.createMany({
+          data: sources.map((src) => ({
+            operationId: operation.id,
+            sourceId: src.id,
+            nameBefore: String(src.name).slice(0, 255),
+            codeBefore: src.code ? String(src.code).slice(0, 64) : null,
+            isActiveBefore: Boolean(src.isActive),
+          })),
+        });
+
         // 4) Yan etki işaretleri — TAŞIMADAN ÖNCE.
         await markSideEffectsTx(tx, entity, sourceIds);
 
         // 5) Çakışma çözümü + 6) düz taşımalar.
         const movedRows: Array<{ table: string; column: string; count: number }> = [];
+        const refRows: Prisma.MergeOperationRefCreateManyInput[] = [];
+        const pkCache: PkCache = newPkCache();
         let conflictsResolved = 0;
         for (const rule of MERGE_MAP[entity]) {
           if (rule.kind === "EXEMPT") continue;
@@ -647,16 +683,67 @@ export class MasterDataMergeService {
             rule.kind === "CONFLICT" &&
             (conflictCount > 0 || rule.policy === "EMPTY_MEANS_ALL");
           if (mustResolve && rule.kind === "CONFLICT") {
-            conflictsResolved += await resolveConflictTx(tx, rule, survivor.id, sourceIds);
+            const res = await resolveConflictTx(tx, rule, survivor.id, sourceIds);
+            conflictsResolved += res.count;
+            // Silinen satır KAYNAĞINA göre gruplanır: fotoğraf satırında taşınan
+            // kolonun değeri hâlâ kaynağın id'sidir (silme taşımadan ÖNCE koşar).
+            for (const sourceId of sourceIds) {
+              const own = res.deletedRows.filter((r) => String(r[rule.column] ?? "") === sourceId);
+              if (own.length > 0) {
+                refRows.push({
+                  operationId: operation.id,
+                  sourceId,
+                  tableName: rule.table,
+                  columnName: rule.column,
+                  kind: MergeRefKind.DELETED,
+                  count: own.length,
+                  // ⚠️ `rowIds` NOT NULL ve DEFAULT'u bilinçli düşürüldü (şema ikizliği):
+                  // taşıma dışı kalemlerde AÇIKÇA boş dizi yazılır.
+                  rowIds: [],
+                  rowData: own as Prisma.InputJsonValue,
+                });
+              }
+            }
+            if (res.snapshotRows.length > 0) {
+              // FIELD_MERGED satırı SURVIVOR'ın — kaynak yok (`sourceId` NULL).
+              refRows.push({
+                operationId: operation.id,
+                sourceId: null,
+                tableName: rule.table,
+                columnName: rule.column,
+                kind: MergeRefKind.FIELD_MERGED,
+                count: res.snapshotRows.length,
+                rowIds: [],
+                rowData: res.snapshotRows as Prisma.InputJsonValue,
+              });
+            }
           }
-          const moved = await tx.$executeRawUnsafe(
-            `UPDATE "${rule.table}" SET "${rule.column}" = $1::uuid
-             WHERE "${rule.column}" = ANY($2::uuid[])`,
-            survivor.id,
-            sourceIds,
-          );
-          movedRows.push({ table: rule.table, column: rule.column, count: Number(moved) });
+          // ⚠️ TAŞIMA KAYNAK BAŞINA: tek `UPDATE … = ANY(sources)` hangi satırın
+          // hangi kaynaktan geldiğini söyleyemez ve geri alma onu tahmin edemez.
+          let movedTotal = 0;
+          for (const sourceId of sourceIds) {
+            const moved = await movePerSourceTx(
+              tx,
+              { table: rule.table, column: rule.column, survivorId: survivor.id, sourceId },
+              pkCache,
+            );
+            movedTotal += moved.count;
+            if (moved.count > 0) {
+              refRows.push({
+                operationId: operation.id,
+                sourceId,
+                tableName: rule.table,
+                columnName: rule.column,
+                kind: MergeRefKind.MOVED,
+                count: moved.count,
+                rowIds: moved.rowIds,
+                ...(moved.rowKeys ? { rowKeys: moved.rowKeys as Prisma.InputJsonValue } : {}),
+              });
+            }
+          }
+          movedRows.push({ table: rule.table, column: rule.column, count: movedTotal });
         }
+        if (refRows.length > 0) await tx.mergeOperationRef.createMany({ data: refRows });
 
         // 7) ATOMİK CLAIM — `mergedIntoId: null` koşulu yarışı kapatır.
         const claimed = await del.updateMany({
@@ -721,7 +808,26 @@ export class MasterDataMergeService {
           await del.updateMany({ where: { id: survivor.id }, data });
         }
 
+        // Alan seçimleri ve çakışma sayısı deftere: geri alma survivor'ın ESKİ
+        // değerini buradan yazar (audit'ten değil).
+        await tx.mergeOperation.update({
+          where: { id: operation.id },
+          data: {
+            conflictsResolved,
+            fieldPicks:
+              fieldsApplied.length > 0
+                ? (fieldsApplied.map((f) => ({
+                    field: f.field,
+                    before: fieldValueOf(survivor, f.field),
+                    after: f.value,
+                    fromId: f.from,
+                  })) as Prisma.InputJsonValue)
+                : undefined,
+          },
+        });
+
         return {
+          operationId: operation.id,
           movedRows,
           conflictsResolved,
           survivorName: survivor.name,
@@ -834,12 +940,21 @@ async function describeConflictTx(
  * Çakışan satırları politikaya göre çözer ve KAÇ satıra dokunulduğunu döner.
  * Bu adımdan sonra düz `UPDATE` çakışmasız koşabilir.
  */
+interface ConflictResolution {
+  /** Dokunulan satır sayısı (eski dönüş değeri — çağıranın sayacı bozulmaz). */
+  count: number;
+  /** Silinen satırların TAM fotoğrafı — geri alma bunlardan yeniden yazar. */
+  deletedRows: Array<Record<string, unknown>>;
+  /** `MERGE_FIELDS`te ZENGİNLEŞTİRİLMEDEN ÖNCEKİ survivor satırları. */
+  snapshotRows: Array<Record<string, unknown>>;
+}
+
 async function resolveConflictTx(
   tx: Prisma.TransactionClient,
   rule: Extract<MoveRule, { kind: "CONFLICT" }>,
   survivorId: string,
   sourceIds: string[],
-): Promise<number> {
+): Promise<ConflictResolution> {
   const other = rule.uniqueOn.filter((c) => c !== rule.column);
   const matchOther = other.map((c) => `t."${c}" = s."${c}"`).join(" AND ");
   // Sayım ikiziyle aynı yüklem — tek kolonlu kısıtta "diğer kolon" yoktur.
@@ -854,6 +969,7 @@ async function resolveConflictTx(
       throw AppError.conflict(`'${rule.label}' çakışması otomatik çözülemez.`);
 
     case "EMPTY_MEANS_ALL": {
+      // (fotoğraflı silme — gerekçe aşağıda)
       // ⚠️ "BOŞ = HEPSİ": survivor'ın HİÇ satırı yoksa kısıt "hepsi serbest"
       // demektir; kaynağın satırlarını taşımak onu SESSİZCE DARALTIR. O yüzden
       // survivor boşken kaynağınkiler tamamen atılır, doluyken yalnız çakışanlar.
@@ -863,38 +979,37 @@ async function resolveConflictTx(
       );
       const survivorHasRows = Number(survivorRows[0]?.n ?? 0) > 0;
       if (!survivorHasRows) {
-        return Number(
-          await tx.$executeRawUnsafe(
-            `DELETE FROM "${rule.table}" WHERE "${rule.column}" = ANY($1::uuid[])`,
-            sourceIds,
-          ),
-        );
+        const rows = await deleteCapturingTx(tx, {
+          table: rule.table,
+          where: `s."${rule.column}" = ANY($1::uuid[])`,
+          args: [sourceIds],
+        });
+        return { count: rows.length, deletedRows: rows, snapshotRows: [] };
       }
-      return Number(
-        await tx.$executeRawUnsafe(
-          `DELETE FROM "${rule.table}" s WHERE ${conflictWhere}`,
-          sourceIds,
-          survivorId,
-        ),
-      );
+      const rows = await deleteCapturingTx(tx, {
+        table: rule.table,
+        where: conflictWhere,
+        args: [sourceIds, survivorId],
+      });
+      return { count: rows.length, deletedRows: rows, snapshotRows: [] };
     }
 
     case "SKIP":
     case "UNION":
-    case "UNION_COMPOSITE_PK":
+    case "UNION_COMPOSITE_PK": {
       // Üçü de aynı SQL'e iner (çakışanı sil, gerisi taşınsın) ama AYRI
       // isimlendirildi çünkü GEREKÇELERİ farklı ve haritayı okuyan kişi
       // "neden survivor kazanıyor?" sorusunun cevabını orada bulmalı.
       // ⚠️ UNION_COMPOSITE_PK'da alternatif yol (updateMany) MÜMKÜN DEĞİL:
       // PK'nın yarısını değiştiren UPDATE çakışan satırda P2002 verir ve
       // `skipDuplicates` bir UPDATE'te yoktur.
-      return Number(
-        await tx.$executeRawUnsafe(
-          `DELETE FROM "${rule.table}" s WHERE ${conflictWhere}`,
-          sourceIds,
-          survivorId,
-        ),
-      );
+      const rows = await deleteCapturingTx(tx, {
+        table: rule.table,
+        where: conflictWhere,
+        args: [sourceIds, survivorId],
+      });
+      return { count: rows.length, deletedRows: rows, snapshotRows: [] };
+    }
 
     case "MERGE_FIELDS": {
       // Alan alan birleşme (customer_color_aliases): önce survivor satırını
@@ -903,6 +1018,14 @@ async function resolveConflictTx(
       // "Müşteri Renkleri" listesinden düşer ve picker'da görünmez olur),
       // `alias` = COALESCE (survivor'ınki doluysa o kazanır; etikete basılan
       // değeri değiştirmiyoruz).
+      // Zenginleşecek survivor satırlarının fotoğrafı — yazımdan ÖNCE.
+      const before = await snapshotRowsTx(tx, {
+        table: rule.table,
+        where: `t."${rule.column}" = $2::uuid
+            AND EXISTS (SELECT 1 FROM "${rule.table}" s
+                         WHERE s."${rule.column}" = ANY($1::uuid[])${other.length > 0 ? ` AND (${other.map((c) => `t."${c}" = s."${c}"`).join(" AND ")})` : ""})`,
+        args: [sourceIds, survivorId],
+      });
       await tx.$executeRawUnsafe(
         `UPDATE "${rule.table}" t
             SET "assigned" = t."assigned" OR s."assigned",
@@ -914,13 +1037,12 @@ async function resolveConflictTx(
         sourceIds,
         survivorId,
       );
-      return Number(
-        await tx.$executeRawUnsafe(
-          `DELETE FROM "${rule.table}" s WHERE ${conflictWhere}`,
-          sourceIds,
-          survivorId,
-        ),
-      );
+      const rows = await deleteCapturingTx(tx, {
+        table: rule.table,
+        where: conflictWhere,
+        args: [sourceIds, survivorId],
+      });
+      return { count: rows.length, deletedRows: rows, snapshotRows: before };
     }
   }
 }

@@ -264,6 +264,52 @@ export interface DuplicateRecordList {
   thresholdPct: number;
 }
 
+/** Birleştirme defteri satırı (backend `MasterDataUnmergeService.list` aynası). */
+export interface MergeOperationRow {
+  id: string;
+  entity: MergeEntity;
+  survivorId: string;
+  reason: string;
+  createdAt: string;
+  createdById: string | null;
+  revertedAt: string | null;
+  revertReason: string | null;
+  sourceCount: number;
+  movedRows: number;
+}
+
+export interface UnmergePlan {
+  operationId: string;
+  entity: MergeEntity;
+  survivorId: string;
+  reason: string;
+  createdAt: string;
+  revertedAt: string | null;
+  blockers: string[];
+  sources: Array<{
+    sourceId: string;
+    nameBefore: string;
+    codeBefore: string | null;
+    isActiveBefore: boolean;
+    stillMerged: boolean;
+    /** Ad hayattaki kayıtla çakışıyor → geri alma isteği YENİ AD taşımalı. */
+    needsRename: boolean;
+    collidesWith: string | null;
+  }>;
+  refs: Array<{ tableName: string; columnName: string; kind: "MOVED" | "DELETED" | "FIELD_MERGED"; count: number }>;
+}
+
+export interface UnmergeResult {
+  operationId: string;
+  entity: MergeEntity;
+  restoredSources: number;
+  repointedRows: number;
+  restoredDeletedRows: number;
+  restoredFieldRows: number;
+  /** Defterde duran ama bugün geri yazılamayan satır (sonradan değişmiş). */
+  skippedRows: number;
+}
+
 export const mergeService = {
   /** Varlığın TAM listesi + şüpheli süzgeci — panelin ana ekranı. */
   records: (
@@ -315,6 +361,26 @@ export const mergeService = {
   ) =>
     apiClient
       .post<ApiResponse<MergeResult>>(`/api/master-data/${entity}/merge`, body)
+      .then((r) => r.data),
+
+  /** Birleştirme defteri — geri alma ekranının listesi (en yeni önce). */
+  merges: (entity?: MergeEntity, limit = 50) =>
+    apiClient
+      .get<ApiResponse<MergeOperationRow[]>>(
+        `/api/master-data/merges?${new URLSearchParams({ ...(entity ? { entity } : {}), limit: String(limit) })}`,
+      )
+      .then((r) => r.data),
+
+  /** Geri alma önizlemesi — engeller, ad çakışmaları, geri yazılacak satır sayıları. */
+  revertPreview: (operationId: string) =>
+    apiClient
+      .get<ApiResponse<UnmergePlan>>(`/api/master-data/merges/${operationId}/revert-preview`)
+      .then((r) => r.data),
+
+  /** Birleştirmeyi geri al — çakışan kaynaklar için `renames` zorunlu. */
+  revert: (operationId: string, body: { reason: string; renames?: Record<string, string> }) =>
+    apiClient
+      .post<ApiResponse<UnmergeResult>>(`/api/master-data/merges/${operationId}/revert`, body)
       .then((r) => r.data),
 
   /** Tespit motoru: kesin ad + kimlik + bulanık ad — gerekçeli çiftler/gruplar. */

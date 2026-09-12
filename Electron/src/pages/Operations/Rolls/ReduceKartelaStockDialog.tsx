@@ -31,11 +31,16 @@ export function ReduceKartelaStockDialog({ group, open, onOpenChange }: Props) {
   const qc = useQueryClient();
   const [count, setCount] = useState("1");
   const [reason, setReason] = useState("");
+  // ⚠️ İDEMPOTENCY ANAHTARI MANTIKSAL DENEME BAŞINA ÜRETİLİR (mobil ikizi
+  // `KartelaStockReduceModal`). Token gövdede gitmezse 15 sn zaman aşımında
+  // operatör tekrar basar ve FIFO BAŞKA N kartelayı iptal eder: ikinci düşüm satırı.
+  const [clientToken, setClientToken] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
     if (open) {
       setCount("1");
       setReason("");
+      setClientToken(crypto.randomUUID());
     }
   }, [open, group?.itemId, group?.colorId]);
 
@@ -52,6 +57,7 @@ export function ReduceKartelaStockDialog({ group, open, onOpenChange }: Props) {
         colorId: group!.colorId,
         count: parsedCount,
         reason: reason.trim(),
+        clientToken,
       }),
     onSuccess: (res) => {
       toast.success(res.message ?? `${res.data.reduced} kartela düşüldü`);

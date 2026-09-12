@@ -197,6 +197,8 @@ export const swatchService = {
     colorId: string | null;
     count: number;
     reason: string;
+    /** İdempotency anahtarı — replay'de FIFO BAŞKA kartelaları iptal etmesin. */
+    clientToken?: string;
   }): Promise<ApiResponse<{ reduced: number }>> {
     return apiClient
       .post<ApiResponse<{ reduced: number }>>(`/api/kartela/stock/reduce`, body)

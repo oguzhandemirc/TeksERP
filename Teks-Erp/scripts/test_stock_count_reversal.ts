@@ -210,6 +210,10 @@ async function main(): Promise<void> {
       eventType: WarehouseEventType.CANCEL_REVERSAL,
       qty: 70,
       toWarehouseId: wh.id,
+      // ⚠️ KÖRLÜK ZEMİNİ: satır SAYIM BAĞSIZ (stockCountId null) doğar — elle geri
+      // almanın yazdığı satırın şekli budur. Bağlı bir satır koymak seddi yanlış
+      // yerden onaylardı (kardeş sayımın satırı sedde girmemeli).
+      stockCountId: null,
       notes: "elle geri almanın yazdığı ters satır (taklit)",
     },
   });
@@ -239,6 +243,25 @@ async function main(): Promise<void> {
   );
   check("§6j Sapma damgası yine atıldı", var5?.reversedAt != null);
 
+  // §6k ⭐ KARDEŞ SAYIMIN ters satırı seddi AÇMAZ (denetim bulgusu 2026-09-12):
+  // SAY-A eksik işaretler → top elle geri alınır → SAY-B yine eksik işaretler →
+  // LIFO SAY-B'yi önce stornolar (ters satır SAY-B'ye bağlı doğar) → SAY-A
+  // stornolanırken o satır "zaten yazılmış" sayılmamalı, yoksa SAY-A'nın CANCEL
+  // satırı sonsuza dek karşılıksız kalır.
+  const r4 = await makeRoll(wh.id, fabric.id, 40, RollStatus.WAREHOUSE);
+  const cA = await runCount(wh.id, [r4]);
+  await inventory.restoreCancelledRoll(r4, undefined, { reason: "elle geri alındı (kardeş sonda)" });
+  const cB = await runCount(wh.id, [r4]);
+  await stockCountReversalService.reverse(cB.id, "kardeş sayım stornosu (LIFO)", ADMIN);
+  await stockCountReversalService.reverse(cA.id, "eski sayım stornosu", ADMIN);
+  const revA = await prisma.warehouseMovement.count({
+    where: { rollId: r4, stockCountId: cA.id, eventType: WarehouseEventType.CANCEL_REVERSAL },
+  });
+  const revB = await prisma.warehouseMovement.count({
+    where: { rollId: r4, stockCountId: cB.id, eventType: WarehouseEventType.CANCEL_REVERSAL },
+  });
+  check("§6k ⭐ Her sayımın CANCEL satırı KENDİ ters satırını aldı (kardeş satır seddi açmadı)", revA === 1 && revB === 1, `A=${revA} B=${revB}`);
+
   // §7
   const svc = readFileSync(join(__dirname, "../src/services/stock-count-reversal.service.ts"), "utf8");
   // Plan katmanı AYRI dosyada (karar ↔ yazım ayrımı): tarama İKİSİNİ birden okur,
@@ -259,6 +282,13 @@ async function main(): Promise<void> {
     "§7b Storno servisinde VE plan helper'ında defter silme/satır güncelleme yok",
     !/(warehouseMovement|yarnMovement|rollVariance)\.delete|stockCountLine\.update/.test(svc) &&
       !/(warehouseMovement|yarnMovement|rollVariance)\.(delete|update)|stockCountLine\.update/.test(planHelper),
+  );
+  // ⚠️ PLAN KATMANI HİÇ YAZMAZ: karar ↔ yazım ayrımı mekanik ölçülür, yoksa bir
+  // gün plan helper'ına "küçük bir create" eklenir ve önizleme yan etki üretir.
+  check(
+    "§7b2 ⭐ Plan helper'ı YAZMIYOR (create/createMany/update/upsert/executeRaw yok)",
+    !/\.(create|createMany|update|updateMany|upsert|delete|deleteMany)\(/.test(planHelper) &&
+      !/\$executeRaw/.test(planHelper),
   );
   check("§7c Rota: reverse iki izni birden ister", /"\/:id\/reverse"[\s\S]{0,200}roll:manual-adjust[\s\S]{0,80}yarn:write/.test(route));
 }

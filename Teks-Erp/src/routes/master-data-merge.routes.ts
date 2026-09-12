@@ -26,11 +26,19 @@ import {
   MasterDataMergeService,
   MAX_MERGE_SOURCES,
 } from "../services/master-data-merge.service";
+import { MasterDataUnmergeService } from "../services/master-data-unmerge.service";
 import { MERGE_ENTITIES } from "../constants/merge-map";
 import { DuplicateDetectionService } from "../services/duplicate-detection.service";
 import { DuplicateReviewService } from "../services/duplicate-review.service";
 
 const router = Router();
+
+/** Geri alma gövdesi — gerekçe birleştirmeyle aynı eşikte (10), ad çakışmasında yeni adlar. */
+const revertSchema = z.object({
+  reason: z.string().trim().min(10, "Gerekçe en az 10 karakter olmalı"),
+  /** `{ kaynakId: yeniAd }` — yalnız adı hayattaki kayıtla çakışan kaynaklar için. */
+  renames: z.record(z.uuid(), z.string().trim().min(1).max(255)).optional(),
+});
 
 /** İkinci kapı: varlığın kendi write izni (kayıt defterinden çözülür). */
 function requireEntityWrite(req: Request, _res: Response, next: NextFunction): void {
@@ -375,6 +383,88 @@ router.delete(
       const id = z.uuid().parse(req.params.id);
       await DuplicateReviewService.reopen(id, req.user?.userId);
       res.json({ success: true, message: "Karar geri açıldı." });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/master-data/merges:
+ *   get:
+ *     tags: [MasterData]
+ *     summary: Birleştirme defteri — en yeni önce (geri alma ekranının listesi)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get("/merges", verifyToken, requirePermission("master-data:merge"), async (req, res, next) => {
+  try {
+    const q = z
+      .object({ entity: z.enum(MERGE_ENTITIES).optional(), limit: z.coerce.number().int().min(1).max(200).optional() })
+      .parse(req.query);
+    res.json({ success: true, data: await MasterDataUnmergeService.list(q) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/master-data/merges/{id}/revert-preview:
+ *   get:
+ *     tags: [MasterData]
+ *     summary: Geri alma önizlemesi — engeller, ad çakışmaları, geri yazılacak satır sayıları
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/merges/:id/revert-preview",
+  verifyToken,
+  requirePermission("master-data:merge"),
+  async (req, res, next) => {
+    try {
+      res.json({ success: true, data: await MasterDataUnmergeService.preview(String(req.params.id)) });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/master-data/merges/{id}/revert:
+ *   post:
+ *     tags: [MasterData]
+ *     summary: Birleştirmeyi geri al (defterden; LIFO, ad çakışmasında yeni ad ister)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Geri alındı }
+ *       409: { description: Engel var (details.code UNMERGE_BLOCKED / UNMERGE_NEEDS_RENAME) }
+ */
+router.post(
+  "/merges/:id/revert",
+  verifyToken,
+  // ⚠️ İkinci kapı `requireEntityWrite` BURADA KULLANILAMAZ: yol `:entity`
+  // taşımıyor, varlık DEFTERDEN çözülür. Karar: birleştirmenin kendi izni
+  // (`master-data:merge`) yeterli sayılır — aynı izinle yapılan işin geri alınması
+  // için İKİNCİ bir yetki aramak, yanlış birleştirmeyi düzeltmeyi birleştirmekten
+  // zor yapardı (SoD gerekçesi yok: geri alma yeni veri üretmez, eskiyi geri yazar).
+  requirePermission("master-data:merge"),
+  async (req, res, next) => {
+    try {
+      const body = revertSchema.parse(req.body ?? {});
+      const data = await MasterDataUnmergeService.revert(String(req.params.id), {
+        reason: body.reason,
+        renames: body.renames,
+        userId: req.user?.userId,
+      });
+      res.json({
+        success: true,
+        data,
+        message:
+          `${data.restoredSources} kayıt geri alındı; ${data.repointedRows} referans kaynağına döndü` +
+          (data.restoredDeletedRows > 0 ? `, ${data.restoredDeletedRows} silinmiş satır yeniden yazıldı` : "") +
+          (data.skippedRows > 0 ? `. ${data.skippedRows} satır geri yazılamadı (sonradan değişmiş).` : "."),
+      });
     } catch (e) {
       next(e);
     }

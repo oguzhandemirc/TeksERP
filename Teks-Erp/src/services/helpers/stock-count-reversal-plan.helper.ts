@@ -123,9 +123,13 @@ async function planRolls(db: Db, count: CountHead): Promise<ReversalRollPlan[]> 
         where: {
           rollId: { in: rollIds },
           eventType: WarehouseEventType.CANCEL_REVERSAL,
+          // ⚠️ İKİNCİ DAL `stockCountId: null` İLE DARALTILIR: bağsız ters satır
+          // yalnız ELLE geri almanın yazdığı satırdır. Daraltılmazsa KARDEŞ
+          // sayımın (LIFO'da önce stornolanan) satırı da sedde takılır ve bu
+          // sayımın CANCEL satırı sonsuza dek karşılıksız kalır (denetim, 2026-09-12).
           OR: [
             { stockCountId: count.id },
-            ...(count.completedAt ? [{ createdAt: { gte: count.completedAt } }] : []),
+            ...(count.completedAt ? [{ stockCountId: null, createdAt: { gte: count.completedAt } }] : []),
           ],
         },
         select: { rollId: true },

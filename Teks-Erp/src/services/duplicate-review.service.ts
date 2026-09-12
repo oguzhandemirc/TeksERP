@@ -147,7 +147,9 @@ export const DuplicateReviewService = {
     const existing = await prisma.duplicateReview.findUnique({ where: { id }, select: SELECT });
     if (!existing) throw AppError.notFound("Karar bulunamadı.");
     if (existing.decision === DuplicateReviewDecision.MERGED) {
-      throw AppError.conflict("Birleştirilmiş çiftin kararı geri açılamaz — birleştirme geri alınamaz.");
+      throw AppError.conflict(
+        "Bu çift birleştirilmiş — kararı açmak için önce BİRLEŞTİRMEYİ geri alın (geri alınınca çift kendiliğinden kuyruğa döner).",
+      );
     }
     await prisma.duplicateReview.delete({ where: { id } });
     await AuditService.log({
@@ -158,6 +160,39 @@ export const DuplicateReviewService = {
       oldData: { entity: existing.entity, pairKey: existing.pairKey, decision: existing.decision, note: existing.note },
       newData: { event: "DUPLICATE_REVIEW_REOPENED" },
     });
+  },
+
+  /**
+   * Birleştirme GERİ ALINDI: çift artık "karar verilmiş" değil — `DEFERRED`e
+   * döner (kuyrukta kalır, işaretli). `NOT_DUPLICATE`e çekmek yalan olurdu
+   * (operatör "aynı kayıt" demişti), satırı silmek de kararın izini yok ederdi.
+   * Best-effort: kuyruk izi geri almayı ASLA geri sarmaz.
+   */
+  async markUnmerged(input: {
+    entity: MergeEntity;
+    survivorId: string;
+    sourceIds: string[];
+    userId?: string;
+    reason?: string;
+  }): Promise<void> {
+    const { entity, survivorId, sourceIds, userId, reason } = input;
+    const enumEntity = reviewEntityOf(entity);
+    for (const sourceId of sourceIds) {
+      const pairKey = pairKeyOf(survivorId, sourceId);
+      try {
+        await prisma.duplicateReview.updateMany({
+          where: { entity: enumEntity, pairKey, decision: DuplicateReviewDecision.MERGED },
+          data: {
+            decision: DuplicateReviewDecision.DEFERRED,
+            note: reason ? `Birleştirme geri alındı: ${reason}`.slice(0, 500) : "Birleştirme geri alındı",
+            decidedById: userId ?? null,
+            decidedAt: new Date(),
+          },
+        });
+      } catch (e) {
+        uyari("duplicate-review", `UNMERGED izi yazılamadı (${entity} ${pairKey}):`, (e as Error).message);
+      }
+    }
   },
 
   /**

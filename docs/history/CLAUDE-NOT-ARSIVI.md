@@ -6246,3 +6246,93 @@ tüketiciydi; ③ atomik claim deseni korunur.
 Migration **yok** · izin **yok** · APK **yok**. Sözleşme: karışık kapanışlı sevkte
 yanıt `partialShip: true` döner (eskiden `false`); panelde bu alan yalnız bilgi
 satırıdır.
+
+---
+
+## 2026-09-12 — ④ Birleştirme defteri: master-data merge artık geri alınabilir [ÇEKİRDEK]
+
+Defter doktrini kalan borç ④. `master-data-merge` başlığı "GERİ ALINAMAZ ve bu
+açıkça söylenir" diyordu; ölçüm gösterdi ki geri alınamazlığın sebebi KARAR değil
+EKSİK DEFTERdi: taşınan satırın KİMLİĞİ hiçbir yerde durmuyor, taşıma dökümü
+yalnız audit yükünde (tablo başına SAYI) duruyordu ve audit 6 ayda arşivleniyor.
+Fabrikada 19 birleştirme tombstone'u var (3 müşteri · 7 kumaş · 6 renk · 3 fason).
+
+### Defter (üç tablo)
+
+- `MergeOperation`: işlem başlığı — varlık, survivor, gerekçe, çözülen çakışma
+  sayısı, `fieldPicks` (hangi alan hangi kayıttan + ÖNCEKİ değer) ve GERİ ALMA
+  DAMGASI (`revertedAt`/`revertedById`/`revertReason`). İleri satır değişmez.
+- `MergeOperationSource`: kaynakların TOMBSTONE ÖNCESİ hâli (ad, kod, `isActive`)
+  — geri alma adı/aktifliği buradan yazar, audit'ten OKUMAZ.
+- `MergeOperationRef`: tablo+kolon+kaynak başına tek satır; `MOVED` taşınan
+  satırların PK'ları (tek kolonlu uuid PK'da `rowIds`, composite PK'da `rowKeys`),
+  `DELETED` çakışma politikasının sildiği satırın TAM fotoğrafı, `FIELD_MERGED`
+  survivor satırının zenginleşmeden önceki hâli.
+
+### Yakalama — taşıma artık KAYNAK BAŞINA koşuyor
+
+Eski kod tek `UPDATE … WHERE col = ANY(sources)` ile taşıyordu; o ifade hangi
+satırın hangi kaynaktan geldiğini SÖYLEYEMEZ. Artık kaynak başına `UPDATE …
+RETURNING <pk>` koşuyor (`movePerSourceTx`): kaynak sayısı ≤20 ve tablo sayısı
+bir avuç olduğu için maliyet ihmal edilebilir, kazanç geri alınabilirlik.
+Çakışma politikalarının sildiği satırlar `DELETE … RETURNING to_jsonb(s.*)` ile,
+`MERGE_FIELDS`in zenginleştirdiği survivor satırları UPDATE'ten ÖNCE fotoğrafla
+yakalanıyor. PK ÇALIŞMA ANINDA `pg_index`ten çözülür — haritaya ikinci bir
+envanter yazmak "elle sayılan kapsam listesi" yasağına girerdi; bugün tek
+composite PK'lı tablo `subcontractor_category_links` ve kod onu özel-kasa olarak
+BİLMİYOR, PK'sından görüyor.
+
+### Geri alma kuralları
+
+- **LIFO:** bir kaydı ilgilendiren daha sonraki (geri alınmamış) birleştirme
+  varsa 409 — aradaki operasyonun taşıdığı satırlar bu geri almanın kümesinde
+  değildir ve sıra bozulursa iki defter birbirini yalanlar.
+- **AD ÇAKIŞMASI KULLANICI KARARIDIR:** mükerrerlerin katlanmış adı çoğunlukla
+  AYNIDIR; tombstone kalkar kalkmaz `<tablo>_nameFold_key` partial unique'i ikinci
+  satırı reddeder. Geri alma isteği çakışan kaynak için YENİ AD taşır (409
+  `UNMERGE_NEEDS_RENAME` + önizleme hangi kaydın çakıştığını söyler).
+- **ATLANAN SATIR SESSİZ DEĞİL:** birleştirmeden sonra başka yere taşınmış,
+  silinmiş ya da anahtarı yeniden doğmuş satır geri yazılamaz; sayısı yanıtta ve
+  audit'te AYRI alan (`skippedRows`). "Hepsi döndü" yalanı yok.
+- **Defter öncesi birleştirme geri alınamaz** (kalem dökümü yok) — geçmiş
+  uydurulmaz; o küme için emniyet ağı gece yedeği + kopyaya geri yükleme.
+- **Mükerrer kuyruğu:** geri alınan çift `MERGED` → `DEFERRED` (kuyrukta kalır,
+  işaretli). `NOT_DUPLICATE` yalan olurdu, satırı silmek kararın izini yok ederdi.
+
+### KİLİT SIRASI DEĞİŞMEZİ (ES-25)
+
+Denetim bir deadlock yolu buldu: birleştirme `swatches` → `swatch_stock_reductions`
+sırasında kilitlerken, kartela düşüm stornosu TERS sırada (düşüm başlığı → kartela)
+ilerliyordu; iki tx aynı anda koşarsa 40P01. İki seçenek tartıldı — kartela stok
+işini merge advisory uzayına (8030) bağlamak REDDEDİLDİ (yanlış eşleşme, gereksiz
+serileşme); `MERGE_MAP`te düşüm kuralı kartela kuralından ÖNCEYE alındı. Artık iki
+yolda tek sıra var: **düşüm defteri → kartela**. Kural `ESZAMANLILIK.md` [ES-25].
+
+### Kod çapaları
+
+- Migration `20260912130000_merge_operation_ledger` + `20260912130100` (rowIds
+  DEFAULT'u düşürüldü — şema ikizliği); şema dilimi commit'i `03d7b9b2`.
+- `helpers/merge-ledger.helper.ts` — yakalama + geri yazma SQL'leri (PK çözümü,
+  `RETURNING`, fotoğraftan `jsonb_populate_recordset` ile yeniden yazma).
+- `master-data-unmerge.service.ts` (claim + yazım + audit) ↔
+  `helpers/master-data-unmerge-plan.helper.ts` (karar: engeller, LIFO, ad çakışması).
+- Uçlar: `GET /api/master-data/merges` · `GET /merges/:id/revert-preview` ·
+  `POST /merges/:id/revert` (izin `master-data:merge`; ikinci kapı
+  `requireEntityWrite` kullanılamaz — yol `:entity` taşımıyor, varlık defterden
+  çözülüyor ve geri alma yeni veri üretmiyor).
+- Panel: Mükerrer Kayıtlar → "Birleştirme Geçmişi" diyaloğu (defter dökümü, engel
+  listesi, çakışan kaynak için yeni ad alanı); `MergeConfirmGate`in "geri alınamaz"
+  şeridi bugünkü gerçeğe çevrildi.
+
+### Bekçi
+
+`scripts/test_master_data_merge_revert.ts` — §1 defter yazımı (kaynak künyesi +
+taşınan satırın kimliği) · §2 geri alma (referans kaynağına, tombstone kalkar, ad
+defterden, operasyon satırı değişmez + damga) · §3 çift geri alma 409 · §4 LIFO ·
+§5 ad çakışması (409 + yeni adla geçer) · §6 defter öncesi operasyon + kuyruk izi
+`DEFERRED` · §7 kilit sırası değişmezi.
+
+### Üç kapı
+
+Migration **var** (iki dosya, şema dilimi `03d7b9b2`). İzin **yok** (mevcut
+`master-data:merge`). APK **yok**; panel sürümü gerekir (Birleştirme Geçmişi).

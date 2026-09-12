@@ -40,6 +40,12 @@ describe("swatchService — kartela ADET stok", () => {
     expect(res.data).toEqual([{ itemId: "i1", count: 5 }]);
   });
 
+  it("reduceStock gövdesi clientToken TAŞIR (replay ikinci düşüm doğurmasın)", async () => {
+    const body = { itemId: "i1", colorId: "c1", count: 2, reason: "kayıp", clientToken: "tok-1" };
+    await swatchService.reduceStock(body);
+    expect(mockPost).toHaveBeenCalledWith("/api/kartela/stock/reduce", body);
+  });
+
   it("reduceStock → POST /api/kartela/stock/reduce, body aynen geçer", async () => {
     const body = { itemId: "i1", colorId: "c1", count: 3, reason: "kayıp" };
     await swatchService.reduceStock(body);

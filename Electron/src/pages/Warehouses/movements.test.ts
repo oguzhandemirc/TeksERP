@@ -161,6 +161,20 @@ describe("kırpma sessiz değil", () => {
     expect(t).not.toMatch(/KIRPILDI/);
   });
 
+  it("sayım kaynaklı satırın belgesi 'Sayım <no>' basar (eskiden '—' idi)", () => {
+    expect(movementSource(row({ stockCount: { id: "s1", countNo: "SAY1209260001" } }))).toBe(
+      "Sayım SAY1209260001",
+    );
+  });
+
+  it("belgesiz satır hâlâ '—' (KK1/Tambur/iptal bir belgeden doğmaz)", () => {
+    expect(
+      movementSource(
+        row({ transfer: null, goodsReceipt: null, shipment: null, rollReturn: null, stockCount: null }),
+      ),
+    ).toBe("—");
+  });
+
   it("iki metin AYRIŞIR — aynı cümle basılsaydı ayrım hiç yapılmamış olurdu", () => {
     expect(pageFooterText(5, true)).not.toBe(pageFooterText(5, false));
   });

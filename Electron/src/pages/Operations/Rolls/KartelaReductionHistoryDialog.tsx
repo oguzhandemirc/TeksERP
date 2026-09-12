@@ -64,14 +64,32 @@ export function KartelaReductionHistoryDialog({ open, onOpenChange, itemId, colo
         <div ref={rootRef} className="max-h-[60vh] space-y-2 overflow-y-auto">
           {q.isLoading ? (
             <div className="py-8 text-center text-sm text-muted-foreground">Yükleniyor…</div>
-          ) : q.isError ? (
-            <div className="py-8 text-center text-sm text-destructive">
-              Düşüm geçmişi yüklenemedi — pencereyi kapatıp yeniden açın.
+          ) : q.isError && rows.length === 0 ? (
+            // ⚠️ Satır VARSA liste silinmez (evin kalıbı `AccountsPage`): 3. sayfa
+            // hatasında ekrandaki satırları ve kaydırma konumunu atmak hatadan
+            // daha çok iş kaybettirir — uyarı şeridi üstte gösterilir.
+            <div className="space-y-2 py-8 text-center text-sm text-destructive">
+              <p>Düşüm geçmişi yüklenemedi.</p>
+              <Button variant="outline" size="sm" onClick={() => void q.refetch()}>
+                Tekrar dene
+              </Button>
             </div>
           ) : rows.length === 0 ? (
             <div className="py-8 text-center text-sm text-muted-foreground">Düşüm kaydı yok.</div>
           ) : (
-            rows.map((r) => <ReductionRow key={r.id} row={r} />)
+            <>
+              {q.isError && (
+                <div className="flex items-center justify-between gap-2 rounded-md border border-destructive/40 px-3 py-2 text-xs text-destructive">
+                  <span>Sonraki sayfa yüklenemedi — liste olduğu gibi duruyor.</span>
+                  <Button variant="outline" size="sm" className="h-7" onClick={() => void q.refetch()}>
+                    Tekrar dene
+                  </Button>
+                </div>
+              )}
+              {rows.map((r) => (
+                <ReductionRow key={r.id} row={r} />
+              ))}
+            </>
           )}
           <AutoLoadMore ref={sentinelRef} hasMore={Boolean(q.hasNextPage)} isFetchingMore={q.isFetchingNextPage} count={rows.length} />
         </div>

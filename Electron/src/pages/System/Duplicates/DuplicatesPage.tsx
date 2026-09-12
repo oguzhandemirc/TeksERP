@@ -1,16 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Clock,
-  Download,
-  Merge,
-  RefreshCw,
-  Search,
-  Undo2,
-  Users,
-  XCircle,
-} from "lucide-react";
+import { Clock, Download, History, Merge, RefreshCw, Search, Undo2, Users, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
@@ -39,6 +30,7 @@ import {
 import { downloadBlob } from "@/lib/file-save";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { MergeDialog } from "@/components/merge/MergeDialog";
+import { MergeHistoryDialog } from "./MergeHistoryDialog";
 import { RollDuplicatesTab } from "./RollDuplicatesTab";
 import {
   DUPLICATE_RULE_LABEL,
@@ -97,6 +89,7 @@ export function DuplicatesPage() {
 
   // Birleştirme diyaloğu
   const [mergeOpen, setMergeOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [survivorId, setSurvivorId] = useState<string | null>(null);
 
   // Karar diyaloğu
@@ -239,6 +232,11 @@ export function DuplicatesPage() {
               <Button variant="outline" size="sm" onClick={() => void listQuery.refetch()}>
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Yenile
+              </Button>
+              {/* Birleştirme artık deftere yazılıyor → geçmişten geri alınabilir. */}
+              <Button variant="outline" size="sm" onClick={() => setHistoryOpen(true)}>
+                <History className="mr-2 h-4 w-4" />
+                Birleştirme Geçmişi
               </Button>
             </div>
           )
@@ -508,6 +506,12 @@ export function DuplicatesPage() {
       </Dialog>
 
       {/* BİRLEŞTİRME — ORTAK diyalog (Tanımlar listeleri de aynısını açar). */}
+      <MergeHistoryDialog
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        entity={tab === "roll" ? "customer" : tab}
+      />
+
       <MergeDialog
         open={mergeOpen}
         onOpenChange={(v) => {
