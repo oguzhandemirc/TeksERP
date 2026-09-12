@@ -44,7 +44,8 @@ export async function getDefaultWarehouseId(db: Db = prisma): Promise<string | n
  * • Varsayılan da yoksa `null` döner ve GÜRÜLTÜLÜ loglar — FIRLATMAZ.
  *   Gerekçe: bu durumda tek alternatif top oluşturmayı reddetmektir, yani
  *   fabrikada üretim kaydını durdurmak. Eksik `warehouseId` geri doldurulabilir
- *   bir boşluktur ve `test_db_invariants` onu zaten kırmızıya çevirir.
+ *   bir boşluktur ve `test_roll_warehouse_stamp` onu kırmızıya çevirir (iki ayrı
+ *   ölçü: bu koşumda doğan toplar · test ön eki olmayan canlı veri).
  */
 export async function resolveTargetWarehouseId(
   db: Db = prisma,
