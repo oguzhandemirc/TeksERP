@@ -50,6 +50,8 @@ import {
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { finalizeRollsAtLastStep } from "./helpers/roll-finalize.helper";
+import { reverseRollStockMoves } from "./helpers/warehouse-ledger.helper";
+import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import {
   assertKursunTabletMayWrite,
   resolveStepBypassEligibility,
@@ -1157,6 +1159,16 @@ export class KursunQcService {
             "Toplardan biri artık üretim dışı (sevk/çuval/tüketim) — yeniden açılamaz. Listeyi yenileyin."
           );
         }
+        // DEPO DEFTERİ — `finalizeRollsAtLastStep`in yazdığı GİRİŞ satırı terslenir:
+        // top stok kümesinden çıkıp üretime geri döndü. Yazılmazsa finish → yeniden
+        // aç → finish turunda İKİ giriş bir çıkışsız kalır ve sapma topun metrajı ×
+        // tur kadar birikir. Ters kayıt ileri satıra BAĞLANIR (`reversesMovementId`),
+        // böylece asimetri DB'den de ölçülebilir.
+        await reverseRollStockMoves(tx, rollIds, {
+          reasonCode: STOCK_MOVE_REASON.KURSUN_REOPEN,
+          userId: userId ?? null,
+          notes: "Kurşun/KK2 adımı yeniden açıldı",
+        });
         // finishStep son-adım dalı WO/kartı COMPLETED yapmış olabilir → geri al.
         await tx.workOrder.updateMany({
           where: { id: step.workOrderId, status: WorkOrderStatus.COMPLETED },

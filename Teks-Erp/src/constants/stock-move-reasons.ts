@@ -16,6 +16,8 @@ export const STOCK_MOVE_REASON = {
   TAMBUR_FINALIZE: "TAMBUR_FINALIZE",
   /** Tambur geri alma — finalize çocuğunun giriş satırının TERSİ. */
   TAMBUR_UNDO: "TAMBUR_UNDO",
+  /** Kurşun/KK2 adımının yeniden açılması — son adım girişinin TERSİ. */
+  KURSUN_REOPEN: "KURSUN_REOPEN",
   /** İş emri kapanış/iptal dispozisyonu. */
   DISPOSITION: "DISPOSITION",
   /** Depo topunun kesimi (ebeveyn çıkışı + çocuk girişi, net sıfır). */
