@@ -113,6 +113,19 @@ function check(label: string, ok: boolean, detail = ""): void {
 const TAG = `TEST-GR-${Date.now()}`;
 const receiptIds: string[] = [];
 const warehouseIds: string[] = [];
+/**
+ * Fişlerin GENEL kalemi — testin KENDİ yarattığı FABRIC kalemi.
+ *
+ * ⚠️ 2026-09-13: burası `item.findFirst({ isActive: true })` idi, yani "ortamda
+ * herhangi bir aktif kalem" varsayıyordu ([TD-38] / reçete md. 11 ihlali).
+ * Ölçüldü: aktif kalemi olmayan bir DB'de bekçi 0/1 ile P2025 verdi. §H ve §9
+ * kendi kalemlerini zaten yaratıyordu — eksik olan TEK yer bu genel kalemdi.
+ *
+ * ⚠️ TÜR FABRIC ve BİLİNÇLİ: `goods-receipt.service` yalnız `itemType === YARN`
+ * dalında kg defterine yazar; ortamdan gelen kalem hangi türdeyse ölçülen dal da
+ * o oluyordu. Sabit bir FABRIC kalem, ölçümü koşumdan bağımsız kılar.
+ */
+let baseItemId: string | null = null;
 /** §H fixture'ı — testin KENDİ yarattığı YARN kalemi (ortam verisine bağımlılık YASAK). */
 let yarnItemId: string | null = null;
 let sarfItemId: string | null = null;
@@ -167,8 +180,11 @@ async function main(): Promise<void> {
   console.log("=== Mal kabul bekçisi ===\n");
 
   const def = await ensureDefaultWarehouse();
-  const item = await prisma.item.findFirst({ where: { isActive: true }, select: { id: true } });
-  if (!item) throw new Error("Test verisi yetersiz — aktif Item yok.");
+  const item = await prisma.item.create({
+    data: { code: `${TAG}-KUM`, name: `${TAG} Kumaş`, itemType: ItemType.FABRIC, unit: ItemUnit.MT },
+    select: { id: true },
+  });
+  baseItemId = item.id;
 
   const wh = await prisma.warehouse.create({ data: { code: `${TAG}-D`, name: `${TAG} Depo` }, select: { id: true } });
   warehouseIds.push(wh.id);
@@ -1267,6 +1283,11 @@ main()
       }
       if (sarfItemId) {
         await prisma.item.deleteMany({ where: { id: sarfItemId } });
+      }
+      // Genel FABRIC kalem EN SONDA: fiş satırları ve toplar ona RESTRICT ile
+      // bağlı; yukarıdaki bloklar onları düşürdükten sonra silinebilir.
+      if (baseItemId) {
+        await prisma.item.deleteMany({ where: { id: baseItemId } });
       }
       // §J temizliği — SIRA ZORUNLU: sipariş kalemi → kalem FK'sı RESTRICT'tir,
       // yani siparişler kalemlerden ÖNCE düşmeli (kalem satırları PO silinince

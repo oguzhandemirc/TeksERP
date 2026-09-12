@@ -1531,6 +1531,7 @@ Alanlar: bölüm başlıkları aşağıda. **Sayı YAZILMAZ** — güncel dağı
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Teks-Erp/scripts/test_system_event_names.ts` | Sistem olayı adlarının beyan edilmiş sözleşmeye (`src/constants/system-events.ts` — `SYSTEM_EVENT` + `ARCHIVED_EVENTS`) uyumu. ⚠️ Küme KEŞFEDİLMEZ, elle taşınır: kaynakta dizge arayan tarama SABİTTEN kurulan çağrıyı görmez (6 ad) ve `src/` ile sınırlı tarama kapsamı daraltır | | | 2026-09-13 |
 | `Teks-Erp/scripts/test_audit_depth.ts` | Audit'in kayıt-bazlı sorgulanabilirliğini (recordId filtresi), satırın değiştirilemezliğini (canlı tabloda updatedAt yok, arşivde durur) ve her okuma  | ✓ |  |  |
 | `Teks-Erp/scripts/test_audit_labels.ts` | Audit ekranlarının Türkçe sözlük KAPSAMINI kilitler: backend↔Electron ayna birebirliği + her tableName/sistem olayı/Prisma enum değerinin etiketi var  |  |  |  |
 | `Teks-Erp/scripts/test_device_activity.ts` | İşlem dökümü atfı: pencere/makine/operatör kesişimi (MACHINE ↔ OPERATOR_WINDOW), movement iki-olay, kronolojik faz-rank, cihaz/kullanıcı geçmişi ve kü | ✓ |  |  |
@@ -1711,6 +1712,7 @@ Alanlar: bölüm başlıkları aşağıda. **Sayı YAZILMAZ** — güncel dağı
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Teks-Erp/scripts/test_quality_code_literal.ts` | Kalite KATALOG KODLARININ (`"1.KALITE"` · `"A1"` · `"FIRE"`) koda gömülmesini AST tripwire ile beş ağaçta arar; kod fabrikaya AÇIK bir alandır, gömülü kod kataloğu 1K/2K/HURDA olan kurulumda sessizce tutmaz ve fire SATILABİLİR STOK sayılır. Doğru cevaplar: kova → `targetStatus`, rol → `QualityGrade.role`. Ratchet (tavan yalnız düşer) | | ✓ | 2026-09-13 |
 | `Electron/src/pages/Operations/WorkOrders/WorkOrderCompleteDialog.test.tsx` | WO kapanis dispozisyonu diyalogu: karar verilmeden kapatma pasif, karar+sebep payload'a girer, fason donusu topta 'Stoga geri' kapali, roll:manual-adj |  |  |  |
 | `Teks-Erp/scripts/test_finalize_last_step.ts` | Son adım finalize'ında durumun kaliteden çözülmesini (WAREHOUSE/SCRAP), barkodsuz açık kumaşa barkod üretimini ve form=ACIK + currentStepId=null damga | ✓ |  | ⚠️ Başlıktaki 'SCRAP hedefli kalite seed'de yok (hepsi WAREHOUSE)' cümlesi artık yanlış — see |
 | `Teks-Erp/scripts/test_helpers.ts` | Saf/karar-mantığı helper'larını in-memory sahte Prisma ile sürer: kalite grade resolve (lenient+strict), müşteri adı cascade, sipariş statü recompute, |  |  |  |

@@ -100,7 +100,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_finalize_last_step`⚠️, `test_helpers`, `test_iade_enhancements`, `test_label_element_condition`, `test_manual_move_backflush`, `test_manual_move_qc_reversal`, `test_null_quality_visibility`, `test_p2_kk2reopen`, `test_phase1_uretim_hardening`, `test_phase3_stok_hardening`, `test_phase6_reporterror_concurrency`, `test_produced_buckets`, `test_qc2_idempotency`⚠️, `test_quality_batch_flags`, `test_quality_scorecard`, `test_scrap_grade_label`, `test_scrap_scorecard`, `test_station_quality_capability`, `test_wo_manual_complete`
+Backend: `test_finalize_last_step`⚠️, `test_helpers`, `test_iade_enhancements`, `test_label_element_condition`, `test_manual_move_backflush`, `test_manual_move_qc_reversal`, `test_null_quality_visibility`, `test_p2_kk2reopen`, `test_phase1_uretim_hardening`, `test_phase3_stok_hardening`, `test_phase6_reporterror_concurrency`, `test_produced_buckets`, `test_qc2_idempotency`⚠️, `test_quality_batch_flags`, `test_quality_code_literal`, `test_quality_scorecard`, `test_scrap_grade_label`, `test_scrap_scorecard`, `test_station_quality_capability`, `test_wo_manual_complete`
 
 İstemci: `WorkOrderCompleteDialog.test.tsx`, `shortCutQuality.test.ts`
 

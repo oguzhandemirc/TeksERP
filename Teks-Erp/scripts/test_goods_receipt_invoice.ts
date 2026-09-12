@@ -70,6 +70,9 @@ const receiptIds: string[] = [];
 const invoiceIds: string[] = [];
 const cariIds: string[] = [];
 let supplierId: string | null = null;
+/** Fişlerin GENEL kalemi ve rengi — test kendi yaratır (ortam verisine bağımlılık YASAK). */
+let baseItemId: string | null = null;
+let colorId: string | null = null;
 /** §9 fixture'ı — testin KENDİ yarattığı YARN kalemi (temizlikte silinir). */
 let yarnItemId: string | null = null;
 /**
@@ -139,8 +142,22 @@ async function main(): Promise<void> {
 
   const wh = await ensureDefaultWarehouse();
   if (!wh) throw new Error("Varsayılan depo yok.");
-  const item = await prisma.item.findFirstOrThrow({ where: { isActive: true }, select: { id: true, name: true } });
-  const color = await prisma.color.findFirst({ where: { isActive: true }, select: { id: true, name: true } });
+  // ⚠️ 2026-09-13: burası `item.findFirstOrThrow({ isActive: true })` +
+  // `color.findFirst(...)` idi. İkisi de ORTAMA bağlıydı ve ikisi ayrı sınıf:
+  //   · kalem YOKSA bekçi P2025 ile ÇÖKÜYORDU (ölçüldü: aktif kalemi olmayan DB).
+  //   · renk YOKSA bekçi sessizce KÜÇÜLÜYORDU — `expectedLines = color ? 3 : 2`,
+  //     yani aynı yeşil iki FARKLI kapsamı örtüyordu ("yeşil ≠ kapsandı").
+  // İkisini de test kendisi yaratır; `finally` siler. [TD-38]
+  const item = await prisma.item.create({
+    data: { code: `${TAG}-KUM`, name: `${TAG} Kumaş`, itemType: "FABRIC", unit: "MT" },
+    select: { id: true, name: true },
+  });
+  baseItemId = item.id;
+  const color = await prisma.color.create({
+    data: { code: `${TAG}-RNK`, name: `${TAG} Renk` },
+    select: { id: true, name: true },
+  });
+  colorId = color.id;
 
   const supplier = await prisma.customer.create({
     data: { code: TAG, name: `${TAG} Tedarikçi`, type: "SUPPLIER" },
@@ -227,7 +244,9 @@ async function main(): Promise<void> {
   cariIds.push(inv.cariId);
 
   // 3.5 renksiz + 4.25 renksiz + (varsa) 3.5 renkli; 9.99 iptal edildi.
-  const expectedLines = color ? 3 : 2;
+  // Renk artık HER KOŞUMDA var (test yaratıyor) → kapsam sabit 3. Eski
+  // `color ? 3 : 2` ifadesi aynı yeşille iki farklı kapsamı örtüyordu.
+  const expectedLines = 3;
   check(
     "§2a ⭐ Satırlar GRUPLANDI (top sayısı kadar satır YOK)",
     inv.lines.length === expectedLines,
@@ -717,6 +736,12 @@ main()
       await prisma.itemPrice.deleteMany({ where: { itemId: yarnItemId } });
       await prisma.item.deleteMany({ where: { id: yarnItemId } });
     }
+    // Genel kalem ve renk EN SONDA: fiş satırları/toplar onlara bağlı.
+    if (baseItemId) {
+      await prisma.itemPrice.deleteMany({ where: { itemId: baseItemId } });
+      await prisma.item.deleteMany({ where: { id: baseItemId } });
+    }
+    if (colorId) await prisma.color.deleteMany({ where: { id: colorId } });
     if (supplierId) await prisma.customer.deleteMany({ where: { id: supplierId } });
     await prisma.$disconnect();
     await pool.end();
