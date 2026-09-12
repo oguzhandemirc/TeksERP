@@ -39,9 +39,9 @@ Durum tabloları **"şu an ne"**yi tutar; defterler **"ne oldu"**yu tutar ve "ne
 - **[ÇEKİRDEK]** İleri işlemin damgasını `null`'lamak ters kayıt DEĞİLDİR ve YASAKTIR — `dispatchedAt`/`dispatchedById`, `weighedAt`/`weightKg`, `invoicedAt`/`invoiceNo` gibi damgalar "bu iş yapıldı" beyanıdır; geri alma bunları silmez, üstüne ters olay yazar. <sub>(arşiv:2026-09-10, 2026-09-12'de daraltıldı)</sub>
 - **[ÇEKİRDEK]** Yeni bir `delete`/`deleteMany` yolu açmak KARARDIR: aşağıdaki iki meşru sınıftan birine girmiyorsa yazılmaz; girdiği sınıf kod yorumunda adıyla anılır. <sub>(arşiv:2026-09-10)</sub>
 
-### Hard delete — yalnız İKİ meşru sınıf
+### Hard delete — meşru sınıflar
 
-Eski dört sınıf 2026-09-10'da ikiye indi. Diğer her "sil" bir DURUM GEÇİŞİDİR.
+**Bugün İKİ sınıf meşrudur** (③b saf yapılandırma pivotu · ④ deftere hiç yazmamış taslak); aşağıdaki tablo kanonik listedir. Eski dört sınıf 2026-09-10'da ikiye indi — yani bu sayı bir kez değişti ve yine değişebilir, bu yüzden BAŞLIKTA taşınmaz: başlık saydığı şeyle birlikte tazelenmezse alıntıya döner. Diğer her "sil" bir DURUM GEÇİŞİDİR.
 
 | Sınıf | Ne yapar | Neden meşru | Emsal |
 |---|---|---|---|

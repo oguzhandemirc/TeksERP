@@ -41,6 +41,7 @@
 // sorusunun cevabı, raporun kendisine güvenip güvenmeyeceğini belirler.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
+import { izDustuUyarisi, onarimIziYaz } from "./lib/onarim-izi";
 
 const APPLY = process.argv.includes("--apply");
 
@@ -196,6 +197,25 @@ async function main(): Promise<void> {
     `\n=== YAZILDI — finalizedAt: ${finalizeWritten} · statusChangedAt: ${statusWritten} ===\n` +
       `    Kapsam dışı kalan: ${trulyOrphan.length} top (yukarıda listelendi).\n`,
   );
+
+  const SCRIPT = "scripts/backfill_roll_production_timestamps.ts";
+  const yazildi = await onarimIziYaz({
+    script: SCRIPT,
+    action: "ROLL_PRODUCTION_TIMESTAMPS_BACKFILL",
+    tableName: "ROLL",
+    hamSql: true,
+    olcum: {
+      finalizedAtYazilan: finalizeWritten,
+      statusChangedAtYazilan: statusWritten,
+      finalizePlani: finalizePlan.length,
+      statusPlani: statusPlan.length,
+      kapsamDisiOksuz: trulyOrphan.length,
+    },
+  });
+  if (!yazildi) {
+    console.error(izDustuUyarisi(SCRIPT, true));
+    process.exitCode = 1;
+  }
 }
 
 main()

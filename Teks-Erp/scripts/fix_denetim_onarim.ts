@@ -24,6 +24,7 @@
 // =============================================================================
 import "dotenv/config";
 import prisma, { pool } from "../src/lib/prisma";
+import { izDustuUyarisi, onarimIziYaz } from "./lib/onarim-izi";
 
 const argv = process.argv.slice(2);
 const APPLY = argv.includes("--apply");
@@ -187,7 +188,24 @@ async function main(): Promise<void> {
   console.log(`${yazilan} satır güncellendi.`);
   const tekrar = await kalem.say();
   console.log(`Kalan: ${tekrar.adet} satır (0 bekleniyor).`);
-  await kapat(tekrar.adet === 0 ? 0 : 1);
+
+  const SCRIPT = "scripts/fix_denetim_onarim.ts";
+  const izYazildi = await onarimIziYaz({
+    script: SCRIPT,
+    action: "DENETIM_ONARIM",
+    hamSql: true,
+    olcum: {
+      kalem: kalem.id,
+      kalemAdi: kalem.ad,
+      bulgular: kalem.bulgular,
+      yazilanSatir: yazilan,
+      oncekiSayim: s.adet,
+      kalanSayim: tekrar.adet,
+    },
+  });
+  if (!izYazildi) console.error(izDustuUyarisi(SCRIPT, true));
+
+  await kapat(tekrar.adet === 0 && izYazildi ? 0 : 1);
 }
 
 async function kapat(kod: number, mesaj?: string): Promise<void> {

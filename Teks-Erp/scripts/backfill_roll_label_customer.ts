@@ -21,6 +21,7 @@
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
+import { izDustuUyarisi, onarimIziYaz } from "./lib/onarim-izi";
 
 const APPLY = process.argv.includes("--apply");
 const BATCH = 500;
@@ -139,6 +140,23 @@ async function main(): Promise<void> {
     }
   }
   console.log(`\n✔ ${written} kayıt güncellendi.`);
+
+  const SCRIPT = "scripts/backfill_roll_label_customer.ts";
+  const izYazildi = await onarimIziYaz({
+    script: SCRIPT,
+    action: "ROLL_LABEL_CUSTOMER_BACKFILL",
+    tableName: "ROLL",
+    olcum: {
+      guncellenen: written,
+      planlanan: plan.length,
+      atlanan: plan.length - written,
+      musteriSayisi: byCustomer.size,
+    },
+  });
+  if (!izYazildi) {
+    console.error(izDustuUyarisi(SCRIPT, false));
+    process.exitCode = 1;
+  }
 }
 
 main()

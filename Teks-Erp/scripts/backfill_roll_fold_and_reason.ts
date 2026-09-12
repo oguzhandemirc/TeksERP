@@ -24,6 +24,7 @@
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { normalizeFoldType } from "../src/services/helpers/fold-type";
+import { izDustuUyarisi, onarimIziYaz } from "./lib/onarim-izi";
 
 const APPLY = process.argv.includes("--apply");
 
@@ -148,6 +149,26 @@ async function main(): Promise<void> {
     written += res.count;
   }
   console.log(`\n  ✅ ${written} alan yazıldı (${planned.length - written} atlandı — arada dolmuş).\n`);
+
+  const SCRIPT = "scripts/backfill_roll_fold_and_reason.ts";
+  const izYazildi = await onarimIziYaz({
+    script: SCRIPT,
+    action: "ROLL_FOLD_AND_REASON_BACKFILL",
+    tableName: "ROLL",
+    olcum: {
+      yazilanAlan: written,
+      planlanan: planned.length,
+      atlanan: planned.length - written,
+      alanKirilimi: planned.reduce<Record<string, number>>((a, p) => {
+        a[p.field] = (a[p.field] ?? 0) + 1;
+        return a;
+      }, {}),
+    },
+  });
+  if (!izYazildi) {
+    console.error(izDustuUyarisi(SCRIPT, false));
+    process.exitCode = 1;
+  }
 }
 
 main()

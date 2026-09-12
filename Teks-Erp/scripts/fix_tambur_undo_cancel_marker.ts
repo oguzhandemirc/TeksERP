@@ -37,6 +37,7 @@
 import prisma, { pool } from "../src/lib/prisma";
 import { RollStatus } from "@prisma/client";
 import { TAMBUR_UNDO_CANCEL_CODE, TAMBUR_UNDO_CANCEL_TEXT } from "../src/constants/reason-presets";
+import { izDustuUyarisi, onarimIziYaz } from "./lib/onarim-izi";
 
 const APPLY = process.argv.includes("--apply");
 
@@ -121,6 +122,24 @@ async function main(): Promise<void> {
     `\nGeri alma: UPDATE rolls SET "cancelReasonCode"=NULL, "cancelReason"=NULL ` +
       `WHERE id IN (yukarıdaki id listesi);\n`,
   );
+
+  const SCRIPT = "scripts/fix_tambur_undo_cancel_marker.ts";
+  const yazildi = await onarimIziYaz({
+    script: SCRIPT,
+    action: "TAMBUR_UNDO_CANCEL_MARKER_BACKFILL",
+    tableName: "ROLL",
+    olcum: {
+      damgalanan: res.count,
+      aday: adaylar.length,
+      atlanan: adaylar.length - res.count,
+      sebepKodu: TAMBUR_UNDO_CANCEL_CODE,
+      acilanMetraj: Number(toplam.toFixed(1)),
+    },
+  });
+  if (!yazildi) {
+    console.error(izDustuUyarisi(SCRIPT, false));
+    process.exitCode = 1;
+  }
 }
 
 main()
