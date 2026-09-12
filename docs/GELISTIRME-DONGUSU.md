@@ -12,8 +12,10 @@
    Eski `tekserp_demo` duruyor ama artık kullanılmıyor. DB adı PROFİL değeridir,
    koda sabitlenmez.
    ⚠️⚠️ **YIKICI BETİK UYARISI:** `scripts/db-guard.ts` izin listesi SON EKE
-   bakar (`_dev`/`_test`/`_local`/`_demo`), yani `clean_test_residue.ts --apply`
-   ve `reset-operational.ts` bu hedefte KOŞAR. Artık gerçek fabrika verisi
+   bakar (`_dev`/`_test`/`_local`/`_demo`), yani `reset-operational.ts` bu
+   hedefte KOŞAR. `clean_test_residue.ts` 2026-09-12'den beri AYRICA fixture
+   kapısından geçer (ad `_test` + hacim eşiği) ve bu hedefte `--apply`
+   verilmeden de DURUR. Artık gerçek fabrika verisi
    olduğu için ikisi de ELLE ONAY olmadan çalıştırılmaz. (2026-09-11'de
    `clean_test_residue --apply` demo DB'de 468 fason sevkinin kalemlerini
    silmişti — betik başlığı silip başlığı bırakıyor.)
@@ -34,7 +36,7 @@
 12. Sunucuyu durdururken YALNIZ kendi PID'ini öldür; `pkill -f "tsx src/server.ts"` YASAK. PID: lsof -iTCP:4000. <sub>(docs/design/MODUL-BAYRAK-TASARIM.md:314-318 (§12-12); docs/history/GECE-KARARLARI-2026-09-03.md:15 (pid `lsof -iTCP:4000`)</sub> — atlanırsa: Aynı komut satırını paylaşan kullanıcının :4000 dev sunucusu da düşer (iki ajan, iki turda ölçüldü) ve kimse fark etmez.
 13. Paralel ajan/oturum başına AYRI port ver (4100 paylaşımı sahte kırmızı üretti). <sub>(docs/design/MODUL-BAYRAK-TASARIM.md:317-318; docs/history/CLAUDE-NOT-ARSIVI.md:2053 (aynı port + aynı test DB → sahte kı)</sub> — atlanırsa: İki koşum birbirinin global ayarını ezer; bekçi kırmızısı gerçek regresyon sanılır.
 14. Tam paket: `npm test` = tsx scripts/run-all-tests.ts (455 test_*.ts dosyası, SIRALI). <sub>(Teks-Erp/package.json:27; scripts/run-all-tests.ts:59-62 (readdirSync + /^test_.*\.ts$/); ls scripts/test_*.ts | wc -l → 455, ölçüldü 2026-09-05)</sub> — atlanırsa: -
-15. `npm test` iki geçitten geçer: (1) productionDbGate — DATABASE_URL host'u localhost/127.0.0.1/::1/0.0.0.0 değilse DURUR (fail-closed), NODE_ENV/APP_ENV=production hiç geçmez; kaçış ALLOW_NONLOCAL_TEST_DB=1. (2) typecheckGate ~28sn. <sub>(scripts/run-all-tests.ts:102-165 (kapı), :174 çağrı, :142-146 YEREL kümesi, :148-155 kaçış, :111-118 production reddi; :)</sub> — atlanırsa: Kapı olmasa 1.539 deleteMany canlı DB'ye giderdi; tip hatası varken paket 'yeşil ama anlamsız' olurdu.
+15. `npm test` DÖRT geçitten geçer: (1) productionDbGate — DATABASE_URL host'u localhost/127.0.0.1/::1/0.0.0.0 değilse DURUR (fail-closed), NODE_ENV/APP_ENV=production hiç geçmez; kaçış ALLOW_NONLOCAL_TEST_DB=1. (2) FİXTURE ADI kapısı — hedef DB adı `_test` ile bitmiyorsa DURUR (ortak ağacın `.env`i fabrikanın canlı yedeğini gösteriyor ve o da localhost'ta; host kapısı görmez). (3) HACİM kapısı — hedefteki top sayısı 500'ü aşıyorsa DURUR (fabrikanın `..._test` adlı bir kopyası ad kalıbından geçerdi); ölçülemezse koşum sürer ama "ölçülemedi" notu basılır. (2) ve (3) için kaçış BEKCI_HEDEF_ONAY=1, hedef adı ve top sayısı log'a basılır. (4) typecheckGate ~28sn. <sub>(scripts/run-all-tests.ts:102-165 (kapı), :174 çağrı, :142-146 YEREL kümesi, :148-155 kaçış, :111-118 production reddi; :)</sub> — atlanırsa: Kapı olmasa 1.539 deleteMany canlı DB'ye giderdi; tip hatası varken paket 'yeşil ama anlamsız' olurdu.
 16. Tek bekçi iki yoldan koşar: `npx tsx scripts/test_X.ts` (kapı YOK) veya `npx tsx scripts/run-all-tests.ts <filtre>` (DB kapısı VAR, tip geçidi ATLANIR). <sub>(Teks-Erp/CLAUDE.md:356; scripts/run-all-tests.ts:170 (filter = process.argv[2]), :174-176 (kapı filtreden bağımsız, tipc)</sub> — atlanırsa: Doğrudan tek-dosya koşumu yanlış DATABASE_URL ile canlı veriye yazabilir; hiçbir uyarı çıkmaz.
 17. SKIP_TYPECHECK=1 tip geçidini tamamen kapatır (acil kaçış). <sub>(scripts/run-all-tests.ts:176 (!process.env.SKIP_TYPECHECK); Teks-Erp/CLAUDE.md:88)</sub> — atlanırsa: Tip driftli test paketi yeşil raporlanır (2026-08-01'de 87 tip hatası bu şekilde gizlenmişti).
 18. Bayrak/veri YAZAN bekçiler hedef-DB kapısından geçer: DB adı tekserp/tekserp_prod/adnansahin_db ise BEKCI_PROD_ONAY=1 istenir. <sub>(Teks-Erp/scripts/lib/hedef-db-kapisi.ts:13-17 (YAZILMASI_YASAK_DB), :29-37 (hedefDbEngeli); tüketiciler test_module_flag)</sub> — atlanırsa: Bayrak yazan bekçi fabrikanın modül anahtarlarını değiştirir; belirti günler sonra 403 olarak çıkar.
@@ -56,7 +58,7 @@
 - Sunucuyu YENİDEN BAŞLATMANIN doğru yolu (kendi PID'ini sakla, `lsof -iTCP:4000`, ayrı port) yalnız tasarım dokümanı §12-12 ve gece raporlarında; hiçbir CLAUDE.md'de ya da geliştirme bölümünde yok.
 - `npm run dev` (nodemon+ts-node, hot reload) ile pratikteki `npx tsx src/server.ts` (hot reload YOK) ayrımı hiçbir belgede yok; 'kaynağı değiştirdim, HTTP bekçisi hâlâ eski kodu ölçüyor' tuzağı yalnız test_superadmin.ts:79 yorumunda.
 - HTTP ayaklı beş bekçinin ayrı sunucu istediği ve her birinin FARKLI varsayılan portu (4100/4101/4104/4112/4122) hiçbir dokümanda derli toplu yok; sunucu yoksa bölümlerin SESSİZCE atlandığı da yazılmamış.
-- `BEKCI_PROD_ONAY=1` ve `ALLOW_NONLOCAL_TEST_DB=1` kaçış anahtarları yalnız kodda + arşiv/audit anlatısında; hiçbir geliştirme talimatında yok (`SKIP_TYPECHECK` sadece CLAUDE.md:88'de var).
+- `BEKCI_PROD_ONAY=1`, `BEKCI_HEDEF_ONAY=1` ve `ALLOW_NONLOCAL_TEST_DB=1` kaçış anahtarları yalnız kodda + arşiv/audit anlatısında; hiçbir geliştirme talimatında yok (`SKIP_TYPECHECK` sadece CLAUDE.md:88'de var).
 - Tek-dosya bekçi koşumunun (`npx tsx scripts/test_X.ts`) productionDbGate'ten GEÇMEDİĞİ uyarısı yalnız audit haritasında (K11:27); CLAUDE.md:356 bu yolu uyarısız önerir.
 - `Teks-Erp/.env.example:31` ve `example-env.txt:2` hâlâ `adnansahin_db@localhost:5432` gösteriyor — gerçek dev hedefi `tekserp_demo@localhost:55433` (.env:5). Şablonu kopyalayan yeni geliştirici var olmayan DB'ye bağlanır.
 - mobil/CLAUDE.md:253-255 sabit `API_URL` örneği veriyor; gerçek çözüm zinciri (devHost → EXPO_PUBLIC_API_URL → localhost) src/constants/api.ts:15-20'de ve dokümanda hiç yok.

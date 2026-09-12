@@ -18,6 +18,12 @@ import "dotenv/config";
 import { spawnSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
+import {
+  FABRIKA_HACIM_ESIGI,
+  fixtureHedefEngeli,
+  hacimHedefEngeli,
+  hedefDbAdi,
+} from "./lib/hedef-db-kapisi";
 
 const SCRIPTS_DIR = join(__dirname);
 const PER_TEST_TIMEOUT_MS = 180_000;
@@ -180,6 +186,16 @@ function productionDbGate(): void {
 
   const YEREL = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
   if (YEREL.has(host)) {
+    // ⚠️ YEREL OLMAK YETMEZ: ortak ağaçtaki `.env` fabrikanın canlı yedeğini
+    // gösteriyor ve o da localhost'ta. Ad fixture kalıbına uymuyorsa DUR.
+    const adEngeli = fixtureHedefEngeli();
+    if (adEngeli) {
+      console.error(`\n❌ ${adEngeli}\n`);
+      dur();
+    }
+    if (process.env.BEKCI_HEDEF_ONAY === "1") {
+      console.warn(`\n⚠️  FIXTURE OLMAYAN HEDEFE KOŞULUYOR: ${dbName} (BEKCI_HEDEF_ONAY=1)\n`);
+    }
     console.log(`→ Hedef DB: ${dbName} @ ${host} (yerel) ✅\n`);
     return;
   }
@@ -203,7 +219,33 @@ function productionDbGate(): void {
   dur();
 }
 
-function main() {
+/**
+ * ÜÇÜNCÜ AYAK — HACİM. Ad kapısı yanılabilir (fabrikanın yeni bir kopyası
+ * `..._test` adıyla doğabilir); veri hacmi yanılmaz. Ölçülemezse SESSİZ
+ * KALINMAZ: not basılır, "ad kapısı geçti" ile "hedef ölçüldü" karışmasın.
+ */
+async function hacimGeciti(): Promise<void> {
+  const { engel, topSayisi, olcumNotu } = await hacimHedefEngeli();
+  if (engel) {
+    console.error(`\n❌ ${engel}\n`);
+    console.error("⛔ TEST PAKETİ DURDURULDU — hedef fabrika ölçeğinde veri taşıyor.\n");
+    process.exit(1);
+  }
+  if (olcumNotu) {
+    console.warn(`⚠️  Hedef hacmi ÖLÇÜLEMEDİ (${olcumNotu}) — yalnız ad kapısı geçerli.\n`);
+    return;
+  }
+  if (process.env.BEKCI_HEDEF_ONAY === "1" && (topSayisi ?? 0) > FABRIKA_HACIM_ESIGI) {
+    console.warn(
+      `\n⚠️  FABRİKA ÖLÇEĞİNDE HEDEFE KOŞULUYOR: ${hedefDbAdi()} ` +
+        `(${topSayisi} top, eşik ${FABRIKA_HACIM_ESIGI}) — BEKCI_HEDEF_ONAY=1\n`,
+    );
+    return;
+  }
+  console.log(`→ Hedef hacim: ${topSayisi} top (eşik ${FABRIKA_HACIM_ESIGI}) ✅\n`);
+}
+
+async function main() {
   // Opsiyonel filtre: `npx tsx scripts/run-all-tests.ts <substring>` → yalnız
   // adı eşleşen test'leri koşar (tek test/alt-küme doğrulaması için).
   const filter = process.argv[2];
@@ -211,6 +253,7 @@ function main() {
   // Geçit SIRASI load-bearing: DB koruması tip kontrolünden ÖNCE ve filtreden
   // BAĞIMSIZ koşar. Tek test koşmak da yazma yapar — tehlike filtreyle azalmaz.
   productionDbGate();
+  await hacimGeciti();
 
   if (!filter && !process.env.SKIP_TYPECHECK && !typecheckGate()) process.exit(1);
   if (!filter && !process.env.SKIP_MIGRATION_GATE && !migrationGate()) process.exit(1);
@@ -411,4 +454,4 @@ function main() {
   process.exit(failed.length > 0 ? 1 : 0);
 }
 
-main();
+void main();

@@ -17,10 +17,14 @@
 //   §2 ölü muaf YOK                      (muaf edilen dosya artık yıkıcı değilse kırmızı)
 //   §3 muaf listesinde hayalet dosya YOK (yeniden adlandırma sonrası bayat girdi)
 //   §4 kapı GERÇEKTEN reddediyor         (varlık ≠ işlev; uzak/prod hedefle ölçülür)
+//   §6 paket hedefi fixture ADI taşıyor  (fabrika adı durur, fixture adı geçer)
+//   §7 hedefin HACMİ fabrika ölçeğinde değil (ad kalıbı yanılabilir, sayı yanılmaz)
+//   §8 silen temizlik yolları da aynı kapıdan geçiyor (`--apply` olmadan bile)
 // =============================================================================
 import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { spawnSync } from "child_process";
+import { FABRIKA_HACIM_ESIGI, hacimEngeliMetni } from "./lib/hedef-db-kapisi";
 
 let pass = 0;
 let fail = 0;
@@ -198,6 +202,92 @@ function main(): void {
     "§4: silme HİÇ denenmedi (TRUNCATE çıktıda yok)",
     !cikti.includes("siliniyor"),
     "kapı yazmadan önce düştü",
+  );
+
+  // ═══ §6 — PAKET HEDEFİ FİXTURE DB OLMALI (2026-09-12) ═══
+  // Ortak ağaçtaki `.env` fabrikanın canlı YEDEĞİNİ gösteriyor ve o da
+  // localhost'ta: host kapısı bunu göremez. Kapı ADA bakar. İki yön de ölçülür —
+  // fabrika adı DURMALI, fixture adı GEÇMELİ (yalnız "durur" ölçmek, her şeyi
+  // durduran bozuk bir kapıyı da yeşil gösterirdi).
+  const kosucu = join(dizin, "run-all-tests.ts");
+  const kos = (db: string) =>
+    spawnSync("npx", ["tsx", kosucu, "__eslesmeyen_ad__"], {
+      encoding: "utf8",
+      env: { ...process.env, DATABASE_URL: `postgresql://u:p@localhost:55433/${db}` },
+      timeout: 120_000,
+    });
+  const fabrika = kos("tekserp_fabrika_dev");
+  const fabrikaCikti = `${fabrika.stdout ?? ""}${fabrika.stderr ?? ""}`;
+  check("§6: fabrika yedeği adıyla paket DURDURULDU (exit 1)", fabrika.status === 1, `exit ${fabrika.status}`);
+  check(
+    "§6: gerekçe yapılabilir (fixture kalıbı + DATABASE_URL örneği)",
+    fabrikaCikti.includes("fixture kalıbına uymuyor") && fabrikaCikti.includes("_test"),
+    fabrikaCikti.split("\n").find((l) => l.includes("fixture kalıbına"))?.trim().slice(0, 80) ?? "(mesaj yok)",
+  );
+  check(
+    "§6: hedef adı log'a basılıyor (operatör neyi vurduğunu görür)",
+    fabrikaCikti.includes("tekserp_fabrika_dev"),
+    "ad çıktıda",
+  );
+  const fixture = kos("tekserp_kapi_sondasi_test");
+  const fixtureCikti = `${fixture.stdout ?? ""}${fixture.stderr ?? ""}`;
+  check(
+    "§6: fixture adıyla kapı GEÇİYOR (kapı her şeyi durdurmuyor)",
+    fixtureCikti.includes("Hedef DB: tekserp_kapi_sondasi_test") && !fixtureCikti.includes("fixture kalıbına uymuyor"),
+    fixtureCikti.split("\n").find((l) => l.includes("Hedef DB"))?.trim().slice(0, 70) ?? "(satır yok)",
+  );
+
+  // ═══ §7 — HACİM AYAĞI: ad kalıbı yanılabilir, veri hacmi yanılmaz ═══
+  // Fabrikanın `..._test` adlı yeni bir kopyası ad kapısından GEÇER. İkinci sed
+  // top sayısıdır. Yüklem saf tutuldu ki bekçi DB'siz iki yönü de ölçebilsin.
+  check(
+    "§7: temiz fixture hacmi GEÇİYOR (28 top)",
+    hacimEngeliMetni("tekserp_kapi_sondasi_test", 28) === null,
+    `eşik ${FABRIKA_HACIM_ESIGI}`,
+  );
+  check(
+    "§7: eşiğin tam üstü DURDURULUYOR",
+    (hacimEngeliMetni("tekserp_kapi_sondasi_test", FABRIKA_HACIM_ESIGI + 1) ?? "").includes("FABRİKA ÖLÇEĞİNDE"),
+    `${FABRIKA_HACIM_ESIGI + 1} top`,
+  );
+  check(
+    "§7: eşiğin tam kendisi GEÇİYOR (sınır kapalı değil)",
+    hacimEngeliMetni("x_test", FABRIKA_HACIM_ESIGI) === null,
+    `${FABRIKA_HACIM_ESIGI} top`,
+  );
+  check(
+    "§7 ⭐ koşucu hacim kapısını GERÇEKTEN çağırıyor (yüklem var ≠ kapı var)",
+    readFileSync(kosucu, "utf8").includes("await hacimGeciti()"),
+    "run-all-tests.ts",
+  );
+
+  // ═══ §8 — SİLME YOLLARI: --apply OLMADAN da fixture olmayan hedefte durur ═══
+  // 07:19 vakası: fixture'lar fabrikanın canlı yedeğinde yaratılıp silindi.
+  // `db-guard` `_dev`i geliştirme sayıp geçirdiği için o yol açıktı.
+  const temizlik = (db: string) =>
+    spawnSync("npx", ["tsx", join(dizin, "clean_test_residue.ts")], {
+      encoding: "utf8",
+      env: { ...process.env, DATABASE_URL: `postgresql://u:p@localhost:55433/${db}` },
+      timeout: 120_000,
+    });
+  const tFabrika = temizlik("tekserp_fabrika_dev");
+  const tFabrikaCikti = `${tFabrika.stdout ?? ""}${tFabrika.stderr ?? ""}`;
+  check(
+    "§8 ⭐ temizlik betiği fabrika yedeğinde DURDU (--apply verilmeden)",
+    tFabrika.status === 1 && tFabrikaCikti.includes("fixture kalıbına uymuyor"),
+    `exit ${tFabrika.status}`,
+  );
+  check(
+    "§8: silme HİÇ denenmedi (rapor başlığı bile basılmadı)",
+    !tFabrikaCikti.includes("DRY-RUN") && !tFabrikaCikti.includes("UYGULAMA MODU"),
+    "kapı ilk ifadede düştü",
+  );
+  const tFixture = temizlik("tekserp_kapi_sondasi_test");
+  const tFixtureCikti = `${tFixture.stdout ?? ""}${tFixture.stderr ?? ""}`;
+  check(
+    "§8: fixture adıyla bu kapı GEÇİYOR (başka sebeple düşebilir, bu gerekçe çıkmaz)",
+    !tFixtureCikti.includes("fixture kalıbına uymuyor"),
+    "ad kapısı sessiz",
   );
 }
 

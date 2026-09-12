@@ -10,6 +10,8 @@
 //
 // TÜKETİCİLER: test_module_flag_off (bant + fail) · fixture-module-flags (throw).
 // =============================================================================
+import { Pool } from "pg";
+
 export const YAZILMASI_YASAK_DB: ReadonlySet<string> = new Set([
   "tekserp",
   "tekserp_prod",
@@ -35,4 +37,96 @@ export function hedefDbEngeli(): string | null {
     );
   }
   return null;
+}
+
+// ── PAKET/BEKÇİ HEDEFİ: FİXTURE DB ZORUNLU (2026-09-12) ─────────────────────
+// Ortak ağaçtaki `.env` fabrikanın canlı YEDEĞİNİ (`tekserp_fabrika_dev`)
+// gösteriyor: açık `DATABASE_URL` verilmeden koşulan her bekçi oraya yazar ve
+// paket 1.500'den fazla `deleteMany` gönderir. Host kapısı bunu görmez (adres
+// yerel), bu yüzden kapı ADA bakar: hedef fixture kalıbına uymuyorsa DURUR.
+//
+// ⚠️ YALNIZ `_test`: ilk yazımda `_local` de kabul ediliyordu ama o son eki
+// taşıyan tek bir veritabanı yok — kapının kabul kümesi, KULLANILAN adlardan
+// geniş olmamalı. `db-guard.ts` daha geniş bir küme (`_dev`/`_demo`) tanır;
+// o kapı "geliştirme hedefi mi" sorusunu, bu kapı "fixture hedefi mi" sorusunu
+// cevaplar ve fixture kümesi bilerek DARDIR.
+const FIXTURE_SON_EKLERI = ["_test"];
+
+/** Fixture olmadığı BİLİNEN adlar — mesajda ayrıca anılır (dev kopya / canlı). */
+export const FIXTURE_OLMAYAN_DB: ReadonlySet<string> = new Set([
+  "tekserp_fabrika_dev",
+  "tekserp_demo",
+  "tekserp_demo2",
+  "tekserp_saf_dev",
+  "tekserp_yeni_dev",
+  "tekserp_adnansahin_dev",
+  ...YAZILMASI_YASAK_DB,
+]);
+
+/**
+ * Paket/bekçi koşumunun hedefi fixture DB mi? Değilse Türkçe gerekçe döner.
+ *
+ * Kaçış `BEKCI_HEDEF_ONAY=1` — bilinçli karardır ve hedef adı log'a basılır.
+ */
+export function fixtureHedefEngeli(): string | null {
+  const dbAdi = hedefDbAdi();
+  const fixture = FIXTURE_SON_EKLERI.some((ek) => dbAdi.endsWith(ek));
+  if (fixture) return null;
+  if (process.env.BEKCI_HEDEF_ONAY === "1") return null;
+  const bilinen = FIXTURE_OLMAYAN_DB.has(dbAdi)
+    ? " Bu ad fabrikanın yedeği / canlı kopya olarak biliniyor."
+    : "";
+  return (
+    `Hedef DB '${dbAdi}' fixture kalıbına uymuyor (${FIXTURE_SON_EKLERI.join(" / ")} ile bitmeli).` +
+    `${bilinen} Paket ve bekçiler bu hedefe YAZAR ve SİLER — ` +
+    "`DATABASE_URL=postgresql://…/<ad>_test` ile koş. " +
+    "Bilerek koşuyorsan BEKCI_HEDEF_ONAY=1 ver."
+  );
+}
+
+// ── ÜÇÜNCÜ AYAK: HACİM (2026-09-12) ─────────────────────────────────────────
+// Ad kapısı yanılabilir: yarın fabrikanın yeni bir kopyası `..._test` adıyla
+// doğarsa kalıp onu GEÇİRİR. Veri hacmi yanılmaz — temiz fixture DB'si onlarca
+// top taşır (ölçüldü: 28), fabrikanın yedeği binlerce (ölçüldü: 5.784).
+export const FABRIKA_HACIM_ESIGI = 500;
+
+/**
+ * Saf yüklem — sayıyı bilen çağıran (bekçi) DB'siz ölçebilsin diye ayrı.
+ * I/O yapan sarmalayıcı `hacimHedefEngeli()`.
+ */
+export function hacimEngeliMetni(dbAdi: string, topSayisi: number): string | null {
+  if (topSayisi <= FABRIKA_HACIM_ESIGI) return null;
+  return (
+    `Hedef DB '${dbAdi}' FABRİKA ÖLÇEĞİNDE veri taşıyor: ${topSayisi} top ` +
+    `(eşik ${FABRIKA_HACIM_ESIGI}). Temiz bir fixture veritabanı bu kadar top ` +
+    "taşımaz — ad kalıbı doğru olsa bile hedef büyük olasılıkla fabrikanın bir " +
+    "kopyasıdır ve paket oraya YAZAR, SİLER. " +
+    "Bilerek koşuyorsan BEKCI_HEDEF_ONAY=1 ver."
+  );
+}
+
+export interface HacimOlcumu {
+  engel: string | null;
+  topSayisi: number | null;
+  /** Ölçüm YAPILAMADIYSA sebebi — sessiz geçmek 'ölçüldü' sanılmasın. */
+  olcumNotu: string | null;
+}
+
+/** Hedefteki top sayısını ölçer; fabrika ölçeğindeyse Türkçe gerekçe döner. */
+export async function hacimHedefEngeli(): Promise<HacimOlcumu> {
+  const url = process.env.DATABASE_URL;
+  if (!url) return { engel: null, topSayisi: null, olcumNotu: "DATABASE_URL tanımsız" };
+  const pool = new Pool({ connectionString: url, connectionTimeoutMillis: 5_000 });
+  try {
+    const r = await pool.query<{ n: number }>('SELECT count(*)::int AS n FROM rolls');
+    const n = Number(r.rows[0]?.n ?? 0);
+    if (process.env.BEKCI_HEDEF_ONAY === "1") return { engel: null, topSayisi: n, olcumNotu: null };
+    return { engel: hacimEngeliMetni(hedefDbAdi(), n), topSayisi: n, olcumNotu: null };
+  } catch (e) {
+    // Ölçülemedi ≠ güvenli. Ad kapısı zaten geçildiği için koşumu düşürmüyoruz
+    // ama not çağırana döner ve log'a basılır.
+    return { engel: null, topSayisi: null, olcumNotu: (e as Error).message.slice(0, 120) };
+  } finally {
+    await pool.end().catch(() => undefined);
+  }
 }

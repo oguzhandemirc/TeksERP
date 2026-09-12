@@ -6453,3 +6453,55 @@ metin sondası) · `test_fason_reopen_remainder_guard` G10 (terminal WO → 409)
 Migration **yok** · izin **yok** · APK **yok**. Sözleşme: iptal ucu yeni bir 409
 metni döndürebilir (aynı yüklemden), geri alma ucu yeni `WORK_ORDER_TERMINAL`
 kodunu ekler.
+
+---
+
+## 2026-09-12 — Bekçi/paket hedefi FİXTURE DB olmak zorunda (üç ayaklı kapı) [ÇEKİRDEK]
+
+### Bulgu
+
+Ortak çalışma ağacındaki `Teks-Erp/.env` `tekserp_fabrika_dev`i — fabrikanın
+canlı yedeğini — gösteriyor. Açık `DATABASE_URL` verilmeden koşulan HER bekçi
+oraya yazar; tam paket 1.500'den fazla `deleteMany` gönderir. `productionDbGate`
+yalnız HOST'a bakıyordu ve fabrika yedeği de localhost'ta olduğu için kapı bu
+riski GÖRMÜYORDU. Aynı gün ölçüldü: 07:19'da fabrika yedeğinde üç fixture
+(`TEST-GHR-ROTA/IST/MAK-*`) yaratılıp silinmiş — `test_guarded_hard_remove`'un
+kendi temizliği. Gerçek kayıp yok; delik gerçek.
+
+### Karar — kapı ÜÇ AYAKLI
+
+1. **Host** (bugüne kadarki tek ayak): hedef yerel değilse DUR.
+2. **Ad**: hedef DB adı `_test` ile bitmiyorsa DUR. İlk yazımda `_local` de
+   kabul ediliyordu; o son eki taşıyan tek bir veritabanı olmadığı için kabul
+   kümesi daraltıldı — kapının kabulü KULLANILAN adlardan geniş olmamalı.
+   `db-guard.ts` daha geniş bir küme (`_dev`/`_demo`) tanımaya devam eder: o
+   kapı "geliştirme hedefi mi", bu kapı "fixture hedefi mi" sorusunu cevaplar.
+3. **Hacim**: hedefteki top sayısı 500'ü aşıyorsa DUR. Ad kalıbı yanılabilir
+   (fabrikanın yarın `..._test` adıyla doğacak bir kopyası kalıptan geçer);
+   veri hacmi yanılmaz — ölçüldü: fixture DB 28 top, fabrika yedeği 5.784.
+   Ölçüm yapılamazsa koşum sürer ama "ölçülemedi" notu basılır: sessizlik
+   "ölçüldü" sanılmasın.
+
+Kaçış (2) ve (3) için `BEKCI_HEDEF_ONAY=1` — bilinçli karardır ve hedef adı ile
+top sayısı log'a basılır. Yüklemler tek kaynakta: `scripts/lib/hedef-db-kapisi.ts`
+(`fixtureHedefEngeli` · `hacimEngeliMetni` saf + `hacimHedefEngeli` I/O).
+
+**Silen temizlik yolları da bu kapıdan geçer:** `clean_test_residue.ts` artık
+`--apply` verilmeden de durur. Gerekçe: kuru koşum "zararsız" değildir, raporu
+doğru sanan operatörün bir sonraki komutu `--apply` olur; ve `db-guard` `_dev`i
+geliştirme hedefi sayıp o yolu açık bırakıyordu.
+
+### Bekçi ve negatif sonda
+
+`test_script_guards.ts` §6–§8, her ayak İKİ YÖNLÜ: fabrika adıyla koşucu durur
+(exit 1 + gerekçe + hedef adı), fixture adıyla GEÇER; hacim yüklemi 28 topu
+geçirir, eşiğin bir üstünü durdurur, eşiğin tam kendisini geçirir (sınır kapalı
+değil); koşucunun `hacimGeciti()` çağrısı metinle ölçülür (yüklem var ≠ kapı
+var); temizlik betiği fabrika adında `--apply`sız durur ve rapor başlığını bile
+basmaz. Negatif sonda (ayrı worktree): kapı çağrısı silinince ilgili kontrol
+kırmızı.
+
+### Üç kapı
+
+Migration **yok** · izin **yok** · APK **yok**. Sözleşme: açık `DATABASE_URL`
+olmadan paket koşumu artık mümkün değil (kadro kuralı).

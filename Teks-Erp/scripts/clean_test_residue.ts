@@ -22,12 +22,24 @@
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { assertGelistirmeVeritabani } from "./db-guard";
+import { fixtureHedefEngeli, hacimHedefEngeli } from "./lib/hedef-db-kapisi";
 
 // ⚠️ İLK İFADE — bu betik geri alınamaz silme yapar ve hedefini `DATABASE_URL`den
 // okur. Kapı 2026-09-06'da eklendi: betik silmeyi Prisma `deleteMany` ile yaptığı
 // için `test_script_guards`ın ham-SQL izleri onu yıkıcı olarak GÖRMÜYORDU; yani
 // kapısız kaldığı fark edilmemişti.
 assertGelistirmeVeritabani("clean_test_residue");
+
+// ⚠️ İKİNCİ KAPI (2026-09-12): `db-guard` `_dev`/`_demo`yu da GELİŞTİRME hedefi
+// sayar ve bu projede dev hedefi artık fabrikanın canlı YEDEĞİ. Fixture silen bu
+// betik için o izin fazla geniş: hedef fixture kalıbında değilse `--apply`
+// OLMADAN da dururuz. Kuru koşum "zararsız" değildir — raporu doğru sanan
+// operatörün bir sonraki komutu `--apply` olur.
+const fixtureEngeli = fixtureHedefEngeli();
+if (fixtureEngeli) {
+  console.error(`\n⛔ clean_test_residue DURDURULDU — ${fixtureEngeli}\n`);
+  process.exit(1);
+}
 
 const APPLY = process.argv.includes("--apply");
 
@@ -89,6 +101,15 @@ async function phase(label: string, run: () => Promise<number>): Promise<void> {
 }
 
 async function main() {
+  // ÜÇÜNCÜ KAPI — HACİM: ad kalıbı doğru olsa bile hedef fabrika ölçeğinde veri
+  // taşıyorsa (fabrikanın `..._test` adlı yeni bir kopyası) silme YAPILMAZ.
+  const hacim = await hacimHedefEngeli();
+  if (hacim.engel) {
+    console.error(`\n⛔ clean_test_residue DURDURULDU — ${hacim.engel}\n`);
+    process.exit(1);
+  }
+  if (hacim.olcumNotu) console.log(`⚠️  Hedef hacmi ölçülemedi (${hacim.olcumNotu}) — yalnız ad kapısı geçerli.`);
+
   console.log(APPLY ? "== UYGULAMA MODU (siler) ==" : "== DRY-RUN (yazmaz; --apply ile uygula) ==");
 
   // ── 1) TOPLAR — bağımlı satırlar önce, FK sırası test teardown'larıyla aynı ──
