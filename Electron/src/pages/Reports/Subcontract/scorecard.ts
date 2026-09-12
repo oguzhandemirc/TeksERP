@@ -19,6 +19,9 @@ export interface SubcontractScorecardRow {
   firePct: number;
   openItems: number;
   openQty: number;
+  /** Topu BAŞKA sevkin doğrudan sevkiyle çıkmış kalemler — ölçülemez, oranın dışında. */
+  unattributedItems: number;
+  unattributedQty: number;
   avgTurnaroundDays: number | null;
   prevFirePct?: number;
   prevDispatchedQty?: number;
@@ -34,6 +37,8 @@ export interface SubcontractScorecard {
     firePct: number;
     openItems: number;
     openQty: number;
+    unattributedItems: number;
+    unattributedQty: number;
     avgTurnaroundDays: number | null;
     prevFirePct?: number;
     prevDispatchedQty?: number;
@@ -68,6 +73,7 @@ export function buildSubcontractExport(opts: {
     // ve henüz dönmemiş mal yüzünden abartılı okunur.
     "FİRE = (kapanmış kalemlerin giden metrajı − dönen metraj − müşteriye giden metraj) / kapanmış kalemlerin giden metrajı.",
     "Henüz dönmemiş (açık) kalemler fire hesabına GİRMEZ; ayrı 'açık bakiye' olarak raporlanır.",
+    "Topu BAŞKA bir sevkin doğrudan sevkiyle çıkmış kalemler ölçülemez sayılır: ne fireye ne açık bakiyeye girer.",
     "Fasondan doğrudan müşteriye sevk edilen metre başarılı teslimdir: fire sayılmaz, paydadan da düşülmez. İptal edilen sevkler kapsam dışıdır.",
   ];
   if (compareLabel) meta.push(`Karşılaştırma dönemi: ${compareLabel}`);

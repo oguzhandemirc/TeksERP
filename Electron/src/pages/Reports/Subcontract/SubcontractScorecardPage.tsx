@@ -165,7 +165,7 @@ export function SubcontractScorecardPage() {
   return (
     <ReportPageLayout
       title="Fason Karnesi"
-      description="Giden ↔ dönen metraj (fason firesi), dönüş süresi ve açık bakiye — firma bazında."
+      description="Giden ↔ dönen ↔ müşteriye teslim metrajı (fason firesi), dönüş süresi ve açık bakiye — firma bazında."
       showCompare
       defaultDays={90}
       actions={<ReportExportBar disabled={!sc} buildSpec={spec} />}
