@@ -7489,3 +7489,151 @@ defter bloğu (sapma defterinden sonra). `src/constants/stock-move-reasons.ts` �
 zaten vardı (2026-09-12 stok defteri dilimi). İzin YOK. APK YOK; panel
 `WAREHOUSE_EVENT_META` iki olayı zaten tanıyor, sebep kodunun panel etiket
 haritası yok.
+
+---
+
+## 2026-09-12 (devere) — "her senaryo çalışmalı" ÇERÇEVESİ: dört mekanizma, sırayla [ÇEKİRDEK]
+
+Kullanıcı devere/çözgü tasarımı için çerçeve kararı verdi: **"bunların her birini bayrak
+yap; bunları ve farklı versiyonlarını yapan birçok firma vardır, herkes farklı
+çalışabiliyor"** ve ardından ekledi: **"duruma göre bayrağa bağlamalıyım veya aksiyon
+anında seçeneğe bağlamalıyım."** Üç saha sorusunun (#11 bobin tartımı/levent dipleri ·
+#20 devere nerede yapılır · #21 tül dokuma mı raşel mi) üçüne de cevap *"hepsini
+destekle"* oldu.
+
+### Doktrin — varyasyonun yeri DÖRT mekanizmadan biridir, sırayla denenir
+
+| # | Mekanizma | Ölçüt |
+|---|---|---|
+| 1 | **[ÇEKİRDEK]** | Seçenek YOK — defter semantiği, brüt sevk, ters yol |
+| 2 | **VERİ** | Aynı kod yolu, farklı gerçek |
+| 3 | **AKSİYON ANINDA SEÇİM** | Aynı fabrikada iki kez farklı olabiliyorsa — operatör o anda seçer |
+| 4 | **[PROFİL] BAYRAK** | EN SON ÇARE — yalnız gerçekten bir kod yolu açılıp kapanıyorsa |
+
+Ayırt edici cümle: **bayrak KOD YOLUNU açıp kapatır · veri AYNI kod yolunda farklı
+gerçekleri taşır · aksiyon anındaki seçim, aynı kod yolunda AYNI ANDA iki farklı gerçeği
+mümkün kılar.** 2 ile 3'ü ayıran soru: *"bu değer kurulumda bir kez mi belirlenir, yoksa
+her kayıtta değişebilir mi?"* Değişebiliyorsa alan vardır ama **formda seçim olarak
+görünmek zorundadır** — varsayılanı olabilir, kilitli olamaz.
+
+**Bayrak enflasyonu, tek-senaryo kadar ciddi bir tuzaktır.** Üç saha sorusu naif olarak
+beş bayrak isterdi; ölçüm sonucu **sıfır yeni modül anahtarı** çıktı, çünkü üçü de "bu kod
+çalışsın mı" değil kaydın İÇERİĞİ: *bu levent nereden geldi · bu iplik nereye gitti · bu
+makine neyi sayar.* Bayrağa çevrilseydi, aynı fabrikada iki makine tipi ya da iki tedarik
+yolu olduğu anda bayrak çökerdi.
+
+### Kararın zamanlaması ölçüldü ve kararı o ölçüm mümkün kıldı
+
+`prisma/migrations/` + `schema.prisma` okundu: devere **Faz 1a CANLI ŞEMADA**
+(`20260912120000_devere_modul_anahtari` · `..120100_devere_warp_spec` · `..160100_devere_sed`
+→ `warp_specs`, `Item.linearDensityDen`, `Item.warpSpecId`, `Station.producesWarpBeam`,
+`devere.enabled`), **Faz 1b henüz YAZILMAMIŞ** (`grep -c "warpBeam" src/ schema.prisma` → 0),
+**tezgah izleme tamamen KÂĞITTA** (`MachineSpec`/`MachineRun` şemada 0). Yani tek senaryoya
+bağlı cümlelerin ezici çoğunluğu henüz yazılmamış bölümdeydi: **bugün bir belge düzeltmesi,
+yarın backfill + kısıt düşürme.** Karar penceresi tam buradaydı.
+
+### Düzeltilen dört tek-senaryo bağı — her biri BİR GERÇEK FİRMAYI kayıttan dışlıyordu
+
+**① Bobin/dip → çekirdek ihlali düzeltildi.** Tasarımın §3.7'si *"net tek satır, iade türü
+gerekmez"* diyordu. Bu, kök `CLAUDE.md`'nin çekirdek cümlesinin ihlaliydi: *"Sevk rakamı HER
+yüzeyde BRÜT; iade ayrı belgeyle kapanır."* İplik çıkışı da bir çıkıştır ve net satır,
+fabrikanın ölçtüğü iki sayıdan birini (cağlığa ne yüklendiğini) kalıcı kaybeder.
+**Yeni:** `WARP_ISSUE` brüt + ayrı `WARP_RETURN` + `ReasonPreset` ZORUNLU (`DEPOYA_IADE` ·
+`ATKILIK_AKTARIM` · `TELEF`). Üç saha senaryosu üç bayrak değil **bir katalogda üç satır**,
+ve seçim **her sarımda** yapılır (3. mekanizma). **Tartmayan fabrikada iade satırı hiç
+doğmaz — yokluk zaten cevaptır**, bayrak gerekmez.
+
+**② Devere nerede → CHECK senaryo kapatıyordu.** `warp_beam_events_wound_facts_ck`
+`machineId NOT NULL` istiyordu, yani *"her levent bir makinede doğar"*: fason sardırılan ya
+da satın alınan levent **DB düzeyinde kaydedilemezdi**. **Yeni:** `WarpBeam.originKind`
+(`IN_HOUSE` · `SUBCONTRACT` · `PURCHASED`) + köken XOR'u; akıbet ayrı eksen
+(`SHIPPED_OUT`). Köken **her leventte seçilir** — aynı fabrika hem içeride sarıp hem hazır
+levent alabilir.
+Fable denetimi taraf kolonunun TİPİNİ de çürüttü: `PURCHASED ⇒ Customer` yanlıştı, çünkü
+**fason devereci kendi ipliğiyle sarıp leventi faturalar** ⇒ `PURCHASED` + `Subcontractor`.
+Tek tipe zorlamak aynı firmaya ikinci cari kart açtırırdı; kodun kendi alış doktrini
+(`supplier-party.helper`) zaten *"alış HER cariden yapılabilir"* ve `Customer XOR
+Subcontractor` diyor. Ayrıca **dördüncü köken `CONSIGNED`** (müşterinin gönderdiği levent,
+fason dokuma) tespit edildi: enum'a bugün girmiyor ama **tabloya satır olarak yazıldı**, ki
+kimse onu `PURCHASED`a saklamasın — saklarsa **alış raporuna yalan girer** ve `SHIPPED_OUT`
+iadesi *"bizim leventi verdik"* diye okunur. Taraf kolonu `ownerCustomerId`dir, `supplierId`
+DEĞİL: **aynı kolon iki anlam taşıyamaz** — `supplierId` "kimden ALDIK", `ownerCustomerId`
+"kimin MALI".
+
+**③ Modül bağımlılığı → desteklenecek kurulumu yasaklıyordu.**
+`MODULE_DEPENDENCIES.devereEnabled = "iplikEnabled"` (canlı, `module-flags.ts`) *"devere her
+zaman kendi iplik stoğunu tüketir"* varsayıyordu; `PURCHASED` levent tüketmez, yani hazır
+levent alan dokumacı devereyi ancak iplik + ticaret açarak kullanabiliyordu. **Bağımlılık
+kaldırıldı ve yerine hiçbir şey yazılmadı:** ölçüldü, `tx.yarnMovement.create` src'de tek
+yerde ve iplik kapısı zaten o tek yazarın ilk iş ifadesi — kapıyı devere servisine bir de
+yazmak **ikinci kopya** olurdu, `yarn.service` bunu adıyla yasaklıyor (*"ikinci kopya bir gün
+ayrışır"*). ⚠️ Asıl delik şemada değil **görünürlük cümlesindeydi**: *"denye yalnız
+`iplikEnabled` iken görünür"* uygulanırsa, kararın var olma sebebi olan kurulum çözgü kartı
+açamaz ve hiçbir levent doğamaz — karar bir cümleyle kendini iptal ediyordu. Cümle
+`iplikEnabled || devereEnabled` (ya da bayraksız, kalem tipinden) oldu; aynı tuzak içe
+aktarma adaptörü cümlesinde de vardı.
+
+**④ Dokuma/raşel → karar doğruydu, ŞEMA karara uymuyordu.** 2026-09-12 §9.5 kararı *"raşel
+ayrı modül DEĞİL"* demişti, ama tezgah izleme şemasının çekirdeği raşeli **yapısal olarak
+dışlıyordu**: `LoomShedType` NOT NULL (raşel ağızlık açmaz ⇒ `MachineSpec` satırı açılamaz ⇒
+makine izleme kapsamına hiç giremez), atkı-tabanlı randıman onda null kalır (*"ölçülemedi"*
+değil, **"model uymuyor"**). **Yeni:** künye nullable · ad ailesi nötr (`Loom*` →
+`MachineSpec`/`MachineRun`/`machine_*`/`test_machine_*`) · `Machine.warpBeamSlots` Faz 3'ten
+1b'ye çekildi · `beamRole` (yuvalar birbirinin aynı değil: zemin/hav/dolgu).
+
+### Geri alınan iki talimat — düşmanca denetim iki kez kazandı
+
+- **"Kapıyı taşı"** geri alındı (③): ikinci kopya üretiyordu.
+- **"Sayaç türü makine sınıfından gelsin"** geri alındı: o bir **`kind`-dispatch**tir (kök
+  kural: *"yeni `kind ===` karşılaştırması yasak"*) ve **çift yüklem** yaratır — sinyal
+  `PICK_COUNTER` derken sınıf `WARP_KNIT` derse hangisi kazanır? **Doğru şekil:** birim
+  SİNYALDE (`COURSE_COUNTER`/`RACK_COUNTER`), sıklık KOŞUMDA (`unitsPerCm`), metre
+  `birim ÷ (unitsPerCm × 100)` — **sınıf dalı YOK**; `machineClass` yalnız sunum/rapor
+  etiketi ve zorunlu değil, çünkü `shedType IS NULL` "ağızlıksız"ı zaten söylüyor.
+- **`machines_warp_beam_slots_pos` (`>= 1`)** da senaryo kapatıyordu: cağlıktan beslenen
+  çözgü makineleri (elastan raşel, iğneli dar dokuma) çözgü tüketir ama **levent bağlanmaz**,
+  yuva 0'dır. Üstelik varsayılan 1, kolonu kurşun ve tambur makinelerine de yazardı — **kolon
+  daha doğmadan yalan söylerdi.** CHECK `>= 0`, varsayılan `0`; yuva kapısı sayı değil
+  `Station.consumesWarpBeam`.
+
+### Ad asimetrisi bilinçlidir
+
+Modeller nötrleşti (`MachineSpec`/`MachineRun`), **DB bayrak anahtarı `tezgah.enabled`
+DEĞİŞMEDİ** — §9.2: anahtar kimliktir, anlamı genişletilmez. İki enum da adını korudu:
+`LoomShedType` ve `LoomWeftInsertion` **gerçekten dokumaya özgü fiziktir**; nötr ada çevirmek
+"her makinenin ağızlığı var" ima ederdi, oysa NULL olmaları tam olarak "bu makine o sınıftan
+değil"i söylüyor.
+
+### GEÇERSİZ → 2026-09-12
+
+- `DEVERE-LEVENT-TARAMASI.md` §3.7'nin eski başlığı ve kararı — *"Tüketim: gerçekleşen kg,
+  beyanlı kaynak, **iade türü yok**"* ve *"Dipler veride stoktan hiç çıkmamış olur, iade
+  türü gerekmez"*: **GEÇERSİZ.** Çıkış brüt yazılır, dönen dip ayrı satırla kapanır.
+- `warp_beam_events_wound_facts_ck`te **`machineId NOT NULL`**: GEÇERSİZ. Makine zorunluluğu
+  kökene bağlıdır.
+- `MODULE_DEPENDENCIES.devereEnabled = "iplikEnabled"`: GEÇERSİZ (kaldırılır).
+- `MachineSpec`in ayrı tablo gerekçesindeki **(b) "`shedType` burada NOT NULL olabiliyor"**
+  maddesi: GEÇERSİZ — NOT NULL olması tam olarak raşeli dışlayan şeydi. (a) *"kurşun
+  makinesinde ölü kolon olmasın"* ayakta.
+- `machines_warp_beam_slots_pos` (`>= 1`, varsayılan 1): GEÇERSİZ → `>= 0`, varsayılan 0.
+
+### Karara BAĞLANMAYAN, yönetici listesinde kalan
+
+- `slot = 1` kanonik sayaç ve `machine_runs_one_open_per_machine_uq`: ikisi de *"bir makine
+  tek iş koşar, tek sayacı anlamlıdır"* varsayar; çift enli makinede yan yana iki kumaş ve
+  çok barlı raşelde barı başına tüketim bunu kırar. İkisi de kâğıtta.
+- Randıman paydasının atkı temelli oluşu (`targetPicksPerMin`, `kopuş/10⁵ atkı`) ve tekil
+  `warpStopCount`/`weftStopCount` (zemin ile hav çözgüsü ayrı kopar ⇒ **Pareto yanlış
+  levente yazılır**).
+- Levent söküm kapısının tek levent varsayması ve *"gereken N yuvanın kaçı dolu"*
+  kontrolünün olmaması.
+- **Polimorfik fason sevk kalemi** (top | levent | iplik): `SubcontractorDispatchItem.rollId`
+  NOT NULL'dur (ölçüldü, `schema.prisma:3887`) ⇒ fasona yalnız TOP gidebilir. Fason devere ve
+  fason haşıl bu borcu ödetir; 1b'den büyük, ayrı dilim.
+- **Emanet iplik / `MaterialOwnership`** (`SEKTOR-YOL-HARITASI.md:152`) — `CONSIGNED`
+  kökeniyle aynı kutuda.
+
+**Bu turda kod ve migration YAZILMADI.** Değişen: `docs/design/DEVERE-LEVENT-TARAMASI.md`
+(§0 · §1.3 · §3.7 · §3.9 yeni · §4.1 · §4.3 · §4.4 · §4.5 · §4.6 · §4.7 · §4.8 · §4.9 ·
+§5 · §7 · §8 · §9.7 yeni) ve `docs/design/DOKUMA-TEZGAH-IZLEME-TASARIMI.md` (§2.2 · §2.9 ·
+§5.6 · §7.3 · §10/#19 · §10/#22 yeni + `Loom*` → `Machine*` nötr ad turu).

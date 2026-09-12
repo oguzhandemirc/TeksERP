@@ -11,9 +11,20 @@
 ## 0 · Özet — yöneticiye
 
 - **Levent bugün sistemde HİÇ yok** (`warpBeam` şema/kod/istemci taramasında 0 eşleşme) ve mevcut hiçbir modele sığmıyor. `Roll` metre + kumaş dünyasıdır, `WorkOrder` top işler, `YarnMovement` iplik kg'ının nereye gittiğini söylemez. Devere **topun doğuşundan ÖNCE** çalışır: içinden top geçmez, iplik girer, levent çıkar.
-- **En küçük anlamlı ilk adım (Faz 1): "Levent doğar, iplik ona düşer, hazır levent stoğu görünür."** Bunun için dört parça gerekir: çözgü kartı (`WarpSpec`), levent (`WarpBeam`, durum tablosu), levent olay defteri (`WarpBeamEvent`, Faz 1'de yalnız `WOUND`/`WOUND_CANCEL`) ve iplik defterinde `WARP_ISSUE`/`WARP_ISSUE_REVERSAL`. Bunlara `devere.enabled` eklenir. Tezgaha bağlama, kalan metre, lot ve top bağı sonraki fazlarda. Faz 1 tek sürüm için büyük olduğundan **1a (defter yazmayan katalog) / 1b (levent doğar)** diye ikiye bölündü; kesme yeri ve gerekçesi §7'de.
-- **Şema dokunuşu GEREKİR.** Şemasız anlamlı bir adım yok: iplik çıkışını serbest metne "LV-12 için" yazmak, doktrinin yasakladığı şeydir (iş kararı metinden okunamaz). Faz 1 tamamen EKLEMELİ: **3 yeni tablo · 1 yeni pg enum tipi (`WarpBeamStatus`) · mevcut enuma 2 değer · 4 nullable ya da varsayılanlı kolon · 9 şema-dışı nesne · 1 modül anahtarı**; pratikte ~5 migration dosyası (enum değerleri kendi tek ifadeli dosyalarında). adnansahin'de sıfır fark (§6). Şema dışında üç mekanik kapı da Faz 1'e dahildir ve atlanırsa sessiz kırılır: **izin kataloğu + ekran `requires`** (§5), **birleştirme haritası** (yeni `Item`/`Customer` FK'ları, §5), **içe aktarma adaptörleri** (§5). Ayrıca iki mevcut sayım yolu işaret fonksiyonuna bağlanmalı, yoksa yeni ters kayıt türü sessizce yanlış sayılır (§4.9).
-- **Faz 1'i BAŞLATMAYI bloke eden dokumacı sorusu YOK, ama KAPSAMINI kilitleyen üç soru var.** Formüldeki bölen sorusu (#1) fizikle çözüldü (§1.2); sıralama sorusu (#2) sonucu etkilemez (çarpma değişmeli). Kapsamı değiştirebilecek üçlü: **#11** (bobinler tartılı mı çıkıyor, dipleri depoya dönüyor mu), **#20** (devere fasona mı veriliyor), **#21** (tül dokuma mı raşel örme mi). Her biri Faz 1'e birer kolon ya da tür ekler, tasarımı devirmez — ama cevap gelmeden Faz 1b'nin kapsamı KİLİTLENMEZ. #5 (desen kodu ↔ ürün kodu) yalnız 1a'nın ekran varsayılanını belirler. Faz 3 #13/#14/#16'ya, Faz 4 #8'e bağlı.
+- **En küçük anlamlı ilk adım (Faz 1): "Levent doğar, iplik ona düşer, hazır levent stoğu görünür."** Bunun için dört parça gerekir: çözgü kartı (`WarpSpec`), levent (`WarpBeam`, durum tablosu — **kökeniyle birlikte**, §3.9), levent olay defteri (`WarpBeamEvent`, Faz 1'de yalnız `WOUND`/`WOUND_CANCEL`) ve iplik defterinde **brüt çıkış + ayrı iade**: `WARP_ISSUE`/`WARP_ISSUE_REVERSAL` ve `WARP_RETURN`/`WARP_RETURN_REVERSAL` (§3.7). Bunlara `devere.enabled` eklenir. Tezgaha bağlama, kalan metre, lot ve top bağı sonraki fazlarda. Faz 1 tek sürüm için büyük olduğundan **1a (defter yazmayan katalog) / 1b (levent doğar)** diye ikiye bölündü; kesme yeri ve gerekçesi §7'de.
+- **Şema dokunuşu GEREKİR.** Şemasız anlamlı bir adım yok: iplik çıkışını serbest metne "LV-12 için" yazmak, doktrinin yasakladığı şeydir (iş kararı metinden okunamaz). Faz 1 tamamen EKLEMELİ: **3 yeni tablo · 3 yeni pg enum tipi (`WarpBeamStatus` · `WarpBeamOrigin` · `WarpKgSource`) · `YarnMovementKind`'a 4 değer · 5 nullable ya da varsayılanlı kolon · 1 modül anahtarı**; enum değerleri kendi tek ifadeli dosyalarında. **1a bu listenin bir bölümünü CANLI ŞEMAYA koydu** (ölçüldü 2026-09-12: `20260912120000_devere_modul_anahtari` · `..120100_devere_warp_spec` · `..160100_devere_sed` — `warp_specs`, `Item.linearDensityDen`, `Item.warpSpecId`, `Station.producesWarpBeam`, `devere.enabled`); kalan her şey **henüz yazılmamıştır** (`grep -c "warpBeam" src/ prisma/schema.prisma` → 0), yani bu belgedeki kısıt kararları hâlâ bedava değiştirilebilir. adnansahin'de sıfır fark (§6). Şema dışında üç mekanik kapı da Faz 1'e dahildir ve atlanırsa sessiz kırılır: **izin kataloğu + ekran `requires`** (§5), **birleştirme haritası** (yeni `Item`/`Customer` FK'ları, §5), **içe aktarma adaptörleri** (§5). Ayrıca iki mevcut sayım yolu işaret fonksiyonuna bağlanmalı, yoksa yeni ters kayıt türü sessizce yanlış sayılır (§4.9).
+- **Faz 1'i bloke eden dokumacı sorusu YOK ve kapsamı kilitleyen soru da KALMADI** (2026-09-12 çerçeve kararı, §9.7). Formüldeki bölen sorusu (#1) fizikle çözüldü (§1.2); sıralama sorusu (#2) sonucu etkilemez (çarpma değişmeli). Kapsamı kilitleyen üçlü — **#11** (bobin tartımı ve dipler), **#20** (devere nerede yapılır), **#21** (dokuma mı raşel mi) — artık **cevabı beklenen soru değil, veri modelinin taşıdığı eksen**dir: üçünün de her cevabı aynı şemada kayıtlıdır (`WarpBeam.originKind` · `WARP_RETURN` çifti + sebep kataloğu · `Machine.machineClass` + `warpBeamSlots`). Saha cevabı artık **hangi satırların doğacağını** belirler, hangi kolonların yazılacağını değil. #5 (desen kodu ↔ ürün kodu) yalnız 1a'nın ekran varsayılanını belirler. Faz 3 #13/#14/#16'ya, Faz 4 #8'e bağlı.
+- **ÇERÇEVE: tek senaryoya bağlanmaz — ve varyasyonun yeri DÖRT MEKANİZMADAN biridir, sırayla denenir** (2026-09-12 doktrini, §9.7):
+
+  | # | Mekanizma | Ölçüt | Bu belgede |
+  |---|---|---|---|
+  | 1 | **[ÇEKİRDEK]** | Seçenek YOK — her kurulumda aynı | Brüt çıkış + ayrı iade (§3.7) · ters yol · atomik claim |
+  | 2 | **VERİ** | Aynı kod yolu, farklı gerçek | `WarpBeam.originKind` · `Machine.machineClass` · `beamRole` |
+  | 3 | **AKSİYON ANINDA SEÇİM** | **Aynı fabrikada iki kez farklı olabiliyorsa** — operatör o anda seçer | Dip kaderi (`WARP_RETURN` sebep kodu) · her leventin kökeni · koşumdaki levent sayısı |
+  | 4 | **[PROFİL] BAYRAK** | **EN SON ÇARE** — yalnız gerçekten bir kod yolu açılıp kapanıyorsa | `devere.enabled` (canlı) · Faz 4'te `dokuma.enabled` |
+
+  Ayırt edici cümle: **bayrak KOD YOLUNU açıp kapatır · veri AYNI kod yolunda farklı gerçekleri taşır · aksiyon anındaki seçim, aynı kod yolunda AYNI ANDA iki farklı gerçeği mümkün kılar.** Üç saha sorusunun hiçbiri "bu kod çalışsın mı" sorusu değildir — üçü de kaydın İÇERİĞİDİR ("bu levent nereden geldi" · "bu iplik nereye gitti" · "bu makine neyi sayar"). Bayrağa çevrilseydi, aynı fabrikada iki makine tipi ya da iki tedarik yolu olduğu anda bayrak çökerdi. **Üç eksen için sıfır yeni modül anahtarı.**
+- **2 ile 3'ü ayıran soru: "bu değer kurulumda bir kez mi belirlenir, yoksa her kayıtta değişebilir mi?"** Değişebiliyorsa alan vardır AMA **formda seçim olarak görünmek zorundadır** — varsayılanı olabilir, kilitli olamaz. Üç örnek: fabrika aynı anda hem içeride sarıp hem hazır levent alabilir (köken her leventte seçilir) · dipleri bir gün depoya iade edip ertesi gün atkıya aktarabilir (sebep her sarımda seçilir) · aynı makinede bir koşum tek, sonraki çift leventle dönebilir (yuva doluluğu her koşumda girilir).
 - **İlk sürümün dürüst ölçeği: 1a → 1b, ve ilk dokuma müşterisinde 1b ile Faz 2 (lot) BİRLİKTE.** Lotsuz sarılan levent kalıcı olarak lotsuz kalır (§7), yani ilk gerçek kurulumda ölçek 3 değil **4 tablo**, 4 değil **6 kolon**dur. "En küçük anlamlı adım" 1b'dir; Faz 2'yi ayırmak ancak müşteri lot izlemeyi istemiyorsa meşrudur.
 - **Ölçülmüş çelişkiler 2026-09-12'de karara bağlandı (§9).** "Rota şablonuna iki istasyon eklenir" kuralı DOKUMA için uygulanır. DEVERE ise yalnız istasyon KATALOĞUNA girer. Devere iş emri adımı yapılırsa iş emri **kendiliğinden hiç kapanmaz**: recompute top geçmeyen adımı PENDING bırakır (`roll-step.helper.ts:140-151`, `:202-221`). Ayrıca quickStart topları ilk adıma, yani Devere'ye sokar (`workorder.service.ts:4672-4677`). Bunu aşmanın tek yolu çekirdek adım koduna dokunmaktır.
 
@@ -63,10 +74,10 @@ kg   = tel × denye × metre / 9.000.000     (dtex: / 10.000.000 · Ne: denye = 
 | # | Aşama | Saha gerçeği | Sektör standardı | TeksERP bugün | Öneri |
 |---|---|---|---|---|---|
 | 1 | Çözgü emri / planı | Desen kartı "ÇÖZGÜ: 600 KAR İPİ 70 DN"; `200 m` notu | Dokuma planından çözgü emri. Çözgü boyu = hedef kumaş ÷ (1 − take-up) + tezgah payı; levent kapasitesiyle sınırlı | Yok | `WarpBeam` **PLANNED** satırı = çözgü emri. Siparişe FK YOK (top↔sipariş bağı yok doktrini); sipariş yalnız plan ekranında bilgi |
-| 2 | Cağlık / bobin | İrsaliyede bobin adedi + lot + kg | Kalba başına tel kadar bobin. Bobin metrajı < kalba × boy ise **lot kalba ortasında değişir**. Bobin dipleri stoğa döner | `YarnMovement` kg; bobin ve lot yok | Faz 1: tüketim gerçekleşen kg (teorik ön-dolu, `kgSource` beyanlı). Veride dipler stoktan hiç çıkmamış olur. Lot ve "bobin yeter mi" kontrolü Faz 2 |
-| 3 | Levent doğuşu | tel · metre · denye | + makine, operatör, lot(lar), kalba düzeni, kopuş, başlangıç | Yok | `WarpBeamEvent.WOUND` (doğuş gerçekleri append-only satırda) + aynı tx'te `WARP_ISSUE` hareketleri |
+| 2 | Cağlık / bobin | İrsaliyede bobin adedi + lot + kg | Kalba başına tel kadar bobin. Bobin metrajı < kalba × boy ise **lot kalba ortasında değişir**. Bobin dipleri stoğa döner | `YarnMovement` kg; bobin ve lot yok | **Brüt çıkış, ayrı iade** (§3.7): cağlığa yüklenen `WARP_ISSUE`, dönen dip `WARP_RETURN` + sebep kodu. Tartmayan fabrikada iade satırı doğmaz — yokluk cevaptır. Lot ve "bobin yeter mi" kontrolü Faz 2 |
+| 3 | Levent doğuşu | tel · metre · denye | + makine, operatör, lot(lar), kalba düzeni, kopuş, başlangıç | Yok | `WarpBeamEvent.WOUND` (doğuş gerçekleri append-only satırda) + aynı tx'te `WARP_ISSUE` hareketleri. **Doğuş yeri kayıtlıdır** (`WarpBeam.originKind`): içeride sarım makineyi, fason sarım fason firmayı, satın alınan levent tedarikçiyi taşır (§3.9) |
 | 4 | Levent stoğu | Tezgah yanında bekleyen leventler | "Levent stok ambarı": tam ve **yarım** levent. Yarım levent **yarı mamuldür**, fire değil | Yok | `status = READY`; "yarım" türetilir (tüketim > 0). Konum Faz 5 |
-| 5 | Tezgaha bağlama | Levent değişimi saatler, atkı değişimi dakikalar | Üç yol: **düğüm** (aynı tel/tahar/tarak) · **tahar** · **takım**. Yarım levent yalnız uyumlu (model/en) tezgaha, takımıyla ya da aynı taharla geçer. Bağlama ve sökümde sayaç okunur | Yok | Faz 3: `MOUNTED` olayı (`machineId`, `mountPosition`, `mountMethod`, `setupStartedAt`, `loomCounter`). Yöntem **önerilir** (önceki levent aynı `WarpSpec` ise düğüm), kullanıcı beyan eder |
+| 5 | Tezgaha bağlama | Levent değişimi saatler, atkı değişimi dakikalar | Üç yol: **düğüm** (aynı tel/tahar/tarak) · **tahar** · **takım**. Yarım levent yalnız uyumlu (model/en) tezgaha, takımıyla ya da aynı taharla geçer. Bağlama ve sökümde sayaç okunur | Yok | Faz 3: `MOUNTED` olayı (`machineId`, `mountPosition`, `mountMethod`, `setupStartedAt`, `machineCounter`). Yöntem **önerilir** (önceki levent aynı `WarpSpec` ise düğüm), kullanıcı beyan eder |
 | 6 | Tüketim / kalan metre | — (#14) | Dört yol: tezgah çözgü sayacı · çap ölçümü (numara, tel, boru ve flanş çapı) · atkı sayısı ÷ (ham atkı/cm × 100) ÷ (1 − take-up) · tartı: (brüt − dara) ÷ (tel × denye ÷ 9000) | Yok | **Kolon değil, türetilir:** `Σ işaret(kind) × lengthM`. Faz 3'te elle `CONSUMED`/`ADJUST_*`, Faz 4'te top çıkışından otomatik. Ölçüm yolu fabrikanın PROFİL verisidir |
 | 7 | Boşalma / levent dibi | — (#15) | Levent sonu firesi kaçınılmaz, düğüm firesi %0,3–0,5; telef satılır | Yok | `EXHAUSTED` olayı, `lengthM` = artık (fire). Türetilen kalan ≠ ölçülen artık ise fark önce `CONSUMED`/`ADJUST_IN` ile kapanır. Telef satışı kapsam dışı (`WasteDisposal` bulgusu) |
 | 8 | Levent ↔ top | Akış: Devere → Dokuma → Kurşun → Tambur | Top doğum damgası: tezgah + levent(ler) + sayaç aralığı → geri izleme lot'a kadar | `Roll.createdMachineId` + `entryStationId` VAR, levent bağı yok | Faz 4: `CONSUMED.rollId`. `Roll`'a levent kolonu AÇILMAZ: çift levent N:M'dir, tek kaynak olay satırıdır |
@@ -153,13 +164,47 @@ Fiziksel akış `Devere → Dokuma → Kurşun → Tambur`'dur ama VERİ akış�
 
 Durum ↔ sayaç çifti açmak (`WarpBeam.remainingM`) iki yazar, çift yüklem ve CHECK ister. Levent başına olay sayısı küçüktür (onlarca–yüzlerce), bu yüzden her okumada toplamak ucuzdur. Tek helper + SQL ikizi (boğaz-ikiz kuralı).
 
-### 3.7 Tüketim: gerçekleşen kg, beyanlı kaynak, iade türü yok (Faz 1)
+### 3.7 Tüketim BRÜT yazılır, dönen dip AYRI satırla kapanır (Faz 1)
 
-Sektör tüketimi `cağlık yüklemesi − bobin dipleri − tartılı fire` diye yazar. Küçük ekip için aynı sonuç tek satırla elde edilir: `WOUND` formu teorik kg'ı ön-doldurur, operatör gerçekleşeni girer ve kaynağı beyan eder (`WEIGHED` | `THEORETICAL`). Dipler veride stoktan hiç çıkmamış olur, **iade türü gerekmez**. Dokumacı bobinleri tartılı çıkarıp dipleri tartılı iade ediyorsa (#11) `WARP_RETURN`↔`WARP_RETURN_REVERSAL` eklenir; Faz 1'i devirmez.
+Sektör tüketimi `cağlık yüklemesi − bobin dipleri − tartılı fire` diye yazar ve **bu çıkarmanın iki ucu da ölçülmüş birer gerçektir**. Defter ikisini de tutar:
+
+- **`WARP_ISSUE` = cağlığa yüklenen brüt kg.** Ne kadar iplik çıktığı sonradan düzeltilmez.
+- **`WARP_RETURN` = dönen bobin dibi**, kendi satırında, **`ReasonPreset` kodu ZORUNLU**: `DEPOYA_IADE` (tartılıp aynı kaleme geri) · `ATKILIK_AKTARIM` (aynı iplik, kullanım sınıfı değişti) · `TELEF` (fire kararı). Üç saha senaryosu üç bayrak değil, **bir katalogda üç satırdır**.
+- **Tartmayan fabrikada iade satırı hiç doğmaz.** "Bobinleri tartarak mı çıkarıyorsunuz" (#11) sorusunun cevabı, satırın VARLIĞIDIR; bayrak gerekmez. Yokluk zaten cevaptır.
+- `WOUND.kgSource` KALIR ama anlamı daralır: "**sarım kg'ı nasıl bilindi**" (`WEIGHED` tartıldı | `THEORETICAL` nominal kabul edildi). "Brüt mü net mi" sorusu artık beyandan değil **satır sayısından** okunur.
+
+**ÇEKİRDEK GEREKÇE — eski "net tek satır" kararı bu yüzden GEÇERSİZDİR.** Tek bir "gerçekleşen kg" satırı, fabrikanın ölçtüğü iki sayıdan birini (cağlığa ne yüklendiğini) deftere hiç yazmaz ve kalıcı olarak kaybeder. Bu, kök `CLAUDE.md`'nin çekirdek cümlesinin ihlalidir: *"Sevk rakamı HER yüzeyde BRÜT; iade ayrı belgeyle kapanır, çıkış belgesi düzeltilmez."* İplik çıkışı da bir çıkıştır. **Bu bir defter şekli kararıdır [ÇEKİRDEK], profil seçimi değildir**; hangi senaryonun satır doğuracağı [PROFİL]'dir.
+
+Ters yol ileri yolla birlikte doğar: `WARP_RETURN_REVERSAL` (`defter.md:56`, "ters yol yazılmadan ileri yol sürüme çıkmaz").
 
 ### 3.8 İplik ters kaydı tipli: `WARP_ISSUE_REVERSAL`, `ADJUST_IN` değil
 
 Bugünkü iplik stornoları `ADJUST_IN/OUT` yazar (fiş/fatura iptali, `yarn.service.ts:279-281`). Devere iptali bu desene uymaz. Doktrin tipli ters değer ister (`defter.md`), ve `ADJUST_IN` sayım fazlasıyla aynı kovadır: `SEKTOR`'ün "fire/kayıt düzeltmesi ayrımı yok" şikâyetinin ta kendisi. Bedeli ölçüldü: elle yazılmış iki yön listesi yeni "artıran" türü yanlış sayar (§4.9). Bu listeler Faz 1'de işaret fonksiyonuna bağlanır.
+
+### 3.9 Levent KÖKENİ bir veri boyutudur — devere içeride yapılmak ZORUNDA değildir
+
+Saha sorusu #20'nin cevapları meşrudur ve **hepsi aynı tabloda yaşar**. ⚠️ **KÖKEN ile AKIBET ayrı eksenlerdir** — "başkasına levent verdik" bir köken değil bir akıbettir (`SHIPPED_OUT`) ve karıştırılırsa "dört köken" diye sayılır; köken **ÜÇ** (+ biri fazlandırılmış).
+
+| Köken | `originKind` | Taraf kolonu | İplik tüketimi | Faz |
+|---|---|---|---|---|
+| İçeride sarıldı | `IN_HOUSE` | yok — `WOUND.machineId` dolu, taraf kolonlarının ÜÇÜ de NULL | `WARP_ISSUE` kendi stoğumuzdan | 1b |
+| Fasona sardırıldı | `SUBCONTRACT` | `subcontractorId` | İplik fasona çıkar, levent geri gelir (⚠️ sevk kalemi borcu aşağıda) | 1b |
+| Hazır satın alındı | `PURCHASED` | **`supplierId` XOR `subcontractorId` — tam biri** | **HİÇ YOK** — levent bir mal kabul kalemidir | 1b |
+| **Müşterinin gönderdiği levent** (fason dokuma) | **`CONSIGNED`** | **`ownerCustomerId`** | HİÇ YOK — mal bizim değil | **Faz N**, `MaterialOwnership` ile |
+
+**Akıbet ekseni (köken DEĞİL):** `SHIPPED_OUT` + ters yolu `SHIP_OUT_CANCEL` — levent başka dokumacıya ya da fasona verildi.
+
+#### Taraf kolonunun TİPİ de kökene bağlı bir veri kararıdır
+
+- **`PURCHASED ⇒ Customer` YANLIŞTI ve düzeltildi** (2026-09-12 düşmanca denetimi). Gerçek vaka: **fason devereci kendi ipliğiyle sarıp leventi faturalar** — köken `PURCHASED`, taraf bir **`Subcontractor`**. Tek tipe (`Customer`) zorlamak aynı firmaya **ikinci bir cari kart** açtırır ve mükerrer cari + birleştirme yükü üretir. Kodun kendi alış doktrini bunu zaten söylüyor (`supplier-party.helper`, C4): *"alış HER cariden yapılabilir"*, `Customer XOR Subcontractor`. Şekil o kalıptan alınır (`resolveSupplierParty`).
+- **`CONSIGNED ⇒ ownerCustomerId`, `supplierId` DEĞİL.** Gerekçe tek cümle: **aynı kolon iki anlam taşıyamaz.** `supplierId` *"kimden ALDIK"* sorusunun cevabıdır; `CONSIGNED`de mal satın alınmıyor, **kimin malı olduğu** kaydediliyor. İkisi tek kolona bindirilse alış raporu ile mülkiyet sorusu aynı alandan okunur ve biri diğerini kirletir.
+- **`CONSIGNED` bugün ENUM'A GİRMİYOR** (fazı var), ama **tabloya satır olarak ŞİMDİ yazılıyor.** Sebep: yazılmazsa biri o senaryoyu `PURCHASED`a saklar — ve o an **alış raporuna yalan girer** (satın alınmamış mal alış gibi görünür), `SHIPPED_OUT` iadesi de *"bizim leventi verdik"* diye okunur.
+- **XOR'un yeri TEK KAPIDIR, CHECK ikinci hattır.** `resolveSupplierParty` kalıbı XOR'u helper'da tutar ve şemada bilinçli olarak CHECK yazmaz — gerekçesi *"23514 kullanıcıya çıplak kısıt adı basar"*. Burada CHECK **ikinci hat olarak yazılır** (elle SQL / içe aktarım yolları için), ama **birincil doğrulama ve Türkçe mesaj helper'dadır**; CHECK'e düşmek bir hata değil bir sed ihlalidir.
+
+- **`WOUND` CHECK'i makineye DEĞİL, kökene bağlanır** (§4.6): `machineId NOT NULL` yerine köken-taraf XOR'u. Eski kısıt "her levent bir makinede doğar" diyordu ve fason ya da satın alınan leventi **DB düzeyinde kaydedilemez** kılıyordu.
+- **`PURCHASED` levent iplik tüketmez.** Bu yüzden modül bağımlılığı `devere → iplik` **kaldırıldı** ve kapı yerini değiştirdi (§5): hazır levent alan dokumacı iplik ve ticaret modüllerini açmak zorunda değildir.
+- **Fason için YENİ ALAN AÇILMAZ.** `Subcontractor` alanı canlı ve zengindir (`SubcontractorDispatch/Item`, `SubcontractorReceipt/Item`, `SubcontractorCategory`). ⚠️ Tek engel ölçüldü: **`SubcontractorDispatchItem.rollId` NOT NULL'dur** (`schema.prisma:3887`) — fasona giden tek şey yapısal olarak TOPtur; iplik, levent ya da tarak/tahar takımı gönderilemez. Polimorfik sevk kalemi (top | levent | iplik) **bu belgenin kapsamı dışında AYRI bir dilimdir** (yönetici 2026-09-12) ve zaten bağımsız olarak tespit edilmiş bir borçtur (`SEKTOR-YOL-HARITASI.md:153`: "fasona iplik gönderildiğinde hiçbir iz doğmuyor, elle `ADJUST_OUT`"). Fason devere o borcu ödetir, yeni alan açmaz.
+- **Emanet iplik (müşteri/fason ipliğiyle devere) kapsam dışıdır** — `SEKTOR-YOL-HARITASI.md:152` `MaterialOwnership` boşluğuyla aynı sınıftır ve onunla birlikte çözülür (saha sorusu #26).
 
 ---
 
@@ -173,12 +218,24 @@ Bugünkü iplik stornoları `ADJUST_IN/OUT` yazar (fiş/fatura iptali, `yarn.ser
 /// LEVENT DURUMU — KAPALI küme (yaşam döngüsü), pg enum. Geçiş = atomik claim + aynı tx'te olay satırı.
 /// Haşıl gelirse DURUM eklenmez: READY kalır, "haşıllandı" olaydan türetilir.
 enum WarpBeamStatus {
-  PLANNED    // çözgü emri — deftere hiç yazmadı (④ taslak: claim'li silinebilir)
-  READY      // sarıldı, tezgah bekliyor — tam ya da yarım (yarım = türetilir)
-  MOUNTED    // tezgahta / raşelde (Faz 3)
-  EXHAUSTED  // bitti — terminal; artık EXHAUSTED satırında fire (Faz 3)
-  SCRAPPED   // gerçek fire — çözgü kullanılamaz; terminal (Faz 3)
-  CANCELLED  // yanlış giriş — hiç sarılmamış sayılır; iplik ters kayıtla döner
+  PLANNED     // çözgü emri — deftere hiç yazmadı (④ taslak: claim'li silinebilir)
+  READY       // sarıldı ya da teslim alındı, tezgah bekliyor — tam ya da yarım (yarım = türetilir)
+  MOUNTED     // tezgahta / raşelde (Faz 3)
+  EXHAUSTED   // bitti — terminal; artık EXHAUSTED satırında fire (Faz 3)
+  SCRAPPED    // gerçek fire — çözgü kullanılamaz; terminal (Faz 3)
+  SHIPPED_OUT // başka dokumacıya/fasona VERİLDİ — terminal; ters yolu SHIP_OUT_CANCEL (Faz 3)
+  CANCELLED   // yanlış giriş — hiç sarılmamış sayılır; iplik ters kayıtla döner
+}
+
+/// LEVENT KÖKENİ — KAPALI küme (§3.9), pg enum. Devere İÇERİDE yapılmak zorunda değildir:
+/// CHECK makineye değil KÖKENE bağlanır, yoksa fason/satın alınan levent kaydedilemez.
+enum WarpBeamOrigin {
+  IN_HOUSE     // kendi devere makinemizde sarıldı — WOUND.machineId dolu, taraf kolonları NULL
+  SUBCONTRACT  // fason sardı — subcontractorId
+  PURCHASED    // hazır levent satın alındı — supplierId XOR subcontractorId; İPLİK TÜKETİMİ YOK
+  // CONSIGNED — müşterinin gönderdiği levent (fason dokuma): ownerCustomerId. FAZ N,
+  //   `MaterialOwnership` ile birlikte doğar; BUGÜN EKLENMEZ ama §3.9 tablosunda yazılıdır
+  //   ki kimse o senaryoyu PURCHASED'a saklamasın (alış raporuna yalan girer).
 }
 
 /// Sarım kg'ının kaynağı — KAPALI küme, bu yüzden pg enum ([DB-15] VarChar'ı yalnız büyümeye
@@ -208,11 +265,13 @@ export const WARP_BEAM_EVENT_KINDS = ["WOUND", "WOUND_CANCEL"] as const; // Faz 
 // Yol haritası (koda GİRMEZ, fazında eklenir):
 //   Faz 3: MOUNTED · MOUNT_CANCEL · DISMOUNTED · DISMOUNT_CANCEL · CONSUMED · CONSUMED_CANCEL
 //          ADJUST_IN · ADJUST_OUT · EXHAUSTED · EXHAUST_CANCEL · SCRAPPED · SCRAP_CANCEL
+//          SHIPPED_OUT · SHIP_OUT_CANCEL (levent dışarı verilir — §3.9)
 //   Faz 5: SIZED · SIZE_CANCEL (haşıl)
 ```
 
 Mevcut pg enum'lara ekler (SONA; her biri **tek ifadeli, ayrı migration** `ADD VALUE IF NOT EXISTS`, PG 55P04; `docs/RECETELER.md` enum reçetesi 13 adım):
-- `YarnMovementKind += WARP_ISSUE, WARP_ISSUE_REVERSAL` [Faz 1]. Mevcut enum'dur, VarChar'a çevirmek bu işin kapsamı dışında.
+- `YarnMovementKind += WARP_ISSUE, WARP_ISSUE_REVERSAL, WARP_RETURN, WARP_RETURN_REVERSAL` [Faz 1]. Dört değer, iki ileri-geri çifti: çıkış BRÜT, dönen dip ayrı satır (§3.7). Mevcut enum'dur, VarChar'a çevirmek bu işin kapsamı dışında.
+- `ReasonPresetKind += WARP_RETURN` [Faz 1]: `DEPOYA_IADE` · `ATKILIK_AKTARIM` · `TELEF` — bobin dibinin üç kaderi (§3.7); `WARP_RETURN` satırında sunucuda ZORUNLU.
 - `ReasonPresetKind += WARP_BEAM_ADJUST, WARP_BEAM_SCRAP` [Faz 3]
 - `LabelKind += WARP_BEAM` [Faz 3]: levent kartı, barkod = `beamNo`
 - `RollEntrySource += WEAVING` [Faz 4]: tezgah çıkışı
@@ -268,8 +327,24 @@ model WarpBeam {
   currentPosition  Int?           @db.SmallInt             // 1..Machine.warpBeamSlots
   notes            String?        @db.VarChar(500)
 
+  /// KÖKEN — §3.9. ⚠️ AKSİYON ANINDA SEÇİLİR, kurulumda değil: aynı fabrika hem içeride
+  /// sarıp hem hazır levent alabilir. Sarım/plan formunda SEÇİM olarak görünür (varsayılanı
+  /// olabilir, KİLİTLİ OLAMAZ).
+  /// ⚠️ Taraf kolonunun TİPİ kökene bağlıdır ve tek kapı `resolveSupplierParty` kalıbıdır:
+  ///   IN_HOUSE    → üçü de NULL (WOUND.machineId dolu)
+  ///   SUBCONTRACT → subcontractorId
+  ///   PURCHASED   → supplierId XOR subcontractorId, TAM BİRİ  ← fason devereci kendi
+  ///                 ipliğiyle sarıp faturalayabilir; Customer'a zorlamak ikinci cari açtırır
+  originKind       WarpBeamOrigin @default(IN_HOUSE)
+  subcontractorId  String?        @db.Uuid                 // SUBCONTRACT · ya da PURCHASED'ın fason tarafı
+  supplierId       String?        @db.Uuid                 // PURCHASED'ın cari tarafı (Customer, CompanyType.SUPPLIER)
+  // ownerCustomerId — CONSIGNED'ın taraf kolonu. FAZ N: `supplierId`e BİNDİRİLMEZ,
+  //   çünkü "kimden aldık" ile "kimin malı" aynı kolonda yaşayamaz (§3.9).
+
   warpSpec       WarpSpec        @relation(fields: [warpSpecId], references: [id], onDelete: Restrict)
   currentMachine Machine?        @relation("WarpBeamCurrentMachine", fields: [currentMachineId], references: [id], onDelete: Restrict)
+  subcontractor  Subcontractor?  @relation("WarpBeamSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
+  supplier       Customer?       @relation("WarpBeamSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
   events         WarpBeamEvent[]
   yarnMovements  YarnMovement[]
 
@@ -281,6 +356,8 @@ model WarpBeam {
   @@index([status, warpSpecId])       // "bu çözgüden hazır leventler"
   @@index([warpSpecId])
   @@index([currentMachineId])
+  @@index([subcontractorId])
+  @@index([supplierId])
   @@map("warp_beams")
 }
 ```
@@ -316,9 +393,13 @@ model WarpBeamEvent {
 
   // MOUNTED / DISMOUNTED (Faz 3)
   mountPosition   Int?            @db.SmallInt
+  /// YUVA ROLÜ — yuvalar birbirinin AYNI DEĞİLDİR (zemin · hav/pile · dolgu leventi).
+  /// Salt yuva sayısı "hangi barıya hangi levent" sorusunu cevaplayamaz. Küçük katalog
+  /// (`ReasonPreset` kalıbı), makine sınıfından bağımsız; boş bırakılabilir.
+  beamRole        String?         @db.VarChar(32)
   mountMethod     WarpBeamMountMethod?
   setupStartedAt  DateTime?       @db.Timestamptz
-  loomCounter     Decimal?        @db.Decimal(12, 3) // bağlama/sökümde tezgah sayacı (metraj ölçeği)
+  machineCounter     Decimal?        @db.Decimal(12, 3) // bağlama/sökümde tezgah sayacı (metraj ölçeği)
 
   // CONSUMED (Faz 3 elle · Faz 4 top)
   fabricLengthM   Decimal?        @db.Decimal(12, 3) // dokunan kumaş — bilgi
@@ -349,7 +430,7 @@ model WarpBeamEvent {
 
 | + | − | 0 |
 |---|---|---|
-| `WOUND` · `CONSUMED_CANCEL` · `ADJUST_IN` · `EXHAUST_CANCEL` · `SCRAP_CANCEL` | `WOUND_CANCEL` · `CONSUMED` · `ADJUST_OUT` · `EXHAUSTED` · `SCRAPPED` | `MOUNTED` · `MOUNT_CANCEL` · `DISMOUNTED` · `DISMOUNT_CANCEL` |
+| `WOUND` · `CONSUMED_CANCEL` · `ADJUST_IN` · `EXHAUST_CANCEL` · `SCRAP_CANCEL` · `SHIP_OUT_CANCEL` | `WOUND_CANCEL` · `CONSUMED` · `ADJUST_OUT` · `EXHAUSTED` · `SCRAPPED` · `SHIPPED_OUT` | `MOUNTED` · `MOUNT_CANCEL` · `DISMOUNTED` · `DISMOUNT_CANCEL` |
 
 ### 4.5 Mevcut modellere eklemeler
 
@@ -366,7 +447,8 @@ model Item {
 
 model YarnMovement {
   // … mevcut alanlar DEĞİŞMEZ
-  /// Tipli belge bağı: devereye çıkış ve tersi. kind ∈ {WARP_ISSUE, WARP_ISSUE_REVERSAL} ⇔ dolu (CHECK).
+  /// Tipli belge bağı: devereye çıkış, dip iadesi ve tersleri.
+  /// kind ∈ {WARP_ISSUE, WARP_ISSUE_REVERSAL, WARP_RETURN, WARP_RETURN_REVERSAL} ⇔ dolu (CHECK).
   /// ⚠️ YarnMovementTxInput + create data ALLOWLIST'tir (yarn.service.ts:208-210): ikisine birden yazılır.
   warpBeamId  String?   @db.Uuid                                                  // [Faz 1]
   warpBeam    WarpBeam? @relation(fields: [warpBeamId], references: [id], onDelete: Restrict)
@@ -385,8 +467,18 @@ model Station {
 }
 
 model Machine {
-  /// Aynı anda bağlanabilecek levent sayısı (çift levent tezgah = 2, raşel = kılavuz barı kadar).     [Faz 3]
-  warpBeamSlots Int @default(1) @db.SmallInt
+  /// Aynı anda bağlanabilecek levent sayısı (çift levent tezgah = 2, raşel = kılavuz barı kadar).    [Faz 1b]
+  /// ⚠️ FAZ 3'TEN ÖNE ÇEKİLDİ (2026-09-12, §9.7): "tül dokumada mı raşelde mi" sorusu cevap
+  /// BEKLENEN bir soru olmaktan çıkıp veri ekseni olunca, sayının Faz 1b'de var olması gerekir.
+  /// Bu bir SAYI alanıdır, bayrak değil: 1 yazan tek leventle çalışır, 6 yazan raşeldir.
+  ///
+  /// ⚠️⚠️ VARSAYILAN 0, CHECK `>= 0` — `1` DEĞİL (2026-09-12 düşmanca denetimi, §9.7h).
+  /// İki sebep: (a) `>= 1` bir SENARYO KAPATIR — cağlıktan beslenen çözgü makineleri
+  /// (elastan raşel, iğneli dar dokuma) çözgü tüketir ama LEVENT BAĞLANMAZ, yuvası 0'dır;
+  /// (b) varsayılan 1 olsaydı kolon adnansahin'in kurşun ve tambur makinelerine de "bir
+  /// levent yuvası var" yazardı — kolon daha doğmadan yalan söylerdi. Yuva kapısı bu sayı
+  /// değil `Station.consumesWarpBeam`tir; sayı yalnız ÜST SINIRDIR.
+  warpBeamSlots Int @default(0) @db.SmallInt
 }
 
 /// TEDARİKÇİ LOTU — DURUM (ana veri). Bakiye TÜRETİLİR (Σ YarnMovement WHERE lotId).               [Faz 2]
@@ -417,15 +509,18 @@ model YarnLot {
 | `warp_beam_events_kind_ck` | CHECK | `kind IN (…)` — liste `WARP_BEAM_EVENT_KINDS` ile **BİREBİR EŞİT** (Faz 1'de iki değer); bekçi iki yönlü eşitlik ölçer | 1 (+3) |
 | `warp_beam_events_length_positive` | CHECK | `"lengthM" IS NULL OR "lengthM" > 0` | 1 |
 | `warp_beam_events_cancel_link_ck` | CHECK | **TEK YÖNLÜ:** `kind` `_CANCEL` ile bitiyor ⇒ `"reversesEventId" IS NOT NULL`. Çift yönlü yazılamaz: `ADJUST_OUT` bir `ADJUST_IN`'in tersi olarak yazıldığında da bağ taşır (§4.7) | 1 |
-| `warp_beam_events_wound_facts_ck` | CHECK | `kind='WOUND'` ⇒ `lengthM, endsCount, denier, theoreticalKg, kgSource, machineId` NOT NULL (`kgSource` enum olduğu için değer listesi CHECK'te tekrarlanmaz) | 1 |
+| `warp_beam_events_wound_facts_ck` | CHECK | `kind='WOUND'` ⇒ `lengthM, endsCount, denier, theoreticalKg, kgSource` NOT NULL (`kgSource` enum olduğu için değer listesi CHECK'te tekrarlanmaz). ⚠️ **`machineId` BU LİSTEDE DEĞİLDİR** — makine zorunluluğu kökene bağlıdır, aşağıdaki XOR seddi taşır (§3.9). Eski "`machineId` NOT NULL" hâli fason ve satın alınan leventi DB düzeyinde imkânsız kılıyordu | 1 |
+| `warp_beams_origin_party_ck` | CHECK — **İKİNCİ HAT** | **KÖKEN XOR'u:** `IN_HOUSE` ⇒ taraf kolonlarının hepsi NULL · `SUBCONTRACT` ⇒ yalnız `subcontractorId` · `PURCHASED` ⇒ `supplierId` ile `subcontractorId`den **TAM BİRİ** (§3.9). ⚠️ Birincil doğrulama ve Türkçe mesaj `resolveSupplierParty` kalıbındaki TEK KAPIDADIR; o kalıp şemada bilinçli CHECK yazmaz (*"23514 çıplak kısıt adı basar"*). Buradaki CHECK yalnız elle SQL / içe aktarım yolları için seddir, kullanıcı yüzeyi değildir | 1 |
+| `warp_beam_events_wound_inhouse_ck` | CHECK | `kind='WOUND'` ∧ leventin kökeni `IN_HOUSE` ⇒ `machineId IS NOT NULL`. ⚠️ Köken `warp_beams`tedir, CHECK tek satırdan okuyamaz: **bu kural servis + bekçi + mutabakat §4.9(9) üçlüsüyle taşınır**, tabloda CHECK olarak YAZILMAZ (satır-dışı yüklem taşıyan CHECK yasağı) | 1 |
 | `warp_beam_events_one_wound_uq` | partial UNIQUE | `("beamId") WHERE kind='WOUND'`: bir levent bir kez doğar. ⚠️ Bu kısıt "aktif" yüklemi TAŞIMAZ ve taşımamalıdır — iptal edilen levent yeniden sarılmaz, **yeni levent açılır**. `WOUND_CANCEL`in durumu PLANNED'a değil CANCELLED'a taşımasının sebebi budur (§4.7) | 1 |
-| `yarn_movements_warp_link_ck` | CHECK | `kind IN ('WARP_ISSUE','WARP_ISSUE_REVERSAL')` ⇔ `"warpBeamId" IS NOT NULL` (bugün `kind`'a bağlı CHECK yok; yalnız `qtyKg > 0` var) | 1 |
+| `yarn_movements_warp_link_ck` | CHECK | `kind IN ('WARP_ISSUE','WARP_ISSUE_REVERSAL','WARP_RETURN','WARP_RETURN_REVERSAL')` ⇔ `"warpBeamId" IS NOT NULL` (bugün `kind`'a bağlı CHECK yok; yalnız `qtyKg > 0` var) | 1 |
+| `yarn_movements_warp_return_reason_ck` | CHECK | `kind IN ('WARP_RETURN','WARP_RETURN_REVERSAL')` ⇒ `"reasonCode" IS NOT NULL`: dip nereye gitti sorusu **her satırda** cevaplanır (§3.7). Kod değerinin `ReasonPreset`te var ve aktif olduğu SUNUCUDA doğrulanır, CHECK yalnız boşluğu kapatır | 1 |
+| `machines_warp_beam_slots_nonneg` | CHECK | `"warpBeamSlots" >= 0` — yuva sayısının TEK kaynağı bu kolondur (ayrı bir `MachineSpec.beamSlots` reddedildi, §9.6). ⚠️ **`>= 1` DEĞİL:** cağlıktan beslenen çözgü makinesinde (elastan raşel, iğneli dar dokuma) yuva 0'dır ve `>= 1` o fabrikayı kayıttan dışlardı; varsayılan da `0`, yoksa kurşun/tambur makinesine "yuvası var" yazardı (§9.7h). Kolonla birlikte **Faz 3'ten 1b'ye çekildi** | 1 |
 | `warp_specs_ends_positive` | CHECK | `"endsCount" > 0` | 1 |
 | `warp_beams_mounted_ck` | CHECK | `(status='MOUNTED') = ("currentMachineId" IS NOT NULL AND "currentPosition" IS NOT NULL)` | 1 |
 | `warp_beams_physical_live_uq` | partial UNIQUE | `(tr_fold("physicalBeamNo")) WHERE status IN ('READY','MOUNTED') AND "physicalBeamNo" IS NOT NULL`: bir gövdede iki canlı çözgü olmaz | 1 |
 | `warp_beams_machine_position_uq` | partial UNIQUE | `("currentMachineId","currentPosition") WHERE status='MOUNTED'`: iki levent aynı yuvada olmaz | 3 |
 | `warp_beam_events_mounted_ck` | CHECK | `kind='MOUNTED'` ⇒ `machineId, mountPosition, mountMethod` NOT NULL | 3 |
-| `machines_warp_beam_slots_pos` | CHECK | `"warpBeamSlots" >= 1` — yuva sayısının TEK kaynağı bu kolondur (ayrı bir `LoomSpec.beamSlots` reddedildi, §9.6) | 3 |
 
 ### 4.7 Durum geçişleri
 
@@ -435,21 +530,23 @@ Her geçiş: atomik claim + aynı tx'te olay satırı + audit tx DIŞINDA.
 |---|---|---|---|---|
 | (yok) → PLANNED | — (taslak) | `clientToken` | — | çözgü kartı pasif → 400 |
 | PLANNED → silindi | — | `deleteMany({id, status:PLANNED})`; count 0 → taze okuma → 409 | — | ④ sınıfı, kod yorumunda adıyla |
-| PLANNED → READY | `WOUND` | `updateMany({id, status:PLANNED})` | Aynı tx'te iplik satırları `applyYarnMovementTx(kind:WARP_ISSUE, warpBeamId)`. Tek yazar olduğu için iplik modül kapısı da içeride koşar. Çok satırlı çıkış **kanonik `(itemId, warehouseId)` sırasıyla** yazılır: eksi bakiye kapısının `FOR UPDATE` serileştiricisi çağıranın sırasına güvenir (`yarn-balance-guard.helper.ts:99-103`) | makine `producesWarpBeam` değil → 400; iplik denye'siz → 400 |
-| READY → CANCELLED | `WOUND_CANCEL` | `updateMany({id, status:READY})` | Net iplik (kalem × depo × lot) `WARP_ISSUE_REVERSAL` ile döner; `reverseGoodsReceiptYarnTx` net + idempotent emsali | aktif (terslenmemiş) `MOUNTED`/`CONSUMED` varsa 409 |
+| PLANNED → READY (`IN_HOUSE`) | `WOUND` | `updateMany({id, status:PLANNED})` | Aynı tx'te iplik satırları `applyYarnMovementTx(kind:WARP_ISSUE, warpBeamId)` — **BRÜT, cağlığa yüklenen**. Dönen dip varsa aynı tx'te `WARP_RETURN` + `reasonCode` (§3.7). Tek yazar olduğu için iplik modül kapısı da içeride koşar. Çok satırlı çıkış **kanonik `(itemId, warehouseId)` sırasıyla** yazılır: eksi bakiye kapısının `FOR UPDATE` serileştiricisi çağıranın sırasına güvenir (`yarn-balance-guard.helper.ts:99-103`) | makine `producesWarpBeam` değil → 400; iplik denye'siz → 400; `WARP_RETURN` sebepsiz → 400 |
+| PLANNED → READY (`SUBCONTRACT` / `PURCHASED`) | `WOUND` | aynı claim | **İplik kapısı KOŞMAZ, `WARP_ISSUE` YAZILMAZ** (§3.9): satın alınan levent iplik tüketmez, fason sarımda iplik fason sevkiyle çıkar. `machineId` boş, karşı taraf (`subcontractorId`/`supplierId`) dolu; `theoreticalKg` beyandır | taraf alanı boş → 400 (`warp_beams_origin_party_ck` seddi); `IN_HOUSE`'ta makine boş → 400 |
+| READY → CANCELLED | `WOUND_CANCEL` | `updateMany({id, status:READY})` | **Net iplik** (kalem × depo × lot) `WARP_ISSUE_REVERSAL` ile döner — net, çünkü `WARP_RETURN` satırları da terslenir (`WARP_RETURN_REVERSAL`); `reverseGoodsReceiptYarnTx` net + idempotent emsali. `IN_HOUSE` olmayan leventte iplik satırı yoktur, ters kayıt da doğmaz | aktif (terslenmemiş) `MOUNTED`/`CONSUMED` varsa 409 |
 | READY → MOUNTED | `MOUNTED` | `updateMany({id, status:READY})` + yuva seddi; P2002 → 409 | Yarım levent başka makineye bağlanıyorsa UYARI ("uyum: model/en/takım") | makine `consumesWarpBeam` değil → 400; yuva > `warpBeamSlots` → 400 |
 | MOUNTED → READY | `DISMOUNTED` | `updateMany({id, status:MOUNTED, currentMachineId})` | Kalan ölçüm girildiyse fark önce `CONSUMED`/`ADJUST_IN` | O makinede AÇIK dokuma koşumu varsa **409** (koşum sürerken levent sökülmez); koşum leventsiz açılmışsa bu **UYARI**dır, 400 değil — saha kaydı eksik olabilir, iş durdurulmaz |
 | MOUNTED/READY → EXHAUSTED | `EXHAUSTED` | claim | Ölçülen artık ≠ türetilen kalan ise fark önce `CONSUMED`/`ADJUST_IN`, sonra `EXHAUSTED(lengthM = artık)` → kalan 0 | — |
 | READY/MOUNTED → SCRAPPED | `SCRAPPED` | claim | `lengthM` = kalan; `reasonCode` zorunlu (sunucuda) | — |
+| READY → SHIPPED_OUT | `SHIPPED_OUT` | `updateMany({id, status:READY})` | Levent başka dokumacıya/fasona VERİLDİ (§3.9): `lengthM` = çıkan kalan, karşı taraf zorunlu. Terminal; ters yolu `SHIP_OUT_CANCEL`. ⚠️ Malın fiziksel çıkış belgesi bu satır DEĞİLDİR — o, polimorfik fason sevk kalemi dilimine bağlıdır ve o dilime kadar levent çıkışı yalnız levent defterinde görünür | MOUNTED'ken 409 (önce sök) |
 | (durum değişmez) | `ADJUST_IN` / `ADJUST_OUT` | `updateMany({id, status})` — durum aynı kalır, claim yalnız yarışı keser | Ölçüm düzeltmesi: `lengthM` > 0, `reasonCode` ZORUNLU (`ReasonPresetKind.WARP_BEAM_ADJUST`). Yanlış yazılan düzeltme KARŞI ADJUST ile kapanır ve `reversesEventId` ile orijinaline bağlanır | kalan metreyi eksiye düşürüyorsa 409; terminal durumda 409 |
 | `*_CANCEL` | ters | claim: durum, terslenen olayın `fromStatus`una döner | — | **İSTİSNA — `WOUND_CANCEL`:** doğuşun stornosudur, `fromStatus` (PLANNED) kuralına GİRMEZ; durumu **CANCELLED**'a (terminal) taşır. Aksi hâlde levent PLANNED'a dönerdi ama `warp_beam_events_one_wound_uq` yüzünden bir daha sarılamazdı (tekrarlanamaz iş, `defter.md:22` tuzağı) ve §4.9 #5 mutabakatı yalan alarm verirdi |
 
 - **LIFO'nun kapsamı.** "En yeni aktif ileri olay" kuralı yalnız **DURUM DEĞİŞTİREN** olaylar için geçerlidir (`WOUND` · `MOUNTED` · `DISMOUNTED` · `EXHAUSTED` · `SCRAPPED`). Yalnız miktar yazan olaylar (`CONSUMED`, `ADJUST_*`) zinciri kilitlemez: her biri kendi ters satırıyla (`CONSUMED_CANCEL`, karşı `ADJUST`) hedefini `reversesEventId` ile göstererek kapanır. Aksi hâlde bir ölçüm düzeltmesi, kendinden önceki her stornoyu kalıcı 409'a düşürürdü. Yüklem TEK helper'dadır: `activeForwardStatusEvent` (↔ `ACTIVE_FORWARD_EVENT_WHERE`, boğaz-ikiz).
 - **Kilit.** Yeni advisory uzayı GEREKMEZ: yuva ve gövde tekilliğini partial UNIQUE seddi, durumu claim korur. `beamNo` sayacı **kilitsiz sayaç emsallerini** izler (`shipmentNo`/`nextSackNo`, `shipping.service.ts:444-446`) — `workOrderNumber` emsal DEĞİLDİR (kendi döngüsü var, sayacı tx dışında okur). Advisory KULLANAN sayaçlar (8022 parti no, 8031 paketleme grubu) çakışması iş akışını durduran numaralar oldukları için farklıdır; levent numarası çakışması yalnız retry ister. ⚠️ `withBarcodeRetry(fn, 5, (e) => !isClientTokenP2002(e))`: predicate verilmezse TÜM P2002 retry edilir ve `clientToken` çakışması beş tur aynı token'ı yazıp replay'i atlar, kullanıcıya "Barkod üretimi 5 denemede başarısız" 409'u döner (`utils/p2002.ts:30-35`).
-- **Eksi bakiye kapısı.** Bugün yalnız `OUT`'u kapılar (`yarn-balance-guard.helper.ts:113`). Kapılanan küme `WARP_ISSUE`'yu içerecek şekilde genişler, `WARP_ISSUE_REVERSAL` muaf kalır (storno). Bayrak metinleri "OUT" diyor, "iplik çıkışı" olarak güncellenir. ⚠️ Kapının `FOR UPDATE` kilidi yalnız VAR OLAN `yarn_stocks` satırında oluşur (satır yoksa bakiye 0 kabul edilir, kilit alınmaz): ilk kez hareket gören (kalem × depo) çiftinde kanonik sıra yarışı serileştirmez. **KARAR (Faz 1b, yönetici 2026-09-12 — "serileşmiyorsa kapı değildir"):** kapı, kendi içinde ve bakiyeyi okumadan ÖNCE `yarn_stocks` satırını `INSERT … ON CONFLICT DO NOTHING` ile doğurur; böylece `FOR UPDATE` daima gerçek bir satırı kilitler. Advisory uzayı AÇILMAZ: kilitlenecek doğal satır ve `(itemId, warehouseId)` UNIQUE'i zaten var, advisory yalnız yeni bir kilit sırası sorusu getirirdi. Sıfır bakiyeli satır zararsızdır — hareket zaten aynı tx'te `ON CONFLICT` ile o satırı yazacaktı. Çok satırlı `WOUND` çıkışı ayrıca kanonik `(itemId, warehouseId)` sırasıyla yazılır (kilit sırası determinizmi).
+- **Eksi bakiye kapısı.** Bugün yalnız `OUT`'u kapılar (`yarn-balance-guard.helper.ts:113`). Kapılanan küme **`WARP_ISSUE` ve `WARP_RETURN_REVERSAL`**'i içerecek şekilde genişler (ikisi de bakiyeyi DÜŞÜRÜR); `WARP_ISSUE_REVERSAL` ve `WARP_RETURN` muaftır (ikisi de artırır). ⚠️ Ölçüt "storno mu" değil **"bakiyeyi düşürüyor mu"**dur: `WARP_RETURN_REVERSAL` bir stornodur ama düşürür, ve iade edilen iplik arada tüketilmişse bakiyeyi eksiye çekebilir. Muafiyet listesi elle değil **`yarnMovementSign` işaret fonksiyonundan** türetilir — elle yazılmış liste tam olarak §4.9'un ölçtüğü hata sınıfıdır. Bayrak metinleri "OUT" diyor, "iplik çıkışı" olarak güncellenir. ⚠️ Kapının `FOR UPDATE` kilidi yalnız VAR OLAN `yarn_stocks` satırında oluşur (satır yoksa bakiye 0 kabul edilir, kilit alınmaz): ilk kez hareket gören (kalem × depo) çiftinde kanonik sıra yarışı serileştirmez. **KARAR (Faz 1b, yönetici 2026-09-12 — "serileşmiyorsa kapı değildir"):** kapı, kendi içinde ve bakiyeyi okumadan ÖNCE `yarn_stocks` satırını `INSERT … ON CONFLICT DO NOTHING` ile doğurur; böylece `FOR UPDATE` daima gerçek bir satırı kilitler. Advisory uzayı AÇILMAZ: kilitlenecek doğal satır ve `(itemId, warehouseId)` UNIQUE'i zaten var, advisory yalnız yeni bir kilit sırası sorusu getirirdi. Sıfır bakiyeli satır zararsızdır — hareket zaten aynı tx'te `ON CONFLICT` ile o satırı yazacaktı. Çok satırlı `WOUND` çıkışı ayrıca kanonik `(itemId, warehouseId)` sırasıyla yazılır (kilit sırası determinizmi).
 - **İdempotency.** `WarpBeam.clientToken` (plan ya da doğrudan sarım) ve `WarpBeamEvent.clientToken` (tabletten tüketim girişi saf INSERT'tir) dört durumlu replay kullanır (`helpers/token-replay.helper.ts`). `clientToken`'lı model sayısı 15'ten 17'ye çıkar.
 - **Modül kapısı TEK YAZARIN İÇİNDE.** `applyWarpBeamEventTx`in ilk ifadesi devere zincirini ölçer (`applyYarnMovementTx` iplik kapısı emsali, `yarn.service.ts:171-177`). Route'ta ayrıca adlandırılmış `requireDevereEnabled` durur.
-- **Elle iplik hareketi yolu kapalı kalır.** `POST /api/yarn/movements` Zod'u `WARP_*` kabul ETMEZ (`yarn.routes.ts:205` literal enum). Aksi halde `warpBeamId`'siz devere çıkışı doğar ve levent iptalinin net ters kaydı onu bulamaz. GET filtre Zod'u (`:160`) genişler.
+- **Elle iplik hareketi yolu kapalı kalır.** `POST /api/yarn/movements` Zod'u dört `WARP_*` türünü de kabul ETMEZ (`yarn.routes.ts:205` literal enum). Aksi halde `warpBeamId`'siz devere çıkışı ya da sebepsiz dip iadesi doğar ve levent iptalinin net ters kaydı onları bulamaz. GET filtre Zod'u (`:160`) genişler.
 - **Yıkıcı işlem önizlemesi.** `WOUND_CANCEL` ve `SCRAPPED` için preview ucu: dönecek iplik satırları (kalem · depo · lot · kg) ve etkilenen levent listelenir.
 
 ### 4.8 Türetilmiş değerler — tek helper + SQL ikizi
@@ -460,7 +557,8 @@ Her geçiş: atomik claim + aynı tx'te olay satırı + audit tx DIŞINDA.
 | "Bu tezgahta şu aralıkta hangi leventler bağlıydı" | `MOUNTED`/`DISMOUNTED` çiftlerinin zaman aralığı (aktif satırlar) | `beamsMountedDuring(machineId, from, to)` ↔ `BEAMS_MOUNTED_DURING_SQL` |
 | Yarım levent | `status='READY'` ∧ aktif `CONSUMED` var | aynı helper |
 | Teorik (nominal) kg | `endsCount × denier × lengthM / 9_000_000` (Decimal, 3 hane) | `warpTheoreticalKg`; panel/tablet ön hesabı AYNI fonksiyonun aynası |
-| Devere firesi kg | `Σ net WARP_ISSUE(beam) − WOUND.theoreticalKg`; yalnız `kgSource='WEIGHED'` | `warpingWasteKg` |
+| Devere firesi kg | `Σ net WARP_ISSUE(beam) − Σ net WARP_RETURN(beam) − WOUND.theoreticalKg`; yalnız `kgSource='WEIGHED'` **ve** kökeni `IN_HOUSE` olan leventte anlamlı. ⚠️ Brüt çıkış ile iade AYRI toplandığı için "cağlığa ne yüklendi" ve "ne döndü" ayrı ayrı da raporlanır — net tek satır bunu veremiyordu (§3.7) | `warpingWasteKg` |
+| Dip kaderi dağılımı | `Σ WARP_RETURN.qtyKg` × `reasonCode` (`DEPOYA_IADE` · `ATKILIK_AKTARIM` · `TELEF`) | rapor — fabrikanın hangi senaryoyu ne sıklıkta uyguladığı ÖLÇÜLÜR, varsayılmaz |
 | Kopuş / milyon m | `breakCount × 1e6 / (endsCount × lengthM)` | rapor |
 | Levent dibi / hurda m | aktif `EXHAUSTED.lengthM` / `SCRAPPED.lengthM` | rapor |
 | Lot bakiyesi (Faz 2) | `Σ yarnMovementSign × qtyKg WHERE lotId` | `yarnLotBalance` |
@@ -478,22 +576,30 @@ Yeni mutabakat bölümleri:
 1. `status IN ('EXHAUSTED','SCRAPPED','CANCELLED')` ⇒ kalan metre = 0.
 2. `status IN ('READY','MOUNTED')` ⇒ kalan metre > 0 ve tam bir aktif `WOUND`.
 3. Son olayın `toStatus`u = `WarpBeam.status` (`ChequeEvent` emsali).
-4. `CANCELLED` levent ⇒ `Σ net WARP_ISSUE` = 0 (kalem × depo × lot).
+4. `CANCELLED` levent ⇒ `Σ net WARP_ISSUE` = 0 **ve** `Σ net WARP_RETURN` = 0 (kalem × depo × lot). İki toplam ayrı ayrı sıfırlanır; birbirini götürmeleri kabul edilmez, yoksa eksik ters kayıt görünmez olur.
 5. `PLANNED` levent ⇒ hiç olay ve iplik satırı yok.
 6. `status='MOUNTED'` ⇒ son aktif DURUM olayı `MOUNTED`'dır **ve** o satırın `machineId`/`mountPosition` değerleri `currentMachineId`/`currentPosition` ile birebir aynıdır (durum kolonu ile defter ayrışamaz).
 7. `status ≠ 'MOUNTED'` ⇒ son aktif durum olayı `MOUNTED` DEĞİLDİR (ve `currentMachineId`/`currentPosition` NULL — `warp_beams_mounted_ck`'nin defter tarafındaki ikizi).
-8. Her aktif `MOUNTED` satırı ya bir `DISMOUNTED`/`EXHAUSTED`/`SCRAPPED` ile kapanmıştır ya da levent hâlâ `status='MOUNTED'`tır — açık kalmış, kapanmamış bağlama satırı yoktur.
+8. Her aktif `MOUNTED` satırı ya bir `DISMOUNTED`/`EXHAUSTED`/`SCRAPPED`/`SHIPPED_OUT` ile kapanmıştır ya da levent hâlâ `status='MOUNTED'`tır — açık kalmış, kapanmamış bağlama satırı yoktur.
+9. **KÖKEN ↔ DEFTER TUTARLILIĞI** (§3.9; CHECK taşıyamaz, satır-dışı yüklem): `originKind='IN_HOUSE'` ⇒ aktif `WOUND` satırının `machineId`'si DOLU **ve** o leventte en az bir `WARP_ISSUE` var. `originKind IN ('SUBCONTRACT','PURCHASED')` ⇒ `WOUND.machineId` NULL **ve** o leventte HİÇ `WARP_ISSUE`/`WARP_RETURN` satırı yok. Negatif sondası: köken alanı elle `PURCHASED`'a çevrilmiş, iplik satırı duran levent fixture'ı.
+   > ⚠️ **ŞERH — bu maddenin `IN_HOUSE` yönü Faz 5'te GENİŞLEYECEK, bekçiye SERT girmemeli.** Haşıl / direkt çözgüde **N ara levent → 1 dokuma levendi** birleşir (§2 tablosu, Faz 5): o levent `IN_HOUSE` doğar ama **iplik ONA değil ara leventlere düştüğü için hiç `WARP_ISSUE`'su olmaz** ve bugünkü yüklem yalancı alarm verir. Faz 5'te soy bağı gelince yön *"`WARP_ISSUE` VEYA ana levent bağı vardır"* olur. Bugün sert yazılırsa Faz 5 bu bekçiyi kırmak zorunda kalır ve kıran kişi muhtemelen maddeyi tümden söker.
+10. Her aktif `WARP_RETURN` satırının `reasonCode`'u `ReasonPreset`te VAR (kod silinmiş ya da hiç yazılmamış satır yakalanır — `ReasonPreset.code` asla değişmez kuralının defter tarafındaki ikizi).
 
 ---
 
 ## 5 · Modül bayrağı
 
 - **Anahtar.** DB `devere.enabled` · API `devereEnabled` · etiket "Devere / levent". **Varsayılan KAPALI**; okuyucu `asBoolean` varsayılanı `false`. Üretim modülündeki "satır yok → true" sigortası BURAYA KOPYALANMAZ.
-- **Bağımlılık.** `MODULE_DEPENDENCIES.devereEnabled = "iplikEnabled"`; zincir iplik → ticaret. Levent iplik stoğunu tüketir ve iplik mal kabulle girer, yani dokumacının ticaret modülü zaten gerekir.
-  - Yazma doğrulaması iki yönlüdür (`system-setting.service.ts:1927-1953`): iplik kapatılırken devere açıksa 400 `MODULE_DEPENDENCY` "önce Devere modülünü kapatın". Ama gövdenin dokunmadığı çift atlanır. Bu yüzden **okuma kapısı zinciri elle ölçer**: `requireDevereEnabled` ticaret → iplik → devere sırasıyla okur ve eksik OLANI söyler (`{ code:"MODULE_DISABLED", modul:"iplik", dependent:"devere" }`). `requireIplikEnabled` bugün tek seviyelidir (`module.middleware.ts:111-133`).
+- **Bağımlılık: `MODULE_DEPENDENCIES.devereEnabled = "iplikEnabled"` KALDIRILIR — ve yerine HİÇBİR ŞEY YAZILMAZ** (2026-09-12 kararı + aynı gün düşmanca denetimi, §9.7d).
+  - **Neden kalkıyor:** bugünkü hâli `src/constants/module-flags.ts:74`te CANLIDIR ve *"devere her zaman kendi iplik stoğunu tüketir"* varsayımını taşır. Bu varsayım §3.9 ile düştü: **`PURCHASED` levent iplik tüketmez.** Hazır levent alan bir dokumacı devereyi ancak iplik ve ticaret modüllerini de açarak kullanabiliyordu — yani tasarım, desteklemek istediğimiz kurulumu modül tablosunda yasaklıyordu.
+  - **Neden kapı TAŞINMIYOR** (önceki "kapıyı `applyWarpBeamEventTx`e taşı" talimatı GERİ ALINDI): ölçüldü — `tx.yarnMovement.create` src'de **tek yerdedir** ve iplik kapısı zaten **o tek yazarın ilk iş ifadesidir** (`yarn.service.ts:171-177`). Bağımlılığı kaldırmak delik AÇMIYOR: iplik kapalıyken `WARP_ISSUE` yazmayı deneyen `IN_HOUSE` sarımı o kapıdan zaten 403 alır. Kapıyı bir de devere servisine yazmak **ikinci kopya** olurdu ve `yarn.service` bunu adıyla yasaklıyor: *"ikinci kopya bir gün ayrışır."*
+  - Route'taki adlandırılmış `requireDevereEnabled` KALIR ama artık **tek seviyelidir** (yalnız `devere.enabled`); üç seviyeli zincir mesajı kalkar.
+  - ⚠️ **ASIL DELİK ŞEMADA DEĞİL, BU BÖLÜMÜN GÖRÜNÜRLÜK CÜMLESİNDEYDİ** — aşağıda "Yüzeyler kapalıyken" maddesinde düzeltildi: *"denye yalnız `iplikEnabled` iken görünür"* uygulanırsa, 2. kararın var olma sebebi olan kurulum (iplik KAPALI + devere AÇIK, yalnız hazır levent) çözgü kartı açamaz ve **hiçbir levent doğamaz**. Karar bir cümleyle kendini iptal ediyordu.
+  - ⚠️ **Panel önizleme borcu:** bağımlılık kalkınca devere açıkken iplik KAPATILABİLİR hâle gelir. Modül kapatma önizlemesi bunu uyarmalı: *"N içeride sarılmış levendin iplik stornosu kilitlenir"* — `WOUND_CANCEL` net ters kaydını yazamayacağı için.
+  - ⚠️ **Bekçi borcu:** `test_devere_regime_gate` "üç seviyeli zincir mesajı" yerine **iki dalı** ölçer — `IN_HOUSE` + iplik kapalı → 403 (kapı iplik servisinden gelir); `PURCHASED` + iplik kapalı → 200. İkinci dal negatif sonda olmadan yazılamaz (geçmesi gereken senaryo bugün 403 alır).
   - `effectiveModuleValue` switch'ine `devereEnabled` case'i ZORUNLU. Eksik kalırsa iplik'e dokunan HER PATCH 400 "Bilinmeyen modül anahtarı" alır (`system-setting.service.ts:1894-1911`). Bunu statik bir bekçi yakalamaz.
 - **Dokuma ile ilişki.** Devere dokumadan bağımsızdır: fason devere atölyesi olabilir, **raşel (çözgülü örme) tül** de levent tüketir. Faz 3 bağlama/söküm/elle tüketim **devere** modülündedir (tezgah ya da raşel = `Machine`). Faz 4'te top çıkışından otomatik tüketim **dokuma** bayrağının kapsamındadır. Repoda `dokuma.enabled` YOK; dokuma tarafının tek yer tutucusu `tezgah.enabled`, o da "Dokuma tezgah izleme" (monitörizasyon), üretime bağlı ve yüzeysiz. Ad uzlaşması §9'da.
-- **Profiller** `taban()`/`acik()` ile üretilir: `taban()` YEDİ anahtarın hepsini açıkça `false` yazar, yani kural dosyasındaki "her profilde açıkça yazılır" TAMLIK kuralı bugün de geçerlidir — yalnız uygulanışı yardımcı fonksiyona taşınmıştır (`module-profiles.ts:95-99`). Devere eklenince `taban()` sekizinciyi kendiliğinden yazar; elle değişecek tek yer `test_module_profile §1b`'deki `7` sayısıdır. `tam` spread ile devere'yi **kendiliğinden açık** alır. `dokuma` profiline elle eklenir. **Mevcut `perde` profili DEĞİŞMEZ** (kumaşı hazır alan kurulum); hedef kitle için AYRI bir **`perde-dokuma`** profili doğar (ticaret + iplik + devere açık; tezgah Faz 4'te) — yönetici kararı §9.4. `basit` (adnansahin) ve `standart` kapalı kalır.
+- **Profiller** `taban()`/`acik()` ile üretilir: `taban()` YEDİ anahtarın hepsini açıkça `false` yazar, yani kural dosyasındaki "her profilde açıkça yazılır" TAMLIK kuralı bugün de geçerlidir — yalnız uygulanışı yardımcı fonksiyona taşınmıştır (`module-profiles.ts:95-99`). Devere eklenince `taban()` sekizinciyi kendiliğinden yazar; elle değişecek tek yer `test_module_profile §1b`'deki `7` sayısıdır. `tam` spread ile devere'yi **kendiliğinden açık** alır. `dokuma` profiline elle eklenir. **Mevcut `perde` profili DEĞİŞMEZ** (kumaşı hazır alan kurulum); hedef kitle için AYRI bir **`perde-dokuma`** profili doğar (ticaret + iplik + devere açık; tezgah Faz 4'te) — yönetici kararı §9.4. `basit` (adnansahin) ve `standart` kapalı kalır. ⚠️ Bağımlılık kalkınca **ikinci bir şekil daha mümkün olur**: devere açık + iplik KAPALI = "hazır levent alan dokumacı" (§3.9). Bu bir ŞEMA sorusu değil profil sorusudur; yeni profil yazılıp yazılmayacağına ilk böyle bir müşteride karar verilir — şimdiden profil üretmek, karşılığı olmayan bir kimlik yaratmaktır.
 - **Grandfathering (karar).** Devere, grandfathering migration'ından (`20260902230000`) SONRA doğan ilk modüldür; eski migration değiştirilemez. Karar: **yeni migration** `devere.enabled = false` yazar (`ON CONFLICT DO NOTHING`). "Sabit false yasağı"nı çiğnemez: kural dünkü davranışı yazmayı emreder, dünkü davranış "devere yok"tur, ve kumasTeknik/tezgah için aynı gerekçeyle sabit false yazıldı (`migration.sql:38-44`). Tek dosyaya sabit üç bekçi dosya LİSTESİNE genişletilir: `test_module_flags §6c`, `test_module_profile §6c/§6d`, `test_module_grandfathering`. `MIGRASYON_DISI` yolu reddedildi; migration başlığı finance'ı olumsuz emsal sayıyor. Kural satırı (`modul-bayrak.md:52`) "yeni doğan modülde dünkü davranış = false" diye daraltılmalı (§9).
 - **Dokunuş listesi (ölçüldü).**
   - Backend: `module-flags.ts` 4 tablo · `system-setting.service.ts` (SETTING_KEYS, FeatureFlags, getFeatureFlags, setFeatureFlags dalı, `readDevereEnabled`, `effectiveModuleValue`) · `feature-flag.routes.ts` strictObject · `module-profiles.ts` (alan eşlemesi + üç yazarlı açıklama) · `screen-catalog.ts` (ModulKey, EKRAN_MODUL_DEGERLERI; yüzey Faz 1'de doğduğu için EKRANSIZ'a GİRMEZ) · `module.middleware.ts` `requireDevereEnabled`.
@@ -504,7 +610,9 @@ Yeni mutabakat bölümleri:
   - Electron: `lib/module-flags.ts` 5 tablo · `featureFlagService.ts` · `flag-modules.ts` (`HideableModule` Exclude'a eklenmezse TS7053) · `moduleProfile.helpers.ts` `modulesThatDependOn` yalnız DOĞRUDAN bağımlıyı döner, geçişli kapanışa çevrilir (yoksa "Ticaret kapanırsa" önizlemesi Devere'yi göstermez; `moduleProfile.helpers.test.ts:104` kırmızı).
   - Mobil: modül alanı yok, dokunuş yok.
   - Bekçiler: `test_module_profile §1b` (===7 → 8) · `test_feature_flag_contract` PANEL_EXEMPT + §15 elle liste (eklenmezse sessiz kapsam boşluğu) · `test_module_flag_off` ALAN_DB_ANAHTARI + §1e/§1h/§7 **tek seviyeye kilitli**, geçişli zincire genişletilir · `test_module_flags §3b/§6c/§9` · `test_screen_catalog` · yeni `test_devere_regime_gate`. `400 MODULE_DEPENDENCY`'yi doğrudan ölçen bekçi bugün YOK; devere ile yazılır.
-- **Yüzeyler kapalıyken.** Menü/karo çizilmez, route 403. `Item` formunda denye yalnız `iplikEnabled`, çözgü kartı alanı yalnız `devereEnabled` iken görünür. `Station` formundaki iki yetenek kutusu yalnız `devereEnabled` iken görünür.
+- **Yüzeyler kapalıyken.** Menü/karo çizilmez, route 403. Çözgü kartı alanı ve `Station` formundaki iki yetenek kutusu yalnız `devereEnabled` iken görünür.
+  - ⚠️ **`Item.linearDensityDen` (denye) görünürlüğü `iplikEnabled || devereEnabled`dır** — yalnız `iplikEnabled` DEĞİL (2026-09-12 düşmanca denetimi, §9.7d). Eski cümle 2. kararı sessizce iptal ediyordu: bağımlılık kalkınca "iplik KAPALI + devere AÇIK" kurulumu meşrudur, ama denye alanı görünmezse `WarpSpec` açılamaz (servis `linearDensityDen` DOLU ister) ve **hiçbir levent doğamaz**. Alternatif ve daha yalın okuma: görünürlüğü bayrağa hiç bağlamamak, bugünkü gibi **kalem tipine** bağlamak (`ItemType.YARN` ise göster) — denye ipliğin fiziksel özelliğidir, bir modülün mülkü değil.
+  - ⚠️ **AYNI TUZAK içe aktarma adaptörü cümlesindedir:** `item.adapter.ts`teki `linearDensityDen` sütunu "modül kapalıyken şablondan düşürülür" kararı `iplikEnabled`e bağlanırsa aynı kurulumda denye toplu girilemez. Sütun ölçütü de `iplikEnabled || devereEnabled` (ya da bayraksız) olur.
 
 ## 6 · adnansahin sıfır-fark kanıtı (Faz 1)
 
@@ -527,11 +635,12 @@ Yeni mutabakat bölümleri:
 | Faz | Kapsam | Değer | Şema | Ön koşul |
 |---|---|---|---|---|
 | **1a — Katalog ve kimlik** (defter YAZMAZ) | `devere.enabled` + grandfathering migration + `requireDevereEnabled` + bayrak dokunuşları (§5) · **izin kodları + ekran `requires`** · `Item.linearDensityDen` · `WarpSpec` CRUD + `Item.warpSpecId` (⚠️ **BEKLEYEN, ÖLÜ DEĞİL:** kolon 1a'da FK + kısmi index'iyle hazır bırakıldı, ama yazma yüzeyi **1b'de doğar** — o güne kadar tüketicisi yoktur; ölçüldü 2026-09-12: backend 0 · panel 0 · içe aktarım 0 referans) · `Station.producesWarpBeam` · **birleştirme haritası + içe aktarma adaptörleri + kalıcı silme kapıları** · panel "Çözgü Kartları" ekranı (teorik kg hesaplayıcısı dahil) | Çözgü kartları ve denye verisi girilmeye başlanır — 1b'nin veri ön koşulu. **Hiçbir defter satırı doğmaz**, dolayısıyla ters yol borcu da doğmaz | 1 tablo · 3 kolon · 2 şema-dışı nesne · 3 izin kodu | — |
-| **1b — Levent doğar** (EN KÜÇÜK ANLAMLI ÇALIŞAN ADIM) | `WarpBeam` + `WarpBeamEvent` · `WOUND`/`WOUND_CANCEL` (önizlemeli) · `WARP_ISSUE`/`WARP_ISSUE_REVERSAL` + `YarnMovement.warpBeamId` · gerçekleşen kg + `kgSource` · levent planı · hazır levent listesi (çözgü kartına göre gruplu) · §4.9 sayım düzeltmeleri · bekçiler | "İplik nereye gitti" ve "hangi leventler hazır" ilk kez cevaplanır; tartılan sarımda devere firesi kg görünür | 2 tablo · 2 enum değeri · 1 kolon · 7 şema-dışı nesne | 1a |
+| **1b — Levent doğar** (EN KÜÇÜK ANLAMLI ÇALIŞAN ADIM) | `WarpBeam` + `WarpBeamEvent` · `WOUND`/`WOUND_CANCEL` (önizlemeli) · **köken üçlüsü** (`originKind` + taraf alanları + XOR seddi, §3.9) · **brüt çıkış + ayrı iade** `WARP_ISSUE`/`WARP_ISSUE_REVERSAL`/`WARP_RETURN`/`WARP_RETURN_REVERSAL` + `YarnMovement.warpBeamId` + `ReasonPresetKind.WARP_RETURN` kataloğu (§3.7) · sarım kg + `kgSource` · **`Machine.warpBeamSlots`** (Faz 3'ten çekildi) · iplik kapısının `applyWarpBeamEventTx`e taşınması (§5) · levent planı · hazır levent listesi (çözgü kartına göre gruplu) · §4.9 sayım düzeltmeleri · bekçiler | "İplik nereye gitti", "hangi leventler hazır", "bu levent nereden geldi" ve "dip nereye gitti" ilk kez cevaplanır; tartılan sarımda devere firesi kg görünür | 2 tablo · 2 yeni pg enum tipi (`WarpBeamStatus`, `WarpBeamOrigin`) · `YarnMovementKind`'a 4 değer · `ReasonPresetKind`'a 1 değer · 4 kolon (`YarnMovement.warpBeamId` · `Machine.warpBeamSlots` · `WarpBeam` taraf alanları) · 11 şema-dışı nesne | 1a |
 | **2 — Lot** | `YarnLot` · mal kabul iplik satırına lot + bobin adedi · sarımda lot seçimi · karışık/lotsuz lot uyarısı · "bobin metrajı kalbaya yeter mi" uyarısı · türetilen lot bakiyesi · levent → lot → irsaliye geri izleme | Çözgü yolu / ton farkının kök nedeni izlenir | 1 tablo · 2 kolon | İlk dokuma müşterisinde **Faz 1 ile aynı sürümde** önerilir: lotsuz sarılan levent kalıcı olarak lotsuz kalır |
-| **3 — Tezgah ve kalan metre** | `MOUNTED`/`DISMOUNTED`/`CONSUMED`(elle)/`ADJUST_*`/`EXHAUSTED`/`SCRAPPED` + tersleri · durum kolonları (`status`/`currentMachineId`/`currentPosition`, olayla AYNI tx) · `Station.consumesWarpBeam` · `Machine.warpBeamSlots` · `beamsMountedDuring` helper + SQL ikizi · iki sebep kataloğu · levent kartı etiketi · tablet ekranı (yeni oturum türü) | Hangi tezgahta ne bağlı, kalan metre, levent dibi firesi, düğüm/tahar/takım süresi | CHECK genişlemesi · 2 enum değeri · 2 kolon · 4 şema-dışı nesne (`warp_beams_machine_position_uq` · `warp_beams_mounted_ck` · `warp_beam_events_mounted_ck` · `machines_warp_beam_slots_pos`) | #13, #14, #15, #16 |
+| **3 — Tezgah ve kalan metre** | `MOUNTED`/`DISMOUNTED`/`CONSUMED`(elle)/`ADJUST_*`/`EXHAUSTED`/`SCRAPPED`/**`SHIPPED_OUT`** + tersleri · durum kolonları (`status`/`currentMachineId`/`currentPosition`, olayla AYNI tx) · `Station.consumesWarpBeam` · **`beamRole` küçük kataloğu** (zemin · hav · dolgu) · `beamsMountedDuring` helper + SQL ikizi · iki sebep kataloğu · levent kartı etiketi · tablet ekranı (yeni oturum türü) | Hangi tezgahta ne bağlı, kalan metre, levent dibi firesi, düğüm/tahar/takım süresi, dışarı verilen levent | CHECK genişlemesi · 2 enum değeri · 2 kolon (`Station.consumesWarpBeam` · `WarpBeamEvent.beamRole`) · 3 şema-dışı nesne (`warp_beams_machine_position_uq` · `warp_beams_mounted_ck` · `warp_beam_events_mounted_ck`) | #13, #14, #15, #16 |
 | **4 — Top tezgahtan doğar** (dokuma bayrağıyla) | Rotada Dokuma adımı + tezgah çıkışı motoru (iş emri İÇİNDE doğum) · `RollEntrySource.WEAVING` · top çıkışında `CONSUMED(rollId)` otomatik (çift levent → iki satır) · take-up · atkı sayacı → metre | Top → levent → lot → tedarikçi geri izleme; randıman | enum değeri + tezgah defterleri (`SEKTOR` dokuma bulguları) | #8 · take-up verisi · `kumasTeknik` Dilim 3 |
-| **5 — Gerekirse** | haşıl olayı · ara levent/direkt çözgü birleştirme · levent demirbaş kartı (dara → tartıdan kalan metre) · tezgah teknik kartı ve uyum kontrolü · ayrı lot bakiye tablosu · çok iplikli/renk raporlu çözgü · tahar planı yapılandırması · levent konumu · fason devere · bobin dipleri iadesi | Sektör genişliği | ölçüme göre | #9, #10, #11, #20, #22 |
+| **5 — Gerekirse** | haşıl olayı · ara levent/direkt çözgü birleştirme · levent demirbaş kartı (dara → tartıdan kalan metre) · tezgah teknik kartı ve uyum kontrolü · ayrı lot bakiye tablosu · çok iplikli/renk raporlu çözgü · tahar planı yapılandırması · levent konumu · **bobin TEKİL kimliği** (kon/masura barkodu) | Sektör genişliği | ölçüme göre | #9, #10, #22 |
+| **AYRI DİLİM (bu belgenin dışında)** | **Polimorfik fason sevk kalemi** (top \| levent \| iplik): `SubcontractorDispatchItem.rollId` NOT NULL'dur (`schema.prisma:3887`) ve fasona yalnız TOP gönderilmesine izin verir | Fason devere ve fason haşıl deftere yazar; `SEKTOR-YOL-HARITASI.md:153`'ün bağımsız tespit ettiği borç kapanır | ölçülmedi — 1b'den büyük | yönetici sırasına alındı 2026-09-12 |
 
 **Migration bandı:** `20260912120000` ve üstü (yönetici tahsisi; 6e `110000` bandını kullanıyor).
 
@@ -540,7 +649,7 @@ Yeni mutabakat bölümleri:
 - `test_warp_beam_lifecycle`: claim yarışı; `WOUND_CANCEL` net ters kayıt + idempotent ikinci çağrı (aynı `clientToken` → cached yanıt, "Barkod üretimi…" 409'u DÖNMEZ); LIFO'nun yalnız durum olaylarını kapsaması; çift iptal seddi; işaret tablosu; formül fixture'ı 816,67 kg.
 - Mekanik kapılar: `test_permission_catalog` · `test_role_template_catalog` · `test_master_data_merge_fk_coverage` (yeni `Item`/`Customer` FK'ları haritada) · `test_import_framework` (round-trip) · `test_screen_catalog`.
 
-**Faz 3 bekçileri:** `test_warp_beam_mount` (bağla/sök claim'i, yuva seddi P2002 → 409, açık koşumda söküm 409, leventsiz koşum UYARI, `*_CANCEL` LIFO) · `test_loom_run_beam_overlap` (`beamsMountedDuring` ↔ SQL ikizi; çift levent ve koşum ortası levent değişimi) · `test_consistency` yeni maddeler (§4.9 6–8) · `test_db_invariants` dört yeni nesne (`warp_beams_machine_position_uq` · `warp_beams_mounted_ck` · `warp_beam_events_mounted_ck` · `machines_warp_beam_slots_pos`).
+**Faz 3 bekçileri:** `test_warp_beam_mount` (bağla/sök claim'i, yuva seddi P2002 → 409, açık koşumda söküm 409, leventsiz koşum UYARI, `*_CANCEL` LIFO) · `test_machine_run_beam_overlap` (`beamsMountedDuring` ↔ SQL ikizi; çift levent ve koşum ortası levent değişimi) · `test_consistency` yeni maddeler (§4.9 6–8) · `test_db_invariants` dört yeni nesne (`warp_beams_machine_position_uq` · `warp_beams_mounted_ck` · `warp_beam_events_mounted_ck` · `machines_warp_beam_slots_nonneg`).
 - `test_yarn_stock` genişlemesi: yeni türler bakiye / eksi kapı §10 / kanonik sıra.
 - `test_consistency §27` işaret-tabanlı; iptal edilmiş levent sondası.
 - `test_db_invariants` envanteri · `test_audit_labels §4` (ENUM_LABELS) · modül bekçileri (§5).
@@ -567,7 +676,7 @@ Yeni mutabakat bölümleri:
 |---|---|---|---|
 | 9 | Çözgüyü konik (devere) makinede mi hazırlıyorsunuz, direkt çözgü + haşıl hattı da var mı? Cağlık kaç bobinlik, magazin cağlık mı? Kaç kalba, kalba başı kaç tel? | Ara levent (Faz 5); kalba alanları | Hayır |
 | 10 | Haşıl yapıyor musunuz? Hangi iplikte, içeride mi fasonda mı? Haşıl alma yüzdesi? | Haşıl olayı; nominal/gerçek kg farkı | Hayır (su jetinde öne çekilir) |
-| 11 | Bobinleri depodan tartarak mı çıkarıyorsunuz? Sarım bitince bobin dipleri ne oluyor: tartılıp depoya mı dönüyor, atkıya mı gidiyor, telef mi? | Tüketim yöntemi (§3.7); `WARP_RETURN` türü | **Faz 1 kapsamını değiştirebilir** (bir tür çifti) |
+| 11 | Bobinleri depodan tartarak mı çıkarıyorsunuz? Sarım bitince bobin dipleri ne oluyor: tartılıp depoya mı dönüyor, atkıya mı gidiyor, telef mi? | — | **KAPSAMI ARTIK KİLİTLEMEZ** (§9.7): dördü de destekleniyor. Brüt `WARP_ISSUE` + ayrı `WARP_RETURN` + sebep kodu (`DEPOYA_IADE` · `ATKILIK_AKTARIM` · `TELEF`). Tartmayan fabrikada iade satırı doğmaz. Cevap **aksiyon anında** verilir, kurulumda değil: aynı fabrika bir gün depoya iade edip ertesi gün atkıya aktarabilir. Soru yalnız **ekran varsayılanını** belirler |
 | 12 | Bir levende tek lot şartı var mı? Bobin metrajı kalbaya yetmeyince ortada lot değişiyor mu? | Lot uyarısının sertliği (Faz 2) | Hayır |
 | 13 | Metal leventleriniz numaralı mı, kaç tane, darası biliniyor mu? Çift levent tezgahınız var mı? | `physicalBeamNo`, `warpBeamSlots`, tartıdan kalan metre | Faz 3 |
 | 14 | Leventte kalan metreyi bugün nasıl biliyorsunuz: tezgah ekranı, çap ölçümü, tartı, tahmin? | Faz 3 elle tüketim ekranının biçimi | Faz 3 |
@@ -576,9 +685,13 @@ Yeni mutabakat bölümleri:
 | 17 | Çözgü boyunu neye göre veriyorsunuz: sipariş metresi + kısalma payı mı, levent kapasitesi mi? Kısalma yüzdesi kartta yazıyor mu, nasıl ölçülüyor? | Plan ekranı; Faz 4 take-up | Hayır |
 | 18 | "600 KAR İPİ"deki 600 nedir (büküm tur/m, kod, başka)? | İplik kartı alanları: ad ayrıştırılmaz, doğru alan elle doldurulur | Hayır |
 | 19 | Devere kopuşlarını sayıyor musunuz, fireyi tartıyor musunuz? | `breakCount` ve `kgSource`'un saha karşılığı | Hayır |
-| 20 | Devereyi hep içeride mi yapıyorsunuz? Fason devere yaptırdığınız, levent satın aldığınız ya da başka dokumacıya levent verdiğiniz oluyor mu? | Fason devere: `WOUND`'da makine yerine fason firma + ipliğin fasona çıkışı | **Faz 1 kapsamını değiştirebilir** |
-| 21 | Tül perdeyi dokuma tezgahında mı, raşel (çözgülü örme) makinesinde mi üretiyorsunuz? | Levent tüketen makine türü; raşelde çok levent/kılavuz barı | **Faz 1 kapsamını değiştirebilir** (yetenek adı/`warpBeamSlots` Faz 1'e çekilir) |
+| 20 | Devereyi hep içeride mi yapıyorsunuz? Fason devere yaptırdığınız, levent satın aldığınız ya da başka dokumacıya levent verdiğiniz oluyor mu? | — | **KAPSAMI ARTIK KİLİTLEMEZ** (§9.7): dördü de destekleniyor. `WarpBeam.originKind` + taraf alanları + `SHIPPED_OUT` (§3.9). Köken **her leventte seçilir**, kurulumda değil — aynı fabrika hem içeride sarıp hem hazır levent alabilir. Soru yalnız formun varsayılanını belirler. ⚠️ Fason devereNİN DEFTERİ ayrı dilime bağlı (polimorfik sevk kalemi) |
+| 21 | Tül perdeyi dokuma tezgahında mı, raşel (çözgülü örme) makinesinde mi üretiyorsunuz? | — | **KAPSAMI ARTIK KİLİTLEMEZ** (§9.7): ikisi de, birlikte de destekleniyor. `Machine.machineClass` (tezgah izleme tasarımında) + `Machine.warpBeamSlots` **Faz 1b'ye çekildi** + `beamRole`. Soru yalnız hangi makine sınıfının kurulacağını belirler |
 | 22 | Tezgah tipiniz ne: su jeti, hava jeti, rapier (kancalı), jakar/armür? | Haşıl ihtiyacı, levent tipi/uyum | Hayır |
+| 23 | Raşelde barı başına levent AYRI AYRI mı sarılıyor, yoksa takım hâlinde mi (aynı çözgü kartından N levent aynı anda)? | `WOUND` tek satır mı N satır mı; sarım formunun şekli | Hayır — ama 1b ekranını etkiler |
+| 24 | Yuvalar rollü mü (zemin leventi · hav/pile leventi · dolgu)? Rol adlarınız neler? | `beamRole` kataloğunun içeriği; gerekli mi | Hayır (Faz 3) |
+| 25 | Hazır levent alıyorsanız fatura satırı NE üzerinden: adet, kg, metre? | `PURCHASED` levent mal kabul kalemi olarak nasıl doğar | Hayır — ama §3.9'un ticaret tarafını belirler |
+| 26 | Fasona verilen ipliğin mülkiyeti kimde kalıyor? Fason devereci kendi ipliğini mi kullanıyor? | Emanet iplik — `SEKTOR-YOL-HARITASI.md:152` `MaterialOwnership` boşluğuyla AYNI sınıf, onunla birlikte çözülür | Hayır (kapsam dışı) |
 
 ## 9 · Yönetici kararları (2026-09-12)
 
@@ -599,11 +712,31 @@ Tezgah izleme tasarımıyla kesişim ölçüldü ve **TEK DEFTER** kararı veril
 | Reddedilen | Neden reddedildi |
 |---|---|
 | **`WarpBeamMount` span tablosu** (bağlama aralığını satır olarak tutan ikinci tablo) | Aynı gerçeğin İKİNCİ kaydı olurdu: aralık zaten `MOUNTED`/`DISMOUNTED` çiftinden türer. İki kaynak bir gün ayrışır ve "hangisi doğru" sorusu doğar; üstelik span satırı defterin ters kayıt disiplininin dışında kalırdı (span güncellenir, defter güncellenmez) |
-| **Dokuma koşumuna levent FK'sı** (`LoomRun.warpBeamId`) | Levent ↔ makine bağı bir ZAMAN ARALIĞIDIR: çift levent tezgahta aynı anda iki levent vardır ve koşumun ORTASINDA levent değişebilir. Tek FK bu ikisini temsil edemez; kesişim `beamsMountedDuring(machineId, from, to)` helper'ından okunur (§4.4) |
-| **`LoomSpec.beamSlots`** (yuva sayısı için ayrı model) | Yuva sayısının tek kaynağı `Machine.warpBeamSlots`tır (+ `machines_warp_beam_slots_pos` CHECK). İkinci bir yer, iki sayının ayrışması demekti |
+| **Dokuma koşumuna levent FK'sı** (`MachineRun.warpBeamId`) | Levent ↔ makine bağı bir ZAMAN ARALIĞIDIR: çift levent tezgahta aynı anda iki levent vardır ve koşumun ORTASINDA levent değişebilir. Tek FK bu ikisini temsil edemez; kesişim `beamsMountedDuring(machineId, from, to)` helper'ından okunur (§4.4) |
+| **`MachineSpec.beamSlots`** (yuva sayısı için ayrı model) | Yuva sayısının tek kaynağı `Machine.warpBeamSlots`tır (+ `machines_warp_beam_slots_nonneg` CHECK). İkinci bir yer, iki sayının ayrışması demekti |
 | **`WarpBeam.remainingLengthM` kolonu** | Durum ↔ sayaç çifti açardı (iki yazar + çift yüklem + CHECK). Kalan metre `Σ işaret(kind) × lengthM` ile türetilir (§4.8); levent başına olay sayısı onlar–yüzler mertebesindedir |
 
 "Şu an ne" sorusunun cevabı yine de durum kolonlarındadır (`status` · `currentMachineId` · `currentPosition`) ve olayla **aynı transaction'da** yazılır; tekillik seddi `warp_beams_machine_position_uq`, emsali `work_sessions_active_machine_uq`. Mutabakat maddeleri §4.9 (6)–(8) durum ile defterin ayrışmasını mekanik olarak yakalar.
+
+### 9.7 · ÇERÇEVE KARARI: tek senaryoya bağlanmaz — dört mekanizma, sırayla (2026-09-12)
+
+Kullanıcı çerçeve kararı verdi: *"Her seçeneği uygulayan firma gerçek hayatta mevcut, biz hepsine hitap ediyoruz. Tüm senaryolar çalışmalı; duruma göre bayrağa bağlamalıyım veya aksiyon anında seçeneğe bağlamalıyım."* Üç saha sorusunun (#11 · #20 · #21) üçüne de cevap **"hepsini destekle"**dir.
+
+**Varyasyonun yeri dört mekanizmadan biridir ve SIRAYLA denenir** (tam tablo §0):
+`[ÇEKİRDEK]` → `VERİ` → `AKSİYON ANINDA SEÇİM` → `[PROFİL] BAYRAK` (en son çare).
+
+Ayırt edici cümle: **bayrak KOD YOLUNU açıp kapatır · veri AYNI kod yolunda farklı gerçekleri taşır · aksiyon anındaki seçim, aynı kod yolunda AYNI ANDA iki farklı gerçeği mümkün kılar.**
+
+| # | Konu | KARAR | Gerekçe |
+|---|---|---|---|
+| 9.7a | Üç eksen kaç bayrak eder | **SIFIR yeni modül anahtarı.** Üç soru da "bu kod çalışsın mı" değil, kaydın İÇERİĞİ ("bu levent nereden geldi" · "bu iplik nereye gitti" · "bu makine neyi sayar") | Bayrağa çevrilseydi, aynı fabrikada iki makine tipi ya da iki tedarik yolu olduğu anda bayrak çökerdi. Bayrak enflasyonu da tek-senaryo kadar ciddi bir tuzaktır |
+| 9.7b | Bobin/dip (#11) | **`WARP_ISSUE` BRÜT + ayrı `WARP_RETURN` + `ReasonPreset` ZORUNLU** (§3.7). Eski "net tek satır, iade türü gerekmez" kararı **GEÇERSİZ** | ① Çekirdek kural: *"sevk rakamı HER yüzeyde BRÜT; iade ayrı belgeyle kapanır"* — iplik çıkışı da bir çıkıştır. Net satır, ölçülen iki sayıdan birini kalıcı kaybeder ② Dip kaderi fabrika sabiti DEĞİL: aynı fabrika bir gün depoya iade edip ertesi gün atkıya aktarabilir → 3. mekanizma ③ Tartmayan fabrikada satır doğmaz; **yokluk zaten cevaptır**, bayrak gerekmez |
+| 9.7c | Devere nerede (#20) | **`WarpBeam.originKind` + taraf kolonları + `SHIPPED_OUT`** (§3.9). **`wound_facts_ck`'deki `machineId NOT NULL` KALDIRILDI**, yerine köken XOR'u. ⚠️ Taraf TİPİ de kökene bağlıdır: `PURCHASED ⇒ supplierId XOR subcontractorId`; `CONSIGNED ⇒ ownerCustomerId` (Faz N, enum'a bugün girmez, tabloya satır girer) | ① Fason devere, hazır levent alımı, müşteri levendiyle fason dokuma ve levent satışı sektörde yaygın ② Eski CHECK bunları **DB düzeyinde imkânsız** kılıyordu ③ **Bugün bedava** — `warp_beam_events` henüz yazılmadı (ölçüldü: grep 0); yarın backfill + kısıt düşürme olurdu ④ Köken her leventte seçilir → formda SEÇİM, kilitli değil ⑤ `PURCHASED`ı `Customer`a zorlamak fason devereciye **ikinci cari kart** açtırırdı; `CONSIGNED`i `supplierId`e bindirmek **alış raporuna yalan** yazdırırdı — aynı kolon iki anlam taşımaz |
+| 9.7d | Modül bağımlılığı | **`MODULE_DEPENDENCIES.devereEnabled = "iplikEnabled"` KALDIRILIR ve yerine HİÇBİR ŞEY YAZILMAZ.** ⚠️ Asıl düzeltme §5'in görünürlük cümlesindedir: denye `iplikEnabled \|\| devereEnabled` (ya da bayraksız, kalem tipinden) | ① `PURCHASED` levent iplik tüketmez; bağımlılık "hazır levent alan dokumacı" kurulumunu modül tablosunda yasaklıyordu ② **"Kapıyı taşı" talimatı GERİ ALINDI** — ölçüldü: `tx.yarnMovement.create` tek yerde, kapı zaten o tek yazarın ilk ifadesi; taşımak **ikinci kopya** olurdu ve `yarn.service` bunu adıyla yasaklıyor ③ Eski görünürlük cümlesi kararı tek başına iptal ediyordu: denye görünmezse `WarpSpec` açılamaz, levent doğamaz |
+| 9.7e | Dokuma/raşel (#21) | **Tezgah izleme şeması §9.5 kararına UYDURULUR** (ayrı belge): `LoomShedType`/`LoomWeftInsertion` **nullable**; **nötr ad ailesi** `MachineSpec`/`MachineRun`/`Machine*`; `Machine.warpBeamSlots` Faz 3'ten **1b'ye çekilir**; `beamRole` eklenir. ⚠️ **"Sayaç türü sınıftan" talimatı GERİ ALINDI**: birim **SİNYALDE** (`COURSE_COUNTER`/`RACK_COUNTER`), sıklık **KOŞUMDA** (`unitsPerCm`), metre helper'ı sınıfa göre **DALLANMAZ**; `machineClass` yalnız sunum/rapor etiketidir ve zorunlu değildir | ① §9.5 zaten "raşel ayrı modül değil" demişti — **karar doğruydu, ŞEMA o karara uymuyordu**: `LoomShedType` NOT NULL raşeli yapısal olarak dışlıyordu ② Tezgah izleme **tamamen kâğıtta** (ölçüldü: `MachineSpec`/`MachineRun` şemada 0) — ad ve tip düzeltmesi bugün bedava, sonra migration + kod turu ③ Sınıf üstünde dallanmak bir `kind`-dispatch'tir (kök kural yasağı) ve sinyal ile sınıf ayrışırsa **çift yüklem** doğar; `shedType IS NULL` "ağızlıksız"ı zaten söyler |
+| 9.7h | Yuva sayısı | **`machines_warp_beam_slots_nonneg`: CHECK `>= 0`, varsayılan `0`** — `>= 1` ve varsayılan `1` DEĞİL | ① `>= 1` bir senaryo kapatıyordu: cağlıktan beslenen çözgü makineleri (elastan raşel, iğneli dar dokuma) çözgü tüketir ama **levent bağlanmaz**, yuva 0'dır ② Varsayılan 1, kolonu adnansahin'in kurşun ve tambur makinelerine de yazardı — **kolon daha doğmadan yalan söylerdi** ③ Yuva kapısı sayı değil `Station.consumesWarpBeam`tir; sayı yalnız üst sınırdır |
+| 9.7f | Bobin tekil kimliği | **AÇILMAZ** — Faz 5'e bırakıldı | Gerçek bayrak/alan enflasyonu riski buradadır: lot + `bobbinCount` (Faz 2) soruların hepsini cevaplıyor; tekil kon barkodu karşılığı olmayan bir kimlik üretir |
+| 9.7g | Fason sevk kalemi | **AYRI DİLİM** — bu belgenin kapsamı dışında | `SubcontractorDispatchItem.rollId` NOT NULL'dur (ölçüldü, `schema.prisma:3887`): fasona yalnız TOP gidebilir. Polimorfik kalem (top \| levent \| iplik) 1b'den büyüktür ve zaten bağımsız bir borçtur (`SEKTOR-YOL-HARITASI.md:153`) |
 
 ⚠️ **Kök `CLAUDE.md`'ye ve `MODUL-BAYRAK-TASARIM.md §5.2`'ye DOKUNULMADI.** Oradaki "devere/çözgü/haşıl yeni mimari istemez — istasyona istasyon, rotaya adım" cümlesi 9.1 kararıyla **daralıyor**: top rotası için doğru, levent için eksik. Kök dosyanın düzeltilmesi kullanıcı onayına bırakıldı (yöneticinin listesinde).
 

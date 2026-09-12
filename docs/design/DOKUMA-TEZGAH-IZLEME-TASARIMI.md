@@ -24,20 +24,20 @@
 - **Modül anahtarı zaten var:** `tezgah.enabled` / `tezgahEnabled`, varsayılan **false**, bağımlılığı `productionEnabled` (`src/constants/module-flags.ts:40,52,78` — 2026-09-12'de `devereEnabled` araya girdi ve eski `:40,51,69` çapaları kaydı; bu dosyada satır numarası ölçülmeden yazılmaz). Yeni modül anahtarı açılmıyor; açılacak olan **yüzeydir**. K2'nin "yeni modüller aç/kapat olacak" şartı bu dilimde mevcut anahtarla karşılanıyor (§7.1).
 - **En küçük satılabilir dilim Faz 1a:** hiç donanım yok, 6 tablo, **3 migration** (A · B1 enum · B2 kolon+CHECK — enum kendi dosyasında, §9), 2 panel sayfası + 1 rapor, 4 izin, 2 bayrak, **advisory kilit yok**, 4 yeni bekçi. Kullanıcının dört sorusunun dördünü de cevaplar: duruş nedeni · randıman · devir · çalışma saati (§9).
 - **Telemetri ile defter aynı cümlede ayrışır:** ham örnek silindiğinde raporlanan hiçbir sayı değişmiyorsa o satır telemetridir — ve bunu insan vicdanı değil bir bekçi ölçer (§1, §4). **Telemetri bir hard-delete SINIFI DEĞİLDİR**, defter-olmayan satırın yaşam döngüsüdür; `defter.md`ye üçüncü sınıf açılmaz, açılan şey bir **bölüm + budamayı ölçen manifest bekçisidir** (§4).
-- **Zamanın ve gölge modun tek cümlesi:** *zamanı ajan ölçer, sunucu **DOĞRULAR** ve uydurmaz; kimlik saat değil **token**'dır; mühürden sonra hiçbir telemetri sessizce değişmez; geçici değer geçici olduğunu **kolonda** söyler* (§3.5, §5.1). Devreye alma da bir cümle değil bir kolondur: `LoomSpec.monitoringState` **OFF → SHADOW → LIVE** ve varsayılan **OFF = bugünkü davranış** (§2.3).
+- **Zamanın ve gölge modun tek cümlesi:** *zamanı ajan ölçer, sunucu **DOĞRULAR** ve uydurmaz; kimlik saat değil **token**'dır; mühürden sonra hiçbir telemetri sessizce değişmez; geçici değer geçici olduğunu **kolonda** söyler* (§3.5, §5.1). Devreye alma da bir cümle değil bir kolondur: `MachineSpec.monitoringState` **OFF → SHADOW → LIVE** ve varsayılan **OFF = bugünkü davranış** (§2.3).
 - **Ham 10 sn örnek DB'ye HİÇ girmez** (20 tezgahta 63 M satır/yıl). Bedeli bir "yedek penceresi" değil **KURULUM KAPISIDIR**: `kur.ps1` her sürümden önce `pg_dump -Fc` alır, `pg_restore --list` ile doğrular ve ikisinden biri düşerse **kurulumu İPTAL eder** (`deploy/kur.ps1:448-451`) — şişen tablo yedeği yavaşlatır, başarısız yedek güncelleme yolunu tümüyle kapatır. Kalıcı büyüme ≈ 240 MB/yıl, budanan tavan ≈ 570 MB — ilk yıl toplam < 1 GB (§4).
 - **Randıman = A × P** (kalite hariç), oranlar asla ortalanmaz, terimler toplanır; formül tek helper'da yaşar ve mühür anında donar (§5).
 - **Toplayıcı ajan ayrı bir gövdedir** (`kenar/`, headless Windows servisi, salon başına bir mini-PC). Electron "Toplayıcı Modu" **yazılmaz** — panelin main process'i HTTP başlatamaz ve `electron-updater` kurulumu **operatörün başlattığı** bir yeniden başlatmadır (vardiya ortasında basılabilir), yani toplayıcı kapanmasına insanın karar verdiği bir sürecin içinde yaşayamaz (§3.1, §10/#2).
-- **Levent bu belgenin işi değildir.** `WarpBeam` ailesi `docs/design/DEVERE-LEVENT-TARAMASI.md`'nindir; tezgah tarafı yalnız okuyucudur ve bu okuma bir KOLON DEĞİL, `beamsMountedDuring(machineId, from, to)` **türetmesidir** — `LoomRun`da levent FK'sı YOK (§7.3).
+- **Levent bu belgenin işi değildir.** `WarpBeam` ailesi `docs/design/DEVERE-LEVENT-TARAMASI.md`'nindir; tezgah tarafı yalnız okuyucudur ve bu okuma bir KOLON DEĞİL, `beamsMountedDuring(machineId, from, to)` **türetmesidir** — `MachineRun`da levent FK'sı YOK (§7.3).
 - **Denetimin en sert dört bulgusu:** ① budama defter satırı silebiliyordu → DB trigger seddi + **«Telemetri ≠ defter» bölümü** + budamayı ÖLÇEN manifest bekçisi (**üçüncü hard-delete sınıfı AÇILMAZ**, §4); ② geri alınmış duruş ajanın kuyruğundan sessizce yeniden doğuyordu → dört durumlu replay; ③ duruşun kapanışı kendi idempotency kuralına çarpıyordu → dar kimlik + geçiş alanı; ④ `MINOR` kaybı sebepten türüyordu, 45 dakikalık kopuş kullanılabilirliği şişiriyordu → `MINOR` yalnız süreden türer (§11).
 
 ---
 
 ## 1 · Tek cümlelik mimari
 
-> Fabrika LAN'ındaki **kenar toplayıcı ajan** tezgahın *donanım* sayaçlarını ve kontaklarını okur, kenarda indirger ve backend'e HTTPS ile toplu basar; backend **hiçbir porta bağlanmaz**, gelen paketi sınıflara ayırır — **ham örnek hiç yazılmaz** (kenarda ölür), **`LoomInterval` kovası ve İNSAN KARARI ALMAMIŞ duruş TELEMETRİDİR** (`updatedAt` var, tavanlı, budanır, yeniden yazılabilir), **insan kararı almış duruş · koşum · sayaç kararı · mühür defteri DEFTERDİR** (budanmaz, geri alma ters kayıt/`revokedAt`) — ve randıman yalnız mühürlü karnenin **terimlerinden** tek helper'da hesaplanır, ham telemetriden değil.
+> Fabrika LAN'ındaki **kenar toplayıcı ajan** tezgahın *donanım* sayaçlarını ve kontaklarını okur, kenarda indirger ve backend'e HTTPS ile toplu basar; backend **hiçbir porta bağlanmaz**, gelen paketi sınıflara ayırır — **ham örnek hiç yazılmaz** (kenarda ölür), **`MachineInterval` kovası ve İNSAN KARARI ALMAMIŞ duruş TELEMETRİDİR** (`updatedAt` var, tavanlı, budanır, yeniden yazılabilir), **insan kararı almış duruş · koşum · sayaç kararı · mühür defteri DEFTERDİR** (budanmaz, geri alma ters kayıt/`revokedAt`) — ve randıman yalnız mühürlü karnenin **terimlerinden** tek helper'da hesaplanır, ham telemetriden değil.
 
-Ayrım çizgisi tek cümleyle: **ham örnek silindiğinde raporlanan hiçbir sayı değişmiyorsa o satır telemetridir.** Bunu bir bekçi ölçer (`scripts/test_loom_prune_safety.ts`, §4).
+Ayrım çizgisi tek cümleyle: **ham örnek silindiğinde raporlanan hiçbir sayı değişmiyorsa o satır telemetridir.** Bunu bir bekçi ölçer (`scripts/test_machine_prune_safety.ts`, §4).
 
 > **ZAMANIN VE KİMLİĞİN TEK CÜMLESİ (Faz 2 sözleşmesi, 2026-09-12):** **zamanı ajan ölçer, sunucu DOĞRULAR ve uydurmaz** (hizasız kova 400, snap yok) · **kimlik saat değil TOKEN'dır** (`stopKey` UUID; `startedAt` veridir) · **mühürden sonra hiçbir telemetri sessizce değişmez** (yeniden yazma yalnız mühürsüz pencerede, mühürlüde 409 `SHIFT_SEALED`) · **geçici değer geçici olduğunu KOLONDA söyler** (`provisionalEndedAt` · `endSource = WATCHDOG` · `restateCount`). Dört ilkenin şemadaki karşılığı §2.6/§2.7'de, kapıları §3.5'tedir.
 
@@ -57,52 +57,52 @@ Emsal gerçektir ve ölçüldü: `EndpointLatencyDaily` + `src/services/latency-
 | **TELEMETRİ** | ✅ | ✅ | ✅ tavanlı | yeniden yazılır (`restateCount` + son `restatedAt`) — **yalnız MÜHÜRSÜZ pencerede**; mühürlüde 409 `SHIFT_SEALED` |
 | **DURUM** | ✅ | ✅ | — | üstüne yazılır |
 
-> **Denetim düzeltmesi (doktrin merceği B6).** Sentez `LoomShiftStat`ı "DEFTER (append-only)" ilan edip `updatedAt` veriyordu; `docs/kurallar/defter.md` bunu adıyla yasaklıyor (*"append-only defter satırı GÜNCELLENMEZ ve SİLİNMEZ; bu yüzden `updatedAt` almaz… bir tablo hem defter hem durum kaynağı OLAMAZ"*). Karne artık **ÖZET/MATERYALİZE KARNE** sınıfındadır: güncel gerçeği o taşır, **geçmişi `LoomShiftStatSeal` defteri taşır** (§2.10). `Shipment.status ↔ ShipmentEvent` ikilisinin aynısı.
+> **Denetim düzeltmesi (doktrin merceği B6).** Sentez `MachineShiftStat`ı "DEFTER (append-only)" ilan edip `updatedAt` veriyordu; `docs/kurallar/defter.md` bunu adıyla yasaklıyor (*"append-only defter satırı GÜNCELLENMEZ ve SİLİNMEZ; bu yüzden `updatedAt` almaz… bir tablo hem defter hem durum kaynağı OLAMAZ"*). Karne artık **ÖZET/MATERYALİZE KARNE** sınıfındadır: güncel gerçeği o taşır, **geçmişi `MachineShiftStatSeal` defteri taşır** (§2.10). `Shipment.status ↔ ShipmentEvent` ikilisinin aynısı.
 
 ### 2.1 · Mevcut modellere EKLER
 
-Bu dilim `Machine`'e **tek bir skaler kolon eklemez** — yalnız ters ilişki alanları. Tezgah künyesi `LoomSpec`'te yaşar; referans profilde (adnansahin) o tablo BOŞTUR ve `Machine` bugünkü hâliyle kalır.
+Bu dilim `Machine`'e **tek bir skaler kolon eklemez** — yalnız ters ilişki alanları. Tezgah künyesi `MachineSpec`'te yaşar; referans profilde (adnansahin) o tablo BOŞTUR ve `Machine` bugünkü hâliyle kalır.
 
 ```prisma
 model Machine {
   // ... mevcut alanlar DEĞİŞMEZ (skaler kolon eklenmiyor)
-  loomSpec         LoomSpec?
-  loomIntervals    LoomInterval[]
-  loomStops        LoomStopEvent[]
-  loomRuns         LoomRun[]
-  loomLiveState    LoomLiveState?
-  loomShiftStats   LoomShiftStat[]
-  loomCounterEvents LoomCounterEvent[]     // ← denetim: eksik karşı-ilişki
-  collectorLinks   LoomCollectorMachine[]
+  machineSpec         MachineSpec?
+  machineIntervals    MachineInterval[]
+  machineStops        MachineStopEvent[]
+  machineRuns         MachineRun[]
+  machineLiveState    MachineLiveState?
+  machineShiftStats   MachineShiftStat[]
+  machineCounterEvents MachineCounterEvent[]     // ← denetim: eksik karşı-ilişki
+  collectorLinks   MachineCollectorLink[]
 }
 
 model ShiftInstance {          // §2.5'te tanımlanıyor
-  stops LoomStopEvent[]        // ← denetim: eksik karşı-ilişki
+  stops MachineStopEvent[]        // ← denetim: eksik karşı-ilişki
 }
 
 model User {
-  loomStopsClassified   LoomStopEvent[]     @relation("LoomStopClassifiedBy")
-  loomStopReclasses     LoomStopReclass[]   @relation("LoomStopReclassBy")
+  machineStopsClassified   MachineStopEvent[]     @relation("MachineStopClassifiedBy")
+  machineStopReclasses     MachineStopReclass[]   @relation("MachineStopReclassBy")
   // ↓ KARŞI-İLİŞKİ ENVANTERİ (aşağıdaki kutu) — sekizi User'da
-  loomSpecsCreated      LoomSpec[]          @relation("LoomSpecCreatedBy")
-  loomSpecsUpdated      LoomSpec[]          @relation("LoomSpecUpdatedBy")
-  loomCollectorsCreated LoomCollector[]     @relation("LoomCollectorCreatedBy")
-  loomCollectorsUpdated LoomCollector[]     @relation("LoomCollectorUpdatedBy")
+  machineSpecsCreated      MachineSpec[]          @relation("MachineSpecCreatedBy")
+  machineSpecsUpdated      MachineSpec[]          @relation("MachineSpecUpdatedBy")
+  machineCollectorsCreated MachineCollector[]     @relation("MachineCollectorCreatedBy")
+  machineCollectorsUpdated MachineCollector[]     @relation("MachineCollectorUpdatedBy")
   shiftDefsCreated      ShiftDefinition[]   @relation("ShiftDefinitionCreatedBy")
   shiftDefsUpdated      ShiftDefinition[]   @relation("ShiftDefinitionUpdatedBy")
-  loomShiftStatsSealed  LoomShiftStat[]     @relation("LoomShiftStatSealedBy")
-  loomShiftSealsActed   LoomShiftStatSeal[] @relation("LoomShiftSealBy")
+  machineShiftStatsSealed  MachineShiftStat[]     @relation("MachineShiftStatSealedBy")
+  machineShiftSealsActed   MachineShiftStatSeal[] @relation("MachineShiftSealBy")
 }
 
-model LoomCollector {          // §2.4'te tanımlanıyor
-  intervals LoomInterval[]     // ← LoomInterval.collector'ın karşılığı
-  stops     LoomStopEvent[]    // ← LoomStopEvent.collector'ın karşılığı
+model MachineCollector {          // §2.4'te tanımlanıyor
+  intervals MachineInterval[]     // ← MachineInterval.collector'ın karşılığı
+  stops     MachineStopEvent[]    // ← MachineStopEvent.collector'ın karşılığı
 }
 
-// LoomRun'un üç opsiyonel bağının karşılıkları (§2.8) — FAZ 2:
-model WorkOrderStep { loomRuns LoomRun[] }
-model Item          { loomRuns LoomRun[] }
-model Color         { loomRuns LoomRun[] }
+// MachineRun'un üç opsiyonel bağının karşılıkları (§2.8) — FAZ 2:
+model WorkOrderStep { machineRuns MachineRun[] }
+model Item          { machineRuns MachineRun[] }
+model Color         { machineRuns MachineRun[] }
 
 model PeripheralDevice {
   /// UYGULAMA PROTOKOLÜ (`connectionType` TAŞIYICIYI söyler, bu KONUŞULAN DİLİ):
@@ -114,14 +114,14 @@ model PeripheralDevice {
 }
 
 model ReasonPreset {
-  /// YALNIZ `kind = LOOM_STOP`ta anlamlı. NULL = sınıflandırılmamış → rapor
+  /// YALNIZ `kind = MACHINE_STOP`ta anlamlı. NULL = sınıflandırılmamış → rapor
   /// UNPLANNED sayar. ⚠️ `stopPlanned` diye İKİNCİ kolon YOK (planlı/plansız
   /// bundan türetilir, tek helper); ⚠️ `MINOR` buraya ASLA yazılmaz (§5.2).
-  stopLossClass LoomStopLossClass?
+  stopLossClass MachineStopLossClass?
 }
 // ŞEMA-DIŞI CHECK (ham SQL + test_db_invariants envanteri):
-//   reason_presets_loom_class_chk:
-//   CHECK (kind <> 'LOOM_STOP' OR ("stopLossClass" IS NOT NULL
+//   reason_presets_machine_class_chk:
+//   CHECK (kind <> 'MACHINE_STOP' OR ("stopLossClass" IS NOT NULL
 //                                   AND "stopLossClass" <> 'MINOR'))
 // ⚠️ CHECK + `constants/reason-presets.ts` + `reason-preset-catalog.job.ts`
 //    AYNI COMMIT'te değişir. Job yeni kolonu yazmazsa INSERT **23514** (CHECK
@@ -129,7 +129,7 @@ model ReasonPreset {
 //    `permission-catalog.job.ts`in izin→rol→sebep ZİNCİRİNDEDİR (`:36` import,
 //    `:157` çağrı) ve 5 denemeden sonra `hata()` + `PERMISSION_CATALOG_RECONCILE_FAILED`
 //    audit satırı basar (`:177`, `:184`). Zarar "katalog sessizce boş" DEĞİL,
-//    "LOOM_STOP satırları ve sonraki kind'lar hiç doğmaz + boot zinciri ortasında
+//    "MACHINE_STOP satırları ve sonraki kind'lar hiç doğmaz + boot zinciri ortasında
 //    düştüğü için o turda ROL ŞABLONLARI da yazılmaz"dır; boş kind'da sunucu ve
 //    tablet gömülü kataloğa düşer.
 //    (`runReasonPresetReconciliation` ÖLÜ KODDUR — repoda yalnız kendi tanımında
@@ -138,35 +138,61 @@ model ReasonPreset {
 
 `WorkSession`'a **hiç dokunulmaz** (gerekçe §2.5). `Item`e, `ProductRecipe`ye ve stok kartı adına **bu dilimde hiç dokunulmaz** (K2).
 
-> **KARŞI-İLİŞKİ ENVANTERİ — 13 alan, `prisma validate` KAPISI.** Prisma tek yönlü ilişki kabul etmez: bu belgede `@relation` yazan her alan karşı tarafını da beyan etmezse `npx prisma validate` **P1012** ile düşer ve şemaya dökme işi ilk adımda durur. Envanter: **User'da 8** (`LoomSpecCreatedBy` · `LoomSpecUpdatedBy` · `LoomCollectorCreatedBy` · `LoomCollectorUpdatedBy` · `ShiftDefinitionCreatedBy` · `ShiftDefinitionUpdatedBy` · `LoomShiftStatSealedBy` · `LoomShiftSealBy`), **LoomCollector'da 2** (`intervals` ← `LoomInterval.collector`, `stops` ← `LoomStopEvent.collector`), **WorkOrderStep · Item · Color'da birer `loomRuns`** (§2.8). Bunlara zaten yazılı olan `Machine` ters ilişkileri, `ShiftInstance.stops` ve iki `User` duruş ilişkisi eklenir.
+> **KARŞI-İLİŞKİ ENVANTERİ — 13 alan, `prisma validate` KAPISI.** Prisma tek yönlü ilişki kabul etmez: bu belgede `@relation` yazan her alan karşı tarafını da beyan etmezse `npx prisma validate` **P1012** ile düşer ve şemaya dökme işi ilk adımda durur. Envanter: **User'da 8** (`MachineSpecCreatedBy` · `MachineSpecUpdatedBy` · `MachineCollectorCreatedBy` · `MachineCollectorUpdatedBy` · `ShiftDefinitionCreatedBy` · `ShiftDefinitionUpdatedBy` · `MachineShiftStatSealedBy` · `MachineShiftSealBy`), **MachineCollector'da 2** (`intervals` ← `MachineInterval.collector`, `stops` ← `MachineStopEvent.collector`), **WorkOrderStep · Item · Color'da birer `machineRuns`** (§2.8). Bunlara zaten yazılı olan `Machine` ters ilişkileri, `ShiftInstance.stops` ve iki `User` duruş ilişkisi eklenir.
 > **Kural:** *bu belgede `@relation` yazan her alan, karşı tarafını AYNI bölümde beyan eder; beyan edilmemiş ilişki tasarım hatası sayılır.* Faz kabul kapısında `npx prisma validate` **temiz** çıkmalıdır (§9).
 
 > **⚠️ RESTRICT FK YAZAN HER FAZ, AYNI COMMIT'TE KALICI SİLME YÜZEYİNİ BÜYÜTÜR.** `Machine`in kalıcı silinmesi `MACHINE_DELETE_GUARDS` adlı **SABİT** bir listeden geçer (`src/services/helpers/guarded-hard-remove.ts:236-273`; bugün **altı sayaç**: `rollOperationCount` · `rollMovementCount` · `rollCreatedCount` · `workSessionCount` · `deviceCount` · `kursunBypassCount` — ölçüldü 2026-09-12; eski *"beş sayaç / `:236-279`"* ölçümü `kursunBypassCount` eklenince bayatladı) ve **önizlemedeki `deletable` de aynı listeden doğar** — yani listeye yazılmayan bir Restrict FK, panelde "kalıcı silinecek" der, `DELETE` P2003'e düşer ve kullanıcı generic 400 görür. "409 + sayı" kalıbı ile *"önizleme etkilenen HER kaydı listeler"* kuralı birlikte kırılır.
-> **Yol:** Faz 1a → `loomShiftStatCount`; Faz 1b → `loomStopCount`; Faz 2 → `loomRunCount` + `loomCounterEventCount`. **Guard eklenmeden FK yazılmaz.** Panel açıklaması (`Electron/src/pages/Stations/machineDeleteDescription.ts`) ve önizleme aynı listeden doğduğu için kendiliğinden hizalanır.
+> **Yol:** Faz 1a → `machineShiftStatCount`; Faz 1b → `machineStopCount`; Faz 2 → `machineRunCount` + `machineCounterEventCount`. **Guard eklenmeden FK yazılmaz.** Panel açıklaması (`Electron/src/pages/Stations/machineDeleteDescription.ts`) ve önizleme aynı listeden doğduğu için kendiliğinden hizalanır.
 
-**`ReasonPresetKind` enum'una tek değer: `LOOM_STOP`.** Reçeteli iş (`docs/RECETELER.md` § Prisma enum'una yeni değer), kendi migration'ında, **`ALTER TYPE … ADD VALUE IF NOT EXISTS`** ile. Aynı commit'te dokunulacaklar: `KIND_STORES_TEXT.LOOM_STOP = false` (satıra **kod** yazılır, metin değil — `as const satisfies Record<ReasonPresetKind, boolean>` olduğu için derleyici zaten zorlar), `KIND_LABELS`, `REASON_PRESET_CATALOG.LOOM_STOP`, Electron `types/enums.ts` + `ENUM_LABELS` (bekçi `test_audit_labels §4` şemadaki HER enum değerini arar), mobil `src/services/reasonPreset.service.ts` kind union'ı + iki `Record` (union güncellenmezse tablet yeni kind'ı hiç tanımaz ve **derleme patlamaz**).
+**`ReasonPresetKind` enum'una tek değer: `MACHINE_STOP`.** Reçeteli iş (`docs/RECETELER.md` § Prisma enum'una yeni değer), kendi migration'ında, **`ALTER TYPE … ADD VALUE IF NOT EXISTS`** ile. Aynı commit'te dokunulacaklar: `KIND_STORES_TEXT.MACHINE_STOP = false` (satıra **kod** yazılır, metin değil — `as const satisfies Record<ReasonPresetKind, boolean>` olduğu için derleyici zaten zorlar), `KIND_LABELS`, `REASON_PRESET_CATALOG.MACHINE_STOP`, Electron `types/enums.ts` + `ENUM_LABELS` (bekçi `test_audit_labels §4` şemadaki HER enum değerini arar), mobil `src/services/reasonPreset.service.ts` kind union'ı + iki `Record` (union güncellenmezse tablet yeni kind'ı hiç tanımaz ve **derleme patlamaz**).
 
 **Sessiz tüketici listesi eksikti — iki dosya daha aynı commit'te değişir:** `Electron/src/pages/ReasonPresets/service.ts` (kind union'ı **elle** yazılmıştır, `:11`; `KIND_TABS` ayrı bir liste) ve `mobil/src/hooks/useReasonPresets.ts` (BUILTIN `Record` + `switch`). Emsal ÖLÇÜLMÜŞ bir geçmiştir: `ORDER_CANCEL` (2026-08-26) mobil union'a hiç girmedi, derleme ve bekçiler **yeşil geçti**. Bu yüzden Faz 1a'ya **yeni bir parite bekçisi** yazılır — `scripts/test_reason_preset_kind_parity.ts`: *sunucu `ReasonPresetKind` ↔ Electron union + `KIND_TABS` ↔ mobil union + `KIND_STORES_TEXT`/`KIND_LABELS` + BUILTIN `switch` **birebir***. Negatif sonda: `ORDER_CANCEL`ı mobil union'dan düşür → kırmızı. ⚠️ Bekçi **ilk koşumda bugünkü gerçek kusuru yakalayacaktır** (`ORDER_CANCEL` mobilde yok); o eksik aynı commit'te kapatılır.
 
-> **⚠️ Kapalı kurulumda ne oluyor (K3 ölçümü).** `jobs/reason-preset-catalog.job.ts` her boot'ta `REASON_PRESET_KINDS` üzerinde döner ve eksik sistem satırlarını **koşulsuz** yaratır — modül bayrağına BAKMAZ. Yani 23 `LOOM_STOP` satırı adnansahin'in canlı DB'sine de düşer. **Bu bilinçlidir:** izin kataloğu denklemi (katalog koda, uzlaştırma boot'ta), ~2 KB, ve hiçbir yüzeyde görünmez. Görünürlük kapısı paneldedir: Hazır Sebepler ekranının `KIND_TABS` dizisi (`Electron/src/pages/ReasonPresets/service.ts:54`) elle yazılmış bir listedir, sekme kendiliğinden belirmez — **`LOOM_STOP` sekmesi oraya yalnız `tezgahEnabled` açıkken çizilecek biçimde eklenir.** Reçeteyi körlemesine uygulayıp sekmeyi koşulsuz eklemek, tezgahı kapalı fabrikada beşinci bir sekme doğurur ve K3'ü ihlal eder.
+> **⚠️ Kapalı kurulumda ne oluyor (K3 ölçümü).** `jobs/reason-preset-catalog.job.ts` her boot'ta `REASON_PRESET_KINDS` üzerinde döner ve eksik sistem satırlarını **koşulsuz** yaratır — modül bayrağına BAKMAZ. Yani 23 `MACHINE_STOP` satırı adnansahin'in canlı DB'sine de düşer. **Bu bilinçlidir:** izin kataloğu denklemi (katalog koda, uzlaştırma boot'ta), ~2 KB, ve hiçbir yüzeyde görünmez. Görünürlük kapısı paneldedir: Hazır Sebepler ekranının `KIND_TABS` dizisi (`Electron/src/pages/ReasonPresets/service.ts:54`) elle yazılmış bir listedir, sekme kendiliğinden belirmez — **`MACHINE_STOP` sekmesi oraya yalnız `tezgahEnabled` açıkken çizilecek biçimde eklenir.** Reçeteyi körlemesine uygulayıp sekmeyi koşulsuz eklemek, tezgahı kapalı fabrikada beşinci bir sekme doğurur ve K3'ü ihlal eder.
 >
 > **Aynı boot turunda İKİNCİ bir uzlaştırıcı daha yazar:** `jobs/permission-catalog.job.ts` Faz 1a'nın **dört `loom:*` izin kodunu** (Faz 2 ile toplam **yedi izin kodu: altı `loom:*` + bir `mobile:*`** — §6.4) kapalı kurulumun `permissions` tablosuna da düşürür (§6.4). İkisi birlikte ~2 KB'dir ve görünmezlik ayrıca ölçülür (§8.1 K3-7).
 >
-> **⚠️ Tabletin kapısı da ELLEDİR ve panelinkinden ZAYIFTIR.** `mobil/src/services/reasonPreset.service.ts` uca `?kind=` **göndermez** (`list()` yalnız `includeInactive` taşır) — yani `LOOM_STOP` satırları kapalı kurulumda da **cihaza iner**; görünmezlik tümüyle ekranların kendi kind'larıyla süzmesine bağlıdır. Backend süzgeci zaten destekliyor (`routes/reason-preset.routes.ts:75` `req.query.kind`). Faz 2'de tablet sınıflandırma kuyruğu yazılırken çağrı `?kind=`li yapılır — ancak o zaman "kapalı modül iz bırakmaz" cümlesi tablette de kurulmuş olur.
+> **⚠️ Tabletin kapısı da ELLEDİR ve panelinkinden ZAYIFTIR.** `mobil/src/services/reasonPreset.service.ts` uca `?kind=` **göndermez** (`list()` yalnız `includeInactive` taşır) — yani `MACHINE_STOP` satırları kapalı kurulumda da **cihaza iner**; görünmezlik tümüyle ekranların kendi kind'larıyla süzmesine bağlıdır. Backend süzgeci zaten destekliyor (`routes/reason-preset.routes.ts:75` `req.query.kind`). Faz 2'de tablet sınıflandırma kuyruğu yazılırken çağrı `?kind=`li yapılır — ancak o zaman "kapalı modül iz bırakmaz" cümlesi tablette de kurulmuş olur.
 
 ### 2.2 · Enumlar
 
 ```prisma
+/// MAKİNE SINIFI — YALNIZ SUNUM/RAPOR ETİKETİ. Levent tüketen makine dokuma
+/// tezgahıyla sınırlı değildir (`DEVERE-LEVENT-TARAMASI.md` §9.5): raşel (çözgülü
+/// örme) de levent tüketir, kılavuz barı başına bir levent.
+///
+/// ⚠️⚠️ DAVRANIŞ BU ALANDAN DALLANMAZ. Ne sayacın birimi, ne randımanın paydası,
+/// ne metre formülü buraya bakar. Sebep iki tane ve ikisi de kural:
+///   (1) `kind`-dispatch yasağı — kök `CLAUDE.md`: "yeni `kind === ...` karşılaştırması"
+///       yasaktır ve bu alan üstünde dallanan her formül tam olarak odur;
+///   (2) ÇİFT YÜKLEM — sinyal `PICK_COUNTER` derken sınıf `WARP_KNIT` derse hangisi
+///       kazanır? Cevabı olmayan soru sorulmaz: birim SİNYALDE yaşar, sıklık KOŞUMDA.
+/// Bu yüzden alan ZORUNLU DEĞİLDİR ve NULL kalabilir: "ağızlıksız makine" bilgisini
+/// `shedType IS NULL` zaten söyler (2026-09-12 düşmanca denetimi, §10/#22).
+///
+/// ⚠️ VERİ alanıdır, bayrak değil: aynı fabrikada hem tezgah hem raşel olur.
+enum MachineClass {
+  LOOM       // dokuma tezgahı
+  WARP_KNIT  // raşel / çözgülü örme
+  WARPER     // devere / çözgü makinesi — kumaş üretmez, levent üretir
+}
+
 /// Ağızlık düzeni — SUNUM + KAPASİTE alanı, davranış dispatch'i DEĞİL.
+/// ⚠️ NULLABLE: çözgülü örme makinesi ağızlık AÇMAZ. Eski NOT NULL hâli raşeli
+/// şemadan yapısal olarak dışlıyordu — `MachineSpec` satırı açılamayan makine izleme
+/// kapsamına hiç giremiyordu (2026-09-12 kararı, §10/#22).
 enum LoomShedType { ARMUR  JAKAR  KAM }
 
 /// Atkı atma sistemi — bakım sınıfı ve tipik devir aralığının çıpası.
+/// ⚠️ NULLABLE: çözgülü örmede atkı YOKTUR; beş değerin hiçbiri karşılamaz.
 enum LoomWeftInsertion { RAPIER  AIRJET  WATERJET  PROJECTILE  SHUTTLE }
 
 /// Sinyalin ANLAMI (marka bağımsız). Taşıma `PeripheralDevice.protocol`ta.
-enum LoomSignalKind {
+enum MachineSignalKind {
   RUN_CONTACT    // çalışıyor/duruyor kontağı veya durum word'ü biti
-  PICK_COUNTER   // KÜMÜLATİF atkı sayacı — TERCİH EDİLEN yol
+  PICK_COUNTER   // KÜMÜLATİF atkı sayacı — dokumada TERCİH EDİLEN yol
+  COURSE_COUNTER // KÜMÜLATİF sıra (course) sayacı — çözgülü örmede atkının karşılığı
+  RACK_COUNTER   // KÜMÜLATİF rack sayacı (1 rack = 480 sıra) — çevrim `scale`de, ayrı formül YOK
   RUN_SECONDS    // makinenin kendi kümülatif çalışma saati sayacı
   INSTANT_RPM    // doğrudan devir okunabiliyorsa
   WARP_STOP      // çözgü kopuş sinyali
@@ -177,23 +203,23 @@ enum LoomSignalKind {
 }
 
 /// Tezgahın ŞU ANKİ hâli. SEMI E10'un sadeleştirilmişi.
-enum LoomRunState { RUNNING  STOPPED  SETUP  OFF  UNKNOWN }
+enum MachineRunState { RUNNING  STOPPED  SETUP  OFF  UNKNOWN }
 
 /// Rakam NEREDEN geldi. ⚠️ `@default` VERİLMEZ — her yazar açıkça beyan eder.
 /// INFERRED: sayaç durağanlığından ÇIKARILDI (röle/kontak yok). Güvenilirliği
 /// MACHINE'den düşüktür ve rapor bunu ayrı beyan eder — `MACHINE` damgası
 /// altında gizlenmesi yasak.
-enum LoomDataSource { MACHINE  INFERRED  OPERATOR  SUPERVISOR  SIMULATED }
+enum MachineDataSource { MACHINE  INFERRED  OPERATOR  SUPERVISOR  SIMULATED }
 
 /// Sayaç farkının NİTELİĞİ — uydurulmuş fark yazılmaz, nitelenir.
-enum LoomDeltaQuality { OK  WRAPPED  RESET  GAP  ANOMALY }
+enum MachineDeltaQuality { OK  WRAPPED  RESET  GAP  ANOMALY }
 
 /// Duruşun randıman muhasebesindeki kovası (ISO 22400-2 zaman modeli +
 /// SEMI E10 durum sınıfları + Nakajima altı büyük kayıp).
 /// ⚠️ MINOR bir SEBEP SINIFI DEĞİL, bir SÜRE SINIFIDIR: yalnız
 /// `tezgah.stopEventMinSeconds` altındaki duruşlardan türer ve
 /// `ReasonPreset.stopLossClass`a ASLA yazılamaz (CHECK ile zorlanır, §5.2).
-enum LoomStopLossClass {
+enum MachineStopLossClass {
   UNPLANNED      // arıza, kopuş sonrası bekleme, operatör yok
   PLANNED        // planlı bakım, temizlik, mola
   SETUP          // levent bağlama · tahar · tarak · desen değişimi
@@ -201,14 +227,14 @@ enum LoomStopLossClass {
   NON_SCHEDULED  // sipariş yok / vardiya planlı değil — HİÇBİR paydada yok
 }
 
-enum LoomStopEndSource { MACHINE  OPERATOR  MANUAL  WATCHDOG }
+enum MachineStopEndSource { MACHINE  OPERATOR  MANUAL  WATCHDOG }
 
 /// Vardiya karnesinin mühür DURUMU. `sealedAt` bir damgadır, durum değil.
-enum LoomSealState { OPEN  SEALED }
+enum MachineSealState { OPEN  SEALED }
 
 /// Mühür defterinin eylem türü — serbest metin DEĞİL (dördüncü bir değer
 /// sessizce kabul edilemez, §2.10).
-enum LoomSealAction { SEAL  UNSEAL  RESEAL }
+enum MachineSealAction { SEAL  UNSEAL  RESEAL }
 
 /// Bir tezgahın İZLEME OLGUNLUĞU — kanal kabul testinin KODLA zorlanan hâli.
 /// ⚠️ ÜÇ DEĞER ve varsayılan **OFF**: "yeni davranış bayrağının varsayılanı =
@@ -220,7 +246,7 @@ enum LoomSealAction { SEAL  UNSEAL  RESEAL }
 ///            raporları (R1–R5) bu tezgahı varsayılan olarak SÜZER; gölge karne
 ///            yalnız "Devreye Alma" sekmesinde ve dışa aktarımda GÖLGE damgalı.
 ///   LIVE   : kabul kapısı geçildi, rakam yayınlanabilir (§2.3, §5.3).
-enum LoomMonitoringState { OFF  SHADOW  LIVE }
+enum MachineMonitoringState { OFF  SHADOW  LIVE }
 ```
 
 ### 2.3 · Makine künyesi ve sinyal haritası
@@ -228,15 +254,19 @@ enum LoomMonitoringState { OFF  SHADOW  LIVE }
 ```prisma
 /// DURUM / MASTER DATA — tezgahın teknik künyesi. Satırın VARLIĞI "bu makine
 /// bir tezgahtır" demektir; `Machine.kind` enum'u AÇILMADI (kind-dispatch
-/// yasağı). Ayrı tablo: (a) alanlar `Machine`e girseydi adnansahin'in kurşun
-/// makinesinde ölü kolon olurdu; (b) `shedType` burada NOT NULL olabiliyor,
-/// kolon olsaydı "tezgah mı değil mi" sorusu üç değerli olurdu.
-model LoomSpec {
+/// yasağı). Ayrı tablo: alanlar `Machine`e girseydi adnansahin'in kurşun
+/// makinesinde ölü kolon olurdu.
+/// ⚠️ SATIRIN VARLIĞI "bu makine İZLENİYOR" demektir — "bu makine bir DOKUMA
+/// TEZGAHIDIR" DEĞİL — ne olduğu `Machine.machineClass` etiketinden okunur, ve o etiket
+/// zorunlu bile değildir: "ağızlıksız makine" bilgisini `shedType IS NULL` zaten söyler.
+model MachineSpec {
   id        String  @id @default(uuid()) @db.Uuid
   machineId String  @unique @db.Uuid
   machine   Machine @relation(fields: [machineId], references: [id], onDelete: Cascade)
 
-  shedType      LoomShedType
+  /// ⚠️ NULLABLE — ağızlık açmayan makinede (çözgülü örme) boştur. Sınıfa bağlı CHECK
+  /// YAZILMAZ: sınıf üstünde dallanmak `kind`-dispatch olurdu ve etiket zorunlu değil.
+  shedType      LoomShedType?
   /// ⚠️ `isMonitored Boolean` KALDIRILDI (Fable denetimi): tek boolean, kabul
   /// testinden BAĞIMSIZ açılabiliyordu ve "gölge mod" yalnız bir reçete cümlesiydi
   /// — NC/NO rölesi ters bağlı bir tezgah %100 randımanla MÜHÜRLENİRDİ, mühür de
@@ -253,7 +283,7 @@ model LoomSpec {
   ///   ③ anomali oranı ≤ `tezgah.acceptanceMaxAnomalyPct` (5) — **409 `SHADOW_ANOMALY`**.
   /// LIVE'dan geri dönüş SEBEPLİ DEMOTE'tur (`demoteReason` zorunlu); `acceptedAt`
   /// ASLA null'lanmaz (ileri damga null'lanmaz kuralı), demote ayrı damga yazar.
-  monitoringState LoomMonitoringState @default(OFF)
+  monitoringState MachineMonitoringState @default(OFF)
   acceptedAt      DateTime? @db.Timestamptz
   acceptedById    String?   @db.Uuid
   acceptedNote    String?   @db.VarChar(300)
@@ -292,10 +322,10 @@ model LoomSpec {
   updatedAt   DateTime @updatedAt @db.Timestamptz
   createdById String?  @db.Uuid
   updatedById String?  @db.Uuid
-  createdBy   User?    @relation("LoomSpecCreatedBy", fields: [createdById], references: [id])
-  updatedBy   User?    @relation("LoomSpecUpdatedBy", fields: [updatedById], references: [id])
+  createdBy   User?    @relation("MachineSpecCreatedBy", fields: [createdById], references: [id])
+  updatedBy   User?    @relation("MachineSpecUpdatedBy", fields: [updatedById], references: [id])
 
-  @@map("loom_specs")
+  @@map("machine_specs")
 }
 
 /// MASTER DATA — bir çevre cihazının OKUNABİLİR NOKTALARI. (FAZ 2)
@@ -308,7 +338,7 @@ model PeripheralSignal {
   peripheralId String           @db.Uuid   // ⚠️ NOT NULL — kanal fiziksel uç noktasız var olamaz
   peripheral   PeripheralDevice @relation(fields: [peripheralId], references: [id], onDelete: Cascade)
 
-  kind     LoomSignalKind
+  kind     MachineSignalKind
   /// YER: Modbus register no · OPC-UA NodeId · DI kanalı ("DI3") · regex grubu.
   /// ANLAM `kind`te, YER burada.
   pointRef String @db.VarChar(64)
@@ -319,7 +349,7 @@ model PeripheralSignal {
   scale      Decimal? @db.Decimal(12, 6)
   debounceMs Int      @default(50)   // kuru kontakta ZORUNLU
   /// Sayaç taşma modülü (16-bit register → 65536). SİNYALİN özelliğidir,
-  /// makinenin değil — `LoomSpec`te İKİZİ YOK.
+  /// makinenin değil — `MachineSpec`te İKİZİ YOK.
   /// ⚠️ NULL DOĞAR ve sarma yorumu KAPALIDIR: her negatif sıçrama RESET/ANOMALY
   /// olur. Modülüs yalnız kanal kabul testinde ÖLÇÜLEREK girilir (§10/#17).
   counterModulus Decimal? @db.Decimal(18, 0)
@@ -328,7 +358,7 @@ model PeripheralSignal {
   /// 1'in `PICK_COUNTER`ından türetilir, ikinci kanal karşılaştırma içindir.
   slot Int @default(1)
 
-  /// KANAL KABUL DAMGASI — `LoomSpec` LIVE kapısının ① numaralı ön koşulu.
+  /// KANAL KABUL DAMGASI — `MachineSpec` LIVE kapısının ① numaralı ön koşulu.
   /// ⚠️ Damgayı "elle tetikledim" BEYANI yazdırmaz: `POST /api/tezgah/signals/:id/accept`
   /// sunucunun son 60 sn'de o kanaldan GÖRDÜĞÜ değişimi arar, yoksa
   /// **409 `SIGNAL_NOT_OBSERVED`** (ters NC/NO kabul ekranının sorusuyla
@@ -336,7 +366,7 @@ model PeripheralSignal {
   /// ⚠️ TEK YAZAR NULL'LAR: `pointRef`/`dataType`/`bitIndex`/`invert`/`scale`/
   /// `counterModulus`/`slot` alanlarından biri değişirse kabul damgası aynı
   /// serviste NULL'lanır — kanal tanımı değişti, eski gözlem o kanalın kanıtı
-  /// değildir. (`LoomSpec.acceptedAt` null'lanmaz; bu kolon DAMGA değil KANIT.)
+  /// değildir. (`MachineSpec.acceptedAt` null'lanmaz; bu kolon DAMGA değil KANIT.)
   acceptedAt   DateTime? @db.Timestamptz
   acceptedById String?   @db.Uuid
 
@@ -350,13 +380,13 @@ model PeripheralSignal {
 }
 ```
 
-> **⚠️ Yazma yolu `/api/machines` altına GİRMEZ.** `src/middlewares/module.middleware.ts:25-42` `/api/stations · /api/machines · /api/work-sessions` yollarını **bilinçli kapısız** (çekirdek) sayar. `LoomSpec` ve `PeripheralSignal` CRUD'u oraya eklenseydi **tezgah modülü kapalıyken yazılabilirdi**. İkisi de kendi router'ında (`/api/tezgah/specs`, `/api/tezgah/signals`) `requireTezgahEnabled` arkasında doğar.
+> **⚠️ Yazma yolu `/api/machines` altına GİRMEZ.** `src/middlewares/module.middleware.ts:25-42` `/api/stations · /api/machines · /api/work-sessions` yollarını **bilinçli kapısız** (çekirdek) sayar. `MachineSpec` ve `PeripheralSignal` CRUD'u oraya eklenseydi **tezgah modülü kapalıyken yazılabilirdi**. İkisi de kendi router'ında (`/api/tezgah/specs`, `/api/tezgah/signals`) `requireTezgahEnabled` arkasında doğar.
 >
 > **⚠️ Panelde `protocol` alanı.** `PeripheralDeviceFormDialog` bugün `connectionType`/`readMode`/`scale`/`simulate` alanlarını çiziyor. Kolon nullable doğduğu için şema tarafı K2'ye uygundur; **form alanı koşulsuz eklenirse adnansahin'in çevre birimi formunda yeni bir "protokol" seçicisi belirir → K3 ihlali.** Alan panelde yalnız `kind === SIGNAL_SOURCE` **ve** `tezgahEnabled` iken çizilir; zorunluluk yalnız modül açıkken ingest doğrulamasında uygulanır.
 >
 > **⚠️ Silinmiş cihazın aktif sinyali — asıl sed YÜKLEMDEDİR, Cascade değil.** `PeripheralDevice` fiziksel olarak SİLİNMEZ, **mezar taşı alır** (`peripheral.service.ts:204-224`: *"KALICI silme — fiziksel DELETE DEĞİL… `deletedAt` damgalanır"*). Dolayısıyla `PeripheralSignal.peripheral … onDelete: Cascade` pratikte **ölü bir yoldur** ve yalnız son hat olarak durur; gerçek risk, silinmiş cihazın sinyalinin ingest kapsamında yaşamaya devam etmesidir. Kapsam çözümü `signal.isActive AND peripheral.deletedAt IS NULL` koşulunu **TEK helper'da** taşır (boğaz-ikizi Prisma parçasıyla birlikte değişir, §3.3/7): silinmiş cihazın aktif sinyali kapsamda görünmez, kalem **403 `MACHINE_NOT_IN_SCOPE`** alır.
 >
-> **⚠️ `LoomSpec` Cascade'i KALIR ama önizleme künyeyi ADIYLA listeler.** `Machine` bugün `test_hard_delete_guard_coverage`in `WATCHED` kümesinde **yok** (`:32` — yalnız `Item`, `Customer`, `Device`), yani tezgahın Cascade çocukları eksiksizlik taramasına hiç girmiyor. İki satır: **(1)** `WATCHED`a `"Machine"` eklenir ve `EXPECTED` envanterine her Cascade kendi gerekçesiyle yazılır (Faz 1a'da yalnız `Machine <- LoomSpec.machine : Cascade` — *"cascade-intended: künye makinesiz anlamsız"*). **(2)** Silme önizlemesi tezgah künyesini adıyla listeler; `baselineRunHours` DOLUYSA satır bir **GUARD**'dır (ERP öncesi çalışma saati bakiyesi **elle girilmiş** veridir, sessizce ölemez) → 409 + *"önce bakiyeyi not alın"*. Audit `oldData` yalnız `Machine` skalarlarını taşır (`guarded-hard-remove.ts:269`), yani iz oraya bırakılamaz.
+> **⚠️ `MachineSpec` Cascade'i KALIR ama önizleme künyeyi ADIYLA listeler.** `Machine` bugün `test_hard_delete_guard_coverage`in `WATCHED` kümesinde **yok** (`:32` — yalnız `Item`, `Customer`, `Device`), yani tezgahın Cascade çocukları eksiksizlik taramasına hiç girmiyor. İki satır: **(1)** `WATCHED`a `"Machine"` eklenir ve `EXPECTED` envanterine her Cascade kendi gerekçesiyle yazılır (Faz 1a'da yalnız `Machine <- MachineSpec.machine : Cascade` — *"cascade-intended: künye makinesiz anlamsız"*). **(2)** Silme önizlemesi tezgah künyesini adıyla listeler; `baselineRunHours` DOLUYSA satır bir **GUARD**'dır (ERP öncesi çalışma saati bakiyesi **elle girilmiş** veridir, sessizce ölemez) → 409 + *"önce bakiyeyi not alın"*. Audit `oldData` yalnız `Machine` skalarlarını taşır (`guarded-hard-remove.ts:269`), yani iz oraya bırakılamaz.
 
 ### 2.4 · Toplayıcı kimliği (FAZ 2)
 
@@ -366,7 +396,7 @@ model PeripheralSignal {
 /// taşır (`x-device-id`, sır değil), toplayıcı 7/24 deftere yazdığı için KİMLİK
 /// BİLGİSİ taşır. `Device`a `kind=COLLECTOR`+`tokenHash` eklemek tablet yoluna
 /// sır sokardı — reddedildi.
-model LoomCollector {
+model MachineCollector {
   id           String       @id @default(uuid()) @db.Uuid
   /// Ajanın ilk açılışta üretip diskte tuttuğu yerel UUID (`Device.deviceId` emsali).
   collectorKey String       @unique @db.VarChar(64)
@@ -411,33 +441,33 @@ model LoomCollector {
   lastSeenAt  DateTime? @db.Timestamptz
 
   isActive Boolean @default(true)
-  machines LoomCollectorMachine[]
+  machines MachineCollectorLink[]
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
   createdById String?  @db.Uuid
   updatedById String?  @db.Uuid
-  createdBy   User?    @relation("LoomCollectorCreatedBy", fields: [createdById], references: [id])
-  updatedBy   User?    @relation("LoomCollectorUpdatedBy", fields: [updatedById], references: [id])
+  createdBy   User?    @relation("MachineCollectorCreatedBy", fields: [createdById], references: [id])
+  updatedBy   User?    @relation("MachineCollectorUpdatedBy", fields: [updatedById], references: [id])
 
   @@unique([nameFold])
   @@index([status])
-  @@map("loom_collectors")
+  @@map("machine_collectors")
 }
 
 /// YAZMA KAPSAMI — fail-closed. ⚠️ `machineId` UNIQUE: bir makinenin TEK yazarı
 /// olur. İki toplayıcı aynı tezgaha basarsa upsert'ler birbirini sessizce ezer
 /// ve açık-duruş seddi ajana SONSUZ 409 olarak görünürdü; bu bir yapılandırma
 /// hatasıdır → 409 MACHINE_ALREADY_CLAIMED, onay ekranında.
-model LoomCollectorMachine {
+model MachineCollectorLink {
   collectorId String        @db.Uuid
   machineId   String        @unique @db.Uuid
-  collector   LoomCollector @relation(fields: [collectorId], references: [id], onDelete: Cascade)
+  collector   MachineCollector @relation(fields: [collectorId], references: [id], onDelete: Cascade)
   machine     Machine       @relation(fields: [machineId], references: [id], onDelete: Cascade)
   createdAt   DateTime      @default(now()) @db.Timestamptz   // M:N pivot → updatedAt YOK
 
   @@id([collectorId, machineId])
-  @@map("loom_collector_machines")
+  @@map("machine_collector_machines")
 }
 ```
 
@@ -471,7 +501,7 @@ model ShiftDefinition {
   isActive       Boolean @default(true)
 
   instances ShiftInstance[]
-  /// ⚠️ GENERATED STORED, ham SQL'de **NOT NULL** (bkz. LoomCollector.nameFold notu).
+  /// ⚠️ GENERATED STORED, ham SQL'de **NOT NULL** (bkz. MachineCollector.nameFold notu).
   nameFold  String? @default(dbgenerated())
 
   createdAt   DateTime @default(now()) @db.Timestamptz
@@ -506,8 +536,8 @@ model ShiftInstance {
   cancelReason String? @db.VarChar(300)
 
   shiftDefinition ShiftDefinition @relation(fields: [shiftDefinitionId], references: [id], onDelete: Restrict)
-  machineStats    LoomShiftStat[]
-  stops           LoomStopEvent[]
+  machineStats    MachineShiftStat[]
+  stops           MachineStopEvent[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -534,7 +564,7 @@ model ShiftInstance {
 /// `EndpointLatencyDaily` + `latency-persist.service` ile AYNI SINIF.
 /// Defter olamaz: defterin TERS YOLU olmak zorundadır, kovanınki ise "yeniden
 /// yaz"dır. Ham 10 sn örneğin neden hiç yazılmadığı: §4.
-model LoomInterval {
+model MachineInterval {
   machineId     String   @db.Uuid
   /// `tezgah.bucketMinutes`e HİZALI — vardiya sınırı bunun katı olmak ZORUNDA
   /// (400 ile doğrulanır), böylece kova iki vardiyaya hiç bölünmez.
@@ -560,7 +590,7 @@ model LoomInterval {
   stopSec   Int?
   /// ⚠️ Ajan bu kovanın kaç saniyesini GÖREBİLDİ. Eksik veri %100 randıman gibi
   /// GÖRÜNEMEZ — izleme sistemlerinin en sık sessiz yalanı budur.
-  /// ⚠️ SATIR İÇİ DB CHECK (`loom_intervals_observed_chk`, ham SQL + envanter):
+  /// ⚠️ SATIR İÇİ DB CHECK (`machine_intervals_observed_chk`, ham SQL + envanter):
   ///   `runSec + stopSec + minorStopSec <= observedSec`  **VE**
   ///   `observedSec <= bucketMinutes * 60`
   /// — "kova içi terimler kova boyunu aşamaz" değişmezi mutabakat bekçisini
@@ -568,8 +598,8 @@ model LoomInterval {
   observedSec Int
 
   /// Eşik ALTI duruşlar burada SAYI olarak yaşar (ayrı defter satırı açılmaz).
-  /// ⚠️ AD TEKTİR: `minorStop*` — karnenin (`LoomShiftStat.minorStopSec`, §2.10)
-  /// ve `LoomStopLossClass.MINOR`ın adıyla BİREBİR. Eski `microStop*` adı AYNI
+  /// ⚠️ AD TEKTİR: `minorStop*` — karnenin (`MachineShiftStat.minorStopSec`, §2.10)
+  /// ve `MachineStopLossClass.MINOR`ın adıyla BİREBİR. Eski `microStop*` adı AYNI
   /// büyüklüğe ikinci bir ad veriyordu ve terim iki tabloda karşılaştırılamıyordu;
   /// "mikro duruş" yalnız KONUŞMA DİLİDİR, kolon adı değildir.
   minorStopCount Int @default(0)
@@ -584,15 +614,15 @@ model LoomInterval {
   weftStopCount  Int?
   otherStopCount Int?
 
-  /// ⚠️ İkisi de **ATKI/DK**tır ve bu kovada GÖZLENEN değerlerdir — `LoomSpec`in
+  /// ⚠️ İkisi de **ATKI/DK**tır ve bu kovada GÖZLENEN değerlerdir — `MachineSpec`in
   /// fiziksel tavanı (`maxRevPerMin`, **devir/dk**) ile karıştırılmaz (§3.4 birim seddi).
   avgPicksPerMin Int?
   maxPicksPerMin Int?
 
-  deltaQuality LoomDeltaQuality
-  source       LoomDataSource
+  deltaQuality MachineDeltaQuality
+  source       MachineDataSource
   collectorId  String?          @db.Uuid
-  collector    LoomCollector?   @relation(fields: [collectorId], references: [id], onDelete: Restrict)
+  collector    MachineCollector?   @relation(fields: [collectorId], references: [id], onDelete: Restrict)
   /// SON yeniden yazımın izi — "her yeniden yazımın izi" DEĞİL (tam sayım
   /// `restateCount`ta). ⚠️ YALNIZ GERÇEKTEN DEĞİŞEN satırda dolar: yazım tek ham
   /// `ON CONFLICT … DO UPDATE … WHERE <satır EXCLUDED'dan FARKLI>` ifadesidir
@@ -613,14 +643,14 @@ model LoomInterval {
   /// üstüne yaz + `restatedAt` (duruş span'inde kural TERSİDİR, §3.5).
   @@id([machineId, bucketStart])
   @@index([bucketStart])
-  @@map("loom_intervals")
+  @@map("machine_intervals")
 }
 // ŞEMA-DIŞI PARTIAL INDEX (anomali kuyruğu — satırların ~%99'u OK):
-//   loom_intervals_anomaly_idx (machineId, bucketStart)
+//   machine_intervals_anomaly_idx (machineId, bucketStart)
 //     WHERE "deltaQuality" <> 'OK'
 //
 // ŞEMA-DIŞI CHECK (ham SQL + test_db_invariants envanteri):
-//   loom_intervals_bucket_chk:
+//   machine_intervals_bucket_chk:
 //     CHECK ("bucketMinutes" IN (<izin verilen kova boyları>))
 //   ⚠️ Küme migration'da YAZILIDIR ve `tezgah.bucketMinutes` bayrağının kabul
 //      ettiği değerlerle BİREBİRDİR (§3.5): bayat bir ajan ızgara dışı kova boyu
@@ -639,11 +669,11 @@ model LoomInterval {
 ///
 /// ⚠️ İKİ YAŞAM SINIFI TEK TABLODA — BİLİNÇLİ İSTİSNA, beş sedle korunur (§4).
 /// Sınırı İNSAN KARARIDIR (sebep değil): bir insan karar vermiş duruş DEFTERDİR
-/// (budanmaz, geri alma `revokedAt`, değişim `LoomStopReclass`); makineden türeyen
+/// (budanmaz, geri alma `revokedAt`, değişim `MachineStopReclass`); makineden türeyen
 /// sınıflandırma ya da sınıflandırılmamış + vardiyası MÜHÜRLÜ duruş TELEMETRİDİR
 /// (rakamı karnede donmuştur, kovayla birlikte düşer). Sınırın "sebep var mı"
 /// olması, Faz 2'nin otomatik sınıflamasıyla birlikte her şeyi kalıcılaştırırdı.
-model LoomStopEvent {
+model MachineStopEvent {
   id        String  @id @default(uuid()) @db.Uuid
   machineId String  @db.Uuid
   runId     String? @db.Uuid
@@ -675,21 +705,21 @@ model LoomStopEvent {
   /// ⚠️ WATCHDOG bir TAHMİNDİR, iş kararı değil: sonradan gelen GERÇEK kapanış
   /// bir ÇELİŞKİ değil bir DÜZELTMEDİR ve `endCorrectedAt` ile damgalanır
   /// (ileri damga null'lanmaz, yeni damga eklenir — §3.5).
-  endSource       LoomStopEndSource?
+  endSource       MachineStopEndSource?
   endCorrectedAt  DateTime? @db.Timestamptz
 
-  /// MAKİNE GERÇEĞİ — ayrı `LoomDetectedCause` enum'u AÇILMADI (marka enum'u
+  /// MAKİNE GERÇEĞİ — ayrı `MachineDetectedCause` enum'u AÇILMADI (marka enum'u
   /// büyütmek fork'un ilk sinyali); ham kod ÇEVRİLMEDEN saklanır.
-  signalKind  LoomSignalKind?
+  signalKind  MachineSignalKind?
   rawStopCode String?         @db.VarChar(32)
 
   /// SINIFLANDIRMA — NULL = KARAR YOK. ⚠️ `SINIFLANDIRILMAMIS` preset'i YOKTUR
   /// (olsaydı kuyruk onunla temizlenirdi); `TESPIT_EDILEMEDI` bir KARARDIR.
   reasonCode     String?            @db.VarChar(64)   // ReasonPreset.code, FK'sız (Roll.cancelReasonCode emsali)
   /// Preset'ten KOPYALANIR ve DONAR — katalog değişse geçmiş rapor değişmez.
-  lossClass      LoomStopLossClass?
+  lossClass      MachineStopLossClass?
   reasonNote     String?            @db.VarChar(300)
-  reasonSource   LoomDataSource?
+  reasonSource   MachineDataSource?
   classifiedById String?            @db.Uuid
   classifiedAt   DateTime?          @db.Timestamptz
 
@@ -702,7 +732,7 @@ model LoomStopEvent {
   factoryDay      DateTime @db.Date          // @db.Date muafı → test_timestamptz_contract envanteri
   pickCounter     Decimal? @db.Decimal(18, 0)   // kova budansa bile üretim çıpası
 
-  source      LoomDataSource
+  source      MachineDataSource
   collectorId String?        @db.Uuid
 
   /// GERİ ALMA — hayalet duruş SİLİNMEZ, damgalanır (`RollOperation.revokedAt`).
@@ -711,11 +741,11 @@ model LoomStopEvent {
   revokeReason String?   @db.VarChar(300)
 
   machine       Machine        @relation(fields: [machineId], references: [id], onDelete: Restrict)
-  run           LoomRun?       @relation(fields: [runId], references: [id])
+  run           MachineRun?       @relation(fields: [runId], references: [id])
   shiftInstance ShiftInstance? @relation(fields: [shiftInstanceId], references: [id])
-  classifiedBy  User?          @relation("LoomStopClassifiedBy", fields: [classifiedById], references: [id])
-  collector     LoomCollector? @relation(fields: [collectorId], references: [id], onDelete: Restrict)
-  reclasses     LoomStopReclass[]
+  classifiedBy  User?          @relation("MachineStopClassifiedBy", fields: [classifiedById], references: [id])
+  collector     MachineCollector? @relation(fields: [collectorId], references: [id], onDelete: Restrict)
+  reclasses     MachineStopReclass[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -725,12 +755,12 @@ model LoomStopEvent {
   @@index([reasonCode, startedAt])
   @@index([shiftInstanceId])
   @@index([runId])
-  @@map("loom_stop_events")
+  @@map("machine_stop_events")
 }
 // ŞEMA-DIŞI PARTIAL INDEXLER (ham SQL + test_db_invariants envanteri):
-//   loom_stops_one_open_per_machine_uq (machineId)
+//   machine_stops_one_open_per_machine_uq (machineId)
 //     WHERE "endedAt" IS NULL AND "revokedAt" IS NULL          ← tek açık duruş seddi
-//   loom_stops_key_uq (machineId, stopKey)
+//   machine_stops_key_uq (machineId, stopKey)
 //     WHERE "revokedAt" IS NULL                                ← replay seddi
 //     ⚠️ ANAHTAR AJAN ÜRETİMİ TOKEN'DIR, SAAT DEĞİL. Eski
 //        `(machineId, startedAt, source)` + saniye kuantizasyonu KALKTI:
@@ -740,11 +770,11 @@ model LoomStopEvent {
 //        ne kadar kayarsa kaysın TEK satırdır.
 //     ⚠️ PARTIAL yüklemi (`revokedAt IS NULL`) şarttır — geri alınmış duruş
 //        sedde yer işgal etmez; yeniden gönderim 409 `STOP_REVOKED` alır (§3.5b).
-//   loom_stops_duty_idx (startedAt)
+//   machine_stops_duty_idx (startedAt)
 //     WHERE "requiresReason" AND "reasonCode" IS NULL AND "revokedAt" IS NULL
 //
 // ŞEMA-DIŞI TRIGGER (§4 — budamanın DB seddi):
-//   loom_stop_events_block_classified_delete  BEFORE DELETE
+//   machine_stop_events_block_classified_delete  BEFORE DELETE
 //     RAISE EXCEPTION WHEN "classifiedById" IS NOT NULL
 //                       OR "reasonSource" IN ('OPERATOR','SUPERVISOR')
 //     ⚠️ Yüklem İNSAN KARARINA daraltıldı (§4): makineden türeyen sınıflandırma
@@ -758,31 +788,31 @@ model LoomStopEvent {
 /// doktrini bunu yerinde yapmayı yasaklar. İz audit'e bırakılamaz (6 ayda
 /// arşivlenir, "iş kaynağı OLARAK OKUNAMAZ"). `Shipment.status ↔ ShipmentEvent`
 /// ikilisinin aynısı; yazar tek servis kapısıdır, ikinci yazar doğmaz.
-model LoomStopReclass {
+model MachineStopReclass {
   id            String   @id @default(uuid()) @db.Uuid
   stopEventId   String   @db.Uuid
   fromReasonCode String? @db.VarChar(64)
   toReasonCode   String? @db.VarChar(64)
-  fromLossClass  LoomStopLossClass?
-  toLossClass    LoomStopLossClass?
+  fromLossClass  MachineStopLossClass?
+  toLossClass    MachineStopLossClass?
   reason         String? @db.VarChar(300)
   actedById      String? @db.Uuid
 
-  stopEvent LoomStopEvent @relation(fields: [stopEventId], references: [id], onDelete: Restrict)
-  actedBy   User?         @relation("LoomStopReclassBy", fields: [actedById], references: [id])
+  stopEvent MachineStopEvent @relation(fields: [stopEventId], references: [id], onDelete: Restrict)
+  actedBy   User?         @relation("MachineStopReclassBy", fields: [actedById], references: [id])
   createdAt DateTime      @default(now()) @db.Timestamptz
 
   @@index([stopEventId, createdAt])
-  @@map("loom_stop_reclasses")
+  @@map("machine_stop_reclasses")
 }
 ```
 
 **İlk sınıflandırma da atomik claim'dir:** `updateMany WHERE { id, reasonCode: null, revokedAt: null }` + `count === 0 → 409` (taze okumayla tanı). `findUnique → if → update` YASAK.
 
 > **⚠️ GERİ ALMA DA MÜHÜR SINIRINA TABİDİR.** Mühür sınırı sentezde yalnız iki yolda kuruluydu (geç gelen ingest kalemi · geriye dönük SINIFLANDIRMA); duruşun `revokedAt` ile geri alınması kapısızdı — defter *"geri alındı"* derken karne **hayaleti saymaya devam ederdi.**
-> **Kural:** `sealState = SEALED` vardiyaya düşen bir duruşun `revokedAt`i doğrudan yazılamaz → **409 `SHIFT_SEALED`**. Yol tektir: `loom:shift-unseal` → revoke (defter satırı) → yeniden hesap → **yeni `sealGeneration`** ile yeniden mühür (`LoomShiftStatSeal` `RESEAL`). *Revoke defteri değiştirir, karneyi TEK BAŞINA değiştiremez.* Bekçi: `test_loom_shift_seal`e iki ayak — "mühürlü vardiyada revoke → 409" ve "unseal sonrası revoke → breakdown YENİ kuşakta düşer".
+> **Kural:** `sealState = SEALED` vardiyaya düşen bir duruşun `revokedAt`i doğrudan yazılamaz → **409 `SHIFT_SEALED`**. Yol tektir: `loom:shift-unseal` → revoke (defter satırı) → yeniden hesap → **yeni `sealGeneration`** ile yeniden mühür (`MachineShiftStatSeal` `RESEAL`). *Revoke defteri değiştirir, karneyi TEK BAŞINA değiştiremez.* Bekçi: `test_machine_shift_seal`e iki ayak — "mühürlü vardiyada revoke → 409" ve "unseal sonrası revoke → breakdown YENİ kuşakta düşer".
 
-**Sistem sebep kataloğu** (`constants/reason-presets.ts` → `REASON_PRESET_CATALOG.LOOM_STOP`, `isSystem: true`):
+**Sistem sebep kataloğu** (`constants/reason-presets.ts` → `REASON_PRESET_CATALOG.MACHINE_STOP`, `isSystem: true`):
 
 | code | stopLossClass |
 |---|---|
@@ -794,7 +824,7 @@ model LoomStopReclass {
 
 > **⚠️ Denetim düzeltmesi (ölçek merceği B2 — KRİTİK).** Sentez dört kopuş sebebini **süreden bağımsız** `MINOR` sayıyordu. `MINOR` ise APT'den DÜŞÜLMEZ (§5.2) — yani **45 dakikalık bir çözgü kopuşu kullanılabilirliği hiç düşürmeyecek, kayıp yalnız performansta erimiş görünecekti.** Belgenin kendi kapanışı bunu fark etmişti (*"45 dakikalık bir çözgü kopuşunun gerçek hikâyesi artık `OPERATOR_YOK`tur"*) ama sınıf atamasını düzeltmemişti. Karar: **`MINOR` bir SÜRE sınıfıdır, sebep sınıfı değil.** Yalnız `tezgah.stopEventMinSeconds` altındaki duruşlardan türer, tek helper'da (`loom-efficiency.helper`) yaşar, `ReasonPreset.stopLossClass`a yazılamaz (CHECK, §2.1) ve zaten eşik altı duruş **defter satırı bile olmaz** — kovada sayı olarak yaşar (§2.6). Bekçi sondası: 45 dk'lık `COZGU_KOPUSU` → `A` düşmeli.
 
-> ⭐ `LEVENT_BAGLAMA`/`TAHAR`/`TARAK_DEGISIMI` ile `DESEN_DEGISIMI`nin **ayrı kodlar** olması saha kaynağının ana bulgusunun karşılığıdır: *"Bir levent → çok desen. Atkı değişimi ucuz, levent değişimi pahalı. Kurulum defteri ikisini AYIRMAK zorunda."* Ayrı bir `MachineSetupEvent` tablosu AÇILMIYOR — ayrım sebep kodunda + `LoomRun` span sınırlarında yaşıyor; kimlik ayağı devere tarafındaki `WarpBeamEvent.MOUNTED`tadır (§7.3).
+> ⭐ `LEVENT_BAGLAMA`/`TAHAR`/`TARAK_DEGISIMI` ile `DESEN_DEGISIMI`nin **ayrı kodlar** olması saha kaynağının ana bulgusunun karşılığıdır: *"Bir levent → çok desen. Atkı değişimi ucuz, levent değişimi pahalı. Kurulum defteri ikisini AYIRMAK zorunda."* Ayrı bir `MachineSetupEvent` tablosu AÇILMIYOR — ayrım sebep kodunda + `MachineRun` span sınırlarında yaşıyor; kimlik ayağı devere tarafındaki `WarpBeamEvent.MOUNTED`tadır (§7.3).
 
 > **⚠️ `LEVENT_BAGLAMA` SINIRI — iki kaynak riski adıyla kapatılır.** Duruş defterindeki `LEVENT_BAGLAMA` süresi **YALNIZ randıman paydasını** (SETUP kovası) besler. Kurulum **SÜRESİ ve YÖNTEMİ** raporu (düğüm · tahar · takım kıyası) **yalnız `WarpBeamEvent.MOUNTED`** okur (`setupStartedAt` → `createdAt`, `mountMethod`; levent belgesi). **Hiçbiri diğerinden KOPYALANMAZ**; mutabakat bekçisi ikisini karşılaştırır ve `|Δ|` eşiği aşarsa **uyarı satırı** yazar (rakamı düzeltmez — iki defterin iki farklı soruya cevap vermesi normaldir).
 
@@ -805,7 +835,7 @@ model LoomStopReclass {
 /// Randımanın PAYDASI buradan doğar: teorik devir TEZGAHIN değil İŞİN
 /// özelliğidir. Atıf örneklem satırlarına DAMGALANMAZ — aralık defteri ucuz,
 /// doğru ve kova budandıktan sonra da yaşar.
-model LoomRun {
+model MachineRun {
   id        String    @id @default(uuid()) @db.Uuid
   machineId String    @db.Uuid
   startedAt DateTime  @db.Timestamptz
@@ -825,7 +855,7 @@ model LoomRun {
 
   /// HEDEF DEVİR (atkı/dk) — randımanın paydası. DEĞİŞİRSE KOŞUM KAPANIR,
   /// yenisi açılır; tek satırda iki devir tutmak paydayı belirsizleştirir.
-  /// NULL → `LoomSpec.nominalPicksPerMin` yedeği; o da NULL → PERFORMANS
+  /// NULL → `MachineSpec.nominalPicksPerMin` yedeği; o da NULL → PERFORMANS
   /// HESAPLANMAZ (uydurulmaz, rapor "P: ölçülemedi" der).
   targetPicksPerMin Int?
   /// DONMUŞ ATKI SIKLIĞI — **TEZGAH ÜSTÜ (HAM) atkı/cm**, mamul DEĞİL.
@@ -836,13 +866,13 @@ model LoomRun {
   /// ayrı helper açılır. Faz 1-2'de ELLE girilir (kalıcı evi §10/#9) ve DONAR;
   /// NULL meşrudur → metre üretilmez, randıman yine hesaplanır.
   /// ⚠️ TÜRETİLEN METRE ASLA STOK YAZMAZ — tek miktar gerçeği `Roll` ölçümüdür.
-  picksPerCm Decimal? @db.Decimal(8, 3)
+  unitsPerCm Decimal? @db.Decimal(8, 3)
 
   // ── KAPANIŞTA DONAN ÜRETİM TERİMLERİ (tek yazar: koşumu kapatan) ──────────
   /// ⚠️ Koşum "BUDANMAZ" ilan edilmişti ama içinde ÜRETİM TERİMİ YOKTU: metre
-  /// `LoomInterval.pickDelta`dan doğuyor, karne taneciği ise vardiya×makine
+  /// `MachineInterval.pickDelta`dan doğuyor, karne taneciği ise vardiya×makine
   /// (`runId` taşımaz) — retention penceresinden sonra "bu iş emri adımında kaç
-  /// atkı/metre üretildi" CEVAPSIZ kalır, `LoomRun` boş kabuk olarak yaşardı.
+  /// atkı/metre üretildi" CEVAPSIZ kalır, `MachineRun` boş kabuk olarak yaşardı.
   /// `workOrderStepId` taşıyan kayıt tanımı gereği İŞ KARARI verisidir.
   /// KURAL: koşum kapanırken üretim terimleri satıra DONAR; kova budandıktan
   /// sonra KOŞUM EKSENİ bu terimlerden cevaplanır, kovadan değil.
@@ -855,7 +885,7 @@ model LoomRun {
   /// Karne ekseni vardiya×makine olduğu için o soruyu karne cevaplayamaz.
   stopSecAtClose    Int?
   stopCountAtClose  Int?
-  /// TEK YAZAR `closeLoomRunTx`, atomik claim `WHERE closedTermsAt IS NULL`.
+  /// TEK YAZAR `closeMachineRunTx`, atomik claim `WHERE closedTermsAt IS NULL`.
   closedTermsAt     DateTime? @db.Timestamptz
 
   /// GERİ ALMA — yanlış açılmış koşum randımanın PAYDASINI taşır; tersi olmayan
@@ -872,20 +902,20 @@ model LoomRun {
   workOrderStep WorkOrderStep? @relation(fields: [workOrderStepId], references: [id], onDelete: Restrict)
   item          Item?          @relation(fields: [itemId], references: [id], onDelete: Restrict)
   color         Color?         @relation(fields: [colorId], references: [id], onDelete: Restrict)
-  stops         LoomStopEvent[]
+  stops         MachineStopEvent[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@index([machineId, startedAt])
   @@index([workOrderStepId])
-  @@map("loom_runs")
+  @@map("machine_runs")
 }
 // ŞEMA-DIŞI PARTIAL UNIQUE (⚠️ revokedAt yüklemi ŞART — geri alınmış koşum
 // sedde YER İŞGAL ETMEZ, yoksa yeni koşum açılamaz):
-//   loom_runs_one_open_per_machine_uq (machineId)
+//   machine_runs_one_open_per_machine_uq (machineId)
 //     WHERE "endedAt" IS NULL AND "revokedAt" IS NULL
-//   loom_runs_natural_uq (machineId, startedAt)
+//   machine_runs_natural_uq (machineId, startedAt)
 //     WHERE "revokedAt" IS NULL                    ← §2.11'in DOĞAL ANAHTARI
 //     ⚠️ Beyan edilen doğal anahtarın sedde karşılığı olmazsa aynı makinede aynı
 //        ana İKİ koşum açılır ve karnenin donmuş paydasının hangisinden geldiği
@@ -893,8 +923,8 @@ model LoomRun {
 //        işgal etmez, aynı an meşru biçimde yeniden açılabilir.
 ```
 
-> **⚠️ `WorkOrderStep` GERÇEKTEN hard delete ediliyor ve `LoomRun` o silmenin guard'ında yok.** Ölçüldü: `workorder.service.ts:5697` `await tx.workOrderStep.delete({ where: { id: old.id } })`, guard ise aynı bloktaki `old._count` toplamından kuruluyor (`:5691-5696`) — `loomRuns` o sayıma girmiyor. Restrict FK'sı olmasa bağ sessizce kopar, Restrict FK'sı olunca **P2003 → generic 400** düşer.
-> **Faz 2 iş kalemi (aynı commit):** `_count` kümesine `loomRuns` eklenir ve 409 mesajına *"bu adıma bağlı tezgah koşumu var"* satırı girer · `MACHINE_DELETE_GUARDS` bu fazda **İKİ sayaç** daha alır — `loomRunCount` + `loomCounterEventCount` (fazlama **TEK KAYNAK §2.1'dedir:** Faz 1a → `loomShiftStatCount` · Faz 1b → `loomStopCount` · Faz 2 → bu ikisi), böylece liste Faz 2 sonunda **dört** tezgah Restrict FK'sını (`LoomShiftStat` · `LoomStopEvent` · `LoomRun` · `LoomCounterEvent`) adıyla sayar · panel önizlemesi bunları listeler · `test_hard_delete_guard_coverage`in `EXPECTED` envanterine Faz 2'nin Cascade çocukları yazılır (`WATCHED`a `"Machine"` **Faz 1a'da** eklendi, §2.3).
+> **⚠️ `WorkOrderStep` GERÇEKTEN hard delete ediliyor ve `MachineRun` o silmenin guard'ında yok.** Ölçüldü: `workorder.service.ts:5697` `await tx.workOrderStep.delete({ where: { id: old.id } })`, guard ise aynı bloktaki `old._count` toplamından kuruluyor (`:5691-5696`) — `machineRuns` o sayıma girmiyor. Restrict FK'sı olmasa bağ sessizce kopar, Restrict FK'sı olunca **P2003 → generic 400** düşer.
+> **Faz 2 iş kalemi (aynı commit):** `_count` kümesine `machineRuns` eklenir ve 409 mesajına *"bu adıma bağlı tezgah koşumu var"* satırı girer · `MACHINE_DELETE_GUARDS` bu fazda **İKİ sayaç** daha alır — `machineRunCount` + `machineCounterEventCount` (fazlama **TEK KAYNAK §2.1'dedir:** Faz 1a → `machineShiftStatCount` · Faz 1b → `machineStopCount` · Faz 2 → bu ikisi), böylece liste Faz 2 sonunda **dört** tezgah Restrict FK'sını (`MachineShiftStat` · `MachineStopEvent` · `MachineRun` · `MachineCounterEvent`) adıyla sayar · panel önizlemesi bunları listeler · `test_hard_delete_guard_coverage`in `EXPECTED` envanterine Faz 2'nin Cascade çocukları yazılır (`WATCHED`a `"Machine"` **Faz 1a'da** eklendi, §2.3).
 
 ### 2.9 · Durum ve sayaç kararı (FAZ 2)
 
@@ -903,13 +933,13 @@ model LoomRun {
 /// geçmiş tutmaz, geri alınmaz, raporlanmaz. Canlı pano tek sorguyla okur.
 /// ⚠️ `Machine`in kolonu DEĞİL: `Machine` her CUD'da audit alır, saniyelik
 /// status upsert'i audit'i çöpe çevirirdi.
-/// ⚠️ PK `machineId @id` (`LoomSpec`in kalıbından BİLEREK farklı): bu tablo bir
+/// ⚠️ PK `machineId @id` (`MachineSpec`in kalıbından BİLEREK farklı): bu tablo bir
 /// VARLIK değil, makinenin ANLIK AYNASIDIR.
 /// ⚠️ `@@index([state])` YOK — 20 satırlık tabloda ölü ağaç. Migration'da
 /// `fillfactor=70` + tablo-özel autovacuum eşiği verilir.
-model LoomLiveState {
+model MachineLiveState {
   machineId          String       @id @db.Uuid
-  state              LoomRunState @default(UNKNOWN)
+  state              MachineRunState @default(UNKNOWN)
   stateSince         DateTime?    @db.Timestamptz
   /// ANLIK devir — YALNIZ burada yaşar, TARİHÇEYE GİRMEZ.
   instantPicksPerMin Int?
@@ -918,24 +948,24 @@ model LoomLiveState {
   openStopId         String?      @db.Uuid
   currentRunId       String?      @db.Uuid
   collectorId        String?      @db.Uuid
-  source             LoomDataSource
+  source             MachineDataSource
 
   machine   Machine  @relation(fields: [machineId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
-  @@map("loom_live_states")
+  @@map("machine_live_states")
 }
 
 /// DEFTER (append-only, `updatedAt` YOK) — sayaç taşma/sıfırlama/anomali
 /// KARARI. Nadir ve kalıcı. Emsal `RollVariance`: sapmanın kendisi ayrı
 /// satırdır, JSON'a gömülmez.
-model LoomCounterEvent {
+model MachineCounterEvent {
   id         String   @id @default(uuid()) @db.Uuid
   machineId  String   @db.Uuid
-  signalKind LoomSignalKind
+  signalKind MachineSignalKind
   occurredAt DateTime @db.Timestamptz
-  quality    LoomDeltaQuality
+  quality    MachineDeltaQuality
   prevValue  Decimal? @db.Decimal(18, 0)
   nextValue  Decimal? @db.Decimal(18, 0)
   /// Kabul edilen fark. NULL = fark ÜRETİLMEDİ (uydurulmadı).
@@ -943,7 +973,7 @@ model LoomCounterEvent {
   /// ⚠️ KARARIN SAHİBİ İKİ KOLONLA yazılır: "SYSTEM" bir uuid DEĞİLDİR, kolona
   /// yazılamaz ve NULL hem "sistem" hem "bilinmiyor" demeye gelirdi.
   /// MACHINE = otomatik kural; SUPERVISOR/OPERATOR = insan kararı.
-  decisionSource LoomDataSource
+  decisionSource MachineDataSource
   /// YALNIZ insan kararında dolar.
   decidedById    String? @db.Uuid
   /// KOVA/PENCERE BAĞI — kararın hangi kovaya ait olduğu, kova BUDANSA BİLE
@@ -956,18 +986,18 @@ model LoomCounterEvent {
   /// düzeltilebilmeli, ama satır DEĞİŞTİRİLMEMELİ. Okuma helper'ı yalnız
   /// süpersede EDİLMEMİŞ satırı alır.
   supersededByEventId String? @db.Uuid
-  supersededBy LoomCounterEvent? @relation("LoomCounterSupersede", fields: [supersededByEventId], references: [id])
-  supersedes   LoomCounterEvent[] @relation("LoomCounterSupersede")
+  supersededBy MachineCounterEvent? @relation("MachineCounterSupersede", fields: [supersededByEventId], references: [id])
+  supersedes   MachineCounterEvent[] @relation("MachineCounterSupersede")
 
   machine   Machine  @relation(fields: [machineId], references: [id], onDelete: Restrict)
   createdAt DateTime @default(now()) @db.Timestamptz
 
   @@index([machineId, occurredAt])
   @@index([quality, occurredAt])
-  @@map("loom_counter_events")
+  @@map("machine_counter_events")
 }
 // ŞEMA-DIŞI PARTIAL UNIQUE (doğal anahtar = idempotency anahtarı):
-//   loom_counter_events_natural_uq (machineId, signalKind, occurredAt)
+//   machine_counter_events_natural_uq (machineId, signalKind, occurredAt)
 //     WHERE "supersededByEventId" IS NULL
 //   ⚠️ Bu sed olmadan partinin yeniden gönderimi MÜKERRER anomali satırı doğurur;
 //      satırların varlığı §2.10'un `anomalyAck` mühür ön koşulunu beslediği için
@@ -983,9 +1013,9 @@ model LoomCounterEvent {
 /// `services/helpers/period-guard.helper.ts:7-16` ("kapanmış dönem RESMİ bir
 /// rakamdır… SESSİZ YENİDEN HESAP en kötüsü"), emsal `CashPeriodClose`.
 /// ⚠️ `updatedAt` VAR ve bu sınıf beyanıdır: güncel gerçeği bu satır, GEÇMİŞİ
-/// `LoomShiftStatSeal` defteri taşır (tek tabloda defter+durum olmaz).
+/// `MachineShiftStatSeal` defteri taşır (tek tabloda defter+durum olmaz).
 /// ⚠️ BU TABLO, KOVANIN VE SEBEPSİZ DURUŞUN BUDANABİLMESİNİN TEK SEBEBİDİR.
-model LoomShiftStat {
+model MachineShiftStat {
   id              String   @id @default(uuid()) @db.Uuid
   machineId       String   @db.Uuid
   shiftInstanceId String   @db.Uuid
@@ -1052,7 +1082,7 @@ model LoomShiftStat {
   stopThresholdSec  Int
   /// Tek koşumlu vardiyada donar; BİRDEN ÇOK koşum varsa **NULL** yazılır ve
   /// metre koşum bazında türetilip toplanır (§5.6).
-  picksPerCmAtClose Decimal? @db.Decimal(8, 3)
+  unitsPerCmAtClose Decimal? @db.Decimal(8, 3)
   producedM         Decimal? @db.Decimal(12, 3)   // ölçek kataloğu: metraj (12,3)
 
   // ── MÜHÜR ANINDA `loom-efficiency.helper` YAZAR, başka hiçbir yol yazmaz ──
@@ -1063,16 +1093,16 @@ model LoomShiftStat {
   /// ⚠️ KALİTE (Q) ve OEE burada YOK: kalite kararı Tambur'da, vardiyadan
   /// GÜNLER sonra verilir. Mühür anında Q hesaplanamaz.
 
-  source     LoomDataSource
-  /// ⚠️ MÜHÜRDE KOPYALANIR ve DONAR (`LoomSpec.monitoringState`ten). Gölge
+  source     MachineDataSource
+  /// ⚠️ MÜHÜRDE KOPYALANIR ve DONAR (`MachineSpec.monitoringState`ten). Gölge
   /// karne ASLA LIVE'a terfi etmez: tezgah sonradan LIVE'a geçse bile o
   /// vardiyanın rakamı gölge koşullarda üretilmiştir ve DEFTER raporları onu
   /// süzmeye devam eder. Canlı kolondan süzmek, geçmişi geriye dönük
   /// "yayınlanmış" yapardı (§5.3/8).
-  monitoringState LoomMonitoringState
+  monitoringState MachineMonitoringState
   /// Anomali (RESET/GAP/ANOMALY) içeren vardiya ONAYSIZ mühürlenemez → **409**.
   /// ⚠️ KOLON Faz 1a'da doğar, KAPI Faz 2'de yürürlüğe girer: anomalinin tek
-  /// kaynağı `LoomCounterEvent` ve `LoomInterval.deltaQuality`tir, ikisi de Faz
+  /// kaynağı `MachineCounterEvent` ve `MachineInterval.deltaQuality`tir, ikisi de Faz
   /// 2'dedir. Faz 1a'da elle girilen karnede anomali KAYNAĞI YOKTUR; alan
   /// `false` kalır ve mührü bloke etmez (§9 — "kaynağı olmayan kapı" sınıfı).
   anomalyAck Boolean @default(false)
@@ -1081,8 +1111,8 @@ model LoomShiftStat {
   /// zaman mühürlendi"dir; ileri damgayı null'lamak ters kayıt DEĞİLDİR ve
   /// yasaktır (`dispatchedAt`/`invoicedAt` sınıfı). Mühür/aç/yeniden-mühür
   /// tekrarlanabilir bir çevrimdir ve TEK KOLONA SIĞMAZ: durum `sealState`,
-  /// çevrim sayacı `sealGeneration`, geçmiş `LoomShiftStatSeal`dedir.
-  sealState      LoomSealState @default(OPEN)
+  /// çevrim sayacı `sealGeneration`, geçmiş `MachineShiftStatSeal`dedir.
+  sealState      MachineSealState @default(OPEN)
   sealGeneration Int           @default(0)
   /// ⚠️ Ad tuzağı: KALDIRILAN `Sack` mühürleme kolonlarıyla ilgisi YOK.
   sealedAt       DateTime?     @db.Timestamptz
@@ -1090,9 +1120,9 @@ model LoomShiftStat {
 
   machine       Machine       @relation(fields: [machineId], references: [id], onDelete: Restrict)
   shiftInstance ShiftInstance @relation(fields: [shiftInstanceId], references: [id], onDelete: Restrict)
-  sealedBy      User?         @relation("LoomShiftStatSealedBy", fields: [sealedById], references: [id])   // kaldırılan Sack alanı DEĞİL
-  breakdown     LoomShiftStopBreakdown[]
-  seals         LoomShiftStatSeal[]
+  sealedBy      User?         @relation("MachineShiftStatSealedBy", fields: [sealedById], references: [id])   // kaldırılan Sack alanı DEĞİL
+  breakdown     MachineShiftStopBreakdown[]
+  seals         MachineShiftStatSeal[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -1100,7 +1130,7 @@ model LoomShiftStat {
   @@unique([machineId, shiftInstanceId])
   @@index([factoryDay, machineId])
   @@index([sealedAt])   // kaldırılan Sack.sealedAt ile ilgisi YOK
-  @@map("loom_shift_stats")
+  @@map("machine_shift_stats")
 }
 
 /// DEFTER (append-only) — vardiya karnesinin SEBEP KIRILIMI; Pareto burada
@@ -1108,18 +1138,18 @@ model LoomShiftStat {
 /// sonra KAYBOLUR. ~175.000 satır/yıl (~45 MB), kalıcı.
 /// ⚠️ MÜHÜR KUŞAĞI: yeniden hesapta satırlar GÜNCELLENMEZ ve SİLİNMEZ (ikisi de
 /// defter yasağı) — YENİ KUŞAK yazılır, eskiler durur; okuma tek helper'dan.
-model LoomShiftStopBreakdown {
+model MachineShiftStopBreakdown {
   id             String  @id @default(uuid()) @db.Uuid
   statId         String  @db.Uuid
   sealGeneration Int
   /// NULL = sınıflandırılmamış kova (rapor bunu UNPLANNED sayar).
   reasonCode String? @db.VarChar(64)
-  lossClass  LoomStopLossClass?
+  lossClass  MachineStopLossClass?
   stopCount  Int
   stopSec    Int
 
   /// ⚠️ Cascade DEĞİL Restrict: defter satırı sessizce yok olamaz.
-  stat      LoomShiftStat @relation(fields: [statId], references: [id], onDelete: Restrict)
+  stat      MachineShiftStat @relation(fields: [statId], references: [id], onDelete: Restrict)
   createdAt DateTime      @default(now()) @db.Timestamptz
 
   /// ⚠️ Prisma `@@unique`i yalnız DEFTERİ TUTAR — gerçek sed ham SQL'dedir
@@ -1128,10 +1158,10 @@ model LoomShiftStopBreakdown {
   /// kova) korumasız kalırdı.
   @@unique([statId, sealGeneration, reasonCode])
   @@index([reasonCode])
-  @@map("loom_shift_stop_breakdowns")
+  @@map("machine_shift_stop_breakdowns")
 }
 // ŞEMA-DIŞI UNIQUE (ham SQL + test_db_invariants `EXPRESSION_UNIQUES` envanteri):
-//   loom_shift_stop_breakdowns_uq:
+//   machine_shift_stop_breakdowns_uq:
 //     UNIQUE NULLS NOT DISTINCT ("statId","sealGeneration","reasonCode")
 //   (Prisma NULLS NOT DISTINCT üretmez. Alternatif: COALESCE("reasonCode",'')
 //    ifade index'i.) Saha PG 16.9 — `docs/ops/KURULUM.md`.
@@ -1141,17 +1171,17 @@ model LoomShiftStopBreakdown {
 /// Kapanmış vardiyaya geç gelen veri karneyi SESSİZCE değiştiremez: mühür
 /// `loom:shift-unseal` ile AÇILIR, yeniden hesaplanır, yeniden mühürlenir ve
 /// her adım burada satır bırakır.
-model LoomShiftStatSeal {
+model MachineShiftStatSeal {
   id             String   @id @default(uuid()) @db.Uuid
   statId         String   @db.Uuid
   /// ⚠️ ENUM — serbest metin dördüncü bir değeri SESSİZCE kabul ederdi.
-  /// (Enum yerine CHECK seçilirse `loom_shift_stat_seals_action_chk` +
+  /// (Enum yerine CHECK seçilirse `machine_shift_stat_seals_action_chk` +
   ///  `test_db_invariants` envanteri ZORUNLUDUR.)
-  action         LoomSealAction
+  action         MachineSealAction
   sealGeneration Int
   /// ⚠️ `terms` yalnız tam terim fotoğrafının ARŞİVİDİR (SORGULANMAZ, GIN yok) ve
   /// tek okuyucusu helper'dır. "Geçen ayın basılmış karnesini AYNEN yeniden bas"
-  /// sözleşmesi SQL'den okunur: `formulaVersion` + `LoomShiftStopBreakdown`
+  /// sözleşmesi SQL'den okunur: `formulaVersion` + `MachineShiftStopBreakdown`
   /// (`sealGeneration`) + aşağıdaki BEŞ KOLON.
   terms          Json
   potSec                Int
@@ -1163,8 +1193,8 @@ model LoomShiftStatSeal {
   reason         String?  @db.VarChar(300)
   actedById      String?  @db.Uuid
 
-  stat      LoomShiftStat @relation(fields: [statId], references: [id], onDelete: Restrict)
-  actedBy   User?         @relation("LoomShiftSealBy", fields: [actedById], references: [id])
+  stat      MachineShiftStat @relation(fields: [statId], references: [id], onDelete: Restrict)
+  actedBy   User?         @relation("MachineShiftSealBy", fields: [actedById], references: [id])
   createdAt DateTime      @default(now()) @db.Timestamptz
 
   /// DOĞAL ANAHTAR (§2.11) — bir KUŞAKTA her eylemden EN ÇOK BİR satır olur:
@@ -1174,13 +1204,13 @@ model LoomShiftStatSeal {
   /// güncel kolonları BİREBİR"* mutabakatını belirsizleştirirdi.
   @@unique([statId, sealGeneration, action])
   @@index([statId, createdAt])
-  @@map("loom_shift_stat_seals")
+  @@map("machine_shift_stat_seals")
 }
 ```
 
 **Mühür geçişleri ATOMİK CLAIM'dir** (üçü de): `updateMany WHERE { id, sealState: <beklenen> }` + `count === 0 → 409` (taze okumayla tanı). "Mühürlü mü" sorusunun tek cevabı `isShiftSealed` helper'ıdır; §3.5'in `SHIFT_SEALED` kapısı da onu çağırır.
 
-> **⚠️ MÜHRÜN YAZARI KİM — Faz 2 kararı.** Faz 1a'da mührü İNSAN atar (`loom:manual-entry`). **Faz 2'de mührü `loom-shift-close.job` atar:** `sealedById = NULL` = **SİSTEM mührü** (`LoomShiftStatSeal.actedById` da NULL, `action = SEAL`). **Anomali içeren vardiyayı job MÜHÜRLEMEZ** (`RESET`/`GAP`/`ANOMALY`): karne `OPEN` kalır, `anomalyAck` kuyruğuna düşer ve yetkili onaylayınca job bir sonraki turda mühürler. Açık kalan vardiya **budanmaz** (budamanın mühür ön koşulu, §4) — bu bilinçli bir birikmedir, sayacı `/api/admin/health`tedir ve rapor *"N vardiya onay bekliyor"* şeridi çizer. Aksi hâlde anomalili vardiya süresiz açık kalır ve budayıcı o pencerede hiç çalışmaz.
+> **⚠️ MÜHRÜN YAZARI KİM — Faz 2 kararı.** Faz 1a'da mührü İNSAN atar (`loom:manual-entry`). **Faz 2'de mührü `loom-shift-close.job` atar:** `sealedById = NULL` = **SİSTEM mührü** (`MachineShiftStatSeal.actedById` da NULL, `action = SEAL`). **Anomali içeren vardiyayı job MÜHÜRLEMEZ** (`RESET`/`GAP`/`ANOMALY`): karne `OPEN` kalır, `anomalyAck` kuyruğuna düşer ve yetkili onaylayınca job bir sonraki turda mühürler. Açık kalan vardiya **budanmaz** (budamanın mühür ön koşulu, §4) — bu bilinçli bir birikmedir, sayacı `/api/admin/health`tedir ve rapor *"N vardiya onay bekliyor"* şeridi çizer. Aksi hâlde anomalili vardiya süresiz açık kalır ve budayıcı o pencerede hiç çalışmaz.
 
 ### 2.11 · Sekiz soru × altı tablo — defterin kendi kontrol listesi
 
@@ -1188,14 +1218,14 @@ model LoomShiftStatSeal {
 
 | Tablo | Sınıf | Doğal anahtar | Ters yol | Kova/pencere bağı | Silme sınıfı | Okuma helper'ı | Mutabakat | Bekçi |
 |---|---|---|---|---|---|---|---|---|
-| `LoomInterval` | TELEMETRİ | `(machineId, bucketStart)` | yeniden yaz (`restateCount`, yalnız mühürsüz) | kendisi kova | **telemetri budaması** (hard-delete sınıfı DEĞİL) | `loom-retention.helper` | Σ `observedSec` + `unobservedSec` = takvim | `test_loom_prune_safety` |
-| `LoomStopEvent` | SPAN (sebeple DEFTER) | **`(machineId, stopKey)`** (PARTIAL, `revokedAt IS NULL`) | `revokedAt` + `LoomStopReclass` | `shiftInstanceId` + `factoryDay` | **telemetri budaması**, yalnız İNSAN kararsız satırda | `CLASSIFICATION_QUEUE_WHERE` | Σ breakdown + minor ≤ POT | `test_loom_prune_safety` · `test_loom_reclass` |
-| `LoomRun` | SPAN / DEFTER | `(machineId, startedAt)` + tek-açık seddi | `revokedAt` | kapanışta donan terimler | budanmaz | `beamsMountedDuring` (levent) | **Σ(koşum ∩ vardiya) ≤ `potSec`** ve karnenin donmuş paydası açık koşumdan mı geliyor | `test_loom_shift_terms` · `test_loom_run_beam_overlap` |
-| `LoomCounterEvent` | DEFTER (append-only) | `(machineId, signalKind, occurredAt)` WHERE aktif | `supersededByEventId` | `bucketStart` | budanmaz | süpersede-edilmemiş yüklemi | **Σ `acceptedDelta` (aktif) ↔ `picksActual` sapması** | `test_loom_counter_delta` |
-| `LoomShiftStat` | ÖZET / KARNE (DURUM) | `(machineId, shiftInstanceId)` | mühür çevrimi + `sealGeneration` | `shiftInstanceId` | budanmaz | `loom-efficiency.helper` | terimler ↔ kova/span toplamı | `test_loom_shift_terms` |
-| `LoomShiftStatSeal` | DEFTER (append-only) | `(statId, sealGeneration, action)` | yok (defter kapanıştır) | `statId` | budanmaz | son-kuşak helper'ı | **son kuşağın terimleri ↔ `LoomShiftStat`ın güncel kolonları BİREBİR** | `test_loom_shift_seal` |
+| `MachineInterval` | TELEMETRİ | `(machineId, bucketStart)` | yeniden yaz (`restateCount`, yalnız mühürsüz) | kendisi kova | **telemetri budaması** (hard-delete sınıfı DEĞİL) | `loom-retention.helper` | Σ `observedSec` + `unobservedSec` = takvim | `test_machine_prune_safety` |
+| `MachineStopEvent` | SPAN (sebeple DEFTER) | **`(machineId, stopKey)`** (PARTIAL, `revokedAt IS NULL`) | `revokedAt` + `MachineStopReclass` | `shiftInstanceId` + `factoryDay` | **telemetri budaması**, yalnız İNSAN kararsız satırda | `CLASSIFICATION_QUEUE_WHERE` | Σ breakdown + minor ≤ POT | `test_machine_prune_safety` · `test_machine_reclass` |
+| `MachineRun` | SPAN / DEFTER | `(machineId, startedAt)` + tek-açık seddi | `revokedAt` | kapanışta donan terimler | budanmaz | `beamsMountedDuring` (levent) | **Σ(koşum ∩ vardiya) ≤ `potSec`** ve karnenin donmuş paydası açık koşumdan mı geliyor | `test_machine_shift_terms` · `test_machine_run_beam_overlap` |
+| `MachineCounterEvent` | DEFTER (append-only) | `(machineId, signalKind, occurredAt)` WHERE aktif | `supersededByEventId` | `bucketStart` | budanmaz | süpersede-edilmemiş yüklemi | **Σ `acceptedDelta` (aktif) ↔ `picksActual` sapması** | `test_machine_counter_delta` |
+| `MachineShiftStat` | ÖZET / KARNE (DURUM) | `(machineId, shiftInstanceId)` | mühür çevrimi + `sealGeneration` | `shiftInstanceId` | budanmaz | `loom-efficiency.helper` | terimler ↔ kova/span toplamı | `test_machine_shift_terms` |
+| `MachineShiftStatSeal` | DEFTER (append-only) | `(statId, sealGeneration, action)` | yok (defter kapanıştır) | `statId` | budanmaz | son-kuşak helper'ı | **son kuşağın terimleri ↔ `MachineShiftStat`ın güncel kolonları BİREBİR** | `test_machine_shift_seal` |
 
-**Eksik üç mutabakat `test_consistency`ye satır olarak yazılır** (kalın yazılanlar): (a) mühürlü vardiyada Σ `acceptedDelta` sapması `picksActual` ile tutarlı mı; (b) Σ(`LoomRun` ∩ vardiya penceresi) ≤ `potSec`; (c) defter ↔ durum ayrışamaz — son kuşağın terimleri güncel kolonlarla birebir.
+**Eksik üç mutabakat `test_consistency`ye satır olarak yazılır** (kalın yazılanlar): (a) mühürlü vardiyada Σ `acceptedDelta` sapması `picksActual` ile tutarlı mı; (b) Σ(`MachineRun` ∩ vardiya penceresi) ≤ `potSec`; (c) defter ↔ durum ayrışamaz — son kuşağın terimleri güncel kolonlarla birebir.
 
 ---
 
@@ -1252,7 +1282,7 @@ Aynı karar boşluk dayanıklılığını da verir: ajan ölse bile bir sonraki 
 4. Ajan `Authorization: Bearer <token>` ile basar. **`verifyToken` DEĞİL** — toplayıcı bir `User` değildir, JWT taşımaz, `req.user` doğmaz, `session-registry`ye kaydolmaz (aksi hâlde bir insanın `'kick'` politikalı girişi ajanı vardiya ortasında sessizce düşürürdü).
 5. Token yalnız üç ingest ucunda ve `/api/tezgah/collector/config`te geçerli; başka yolda 401. Middleware başka route'a mount EDİLMEZ.
 6. `installationId` uyuşmazlığı → **409 `INSTALLATION_MISMATCH`**.
-7. Kapsam: `LoomCollectorMachine` + **`LoomSpec.monitoringState IN ('SHADOW','LIVE')`** + **`signal.isActive AND peripheral.deletedAt IS NULL`**. Üçü TEK helper'da yaşar (boğaz-ikizi Prisma parçasıyla birlikte değişir): silinmiş cihaz mezar taşı aldığı için Cascade hiç tetiklenmez ve onun aktif sinyali kapsamda kalırdı. Kapsam dışı makine → **403 `MACHINE_NOT_IN_SCOPE`**; **`monitoringState = OFF` olan makine de kapsam dışıdır** (aynı 403, aynı helper — ingest'in gölge moda sokulmamış tezgaha yazmasının yolu yoktur, §2.3).
+7. Kapsam: `MachineCollectorLink` + **`MachineSpec.monitoringState IN ('SHADOW','LIVE')`** + **`signal.isActive AND peripheral.deletedAt IS NULL`**. Üçü TEK helper'da yaşar (boğaz-ikizi Prisma parçasıyla birlikte değişir): silinmiş cihaz mezar taşı aldığı için Cascade hiç tetiklenmez ve onun aktif sinyali kapsamda kalırdı. Kapsam dışı makine → **403 `MACHINE_NOT_IN_SCOPE`**; **`monitoringState = OFF` olan makine de kapsam dışıdır** (aynı 403, aynı helper — ingest'in gölge moda sokulmamış tezgaha yazmasının yolu yoktur, §2.3).
 8. `revokedAt` + `rotate-token`. Token güncellenmez, **yenisi üretilir**.
 9. Ajan sunucuyu mevcut mDNS ile bulur (`jobs/mdns-advertiser.job.ts`) — yeni keşif mekanizması yok. Ajan açılışta yerel `:4000`'de TeksERP bulursa **reddeder** ve kurulum hatası basar.
 10. **Doğrulama MALİYETİ ölçülür.** Token rastgele 256-bit üretildiği için sözlük saldırısı yüzeyi yoktur; bcrypt'i HER istekte koşmak (20 tezgah × 5 sn nabız ≈ 4 istek/sn, `bcryptjs` saf JS) **tek-process** backend'in ana iş parçacığını gereksiz meşgul eder. Kalıcı hash bcrypt KALIR (sır hijyeni), ama doğrulanmış token → `collectorId` eşlemesi **bellek içi TTL'li önbellekte** tutulur (60 sn; `revokedAt`/`rotate-token` anında düşürür). Alternatif: `tokenHash`i SHA-256 + sabit-zaman karşılaştırmaya çevirmek. ⚠️ Sayı BUGÜN ÖLÇÜLMEDİ — pilotta `/api/admin/health` gecikme sayacıyla **ölçülür ve karar ölçümle verilir**.
@@ -1273,38 +1303,38 @@ export function deriveCounterDelta(i: {
   prev: Prisma.Decimal | null; cur: Prisma.Decimal;
   elapsedSec: number; maxRevPerMin: number | null; picksPerRev: number;
   modulus: Prisma.Decimal | null; tolerance?: number;   // vars. 0.10
-}): { delta: number | null; quality: LoomDeltaQuality } { /* … */ }
+}): { delta: number | null; quality: MachineDeltaQuality } { /* … */ }
 ```
 
 1. **Asla fark uydurma.** `ANOMALY` → `pickDelta = null`. Kova 0 üretim GÖSTERMEZ, **"bilinmiyor"** gösterir. `0` ile `null` raporda ayrı kovalardır.
 2. **Tavan = fizik.** `maxRevPerMin × picksPerRev × geçen_dk × 1.1`. `maxRevPerMin` NULL ise **tavan uygulanmaz ve kalem `ANOMALY` damgalanır** — uydurulmuş bir tavan sessiz kabul üretirdi.
    > **⚠️ BİRİM SEDDİ (Fable D1, KRİTİK).** Tavan **devir/dk** okur, randıman paydası **atkı/dk** okur ve sentez ikisine de `maxPicksPerMin` diyordu: `picksPerRev = 2` olan bir tezgahta tavan sessizce **2,2 katına** gevşer, kontrolcü çöpü `OK` damgalanıp doğrudan `picksActual`a girerdi. Adlar ayrıldı: **`maxRevPerMin` = devir/dk** (§2.3) · **`targetPicksPerMin`/`nominalPicksPerMin` = atkı/dk** (§2.8, §2.10). **`picksPerRev` YALNIZ tavana girer, PAYDAYA ASLA** — AST tripwire `picksPerRev` ile `targetPicksPerMin`in aynı ifadede geçmesini yasaklar.
-3. **`WRAPPED` ile `RESET` ayrımının tek ayırt edicisi olabilirlik tavanıdır.** `RESET` **dürüsttür ama EKSİKTİR**: sıfırlama öncesi atkılar kayıptır. Satır `RESET` damgalanır, `LoomCounterEvent` yazılır, onay olmadan vardiya mühürlenemez. 16-bit sarma ile operatörün doff'ta sayacı sıfırlaması **ayırt edilemeyebilir** — bu yüzden negatif sıçrama sarma diye YORUMLANMAZ (modülüs NULL doğar, §2.3), insana bırakılır.
-4. **Süreklilik ajanda yaşar.** `prev` backend'den okunup yazılmaz (TOCTOU); ajan kovayı kaparken `pickCounterStart` ve `pickCounterEnd`i BİRLİKTE yollar. Ajan yeniden başladığında `prev` yoktur → ilk kova `GAP`, ve `LoomLiveState.lastPickCounter` farkı bir **`LoomCounterEvent` satırı** doğurur: `quality = GAP`, `signalKind = PICK_COUNTER`, `prevValue = LoomLiveState.lastPickCounter`, `nextValue = ilk yeni okuma`, `acceptedDelta = null` (fark ÜRETİLMEZ), `decisionSource = MACHINE`, `decidedById = null` — *"şu andan şu ana görülmedi, aradaki N atkı bu kovaya sığdırılamaz."* ⚠️ Ayrı bir `COLLECTOR_GAP` enum değeri ya da tablosu **AÇILMAZ**; o ad, `GAP` niteliğinin toplayıcı kaynaklı hâli için kullanılan konuşma dilidir.
+3. **`WRAPPED` ile `RESET` ayrımının tek ayırt edicisi olabilirlik tavanıdır.** `RESET` **dürüsttür ama EKSİKTİR**: sıfırlama öncesi atkılar kayıptır. Satır `RESET` damgalanır, `MachineCounterEvent` yazılır, onay olmadan vardiya mühürlenemez. 16-bit sarma ile operatörün doff'ta sayacı sıfırlaması **ayırt edilemeyebilir** — bu yüzden negatif sıçrama sarma diye YORUMLANMAZ (modülüs NULL doğar, §2.3), insana bırakılır.
+4. **Süreklilik ajanda yaşar.** `prev` backend'den okunup yazılmaz (TOCTOU); ajan kovayı kaparken `pickCounterStart` ve `pickCounterEnd`i BİRLİKTE yollar. Ajan yeniden başladığında `prev` yoktur → ilk kova `GAP`, ve `MachineLiveState.lastPickCounter` farkı bir **`MachineCounterEvent` satırı** doğurur: `quality = GAP`, `signalKind = PICK_COUNTER`, `prevValue = MachineLiveState.lastPickCounter`, `nextValue = ilk yeni okuma`, `acceptedDelta = null` (fark ÜRETİLMEZ), `decisionSource = MACHINE`, `decidedById = null` — *"şu andan şu ana görülmedi, aradaki N atkı bu kovaya sığdırılamaz."* ⚠️ Ayrı bir `COLLECTOR_GAP` enum değeri ya da tablosu **AÇILMAZ**; o ad, `GAP` niteliğinin toplayıcı kaynaklı hâli için kullanılan konuşma dilidir.
 
 ### 3.5 · İdempotency, sıra, saat
 
 | Sınıf | Anahtar | Aynı yük | Farklı yük |
 |---|---|---|---|
 | **Kova** (telemetri) | `@@id([machineId, bucketStart])` | no-op | **üstüne yaz + `restatedAt`/`restateCount`** — mühürlü pencerede **409 `SHIFT_SEALED`** |
-| **Duruş AÇILIŞI** (defter) | **`loom_stops_key_uq (machineId, stopKey)`** (PARTIAL, `revokedAt IS NULL`) | no-op | **409 `STOP_PAYLOAD_CONFLICT`** |
+| **Duruş AÇILIŞI** (defter) | **`machine_stops_key_uq (machineId, stopKey)`** (PARTIAL, `revokedAt IS NULL`) | no-op | **409 `STOP_PAYLOAD_CONFLICT`** |
 | **Duruş KAPANIŞI** (geçiş) | `updateMany WHERE {id, endedAt:null, revokedAt:null}` | aynı `endedAt` → no-op | farklı `endedAt` → **409 `STOP_END_CONFLICT`** |
 | **Geri alınmış duruş** | doğal anahtar REVOKED satıra düşer | — | **409 `STOP_REVOKED`** (ajan kalemi kuyruktan DÜŞÜRÜR) |
 | **Elle giriş / düzeltme** | `clientToken @unique @db.Uuid` | `token-replay.helper` dört durumu | ③ 409 `CLIENT_TOKEN_COLLISION` |
-| **Sayaç kararı** (defter) | `loom_counter_events_natural_uq` (PARTIAL, süpersede-edilmemiş) | no-op | **409 `COUNTER_EVENT_CONFLICT`** |
-| **Parti** | `LoomCollector.lastSeq` | `ackSeq`e kadar buda | — |
+| **Sayaç kararı** (defter) | `machine_counter_events_natural_uq` (PARTIAL, süpersede-edilmemiş) | no-op | **409 `COUNTER_EVENT_CONFLICT`** |
+| **Parti** | `MachineCollector.lastSeq` | `ackSeq`e kadar buda | — |
 
 > **⚠️ Üç denetim düzeltmesi bu tabloda.**
-> **(a) Kimlik DAR olmalı** (`idempotent-replay.helper` başlığı: *"gövdenin tamamı aynı mı DEĞİL"*). Duruş bir SPAN'dir; ajan aynı kalemi iki kez yollar — açılışta `endedAt: null`, kapanışta dolu. Sentezin "aynı anahtar + farklı yük → 409" kuralı **meşru kapanışı sistematik olarak reddediyordu**; duruş `maxOpenStopHours` sonunda WATCHDOG'la kapanır ve süresi persentillerden dışlanırdı. Kimlik **DAR ve SAATTEN BAĞIMSIZDIR** — `(machineId, stopKey)` (aşağıdaki karar; sentezin `machineId + startedAt + source` üçlüsü KALKTI); `endedAt`/`durationSec`/`endSource` **geçiş alanıdır** ve atomik claim ile yazılır (`WHERE {id, …}` — `machineId` yüklemiyle kapatmak TOCTOU'yu geri getirir; açık duruşun id'si `LoomLiveState.openStopId`den okunur). Sınıflandırma alanları ingest yükünde HİÇ kabul edilmez (ajan sebep atamaz).
+> **(a) Kimlik DAR olmalı** (`idempotent-replay.helper` başlığı: *"gövdenin tamamı aynı mı DEĞİL"*). Duruş bir SPAN'dir; ajan aynı kalemi iki kez yollar — açılışta `endedAt: null`, kapanışta dolu. Sentezin "aynı anahtar + farklı yük → 409" kuralı **meşru kapanışı sistematik olarak reddediyordu**; duruş `maxOpenStopHours` sonunda WATCHDOG'la kapanır ve süresi persentillerden dışlanırdı. Kimlik **DAR ve SAATTEN BAĞIMSIZDIR** — `(machineId, stopKey)` (aşağıdaki karar; sentezin `machineId + startedAt + source` üçlüsü KALKTI); `endedAt`/`durationSec`/`endSource` **geçiş alanıdır** ve atomik claim ile yazılır (`WHERE {id, …}` — `machineId` yüklemiyle kapatmak TOCTOU'yu geri getirir; açık duruşun id'si `MachineLiveState.openStopId`den okunur). Sınıflandırma alanları ingest yükünde HİÇ kabul edilmez (ajan sebep atamaz).
 > **Anahtarın KENDİSİ de kırılgandı ve ARTIK SAATTEN KOPARILDI (Faz 2 sözleşmesi, 2026-09-12).** ±120 sn saat sapması kabul edilirken replay seddi ajan saatinin **milisaniye eşitliğine** bağlıydı — 1 sn kayan bir tekrar gönderim İKİNCİ satır açar, kopya KAPALI geldiği için `one_open_per_machine_uq` görmez ve aynı duruş breakdown'da iki kez sayılıp randımanı düşürürdü. Ara çözüm olan **saniyeye kuantizasyon** (`date_trunc('second')`) ve `tezgah.stopMatchToleranceSec` toleransı bir kimlik çözümü değil semptom bastırıcıydı: tolerans ne seçilirse seçilsin, sınırın iki yanında iki farklı yanlış cevap veriyordu (dar tolerans → mükerrer satır, geniş tolerans → iki ayrı duruşun birleşmesi).
-> **Karar: kimlik ajan üretimi bir TOKEN'dır.** `LoomStopEvent.stopKey` (UUID, `clientToken` kalıbı) ajan duruşu ilk gördüğünde üretilir ve kalemin ömrü boyunca DEĞİŞMEZ; sed **PARTIAL UNIQUE `(machineId, stopKey) WHERE revokedAt IS NULL`**tir. `startedAt` **kimlik değil VERİDİR** (ham ajan damgası; sunucu gerçeği `startedAtServer = startedAt + clockSkewMs` ile türetilir), `clockSkewMs` süre şüphesinin izidir ve **kimliğin parçası DEĞİLDİR**. Aynı `stopKey` + FARKLI kimlik yükü (`machineId`/`source`/`startedAt` oynamış) → **409 `STOP_PAYLOAD_CONFLICT`**; sıra dışı açılış (açık duruş dururken farklı `stopKey` ile ikinci açılış) → **409 `STOP_OUT_OF_ORDER`**. `tezgah.stopMatchToleranceSec` bayrağı bu kararla **DÜŞTÜ** (§6.3'ten çıkarıldı) — tolerans penceresi artık gereksizdir.
+> **Karar: kimlik ajan üretimi bir TOKEN'dır.** `MachineStopEvent.stopKey` (UUID, `clientToken` kalıbı) ajan duruşu ilk gördüğünde üretilir ve kalemin ömrü boyunca DEĞİŞMEZ; sed **PARTIAL UNIQUE `(machineId, stopKey) WHERE revokedAt IS NULL`**tir. `startedAt` **kimlik değil VERİDİR** (ham ajan damgası; sunucu gerçeği `startedAtServer = startedAt + clockSkewMs` ile türetilir), `clockSkewMs` süre şüphesinin izidir ve **kimliğin parçası DEĞİLDİR**. Aynı `stopKey` + FARKLI kimlik yükü (`machineId`/`source`/`startedAt` oynamış) → **409 `STOP_PAYLOAD_CONFLICT`**; sıra dışı açılış (açık duruş dururken farklı `stopKey` ile ikinci açılış) → **409 `STOP_OUT_OF_ORDER`**. `tezgah.stopMatchToleranceSec` bayrağı bu kararla **DÜŞTÜ** (§6.3'ten çıkarıldı) — tolerans penceresi artık gereksizdir.
 > **(b) Replay'in DÖRDÜNCÜ durumu.** Sed PARTIAL olduğu için geri alınmış satır yer işgal etmez: süpervizör hayalet duruşu `revokedAt` ile geri alır, ajan aynı kalemi yeniden yollar, **yeni aktif duruş doğar ve geri alma sessizce iptal olur.** Bu tam olarak `services/helpers/token-replay.helper.ts` başlığındaki ④ durumudur (*"yazıldı, sonra İPTAL EDİLDİ → cached kaydı dönmek YANLIŞ CEVAPTIR"*). Ingest doğal anahtar aramasında geri alınmışları da GÖRÜR → 409 `STOP_REVOKED`.
 > **(c) İnsan yolunun `clientToken`ı.** Makine yolunun tekilliği doğal anahtardır ve orada `clientToken` KULLANILMAZ; ama Faz 1a'nın tek yazma yüzeyi **elle vardiya girişidir** ve çift tıklama insan hatasıdır. Elle giriş ve duruş düzeltme uçları `clientToken @unique @db.Uuid` taşır (kök kural: *"kayıt yaratan uçlar `clientToken` taşır"*; bugün şemada 17 satır — kök `CLAUDE.md`'nin "15 model" ölçümü bayat, tazelenmeli).
 
 > **⚠️ MEKANİZMA YAZILMADAN BU TABLO UYGULANAMAZ** (Fable C2/C3/C6). Tablo SONUCU söylüyordu, nasıl ayırt edileceğini değil; iki satırın naif uygulaması doktrine çarpıyor.
 >
 > **(1) Kova yazımı TEK HAM İFADEDİR.** Prisma `upsert` **koşullu update yapamaz** (her çağrıda koşulsuz yazar → `restatedAt` her kovada dolar ve terim anlamsızlaşır), oku-yaz ise yasak. Yazım:
-> `INSERT … ON CONFLICT ("machineId","bucketStart") DO UPDATE SET …, "restateCount" = loom_intervals."restateCount" + 1, "restatedAt" = now() WHERE (loom_intervals.* IS DISTINCT FROM EXCLUDED.*) AND NOT EXISTS (<mühürlü pencere>) RETURNING (xmax = 0) AS inserted` — `restatedAt`/`restateCount` yalnız **gerçekten değişen** satırda artar, aynı yük DB'ye hiç yazmaz (ölü tuple üretmez). Emsal ölçüldü: `item-price.service.ts:383` (`ON CONFLICT … WHERE <index predicate> DO UPDATE … RETURNING (xmax = 0)`). Ham yolda `updatedAt` ELLE yazılır (`@updatedAt` ham SQL'de çalışmaz).
+> `INSERT … ON CONFLICT ("machineId","bucketStart") DO UPDATE SET …, "restateCount" = machine_intervals."restateCount" + 1, "restatedAt" = now() WHERE (machine_intervals.* IS DISTINCT FROM EXCLUDED.*) AND NOT EXISTS (<mühürlü pencere>) RETURNING (xmax = 0) AS inserted` — `restatedAt`/`restateCount` yalnız **gerçekten değişen** satırda artar, aynı yük DB'ye hiç yazmaz (ölü tuple üretmez). Emsal ölçüldü: `item-price.service.ts:383` (`ON CONFLICT … WHERE <index predicate> DO UPDATE … RETURNING (xmax = 0)`). Ham yolda `updatedAt` ELLE yazılır (`@updatedAt` ham SQL'de çalışmaz).
 > **⚠️ MÜHÜR YÜKLEMİ AYNI İFADENİN İÇİNDEDİR** (Faz 2 sözleşmesi): `NOT EXISTS (<mühürlü pencere>)` düşerse satır DÖNMEZ ve kalem **409 `SHIFT_SEALED`** alır — mühür kontrolünü ayrı bir `SELECT`e almak check-then-act olurdu (§3.5 sonundaki advisory kilit kararı bunun ikinci yarısıdır). Yüklem **`SEALED_WINDOW_SQL` ↔ `isSealedWindow()` boğaz-ikizidir**: saf yüklem WHERE'e giremez, Prisma parçası ile SQL parçası AYNI commit'te değişir ve AST tripwire ikisini birlikte ölçer. **Mühürden sonra hiçbir telemetri sessizce değişmez.**
 >
 > **(2) Duruş AÇILIŞI da tek ifadedir — `P2002` YAKALANMAZ.** Unique ihlali tx'i **abort eder** (SAVEPOINT yok) ve "makine başına tek tx" kuralıyla birleşince bir kalemin çakışması TÜM paketi düşürür — kalem bazlı cevap sözleşmesi de çökerdi; ayrıca ham sorguda Prisma **P2010** döner, P2002 değil. Yazım:
@@ -1319,14 +1349,14 @@ export function deriveCounterDelta(i: {
 - **Saat sapması — iki ayrı cümle:** **(1)** Ajan saatinin **TEK KAYNAĞI sunucudur**: sunucunun `Date` başlığından ölçtüğü ofseti KENDİ damgalarına uygular ve ham ofseti `clockSkewMs` olarak beyan eder — işletim sistemi NTP'si gerekmez. **(2)** `tezgah.maxClockSkewSec` (120) kapısı ofsetin **ÖLÇÜLEMEDİĞİ** durum içindir (başlık yok / ardışık ölçümler tutarsız) ve **PAKETİ değil KALEMİ** düşürür (`rejected[]`). ⚠️ *"Sunucu NTP kaynağı yapılır, `kur.ps1` kurulum adımıdır"* cümlesi **ÖLÇÜLDÜ ve YANLIŞTI**: `deploy/kur.ps1`de `w32tm`/NTP/`Set-Date` **sıfır geçiş**. İstenirse bu Faz 2'nin AYRI bir iş kalemidir (yeni `kur.ps1` adımı + sürüm notu), var olan bir adım değil.
 - **Geç gelen veri:** mühürlü vardiyaya düşen kalemler **409 `SHIFT_SEALED`** alır; panelde "N kalem mühürlü vardiyaya geldi" uyarısı çıkar, süpervizör `loom:shift-unseal` ile mührü açıp yeniden hesaplatır. **Sessiz yeniden hesap YOK.**
 - **Kapanmayan duruş:** `tezgah.maxOpenStopHours` (12) aşılınca **tembel kapatma** (`resolveActiveSession` emsali, ayrı process yok) → `endSource = WATCHDOG`.
-- **Kova boyu TEK KAYNAKTAN okunur ve İLERİYE DÖNÜK değişir.** Boyun tek kaynağı **`GET /api/tezgah/collector/config`**tur: sunucu yürürlükteki `bucketMinutes`i **`effectiveFrom` damgasıyla** döner, ajan onu kullanır ve kalemde tekrar beyan eder. Beyan ile yürürlükteki değer uyuşmazsa kalem **400 `BUCKET_SIZE_MISMATCH`** alır (ajan config'i tazeleyip yeniden dener) — eski `409 BUCKET_SIZE_CONFLICT` adı bu tek-kaynak kuralıyla değiştirildi: çakışma bir yarış değil, **bayat yapılandırmadır**. Satır içi DB CHECK (`loom_intervals_bucket_chk`) `bucketMinutes`i yürürlükteki kümeyle sınırlar, yani bayat bir ajan seddi DB'de de bulur. 60→15 çekilirse eski kova PK'da çakışıp ezilir ve o saat **çift sayılır**; bu yüzden değişim ANI `SystemSetting`e damgalanır, budayıcı/mühürleyici o andan öncesini eski kova boyuyla okur ve **eski kovalara DOKUNULMAZ**. Değişim **hem kova hem VARDİYA sınırına hizalı** bir anda yürürlüğe girer (vardiya ortasında boy değişirse o vardiyanın terimleri iki farklı ızgaradan toplanır ve mutabakat kalıcı olarak kırmızı kalırdı). **Hizanın kendisi de doğrulanır:** ingest, `bucketStart`i fabrika gününün başlangıcından itibaren `bucketMinutes` ızgarasına göre ölçer; hizasız kalem **400 `BUCKET_MISALIGNED`** alır ve sunucu **sessizce kuantize ETMEZ** (kuantizasyon ajanın hatasını gizler ve iki kovayı birleştirir; 10:00 ile 10:02 başlangıçlı iki 15 dk'lık kova PK'yı ihlal etmez ama 13 dk ÖRTÜŞÜR). Izgara kontrolü `shift-resolve.helper` ile aynı takvim kaynağını kullanır.
+- **Kova boyu TEK KAYNAKTAN okunur ve İLERİYE DÖNÜK değişir.** Boyun tek kaynağı **`GET /api/tezgah/collector/config`**tur: sunucu yürürlükteki `bucketMinutes`i **`effectiveFrom` damgasıyla** döner, ajan onu kullanır ve kalemde tekrar beyan eder. Beyan ile yürürlükteki değer uyuşmazsa kalem **400 `BUCKET_SIZE_MISMATCH`** alır (ajan config'i tazeleyip yeniden dener) — eski `409 BUCKET_SIZE_CONFLICT` adı bu tek-kaynak kuralıyla değiştirildi: çakışma bir yarış değil, **bayat yapılandırmadır**. Satır içi DB CHECK (`machine_intervals_bucket_chk`) `bucketMinutes`i yürürlükteki kümeyle sınırlar, yani bayat bir ajan seddi DB'de de bulur. 60→15 çekilirse eski kova PK'da çakışıp ezilir ve o saat **çift sayılır**; bu yüzden değişim ANI `SystemSetting`e damgalanır, budayıcı/mühürleyici o andan öncesini eski kova boyuyla okur ve **eski kovalara DOKUNULMAZ**. Değişim **hem kova hem VARDİYA sınırına hizalı** bir anda yürürlüğe girer (vardiya ortasında boy değişirse o vardiyanın terimleri iki farklı ızgaradan toplanır ve mutabakat kalıcı olarak kırmızı kalırdı). **Hizanın kendisi de doğrulanır:** ingest, `bucketStart`i fabrika gününün başlangıcından itibaren `bucketMinutes` ızgarasına göre ölçer; hizasız kalem **400 `BUCKET_MISALIGNED`** alır ve sunucu **sessizce kuantize ETMEZ** (kuantizasyon ajanın hatasını gizler ve iki kovayı birleştirir; 10:00 ile 10:02 başlangıçlı iki 15 dk'lık kova PK'yı ihlal etmez ama 13 dk ÖRTÜŞÜR). Izgara kontrolü `shift-resolve.helper` ile aynı takvim kaynağını kullanır.
 - **Simülasyon — İKİ SİNYAL, çapraz kontrol.** `source: SIMULATED` yalnız `tezgah.simulatedDataEnabled` AÇIKKEN kabul edilir (varsayılan kapalıda 400). **Ek olarak:** kapsamdaki cihazın `PeripheralDevice.simulate` değeri true iken `source: MACHINE` beyan eden kalem **400 `SOURCE_MISMATCH`** alır — emsalin gerçek biçimi iki sinyallidir (`test_sack_weigh_source` başlığı: *"İki sinyal: istemci beyanı VE sunucunun cihazı kendi çözüp `simulate`i çapraz kontrol etmesi"*; `shipping.service.ts:1497-1534`). Tek beyana bakmak, simüle cihazın `MACHINE` damgasıyla deftere yazmasına izin verirdi.
 - **Advisory kilit — HAYALET KOVA GERÇEKTİ (Fable C1, KRİTİK).** Sentez *"ingest kilit ALMAZ"* diyordu ve `work_sessions_active_machine_uq` emsalini gösteriyordu; **emsal yanlış sınıf**: o sed bir TEKİLLİK değişmezini korur, bir **SAYIM FOTOĞRAFINI** değil. Kilitsiz kurgu şu yarışı açık bırakıyordu: ingest `sealedAt = null` okur → mühür sayar ve commit eder → ingest commit eder; `409 SHIFT_SEALED` kapısı da aynı kilitsiz okumaya dayandığı için **check-then-act**tir. Taze okuma tek başına YETMEZ — ölçüldü: döneme YAZAN her yol kapanışla aynı uzayı alıyor (`period-guard.helper.ts:165-166`, `assertPeriodOpenTx`in İLK ifadesi kilittir) ve paylaşımlı kalıbın emsali hazır (`master-data-live.helper.ts:68` `pg_advisory_xact_lock_shared`; bekçi regex'i `_shared`i tanır, `test_advisory_lock_namespaces.ts:78`).
-  **Karar:** **mühür** tx'inin İLK ifadesi `pg_advisory_xact_lock(8032, hashtext(shiftInstanceId))` (**EXCLUSIVE**); **ingest** tx'inin İLK ifadesi aynı anahtarda **`pg_advisory_xact_lock_shared`**. Kalemin `shiftInstanceId`si tx'ten ÖNCE `shift-resolve.helper` ile çözülür (takvim hesabı, kilit sırasını bozmaz); bir pakette birden çok vardiya varsa kilitler `shiftInstanceId` **artan sırada** alınır (deterministik sıra kuralı). Faz 1a'da mührün tek yazarı insandır ve `LoomInterval` yoktur — uzay **Faz 2'de** doğar (§9).
+  **Karar:** **mühür** tx'inin İLK ifadesi `pg_advisory_xact_lock(8032, hashtext(shiftInstanceId))` (**EXCLUSIVE**); **ingest** tx'inin İLK ifadesi aynı anahtarda **`pg_advisory_xact_lock_shared`**. Kalemin `shiftInstanceId`si tx'ten ÖNCE `shift-resolve.helper` ile çözülür (takvim hesabı, kilit sırasını bozmaz); bir pakette birden çok vardiya varsa kilitler `shiftInstanceId` **artan sırada** alınır (deterministik sıra kuralı). Faz 1a'da mührün tek yazarı insandır ve `MachineInterval` yoktur — uzay **Faz 2'de** doğar (§9).
 
 ```
 // period-guard.helper.ts ENVANTERİNE TEK SATIR (FAZ 2'de eklenir):
-//   8032  LOOM_SHIFT_SEAL_LOCK_NS  services/loom-shift.service.ts  tezgah vardiya mühürü
+//   8032  MACHINE_SHIFT_SEAL_LOCK_NS  services/loom-shift.service.ts  tezgah vardiya mühürü
 //         (anahtar: hashtext(shiftInstanceId); EXCLUSIVE sahip = mühürleyici,
 //          `_shared` = ingest — 8030 / `master-data-live.helper.ts:68` emsali)
 ```
@@ -1344,12 +1374,12 @@ Envanter bugün 8021→8031'de bitiyor (`src/services/helpers/period-guard.helpe
 | Katman | Çözünürlük | Satır/yıl | Saklama | Yıllık/tavan boyut |
 |---|---|---|---|---|
 | Ham örnek | 10 sn | *63,07 M* | **DB'ye HİÇ girmez** — kenarda 7 günlük halka tampon | **0** |
-| `LoomInterval` | 15 dk | 700.800 | `tezgah.sampleRetentionDays` = **180** | **~120 MB TAVAN (sabit)** |
-| `LoomStopEvent` **insan kararsız** | olay | ~1,12 M ⚠️ | kova ile birlikte budanır (vardiya mühürlüyse) | ~450 MB tavan |
-| `LoomStopEvent` **insan kararlı** | olay | ~280 K ⚠️ | **BUDANMAZ** | ~180 MB/yıl |
-| `LoomShiftStopBreakdown` | vardiya×sebep×kuşak | 175.200 | **BUDANMAZ** | ~45 MB/yıl |
-| `LoomShiftStat` | vardiya×makine | 21.900 | **BUDANMAZ** | ~7 MB/yıl |
-| `LoomRun` · `LoomCounterEvent` · `ShiftInstance` | — | ~24.000 | **BUDANMAZ** | ~6 MB/yıl |
+| `MachineInterval` | 15 dk | 700.800 | `tezgah.sampleRetentionDays` = **180** | **~120 MB TAVAN (sabit)** |
+| `MachineStopEvent` **insan kararsız** | olay | ~1,12 M ⚠️ | kova ile birlikte budanır (vardiya mühürlüyse) | ~450 MB tavan |
+| `MachineStopEvent` **insan kararlı** | olay | ~280 K ⚠️ | **BUDANMAZ** | ~180 MB/yıl |
+| `MachineShiftStopBreakdown` | vardiya×sebep×kuşak | 175.200 | **BUDANMAZ** | ~45 MB/yıl |
+| `MachineShiftStat` | vardiya×makine | 21.900 | **BUDANMAZ** | ~7 MB/yıl |
+| `MachineRun` · `MachineCounterEvent` · `ShiftInstance` | — | ~24.000 | **BUDANMAZ** | ~6 MB/yıl |
 
 **Bir yıl sonra:** kalıcı büyüme ≈ **240 MB/yıl**, budanan tavan ≈ **570 MB**; ilk yıl toplam **< 1 GB**. ⚠️ Satır boyu bandının **alt ve üst ucu** ayrı yazılır; aynı tabloya iki farklı boy verilmez (yukarıdaki iki satır aynı tablodur ve boy farkı yalnız DOLU kolon sayısından gelir). Bu tavanın asıl bedeli bir "yedek penceresi" DEĞİL, **KURULUM KAPISIDIR:** `deploy/kur.ps1:448-451` her sürümden önce `pg_dump -Fc` alır, `pg_restore --list` ile doğrular ve ikisinden biri düşerse **kurulumu İPTAL eder** (*"Yedek ALINAMADI -> kurulum IPTAL"* / *"Yedek DOGRULANAMADI (bozuk dump) -> kurulum IPTAL"*); zaman sınırı/pencere YOKTUR. Tablo büyümesi yedeği yavaşlatır, **başarısız bir yedek güncelleme yolunu tümüyle kapatır** — retention tavanı bu yüzden bir depolama kararı değil, bir **DAĞITIM** kararıdır. "En eski canlı dump'ta şema provası" kuralı korunur. 120 tezgahta ×6 → o ölçekte partition kararı yeniden açılır (bugün açılmaz; **tetik yazılı:** tablo 20 M satırı VEYA kurulum 60 tezgahı geçerse, ve prova **boş tabloda** yapılır — sayaç `/api/admin/health`te).
 
@@ -1357,39 +1387,39 @@ Envanter bugün 8021→8031'de bitiyor (`src/services/helpers/period-guard.helpe
 
 ### Budama — dört sed
 
-1. **BUDAMA TESTİ (bekçi).** Raporlanabilir her sayı budamadan sonra da aynı değeri vermelidir. `scripts/test_loom_prune_safety.ts` **dört ayaklıdır**: ① **pozitif sed sondası** — budama penceresinin İÇİNE sebepli + `classifiedById` dolu + geri alınmış üç duruş konur, budamadan sonra üçü de DURUYOR olmalı; ② **gerçek negatif sonda** — budayıcının WHERE'inden sebep yüklemi kaldırılır → kırmızı; ③ **yüzey envanteri** — `loom_stop_events`/`loom_intervals` okuyan dosyaların AST listesi sabitlenir; listeye yeni dosya girerse kırmızı (yeni bir rapor, budama güvenliği yeniden ölçülmeden doğamaz); ④ **koşum terimi sondası** — budamadan önce ve sonra `LoomRun`ın üretim VE duruş terimleri AYNI (aşağıdaki *"Koşum ekseni kovadan bağımsızdır"* paragrafı). "Oku → buda → yeniden oku → fark 0" kalır ama **tek başına güvence sayılmaz**: bugün var olmayan bir raporun okuduğu kolonu ölçemez.
+1. **BUDAMA TESTİ (bekçi).** Raporlanabilir her sayı budamadan sonra da aynı değeri vermelidir. `scripts/test_machine_prune_safety.ts` **dört ayaklıdır**: ① **pozitif sed sondası** — budama penceresinin İÇİNE sebepli + `classifiedById` dolu + geri alınmış üç duruş konur, budamadan sonra üçü de DURUYOR olmalı; ② **gerçek negatif sonda** — budayıcının WHERE'inden sebep yüklemi kaldırılır → kırmızı; ③ **yüzey envanteri** — `machine_stop_events`/`machine_intervals` okuyan dosyaların AST listesi sabitlenir; listeye yeni dosya girerse kırmızı (yeni bir rapor, budama güvenliği yeniden ölçülmeden doğamaz); ④ **koşum terimi sondası** — budamadan önce ve sonra `MachineRun`ın üretim VE duruş terimleri AYNI (aşağıdaki *"Koşum ekseni kovadan bağımsızdır"* paragrafı). "Oku → buda → yeniden oku → fark 0" kalır ama **tek başına güvence sayılmaz**: bugün var olmayan bir raporun okuduğu kolonu ölçemez.
 2. **Mühür ön koşulu.** Budayıcı yalnız `sealState = SEALED` olan vardiyanın penceresine dokunur.
-3. **Sebep seddi (uygulama) — yüklem İNSAN KARARINA daraltıldı.** Budanmayan duruş = **insan kararı taşıyan** duruştur: `classifiedById IS NOT NULL OR reasonSource IN ('OPERATOR','SUPERVISOR')`. Makineden türeyen sınıflandırma (`reasonSource IN ('MACHINE','INFERRED')` **ve** `classifiedById IS NULL`) **TELEMETRİDİR**: kovayla birlikte budanır, rakamı karnede ve `LoomShiftStopBreakdown`ta zaten donmuştur. Yüklem `src/services/helpers/loom-retention.helper.ts`te TEK kaynaktır ve AST tripwire ile korunur.
+3. **Sebep seddi (uygulama) — yüklem İNSAN KARARINA daraltıldı.** Budanmayan duruş = **insan kararı taşıyan** duruştur: `classifiedById IS NOT NULL OR reasonSource IN ('OPERATOR','SUPERVISOR')`. Makineden türeyen sınıflandırma (`reasonSource IN ('MACHINE','INFERRED')` **ve** `classifiedById IS NULL`) **TELEMETRİDİR**: kovayla birlikte budanır, rakamı karnede ve `MachineShiftStopBreakdown`ta zaten donmuştur. Yüklem `src/services/helpers/loom-retention.helper.ts`te TEK kaynaktır ve AST tripwire ile korunur.
    > **Neden daraltıldı (Fable D4, KRİTİK):** eski yüklem (`reasonCode IS NOT NULL OR …`) §10/#11'in *"sinyalden çözülen kısa kopuş otomatik sınıflanır"* kararıyla çarpışıyordu — dokumada duruşların ÇOĞU kopuştur, yani otomatik sınıflama budanan 1,12 M satırı kalıcı 1,12 M satıra çevirir ve *"ilk yıl < 1 GB"* bütçesini **tek tabloyla** aşardı. Sınır artık "sebep var mı" değil, **"bir insan karar verdi mi"**dir.
-4. **Sebep seddi (DB).** ⚠️ `loom_stop_events_block_classified_delete` **BEFORE DELETE trigger**'ı **aynı yüklemi birebir** DB'de zorlar (`RAISE EXCEPTION`) — üçü (helper · trigger · `loom_stops_duty_idx`) **boğaz-ikizdir** ve birlikte değişir. Gerekçe: yüklemdeki tek hata defter satırını geri dönüşsüz siler; `scripts/test_db_invariants.ts:543` trigger envanteri zaten var ve *"trigger kaybı diğerlerinden DAHA KRİTİK"* diyor.
-5. **Takvimle kapanan borç BEYAN EDİLİR (sed değil, ÖLÇÜM).** `loom_stops_duty_idx` yüklemi (sınıflandırma kuyruğu) ile budama yüklemi **tümleyendir**: budayıcı koştuğunda kuyrukta bekleyen borç satırları sessizce yok olur — yani sınıflandırma borcunu insan kararı değil **TAKVİM** kapatır. Bu yüzden budayıcı her koşumda sildiği pencerede kaç **SINIFLANDIRILMAMIŞ** duruş bulunduğunu sayar; sayı `/api/admin/health`e ve audit'e yazılır. Sayacın sıfırdan büyük olması bir kusur değil bir **ölçümdür**: sınıflandırma kuyruğunun kronik temizlenmediğini gösterir ve `shiftCloseRequiresClassification` kararının girdisidir.
+4. **Sebep seddi (DB).** ⚠️ `machine_stop_events_block_classified_delete` **BEFORE DELETE trigger**'ı **aynı yüklemi birebir** DB'de zorlar (`RAISE EXCEPTION`) — üçü (helper · trigger · `machine_stops_duty_idx`) **boğaz-ikizdir** ve birlikte değişir. Gerekçe: yüklemdeki tek hata defter satırını geri dönüşsüz siler; `scripts/test_db_invariants.ts:543` trigger envanteri zaten var ve *"trigger kaybı diğerlerinden DAHA KRİTİK"* diyor.
+5. **Takvimle kapanan borç BEYAN EDİLİR (sed değil, ÖLÇÜM).** `machine_stops_duty_idx` yüklemi (sınıflandırma kuyruğu) ile budama yüklemi **tümleyendir**: budayıcı koştuğunda kuyrukta bekleyen borç satırları sessizce yok olur — yani sınıflandırma borcunu insan kararı değil **TAKVİM** kapatır. Bu yüzden budayıcı her koşumda sildiği pencerede kaç **SINIFLANDIRILMAMIŞ** duruş bulunduğunu sayar; sayı `/api/admin/health`e ve audit'e yazılır. Sayacın sıfırdan büyük olması bir kusur değil bir **ölçümdür**: sınıflandırma kuyruğunun kronik temizlenmediğini gösterir ve `shiftCloseRequiresClassification` kararının girdisidir.
 
-> **⚠️ DOKTRİN BORCU — ve ÜÇÜNCÜ HARD-DELETE SINIFI AÇILMAYACAK (yönetici kararı, 2026-09-12).** `LoomStopEvent` tek tabloda iki yaşam sınıfı taşıyor ve budayıcı ondan fiziksel `DELETE` yapıyor. `docs/kurallar/defter.md` iki meşru hard-delete sınıfı tanıyor (③b saf yapılandırma pivotu · ④ deftere hiç yazmamış taslak) ve *"yeni bir `delete` yolu açmak KARARDIR: iki sınıftan birine girmiyorsa yazılmaz"* diyor.
+> **⚠️ DOKTRİN BORCU — ve ÜÇÜNCÜ HARD-DELETE SINIFI AÇILMAYACAK (yönetici kararı, 2026-09-12).** `MachineStopEvent` tek tabloda iki yaşam sınıfı taşıyor ve budayıcı ondan fiziksel `DELETE` yapıyor. `docs/kurallar/defter.md` iki meşru hard-delete sınıfı tanıyor (③b saf yapılandırma pivotu · ④ deftere hiç yazmamış taslak) ve *"yeni bir `delete` yolu açmak KARARDIR: iki sınıftan birine girmiyorsa yazılmaz"* diyor.
 > **Önceki tasarım turu buradan bir ⑤ sınıfı öneriyordu — REDDEDİLDİ.** Gerekçe: sınıf listesi *"bir defter satırını hangi koşulda fiziksel silebilirsin"* sorusunun cevabıdır; telemetri satırı **defter satırı değildir**, dolayısıyla o listeye girmesi kategori hatasıdır. Üçüncü bir sınıf açmak, listeyi "silinebilir şeyler" listesine çevirir ve bir sonraki tasarımcı kendi tablosunu oraya yazmak için gerekçe arar — doktrinin aşınma yolu tam olarak budur.
-> **Karar: `defter.md`ye SINIF değil BÖLÜM eklenir — "Telemetri ≠ defter" — ve budama izni bir BEKÇİYLE ölçülür.** Altı çekirdek kural: **①** telemetri bir hard-delete sınıfı DEĞİL, **defter-olmayan satırın yaşam döngüsüdür** (`updatedAt` taşır, yeniden yazılır, tavanlıdır, budanır); **②** deftere/iş kararına giren her sayı **budamadan ÖNCE kalıcı kolona DONAR** (karne terimleri · `LoomShiftStopBreakdown` · koşumun kapanış terimleri); **③** budama izni **manifest bekçisiyle ÖLÇÜLEREK** verilir — bekçi yeşil değilken retention job sürüme çıkmaz; **④** telemetri okuyan yol **tek dosyada** yaşar ve AST tripwire ile sabitlenir; **⑤** aynı tabloda defter + telemetri varsa **yüklem TEK helper'dadır** ve DB seddiyle ikizdir; **⑥** retention **açık koşuma, açık vardiyaya ve mühürsüz pencereye DOKUNMAZ**.
+> **Karar: `defter.md`ye SINIF değil BÖLÜM eklenir — "Telemetri ≠ defter" — ve budama izni bir BEKÇİYLE ölçülür.** Altı çekirdek kural: **①** telemetri bir hard-delete sınıfı DEĞİL, **defter-olmayan satırın yaşam döngüsüdür** (`updatedAt` taşır, yeniden yazılır, tavanlıdır, budanır); **②** deftere/iş kararına giren her sayı **budamadan ÖNCE kalıcı kolona DONAR** (karne terimleri · `MachineShiftStopBreakdown` · koşumun kapanış terimleri); **③** budama izni **manifest bekçisiyle ÖLÇÜLEREK** verilir — bekçi yeşil değilken retention job sürüme çıkmaz; **④** telemetri okuyan yol **tek dosyada** yaşar ve AST tripwire ile sabitlenir; **⑤** aynı tabloda defter + telemetri varsa **yüklem TEK helper'dadır** ve DB seddiyle ikizdir; **⑥** retention **açık koşuma, açık vardiyaya ve mühürsüz pencereye DOKUNMAZ**.
 > Bu bir `/karar-notu` işidir: tam metin arşive, `docs/kurallar/defter.md`ye bölüm + tek kural satırı. **Budayıcı bu bölüm yazılmadan ve bekçisi yeşil görülmeden sürüme çıkmaz** (Faz 2 kabul kapısı, §9). Kök `CLAUDE.md`'ye tek cümle eklenip eklenmeyeceği **kullanıcı onayındadır** — bu belge onu kendiliğinden yazmaz.
-> Alternatif ① (tabloyu ikiye ayırmak, sınıflandırmada satır taşımak) ölçüldü ve reddedildi: taşıma sırasında id değişir, `LoomStopReclass`/`LoomShiftStopBreakdown` atıfları kırılır ve "tek açık duruş" seddi iki tabloya bölünür.
+> Alternatif ① (tabloyu ikiye ayırmak, sınıflandırmada satır taşımak) ölçüldü ve reddedildi: taşıma sırasında id değişir, `MachineStopReclass`/`MachineShiftStopBreakdown` atıfları kırılır ve "tek açık duruş" seddi iki tabloya bölünür.
 
 ### Budama bekçisinin SÖZLEŞMESİ — okuma kümesi bir MANİFESTTİR (2026-09-12)
 
 *"Oku → buda → yeniden oku → fark 0"* cümlesi bir bekçi değildir: **hangi uçların okunacağı** yazılmadıkça bekçi, yazarının o gün hatırladığı yüzeyleri ölçer ve yarın doğan rapor budama güvenliği hiç ölçülmeden canlıya çıkar. Sözleşme dört madde:
 
-**① OKUMA KÜMESİ ELLE LİSTE DEĞİL, MANİFESTTİR.** `scripts/test_loom_prune_safety.ts` Express router'ından **`/api/tezgah/**` altındaki HER `GET` ucunu toplar** ve `src/constants/loom-read-surfaces.ts` manifestiyle karşılaştırır; **manifestte olmayan bir uç varsa bekçi KIRMIZI** (yeni rapor, sınıfı beyan edilmeden doğamaz). Manifest her ucu iki sınıftan birine yazar:
+**① OKUMA KÜMESİ ELLE LİSTE DEĞİL, MANİFESTTİR.** `scripts/test_machine_prune_safety.ts` Express router'ından **`/api/tezgah/**` altındaki HER `GET` ucunu toplar** ve `src/constants/loom-read-surfaces.ts` manifestiyle karşılaştırır; **manifestte olmayan bir uç varsa bekçi KIRMIZI** (yeni rapor, sınıfı beyan edilmeden doğamaz). Manifest her ucu iki sınıftan birine yazar:
 
 | Sınıf | Uçlar | Budama sonrası sözleşme |
 |---|---|---|
 | **DEFTER** (budama öncesi/sonrası **BİREBİR**) | **R1** `shift-stats` · **R2** `efficiency` · **R3** `stop-pareto` · **R4** `runs` · **R5** `run-hours` · **R6** `stops?classified=1` · **R7** `seals` | tek bir alan bile değişirse kırmızı |
 | **TELEMETRİ** (değişebilir, ama **DÜRÜSTÇE**) | **T1** `intervals` · **T2** `dashboard` · **T3** `stops?classified=0` | cevap `ApiResponse.warnings` taşır ve **budanmış pencerede `null` döner, `0` DEĞİL** — "veri yok" ile "sıfırdı" aynı sayıya çökerse kullanıcı boş pencereyi %0 randıman sanar |
 
-**② AST TRIPWIRE — `scripts/loom-telemetry-ast-tarama.ts`, dört kural.** ⓐ `prisma.loomInterval` delegate'i **yalnız beş dosyada** geçebilir (ingest servisi · mühürleyici · retention helper · pano servisi · bekçinin kendisi); ⓑ sebepsiz duruş yüklemi **yalnız üç dosyada**; ⓒ `PRUNABLE_STOP_WHERE` (Prisma parçası) ↔ `isPrunableStop()` (bellek-içi yüklem) **boğaz-ikizdir** ve birlikte değişir; ⓓ rapor servisleri (R1–R7) allowlist DIŞINDADIR — bir defter raporu telemetri delegate'ine dokunamaz. **Envanter İKİ YÖNLÜDÜR:** listede olup artık var olmayan dosya da kırmızıdır (ölü muaf, gerçek ihlali sessizce kapsam dışında tutar).
+**② AST TRIPWIRE — `scripts/loom-telemetry-ast-tarama.ts`, dört kural.** ⓐ `prisma.machineInterval` delegate'i **yalnız beş dosyada** geçebilir (ingest servisi · mühürleyici · retention helper · pano servisi · bekçinin kendisi); ⓑ sebepsiz duruş yüklemi **yalnız üç dosyada**; ⓒ `PRUNABLE_STOP_WHERE` (Prisma parçası) ↔ `isPrunableStop()` (bellek-içi yüklem) **boğaz-ikizdir** ve birlikte değişir; ⓓ rapor servisleri (R1–R7) allowlist DIŞINDADIR — bir defter raporu telemetri delegate'ine dokunamaz. **Envanter İKİ YÖNLÜDÜR:** listede olup artık var olmayan dosya da kırmızıdır (ölü muaf, gerçek ihlali sessizce kapsam dışında tutar).
 
 **③ RETENTION'IN DOKUNAMAYACAKLARI.** Budayıcı **açık koşumun** penceresine, **açık vardiyaya** ve **mühürsüz pencereye** DOKUNMAZ. Açık koşum süresiz bir budama muafiyeti üretmesin diye kardeş kural: **`tezgah.maxOpenRunDays` (7) aşan koşum watchdog ile kapanır** (`endedAt` beyan edilir, terimler donar) — aksi hâlde unutulmuş tek bir açık koşum, kendi penceresini sonsuza kadar budanmaz kılardı.
 
-**④ NEGATİF SONDALAR — sekizi de KIRMIZI GÖRÜLEREK yazılır.** **N1** breakdown satırı silinir → kırmızı · **N2** budama yükleminden mühür koşulu düşürülür → kırmızı · **N3** yüklemden sebep/insan-kararı koşulu düşürülür → kırmızı · **N4** koşum kapanışı atlanır (terimler donmaz) → kırmızı · **N5** açık koşumun penceresi budanır → kırmızı · **N6** manifestte olmayan bir `GET` ucu eklenir → kırmızı · **N7** T1 cevabından `warnings` kaldırılır (ya da boş pencerede `0` döndürülür) → kırmızı · **N8** allowlist dışı bir dosyaya `loomInterval` delegate'i konur **ve** listeye ölü bir muaf bırakılır → kırmızı.
+**④ NEGATİF SONDALAR — sekizi de KIRMIZI GÖRÜLEREK yazılır.** **N1** breakdown satırı silinir → kırmızı · **N2** budama yükleminden mühür koşulu düşürülür → kırmızı · **N3** yüklemden sebep/insan-kararı koşulu düşürülür → kırmızı · **N4** koşum kapanışı atlanır (terimler donmaz) → kırmızı · **N5** açık koşumun penceresi budanır → kırmızı · **N6** manifestte olmayan bir `GET` ucu eklenir → kırmızı · **N7** T1 cevabından `warnings` kaldırılır (ya da boş pencerede `0` döndürülür) → kırmızı · **N8** allowlist dışı bir dosyaya `machineInterval` delegate'i konur **ve** listeye ölü bir muaf bırakılır → kırmızı.
 
-**Mutabakat bekçisi kapsamı:** değişmez **`Σ observedSec + unobservedSec = calendarSec`**tir — eski *"Σ kova süresi = takvim"* biçimi `unobservedSec > 0` olan **her** vardiyada tanımı gereği kırmızı verirdi (§5.1). Eşitlik yalnız **retention penceresi içindeki** vardiyalar için ölçülür ve körlük zemini basılır (kaç vardiya ölçüldü — *"0 bulgu ≠ hiç bakılmadı"*). Pencere dışı için kovadan bağımsız ikinci değişmez: `Σ LoomShiftStopBreakdown.stopSec + minorStopSec ≤ potSec`.
+**Mutabakat bekçisi kapsamı:** değişmez **`Σ observedSec + unobservedSec = calendarSec`**tir — eski *"Σ kova süresi = takvim"* biçimi `unobservedSec > 0` olan **her** vardiyada tanımı gereği kırmızı verirdi (§5.1). Eşitlik yalnız **retention penceresi içindeki** vardiyalar için ölçülür ve körlük zemini basılır (kaç vardiya ölçüldü — *"0 bulgu ≠ hiç bakılmadı"*). Pencere dışı için kovadan bağımsız ikinci değişmez: `Σ MachineShiftStopBreakdown.stopSec + minorStopSec ≤ potSec`.
 
-**Koşum ekseni kovadan bağımsızdır:** `LoomRun` budanmaz ama içinde üretim terimi yoksa boş kabuktur — bu yüzden koşum kapanışında `picksAtClose`/`producedM`/`observedSecAtClose` **ve `stopSecAtClose`/`stopCountAtClose`** donar (§2.8). Duruş terimleri sonradan eklendi ve gerekçesi ölçülmüştür: sebepsiz duruş budandığında **koşum düzeyi duruş da ölüyordu** — karne ekseni vardiya×makine olduğu için *"bu iş emri adımında kaç kez, kaç saat durduk"* sorusunu karne cevaplayamaz. Tek yazar `closeLoomRunTx`, atomik claim `WHERE closedTermsAt IS NULL`. Retention penceresinden sonra koşum ekseninin HER sorusu **koşumun kendi terimlerinden** cevaplanır, kovadan değil. `test_loom_prune_safety`nin **DÖRDÜNCÜ AYAĞI** tam olarak budur: **budamadan önce ve sonra koşum üretimi VE duruş terimleri AYNI** (§4 madde ① ④).
+**Koşum ekseni kovadan bağımsızdır:** `MachineRun` budanmaz ama içinde üretim terimi yoksa boş kabuktur — bu yüzden koşum kapanışında `picksAtClose`/`producedM`/`observedSecAtClose` **ve `stopSecAtClose`/`stopCountAtClose`** donar (§2.8). Duruş terimleri sonradan eklendi ve gerekçesi ölçülmüştür: sebepsiz duruş budandığında **koşum düzeyi duruş da ölüyordu** — karne ekseni vardiya×makine olduğu için *"bu iş emri adımında kaç kez, kaç saat durduk"* sorusunu karne cevaplayamaz. Tek yazar `closeMachineRunTx`, atomik claim `WHERE closedTermsAt IS NULL`. Retention penceresinden sonra koşum ekseninin HER sorusu **koşumun kendi terimlerinden** cevaplanır, kovadan değil. `test_machine_prune_safety`nin **DÖRDÜNCÜ AYAĞI** tam olarak budur: **budamadan önce ve sonra koşum üretimi VE duruş terimleri AYNI** (§4 madde ① ④).
 
 ---
 
@@ -1410,10 +1440,10 @@ takvim (ShiftInstance penceresi)
 ```
 
 > **⚠️ Denetim düzeltmesi (çürütme izi merceği, KRİTİK).** Sentez kovanın iki vardiyaya bölünmemesini garantiliyordu ama **duruş span'i için hiçbir kırpma kuralı yoktu**: 23:50'de başlayan 12 saatlik bir duruş tümüyle ilk güne yazılır, o günün duruş toplamı 24 saati aşar ve **kullanılabilirlik negatif çıkar.** Tasarım turunun kendi kararı sentezde düşmüştü.
-> **Kural:** `LoomStopEvent` **olayın gerçeğini** tek satırda tutar (`startedAt`/`durationSec` kırpılmaz, `factoryDay` doğuşta donar); **karne terimleri span'den değil, vardiya penceresine KIRPILMIŞ saniyeden toplanır.** Faz 2'de taşıyıcı `LoomInterval.stopSec`tir (kova zaten vardiya sınırının katı, §2.6); Faz 1a'da (kovasız) kırpmayı mühürleyici yapar ve `shift-resolve.helper`in ikizi olarak **tek helper'da** yaşar. Değişmez: `Σ(kova/karne stopSec) = Σ(span durationSec ∩ vardiya penceresi)` — bekçi `scripts/test_loom_shift_terms.ts`.
+> **Kural:** `MachineStopEvent` **olayın gerçeğini** tek satırda tutar (`startedAt`/`durationSec` kırpılmaz, `factoryDay` doğuşta donar); **karne terimleri span'den değil, vardiya penceresine KIRPILMIŞ saniyeden toplanır.** Faz 2'de taşıyıcı `MachineInterval.stopSec`tir (kova zaten vardiya sınırının katı, §2.6); Faz 1a'da (kovasız) kırpmayı mühürleyici yapar ve `shift-resolve.helper`in ikizi olarak **tek helper'da** yaşar. Değişmez: `Σ(kova/karne stopSec) = Σ(span durationSec ∩ vardiya penceresi)` — bekçi `scripts/test_machine_shift_terms.ts`.
 
 > **⚠️ `unobservedSec`in TÜRETME KURALI (Fable D3, KRİTİK).** Dört ayrı bölüm bu terimin *ne olduğunu* söylüyordu, hiçbiri *nasıl hesaplandığını* söylemiyordu — ve ajan sustuğunda kova satırı da doğmadığı için toplanacak `observedSec` hiç yoktur.
-> **Kural:** `unobservedSec = calendarSec − Σ(LoomInterval.observedSec ∩ vardiya penceresi)` — **ARTIK yöntemiyle** hesaplanır, heartbeat aralığından DEĞİL; hiç kova doğmamış pencere bu farkta kendiliğinden görünür. **Heartbeat bir KAYNAK DEĞİLDİR**: nabız ajanın canlılığını söyler, kovanın gözlenmişliğini değil; ikisini karıştırmak "ajan ayaktaydı, demek ki ölçüyordu" yalanını üretir.
+> **Kural:** `unobservedSec = calendarSec − Σ(MachineInterval.observedSec ∩ vardiya penceresi)` — **ARTIK yöntemiyle** hesaplanır, heartbeat aralığından DEĞİL; hiç kova doğmamış pencere bu farkta kendiliğinden görünür. **Heartbeat bir KAYNAK DEĞİLDİR**: nabız ajanın canlılığını söyler, kovanın gözlenmişliğini değil; ikisini karıştırmak "ajan ayaktaydı, demek ki ölçüyordu" yalanını üretir.
 > **Kova içi tutarlılık satır yazılırken zorlanır** (DB CHECK, §2.6): `runSec + stopSec + minorStopSec ≤ observedSec ≤ bucketMinutes × 60`. Üst sınır olmadan bir ajan hatası kovaya kova boyundan uzun gözlem yazar ve `unobservedSec` **negatife** düşerdi.
 > **MUTABAKATIN DOĞRU BİÇİMİ `Σ observedSec + unobservedSec = calendarSec`tir**, *"Σ kova = takvim"* DEĞİL — ikincisi `unobservedSec > 0` olan her vardiyada tanımı gereği kırmızı verir (§4).
 > **COLLECTOR_GAP'in iki yüzü ve `gapPicks`:** ajan sustuktan sonraki ilk kova `GAP` damgalanır; sayaç o sürede ilerlemiştir ve fark ilk kovada **sıçrama** olarak gelir. Karar **terimi ikiye ayırmaktır**: sıçrayan atkı `gapPicks` kolonuna yazılır (§2.10) ve **metre onu İÇERİR** (kumaş gerçekten dokundu, `Roll` bir gün o metreyi gösterecek), **randımanın PAYINDAN DÜŞÜLÜR, PAYDAYA HİÇ GİRMEZ** (`picksActual − gapPicks`; o sürenin karşılığı `unobservedSec`tir ve POT'tan zaten düşüldüğü için paydada hiç doğmaz — sıçramayı P'ye saymak gözlenmemiş süreyi ödüllendirir, saymamak ise üretimi yok sayar; tek sayı ikisini birden yapamaz).
@@ -1454,42 +1484,56 @@ Dokumada `P` tipik olarak 0,97–1,00 bandındadır (tezgah durunca atkı atmaz 
 
 > **Terimler SAKLANIR, oran TEK helper'da TÜRETİLİR, mühür anında oran DENORMALİZE edilir.**
 
-1. `LoomShiftStat` yalnız **terimleri** tutar (saniye ve atkı).
-2. `src/services/helpers/loom-efficiency.helper.ts` → `computeLoomKpis(terms)` **TEK yazar ve TEK okuyucudur.** AST tripwire: `src/` içinde `picksActual /` ya da `aptSec /` aritmetiği başka dosyada geçemez.
+1. `MachineShiftStat` yalnız **terimleri** tutar (saniye ve atkı).
+2. `src/services/helpers/loom-efficiency.helper.ts` → `computeMachineKpis(terms)` **TEK yazar ve TEK okuyucudur.** AST tripwire: `src/` içinde `picksActual /` ya da `aptSec /` aritmetiği başka dosyada geçemez.
 3. Mühür anında oranlar + `formulaVersion` satıra yazılır. Denormalize güncel değer meşrudur, **koşulu TEK YAZAR olmasıdır**; ikinci bir yazma yolu açmak (servis içinden doğrudan yazım dahil) "tek kaynak satır" sınıfını kırar ve bekçi bunu AST ile ölçer. *(`Sack.weightKg ↔ SackWeighing` EMSAL DEĞİL UYARIDIR — §2.10.)*
 4. **ORANLAR ASLA ORTALANMAZ.** Haftalık/tezgah-üstü randıman `avg(effectivenessPct)` **değil** `Σpicks / Σ(target × POT)`. Helper **yüzde dizisi KABUL ETMEZ**.
 5. `formulaVersion` değişirse **geçmiş mühür DEĞİŞMEZ**; yeni sürüm yeni vardiyalardan geçerlidir.
 6. **Sınıflandırılmamış süre `UNPLANNED` sayılır** (fail-closed: bilinmeyen rakamı şişirmez, düşürür) **ve** `unclassifiedSec` ayrıca döner + `warnings` yazılır. `stopLossClass IS NULL` de aynı muameleyi görür — yüklem `IS NOT TRUE`/`COALESCE` ile **kötümser** kurulur.
    > **İSTİSNA — "gözlendi ama hiç üretim yok" ≠ "gözlenmedi".** `SIPARIS_YOK` bir SEBEP KODUDUR ve sınıflandırılmadan `UNPLANNED` sayılır: 8 saat boş duran bir tezgah, vardiya bitmeden sınıflandırılmazsa **%0 randımanla mühürlenir** ve düzeltmesi `loom:shift-unseal` ister — amire her vardiyada, her boş tezgah için zorunluluk çıkar. **Kural:** `observedSec ≈ calendarSec` **VE** `picksActual = 0` **VE** vardiyada hiç açık koşum yoksa, mühürleyici süreyi `nonScheduledSec`e yazar ve `source = INFERRED` damgalar (tezgahın boş durduğu **ÖLÇÜLMÜŞTÜR**, varsayılmamıştır); rapor bunu ayrı satırda beyan eder ve amir mühür öncesi tek tıkla `UNPLANNED`a çevirebilir. Ajan susmuşsa (`observedSec ≈ 0`) bu kural **UYGULANMAZ** — o süre `unobservedSec`tir.
-7. **SIFIR PAYDA SÖZLEŞMESİ: `computeLoomKpis` sıfır döndürmez, `null` döndürür.** `POT = 0` (iptal vardiya) → `A = P = E = null`; `APT = 0` (tam duruş) → `P = null`, `A = 0` (gerçek: hiç çalışmadı). `null` "ölçülemedi"dir ve toplamada **PAYDAN DA PAYDADAN DA** dışlanır; toplayıcı kaç vardiyanın dışlandığını döner ve rapor bunu körlük zemini olarak basar (*"N vardiya ölçülemedi"*). Yüzde dizisi kabul edilmediği gibi, **`null`ı 0 sayan çağrı da AST tripwire ile yasaklanır** — aksi hâlde iptal vardiyalar haftalık randımanı sessizce aşağı çeker.
-8. **GÖLGE MOD BİR KOLON + KAPIDIR, bir reçete cümlesi değil.** Kolon `LoomSpec.monitoringState` (**OFF → SHADOW → LIVE**, varsayılan OFF = bugünkü davranış, §2.3); kapı `POST /specs/:id/go-live`ın üç şartıdır. **`SHADOW` tezgahın kovası ve duruşu YAZILIR ve karnesi NORMAL MÜHÜRLENİR** — mühürlememek, gölge dönemi ölçülemez kılar ve kabul kapısının ② numaralı şartını (*"15 mühürlü gölge vardiya"*) imkânsızlaştırırdı. Ayrım YAYINDA yapılır: **DEFTER raporları (R1–R5) varsayılan olarak `monitoringState = LIVE` süzer**; gölge karneler yalnız **"Devreye Alma" sekmesinde** (`loom:spec-manage`) görünür ve dışa aktarımda her satır **GÖLGE damgası** taşır. Süzme karnenin **DONMUŞ** `LoomShiftStat.monitoringState` kolonundan yapılır, canlı künyeden değil (§2.10): gölge karne LIVE'a asla terfi etmez. Yüklem `loom-efficiency.helper`in **boğaz-ikizi** olarak TEK helper'da yaşar ve AST tripwire ile korunur. Bekçi **`test_loom_shadow_mode`** (§9).
+7. **SIFIR PAYDA SÖZLEŞMESİ: `computeMachineKpis` sıfır döndürmez, `null` döndürür.** `POT = 0` (iptal vardiya) → `A = P = E = null`; `APT = 0` (tam duruş) → `P = null`, `A = 0` (gerçek: hiç çalışmadı). `null` "ölçülemedi"dir ve toplamada **PAYDAN DA PAYDADAN DA** dışlanır; toplayıcı kaç vardiyanın dışlandığını döner ve rapor bunu körlük zemini olarak basar (*"N vardiya ölçülemedi"*). Yüzde dizisi kabul edilmediği gibi, **`null`ı 0 sayan çağrı da AST tripwire ile yasaklanır** — aksi hâlde iptal vardiyalar haftalık randımanı sessizce aşağı çeker.
+8. **GÖLGE MOD BİR KOLON + KAPIDIR, bir reçete cümlesi değil.** Kolon `MachineSpec.monitoringState` (**OFF → SHADOW → LIVE**, varsayılan OFF = bugünkü davranış, §2.3); kapı `POST /specs/:id/go-live`ın üç şartıdır. **`SHADOW` tezgahın kovası ve duruşu YAZILIR ve karnesi NORMAL MÜHÜRLENİR** — mühürlememek, gölge dönemi ölçülemez kılar ve kabul kapısının ② numaralı şartını (*"15 mühürlü gölge vardiya"*) imkânsızlaştırırdı. Ayrım YAYINDA yapılır: **DEFTER raporları (R1–R5) varsayılan olarak `monitoringState = LIVE` süzer**; gölge karneler yalnız **"Devreye Alma" sekmesinde** (`loom:spec-manage`) görünür ve dışa aktarımda her satır **GÖLGE damgası** taşır. Süzme karnenin **DONMUŞ** `MachineShiftStat.monitoringState` kolonundan yapılır, canlı künyeden değil (§2.10): gölge karne LIVE'a asla terfi etmez. Yüklem `loom-efficiency.helper`in **boğaz-ikizi** olarak TEK helper'da yaşar ve AST tripwire ile korunur. Bekçi **`test_machine_shadow_mode`** (§9).
 
 ### 5.4 · Devir ve kopuş KPI'ı
 
 | | Nerede | Neden |
 |---|---|---|
-| **Anlık devir** | `LoomLiveState.instantPicksPerMin` — tarihçe YOK | 10 sn'lik anlık devir gürültüdür; yılda 63 M satır eder |
+| **Anlık devir** | `MachineLiveState.instantPicksPerMin` — tarihçe YOK | 10 sn'lik anlık devir gürültüdür; yılda 63 M satır eder |
 | **Ortalama (çalışırken)** | türetilir: `(picksActual − gapPicks) / APT_dk` | sayaçtan çıkar, örnekleme hatası yok, toplanabilir; `gapPicks` **paydan düşülür** (§5.2) |
 | **Ortalama (genel)** | türetilir: `(picksActual − gapPicks) / POT_dk` | **Kimlik: `randıman = avgOverallPicksPerMin / targetPicksPerMin`** (ikisi de **atkı/dk**; `Rpm` adı devir/dk ile karışıyordu — §3.4 birim seddi). ⚠️ **Kimlik YALNIZ TEK HEDEFLİ vardiyada birebirdir:** birden çok koşum/hedef varsa `targetPicksPerMin` **NULL**'dur (§2.10) ve E bu kimlikten DEĞİL **kendi tanımından** okunur — `(picksActual − gapPicks) / targetPickCapacityPot` (§5.2) |
-| **Hedef** | `LoomRun.targetPicksPerMin` — SAKLANIR | randımanın paydası; işin özelliği, tezgahın değil |
+| **Hedef** | `MachineRun.targetPicksPerMin` — SAKLANIR | randımanın paydası; işin özelliği, tezgahın değil |
 | **Kopuş yoğunluğu** | `kopuş/10⁵ atkı = (warpStopCount \| weftStopCount) × 100000 / picksActual` | ⚠️ payda ATKIDIR, saat değil — saat bazlı sayım yavaş koşan tezgahı ödüllendirir. **Pay ya da payda NULL ise KPI HESAPLANMAZ** ve rapor "ölçülemedi" der (kanalsız retrofitte sayaç NULL'dır, 0 değil — §2.6) |
 
-> Kopuş KPI'ı denetimde geri getirildi (çürütme izi merceği, KRİTİK 4): 1 numaralı gereksinimin sektör ölçüsüdür ve terimleri karnede zaten var. **`ReasonPreset.stopCountsAsBreak` kolonu ise REDDEDİLDİ** — kopuş sayacı **makine sinyalinden** doğar (`LoomSignalKind.WARP_STOP`/`WEFT_STOP` → `LoomInterval.warpStopCount`), insan sınıflandırmasından değil; ikinci bir sayım yolu açmak aynı soruya iki cevap veren "çift yüklem" sınıfını üretirdi (§11).
+> Kopuş KPI'ı denetimde geri getirildi (çürütme izi merceği, KRİTİK 4): 1 numaralı gereksinimin sektör ölçüsüdür ve terimleri karnede zaten var. **`ReasonPreset.stopCountsAsBreak` kolonu ise REDDEDİLDİ** — kopuş sayacı **makine sinyalinden** doğar (`MachineSignalKind.WARP_STOP`/`WEFT_STOP` → `MachineInterval.warpStopCount`), insan sınıflandırmasından değil; ikinci bir sayım yolu açmak aynı soruya iki cevap veren "çift yüklem" sınıfını üretirdi (§11).
 
 ### 5.5 · Çalışma saati
 
-`baselineRunHours + Σ(LoomShiftStat.aptSec, baselineAt sonrası)`. **Artan sayaç kolonu YOK** — ikinci yazar olurdu. Formül defterin tam olmasına bağlıdır: ajan saatlerce susarsa eksik çıkardı — bu yüzden `unobservedSec` **ayrı** raporlanır ve "bilinmeyen, sıfır değil" olarak gösterilir.
+`baselineRunHours + Σ(MachineShiftStat.aptSec, baselineAt sonrası)`. **Artan sayaç kolonu YOK** — ikinci yazar olurdu. Formül defterin tam olmasına bağlıdır: ajan saatlerce susarsa eksik çıkardı — bu yüzden `unobservedSec` **ayrı** raporlanır ve "bilinmeyen, sıfır değil" olarak gösterilir.
 
-> **⚠️ TOPLAM ÇALIŞMA SAATİ GERİYE DÖNÜK KAYABİLİR — bu bilinçlidir.** Sayı TÜRETİLMİŞTİR ve mühürlü kuşakların toplamıdır: bir vardiya **yeniden mühürlenirse toplam da DEĞİŞİR**, çünkü doğru rakam son kuşaktır ve değişimin izi `LoomShiftStatSeal`de durur. **Bu yüzden bakım periyodu / garanti eşiği bu türetilmiş sayıya BAĞLANMAZ**; eşik gerektiğinde o anın değeri ayrı bir damga satırına yazılır (Faz 3 kararı) ve rapor *"şu ana kadarki mühürlü gerçeğe göre"* ibaresini basar.
+> **⚠️ TOPLAM ÇALIŞMA SAATİ GERİYE DÖNÜK KAYABİLİR — bu bilinçlidir.** Sayı TÜRETİLMİŞTİR ve mühürlü kuşakların toplamıdır: bir vardiya **yeniden mühürlenirse toplam da DEĞİŞİR**, çünkü doğru rakam son kuşaktır ve değişimin izi `MachineShiftStatSeal`de durur. **Bu yüzden bakım periyodu / garanti eşiği bu türetilmiş sayıya BAĞLANMAZ**; eşik gerektiğinde o anın değeri ayrı bir damga satırına yazılır (Faz 3 kararı) ve rapor *"şu ana kadarki mühürlü gerçeğe göre"* ibaresini basar.
 
 ### 5.6 · Metre
 
-`metre = pickDelta ÷ (LoomRun.picksPerCm × 100)` — ve bu **ÇÖZGÜ/HAM metredir**, mamul değil. ⚠️ **Metre `gapPicks`i İÇERİR** (randıman onu dışlar, §5.2): ajan susmuşken dokunan kumaş gerçektir ve bir gün `Roll` ölçümünde görünecektir; metreden düşmek, sayaç ile top arasındaki farkı yapay olarak büyütürdü. `picksPerCm` **TEZGAH ÜSTÜ (HAM) atkı/cm**'dir; mamul (bitim sonrası) metre `× (1 − takeUp)` ile AYRI bir büyüklüktür ve **bu belgede HESAPLANMAZ** (take-up kumaş teknik kartının işi — `docs/design/DEVERE-LEVENT-TARAMASI.md` §4.8: *"Leventin metresi çözgü metresidir, kumaş değil. Aynı kolonda iki anlam yaşayamaz"*). İki anlam aynı kolonda yaşayamaz; mamul metre gerektiğinde ayrı kolon + ayrı helper açılır. `picksPerCm` NULL ise **metre üretilmez**, randıman yine hesaplanır. Vardiyada **birden çok koşum** varsa metre koşum bazında türetilip toplanır (`picksPerCmAtClose` NULL kalır, §2.10).
+**Metre TEK HELPER'dan ve TEK FORMÜLDEN doğar; makine sınıfına göre DALLANMAZ** (`machineRunLengthM` ↔ boğaz-ikizi `MACHINE_RUN_LENGTH_SQL`; 2026-09-12 düşmanca denetimi, §10/#22):
+
+```
+metre = sayaçDeltası ÷ (MachineRun.unitsPerCm × 100)
+```
+
+Birim iki yerde yaşar ve **ikisi de `machineClass` DEĞİLDİR**:
+- **BİRİM SİNYALDE.** Sayacın ne saydığını `MachineSignalKind` söyler: `PICK_COUNTER` (atkı) · `COURSE_COUNTER` (sıra) · `RACK_COUNTER` (rack; 1 rack = 480 sıra çevrimi kanalın `scale`indedir, ayrı formül DEĞİL) · `FABRIC_LENGTH` (zaten metre, dönüşüm yok).
+- **SIKLIK KOŞUMDA.** `MachineRun.unitsPerCm` — dokumada tezgah üstü HAM atkı/cm, örmede sıra/cm. **Kolon adı birimi söylemez, çünkü formül birimden bağımsızdır.**
+
+⚠️ **Sınıf üstünde dallanmama kararı bilinçlidir:** `if (machineClass === WARP_KNIT)` bir `kind`-dispatch'tir (kök `CLAUDE.md` yasağı) ve sinyal ile sınıf ayrışırsa *"hangisi kazanır"* sorusunu doğurur — çift yüklem sınıfı. Tek yüklem: **sayaç ne diyorsa o.**
+
+⚠️ **`FABRIC_LENGTH` enum'da baştan beri VARDI ama hiçbir formülde kullanılmıyordu** (ölçüldü 2026-09-12). Makinenin kendi metre sayacı varsa **birinci tercih odur**: dönüşüm yapmaz, dolayısıyla sıklık sapmasını metreye yazmaz. `unitsPerCm` NULL ise **metre üretilmez**, randıman yine hesaplanır (eski `unitsPerCm` NULL kuralı aynen geçerli, yalnız adı genelleşti).
+
+Ve türetilen bu metre **ÇÖZGÜ/HAM metredir**, mamul değil. ⚠️ **Metre `gapPicks`i İÇERİR** (randıman onu dışlar, §5.2): ajan susmuşken dokunan kumaş gerçektir ve bir gün `Roll` ölçümünde görünecektir; metreden düşmek, sayaç ile top arasındaki farkı yapay olarak büyütürdü. `unitsPerCm` **TEZGAH ÜSTÜ (HAM) atkı/cm**'dir; mamul (bitim sonrası) metre `× (1 − takeUp)` ile AYRI bir büyüklüktür ve **bu belgede HESAPLANMAZ** (take-up kumaş teknik kartının işi — `docs/design/DEVERE-LEVENT-TARAMASI.md` §4.8: *"Leventin metresi çözgü metresidir, kumaş değil. Aynı kolonda iki anlam yaşayamaz"*). İki anlam aynı kolonda yaşayamaz; mamul metre gerektiğinde ayrı kolon + ayrı helper açılır. `unitsPerCm` NULL ise **metre üretilmez**, randıman yine hesaplanır. Vardiyada **birden çok koşum** varsa metre koşum bazında türetilip toplanır (`unitsPerCmAtClose` NULL kalır, §2.10).
 
 > ⚠️ **SAYAÇ ASLA STOK YAZMAZ.** Türetilen metre bir TAHMİNDİR; tek miktar gerçeği `Roll` ölçümüdür. Sayaçtan türeyen metre ile ölçülen `Roll` metresi asla birebir tutmaz (çekme, atkı sıklığı sapması, kenar fire — **saha doğrulaması**: %2–5 bandı pilotta ölçülür). Bu kural yazılı olmazsa birileri "sayaçtan otomatik top açalım" der ve tek-kaynak disiplini çöker.
 >
-> ⚠️ **`picksPerCm`in evi bugün YOK** (kod gerçekliği merceği O4): `ProductRecipe`te atkı/cm kolonu yoktur (`schema.prisma:1332` — alanlar `code · name · itemId · colorId · width · foldType · routeId · isActive`) ve `FabricProperty` **SEÇİM** kataloğudur, sayısal değer taşıyamaz (*"SEÇİM tipli özelliğin değeri `RollProperty`ye YAZILMAZ… değer kaydın KENDİ kolonunda durur"*).
-> **Kalıcı ev `ProductRecipe` DEĞİLDİR** — kardeş belge bunu ölçerek reddetti (`DEVERE-LEVENT-TARAMASI.md` §3.4: sıklık **renge/desene** bağlıdır, reçeteye konursa kopya doğar). Faz 1-2'de değer yalnız `LoomRun.picksPerCm`e **elle** girilir; kalıcı ev açıldığında kaynağı **çözgü/desen kartıdır** (`WarpSpec` ailesi, devere belgesi) ve **SERT bağımlılık yine EKLENMEZ**: NULL ise metre üretilmez, randıman hesaplanır. Karar §10/#9.
+> ⚠️ **`unitsPerCm`in evi bugün YOK** (kod gerçekliği merceği O4): `ProductRecipe`te atkı/cm kolonu yoktur (`schema.prisma:1332` — alanlar `code · name · itemId · colorId · width · foldType · routeId · isActive`) ve `FabricProperty` **SEÇİM** kataloğudur, sayısal değer taşıyamaz (*"SEÇİM tipli özelliğin değeri `RollProperty`ye YAZILMAZ… değer kaydın KENDİ kolonunda durur"*).
+> **Kalıcı ev `ProductRecipe` DEĞİLDİR** — kardeş belge bunu ölçerek reddetti (`DEVERE-LEVENT-TARAMASI.md` §3.4: sıklık **renge/desene** bağlıdır, reçeteye konursa kopya doğar). Faz 1-2'de değer yalnız `MachineRun.unitsPerCm`e **elle** girilir; kalıcı ev açıldığında kaynağı **çözgü/desen kartıdır** (`WarpSpec` ailesi, devere belgesi) ve **SERT bağımlılık yine EKLENMEZ**: NULL ise metre üretilmez, randıman hesaplanır. Karar §10/#9.
 
 ---
 
@@ -1539,7 +1583,7 @@ Alt reçeteler (sentezde eksikti): **enum bayrak** üçlü ister (type + değer 
 |---|---|---|---|
 | `tezgah.shiftDayAttribution` | **1a** | **START** (enum) | gece vardiyası BAŞLADIĞI güne (`time.ts` "01:30'da okutulan top BUGÜNDÜR" gerekçesi) |
 | `tezgah.breakOutOfPot` | **1a** | **false** | mola POT'ta kalır → randıman düşer (muhafazakâr yön) |
-| `tezgah.stopEventMinSeconds` | **1b** | **20** | eşik altı duruş defter satırı olmaz, kovada+karnede SAYILIR. ⚠️ Faz 1a'da YAZILMAZ: eşikleyeceği tablo (`LoomStopEvent`) **Faz 1b'de** doğuyor (§2.7, §9) — bayrak tablosuyla AYNI fazda açılır |
+| `tezgah.stopEventMinSeconds` | **1b** | **20** | eşik altı duruş defter satırı olmaz, kovada+karnede SAYILIR. ⚠️ Faz 1a'da YAZILMAZ: eşikleyeceği tablo (`MachineStopEvent`) **Faz 1b'de** doğuyor (§2.7, §9) — bayrak tablosuyla AYNI fazda açılır |
 | `tezgah.sealAllowsUnackedAnomaly` | 2 | **false** | ⚠️ ad TERSİNE ÇEVRİLDİ (aşağıdaki kutu) |
 | `tezgah.collectorPairingOptional` | 2 | **false** | ⚠️ ad TERSİNE ÇEVRİLDİ; `device.pairingRequired`in TERSİ davranış, bilinçli: tablet okur, toplayıcı DEFTERE YAZAR |
 | `tezgah.bucketMinutes` | 2 | **15** | değişimi ileriye dönük (§3.5). ⚠️ **YAZIMI KAPILIDIR:** yeni değer AKTİF her `ShiftDefinition`ın `startMinute` ve `durationMinutes`ini bölmüyorsa **400** döner ve ihlal eden HER tanımı adıyla listeler (yıkıcı işlemde "etkilenen her kaydı listele"). Aynı doğrulama TERS yönde de koşar (`ShiftDefinition` yazımı yürürlükteki `bucketMinutes`e göre ölçülür); tek kaynak `assertBucketAlignment(bucketMinutes, definitions)` — iki yazar da onu çağırır (boğaz-ikiz). Tek yönlü doğrulama, bayrak 15→20 olunca "klipleme hiç doğmaz" değişmezini sessizce düşürürdü |
@@ -1568,7 +1612,7 @@ Alt reçeteler (sentezde eksikti): **enum bayrak** üçlü ister (type + değer 
 |---|---|---|---|---|
 | `loom:read` | web | 1a | pano · karne · randıman raporu | `WEB_PRODUCTION_SUPERVISOR` (+ varsa patron/görüntüleme şablonu) |
 | `loom:manual-entry` | web | 1a | elle vardiya üretim/duruş girişi (mühür **ve `anomalyAck` onayı** dahil) | `WEB_PRODUCTION_SUPERVISOR` |
-| `loom:spec-manage` | web | 1a | `LoomSpec` · vardiya kataloğu · **`OFF → SHADOW` ve `SHADOW → LIVE` geçişleri** · sebepli **demote** · (Faz 2: `PeripheralSignal` + `POST /signals/:id/accept`) · "Devreye Alma" sekmesindeki **gölge karneler** | master-data/yönetim şablonu |
+| `loom:spec-manage` | web | 1a | `MachineSpec` · vardiya kataloğu · **`OFF → SHADOW` ve `SHADOW → LIVE` geçişleri** · sebepli **demote** · (Faz 2: `PeripheralSignal` + `POST /signals/:id/accept`) · "Devreye Alma" sekmesindeki **gölge karneler** | master-data/yönetim şablonu |
 | **`loom:shift-unseal`** | web | 1a | mühür açma — geçmiş rakamı değiştirir | `WEB_PRODUCTION_SUPERVISOR` (`roll:manual-adjust` ile aynı aile) |
 | `loom:classify` | web | 2 | duruşa sebep atama (panel) | `WEB_PRODUCTION_SUPERVISOR` |
 | `mobile:tezgah-durus` | mobile | 2 | duruşa sebep atama (tablet) | mobil operatör şablonu; yoksa **gerekçeli** `ROLE_COVERAGE_EXEMPT` |
@@ -1584,11 +1628,11 @@ Alt reçeteler (sentezde eksikti): **enum bayrak** üçlü ister (type + değer 
 
 Sentezde hiç yoktu; kardeş belge (`docs/design/DEVERE-LEVENT-TARAMASI.md` §5) bunu doğru yapıyor.
 
-- **Dokunulacak DOSYALAR (Faz 1a, iplik emsalinde sekiz dosya — "ekran" düzeyi yetmez):** `Electron/src/routes/content-routes.tsx` (route satırı) · `Electron/src/pages/Operations/tile-config.ts` (karo + bağlam alanı) · `Electron/src/components/layout/nav-config.ts` (`featureFlag` union'ı) · `Electron/src/pages/GeneralSettings/settings-config.ts` (toggle) · `Electron/src/lib/module-flags.ts` (`MODULE_PLACEHOLDERS`) · **`pages/Loom/loom-regime.ts`** (saf yüklem — iplikteki `Yarn/yarn-regime.ts` kalıbı; YENİ dosya) · sayfa bileşenleri · `Electron/src/types/enums.ts` + `ENUM_LABELS`.
+- **Dokunulacak DOSYALAR (Faz 1a, iplik emsalinde sekiz dosya — "ekran" düzeyi yetmez):** `Electron/src/routes/content-routes.tsx` (route satırı) · `Electron/src/pages/Operations/tile-config.ts` (karo + bağlam alanı) · `Electron/src/components/layout/nav-config.ts` (`featureFlag` union'ı) · `Electron/src/pages/GeneralSettings/settings-config.ts` (toggle) · `Electron/src/lib/module-flags.ts` (`MODULE_PLACEHOLDERS`) · **`pages/MachineMonitor/machine-regime.ts`** (saf yüklem — iplikteki `Yarn/yarn-regime.ts` kalıbı; YENİ dosya) · sayfa bileşenleri · `Electron/src/types/enums.ts` + `ENUM_LABELS`.
 - **Ekranlar (Faz 1a):** vardiya kataloğu · elle vardiya girişi · randıman raporu. **Tezgah künyesi AYRI EKRAN DEĞİL** — mevcut Makine formuna "Tezgah" bölümü olarak girer (palet/`def:station-capabilities` kalıbı), yeni route+karo+izin üçlüsü doğmaz.
 - **`SCREEN_CATALOG` girdisi** her ekran için zorunlu (`modul: "tezgahEnabled"`, `requires: ["loom:read"]`, `capabilities: ["loom:manual-entry","loom:spec-manage","loom:shift-unseal"]`) — `ScreenEntry.modul` derlemede zorunlu alandır.
 - **Karo `visibleWhen: tezgahEnabled`** ve manifesto `modul` alanı birebir (`test_screen_catalog §9c/§9e` iki yönlü). Karo döngüsü DIŞINDAKİ palet girdileri modül kapısını ELLE taşır.
-- **Hazır Sebepler:** `KIND_TABS`e `LOOM_STOP` sekmesi **yalnız `tezgahEnabled` açıkken** (§2.1).
+- **Hazır Sebepler:** `KIND_TABS`e `MACHINE_STOP` sekmesi **yalnız `tezgahEnabled` açıkken** (§2.1).
 - **Enum etiketleri:** `types/enums.ts` + `ENUM_LABELS` (bekçi şemadaki her enum değerini arar).
 - **Mobil (Faz 2):** `reasonPreset.service.ts` kind union'ı + iki `Record` **ve `list()` çağrısının `?kind=` ile daraltılması** (§2.1 — bugün süzgeçsiz çekiyor, kapalı modülün kataloğu tablete iniyor); `mobil/src/hooks/useReasonPresets.ts` BUILTIN `Record` + `switch`; `featureFlag.service.ts` `tezgahEnabled` + `DEFAULT_FEATURE_FLAGS` yönü **fail-closed**; kuyruk ekranı `mobile:tezgah-durus` **ve** bayrak kapalıyken çizilmez (tablette `MODULE_DISABLED`ın kullanıcı yüzü hâlâ yok — `docs/kurallar/modul-bayrak.md`'nin açık maddesi; bu yüzden kapı istemcide de gerekir).
 - **Bayat metin:** `modulKapali()` bugün *"Genel Ayarlar → Modüller bölümünden açılabilir"* diyor (`module.middleware.ts:80`) — oysa modül anahtarlarının tek evi 2026-09-04'ten beri **Sistem → Modüller**. Yeni kapı bu bayat adresi çoğaltacağı için metin aynı commit'te düzeltilir (alan dosyasındaki açık soru kapanır).
@@ -1627,20 +1671,22 @@ Sentezin §2.11'i (`WarpBeam` · `WarpBeamMount` · `WarpBeamMovement` · `WarpB
 
 > **KARAR: levent ve tüm defteri `docs/design/DEVERE-LEVENT-TARAMASI.md`'ye aittir; tezgah tasarımı levente yalnız OKUYUCUDUR.** Sentezin §2.11'i bu belgede **silindi**. Gerekçe ①: çözgü hazırlama sektörde ayrı departman ve ayrı varlık ömrü; ②: tek defteri iki tasarımın yazması "tek kaynak satır" sağlamlık sınıfıdır; ③: DEVERE belgesi repoyu ölçmüş, sentez ölçmemişti.
 >
-> **Levent defteri OLAY DEFTERİDİR** (yönetici kararı, 2026-09-12): `WarpBeamEvent` `MOUNTED`/`DISMOUNTED` + tipli `MOUNT_CANCEL`/`DISMOUNT_CANCEL` (append-only, `reversesEventId @unique`, LIFO yalnız durum olaylarında) + "şu an" DURUM KOLONLARINDA (`WarpBeam.status` / `currentMachineId` / `currentPosition`). `WarpBeamMount` **span tablosu REDDEDİLDİ**; `LoomRun.mountId`/`mountedEventId`/**`warpBeamId` AÇILMAZ**; yuva sayısının tek kaynağı **`Machine.warpBeamSlots`**tir ve **`LoomSpec.beamSlots` yazılmaz** (yuva, leventin yuva alanının tanım kümesidir; `LoomSpec` tezgah künyesidir ve levent tüketen makine tezgahla sınırlı değildir — raşel).
+> **Levent defteri OLAY DEFTERİDİR** (yönetici kararı, 2026-09-12): `WarpBeamEvent` `MOUNTED`/`DISMOUNTED` + tipli `MOUNT_CANCEL`/`DISMOUNT_CANCEL` (append-only, `reversesEventId @unique`, LIFO yalnız durum olaylarında) + "şu an" DURUM KOLONLARINDA (`WarpBeam.status` / `currentMachineId` / `currentPosition`). `WarpBeamMount` **span tablosu REDDEDİLDİ**; `MachineRun.mountId`/`mountedEventId`/**`warpBeamId` AÇILMAZ**; yuva sayısının tek kaynağı **`Machine.warpBeamSlots`**tir ve **`MachineSpec.beamSlots` yazılmaz** (yuva, leventin yuva alanının tanım kümesidir; `MachineSpec` tezgah künyesidir ve levent tüketen makine tezgahla sınırlı değildir — raşel).
 
-**Okuma yüzeyi TEK KAYNAKTIR.** *"Koşum sırasında hangi levent(ler) bağlıydı"* sorusu `beamsMountedDuring(machineId, from, to)` helper'ı ve boğaz-ikizi `BEAMS_MOUNTED_DURING_SQL` ile cevaplanır — **ikisi de levent belgesinindir**; tezgah raporları YALNIZ onu çağırır, kendi yüklemini kurmaz (AST tripwire). Aralık kesişimi aktif MOUNTED/DISMOUNTED olaylarının operasyonel penceresi (`setupStartedAt ?? createdAt`) ile `LoomRun.[startedAt, endedAt)` arasındadır; **çift levent desteklenir** ve `MOUNT_CANCEL` sonrası türetme kendiliğinden değişir. Bekçi: **`test_loom_run_beam_overlap`** (tezgah Faz 2) — helper ↔ SQL ikizi eşitliği, üç fixture (tek levent · çift levent · koşum ortasında levent değişimi), negatif sonda: yüklem düşürülünce kırmızı.
+**Okuma yüzeyi TEK KAYNAKTIR.** *"Koşum sırasında hangi levent(ler) bağlıydı"* sorusu `beamsMountedDuring(machineId, from, to)` helper'ı ve boğaz-ikizi `BEAMS_MOUNTED_DURING_SQL` ile cevaplanır — **ikisi de levent belgesinindir**; tezgah raporları YALNIZ onu çağırır, kendi yüklemini kurmaz (AST tripwire). Aralık kesişimi aktif MOUNTED/DISMOUNTED olaylarının operasyonel penceresi (`setupStartedAt ?? createdAt`) ile `MachineRun.[startedAt, endedAt)` arasındadır; **çift levent desteklenir** ve `MOUNT_CANCEL` sonrası türetme kendiliğinden değişir. Bekçi: **`test_machine_run_beam_overlap`** (tezgah Faz 2) — helper ↔ SQL ikizi eşitliği, üç fixture (tek levent · çift levent · koşum ortasında levent değişimi), negatif sonda: yüklem düşürülünce kırmızı.
 
 > **İKİ YÖNLÜ KAPI (levent Faz 3 ile AYNI sürümde çıkar):**
-> **(1)** `DISMOUNTED` yazılırken o makinede `endedAt IS NULL AND revokedAt IS NULL` **açık koşum varsa 409** *"önce koşumu kapat"* — sorgunun sahibi tezgah tarafıdır ve yüklem `loom_runs_one_open_per_machine_uq` ile **aynı helper'dan** okunur. Tezgah modülü kapalıysa `LoomRun` yoktur, kapı uygulanmaz.
+> **(1)** `DISMOUNTED` yazılırken o makinede `endedAt IS NULL AND revokedAt IS NULL` **açık koşum varsa 409** *"önce koşumu kapat"* — sorgunun sahibi tezgah tarafıdır ve yüklem `machine_runs_one_open_per_machine_uq` ile **aynı helper'dan** okunur. Tezgah modülü kapalıysa `MachineRun` yoktur, kapı uygulanmaz.
 > **(2)** Koşum açılırken `WarpBeam.status = MOUNTED ∧ currentMachineId = run.machineId` yoksa **`ApiResponse.warnings`** — **400 DEĞİL**: levent modülü kapalı kurulumda leventsiz koşum meşrudur.
+>
+> ⚠️ **İKİSİ DE TEK LEVENT VARSAYAR ve bu varsayım AÇIK SORUDUR** (2026-09-12, §10/#19): **(1)** çok leventli makinede TEK leventi değiştirmek koşumu bitirmez — kapı orada meşru işi bloke eder ya da operatöre sahte koşum kapanışı yaptırır; **(2)** *"gereken N yuvanın kaçı dolu"* kontrolü yoktur, yani 6 barlı raşelde tek levent takılıyken koşum sessizce meşru görünür. Kapının doğru şekli `Machine.warpBeamSlots` ile `beamsMountedDuring` sayısının karşılaştırılmasıdır, ama **bu belgede karara bağlanmadı** — yönetici listesinde, `machine_runs_one_open_per_machine_uq` sorusuyla aynı kutuda.
 
 **Geri alınamaz üç kalem — ikisi şimdi karara bağlanır, biri devere belgesine bırakılır:**
 
 | Kalem | Karar | Neden geri alınamaz |
 |---|---|---|
 | Enum değeri | **`RollEntrySource.WEAVING`** (sentezin `LOOM_DOFF`u DEĞİL) | PostgreSQL'de enum değeri **düşürülemez**; iki belge sürüme çıkarsa kalıcı çift değer kalır |
-| Yuva sayısı | **`Machine.warpBeamSlots`** (`LoomSpec.beamSlots` DEĞİL) | raşel/örme de levent tüketir; tezgah modülüne bağlanamaz. Varsayılanlı tek kolon → adnansahin'de sıfır fark |
+| Yuva sayısı | **`Machine.warpBeamSlots`** (`MachineSpec.beamSlots` DEĞİL) | raşel/örme de levent tüketir; tezgah modülüne bağlanamaz. Varsayılanlı tek kolon → adnansahin'de sıfır fark |
 | Advisory uzay | **8032 = tezgah vardiya mührü** (Faz 2; EXCLUSIVE sahibi mühürleyici, ingest `_shared` — §3.5); devere ölçerse **8033** | uzay numarası envanterde tek kaynaktır, iki alt sistem aynı numaraya oturamaz |
 | Koşum↔levent bağı | **kolon YOK** — `beamsMountedDuring` türetmesi | enum/kolon geri alınamaz; FK ikinci kaynak olur ve `MOUNT_CANCEL`de sarkar, çift leventte yetmez |
 
@@ -1658,7 +1704,7 @@ Bu bölüm sözleşmedir: **her fazın kabul kapısı bu maddelerin ölçülmü�
 | K3-2 | **Bayrak kapalıyken değişmezlik bekçisi SUNUCU AYAKTA koşulur** | `PORT=4101 npx tsx src/server.ts` ayakta → `npx tsx scripts/test_module_flag_off.ts` → **`atlandı = 0`** görülür. ⚠️ Sunucusuz koşumda **18 HTTP kontrolü** *(ölçüldü 2026-09-12; eski "14" ölçümü `devere` satırıyla bayatladı)* **sessizce atlanıyor** (`:551-552` — `httpKontrolSayisi` formülü; sayı TABLODAN türer: `MODULLER.length (5) + onKosul taşıyan (2) + 1 + 5 + 5`, yani `MODULLER`e satır eklendikçe kendiliğinden büyür. ⚠️ Üçüncü turda yazılan `:524-528` çapası YANLIŞTI — o aralık profil damgası yorumudur, §11d) — yani sunucusuz yeşil, K3'ün kanıtı DEĞİLDİR. ⚠️⚠️ **Bu şart `npm test` ile SAĞLANMAZ:** koşucu 4101'i KALDIRMAZ ve "atlanan kontrol" satırı exit kodunu **düşürmez** (`run-all-tests.ts:393-405` — *"yeşil ≠ kapsandı"*). Kabul kapısı bu satırı `npm test` çıktısından değil **AYRI komuttan** okur ve komut `Teks-Erp/docs/BEKCI-HARITASI.md`ye tezgah satırı olarak yazılır. Kalıcı çözüm tercihi (Faz 1a iş kalemi): koşucuya **`TEKSERP_STRICT=1`** modu — atlanan kontrol varsa exit ≠ 0 |
 | K3-3 | `MODULLER` tablosunda tezgahın **kendi satırı** var | Bugün `tezgahEnabled` yalnız `MODULE_DEPENDENCIES`ten türeyen bir **yer tutucu**dur (`YONETILEN` türetme bloğu `:216-222`), `MODULLER` tablosunda satırı **yoktur** (`:136-204`, **BEŞ satır**: `ticaret · iplik · devere · depoMulti · production` — ölçüldü 2026-09-12; eski *"`:136-190`, dört satır"* ölçümü `devere` satırı eklenince bayatladı). `requireTezgahEnabled` yazıldığı an 403 gövdesi (`details.code`/`modul`), önbeleksizlik, kapı-`verifyToken` sırası ve bağımlılık dalı **hiç ölçülmez**. **Satırın UNUTULMAMASI da ölçülür:** `test_module_flag_off`a TERS kontrol eklenir — *"`MODULE_SETTING_KEYS`teki (sekiz) her anahtar ya `MODULLER`de bir satırdır ya GEREKÇELİ muaf listesindedir"* (bugün `kumasTeknik` · `tezgah` · `devere` muaf, gerekçe *"backend kapısı yok"*). `requireTezgahEnabled`in export edildiği commit'te tezgah muaftan satıra geçer; geçmezse bekçi kırmızı verir |
 | K3-4 | **Negatif sonda kırmızı görülerek yazılır** | `requireTezgahEnabled` içinde `readTezgahEnabled()` → `readProductionEnabled()` takası yapılır ve §1h kırmızı verdiği ÖLÇÜLÜR (SONDA-20 kalıbı); kapı `verifyToken`dan öne alınır → kırmızı |
-| K3-5 | Migration **yalnız kolon/tablo ekler**, veri yeniden yazılmaz | Yeni kolonların hepsi nullable ya da `@default`lu; CHECK yalnız yeni kind'ı bağlar (`kind <> 'LOOM_STOP' OR …`) → mevcut satırlar doğrulamayı geçer. `UPDATE`/backfill ifadesi **YOK** |
+| K3-5 | Migration **yalnız kolon/tablo ekler**, veri yeniden yazılmaz | Yeni kolonların hepsi nullable ya da `@default`lu; CHECK yalnız yeni kind'ı bağlar (`kind <> 'MACHINE_STOP' OR …`) → mevcut satırlar doğrulamayı geçer. `UPDATE`/backfill ifadesi **YOK** |
 | K3-6 | Canlı kurulumda değer `false` damgalı | `test_module_grandfathering` (SQL VALUES ayrıştırma) — `20260902230000` migration'ı `tezgah.enabled = false` yazıyor |
 | **K3-7** | **Kapalı modülde doğan KATALOG SATIRLARI hiçbir yüzeyde görünmez** | İki boot uzlaştırıcısı yazıyor: 23 sistem sebebi (§2.1) + dört `loom:*` izin kodu (§6.4). İzin atama ağacı `loom:*` kodlarını `tezgahEnabled` kapalıyken **çizmez**; ölçüm: `test_module_flag_off`un panel/izin ayağı + `test_screen_catalog` izin↔ekran kapsaması. Tabletin sebep kataloğu ayağı için §2.1 (`?kind=` daraltması, Faz 2) |
 
@@ -1666,8 +1712,8 @@ Bu bölüm sözleşmedir: **her fazın kabul kapısı bu maddelerin ölçülmü�
 
 | # | Şart | Bu tasarımda |
 |---|---|---|
-| K2-1 | `Item.name` **ASLA ayrıştırılmaz/taşınmaz** | Belgede `Item` referansı yalnız `LoomRun.itemId` FK'sıdır; ad ayrıştırma, backfill, toplu `UPDATE` **yok**. `picksPerCm` elle girilir (§5.6) |
-| K2-2 | Yapılandırılmış alanlar **nullable** eklenir, zorunluluk yalnız modül açıkken | `protocol String?` · `stopLossClass LoomStopLossClass?` · **`LoomSpec.monitoringState @default(OFF)`** (varsayılan = bugünkü davranış: künye satırı doğsa bile izleme başlamaz) · `maxRevPerMin Int?` · kopuş sayaçları `Int?` (§2.6/§2.10 — `@default(0)` "kopuş yok" yalanı üretirdi) |
+| K2-1 | `Item.name` **ASLA ayrıştırılmaz/taşınmaz** | Belgede `Item` referansı yalnız `MachineRun.itemId` FK'sıdır; ad ayrıştırma, backfill, toplu `UPDATE` **yok**. `unitsPerCm` elle girilir (§5.6) |
+| K2-2 | Yapılandırılmış alanlar **nullable** eklenir, zorunluluk yalnız modül açıkken | `protocol String?` · `stopLossClass MachineStopLossClass?` · **`MachineSpec.monitoringState @default(OFF)`** (varsayılan = bugünkü davranış: künye satırı doğsa bile izleme başlamaz) · `maxRevPerMin Int?` · kopuş sayaçları `Int?` (§2.6/§2.10 — `@default(0)` "kopuş yok" yalanı üretirdi) |
 | K2-3 | `Machine`e **skaler kolon eklenmez** | Yalnız ters ilişki alanları (§2.1). Faz 3'ün `Machine.warpBeamSlots`u devere belgesinindir ve varsayılanlıdır |
 | K2-4 | **Adlandırılmış kapı**, jenerik `requireModule` yok | `requireTezgahEnabled` (§6.1) |
 | K2-5 | **Fork yok** | `if (musteri === 'X')` hiçbir yerde; fark yalnız bayrak profilinde |
@@ -1676,82 +1722,82 @@ Bu bölüm sözleşmedir: **her fazın kabul kapısı bu maddelerin ölçülmü�
 
 ### 8.3 · Defter doktrini (K1)
 
-Telemetri budanabilir (`LoomInterval`, insan kararı almamış + mühürlü duruş); **iş kararına giren her bilgi kalıcı kolondadır** (`LoomShiftStat` terimleri, `LoomShiftStopBreakdown`, `unclassifiedSec`). Geri alma her yerde ters kayıt/`revokedAt`: duruş `revokedAt`, koşum `revokedAt`, sayaç kararı `supersededByEventId`, mühür `LoomShiftStatSeal`, sebep değişimi `LoomStopReclass`. **İleri damga null'lanmaz** (`sealedAt`, `provisionalEndedAt`, `acceptedAt`). Budama dört sedle korunur; **üçüncü bir hard-delete sınıfı AÇILMAZ** — `defter.md`ye **«Telemetri ≠ defter» bölümü** (altı kural) yazılmadan ve **budama manifest bekçisi yeşil görülmeden** budayıcı sürüme çıkmaz (§4).
+Telemetri budanabilir (`MachineInterval`, insan kararı almamış + mühürlü duruş); **iş kararına giren her bilgi kalıcı kolondadır** (`MachineShiftStat` terimleri, `MachineShiftStopBreakdown`, `unclassifiedSec`). Geri alma her yerde ters kayıt/`revokedAt`: duruş `revokedAt`, koşum `revokedAt`, sayaç kararı `supersededByEventId`, mühür `MachineShiftStatSeal`, sebep değişimi `MachineStopReclass`. **İleri damga null'lanmaz** (`sealedAt`, `provisionalEndedAt`, `acceptedAt`). Budama dört sedle korunur; **üçüncü bir hard-delete sınıfı AÇILMAZ** — `defter.md`ye **«Telemetri ≠ defter» bölümü** (altı kural) yazılmadan ve **budama manifest bekçisi yeşil görülmeden** budayıcı sürüme çıkmaz (§4).
 
 ---
 
 ## 9 · Fazlandırma
 
-> Sentezin "Faz 1"i en küçük anlamlı adım değil, **en küçük eksiksiz mimariydi**: 7 tablo + 2 migration + job + 2 AST-korumalı helper + 4 ekran + 7 izin + 4 bayrak + advisory uzay + 5 bekçi — repoda bugün 128 model var, yani tek dilimde %5,5 büyüme, hiç yüzeyi olmayan bir modül için. Üstelik içinde **kaynağı olmayan parçalar** vardı: `stopEventMinSeconds` Faz 1'de ama eşikleyeceği tablo Faz 2'de; `anomalyAck` kapısı Faz 1'de ama anomali kaynağı Faz 2'de. Ölçek merceğinin kesimi uygulandı ve **iki parça kaynağıyla HİZALANDI:** `stopEventMinSeconds` eşikleyeceği tabloyla (`LoomStopEvent`) birlikte **Faz 1b**'ye taşındı (§2.7, §6.3); `anomalyAck` **kolonu** Faz 1a'da doğar ama **kapısı** anomali kaynağıyla birlikte **Faz 2**'de yürürlüğe girer (§2.10).
+> Sentezin "Faz 1"i en küçük anlamlı adım değil, **en küçük eksiksiz mimariydi**: 7 tablo + 2 migration + job + 2 AST-korumalı helper + 4 ekran + 7 izin + 4 bayrak + advisory uzay + 5 bekçi — repoda bugün 128 model var, yani tek dilimde %5,5 büyüme, hiç yüzeyi olmayan bir modül için. Üstelik içinde **kaynağı olmayan parçalar** vardı: `stopEventMinSeconds` Faz 1'de ama eşikleyeceği tablo Faz 2'de; `anomalyAck` kapısı Faz 1'de ama anomali kaynağı Faz 2'de. Ölçek merceğinin kesimi uygulandı ve **iki parça kaynağıyla HİZALANDI:** `stopEventMinSeconds` eşikleyeceği tabloyla (`MachineStopEvent`) birlikte **Faz 1b**'ye taşındı (§2.7, §6.3); `anomalyAck` **kolonu** Faz 1a'da doğar ama **kapısı** anomali kaynağıyla birlikte **Faz 2**'de yürürlüğe girer (§2.10).
 
 ### FAZ 1a — "Elle vardiya girişi" · **en küçük satılabilir dilim**
 
 **Hiç donanım, hiç toplayıcı, hiç telemetri yok.** `MODUL-BAYRAK-TASARIM.md` §8'in kademe ③'ü: *"hiç bağlantı yokken bile randıman raporu çıkar."* Hem satılabilir bir yetenek, hem Faz 2'nin tüm hesap katmanını (karne, formül, mühür, sebep kataloğu) **donanım riski olmadan** doğrulayan iskele. Kullanıcının dört sorusunun dördünü de cevaplar.
 
-**Tablolar (6):** `ShiftDefinition` · `ShiftInstance` · `LoomShiftStat` · `LoomShiftStopBreakdown` · `LoomShiftStatSeal` · `LoomSpec` (kırpılmış: `machineId` · `shedType` · **`monitoringState @default(OFF)`**/`acceptedAt`/`acceptedById`/`acceptedNote`/`demotedAt`/`demotedById`/`demoteReason` · `nominalPicksPerMin` · `baselineRunHours`/`baselineAt` · `notes` + künye). ⚠️ Faz 1a'da elle girilen karne **`monitoringState`i kopyalar** (§2.10) ve elle giriş yüzeyi `OFF` makineye karne yazmaz — gölge/yayın ayrımı Faz 2'de değil, ilk günden şemadadır.
-**`LoomRun` Faz 2'ye itildi:** Faz 1a'da koşum yok, donmuş payda zaten `LoomShiftStat.targetPicksPerMin`te; sonradan eklenmesi saf ekleme.
+**Tablolar (6):** `ShiftDefinition` · `ShiftInstance` · `MachineShiftStat` · `MachineShiftStopBreakdown` · `MachineShiftStatSeal` · `MachineSpec` (kırpılmış: `machineId` · `shedType` · **`monitoringState @default(OFF)`**/`acceptedAt`/`acceptedById`/`acceptedNote`/`demotedAt`/`demotedById`/`demoteReason` · `nominalPicksPerMin` · `baselineRunHours`/`baselineAt` · `notes` + künye). ⚠️ Faz 1a'da elle girilen karne **`monitoringState`i kopyalar** (§2.10) ve elle giriş yüzeyi `OFF` makineye karne yazmaz — gölge/yayın ayrımı Faz 2'de değil, ilk günden şemadadır.
+**`MachineRun` Faz 2'ye itildi:** Faz 1a'da koşum yok, donmuş payda zaten `MachineShiftStat.targetPicksPerMin`te; sonradan eklenmesi saf ekleme.
 
 **Migration A:** altı tablo + ham SQL (`ShiftDefinition.nameFold` **GENERATED ALWAYS AS (public.tr_fold("name")) STORED** — Prisma `dbgenerated()` kolonu yaratmaz, yalnız defteri tutar; `@@unique([nameFold])` + `test_db_invariants` `EXPRESSION_UNIQUES`/fold envanteri aynı commit'te; **uygulama bekçisi `assertNameNotDuplicate` KALDIRILMAZ** — anlaşılır 409'u o verir, DB seddi sessiz son hattır).
-**Migration B1 (enum — dosyada TEK ifade):** `ALTER TYPE "ReasonPresetKind" ADD VALUE IF NOT EXISTS 'LOOM_STOP';`
+**Migration B1 (enum — dosyada TEK ifade):** `ALTER TYPE "ReasonPresetKind" ADD VALUE IF NOT EXISTS 'MACHINE_STOP';`
 > ⚠️ **55P04 — enum değeri kendi commit'inde ve KENDİ DOSYASINDA doğar; aynı tx'te KULLANILAMAZ.** PostgreSQL *"unsafe use of new value of enum type"* der ve `migrate deploy` **ortada kalır**; sürüm gecesi backend ÖNCE dağıtıldığı için bu doğrudan müşteri zararıdır. Repo emsali bu dersi taşıyor: `prisma/migrations/20260826130000_reason_preset_order_cancel_kind/migration.sql:13` *"bilerek TEK ifadedir"* (`docs/RECETELER.md:103,119`).
 
-**Migration B2 (kolon + CHECK):** `ReasonPreset.stopLossClass` + `reason_presets_loom_class_chk` + `test_db_invariants` envanter satırı. **B1 ile B2 aynı commit'te, B1 ÖNCE**; `constants/reason-presets.ts` ve `reason-preset-catalog.job.ts` de **AYNI COMMIT'te.**
+**Migration B2 (kolon + CHECK):** `ReasonPreset.stopLossClass` + `reason_presets_machine_class_chk` + `test_db_invariants` envanter satırı. **B1 ile B2 aynı commit'te, B1 ÖNCE**; `constants/reason-presets.ts` ve `reason-preset-catalog.job.ts` de **AYNI COMMIT'te.**
 
-**Kod:** `requireTezgahEnabled` + `REGIME_GATES` satırı · 4 izin **+ dar rol şablonu satırları** (§6.4) · `MACHINE_DELETE_GUARDS`a `loomShiftStatCount` (§2.1 — Restrict FK ile AYNI commit) · `jobs/shift-calendar.job.ts` — **her koşumun İLK ifadesi `if (!(await readTezgahEnabled())) return "disabled";`** (`exchange-rate.job.ts:295` emsali: `if (!(await readFinanceEnabled())) return "disabled";`); kapalı kurulumda `ShiftInstance` **materyalize ETMEZ** ve sayacı `/api/admin/health`te *"disabled"* görünür (boot + günlük, 30 gün ileri; `@@unique` sayesinde kilit gerekmez) · `helpers/shift-resolve.helper.ts` (`resolveShiftInstanceId(at)` TEK KAYNAK, AST bekçili) · `helpers/loom-efficiency.helper.ts` (`computeLoomKpis`) · duruş span kırpma helper'ı (§5.1) · **§6.2'nin altı yer tutucu satırı** · panel: vardiya kataloğu + elle giriş + randıman raporu + Makine formuna "Tezgah" bölümü.
+**Kod:** `requireTezgahEnabled` + `REGIME_GATES` satırı · 4 izin **+ dar rol şablonu satırları** (§6.4) · `MACHINE_DELETE_GUARDS`a `machineShiftStatCount` (§2.1 — Restrict FK ile AYNI commit) · `jobs/shift-calendar.job.ts` — **her koşumun İLK ifadesi `if (!(await readTezgahEnabled())) return "disabled";`** (`exchange-rate.job.ts:295` emsali: `if (!(await readFinanceEnabled())) return "disabled";`); kapalı kurulumda `ShiftInstance` **materyalize ETMEZ** ve sayacı `/api/admin/health`te *"disabled"* görünür (boot + günlük, 30 gün ileri; `@@unique` sayesinde kilit gerekmez) · `helpers/shift-resolve.helper.ts` (`resolveShiftInstanceId(at)` TEK KAYNAK, AST bekçili) · `helpers/loom-efficiency.helper.ts` (`computeMachineKpis`) · duruş span kırpma helper'ı (§5.1) · **§6.2'nin altı yer tutucu satırı** · panel: vardiya kataloğu + elle giriş + randıman raporu + Makine formuna "Tezgah" bölümü.
 
-**Advisory kilit YOK, `LoomStopEvent` YOK, ajan YOK, `clientToken` yalnız elle giriş ucunda.**
+**Advisory kilit YOK, `MachineStopEvent` YOK, ajan YOK, `clientToken` yalnız elle giriş ucunda.**
 
 > **⚠️ KAPI İLE EKRANIN SIRASI — "kapı fazın başında, ekran fazın sonunda" ÖLÇÜLMÜŞ KIRMIZI üretir.** `requireTezgahEnabled` export'u ile en az bir `SCREEN_CATALOG` tezgah ekranı (`modul: "tezgahEnabled"`) **AYNI COMMIT'te** doğar. Gerekçe ölçüldü: `test_screen_catalog` §10b'nin kaynağı doğrudan `src/middlewares/*.ts` içindeki `export async function require<Alan>Enabled` taramasıdır ve **`EKRANSIZ_MODULLER`e HİÇ BAKMAZ** (muaf yalnız §8'i kapatır) — yani kapı yazıldığı an ekran beyan edilmemişse bekçi kırmızı verir ve **commit kapısı durur**. *(Bekçi bugün yeşildir çünkü `requireDevereEnabled` repoda yok — devere anahtarı bilerek "kapısız" commit'lendi; tuzak tezgah için aynen duruyor.)* Aynı commit'te `EKRANSIZ_MODULLER`daki tezgah girdisi silinir (§6.2/#1).
 
-**Vardiya boşluk politikası:** kapsayan örnek yoksa `shiftInstanceId = NULL` kabul edilir ve satır YİNE yazılır (ingest reddi ajanın kuyruğunu kilitlerdi), ama **NULL bir değer değil bir BOŞLUKTUR**: `/api/admin/health` sayacına düşer, `LoomShiftStat` üretmez ve raporda "vardiya atanmamış N kayıt" şeridiyle beyan edilir. Bu, fail-closed varsayılanından **bilinçli bir sapmadır** ve gerekçesi ingest'in geri basınç üretmemesidir. *(Sentezin `variance-reasons.ts:203` emsali ters okunmuştu: o cümlenin fail-closed dalı `undefined`dır — emsal kaldırıldı, karar kendi gerekçesiyle duruyor.)*
+**Vardiya boşluk politikası:** kapsayan örnek yoksa `shiftInstanceId = NULL` kabul edilir ve satır YİNE yazılır (ingest reddi ajanın kuyruğunu kilitlerdi), ama **NULL bir değer değil bir BOŞLUKTUR**: `/api/admin/health` sayacına düşer, `MachineShiftStat` üretmez ve raporda "vardiya atanmamış N kayıt" şeridiyle beyan edilir. Bu, fail-closed varsayılanından **bilinçli bir sapmadır** ve gerekçesi ingest'in geri basınç üretmemesidir. *(Sentezin `variance-reasons.ts:203` emsali ters okunmuştu: o cümlenin fail-closed dalı `undefined`dır — emsal kaldırıldı, karar kendi gerekçesiyle duruyor.)*
 
 **Bekçiler (4 yeni + 10 mevcut):**
-- `scripts/test_loom_efficiency_formula.ts` — A×P kimliği · yüzde ortalaması yasağının AST'si · `formulaVersion` donuyor mu · **45 dk'lık `COZGU_KOPUSU` → A düşmeli** (§5.2)
-- `scripts/test_loom_shift_seal.ts` — mühür/aç/yeniden-mühür **atomik claim** mi · `sealedAt` null'lanmıyor mu · `sealGeneration` artıyor mu · anomalili vardiya onaysız mühürlenemiyor mu → **409** *(⚠️ bu ayak Faz 2'de koşar: anomali kaynağı `LoomCounterEvent`/`deltaQuality` orada doğar; Faz 1a'da yalnız kolon + atomik claim ölçülür — §2.10)*
-- `scripts/test_loom_shift_terms.ts` — vardiya sınırında **kırpma** (§5.1) · `Σ LoomShiftStopBreakdown.stopSec + minorStopSec ≤ potSec` (§4). ⚠️ `Σ observedSec + unobservedSec = calendarSec` eşitliği **Faz 1a'da KOŞULMAZ**: kova (`LoomInterval`) Faz 2'de doğar ve Faz 1a `unobservedSec = 0` BEYAN eder (§5.1) — ayak bu fazda doğuşta kırmızı verirdi. İkinci ayak **Faz 2'de** eklenir
+- `scripts/test_machine_efficiency_formula.ts` — A×P kimliği · yüzde ortalaması yasağının AST'si · `formulaVersion` donuyor mu · **45 dk'lık `COZGU_KOPUSU` → A düşmeli** (§5.2)
+- `scripts/test_machine_shift_seal.ts` — mühür/aç/yeniden-mühür **atomik claim** mi · `sealedAt` null'lanmıyor mu · `sealGeneration` artıyor mu · anomalili vardiya onaysız mühürlenemiyor mu → **409** *(⚠️ bu ayak Faz 2'de koşar: anomali kaynağı `MachineCounterEvent`/`deltaQuality` orada doğar; Faz 1a'da yalnız kolon + atomik claim ölçülür — §2.10)*
+- `scripts/test_machine_shift_terms.ts` — vardiya sınırında **kırpma** (§5.1) · `Σ MachineShiftStopBreakdown.stopSec + minorStopSec ≤ potSec` (§4). ⚠️ `Σ observedSec + unobservedSec = calendarSec` eşitliği **Faz 1a'da KOŞULMAZ**: kova (`MachineInterval`) Faz 2'de doğar ve Faz 1a `unobservedSec = 0` BEYAN eder (§5.1) — ayak bu fazda doğuşta kırmızı verirdi. İkinci ayak **Faz 2'de** eklenir
 - `scripts/test_reason_preset_kind_parity.ts` — sunucu `ReasonPresetKind` ↔ Electron union + `KIND_TABS` ↔ mobil union + iki `Record` + BUILTIN `switch` **birebir** (§2.1). ⚠️ İlk koşumda bugünkü `ORDER_CANCEL` eksiğini yakalar; o eksik aynı commit'te kapatılır
-- Mevcut: **`test_module_flag_off` (sunucu 4101 AYAKTA, `atlandı=0`, negatif sonda + `MODULE_SETTING_KEYS` ters kontrolü)** · `test_feature_flag_contract` (PANEL_EXEMPT'teki `tezgahEnabled` ANAHTARI silinir, `REGIME_GATES` satırı) · `test_screen_catalog` (§10b kapı↔ekran sırası + ölü muaf + izin↔ekran kapsaması) · `test_module_profile` (§2 tamlık; profil sayısı **6 KALIR**, sekiz anahtar) · `test_role_template_catalog` (§2: dört iznin dördü de bir dar rolde) · `test_timestamptz_contract` (**tek** yeni `@db.Date` muafı: `LoomShiftStat.factoryDay`; ikincisi Faz 1b'de) · `test_module_flags` · **`test_hard_delete_guard_coverage`** (`WATCHED`a `"Machine"` + `EXPECTED`e `Machine <- LoomSpec.machine : Cascade` — §2.3; Faz 2 yalnız envanteri büyütür) · Electron `flag-modules.test.ts` + `module-flags.test.ts`
+- Mevcut: **`test_module_flag_off` (sunucu 4101 AYAKTA, `atlandı=0`, negatif sonda + `MODULE_SETTING_KEYS` ters kontrolü)** · `test_feature_flag_contract` (PANEL_EXEMPT'teki `tezgahEnabled` ANAHTARI silinir, `REGIME_GATES` satırı) · `test_screen_catalog` (§10b kapı↔ekran sırası + ölü muaf + izin↔ekran kapsaması) · `test_module_profile` (§2 tamlık; profil sayısı **6 KALIR**, sekiz anahtar) · `test_role_template_catalog` (§2: dört iznin dördü de bir dar rolde) · `test_timestamptz_contract` (**tek** yeni `@db.Date` muafı: `MachineShiftStat.factoryDay`; ikincisi Faz 1b'de) · `test_module_flags` · **`test_hard_delete_guard_coverage`** (`WATCHED`a `"Machine"` + `EXPECTED`e `Machine <- MachineSpec.machine : Cascade` — §2.3; Faz 2 yalnız envanteri büyütür) · Electron `flag-modules.test.ts` + `module-flags.test.ts`
 - **`npx prisma validate` TEMİZ** — §2.1'deki **karşı-ilişki envanterinin HER alanı** yazılmış olmalı (13 alan); biri eksikse **P1012** ile düşer ve şemaya dökme ilk adımda durur
 
 **Kabul kapısı:** ① bekçiler yeşil **ve `test_module_flag_off` AYRI KOMUTTAN ölçüldü** — `PORT=4101 npx tsx src/server.ts` ayakta iken `npx tsx scripts/test_module_flag_off.ts` → **`atlandı = 0`**; `npm test` çıktısı bu şartın kanıtı DEĞİLDİR (§8.1 K3-2) · ② dört yeni bekçi negatif sondayla **kırmızı görülerek** yazıldı · ③ bayrak panelden açılıp kapanıyor (§6.2 altı yer tutucu emekli) · ④ kapalıyken adnansahin'in ekranlarında sıfır fark (§8.1) · ⑤ **`npx prisma validate` temiz** (13 karşı-ilişki) · ⑥ `npm test` tam paket yeşil (~6,5 dk).
 
 ### FAZ 1b — Sebep kırılımı + elle duruş girişi
 
-`LoomStopEvent` (üç partial index + **BEFORE DELETE trigger**) · `LoomStopReclass` · `loom:classify` · `tezgah.stopEventMinSeconds` · panelde duruş girişi/düzeltme ekranı · `LoomShiftStopBreakdown`ın gerçek dolumu. **Hâlâ donanım yok** — duruşları vardiya amiri girer. `factoryDay` ikinci `@db.Date` muafı burada doğar.
+`MachineStopEvent` (üç partial index + **BEFORE DELETE trigger**) · `MachineStopReclass` · `loom:classify` · `tezgah.stopEventMinSeconds` · panelde duruş girişi/düzeltme ekranı · `MachineShiftStopBreakdown`ın gerçek dolumu. **Hâlâ donanım yok** — duruşları vardiya amiri girer. `factoryDay` ikinci `@db.Date` muafı burada doğar.
 
-**Bekçiler:** `test_loom_prune_safety` iskeleti (henüz budayıcı yok ama sed sondaları yazılır) · `test_db_invariants` (partial index + trigger + CHECK envanteri) · `test_loom_reclass` (ilk sınıflandırma atomik claim mi, değiştirme defter satırı yazıyor mu, yerinde güncelleme yok mu).
+**Bekçiler:** `test_machine_prune_safety` iskeleti (henüz budayıcı yok ama sed sondaları yazılır) · `test_db_invariants` (partial index + trigger + CHECK envanteri) · `test_machine_reclass` (ilk sınıflandırma atomik claim mi, değiştirme defter satırı yazıyor mu, yerinde güncelleme yok mu).
 **Kabul kapısı:** sebepli duruş `DELETE` denemesi DB'de `RAISE EXCEPTION` alıyor (pozitif sed sondası) · yeniden sınıflandırma audit'e değil deftere düşüyor.
 
 ### FAZ 2 — Otomatik toplama
 
-`LoomCollector` + `LoomCollectorMachine` + `verifyCollectorToken` · `PeripheralDevice.protocol` + `PeripheralSignal` · `LoomInterval` · `LoomRun` · `LoomLiveState` · `LoomCounterEvent` · üç ingest ucu · `loom-retention.job` · `loom-counter.helper` · **ajanın kendisi (`kenar/`)** · canlı pano · tablet sınıflandırma kuyruğu (uç **`?kind=`li** çağrılır) · advisory **8032** (mühür EXCLUSIVE / ingest `_shared`) · `MACHINE_DELETE_GUARDS`a **iki sayaç** (`loomRunCount` + `loomCounterEventCount` — §2.1'in yolu) + `workorder.service.ts` adım silme guard'ına `loomRuns` (§2.8) · `loom-read-surfaces.ts` **okuma manifesti** + `loom-telemetry-ast-tarama.ts` (§4) · kalan **12 bayrak** · *(istenirse)* `kur.ps1`e NTP adımı — **bugün yok, ayrı iş kalemi** (§3.5).
+`MachineCollector` + `MachineCollectorLink` + `verifyCollectorToken` · `PeripheralDevice.protocol` + `PeripheralSignal` · `MachineInterval` · `MachineRun` · `MachineLiveState` · `MachineCounterEvent` · üç ingest ucu · `loom-retention.job` · `loom-counter.helper` · **ajanın kendisi (`kenar/`)** · canlı pano · tablet sınıflandırma kuyruğu (uç **`?kind=`li** çağrılır) · advisory **8032** (mühür EXCLUSIVE / ingest `_shared`) · `MACHINE_DELETE_GUARDS`a **iki sayaç** (`machineRunCount` + `machineCounterEventCount` — §2.1'in yolu) + `workorder.service.ts` adım silme guard'ına `machineRuns` (§2.8) · `loom-read-surfaces.ts` **okuma manifesti** + `loom-telemetry-ast-tarama.ts` (§4) · kalan **12 bayrak** · *(istenirse)* `kur.ps1`e NTP adımı — **bugün yok, ayrı iş kalemi** (§3.5).
 
-**Bekçiler:** `test_loom_prune_safety` (**dört ayak**, §4) · **`test_loom_shift_terms`in İKİNCİ AYAĞI** — `Σ observedSec + unobservedSec = calendarSec` (kova bu fazda doğduğu için eşitlik ancak burada anlamlıdır; §4/§5.1) · `test_loom_counter_delta` (taşma/sıfırlama/anomali matrisi) · `test_loom_ingest_contract` (**dört durumlu replay + `STOP_REVOKED` + span kapanışı + sıra dışı 409 + saat sapması 400 + `SOURCE_MISMATCH` 400 + kapsam dışı 403 + uzak istekte 404**) · `test_loom_secret_hygiene` (token log/audit/sürüm notuna sızmıyor mu — kodla ölçülür) · `test_advisory_lock_namespaces` (8032, `_shared` dahil) · `test_remote_access_guard` (iki yeni önek) · `test_route_auth_coverage` (dört `EXEMPT` satırı) · `test_db_invariants` (kalan envanter + `NULLS NOT DISTINCT` breakdown seddi + `loom_counter_events_natural_uq`) · **`test_loom_shadow_mode`** — **S1** `OFF` makineye ingest → 403 · **S2** `SHADOW` karnesi mühürlenir ama DEFTER raporlarında (R1–R5) GÖRÜNMEZ · **S3** `go-live` kabulsüz sinyalle → 409 `SIGNAL_NOT_ACCEPTED` + eksik liste · **S4** 14 gölge vardiyada → 409 `SHADOW_TOO_SHORT` · **S5** anomali oranı aşınca → 409 `SHADOW_ANOMALY` · **S6** LIVE makinede kanal değişikliği → 409 `CHANNEL_CHANGE_REQUIRES_SHADOW`; **beş negatif sonda** (rapor süzgecini kaldır · karnenin donmuş `monitoringState`i yerine canlı künyeden süz · `go-live` kapılarından birini düşür · `signals/:id/accept`in gözlem şartını kaldır (409 `SIGNAL_NOT_OBSERVED` düşer) · kanal alanı değişince kabul damgasını null'lama → hepsi kırmızı vermelidir) · **`test_loom_run_beam_overlap`** (helper ↔ SQL ikizi, üç fixture — §7.3) · `test_hard_delete_guard_coverage` (`EXPECTED`e Faz 2'nin Cascade çocukları; `WATCHED`a `"Machine"` **Faz 1a'da** eklendi — §2.3) · `test_consistency` (§2.11'in eksik üç mutabakatı).
+**Bekçiler:** `test_machine_prune_safety` (**dört ayak**, §4) · **`test_machine_shift_terms`in İKİNCİ AYAĞI** — `Σ observedSec + unobservedSec = calendarSec` (kova bu fazda doğduğu için eşitlik ancak burada anlamlıdır; §4/§5.1) · `test_machine_counter_delta` (taşma/sıfırlama/anomali matrisi) · `test_machine_ingest_contract` (**dört durumlu replay + `STOP_REVOKED` + span kapanışı + sıra dışı 409 + saat sapması 400 + `SOURCE_MISMATCH` 400 + kapsam dışı 403 + uzak istekte 404**) · `test_machine_secret_hygiene` (token log/audit/sürüm notuna sızmıyor mu — kodla ölçülür) · `test_advisory_lock_namespaces` (8032, `_shared` dahil) · `test_remote_access_guard` (iki yeni önek) · `test_route_auth_coverage` (dört `EXEMPT` satırı) · `test_db_invariants` (kalan envanter + `NULLS NOT DISTINCT` breakdown seddi + `machine_counter_events_natural_uq`) · **`test_machine_shadow_mode`** — **S1** `OFF` makineye ingest → 403 · **S2** `SHADOW` karnesi mühürlenir ama DEFTER raporlarında (R1–R5) GÖRÜNMEZ · **S3** `go-live` kabulsüz sinyalle → 409 `SIGNAL_NOT_ACCEPTED` + eksik liste · **S4** 14 gölge vardiyada → 409 `SHADOW_TOO_SHORT` · **S5** anomali oranı aşınca → 409 `SHADOW_ANOMALY` · **S6** LIVE makinede kanal değişikliği → 409 `CHANNEL_CHANGE_REQUIRES_SHADOW`; **beş negatif sonda** (rapor süzgecini kaldır · karnenin donmuş `monitoringState`i yerine canlı künyeden süz · `go-live` kapılarından birini düşür · `signals/:id/accept`in gözlem şartını kaldır (409 `SIGNAL_NOT_OBSERVED` düşer) · kanal alanı değişince kabul damgasını null'lama → hepsi kırmızı vermelidir) · **`test_machine_run_beam_overlap`** (helper ↔ SQL ikizi, üç fixture — §7.3) · `test_hard_delete_guard_coverage` (`EXPECTED`e Faz 2'nin Cascade çocukları; `WATCHED`a `"Machine"` **Faz 1a'da** eklendi — §2.3) · `test_consistency` (§2.11'in eksik üç mutabakatı).
 
 **Kabul kapısı — üçü birden:**
-1. **«Telemetri ≠ defter» bölümü yazıldı VE budama bekçisi yeşil ölçüldü.** Üçüncü bir hard-delete sınıfı AÇILMAZ (§4): `/karar-notu` ile arşive tam metin + `docs/kurallar/defter.md`ye **bölüm (altı kural) + tek kural satırı**; kök `CLAUDE.md` cümlesi **kullanıcı onayına** bırakılır. Kapının ölçülen yarısı `test_loom_prune_safety`nin **manifest ayağıdır** (`/api/tezgah/**` GET uçları ↔ `loom-read-surfaces.ts`, R1–R7 birebir / T1–T3 `warnings`li) + `loom-telemetry-ast-tarama.ts`nin dört kuralı + **N1–N8 negatif sondaları kırmızı görülerek**. Bölüm yazılmadan ve bekçi yeşil görülmeden **retention job sürüme çıkmaz**.
+1. **«Telemetri ≠ defter» bölümü yazıldı VE budama bekçisi yeşil ölçüldü.** Üçüncü bir hard-delete sınıfı AÇILMAZ (§4): `/karar-notu` ile arşive tam metin + `docs/kurallar/defter.md`ye **bölüm (altı kural) + tek kural satırı**; kök `CLAUDE.md` cümlesi **kullanıcı onayına** bırakılır. Kapının ölçülen yarısı `test_machine_prune_safety`nin **manifest ayağıdır** (`/api/tezgah/**` GET uçları ↔ `loom-read-surfaces.ts`, R1–R7 birebir / T1–T3 `warnings`li) + `loom-telemetry-ast-tarama.ts`nin dört kuralı + **N1–N8 negatif sondaları kırmızı görülerek**. Bölüm yazılmadan ve bekçi yeşil görülmeden **retention job sürüme çıkmaz**.
 2. **Audit muafiyeti kodlandı ve ölçüldü:** `AUDIT_EXEMPT_MODELS` sabiti (⚠️ **bugün repoda YOKTUR, yaratılacaktır**) + iki yönlü bekçi (ölü muaf da kırmızı) + kök `CLAUDE.md`'nin *"tek istisna `UserPreference`"* cümlesinin `/karar-notu` ile güncellenmesi.
-3. **Kanal kabul testi + gölge mod KODA BAĞLANDI — reçete cümlesi yetmez: KOLON + KAPI.** Kolon `LoomSpec.monitoringState` (**OFF → SHADOW → LIVE**, varsayılan OFF) + `acceptedAt`/`acceptedById` + `demotedAt`/`demotedById`/`demoteReason`, kanal tarafında `PeripheralSignal.acceptedAt`/`acceptedById`, karnede **donmuş** `LoomShiftStat.monitoringState` (§2.3, §2.10). Kapı `POST /specs/:id/go-live`ın **üç şartıdır** (`SIGNAL_NOT_ACCEPTED` · `SHADOW_TOO_SHORT` · `SHADOW_ANOMALY`) ve kanal damgası `POST /signals/:id/accept`in **gözlem şartıdır** (`SIGNAL_NOT_OBSERVED` — "elle tetikledim" beyanı sunucu gözlemiyle kanıtlanır). LIVE makinede kanal değişikliği **409 `CHANNEL_CHANGE_REQUIRES_SHADOW`** → önce sebepli demote. Bekçi **`test_loom_shadow_mode`** (S1–S6 + beş negatif sonda, kırmızı görülerek yazılır). Süreç önlemi kalkmadı: kanal kabul testi + **en az 5 iş günü gölge mod** kurulum reçetesinde ZORUNLU madde olarak kalır ve `tezgah.fineWindowUntil` onun **tanı aracıdır** (kabul kapısı DEĞİL). *NC/NO rölesi ters bağlanmış bir tezgah "hep çalışıyor" görünür, randıman %100 çıkar ve kimse şikâyet etmez çünkü rakam güzeldir — ve mühür kalıcıdır; bu yüzden kapı bir boolean'ın yanındaki yorum olamaz.*
+3. **Kanal kabul testi + gölge mod KODA BAĞLANDI — reçete cümlesi yetmez: KOLON + KAPI.** Kolon `MachineSpec.monitoringState` (**OFF → SHADOW → LIVE**, varsayılan OFF) + `acceptedAt`/`acceptedById` + `demotedAt`/`demotedById`/`demoteReason`, kanal tarafında `PeripheralSignal.acceptedAt`/`acceptedById`, karnede **donmuş** `MachineShiftStat.monitoringState` (§2.3, §2.10). Kapı `POST /specs/:id/go-live`ın **üç şartıdır** (`SIGNAL_NOT_ACCEPTED` · `SHADOW_TOO_SHORT` · `SHADOW_ANOMALY`) ve kanal damgası `POST /signals/:id/accept`in **gözlem şartıdır** (`SIGNAL_NOT_OBSERVED` — "elle tetikledim" beyanı sunucu gözlemiyle kanıtlanır). LIVE makinede kanal değişikliği **409 `CHANNEL_CHANGE_REQUIRES_SHADOW`** → önce sebepli demote. Bekçi **`test_machine_shadow_mode`** (S1–S6 + beş negatif sonda, kırmızı görülerek yazılır). Süreç önlemi kalkmadı: kanal kabul testi + **en az 5 iş günü gölge mod** kurulum reçetesinde ZORUNLU madde olarak kalır ve `tezgah.fineWindowUntil` onun **tanı aracıdır** (kabul kapısı DEĞİL). *NC/NO rölesi ters bağlanmış bir tezgah "hep çalışıyor" görünür, randıman %100 çıkar ve kimse şikâyet etmez çünkü rakam güzeldir — ve mühür kalıcıdır; bu yüzden kapı bir boolean'ın yanındaki yorum olamaz.*
 
 ### FAZ 3 — Marka sürücüleri, doff, kalite ayağı
 
-`LoomModel` + `LoomStopCodeMap` (otomatik sınıflandırma — budama yüklemi İNSAN kararına bakar, §4) · `RollEntrySource.WEAVING` + `DoffEvent` · `Q`/OEE · `tezgah.shiftCloseRequiresClassification` · `picksPerCm`in kalıcı evi (kaynak: çözgü/desen kartı — `WarpSpec` ailesi; **sert bağımlılık EKLENMEZ**, §10/#9) · **levent bağı: KOLON YOK, `beamsMountedDuring` türetmesi** (§7.3) ve `Machine.warpBeamSlots` levent belgesinin migration'ında doğar. Levent defterinin kendisi DEVERE belgesinindir; tezgah izlemenin `perde-dokuma` profiline eklenmesi **ayrı bir karar notudur** (§7.2).
+`MachineModel` + `MachineStopCodeMap` (otomatik sınıflandırma — budama yüklemi İNSAN kararına bakar, §4) · `RollEntrySource.WEAVING` + `DoffEvent` · `Q`/OEE · `tezgah.shiftCloseRequiresClassification` · `unitsPerCm`in kalıcı evi (kaynak: çözgü/desen kartı — `WarpSpec` ailesi; **sert bağımlılık EKLENMEZ**, §10/#9) · **levent bağı: KOLON YOK, `beamsMountedDuring` türetmesi** (§7.3) ve `Machine.warpBeamSlots` levent belgesinin migration'ında doğar. Levent defterinin kendisi DEVERE belgesinindir; tezgah izlemenin `perde-dokuma` profiline eklenmesi **ayrı bir karar notudur** (§7.2).
 
 > **⚠️ FAZ 3'ÜN TEK PARÇALI SÜRÜM KURALI — beş kalem AYNI sürümde çıkar.** Levent tarafı üç ayrı yazara bölünebilir bir iştir ve bölünürse **yarım bir defter canlıya çıkar**: olay defteri yazılıp durum kolonları yazılmazsa "şu an hangi levent takılı" sorusu olayları tarayarak cevaplanır (ikinci okuma yolu, ayrışan yüzey); durum kolonları yazılıp sed yazılmazsa iki makine aynı leventi MOUNTED gösterir; `beamsMountedDuring` yazılmazsa tezgah raporları kendi yüklemini kurar ve tek kaynak çöker. **Aynı sürüm:** ① `WarpBeamEvent` olay defteri (append-only, tipli `*_CANCEL`, `reversesEventId @unique`) · ② `WarpBeam.status`/`currentMachineId`/`currentPosition` durum kolonları · ③ partial unique sed (bir levent aynı anda tek makinede) + `Machine.warpBeamSlots` · ④ `beamsMountedDuring` helper'ı **ve** boğaz-ikizi `BEAMS_MOUNTED_DURING_SQL` · ⑤ mutabakat bekçisi. Beşi aynı commit'te olmak zorunda değildir, **aynı SÜRÜMDE olmak zorundadır** (§7.3).
 
 **Bekçiler (Faz 3):**
-- **`scripts/test_loom_run_beam_overlap.ts`** (Faz 2'de iskeleti doğar, Faz 3'te gerçek defterle koşar) — helper ↔ SQL ikizi **birebir**; üç fixture: tek levent · çift levent · koşum ortasında levent değişimi. Negatif sonda: kesişim yüklemini düşür → kırmızı.
+- **`scripts/test_machine_run_beam_overlap.ts`** (Faz 2'de iskeleti doğar, Faz 3'te gerçek defterle koşar) — helper ↔ SQL ikizi **birebir**; üç fixture: tek levent · çift levent · koşum ortasında levent değişimi. Negatif sonda: kesişim yüklemini düşür → kırmızı.
 - **`scripts/test_warp_beam_ledger.ts`** (levent belgesinin bekçisi, tezgah tarafından ÇAĞRILIR) — olay ↔ durum mutabakatı: `WarpBeam.status`/`currentMachineId`, olay defterinin son geçerli satırından **türetilenle birebir**; `MOUNT_CANCEL` sonrası durum kendiliğinden geri döner. Negatif sonda: bir `DISMOUNTED` olayını gizle → durum ayrışır → kırmızı.
-- **`scripts/test_loom_doff_source.ts`** — `RollEntrySource.WEAVING` ile doğan topun kaynağı ve `DoffEvent` bağı; **türetilen metrenin stok yazmadığı** (§5.6) AST ile ölçülür: `producedM` ile `Roll` miktar yazan yol aynı ifadede geçemez.
-- **`scripts/test_loom_stop_code_map.ts`** — marka ham kodu → `ReasonPreset` eşlemesi; eşlenen duruş `reasonSource = MACHINE`, **`classifiedById = NULL`** yazar (yani budama yüklemi onu TELEMETRİ saymaya devam eder, §4). Negatif sonda: eşleyici `classifiedById` yazsın → budama bekçisi kırmızı (otomatik sınıflama kalıcılaşma tuzağı).
-- **Mevcut:** `test_db_invariants` (yeni partial unique + `WEAVING` enum envanteri) · `test_loom_prune_safety` (okuma manifestine Faz 3 uçları eklendi mi — manifest dışı uç kırmızı, §4) · `test_consistency` (levent ↔ koşum kesişimi) · `test_timestamptz_contract`.
+- **`scripts/test_machine_doff_source.ts`** — `RollEntrySource.WEAVING` ile doğan topun kaynağı ve `DoffEvent` bağı; **türetilen metrenin stok yazmadığı** (§5.6) AST ile ölçülür: `producedM` ile `Roll` miktar yazan yol aynı ifadede geçemez.
+- **`scripts/test_machine_stop_code_map.ts`** — marka ham kodu → `ReasonPreset` eşlemesi; eşlenen duruş `reasonSource = MACHINE`, **`classifiedById = NULL`** yazar (yani budama yüklemi onu TELEMETRİ saymaya devam eder, §4). Negatif sonda: eşleyici `classifiedById` yazsın → budama bekçisi kırmızı (otomatik sınıflama kalıcılaşma tuzağı).
+- **Mevcut:** `test_db_invariants` (yeni partial unique + `WEAVING` enum envanteri) · `test_machine_prune_safety` (okuma manifestine Faz 3 uçları eklendi mi — manifest dışı uç kırmızı, §4) · `test_consistency` (levent ↔ koşum kesişimi) · `test_timestamptz_contract`.
 
 **Kabul kapısı — beşi birden:**
 1. **Tek parçalı sürüm ölçüldü:** ①–⑤ kalemlerinin beşi de aynı sürüm etiketinde; `npx prisma validate` **temiz** ve levent tarafının karşı-ilişkileri beyan edilmiş (P1012 duvarı, §2.1).
 2. **`RollEntrySource.WEAVING` kendi migration dosyasında TEK ifade** (`ALTER TYPE … ADD VALUE IF NOT EXISTS`) ve onu KULLANAN kolon/CHECK **ayrı dosyada, sonra** — PG **55P04** kuralı (§9 Faz 1a/B1 emsali).
 3. **Dört yeni bekçi negatif sondayla KIRMIZI görülerek yazıldı** (yukarıdaki dört sonda tek tek koşturulup kırmızı görüldü, sonra düzeltildi).
 4. **Mutabakat yeşil:** `beamsMountedDuring` ile `WarpBeamEvent` defteri aynı cevabı veriyor (üç fixture) **ve** levent↔koşum kapısının iki yönü ölçüldü — `DISMOUNTED` açık koşumda **409**, koşum açılışında leventsizlik **`warnings`** (400 DEĞİL, §7.3).
-5. **Budama güvenliği yeniden ölçüldü:** Faz 3'ün yeni okuma uçları `loom-read-surfaces.ts` manifestine **sınıfıyla** yazıldı (DEFTER mi TELEMETRİ mi) ve `test_loom_prune_safety` yeşil; `npm test` tam paket yeşil (~6,5 dk).
+5. **Budama güvenliği yeniden ölçüldü:** Faz 3'ün yeni okuma uçları `loom-read-surfaces.ts` manifestine **sınıfıyla** yazıldı (DEFTER mi TELEMETRİ mi) ve `test_machine_prune_safety` yeşil; `npm test` tam paket yeşil (~6,5 dk).
 
 ---
 
@@ -1766,20 +1812,25 @@ Telemetri budanabilir (`LoomInterval`, insan kararı almamış + mühürlü duru
 5. **Birincil sayı `E = A × P`; ikincil `teknikRandıman = APT/(APT+UNPLANNED)` ayrı adla.** Rapor başlığına tanım + bileşenler basılır; **"ISO 22400-2 Effectiveness" ibaresi KULLANILMAZ** (§5.2). Satış cümlesi açıkça söylenir: *"tezgah terminaliyle birebir tutmaz — tanım, vardiya sınırı ve sayaç sıfırlaması farklı."* ① *(itiraz edilebilir)*
 6. **POT: `NON_SCHEDULED` düşülür · mola POT'ta KALIR (`breakOutOfPot=false`) · planlı bakım ve SETUP POT'ta kalır · `TOP_ALMA` ve `LEVENT_BAGLAMA` = `SETUP`.** ①③ Muhafazakâr yön + fail-closed; bu üç karar aynı fabrikanın randımanını %8–15 oynatır, `formulaVersion` geçmişi korur. *(itiraz edilebilir)*
 7. **Mikro duruş eşiği = 20 sn**, ama **`MINOR` sebepten değil SÜREDEN türer** (§5.2). ① Yol haritasının kendi ölçüsü (*"bir kopuş 20 saniye sürer"*); eşik `formulaVersion` olayı gibi ele alınır ve karneye donar. **Saha doğrulaması** — pilotta ölçülür; varsayılan 20 sn. *(itiraz edilebilir)*
-8. **Audit sapması: EVET, dar ve adıyla — ama FAZ 2 kararıdır.** Faz 1a/1b'de makine yazarı yok, muafiyet gerekmez. Faz 2'de makine kaynaklı yazımlar (`LoomInterval` upsert · `LoomLiveState` nabzı · duruş aç/kapat) `AuditService.log()` **çağırmaz**; muafiyet `AUDIT_EXEMPT_MODELS` ile **kodlanır** (⚠️ bugün yoktur) ve iki yönlü bekçiyle ölçülür; listeye satır eklemek karar notu gerektirir. İnsan dokunuşları (sebep atama, yeniden sınıflandırma, mühür/aç, token, elle giriş, revoke) normal audit'lenir. ②③ Kabul edilmezse tek duruşun ömrü ~2 KB audit demektir — `LoomStopEvent`in kendisinin üç katı. *(itiraz edilebilir; kök `CLAUDE.md` cümlesini değiştirir)*
-9. **`kumasTeknik`e SERT bağımlılık EKLENMEZ.** `picksPerCm` NULL → metre üretilmez, randıman hesaplanır, rapor beyan eder. Faz 1–2'de değer **yalnız `LoomRun.picksPerCm`e elle girilir**. ⚠️ **Kalıcı ev `ProductRecipe` DEĞİLDİR** — kardeş belge bunu ölçerek reddetti (`DEVERE-LEVENT-TARAMASI.md` §3.4: sıklık renge/desene bağlıdır, reçeteye konursa **kopya** doğar). Ev açıldığında kaynağı **çözgü/desen kartıdır** (`WarpSpec` ailesi, devere belgesi) ve bağımlılık `kumasTeknik` değil **`devere`** tarafındadır; **sert bağımlılık yine EKLENMEZ**: NULL → metre üretilmez, randıman hesaplanır, rapor beyan eder. ② Teknik kart istemeyen dokumacıyı zorlamaz. *(itiraz edilebilir)*
+8. **Audit sapması: EVET, dar ve adıyla — ama FAZ 2 kararıdır.** Faz 1a/1b'de makine yazarı yok, muafiyet gerekmez. Faz 2'de makine kaynaklı yazımlar (`MachineInterval` upsert · `MachineLiveState` nabzı · duruş aç/kapat) `AuditService.log()` **çağırmaz**; muafiyet `AUDIT_EXEMPT_MODELS` ile **kodlanır** (⚠️ bugün yoktur) ve iki yönlü bekçiyle ölçülür; listeye satır eklemek karar notu gerektirir. İnsan dokunuşları (sebep atama, yeniden sınıflandırma, mühür/aç, token, elle giriş, revoke) normal audit'lenir. ②③ Kabul edilmezse tek duruşun ömrü ~2 KB audit demektir — `MachineStopEvent`in kendisinin üç katı. *(itiraz edilebilir; kök `CLAUDE.md` cümlesini değiştirir)*
+9. **`kumasTeknik`e SERT bağımlılık EKLENMEZ.** `unitsPerCm` NULL → metre üretilmez, randıman hesaplanır, rapor beyan eder. Faz 1–2'de değer **yalnız `MachineRun.unitsPerCm`e elle girilir**. ⚠️ **Kalıcı ev `ProductRecipe` DEĞİLDİR** — kardeş belge bunu ölçerek reddetti (`DEVERE-LEVENT-TARAMASI.md` §3.4: sıklık renge/desene bağlıdır, reçeteye konursa **kopya** doğar). Ev açıldığında kaynağı **çözgü/desen kartıdır** (`WarpSpec` ailesi, devere belgesi) ve bağımlılık `kumasTeknik` değil **`devere`** tarafındadır; **sert bağımlılık yine EKLENMEZ**: NULL → metre üretilmez, randıman hesaplanır, rapor beyan eder. ② Teknik kart istemeyen dokumacıyı zorlamaz. *(itiraz edilebilir)*
 10. **KARAR KAPALI — `perde-dokuma` profili repoda ZATEN VAR ve bu belge onu DEĞİŞTİRMEZ.** Profil 2026-09-12'de **devere içeriğiyle** doğdu (`module-profiles.ts:159`) ve tezgah izleme orada **bilinçli olarak KAPALIDIR** (Faz 4). Canlı bir profilin modül kümesini değiştirmek sessiz bir davranış değişikliğidir; tezgah izleme o profilde **bayrakla, kurulum başına** açılır ve profile eklenmesi AYRI bir karar notudur. `MODULE_PROFILES` sayısı **6 KALIR** (sentezin "5 → 6" cümlesi bayattı). ②③ *(itiraz edilebilir)*
 11. **Sebebi ikisi de atar, varsayılan yüzey TABLET;** izinler ayrı kodlardır (`loom:classify` web + `mobile:tezgah-durus`). Eşik altı hiç sorulmaz; sinyalden çözülen kısa kopuş otomatik sınıflanır (`reasonSource = MACHINE|INFERRED`, `classifiedById = NULL`) — ⚠️ **ve bu yüzden budama seddi "sebep var mı"ya değil "İNSAN karar verdi mi"ye bakar** (§4): aksi hâlde otomatik sınıflama budanan ~1,12 M satırı kalıcıya çevirir ve yıllık bütçeyi tek tabloyla aşardı. `longStopThresholdSec` (300) üstü otomatik sınıflansa bile kuyruğa düşer. **Tamamı Faz 2.** ①③ *(itiraz edilebilir)*
 12. **Sistem sebebinin anlamı KOD SAHİPLİ — fabrika değiştiremez;** fabrika yalnız kendi eklediği sebebin sınıfını seçer. ② `ELEKTRIK_KESINTISI`ni "planlı" yapan bir fabrika kendi rakamını kandırır; `MOLA` meşru bir fabrika kararıdır ve o zaten `breakOutOfPot` bayrağıyla yönetiliyor. *(itiraz edilebilir)*
-13. **Geriye dönük sınıflandırma penceresi = MÜHÜR SINIRI.** Mühürlenmemişte serbest, mühürlüde `loom:shift-unseal` + `LoomShiftStatSeal` satırı + (değişiklikse) `LoomStopReclass`. **Duruşun `revokedAt` ile geri alınması da bu sınıra tabidir** (§2.7): mühürlüyse doğrudan yazılamaz → 409 `SHIFT_SEALED`. ⚠️ **Pencere fiilen `min(mühür sınırı, sampleRetentionDays)`tır:** budanmış bir duruş, mühür açılsa da **GERİ GELMEZ**. Karnenin `unclassifiedSec` terimi donduğu için **RAKAM korunur**, kaybolan **KALEM LİSTESİDİR**; unseal ekranı ve rapor bunu *"N sn sınıflandırılmamış — kalemleri budandı, yeniden sınıflandırılamaz"* diye beyan eder. `sampleRetentionDays`i kısaltmak bu pencereyi de kısaltır ve geri alınamaz (#16). ③ *(itiraz edilebilir)*
+13. **Geriye dönük sınıflandırma penceresi = MÜHÜR SINIRI.** Mühürlenmemişte serbest, mühürlüde `loom:shift-unseal` + `MachineShiftStatSeal` satırı + (değişiklikse) `MachineStopReclass`. **Duruşun `revokedAt` ile geri alınması da bu sınıra tabidir** (§2.7): mühürlüyse doğrudan yazılamaz → 409 `SHIFT_SEALED`. ⚠️ **Pencere fiilen `min(mühür sınırı, sampleRetentionDays)`tır:** budanmış bir duruş, mühür açılsa da **GERİ GELMEZ**. Karnenin `unclassifiedSec` terimi donduğu için **RAKAM korunur**, kaybolan **KALEM LİSTESİDİR**; unseal ekranı ve rapor bunu *"N sn sınıflandırılmamış — kalemleri budandı, yeniden sınıflandırılamaz"* diye beyan eder. `sampleRetentionDays`i kısaltmak bu pencereyi de kısaltır ve geri alınamaz (#16). ③ *(itiraz edilebilir)*
 14. **Marka sürücüsü Faz 2'de YAZILMAZ; devreye alma bir REÇETE MADDESİ DEĞİL, bir KAPIDIR.** Varsayılan ve tek birinci-sınıf yol **kuru kontak + donanım darbe sayacı retrofiti**; marka entegrasyonu yalnız ölçülmüş bir tezgahta ve Faz 3'te. **Doğrulanmamış ürün adları belgeden ÇIKARILDI** — satış cümlesine sızma riski. **Saha doğrulaması:** *"tezgahlar hangi marka/model, veri çıkışı var mı, duruş sebebini operatör bugün nereye giriyor?"* (saha kaynağının 8. açık sorusu) **Faz 2'nin ön koşuludur, Faz 1a'nın değil** — Faz 1a tam da bu belirsizliği beklememek için seçildi. ②③
-15. **Retrofit yanlış yorumu → REÇETE CÜMLESİ DEĞİL, KOLON + KAPI (+ süreç).** `LoomSpec.monitoringState` **`OFF` doğar** (varsayılan = bugünkü davranış); `OFF → SHADOW` ingest kapsamını açar; `SHADOW` tezgahın verisi yazılır ve karnesi **normal mühürlenir** ama **DEFTER raporları onu süzer** ve dışa aktarımda GÖLGE damgası taşır (§2.3, §5.3/8) — `SHADOW → LIVE` üç kapılıdır (`SIGNAL_NOT_ACCEPTED` · `SHADOW_TOO_SHORT` · `SHADOW_ANOMALY`), geri dönüş sebepli demote'tur, bekçisi **`test_loom_shadow_mode`**. Kanal kabul testi + **en az 5 iş günü gölge mod** kurulum reçetesinde ZORUNLU madde olarak KALIR (süreç önlemi kalkmadı, üstüne kolon ve kapı eklendi). `observedSec` düşükse rapor uyarır ama **mühürü bloke etmez**. ② *(itiraz edilebilir)*
+15. **Retrofit yanlış yorumu → REÇETE CÜMLESİ DEĞİL, KOLON + KAPI (+ süreç).** `MachineSpec.monitoringState` **`OFF` doğar** (varsayılan = bugünkü davranış); `OFF → SHADOW` ingest kapsamını açar; `SHADOW` tezgahın verisi yazılır ve karnesi **normal mühürlenir** ama **DEFTER raporları onu süzer** ve dışa aktarımda GÖLGE damgası taşır (§2.3, §5.3/8) — `SHADOW → LIVE` üç kapılıdır (`SIGNAL_NOT_ACCEPTED` · `SHADOW_TOO_SHORT` · `SHADOW_ANOMALY`), geri dönüş sebepli demote'tur, bekçisi **`test_machine_shadow_mode`**. Kanal kabul testi + **en az 5 iş günü gölge mod** kurulum reçetesinde ZORUNLU madde olarak KALIR (süreç önlemi kalkmadı, üstüne kolon ve kapı eklendi). `observedSec` düşükse rapor uyarır ama **mühürü bloke etmez**. ② *(itiraz edilebilir)*
 16. **`sampleRetentionDays` 180'de kalır.** ② Kısaltmak geri alınamaz, uzatmak serbest; **saha doğrulaması** duruş frekansı pilotta ölçülür. *(itiraz edilebilir)*
 17. **`counterModulus` NULL doğar ve sarma yorumu KAPALIDIR** — her negatif sıçrama `RESET`/`ANOMALY`. Modülüs yalnız kanal kabul testinde **ÖLÇÜLEREK** girilir. ③ Uydurulmuş değer yazılmaz. *(itiraz edilebilir)*
-18. **`loom_stop_events` partition bugün açılmaz, tetiği yazılıdır:** tablo 20 M satırı VEYA kurulum 60 tezgahı geçerse karar yeniden açılır ve **boş tabloda** prova edilir; sayaç `/api/admin/health`te. ② *(itiraz edilebilir)*
-19. **Jakar ayrı kutudur: `slot = 1` kanonik `PICK_COUNTER`dır ve metre YALNIZ slot 1'den türetilir;** ikinci kanal karşılaştırma/anomali içindir, rapora girmez. ③ "Hangi sayaç doğru" sorusu kurulumda değil şemada cevaplanır. *(itiraz edilebilir)*
+18. **`machine_stop_events` partition bugün açılmaz, tetiği yazılıdır:** tablo 20 M satırı VEYA kurulum 60 tezgahı geçerse karar yeniden açılır ve **boş tabloda** prova edilir; sayaç `/api/admin/health`te. ② *(itiraz edilebilir)*
+19. **`slot = 1` kanonik üretim sayacıdır ve metre YALNIZ slot 1'den türetilir;** ikinci kanal karşılaştırma/anomali içindir, rapora girmez. ③ "Hangi sayaç doğru" sorusu kurulumda değil şemada cevaplanır. ⚠️ **AÇIK SORU (2026-09-12):** bu kural *"makine başına tek üretim sayacı anlamlıdır"* varsayar. Çok barlı raşelde her kılavuz barı kendi tüketimini yapar ve çift enli makinede yan yana iki ayrı kumaş doğar — orada **iki sayaç iki GERÇEK** olabilir, biri diğerinin kopyası değil. Aynı varsayımın ikinci yüzü `machine_runs_one_open_per_machine_uq`tir (bir makine aynı anda tek iş koşar) ve o sed yan yana iki kumaşı **yapısal olarak imkânsız** kılar. İkisi de kâğıttadır, dolayısıyla bugün bedava; yönetici listesine alındı, bu belgede KARARA BAĞLANMADI. *(itiraz edilebilir)*
 20. **`minVersion` YÜKSELTİLMEZ:** yeni enum değerleri ve uçlar yalnız yeni yüzeylerde okunuyor, sahadaki istemciyi etkilemiyor. ③ *(itiraz edilebilir)*
-21. **`LoomInterval` PK'sı `@@id([machineId,bucketStart])`, `LoomLiveState` PK'sı `machineId @id`, `LoomSpec` PK'sı `id` + `machineId @unique`** — üç farklı kalıp bilinçlidir ve gerekçesi `///` ile yazılıdır (§2.3, §2.6, §2.9): varlık olan `id` alır, makinenin aynası olan almaz. ③ *(itiraz edilebilir)*
+21. **`MachineInterval` PK'sı `@@id([machineId,bucketStart])`, `MachineLiveState` PK'sı `machineId @id`, `MachineSpec` PK'sı `id` + `machineId @unique`** — üç farklı kalıp bilinçlidir ve gerekçesi `///` ile yazılıdır (§2.3, §2.6, §2.9): varlık olan `id` alır, makinenin aynası olan almaz. ③ *(itiraz edilebilir)*
+22. **İZLENEN MAKİNE DOKUMA TEZGAHIYLA SINIRLI DEĞİLDİR — künye nullable, ad nötr, birim sinyalde** (2026-09-12; `DEVERE-LEVENT-TARAMASI.md` §9.5 kararının şemaya uygulanması, §9.7e). Üç parça:
+    - **(a) Künye nullable.** `LoomShedType` ve `LoomWeftInsertion` **NULL olabilir**: çözgülü örme (raşel) ağızlık açmaz ve atkı atmaz. Eski NOT NULL hâli raşeli şemadan yapısal olarak dışlıyordu — `MachineSpec` satırı açılamayan makine izleme kapsamına hiç giremiyordu. **İki enumun ADI `Loom*` KALIR** ve bu bilinçlidir: ağızlık düzeni ile atkı atma sistemi **gerçekten dokumaya özgü fiziktir**; nötr ada çevirmek "her makinenin ağızlığı var" ima ederdi. NULL olmaları tam olarak "bu makine o sınıftan değil"i söyler. ③
+    - **(b) Ad ailesi nötr: `MachineSpec` / `MachineRun` / `Machine*` / `machine_*` / `test_machine_*`.** `Loom*` adları raşel kapsama girince yanlış ad olur. **Şemada bugün HİÇBİRİ YOK** (ölçüldü 2026-09-12: `MachineSpec`/`MachineRun`/`MachineInterval` → 0 eşleşme; `Machine*` ad uzayı ve `machine_*` tablo öneki boş, yalnız `machines` dolu) ⇒ **bugün bir belge düzeltmesi, yarın migration + kod turu.** ⚠️ DB bayrak anahtarı `tezgah.enabled` **DEĞİŞMEZ** (§9.2: anahtar kimliktir), yani ad asimetrisi bilinçlidir: modeller nötr, bayrak tarihsel. ③
+    - **(c) Birim SİNYALDE, sıklık KOŞUMDA, sınıf yalnız ETİKET.** Metre tek formülden doğar (`sayaçDeltası ÷ (unitsPerCm × 100)`, §5.6) ve `machineClass` üstünde **DALLANMAZ**: dallanmak bir `kind`-dispatch olurdu (kök `CLAUDE.md` yasağı) ve sinyal `PICK_COUNTER` derken sınıf `WARP_KNIT` derse *"hangisi kazanır"* sorusunu doğururdu — çift yüklem. Bu yüzden `machineClass` **zorunlu değildir**. ③
+    - ⚠️ **AÇIK KALAN, KARARA BAĞLANMAYAN:** randımanın paydası hâlâ atkı temellidir (`targetPicksPerMin`, `kopuş/10⁵ atkı`) ve çözgülü örmede/kaplama hattında yapısal olarak null kalır — *"ölçülemedi"* değil, **"model uymuyor"**. Ayrıca `warpStopCount`/`weftStopCount` tekildir: zemin ve hav çözgüsü ayrı kopar, tek sayaç hangi leventin koptuğunu söyleyemez ve **Pareto yanlış levente yazılır**. İkisi de kâğıtta; yönetici listesinde.
 
 ---
 
@@ -1792,19 +1843,19 @@ Telemetri budanabilir (`LoomInterval`, insan kararı almamış + mühürlü duru
 | Mercek | K/O/D | İşlendi | Reddedildi | Bu belgede nerede |
 |---|---|---|---|---|
 | **Kabul şartları + bayrak (K2/K3)** | 4/8/3 | 15 | — | §6.2 yer tutucu emekliliği · §6.3 fail-open iki bayrağın adı · §7.1 modül ilişkisi · §8 kabul şartları · §2.1 kapalı kurulum ölçümü |
-| **Defter doktrini + telemetri (K1)** | 6/6/3 | 15 | — | §2.7 `LoomStopReclass` · §3.5 dört durumlu replay + span kapanışı · §4 trigger + «Telemetri ≠ defter» bölümü · §2.10 `sealState`/`sealGeneration` · §2.8 koşum `revokedAt` · §2.9 `supersededByEventId` |
+| **Defter doktrini + telemetri (K1)** | 6/6/3 | 15 | — | §2.7 `MachineStopReclass` · §3.5 dört durumlu replay + span kapanışı · §4 trigger + «Telemetri ≠ defter» bölümü · §2.10 `sealState`/`sealGeneration` · §2.8 koşum `revokedAt` · §2.9 `supersededByEventId` |
 | **Çekirdek mimari** | 4/8/6 | 17 | 1 | §3.1 ajan gövdesi · §3.3 uzak/LAN 404 + `EXEMPT` · §6.4 SoD + izin kategorisi · §6.5 panel/mobil ayna · §3.5 `SOURCE_MISMATCH` |
 | **Çürütme izi** | 4/8/5 | 15 | 2 | §5.1 duruşun pay edilmesi · §2.1 üç karşı-ilişki · §5.4 kopuş/10⁵ · §3.5 sıra + `bucketMinutes` · §2.4 `lastSeq` |
-| **Kod gerçekliği** | 3/7/4 | 14 | — | §6.2 panel tip zinciri · §6.1 `REGIME_GATES` düzeltmesi · §5.6 `picksPerCm` evi yok · §9 `variance-reasons` emsalinin kaldırılması · tüm `dosya:satır` düzeltmeleri |
+| **Kod gerçekliği** | 3/7/4 | 14 | — | §6.2 panel tip zinciri · §6.1 `REGIME_GATES` düzeltmesi · §5.6 `unitsPerCm` evi yok · §9 `variance-reasons` emsalinin kaldırılması · tüm `dosya:satır` düzeltmeleri |
 | **Ölçek + fazlandırma** | 5/5/3 | 12 | 1 | §9 Faz 1a/1b/2/3 · §5.2 `MINOR` düzeltmesi · §5.2 ISO etiketi · §7.3 levent sahipliği · §2.3 `maxPicksPerMin` nullable |
 
 **Reddedilen dört bulgu:**
 
 | # | Bulgu | Red gerekçesi |
 |---|---|---|
-| 1 | `ReasonPreset.stopCountsAsBreak` kolonunun geri getirilmesi (çürütme izi, KRİTİK 4'ün ikinci yarısı) | Kopuş sayacı **makine sinyalinden** doğar (`WARP_STOP`/`WEFT_STOP` → `LoomInterval.warpStopCount`), insan sınıflandırmasından değil; ikinci sayım yolu aynı soruya iki cevap veren "çift yüklem" sınıfını üretirdi. Bulgunun kendi şartı gereği red gerekçesi buraya yazıldı; **KPI'ın kendisi (kopuş/10⁵ atkı) İŞLENDİ** (§5.4). |
-| 2 | `LoomSampleHold` — budama muafiyeti / "altı ay sonra bu topun dokuma gecesini göster" (çürütme izi, DÜŞÜK 16) | İhtiyaç **ölçülmedi** ve kova zaten 180 gün duruyor; muafiyet tablosu budama seddini delen ikinci bir yüklem açardı. ② Tek fabrika ölçeğinde bugün karşılığı yok. Kardeşi **`tezgah.fineWindowUntil` İŞLENDİ** (§6.3). |
-| 3 | `LoomShiftStat.factoryDay`in kaldırılması / `Timestamptz`e çevrilmesi (çekirdek mimari, ORTA 7'nin ikinci yarısı) | Kolon **donmuş rapor eksenidir**, tek yazarı mühürleyicidir ve `picksPerCmAtClose` ile aynı sınıftadır; her rapor için `ShiftInstance` join'i ödemek pahalıdır. *(Bu satırdaki `Sack.weightKg ↔ SackWeighing` EMSALİ Fable turunda KALDIRILDI — ölçüldü: `shipping.service.ts:461-469` çuval oluşturma yolu defter satırı yazmadan kg yazabiliyor, yani kalıp bir örnek değil bir uyarıdır. Red kararı ayakta; yalnız gerekçesindeki emsal düştü.)* `@db.Date` seçimi `ExchangeRate.rateDate` gerekçesiyle aynıdır (takvim günü anahtarı, an değil). **Muaf sayısı düzeltmesi (Faz 1a'da bir, Faz 1b'de bir) İŞLENDİ.** |
+| 1 | `ReasonPreset.stopCountsAsBreak` kolonunun geri getirilmesi (çürütme izi, KRİTİK 4'ün ikinci yarısı) | Kopuş sayacı **makine sinyalinden** doğar (`WARP_STOP`/`WEFT_STOP` → `MachineInterval.warpStopCount`), insan sınıflandırmasından değil; ikinci sayım yolu aynı soruya iki cevap veren "çift yüklem" sınıfını üretirdi. Bulgunun kendi şartı gereği red gerekçesi buraya yazıldı; **KPI'ın kendisi (kopuş/10⁵ atkı) İŞLENDİ** (§5.4). |
+| 2 | `MachineSampleHold` — budama muafiyeti / "altı ay sonra bu topun dokuma gecesini göster" (çürütme izi, DÜŞÜK 16) | İhtiyaç **ölçülmedi** ve kova zaten 180 gün duruyor; muafiyet tablosu budama seddini delen ikinci bir yüklem açardı. ② Tek fabrika ölçeğinde bugün karşılığı yok. Kardeşi **`tezgah.fineWindowUntil` İŞLENDİ** (§6.3). |
+| 3 | `MachineShiftStat.factoryDay`in kaldırılması / `Timestamptz`e çevrilmesi (çekirdek mimari, ORTA 7'nin ikinci yarısı) | Kolon **donmuş rapor eksenidir**, tek yazarı mühürleyicidir ve `unitsPerCmAtClose` ile aynı sınıftadır; her rapor için `ShiftInstance` join'i ödemek pahalıdır. *(Bu satırdaki `Sack.weightKg ↔ SackWeighing` EMSALİ Fable turunda KALDIRILDI — ölçüldü: `shipping.service.ts:461-469` çuval oluşturma yolu defter satırı yazmadan kg yazabiliyor, yani kalıp bir örnek değil bir uyarıdır. Red kararı ayakta; yalnız gerekçesindeki emsal düştü.)* `@db.Date` seçimi `ExchangeRate.rateDate` gerekçesiyle aynıdır (takvim günü anahtarı, an değil). **Muaf sayısı düzeltmesi (Faz 1a'da bir, Faz 1b'de bir) İŞLENDİ.** |
 | 4 | Makine ingest yoluna da `clientToken` eklenmesi (çekirdek mimari, ORTA 12'nin ilk seçeneği) | Makine yolunun tekilliği **doğal anahtardır** ve kalem başına token üretmek ajanın kuyruğuna ikinci bir kimlik ekseni sokardı. Bulgunun ikinci seçeneği (409 alan kalem kuyrukta ölür, retry edilmez, sayacı `/api/admin/health`te) İŞLENDİ (§3.5); **insan yolunun `clientToken`ı ise EKLENDİ.** |
 
 **K2'den bilinçli sapma (kullanıcı onayına açık):** K2 `dokuma → devere` bağımlılığını bağlayıcı sayıyor; bu belge onu **kurmuyor** (§7). Ölçüm: `module-flags.ts:77` `iplikEnabled → ticaretEnabled` zinciri gerçektir (`:78` tezgah, `:79` devere — eski `:68` çapası 2026-09-12'de kaydı), dolayısıyla `dokuma→devere→iplik→ticaret` dokumayı açan her müşteriye ticareti zorla açardı ve **K3'ün "zorlamayacak" şartıyla çelişirdi.** Sapma bu dilimde pratik sonuç doğurmuyor (`dokuma.enabled` açılmıyor); karar, anahtar doğduğu gün geçerlidir ve itiraza açıktır.
@@ -1821,7 +1872,7 @@ Ayrı bir düşmanca denetim, belgenin **yazılmasından önceki sentez metnini*
 |---|---|---|
 | 1 | **PG 55P04** — `ADD VALUE` + kolon + CHECK tek dosyadaydı; `migrate deploy` sürüm gecesi ortada kalırdı | §9 Faz 1a: **B1 (enum, dosyada tek ifade) + B2 (kolon+CHECK)**, B1 önce, aynı commit |
 | 2 | **P1012** — 13 karşı-ilişki beyan edilmemişti; `prisma validate` ilk duvardı | §2.1 **KARŞI-İLİŞKİ ENVANTERİ** + kural cümlesi; kabul kapısına `prisma validate` |
-| 3 | **Hedefsiz levent kolonu** — `LoomRun.warpBeamId` var olmayan tabloya bakıyordu ve yönetici kararına aykırıydı | §2.8'den **SİLİNDİ**; §7.3 `beamsMountedDuring` türetmesi + iki yönlü kapı; §9 Faz 3 |
+| 3 | **Hedefsiz levent kolonu** — `MachineRun.warpBeamId` var olmayan tabloya bakıyordu ve yönetici kararına aykırıydı | §2.8'den **SİLİNDİ**; §7.3 `beamsMountedDuring` türetmesi + iki yönlü kapı; §9 Faz 3 |
 | 4 | **`perde-dokuma` ad çakışması** — profil repoda VAR, içeriği farklı, tezgah orada KAPALI | §7.2 **KARAR KAPALI** · §6.1 altı profil/dördü kapalı · §10/#10 · profil sayısı **6 KALIR** |
 | 5 | **`warpStopCount/weftStopCount NOT NULL`** — tek kontaklı retrofitte *"kopuş yok"* yalanı canlı tabloya Faz 1a'da girerdi | §2.6 · §2.10 **`Int?`** · §5.4 "pay ya da payda NULL → KPI hesaplanmaz" |
 
@@ -1881,14 +1932,14 @@ Bu tur **yeni karar üretmedi**: bağımsız bir doğrulayıcı belgeyi baştan 
 
 | # | Ağır çelişki | Ne değişti |
 |---|---|---|
-| 1 | §2.7 başlığı "(FAZ 2)" diyordu, §9 `LoomStopEvent`i **Faz 1b**'de doğuruyordu | Başlık **FAZ 1b** oldu; makine kaynaklı alanların "KOLON 1b / YAZAR 2" ayrımı başlığın altına yazıldı |
+| 1 | §2.7 başlığı "(FAZ 2)" diyordu, §9 `MachineStopEvent`i **Faz 1b**'de doğuruyordu | Başlık **FAZ 1b** oldu; makine kaynaklı alanların "KOLON 1b / YAZAR 2" ayrımı başlığın altına yazıldı |
 | 2 | `stopEventMinSeconds` "Faz 2" ve *"eşikleyeceği tablo Faz 2'de doğuyor"* diyordu | Bayrak **Faz 1b** — eşiklediği tabloyla AYNI fazda (§6.3); §9 Faz 2'nin bayrak sayısı **13 → 12** |
 | 3 | `CLOCK_SKEW` bir yerde *"aşan PAKET 400"*, başka yerde *"PAKETİ değil KALEMİ düşürür"* | Tek doğru bırakıldı: **kalem düşer, `rejected[]` ile döner**; §6.3'teki paket cümlesi düzeltildi |
 | 4 | §5.4 kimliği `gapPicks`siz yazılmıştı ve çok koşumlu vardiyada `targetPicksPerMin` NULL olabiliyordu | Kimlik `gapPicks`li hâle getirildi + **"yalnız TEK HEDEFLİ vardiyada birebir"** şerhi; çok hedefli vardiyada E **kendi tanımından** okunur |
 | 5 | Guard fazlaması üç yerde üç farklı sayı veriyordu (1a:1 · 1b:1 · 2:2 ↔ *"dört Restrict adıyla"* ↔ *"üç sayaç"*) | **§2.1'in yolu TEK KAYNAK** ilan edildi; §2.8 ve §9 Faz 2 ona hizalandı (**iki sayaç** eklenir, toplam dört) |
 | 6 | Faz 1a bekçi listesinde `Σ observedSec + unobservedSec = calendarSec` vardı — ama Faz 1a'da **kova YOK** ve `unobservedSec = 0` BEYAN ediliyor | Bekçi doğuşta kırmızı verirdi: eşitlik **Faz 2 ayağına** taşındı, Faz 1a'da **kırpma + `Σ breakdown ≤ POT`** kaldı |
 
-**On yedi küçük hizalamanın hepsi kapandı:** eski duruş kimliği (`machineId + startedAt + source`) düzeltmenin içinden temizlendi → **`(machineId, stopKey)`** · bayrak sayısı tek sayıya (**16**) indi ve `stopMatchToleranceSec`in düştüğü not edildi · `minClassificationPct` metinden çıkarıldı (tablo 16 bayrağın tamamıdır) · `gapPicks` üç yerde **"paydan düşülür, paydaya girmez"** oldu · `test_hard_delete_guard_coverage` Faz 1a bekçi listesine eklendi · `anomalyAck` **kolon 1a / kapı 2** olarak hizalandı · *"onaysız mühür 400"* → **409** · `prune_safety` **dört ayak** · Faz 1a bekçi sayımı listeye göre **4 yeni + 10 mevcut** · `loom_intervals_bucket_chk` §2.6 envanterine yazıldı · `LoomShiftStatSeal`e **`@@unique([statId, sealGeneration, action])`** · `LoomRun`a **`loom_runs_natural_uq`** partial unique · `microStop*` → **`minorStop*`** (tek ad) · bölüm numaraları bitişik yapıldı (**§7.1/§7.2/§7.3** ve **§11a–§11d**) ve atıflar hizalandı · izin sayımı *"yedi `loom:*`"* → **altı `loom:*` + bir `mobile:*`**.
+**On yedi küçük hizalamanın hepsi kapandı:** eski duruş kimliği (`machineId + startedAt + source`) düzeltmenin içinden temizlendi → **`(machineId, stopKey)`** · bayrak sayısı tek sayıya (**16**) indi ve `stopMatchToleranceSec`in düştüğü not edildi · `minClassificationPct` metinden çıkarıldı (tablo 16 bayrağın tamamıdır) · `gapPicks` üç yerde **"paydan düşülür, paydaya girmez"** oldu · `test_hard_delete_guard_coverage` Faz 1a bekçi listesine eklendi · `anomalyAck` **kolon 1a / kapı 2** olarak hizalandı · *"onaysız mühür 400"* → **409** · `prune_safety` **dört ayak** · Faz 1a bekçi sayımı listeye göre **4 yeni + 10 mevcut** · `machine_intervals_bucket_chk` §2.6 envanterine yazıldı · `MachineShiftStatSeal`e **`@@unique([statId, sealGeneration, action])`** · `MachineRun`a **`machine_runs_natural_uq`** partial unique · `microStop*` → **`minorStop*`** (tek ad) · bölüm numaraları bitişik yapıldı (**§7.1/§7.2/§7.3** ve **§11a–§11d**) ve atıflar hizalandı · izin sayımı *"yedi `loom:*`"* → **altı `loom:*` + bir `mobile:*`**.
 
 **Düzeltilen çapalar (bu turun tek kod ölçümü):** ① `test_module_flag_off.ts`in 18 HTTP kontrolünü türeten formül **`:551-552`**tedir (`httpKontrolSayisi`); üçüncü turda yazılan **`:524-528` YANLIŞTI** — o aralık profil damgası yorumudur (§8.1 K3-2, §11c tablosu #3). **Sayının kendisi (18) doğruydu.** ② §11a'daki bayat `module-flags.ts:68` → **`:77`** (`:78` tezgah, `:79` devere) — §11c'nin zaten düzelttiği çapa, §11a'da bayat kalmıştı.
 
@@ -1898,8 +1949,8 @@ Bu tur **yeni karar üretmedi**: bağımsız bir doğrulayıcı belgeyi baştan 
 
 ## 12 · Tasarımın kendi zayıf noktaları — saklanmadan
 
-- **Retrofit sinyalinin sessiz yanlış yorumu** en büyük risktir. Sentez bunu *"teknik değil süreç önlemi"* diye bırakıyordu — **düzeltildi ve önlem artık ÜÇ KATMANLIDIR: KOLON + KAPI + SÜREÇ.** Kolon `monitoringState` (OFF/SHADOW/LIVE) ve kanal kabul damgaları; kapı `go-live`ın üç şartı + `signals/:id/accept`in gözlem şartı + `CHANNEL_CHANGE_REQUIRES_SHADOW`; süreç ise kanal kabul testi + en az 5 iş günü gölge mod + `observedSec` beyanı (§2.3/§5.3, bekçi `test_loom_shadow_mode`). Risk azalır ama **sıfırlanmaz**: üç kapıyı da geçen bir kurulumda LIVE'a basan insan, sinyali gerçekten anlamadan da basabilir — kapı gözlemi zorunlu kılar, doğru yorumu değil.
+- **Retrofit sinyalinin sessiz yanlış yorumu** en büyük risktir. Sentez bunu *"teknik değil süreç önlemi"* diye bırakıyordu — **düzeltildi ve önlem artık ÜÇ KATMANLIDIR: KOLON + KAPI + SÜREÇ.** Kolon `monitoringState` (OFF/SHADOW/LIVE) ve kanal kabul damgaları; kapı `go-live`ın üç şartı + `signals/:id/accept`in gözlem şartı + `CHANNEL_CHANGE_REQUIRES_SHADOW`; süreç ise kanal kabul testi + en az 5 iş günü gölge mod + `observedSec` beyanı (§2.3/§5.3, bekçi `test_machine_shadow_mode`). Risk azalır ama **sıfırlanmaz**: üç kapıyı da geçen bir kurulumda LIVE'a basan insan, sinyali gerçekten anlamadan da basabilir — kapı gözlemi zorunlu kılar, doğru yorumu değil.
 - **Duruş frekansı ölçülmedi** — budanmayan kısmın boyutu buna bağlı.
 - **Sayaç sıfırlaması ile 16-bit sarma ayırt edilemeyebilir**; tasarım bunu uydurmuyor (`RESET` + onay) ama karne "eksik" olabilir ve rapor `warnings` şeridini çizmezse kullanıcı eksik sayıyı tam sanar.
-- **`LoomStopEvent` iki yaşam sınıfını tek tabloda taşıyor.** Dört sedle korunuyor (§4) ama bu, doktrinin bilinçli bir istisnasıdır ve bedeli yazılıdır: sınıf satır bazlı ve **çalışma zamanında değişiyor** (sebep atanınca telemetri deftere terfi ediyor).
+- **`MachineStopEvent` iki yaşam sınıfını tek tabloda taşıyor.** Dört sedle korunuyor (§4) ama bu, doktrinin bilinçli bir istisnasıdır ve bedeli yazılıdır: sınıf satır bazlı ve **çalışma zamanında değişiyor** (sebep atanınca telemetri deftere terfi ediyor).
 - **Faz 1a'nın verisi insandan geliyor.** Elle girilen bir vardiya karnesi, telemetriden gelen karneyle aynı tabloda yaşar ve ayrımı yalnız `source` kolonu taşır — rapor bunu beyan etmezse kullanıcı ikisini karıştırır.
