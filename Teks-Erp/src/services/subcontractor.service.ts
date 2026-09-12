@@ -3224,21 +3224,24 @@ export class SubcontractorService {
           })),
         });
 
-        // DEPO DEFTERİ — fason dönüşü GERÇEK bir giriştir: orijinal rulolar
-        // emekliye ayrıldı (dışarıda tüketildi), bu toplar makbuzdan doğdu ve
-        // fiziksel olarak fabrikaya geri girdi. Kesim çocuğundan farkı bu:
-        // orada mal zaten içerideydi (dönüşüm), burada dışarıdan geldi.
-        await writeWarehouseMovements(
-          tx,
-          bornRollInputs.map(({ id, nr }) => ({
-            rollId: id,
-            eventType: WarehouseEventType.ENTRY,
-            qty: nr.qty,
-            toWarehouseId: bornWarehouseId,
-            userId: userId ?? null,
-            notes: `Fason dönüşü (${receipt.receiptNo})`,
-          })),
-        );
+        // DEPO DEFTERİ — YALNIZ mal fiilen DEPOYA girdiyse satır yazılır, yani
+        // fason SON adımsa (`bornStatus === WAREHOUSE`). Ara adımda doğan top
+        // IN_PRODUCTION'dır: fiziksel olarak üretim hattındadır, rafta değil.
+        // ⚠️ Koşulsuz yazım depoya girmemiş malı depoda gösteriyordu (ölçüm:
+        // bu kurulumda fason dönüşü girişlerinin 57/57'si böyleydi).
+        if (bornStatus === RollStatus.WAREHOUSE) {
+          await writeWarehouseMovements(
+            tx,
+            bornRollInputs.map(({ id, nr }) => ({
+              rollId: id,
+              eventType: WarehouseEventType.ENTRY,
+              qty: nr.qty,
+              toWarehouseId: bornWarehouseId,
+              userId: userId ?? null,
+              notes: `Fason dönüşü (${receipt.receiptNo})`,
+            })),
+          );
+        }
 
         // Receipt-seviyesi özellikler tüm born roll'larda aynı (resolvedAppliedPropertyIds)
         // → roll × property cross product tek createMany ile. skipDuplicates:
@@ -3741,6 +3744,16 @@ export class SubcontractorService {
         );
       }
       closedQty = Number(fresh.currentQty);
+      // ÇIKIŞSIZ KAPAMA YASAK: `recordVarianceTx` 0 metrajda satır YAZMAZ
+      // (helper başlığı: sapmanın tanımı gereği) — kalan 0 iken kapama yapılırsa
+      // DURUM bayrağı basılır ama defterde satır olmaz, yani geri alınacak bir
+      // defter kaydı da kalmaz. Kapama bir FİRE kararıdır; sıfır metrede karar yok.
+      if (!(closedQty > 0)) {
+        throw AppError.conflict(
+          "Bu topun fasonda bekleyen kalanı yok (0 m) — kapatılacak bir şey bulunamadı.",
+          { code: "REMAINDER_NOTHING_TO_CLOSE" },
+        );
+      }
 
       // ATOMİK CLAIM — receive'daki consume ile aynı desen.
       const claimed = await tx.roll.updateMany({
