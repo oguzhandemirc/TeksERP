@@ -2,7 +2,7 @@
 
 > Üretilmiş (anlama turu 2026-09-05, +10 bekçi 2026-09-06/07; 467 backend bekçisi + 296 istemci testi — Electron 211, mobil 85). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı; 455 dosya, **~6,5 dakika** — 369 sn koşum + 28 sn tip geçidi, ölçüldü 2026-09-05 — 'saatler sürer' cümlesi YANLIŞTI, `docs/standart/TEST-VE-DERLEME.md` [TD-02]). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
 
-Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (94), `diger` (91), `sevkiyat` (87), `etiket` (83), `finans` (81), `siparis` (72), `modul-bayrak` (68), `belge` (65), `ayar` (58), `cuval` (59), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (41), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (30), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (23), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (12), `sebep-katalogu` (12), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
+Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (94), `diger` (91), `sevkiyat` (87), `etiket` (83), `finans` (81), `siparis` (72), `modul-bayrak` (69), `belge` (65), `ayar` (58), `cuval` (59), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (41), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (30), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (23), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (12), `sebep-katalogu` (12), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
 
 
 ## yetki-izin (98)
@@ -852,7 +852,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (94), `di
 | `Teks-Erp/scripts/test_workorder_search.ts` | İş emri aramasının sipariş no yolu: tam/kısmi sipariş no yalnız bağlı WO'yu döner, İE no ve müşteri adı araması regresyonsuz. | ✓ |  |  |
 | `mobil/src/screens/Modules/Tambur/canUnlinkOrderLine.test.ts` | Backend son-bağ kuralının istemci aynası: ORDER_PRODUCTION + tek bağ + hedef kumaş varsa kaldırılabilir (becomesStock uyarısı); hedef kumaş yoksa enge |  |  |  |
 
-## modul-bayrak (68)
+## modul-bayrak (69)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
@@ -892,6 +892,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (94), `di
 | `Teks-Erp/scripts/test_cash_negative_guard.ts` | finance.blockNegativeCashEnabled: kapalıyken sıfır fark, açıkken 4 ileri yol 409 (somut mesaj, iz bırakmaz), ters yollar ve BANKA muaf, TOCTOU + eşzam | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_demo_mode.ts` | Demo modu kayıt yokken false; /api/demo/* altındaki HER uç requireDemoMode arkasında (kaynak taraması + körlük zemini); panel varsayılanı ↔ backend ok |  |  |  |
 | `Teks-Erp/scripts/test_depo_multi_regime_gate.ts` | depo.multiEnabled kapalıyken depolar ARASI transfer ulaşılamaz, ama depo TANIMI/DEFTERİ kapısız kalır — ayrımı aynı koşumda iki yönlü ölçer. |  | ✓ |  |
+| `Teks-Erp/scripts/test_devere_regime_gate.ts` | Devere kapısının ÜÇ halkayı (ticaret → iplik → devere) ELLE ölçtüğünü, 403'ün eksik olan EN DIŞ halkayı söylediğini, devere modeline dokunan her route | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_device_assignment.ts` | devicePairingRequired AÇIK rejiminde cihaz yaşam döngüsü: announce→PENDING, resolveDevice null, pasif makineye atama reddi, approve→APPROVED+atıf, rev | ✓ |  |  |
 | `Teks-Erp/scripts/test_device_pairing_flag.ts` | Cihaz doğuş durumunun BAYRAKTAN türediğini: kapalı→APPROVED+DEVICE_AUTO_APPROVED izi+resolveDevice atfı, açık→PENDING, cevaplar pairingRequired taşır, | ✓ |  |  |
 | `Teks-Erp/scripts/test_exchange_rate_fetch.ts` | TCMB kur işi: XML ayrıştırma (bülten tarihi + Unit normalizasyonu), yazma kuralı (MANUAL satıra dokunmaz), finance.enabled kapalıyken tam no-op. | ✓ | ✓ |  |

@@ -14,12 +14,16 @@
 // devere AÇIK" üretebilir; kapı yalnız kendi anahtarına baksaydı levent doğar
 // ve kapalı ticaret rejiminde iplik defterine satır yazılırdı.
 //
-// ⚠️ FAZ 1a ZEMİNİ: bugün devere'nin yüzeyi YOK (route · servis · Prisma modeli
-// yok; Çözgü Kartları ekranı aynı fazın son adımında geliyor). §6 bunu POZİTİF
-// olarak ölçer — yüzey doğduğu gün kırmızı verir ve bekçi genişletilmek ZORUNDA
-// kalır ("0 bulgu ≠ hiç bakılmadı" körlük zemini).
+// ⚠️ FAZ 1a YÜZEYİ DOĞDU (route · servis · Prisma modeli · Çözgü Kartları
+// ekranı). §6 yüzeyi POZİTİF olarak arar: silinirse ya da kapısız bir router
+// eklenirse kırmızı verir ("0 bulgu ≠ hiç bakılmadı" körlük zemini).
 //
-// Salt-okunur: DB'ye dokunmaz, HTTP atmaz, sunucu istemez.
+// ⚠️ §1–§6 METİN ölçer; §7 AKIŞ ölçer ve bu ayrım pahalıya öğrenildi: kapı,
+// route, izin ve ekran yeşilken faz TEK KART üretemiyordu (iplik denyesinin
+// hiçbir yazma yüzeyi yoktu). Statik bekçi bunu göremez.
+//
+// DB'YE YAZAR (§7 fikstürü: iki `TEST-DEVERE-<pid>` iplik kalemi + bir çözgü
+// kartı, `finally`de silinir). HTTP atmaz, sunucu istemez.
 // Koşum: npx tsx scripts/run-all-tests.ts devere_regime
 //
 // NEGATİF SONDALAR (yazılırken koşuldu, dosya sha256 ile geri yüklendi):
@@ -39,6 +43,11 @@ import {
   MODULE_SETTING_KEYS,
 } from "../src/constants/module-flags";
 import { readDevereEnabled } from "../src/services/system-setting.service";
+// §7 akışı için: kartı route'un KULLANDIĞI servis örneğiyle açıyoruz — ikinci
+// bir yapılandırma yazmak, bekçiyi üretimden ayrı bir kurulumu ölçer hâle
+// getirirdi (`uniqueField`/`duplicateNameField` orada tanımlı).
+import { warpSpecService } from "../src/routes/warp-spec.routes";
+import { ItemType } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { yorumlariSok } from "./lib/regime-gate-scan";
 
@@ -184,6 +193,95 @@ async function main(): Promise<void> {
     "§6d Kapı ölü değil: middleware dışa aktarılmış",
     new RegExp(`export async function ${KAPI}`).test(kod),
   );
+
+  // ── §7 ⭐ "KART AÇ" AKIŞI — fazın ilan ettiği çıktı GERÇEKTEN üretilebiliyor mu
+  // §1–§6 METNE bakar; hiçbiri "bir çözgü kartı açılabiliyor mu" sorusunu
+  // sormaz. Ölçüldü (2026-09-12 denetimi): kapı, route, izin ve ekran yeşilken
+  // bile TEK KART açılamıyordu — iplik kaleminin denye alanının hiçbir YAZMA
+  // yüzeyi yoktu, yani her deneme "denye boş" 400'üne düşüyordu. Statik bekçi
+  // bunu göremez; akış bu yüzden burada.
+  const damga = `TEST-DEVERE-${process.pid}`;
+  let iplikId: string | null = null;
+  let denyesizIplikId: string | null = null;
+  let kartId: string | null = null;
+  try {
+    const iplik = await prisma.item.create({
+      data: {
+        code: `${damga}-IPL1`,
+        name: `${damga}-IPLIK-DENYELI`,
+        itemType: ItemType.YARN,
+        unit: "KG",
+        // Metin: Decimal kolona JS float yazmak yasak.
+        linearDensityDen: "150",
+      },
+      select: { id: true },
+    });
+    iplikId = iplik.id;
+
+    const sonuc = await warpSpecService.create({
+      code: `${damga}-K1`,
+      name: `${damga}-KART`,
+      yarnItemId: iplikId,
+      endsCount: 4200,
+    });
+    kartId = (sonuc as { data?: { id?: string } }).data?.id ?? null;
+    check(
+      "§7a ⭐ Denyeli iplikle çözgü kartı AÇILABİLİYOR (fazın ilan ettiği çıktı)",
+      kartId !== null,
+      kartId ?? "kart açılamadı — faz çıktısı üretilemiyor",
+    );
+
+    const denyesiz = await prisma.item.create({
+      data: {
+        code: `${damga}-IPL2`,
+        name: `${damga}-IPLIK-DENYESIZ`,
+        itemType: ItemType.YARN,
+        unit: "KG",
+      },
+      select: { id: true },
+    });
+    denyesizIplikId = denyesiz.id;
+    let reddedildi = false;
+    let redMesaji = "";
+    try {
+      await warpSpecService.create({
+        code: `${damga}-K2`,
+        name: `${damga}-KART2`,
+        yarnItemId: denyesizIplikId,
+        endsCount: 100,
+      });
+    } catch (e) {
+      reddedildi = true;
+      redMesaji = (e as Error).message;
+    }
+    check(
+      "§7b ⭐ Denyesiz iplikle kart AÇILAMIYOR (hata kart açılırken söylenir)",
+      reddedildi,
+      reddedildi ? redMesaji.slice(0, 80) : "denyesiz iplik kabul edildi — hesap sessizce 0 kg gösterirdi",
+    );
+
+    // §7c: red mesajı VAR OLAN bir yüzeye gönderiyor mu? "kalem kartından
+    // denyeyi girin" cümlesi, o alan panelde çizilmiyorsa operatörü olmayan
+    // bir kutuya yollar — denetimin ORTA-1'i tam olarak buydu.
+    const FORM = path.resolve(__dirname, "../../Electron/src/pages/Items/ItemFormDialog.tsx");
+    const formMetni = fs.existsSync(FORM) ? fs.readFileSync(FORM, "utf8") : "";
+    const yuzeyVar = /linearDensityDen/.test(formMetni);
+    check(
+      "§7c ⭐ Denye red mesajının gönderdiği yüzey VAR (kalem formunda alan çizili)",
+      yuzeyVar,
+      !formMetni
+        ? "ItemFormDialog okunamadı"
+        : yuzeyVar
+          ? "ItemFormDialog denye alanını taşıyor"
+          : "ItemFormDialog'da denye alanı YOK — 'kalem kartından denyeyi girin' mesajı " +
+            "operatörü hiç çizilmeyen bir kutuya gönderiyor",
+    );
+  } finally {
+    if (kartId) await prisma.warpSpec.deleteMany({ where: { id: kartId } });
+    for (const id of [iplikId, denyesizIplikId]) {
+      if (id) await prisma.item.deleteMany({ where: { id } });
+    }
+  }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
