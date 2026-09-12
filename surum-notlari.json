@@ -65,7 +65,7 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Tamamlanmış bir stok sayımı stornolanabiliyor (Stok Sayımı → sayım detayı → “Stornola”). Yanlış “bulunamadı” işaretiyle tamamlanan bir sayım o topları iptal ediyordu ve tek çıkış yolu topları tek tek geri almaktı — o yol da depo hareketine ve sapma kaydına ters satır yazmıyordu. Artık tek belgeden dönülüyor: onaydan önce hangi topların ve hangi iplik kalemlerinin geri geleceği tek tek listeleniyor, sayım listesinin kendisi silinmiyor ve satırda “Stornolandı” rozeti çıkıyor. Yalnız deponun EN SON tamamlanmış sayımı stornolanabilir; araya başka sayım girdiyse ya da düşülen toplardan biri artık başka bir sebeple duruyorsa uyarı verilir ve o top gerekçesiyle listelenir. Yetki gerekir: top düzeltme ve iplik yazma yetkisi birlikte aranır."
+          "metin": "Tamamlanmış bir stok sayımı stornolanabiliyor (Stok Sayımı → sayım detayı → “Stornola”). Yanlış “bulunamadı” işaretiyle tamamlanan bir sayım o topları iptal ediyordu ve tek çıkış yolu topları tek tek geri almaktı — o yol da depo hareketine ve sapma kaydına ters satır yazmıyordu. Artık tek belgeden dönülüyor: onaydan önce hangi topların ve hangi iplik kalemlerinin geri geleceği tek tek listeleniyor, sayım listesinin kendisi silinmiyor ve satırda “Stornolandı” rozeti çıkıyor. Yalnız deponun EN SON tamamlanmış sayımı stornolanabilir; araya başka sayım girdiyse önce o geri alınır. Sayımın düşürdüğü bir top daha önce elle geri alınmışsa storno yine yapılır: o topun durumuna dokunulmaz, yalnız depo hareketine ve sapma kaydına ters satır yazılır ve önizlemede bu toplar “yalnız kayıt” diye ayrı listelenir. Yetki gerekir: top düzeltme ve iplik yazma yetkisi birlikte aranır."
         },
         {
           "kapsam": "panel",
@@ -111,6 +111,21 @@
           "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Fasoncu karnesinde fasondan doğrudan müşteriye giden metre artık BAŞARILI TESLİM sayılıyor — fire oranı “işlenen metre başına kayıp” demektir. Tabloda “Dönen” hücresinin altında “+N m müşteriye” satırı, dışa aktarımda “Müşteriye (m)” kolonu var."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Paketleme → Çuvallar ekranında çuvallar sevk hazırlığına göre gruplanabiliyor. Aynı carinin farklı günlerde çıkacak iki hazırlığı tek havuzda bekliyordu ve “Hemen Sevk Et” içi dolu her çuvalı alıyordu; salı tırı için basılan düğme gelecek haftanın çuvallarını da gönderiyordu. Artık listenin üstünde grup şeridi (P1 · P2 · Gruplanmamış, sayaçlarıyla) ve satırda grup sütunu var; seçili çuvallar “Parti Ata” ile bir gruba yaftalanır, şeritten tıklanınca liste yalnız o grubu gösterir ve döküm yalnız o grubu basar. Grup bir yaftadır: stok düşmez, çuvalı kilitlemez, başka bir sevkin o çuvalı almasını engellemez; çuval havuzdan çıkınca gruptan kendiliğinden düşer, grup boşalınca numarası yeniden kullanılır. Grup adı hiçbir belgeye basılmaz; döküm kâğıdının başlığında cari adı, grup adı ve basım anı yazar. Bu özellik KAPALI gelir: Genel Ayarlar → Sevkiyat → Paketleme grubu."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Belge tasarımı ekranındaki şablon önizlemesi, belge tasarımını görüntüleme yetkisiyle giren büro personeli için artık açılıyor. Ekranın kendisi bu yetkiyle açılıyordu ama sağdaki önizleme hâlâ yönetici ayarı yetkisi istiyordu: tasarımcı soldaki ayarı yapıyor, önizleme sessizce boş kalıyordu (bu sunucunun kayıtlarında 4 kez yaşandı)."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Fasondan doğrudan müşteriye sevk yapılmış (fasondan sevk kaydı olan) bir fason sevkiyatı artık iptal edilemiyor; deneyince hangi fasondan-sevk numarası yüzünden kilitli olduğu yazıyor. Önceden mal müşteriye çıkmış olmasına rağmen fason sevki iptal edilebiliyordu ve fasoncu karnesi yanlış çıkıyordu. İş emri iptalinde bu sevkler atlanır; fasonda kalan mal mevcut “kalan gelmeyecek” kararıyla kapatılır."
         }
       ]
     },
