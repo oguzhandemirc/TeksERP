@@ -91,7 +91,17 @@ export interface KapisizYol {
  *      (Fasonda tüm serviste TEK çağrı vardı: kabul. Sevk hiç yazmıyordu.)
  *   ② VERİ: stok kümesi DIŞI statüdeki topun defterde ÇIKIŞ ucu var mı —
  *      `AT_SUBCONTRACTOR` 187 topun **187**'sinde yoktu (fabrika kopyası, 2026-09-13).
- * ⇒ ②, ①'den güçlüdür: kod yolundan bağımsızdır ve listeye eklenmeyi BEKLEMEZ.
+ *
+ * ⚠️ ②'NİN TEK BAŞINA KULLANILMASI YANILTIR — kendi hatam (2026-09-13): "187/187
+ * çıkışsız" sayısını *"187 top defterden kaçtı"* diye okudum. Ayrıştırınca çıktı:
+ *      stok kümesine GİRİŞ ucu olan            :   0
+ *      girişi olup çıkışı olmayan (ASİMETRİ)   :   0
+ *      hiç defter satırı olmayan               : 105
+ * ⇒ O topların girişi de YOK; eksik çıkış bir ASİMETRİ değil, defter-öncesi
+ * MİRAS. Kod boşluğu (fason sevki satır yazmıyor) yine gerçekti, ama veri sayısı
+ * onun KANITI değildi. ⇒ Doğru ölçüt **asimetri**dir: `girişi var ∧ çıkışı yok`.
+ * Çıplak "çıkışı yok" sayısı epoch öncesini de toplar ve ihlali büyütür.
+ * ⇒ ②, ①'den güçlüdür (kod yolundan bağımsız) ama ASİMETRİ olarak kurulmalıdır.
  * `test_consistency`in "stok dışı + çıkış satırı yok" bölümü bu ölçünün kalıcı hâli.
  */
 export const BILINEN_KAPISIZ_YOLLAR: readonly KapisizYol[] = [

@@ -121,6 +121,9 @@ interface Section {
 const DEFTER_UFKU: string | null = null;
 
 /** Stok kümesi DIŞI statüler — buraya düşen topun defterde ÇIKIŞ ucu olmalıydı. */
+/** Stok kümesi İÇİ statüler — giriş/çıkış uçlarının anlamlı olduğu küme. */
+const STOK_ICI_STATULER = `'STOCK','WAREHOUSE','A1_STOCK','RETURNED_FROM_SUBCONTRACTOR'`;
+
 const STOK_DISI_STATULER = `'SHIPPED','AT_SUBCONTRACTOR','AT_KARTELA','SCRAP','CANCELLED',
                    'SUBCONTRACTOR_CONSUMED','TAMBUR_CONSUMED','KARTELA_CONSUMED'`;
 
@@ -864,11 +867,28 @@ WHERE r."warehouseId" IS NULL
     // ⚠️ MİRAS, BORÇ DEĞİL: kullanıcı kararı 2026-09-13 geçmiş onarımını kapsam
     // dışı bıraktı ⇒ bu sayı sıfıra İNMEYECEK. Bölüm bu yüzden ADVISORY ve
     // yalnız UFUKTAN SONRA doğan topu sert ölçer (yukarıdaki `DEFTER_UFKU`).
-    title: "Stok kümesi DIŞINDA olup defterde ÇIKIŞ ucu olmayan top (defter ufku)",
+    // ⚠️ YÜKLEM **ASİMETRİ**DİR, çıplak "çıkışı yok" DEĞİL — ve bu ayrım ölçümle
+    // öğrenildi (2026-09-13, kendi hatam): `AT_SUBCONTRACTOR` 187 topun 187'sinde
+    // çıkış ucu yoktu ve bunu "187 top defterden kaçtı" diye okudum. Ayrıştırınca
+    // stok kümesine GİRİŞ ucu olan **0**, asimetri **0**, hiç satırı olmayan 105
+    // çıktı ⇒ o toplar deftere HİÇ girmemişti; eksik çıkış bir asimetri değil,
+    // defter-öncesi mirastı. Çıplak yüklem epoch öncesini toplar ve ihlali BÜYÜTÜR.
+    // Asimetri yüklemi ise yalnız gerçek kaçağı sayar: *mal deftere GİRDİ, çıkışı
+    // yazılmadı* — ve bu, ufuk açıldığında sert ölçülebilecek tek şekildir.
+    title: "Deftere GİRMİŞ ama stok kümesinden çıkışı YAZILMAMIŞ top (asimetri, defter ufku)",
+    // Fikstür artığı elenir — imza barkodda DEĞİL kalem kodunda (§29'un dersi:
+    // servisten doğan fikstür ÜRETİM formatlı barkod taşır). Ölçüldü 2026-09-13:
+    // bu bölümün sonda DB'sinde saydığı 4 satırın 4'ü `test_stock_count_reversal`
+    // §6p/§6r fikstürüydü — ham UPDATE ile SHIPPED'e çekildikleri için çıkış satırı
+    // yok; fabrika kopyasında asimetri **0**.
+    noise: {
+      where: `WHERE ${notFixtureSql("drift.barcode")} AND ${notFixtureItemOfRollSql("drift.kayit")}`,
+      why: "fikstür artığı (ham UPDATE ile stok dışına çekilmiş top) — barkod VEYA kalem kodundan elenir",
+    },
     miras: {
       taban: null, // ufuk açılmadan ARTIŞ ölçülemez (bkz. DEFTER_UFKU) — yalnız sayılır
       tarih: "2026-09-13",
-      nerede: "fabrika kopyası: 4.160",
+      nerede: "fabrika kopyası: asimetri 0 · çıplak sayım 4.160 (yanıltıcı)",
       not: "MİRAS (kullanıcı kararı 2026-09-13: geçmiş onarımı kapsam dışı) — ufuk açılınca sert ölçülür",
     },
     sql: `
@@ -876,10 +896,14 @@ SELECT r.id::text AS kayit, r.barcode, r.status::text AS durum,
        r."currentQty"::text AS metraj, r."createdAt"::text AS dogum
 FROM rolls r
 WHERE r.status IN (${STOK_DISI_STATULER})
+  -- ASİMETRİ: stok kümesine GİRMİŞ olmalı…
+  AND EXISTS (
+    SELECT 1 FROM warehouse_movements gir
+     WHERE gir."rollId" = r.id AND gir."toStatus" IN (${STOK_ICI_STATULER}))
+  -- …ama çıkışı YAZILMAMIŞ olmalı.
   AND NOT EXISTS (
-    SELECT 1 FROM warehouse_movements w
-     WHERE w."rollId" = r.id
-       AND (w."fromWarehouseId" IS NOT NULL OR w."fromStatus" IS NOT NULL))
+    SELECT 1 FROM warehouse_movements cik
+     WHERE cik."rollId" = r.id AND cik."fromStatus" IN (${STOK_ICI_STATULER}))
   ${DEFTER_UFKU ? `AND r."createdAt" >= '${DEFTER_UFKU}'` : ""}`,
   },
 ];
