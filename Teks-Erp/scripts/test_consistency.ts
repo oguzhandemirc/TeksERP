@@ -306,9 +306,18 @@ LEFT JOIN work_order_steps wos ON wos.id = r."currentStepId"
 LEFT JOIN work_orders wo ON wo.id = wos."workOrderId"
 WHERE r.status = 'IN_PRODUCTION'
   AND (r."currentStepId" IS NULL OR wo.id IS NULL OR wo.status IN ('CANCELLED','SUPERSEDED'))`,
+    // ⚠️ BARKODU NULL OLAN SATIR bu süzgeçten GEÇİYORDU ve geçmesi TASARIM GEREĞİ:
+    // `notFixtureSql` NULL'ı "üretim" sayar (elenmez) — doğru varsayılan, çünkü
+    // barkodsuz ÜRETİM topu gerçek bir kusur şeklidir. Ama fason dönüşünde doğan
+    // fikstür topu da barkodsuzdur, yani ön ek ARAMAK İÇİN BİR YER BULAMAZ.
+    // Ölçüldü 2026-09-13: 21 satırın 21'inin barkodu NULL, `entrySource`u
+    // `SUBCONTRACTOR_RETURN` ve kalemi bir FİKSTÜR kalemi (`TEST-SSTR-…-KM`);
+    // aynı sorgu fabrikanın canlı kopyasında **0** satır döndürüyor ⇒ üretim
+    // maruziyeti yok. Bu yüzden kalem kodu terimi eklendi: barkodu olmayan satırın
+    // imzası yalnız kaleminde kalır.
     noise: {
-      where: `WHERE ${notFixtureSql(`drift.barcode`)}`,
-      why: "manuel-taşıma testleri (TEST-MM-…) adımsız top bırakır; üretim barkodu 'T…' formatındadır",
+      where: `WHERE ${notFixtureSql(`drift.barcode`)} AND ${notFixtureItemOfRollSql("drift.id")}`,
+      why: "manuel-taşıma testleri (TEST-MM-…) adımsız top bırakır; fason dönüşü fikstürü BARKODSUZ doğar ve yalnız kalem kodundan elenir (üretim barkodu 'T…' formatındadır)",
     },
   },
   {
