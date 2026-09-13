@@ -103,6 +103,11 @@
           "kapsam": "her-ikisi",
           "tip": "duzeltme",
           "metin": "Tambur kapanışında “fire” seçilen kalan parça artık tek başına geri alınamaz: o parçada yalnız “Tüm İşlemi Geri Al” sunulur, “Tek Parça İptali” ve “İş Emrine Geri Al” görünmez; eski ekrandan denenirse “kapanışın fire kalanıdır, kapanışı tümden geri alın” uyarısıyla reddedilir. Sıradan kesim parçalarında değişiklik yok."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Elle metraj düzeltmesi (Envanter → Metrajı Düzelt) artık Depo Hareketleri’nde bir “Düzeltme” satırı olarak görünür ve depo stok toplamı düzeltmeyi hemen izler; eskiden düzeltme yalnız sapma defterinde kalır, depo hareketlerinde görünmezdi. Düzeltilmiş topların depo stok raporundaki (tarihe göre) rakamı bu nedenle DEĞİŞİR. Bu sürümden önce yapılmış düzeltmeler geriye dönük yazılmaz; yalnız bundan sonraki düzeltmeler görünür."
         }
       ]
     },
