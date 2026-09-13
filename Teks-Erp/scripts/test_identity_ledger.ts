@@ -150,13 +150,23 @@ function yonB() {
   }
 
   // Alan dosyasının KOŞUM listesi (kural çapası `· bekçi:` DEĞİL — koşum listesi).
-  function alanListesi(alan: string): Set<string> | null {
+  function alanListesi(alan: string): Set<string> | null | "bicimsiz" {
     const s = oku(`docs/kurallar/${alan}.md`);
     if (!s) return null;
     const bas = /^##\s*Bekçiler/m.exec(s);
     if (!bas) return null;
     const mb = /^Backend:\s*([\s\S]+?)(?:\n\n|$)/m.exec(s.slice(bas.index + bas[0].length));
-    if (!mb) return new Set();
+    // ⚠️ ÜÇ SONUÇ, İKİ DEĞİL (2026-09-13, 01'in ölçümü): eskiden burada BOŞ KÜME
+    // dönülüyordu ve "## Bekçiler bölümü YOK" ile "bölüm DOLU ama `Backend:`
+    // biçiminde değil" AYNI şeye çıkıyordu. `dokuma.md` bölümü madde imli liste
+    // kullanıyor ⇒ bölüm dolu, kapı BOŞ görüyor ve o alanın bekçileri B-d diye
+    // raporlanıyor — oysa tarif YAZILMIŞ, yalnız kapının OKUDUĞU BİÇİMDE değil.
+    // ⇒ ***Bir belge bölümünü doldurmak, o bölümü okuyan kapıyı BESLEMEK değildir
+    //   — kapı bölümü değil BİÇİMİ okur.***
+    // ⚠️ Ve sessiz boş küme ikinci bir kayba yol açıyordu: B-a/B-b o alan için
+    //   HİÇ koşmuyor ⇒ alan KISMEN ölçülmüyor, ama çıktı bunu söylemiyor.
+    // Ölçüldü: ~30 alan dosyasından YALNIZ `dokuma` bu biçimi tutmuyor.
+    if (!mb) return "bicimsiz";
     return new Set([...mb[1].matchAll(/`([^`]+?)`/g)].map((m) => m[1].replace(/⚠️/g, "").trim()));
   }
 
@@ -191,9 +201,23 @@ function yonB() {
   // ve küçülmesi beklenir; sıfırlandığı gün [GATE]'e çevrilir. `check-docs.mjs`
   // aynı ayrımı kullanıyor (ölü-link GATE, kaldırılmış-sembol ADVISORY).
   const tumListeler = new Set<string>();
-  for (const alan of alanlar) for (const n of alanListesi(alan) ?? []) tumListeler.add(n);
+  const bicimsizAlanlar = new Set<string>();
+  for (const alan of alanlar) {
+    const l = alanListesi(alan);
+    if (l && l !== "bicimsiz") for (const n of l) tumListeler.add(n);
+  }
   for (const [alan, atanan] of haritaBolum) {
     const liste = alanListesi(alan);
+    if (liste === "bicimsiz") {
+      if (!bicimsizAlanlar.has(alan)) {
+        bicimsizAlanlar.add(alan);
+        hatalar.push(
+          `B-e docs/kurallar/${alan}.md "## Bekçiler" bölümü DOLU ama \`Backend:\` biçiminde DEĞİL ` +
+            `— kapı o alanın koşum listesini OKUYAMIYOR (B-a/B-b de o alanda koşmadı)`,
+        );
+      }
+      continue;
+    }
     for (const n of atanan) {
       if (liste) { if (!liste.has(n)) hatalar.push(`B-d harita "${n}"yi ${alan} alanına atamış, ALAN KOŞUM LİSTESİNDE yok`); }
       else if (!tumListeler.has(n)) uyarilar.push(`${alan}/${n}`);
@@ -207,7 +231,20 @@ function yonB() {
   }
   if (hatalar.length === 0) ok(`bekçi kümesi hizalı (${gercek.size} gerçek · ${haritaAdlar.size} haritada)`);
   else {
-    no(`${hatalar.length} ayrışma — bir alana dokunan kişi onu koruyan bekçiyi KOŞMUYOR:`);
+    // ⚠️ İKİ SINIF AYRI SAYILIR (2026-09-13). Tek toplam basıldığında sayı
+    // DÜŞERKEN sınıf AĞIRLAŞABİLİR ve okuyan "ilerliyor" der: ölçüldü — 6 → 4
+    // inişinde ikisi B-c'den B-d'ye GEÇTİ, yani daha zor fark edilir hâle geldi.
+    //   B-c = ENVANTER eksiği  — "kimse bu bekçiyi TARİF etmedi"
+    //   B-d = KAPSAM eksiği    — "tarif edildi ama o alana dokunan KOŞMAYACAK"
+    // ⇒ B-d daha sinsidir: harita satırı VAR, bakan "tamam" der ve geçer.
+    // ***Bir bekçiyi TARİF etmek onu BAĞLAMAK değildir.***
+    const bc = hatalar.filter((h) => h.startsWith("B-c")).length;
+    const bd = hatalar.filter((h) => h.startsWith("B-d")).length;
+    const be = hatalar.filter((h) => h.startsWith("B-e")).length;
+    const kirilim = [bc ? `${bc} B-c (envanter)` : "", bd ? `${bd} B-d (KAPSAM)` : "", be ? `${be} B-e (BİÇİM)` : ""]
+      .filter(Boolean)
+      .join(" · ");
+    no(`${hatalar.length} ayrışma — ${kirilim} — bir alana dokunan kişi onu koruyan bekçiyi KOŞMUYOR:`);
     for (const h of hatalar.sort()) console.log(`      · ${h}`);
   }
 }
