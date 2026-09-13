@@ -29,6 +29,7 @@ import { kartelaService } from "../src/services/kartela.service";
 import { AppError } from "../src/utils/app-error";
 import { ensureTestKartela } from "./fixture-subcontractor";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0;
 let fail = 0;
@@ -74,6 +75,8 @@ async function freshColor(label: string): Promise<string> {
 async function birthSwatches(count: number, colorId: string = COLOR): Promise<string> {
   const roll = await prisma.roll.create({
     data: {
+      // Stok kumesinden cikabilmek icin deposu DOLU olmali (K6 kapisi).
+      warehouseId: await fixtureWarehouseId(),
       barcode: `TEST-SSR-${TS}-${rollIds.length}`,
       itemId: ITEM,
       colorId,

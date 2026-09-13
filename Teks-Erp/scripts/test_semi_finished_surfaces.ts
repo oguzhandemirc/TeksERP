@@ -18,6 +18,7 @@ import { RollStatus, RollEntrySource } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { OrderService } from "../src/services/order.service";
 import { InventoryService } from "../src/services/inventory.service";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 import {
   ProductionBalanceService,
   type BalanceGroup,
@@ -60,6 +61,8 @@ async function main() {
     const mkRoll = async (qty: number, semi: boolean, rollColorId: string | null) => {
       const r = await prisma.roll.create({
         data: {
+      // Stok kumesinden cikabilmek icin deposu DOLU olmali (K6 kapisi).
+      warehouseId: await fixtureWarehouseId(),
           barcode: `TEST-SFS-${ts}-${rollIds.length}`,
           itemId: item.id,
           colorId: rollColorId,
