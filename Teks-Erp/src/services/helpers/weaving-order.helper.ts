@@ -13,7 +13,8 @@
 // kullanmak, birbirini hiç görmeyen iki alt sistemi sessizce serileştirir
 // (envanter gerekçesi `period-guard.helper.ts` başlığında).
 // =============================================================================
-import type { Prisma } from "@prisma/client";
+import { Prisma, WeavingOrderStatus } from "@prisma/client";
+import { AppError } from "../../utils/app-error";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../../utils/code-format";
 
 /**
@@ -52,4 +53,51 @@ export async function nextWeavingOrderNumberTx(
   });
   const seq = nextDailySeq(todays.map((w) => w.weavingOrderNumber), prefix);
   return buildDailyCode(WEAVING_ORDER_PREFIX, seq, date);
+}
+
+/** Kapanmış/iptal edilmiş iş için tek etiket sözlüğü (helper `ApiResponse` KURMAZ, yalnız hata). */
+const KAPALI_ETIKET: Partial<Record<WeavingOrderStatus, string>> = {
+  COMPLETED: "kapatılmış",
+  CANCELLED: "iptal edilmiş",
+};
+
+/**
+ * `PLANNED → IN_PROGRESS` — `WeavingOrder.status`un TEK YAZARI (1e hükmü 2026-09-13).
+ * Tetikleyici KOŞUM-AÇMA ucudur (machine-run.service, AYNI tx'te çağırır); manuel
+ * `start` ucu yoktur: "devam ediyor" demek koşum var demektir.
+ *
+ * İKİ ADIMLI CLAIM (ikiz yüklem): ① `PLANNED → IN_PROGRESS` atomik; ② düşerse
+ * `status = IN_PROGRESS` satırına DOKUNMA (updateMany) — ikinci koşum meşrudur ama
+ * satır KİLİDİ alınmalı ki eşzamanlı close/cancel claim'iyle serileşsin; o claim
+ * commit ettiyse ② de 0 döner ve taze okuma 409 verir. Kilitsiz "oku → geç" yolu,
+ * close'un koşum sayımıyla birbirini görmezdi.
+ *
+ * Audit ÇAĞIRANIN işidir (tx dışında): `transitioned` true ise durum değişti.
+ */
+export async function markWeavingOrderInProgressTx(
+  tx: Prisma.TransactionClient,
+  weavingOrderId: string,
+  userId?: string,
+): Promise<{ status: WeavingOrderStatus; transitioned: boolean }> {
+  const claim = await tx.weavingOrder.updateMany({
+    where: { id: weavingOrderId, status: WeavingOrderStatus.PLANNED },
+    data: { status: WeavingOrderStatus.IN_PROGRESS, updatedById: userId ?? null },
+  });
+  if (claim.count === 1) return { status: WeavingOrderStatus.IN_PROGRESS, transitioned: true };
+
+  const touch = await tx.weavingOrder.updateMany({
+    where: { id: weavingOrderId, status: WeavingOrderStatus.IN_PROGRESS },
+    data: { updatedById: userId ?? null },
+  });
+  if (touch.count === 1) return { status: WeavingOrderStatus.IN_PROGRESS, transitioned: false };
+
+  const fresh = await tx.weavingOrder.findUnique({
+    where: { id: weavingOrderId },
+    select: { status: true, weavingOrderNumber: true },
+  });
+  if (!fresh) throw AppError.notFound("Dokuma işi bulunamadı");
+  throw AppError.conflict(
+    `${fresh.weavingOrderNumber} ${KAPALI_ETIKET[fresh.status] ?? fresh.status} — koşum açılamaz`,
+    { code: "WEAVING_ORDER_NOT_OPEN", status: fresh.status },
+  );
 }

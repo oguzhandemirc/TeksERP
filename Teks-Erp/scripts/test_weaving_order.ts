@@ -18,12 +18,15 @@
 //   §6 LİSTE/DETAY  durum süzgeci sunucuda · cursor tekrarsız · openRunCount.
 //   §7 AUDIT        her yazma `system_logs`a WEAVING_ORDER satırı (tx dışında).
 //   §8 DB CHECK     `weaving_orders_party_ck` servisi ATLAYAN yazımı da reddeder.
+//   §9 IN_PROGRESS  `markWeavingOrderInProgressTx` TEK YAZAR (1e hükmü): PLANNED →
+//                   IN_PROGRESS claim · ikinci koşum no-op · kapanmışa 409 · IN_PROGRESS'ten
+//                   kapat/iptal (eskiden erişilemeyen dal) · EŞZAMANLILIK: close claim'i
+//                   satırı kilitler, eşzamanlı mark bekler ve 409 alır; mark+koşum tx'i
+//                   sürerken close, koşumu GÖRÜR ve 409 (claim ÖNCE, sayım SONRA).
 //
-//   ⛔ IN_PROGRESS DALI BUGÜN ERİŞİLEMEZ: `PLANNED → IN_PROGRESS` geçişi bu
-//      yüzeyde YOK (sözleşme yazılı değil; sahibi P2b koşum-açma ucu). §0 bunu
-//      ölçer: yazan yol 0. P2b o yolu açtığında §0 KIRMIZI verir ve o gün
-//      "IN_PROGRESS'ten kapat/iptal" davranışı buraya YAZILIR — "basılmayan
-//      dalın yeşili" sınıfı doğmasın diye.
+//   §0 STATİK: `status: WeavingOrderStatus.IN_PROGRESS` yazan yol TAM 1 ve o yol
+//      helper'daki `markWeavingOrderInProgressTx` — ikinci bir yazar doğarsa KIRMIZI.
+//      Manuel `start` ucu YOK: "devam ediyor" demek koşum var demektir.
 //   ⛔ HTTP katmanı (Zod, izin, modül kapısı) burada ÖLÇÜLMEZ — statik kapılar
 //      (`test_route_auth_coverage` · `test_permission_catalog` · `test_swagger_spec`)
 //      ve d9'un HTTP sondaları.
@@ -33,6 +36,9 @@
 // Negatif sonda (2026-09-13, ölçüldü): close() açık-koşum kontrolü atlandı → 3 ❌
 // (§4a §4b §4d); replay canlılık kontrolü atlandı → 1 ❌ (§2c); create PLANNED
 // yerine IN_PROGRESS yazdı → 5 ❌ (§0b §1a §4d §6a §6b). sha256 ile geri yüklendi.
+// §9 sondası (2026-09-13): close'da sayım claim'den ÖNCE'ye alındı → 2 ❌ (§9j §9k, close
+// koşumu görmeden 200); mark'ta dokunma-kilidi yerine oku→geç → 1 ❌ (§9i, mark 200);
+// serviste ikinci IN_PROGRESS yazarı → 2 ❌ (§0b §1a). sha256 ile geri yüklendi.
 // =============================================================================
 
 import { ItemUnit, WeavingExecutionKind, WeavingOrderStatus } from "@prisma/client";
@@ -48,6 +54,8 @@ import {
   listWeavingOrders,
   updateWeavingOrder,
 } from "../src/services/weaving-order.service";
+import { WeavingExecutionKind as WK } from "@prisma/client";
+import { markWeavingOrderInProgressTx } from "../src/services/helpers/weaving-order.helper";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
@@ -147,10 +155,11 @@ async function main(): Promise<void> {
       const writers = files.filter((f) => /status:\s*WeavingOrderStatus\.IN_PROGRESS\b/.test(fs.readFileSync(f, "utf8")));
       const closers = files.filter((f) => /status:\s*WeavingOrderStatus\.COMPLETED\b/.test(fs.readFileSync(f, "utf8")));
       check("§0a pozitif kontrol: desen COMPLETED yazarını görüyor (≥1)", closers.length >= 1, `${closers.length}`);
+      const rel = writers.map((f) => path.relative(SRC, f));
       check(
-        "§0b IN_PROGRESS yazan yol 0 — dal bugün ERİŞİLEMEZ; P2b açınca bu ölçüm KIRMIZI verir ve davranış buraya yazılır",
-        writers.length === 0,
-        writers.map((f) => path.relative(SRC, f)).join(", "),
+        "§0b IN_PROGRESS yazan yol TAM 1 ve o yol helpers/weaving-order.helper.ts (markWeavingOrderInProgressTx) — tek yazar",
+        rel.length === 1 && rel[0] === path.join("services", "helpers", "weaving-order.helper.ts"),
+        rel.join(", "),
       );
     }
 
@@ -286,6 +295,63 @@ async function main(): Promise<void> {
       }),
     );
     check("§8a servisi atlayan SUBCONTRACTED+fasoncusuz INSERT DB'de reddedilir (weaving_orders_party_ck)", e18 !== null && /weaving_orders_party_ck/.test(String((e18 as { message?: string }).message ?? "")), String((e18 as { message?: string })?.message ?? "").slice(0, 80));
+
+    // ── §9 PLANNED → IN_PROGRESS: tek yazar, koşum-açma çağırır ─────────────
+    console.log("\n=== §9 IN_PROGRESS (tek yazar) ===");
+    const mark = (id: string) => prisma.$transaction((tx) => markWeavingOrderInProgressTx(tx, id, uid));
+    const m1 = track(await createWeavingOrder({ itemId: itemFabric.id, executionKind: WK.IN_HOUSE }, uid));
+    const t1 = await mark(m1.data.id);
+    check("§9a PLANNED → IN_PROGRESS, transitioned true", t1.status === WeavingOrderStatus.IN_PROGRESS && t1.transitioned, JSON.stringify(t1));
+    const t2 = await mark(m1.data.id);
+    check("§9b ikinci koşum: IN_PROGRESS kalır, transitioned false (ikinci koşum meşru)", t2.status === WeavingOrderStatus.IN_PROGRESS && !t2.transitioned, JSON.stringify(t2));
+    check("§9c DB'de IN_PROGRESS", (await getWeavingOrder(m1.data.id)).data.status === WeavingOrderStatus.IN_PROGRESS);
+    const u9 = await updateWeavingOrder(m1.data.id, { notes: "devam ederken" }, uid);
+    check("§9d IN_PROGRESS'te düzenleme açık", u9.data.notes === "devam ederken");
+    const c9 = await closeWeavingOrder(m1.data.id, uid);
+    check("§9e IN_PROGRESS'ten kapatma → COMPLETED (eskiden erişilemeyen dal)", c9.data.status === WeavingOrderStatus.COMPLETED, c9.data.status);
+    const e19 = await catchErr(() => mark(m1.data.id));
+    check("§9f kapanmış işe koşum açılamaz → 409 WEAVING_ORDER_NOT_OPEN", e19?.statusCode === 409 && codeOf(e19) === "WEAVING_ORDER_NOT_OPEN", `${e19?.statusCode} ${codeOf(e19)}`);
+    const e20 = await catchErr(() => mark(randomUUID()));
+    check("§9g olmayan iş → 404", e20?.statusCode === 404, String(e20?.statusCode));
+    const m2 = track(await createWeavingOrder({ itemId: itemFabric.id, executionKind: WK.IN_HOUSE }, uid));
+    await mark(m2.data.id);
+    const x9 = await cancelWeavingOrder(m2.data.id, "devam ederken iptal", uid);
+    check("§9h IN_PROGRESS'ten iptal → CANCELLED", x9.data.status === WeavingOrderStatus.CANCELLED, x9.data.status);
+
+    // EŞZAMANLILIK ①: close claim'i satırı KİLİTLER — IN_PROGRESS işte paralel mark
+    // bekler, close commit edince 409 alır (kilitsiz "oku → geç" yolu 200 dönerdi).
+    const m3 = track(await createWeavingOrder({ itemId: itemFabric.id, executionKind: WK.IN_HOUSE }, uid));
+    await mark(m3.data.id);
+    const closeP = prisma.$transaction(async (tx) => {
+      await tx.weavingOrder.updateMany({ where: { id: m3.data.id, status: WeavingOrderStatus.IN_PROGRESS }, data: { status: WeavingOrderStatus.COMPLETED, closedAt: new Date() } });
+      await new Promise((r) => setTimeout(r, 500));
+      return "closed";
+    });
+    await new Promise((r) => setTimeout(r, 120));
+    const markP = mark(m3.data.id).then(() => "marked" as const).catch((e: unknown) => e as Err);
+    const [cr, mr] = await Promise.all([closeP, markP]);
+    check("§9i eşzamanlı: close claim'i kilitler, mark BEKLER ve 409 alır (iki tx birbirini görür)",
+      cr === "closed" && mr !== "marked" && (mr as Err)?.statusCode === 409 && codeOf(mr as Err) === "WEAVING_ORDER_NOT_OPEN",
+      mr === "marked" ? "mark 200 döndü (kilit yok)" : `${(mr as Err)?.statusCode} ${codeOf(mr as Err)}`);
+
+    // EŞZAMANLILIK ②: koşum-açma tx'i (mark + koşum INSERT) sürerken close → close'un
+    // claim'i kilitte BEKLER, koşum commit'ini GÖRÜR ve 409 HAS_OPEN_RUNS (claim ÖNCE,
+    // sayım SONRA). Eski sıra (sayım → claim) koşumu görmeden kapatırdı.
+    const m4 = track(await createWeavingOrder({ itemId: itemFabric.id, executionKind: WK.IN_HOUSE }, uid));
+    const runOpenP = prisma.$transaction(async (tx) => {
+      await markWeavingOrderInProgressTx(tx, m4.data.id, uid);
+      const r = await tx.machineRun.create({ data: { machineId: machine.id, productionLineNo: 2, startedAt: new Date(), weavingOrderId: m4.data.id }, select: { id: true } });
+      await new Promise((r2) => setTimeout(r2, 500));
+      return r.id;
+    });
+    await new Promise((r) => setTimeout(r, 120));
+    const closeP2 = closeWeavingOrder(m4.data.id, uid).then(() => "closed" as const).catch((e: unknown) => e as Err);
+    const [runId, cr2] = await Promise.all([runOpenP, closeP2]);
+    check("§9j eşzamanlı: koşum-açma sürerken close BEKLER, koşumu görür → 409 HAS_OPEN_RUNS (claim önce, sayım sonra)",
+      typeof runId === "string" && cr2 !== "closed" && (cr2 as Err)?.statusCode === 409 && codeOf(cr2 as Err) === "WEAVING_ORDER_HAS_OPEN_RUNS",
+      cr2 === "closed" ? "close 200 döndü — koşumu görmedi" : `${(cr2 as Err)?.statusCode} ${codeOf(cr2 as Err)}`);
+    const g4 = await getWeavingOrder(m4.data.id);
+    check("§9k iş IN_PROGRESS kaldı, açık koşum 1", g4.data.status === WeavingOrderStatus.IN_PROGRESS && g4.data.openRunCount === 1, `${g4.data.status}/${g4.data.openRunCount}`);
   } finally {
     await cleanup();
     await prisma.$disconnect();

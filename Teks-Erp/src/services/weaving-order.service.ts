@@ -14,12 +14,10 @@
 // • Numara: `DK`+GGAAYY+NNNN, 8032 kilidi `nextWeavingOrderNumberTx`in İLK ifadesi.
 // • Replay: `clientToken` dört durumlu (`assertWeavingOrderReplayAlive`).
 // • Kapat/iptal: `status IN (PLANNED, IN_PROGRESS)` üzerinden ATOMİK CLAIM;
-//   açık koşum varsa 409 koşumları ADIYLA söyler. `PLANNED → IN_PROGRESS`
-//   geçişi BU YÜZEYDE YOK (sözleşme yazılı değil; sahibi P2b koşum-açma ucu).
-//
-// ⚠️ İKİZ YÜKLEM (P2b'ye not): koşum-açma ucu kendi atomik WHERE'inde dokuma
-// işinin `status IN (PLANNED, IN_PROGRESS)` olduğunu şart koşmalı — buradaki
-// "açık koşum yok → kapat" kontrolü tek başına TOCTOU penceresi bırakır.
+//   açık koşum varsa 409 koşumları ADIYLA söyler. Claim ÖNCE, koşum sayımı SONRA
+//   (aynı tx): claim satır kilidi alır ve koşum-açmanın `markWeavingOrderInProgressTx`
+//   claim'iyle serileşir — iki tx birbirini görür. `PLANNED → IN_PROGRESS`in tek
+//   yazarı o helper, tetikleyicisi koşum-açma; manuel `start` ucu YOK (1e 2026-09-13).
 // =============================================================================
 
 import { ItemType, Prisma, WeavingOrderStatus } from "@prisma/client";
@@ -33,7 +31,7 @@ import { buildNextDynamicCursor, decodeDynamicCursor, dynamicCursorWhere } from 
 import { AuditService } from "./audit.service";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { assertWeavingOrderReplayAlive } from "./helpers/token-replay.helper";
-import { nextWeavingOrderNumberTx } from "./helpers/weaving-order.helper";
+import { markWeavingOrderInProgressTx, nextWeavingOrderNumberTx } from "./helpers/weaving-order.helper";
 import {
   OPEN_RUN_WHERE,
   WEAVING_ORDER_SELECT,
@@ -49,6 +47,8 @@ import {
 } from "./helpers/weaving-order-input.helper";
 
 export type { WeavingOrderCreateInput, WeavingOrderDto, WeavingOrderUpdateInput };
+// Koşum-açma ucu (machine-run.service) `IN_PROGRESS` geçişini buradan çağırır — tek yazar.
+export { markWeavingOrderInProgressTx };
 
 /** Audit modül adı — dokuma işinin kendi geçmişi burada okunur. */
 const WEAVING_ORDER_TABLE = "WEAVING_ORDER";
@@ -308,7 +308,7 @@ export async function closeWeavingOrder(id: string, userId?: string): Promise<Ap
   if (!before) throw AppError.notFound("Dokuma işi bulunamadı");
 
   const closed = await prisma.$transaction(async (tx) => {
-    await assertNoOpenRunsTx(tx, id, "kapatılamaz");
+    // CLAIM ÖNCE (satır kilidi), koşum sayımı SONRA — ikiz yüklem.
     const claim = await tx.weavingOrder.updateMany({
       where: { id, status: { in: [...WEAVING_ORDER_OPEN_STATUSES] } },
       data: {
@@ -319,6 +319,7 @@ export async function closeWeavingOrder(id: string, userId?: string): Promise<Ap
       },
     });
     if (claim.count === 0) await throwClaimFailureTx(tx, id, "kapatılamaz", "WEAVING_ORDER_NOT_OPEN");
+    await assertNoOpenRunsTx(tx, id, "kapatılamaz");
     return tx.weavingOrder.findUniqueOrThrow({ where: { id }, select: WEAVING_ORDER_SELECT });
   });
 
@@ -349,7 +350,7 @@ export async function cancelWeavingOrder(
   if (!before) throw AppError.notFound("Dokuma işi bulunamadı");
 
   const cancelled = await prisma.$transaction(async (tx) => {
-    await assertNoOpenRunsTx(tx, id, "iptal edilemez");
+    // CLAIM ÖNCE (satır kilidi), koşum sayımı SONRA — ikiz yüklem.
     const claim = await tx.weavingOrder.updateMany({
       where: { id, status: { in: [...WEAVING_ORDER_OPEN_STATUSES] } },
       data: {
@@ -361,6 +362,7 @@ export async function cancelWeavingOrder(
       },
     });
     if (claim.count === 0) await throwClaimFailureTx(tx, id, "iptal edilemez", "WEAVING_ORDER_NOT_OPEN");
+    await assertNoOpenRunsTx(tx, id, "iptal edilemez");
     return tx.weavingOrder.findUniqueOrThrow({ where: { id }, select: WEAVING_ORDER_SELECT });
   });
 
