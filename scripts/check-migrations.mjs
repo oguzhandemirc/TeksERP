@@ -198,9 +198,68 @@ const untrackedTests = existsSync(join(REPO_ROOT, SCRIPTS_DIR))
     )
   : [];
 
+// =============================================================================
+// ⚠️ İLGİLİ ↔ İLGİSİZ AYRIMI — SERTLİK DEĞİŞMEZ, YALNIZ MESAJ ZENGİNLEŞİR
+// =============================================================================
+// Bu kapı 2026-09-13'te DÖRT kez yanlış kişiyi durdurdu (d5 ×3 kaçışa zorlandı ·
+// ea worktree · 01 · sahnelenen dosyaların yabancı commit'e kapılması) ve aynı
+// gün SIFIR kez gerçek bir unutulmuş test yakaladı. Dördünde de duran kişi
+// **neden** durduğunu göremedi: liste "takipsiz bekçi var" diyordu, kimin işi
+// olduğunu söylemiyordu.
+//
+// ⚠️ SAHİPLİK GİT'TEN TÜRETİLEMEZ — ve uydurulmaz. Ama İLİŞKİ TÜRETİLEBİLİR:
+// commit'in migration SQL'i hangi adları getiriyorsa (`"kolon"` · tablo adı),
+// takipsiz testlerde o adlar aranır. Ölçülen bir şey, tahmin edilen değil.
+//   ilişkili  = bu migration'ın getirdiği adı ANIYOR → kapının beyan ettiği risk
+//   ilişkisiz = hiçbirini anmıyor                    → muhtemelen komşunun işi
+//
+// ⚠️ SERTLİK KULLANICININ KARARIDIR ve burada DEĞİŞMİYOR (başlık § COMMIT KAPISI
+// KİPİ). Bu blok tamamen EKLEMELİ: aynı commit'ler durur, aynı commit'ler geçer;
+// yalnız duran kişi ne olduğunu görür. Sertliğin İLİŞKİLİ kümeye daraltılması
+// ayrı bir karardır ve KULLANICIYA taşınmıştır.
+function migrationAdlari() {
+  const yollar = (KOMIT_KUMESI ?? []).filter((f) => f.startsWith(`${MIGRATIONS_DIR}/`));
+  const adlar = new Set();
+  for (const y of yollar) {
+    let sql = "";
+    try {
+      sql = readFileSync(join(REPO_ROOT, y), "utf8");
+    } catch {
+      continue; // dosya okunamadı → o migration'dan ad çıkarılamaz, SESSİZ GEÇME:
+    } //          aşağıdaki "ad çıkarılamadı" beyanı bunu görünür kılar.
+    for (const m of sql.matchAll(/"([A-Za-z_][A-Za-z0-9_]{3,})"/g)) adlar.add(m[1]);
+  }
+  return adlar;
+}
+
 if (untrackedTests.length) {
+  const adlar = migrationAdlari();
+  const ilgili = [];
+  const ilgisiz = [];
+  for (const e of untrackedTests) {
+    let govde = "";
+    try {
+      govde = readFileSync(join(REPO_ROOT, e.path), "utf8");
+    } catch {
+      /* okunamayan dosya İLGİSİZ sayılmaz — aşağıda ayrıca beyan edilir */
+    }
+    (govde && [...adlar].some((a) => govde.includes(a)) ? ilgili : ilgisiz).push(e.path);
+  }
+  const ayrim =
+    adlar.size === 0
+      ? "\n  ⓘ Bu commit'in migration'ından ad ÇIKARILAMADI (SQL okunamadı ya da\n" +
+        "    tırnaklı tanımlayıcı yok) ⇒ ilgili/ilgisiz ayrımı YAPILAMADI."
+      : `\n  ⓘ Bu migration ${adlar.size} ad getiriyor. Takipsiz bekçilerin ayrımı:\n` +
+        `    İLGİLİ  (o adlardan birini ANIYOR — kapının beyan ettiği GERÇEK risk): ` +
+        `${ilgili.length ? ilgili.join(", ") : "YOK"}\n` +
+        `    İLGİSİZ (hiçbirini anmıyor — muhtemelen KOMŞUNUN işi): ` +
+        `${ilgisiz.length ? ilgisiz.join(", ") : "yok"}` +
+        (ilgili.length === 0
+          ? "\n    ⚠️ Bu commit'in migration'ıyla İLİŞKİLİ takipsiz test YOK."
+          : "");
   takipsizBulgu({
     gate: "GATE 4 — COMMIT EDİLMEMİŞ TEST",
+    ayrim,
     why:
       "Testler CI'ın gerçek şema gate'idir: boş DB'ye `migrate deploy` + `npm test`\n" +
       "  koşuluyor, yeni kolonu okuyan bir test migration'sız kalırsa CI KIRMIZI olur.\n" +
@@ -411,6 +470,7 @@ if (uyarilar.length > 0) {
   for (const u of uyarilar) {
     console.log(`   [${u.gate}]`);
     for (const it of u.items) console.log(`     • ${it}`);
+    if (u.ayrim) console.log(u.ayrim);
   }
   console.log(
     "   Senin dosyansa: `git add` yeter (commit etmek şart değil). Bir sonraki\n" +
@@ -433,6 +493,9 @@ for (const p of problems) {
   console.error(`  [${p.gate}]`);
   console.error(`  ${p.why}`);
   for (const it of p.items) console.error(`    • ${it}`);
+  // İLGİLİ ↔ İLGİSİZ ayrımı (yalnız GATE 4 taşır) — duran kişi KİMİN işi
+  // yüzünden durduğunu görsün. Sertliği DEĞİŞTİRMEZ, yalnız görünür kılar.
+  if (p.ayrim) console.error(p.ayrim);
   console.error(`  → Düzelt: ${p.fix}\n`);
 }
 console.error(
