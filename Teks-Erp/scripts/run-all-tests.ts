@@ -40,6 +40,12 @@ const PER_TEST_TIMEOUT_MS = 180_000;
 // biri anında 1 MiB'ı aşar. Ucuz sigorta.
 const MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
 
+// SESSİZ YEŞİL DEVRALINAN — tanecik DOSYA (1e hükmü 2026-09-13). Ölçüldü (d9, 534
+// bekçi ulaşılamaz DB ile): kusur 0 — iki üye vardı (`test_audit_p0` ·
+// `test_p1b_barcode_collision`), `c0f743bf` ile beyanlı hâle geldi. Mandal 0'dan
+// başlar; yalnız KÜÇÜLÜR. Üye artık sessiz değilse ölü muaf → kırmızı (iki yönlü).
+const SESSIZ_YESIL_DEVRALINAN: ReadonlySet<string> = new Set<string>([]);
+
 // Windows'ta `npx` = `npx.cmd`; spawnSync onu shell olmadan çözemez (ENOENT →
 // her test 0.0s'de "çıkış kodu null" ile düşer). shell:true Windows'ta npx'i
 // cmd.exe üzerinden çözer; Linux/CI'da (shell:false) doğrudan çalışır.
@@ -440,7 +446,7 @@ async function main() {
 
   console.log(`\n=== Backend test suite — ${files.length} dosya ===\n`);
 
-  const results: { file: string; ok: boolean; summary: string; ms: number; flaky: boolean; skipped: number; bilinmeyenAtlama: boolean; ilkKirmizi?: string }[] = [];
+  const results: { file: string; ok: boolean; summary: string; ms: number; flaky: boolean; skipped: number; bilinmeyenAtlama: boolean; sessizYesil: boolean; ilkKirmizi?: string }[] = [];
 
   /**
    * Süreç anormal mi bitti ve neden? Tek ayırt edici `res.error.code` — ÖLÇÜLDÜ
@@ -494,6 +500,7 @@ async function main() {
     killed: string | null;
     skipped: number;
     bilinmeyenAtlama: boolean;
+    sessizYesil: boolean;
   } {
     const res = spawnSync("npx", ["tsx", join(SCRIPTS_DIR, file)], {
       encoding: "utf8",
@@ -546,7 +553,29 @@ async function main() {
           : ok
             ? "geçti (exit 0)"
             : "BAŞARISIZ";
-    return { ok, status: res.status, summary, out, killed, skipped, bilinmeyenAtlama };
+    // SESSİZ YEŞİL (2026-09-13, d9 ölçtü): çıkış 0 ∧ 0 kontrol ∧ BEYAN YOK — bekçi
+    // hiçbir şey ölçmeden yeşil çıktı (iki emsal: `finally { process.exit(0) }`
+    // hatayı yuttu, "0 geçti, 0 başarısız" basıldı). Yüklem ÜÇ terimli: `atla()`
+    // beyanı (", N atlandı" / BİLİNMEYEN) taşıyan 0/0 MEŞRUDUR — üç sonuçlu doğru
+    // davranış iki sonuçlu yanlıştan ancak üçüncü terimle ayrılır (d9'un ilk
+    // yüklemi kendi onardığı dosyayı ihlal saydı). Kontrol sayısı YUKARIDAKİ
+    // ayrıştırıcılardan — ikinci bir ayrıştırıcı iki koşumun iki şey iddia etmesidir.
+    const kontrolSayisi = m ? Number(m[1]) + Number(m[2]) : slash ? Number(slash[2]) : null;
+    const beyanVar = skipped > 0 || bilinmeyenAtlama;
+    const sessizYesil = ok && !beyanVar && (kontrolSayisi === 0 || kontrolSayisi === null);
+    if (sessizYesil && !SESSIZ_YESIL_DEVRALINAN.has(file)) {
+      return {
+        ok: false,
+        status: res.status,
+        summary: `SESSİZ YEŞİL — çıkış 0 ∧ ${kontrolSayisi === null ? "özet satırı yok" : "0 kontrol"} ∧ beyan yok (ölçmeden yeşil; atla() ile beyan et ya da kırmızı düş)`,
+        out,
+        killed,
+        skipped,
+        bilinmeyenAtlama,
+        sessizYesil: true,
+      };
+    }
+    return { ok, status: res.status, summary, out, killed, skipped, bilinmeyenAtlama, sessizYesil };
   }
 
   /** Başarısız çıktı ALTYAPI arızası mı (DB bağlantısı) yoksa gerçek assertion mı? */
@@ -582,7 +611,7 @@ async function main() {
     // etiketi basılıyor — 360sn'lik bir satır sessizce şaşırtmasın).
     const retryNote = retried ? (flaky ? " (2. denemede)" : ` (2 deneme de düştü; 1.: ${firstSummary})`) : "";
     const ilkKirmizi = r.out.split("\n").find((l) => /^\s*(❌|✗)\s/.test(l))?.trim().slice(0, 150);
-    results.push({ file, ok: r.ok, summary: r.summary + retryNote, ms, flaky, skipped: r.skipped, bilinmeyenAtlama: r.bilinmeyenAtlama, ilkKirmizi });
+    results.push({ file, ok: r.ok, summary: r.summary + retryNote, ms, flaky, skipped: r.skipped, bilinmeyenAtlama: r.bilinmeyenAtlama, sessizYesil: r.sessizYesil, ilkKirmizi });
     // SIKLIK DEFTERİ — yalnız `IZLENEN` kümesindeki bekçi için (bugün tek dosya),
     // zaten koşmuş bir sonuçtan tek satır: EKSTRA KOŞUM YOK. Karar kuralı ve iki
     // tasarım gerekçesi `scripts/lib/siklik-defteri.ts` başlığında ve o kural
@@ -657,6 +686,18 @@ async function main() {
   // sayıda atlandı" AYNI satırı basıyordu. `N atlandı` sessizce N'i BİLDİĞİMİZİ
   // iddia eder; bilinmeyeni oraya katmak ya da 0 yazmak aynı yalanın küçük
   // puntolusudur. Bekçi bunu `Sonuç:` satırında BILINMEYEN_BEYAN ile bildirir.
+  // SESSİZ YEŞİL — iki yönlü: devralınan üye artık sessiz DEĞİLSE ölü muaftır, kırmızı
+  // (liste sessizce şişmesin, "muaf" bir gün "bakılmadı" demesin).
+  const sessizler = results.filter((r) => r.sessizYesil);
+  const oluMuaf = [...SESSIZ_YESIL_DEVRALINAN].filter((f) => !results.some((r) => r.file === f && r.sessizYesil));
+  if (sessizler.length > 0 || oluMuaf.length > 0) {
+    console.log(`\n⚠️  SESSİZ YEŞİL: ${sessizler.length} dosya çıkış 0 ∧ 0 kontrol ∧ beyan yok (devralınan ${SESSIZ_YESIL_DEVRALINAN.size})`);
+    for (const f of sessizler) console.log(`  ${SESSIZ_YESIL_DEVRALINAN.has(f.file) ? "⚠️  devralınan" : "❌"} ${f.file}`);
+    if (oluMuaf.length > 0) {
+      console.log(`  ❌ ÖLÜ MUAF (artık sessiz değil, listeden düş): ${oluMuaf.join(" · ")}`);
+    }
+  }
+  const oluMuafKirmizisi = oluMuaf.length > 0;
   const bilinmeyenler = results.filter((r) => r.bilinmeyenAtlama);
   if (bilinmeyenler.length > 0) {
     console.log(
@@ -688,7 +729,7 @@ async function main() {
     console.log(`Altyapı flake'i (2. denemede geçti — DB bağlantı timeout'u): ${flakes.length}`);
     for (const f of flakes) console.log(`  ⚠️  ${f.file}`);
   }
-  process.exit(failed.length > 0 || strictAtlamaKirmizisi ? 1 : 0);
+  process.exit(failed.length > 0 || strictAtlamaKirmizisi || oluMuafKirmizisi ? 1 : 0);
 }
 
 void main();
