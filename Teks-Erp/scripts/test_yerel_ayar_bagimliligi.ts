@@ -129,7 +129,9 @@ const ALET_TABAN = 14;
  * 113 → 0 düşer; 0'da bu cırcır SERT'e çevrilir ve "iki yan aynı mı katlıyor"
  * sorusu YAPISAL olarak kapanır — elle tutulan bir çift listesiyle değil.
  */
-const HAM_FOLD_TABAN = 113;
+// 113 → 54 (2026-09-14, entegratör 1e): ea backend parçası (upperTr/lowerTr, 7bc091bb) birleşik ağaçta ölçüldü;
+// kalan 54 = Electron 17 + mobil 20 (parça 2, ea) + 12 test oracle'ı (muaf adayı) + helper içi.
+const HAM_FOLD_TABAN = 54;
 
 function main(): void {
   console.log("\n=== Yerel ayar bağımlılığı (süreç locale'i) ===\n");
