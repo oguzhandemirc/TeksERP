@@ -1,15 +1,15 @@
 {
   "_not": "KEYFİ arama yapan (dosya, model) çiftleri — yalnız KÜÇÜLÜR. Ölçüm: --yaz",
-  "_agac": "1a38ee34",
+  "_agac": "ffa51fca",
   "_paydalar": {
-    "taranan": 526,
-    "icerenDosya": 284,
-    "populasyon": 912
+    "taranan": 538,
+    "icerenDosya": 285,
+    "populasyon": 924
   },
   "_keyfi": {
-    "cagri": 175,
-    "dosya": 122,
-    "uye": 173
+    "cagri": 173,
+    "dosya": 121,
+    "uye": 171
   },
   "uyeler": [
     "test_accounting_export.ts::user",
@@ -98,8 +98,6 @@
     "test_printed_doc_builders.ts::subcontractorDispatch",
     "test_printed_doc_builders.ts::subcontractorReceipt",
     "test_printed_doc_builders.ts::warehouseTransfer",
-    "test_qc2_idempotency.ts::roll",
-    "test_qc2_idempotency.ts::workOrderStep",
     "test_quality_batch_flags.ts::item",
     "test_quick_shipment.ts::item",
     "test_quick_start_wo.ts::item",
