@@ -103,6 +103,30 @@ let pasiflesenler: Array<{ id: string; fullName: string }> = [];
 /** Sızıntı taramasının arayacağı sırlar (ölçüm sonunda dolar). */
 const sirlar: string[] = [];
 
+/**
+ * İDDİANIN yüklemi: sırrın RAKAM SINIRLI geçtiği satır sayısı. §7'nin geniş
+ * `LIKE` sorgusu TEŞHİS içindir; kırmızıyı bu sayı verir.
+ *
+ * Neden ayrı bir sorgu: geniş sorgu `LIMIT 3` ile teşhis satırı getirir, sınırlı
+ * eşleşme o üçün DIŞINDA kalabilir — bir iddia, gördüğü ilk üç satıra
+ * dayandırılamaz.
+ *
+ * ⚠️ KOLON KOLON, BİRLEŞTİRİLMİŞ METİNDE DEĞİL. Geniş sorgu üç kolona AYRI AYRI
+ * bakar; sınır yüklemi `newData||oldData||changes` üzerinde çalışsaydı iki
+ * kolonun EKİNDE sahte bir eşleşme doğardı (`…98` + `6412…` → `986412`) ve
+ * iddia, teşhisinin ölçmediği bir şeye dayanırdı. İkisi boğaz ikizidir: aynı
+ * şekli sorarlar, biri geniş biri dar.
+ */
+async function sinirliEslesmeSayisi(desen: string): Promise<number> {
+  const [r] = await prisma.$queryRaw<Array<{ n: bigint }>>`
+    SELECT count(*)::bigint AS n
+      FROM system_logs
+     WHERE COALESCE("newData"::text,'') ~ ${desen}
+        OR COALESCE("oldData"::text,'') ~ ${desen}
+        OR COALESCE("changes"::text,'') ~ ${desen}`;
+  return Number(r?.n ?? 0);
+}
+
 // -----------------------------------------------------------------------------
 
 /**
@@ -122,6 +146,10 @@ async function onarBayatDurum(): Promise<void> {
     await prisma.userPermission.deleteMany({ where: { userId: b.id } });
     await prisma.user.delete({ where: { id: b.id } });
   }
+  // §7b sonda satırı — süreç create ile delete ARASINDA ölürse artık kalır ve
+  // `system_logs`ta uydurma bir olay adı bırakır. Temizliğin son adımı
+  // susturulmaz: imza (`tableName`) yalnız bu bekçinin yazdığı bir değerdir.
+  await prisma.systemLog.deleteMany({ where: { tableName: "SONDA_YUKLEM_SINIRI" } });
   // İMZALI artık = yarıda kalmış bir koşum (başka hiçbir yol bu adı yazmaz).
   const yarim = await prisma.user.findMany({
     where: { fullName: GECICI_IMZA },
@@ -500,6 +528,21 @@ async function main(): Promise<void> {
     // ⛔ SIRRIN KENDİSİ ASLA BASILMAZ — repo PUBLIC ve bu çıktı CI log'una düşer.
     // Yalnız PARMAK İZİ basılır: uzunluk · yalnız-rakam mı · sha256'nın ilk 8'i.
     for (const s of sirlar) {
+      // ⚠️ SORGU GENİŞ, İDDİA SINIRLI — ÜÇ SONUÇ (1e hükmü 2026-09-14).
+      // Sebebi ÖLÇÜLDÜ: PIN altı haneli ve YALNIZ RAKAM (`randomInt(0,1_000_000)`
+      // + `padStart(6,"0")`, `auth.service.ts`), `LIKE '%…%'` ise SINIRSIZDIR ⇒
+      // kalabalık bir `system_logs` metninde ALAKASIZ bir sayıya çakışır.
+      // Ölçüldü 2026-09-14 (19.895 satırlık / 4,35 MB korpus): sınırsız yüklem
+      // %1,07 per PIN (tur başına %2,12, iki PIN) · rakam sınırlı %0,12 ·
+      // CI'da gözlenen kırmızı sıklığı 1/59 tur ≈ %1,7 — aynı mertebe.
+      // ⇒ Sorgu geniş KALIR (yoksa gözlemi kaybederiz), İDDİA rakam sınırına
+      //   bağlanır. (A) SIZINTI hiçbir şey kaybetmez: gerçek bir sızıntı PIN'i
+      //   bir DEĞER olarak yazar ve iki yanı rakam-dışıdır.
+      // ⛔ EŞLEŞEN METİN ASLA BASILMAZ — repo PUBLIC, çıktı CI log'una düşer.
+      const rakamsal = /^\d+$/.test(s);
+      // FAIL-CLOSED: sınır yalnız rakamsal sır için kurulabilir. PIN üretimi bir
+      // gün harf katarsa kapı GEVŞEMEZ — geniş eşleşmenin kendisi iddia olur.
+      const sinirDeseni = rakamsal ? `(^|[^0-9])${s}([^0-9]|$)` : null;
       const satirlar = await prisma.$queryRaw<
         Array<{ action: string; tableName: string; alan: string; tam: boolean; createdAt: Date }>
       >`
@@ -514,6 +557,8 @@ async function main(): Promise<void> {
             OR COALESCE("oldData"::text,'') LIKE ${"%" + s + "%"}
             OR COALESCE("changes"::text,'') LIKE ${"%" + s + "%"}
          ORDER BY "createdAt" DESC LIMIT 3`;
+      const sinirliSayi =
+        sinirDeseni === null ? satirlar.length : await sinirliEslesmeSayisi(sinirDeseni);
       const izi =
         `uzunluk=${s.length} · yalnızRakam=${/^\d+$/.test(s)} · ` +
         `sha256[0:8]=${createHash("sha256").update(s).digest("hex").slice(0, 8)}`;
@@ -526,26 +571,86 @@ async function main(): Promise<void> {
       // ⇒ *Bir beyan, beyan ettiği durumda TÜKETİCİNİN OKUDUĞU yere konur.*
       const ilk = satirlar[0];
       const kisa =
-        satirlar.length === 0
+        sinirliSayi === 0
           ? ""
-          : `${ilk.tam ? "(A)SIZINTI" : "(B)ÇAKIŞMA"} ${ilk.action}/${ilk.tableName}@${ilk.alan}` +
-            ` · uz=${s.length} rakam=${/^\d+$/.test(s)} sha=${createHash("sha256").update(s).digest("hex").slice(0, 8)}` +
-            (satirlar.length > 1 ? ` · +${satirlar.length - 1} satır` : "");
+          : `(A)SIZINTI ${ilk.action}/${ilk.tableName}@${ilk.alan}` +
+            ` · uz=${s.length} rakam=${rakamsal} sha=${createHash("sha256").update(s).digest("hex").slice(0, 8)}` +
+            (sinirliSayi > 1 ? ` · ${sinirliSayi} sınırlı satır` : "");
       const teshis =
-        satirlar.length === 0
+        sinirliSayi === 0
           ? ""
           : kisa +
             `\n      ↳ TEŞHİS — sır izi: ${izi}` +
-            `\n      ↳ eşleşen ${satirlar.length} satır (en yeni 3): ` +
+            `\n      ↳ rakam sınırlı ${sinirliSayi} satır · geniş eşleşen (en yeni 3): ` +
             satirlar
-              .map(
-                (r) =>
-                  `${r.action}/${r.tableName}@${r.alan}` +
-                  `[${r.tam ? "TAM DEĞER — (A) SIZINTI" : "parça — (B) ÇAKIŞMA olabilir"}]`,
-              )
+              .map((r) => `${r.action}/${r.tableName}@${r.alan}[${r.tam ? "TAM DEĞER" : "parça"}]`)
               .join(" · ");
-      check(`\`system_logs\` içinde sır geçmiyor (${s.slice(0, 4)}…)`, satirlar.length === 0, teshis);
+      check(`\`system_logs\` içinde sır geçmiyor (${s.slice(0, 4)}…)`, sinirliSayi === 0, teshis);
+      // ÜÇÜNCÜ SONUÇ: geniş eşleşme VAR, sınırlı YOK ⇒ kırmızı DEĞİL, ama sessiz
+      // de değil. Sayı + sınıf + satır KİMLİĞİ basılır; eşleşen METİN basılmaz.
+      if (sinirliSayi === 0 && satirlar.length > 0) {
+        console.log(
+          `   ⓘ (B) ÇAKIŞMA, %1 sınıfı — ${satirlar.length} geniş eşleşme, rakam sınırlı 0 · ${izi}` +
+            `\n      ↳ ${satirlar.map((r) => `${r.action}/${r.tableName}@${r.alan}`).join(" · ")}` +
+            `\n      ↳ sınırsız \`LIKE '%…%'\` altı haneli bir sayıyı ALAKASIZ bir satırda bulur;` +
+            ` ölçülen oran %1,07/PIN (2026-09-14). Sızıntı DEĞİL — ama ölçüldüğü GÖRÜNSÜN.`,
+        );
+      }
     }
+
+    // ── §7b SINIRIN KENDİSİ ÖLÇÜLÜR ──────────────────────────────────────────
+    // Daraltılmış bir güvenlik yükleminin bedeli KÖRLÜKTÜR; o yüzden sınır beş
+    // biçimle sondalanır. Dördü sızıntı biçimidir ve ISIRMALI; beşincisi rakama
+    // yapışık biçimdir ve ISIRMAMALI (sınırın kendisi).
+    console.log("\n=== 7b) YÜKLEM SINIRI — dört sızıntı biçimi ısırır, rakama yapışık ısırmaz ===");
+    const SONDA_PIN = "986412"; // gerçek sır DEĞİL — sabit, uydurulmuş bir desen
+    const SONDA_DESEN = `(^|[^0-9])${SONDA_PIN}([^0-9]|$)`;
+    const bicimler: Array<{ ad: string; metin: string; isirmali: boolean }> = [
+      { ad: 'JSON değeri "PIN"', metin: `{"quickPin":"${SONDA_PIN}"}`, isirmali: true },
+      { ad: 'alan adıyla "pin":"PIN"', metin: `{"a":1,"pin":"${SONDA_PIN}"}`, isirmali: true },
+      { ad: "mesaj içinde PIN: …", metin: `{"msg":"PIN: ${SONDA_PIN} gonderildi"}`, isirmali: true },
+      { ad: "harfe yapışık abcPINdef", metin: `{"x":"abc${SONDA_PIN}def"}`, isirmali: true },
+      { ad: "⭐ RAKAMA yapışık 12PIN", metin: `{"x":"12${SONDA_PIN}"}`, isirmali: false },
+    ];
+    // Aynı OPERATÖRE verilir (`~`), ama tabloya YAZILMADAN: artık bırakmaz.
+    for (const b of bicimler) {
+      const [r] = await prisma.$queryRaw<Array<{ esledi: boolean }>>`
+        SELECT ${b.metin}::text ~ ${SONDA_DESEN} AS esledi`;
+      check(
+        `§7b ${b.ad} → ${b.isirmali ? "ISIRIR" : "ısırmaz (NOT sınıfı)"}`,
+        r.esledi === b.isirmali,
+        `esledi=${r.esledi}`,
+      );
+    }
+    // Ve bir GERÇEK satır: `VALUES` yüklemi ölçer, bu satır SORGU ŞEKLİNİ ölçer
+    // (üç kolonun COALESCE ile birleşmesi). Yazılır, ölçülür, `finally`de silinir
+    // ve sayım tabana döndüğü DOĞRULANIR — artık bırakan bir sonda kusurdur.
+    const tabanSayi = await prisma.systemLog.count();
+    let sondaId: string | null = null;
+    try {
+      const satir = await prisma.systemLog.create({
+        data: {
+          action: "SONDA",
+          tableName: "SONDA_YUKLEM_SINIRI",
+          recordId: "-",
+          newData: { quickPin: SONDA_PIN },
+        },
+        select: { id: true },
+      });
+      sondaId = satir.id;
+      check(
+        "§7b ⭐ gerçek `system_logs` satırı TAM SORGU ŞEKLİYLE yakalanır",
+        (await sinirliEslesmeSayisi(SONDA_DESEN)) > 0,
+        "gerçek sorgu şekli: üç kolona AYRI AYRI bakılır",
+      );
+    } finally {
+      if (sondaId) await prisma.systemLog.delete({ where: { id: sondaId } });
+    }
+    check(
+      "§7b sonda satırı SİLİNDİ (artık bırakılmadı)",
+      (await prisma.systemLog.count()) === tabanSayi,
+      `taban ${tabanSayi}`,
+    );
 
     // Dosya sistemi — script hiçbir şey YAZMAMALI.
     const scriptSrc = fs.readFileSync(path.join(__dirname, "superadmin-olustur.ts"), "utf8");
