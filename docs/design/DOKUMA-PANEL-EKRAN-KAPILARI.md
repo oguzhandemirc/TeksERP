@@ -84,7 +84,11 @@ bağlı karo yüklemi, nav ön ek mirası) · `Electron/src/pages/Operations/til
 `constants/module-flags.ts` (anahtar + üst modül + görünen ad) ·
 `constants/module-profiles.ts` (`"dokuma.enabled": "dokumaEnabled"`) ·
 `middlewares/module.middleware.ts` (`requireDokumaEnabled`) ·
-`routes/weaving-order.routes.ts` (`router.use`ta `requireProductionEnabled`in yanına).
+`routes/weaving-order.routes.ts` (`router.use`ta `verifyToken`dan SONRA).
+⚠️ **İNDİ: YANINA değil YERİNE** — bu satır plan aşamasında *"`requireProductionEnabled`in
+yanına"* diyordu; inen kod onu YERİNE koydu, çünkü `requireDokumaEnabled` üretim halkasını
+KENDİ İÇİNDE okuyor (`test_dokuma_regime_gate §2a/§2b`). `test_production_regime_gate`in
+`KAPILI` listesinden üç dosya bu yüzden düştü (13 → 10, D3).
 **Varsayılan = BUGÜNKÜ davranış** kuralı burada *"referans profilde KAPALI"* demektir.
 
 **Ölçen bekçiler:** `test_feature_flag_contract` (üç-yer sözleşmesi: boolean + sayısal +
@@ -110,11 +114,28 @@ React tarafında bayrak okumanın ve fail-closed varsayılanın biçimi.
 1. `SCREEN_CATALOG` satırı **eklendi** ve `SCREENLESS_PERMISSIONS`tan iki satır **düştü**.
 2. `dokumaEnabled` dört dosyada doğdu; referans profilde **KAPALI**.
 3. Karo + route + palet izinleri birebir; karo yüklemi **saf** (sarmalayıcı yok).
-4. `test_screen_catalog` yeşil (§4 · §9a/b/b2 · §10b · muaf listesi) ·
+4. `test_screen_catalog` yeşil — route izni ↔ manifesto hizası *"her Electron route izni
+   manifestoda beyanlı"* kontrolüdür (ADIYLA anılır: dosyada `§4` diye bir bölüm YOKTUR,
+   D2) · `§9c`/`§9e` karo ↔ bayrak iki yönlü · `§10b` kapısı olan modülün ekranı var ·
    `test_feature_flag_contract` · `test_module_flags` · `test_module_profile` ·
    `tile-visibility.test.ts` · `CommandPalette.test.tsx`.
-5. Negatif sonda: bayrak KAPALIYKEN karo çizilmiyor VE route `/forbidden`e düşüyor —
-   ikisi ayrı ayrı ölçülür (biri karoyu, öteki ucu korur).
+5. Negatif sonda İKİ yönlü ve **her yön mekanizmasıyla anılır**:
+   · **karo çizilmez** — `isWeavingOrdersVisible` (`Operations/WeavingOrders/weaving-regime.ts`),
+     ölçen `tile-visibility.test.ts`; karo ↔ bayrak bağı `test_screen_catalog §9c/§9e`.
+   · **backend 403 `MODULE_DISABLED`** — `requireDokumaEnabled`, üç router'da da ilk
+     `router.use(verifyToken, requireDokumaEnabled)` (`weaving-order` · `machine-run` ·
+     `machine-doff`), ölçen `test_dokuma_regime_gate §2a/§2b` (kapı + sıra) ve `§6g`
+     (dokuma yüzeyine dokunan HER router kapıyı taşıyor).
+   ⚠️ **Route bayrağa BAKMAZ ve bu bilinçlidir (D1, 2026-09-14).** `ProtectedRoute` yalnız
+   oturum + izin okur (`components/ProtectedRoute.tsx`; dosyada tek bir bayrak atfı yok) —
+   panelde bugün HİÇBİR ekranın bayrak-duyarlı route kapısı yok, emsal `operations/yarn-stock`
+   dâhil. ⇒ Bayrak KAPALI + izin VARKEN elle yazılan URL boş kabuk çizer ve liste isteği
+   403 alır; gezinme yoluyla sıfır görünür fark KARO + PALET gizliliğinden gelir.
+   ⇒ **Eski cümle ("route `/forbidden`e düşer") GEÇERSİZ — 2026-09-14.** Var olmayan bir
+   mekanizmayı ölçüt yazıyordu; bkz. `docs/standart/OLCUM-DISIPLINI-CIKARIM.md`
+   § Bir KAPANIŞ ÖLÇÜTÜ, ölçtüğü MEKANİZMANIN adını taşımalı.
+   ⇒ Bayrak-duyarlı route kapısı (`ProtectedRoute` `SCREEN_CATALOG`tan `modul` okur) AYRI
+   DİLİMDİR (1e hükmü (B), sahibi 47); indiği gün bu ölçüt yeniden yazılır.
 
 ---
 
@@ -125,8 +146,11 @@ React tarafında bayrak okumanın ve fail-closed varsayılanın biçimi.
 AÇIK (1e ürün kararı) · karo + route + palet birebir, yüklem saf (`isWeavingOrdersVisible`) · bekçiler yeşil
 (`test_screen_catalog` 33/0 · `test_feature_flag_contract` 78/0 · `test_module_flags` 82/0 · `test_module_profile` 58/0 ·
 `tile-visibility.test` · `CommandPalette.test`) · negatif sonda İKİ yönlü: karo `ctx({dokumaEnabled:false})` → çizilmez
-(`tile-visibility.test`), route `/forbidden`a düşer (`ProtectedRoute requirePermission="weavingorder:read"`, `test_screen_catalog §4`).
-⚠️ **Son cümle ÇÜRÜDÜ (47, 2026-09-14, aşağıda D1):** route izne bakar, bayrağa değil; gösterilen iki delil bayrağı ölçmez.
+(`tile-visibility.test`) · backend kapısı 403 `MODULE_DISABLED` döner (`requireDokumaEnabled`, üç router'da ilk `router.use`;
+ölçen `test_dokuma_regime_gate` — **bu bekçinin sayısı 0c'nin ölçümüdür, 5e'nin ağacında `DATABASE_URL` olmadığı için
+KOŞULMADI**). Route `ProtectedRoute` ile yalnız İZNE bakar.
+⚠️ **Bu cümlenin ÖNCEKİ hâli ("route `/forbidden`a düşer", delil `test_screen_catalog §4`) ÇÜRÜDÜ ve 2026-09-14'te
+DÜZELTİLDİ** (47 ölçtü — D1/D2; 5e yazdı — sözleşme cümlesi 5e'nin hatasıydı). İki cümle yan yana bırakılmaz.
 
 **④'ün "dört dosya" cümlesi ÖNCÜLDÜ (5e: modüle ÖZGÜ dört yeri saymış, jenerik bayrak sözleşmesini atlamıştı), ölçülen ayak izi 28 dosyadır** — ölçüm 2026-09-13, taban `05c6dbbb`, yüklem `git grep -l -E 'devereEnabled|devere\.enabled|readDevereEnabled|requireDevereEnabled' -- ':!docs' ':!*.md'` (kod + bekçi/test dahil, belge hariç; devere emsali):
 `Teks-Erp/src` 8 (`app.ts` · `constants/module-flags` · `constants/module-profiles` · `constants/screen-catalog` ·
@@ -175,7 +199,7 @@ Davranışsal (güvenlik/veri) kusur BULUNMADI; asıl sed backend'dir ve ölçü
 
 ### Çürüdü ❌ — kalemler (sahibi 1e'nin kararı; 47 kod/sözleşme değiştirmedi)
 
-- **D1 · Kapanış ölçütü 5'in ikinci yarısı kodda KARŞILIKSIZ.** `Electron/src/components/ProtectedRoute.tsx` yalnız `user` ·
+- **D1 · ✅ KAPANDI 2026-09-14 (5e; ölçüt 5 yeniden yazıldı, mekanizma adıyla) · Kapanış ölçütü 5'in ikinci yarısı kodda KARŞILIKSIZ.** `Electron/src/components/ProtectedRoute.tsx` yalnız `user` ·
   `canEnterApp` · `requirePermission` · `requireAnyPermission` · `requireSystemAccount` okur; bayrak dalı YOK
   (`grep -c 'MODULE_DISABLED\|dokumaEnabled\|useFeatureFlags'` → 0). `content-routes.tsx` dokuma route'u yalnız
   `requirePermission="weavingorder:read"` taşır. ⇒ bayrak KAPALIYKEN `weavingorder:read` (ya da `["*"]` süperadmin) taşıyan
@@ -188,7 +212,7 @@ Davranışsal (güvenlik/veri) kusur BULUNMADI; asıl sed backend'dir ve ölçü
   Karar 1e'de: **(a)** ölçüt 5 konvansiyona DARALTILIR ("karo çizilmez + backend 403; route izin kapısı") — 47 önerisi, backend
   sed zaten ölçülü · **(b)** `ProtectedRoute`a bayrak ayağı (`requireModuleFlag`) doğar, dokuma + emsaller ona bağlanır, negatif
   sonda (vitest + memory router, `dokumaEnabled:false` + `weavingorder:read` → `/forbidden`) yazılır — ayrı dilim, üç emsal ekranı kapsar.
-- **D2 · "İNDİ" bölümünün delil atfı GEÇERSİZ.** `test_screen_catalog §4` diye bir bölüm yok (`grep -c '§4'` → 0); dosyanın
+- **D2 · ✅ KAPANDI 2026-09-14 (5e; ölçüt 4 ve İNDİ atfı ADIYLA anılır oldu) · "İNDİ" bölümünün delil atfı GEÇERSİZ.** `test_screen_catalog §4` diye bir bölüm yok (`grep -c '§4'` → 0); dosyanın
   "── 4)" bölümü *"her Electron route izni bir ekranda beyan edilmiş"* = izin↔manifesto hizası, bayrak-kapalı yönlendirme değil.
   Aynı sınıf: `test_dokuma_regime_gate` başlığı (satır 22–23) *"ne karo, ne route, ne istek"* der ama §7e yalnız
   `requirePermission="weavingorder:read"` metnini arar ve **§7b etiketi** *"(kapalı modülde istek atan yüzey yok)"* ölçtüğünden
@@ -206,7 +230,7 @@ Davranışsal (güvenlik/veri) kusur BULUNMADI; asıl sed backend'dir ve ölçü
   — küme artık dokuz (`dokuma.enabled`); aynı commit `module-profiles.ts` `tam` açıklamasını "Dokuz"a çevirmiş, bunu atlamış.
   (`module-flags.ts` başlığındaki "YEDİ", `module-profiles.ts`/`screen-catalog.ts`/`module-profile.job.ts`teki "yedi" bu dilimden
   ÖNCE de bayattı — aynı sınıf, ayrı borç; elle sayım yasağı kapsamında.)
-- **D6 · Sözleşme kendi eski cümlesini bırakmış:** ④ *"`router.use`ta `requireProductionEnabled`in yanına"* — inen kod YANINA değil
+- **D6 · ✅ KAPANDI 2026-09-14 (5e; ④'e "İNDİ: YANINA değil YERİNE" şerhi) · Sözleşme kendi eski cümlesini bırakmış:** ④ *"`router.use`ta `requireProductionEnabled`in yanına"* — inen kod YANINA değil
   YERİNE koydu (kapı üretimi kendi içinde okur), `test_production_regime_gate` KAPILI'sından üç dosya bu yüzden düştü. Plan cümlesi
   ölçümle yan yana duruyor; "İNDİ: yerine" şerhi düşülmeli.
 - **Küçük (canlı delik değil):** `test_dokuma_regime_gate`in route taraması düz `readdirSync` — `src/routes/reports/` altındaki
