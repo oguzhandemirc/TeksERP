@@ -48,13 +48,16 @@ export interface HttpKapiSonucu {
 }
 
 /**
- * STRICT koşum — `TEKSERP_STRICT=1`. Paket kararında "yeşil = kapsandı" iddiası
- * ancak bu anahtarla kurulur: sunucu YOKLUĞU da kırmızıya döner. Anahtar tek
- * isimdir; ikinci bir strict bayrağı doğarsa iki koşum iki farklı şey iddia eder.
+ * STRICT koşum — `TEKSERP_STRICT=1`.
+ *
+ * ⚠️ EVİ ARTIK `lib/atlama.ts`: atlama yalnız HTTP ön koşuluyla olmuyor (DB,
+ * fixture, şablon, izin de atlatıyor) ve anahtar TEK evde durmalı. Burada
+ * yalnız yeniden ihraç edilir — ikinci bir tanım, iki koşumun iki farklı şey
+ * iddia etmesi demektir.
  */
-export function strictMi(): boolean {
-  return process.env.TEKSERP_STRICT === "1";
-}
+import { strictMi } from "./atlama";
+
+export { strictMi };
 
 /** `http://localhost:4112` → `4112`; adres çözülemezse "?" (mesaj için). */
 function portOf(base: string): string {

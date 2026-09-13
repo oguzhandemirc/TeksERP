@@ -27,7 +27,7 @@ import {
 } from "./lib/hedef-db-kapisi";
 // STRICT anahtarı TEK KAYNAKTIR ([TD-10c]): ikinci bir bayrak ya da ikinci bir
 // `process.env` okuması açılmaz — iki koşum iki farklı şey iddia ederdi.
-import { strictMi } from "./lib/http-bekci-kapisi";
+import { BILINMEYEN_BEYAN, strictMi } from "./lib/atlama";
 
 const SCRIPTS_DIR = join(__dirname);
 const PER_TEST_TIMEOUT_MS = 180_000;
@@ -56,6 +56,21 @@ const IS_WIN = process.platform === "win32";
  * adıyla `deleteMany` (+ `.catch(() => {})` → temizlik sessizce hiç koşmadı),
  * `typeof err` ile `never`'a inen hata gövdesi kontrolleri, zorunlu hâle gelmiş
  * bir parametrenin `undefined` gitmesi. Hepsi YEŞİL test olarak raporlanıyordu.
+ *
+ * ⚠️ AYNI SINIF `data:` İÇİNDE DE VAR ve orada DAHA SESSİZ (2026-09-13, 6e ölçtü;
+ * bugün gerçek bir hata geçirdi). Prisma `data` içindeki `undefined` alanı
+ * SESSİZCE ATAR:
+ *     RollStatus.DISPATCHED  → öyle bir üye YOK (doğrusu SHIPPED) → undefined
+ *     update({ data: { status: undefined, warehouseId: null } })
+ *     ⇒ warehouseId null oldu, status DEĞİŞMEDİ — fikstürün "topu stok dışına
+ *       çıkar" adımı HİÇ ÇALIŞMADI
+ * Ayrım load-bearing: **süzgeç no-op'u SONUCU değiştirir, `data` no-op'u
+ * FİKSTÜRÜ değiştirir** — yani bekçi ölçmediği şeyi yeşil raporlar ve kırmızı
+ * verecek bir şey kalmadığı için daha da sessizdir.
+ * ⇒ Panzehir POZİTİF KONTROL: ***fikstürünü kendi kuran her bekçi, KURDUĞUNU
+ *   ölçmek zorundadır.*** (6e'yi yalnız kendi koyduğu `§6p1 Sonda kurulumu:
+ *   top stok kümesinin DIŞINDA` kontrolü yakaladı; tip kapısı filtre yüzünden
+ *   koşmuyordu — yukarıdaki GEÇİT ATLANDI beyanı tam bu yüzden eklendi.)
  *
  * Tip hatası varken paketi koşmak yanıltıcıdır (yeşil ama anlamsız) → HIZLI DÜŞ.
  * Tek test koşarken (filtre argümanı) geçit ATLANIR — iterasyon hızlı kalsın.
@@ -282,6 +297,26 @@ async function main() {
   productionDbGate();
   await hacimGeciti();
 
+  // ⚠️ ATLANAN GEÇİT BEYAN EDİLİR (2026-09-13, 6e'nin ölçümü — ve bugün bir hata
+  // geçirdi). Bu iki geçit filtreli koşumda BİLEREK atlanıyor (iterasyon hızlı
+  // kalsın) ama eskiden **tek satır bile basılmıyordu**: geliştirme döngüsünün
+  // tamamı (`run-all-tests.ts <ad>`) tip kapısız koşuyor ve koşan kimse bunu
+  // göremiyordu.
+  //
+  // Bu dosya aynı doktrini BEKÇİLERE zaten uyguluyor (`, N atlandı` sayacı) ama
+  // KENDİ geçitlerine uygulamıyordu — kapının ölüm biçimlerinden biri:
+  //   ⇒ *kendi kapsam kaybını duyurmayan kapı.*
+  // Yeşil "ölçüldü" sanılır; oysa "bakılmadı"dır. `atla()` ile aynı cümle.
+  const gecitAtlandi: string[] = [];
+  if (filter) gecitAtlandi.push("tip + migration geçidi (filtreli koşum)");
+  else {
+    if (process.env.SKIP_TYPECHECK) gecitAtlandi.push("tip geçidi (SKIP_TYPECHECK=1)");
+    if (process.env.SKIP_MIGRATION_GATE) gecitAtlandi.push("migration geçidi (SKIP_MIGRATION_GATE=1)");
+  }
+  for (const g of gecitAtlandi) {
+    console.log(`⏭️  GEÇİT ATLANDI — ${g}\n      ↳ bu koşum TAM KAPSAM DEĞİL; tam kapsam: npm test`);
+  }
+
   if (!filter && !process.env.SKIP_TYPECHECK && !typecheckGate()) process.exit(1);
   if (!filter && !process.env.SKIP_MIGRATION_GATE && !migrationGate()) process.exit(1);
 
@@ -297,7 +332,7 @@ async function main() {
 
   console.log(`\n=== Backend test suite — ${files.length} dosya ===\n`);
 
-  const results: { file: string; ok: boolean; summary: string; ms: number; flaky: boolean; skipped: number; ilkKirmizi?: string }[] = [];
+  const results: { file: string; ok: boolean; summary: string; ms: number; flaky: boolean; skipped: number; bilinmeyenAtlama: boolean; ilkKirmizi?: string }[] = [];
 
   /**
    * Süreç anormal mi bitti ve neden? Tek ayırt edici `res.error.code` — ÖLÇÜLDÜ
@@ -350,6 +385,7 @@ async function main() {
     out: string;
     killed: string | null;
     skipped: number;
+    bilinmeyenAtlama: boolean;
   } {
     const res = spawnSync("npx", ["tsx", join(SCRIPTS_DIR, file)], {
       encoding: "utf8",
@@ -383,6 +419,10 @@ async function main() {
     // mekanizmanın kendisi ölçülmemiş sayı basamaz.
     const skippedM = out.match(/(?:Sonuç|SONUÇ):[^\n]*?,\s*(\d+)\s*atlandı/i);
     const skipped = skippedM ? Number(skippedM[1]) : 0;
+    // SAYILAMAYAN ATLAMA — aynı gerekçeyle ÖZET SATIRINA DEMİRLİ: serbest arama
+    // bir check MESAJINDAKİ beyanı gerçek sanardı. `atlama.ts` bu eki yalnız
+    // `ozetEki()` üzerinden üretir, elle yazılmaz.
+    const bilinmeyenAtlama = new RegExp(`(?:Sonuç|SONUÇ):[^\\n]*?${BILINMEYEN_BEYAN}`, "i").test(out);
     // ANORMAL BİTİŞTE KAZINAN ÖZET YALAN SÖYLER — kullanma.
     // 188/214 test `Sonuç:` satırını `await prisma.$disconnect()`'ten ÖNCE basar.
     // `$disconnect()` asılırsa (havuz drenajı / iptal edilmiş statement) süreç
@@ -398,7 +438,7 @@ async function main() {
           : ok
             ? "geçti (exit 0)"
             : "BAŞARISIZ";
-    return { ok, status: res.status, summary, out, killed, skipped };
+    return { ok, status: res.status, summary, out, killed, skipped, bilinmeyenAtlama };
   }
 
   /** Başarısız çıktı ALTYAPI arızası mı (DB bağlantısı) yoksa gerçek assertion mı? */
@@ -434,7 +474,7 @@ async function main() {
     // etiketi basılıyor — 360sn'lik bir satır sessizce şaşırtmasın).
     const retryNote = retried ? (flaky ? " (2. denemede)" : ` (2 deneme de düştü; 1.: ${firstSummary})`) : "";
     const ilkKirmizi = r.out.split("\n").find((l) => /^\s*(❌|✗)\s/.test(l))?.trim().slice(0, 150);
-    results.push({ file, ok: r.ok, summary: r.summary + retryNote, ms, flaky, skipped: r.skipped, ilkKirmizi });
+    results.push({ file, ok: r.ok, summary: r.summary + retryNote, ms, flaky, skipped: r.skipped, bilinmeyenAtlama: r.bilinmeyenAtlama, ilkKirmizi });
     // SIKLIK DEFTERİ — yalnız `IZLENEN` kümesindeki bekçi için (bugün tek dosya),
     // zaten koşmuş bir sonuçtan tek satır: EKSTRA KOŞUM YOK. Karar kuralı ve iki
     // tasarım gerekçesi `scripts/lib/siklik-defteri.ts` başlığında ve o kural
@@ -503,6 +543,20 @@ async function main() {
   // basılır ki "hepsi yeşil" cümlesi "hepsi ölçüldü" sanılmasın.
   const skippedFiles = results.filter((r) => r.skipped > 0);
   let strictAtlamaKirmizisi = false;
+  // ⚠️ SAYILAMAYAN ATLAMA AYRI BEYANDIR, TOPLAMA GİRMEZ (2026-09-13).
+  // Erken `return` ile düşen bölümlerde kaç kontrolün koşmadığı YAPISAL OLARAK
+  // bilinemez — o kontroller hiç doğmaz. Bugüne dek `0 atlandı` ile "bilinmeyen
+  // sayıda atlandı" AYNI satırı basıyordu. `N atlandı` sessizce N'i BİLDİĞİMİZİ
+  // iddia eder; bilinmeyeni oraya katmak ya da 0 yazmak aynı yalanın küçük
+  // puntolusudur. Bekçi bunu `Sonuç:` satırında BILINMEYEN_BEYAN ile bildirir.
+  const bilinmeyenler = results.filter((r) => r.bilinmeyenAtlama);
+  if (bilinmeyenler.length > 0) {
+    console.log(
+      `⚠️  SAYILAMAYAN ATLAMA: ${bilinmeyenler.length} dosyada BİLİNMEYEN sayıda kontrol koşmadı` +
+        ` — bu sayı yukarıdaki toplama GİRMEZ (erken \`return\`; kaç kontrol düştüğü bilinemez)`,
+    );
+    for (const f of bilinmeyenler) console.log(`  ⚠️  ${f.file} — bilinmeyen sayıda`);
+  }
   if (skippedFiles.length > 0) {
     const total = skippedFiles.reduce((sum, r) => sum + r.skipped, 0);
     console.log(
