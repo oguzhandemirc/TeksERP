@@ -3693,6 +3693,12 @@ export class TamburService {
           });
         }
         remainingChildId = child.id;
+        // STOK DEFTERİ — kalan parça da depoda doğar: `cutOpenFabric` çocuğuyla AYNI
+        // giriş (2026-09-14'e kadar satırsızdı; tipli `rollData` yüzünden K
+        // listesinin kör noktasıydı, 6e ölçtü). Fire kalitesi de WAREHOUSE'a
+        // iner ⇒ o da stok kümesine girer, satır alır (durum = defter).
+        await postOpenFabricChildEntryTx(tx, child, tamburStepId, userId);
+
         // PLAN-SAPMA DEFTERİ — YALNIZ bu dalda: kapı pre-tx `currentQty > 0`
         // gördü ama tx içindeki TAZE kalan 0'a düşmüş olabilir (araya kesim
         // girdi). O durumda depoya inen bir şey yok → 0 metrajlık satır

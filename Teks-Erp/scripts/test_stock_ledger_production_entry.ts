@@ -21,9 +21,11 @@
 //   §4 rescue: TEK PRODUCTION girişi, RESCUE, metraj = currentQty, adım damgası, sebep notes'ta
 //   §5 0 metrajlı takılı top: kurtarılır ama satır YAZILMAZ (taşınacak mal yok — atlama, hata değil)
 //   §6 körlük zemini: fikstür satır üretti
+//   §7 ⭐ finalizeOpenFabric KALANI da aynı girişi alır (6e'nin kör noktası, 2026-09-14) + SINGLE geri alma tersler
 // Negatif sondalar (2026-09-14, cp+sha256 ile geri):
-//   · `cutOpenFabric`ten `postStockMove` bloğu silinince: §1a/§1b/§2/§3 kırmızı (ilk sürüm §2'de `s1[0]!.id` ile ÇÖKÜYORDU — dili ölen bekçi; `?.` ile düzeltildi)
+//   · `cutOpenFabric`ten `postStockMove` çağrısı silinince: §1a/§1b/§2/§3 kırmızı (ilk sürüm §2'de `s1[0]!.id` ile ÇÖKÜYORDU — dili ölen bekçi; `?.` ile düzeltildi)
 //   · `rescueStuckRoll`dan `postStockMove` bloğu silinince: §4/§6 kırmızı
+//   · `finalizeOpenFabric`ten `postOpenFabricChildEntryTx` çağrısı silinince: §7a/§7b kırmızı
 //   · `test_stok_defteri_bag_olcumu §4f` bu commit'le BİLEREK kırmızı (K 2→0, taban 1e'de)
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım.
 // =============================================================================
@@ -147,6 +149,23 @@ async function main(): Promise<void> {
     check("§5 0 metrajlı top kurtarıldı, satır YAZILMADI (taşınacak mal yok)", c5?.status === RollStatus.WAREHOUSE && (await satirlar(c.rollId)).length === 0, `durum=${c5?.status}`);
 
     check("§6 körlük zemini: fikstür defter satırı üretti", (await prisma.warehouseMovement.count({ where: { rollId: { in: rollIds } } })) >= 5);
+
+    // ── §7 finalizeOpenFabric KALANI — cutOpenFabric çocuğuyla AYNI giriş ─────
+    // 6e ölçtü (2026-09-14): kalan çocuk WAREHOUSE doğuyor, hiçbir kapı çağrılmıyordu;
+    // tipli `rollData` yüzünden K listesinin kör noktasıydı.
+    const d = await uretimdeTop("D", tamburSt.id, 100, { acik: true, warehouseId: warehouse.id, itemId, gradeCode: grade.code });
+    const c7 = await tambur.cutOpenFabric(d.rollId, { lengthMeters: 40, status: "WAREHOUSE", confirmMismatch: true });
+    rollIds.push((c7.data as { childRoll: { id: string } }).childRoll.id);
+    const fin7 = await tambur.finalizeOpenFabric(d.rollId, { remainingAction: "keep_1kalite", varianceReasonCode: null, varianceReasonText: "bekçi §7", confirmMismatch: true });
+    const kalan7 = (fin7.data as { remainingChildId: string | null }).remainingChildId;
+    if (kalan7) rollIds.push(kalan7);
+    const s7 = kalan7 ? await satirlar(kalan7) : [];
+    check("§7a finalize KALANI (60 m) TEK PRODUCTION girişi aldı: TAMBUR_CUT, depo/WAREHOUSE, adım damgalı", !!kalan7 && s7.length === 1 && s7[0]!.reasonCode === STOCK_MOVE_REASON.TAMBUR_CUT && Number(s7[0]!.qty) === 60 && s7[0]!.toWarehouseId === warehouse.id && s7[0]!.workOrderStepId === d.stepId, `kalan=${!!kalan7} satır=${s7.length} sebep=${s7[0]?.reasonCode} qty=${String(s7[0]?.qty)}`);
+    if (kalan7) {
+      await undo.applyUndo(kalan7, undefined, { mode: "SINGLE", reason: "bekçi §7b" });
+      const s7b = await satirlar(kalan7);
+      check("§7b kalan çocuğun geri alınması girişi TAMBUR_UNDO ile BAĞLI tersler, net 0", s7b.length === 2 && net(s7b) === 0 && s7b.some((r) => r.reasonCode === STOCK_MOVE_REASON.TAMBUR_UNDO && r.reversesMovementId === s7[0]?.id), `satır=${s7b.length} net=${net(s7b)}`);
+    }
   } finally {
     await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.rollVariance.deleteMany({ where: { OR: [{ rollId: { in: rollIds } }, { sourceRollId: { in: rollIds } }] } });
