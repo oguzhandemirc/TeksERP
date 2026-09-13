@@ -216,3 +216,22 @@ dosyalarının İÇİNDE yaşıyor ve mandala görünmez. Kör nokta teorik değ
 
 **Savunma:** mandal yazarken taneciği **başlığa** yaz ve kör noktasını **aynı cümlede**
 beyan et; okuyan, yeşilin neyi kapsamadığını kapının kendisinden öğrensin.
+
+### Bir bekçinin KENDİ yeşili, KAPIDAN geçeceğini söylemez — "koştu" ≠ "derlendi"
+`npx tsx scripts/x.ts`in yeşil vermesi, aynı dosyanın tip kapısından geçtiği anlamına
+**gelmez**: koşucu ile tip kapısı FARKLI yapılandırma okur ve koşucu, derleyicinin
+reddettiği bir yazımı çalıştırabilir.
+
+*(Vaka 2026-09-13: yeni bir bekçi `tsx` ile 3/0 yeşil koştu ve üç sondası da iki yönlü
+doğrulandı; commit kapısı `TS1343 — 'import.meta' meta-property is only allowed when
+the 'module' option is …` ile düştü. Kod doğruydu, **yazım o projenin derleyici ayarıyla
+uyumsuzdu**. Kapı 84 saniye sonra, ölçüm bittikten çok sonra konuştu.)*
+
+> **Bir bekçi iki kez bitirilir:** ① kendisi koşar ② o projenin **tip kapısı** onu derler.
+> İkincisi ayrı bir ölçümdür ve komutu `package.json > scripts`ten OKUNUR, uydurulmaz
+> (`TEST-VE-DERLEME-BEKCI.md` [TD-41]).
+
+**Savunma:** yeni bekçiyi sıfırdan değil **KARDEŞ bir bekçinin kalıbından** başlat
+(burada `__dirname`, `scripts/lib/kural-dosyalari.ts`); kalıp, o projenin derleyici
+ayarıyla uyumlu olduğu **zaten ölçülmüş** bir seçimdir — ve kalıptan sapmak sessiz değil,
+kapıda gürültülü bir bedel öder.
