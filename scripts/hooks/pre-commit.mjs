@@ -168,7 +168,9 @@ if (staged.some((f) => /^(Teks-Erp|Electron|mobil)\/src\/.*\.tsx?$/.test(f))) {
 // CI'da ısırıyordu. DB'siz + ≤5 sn + `scripts/`/`docs/standart/`/`docs/kurallar/`ı
 // konu edinen 12 mandal, eşzamanlı 4, yalnız izole ağaçta (ortak ağaçta ⏭ beyanla).
 // Küme, gerekçe ve ölçüm `scripts/hooks/hizli-mandallar.mjs` başlığında.
-if (staged.some((f) => /^(Teks-Erp\/scripts\/|docs\/standart\/|docs\/kurallar\/)/.test(f))) {
+// Dördüncü tetik `Teks-Erp/docs/` (2026-09-14): harita satırı ve "Negatif sonda" hücresi orada;
+// identity_ledger ve harita_sonda_atfi onu okur — yalnız haritaya dokunan commit de mandal görsün.
+if (staged.some((f) => /^(Teks-Erp\/scripts\/|Teks-Erp\/docs\/|docs\/standart\/|docs\/kurallar\/)/.test(f))) {
   adimlar.push({ ad: "hızlı mandallar", cwd: ".", cmd: ["node", ["scripts/hooks/hizli-mandallar.mjs"]] });
 }
 
