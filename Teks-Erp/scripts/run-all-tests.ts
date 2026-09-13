@@ -18,6 +18,7 @@ import "dotenv/config";
 import { spawnSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
+import { dbAdi, defteYaz } from "./lib/siklik-defteri";
 import {
   FABRIKA_HACIM_ESIGI,
   fixtureHedefEngeli,
@@ -268,6 +269,14 @@ async function main() {
   // adı eşleşen test'leri koşar (tek test/alt-küme doğrulaması için).
   const filter = process.argv[2];
 
+  // SIKLIK DEFTERİ bağlamı — bir kez çözülür. Kirli ağaç `+` ile işaretlenir:
+  // aynı sha'nın iki koşumu ayrışıyorsa, ağacın kirli olup olmadığı ④ sorusunun
+  // ("AYNI sha ile ayrışıyor mu") cevabını değiştirir.
+  const shaRes = spawnSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8", cwd: SCRIPTS_DIR });
+  const kirliRes = spawnSync("git", ["status", "--porcelain"], { encoding: "utf8", cwd: SCRIPTS_DIR });
+  const HEAD_SHA = `${(shaRes.stdout ?? "?").trim() || "?"}${(kirliRes.stdout ?? "").trim() ? "+" : ""}`;
+  let sonKosan: string | null = null;
+
   // Geçit SIRASI load-bearing: DB koruması tip kontrolünden ÖNCE ve filtreden
   // BAĞIMSIZ koşar. Tek test koşmak da yazma yapar — tehlike filtreyle azalmaz.
   productionDbGate();
@@ -426,6 +435,24 @@ async function main() {
     const retryNote = retried ? (flaky ? " (2. denemede)" : ` (2 deneme de düştü; 1.: ${firstSummary})`) : "";
     const ilkKirmizi = r.out.split("\n").find((l) => /^\s*(❌|✗)\s/.test(l))?.trim().slice(0, 150);
     results.push({ file, ok: r.ok, summary: r.summary + retryNote, ms, flaky, skipped: r.skipped, ilkKirmizi });
+    // SIKLIK DEFTERİ — yalnız `IZLENEN` kümesindeki bekçi için (bugün tek dosya),
+    // zaten koşmuş bir sonuçtan tek satır: EKSTRA KOŞUM YOK. Karar kuralı ve iki
+    // tasarım gerekçesi `scripts/lib/siklik-defteri.ts` başlığında ve o kural
+    // defterde TEK KAYIT oluşmadan ÖNCE commit edildi.
+    defteYaz({
+      dosya: file,
+      sha: HEAD_SHA,
+      mod: filter ? "tek" : "tam",
+      db: dbAdi(process.env.DATABASE_URL),
+      sonuc: r.ok ? "yesil" : "kirmizi",
+      ozet: r.summary + retryNote,
+      ilk: ilkKirmizi ?? null,
+      onceki: sonKosan,
+      sira: results.length,
+      ms,
+      yeniden: retried,
+    });
+    sonKosan = file;
     const icon = r.ok ? (flaky ? "⚠️" : "✅") : "❌";
     const skipNote = r.skipped > 0 ? ` ⚠️ ${r.skipped} atlandı` : "";
     console.log(

@@ -37,3 +37,6 @@ Teks-Erp/_*.mjs
 # Kaybı telafi edilemez: mühür değişirse her tablette uygulama silinip
 # yeniden kurulur. Yedeği şifresiyle birlikte repo DIŞINDA da tutulmalı.
 /_anahtarlar/
+
+# Sıklık defteri — ARALIKLI bekçi teşhis verisi (yerel; CI kaydı log satırındadır)
+Teks-Erp/siklik-defteri.jsonl
