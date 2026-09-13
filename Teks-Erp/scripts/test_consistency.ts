@@ -82,7 +82,47 @@ interface Section {
    * ortam gürültüsü elenir.
    */
   noise?: { where: string; why: string };
+  /**
+   * MİRAS BÖLÜMÜ — mutlak sayı KALICI ve BEKLENEN, yalnız ARTIŞ kırmızıdır.
+   *
+   * ⚠️ NEDEN BU ŞEKİL VAR (kullanıcı kararı 2026-09-13): *"geçmiş verileri
+   * onarmak veya backfill yapmak mümkün değil; bundan sonraki kayıtlar sağlam
+   * olsun yeter."* ⇒ Bu bölümün saydığı satırlar bir BORÇ değil bir MİRAStır ve
+   * sıfıra inmeyecek. Yüklemi `n === 0` kurmak kalıcı kırmızı üretirdi — ve
+   * kalıcı kırmızı bir kapının ölüm biçimidir (görünmez olur, sonra susturulur).
+   *
+   * ⇒ Yüklem: **"bu sayı tabandan büyük mü"**. Taban ELLE yazılır, tarihi ve
+   * ölçüldüğü DB ile birlikte; büyürse yeni bir kapısız yol açılmış demektir.
+   */
+  miras?: { taban: number | null; tarih: string; nerede: string; not: string };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DEFTER UFKU — "bundan sonraki kayıtlar sağlam olsun"un mekanik karşılığı
+//
+// Kullanıcı kararı 2026-09-13: *"mevcut topların geçmiş verilerini onarmak veya
+// backfill yapmak mümkün değil, bununla uğraşma; bundan sonraki kayıtlar sağlam
+// olsun yeter."* ⇒ Geçmiş bir BORÇ değil bir MİRAStır ve sıfıra inmeyecek.
+//
+// ⚠️ NEDEN SAYI TABANI DEĞİL TARİH UFKU (ölçüldü 2026-09-13): miras kümesi
+// fabrikanın canlı kopyasında **4.160 top** (SHIPPED 1.855 · SUBCONTRACTOR_CONSUMED
+// 1.519 · CANCELLED 366 · TAMBUR_CONSUMED 227 · AT_SUBCONTRACTOR 187 · SCRAP 6).
+// Bu sayı VERİYE bağlıdır: aynı bölüm fixture DB'sinde bambaşka bir sayı verir ⇒
+// sabit bir sayı tabanı her DB'de yanlış olur (lint tavanı KODU ölçtüğü için
+// taşınabilir, bu ölçü veriyi ölçüyor). Tarih ufku DB'den BAĞIMSIZDIR: "ufuktan
+// sonra doğan top" her kurulumda aynı anlama gelir ve beklenen değer **0**'dır.
+//
+// ⚠️ UFUK HENÜZ AÇILMADI: yazar kümesi kapanmadan (K = 0) ufku bugüne koymak,
+// hâlâ kapısız olan yolların ürettiği satırları "yeni kusur" diye raporlardı.
+// K = 0 olduğu gün bu sabit o tarihe çekilir ve bölüm SERT (n === 0) olur.
+// Bugünkü hâli: ufuk `null` ⇒ bölüm yalnız MİRASI sayar ve ADVISORY kalır.
+// İlerleme: `scripts/lib/stok-defteri-bag-olcumu.ts` (K = 6, 2026-09-13).
+// ─────────────────────────────────────────────────────────────────────────────
+const DEFTER_UFKU: string | null = null;
+
+/** Stok kümesi DIŞI statüler — buraya düşen topun defterde ÇIKIŞ ucu olmalıydı. */
+const STOK_DISI_STATULER = `'SHIPPED','AT_SUBCONTRACTOR','AT_KARTELA','SCRAP','CANCELLED',
+                   'SUBCONTRACTOR_CONSUMED','TAMBUR_CONSUMED','KARTELA_CONSUMED'`;
 
 const SECTIONS: Section[] = [
   {
@@ -813,6 +853,35 @@ FROM rolls r
 WHERE r."warehouseId" IS NULL
   AND r.status IN ('STOCK', 'WAREHOUSE', 'A1_STOCK', 'RETURNED_FROM_SUBCONTRACTOR')`,
   },
+  {
+    id: "30",
+    // Mal stok kümesinden ÇIKTI ama defter çıkışı GÖRMEDİ. Yüklem "hangi servis
+    // yazmadı" değil "mal çıktı mı defter gördü mü" diye sorar — KOD YOLUNDAN
+    // BAĞIMSIZ, yani yeni bir kapısız yol açıldığında elle listeye eklenmeyi
+    // BEKLEMEZ. (`BILINEN_KAPISIZ_YOLLAR` elle tutuluyor ve bir kez eksik çıktı:
+    // fason sevki aylarca listede yoktu — 187/187 top çıkışsız.)
+    //
+    // ⚠️ MİRAS, BORÇ DEĞİL: kullanıcı kararı 2026-09-13 geçmiş onarımını kapsam
+    // dışı bıraktı ⇒ bu sayı sıfıra İNMEYECEK. Bölüm bu yüzden ADVISORY ve
+    // yalnız UFUKTAN SONRA doğan topu sert ölçer (yukarıdaki `DEFTER_UFKU`).
+    title: "Stok kümesi DIŞINDA olup defterde ÇIKIŞ ucu olmayan top (defter ufku)",
+    miras: {
+      taban: null, // ufuk açılmadan ARTIŞ ölçülemez (bkz. DEFTER_UFKU) — yalnız sayılır
+      tarih: "2026-09-13",
+      nerede: "fabrika kopyası: 4.160",
+      not: "MİRAS (kullanıcı kararı 2026-09-13: geçmiş onarımı kapsam dışı) — ufuk açılınca sert ölçülür",
+    },
+    sql: `
+SELECT r.id::text AS kayit, r.barcode, r.status::text AS durum,
+       r."currentQty"::text AS metraj, r."createdAt"::text AS dogum
+FROM rolls r
+WHERE r.status IN (${STOK_DISI_STATULER})
+  AND NOT EXISTS (
+    SELECT 1 FROM warehouse_movements w
+     WHERE w."rollId" = r.id
+       AND (w."fromWarehouseId" IS NOT NULL OR w."fromStatus" IS NOT NULL))
+  ${DEFTER_UFKU ? `AND r."createdAt" >= '${DEFTER_UFKU}'` : ""}`,
+  },
 ];
 
 async function driftCount(s: Section): Promise<number> {
@@ -847,6 +916,27 @@ async function main(): Promise<void> {
       continue;
     }
     const suffix = s.noise ? ` [gürültü filtresi: ${s.noise.why}]` : "";
+    if (s.miras) {
+      // MİRAS: mutlak sayı beklenen, ARTIŞ kırmızı. Sayı HER KOŞUMDA basılır —
+      // "0 bulundu çünkü hiç bakılmadı" ile "0 bulundu çünkü temiz" ayrılsın.
+      const artti = s.miras.taban !== null && n > s.miras.taban;
+      const tabanMetni =
+        s.miras.taban === null
+          ? `ufuk AÇILMADI ⇒ artış ölçülmüyor (ölçüm ${s.miras.tarih}, ${s.miras.nerede})`
+          : `taban ${s.miras.taban} (${s.miras.tarih} · ${s.miras.nerede})`;
+      check(
+        `§${s.id} ${s.title}`,
+        !artti,
+        `${n} satır · ${tabanMetni}` +
+          (artti ? ` — ⬆️ ARTTI (+${n - (s.miras.taban as number)}): YENİ kapısız çıkış açılmış` : "") +
+          ` · ${s.miras.not}${suffix}`,
+      );
+      if (artti) {
+        const samples = await driftSamples(s).catch(() => []);
+        for (const line of samples) console.log(`      ↳ ${line}`);
+      }
+      continue;
+    }
     check(`§${s.id} ${s.title}`, n === 0, n === 0 ? `drift yok${suffix}` : `${n} DRIFT SATIRI${suffix}`);
     if (n > 0) {
       const samples = await driftSamples(s).catch(() => []);

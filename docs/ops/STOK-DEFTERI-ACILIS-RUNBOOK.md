@@ -1,4 +1,25 @@
-# Stok defterinin açılışı — onarım RUNBOOK'u (kullanıcı kararı bekliyor)
+# Stok defterinin açılışı — onarım RUNBOOK'u · ⛔ ARŞİV (uygulanmayacak)
+
+> # ⛔ KULLANICI KARARI 2026-09-13: FOTOĞRAF ÇEKİLMEYECEK
+>
+> Kullanıcının kararı (yönetici oturum `teks-erp-1e` üzerinden iletildi):
+> *"Mevcut topların geçmiş verilerini onarmak veya backfill yapmak mümkün değil,
+> bununla uğraşma. **Bundan sonraki kayıtlar sağlam olsun yeter.**"*
+>
+> ⇒ Geçmiş onarımı **kapsam dışı**. Açılış fotoğrafı da bu kararın içindedir:
+> teknik olarak append-only'dir ama **işlevi backfill**'dir — var olan stok için
+> sentetik açılış satırları üretir. **Bu belge UYGULANMAYACAK.**
+>
+> **Neden silinmedi:** reddedilen bir şıkkın gerekçesi yazılmazsa altı ay sonra
+> yeniden önerilir. Aşağıdaki ölçümler (K · 187/187 · epoch tanımı · üç şık · geri
+> alma yolu) kararın **gerekçesini** saklar, bir planı değil.
+>
+> **Bugün geçerli olan tek iş:** depoya yazan yolları defterin İÇİNDEN geçirmek —
+> *"bundan sonraki kayıtlar sağlam olsun"*un mekanik karşılığı. İlerleme `K` ile
+> ölçülür (`scripts/lib/stok-defteri-bag-olcumu.ts`).
+>
+> ⚠️ Geçmişin eksik KALACAĞI artık bir borç değil bir **sınır**:
+> `docs/kurallar/defter.md` 104. satır şerhi.
 
 > **Bu belge bir PLANDIR, koşum değil.** Hiçbir adımı `--apply` ile koşulmadı.
 > **Yeni script YAZILMADI** — mekanizma zaten var (`scripts/acilis_fotografi_stok_defteri.ts`);

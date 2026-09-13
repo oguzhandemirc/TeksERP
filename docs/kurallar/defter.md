@@ -101,7 +101,7 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 
 ## Mevcut defter envanteri (2026-09-13 ölçümü — kapısı `test_defter_ters_yol`)
 
-> ⚠️ **`WarehouseMovement` bir STOK DEFTERİDİR (2026-09-13) ama GEÇMİŞİ EKSİKTİR.** Yazar kümesi kapandı — 10 terfi yolu depo damgalıyor, stok kümesinden çıkan yollar deposuz topu 409 ile durduruyor, ters yollar `reversesMovementId` ile bağlı. **Kapalı KALMASINI ölçen kapı: `test_stok_defteri_bag_olcumu` (K = 0 ∧ V).** ⚠️ *Kapısız bir "tamdır", tarihsiz bir sayıdan farksızdır* — on birinci bir terfi yolu yazılırsa cümleyi o kapı yalanlar, okuyanın güvenmesi gerekmez.
+> ⚠️ **`WarehouseMovement` bir STOK DEFTERİDİR (2026-09-13) ama GEÇMİŞİ EKSİKTİR — ve EKSİK KALACAK (kullanıcı kararı 2026-09-13: *"geçmiş verileri onarmak veya backfill yapmak mümkün değil; bundan sonraki kayıtlar sağlam olsun yeter"*). Açılış fotoğrafı da bu kararın içindedir (işlevi backfill) ⇒ `docs/ops/STOK-DEFTERI-ACILIS-RUNBOOK.md` ARŞİVDİR. Bu cümle artık bir BORÇ değil bir SINIR bildirir: eksik geçmiş onarılmayacak, yalnız bundan sonrası deftere bağlanacak (ilerleme ölçüsü `K`).** Yazar kümesi kapandı — 10 terfi yolu depo damgalıyor, stok kümesinden çıkan yollar deposuz topu 409 ile durduruyor, ters yollar `reversesMovementId` ile bağlı. **Kapalı KALMASINI ölçen kapı: `test_stok_defteri_bag_olcumu` (K = 0 ∧ V).** ⚠️ *Kapısız bir "tamdır", tarihsiz bir sayıdan farksızdır* — on birinci bir terfi yolu yazılırsa cümleyi o kapı yalanlar, okuyanın güvenmesi gerekmez.
 >
 > **Eksik olan GEÇMİŞTİR ve bu bir VERİ olgusudur; yazar düzelterek kapanmaz.** Ölçüm — taban: ağaç `810331bf`, DB `tekserp_fabrika_dev` (fabrikanın canlı yedeği, salt okuma), 2026-09-13:
 >
