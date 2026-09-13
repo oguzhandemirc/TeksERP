@@ -28,6 +28,7 @@ Karar hikâyeleri (tarih, ölçüm, hangi alternatif neden reddedildi) `docs/his
 | [`ELECTRON.md`](ELECTRON.md) | Panel: sayfa kalıbı, servis/şema/kolon dosyaları, izin aynası, boyut |
 | [`MOBIL.md`](MOBIL.md) | Tablet: ekran kalıbı (kabuk + görünüm + hook + saf mantık), offline kuyruk, OTA/APK sınırı |
 | [`KUTUPHANELER.md`](KUTUPHANELER.md) | Katman × ihtiyaç → kütüphane tablosu, yeni bağımlılık karar kaydı, ölü paket teşhisi |
+| [`KUTUPHANELER-TABLO.md`](KUTUPHANELER-TABLO.md) | Kütüphane ENVANTERİ (§2) — katman × ihtiyaç tablosunun kendisi; 2026-09-13'te `KUTUPHANELER.md`'den bölündü, §2 numarası çapalar kopmasın diye korundu |
 | [`ESZAMANLILIK.md`](ESZAMANLILIK.md) | Yarış ve idempotency tutumu (§1), karar tablosu (§2), bekçi yazımı (§4), istemci tarafı (§5), yanlış refleks listesi (§7), beklenen uyarı (§8) |
 | [`ESZAMANLILIK-ENVANTER.md`](ESZAMANLILIK-ENVANTER.md) | Kilit uzayı envanteri (§3) ve bilinen boşluklar (§6) — 2026-09-13'te `ESZAMANLILIK.md`'den bölündü, §3/§6 numaraları çapalar kopmasın diye korundu |
 | [`TEST-VE-DERLEME.md`](TEST-VE-DERLEME.md) | Ne zaman ne koşar, hangi kapı nerede (§1–§3, §6) |
@@ -54,7 +55,7 @@ Her kural tek satır ve şu şablondadır:
 - **[BE-07]** <emir kipi, tek cümle> · zorlama: <etiket> · kanıt: <dosya:satır | ölçüm> [· devralınan: <N (tavan) | yok>]
 ```
 
-`devralınan:` **opsiyoneldir** ve yalnız kuralın SAYILABİLİR bir kod yüzeyi varsa yazılır: `N` ölçülmüş devralınan ihlaldir (mekanik kuralda `lint-baseline.json` tavanı), `yok` ise "ölçüldü, sıfır" beyanıdır. Alanın hiç yazılmaması "sayılacak bir yüzey yok" demektir — katman-üstü ilkeler (`ILKELER.md`) ve kadans kuralları (`TEST-VE-DERLEME.md`) bir dosya kümesini değil bir DAVRANIŞI tarif eder, orada `devralınan: yok` yazmak ölçülmemiş bir sayıyı ölçülmüş gibi gösterirdi. Bugünkü dağılım (ölçüm 2026-09-06): 278 kuralın 218'i alanı taşır; taşımayan 60 kural `ILKELER.md` (28), `TEST-VE-DERLEME.md` (31) ve `VERITABANI.md` (1) içindedir.
+`devralınan:` **opsiyoneldir** ve yalnız kuralın SAYILABİLİR bir kod yüzeyi varsa yazılır: `N` ölçülmüş devralınan ihlaldir (mekanik kuralda `lint-baseline.json` tavanı), `yok` ise "ölçüldü, sıfır" beyanıdır. Alanın hiç yazılmaması "sayılacak bir yüzey yok" demektir — katman-üstü ilkeler (`ILKELER.md`) ve kadans kuralları (`TEST-VE-DERLEME.md`) bir dosya kümesini değil bir DAVRANIŞI tarif eder, orada `devralınan: yok` yazmak ölçülmemiş bir sayıyı ölçülmüş gibi gösterirdi. Bugünkü dağılım (**ölçüm 2026-09-14**): **304 kuralın 222'si** alanı taşır; taşımayan **82**'nin 78'i davranış tarif eden üç dosyadadır (`ILKELER.md` 28 · `TEST-VE-DERLEME-BEKCI.md` 28 · `TEST-VE-DERLEME.md` 22), kalan 4'ü **işaretçi ya da eşik kuralıdır** ve kendi yüzeyi yoktur (`BACKEND-HTTP.md` BE-33/BE-34 alan dosyasına işaret eder · `ELECTRON.md` EL-42 marjı, `VERITABANI-MIGRATION.md` DB-29c eşiği tarif eder). ⚠️ Bu satır bir ölçümdür ve 8 günde bir kez bayatladı (2026-09-06 sayıları 278/218 idi) — tazelemek için: `grep -hE '^- \*\*\[' --exclude=README.md docs/standart/*.md | grep -c 'devralınan:'` ve aynı grep'in `-vc`'si. ⛔ `--exclude=README.md` ŞART: bu dosyanın § Kural biçimi bölümündeki ÖRNEK satır (`[BE-07]` şablonu) kural gibi görünür ve sayıyı 222 yerine 223 gösterir — ölçüldü 2026-09-14, komutu belgeye yazarken yakalandı.
 
 **Zorlama etiketi** kuralın nasıl korunduğunu söyler. Etiketsiz kural yazılmaz:
 
