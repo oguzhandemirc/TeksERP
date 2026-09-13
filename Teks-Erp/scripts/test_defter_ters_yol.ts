@@ -19,7 +19,8 @@
 // iddiadır; burada her satırı yanlışlanabilir bir ölçüm karşılar.
 //
 // ÖLÇÜLENLER
-//   §1 EVREN — her append-only model beyan tablosunda SINIFLANMIŞ mı (iki yönlü)
+//   §1 EVREN — her append-only model beyan tablosunda SINIFLANMIŞ mı (iki yönlü);
+//      §1d beyanda model TEKİL mi (mükerrer satır sessiz sınıf değişimidir)
 //   §2 "yarı" beyanı doğru mu (updatedAt gerçekten var/yok — ölü beyan kırmızı)
 //   §3 Mekanizma ŞEMADA gerçek mi (kolon/enum değeri yeniden adlandırılırsa KIRMIZI)
 //   §4 Ters yazan sembol var mı ve tanımı DIŞINDA referansı var mı (ölü ters yol);
@@ -129,6 +130,19 @@ check("§1b beyandaki her model şemada var (ölü beyan yok)", oluBeyan.length 
 const fazlaBeyan = DEFTER_BEYANI.filter((b) => modelAlanlari.has(b.model) && !evren.has(b.model)).map((b) => b.model);
 check("§1c beyanda evren dışı model yok", fazlaBeyan.length === 0,
   fazlaBeyan.length ? `append-only DEĞİL ve "yarı" da denmemiş: ${fazlaBeyan.join(", ")}` : "");
+
+// §1d — BEYANDA MODEL TEKİL. Kör nokta 01 tarafından ölçüldü (2026-09-13): 3-way
+// apply aynı modeli İKİ KEZ beyana soktu, `new Map(DEFTER_BEYANI.map(...))`
+// sonuncuyu aldı, öncekiler SESSİZ kaldı ve kapı 165/0 YEŞİL verdi. İki satır
+// çelişirse (biri DEFTER biri PIVOT) hangisinin okunduğu DİZİ SIRASINA bağlıdır —
+// sessiz sınıf değişimi. Tekillik beyanın kendisinin bir değişmezidir.
+{
+  const sayim = new Map<string, number>();
+  for (const b of DEFTER_BEYANI) sayim.set(b.model, (sayim.get(b.model) ?? 0) + 1);
+  const mukerrer = [...sayim].filter(([, n]) => n > 1).map(([m, n]) => `${m}×${n}`);
+  check("§1d beyanda her model TEK satır", mukerrer.length === 0,
+    mukerrer.length ? `MÜKERRER: ${mukerrer.join(", ")} — Map sonuncuyu alır, öncekiler SESSİZ; sınıf dizi sırasına bağlı kalır` : `${DEFTER_BEYANI.length} satır, ${sayim.size} model`);
+}
 
 console.log("\n=== §2 \"yarı\" beyanı iki yönlü ===");
 for (const b of DEFTER_BEYANI) {
