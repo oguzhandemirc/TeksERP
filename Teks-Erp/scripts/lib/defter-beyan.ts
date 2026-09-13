@@ -324,12 +324,33 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   PIVOT("ItemAllowedProperty"), PIVOT("ItemAllowedColor"), PIVOT("DevicePeripheral"),
   PIVOT("CustomerStandaloneLabel", "müşteriye bağlı bağımsız etiket tanımı — ayar kümesi (③b)"),
   PIVOT("MachineCollectorLink", "toplayıcı → makine KAPSAM satırı; iki FK de Cascade, Decimal yok, karar/ölçüm taşımaz — 01'in guard muafiyetiyle aynı okuma: \"yapılandırmadır, defter değil\" (③b)"),
+  // ③a TİCARİ pivotların `yazan`/`silen` beyanı, borcun KAPANIŞINI ölçülebilir kılar:
+  // `silen` listesi boşalınca §10 "ÖLÜ SİLME BEYANI" kırmızı verir ve beyan o gün
+  // DEFTER'e çevrilir. Kanıt eskiden bir BELGE CÜMLESİYDİ ("defter.md ③a satırı") —
+  // belge cümlesi ölçüm değildir; "7 site" kapının kendi tarayıcısıyla sayıldı
+  // (2026-09-13): RollProperty 5 + WorkOrderTargetProperty 2, İKİ SINIF — dördü
+  // sil-yaz (replace), üçü ölü topun satırını temizleme (iptal/geri alma/retire).
   { model: "RollProperty", sinif: "PIVOT_TICARI",
     gerekce: "topun özelliği rota kapsamasını belirleyen GERÇEK kısıt, ayar değil (2026-09-11 kararı)",
-    borc: [{ ne: "7 site sil-yazdan versiyonlamaya geçecek", kanit: "docs/kurallar/defter.md ③a satırı (2026-09-11)", sahibi: "rota/renk alanı" }] },
+    yazan: ["src/services/helpers/station-capability-transfer.helper.ts", "src/services/inventory.service.ts",
+      "src/services/subcontractor.service.ts", "src/services/workorder.service.ts", "src/services/tambur.service.ts",
+      "src/services/tambur-undo.service.ts"],
+    silen: ["src/services/inventory.service.ts", "src/services/subcontractor.service.ts", "src/services/workorder.service.ts",
+      "src/services/tambur.service.ts"],
+    borc: [{
+      ne: "5 site fiziksel siliyor — 2 SİL-YAZ (top düzeltme FLAG replace · WO hedef → top FLAG replace) + 3 ÖLÜ TOP TEMİZLİĞİ (fason kabul iptali · fason transfer geri alma · kesimde ebeveyn retire). İkinci sınıf versiyonlama istemez: top zaten CANCELLED/retired, satır kalsa geçmiş kalır — deleteMany kaldırılır. Birinci sınıf versiyon kolonu (validUntil) + okuyucu turu ister",
+      kanit: "kapının tarayıcısı (defterYazimlariniTara, SILEN) 2026-09-13: inventory.service.ts:4531 · subcontractor.service.ts:5436 · :5983 · workorder.service.ts:6009 · tambur.service.ts:1278 — hiçbiri deftere yazmıyor, replace izi yalnız audit'te (inventory F119, tx dışında). Kapanır: `silen` boşalır → §10 ÖLÜ SİLME kırmızı → beyan DEFTER {DAMGA validUntil}",
+      sahibi: "rota/renk alanı",
+    }] },
   { model: "WorkOrderTargetProperty", sinif: "PIVOT_TICARI",
     gerekce: "iş emri hedef özelliği — topun özelliğiyle aynı sınıf (2026-09-11 kararı)",
-    borc: [{ ne: "sil-yazdan versiyonlamaya geçecek", kanit: "docs/kurallar/defter.md ③a satırı (2026-09-11)", sahibi: "rota/renk alanı" }] },
+    yazan: ["src/services/helpers/workorder-clone.helper.ts", "src/services/workorder.service.ts"],
+    silen: ["src/services/workorder.service.ts"],
+    borc: [{
+      ne: "2 site SİL-YAZ (WO güncelleme drop-and-recreate · WO hedef özellik replace); değişim izi deftere yazılmıyor",
+      kanit: "kapının tarayıcısı (SILEN) 2026-09-13: workorder.service.ts:5812 · :5983. Kapanır: `silen` boşalır → §10 ÖLÜ SİLME kırmızı → beyan DEFTER {DAMGA validUntil}",
+      sahibi: "rota/renk alanı",
+    }] },
 
   // ── TELEMETRİ — budanabilir, ama KARAR UFKU beyan edilir ──────────────────
   { model: "TravelerCardScan", sinif: "TELEMETRI",

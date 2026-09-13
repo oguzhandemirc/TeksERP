@@ -100,7 +100,7 @@ Durum tabloları **"şu an ne"**yi tutar; defterler **"ne oldu"**yu tutar ve "ne
 Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, kural satırına dönüşür.
 
 - **`WarehouseMovement` GERÇEK STOK DEFTERİNE dönüşecek.** `warehouseId` atayan HER yol deftere bağlanır — statü terfisi (`STOCK → WAREHOUSE`) dahil; bugün terfi bilinçli olarak satır yazmıyor ve defter yalnız dışarıdan gelen malı görüyor. Hedef: Σhareket ↔ canlı stok mutabakatı ve as-of kesit. Ön koşulun İKİ YARISI DA KAPANDI: elle "iptali geri al" 2026-09-12'den beri ters kayıt yazıyor (`restoreCancelledRoll` → `reverseLatestScopedStockMove`, bekçi `test_stock_ledger_cancel_restore`) ve iade ters yolu 2026-09-13'te indi (`cancelReturn` → `RETURN_CANCEL`, bağlı). ⚠️ Bu maddenin KENDİSİNİN kapandığı ayrı bir ölçümdür (terfi yollarının deftere bağlanması) ve bu satırı yazan oturumun işi değildir — aşağıdaki 2026-09-11 şerhi de o ölçümle birlikte tazelenir.
-- **`RollProperty` / `WorkOrderTargetProperty` ③a'dır** (yukarı bak) — 7 site sil-yazdan versiyonlamaya geçecek.
+- **`RollProperty` / `WorkOrderTargetProperty` ③a'dır** (yukarı bak) — 7 silme sitesi (5 + 2, kapının tarayıcısıyla sayıldı 2026-09-13) İKİ SINIF: 4'ü sil-yaz (versiyon kolonu + okuyucu turu ister), 3'ü ölü topun satır temizliği (fason kabul iptali · fason transfer geri alma · kesimde ebeveyn retire — deleteMany kaldırılır, versiyon istemez). Kapanır: beyandaki `silen` listesi boşalır → `test_defter_ters_yol` §10 ÖLÜ SİLME kırmızı → beyan DEFTER {DAMGA validUntil}. · bekçi: `test_defter_ters_yol.ts` §5/§10
 
 ## Mevcut defter envanteri (2026-09-13 ölçümü — kapısı `test_defter_ters_yol`)
 
