@@ -62,4 +62,22 @@ Mobil kırmızısı da listede değil ve gerçek: `mobil/src/test/update-feed-ur
 
 ⚠️ İki ölçüm daha aynı koşumdan çıktı: paket CI'da **871 sn** sürüyor (yerelde ölçülen ~390 sn'nin iki katından fazla — farkın kendisi ayrı bir ölçüm kalemidir), ve koşucu **3 dosyada 5 atlanan kontrol** bildirdi. Atlama sayısı koşmayan yüklem sayısı DEĞİL, bir alt sınırdır (`OLCUM-DISIPLINI-CIKARIM.md` § "Atlanan" sayısı).
 
-**Listeye satır eklerken:** bekçi · bölüm · sebep (ölçümle) · **kim kapatabilir** · kapanış koşulu. Beşi eksiksiz değilse satır yazılmaz.
+### İki kırmızı sınıfı: BİLEREK ↔ KUYRUK
+
+Bu listedeki her satır ikisinden biridir ve **ayrımı karıştırmak pahalıdır**:
+
+| | **BİLEREK** | **KUYRUK** |
+|---|---|---|
+| Neyin sonucu | bir **KARARIN** | bir **SIRANIN** |
+| Kapanması için | karar DEĞİŞMELİ | beklemek YETER |
+| Tarihi var mı | yok — karar sürdükçe sürer | **VAR**, ve tarih geçince anlamı değişir |
+| Satır ne taşır | kararı ve sahibini | **beklenen kapanma ölçüsünü** |
+
+*(1e/d9)* Bir KUYRUK satırı tarihini geçirirse artık kuyruk değildir: ya karar olmuştur
+(bilerek), ya da unutulmuştur — ikisi de yeniden hüküm ister.
+
+> **Bayat KIRMIZI, bayat yeşilden pahalıdır** (`OLCUM-DISIPLINI.md` § Kırmızıyı
+> sınıflandırma): bayat kırmızı **var olmayan bir işi kuyruğa koyar** ve bir oturumu
+> ona bağlar. Bu listenin var olma sebebi tam olarak budur.
+
+**Listeye satır eklerken:** bekçi · bölüm · sebep (ölçümle) · **kim kapatabilir** · kapanış koşulu · **sınıf (BİLEREK / KUYRUK)** ve kuyruksa **tarih**. Altısı eksiksiz değilse satır yazılmaz.

@@ -127,7 +127,35 @@ yukarıdaki madde bu turdan ÖNCE de yazılıydı.
 Ayırt etme yöntemi: *cümleyi bugün okuyan biri ondan ne çıkarır — "o gün böyleydi"
 mi, "bugün böyle" mi?*
 
+- **Bir sayı, alındığı KAPSAM ve AN'la birlikte taşınır.** Bir mandal/tavan bir ANın
+  fotoğrafıdır; ölçüm tabanı **beyan edilir**. *(1e/ea)*
+  ⚠️ **Ve taban yalnız COMMIT değildir: ağaç + VERİTABANI birlikte beyan edilir** —
+  aynı commit'te farklı DB'de ölçmek farklı sayı verir. *(6e, yanlış DB'de ölçüp
+  kendi yakaladı.)*
+- **Bir boşluk sayısı, boşluk BÜYÜYORSA bir ölçüm değil bir ZAMAN DAMGASIDIR.** *(6e:
+  defter boşluğu günde ~100 top büyüyordu — "şu kadar eksik" cümlesi ertesi gün yanlış.)*
+  Büyüyen bir boşluk sayı ile değil, **hız ve tarih** ile yazılır.
+
 > **Var olmayan bir sayı bayatlayamaz.**
+
+## Mandal (tavan) yazma
+
+Bir mandal — `devralınan: N`, `lint-baseline.json`, herhangi bir "yalnız düşer" sayısı —
+iki kuralla hareket eder:
+
+> **Mandal yalnız SIKILAŞTIRAN yönde ve yalnız AZ ÖNCE ÖLÇÜLEN değere hareket eder.**
+
+**Yükseltmek ihlali ONAYLAMAK, düşürmek kazanımı KİLİTLEMEKTİR** — ve düşürme
+**düzeltmeyle AYNI commit'te** olur, yoksa kazanım bir sonraki eklemede sessizce geri
+verilir. *(1e)*
+
+## "Kapalıdır" diyen cümle kapıyı adıyla taşır
+
+> **Bir belgede *"tamdır / kapalıdır / artık olmuyor"* diyen her cümle, onu kapalı
+> tutan KAPIYI adıyla taşır; taşımıyorsa cümle bir ÖLÇÜM değil bir ANIDIR.** *(1e)*
+
+Kapısı yazılmayan bir "kapandı" cümlesi, yazıldığı gün doğrudur ve ertesi gün
+yanlışlanamaz hâle gelir.
 
 ## Kimlik yazma — repo PUBLIC
 
@@ -202,6 +230,13 @@ Dördüncüsü düzeltilecek bir şey değildir; "gerekçesi ölçülmüş atlam
 başka bir ortamda ölçülebilir; ikisini ayırmadan verilen hüküm ya gerçek bir kusuru
 gizler ya çalışan bir kapıyı gevşetir.
 
+⚠️ **`ARALIKLI` (flaky) bir teşhis DEĞİL, sebebi BULAMAYINCA varılan sınıftır.**
+Aramadan varılırsa teşhis değil, **teşhisi erteleyen bir etikettir**. *(1e, kendi
+hükmünü daraltarak.)*
+
+> **Bayat KIRMIZI, bayat yeşilden PAHALIDIR.** Bayat yeşil yanlış güven verir; bayat
+> kırmızı **var olmayan bir işi kuyruğa koyar** ve bir oturumu ona bağlar. *(d9)*
+
 ### ⑧ Uzaktaki kapı, ürünle ilgisiz bir sebeple HİÇ açılmayabilir
 
 Faturalandırma · kota · izin — uzak koşucu işi **başlatmaz**, ama koşum **KIRMIZI
@@ -234,3 +269,28 @@ jest)` KIRMIZI verdi. Ölü kapının gizlediği kusurlar, kapı açıldığı g
 tasarımın 'arka durağı var' cümlesi de bir İDDİADIR"* kuralının en pahalı örneği: aynı
 hafta `.githooks/`te `pre-push` olmadığı ölçülmüştü — **aynı iddia bir kat yukarıda da
 yanlışmış.** Arka durak varsayımı iki katmanda birden çürüdü.
+
+## Ölçüm bir KARARI değiştirebiliyor mu
+
+> **Ölçüm ile eylem AYNI atomik adımdaysa, ölçüm kararı değiştiremez — yalnız kayda
+> geçer.** Kendisinden sonra geleni durduramayan bir kapı, kapı değil **GÜNLÜKTÜR**.
+> *(6e)*
+
+**Ve ölçümün VARLIĞI, ölçümün işe yaradığının kanıtı değildir** *(6e)*: yanlış DB ·
+yanlış mekanizma · yanlış zamanlama — üçü de *"ölçüm yapıldı"* satırını sorunsuz geçer.
+Sorulacak şey *"ölçtüm mü"* değil, ***"bu ölçüm yanlış bir dünyada FARKLI çıkar mıydı"***.
+
+## Hangi hipotez ölçülür
+
+> **Bir hipotezin değeri DOĞRU ÇIKMASIYLA değil, ölçülmesinin UCUZ ve sonucunun AYIRT
+> EDİCİ olmasıyla ölçülür.** *(1e)*
+
+Çürüyen ucuz bir hipotez, ölçülmemiş doğru bir sezgiden iyidir — ve çürürken çoğu kez
+aranmayan bir şey bulur.
+
+## Bir turda ne taşınır
+
+> **Bir turda taşınan her commit ya bir SORU sorar ya bir ÖLÇÜM ARACI taşır.** *(1e)*
+
+Dışarıda tutulacak olan, **ölçüm aracının KALİBRASYONUNU** değiştirendir: aracı turun
+ortasında ayarlamak, turun başındaki ölçümlerle sonundakileri karşılaştırılamaz kılar.

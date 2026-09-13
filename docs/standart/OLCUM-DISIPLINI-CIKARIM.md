@@ -168,6 +168,23 @@ sınıfı değişir**.)*
 *(İkinci vaka: yan yana duran iki ön kayıt — ikisi de tutmadı; tutmaması da bir
 bulguydu ve ancak ÖNCE yazıldıkları için bulguydu.)*
 
+### Bir dosyanın TOPLAMINDAKİ fark, bir SİTEYE ancak tek dal varsa atfedilir
+İki koşum arasında bir dosyanın toplamı değiştiyse, bunu belirli bir satıra
+bağlayabilmen için o dosyada **veriye bağlı TEK bir dal** olması gerekir. Birden çok
+dal varsa fark hangisinden geldi, bilinmiyor. *(d5)*
+**Savunma:** atıf kurmadan önce dalları say; sayamıyorsan farkı dosyaya ata, satıra değil.
+
+### Bir kusurun ADI, kusurun YERİ değildir
+Kendi verdiğin sınıf adı iki adım sonra **senin için kanıta dönüşüyor**: adı koyan
+sensin, ama sonra ona sanki bağımsız bir ölçümmüş gibi dayanıyorsun. *(ea)*
+**Savunma:** sınıf adını kanıt olarak kullanma — ada değil, adı doğuran ÖLÇÜME dön.
+Kardeşi § "Bu benim değil" bir ÖLÇÜM olmalı.
+
+### Beyan, kapsamın YERİNE GEÇMEZ
+`atla()` bir boşluğu **GÖRÜNÜR** kılar, **KAPATMAZ**. Beyan edilmiş bir atlama dürüsttür
+ama kapsam değildir; "beyan ettim" ile "ölçtüm" aynı cümle değil. *(1e)*
+Kardeşleri § "Atlanan" sayısı bir ALT SINIRDIR ve § Bir atlama, komşusunu da götürürse.
+
 ### İki operasyonel kural
 
 - **Paket içinde kırmızı + tek başına yeşil ⇒ kusur kodda değil, koşumun DURUMUNDA.**

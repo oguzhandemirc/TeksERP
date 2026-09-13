@@ -137,8 +137,14 @@ uyarı 5/5 deterministik çıktı — olgu hiç seyrek değilmiş.)*
 çıktı, tek sebep aracın varsayılan sonuç sınırıydı.
 > **İki bağımsız vaka, tek kural: aracın varsayılan SINIRI, bulgunun sınırı sanılır.**
 
-**Savunma:** sınırı olan her araçta (yığın derinliği, sonuç tavanı, `head`, `grep -m`,
-ajan çıktı kırpması) sınırı ÖNCE kaldır, sonra ölç.
+**(c) Bir aracın SESSİZLİĞİ bir veri değildir.**
+Araç bir satırı basmıyorsa bu *"o şey yok"* demek değil, **aracın bastırma
+politikası** demektir — ve o politika ölçülebilir. *(d5: koşucu, geçen dosyayı hiç
+basmıyordu; "listede yok" ⇒ "koşmadı" sanıldı.)*
+
+**Savunma:** sınırı ve sessizliği olan her araçta (yığın derinliği, sonuç tavanı,
+`head`, `grep -m`, ajan çıktı kırpması, "yalnız hataları bas" modu) **politikayı ÖNCE
+oku**, sonra ölç.
 
 ### Ölçümün KURULUM adımı da ölçülen sistemin içindedir
 *"Önce generate, önce build, önce migrate"* bir hazırlık **REFLEKSİDİR** — ölçüm değil
@@ -322,6 +328,35 @@ diye soran bir kontrol, tablo boşalınca sessiz yeşil vermek yerine kırmızı
 ⚠️ Ve düzeltirken **ikinci** bir kör nokta çıktı: aynı bekçinin bölüm regex'i son alt
 bölümü hiç yakalamıyordu (ardında başlık yoktu), yani **belge DÜZENİNE bağımlıydı** ve
 bunu kimse bilmiyordu. *Bir kusuru düzeltmek, komşusunu görünür kılar.*
+
+### Bir düzeltmenin sonucu, DÜZELTİLEN KÜMEYE bakarak ölçülemez
+Düzelttiğin kümeye bakmak yalnız *"gitti mi"*yi söyler; *"yerine yenisi geldi mi"*yi
+söylemez. **İki fark birden alınır: `eski \ yeni` VE `yeni \ eski`.** *(ea)*
+**Savunma:** tek yönlü fark bir düzeltmeyi asla doğrulamaz — düzeltme yeni site
+üretebilir ve o siteler ilk kümede yoktur.
+
+### Bir ortamı TARİF etmek, onu ARAMAK değildir
+Bir ortam şartı yazdığın an ikinci soru ZORUNLUDUR: *"bu şartı bugün sağlayan bir hat
+var mı?"* Tarif, varlığın kanıtı değildir. *(d5)*
+
+### Bir örneklem yanlılığının VARLIĞINI bilmek, YÖNÜNÜ bilmek değildir
+*"Bu örneklem yanlı"* demek, sonucun hangi tarafa kaydığını söylemez — düzeltme yönü
+ayrıca ölçülür. *(ea; alfabetik dilimden alınan örneklem)*
+
+### Bir kümeyi YAZARININ İZİNDEN bölersen, ölçtüğün şey yazardır
+Kümeyi içeriğine göre değil, yazarın bıraktığı ize (yorum biçimi, ad kalıbı, dosya
+düzeni) göre bölersen sonuç içerik hakkında değil **yazar hakkında** çıkar. *(ea)*
+
+### Araç VAR ile araç UYUMLU ayrı iki şeydir
+Aracın kurulu olması, ölçtüğün sistemle **aynı sürüm hattında** olduğunu söylemez.
+*(d9: `pg_dump` 18.6 ↔ sunucu 16.15 — araç vardı, uyumlu değildi.)*
+**Savunma:** sürüm bağımlı araçta iki sürümü de yaz.
+
+### Pencerenin BOŞ olduğunu ölçmek, DOĞRU AĞAÇTA olduğunu ölçmek değildir
+`git worktree` **dosya** izolasyonu verir, **ref** izolasyonu VERMEZ: aynı `.git`,
+aynı dallar. *(1e/6e)* Kardeşi § Paylaşılan `node_modules` üstünde worktree.
+**Savunma:** commit öncesi dalı ve hedefi AYRI adımda oku
+(`git rev-parse --abbrev-ref HEAD` · `git rev-parse HEAD main`), sonra commit et.
 
 ## KATMAN 2 · Ölçümden sonraki adım → ayrı dosya
 
