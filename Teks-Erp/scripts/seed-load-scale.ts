@@ -6,7 +6,7 @@
 // hot sorguları gerçek hacme karşı EXPLAIN'le ölçebilsin.
 //
 // ⚠️ SADECE teks_loadtest DB'sinde çalıştır:
-//   export DATABASE_URL="postgresql://oad@localhost:5432/teks_loadtest?schema=public"
+//   export DATABASE_URL="postgresql://<kullanıcı>@localhost:5432/teks_loadtest?schema=public"
 //   export JWT_SECRET="ci-test-secret-not-for-production"; export TZ=UTC
 //   npx prisma migrate deploy && npm run seed   # önce master data
 //   ORDERS_PER_DAY=50 DAYS=365 npx tsx scripts/seed-load-scale.ts

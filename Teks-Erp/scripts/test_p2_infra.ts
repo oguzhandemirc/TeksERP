@@ -1,7 +1,7 @@
 // =============================================================================
 // P2 infra bucket testi — F20 (atomik login rezervasyonu) + F29 (boot guard)
 // =============================================================================
-// Koşum:  DATABASE_URL="postgresql://oad@localhost:5432/adnansahin_p2_test?schema=public" \
+// Koşum:  DATABASE_URL="postgresql://<kullanıcı>@localhost:5432/<müşteri>_p2_test?schema=public" \
 //         npx tsx scripts/test_p2_infra.ts
 // HTTP yok; modül + prisma doğrudan import. Kendi ayar satırlarını yaratır+temizler.
 // =============================================================================

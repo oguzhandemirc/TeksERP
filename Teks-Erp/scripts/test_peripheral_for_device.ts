@@ -49,7 +49,7 @@ async function upsertMeter(code: string, name: string, machineId: string, role: 
  *
  * ⚠️ DB ÖN KOŞULUNDAN ÖNCE ÇAĞRILIR ve bu SIRA ÖLÇÜLDÜ: `main()` seed'siz DB'de
  * "makine yok" diyip `exit(0)` veriyor, yani arkada kalan her kontrol SESSİZCE
- * atlanıyor ve bekçi YEŞİL görünüyordu (ölçüldü: `tekserp_fabrika_dev`te sonuç
+ * atlanıyor ve bekçi YEŞİL görünüyordu (ölçüldü: fabrikanın canlı yedeğinde, sonuç
  * satırı hiç basılmadı). DB'ye ihtiyacı olmayan sonda, DB ön koşuluna bağlanmaz.
  */
 function unitToleransSondasi(): void {

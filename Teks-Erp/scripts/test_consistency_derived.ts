@@ -31,7 +31,7 @@
 //
 // Koşum:
 //   npx tsx scripts/test_consistency_derived.ts
-//   DATABASE_URL="postgresql://oad@localhost:5432/tekserp_saha?schema=public" \
+//   DATABASE_URL="postgresql://<kullanıcı>@localhost:5432/<saha-veritabanı>?schema=public" \
 //     npx tsx scripts/test_consistency_derived.ts
 //   npx tsx scripts/test_consistency_derived.ts --probe    # negatif sondalar (aşağı)
 // =============================================================================

@@ -134,9 +134,9 @@ function migrationGate(): boolean {
  * bakıyor); konvansiyon bir sed değildir.
  *
  * KURAL: yalnız YEREL host'a izin verilir. Gerekçe ölçümle seçildi —
- *   • dev  : postgresql://…@localhost:55433/tekserp_fabrika_dev (FABRİKANIN YEDEĞİ)
- *   • CI   : postgresql://…@localhost:5432/teks_ci   (.github/workflows/ci.yml)
- *   • saha : 192.168.1.250 / SAHINSRV                (docs/ops/DEPLOY-RUNBOOK.md)
+ *   • dev  : yerel port, fabrikanın canlı YEDEĞİNİ taşıyan veritabanı
+ *   • CI   : yerel port, CI'ın kendi veritabanı  (.github/workflows/ci.yml)
+ *   • saha : fabrika sunucusu — sabit LAN IP + makine adı (docs/ops/DEPLOY-RUNBOOK.md)
  * ⚠️ HOST AYAĞI TEK BAŞINA YETMEZ ve bu cümle 2026-09-12'de düzeltildi: dev
  * hedefi artık fabrikanın canlı yedeği ve O DA localhost'ta. Bu yüzden ad ayağı
  * (`_test` ya da kabul kümesindeki `teks_ci`) ve hacim ayağı eklendi; CI ADIYLA

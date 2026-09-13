@@ -14,7 +14,7 @@
 //     yapısal olarak imkânsız; en kötü ihtimal "hızlanma yok".
 //
 // ⚠️ SADECE teks_loadtest:
-//   export DATABASE_URL="postgresql://oad@localhost:5432/teks_loadtest?schema=public"
+//   export DATABASE_URL="postgresql://<kullanıcı>@localhost:5432/teks_loadtest?schema=public"
 //   export JWT_SECRET="ci-test-secret-not-for-production"; export TZ=UTC
 //   npx tsx scripts/bench_audit_summary.ts
 //

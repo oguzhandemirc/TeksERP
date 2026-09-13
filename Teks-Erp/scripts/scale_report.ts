@@ -10,7 +10,7 @@
 //   - MAX_OFFSET=10000 guard hâlâ 400 veriyor mu (1 test).
 //
 // ⚠️ SADECE teks_loadtest:
-//   export DATABASE_URL="postgresql://oad@localhost:5432/teks_loadtest?schema=public"
+//   export DATABASE_URL="postgresql://<kullanıcı>@localhost:5432/teks_loadtest?schema=public"
 //   export JWT_SECRET="ci-test-secret-not-for-production"; export TZ=UTC
 //   npx tsx scripts/scale_report.ts
 //

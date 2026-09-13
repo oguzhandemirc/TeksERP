@@ -11,7 +11,7 @@
 // edilmiş bir sözleşme kurulur; kapı sonra UYUMU ölçer.
 //
 // ⚠️ "DB'de yok" BİR BULGU DEĞİLDİR ve oran şaşırtıcı: ÖLÇÜLDÜ 2026-09-13 —
-// `tekserp_fabrika_dev` 16, `tekserp_demo` 12 farklı ad yazmış, BİRLEŞİM 18 ⇒
+// fabrikanın canlı yedeği 16, demo veritabanı 12 farklı ad yazmış, BİRLEŞİM 18 ⇒
 // aşağıdaki 52 adın **34'ü hiç yazılmamış** ve hepsi meşru kod yolu
 // (`AUDIT_ARCHIVE` 6 ayda bir · `UNCAUGHT_EXCEPTION` felaket yolu · `DB_COPY_*`
 // elle tetiklenen tur · `SETTINGS_PASSWORD_*` fabrika kapıyı hiç kurmadı).

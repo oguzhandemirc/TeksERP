@@ -6,7 +6,7 @@
 // OrderStatus) assert eder. Sunucu yok — service sınıfları + prisma doğrudan.
 //
 // Çalıştırma:
-//   export DATABASE_URL="postgresql://oad@localhost:5432/teks_ci_utc?schema=public"
+//   export DATABASE_URL="postgresql://<kullanıcı>@localhost:5432/teks_ci_utc?schema=public"
 //   export JWT_SECRET="ci-test-secret-not-for-production"
 //   export TZ=UTC
 //   npx tsx scripts/test_e2e_full_flow.ts

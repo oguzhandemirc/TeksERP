@@ -38,7 +38,7 @@
 //   ATLANAN 0 m (ileri satır 0 metraj — kapı 0'ı yazmaz; tek satır tüm tx'i düşürmesin).
 //   İkinci kanıt (bilgi): `finalizedAt` — doğuşta WAREHOUSE ise trigger doğum anında damgalar;
 //   IN_PRODUCTION doğan topta NULL ya da doğumdan sonradır. Dökümde her satıra basılır.
-//   Ölçüm (tekserp_fabrika_dev, 2026-09-12): 69 aday, 12'si TST- test artığı → gerçek 57 / 32.044 m.
+//   Ölçüm (fabrikanın canlı yedeğinde, 2026-09-12): 69 aday, 12'si TST- test artığı → gerçek 57 / 32.044 m.
 //
 // TERS KAYIT BİÇİMİ: tek yazma kapısından (`postStockMove`) — `reverseStockMove`
 //   kullanılmaz çünkü tarihsel satırlarda fromStatus/toStatus NULL'dur ve o helper
