@@ -12,14 +12,80 @@ import { Router } from "express";
 import { z } from "zod";
 import { MachineDataSource } from "@prisma/client";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { requireDokumaEnabled } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
+import { AppError } from "../utils/app-error";
 import { openDoff, revokeDoff } from "../services/machine-doff.service";
+import { listDoffsForDay, listUnlinkedDoffs, UNLINKED_MAX_DAYS } from "../services/loom-list.service";
 
 const router = Router();
 
 router.use(verifyToken, requireDokumaEnabled);
+
+// OKUMA uçları: tezgah ekranı (tablet, `mobile:dokuma`) ve KK1'in seçim listesi.
+// Yazma izni olan (loom:doff) da okur; ayrı bir `loom:read` kodu AÇILMADI —
+// listeler yazma yüzeyinin yüzüdür, tek başına verilen bir yetki değil.
+const MOBILE_DOKUMA = ["mobile:dokuma"] as const;
+
+const listSchema = z
+  .object({
+    machineId: z.string().uuid("Geçersiz makine").optional(),
+    /** Fabrika günü (YYYY-MM-DD); verilmezse bugün. Yalnız `machineId` ile anlamlı. */
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Tarih YYYY-MM-DD olmalı").optional(),
+    /** `true` → hiç top doğurmamış, geri alınmamış indirmeler (KK1 seçim listesi); makine opsiyonel. */
+    unlinked: z.enum(["true", "false"]).optional(),
+    sinceDays: z.coerce.number().int().min(1).max(UNLINKED_MAX_DAYS).optional(),
+  })
+  .strict();
+
+/**
+ * @openapi
+ * /api/machine-doffs:
+ *   get:
+ *     tags: [MachineDoffs]
+ *     summary: İndirme listesi — günün indirmeleri (makine + fabrika günü) ya da BAĞLANMAMIŞ indirmeler
+ *     description: >
+ *       `unlinked=true`: hiç top doğurmamış ve geri alınmamış indirmeler, son `sinceDays` fabrika
+ *       günü (varsayılan 3, tavan 30); `machineId` opsiyonel — masa KK1 her tezgahın indirmesini
+ *       görür (bağ açık liste seçimidir). Aksi hâlde `machineId` ZORUNLU ve liste o makinenin
+ *       `date` (varsayılan bugün) fabrika günündeki indirmeleridir; geri alınmışlar kapsam dışı.
+ *       Liste 200'de kırpılır, `meta.total` kırpılmaz (`meta.truncated`).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: machineId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: date
+ *         schema: { type: string, example: "2026-09-14" }
+ *       - in: query
+ *         name: unlinked
+ *         schema: { type: string, enum: ["true", "false"] }
+ *       - in: query
+ *         name: sinceDays
+ *         schema: { type: integer, minimum: 1, maximum: 30 }
+ *     responses:
+ *       200: { description: Liste + meta (total · truncated · pencere) }
+ *       400: { description: machineId eksik (günün listesi) ya da parametre hatası }
+ *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ *       404: { description: Makine yok }
+ */
+router.get("/", requireAnyPermission("loom:run", "loom:doff", ...MOBILE_DOKUMA), async (req, res, next) => {
+  try {
+    const q = listSchema.parse(req.query);
+    if (q.unlinked === "true") {
+      res.json(await listUnlinkedDoffs({ machineId: q.machineId ?? null, sinceDays: q.sinceDays ?? null }));
+      return;
+    }
+    if (!q.machineId) {
+      throw AppError.badRequest("Günün indirme listesi için machineId zorunlu (bağlanmamışlar için unlinked=true).", { code: "MACHINE_ID_REQUIRED" });
+    }
+    res.json(await listDoffsForDay({ machineId: q.machineId, date: q.date ?? null }));
+  } catch (e) {
+    next(e);
+  }
+});
 
 const openSchema = z
   .object({

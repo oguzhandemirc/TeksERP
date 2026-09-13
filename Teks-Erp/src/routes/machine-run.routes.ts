@@ -14,14 +14,60 @@
 import { Router } from "express";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { requireDokumaEnabled } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { closeMachineRun, openMachineRun, revokeMachineRun } from "../services/machine-run.service";
+import { listOpenMachineRuns } from "../services/loom-list.service";
 
 const router = Router();
 
 router.use(verifyToken, requireDokumaEnabled);
+
+// OKUMA ucu: tezgah ekranı (tablet `mobile:dokuma`) + yazma izni olanlar; ayrı `loom:read` YOK.
+const MOBILE_DOKUMA = ["mobile:dokuma"] as const;
+
+const openListSchema = z
+  .object({
+    machineId: z.string().uuid("Geçersiz makine"),
+    /** Yalnız `open=true` desteklenir — kapalı/geri alınmış koşum listesi rapor dilimidir (d9). */
+    open: z.literal("true", { message: "Yalnız open=true desteklenir" }),
+  })
+  .strict();
+
+/**
+ * @openapi
+ * /api/machine-runs:
+ *   get:
+ *     tags: [MachineRuns]
+ *     summary: Makinenin AÇIK koşumları (hat sırasıyla)
+ *     description: >
+ *       `endedAt IS NULL ∧ revokedAt IS NULL`; hat başına en çok bir (sed). Yalnız `open=true` —
+ *       geçmiş koşumlar rapor dilimidir. `meta.total` kırpılmaz.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: machineId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: open
+ *         required: true
+ *         schema: { type: string, enum: ["true"] }
+ *     responses:
+ *       200: { description: Açık koşum listesi + meta }
+ *       400: { description: Parametre hatası }
+ *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ *       404: { description: Makine yok }
+ */
+router.get("/", requireAnyPermission("loom:run", "loom:doff", ...MOBILE_DOKUMA), async (req, res, next) => {
+  try {
+    const q = openListSchema.parse(req.query);
+    res.json(await listOpenMachineRuns(q.machineId));
+  } catch (e) {
+    next(e);
+  }
+});
 
 const openSchema = z
   .object({

@@ -882,7 +882,7 @@ UPDATE doff_events SET "revokedAt" = now(), "revokedById" = :u, "revokeReason" =
 #### J · HÜKÜMLER (1e, 2026-09-14) — hepsi verildi
 
 1. **KK1 makine damgası ↔ doff makinesi → (a):** bağ KK1'de açık LİSTE seçimi; makine eşleşmesi yalnız KK1 cihazı bir tezgaha bağlıysa denetlenir; masa KK1'de bağ KABUL; "makinesiz KK1'de 400" kararı GEÇERSİZ (hiç geçemeyen kontrol ölü kapıdır). Kod + `dokuma.md` kural satırı + arşiv notu **01**.
-2. **Liste uçları → 01 backend**, "Backend ÖNCE" (makine başına GET: açık koşumlar · bugünkü indirmeler · bağlanmamış indirmeler); ilk dilim yerel durumla YAPILMAZ.
+2. **Liste uçları → 01 backend**, "Backend ÖNCE" (makine başına GET: açık koşumlar · bugünkü indirmeler · bağlanmamış indirmeler); ilk dilim yerel durumla YAPILMAZ. **✅ İNDİ (01, 2026-09-14):** `GET /api/machine-runs?machineId&open=true` · `GET /api/machine-doffs?machineId[&date]` · `GET /api/machine-doffs?unlinked=true[&machineId][&sinceDays]` — `loom-list.service.ts`, `requireAnyPermission(loom:run · loom:doff · mobile:dokuma)`, süzme sunucuda, `meta.total/truncated`; bekçi `test_loom_lists` 11/0.
 3. **Revoke izni → EVET**, ayrı yetenek `mobile:dokuma-geri-al` (geri alma ayrı yetkidir, `undo-dispatch` emsali).
 4. **`StationKind.WEAVING` → 01** şema penceresi; tezgah rota şablonuna GİREMEZ kapısıyla; 6e'nin K2 penceresi ondan sonra.
 5. **§3.6 kuyruk cümlesi → DÖRT eylem için GEÇERSİZ** (`kk1.md`: kuyruk kalktı, anlık toast); §3.6'ya şerh işlendi.
