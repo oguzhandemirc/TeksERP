@@ -67,20 +67,15 @@ Bir yüklem yanlış olmadan **sınırsız** olabilir: aradığını bulur, ama 
 bulur. Üç biçim ölçüldü: *kelime sınırı yok* · *bağlam sınırı yok* · *boş küme her şeye
 uyar*. Panzehir aynı: sınırı BEYAN et (boşluk/`\b`, alanı daralt, boş kümeyi ayrı ele al).
 
-| # | vaka (2026-09-13) | gevşeklik | sonuç |
+| # | vaka | gevşeklik | sonuç |
 |---|---|---|---|
-| a | `grep _shipped` | alt dizgi | 6 eşleşme, gerçek **3** — fazlalık bir *constraint adı* + bir *emsal yorumu* |
-| b | `lib/<ad>` metni arandı | ad ≠ bağ | 26 ↔ gerçek **25**; fark bir YORUM satırıydı (§ Bir adın geçmesi bir BAĞIMLILIK değildir) |
-| c | **`!m.includes("9-KAT")`** | alt dizgi | **kurbanı KENDİ fikstürü** — aşağıda |
+| a | `grep _shipped` *(2026-09-13)* | alt dizgi | 6 eşleşme, gerçek **3** — fazlalık bir *constraint adı* + bir *emsal yorumu* |
+| b | `lib/<ad>` metni arandı *(2026-09-13)* | ad ≠ bağ | 26 ↔ gerçek **25**; fark bir YORUM satırıydı (§ Bir adın geçmesi bir BAĞIMLILIK değildir) |
+| c | **`!m.includes("9-KAT")`** | alt dizgi | **kurbanı KENDİ fikstürü** — vaka dosyasında |
 
-⭐ **(c) ailenin en pahalı biçimi, çünkü kurban bekçinin KENDİ ürettiği değer.**
-*(d9, ölçüldü: sonda değeri `TEST-KAT-${Date.now()}-KAT`. Damga **9 ile bittiğinde**
-dizgi `…5549-KAT` oluyor ve `"9-KAT"` alt dizgisini İÇERİYOR ⇒ yüklem alakasız bir
-değerle eşleşiyor. "Aralıklılık" gizemi değil **damga aritmetiği**: `Date.now() % 10 === 9`
-⇒ 1/10; CI'daki iki kırmızının ikisi de 9 ile bitiyordu — `1789324255549` · `1789323101009`.
-Üç hipotez kuruldu (başka testin fikstür kalıntısı · kendi kalıntısı · bayat önbellek) ve
-**üçü de yanlıştı**. Düzeltme `675211b2`: liste artık TOKEN olarak okunuyor, dört sonda,
-biri (§0c) eski yüklemin yanılgısını BELGELİYOR.)*
+⇒ **Vakaların ÖLÇÜM ayrıntısı ayrı dosyada:** [`OLCUM-DISIPLINI-SINIRSIZ.md`](OLCUM-DISIPLINI-SINIRSIZ.md) — her vakanın korpusu,
+paydası, kapsam beyanı ve panzehri. Burada **kural ve tablo** kalır; vaka envanteri
+büyür, kural büyümez.
 
 > **Bir bekçi, kendi fikstürünü ortama koyduğu anda KENDİ YÜKLEMİNİN GİRDİSİ hâline
 > gelir.** ⇒ Sınırı beyan etmek yetmez; ayrıca sor: ***sondanın ÜRETTİĞİ değer, sondanın

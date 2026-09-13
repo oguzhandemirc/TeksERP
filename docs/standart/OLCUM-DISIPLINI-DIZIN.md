@@ -1,11 +1,11 @@
 # Ölçüm disiplini — BAŞLIK DİZİNİ
 
-Dokuz ölçüm dosyasının **her başlığı** burada, tek tabloda. Tek soruyu `grep`siz
+Ölçüm disiplini dosyalarının **her başlığı** burada, tek tabloda. Tek soruyu `grep`siz
 cevaplar: ***bu bulgu zaten hangi başlığın altında?***
 
 > **Neden var:** katalog 2026-09-13'te tek günde +16 sınıf aldı ve dokuz dosyaya
-> bölündü. Bölünmenin bedeli: *bir sınıfın zaten yazılı olup olmadığı* artık tek
-> dosyada okunamıyor, her yeni bulguda dokuz dosya `grep`leniyor — ve `grep`
+> bölünmeye başladı. Bölünmenin bedeli: *bir sınıfın zaten yazılı olup olmadığı* artık tek
+> dosyada okunamıyor, her yeni bulguda dosyaların tamamı `grep`leniyor — ve `grep`
 > **cümleyi değil deseni** bulur; aynı sınıf başka kelimelerle yazılmışsa görünmez.
 > Mükerrer sınıf, kataloğun kendi arıza biçimidir.
 
@@ -21,7 +21,7 @@ kalamaz). ⇒ **Dizin bayatlayamaz; bayatlatmayı deneyen commit durur.** İlk d
 bir kereye mahsus üretildi (2026-09-13); bundan sonrasını üreteç değil KAPI tutar —
 üretece bağlı bir dizin, üreteç koşulmadığı gün sessizce bayatlardı.
 
-Sayı bir ölçümdür ve bu satır da kapı altındadır: **140 başlık / 9 dosya**
+Sayı bir ölçümdür ve bu satır da kapı altındadır: **141 başlık / 10 dosya**
 (ölçüldü 2026-09-13; kapı her koşumda yeniden sayar ve sayı tutmazsa kırmızı verir).
 
 | # | başlık | dosya |
@@ -71,6 +71,7 @@ Sayı bir ölçümdür ve bu satır da kapı altındadır: **140 başlık / 9 do
 |  | § NE sorduğun kadar NEREYE sorduğun — yetenek ORTAK LIB'e çıkınca dosya bazlı envanter körleşir | (`OLCUM-DISIPLINI-YUKLEM.md`) |
 |  | § Bir adın geçmesi bir BAĞIMLILIK değildir | (`OLCUM-DISIPLINI-YUKLEM.md`) |
 |  | § Üyelik yalnız HANGİ DOSYALAR değil, HANGİ KOŞULLARDA sorusunu da taşır | (`OLCUM-DISIPLINI-YUKLEM.md`) |
+|  | § (c) Kurbanı bekçinin KENDİ fikstürü — alt dizgi | (`OLCUM-DISIPLINI-SINIRSIZ.md`) |
 |  | § KABUK ailesi — "komut çalıştı" ile "ölçüm okundu" ayrı şeylerdir | (`OLCUM-DISIPLINI-SUREC.md`) |
 |  | § ASILI KALMAK, çalışmanın DELİLİ değildir — stdin bekleyen komut "yavaş" görünür | (`OLCUM-DISIPLINI-SUREC.md`) |
 |  | § KANCA ailesi — kendi repo'sunu kuran araç, KANCANIN git ortamını MİRAS ALIR | (`OLCUM-DISIPLINI-SUREC.md`) |
@@ -174,6 +175,7 @@ Sayı bir ölçümdür ve bu satır da kapı altındadır: **140 başlık / 9 do
 | [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | YÖNTEM — ölçüm nasıl yapılır, nasıl YAZILIR (15 başlık) |
 | [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) | KATMAN 1a — ölçümün ARACI (16 başlık) |
 | [`OLCUM-DISIPLINI-YUKLEM.md`](OLCUM-DISIPLINI-YUKLEM.md) | KATMAN 1a′ — YÜKLEM (ne sorduğun) (14 başlık) |
+| [`OLCUM-DISIPLINI-SINIRSIZ.md`](OLCUM-DISIPLINI-SINIRSIZ.md) | YÜKLEM'in § Sınırsız eşleşme VAKA envanteri (1 başlık) |
 | [`OLCUM-DISIPLINI-SUREC.md`](OLCUM-DISIPLINI-SUREC.md) | komutun SÜRECİ ve ORTAMI (4 başlık) |
 | [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | KATMAN 1b — ölçümün KURGUSU (31 başlık) |
 | [`OLCUM-DISIPLINI-ORTAK-AGAC.md`](OLCUM-DISIPLINI-ORTAK-AGAC.md) | KATMAN 1c — PAYLAŞILAN AĞAÇ, ÇOK OTURUM (8 başlık) |

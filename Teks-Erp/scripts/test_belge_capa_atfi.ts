@@ -43,7 +43,7 @@
 //       aynası olduğu için duruyor — ama körlük zeminini METİN dalı taşıyor.
 //
 // ⭐ BAŞLIK DİZİNİ İKİ YÖNDEN ölçülür (2026-09-13, 5e):
-//    `docs/standart/OLCUM-DISIPLINI-DIZIN.md` dokuz ölçüm dosyasının her başlığını
+//    `docs/standart/OLCUM-DISIPLINI-DIZIN.md` ölçüm disiplini dosyalarının her başlığını
 //    tek tabloda taşır ve her satırı bir TERS SIRA çapasıdır. Tek yön yetmez:
 //      (a) dizin → dosya: ölü başlık kırmızı  (yukarıdaki çapa kolu ölçer)
 //      (b) dosya → dizin: dizinde OLMAYAN başlık kırmızı
@@ -242,7 +242,7 @@ function main(): void {
       }
     }
     check(
-      "⭐ dokuz ölçüm dosyasının HER başlığı dizinde",
+      "⭐ ölçüm dosyalarının HER başlığı dizinde",
       eksik.length === 0,
       eksik.length === 0 ? `${toplamBaslik} başlık ↔ ${dizinCiftleri.length} dizin satırı` : eksik.join(" · "),
     );
