@@ -186,19 +186,17 @@ jobs:
             echo "✅ $port hazır"
           done
 
-      # ⚠️ DÜZELTMESİ OTURUMLARA YASAK olan kapılar BURADAN ÇIKARILIR ve kendi
-      # job'unda kırmızı kalır ("Kullanıcı kararı bekleyen kapılar ⏸").
-      # ⭐ GEREKÇE ÖLÇÜLDÜ 2026-09-13: tamamlanan 36 CI koşumunun 36'sı da
-      # `failure`, hepsi BU job, ve içlerinden biri TASARIMI GEREĞİ kırmızıydı
-      # (`test_hook_config` — `.claude/settings.json`, kullanıcının denetim
-      # yüzeyi). ⇒ Yeni bir GERÇEK arıza ile DURAN kırmızı ayırt edilemiyordu:
-      # iş-düzeyi sinyal doygunlaşmıştı ("sürekli kırmızı = sessiz", üst katman).
-      # ⇒ *Bir kırmızının maliyeti, onu gösteren KAPIDA değil onu TAŞIYAN
-      #   SİNYALDE ölçülür.*
-      # ⚠️ Dışlanan ad koşum ÖZETİNDE adıyla basılır — sessiz dışlama YOK.
+      # ⚠️ DIŞLAMA YOK — ve bu bir ÖLÇÜM sonucudur, tercih değil.
+      # `TEKSERP_HARIC: test_hook_config` buradaydı: kanca yolu göreliydi,
+      # düzeltmesi kullanıcının denetim yüzeyindeydi (`.claude/`) ve duran kırmızı
+      # iş-düzeyi sinyali doyuruyordu (36/36 `failure`). Kanca `a8ce49ca`de
+      # mutlaklaştı ⇒ kalem KAPANDI ⇒ bekçi ana pakete DÖNDÜ (temiz `git archive
+      # HEAD` export'unda, `CLAUDE_PROJECT_DIR` ve `DATABASE_URL` unset: 9/0).
+      # ⚠️ *Bir muafiyet, gerekçesi bittiği gün kaldırılmazsa KALICI olur* —
+      #   dışlanan bekçi yeşil paketin İÇİNDE DEĞİLDİR ve kimse fark etmez.
+      # ⭐ Yeniden dışlama gerekirse reçete: `scripts/run-all-tests.ts` içinde
+      #   `TEKSERP_HARIC` başlığı (giriş ölçütü + ayrı job'ın tuzağı).
       - name: Test suite (scripts/test_*.ts runner)
-        env:
-          TEKSERP_HARIC: test_hook_config
         run: set -o pipefail; npm test 2>&1 | tee -a /tmp/ci-backend.log
 
       # Kendi başlattığımız PID'ler — `pkill` YOK (kök CLAUDE.md yasağı).
@@ -391,47 +389,3 @@ jobs:
         run: npx playwright install-deps
       - name: E2E (build + headless launch)
         run: xvfb-run --auto-servernum npm run e2e
-
-  # ===========================================================================
-  # KULLANICI KARARI BEKLEYEN KAPILAR — kırmızı kalır, ama sinyali DOYURMAZ
-  # ===========================================================================
-  # ⚠️ GİRİŞ ÖLÇÜTÜ (tek ve dar): buraya YALNIZ düzeltmesi OTURUMLARA YASAK olan
-  # kapılar girer — yani çözümü kullanıcının kendi denetim yüzeyinde olan
-  # (`.claude/settings.json` gibi) kalemler. Başka HİÇBİR kırmızı buraya
-  # taşınmaz: "şimdilik kırmızı", "bilinen sorun", "sonra bakarız" GİRMEZ.
-  # ⇒ *Bir muafiyet kabı, giriş ölçütünü TAŞIMIYORSA dolar.*
-  #
-  # ⭐ NEDEN AYRI JOB (ölçüldü 2026-09-13): bu kapı `Backend` içindeyken tamamlanan
-  # 36 CI koşumunun 36'sı da `failure` bastı ⇒ yeni bir GERÇEK arıza ile DURAN
-  # kırmızı ayırt edilemiyordu. Ayrı job, kapıyı SUSTURMADAN sinyali geri verir:
-  # burası kırmızı kalır, `Backend` yeşile döner, ikisi AYRI okunur.
-  # ⛔ `continue-on-error` DEĞİL — o gerçekten sessizleştirirdi.
-  bekleyen-kapilar:
-    name: Kullanıcı kararı bekleyen kapılar ⏸
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: Teks-Erp
-    env:
-      # ⚠️ UFUK: karar AÇIK kalabilir ama SESSİZCE ESKİYEMEZ. Bu tarih, kalemin
-      # beklemeye alındığı gündür; adım kaç gündür beklediğini BASAR.
-      BEKLEMEYE_ALINDI: "2026-09-13"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: Teks-Erp/package-lock.json
-      - run: npm ci
-      - name: Bekleyen kapılar (yalnız kullanıcı kararına bağlı olanlar)
-        run: |
-          gecen=$(( ( $(date -u +%s) - $(date -u -d "$BEKLEMEYE_ALINDI" +%s) ) / 86400 ))
-          echo "⏸ Bu job'daki kapıların düzeltmesi OTURUMLARA YASAKTIR."
-          echo "   Kalem $gecen gündür beklemede (beklemeye alındı: $BEKLEMEYE_ALINDI)."
-          echo "   Kırmızı kalması BEKLENEN durumdur; YEŞİLE dönmesi kararın verildiği anlamına gelir."
-          if [ "$gecen" -gt 30 ]; then
-            echo "   ⚠️ 30 GÜNDEN UZUN: 'karar açık' bir durum olmaktan çıkıp UNUTULMUŞ olabilir."
-          fi
-          set -o pipefail
-          npx tsx scripts/run-all-tests.ts hook_config

@@ -408,13 +408,18 @@ async function main() {
     // ⚠️ DIŞLAMA — ve BEYANLI. `TEKSERP_HARIC` virgülle ayrılmış alt-dizgeler alır
     // ve eşleşen bekçileri koşmaz. TEK MEŞRU KULLANIMI: düzeltmesi OTURUMLARA
     // YASAK olan kapıları (kullanıcının denetim yüzeyi) ayrı bir CI job'una
-    // taşımak — `ci.yml` "Kullanıcı kararı bekleyen kapılar" job'u.
+    // taşımak. ⚠️ BUGÜN KULLANAN YOK: ilk kullanıcısı `test_hook_config`ti, kalem
+    // `a8ce49ca` ile kapandı ve bekçi ana pakete DÖNDÜ — `ci.yml`de dışlama yok.
     // ⭐ NEDEN VAR (ölçüldü 2026-09-13): duran bir kırmızı tüm iş-düzeyi sinyalini
-    // doyuruyordu — tamamlanan 36 CI koşumunun 36'sı da `failure`, hepsi aynı
-    // job, ve içlerinden biri TASARIMI GEREĞİ kırmızıydı. ⇒ Yeni bir gerçek arıza
-    // ile duran kırmızı AYIRT EDİLEMİYORDU (*"sürekli kırmızı = sessiz"*, iş
-    // akışı katmanı). ⇒ *Bir kırmızının maliyeti, onu gösteren KAPIDA değil onu
-    // TAŞIYAN SİNYALDE ölçülür.*
+    // doyuruyordu — 36 CI koşumunun 36'sı da `failure`, biri TASARIMI GEREĞİ. ⇒
+    // Yeni bir gerçek arıza ile duran kırmızı AYIRT EDİLEMİYORDU. ⇒ *Bir
+    // kırmızının maliyeti, onu gösteren KAPIDA değil onu TAŞIYAN SİNYALDE ölçülür.*
+    // ⛔ YENİDEN KULLANIRSAN, ayrı job bekçiyi BU KOŞUCUYLA ÇAĞIRMASIN: koşucunun
+    // hedef-DB ön kapısı, DB'ye HİÇ dokunmayan bir bekçiyi de durdurur ⇒ job kapıya
+    // ULAŞAMADAN ölür ve kırmızısı "kapı ısırdı" değil "job'ın DB'si yok" der
+    // (gerçekleşti). Doğrudan `npx tsx scripts/test_x.ts` ile koş — ve job'ın
+    // çıktısındaki "yeşile dönerse karar verilmiştir" türü her İDDİA ancak job o
+    // yeşile ULAŞABİLİYORSA doğrudur; ulaşamıyorsa iddiayı metinden ÇIKAR.
     // ⚠️ Dışlanan her ad ÖZETTE ADIYLA basılır (aşağıda) — bir muafiyet kabı,
     // ne aldığını söylemiyorsa DOLAR.
     .filter((f) => !haricListesi.some((h) => f.includes(h)))
