@@ -147,6 +147,40 @@ const DOSYA_ADI_DESENI = /[A-Za-z0-9_.-]+\.tsx?/g;
 // kusuru sanıyordu. (Üçüncü sahte pozitif sınıfı: `ts` dışı uzantılar.)
 const CIPLAK_BEKCI_DESENI = /\btest_[a-z0-9_]+\b(?!\.[a-z])/g;
 
+/**
+ * `· Çapa: `…`` alanları — kuralın VAAT ettiği bekçinin adı.
+ *
+ * ⚠️ NEDEN AYRI BİR KOL: `bekçi:` alanı ölü ad veremez (üstteki cırcır tutar), ama
+ * `Çapa:` verebiliyordu ve fark eden yoktu — alan yalnız `ALAN_SONU` ayracında geçiyor,
+ * hiçbir kapı ADINI çözmüyordu. Korunmayan bir alan, korunan alanın yanında sessizce
+ * bayatlar (ölçüldü 2026-09-13: 7 Çapa alanının 3'ü çözülmüyordu).
+ */
+function capaAlanlari(dosyalar: Map<string, string>): Array<{
+  dosya: string;
+  satir: number;
+  icerik: string;
+  kapanirVar: boolean;
+}> {
+  const out: Array<{ dosya: string; satir: number; icerik: string; kapanirVar: boolean }> = [];
+  const CAPA = /·\s*Çapa:\s*`([^`]+)`/;
+  for (const [dosya, metin] of dosyalar) {
+    metin.split("\n").forEach((s, i) => {
+      const m = CAPA.exec(s);
+      if (m) out.push({ dosya, satir: i + 1, icerik: m[1], kapanirVar: /·\s*Kapanır:/.test(s) });
+    });
+  }
+  return out;
+}
+
+/** Bir alan metninden bekçi adı adayları — `bekçi:` kolunun yüklemiyle AYNI. */
+function adAdaylari(icerik: string): string[] {
+  const uzantili = icerik.match(DOSYA_ADI_DESENI) ?? [];
+  const ciplak = (icerik.replace(DOSYA_ADI_DESENI, " ").match(CIPLAK_BEKCI_DESENI) ?? []).map(
+    (n) => `${n}.ts`,
+  );
+  return [...uzantili, ...ciplak];
+}
+
 function repoDosyaAdlari(): Set<string> {
   const ham = execFileSync("git", ["ls-files", "*.ts", "*.tsx"], { cwd: KOK, encoding: "utf8" });
   return new Set(ham.split("\n").filter(Boolean).map((p) => basename(p)));
@@ -219,6 +253,33 @@ function main(): void {
     console.log(`     ℹ️ çalışma ağacında: çözülmeyen ${agactaCozulmeyen} · kesik ${agactaKesik} (commit'lenmemiş fark; tabana ESAS DEĞİL — önce stage'le)`);
   }
 
+  // ── `Çapa:` ÖLÜ AD — vaat, ancak KAPANIR cümlesiyle meşrudur ──────────────
+  //
+  // YÜKLEM: `Çapa:` adı çözülmüyor **∧** aynı satırda `Kapanır:` YOK ⇒ kırmızı.
+  // Cırcır DEĞİL, sert kural (taban 0, sabit yok). Gerekçe: çözülmeyen bir çapa bir
+  // VAAT'tir; vaat `Kapanır:` cümlesiyle meşrudur, cümlesizse ölü addır. Cırcır
+  // olsaydı DÜRÜST bir vaat doğduğu gün kırmızı verir ve tabanın yükseltilmesi
+  // gerekirdi — yani kapı doğru davranışı PAHALILAŞTIRIRDI.
+  const capalar = capaAlanlari(dosyalar.index);
+  // KÖRLÜK ZEMİNİ: hiç `Çapa:` bulunamazsa "ölü ad yok" cümlesi VAKUMEN doğru olur.
+  check("körlük zemini: `Çapa:` alanı bulundu", capalar.length > 0, `${capalar.length} alan`);
+  const oluCapa = capalar.filter(
+    (c) => !c.kapanirVar && adAdaylari(c.icerik).some((ad) => !gercek.has(ad)),
+  );
+  check(
+    "⭐ çözülmeyen `Çapa:` YALNIZ `Kapanır:` cümlesi olan satırda",
+    oluCapa.length === 0,
+    oluCapa.length === 0
+      ? `${capalar.length} çapanın ${capalar.filter((c) => c.kapanirVar).length}'i Kapanır cümleli`
+      : oluCapa.map((c) => `${c.dosya}:${c.satir} → ${adAdaylari(c.icerik).filter((ad) => !gercek.has(ad)).join(", ")}`).join(" · "),
+  );
+  if (oluCapa.length > 0) {
+    console.log(
+      "   YAPILACAK: ya bekçiyi yaz (ad çözülsün), ya da aynı satıra `Kapanır:`\n" +
+        "   cümlesi ekle — ne olunca biteceğini bir SAYI ya da KÜME ile söyleyen.",
+    );
+  }
+
   // ── KAPSAM BEYANI — yeşilin NE DEMEK OLMADIĞI ─────────────────────────────
   console.log(
     `\n   ⛔ BU KOLUN ÖLÇMEDİĞİ (yeşil "borç notları kapı altında" DEMEK DEĞİLDİR):\n` +
@@ -226,6 +287,9 @@ function main(): void {
       `        olup olmadığı BU KOLDA ÖLÇÜLMEZ — B kolu inmedi.\n` +
       `      · Adı geçen bekçinin o kuralı gerçekten ölçtüğü ölçülmez (atıf ≠ koruma).\n` +
       `      · Dosya adı anmayan ${adAnmayan} düz-metin atıf kapsam DIŞI.\n` +
+      `      · \`Çapa:\` kolu yalnız AD ÇÖZÜMÜNÜ ölçer — \`Kapanır:\` cümlesinin\n` +
+      `        ÖLÇÜLEBİLİRLİĞİ (bir sayı/küme söylüyor mu) ÖLÇÜLMEZ; cümlenin VARLIĞI\n` +
+      `        vaadi meşru kılar, DOĞRULUĞU değil.\n` +
       `      · KESİK alanın İÇİNDE hangi adın kaybolduğu — kesik alan sayılır,\n` +
       `        kaybolan ad bilinemez; "0 çözülmeyen" o adlar için bir şey söylemez.\n` +
       `   ⚠️ BELGE METNİ INDEX'TEN okunur (ne ağaç ne HEAD; gerekçe lib/kural-dosyalari.ts);\n` +
