@@ -334,3 +334,26 @@ en azından `git status --porcelain <dizin>` çıktısının BOŞ olduğunu **ay
 **push** anıdır, commit anı değil; yerel duran bir commit'te tabanı düzeltmek main'e
 hiç yanlış taban sokmaz. *"Sonra ikinci commit'le düzeltirim"* dürüsttür ama bir koşum
 boyunca herkesi kırmızıda bırakır.
+
+## Sistemin ÜRETMEDİĞİ durumu ölçmenin iki aleti
+
+Bir değişmezi sınamak için bazen **sistemin doğal olarak üretmediği** bir durum gerekir.
+İki alet vardır ve seçimi tek soru belirler:
+
+> **Sistemin üretmediği şey VERİ mi, KURAL mı?**
+> Veriyse → **satırı elle kur.** Kuralsa (kapı o durumu dışlıyorsa) → **kapının
+> kendisini boz.**
+
+*(İki vaka, aynı gün: bir süzgeç kusurunda storno `dispatchedAt`i NULL'ladığı için
+doğal veri o satırı hiç üretmiyordu ⇒ satır elle kuruldu. Bir trigger kusurunda ise
+trigger o durumu zaten dışlıyordu ⇒ trigger'ın kaynak listesi bozuldu ve bekçi
+33/0 → 32/1 düştü; kırmızı olan tam beklenen kontroldü.)*
+
+⚠️ **İkinci alet daha tehlikelidir: KAPIYI bozan sonda, GERİ ALINDIĞINI da ölçmek
+zorundadır.** Bozulan şey bir kapıdır; sessizce bozuk kalırsa **herkesin yeşili yanlış
+olur** ve kimse bunu kendi koşumundan anlayamaz.
+> **Geri alma bir iddiadır; sha ile ölçülmedikçe kurulmamıştır.**
+*(Emsal: `pg_get_functiondef` sha'sı alındı, geri alındıktan sonra birebir karşılaştırıldı
+ve bekçi yeniden koşturularak 33/0'a döndüğü görüldü.)*
+Kardeşi § Yerel yeşil ↔ HEAD: orada yeşil başkasının işinden gelir, burada **senin geri
+almadığın bozuktan**.
