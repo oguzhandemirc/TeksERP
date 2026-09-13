@@ -271,6 +271,32 @@ Ortak kör nokta: ikisi de literal desen aradı, DOLAYLI çağrıyı göremedi.)
 *(Vaka `73919ea0`, 2026-09-13: sonda bilerek karşı taraftan kuruldu, çünkü asıl dosyada
 o an başka bir oturum çalışıyordu.)*
 
+### SONDA ailesi — sondanın SESSİZLİĞİ hiçbir tarafın lehine delil değildir
+Bir sonda ısırmadıysa bu ne kapının sağlam olduğunu ne sondanın geçerli olduğunu
+gösterir. Yedi biçim *(kaynak: oturum ölçümü 2026-09-13, `test_identity_ledger` sonda
+turu; a maddesi sha'lı — `5ac6e830`)*:
+
+| # | Biçim | Vaka |
+|---|---|---|
+| a | araç gözlenenin içinde | sentinel elenmedi, 8 karakteri gezildi → 216 sahte kırmızı (§ Mutasyonun ürettiği sayı) |
+| b | **mutasyon UYGULANMADI** | `sed` çapası tutmadı; "kapı ısırmadı" görüldü. İkinci denemede hedef bekçi **yoktu** (ad yanlıştı) |
+| c | **beyan basılmadı** | beyan ÖZET satırındaydı; tüm dosyalar elenince özet hiç koşmadı — *"sessiz dışlama olmasın"* satırı tam o durumda sessizdi |
+| d | sonuç okunmadı | ölçüm ile eylem aynı zincirdeydi (`-ARAC.md` § KABUK ailesi c) |
+| e | çıktı kırpıldı | `tail` beyanın bulunduğu başı kesti (aynı yer, f) |
+| f | **düzenleme artığı** | bir belgede kesik ad artığı kaldı; ölü link olmadığı için belge kapısı görmedi |
+| g | ⚠️ **YANLIŞ ALAN** | mutasyon `Backend:` alanına yazıldı, kapı `bekçi:` alanını okuyor → ısırmadı. Doğru alana yazılınca ISIRDI |
+
+⚠️ **(g) en sinsisidir: kapıyı HAKSIZ YERE ölü ilan ettirir.** O sondadan sonra
+*"taban sert değil"* yazılacaktı.
+
+> **Sonda, MUTASYONUN UYGULANDIĞINI ve DOĞRU ALANA dokunduğunu da ölçer.**
+
+### Tutmayan bir sonda İKİ şeyden birini söyler: kurgu yanlış YA DA kapı KÖR
+*"Sonda tutmadı, demek ki temiz"* üçüncü bir seçenek değildir.
+*(Vaka `b35a7a32` → `222cbf14`, 2026-09-13: bir sonda tutmadı; sebep kapının UZANTISIZ
+adlara kör olmasıydı — 155 benzersiz ad, üstelik en yaygın biçim. "Temiz" denseydi kapı
+kör hâliyle inecekti.)*
+
 ## KATMAN 2 · Ölçümden sonraki adım → ayrı dosya
 
 [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) (`docs/standart/OLCUM-DISIPLINI-CIKARIM.md`) — 2026-09-13'te buradan bölündü; katalog o gün **+20 sınıf** aldı ve bu dosya tavana 1.667 bayt kalmıştı. Tavan yükseltilmedi.

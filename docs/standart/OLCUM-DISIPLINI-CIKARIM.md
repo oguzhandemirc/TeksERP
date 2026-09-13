@@ -213,6 +213,15 @@ gerçek demektir**.)*
 *(Aynı commit: *"sevkte iz kayboluyor"* sanılan borcun kapsamı ölçülünce yalnız ELLE
 KALDIRMA yoluna daraldı; sevk yolu zaten soft'tu.)*
 
+### Devralınan kusur beklentisi, kusur kapandıktan sonra KÖRLÜK TALİMATINA döner
+*"Bu bekçi ilk koşumda şu bilinen kusuru yakalayacak, beklenen"* cümlesi **ölçülmeden**
+kurulursa, kusur kapandığı gün aynı cümle okuyucuya *"o kırmızıyı görmezden gel"* der.
+*(Vaka: bir parite bekçisi için "ilk koşumda şu kusuru yakalar, normaldir" denmişti;
+ölçülünce kusurun bir gün önce kapandığı çıktı — beklenti artık bir körlük talimatıydı.
+Kaynak: oturum ölçümü 2026-09-13, sha yok; kapanış `e05da096`.)*
+**Savunma:** devralınan kusur beklentisi yazarken **kapandı mı diye ölç** ve beklentiye
+bir TARİH ver; tarihi geçen beklenti kalkar.
+
 ### İki operasyonel kural
 
 - **Paket içinde kırmızı + tek başına yeşil ⇒ kusur kodda değil, koşumun DURUMUNDA.**

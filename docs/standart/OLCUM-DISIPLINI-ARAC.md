@@ -228,3 +228,27 @@ sahte kırmızı. Sayı bir bulgu sanıldı ve onunla başka bir oturumun DOĞRU
 > **`!x` bir sentinel'i ELEMEZ** — sentinel ekleyen, her TÜKETİCİYİ adıyla eler.
 Kardeşi § 4 · Araç ölçümün içinde.
 
+### KABUK ailesi — "komut çalıştı" ile "ölçüm okundu" ayrı şeylerdir
+Altı biçim, hepsi aynı yüklemi paylaşıyor *(kaynak: oturum ölçümü 2026-09-13, sha yok;
+vakalar üç ayrı oturumun KENDİ hataları)*:
+
+| # | Biçim | Vaka |
+|---|---|---|
+| a | **`&&` zinciri TEMİZ sonuçta kesilir** | `… \| grep -c … && git push` — `grep` 0 eşleşmede **çıkış 1** verir, `push` HİÇ koşmadı |
+| b | **`$?` yanlış komuttan okunur** | `npx tsx … \| tail -25; echo $?` → okunan şey `tail`in kodu |
+| c | **ölçüm + eylem AYNI zincirde** | `run-all-tests …; git push` — 11/13 KIRMIZI okunmadan push edildi |
+| d | **koşmayan araç SIFIR üretir** | zsh'ta `--include=*.ts` glob'landı, `grep` hiç koşmadı, `wc -l` **0** bastı (gerçek 20) |
+| e | **`head -3`** | `grep … \| head -3` üç satır verdi, gerçek kullanım **4.** satırdaydı → "0 referans" (gerçek 2) |
+| f | **`tail -12`** | bir beyanın basılmadığı sanıldı; `tail` çıktının BAŞINI kesmişti, beyan oradaydı |
+
+> **Ölçüm komutunda KIRPMA yoksa kapsam tamdır; kırpma varsa KAPSAM KIRPMADIR.**
+
+**Savunma:** ölçümü eylemden ayır (`RC=$?` hemen işin ardından), zinciri kısalt, ve
+kırpan her komutun (`head` · `tail` · `-m` · ajan çıktı sınırı) kapsamı daralttığını
+raporda YAZ.
+
+### Bir YOKLUK iddiası, arandığı DESENLE yazılır
+*"Başka kırıcı çift YOK"* değil — **"`DROP COLUMN` ve `delete data\.` desenleriyle
+aradım; üçüncü bir biçim varsa bu ikisi görmez."**
+*(Kaynak: oturum ölçümü 2026-09-13, sha yok; paket envanteri belgesi.)*
+Kardeşi § Boş çıktı bir ÖLÇÜM değildir ve `OLCUM-DISIPLINI-SINIFLAR.md` § "Bende yok".

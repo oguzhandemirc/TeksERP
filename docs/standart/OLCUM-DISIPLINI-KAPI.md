@@ -293,3 +293,18 @@ altı tarayıcıyı birden koşturarak dersi genelleştirdi.)*
 
 📌 **Kendine uygulanmayan kural için tek çare KAPIDIR**; *"bunu biliyorum"* bir kapı
 değildir. İki vakada da yakalayan belge değil kapı oldu.
+
+## Bir kapının yeşili, ÖLÇTÜĞÜ İKİ UÇLA sınırlıdır
+
+Bir kapı iki şeyi karşılaştırır. **Düzeltmeyi ÜÇÜNCÜ bir uca yaparsan kapı yeşil verir
+ve yeşil YALAN olur.**
+
+*(Vaka `d4cc3ea0`, 2026-09-13 — yakın kaçış: bir düzeltme betiği "düzeltildi" bastı ama
+dosyaya HİÇBİR ŞEY yazmamıştı. Farklar **DB'de elle** kapatılınca `test_schema_drift`
+yeşile döndü — oysa o bekçi **şema ↔ DB** karşılaştırır, **migration DOSYASI ↔ DB**
+değil. Taze bir kurulumda — sahada, CI'da, yeni test DB'sinde — BAŞKA bir şema
+doğacaktı. Taze DB'de baştan deploy yakaladı.)*
+
+**Savunma:** kapının adını okurken *"hangi İKİ ucu karşılaştırıyor"* diye sor ve
+düzeltmeyi o iki uçtan birine yap. Kapının göremediği üçüncü uç, kapının kapsam
+beyanına yazılır.

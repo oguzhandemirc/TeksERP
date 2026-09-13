@@ -227,3 +227,24 @@ aranmayan bir şey bulur.
 
 Dışarıda tutulacak olan, **ölçüm aracının KALİBRASYONUNU** değiştirendir: aracı turun
 ortasında ayarlamak, turun başındaki ölçümlerle sonundakileri karşılaştırılamaz kılar.
+
+## Bayatlamanın SEKİZ biçimi
+
+Bayatlık yalnız *"sayı eskidi"* değildir. Sekiz biçim ölçüldü ve **her birinin bedeli
+farklıdır** *(kaynak: oturum ölçümü 2026-09-13; ⑤ ve ⑦ sha'lı)*:
+
+| # | Biçim | Ne olur |
+|---|---|---|
+| ① | **satır no** | çapa kayar; doğrulanan şey satırın varlığı olur, BAĞIN durduğu DEĞİL |
+| ② | **bağ / öncül** | atfın dayandığı alan kalkmıştır; madde **konusuzdur**, yanlış değil |
+| ③ | **rezervasyon** | "şu numara önerildi" yazar, başkası inmiştir — bayat rezervasyon **HİÇ patlamaz** |
+| ④ | **teşhis** | ölçülmeden kurala çevrilen teşhis, yanlışlığıyla kurumsallaşır (§ Teşhis mi, ölçüm mü) |
+| ⑤ | **genelleştirme** | özel bir ölçüm genel kurala çevrilir; sınırı kaybolur — `a1ee02e9` |
+| ⑥ | **kapanmış borç** | kapalı borç açık görünür; bedeli **yapılmış işi tekrar yaptırmak** (`73919ea0`) |
+| ⑦ | ⚠️ **ABARTILMIŞ TEHLİKE** | tehlikeyi BÜYÜTEN bayatlık, ağırlığı yanlış yere verdirir — `994da11d`: *"preset düşerse rol şablonları da yazılmaz"* deniyordu; ölçüldü, sıra **izinler → şablonlar → presetler**, presetler EN SON, düşerse ötekiler ZATEN yazılmış |
+| ⑧ | **beyan METNİ** | sayı beyanı yanlış ama kapı **varlığı** ölçtüğü için görmez (*"dört enumda"* yazıyordu, gerçek BEŞ) |
+
+⚠️ **⑦ ve ⑧ en sinsileridir, çünkü ikisi de kapıdan geçer:** ⑦ okuyanı yanlış yere
+ağırlık vermeye iter; ⑧'i ölçen kapı sayıyı değil VARLIĞI sorduğu için sessiz kalır.
+📌 Ve ③ hiç patlamadığı için hiç fark edilmez — **bayatlığın tek biçimi "yanlış cevap"
+değil, "hiç sorulmayan soru"dur.**
