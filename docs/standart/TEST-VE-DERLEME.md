@@ -12,7 +12,7 @@ Kural biçimi: [`README.md`](README.md).
 |---|---|---|---|
 | Düzenleme sırasında | hiçbir şey | — | — |
 | Değişiklik bitince | dokunulan alanın bekçileri + o projede tip kontrolü | 1–3 dk | model disiplini · `/bekci-kos` |
-| **Commit** | değişen alt projede tip + lint + lint tavanı; Electron/mobil değiştiyse o projenin hızlı test paketi; migration/bekçi dokunulduysa hijyen; `.md` dokunulduysa doküman kapısı | 15–145 sn | `.githooks/pre-commit` |
+| **Commit** | değişen alt projede tip + lint + lint tavanı; Electron/mobil değiştiyse o projenin hızlı test paketi; migration/bekçi dokunulduysa hijyen; `Teks-Erp/scripts/`·`docs/standart/`·`docs/kurallar/` dokunulduysa **hızlı mandallar** (12 DB'siz mandal, eşzamanlı 4, ≈7 sn; yalnız izole ağaçta) ; `.md` dokunulduysa doküman kapısı | 15–145 sn | `.githooks/pre-commit` |
 | PR / push öncesi | backend tam bekçi paketi | **6 dk 28 sn** | `npm test` |
 | CI | docs · backend (lint + tavan + tip + tam paket) · Electron (lint + tavan + tip + vitest) · mobil (lint + tavan + tip + jest) | uzun | `.github/workflows/ci.yml` |
 | Sürüm | sürüm notu kapısı + paketleme kapıları | — | `scripts/check-surum-notlari.mjs`, `deploy/*` |
@@ -32,6 +32,7 @@ TEKSERP_HOOK_SKIP=1 git commit …     # bilerek atla
 - **[TD-04]** Kapı `core.hooksPath` ile kurulur, `.git/hooks`'a kopyalanmaz — `.git/hooks` versiyonlanmaz, her klon kapısız başlar ve kimse fark etmez · zorlama: hook · kanıt: 2026-09-05 ölçümü (yerelde hiç hook yoktu; main'de 9 tip hatası ve 7 kırmızı test bir gün durdu)
 - **[TD-05]** Kapı **değişene orantılıdır**: yalnız staged dosyaların ait olduğu alt projede koşar · zorlama: hook:`scripts/hooks/lib/staged.mjs` · kanıt: proje çözümü tek kaynak (Claude'un Bash hook'u da aynı modülü kullanır)
 - **[TD-06]** Kaçış (`TEKSERP_HOOK_SKIP=1` / `--no-verify`) bir karardır: kırmızıyı bilerek geçiyorsan commit mesajında söyle · zorlama: insan:kaçışın meşru olup olmadığı yalnız niyetten bilinir · kanıt: emsal `cdcb73f4` — kapı aynı staged küme üzerinde 13/13 yeşil ölçüldükten sonra üçüncü kez koşturmamak için atlandı ve gerekçe commit mesajında yazılı
+- **[TD-43]** Kapı BEKÇİ koşmaz ama **hızlı mandalları** koşar: DB'siz, ≤5 sn ve `Teks-Erp/scripts/` · `docs/standart/` · `docs/kurallar/`ı konu edinen 12 mandal, eşzamanlı 4 (12 birden üç oturumla OOM üretti), yalnız izole ağaçta (`.git/worktrees/`) — ortak ağaçta ⏭ BEYANLA atlanır (başkasının commit'siz dosyası bizi durdurmasın), CI ısırır. Küme ELLE listelenir, türetilmez (DB'siz görünüp vakumen yeşil kalan bekçi var). Ayrı kaçış yok, `TEKSERP_HOOK_SKIP` kapsar · zorlama: hook:`scripts/hooks/hizli-mandallar.mjs` · kanıt: ölçüm 2026-09-13 — 534 bekçinin 105'i DB'siz, 95'i ≤5 sn; 12 sıralı 16–23 sn, paralel 6,4 sn, eşzamanlı 4 ile 7,2 sn; `test_keyfi_arama` bir commit'in iki yeni keyfi çiftini kapıda değil CI'da gördü (kapının doğum sebebi)
 
 ## 3 · Bekçi paketi — mekanik gerçekler
 

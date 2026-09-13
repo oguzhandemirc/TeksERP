@@ -133,6 +133,14 @@ if (staged.some((f) => /^(Teks-Erp|Electron|mobil)\/src\/.*\.tsx?$/.test(f))) {
   });
 }
 
+// HIZLI MANDALLAR (1e hükmü 2026-09-13): kapı bekçi koşmaz, mandallar yalnız
+// CI'da ısırıyordu. DB'siz + ≤5 sn + `scripts/`/`docs/standart/`/`docs/kurallar/`ı
+// konu edinen 12 mandal, eşzamanlı 4, yalnız izole ağaçta (ortak ağaçta ⏭ beyanla).
+// Küme, gerekçe ve ölçüm `scripts/hooks/hizli-mandallar.mjs` başlığında.
+if (staged.some((f) => /^(Teks-Erp\/scripts\/|docs\/standart\/|docs\/kurallar\/)/.test(f))) {
+  adimlar.push({ ad: "hızlı mandallar", cwd: ".", cmd: ["node", ["scripts/hooks/hizli-mandallar.mjs"]] });
+}
+
 // Doküman kapısı: ölü link + CLAUDE.md boyut tavanı.
 if (staged.some((f) => f.endsWith(".md"))) {
   adimlar.push({ ad: "doküman kapısı", cwd: ".", cmd: ["node", ["scripts/check-docs.mjs"]] });
@@ -173,6 +181,11 @@ for (const adim of adimlar) {
   const sn = ((Date.now() - t0) / 1000).toFixed(1);
   if (r.status === 0 && !r.error) {
     process.stderr.write(`   ✅ ${adim.ad} (${sn}s)\n`);
+    // Yeşil adımın çıktısı yutulur — ⏭ BEYANI hariç: kapsam kaybı sessiz olamaz
+    // (ölüm biçimi ⑪). Beyan satırı adımın kendi çıktısında "⏭" ile başlar.
+    for (const satir of `${r.stdout || ""}\n${r.stderr || ""}`.split("\n")) {
+      if (satir.trim().startsWith("⏭")) process.stderr.write(`   ${satir.trim()}\n`);
+    }
     continue;
   }
   const govde = `${r.stdout || ""}\n${r.stderr || ""}`.split("\n").filter(Boolean).slice(-30).join("\n");
