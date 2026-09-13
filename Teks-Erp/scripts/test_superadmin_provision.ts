@@ -517,10 +517,25 @@ async function main(): Promise<void> {
       const izi =
         `uzunluk=${s.length} · yalnızRakam=${/^\d+$/.test(s)} · ` +
         `sha256[0:8]=${createHash("sha256").update(s).digest("hex").slice(0, 8)}`;
+      // ⚠️ SINIFLANDIRMA ❌ SATIRININ KENDİSİNDE OLMALI (2026-09-13, ölçüldü):
+      // koşucu `ilkKirmizi`yi ❌ ile başlayan TEK satırdan alıyordu ve 150
+      // karaktere kırpıyordu (`run-all-tests.ts:613`) ⇒ `\n` ile başlayan
+      // teşhisim CI özetine HİÇ ulaşmadı; güvenlik sınıfı bir kırmızı
+      // SINIFLANDIRILAMADAN bekledi. d5 `622df3e2` ile ↳ bloğunu geçirir hâle
+      // getirdi, ama ikisi birbirinin yerine geçmez: SINIF ❌'te, AYRINTI ↳'de.
+      // ⇒ *Bir beyan, beyan ettiği durumda TÜKETİCİNİN OKUDUĞU yere konur.*
+      const ilk = satirlar[0];
+      const kisa =
+        satirlar.length === 0
+          ? ""
+          : `${ilk.tam ? "(A)SIZINTI" : "(B)ÇAKIŞMA"} ${ilk.action}/${ilk.tableName}@${ilk.alan}` +
+            ` · uz=${s.length} rakam=${/^\d+$/.test(s)} sha=${createHash("sha256").update(s).digest("hex").slice(0, 8)}` +
+            (satirlar.length > 1 ? ` · +${satirlar.length - 1} satır` : "");
       const teshis =
         satirlar.length === 0
           ? ""
-          : `\n      ↳ TEŞHİS — sır izi: ${izi}` +
+          : kisa +
+            `\n      ↳ TEŞHİS — sır izi: ${izi}` +
             `\n      ↳ eşleşen ${satirlar.length} satır (en yeni 3): ` +
             satirlar
               .map(
