@@ -7900,3 +7900,72 @@ beş oturumun yerel görüşünde duruyor ve hepsi aynı anda commit atıyordu; 
 düzelttiğinden fazlasını kırardı. İleri doğru düzeltildi: gerekçe bu nota, kural kataloğa.
 
 **Üç kapı.** Migration YOK · izin YOK · APK YOK.
+
+## 2026-09-13 — BAYAT KURAL TARAMASI: yol katmanı temiz, sayı katmanı YENİDEN ÖLÇÜLEMİYOR [ÇEKİRDEK]
+
+**Soru.** Bir günde üç bayat kural cümlesi **tesadüfen** çıktı (hiçbiri aranarak bulunmadı) ve
+projenin kendi kuralı *"iki cümle yan yana bırakılmaz"* diyor. Kaç tane daha var?
+
+**Kapsam beyanı.** Yalnız **mekanik olarak yanlışlanabilir** iddialar ölçüldü: atıf yolları ·
+`dosya:satır` çapaları · bekçi adları · sayı iddiaları. *"İyi tasarım şudur"* diyen cümleler
+kapsam DIŞI. Korpus: `docs/kurallar` + `docs/standart` (1.159 kural satırı, 43 dosya); bekçi-adı
+ekseni ayrıca `KOD-KURALLARI` + `RECETELER` + `BEKCI-HARITASI` üzerinde koştu.
+
+**SONUÇ — yol/atıf katmanı TEMİZ.** 450 kural satırı yol taşıyor, 61 `dosya:satır` çapasının
+**0'ı** aralık dışı, 808 benzersiz bekçi adı / 2.956 atıfın **0'ı** bayat (tek "yok" vuruşu
+`RECETELER.md:389`, ve o cümle zaten eksikliği ANLATIYOR). Tek kusur bir uzantı kaymasıydı
+(`BulkCancelRollsDialog.test.ts` → `.test.tsx`), düzeltildi.
+
+⚠️ **`docs/design/` KAPSAM DIŞI bırakıldı ve bu bir hükümdür.** İlk koşum orada 23 "yok" verdi;
+hepsi tasarım belgeleriydi ve orada bekçi adı **YAZILACAK** olanı anlatıyor, var olanı değil.
+Yüklem o korpusa uymuyor — *yasağı anlatan cümle yasağın kendisi sayılamaz* tuzağının kardeşi.
+
+**ASIL BULGU — sayı katmanı.** 95 sayı iddiasından 15'i seed'li rastgele seçildi (seed 20260913,
+seçim ÖLÇÜMDEN ÖNCE yazıldı; bantlar da önceden: 0-2 sağlıklı · 3-6 borç · 7+ sayıların yeri
+sorgulanır). Çıkan:
+
+```
+BAYAT (kural yanlış)                      : 0
+TUTTU (sayı birebir)                      : 2
+KAYMIŞ (kural doğru, sayı sürüklenmiş)    : 4
+ÖLÇEMEDİM                                 : 9   ← bulgu bu
+```
+
+> **9/15 sayı iddiası yeniden ölçülemiyor — bayat oldukları için değil, YÜKLEMLERİNİ
+> TAŞIMADIKLARI için.**
+
+*"269 servis dosyasında 2 kullanım"* — hiçbir okuma 269 vermiyor (`*.service.ts` 118 ·
+`src/services` altındaki tüm `.ts` 292). Hangi küme sayıldı, yazılı değil. Aynısı *"80 site"*,
+*"59 kullanım"*, *"16 çağrı / 12 dosya"* için de geçerli. **Doğrulanamayan bir sayı ne bayat ne
+geçerli ilan edilebilir.** Bu, *kapsamını yitirmiş ölçüm* sınıfının kural-kitabı tarafındaki
+hâli — ve **eksik olan kural değil, uygulanmasıdır**: `OLCUM-DISIPLINI § Sayı yazma` zaten
+*"yerine ölçüm komutu yazılır"* diyordu. Kural bir madde ile güçlendirildi: **kalan her sayı,
+onu ÜRETEN KOMUTLA birlikte yazılır.**
+
+⚠️ **VE İKİ TAVAN SESSİZCE AŞILMIŞ.** `devralınan:` alanı standart/README'ye göre bir TAVANDIR
+ve *yalnız düşer*:
+
+```
+BACKEND.md:107  devralınan: 18 (soneksiz helper)       → ölçüm 2026-09-13: 30
+BACKEND.md:111  devralınan: 53 (handler başına guard)  → ölçüm 2026-09-13: 78
+```
+
+**Sayılar BİLEREK GÜNCELLENMEDİ.** Doğru sayıyı yazmak burada tavanı YÜKSELTMEK olurdu:
+*aşılmış bir tavanı güncellemek onu ölçmek değil, ONAYLAMAKTIR.* Satırlar `⚠️ AŞILDI … kapısı
+YOK` şerhiyle **görünür** bırakıldı. Sessizce yükselmelerinin sebebi ölçüldü: `lint-baseline.json`
+ın kapısı var, **bu alanın hiçbir kapısı yok** — *"yazılı bir uyarı bir kapı değildir"*in
+kural-kitabı tarafındaki dördüncü örneği. Kapı ayrı iş; kurulduğu gün bugünkü ölçüm **yeni taban**
+olur (seçilmiş değil, ölçülmüş) ve ondan sonra yalnız düşer.
+
+**Ölçüm aracının kendisi üç turda düzeldi** ve ikisi ÖRNEKLE yakalandı: 1. tur 36 bulgu (çıplak
+`src/…` yolları yanlış kökten çözülüyordu) · 2. tur **72 — daha kötü** (düzeltme
+`Teks-Erp/Teks-Erp/…` üretti; `Teks-Erp/CLAUDE.md` "yok" diyordu) · 3. tur 1 bulgu + pozitif
+kontrol ısırıyor (sahte yol enjekte → 255). İlk iki tur yayımlansaydı 36 ve 72 **sahte bayat**
+bildirecekti. Ham sembol ekseni %83 yanlış pozitif verdi ve terk edilmedi, **yüklemi daraltıldı**
+(bekçi adı alt kümesi → ~%0 gürültü): *bir eksen işe yaramıyorsa önce yüklem daraltılır.*
+
+> **Turun kapanışı: "sağlıklı" burada "yanlış değil" demektir, "doğrulanabilir" demek DEĞİL.**
+
+**Üç kapı.** Migration YOK · izin YOK · APK YOK. Kalan 80 sayı iddiası için sıra kurulmadı
+(bant "0-2 bayat"). ⚠️ `BACKEND.md` bu turda 1.060 bayt boşluğa indi — advisory onu işaretliyor
+ve artık AKTİF YAZILAN bir dosya; bölme adayı.

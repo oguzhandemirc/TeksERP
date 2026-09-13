@@ -109,6 +109,20 @@ belgede:
 - **Damgalı ölçümün PAYDASI** ise kalır — payda olduğu açıkça yazılarak
   (*"2026-09-05 ölçümü: o günkü 455 dosya için 369 sn"*).
 - **Tek başına bir durum beyanı** ise kalkar. Yerine ölçüm komutu yazılır.
+- **Kalan her sayı, onu ÜRETEN KOMUTLA birlikte yazılır.** `"76 sonekli helper"`
+  değil, `` `find src -name '*.helper.ts' | wc -l` → 76 (2026-09-06)``. Böylece sayı
+  bayatlasa bile **yanlışlanabilir kalır**; komutsuz sayı ne doğrulanabilir ne
+  çürütülebilir.
+
+⚠️ **Ölçüldü 2026-09-13 (örneklem: 95 sayı iddiasından 15, seed'li rastgele):**
+kural satırlarındaki sayıların **9/15'i YENİDEN ÖLÇÜLEMEDİ** — bayat oldukları için
+değil, **yüklemlerini taşımadıkları için**. *"269 servis dosyasında 2 kullanım"* —
+hiçbir okuma 269 vermiyor (`*.service.ts` 118 · `src/services` altındaki tüm `.ts`
+292); hangi kümenin sayıldığı yazılı değil. Bu, § Kapsamını yitirmiş ölçüm sınıfının
+kural-kitabı tarafındaki hâlidir ve **eksik olan kural değil, uygulanmasıdır** —
+yukarıdaki madde bu turdan ÖNCE de yazılıydı.
+
+> **"Sağlıklı" burada "yanlış değil" demektir, "doğrulanabilir" demek DEĞİL.**
 
 Ayırt etme yöntemi: *cümleyi bugün okuyan biri ondan ne çıkarır — "o gün böyleydi"
 mi, "bugün böyle" mi?*
