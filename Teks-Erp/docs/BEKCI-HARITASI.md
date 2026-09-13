@@ -5,6 +5,94 @@
 Alanlar: bölüm başlıkları aşağıda. **Sayı YAZILMAZ** — güncel dağılım için `grep -c '^| .Teks-Erp/scripts/' Teks-Erp/docs/BEKCI-HARITASI.md`.
 
 
+## bilerek-kirmizi — (bekçi × VERİ) listesi
+
+> ⚠️ **Bu bir BEKÇİ listesi değil, bir (bekçi × VERİ) listesidir.** Aynı bekçi bir veritabanında kırmızı, ötekinde yeşildir ve **ikisi de doğrudur**. Ölçüldü 2026-09-13: aynı ağaçta üç oturum üç FARKLI kırmızı listesi çıkardı (`tekserp_e2e_test` · `tekserp_ea_test` · fabrika yedeği). Bu yüzden her satır **hangi veride görünür** alanını taşır; o alan olmadan liste doğru satırlar/yanlış bağlam olur — biri fikstürde koşup "demek düzelmiş" der.
+>
+> **Niçin var:** bilerek-kırmızıların sayısı kabile bilgisi hâline gelirse, DÖRDÜNCÜ gerçek kırmızı "herhalde o bilinenlerden" diye geçilir.
+>
+> **Bu tablo bir ANIN fotoğrafıdır.** Kırmızı kümesi yalnız veriye değil **ZAMANA** da bağlı: 2026-09-13'te `test_identity_ledger` sabah yeşildi (koruduğu dosya henüz doğmamıştı), öğleden sonra o dosya yazılınca kırmızıya dönecekti, harita satırı eklenince yine yeşil oldu. **Aynı ağaç, aynı DB, üç farklı saat, üç farklı sonuç.** Bu yüzden her satır tarihlidir.
+>
+> **Yeniden ölçme:** `cd Teks-Erp && DATABASE_URL=<fikstür> npm test` → çıkışın sonundaki `❌` satırları + `⚠️ ATLANAN KONTROL` bloğu. Liste bayatsa **bu komutun çıktısı kazanır**, aşağıdaki tablo değil.
+>
+> ⇒ Tam ölçüt dört boyutlu: **(bekçi × VERİ × REJİM × AN)**. "Veri" = bekçinin okuduğu her yapılandırılabilir durum (DB · şablon · ayar · profil · bayrak).
+>
+> **Altı sınıf karıştırılmaz:** **bilerek** (karar verildi, kapanmayacak ya da kapatan belli) · **devralınan** (borç, bir dilim bekliyor) · **ortam** (veri/sunucu eksikliği; ürün kusuru DEĞİL) · **artık** (başka bir bekçinin eksik temizliği — faturası onu ÜRETENE çıkmaz) · **aralıklı** (aynı ağaçta iki ardışık koşum iki farklı cevap; sebep BİLİNMİYOR) · **kuyruk** (kırmızı bir kusuru değil, BEKLEYEN BİR İŞİ gösterir) · **ortak ağaç / yarım düzenleme** (bekçi, başka bir oturumun O ANDA yazdığı dosyayı okudu; sebep BİLİNİR ve tekrarlanabilir — `aralıklı`dan farkı budur).
+
+| Bekçi + § | Sınıf | Kim kapatabilir | Hangi veride görünür | Hangi ÖLÇÜM bunu söylüyor |
+|---|---|---|---|---|
+| `test_consistency` §1c/§1d — siparişe yazılmayan sevk | bilerek | **hiç kapanmayacak** (fabrikanın çalışma biçimi; onarım YAPILMAYACAK, sayının büyümesi de alarm değildir) | **yalnız fabrika verisi** — fikstürde 0 sevkiyat olduğu için tezahür etmez | 2026-09-11 kullanıcı kararı, commit `d0d4c638`; fabrika yedeğinde 45 sevkiyat / 11.855,3 m + 5 sevkiyat. Kural satırı: `docs/kurallar/sevkiyat.md` [PROFİL] |
+| `test_hook_config` §2 — PreToolUse kanca yolu GÖRELİ | bilerek | **kullanıcı** (`.claude/settings.json` tek satır) — ⚠️ kapanana dek **her push'ta CI kırmızısı + kullanıcıya mail** | her ikisi (veriden bağımsız, config okur) | 2026-09-13 d5 ölçtü ve indirdi: kabuk kökten çıkınca kanca SESSİZCE ölür |
+| `test_script_guards` §1 — `test_bash_guard_scope.ts` yıkıcı yazma kapıdan geçmiyor | devralınan | d5 (bir dilim) | her ikisi | 2026-09-13 tam paket; dosya commit'li (`df8cb41c`), ağaç temiz |
+| `test_identity_ledger` — harita ↔ bekçi kümesi hizası | **kuyruk** | **haritaya satırını yazan kişi** · kırmızı süresi = bekçinin DOĞUŞU ↔ satırının İNİŞİ | her ortamda (ağacın kendisine bağlı, veriye değil) | ⚠️ **Bu kırmızı bir KUSUR DEĞİL, bir KUYRUK GÖSTERGESİDİR:** *"ağaçta haritalanmamış bir bekçi var."* Ölçüldü 2026-09-13 gecesi — aynı bekçi **üç kez** aynı sebeple kırmızı verdi ve her seferinde **başka** bir dosya yüzünden (`test_kimlik_sizintisi` → `test_defter_ters_yol` → `test_kapi_kapsami` → `test_devralinan_tavan`). **Kuyruk aynı gece KAPANDI: 510 gerçek · 510 haritada, 3/0.** Dört satırın dördü de **bekçiyi YAZAN oturumdan metin alınarak** yazıldı. Satır olmadan bakan kişi **kusur arar**; o gece üç kez arandı, üçünde de kusur yoktu. ⚠️ Satırı **bekçiyi YAZAN kişi tarif eder**, taşıyan yalnız taşır. ⚠️ **Ve buradaki "ortam" bir DB değil, ÇALIŞMA KOPYASININ KİRLİ HÂLİDİR:** aynı bekçi, aynı commit, iki farklı çalışma kopyası → iki farklı ayrışma sayısı (2026-09-13: benim kopyamda 1, başka oturumunkinde 3/0 — fark, kimin hangi commit edilmemiş satırı taşıdığı). Ölçüldü: kendi diff'im kenara konunca ayrışma **1 → 4** çıktı, yani satırlar sebep değil ÇÖZÜMDÜ |
+| `test_mobile_screen_permissions` | **ortak ağaç / yarım düzenleme** | **kimse — koşumu ağaç SAKİNKEN tekrarla** | ortak ağaçta, UZUN koşumda | ⚠️ **ARALIKLI SANILDI, DEĞİLDİ.** Ölçüm zinciri (2026-09-13): bekçi `Teks-Erp/src/routes`u da okur (`requireAnyPermission(...)` ayrıştırır) · `quality-grade.routes.ts` mtime **06:12:13** = strict paket koşumumun (05:58:50→06:13:26) TAM İÇİNDE · commit 17 sn SONRA. ⇒ Bekçi dosyayı **yazılırken** okudu. **Bulaşma sınırı ÖLÇÜLDÜ:** koşum penceresinde değişen tek `Teks-Erp/src` dosyası ile strict'siz koşumda kırmızı olmayan tek bekçi **aynı** ⇒ başka ölçüm etkilenmedi. ⚠️ *Uzun bir koşum, ortak ağaçta TEK BİR ağaç durumunu ölçmez* |
+| `test_fold_catalog` — kat kataloğu | **aralıklı** | **hiç kimse — sebebi BİLİNMİYOR** | ölçülemedi: aynı ağaçta iki ardışık CI turu iki farklı cevap verdi | `8f68c367` → **24/1 KIRMIZI** · `2e188894` → **YEŞİL** (arada bu bekçiye ve kat kataloğuna dokunan değişiklik YOK). ⚠️ Aralıklı bir bekçi, bu tablonun *"bir ANIN fotoğrafıdır"* şerhini bile AŞAR: iki ardışık turda iki farklı cevap verir ve listeyi okuyan **"liste bayat"** sanır — oysa liste doğru, **bekçi kararsız**. Sınıfı düşürmeden önce sebebi bulunmalı |
+| `test_module_flag_off` §3 · `test_module_grandfathering` §2b — modül anahtarı satırı yok | **ortam** | — (kusur değil) | **yalnız geçmişi migration'dan SONRA dolan fikstür** | 2026-09-13 belirleyici kontrol: `tekserp_fabrika_dev` (5.813 top) → 6 anahtarın 6'sı VAR; `tekserp_e2e_test` (41 top) → 0. Damga migration'ı boş DB'de koştu, damgalayacak geçmiş yoktu |
+| `test_scan_code_case` — tam eşleşme Seq Scan | **ortam** | — (kusur değil) | **yalnız küçük fikstür** | 2026-09-13: planlayıcı onlarca satırlık tabloda index kullanmaz. **CI KANITI** (`2e188894`): `Seq Scan on rolls (cost=0.00..1.02 rows=1)` — sınıflandırma tahmin değil, sorgu planıyla doğrulanmış |
+
+⚠️ **Bu tabloya girmeyen bir sınıf daha var: ARTIK.** Bir bekçinin eksik temizliği başka bir bekçiyi kırar ve fatura **onu üretene çıkmaz**. 2026-09-13'te `test_consistency` §6 (çuval `seq` ↔ `shipmentId`) böyle kırmızıydı; kaynak bir ölçüm betiğinin düşen temizliğiydi, artık silinince §6 yeşile döndü. **Kırmızıyı listeye eklemeden önce "bu bir artık mı" diye sor** — satırın `createdAt`ını ölçtüğün sistemin saat diliminde oku (`timestamptz`, fabrika günü Europe/Istanbul), kendi sezginde değil.
+
+### ÖLÇÜLMEMİŞ (atlanan) — ÖLÇÜLDÜ (2026-09-13)
+
+> Bu yüklemler paket koşumunda **hiç basılmıyordu**. 2026-09-13'te altısı da kendi portunda sunucu kaldırılarak koşuruldu; aşağıdaki tablo **öncesi/sonrası ölçümdür**, tahmin değil.
+>
+> ⚠️ **Ve "atlanan" sayısı KOŞMAYAN YÜKLEM sayısı DEĞİLDİR — atlanan BÖLÜM sayısıdır.** `test_module_flag_off`ta 18 atlama, sunucu açılınca **24** yeni yüklem bastı: bir atlama satırı birden çok yüklem gizleyebilir. ⇒ Atlanan sayısı bir alt sınırdır; kapsam açığı **ondan büyüktür**.
+
+| Bekçi | Port | Paket (sunucusuz) | Sunucu AÇIK | Yeni koşan | Sonuç |
+|---|---|---|---|---|---|
+| `test_superadmin.ts` | 4104 | 86 / 0 / **20 atlandı** | 103 / 0 / 3 | **+17** | hepsi YEŞİL |
+| `test_module_flag_off.ts` | 4101 | 85 / 1 / **18 atlandı** | 109 / 1 / 0 | **+24** | yeni yüklemler yeşil; §3 kırmızısı ORTAM (yukarıdaki tabloda) |
+| `test_settings_password.ts` | 4112 | 134 / 0 / **12 atlandı** | 146 / 0 / 0 | **+12** | hepsi YEŞİL |
+| `test_finance_flag_off.ts` | 4100 | 5 / 0 / **6 atlandı** | 10 / 0 / 0 | **+5** | hepsi YEŞİL |
+| `test_module_profile.ts` | 4122 | 58 / 0 / **4 atlandı** | 62 / 0 / 0 | **+4** | hepsi YEŞİL |
+| `test_scrap_grade_label.ts` §5/§5b | — | 20 / 0 / **1 atlandı** | — | — | port değil **şablon** rejimi: aktif `ROLL_FINISHED` şablonu kalite/uyarı elemanı taşımıyor (akış modunda, kanvas varyantı yok); fabrika şablonu kanvasa taşıdığında kendiliğinden koşar |
+
+**Kapanan:** beş port bekçisinin atlananları — geriye **dört** kalır: `test_superadmin` 3 + `test_scrap_grade_label` 1.
+
+⚠️ **Kalan dördü "koşulamaz" değil, BAŞKA REJİM ister** — ve bu, *hangi veride* alanının bir üst hâlidir:
+
+> ***Bazı bekçilerin TAM kapsamı tek koşumda ölçülemez; rejim başına bir koşum ister ve rejimler birbirini DIŞLAR.***
+
+`test_superadmin` iki rejimli ve paket **ikisini de** koşturmuyordu:
+```
+sistem hesabı YOK → 103 / 0 / 3    (2026-09-13 ölçümü, tekserp_e2e_test)
+sistem hesabı VAR → 126 / 0 / 16   (bekçinin kendi başlığındaki ölçüm, tekserp_modul_test)
+```
+Hesap VAR rejimi `npm run superadmin:kur` ister — **TTY ister ve sır hijyeni alanına girer**, o yüzden bir bekçi koşumu olarak kurulmaz; kullanıcı kararıdır.
+
+### Nasıl koşulur (port bekçileri)
+```bash
+cd Teks-Erp
+PORT=<port> npx tsx src/server.ts &          # kendi PID'in
+TEST_API_URL=http://localhost:<port> npx tsx scripts/<bekçi>.ts
+```
+⚠️ **SÜREÇ KAPATMANIN İKİ KURALI — birlikte uygulanır (ölçüldü 2026-09-13, ortak makine).**
+
+1. ***"Kendi PID'in" = DİNLEYEN sürecin PID'i, spawn ettiğin DEĞİL.*** `npx` iki kademe ekler (`npx` → `tsx` → `node`); kaydedilen spawn PID'i öldürmek **dinleyiciyi ayakta bırakabilir** ve insanı `pkill -f tsx`e (YASAK) iter — yani kural, uygulanması pahalı olduğu için kendi ihlalini üretir.
+2. ***Hedefi DESENLE değil SAHİPLİKLE seç.*** Ortak makinede bir desenle eşleşen her süreç senin değildir: `pkill -f <desen>` koşturmadan önce sahip ölçülür (`lsof -p <PID> -a -d cwd` + ata zinciri). Kök CLAUDE.md'nin *"`pkill -f tsx` YASAK"* satırı bir **liste** değil **ölçüt**tür — `tsx` yasaksa `python3` da aynı sınıftadır.
+
+**Uygulama:** dinleyici `lsof -nP -iTCP:<port> -sTCP:LISTEN` ile bulunur → ata zinciri `ps -o pid,ppid,command` ile doğrulanır → süreçler **adıyla** kapatılır → **sonra portun kapandığı ÖLÇÜLÜR** (`nc -z`). Dördüncü adım atlanırsa "kapattım" bir beyandır, ölçüm değil.
+
+⚠️ **`TEKSERP_STRICT=1` altında atlama kırmızı olur — AMA YALNIZ ONA UYAN BEKÇİDE, ve bugün o sayı BİR.**
+Ölçüldü 2026-09-13: `strictMi()`/`TEKSERP_STRICT` **metnini içeren** iki dosya var ama biri (`test_script_guards`)
+strict'e **uymuyor**, başka bir dosyanın kaynağında o dizgeyi **arıyor** — strict *hakkında* bir bekçi, strict'e
+*uyan* değil. ⇒ ***bir dosyanın X'i ANMASI, X'e UYMASI değildir.***
+Kalan atlamalar üç biçimde ve strict hiçbirini görmez:
+· **basar ama saymaz** (`⏭️` yazıp özete katmaz — `test_backup` bu sınıfta: `pg_dump` yokken 77 yüklem düşer)
+· **erken `return`** — kontroller hiç DOĞMAZ, sayıları yapısal olarak BİLİNEMEZ
+· ⚠️ **`check("… atlandı", true)` — atlamayı GEÇTİ sayar**: kapsam kaybı sıfır değil **EKSİ**, yeşil yukarı şişer.
+  Ölçüldü: **14 site / 9 dosya** (çok satırlı desenle; dar desen 1, orta desen 7 buluyordu — *sayı, deseninin
+  genişliğidir*). ⚠️ **İki alt grup var ve YÖNÜ ters sandım — düzeltildi (d5'in ölçümü):** bir kısmı *"veri/fixture
+  yok"* der (dürüst), bir kısmı *"DB seddi senaryoyu üretilemez kıldı"* der. İkincisini *"seddin kanıtı"*
+  sandım; **değil.** O satırlar **çıplak `catch`** kullanıyor ve hata kodunu HİÇ okumuyor ⇒ bağlantı
+  koptuğunda, fikstürde yazım hatası olduğunda ya da alakasız bir hata düştüğünde de aynı dala girip
+  **yeşil** basıyor. ***Bir yokluğa mekanizma atfetmek, o mekanizmayı ÖLÇMEK değildir*** — ve değişkenin
+  adı (`sedEngelledi`) bir İDDİADIR, kod onu hiçbir yerde denetlemiyor.
+  ⇒ ***Fark gerçek ama yön ters: bu grup daha MEŞRU değil, daha az ÖLÇÜLMÜŞ.***
+  Düzeltme atlama muhasebesi değil **EKSİK YÜKLEM**: hata kodu + **kısıta özgü ad** okunur, beklenmedikse
+  `throw` edilir (ölçüldü: `P2002` tek başına yetmez — `tr_fold_color(name::text)` · `"nameFold"` ·
+  `upper(code::text)` üç FARKLI kısıt, ve fikstürün kendi `code` çakışması da P2002 verir).
+
 ## yetki-izin
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
@@ -415,6 +503,10 @@ Alanlar: bölüm başlıkları aşağıda. **Sayı YAZILMAZ** — güncel dağı
 | `Teks-Erp/scripts/test_type_assertion_ratchet.ts` | `as unknown as` MANDALI, iki küme, yalnız küçülür: **A** `src/` nesne literali uyduruluyor (`{…} as unknown as X`) · **B** `scripts/` örneği nesne tipine genişletme (özel üyeye erişim). Sayı değil KÜME dondurulur (`dosya::hedef`), satır numarasından bağımsız. ⚠️ Sahte `Request` nesneleri (122 site) kapsam DIŞI — meşru test-double, imza körlüğü üretmez | | ✓ | 2026-09-13 |
 | `Teks-Erp/scripts/test_hook_config.ts` | KAPININ VARLIĞININ bekçisi: `.claude/settings.json`teki her komut kancasının script'i gerçekten var mı ve yolu KABUĞUN DİZİNİNDEN bağımsız mı (mutlak ya da `${CLAUDE_PROJECT_DIR}` çapalı). Göreli yol, kabuk alt projeye kayınca kancayı SESSİZCE öldürür ve Claude Code bunu non-blocking sayar. Ayar dosyasını yalnız OKUR, değiştirmez | | ✓ | 2026-09-13 |
 | `Teks-Erp/scripts/test_bash_guard_scope.ts` | Komut kapısının (`scripts/claude-hooks/bash-guard.mjs`) yasağı KENDİ komutunda araması: komut satırı ayıraçlarla parçalara bölünür ve yasak parçalarda aranır. Üç yön birden ölçülür — gerçek ihlaller hâlâ kırmızı · yanlış pozitifler gitti · bölme İKİ yanlış negatifi de kapattı. Kapı gerçek hook sözleşmesiyle (stdin JSON) çağrılır, `TEKSERP_HOOK_SKIP` miras alınmaz | | ✓ | 2026-09-13 |
+| `Teks-Erp/scripts/test_kimlik_sizintisi.ts` | Fabrika DB adının koda/dokümana SABİTLENMEMESİ (kök CLAUDE.md *"DB adı PROFİL değeridir"*): ağaçta gerçek kurulum adını taşıyan satırlar; muafiyet listesi gerekçeli ve dar (güvenli-ad listesi + o listeyi sınayan sondalar — ad orada sondanın GİRDİSİDİR). ⚠️ Panzehir adı SİLMEK değil SINIFIYLA ADLANDIRMAK: *"fabrikanın canlı yedeğinde"* — ölçüm doğrulanabilir kalır, kimlik gider | | ✓ ilk koşumda ısırdı: on site + **kendi başlığındaki örnek satırı** yakaladı | 2026-09-13 |
+| `Teks-Erp/scripts/test_kapi_kapsami.ts` | Tip kapısının KAPSAMI sıfır olamaz: her alt projenin `package.json > scripts.typecheck*` hedeflerinden `-p <config>` çıkarılır ve `--showConfig` ile kök dosya sayısı ölçülür. 0 dosya = kapı hiçbir şey ölçmüyor, her zaman yeşil verir (Electron kök config'i tam bu durumdaydı). Config listesi ELLE yazılmaz, script'ten türetilir; `-1` (config çözülemedi) "kapsam bulgusu değil ARIZA" diye ayrı raporlanır | | ✓ | 2026-09-13 |
+| `Teks-Erp/scripts/test_defter_ters_yol.ts` | Defter ters yol kapısı: her append-only modelin SINIFI + her defterin ters yol MEKANİZMASI beyandan okunup şemaya ve koda karşı doğrulanır (tipli enum çifti · damga · ters bağ · net karşı olay — tek kural yetmez, beyan edilir). Satır yaratan ileri yol kümesi beyanla birebir mi · beyansız `delete` var mı · borçlar iki yönlü görünür mü · telemetri sınıfının KARAR UFKU. Fikstür ayrımı KEŞİFLE (koşucunun kendi süzgeci), elle liste değil. DB gerektirmez (AST + tip denetleyicisi), 21 sn | | ✓ | 2026-09-13 |
+| `Teks-Erp/scripts/test_devralinan_tavan.ts` | `docs/standart/*.md` kural satırlarındaki `· devralınan: N` **tavanlarının** sessizce yükselmesini durdurur: **§1** belgedeki sayıyı dondurur (**70/70**, hiçbir şey çalıştırmaz, **gerçekliği ÖLÇMEZ**) · **§2** gerçekliği **bekçinin içinde** ölçer (**2/70** — 70 tavanın yalnız 2'si koşturulabilir ölçüm komutu taşıyor). ⇒ **§1 yeşilse "tavan aşılmadı" DEĞİL, "tavan YÜKSELTİLMEDİ" demektir.** Taban iki sütunlu: belge (18 · 53) ↔ gerçek (30 · 78); **aradaki fark BORÇTUR ve görünür bırakılmıştır** — kapı sonraki kaymayı durdurur, mevcut borcu ÖDEMEZ. **Mandaldır, tarayıcı değil: doğduğu gün ısırmaz.** | — | ✓ | commit `be330599` |
 | `Teks-Erp/scripts/test_logger_kanali.ts` | Backend log kanalı sözleşmesi: `SEVIYE [alan] mesaj` biçimi · akış ayrımı (bilgi→stdout, hata/uyarı→stderr) · bir hata = TEK etiketli satır (sayılabilirlik) · `src/` içinde çıplak `console` yok · ESLint `no-console` açık | | ✓ | 2026-09-07 |
 | `Teks-Erp/scripts/test_ortam_bagimliligi_tavani.ts` | [TD-17] TAVANI (yalnız düşer): "herhangi bir aktif kayıt" 109 dosya · ham `username: "admin"` 129 dosya; körlük zemini 400. ⚠️ İhlal demiyor, BAĞIMLILIK TAŞIYAN DOSYA SAYISI diyor — yönü zorlar | | ✓ | 2026-09-06 |
 | `Teks-Erp/scripts/test_negatif_sonda_kapsami.ts` | Kayıtlı negatif sonda TABANI (yalnız yükselir) — bugün 79/461 (%17,1); körlük zemini 400 dosya. ⚠️ Kapsam CIRCIRI, ispat değil: metinle kandırılabilir, ölçtüğü şey gerilemenin durması | | ✓ | 2026-09-06 |

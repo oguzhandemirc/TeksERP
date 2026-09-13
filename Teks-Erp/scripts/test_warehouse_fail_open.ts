@@ -1,49 +1,65 @@
 // =============================================================================
-// SONDA — VARSAYILAN DEPO YOKKEN "DEPODA" DEMEK: fail-open kapısı
+// SONDA — VARSAYILAN DEPO YOKKEN "DEPODA" DEMEK: fail-open kapandı, kapsamı ölçülüyor
 // =============================================================================
-// ⚠️ BU DOSYA BUGÜN KIRMIZI VERMEK İÇİN YAZILDI. Yeşile çevirmek ürün kararıdır
-// (depo alanı): uç ya REDDEDECEK (4xx) ya da topu WAREHOUSE'a GEÇİRMEYECEK.
-// İddia bilerek "ikisinden biri" biçiminde — hangisinin doğru olduğunu bu bekçi
-// DEĞİL, düzeltmeyi yapan karar verir; bekçi yalnız BUGÜNKÜ davranışı reddeder.
+// ⚠️ BU DOSYA ARTIK YEŞİL ve BİR REGRESYON BEKÇİSİDİR — 2026-09-12'ye kadar
+// bilerek kırmızıydı, düzeltme indi. Eski "BEKLENEN KIRMIZI" rejimi BİTTİ;
+// aşağıdaki hiçbir satır bir ürün kusurunu açıkta tutmuyor, hepsi kapanmış bir
+// kusurun geri gelmesini bekliyor.
 //
-// BUGÜNKÜ DAVRANIŞ (ölçüldü 2026-09-12): `resolveTargetWarehouseId`
-// (`services/helpers/warehouse.helper.ts:50`) varsayılan depo yoksa FIRLATMAZ,
-// gürültülü loglar ve `null` döner. Sonuç: uç 200/201 verir, top `WAREHOUSE`
-// statüsüne geçer, `warehouseId` NULL kalır. İki farklı gerçek ("depoda" ile
-// "depoda ama neresi belli değil") tek çıktıya iniyor ve `status` farkı taşımıyor.
+// DÜZELTME NE SEÇTİ (ölçüldü 2026-09-13, ağaç `8ce92cb3`): `warehouse.helper.ts`
+// `resolveTargetWarehouseId` FAIL-OPEN'ı KAPATTI — artık `null` DÖNMÜYOR:
+// varsayılan yoksa `ensureDefaultWarehouse()` çağırıyor (yoksa TERFİ ettirir,
+// hiç yoksa `DP-MERKEZ`i doğurur), sonra tekrar okuyor; o da olmazsa **409
+// FIRLATIYOR**. Yani üç yol da artık topu DAMGALI doğuruyor.
 //
-// FAIL-OPEN BİLİNÇLİDİR ve gerekçesi helper'da yazılı: "tek alternatif top
-// oluşturmayı reddetmek, yani fabrikada üretim kaydını durdurmaktır." Bu sonda o
-// gerekçeyi çürütmez — KAPSAMINI ölçer: gerekçe KÖK yollar için (KK1 girişi)
-// ikna edici, ama TERFİ yolları için (aşağıda §4) hiç konuşmuyor; orada üretim
-// kaydı zaten var, yalnız statü değişiyor.
+// ⚠️ DERS — BU SONDA KENDİ İDDİASINI ÖLÇEMEDİ: ilk yazımda iddia "ya 4xx ya
+// damgalı/sokmaz" biçimindeydi ve düzeltmenin seçtiği ÜÇÜNCÜ yolu (terfi ettir,
+// devam et) sessizce KABUL ETTİ — sonda yeşile döndü ama hangi davranışın
+// indiğini SÖYLEMEDİ. Gevşek iddia, doğru düzeltmeyi de yanlış düzeltmeyi de
+// aynı yeşille geçirir. Bu yüzden §2-§5 artık TEK davranış iddia ediyor:
+// **top DAMGALI doğar ve damga (yeniden) varsayılan olan deponun kendisidir.**
 //
-// ⚠️ "HİÇ DEPO YOK" DALI: ÖLÇÜLDÜ, BEKÇİYE BAĞLANMADI — ikisi farklı şeydir.
-// Buradaki üç bölüm "depo VAR ama VARSAYILAN yok" rejimini ölçer; "hiç depo yok"
-// rejimi AYRI ve bu dosyada kilitli DEĞİL.
+// ═══ KAPSAM — ŞERH DEĞİL, SAYI (ölçüldü 2026-09-13) ═════════════════════════
+// Eski şerh şunu diyordu: *"'hiç depo yok' dalı tek giriş noktasında ölçüldü;
+// dokuz `roll.create` noktası aynı çözümleyiciden geçiyor ama 'aynı fonksiyonu
+// çağırıyor' ≠ 'aynı ilk-yazma davranışını gösteriyor'."* Şerh haklıydı ve
+// FARKIN KENDİSİ artık ölçüldü — dokuz top doğuran yazma noktası İKİ SINIFA
+// ayrılıyor ve iki sınıf resolver'ı AYNI SIKLIKTA görmüyor:
 //
-// ÖLÇÜLDÜ (2026-09-12, boş fikstür: top=0 · depo=0 · uzlaştırma hiç koşmamış):
-// `POST /api/rolls/initial-entry` → 201, top `warehouseId` DOLU doğdu ve depo
-// sayısı 0→1 oldu: `DP-MERKEZ`i boot işi değil İSTEĞİN KENDİSİ yarattı
-// (`ensureDefaultWarehouse` sonradan çağrıldığında "exists" dedi). Yani
-// uzlaştırma ihtiyaç anında koşuyor ve "hiç depo yok" durumu İLK YAZMA
-// İSTEĞİNDEN SONRA ulaşılamaz — `resolveTargetWarehouseId`in reddetme dalı KÖK
-// YOLDA basılamaz kapıdır. ⚠️ Kapsam: tek giriş noktasında ölçüldü; "dokuz
-// `roll.create` noktası aynı fonksiyonu çağırıyor" ile "aynı ilk-yazma
-// davranışını gösteriyor" FARKLI iki iddiadır ve ikincisi ölçülmedi.
+//   · KOŞULSUZ (3) — her çağrıda resolver'a sorar, 409'u da terfiyi de görür:
+//     `inventory.service.ts:1135` (KK1 initial-entry) ·
+//     `inventory.service.ts:4906` (createOpenFabric) ·
+//     `subcontractor.service.ts:3212` (receive → `roll.createMany`)
+//   · KOŞULLU (6) — `parent.warehouseId ?? (await resolveTargetWarehouseId(tx))`:
+//     `subcontractor.service.ts:545` · `tambur.service.ts:1076` · `:2245` ·
+//     `:2781` · `:3167` · `:3629`
+//     ⚠️ Ebeveyni DAMGALI bir fabrikada bu altısı resolver'a HİÇ SORMAZ —
+//     ne 409'u görür ne terfiyi. Onların deposu ebeveynden MİRASTIR ve
+//     doğruluğu ebeveynin damgasına bağlıdır, resolver'a değil.
 //
-// NEDEN BEKÇİ YOK: davranışsal bir sonda ön koşulunu KENDİSİ yok eder — "hiç
-// depo yok"u kilitleyen kontrol, koştuğu anda depo doğurur ve ikinci koşumda
-// ölçeceği durum kalmaz. Her koşumda taze fikstür kuran bir altyapı gerekir.
-// SIRADAKİ (d5, yapısal sonda): `ensureDefaultWarehouse`in ÜÇÜNCÜ kademesinin
-// ("hiç yoksa yarat") varlığını ölç — ulaşılamazlığın tek sebebi odur; kaldırılırsa
-// reddetme dalı basılabilir hâle gelir ve bunu söyleyen hiçbir şey yoktur.
-// Kapı çürümez, ULAŞILAMAZLIĞI çürür.
+// Bu sonda KOŞULSUZ sınıfın BİRİNİ (KK1, §2) ve KOŞULLU sınıfın İKİSİNİ
+// (tambur finalize §3, terfi yolu §4) davranışsal olarak ölçer.
+// ⚠️ AÇIK KALAN — KAPSAM eksiği, bilgi eksiği DEĞİL: koşulsuz sınıfın kalan
+// ikisi (`createOpenFabric` bir `GoodsReceipt` fikstürü ister, `receive` bir
+// fason firması fikstürü) bu sondada KOŞMUYOR. Davranışları ölçülmedi; sınıfa
+// ait oldukları ÖLÇÜLDÜ (yukarıdaki envanter). Envanteri mekanik koruyacak
+// AST tripwire'ı bu dosya YAZMAZ — sahibi `d5` (ölçüt commit'i durduran kapıya
+// dönüşüyorsa altyapıdır).
+//
+// ═══ "HİÇ DEPO YOK" DALI: ULAŞILAMAZ, ve ulaşılamazlığın sebebi KODDA ═══════
+// Ölçüldü (2026-09-12, boş fikstür top=0 · depo=0): `POST /api/rolls/initial-entry`
+// → 201, top damgalı doğdu, depo sayısı 0→1: `DP-MERKEZ`i boot işi değil İSTEĞİN
+// KENDİSİ yarattı. 2026-09-13 ölçümü bunu keskinleştirdi: üçüncü kademe artık
+// `resolveTargetWarehouseId`in KENDİ gövdesinde. Dolayısıyla 409 yalnız
+// YARATMANIN DÜŞTÜĞÜ durumda basılır — yani DB yazılamıyorken. Bu bir
+// BASILAMAZ KAPIDIR ve kapının kendisi değil ULAŞILAMAZLIĞI çürüyebilir:
+// üçüncü kademeyi kaldıran biri 409'u basılabilir hâle getirir ve bunu söyleyen
+// hiçbir şey yoktur. ŞEKLİ ölçen yapısal sonda `d5`e verildi (2026-09-13).
 //
 // MEVCUT BEKÇİYLE İLİŞKİ — `test_roll_warehouse_stamp` bu deliği KAPATMIYOR:
 // `main()` ilk iş `ensureDefaultWarehouse()` çağırıyor, yani "varsayılan depo
-// yok" rejimini HİÇ kurmuyor (dosya bunu kendi yorumunda açıkça söylüyor). O
-// bekçi SONUCU süpürür ("test-dışı deposuz top yok"), bu sonda ANI ölçer.
+// yok" rejimini HİÇ kurmuyor. O bekçi SONUCU süpürür ("test-dışı deposuz top
+// yok"), bu sonda ANI ölçer.
 // =============================================================================
 import type { Server } from "http";
 import type { AddressInfo } from "net";
@@ -118,11 +134,24 @@ async function main(): Promise<void> {
     console.log("\n── §2 SONDA: varsayılan depo YOK, KK1 girişi (kök yol) ──");
     const b = await kk1();
     const bD = b.id ? await damga(b.id) : null;
-    // İDDİA: ya 4xx ya da damgalı doğsun. Bugün 201 + NULL geliyor ⇒ KIRMIZI.
+    // ⚠️ TEK DAVRANIŞ İDDİASI (gevşek "ya/ya" biçimi bilerek TERK EDİLDİ):
+    // resolver `ensureDefaultWarehouse`i çağırır, o da mevcut depoyu TERFİ
+    // ettirir ⇒ istek 201 verir ve top O DEPONUN damgasıyla doğar. Reddetme
+    // (409) bu rejimde DOĞRU CEVAP DEĞİLDİR — ortada terfi edecek depo vardır.
     check(
-      "§2 ⭐ varsayılan depo yokken KK1 ya REDDEDER ya da DAMGALI top doğurur",
-      b.r.status >= 400 || (bD !== null && bD.warehouseId !== null),
-      `status=${b.r.status} warehouseId=${String(bD?.warehouseId)} statü=${String(bD?.status)}`,
+      "§2a ⭐ varsayılan depo yokken KK1 başarılı (terfi devreye girer, üretim durmaz)",
+      b.r.status === 201,
+      `status=${b.r.status}`,
+    );
+    check(
+      "§2b ⭐ doğan top DAMGALI ve damga TERFİ EDEN deponun kendisi",
+      bD !== null && bD.warehouseId === varsayilan.id,
+      `warehouseId=${String(bD?.warehouseId)} beklenen=${varsayilan.id} statü=${String(bD?.status)}`,
+    );
+    check(
+      "§2c ⭐ terfi GERÇEKTEN oldu (depo yeniden isDefault) — 'damga dolu' tesadüf değil",
+      (await prisma.warehouse.findUniqueOrThrow({ where: { id: varsayilan.id }, select: { isDefault: true } })).isDefault === true,
+      "ensureDefaultWarehouse ikinci kademe (promoted)",
     );
 
     console.log("\n── §3 SONDA: varsayılan depo YOK, tambur finalize (zincir yolu) ──");
@@ -146,11 +175,18 @@ async function main(): Promise<void> {
       const fin = await call("POST", "/api/tambur/finalize", { token, body: { rollId: parent.id, cuts: [{ length: 25, qualityGrade: grade.code }] } });
       const cocuk = await prisma.roll.findMany({ where: { parentRollId: parent.id }, select: { id: true, status: true, warehouseId: true } });
       const hepsiDamgali = cocuk.length > 0 && cocuk.every((c) => c.warehouseId !== null);
-      const hicbiriDepoda = cocuk.every((c) => c.status !== RollStatus.WAREHOUSE);
+      // ⚠️ Bu KOŞULLU sınıfın bir üyesi (`tambur.service.ts:3629`): ebeveyn
+      // deposuz olduğu için resolver'a SORAR. Ebeveyni damgalı bir fabrikada
+      // aynı satır resolver'a hiç sormaz — kapsam envanteri başlıkta.
       check(
-        "§3 ⭐ varsayılan depo yokken finalize ya REDDEDER ya da çocuğu depoya SOKMAZ/damgalar",
-        fin.status >= 400 || hepsiDamgali || hicbiriDepoda,
-        `status=${fin.status} çocuk=${cocuk.length} damga=[${cocuk.map((c) => String(c.warehouseId)).join(",")}] statü=[${cocuk.map((c) => c.status).join(",")}]`,
+        "§3a ⭐ varsayılan depo yokken finalize başarılı (terfi devreye girer)",
+        fin.status === 200,
+        `status=${fin.status}`,
+      );
+      check(
+        "§3b ⭐ doğan HER çocuk DAMGALI (kendini yalanlayan satır yok: WAREHOUSE + null)",
+        hepsiDamgali,
+        `çocuk=${cocuk.length} damga=[${cocuk.map((c) => String(c.warehouseId)).join(",")}] statü=[${cocuk.map((c) => c.status).join(",")}]`,
       );
     }
 
@@ -159,9 +195,26 @@ async function main(): Promise<void> {
     const terfi = c.id ? await call("POST", `/api/rolls/${c.id}/prepare-for-sale`, { token }) : { status: 0, body: {} };
     const cD = c.id ? await damga(c.id) : null;
     check(
-      "§4 ⭐ deposuz top WAREHOUSE'a terfi ETTİRİLMEMELİ (ya da terfi damgalamalı)",
-      terfi.status >= 400 || (cD !== null && cD.warehouseId !== null) || cD?.status !== RollStatus.WAREHOUSE,
-      `status=${terfi.status} warehouseId=${String(cD?.warehouseId)} statü=${String(cD?.status)}`,
+      "§4a ⭐ terfi yolu başarılı (`prepare-for-sale`)",
+      terfi.status === 200 || terfi.status === 201,
+      `status=${terfi.status}`,
+    );
+    check(
+      "§4b ⭐ WAREHOUSE'a geçen top DAMGASIZ KALMAZ — 'depoda ama neresi belli değil' YOK",
+      cD !== null && !(cD.status === RollStatus.WAREHOUSE && cD.warehouseId === null),
+      `warehouseId=${String(cD?.warehouseId)} statü=${String(cD?.status)}`,
+    );
+
+    // ═══ §5 — REJİMDEN BAĞIMSIZ: kendini yalanlayan satır hiç doğmadı ═══════
+    // Körlük zemini: sonda kendi toplarını sayar; 0 top "bakılmadı" demektir.
+    console.log("\n── §5 Kendini yalanlayan satır (sondanın ürettiği toplar) ──");
+    const kendi = await prisma.roll.findMany({ where: { itemId: { in: yarat.item } }, select: { barcode: true, status: true, warehouseId: true } });
+    check("§5a körlük zemini: sonda en az üç top üretti", kendi.length >= 3, `${kendi.length} top`);
+    const yalanci = kendi.filter((r) => r.status === RollStatus.WAREHOUSE && r.warehouseId === null);
+    check(
+      "§5b ⭐ hiçbir top `WAREHOUSE` + `warehouseId=null` doğmadı (iki gerçek tek çıktıya inmiyor)",
+      yalanci.length === 0,
+      yalanci.length === 0 ? `${kendi.length} top denetlendi` : yalanci.map((r) => r.barcode).join(" · "),
     );
   } finally {
     server.close();
@@ -205,12 +258,12 @@ main()
     // yüzey bu cümledir. Çıkış kodu BİLEREK 1 kalır — sessiz bekçi yazmıyoruz.
     if (fail > 0) {
       console.log(
-        "\n⚠️  BU KIRMIZI BEKLENİYOR — sonda ürün kusurunu açıkta tutmak için yazıldı\n" +
-        "    (varsayılan depo yokken üç yol da topu 'depoda' sayıyor; `warehouse.helper.ts`\n" +
-        "     fail-open'ı bilinçli, ama terfi yollarını kapsamıyor). Düzeltme DEPO alanında:\n" +
-        "     uç ya 4xx döndürecek ya da topu WAREHOUSE'a geçirmeyecek. Yeşile döndüğünde\n" +
-        "     bu bekçi düzeltmenin çalıştığının KANITIDIR — silinmez.\n" +
-        "    §1 (pozitif kontrol) da kırmızıysa durum BAŞKA: orada gerçek bir regresyon var.",
+        "\n⚠️  BU SONDA ARTIK BİR REGRESYON BEKÇİSİDİR — kırmızısı BEKLENEN DEĞİL.\n" +
+        "    2026-09-12'de `resolveTargetWarehouseId` fail-open'ı kapandı (null dönmüyor,\n" +
+        "    `ensureDefaultWarehouse` + 409). Kırmızı, o düzeltmenin geri alındığını ya da\n" +
+        "    bir doğum yolunun resolver'ı atladığını söyler.\n" +
+        "    §1 (pozitif kontrol) kırmızıysa önce ORAYA bak: zincir kapıya ulaşmıyordur\n" +
+        "    ve §2-§5'in sonucu yorumlanamaz.",
       );
     }
     await prisma.$disconnect();

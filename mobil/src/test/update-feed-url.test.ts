@@ -71,8 +71,30 @@ describe('güncelleme kanalı adresi', () => {
     expect(appJson.updates.enabled).toBe(true);
     expect(appJson.updates.codeSigningCertificate).toBeTruthy();
     expect(appJson.updates.codeSigningMetadata?.keyid).toBeTruthy();
-    // Sertifika dosyası GERÇEKTEN var olmalı — yolu yazıp dosyayı unutmak,
-    // prebuild'i düşürür ama bunu ancak derleme anında öğrenirsin.
+  });
+
+  // ⚠️ DOSYA VARLIĞI AYRI BİR YÜKLEM — ve TEMİZ KLONDA SAĞLANAMAZ.
+  // İmzalama materyali `mobil/.gitignore`da (`keystore/`) ve orada KALMALI:
+  // repo public. Yani bu yüklem yalnız sertifikası olan makinede sağlanabilir
+  // ⇒ yeşili bir kapsam beyanı DEĞİLDİR (ölçüldü 2026-09-13: yerelde yeşil,
+  // temiz klonda ve CI'da kırmızı — bir aydır CI ölü olduğu için görünmemişti).
+  //
+  // ⚠️ ATLAMA KAPSAMI DAR: yalnız DOSYA VARLIĞI atlanır. Yukarıdaki üç alan
+  // kontrolü (`enabled` · sertifika yolu · `keyid`) her ortamda koşar — bir
+  // atlama, ölçülebilen komşusunu da götürürse kapsam sessizce kaybolur.
+  //
+  // ⚠️ ASIL YERİ BURASI DEĞİL: testin kendi gerekçesi *"bunu ancak DERLEME
+  // ANINDA öğrenirsin"* diyor ⇒ kontrolün evi paketleme/yayın kapısıdır
+  // (sertifikanın gerçekten olması gereken an). Buradaki hâli geçicidir.
+  //
+  // ⚠️ `TEKSERP_STRICT=1` altında ATLAMA YOK: paketleme öncesi "hepsi koşsun"
+  // diyen biri, atlananın arkasına saklanmış bir eksikliği görebilmeli. O modda
+  // test koşar ve keystore yoksa KIRMIZI verir — beyanlı atlama bir muafiyet
+  // değil, bir GÖRÜNÜRLÜK kararıdır.
+  const strict = process.env.TEKSERP_STRICT === '1';
+  const keystoreVar = fs.existsSync(path.join(KOK, 'keystore'));
+  const sertifikaTesti = keystoreVar || strict ? it : it.skip;
+  sertifikaTesti('imzalama sertifikası dosyası GERÇEKTEN var (yalnız keystore/ olan makinede)', () => {
     expect(fs.existsSync(path.join(KOK, appJson.updates.codeSigningCertificate))).toBe(true);
   });
 
