@@ -147,6 +147,8 @@ const MUAFLAR: Record<string, string> = {
     "TRUNCATE bir STRING SABİTİNDE geçiyor (trigger tanımı: 'BEFORE DELETE OR UPDATE OR TRUNCATE') — yorum ayıklaması bunu elemez, çalıştırılan bir ifade de değil",
   "test_audit_depth.ts":
     "TRUNCATE bilerek koşuluyor ama GERİ ALINAN bir tx içinde: audit guard'ının onu reddettiğini ölçüyor",
+  "test_bash_guard_scope.ts":
+    "yıkıcı SQL metinleri KOMUT KAPISINA GİRDİ olarak verilir, hiç çalıştırılmaz — dosyada prisma/psql/Pool çağrısı YOK (ölçüldü 2026-09-13); kapı bir dizgeyi çalıştırılan komuttan ayırt edemediği için §1 buraya takılıyordu, `test_db_invariants.ts` muafiyetiyle aynı sınıf",
   "test_script_guards.ts": "bu dosyanın kendisi — izleri sabit olarak taşır",
 };
 
