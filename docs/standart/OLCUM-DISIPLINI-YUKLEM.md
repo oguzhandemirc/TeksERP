@@ -62,6 +62,18 @@ aradım; üçüncü bir biçim varsa bu ikisi görmez."**
 *(Kaynak: oturum ölçümü 2026-09-13, sha yok; paket envanteri belgesi.)*
 Kardeşi § Boş çıktı bir ÖLÇÜM değildir ve `OLCUM-DISIPLINI-SINIFLAR.md` § "Bende yok".
 
+⭐ **Kardeşi — *"artık yok"* sonucu, ancak yüklem GERÇEK adı içeriyorsa kanıttır.**
+Temizlik doğrulaması genelde *"fikstür kalmadı"* diye yazılır ve aranan şey kodda
+gördüğün dizedir. Ama üretilmiş fikstür adları **çalışma anında** doğar
+(`TEST-…-${Date.now()}`): şablon dizgesi veritabanında HİÇ geçmez, arama boş döner ve
+boşluk *"temizlendi"* diye okunur. *(d9, 2026-09-14; kardeş vaka aynı gün: çöken bir
+koşumun artığı P2002 ile ASIL hatayı maskeledi — `ea3942c7`.)*
+> **Yokluk iddiasında yüklem, aranan şeyin ÇALIŞMA ANINDAKİ hâlini taşımalı:** ön ek
+> (`TEST-`/`TST-`) ya da koşumun ürettiği damganın kendisi — kodda yazan şablon değil.
+📌 Ve pozitif kontrol burada zorunludur: aramanın **bir şey bulduğu** bir durum kur
+(temizlikten ÖNCE ara), sonra temizlik sonrası boşluğu kanıt say.
+
+
 ### Sınırsız eşleşme — sınırını BEYAN ETMEYEN yüklem alakasızı içeri alır
 Bir yüklem yanlış olmadan **sınırsız** olabilir: aradığını bulur, ama **aramadığını da**
 bulur. Beş biçim ölçüldü: *kelime sınırı yok* · *bağlam sınırı yok* · *boş küme her şeye

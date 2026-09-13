@@ -21,7 +21,7 @@ kalamaz). ⇒ **Dizin bayatlayamaz; bayatlatmayı deneyen commit durur.** İlk d
 bir kereye mahsus üretildi (2026-09-13); bundan sonrasını üreteç değil KAPI tutar —
 üretece bağlı bir dizin, üreteç koşulmadığı gün sessizce bayatlardı.
 
-Sayı bir ölçümdür ve bu satır da kapı altındadır: **151 başlık / 11 dosya**
+Sayı bir ölçümdür ve bu satır da kapı altındadır: **152 başlık / 11 dosya**
 (ölçüldü 2026-09-13; kapı her koşumda yeniden sayar ve sayı tutmazsa kırmızı verir).
 
 ⚙️ **MÜKERRER TARAMASI (dizinin ilk kullanımı, 2026-09-14):** 147 başlık çiftlenip
@@ -186,6 +186,7 @@ açan kişi tabloyu yine baştan sona okur.**
 |  | § ⑧ Uzaktaki kapı, ürünle ilgisiz bir sebeple HİÇ açılmayabilir | (`OLCUM-DISIPLINI-KAPI-OLUMU.md`) |
 |  | § Bir kapının yeşili, ÖLÇTÜĞÜ İKİ UÇLA sınırlıdır | (`OLCUM-DISIPLINI-KAPI-OLUMU.md`) |
 |  | § Bir kapının TETİĞİ bir OLAYI ölçer; TANISI bir ANLAM iddia eder | (`OLCUM-DISIPLINI-KAPI-OLUMU.md`) |
+|  | § Bir kırmızı ÖTEKİNİ GİZLER — ilk kırmızı düzelene kadar ikincisi YOKTUR | (`OLCUM-DISIPLINI-KAPI-OLUMU.md`) |
 |  | § Bir kırmızının MESAJI, hangi kontrolün kırmızı olduğunu söylemez | (`OLCUM-DISIPLINI-KAPI-OLUMU.md`) |
 |  | § …ve etiketi SÜZGEÇ de yiyebilir — damga süzgecinin deseni metnin içinde de geçer | (`OLCUM-DISIPLINI-KAPI-OLUMU.md`) |
 
@@ -203,5 +204,5 @@ açan kişi tabloyu yine baştan sona okur.**
 | [`OLCUM-DISIPLINI-ORTAK-AGAC.md`](OLCUM-DISIPLINI-ORTAK-AGAC.md) | KATMAN 1c — PAYLAŞILAN AĞAÇ, ÇOK OTURUM (8 başlık) |
 | [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) | KATMAN 2 — ölçümden sonraki adım (31 başlık) |
 | [`OLCUM-DISIPLINI-KAPI.md`](OLCUM-DISIPLINI-KAPI.md) | ölçümü KAPIYA çevirmek (11 başlık) |
-| [`OLCUM-DISIPLINI-KAPI-OLUMU.md`](OLCUM-DISIPLINI-KAPI-OLUMU.md) | kapının ÖLÜMÜ, kırmızının okunması (11 başlık) |
+| [`OLCUM-DISIPLINI-KAPI-OLUMU.md`](OLCUM-DISIPLINI-KAPI-OLUMU.md) | kapının ÖLÜMÜ, kırmızının okunması (12 başlık) |
 

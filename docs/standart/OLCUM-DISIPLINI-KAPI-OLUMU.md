@@ -252,6 +252,25 @@ NEREYE sorduğun (yüklem nereye bakar) — bu ikisi tetiğe, buradaki tanıya a
 Ve `OLCUM-DISIPLINI.md` § Teşhis mesajı da bir yüklemdir (tanının YÜKLEMİ) ·
 § Teşhis mi, ölçüm mü — kurala çevirmeden önce (tanının KURALA dönüşmesi).
 
+### Bir kırmızı ÖTEKİNİ GİZLER — ilk kırmızı düzelene kadar ikincisi YOKTUR
+Kırmızı bir dosyaya ikinci bir kırmızı eklendiğinde **hiçbir şey değişmez**: koşum zaten
+kırmızıydı, sayaç zaten artmıştı, okuyan zaten *"bu dosya kırmızı"* diye biliyordu. İkinci
+kusur **doğduğu gün görünmez** ve ilk kusur kapanana kadar da görünmez — yani en uzun
+yaşayan kusur, en gürültülü komşunun yanındakidir.
+
+*(Vaka 2026-09-14: `ENTRY_CORRECTION` yazıcısı bir bekçinin FK temizliğini kırdı; kırmızı
+**#49'dan beri** oradaydı ama aynı dosyanın başka bir kırmızısının arkasında durduğu için
+hiçbir turda fark edilmedi.)*
+
+> **Bir bekçinin KIRMIZI SAYISI da bir ölçümdür** — "kırmızı mı" ikili sorusu, içeride
+> kaç kusur olduğunu gizler. Kırmızı bir dosyayı düzeltirken *"kaç ❌ vardı, kaç kaldı"*
+> yaz; sayı düşmüyorsa düzelttiğin kusur başkasıydı.
+📌 Panzehir iki adım: ① kırmızı bir dosyaya dokunan commit, o dosyanın ❌ SAYISINI önce ve
+sonra basar · ② "bilerek kırmızı" kaydı ADIYLA ve SAYISIYLA tutulur (`BEKCI-HARITASI.md`
+§ bilerek-kirmizi) — sayı tutulmazsa yeni bir kusur eski gerekçenin altına saklanır.
+Kardeşleri § Bir kırmızının MESAJI, hangi kontrolün kırmızı olduğunu söylemez ·
+§ SÜREKLİ bir kırmızı sessiz değil DUYULMAZDIR (aynı ailenin öteki ucu).
+
 ### Bir kırmızının MESAJI, hangi kontrolün kırmızı olduğunu söylemez
 Kontrol **etiketi** ile kontrol **mesajı** ayrı iki bilgidir ve yalnız etiket hangi
 iddianın düştüğünü söyler. Mesaj paylaşılabilir: iki ayrı kontrol aynı metni basıyorsa,
