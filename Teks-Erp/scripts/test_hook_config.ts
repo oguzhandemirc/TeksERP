@@ -34,6 +34,7 @@
 //    kullanıcının denetim yüzeyidir; düzeltmeyi kullanıcı uygular, bekçi bozulduğunu
 //    söyler.
 // =============================================================================
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, isAbsolute } from "node:path";
 
@@ -150,6 +151,28 @@ function main(): void {
     scriptYolu('node "${CLAUDE_PROJECT_DIR}"/scripts/claude-hooks/bash-guard.mjs') ===
       '"${CLAUDE_PROJECT_DIR}"/scripts/claude-hooks/bash-guard.mjs',
   );
+
+  // ── §4 ORTAK .git/config TEMİZ Mİ (tripwire, 2026-09-14) ─────────────────
+  // Hook'a alınan bir bekçi git'in GIT_DIR'ını miras alıp `git init/config`i
+  // GERÇEK repoya koştu: ortak config'e `core.bare=true` (ana ağaçta `git reset`
+  // "bare repository" ile düştü) ve `user.name=bekci` yazıldı — bir origin commit'i
+  // o kimlikle doğdu. `.git/config` TÜM worktree'lerin ortak dosyasıdır; ona yazan
+  // her şey buradan görülsün. Yerel config'in DOĞRU hâli: bare=false · worktree
+  // anahtarı yok · kimlik yerelde YOK (global'den gelir). Sonda: `--file` ile
+  // bozuk bir kopya (TEKSERP_GIT_CONFIG_SONDA) — gerçek config'e dokunulmaz.
+  const gitConfig = (anahtar: string): string | null => {
+    const dosya = process.env.TEKSERP_GIT_CONFIG_SONDA;
+    const r = spawnSync("git", dosya ? ["config", "--file", dosya, "--get", anahtar] : ["config", "--local", "--get", anahtar], {
+      cwd: KOK,
+      encoding: "utf8",
+    });
+    return r.status === 0 ? r.stdout.trim() : null;
+  };
+  const bare = gitConfig("core.bare");
+  check("§4a ⭐ ortak config: core.bare=false", bare === "false", `core.bare=${bare ?? "(yok)"}`);
+  check("§4b ⭐ ortak config: core.worktree YOK", gitConfig("core.worktree") === null, gitConfig("core.worktree") ?? "yok");
+  const yerelKimlik = [gitConfig("user.name"), gitConfig("user.email")].filter((v) => v !== null);
+  check("§4c ⭐ ortak config: user.name/email YEREL değil (global'den gelir)", yerelKimlik.length === 0, yerelKimlik.length ? `yerelde: ${yerelKimlik.join(" / ")}` : "temiz");
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);

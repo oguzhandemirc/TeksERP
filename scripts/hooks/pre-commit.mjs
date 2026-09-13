@@ -225,8 +225,11 @@ for (const adim of adimlar) {
     timeout: 600_000,
     // `gitEnvSil`: git, hook sürecine GIT_DIR/GIT_INDEX_FILE/GIT_PREFIX verir ve bunlar
     // çocuğa iner. Geçici repoda `git init/add/commit` yapan bir adım (kapsam bekçisi)
-    // o env ile GERÇEK repoya commit atar — 2026-09-13'te oldu: "taban" commit'i
-    // dalıma indi, 3977 dosya silindi, reset ile döndü. Yalnız işaretli adımlarda
+    // o env ile GERÇEK repoya commit atar — 2026-09-13'te oldu, ÜÇ YÜZÜ vardı: "taban"
+    // commit'i dala indi (3977 dosya silindi, reset ile döndü) · `git init` cwd'de değil
+    // GIT_DIR'da koştuğu için ortak .git/config'e core.bare=true yazdı (ana ağaçta
+    // reset "bare repository" ile düştü) · testin `git config user.*`ı ortak config'e
+    // gitti, bir origin commit'i "bekci" kimliğiyle doğdu. Yalnız işaretli adımlarda
     // sökülür: index okuyan adımlar (identifier_language `git show :yol`) pathspec
     // commit'inde GEÇİCİ index'i GIT_INDEX_FILE'dan bulur, onlara dokunulmaz.
     env: {

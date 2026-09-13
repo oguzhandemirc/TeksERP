@@ -55,8 +55,20 @@ function check(ad: string, ok: boolean, detay = "") {
 console.log("\n§1 — GATE 1/4 gerçek indeksi okuyor mu");
 
 const havuz = mkdtempSync(join(tmpdir(), "tekserp-gate-"));
+// ⚠️ GİT ORTAMI İZOLE (2026-09-14, iki kez ısırdı): bu bekçi hook'a alınınca git'in
+// hook'a verdiği GIT_DIR/GIT_INDEX_FILE miras kaldı — `git init/config/commit`
+// GEÇİCİ dizini değil GERÇEK repoyu gördü: dala "taban" commit'i indi, ortak
+// .git/config'e core.bare=true + user.name=bekci yazıldı, bir origin commit'i o
+// kimlikle doğdu. Cwd'ye güvenilmez, git GIT_DIR'a bakar. Üç kat: GIT_* sökülür ·
+// global/sistem config kapatılır · HOME geçici — kimlik yalnız KENDİ repo'suna yazılır.
+const GIT_ENV: NodeJS.ProcessEnv = {
+  ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_"))),
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_NOSYSTEM: "1",
+  HOME: havuz,
+};
 try {
-  const g = (args: string[]) => execFileSync("git", args, { cwd: havuz, encoding: "utf8" });
+  const g = (args: string[]) => execFileSync("git", args, { cwd: havuz, encoding: "utf8", env: GIT_ENV });
   mkdirSync(join(havuz, "scripts"), { recursive: true });
   mkdirSync(join(havuz, "Teks-Erp/prisma/migrations/20260101_taban"), { recursive: true });
   mkdirSync(join(havuz, "Teks-Erp/scripts"), { recursive: true });
@@ -76,6 +88,7 @@ try {
     spawnSync("node", [join(havuz, "scripts/check-migrations.mjs")], {
       cwd: havuz,
       encoding: "utf8",
+      env: GIT_ENV,
     });
 
   // ① GERÇEKTEN takipsiz migration + test → KIRMIZI (kapı hâlâ ısırıyor)
@@ -137,6 +150,7 @@ try {
       cwd: havuz,
       encoding: "utf8",
       input: staged,
+      env: GIT_ENV,
     });
 
   const r4 = kipiKos(["--commit-kapisi"], "docs/bir-belge.md\n");
