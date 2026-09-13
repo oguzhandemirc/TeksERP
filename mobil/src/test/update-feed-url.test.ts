@@ -83,6 +83,13 @@ describe('güncelleme kanalı adresi', () => {
   // kontrolü (`enabled` · sertifika yolu · `keyid`) her ortamda koşar — bir
   // atlama, ölçülebilen komşusunu da götürürse kapsam sessizce kaybolur.
   //
+  // ⛔ VE BU ATLAMA BİR RİSKİ KAPATMAZ, YALNIZ ÖLÇÜMÜ DÜRÜSTLEŞTİRİR:
+  // imzalama sertifikası bugün YALNIZ bir makinede duruyor — repoda yok (doğru),
+  // ama başka bir kopyası da yok. Kaybolursa yayınlanmış APK'lar güncelleme
+  // ALAMAZ (imza doğrulaması tutmaz) ve yeni sertifikayla üretilen paketi eski
+  // istemci reddeder. ⇒ CI kırmızısı kapandı, **risk açık**; kullanıcı kararı.
+  // Bu satır okunduğunda "sorun çözüldü" sanılmasın diye buradadır.
+  //
   // ⚠️ ASIL YERİ BURASI DEĞİL: testin kendi gerekçesi *"bunu ancak DERLEME
   // ANINDA öğrenirsin"* diyor ⇒ kontrolün evi paketleme/yayın kapısıdır
   // (sertifikanın gerçekten olması gereken an). Buradaki hâli geçicidir.
