@@ -75,7 +75,7 @@ const KURALLAR = join(KOK, "docs", "kurallar");
  *     | grep -E 'bekçi: `(YOK|yok|BELİRSİZ)' \
  *     | grep -vE 'Kapanır: `[^`]+`( ·| <sub>|$)' | wc -l
  */
-const B_TABAN = 10;  // 17 → 10 (2026-09-13, entegratör 1e): tren #3 sonunda BİRLEŞİK index'te ölçüldü — 6e 7 satıra ölçülmüş Kapanır; sabite trende TEK yazar
+const B_TABAN = 9;  // 17 → 10 → 9 (2026-09-13/14, entegratör 1e): tren sonunda BİRLEŞİK index'te ölçüldü — 6e 7 satıra ölçülmüş Kapanır · 6e deploy-kurulum:24 (iç backtick, ayrıştırıcı düzeltmesi ea'da); sabite trende TEK yazar
 
 /** Koşulsuz borç beyanı: adlandırılmış bekçi YOK. */
 const KOSULSUZ = /^(YOK|yok|BELİRSİZ)/;
