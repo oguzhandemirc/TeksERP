@@ -48,6 +48,7 @@ Her adım istasyon kataloğu + rota şablonundan kurulur; **TOPUN rotası için*
 - Liste + cursor + özet şeridi tek where'den doğar; cursor'lu listede süzme SUNUCUDA; elle okunan her id filtresi `readIdCondition`/`readFilterList`'ten geçer (CSV de string'dir).
 - Enum'a değer eklemek, bayrak eklemek, route+izin eklemek **reçeteli iştir** (`docs/RECETELER.md`) — "altıncı enum değeri unutuldu" ve "dört kapı" sınıfı hatalar sessizdir.
 - İstek gövdesini elle kuran istemci katmanı sessiz bir allowlist'tir; Zod tanımadığı anahtarı sessizce siler — alan iki uçta da sözleşmeye eklenir. Müşteri belgesinde iç veri taşıyan kolon OPT-IN doğar (allowlist), blocklist yeni kolonu sızdırır.
+- ⚠️ **`BaseController` modelinde yeni bir SKALER kolon, aynı anda yeni bir YAZILABİLİR ALANDIR** — ayrı bir karar gerektirmeden (ölçüldü 2026-09-13: `sanitizeWriteData` DMMF'in tüm skalerlerini geçirir, mass-assignment koruması yalnız İLİŞKİLERİ kapatır; `Machine`e eklenen kolon gövdeden yazıldı). ⇒ Kolon eklerken sor: *bu alan o uçtan yazılabilir olmalı mı?* Olmamalıysa yazılabilirliği **açıkça** kapat; olmalıysa doğrulaması aynı dilimde iner. 13 route bu sınıfta.
 
 ### Kapılar ve sözleşme
 - FAIL-CLOSED varsayılan: tanınmayan kapsam 400, çözülemeyen şablon 400/404 (yerleşiğe sapma yok), izin guard'ı anahtar-kapsamlı ve düz OR'a çevrilmez, önbellekte TTL tazeliktir geçerlilik değil (bayat döner + tazeler; hiç dolmadıysa fail-closed kalır).
