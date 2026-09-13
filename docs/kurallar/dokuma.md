@@ -63,6 +63,10 @@
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>`
 
+Backend: `test_devere_regime_gate`, `test_audit_labels`, `test_reason_preset_kind_parity`, `test_db_invariants`, `test_timestamptz_contract`, `test_machine_run`, `test_hard_delete_guard_coverage`, `test_master_data_merge_fk_coverage`
+
+> ⚠️ **Yukarıdaki `Backend:` satırı KAPININ okuduğu biçimdir, süs değil.** `test_identity_ledger.ts:158` alan koşum listesini yalnız `## Bekçiler` başlığından sonraki `Backend:` satırından ayrıştırır (`` `ad` `` aralarında). Aşağıdaki madde imli açıklamalar **insan içindir ve kapı onları GÖRMEZ**: bu dosya 2026-09-13'te madde imli listeyi taşıyordu ve `test_machine_run` tarif edilmiş olduğu hâlde kapı onu **B-d (KAPSAM eksiği)** saydı. ⇒ *Bir belge bölümünü doldurmak, o bölümü okuyan kapıyı beslemek değildir — kapı bölümü değil BİÇİMİ okur.* Yeni bekçi **iki yere birden** yazılır: `Backend:` satırına (bağ) ve aşağıya (tarif).
+
 **Bugün VAR olanlar:**
 - `test_devere_regime_gate` — devere kapısının üç halkayı (ticaret → iplik → devere) ELLE ölçtüğü; dokuma inince kardeş zincir aynı biçimde ölçülür.
 - `test_audit_labels` — şemadaki her enum değerinin Electron karşılığı (yeni dokuma enum'ları beyan edilmeden geçemez).
