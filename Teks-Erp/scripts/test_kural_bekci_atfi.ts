@@ -111,7 +111,7 @@ const TABAN = 0;
  *     | awk '{ a=gsub(/\(/,"("); b=gsub(/\)/,")"); if (length($0)==80 || a!=b) n++ } END { print n }'
  *   (awk'ta `length` BYTE sayabilir — kapı KARAKTER sayar; fark Türkçe harflerden.)
  */
-const KESIK_TABAN = 13;  // 63 → 50 → 21 → 14 → 13 (2026-09-13, entegratör 1e): tren sonunda BİRLEŞİK index'te ölçüldü — ea ayrıştırıcı −2 · 5e 17 + 11 · 6e 8 · sabite trende TEK yazar; kalan 13: 01 (parti 4 · rota-renk 4 · kursun 3 · is-emri 1 · tambur 1)
+const KESIK_TABAN = 0;  // 72 → 63 → 50 → 21 → 14 → 13 → 0 (2026-09-13/14, entegratör 1e): tren sonunda BİRLEŞİK index'te ölçüldü — ea ayrıştırıcı −2 · 5e 17 + 11 · 6e 8 · 01 13 · sabite trende TEK yazar. ⚠️ ARTIK SERT: yeni kesik alan ilk günden kırmızı
 
 /** Üretecin kesme imzası ya da dengesiz parantez — alan bütün değil. */
 function kesikMi(a: BekciAlani): boolean {
