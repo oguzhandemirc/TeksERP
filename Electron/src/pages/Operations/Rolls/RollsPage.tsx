@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, ClipboardList, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -24,7 +24,9 @@ import { RollsTableBody } from "./RollsTableBody";
 import { RollsKanban } from "./RollsKanban";
 import { RollsStats } from "./RollsStats";
 import { useRollStats } from "./useRollStats";
-import { rollColumns } from "./columns";
+import { makeRollColumns } from "./columns";
+import { qualityGradeService } from "@/pages/QualityGrades/service";
+import { loadAllForPicker } from "@/lib/picker-loader";
 import { ManualEntryDialog } from "./ManualEntryDialog";
 import { RollDetailSheet } from "./RollDetailSheet";
 import { useFasonScopeLabel } from "./useFasonScopeLabel";
@@ -135,11 +137,29 @@ export function RollsPage() {
   // buraya geliş" olduğu için tarih kolonu "Giriş" (createdAt); diğer sekmelerde
   // top oraya sonradan gelir ve "Son İşlem" (updatedAt) gösterilir (2026-07-30).
   const isEntryTab = tab === "RAW_STOCK" || tab === "SEMI_FINISHED";
+  // KALİTE KATALOĞU — rozet rengi/kararı buradan (karar ①). Anahtar mevcut
+  // `picker` ile AYNI: react-query anahtar bazında tekilleştirir, yeni önbellek
+  // girdisi doğmaz (Electron'da bu katalog altı farklı anahtarla çekiliyor —
+  // birleştirme ayrı iş).
+  const qualityGradesQuery = useQuery({
+    queryKey: ["quality-grades", "picker"],
+    queryFn: () => loadAllForPicker(qualityGradeService, { sortBy: "sortOrder" }),
+    staleTime: 10 * 60 * 1000,
+  });
+  // Boş dizi = katalog henüz yok → rozet çizilmez, kalite ham koduyla yazılır.
+  // ⚠️ KENDİ useMemo'sunda: `?? []` her render'da YENİ dizi üretir ve ona bağlı
+  // `useMemo` her render'da yeniden koşardı (`exhaustive-deps`).
+  const qualityGrades = useMemo(
+    () => qualityGradesQuery.data?.data ?? [],
+    [qualityGradesQuery.data],
+  );
+  const columns = useMemo(() => makeRollColumns(qualityGrades), [qualityGrades]);
+
   const dataTable = useDataTable<Roll>({
     queryKey: `rolls:${tab}`,
     queryKeyParts: ["rolls", tab],
     fetchFn: rollService.listCursor,
-    columns: rollColumns,
+    columns,
     defaultPageSize: 100,
     forceFilters: tab === "KANBAN" ? {} : buildRollForceFilters(tab),
     // Ham Stok dışındaki sekmelerde "buraya geliş" ≠ "oluşturma" → son hareket

@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { safeFormat } from "@/lib/format";
 import { rollStatusLabels, RollStatus, rollEntrySourceLabels } from "@/types/enums";
+import type { QualityGrade } from "@/pages/QualityGrades/types";
 import { type Roll, shipmentScopeLabels, activeDispatchOf, activeCategoryOf } from "./types";
 
 /**
@@ -83,7 +84,73 @@ const processingLabels: Record<ReturnType<typeof rollProcessingState>, string> =
   arsiv: "Arşiv",
 };
 
-export const rollColumns: ColumnDef<Roll>[] = [
+/**
+ * TOP KOLONLARI — artık bir FABRİKA, sabit dizi değil (2026-09-13, karar ①).
+ *
+ * ⚠️ NEDEN DEĞİŞTİ: kalite rozeti `grade === "FIRE"` / `=== "A1"` kodlarına
+ * gömülüydü. Kod fabrikaya AÇIK bir alandır; kataloğu `2K/HURDA` olan bir
+ * kurulumda HİÇBİR top rozet almazdı (sessiz — hata da yok, rozet de yok).
+ * Rozet rengi kalitenin KENDİ alanından (`color`) gelir; ROLDEN değil, çünkü
+ * dört kademeli bir katalogda üç rol vardır ve dördüncü kademe rozetsiz kalırdı.
+ *
+ * ⚠️ `grades` BOŞ DİZİ gelirse (katalog daha yüklenmediyse ya da istek düştüyse)
+ * rozet ÇİZİLMEZ ve kalite ham koduyla yazılır — bilgi KAYBOLMAZ, yalnız renk
+ * gelmez. Sessiz boşluk değil, görünür sadelik.
+ */
+/**
+ * KALİTE KOLONU — katalogla parametrelenen TEK kolon (2026-09-13, karar ①).
+ *
+ * ⚠️ Yalnız bu kolon fabrikadır, kolon dizisinin TAMAMI değil: diziyi
+ * fonksiyona çevirmek 450+ satırlık dev bir fonksiyon üretiyordu ve
+ * `max-lines-per-function` tavanını aşıyordu. Kataloğa ihtiyacı olan tek
+ * yeri ayırmak hem tavanı korur hem niyeti açık eder.
+ */
+function qualityColumn(grades: readonly QualityGrade[]): ColumnDef<Roll> {
+  return (
+  {
+    accessorKey: "qualityGrade",
+    header: () => <SortableHeader field="qualityGrade" label="Kalite" />,
+    meta: { label: "Kalite" },
+    cell: ({ row }) => {
+      const grade = row.original.qualityGrade;
+      // Rozet KATALOGDAN: rol rozetin ÇİZİLİP çizilmeyeceğini, `color` rengini
+      // söyler. Rolsüz kademe rozetsiz kalır — bugünkü davranışın aynısı
+      // (eskiden de yalnız iki kod rozet alıyordu).
+      const gradeRow = grade ? grades.find((g) => g.code === grade) : undefined;
+      if (gradeRow?.role === "SCRAP") {
+        return (
+          <Badge
+            variant="destructive"
+            className="text-[10px]"
+            style={gradeRow.color ? { backgroundColor: gradeRow.color } : undefined}
+          >
+            {grade}
+          </Badge>
+        );
+      }
+      if (gradeRow?.role === "SECOND") {
+        return (
+          <Badge
+            variant="outline"
+            className="text-[10px] border-warning text-warning"
+            style={gradeRow.color ? { borderColor: gradeRow.color, color: gradeRow.color } : undefined}
+          >
+            {grade}
+          </Badge>
+        );
+      }
+      // Kalite yalnız kalite istasyonlarında belirlenir — bakılmamışsa null → "—".
+      return (
+        <span className="text-xs">
+          {grade ?? <span className="text-muted-foreground">—</span>}
+        </span>
+      );
+    },
+  }
+  );
+}
+
+const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
   {
     accessorKey: "barcode",
     header: () => <SortableHeader field="barcode" label="Barkod" />,
@@ -358,37 +425,10 @@ export const rollColumns: ColumnDef<Roll>[] = [
       return <span className="truncate text-xs">{w.name}</span>;
     },
   },
-  {
-    accessorKey: "qualityGrade",
-    header: () => <SortableHeader field="qualityGrade" label="Kalite" />,
-    meta: { label: "Kalite" },
-    cell: ({ row }) => {
-      const grade = row.original.qualityGrade;
-      if (grade === "FIRE") {
-        return (
-          <Badge variant="destructive" className="text-[10px]">
-            Fire
-          </Badge>
-        );
-      }
-      if (grade === "A1") {
-        return (
-          <Badge
-            variant="outline"
-            className="text-[10px] border-warning text-warning"
-          >
-            A1
-          </Badge>
-        );
-      }
-      // Kalite yalnız kalite istasyonlarında belirlenir — bakılmamışsa null → "—".
-      return (
-        <span className="text-xs">
-          {grade ?? <span className="text-muted-foreground">—</span>}
-        </span>
-      );
-    },
-  },
+  // Kalite kolonu KATALOGLA parametreli — `makeRollColumns` bunu
+  // `qualityColumn(grades)` ile DEĞİŞTİRİR. Buradaki satır yalnız SIRAYI
+  // tutar; kataloğu olmayan bir çağıran yine bugünkü rozetsiz görünümü alır.
+  qualityColumn([]),
   {
     id: "kartela",
     header: () => <span className="text-xs">Kartela</span>,
@@ -534,3 +574,17 @@ export const rollColumns: ColumnDef<Roll>[] = [
     },
   },
 ];
+
+/**
+ * Top kolonları — kalite kolonu KATALOGLA parametrelenir, gerisi sabittir.
+ *
+ * ⚠️ `grades` BOŞ gelirse (katalog henüz yüklenmediyse) kalite rozeti
+ * ÇİZİLMEZ ve kalite HAM KODUYLA yazılır: bir sunum kaybı, bilgi kaybına
+ * dönüşmez.
+ */
+export function makeRollColumns(grades: readonly QualityGrade[]): ColumnDef<Roll>[] {
+  const kalite = qualityColumn(grades);
+  return BASE_ROLL_COLUMNS.map((c) =>
+    "accessorKey" in c && c.accessorKey === "qualityGrade" ? kalite : c,
+  );
+}

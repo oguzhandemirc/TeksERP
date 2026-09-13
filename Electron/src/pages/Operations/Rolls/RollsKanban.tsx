@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { qualityGradeService } from "@/pages/QualityGrades/service";
+import type { QualityGrade } from "@/pages/QualityGrades/types";
+import { loadAllForPicker } from "@/lib/picker-loader";
 import { Cog, Disc3, Layers, Package, Send, Truck, Warehouse, type LucideIcon } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stagger, StaggerItem } from "@/components/motion";
@@ -68,6 +71,15 @@ export function RollsKanban() {
 
   // TEK istek — eskiden 6 ayrı sorgu (useQueries) vardı; kuyruk kolonları ~500
   // satırı nested payload'la çekiyordu. Artık kolon başına 10 + count sunucuda.
+  // Kalite kataloğu — rozet sınıfı için. Anahtar mevcut `picker` ile AYNI:
+  // react-query tekilleştirir, yeni önbellek girdisi doğmaz.
+  const qualityGradesQuery = useQuery({
+    queryKey: ["quality-grades", "picker"],
+    queryFn: () => loadAllForPicker(qualityGradeService, { sortBy: "sortOrder" }),
+    staleTime: 10 * 60 * 1000,
+  });
+  const qualityGrades = qualityGradesQuery.data?.data ?? [];
+
   const { data, isLoading } = useQuery({
     queryKey: ["rolls", "kanban"],
     staleTime: 30_000,
@@ -107,7 +119,7 @@ export function RollsKanban() {
                     {slice.kind === "roll" &&
                       slice.rolls.map((roll) => (
                         <StaggerItem key={roll.id}>
-                          <RollCard roll={roll} onClick={() => setSelected(roll)} />
+                          <RollCard grades={qualityGrades} roll={roll} onClick={() => setSelected(roll)} />
                         </StaggerItem>
                       ))}
                     {slice.kind === "queue" &&
@@ -144,9 +156,20 @@ export function RollsKanban() {
   );
 }
 
-function gradeClass(grade: string | null): string {
-  if (grade === "FIRE") return "bg-destructive/15 text-destructive";
-  if (grade === "A1") return "bg-warning/15 text-warning";
+/**
+ * Kalite rozetinin sınıfı KATALOGTAN (2026-09-13, karar ①).
+ *
+ * ⚠️ Burada `grade === "FIRE"` / `=== "A1"` vardı; kod fabrikaya AÇIK bir
+ * alandır ve kataloğu `2K/HURDA` olan bir kurulumda HİÇBİR top renkli rozet
+ * almazdı (sessiz: hata yok, renk de yok). Karar rolden gelir (rozet çizilsin
+ * mi), renk kalitenin KENDİ alanından — rolsüz kademe nötr kalır ve bu bugünkü
+ * davranışın aynısıdır.
+ * `grades` BOŞ ise (katalog henüz yok) nötr sınıf döner: kod yine yazılır.
+ */
+function gradeClass(grades: readonly QualityGrade[], grade: string | null): string {
+  const row = grade ? grades.find((g) => g.code === grade) : undefined;
+  if (row?.role === "SCRAP") return "bg-destructive/15 text-destructive";
+  if (row?.role === "SECOND") return "bg-warning/15 text-warning";
   return "bg-muted text-muted-foreground";
 }
 
@@ -179,7 +202,16 @@ function FabricHeader({
 }
 
 /** Tek rulo kartı (Ham Stok / Fason / Depo) — tıklayınca detay açılır. */
-function RollCard({ roll, onClick }: { roll: Roll; onClick: () => void }) {
+function RollCard({
+  grades,
+  roll,
+  onClick,
+}: {
+  /** Kalite kataloğu — rozet sınıfı buradan (gradeClass notuna bak). */
+  grades: readonly QualityGrade[];
+  roll: Roll;
+  onClick: () => void;
+}) {
   return (
     <button
       type="button"
@@ -199,7 +231,7 @@ function RollCard({ roll, onClick }: { roll: Roll; onClick: () => void }) {
           <span className="text-xs font-medium tabular-nums">
             {roll.currentQty.toLocaleString("tr-TR", { useGrouping: false })} m
           </span>
-          <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", gradeClass(roll.qualityGrade))}>
+          <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", gradeClass(grades, roll.qualityGrade))}>
             {roll.qualityGrade ?? "—"}
           </span>
         </div>

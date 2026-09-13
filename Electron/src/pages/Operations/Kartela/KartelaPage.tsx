@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { Send, PackageCheck, Package, Palette } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -13,7 +13,9 @@ import { cn } from "@/lib/utils";
 import { ScanField } from "@/components/scanner/ScanField";
 import { useScanSeed } from "@/hooks/useScanSeed";
 import { useDataTable } from "@/hooks/useDataTable";
-import { rollColumns } from "@/pages/Operations/Rolls/columns";
+import { makeRollColumns } from "@/pages/Operations/Rolls/columns";
+import { qualityGradeService } from "@/pages/QualityGrades/service";
+import { loadAllForPicker } from "@/lib/picker-loader";
 import { rollService, buildRollForceFilters } from "@/pages/Operations/Rolls/service";
 import { RollsTableBody, buildRollFilterDefs, DATE_FILTER } from "@/pages/Operations/Rolls/RollsTableBody";
 import { SwatchesPanel } from "@/pages/Operations/Rolls/SwatchesPanel";
@@ -101,11 +103,29 @@ export function KartelaPage() {
     [foldValues],
   );
   const rollForceFilters = useMemo(() => buildRollForceFilters("KARTELA_SENT"), []);
+  // KALİTE KATALOĞU — rozet rengi/kararı buradan (karar ①). Anahtar mevcut
+  // `picker` ile AYNI: react-query anahtar bazında tekilleştirir, yeni önbellek
+  // girdisi doğmaz (Electron'da bu katalog altı farklı anahtarla çekiliyor —
+  // birleştirme ayrı iş).
+  const qualityGradesQuery = useQuery({
+    queryKey: ["quality-grades", "picker"],
+    queryFn: () => loadAllForPicker(qualityGradeService, { sortBy: "sortOrder" }),
+    staleTime: 10 * 60 * 1000,
+  });
+  // Boş dizi = katalog henüz yok → rozet çizilmez, kalite ham koduyla yazılır.
+  // ⚠️ KENDİ useMemo'sunda: `?? []` her render'da YENİ dizi üretir ve ona bağlı
+  // `useMemo` her render'da yeniden koşardı (`exhaustive-deps`).
+  const qualityGrades = useMemo(
+    () => qualityGradesQuery.data?.data ?? [],
+    [qualityGradesQuery.data],
+  );
+  const columns = useMemo(() => makeRollColumns(qualityGrades), [qualityGrades]);
+
   const rollsTable = useDataTable<Roll>({
     queryKey: "rolls:KARTELA_SENT",
     queryKeyParts: ["rolls", "KARTELA_SENT"],
     fetchFn: rollService.listCursor,
-    columns: rollColumns,
+    columns,
     defaultPageSize: 100,
     forceFilters: rollForceFilters,
     // Fason sütunları kartela tablosunda anlamsız (AT_KARTELA topta aktif fason

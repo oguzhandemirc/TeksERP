@@ -26,13 +26,17 @@
 // arşive bakabilen depo/üretim personeli artık bakamaz.
 // =============================================================================
 
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { useDataTable } from "@/hooks/useDataTable";
 import { useTableExportAll } from "@/hooks/useTableExportAll";
 import { ExportMenu } from "@/components/data-table/ExportMenu";
 import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
-import { rollColumns } from "@/pages/Operations/Rolls/columns";
+import { makeRollColumns } from "@/pages/Operations/Rolls/columns";
+import { qualityGradeService } from "@/pages/QualityGrades/service";
+import { loadAllForPicker } from "@/lib/picker-loader";
 import { RollsTableBody } from "@/pages/Operations/Rolls/RollsTableBody";
 import {
   rollService,
@@ -42,11 +46,29 @@ import {
 import type { Roll } from "@/pages/Operations/Rolls/types";
 
 export default function RollArchivePage() {
+  // KALİTE KATALOĞU — rozet rengi/kararı buradan (karar ①). Anahtar mevcut
+  // `picker` ile AYNI: react-query anahtar bazında tekilleştirir, yeni önbellek
+  // girdisi doğmaz (Electron'da bu katalog altı farklı anahtarla çekiliyor —
+  // birleştirme ayrı iş).
+  const qualityGradesQuery = useQuery({
+    queryKey: ["quality-grades", "picker"],
+    queryFn: () => loadAllForPicker(qualityGradeService, { sortBy: "sortOrder" }),
+    staleTime: 10 * 60 * 1000,
+  });
+  // Boş dizi = katalog henüz yok → rozet çizilmez, kalite ham koduyla yazılır.
+  // ⚠️ KENDİ useMemo'sunda: `?? []` her render'da YENİ dizi üretir ve ona bağlı
+  // `useMemo` her render'da yeniden koşardı (`exhaustive-deps`).
+  const qualityGrades = useMemo(
+    () => qualityGradesQuery.data?.data ?? [],
+    [qualityGradesQuery.data],
+  );
+  const columns = useMemo(() => makeRollColumns(qualityGrades), [qualityGrades]);
+
   const dataTable = useDataTable<Roll>({
     queryKey: "rolls:ARCHIVE",
     queryKeyParts: ["rolls", "ARCHIVE"],
     fetchFn: rollService.listCursor,
-    columns: rollColumns,
+    columns,
     defaultPageSize: 100,
     // Statü kümesi TEK KAYNAKTAN gelir (STATUS_GROUPS.ARCHIVE) — buraya elle
     // statü listesi kopyalamak, kümenin zamanla ayrışması demekti.

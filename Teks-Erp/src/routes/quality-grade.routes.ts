@@ -12,7 +12,22 @@ import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { AppError } from "../utils/app-error";
 
-const MOBILE_QUALITY_READ = ["mobile:kk1", "mobile:kk2-kursun", "mobile:tambur", "mobile:iade"] as const;
+// Kalite kataloğunu OKUYAN mobil ekranların izinleri.
+// ⚠️ `mobile:depo` + `mobile:sevkiyat` 2026-09-13'te EKLENDİ (karar ①): o iki
+// ekran kalite rozetini/gizlemesini artık KATALOGTAN çözüyor ve kataloğu
+// çekiyor. Eklenmeseydi Depo/Sevkiyat operatörü ekranı açtığında bu uç 403
+// verirdi — rozet sessizce çizilmez, istek her açılışta düşerdi.
+// "Bir yetenek VAR sayılmak için üçü birden: motor + çıkış yüzeyi + İZİN
+// ATAMASI" (kök CLAUDE.md); yüzeyi ekleyip izni eklememek o kuralın ihlali.
+// Bekçi: test_mobile_screen_permissions (ekran izni ↔ çağrılan uç).
+const MOBILE_QUALITY_READ = [
+  "mobile:kk1",
+  "mobile:kk2-kursun",
+  "mobile:tambur",
+  "mobile:iade",
+  "mobile:depo",
+  "mobile:sevkiyat",
+] as const;
 
 // QualityGrade.targetStatus / returnTargetStatus = RollStatus enum; Tambur çıktısı bu
 // değeri DOĞRUDAN child Roll.status'a uyguluyor (tambur.service resolveCutStatus). Bare
