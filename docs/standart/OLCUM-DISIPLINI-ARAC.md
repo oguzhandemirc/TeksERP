@@ -268,6 +268,25 @@ içinde, düzeltmenin yanında duruyor.)*
 
 > **`cwd` bir konumdur, `GIT_DIR` bir HEDEFTİR — ve git ikincisini dinler.**
 
+⚠️ **Ve zarar tek yüzlü değildi — ÜÇ yüzü ölçüldü, sonuncusu KALICI:**
+| # | ne oldu | kapsamı |
+|---|---|---|
+| 1 | dala "taban" commit'i, **3.977 dosya silindi** | geri alındı (`reset`) |
+| 2 | `git init` `GIT_DIR`da koştu ⇒ ortak `.git/config`e **`core.bare=true`** | ana ağaçta `reset` *"bare repository"* ile düştü; `.git/config` **TÜM worktree'lerin ortak dosyası** |
+| 3 | testin `git config user.*`ı ortak config'e gitti | bir **origin commit'i** `bekci <bekci@test>` kimliğiyle doğdu — `e904af4b`, force-push yasak ⇒ **kalıcı** |
+
+⇒ **Ortak `.git/config`e yazan bir araç, tek bir ağacı değil TÜM ağaçları bozar** — ve
+üçüncü yüzde olduğu gibi, bazı hasar geri alınamaz. Üçüncüsünün dersi ayrıca şudur:
+*yıkıcı bir yan etkinin en ucuz görüneni (bir ad alanı) en kalıcısı olabilir.*
+
+**Panzehir ÜÇ KAT** (tek kat yetmedi, üçü de ölçüldü):
+① kancada `gitEnvSil` (yalnız kendi repo'sunu kuran adımlarda) ·
+② **testin kendi izolasyonu**: `GIT_*` sök **+** `GIT_CONFIG_GLOBAL=/dev/null` **+**
+`GIT_CONFIG_NOSYSTEM` **+** geçici `HOME` ·
+③ `test_hook_config` §4 **tripwire**: ortak config temiz mi (`bare=false` ∧ worktree yok
+∧ `user.*` yerelde yok). ⇒ *Kancayı düzeltmek testi düzeltmez; ikisi ayrı ayrı izole
+edilir, üstüne bir tripwire konur.*
+
 **Savunma (ölçülmüş, ve İKİ YÖNLÜ):** böyle adımlarda `GIT_*` değişkenleri **sökülür**
 (`gitEnvSil`) — ama **yalnız işaretli adımlarda.** İndeksten okuyan adımlar
 (`git show :<yol>`) pathspec commit'inde GEÇİCİ indeksi tam da `GIT_INDEX_FILE`dan bulur;
@@ -280,3 +299,23 @@ ağaç, aynı araç — **farklı REJİM** (`OLCUM-DISIPLINI.md` § Sayı yazma,
 Bir aracı yeni bir koşum ortamına taşımak, onu **yeniden ölçmeyi** gerektirir.
 Kardeşleri § 4 · Araç ölçümün içinde · `OLCUM-DISIPLINI-ORTAK-AGAC.md` § Başka oturumun
 AĞAÇ-BÜTÜNÜ komutu.
+
+### Yıkıcı bir yolun DÜZELTMESİ, önce KURBAN EDİLEBİLİR bir hedefte sınanır
+Bir yolun yıkıcı olduğu **biliniyorsa**, *"düzelttim"* iddiasının ilk ölçümü gerçek
+hedefte yapılmaz. Düzeltme yarım uygulanmış olabilir ve sonda, düzeltmeyi değil
+**yıkımı tekrar** ölçer.
+
+*(Vaka 2026-09-13, d5: kanca/`GIT_DIR` düzeltmesini yazarken izolasyon düzenlemesi YARIM
+uygulanmıştı — `perl` bozuk çıktı vermiş, fark edilmemişti — ve sonda gerçek repoya karşı
+koşuldu: **aynı ısırık ikinci kez** (`core.bare=true`, `user.*`, dal "taban"a kaydı).
+Onarıldı; sonra sonda SAHTE bir repoda yapıldı: `GIT_DIR` sahte repoyu gösterirken test
+koşuldu, sahte config'in sha'sı ve `HEAD` **önce = sonra** diye ölçüldü.)*
+
+> **Gerçek hedef İKİNCİ ölçümdür.** Birincisi kurban edilebilir bir kopyada yapılır ve
+> orada *hiçbir şeyin değişmediği* sha ile gösterilir.
+
+⚠️ Bu, § 4 *Araç ölçümün içinde*'nin **eylem hâlidir**: orada araç gözlediğini bozar,
+burada **ölçen kişinin kendisi** araçtır ve düzeltmesini doğrulamadan uygular.
+**Savunma:** yıkıcı yol düzeltmesi üç adımdır — ① düzeltmenin UYGULANDIĞINI ölç
+(`shasum`/`assert`, `SONDA ailesi` (b)) ② sahte hedefte sonda ③ gerçek hedefte sonda.
+Kardeşi `OLCUM-DISIPLINI-SINIFLAR.md` § SONDA ailesi · § KANCA ailesi (üstte).
