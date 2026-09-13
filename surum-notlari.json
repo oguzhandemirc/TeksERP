@@ -98,6 +98,11 @@
           "kapsam": "her-ikisi",
           "tip": "duzeltme",
           "metin": "Depoda kesilmiş bir top tabletten geri alındığında Depo Hareketleri ile topun metrajı artık aynı sayıyı söylüyor. Önceden geri alma yalnız yeni topun giriş satırını tersliyor, ana topun kesim çıkışı defterde açık kalıyordu: top listesinde 100 metre görünen ana top defterde 60 sayılıyordu. Şimdi kesim çıkışı da terslenir — ama yalnız metraj gerçekten ana topa geri konuyorsa. Geri alma sırasında “kayıt yanlıştı” seçeneğini seçip kaynak topu arşivde bırakırsanız kaynak metrajı eskisi gibi değişmez ve defter de buna uyar; yeni topun satırı düzeltme kaydı olarak kalır. Kapanışla biten kesimin kendi fire/artık çıkışı bu geri almada terslenmez. Bu sürümden önce yarım geri alınmış kesimler kendiliğinden düzelmez; mutabakat raporu bunları ayrı bir bölümde sayar."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "duzeltme",
+          "metin": "Tambur kapanışında “fire” seçilen kalan parça artık tek başına geri alınamaz: o parçada yalnız “Tüm İşlemi Geri Al” sunulur, “Tek Parça İptali” ve “İş Emrine Geri Al” görünmez; eski ekrandan denenirse “kapanışın fire kalanıdır, kapanışı tümden geri alın” uyarısıyla reddedilir. Sıradan kesim parçalarında değişiklik yok."
         }
       ]
     },
