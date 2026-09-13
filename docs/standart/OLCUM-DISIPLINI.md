@@ -17,11 +17,31 @@ Buradaki kurallar **mekanik değildir ve mekanikleştirilemez** — tek kullanı
 
 > **Her ölçümü raporlarken NEYİ ölçtüğünü ve NASIL doğruladığını yaz.**
 
-> ⚠️ **Bir ölçümü KAPIYA çevirmek ayrı bir iştir ve ayrı dosyadadır:**
-> [`OLCUM-DISIPLINI-KAPI.md`](OLCUM-DISIPLINI-KAPI.md) — mandal yazma · kapının ölüm
-> biçimleri · kırmızıyı sınıflandırma · yerel yeşil ↔ HEAD · "kapalıdır" diyen cümle ·
-> ölçüm bir kararı değiştirebiliyor mu. **Burası ölçümün NASIL YAPILDIĞI ve NASIL
-> YAZILDIĞI**; orası ölçümün NASIL ZORLANDIĞI.
+## Aile — hangi soru hangi dosyada
+
+Ölçüm disiplini **on bir dosyadır** ve hepsi aynı soruyu bölerek cevaplar. Buradan
+başla, sorunun sahibine git:
+
+| Sorun | Dosya |
+|---|---|
+| *Ölçümü nasıl yaparım, sonucu nasıl okurum?* (pozitif kontrol · eşik · yapısal sonda) | **bu dosya** |
+| *Ölçümü nasıl YAZARIM?* — sayı · çapa · kimlik | [`-YAZIM.md`](OLCUM-DISIPLINI-YAZIM.md) |
+| *Aletim mi bozuk?* — desen, komut, ayrıştırıcı, aracın varsayılanı | [`-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) |
+| *Doğru şeyi mi sordum?* — desenin kapsamı, eşleşmenin sınırı, popülasyon üyeliği | [`-YUKLEM.md`](OLCUM-DISIPLINI-YUKLEM.md) |
+| *Sınırsız eşleşmenin VAKALARI* — korpus, payda, kapsam beyanı | [`-SINIRSIZ.md`](OLCUM-DISIPLINI-SINIRSIZ.md) |
+| *Komut gerçekten koştu mu?* — kabuk, asılı süreç, kancanın git ortamı | [`-SUREC.md`](OLCUM-DISIPLINI-SUREC.md) |
+| *Deneyi doğru mu kurdum?* — kontrol grubu, ortam, sondanın kendisi | [`-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) |
+| *Ağacı/indeksi BAŞKASIYLA mı paylaşıyorum?* | [`-ORTAK-AGAC.md`](OLCUM-DISIPLINI-ORTAK-AGAC.md) |
+| *Sayı doğru; ondan ÇIKARDIĞIM doğru mu?* | [`-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) |
+| *Bu ölçümü KAPIYA nasıl çeviririm?* — mandal, cırcır, taban | [`-KAPI.md`](OLCUM-DISIPLINI-KAPI.md) |
+| *Kapım öldü mü, bu kırmızı ne diyor?* | [`-KAPI-OLUMU.md`](OLCUM-DISIPLINI-KAPI-OLUMU.md) |
+| *Bu sınıf zaten yazılı mı?* — **her başlık tek tabloda** | [`-DIZIN.md`](OLCUM-DISIPLINI-DIZIN.md) |
+
+⚠️ Sıra rastgele değil: üstteki üç satır ölçümün KENDİSİ, ortadakiler ölçümün
+KURGUSU ve ORTAMI, alttakiler ölçümden SONRASI. Bir arıza yaşadığında yukarıdan
+aşağı in — çoğu vaka ilk üçte biter.
+📌 **Yeni bir sınıf yazmadan önce `-DIZIN.md`yi baştan sona oku** (bir dakika);
+mükerrer sınıf bu kataloğun kendi arıza biçimidir.
 
 ## Kurtarıcı kurallar — birbirinin tersi, ikisi de üç saniye
 

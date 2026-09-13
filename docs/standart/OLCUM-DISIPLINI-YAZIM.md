@@ -69,6 +69,16 @@ basıp `return` ediyor ve `=== Sonuç ===` satırı `:132`de, yani **erken dön�
 
 Aynı yüklem, aynı ağaç, aynı ayrıştırıcı — **farklı rejim, farklı sayı.**
 
+⭐ **Ve "sayıyı ÜRETEN KOMUTUYLA yaz" kuralı, KOMUT DOĞRULANMADAN yarım kalır.**
+Yanlış bir komut, sayıyı tazeleyecek kişiyi **yanlış sayıya** götürür — üstelik bu kez
+iddia *"ölçülmüş"* damgası taşır, yani ilk hâlinden daha güvenilir görünür.
+*(Vaka 2026-09-14, komutu belgeye yazarken yakalandı: `grep -hE '^- \*\*\[' docs/standart/*.md`
+**223** verdi, gerçek **222** — `README.md`nin § Kural biçimi bölümündeki ÖRNEK satır
+(`[BE-07]` şablonu) kural gibi görünüyordu. `--exclude=README.md` ile ikisi eşitlendi.)*
+📌 Panzehir üç adım: ① komutu KOŞ · ② çıktısını yazacağın sayıyla KARŞILAŞTIR · ③ ayrışma
+varsa **sayıyı değil komutu** düzelt ve ayrışmanın sebebini satıra yaz. Komutu kopyalayıp
+sayıyı ayrı bir yerden almak, iki ölçümü tek cümlede birleştirmektir.
+
 > **Bir sayının kimliği, ölçümün KOŞULLARIDIR.** Bugüne kadar adı konmuş eksenler:
 > *yüklem* (ne sordun) · *ağaç* (hangi commit) · *ayrıştırıcı* (aracın hangi sürümü) ·
 > *yük* (hangi hacim) · *rejim* (DB var/yok · sunucu ayakta/değil · fikstür dolu/boş ·
