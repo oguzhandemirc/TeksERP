@@ -26,6 +26,26 @@
       "maddeler": [
         {
           "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Bir iadeyi geri aldığınızda depo defterine ters kayıt düşüyor. Önceden iade kabulü “Depo Hareketleri” ekranına bir giriş satırı yazıyordu; iadeyi geri aldığınızda o giriş defterde DURUYOR, yani mal gelmediği hâlde depoya girmiş görünüyordu ve depo toplamı sessizce şişiyordu. Artık geri alma, girişin tersini bugünün tarihiyle yazar ve iki satır birbirine bağlı görünür. Geçmiş kayıtlar olduğu gibi kalır — hiçbir eski satır silinmez ya da değiştirilmez; düzeltme ileriye dönüktür. Aynı iadeyi ikinci kez geri almaya çalışırsanız işlem reddedilir, ikinci bir ters satır yazılmaz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "FİRE olarak iade alınan top artık depo hareketi üretmiyor. Önceden, kalitesi FİRE seçilerek iade alınan bir top “Depo Hareketleri” ekranında depoya GİRİŞ olarak görünüyordu — oysa mal rafa konmuyor, fireye ayrılıyor. Bu satır depo toplamını yanlış okutuyordu. Artık FİRE iadesinde depo hareketi yazılmaz; iade kaydının kendisi, İade Takibi raporu ve fire rakamları DEĞİŞMEDİ — yalnız depo hareketleri listesinden o yanlış giriş satırı kalkar. Bu iadenin geri alınması da simetrik olarak depo hareketi üretmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Deposu tanımlı olmayan bir top sevk edilemiyor ve iade alınamıyor; uyarı hangi topların eksik olduğunu barkodlarıyla sayar. Önceden bu durum sessizce geçiyordu: sevkiyat tamamlanıyor, mal çıkıyor, ama o topun çıkışı depo defterine HİÇ yazılmıyordu — aynı sevkiyatta iki top çıkıp defterde tek satır görünebiliyordu. Artık işlem durur ve eksik topları listeler; deposunu belirledikten sonra sevk/iade normal şekilde tamamlanır. BU FABRİKADA deposu tanımsız top bulunmuyor, yani günlük işte bir değişiklik beklenmez; uyarı yalnız eski bir yedekten dönülürse ya da dışarıdan aktarılan eski kayıtlarda görünebilir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Sevk stornosu ile iade artık depo defterinde birbirine karışmıyor. İkisi farklı şeydir: sevk stornosu “bu mal hiç çıkmadı” demektir ve sevki geri alır; iade ise “mal çıktı, müşteri geri gönderdi” demektir ve sevk rakamını DEĞİŞTİRMEZ. Bunun sonucu olarak bir iadeyi geri aldığınızda sevkiyat kaydına dokunulmaz — top yeniden “müşteride” sayılır, sevk edilmiş metraj olduğu gibi kalır. Sevk raporlarındaki rakamlar bu değişiklikten etkilenmez."
+        },
+        {
+          "kapsam": "panel",
           "tip": "yeni",
           "metin": "Yanlış giden bir toplu aktarımı geri alabiliyorsunuz. Veri Aktarımı ekranındaki Geçmiş listesinde her yüklemenin yanında artık “Geri sar” düğmesi var. Önceden yanlış dosya yüklendiğinde tek yol kayıtları tek tek elle düzeltmekti. Artık her yükleme ne yazdığını kendi kaydında tutuyor: düğmeye bastığınızda etkilenen HER satır, yanında ne yapılacağı yazılı olarak listelenir (yeni oluşturulan kayıt pasife alınacak · güncellenen kayıt eski değerine dönecek). İstediğiniz satırları seçer, gerekçe yazar ve yalnız seçtiklerinizi geri alırsınız; bir kısmını şimdi, kalanını sonra geri sarmak da mümkündür. Yüklemeden SONRA birisi o kaydı değiştirmişse o satıra DOKUNULMAZ — listede gerekçesiyle atlanmış görünür. Atlanan her satırın kendi gerekçesi yazılır; tek bir “12 satır atlandı” özeti verilmez. Geri alma hiçbir şeyi yok etmez: yükleme listede kalır, üzerine “geri sarıldı” damgası ve gerekçeniz yazılır; yeni kayıtlar silinmez, pasife alınır. Aynı satır ikinci kez geri sarılamaz. Sipariş yüklemesi geri sarılırken siparişin kendi iptal yolu kullanılır — sevk edilmiş ya da iş emri açılmış sipariş geri alınmaz ve sebebi satırda yazar. Başka kayıtlara yazılmış yan bilgiler (örneğin müşterinin kendi kumaş adı) silinmez; pencerede “bunlar kalacak” diye ayrıca listelenir. Geri sarma iki yetkiye bağlı: toplu aktarım yetkisi VE o verinin kendi düzenleme yetkisi."
         },
