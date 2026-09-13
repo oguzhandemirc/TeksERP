@@ -51,8 +51,14 @@ function check(label: string, ok: boolean, detay?: string): void {
 const KOK = join(__dirname, "..", "..");
 const KURALLAR = join(KOK, "docs", "kurallar");
 
-/** Devralınan KESİK ad borcu — YALNIZ DÜŞER (ölçüldü 2026-09-13: 10). */
-const TABAN = 10;
+/**
+ * Devralınan KESİK ad borcu — YALNIZ DÜŞER.
+ * 10 → 5: dördü tek adaya çözüldü ve tamamlandı, biri kapının SAHTE POZİTİFİYDİ
+ * (`scripts/test_surum.mjs`). Kalan 5 GERÇEKTEN belirsiz (`test_h` 5 aday,
+ * `test_dispa` 5, `test_db` 3, `test_superad`/`test_superadmi` 3) ⇒ tamamlamak
+ * o kuralın hangi bekçiyle korunduğuna KARAR VERMEK olurdu; sahiplerinde.
+ */
+const TABAN = 5;
 
 /** `· bekçi: `…`` alanının İÇERİĞİ (backtick'ler arası), dosya başına. */
 function bekciAlanlari(): Array<{ dosya: string; satir: number; icerik: string }> {
@@ -88,7 +94,12 @@ const DOSYA_ADI_DESENI = /[A-Za-z0-9_.-]+\.tsx?/g;
  * => Tutmayan bir sonda iki şeyin işareti olabilir: sonda kurgu YA DA KAPI KÖR.
  *    Hangisi olduğu ölçülmeden bilinmez — burada ikincisiydi.
  */
-const CIPLAK_BEKCI_DESENI = /\btest_[a-z0-9_]+\b/g;
+// ⚠️ SONDAKİ NEGATİF BAKIŞ (`(?!\.[a-z])`) da ölçümle geldi: `surum-yayin.md`
+// `scripts/test_surum.mjs` diyor — `.ts` DEĞİL. Bakış olmadan kural adı
+// `test_surum` diye kopuyor, `.ts` ekleniyor ve var olmayan bir dosya
+// "çözülmedi" diye raporlanıyordu. Yani kapı, kendi eklediği uzantıyı belgenin
+// kusuru sanıyordu. (Üçüncü sahte pozitif sınıfı: `ts` dışı uzantılar.)
+const CIPLAK_BEKCI_DESENI = /\btest_[a-z0-9_]+\b(?!\.[a-z])/g;
 
 function repoDosyaAdlari(): Set<string> {
   const ham = execFileSync("git", ["ls-files", "*.ts", "*.tsx"], { cwd: KOK, encoding: "utf8" });
@@ -140,7 +151,12 @@ function main(): void {
       `      · \`bekçi: YOK/BELİRSİZ\` diyen ${kosulsuzBorc} satırın KAPANMA KOŞULU\n` +
       `        olup olmadığı BU KOLDA ÖLÇÜLMEZ — B kolu inmedi.\n` +
       `      · Adı geçen bekçinin o kuralı gerçekten ölçtüğü ölçülmez (atıf ≠ koruma).\n` +
-      `      · Dosya adı anmayan ${adAnmayan} düz-metin atıf kapsam DIŞI.\n`,
+      `      · Dosya adı anmayan ${adAnmayan} düz-metin atıf kapsam DIŞI.\n` +
+      `   ⚠️ SONUÇ ÇALIŞMA AĞACINA BAĞLIDIR: yüklem dosya VARLIĞINI ve belge\n` +
+      `      METNİNİ okur, ikisi de commit'lenmemiş düzenlemelerden etkilenir.\n` +
+      `      Ortak ağaçta iki oturum FARKLI sayı görebilir (ölçüldü 2026-09-13:\n` +
+      `      10 ↔ 6; fark, benim 2 dk sonra yaptığım sahnelenmemiş belge\n` +
+      `      düzeltmesiydi). Sayıyı taşırken AĞACI da beyan et.\n`,
   );
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

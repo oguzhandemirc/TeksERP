@@ -19,7 +19,7 @@
 
 ### Yasaklar
 
-- **[ÇEKİRDEK]** `isSystemAccount` panelden/API'den ATANAMAZ ve mevcut kullanıcı YÜKSELTİLMEZ: hiçbir Zod şemasına/yazma yoluna girmez; tek yazar `scripts/superadmin-olustur.ts` (`src/` DIŞINDA, sunucu paketine girmez). · bekçi: `test_superadmin_visible ('Alan panelden ATANAMAZ' kolu) + test_superadmin_provis` <sub>(CLAUDE.md:104, CLAUDE.md:105)</sub>
+- **[ÇEKİRDEK]** `isSystemAccount` panelden/API'den ATANAMAZ ve mevcut kullanıcı YÜKSELTİLMEZ: hiçbir Zod şemasına/yazma yoluna girmez; tek yazar `scripts/superadmin-olustur.ts` (`src/` DIŞINDA, sunucu paketine girmez). · bekçi: `test_superadmin_visible ('Alan panelden ATANAMAZ' kolu) + test_superadmin_provision` <sub>(CLAUDE.md:104, CLAUDE.md:105)</sub>
 - **[ÇEKİRDEK]** SIR HİJYENİ: süperadmin parolası/PIN/TOTP ve ayar şifresi repoya, log'a, sürüm notuna, audit yüküne GİRMEZ; log satırında sır da kullanıcı adı da yok. `.env`de kalan `SUPERADMIN_*` uyarısı YALNIZ ANAHTAR ADI basar; job tam anahtar literali taşımaz (`Object.keys(process.env)` + ön ek). · bekçi: `test_superadmin_provision §6 (literal/process.env.X deseni yok) + §8 (sentinel u` <sub>(CLAUDE.md:301, CLAUDE.md:97, CLAUDE.md:105)</sub>
 - **[ÇEKİRDEK]** Modül profili uygulama için YAZMA UCU YOK: `PATCH /feature-flags` tek kapı (süperadmin guard + ayar şifresi zinciri ikinci kez KURULMAZ — §12.5 kapı çoğaltma yasağı); `GET /api/admin/module-profile` salt okuma, fark SUNUCUDA hesaplanır. · bekçi: `BELİRSİZ — notta adlı bekçi yok` <sub>(arşiv:2134)</sub>
 
