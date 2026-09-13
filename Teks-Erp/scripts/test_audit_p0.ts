@@ -10,6 +10,8 @@
 //   F129 — generateSplitBarcode ayraçsız (tire yok — el tarayıcı -→* bozmaz).
 // =============================================================================
 import prisma from "../src/lib/prisma";
+// ⚠️ ORTAK ATLAMA DEFTERİ: "ölçemedim" ile "ölçtüm, geçti" aynı sayıya çıkamaz.
+import { atlamaDefteri } from "./lib/atlama";
 import { ItemService } from "../src/services/item.service";
 import { InventoryService } from "../src/services/inventory.service";
 import { AppError } from "../src/utils/app-error";
@@ -17,6 +19,11 @@ import { RollStatus } from "@prisma/client";
 
 let pass = 0;
 let fail = 0;
+const atlama = atlamaDefteri((mesaj) => {
+  fail++;
+  console.log(`❌ ${mesaj}`);
+});
+let dusenHata: string | null = null;
 function check(label: string, ok: boolean, extra = "") {
   if (ok) { pass++; console.log(`✅ ${label}${extra ? " — " + extra : ""}`); }
   else { fail++; console.log(`❌ ${label}${extra ? " — " + extra : ""}`); }
@@ -39,6 +46,7 @@ async function main() {
   const ts = Date.now();
   const itemCode = `TEST-P0-ITEM-${ts}`;
   let itemId = "";
+  let warehouseId = "";
   const rollIds: string[] = [];
 
   try {
@@ -133,6 +141,19 @@ async function main() {
     );
 
     // STOCK top → iptal edilebilir (CANCELLED).
+    // ⚠️ DEPO ŞART ve bu bir fikstür ayrıntısı DEĞİL, ÜRÜN KURALI: iptal depo
+    // stoğunu düşürür (`warehouse-stock.helper`), deposu olmayan STOCK top
+    // iptal EDİLEMEZ. Kural bekçi yazıldıktan SONRA büyümüş; bu satır yokken
+    // servis atıyordu ve hata `process.exit(0)`ın altında kaybolduğu için
+    // bekçi DÖRT kontrolle YEŞİL görünüyordu (2026-09-13'te fail-closed
+    // düzeltmesi ortaya çıkardı).
+    // ⛔ `findFirst({ isActive: true })` ile ortamda ARANMAZ — kendi deposunu
+    // İŞ ANAHTARIYLA kur (d5'in keyfi-arama mandalı).
+    const warehouse = await prisma.warehouse.create({
+      data: { code: `TP0-${ts}`.slice(0, 32), name: `TEST P0 DEPO ${ts}` },
+      select: { id: true },
+    });
+    warehouseId = warehouse.id;
     const stockRoll = await prisma.roll.create({
       data: {
         barcode: `TESTP0${ts}K`,
@@ -141,6 +162,7 @@ async function main() {
         currentQty: "30.000",
         qualityGrade: "1. Kalite",
         status: RollStatus.STOCK,
+        warehouseId: warehouse.id,
       },
       select: { id: true },
     });
@@ -159,18 +181,40 @@ async function main() {
     // (F129 split-barkod testi kaldırıldı — split çocukları artık FRESH kısa barkod
     //  alıyor; parent-türevi `generateSplitBarcode` biçimi silindi. Barkod ayraçsızlığı
     //  test_roll_barcode.ts'te ROLL_BARCODE_RE ile kapsanıyor.)
+  } catch (e) {
+    // ⚠️ HATA YUTULMAZ: sebebi ⏭ beyanında ADIYLA basılır.
+    // ⚠️ Prisma bağlantı hatalarında `message` BOŞ olabilir — kod ve isim
+    // olmadan beyan "bir şey oldu" der ve teşhis taşımaz.
+    const kod = (e as { code?: string })?.code;
+    const govde = e instanceof Error ? e.message.trim().slice(0, 160) : String(e);
+    dusenHata = [e instanceof Error ? e.name : "hata", kod ? `[${kod}]` : "", govde || "(mesaj boş)"]
+      .filter(Boolean)
+      .join(" ");
+    if (pass + fail > 0) { fail++; console.log(`❌ beklenmeyen hata — ${dusenHata}`); }
   } finally {
     // Cleanup — test kendi yarattığını siler.
     if (rollIds.length) {
       await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
     }
+    if (warehouseId) await prisma.warehouse.deleteMany({ where: { id: warehouseId } });
     if (itemId) {
       await prisma.itemAllowedColor.deleteMany({ where: { itemId } });
       await prisma.itemAllowedProperty.deleteMany({ where: { itemId } });
       await prisma.item.deleteMany({ where: { id: itemId } });
     }
-    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-    await prisma.$disconnect();
+    // ⛔ SIFIR ÖLÇÜM YEŞİL OLAMAZ (fail-closed, 2026-09-13 d5'in DB'siz taraması):
+    // DB'ye ulaşılamayınca gövde İLK çağrıda düşüyordu, `fail` 0 kalıyordu ve
+    // `process.exit(0)` hatayı kendi altında gömüyordu ⇒ "0 geçti · 0 başarısız
+    // · çıkış 0" = YEŞİL AMA HİÇ BAKMADI. Üç sonuç: uyumlu / ihlal / ÖLÇÜLEMEDİ.
+    if (pass + fail === 0) {
+      atlama.atla(
+        "TÜM BÖLÜMLER",
+        dusenHata ?? "hiçbir kontrol koşmadı — DB'ye ulaşılamamış ya da gövde erken düşmüş olabilir",
+        "?",
+      );
+    }
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${atlama.ozetEki()} ===`);
+    await prisma.$disconnect().catch(() => undefined);
     process.exit(fail > 0 ? 1 : 0);
   }
 }
