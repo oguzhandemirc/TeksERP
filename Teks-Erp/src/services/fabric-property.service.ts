@@ -316,6 +316,8 @@ export class FabricPropertyService extends BaseService {
         // isTargetableProperty özelliği hedef seçicilere AÇARDI.
         const [valueCount, usedCount] = await Promise.all([
           prisma.fabricPropertyValue.count({ where: { propertyId: id } }),
+          // ⚠️ `revokedAt` SÜZÜLMEZ (bilinçli): soru "HİÇ değer taşıdı mı" — geçmişte
+          // değer taşımış özelliği BAYRAK'a çevirmek "değerli bayrak" limbosu üretir.
           prisma.rollProperty.count({ where: { propertyId: id, valueId: { not: null } } }),
         ]);
         if (valueCount > 0 || usedCount > 0) {
@@ -344,6 +346,7 @@ export class FabricPropertyService extends BaseService {
           );
         }
         const [woT, lineT, routeT, itemT] = await Promise.all([
+          // ⚠️ `revokedAt` SÜZÜLMEZ (bilinçli): tip dönüşümü kilidi tarihsel kullanımı da sayar.
           prisma.workOrderTargetProperty.count({ where: { propertyId: id } }),
           prisma.orderLineRequiredProperty.count({ where: { propertyId: id } }),
           prisma.routeStepProperty.count({ where: { propertyId: id } }),

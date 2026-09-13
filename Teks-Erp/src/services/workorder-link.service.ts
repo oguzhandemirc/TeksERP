@@ -40,6 +40,7 @@ import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { InventoryService } from "./inventory.service";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { whereRollsOfWorkOrder } from "./helpers/workorder-rolls.helper";
+import { ACTIVE_ROLL_PROPERTY } from "./helpers/property-revoke.helper";
 import {
   PLAN_CHANGE_FROZEN_STATUSES,
   assertPlanChangeAllowed,
@@ -794,7 +795,7 @@ export class WorkOrderLinkService {
         // ZIMPARALI/vb. bayraklarını SESSİZCE SİLERDİ. (SEÇİM tipli satırlara
         // motor zaten dokunmuyor — onları taşımaya gerek yok.)
         properties: {
-          where: { property: { valueType: "FLAG" } },
+          where: { ...ACTIVE_ROLL_PROPERTY, property: { valueType: "FLAG" } },
           select: { propertyId: true },
         },
       },

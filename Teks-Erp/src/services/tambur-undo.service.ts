@@ -79,6 +79,7 @@ import {
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { reverseAllRollStockMoves, reverseStockMove, reverseTransformGroupsOf } from "./helpers/warehouse-ledger-reverse.helper";
+import { ACTIVE_ROLL_PROPERTY } from "./helpers/property-revoke.helper";
 import { postStockMove } from "./helpers/warehouse-ledger.helper";
 import { warehouseStampManyTx } from "./helpers/warehouse.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
@@ -1727,10 +1728,10 @@ export class TamburUndoService {
 
       // 5) finalize kaynağın property'lerini silmişti — iptal edilen çocuğun
       //    kopyasından geri kur (FULL 6 ile aynı, donör = bu çocuk).
-      const parentPropCount = await tx.rollProperty.count({ where: { rollId: parentId } });
+      const parentPropCount = await tx.rollProperty.count({ where: { rollId: parentId, ...ACTIVE_ROLL_PROPERTY } });
       if (parentPropCount === 0) {
         const donor = await tx.rollProperty.findMany({
-          where: { rollId: childId },
+          where: { rollId: childId, ...ACTIVE_ROLL_PROPERTY },
           select: { propertyId: true, valueId: true },
         });
         if (donor.length > 0) {
@@ -2076,11 +2077,11 @@ export class TamburUndoService {
       await this.reverseDeadChildGroupsTx(tx, deadChildIds, userId);
 
       // 6) finalize parent'ın property'lerini SİLMİŞTİ — çocuk kopyasından geri kur.
-      const parentPropCount = await tx.rollProperty.count({ where: { rollId: parentId } });
+      const parentPropCount = await tx.rollProperty.count({ where: { rollId: parentId, ...ACTIVE_ROLL_PROPERTY } });
       let propsRestored = 0;
       if (parentPropCount === 0) {
         const donor = await tx.rollProperty.findMany({
-          where: { rollId: { in: ids } },
+          where: { rollId: { in: ids }, ...ACTIVE_ROLL_PROPERTY },
           // valueId: geri kurulum DEĞER-FARKINDA (denetim F6) — çocuk kesimde
           // GRAMAJ=50GR'ı miras aldıysa geri dönen ebeveyn de onu taşımalı.
           select: { rollId: true, propertyId: true, valueId: true },

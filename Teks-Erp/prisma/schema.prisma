@@ -6718,8 +6718,13 @@ model LabelContextDefault {
 }
 
 /// WorkOrder ↔ FabricProperty M:N — planlamacının iş emri için belirlediği
-/// üretim özellikleri. Tambur'da finalize sırasında bu liste otomatik olarak
-/// üretilen Roll'lara RollProperty olarak yazılır. Step planlaması YOK.
+/// üretim özellikleri. Fason kabulünde (`subcontractor.service` `receiveInner`)
+/// doğan toplara RollProperty olarak yazılır; Tambur yalnız ebeveynden çocuğa
+/// miras verir. Step planlaması YOK.
+///
+/// ③a TİCARİ PİVOT (2026-09-14, OZELLIK-PIVOT-SURUMLEME-PLAN): satır SİLİNMEZ,
+/// `revokedAt` damgalanır; değişiklik = eski aktif satırın damgası + yeni satır.
+/// Aktif okuma tek yüklemden geçer (`ACTIVE_TARGET_PROPERTY`).
 model WorkOrderTargetProperty {
   id          String @id @default(uuid()) @db.Uuid
   workOrderId String @db.Uuid
@@ -6728,10 +6733,19 @@ model WorkOrderTargetProperty {
   workOrder WorkOrder      @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
   property  FabricProperty @relation(fields: [propertyId], references: [id])
 
+  /// GERİ ALMA DAMGASI — `RollOperation` emsali. `revokedById` düz UUID, ilişki
+  /// DEĞİL (kanban projeksiyonu users tablosuna sorgu atmasın).
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  revokeReason String?   @db.VarChar(300)
+
   createdAt DateTime @default(now()) @db.Timestamptz
 
-  @@unique([workOrderId, propertyId])
+  // DB'de PARTIAL'dır (`WHERE "revokedAt" IS NULL`, migration 20260914030000):
+  // damgalı satır dururken aynı çift yeniden yazılabilsin; AKTİF çift tekildir.
+  @@unique([workOrderId, propertyId], map: "work_order_target_properties_active_pair_uq")
   @@index([propertyId])
+  @@index([workOrderId, revokedAt])
   @@map("work_order_target_properties")
 }
 
@@ -6750,9 +6764,9 @@ model RollProperty {
   /// BAYRAK tipli özellikte NULL — orada özelliğin varlığı zaten cevaptır
   /// ("zımparalı mı? evet"). SEÇİM tipinde varlık yetmez, hangisi olduğu lazım.
   ///
-  /// ⚠️ `@@unique([rollId, propertyId])` KORUNUYOR ve bu, DIŞLAYICILIĞIN
-  /// kendisidir: bir topa aynı özellikten iki değer (hem 25GR hem 50GR)
-  /// yazılamaz. Bu yüzden değer AYRI bir satır değil, MEVCUT satırın kolonu.
+  /// ⚠️ `@@unique([rollId, propertyId])` AKTİF satırlar için KORUNUYOR (DB'de
+  /// partial, `WHERE "revokedAt" IS NULL`) ve bu, DIŞLAYICILIĞIN kendisidir: bir
+  /// topa aynı özellikten iki AKTİF değer (hem 25GR hem 50GR) yazılamaz.
   ///
   /// ⚠️ KATALOG SATIRINA FK — serbest metin DEĞİL. `Roll.foldType`'tan farkı
   /// bilinçli: kat indekslenip filtrelenip sıralanıyor (skaler kolon şart),
@@ -6767,13 +6781,21 @@ model RollProperty {
   property FabricProperty       @relation(fields: [propertyId], references: [id])
   value    FabricPropertyValue? @relation(fields: [valueId], references: [id], onDelete: Restrict)
 
-  /// M:N pivot → `updatedAt` YOK (kök CLAUDE.md konvansiyonu). `valueId`
-  /// upsert ile tazelenir (istasyon yeteneği kopyalaması) — bağ aynı kalır.
+  /// ③a TİCARİ PİVOT (2026-09-14, OZELLIK-PIVOT-SURUMLEME-PLAN): satır SİLİNMEZ,
+  /// damgalanır; değer değişimi (50GR→25GR) eski satırın damgası + YENİ sürüm
+  /// satırıdır, yerinde `valueId` güncellemesi değil. `revokedById` düz UUID.
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  revokeReason String?   @db.VarChar(300)
+
+  /// M:N pivot → `updatedAt` YOK (kök CLAUDE.md konvansiyonu).
   createdAt DateTime @default(now()) @db.Timestamptz
 
-  @@unique([rollId, propertyId])
+  // DB'de PARTIAL'dır (`WHERE "revokedAt" IS NULL`, migration 20260914030000).
+  @@unique([rollId, propertyId], map: "roll_properties_active_pair_uq")
   @@index([propertyId])
   @@index([valueId])
+  @@index([rollId, revokedAt])
   @@map("roll_properties")
 }
 

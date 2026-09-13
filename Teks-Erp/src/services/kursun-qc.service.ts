@@ -531,8 +531,8 @@ export class KursunQcService {
       });
     } else if (data.properties?.length) {
       // Op zaten vardı ama operatör SEÇİM göndererek tekrar bastı — meşru
-      // düzeltme yolu: `copyStationCapabilitiesToRoll` upsert'i valueId'yi
-      // günceller (örn. gramaj 25GR → 50GR). Bu dalı sessiz bırakmak, topun
+      // düzeltme yolu: `copyStationCapabilitiesToRoll` → `setRollPropertyValueTx`
+      // eski değeri damgalayıp yeni sürüm satırı yazar (örn. gramaj 25GR → 50GR). Bu dalı sessiz bırakmak, topun
       // özellik DEĞERİNİN kayıtsız değişmesi demekti (denetim F2). Aynı
       // seçimlerin no-op replay'i de bu audit'i yazar — kabul edilen bedel:
       // fazladan bir UPDATE satırı, kaybolan bir düzeltme izinden iyidir.

@@ -62,6 +62,7 @@ import {
   WorkOrderStatus,
 } from "@prisma/client";
 import { OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
+import { ACTIVE_TARGET_PROPERTY } from "./helpers/property-revoke.helper";
 
 // Refakat kartı listesinde sıralanabilir kolonlar. createdAt BİLEREK yok →
 // varsayılan/createdAt isteği printedAt'e düşer (yeni basılan kart ilk gelsin).
@@ -1164,6 +1165,7 @@ export class TravelerCardService {
         targetItem: { select: { code: true, name: true } },
         targetColor: { select: { name: true, hex: true } },
         targetProperties: {
+          where: ACTIVE_TARGET_PROPERTY,
           orderBy: { propertyId: "asc" },
           select: { propertyId: true, property: { select: { name: true } } },
         },

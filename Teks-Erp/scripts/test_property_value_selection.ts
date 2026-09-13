@@ -9,8 +9,9 @@
 //
 // Korunan invariantlar:
 //   1. SEÇİM özelliğinde seçilen değer topa YAZILIR
-//   2. Aynı özellikte İKİNCİ bir değer AYRI satır AÇMAZ, üstüne yazar
-//      (@@unique([rollId,propertyId]) = dışlayıcılık; 25GR ve 50GR aynı anda olamaz)
+//   2. Aynı özellikte İKİNCİ bir değer ikinci AKTİF satır AÇMAZ: eski satır
+//      DAMGALANIR, yeni sürüm satırı yazılır (partial unique = dışlayıcılık; 25GR
+//      ve 50GR aynı anda AKTİF olamaz; geçmiş satır durur — ③a, 2026-09-14)
 //   3. SEÇİM özelliği değersiz işaretlenirse 400 (ADIYLA)
 //   4. Katalogda olmayan değer 400 (geçerli değerleri sayar)
 //   5. BAYRAK özelliğine değer gönderilirse 400 (sessizce yutulmaz)
@@ -30,6 +31,7 @@
 //      yoktu, operatör dolduruyor veri ulaşmıyor" vakasının bekçisi)
 // =============================================================================
 import prisma from "../src/lib/prisma";
+import { ACTIVE_ROLL_PROPERTY } from "../src/services/helpers/property-revoke.helper";
 import { roleGrade } from "./fixture-quality-grade";
 import {
   assertPropertySelectionsValid,
@@ -140,12 +142,12 @@ async function main() {
       caps,
     });
     const w1 = await prisma.rollProperty.findFirst({
-      where: { rollId: r1, propertyId: gramaj.id },
+      where: { rollId: r1, propertyId: gramaj.id, ...ACTIVE_ROLL_PROPERTY },
       select: { value: { select: { code: true } } },
     });
     check("seçilen değer topa YAZILDI", w1?.value?.code === "50GR", String(w1?.value?.code));
 
-    // ── 2) İkinci değer AYRI SATIR AÇMAZ, üstüne yazar ───────────────────────
+    // ── 2) İkinci değer ikinci AKTİF satır açmaz — eski satır damgalanır, sürüm ──
     await copyStationCapabilitiesToRoll(prisma, {
       stationId: station.id,
       rollId: r1,
@@ -153,16 +155,24 @@ async function main() {
       caps,
     });
     const rows1 = await prisma.rollProperty.findMany({
-      where: { rollId: r1, propertyId: gramaj.id },
+      where: { rollId: r1, propertyId: gramaj.id, ...ACTIVE_ROLL_PROPERTY },
       select: { value: { select: { code: true } } },
     });
-    check("düzeltme ÜSTÜNE yazar, ikinci satır açmaz", rows1.length === 1, `satır=${rows1.length}`);
+    const rows1Toplam = await prisma.rollProperty.findMany({
+      where: { rollId: r1, propertyId: gramaj.id },
+      select: { revokedAt: true, value: { select: { code: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+    check("düzeltme ikinci AKTİF satır açmaz (1 aktif)", rows1.length === 1, `aktif=${rows1.length}`);
     check("düzeltilen değer 25GR", rows1[0]?.value?.code === "25GR", String(rows1[0]?.value?.code));
+    check("eski değer (50GR) SİLİNMEDİ, damgalı duruyor — toplam 2",
+      rows1Toplam.length === 2 && rows1Toplam[0]?.value?.code === "50GR" && rows1Toplam[0]?.revokedAt !== null,
+      JSON.stringify(rows1Toplam.map((r) => `${r.value?.code}:${r.revokedAt ? "damgalı" : "aktif"}`)));
 
     // ── 7) Değersiz çağrı MEVCUT değeri SİLMEZ (bypass kapanışı emsali) ──────
     await copyStationCapabilitiesToRoll(prisma, { stationId: station.id, rollId: r1, caps });
     const afterNoSel = await prisma.rollProperty.findFirst({
-      where: { rollId: r1, propertyId: gramaj.id },
+      where: { rollId: r1, propertyId: gramaj.id, ...ACTIVE_ROLL_PROPERTY },
       select: { value: { select: { code: true } } },
     });
     check("seçimsiz çağrı mevcut değeri SİLMEDİ", afterNoSel?.value?.code === "25GR",
@@ -177,7 +187,7 @@ async function main() {
       caps,
     });
     const w2 = await prisma.rollProperty.findFirst({
-      where: { rollId: r2, propertyId: gramaj.id },
+      where: { rollId: r2, propertyId: gramaj.id, ...ACTIVE_ROLL_PROPERTY },
       select: { value: { select: { code: true } } },
     });
     check('"50gr" (küçük harf + boşluk) → 50GR', w2?.value?.code === "50GR", String(w2?.value?.code));
@@ -249,7 +259,7 @@ async function main() {
       propertyIds: [flagProp.id, gramaj.id], // echo: CHOICE id listede
     });
     const after11a = await prisma.rollProperty.findMany({
-      where: { rollId: r1 },
+      where: { rollId: r1, ...ACTIVE_ROLL_PROPERTY },
       select: { propertyId: true, value: { select: { code: true } } },
     });
     check("Düzelt echo'su SEÇİM değerini KORUDU (25GR)",
@@ -257,16 +267,16 @@ async function main() {
       JSON.stringify(after11a.map((p) => p.value?.code ?? "flag")));
     check("Düzelt BAYRAK özelliğini yazdı",
       after11a.some((p) => p.propertyId === flagProp.id));
-    check("Düzelt ikinci SEÇİM satırı AÇMADI",
+    check("Düzelt ikinci AKTİF SEÇİM satırı AÇMADI",
       after11a.filter((p) => p.propertyId === gramaj.id).length === 1);
 
     // propertyIds=[] — "tüm özellikleri kaldır" yalnız BAYRAK evrenini boşaltır.
     await invSvc.applyManualProperties(r1, { colorId: null, propertyIds: [] });
     const after11b = await prisma.rollProperty.findMany({
-      where: { rollId: r1 },
+      where: { rollId: r1, ...ACTIVE_ROLL_PROPERTY },
       select: { propertyId: true, value: { select: { code: true } } },
     });
-    check("propertyIds=[] BAYRAK'ı sildi", !after11b.some((p) => p.propertyId === flagProp.id));
+    check("propertyIds=[] BAYRAK'ı aktif kümeden çıkardı", !after11b.some((p) => p.propertyId === flagProp.id));
     check("propertyIds=[] SEÇİM satırını SİLMEDİ",
       after11b.find((p) => p.propertyId === gramaj.id)?.value?.code === "25GR",
       JSON.stringify(after11b.map((p) => p.value?.code ?? "flag")));
@@ -311,7 +321,7 @@ async function main() {
     const woSvc = new WorkOrderService();
     await woSvc.updateTargetProperties(wo.id, [flagProp.id]);
     const after12 = await prisma.rollProperty.findMany({
-      where: { rollId: r3.id },
+      where: { rollId: r3.id, ...ACTIVE_ROLL_PROPERTY },
       select: { propertyId: true, value: { select: { code: true } } },
     });
     check("hedef replace SEÇİM değerini KORUDU (50GR)",
@@ -334,12 +344,25 @@ async function main() {
     const childId = cut.data!.childRoll.id;
     rollIds.push(childId);
     const childProps = await prisma.rollProperty.findMany({
-      where: { rollId: childId },
+      where: { rollId: childId, ...ACTIVE_ROLL_PROPERTY },
       select: { propertyId: true, value: { select: { code: true } } },
     });
     check("kesim çocuğu SEÇİM değerini DEVRALDI (50GR)",
       childProps.find((p) => p.propertyId === gramaj.id)?.value?.code === "50GR",
       JSON.stringify(childProps.map((p) => `${p.propertyId === gramaj.id ? "gr" : "?"}:${p.value?.code ?? "-"}`)));
+    // Ebeveynde damgalı bir sürüm olsaydı çocuğa GEÇMEMELİ — r2'ye önce 25GR yazıp
+    // 50GR'ye döndür (bir damgalı satır doğar), sonra ikinci kesim.
+    await copyStationCapabilitiesToRoll(prisma, { stationId: station.id, rollId: r2, selections: [{ propertyId: gramaj.id, valueCode: "25GR" }], caps });
+    await copyStationCapabilitiesToRoll(prisma, { stationId: station.id, rollId: r2, selections: [{ propertyId: gramaj.id, valueCode: "50GR" }], caps });
+    check("ön koşul — ebeveynde 1 aktif + 2 damgalı gramaj",
+      (await prisma.rollProperty.count({ where: { rollId: r2, propertyId: gramaj.id } })) === 3 &&
+      (await prisma.rollProperty.count({ where: { rollId: r2, propertyId: gramaj.id, ...ACTIVE_ROLL_PROPERTY } })) === 1);
+    const cut2 = await tamburSvc.cutWarehouseRoll(r2, { cutLength: 10, qualityGrade: (await roleGrade("FIRST")).code });
+    rollIds.push(cut2.data!.childRoll.id);
+    const child2All = await prisma.rollProperty.findMany({ where: { rollId: cut2.data!.childRoll.id, propertyId: gramaj.id }, select: { value: { select: { code: true } } } });
+    check("⭐ ebeveynin DAMGALI değeri çocuğa GEÇMEDİ (çocukta tek satır, 50GR)",
+      child2All.length === 1 && child2All[0]?.value?.code === "50GR",
+      JSON.stringify(child2All.map((c) => c.value?.code)));
 
     // ── 14) Zod katmanı `properties`/`valueCode`yi ELEMEZ ────────────────────
     const zBody = {
@@ -356,20 +379,26 @@ async function main() {
     check("kursunFinishSchema properties'i taşıyor",
       zFin.properties?.[0]?.valueCode === "50gr", String(zFin.properties?.[0]?.valueCode));
   } finally {
-    await prisma.rollProperty.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});
-    await prisma.rollVariance.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});
-    await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});
-    await prisma.roll.deleteMany({ where: { id: { in: rollIds } } }).catch(() => {});
+    // Temizlik hatası KIRMIZIDIR — `.catch(() => {})` yutması kaldırıldı (1e/6e ölçtü:
+    // valueId FK'sı yutuluyordu). Sıra: bağımlı → bağımsız; stok defteri satırları
+    // (kesim çocuğu PRODUCTION girişi) top silinmeden önce, ters satır önce.
+    await prisma.rollProperty.deleteMany({ where: { rollId: { in: rollIds } } });
+    await prisma.rollVariance.deleteMany({ where: { rollId: { in: rollIds } } });
+    await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
+    await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
+    await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: rollIds }, reversesMovementId: { not: null } } });
+    await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: rollIds } } });
+    await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
     if (woId) {
-      await prisma.workOrderTargetProperty.deleteMany({ where: { workOrderId: woId } }).catch(() => {});
-      await prisma.workOrderStep.deleteMany({ where: { workOrderId: woId } }).catch(() => {});
-      await prisma.workOrder.deleteMany({ where: { id: woId } }).catch(() => {});
+      await prisma.workOrderTargetProperty.deleteMany({ where: { workOrderId: woId } });
+      await prisma.workOrderStep.deleteMany({ where: { workOrderId: woId } });
+      await prisma.workOrder.deleteMany({ where: { id: woId } });
     }
-    await prisma.item.deleteMany({ where: { id: item.id } }).catch(() => {});
-    await prisma.stationProperty.deleteMany({ where: { stationId: station.id } }).catch(() => {});
-    await prisma.fabricPropertyValue.deleteMany({ where: { propertyId: { in: propIds } } }).catch(() => {});
-    await prisma.fabricProperty.deleteMany({ where: { id: { in: propIds } } }).catch(() => {});
-    await prisma.station.deleteMany({ where: { id: station.id } }).catch(() => {});
+    await prisma.item.deleteMany({ where: { id: item.id } });
+    await prisma.stationProperty.deleteMany({ where: { stationId: station.id } });
+    await prisma.fabricPropertyValue.deleteMany({ where: { propertyId: { in: propIds } } });
+    await prisma.fabricProperty.deleteMany({ where: { id: { in: propIds } } });
+    await prisma.station.deleteMany({ where: { id: station.id } });
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

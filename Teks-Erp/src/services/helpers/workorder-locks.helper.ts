@@ -35,6 +35,7 @@
 
 import type { Prisma, PrismaClient, StepStatus } from "@prisma/client";
 import { STEP_CAPABILITY_SELECT, stepCanApplyColor } from "./step-capability.helper";
+import { ACTIVE_TARGET_PROPERTY } from "./property-revoke.helper";
 
 /**
  * WorkOrder satırını write-kilitle — fason completion yollarını serileştirir.
@@ -97,7 +98,7 @@ export async function computeWorkOrderLocks(
     select: {
       id: true,
       targetColorId: true,
-      targetProperties: { select: { propertyId: true } },
+      targetProperties: { where: ACTIVE_TARGET_PROPERTY, select: { propertyId: true } },
       steps: {
         select: {
           id: true,

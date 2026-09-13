@@ -44,6 +44,7 @@ import {
 import { warehouseStampManyTx } from "./helpers/warehouse.helper";
 import { assertRollsHaveWarehouse } from "./helpers/warehouse-stock.helper";
 import { lowerTr } from "../utils/tr-case";
+import { ACTIVE_ROLL_PROPERTY } from "./helpers/property-revoke.helper";
 
 // Liste filtre/sayfalama parametreleri — hem offset (mobil) hem cursor (admin)
 // modunu besler. cursor||mode==="cursor" → cursor response; aksi halde offset.
@@ -1281,6 +1282,7 @@ export class KartelaService {
             item: { select: { code: true, name: true } },
             color: { select: { code: true, name: true } },
             properties: {
+              where: ACTIVE_ROLL_PROPERTY,
               select: { property: { select: { id: true, name: true, color: true } } },
             },
           },

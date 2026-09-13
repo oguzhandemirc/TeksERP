@@ -92,7 +92,7 @@ function norm(s: string): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1) PARTIAL INDEXLER (38) — ad + predicate + uniqueness
+// 1) PARTIAL INDEXLER — ad + predicate + uniqueness (sayı dizinin uzunluğu; başlığa yazılmaz, bayatlar)
 //    uniq alanı KRİTİK: `schema.prisma:1603-1605` predicate farkını drift
 //    saymaz ama index↔unique farkını SAYAR ("aksi halde migrate dev sonsuz
 //    CREATE üretir"). Bu yüzden ikisi ayrı ayrı doğrulanır.
@@ -122,6 +122,21 @@ const PARTIAL_INDEXES: Array<{
     uniq: true,
     predicate: `("clearedAt" IS NULL)`,
     why: "damgalı eski tahsis dururken aynı (çuval, sipariş satırı) yeniden tahsis edilebilsin",
+  },
+  // ③a özellik pivotu — sürümleme (migration 20260914030000, OZELLIK-PIVOT-SURUMLEME-PLAN)
+  {
+    table: "roll_properties",
+    index: "roll_properties_active_pair_uq",
+    uniq: true,
+    predicate: `("revokedAt" IS NULL)`,
+    why: "damgalı özellik satırı dururken aynı (top, özellik) yeniden yazılabilsin; AKTİF çift tekil",
+  },
+  {
+    table: "work_order_target_properties",
+    index: "work_order_target_properties_active_pair_uq",
+    uniq: true,
+    predicate: `("revokedAt" IS NULL)`,
+    why: "damgalı hedef dururken aynı (iş emri, özellik) yeniden yazılabilsin; AKTİF çift tekil",
   },
   // rolls — null-yoğun FK'lar (migration 20260606001717 → 20260612100000 onarımı)
   { table: "rolls", index: "rolls_sackId_idx", uniq: false, predicate: `("sackId" IS NOT NULL)`, why: "null-yoğun FK" },

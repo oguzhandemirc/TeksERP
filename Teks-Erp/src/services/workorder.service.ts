@@ -11,6 +11,7 @@
 
 import { ACTIVE_OPERATION, OWN_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
+import { ACTIVE_ROLL_PROPERTY, ACTIVE_TARGET_PROPERTY } from "./helpers/property-revoke.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { postStockMove, qtyYazilabilir } from "./helpers/warehouse-ledger.helper";
 import { postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
@@ -1301,7 +1302,7 @@ export class WorkOrderService {
         // "mal zaten hedef renkte/özellikte mi". Okunmazsa muafiyet hiç doğmaz ve
         // sipariş bağlı + boyahanesiz rota yine 400 verir.
         colorId: true,
-        properties: { select: { propertyId: true } },
+        properties: { where: ACTIVE_ROLL_PROPERTY, select: { propertyId: true } },
       },
     });
     const byBarcode = new Map(rolls.map((r) => [r.barcode, r]));
@@ -1984,7 +1985,9 @@ export class WorkOrderService {
       include: {
         targetItem: true,
         targetColor: true,
-        targetProperties: { include: { property: true } },
+        // Aktif süzgeç ŞART: panel prefill bu listeyi PUT replace'e echo eder — damgalı
+        // hedef burada dönerse replace onu DİRİLTİR.
+        targetProperties: { where: ACTIVE_TARGET_PROPERTY, include: { property: true } },
         steps: {
           include: {
             station: true,
@@ -2909,7 +2912,7 @@ export class WorkOrderService {
               // 50 topta okunmuyor). Parti kimliği kapsam seçici için.
               currentStep: { select: { station: { select: { name: true } } } },
               batch: { select: { batchNumber: true } },
-              _count: { select: { properties: true } },
+              _count: { select: { properties: { where: ACTIVE_ROLL_PROPERTY } } },
             },
             take: 200,
             orderBy: { createdAt: "asc" },
@@ -3003,7 +3006,7 @@ export class WorkOrderService {
                 {
                   OR: [
                     { colorId: { not: null } },
-                    { properties: { some: {} } },
+                    { properties: { some: ACTIVE_ROLL_PROPERTY } },
                     { entrySource: RollEntrySource.SUBCONTRACTOR_RETURN },
                     { status: RollStatus.AT_SUBCONTRACTOR },
                     { status: RollStatus.RETURNED_FROM_SUBCONTRACTOR },
@@ -3918,7 +3921,7 @@ export class WorkOrderService {
             entrySource: true,
             qualityGrade: true,
             color: { select: { name: true, hex: true } },
-            _count: { select: { properties: true } },
+            _count: { select: { properties: { where: ACTIVE_ROLL_PROPERTY } } },
           },
           orderBy: { createdAt: "asc" },
         })
@@ -5203,7 +5206,7 @@ export class WorkOrderService {
   ): Promise<ApiResponse<WorkOrder>> {
     const existing = await prisma.workOrder.findUnique({
       where: { id },
-      include: { targetProperties: { select: { propertyId: true } } },
+      include: { targetProperties: { where: ACTIVE_TARGET_PROPERTY, select: { propertyId: true } } },
     });
     if (!existing) throw AppError.notFound("İş emri bulunamadı");
     if (
@@ -5521,7 +5524,7 @@ export class WorkOrderService {
         // bağlı toplar zaten hedef rengi taşıyorsa uyarı YANLIŞ olurdu.
         const attachedRolls = await prisma.roll.findMany({
           where: { currentStep: { workOrderId: id } },
-          select: { colorId: true, properties: { select: { propertyId: true } } },
+          select: { colorId: true, properties: { where: ACTIVE_ROLL_PROPERTY, select: { propertyId: true } } },
         });
         const colorOnGoods =
           attachedRolls.length > 0 &&
@@ -5926,7 +5929,7 @@ export class WorkOrderService {
       select: {
         id: true,
         targetItemId: true,
-        targetProperties: { select: { propertyId: true } },
+        targetProperties: { where: ACTIVE_TARGET_PROPERTY, select: { propertyId: true } },
         targetItem: {
           select: {
             allowedProperties: { select: { propertyId: true } },

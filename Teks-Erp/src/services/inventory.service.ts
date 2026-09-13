@@ -7,6 +7,7 @@
 // =============================================================================
 
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
+import { ACTIVE_ROLL_PROPERTY } from "./helpers/property-revoke.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { claimDoffForRollTx } from "./helpers/machine-doff-link.helper";
@@ -481,6 +482,7 @@ const ROLL_LIST_INCLUDE = {
   // ayrışırsa satır ile panel aynı top için farklı şey söyler.
   warehouse: { select: { id: true, code: true, name: true } },
   properties: {
+    where: ACTIVE_ROLL_PROPERTY,
     select: {
       propertyId: true,
       property: { select: { id: true, code: true, name: true } },
@@ -1714,9 +1716,9 @@ export class InventoryService {
     if (propertyIds.length > 0) {
       where.AND = [
         ...(Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : []),
-        ...propertyIds.map((pid) => ({
-          properties: { some: { propertyId: pid } },
-        })),
+        ...propertyIds.map(
+          (pid) => ({ properties: { some: { ...ACTIVE_ROLL_PROPERTY, propertyId: pid } } }) satisfies Prisma.RollWhereInput,
+        ),
       ];
     }
 
@@ -2539,7 +2541,19 @@ export class InventoryService {
           },
           orderBy: { createdAt: "asc" },
         },
-        properties: { include: { property: true } },
+        // `include` yerine `select`: damga kolonları (revokedAt…) API'ye sızmasın; `value`
+        // liste ile aynı şekilde (detay↔liste ayrışması kapandı, plan §7.2).
+        properties: {
+          where: ACTIVE_ROLL_PROPERTY,
+          select: {
+            id: true,
+            propertyId: true,
+            valueId: true,
+            createdAt: true,
+            property: true,
+            value: { select: { id: true, code: true, name: true } },
+          },
+        },
         // En güncel iade kaydı (iade gelmiş depo topu için not/neden).
         returns: {
           orderBy: { createdAt: "desc" },
@@ -2800,7 +2814,10 @@ export class InventoryService {
         markedForKartela: true,
         lastLabelSnapshot: true,
         labelDirty: true,
+        // Aktif süzgeç ŞART: `propertyIds` istemciye echo edilir ve panel aynen geri
+        // yollar — damgalı id burada dönerse replace onu DİRİLTİR.
         properties: {
+          where: ACTIVE_ROLL_PROPERTY,
           select: {
             propertyId: true,
             property: { select: { id: true, code: true, name: true, color: true } },
@@ -4252,7 +4269,10 @@ export class InventoryService {
         sack: { select: { shipmentId: true } },
         // valueType: bu uç yalnız BAYRAK evrenini yönetir (aşağıya bak) —
         // mevcut kümenin FLAG alt kümesini bilmek zorunda.
-        properties: { select: { propertyId: true, property: { select: { valueType: true } } } },
+        properties: {
+          where: ACTIVE_ROLL_PROPERTY,
+          select: { propertyId: true, property: { select: { valueType: true } } },
+        },
       },
     });
     if (!roll) throw AppError.notFound("Top bulunamadı");

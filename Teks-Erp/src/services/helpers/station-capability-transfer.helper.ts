@@ -30,6 +30,7 @@
 import { FabricPropertyValueType, StationPropertyMode } from "@prisma/client";
 import type { TxClient } from "./roll-step.helper";
 import { AppError } from "../../utils/app-error";
+import { setRollPropertyValueTx } from "./property-revoke.helper";
 
 /** İstasyona bağlı bir özellik + modu + (SEÇİM ise) izin verilen değerleri. */
 export interface StationPropertyCap {
@@ -171,10 +172,10 @@ export function assertPropertySelectionsValid(
  * ⚠️ Kesişim ALINIR: istemcinin gönderdiği id körlemesine yazılmaz, yoksa tablet
  * istasyonun veremeyeceği bir özelliği topa yazdırabilirdi.
  *
- * ⚠️ `createMany(skipDuplicates)` DEĞİL, satır satır `upsert`: değer taşıyan
- * satırda operatör seçimini DÜZELTEBİLMELİ (50GR → 25GR). skipDuplicates ilk
- * yazılanı dondurur ve düzeltme sessizce kaybolurdu. Değer GÖNDERİLMEDİYSE
- * `update: {}` ile no-op — yani seçim taşımayan bir çağrı (bypass kapanışı)
+ * ⚠️ `createMany(skipDuplicates)` DEĞİL, satır satır `setRollPropertyValueTx`:
+ * değer taşıyan satırda operatör seçimini DÜZELTEBİLMELİ (50GR → 25GR) ve
+ * düzeltme yerinde güncelleme değil SÜRÜM (eski satır damgalı durur, ③a).
+ * Değer GÖNDERİLMEDİYSE no-op — seçim taşımayan bir çağrı (bypass kapanışı)
  * mevcut değeri SİLMEZ ve idempotent tekrar (offline replay) güvenlidir.
  *
  * ⚠️ Sıralı döngü bilinçli: `tx` ile `Promise.all` YASAK (pg adapter tek
@@ -189,6 +190,8 @@ export async function copyStationCapabilitiesToRoll(
     selections?: PropertySelection[] | null;
     /** Zaten yüklenmiş yetenek listesi (ikinci sorguyu önler). */
     caps?: StationPropertyCap[];
+    /** Değer düzeltmesinde eski satırın damgasına yazılır (`revokedById`). */
+    userId?: string | null;
   },
 ): Promise<{ propertyIds: string[] }> {
   const caps = args.caps ?? (await loadStationPropertyCaps(tx, args.stationId));
@@ -208,10 +211,12 @@ export async function copyStationCapabilitiesToRoll(
   if (rows.length === 0) return { propertyIds: [] };
 
   for (const r of rows) {
-    await tx.rollProperty.upsert({
-      where: { rollId_propertyId: { rollId: args.rollId, propertyId: r.propertyId } },
-      create: { rollId: args.rollId, propertyId: r.propertyId, valueId: r.valueId },
-      update: r.valueId ? { valueId: r.valueId } : {},
+    await setRollPropertyValueTx(tx, {
+      rollId: args.rollId,
+      propertyId: r.propertyId,
+      valueId: r.valueId,
+      reason: "STATION_CAPABILITY_RESELECT",
+      userId: args.userId ?? null,
     });
   }
   return { propertyIds: rows.map((r) => r.propertyId) };

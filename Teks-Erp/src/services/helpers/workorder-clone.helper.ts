@@ -19,6 +19,7 @@ import { Prisma, StepStatus, WorkOrderStatus } from "@prisma/client";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../../utils/code-format";
 import { AppError } from "../../utils/app-error";
 import { TravelerCardService } from "../traveler-card.service";
+import { ACTIVE_TARGET_PROPERTY } from "./property-revoke.helper";
 
 const travelerCardService = new TravelerCardService();
 
@@ -102,7 +103,9 @@ export async function cloneWorkOrderTx(
           plannedSubcontractorId: true,
         },
       },
-      targetProperties: { select: { propertyId: true } },
+      // Aktif süzgeç: damgalı hedef klonlanırsa nested create aynı propertyId'yi iki kez
+      // yazar → partial unique P2002 → devir/parti ayırma tx'i düşer.
+      targetProperties: { where: ACTIVE_TARGET_PROPERTY, select: { propertyId: true } },
       orderLinks: { select: { orderLineId: true, allocatedQty: true } },
     },
   });

@@ -25,6 +25,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { LabelService } from "./label.service";
 import { InventoryService } from "./inventory.service";
+import { ACTIVE_ROLL_PROPERTY } from "./helpers/property-revoke.helper";
 
 /** Senaryo künyesi — panel listeyi BURADAN kurar, kendi kopyasını tutmaz. */
 export interface DemoScenario {
@@ -63,7 +64,7 @@ const SENARYO_SELECT = {
   colorId: true,
   labelDirty: true,
   labelPrintedAt: true,
-  properties: { select: { propertyId: true, valueId: true } },
+  properties: { where: ACTIVE_ROLL_PROPERTY, select: { propertyId: true, valueId: true } },
 } as const;
 
 export class DemoService {

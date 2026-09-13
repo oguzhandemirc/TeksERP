@@ -14,6 +14,7 @@
 // =============================================================================
 
 import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
+import { ACTIVE_ROLL_PROPERTY, ACTIVE_TARGET_PROPERTY } from "./helpers/property-revoke.helper";
 import { ACTIVE_MOVEMENT, revokeRollMovements } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
@@ -567,7 +568,7 @@ async function createFasonShipChild(
 ): Promise<string> {
   const barcode = await generateRollBarcodeTx(tx, "H");
   const props = await tx.rollProperty.findMany({
-    where: { rollId: parent.id },
+    where: { rollId: parent.id, ...ACTIVE_ROLL_PROPERTY },
     // valueId: kısmi-sevk çocuğu ebeveynin değer seçimini de devralır (denetim F6).
     select: { propertyId: true, valueId: true },
   });
@@ -1902,7 +1903,7 @@ export class SubcontractorService {
             width: true,
             targetColor: { select: { name: true } },
             // `propertyId` → adım süzgeci (bkz. resolveStepWorkInstructions).
-            targetProperties: { select: { propertyId: true, property: { select: { name: true } } } },
+            targetProperties: { where: ACTIVE_TARGET_PROPERTY, select: { propertyId: true, property: { select: { name: true } } } },
             steps: {
               orderBy: { stepSequence: "asc" },
               select: { id: true, stationId: true },
@@ -2666,7 +2667,7 @@ export class SubcontractorService {
         targetItemId: true,
         targetColorId: true,
         width: true,
-        targetProperties: { select: { propertyId: true } },
+        targetProperties: { where: ACTIVE_TARGET_PROPERTY, select: { propertyId: true } },
       },
     });
     if (!wo) throw AppError.notFound("İş emri bulunamadı");
@@ -4206,7 +4207,7 @@ export class SubcontractorService {
               id: true, workOrderNumber: true, status: true,
               width: true,
               targetColor: { select: { id: true, code: true, name: true, hex: true } },
-              targetProperties: { select: { property: { select: { id: true, code: true, name: true } } } },
+              targetProperties: { where: ACTIVE_TARGET_PROPERTY, select: { property: { select: { id: true, code: true, name: true } } } },
             },
           },
           plannedSubcontractor: { select: { id: true, code: true, name: true } },
@@ -4352,7 +4353,7 @@ export class SubcontractorService {
             id: true, workOrderNumber: true, status: true,
             width: true,
             targetColor: { select: { id: true, code: true, name: true, hex: true } },
-            targetProperties: { select: { property: { select: { id: true, code: true, name: true } } } },
+            targetProperties: { where: ACTIVE_TARGET_PROPERTY, select: { property: { select: { id: true, code: true, name: true } } } },
           },
         },
         plannedSubcontractor: { select: { id: true, code: true, name: true } },
@@ -4447,7 +4448,7 @@ export class SubcontractorService {
             id: true, workOrderNumber: true, status: true,
             width: true,
             targetColor: { select: { id: true, code: true, name: true, hex: true } },
-            targetProperties: { select: { property: { select: { id: true, code: true, name: true } } } },
+            targetProperties: { where: ACTIVE_TARGET_PROPERTY, select: { property: { select: { id: true, code: true, name: true } } } },
           },
         },
         plannedSubcontractor: { select: { id: true, code: true, name: true } },
@@ -4684,7 +4685,7 @@ export class SubcontractorService {
           include: {
             targetItem: true,
             targetColor: true,
-            targetProperties: { include: { property: true } },
+            targetProperties: { where: ACTIVE_TARGET_PROPERTY, include: { property: true } },
             orderLinks: {
               include: {
                 orderLine: {
@@ -4897,6 +4898,7 @@ export class SubcontractorService {
           include: {
             targetColor: { select: { id: true, code: true, name: true, hex: true } },
             targetProperties: {
+              where: ACTIVE_TARGET_PROPERTY,
               select: { property: { select: { id: true, name: true } } },
             },
           },
@@ -7098,7 +7100,7 @@ async function buildFasonDispatchDoc(
           // ⚠️ `propertyId` DE seçilir: "YAPILACAK İŞLEMLER" satırı bu listeyi
           // sevkin gittiği ADIMIN istasyon yetenekleriyle KESİŞTİRİR
           // (`resolveStepWorkInstructions`) ve kesişim id üzerinden kurulur.
-          targetProperties: { select: { propertyId: true, property: { select: { name: true } } } },
+          targetProperties: { where: ACTIVE_TARGET_PROPERTY, select: { propertyId: true, property: { select: { name: true } } } },
         },
       },
       step: {

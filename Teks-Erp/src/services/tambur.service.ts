@@ -15,6 +15,7 @@
 // =============================================================================
 
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
+import { ACTIVE_ROLL_PROPERTY } from "./helpers/property-revoke.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { postStockMove, qtyYazilabilir } from "./helpers/warehouse-ledger.helper";
 import { postOpenFabricChildEntryTx } from "./helpers/production-entry-ledger.helper";
@@ -381,6 +382,7 @@ export class TamburService {
             item: { select: { code: true, name: true } },
             color: { select: { code: true, name: true } },
             properties: {
+              where: ACTIVE_ROLL_PROPERTY,
               // value: Tambur FINAL KARAR noktasıdır — kurşunda seçilen GRAMAJ
               // değeri kesim/kalite kararını veren operatörün gözü önünde olmalı
               // (denetim VAL-03: ad basılıyordu, değer basılmıyordu).
@@ -1072,7 +1074,7 @@ export class TamburService {
       // (Renk veren fason adımında WO.targetProperties parent.properties'e zaten
       // kopyalanmış durumda; Tambur sadece propagate eder.)
       const parentProperties = await tx.rollProperty.findMany({
-        where: { rollId: data.rollId },
+        where: { rollId: data.rollId, ...ACTIVE_ROLL_PROPERTY },
         // valueId: miras DEĞER-FARKINDA (denetim F6) — GRAMAJ=50GR çocuğa geçer.
         select: { propertyId: true, valueId: true },
       });
@@ -1674,6 +1676,7 @@ export class TamburService {
           qualityGrade: true,
           color: { select: { id: true, code: true, name: true, hex: true } },
           properties: {
+            where: ACTIVE_ROLL_PROPERTY,
             select: {
               propertyId: true,
               property: { select: { id: true, code: true, name: true } },
@@ -2124,7 +2127,7 @@ export class TamburService {
     const parent = await prisma.roll.findUnique({
       where: { id: rollId },
       include: {
-        properties: { select: { propertyId: true, valueId: true } },
+        properties: { where: ACTIVE_ROLL_PROPERTY, select: { propertyId: true, valueId: true } },
         // Çuval kodu — aşağıdaki çuval guard'ının mesajı için (operatör çuvalı bulmalı).
         sack: { select: { sackNo: true } },
       },
@@ -2638,7 +2641,7 @@ export class TamburService {
     const parent = await prisma.roll.findUnique({
       where: { id: rollId },
       include: {
-        properties: { select: { propertyId: true, valueId: true } },
+        properties: { where: ACTIVE_ROLL_PROPERTY, select: { propertyId: true, valueId: true } },
         // Çuval kodu — aşağıdaki çuval guard'ının mesajı için.
         sack: { select: { sackNo: true } },
       },
@@ -3055,7 +3058,7 @@ export class TamburService {
             workOrder: { select: { id: true, status: true, foldType: true, targetColorId: true, width: true } },
           },
         },
-        properties: { select: { propertyId: true, valueId: true } },
+        properties: { where: ACTIVE_ROLL_PROPERTY, select: { propertyId: true, valueId: true } },
       },
     });
     if (!parent) throw AppError.notFound("Roll bulunamadı");
@@ -3483,7 +3486,7 @@ export class TamburService {
             },
           },
         },
-        properties: { select: { propertyId: true, valueId: true } },
+        properties: { where: ACTIVE_ROLL_PROPERTY, select: { propertyId: true, valueId: true } },
       },
     });
     if (!parent) throw AppError.notFound("Roll bulunamadı");
