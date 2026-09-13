@@ -288,6 +288,16 @@ jobs:
       # 2026-09-05'e kadar no-op'tu; 9 tip hatası main'de bir gün durdu.
       - name: Type-check
         run: npm run typecheck
+      # ⚠️ KAPI KAPSAMI BURADA ÖLÇÜLÜR, Backend job'ında DEĞİL (2026-09-13).
+      # `test_kapi_kapsami` üç projeyi de Backend'den ölçüyordu; orada yalnız
+      # Teks-Erp'in bağımlılıkları kurulu olduğu için Electron/mobil configleri
+      # "çözülemedi" deyip ÜÇ TUR kırmızı verdi. Beyan (atla()) o kırmızıyı
+      # GÖRÜNÜR kıldı ama KAPATMADI — kapsam, bağımlılıkları KURULU olan kendi
+      # job'ında ölçülür. Adım `npm ci`den SONRA gelir; öncesinde aynı
+      # "çözülemedi" ikinci kez üretilirdi.
+      - name: Kapı kapsamı (tip kapısı SIFIR dosya derlemiyor)
+        run: node scripts/kapi-kapsami.mjs Electron
+        working-directory: .
       - name: Test (Vitest)
         run: npm test
 
@@ -318,6 +328,16 @@ jobs:
         working-directory: .
       - name: Type-check
         run: npx tsc --noEmit
+      # ⚠️ KAPI KAPSAMI BURADA ÖLÇÜLÜR, Backend job'ında DEĞİL (2026-09-13).
+      # `test_kapi_kapsami` üç projeyi de Backend'den ölçüyordu; orada yalnız
+      # Teks-Erp'in bağımlılıkları kurulu olduğu için Electron/mobil configleri
+      # "çözülemedi" deyip ÜÇ TUR kırmızı verdi. Beyan (atla()) o kırmızıyı
+      # GÖRÜNÜR kıldı ama KAPATMADI — kapsam, bağımlılıkları KURULU olan kendi
+      # job'ında ölçülür. Adım `npm ci`den SONRA gelir; öncesinde aynı
+      # "çözülemedi" ikinci kez üretilirdi.
+      - name: Kapı kapsamı (tip kapısı SIFIR dosya derlemiyor)
+        run: node scripts/kapi-kapsami.mjs mobil
+        working-directory: .
       - name: Test (jest-expo)
         run: npx jest --runInBand
 

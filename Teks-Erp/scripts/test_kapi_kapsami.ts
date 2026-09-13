@@ -29,8 +29,7 @@
 //    "kapı komutunu kendin uydurma"ydı; burada ikinci bir liste tutmak aynı hatayı
 //    bekçinin içine kopyalamak olurdu. Script değişirse bekçi onu İZLER.
 // =============================================================================
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { atlamaDefteri } from "./lib/atlama";
 import { join } from "node:path";
 
@@ -49,51 +48,29 @@ function check(label: string, ok: boolean, detay = ""): void {
   }
 }
 
-/** `package.json > scripts` içindeki tip kapılarından `-p <config>` hedeflerini çıkarır. */
-function kapiConfigleri(proje: string): string[] {
-  const pkg = JSON.parse(readFileSync(join(KOK, proje, "package.json"), "utf8")) as {
-    scripts?: Record<string, string>;
-  };
-  const konu = Object.entries(pkg.scripts ?? {}).filter(([ad]) => /^typecheck/.test(ad));
-  const out = new Set<string>();
-  for (const [, cmd] of konu) {
-    const p = [...cmd.matchAll(/-p\s+(\S+)/g)].map((m) => m[1]);
-    // `-p` yoksa varsayılan `tsconfig.json` kullanılır — o da bir kapı hedefidir.
-    if (p.length === 0) out.add("tsconfig.json");
-    else for (const x of p) out.add(x);
-  }
-  return [...out];
-}
-
 /**
- * O config'in KÖK DOSYA sayısı (`include`/`files` çözülmüş hâli).
+ * ÖLÇÜM ÇEKİRDEĞE DELEGE EDİLİR — `scripts/kapi-kapsami.mjs`.
  *
- * ⚠️ NEDEN `--showConfig`, `--listFilesOnly` DEĞİL: ikisi de aynı sayıyı veriyor
- * (ölçüldü: 486 · 1133 · 26 · 1407) ama `--showConfig` tip denetimi yapmadan
- * yalnız config'i çözüyor ⇒ **2,7 sn ↔ 16,3 sn, 6 kat ucuz.** Kapı her commit'te
- * koşuyor; bedeli düşürmek kadansı korumanın parçası.
+ * ⚠️ Eskiden bu dosya kendi `kapiConfigleri`/`dosyaSayisi`ını taşıyordu ve
+ * (b) düzeltmesiyle birlikte CI'ın Electron/mobil job'ları da aynı ölçümü
+ * yapmak zorunda kaldı. İkinci bir kopya yazmak İKİ GERÇEK üretirdi — bu gece
+ * `tr-kokler.ts` ile tam bunu reddettik.
+ * ⇒ *Bir ölçüm iki yerde koşacaksa, iki kez YAZILMAZ; bir kez yazılıp iki kez
+ *   ÇAĞRILIR.* Çekirdek zero-dep `.mjs`tir, çünkü Electron/mobil job'larında
+ *   `tsx` ve Teks-Erp bağımlılıkları YOK.
  *
- * ⚠️ SEMANTİK FARK BEYAN EDİLİR: `--showConfig` KÖK dosyaları sayar (include/files),
- * `--listFilesOnly` import kapanışını da. Bu kapının sorusu "kapsam SIFIR mı" olduğu
- * için kök dosya sayısı DAHA DOĞRU sinyaldir: Electron'un kök config'i `files: []`
- * taşır ve kapanışta yalnız `lib.d.ts` görünürdü. (mobil'de 403 ↔ 394 farkı buradan.)
+ * Çıkış kodu sözleşmesi: 0 = temiz · 1 = SIFIR dosya (kapsam bulgusu) ·
+ * 2 = ölçülemedi (ARIZA / bağımlılık yok) — üçü AYRI, çünkü "ölçemedim" ile
+ * "ihlal buldum" aynı kırmızıya çıkamaz.
  */
-function dosyaSayisi(proje: string, cfg: string): number {
-  let ham = "";
-  try {
-    ham = execFileSync("npx", ["tsc", "--showConfig", "-p", cfg], {
-      cwd: join(KOK, proje),
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-    });
-  } catch (err) {
-    ham = (err as { stdout?: string }).stdout ?? "";
-  }
-  try {
-    return ((JSON.parse(ham) as { files?: string[] }).files ?? []).length;
-  } catch {
-    return -1; // config çözülemedi → ARIZA, aşağıda 0'dan ayrı raporlanır
-  }
+function cekirdek(proje: string): { kod: number; satirlar: string[] } {
+  const r = spawnSync("node", [join(KOK, "scripts", "kapi-kapsami.mjs"), proje], {
+    cwd: KOK,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  const cikti = `${r.stdout ?? ""}${r.stderr ?? ""}`;
+  return { kod: r.status ?? 2, satirlar: cikti.split("\n").filter(Boolean) };
 }
 
 function main(): void {
@@ -101,7 +78,7 @@ function main(): void {
   const ATLAMA = atlamaDefteri(() => {
     fail++;
   });
-  let toplamConfig = 0;
+  let olculen = 0;
   for (const proje of PROJELER) {
     // ⚠️ ÖLÇÜLEMEYEN KAPSAM, "SIFIR DOSYA" DEĞİLDİR — ve ikisini ayırmak bu
     // bekçinin varlık sebebi (2026-09-13, CI'da üç kez kırmızı verdi).
@@ -110,35 +87,26 @@ function main(): void {
     // çözemiyor ve kapı `-1` alıyor. Kapı doğru davrandı (ARIZA dedi, "0 dosya"
     // demedi) ama YANLIŞ YERDEN ölçüyordu: üç projeyi TEK job'dan.
     //
-    // ⚠️ VE BU BEYAN BİR ÇÖZÜM DEĞİL, BİR BORÇ KAYDIDIR. `atla()` boşluğu
-    // GÖRÜNÜR kılar, KAPATMAZ: beyan edildiği an Electron ve mobil'in kapı
-    // kapsamı o job'da ÖLÇÜLMÜYOR demektir. Kalem ancak (b) ile kapanır —
-    // kapsam, bağımlılıkları kurulu olan KENDİ job'ında ölçülünce.
-    if (!existsSync(join(KOK, proje, "node_modules"))) {
+    // ⚠️ VE BEYAN BİR ÇÖZÜM DEĞİL, BİR BORÇ KAYDIYDI. (b) ile kapandı: kapsam
+    // artık Electron ve mobil'in KENDİ CI job'larında, bağımlılıkları kurulu
+    // hâlde ölçülüyor (`ci.yml` → "Kapı kapsamı" adımı). Buradaki beyan, YEREL
+    // koşumda ya da bağımlılığın kurulu olmadığı herhangi bir ortamda hâlâ
+    // gereklidir — ölçülemeyen kapsam sessiz geçmemeli.
+    const { kod, satirlar } = cekirdek(proje);
+    for (const l of satirlar) console.log(`   ${l}`);
+    // Çekirdeğin çıkış kodu ÜÇ DURUMLU ve "ölçemedim" ≠ "ihlal buldum":
+    //   0 = temiz · 1 = SIFIR dosya (gerçek kapsam bulgusu) · 2 = ölçülemedi
+    if (kod === 2) {
       ATLAMA.atla(
         `${proje} tip kapısı kapsamı`,
-        "bu kapsam BU JOB'DA ÖLÇÜLMÜYOR — bağımlılıkları kurulu değil (borç: kendi job'ına taşınacak)",
+        "bu kapsam BURADA ÖLÇÜLMÜYOR — bağımlılıkları kurulu değil (CI'da kendi job'ında ölçülür)",
       );
       continue;
     }
-    const configler = kapiConfigleri(proje);
-    // KÖRLÜK ZEMİNİ: script adı değişirse liste boşalır ve aşağıdaki her kontrol
-    // VAKUMEN yeşil olur.
-    check(`§0 ${proje}: package.json'dan tip kapısı çözüldü`, configler.length > 0, configler.join(" · "));
-    toplamConfig += configler.length;
-    for (const cfg of configler) {
-      const n = dosyaSayisi(proje, cfg);
-      check(
-        `⭐ ${proje}/${cfg} SIFIR dosya derlemiyor`,
-        n > 0,
-        n > 0
-          ? `${n} dosya`
-          : n === 0
-            ? "0 DOSYA — bu kapı HİÇBİR ŞEY ölçmüyor, her zaman yeşil verir"
-            : "config ÇÖZÜLEMEDİ — bu bir kapsam bulgusu değil ARIZA",
-      );
-    }
+    olculen++;
+    check(`⭐ ${proje}: hiçbir kapı hedefi SIFIR dosya derlemiyor`, kod === 0, satirlar.at(-1) ?? "");
   }
+
   // ⚠️ KÖRLÜK ZEMİNİ ÖLÇÜLEN PROJE SAYISINA GÖRE KURULUR — sabit bir eşik
   // (eski hâli: 4) beyanla birlikte YANLIŞ kırmızı üretir.
   //
@@ -150,19 +118,20 @@ function main(): void {
   // Doğru yüklem: ölçülen HER projeden en az bir kapı hedefi çıkmalı. Script
   // adları değişip liste boşalırsa (asıl kovaladığımız vakumen-yeşil) toplam
   // ölçülen proje sayısının altına düşer ve zemin ISIRIR.
-  const olculenProje = PROJELER.length - ATLAMA.sayi;
-  if (olculenProje === 0) {
-    // Hiçbir proje ölçülmediyse zeminin kendisi de ölçülmemiştir — onu da
-    // BEYAN et, sessizce atlama. "Kontrol koşmadı" ile "kontrol geçti" ayrı.
-    ATLAMA.atla("§0z körlük zemini", "ölçülen proje YOK — zemin değerlendirilemedi");
-  } else {
-    check(
-      "§0z körlük zemini: ölçülen her projede kapı hedefi bulundu",
-      toplamConfig >= olculenProje,
-      `${toplamConfig} config / ${olculenProje} ölçülen proje` +
-        (ATLAMA.sayi > 0 ? ` (${ATLAMA.sayi} proje atlandı)` : ""),
-    );
-  }
+  // ⚠️ İKİNCİ SONDA BUNU YAKALADI: delegasyondan sonra zemini
+  // `check(..., olculenProje > 0)` diye bırakmıştım — ama o satır yalnız
+  // `olculen > 0` dalında koşuyordu, yani YÜKLEM HER ZAMAN DOĞRUYDU.
+  // **Totolojik bir kontrol, vakumen yeşilin ta kendisidir** — ve bu bekçi tam
+  // olarak onu kovalamak için var. Kendi zeminini kaybetmiş bir körlük zemini.
+  //
+  // Doğru yüklem YANLIŞLANABİLİR olmalı: her proje ya ÖLÇÜLDÜ ya BEYAN EDİLDİ;
+  // toplam eksikse bir `continue` dalı ya da yutulan bir istisna projeyi
+  // sessizce düşürmüş demektir.
+  check(
+    "§0z körlük zemini: her proje ya ölçüldü ya BEYAN edildi",
+    olculen + ATLAMA.sayi === PROJELER.length,
+    `${olculen} ölçüldü + ${ATLAMA.sayi} beyan = ${olculen + ATLAMA.sayi} / ${PROJELER.length} proje`,
+  );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   process.exit(fail > 0 ? 1 : 0);
