@@ -12,7 +12,7 @@
 
 - **[ÇEKİRDEK]** Roll.finalizedAt/statusChangedAt damgalarını DB TRIGGER'ı yazar (roll_stamp_production_timestamps, BEFORE INSERT OR UPDATE) — uygulama koduna güvenilmez: Roll.status'e yazan 40+ nokta var, biri atlanırsa rapor SESSİZCE eksilir (hata yok, log yok). Damgayı elle yazma. · bekçi: `scripts/test_db_invariants.ts §6 + scripts/test_quality_scorecard.ts` <sub>(CLAUDE.md:69)</sub>
 - **[ÇEKİRDEK]** finalizedAt WRITE-ONCE DEĞİLDİR, üzerine yazılır: depo topu yeni iş emrine girip tekrar finalize olursa tazelenir. Invariant: finalizedAt DAİMA mevcut qualityGradeId ile AYNI olaydan gelir; sabitlenirse top ESKİ tarihle YENİ kaliteyi taşır. <sub>(CLAUDE.md:69)</sub>
-- **[ÇEKİRDEK]** 'Dönemde sevk edilen metraj' TEK tanım reports/_shipped.ts (brüt: canlı sevk + RollReturn geri-eklemesi + DirectShipment). İkinci tanım yazma — biri doğrudan sevkleri, diğeri iade geri-eklemesini unutur. Bugün 3 tüketici; beşincisinde sınıf yeniden açılır. · bekçi: `yok (kök Ortak Konvansiyonlar 'Tek kaynak satır kuralı'nın emsali)` <sub>(CLAUDE.md:69)</sub>
+- **[ÇEKİRDEK]** 'Dönemde sevk edilen metraj' TEK tanım reports/_shipped.ts (brüt: canlı sevk + RollReturn geri-eklemesi + DirectShipment). İkinci tanım yazma — biri doğrudan sevkleri, diğeri iade geri-eklemesini unutur. Bugün 3 tüketici; beşincisinde sınıf yeniden açılır. · bekçi: `yok (kök Ortak Konvansiyonlar 'Tek kaynak satır kuralı'nın emsali)` · **Kapanır:** brüt sevk metrajını `_shipped.ts` DIŞINDA hesaplayan bir yolun VARLIĞINI ölçen bekçi indiğinde — ölçüt: `dispatchedAt` aralık süzgeciyle metraj toplayan her yol ADIYLA envanterde durur ve envanter İKİ YÖNLÜDÜR (tüketicinin kaybolması kadar YENİ bir hesabın doğması da kırmızı verir). ⚠️ *"İkinci tanım yazma"* bir NİYETTİR; kapanış onu SAYIYA çevirir — bugün 3 tüketici. <sub>(CLAUDE.md:69)</sub>
 
 ### Yasaklar
 
@@ -47,7 +47,7 @@
 
 ### Tuzaklar
 
-- **[ÇEKİRDEK]** _shipped.ts'teki status='DISPATCHED' süzgecini SİLME: kaybını hiçbir bekçi göremez (ölçüldü, yeşil kalıyor) çünkü storno dispatchedAt'i NULL'lar ve aralık süzgeci PLANNED'ı zaten eler. Süzgeç o invariant'a GÜVENMEMEK için duruyor. · bekçi: `yok (bilinçli olarak bekçisiz — arşiv bunu açıkça yazar)` <sub>(CLAUDE.md:69)</sub>
+- **[ÇEKİRDEK]** _shipped.ts'teki status='DISPATCHED' süzgecini SİLME: kaybını hiçbir bekçi göremez (ölçüldü, yeşil kalıyor) çünkü storno dispatchedAt'i NULL'lar ve aralık süzgeci PLANNED'ı zaten eler. Süzgeç o invariant'a GÜVENMEMEK için duruyor. · bekçi: `yok (bilinçli olarak bekçisiz — arşiv bunu açıkça yazar)` · **Kapanır:** `collectShipped`'in, `dispatchedAt`i aralıkta AMA `status ≠ 'DISPATCHED'` olan bir sevkiyatı DIŞLADIĞINI ölçen bekçi indiğinde — ve o bekçi, süzgeç SİLİNEREK kırmızı verdiği negatif sondayla doğrulandığında. ⚠️ Normal storno yolunu (`dispatchedAt` NULL'lanmış) kuran bir bekçi KAPATMAZ: o satırı aralık süzgeci zaten eler ve aynı kör nokta tekrarlanır — kapanış, invariant'ın YASAKLADIĞI satırı KURMAYI gerektirir. <sub>(CLAUDE.md:69)</sub>
 - **[ÇEKİRDEK]** Fire Karnesi'nde İKİ ÇIPA İKİ BİRİM: hurda finalizedAt + METRE, hata tespiti RollError.detectedAt + ADET — toplanmaması gereken iki sayı aynı birimde basılmaz. Hata bağı LEFT JOIN LATERAL … LIMIT 1 olmak zorunda: düz JOIN iki hatalı 100 m'lik topu 200 m hurda gösterir. <sub>(CLAUDE.md:69)</sub>
 
 ### Reçeteler

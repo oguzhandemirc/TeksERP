@@ -107,6 +107,7 @@ Backend: `test_devere_regime_gate`, `test_audit_labels`, `test_reason_preset_kin
 
 ⚠️ **İKİ EKSEN, KARIŞTIRILMAZ:** `ReasonPreset.code` = **SEBEP** (sıralama ekseni) · `MachineStopLossClass` = **SÜRE SINIFI** (gruplama ekseni). Tasarımın şerhi: *"`MINOR` bir SEBEP SINIFI DEĞİL, bir SÜRE SINIFIDIR"* — yalnız `tezgah.stopEventMinSeconds` altındaki duruşlardan türer ve `ReasonPreset.stopLossClass`a ASLA yazılamaz.
 ⇒ Tek eksende sunulursa *"mikro duruşlar"* bir sebep gibi görünür ve **operatöre yanlış iş verir** — raporun yanlış olmasının en pahalı biçimi.
+⚠️ Ayrım denetim ekranında bir override'la yaşar (`MACHINE_STOP_EVENT.lossClass` → *"Mikro duruş (eşik altı)"*); override silinirse ekran duruşa `DefectSeverity` dilinde *"Küçük"* der. Bu **korumasızdı** (ölçüldü 2026-09-13: silince Electron 75/75, backend 22/0 yeşil kaldı) — `test_dokuma_rapor_onkosullari` §6 kapatır.
 ⚠️ Sebep **serbest metin DEĞİL**: `reasonCode` → `ReasonPreset.code` (FK'SIZ, `Roll.cancelReasonCode` emsali) ve etiket **kopyalanıp DONAR** — katalog değişse geçmiş rapor değişmez.
 
 **③ VARDİYA KARNESİ**
@@ -118,7 +119,7 @@ Backend: `test_devere_regime_gate`, `test_audit_labels`, `test_reason_preset_kin
 **① ELLE GİRİŞ BİRİNCİ SINIFTIR ve toplamda ERİMEZ.**
 Veri çekilemeyen tezgahlar için elle giriş olacak ⇒ raporun **her toplam satırı** `MachineShiftStat.source` kırılımını taşır. **Tek yüzdeye çökertme YASAK:** *"%78"* denmez, *"%78 (ölçülen 62, elle 16)"* denir.
 ⚠️ `SIMULATED` `OPERATOR`dan **AYRI** durur — farklı güven sınıfı; kök `CLAUDE.md` *"uydurulmuş değer `source:'SIMULATED'` beyanıyla gider"* diyor ve birleştirmek o beyanı **yok eder**.
-**Bekçisi:** toplam satırı kırılım toplamına eşit mi **ve** kırılım basılıyor mu. (Şema gerektirmez.)
+**Bekçisi İKİ KATMANLI.** ÇIKTI bekçisi (toplam = Σkırılım **ve** kırılım basılıyor mu) rapor yüzeyi indiğinde yazılır — bugün YOKTUR ve `test_dokuma_rapor_onkosullari` bunu *"ÖLÇÜLEMEDİ"* diye BEYAN eder (boş hücre değil). ÖN KOŞUL bekçisi bugün koşar (`SIMULATED` ile `OPERATOR` ayrı iki enum değeri · her `MachineDataSource` kolonu `@default`suz) ve envanter-dışı bir kaynak kolonu doğduğu gün KIRMIZI vererek çıktı bekçisini çağırır.
 
 **② UFUK YAZILIR — ve HER UFKUN TEK KAYNAĞI, AYRI ADI VAR.**
 Rapor *"her şey tutuyor"* demez, *"şu tarihten sonrası ölçülü"* der.
