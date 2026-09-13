@@ -126,8 +126,11 @@ function main() {
     process.exit(2);
   }
 
-  const gecici = mkdtempSync(join(tmpdir(), "tekserp-lint-"));
-  const rapor = join(gecici, "eslint.json");
+  // --rapor=<yol>: rapor oraya yazılır ve SİLİNMEZ — lint tavanı aynı JSON'u okur,
+  // eslint bir kapıda İKİ kez koşmaz (ölçüldü 2026-09-14: 19 sn + 3,5 GB tasarruf).
+  const raporArg = process.argv.slice(2).find((a) => a.startsWith("--rapor="))?.split("=")[1];
+  const gecici = raporArg ? null : mkdtempSync(join(tmpdir(), "tekserp-lint-"));
+  const rapor = raporArg ?? join(gecici, "eslint.json");
   const r = spawnSync(proje.lint[0], [...proje.lint[1], "--", "-f", "json", "-o", rapor], {
     cwd: join(REPO, proje.ad),
     encoding: "utf8",
@@ -143,7 +146,7 @@ function main() {
       sonuclar = null;
     }
   }
-  rmSync(gecici, { recursive: true, force: true });
+  if (gecici) rmSync(gecici, { recursive: true, force: true });
 
   if (!Array.isArray(sonuclar)) {
     console.error(

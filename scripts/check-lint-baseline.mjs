@@ -99,7 +99,23 @@ function baselineYolu(proje) {
 function olc(proje) {
   const { dizin, argv: lintArgv } = PROJELER[proje];
   let ham;
-  try {
+  // --rapor=<yol>: lint-gate'in az önce yazdığı JSON — aynı küme (argv birebir,
+  // yukarıdaki sözleşme), eslint ikinci kez koşmaz (ölçüldü 2026-09-14: 19 sn +
+  // 3,5 GB / kapı). Verilmiş ama okunamıyorsa ARIZA: sessizce kendim koşup yeşil
+  // geçmek bir kablolama hatasını 19 sn'lik bir yavaşlığa gizlerdi.
+  const raporYolu = process.argv.slice(2).find((a) => a.startsWith("--rapor="))?.split("=")[1];
+  if (raporYolu) {
+    try {
+      ham = readFileSync(raporYolu, "utf8");
+    } catch (err) {
+      console.error(`❌ ${proje}: --rapor verildi ama okunamadı (${raporYolu}) — ARIZA, ihlal değil: ${err.message}`);
+      process.exit(2);
+    }
+    if (!ham.trim().startsWith("[")) {
+      console.error(`❌ ${proje}: --rapor JSON değil (${raporYolu}) — ARIZA.`);
+      process.exit(2);
+    }
+  } else try {
     ham = execFileSync("npx", [...lintArgv, "-f", "json"], {
       cwd: join(REPO_ROOT, dizin),
       encoding: "utf8",

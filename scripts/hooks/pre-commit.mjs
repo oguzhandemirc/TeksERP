@@ -22,7 +22,8 @@
 // =============================================================================
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { etkilenenProjeler, stagedFiles } from "./lib/staged.mjs";
@@ -79,6 +80,9 @@ const genisTip = (ad) =>
 const AGIR_ADIM_ENV = {
   NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --max-old-space-size=6144`.trim(),
 };
+// Lint raporu için kapıya özel geçici dizin — çıkışta silinir (yeşil/kırmızı).
+const RAPOR_DIZINI = mkdtempSync(join(tmpdir(), "tekserp-kapi-"));
+process.on("exit", () => rmSync(RAPOR_DIZINI, { recursive: true, force: true }));
 
 for (const proje of etkilenenProjeler(REPO, staged)) {
   const genis = genisTip(proje.ad);
@@ -94,7 +98,9 @@ for (const proje of etkilenenProjeler(REPO, staged)) {
   adimlar.push({
     ad: `${proje.ad} · lint`,
     cwd: ".",
-    cmd: ["node", ["scripts/hooks/lint-gate.mjs", `--proje=${proje.ad}`]],
+    // TEK ESLİNT KOŞUMU (ölçüldü 2026-09-14): lint ve tavan aynı kümeyi ayrı ayrı
+    // tarıyordu (19 sn + 3,5 GB × 2). Rapor bir kez yazılır, tavan onu okur.
+    cmd: ["node", ["scripts/hooks/lint-gate.mjs", `--proje=${proje.ad}`, `--rapor=${join(RAPOR_DIZINI, `${proje.ad}.json`)}`]],
     stdin: `${staged.join("\n")}\n`,
     env: AGIR_ADIM_ENV,
   });
@@ -105,7 +111,7 @@ for (const proje of etkilenenProjeler(REPO, staged)) {
       cwd: ".",
       // Tavan da commit kapısı kipinde: SAYIM proje geneli kalır (tabanla
       // karşılaştırılabilir olmalı), yalnız VERDİKT bu commit'in dosyalarına bakar.
-      cmd: ["node", ["scripts/check-lint-baseline.mjs", `--proje=${anahtar}`, "--commit-kapisi"]],
+      cmd: ["node", ["scripts/check-lint-baseline.mjs", `--proje=${anahtar}`, "--commit-kapisi", `--rapor=${join(RAPOR_DIZINI, `${proje.ad}.json`)}`]],
       stdin: `${staged.join("\n")}\n`,
       env: AGIR_ADIM_ENV,
     });
