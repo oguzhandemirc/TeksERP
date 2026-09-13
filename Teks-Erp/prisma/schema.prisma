@@ -2749,6 +2749,8 @@ model Roll {
   movements            RollMovement[]
   operations           RollOperation[]
   variances            RollVariance[]
+  /// Bu topun KEŞFİ olan (ebeveyne yazılmış) sapma satırları — `sourceRollId` ters ilişkisi.
+  sourceOfVariances    RollVariance[] @relation("RollVarianceSourceRoll")
   /// Plan-sapma defteri: bu top KAPIYA GİREN taraf (parent).
   planDeviations       RollPlanDeviation[]         @relation("RollPlanDeviationRoll")
   /// Plan-sapma defteri: bu top o geçişte DOĞAN çocuk.
@@ -4092,8 +4094,10 @@ model RollVariance {
   /// Örn. TAMBUR_FINALIZE · TAMBUR_WAREHOUSE_FINALIZE · TAMBUR_OVERCUT ·
   /// TAMBUR_UNDO_SINGLE. Sebep "neden", kaynak "nerede" sorusunu yanıtlar.
   source          String           @db.VarChar(64)
-  /// Sapmayı DOĞURAN kaydın kimliği (bugün yalnız `SUBCONTRACTOR_RETURN`:
-  /// `SubcontractorReceipt.id`). TERSLEMENİN ADRESİDİR.
+  /// Sapmayı DOĞURAN BELGENİN kimliği (`SUBCONTRACTOR_RETURN`: `SubcontractorReceipt.id`;
+  /// `STOCK_COUNT`: `StockCount.id` — 2026-09-14'te ölçüldü, iki yazıcı). TERSLEMENİN
+  /// ADRESİDİR ve BELGE kimliği KALIR: top kimliği ayrı kolondadır (`sourceRollId`),
+  /// çünkü bir kolonun anlamı iddiadır ve iki anlam tek kolonda okuyucuyu kör eder.
   ///
   /// ⚠️ `rollId + source + workOrderStepId` ile aramak YETMEZ ve bu load-bearing:
   /// kısmi teslimatta AYNI top AYNI adımda birden çok makbuzda sapma üretir
@@ -4101,6 +4105,11 @@ model RollVariance {
   /// olduğu için yalnız SONUNCUSUNU kaldırır. Adres olmadan iptal, önceki
   /// teslimatın meşru sapmasını da sessizce terslerdi.
   sourceRefId     String?          @db.Uuid
+  /// Sapmayı DOĞURAN TOP — sapma satırı EBEVEYNE yazıldığında (kesim keşfi ebeveyne
+  /// taşınır: hüküm ② 2026-09-14) hangi çocuktan geldiği. Tersleme ve mutabakat
+  /// "bu çocuğun keşfi" sorusunu buradan sorar; `sourceRefId` belgeyi, bu kolon topu
+  /// söyler. `Restrict`: keşfin kaynağı olan top silinemez (defter satırı ona bakıyor).
+  sourceRollId    String?          @db.Uuid
   createdById     String?          @db.Uuid
 
   /// TERSLENDİ (2026-08-09) — satır SİLİNMEZ, işaretlenir (append-only defter).
@@ -4117,6 +4126,7 @@ model RollVariance {
 
   // Relations
   roll       Roll           @relation(fields: [rollId], references: [id])
+  sourceRoll Roll?          @relation("RollVarianceSourceRoll", fields: [sourceRollId], references: [id], onDelete: Restrict)
   step       WorkOrderStep? @relation(fields: [workOrderStepId], references: [id])
   createdBy  User?          @relation(fields: [createdById], references: [id])
   reversedBy User?          @relation("RollVarianceReversedBy", fields: [reversedById], references: [id])
@@ -4137,6 +4147,7 @@ model RollVariance {
   @@index([createdById, createdAt])
   // Terslemenin erişim yolu: "şu makbuzun sapma satırları" (iptalde updateMany).
   @@index([source, sourceRefId])
+  @@index([sourceRollId])
   @@map("roll_variances")
 }
 

@@ -21,6 +21,7 @@
 //   §6 DEPO KESİMİ ÇIKMAZI kapandı (9 kaynağın 6'sı bu durumdaydı)
 //   §7 Sapma defteri TERSLENİR (hayalet fire kalmaz)
 //   §11 ÜRETİM AKIŞINDA tekil geri alma da AŞIMI KORUR (canlı ↔ arşiv aynası)
+//       ⚠️ 2026-09-14 ÇEVRİLDİ (hüküm ②): Σ canlı OVERAGE = gerçek aşım, tek satır, sourceRollId adlı
 //
 // Fixture kendi verisini üretir (ortam verisine bağımlı DEĞİL), finally'de siler.
 // =============================================================================
@@ -754,17 +755,29 @@ async function main(): Promise<void> {
       Number(s11After?.initialQty) === 120,
       `init=${s11After?.initialQty}`,
     );
-    // Sessiz düzeltme YASAK: metraj yukarı çekildiyse defterde adresi olmalı.
-    const s11Restore = await prisma.rollVariance.findMany({
-      where: { rollId: s11Parent.id, source: "TAMBUR_UNDO_RESTORE" },
-      select: { qty: true, kind: true },
+    // ⚠️ ÇEVRİLDİ 2026-09-14 (hüküm ② a, KEŞİF TERMİNAL): eski ayak "TAMBUR_UNDO_RESTORE
+    // tek satır 20" bekliyor ve DEĞİŞMEZİN TERSİNİ kilitliyordu — aşım kesim anında
+    // ebeveyne TAMBUR_OVERCUT 20 olarak zaten yazılmıştı; geri almanın bump'ı aynı 20
+    // için İKİNCİ bir canlı OVERAGE doğuruyordu (Σ 40, gerçek aşım 20; 1c ölçtü).
+    // Yeni değişmez: Σ canlı OVERAGE(ebeveyn) = GERÇEK aşım; bump sapması yalnız
+    // KEŞİFLE KARŞILANMAYAN kısım için yazılır (burada 0); keşfin kaynağı olan
+    // çocuk `sourceRollId` ile adlanır. Kod ② ile yeşil (çevrim önce, kod sonra).
+    const s11Overages = await prisma.rollVariance.findMany({
+      where: { rollId: s11Parent.id, kind: RollVarianceKind.OVERAGE, reversedAt: null },
+      select: { qty: true, source: true, sourceRollId: true },
     });
+    const s11Sum = s11Overages.reduce((t, v) => t + Number(v.qty), 0);
     check(
-      "⭐ yukarı çekilen metraj SAPMA DEFTERİNE yazıldı (TAMBUR_UNDO_RESTORE)",
-      s11Restore.length === 1 &&
-        s11Restore[0]?.kind === RollVarianceKind.OVERAGE &&
-        Number(s11Restore[0]?.qty) === 20,
-      s11Restore.map((v) => `${v.kind}:${v.qty}`).join(",") || "satır yok",
+      "⭐ Σ canlı OVERAGE(ebeveyn) = GERÇEK aşım (20) — tek satır, kaynak TAMBUR_OVERCUT (bump keşifle karşılandı, ikinci satır YOK)",
+      s11Sum === 20 &&
+        s11Overages.length === 1 &&
+        s11Overages[0]?.source === "TAMBUR_OVERCUT",
+      s11Overages.map((v) => `${v.source}:${v.qty}`).join(",") || "satır yok",
+    );
+    check(
+      "⭐ keşfin kaynağı ADIYLA: TAMBUR_OVERCUT sapması sourceRollId = aşımı doğuran 3. çocuk",
+      s11Overages[0]?.sourceRollId === s11Kids[2],
+      `sourceRollId=${String(s11Overages[0]?.sourceRollId)} 3. çocuk=${s11Kids[2]}`,
     );
   } finally {
     if (rollIds.length) {
