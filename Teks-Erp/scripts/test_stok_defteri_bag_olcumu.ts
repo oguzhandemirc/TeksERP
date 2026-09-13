@@ -23,6 +23,7 @@ import {
   type KapisizYolOlcumu,
   type KodOlcumu,
   type VeriOlcumu,
+  kToplam,
 } from "./lib/stok-defteri-bag-olcumu";
 
 let pass = 0;
@@ -149,6 +150,16 @@ async function main(): Promise<void> {
     check("§3e defter boş → K karar verir (bilgi satırı, engel değil)", sevkBagiKarari(kodTemiz, kyTemiz, veri(null, null, 0)).bagli);
     const g = sevkBagiKarari(kodKirli, kyTemiz, veri(t1, t2)).gerekceler.join("\n");
     check("§3f gerekçe çağıran dosyayı adıyla basar", g.includes("shipping.service.ts:1"));
+    // ── §3f2 ⭐ K BOZUK ARAÇTA SAYI DÖNDÜRMEZ — fail-closed TİPTE ────────────
+    // NEDEN (ölçüldü 2026-09-13): araç yanlış kökle çağrılınca `aracSaglam: false`
+    // döndü, yani DOĞRU davrandı. Ama okuyan bayrağı okumadan
+    // `cagiranlar.length + sayilanKapisiz` topladı ve K = 0 + 0 = 0 okudu —
+    // *fail-closed bir ARIZA, yeşil bir SONUÇ gibi göründü* ve runbook'a "SIKI mod
+    // serbest" yazılmasına bir adım kaldı. `kToplam` null döndürerek çağıranı
+    // DURMAYA zorlar; `?? 0` yazan biri artık bunu bilerek yazmak zorunda.
+    check("§3f2 ⭐ araç bozukken kToplam NULL (toplanamaz)", kToplam(kodBozuk, kyTemiz) === null);
+    check("§3f3 ⭐ kapısız ayağı bozukken de NULL", kToplam(kodTemiz, kyBozuk) === null);
+    check("§3f4 araç sağlamken kToplam gerçek K'yı verir", kToplam(kodKirli, kyKirli) === 2, String(kToplam(kodKirli, kyKirli)));
     // ── §3g–§3i — İKİNCİ KÜME kararı kendi başına verebilir ──────────────────
     // Eski kapı temiz olsa bile kapısız bir yol K'yı sıfırdan büyük tutar; bu
     // bekçinin eski hâli bunu ÖLÇEMİYORDU, çünkü karar tek kümeye bakıyordu.

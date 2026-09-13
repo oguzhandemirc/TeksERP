@@ -358,11 +358,32 @@ export interface BagKarari {
  * başına hangi yolların sayıldığını söylemez, ve söylemeyen bir sayı bir sonraki
  * okuyucuda eksik paydaya döner.
  */
+/**
+ * K'NIN TEK MEŞRU OKUMA YOLU — bozuk araçta `null` döner, yani TOPLANAMAZ.
+ *
+ * ⚠️ NEDEN TİPTE (ölçüldü 2026-09-13, acı deneyim): araç yanlış kökle çağrılınca
+ * `aracSaglam: false` döndü — yani DOĞRU davrandı, bozuk olduğunu söyledi. Ama
+ * okuyan `aracSaglam`ı okumadan `kod.cagiranlar.length + sayilanKapisiz` topladı
+ * ve **`K = 0 + 0 = 0`** okudu: *fail-closed bir ARIZA, yeşil bir SONUÇ gibi
+ * göründü* ve runbook'a "SIKI mod serbest" yazılmasına bir adım kaldı.
+ *
+ * ⇒ Ders: **fail-closed'ı okuyana bırakma, TİPE koy.** `.cagiranlar.length` K
+ * DEĞİLDİR ve tek başına K yerine kullanılamaz; `null` dönüşü çağıranı
+ * `?? 0`'a değil DURMAYA zorlar (yönetici kararı: 1e, 2026-09-13).
+ */
+export function kToplam(kod: KodOlcumu, kapisiz: KapisizYolOlcumu): number | null {
+  if (!kod.aracSaglam || !kapisiz.aracSaglam) return null;
+  return kod.cagiranlar.length + kapisiz.yollar.filter((y) => !y.bagli).length;
+}
+
 export function sevkBagiKarari(kod: KodOlcumu, kapisiz: KapisizYolOlcumu, veri: VeriOlcumu): BagKarari {
   const g: string[] = [];
   let bagli = true;
   const sayilanKapisiz = kapisiz.yollar.filter((y) => !y.bagli);
-  const kTotal = kod.cagiranlar.length + sayilanKapisiz.length;
+  // ⚠️ TEK KAYNAK: toplama `kToplam`dadır ve bozuk araçta `null` döner. Burada
+  // ikinci bir toplama yazılsaydı ikisi ayrışabilirdi; `?? -1` yalnız aşağıdaki
+  // fail-closed dalları ÇALIŞTIKTAN SONRA okunur (o dallarda `kTotal` basılmaz).
+  const kTotal = kToplam(kod, kapisiz) ?? -1;
 
   if (!kod.aracSaglam) {
     bagli = false;
