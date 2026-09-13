@@ -253,3 +253,30 @@ SAYIYA çevirebilir) önce `Kapanır:` alanında, sonra `bekçi:` alanında, son
 **Savunma:** serbest metin bir komuta ARGÜMAN olarak değil DOSYA olarak geçer
 (`git commit -F <dosya>`, heredoc); ve asılı kalan süreç önce `pgrep -P` ile açılır,
 öldürülürken kendi PID'i adıyla öldürülür (`pkill -f <desen>` başkasının işini alır).
+
+### KANCA ailesi — kendi repo'sunu kuran araç, KANCANIN git ortamını MİRAS ALIR
+*"Geçici dizindeyim"* cümlesi **cwd'ye** bakar; git ise **`GIT_DIR`a** bakar. Git, hook
+sürecine `GIT_DIR` · `GIT_INDEX_FILE` · `GIT_PREFIX` verir ve bunlar çocuk sürece aynen
+iner. ⇒ Kanca içinden çağrılan ve **kendi repo'sunu kuran** bir araç (`git init` +
+`add` + `commit`), geçici dizinde çalıştığını sanırken **gerçek repoya** yazar.
+
+*(Vaka 2026-09-13, d5: yeni bir kapsam bekçisi geçici dizinde `git init/add/commit`
+yapıyordu. Commit kapısına girdiği ilk gün, koşucu env'i çocuğa aynen geçirdiği için
+bekçi geçici dizini değil **dalı** gördü: "taban" commit'i dala indi ve **3.977 dosya
+silindi**. Kayıp yok — `reset` ile döndü. Vakanın kaydı `scripts/hooks/pre-commit.mjs`
+içinde, düzeltmenin yanında duruyor.)*
+
+> **`cwd` bir konumdur, `GIT_DIR` bir HEDEFTİR — ve git ikincisini dinler.**
+
+**Savunma (ölçülmüş, ve İKİ YÖNLÜ):** böyle adımlarda `GIT_*` değişkenleri **sökülür**
+(`gitEnvSil`) — ama **yalnız işaretli adımlarda.** İndeksten okuyan adımlar
+(`git show :<yol>`) pathspec commit'inde GEÇİCİ indeksi tam da `GIT_INDEX_FILE`dan bulur;
+onlardan sökmek kapıyı körleştirir. ⇒ *Ortam değişkenini sökmek de bir KARARDIR ve
+adım adım verilir.*
+
+⚠️ **Ve ısırma ANI sınıfın ikinci yarısı:** bu bekçi bugüne dek yalnız **elle** ve
+**CI'da** koşuyordu, orada zararsızdı; **kancaya girdiği an** ısırdı. Aynı yüklem, aynı
+ağaç, aynı araç — **farklı REJİM** (`OLCUM-DISIPLINI.md` § Sayı yazma, beşinci eksen).
+Bir aracı yeni bir koşum ortamına taşımak, onu **yeniden ölçmeyi** gerektirir.
+Kardeşleri § 4 · Araç ölçümün içinde · `OLCUM-DISIPLINI-ORTAK-AGAC.md` § Başka oturumun
+AĞAÇ-BÜTÜNÜ komutu.
