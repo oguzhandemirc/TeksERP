@@ -211,6 +211,21 @@ mi, "bugün böyle" mi?*
   Sayı yine de yazılacaksa **yanına neyin sayısı olduğu** yazılır
   (`§7 (8; …)` = o bölümdeki kontrol adedi, koşum adedi değil).
 
+- **İLERİ TARİHLİ ölçüm iddiası — tarih de bir ÖLÇÜMDÜR, tahmin edilmez.** Bir ölçüme
+  konan tarih onun *ne zaman doğru olduğunu* söyler; yanlış yazılırsa ölçüm **geleceğe
+  ait** görünür ve hiçbir kapı bunu görmez.
+  ⚠️ **`check-docs`ın tarihsiz-sayı kolu burada KÖRDÜR:** yüklemi
+  `/\b20\d{2}-\d{2}-\d{2}\b/` — tarihin **VARLIĞINI** arar, **DOĞRULUĞUNU** değil.
+  Tarihli ama yanlış bir satır, tarihsizinden daha ikna edicidir.
+  *(Vaka 2026-09-13, aynı gün İKİ kez: sabah bir reçete satırı, akşam entegratör oturumu
+  gece yarısını geçtiğini sanıp saatlerce `2026-09-14` yazdı ve peer'lar ondan devraldı —
+  25 dosya / 53 satır (hüküm başlığı, sabit yorumları, arşiv başlıkları, kural satırları,
+  kanca yorumları) tek commit'le geri çekildi. Dokunulmayanlar bilinçli: Electron fikstür
+  tarihleri ve **uygulanmış** bir migration yorumu — migration immutable'dır, kapı
+  durdurur.)*
+  > **Tarih yazarken `date` KOŞULUR.** Uzun bir oturumda "şu an saat kaç" bir HATIRLAMA
+  > değil bir ÖLÇÜMDÜR; bağlam ne kadar uzunsa tahmin o kadar kayar.
+
 > **Var olmayan bir sayı bayatlayamaz.**
 > Var olması gerekiyorsa, **yanında yükleminin adı durur.**
 
