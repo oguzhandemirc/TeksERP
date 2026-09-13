@@ -51,6 +51,7 @@ import { spawn } from "node:child_process";
 
 import prisma, { pool } from "../src/lib/prisma";
 import bcrypt from "bcryptjs";
+import { createHash } from "node:crypto";
 import {
   provisionSuperadmin,
   defaultProvisionDeps,
@@ -486,13 +487,49 @@ async function main(): Promise<void> {
     }
 
     // Tüm `system_logs` — başka bir yol (örn. generic audit) sırrı yazmış olabilir.
+    //
+    // ⚠️ KIRMIZI KENDİ TEŞHİSİNİ TAŞIR (2026-09-13). Ölçüldü: bu yüklem TEK
+    // BAŞINA koşumda 79/0 YEŞİL, TAM PAKETTE 78/1 KIRMIZI ⇒ bir ARTIK sınıfı.
+    // Ama iki mekanizma aynı kırmızıyı verir ve ayırt edilmeden sınıflanamaz:
+    //   (A) GERÇEK SIZINTI — paketteki başka bir yol PIN/TOTP'u audit yüküne
+    //       yazıyor ⇒ SIR HİJYENİ ihlali (çekirdek kural).
+    //   (B) GEVŞEK YÜKLEM — `LIKE '%…%'` sınırsız eşleşir; KISA/SAYISAL bir sır
+    //       kalabalık bir `system_logs`ta ALAKASIZ bir satıra çakışır.
+    // ⇒ Teşhis olmadan (A) ile (B) AYNI görünür ve yanlış kişi aranır.
+    //
+    // ⛔ SIRRIN KENDİSİ ASLA BASILMAZ — repo PUBLIC ve bu çıktı CI log'una düşer.
+    // Yalnız PARMAK İZİ basılır: uzunluk · yalnız-rakam mı · sha256'nın ilk 8'i.
     for (const s of sirlar) {
-      const say = await prisma.$queryRaw<Array<{ n: bigint }>>`
-        SELECT count(*)::bigint AS n FROM system_logs
-        WHERE COALESCE("newData"::text,'') LIKE ${"%" + s + "%"}
-           OR COALESCE("oldData"::text,'') LIKE ${"%" + s + "%"}
-           OR COALESCE("changes"::text,'') LIKE ${"%" + s + "%"}`;
-      check(`\`system_logs\` içinde sır geçmiyor (${s.slice(0, 4)}…)`, Number(say[0]?.n ?? 0) === 0);
+      const satirlar = await prisma.$queryRaw<
+        Array<{ action: string; tableName: string; alan: string; tam: boolean; createdAt: Date }>
+      >`
+        SELECT action, "tableName", "createdAt",
+               CASE WHEN COALESCE("newData"::text,'') LIKE ${"%" + s + "%"} THEN 'newData'
+                    WHEN COALESCE("oldData"::text,'') LIKE ${"%" + s + "%"} THEN 'oldData'
+                    ELSE 'changes' END AS alan,
+               (COALESCE("newData"::text,'') || COALESCE("oldData"::text,'') ||
+                COALESCE("changes"::text,'')) LIKE ${"%\"" + s + "\"%"} AS tam
+          FROM system_logs
+         WHERE COALESCE("newData"::text,'') LIKE ${"%" + s + "%"}
+            OR COALESCE("oldData"::text,'') LIKE ${"%" + s + "%"}
+            OR COALESCE("changes"::text,'') LIKE ${"%" + s + "%"}
+         ORDER BY "createdAt" DESC LIMIT 3`;
+      const izi =
+        `uzunluk=${s.length} · yalnızRakam=${/^\d+$/.test(s)} · ` +
+        `sha256[0:8]=${createHash("sha256").update(s).digest("hex").slice(0, 8)}`;
+      const teshis =
+        satirlar.length === 0
+          ? ""
+          : `\n      ↳ TEŞHİS — sır izi: ${izi}` +
+            `\n      ↳ eşleşen ${satirlar.length} satır (en yeni 3): ` +
+            satirlar
+              .map(
+                (r) =>
+                  `${r.action}/${r.tableName}@${r.alan}` +
+                  `[${r.tam ? "TAM DEĞER — (A) SIZINTI" : "parça — (B) ÇAKIŞMA olabilir"}]`,
+              )
+              .join(" · ");
+      check(`\`system_logs\` içinde sır geçmiyor (${s.slice(0, 4)}…)`, satirlar.length === 0, teshis);
     }
 
     // Dosya sistemi — script hiçbir şey YAZMAMALI.
