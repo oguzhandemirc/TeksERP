@@ -29,7 +29,7 @@
 ### Tuzaklar
 
 - **[ÇEKİRDEK]** `DISCOVERY_PORTS = [4000, 5000, 3000, 8080]` TEK KAYNAKTIR ve `DISCOVERY_DEFAULT_PORT` ondan TÜRER. İkinci bir gerçek yazma: ayrışırsa mDNS çalışmaya devam eder, yalnız tarama yanlış porta bakar — saha tarifi 'bazen buluyor'. Liste KISA tutulur (maliyet host × port ile doğrusal). · bekçi: `discovery-logic.test.ts negatif sondası ('varsayılan port listenin ilki olmaktan` <sub>(CLAUDE.md:110)</sub>
-- **[ÇEKİRDEK]** Onay kapısı kararını SUNUCU verir: `/devices/status` ve `/devices/announce` cevapları `pairingRequired` taşır, koşul `pairingRequired && status !== "APPROVED"`. Mobilde tek yüklem `navigation/pairingGate.ts`; `??` LOAD-BEARING (sunucu kararı bayat uç bayrağını EZER) — `||`/`&&` yazma. · bekçi: `mobil/src/navigation/pairingGate.test.ts (9; `??`→`||` sondasında 1 ❌)` <sub>(CLAUDE.md:108)</sub>
+- **[ÇEKİRDEK]** Onay kapısı kararını SUNUCU verir: `/devices/status` ve `/devices/announce` cevapları `pairingRequired` taşır, koşul `pairingRequired && status !== "APPROVED"`. Mobilde tek yüklem `navigation/pairingGate.ts`; `??` LOAD-BEARING (sunucu kararı bayat uç bayrağını EZER) — `||`/`&&` yazma. · bekçi: `mobil/src/navigation/pairingGate.test.ts (9; ?? → || sondasında 1 ❌)` <sub>(CLAUDE.md:108)</sub>
 
 ### Reçeteler
 
