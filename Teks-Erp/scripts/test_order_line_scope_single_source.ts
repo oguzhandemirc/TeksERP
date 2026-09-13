@@ -42,7 +42,12 @@ const HELPER_REL = path.join("services", "helpers", "order-line-scope.helper.ts"
 const RAW_SQL_EXEMPT: Record<string, string> = {
   "services/order.service.ts":
     "satır KİLİDİ (SELECT … FOR UPDATE) — silinecek satırları kilitler, talep sorgusu değil",
-  "constants/merge-map.ts": "birleştirme haritasında tablo ADI, sorgu değil",
+  // 2026-09-13: `merge-map.ts` DÖRDE BÖLÜNDÜ (max-lines dikişi). `order_lines`
+  // satırı yalnız İKİ dosyada kaldı — ana dosyada SIFIR, o yüzden eski muaf girdi
+  // KALDIRILDI (ölü muaf da bu bekçiyi düşürür). Dördüne birden muafiyet YAZILMADI:
+  // muaf kümeyi gereksiz genişletmek kapıyı bir listeye çevirir.
+  "constants/merge-map.item.ts": "birleştirme haritasında tablo ADI, sorgu değil",
+  "constants/merge-map.color.ts": "birleştirme haritasında tablo ADI, sorgu değil",
   "utils/query-parser.ts": "tablo ADI listesi, sorgu değil",
 };
 
