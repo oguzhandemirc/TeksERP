@@ -162,24 +162,11 @@ sahte kırmızı. Sayı bir bulgu sanıldı ve onunla başka bir oturumun DOĞRU
 > **`!x` bir sentinel'i ELEMEZ** — sentinel ekleyen, her TÜKETİCİYİ adıyla eler.
 Kardeşi § 4 · Araç ölçümün içinde.
 
-### KABUK ailesi — "komut çalıştı" ile "ölçüm okundu" ayrı şeylerdir
-Altı biçim, hepsi aynı yüklemi paylaşıyor *(kaynak: oturum ölçümü 2026-09-13, sha yok;
-vakalar üç ayrı oturumun KENDİ hataları)*:
+### Komutun SÜRECİ ve ORTAMI → ayrı dosya
+Aletin **ne yaptığı** ile aleti çalıştıran **sürecin/ortamın** ne yaptığı ayrı iki kusur
+ailesidir. İkincisi — kabuk, asılı kalan süreç, kancanın miras verdiği git ortamı, yıkıcı
+yolun sondası — [`OLCUM-DISIPLINI-SUREC.md`](OLCUM-DISIPLINI-SUREC.md)'de.
 
-| # | Biçim | Vaka |
-|---|---|---|
-| a | **`&&` zinciri TEMİZ sonuçta kesilir** | `… \| grep -c … && git push` — `grep` 0 eşleşmede **çıkış 1** verir, `push` HİÇ koşmadı |
-| b | **`$?` yanlış komuttan okunur** | `npx tsx … \| tail -25; echo $?` → okunan şey `tail`in kodu |
-| c | **ölçüm + eylem AYNI zincirde** | `run-all-tests …; git push` — 11/13 KIRMIZI okunmadan push edildi |
-| d | **koşmayan araç SIFIR üretir** | zsh'ta `--include=*.ts` glob'landı, `grep` hiç koşmadı, `wc -l` **0** bastı (gerçek 20) |
-| e | **`head -3`** | `grep … \| head -3` üç satır verdi, gerçek kullanım **4.** satırdaydı → "0 referans" (gerçek 2) |
-| f | **`tail -12`** | bir beyanın basılmadığı sanıldı; `tail` çıktının BAŞINI kesmişti, beyan oradaydı |
-
-> **Ölçüm komutunda KIRPMA yoksa kapsam tamdır; kırpma varsa KAPSAM KIRPMADIR.**
-
-**Savunma:** ölçümü eylemden ayır (`RC=$?` hemen işin ardından), zinciri kısalt, ve
-kırpan her komutun (`head` · `tail` · `-m` · ajan çıktı sınırı) kapsamı daralttığını
-raporda YAZ.
 
 ### Kapı, kendi AYRIŞTIRICISININ darlığını SAYIYA çevirebilir — ve sayı CIRCIRA girer
 Bir kapı alanı okurken kullandığı sınır, alanın gerçek sınırı olmayabilir. O zaman kapı
@@ -231,91 +218,3 @@ kabul etmesidir (`OLCUM-DISIPLINI-ORTAK-AGAC.md`).
 satır sayısı ⇒ mükerrer`) ve farkı **kırmızı** yap. Emsal: kural kimliği tekilliği
 `scripts/check-docs.mjs`te tam bu yüzden ayrı bir kapıdır — `- **[ID]**` satırları da bir
 beyan tablosudur ve mükerrer ID sessizdi.
-
-### ASILI KALMAK, çalışmanın DELİLİ değildir — stdin bekleyen komut "yavaş" görünür
-Uzun süren bir adım iki şeyden biridir: **iş yapıyor** ya da **bir girdi bekliyor**. İkisi
-dışarıdan AYNIDIR — çıktı yok, çıkış kodu yok, ilerleme yok. Ve bekleme hâli kendini
-"paket yavaş" diye okutur, çünkü o açıklama zaten hazırdadır.
-
-*(Vaka 2026-09-13, ölçüldü: bir commit 3 dakika "kapı koşuyor" sanıldı. Gerçekte kabuk,
-commit mesajının İÇİNDEKİ backtick'leri komut ikamesi olarak çalıştırmıştı — mesajda
-geçen `cp` hata bastı, `shasum -c` argümansız kalıp **stdin'i** beklemeye oturdu. Kapı
-hiç başlamamıştı; teşhis `ps`te sürecin ÇOCUĞUNU görmekle geldi: `perl … shasum -c`.)*
-
-> **Bir şey uzun sürüyorsa, NE yaptığını sor — süreyi değil, ÇOCUK SÜRECİ ölç.**
-> `pgrep -P <pid>` üç saniyede cevap verir; "herhalde testler" bir saat yer.
-
-⚠️ **Ve bu, bugünün üçüncü yüzeyi:** aynı sınıf (§ Kapı, kendi AYRIŞTIRICISININ darlığını
-SAYIYA çevirebilir) önce `Kapanır:` alanında, sonra `bekçi:` alanında, sonunda **KABUKTA**
-çıktı. Sınıf markdown'a ait değil: **ayraç içerikte de geçebiliyorsa, ayrıştırıcı içeriği
-ÇALIŞTIRIR.** Komut mesajı, alan değeri, log satırı — hiçbiri "sadece veri" değildir.
-
-**Savunma:** serbest metin bir komuta ARGÜMAN olarak değil DOSYA olarak geçer
-(`git commit -F <dosya>`, heredoc); ve asılı kalan süreç önce `pgrep -P` ile açılır,
-öldürülürken kendi PID'i adıyla öldürülür (`pkill -f <desen>` başkasının işini alır).
-
-### KANCA ailesi — kendi repo'sunu kuran araç, KANCANIN git ortamını MİRAS ALIR
-*"Geçici dizindeyim"* cümlesi **cwd'ye** bakar; git ise **`GIT_DIR`a** bakar. Git, hook
-sürecine `GIT_DIR` · `GIT_INDEX_FILE` · `GIT_PREFIX` verir ve bunlar çocuk sürece aynen
-iner. ⇒ Kanca içinden çağrılan ve **kendi repo'sunu kuran** bir araç (`git init` +
-`add` + `commit`), geçici dizinde çalıştığını sanırken **gerçek repoya** yazar.
-
-*(Vaka 2026-09-13, d5: yeni bir kapsam bekçisi geçici dizinde `git init/add/commit`
-yapıyordu. Commit kapısına girdiği ilk gün, koşucu env'i çocuğa aynen geçirdiği için
-bekçi geçici dizini değil **dalı** gördü: "taban" commit'i dala indi ve **3.977 dosya
-silindi**. Kayıp yok — `reset` ile döndü. Vakanın kaydı `scripts/hooks/pre-commit.mjs`
-içinde, düzeltmenin yanında duruyor.)*
-
-> **`cwd` bir konumdur, `GIT_DIR` bir HEDEFTİR — ve git ikincisini dinler.**
-
-⚠️ **Ve zarar tek yüzlü değildi — ÜÇ yüzü ölçüldü, sonuncusu KALICI:**
-| # | ne oldu | kapsamı |
-|---|---|---|
-| 1 | dala "taban" commit'i, **3.977 dosya silindi** | geri alındı (`reset`) |
-| 2 | `git init` `GIT_DIR`da koştu ⇒ ortak `.git/config`e **`core.bare=true`** | ana ağaçta `reset` *"bare repository"* ile düştü; `.git/config` **TÜM worktree'lerin ortak dosyası** |
-| 3 | testin `git config user.*`ı ortak config'e gitti | bir **origin commit'i** `bekci <bekci@test>` kimliğiyle doğdu — `e904af4b`, force-push yasak ⇒ **kalıcı** |
-
-⇒ **Ortak `.git/config`e yazan bir araç, tek bir ağacı değil TÜM ağaçları bozar** — ve
-üçüncü yüzde olduğu gibi, bazı hasar geri alınamaz. Üçüncüsünün dersi ayrıca şudur:
-*yıkıcı bir yan etkinin en ucuz görüneni (bir ad alanı) en kalıcısı olabilir.*
-
-**Panzehir ÜÇ KAT** (tek kat yetmedi, üçü de ölçüldü):
-① kancada `gitEnvSil` (yalnız kendi repo'sunu kuran adımlarda) ·
-② **testin kendi izolasyonu**: `GIT_*` sök **+** `GIT_CONFIG_GLOBAL=/dev/null` **+**
-`GIT_CONFIG_NOSYSTEM` **+** geçici `HOME` ·
-③ `test_hook_config` §4 **tripwire**: ortak config temiz mi (`bare=false` ∧ worktree yok
-∧ `user.*` yerelde yok). ⇒ *Kancayı düzeltmek testi düzeltmez; ikisi ayrı ayrı izole
-edilir, üstüne bir tripwire konur.*
-
-**Savunma (ölçülmüş, ve İKİ YÖNLÜ):** böyle adımlarda `GIT_*` değişkenleri **sökülür**
-(`gitEnvSil`) — ama **yalnız işaretli adımlarda.** İndeksten okuyan adımlar
-(`git show :<yol>`) pathspec commit'inde GEÇİCİ indeksi tam da `GIT_INDEX_FILE`dan bulur;
-onlardan sökmek kapıyı körleştirir. ⇒ *Ortam değişkenini sökmek de bir KARARDIR ve
-adım adım verilir.*
-
-⚠️ **Ve ısırma ANI sınıfın ikinci yarısı:** bu bekçi bugüne dek yalnız **elle** ve
-**CI'da** koşuyordu, orada zararsızdı; **kancaya girdiği an** ısırdı. Aynı yüklem, aynı
-ağaç, aynı araç — **farklı REJİM** (`OLCUM-DISIPLINI.md` § Sayı yazma, beşinci eksen).
-Bir aracı yeni bir koşum ortamına taşımak, onu **yeniden ölçmeyi** gerektirir.
-Kardeşleri § 4 · Araç ölçümün içinde · `OLCUM-DISIPLINI-ORTAK-AGAC.md` § Başka oturumun
-AĞAÇ-BÜTÜNÜ komutu.
-
-### Yıkıcı bir yolun DÜZELTMESİ, önce KURBAN EDİLEBİLİR bir hedefte sınanır
-Bir yolun yıkıcı olduğu **biliniyorsa**, *"düzelttim"* iddiasının ilk ölçümü gerçek
-hedefte yapılmaz. Düzeltme yarım uygulanmış olabilir ve sonda, düzeltmeyi değil
-**yıkımı tekrar** ölçer.
-
-*(Vaka 2026-09-13, d5: kanca/`GIT_DIR` düzeltmesini yazarken izolasyon düzenlemesi YARIM
-uygulanmıştı — `perl` bozuk çıktı vermiş, fark edilmemişti — ve sonda gerçek repoya karşı
-koşuldu: **aynı ısırık ikinci kez** (`core.bare=true`, `user.*`, dal "taban"a kaydı).
-Onarıldı; sonra sonda SAHTE bir repoda yapıldı: `GIT_DIR` sahte repoyu gösterirken test
-koşuldu, sahte config'in sha'sı ve `HEAD` **önce = sonra** diye ölçüldü.)*
-
-> **Gerçek hedef İKİNCİ ölçümdür.** Birincisi kurban edilebilir bir kopyada yapılır ve
-> orada *hiçbir şeyin değişmediği* sha ile gösterilir.
-
-⚠️ Bu, § 4 *Araç ölçümün içinde*'nin **eylem hâlidir**: orada araç gözlediğini bozar,
-burada **ölçen kişinin kendisi** araçtır ve düzeltmesini doğrulamadan uygular.
-**Savunma:** yıkıcı yol düzeltmesi üç adımdır — ① düzeltmenin UYGULANDIĞINI ölç
-(`shasum`/`assert`, `SONDA ailesi` (b)) ② sahte hedefte sonda ③ gerçek hedefte sonda.
-Kardeşi `OLCUM-DISIPLINI-SINIFLAR.md` § SONDA ailesi · § KANCA ailesi (üstte).

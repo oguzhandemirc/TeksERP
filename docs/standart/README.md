@@ -38,6 +38,7 @@ Karar hikâyeleri (tarih, ölçüm, hangi alternatif neden reddedildi) `docs/his
 | [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | KATMAN 1b — ölçümün **KURGUSU**: soru, kontrol grubu, ortam, deneyin kurulumu |
 | [`OLCUM-DISIPLINI-ORTAK-AGAC.md`](OLCUM-DISIPLINI-ORTAK-AGAC.md) | KATMAN 1c — ölçüm ORTAMI **paylaşılıyorsa**: ortak ağaç/indeks/ref, `node_modules`, kilit |
 | [`OLCUM-DISIPLINI-YUKLEM.md`](OLCUM-DISIPLINI-YUKLEM.md) | KATMAN 1a′ — **ne sorduğun**: desenin kapsamı, eşleşmenin sınırı, popülasyon üyeliği |
+| [`OLCUM-DISIPLINI-SUREC.md`](OLCUM-DISIPLINI-SUREC.md) | Komutun **süreci ve ortamı**: kabuk, asılı süreç, kancanın git ortamı, yıkıcı yol sondası |
 | [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) | KATMAN 1a — ölçümün **ARACI**: desen, komut, ayrıştırıcı, aracın varsayılanı ve kapsamı |
 | [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) | Arıza sınıfı kataloğu **KATMAN 2** — ölçümden sonraki adım (*sayı doğru; ondan ÇIKARILAN ne?*); hiçbir pozitif kontrol bu katmanı yakalamaz |
 
