@@ -36,7 +36,7 @@
 // DB GEREKTİRMEZ: statik analiz (AST + tip denetleyicisi). Prisma istemcisi
 // açılmaz, havuz kurulmaz.
 // =============================================================================
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { DEFTER_BEYANI, type DefterBeyani } from "./lib/defter-beyan";
 import { SILEN, defterYazimlariniTara, sembolReferanslari } from "./lib/defter-yazim-tarama";
@@ -216,6 +216,33 @@ const oluScript = Object.keys(SCRIPT_SINIFI).filter((d) => !scriptYazanlar.inclu
 check("§8b script beyanında ölü satır yok", oluScript.length === 0,
   oluScript.length ? `artık defter yazmıyor: ${oluScript.join(", ")}` : "");
 
+// Tasarım atfı ÖLÜ olmamalı: belgesi silinmiş/taşınmış bir "çözüm tasarlandı"
+// beyanı, borcun üzerinde çalışıldığı izlenimini kanıtsız bırakır.
+for (const b of DEFTER_BEYANI) {
+  for (const x of b.borc ?? []) {
+    if (!x.tasarim) continue;
+    const varMi = existsSync(join(KOK, "..", x.tasarim));
+    check(`§6c ${b.model} tasarım atfı yaşıyor`, varMi, varMi ? x.tasarim : `BELGE YOK: ${x.tasarim}`);
+  }
+}
+
+// Borç notunun kendisi bayatlayabilir: "şu değer yazılmıyor" iddiası, değer
+// yazılmaya başlayınca SESSİZCE yanlışa düşer. Sonda iki yönlüdür — iddia
+// doğruyken yeşil, iddia çürüdüğünde KIRMIZI ("borç notu bayat").
+const srcDosyalari = walkTs(join(KOK, "src"));
+for (const b of DEFTER_BEYANI) {
+  for (const x of b.borc ?? []) {
+    if (!x.kanitSondasi) continue;
+    const { enumAdi, deger } = x.kanitSondasi;
+    const kalip = new RegExp(`\\b${enumAdi}\\.${deger}\\b`);
+    const gecen = srcDosyalari.filter((f) => kalip.test(readFileSync(f, "utf8")));
+    check(`§6d ${b.model} borç notu hâlâ doğru (${enumAdi}.${deger} yazılmıyor)`, gecen.length === 0,
+      gecen.length
+        ? `BORÇ NOTU BAYAT — değer artık ${gecen.length} dosyada kullanılıyor: ${gecen.slice(0, 3).map((f) => f.replace(KOK + "/", "")).join(", ")}`
+        : `src/ içinde sıfır kullanım (${srcDosyalari.length} dosya tarandı)`);
+  }
+}
+
 console.log("\n=== §11 \"Ters yolu ebeveynindedir\" çürütmesinin zayıf halkası ===");
 // Bir satır modelini "ebeveyninden gider" diye sınıflamak bir ÇÜRÜTMEDİR
 // ("bunun kendi ters yolu gerekmez, çünkü…") ve her çürütmenin en zayıf halkası
@@ -276,7 +303,10 @@ console.log("ℹ️  (çözülemeyen satırlar Prisma yazımı OLMAYABİLİR —
 
 const acikBorclar = DEFTER_BEYANI.flatMap((b) => (b.borc ?? []).map((x) => ({ model: b.model, ...x })));
 console.log(`\n=== AÇIK DEFTER BORÇLARI (${acikBorclar.length}) — muaf değil, GÖRÜNÜR ===`);
-for (const x of acikBorclar) console.log(`  • ${x.model}: ${x.ne}\n      kanıt: ${x.kanit}\n      sahibi: ${x.sahibi}`);
+for (const x of acikBorclar) {
+  const durum = x.tasarim ? `TASARLANDI → ${x.tasarim}` : "TASARIM YOK";
+  console.log(`  • ${x.model} [${durum}]: ${x.ne}\n      kanıt: ${x.kanit}\n      sahibi: ${x.sahibi}`);
+}
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

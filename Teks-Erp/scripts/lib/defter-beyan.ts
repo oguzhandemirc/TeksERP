@@ -50,6 +50,26 @@ export interface DefterBorcu {
   kanit: string;
   /** Alan sahibi; borç GÖRÜNÜR kalır, muaf listesine gömülmez. */
   sahibi: string;
+  /**
+   * Çözümü TASARLANMIŞ borcun tasarım belgesi (repo köküne göreli).
+   *
+   * "Tasarlanmış borç" ile "tasarımsız borç" AYRI DURUMLARDIR ve ikisini aynı
+   * satırda göstermek, üzerinde çalışılanı çalışılmayandan ayırt edilemez kılar.
+   * Kapı bu yolun VAR OLDUĞUNU da ölçer: ölü tasarım atfı, kapanmış sanılan bir
+   * borçtan daha kötüdür (§6c).
+   */
+  tasarim?: string;
+  /**
+   * Borç notunun YANLIŞLANABİLİR hâli — dar kapsamlı, tek biçim.
+   *
+   * NEDEN: beyan tablosunda iki tür satır var — ÖLÇÜLEN (kapı yakalar) ve
+   * ANLATILAN (kapı yakalamaz). `kanit` düz metindir ve SESSİZCE bayatlar:
+   * `RETURN` borcunun kanıtı 2026-09-13'te yanlışa düştü (ters yol indi) ve kapı
+   * görmedi. Bir borç notu, iddiasını ölçülebilir bir sondaya çevirebiliyorsa
+   * çevirir. ⚠️ Genel kural DEĞİL: yalnız çevrilebilen borçta kullanılır, ve
+   * bugün TEK biçim var — "şu enum değeri hiçbir yerden yazılmıyor".
+   */
+  kanitSondasi?: { tur: "ENUM_DEGERI_YAZILMIYOR"; enumAdi: string; deger: string };
 }
 
 export interface DefterBeyani {
@@ -89,16 +109,27 @@ const PIVOT = (model: string, gerekce = "saf ayar kümesi — parasal/ticari/kal
 export const DEFTER_BEYANI: DefterBeyani[] = [
   // ── DEFTERLER ──────────────────────────────────────────────────────────────
   D("WarehouseMovement", "depo giriş/çıkış defteri; 13 olay", { tur: "TERS_BAG", kolon: "reversesMovementId" },
+    // ⚠️ Ters helper'lar AYRI DOSYAYA taşındı (kaynak dosya 281/300 kod satırındaydı,
+    // lint tavanı her eklemeyi reddediyordu) ve dördüncüsü o bölmede doğdu:
+    // `reverseLegacyStockMove` — statüsüz eski satırların ters yolu.
+    // Bu satırın bayatlığını KAPININ KENDİSİ yakaladı (§4a, 111/3): dosya taşıması
+    // yeniden adlandırma DEĞİLDİR ama aynı sınıftır — beyan yolu da güncellenir.
     [
-      { dosya: "src/services/helpers/warehouse-ledger.helper.ts", sembol: "reverseStockMove" },
-      { dosya: "src/services/helpers/warehouse-ledger.helper.ts", sembol: "reverseAllRollStockMoves" },
-      { dosya: "src/services/helpers/warehouse-ledger.helper.ts", sembol: "reverseLatestScopedStockMove" },
+      { dosya: "src/services/helpers/warehouse-ledger-reverse.helper.ts", sembol: "reverseStockMove" },
+      { dosya: "src/services/helpers/warehouse-ledger-reverse.helper.ts", sembol: "reverseLegacyStockMove" },
+      { dosya: "src/services/helpers/warehouse-ledger-reverse.helper.ts", sembol: "reverseAllRollStockMoves" },
+      { dosya: "src/services/helpers/warehouse-ledger-reverse.helper.ts", sembol: "reverseLatestScopedStockMove" },
     ],
     ["src/services/helpers/warehouse-ledger.helper.ts"],
+    // `RETURN` borcu KAPANDI (2026-09-13): `cancelReturn` artık `RETURN_CANCEL`
+    // sebep koduyla `reverseStockMove`/`reverseLegacyStockMove` çağırıyor (6e dalında
+    // ölçüldü). Kapanan borç satırı SİLİNİR — kapanmış borca sonda yazmak ölü muaf
+    // üretir, ve açık borç listesinde durması listeyi ağırlıksızlaştırır.
     { borc: [{
-      ne: "`RETURN` ters yolsuz — iade iptali defteri terslemiyor",
-      kanit: "return.service.ts:576 RETURN yazıyor; cancelReturn (:838) gövdesinde defter çağrısı YOK (2026-09-13)",
-      sahibi: "sevkiyat/iade alanı",
+      ne: "`EXTERNAL` olayının YAZAN YOLU YOK — fason ve kartela firmasına çıkış/dönüş deftere EXTERNAL olarak düşmüyor",
+      kanit: "şema yorumu onu \"üçüncü şahıs: fason ve kartela firmasına çıkış / dönüş\" diye tanımlıyor, fason dönüşü ise ENTRY yazıyor",
+      kanitSondasi: { tur: "ENUM_DEGERI_YAZILMIYOR", enumAdi: "WarehouseEventType", deger: "EXTERNAL" },
+      sahibi: "depo/stok defteri alanı",
     }] }),
 
   D("CariTransaction", "cari borç/alacak defteri", { tur: "TERS_BAG", kolon: "reversesTxnId" },
@@ -197,7 +228,20 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
       //      iptalinin `fason-receipt` satırlarını DAMGALAMASI; yoksa süzgeç boş
       //      küme üzerinde çalışır.
       kanit: "canlı uç quality.routes.ts:67 ham SQL COUNT/SUM (where yalnız createdAt) · tambur-undo bu satıra DOKUNMUYOR · cancelReceipt+restore zinciri ölçüldü (roll-cancel-restore.helper.ts:88 sekiz sinyal) · damga kolonu yok",
-      sahibi: "tambur alanı",
+      // ÇÖZÜM TASARLANDI (2026-09-13), UYGULANMADI. Karar: DAMGA (`revokedAt` +
+      // `revokedById` + `revokeReason`), karşı kayıt REDDEDİLDİ — karne onayı
+      // `COUNT(DISTINCT confirmationId)` ile sayıyor, karşı satır ya onay sayısını
+      // artırır ya `qtyM`yi belirsizleştirir. Tanecik SATIR DEĞİL `confirmationId`
+      // (renk + en birlikte saparsa 2 satır ama BİR imza; yarım damga bir imzayı
+      // yarım geri almaktır). Dört damgalayan dal: FULL · SINGLE (yalnız
+      // `childRollId`e bağlı; `finalize` satırı DAMGALANMAZ, topun geri kalanı hâlâ
+      // sapan kimlikle depoda) · SINGLE_RESTORE · cancelReceipt cascade. Üç okuyucu
+      // süzer (karne: findMany + ham SQL gün serisi + karşılaştırma dönemi) + kapı.
+      // ⚠️ `revokedAt` kolonu indiği AN bu kapı §6b'den KIRMIZI verir ve beyanın
+      // `{ tur: "DAMGA", kolon: "revokedAt" }`a çevrilmesini ister — kusur değil,
+      // beyanın güncellenme çağrısıdır.
+      tasarim: "docs/design/PLAN-SAPMA-GERI-ALMA-TASARIM.md",
+      sahibi: "tambur alanı (tasarım 01, uygulama sahibine verilecek)",
     }] }),
 
   D("SackAllocation", "sipariş karşılama defteri — MALİ ETKİSİ OLAN tek tahsis defteri", { tur: "YOK" }, [],
