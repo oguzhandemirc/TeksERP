@@ -33,6 +33,7 @@ Karar hikâyeleri (tarih, ölçüm, hangi alternatif neden reddedildi) `docs/his
 | [`TEST-VE-DERLEME-BEKCI.md`](TEST-VE-DERLEME-BEKCI.md) | Bir bekçinin **güvencesi** (§4: yeşil ≠ kapsandı) ve **yazımı** (§5: yeni bekçi) |
 | [`TEST-VE-DERLEME-SINIRLAR.md`](TEST-VE-DERLEME-SINIRLAR.md) | Bilinen sınırlar (§7) ve **bilerek kırmızı bekçiler** (§8) — paket kırmızı verdiğinde ilk bakılacak liste; her satır "kim kapatabilir" taşır |
 | [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | Ölçüm YÖNTEMİ: pozitif kontrol ↔ örnekle doğrulama, atıfta eşik, yapısal sonda, sayı/çapa/kimlik yazma, teşhis mi ölçüm mü |
+| [`OLCUM-DISIPLINI-KAPI-OLUMU.md`](OLCUM-DISIPLINI-KAPI-OLUMU.md) | Kapının ÖLÜMÜ ve kırmızının okunması: sekiz ölüm biçimi, yerel yeşil, kırmızıyı sınıflandırma |
 | [`OLCUM-DISIPLINI-KAPI.md`](OLCUM-DISIPLINI-KAPI.md) | Ölçümü KAPIYA çevirmek: mandal yazma, **kapının dokuz ölüm biçimi**, kırmızıyı sınıflandırma, yerel yeşil ↔ HEAD |
 | [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | KATMAN 1b — ölçümün **KURGUSU**: soru, kontrol grubu, ortam, deneyin kurulumu |
 | [`OLCUM-DISIPLINI-ORTAK-AGAC.md`](OLCUM-DISIPLINI-ORTAK-AGAC.md) | KATMAN 1c — ölçüm ORTAMI **paylaşılıyorsa**: ortak ağaç/indeks/ref, `node_modules`, kilit |

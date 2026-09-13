@@ -167,7 +167,7 @@ Kırmızının sebebini ararken kapının koştuğu **sorulmamış bir öncüld�
 *(Vaka: üç ORTAM kırmızısı, uzak kapının kalıcı kırmızılığının sebebi sanıldı; gerçek
 sebep kapının **hiç koşmaması**ydı.)*
 **Savunma:** sebep aramadan önce kapının KOŞTUĞUNU ölç — süre, adım sayısı, çıktı
-hacmi. Kardeşi: `OLCUM-DISIPLINI.md` § Kapının ölüm biçimleri ⑦–⑧.
+hacmi. Kardeşi: `OLCUM-DISIPLINI-KAPI-OLUMU.md` § Kapının ölüm biçimleri ⑦–⑧.
 
 ### İki rejimli bekçi — tam kapsam tek koşumda ölçülemez
 Bazı bekçilerin kapsamı, **birbirini DIŞLAYAN** ortam rejimlerine bölünür; her rejim

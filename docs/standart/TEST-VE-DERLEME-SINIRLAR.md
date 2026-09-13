@@ -40,7 +40,7 @@ Bunlar bilinçli açıklardır; kapatılmaları ayrı iştir.
 
 ### Listenin ilk gerçek sınavı — 2026-09-13 CI koşumu
 
-Uzak kapı 34 gün kapalı kaldıktan sonra ilk kez koştu (`OLCUM-DISIPLINI.md` § Kapının ölüm biçimleri ⑧). Sonuç, listenin ne işe yaradığını ölçtü:
+Uzak kapı 34 gün kapalı kaldıktan sonra ilk kez koştu (`OLCUM-DISIPLINI-KAPI-OLUMU.md` § Kapının ölüm biçimleri ⑧). Sonuç, listenin ne işe yaradığını ölçtü:
 
 | Job | Sonuç |
 |---|---|
