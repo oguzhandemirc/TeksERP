@@ -259,6 +259,21 @@ aldı. Teşhis ea'nın; ilk okumam "indekste kaldı" idi ve YANLIŞTI.)*
 > **Ortak ağaçta `stash`/`checkout`/`reset --hard`/`clean` YOK** — bu kuralın
 > mekanizması budur: komut senin değil, AĞACIN tamamının zamanını oynatır.
 
+### Ortak ağaçta ölçülen sayı, BAŞKASININ commit'siz işini içerir — ve çoğu kez LEHİNE
+Paylaşılan çalışma ağacı yalnız kapıyı körleştirmez (o yön `RECETELER.md` § İzole oturum
+çalışma ağacı'nda yazılı: ana ağaçta *staged ama commit'siz* dosyaya link veren belge
+kapıya ölü görünmez). **Ters yön de var ve daha sinsidir: kapının SAYISI da kirlenir.**
+*(Vaka 2026-09-13, aynı commit iki ağaçta ölçüldü: kesik alan ortak ağaçta **32**, izole
+ağaçta **33** — eksik olan bir, başka bir oturumun commit'lenmemiş düzeltmesiydi ve
+benim sonucum sayılıyordu. Aynı kapı benzersiz bekçi adını ortak ağaçta **243**, izole
+ağaçta **234** gördü: dokuz ad başkalarının commit'siz satırlarından geliyordu.)*
+> **Sapma yönü rastgele değil:** ortak ağaçta biriken şey **başkalarının İLERLEMESİDİR**,
+> yani sayı hep *iyi* tarafa kayar. Kirlenmiş bir ölçüm, fark ettirmeden bir ÖVGÜdür.
+
+**Savunma:** cırcır tabanı olacak her sayı **izole ağaçtan** alınır; alınamıyorsa ölçüm
+`git show HEAD:`/index üstünden yapılır ve *"ortak ağaçta ölçüldü"* diye beyan edilir.
+Kardeşi § Başka oturumun AĞAÇ-BÜTÜNÜ komutu, sondanı ZAMANDA DONDURUR.
+
 ### `.git/index.lock` bir KUYRUK değil, bir REDDİR
 Paylaşımlı ağaçta eşzamanlı commit **serileştirilmez**; ikincisi düşer.
 *(Vaka: iki oturum aynı anda commit attı. Doğru hamle kilidi SİLMEK değildi — gerçek
