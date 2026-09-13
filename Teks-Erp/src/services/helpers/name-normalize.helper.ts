@@ -13,6 +13,7 @@
 // kayıtla yeni boşluklu yazım aynı anahtara düşer, görünmez mükerrer doğmaz.
 // =============================================================================
 import { foldSearchText } from "../../utils/search-fold";
+import { upperTr } from "../../utils/tr-case";
 
 /**
  * GENEL AD NORMALİZASYONU — master-data adlarının DEPOLANAN biçimi (2026-08-19).
@@ -37,12 +38,12 @@ import { foldSearchText } from "../../utils/search-fold";
  * biçimi değil, belge/render katmanıdır.
  */
 export function normalizeDisplayName(name: string): string {
-  return name.trim().replace(/\s+/g, " ").toLocaleUpperCase("tr-TR");
+  return upperTr(name.trim().replace(/\s+/g, " "));
 }
 
 /** Ürün adı: trim + çoklu boşluk tekle + Türkçe büyük harf. Boşluklar KORUNUR. */
 export function normalizeItemName(name: string): string {
-  return name.trim().replace(/\s+/g, " ").toLocaleUpperCase("tr-TR");
+  return upperTr(name.trim().replace(/\s+/g, " "));
 }
 
 /**
@@ -51,9 +52,7 @@ export function normalizeItemName(name: string): string {
  * boşlukla ayrık YALNIZ-TİRE token'lar düşer ("açık - mavi 03" → "03 AÇIK MAVİ").
  */
 export function normalizeColorName(name: string): string {
-  const tokens = name
-    .trim()
-    .toLocaleUpperCase("tr-TR")
+  const tokens = upperTr(name.trim())
     .split(/\s+/)
     .filter((t) => t.length > 0 && !/^-+$/.test(t));
   if (tokens.length === 0) return "";

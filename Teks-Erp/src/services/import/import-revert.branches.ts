@@ -13,6 +13,7 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { OrderService } from "../order.service";
 import type { ImportAdapter, ImportContext, PreparedRow } from "./import.types";
+import { upperTr } from "../../utils/tr-case";
 
 /** Ters yol sınıfı — §8.2 matrisinin koddaki karşılığı. */
 export type RevertMode = "DEACTIVATE" | "DELETE_PIVOT" | "CANCEL_DOCUMENT";
@@ -274,7 +275,7 @@ async function readChildSets(
   keyValue: string,
 ): Promise<Record<string, unknown> | undefined> {
   const map = await adapter.findExisting([keyValue]);
-  return map.get(keyValue.toLocaleUpperCase("tr-TR")) ?? map.get(keyValue);
+  return map.get(upperTr(keyValue)) ?? map.get(keyValue);
 }
 
 /** Motorun diff'iyle AYNI kanonikleştirme: sıra bağımsız, boş=null. */

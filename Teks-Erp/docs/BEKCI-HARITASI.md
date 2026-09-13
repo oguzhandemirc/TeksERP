@@ -1781,6 +1781,7 @@ Kalan atlamalar üç biçimde ve strict hiçbirini görmez:
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Teks-Erp/scripts/test_tr_case.ts` | Türkçe harf katlaması TEK KAYNAK (`utils/tr-case.ts`, `"tr-TR"` yalnız orada): i/İ oracle düz dizeyle ("iplik" ↔ "İPLİK", "ışık" ↔ "IŞIK"; kod tuzağı "sip" → "SİP" ≠ "SIP" belgelendi) + içe aktarım simetrisi (yazan `import.service` ↔ 16 adaptörün kod haritası aynı helper; anahtarda `toUpperCase()`/ham `toLocale` yasak; 2026-09-14) |  | helper'ı `toUpperCase()`a çevir → 4/34 ❌; bir adaptörde `upperTr(r.code)` → `r.code.toUpperCase()` → 1/34 ❌ | |
 | `Teks-Erp/scripts/test_master_data_merge_revert.ts` | Birleştirmeyi geri alma: defter yazımı (kaynak künyesi + taşınan satır kimliği), referansın kaynağına dönüşü, tombstone kalkması, operasyon satırının değişmemesi + ters damga, çift geri alma 409, LIFO, ad çakışmasında yeni ad, referanssız birleştirmenin geri alınabilmesi, kilit sırası değişmezi | ✓ | ✓ |  |
 | `Electron/src/components/forms/SimilarNamesWarning.test.tsx` | Benzer ad uyarısı: <3 harfte sunucuya sormaz, debounce ile tek istek, birebir eşleşme ayrı başlık + 'kaydedilemez', birleştirilmiş ad işaretlenir, son |  |  | ⚠️ yok |
 | `Electron/src/components/forms/similar-names-coverage.test.ts` | Statik kapsam bekçisi: pages ağacında register("name") taşıyan her form ya SimilarNamesWarning çizer ya MUAF listesinde; muaf listesi bayatlık kontrol |  |  | ⚠️ yok |

@@ -183,6 +183,7 @@ import { finalizeRollsAtLastStep, finalBarcodeType, loadProducedBuckets } from "
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.helper";
 import { uyari } from "../lib/logger";
+import { upperTr } from "../utils/tr-case";
 
 export interface RollStats {
   totalCount: number;
@@ -4529,7 +4530,7 @@ export class InventoryService {
                     ? `topun metrajı bu sırada değişti (${roll.currentQty.toString()} → ${taze.currentQty.toString()} m) — büyük olasılıkla Tambur'da kesildi`
                     : "top bu sırada başka bir işlemle güncellendi";
           throw AppError.conflict(
-            `${neden.charAt(0).toLocaleUpperCase("tr")}${neden.slice(1)} — düzeltme uygulanmadı. Ekranı yenileyip güncel değerlerle tekrar deneyin.`,
+            `${upperTr(neden.charAt(0))}${neden.slice(1)} — düzeltme uygulanmadı. Ekranı yenileyip güncel değerlerle tekrar deneyin.`,
           );
         }
       }

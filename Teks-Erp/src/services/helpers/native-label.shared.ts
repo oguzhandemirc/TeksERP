@@ -11,6 +11,7 @@ import type { ResolvedLabelFormat } from "./label-format.resolver";
 import type { FontSize, TemplateField } from "../../config/label-fields";
 import { fieldDisplayValue } from "./label-field-values";
 import { formatNumber } from "./label-html.shared";
+import { lowerTr, upperTr } from "../../utils/tr-case";
 
 export interface NativeRenderInput {
   payload: LabelPayload;
@@ -400,7 +401,7 @@ export function alignOffsetDots(align: "left" | "center" | "right" | undefined, 
 /** Harf dönüşümü — Türkçe-duyarlı (i↔İ, ı↔I). Yok → dokunma. Native + raster + HTML
  *  aynı dönüşümü uygular → tüm dillerde aynı metin (sanitize/asciiFold sonradan). */
 export function applyTextCase(text: string, textCase: "upper" | "lower" | undefined): string {
-  if (textCase === "upper") return text.toLocaleUpperCase("tr-TR");
-  if (textCase === "lower") return text.toLocaleLowerCase("tr-TR");
+  if (textCase === "upper") return upperTr(text);
+  if (textCase === "lower") return lowerTr(text);
   return text;
 }

@@ -10,12 +10,13 @@
 
 import { AppError } from "../../utils/app-error";
 import { FACTORY_TIMEZONE } from "../../constants/time";
+import { upperTr } from "../../utils/tr-case";
 
 /** "Temizle" niyetinin açık yazımı. Şablonun Açıklama sayfasında anlatılır. */
 const NULL_LITERAL = "NULL";
 
 export const isClearLiteral = (raw: string): boolean =>
-  raw.trim().toLocaleUpperCase("en-US") === NULL_LITERAL;
+  raw.trim().toUpperCase() === NULL_LITERAL;
 
 /**
  * TR/EN karışık sayı metnini çözer. Fabrikadaki dosyalar iki yerelden de gelir
@@ -57,7 +58,7 @@ const FALSE_WORDS = new Set(["HAYIR", "H", "FALSE", "0", "PASIF", "PASİF", "YOK
 
 /** "Evet/Hayır", "Aktif/Pasif", "1/0", "true/false"… → boolean. Tanınmazsa null. */
 export function parseBool(raw: string): boolean | null {
-  const s = raw.trim().toLocaleUpperCase("tr-TR");
+  const s = upperTr(raw.trim());
   if (TRUE_WORDS.has(s)) return true;
   if (FALSE_WORDS.has(s)) return false;
   return null;

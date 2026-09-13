@@ -273,6 +273,7 @@ export function buildWhereClause(
 // sessizce hiç eşleşmez. Ayrım çağıranın bilinçli kararıdır.
 import { foldSearchTokens } from "./search-fold";
 import { foldCodeForCompare } from "./code-format";
+import { lowerTr, upperTr } from "./tr-case";
 
 /** "a.b.c" → { a: { b: { c: leaf } } } (list-relation `some` dahil düz iç içe). */
 function nestPath(path: string, leaf: unknown): Record<string, unknown> {
@@ -447,12 +448,12 @@ const TR_MAX_I_POSITIONS = 3;
  * → ASCII'de "Işçi" (NOKTASIZ I) üretilir ve DB'deki "İşçi" ile eşleşmez.
  */
 function trTitleCase(term: string): string {
-  const lower = term.toLocaleLowerCase("tr-TR");
+  const lower = lowerTr(term);
   let out = "";
   let atWordStart = true;
   for (const ch of lower) {
     const isWordChar = /[0-9a-zçğıöşü]/.test(ch);
-    out += atWordStart && isWordChar ? ch.toLocaleUpperCase("tr-TR") : ch;
+    out += atWordStart && isWordChar ? upperTr(ch) : ch;
     atWordStart = !isWordChar;
   }
   return out;
@@ -487,8 +488,8 @@ export function turkishSearchPatterns(search: string): string[] {
   };
   push(term);
   if (TR_FOLD.test(term)) {
-    push(term.toLocaleUpperCase("tr-TR"));
-    push(term.toLocaleLowerCase("tr-TR"));
+    push(upperTr(term));
+    push(lowerTr(term));
     // ⭐ BAŞLIK DÜZENİ — normalize EDİLMEYEN yarının olağan yazımı
     // ("Ege Kumaş İthalat", "T. İş Bankası").
     push(trTitleCase(term));

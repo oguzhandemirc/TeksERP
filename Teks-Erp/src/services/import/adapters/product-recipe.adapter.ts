@@ -10,6 +10,7 @@ import { productRecipeService } from "../../../routes/product-recipe.routes";
 import { resolveReference, resolveReferenceList } from "../import-lookup";
 import { splitList } from "../import-coerce";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
+import { upperTr } from "../../../utils/tr-case";
 
 const COLUMNS: ImportColumn[] = [
   {
@@ -103,7 +104,7 @@ export const productRecipeImportAdapter: ImportAdapter = {
     });
     const map = new Map<string, Record<string, unknown>>();
     for (const r of rows) {
-      map.set(r.code.toLocaleUpperCase("tr-TR"), {
+      map.set(upperTr(r.code), {
         ...r,
         // Diff karşılaştırması SÜTUN anahtarlarıyla yapılır — mevcut hâli de
         // aynı anahtarlarla sun, yoksa her satır "değişti" görünür.

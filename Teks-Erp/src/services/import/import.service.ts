@@ -51,6 +51,7 @@ import type {
   ImportRowResult,
   PreparedRow,
 } from "./import.types";
+import { upperTr } from "../../utils/tr-case";
 
 function emptyContext(userId?: string): ImportContext {
   return { userId, cache: new Map() };
@@ -95,11 +96,11 @@ function coerceCell(
       return { value: d };
     }
     case "enum": {
-      const wanted = text.toLocaleUpperCase("tr-TR");
+      const wanted = upperTr(text);
       const match = col.enumValues?.find(
         (e) =>
-          e.value.toLocaleUpperCase("tr-TR") === wanted ||
-          e.label.toLocaleUpperCase("tr-TR") === wanted,
+          upperTr(e.value) === wanted ||
+          upperTr(e.label) === wanted,
       );
       if (!match) {
         const list = (col.enumValues ?? []).map((e) => e.label).join(" · ");
@@ -191,7 +192,7 @@ async function prepareRows(
         units.push(p);
         continue;
       }
-      const norm = key.toLocaleUpperCase("tr-TR");
+      const norm = upperTr(key);
       const childValues: Record<string, unknown> = {};
       for (const c of childCols) if (p.values[c] !== undefined) childValues[c] = p.values[c];
 
@@ -224,7 +225,7 @@ async function prepareRows(
     for (const p of prepared) {
       const key = p.result.key;
       if (!key) continue;
-      const norm = key.toLocaleUpperCase("tr-TR");
+      const norm = upperTr(key);
       const firstRow = seen.get(norm);
       if (firstRow !== undefined) {
         p.result.errors.push({
@@ -245,7 +246,7 @@ async function prepareRows(
   // --- 4. karar + diff ------------------------------------------------------
   for (const p of units) {
     const key = p.result.key;
-    const found = key ? (existing.get(key.toLocaleUpperCase("tr-TR")) ?? existing.get(key) ?? null) : null;
+    const found = key ? (existing.get(upperTr(key)) ?? existing.get(key) ?? null) : null;
     p.existing = found;
     p.result.targetId = (found?.id as string | undefined) ?? null;
 

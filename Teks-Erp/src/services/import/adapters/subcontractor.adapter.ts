@@ -23,6 +23,7 @@ import { SubcontractorManagementService } from "../../subcontractor-management.s
 import { resolveReferenceList } from "../import-lookup";
 import { splitList } from "../import-coerce";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
+import { upperTr } from "../../../utils/tr-case";
 
 // Servisin paylaşılan tekili yok (controller kendi private örneğini kuruyor);
 // servis durumsuz olduğu için burada kendi örneğimizi kuruyoruz.
@@ -125,7 +126,7 @@ export const subcontractorImportAdapter: ImportAdapter = {
     });
     const map = new Map<string, Record<string, unknown>>();
     for (const r of rows) {
-      map.set(r.code.toLocaleUpperCase("tr-TR"), {
+      map.set(upperTr(r.code), {
         ...r,
         // Diff sütun anahtarlarıyla yapılır — mevcut hâli de aynı anahtarla sun.
         categoryCodes: r.categories.map((c) => c.category.code),

@@ -29,6 +29,7 @@ import { CustomerAliasService } from "../../customer-alias.service";
 import { normalizeDisplayName } from "../../helpers/name-normalize.helper";
 import { resolveReference } from "../import-lookup";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
+import { upperTr } from "../../../utils/tr-case";
 
 // Servisin paylaşılan tekili yok (controller kendi private örneğini kuruyor);
 // servis durumsuz olduğu için burada kendi örneğimizi kuruyoruz.
@@ -109,7 +110,7 @@ function commonColumns(targetLabel: string, targetExample: string, targetNameKey
       createOnly: true,
       maxLen: 160,
       help:
-        `Dikey çizgi ile ayırın: CARİ KODU|${targetLabel.toLocaleUpperCase("tr-TR")} KODU ` +
+        `Dikey çizgi ile ayırın: CARİ KODU|${upperTr(targetLabel)} KODU ` +
         `(örn. MUS1908260001|${targetExample}). Kodlar sistemdeki kodlardır; bulunamazsa satır hata verir.`,
       example: `MUS1908260001${KEY_SEP}${targetExample}`,
     },
@@ -150,7 +151,7 @@ async function loadCustomers(
     where: { code: { in: codes, mode: "insensitive" } },
     select: { id: true, code: true, name: true },
   });
-  return new Map(rows.map((r) => [r.code.toLocaleUpperCase("tr-TR"), r]));
+  return new Map(rows.map((r) => [upperTr(r.code), r]));
 }
 
 function parseKeys(keys: string[]): Array<{ raw: string; parts: AliasKeyParts }> {
@@ -236,7 +237,7 @@ export const customerItemAliasImportAdapter: ImportAdapter = {
       where: { code: { in: itemCodes, mode: "insensitive" } },
       select: { id: true, code: true, name: true },
     });
-    const itemByCode = new Map(items.map((i) => [i.code.toLocaleUpperCase("tr-TR"), i]));
+    const itemByCode = new Map(items.map((i) => [upperTr(i.code), i]));
     if (items.length === 0) return map;
 
     const rows = await prisma.customerItemAlias.findMany({
@@ -249,12 +250,12 @@ export const customerItemAliasImportAdapter: ImportAdapter = {
     const byPair = new Map(rows.map((r) => [`${r.customerId}:${r.itemId}`, r]));
 
     for (const { raw, parts } of parsed) {
-      const customer = customerByCode.get(parts.customerCode.toLocaleUpperCase("tr-TR"));
-      const item = itemByCode.get(parts.targetCode.toLocaleUpperCase("tr-TR"));
+      const customer = customerByCode.get(upperTr(parts.customerCode));
+      const item = itemByCode.get(upperTr(parts.targetCode));
       if (!customer || !item) continue;
       const hit = byPair.get(`${customer.id}:${item.id}`);
       if (!hit) continue;
-      map.set(raw.toLocaleUpperCase("tr-TR"), {
+      map.set(upperTr(raw), {
         id: hit.id,
         // `name` sütun DEĞİL — motorun satır etiketi olarak kullandığı alan.
         name: `${customer.name} · ${item.name}`,
@@ -339,7 +340,7 @@ export const customerColorAliasImportAdapter: ImportAdapter = {
       where: { code: { in: colorCodes, mode: "insensitive" } },
       select: { id: true, code: true, name: true },
     });
-    const colorByCode = new Map(colors.map((c) => [c.code.toLocaleUpperCase("tr-TR"), c]));
+    const colorByCode = new Map(colors.map((c) => [upperTr(c.code), c]));
     if (colors.length === 0) return map;
 
     // `assigned=true, alias=null` satırları da EŞLEŞİR: kayıt fiziksel olarak
@@ -355,12 +356,12 @@ export const customerColorAliasImportAdapter: ImportAdapter = {
     const byPair = new Map(rows.map((r) => [`${r.customerId}:${r.colorId}`, r]));
 
     for (const { raw, parts } of parsed) {
-      const customer = customerByCode.get(parts.customerCode.toLocaleUpperCase("tr-TR"));
-      const color = colorByCode.get(parts.targetCode.toLocaleUpperCase("tr-TR"));
+      const customer = customerByCode.get(upperTr(parts.customerCode));
+      const color = colorByCode.get(upperTr(parts.targetCode));
       if (!customer || !color) continue;
       const hit = byPair.get(`${customer.id}:${color.id}`);
       if (!hit) continue;
-      map.set(raw.toLocaleUpperCase("tr-TR"), {
+      map.set(upperTr(raw), {
         id: hit.id,
         name: `${customer.name} · ${color.name}`,
         externalKey: `${customer.code}${KEY_SEP}${color.code}`,

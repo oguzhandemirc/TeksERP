@@ -23,6 +23,7 @@ import type {
   ImportFixHint,
   PreparedRow,
 } from "../import.types";
+import { upperTr } from "../../../utils/tr-case";
 
 const COLUMNS: ImportColumn[] = [
   // ── Başlık sütunları (grubun İLK satırından okunur) ────────────────────────
@@ -179,7 +180,7 @@ export const routeImportAdapter: ImportAdapter = {
     });
     const map = new Map<string, Record<string, unknown>>();
     for (const r of rows) {
-      map.set((r.code ?? "").toLocaleUpperCase("tr-TR"), {
+      map.set(upperTr(r.code ?? ""), {
         ...r,
         customerCode: r.customer?.code ?? null,
         // Motor çocuk diff'ini SÜTUN ANAHTARLARIYLA karşılaştırır — mevcut

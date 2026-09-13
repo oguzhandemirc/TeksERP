@@ -17,6 +17,7 @@
 import prisma from "../../../lib/prisma";
 import { SubcontractorCategoryService } from "../../subcontractor-management.service";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
+import { upperTr } from "../../../utils/tr-case";
 
 // Servisin paylaşılan tekili yok (controller kendi private örneğini kuruyor);
 // servis durumsuz olduğu için burada kendi örneğimizi kuruyoruz.
@@ -90,7 +91,7 @@ export const subcontractorCategoryImportAdapter: ImportAdapter = {
       },
     });
     const map = new Map<string, Record<string, unknown>>();
-    for (const r of rows) map.set(r.code.toLocaleUpperCase("tr-TR"), r as Record<string, unknown>);
+    for (const r of rows) map.set(upperTr(r.code), r as Record<string, unknown>);
     return map;
   },
 

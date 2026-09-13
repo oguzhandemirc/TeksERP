@@ -26,6 +26,7 @@ import type {
   ImportFixHint,
   PreparedRow,
 } from "../import.types";
+import { upperTr } from "../../../utils/tr-case";
 
 const COLUMNS: ImportColumn[] = [
   // ── Başlık (grubun İLK satırından) ────────────────────────────────────────
@@ -200,7 +201,7 @@ export const orderImportAdapter: ImportAdapter = {
         select: { id: true, name: true },
       });
       const matches = branches.filter(
-        (b) => b.name.toLocaleUpperCase("tr-TR") === wanted.toLocaleUpperCase("tr-TR"),
+        (b) => upperTr(b.name) === upperTr(wanted),
       );
       if (matches.length === 0) {
         row.result.errors.push({

@@ -8,6 +8,7 @@
 import prisma from "../../../lib/prisma";
 import { colorService } from "../../../routes/color.routes";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
+import { upperTr } from "../../../utils/tr-case";
 
 const COLUMNS: ImportColumn[] = [
   {
@@ -64,7 +65,7 @@ export const colorImportAdapter: ImportAdapter = {
       select: { id: true, code: true, name: true, hex: true, isActive: true },
     });
     const map = new Map<string, Record<string, unknown>>();
-    for (const r of rows) map.set((r.code ?? "").toLocaleUpperCase("tr-TR"), r as Record<string, unknown>);
+    for (const r of rows) map.set(upperTr(r.code ?? ""), r as Record<string, unknown>);
     return map;
   },
 

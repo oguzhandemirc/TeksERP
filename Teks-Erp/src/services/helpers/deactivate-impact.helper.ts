@@ -20,6 +20,7 @@
 // =============================================================================
 import prisma from "../../lib/prisma";
 import { MERGE_MAP, type MergeEntity } from "../../constants/merge-map";
+import { lowerTr } from "../../utils/tr-case";
 
 /** Prisma model adı → birleştirme haritasındaki varlık. */
 const MODEL_TO_ENTITY: Record<string, MergeEntity> = {
@@ -80,7 +81,7 @@ export async function countLiveDependencies(
 /** Operatörün okuyacağı tek cümle. Boşsa null. */
 export function buildDependencyWarning(sayimlar: BagimlilikSayimi[]): string | null {
   if (sayimlar.length === 0) return null;
-  const liste = sayimlar.map((s) => `${s.count} ${s.label.toLocaleLowerCase("tr")}`).join(", ");
+  const liste = sayimlar.map((s) => `${s.count} ${lowerTr(s.label)}`).join(", ");
   return (
     `⚠️ Bu kayda bağlı CANLI veri var (${liste}). Pasife alındı ama ` +
     "seçicilerde artık görünmeyecek — bağlı işler devam ediyorsa yeniden aktifleştirin."

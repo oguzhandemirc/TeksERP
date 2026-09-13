@@ -43,6 +43,7 @@ import {
 } from "../utils/cursor";
 import { warehouseStampManyTx } from "./helpers/warehouse.helper";
 import { assertRollsHaveWarehouse } from "./helpers/warehouse-stock.helper";
+import { lowerTr } from "../utils/tr-case";
 
 // Liste filtre/sayfalama parametreleri — hem offset (mobil) hem cursor (admin)
 // modunu besler. cursor||mode==="cursor" → cursor response; aksi halde offset.
@@ -1422,13 +1423,10 @@ export class KartelaService {
       };
     });
 
-    const search = params?.search?.trim().toLocaleLowerCase("tr-TR");
+    const search = params?.search ? lowerTr(params.search.trim()) : undefined;
     if (search) {
       data = data.filter((d) =>
-        [d.itemName, d.itemCode, d.colorName ?? ""]
-          .join(" ")
-          .toLocaleLowerCase("tr-TR")
-          .includes(search),
+        lowerTr([d.itemName, d.itemCode, d.colorName ?? ""].join(" ")).includes(search),
       );
     }
 

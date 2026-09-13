@@ -13,6 +13,7 @@ import prisma from "../../../lib/prisma";
 import { machineService } from "../../../routes/station.routes";
 import { resolveReference } from "../import-lookup";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
+import { upperTr } from "../../../utils/tr-case";
 
 const COLUMNS: ImportColumn[] = [
   {
@@ -72,7 +73,7 @@ export const machineImportAdapter: ImportAdapter = {
     });
     const map = new Map<string, Record<string, unknown>>();
     for (const r of rows) {
-      map.set(r.code.toLocaleUpperCase("tr-TR"), {
+      map.set(upperTr(r.code), {
         ...r,
         // Diff sütun ANAHTARIYLA yapılır — mevcut istasyonu da kod olarak sun.
         stationCode: r.station?.code ?? null,

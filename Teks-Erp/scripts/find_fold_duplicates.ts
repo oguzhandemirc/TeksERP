@@ -198,7 +198,7 @@ async function main(): Promise<void> {
     const byCode = new Map<string, typeof rows>();
     for (const r of rows) {
       if (!r.code) continue;
-      const k = r.code.toLocaleLowerCase("en");
+      const k = r.code.toLowerCase();
       byCode.set(k, [...(byCode.get(k) ?? []), r]);
     }
     const codeHits = [...byCode.values()].filter((m) => m.length > 1);

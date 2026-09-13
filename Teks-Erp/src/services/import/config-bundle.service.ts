@@ -27,6 +27,7 @@ import { documentProfileService } from "../document-profile.service";
 import { freeDocumentService } from "../free-document.service";
 import { LabelTemplateService } from "../label-template.service";
 import { PermissionManagementService } from "../permission-management.service";
+import { upperTr } from "../../utils/tr-case";
 
 /** Paketin taşıyabileceği tür anahtarları. */
 export const BUNDLE_KINDS = [
@@ -204,7 +205,7 @@ export function validateEnvelope(raw: unknown): BundleEnvelope {
 
 /** Hedefteki mevcut anahtarlar (tür bazlı). */
 async function existingKeys(kind: BundleKind): Promise<Set<string>> {
-  const norm = (s: string): string => s.trim().toLocaleUpperCase("tr-TR");
+  const norm = (s: string): string => upperTr(s.trim());
   switch (kind) {
     case "LABEL_TEMPLATE": {
       const rows = await prisma.labelTemplate.findMany({ where: { deletedAt: null }, select: { name: true } });
@@ -231,7 +232,7 @@ async function existingKeys(kind: BundleKind): Promise<Set<string>> {
 
 /** "X (2)", "X (3)" … — hedefte boş olan ilk adı bulur. */
 function nextFreeName(base: string, taken: Set<string>): string {
-  const norm = (s: string): string => s.trim().toLocaleUpperCase("tr-TR");
+  const norm = (s: string): string => upperTr(s.trim());
   for (let i = 2; i < 100; i++) {
     const candidate = `${base} (${i})`;
     if (!taken.has(norm(candidate))) return candidate;
@@ -251,11 +252,11 @@ export async function planBundle(
   for (const item of envelope.items) {
     const kind = assertKind(item.kind);
     const set = taken.get(kind)!;
-    const exists = set.has(item.key.trim().toLocaleUpperCase("tr-TR"));
+    const exists = set.has(upperTr(item.key.trim()));
 
     if (!exists) {
       rows.push({ kind, key: item.key, action: "CREATE" });
-      set.add(item.key.trim().toLocaleUpperCase("tr-TR"));
+      set.add(upperTr(item.key.trim()));
       continue;
     }
     if (onConflict === "skip") {
@@ -272,7 +273,7 @@ export async function planBundle(
       continue;
     }
     const newKey = nextFreeName(item.key, set);
-    set.add(newKey.trim().toLocaleUpperCase("tr-TR"));
+    set.add(upperTr(newKey.trim()));
     rows.push({ kind, key: item.key, action: "RENAME", newKey, message: `Yeni ad: ${newKey}` });
   }
 

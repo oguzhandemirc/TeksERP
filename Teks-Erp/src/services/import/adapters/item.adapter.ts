@@ -13,6 +13,7 @@ import { itemService } from "../../../routes/item.routes";
 import { resolveReferenceList } from "../import-lookup";
 import { splitList } from "../import-coerce";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
+import { upperTr } from "../../../utils/tr-case";
 
 const COLUMNS: ImportColumn[] = [
   {
@@ -111,7 +112,7 @@ export const itemImportAdapter: ImportAdapter = {
     });
     const map = new Map<string, Record<string, unknown>>();
     for (const r of rows) {
-      map.set(r.code.toLocaleUpperCase("tr-TR"), {
+      map.set(upperTr(r.code), {
         ...r,
         // Decimal NESNESİ sayı sütunuyla karşılaştırılamaz: "değişti mi"
         // sorusu dokunulmamış her satırda YANLIŞ 'evet' derdi.

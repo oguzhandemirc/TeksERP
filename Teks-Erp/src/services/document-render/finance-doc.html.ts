@@ -31,6 +31,7 @@ import { DOC_DENSITY, docChromeCss, resolveDocPageSize, scaleW } from "./doc-den
 import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
 import type { PrintedDocSnapshot } from "../printed-document.service";
 import { fmtDate } from "./fmt-date";
+import { upperTr } from "../../utils/tr-case";
 
 /** Fatura kalemi — tutarlar STRING (Decimal serileştirmesi; float'a çevrilmez). */
 export interface InvoiceDocLine {
@@ -399,7 +400,7 @@ export function renderPaymentReceiptHtml(snapshot: PrintedDocSnapshot, meta: Ren
   // para alındı"). Faturanın kalem tablosunu buraya kopyalamak, tek satırlık
   // bir tabloyla kâğıdı faturaya benzetir ve ikisi karıştırılır.
   const totalsBox = `<div class="tot">
-      <div class="row grand"><span>${esc(h.directionLabel).toLocaleUpperCase("tr")}</span><b>${esc(fmtMoney(doc.amount))} ${cur}</b></div>
+      <div class="row grand"><span>${upperTr(esc(h.directionLabel))}</span><b>${esc(fmtMoney(doc.amount))} ${cur}</b></div>
       ${h.currency !== "TRY" && doc.amountTry ? `<div class="row try"><span>TL Karşılığı (kur ${esc(fmtQty(h.exchangeRate))})</span><b>${esc(fmtMoney(doc.amountTry))} TRY</b></div>` : ""}
     </div>`;
 

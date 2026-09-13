@@ -14,6 +14,7 @@
 import prisma from "../../lib/prisma";
 import { foldNameForCompare } from "../helpers/name-normalize.helper";
 import type { ImportContext, ImportFixHint, LookupHit } from "./import.types";
+import { upperTr } from "../../utils/tr-case";
 
 /** Desteklenen lookup varlıkları → Prisma delegate + alanlar. */
 interface LookupSource {
@@ -80,7 +81,7 @@ export async function resolveReference(
     bucket = new Map<string, LookupHit>();
     ctx.cache.set(cacheKey, bucket);
   }
-  const cached = bucket.get(value.toLocaleUpperCase("tr-TR"));
+  const cached = bucket.get(upperTr(value));
   if (cached) return activeOrError(cached, src.label, value);
 
   // 1) KOD ile tam eşleşme (harf-duyarsız).
@@ -91,7 +92,7 @@ export async function resolveReference(
     })) as Record<string, unknown> | null;
     if (byCode) {
       const hit = toHit(byCode, src);
-      bucket.set(value.toLocaleUpperCase("tr-TR"), hit);
+      bucket.set(upperTr(value), hit);
       return activeOrError(hit, src.label, value);
     }
   }
@@ -125,7 +126,7 @@ export async function resolveReference(
     };
   }
   const hit = toHit(byName[0] as Record<string, unknown>, src);
-  bucket.set(value.toLocaleUpperCase("tr-TR"), hit);
+  bucket.set(upperTr(value), hit);
   const outcome = activeOrError(hit, src.label, value);
   if (outcome.error) return outcome;
   return {

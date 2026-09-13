@@ -13,6 +13,7 @@ import { fabricPropertyService } from "../../../routes/fabric-property.routes";
 import { resolveReferenceList } from "../import-lookup";
 import { splitList } from "../import-coerce";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
+import { upperTr } from "../../../utils/tr-case";
 
 const COLUMNS: ImportColumn[] = [
   {
@@ -101,7 +102,7 @@ export const fabricPropertyImportAdapter: ImportAdapter = {
     });
     const map = new Map<string, Record<string, unknown>>();
     for (const r of rows) {
-      map.set(r.code.toLocaleUpperCase("tr-TR"), {
+      map.set(upperTr(r.code), {
         ...r,
         stationCodes: r.stationCapabilities.map((c) => c.station.code),
         valueCodes: r.values.map((v) => `${v.code}=${v.name}`).join(";"),
@@ -159,7 +160,7 @@ export const fabricPropertyImportAdapter: ImportAdapter = {
           bad = true;
           return;
         }
-        parsed.push({ code: c.trim().toLocaleUpperCase("en-US"), name, sortOrder: i });
+        parsed.push({ code: c.trim().toUpperCase(), name, sortOrder: i });
       });
       if (bad) {
         row.result.errors.push({

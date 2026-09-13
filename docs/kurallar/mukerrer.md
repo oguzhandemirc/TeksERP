@@ -11,6 +11,7 @@
 ### Değişmezler
 
 
+- **[ÇEKİRDEK]** Türkçe harf katlaması TEK helper'dan (`utils/tr-case.ts` `upperTr`/`lowerTr`; `"tr-TR"` yalnız orada yazılır) — AD içindir, KOD için `foldCodeForCompare` (i/İ); içe aktarımda yazan↔okuyan aynı helper'ı çağırır, tek yanlı taşıma bugün olmayan kusuru doğurur. · bekçi: `scripts/test_tr_case.ts (DB'siz; i/İ oracle + adaptör simetrisi)`
 - **[ÇEKİRDEK]** Birleştirme artık DEFTERLİ ve geri alınabilir: `MergeOperation` + kaynak künyesi + taşınan/silinen/zenginleşen referans satırları yazılır; geri alma en yeniden eskiye (LIFO) yapılır, adı çakışan kaynak için YENİ AD ister, geri yazılamayan satırı `skippedRows` olarak bildirir, defter öncesi birleştirmeyi reddeder. · bekçi: `test_master_data_merge_revert.ts` <sub>(arşiv:2026-09-12)</sub>- **[ÇEKİRDEK]** Ad mükerrerinin son hattı DB seddidir: `<tablo>_nameFold_key` UNIQUE. Ana veri BİRLEŞTİRMESİNE katılan tabloda partial (`WHERE "mergedIntoId" IS NULL` — mezar taşı aynı adı meşruen taşır), katılmayanda DÜZ UNIQUE. Sed uygulama guard'ının AYNASIDIR, ondan gevşek olamaz. · bekçi: `test_db_invariants PARTIAL_INDEXES + test_master_data_name_dup §10` <sub>(CLAUDE.md:78)</sub>
 - **[ÇEKİRDEK]** Uygulama bekçisi `assertNameNotDuplicate` KALDIRILMAZ — Türkçe, kod bilgili 409'u ('zaten var' ↔ 'PASİF, aktifleştirin') o verir. Ama KİLİTSİZ check-then-act'tir (`create()` tx bile açmaz): yarışı, `duplicateNameField` unutulmasını, içe aktarım fail-open'ını ve elle SQL'i yalnız DB seddi kapatır. · bekçi: `test_master_data_name_dup §9/§10` <sub>(CLAUDE.md:78)</sub>
 - **[ÇEKİRDEK]** Survivorship'te (P2) seçim DEĞER değil KAYIT üzerindendir (`fieldPicks[alan]=kayıtId`) — serbest metin uçu sınırsız alan düzenleme API'sine çevirirdi; `code` ve kimlik alanları seçilemez. ⚠️ SIRA LOAD-BEARING: survivor alan yazımı ATOMİK CLAIM'DEN SONRA, yoksa ad taşıma P2002 verir. · bekçi: `test_merge_field_picks` <sub>(CLAUDE.md:80)</sub>
@@ -61,7 +62,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_color_name_dup`, `test_consistency`, `test_data_integrity_gaps`, `test_db_invariants`, `test_duplicate_detection`, `test_duplicate_rolls`, `test_fold_contract`, `test_item_code_case_uniqueness`, `test_master_data_merge`, `test_master_data_merge_conflicts`, `test_master_data_merge_fk_coverage`, `test_master_data_merge_race`, `test_master_data_merge_revert`, `test_master_data_name_dup`, `test_merge_field_picks`, `test_name_normalization`, `test_name_uppercase_storage`, `test_similar_names`, `test_subcontractor_management`, `test_turkish_search_fold`
+Backend: `test_color_name_dup`, `test_tr_case`, `test_consistency`, `test_data_integrity_gaps`, `test_db_invariants`, `test_duplicate_detection`, `test_duplicate_rolls`, `test_fold_contract`, `test_item_code_case_uniqueness`, `test_master_data_merge`, `test_master_data_merge_conflicts`, `test_master_data_merge_fk_coverage`, `test_master_data_merge_race`, `test_master_data_merge_revert`, `test_master_data_name_dup`, `test_merge_field_picks`, `test_name_normalization`, `test_name_uppercase_storage`, `test_similar_names`, `test_subcontractor_management`, `test_turkish_search_fold`
 
 İstemci: `SimilarNamesWarning.test.tsx`⚠️, `similar-names-coverage.test.ts`⚠️, `searchFold.test.ts`
 
