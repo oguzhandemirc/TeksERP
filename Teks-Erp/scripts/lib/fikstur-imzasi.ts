@@ -18,6 +18,17 @@
 // SERVİS üretir. Fabrikada `TEST-`/`TST-`/`DEMO-` kodlu kalem yok, yani bu
 // genişlemenin ölçüm kaybı bilinen ve sıfırdır.
 //
+// ⭐ KÖK TARİF — bu modülün neden VAR olduğunu tek cümlede söyler:
+//   Ayırt edici sorunu yalnız kimliğin YENİDEN KURULDUĞU yerde vardır;
+//   HATIRLANDIĞI yerde yoktur.
+// Kendi yarattığı id'yi tutan temizlik (`deleteMany({ id: { in: yaratilan } })`)
+// servisin verdiği barkodu hiç sormaz ve bu sınıftan etkilenmez. DB'yi tarayıp
+// "bu satır kimin" sorusunu ön ekten cevaplayan her yüzey ise kimliği yeniden
+// KURAR ve format değişince çöker — `test_consistency` §29 ile
+// `test_roll_warehouse_stamp` tam bu yüzden aynı gün ikisi birden yanlış ölçtü.
+// ⇒ Yeni bir bekçi yazarken tercih sırası: ÖNCE hatırla (id tut), ayırt ediciye
+// ancak taramak zorunda olduğun yerde başvur.
+//
 // ⚠️ SÜZGEÇ YALNIZ KANITLA EKLENİR: "bu satırları test paketi üretti" ölçülmeden
 // hiçbir bölüme gürültü süzgeci konmaz, yoksa kapı kendi kusurunu eler.
 // =============================================================================
