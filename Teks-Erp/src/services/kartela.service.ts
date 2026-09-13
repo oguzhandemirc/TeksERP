@@ -20,7 +20,10 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
-import { Prisma, PrintedDocType, RollStatus } from "@prisma/client";
+import { Prisma, PrintedDocType, RollStatus, WarehouseEventType } from "@prisma/client";
+import { postStockMoves } from "./helpers/warehouse-ledger.helper";
+import { reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
+import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import {
   printedDocumentService,
   registerPrintedDocBuilder,
@@ -348,6 +351,35 @@ export class KartelaService {
           );
         }
 
+        // STOK DEFTERİ — mal stok kümesinden ÇIKTI (kartela firmasına). Bu yol
+        // 2026-09-13'e kadar deftere NE İLERİ NE TERS satır yazıyordu: kartela
+        // K'nin son iki kapısız yoluydu ve `EXTERNAL` borcunun kalan yarısıydı.
+        //
+        // ⚠️ UÇLAR BELİRSİZ DEĞİL: claim yüklemi `status: WAREHOUSE` İSTİYOR, yani
+        // çıkış ucunun statüsü tanım gereği `WAREHOUSE`; ve `assertRollsHaveWarehouse`
+        // (yukarıda, replay'den SONRA) deposuz topu 409 ile durduruyor ⇒ depo ucu da
+        // garanti. Sevkteki `preShipStatus` gibi bir kanıt kolonuna ihtiyaç YOK.
+        // GİRİŞ ucu stok kümesi DIŞI (`AT_KARTELA`) ⇒ depo taşımaz (K1).
+        await postStockMoves(
+          tx,
+          rolls.map((r) => ({
+            rollId: r.id,
+            eventType: WarehouseEventType.EXTERNAL,
+            qty: r.currentQty,
+            from: { warehouseId: r.warehouseId, status: RollStatus.WAREHOUSE },
+            to: { warehouseId: null, status: RollStatus.AT_KARTELA },
+            reasonCode: STOCK_MOVE_REASON.KARTELA_DISPATCH,
+            // ⚠️ BELGE BAĞI İÇİN KOLON YOK: `WarehouseMovement` transferId ·
+            // goodsReceiptId · shipmentId · rollReturnId · sackId · stockCountId
+            // taşıyor, `kartelaDispatchId` YOK. Kolon eklemek migration demek ve bu
+            // dilimin kapsamı dışında ⇒ belge numarası `notes`a yazılır (fason
+            // dönüşü emsali). İptal ters satırı belge bağıyla DEĞİL, ileri satırın
+            // kendisiyle (`reversesMovementId`) bulunur — bağ ORADA kurulur.
+            notes: `Kartela sevki (${dispatchNo})`,
+            userId: userId ?? null,
+          })),
+        );
+
         return dispatch;
       })
     );
@@ -458,6 +490,37 @@ export class KartelaService {
         throw AppError.conflict(
           "Toplardan biri bu sırada başka bir işlemle değişmiş — sevk iptal edilemedi. Listeyi yenileyip tekrar deneyin."
         );
+      }
+
+      // STOK DEFTERİ — ters satır BAĞLI doğar: ileri `EXTERNAL` satırını
+      // `reversesMovementId` ile işaret eder ve `reverseStokMove` uçları KENDİSİ
+      // aynalar (from {∅, AT_KARTELA} → to {depo, WAREHOUSE}). Geri dönüş deposu
+      // İLERİ SATIRDAN gelir, canlı veriden DEĞİL: `warehouseStampManyTx` varsayılan
+      // depoyu yazabilir ve mal aslında başka bir raftan çıkmış olabilir.
+      //
+      // ⚠️ İLERİ SATIR YOKSA HİÇBİR ŞEY YAZILMAZ (bu dilimden ÖNCE yapılmış sevkler):
+      // bağsız bir giriş satırı, çıkışı hiç kaydedilmemiş bir malı stoğa EKLERDİ ve
+      // Σ'yı şişirirdi. Kaydı olmayan çıkışın kaydı olmayan dönüşü — miras, ikisi de
+      // defterde yok, Σ tutarlı kalır.
+      for (const rollId of rollIds) {
+        const ileri = await tx.warehouseMovement.findFirst({
+          where: {
+            rollId,
+            eventType: WarehouseEventType.EXTERNAL,
+            reasonCode: STOCK_MOVE_REASON.KARTELA_DISPATCH,
+            reversesMovementId: null,
+            reversedBy: { none: {} },
+          },
+          orderBy: { createdAt: "asc" },
+          select: { id: true },
+        });
+        if (!ileri) continue;
+        await reverseStockMove(tx, ileri.id, {
+          eventType: WarehouseEventType.EXTERNAL,
+          reasonCode: STOCK_MOVE_REASON.KARTELA_CANCEL,
+          userId: userId ?? null,
+          notes: trimmed,
+        });
       }
     });
 

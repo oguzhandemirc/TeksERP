@@ -75,8 +75,16 @@ export const STOCK_MOVE_REASON = {
   /** Fason firmasına çıkış / dönüş. */
   FASON_DISPATCH: "FASON_DISPATCH",
   FASON_RECEIPT: "FASON_RECEIPT",
-  /** Kartela firmasına çıkış. */
+  /** Kartela firmasına çıkış (`WAREHOUSE → AT_KARTELA`, stok kümesinden ÇIKIŞ). */
   KARTELA_DISPATCH: "KARTELA_DISPATCH",
+  /**
+   * Kartela sevk iptali — `KARTELA_DISPATCH` satırının TERSİ (mal rafına döndü).
+   *
+   * ⚠️ Geri dönüş deposu İLERİ SATIRDAN aynalanır, canlı veriden DEĞİL:
+   * `warehouseStampManyTx` varsayılan depoyu yazabilir ve mal aslında başka bir
+   * raftan çıkmış olabilir.
+   */
+  KARTELA_CANCEL: "KARTELA_CANCEL",
   /** Gerçek fire. */
   SCRAP: "SCRAP",
   /** Sayım farkı. */

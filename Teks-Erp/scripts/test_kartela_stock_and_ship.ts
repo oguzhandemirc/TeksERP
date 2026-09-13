@@ -16,8 +16,9 @@ import { ensureTestKartela } from "./fixture-subcontractor";
 import { kartelaService } from "../src/services/kartela.service";
 import { shippingService } from "../src/services/shipping.service";
 import { AppError } from "../src/utils/app-error";
-import { RollStatus } from "@prisma/client";
+import { RollStatus, WarehouseEventType } from "@prisma/client";
 import { fixtureWarehouseId } from "./fixture-warehouse";
+import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
 
 let pass = 0,
   fail = 0;
@@ -293,6 +294,81 @@ async function run(): Promise<void> {
     reasonGuard = e instanceof AppError && e.statusCode === 400;
   }
   check("kısa gerekçe → 400", reasonGuard);
+
+  // ══ STOK DEFTERİ — kartela sevki ve iptali (K'nin SON iki kapısı) ══════════
+  // ⚠️ Bu yol 2026-09-13'e kadar deftere NE İLERİ NE TERS satır yazıyordu; yani
+  // "taşıma" değil SIFIRDAN BAĞLAMA. Karşılaştıracak bir "önce" hâli olmadığı için
+  // kalemler şekli DOĞRUDAN ölçüyor (önce/sonra yüklemi kurulamaz).
+  const dRoll = await makeWarehouseRoll(null);
+  const dDepo = (await prisma.roll.findUniqueOrThrow({ where: { id: dRoll }, select: { warehouseId: true } })).warehouseId;
+  const dres = await kartelaService.dispatch({ subcontractorId: FIRM, rollIds: [dRoll] }, ADMIN);
+  const dId = (dres.data as { id?: string })?.id as string;
+  if (dId) dispatchIds.push(dId);
+  const ileri = await prisma.warehouseMovement.findFirst({
+    where: { rollId: dRoll, eventType: WarehouseEventType.EXTERNAL },
+    select: { id: true, fromWarehouseId: true, fromStatus: true, toWarehouseId: true, toStatus: true, reasonCode: true, qty: true, notes: true },
+  });
+  const dTop = await prisma.roll.findUniqueOrThrow({ where: { id: dRoll }, select: { status: true, warehouseId: true } });
+  check(
+    "DEFTER-1 ⭐ Kartela sevki: ÇIKIŞ satırı STATÜLÜ — from {depo, WAREHOUSE} → to {∅, AT_KARTELA} · KARTELA_DISPATCH",
+    ileri !== null &&
+      ileri.fromWarehouseId === dDepo &&
+      ileri.fromStatus === RollStatus.WAREHOUSE &&
+      ileri.toWarehouseId === null &&
+      ileri.toStatus === RollStatus.AT_KARTELA &&
+      ileri.reasonCode === STOCK_MOVE_REASON.KARTELA_DISPATCH,
+    JSON.stringify(ileri),
+  );
+  check(
+    "DEFTER-2 Topun deposu KORUNDU (dönüş adresi) ama defterin giriş ucu NULL — ikisi bilerek farklı",
+    dTop.status === RollStatus.AT_KARTELA && dTop.warehouseId === dDepo && ileri?.toWarehouseId === null,
+    `${dTop.status} / depo=${String(dTop.warehouseId)}`,
+  );
+  check(
+    "DEFTER-3 Belge bağı `notes`ta (şemada kartelaDispatchId kolonu YOK)",
+    (ileri?.notes ?? "").includes("Kartela sevki"),
+    ileri?.notes ?? "—",
+  );
+
+  await kartelaService.cancelDispatch(dId, "bekçi: defter ölçümü için iptal", ADMIN);
+  const tersler = await prisma.warehouseMovement.findMany({
+    where: { rollId: dRoll, eventType: WarehouseEventType.EXTERNAL, reversesMovementId: { not: null } },
+    select: { reversesMovementId: true, fromWarehouseId: true, fromStatus: true, toWarehouseId: true, toStatus: true, reasonCode: true },
+  });
+  check(
+    "DEFTER-4 ⭐ İptal: ters satır BAĞLI (reversesMovementId → ileri) ve uçlar AYNALI · KARTELA_CANCEL",
+    tersler.length === 1 &&
+      tersler[0]!.reversesMovementId === ileri?.id &&
+      tersler[0]!.fromWarehouseId === null &&
+      tersler[0]!.fromStatus === RollStatus.AT_KARTELA &&
+      tersler[0]!.toWarehouseId === dDepo &&
+      tersler[0]!.toStatus === RollStatus.WAREHOUSE &&
+      tersler[0]!.reasonCode === STOCK_MOVE_REASON.KARTELA_CANCEL,
+    JSON.stringify(tersler),
+  );
+  const dSatirlar = await prisma.warehouseMovement.findMany({
+    where: { rollId: dRoll },
+    select: { qty: true, fromWarehouseId: true, toWarehouseId: true },
+  });
+  const dNet = dSatirlar.reduce((t, x) => t + (x.toWarehouseId ? Number(x.qty) : 0) - (x.fromWarehouseId ? Number(x.qty) : 0), 0);
+  check("DEFTER-5 ⭐ Σ kapanıyor: çıkış + iptal girişi = 0 (mal rafa döndü)", Math.abs(dNet) < 0.001, `net=${dNet}`);
+
+  // ⚠️ BU DİLİMDEN ÖNCE yapılmış sevkin iptali: ileri satır YOK ⇒ ters satır da
+  // YAZILMAZ. Bağsız bir giriş satırı, çıkışı hiç kaydedilmemiş malı stoğa EKLER
+  // ve Σ'yı ŞİŞİRİRDİ. Fikstür o hâli ileri satırı silerek kurar.
+  const mRoll = await makeWarehouseRoll(null);
+  const mres = await kartelaService.dispatch({ subcontractorId: FIRM, rollIds: [mRoll] }, ADMIN);
+  const mId = (mres.data as { id?: string })?.id as string;
+  if (mId) dispatchIds.push(mId);
+  await prisma.warehouseMovement.deleteMany({ where: { rollId: mRoll } });
+  await kartelaService.cancelDispatch(mId, "bekçi: miras sevkin iptali", ADMIN);
+  const mSatir = await prisma.warehouseMovement.count({ where: { rollId: mRoll } });
+  const mTop = await prisma.roll.findUniqueOrThrow({ where: { id: mRoll }, select: { status: true } });
+  check(
+    "DEFTER-6 ⭐ İleri satırı OLMAYAN sevkin iptali satır YAZMADI (Σ şişmedi) ama top rafına DÖNDÜ",
+    mSatir === 0 && mTop.status === RollStatus.WAREHOUSE,
+    `satır=${mSatir} · ${mTop.status}`,
+  );
 }
 
 async function cleanup(): Promise<void> {

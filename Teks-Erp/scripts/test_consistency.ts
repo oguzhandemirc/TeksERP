@@ -112,13 +112,15 @@ interface Section {
 // taşınabilir, bu ölçü veriyi ölçüyor). Tarih ufku DB'den BAĞIMSIZDIR: "ufuktan
 // sonra doğan top" her kurulumda aynı anlama gelir ve beklenen değer **0**'dır.
 //
-// ⚠️ UFUK HENÜZ AÇILMADI: yazar kümesi kapanmadan (K = 0) ufku bugüne koymak,
-// hâlâ kapısız olan yolların ürettiği satırları "yeni kusur" diye raporlardı.
-// K = 0 olduğu gün bu sabit o tarihe çekilir ve bölüm SERT (n === 0) olur.
-// Bugünkü hâli: ufuk `null` ⇒ bölüm yalnız MİRASI sayar ve ADVISORY kalır.
-// İlerleme: `scripts/lib/stok-defteri-bag-olcumu.ts` (K = 6, 2026-09-13).
+// ⚠️ UFUK AÇILDI — 2026-09-13: yazar kümesi KAPANDI (K = 0; sevk ×2 · fason kabul ·
+// fason sevki · transfer ×2 · kartela ×2 deftere bağlandı) ve bölüm artık SERT:
+// ufuktan SONRA doğan bir topun stok kümesine girişi yazılmış ama çıkışı
+// yazılmamışsa bu bir KUSURDUR, beklenen değer 0. Ufuktan ÖNCESİ mirastır ve
+// kullanıcı kararıyla onarılmayacak ⇒ yüklem `createdAt >= UFUK` ile sınırlanır.
+// Ölçü: `scripts/lib/stok-defteri-bag-olcumu.ts` (K = 0, kapısı
+// `test_stok_defteri_bag_olcumu`).
 // ─────────────────────────────────────────────────────────────────────────────
-const DEFTER_UFKU: string | null = null;
+const DEFTER_UFKU: string | null = "2026-09-13";
 
 /** Stok kümesi DIŞI statüler — buraya düşen topun defterde ÇIKIŞ ucu olmalıydı. */
 /** Stok kümesi İÇİ statüler — giriş/çıkış uçlarının anlamlı olduğu küme. */
@@ -877,19 +879,10 @@ WHERE r."warehouseId" IS NULL
     // yazılmadı* — ve bu, ufuk açıldığında sert ölçülebilecek tek şekildir.
     title: "Deftere GİRMİŞ ama stok kümesinden çıkışı YAZILMAMIŞ top (asimetri, defter ufku)",
     // Fikstür artığı elenir — imza barkodda DEĞİL kalem kodunda (§29'un dersi:
-    // servisten doğan fikstür ÜRETİM formatlı barkod taşır). Ölçüldü 2026-09-13:
-    // bu bölümün sonda DB'sinde saydığı 4 satırın 4'ü `test_stock_count_reversal`
-    // §6p/§6r fikstürüydü — ham UPDATE ile SHIPPED'e çekildikleri için çıkış satırı
-    // yok; fabrika kopyasında asimetri **0**.
+    // servisten doğan fikstür ÜRETİM formatlı barkod taşır).
     noise: {
       where: `WHERE ${notFixtureSql("drift.barcode")} AND ${notFixtureItemOfRollSql("drift.kayit")}`,
       why: "fikstür artığı (ham UPDATE ile stok dışına çekilmiş top) — barkod VEYA kalem kodundan elenir",
-    },
-    miras: {
-      taban: null, // ufuk açılmadan ARTIŞ ölçülemez (bkz. DEFTER_UFKU) — yalnız sayılır
-      tarih: "2026-09-13",
-      nerede: "fabrika kopyası: asimetri 0 · çıplak sayım 4.160 (yanıltıcı)",
-      not: "MİRAS (kullanıcı kararı 2026-09-13: geçmiş onarımı kapsam dışı) — ufuk açılınca sert ölçülür",
     },
     sql: `
 SELECT r.id::text AS kayit, r.barcode, r.status::text AS durum,
