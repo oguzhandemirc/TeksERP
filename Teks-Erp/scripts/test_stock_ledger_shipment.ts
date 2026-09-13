@@ -39,6 +39,7 @@ import { AppError } from "../src/utils/app-error";
 import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { roleGrade } from "./fixture-quality-grade";
 
 let pass = 0;
 let fail = 0;
@@ -60,6 +61,8 @@ const customerIds: string[] = [];
 const itemIds: string[] = [];
 let ADMIN = "";
 let WH = "";
+let GRADE = "";
+let GRADE_CODE = "";
 
 function errOf(e: unknown): { status?: number; message: string } {
   if (e instanceof AppError) return { status: e.statusCode, message: e.message };
@@ -103,7 +106,8 @@ async function sevkiyatKur(
         status: t.status,
         // Sevk `warehouseId`yi TEMİZLEMEZ — §2 tam bunu ölçüyor.
         warehouseId: WH,
-        qualityGrade: "1.KALITE",
+        qualityGrade: GRADE_CODE,
+        qualityGradeId: GRADE,
         shipmentId: shipment.id,
         sackId: sack.id,
       },
@@ -129,6 +133,9 @@ const defter = (rollId: string) =>
 async function main(): Promise<void> {
   ADMIN = (await ensureTestAdmin()).id;
   WH = await fixtureWarehouseId();
+  const g = await roleGrade("FIRST");
+  GRADE = g.id;
+  GRADE_CODE = g.code;
   const item = await prisma.item.create({
     data: { code: `${TAG}-KM`, name: `${TAG} Kumaş`, itemType: ItemType.FABRIC, unit: ItemUnit.MT },
     select: { id: true },
