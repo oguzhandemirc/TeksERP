@@ -21,7 +21,7 @@ kalamaz). ⇒ **Dizin bayatlayamaz; bayatlatmayı deneyen commit durur.** İlk d
 bir kereye mahsus üretildi (2026-09-13); bundan sonrasını üreteç değil KAPI tutar —
 üretece bağlı bir dizin, üreteç koşulmadığı gün sessizce bayatlardı.
 
-Sayı bir ölçümdür ve bu satır da kapı altındadır: **143 başlık / 10 dosya**
+Sayı bir ölçümdür ve bu satır da kapı altındadır: **145 başlık / 10 dosya**
 (ölçüldü 2026-09-13; kapı her koşumda yeniden sayar ve sayı tutmazsa kırmızı verir).
 
 | # | başlık | dosya |
@@ -52,6 +52,7 @@ Sayı bir ölçümdür ve bu satır da kapı altındadır: **143 başlık / 10 d
 |  | § Araç VAR ile araç UYUMLU ayrı iki şeydir | (`OLCUM-DISIPLINI-ARAC.md`) |
 |  | § Bir LİSTE tek başına ölçüm aracı değildir — ELEME adımı onun yarısıdır | (`OLCUM-DISIPLINI-ARAC.md`) |
 |  | § Boş çıktı bir ÖLÇÜM değildir — iki dünya aynı boşluğu üretir | (`OLCUM-DISIPLINI-ARAC.md`) |
+|  | § Ağacı `git` üzerinden okuyan araç, kümesini İNDEKSTEN alır — yazdığın dosya orada olmayabilir | (`OLCUM-DISIPLINI-ARAC.md`) |
 |  | § Bir tarayıcı, kendi TARİF ETTİĞİ şeyin ÖRNEĞİNİ gerçek sanır | (`OLCUM-DISIPLINI-ARAC.md`) |
 |  | § Mutasyonun ürettiği sayı, MUTASYONDAN gelmiş olabilir | (`OLCUM-DISIPLINI-ARAC.md`) |
 |  | § Komutun SÜRECİ ve ORTAMI → ayrı dosya | (`OLCUM-DISIPLINI-ARAC.md`) |
@@ -138,6 +139,7 @@ Sayı bir ölçümdür ve bu satır da kapı altındadır: **143 başlık / 10 d
 |  | § Bir dosyanın TOPLAMINDAKİ fark, bir SİTEYE ancak tek dal varsa atfedilir | (`OLCUM-DISIPLINI-CIKARIM.md`) |
 |  | § Bir kusurun ADI, kusurun YERİ değildir | (`OLCUM-DISIPLINI-CIKARIM.md`) |
 |  | § Beyan, kapsamın YERİNE GEÇMEZ | (`OLCUM-DISIPLINI-CIKARIM.md`) |
+|  | § Bir KAPANIŞ ÖLÇÜTÜ, ölçtüğü MEKANİZMANIN adını taşımalı — yoksa kendi kendini onaylatır | (`OLCUM-DISIPLINI-CIKARIM.md`) |
 |  | § Ad kalıbı bir ÖLÇÜT değildir | (`OLCUM-DISIPLINI-CIKARIM.md`) |
 |  | § Bir borç, koşulu sağlandığı için değil ÖNCÜLÜ yanlış olduğu için de kapanabilir | (`OLCUM-DISIPLINI-CIKARIM.md`) |
 |  | § Kapanma koşulunu yazan not, KOŞULUN SAĞLANDIĞINI da aynı nota yazmalıdır | (`OLCUM-DISIPLINI-CIKARIM.md`) |
@@ -175,13 +177,13 @@ Sayı bir ölçümdür ve bu satır da kapı altındadır: **143 başlık / 10 d
 | dosya | kapsam |
 |---|---|
 | [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | YÖNTEM — ölçüm nasıl yapılır, nasıl YAZILIR (15 başlık) |
-| [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) | KATMAN 1a — ölçümün ARACI (16 başlık) |
+| [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) | KATMAN 1a — ölçümün ARACI (17 başlık) |
 | [`OLCUM-DISIPLINI-YUKLEM.md`](OLCUM-DISIPLINI-YUKLEM.md) | KATMAN 1a′ — YÜKLEM (ne sorduğun) (14 başlık) |
 | [`OLCUM-DISIPLINI-SINIRSIZ.md`](OLCUM-DISIPLINI-SINIRSIZ.md) | YÜKLEM'in § Sınırsız eşleşme VAKA envanteri (3 başlık) |
 | [`OLCUM-DISIPLINI-SUREC.md`](OLCUM-DISIPLINI-SUREC.md) | komutun SÜRECİ ve ORTAMI (4 başlık) |
 | [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | KATMAN 1b — ölçümün KURGUSU (31 başlık) |
 | [`OLCUM-DISIPLINI-ORTAK-AGAC.md`](OLCUM-DISIPLINI-ORTAK-AGAC.md) | KATMAN 1c — PAYLAŞILAN AĞAÇ, ÇOK OTURUM (8 başlık) |
-| [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) | KATMAN 2 — ölçümden sonraki adım (30 başlık) |
+| [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) | KATMAN 2 — ölçümden sonraki adım (31 başlık) |
 | [`OLCUM-DISIPLINI-KAPI.md`](OLCUM-DISIPLINI-KAPI.md) | ölçümü KAPIYA çevirmek (11 başlık) |
 | [`OLCUM-DISIPLINI-KAPI-OLUMU.md`](OLCUM-DISIPLINI-KAPI-OLUMU.md) | kapının ÖLÜMÜ, kırmızının okunması (11 başlık) |
 

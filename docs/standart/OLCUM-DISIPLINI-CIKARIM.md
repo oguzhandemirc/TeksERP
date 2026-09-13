@@ -185,6 +185,26 @@ Kardeşi § "Bu benim değil" bir ÖLÇÜM olmalı.
 ama kapsam değildir; "beyan ettim" ile "ölçtüm" aynı cümle değil. *(1e)*
 Kardeşleri § "Atlanan" sayısı bir ALT SINIRDIR ve § Bir atlama, komşusunu da götürürse.
 
+### Bir KAPANIŞ ÖLÇÜTÜ, ölçtüğü MEKANİZMANIN adını taşımalı — yoksa kendi kendini onaylatır
+Bir dilimin *"bitti"* koşulunu yazarken sonucu tarif etmek kolaydır (*"route
+`/forbidden`e düşer"*); o sonucu ÜRETEN mekanizmayı adıyla yazmak ölçüm gerektirir
+(*"hangi dosya, hangi satır bunu yapıyor?"*). Adsız bir ölçüt, doğrulanırken **kendi
+kendini onaylatır**: doğrulayan kişi de aynı hayali makul bulur ve arar bulamaz —
+ama aramadığını fark etmez, çünkü aradığı şeyin ADI yoktur.
+
+*(Vaka 2026-09-14, kusur 5e'de: bir ekran diliminin kapanış ölçütüne "bayrak
+KAPALIYKEN route `/forbidden`e düşer" yazılmıştı. Ölçüldü: `ProtectedRoute` yalnız
+oturum + izin bakıyor, modül bayrağına HİÇ bakmıyor — cümle hiçbir zaman doğru
+değildi. Dilimi yazan oturum cümleyi kopyaladı, delil olarak da yanlış bölümü
+gösterdi (route izni ↔ katalog aynası). İki oturum, tek hayal.)*
+
+> **Ölçüt yazarken sor: bu cümleyi YANLIŞLAYACAK dosya hangisi?** Cevabı olmayan ölçüt
+> bir temenni, olan ölçüt bir sondadır.
+📌 Pratik biçim: *"<davranış> — <mekanizma dosyası:sembol>, ölçen <bekçi §bölüm>"*.
+Üçü de yazılıysa ölçütü doğrulayan kişi KAYNAĞA gider; yalnız davranış yazılıysa
+belgeye geri döner ve daireyi kapatır.
+Kardeşleri § Beyan, kapsamın YERİNE GEÇMEZ · § Bir kusurun ADI, kusurun YERİ değildir.
+
 ### Ad kalıbı bir ÖLÇÜT değildir
 *"`_CANCEL` yok"* ile *"geri alınamıyor"* **ayrı şeylerdir**. Ölçüt, mekanizmanın
 **BEYAN EDİLMİŞ** olmasıdır; adı serbesttir.

@@ -135,11 +135,32 @@ Vaka 01'e ait: bir bekçinin "yok" sanılması, dosya yerindeyken desenin eşle�
 
 > **Yokluk iddiasını POZİTİF kanıtla kur:** `git ls-files | grep` (ağacın tamamı,
 > `cwd`den bağımsız) — ya da `ls <yol>` çalıştır ve **çıkış kodunu OKU, stderr'i yutma**.
+> ⚠️ Ama `git ls-files`in kendi sınırı var ve aşağıdaki başlık onu anlatıyor: **izlenmeyen
+> dosya o komut için YOKTUR.**
 
 ⚠️ **Ayrı ve hâlâ geçerli bir vaka — aynı üst sınıftan:** bir kapı yanlış dizinden
 koşturulup `MODULE_NOT_FOUND` verdi ve az kalsın *"kapı bozuk"* denecekti. Monorepo'da
 `cwd` gerçekten önemlidir; ama 01'in vakasında **sebep o değildi**. Ve evde zaten yazılı
 olan satırın ihlali: **`>/dev/null` gerekçeyi yutar.**
+
+### Ağacı `git` üzerinden okuyan araç, kümesini İNDEKSTEN alır — yazdığın dosya orada olmayabilir
+`git ls-files` **çalışma dizinini değil İNDEKSİ** listeler. Yeni yazılmış ama `git add`
+edilmemiş bir dosya ağaçta DURUR, o komut için **YOKTUR** — ve fark sessizdir, çünkü
+eksik üye bir hata değil bir **boşluk** üretir; boşluk da çoğu yüklemde yeşildir.
+
+*(Vaka 2026-09-14: `test_belge_capa_atfi` hedef kümesini `git ls-files "*.md"` ile kuruyor.
+Yeni yazılan `OLCUM-DISIPLINI-DIZIN.md` izlenmiyordu ⇒ kapı **"dizin: YOK"** dedi, dosya
+gözümün önünde dururken. `git add` sonrası aynı koşumda 141 satır belirdi. Kapı doğruydu,
+EVRENİ eksikti.)*
+
+> **Bir aracın EVRENİ de bir yüklemdir:** `git ls-files` (indeks) · `find`/`readdir`
+> (çalışma ağacı, `.gitignore`'u görmez) · `git show HEAD:` (son commit) · `git diff --cached`
+> (sahne) **dört FARKLI kümedir** ve aynı soruya farklı cevap verirler.
+📌 Panzehir: *"bu araç hangi evreni okuyor ve bu commit'in içeriği o evrende mi?"* — yeni
+dosya yazdıysan ölçümden ÖNCE `git add`, ya da evreni bilerek çalışma ağacına çevir.
+⚠️ Ve tersi de tuzaktır: cırcır tabanını çalışma ağacından okumak, eş oturumun commit
+etmediği işini kendi sayına katar — bkz. `OLCUM-DISIPLINI-ORTAK-AGAC.md` § Ortak ağaçta
+ölçülen sayı, BAŞKASININ commit'siz işini içerir.
 
 ### Bir tarayıcı, kendi TARİF ETTİĞİ şeyin ÖRNEĞİNİ gerçek sanır
 Biçim tarif eden belgeler (`README`, şablon, başlık örneği) tarayıcının kapsamı
