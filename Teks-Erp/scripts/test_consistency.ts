@@ -28,6 +28,7 @@
 // Koşum: npx tsx scripts/test_consistency.ts
 // =============================================================================
 import { Prisma } from "@prisma/client";
+import { notFixtureSql, notFixtureItemOfRollSql } from "./lib/fikstur-imzasi";
 import prisma from "../src/lib/prisma";
 import { DISPOSITION_NOTE_PREFIXES } from "../src/services/helpers/roll-disposition.helper";
 import { chequeCashEventTypesSql, chequeCashInflowSql } from "../src/services/helpers/cheque-cash-events.helper";
@@ -69,36 +70,6 @@ function check(label: string, ok: boolean, extra = ""): void {
 // yalnız "bu satırları test paketi üretti" KANITLANDIĞINDA eklenir ve gerekçesi
 // `why` alanına yazılır.
 // ─────────────────────────────────────────────────────────────────────────────
-const FIXTURE_PREFIXES = ["TEST-", "TST-", "DEMO-"];
-
-/** `<kolon>` test/demo fixture ön eki taşımıyor mu? (NULL = üretim sayılır, elenmez) */
-function notFixture(column: string): string {
-  const conds = FIXTURE_PREFIXES.map((p) => `${column} NOT LIKE '${p}%'`).join(" AND ");
-  return `(${column} IS NULL OR (${conds}))`;
-}
-
-/**
- * Topun KALEMİ fixture ön eki taşımıyor mu — `<kolon>` topun id'sini (text) verir.
- *
- * ⚠️ NEDEN BARKOD YETMEZ (ölçüldü 2026-09-13): fikstürünü GERÇEK servisten kuran
- * bekçi (`inventory.createInitialEntry`) topa ÜRETİM FORMATINDA barkod verir
- * (`T130926F2770`) — `TEST-`/`TST-` ön eki yoktur ve barkoda bakan süzgeç o topu
- * ÜRETİM verisi sanar. §29 dört satırı tam böyle raporladı; kimlikleri KALEM
- * kodundan çözüldü (`TEST-SSTR-…-KM`). Kalem kodu fikstürün elinde kalan tek
- * güvenilir imzadır, çünkü barkodu servis üretir.
- *
- * Süzgeç DIŞARIDAN korele alt sorguyla uygulanır: `consistency-check.sql`den
- * AYNEN kopyalanan sorgunun metni değişmez (kopya kayması bu dosyanın en pahalı
- * hatası olurdu).
- */
-function notFixtureItemOfRoll(rollIdColumn: string): string {
-  const conds = FIXTURE_PREFIXES.map((p) => `i2.code LIKE '${p}%'`).join(" OR ");
-  return `NOT EXISTS (
-    SELECT 1 FROM rolls r2 JOIN items i2 ON i2.id = r2."itemId"
-    WHERE r2.id = ${rollIdColumn}::uuid AND (${conds})
-  )`;
-}
-
 interface Section {
   /** consistency-check.sql'deki bölüm numarası (izlenebilirlik için birebir) */
   id: string;
@@ -336,7 +307,7 @@ LEFT JOIN work_orders wo ON wo.id = wos."workOrderId"
 WHERE r.status = 'IN_PRODUCTION'
   AND (r."currentStepId" IS NULL OR wo.id IS NULL OR wo.status IN ('CANCELLED','SUPERSEDED'))`,
     noise: {
-      where: `WHERE ${notFixture(`drift.barcode`)}`,
+      where: `WHERE ${notFixtureSql(`drift.barcode`)}`,
       why: "manuel-taşıma testleri (TEST-MM-…) adımsız top bırakır; üretim barkodu 'T…' formatındadır",
     },
   },
@@ -461,7 +432,7 @@ WHERE r.status = 'AT_SUBCONTRACTOR'
     WHERE sdi."rollId" = r.id AND sd."cancelledAt" IS NULL
   )`,
     noise: {
-      where: `WHERE ${notFixture(`drift.barcode`)}`,
+      where: `WHERE ${notFixtureSql(`drift.barcode`)}`,
       why: "SQL dosyasının kendi notu: seed'li/test'li ortamda statü dispatch'siz yazılır — üretimde her satır gerçek anomalidir",
     },
   },
@@ -482,7 +453,7 @@ WHERE tc.id IS NULL
       //      temizliği yarım kalmış bir testin izidir (adımlar + kart silinmiş, WO
       //      bir FK'ya takıldığı için kalmış). Gerçek bir "kart atlama" regresyonu
       //      adımları OLAN bir WO üretir, yani kapı zayıflamaz.
-      where: `WHERE ${notFixture(`drift."workOrderNumber"`)}
+      where: `WHERE ${notFixtureSql(`drift."workOrderNumber"`)}
                 AND EXISTS (SELECT 1 FROM work_order_steps s WHERE s."workOrderId" = drift.id)`,
       why: "fixture WO'ları + adımı silinmiş (yarım temizlenmiş) test kalıntıları",
     },
@@ -614,7 +585,7 @@ WHERE a.kayitli <> (CASE WHEN a.acik > 0 THEN 'ACTIVE'
                          WHEN a.bekleyen = 0 THEN 'COMPLETED'
                          ELSE 'ACTIVE' END)`,
     noise: {
-      where: `WHERE ${notFixture(`drift."workOrderNumber"`)}`,
+      where: `WHERE ${notFixtureSql(`drift."workOrderNumber"`)}`,
       why: "fixture WO'ları: testler adım durumunu doğrudan yazar / yarım temizler (ölçüm: 305 driftin 305'i fixture)",
     },
   },
@@ -823,7 +794,7 @@ WHERE s."itemId" IS NULL`,
     // kodu fikstür ön eki taşıyorsa satır test artığıdır. Fabrikada `TEST-` kalem
     // yok, yani ölçüm kaybı bilinen ve sıfır.
     noise: {
-      where: `WHERE ${notFixture("drift.barcode")} AND ${notFixtureItemOfRoll("drift.kayit")}`,
+      where: `WHERE ${notFixtureSql("drift.barcode")} AND ${notFixtureItemOfRollSql("drift.kayit")}`,
       why: "bekçi fikstürleri deposuz stok topu bırakıyor — barkod VEYA kalem kodu ön ekinden elenir (ayrı borç, §29 üretimi ölçer)",
     },
     sql: `

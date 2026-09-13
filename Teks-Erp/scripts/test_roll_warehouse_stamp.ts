@@ -20,11 +20,13 @@
 //      Bu kontrol testin kalbi: kesmek malı TAŞIMAZ. Ebeveyn varsayılan-DIŞI bir
 //      depoya konur; kod mirası atlayıp varsayılana yazarsa burası kırmızı olur.
 // =============================================================================
-import { RollStatus } from "@prisma/client";
+import { Prisma, RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { InventoryService } from "../src/services/inventory.service";
 import { TamburService } from "../src/services/tambur.service";
 import { ensureDefaultWarehouse, type DefaultWarehouseResult } from "../src/jobs/default-warehouse.job";
+import { WAREHOUSE_STOCK_STATUSES } from "../src/services/helpers/warehouse-stock.helper";
+import { fikstursuzTopWhere } from "./lib/fikstur-imzasi";
 
 const inventory = new InventoryService();
 const tambur = new TamburService();
@@ -47,6 +49,34 @@ const createdRollIds: string[] = [];
 const createdWarehouseIds: string[] = [];
 const TAG = `TEST-WH-${Date.now()}`;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ÖLÇÜLEN KÜME — "deposuz top" DEĞİL, "deposuz STOK topu" (K1)
+//
+// ⚠️ YÜKLEM 2026-09-13'te DÜZELTİLDİ, daraltılmadı: eski hâli `warehouseId: null`
+// olan HER topu kusur sayıyordu. Oysa K1 uç şekli şunu SÖYLER:
+//     uç.warehouseId === null  ⇔  uç.status ∉ WAREHOUSE_STOCK_STATUSES
+// yani statüsü stok kümesinde OLMAYAN topun deposu NULL OLMAK ZORUNDADIR. Eski
+// yüklem doğru sevk edilmiş (`SHIPPED`), fire olmuş (`SCRAP`) ya da iptal edilmiş
+// her topu "deposuz top" diye raporluyordu — DEĞİŞMEZİN TERSİNİ ölçüyordu.
+// Ölçüldü: kırmızı veren 8 satırın 8'i `SHIPPED` + deposuz, yani K1'e UYGUN.
+//
+// Bu sınıf en pahalı bekçi kusurudur: düzeltmeye çalışan kişi, deposuz bırakılması
+// GEREKEN topa depo yazarak — yani sistemi bozarak — yeşil alır.
+//
+// Doğru küme `test_consistency` §29'un yüklemiyle AYNI olmalı (iki yüzey tek
+// gerçeği söyler): deposu NULL **ve** statüsü stok kümesinde.
+// ─────────────────────────────────────────────────────────────────────────────
+const DEPOSUZ_STOK_TOPU_HER_KAYNAK = {
+  warehouseId: null,
+  status: { in: [...WAREHOUSE_STOCK_STATUSES] },
+} satisfies Prisma.RollWhereInput;
+
+/** Aynı küme, fikstür artığı elenmiş — imza `lib/fikstur-imzasi`de TEK kaynakta. */
+const DEPOSUZ_STOK_TOPU_WHERE = {
+  ...DEPOSUZ_STOK_TOPU_HER_KAYNAK,
+  ...fikstursuzTopWhere(),
+} satisfies Prisma.RollWhereInput;
+
 /**
  * Kırmızı satır NE YAPILACAĞINI söylesin: deposuz top iki ayrı sebepten doğar ve
  * panzehirleri farklıdır. Tahmin edilmez, ÖLÇÜLÜR.
@@ -67,10 +97,7 @@ async function deposuzTanisi(runStart: Date, def: DefaultWarehouseResult): Promi
         "(eski davranış `null` döndürmekti — top deposuz doğar, bekçi yeşil kalırdı). · ";
 
   const enYeni = await prisma.roll.findFirst({
-    where: {
-      warehouseId: null,
-      NOT: [{ barcode: { startsWith: "TEST" } }, { barcode: { startsWith: "TST" } }],
-    },
+    where: DEPOSUZ_STOK_TOPU_WHERE,
     orderBy: { createdAt: "desc" },
     select: { createdAt: true, barcode: true },
   });
@@ -228,7 +255,13 @@ async function main(): Promise<void> {
   // burada birikiyor ve bu bekçi KOD sağlamken sonsuza dek kırmızı kalıyordu.
   // Bekçinin sorusu iki ayrı ölçüye bölündü:
   //   1) BU KOŞUMDA doğan her top damgalı mı (etiketin gerçekten söylediği şey),
-  //   2) CANLI/gerçek veride (test ön eki DIŞINDA) deposuz top var mı.
+  //   2) CANLI/gerçek veride (test ön eki DIŞINDA) deposuz STOK topu var mı.
+  //
+  // ⚠️ YUKARIDAKİ "140, hepsi test ön ekli" ÖLÇÜMÜ KAPSAMINI YİTİRDİ (2026-09-13):
+  // o ölçüm alındığında artıkların hepsi ön ekliydi, ama fikstürünü GERÇEK
+  // servisten kuran bekçi topa ÜRETİM FORMATINDA barkod verir (`T130926F2770`) ve
+  // ön ek taşımaz ⇒ test artığı "canlı veri" sayılır. İmza artık iki kolondan
+  // okunuyor (barkod VEYA kalem kodu), tek kaynak `lib/fikstur-imzasi`.
   const bornThisRun = await prisma.roll.count({ where: { createdAt: { gte: runStart } } });
   check(
     "Körlük zemini: bu koşumda top doğdu (damga ölçümü anlamlı)",
@@ -252,15 +285,10 @@ async function main(): Promise<void> {
   // create noktasının kapsaması buradan görünür. Test artıkları sayımdan
   // ÇIKARILIR ama gizlenmez: adedi basılır ki "0 çıktı çünkü hiç bakılmadı"
   // ile "0 çıktı çünkü temiz" ayırt edilebilsin.
-  const nullTotal = await prisma.roll.count({ where: { warehouseId: null } });
-  const nullReal = await prisma.roll.count({
-    where: {
-      warehouseId: null,
-      NOT: [{ barcode: { startsWith: "TEST" } }, { barcode: { startsWith: "TST" } }],
-    },
-  });
+  const nullTotal = await prisma.roll.count({ where: DEPOSUZ_STOK_TOPU_HER_KAYNAK });
+  const nullReal = await prisma.roll.count({ where: DEPOSUZ_STOK_TOPU_WHERE });
   check(
-    "Test-dışı deposuz top yok (canlı veri damgalı)",
+    "Test-dışı deposuz STOK topu yok (canlı veri damgalı; stok DIŞI top deposuz OLMALI)",
     nullReal === 0,
     // ⚠️ PAYDA BASILIR: "0 bulundu çünkü 5.813 top tarandı" ile "0 bulundu
     // çünkü hiç top yok" çıktıdan ayırt edilemiyordu — iki ortamda bayt bayt
