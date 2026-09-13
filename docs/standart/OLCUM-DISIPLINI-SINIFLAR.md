@@ -237,7 +237,7 @@ turu; a maddesi sha'lı — `5ac6e830`)*:
 | # | Biçim | Vaka |
 |---|---|---|
 | a | araç gözlenenin içinde | sentinel elenmedi, 8 karakteri gezildi → 216 sahte kırmızı (§ Mutasyonun ürettiği sayı) |
-| b | **mutasyon UYGULANMADI** | `sed` çapası tutmadı; "kapı ısırmadı" görüldü. İkinci denemede hedef bekçi **yoktu** (ad yanlıştı) |
+| b | **mutasyon UYGULANMADI** | `sed` çapası tutmadı; "kapı ısırmadı" görüldü. İkinci denemede hedef bekçi **yoktu** (ad yanlıştı). İki mekanizma daha ölçüldü (82, 2026-09-13): `sed '0,/…/s//…/'` deseni satır sonu biçimine uymadı ⇒ dosya DEĞİŞMEDİ, çıktıda `❌` yoktu ve "sonda yeşil kaldı" yazılacaktı; ve arka plan kabuğu `LANG` taşımadığı için Python heredoc'u Türkçe karakterde `SyntaxError` verdi ⇒ yama uygulanmadan `typecheck RC=0` **yeşil** geldi |
 | c | **beyan basılmadı** | beyan ÖZET satırındaydı; tüm dosyalar elenince özet hiç koşmadı — *"sessiz dışlama olmasın"* satırı tam o durumda sessizdi |
 | d | sonuç okunmadı | ölçüm ile eylem aynı zincirdeydi (`OLCUM-DISIPLINI-ARAC.md` § KABUK ailesi c) |
 | e | çıktı kırpıldı | `tail` beyanın bulunduğu başı kesti (aynı yer, f) |
@@ -248,6 +248,17 @@ turu; a maddesi sha'lı — `5ac6e830`)*:
 *"taban sert değil"* yazılacaktı.
 
 > **Sonda, MUTASYONUN UYGULANDIĞINI ve DOĞRU ALANA dokunduğunu da ölçer.**
+
+**Panzehir — iki adım, ikisi de ÖLÇÜM (82, 2026-09-13):**
+1. **Değişikliği doğrula:** `shasum` önce/sonra FARKLI olmalı (ya da Python'da
+   `assert old in s`). *"`sed` sessizce eşleşmedi"* bir SONUÇTUR, hata değil — kabuk
+   çıkış kodu 0 döner ve hiçbir şey yazmaz.
+2. **Kırmızıyı ADIYLA bekle:** hangi bölüm, hangi mesaj. ***`❌` YOKLUĞU ≠ sonda geçti***
+   — beklenen kırmızının metnini önceden yaz, sonra ara.
+
+⚠️ **Farkı kardeşlerinden:** § Sessiz kapı ölümü'nde ve *tek yönlü ölçülen kapı*da KAPI
+ölüdür; burada **kapı sağlamdır, SONDA ölüdür** — ve ölü bir sonda kapıyı
+*doğrulanmış* gösterir, yani zararı kapının ölümünden daha uzun yaşar.
 
 ### Bir sondanın DÜNKÜ sonucu, bugünkü koda dair bir iddia değildir
 Sonda bir kereye mahsus bir tören değil, **bir ölçümdür** — ve ölçümler bayatlar.
