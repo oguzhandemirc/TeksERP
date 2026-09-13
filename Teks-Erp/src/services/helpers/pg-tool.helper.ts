@@ -39,14 +39,14 @@ export function pgTool(name: PgToolName): string {
 // açılmaz. `pgTool()` `PG_BIN_DIR` yoksa PATH'e düşer ⇒ bu saha için de gerçek.
 
 /** Üç sonuç, iki değil: "araç YOK" ile "araç UYUMSUZ" aynı şey DEĞİLDİR. */
-export type SurumUyumu =
-  | { sonuc: "uyumlu"; istemci: number; sunucu: number }
-  | { sonuc: "istemci-yeni"; istemci: number; sunucu: number }
-  | { sonuc: "olculemedi"; sebep: string };
+export type VersionCompat =
+  | { result: "compatible"; client: number; server: number }
+  | { result: "client-newer"; client: number; server: number }
+  | { result: "unmeasured"; reason: string };
 
 /** `pg_dump (PostgreSQL) 18.6` → 18. Okunamazsa null (uyumsuz DEĞİL, ölçülemedi). */
-export function istemciAnaSurumu(versionCiktisi: string | null | undefined): number | null {
-  const m = /\b(\d+)(?:\.\d+)*\s*$/.exec((versionCiktisi ?? "").trim());
+export function clientMajorVersion(versionOutput: string | null | undefined): number | null {
+  const m = /\b(\d+)(?:\.\d+)*\s*$/.exec((versionOutput ?? "").trim());
   return m ? Number(m[1]) : null;
 }
 
@@ -55,28 +55,34 @@ export function istemciAnaSurumu(versionCiktisi: string | null | undefined): num
  * sınar; gerçek bir PG 18 kurulumu GEREKMEZ (yoksa bekçi "yalnız bir makinede
  * koşan" sınıfına düşerdi).
  */
-export function surumUyumu(istemci: number | null, sunucuVersionNum: number | null): SurumUyumu {
-  if (istemci === null) return { sonuc: "olculemedi", sebep: "istemci sürümü okunamadı" };
-  if (sunucuVersionNum === null || sunucuVersionNum <= 0) {
-    return { sonuc: "olculemedi", sebep: "sunucu sürümü okunamadı" };
+export function versionCompat(client: number | null, serverVersionNum: number | null): VersionCompat {
+  if (client === null) return { result: "unmeasured", reason: "istemci sürümü okunamadı" };
+  if (serverVersionNum === null || serverVersionNum <= 0) {
+    return { result: "unmeasured", reason: "sunucu sürümü okunamadı" };
   }
-  const sunucu = Math.floor(sunucuVersionNum / 10000);
-  return istemci > sunucu ? { sonuc: "istemci-yeni", istemci, sunucu } : { sonuc: "uyumlu", istemci, sunucu };
+  const server = Math.floor(serverVersionNum / 10000);
+  return client > server
+    ? { result: "client-newer", client, server }
+    : { result: "compatible", client, server };
 }
 
+/** Türkçe iz metninde yolun adı — ayırt edici İngilizce, kullanıcıya görünen ad Türkçe ([IL-16]). */
+const PATH_LABEL: Record<"backup" | "restore", string> = { backup: "yedek", restore: "geri-yükleme" };
+
 /** İz metni — "uyardım" bir kapı değildir; okunabilir iz bırakmıyorsa hiç olmamıştır. */
-export function surumUyumuMetni(u: SurumUyumu, yol: "yedek" | "geri-yükleme"): string {
-  if (u.sonuc === "olculemedi") {
-    return `PostgreSQL sürüm uyumu ÖLÇÜLEMEDİ (${u.sebep}) — ${yol} yolu devam ediyor, uyum GARANTİ EDİLMİYOR.`;
+export function versionCompatMessage(compat: VersionCompat, path: "backup" | "restore"): string {
+  const yol = PATH_LABEL[path];
+  if (compat.result === "unmeasured") {
+    return `PostgreSQL sürüm uyumu ÖLÇÜLEMEDİ (${compat.reason}) — ${yol} yolu devam ediyor, uyum GARANTİ EDİLMİYOR.`;
   }
-  if (u.sonuc === "istemci-yeni") {
+  if (compat.result === "client-newer") {
     return (
-      `PostgreSQL istemcisi (${u.istemci}) sunucudan (${u.sunucu}) YENİ — ${yol} yolu. ` +
+      `PostgreSQL istemcisi (${compat.client}) sunucudan (${compat.server}) YENİ — ${yol} yolu. ` +
       `Bu istemciyle alınan yedek bu sunucuya GERİ YÜKLENEMEZ. ` +
       `Çözüm: PG_BIN_DIR'i sunucu sürümüyle aynı aileden bir bin klasörüne gösterin.`
     );
   }
-  return `PostgreSQL sürüm uyumu: istemci ${u.istemci} ↔ sunucu ${u.sunucu}.`;
+  return `PostgreSQL sürüm uyumu: istemci ${compat.client} ↔ sunucu ${compat.server}.`;
 }
 
 /**
@@ -85,11 +91,11 @@ export function surumUyumuMetni(u: SurumUyumu, yol: "yedek" | "geri-yükleme"): 
  * diğeri kalır ve uyum kapısı yalnız BİR yolda çalışır.
  * `server_version_num`: 16.15 → 160015.
  */
-export const SUNUCU_SURUM_SQL = `SELECT current_setting('server_version_num') AS v`;
+export const SERVER_VERSION_SQL = `SELECT current_setting('server_version_num') AS v`;
 
-/** `SUNUCU_SURUM_SQL` sonucunu sayıya çevirir. Okunamazsa null (uyumsuz DEĞİL). */
-export function sunucuSurumNumarasi(ham: string | null | undefined): number | null {
-  const n = Number((ham ?? "").trim());
+/** `SERVER_VERSION_SQL` sonucunu sayıya çevirir. Okunamazsa null (uyumsuz DEĞİL). */
+export function serverVersionNumber(raw: string | null | undefined): number | null {
+  const n = Number((raw ?? "").trim());
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
@@ -100,15 +106,15 @@ export function sunucuSurumNumarasi(ham: string | null | undefined): number | nu
  * sözleşmesi bozulmaz. Okunamazsa null döner — **fırlatmaz**, çünkü bu yol
  * hiçbir işi durdurmamalı.
  */
-const istemciSurumOnbellegi = new Map<string, number | null>();
-export async function istemciSurumu(name: PgToolName): Promise<number | null> {
-  const yol = pgTool(name);
-  const onbellek = istemciSurumOnbellegi.get(yol);
-  if (onbellek !== undefined) return onbellek;
-  const r = await runProcess(yol, ["--version"], { captureStdout: true, timeoutMs: 15_000 });
-  const surum = r.spawnError !== null || r.code !== 0 ? null : istemciAnaSurumu(r.stdout);
-  istemciSurumOnbellegi.set(yol, surum);
-  return surum;
+const clientVersionCache = new Map<string, number | null>();
+export async function clientVersion(name: PgToolName): Promise<number | null> {
+  const toolPath = pgTool(name);
+  const cached = clientVersionCache.get(toolPath);
+  if (cached !== undefined) return cached;
+  const r = await runProcess(toolPath, ["--version"], { captureStdout: true, timeoutMs: 15_000 });
+  const version = r.spawnError !== null || r.code !== 0 ? null : clientMajorVersion(r.stdout);
+  clientVersionCache.set(toolPath, version);
+  return version;
 }
 
 /**
@@ -119,28 +125,28 @@ export async function istemciSurumu(name: PgToolName): Promise<number | null> {
  * Okuyucu fırlatırsa sonuç "ölçülemedi"dir ve hata metni **gerekçeye yazılır** —
  * yokluğa mekanizma atfedilmez, ölçülen sebep iz bırakır.
  */
-export async function surumUyumuOlc(
-  istemciOku: () => Promise<number | null>,
-  sunucuOku: () => Promise<number | null>,
-): Promise<SurumUyumu> {
-  let istemci: number | null = null;
-  let sunucu: number | null = null;
-  const okumaNotu: string[] = [];
+export async function measureVersionCompat(
+  readClient: () => Promise<number | null>,
+  readServer: () => Promise<number | null>,
+): Promise<VersionCompat> {
+  let client: number | null = null;
+  let server: number | null = null;
+  const readNotes: string[] = [];
   try {
-    istemci = await istemciOku();
+    client = await readClient();
   } catch (e) {
-    okumaNotu.push(`istemci: ${e instanceof Error ? e.message : String(e)}`);
+    readNotes.push(`istemci: ${e instanceof Error ? e.message : String(e)}`);
   }
   try {
-    sunucu = await sunucuOku();
+    server = await readServer();
   } catch (e) {
-    okumaNotu.push(`sunucu: ${e instanceof Error ? e.message : String(e)}`);
+    readNotes.push(`sunucu: ${e instanceof Error ? e.message : String(e)}`);
   }
-  const u = surumUyumu(istemci, sunucu);
-  if (u.sonuc === "olculemedi" && okumaNotu.length > 0) {
-    return { sonuc: "olculemedi", sebep: `${u.sebep} — ${okumaNotu.join("; ")}` };
+  const compat = versionCompat(client, server);
+  if (compat.result === "unmeasured" && readNotes.length > 0) {
+    return { result: "unmeasured", reason: `${compat.reason} — ${readNotes.join("; ")}` };
   }
-  return u;
+  return compat;
 }
 
 export interface ToolResult {

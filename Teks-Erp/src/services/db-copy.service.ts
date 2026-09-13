@@ -41,13 +41,13 @@ import {
 } from "./helpers/pg-admin-client";
 import { pgToolArgs, quoteIdent, quoteLiteral, withDatabase } from "./helpers/pg-conn.helper";
 import {
-  SUNUCU_SURUM_SQL,
-  istemciSurumu,
+  SERVER_VERSION_SQL,
+  clientVersion,
   pgTool,
   runTool,
-  sunucuSurumNumarasi,
-  surumUyumuMetni,
-  surumUyumuOlc,
+  serverVersionNumber,
+  versionCompatMessage,
+  measureVersionCompat,
 } from "./helpers/pg-tool.helper";
 import { hata } from "../lib/logger";
 import {
@@ -594,17 +594,17 @@ async function runCopyJob(
   // ve HEMEN düşürür (`--exit-on-error`) — yani arıza görünür ve kendi hata
   // yolundan raporlanır. Ön kapı takmak, gerçek hatayı gizlemekten başka bir şey
   // yapmazdı; uyarı ise "kod 1" çıktısına SEBEBİ ekler.
-  const uyum = await surumUyumuOlc(
-    () => istemciSurumu("pg_restore"),
+  const compat = await measureVersionCompat(
+    () => clientVersion("pg_restore"),
     async () => {
-      const r = await prisma.$queryRawUnsafe<Array<{ v: string }>>(SUNUCU_SURUM_SQL);
-      return sunucuSurumNumarasi(r[0]?.v);
+      const r = await prisma.$queryRawUnsafe<Array<{ v: string }>>(SERVER_VERSION_SQL);
+      return serverVersionNumber(r[0]?.v);
     },
   );
-  const uyumMetni = uyum.sonuc === "uyumlu" ? null : surumUyumuMetni(uyum, "geri-yükleme");
-  if (uyumMetni) {
-    hata("db-copy", uyumMetni);
-    setPhase("restoring", uyumMetni);
+  const compatMessage = compat.result === "compatible" ? null : versionCompatMessage(compat, "restore");
+  if (compatMessage) {
+    hata("db-copy", compatMessage);
+    setPhase("restoring", compatMessage);
   }
   const jobs = Number(process.env.PG_RESTORE_JOBS) > 1 ? Number(process.env.PG_RESTORE_JOBS) : 1;
   const restore = await runTool(
@@ -622,7 +622,7 @@ async function runCopyJob(
     await finishJob(
       false,
       `pg_restore başarısız (kod ${restore.code}): ${restore.stderr.trim().slice(0, 400)}` +
-        (uyumMetni ? ` [${uyumMetni}]` : "") +
+        (compatMessage ? ` [${compatMessage}]` : "") +
         (dropErr ? ` — kopya SİLİNEMEDİ (${dropErr}), elle silin.` : " — kopya silindi."),
       "restoring",
     );

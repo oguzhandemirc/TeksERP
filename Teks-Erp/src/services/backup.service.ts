@@ -37,13 +37,13 @@ import {
   type PgConn,
 } from "./helpers/pg-conn.helper";
 import {
-  SUNUCU_SURUM_SQL,
-  istemciSurumu,
+  SERVER_VERSION_SQL,
+  clientVersion,
   pgTool,
   runTool,
-  sunucuSurumNumarasi,
-  surumUyumuMetni,
-  surumUyumuOlc,
+  serverVersionNumber,
+  versionCompatMessage,
+  measureVersionCompat,
 } from "./helpers/pg-tool.helper";
 import prisma from "../lib/prisma";
 import { uyari } from "../lib/logger";
@@ -236,18 +236,18 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
   // ⚠️ "Sürüm okunamadı" DURDURMAZ, yalnız iz bırakır: `PG_BIN_DIR` yoksa PATH'e
   // düşülüyor ve araç bulunamayan her kurulumda yedeği durdurmak, çözdüğümüzden
   // büyük bir arıza olurdu (üç sonuç, iki değil).
-  const uyum = await surumUyumuOlc(
-    () => istemciSurumu("pg_dump"),
+  const compat = await measureVersionCompat(
+    () => clientVersion("pg_dump"),
     async () => {
-      const r = await prisma.$queryRawUnsafe<Array<{ v: string }>>(SUNUCU_SURUM_SQL);
-      return sunucuSurumNumarasi(r[0]?.v);
+      const r = await prisma.$queryRawUnsafe<Array<{ v: string }>>(SERVER_VERSION_SQL);
+      return serverVersionNumber(r[0]?.v);
     },
   );
-  if (uyum.sonuc === "istemci-yeni") {
-    return finish(false, surumUyumuMetni(uyum, "yedek"), null);
+  if (compat.result === "client-newer") {
+    return finish(false, versionCompatMessage(compat, "backup"), null);
   }
-  if (uyum.sonuc === "olculemedi") {
-    uyari("yedek", surumUyumuMetni(uyum, "yedek"));
+  if (compat.result === "unmeasured") {
+    uyari("backup", versionCompatMessage(compat, "backup"));
   }
 
   running = true;
