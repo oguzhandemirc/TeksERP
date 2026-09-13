@@ -24,6 +24,7 @@ import { openLineWhere } from "./helpers/order-line-scope.helper";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { resolveTargetWarehouseId, warehouseStampManyTx } from "./helpers/warehouse.helper";
 import { postStockMoves } from "./helpers/warehouse-ledger.helper";
+import { assertRollsHaveWarehouse, WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { v4 as uuidv4 } from "uuid";
 import { ApiResponse } from "../types/api.types";
@@ -1347,6 +1348,18 @@ export class SubcontractorService {
       // ÇIKAMAZ (2026-07-30 hayalet-içerik guard'ı; pre-check'in tx-içi ikizi).
       // Meşru top dışlanmaz — iş emrine bağlı top invariant gereği çuvalsızdır
       // (attachRolls F5 sackId/shipmentId null şartı koyar).
+      // ⚠️ ÇIKIŞ UCUNUN KANITI CLAIM'DEN ÖNCE OKUNUR: flip `status`u ezdiği için
+      // sevk sonrası "hangi durumdan çıktı" sorusu cevapsız kalır — sevkteki
+      // `preShipStatus` gibi bir kolon BURADA YOK. Claim başarılıysa (sayı
+      // eşleşmesi aşağıda zorunlu) bu küme ile claim kümesi AYNIDIR.
+      const cikisKaniti = await tx.roll.findMany({
+        where: { id: { in: dispatchRollIds } },
+        select: { id: true, status: true, warehouseId: true, currentQty: true, barcode: true },
+      });
+      const stoktanCikanlar = cikisKaniti.filter((r) => WAREHOUSE_STOCK_STATUSES.includes(r.status));
+      // K6 — stok kümesinden ÇIKAN yol: deposuz top 409 + barkod listesi.
+      // (Ölçüldü 2026-09-13: fabrika kopyasında deposuz stok topu 0 ⇒ maruziyet yok.)
+      assertRollsHaveWarehouse(stoktanCikanlar, "Fasona gönderilemez");
       const claimed = await tx.roll.updateMany({
         where: {
           id: { in: dispatchRollIds },
@@ -1360,6 +1373,31 @@ export class SubcontractorService {
       if (claimed.count !== dispatchRollIds.length) {
         throw AppError.conflict(
           "Toplardan biri bu sırada başka bir sevke alınmış, farklı bir adıma taşınmış ya da bir çuvala okutulmuş. Listeyi yenileyip tekrar deneyin."
+        );
+      }
+
+      // DEPO DEFTERİ — mal stok kümesinden ÇIKTI (fason firmasına). ⚠️ YALNIZ
+      // `STOCK`tan çıkan top satır yazar: claim yüklemi `IN_PRODUCTION | STOCK`
+      // kabul ediyor ve `IN_PRODUCTION` stok kümesinde DEĞİLDİR — oradan çıkan top
+      // için "stok dışından stok dışına" satır yazılmaz (tasarım §64). Bu bir
+      // SESSİZ ATLAMA değil, OLAY YOKLUĞUDUR.
+      //
+      // ⚠️ Bu yol 2026-09-13'e kadar deftere HİÇ satır yazmıyordu (tüm serviste
+      // tek defter çağrısı vardı: kabul) ⇒ `STOCK`tan fasona çıkan top defterde iz
+      // bırakmıyordu. `Roll.warehouseId` bilerek temizlenmez (dönüş adresi), o
+      // yüzden çıkışı yalnız bu satır kaydeder — sevkteki kalıbın aynısı.
+      if (stoktanCikanlar.length > 0) {
+        await postStockMoves(
+          tx,
+          stoktanCikanlar.map((r) => ({
+            rollId: r.id,
+            eventType: WarehouseEventType.EXTERNAL, // şema: "üçüncü şahıs — fason/kartela çıkışı
+            qty: r.currentQty,
+            from: { warehouseId: r.warehouseId, status: r.status },
+            to: { warehouseId: null, status: RollStatus.AT_SUBCONTRACTOR },
+            reasonCode: STOCK_MOVE_REASON.FASON_DISPATCH,
+            userId: userId ?? null,
+          })),
         );
       }
 

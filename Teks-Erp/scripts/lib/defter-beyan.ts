@@ -125,10 +125,19 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     // sebep koduyla `reverseStockMove`/`reverseLegacyStockMove` çağırıyor (6e dalında
     // ölçüldü). Kapanan borç satırı SİLİNİR — kapanmış borca sonda yazmak ölü muaf
     // üretir, ve açık borç listesinde durması listeyi ağırlıksızlaştırır.
+    // `EXTERNAL` borcu DARALDI (2026-09-13, 6e dalı): fason SEVKİ artık EXTERNAL
+    // yazıyor (`subcontractor.service.dispatch` → `from {depo, STOCK}` →
+    // `to {∅, AT_SUBCONTRACTOR}`, sebep `FASON_DISPATCH`). Borç KAPANMADI: kartela
+    // yolu (`kartela.service.ts::dispatch` + `::cancelDispatch`) hâlâ hiçbir satır
+    // yazmıyor. ⚠️ `kanitSondasi` KALDIRILDI çünkü `ENUM_DEGERI_YAZILMIYOR` artık
+    // yanlış bir iddia (değer YAZILIYOR) ve "fasonda yazılıyor ama kartelada
+    // yazılmıyor"ı anlatan bir sonda türü bu beyanın biçiminde YOK — yeni bir tür
+    // eklemek beyanı devralmak değil yeniden yazmak olurdu. Borcun ölçüsü artık
+    // K'dır: `scripts/lib/stok-defteri-bag-olcumu.ts` kartela ×2'yi BAĞSIZ sayıyor
+    // ve kapısı `test_stok_defteri_bag_olcumu`dur (K = 4, 2026-09-13).
     { borc: [{
-      ne: "`EXTERNAL` olayının YAZAN YOLU YOK — fason ve kartela firmasına çıkış/dönüş deftere EXTERNAL olarak düşmüyor",
-      kanit: "şema yorumu onu \"üçüncü şahıs: fason ve kartela firmasına çıkış / dönüş\" diye tanımlıyor, fason dönüşü ise ENTRY yazıyor",
-      kanitSondasi: { tur: "ENUM_DEGERI_YAZILMIYOR", enumAdi: "WarehouseEventType", deger: "EXTERNAL" },
+      ne: "`EXTERNAL` olayını KARTELA yolu yazmıyor — kartela firmasına çıkış/dönüş deftere hiç düşmüyor (fason sevki 2026-09-13'te bağlandı)",
+      kanit: "şema yorumu onu \"üçüncü şahıs: fason ve kartela firmasına çıkış / dönüş\" diye tanımlıyor; fason sevki artık EXTERNAL yazıyor, kartela sevki/iptali hâlâ hiçbir kapıdan geçmiyor (K = 4)",
       sahibi: "depo/stok defteri alanı",
     }] }),
 
