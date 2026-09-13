@@ -2,12 +2,14 @@
 // test_latency_persist — günlük özet kalıcılaştırması (GERÇEK DB, TEST- verisi)
 // =============================================================================
 // Koşum: npx tsx scripts/test_latency_persist.ts
-// Sözleşmeler: flush merge-upsert (gün içi toplanır), bucket'lar korunur,
+//   Saat dilimi sondası CI gibi: TZ=UTC npx tsx scripts/test_latency_persist.ts
+// Sözleşmeler: gün anahtarı tek kaynak (constants/time.ts, saat diliminden
+// bağımsız), flush merge-upsert (gün içi toplanır), bucket'lar korunur,
 // history persentili birleşik bucket'tan ve max'ı aşmaz, retention 90+ günü
 // siler, flush hataları isteği düşürmez (sağlık sayacı).
 
 import prisma from "../src/lib/prisma";
-import { factoryYmd } from "../src/constants/time";
+import { factoryDayKeyUtcMidnight, factoryYmd } from "../src/constants/time";
 import {
   noteLatencyDelta,
   flushLatencyNow,
@@ -43,13 +45,45 @@ const ROUTE = `/api/TEST-perf-${RUN}`; // benzersiz TEST- anahtarı
 const KEY = `GET ${ROUTE}`;
 const OLD_KEY = `GET /api/TEST-perf-old-${RUN}`;
 
-// Servisin gün temsiliyle AYNI: yerel Y/M/D + UTC-midnight (DATE kolonuna
-// UTC gün-parçası yazıldığı için — bkz. latency-persist.service localDay).
-function localDay(offsetDays = 0): Date {
-  const n = new Date();
-  const d = new Date(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate()));
+// Gün anahtarı TEK KAYNAKTAN (constants/time.ts) — servisin `localDay`i de aynı
+// fonksiyona bağlı. Eski hâli süreç saat dilimiyle (`getFullYear()` vb.) kendi
+// gününü üretiyordu: UTC koşan CI'da 21:00Z–00:00Z (İstanbul 00:00–03:00) servis
+// fabrika gününe yazarken test bir önceki güne bakıyor, her gece 3 saat kırmızı
+// pencere açılıyordu (ölçüldü 2026-09-14, koşum 21:08Z: 11/16).
+function localDay(offsetDays = 0, at: Date = new Date()): Date {
+  const d = factoryDayKeyUtcMidnight(at);
   d.setUTCDate(d.getUTCDate() + offsetDays);
   return d;
+}
+
+/**
+ * NEGATİF SONDA — gerçek saati beklemeden: testin gün anahtarı, sözleşmenin
+ * (`factoryYmd`) gününe SABİT anlarda eşit olmalı. 21:30Z fabrika için ERTESİ
+ * gündür; süreç saat dilimine dayanan bir helper `TZ=UTC` altında burada 09-13
+ * üretir ve kırmızı verir (mutasyon: `localDay`i eski Y/M/D hâline çevir).
+ * `TEST_LATENCY_NOW` (ISO) verilirse o an da listeye eklenir.
+ */
+function checkDaySourceAgainstContract(): void {
+  const instants = [
+    ["2026-09-13T21:30:00Z", "2026-09-14"], // İstanbul 00:30 — kırmızı pencerenin içi
+    ["2026-09-13T20:59:59Z", "2026-09-13"], // İstanbul 23:59:59 — pencerenin hemen öncesi
+    // Kış anı MEVSİM FARKI ÖLÇMEZ, mevsim farkı OLMADIĞINI kilitler: Türkiye 2016'dan
+    // beri sabit UTC+3, DST yok ⇒ 21:30Z her mevsim ertesi gündür. tzdata DST'yi
+    // geri getirirse ya da ofset "yazın +3 kışın +2" diye elle yazılırsa BU satır
+    // kırmızı verir — beklentiyi 01-15'e çevirmek sondayı öldürür.
+    ["2026-01-15T21:30:00Z", "2026-01-16"],
+  ];
+  const extra = process.env.TEST_LATENCY_NOW;
+  if (extra) instants.push([extra, factoryYmd(new Date(extra))]);
+  for (const [iso, expected] of instants) {
+    const at = new Date(iso);
+    const mine = localDay(0, at).toISOString().slice(0, 10);
+    check(
+      `gün anahtarı sözleşmeyle aynı @${iso}`,
+      mine === expected && factoryYmd(at) === expected,
+      `test=${mine} sözleşme=${factoryYmd(at)} beklenen=${expected} TZ=${process.env.TZ ?? "(süreç)"}`
+    );
+  }
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -116,6 +150,8 @@ async function readStableUnion(
 
 async function main(): Promise<void> {
   try {
+    checkDaySourceAgainstContract();
+
     // Retention hedefi: 100 gün önceye TEST satırı — İLK flush'ta silinmeli
     // (retention süreçte günde 1 kez, ilk flush'ta koşar).
     await prisma.endpointLatencyDaily.create({
