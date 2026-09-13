@@ -271,8 +271,8 @@ async function main(): Promise<void> {
   // neti sıfır. Geri alma yalnız ÇOCUĞU tersliyordu ⇒ ebeveynin OUT'u yetim, durum
   // 100 ↔ defter 60. Düzeltme grubu tersler — AMA yalnız metrajın ebeveyne GERİ
   // KONDUĞU dallarda: "kaynak arşivde" dalında metraj dönmez (RECORD_CORRECTION),
-  // orada koşulsuz grup terslemesi TERS ayrışma üretir (durum 0 ↔ defter 40; ölçüldü,
-  // ilk sürüm tek fikstürle yeşildi). Beş geri alma dalı, HER BİRİ KENDİ FİKSTÜRÜYLE:
+  // orada koşulsuz grup terslemesi TERS ayrışma üretir — ölçüldü 2026-09-13, sonda C:
+  // durum 0 ↔ defter 40 (ilk sürüm tek fikstürle yeşildi). Beş dal, HER BİRİ KENDİ FİKSTÜRÜYLE:
   //   A SINGLE depo-restore · B SINGLE adım-restore · C SINGLE kaynak-arşivde ·
   //   D SINGLE_RESTORE · E FULL. Ölçüt her dalda aynı: ÇOCUK net 0 ∧ EBEVEYN durum = defter.
   {
