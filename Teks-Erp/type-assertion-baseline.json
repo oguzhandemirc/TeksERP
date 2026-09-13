@@ -1,0 +1,43 @@
+{
+  "_not": "Tip zorlaması MANDALI — küme yalnız KÜÇÜLÜR. Ölçüm: npx tsx scripts/test_type_assertion_ratchet.ts --yaz",
+  "_A": "src/ — nesne literali uyduruluyor ({…} as unknown as X)",
+  "_B": "scripts/ — örneği nesne tipine genişletme ((x as unknown as {…}))",
+  "A": {
+    "src/services/import/import.service.ts::object": 3,
+    "src/services/inventory.service.ts::Roll }": 1,
+    "src/services/inventory.service.ts::Roll": 1,
+    "src/services/label-template.service.ts::LabelTemplate": 1,
+    "src/services/label-template.service.ts::LabelTemplateVariant": 1,
+    "src/services/label.service.ts::Parameters<typeof buildRollLabelHtml>[0][\"template\"": 1,
+    "src/services/label.service.ts::Parameters<typeof templateTextLines>[1": 1,
+    "src/services/shipping.service.ts::(typeof sh.sacks)[number][\"rolls\"][number": 1,
+    "src/services/system-setting.service.ts::Pick<typeof prisma, \"systemSetting\">": 2,
+    "src/services/traveler-card.service.ts::Prisma.InputJsonValue": 1,
+    "src/services/traveler-card.service.ts::TravelerCardSnapshot": 1
+  },
+  "B": {
+    "scripts/seed-kk2-queue.ts::wo": 1,
+    "scripts/test_auto_draft_shipment.ts::shippingService": 1,
+    "scripts/test_depo_roll_cancel_permission.ts::inventoryRouter": 1,
+    "scripts/test_discovery_identity.ts::payload": 1,
+    "scripts/test_duplicate_detection.ts::Prisma": 1,
+    "scripts/test_inventory_shipment_scope.ts::inv": 1,
+    "scripts/test_master_data_merge_fk_coverage.ts::Prisma": 1,
+    "scripts/test_merge_field_picks.ts::Prisma": 1,
+    "scripts/test_middleware_order.ts::app": 1,
+    "scripts/test_observability_contract.ts::app": 1,
+    "scripts/test_route_auth_coverage.ts::app": 1,
+    "scripts/test_search_field_config.ts::Prisma": 1,
+    "scripts/test_semi_finished_entry.ts::svc": 1,
+    "scripts/test_settings_password.ts::h": 1,
+    "scripts/test_settings_password.ts::res": 1,
+    "scripts/test_settings_password.ts::truncHata": 1,
+    "scripts/test_shipment_event_ledger.ts::svc": 1,
+    "scripts/test_shipment_order_ledger.ts::prisma.order": 2,
+    "scripts/test_superadmin.ts::h": 1,
+    "scripts/test_tambur_cut_concurrency.ts::prisma.roll": 2,
+    "scripts/test_type_assertion_ratchet.ts::x": 1,
+    "scripts/test_warehouse_movements.ts::warehouseRouter": 1,
+    "scripts/test_workstation_permission.ts::peripheralRouter": 1
+  }
+}
