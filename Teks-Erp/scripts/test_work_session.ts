@@ -121,13 +121,36 @@ async function main() {
     const losses = race.filter(
       (r) => r.status === "rejected" && (r.reason as Error).message.includes("tekrar deneyin"),
     ).length;
-    // Yarış zamanlamasına göre kaybeden P2002 (tekrar deneyin) YA DA precheck'e
-    // takılıp MACHINE_OCCUPIED görebilir — ikisi de doğru davranış (409).
     const occupied = race.filter(
       (r) => r.status === "rejected" && (r.reason as Error).message.includes("başka bir oturum açık"),
     ).length;
-    check("eşzamanlı open → tam biri kazanır", wins === 1 && losses + occupied === 1,
+    // ⚠️ İKİ AYRI YÜKLEM (2026-09-13). Eskiden tek satırdı ve İKİ SONUCU DA kabul
+    // ediyordu (`wins===1 && losses+occupied===1`). Davranış olarak doğruydu —
+    // ikisi de 409 — ama iddia GEVŞEKTİ: çağrılar hiç ÖRTÜŞMESE bile ikincisi
+    // precheck'e takılıp MACHINE_OCCUPIED alır ve satır YEŞİL geçer. Yani
+    // pencereyi açmayı bozan bir regresyon GÖRÜNMEZ olurdu.
+    check("§5a eşzamanlı open → tam biri kazanır (davranış)", wins === 1 && losses + occupied === 1,
       `wins=${wins} p2002=${losses} occupied=${occupied}`);
+
+    // ⭐ PENCERE KANITI — ve kanıt burada `pg_blocking_pids` GEREKTİRMEZ:
+    // kaybeden P2002 aldıysa İKİSİ DE precheck'ten geçmiş demektir (aksi hâlde
+    // ikincisi MACHINE_OCCUPIED alırdı ve INSERT'e hiç gelmezdi). Yani
+    // ***`p2002 === 1` pencerenin KURULDUĞUNUN kendisidir*** — sed yolunun
+    // (partial unique → P2002 → 409 SESSION_RACE) gerçekten basıldığını söyler.
+    // Ölçüldü 2026-09-13: üç ardışık koşumda 3/3 `p2002=1`.
+    // ⇒ Kurulamazsa bu bir YÜKLEM SONUCU DEĞİL ÖLÇÜM ARIZASIDIR: sed yolu
+    //   ölçülmemiştir ve §5a'nın yeşili onu kapsamaz.
+    if (losses === 1) {
+      check("§5b ⭐ PENCERE KURULDU — kaybeden P2002 aldı (sed yolu BASILDI)", true,
+        "ikisi de precheck'ten geçti, partial unique → 409 SESSION_RACE");
+    } else {
+      fail++;
+      console.log(
+        `❌ §5b YARIŞ ÖLÇÜLMEDİ — kaybeden precheck'e takıldı (occupied=${occupied}), ` +
+          `sed yolu (P2002 → SESSION_RACE) BASILMADI. §5a'nın yeşili bu yolu KAPSAMAZ; ` +
+          `sonuç yorumlanamaz.`,
+      );
+    }
 
     // 6) makinesiz istasyon (SHIPPING) oturumu — farklı cihaz açabilir; ancak AYNI
     //    operatör "tek yer" kuralıyla ikinci cihazda açınca öncekini (dev1) düşürür.
