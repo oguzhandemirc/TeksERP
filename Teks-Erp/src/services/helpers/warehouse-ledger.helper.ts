@@ -8,9 +8,12 @@
 // (`workOrderStepId` NOT NULL) ve depo olayları oraya sığmaz.
 //
 // ⚠️ NE ZAMAN SATIR YAZILMAZ (üçü de bilinçli):
-//   • KESİM ÇOCUĞU — kesim bir DÖNÜŞÜMDÜR, hareket değil. Mal zaten o depoda ve
-//     toplam metraj değişmiyor; çocuğa ENTRY yazmak depoya gireni İKİ KEZ
+//   • DEPO KESİMİ ÇOCUĞU — kesim bir DÖNÜŞÜMDÜR, hareket değil. Mal zaten o depoda
+//     ve toplam metraj değişmiyor; çocuğa ENTRY yazmak depoya gireni İKİ KEZ
 //     saydırırdı (100 m top 2×50 olunca depoya 100 m daha girmiş görünür).
+//     ⚠️ Kural yalnız ebeveyn de STOKTAYKEN geçerlidir: açık kumaş (IN_PRODUCTION)
+//     kesimi çocuğu stok kümesine İLK KEZ girer ve PRODUCTION satırı alır
+//     (`TAMBUR_CUT`, hüküm §11 giriş kalemi 2026-09-13/14).
 //   • STATÜ TERFİSİ (`STOCK → WAREHOUSE`) — konum değişmiyor.
 //   • BACKFILL — açılış durumu topun kendi satırındadır.
 //

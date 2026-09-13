@@ -133,7 +133,9 @@ export const BILINEN_KAPISIZ_YOLLAR: readonly KapisizYol[] = [
   //    hepsi stok kümesinden ÇIKARIYOR ya da stok kümesine SOKUYOR). K=0 iddiası
   //    (2026-09-13 öğle) bu yüzden KÖRDÜ. Çıkış üçlüsü aynı gece 1c'nin tek yazıcısına
   //    bağlandı (`postProductionIssuesTx`, listede KALIR — `bagli: true` sayılır);
-  //    giriş ikilisi 01'de (doff sonrası) ⇒ K = 2, cırcır tabanı (`test_… §4e`).
+  //    giriş ikilisi 2026-09-13/14'te 01'de bağlandı (`rescueStuckRoll` → RESCUE ·
+  //    `cutOpenFabric` → TAMBUR_CUT, ikisi de `postStockMove`) ⇒ K = 0; listede KALIRLAR
+  //    (`bagli: true`), silinirlerse kapı o yolu bir daha GÖRMEZ.
   {
     dosya: "src/services/workorder-manual-move.service.ts",
     fonksiyon: "manualMove",

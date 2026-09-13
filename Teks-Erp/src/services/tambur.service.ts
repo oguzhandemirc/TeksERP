@@ -3212,6 +3212,22 @@ export class TamburService {
         },
       });
 
+      // STOK DEFTERİ — çocuk depoda doğdu: üretimden depoya GİRİŞ (hüküm §11 giriş
+      // kalemi). Ebeveyn IN_PRODUCTION = stok dışı, satır YALNIZ çocukta; bu yol
+      // 2026-09-13'e kadar satırsızdı (K kümesinin üyesi), geri alma
+      // `reverseAllRollStockMoves` ile bu satırı tersler. Koşulsuz: metraj > 0
+      // yukarıda doğrulandı, depo çözücüden geldi — deposuz/0 çocuk kapının
+      // kendi seddinde DURUR, sessizce atlanmaz.
+      await postStockMove(tx, {
+        rollId: child.id,
+        eventType: WarehouseEventType.PRODUCTION,
+        qty: child.initialQty,
+        to: { warehouseId: child.warehouseId, status: child.status },
+        reasonCode: STOCK_MOVE_REASON.TAMBUR_CUT,
+        workOrderStepId: tamburStepId,
+        userId: userId ?? null,
+      });
+
       if (propertySnapshot.length > 0) {
         await tx.rollProperty.createMany({
           data: propertySnapshot.map((p) => ({

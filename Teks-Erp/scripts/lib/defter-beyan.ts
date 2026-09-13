@@ -421,7 +421,7 @@ export type OlayTersYolu =
   | { tur: "BORC"; ne: string; kanit: string; sahibi: string };
 
 export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
-  PRODUCTION_ISSUE: { tur: "KARSI_OLAY", kod: ["WO_DETACH", "DISPOSITION"], gerekce: "raftan üretime giriş — iki çıkışın (detach · dispozisyon) ortak karşı yönü; ikisi de PRODUCTION olayı, bağ yok",
+  PRODUCTION_ISSUE: { tur: "KARSI_OLAY", kod: ["WO_DETACH", "DISPOSITION", "RESCUE"], gerekce: "raftan üretime giriş — üç çıkışın (detach · dispozisyon · kurtarma) ortak karşı yönü; üçü de PRODUCTION olayı, bağ yok",
     tersYazan: [{ dosya: "src/services/workorder.service.ts", sembol: "detachRolls" }] },
   // WO_DETACH TERS_KODU DEĞİL (ölçüldü 2026-09-13): yazıcısı `detachRolls` `postStockMove` ile
   // İLERİ satır yazar (eventType PRODUCTION, reasonCode WO_DETACH), `reverseStockMove` ile
@@ -432,7 +432,12 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   PRODUCTION_RECEIPT: { tur: "BAGLI_TERS", kod: "KURSUN_REOPEN", tersYazan: [{ dosya: "src/services/kursun-qc.service.ts", sembol: "reopenStep" }] },
   KURSUN_REOPEN: { tur: "TERS_KODU", ileri: "PRODUCTION_RECEIPT" },
   TAMBUR_FINALIZE: { tur: "BAGLI_TERS", kod: "TAMBUR_UNDO", tersYazan: [{ dosya: "src/services/tambur-undo.service.ts", sembol: "applySingle" }, { dosya: "src/services/tambur-undo.service.ts", sembol: "applySingleRestore" }, { dosya: "src/services/tambur-undo.service.ts", sembol: "applyFull" }] },
-  TAMBUR_UNDO: { tur: "TERS_KODU", ileri: ["TAMBUR_FINALIZE", "CUT_SPLIT", "CUT_DISCARD", "SCRAP", "OVERAGE"] },
+  // TAMBUR_CUT (01, hüküm §11 giriş kalemi, 2026-09-13/14): `cutOpenFabric` çocuğunun üretimden
+  // depoya GİRİŞİ — K kümesinin ikinci üyesi kapandı. Geri alma yolu finalize çocuğuyla AYNI:
+  // applySingle/applySingleRestore/applyFull `reverseAllRollStockMoves` ile TAMBUR_UNDO yazar
+  // (bekçi `test_stock_ledger_tambur_undo §18`).
+  TAMBUR_CUT: { tur: "BAGLI_TERS", kod: "TAMBUR_UNDO", tersYazan: [{ dosya: "src/services/tambur-undo.service.ts", sembol: "applySingle" }, { dosya: "src/services/tambur-undo.service.ts", sembol: "applySingleRestore" }, { dosya: "src/services/tambur-undo.service.ts", sembol: "applyFull" }] },
+  TAMBUR_UNDO: { tur: "TERS_KODU", ileri: ["TAMBUR_FINALIZE", "TAMBUR_CUT", "CUT_SPLIT", "CUT_DISCARD", "SCRAP", "OVERAGE"] },
   ENTRY_RECEIPT: { tur: "KARSI_OLAY", kod: "ROLL_CANCEL", gerekce: "topun doğuşunun tersi kayıttan düşmesidir; ayrı olay, bağ yok",
     tersYazan: [{ dosya: "src/services/inventory.service.ts", sembol: "softDelete" }] },
   ROLL_CANCEL: { tur: "BAGLI_TERS", kod: "CANCEL_RESTORE", tersYazan: [{ dosya: "src/services/inventory.service.ts", sembol: "restoreCancelledRoll" }] },
@@ -475,6 +480,11 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   // tersler; dispozisyon alan top çocuk değilse (kaynak/kardeş) onun yolu geri alma değil
   // yeniden üretime alma = bu karşı olaydır.
   DISPOSITION: { tur: "KARSI_OLAY", kod: "PRODUCTION_ISSUE", gerekce: "üretim → raf (dispozisyon) ↔ raf → üretim (production issue); bağ yok, karşı yön; çocuk kapsamı dışı toplar için tek geri yol",
+    tersYazan: [{ dosya: "src/services/helpers/production-issue-ledger.helper.ts", sembol: "postProductionIssuesTx" }] },
+  // RESCUE (01, hüküm §11 giriş kalemi, 2026-09-13/14): `rescueStuckRoll` — istasyonda takılı top
+  // süpervizörce depoya alınır (PRODUCTION girişi); K kümesinin ilk üyesi kapandı. Karşı yönü
+  // DISPOSITION ile aynı: raftan üretime giriş = PRODUCTION_ISSUE (elle taşıma / attach), bağ yok.
+  RESCUE: { tur: "KARSI_OLAY", kod: "PRODUCTION_ISSUE", gerekce: "üretim → raf (kurtarma) ↔ raf → üretim (production issue); bağ yok, karşı yön — kurtarılan top yeniden üretime elle taşımayla girer",
     tersYazan: [{ dosya: "src/services/helpers/production-issue-ledger.helper.ts", sembol: "postProductionIssuesTx" }] },
   // CUT_SPLIT — BORÇ KAPANDI (01, `c2a10e88`, koşullu sürüm; 82 statik okuma → 01 çalıştırma:
   // 100 → kes 40 → geri al ⇒ durum 100 ↔ defter 60 ayrışması kapandı). Ters yol

@@ -8702,3 +8702,40 @@ birebir · data yok → birebir) + Kurşun Dağıtım regresyonu korundu (yalnı
 `screenModules.test.ts` · `test_screen_catalog §3b` manifesto ↔ tablo iki yönlü (negatif sonda: tablodan
 KK1 silindi → 1 ❌ · manifestoda Tambur çekirdeğe çevrildi → 1 ❌; md5 geri). Sürüm notu adayı (ea'ya):
 "kapalı modülün tablet ekranları artık görünmez" — referans fabrikada production AÇIK ⇒ etki 0.
+
+## 2026-09-14 — K'NIN GİRİŞ İKİLİSİ KAPANDI: `cutOpenFabric` çocuğu `TAMBUR_CUT`, `rescueStuckRoll` `RESCUE` — gerçek K 2 → 0 [ÇEKİRDEK]
+
+**Bağlam.** Hüküm dosyası §11 ③'ün ayrı kalemi ("`rescueStuckRoll` + `cutOpenFabric` çocuğu — giriş yönü,
+üretim dalının defteri, 01 doff'tan sonra"). 1c'nin beş kör yolundan çıkış üçlüsü aynı gece
+`postProductionIssuesTx`e bağlanmıştı; giriş ikilisi `test_stok_defteri_bag_olcumu §4e`de **K_TABAN = 2**
+cırcırı olarak bekliyordu (üye KÜMESİ adıyla: `rescueStuckRoll` · `cutOpenFabric`).
+
+**Neden satırsızdı — ve neden "kesim çocuğuna satır yazılmaz" kuralı burada GEÇMEZ.** `warehouse-ledger.helper`
+başlığı kesim çocuğunu bilinçli satırsız sayıyordu: *"kesim bir DÖNÜŞÜMDÜR, mal zaten o depoda, toplam
+değişmiyor"*. Bu cümle DEPO kesimi (`cutWarehouseRoll`) için doğrudur — ebeveyn de stokta, TRANSFORM çifti net
+sıfır. Açık kumaş kesiminde ebeveyn **IN_PRODUCTION**, yani stok dışı; çocuk WAREHOUSE doğunca mal stok
+kümesine **ilk kez** girer ve bu bir dönüşüm değil GİRİŞTİR. Aynı kural iki farklı ebeveyn statüsüne
+uygulandığı için yol yıllarca satırsız kaldı. ⇒ *Bir "satır yazılmaz" gerekçesi ebeveynin statüsüne bağlıysa,
+gerekçe o statüyle birlikte yazılır; statü değişince gerekçe sessizce yanlışlaşır.*
+
+**Kod.** İki yeni sebep kodu (katalog satırı, migration değil): `TAMBUR_CUT` (`TAMBUR_FINALIZE`ın kesim ikizi;
+PRODUCTION girişi, çocukta, `workOrderStepId` = Tambur adımı; koşulsuz `postStockMove` — deposuz/0 çocuk kapının
+seddinde durur, sessizce atlanmaz) ve `RESCUE` (üretimden depoya giriş, claim'den SONRA taze depo/metraj,
+`roll-disposition` emsali; 0 metrajlı takılı top kurtarılır ama satır yazılmaz — taşınacak mal yok, atlama
+hata değil; sebep `notes`ta). Beyan: `TAMBUR_CUT` BAGLI_TERS → `TAMBUR_UNDO` (`applySingle`/`applySingleRestore`/
+`applyFull` `reverseAllRollStockMoves` ile zaten tersliyordu — satır yokken 0 satır tersliyordu, şimdi 1) ·
+`RESCUE` KARSI_OLAY → `PRODUCTION_ISSUE` (DISPOSITION ile aynı çift: kurtarılan top üretime elle taşımayla
+döner) · `PRODUCTION_ISSUE.kod` üç ileriyi karşılar · `TAMBUR_UNDO.ileri` altı ileri.
+
+**Ölçüm (tekserp_01_test).** Yeni bekçi `test_stock_ledger_production_entry` §1–§6: TAMBUR_CUT girişi (uç depo/
+WAREHOUSE, adım damgalı, ebeveyn satırsız) · SINGLE adım-restore dalı TAMBUR_UNDO bağlı ters, net 0, ebeveyn
+metrajı geri · kaynak-arşivde dalı (finalizeOpenFabric sonrası SINGLE) yine terslenir · RESCUE girişi · 0 metraj
+atlama · körlük zemini. İki negatif sonda (yazıcı susturulunca §1–§3 / §4 kırmızı). `test_stok_defteri_bag_olcumu
+§4f` bu commit'le BİLEREK kırmızı: gerçek K 0 < taban 2 — sabiti 1e tren sonunda birleşik index'te yazar
+(kadro kuralı: cırcır sabitine oturum dokunmaz).
+
+**Saha etkisi (fabrika kopyası, damga 2026-09-11, ölçüldü 2026-09-14).** Ufuk (2026-09-13) sonrası doğan
+cutOpenFabric çocuğu **0**, ufuk sonrası kurtarma **0** ⇒ backfill YOK. Tüm-zaman satırsız çocuk **2.912**
+(kurtarma 3) — defter-öncesi miras, kullanıcı kararıyla ONARILMAZ; `test_consistency`in ufuk sonrası asimetri
+ölçüsü bunları görmez (giriş de yok). Defterden okunan as-of depo toplamı bundan sonra bu çocukları da sayar —
+rakam YÜKSELİR (gerçeğe yaklaşır), düşmez; sürüm notu gerekip gerekmediği ea'da.

@@ -14,6 +14,21 @@ export const STOCK_MOVE_REASON = {
   PRODUCTION_RECEIPT: "PRODUCTION_RECEIPT",
   /** Tambur finalize çocuğunun doğumu. */
   TAMBUR_FINALIZE: "TAMBUR_FINALIZE",
+  /**
+   * Açık kumaştan per-cut kesim çocuğunun doğumu (`cutOpenFabric`) — Tambur
+   * adımından depoya GİRİŞ. `TAMBUR_FINALIZE`ın kesim ikizi: ebeveyn IN_PRODUCTION
+   * (stok dışı), yani satır yalnız çocukta; "kesim çocuğuna satır yazılmaz" kuralı
+   * DEPO kesimine aittir (orada ebeveyn de stokta, toplam değişmez) — burada mal
+   * stok kümesine ilk kez giriyor. Tersi `TAMBUR_UNDO` (hüküm §11, 2026-09-13).
+   */
+  TAMBUR_CUT: "TAMBUR_CUT",
+  /**
+   * İstasyonda takılı topun süpervizörce kurtarılması (`rescueStuckRoll`) —
+   * üretimden depoya GİRİŞ. Karşı yönü raftan üretime giriş (`PRODUCTION_ISSUE`),
+   * `DISPOSITION` ile aynı çift; ayrı kod çünkü tetik farklı (iş emri kapanışı değil,
+   * süpervizör kararı) ve rapor "kaç top kurtarıldı" sorusunu defterden okumalı.
+   */
+  RESCUE: "RESCUE",
   /** Tambur geri alma — finalize çocuğunun giriş satırının TERSİ. */
   TAMBUR_UNDO: "TAMBUR_UNDO",
   /** Kurşun/KK2 adımının yeniden açılması — son adım girişinin TERSİ. */

@@ -5181,6 +5181,33 @@ export class InventoryService {
    * Recompute semantiği: kapanan movement "geçti" sayılır → adım/WO oto-COMPLETE
    * olabilir; dokunulmamış PENDING adımlar WO'yu bloklar (operatör WO'yu ayrıca iptal eder).
    */
+  /**
+   * Kurtarmanın stok defteri girişi (`RESCUE`). Depo/metraj claim'den SONRA taze
+   * okunur (`roll-disposition` emsali). 0 metrajlı top için hareket YAZILMAZ —
+   * taşınacak mal yok; deposuzluk bu sınıfta DEĞİL: damga onu kapattı, buraya
+   * düşen deposuz top kapının seddinde durur.
+   */
+  private async postRescueEntryTx(
+    tx: Prisma.TransactionClient,
+    args: { rollId: string; stepId: string | null; userId?: string; reason: string },
+  ): Promise<void> {
+    const fresh = await tx.roll.findUniqueOrThrow({
+      where: { id: args.rollId },
+      select: { warehouseId: true, currentQty: true },
+    });
+    if (!qtyYazilabilir(fresh.currentQty)) return;
+    await postStockMove(tx, {
+      rollId: args.rollId,
+      eventType: WarehouseEventType.PRODUCTION,
+      qty: fresh.currentQty,
+      to: { warehouseId: fresh.warehouseId, status: RollStatus.WAREHOUSE },
+      reasonCode: STOCK_MOVE_REASON.RESCUE,
+      workOrderStepId: args.stepId,
+      userId: args.userId ?? null,
+      notes: args.reason,
+    });
+  }
+
   async rescueStuckRoll(
     rollId: string,
     data: { reason: string },
@@ -5288,6 +5315,10 @@ export class InventoryService {
           "Top bu sırada başka bir işleme girdi — yenileyip tekrar deneyin",
         );
       }
+
+      // STOK DEFTERİ — üretimden depoya GİRİŞ (hüküm §11 giriş kalemi; 2026-09-13'e
+      // kadar satırsızdı, K kümesinin üyesi).
+      await this.postRescueEntryTx(tx, { rollId, stepId: roll.currentStepId, userId, reason });
 
       // "her kumaşa etiket" (F4) — barkodsuzsa final (WAREHOUSE) barkod üret.
       if (roll.barcode == null) {
