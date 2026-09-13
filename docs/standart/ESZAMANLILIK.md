@@ -49,31 +49,9 @@ Omurga cümle: **count kontrolü yoksa bu bir claim değil, dürtmedir** — ve 
 
 ---
 
-## 3 · Kilit uzayı envanteri
+## 3 · Kilit uzayı envanteri → ayrı dosya
 
-Envanterin tek kaynağı `Teks-Erp/src/services/helpers/period-guard.helper.ts` başlığıdır. Bugünkü fiilî durum **10 sabit / 8 numara**:
-
-| Numara | Sabit | Dosya | Amaç |
-|---|---|---|---|
-| 8021 | `DUPLICATE_GUARD_LOCK_NS` | `helpers/duplicate-guard.helper.ts:33` | KK1 mükerrer top tuzağı |
-| 8022 | `BATCH_NUMBER_LOCK_NS` | `batch.service.ts:96` | parti numarası üreteci (tek global anahtar) |
-| 8023 | `SHIPMENT_LOCK_NS` | `helpers/shipment-locks.helper.ts:27` | sevkiyat kapsamı |
-| 8024 | `SESSION_REGISTRY_LOCK_NS` | `session-registry.service.ts:31` | oturum kayıt defteri |
-| 8025 | `PERM_ADMIN_LOCK_NS` | `permission-management.service.ts:21` | yetki (son-admin) guard'ı |
-| 8026 | `PERIOD_CLOSE_LOCK_NS` | `helpers/period-guard.helper.ts:81` | cari dönem kapanışı |
-| 8027 | `PURCHASE_ORDER_LOCK_NS` | `purchase-order.service.ts:109` | alış siparişi senkronu |
-| 8028 | `CASH_PERIOD_CLOSE_LOCK_NS` | `helpers/cash-period-guard.helper.ts:53` | kasa/banka dönem kapanışı |
-| 8029 | `CODE_UNIQUE_LOCK_NS` | `helpers/code-unique.helper.ts:55` | kod tekilliği |
-| 8030 | `MERGE_LOCK_NS` | `master-data-merge.service.ts:56` | master-data birleştirme (tek global anahtar) |
-
-Bu tablo bir ÖZETTİR; kanonik envanter `period-guard.helper.ts` başlığındadır ve `test_advisory_lock_namespaces` ikisini birden ölçer.
-
-⚠️ **2026-09-05'e kadar İKİ ÇAKIŞMA vardı** ve kayıt olarak duruyor: 8026'yı kod tekilliği ile cari dönem kapanışı, 8027'yi alış siparişi ile master-data birleştirme paylaşıyordu. Zarar veri değil **gecikmeydi** — aynı uzayı paylaşan iki alt sistem birbirini sessizce serileştirir ve gecikmenin kaynağı bulunamaz. Çakışan iki sistem yeni uzaylara (8029 · 8030) taşındı, envanter 10 satıra tamamlandı, 7 dosyadaki kopya listeler tek kaynağa indirildi (üçü zaten yanlıştı) ve tam küme eşsizliği bekçiye bağlandı.
-
-- **[ES-14]** Her advisory uzayının **TEK** sahibi olur; yeni bir alt sistem var olan numarayı ödünç almaz · zorlama: bekçi:`scripts/test_advisory_lock_namespaces.ts` (tam küme eşsizliği + envanter↔kod iki yönlü + körlük zemini, 6 negatif sonda) · kanıt: 10 sabit / 10 numara, çakışma yok (2026-09-05'te iki çakışma giderildi) · devralınan: yok
-- **[ES-15]** Yeni uzay eklerken numara, sahip ve amaç `period-guard.helper.ts` başlığındaki envantere AYNI commit'te yazılır · zorlama: insan:envanter yorum metnidir, kod↔yorum eşleşmesi AST'den güvenilir çıkmaz · zorlama ayrıca bekçi:`test_advisory_lock_namespaces` (envanterdeki satırın kodda karşılığı ve koddaki uzayın envanterde yazılı olması İKİ YÖNLÜ ölçülür) · kanıt: envanter 2026-09-05 öncesinde 8023'ü hiç listelemiyor ve 8026/8027'yi tek sahibe atfediyordu · devralınan: yok
-- **[ES-25]** Aynı iki tabloya dokunan iki ayrı yol SATIR kilitlerini AYNI SIRADA alır ve sıra DEĞİŞMEZ olarak yazılır. **Değişmez (2026-09-12): kartela uzayında kilit sırası DAİMA düşüm başlığı → kartela; `MERGE_MAP` kural sırası bu değişmezin İKİZİDİR.** Sıra **düşüm defteri → kartela** (`swatch_stock_reductions` → `swatches`); bu yüzden `MERGE_MAP`te düşüm kuralı kartela kuralından ÖNCE gelir — birleştirme/geri alma ile kartela stok düşümü/stornosu eşzamanlı koşarsa 40P01 doğmaz. Advisory paylaşımı SEÇİLMEDİ: kartela stok işini birleştirme uzayına bağlamak iki alt sistemi gereksiz serileştirirdi · zorlama: kod yorumu (`constants/merge-map.ts`) + bekçi:`test_master_data_merge_revert.ts` (iki yönlü yarış sondası) · kanıt: arşiv 2026-09-12 ④ notu · devralınan: yok
-- **[ES-16]** Uzay sabiti `export const X_LOCK_NS: number = 80NN;` biçiminde yazılır — açık `: number` olmadan literal tipe daralır ve bekçideki "uzaylar farklı" karşılaştırması TS2367 ile derlenmez; çağrıda çıplak sayı kullanılmaz · zorlama: tsc + bekçi:`test_shipment_scope_lock.ts §2` · kanıt: `period-guard.helper.ts` gerekçesi; `grep pg_advisory` → sabit dışı çıplak sayı 0 · devralınan: yok (iki anotasyonsuz sabit 2026-09-05'te tiplendi, 10/10)
+Tam envanter (8021…8031, sahipleri ve gerekçeleri) 2026-09-13'te [`ESZAMANLILIK-ENVANTER.md`](ESZAMANLILIK-ENVANTER.md)'ye taşındı (`docs/standart/ESZAMANLILIK-ENVANTER.md`) — bu dosya boyut tavanına 447 bayt kalmıştı; tavan YÜKSELTİLMEDİ. Orada da **§3** numarasıyla duruyor. Kanonik kaynak envanterin kendisi değil `src/services/helpers/period-guard.helper.ts` başlığıdır; bekçi `scripts/test_advisory_lock_namespaces.ts`.
 
 ---
 
@@ -97,22 +75,9 @@ Yarış bekçisi "iki isteği aynı anda gönder" değildir — o pencereyi ısk
 
 ---
 
-## 6 · Bilinen boşluklar
+## 6 · Bilinen boşluklar → ayrı dosya
 
-Kimlikler bu tabloya özeldir; parantez içindeki kod keşif kaydındaki karşılığıdır (`docs/history/standart-2026-09-05/kesif/eszamanlilik.json`).
-
-| # | Ne | Dosya:satır | Risk | Önerilen mekanizma | Neden ertelendi |
-|---|---|---|---|---|---|
-| AÇIK-1 (keşif ES-01) | "Ölü replay" yüklemi 15 token'lı modelin yalnız 3'ünde tek kaynakta; sevkiyat kuralı elle kopyalamış | `helpers/token-replay.helper.ts` ↔ `shipping.service.ts:1663-1673` | orta — cached `success:true` + iptal edilmiş kayıt | model-bağımsız `assertReplayAlive(kind, row)` | 12 ucun her birinde "ölü" tanımı ayrı (statü kümeleri farklı), tek turda ölçülemedi |
-| AÇIK-2 (keşif ES-02) | Dört tablet ucu `clientToken`'sız: SubcontractorDispatch · KartelaDispatch · KartelaReceipt · StockCount | `subcontractor.service.ts:1051`, `kartela.service.ts:174`, `:470` | orta — mükerrer belge doğmaz (top claim'i korur, `subcontractor.service.ts:6438`) ama operatör "kayıt oldu mu" cevabını alamaz | kolon + replay dalı + istemci token gönderimi | APK ister (mobil native/sözleşme turu); bu turda YAPILMIYOR |
-| AÇIK-3 (keşif ES-03) | 36 tx-dışı `findUnique→if→update` sitesi — hepsi yönetim/master-data, defter değil | `device.service.ts:322,345,401,416,429,476`, `auth.service.ts:191,253`, `peripheral.service.ts:176,210`, `traveler-template.service.ts:224,246`, `customer-branch.service.ts:223`, `reason-preset.service.ts:413`, `free-document.service.ts:83` | düşük — tek yönetici, düşük frekans, son-yazan-kazanır | atomik claim | **devralınan**: toplu kampanya yok; yeni kodda `[ES-03]` zorunlu |
-| AÇIK-4 (keşif İ-11) | Refakat kartı sürüm artırımı check-then-act; `(workOrderId, version)` unique yok, arşiv upsert'i çakışan iki baskıyı tek satıra çökertiyor | `traveler-card.service.ts:269-291`, `recordPrintEvent:349-375` | orta — ikinci baskının içeriği sessizce kaybolur | claim (`updateMany where {id, status, version}` + `count===0 → 409`), emsal `printed-document.service.ts:744` | — **bu turda düzeltiliyor** |
-| AÇIK-5 (keşif İ-12) | Boot job'unda tx'siz çok-model yazım (repo genelindeki tek örnek) | `jobs/role-template-catalog.job.ts:57` (`:118`, `:147`, `:172`) | düşük — yarım kalan uzlaştırmayı sonraki boot tamamlar | tek `$transaction` | — **bu turda düzeltiliyor** |
-| AÇIK-6 (keşif İ-13) | Fason talimatı güncellemesi tx dışı check-then-act | `subcontractor.service.ts:4753` → `:4785` | düşük — sevk fişi snapshot'ı donmuş, kâğıt etkilenmez | tx + claim | — |
-| AÇIK-7 (keşif M-05) | `SackTag` adı check-then-act ile tekilleştiriliyor, DB seddi yok | `sack-tag.service.ts:132`, `:164` | düşük — eşzamanlı iki ekleme aynı adı yazar | yumuşak kapılı partial UNIQUE (`nameFold` deseni) | — |
-| AÇIK-8 (keşif İ-10) | İki advisory uzayında çift sahip; tam küme eşsizliğini ölçen bekçi yok | §3 tablosu; bekçi kapsamı `test_shipment_scope_lock.ts:93-94` | orta — bugün zarar yok, yarın gecikme/deadlock | yeni uzay (8029) + envanter tamamlama + `test_advisory_lock_namespaces` | — **bu turda düzeltiliyor** |
-
-Ayrıca kapsam dışı bırakılan iki karar: backend'de yapılandırılmış logger yok (137 `console` çağrısı fiilen tek kanal) ve mobilde şema doğrulama katmanı yok (`zod` bağımlılığı yok) — ikisi de [`README.md`](README.md) § bilinen borç listesinde.
+AÇIK-1…AÇIK-8 tablosu aynı turda [`ESZAMANLILIK-ENVANTER.md`](ESZAMANLILIK-ENVANTER.md) §6'ya taşındı; numarası değişmedi.
 
 ---
 
@@ -122,7 +87,27 @@ Ayrıca kapsam dışı bırakılan iki karar: backend'de yapılandırılmış lo
 - `RepeatableRead` bir serileştirici değildir; yazan tx'i korumaz, yalnız okuma fotoğrafını dondurur (`[ES-01]`).
 - Advisory kilidi tx'in ortasında almak hiçbir şey kazandırmaz — korunan okuma çoktan yapılmıştır (`[ES-06]`).
 - P2002'de kör retry yapmak: `clientToken` çakışması 5 tur boşa döner ve kullanıcıya "Barkod üretimi 5 denemede başarısız" yalanını bastırır (`[ES-04]`, `[ES-07]`).
-- `tx.*` çağrılarını `Promise.all` ile paralelleştirmek: pg adapter tek bağlantıyı seri çalıştırır, kazanç yok, ESLint kuralı yakalar (`docs/KOD-KURALLARI.md`).
+- `tx.*` çağrılarını `Promise.all` ile paralelleştirmek: pg adapter tek bağlantıyı seri çalıştırır, kazanç yok, ESLint kuralı yakalar (`docs/KOD-KURALLARI.md`). ⚠️ pg'nin "already executing a query" uyarısını bu kuralın ihlali sanma — §8.
 - Audit'i tx'e sokmak: audit best-effort'tur, tx'e girerse iş yazımını kendi hatasıyla geri sarar (`[ES-11]`).
 - `FOR UPDATE`'i tek koruma sanmak: tx dışında çağrıldığında hiçbir şey korumaz (`[ES-09]`).
 - Yarış bekçisini `Promise.allSettled` ile kurmak: pencere ıskalanır, bekçi sahte yeşil kalır (`[ES-17]`).
+
+---
+
+## 8 · Beklenen uyarı — bu BİZİM ihlalimiz değil
+
+`POST /api/orders` (ve çok düğümlü chunk üreten her uç) pg'nin şu uyarısını basar:
+
+```
+DeprecationWarning: Calling client.query() when the client is already executing a query
+```
+
+**`[ES-11]` ihlali DEĞİLDİR.** Kırpılmamış yığında (14 kare) **uygulama karesi SIFIR**: tek chunk transaction, `AuditService` karesi yok; uyarı Prisma'nın kendi yorumlayıcısından geliyor — `withChunkTransaction` → çocuk düğümler üzerinde `Array.map`. Yani bir **yükseltme borcu**: `pg@9`da bu kullanım kalkacak.
+
+Ölçüldü 2026-09-13: uyarı metni `node_modules/pg/lib/client.js:36` (pg 8.20.0 · `@prisma/client` 7.10.0); kaynak `client-engine-runtime/src/interpreter/query-interpreter.ts`. ⚠️ `node_modules/@prisma/client-engine-runtime` diye kurulu bir paket YOK — kod `@prisma/client/runtime/client.js` içine bundle'lanmış, kaynak adı ancak `client.js.map`ten okunur.
+
+⚠️ **Pozitif kontrol KURULAMADI:** `Promise.all(tx.*)` dalı da nested dal da bu uyarıyı ÜRETMEDİ. *"Bir uygulama ihlali başka türlü görünürdü"* çıkarımı yığının YAPISIYLA destekleniyor, **deneyle değil** — güçlü bir çıkarım, kanıtlanmış bir deney değil.
+
+⚠️ **Bu, `[ES-11]` yasağını gereksiz KILMAZ.** `Promise.all(tx.*)`ın uyarı üretmemesi büyük olasılıkla sorguların motorda sıraya girmesindendir: **kapı tetiklenmedi ≠ kapı yok.**
+
+**Pinlenmemiş kalem:** `POST /api/orders` içinde HANGİ ifadenin çok düğümlü chunk ürettiği ölçülmedi — Prisma yükseltilirken ilk bakılacak yer.

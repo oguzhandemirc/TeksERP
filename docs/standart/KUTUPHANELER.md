@@ -57,7 +57,7 @@ Paket `deploy/` ve `scripts/`yi TAŞIMAZ (`docs/KOD-KURALLARI.md` § deploy) —
 | Native | `serialport` · `node-hid` (+ `@electron/rebuild`) | `createRequire` tembel yükleme ([KU-16]) |
 | Keşif | `bonjour-service` **1.4.4 SABİT** | `dependencies`te kalmak ZORUNDA |
 | Kabuk hizmetleri | `electron-store` · `electron-log` · `electron-updater` | `electron-window-state` ölü |
-| Test | `vitest` · `@testing-library/*` · `jsdom` · `vitest-axe` · `@playwright/test` | `@stryker-mutator/*` CI'da koşmuyor (`TEST-VE-DERLEME.md` §7) |
+| Test | `vitest` · `@testing-library/*` · `jsdom` · `vitest-axe` · `@playwright/test` | `@stryker-mutator/*` CI'da koşmuyor (`TEST-VE-DERLEME-SINIRLAR.md` §7) |
 
 ### 2.3 mobil (`mobil/`) — Expo SDK 54
 
@@ -124,41 +124,29 @@ Onay şartı kök `CLAUDE.md` § Süreç'te (yeni paket eklemeden önce kullanı
 
 ⚠️ **`importFiles: 0` TEK BAŞINA KANIT DEĞİLDİR.** Ölçümde 13 CANLI paket sıfır göründü: `exceljs`, `serialport`, `node-hid`, `bonjour-service`, `@fontsource/plus-jakarta-sans`, `prisma`, `expo-build-properties`, `expo-asset`, `jest-expo`, `react-native-screens`, `react-native-worklets`, `@playwright/test`, `@stryker-mutator/*`.
 
-Reçete — sırayla, üçü de temiz çıkmadan silme yok:
+Reçete iki parçadır: önce **üç KANAL** taranır, sonra **iki ADIM** koşar. Kanallar paralel kanıt yüzeyleridir (biri bile doluysa paket CANLI); adımlar sıralıdır ve ancak üç kanal da boş çıkarsa başlar.
 
-1. **(a) Dinamik import:** `await import("<paket>")` ara (emsal `xlsx-export.ts:39`).
-2. **(b) `createRequire` / tembel `require`:** `req("<paket>")`, `require('<paket>')` ara (emsal `printer.ipc.ts:42`, `hal/btClassic.transport.ts:54`).
-3. **(c) Config referansı:** `app.json > plugins` · `babel/jest/metro/vite/vitest/playwright/stryker` config · CSS `@import` ya da alt yol CSS import'u · `package.json > scripts` içinde CLI · **peerDependency** (`node_modules/<tüketici>/package.json`ından OKUNARAK).
-4. Üçü de boşsa hüküm ÖLÜ; kaldırmadan önce §7'deki kaldırma etkisi (native mi, OTA mı APK mı) yazılır.
-5. Doğrulama o projenin kapısıdır: backend `run-all-tests.ts` + `typecheck` · Electron `typecheck` + `vitest run` + `build` · mobil `npm test` + `npx expo-doctor` (native değiştiyse `expo prebuild --clean` sonrası manifest diff'i).
+**Üç kanal — üçü de taranır:**
 
-- **[KU-20]** `importFiles: 0` gördüğünde paketi ölü ilan etme; üç kanal doğrulanmadan silme yapılmaz · zorlama: insan:üç kanal taraması MEKANİK DEĞİL — `test_dependency_contract.ts` üç bölümden oluşur (a pin · b CommonJS `require` · c §2 tablosu ↔ `dependencies` farkı) ve ölü-paket bölümü TAŞIMAZ; hüküm yukarıdaki beş adımlı reçeteyle elle verilir · kanıt: keşif 13 paketten 1'ini yanlış işaretledi — `react-native-ble-plx` CANLI çıktı (`mobil/src/services/bluetooth.service.ts:1` + `app.json` `plugins[1]`) · devralınan: yok
+- **(a) Dinamik import:** `await import("<paket>")` ara (emsal `xlsx-export.ts:39`).
+- **(b) `createRequire` / tembel `require`:** `req("<paket>")`, `require('<paket>')` ara (emsal `printer.ipc.ts:42`, `hal/btClassic.transport.ts:54`).
+- **(c) Config referansı:** `app.json > plugins` · `babel/jest/metro/vite/vitest/playwright/stryker` config · CSS `@import` ya da alt yol CSS import'u · `package.json > scripts` içinde CLI · **peerDependency** (`node_modules/<tüketici>/package.json`ından OKUNARAK).
+
+**İki adım — üç kanal da boşsa:**
+
+1. Hüküm ÖLÜ; kaldırmadan önce §7'deki kaldırma etkisi (native mi, OTA mı APK mı) yazılır.
+2. Doğrulama o projenin kapısıdır: backend `run-all-tests.ts` + `typecheck` · Electron `typecheck` + `vitest run` + `build` · mobil `npm test` + `npx expo-doctor` (native değiştiyse `expo prebuild --clean` sonrası manifest diff'i).
+
+- **[KU-20]** `importFiles: 0` gördüğünde paketi ölü ilan etme; üç kanal doğrulanmadan silme yapılmaz · zorlama: insan:üç kanal taraması MEKANİK DEĞİL — `test_dependency_contract.ts` üç bölümden oluşur (a pin · b CommonJS `require` · c §2 tablosu ↔ `dependencies` farkı) ve ölü-paket bölümü TAŞIMAZ; hüküm yukarıdaki üç kanal + iki adımlı reçeteyle elle verilir · kanıt: keşif 13 paketten 1'ini yanlış işaretledi — `react-native-ble-plx` CANLI çıktı (`mobil/src/services/bluetooth.service.ts:1` + `app.json` `plugins[1]`) · devralınan: yok
 - **[KU-21]** "Peer artığı" iddiası node_modules'ten ÖLÇÜLEREK doğrulanır, varsayılmaz · zorlama: insan:peer grafiği kaynak ağacında değil, kurulu ağaçta yaşar · kanıt: `react-native-paper@5.15.1` `peerDependencies` = {react, react-native, react-native-safe-area-context} — `react-native-vector-icons` İÇİNDE YOK; `mobil/CLAUDE.md:51`'deki "yalnız peer artığı" cümlesi ölçümle yanlış · devralınan: yok
 - **[KU-22]** Bir paketle "birlikte ölür" sanılan yardımcı AYRI ölçülür · zorlama: insan:bağımlılık gerekçesi yorumda yaşar, grafikte değil · kanıt: `buffer` — `Electron/src/main.tsx:13-15` polyfill'i `@react-pdf/renderer`e bağlıyor ama `exceljs`in tarayıcı bundle'ı da `Buffer`a referans veriyor (4 eşleşme) → hüküm BELİRSİZ, paket KALIR · devralınan: yok
 - **[KU-23]** Paket kaldırılırken onu adıyla anan HER bayat referans aynı commit'te temizlenir: `CLAUDE.md` paket listesi · `knip.json > ignoreDependencies` · `jest.config.js > transformIgnorePatterns` · `package.json > scripts` · gerekçe yorumu · zorlama: insan:bayat referansın kendisi derlemeyi kırmaz, sessiz kalır · kanıt: k01 § `kaldirmaEtkisi` — `react-native-svg` (jest config), `react-native-web` (`"web"` script'i), `@faker-js/faker` (knip susturması) · devralınan: yok
 
-## 7 · Kaldırılanlar — hüküm tablosu
+## 7 · Kaldırma turu — hüküm tablosu arşivde
 
-Üç kanaldan doğrulanmış 15 paket. Kaldırma sırası ve doğrulama komutları: `k01-olu-paket-uc-kanal.json` § `kaldirmaSirasi`. **Durum sütunu 2026-09-05 ölçüm anındadır**; kaldırma adımı tamamlandıkça satır "kaldırıldı" olur.
+Hüküm tablosunun kendisi (16 satır, `Durum` sütunu **2026-09-05 ölçüm anındadır**) arşive taşındı: `docs/history/standart-2026-09-05/olu-paket-hukum-tablosu.md`. Gerekçe: donmuş bir turun durum tablosu kural değil HİKÂYEDİR (`README.md` § üç belge katmanı) ve bu dosya boyut tavanına 1 bayt kalmıştı — tavan YÜKSELTİLMEDİ. Kaldırma sırası ve doğrulama komutları: `k01-olu-paket-uc-kanal.json` § `kaldirmaSirasi`.
 
-| Paket | Proje | Hüküm | Kanıt (özet) | Kaldırma etkisi | Durum |
-|---|---|---|---|---|---|
-| `@radix-ui/react-avatar` | Electron | ÖLÜ | yalnız `package.json:43`; `ui/avatar.tsx` yok, `<Avatar` 0 | saf JS, etkisiz | adım 1 |
-| `@radix-ui/react-scroll-area` | Electron | ÖLÜ | yalnız `package.json:50`; `<ScrollArea` 0 | saf JS, etkisiz | adım 1 |
-| `@radix-ui/react-switch` | Electron | ÖLÜ | yalnız `package.json:54`; `<Switch` 0 | saf JS, etkisiz | adım 1 |
-| `@fontsource/roboto` | Electron | ÖLÜ | yalnız `package.json:41`; CSS'teki "Roboto" İŞLETİM SİSTEMİ font adı | yedek zincir aynen çalışır | adım 1 |
-| `electron-window-state` | Electron | ÖLÜ | yalnız `package.json:71`; pencere ölçüsü sabit kodlu `electron/main.ts:39-41` | etkisiz (durum zaten kalıcı değil) | adım 1 |
-| `@react-pdf/renderer` | Electron | ÖLÜ | 3 kanal 0; yerini backend `renderTravelerCardHtml` + iframe aldı | `buffer`a DOKUNMA; `main.tsx:13-15` yorumu exceljs'e çekilir | adım 2 |
-| `@faker-js/faker` | Teks-Erp (dev) | ÖLÜ | `src`+`scripts`+`prisma` 0; tek iz `knip.json:24` susturması | devDep, ürüne zaten girmiyor | adım 3 |
-| `@react-navigation/bottom-tabs` | mobil | ÖLÜ | `createBottomTabNavigator` 0 | saf JS, **OTA-güvenli** | adım 4 |
-| `react-native-web` | mobil | ÖLÜ | `app.json`da web platformu yok; tek iz `"web"` script'i | script'le birlikte düşer; `expo-camera` peer'ı optional | adım 5 |
-| `react-dom` | mobil | ÖLÜ | tek isteyen `react-native-web`; `jest-expo` istemiyor (ölçüldü) | web ayağından SONRA | adım 5 |
-| `react-native-qrcode-svg` | mobil | ÖLÜ | `QRCode`/`<Svg` 0; QR'ı backend üretir | saf JS ama `svg` ile aynı adımda | adım 6 |
-| `react-native-svg` | mobil | ÖLÜ | tek isteyen ölü `qrcode-svg`; jest config izi BAYAT | **NATIVE — OTA ile gitmez, APK** | adım 6 |
-| `expo-sharing` | mobil | ÖLÜ | `shareAsync` 0; paylaşım `expo-print`+`intent-launcher` yolundan | **NATIVE — APK** | adım 6 |
-| `react-native-vector-icons` | mobil | ÖLÜ | Paper peer'ı DEĞİL; Metro + jest-expo `@expo/vector-icons`e ALIAS'lıyor | bundle'a zaten girmiyor; autolink artığı → **APK** | adım 6 |
-| `react-native-ble-plx` | mobil | **CANLI** | `bluetooth.service.ts:1` import + `app.json` `plugins[1]` → APK'ya native kod + BLUETOOTH/LOCATION izinleri | **KALDIRILMAZ** — önce "sahipsiz BLE yolu kapansın mı" kararı; sonra 3 dosya + APK + manifest izin diff'i | ayrı iş |
-| `buffer` | Electron | **BELİRSİZ** | `main.tsx:1,16` canlı import; exceljs bundle'ı da `Buffer` istiyor | **KALIR** — yalnız yorum gerekçesi düzeltilir | kalır |
+Turdan kalan İKİ KURAL burada durur:
 
 - **[KU-24]** Native paket kaldırmak mobilde bir APK turudur; OTA ile gitmez ve `expo prebuild --clean` sonrası `AndroidManifest.xml` diff'i, kalan canlı paketlerin izinlerini düşürmediği doğrulanarak kapanır · zorlama: insan:izin diff'i yapı çıktısında ölçülür, kaynakta değil · kanıt: k01 `kaldirmaSirasi[6]` — `react-native-bluetooth-classic` (CANLI) hâlâ BLUETOOTH_CONNECT/SCAN istiyor · devralınan: yok
 - **[KU-25]** Kaldırma öncesi üç projede YEŞİL taban ölçülür; kırmızı zeminde kaldırma yapılmaz (kaldırmanın kırdığı ile devralınan kırmızı karışır) · zorlama: insan:sıralama disiplini · kanıt: k01 `kaldirmaSirasi[0]` · devralınan: yok
@@ -168,7 +156,7 @@ Reçete — sırayla, üçü de temiz çıkmadan silme yok:
 | Konu | Ölçüm | Neden ertelendi |
 |---|---|---|
 | **Araç zinciri drift** | TypeScript üç ana sürüm: backend 6.0.2 · Electron 5.6.3 (`~`, bilinçli tilde) · mobil 5.9.3 (SDK); ESLint iki ana sürüm: 10.2.1 / 9.39.4 / 9.39.4 | Hizalama üç projede eşzamanlı lint+tip kırılması demek; Electron'un tilde gerekçesi bugün YAZILI DEĞİL, önce o yazılmalı |
-| **mobilde şema doğrulama katmanı yok** | `zod` bağımlılığı YOK; 386 dosyada 0 `z.object` | Tasarım kaydı (`ESZAMANLILIK.md` § Bilinen boşluklar); yeni bağımlılık + istemci sözleşmesi turu |
+| **mobilde şema doğrulama katmanı yok** | `zod` bağımlılığı YOK; 386 dosyada 0 `z.object` | Tasarım kaydı (`ESZAMANLILIK-ENVANTER.md` §6 bilinen boşluklar); yeni bağımlılık + istemci sözleşmesi turu |
 | **`uuid` ↔ `crypto.randomUUID` ikiliği** | backend `uuid` 2 dosya (v4 + `validate`), `randomUUID` 20 dosya | `validate`in yerleşik karşılığı yok → paket meşru; v4 kullanımı taşınabilir, ESM-only riski ([KU-19]) bunu ödüllendirir |
 
 > **KAPANDI (2026-09-07):** backend logger → §9 (`src/lib/logger.ts`, paket eklenmedi).
