@@ -26,6 +26,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { etkilenenProjeler, stagedFiles } from "./lib/staged.mjs";
+import { slotAl } from "./lib/semafor.mjs";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -179,6 +180,12 @@ if (staged.some((f) => SURUM_NOTU_YOLLARI.has(f))) {
 
 if (adimlar.length === 0) process.exit(0);
 
+// KAPI SEMAFORU (1e hükmü 2026-09-14): ağır adım (tsc/eslint/test) varsa makine
+// genelinde en çok KAPASITE kapı aynı anda koşar — ölçüm ve tuzaklar lib/semafor.mjs.
+// Yalnız doküman/sürüm-notu kapısı (saniyeler, MB'lar) sıraya girmez.
+const agirVar = adimlar.some((a) => a.env === AGIR_ADIM_ENV || a.ad.endsWith(" · test"));
+const slotBirak = agirVar ? slotAl() : () => {};
+
 process.stderr.write(`⏳ commit kapısı: ${adimlar.length} adım (${adimlar.map((a) => a.ad).join(" · ")})\n`);
 
 for (const adim of adimlar) {
@@ -206,6 +213,7 @@ for (const adim of adimlar) {
       `${govde.replace(/^/gm, "      | ")}\n\n` +
       `⛔ Commit atılmadı. Bilerek geçmek gerekiyorsa: TEKSERP_HOOK_SKIP=1 git commit …\n`,
   );
+  slotBirak();
   process.exit(1);
 }
 
@@ -225,4 +233,5 @@ if (headBasta && headSonda && headBasta !== headSonda) {
 }
 
 process.stderr.write(`✅ commit kapısı temiz (${((Date.now() - basladi) / 1000).toFixed(1)}s)\n`);
+slotBirak();
 process.exit(0);
