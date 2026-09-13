@@ -322,6 +322,8 @@ const CHECK_CONSTRAINT_MESSAGES: Record<string, string> = {
   machines_productionLineCount_pos:
     "Makinenin üretim hattı sayısı en az 1 olmalı.",
   machine_runs_productionLineNo_pos: "Üretim hattı numarası en az 1 olmalı.",
+  doff_events_pieceCount_pos: "İndirilen parça sayısı en az 1 olmalı.",
+  doff_events_productionLineNo_pos: "Üretim hattı numarası en az 1 olmalı.",
   shift_definitions_window_sane:
     "Vardiya penceresi geçersiz — başlangıç gün içinde (0–1439 dk), süre pozitif, mola süreden kısa olmalı.",
   shift_instances_time_order: "Vardiya penceresinin bitişi başlangıcından sonra olmalı.",

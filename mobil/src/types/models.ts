@@ -94,7 +94,11 @@ export type RollEntrySource =
   | 'MANUAL_ENTRY'
   | 'TAMBUR_SPLIT'
   | 'SUBCONTRACTOR_RETURN'
-  | 'TAMBUR_MANUAL';
+  | 'TAMBUR_MANUAL'
+  // 2026-09-13 (dokuma P3): tezgahtan inip KK1'de doğan top. ⚠️ Bu union backend'in
+  // gerisinde — PURCHASE_RECEIPT (2026-08-13) ve SEMI_FINISHED (2026-08-17) burada YOK;
+  // devralınan açık, sahibi tablet alanı.
+  | 'WEAVING';
 
 // =============================================================================
 // Master data — Color, FabricProperty

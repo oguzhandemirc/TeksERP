@@ -508,7 +508,7 @@ Yeni ekran, ölçülmüş 10 mobil kusurun hiçbirini tekrarlamaz:
 
 ⚠️ **SIMULATED boşluğu tekrarlanmayacak:** `source:'SIMULATED'` beyanı bugün **yalnız SCALE/çuval tartısı yolunda** var; METER yolunda yok. Doff sayacı bir ölçüm cihazıdır ⇒ **beyanı baştan taşır** ve kararı backend verir.
 
-### 3.8 · `DoffEvent` — model tasarımı (ŞEMAYA YAZILMADI, hüküm bekliyor)
+### 3.8 · `DoffEvent` — model tasarımı (ŞEMAYA YAZILDI — dokuma P3, 2026-09-13; migration `20260913250000_doff_event` + `…251000_roll_entry_source_weaving`; yazan uç ve `DOFF_CANCEL` yolu HENÜZ YOK)
 
 **Sınıfı: DEFTER** (`docs/standart/VERITABANI.md` §2) — *"ne oldu"* tutar, `updatedAt` almaz, kronolojisi `createdAt`tir, künye yerine AKTÖR taşır.
 

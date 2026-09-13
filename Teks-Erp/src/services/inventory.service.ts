@@ -2993,6 +2993,8 @@ export class InventoryService {
           return "Tambur (Manuel)";
         case RollEntrySource.SEMI_FINISHED:
           return "Yarı Mamul Girişi (Dış Alım)";
+        case RollEntrySource.WEAVING:
+          return "Dokuma (Tezgahtan İndi)";
         case RollEntrySource.SUPPLIER_RECEIPT:
         default:
           return "Ham Giriş";

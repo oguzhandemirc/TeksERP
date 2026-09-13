@@ -102,6 +102,11 @@ enum RollEntrySource {
   /// yapılır ve Ham Stok listesinde süzülür. Raporda "içeride ürettiğimiz ham"
   /// ile "dışarıdan aldığımız yarı mamül" birbirine karışmasın diye gerekli.
   SEMI_FINISHED
+  /// DOKUMADAN İNEN top (2026-09-13, dokuma P3) — üçüncü doğum sınıfı: ne satın
+  /// alınmış ne fason dönüşü; fabrikanın KENDİ tezgahında dokunup KK1'de doğmuş.
+  /// `DoffEvent` "indi" der, top BURADA doğmaz (KK1 sorar, `doffEventId` bağlar).
+  /// Bu değeri yazan uç P3'te YOK (şema-only) — eski istemci değeri hiç görmez.
+  WEAVING
 }
 
 /// ÜRETİM SAPMASININ TÜRÜ (`RollVariance.kind`, 2026-08-09).
@@ -955,6 +960,7 @@ model Machine {
   machineSpec    MachineSpec?
   /// Tezgah duruşları — `Restrict`; guard'ı ingest diliminde (yazan yol orada doğar).
   machineStops   MachineStopEvent[]
+  doffEvents     DoffEvent[]
   /// Toplayıcı kapsamı — `Cascade` (kapsam satırı makinesiz anlamsız).
   collectorLinks MachineCollectorLink[]
 
@@ -1700,6 +1706,7 @@ model MachineRun {
   /// varsayılanı `SetNull`dır ve o, gerçekleşmiş bir koşumun BAĞLAMINI sessizce
   /// siler — yani ileri kaydı DEĞİŞTİRMEK olur (defter doktrini yasağı).
   stops        MachineStopEvent[]
+  doffEvents   DoffEvent[]
 
   machine      Machine       @relation(fields: [machineId], references: [id], onDelete: Restrict)
   weavingOrder WeavingOrder? @relation("MachineRunWeavingOrder", fields: [weavingOrderId], references: [id], onDelete: Restrict)
@@ -2037,6 +2044,68 @@ model MachineStopReclass {
 
   @@index([stopEventId, createdAt])
   @@map("machine_stop_reclasses")
+}
+
+/// TOP İNDİRME — tezgahtan kumaş indiği AN (dokuma P3, tasarım
+/// DOKUMA-IS-EMRI-VE-TABLET-TASARIMI §3.8). DEFTER: satır SİLİNMEZ, GÜNCELLENMEZ
+/// (`updatedAt` yok, kronoloji `createdAt`); geri alma `revokedAt` damgasıdır ve
+/// yalnız hiç top doğurmamış indirmede açıktır (`DOFF_CANCEL` ⇔ NOT EXISTS rolls).
+/// ⚠️ TOP BURADA DOĞMAZ — bu olay yalnız "indi" der; `Roll` KK1'de doğar
+/// (`entrySource=WEAVING`, `doffEventId` bağı). Yazan uç P3'te YOK (şema-only).
+model DoffEvent {
+  id               String @id @default(uuid()) @db.Uuid
+  machineId        String @db.Uuid
+  /// `Machine.productionLineCount` sınırı `assertProductionLineValid` ile (P4b);
+  /// CHECK `doff_events_productionLineNo_pos` (>= 1, MachineRun emsali).
+  productionLineNo Int    @default(1)
+
+  /// KOŞUM BAĞI OPSİYONEL: operatör koşumu açmayı unutmuş olabilir. Fiziksel
+  /// olarak OLMUŞ bir olayı kaydetmeyi reddetmek, onu atıfsız kaydetmekten
+  /// kötüdür (kurşun `machineId=null` emsali: ATIF UYDURULMAZ). Koşum yoksa
+  /// `ApiResponse.warnings` — 400 DEĞİL. ⚠️ `weavingOrderId` KOLON DEĞİLDİR —
+  /// koşumdan türetilir; FK ikinci kaynak olurdu ("tek kaynak satır").
+  machineRunId     String? @db.Uuid
+
+  /// Operatörün "İndir"e bastığı an (`clientEnteredAt` kalıbı; makul aralık
+  /// dışındaysa sunucu saatine düşülür). Kronoloji yine `createdAt`tir.
+  doffedAt         DateTime @db.Timestamptz
+  /// Kaç parça indi. CHECK `doff_events_pieceCount_pos` (>= 1) — sıfır parçalı
+  /// doff bir doff değildir; gevşetme tek ifadelidir, sıkmak veri temizliği ister.
+  pieceCount       Int
+
+  /// SAYACIN O ANDAKİ DEĞERİ — sıfırlama beyan edilmiş bir olay olur, yorumlanacak
+  /// anomali değil. NULL meşru = okunamadı (elle giriş yolu kapatılamaz).
+  counterAtDoff    Decimal? @db.Decimal(18, 0)
+  /// Sayaç nereden geldi. `@default` VERİLMEZ — her yazar açıkça beyan eder
+  /// (`SIMULATED` beyanı burada doğar; kararı backend verir).
+  counterSource    MachineDataSource
+
+  /// Fiziksel etikete yazılan kısa kod (`buildDailyCode` emsali). Elle
+  /// yazılabilir olması yeter — tezgaha yazıcı ŞART DEĞİL.
+  code             String  @unique @db.VarChar(32)
+  notes            String? @db.VarChar(300)
+
+  /// Çevrimdışı kuyruk idempotency'si (`offline/entryAttempt.ts` kalıbı).
+  clientToken      String? @unique @db.Uuid
+
+  /// GERİ ALMA — `MachineRun` ile aynı kalıp. `revokedById`/`createdById`
+  /// BİLİNÇLİ FK'sız ve indexsiz (MachineRun emsali, [DB-11]): "kim yaptı"
+  /// alanı üstünde süzme yapılmaz.
+  revokedAt        DateTime? @db.Timestamptz
+  revokedById      String?   @db.Uuid
+  revokeReason     String?   @db.VarChar(300)
+
+  createdAt        DateTime @default(now()) @db.Timestamptz
+  createdById      String?  @db.Uuid
+
+  /// İKİ BAĞ DA `Restrict` — gerçekleşmiş bir indirmenin bağlamı sessizce silinmez.
+  machine    Machine     @relation(fields: [machineId], references: [id], onDelete: Restrict)
+  machineRun MachineRun? @relation(fields: [machineRunId], references: [id], onDelete: Restrict)
+  rolls      Roll[]
+
+  @@index([machineId, doffedAt])
+  @@index([machineRunId])
+  @@map("doff_events")
 }
 
 /// TEZGAH KÜNYESİ — makinenin teknik kimliği ve izleme hâli.
@@ -2401,6 +2470,11 @@ model Roll {
   // Açık kumaş ileride Tambur'da bölünüp gerçek toplara dönüşür (parentRollId).
   parentReceiptId String? @db.Uuid
 
+  /// BU TOP HANGİ İNDİRMEDEN? (dokuma P3) NULL = atanmamış — TAHMİN EDİLMEZ. KK1
+  /// sorar (aksiyon anında seçim); cevap yoksa boş kalır ve raporda "atanmamış"
+  /// kovasında AYRI gösterilir. `entrySource=WEAVING` ile birlikte anlamlı.
+  doffEventId String? @db.Uuid
+
   // Parti (Batch) üyeliği. Attach anında doğan partiye yazılır; fason kabulde born
   // roll'a (dispatch.batchId'den), Tambur kesiminde çocuk roll'a KALITILIR → bir parti
   // tüm rota boyunca (depodaki bölünmüş çocuklar dahil) tek kimlikle izlenir.
@@ -2683,6 +2757,8 @@ model Roll {
   children             Roll[]                      @relation("RollLineage")
   directShipment       DirectShipment?             @relation(fields: [directShipmentId], references: [id])
   parentReceipt        SubcontractorReceipt?       @relation("RollFromReceipt", fields: [parentReceiptId], references: [id])
+  /// `Restrict`: topu doğurmuş indirme silinemez — ileri kaydın bağlamı (defter doktrini).
+  doffEvent            DoffEvent?                  @relation(fields: [doffEventId], references: [id], onDelete: Restrict)
   /// Bu rol parent olarak hangi RollOperation kayıtlarına kaynak — Tambur kalıtım izi
   inheritedOperations  RollOperation[]             @relation("RollOperationInherited")
   dispatchItems        SubcontractorDispatchItem[]
@@ -2757,6 +2833,8 @@ model Roll {
   @@index([colorId, status])
   // Raporlama: kaynak bazlı dönem sorguları (örn. "Mart 2027 ham kumaş üretimi")
   @@index([entrySource, createdAt])
+  // Domain FK ([DB-12]): "bu indirmeden kaç top doğdu" + DOFF_CANCEL kapısı (NOT EXISTS).
+  @@index([doffEventId])
   // WO detayı: "şu adımda üretilen + WAREHOUSE/A1_STOCK" sorgusu
   @@index([producedInStepId, status])
   // Fason kuyruğu: "bu adımda + AT_SUBCONTRACTOR" listeleme

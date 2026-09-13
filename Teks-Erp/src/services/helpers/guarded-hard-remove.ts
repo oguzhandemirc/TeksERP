@@ -276,6 +276,14 @@ const MACHINE_DELETE_GUARDS: DependencyGuard[] = [
     message: (n) => `Bu makinede ${n} dokuma koşumu kayıtlı — kalıcı silinemez. Pasife alın.`,
   },
   {
+    // `revokedAt` SÜZÜLMEZ — machineRunCount ile aynı soru: "bu makinede iş yapıldı mı".
+    // Geri alınmış indirme de o makinenin geçmişinin kanıtıdır; FK RESTRICT'tir,
+    // guard yalnız ham P2003 yerine hangi kaydın engellediğini söyler.
+    key: "doffEventCount",
+    count: (id) => prisma.doffEvent.count({ where: { machineId: id } }),
+    message: (n) => `Bu makinede ${n} top indirme kaydı var — kalıcı silinemez. Pasife alın.`,
+  },
+  {
     // `KursunBypassAssignment.machineId` RESTRICT'tir, yani silme zaten P2003'e
     // düşer — ama operatör jenerik "bağlı kayıt var" yerine HANGİ izin engellediğini
     // görmeli; atama satırı append-only bypass izidir, silinmez.

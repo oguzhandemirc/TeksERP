@@ -206,6 +206,7 @@ export const RollEntrySource = {
   SUBCONTRACTOR_RETURN: "SUBCONTRACTOR_RETURN",
   TAMBUR_MANUAL: "TAMBUR_MANUAL",
   SEMI_FINISHED: "SEMI_FINISHED",
+  WEAVING: "WEAVING",
 } as const;
 export type RollEntrySource = (typeof RollEntrySource)[keyof typeof RollEntrySource];
 
@@ -225,6 +226,9 @@ export const rollEntrySourceLabels: Record<RollEntrySource, string> = {
   // 2026-08-17: dışarıdan alınan yarı mamul — ham girişten AYRI tutulur ki
   // "içeride ürettiğimiz ham" ile "dışarıdan aldığımız yarı mamul" karışmasın.
   SEMI_FINISHED: "Yarı Mamul (Dış Alım)",
+  // 2026-09-13 (dokuma P3): fabrikanın kendi tezgahında dokunup KK1'de doğan top —
+  // üçüncü doğum sınıfı; yazan uç henüz yok, değer şemada.
+  WEAVING: "Dokuma (Tezgahtan)",
 };
 
 

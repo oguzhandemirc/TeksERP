@@ -116,6 +116,7 @@ const FILTERS: FilterDef[] = [
       { value: "SUBCONTRACTOR_RETURN", label: "Fason Dönüşü" },
       { value: "TAMBUR_MANUAL", label: "Tambur (Manuel)" },
       { value: "MANUAL_ENTRY", label: "Manuel Giriş" },
+      { value: "WEAVING", label: "Dokuma (Tezgahtan)" },
     ],
   },
   // GİRİŞ İSTASYONU (2026-08-12): "bu top SİSTEME nereden girdi" — kalıcı köken.

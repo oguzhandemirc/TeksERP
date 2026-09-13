@@ -451,6 +451,11 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // burada kurulamaz — satırlar arası CHECK yoktur; o doğrulama P4'ün servis
   // kapısına borçtur ve orada `MachineSpec` ile birlikte iner.
   { table: "machine_runs", name: "machine_runs_productionLineNo_pos" },
+  // 2026-09-13 (dokuma P3) — migration 20260913250000: top indirme defteri.
+  // pieceCount >= 1 (sıfır parçalı doff bir doff değildir) · productionLineNo >= 1
+  // (MachineRun emsali; üst sınır yine servis kapısında).
+  { table: "doff_events", name: "doff_events_pieceCount_pos" },
+  { table: "doff_events", name: "doff_events_productionLineNo_pos" },
   // 2026-09-13 (dokuma P4b) — migration 20260913235000: makinenin hat SAYISI.
   // ⚠️ Bu CHECK yalnız ALT sınırı tutar. ÜST sınır (`machine_runs.productionLineNo
   // <= machines.productionLineCount`) DB'de KURULAMAZ — satırlar arası CHECK yok;

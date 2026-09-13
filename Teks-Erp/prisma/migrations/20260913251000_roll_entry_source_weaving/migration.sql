@@ -1,0 +1,13 @@
+-- =============================================================================
+-- DOKUMA P3 — `RollEntrySource.WEAVING` (2026-09-13) — GERİ ALINAMAZ enum değeri
+-- =============================================================================
+-- Üçüncü doğum sınıfı: fabrikanın kendi tezgahında dokunup KK1'de doğan top.
+-- TEK İFADE, AYRI DOSYA: PG yeni enum değerini onu yaratan tx'te KULLANDIRMAZ
+-- (55P04); değeri kullanan hiçbir ifade buraya girmez. `IF NOT EXISTS`: defter
+-- dışı açılmış bir değer sonraki `migrate deploy`i düşürmesin.
+-- ⚠️ Bu değeri YAZAN uç P3'te yok (şema-only) — eski istemci değeri hiç görmez,
+--   `minVersion` tetiklenmez; yazan uç indiğinde reçete 13. adım yeniden sorulur.
+-- Aynalar (reçete 3–11): inventory.service `entryTitle` · Electron enums/labels/
+--   audit-labels/Rolls filtresi/WorkSessions · mobil models.ts — aynı commit.
+-- =============================================================================
+ALTER TYPE "RollEntrySource" ADD VALUE IF NOT EXISTS 'WEAVING';

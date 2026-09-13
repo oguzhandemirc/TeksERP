@@ -475,6 +475,7 @@ export const ENUM_LABELS: Record<string, string> = {
   // RollEntrySource (eksik kalanlar)
   SEMI_FINISHED: "Yarı Mamul",
   TAMBUR_MANUAL: "Tamburda Elle Eklendi",
+  WEAVING: "Dokumadan İndi",
   // KursunBypassCompletionSource
   TAMBUR_SCAN: "Tambur Okutması",
   DISTRIBUTION_LAST_STEP: "Dağıtımın Son Adımı",

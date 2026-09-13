@@ -17,6 +17,7 @@ export const entrySourceLabels: Record<string, string> = {
   SUBCONTRACTOR_RETURN: "Fason dönüş topu",
   TAMBUR_MANUAL: "Tambur (manuel)",
   SEMI_FINISHED: "Yarı mamul girişi",
+  WEAVING: "Dokumadan indi",
 };
 
 /** Olay satırı başlığı — top girişi / istasyon giriş-çıkış / hata / operasyon / iptal. */
