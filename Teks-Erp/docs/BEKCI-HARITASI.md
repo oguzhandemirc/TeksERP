@@ -554,7 +554,7 @@ Kalan atlamalar üç biçimde ve strict hiçbirini görmez:
 | `Teks-Erp/scripts/test_controller_binds.ts` | Bind desenini kullanan bir controller'da route'a çıplak referansla geçilen HER handler bağlanmış olmalı (this kaybı = her çağrıda sessiz 500). |  | ✓ |  |
 | `Teks-Erp/scripts/test_customer.ts` | CustomerService BaseService CRUD: kod BACKEND-authoritative üretilir (istemci kodu yok sayılır), search, update, soft delete; silinen kayıt reaktive e | ✓ |  |  |
 | `Teks-Erp/scripts/test_customer_branch.ts` | CustomerBranchService create/update/deactivate/findByCustomer + M-26 açık siparişli şubenin pasifleştirilmesini engelleyen guard. | ✓ |  |  |
-| `Teks-Erp/scripts/test_customer_card_fields.ts` | Müşteri kartı alanlarının trim/null normalizasyonu, geçersiz e-posta ve uzunluk aşımında alan-adlı 400 (DB'ye ulaşmadan), exportCode ile arama. | ✓ |  |  |
+| `Teks-Erp/scripts/test_customer_card_fields.ts` | Müşteri kartı alanlarının trim/null normalizasyonu, geçersiz e-posta ve uzunluk aşımında alan-adlı 400 (DB'ye ulaşmadan), exportCode ile arama.; §8 defaultDestination (sevk varsayılanı: EXPORT yazılır, ''→null, enum dışı 400, gönderilmezse null) | ✓ |  |  |
 | `Teks-Erp/scripts/test_customer_sack_delete_guard.ts` | Müşteri kalıcı silmede bağlı çuval varsa EXPLICIT sayımla bloklanır — FK RESTRICT→SET NULL drift'inden sonra örtük P2003 koruması kalktı. | ✓ |  |  |
 | `Teks-Erp/scripts/test_db_copy.ts` | Kopyaya geri yükleme zinciri: ad/allowlist, doğrulama karar fonksiyonu, disk guard, durum uzlaştırma, takas komutu — Katman 1 DB'siz saf mantık, Katma |  |  |  |
 | `Teks-Erp/scripts/test_db_copy_single_start.ts` | startCopyJob atomik claim'i: iki eşzamanlı çağrıdan tam biri başlar, iş tek kez koşar, doğrulama düşerse claim geri bırakılır. |  |  |  |

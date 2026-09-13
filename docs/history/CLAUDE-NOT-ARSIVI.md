@@ -8167,3 +8167,36 @@ DEĞİŞMEZ (defter satırı gerçektir, örme dilimi kg'a çevirecek). Bu fabri
 (§1/§20 sahte kırmızı). `tekserp_9b_test` + `tekserp_9b2_test` DROP bekliyor (kapı DROP'u
 kullanıcıya bırakır). Tablet `update-feed-url.test.ts` worktree'de ignore edilen `keystore/`
 olmadan kırmızı — sembolik bağ.
+
+## 2026-09-13 — Cari yurtiçi/yurtdışı VARSAYILANI: kilit değil, sevkiyat kendi değerini saklar [ÇEKİRDEK]
+
+**Saha ölçümü (1e):** bir müşteri hem yurtiçi hem ihracat sevkiyatı alıyor; cari düzeyinde
+kilit o müşteriyi çalıştırmazdı. Panelde ve tablette sevk hedefi her sevkte elle seçiliyordu
+(`DOMESTIC` sabit başlangıç; üçüncü tur mobil-A #9).
+
+**Karar (1e hükümleri):** `Customer.defaultDestination ShipmentDestination?` — ② VERİ, bayrak yok,
+default YOK (NULL = bugünkü ekran), backfill yok. Sevkiyat `destination`ını kendisi saklar
+(defter: cari yarın yurtdışı olsa eski sevkler değişmez); raporlar sevkiyattan okur; KG
+zorunluluğu `destination === EXPORT`te kalır. Varsayılan **formda** uygulanır — görünür ve
+değiştirilebilir; backend `createShipment` cariden örtük okumaz (okusaydı defter doktrinini
+kırardı). Ezme kuralı: operatör seçiciye bir kez dokunduysa `touched` geri dönülmez, açık
+girdi örtük varsayılanı yener (kalem kartı birimi dersinin aynısı).
+
+**Ölçümler:** HTTP (worktree sunucusu): `POST /api/customers {defaultDestination:"EXPORT"}` →
+201 alan dolu · `GET /api/customers/:id` → EXPORT · tablet yolu `GET /api/shipping/pool/sacks?customerId`
+→ `customer.defaultDestination: EXPORT` (alan tablete GERÇEKTEN ulaşıyor) · `PATCH {"OVERSEAS"}` →
+400 Türkçe, `body.code` undefined · `PATCH {null}` → 200 null. İçe aktarım "Sevk Varsayılanı"
+sütunu: `Mars` → satır ERROR (fail-closed, sessiz DOMESTIC yok), boş → yok, `Yurtdışı` → CREATE.
+
+**Kod çapaları:** `prisma/schema.prisma` Customer · migration `20260913140000_customer_default_destination`
+(ADD COLUMN IF NOT EXISTS, nullable) · `customer.service.ts` `normalizeDefaultDestination` (""→null,
+enum dışı 400) · `shipping.service.ts` `listCustomerPoolSacks` select · `customer.routes.ts` OpenAPI ·
+`import/adapters/customer.adapter.ts` enum sütunu + export round-trip · panel `Customers/{types,schema,
+CustomerFormDialog}` Select "Yok/Yurtiçi/Yurtdışı", `SackContentEdit/destinationDefault.ts` +
+`CreateShipmentDialog` (`destinationTouched`, `customerService.getById`) · tablet `packing.service`
+tipi, `TartiPaket/destinationDefault.ts`, `PaketlemeScreen` (`destinationTouchedRef`).
+
+**Bekçiler:** `test_customer_card_fields` §8 (5 kontrol) · panel `destinationDefault.test.ts` (4) ·
+tablet `destinationDefault.test.ts` (3). Üç kapı: migration EVET (additive, backend önce) · izin
+HAYIR · OTA yeter (tablet yalnız okur). Sürüm notu maddesi (her-ikisi).
+

@@ -11,7 +11,7 @@ import { AppError } from "../utils/app-error";
 import { validateName, validateCode } from "../lib/string-validators";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import prisma from "../lib/prisma";
-import { OrderStatus } from "@prisma/client";
+import { OrderStatus, ShipmentDestination } from "@prisma/client";
 import { dailyCodePrefix, nextDailySeq, foldCodeForCompare } from "../utils/code-format";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 
@@ -272,6 +272,23 @@ export class CustomerService extends BaseService {
     );
   }
 
+  /**
+   * `defaultDestination`: boş/"" → null (varsayılan yok), enum dışı → 400 TR.
+   * Prisma'nın kendi validation hatası da 400'e iner ama alan adı ve mesaj burada
+   * belirgin olsun — kullanıcı "kg yazdım m oldu" benzeri sessiz kaymayı görmesin.
+   */
+  private normalizeDefaultDestination(data: Record<string, unknown>): void {
+    if (!("defaultDestination" in data)) return;
+    const v = data.defaultDestination;
+    if (v == null || v === "") {
+      data.defaultDestination = null;
+      return;
+    }
+    if (typeof v !== "string" || !(Object.values(ShipmentDestination) as string[]).includes(v)) {
+      throw AppError.badRequest(`Geçersiz sevk varsayılanı: ${String(v)} (DOMESTIC veya EXPORT).`);
+    }
+  }
+
   async create(
     data: Record<string, unknown>,
     userId?: string
@@ -286,6 +303,7 @@ export class CustomerService extends BaseService {
     // (idempotent, yan etkisiz). Şekillenmiş dizi retry içinde `data.branches`'e
     // yazılır → super.create sanitize'ı korur (config.nestedCreateFields) ve
     // BaseService onu `{ create: [...] }`'e sarıp müşteriyle ATOMİK nested-create eder.
+    this.normalizeDefaultDestination(data);
     const branches = validateAndShapeBranches(data.branches);
     return withBarcodeRetry(async () => {
       data.code = await nextCustomerCode();
@@ -311,6 +329,7 @@ export class CustomerService extends BaseService {
     // gövdesinde gelirse (beklenmez — UI şubeleri ayrı uçlardan yönetir) sessizce
     // düş: BaseService.update nested-wrap YAPMAZ, ham dizi Prisma update'i bozardı.
     if ("branches" in data) delete data.branches;
+    this.normalizeDefaultDestination(data);
     this.applyStringFields(data, false);
     this.applyCardFields(data);
     const validated = this.validateTaxNumber(data.taxNumber);

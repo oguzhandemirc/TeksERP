@@ -43,6 +43,17 @@ const COLUMNS: ImportColumn[] = [
   { key: "city", label: "İl", type: "text", maxLen: 80, example: "BURSA" },
   { key: "district", label: "İlçe", type: "text", maxLen: 80, example: "" },
   { key: "country", label: "Ülke", type: "text", maxLen: 80, example: "TÜRKİYE" },
+  {
+    key: "defaultDestination",
+    label: "Sevk Varsayılanı",
+    type: "enum",
+    enumValues: [
+      { value: "DOMESTIC", label: "Yurtiçi" },
+      { value: "EXPORT", label: "Yurtdışı" },
+    ],
+    help: "Sevkiyat formu bu değerle AÇILIR, operatör değiştirebilir (kilit değil). Boş = varsayılan yok; tanınmayan değer satırı reddeder.",
+    example: "",
+  },
   { key: "contactName", label: "Yetkili", type: "text", maxLen: 120, example: "" },
   { key: "contactPhone", label: "Telefon", type: "text", maxLen: 40, example: "" },
   { key: "email", label: "E-posta", type: "text", maxLen: 200, example: "" },
@@ -72,7 +83,7 @@ export const customerImportAdapter: ImportAdapter = {
       where: { code: { in: keys, mode: "insensitive" } },
       select: {
         id: true, code: true, name: true, type: true, taxNumber: true, exportCode: true,
-        address: true, city: true, district: true, country: true, contactName: true,
+        address: true, city: true, district: true, country: true, defaultDestination: true, contactName: true,
         contactPhone: true, email: true, notes: true, isActive: true,
       },
     });
@@ -125,7 +136,7 @@ export const customerImportAdapter: ImportAdapter = {
       orderBy: { code: "asc" },
       select: {
         code: true, name: true, type: true, taxNumber: true, exportCode: true,
-        address: true, city: true, district: true, country: true, contactName: true,
+        address: true, city: true, district: true, country: true, defaultDestination: true, contactName: true,
         contactPhone: true, email: true, notes: true, isActive: true,
       },
     });
@@ -139,6 +150,7 @@ export const customerImportAdapter: ImportAdapter = {
       city: r.city ?? "",
       district: r.district ?? "",
       country: r.country ?? "",
+      defaultDestination: r.defaultDestination ?? "",
       contactName: r.contactName ?? "",
       contactPhone: r.contactPhone ?? "",
       email: r.email ?? "",

@@ -28,6 +28,7 @@ import { invalidateSackHub } from "./useSackData";
 import { ShipmentOrderSelect } from "./ShipmentOrderSelect";
 import { ShipmentPreviewPanel } from "./ShipmentPreviewPanel";
 import { destinationLabels, type SackSearchRow, type ShipmentDestination } from "./types";
+import { useCustomerDefaultDestination } from "./destinationDefault";
 import { shipmentService } from "@/pages/Operations/Shipments/service";
 import { ShipmentSackCountField } from "./ShipmentSackCountField";
 
@@ -86,6 +87,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
   const [orderless, setOrderless] = useState(false);
   const [orderIds, setOrderIds] = useState<Set<string>>(new Set());
   const [destination, setDestination] = useState<ShipmentDestination>("DOMESTIC");
+  const [destinationTouched, setDestinationTouched] = useState(false); // dokunduysa cari varsayılanı EZMEZ
   // İdempotency (A4) — ManualEntryDialog emsali: açılış başına taze token, deneme
   // içinde sabit → timeout-retry kurulmuş sevkiyatı geri alır (kör 409 yerine).
   const [clientToken, setClientToken] = useState(() => crypto.randomUUID());
@@ -97,12 +99,14 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
     setOrderless(false);
     setOrderIds(new Set());
     setDestination("DOMESTIC");
+    setDestinationTouched(false);
     setPostWarnings([]);
     setClientToken(crypto.randomUUID()); // yeni açılış = yeni mantıksal deneme
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, sackKey]);
 
   const effCustomerId = lockedCustomerId ?? customerId;
+  useCustomerDefaultDestination({ open, customerId: effCustomerId, touched: destinationTouched, setDestination }); // cari varsayılanı, kilit değil
   const effBranchId = lockedBranchId ?? branchId;
   const activeOrderIds = orderless ? [] : [...orderIds];
 
@@ -308,7 +312,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
           {/* Kapsam (yurtiçi / yurtdışı) — ihracat/prosedür kodu artık belgede
               otomatik çözülür (şube kodu ?? müşteri ihracat kodu), elle girilmez. */}
           <div className="flex flex-wrap items-center gap-2">
-            <Select value={destination} onValueChange={(v) => setDestination(v as ShipmentDestination)}>
+            <Select value={destination} onValueChange={(v) => { setDestinationTouched(true); setDestination(v as ShipmentDestination); }}>
               <SelectTrigger className="h-9 w-36">
                 <SelectValue />
               </SelectTrigger>

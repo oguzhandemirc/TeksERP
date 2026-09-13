@@ -38,6 +38,11 @@
           "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Toplu sipariş yükleme şablonuna “Birim” sütunu eklendi (Metre / Kilogram / Adet). Boş bırakılırsa kalemin kartındaki birim kullanılır. Mevcut “Miktar (m)” başlığı değişmedi; indirilmiş eski şablonlar aynen çalışır. Üretim dengesi ve stok karnesi gibi metre toplayan ekranlar kilo/adet kalemi henüz ayırt etmiyor — o kalemler oralarda hâlâ metre gibi toplanır; ayrı bir güncellemede düzelecek."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "yeni",
+          "metin": "Müşteri kartına “Sevk varsayılanı” alanı geldi: Yurtiçi, Yurtdışı ya da Yok. Bu müşteriye sevkiyat kurarken panelde ve tablette yurtiçi/yurtdışı seçicisi bu değerle açılır; her sevkte yeniden seçmek gerekmez. Bu bir varsayılandır, kilit değil: aynı müşteriye hem yurtiçi hem ihracat sevkiyatı yapıyorsanız seçiciyi o sevk için değiştirirsiniz ve seçiminiz sonradan değişmez. Geçmiş sevkiyatlara dokunulmaz; boş bırakılan müşteride ekran eskisi gibi yurtiçinden başlar. Toplu müşteri yükleme şablonuna da “Sevk Varsayılanı” sütunu eklendi."
         }
       ]
     },

@@ -129,6 +129,7 @@ router.get("/:id", verifyToken, requireAnyPermission("customer:read", ...MOBILE_
  *               city: { type: string }
  *               district: { type: string }
  *               country: { type: string }
+ *               defaultDestination: { type: string, enum: [DOMESTIC, EXPORT], nullable: true, description: "Sevk hedefi VARSAYILANI — sevkiyat formu buradan başlar, kilit değil; boş = varsayılan yok" }
  *               contactName: { type: string }
  *               contactPhone: { type: string }
  *               email: { type: string }
@@ -168,6 +169,7 @@ router.post("/", verifyToken, requirePermission("customer:write"), controller.cr
  *               city: { type: string }
  *               district: { type: string }
  *               country: { type: string }
+ *               defaultDestination: { type: string, enum: [DOMESTIC, EXPORT], nullable: true, description: "Sevk hedefi VARSAYILANI — sevkiyat formu buradan başlar, kilit değil; boş = varsayılan yok" }
  *               contactName: { type: string }
  *               contactPhone: { type: string }
  *               email: { type: string }

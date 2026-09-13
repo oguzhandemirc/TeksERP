@@ -79,6 +79,8 @@ export const customerFormSchema = z.object({
   city: z.string().max(80, "En fazla 80 karakter").optional().or(z.literal("")),
   district: z.string().max(80, "En fazla 80 karakter").optional().or(z.literal("")),
   country: z.string().max(80, "En fazla 80 karakter").optional().or(z.literal("")),
+  // Sevk hedefi varsayılanı — null = yok (bugünkü ekran DOMESTIC'ten başlar).
+  defaultDestination: z.enum(["DOMESTIC", "EXPORT"]).nullable().optional(),
   contactName: z.string().max(120, "En fazla 120 karakter").optional().or(z.literal("")),
   contactPhone: z.string().max(40, "En fazla 40 karakter").optional().or(z.literal("")),
   email: z
@@ -123,6 +125,7 @@ export const customerFormDefaults: CustomerFormValues = {
   city: "",
   district: "",
   country: "",
+  defaultDestination: null,
   contactName: "",
   contactPhone: "",
   email: "",
@@ -145,6 +148,7 @@ export function customerCardPayload(v: CustomerFormValues) {
     city: v.city?.trim() || null,
     district: v.district?.trim() || null,
     country: v.country?.trim() || null,
+    defaultDestination: v.defaultDestination ?? null,
     contactName: v.contactName?.trim() || null,
     contactPhone: v.contactPhone?.trim() || null,
     email: v.email?.trim() || null,

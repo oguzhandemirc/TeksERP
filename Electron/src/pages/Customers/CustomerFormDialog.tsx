@@ -12,6 +12,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormField } from "@/components/forms/FormField";
 import { EnumSelect } from "@/components/forms/EnumSelect";
 import { companyTypeLabels, type CompanyType } from "@/types/enums";
@@ -62,6 +63,7 @@ export function CustomerFormDialog({
         city: initial.city ?? "",
         district: initial.district ?? "",
         country: initial.country ?? "",
+        defaultDestination: initial.defaultDestination ?? null,
         contactName: initial.contactName ?? "",
         contactPhone: initial.contactPhone ?? "",
         email: initial.email ?? "",
@@ -177,6 +179,28 @@ export function CustomerFormDialog({
       <div className="grid grid-cols-3 gap-3">
         <FormField label="Ülke" htmlFor="country" error={form.formState.errors.country}>
           <Input id="country" placeholder="Türkiye" {...form.register("country")} />
+        </FormField>
+        {/* Sevk hedefi VARSAYILANI — sevkiyat formu buradan başlar; operatör değiştirir (kilit değil). */}
+        <FormField label="Sevk varsayılanı" error={form.formState.errors.defaultDestination}>
+          <Controller
+            control={form.control}
+            name="defaultDestination"
+            render={({ field }) => (
+              <Select
+                value={field.value ?? "NONE"}
+                onValueChange={(v) => field.onChange(v === "NONE" ? null : (v as "DOMESTIC" | "EXPORT"))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NONE">Yok (her sevkte seçilir)</SelectItem>
+                  <SelectItem value="DOMESTIC">Yurtiçi</SelectItem>
+                  <SelectItem value="EXPORT">Yurtdışı</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          />
         </FormField>
         <FormField label="Şehir" htmlFor="city" error={form.formState.errors.city}>
           <Input id="city" {...form.register("city")} />

@@ -13,6 +13,8 @@ export interface Customer {
   city: string | null;
   district: string | null;
   country: string | null;
+  /** Sevk hedefi VARSAYILANI — sevkiyat formu buradan başlar, kilit değil; null = yok. */
+  defaultDestination?: "DOMESTIC" | "EXPORT" | null;
   contactName: string | null;
   contactPhone: string | null;
   email: string | null;

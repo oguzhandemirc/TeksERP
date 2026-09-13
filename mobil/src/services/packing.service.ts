@@ -122,7 +122,8 @@ export interface PoolSack {
   swatches: PoolSackSwatch[];
 }
 export interface CustomerPoolSacks {
-  customer: { id: string; code: string; name: string };
+  /** `defaultDestination`: sevk hedefi VARSAYILANI (kilit değil) — paketleme ekranı seçiciyi buradan başlatır. */
+  customer: { id: string; code: string; name: string; defaultDestination?: ShipmentDestination | null };
   sacks: PoolSack[];
 }
 

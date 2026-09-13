@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
+import { resolveDestination } from './destinationDefault';
 import {
   Surface,
   Text,
@@ -87,7 +88,9 @@ export default function PaketlemeScreen() {
   const branchId = route.params.branchId ?? null;
 
   // Sevkiyat kapsamı (yurtiçi/yurtdışı) — sevkiyat KURULUMUNDA kullanılır (taslak).
+  // İlk değer cari kartının VARSAYILANIdır (kilit değil); operatör dokunduysa ezilmez.
   const [destination, setDestination] = useState<ShipmentDestination>('DOMESTIC');
+  const destinationTouchedRef = useRef(false);
 
   const [scanOpen, setScanOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
@@ -149,6 +152,13 @@ export default function PaketlemeScreen() {
   const pool = poolQ.data?.data ?? null;
   const sacks = pool?.sacks ?? [];
   const customer = pool?.customer ?? null;
+  const customerDefaultDestination = customer?.defaultDestination ?? null;
+  useEffect(() => {
+    if (!pool) return;
+    setDestination((cur) =>
+      resolveDestination({ current: cur, touched: destinationTouchedRef.current, customerDefault: customerDefaultDestination }),
+    );
+  }, [pool, customerDefaultDestination]);
 
   // Render'dan bağımsız güncel çuval listesi (scan callback stale closure önlemi).
   const sacksRef = useRef<PoolSack[]>([]);
@@ -567,7 +577,11 @@ export default function PaketlemeScreen() {
                     return (
                       <TouchableRipple
                         key={d}
-                        onPress={() => !active && setDestination(d)}
+                        onPress={() => {
+                          if (active) return;
+                          destinationTouchedRef.current = true;
+                          setDestination(d);
+                        }}
                         style={[
                           styles.destChip,
                           active && (d === 'EXPORT' ? styles.destChipExport : styles.destChipActive),

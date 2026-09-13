@@ -10,6 +10,8 @@
 //   5. Sınır aşımı (exportCode 51 karakter) → alan-adlı 400, DB'ye ulaşmaz.
 //   6. Metin olmayan tip → 400.
 //   7. findAll search exportCode üzerinden müşteriyi bulur (route searchFields).
+//   8. defaultDestination (sevk hedefi VARSAYILANI, 2026-09-13): EXPORT yazılır, "" → null,
+//      enum dışı → 400 ve kaydı değiştirmez, alan gönderilmezse null (bugünkü davranış).
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { CustomerService } from "../src/services/customer.service";
@@ -147,6 +149,32 @@ async function main() {
       Array.isArray(rows) && rows.some((r) => r.id === rec!.id),
       `bulunan=${rows.length}`,
     );
+
+    // 8) defaultDestination — sevk hedefi VARSAYILANI (kilit değil), boş → null, enum dışı → 400
+    const dd = await service.create({ name: "TEST Sevk Varsayılanı", defaultDestination: "EXPORT" }, undefined);
+    const ddId = (dd.data as { id: string }).id;
+    createdIds.push(ddId);
+    const ddRow = await prisma.customer.findUnique({ where: { id: ddId }, select: { defaultDestination: true } });
+    check("8a create defaultDestination=EXPORT yazıldı", ddRow?.defaultDestination === "EXPORT", String(ddRow?.defaultDestination));
+    await service.update(ddId, { defaultDestination: "" }, undefined);
+    const ddNull = await prisma.customer.findUnique({ where: { id: ddId }, select: { defaultDestination: true } });
+    check("8b update defaultDestination='' → null (varsayılan yok)", ddNull?.defaultDestination === null, String(ddNull?.defaultDestination));
+    let badDest: unknown;
+    try {
+      await service.update(ddId, { defaultDestination: "OVERSEAS" }, undefined);
+    } catch (e) { badDest = e; }
+    check(
+      "8c enum dışı defaultDestination → 400 (Türkçe, alan adlı)",
+      badDest instanceof AppError && badDest.statusCode === 400 && badDest.message.includes("sevk varsayılanı"),
+      badDest instanceof Error ? badDest.message : String(badDest),
+    );
+    const ddAfter = await prisma.customer.findUnique({ where: { id: ddId }, select: { defaultDestination: true } });
+    check("8d geçersiz deneme kaydı DEĞİŞTİRMEDİ", ddAfter?.defaultDestination === null);
+    const noField = await service.create({ name: "TEST Sevk Varsayılansız" }, undefined);
+    const nfId = (noField.data as { id: string }).id;
+    createdIds.push(nfId);
+    const nfRow = await prisma.customer.findUnique({ where: { id: nfId }, select: { defaultDestination: true } });
+    check("8e alan gönderilmedi → null (bugünkü davranış)", nfRow?.defaultDestination === null);
   } finally {
     for (const id of createdIds) {
       await prisma.customer.delete({ where: { id } }).catch(() => {});
