@@ -19,8 +19,10 @@
 //          ve o ekran dokuma karosunun arkasındadır. Bu bölüm o cümleyi kilitler:
 //          uçları çağıran her istemci dosyası allowlist'te, allowlist'teki ekranın
 //          karosu `dokumaEnabled`e bağlı, route'u `weavingorder:read` istiyor,
-//          manifestosu `dokumaEnabled` beyan ediyor. Kapalı fabrikada ne karo, ne
-//          route, ne istek — sıfır fark.
+//          manifestosu `dokumaEnabled` beyan ediyor. Ölçtüğü KADAR iddia: karo ve
+//          palet gizli (menüden ulaşılmaz); route yalnız İZNE bakar, elle yazılan
+//          URL boş kabuk + backend 403 görür (`ProtectedRoute` bayrak okumaz —
+//          panel route kapısı ayrı dilim). "İstek atılmaz" demez: ölçmüyor.
 //
 // Salt-okunur: DB'ye dokunmaz (§5 satır-yok diyen sahte istemciyle ölçülür),
 // HTTP atmaz. Koşum: npx tsx scripts/run-all-tests.ts dokuma_regime
@@ -35,6 +37,8 @@
 //      → §7b kırmızı (1 ❌).
 //   ④ `isWeavingOrdersVisible` `return true;` yapıldı → §7d kırmızı (1 ❌).
 //   ⑤ `MODULE_DEPENDENCIES.dokumaEnabled` silindi → §4a kırmızı (1 ❌).
+//   ⑥ (2026-09-14) `src/routes/reports/` altına `prisma.weavingOrder` okuyan KAPISIZ
+//      router kondu → §6g kırmızı (1 ❌) — özyineli tarama olmasa görünmezdi.
 // GEREKLİ Mİ (reçete md. 20): kapı doğduğu gün ağaçta gerçek kusur bulmadı — ölçtüğü
 // sınıf (kapı sızıntısı · listesiz taşıyıcı · kapısız istemci) bugün yok; gerekçesi
 // üç kardeş bekçinin (production/iplik/devere) ölçülmüş tarihidir.
@@ -201,11 +205,13 @@ async function main(): Promise<void> {
       o.hepsiKapidanSonra ? "" : "kapıdan ÖNCE tanımlı uç kapıyı HİÇ görmez — hata da log da üretmez",
     );
   }
-  const routeDizini = path.join(SRC, "routes");
-  const tumRouteDosyalari = fs
-    .readdirSync(routeDizini)
-    .filter((f) => f.endsWith(".routes.ts"))
-    .map((f) => `routes/${f}`);
+  // ⚠️ ÖZYİNELİ: `src/routes/reports/` altında 8 router var; düz `readdirSync`
+  // onları görmüyordu (1e ölçtü 2026-09-14) — oraya konan kapısız bir dokuma
+  // router'ı §6g'yi vakumen yeşil bırakırdı. Sonda: reports/ altına
+  // `prisma.weavingOrder` okuyan kapısız router → §6g ❌ (1).
+  const tumRouteDosyalari = routeDosyalariOzyineli(path.join(SRC, "routes")).map((f) =>
+    path.relative(SRC, f).split(path.sep).join("/"),
+  );
   const kapiTasiyan = tumRouteDosyalari.filter((rel) =>
     yorumlariSok(fs.readFileSync(path.join(SRC, rel), "utf8")).includes(KAPI),
   );
@@ -261,7 +267,7 @@ async function main(): Promise<void> {
   const izinsiz = cagiranlar.filter((f) => !izinli.has(f));
   const oluIzin = [...izinli].filter((f) => !cagiranlar.includes(f));
   check(
-    "§7b ⭐ Dokuma uçlarını çağıran her istemci dosyası allowlist'te (kapalı modülde istek atan yüzey yok)",
+    "§7b ⭐ Dokuma uçlarını çağıran her istemci dosyası allowlist'te (çağıran dosya = dokuma karosunun arkasındaki service)",
     izinsiz.length === 0,
     izinsiz.length ? `izinsiz: ${izinsiz.join(", ")}` : `${cagiranlar.length} dosya çağırıyor`,
   );
@@ -300,6 +306,17 @@ async function main(): Promise<void> {
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);
+}
+
+/** `src/routes/**​/*.routes.ts` — alt dizinler dahil (reports/). */
+function routeDosyalariOzyineli(dir: string): string[] {
+  const out: string[] = [];
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const tam = path.join(dir, e.name);
+    if (e.isDirectory()) out.push(...routeDosyalariOzyineli(tam));
+    else if (e.name.endsWith(".routes.ts")) out.push(tam);
+  }
+  return out;
 }
 
 /** `visibleWhen: X` → X'in tanımlandığı dosyada `return <param>.dokumaEnabled;` var mı? */

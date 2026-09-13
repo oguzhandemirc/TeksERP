@@ -42,7 +42,7 @@ export const MODULE_FLAG_KEYS: ReadonlySet<string> = new Set([
   "dokumaEnabled",
 ]);
 
-/** Aynı sekiz modülün DB anahtarı (`system_settings.key`). */
+/** Aynı dokuz modülün DB anahtarı (`system_settings.key`). */
 export const MODULE_SETTING_KEYS: ReadonlySet<string> = new Set([
   "production.enabled",
   "finance.enabled",

@@ -84,6 +84,8 @@
 
 Backend: `test_devere_regime_gate`, `test_dokuma_regime_gate`, `test_audit_labels`, `test_reason_preset_kind_parity`, `test_db_invariants`, `test_timestamptz_contract`, `test_machine_run`, `test_hard_delete_guard_coverage`, `test_master_data_merge_fk_coverage`, `test_production_line`, `test_machine_stop`, `test_weaving_order`, `test_loom_stop_ground`, `test_dokuma_rapor_onkosullari`, `test_production_regime_gate`, `test_permission_catalog`, `test_role_template_catalog`, `test_swagger_spec`, `test_machine_doff_source`, `test_screen_catalog`, `test_defter_ters_yol`
 
+İstemci: `weaving-regime.test.ts` (Dokuma İşleri karosu yalnız `dokumaEnabled` ile; yüklem üretime bakmaz — zincir bağlamı kuran hook'ta), `tile-visibility.test.ts` (karo ↔ palet aynı yüklem nesnesi, koşullu karo kümesi açık sayılır)
+
 > ⚠️ **Yukarıdaki `Backend:` satırı KAPININ okuduğu biçimdir, süs değil.** `test_identity_ledger.ts:158` alan koşum listesini yalnız `## Bekçiler` başlığından sonraki `Backend:` satırından ayrıştırır (`` `ad` `` aralarında). Aşağıdaki madde imli açıklamalar **insan içindir ve kapı onları GÖRMEZ**: bu dosya 2026-09-13'te madde imli listeyi taşıyordu ve `test_machine_run` tarif edilmiş olduğu hâlde kapı onu **B-d (KAPSAM eksiği)** saydı. ⇒ *Bir belge bölümünü doldurmak, o bölümü okuyan kapıyı beslemek değildir — kapı bölümü değil BİÇİMİ okur.* Yeni bekçi **iki yere birden** yazılır: `Backend:` satırına (bağ) ve aşağıya (tarif).
 
 **Bugün VAR olanlar:**
