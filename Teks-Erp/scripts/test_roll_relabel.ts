@@ -10,7 +10,12 @@
 //   6. Metraj (currentQty) düzeltmesi — bütün topta initialQty ile birlikte güncellenir
 //   7. Kısmen tüketilmiş topta metraj düzeltme reddedilir (renk-only geçer)
 //   8-10. Etiket bayat: relabel→labelDirty=true, baskı→false, no-op→temiz kalır
+//   11. FAZ 0 (OZELLIK-PIVOT-SURUMLEME-PLAN §9, 2026-09-14): `propertyIds`
+//       GÖNDERİLMEYİNCE bayrak DURUR (eskiden `?? []` her düzeltmede hepsini
+//       siliyordu); etiket bayatlamaz; dizi gelince replace hâlâ çalışır.
 // =============================================================================
+import { readFileSync } from "fs";
+import { join } from "path";
 import prisma from "../src/lib/prisma";
 import { roleGrade } from "./fixture-quality-grade";
 import { InventoryService } from "../src/services/inventory.service";
@@ -178,6 +183,39 @@ async function main() {
     );
     const r1Noop = await prisma.roll.findUnique({ where: { id: r1.id }, select: { labelDirty: true } });
     check("No-op relabel labelDirty set etmez (temiz kalır)", r1Noop?.labelDirty === false);
+
+    // 11) FAZ 0 — `propertyIds` gönderilmeyince bayrak DURUR. Fikstür özelliği İŞ
+    //     ANAHTARIYLA (code) kurulur, ortamda aranmaz.
+    const faz0Prop = await prisma.fabricProperty.upsert({
+      where: { code: "TEST-RELABEL-FAZ0" },
+      create: { code: "TEST-RELABEL-FAZ0", name: "TEST Faz 0 bayrağı", valueType: "FLAG" },
+      update: {}, select: { id: true },
+    });
+    const faz0Base = { colorId: r1Cur!.colorId, width: r1Cur!.width != null ? Number(r1Cur!.width) : null, qualityGrade: r1Cur!.qualityGrade ?? undefined };
+    await inv.applyManualProperties(r1.id, { ...faz0Base, propertyIds: [faz0Prop.id] }, undefined);
+    await label.recordPrintEvent(r1.id, undefined, { stock: true });
+    const flagCount = () => prisma.rollProperty.count({ where: { rollId: r1.id, propertyId: faz0Prop.id } });
+    check("11 ön koşul — bayrak yazıldı, etiket temiz", (await flagCount()) === 1 && (await prisma.roll.findUnique({ where: { id: r1.id }, select: { labelDirty: true } }))?.labelDirty === false);
+    // (a) alan yok + başka değişiklik yok → bayrak durur, etiket temiz kalır
+    await inv.applyManualProperties(r1.id, { ...faz0Base }, undefined);
+    const r1a = await prisma.roll.findUnique({ where: { id: r1.id }, select: { labelDirty: true } });
+    check("⭐ 11a propertyIds GÖNDERİLMEDİ → bayrak DURUYOR", (await flagCount()) === 1);
+    check("11a propertyIds gönderilmeyince etiket BAYATLAMADI", r1a?.labelDirty === false);
+    // (b) alan yok + en değişti → bayrak yine durur, etiket bayatlar (en yüzünden)
+    await inv.applyManualProperties(r1.id, { ...faz0Base, width: 210 }, undefined);
+    const r1b = await prisma.roll.findUnique({ where: { id: r1.id }, select: { labelDirty: true, width: true } });
+    check("⭐ 11b en düzeltmesi bayrağı SİLMEDİ (tabletten renk/en düzeltme senaryosu)", (await flagCount()) === 1 && Number(r1b?.width) === 210);
+    check("11b en değişince etiket bayatladı", r1b?.labelDirty === true);
+    // (c) dizi geldi → replace hâlâ çalışır (boş dizi = hepsini kaldır)
+    await inv.applyManualProperties(r1.id, { ...faz0Base, width: 210, propertyIds: [] }, undefined);
+    check("11c propertyIds: [] → bayrak KALDIRILDI (replace sözleşmesi korunur)", (await flagCount()) === 0);
+    // (d) Controller `undefined`i servise OLDUĞU GİBİ geçirir — `?? []` geri gelirse
+    //     yukarıdaki servis kontrolleri yeşil kalır (servisi doğrudan çağırıyoruz),
+    //     kusur ROUTE katmanında yaşar. Statik çapa: iki geçiş noktası, sıfır `?? []`.
+    const ctlSrc = readFileSync(join(__dirname, "..", "src", "controllers", "inventory.controller.ts"), "utf8");
+    const gecis = ctlSrc.split("propertyIds: body.propertyIds,").length - 1;
+    const kacis = ctlSrc.split("propertyIds: body.propertyIds ?? []").length - 1;
+    check("⭐ 11d controller `?? []` YOK, iki uç `undefined`i geçiriyor", gecis === 2 && kacis === 0, `geçiş=${gecis} ??[]=${kacis}`);
   } finally {
     // Sevk onayı ayarını eski değerine döndür (senaryo 4 geçici açmıştı).
     if (prevConf !== undefined) {
@@ -195,6 +233,7 @@ async function main() {
       await prisma.shipment.delete({ where: { id } }).catch(() => {});
     }
     await prisma.rollProperty.deleteMany({ where: { rollId: { in: [r1.id, r2.id, r3.id] } } });
+    await prisma.fabricProperty.deleteMany({ where: { code: "TEST-RELABEL-FAZ0" } }).catch(() => {});
     await prisma.roll.deleteMany({ where: { id: { in: [r1.id, r2.id, r3.id] } } });
     await prisma.color.deleteMany({ where: { id: { in: [colorA.id, colorB.id] } } });
     await prisma.item.delete({ where: { id: item.id } }).catch(() => {});

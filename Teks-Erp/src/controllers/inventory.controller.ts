@@ -699,7 +699,7 @@ export class InventoryController {
         req.params.id as string,
         {
           colorId: body.colorId ?? null,
-          propertyIds: body.propertyIds ?? [],
+          propertyIds: body.propertyIds,
           width: body.width,
           qualityGrade: body.qualityGrade,
           foldType: body.foldType,
@@ -739,7 +739,7 @@ export class InventoryController {
         req.params.id as string,
         {
           colorId: body.colorId ?? null,
-          propertyIds: body.propertyIds ?? [],
+          propertyIds: body.propertyIds,
           width: body.width,
           qualityGrade: body.qualityGrade,
           foldType: body.foldType,

@@ -4200,7 +4200,14 @@ export class InventoryService {
     rollId: string,
     data: {
       colorId: string | null;
-      propertyIds: string[];
+      /**
+       * BAYRAK (FLAG) kümesi — `undefined` DOKUNMA, dizi = TAM liste (replace).
+       * Faz 0 (OZELLIK-PIVOT-SURUMLEME-PLAN §9, 2026-09-14): alanı yollamayan
+       * istemci (tablet Çuval Düzelt yalnız renk/en yollar) eskiden `?? []` ile
+       * "hiç özellik" demiş sayılıyor ve her düzeltme topun BÜTÜN bayraklarını
+       * siliyordu. `undefined` iken özellik bloğu ve `propsChanged` hiç koşmaz.
+       */
+      propertyIds?: string[];
       width?: number | null;
       qualityGrade?: string;
       currentQty?: number;
@@ -4364,9 +4371,10 @@ export class InventoryService {
     // gramajlı topun HİÇBİR alanını (renk/en/metraj) düzeltilemez yapardı.
     // Eski davranış daha kötüydü: koşulsuz deleteMany+createMany, operatörün
     // tabletteki 50GR seçimini HER kayıtta sessizce siliyordu.
-    const dedupedProps = [...new Set(data.propertyIds)];
+    const propsTouched = data.propertyIds !== undefined;
+    const dedupedProps = [...new Set(data.propertyIds ?? [])];
     const { flagIds: dedupedFlagProps, choiceIds: untouchedChoiceIds } =
-      await partitionTargetableIds(dedupedProps);
+      propsTouched ? await partitionTargetableIds(dedupedProps) : { flagIds: [], choiceIds: [] };
     if (dedupedFlagProps.length > 0) {
       const props = await prisma.fabricProperty.findMany({
         where: { id: { in: dedupedFlagProps }, isActive: true },
@@ -4436,8 +4444,9 @@ export class InventoryService {
       roll.properties.filter((p) => p.property.valueType === "FLAG").map((p) => p.propertyId),
     );
     const propsChanged =
-      dedupedFlagProps.length !== existingPropIds.size ||
-      dedupedFlagProps.some((id) => !existingPropIds.has(id));
+      propsTouched &&
+      (dedupedFlagProps.length !== existingPropIds.size ||
+        dedupedFlagProps.some((id) => !existingPropIds.has(id)));
     const oldWidth = roll.width == null ? null : Number(roll.width);
     const widthChanged = data.width !== undefined && data.width !== oldWidth;
     const colorChanged = roll.colorId !== data.colorId;
@@ -4525,17 +4534,19 @@ export class InventoryService {
         }
       }
 
-      // 2) Roll.properties replace — YALNIZ BAYRAK EVRENİ. SEÇİM satırlarına
-      //    (valueId taşıyanlar) dokunulmaz: silmek operatörün istasyonda yaptığı
-      //    değer seçimini (50GR) yok etmek olurdu ve bunu geri getirecek hiçbir
-      //    yüzey yoktur (denetim F1, CRITICAL).
-      await tx.rollProperty.deleteMany({
-        where: { rollId, property: { valueType: "FLAG" } },
-      });
-      if (dedupedFlagProps.length > 0) {
-        await tx.rollProperty.createMany({
-          data: dedupedFlagProps.map((propertyId) => ({ rollId, propertyId })),
+      // 2) Roll.properties replace — YALNIZ BAYRAK EVRENİ ve YALNIZ alan geldiyse
+      //    (`undefined` = dokunma, Faz 0). SEÇİM satırlarına (valueId taşıyanlar)
+      //    dokunulmaz: silmek operatörün istasyonda yaptığı değer seçimini (50GR)
+      //    yok etmek olurdu ve bunu geri getirecek hiçbir yüzey yoktur (denetim F1).
+      if (propsTouched) {
+        await tx.rollProperty.deleteMany({
+          where: { rollId, property: { valueType: "FLAG" } },
         });
+        if (dedupedFlagProps.length > 0) {
+          await tx.rollProperty.createMany({
+            data: dedupedFlagProps.map((propertyId) => ({ rollId, propertyId })),
+          });
+        }
       }
 
     });
@@ -4557,7 +4568,9 @@ export class InventoryService {
       },
       newData: {
         colorId: data.colorId,
-        propertyIds: dedupedFlagProps,
+        // `undefined` = alan gelmedi, bayraklara DOKUNULMADI (Faz 0) — audit'te `[]`
+        // ("hepsi silindi") ile karışmasın.
+        propertyIds: propsTouched ? dedupedFlagProps : undefined,
         // Sessiz ayırma audit'te GÖRÜNMEZ olmasın: bu id'ler istemciden geldi
         // ama SEÇİM tipli oldukları için bu uç onlara dokunmadı.
         untouchedChoicePropertyIds: untouchedChoiceIds,

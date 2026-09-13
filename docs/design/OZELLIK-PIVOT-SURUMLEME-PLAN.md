@@ -16,7 +16,9 @@ Bu bölüm planı DEĞİŞTİRMEZ, ölçer: hangi satır indi, hangi satır numa
 - **Risk #9 kapandı** — `getCancelImpact` `rollWhere` `K18_DEAD_STATUSES` süzer (`585b1274`): TAMBUR_CONSUMED ebeveyn "işlenmiş" sayılmaz. Fabrika kopyası: 67/125 açık WO listede ölü satır taşıyordu, 3'ünün sayısı düşer.
 - **Kapı** — `test_defter_ters_yol` §5/§10 artık `RollProperty`/`WorkOrderTargetProperty`yi `yazan`/`silen` ile tarıyor (`dbc2d930`); `silen` boşaldığı gün "ÖLÜ SİLME BEYANI" kırmızı verir ⇒ Faz 2c/2d'nin bitişi ölçülür. Beyan bu belgeyi `tasarim` olarak atfeder (§6c ölü atıf denetimi).
 
-**Bekleyen (sıra 1e'de: 01 WEAVING şeması → 6e K2 `SackAllocation` → bu plan):** Faz 0 (`inventory.controller.ts:685/:725` `?? []` hâlâ duruyor) · Faz 1 (şema/migration/helper/okur turu — `revokedAt` kolonu yok, `property-revoke.helper.ts` yok) · 2a–2e.
+- **Faz 0 bitti (2026-09-14)** — `inventory.controller.ts:685/:725` `?? []` kalktı, servis imzası `propertyIds?: string[]`; `undefined` iken özellik bloğu, `propsChanged` ve audit `propertyIds` hiç koşmaz. Bekçi `test_roll_relabel` §11 (11a–11d; 11d controller çapası — servis sondası route katmanını göremez). İki negatif sonda: servis `propsTouched=true` → 3 ❌ · controller `?? []` geri → 11d ❌.
+
+**Bekleyen (sıra 1e'de: 01 WEAVING şeması → 6e K2 `SackAllocation` → bu plan):** Faz 1 (şema/migration/helper/okur turu — `revokedAt` kolonu yok, `property-revoke.helper.ts` yok) · 2a–2e.
 
 **Satır numaraları (2026-09-14):** Y1 `:211` (aynı) · Y3 `tambur-undo.service.ts:1730` · Y4 `:2079` · Y5 `inventory.service.ts:4531/:4535` · Y7 `workorder.service.ts:5812` (yanında `WorkOrderToOrderLine.deleteMany :5816` — ayrı borç, beyanda) · Y8 `:5983/:5985` · Y9 `:6009/:6020` · Y10 `subcontractor.service.ts:5436` (silme yok) · Y11 `:5983` (silme yok).
 
