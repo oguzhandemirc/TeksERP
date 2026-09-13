@@ -332,6 +332,10 @@ async function main() {
   // Opsiyonel filtre: `npx tsx scripts/run-all-tests.ts <substring>` → yalnız
   // adı eşleşen test'leri koşar (tek test/alt-küme doğrulaması için).
   const filter = process.argv[2];
+  const haricListesi = (process.env.TEKSERP_HARIC ?? "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
 
   // SIKLIK DEFTERİ bağlamı — bir kez çözülür. Kirli ağaç `+` ile işaretlenir:
   // aynı sha'nın iki koşumu ayrışıyorsa, ağacın kirli olup olmadığı ④ sorusunun
@@ -401,8 +405,29 @@ async function main() {
   const files = readdirSync(SCRIPTS_DIR)
     .filter((f) => /^test_.*\.ts$/.test(f))
     .filter((f) => !filter || f.includes(filter))
+    // ⚠️ DIŞLAMA — ve BEYANLI. `TEKSERP_HARIC` virgülle ayrılmış alt-dizgeler alır
+    // ve eşleşen bekçileri koşmaz. TEK MEŞRU KULLANIMI: düzeltmesi OTURUMLARA
+    // YASAK olan kapıları (kullanıcının denetim yüzeyi) ayrı bir CI job'una
+    // taşımak — `ci.yml` "Kullanıcı kararı bekleyen kapılar" job'u.
+    // ⭐ NEDEN VAR (ölçüldü 2026-09-13): duran bir kırmızı tüm iş-düzeyi sinyalini
+    // doyuruyordu — tamamlanan 36 CI koşumunun 36'sı da `failure`, hepsi aynı
+    // job, ve içlerinden biri TASARIMI GEREĞİ kırmızıydı. ⇒ Yeni bir gerçek arıza
+    // ile duran kırmızı AYIRT EDİLEMİYORDU (*"sürekli kırmızı = sessiz"*, iş
+    // akışı katmanı). ⇒ *Bir kırmızının maliyeti, onu gösteren KAPIDA değil onu
+    // TAŞIYAN SİNYALDE ölçülür.*
+    // ⚠️ Dışlanan her ad ÖZETTE ADIYLA basılır (aşağıda) — bir muafiyet kabı,
+    // ne aldığını söylemiyorsa DOLAR.
+    .filter((f) => !haricListesi.some((h) => f.includes(h)))
     .sort();
 
+  // ⚠️ DIŞLANAN BEKÇİLER ADIYLA BASILIR — bu koşum onları ÖLÇMEDİ ve bunu
+  // söylemek zorunda. Sessiz bir dışlama, muafiyet kabını çöp kutusuna çevirir.
+  if (haricListesi.length > 0) {
+    console.log(
+      `\n⚠️  DIŞLANDI (TEKSERP_HARIC): ${haricListesi.join(", ")} — bu koşum onları ÖLÇMEDİ.\n` +
+        `    Bu yeşil "hepsi temiz" DEMEZ; dışlananların sonucu kendi job'undadır.`,
+    );
+  }
   if (files.length === 0) {
     console.error("Hiç test_*.ts bulunamadı.");
     process.exit(1);
