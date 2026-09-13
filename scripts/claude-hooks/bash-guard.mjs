@@ -79,7 +79,15 @@ const PARCALAR = calistirilacakParcalar(cmd);
 
 for (const b of BANS) {
   if (PARCALAR.some((p) => b.re.test(p))) {
-    process.stderr.write(`⛔ Komut kapısı: ${b.why}\n(kaçış yalnız kullanıcı kararıyla: TEKSERP_HOOK_SKIP=1)\n`);
+    process.stderr.write(
+      `⛔ Komut kapısı: ${b.why}\n` +
+      // ⚠️ KAPSAM ÇIKTIDA DURUR: bir kapının sınırı yalnız kaynağında yaşarsa
+      // altı ay sonra GENİŞLEMİŞ sanılır. Korpusta geçen dört gerçek DB
+      // düşürmeden biri tam bu sınırın içindeydi (`cat > x.sh <<EOF`).
+      `KAPSAM: kabuk komutu incelenir, PROGRAM DAVRANIŞI incelenmez — bir dosyaya\n` +
+      `        yazılıp sonra çalıştırılan script kapsam DIŞIDIR.\n` +
+      `(kaçış yalnız kullanıcı kararıyla: TEKSERP_HOOK_SKIP=1)\n`,
+    );
     process.exit(2);
   }
 }
