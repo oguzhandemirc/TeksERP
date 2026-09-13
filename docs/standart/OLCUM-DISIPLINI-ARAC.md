@@ -270,3 +270,31 @@ Alan tam okunuyordu; kusur okumada değil **popülasyonun tanımındaydı**.)*
 `te` bir **yokluk** değil bir **kırmızı** olur.
 Kardeşleri § Boş çıktı bir ÖLÇÜM değildir · § Tarama, aradığı şeyin YAZILIŞ BİÇİMİNİ
 değil KENDİSİNİ sormalı.
+
+### Kapı, kendi AYRIŞTIRICISININ darlığını SAYIYA çevirebilir — ve sayı CIRCIRA girer
+Bir kapı alanı okurken kullandığı sınır, alanın gerçek sınırı olmayabilir. O zaman kapı
+**ağaçtaki kusuru değil, KENDİ OKUMASINI** sayar — ve o sayı bir cırcır tabanına
+yazıldıysa kusur kozmetik olmaktan çıkar: **taban şişer, kapı GEVŞER.**
+
+*(Vaka 2026-09-13, ölçüldü: kesik `bekçi:` alanı kapısının ayrıştırıcısı
+`` bekçi: `[^`]*` `` — ilk kapanış backtick'inde durur. Alanın İÇİNDE backtick olan dört
+satırda kapı alanın yarısını okudu ve "parantez dengesiz ⇒ kesik" dedi. Gerçek alanlar
+tamdı: 45→70 · 9→64 · 36→70 · 97→169 karakter. 59'un 4'ü ağaçta yoktu.)*
+
+⚠️ **Yönü de ölçüldü:** sahte kesikler tabanı 4 birim YUKARIDA tutuyordu, yani cırcır
+gerçek dört yeni kesiği sessizce yutabilirdi. **Aracın hatası simetrik değildir** — bir
+yönde gürültü, diğer yönde KORUMA KAYBI.
+
+> **Ayrıştırıcının SINIRI, ölçülen şeyin sınırıyla aynı mı?** Alanın ayracı, alanın
+> içinde de geçebilen bir karakterse cevap HAYIRDIR.
+
+**Savunma:** aracın okuduğu değeri, aynı satırdan **bağımsız ikinci bir sınırla** (burada
+`· bekçi: ` ile ` <sub>` arası) yeniden çıkar ve iki okumayı karşılaştır; fark **kusurun
+değil ARACIN** ölçüsüdür. Kalıcı çare ayracı içerikte geçemeyecek biçimde seçmek ya da
+alandan ayracı yasaklamaktır.
+
+⚠️ **Aynı mekanizma bu turda İKİ ayrı alanda çıktı** (`Kapanır:` ve `bekçi:`) — yani
+bulgu bir satırın değil, **alan biçiminin** özelliğidir: backtick'le sınırlanan her
+serbest-metin alanı bu sınıftadır.
+Kardeşleri § Bir tarayıcı, kendi TARİF ETTİĞİ şeyin ÖRNEĞİNİ gerçek sanır ·
+§ Bir yüklem, aradığı şeyin BOZULMUŞ hâlini aramaz.
