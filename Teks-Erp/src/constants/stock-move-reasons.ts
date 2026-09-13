@@ -75,6 +75,18 @@ export const STOCK_MOVE_REASON = {
   /** Fason firmasına çıkış / dönüş. */
   FASON_DISPATCH: "FASON_DISPATCH",
   FASON_RECEIPT: "FASON_RECEIPT",
+  /**
+   * Fason sevk iptali — `FASON_DISPATCH` satırının TERSİ (mal rafına döndü).
+   *
+   * ⚠️ `FASON_RECEIPT` bunun yerine GEÇMEZ: kabul, fasondan dönen malı YENİ bir
+   * top olarak doğurur (ebeveyn `SUBCONTRACTOR_CONSUMED`, stok dışı → stok dışı,
+   * satır yazılmaz). İptal ise EBEVEYNİ `STOCK`a geri döndürür — stok kümesine
+   * giriştir ve tek kaydı budur.
+   *
+   * ⚠️ Geri dönüş deposu İLERİ SATIRDAN aynalanır, canlı veriden DEĞİL:
+   * `warehouseStampManyTx` iptal yolunda varsayılan depoyu yazabilir.
+   */
+  FASON_DISPATCH_CANCEL: "FASON_DISPATCH_CANCEL",
   /** Kartela firmasına çıkış (`WAREHOUSE → AT_KARTELA`, stok kümesinden ÇIKIŞ). */
   KARTELA_DISPATCH: "KARTELA_DISPATCH",
   /**

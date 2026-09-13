@@ -24,6 +24,7 @@ import { openLineWhere } from "./helpers/order-line-scope.helper";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { resolveTargetWarehouseId, warehouseStampManyTx } from "./helpers/warehouse.helper";
 import { postStockMoves } from "./helpers/warehouse-ledger.helper";
+import { reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
 import { assertRollsHaveWarehouse, WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { v4 as uuidv4 } from "uuid";
@@ -2165,6 +2166,37 @@ export class SubcontractorService {
         throw AppError.conflict(
           "Toplardan biri bu sırada başka bir işlemle (kabul/taşıma) değişmiş — sevk iptal edilemedi. Listeyi yenileyip tekrar deneyin."
         );
+      }
+
+      // 2b) STOK DEFTERİ — ters satır BAĞLI doğar (kartela emsali). Mal stok
+      //     kümesine GERİ GİRDİ (`AT_SUBCONTRACTOR → STOCK`); bu yol 2026-09-13'e
+      //     kadar deftere hiçbir şey yazmıyordu ve defter malı sonsuza kadar
+      //     fasonda sayıyordu. Uçları `reverseStockMove` aynalar, yani geri dönüş
+      //     deposu İLERİ SATIRDAN gelir — yukarıdaki `warehouseStampManyTx`
+      //     varsayılan depoyu yazmış olabilir ve mal başka raftan çıkmış olabilir.
+      //
+      // ⚠️ İLERİ SATIR YOKSA HİÇBİR ŞEY YAZILMAZ (ufuktan önceki sevkler):
+      //     bağsız bir giriş satırı, çıkışı hiç kaydedilmemiş malı stoğa EKLER ve
+      //     Σ'yı şişirirdi. Kaydı olmayan çıkışın kaydı olmayan dönüşü — Σ tutarlı.
+      for (const rollId of rollIds) {
+        const ileri = await tx.warehouseMovement.findFirst({
+          where: {
+            rollId,
+            eventType: WarehouseEventType.EXTERNAL,
+            reasonCode: STOCK_MOVE_REASON.FASON_DISPATCH,
+            reversesMovementId: null,
+            reversedBy: { none: {} },
+          },
+          orderBy: { createdAt: "desc" },
+          select: { id: true },
+        });
+        if (!ileri) continue;
+        await reverseStockMove(tx, ileri.id, {
+          eventType: WarehouseEventType.EXTERNAL,
+          reasonCode: STOCK_MOVE_REASON.FASON_DISPATCH_CANCEL,
+          userId: userId ?? null,
+          notes: trimmedReason,
+        });
       }
 
       // 3) Açık RollMovement'ları CANCEL notuyla kapat — tek raw UPDATE (eski kod

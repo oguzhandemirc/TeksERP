@@ -26,6 +26,12 @@
 //   §3 ⭐ Kısmi kabul topu TÜKETMEZ: ebeveyn AT_SUBCONTRACTOR kalır, ona ait
 //      yeni defter satırı doğmaz (fason kuralı: kısmi kabul ≠ tüketim)
 //   §4 POZİTİF KONTROL: fikstür gerçekten kabul etti (born top var, makbuz var)
+//   §7 ⭐ SEVK İPTALİ: ters satır BAĞLI doğar (`reversesMovementId`), uçlar
+//      AYNALANIR ve geri dönüş deposu İLERİ SATIRDAN gelir — canlı damgadan
+//      değil (`warehouseStampManyTx` iptal yolunda varsayılan depoyu yazabilir).
+//      İleri satır NE SİLİNİR NE DEĞİŞİR.
+//   §8 ⭐ UFUK SINIRI: ileri satırı OLMAYAN sevkin iptali satır YAZMAZ — bağsız
+//      giriş, çıkışı hiç kaydedilmemiş malı stoğa ekler ve Σ'yı şişirirdi.
 // =============================================================================
 import { RollStatus, StepStatus, WarehouseEventType } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -194,6 +200,70 @@ async function main(): Promise<void> {
     topUretim.status === RollStatus.AT_SUBCONTRACTOR &&
       dUretim.filter((x) => x.eventType === WarehouseEventType.EXTERNAL).length === 0,
     `${topUretim.status} · çıkış satırı=${dUretim.length}`,
+  );
+
+  // ═══ §7 · §8 — FASON SEVK İPTALİ: ters satır BAĞLI doğar ═══
+  // Bu yol 2026-09-13'e kadar deftere HİÇBİR ŞEY yazmıyordu: iptal topu
+  // `AT_SUBCONTRACTOR → STOCK`a döndürüyor (stok kümesine GİRİŞ) ama defter malı
+  // sonsuza kadar fasonda sayıyordu. ⚠️ `FASON_RECEIPT` bunun yerine geçmez:
+  // kabul YENİ top doğurur, iptal EBEVEYNİ döndürür — iki ayrı olay.
+  const ip = await woKur("IPTAL", 150, true);
+  const ipIleri = await prisma.warehouseMovement.findFirstOrThrow({
+    where: { rollId: ip.rollId, reasonCode: STOCK_MOVE_REASON.FASON_DISPATCH },
+    select: { id: true, fromWarehouseId: true },
+  });
+  const ipSevk = await prisma.subcontractorDispatch.findFirstOrThrow({
+    where: { workOrderId: ip.woId }, select: { id: true },
+  });
+  await sub.cancel(ipSevk.id, `${TAG} iptal sondası`, ADMIN);
+  const dIptal = await prisma.warehouseMovement.findMany({
+    where: { rollId: ip.rollId },
+    select: {
+      id: true, eventType: true, qty: true, reasonCode: true, createdAt: true,
+      fromWarehouseId: true, fromStatus: true, toWarehouseId: true, toStatus: true, reversesMovementId: true,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  const ters = dIptal.find((x) => x.reasonCode === STOCK_MOVE_REASON.FASON_DISPATCH_CANCEL);
+  const topIptal = await prisma.roll.findUniqueOrThrow({ where: { id: ip.rollId }, select: { status: true } });
+  check(
+    "§7 ⭐ İPTAL: ters satır BAĞLI ve uçlar AYNALANMIŞ — from {∅, AT_SUBCONTRACTOR} → to {depo, STOCK}",
+    ters !== undefined &&
+      ters.reversesMovementId === ipIleri.id &&
+      ters.fromWarehouseId === null &&
+      ters.fromStatus === RollStatus.AT_SUBCONTRACTOR &&
+      ters.toWarehouseId === ipIleri.fromWarehouseId &&
+      ters.toStatus === RollStatus.STOCK &&
+      Number(ters.qty) === 150,
+    JSON.stringify(ters),
+  );
+  check(
+    "§7b Geri dönüş deposu İLERİ SATIRDAN aynalandı (canlı damgadan DEĞİL) ve top STOCK'a döndü",
+    ters?.toWarehouseId === ipIleri.fromWarehouseId && topIptal.status === RollStatus.STOCK,
+    `defter=${String(ters?.toWarehouseId)} · ileri=${String(ipIleri.fromWarehouseId)} · top=${topIptal.status}`,
+  );
+  check(
+    "§7c İLERİ SATIR NE SİLİNDİ NE DEĞİŞTİ — iki satır yan yana duruyor (append-only)",
+    dIptal.filter((x) => x.reasonCode === STOCK_MOVE_REASON.FASON_DISPATCH).length === 1 && dIptal.length === 2,
+    `${dIptal.length} satır: ${dIptal.map((x) => x.reasonCode).join(" → ")}`,
+  );
+
+  // §8 — UFUK SINIRI: ileri satırı OLMAYAN sevkin iptali HİÇBİR ŞEY yazmaz.
+  // Burada `IN_PRODUCTION` topu kullanıyoruz (§6 gereği çıkış satırı doğmadı) —
+  // ufuk öncesi eski sevklerin aynısı. Bağsız bir giriş satırı, çıkışı hiç
+  // kaydedilmemiş malı stoğa EKLER ve Σ'yı şişirirdi.
+  const ipSevkU = await prisma.subcontractorDispatch.findFirstOrThrow({
+    where: { workOrderId: u.woId }, select: { id: true },
+  });
+  await sub.cancel(ipSevkU.id, `${TAG} ufuk sondası`, ADMIN);
+  const dUfuk = await prisma.warehouseMovement.findMany({
+    where: { rollId: u.rollId }, select: { reasonCode: true },
+  });
+  const topUfuk = await prisma.roll.findUniqueOrThrow({ where: { id: u.rollId }, select: { status: true } });
+  check(
+    "§8 ⭐ UFUK SINIRI: ileri satırı olmayan sevkin iptali satır YAZMAZ (olay yokluğu) — ama top yine de döner",
+    dUfuk.length === 0 && topUfuk.status === RollStatus.STOCK,
+    `${dUfuk.length} satır · top=${topUfuk.status}`,
   );
 
   // ═══ §1 · §4 — FASON SON ADIM: born top rafa iner, satır STATÜLÜ ═══

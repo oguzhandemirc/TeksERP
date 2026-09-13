@@ -362,10 +362,8 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   OPENING: { tur: "TERMINAL", gerekce: "defterin epoch fotoğrafı; ÖNCESİ YOK, dolayısıyla tersi de yok (warehouse-ledger-reverse.helper.ts epoch şerhi)" },
   SHRINK: { tur: "BASKA_DEFTER", nerede: "RollVariance", gerekce: "çekme ÖLÇÜMdür ve `SHRINK_REASON_CODE=\"FASON_CEKME\"` ile varyans defterine yazılır; stok defterinde hiç yazarı yok (ölçüldü 2026-09-13: 0 yazar / 0 satır)" },
 
-  FASON_DISPATCH: { tur: "BORC",
-    ne: "TERS YOLU YOK — fason sevk iptali topu AT_SUBCONTRACTOR → STOCK'a döndürüyor ama deftere HİÇBİR satır yazmıyor; katalogda FASON_*_CANCEL kodu da yok",
-    kanit: "subcontractor.service.ts `cancel` (soft cancel) gövdesinde tek defter çağrısı yok · ölçüldü 2026-09-13: 39 ileri / 0 ters / 0 bağlı",
-    sahibi: "fason alanı (6e)" },
+  FASON_DISPATCH: { tur: "BAGLI_TERS", kod: "FASON_DISPATCH_CANCEL" },
+  FASON_DISPATCH_CANCEL: { tur: "TERS_KODU", ileri: "FASON_DISPATCH" },
   FASON_RECEIPT: { tur: "BORC",
     ne: "ÖLÇÜLMEDİ — fason kabulünün geri alınması deftere satır yazıyor mu bilinmiyor",
     kanit: "yazan: subcontractor.service.ts `receiveInner` (ENTRY). Geri alma yolu ARANMADI",
