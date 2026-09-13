@@ -120,6 +120,9 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // hangi çözgüden dokunuyor). Yazma YOK: kartı süpervizör açar.
       // Devere modülü kapalı doğduğu için bu izin sahada bir şey AÇMAZ.
       "warpspec:read",
+      // Dokuma işi planlamanın OKUDUĞU şeydir; kapat/iptal kararı süpervizörde.
+      // Ekranı henüz yok (yüzey önce, ekran sonra) — sahada bir şey AÇMAZ.
+      "weavingorder:read",
     ],
   },
   {
@@ -320,6 +323,10 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // bozar. Okuma planlamada da var, yazma yalnız burada.
       "warpspec:read",
       "warpspec:write",
+      // Dokuma işi yazma DAR: kapanış AÇIK BİR KARARDIR (operatör/süpervizör
+      // kapatır, türetilmez) ve iptal bir durum geçişidir — planlama okur.
+      "weavingorder:read",
+      "weavingorder:write",
     ],
   },
   {

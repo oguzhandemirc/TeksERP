@@ -27,7 +27,7 @@
 // buradan geçmeli.
 // =============================================================================
 
-import { OrderStatus, RollStatus } from "@prisma/client";
+import { OrderStatus, RollStatus, WeavingOrderStatus } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 
 /**
@@ -78,5 +78,25 @@ export function assertOrderReplayAlive(existing: {
     `Bu form daha önce kaydedilmiş ve sipariş İPTAL edilmiş (${existing.orderNumber ?? "-"}) — ` +
       "aynı gönderim tekrar edilemez. Yeni sipariş için formu kapatıp yeniden açın.",
     { code: "ORDER_CANCELLED", orderId: existing.id, orderNumber: existing.orderNumber },
+  );
+}
+
+/**
+ * Token'la bulunan dokuma işi hâlâ canlı mı — değilse 409 `WEAVING_ORDER_CANCELLED`.
+ *
+ * Üçüncü ayrı kod: dokuma işi ne top ne sipariştir; istemci "formu yeniden aç"
+ * hamlesini kendi ekranında verir. COMPLETED canlı SAYILIR — kapanmış bir işi
+ * yeniden göndermek "zaten var" cevabını hak eder, iptal edilmiş iş ise etmez.
+ */
+export function assertWeavingOrderReplayAlive(existing: {
+  id: string;
+  status: WeavingOrderStatus;
+  weavingOrderNumber: string;
+}): void {
+  if (existing.status !== WeavingOrderStatus.CANCELLED) return;
+  throw AppError.conflict(
+    `Bu form daha önce kaydedilmiş ve dokuma işi İPTAL edilmiş (${existing.weavingOrderNumber}) — ` +
+      "aynı gönderim tekrar edilemez. Yeni iş için formu kapatıp yeniden açın.",
+    { code: "WEAVING_ORDER_CANCELLED", weavingOrderId: existing.id, weavingOrderNumber: existing.weavingOrderNumber },
   );
 }

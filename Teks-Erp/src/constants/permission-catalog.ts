@@ -65,6 +65,12 @@ export const PERMISSION_CATALOG = [
   { code: "workorder:distribute", module: "PRODUCTION", category: "web", description: "Kurşun dağıtım — fason dönüşü iş emrini fiziksel kurşun makinesine atama + son-adım tamamlama" },
   { code: "station:read", module: "PRODUCTION", category: "web", description: "Üretim istasyonu listesi/detay görüntüleme" },
   { code: "station:write", module: "PRODUCTION", category: "web", description: "Üretim istasyonu tanımlama/düzenleme" },
+  // ── Dokuma işi (2026-09-13, yazma yüzeyi) ──────────────────────────────────
+  // Dokuma işi bir `WorkOrder` DEĞİLDİR (kendi varlığı, kendi yaşam döngüsü) ve
+  // `workorder:*` ile açılmaz: topun rotasını planlayan kişi tezgaha iş dağıtan
+  // planlamacı olmak zorunda değil. Ekranı ayrı dilimde iner (SCREENLESS muaf).
+  { code: "weavingorder:read", module: "PRODUCTION", category: "web", description: "Dokuma işi listesi/detay görüntüleme" },
+  { code: "weavingorder:write", module: "PRODUCTION", category: "web", description: "Dokuma işi oluşturma/düzenleme/kapatma/iptal" },
   { code: "item:read", module: "MASTER_DATA", category: "web", description: "Ürün/kumaş tanımı listesi/detay görüntüleme" },
   { code: "item:write", module: "MASTER_DATA", category: "web", description: "Ürün/kumaş tanımı oluşturma/düzenleme" },
   // ── Devere / levent (2026-09-12, Faz 1a) ───────────────────────────────────

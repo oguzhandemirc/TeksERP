@@ -400,6 +400,11 @@ export const EKRANSIZ_MODULLER: ReadonlyArray<{ modul: ModulKey; reason: string 
 export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: string }> = [
   { code: "admin:*", reason: "Wildcard — tek tek ekran beyanı anlamsız." },
   { code: "mobile:*", reason: "Wildcard — tüm mobil ekranları kapsar." },
+  // Dokuma işi yazma yüzeyi ekrandan ÖNCE indi (2026-09-13). Ekran dilimi
+  // (`SCREEN_CATALOG` girdisi + karo + route) inince bu iki satır DÜŞER —
+  // kapı iki yönlü, bayat muaf kırmızı verir.
+  { code: "weavingorder:read", reason: "Dokuma işi ekranı ayrı dilimde iner; yüzey önce, ekran sonra (2026-09-13)." },
+  { code: "weavingorder:write", reason: "Dokuma işi ekranı ayrı dilimde iner; yüzey önce, ekran sonra (2026-09-13)." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

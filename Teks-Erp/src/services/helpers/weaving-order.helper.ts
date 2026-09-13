@@ -14,6 +14,7 @@
 // (envanter gerekçesi `period-guard.helper.ts` başlığında).
 // =============================================================================
 import type { Prisma } from "@prisma/client";
+import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../../utils/code-format";
 
 /**
  * Dokuma işi numara sayacı uzayı.
@@ -30,4 +31,25 @@ export const WEAVING_ORDER_LOCK_NS: number = 8032;
  */
 export async function lockWeavingOrderNumberTx(tx: Prisma.TransactionClient): Promise<void> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${WEAVING_ORDER_LOCK_NS}::int, 0::int)`;
+}
+
+/** Dokuma işi numarası ön eki — `DK` + GGAAYY + NNNN (`IE` iş emri emsali). */
+export const WEAVING_ORDER_PREFIX = "DK";
+
+/**
+ * Sıradaki dokuma işi numarası — kilit bu fonksiyonun İLK ifadesidir, sayaç
+ * okuması ondan sonra gelir. Çağıran tx'te bundan önce başka ifade koşturmaz.
+ */
+export async function nextWeavingOrderNumberTx(
+  tx: Prisma.TransactionClient,
+  date: Date,
+): Promise<string> {
+  await lockWeavingOrderNumberTx(tx);
+  const prefix = dailyCodePrefix(WEAVING_ORDER_PREFIX, date);
+  const todays = await tx.weavingOrder.findMany({
+    where: { weavingOrderNumber: { gte: prefix, startsWith: prefix } },
+    select: { weavingOrderNumber: true },
+  });
+  const seq = nextDailySeq(todays.map((w) => w.weavingOrderNumber), prefix);
+  return buildDailyCode(WEAVING_ORDER_PREFIX, seq, date);
 }
