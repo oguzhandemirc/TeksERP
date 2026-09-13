@@ -99,9 +99,24 @@ function statusEntries(pathspec) {
 // düzeltmesi yalnız SAHNELENMİŞ yabancı dosyayı kurtarır; GERÇEKTEN takipsiz
 // yabancı dosya hâlâ yanlış kişiyi durduruyordu.
 //
-// KARAR (kullanıcı onaylı): commit `prisma/migrations`a **dokunuyorsa** takipsiz
-// kapılar SERT kalır — migration gönderiyorsan temiz bir migration durumu görmek
-// ZORUNDASIN. Dokunmuyorsa UYARI + çıkış 0, dosya ADIYLA ve SAHİP UYDURMADAN.
+// KARAR (kullanıcı onaylı, 2026-09-13 sabahı): commit `prisma/migrations`a
+// **dokunuyorsa** takipsiz kapılar SERT kalır — migration gönderiyorsan temiz bir
+// migration durumu görmek ZORUNDASIN. Dokunmuyorsa UYARI + çıkış 0, dosya ADIYLA
+// ve SAHİP UYDURMADAN.
+//
+// ⚠️ KARAR DARALTILDI (kullanıcı onaylı, 2026-09-13 gecesi) — ve ESKİ HÂLİ NEDEN
+// BIRAKILDIĞIYLA BİRLİKTE DURUYOR ki altı ay sonra "neden bu kadar dar" diye
+// genişletilmesin:
+//   ESKİ kapsam : migration commit'i + HERHANGİ bir takipsiz bekçi → SERT
+//   YENİ kapsam : migration commit'i + o migration'ın GETİRDİĞİ ADI ANAN
+//                 takipsiz bekçi → SERT.  Ötekiler → ADVISORY (çıkış 0).
+//   GEREKÇE (ölçüldü): eski kapsam bir günde **4 kez yanlış kişiyi durdurdu**
+//     (d5 ×3 kaçışa zorlandı · ea worktree · 01 · sahnelenen dosyaların yabancı
+//     commit'e kapılması) ve **0 kez** gerçek bir unutulmuş test yakaladı.
+//   ⚠️ SINIRI (kullanıcı bilerek kabul etti, ve kapı bunu kendi ağzından duyurur):
+//     adı geçmeyen ama o migration için yazılmış bir testi KAÇIRIR.
+//   ⇒ Sahiplik git'ten türetilemez ve uydurulmaz; ama İLİŞKİ türetilebilir:
+//     migration SQL'inden adlar çıkarılır, takipsiz testlerde aranır.
 //
 // ⚠️ KORUMA KAYBOLMUYOR, DOĞRU KİŞİYE TAŞINIYOR: takipsiz bir migration prod'a
 // zaten hiç gitmez; asıl risk SAHİBİNİN unutmasıdır ve o kişi kendi commit'inde
@@ -255,9 +270,18 @@ if (untrackedTests.length) {
         `    İLGİSİZ (hiçbirini anmıyor — muhtemelen KOMŞUNUN işi): ` +
         `${ilgisiz.length ? ilgisiz.join(", ") : "yok"}` +
         (ilgili.length === 0
-          ? "\n    ⚠️ Bu commit'in migration'ıyla İLİŞKİLİ takipsiz test YOK."
-          : "");
-  takipsizBulgu({
+          ? "\n    ⚠️ Bu commit'in migration'ıyla İLİŞKİLİ takipsiz test YOK ⇒ bu kapı" +
+            " seni DURDURMUYOR (kullanıcı kararı 2026-09-13: sertlik İLGİLİ kümesine daraltıldı)."
+          : "") +
+        "\n    ⚠️ SINIR: bu kapı, migration'ın getirdiği adı ANMAYAN ama yine de o migration" +
+        "\n       için yazılmış bir testi KAÇIRIR. Kullanıcı bu riski bilerek kabul etti;" +
+        "\n       gerekçe: eski kapsam 4 kez yanlış kişiyi durdurdu, 0 kez gerçek unutulmuş" +
+        "\n       test yakaladı (ölçüldü 2026-09-13).";
+  // ⚠️ SERTLİK ARTIK İLGİLİ KÜMESİNE BAĞLI (kullanıcı kararı, 2026-09-13 gecesi).
+  // `takipsizBulgu` genel sertliği uygular; GATE 4 ondan AYRILIR ve yalnız
+  // migration'ın getirdiği adı ANAN takipsiz bekçi varsa sert olur.
+  const gate4Sert = TAKIPSIZ_SERT && ilgili.length > 0;
+  (gate4Sert ? problems : uyarilar).push({
     gate: "GATE 4 — COMMIT EDİLMEMİŞ TEST",
     ayrim,
     why:
