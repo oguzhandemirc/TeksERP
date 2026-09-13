@@ -4,7 +4,7 @@
 
 ⚠️ **Bölüm numarası KORUNDU** — `TEST-VE-DERLEME.md §7` diye işaret eden çapalar hedefini bulmalıdır.
 
-Kadans, commit kapısı, paket gerçekleri, "yeşil ≠ kapsandı", yeni bekçi yazımı ve derleme orada kaldı: `docs/standart/TEST-VE-DERLEME.md`.
+Kadans, commit kapısı, paket gerçekleri ve derleme orada kaldı; "yeşil ≠ kapsandı" (§4) ile yeni bekçi yazımı (§5) [`TEST-VE-DERLEME-BEKCI.md`](TEST-VE-DERLEME-BEKCI.md)'de: `docs/standart/TEST-VE-DERLEME.md`.
 
 ---
 

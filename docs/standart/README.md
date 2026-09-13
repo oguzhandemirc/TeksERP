@@ -29,7 +29,8 @@ Karar hikâyeleri (tarih, ölçüm, hangi alternatif neden reddedildi) `docs/his
 | [`KUTUPHANELER.md`](KUTUPHANELER.md) | Katman × ihtiyaç → kütüphane tablosu, yeni bağımlılık karar kaydı, ölü paket teşhisi |
 | [`ESZAMANLILIK.md`](ESZAMANLILIK.md) | Yarış ve idempotency tutumu (§1), karar tablosu (§2), bekçi yazımı (§4), istemci tarafı (§5), yanlış refleks listesi (§7), beklenen uyarı (§8) |
 | [`ESZAMANLILIK-ENVANTER.md`](ESZAMANLILIK-ENVANTER.md) | Kilit uzayı envanteri (§3) ve bilinen boşluklar (§6) — 2026-09-13'te `ESZAMANLILIK.md`'den bölündü, §3/§6 numaraları çapalar kopmasın diye korundu |
-| [`TEST-VE-DERLEME.md`](TEST-VE-DERLEME.md) | Ne zaman ne koşar, hangi kapı nerede (§1–§6) |
+| [`TEST-VE-DERLEME.md`](TEST-VE-DERLEME.md) | Ne zaman ne koşar, hangi kapı nerede (§1–§3, §6) |
+| [`TEST-VE-DERLEME-BEKCI.md`](TEST-VE-DERLEME-BEKCI.md) | Bir bekçinin **güvencesi** (§4: yeşil ≠ kapsandı) ve **yazımı** (§5: yeni bekçi) |
 | [`TEST-VE-DERLEME-SINIRLAR.md`](TEST-VE-DERLEME-SINIRLAR.md) | Bilinen sınırlar (§7) ve **bilerek kırmızı bekçiler** (§8) — paket kırmızı verdiğinde ilk bakılacak liste; her satır "kim kapatabilir" taşır |
 | [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | Ölçüm YÖNTEMİ: pozitif kontrol ↔ örnekle doğrulama, atıfta eşik, yapısal sonda, sayı/çapa/kimlik yazma, teşhis mi ölçüm mü |
 | [`OLCUM-DISIPLINI-KAPI.md`](OLCUM-DISIPLINI-KAPI.md) | Ölçümü KAPIYA çevirmek: mandal yazma, **kapının dokuz ölüm biçimi**, kırmızıyı sınıflandırma, yerel yeşil ↔ HEAD |
