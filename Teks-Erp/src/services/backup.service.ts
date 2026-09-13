@@ -228,7 +228,6 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
     return finish(false, "DATABASE_URL çözümlenemedi — yedek alınamaz.", null);
   }
 
-  // --- 0) İSTEMCİ ↔ SUNUCU SÜRÜM UYUMU (fail-closed)
   // Sunucudan YENİ bir `pg_dump` ile alınan yedek BUGÜN sorunsuz görünür, LAZIM
   // OLDUĞU GÜN açılmaz (ölçüldü: istemci 18 ↔ sunucu 16 → geri yüklemede
   // "unrecognized configuration parameter transaction_timeout"). Açılamayan bir
@@ -236,6 +235,20 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
   // ⚠️ "Sürüm okunamadı" DURDURMAZ, yalnız iz bırakır: `PG_BIN_DIR` yoksa PATH'e
   // düşülüyor ve araç bulunamayan her kurulumda yedeği durdurmak, çözdüğümüzden
   // büyük bir arıza olurdu (üç sonuç, iki değil).
+  // ⚠️ BAYRAK, İLK `await`TEN ÖNCE SET EDİLİR — VE BU SIRA LOAD-BEARING.
+  // `if (running)` kapısı ile buraya kadarki yol BİLEREK senkrondu: iki eşzamanlı
+  // çağrıdan biri kapıdan geçip bayrağı dikiyor, ikincisi geçemiyordu. Araya bir
+  // `await` girerse ikisi de kapıdan geçer ve karşılıklı dışlama SESSİZCE kaybolur.
+  // Ölçüldü 2026-09-13: sürüm kapısı ilk yazımda bayraktan ÖNCE await ediyordu ve
+  // `test_backup` §5 ("paralel iki yedekten biri reddedildi") kırmızıya döndü —
+  // ürün kodunda gerçek bir eşzamanlılık kaybıydı, bekçi doğru bağırdı.
+  // ⇒ Buraya yeni bir `await` eklemeden önce bayrağı da birlikte taşı.
+  running = true;
+
+  // --- 0) İSTEMCİ ↔ SUNUCU SÜRÜM UYUMU (fail-closed)
+  // `measureVersionCompat` FIRLATMAZ (okuyucuların hatasını "ölçülemedi"ye
+  // çevirir) ⇒ bayrak burada try/finally'siz güvenli; yine de her erken dönüş
+  // bayrağı KENDİ elinde indirir.
   const compat = await measureVersionCompat(
     () => clientVersion("pg_dump"),
     async () => {
@@ -244,13 +257,13 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
     },
   );
   if (compat.result === "client-newer") {
+    running = false;
     return finish(false, versionCompatMessage(compat, "backup"), null);
   }
   if (compat.result === "unmeasured") {
     uyari("backup", versionCompatMessage(compat, "backup"));
   }
 
-  running = true;
   const out = path.join(BACKUP_DIR, `${NIGHTLY_PREFIX}${stamp(new Date())}.dump`);
   // ⚠️ YARIM DOSYA NİHAİ ADI ALMAZ (denetim 2026-08-09, F-CORE-OPS-001).
   // pg_dump eskiden DOĞRUDAN `out`a yazıyordu. Süreç dump sırasında ölürse
