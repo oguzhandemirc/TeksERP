@@ -3,12 +3,12 @@
 // SEMAFOR SONDASI — `scripts/hooks/**` değişince kapı bunu koşar (zero-dep)
 // =============================================================================
 // Çalıştır: node scripts/hooks/lib/semafor-sonda.mjs      Çıkış: 0 geçti · 1 düştü
-// Üç davranış, kendi geçici kökünde (gerçek semafora DOKUNMAZ):
+// Dört davranış, kendi geçici kökünde (gerçek semafora ve deftere DOKUNMAZ):
 //   ① ölü PID'li ve pid'siz slot süpürülür  ② al → pid dosyası bizim, bırak → yok
-//   ③ kapasite doluyken bekler ve ⏳ basar; bir tutucu ölünce alır
+//   ③ kapasite doluyken bekler ve ⏳ basar; bir tutucu ölünce alır  ④ agir-is.mjs sarmalayıcısı
 // =============================================================================
-import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -66,7 +66,33 @@ const sonuc = await new Promise((r) => {
 });
 check("③ dolu semaforda bekledi ve ⏳ bastı", bekliyor && /⏳ kapı semaforu: \d+ kapı önde/.test(cikti), cikti.split("\n")[0]?.slice(0, 80));
 check("③ tutucu ölünce aldı", sonuc === 0 && /ALINDI \d+/.test(cikti), String(cikti.match(/ALINDI \d+/)?.[0] ?? sonuc));
-for (const t of tutucular) t.kill();
+// Tutucular ÖLÜNCEYE kadar beklenir (kill asenkron; canlı sanılan slot süpürülmez), sonra süpür.
+await Promise.all(tutucular.map((t) => new Promise((r) => (t.exitCode !== null || t.signalCode ? r() : (t.on("exit", r), t.kill())))));
+supur();
+const slotSayisi = () => readdirSync(KOK).filter((a) => a.startsWith("slot-")).length;
+
+// ④ ağır iş sarmalayıcısı (scripts/agir-is.mjs): slotu bu havuzdan alır, çocuğun çıkış
+//    kodunu AYNEN taşır, deftere "semafor bekleme" + "ağır iş" satırı düşer. Sonda kendi
+//    defter yoluna yazar (gerçek deftere dokunmaz). Çocuk bilerek 3 ile çıkar: 0/1 dışı
+//    bir kod, "geçti/düştü"ye indirgenmediğini de ölçer.
+const SARMAL = join(BURASI, "..", "..", "agir-is.mjs");
+const defterYolu = join(KOK, "defter.tsv");
+const sarmal = spawnSync(
+  process.execPath,
+  [SARMAL, "--", process.execPath, "-e", `const s = require("fs").readdirSync(process.env.TEKSERP_SEMAFOR_KOK).filter(a => a.startsWith("slot-")); process.stdout.write("SLOT " + s.length); process.exit(3)`],
+  { env: { ...process.env, TEKSERP_SEMAFOR_KOK: KOK, TEKSERP_KAPI_DEFTERI: defterYolu }, encoding: "utf8", timeout: 20_000 },
+);
+const defter = existsSync(defterYolu) ? readFileSync(defterYolu, "utf8") : "";
+check("④ sarmalayıcı: çocuk slot varken koştu ve çıkış kodu AYNEN taşındı (3)", sarmal.status === 3 && /SLOT 1/.test(sarmal.stdout), `çıkış=${sarmal.status} stdout=${JSON.stringify(sarmal.stdout)}`);
+check("④ sarmalayıcı: slot çıkışta bırakıldı", slotSayisi() === 0, `kalan slot ${slotSayisi()}`);
+check(
+  "④ sarmalayıcı: deftere 'semafor bekleme' ✅ + 'ağır iş' ❌ (çıkış 3) satırları düştü",
+  /\tsemafor bekleme\t✅\t/.test(defter) && /\tağır iş · [^\t]*\t❌\t[\d.]+\t3\t/.test(defter),
+  JSON.stringify(defter.split("\n").filter(Boolean).map((l) => l.split("\t").slice(2, 6).join("|"))),
+);
+const bos = spawnSync(process.execPath, [SARMAL], { env: { ...process.env, TEKSERP_SEMAFOR_KOK: KOK }, encoding: "utf8" });
+check("④ sarmalayıcı: komutsuz çağrı 2 ile düşer ve slot almaz", bos.status === 2 && slotSayisi() === 0, `çıkış=${bos.status}`);
+
 rmSync(KOK, { recursive: true, force: true });
 
 console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
