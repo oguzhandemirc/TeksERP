@@ -356,7 +356,12 @@ for (const file of kodDosyalari(REPO_ROOT)) {
   // Bugün DÖRDÜNCÜ kez aynı sınıf: bir tarayıcının ilk kurbanı kendi belgesidir.
   const src = readFileSync(file, "utf8")
     .split("\n")
-    .map((l) => (l.trim().startsWith("//") || l.trim().startsWith("*") ? "" : l))
+    // `/**` ile BAŞLAYAN tek satırlık JSDoc de yorumdur: eski hâl yalnız `//` ve
+    // devam satırı `*` eliyordu, `/** … */` koddan sayılıp yanlış kırmızı veriyordu.
+    .map((l) => {
+      const t = l.trim();
+      return t.startsWith("//") || t.startsWith("*") || t.startsWith("/*") ? "" : l;
+    })
     .join("\n");
   if (!FS_CAGRISI.test(src)) continue; // dosya hiç okuma yapmıyorsa atıfları prose'dur
   const aday = new Set();

@@ -228,6 +228,25 @@ koşmadı ve senaryo ÖLÇÜLMEMİŞ olarak yeşil kalacaktı.)* *(6e)*
 **Savunma: pozitif kontrol** — bu vakayı yakalayan tek şey oydu. Fikstür kurulduktan
 sonra kurulanı GERİ OKU ve beklediğin değerde olduğunu ölç; yazdığını varsayma.
 
+### Ortak ağaçta "BENİM commit'im" diye bir şey yoktur — "ŞU ANKİ REF" vardır
+Bir commit'i kendi malın sayman, ona sonradan dokunabileceğini varsayar. Ortak ağaçta o
+varsayım üç ayrı biçimde çöker ve **üçü de aynı gün yaşandı (2026-09-13)**:
+
+| # | Biçim | Ne oldu |
+|---|---|---|
+| ① | başkasının **commit'siz** işi ölçümü kirletti | cırcır tabanı ağaçtan ölçüldü, 13 kapanışın 6'sı ölçenindi |
+| ② | commit **süpürüldü** | bir oturumun çıplak `git commit`i başkasının üç dosyasını kendi commit'ine aldı |
+| ③ | **amend ayrıştı** | bir commit push'landı, yazarı bunu bilmeden amend etti; `main` çatallandı |
+
+> **Push eden, push'ladığını YAZARA söyler — VE yazar, amend ettiğini PUSH EDEBİLECEK
+> olana söyler.** Tek yönlü hâli ayrışmanın yalnız bir ucunu kapatır.
+
+📌 Ve bu, **izole ağaca (worktree) geçişin en kısa gerekçesidir**: yukarıdaki üçünün
+hiçbiri dikkatle önlenmez, çünkü üçü de *başkasının* zamanlamasına bağlıdır.
+⚠️ Ama izolasyon **dosya** izolasyonudur, **ref** izolasyonu değildir
+(§ Pencerenin BOŞ olduğunu ölçmek) — ve paylaşılan `node_modules` üstünde hiç değildir
+(§ Paylaşılan `node_modules` üstünde worktree).
+
 ### `.git/index.lock` bir KUYRUK değil, bir REDDİR
 Paylaşımlı ağaçta eşzamanlı commit **serileştirilmez**; ikincisi düşer.
 *(Vaka: iki oturum aynı anda commit attı. Doğru hamle kilidi SİLMEK değildi — gerçek

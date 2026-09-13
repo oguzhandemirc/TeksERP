@@ -308,3 +308,29 @@ doğacaktı. Taze DB'de baştan deploy yakaladı.)*
 **Savunma:** kapının adını okurken *"hangi İKİ ucu karşılaştırıyor"* diye sor ve
 düzeltmeyi o iki uçtan birine yap. Kapının göremediği üçüncü uç, kapının kapsam
 beyanına yazılır.
+
+## Cırcır tabanı YALNIZ `git show HEAD:` içeriğinden ölçülür
+
+> **Bir cırcır tabanı ÇALIŞMA AĞACINDAN ASLA ölçülmez.** Ortak ağaçta o ağaç hiç
+> kimsenin commit'i değildir; içinde başka oturumların **commit edilmemiş** kapanışları
+> vardır ve taban onların üstüne kilitlenir.
+
+Sonuç, kapının en kötü ölüm biçimi: taban gerçeğin **altına** iner, kapı **herkese**
+kırmızı verir, ve suçlu görünen ihlali yapan değil **ondan sonra commit atan** kişidir.
+
+*(Vaka 2026-09-13: bir taban 37 → 27'ye çekilmek üzereydi; ölçüm çalışma ağacında
+alınmıştı ve o ağaçta 13 kapanış vardı — yalnız 6'sı ölçümü yapanın. HEAD'de
+`git show HEAD:` ile ölçülünce gerçek **37/37** çıktı. Aynı gün aynı sınıf **beş kez**
+ısırdı ve her seferinde başka bir aracı yakaladı: bir taban tazelemesi · bir sayaç ·
+bir kural dosyası · satır numarası çapaları · bu taban.)*
+
+**Ölçüm:** yüklemini `git ls-tree HEAD` + `git show HEAD:<yol>` içeriğine uygula; ya da
+en azından `git status --porcelain <dizin>` çıktısının BOŞ olduğunu **ayrıca** ölç.
+⚠️ Ve **hesaplama, ÖLÇ**: "37 − 6 = 31" bir tahmindir; tabanın kendi yüklemi (`KOSULSUZ`
+· `KAPANIR`) seninkinden farklı olabilir — bugün tam bu yüzden aynı soruya iki sayı
+çıktı (kapı 27, bağımsız kopya 24).
+
+📌 Ve düzeltmenin yeri: **push'tan ÖNCE `--amend`**. Bir commit inmiş sayıldığı an
+**push** anıdır, commit anı değil; yerel duran bir commit'te tabanı düzeltmek main'e
+hiç yanlış taban sokmaz. *"Sonra ikinci commit'le düzeltirim"* dürüsttür ama bir koşum
+boyunca herkesi kırmızıda bırakır.
