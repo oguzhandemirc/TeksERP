@@ -144,7 +144,12 @@ export function RollsPage() {
   const qualityGradesQuery = useQuery({
     queryKey: ["quality-grades", "picker"],
     queryFn: () => loadAllForPicker(qualityGradeService, { sortBy: "sortOrder" }),
-    staleTime: 10 * 60 * 1000,
+    // 5 dk — bu anahtarın ÖNCEDEN VAR OLAN dört okuyucusuyla aynı. Farklı
+    // yazsaydık aynı önbellek girdisi iki farklı yaşta veriyi taze sayardı
+    // (react-query staleTime'ı GÖZLEMCİ BAŞINA uygular): admin bir kaliteyi
+    // pasifleştirir, bir sekme 10 dk eski kataloğu doğru sayar, öteki 5'te
+    // tazeler. Görünmez, çünkü ikisi de geçerli bir katalog döner.
+    staleTime: 5 * 60_000,
   });
   // Boş dizi = katalog henüz yok → rozet çizilmez, kalite ham koduyla yazılır.
   // ⚠️ KENDİ useMemo'sunda: `?? []` her render'da YENİ dizi üretir ve ona bağlı
