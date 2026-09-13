@@ -23,6 +23,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { warehouseTransferService } from "../src/services/warehouse-transfer.service";
 import { InventoryService } from "../src/services/inventory.service";
 import { printedDocumentService } from "../src/services/printed-document.service";
+import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
 
 const inventory = new InventoryService();
 
@@ -76,9 +77,24 @@ async function main(): Promise<void> {
   check("A3) ⭐ Toplar HEDEF depoda", moved.every((m) => m.warehouseId === b.id));
   const trMoves = await prisma.warehouseMovement.findMany({
     where: { transferId: detail.id, eventType: WarehouseEventType.TRANSFER },
-    select: { fromWarehouseId: true, toWarehouseId: true, qty: true },
+    select: { id: true, fromWarehouseId: true, toWarehouseId: true, qty: true, fromStatus: true, toStatus: true, reasonCode: true },
   });
   check("A4) Defterde iki TRANSFER satırı, yönleriyle", trMoves.length === 2 && trMoves.every((m) => m.fromWarehouseId === a.id && m.toWarehouseId === b.id));
+  // ⚠️ TRANSFER İKİ UÇLU TEK OLAYDIR: `from` ve `to` DOLU ve FARKLI, İKİ UÇ DA
+  // stok kümesinde, ve STATÜ İKİ UÇTA AYNI — taşımak malı hareket ettirir, DURUMUNU
+  // değiştirmez. Sevk/fason TEK uçludur (bir uç ∅); o kalıbı buraya kopyalamak
+  // sessiz bir yanlış olurdu, bu yüzden kalem statüleri AÇIKÇA ölçüyor.
+  check(
+    "A4b) ⭐ Satır STATÜLÜ ve statü İKİ UÇTA AYNI (iki uçlu olay) · reasonCode TRANSFER",
+    trMoves.length === 2 &&
+      trMoves.every(
+        (m) =>
+          m.fromStatus !== null &&
+          m.fromStatus === m.toStatus &&
+          m.reasonCode === STOCK_MOVE_REASON.TRANSFER,
+      ),
+    JSON.stringify(trMoves.map((m) => `${String(m.fromStatus)}→${String(m.toStatus)}/${String(m.reasonCode)}`)),
+  );
 
   // ── A5-A7) Resmi belge: transfer tx'inde DONDU ve BASILABİLİYOR ─────────
   const frozen = await prisma.printedDocument.findFirst({
@@ -136,8 +152,30 @@ async function main(): Promise<void> {
   check("E1) ⭐ Toplar KAYNAK depoya döndü", backRows.every((m) => m.warehouseId === a.id));
   const status = await prisma.warehouseTransfer.findUnique({ where: { id: detail.id }, select: { status: true } });
   check("E2) Transfer CANCELLED", status?.status === WarehouseTransferStatus.CANCELLED);
-  const reversal = await prisma.warehouseMovement.count({ where: { transferId: detail.id, eventType: WarehouseEventType.TRANSFER_REVERSAL } });
-  check("E3) TRANSFER_REVERSAL satırları yazıldı", reversal === 2, `satır=${reversal}`);
+  const tersler = await prisma.warehouseMovement.findMany({
+    where: { transferId: detail.id, eventType: WarehouseEventType.TRANSFER_REVERSAL },
+    select: { fromWarehouseId: true, toWarehouseId: true, fromStatus: true, toStatus: true, reversesMovementId: true, reasonCode: true },
+  });
+  check("E3) TRANSFER_REVERSAL satırları yazıldı", tersler.length === 2, `satır=${tersler.length}`);
+  // ⚠️ İKİ UÇLU OLAYDA "TERS" DEMEK UÇLARIN AYNALANMASIDIR (from↔to yer değiştirir),
+  // sevkteki "tek uç boşalır" kalıbı DEĞİL. Ve satır BAĞLI doğar: bağsız olsaydı
+  // çift iptal DB unique'ine çarpmaz ve "bu satır ters kayıt mı" cevapsız kalırdı.
+  const ileriIds = new Set(trMoves.map((m) => m.id));
+  check(
+    "E3b) ⭐ Ters satır BAĞLI (reversesMovementId → ileri satır) ve uçlar AYNALI",
+    tersler.length === 2 &&
+      tersler.every(
+        (t) =>
+          t.reversesMovementId !== null &&
+          ileriIds.has(t.reversesMovementId) &&
+          t.fromWarehouseId === b.id &&
+          t.toWarehouseId === a.id &&
+          t.fromStatus !== null &&
+          t.fromStatus === t.toStatus &&
+          t.reasonCode === STOCK_MOVE_REASON.TRANSFER_CANCEL,
+      ),
+    JSON.stringify(tersler.map((t) => `${t.reversesMovementId ? "bağlı" : "BAĞSIZ"} ${String(t.fromStatus)}→${String(t.toStatus)}`)),
+  );
   const voided = await prisma.printedDocument.findFirst({
     where: { docType: "TRANSFER_DISPATCH", sourceId: detail.id },
     orderBy: { version: "desc" },

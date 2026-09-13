@@ -23,7 +23,10 @@ import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { applyDateRange, buildWhereClause } from "../utils/query-parser";
 import { ROLL_STATUS_TR } from "../constants/status-labels";
-import { writeWarehouseMovements } from "./helpers/warehouse-ledger.helper";
+import { postStockMoves } from "./helpers/warehouse-ledger.helper";
+import { reverseLegacyStockMove, reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
+import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
+import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import type { ApiResponse } from "../types/api.types";
 
 const TRANSFER_PREFIX = "DT";
@@ -266,32 +269,48 @@ export class WarehouseTransferService {
           }
         }
 
+        // ⚠️ TRANSFER İKİ UÇLU TEK OLAYDIR: `from` ve `to` DOLU ve FARKLI, ve
+        // İKİ UÇ DA stok kümesindedir — sevk/fason gibi tek uçlu DEĞİL. Statü iki
+        // uçta da AYNIDIR: taşımak malı hareket ettirir, durumunu değiştirmez.
+        // Sevk kalıbını kopyalamak burada sessiz bir yanlış üretirdi.
+        //
+        // ⚠️ STOK KÜMESİ DIŞI TOP SATIR YAZMAZ ve bu SESSİZ ATLAMA DEĞİL, OLAY
+        // YOKLUĞUDUR (§64: stok dışından stok dışına satır yazılmaz). Transfer
+        // statüyü kısıtlamıyor ve depolu-çuvalsız-sevkiyatsız şekilde stok kümesi
+        // DIŞI 2.431 top var (ölçüldü 2026-09-13, fabrika kopyası: CONSUMED 1.519 ·
+        // CANCELLED 382 · TAMBUR_CONSUMED 250 · AT_SUBCONTRACTOR 187 ·
+        // IN_PRODUCTION 87 · SCRAP 6) — ör. fireyi hurda deposuna taşımak meşru
+        // bir iştir ve Σ'yı etkilemez. Onlara satır yazmak K1 uç şeklini ihlal
+        // eder (`assertEndShape` 500 verir); REDDETMEK de yanlış olurdu.
+        const stokUcu = (r: { status: RollStatus }) => WAREHOUSE_STOCK_STATUSES.includes(r.status);
         const memberRows = sacks.flatMap((sk) =>
-          sk.rolls.map((r) => ({
+          sk.rolls.filter(stokUcu).map((r) => ({
             rollId: r.id,
             eventType: WarehouseEventType.TRANSFER,
             qty: r.currentQty,
-            fromWarehouseId: input.fromWarehouseId,
-            toWarehouseId: input.toWarehouseId,
+            from: { warehouseId: input.fromWarehouseId, status: r.status },
+            to: { warehouseId: input.toWarehouseId, status: r.status },
+            reasonCode: STOCK_MOVE_REASON.TRANSFER,
             transferId: transfer.id,
             sackId: sk.id,
             userId: userId ?? null,
           })),
         );
-        await writeWarehouseMovements(tx, [
-          ...rolls.map((r) => ({
+        await postStockMoves(tx, [
+          ...rolls.filter(stokUcu).map((r) => ({
             rollId: r.id,
             eventType: WarehouseEventType.TRANSFER,
             qty: r.currentQty,
-            fromWarehouseId: input.fromWarehouseId,
-            toWarehouseId: input.toWarehouseId,
+            from: { warehouseId: input.fromWarehouseId, status: r.status },
+            to: { warehouseId: input.toWarehouseId, status: r.status },
+            reasonCode: STOCK_MOVE_REASON.TRANSFER,
             transferId: transfer.id,
             userId: userId ?? null,
           })),
           ...memberRows,
-          // Transfer İPTALİ defterden okuyor: eksik satır malı hedef depoda
-          // MAHSUR bırakır. Bu yolda 0 metraj tutarsızlık sinyalidir.
-        ], { onUnwritable: "throw" });
+        ]);
+        // Transfer İPTALİ defterden okuyor: eksik satır malı hedef depoda MAHSUR
+        // bırakır. Politika argümanı YOK — yeni kapı 0 metrajda her zaman fırlatır.
 
         // Resmi belge — transfer irsaliyesi v1 BURADA, aynı tx içinde donar
         // (sevk irsaliyesi emsali): içerik "taşıma anı"dır.
@@ -446,7 +465,9 @@ export class WarehouseTransferService {
     const result = await prisma.$transaction(async (tx) => {
       const rows = await tx.warehouseMovement.findMany({
         where: { transferId: id, eventType: WarehouseEventType.TRANSFER },
-        select: { rollId: true, qty: true, sackId: true },
+        // `id` + uçlar: ters satır `reversesMovementId` ile BAĞLANIR, ve statüsüz
+        // eski satır (②-c öncesi) aynalanamadığı için K4 dalına yönlendirilir.
+        select: { id: true, rollId: true, qty: true, sackId: true, fromStatus: true, toStatus: true },
       });
       if (rows.length === 0) throw AppError.conflict("Transferin kalemleri bulunamadı.");
 
@@ -540,22 +561,32 @@ export class WarehouseTransferService {
 
       // Defter APPEND-ONLY: TRANSFER satırı silinmez, ters satır eklenir —
       // taşıma gerçekten olmuştu; ikisi birlikte "gitti ve geri geldi" der.
-      await writeWarehouseMovements(
-        tx,
-        rows.map((r) => ({
-          rollId: r.rollId,
+      // ⚠️ TERS SATIR BAĞLI DOĞAR (tasarım D2a): iki uçlu olayda "ters" demek
+      // UÇLARIN AYNALANMASIDIR (from↔to yer değiştirir) — sevkteki "tek uç boşalır"
+      // kalıbı DEĞİL. `reverseStockMove` aynalamayı kendisi yapar ve metrajı ileri
+      // satırdan kopyalar; bağsız yazsaydık çift iptal DB unique'ine çarpmazdı.
+      for (const r of rows) {
+        const ters = {
           eventType: WarehouseEventType.TRANSFER_REVERSAL,
-          qty: r.qty,
-          fromWarehouseId: transfer.toWarehouseId,
-          toWarehouseId: transfer.fromWarehouseId,
-          transferId: id,
-          sackId: r.sackId ?? null,
+          reasonCode: STOCK_MOVE_REASON.TRANSFER_CANCEL,
           userId: userId ?? null,
           notes: reason?.trim() || null,
-        })),
-        // İleri transfer satırı gürültülü yazıldı; tersi de öyle olmalı.
-        { onUnwritable: "throw" },
-      );
+        };
+        if (r.fromStatus !== null || r.toStatus !== null) {
+          await reverseStockMove(tx, r.id, ters);
+          continue;
+        }
+        // ESKİ KAYIT DALI (K4): statüsüz ileri satırın yönü aynalanamaz; uçlar elle
+        // kurulur ama BAĞ kurulur (epoch sondası `reverseLegacyStockMove` içinde).
+        // Uçlar transferin KENDİ belgesinden gelir, canlı veriden değil.
+        const top = rolls.find((x) => x.id === r.rollId);
+        if (!top || !WAREHOUSE_STOCK_STATUSES.includes(top.status)) continue;
+        await reverseLegacyStockMove(tx, r.id, {
+          ...ters,
+          from: { warehouseId: transfer.toWarehouseId, status: top.status },
+          to: { warehouseId: transfer.fromWarehouseId, status: top.status },
+        });
+      }
 
       // Belge İPTAL filigranıyla VOIDED'e çekilir — silinmez: transfer gerçekten
       // yapılmıştı ve kâğıdı sahada dolaşmış olabilir.

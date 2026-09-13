@@ -46,6 +46,16 @@ export const STOCK_MOVE_REASON = {
    */
   RETURN_CANCEL: "RETURN_CANCEL",
   /**
+   * Depolar arası transfer — İKİ UÇLU tek olay: `from` ve `to` DOLU ve FARKLI,
+   * ikisi de stok kümesinde, STATÜ İKİ UÇTA AYNI (taşımak durumu değiştirmez).
+   *
+   * ⚠️ Stok kümesi DIŞI top (ör. fireyi hurda deposuna taşımak) satır YAZMAZ —
+   * §64: stok dışından stok dışına satır yazılmaz. Bu bir atlama değil, olay yokluğu.
+   */
+  TRANSFER: "TRANSFER",
+  /** Transfer iptali — `TRANSFER` satırının TERSİ; uçlar AYNALANIR (from↔to). */
+  TRANSFER_CANCEL: "TRANSFER_CANCEL",
+  /**
    * Müşteriye sevk — mal stok kümesinden ÇIKTI (`→ SHIPPED`).
    *
    * ⚠️ Çıkış ucu `warehouseId` TAŞIMAZ (K1: `SHIPPED` stok kümesinde değil), ama
