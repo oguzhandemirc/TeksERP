@@ -21,7 +21,7 @@ kalamaz). ⇒ **Dizin bayatlayamaz; bayatlatmayı deneyen commit durur.** İlk d
 bir kereye mahsus üretildi (2026-09-13); bundan sonrasını üreteç değil KAPI tutar —
 üretece bağlı bir dizin, üreteç koşulmadığı gün sessizce bayatlardı.
 
-Sayı bir ölçümdür ve bu satır da kapı altındadır: **147 başlık / 10 dosya**
+Sayı bir ölçümdür ve bu satır da kapı altındadır: **148 başlık / 11 dosya**
 (ölçüldü 2026-09-13; kapı her koşumda yeniden sayar ve sayı tutmazsa kırmızı verir).
 
 ⚙️ **MÜKERRER TARAMASI (dizinin ilk kullanımı, 2026-09-14):** 147 başlık çiftlenip
@@ -45,9 +45,10 @@ açan kişi tabloyu yine baştan sona okur.**
 |  | § Asenkron eylemde tek ölçüm yetmez | (`OLCUM-DISIPLINI.md`) |
 |  | § Atıfta eşik düşmesi | (`OLCUM-DISIPLINI.md`) |
 |  | § Yapısal sonda — "gerekçesi ölçülmedi"nin çıkış yolu | (`OLCUM-DISIPLINI.md`) |
-|  | § Sayı yazma | (`OLCUM-DISIPLINI.md`) |
-|  | § Çapa yazma | (`OLCUM-DISIPLINI.md`) |
-|  | § Kimlik yazma — repo PUBLIC | (`OLCUM-DISIPLINI.md`) |
+|  | § Ölçümü YAZMA — sayı · çapa · kimlik → ayrı dosya | (`OLCUM-DISIPLINI.md`) |
+|  | § Sayı yazma | (`OLCUM-DISIPLINI-YAZIM.md`) |
+|  | § Çapa yazma | (`OLCUM-DISIPLINI-YAZIM.md`) |
+|  | § Kimlik yazma — repo PUBLIC | (`OLCUM-DISIPLINI-YAZIM.md`) |
 |  | § Teşhis mi, ölçüm mü — kurala çevirmeden önce | (`OLCUM-DISIPLINI.md`) |
 |  | § Hangi hipotez ölçülür | (`OLCUM-DISIPLINI.md`) |
 |  | § Bir turda ne taşınır | (`OLCUM-DISIPLINI.md`) |
@@ -189,7 +190,8 @@ açan kişi tabloyu yine baştan sona okur.**
 
 | dosya | kapsam |
 |---|---|
-| [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | YÖNTEM — ölçüm nasıl yapılır, nasıl YAZILIR (15 başlık) |
+| [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | YÖNTEM — ölçüm nasıl yapılır, nasıl OKUNUR (13 başlık) |
+| [`OLCUM-DISIPLINI-YAZIM.md`](OLCUM-DISIPLINI-YAZIM.md) | ölçümü YAZMA: sayı · çapa · kimlik (3 başlık) |
 | [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) | KATMAN 1a — ölçümün ARACI (17 başlık) |
 | [`OLCUM-DISIPLINI-YUKLEM.md`](OLCUM-DISIPLINI-YUKLEM.md) | KATMAN 1a′ — YÜKLEM (ne sorduğun) (15 başlık) |
 | [`OLCUM-DISIPLINI-SINIRSIZ.md`](OLCUM-DISIPLINI-SINIRSIZ.md) | YÜKLEM'in § Sınırsız eşleşme VAKA envanteri (4 başlık) |

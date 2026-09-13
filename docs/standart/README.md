@@ -33,7 +33,8 @@ Karar hikâyeleri (tarih, ölçüm, hangi alternatif neden reddedildi) `docs/his
 | [`TEST-VE-DERLEME.md`](TEST-VE-DERLEME.md) | Ne zaman ne koşar, hangi kapı nerede (§1–§3, §6) |
 | [`TEST-VE-DERLEME-BEKCI.md`](TEST-VE-DERLEME-BEKCI.md) | Bir bekçinin **güvencesi** (§4: yeşil ≠ kapsandı) ve **yazımı** (§5: yeni bekçi) |
 | [`TEST-VE-DERLEME-SINIRLAR.md`](TEST-VE-DERLEME-SINIRLAR.md) | Bilinen sınırlar (§7) ve **bilerek kırmızı bekçiler** (§8) — paket kırmızı verdiğinde ilk bakılacak liste; her satır "kim kapatabilir" taşır |
-| [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | Ölçüm YÖNTEMİ: pozitif kontrol ↔ örnekle doğrulama, atıfta eşik, yapısal sonda, sayı/çapa/kimlik yazma, teşhis mi ölçüm mü |
+| [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | Ölçüm YÖNTEMİ: pozitif kontrol ↔ örnekle doğrulama, atıfta eşik, yapısal sonda, teşhis mi ölçüm mü, bayatlamanın biçimleri |
+| [`OLCUM-DISIPLINI-YAZIM.md`](OLCUM-DISIPLINI-YAZIM.md) | Ölçümü **YAZMA**: sayı · çapa · kimlik — ölçümden SONRA yazılan metnin kuralları; 2026-09-14'te hub'dan AİLE çizgisiyle bölündü (hub'ın %53'üydü) |
 | [`OLCUM-DISIPLINI-KAPI-OLUMU.md`](OLCUM-DISIPLINI-KAPI-OLUMU.md) | Kapının ÖLÜMÜ ve kırmızının okunması: ölüm biçimleri, yerel yeşil, kırmızıyı sınıflandırma, tetik ↔ tanı |
 | [`OLCUM-DISIPLINI-KAPI.md`](OLCUM-DISIPLINI-KAPI.md) | Ölçümü KAPIYA çevirmek: mandal yazma, cırcır tabanı, iki sonda kuralı, tavanın ikinci işlevi (ölüm biçimleri KAPI-OLUMU'nda) |
 | [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | KATMAN 1b — ölçümün **KURGUSU**: soru, kontrol grubu, ortam, deneyin kurulumu |
