@@ -6,7 +6,8 @@
 // ⭐ NEDEN VAR (6e'nin envanteri, 2026-09-13): bekçilerin bir kısmı fikstürünü
 //    kurmak yerine ORTAMDA NE VARSA onu buluyor — `findFirst` ile "herhangi bir
 //    aktif kayıt". Temiz bir CI DB'sinde bu ya düşer ya VAKUMEN yeşil kalır.
-//    Ölçüldü: 912 çağrının 175'i keyfi, 122 dosyada.
+//    Ölçüldü 2026-09-13 (`npx tsx scripts/test_keyfi_arama.ts --yaz`): 912 çağrının
+//    175'i keyfi, 122 dosyada, 173 (dosya, model) çifti.
 //
 // ⚠️ DÜZELTME TURU YOK — MANDAL (1e'nin hükmü). Ayırt edici ölçüt tek:
 //    *bir borcun ÜRÜNDE bir kırılma üretip üretmediği.* 137 kalite literali
