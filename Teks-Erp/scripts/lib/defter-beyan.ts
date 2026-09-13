@@ -268,6 +268,27 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
       sahibi: "sevkiyat alanı",
     }] }),
 
+  // ── TEZGAH DEFTERLERİ (dokuma P2/P2b-1, 2026-09-13) — yazma yüzeyi HENÜZ YOK ──
+  // Dört model şema-only indi; hiçbirinin `src/`de satır yaratan yolu yok (ölçüldü:
+  // keşif 0/0/0/0). `yazan: []` bu yüzden ölçülmüş bir gerçek, tembellik değil:
+  // ilk yazıcı doğduğu gün §5 "YENİ YOL" der ve beyanı adıyla ister; §4c ise
+  // yazan bir defterin ters yazanını da ister. Sınıflar DEVRALINMADI, şemanın kendi
+  // şerhlerinden ve tasarım §4 tablosundan ÖLÇÜLDÜ.
+  D("MachineRun", "tezgah koşumu — kapanışta DONAN üretim/duruş terimleri taşır (picksAtClose · producedM · stopSecAtClose · closedTermsAt); şerhi birebir: \"kova budandıktan sonra KOŞUM EKSENİ bu terimlerden cevaplanır\" ⇒ kova telemetri, koşum onun donmuş DEFTERİ; tasarım §4 BUDANMAZ; üç bağ Restrict; `clientToken` idempotent; makine kalıcı silme guard'ını besler (karar ufku). Randıman raporu henüz yok ⇒ \"satır silinince rapor değişir mi\" sondası KONUSUZ, okuyucusu koşum ekseni raporu olacak (01 düzeltmesi: karne vardiya×makine, runId taşımaz, DEFTER'i teyit eder çürütemez)",
+    { tur: "DAMGA", kolon: "revokedAt" }, [], [], { yari: true }),
+
+  D("MachineStopEvent", "duruş defteri — duruşun OLGULARI (startedAt · endedAt · pickCounter · stopKey) değişmez, KARARI (reasonCode · lossClass) değişir ve her değişim `MachineStopReclass`a satır yazar ⇒ doktrinin durum+defter çifti tek tabloda: reasonCode DURUM, reclass DEFTER. ⚠️ İKİ YAŞAM SÜRESİ tek tabloda (tasarım §4): insan kararlı duruş BUDANMAZ, makine sınıflı duruş kovayla budanır — yüklem `classifiedById IS NOT NULL OR reasonSource IN (OPERATOR,SUPERVISOR)`. Budayıcı bugün YOK; indiği gün §10 `silen` beyanını ister ve tasarım §4 sed ③/④ (tek helper + BEFORE DELETE trigger) onunla birlikte doğar. 01'in guard muafiyetiyle aynı okuma: \"duruş bir DEFTERDİR, guard ingest dilimiyle gelecek\"",
+    { tur: "DAMGA", kolon: "revokedAt" }, [], [], { yari: true }),
+
+  D("MachineStopReclass", "sebep DEĞİŞİM defteri — \"ne oldu değişmez\" kuralının NERESİNDE: duruşun olguları değişmez, SINIFLANDIRMASI bir KARARDIR ve karar revize edilir; revizyonun kendisi bu deftere from→to satırı olarak düşer ve o satır bir daha değişmez (append-only, updatedAt YOK). Ters yolu karşı kayıttır (to→from yeni satır), damga değil — bir kararı geri almak onu silmek değil tersini yazmaktır",
+    { tur: "YOK" }, [], [],
+    { borc: [{
+      ne: "ters yolu KARŞI KAYIT olacak (to→from) ama yazma yüzeyi de ters yolu da henüz YOK (P2b-1 şema-only)",
+      kanit: "src/ içinde machineStopReclass yaratan 0 yol (keşif 2026-09-13); şemada damga/ters bağ kolonu yok ve olmaması DOĞRU — mekanizma karşı kayıt. Kapanma: reclass yazan uç doğduğunda §5 kırmızı verir; o commit `yazan` + karşı-kayıt yolunu beyan eder ve bu borç silinir",
+      tasarim: "docs/design/DOKUMA-TEZGAH-IZLEME-TASARIMI.md",
+      sahibi: "dokuma alanı (01, P2b)",
+    }] }),
+
   // ── SATIRLAR — ters yolu EBEVEYNİNDE ──────────────────────────────────────
   SATIR("SwatchStockReductionItem", "SwatchStockReduction", "düşümün iptal kümesi; storno kalemden okur"),
   SATIR("MergeOperationSource", "MergeOperation", "birleştirmenin kaynak kaydı"),
@@ -285,6 +306,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   PIVOT("OrderLineRequiredProperty"), PIVOT("SubcontractorReceiptProperty"), PIVOT("SubcontractorToCategory"),
   PIVOT("ItemAllowedProperty"), PIVOT("ItemAllowedColor"), PIVOT("DevicePeripheral"),
   PIVOT("CustomerStandaloneLabel", "müşteriye bağlı bağımsız etiket tanımı — ayar kümesi (③b)"),
+  PIVOT("MachineCollectorLink", "toplayıcı → makine KAPSAM satırı; iki FK de Cascade, Decimal yok, karar/ölçüm taşımaz — 01'in guard muafiyetiyle aynı okuma: \"yapılandırmadır, defter değil\" (③b)"),
   { model: "RollProperty", sinif: "PIVOT_TICARI",
     gerekce: "topun özelliği rota kapsamasını belirleyen GERÇEK kısıt, ayar değil (2026-09-11 kararı)",
     borc: [{ ne: "7 site sil-yazdan versiyonlamaya geçecek", kanit: "docs/kurallar/defter.md ③a satırı (2026-09-11)", sahibi: "rota/renk alanı" }] },

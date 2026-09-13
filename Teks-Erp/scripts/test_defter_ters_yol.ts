@@ -22,7 +22,8 @@
 //   §1 EVREN — her append-only model beyan tablosunda SINIFLANMIŞ mı (iki yönlü)
 //   §2 "yarı" beyanı doğru mu (updatedAt gerçekten var/yok — ölü beyan kırmızı)
 //   §3 Mekanizma ŞEMADA gerçek mi (kolon/enum değeri yeniden adlandırılırsa KIRMIZI)
-//   §4 Ters yazan sembol var mı ve tanımı DIŞINDA referansı var mı (ölü ters yol)
+//   §4 Ters yazan sembol var mı ve tanımı DIŞINDA referansı var mı (ölü ters yol);
+//      §4c yazıcısı olan defterin ters yazıcısı da beyanlı mı (boş liste sessiz yeşildir)
 //   §5 ⭐ Satır yaratan İLERİ yol kümesi beyanla BİREBİR mi (yeni yol → kırmızı,
 //      ölü beyan → kırmızı). İç içe ilişki yazımı BAĞLAMSAL TİPTEN çözülür.
 //   §6 Borç iki yönlü — mekanizma YOK ⇒ borç zorunlu; mekanizma BELİRDİYSE kırmızı
@@ -167,6 +168,20 @@ for (const b of defterler) {
     check(`§4b ${b.model} \`${t.sembol}\` tanımı dışında çağrılıyor`, toplam > 0,
       toplam > 0 ? `${toplam} referans (${kayit!.disReferans} dosya dışı)` : "SIFIR referans — YAZILMIŞ AMA ÇAĞRILMAYAN ters yol");
   }
+}
+
+// §4c — YAZAN bir defterin ters YAZANI da olmalı. Tezgah defterleri (2026-09-13)
+// yazma yüzeyi olmadan indi ve `tersYazan: []` ile beyan edildi; bu DOĞRU (ters
+// yazılacak bir şey yok) ama ilk yazıcı doğduğu gün `yazan` güncellenir ve
+// `tersYazan` boş KALIRSA §4 hiçbir şey ölçmez — boş liste sessiz yeşildir.
+// Kural: mekanizması olan DEFTER'in yazıcısı varsa ters yazıcısı da beyan edilir.
+for (const b of defterler) {
+  if (b.mekanizma!.tur === "YOK") continue;           // borçlu defter §6'da görünür
+  const yazici = (b.yazan ?? []).length;
+  const ters = (b.tersYazan ?? []).length;
+  if (yazici === 0 && ters === 0) continue;           // yazma yüzeyi yok — sessizlik meşru
+  check(`§4c ${b.model} yazıcısı varsa ters yazıcısı da beyanlı`, ters > 0,
+    ters > 0 ? `${yazici} yazıcı · ${ters} ters yazıcı` : `${yazici} yazıcı dosya beyanlı ama ters yazan YOK — ileri yol yazılıp geri yol yazılmadı, ya da beyan eksik`);
 }
 
 console.log("\n=== §5 Satır yaratan İLERİ yol kümesi beyanla birebir mi ===");
