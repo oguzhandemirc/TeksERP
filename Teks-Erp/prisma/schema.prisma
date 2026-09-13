@@ -483,6 +483,7 @@ model User {
   weighedSacks               Sack[]                   @relation("SackWeighedBy")
   sackTagAssignments         SackTagAssignment[]      @relation("SackTagAssignmentCreatedBy")
   sackTagAssignmentsCleared  SackTagAssignment[]      @relation("SackTagAssignmentClearedBy")
+  sackAllocationsCleared     SackAllocation[]         @relation("SackAllocationClearedBy")
   swatchStockReductions      SwatchStockReduction[]   @relation("SwatchStockReductionCreatedBy")
   swatchStockReductionsReversed SwatchStockReduction[] @relation("SwatchStockReductionReversedBy")
   kursunBypassAssigned       KursunBypassAssignment[] @relation("KursunBypassAssignedBy")
@@ -6029,15 +6030,30 @@ model SackAllocation {
   orderLineId String  @db.Uuid
   qty         Decimal @db.Decimal(12, 3) // Bu çuvalın bu satıra düşürdüğü metraj
 
+  /// TAHSİS DAMGASI (2026-09-14, K2 — `SackTagAssignment.clearedAt` deseni): tahsis
+  /// yeniden hesaplandığında (sipariş kümesi değişimi · sevk iptali · şablon yenileme)
+  /// eski satır SİLİNMEZ, damgalanır — sipariş karşılamasını belirleyen ticari pivot
+  /// (`defter.md` ③a) sil-yaz edilmez. Okuyan HER yol `ACTIVE_ALLOCATION` süzer
+  /// (`helpers/sack-allocation.helper.ts`); Σ'lar yalnız etkin satırı toplar.
+  clearedAt DateTime? @db.Timestamptz
+  /// Damgayı basan sevkiyat — FK DEĞİL, düz adres (`sourceRefId` deseni).
+  clearedShipmentId String? @db.Uuid
+  clearedById String? @db.Uuid
+  clearedBy   User?   @relation("SackAllocationClearedBy", fields: [clearedById], references: [id])
+
   // Restrict: çuval silinmeden önce tahsis rebalance ile temizlenir (defter kaybolmasın).
   sack      Sack      @relation(fields: [sackId], references: [id], onDelete: Restrict)
   orderLine OrderLine @relation(fields: [orderLineId], references: [id])
 
   createdAt DateTime @default(now()) @db.Timestamptz
 
-  // Aynı çuval+satıra iki kez tahsis yazılamaz (rebalance sil-yaz deseni + saf savunma).
-  @@unique([sackId, orderLineId])
+  // Aynı çuval+satıra AYNI ANDA iki ETKİN tahsis yazılamaz — PARTIAL UNIQUE
+  // `sack_allocations_active_uq` (`WHERE "clearedAt" IS NULL`, şema dışı, migration
+  // 20260914020000; envanteri test_db_invariants). Tam unique, damgalı eski satır
+  // dururken aynı (çuval, satır)ın yeniden tahsisini engellerdi.
+  @@index([sackId])
   @@index([orderLineId])
+  @@index([clearedAt])
   @@map("sack_allocations")
 }
 

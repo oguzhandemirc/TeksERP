@@ -130,6 +130,7 @@ import type { CursorPaginatedResponse } from "./base.service";
 import type { Request } from "express";
 import { uyari } from "../lib/logger";
 import { PackingGroupService } from "./packing-group.service";
+import { ACTIVE_ALLOCATION, clearShipmentAllocationsTx } from "./helpers/sack-allocation.helper";
 import {
   parseQueryParams,
   isCursorRequested,
@@ -978,7 +979,7 @@ export class ShippingService {
           select: {
             branchId: true,
             rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, select: { itemId: true, colorId: true, width: true, currentQty: true } },
-            allocations: { select: { qty: true } },
+            allocations: { where: ACTIVE_ALLOCATION, select: { qty: true } },
           },
         },
         orders: {
@@ -1071,7 +1072,7 @@ export class ShippingService {
               where: { status: { notIn: SACK_ABSENT_STATUSES } },
               select: { itemId: true, colorId: true, width: true, currentQty: true },
             },
-            allocations: { select: { qty: true } },
+            allocations: { where: ACTIVE_ALLOCATION, select: { qty: true } },
           },
         },
         orders: {
@@ -1172,7 +1173,7 @@ export class ShippingService {
   /** Sevkiyatın toplam tahsis metrajı — onarım öncesi/sonrası ölçümü için. */
   private async olcTahsis(shipmentId: string): Promise<number> {
     const rows = await prisma.sackAllocation.aggregate({
-      where: { sack: { shipmentId } },
+      where: { sack: { shipmentId }, ...ACTIVE_ALLOCATION },
       _sum: { qty: true },
     });
     return Math.round(Number(rows._sum.qty ?? 0) * 1000) / 1000;
@@ -2020,6 +2021,7 @@ export class ShippingService {
         where: {
           orderLineId: { in: lines.map((l) => l.id) },
           sack: { shipment: { status: ShipmentStatus.PLANNED } },
+          ...ACTIVE_ALLOCATION,
         },
         _sum: { qty: true },
       });
@@ -2069,7 +2071,8 @@ export class ShippingService {
     orderIds: string[],
     branchId: string | null
   ): Promise<AllocationAuditTrail | null> {
-    await tx.sackAllocation.deleteMany({ where: { sack: { shipmentId } } });
+    // Eski tahsis SİLİNMEZ, damgalanır (K2) — okuyucular ACTIVE_ALLOCATION süzer.
+    await clearShipmentAllocationsTx(tx, shipmentId, null);
     if (orderIds.length === 0) return null;
     const sackRows = await tx.sack.findMany({ where: { shipmentId }, select: { id: true } });
     const sackIds = sackRows.map((s) => s.id);
@@ -2742,7 +2745,7 @@ export class ShippingService {
       }
       const pendingOther = await prisma.sackAllocation.groupBy({
         by: ["orderLineId"],
-        where: { orderLineId: { in: [...lineNeeds.keys()] }, sack: { shipment: { status: ShipmentStatus.PLANNED } } },
+        where: { orderLineId: { in: [...lineNeeds.keys()] }, sack: { shipment: { status: ShipmentStatus.PLANNED } }, ...ACTIVE_ALLOCATION },
         _sum: { qty: true },
       });
       for (const g of pendingOther) {
@@ -2819,8 +2822,8 @@ export class ShippingService {
       const eski = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
       const etkilenen = [...new Set([...eski.map((o) => o.orderId), ...orderIds])];
 
-      // ① Bu sevkiyatın tahsislerini kaldır ve defteri ONSUZ yeniden hesapla.
-      await tx.sackAllocation.deleteMany({ where: { sack: { shipmentId } } });
+      // ① Bu sevkiyatın tahsislerini DAMGALA (silme yok, K2) ve defteri onsuz yeniden hesapla.
+      await clearShipmentAllocationsTx(tx, shipmentId, userId);
       if (etkilenen.length > 0) {
         const lineRows = await tx.orderLine.findMany({ where: { orderId: { in: etkilenen } }, select: { id: true } });
         await touchOrderLinesTx(tx, lineRows.map((l) => l.id));
@@ -3501,7 +3504,7 @@ export class ShippingService {
         customer: { select: { name: true } },
         branch: { select: { name: true } },
         _count: { select: { sacks: true, rolls: true, swatches: true } },
-        sacks: { select: { allocations: { select: { qty: true, orderLine: { select: { order: { select: { orderNumber: true } } } } } } } },
+        sacks: { select: { allocations: { where: ACTIVE_ALLOCATION, select: { qty: true, orderLine: { select: { order: { select: { orderNumber: true } } } } } } } },
       },
     });
     if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
@@ -3567,7 +3570,7 @@ export class ShippingService {
       reasonCode: opts?.reasonCode ?? null,
       userId: opts?.userId ?? null,
     });
-    // Tahsisleri sil (çuval.shipmentId null'lanmadan ÖNCE — yoksa where eşleşmez) + sipariş defteri.
+    // Tahsisleri DAMGALA (çuval.shipmentId null'lanmadan ÖNCE — yoksa ilişki yüklemi eşleşmez) + sipariş defteri.
     const orderRows = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
     // Lost-update kilidi (performDispatchTx ile simetrik): defter mutasyonu
     // (deleteMany) + recompute, etkilenen siparişlerin TAM satır kümesi kilitliyken
@@ -3575,7 +3578,7 @@ export class ShippingService {
     const orderIds = [...new Set(orderRows.map((o) => o.orderId))];
     const lineRows = await tx.orderLine.findMany({ where: { orderId: { in: orderIds } }, select: { id: true } });
     await touchOrderLinesTx(tx, lineRows.map((l) => l.id));
-    await tx.sackAllocation.deleteMany({ where: { sack: { shipmentId } } });
+    await clearShipmentAllocationsTx(tx, shipmentId, opts?.userId ?? null);
     await tx.shipmentOrder.updateMany({ where: { shipmentId }, data: { isActive: false } });
     // Çuvallar depoya döner; içerik shipmentId null.
     await tx.roll.updateMany({ where: { shipmentId }, data: { shipmentId: null } });
@@ -4114,6 +4117,7 @@ export class ShippingService {
       },
       customer: { select: { id: true, code: true, name: true } },
       branch: { select: { id: true, code: true, name: true } },
+      // `clearedAt` SÜZÜLMEZ: bu `allocations` DirectShipAllocation (doğrudan sevk), SackAllocation değil
       _count: { select: { allocations: true } },
     } as const;
     type ShipRow = Prisma.ShipmentGetPayload<{ select: typeof select }>;
@@ -4574,7 +4578,7 @@ export class ShippingService {
               select: { id: true, barcode: true, status: true, width: true, currentQty: true, qualityGrade: true, item: { select: { id: true, code: true, name: true } }, color: { select: { id: true, code: true, name: true } } },
             },
             swatches: { select: { id: true, barcode: true, length: true, width: true, item: { select: { code: true, name: true } }, color: { select: { code: true, name: true } } } },
-            allocations: { select: { orderLineId: true, qty: true } },
+            allocations: { where: ACTIVE_ALLOCATION, select: { orderLineId: true, qty: true } },
           },
         },
       },
@@ -5611,7 +5615,7 @@ async function collectShipmentDerived(db: PrintedDocDb, shipmentId: string) {
           // DB'ye hiç gitmeden, sorgu kurulurken atılır → belge her çağrıda patlar.
           // tsc bunu GÖREMEZ: `PrintedDocDb` bir union tipidir ve union üzerinden çağrı
           // fazla-alan (excess property) kontrolünü düşürür.
-          allocations: { select: { qty: true, orderLine: { select: { unitPrice: true, customerItemName: true, item: { select: { name: true } }, color: { select: { name: true } }, order: { select: { currency: true } } } } } },
+          allocations: { where: ACTIVE_ALLOCATION, select: { qty: true, orderLine: { select: { unitPrice: true, customerItemName: true, item: { select: { name: true } }, color: { select: { name: true } }, order: { select: { currency: true } } } } } },
         },
       },
     },

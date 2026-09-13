@@ -8829,3 +8829,38 @@ sil → §1b (fail-open) · MACHINE_ONLY boşalt → §2 · NON_ROUTABLE boşalt
 work_session 23/0 · mobil_enum_aynasi 34/0 · production_regime_gate 40/0 · feature_flag_contract 78/0.
 Ders: *bir tür değeri eklemek iki soru sorar — "kim açar" (oturum) ve "nereye giremez" (rota);
 ikincisi sorulmazsa yeni tür var olan her listeye SESSİZCE sızar.*
+
+## 2026-09-14 — K2: ÇUVAL TAHSİSİ (SackAllocation) sil-yaz'dan DAMGAYA — mali pivotun geçmişi artık satırın kendisinde [ÇEKİRDEK]
+
+**Borç:** `SackAllocation` sipariş karşılamasını belirleyen tek mali tahsis defteriydi ve üç yolda
+(`writeShipmentAllocationsTx` · `setShipmentOrders` · `cancelPlannedShipmentTx`) `deleteMany` ile
+sil-yaz ediliyordu; değişim izi yalnız audit'te (tx dışı, best-effort, 6 ayda arşiv). 82 ölçtü: üç
+site tek dosyada, kısmi kapanış §10'a görünmez ⇒ TEK commit. **Hüküm (1e):** versiyon tablosu ya da
+ters kayıt DEĞİL, K1 (`SackTagAssignment`) ile aynı DAMGA — `clearedAt` (+ `clearedShipmentId` adres,
+`clearedById`), Σ okuyucular `clearedAt: null` süzer, etkin satırda partial unique (raw SQL).
+
+**İniş (6e):** migration `20260914020000_sack_allocation_cleared` (add-only kolonlar + `DROP INDEX
+sack_allocations_sackId_orderLineId_key` + `sack_allocations_active_uq WHERE "clearedAt" IS NULL`;
+Prisma `@@unique` şemadan düştü, envanter `test_db_invariants`). Tek yazıcı
+`helpers/sack-allocation.helper.ts::clearShipmentAllocationsTx`, yüklem `ACTIVE_ALLOCATION`. On dört
+okuma yüzeyi süzgeç aldı: sevkiyat detayı/önizleme/onarım ölçümü (`olcTahsis`) · tahsis hesabı iki
+`groupBy` · sipariş defteri (`order-status.helper`, `OrderLine.shippedQty`) · sipariş detayı · müşteri
+adı çözümü · otomatik fatura taslağı · irsaliye/çeki listesi belge seçimleri · sevk raporu · teslim
+süresi raporu ham SQL · `consistency-check.sql`/`test_consistency` üç sorgu (alias'sız `qty ≤ 0` sondası
+beyanlı istisna — damgalı satırda da qty > 0). `DirectShipAllocation`ın `allocations` ilişkisi
+SackAllocation DEĞİL, istisna işaretli. Tarama aracı (`revoke-ast-tarama`) `damga` parametresi aldı
+(`revokedAt` varsayılan; K1/K2 `clearedAt`) — ikinci tarama altyapısı doğmadı.
+
+**Ölçüm:** `test_sack_allocation_cleared` 22/0 (§1 damga+clearedShipmentId · §2 partial unique: aynı
+(çuval, satır) damgalı dururken yeniden tahsis · §3 sevk yeniden hesaplar (satır silinmez), storno
+tahsise dokunmaz, iptal damgalar · §4 delegate 7 / ilişki 5 / silme 0 / SQL 1 · §5 SQL ikizi · §6 ileri
+kayıt değişmez). Dört bekçi kendi okuyucusunu süzüyordu, yüklem eklendi (order_ledger 32/0 ·
+allocation_repair 24/0 · dispatch_allocation_fresh 6/0 · undo_dispatch 52/0 — "tahsis silindi"
+iddiası "damgalandı"ya döndü). defter_ters_yol 186/0 (beyan DAMGA), db_invariants 188/0,
+consistency 36/0+1⏭, shipping_flags 60/0, dispatch_report_gross 34/0, roll_*_revoke yeşil.
+**Negatif sondalar (cp+sha256):** `order-status.helper`ten süzgeç düşürüldü → §4a ihlal + §3a
+shippedQty 300→900 · damga `deleteMany`e çevrildi → §1b/§2a/§2c/§3a2/§3b/§6 (6 ❌).
+
+**Sınır:** eski (bugüne dek silinmiş) tahsislerin izi yok — geçmiş onarılmaz (kullanıcı kararı);
+bundan sonra damga. Storno (`undoDispatch`) tahsise dokunmaz (bugün de dokunmuyordu).
+

@@ -32,6 +32,8 @@ export interface AktifYuklemTanimi {
   tablo: string;
   /** Taramadan muaf tek kaynak dosyası (backend köküne göreli). */
   helper: string;
+  /** Damga kolonu — varsayılan `revokedAt`; K1/K2 deseninde `clearedAt`. İstisna işareti de bu ada göre: `\`<damga>\` SÜZÜLMEZ`. */
+  damga?: string;
 }
 
 export interface TaramaSonucu {
@@ -45,7 +47,7 @@ export interface TaramaSonucu {
   istisnalar: string[];
 }
 
-const ISTISNA = /`revokedAt` SÜZÜLMEZ/;
+const istisnaDeseni = (damga: string): RegExp => new RegExp("`" + damga + "` SÜZÜLMEZ");
 const OKUMA_GUNCELLEME = new Set([
   "findMany", "findFirst", "findFirstOrThrow", "findUnique", "findUniqueOrThrow",
   "count", "aggregate", "groupBy", "update", "updateMany", "upsert",
@@ -161,7 +163,8 @@ export function aktifYuklemTara(kok: string, tanimlar: AktifYuklemTanimi[]): Map
     const dosya = relative(kok, sf.fileName);
     const satirlar = sf.text.split("\n");
     const yer = (n: ts.Node): string => `${dosya}:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}`;
-    const istisnaMi = (n: ts.Node, sonuc: TaramaSonucu): boolean => {
+    const istisnaMi = (n: ts.Node, sonuc: TaramaSonucu, damga = "revokedAt"): boolean => {
+      const ISTISNA = istisnaDeseni(damga);
       const satir = sf.getLineAndCharacterOfPosition(n.getStart(sf)).line;
       let isaretli = ISTISNA.test(satirlar.slice(Math.max(0, satir - 3), satir + 1).join("\n"));
       for (let i = satir - 1; !isaretli && i >= Math.max(0, satir - 8); i--) {
@@ -210,7 +213,7 @@ export function aktifYuklemTara(kok: string, tanimlar: AktifYuklemTanimi[]): Map
           if (metod.startsWith("delete")) sonuc.silme.push(yer(n));
           if (OKUMA_GUNCELLEME.has(metod)) {
             sonuc.cagriSayisi++;
-            if (!n.arguments.some((a) => sabitTasir(a, t.sabit)) && !istisnaMi(n, sonuc)) {
+            if (!n.arguments.some((a) => sabitTasir(a, t.sabit)) && !istisnaMi(n, sonuc, t.damga ?? "revokedAt")) {
               sonuc.cagriIhlal.push(`${yer(n)} ${metod}`);
             }
           }
@@ -222,23 +225,23 @@ export function aktifYuklemTara(kok: string, tanimlar: AktifYuklemTanimi[]): Map
           const prismaTipli = /Args\b|Filter\b|Input\b|Select\b|Include\b/.test(ad);
           // Prisma dışı bir tiple bağlamlanmış nesne (yanıt/şablon tipi) aday değildir.
           const kardes = prismaTipli ? null : ad ? "degil" : kardestenCoz(n, t.model);
-          if (kardes === "belirsiz" && !istisnaMi(n, sonuc)) {
+          if (kardes === "belirsiz" && !istisnaMi(n, sonuc, t.damga ?? "revokedAt")) {
             sonuc.iliskiIhlal.push(`${yer(n)} (model çözülemedi)`);
           } else if (prismaTipli ? iliskiTipi.test(ad) : kardes === "hedef") {
             sonuc.iliskiSayisi++;
             const everyVar =
               ts.isObjectLiteralExpression(n.initializer) &&
               n.initializer.properties.some((p) => p.name && ts.isIdentifier(p.name) && p.name.text === "every");
-            if ((everyVar || !sabitTasir(n.initializer, t.sabit)) && !istisnaMi(n, sonuc)) {
+            if ((everyVar || !sabitTasir(n.initializer, t.sabit)) && !istisnaMi(n, sonuc, t.damga ?? "revokedAt")) {
               sonuc.iliskiIhlal.push(`${yer(n)}${everyVar ? " every" : ""}`);
             }
           }
         }
         if (ts.isNoSubstitutionTemplateLiteral(n) || ts.isTemplateExpression(n) || ts.isStringLiteral(n)) {
-          const eksik = sqlEksikSuzgec(n.getText(sf), t.tablo);
+          const eksik = sqlEksikSuzgec(n.getText(sf), t.tablo, t.damga ?? "revokedAt");
           if (eksik !== null) {
             sonuc.sqlSayisi++;
-            if (eksik.length > 0 && !istisnaMi(n, sonuc)) sonuc.sqlIhlal.push(`${yer(n)} ${eksik.join(",")}`);
+            if (eksik.length > 0 && !istisnaMi(n, sonuc, t.damga ?? "revokedAt")) sonuc.sqlIhlal.push(`${yer(n)} ${eksik.join(",")}`);
           }
         }
       }
@@ -255,7 +258,7 @@ export function aktifYuklemTara(kok: string, tanimlar: AktifYuklemTanimi[]): Map
  * alias'sız başvuru nitelemesiz `"revokedAt" IS NULL` ister — her başvuru kendi
  * süzgecini sayar (aynı literalde iki tablo birbirinin süzgeciyle örtülmez).
  */
-export function sqlEksikSuzgec(metin: string, tablo: string): string[] | null {
+export function sqlEksikSuzgec(metin: string, tablo: string, damga = "revokedAt"): string[] | null {
   const bas = new RegExp(`\\b(FROM|JOIN|UPDATE)\\s+(?:public\\.)?"?${tablo}"?(?:\\s+(?:AS\\s+)?([A-Za-z_][A-Za-z0-9_]*))?`, "gi");
   const aliasSay = new Map<string, number>();
   let bulundu = false;
@@ -269,8 +272,8 @@ export function sqlEksikSuzgec(metin: string, tablo: string): string[] | null {
   const eksik: string[] = [];
   for (const [alias, adet] of aliasSay) {
     const desen = alias
-      ? new RegExp(`\\b${alias}\\."revokedAt"\\s+IS\\s+NULL`, "g")
-      : new RegExp(`(?:^|[^.\\w"])"revokedAt"\\s+IS\\s+NULL`, "g");
+      ? new RegExp(`\\b${alias}\\."${damga}"\\s+IS\\s+NULL`, "g")
+      : new RegExp(`(?:^|[^.\\w"])"${damga}"\\s+IS\\s+NULL`, "g");
     const suzgec = (metin.match(desen) ?? []).length;
     if (suzgec < adet) eksik.push(`${alias || "(alias yok)"} ${suzgec}/${adet}`);
   }

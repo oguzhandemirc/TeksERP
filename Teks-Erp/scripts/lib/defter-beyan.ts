@@ -236,13 +236,17 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   // Uygulama: 4b666d33 · tasarım: docs/design/PLAN-SAPMA-GERI-ALMA-TASARIM.md
   // Bekçi: scripts/test_plan_deviation_undo.ts (25 kontrol, iki negatif sonda koşuldu)
 
-  D("SackAllocation", "sipariş karşılama defteri — MALİ ETKİSİ OLAN tek tahsis defteri", { tur: "YOK" }, [],
-    ["src/services/shipping.service.ts"],
-    { silen: ["src/services/shipping.service.ts"], borc: [{
-      ne: "sil-yaz (3 deleteMany, tek dosya); değişim geçmişi AUDIT'e yazılıyor (tx dışında, best-effort, 6 ayda arşivlenir). Kapanır: tahsis satırı SİLİNMEZ, versiyonlanır (`validUntil` damgası; `@@unique([sackId, orderLineId])` partial'a döner: `validUntil IS NULL`) ya da ters kayıt alır; `OrderLine.shippedQty` gibi Σ okuyucular yalnız açık versiyonu toplar",
-      kanit: "shipping.service.ts:2072 writeShipmentAllocationsTx · :2823 setShipmentOrders · :3578 cancelPlannedShipmentTx (kapının tarayıcısı, 2026-09-13) · flushAllocationAudit :2138 tx DIŞINDA · kod yorumu tabloyu \"mali etkisi olan tek defter\" diyor. ÖLÇÜM SINIRI: üç site TEK dosyada — §10 dosya taneciklidir, kısmi kapanış (1–2 site) kapıya GÖRÜNMEZ, yalnız dosya boşalınca ÖLÜ SİLME kırmızısı gelir",
-      sahibi: "sevkiyat alanı",
-    }] }),
+  // ⭐ BORÇ KAPANDI (K2, 6e 2026-09-14): sil-yaz BİTTİ — üç `deleteMany` sitesi (writeShipmentAllocationsTx ·
+  // setShipmentOrders · cancelPlannedShipmentTx) TEK boğaza indi (`clearShipmentAllocationsTx`), satır
+  // `clearedAt` + `clearedShipmentId` + `clearedById` ile DAMGALANIR; tam unique `sack_allocations_active_uq`
+  // partial'a döndü (`WHERE "clearedAt" IS NULL`, envanteri test_db_invariants); Σ okuyucuların hepsi
+  // `ACTIVE_ALLOCATION` süzer (AST+tip kapısı `test_sack_allocation_cleared §4`, damga: clearedAt).
+  // Geri alma ucu YOK ve olmamalı: yeni tahsis yeni satırdır, damgalı satır tarihtir (versiyon değil damga —
+  // hüküm 1e, SackTagAssignment deseni). "Kim değiştirdi" artık audit'te değil satırın kendisinde.
+  D("SackAllocation", "sipariş karşılama defteri — MALİ ETKİSİ OLAN tek tahsis defteri; damga clearedAt/clearedById, adres clearedShipmentId",
+    { tur: "DAMGA", kolon: "clearedAt" },
+    [{ dosya: "src/services/helpers/sack-allocation.helper.ts", sembol: "clearShipmentAllocationsTx" }],
+    ["src/services/shipping.service.ts"]),
 
   // ⚠️ ESKİ BORÇ KAPANDI (2026-09-13) — ÖNCÜLÜ YANLIŞTI, koşulu sağlandığı için değil.
   // Not "aynı ilişki iki rejimle kapanıyor: deleteMany ve isActive:false" diyordu.

@@ -27,6 +27,7 @@
 //    Geri alındığında yeşil.
 import { ItemType, RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
+import { ACTIVE_ALLOCATION } from "../src/services/helpers/sack-allocation.helper";
 import { ShippingService } from "../src/services/shipping.service";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 
@@ -115,7 +116,7 @@ async function main(): Promise<void> {
   if (kurulan?.status !== "DISPATCHED") await svc.dispatchShipment(sevkId, {}, ADMIN);
 
   const ilkTahsis = await prisma.sackAllocation.aggregate({
-    where: { sack: { shipmentId: sevkId } },
+    where: { sack: { shipmentId: sevkId }, ...ACTIVE_ALLOCATION },
     _sum: { qty: true },
   });
   check("§0: ilk sevkte 500 m siparişe tahsis edildi (körlük zemini)", Number(ilkTahsis._sum.qty ?? 0) === 500, `${ilkTahsis._sum.qty}`);
@@ -135,7 +136,7 @@ async function main(): Promise<void> {
 
   // ═══ §1 — TAZELİK ═══
   const sonTahsis = await prisma.sackAllocation.aggregate({
-    where: { sack: { shipmentId: sevkId } },
+    where: { sack: { shipmentId: sevkId }, ...ACTIVE_ALLOCATION },
     _sum: { qty: true },
   });
   const kalem = await prisma.orderLine.findUnique({ where: { id: kalemId }, select: { quantity: true, shippedQty: true } });

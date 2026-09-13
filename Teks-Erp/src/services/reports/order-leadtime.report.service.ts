@@ -151,7 +151,7 @@ async function collect(range: DateRange): Promise<RawRow[]> {
       -- konsaydı kısmi sevk sonrası iptal edilen kalemin sevki kaybolur ve
       -- sipariş "hiç sevk görmemiş" sayılırdı.
       FROM order_lines ol
-      JOIN sack_allocations sa ON sa."orderLineId" = ol.id
+      JOIN sack_allocations sa ON sa."orderLineId" = ol.id AND sa."clearedAt" IS NULL
       JOIN sacks s             ON s.id = sa."sackId"
       JOIN shipments sh        ON sh.id = s."shipmentId" AND sh.status = 'DISPATCHED'
       WHERE ol."orderId" = o.id

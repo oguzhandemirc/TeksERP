@@ -156,7 +156,7 @@ FROM order_lines ol
 LEFT JOIN (
   SELECT sal."orderLineId", SUM(sal.qty) AS toplam
   FROM sack_allocations sal
-  JOIN sacks sk ON sk.id = sal."sackId"
+  JOIN sacks sk ON sk.id = sal."sackId" AND sal."clearedAt" IS NULL
   JOIN shipments sh ON sh.id = sk."shipmentId"
   WHERE sh.status = 'DISPATCHED'
   GROUP BY sal."orderLineId"
@@ -202,7 +202,7 @@ FROM shipments sh
 WHERE sh.status = 'DISPATCHED'
   AND EXISTS (SELECT 1 FROM shipment_orders so WHERE so."shipmentId" = sh.id)
   AND NOT EXISTS (
-    SELECT 1 FROM sacks sk JOIN sack_allocations sa ON sa."sackId" = sk.id
+    SELECT 1 FROM sacks sk JOIN sack_allocations sa ON sa."sackId" = sk.id AND sa."clearedAt" IS NULL
      WHERE sk."shipmentId" = sh.id
   )`,
   },
@@ -232,7 +232,7 @@ JOIN LATERAL (
     COALESCE((SELECT sum(r."currentQty") FROM rolls r JOIN sacks s2 ON s2.id = r."sackId"
                WHERE s2."shipmentId" = sh.id), 0) AS icerik,
     COALESCE((SELECT sum(sa.qty) FROM sack_allocations sa JOIN sacks s3 ON s3.id = sa."sackId"
-               WHERE s3."shipmentId" = sh.id), 0) AS tahsis
+               WHERE s3."shipmentId" = sh.id AND sa."clearedAt" IS NULL), 0) AS tahsis
 ) x ON TRUE
 WHERE sh.status = 'DISPATCHED'
   AND EXISTS (SELECT 1 FROM shipment_orders so WHERE so."shipmentId" = sh.id)
@@ -259,7 +259,7 @@ SELECT 'rolls' AS tablo, id::text AS kayit FROM rolls
 UNION ALL
 SELECT 'order_lines', id::text FROM order_lines WHERE "quantity" <= 0 OR "shippedQty" < 0
 UNION ALL
-SELECT 'sack_allocations', id::text FROM sack_allocations WHERE qty <= 0`,
+SELECT 'sack_allocations', id::text FROM sack_allocations WHERE qty <= 0 -- clearedAt SUZULMEZ: damgali satirda da qty > 0 (ileri kayit degismez)`,
   },
   {
     id: "4",

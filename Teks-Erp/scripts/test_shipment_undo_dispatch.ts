@@ -48,6 +48,7 @@
 //    çıkmamış sevkiyat da geri alınabilir hale gelir.
 //    Geri alındığında yeşil.
 import prisma, { pool } from "../src/lib/prisma";
+import { ACTIVE_ALLOCATION } from "../src/services/helpers/sack-allocation.helper";
 import { shippingService } from "../src/services/shipping.service";
 import { returnService } from "../src/services/return.service";
 import { ensureTestAdmin } from "./fixture-test-user";
@@ -359,8 +360,10 @@ async function main() {
         rollsRel.some((r) => r.status === "A1_STOCK"),
       JSON.stringify(rollsRel),
     );
-    const allocRel = await prisma.sackAllocation.count({ where: { sackId: sack.id } });
-    check("tahsis silindi (sipariş bağı kalktı)", allocRel === 0, String(allocRel));
+    // K2 (2026-09-14): tahsis SİLİNMEZ, damgalanır — etkin satır 0, damgalı satırlar durur.
+    const allocRel = await prisma.sackAllocation.count({ where: { sackId: sack.id, ...ACTIVE_ALLOCATION } });
+    const allocDamgali = await prisma.sackAllocation.count({ where: { sackId: sack.id, clearedAt: { not: null } } });
+    check("tahsis damgalandı, silinmedi (etkin 0, damgalı ≥ 1 — sipariş bağı kalktı)", allocRel === 0 && allocDamgali >= 1, `etkin ${allocRel} · damgalı ${allocDamgali}`);
     const soRel = await prisma.shipmentOrder.findFirst({ where: { shipmentId: shipment.id }, select: { isActive: true } });
     check("ShipmentOrder.isActive false", soRel?.isActive === false, String(soRel?.isActive));
     const lineRel = await prisma.orderLine.findUnique({ where: { id: line.id }, select: { shippedQty: true } });

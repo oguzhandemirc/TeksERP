@@ -114,6 +114,15 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("revokedAt" IS NULL)`,
     why: "geri alınmış iz dururken aynı (top, adım, tip) yeniden yazılabilsin",
   },
+  // sack_allocations — K2 (2026-09-14): tahsis sil-yaz'dan damgaya döndü; tam unique
+  // damgalı satır dururken aynı (çuval, satır)ın yeniden tahsisini engellerdi → PARTIAL.
+  {
+    table: "sack_allocations",
+    index: "sack_allocations_active_uq",
+    uniq: true,
+    predicate: `("clearedAt" IS NULL)`,
+    why: "damgalı eski tahsis dururken aynı (çuval, sipariş satırı) yeniden tahsis edilebilsin",
+  },
   // rolls — null-yoğun FK'lar (migration 20260606001717 → 20260612100000 onarımı)
   { table: "rolls", index: "rolls_sackId_idx", uniq: false, predicate: `("sackId" IS NOT NULL)`, why: "null-yoğun FK" },
   { table: "rolls", index: "rolls_shipmentId_idx", uniq: false, predicate: `("shipmentId" IS NOT NULL)`, why: "null-yoğun FK" },

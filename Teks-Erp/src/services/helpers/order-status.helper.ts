@@ -14,6 +14,7 @@
 // =============================================================================
 
 import { Prisma, OrderStatus, ShipmentStatus, ItemUnit } from "@prisma/client";
+import { ACTIVE_ALLOCATION } from "./sack-allocation.helper";
 import { isMeasuredUnit, unitLabel } from "../../constants/item-unit";
 import { readShippingToleranceMeters } from "../system-setting.service";
 
@@ -61,6 +62,7 @@ export async function computeLineLedgerTx(
     where: {
       orderLineId: { in: ids },
       sack: { shipment: { status: ShipmentStatus.DISPATCHED } },
+      ...ACTIVE_ALLOCATION,
     },
     _sum: { qty: true },
   });
