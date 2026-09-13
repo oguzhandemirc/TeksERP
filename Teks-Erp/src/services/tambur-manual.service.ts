@@ -94,6 +94,7 @@ import { ensureWorkOrderInProgress, recomputeStepStatus } from "./helpers/roll-s
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
 import { resolveLabelIntent } from "./helpers/label-intent.helper";
 import { resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { STEP_CAPABILITY_SELECT, stepCanApplyColor } from "./helpers/step-capability.helper";
@@ -1135,6 +1136,7 @@ export class TamburManualService {
           weightKg: true,
           sackId: true,
           shipmentId: true,
+          warehouseId: true,
         },
       });
       if (!fresh) throw AppError.notFound("Top bulunamadı", { code: "ROLL_NOT_FOUND" });
@@ -1198,6 +1200,11 @@ export class TamburManualService {
           { code: "ROLL_STATE_CHANGED", rollId: roll.id, status: fresh.status },
         );
       }
+
+      // DEPO DEFTERİ — Faz 1 topu rafa yazdı (`ENTRY_RECEIPT`), Faz 2 üretime alıyor:
+      // çıkış satırı yazılmazsa top hem üretimde hem defterde rafta kalır (ölçüldü
+      // 2026-09-13). Görüntü claim ÖNCESİ `fresh`ten; `attachRolls` ile aynı yazıcı.
+      await postProductionIssuesTx(tx, [{ id: roll.id, ...fresh }], { workOrderStepId: step.id, userId: ctx.userId ?? null });
 
       await tx.rollMovement.create({
         data: {

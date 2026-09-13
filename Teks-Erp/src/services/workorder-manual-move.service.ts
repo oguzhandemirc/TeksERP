@@ -33,6 +33,7 @@ import { voidStalePendingBypassAssignmentsTx } from "./helpers/kursun-bypass-gua
 import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { ApiResponse } from "../types/api.types";
 import { OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
+import { postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
 
 /**
  * Taşınabilir statüler — fasondaki/tüketilmiş/iptal/sevkli hariç (çuval/sevk ayrıca guard'lı).
@@ -85,6 +86,8 @@ interface MoveRoll {
   batchId: string | null;
   batchNumber: string | null;
   currentStepName: string | null;
+  /** Stok defteri: raftan üretime çıkış satırının deposu (claim ÖNCESİ). */
+  warehouseId: string | null;
 }
 
 interface StepRef {
@@ -219,6 +222,7 @@ export class WorkOrderManualMoveService {
         sackId: true,
         shipmentId: true,
         batchId: true,
+        warehouseId: true,
         batch: { select: { batchNumber: true, workOrderId: true } },
         currentStep: { select: { station: { select: { name: true } } } },
       },
@@ -243,6 +247,7 @@ export class WorkOrderManualMoveService {
       sackId: r.sackId,
       shipmentId: r.shipmentId,
       batchId: r.batchId,
+      warehouseId: r.warehouseId,
       batchNumber: r.batch?.batchNumber ?? null,
       currentStepName: r.currentStep?.station?.name ?? null,
     }));
@@ -632,6 +637,12 @@ export class WorkOrderManualMoveService {
         if (claim.count !== selectedIds.length) {
           throw AppError.conflict("Toplar bu sırada değişti — taşıma iptal, önizlemeyi yenileyin.");
         }
+
+        // DEPO DEFTERİ — raftaki top üretime alınıyorsa mal raftan İNER (`attachRolls`
+        // ile aynı yazıcı). Yön/metraj claim ÖNCESİ görüntüden (`ctx.selected`);
+        // zaten üretimdeki top satır almaz. Yazılmadığı sürede raf topu üretime
+        // satırsız giriyor, mutabakat onu "rafta" sayıyordu (ölçüldü 2026-09-13).
+        await postProductionIssuesTx(tx, ctx.selected, { workOrderStepId: t.id, userId: userId ?? null });
 
         // Backflush renk sentezi — atlanan renk-veren adım için renksiz topları WO hedef
         // rengiyle boya (receive() emsali). Kalite ASLA sentezlenmez.

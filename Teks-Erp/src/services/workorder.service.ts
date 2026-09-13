@@ -13,6 +13,7 @@ import { ACTIVE_OPERATION, OWN_OPERATION } from "./helpers/roll-operation.helper
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { postStockMove, qtyYazilabilir } from "./helpers/warehouse-ledger.helper";
+import { postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
 import { warehouseStampManyTx, warehouseStampWhereTx } from "./helpers/warehouse.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import prisma from "../lib/prisma";
@@ -4814,19 +4815,9 @@ export class WorkOrderService {
         // DEPO DEFTERİ — üretime alma bir ÇIKIŞTIR: mal raftan iniyor. Yön ve
         // metraj claim ÖNCESİ durumdan okunur (`candidates` tx içinde tazedir);
         // claim sonrası statü artık IN_PRODUCTION'dır ve "nereden çıktı"yı söylemez.
-        for (const r of succeeded) {
-          if (r.warehouseId && WAREHOUSE_STOCK_STATUSES.includes(r.status) && qtyYazilabilir(r.currentQty)) {
-            await postStockMove(tx, {
-              rollId: r.id,
-              eventType: WarehouseEventType.PRODUCTION,
-              qty: r.currentQty,
-              from: { warehouseId: r.warehouseId, status: r.status },
-              reasonCode: STOCK_MOVE_REASON.PRODUCTION_ISSUE,
-              workOrderStepId: firstStepId,
-              userId: userId ?? null,
-            });
-          }
-        }
+        // Yazıcı TEK (`production-issue-ledger.helper`): manuel taşıma · elle top ·
+        // redye ayırma aynı yüklemi ve aynı satırı yazar (2026-09-14, hüküm §5).
+        await postProductionIssuesTx(tx, succeeded, { workOrderStepId: firstStepId, userId: userId ?? null });
         if (claimedIds.size !== candidates.length) {
           for (const r of candidates) {
             if (!claimedIds.has(r.id)) {

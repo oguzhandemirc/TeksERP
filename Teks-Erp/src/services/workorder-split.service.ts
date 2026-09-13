@@ -35,6 +35,7 @@ import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { voidStalePendingBypassAssignmentsTx } from "./helpers/kursun-bypass-guard.helper";
 import { ApiResponse } from "../types/api.types";
 import { OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
+import { postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
 
 export type SplitMode = "REDYE_SAME_COLOR" | "NEW_COLOR" | "UNDYED_MOVE";
 
@@ -55,6 +56,8 @@ interface SplitContextRoll {
   weightKg: Prisma.Decimal | null;
   sackId: string | null;
   shipmentId: string | null;
+  /** Stok defteri: raftan üretime çıkış satırının deposu (claim ÖNCESİ). */
+  warehouseId: string | null;
   /** Redye / NEW_COLOR için uygun mu (statü + çuval/sevk yok + boyahane adımında/sonrasında). */
   redyeEligible: boolean;
 }
@@ -132,6 +135,7 @@ export class WorkOrderSplitService {
         weightKg: true,
         sackId: true,
         shipmentId: true,
+        warehouseId: true,
       },
       orderBy: { createdAt: "asc" },
     });
@@ -356,6 +360,10 @@ export class WorkOrderSplitService {
           throw AppError.conflict("Parti bu sırada değişti — yeniden boyama iptal, sayfayı yenileyin.");
         }
 
+        // DEPO DEFTERİ — raftaki (depo/ham) top boyahaneye geri sarılıyorsa mal
+        // raftan İNER; görüntü claim ÖNCESİ `selected`ten (`attachRolls` yazıcısı).
+        await postProductionIssuesTx(tx, selected, { workOrderStepId: colorStep.id, userId: userId ?? null });
+
         // 2) Yeni parti (aynı WO, splitFrom=kaynak). Kart WO başına — yeni kart yok.
         const created = await createBatchTx(tx, {
           workOrderId: ctx.workOrderId,
@@ -477,6 +485,10 @@ export class WorkOrderSplitService {
           movedTotalQty,
           userId,
         });
+
+        // DEPO DEFTERİ — raftaki top yeni WO'nun boyahane adımına giriyor: raftan
+        // İNER; görüntü claim ÖNCESİ `selected`ten, adım damgası yeni WO'nun.
+        await postProductionIssuesTx(tx, selected, { workOrderStepId: newReEntryStepId, userId: userId ?? null });
 
         // 3) Partinin ayak izini yeni WO adımlarına repoint (movement dahil — R1).
         await repointRollsTx(tx, selectedIds, oldToNew);

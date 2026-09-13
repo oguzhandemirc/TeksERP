@@ -8330,3 +8330,35 @@ altı okuyucu etkilenir (`rollWhole` metraj-düzeltme kapısı · WO üretilen m
 coverage Σkök · üretim raporu · ikiz kapısı · etiket "100 / 140"), saha etkisi bugün 0 (geri alınmış
 depo kesimi 0, initialQty > giriş defteri 0). Düzeltme 1e hükmüyle initialBump deseni; bekçi
 `test_stock_ledger_tambur_undo §12` (tren #5 sonrası, 6e). Kural satırı `Kapanır:` taşıyor.
+
+## 2026-09-14 — RAFTAN ÜRETİME GİREN ÜÇ YOL SATIRSIZDI: yazıcı teke indi, K=0 kapısı KÖRDÜ [ÇEKİRDEK]
+
+**Olgu (1c ölçtü, hüküm dosyası §5; 1e hükmü §11 ③):** stok kümesindeki top üretime dört
+yoldan giriyordu ve yalnız `attachRolls` ("Yeniden Üretime Al") `PRODUCTION_ISSUE` çıkışı
+yazıyordu. Manuel taşıma ("Konumu Düzelt", koşuldu: ENTRY +100 duruyor, top üretimde), elle top
+(Faz 1 `createInitialEntry` rafa yazar, Faz 2 claim üretime alır) ve redye ayırma (aynı renk ·
+yeni renk) satırsızdı ⇒ top üretimde, defter "rafta"; mutabakat (§H) her yolda top metrajı kadar
+boşluk. **Kapı neden görmedi:** `test_stok_defteri_bag_olcumu` K'yı (i) eski kapıyı çağıranlar
+(AST) + (ii) elle liste ile sayar; hiçbir kapıyı çağırmayan yol AST'ye görünmez ve listede yoktu;
+veri ayağı (`test_consistency` asimetrisi) `IN_PRODUCTION`ı stok dışı saymaz. Sınıf **KÖR (kapı
+borcu)**, beyanlı kapsam dışı değil (kütüphanenin kendi "yeni üye" reçetesi ① — `grep -c
+postStockMove` = 0 ∧ stok kümesinden çıkaran yol — üyeyi buluyordu; 6e kabul etti).
+
+**Karar:** yazıcı TEK — `helpers/production-issue-ledger.helper.ts` (`needsProductionIssue` yüklemi:
+stok kümesi ∧ depo var ∧ metraj yazılabilir; `postProductionIssuesTx` satırı); `attachRolls` da
+buna geçti (dört yol aynı satır). Görüntü claim ÖNCESİ; zaten üretimdeki top satır almaz
+(stok dışı → stok dışı). `DISPOSITION` beyanı `KARSI_OLAY = PRODUCTION_ISSUE` (küme düzeyi;
+çocuk kapsamında `TAMBUR_UNDO` ile bağlı da terslenir — şerh 82'de).
+
+**Bekçi:** `test_stock_ledger_manual_move` (16 kontrol: §1 manuel taşıma WAREHOUSE/STOCK → adım ·
+§2 üretimdeki top adım değişince satırsız · §3 elle top + idempotent tekrar · §4 redye iki dal +
+partideki üretimdeki top satırsız · §H canlı stok = Σdefter · §Z körlük zemini). İki sonda:
+yazıcı susturulunca 12 kırmızı (§H boşluğu 530 = fikstür metrajı); yazıcıyla 16/0. Mevcut 16
+bekçi (manuel taşıma ×5 · elle top ×2 · redye/split ×4 · stok defteri ×3 · beyan · K=0) yeşil.
+
+**Fabrika kopyası (salt okuma, iniş öncesi):** `IN_PRODUCTION` 87 top, hiçbirinde stok GİRİŞ
+satırı yok (defter-öncesi küme) ⇒ defter asimetrisi **0**; audit'te 7 manuel taşıma (Tem–Ağu,
+tek top, kaynak statü yükte yok) — onarım yok, ufuk sonrası. Giriş yönü (`rescueStuckRoll`,
+`cutOpenFabric` çocuğu) bu notun dışında, ayrı sahip. K=0 kapısı üyeliği 6e'de: öneri üç üyeyi
+DÜŞÜRMEK değil, `postProductionIssuesTx`i `YENI_KAPI_FONKSIYONLARI`na eklemek — üyeler kalır,
+çağrı kaldırılırsa kapı kırmızıya döner.
