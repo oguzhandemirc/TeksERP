@@ -28,6 +28,7 @@ import path from "path";
 import prisma, { pool } from "../src/lib/prisma";
 import { ItemType, ItemUnit, RollStatus } from "@prisma/client";
 import { normalizeScanCode } from "../src/utils/code-format";
+import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { InventoryService } from "../src/services/inventory.service";
 import { ReturnService } from "../src/services/return.service";
 import { SackSearchService } from "../src/services/sack-search.service";
@@ -187,8 +188,77 @@ async function testLookups(): Promise<void> {
 }
 
 // ── C) Index korunuyor mu (çözümün ASIL bedeli) ─────────────────────────────
+/**
+ * Plancının index'i SEÇMESİ için gereken asgari satır — ÖLÇÜLDÜ, uydurulmadı.
+ *
+ * ⚠️ ÖLÇÜM (2026-09-13, PG 16.15, `rolls` tablosu, `ANALYZE` sonrası):
+ *   toplam 101 → Seq Scan · 131 → Seq Scan · 181 → Seq Scan
+ *   toplam 200 → Index Scan using rolls_barcode_key · 281 → Index · 581 → Index
+ * ⇒ dönüş noktası ~190. Eşik 500 seçildi: **≈2,6× pay**, çünkü sayı satır
+ *   genişliğine ve `relpages`e bağlıdır, salt satır sayısına değil.
+ */
+const PLAN_ESIGI = 500;
+const DOLGU_ON_EKI = "SCCPLAN-";
+
+/**
+ * C) bölümünün ÖN KOŞULUNU KURAR — ortamdan BEKLEMEZ.
+ *
+ * ⚠️ GEREKÇE `e77714b4`TEN DEVRALINDI, YENİDEN ÖLÇÜLMEDİ. d5 dört tur aynı
+ * soruyu sordu ve İKİ teşhisi de ÖLÇEREK DÜŞÜRDÜ:
+ *   (1) "ORTAM — plancı KÜÇÜK tabloda index kullanmaz"  ⇒ DÜŞTÜ: CI'ın planı
+ *       `cost=0.00..112.03` geldi, yani tablo küçük DEĞİL.
+ *   (2) "ARALIKLI"                                       ⇒ DÜŞTÜ: ✅✅❌❌ salınım
+ *       değil temiz bir GEÇİŞ (sıklık defterinin kuralı: ③ SÜRÜKLENME).
+ * AYAKTA KALAN ADAY TEŞHİS: seq scan maliyeti ≈ `relpages` ⇒ CI'ın tablosu da
+ * 112 sayfa; YERELDE AYNI SAYFA SAYISINDA plancı INDEX seçiyor. ⇒ ***Fark
+ * SAYFADA değil İSTATİSTİKTE: CI'ın efemer DB'sinde `ANALYZE` hiç koşmuyor,
+ * plancı BAYAT `reltuples` görüyor.*** (Bekçiler top yaratıp siliyor, silinen
+ * satırlar sayfaları bırakıyor, autovacuum yetişmiyor — `test_audit_depth` ile
+ * aynı kök.)
+ *
+ * ⇒ Bu yüzden ön koşulun ASIL parçası dolgu satırı DEĞİL **`ANALYZE`**dir;
+ *   dolgu yalnız istatistiğin index'i seçtirecek kadar CANLI satır görmesini
+ *   garanti eder (ölçüm aşağıda). İkisi AYRI gerekçedir ve ikisi de gerekir.
+ * ⇒ *Bir bekçinin yeşili, bekçinin DIŞINDAKİ bir duruma bağlıysa o bekçi
+ *   kendine yetmiyordur.*
+ * ⚠️ `e77714b4`ün getirdiği "kırmızı kendi TEŞHİSİNİ taşır" davranışı AYNEN
+ *   KORUNUR — ön koşul onun üstüne biner: teşhis kalır, kırmızı gider.
+ */
+async function planOnKosuluKur(itemId: string): Promise<{ once: number; sonra: number }> {
+  const once = await prisma.roll.count();
+  const eksik = PLAN_ESIGI - once;
+  if (eksik > 0) {
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO rolls (id, barcode, "itemId", "initialQty", "currentQty", "qualityGrade",
+                          width, status, "entrySource", "createdAt", "updatedAt")
+       SELECT gen_random_uuid(), '${DOLGU_ON_EKI}' || g, $1::uuid, 1, 1, '1.KALITE', 100,
+              'WAREHOUSE', 'SUPPLIER_RECEIPT', now(), now()
+       FROM generate_series(1, ${eksik}) g`,
+      itemId,
+    );
+  }
+  // ⚠️ `ANALYZE` ŞART: satır eklemek yetmez, plancı BAYAT istatistikle karar verir.
+  await prisma.$executeRawUnsafe(`ANALYZE rolls`);
+  return { once, sonra: await prisma.roll.count() };
+}
+
+async function planOnKosuluKaldir(): Promise<void> {
+  await prisma.$executeRawUnsafe(`DELETE FROM rolls WHERE barcode LIKE '${DOLGU_ON_EKI}%'`);
+  await prisma.$executeRawUnsafe(`ANALYZE rolls`);
+}
+
 async function testIndexPreserved(): Promise<void> {
   console.log("\n── C) Unique index korunuyor ──");
+  if (!cleanup.itemId) {
+    fail++;
+    console.log("❌ C) ÖN KOŞUL KURULAMADI — fikstür kalemi yok; index yüklemi ÖLÇÜLMEDİ");
+    return;
+  }
+  const sayim = await planOnKosuluKur(cleanup.itemId);
+  console.log(
+    `   ön koşul KURULDU: ${sayim.once} → ${sayim.sonra} satır + ANALYZE ` +
+      `(eşik ${PLAN_ESIGI}; ölçüldü: 181 satırda Seq Scan, 200'de Index)`,
+  );
   const rows = await prisma.$queryRawUnsafe<{ "QUERY PLAN": string }[]>(
     `EXPLAIN SELECT id FROM rolls WHERE barcode = 'T130826F0230'`,
   );
@@ -370,6 +440,14 @@ function testMechanical(): void {
 
 async function main(): Promise<void> {
   console.log("=== Okutma kodu büyük/küçük harf bekçisi ===");
+  // ⚠️ İLK İFADE: bu bekçi artık C) bölümünde ÖN KOŞUL KURUYOR (dolgu satırı +
+  // `ANALYZE rolls`) ve `ANALYZE` tablo istatistiğini GLOBAL etkiler.
+  const dbEngeli = hedefDbEngeli();
+  if (dbEngeli) {
+    console.error(`❌ DURDURULDU: ${dbEngeli}`);
+    fail++;
+    return;
+  }
   try {
     testHelper();
     await testLookups();
@@ -379,6 +457,10 @@ async function main(): Promise<void> {
     fail++;
     console.error("Beklenmeyen hata:", err);
   } finally {
+    await planOnKosuluKaldir().catch((e: unknown) => {
+      console.log(`  ⚠️ TEMİZLİK DÜŞTÜ: plan dolgusu — ${e instanceof Error ? e.message.split("\n")[0] : String(e)}`);
+    });
+
     await prisma.rollOperation.deleteMany({ where: { rollId: { in: cleanup.rollIds } } }).catch(() => {});
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: cleanup.rollIds } } }).catch(() => {});
     await prisma.roll.deleteMany({ where: { id: { in: cleanup.rollIds } } }).catch(() => {});
