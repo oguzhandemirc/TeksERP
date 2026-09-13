@@ -184,3 +184,35 @@ kural değil, **kuralın resmidir**. *(5e teşhis · d5 formülasyon)*
 aynı gece bir başka oturuma dört kez çarptı.)*
 ⚠️ Ters yönü de var ve bu belgede yaşandı: *yasağı anlatan cümle, yasağın kendisi
 sayılabilir* (§ Dolaylılık'ın ters yönü).
+
+### Bir POPÜLASYONU saymadan önce ÜYELİĞİNİ sına
+
+Bir kümenin üyelerini saymak, onların o kümeye ait olduğunu **varsayar**. Üyelik
+sınanmazsa sayı üç ayrı şeyi tek rakama sıkıştırır ve hiçbiri görünmez.
+
+*(Vaka 2026-09-13, `--apply` script'lerinin iz bırakması.* Dolaşan sayı: **"27
+script'in 6'sı hiç iz bırakmıyor"**. İki oturum bağımsız ölçtü ve **ikisi de 6
+buldu**. Pozitif kontrol — *"bu altısı gerçekten YAZIYOR mu?"* — sayıyı çökertti:*
+
+| ölçülen | gerçek sınıf |
+|---|---|
+| `backfill-record-provenance` | **gerçekten izsiz yazıyor** (ham SQL — ne audit ne `updatedAt`) |
+| `setup-ticaret` | **servis üzerinden yazıyor** ⇒ iz VAR; `systemSettingService` · `PermissionManagementService` · `ensureDefaultWarehouse` audit'i kendileri atıyor. Desen taraması dolaylı çağrıyı görmedi |
+| `db-guard` | **hiç yazmıyor** — salt-okunur bir kapı, popülasyonun üyesi bile değil |
+
+⇒ *"6 izsiz"* = **1 gerçek ihlal + servis üzerinden yazanlar + popülasyona ait
+olmayanlar.** Bir yüklem "yazma yolu"nu **kapanışıyla** izlemiyorsa (script →
+servis → audit/Prisma), meşru script'leri ihlal gösterir.
+
+> ***İki bağımsız ölçüm aynı sayıya vardı ve ikisi de yanlıştı. Aynı KÖR NOKTAYI
+> paylaşan iki ölçüm birbirini DOĞRULAMAZ.***
+
+⚠️ Bu, *"kritik iddiada iki bağımsız ARAÇ kullan"* kuralının ince yeri:
+**bağımsızlık KAYNAKTA değil YÖNTEMDE olmalı.** İki oturum, iki kaynak — ama tek
+yöntem (literal desen araması) ve tek kör nokta (dolaylılık). Farklı kişilerin
+aynı yöntemi koşturması, ölçümü **tekrarlar**, doğrulamaz.
+
+📌 Panzehir iki adımlı: ① üyeliği sına (*"bu dosya gerçekten YAZIYOR mu?"*),
+② yüklemi kapanışa taşı (doğrudan çağrı değil, ulaşılan tüm yazma yolları).
+*(d5 ölçüm + formülasyon · 1e'nin "yazan yolları say, adı arama" şartı bunu
+önceden söylüyordu ve ilk turda yine literal sayıldı.)*
