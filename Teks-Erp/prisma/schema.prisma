@@ -1444,6 +1444,7 @@ model WarpSpec {
 
   yarnItem    Item   @relation("WarpSpecYarn", fields: [yarnItemId], references: [id], onDelete: Restrict)
   fabricItems Item[] @relation("ItemWarpSpec")
+  weavingOrders WeavingOrder[] @relation("WeavingOrderWarpSpec")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -1462,6 +1463,96 @@ model WarpSpec {
   @@unique([nameFold])
   @@index([yarnItemId])
   @@map("warp_specs")
+}
+
+/// KİM DOKUYOR — `WarpBeamOrigin` kalıbının kardeşi, ikinci bir desen icat edilmez.
+enum WeavingExecutionKind {
+  IN_HOUSE
+  SUBCONTRACTED
+}
+
+/// ⚠️ Değerleri KENDİ alanında okunur; ortak Türkçe haritası (`ENUM_LABELS`)
+/// `FIELD_ENUM_OVERRIDES` ile beslenir. `PLANNED` bugün "Planlandı" (iş emri /
+/// sevkiyat) ile çakışıyor ve o cevap dokuma için de doğru — ama çakışmasın diye
+/// bir değeri yeniden adlandırmak ALAN DİLİNİ BOZAR; override mekanizması tam
+/// bunun için var.
+enum WeavingOrderStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+/// DOKUMA İŞİ — "ne dokunacak, ne kadar, kim dokuyacak".
+///
+/// ⚠️ Bir `WorkOrder` DEĞİLDİR ve onun rotasını/adımlarını TAŞIMAZ. Dokuma topun
+/// rotasında bir ADIM değil, topu DOĞURAN ayrı bir VARLIKTIR (kullanıcı ölçütü
+/// 2026-09-13, kök `CLAUDE.md`): bugün bir top ya fabrikanın DIŞINDAN gelir ya iş
+/// emri içinde BAŞKA BİR TOPTAN doğar (ana top tüketilir, metre korunur) — dokuma
+/// ise iplikten metre YARATIR ve rotanın metre-korunumlu sözlüğünde karşılığı yok.
+/// Gerekçe ve reddedilen şık: `docs/design/DOKUMA-IS-EMRI-VE-TABLET-TASARIMI.md` §1.
+///
+/// ⚠️ TOP BURADA DOĞMAZ: dokunan kumaş KK1'de `Roll` olur (`StationKind.RAW_QC`
+/// zaten "ham mal girişi / dokuma çıkışı" der) — ikinci bir giriş motoru yazılmaz.
+///
+/// ⚠️ CANLI SAYAÇ KOLONU YOK (`WarpBeam` emsali): üretilen metre buradan değil
+/// `Roll` ölçümünden okunur. Kolon yalnız bir KAPANIŞ terimi olabilir ve donduğu
+/// an beyan edilir — canlı sayaç kolonu çift-yüklem sınıfını doğurur.
+model WeavingOrder {
+  id                 String  @id @default(uuid()) @db.Uuid
+  weavingOrderNumber String  @unique @db.VarChar(64)
+  /// İdempotency — kayıt yaratan uç (`clientToken @unique` sözleşmesi).
+  clientToken        String? @unique @db.Uuid
+
+  /// Dokunacak kumaş — `ItemType.FABRIC` (servis 400 verir).
+  itemId     String  @db.Uuid
+  /// Ham dokumada NULL MEŞRUDUR — renk sonraki adımlarda gelir.
+  colorId    String? @db.Uuid
+  /// Hangi çözgü kartı besliyor — Faz 1a'da doğan `WarpSpec`in ilk tüketicisi.
+  warpSpecId String? @db.Uuid
+
+  /// TALEP ekseni (metre). NULL = açık uçlu iş (levent bitene kadar dokunur).
+  /// ⚠️ HEDEFTİR, TETİK DEĞİLDİR: bu sayıya ulaşmak işi KAPATMAZ. Ölçüldüğü
+  /// kaynak KK1 top metresidir ve GEÇ gelir; otomatik kapanış tezgah hâlâ
+  /// koşarken işi kapatırdı (§2.2a'da reddedildi).
+  plannedM Decimal? @db.Decimal(12, 3)
+
+  executionKind WeavingExecutionKind
+  /// XOR: `SUBCONTRACTED` ise DOLU, `IN_HOUSE` ise NULL (CHECK ikinci hat;
+  /// birincil doğrulama servis kapısında — `resolveSupplierParty` kalıbı).
+  subcontractorId String? @db.Uuid
+
+  status           WeavingOrderStatus @default(PLANNED)
+  plannedStartDate DateTime?          @db.Timestamptz
+  plannedEndDate   DateTime?          @db.Timestamptz
+  notes            String?            @db.VarChar(500)
+
+  /// KAPANIŞ — açık karardır, türetilmez.
+  closedAt   DateTime? @db.Timestamptz
+  closedById String?   @db.Uuid
+
+  /// İPTAL — soft; ileri kayıtları (koşum/duruş/doff) NE SİLER NE DEĞİŞTİRİR.
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  item           Item           @relation("WeavingOrderItem", fields: [itemId], references: [id], onDelete: Restrict)
+  color          Color?         @relation("WeavingOrderColor", fields: [colorId], references: [id], onDelete: Restrict)
+  warpSpec       WarpSpec?      @relation("WeavingOrderWarpSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
+  subcontractor  Subcontractor? @relation("WeavingOrderSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt      @db.Timestamptz
+  createdById String?  @db.Uuid
+  updatedById String?  @db.Uuid
+
+  // Ekran sorgusu: "açık işler, planlanan başlangıca göre" (eşitlik önce).
+  @@index([status, plannedStartDate])
+  @@index([itemId])
+  @@index([colorId])
+  @@index([warpSpecId])
+  @@index([subcontractorId])
+  @@map("weaving_orders")
 }
 
 // =============================================================================
@@ -1510,6 +1601,7 @@ model Item {
   /// Müşteri-bazlı isim alias'ları — etiket basımında "müşterideki adı" için.
   customerAliases    CustomerItemAlias[]
   productRecipes     ProductRecipe[]
+  weavingOrders      WeavingOrder[]         @relation("WeavingOrderItem")
   rollReturns        RollReturn[]
   swatchReductions   SwatchStockReduction[]
   /// Bu KUMAŞI besleyen çözgü kartı (N:1) — devere modülü.
@@ -4284,6 +4376,7 @@ model Subcontractor {
   plannedDispatches        SubcontractorDispatch[]   @relation("DispatchPlannedSubcontractor")
   receipts                 SubcontractorReceipt[]    @relation("ReceiptSubcontractor")
   plannedSteps             WorkOrderStep[]           @relation("StepPlannedSubcontractor")
+  weavingOrders            WeavingOrder[]            @relation("WeavingOrderSubcontractor")
   plannedRouteSteps        RouteStep[]               @relation("RouteStepPlannedSubcontractor")
   kartelaDispatches        KartelaDispatch[]         @relation("KartelaDispatchSub")
   kartelaReceipts          KartelaReceipt[]          @relation("KartelaReceiptSub")
@@ -5412,6 +5505,7 @@ model Color {
   orderLines          OrderLine[]
   workOrderTargets    WorkOrder[]            @relation("WorkOrderTargetColor")
   swatches            Swatch[]
+  weavingOrders       WeavingOrder[]      @relation("WeavingOrderColor")
   stationCapabilities StationColor[]
   /// Müşteri-bazlı isim alias'ları — etiket basımında "müşterideki adı" için.
   customerAliases     CustomerColorAlias[]

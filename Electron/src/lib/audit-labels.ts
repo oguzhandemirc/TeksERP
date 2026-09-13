@@ -353,6 +353,9 @@ export const ENUM_LABELS: Record<string, string> = {
   TABLET: "Tablet",
   PHONE: "Telefon",
   DESKTOP: "Masaüstü",
+  // WeavingExecutionKind — dokuma işini KİM koşuyor (2026-09-13).
+  IN_HOUSE: "Kendi tezgahımızda",
+  SUBCONTRACTED: "Fasonda dokunuyor",
   // OrderStatus / WorkOrderStatus / StepStatus (ortak durumlar dahil)
   PENDING: "Bekliyor",
   APPROVED: "Onaylandı",
@@ -754,12 +757,15 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   SCRAP: "sapma türü / top statüsü / kalite rolü — üçünde de 'Fire'",
   SCALE: "tartı kaynağı ve çevre birimi türü — ikisi de 'Kantar'",
   MANUAL: "tartı kaynağı ve kur kaynağı — ikisi de 'Elle girildi'",
-  CANCELLED: "on dört durum enum'u — hepsinde 'İptal' (en geniş ortaklık)",
+  CANCELLED: "on beş durum enum'u — hepsinde 'İptal' (en geniş ortaklık)",
+  IN_PROGRESS:
+    "WorkOrderStatus ve WeavingOrderStatus — ikisi de 'Devam Ediyor'. Dokuma işi " +
+    "IN_PROGRESS iken tezgah koşuyordur; iş emrininkiyle aynı cümle doğru (2026-09-13)",
   CUSTOMER: "firma türü / mükerrer-varlık / cari — üçü de 'Müşteri'",
   PENDING: "sipariş/adım/cihaz — üçü de 'Bekliyor'",
   APPROVED: "sipariş ve cihaz — ikisi de 'Onaylandı'",
-  COMPLETED: "altı durum enum'u — hepsinde 'Tamamlandı'",
-  PLANNED: "iş emri / sevkiyat / sevkiyat olayı — üçü de 'Planlandı'",
+  COMPLETED: "yedi durum enum'u — hepsinde 'Tamamlandı'",
+  PLANNED: "iş emri / DOKUMA İŞİ / sevkiyat / sevkiyat olayı — dördü de 'Planlandı'",
   SUPERSEDED: "iş emri ve basılı belge — ikisi de 'Eski Versiyon'",
   ACTIVE: "yedi durum enum'u — hepsinde 'Aktif'",
   VOIDED: "refakat kartı ve basılı belge — ikisi de 'İptal'",
