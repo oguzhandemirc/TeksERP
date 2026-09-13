@@ -119,3 +119,16 @@ export function assertMachineRunReplayAlive(existing: {
     { code: "RUN_REVOKED", runId: existing.id, revokedAt: existing.revokedAt },
   );
 }
+
+/**
+ * Token'la bulunan top indirmesi hâlâ canlı mı — geri alınmışsa 409 `DOFF_REVOKED`.
+ * `assertMachineRunReplayAlive` ikizi: "ölü" hâl statü değil DAMGADIR.
+ */
+export function assertDoffReplayAlive(existing: { id: string; revokedAt: Date | null }): void {
+  if (!existing.revokedAt) return;
+  throw AppError.conflict(
+    "Bu indirme daha önce kaydedilip geri alınmış — yeniden kaydetmek için formu yeniden açın " +
+      "(aynı gönderim tekrar edilemez).",
+    { code: "DOFF_REVOKED", doffEventId: existing.id, revokedAt: existing.revokedAt },
+  );
+}

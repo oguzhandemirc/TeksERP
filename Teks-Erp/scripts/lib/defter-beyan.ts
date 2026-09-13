@@ -285,13 +285,14 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     ["src/services/machine-run.service.ts"],
     { yari: true }),
 
-  // 2026-09-13 (01, dokuma P3): ŞEMA-ONLY — yazan uç yok, `yazan: []` bilinçli (§5 ilk
-  // yazıcıyı beyansız gelirse KIRMIZI yapar). Ters yol tasarımda `DOFF_CANCEL`: damga,
-  // ve yalnız hiç top doğurmamış indirmede açık (NOT EXISTS rolls.doffEventId) — top
-  // doğduysa doff tarihsel olgudur, topun kaderi onu değiştirmez. Ters yazan sembol
-  // yazma yüzeyiyle doğar; o gün bu satıra `tersYazan` + `yazan` girer.
+  // 2026-09-13 (01, dokuma P3 → P3b yazma yüzeyi): kaydeden `openDoff`, geri alan
+  // `revokeDoff` — aynı dosyada. Ters yol DAMGA, yalnız hiç top doğurmamış indirmede
+  // açık (`rolls: { none: {} }`, statüye BAKILMAZ). Bağ KK1'de `claimDoffForRollTx`
+  // ile (FOR UPDATE) kurulur; o helper doff YAZMAZ, kilitler — yazan listesine girmez.
   D("DoffEvent", "top İNDİRME defteri — tezgahtan kumaş indiği AN'ın kaydı; top burada DOĞMAZ (KK1'de `entrySource=WEAVING`, `doffEventId` bağı). Append-only, updatedAt YOK; `counterAtDoff` sayacın o anki değerini DONDURUR (sıfırlama beyan edilmiş olay olur, yorumlanacak anomali değil); makine kalıcı silme guard'ını besler (`doffEventCount`)",
-    { tur: "DAMGA", kolon: "revokedAt" }, [], []),
+    { tur: "DAMGA", kolon: "revokedAt" },
+    [{ dosya: "src/services/machine-doff.service.ts", sembol: "revokeDoff" }],
+    ["src/services/machine-doff.service.ts"]),
 
   D("MachineStopEvent", "duruş defteri — duruşun OLGULARI (startedAt · endedAt · pickCounter · stopKey) değişmez, KARARI (reasonCode · lossClass) değişir ve her değişim `MachineStopReclass`a satır yazar ⇒ doktrinin durum+defter çifti tek tabloda: reasonCode DURUM, reclass DEFTER. ⚠️ İKİ YAŞAM SÜRESİ tek tabloda (tasarım §4): insan kararlı duruş BUDANMAZ, makine sınıflı duruş kovayla budanır — yüklem `classifiedById IS NOT NULL OR reasonSource IN (OPERATOR,SUPERVISOR)`. Budayıcı bugün YOK; indiği gün §10 `silen` beyanını ister ve tasarım §4 sed ③/④ (tek helper + BEFORE DELETE trigger) onunla birlikte doğar. 01'in guard muafiyetiyle aynı okuma: \"duruş bir DEFTERDİR, guard ingest dilimiyle gelecek\"",
     { tur: "DAMGA", kolon: "revokedAt" }, [], [], { yari: true }),

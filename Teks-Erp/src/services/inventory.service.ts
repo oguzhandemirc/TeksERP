@@ -9,6 +9,7 @@
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
+import { claimDoffForRollTx } from "./helpers/machine-doff-link.helper";
 import { normalizeScanCode } from "../utils/code-format";
 import { AuditService } from "./audit.service";
 import { normalizeFoldType, resolveFoldTypeForWrite } from "./helpers/fold-type";
@@ -734,6 +735,12 @@ export class InventoryService {
        */
       forcedEntrySource?: RollEntrySource;
       /**
+       * BU TOP HANGİ İNDİRMEDEN (dokuma P3/§3.8b) — yalnız `forcedEntrySource: WEAVING`
+       * ile anlamlı; verilmezse NULL kalır ("atanmamış", tahmin edilmez). Bağ tx
+       * içinde doff satırı KİLİTLENEREK kurulur (`claimDoffForRollTx`).
+       */
+      doffEventId?: string | null;
+      /**
        * Elle eklenen topun SEBEBİ — kalıcı kolona (`Roll.entryReason`) yazılır.
        * Zincire dayanan yollar (KK1 / kesim / fason) bunu VERMEZ; onların sebebi
        * belgesidir ve alan NULL kalır. Audit kaydı ayrıca yazılmaya devam eder
@@ -1128,6 +1135,11 @@ export class InventoryService {
         await lockAgainstMergeTx(tx);
         await assertMasterDataLiveTx(tx, { itemId: data.itemId, colorId: data.colorId ?? null });
 
+        // DOFF BAĞI — satır kilidi (FOR UPDATE) ile; düz okuma eşzamanlı DOFF_CANCEL'e
+        // pencere açar. Sıra: advisory kilit (yukarıda) → doff satırı → barkod sayacı;
+        // iptal yolu yalnız doff satırını tutar, ABBA yok.
+        await claimDoffForRollTx(tx, { doffEventId: opts?.doffEventId, entrySource, createdMachineId: machineId ?? null });
+
         // Barkod atomik sayaçtan (tx içinde) → sıra çakışmasız, retry gerekmez.
         const barcode = await generateRollBarcodeTx(tx, rollType);
         // DEPO: çağıran açıkça verdiyse o (var+aktif doğrulanır), yoksa varsayılan.
@@ -1154,6 +1166,7 @@ export class InventoryService {
             entrySource,
             createdById: userId ?? null,
             createdMachineId: machineId ?? null,
+            doffEventId: opts?.doffEventId ?? null,
             // GİRİŞ İSTASYONU — çağıranın AÇIKÇA verdiği değer, burada
             // TÜRETİLMEZ (`machineId` elde olsa bile; bkz. opts dokümanı).
             entryStationId: opts?.entryStationId ?? null,
