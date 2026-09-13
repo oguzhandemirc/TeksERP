@@ -187,7 +187,7 @@ enum MachineClass {
 /// `Machine.productionLineCount Int @default(1) @db.SmallInt`  — CHECK `>= 1`
 ///   ⚠️ CHECK YÖNÜ ÖLÇÜYLE DEĞİL TERSİNE ÇEVRİLEBİLİRLİKLE seçildi: karşı senaryo
 ///   arandı (izlenen ama üretmeyen ekipman — ölçüm masası, kazan, kompresör) ve
-///   BULUNAMADI, çünkü "sayacı yok" hâli zaten `lineNo` NULL ile ifade ediliyor.
+///   BULUNAMADI, çünkü "sayacı yok" hâli zaten `productionLineNo` NULL ile ifade ediliyor.
 ///   Karşı örnek yokken ucuz yönde yanılırız: `>= 1` → gevşetmek TEK İFADELİ migration;
 ///   `>= 0` → sıkmak veri temizliği ister. **Bilinen gevşetme yolu:** böyle bir ekipman
 ///   izleme kapsamına girerse CHECK `>= 0`a iner ve o makinede metre/randıman raporları
@@ -196,9 +196,9 @@ enum MachineClass {
 ///   (cağlıktan beslenen çözgü makinesinde yuva gerçekten 0). Karşı örnek varsa ölçüm
 ///   kazanır; yoksa tersine çevrilebilirlik kazanır.
 ///
-/// `MachineRun.lineNo` · `MachineInterval.lineNo` · `MachineShiftStat.lineNo`
+/// `MachineRun.productionLineNo` · `MachineInterval.productionLineNo` · `MachineShiftStat.productionLineNo`
 ///   hepsi `Int @default(1)`; kısıtlar §2.x'te genişler (aşağıda).
-/// `PeripheralSignal.lineNo Int?` — bu kanal HANGİ hattı ölçüyor; NULL = üretim gerçeği
+/// `PeripheralSignal.productionLineNo Int?` — bu kanal HANGİ hattı ölçüyor; NULL = üretim gerçeği
 ///   DEĞİL (karşılaştırma/tanı kanalı) ve metreye/randımana GİRMEZ.
 /// `PeripheralSignal.beamSlot Int?` — bu kanal hangi levent yuvasının kopuşunu izliyor
 ///   (§5.4 kırılımı); NULL = bilinmiyor.
@@ -667,11 +667,11 @@ model MachineInterval {
 
   /// DOĞAL ANAHTAR = İDEMPOTENCY ANAHTARI. Aynı yük → no-op; FARKLI yük →
   /// üstüne yaz + `restatedAt` (duruş span'inde kural TERSİDİR, §3.5).
-  /// ⚠️ PK'ya `lineNo` GİRER (2026-09-12, §10/#23): çift enli makinede iki hat iki ayrı
-  /// kumaş üretir ve `unitDelta` hat başınadır. Tek hatlı makinede `lineNo=1` sabit
+  /// ⚠️ PK'ya `productionLineNo` GİRER (2026-09-12, §10/#23): çift enli makinede iki hat iki ayrı
+  /// kumaş üretir ve `unitDelta` hat başınadır. Tek hatlı makinede `productionLineNo=1` sabit
   /// olduğu için satır kümesi DEĞİŞMEZ — PK'ya sabit bir kolon eklemek satır üretmez.
   /// Bugün bedava; tablo doğduktan sonra aynı iş TABLO YENİDEN YAZIMIDIR.
-  @@id([machineId, lineNo, bucketStart])
+  @@id([machineId, productionLineNo, bucketStart])
   @@index([bucketStart])
   @@map("machine_intervals")
 }
@@ -953,13 +953,13 @@ model MachineRun {
 }
 // ŞEMA-DIŞI PARTIAL UNIQUE (⚠️ revokedAt yüklemi ŞART — geri alınmış koşum
 // sedde YER İŞGAL ETMEZ, yoksa yeni koşum açılamaz):
-//   machine_runs_one_open_per_line_uq (machineId, "lineNo")
+//   machine_runs_one_open_per_prod_line_uq (machineId, "productionLineNo")
 //     WHERE "endedAt" IS NULL AND "revokedAt" IS NULL
 //     ⚠️ ADI VE KAPSAMI DEĞİŞTİ (2026-09-12, §10/#23): eski hâli (machineId) yalnızdı ve
 //     "bir makine aynı anda TEK iş koşar" diyordu — çift enli tezgahta yan yana iki ayrı
-//     kumaşı YAPISAL OLARAK İMKÂNSIZ kılıyordu. Tek hatlı makinede lineNo=1 sabit olduğu
+//     kumaşı YAPISAL OLARAK İMKÂNSIZ kılıyordu. Tek hatlı makinede productionLineNo=1 sabit olduğu
 //     için sed BUGÜNKÜ İLE AYNI KÜMEYİ reddeder: davranış birebir korunur.
-//   machine_runs_natural_uq (machineId, "lineNo", startedAt)
+//   machine_runs_natural_uq (machineId, "productionLineNo", startedAt)
 //     WHERE "revokedAt" IS NULL                    ← §2.11'in DOĞAL ANAHTARI
 //     ⚠️ Beyan edilen doğal anahtarın sedde karşılığı olmazsa aynı makinede aynı
 //        ana İKİ koşum açılır ve karnenin donmuş paydasının hangisinden geldiği
@@ -1171,10 +1171,10 @@ model MachineShiftStat {
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
-  /// ⚠️ `lineNo` UNIQUE'E GİRER (§10/#23) — ve bu MÜHÜR TANECİĞİNİ BÖLER: bir
+  /// ⚠️ `productionLineNo` UNIQUE'E GİRER (§10/#23) — ve bu MÜHÜR TANECİĞİNİ BÖLER: bir
   /// vardiya×makine artık N karne satırıdır, mühür ise satır başınadır ⇒ N bağımsız mühür.
   /// Bu yüzden mühür VARDİYA×MAKİNE düzeyinde ATOMİKTİR (§4 "kısmi mühür yok").
-  @@unique([machineId, shiftInstanceId, lineNo])
+  @@unique([machineId, shiftInstanceId, productionLineNo])
   @@index([factoryDay, machineId])
   @@index([sealedAt])   // kaldırılan Sack.sealedAt ile ilgisi YOK
   @@map("machine_shift_stats")
@@ -1462,11 +1462,11 @@ Envanter bugün 8021→8031'de bitiyor (`src/services/helpers/period-guard.helpe
 
 **③ RETENTION'IN DOKUNAMAYACAKLARI.** Budayıcı **açık koşumun** penceresine, **açık vardiyaya** ve **mühürsüz pencereye** DOKUNMAZ. Açık koşum süresiz bir budama muafiyeti üretmesin diye kardeş kural: **`tezgah.maxOpenRunDays` (7) aşan koşum watchdog ile kapanır** (`endedAt` beyan edilir, terimler donar) — aksi hâlde unutulmuş tek bir açık koşum, kendi penceresini sonsuza kadar budanmaz kılardı.
 
-**③b MÜHÜR VARDİYA×MAKİNE DÜZEYİNDE ATOMİKTİR — kısmi mühür YOKTUR** (2026-09-12, §10/#23). `MachineShiftStat`ın unique'ine `lineNo` girdiği için bir vardiya×makine artık **N karne satırıdır** ve mühür satır başına verildiğinden **N bağımsız mühür** doğar. Hat 1 mühürlenip hat 2 mühürsüz kalırsa ③'ün *"mühürsüz pencereye dokunmaz"* kuralı o pencerenin **yarısını korur, yarısını budar** — sonra hat 2'nin karnesi yeniden hesaplandığında **değişir.** Tam kaçınmak istediğimiz sürüklenme, yalnız hat ekseninde. Bu yüzden:
+**③b MÜHÜR VARDİYA×MAKİNE DÜZEYİNDE ATOMİKTİR — kısmi mühür YOKTUR** (2026-09-12, §10/#23). `MachineShiftStat`ın unique'ine `productionLineNo` girdiği için bir vardiya×makine artık **N karne satırıdır** ve mühür satır başına verildiğinden **N bağımsız mühür** doğar. Hat 1 mühürlenip hat 2 mühürsüz kalırsa ③'ün *"mühürsüz pencereye dokunmaz"* kuralı o pencerenin **yarısını korur, yarısını budar** — sonra hat 2'nin karnesi yeniden hesaplandığında **değişir.** Tam kaçınmak istediğimiz sürüklenme, yalnız hat ekseninde. Bu yüzden:
 - Mühürleyici (Faz 1a insan, Faz 2 `machine-shift-close.job`) bir vardiya×makinenin **bütün hat satırlarını TEK TX'te** mühürler.
 - **Budayıcının yüklemi hat başına değil PENCERE başına sorar:** *"bu (machineId, shiftInstanceId) penceresinin HER hattı mühürlü mü?"*
 
-> ⚠️ **Bu boşluk `lineNo` olmadan YOKTU — tasarımın kendi ürünüdür.** Genel kural (2026-09-12): **bir tasarım bir TANECİĞİ ya da bir ANLAMI böldüğünde, ona dayanan HER yüklem ve HER formül yeniden sorulur.** `lineNo` bir unique'i böldü; mühür yüklemi de onunla bölündü ve bu **sessiz** olurdu.
+> ⚠️ **Bu boşluk `productionLineNo` olmadan YOKTU — tasarımın kendi ürünüdür.** Genel kural (2026-09-12): **bir tasarım bir TANECİĞİ ya da bir ANLAMI böldüğünde, ona dayanan HER yüklem ve HER formül yeniden sorulur.** `productionLineNo` bir unique'i böldü; mühür yüklemi de onunla bölündü ve bu **sessiz** olurdu.
 
 **④ NEGATİF SONDALAR — sekizi de KIRMIZI GÖRÜLEREK yazılır.** **N1** breakdown satırı silinir → kırmızı · **N2** budama yükleminden mühür koşulu düşürülür → kırmızı · **N3** yüklemden sebep/insan-kararı koşulu düşürülür → kırmızı · **N4** koşum kapanışı atlanır (terimler donmaz) → kırmızı · **N5** açık koşumun penceresi budanır → kırmızı · **N6** manifestte olmayan bir `GET` ucu eklenir → kırmızı · **N7** T1 cevabından `warnings` kaldırılır (ya da boş pencerede `0` döndürülür) → kırmızı · **N8** allowlist dışı bir dosyaya `machineInterval` delegate'i konur **ve** listeye ölü bir muaf bırakılır → kırmızı · **N9** iki hatlı makinede yalnız BİR hat mühürlenir, budayıcı koşturulur → kırmızı ("kısmi mühürlü pencere budandı").
 
@@ -1570,7 +1570,7 @@ Dokumada `P` tipik olarak 0,97–1,00 bandındadır (tezgah durunca atkı atmaz 
 | **Hedef** | `MachineRun.targetPicksPerMin` — SAKLANIR | randımanın paydası; işin özelliği, tezgahın değil |
 | **Kopuş yoğunluğu** | `kopuş/10⁵ atkı = (warpStopCount \| weftStopCount) × 100000 / picksActual` | ⚠️ payda ATKIDIR, saat değil — saat bazlı sayım yavaş koşan tezgahı ödüllendirir. **Pay ya da payda NULL ise KPI HESAPLANMAZ** ve rapor "ölçülemedi" der (kanalsız retrofitte sayaç NULL'dır, 0 değil — §2.6) |
 
-> ⚠️ **SAYAÇ TÜM SLOTLARI TOPLAR — ve bu düzeltilmiş bir GİZLİ HATADIR** (2026-09-12). `MachineInterval.warpStopCount` *"makinenin beyan ettiği kopuş adedi"* diye tanımlıydı ama **hangi slotlardan toplandığını söylemiyordu**, üstelik aynı belgede `slot = 1 kanoniktir` yazıyordu. İki `WARP_STOP` kanallı bir makinede (zemin + hav çözgüsü) bu ikisi birlikte okunursa **ikinci kanal sessizce sayılmaz: eksik sayım.** **Yeni kural:** *`slot` kanonikliği YALNIZ üretim sayacına aitti ve o da `lineNo`ya devredildi (§2.2b); kopuş ve duruş sayaçları aynı `kind`ın TÜM slotlarını TOPLAR.*
+> ⚠️ **SAYAÇ TÜM SLOTLARI TOPLAR — ve bu düzeltilmiş bir GİZLİ HATADIR** (2026-09-12). `MachineInterval.warpStopCount` *"makinenin beyan ettiği kopuş adedi"* diye tanımlıydı ama **hangi slotlardan toplandığını söylemiyordu**, üstelik aynı belgede `slot = 1 kanoniktir` yazıyordu. İki `WARP_STOP` kanallı bir makinede (zemin + hav çözgüsü) bu ikisi birlikte okunursa **ikinci kanal sessizce sayılmaz: eksik sayım.** **Yeni kural:** *`slot` kanonikliği YALNIZ üretim sayacına aitti ve o da `productionLineNo`ya devredildi (§2.2b); kopuş ve duruş sayaçları aynı `kind`ın TÜM slotlarını TOPLAR.*
 >
 > ⚠️ **KIRILIM İÇİN KOLON ÇİFTİ AÇILMAZ.** *"İki çözgü varsa duruş hangisine yazılır"* sorusunun cevabı `warpStopCount1/2` DEĞİLDİR: tekil sayaç **makinenin toplamı** olarak kalır ve kırılım `MachineStopEvent.beamSlot`tan okunur (§2.7). Gerekçe ölçüldü — `warpStopCount`/`weftStopCount`un **dört okuyucusu** var: ① `MachineInterval` (ingest yazar) → ② `MachineShiftStat` (vardiya toplamı) → ③ bu KPI → ④ §11 gerekçe metni. Çoğullaştırsaydık ② ve ③ **toplam yerine birinciyi** okur, KPI **sessizce düşük** çıkardı — kırmızı vermeden yanlış sayı. Tekili bozmayıp kırılımı deftere koymak bu dördünden **hiçbirini değiştirmez**: tuzak yapısal olarak doğmaz. **N=1 birebir:** `beamSlot` her yerde NULL doğar, Pareto bugünkü gibi kırılımsız çizilir, formül harfi harfine aynı kalır.
 
@@ -1746,7 +1746,7 @@ Sentezin §2.11'i (`WarpBeam` · `WarpBeamMount` · `WarpBeamMovement` · `WarpB
 **Okuma yüzeyi TEK KAYNAKTIR.** *"Koşum sırasında hangi levent(ler) bağlıydı"* sorusu `beamsMountedDuring(machineId, from, to)` helper'ı ve boğaz-ikizi `BEAMS_MOUNTED_DURING_SQL` ile cevaplanır — **ikisi de levent belgesinindir**; tezgah raporları YALNIZ onu çağırır, kendi yüklemini kurmaz (AST tripwire). Aralık kesişimi aktif MOUNTED/DISMOUNTED olaylarının operasyonel penceresi (`setupStartedAt ?? createdAt`) ile `MachineRun.[startedAt, endedAt)` arasındadır; **çift levent desteklenir** ve `MOUNT_CANCEL` sonrası türetme kendiliğinden değişir. Bekçi: **`test_machine_run_beam_overlap`** (tezgah Faz 2) — helper ↔ SQL ikizi eşitliği, üç fixture (tek levent · çift levent · koşum ortasında levent değişimi), negatif sonda: yüklem düşürülünce kırmızı.
 
 > **İKİ YÖNLÜ KAPI (levent Faz 3 ile AYNI sürümde çıkar):**
-> **(1)** `DISMOUNTED` yazılırken o makinede `endedAt IS NULL AND revokedAt IS NULL` **açık koşum varsa 409** *"önce koşumu kapat"* — sorgunun sahibi tezgah tarafıdır ve yüklem `machine_runs_one_open_per_machine_uq` ile **aynı helper'dan** okunur. Tezgah modülü kapalıysa `MachineRun` yoktur, kapı uygulanmaz.
+> **(1)** `DISMOUNTED` yazılırken o makinede `endedAt IS NULL AND revokedAt IS NULL` **açık koşum varsa 409** *"önce koşumu kapat"* — sorgunun sahibi tezgah tarafıdır ve yüklem `machine_runs_one_open_per_prod_line_uq` ile **aynı helper'dan** okunur. Tezgah modülü kapalıysa `MachineRun` yoktur, kapı uygulanmaz.
 > **(2)** Koşum açılırken `WarpBeam.status = MOUNTED ∧ currentMachineId = run.machineId` yoksa **`ApiResponse.warnings`** — **400 DEĞİL**: levent modülü kapalı kurulumda leventsiz koşum meşrudur.
 >
 > ⚠️ **(1) DÜZELTİLDİ — tek levent varsayımı kalktı, kapı İKİ EŞİKLE TÜRETİLİR** (2026-09-12 kararı, §10/#23). Eski hâli *"bir leventin inmesi makinenin işinin bitmesidir"* varsayıyordu; raşelde bu **kenar durum değil garanti ihlalidir**, çünkü barıların kaçıklıkları farklı olduğu için leventler farklı zamanlarda biter ve biri değişirken makine koşmaya devam eder.
@@ -1906,7 +1906,7 @@ Telemetri budanabilir (`MachineInterval`, insan kararı almamış + mühürlü d
 16. **`sampleRetentionDays` 180'de kalır.** ② Kısaltmak geri alınamaz, uzatmak serbest; **saha doğrulaması** duruş frekansı pilotta ölçülür. *(itiraz edilebilir)*
 17. **`counterModulus` NULL doğar ve sarma yorumu KAPALIDIR** — her negatif sıçrama `RESET`/`ANOMALY`. Modülüs yalnız kanal kabul testinde **ÖLÇÜLEREK** girilir. ③ Uydurulmuş değer yazılmaz. *(itiraz edilebilir)*
 18. **`machine_stop_events` partition bugün açılmaz, tetiği yazılıdır:** tablo 20 M satırı VEYA kurulum 60 tezgahı geçerse karar yeniden açılır ve **boş tabloda** prova edilir; sayaç `/api/admin/health`te. ② *(itiraz edilebilir)*
-19. **~~`slot = 1` kanonik üretim sayacıdır~~ → GEÇERSİZ, #23 ile değiştirildi (2026-09-12).** Kural kanalın ANLAMINI **konumundan** okuyordu ve iki yönden yanlıştı: ① aynı makine modeli iki türlü kablolanır (slot 2 = jakar başlığının ikinci ölçümü mü, ikinci yolun sayacı mı?) — konum bunu söyleyemez; ② kurulumcu karşılaştırma kanalını slot 1'e takarsa kural **sessizce yanlış metre** üretir. Yerine: **anlam `PeripheralSignal.lineNo`da taşınır** — metre ve randıman `lineNo` DOLU kanallardan türetilir, `lineNo` NULL kanal (karşılaştırma/tanı) rapora hiç girmez. ③
+19. **~~`slot = 1` kanonik üretim sayacıdır~~ → GEÇERSİZ, #23 ile değiştirildi (2026-09-12).** Kural kanalın ANLAMINI **konumundan** okuyordu ve iki yönden yanlıştı: ① aynı makine modeli iki türlü kablolanır (slot 2 = jakar başlığının ikinci ölçümü mü, ikinci yolun sayacı mı?) — konum bunu söyleyemez; ② kurulumcu karşılaştırma kanalını slot 1'e takarsa kural **sessizce yanlış metre** üretir. Yerine: **anlam `PeripheralSignal.productionLineNo`da taşınır** — metre ve randıman `productionLineNo` DOLU kanallardan türetilir, `productionLineNo` NULL kanal (karşılaştırma/tanı) rapora hiç girmez. ③
 20. **`minVersion` YÜKSELTİLMEZ:** yeni enum değerleri ve uçlar yalnız yeni yüzeylerde okunuyor, sahadaki istemciyi etkilemiyor. ③ *(itiraz edilebilir)*
 21. **`MachineInterval` PK'sı `@@id([machineId,bucketStart])`, `MachineLiveState` PK'sı `machineId @id`, `MachineSpec` PK'sı `id` + `machineId @unique`** — üç farklı kalıp bilinçlidir ve gerekçesi `///` ile yazılıdır (§2.3, §2.6, §2.9): varlık olan `id` alır, makinenin aynası olan almaz. ③ *(itiraz edilebilir)*
 22. **İZLENEN MAKİNE DOKUMA TEZGAHIYLA SINIRLI DEĞİLDİR — künye nullable, ad nötr, birim sinyalde** (2026-09-12; `DEVERE-LEVENT-TARAMASI.md` §9.5 kararının şemaya uygulanması, §9.7e). Üç parça:
@@ -1917,9 +1917,9 @@ Telemetri budanabilir (`MachineInterval`, insan kararı almamış + mühürlü d
 
 23. **ÜRETİLEN KUMAŞ SAYISI, TÜKETİLEN LEVENT SAYISINDAN BAĞIMSIZ BİR EKSENDİR** (2026-09-12; #19'u ezer). **Sınıf: BİRLEŞTİRİLMİŞ EKSEN** — iki bağımsız gerçek tek sayıya bindirilirse model her iki uçta da **sessizce** yanlış olur, çünkü bir uçta doğru çalışır ve **test edilen uç odur.** Ölçüm: raşel **N levent → 1 kumaş → 1 sayaç**; çift enli tezgah **1–2 levent → 2 kumaş → 2 sayaç.** Dört parça:
     - **(a) `Machine.productionLineCount`** (ÇIKTI) `Machine.warpBeamSlots`tan (GİRDİ) ayrıdır; CHECK `>= 1` ve yönü **tersine çevrilebilirlikle** seçildi (karşı örnek arandı, bulunamadı; gevşetmek tek ifadeli migration, sıkmak veri temizliği). Bilinen gevşetme yolu §2.2b'de yazılı. ②
-    - **(b) `lineNo` üç tabloya girer** (`MachineRun` · `MachineInterval` PK'sı · `MachineShiftStat` unique'i) ve `machine_runs_one_open_per_machine_uq` → **`machine_runs_one_open_per_line_uq (machineId, lineNo)`** olur. **Tek hatlı makinede lineNo=1 sabit olduğu için satır kümesi ve reddedilen küme DEĞİŞMEZ — davranış birebir.** Tablolar bugün YOK; aynı iş sonra yapılırsa **tablo yeniden yazımıdır.** ②③
-    - **(c) Kanalın anlamı `PeripheralSignal.lineNo`da**, konumda değil — ve değeri **kanal kabul testinde BEYAN edilir** (③ aksiyon anında seçim), çünkü türetilemez. Kolon varsayılanı **VERİLMEZ**: `1` karşılaştırma kanalını üretim sayardı (çift sayım), `NULL` tek kanallı kurulumda metreyi öldürürdü — **doğru varsayılan konuma bağlı olduğu için formun işidir** (`slot==1 ? 1 : null` ön-dolu, kilitli değil). ③
-    - **(d) Mühür vardiya×makine düzeyinde ATOMİKTİR** ve budayıcı yüklemi pencere başına sorar (§4 ③b) — `lineNo` bir unique'i böldüğü için mühür yüklemi de onunla bölündü. **Genel kural: bir tasarım bir TANECİĞİ ya da bir ANLAMI böldüğünde, ona dayanan HER yüklem ve HER formül yeniden sorulur.** ①
+    - **(b) `productionLineNo` üç tabloya girer** (`MachineRun` · `MachineInterval` PK'sı · `MachineShiftStat` unique'i) ve `machine_runs_one_open_per_machine_uq` → **`machine_runs_one_open_per_prod_line_uq (machineId, productionLineNo)`** olur. **Tek hatlı makinede productionLineNo=1 sabit olduğu için satır kümesi ve reddedilen küme DEĞİŞMEZ — davranış birebir.** Tablolar bugün YOK; aynı iş sonra yapılırsa **tablo yeniden yazımıdır.** ②③
+    - **(c) Kanalın anlamı `PeripheralSignal.productionLineNo`da**, konumda değil — ve değeri **kanal kabul testinde BEYAN edilir** (③ aksiyon anında seçim), çünkü türetilemez. Kolon varsayılanı **VERİLMEZ**: `1` karşılaştırma kanalını üretim sayardı (çift sayım), `NULL` tek kanallı kurulumda metreyi öldürürdü — **doğru varsayılan konuma bağlı olduğu için formun işidir** (`slot==1 ? 1 : null` ön-dolu, kilitli değil). ③
+    - **(d) Mühür vardiya×makine düzeyinde ATOMİKTİR** ve budayıcı yüklemi pencere başına sorar (§4 ③b) — `productionLineNo` bir unique'i böldüğü için mühür yüklemi de onunla bölündü. **Genel kural: bir tasarım bir TANECİĞİ ya da bir ANLAMI böldüğünde, ona dayanan HER yüklem ve HER formül yeniden sorulur.** ①
     - ⚠️ Kopuş kırılımı `MachineStopEvent.beamSlot`ta; **sayaç kolonları ÇOĞULLAŞTIRILMAZ** (dört okuyucu ölçüldü, §5.4).
 
 24. **BORÇ — ad turu `pick*` → `unit*`, CI YEŞİLE DÖNDÜKTEN SONRA, TEK COMMIT** (2026-09-12). `unitsPerCm` yapıldı ama hız/kapasite terimleri atkı adında kaldı: `picksActual` · `gapPicks` · `targetPicksPerMin` · `targetPickCapacityApt|Pot` · `pickDelta` · `nominalPicksPerMin` · `avg|maxPicksPerMin` → `unitsActual` · `gapUnits` · `targetUnitsPerMin` · `targetUnitCapacity*` · `unitDelta` · `nominalUnitsPerMin` · `avg|maxUnitsPerMin`. **Neden ertelendi:** CI kırmızıyken 78 geçişlik ad turu inerse sonraki her kırmızıda *"bu turdan mı, öncekilerden mi"* sorusu cevapsız kalır — **kontrol grubu kirli** sınıfı, üstelik önceden görülebilir hâlde.

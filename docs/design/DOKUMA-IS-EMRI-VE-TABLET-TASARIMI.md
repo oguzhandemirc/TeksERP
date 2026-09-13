@@ -144,8 +144,11 @@ Dördü de audit ekranına yanlış Türkçe basar ve **kapı KIRMIZI VERMEZ.** 
 
 **Kural: iki anlam çarpıştığında geri adım atan YENİ olandır.** Yeni ad **`productionLineNo`** — `Machine.productionLineCount`'un birebir aynası, yani *sayı* ile *numara* aynı sözlükten okunur. Ölçüt karşılanıyor: *bu adı ilk kez gören biri hangi soruyu cevapladığını tahmin edebilmeli.*
 
-Etkilenen tanımlar (tezgah tasarımından, iniş anında):
-`MachineRun.productionLineNo` · `MachineInterval.productionLineNo` (PK'ya girer) · `MachineShiftStat.productionLineNo` (unique'e girer) · `PeripheralSignal.productionLineNo` (nullable, varsayılan YOK) · `machine_runs_one_open_per_line_uq` ve kardeş kısıt adları.
+Etkilenen tanımlar — **kardeş belgeye uygulandı** (`DOKUMA-TEZGAH-IZLEME-TASARIMI.md`, 18 satır):
+`MachineRun.productionLineNo` · `MachineInterval.productionLineNo` (PK'ya girer) · `MachineShiftStat.productionLineNo` (unique'e girer) · `PeripheralSignal.productionLineNo` (nullable, varsayılan YOK).
+
+Kısıt adı kolona hizalanır (proje alışkanlığı: `machines_warp_beam_slots_nonneg` ↔ `warpBeamSlots`): `machine_runs_one_open_per_line_uq` → **`machine_runs_one_open_per_prod_line_uq`**.
+⚠️ `machine_stops_one_open_per_machine_uq` **DEĞİŞMEZ** — o "bir makinede tek açık DURUŞ" der ve hat eksenine bölünmez (§5.4: duruş sayaçları çoğullaştırılmaz).
 
 ---
 
