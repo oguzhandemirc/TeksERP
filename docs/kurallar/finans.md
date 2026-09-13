@@ -26,7 +26,7 @@
 
 ### Reçeteler
 
-- **[ÇEKİRDEK]** SINIF 1 — İki tarih: yeni mali belge tipi eklerken sor 'kâğıdın tarihi = işlem tarihimiz mi?'; değilse İKİ alan (`Cheque.issueDate` ↔ `postingDate`); defter/kilit/belge-no/kur DÖRDÜ `postingDate`ten. Payment/Invoice tek tarihli MEŞRU — çift tarihi her tabloya yaymak reddedildi. · bekçi: `postingDate okuyan bekçiler: test_cheque_portfolio.ts · test_cash_period_close.t` <sub>(CLAUDE.md:286)</sub>
+- **[ÇEKİRDEK]** SINIF 1 — İki tarih: yeni mali belge tipi eklerken sor 'kâğıdın tarihi = işlem tarihimiz mi?'; değilse İKİ alan (`Cheque.issueDate` ↔ `postingDate`); defter/kilit/belge-no/kur DÖRDÜ `postingDate`ten. Payment/Invoice tek tarihli MEŞRU — çift tarihi her tabloya yaymak reddedildi. · bekçi: `postingDate okuyan bekçiler: Teks-Erp/scripts/test_cheque_portfolio.ts (115 kontrol, 9 postingDate atfı) + test_cash_period_close.ts (64 kontrol, 1 postingDate atfı) — kapsam ASİMETRİK, dönem kapanışı tarafı dar` <sub>(CLAUDE.md:286)</sub>
 
 ### Kararlar
 
