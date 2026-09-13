@@ -51,7 +51,7 @@
 
 - **[ÇEKİRDEK]** Rezervasyon gelirse (`shipping.reservationEnabled`, MODUL-BAYRAK karar #6 + §9) KENDİ append-only defteriyle kurulur; `SackAllocation`a DOKUNULMAZ — o sevk muhasebesidir. Bayrak bugün kodda YOK; 'rezerv YOK' profil seçimidir, kalıcı domain kuralı değil. <sub>(CLAUDE.md:41, CLAUDE.md:17)</sub>
 - **[ÇEKİRDEK]** Brüt/donmuş-belge kuralı refakat kartına UZANMAZ — o kural para/irsaliye yüzeyine aittir; kart malla gezen operasyon kâğıdıdır: parti bloğu baskı anında canlı (`resolveLiveBatches`), sevk yalnız iptal edilmemişlerden (en yenisi + `(+N)`). · bekçi: `scripts/test_traveler_card_a5_batches.ts` <sub>(CLAUDE.md:137)</sub>
-- **[ÇEKİRDEK]** İade belgesi ÜYE id'siyle ÇÖZÜLMEZ (`buildReturnDispatchDoc` null; aksi hâlde lazy-init grubun İKİNCİ resmi kopyasını dondurur) → istemci `documentSourceId` (`returnGroupId ?? id`) kullanır, alan `select`ten düşürülmez. Grup iptali VOID DEĞİL REVİZE: `reissueForSourceTx` v+1; son kalem → VOIDED. · bekçi: `scripts/test_return_bulk_group.ts (üye-id kapısı kaldırılınca 2 kontrol kırmızı)` <sub>(CLAUDE.md:63)</sub>
+- **[ÇEKİRDEK]** İade belgesi ÜYE id'siyle ÇÖZÜLMEZ (`buildReturnDispatchDoc` null; aksi hâlde lazy-init grubun İKİNCİ resmi kopyasını dondurur) → istemci `documentSourceId` (`returnGroupId ?? id`) kullanır, alan `select`ten düşürülmez. Grup iptali VOID DEĞİL REVİZE: `reissueForSourceTx` v+1; son kalem → VOIDED. · bekçi: `scripts/test_return_bulk_group.ts (üye-id kapısı kaldırılınca 2 kontrol kırmızı: 'üye id'sinde belge çözülmedi (null)' · 'detay: üye satırı LİDERİ işaret ediyor')` <sub>(CLAUDE.md:63)</sub>
 
 ### Reçeteler
 
