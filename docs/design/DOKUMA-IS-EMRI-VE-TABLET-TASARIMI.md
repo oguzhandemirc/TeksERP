@@ -170,30 +170,128 @@ Kısıt adı kolona hizalanır (proje alışkanlığı: `machines_warp_beam_slot
 
 ⚠️ Bu, §1.2'nin aynı sınıfıdır (**birleştirilmiş eksen**): üç bağımsız gerçeği tek sayıya bindiren model, her uçta sessizce yanlış olur ve yalnız test edilen uçta doğru çalışır. Raşel/çift-enli ayrımında aynı hata bir kez yakalandı (`DOKUMA-TEZGAH-IZLEME-TASARIMI.md` §10/#23: *"ÜRETİLEN KUMAŞ SAYISI, TÜKETİLEN LEVENT SAYISINDAN BAĞIMSIZ BİR EKSENDİR"*).
 
-### 2.2 · Dokuma işinin kabı — `WeavingOrder`, minimum hâliyle
+### 2.2 · Dokuma işinin kabı — `WeavingOrder` (tam tasarım, ŞEMAYA YAZILMADI)
 
-`MachineRun.workOrderStepId`'nin yerine gelen kap. Faz 1'de **yalnız** şunlar:
+**Sınıfı: İŞ KABI** — `WorkOrder` emsali. Mutasyona uğrar ⇒ `createdAt` + `updatedAt` + künye (`DoffEvent`in DEFTER sınıfından farklı; o append-only'dir).
 
+```prisma
+/// DOKUMA İŞİ — "ne dokunacak, ne kadar, kim dokuyacak".
+/// ⚠️ Bir `WorkOrder` DEĞİLDİR ve onun rotasını/adımlarını taşımaz (§1 hükmü):
+/// dokuma topun rotasında bir adım değil, topu DOĞURAN ayrı bir varlıktır.
+model WeavingOrder {
+  id                 String   @id @default(uuid()) @db.Uuid
+  weavingOrderNumber String   @unique @db.VarChar(64)
+  clientToken        String?  @unique @db.Uuid
+
+  /// Dokunacak kumaş — `ItemType.FABRIC` (servis 400).
+  itemId      String  @db.Uuid
+  /// Ham dokumada NULL MEŞRUDUR — renk sonraki adımlarda gelir.
+  colorId     String? @db.Uuid
+  /// Hangi çözgü kartı besliyor. Faz 1a'da doğan `WarpSpec`in ilk tüketicisi.
+  warpSpecId  String? @db.Uuid
+
+  /// TALEP ekseni (§2.1) — metre. NULL = açık uçlu iş (levent bitene kadar dok).
+  /// ⚠️ HEDEFTİR, TETİK DEĞİLDİR: bu sayıya ulaşmak işi KAPATMAZ (§2.2a).
+  plannedM    Decimal? @db.Decimal(12, 3)
+
+  /// KİM DOKUYOR. `WarpBeamOrigin` kalıbının kardeşi — ikinci bir desen icat edilmez.
+  executionKind    WeavingExecutionKind
+  /// XOR: `SUBCONTRACTED` ise DOLU, `IN_HOUSE` ise NULL (CHECK `weaving_orders_party_ck`).
+  /// ⚠️ İKİNCİ HATTIR — birincil doğrulama `resolveSupplierParty` kalıbındaki tek kapıda.
+  subcontractorId  String? @db.Uuid
+
+  status      WeavingOrderStatus @default(PLANNED)
+  plannedStartDate DateTime? @db.Timestamptz
+  plannedEndDate   DateTime? @db.Timestamptz
+  notes            String?   @db.VarChar(500)
+
+  /// KAPANIŞ — açık karardır, türetilmez (§2.2a).
+  closedAt     DateTime? @db.Timestamptz
+  closedById   String?   @db.Uuid
+  /// İPTAL — soft, sebep kataloğundan.
+  cancelledAt  DateTime? @db.Timestamptz
+  cancelledById String?  @db.Uuid
+  cancelReason String?   @db.VarChar(300)
+
+  runs MachineRun[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt      @db.Timestamptz
+  createdById String? @db.Uuid
+  updatedById String? @db.Uuid
+
+  @@index([status, plannedStartDate])
+  @@index([itemId])
+  @@map("weaving_orders")
+}
+
+enum WeavingExecutionKind { IN_HOUSE  SUBCONTRACTED }
+enum WeavingOrderStatus   { PLANNED  IN_PROGRESS  COMPLETED  CANCELLED }
 ```
-WeavingOrder
-  id · weavingOrderNumber @unique · clientToken? @unique
-  itemId            → dokunacak kumaş (ItemType.FABRIC), ZORUNLU
-  colorId?          → renk (ham dokumada NULL meşru)
-  warpSpecId?       → hangi çözgü kartı besliyor
-  plannedM?         → TALEP ekseni (metre); NULL = açık uçlu koşum meşru
-  executionKind     → IN_HOUSE | SUBCONTRACTED
-  subcontractorId?  → XOR: SUBCONTRACTED ise dolu, IN_HOUSE ise NULL (CHECK)
-  status            → PLANNED | IN_PROGRESS | COMPLETED | CANCELLED
-  künye + zaman damgaları
-```
 
-`MachineRun.weavingOrderId String?` — **nullable**, çünkü tasarımın kendi cümlesi zaten böyle diyordu: *"Bağ OPSİYONEL: iş emirsiz koşum meşrudur (numune, deneme)."* Bu cümle korunuyor, yalnız işaret ettiği yer değişiyor.
+**Numara üreteci:** `workOrderNumber` emsali — sequence okuma **tx İÇİNDE**, `withBarcodeRetry`. Advisory uzay gerekir; envanter bugün **8031**'de bitiyor ve tezgah tasarımı **8032**'yi (vardiya mührü), devere **8033**'ü rezerve etmiş — ikisi de henüz *yazılmamış tasarım rezervasyonu*. ⇒ `WEAVING_ORDER_LOCK_NS = 8034`, ama **iniş anında `period-guard.helper.ts` başlığından yeniden ölçülür** (rezervasyonlar sırayla inmemiş olabilir).
+
+#### (a) Kapanış ölçütü — AÇIK KARAR, türetilmez
+
+Üç aday vardı; ikisi reddedildi:
+
+| aday | karar | gerekçe |
+|---|---|---|
+| levent bitince | ❌ | §2.3 zaten *"levent bitince koşum bitmez"* diyor; iş emri evla |
+| `plannedM`e ulaşınca | ❌ **reddedildi** | ⚠️ aşağıda |
+| **operatör kapatır** | ✅ | |
+
+⚠️ **`plannedM` neden tetik değil:** o sayı **ÜRETİLEN**e karşı ölçülür, yani KK1'de ölçülmüş top metresine — ve o sayı **geç gelir** (top doff'tan günler sonra ölçülür). Geciken bir sayıya bağlı otomatik kapanış, **tezgah hâlâ koşarken işi kapatır.** Bu, §1.2(a)'da dokumayı rota adımı yapmayı reddettiğimiz salınım kusurunun **yeni bir yerde kurulmuş hâlidir**; aynı hatayı ikinci kez yapmıyoruz.
+
+⇒ `plannedM`e ulaşmak bir **rozet/uyarı** üretir (*"hedefe ulaşıldı"*), **durum değişikliği değil.**
+
+**Kapanış kapısı:** açık koşum varken kapanmaz → **409**, ve koşumları **adıyla** söyler:
+`{ code: "WEAVING_ORDER_HAS_OPEN_RUNS", machines: [...], runIds: [...] }`.
+
+#### (b) Ters yol — iptal doff'u, koşumu, duruşu SİLMEZ
+
+> Kök kural: *geri alma ileri kaydı NE SİLER NE DEĞİŞTİRİR.*
+
+Koşum, duruş ve doff **olmuş olaylardır**; işin iptali onları olmamış yapmaz. İptal **yalnız `WeavingOrder` üstünde bir durum geçişidir** (atomik claim: `updateMany WHERE {id, status: <beklenen>}` + `count===0 → 409`).
+
+| nesne | iptalde ne olur |
+|---|---|
+| `MachineRun` (kapanmış) | **dokunulmaz** — o koşum gerçekten koştu |
+| `MachineRun` (açık) | **409, önce kapat** (yukarıdaki kapı) |
+| `MachineStopEvent` | **dokunulmaz** |
+| `DoffEvent` | **dokunulmaz** — kendi ters yolu var (`DOFF_CANCEL`, §3.8) ve ölçütü ayrıdır |
+| doğmuş `Roll` | **dokunulmaz** — stokta kalır; `WorkOrder` iptalinde toplar `STOCK`'a düştüğü gibi |
+
+⚠️ **`MachineRun.weavingOrderId`i `null`'lamak YASAKTIR** — ileri damgayı `null`'lamak ters kayıt değildir (`Roll.doffEventId` ile aynı aile). İptal edilmiş bir işe bağlı koşum, *"bunu şu iş için dokuduk, sonra iş iptal edildi"* der ve bu **doğru bir cümledir**.
+
+#### (c) Sipariş bağı — Faz 1'de AÇILMIYOR, ve sebebi burada yazılı
+
+> Bu paragraf, kararın altı ay sonra yeniden önerilmemesi için var.
+
+1. **Karşılamaya gerek yok.** Kök kural: *"top↔sipariş satırı bağı YOKTUR — karşılama `SackAllocation` ile SEVK ANINDA yazılır."* Dokuma stoka üretir; hangi siparişe gideceği sevkte belli olur.
+2. **İkinci kopya sınıfı.** `WeavingOrderToOrderLine` pivotu, `WorkOrderToOrderLine`'ın *aynı soruyu cevaplayan ikinci yolu* olurdu.
+3. **Bedeli ölçülmüş.** Sipariş bağı açmak yanında şunları getirir: tip aynası (`WorkOrder.type` = *"bağın aynası"*, beş ayrı zorlama noktası), **iki bağ yolu iki sözleşme** (create/replace türetir, sonradan bağ MİRAS ALMAZ), uyumsuz-bağ override'ı ve süpervizör izni. Bunların hepsi `WorkOrder`da pahalıya öğrenildi.
+4. **İstenen şey aslında REZERVASYON.** *"Bu dokuma şu müşteri için"* cümlesi bir rezervasyondur ve **rezervasyon bu üründe YOKTUR** — profil kararı (`MODUL-BAYRAK-TASARIM.md` #6).
+
+**Ne zaman açılır:** bir fabrika *"dokunan malı sevkten önce siparişe kilitlemek"* isterse. O zaman açılacak şey sipariş bağı değil **rezervasyon mekanizmasıdır** ve kararı bu belge vermez.
+
+#### (d) `MachineRun` tarafındaki tek kolon ve Faz 1'in sınırı
+
+`MachineRun.workOrderStepId` **kalkar** (§1.4), yerine:
+
+```prisma
+/// HANGİ DOKUMA İŞİ. NULL MEŞRUDUR — tasarımın kendi cümlesi zaten böyleydi:
+/// "Bağ OPSİYONEL: iş emirsiz koşum meşrudur (numune, deneme)." Cümle korunuyor,
+/// yalnız işaret ettiği yer değişiyor. `onDelete: Restrict` (üç opsiyonel bağın hepsi).
+weavingOrderId String? @db.Uuid
+```
 
 **Faz 1'de BİLEREK YOK:**
-- ❌ sipariş bağı (§1.5 — `SackAllocation` zaten karşılıyor)
-- ❌ `requiredBeamCount` (take-up yok, hesaplanamaz)
-- ❌ rota şablonu / adım (§1 hükmü)
-- ❌ refakat kartı (kart iş emriyle doğar; dokuma iş emri değil)
+- ❌ **sipariş bağı** — (c)'de gerekçesi yazılı
+- ❌ **`requiredBeamCount`** — take-up bugün yok, *"bu iş kaç levent eder"* hesaplanamaz (§2.1)
+- ❌ **rota şablonu / adım** — §1 hükmü
+- ❌ **refakat kartı** — kart iş emriyle doğar (`TravelerCard.workOrderId @unique`); dokuma bir iş emri değildir
+- ❌ **otomatik kapanış** — (a)'da reddedildi
 
 ### 2.3 · Levent bitince koşum BİTMEZ
 
