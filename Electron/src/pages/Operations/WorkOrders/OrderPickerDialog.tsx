@@ -41,8 +41,8 @@ export interface PickedOrderLine {
   itemColorHex: string | null;
   itemColorName: string | null;
   quantity: number;
-  /** Picker'da gösterilen "Açık" metraj (quantity − sevk). */
-  openQty: number;
+  /** Picker'da gösterilen "Açık" metraj (quantity − sevk). KG/ADET satırda `null` = ölçülmüyor. */
+  openQty: number | null;
   width: number | null;
   requiredProperties: PickedOrderLineProperty[];
 }
@@ -124,7 +124,9 @@ export function buildPicked(order: Order, line: OrderLine): PickedOrderLine {
     itemColorHex: line.color?.hex ?? null,
     itemColorName: line.color?.name ?? null,
     quantity: line.quantity,
-    openQty: line.openQty ?? line.quantity,
+    // `null` = ölçülmüyor (KG/ADET; backend söyler) — metreye DÜŞÜLMEZ.
+    // `undefined` = alanı taşımayan eski yanıt → bugünkü gibi istenen metraj.
+    openQty: line.openQty === undefined ? line.quantity : line.openQty,
     width: line.width ?? null,
     requiredProperties: (line.requiredProperties ?? []).map((rp) => ({
       id: rp.propertyId,

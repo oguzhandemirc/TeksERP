@@ -704,8 +704,10 @@ export function useQuickWorkOrder() {
   /** Bir kalem seçildiğinde ürün/renk/en/özellikleri siparişten doldur. */
   const applyOrderLine = useCallback((line: AvailableOrderLine) => {
     // Net açık = açık − üretimdeki (backend `withInProduction`). Yoksa ham açık —
-    // picker satırı da aynı sırayı kullanıyor, iki yüzey ayrışmasın.
-    const target = Number(line.netOpenQty ?? line.openQty);
+    // picker satırı da aynı sırayı kullanıyor, iki yüzey ayrışmasın. KG/ADET
+    // satırda null: metre hedefi ÖNERİLMEZ, operatör elle girer.
+    const targetRaw = line.netOpenQty ?? line.openQty;
+    const target = targetRaw == null ? NaN : Number(targetRaw);
     if (Number.isFinite(target) && target > 0) {
       setLineTargets((cur) => ({ ...cur, [line.lineId]: target }));
     }

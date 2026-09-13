@@ -3908,7 +3908,8 @@ export default function TamburScreen() {
                                   ]}
                                   numberOfLines={2}
                                 >
-                                  {l.customerName} · {Math.round(l.openQty)}m açık
+                                  {l.customerName}
+                                  {l.openQty == null ? ' · açık ölçülmüyor' : ` · ${Math.round(l.openQty)}m açık`}
                                 </Text>
                               </TouchableRipple>
                             );

@@ -20,7 +20,8 @@
 // Kural tek cümleyle: **GELECEK sorusu süzer, GEÇMİŞ sorusu süzmez.**
 // =============================================================================
 
-import { Prisma } from "@prisma/client";
+import { ItemUnit, Prisma } from "@prisma/client";
+import { isMeasuredUnit, LEDGER_UNIT } from "../../constants/item-unit";
 
 /** İptal edilmemiş (aktif) kalem. `cancelledAt IS NULL` = aktif. */
 export const ACTIVE_LINE = { cancelledAt: null } as const;
@@ -65,3 +66,21 @@ export function someOpenLine(fields: {
 }): { lines: { some: ReturnType<typeof openLineWhere> } } {
   return { lines: { some: openLineWhere(fields) } };
 }
+
+/**
+ * Aktif kalemin karşılaması metre defterinden ÖLÇÜLÜR mü — Σ TALEP süzgeci.
+ *
+ * KG/ADET satırın `shippedQty`si hiç yazılmaz (`isMeasuredUnit`); metre toplayan
+ * bir yüzey onu "hiç sevk edilmemiş 100 m" sanır ve talebe ekler. Bu yüzden metre
+ * Σ soran her sorgu `ACTIVE_LINE`a ek olarak bunu da taşır (üretim dengesi, stok
+ * karnesi). Bellek-içi ikizi `isMeasuredLine` — ikisi aynı şeyi söylemek ZORUNDA.
+ *
+ * ⚠️ NEREDE KULLANILMAZ: "üretime alınabilir mi" sorusu (WO picker, linkable).
+ * KG satır üretime alınabilir kalır; o yüzeyler süzmez, `openQty`yi null yapar
+ * ("ölçülmüyor"). Tahsis (`allocation.helper`) da süzmez: need = quantity − shippedQty.
+ */
+export const MEASURED_LINE = { unit: LEDGER_UNIT } as const;
+
+/** `MEASURED_LINE`in bellek-içi ikizi (`unit` kolonu NOT NULL, varsayılan MT). */
+export const isMeasuredLine = (line: { unit: ItemUnit | null | undefined }): boolean =>
+  isMeasuredUnit(line.unit);

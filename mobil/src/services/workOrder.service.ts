@@ -58,7 +58,10 @@ export interface LinkableOrderLine {
   width: number | null;
   quantity: number;
   shippedQty: number;
-  openQty: number;
+  /** İstenen − sevk. KG/ADET satırda `null` = ölçülmüyor (satır yine bağlanabilir). */
+  openQty: number | null;
+  /** `openQty` ölçülüyor mu (`unit === MT`). Eski backend göndermez. */
+  measured?: boolean;
   deadline: string | null;
   /** En farkı gibi ENGEL OLMAYAN uyumsuzluklar — uyarı çipi olarak gösterilir. */
   warnings: string[];

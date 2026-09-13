@@ -164,6 +164,8 @@ export interface WorkOrder {
       /** Denormalize sevk toplamı (m) — kalemin TÜM sevkiyatları (spec havuzu),
        *  bu WO'ya atfedilmez; bağlam bilgisidir. findById payload'ında gelir. */
       shippedQty: number;
+      /** Satır birimi (MT/KG/ADET). KG/ADET'te açık metraj ölçülmez. Eski backend göndermez. */
+      unit?: string;
       width: number | null;
       colorId: string | null;
       order?: {
@@ -323,8 +325,10 @@ export interface LinkableOrderLine {
   width: number | null;
   quantity: number;
   shippedQty: number;
-  /** İstenen − sevk edilen (negatife düşmez). */
-  openQty: number;
+  /** İstenen − sevk edilen (negatife düşmez). KG/ADET satırda `null` = ölçülmüyor. */
+  openQty: number | null;
+  /** `openQty` ölçülüyor mu (`unit === MT`). */
+  measured: boolean;
   deadline: string | null;
   warnings: string[];
 }

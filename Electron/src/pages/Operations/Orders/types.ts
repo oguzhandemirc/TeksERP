@@ -60,8 +60,13 @@ export interface OrderLine {
   color?: OrderLineColor | null;
   /** Müşterinin istediği özellikler — WO açılırken targetProperties önerisi olur. */
   requiredProperties?: OrderLineRequiredPropertyLink[];
-  /** WO picker (gap) yanıtında gelir: Açık = quantity − sevk − canlı rezerve. */
-  openQty?: number;
+  /**
+   * WO picker (gap) yanıtında gelir: Açık = quantity − sevk. KG/ADET satırda `null`
+   * (karşılama metre defterinden ölçülmez); eski backend alanı göndermez (undefined).
+   */
+  openQty?: number | null;
+  /** `openQty` ölçülüyor mu (`unit === MT`). Eski backend göndermez → ölçülür sayılır. */
+  measured?: boolean;
   shippedQty?: number;
   reservedQty?: number;
   /**

@@ -1,4 +1,5 @@
 import { WorkOrderType } from "@/types/enums";
+import { isMeasuredUnit } from "@/lib/item-unit";
 import { lineOpen } from "./order-fulfillment";
 import { buildPicked, type PickedOrderLine } from "./OrderPickerDialog";
 import type { CustomRouteStep, DesignerStep } from "./RouteDesignerDialog";
@@ -68,7 +69,8 @@ export function pickedLinesFromWorkOrder(wo: WorkOrder): PickedOrderLine[] {
       itemColorHex: ol.color?.hex ?? null,
       itemColorName: ol.color?.name ?? null,
       quantity: ol.quantity,
-      openQty: ol.quantity,
+      // Link-only: açık = istenen; KG/ADET satırda ölçülmez (null).
+      openQty: isMeasuredUnit(ol.unit) ? ol.quantity : null,
       width: ol.width ?? null,
       requiredProperties: (ol.requiredProperties ?? []).map((rp) => ({
         id: rp.propertyId,

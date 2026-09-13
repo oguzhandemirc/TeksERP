@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { safeFormat, formatNumber } from "@/lib/format";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
-import { lineOpen } from "../order-fulfillment";
+import { lineOpenMeasured } from "../order-fulfillment";
 import type { WorkOrder } from "../types";
 
 /**
@@ -103,7 +103,8 @@ export function OrderLinksV3({ wo }: { wo: WorkOrder }) {
           <div style={{ marginTop: "9px", display: "flex", flexDirection: "column", gap: "9px" }}>
             {links.map((link) => {
               const ol = link.orderLine;
-              const open = lineOpen(Number(ol?.quantity ?? 0), Number(ol?.shippedQty ?? 0));
+              // KG/ADET satırda açık metraj ölçülmez (null) — "ölçülmüyor" basılır.
+              const open = ol ? lineOpenMeasured(ol) : 0;
               return (
                 <div
                   key={link.orderLineId}
@@ -146,7 +147,9 @@ export function OrderLinksV3({ wo }: { wo: WorkOrder }) {
                   {ol && order?.status !== "CANCELLED" && (
                     <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                       <span className="chip ok num">Sevk {formatNumber(ol.shippedQty ?? 0, 1)}</span>
-                      <span className="chip bad num">Açık {formatNumber(open, 1)}</span>
+                      <span className="chip bad num">
+                        {open === null ? "Açık ölçülmüyor" : `Açık ${formatNumber(open, 1)}`}
+                      </span>
                     </div>
                   )}
                 </div>

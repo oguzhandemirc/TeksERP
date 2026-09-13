@@ -31,7 +31,7 @@ import {
 } from "@prisma/client";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { resolveReasonCode } from "./reason-preset.service";
-import { openLineWhere, someOpenLine } from "./helpers/order-line-scope.helper";
+import { isMeasuredLine, openLineWhere, someOpenLine } from "./helpers/order-line-scope.helper";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { validate as isUuidString } from "uuid";
 import { dailyCodePrefix, nextDailySeq } from "../utils/code-format";
@@ -1135,10 +1135,12 @@ export class OrderService extends BaseService {
           .map((line) => {
             const cov = covMap.get(line.id);
             const shipped = cov?.shipped ?? new Prisma.Decimal(0);
-            const openQty = new Prisma.Decimal(line.quantity).minus(shipped);
-            return { ...line, shippedQty: shipped, openQty };
+            // KG/ADET satırda açık metraj ÖLÇÜLMEZ (null) — satır yine üretime alınabilir.
+            const measured = isMeasuredLine(line);
+            const openQty = measured ? new Prisma.Decimal(line.quantity).minus(shipped) : null;
+            return { ...line, shippedQty: shipped, openQty, measured };
           })
-          .filter((line) => line.openQty.greaterThan(0));
+          .filter((line) => line.openQty === null || line.openQty.greaterThan(0));
         return { ...order, lines };
       })
       .filter((order) => order.lines.length > 0);
@@ -1255,6 +1257,7 @@ export class OrderService extends BaseService {
           itemId: true,
           quantity: true,
           shippedQty: true,
+          unit: true,
           width: true,
           colorId: true,
           customerItemName: true,
@@ -1305,13 +1308,15 @@ export class OrderService extends BaseService {
         for (const l of links) woLinked.add(l.orderLineId);
       }
       const data = page.map((l) => {
-        // Açık = quantity − sevk (rezerv yok; düşüş yalnız sevkte).
-        const openQty = new Prisma.Decimal(l.quantity).minus(l.shippedQty);
+        // Açık = quantity − sevk (rezerv yok; düşüş yalnız sevkte). KG/ADET satırda
+        // ÖLÇÜLMEZ (null): shippedQty hiç yazılmaz, metre açığı yalan olurdu.
+        const measured = isMeasuredLine(l);
+        const openQty = measured ? new Prisma.Decimal(l.quantity).minus(l.shippedQty) : null;
         const inProduction =
           inProdBySpec?.get(
             `${l.itemId}|${l.colorId ?? ""}|${l.width == null ? "" : new Prisma.Decimal(l.width).toString()}`,
           ) ?? new Prisma.Decimal(0);
-        const netOpenQty = Prisma.Decimal.max(0, openQty.minus(inProduction));
+        const netOpenQty = openQty === null ? null : Prisma.Decimal.max(0, openQty.minus(inProduction));
         return {
           lineId: l.id,
           itemId: l.itemId,
@@ -1333,6 +1338,7 @@ export class OrderService extends BaseService {
           openQty,
           inProduction,
           netOpenQty,
+          measured,
           hasWorkOrder: woLinked.has(l.id),
         };
       });
@@ -1362,6 +1368,7 @@ export class OrderService extends BaseService {
         id: true,
         itemId: true,
         quantity: true,
+        unit: true,
         width: true,
         colorId: true,
         customerItemName: true,
@@ -1397,14 +1404,16 @@ export class OrderService extends BaseService {
     const data = lines
       .map((l) => {
         const cov = covMap.get(l.id);
-        // Açık = quantity − kapsama (sevk + çuvallanmış rezerv).
-        const openQty = new Prisma.Decimal(l.quantity).minus(
-          cov?.coverage ?? new Prisma.Decimal(0),
-        );
+        // Açık = quantity − kapsama (sevk + çuvallanmış rezerv). KG/ADET satırda
+        // ÖLÇÜLMEZ (null) — satır listede kalır, rakam yerine "ölçülmüyor".
+        const measured = isMeasuredLine(l);
+        const openQty = measured
+          ? new Prisma.Decimal(l.quantity).minus(cov?.coverage ?? new Prisma.Decimal(0))
+          : null;
         const inProduction =
           inProdBySpec?.get(specKey(l.colorId, l.width)) ?? new Prisma.Decimal(0);
         // Net açık = açık − üretimdeki (0'ın altına inmez). Yalnız withInProduction'da anlamlı.
-        const netOpenQty = Prisma.Decimal.max(0, openQty.minus(inProduction));
+        const netOpenQty = openQty === null ? null : Prisma.Decimal.max(0, openQty.minus(inProduction));
         return {
           lineId: l.id,
           itemId: l.itemId,
@@ -1426,9 +1435,10 @@ export class OrderService extends BaseService {
           openQty,
           inProduction,
           netOpenQty,
+          measured,
         };
       })
-      .filter((l) => l.openQty.greaterThan(0));
+      .filter((l) => l.openQty === null || l.openQty.greaterThan(0));
 
     return { success: true, data };
   }

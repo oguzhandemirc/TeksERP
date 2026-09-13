@@ -15,6 +15,7 @@ import OrderLineFilterSheet, {
   type OrderLineFilters,
 } from './OrderLineFilterSheet';
 import { orderService, type AvailableOrderLine } from '../../../services/order.service';
+import { openQtyText } from '../../../lib/item-unit';
 import { colors, spacing, radius } from '../../../theme';
 
 const PAGE_SIZE = 20;
@@ -203,7 +204,8 @@ export default function OrderLinkPicker({
     ({ item }: { item: AvailableOrderLine }) => {
       const checked = value.includes(item.lineId);
       // Net açık = açık − üretimdeki (backend withInProduction). Yoksa ham açık.
-      const netOpen = Math.round(Number(item.netOpenQty ?? item.openQty));
+      // KG/ADET satırda null → "ölçülmüyor" (metreye düşülmez).
+      const netOpen = openQtyText(item.netOpenQty ?? item.openQty);
       const inProd = Math.round(Number(item.inProduction ?? 0));
       return (
         <TouchableRipple onPress={() => toggle(item)} style={styles.row} borderless>
@@ -237,7 +239,7 @@ export default function OrderLinkPicker({
                 {inProd > 0 ? ` · ${inProd}m üretimde` : ''}
               </Text>
             </View>
-            <Text style={styles.openQty}>Açık: {netOpen}m</Text>
+            <Text style={styles.openQty}>Açık: {netOpen}</Text>
           </View>
         </TouchableRipple>
       );

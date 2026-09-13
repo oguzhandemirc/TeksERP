@@ -33,7 +33,7 @@ import { Prisma, OrderStatus, RollStatus, WorkOrderStatus, WorkOrderType } from 
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
-import { ACTIVE_LINE } from "./helpers/order-line-scope.helper";
+import { ACTIVE_LINE, isMeasuredLine } from "./helpers/order-line-scope.helper";
 import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
@@ -80,8 +80,13 @@ export interface LinkableOrderLine {
   quantity: number;
   /** Bugüne kadar sevk edilen (denormalize `shippedQty`). */
   shippedQty: number;
-  /** Henüz karşılanmamış metraj (istenen − sevk). Negatife düşmez. */
-  openQty: number;
+  /**
+   * Henüz karşılanmamış metraj (istenen − sevk). Negatife düşmez. KG/ADET satırda
+   * `null` — karşılama metre defterinden ölçülmez; satır yine bağlanabilir.
+   */
+  openQty: number | null;
+  /** `openQty` ölçülüyor mu (`unit === MT`). */
+  measured: boolean;
   deadline: string | null;
   /** En farkı gibi ENGEL OLMAYAN uyumsuzluklar — istemci uyarı olarak gösterir. */
   warnings: string[];
@@ -219,6 +224,7 @@ export class WorkOrderLinkService {
         width: true,
         quantity: true,
         shippedQty: true,
+        unit: true,
         item: { select: { name: true } },
         color: { select: { name: true } },
         order: {
@@ -238,6 +244,7 @@ export class WorkOrderLinkService {
     const data: LinkableOrderLine[] = lines.map((l) => {
       const quantity = Number(l.quantity);
       const shippedQty = Number(l.shippedQty);
+      const measured = isMeasuredLine(l);
       const lineWidth = num(l.width);
       const warnings: string[] = [];
       if (woWidth != null && lineWidth != null && woWidth !== lineWidth) {
@@ -255,7 +262,8 @@ export class WorkOrderLinkService {
         width: lineWidth,
         quantity,
         shippedQty,
-        openQty: Math.max(0, quantity - shippedQty),
+        openQty: measured ? Math.max(0, quantity - shippedQty) : null,
+        measured,
         deadline: l.order.deadline ? l.order.deadline.toISOString() : null,
         warnings,
       };

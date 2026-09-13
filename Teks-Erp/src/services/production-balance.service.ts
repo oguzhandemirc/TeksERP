@@ -19,7 +19,7 @@ import prisma from "../lib/prisma";
 import { OrderStatus, Prisma, RollEntrySource, RollStatus, WorkOrderStatus } from "@prisma/client";
 import { ApiResponse } from "../types/api.types";
 import { computeWoMaterial } from "./helpers/coverage.helper";
-import { ACTIVE_LINE } from "./helpers/order-line-scope.helper";
+import { ACTIVE_LINE, MEASURED_LINE } from "./helpers/order-line-scope.helper";
 import { readIdCondition } from "../utils/query-parser";
 
 const LIVE_WO: WorkOrderStatus[] = [
@@ -191,6 +191,9 @@ export class ProductionBalanceService {
         order: { status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] } },
         // İptal edilmiş KALEM talep değildir (2026-08-27) — tek kaynak.
         ...ACTIVE_LINE,
+        // KG/ADET kalemin karşılaması metre defterinden ölçülmez; metre Σ'ya
+        // girse "hiç sevk edilmemiş" görünürdü — tek kaynak.
+        ...MEASURED_LINE,
         ...(itemId ? { itemId } : {}),
       },
       select: {

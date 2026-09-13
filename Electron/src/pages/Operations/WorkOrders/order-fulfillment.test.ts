@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { lineOpen, isEffectivelyZero, summarizeLinkedFulfillment } from "./order-fulfillment";
+import { lineOpen, lineOpenMeasured, isEffectivelyZero, summarizeLinkedFulfillment } from "./order-fulfillment";
 import type { WorkOrder } from "./types";
 
 type OrderLink = NonNullable<WorkOrder["orderLinks"]>[number];
@@ -22,6 +22,19 @@ describe("lineOpen", () => {
   it("kısmi sevk → kalan", () => expect(lineOpen(100, 40)).toBe(60));
   it("tam sevk → 0", () => expect(lineOpen(100, 100)).toBe(0));
   it("aşım → 0 (negatif clamp)", () => expect(lineOpen(100, 120)).toBe(0));
+});
+
+describe("lineOpenMeasured", () => {
+  it("MT → lineOpen ile aynı (kalan)", () =>
+    expect(lineOpenMeasured({ quantity: 100, shippedQty: 40, unit: "MT" })).toBe(60));
+  it("unit yok (eski backend) → metre sayılır", () =>
+    expect(lineOpenMeasured({ quantity: 100, shippedQty: 40 })).toBe(60));
+  it("KG → null (ölçülmüyor; metreye DÜŞÜLMEZ)", () =>
+    expect(lineOpenMeasured({ quantity: 100, shippedQty: 0, unit: "KG" })).toBeNull());
+  it("ADET → null", () =>
+    expect(lineOpenMeasured({ quantity: 12, unit: "ADET" })).toBeNull());
+  it("MT aşım → 0 (clamp korunur)", () =>
+    expect(lineOpenMeasured({ quantity: 100, shippedQty: 120, unit: "MT" })).toBe(0));
 });
 
 describe("isEffectivelyZero", () => {

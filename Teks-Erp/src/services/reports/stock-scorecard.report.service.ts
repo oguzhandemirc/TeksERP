@@ -39,7 +39,7 @@
 // =============================================================================
 
 import prisma from "../../lib/prisma";
-import { ACTIVE_LINE } from "../helpers/order-line-scope.helper";
+import { ACTIVE_LINE, MEASURED_LINE } from "../helpers/order-line-scope.helper";
 import { OrderStatus, Prisma } from "@prisma/client";
 import { pctOf, round1 } from "./_breakdown";
 
@@ -170,6 +170,8 @@ export async function getStockScorecard(): Promise<StockScorecard> {
       where: {
         order: { status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] } },
         ...ACTIVE_LINE,
+        // KG/ADET kalem metre talebine girmez (shippedQty hiç yazılmaz) — tek kaynak.
+        ...MEASURED_LINE,
       },
       select: { itemId: true, colorId: true, width: true, quantity: true, shippedQty: true },
     }),

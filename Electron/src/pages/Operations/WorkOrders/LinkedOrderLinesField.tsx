@@ -287,7 +287,7 @@ function LineCard({
             </span>
           </span>
           <span className="text-[10px] font-medium tabular-nums text-muted-foreground">
-            Açık {fmt(line.openQty)} m
+            {line.openQty === null ? "Açık: ölçülmüyor" : `Açık ${fmt(line.openQty)} m`}
           </span>
         </div>
 

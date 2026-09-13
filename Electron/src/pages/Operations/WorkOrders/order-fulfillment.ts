@@ -1,3 +1,4 @@
+import { isMeasuredUnit } from "@/lib/item-unit";
 import type { WorkOrder } from "./types";
 
 type OrderLink = NonNullable<WorkOrder["orderLinks"]>[number];
@@ -9,6 +10,20 @@ type OrderLink = NonNullable<WorkOrder["orderLinks"]>[number];
  */
 export function lineOpen(quantity: number, shippedQty: number): number {
   return Math.max(0, quantity - shippedQty);
+}
+
+/**
+ * Açık metraj, ÖLÇÜLEBİLİYORSA. KG/ADET satırın karşılaması metre defterinden
+ * ölçülmez → `null` ("ölçülmüyor"); metreye DÜŞÜLMEZ. `unit` yoksa (eski backend)
+ * metre sayılır — backend `isMeasuredLine` ikizi.
+ */
+export function lineOpenMeasured(line: {
+  quantity: number | string;
+  shippedQty?: number | string | null;
+  unit?: string | null;
+}): number | null {
+  if (!isMeasuredUnit(line.unit)) return null;
+  return lineOpen(Number(line.quantity), Number(line.shippedQty ?? 0));
 }
 
 /** 1 ondalığa yuvarlandığında sıfır mı (üretimde <0.05 m = 10cm altı ihmal). */

@@ -206,7 +206,9 @@ export function LinkOrderDialog({
                       ))}
                     </td>
                     <td className="p-2 text-right tabular-nums">
-                      <div className="font-medium">{fmt(l.openQty)} m</div>
+                      <div className="font-medium">
+                        {l.openQty === null ? "ölçülmüyor" : `${fmt(l.openQty)} m`}
+                      </div>
                       <div className="text-[11px] text-muted-foreground">
                         {fmt(l.quantity)} istendi
                       </div>

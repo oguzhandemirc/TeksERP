@@ -139,5 +139,45 @@ console.log("\n=== 2) Ham SQL'de order_lines süzgeci ===");
   check("muaf listesi bayat değil", stale.length === 0, stale.join(", "));
 }
 
+console.log("\n=== 3) 'Ölçülen kalem' (MEASURED_LINE) tek kaynak ===");
+{
+  // KG/ADET satırın shippedQty'si hiç yazılmaz; metre Σ TALEP soran yüzey onu
+  // "hiç sevk edilmemiş" sanır. Süzgeç `MEASURED_LINE`de yaşar, elle `unit: MT`
+  // yazılmaz. 2026-09-13'te doğduğu gün ısıracak ihlal yoktu (mandal, tarayıcı
+  // değil) — negatif sonda (2026-09-13): `...MEASURED_LINE` silindi → 1 ❌; yerine
+  // `unit: ItemUnit.MT` yazıldı → 2 ❌ (literal + taşımıyor). sha256 ile geri yüklendi.
+  const MT_LITERAL = /\bunit:\s*(ItemUnit\.MT|"MT"|'MT'|LEDGER_UNIT)\b/;
+  // Pozitif kontrol: desen yardımcının kendi tanımını görüyor (aksi hâlde kapı kör).
+  check(
+    "pozitif kontrol: desen yardımcıdaki MEASURED_LINE tanımını yakalıyor",
+    MT_LITERAL.test(fs.readFileSync(helperPath, "utf8")),
+  );
+  const offenders: string[] = [];
+  for (const f of FILES) {
+    if (f === helperPath) continue;
+    const rel = path.relative(SRC, f);
+    fs.readFileSync(f, "utf8")
+      .split("\n")
+      .forEach((line, i) => {
+        const code = line.split("//")[0] ?? "";
+        if (MT_LITERAL.test(code)) offenders.push(`${rel}:${i + 1}  ${line.trim().slice(0, 90)}`);
+      });
+  }
+  check(
+    "elle yazılmış `unit: MT` süzgeci YOK (tek sahibi MEASURED_LINE)",
+    offenders.length === 0,
+    offenders.join("\n     "),
+  );
+  // Metre Σ TALEP soran iki yüzey süzgeci TAŞIMAK zorunda — düşerse KG kalem
+  // talebe girer ve hiçbir şey kırmızıya dönmez (davranış ayağı: unit_ledger ⑨).
+  for (const rel of [
+    "services/production-balance.service.ts",
+    "services/reports/stock-scorecard.report.service.ts",
+  ]) {
+    const src = fs.readFileSync(path.join(SRC, rel), "utf8");
+    check(`${rel} \`...MEASURED_LINE\` taşıyor`, /\.\.\.MEASURED_LINE\b/.test(src));
+  }
+}
+
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

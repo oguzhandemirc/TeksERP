@@ -13,6 +13,7 @@ import {
 import AppModal from './AppModal';
 import { useQuery } from '@tanstack/react-query';
 import { orderService } from '../services/order.service';
+import { openQtyText } from '../lib/item-unit';
 import { customerService } from '../services/customer.service';
 import { foldSearchText } from '../utils/searchFold';
 import { useTruncationWarning } from '../hooks/useTruncationWarning';
@@ -198,7 +199,8 @@ export default function LabelTargetSheet({
                         <Text style={styles.rowMeta} numberOfLines={1}>
                           {c.orderNumber} · {c.itemName}
                           {c.colorName ? ` · ${c.colorName}` : ''}
-                          {c.width ? ` · ${c.width}cm` : ''} · açık {Math.round(c.openQty)}m
+                          {c.width ? ` · ${c.width}cm` : ''}
+                          {` · açık ${openQtyText(c.openQty)}`}
                           {c.customerItemName ? ` (Müşteride: ${c.customerItemName})` : ''}
                         </Text>
                       </View>

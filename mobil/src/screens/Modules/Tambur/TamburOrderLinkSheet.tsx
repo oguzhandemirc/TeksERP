@@ -17,6 +17,7 @@ import OrderLineFilterSheet, {
   type OrderLineFilters,
 } from '../HizliIsEmri/OrderLineFilterSheet';
 import { orderService, type AvailableOrderLine } from '../../../services/order.service';
+import { openQtyText } from '../../../lib/item-unit';
 import {
   workOrderService,
   type LinkableOrderLine,
@@ -344,7 +345,7 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
               ? renderMismatchChips({ itemDiff: false, colorDiff: false, widthDiff: false }, item.warnings)
               : null}
           </View>
-          <Text style={styles.openQty}>Açık: {Math.round(item.openQty)}m</Text>
+          <Text style={styles.openQty}>Açık: {openQtyText(item.openQty)}</Text>
         </View>
       </TouchableRipple>
     ),
@@ -435,7 +436,7 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
               {renderMismatchChips(mm)}
             </View>
             <Text style={[styles.openQty, hardDead && styles.rowTextDead]}>
-              Açık: {Math.round(Number(item.openQty))}m
+              Açık: {openQtyText(item.openQty)}
             </Text>
           </View>
         </TouchableRipple>

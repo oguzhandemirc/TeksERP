@@ -46,3 +46,17 @@ describe("OrderLinksV3 sipariş navigasyonu", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 });
+
+describe("OrderLinksV3 açık metraj (MEASURED_LINE ikizi)", () => {
+  it("MT satır → 'Açık <kalan>' (unit yoksa da metre)", () => {
+    renderWithProviders(<OrderLinksV3 wo={wo([{ ...linkWithOrder, orderLine: { ...linkWithOrder.orderLine, shippedQty: 40 } }])} />);
+    expect(screen.getByText(/Açık 60/)).toBeInTheDocument();
+  });
+  it("KG satır → 'Açık ölçülmüyor' (metreye düşülmez, rakam basılmaz)", () => {
+    renderWithProviders(
+      <OrderLinksV3 wo={wo([{ ...linkWithOrder, orderLine: { ...linkWithOrder.orderLine, unit: "KG" } }])} />,
+    );
+    expect(screen.getByText(/Açık ölçülmüyor/)).toBeInTheDocument();
+    expect(screen.queryByText(/Açık 100/)).not.toBeInTheDocument();
+  });
+});

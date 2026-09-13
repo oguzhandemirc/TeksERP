@@ -14,3 +14,12 @@ export function unitLabel(unit: string | null | undefined): string {
 export function isMeasuredUnit(unit: string | null | undefined): boolean {
   return unit == null || unit === 'MT';
 }
+
+/**
+ * "Açık" rozeti metni — `null` = ölçülmüyor (KG/ADET satır; backend `openQty`yi
+ * null gönderir). Metreye DÜŞÜLMEZ: "0m" basmak "hiç açık yok" yalanı olurdu.
+ * `undefined` (eski backend / alan yok) da ölçülmüyor sayılır — rakam uydurulmaz.
+ */
+export function openQtyText(raw: number | null | undefined): string {
+  return raw == null ? 'ölçülmüyor' : `${Math.round(Number(raw))}m`;
+}

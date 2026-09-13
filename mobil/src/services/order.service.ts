@@ -28,11 +28,14 @@ export interface AvailableOrderLine {
   customerColorName: string | null;
   width: number | null;
   quantity: number;
-  openQty: number;
+  /** Açık = istenen − sevk. KG/ADET satırda `null` — karşılama metre defterinden ölçülmez. */
+  openQty: number | null;
   /** Yalnız withInProduction istendiğinde dolar (Hızlı İş Emri). */
   inProduction?: number;
-  /** Net açık = açık − üretimdeki (withInProduction). Yoksa openQty kullan. */
-  netOpenQty?: number;
+  /** Net açık = açık − üretimdeki (withInProduction). Yoksa openQty kullan. `openQty` null ise null. */
+  netOpenQty?: number | null;
+  /** `openQty` ölçülüyor mu (`unit === MT`). Eski backend göndermez → ölçülür sayılır. */
+  measured?: boolean;
   /**
    * Bu KALEME (spec havuzuna değil) canlı bir iş emri bağlı mı — iptal/devredilmiş
    * WO sayılmaz. Yalnız cursor modda döner. `inProduction` ile karıştırma: o,

@@ -17,7 +17,7 @@ import {
   buildPicked,
   type PickedOrderLine,
 } from "@/pages/Operations/WorkOrders/OrderPickerDialog";
-import { lineOpen } from "@/pages/Operations/WorkOrders/order-fulfillment";
+import { lineOpenMeasured } from "@/pages/Operations/WorkOrders/order-fulfillment";
 import type { Order, OrderLine } from "./types";
 
 /**
@@ -31,19 +31,21 @@ function lineSignature(l: OrderLine): string {
 /**
  * Kalan (sevk edilmemiş) miktar — yeni iş emrine bu kadar alınır.
  *
- * Formül TEK YERDE: `order-fulfillment.lineOpen` (kanonik, negatif clamp'li).
+ * Formül TEK YERDE: `order-fulfillment.lineOpenMeasured` (kanonik, negatif clamp'li; KG/ADET → null).
  * Buradaki eski kopya clamp'sizdi; davranış farkı YOK çünkü `groupEligible`
  * yalnız `isLineOpen` süzgecinden geçmiş (rem > 0) kalemleri görür — yani
  * clamp hiç tetiklenmez. Aşırı sevkte artık `openQty`/`openTotal` negatif
  * yerine 0 olur ki iş emrine "eksi metraj" seed etmekten iyidir.
  */
-function lineRemaining(l: OrderLine): number {
-  return lineOpen(Number(l.quantity), Number(l.shippedQty ?? 0));
+// KG/ADET satırda açık metraj ÖLÇÜLMEZ (null) — satır yine alınabilir, "ölçülmüyor".
+function lineRemaining(l: OrderLine): number | null {
+  return lineOpenMeasured(l);
 }
 
-/** Sevki tamamlanmamış kalem yeni iş emrine alınabilir. */
+/** Sevki tamamlanmamış (ya da ölçülmeyen) kalem yeni iş emrine alınabilir. */
 function isLineOpen(l: OrderLine): boolean {
-  return lineRemaining(l) > 0;
+  const rem = lineRemaining(l);
+  return rem === null || rem > 0;
 }
 
 interface EligibleLine {
@@ -87,7 +89,7 @@ function groupEligible(lines: EligibleLine[]): GroupInfo[] {
     }
     const rem = lineRemaining(line);
     g.pickedLines.push(buildPicked(order, { ...line, openQty: rem }));
-    g.openTotal += rem;
+    g.openTotal += rem ?? 0;
     const set = orderSets.get(sig)!;
     if (!set.has(order.id)) {
       set.add(order.id);

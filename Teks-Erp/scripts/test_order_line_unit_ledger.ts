@@ -23,11 +23,21 @@
 //   ⑧ İçe aktarım (order.adapter → orderService.create): "Birim" sütunu boşsa
 //      kalemden kopya (KG kalem → KG), doluysa etiketle ("Kilogram") → KG,
 //      MT kalem + boş → MT.
+//   ⑨ MEASURED_LINE (#7, 2026-09-13): metre Σ TALEP KG satırı görmez (üretim
+//      dengesi Σ talep 0, satır listesi boş; MT talebi AYNEN — KG birimli MT
+//      kalem de dışarıda); "açık" yüzeyleri KG satırı LİSTEDE tutar ama
+//      openQty/netOpenQty null + measured:false (linkable, available legacy +
+//      cursor); tahsis SÜZÜLMEZ (allocate KG need = quantity); "Miktar (m)"
+//      başlığı tam 1 kez (donmuş sözleşme). Stok karnesi davranışsal ölçülmez
+//      (talep içsel) — statik ayağı scope_single_source §3.
 //
 // Negatif sonda (2026-09-13, ölçüldü): `resolveLineUnit` kopyası `MT`ye
 // sabitlendi → 11 ❌ (①b ①c ②a ③b–③e ⑤a–⑤c ⑥); `isMeasuredUnit` `true`ya
 // sabitlendi → 9 ❌ (①c ③b–③e ⑤a–⑤c ⑥); `order.adapter` birim geçişi kapatıldı →
 // 1 ❌ (⑧d). sha256 ile birebir geri yüklendi.
+// ⑨ sondası (2026-09-13): production-balance'tan `...MEASURED_LINE` silindi → 3 ❌
+// (⑨a Σ 243 · ⑨b 5 satır · ⑨c 75); `isMeasuredLine` hep true → 3 ❌ (⑨e ⑨g ⑨h,
+// openQty 100 / measured true). sha256 ile geri yüklendi.
 //
 // Fixture: TST-OLU-* business-key; hardcoded UUID yok; finally'de FK sırasıyla
 // temizlenir. Sipariş numaraları servis üretir → id listesiyle temizlenir.
@@ -36,6 +46,12 @@ import prisma from "../src/lib/prisma";
 import { OrderService } from "../src/services/order.service";
 import { recomputeOrderStatusTx } from "../src/services/helpers/order-status.helper";
 import { ImportService } from "../src/services/import/import.service";
+import { ProductionBalanceService } from "../src/services/production-balance.service";
+import { workOrderLinkService } from "../src/services/workorder-link.service";
+import { allocate } from "../src/services/helpers/allocation.helper";
+import { Prisma } from "@prisma/client";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { randomUUID } from "node:crypto";
@@ -73,6 +89,8 @@ async function cleanup(): Promise<void> {
     await prisma.importRunLine.deleteMany({ where: { importRun: { clientToken: { in: importTokens } } } });
     await prisma.importRun.deleteMany({ where: { clientToken: { in: importTokens } } });
   }
+  // ⑨ WO'ları item'dan ÖNCE (targetItemId FK).
+  await prisma.workOrder.deleteMany({ where: { workOrderNumber: { startsWith: "TST-OLU-WO-", endsWith: kuyruk } } });
   await prisma.item.deleteMany({ where: { code: { startsWith: "TST-OLU-ITM-", endsWith: kuyruk } } });
   await prisma.customer.deleteMany({ where: { code: `TST-OLU-CUS-${ts}` } });
 }
@@ -278,6 +296,66 @@ async function main(): Promise<void> {
     check("⑧b MT kalem + boş Birim → MT", q(10)?.unit === ItemUnit.MT, String(q(10)?.unit));
     check("⑧c KG kalem + boş Birim → KG (kalemden kopya)", q(20)?.unit === ItemUnit.KG, String(q(20)?.unit));
     check("⑧d MT kalem + 'Kilogram' → KG (etiketle açık değer)", q(5)?.unit === ItemUnit.KG, String(q(5)?.unit));
+
+    // ── ⑨ MEASURED_LINE: Σ talep KG'yi görmez, "açık" yüzeyleri null der ──────
+    // Fixture hâli: o2 = MT kalem/KG birim 10 · o3 = MT 50 açık + KG 20 · o5 = yalnız
+    // KG 100 (tahsis 100 m, shippedQty 0) · içe aktarım MT 10 + KG 20 + KG(etiket) 5.
+    const balance = new ProductionBalanceService();
+    const sumTalep = (groups: Array<{ talep: Prisma.Decimal }>) =>
+      groups.reduce((s, g) => s.plus(g.talep), new Prisma.Decimal(0));
+    const balKG = (await balance.getBalance({ itemId: itemKG.id })).data ?? [];
+    const talepKG = sumTalep(balKG);
+    check("⑨a üretim dengesi: KG kalem TALEBE GİRMEZ (Σ talep 0)", talepKG.isZero(), talepKG.toString());
+    const kgLines = balKG.flatMap((g) => g.specs.flatMap((s) => s.lines));
+    check("⑨b üretim dengesi: KG satır listesi BOŞ", kgLines.length === 0, `${kgLines.length} satır`);
+    const balMT = (await balance.getBalance({ itemId: itemMT.id })).data ?? [];
+    const talepMT = sumTalep(balMT);
+    // Pozitif kontrol: MT açık = o3 50 + içe aktarım 10 = 60; o2'nin KG BİRİMLİ 10'u DIŞARIDA.
+    check("⑨c üretim dengesi: MT talebi AYNEN 60 (KG birimli MT kalem dışarıda)", talepMT.equals(60), talepMT.toString());
+
+    const mkWo = (suffix: string, itemId: string) =>
+      prisma.workOrder.create({
+        data: { workOrderNumber: `TST-OLU-WO-${suffix}-${ts}`, status: "PLANNED", type: "STOCK_PRODUCTION", targetItemId: itemId },
+        select: { id: true },
+      });
+    const woKG = await mkWo("KG", itemKG.id);
+    const woMT = await mkWo("MT", itemMT.id);
+    const lkKG = ((await workOrderLinkService.getLinkableOrderLines(woKG.id)).data ?? []).find((l) => l.id === l5[0].id);
+    check("⑨d linkable: KG satır LİSTEDE (üretime alınabilir kalır)", lkKG != null);
+    check("⑨e linkable: KG satır openQty null + measured false",
+      lkKG?.openQty === null && lkKG?.measured === false, JSON.stringify({ openQty: lkKG?.openQty, measured: lkKG?.measured }));
+    const lkMT = ((await workOrderLinkService.getLinkableOrderLines(woMT.id)).data ?? []).find((l) => l.id === l3a[0].id);
+    check("⑨f linkable: MT satır openQty 50 + measured true",
+      lkMT?.openQty === 50 && lkMT?.measured === true, JSON.stringify({ openQty: lkMT?.openQty, measured: lkMT?.measured }));
+
+    type AvailRow = { lineId: string; openQty: unknown; netOpenQty: unknown; measured: boolean };
+    const avail = async (p: Parameters<typeof svc.findAvailableOrderLines>[0]) =>
+      ((await svc.findAvailableOrderLines(p)) as { data: AvailRow[] }).data;
+    const avKG = (await avail({ itemId: itemKG.id })).find((l) => l.lineId === l5[0].id);
+    check("⑨g available (legacy): KG satır listede, openQty/netOpenQty null, measured false",
+      avKG != null && avKG.openQty === null && avKG.netOpenQty === null && avKG.measured === false,
+      JSON.stringify(avKG && { openQty: avKG.openQty, netOpenQty: avKG.netOpenQty, measured: avKG.measured }));
+    const avKGc = (await avail({ itemId: itemKG.id, limit: 50, withInProduction: true })).find((l) => l.lineId === l5[0].id);
+    check("⑨h available (cursor): KG satır listede, openQty/netOpenQty null, measured false",
+      avKGc != null && avKGc.openQty === null && avKGc.netOpenQty === null && avKGc.measured === false,
+      JSON.stringify(avKGc && { openQty: avKGc.openQty, netOpenQty: avKGc.netOpenQty, measured: avKGc.measured }));
+    const avMT = (await avail({ itemId: itemMT.id })).find((l) => l.lineId === l3a[0].id);
+    check("⑨i available (legacy): MT satır openQty 50 + measured true",
+      avMT != null && Number(avMT.openQty) === 50 && avMT.measured === true,
+      JSON.stringify(avMT && { openQty: String(avMT.openQty), measured: avMT.measured }));
+
+    // Tahsis DEĞİŞMEZ: KG satırın ihtiyacı quantity − shippedQty (= quantity).
+    const now = new Date();
+    const alloc = allocate(
+      [{ itemId: itemKG.id, colorId: null, width: null, currentQty: new Prisma.Decimal(100) }],
+      [{ id: "kg", itemId: itemKG.id, colorId: null, width: null, quantity: new Prisma.Decimal(100),
+         shippedQty: new Prisma.Decimal(0), deadline: null, orderDate: now, lineCreatedAt: now }],
+    );
+    check("⑨j allocate(): KG satır need = quantity (tahsis süzülmez, 100)", alloc.get("kg")?.equals(100) === true, alloc.get("kg")?.toString());
+    // "Miktar (m)" içe aktarım başlığı DONMUŞ sözleşme (indirilmiş şablon) — tam 1 kez.
+    const adapterSrc = fs.readFileSync(path.resolve(__dirname, "..", "src", "services", "import", "adapters", "order.adapter.ts"), "utf8");
+    check("⑨k içe aktarım 'Miktar (m)' başlığı tam 1 kez (dokunulmadı)",
+      (adapterSrc.match(/label: "Miktar \(m\)"/g) ?? []).length === 1);
   } finally {
     await cleanup();
     await prisma.$disconnect();

@@ -27,7 +27,7 @@ import { StatusBadge, orderStatusTones } from "@/components/operations/StatusBad
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { orderStatusLabels } from "@/types/enums";
 import { CoveragePanel } from "@/pages/Operations/WorkOrders/CoveragePanel";
-import { lineOpen } from "@/pages/Operations/WorkOrders/order-fulfillment";
+import { lineOpenMeasured } from "@/pages/Operations/WorkOrders/order-fulfillment";
 import { isMeasuredUnit, unitLabel } from "@/lib/item-unit";
 import { buildPicked, type PickedOrderLine } from "@/pages/Operations/WorkOrders/OrderPickerDialog";
 import { orderService } from "./service";
@@ -46,15 +46,17 @@ const lineSig = (l: OrderLine) => `${l.itemId}::${l.colorId ?? ""}::${l.width ??
 /**
  * Açık (sevk edilmemiş) metre — 0 ise kalem iş emrine alınamaz.
  *
- * Formül TEK YERDE: `order-fulfillment.lineOpen` (kanonik). Buradaki yerel kopya
+ * Formül TEK YERDE: `order-fulfillment.lineOpenMeasured` (kanonik; KG/ADET → null). Buradaki yerel kopya
  * clamp'siz olduğu için aşırı sevkte NEGATİF dönüyordu; iki çağrı yeri de sonucu
  * ya `> 0` ile karşılaştırdığı ya da yalnız açık kalemde kullandığı için görünür
  * bir fark yok — ama kopya kalsaydı üçüncü çağrı yerinde "−12 m açık" basardı.
  */
 // İptal edilmiş kalemin AÇIĞI YOKTUR: iş emri seçimine girmemeli ve
 // "sevk bekliyor" gibi görünmemeli (2026-08-27).
-const lineRem = (l: OrderLine) =>
-  l.cancelledAt != null ? 0 : lineOpen(Number(l.quantity), Number(l.shippedQty ?? 0));
+// KG/ADET satırda açık metraj ÖLÇÜLMEZ (null): satır yine iş emrine alınabilir,
+// picker "ölçülmüyor" basar — metreye düşülmez.
+const lineRem = (l: OrderLine): number | null =>
+  l.cancelledAt != null ? 0 : lineOpenMeasured(l);
 /** Çapaya göre hangi nitelikler farklı — overlay'de "neden seçilemez" metni için. */
 const diffLabel = (anchor: OrderLine, line: OrderLine) => {
   const parts: string[] = [];
@@ -356,7 +358,8 @@ export function OrderDetailSheet({
               <ul className="space-y-2">
                 {order.lines.map((line) => {
                   const cancelled = line.cancelledAt != null;
-                  const open = lineRem(line) > 0;
+                  const rem = lineRem(line);
+                  const open = rem === null || rem > 0;
                   const isSel = selectedLineIds.has(line.id);
                   const dimmed =
                     woEligible && open && anchorSig !== null && lineSig(line) !== anchorSig;

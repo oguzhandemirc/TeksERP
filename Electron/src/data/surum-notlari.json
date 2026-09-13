@@ -37,7 +37,7 @@
         {
           "kapsam": "panel",
           "tip": "iyilestirme",
-          "metin": "Toplu sipariş yükleme şablonuna “Birim” sütunu eklendi (Metre / Kilogram / Adet). Boş bırakılırsa kalemin kartındaki birim kullanılır. Mevcut “Miktar (m)” başlığı değişmedi; indirilmiş eski şablonlar aynen çalışır. Üretim dengesi ve stok karnesi gibi metre toplayan ekranlar kilo/adet kalemi henüz ayırt etmiyor — o kalemler oralarda hâlâ metre gibi toplanır; ayrı bir güncellemede düzelecek."
+          "metin": "Toplu sipariş yükleme şablonuna “Birim” sütunu eklendi (Metre / Kilogram / Adet). Boş bırakılırsa kalemin kartındaki birim kullanılır. Mevcut “Miktar (m)” başlığı değişmedi; indirilmiş eski şablonlar aynen çalışır. Üretim dengesi ve stok karnesi gibi metre toplayan ekranlar kilo/adet kalemi artık ayırt ediyor: o kalemler metre talebine girmez. İş emri açarken sipariş kalemi seçme ekranlarında (panel ve tablet) kilo/adet kalem listede kalır, üretime alınabilir; yalnız “Açık” rakamı yerine “ölçülmüyor” yazar — metre uydurulmaz. Sevkiyat tahsisi değişmedi."
         },
         {
           "kapsam": "her-ikisi",
