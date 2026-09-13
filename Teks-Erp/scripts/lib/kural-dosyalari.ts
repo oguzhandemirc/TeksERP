@@ -51,6 +51,26 @@ export type BekciAlani = { dosya: string; satir: number; icerik: string; tamSati
 
 /** Alanın yaşayabileceği parça: bir sonraki kardeş alana ya da `<sub>`e kadar. */
 const ALAN_SONU = / <sub>| · (?:Kapanır|Öncül|Çapa|KAPANDI):|$/;
+
+/**
+ * Kardeş alanın (`Kapanır:` · `Öncül:` · `Çapa:` · `KAPANDI:`) İÇERİĞİ — satırda
+ * ilk geçtiği yerden bir sonraki kardeşe/`<sub>`e kadar, kırpılmış. Backtick
+ * ZORUNLU DEĞİL ve bu bilinçli (2026-09-13): alanın sınırı kardeşlerle çizilir,
+ * backtick'le değil — ev cümleyi bazen düz yazıyor, bazen içine kod adı koyuyor
+ * (`--apply`, `GIN`). Eski yüklem backtick'le sınırlıyordu ve içindeki ilk
+ * backtick'te durup KESİK cümleyi "var" sayıyordu; sıkılaştırılmış hâli ise iç
+ * backtick'li ve düz yazılmış cümleleri "YOK" sayıyordu (deploy-kurulum ×3) —
+ * ikisi de aynı kusurun iki yüzü: sınırı YANLIŞ ŞEYLE çizmek. Alan yoksa null.
+ */
+export function kardesAlan(satir: string, ad: "Kapanır" | "Öncül" | "Çapa" | "KAPANDI"): string | null {
+  const m = new RegExp(` · ${ad}:|^${ad}:`).exec(satir);
+  if (!m) return null;
+  const bas = m.index + m[0].length;
+  const kalan = satir.slice(bas);
+  const son = new RegExp(` <sub>| · (?:${["Kapanır", "Öncül", "Çapa", "KAPANDI"].filter((k) => k !== ad).join("|")}):|$`).exec(kalan)?.index ?? kalan.length;
+  const icerik = kalan.slice(0, son).trim().replace(/^`|`$/g, "").trim();
+  return icerik.length > 0 ? icerik : null;
+}
 /** Alanı kapatan backtick: ardından ayraç gelen İLK backtick. */
 const KAPANIS = /`(?= ·| —| <sub>|$)/;
 

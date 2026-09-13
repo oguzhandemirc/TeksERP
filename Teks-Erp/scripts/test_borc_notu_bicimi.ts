@@ -37,6 +37,12 @@
 //   B− iç backtick'li `Kapanır:`, STAGE'li          → 35 → 36  (sayılmadı) ✓
 //   B+ çift tırnaklı `Kapanır:`, STAGE'li           → 35 → 35  (sayıldı)   ✓
 //   B  aynı ihlal STAGE'siz                         → index 35 · ℹ️ ağaç 36 ✓
+//   ── üçüncü tur (2026-09-13, kardeş-alan ayrıştırıcısı; worktree, STAGE'li) ──
+//   B  iç backtick'li `Kapanır:`                   → 7 → 7  (sayıldı)     ✓
+//   B− `Kapanır:` yok                               → 7 → 8  KIRMIZI      ✓
+//   B  düz yazı `Kapanır:` (backtick yok)           → 7 → 7  (sayıldı)     ✓
+//   B− boş `Kapanır:` (` · Öncül` hemen ardında)    → 7 → 8               ✓
+//   B− boş backtick çifti                           → 7 → 8               ✓
 //
 // ⚠️ B+ (POZİTİF sonda) BİR KUSUR BULDU ve negatif sonda onu göremezdi:
 // yüklem `Kapanır:`ı `bekçi:` backtick'lerinin İÇİNDE arıyordu, oysa `Kapanır:`
@@ -48,7 +54,7 @@
 // =============================================================================
 import { readdirSync, readFileSync } from "fs";
 import { basename, join } from "path";
-import { type BekciAlani, bekciAlanlari, KOK, kuralDosyalari } from "./lib/kural-dosyalari";
+import { type BekciAlani, bekciAlanlari, kardesAlan, KOK, kuralDosyalari } from "./lib/kural-dosyalari";
 
 let pass = 0;
 let fail = 0;
@@ -70,32 +76,33 @@ const KURALLAR = join(KOK, "docs", "kurallar");
  *    değişince eski sayı yanlış değil KONUSUZ olur.
  *
  * ⚠️ TABAN INDEX'TEN ÖLÇÜLÜR (ne ağaç ne HEAD) — gerekçe `lib/kural-dosyalari.ts`.
- * Üreten komut (index'ten; iç backtick'li `Kapanır:` alanı SAYILMAZ):
+ * Üreten komut (index'ten; `Kapanır:` kardeş alan olarak, backtick şart değil):
  *   for f in $(git ls-files docs/kurallar/*.md); do git show ":$f"; done \
  *     | grep -E 'bekçi: `(YOK|yok|BELİRSİZ)' \
- *     | grep -vE 'Kapanır: `[^`]+`( ·| <sub>|$)' | wc -l
+ *     | grep -vE ' · Kapanır: *[^ ·]' | wc -l
  */
-const B_TABAN = 9;  // 17 → 10 → 9 (2026-09-13/14, entegratör 1e): tren sonunda BİRLEŞİK index'te ölçüldü — 6e 7 satıra ölçülmüş Kapanır · 6e deploy-kurulum:24 (iç backtick, ayrıştırıcı düzeltmesi ea'da); sabite trende TEK yazar
+const B_TABAN = 7;  // 17 → 10 → 9 → 7 (2026-09-13/14, entegratör 1e): tren sonunda BİRLEŞİK index'te ölçüldü — 6e 7 Kapanır · ea kardeş-alan ayrıştırıcısı (3 artefakt düştü); kalan 7: 01 (parti:18 · rota-renk:34/51/53 · tambur:18/19/50); sabite trende TEK yazar
 
 /** Koşulsuz borç beyanı: adlandırılmış bekçi YOK. */
 const KOSULSUZ = /^(YOK|yok|BELİRSİZ)/;
 /**
- * Kapanma koşulu alanı — TAM SATIRDA aranır, `bekçi:` alanının İÇİNDE değil.
+ * Kapanma koşulu alanı — TAM SATIRDA, kardeş alan olarak aranır (`kardesAlan`),
+ * `bekçi:` alanının İÇİNDE değil.
  *
  * ⚠️ İlk yazımda `bekçi:` backtick'lerinin İÇİNDEKİ metinde aranıyordu ve bunu
  * POZİTİF SONDA yakaladı: kurala `· Kapanır: \`…\`` eklendi ve sayı DÜŞMEDİ —
  * çünkü `Kapanır:` bir KARDEŞ alandır, `bekçi:` alanının içeriği değil.
- * => Yüklem tabanı DÜŞÜREMEYEN bir cırcır, hiç kapı olmamasından KÖTÜDÜR:
- *    borç kapatılamaz, sayı hiç inmez ve kapı ilk sıkışmada susturulur.
- *    Negatif sonda bunu göremezdi — yalnız POZİTİF sonda gösterdi.
+ * => Yüklem tabanı DÜŞÜREMEYEN bir cırcır, hiç kapı olmamasından KÖTÜDÜR.
  *
- * ⚠️ Kapanış backtick'inden sonra AYRAÇ şart (` ·` / ` <sub>` / satır sonu).
- * Alan backtick'le sınırlıdır; cümlenin İÇİNDEKİ backtick alanı erken kapatır
- * ve gevşek yüklem KESİK cümleyi "var" sayar (ölçüldü 2026-09-13: dört satır,
- * bağımsız grep 6 sayarken kapı 5 saydı — iki yüklem iki soru soruyordu).
- * Cümle içinde ad gerekiyorsa çift tırnak: "next.station.kind !== TAMBUR".
+ * ⚠️ ÜÇÜNCÜ YAZIM (2026-09-13): ikinci yazım kapanış backtick'inden sonra ayraç
+ * istiyordu — iç backtick'li cümleyi KESİK okuyan gevşek yüklemin panzehiri
+ * olarak. Ama panzehir sınırı yine BACKTICK'le çiziyordu; ev cümleyi düz de
+ * yazıyor, içine kod adı da koyuyor (deploy-kurulum ×3 "YOK" sayıldı, 6e ölçtü).
+ * Sınır artık KARDEŞ ALANLARLA çizilir (` · Öncül:` / ` <sub>` / satır sonu);
+ * backtick'in varlığı ya da içerideki backtick alanın var/yok kararını
+ * değiştirmez. Cümlenin İYİ olduğu yine ölçülmez — yalnız dolu olduğu.
  */
-const KAPANIR = /Kapanır:\s*`[^`]+`(?=\s*(?:·|<sub>|$))/;
+const kapanirVar = (tamSatir: string): boolean => kardesAlan(tamSatir, "Kapanır") !== null;
 
 /** C kolu: opt-in borç bloğu ve zorunlu alanları. */
 const BORC_ISARETCISI = /\*\*BORÇ:\*\*/;
@@ -142,7 +149,7 @@ function main(): void {
 
   // ── B KOLU — koşulsuz borç, `Kapanır:` taşımayan ─────────────────────────
   const kapanirsizOlc = (a: BekciAlani[]): BekciAlani[] =>
-    a.filter((x) => KOSULSUZ.test(x.icerik)).filter((x) => !KAPANIR.test(x.tamSatir));
+    a.filter((x) => KOSULSUZ.test(x.icerik)).filter((x) => !kapanirVar(x.tamSatir));
   const kosulsuz = alanlar.filter((a) => KOSULSUZ.test(a.icerik));
   const kapanirsiz = kapanirsizOlc(alanlar);
   check(
