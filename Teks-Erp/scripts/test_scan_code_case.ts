@@ -193,11 +193,43 @@ async function testIndexPreserved(): Promise<void> {
     `EXPLAIN SELECT id FROM rolls WHERE barcode = 'T130826F0230'`,
   );
   const plan = rows.map((r) => r["QUERY PLAN"]).join(" ");
-  check(
-    "tam eşleşme INDEX kullanıyor (Seq Scan değil)",
-    /Index/i.test(plan) && !/Seq Scan/i.test(plan),
-    plan.slice(0, 80),
-  );
+  const indexKullaniyor = /Index/i.test(plan) && !/Seq Scan/i.test(plan);
+
+  // ⚠️ KIRMIZI KENDİ TEŞHİSİNİ TAŞISIN (2026-09-13). Bu yüklem CI'da DÖRT turdur
+  // izleniyor ve iki kez sınıfı yanlış kondu:
+  //   ①  "ORTAM — plancı küçük tabloda index kullanmaz"  ← `cost=0.00..1.02` (≈1 sayfa)
+  //   ②  "ARALIKLI"                                       ← ✅✅❌❌ görülünce
+  // Ama dördüncü turda plan `cost=0.00..112.03` geldi: tablo artık KÜÇÜK DEĞİL,
+  // yani ① açıklaması ÖLDÜ. Ve karşı-örnek (ILIKE) ile TAM AYNI planı verdi —
+  // iki farklı sorgu aynı planı veriyorsa `barcode` için hiçbir index
+  // kullanılmıyor demektir.
+  //
+  // Hangi açıklamanın doğru olduğu CI'ın DB'sinden okunmadan bilinemez ve o DB
+  // EFEMER — koşum bitince yok. ⇒ Teşhis, kırmızının KENDİSİYLE birlikte
+  // basılmalı; yoksa her turda aynı soruyu yeniden soruyoruz.
+  //   *Bir kırmızı, sınıflandırılabilmesi için gereken veriyi yanında taşımalıdır.*
+  let teshis = "";
+  if (!indexKullaniyor) {
+    try {
+      const idx = await prisma.$queryRawUnsafe<{ indexname: string }[]>(
+        `SELECT indexname FROM pg_indexes WHERE tablename='rolls' AND indexdef ILIKE '%barcode%'`,
+      );
+      const ist = await prisma.$queryRawUnsafe<{ reltuples: number; relpages: number }[]>(
+        `SELECT reltuples::int AS reltuples, relpages FROM pg_class WHERE relname='rolls'`,
+      );
+      const n = await prisma.roll.count();
+      teshis =
+        `\n      ↳ TEŞHİS: barcode index'i = ${idx.length ? idx.map((i) => i.indexname).join(",") : "YOK ⛔"}` +
+        ` · gerçek satır = ${n} · plancının gördüğü reltuples = ${ist[0]?.reltuples ?? "?"}` +
+        ` · relpages = ${ist[0]?.relpages ?? "?"}` +
+        `\n      ↳ index YOKSA şema/migration sorunu · index VARSA istatistik bayat (ANALYZE koşmamış)` +
+        ` — ikisi AYRI kalem, "ortam" tek başına ikisini de açıklamaz`;
+    } catch (e) {
+      // Teşhis SORGUSU düşerse sessiz kalma: teşhisin yokluğu da bir bilgidir.
+      teshis = `\n      ↳ TEŞHİS ALINAMADI: ${(e as Error).message.slice(0, 90)}`;
+    }
+  }
+  check("tam eşleşme INDEX kullanıyor (Seq Scan değil)", indexKullaniyor, plan.slice(0, 80) + teshis);
 
   const ilike = await prisma.$queryRawUnsafe<{ "QUERY PLAN": string }[]>(
     `EXPLAIN SELECT id FROM rolls WHERE barcode ILIKE 'T130826F0230'`,
