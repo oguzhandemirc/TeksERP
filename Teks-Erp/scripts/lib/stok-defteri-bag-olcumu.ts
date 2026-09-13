@@ -160,6 +160,25 @@ export const BILINEN_KAPISIZ_YOLLAR: readonly KapisizYol[] = [
     ad: "üretim kesimi çocuğu (WAREHOUSE doğar, satır yok) — GİRİŞ",
   },
 ];
+/**
+ * K'NIN ÜÇÜNCÜ EKSENİ — YERİNDE MİKTAR DEĞİŞTİREN YOLLAR (2026-09-14, hüküm MANUAL_ADJUST).
+ *
+ * K yalnız stok kümesine GİRİŞ/ÇIKIŞ yollarını sayıyordu; topu yerinde bırakıp
+ * `currentQty`sini değiştiren yol tanımı gereği görünmezdi — elle metraj düzeltmesi
+ * (`adjustRollQty`, 500 → 480) deftere hiç yazmıyordu ve K=0 yine doğruydu. Defter
+ * 2026-09-13'ten beri MİKTAR defteri (Σ = durum) ⇒ bu eksen de kapılıdır. Ölçüm aynı
+ * yöntemle (gövdede yeni kapı çağrısı); taban YOK, SERT: listedeki her yol bağlı olmalı.
+ * Yeni üye reçetesi: `currentQty` yazan `updateMany`/`update` içeren, statü
+ * değiştirmeyen servis yolları — `grep -n "currentQty:" src/services/*.ts`.
+ */
+export const MIKTAR_YOLLARI: readonly KapisizYol[] = [
+  {
+    dosya: "src/services/inventory.service.ts",
+    fonksiyon: "adjustRollQty",
+    ad: "elle metraj düzeltmesi (PATCH /rolls/:id/qty) — YERİNDE MİKTAR",
+  },
+];
+
 /** Eski kapının bugün yazdığı olay aileleri (V'nin aile bazlı bilgi satırı). */
 export const ESKI_KAPI_AILELERI: readonly WarehouseEventType[] = [
   WarehouseEventType.SHIPMENT,
@@ -307,7 +326,7 @@ function govdeBul(sf: ts.SourceFile, ad: string): ts.Node | null {
  * yol" DEĞİL "araç bozuk"tur. Fonksiyon yeniden adlandırıldığında sessizce yeşile
  * dönen bir bekçi, korumadığı şeyi koruduğunu söyler.
  */
-export function kapisizYolOlcumu(kok: string): KapisizYolOlcumu {
+export function kapisizYolOlcumu(kok: string, liste: readonly KapisizYol[] = BILINEN_KAPISIZ_YOLLAR): KapisizYolOlcumu {
   const yollar: KapisizYolBulgusu[] = [];
   const sorunlar: string[] = [];
   // Pozitif kontrolün ilk yarısı: "bağlı" kararını veren kapı adları GERÇEK mi.
@@ -333,7 +352,7 @@ export function kapisizYolOlcumu(kok: string): KapisizYolOlcumu {
       sorunlar.push(`yeni kapı tanımı yok: ${eksik.join(", ")} — "kapısız" kararı GEÇERSİZ`);
     }
   }
-  for (const yol of BILINEN_KAPISIZ_YOLLAR) {
+  for (const yol of liste) {
     const tamYol = path.join(kok, yol.dosya);
     if (!fs.existsSync(tamYol)) {
       sorunlar.push(`${yol.dosya} bulunamadı (yol: ${yol.ad})`);

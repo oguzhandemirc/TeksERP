@@ -16,6 +16,8 @@
 //   §6 CLAIM YARIŞI: iki paralel düzeltmeden yalnız BİRİ geçer; kaybeden 409
 //      alır ve sapma defteri farkı İKİ KEZ görmez (tek satır)
 //   §7 İş emri adımına bağlı FREE_STOCK topu 409 (currentStepId guard'ı)
+//   §8 STOK DEFTERİ: elle düzeltme ADJUST satırı yazar — iki yön, rollVarianceId bağlı, Δnet = Δcurrent;
+//      deposuz top satır almaz (hüküm 2026-09-14; öncesinde yol defter YAZMIYORDU)
 //
 // Fixture kendi verisini üretir (ortam verisine bağımlı DEĞİL), finally'de
 // siler. ⚠️ RollVariance FK'sı RESTRICT — top silinmeden ÖNCE variance satırı
@@ -30,6 +32,7 @@ import { RollVarianceKind } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { InventoryService } from "../src/services/inventory.service";
 import { AppError } from "../src/utils/app-error";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0;
 let fail = 0;
@@ -328,8 +331,50 @@ async function main(): Promise<void> {
       err?.statusCode === 409 && err.message.includes("iş emri"),
       err?.message ?? "hata yok",
     );
+
+    // ── §8 STOK DEFTERİ — elle düzeltme ADJUST satırı yazar, iki yön (hüküm 2026-09-14) ──
+    // 2026-09-14'e kadar bu yol deftere HİÇ yazmıyordu (şerhi "konum defteri, ADJUST yok"
+    // diyordu — ikisi de bayattı): elle düzeltilmiş top için durum ≠ defter (500 → 480:
+    // defter 500). K bu yolu tanımı gereği görmüyordu (yerinde miktar değiştiren, giriş/çıkış
+    // değil). Ölçüt: Δnet(defter) = Δcurrent, her iki yönde; satır `rollVarianceId` ile bağlı;
+    // deposuz (ufuk öncesi) top satır ALMAZ.
+    console.log("\n── §8 Stok defteri: elle düzeltme ADJUST satırı (iki yön, bağlı) ──");
+    const depoId = await fixtureWarehouseId();
+    const dRoll = await mkRoll("WAREHOUSE", 500, "WD", { warehouseId: depoId });
+    const netOf = async (id: string): Promise<number> => {
+      const rows = await prisma.warehouseMovement.findMany({
+        where: { rollId: id },
+        select: { qty: true, fromWarehouseId: true, toWarehouseId: true, reasonCode: true, rollVarianceId: true, fromStatus: true, toStatus: true },
+      });
+      return rows.reduce((t, r) => t + (r.toWarehouseId ? Number(r.qty) : 0) - (r.fromWarehouseId ? Number(r.qty) : 0), 0);
+    };
+    const n0 = await netOf(dRoll);
+    const downRes = await service.adjustRollQty(dRoll, { newQty: 480, reason: "sayım düşük" }, undefined);
+    const n1 = await netOf(dRoll);
+    const downRow = await prisma.warehouseMovement.findFirst({ where: { rollId: dRoll, reasonCode: "MANUAL_ADJUST" }, select: { qty: true, fromWarehouseId: true, toWarehouseId: true, fromStatus: true, rollVarianceId: true, eventType: true } });
+    check(
+      "§8a AŞAĞI: defter −20 (from ucu, ADJUST, MANUAL_ADJUST) ve Δnet = Δcurrent",
+      n1 - n0 === -20 && downRow?.eventType === "ADJUST" && downRow.fromWarehouseId === depoId && downRow.toWarehouseId === null && downRow.fromStatus === "WAREHOUSE" && Number(downRow.qty) === 20,
+      JSON.stringify(downRow),
+    );
+    check(
+      "§8b satır sapmaya BAĞLI (rollVarianceId = bu düzeltmenin sapması)",
+      downRow?.rollVarianceId !== null && downRow?.rollVarianceId === (downRes.data as { varianceId?: string }).varianceId,
+      `bağ=${String(downRow?.rollVarianceId)} sapma=${String((downRes.data as { varianceId?: string }).varianceId)}`,
+    );
+    await service.adjustRollQty(dRoll, { newQty: 495, reason: "sayım yüksek" }, undefined);
+    const n2 = await netOf(dRoll);
+    const upRow = await prisma.warehouseMovement.findFirst({ where: { rollId: dRoll, reasonCode: "MANUAL_ADJUST", toWarehouseId: { not: null } }, select: { qty: true, toStatus: true, rollVarianceId: true } });
+    check("§8c YUKARI: defter +15 (to ucu) ve Δnet = Δcurrent", n2 - n1 === 15 && Number(upRow?.qty) === 15 && upRow?.toStatus === "WAREHOUSE" && upRow.rollVarianceId !== null, JSON.stringify(upRow));
+    const dFinal = await prisma.roll.findUniqueOrThrow({ where: { id: dRoll }, select: { currentQty: true } });
+    check("§8d toplam: Σ(ADJUST) = current − giriş (495 − 500 = −5)", n2 - n0 === Number(dFinal.currentQty) - 500, `Σ=${n2 - n0} current=${dFinal.currentQty}`);
+    // Deposuz top (ufuk öncesi): satır YAZILMAZ, düzeltme yine geçer.
+    const legacy = await mkRoll("WAREHOUSE", 300, "WL");
+    await service.adjustRollQty(legacy, { newQty: 290, reason: "sayım düşük" }, undefined);
+    check("§8e deposuz (ufuk öncesi) top: düzeltme geçer, defter satırı YAZILMAZ", (await prisma.warehouseMovement.count({ where: { rollId: legacy } })) === 0 && Number((await prisma.roll.findUniqueOrThrow({ where: { id: legacy }, select: { currentQty: true } })).currentQty) === 290);
   } finally {
     if (cleanupRollIds.length) {
+      await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: cleanupRollIds } } });
       await prisma.rollVariance.deleteMany({ where: { rollId: { in: cleanupRollIds } } });
       await prisma.roll.deleteMany({ where: { id: { in: cleanupRollIds } } });
     }

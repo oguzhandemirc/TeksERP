@@ -4614,9 +4614,11 @@ export class InventoryService {
    *   • sayım YÜKSEK → `OVERAGE` ("kayıtlıdan fazla çıktı") — tambur aşımının
    *     depo ikizi.
    *
-   * Depo hareket defterine (`WarehouseMovement`) satır YAZILMAZ: o KONUM
-   * defteridir ("hangi depoya girdi/çıktı") ve ADJUST olay tipi de yoktur;
-   * miktar sapmasının defteri RollVariance'tır. İki defter, iki ayrı soru.
+   * Stok defterine (`WarehouseMovement`) ADJUST satırı da yazılır (hüküm 2026-09-14):
+   * defter 2026-09-13'ten beri MİKTAR defteridir (Σ = durum) ve elle düzeltme
+   * miktarı yerinde değiştiren tek kapısız yoldu — sapma satırı `rollVarianceId`
+   * ile bağlanır (aynı kararın iki defteri). Geri alma yok: ters yönde ikinci
+   * düzeltme yeni olgudur (`KARSI_OLAY = MANUAL_ADJUST`).
    */
   async adjustRollQty(
     rollId: string,
@@ -4652,6 +4654,7 @@ export class InventoryService {
         sackId: true,
         shipmentId: true,
         currentStepId: true,
+        warehouseId: true,
       },
     });
     if (!roll) throw AppError.notFound("Top bulunamadı");
@@ -4773,6 +4776,22 @@ export class InventoryService {
         reasonText: reason,
         userId: userId ?? null,
       });
+
+      // STOK DEFTERİ — düşükse çıkış ucu −fark, yüksekse giriş ucu +fark; deposuz
+      // (ufuk öncesi) top satır almaz — diğer yazıcılarla aynı kapı.
+      if (roll.warehouseId !== null && WAREHOUSE_STOCK_STATUSES.includes(roll.status) && qtyYazilabilir(diff)) {
+        const end = { warehouseId: roll.warehouseId, status: roll.status };
+        await postStockMove(tx, {
+          rollId,
+          eventType: WarehouseEventType.ADJUST,
+          qty: diff,
+          ...(isShort ? { from: end } : { to: end }),
+          reasonCode: STOCK_MOVE_REASON.MANUAL_ADJUST,
+          rollVarianceId: varianceId,
+          userId: userId ?? null,
+          notes: reason.slice(0, 300),
+        });
+      }
     });
 
     // Audit tx-DIŞI (best-effort konvansiyonu — bu dosyadaki diğer CUD'ler gibi).

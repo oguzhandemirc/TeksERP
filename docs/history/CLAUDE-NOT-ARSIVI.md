@@ -8450,3 +8450,27 @@ Negatif sondalar (cp+sha256 31b1edf0/09923e49): karşılama kaldır → §16b/§
 kaldır → §16/§16c ❌ (durum 120 ↔ defter 100) · kesim anı `sourceRollId` kaldır → §16z/§16b/§17 ❌.
 **Ders (aynı gece ikinci kez):** ilk P3 sondası hiç ısırmadı — perl deseni bağlamı bulamadı, `grep -c`
 0 dedi; sonda "uygulanmadı" ile "ısırmadı" ayrı sonuçlardır, ikincisi ancak birincisi 1 ise okunur.
+
+## 2026-09-14 — MANUAL_ADJUST: katalogda ölü kod, elle metraj yolu deftere yazmıyordu — K'nın ÜÇÜNCÜ EKSENİ [ÇEKİRDEK]
+
+**Ölçüm (6e):** `STOCK_MOVE_REASON.MANUAL_ADJUST` src'de 0 yazıcı, fabrika kopyasında 0 satır (82'nin
+gördüğü 24 satır bir test DB'sinde tek seferlik koşum izi). Elle metraj yolu (`adjustRollQty`,
+`PATCH /rolls/:id/qty`, `roll:manual-adjust`) `currentQty`yi CAS ile değiştirip `RollVariance`
+(WAREHOUSE_QTY_ADJUST) yazıyor ama stok defterine DOKUNMUYORDU; şerhi *"WarehouseMovement konum
+defteridir, ADJUST olay tipi de yoktur"* (2026-08-14) — iki cümle de bayat: ADJUST var, defter
+2026-09-13'ten beri MİKTAR defteri (Σ = durum). ⇒ elle düzeltilmiş top için durum ≠ defter
+(`defter.md:19` ihlali) ve **K'nın körlüğü**: K yalnız stok kümesine GİRİŞ/ÇIKIŞ yollarını sayıyordu,
+topu yerinde bırakıp miktarını değiştiren yol tanımı gereği görünmezdi. Fabrika kopyasında
+`WAREHOUSE_QTY_ADJUST` sapması 0 ⇒ onarım konusuz.
+
+**Hüküm (1e, şık a):** `adjustRollQty` ADJUST satırı yazar (düşükse `from` −fark, yüksekse `to`
++fark, `MANUAL_ADJUST`, `rollVarianceId` bağlı); geri alma yolu yok — ters yönde ikinci düzeltme yeni
+olgu (`KARSI_OLAY = MANUAL_ADJUST`, beyan 82'de). Şerh silindi, tek satır NEDEN. K'ya üçüncü eksen:
+`MIKTAR_YOLLARI` (`stok-defteri-bag-olcumu.ts`, tarayıcı liste-parametreli oldu), `adjustRollQty` üye,
+§4g SERT (taban yok). Yeni üye reçetesi: `currentQty:` yazan, statü değiştirmeyen servis yolları.
+
+**Bekçi:** `test_roll_qty_adjust §8` (aşağı −20 from · bağ · yukarı +15 to · Σ = current − giriş ·
+deposuz top satırsız) 30 → 35/0 · `test_stok_defteri_bag_olcumu §4g` 33/0. Negatif sondalar
+(cp+sha256 a02f641a): yazım kaldır → §8a/b/c/d ❌ · aynı mutasyon → §4g ❌ (adjustRollQty:KAPISIZ).
+Sürüm notu (ea): "elle düzeltilen metraj artık Depo Hareketleri'nde görünür" — sahadaki as-of rakamı
+DEĞİŞİR (elle düzeltilen toplarda defter ilk kez durumu izler).

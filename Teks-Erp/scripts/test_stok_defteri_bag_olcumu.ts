@@ -26,6 +26,7 @@ import {
   type KodOlcumu,
   type VeriOlcumu,
   kToplam,
+  MIKTAR_YOLLARI,
 } from "./lib/stok-defteri-bag-olcumu";
 
 let pass = 0;
@@ -215,6 +216,15 @@ async function main(): Promise<void> {
       "§4f K tabanı ÇÜRÜMEMİŞ (gerçek < taban ise tabanı ve üye kümesini düşür)",
       kTotal >= K_TABAN,
       `gerçek ${kTotal} · taban ${K_TABAN}`,
+    );
+    // §4g — ÜÇÜNCÜ EKSEN: yerinde miktar değiştiren yollar. Taban YOK, SERT.
+    const miktar = kapisizYolOlcumu(path.resolve(__dirname, ".."), MIKTAR_YOLLARI);
+    check("§4g araç sağlam (miktar yolları yerinde)", miktar.aracSaglam, miktar.aracNotu ?? "");
+    check("§4g körlük zemini: miktar yolu listesi boş değil", miktar.yollar.length >= 1, `yol=${miktar.yollar.length}`);
+    check(
+      "§4g ⭐ yerinde miktar değiştiren HER yol deftere bağlı (kapısız = 0, sert)",
+      miktar.aracSaglam && miktar.yollar.every((y) => y.bagli),
+      miktar.yollar.map((y) => `${y.fonksiyon}:${y.bagli ? y.bulunanKapi : "KAPISIZ"}`).join(" · "),
     );
     console.log(
       `   bilgi: gerçek ağaçta (${gercek.agac}) K = ${kTotal} — eski kapı ${gercek.cagiranlar.length} ` +
