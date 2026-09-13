@@ -193,3 +193,32 @@ doğacaktı. Taze DB'de baştan deploy yakaladı.)*
 **Savunma:** kapının adını okurken *"hangi İKİ ucu karşılaştırıyor"* diye sor ve
 düzeltmeyi o iki uçtan birine yap. Kapının göremediği üçüncü uç, kapının kapsam
 beyanına yazılır.
+
+### Bir kapının TETİĞİ bir OLAYI ölçer; TANISI bir ANLAM iddia eder
+Kırmızının doğru olması, kırmızının **cümlesinin** doğru olduğunu göstermez. Tetik bir
+olayı görür ve bu ölçülebilir; tanı o olayın NE ANLAMA GELDİĞİNİ söyler ve **bu ayrı bir
+ölçümdür, tetiğin içinde yapılamaz.** ⇒ İkisi ayrı ayrı yanlışlanabilir — ve **tanı daha
+kolay yanılır, çünkü onu hiçbir şey ölçmez.**
+
+*(Vaka 2026-09-13: `test_dokuma_rapor_onkosullari` §3d, envanter dışı bir
+`MachineDataSource` kolonu doğduğunda kırmızı verecek şekilde kurulmuştu — tetiği bir ad
+tahmini değil DAVRANIŞTI ve ilk kez `doff_events.counterSource` ile uyandı. **Uyanış
+doğruydu.** Ama mesaj kesin konuşuyordu: *"YENİ bir kaynak kolonu, raporun TAŞIYICISININ
+geldiğini söyler ⇒ ÇIKTI bekçisi yazılmalı."* Şemada ölçüldü: `counterSource`,
+`counterAtDoff` ile çift çalışan, doff'taki sayaç okumasının KÖKENİNİ taşıyan bir **olay
+kolonu** — kaynak-beyanı ailesinden, ama raporun taşıyıcısı DEĞİL.)*
+
+*(İkinci vaka, aynı gün: bir watchdog dosya tavanı aşıldığı için **doğru** ateşledi, ama
+tanısı *"asılı kaldı"* dedi; üç bağımsız ölçüm dosyanın yalnız **yavaş** olduğunu gösterdi
+— 42 sn. Aynı imza: olay gerçek, anlam uydurma.)*
+
+> **Tetik mesajı KESİN değil SORU kurar:** *"şu geldi"* der, *"şu demektir"* demez.
+> Sınıflandırmayı okuyandan ister, kendi yapmaz.
+
+**Savunma:** mesajı iki parçalı yaz — ① ne ÖLÇÜLDÜ (olay, adıyla) ② hangi AYRIMIN
+yapılması gerekiyor (şıklarıyla). Tanı bir kez yanıldıysa **satır kendi yanılgısını
+taşısın** (*"bu satır önce (a)yı kesin söylüyordu ve ilk uyanışında YANILDI"*) — bir
+envanterin güvenilirliği, çürütülen satırlarını da taşımasıyla ölçülür.
+Kardeşleri § Bir kapının "neden kırmızı" cevabı, kapının ÇALIŞTIĞINI varsayar ·
+`OLCUM-DISIPLINI-YUKLEM.md` § Sınırsız eşleşme (yüklem neyi tutar) ve § NE sorduğun kadar
+NEREYE sorduğun (yüklem nereye bakar) — bu ikisi tetiğe, buradaki tanıya aittir.
