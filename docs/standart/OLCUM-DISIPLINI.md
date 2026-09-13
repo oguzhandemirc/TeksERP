@@ -172,6 +172,13 @@ mi, "bugün böyle" mi?*
 `dosya:satır`dan DAHA belirsiz bir yere işaret ediyordu, 1'i sahte eşleşmeydi —
 gösterdiği sembol o dosyada hiç geçmiyordu. Dönüşüm işi bu ölçümle İPTAL edildi.)*
 
+📌 **"Ayırt edici sembol EKLE" işi de ÖLÇÜLDÜ ve KAPANDI** (ön kayıtlı, 2026-09-13):
+çözülen **47** çapanın **14'ünde** aday sembol var, ama yalnız **4'ü** ayırt edici
+(`git grep -l` ≤ 5 dosya) — ve dördü de o sembolü **zaten taşıyor**. Kalan **33 çapada
+hiç aday sembol yok**: orada `dosya:satır` gerçekten tek seçenek.
+⇒ Eklenecek çapa **sıfır**. Ön kayıtlı bant *"≤4 → kalem değil, kapat"* idi; kalem
+kapandı. *Bu, ölçümün bir işi doğurmak yerine ORTADAN KALDIRDIĞI üçüncü vaka.*
+
 ## Kimlik yazma — repo PUBLIC
 
 Ölçüldü 2026-09-13: depo **herkese açık** (`gh repo view` → `visibility: PUBLIC`).
