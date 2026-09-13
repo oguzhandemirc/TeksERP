@@ -123,7 +123,8 @@ async function main(): Promise<void> {
   const undo = new TamburUndoService();
   const warehouse = await prisma.warehouse.findFirst({ where: { isDefault: true }, select: { id: true } });
   const station = await prisma.station.findUnique({ where: { code: "TAMBUR_1" }, select: { id: true } });
-  if (!warehouse || !station) throw new Error("Fikstür eksik: varsayılan depo / TAMBUR_1 istasyonu");
+  if (!warehouse) throw new Error("Varsayılan depo yok (ensureDefaultWarehouse koşmamış)");
+  if (!station) throw new Error("TAMBUR_1 istasyonu yok (seed koşmamış)");
 
   itemId = (await prisma.item.create({ data: { code: TAG, name: `${TAG} kumaş`, itemType: "FABRIC" }, select: { id: true } })).id;
   const gWh = await prisma.qualityGrade.create({ data: { code: `${TAG}-W`, name: "Test depo kalitesi", targetStatus: RollStatus.WAREHOUSE }, select: { id: true, code: true } });
