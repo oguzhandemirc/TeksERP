@@ -188,7 +188,15 @@ export function envanterFarki(
 // §3c kırmızı verir ve yazan kişiyi tek soruyla yüzleştirir:
 // *bu kolon raporun KAYNAK KIRILIMINI mı taşıyor? Öyleyse ③'ün çıktı bekçisi.*
 // ─────────────────────────────────────────────────────────────────────────────
-const KAYNAK_KOLONLARI_BEKLENEN = ["machine_stop_events.reasonSource", "machine_stop_events.source"];
+const KAYNAK_KOLONLARI_BEKLENEN = [
+  // Doff'taki SAYAÇ OKUMASININ kökeni (`counterAtDoff` ile çift). `NOT NULL`,
+  // `@default` YOK — tasarımın kendi cümlesi: "`SIMULATED` beyanı burada doğar".
+  // ⚠️ Bu bir OLAY kolonudur, raporun taşıyıcısı DEĞİL (2026-09-13'te mandal
+  // uyanınca şemadan OKUNARAK sınıflandırıldı, varsayılmadı).
+  "doff_events.counterSource",
+  "machine_stop_events.reasonSource",
+  "machine_stop_events.source",
+];
 
 const LOSS_CLASS_BEKLENEN = ["UNPLANNED", "SETUP", "PLANNED", "NON_SCHEDULED", "MINOR"];
 const DATA_SOURCE_BEKLENEN = ["MACHINE", "INFERRED", "OPERATOR", "SUPERVISOR", "SIMULATED"];
@@ -285,7 +293,10 @@ async function main(): Promise<void> {
     fark.eksik.length === 0 && fark.fazla.length === 0
       ? `${kaynakKolonlari.length} kolon`
       : `EKSİK: ${fark.eksik.join(", ") || "—"} | FAZLA: ${fark.fazla.join(", ") || "—"}` +
-          "  ⇒ YENİ bir kaynak kolonu, raporun TAŞIYICISININ geldiğini söyler: ③'ün ÇIKTI bekçisi yazılmalı (sahibi: d9).",
+          "  ⇒ YENİ bir kaynak kolonu doğdu; SINIFLANDIR (şemadan OKU, varsayma): " +
+          "(a) raporun SATIRINDA yaşıyorsa taşıyıcı gelmiştir ⇒ ③'ün ÇIKTI bekçisi yazılmalı (sahibi: d9) · " +
+          "(b) bir OLAYIN kökenini taşıyorsa envantere gerekçesiyle eklenir (emsal: doff_events.counterSource). " +
+          "⚠️ Bu satır önce (a)yı KESİN söylüyordu ve ilk uyanışında YANILDI.",
   );
   console.log("");
 
