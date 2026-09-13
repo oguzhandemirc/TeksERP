@@ -29,7 +29,29 @@ Karne (`plan-deviation-scorecard.report.service.ts`) `where`ine yalnız tarih ar
 
 En ağır hâli: `finalize` kaynağında `qtyM` topun TAMAMIDIR. Geri alınıp yeniden finalize edilen bir top **iki tam imza + iki tam metraj** üretir.
 
-### ② Kapı soruyu bastırıyor — **DOĞRULANMADI**
+### ② Kapı soruyu bastırıyor — **DOĞRULANDI** (ikinci turda; ilk çürütmem eksikti)
+
+> ⚠️ Bu bölüm bir kez **yanlış** yazıldı: *"doğrulanmadı"* denmişti. Açık uç ölçülünce hüküm döndü. Eski çürütme aşağıda duruyor çünkü **iki ayağı hâlâ geçerli** — düşen yalnız üçüncüsü, ve kusur tam oradan giriyor.
+
+**Gerçek yol — üçümüzün de adlandırmadığı:** *tambur-undo* değil, **kabul iptali → topu dirilt → sapma satırı hayatta**.
+
+Ölçüm zinciri (`subcontractor.service.ts:5294-5300` + `roll-cancel-restore.helper.ts:88-145` + `inventory.service.ts:3881-3887`):
+
+| adım | ölçüm |
+|---|---|
+| cascade hareketi ne yapıyor | **siliyor değil GERİ ALIYOR** (`revokeRollMovements`) |
+| restore guard `movementCount`u ne sayıyor | **`ACTIVE_MOVEMENT`** ⇒ geri alınmış hareketi **görmüyor** ⇒ 0 |
+| cascade `currentStepId` | **`null`'a çekiliyor** ⇒ adım engeli de düşüyor |
+| cascade `cancelReasonCode` | **hiç yazılmıyor** (`data` yalnız `status` + `currentStepId`) ⇒ `TAMBUR_UNDO` engeli tetiklenmiyor |
+| kalan sinyaller | `operationCount` 0 (cascade işlenmiş topu zaten 409'la reddediyor) · `childCount` 0 · çuval/sevk/fason/kartela 0 |
+
+⇒ **Doğan top restore guard'ının HER sinyalinden geçiyor: diriltilebilir.** Dirildiğinde `fason-receipt` sapma satırı canlı kalır ve Tambur'da soruyu **bastırır** — oysa o onayı üreten kabul iptal edilmiştir.
+
+⇒ **Kapıya `revokedAt IS NULL` süzgeci ucuz sigorta DEĞİL, gerçek onarımdır.** Ve yanında ikinci bir iş doğar: **kabul iptali `fason-receipt` satırlarını damgalamalıdır** (`confirmationId` düzeyinde, §3 taneciği) — yoksa süzgeç boş küme üzerinde çalışır.
+
+📌 **Yan bulgu (ayrı ve küçük açık):** `cancelReceipt` cascade'i doğan topu **hiçbir sebep kodu/metni yazmadan** iptal ediyor. Projede iptal sebebi kataloglu (`ROLL_CANCEL`); bu yolda top *sebepsiz* iptal oluyor ve `isUndoSourcedByAudit` çıpası da boşa düşüyor.
+
+### ②-eski · İlk çürütme — iki ayağı geçerli, üçüncüsü düştü
 
 İlk bildirimde bastırmanın sahibi `tambur-undo` sanıldı. Ölçüm başka söylüyor:
 
@@ -37,11 +59,9 @@ En ağır hâli: `finalize` kaynağında `qtyM` topun TAMAMIDIR. Geri alınıp y
 - Tambur geri alması bir **fason kabul onayını** geçersiz kılmaz — kumaş gerçekten farklı renk döndü ve bu kabulde onaylandı. O satırın yaşaması **doğrudur**.
 - Fason kabul iptali (`subcontractor.service.ts:5148 cancelReceipt`) doğan topları **zorunlu cascade ile iptal eder** (`:5257`; tüm `bornRolls` onaylanmadan 409). İptal edilmiş top Tambur'a hiç ulaşmaz; yeniden kabul **yeni id'lerle** yeni toplar doğurur ve onların sapma satırı yoktur ⇒ **soru tekrar sorulur.**
 
-⇒ Bildirilen biçimiyle bu kusur **yok.** Kalan tek açık uç, doğrulanmamış bir kenar durum:
+İlk iki ayak **hâlâ geçerli**: kapı yalnız `fason-receipt` satırına bakar ve tambur-undo bir kabul onayını geçersiz kılmaz. Düşen üçüncü ayak şuydu — *"yeniden kabul yeni id'lerle doğar, o yüzden soru tekrar sorulur"*. Bu, topun **diriltilemeyeceğini** varsayıyordu; ölçülünce yanlış çıktı (yukarı bak).
 
-> **AÇIK SORU:** kabul iptaliyle `CANCELLED` olmuş bir top *"İptali Geri Al"* ile diriltilebiliyor mu? Diriltilebiliyorsa, artık geçersiz bir kabulün sapma satırı canlı topa geri yapışır. (`roll-cancel-restore.helper.ts:137-144` yalnız `TAMBUR_GERI_ALMA` sebebini reddediyor.) Ölçülmedi.
-
-📌 Bu kenar durum kapıya `revokedAt IS NULL` süzgeci eklemeyi **ucuz sigorta** yapar — ama bu, kanıtlanmış bir kusurun onarımı değildir ve öyle yazılmaz.
+> ⚠️ **Hatanın dersi:** bir çürütmeyi üç ayak üstüne kurdum ve **ikisini ölçüp üçüncüsünü varsaydım**. Varsayılan ayak, çürütmenin taşıyıcısıydı. *Bir iddiayı çürüten zincirin en zayıf halkası, ölçülmemiş olanıdır — ve onu ölçmemek çürütmeyi değil, güveni üretir.*
 
 ## §3 · Karar: DAMGA, karşı kayıt DEĞİL
 
@@ -81,7 +101,17 @@ Tek satırı damgalayıp diğerini bırakmak **bir imzayı yarım geri almaktır
 `findMany` ana sorgu (`:109`) · ham SQL gün serisi (`:186`, `DISTINCT ON` iç sorgusuna) · karşılaştırma dönemi `findMany` (`:211`).
 ⚠️ `summary.byField` bilinçli olarak **satır bazlıdır** (`:133-142`); damga aynı `where`den geldiği için o kırılım da kendiliğinden temizlenir — ayrı bir iş değildir.
 
-**(b) Kapı** — `findFirst` (`:87`) `revokedAt: null` alır. §2②'de yazıldığı gibi bu **kanıtlanmış bir kusurun onarımı değil**, kenar duruma karşı ucuz sigortadır ve öyle etiketlenir.
+**(b) Kapı** — `findFirst` (`:87`) `revokedAt: null` alır. §2② uyarınca bu **gerçek bir onarımdır**, sigorta değil.
+
+**(c) ⚠️ Kabul iptali de DAMGALAR — yoksa (b) boş küme üzerinde çalışır.** `cancelReceipt` cascade'i, iptal ettiği doğan topların `fason-receipt` satırlarını `confirmationId` düzeyinde damgalar:
+
+```
+updateMany WHERE { rollId: { in: bornRollIds }, source: "fason-receipt", revokedAt: null }
+```
+
+(Burada imza zaten top başına tektir — `subcontractor.service.ts:3302` her doğan top için ayrı `confirmationId` üretir — ama yüklem yine `revokedAt: null` taşır ki çift iptal ikinci kez yazmasın.)
+
+⇒ **Damgalayan dal sayısı 4'tür**, 3 değil: FULL · SINGLE · SINGLE_RESTORE · **cancelReceipt cascade**.
 
 ## §6 · Geçmiş veri: DAMGALANACAK BİR ŞEY YOK
 
@@ -113,6 +143,6 @@ Tek satırı damgalayıp diğerini bırakmak **bir imzayı yarım geri almaktır
 
 ## §9 · Açık sorular
 
-- **Kenar durum ölçülmedi:** kabul iptaliyle `CANCELLED` olan top *"İptali Geri Al"* ile diriltilebiliyor mu (§2②).
+- **Yan bulgu, ayrı iş:** `cancelReceipt` cascade'i doğan topu **sebep kodu/metni yazmadan** iptal ediyor (`:5294-5300`) — projede iptal sebebi kataloglu olmasına rağmen. Bu tasarımın kapsamı dışında ama aynı turda ölçüldü.
 - **Kapsam dışı bırakıldı:** iptal edilmiş TOPUN (Tambur dışı, Envanter'den `softDelete`) sapma satırı da karnede kalıyor. Bu ayrı bir sorudur — *"top iptal edildi"* ile *"onay geri alındı"* aynı şey değil; biri malı, öteki imzayı iptal eder. Damga mekanizması kurulduktan sonra ayrıca sorulmalı.
 - **`RollOperation` mirası:** kesimde çocuklara yazılan `KURSUN_APPLIED`/`QC2_COMPLETED` satırları geri almada **hiç damgalanmıyor** (`tambur.service.ts:3266-3277`) — bu tasarımın kapsamı dışında ama aynı ailede duran ikinci bir açık.
