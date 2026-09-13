@@ -83,6 +83,21 @@ yeşil + yerel). ⇒ **Bir aletin KAPSAMI ölçtüğü olayın rejimini içermiy
 edilir, sonra eşik o kapsamda anlamlı hâle getirilir** — ve tek yönlü veri bir satırı KAPATMAZ,
 yalnız aramayı öbür rejime taşır.
 
+⭐ **Ve rejim ekseninin ikinci yüzü: bir kontrolün DOĞRU olması, DOĞRU YERDE koştuğu
+anlamına gelmez — KOŞUM YERİ (job · rejim · çalışma dizini) de bir ölçüm koşuludur.**
+*(d9, 2026-09-14; günün üçüncü üyesi. ① `test_latency_persist`in penceresi süreç SAAT
+DİLİMİNE bağlıydı · ② `test_yerel_ayar_bagimliligi` süreç YEREL AYARINA · ③ `test_hook_config`
+**§6** Electron vitest yapılandırmasını okuyor ama Backend job'ında Electron bağımlılığı
+YOK. Üçünde de yüklem doğru; değişen, koştuğu YER.)*
+> Bir kontrol *"neyi ölçtüğünü"* yazar da *"NEREDE koşması gerektiğini"* yazmazsa, yanlış
+> job'a düştüğü gün ya sahte kırmızı ya sahte yeşil verir — ve ikisi de kontrolün kendi
+> hatası sanılır.
+📌 Panzehir: kontrolün BAĞIMLILIĞINI adıyla yaz (hangi paket · hangi kök · hangi env) ve
+koştuğu job'ı o bağımlılığa göre seç; taşınamıyorsa kapsamı BEYAN et. *(Gözlem 2026-09-14,
+5e: `§6a/§6b` benim ağacımda da kırmızı ve hata metni Electron çözümlemesini gösteriyor —
+teşhis d9'unkiyle tutarlı; kalem d9'da.)*
+Kardeşi § Zıt iki cevap = ortam farkı (`OLCUM-DISIPLINI-SINIFLAR.md`).
+
 ⚠️ **Ve asıl uyarı sayıda değil, LİSTENİN KENDİSİNDE:** bu liste tek günde **iki → üç →
 beş** oldu. *"Üç parçadır"* cümlesi yazıldığı gün doğruydu ve aynı gün bayatladı. ⇒
 Eksen sayısını ezberleme; **eksen listesini AÇIK yaz** ve yeni bir sayı üretirken sor:

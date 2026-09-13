@@ -224,7 +224,8 @@ Mekanik kapı: KISMİ. Var olanlar: `scripts/check-migrations.mjs` GATE 4 (untra
 20. Bekçi inmeden ÖNCE İKİ soru AYRI AYRI sorulur ve cevapları başlığa yazılır. ① **Çalışıyor mu** — negatif sonda (md. 15): korunan davranışı bilerek boz, kırmızıyı ÖLÇ, geri al. ② **Gerekli mi** — kapı doğduğu gün ağaçta duran GERÇEK bir kusur yakaladı mı? Yakalamadıysa ölçtüğü şeyin var olduğu kanıtlanmamıştır; bekçi yine de yazılır (bugün olmayan bir kusuru yarın için önlemek meşrudur) ama **gerekçesi ÖLÇÜLMEMİŞ sayılır ve o hâliyle başlığa kaydedilir**. <sub>(ölçüm 2026-09-12: `test_identity_ledger` ilk koşumda 15 gerçek ayrışma buldu — biri kendisiydi, `6e` aynı hataya İKİ kez düştü; `ea`'nın migration monotonluk kapısı hem kurgu sondada hem test DB'sindeki gerçek sıra bozukluğunda kırmızı verdi · docs/design/KIMLIK-KAPISI-OLCUM-2026-09-12.md)</sub> — atlanırsa: Kurgu sonda kapının ÇALIŞTIĞINI gösterir, GEREKLİ olduğunu göstermez; gerekçesi yazılmayan bekçi bir yıl sonra "bu neden var" sorusuna cevap veremez ve ilk kırmızıda silinir — kapıların gerçek ölüm sebebi budur.
 21. Yeni bekçi ÜÇ DOSYA BİRDEN doğar: bekçi dosyası · alan dosyasının `bekçi:`/`Backend:` satırı (`docs/kurallar/<alan>.md`) · `Teks-Erp/docs/BEKCI-HARITASI.md` satırı — üçü aynı commit'te. <sub>(`test_identity_ledger` B-c "gerçek bekçi HARİTADA hiç anılmıyor" · ölçüm 2026-09-14: hızlı mandalların ilk-gün tek ısırığı bu — 0c `test_dokuma_regime_gate.ts`i yazdı, iki satır yoktu, mandal elle koşumda kırmızı; satırlar eklenince 12/12)</sub> — atlanırsa: Bekçi CI'da koşar ama alana dokunan kimse onu koşmaz (harita ve alan dosyası "hangi bekçi" sorusunun tek cevabıdır); commit kapısındaki hızlı mandal (`identity_ledger`) commit'i durdurur.
 
-22. **Cırcır yazıyorsan İKİ KOLU ayır ve çürüme kolunu `curumeKolu()`'ndan geçir** (`scripts/lib/circir-kolu.ts`): ARTIŞ (gerçek > taban) her yerde SERT · ÇÜRÜME (gerçek < taban) commit kapısında ⚠️ UYARI (atlama defterine ⏭ satırı, çıkış 0), CI ve trende SERT. **Sabiti yalnız ENTEGRATÖR yazar — ÖLÇEN YAZMAZ.** Düz `check(gercek === taban)` yazarsan borcu KAPATAN oturumu kilitlersin: gerçek düşer, sabit duruyordur, o oturumun SONRAKİ HİÇBİR commit'i geçmez — kapının "doğru davranışı pahalı kılmak" ölüm biçimi. <sub>(`Teks-Erp/scripts/lib/circir-kolu.ts:23` `commitKapisiMi()` · `:30` `curumeKolu()`; emsal `test_borc_notu_bicimi` · `test_kural_bekci_atfi`; ayrım `scripts/hooks/hizli-mandallar.mjs`in çocuk sürece verdiği `TEKSERP_KAPI_ADIMI=commit`)</sub> ⚠️ **Yazmadan ÖNCE `Teks-Erp/scripts/lib/` altına bak: `circir-kolu.ts` ve `atlama.ts` VAR** — ikinci bir kaynak açılmaz. (Ölçüldü 2026-09-14: bir oturum `lib/circir.ts` açmaya başlayıp aynı gün sildi; iki kol iki dosyadan yönetilse ayrım da ikiye bölünürdü.) — atlanırsa: borcunu ödeyen oturum cezalandırılır ve kapı ilk sıkışmada susturulur.
+22. **Cırcır yazıyorsan İKİ KOLU ayır ve çürüme kolunu `curumeKolu()`'ndan geçir** (`scripts/lib/circir-kolu.ts`): ARTIŞ (gerçek > taban) her yerde SERT · ÇÜRÜME (gerçek < taban) commit kapısında ⚠️ UYARI (atlama defterine ⏭ satırı, çıkış 0), CI ve trende SERT. **Sabiti yalnız ENTEGRATÖR yazar — ÖLÇEN YAZMAZ.** Düz `check(gercek === taban)` yazarsan borcu KAPATAN oturumu kilitlersin: gerçek düşer, sabit duruyordur, o oturumun SONRAKİ HİÇBİR commit'i geçmez — kapının "doğru davranışı pahalı kılmak" ölüm biçimi. <sub>(`Teks-Erp/scripts/lib/circir-kolu.ts:23` `commitKapisiMi()` · `:30` `curumeKolu()`; emsal `test_borc_notu_bicimi` · `test_kural_bekci_atfi`; ayrım `scripts/hooks/hizli-mandallar.mjs`in çocuk sürece verdiği `TEKSERP_KAPI_ADIMI=commit`)</sub> ⚠️ **"Ön kontrol" script'i yazacaksan: ya kapının KENDİ yüklemini import eder, ya HİÇ YAZILMAZ — ortası yasaktır.** Kapıya benzeyen ama ayrı yazılmış bir yüklem, kapının yerine okunduğu anda zarar verir (ölçüldü 2026-09-14, aynı gün İKİ kez: biri desen farkı — `` `) `` ↔ `` `] ``, öteki EVREN farkı — `glob` çalışma ağacı ↔ `git ls-files` indeks; ikisi de "temiz" derken kapı kırmızıydı).
+⚠️ **Yazmadan ÖNCE `Teks-Erp/scripts/lib/` altına bak: `circir-kolu.ts` ve `atlama.ts` VAR** — ikinci bir kaynak açılmaz. (Ölçüldü 2026-09-14: bir oturum `lib/circir.ts` açmaya başlayıp aynı gün sildi; iki kol iki dosyadan yönetilse ayrım da ikiye bölünürdü.) — atlanırsa: borcunu ödeyen oturum cezalandırılır ve kapı ilk sıkışmada susturulur.
 
 ⚠️ Belgesiz kalan adımlar (koddan çıkarıldı, hiçbir .md'de yoktu):
 
@@ -240,6 +241,31 @@ Mekanik kapı: KISMİ. Var olanlar: `scripts/check-migrations.mjs` GATE 4 (untra
 - Koşucu sınırları (180 sn/test, 32 MiB maxBuffer, altyapı hatasında TEK yeniden deneme, assertion hatası ASLA yeniden denenmez) yalnız run-all-tests.ts yorumlarında yaşıyor.
 - `process.exit(fail>0?1:0)`ın gerekçesi (koşucunun doğruluk kaynağı exit kodu + `!res.error`) belgede yok; format kuralı var, sebebi yok.
 - Bekçi standardının TAMAMINI anlatan tek bir belge yok — bilgi dört .md'ye ve üç kod dosyasının başlık yorumuna dağılmış.
+
+## Belge bölme (`docs/standart` boyut tavanı)
+
+Mekanik kapı: `scripts/check-docs.mjs` — tavan 24 KB (SERT, CI kırmızı) + tavana 3 KB'tan az kalınca ADVISORY. Tavan YÜKSELTİLMEZ; dosya BÖLÜNÜR.
+
+1. **Sırayı ÖLÇ, seçme.** Ölçüt HIZ'dır, uzaklık değil: durgun bir dosya tavana dayanmış olabilir ve hiç kırılmaz. Tek komut (2026-09-14'te bu tur böyle ölçüldü):
+   ```bash
+   cd <repo>; python3 - <<'EOF'
+   import os,subprocess
+   CAP=24*1024
+   for ad in sorted(os.listdir("docs/standart")):
+       if not ad.endswith(".md"): continue
+       rel="docs/standart/"+ad; b=os.path.getsize(rel)
+       n=len(subprocess.check_output(["git","log","--since=7 days ago","--format=%h","--",rel],text=True).split())
+       print("%6d kalan %6d bayt %3d commit/7g  %s" % (CAP-b,b,n,ad))
+   EOF
+   ```
+   Kalan boşluk KÜÇÜK + commit sayısı YÜKSEK olan bölünür. (Bu tur: hub 2.494 bayt / 26 commit ⇒ bölündü; `ELECTRON.md` 1.619 / 3 ve `MOBIL.md` 2.333 / **0** ⇒ bölünmedi.)
+2. **Çizgiyi ÖLÇ:** bölüm bölüm bayt say (aynı kalıpla, `^## ` ayır). İki meşru çizgi var — **kural kalır, ENVANTER ayrılır** (envanter büyür, kural büzmez) ya da **AİLE ayrılır** (bir grup bölümün ortak İMZASI varsa). Çizgiyi bayt değil imza seçer; bayt yalnız aciliyeti söyler.
+3. **Bölmeden ÖNCE çapa taraması:** `git grep -nE '<DOSYA>\.md`?['"'"'’a-zçğıöşü]{0,4}[[:space:]]{0,2}§'` — taşınan bölüme dışarıdan gelen atıf varsa AYNI commit'te yeni dosyaya çevrilir, yoksa `test_belge_capa_atfi` kırmızı verir.
+4. **Bölüm NUMARALARI korunur** (ayrılan dosya §1'den değil kendi numarasından başlar) ve bırakılan yerde **işaretçi başlık** durur — eski `X.md §N` çapaları çözülmeye devam etsin.
+5. **Aynı commit'te:** yeni dosya + işaretçi + `docs/standart/README.md` satırı + (yalnız `OLCUM-DISIPLINI*` ailesindeyse) `OLCUM-DISIPLINI-DIZIN.md` satırları ve sayıları. Yeni dosyayı **`git add`le** — `git ls-files` okuyan kapılar izlenmeyen dosyayı GÖRMEZ.
+6. **`devralınan:` tavanı taşıyan kural taşındıysa** defter anahtarı `dosya::kural` olduğu için "YENİ tavan" görünür: `test_devralinan_tavan` bunu TAŞIMA olarak tanır (değer korunur); değer de değiştiyse kırmızı verir ve `--yaz` reddeder.
+
+⚠️ Bölme bitmez: ölçüldü 2026-09-13 — kural satırlarının **%55–60'ı kuyruktur** (`zorlama:`/`kanıt:`), yani büyüme içerikten değil BİÇİMDEN gelir. Yapısal çare (kanıt gövdelerini kardeş dosyaya) bir DOKTRİN değişikliğidir ve kullanıcıdadır.
 
 ## Yeni ESLint kuralı
 
