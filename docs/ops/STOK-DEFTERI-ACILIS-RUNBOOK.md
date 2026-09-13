@@ -72,7 +72,32 @@ Tek yazma kapısından (`postStockMoves`).
 | ③ | daha önce fotoğraf çekilmemiş | ✅ **0** `OPENING_BALANCE` satırı |
 | ④ | SESSİZ PENCERE — yazma trafiği durmuş (backend durdurulmuş / vardiya dışı) | ⛔ koşum anında sağlanacak; script son 120 sn'de defter yazımı görürse `--apply`yi REDDEDER |
 | ⑤ | `--onay=<N>` + `--hedef=<db>` birlikte | ⛔ koşum anında |
-| ⑥ | sevk bağı: K = 0 ∧ V (SIKI modda ENGELLER) | K: `test_stok_defteri_bag_olcumu` yeşil · V: yedekte en yeni **statülü** satır (09-12T18:00) en yeni **statüsüz**ten (09-11T12:20) YENİ ⇒ sağlanıyor. ⚠️ **V canlıda yeniden ölçülür** — ağaç ≠ saha |
+| ⑥ | sevk bağı: K = 0 ∧ V (SIKI modda ENGELLER) | ⛔ **K = 7 ⇒ SAĞLANMIYOR, SIKI MOD BUGÜN BLOKE** (ölçüldü, ağaç `8079987c`). V ayağı sağlanıyor (yedekte en yeni **statülü** satır 09-12T18:00 > en yeni **statüsüz** 09-11T12:20) ama K ∧ V olduğu için yetmiyor. ⚠️ V canlıda yeniden ölçülür — ağaç ≠ saha |
+
+### ⚠️ ⑥ DÜZELTMESİ (2026-09-13) — bu satır ilk yazımda YANLIŞTI
+
+İlk yazımda ⑥ *"sağlanıyor"* yazıyordu ve gerekçesi **"`test_stok_defteri_bag_olcumu` yeşil"**di.
+**O çıkarım geçersiz:** bekçi *aracın ÇALIŞTIĞINI* ölçer (pozitif kontrolleriyle), *K'nın 0
+olduğunu* ölçmez. Yeşil bekçiyi koşulun kendisi yerine koymak — belge cümlesini ölçüm
+yerine koymanın aynısı. Gerçek ölçüm:
+
+```
+K = eski kapı çağıranı (5) + bağsız kapısız yol (2) = 7        (ağaç 8079987c)
+  src/services/shipping.service.ts:3341          writeWarehouseMovements
+  src/services/shipping.service.ts:3821          writeWarehouseMovements
+  src/services/subcontractor.service.ts:3266     writeWarehouseMovements
+  src/services/warehouse-transfer.service.ts:281 writeWarehouseMovements
+  src/services/warehouse-transfer.service.ts:543 writeWarehouseMovements
+  src/services/kartela.service.ts::dispatch        ❌ BAĞSIZ
+  src/services/kartela.service.ts::cancelDispatch  ❌ BAĞSIZ
+```
+
+⚠️ **ARAÇ ÇAĞRISININ KÖKÜ LOAD-BEARING:** `eskiKapiCagiranlari(kok)` / `kapisizYolOlcumu(kok)`
+`Teks-Erp/` dizininden `"."` ile çağrılır. Yanlış kök verilince araç dosyaları bulamaz,
+`aracSaglam: false` döner ve naif bir toplama **K = 0** gibi okunur — yani *fail-closed bir
+arıza, yeşil bir sonuç gibi görünür*. Ölçen kişi `aracSaglam`ı **okumadan** K'yı kullanmasın.
+
+⇒ **Bugünkü gerçek karar: SIKI mod koşulamaz.** Şıklar §6'da buna göre güncellendi.
 
 ### 3a. Koşum anı ölçümü (atlanmaz)
 
@@ -106,7 +131,8 @@ geri alınamaz yazma yok. Mod (SIKI/GEVŞEK) hem çıktıya hem **yazılan her s
 
 ⑥ sağlanmıyorsa ve kullanıcı yine de "şimdi çek" diyorsa. Bedeli: fotoğraf sonrası
 **yalnız toplam Σ** güvenilirdir; depo × durum kırılımı ve as-of kesiti BEYAN kalır.
-Bugünkü ölçümde ⑥ sağlanıyor ⇒ **GEVŞEK moda gerek yok**, SIKI koşulmalı.
+⛔ **Bugünkü ölçümde ⑥ SAĞLANMIYOR (K = 7)** ⇒ bugün çekilecekse **tek seçenek
+GEVŞEK mod**; SIKI mod script tarafından REDDEDİLİR.
 
 ## 5. İz ve geri dönüş
 
@@ -127,11 +153,19 @@ Bugünkü ölçümde ⑥ sağlanıyor ⇒ **GEVŞEK moda gerek yok**, SIKI koşu
 
 ## 6. Karar için üç şık
 
-1. **SIKI modda şimdi çek** — ⑥ sağlanıyor, ① ve ③ yeşil. Σ ve depo × durum
-   kırılımı fotoğraf sonrası güvenilir olur. *(Önerilen; tek ön koşul sessiz pencere.)*
-2. **Bekle** — boşluğun canlıda gerçekten durduğu 3a ile doğrulanana kadar.
-   Maliyeti: Σ okumaları o güne kadar tanımsız kalmaya devam eder.
-3. **GEVŞEK modda çek** — yalnız ⑥ canlıda sağlanmıyorsa anlamlı; kırılım BEYAN kalır.
+1. **K'yı 0'a indir, SONRA SIKI modda çek** *(önerilen)* — yedi yol taşınacak:
+   `shipping` ×2 · `subcontractor` ×1 · `warehouse-transfer` ×2 · `kartela` dispatch +
+   cancelDispatch. Σ **ve** depo × durum kırılımı ancak böyle güvenilir olur.
+   Maliyeti: bu yedi yol inene kadar fotoğraf beklemede.
+2. **Bekle** — ayrıca boşluğun canlıda gerçekten durduğu §3a ile doğrulanana kadar.
+   ①'in içinde zaten var; tek başına seçilirse Σ okumaları tanımsız kalmaya devam eder.
+3. **GEVŞEK modda şimdi çek** — ⑥'yı beklemeden. Toplam Σ bu andan güvenilir olur, ama
+   **depo × durum kırılımı ve as-of kesiti kalıcı olarak BEYAN kalır** (eski kapıdan
+   yazılan satır hangi durumdan çıktığını söylemiyor). Geri dönüşü yok: fotoğraf bir
+   kez çekilir.
+
+⚠️ Şık 1 ile 3 arasındaki seçim **"ne zaman" değil "neyi kalıcı olarak kaybediyoruz"**
+sorusudur: GEVŞEK fotoğraf, kırılım güvenilirliğini **bir daha geri getirmez**.
 
 Hiçbir şık **368 CANCELLED** satırını kapatmaz (§2.1) — o ayrı bir karardır.
 
