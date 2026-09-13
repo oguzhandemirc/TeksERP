@@ -268,6 +268,13 @@ tripwire(
 );
 
 tripwire(
+  "tavan verdikti 'DEĞDİ Mİ' değil 'ARTTI MI' soruyor (HEAD ile karşılaştırma)",
+  "scripts/check-lint-baseline.mjs",
+  (k) => /headSayim\(/.test(k) && /--stdin-filename/.test(k) && /> \(h\[a\.kural\] \?\? 0\)/.test(k),
+  (k) => k.replace(/> \(h\[a\.kural\] \?\? 0\)/, ">= 0"),
+);
+
+tripwire(
   "tavan verdikti STAGED kümesine bakıyor ve kural→dosya atfını tutuyor",
   "scripts/check-lint-baseline.mjs",
   (k) => /kuralDosyalari/.test(k) && /asan\.filter\([\s\S]{0,120}STAGED\.has/.test(k),

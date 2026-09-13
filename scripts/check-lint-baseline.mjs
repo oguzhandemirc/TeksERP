@@ -123,6 +123,8 @@ function olc(proje) {
   // Kural → o kuralı ihlal eden DOSYALAR (repo köküne göre). Sayım değişmez;
   // bu harita yalnız VERDİKT için — "aşımı kim getirdi" sorusunu cevaplar.
   const kuralDosyalari = {};
+  // Kural → dosya → adet. "Aşımı KİM getirdi" sorusu ancak KATKI DEĞİŞİMİYLE cevaplanır.
+  const kuralDosyaSayim = {};
   let hata = 0;
   for (const d of dosyalar) {
     const repoRel = d.filePath.startsWith(REPO_ROOT)
@@ -136,10 +138,51 @@ function olc(proje) {
       }
       sayim[m.ruleId] = (sayim[m.ruleId] ?? 0) + 1;
       (kuralDosyalari[m.ruleId] ??= new Set()).add(repoRel);
+      ((kuralDosyaSayim[m.ruleId] ??= {})[repoRel] ??= 0), (kuralDosyaSayim[m.ruleId][repoRel] += 1);
       if (m.severity === 2) hata++;
     }
   }
-  return { sayim, kuralDosyalari, dosyaSayisi: dosyalar.length, hata };
+  return { sayim, kuralDosyalari, kuralDosyaSayim, dosyaSayisi: dosyalar.length, hata };
+}
+
+
+/**
+ * Staged bir dosyanın HEAD'deki hâlinin kural-başına ihlal sayısı.
+ *
+ * ⚠️ NEDEN GEREKLİ (2026-09-13): verdikt yüklemi önce *"aşan kuralın ihlallerini
+ * taşıyan dosyalardan biri staged mi"* diye soruyordu. Ama bir dosya o kuralı
+ * ZATEN HEAD'de ihlal ediyor olabilir; o zaman yüklem "bu commit AŞIMI YAPTI mı"
+ * değil "bu commit o kurala DEĞİYOR mu" diye sorar ve YABANCI bir aşım için
+ * commit'i durdurur. Ölçüldü: `max-lines-per-function` 455 > 454, staged dosyanın
+ * katkısı HEAD'de de ŞİMDİ de 2 — yani aşım tamamen başka bir oturumdan.
+ *
+ * ⚠️ AĞACA GEÇİCİ DOSYA YAZILMAZ: ortak çalışma ağacında yarım kalan bir kopya
+ * başka oturumların kapılarına düşer. `--stdin-filename` config'i yol üzerinden
+ * çözer, içerik borudan gelir.
+ */
+function headSayim(proje, repoRel) {
+  const { dizin, argv } = PROJELER[proje];
+  let head = "";
+  try {
+    head = execFileSync("git", ["show", `HEAD:${repoRel}`], {
+      cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024,
+    });
+  } catch {
+    return null; // dosya HEAD'de YOK (yeni dosya) → katkısının tamamı bu commit'in
+  }
+  const rel = repoRel.startsWith(`${dizin}/`) ? repoRel.slice(dizin.length + 1) : repoRel;
+  let ham = "";
+  try {
+    ham = execFileSync("npx", [...argv.slice(0, 1), "--stdin", "--stdin-filename", rel, "-f", "json"], {
+      cwd: join(REPO_ROOT, dizin), encoding: "utf8", input: head, maxBuffer: 64 * 1024 * 1024,
+    });
+  } catch (err) {
+    ham = err.stdout ?? "";
+    if (!ham.trim().startsWith("[")) return null; // ölçemedik → "arttı" VARSAYMA, geniş tarafa düş
+  }
+  const out = {};
+  for (const d of JSON.parse(ham)) for (const m of d.messages ?? []) if (m.ruleId) out[m.ruleId] = (out[m.ruleId] ?? 0) + 1;
+  return out;
 }
 
 let kirmizi = false;
@@ -150,7 +193,7 @@ for (const proje of SECILEN) {
     console.error(`Bilinmeyen proje: ${proje} (${Object.keys(PROJELER).join(", ")})`);
     process.exit(2);
   }
-  const { sayim, kuralDosyalari, dosyaSayisi, hata } = olc(proje);
+  const { sayim, kuralDosyalari, kuralDosyaSayim, dosyaSayisi, hata } = olc(proje);
 
   if (dosyaSayisi < EN_AZ_DOSYA[proje]) {
     console.error(
@@ -197,8 +240,21 @@ for (const proje of SECILEN) {
   if (asan.length > 0) {
     // VERDİKT: aşımı yapan kuralın ihlalleri BU COMMIT'in dosyalarında da var mı?
     // Bayraksız kipte (CI · elle koşum) soru sorulmaz, hepsi sert.
+    // ⚠️ VERDİKT "DEĞDİ Mİ" DEĞİL "ARTTI MI" SORAR. Staged dosyanın o kurala
+    // bugünkü katkısı HEAD'dekinden BÜYÜKSE aşımı bu commit getirmiştir; eşitse
+    // (ya da küçükse) aşım YABANCIDIR ve commit durdurulmaz.
+    const headCache = new Map();
     const benim = STAGED
-      ? asan.filter((a) => [...(kuralDosyalari[a.kural] ?? [])].some((f) => STAGED.has(f)))
+      ? asan.filter((a) =>
+          [...(kuralDosyalari[a.kural] ?? [])]
+            .filter((f) => STAGED.has(f))
+            .some((f) => {
+              if (!headCache.has(f)) headCache.set(f, headSayim(proje, f));
+              const h = headCache.get(f);
+              if (h === null) return true; // HEAD'de yok / ölçülemedi → geniş tarafa
+              return (kuralDosyaSayim[a.kural]?.[f] ?? 0) > (h[a.kural] ?? 0);
+            }),
+        )
       : asan;
     const yaz = benim.length > 0 ? console.error : console.log;
     if (benim.length > 0) kirmizi = true;
