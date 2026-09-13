@@ -3,23 +3,23 @@
   "_belge": "belgedeki SAYI (yükselirse kırmızı) — gerçekliği ölçmez",
   "_gercek": "GERÇEKLİK ölçümü (yalnız 2 kural; bekçinin içinde, belgeden komut çalıştırılmaz)",
   "belge": {
+    "BACKEND-HTTP.md::BE-18": 106,
+    "BACKEND-HTTP.md::BE-30": 53,
+    "BACKEND-HTTP.md::BE-35": 17,
+    "BACKEND-HTTP.md::BE-36": 2,
+    "BACKEND-HTTP.md::BE-37": 2,
+    "BACKEND-HTTP.md::BE-38": 158,
+    "BACKEND-HTTP.md::BE-39": 47,
+    "BACKEND-HTTP.md::BE-40": 117,
     "BACKEND.md::BE-05": 10,
     "BACKEND.md::BE-07": 11,
     "BACKEND.md::BE-10": 1,
     "BACKEND.md::BE-15": 77,
-    "BACKEND.md::BE-18": 106,
     "BACKEND.md::BE-24": 117,
     "BACKEND.md::BE-25": 199,
     "BACKEND.md::BE-26": 269,
     "BACKEND.md::BE-28": 13,
     "BACKEND.md::BE-29": 18,
-    "BACKEND.md::BE-30": 53,
-    "BACKEND.md::BE-35": 17,
-    "BACKEND.md::BE-36": 2,
-    "BACKEND.md::BE-37": 2,
-    "BACKEND.md::BE-38": 158,
-    "BACKEND.md::BE-39": 47,
-    "BACKEND.md::BE-40": 117,
     "BACKEND.md::BE-42": 5,
     "ELECTRON.md::EL-06": 16,
     "ELECTRON.md::EL-08": 8,
@@ -75,7 +75,7 @@
     "VERITABANI.md::DB-38": 13
   },
   "gercek": {
-    "BACKEND.md::BE-29": 30,
-    "BACKEND.md::BE-30": 53
+    "BACKEND-HTTP.md::BE-30": 53,
+    "BACKEND.md::BE-29": 30
   }
 }
