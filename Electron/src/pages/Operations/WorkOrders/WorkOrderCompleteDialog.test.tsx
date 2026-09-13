@@ -132,7 +132,7 @@ describe("WorkOrderCompleteDialog (kapanış dispozisyonu)", () => {
     await chooseDisposition(user, /Bitmiş depo/i);
     // Sebep girilmeden hâlâ kapalı (min 3 karakter).
     expect(confirmBtn()).toBeDisabled();
-    await user.type(screen.getByPlaceholderText(/sipariş iptal/i), "kalan mal depoya alındı");
+    await user.type(screen.getByPlaceholderText(/sipariş iptal/i), "depoya"); // kısa: marj [EL-40]
     await waitFor(() => expect(confirmBtn()).toBeEnabled());
 
     await user.click(confirmBtn());
@@ -142,7 +142,7 @@ describe("WorkOrderCompleteDialog (kapanış dispozisyonu)", () => {
       { reason: string; dispositions: { rollId: string; action: string; qualityGradeId: string | null }[] },
     ];
     expect(woId).toBe("wo1");
-    expect(payload.reason).toBe("kalan mal depoya alındı");
+    expect(payload.reason).toBe("depoya");
     expect(payload.dispositions).toEqual([
       { rollId: "r1", action: "WAREHOUSE", qualityGradeId: null },
     ]);
