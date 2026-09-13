@@ -36,7 +36,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { RollStatus } from "@prisma/client";
+import { Prisma, RollStatus } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import {
   revokePlanDeviationsTx,
@@ -105,7 +105,18 @@ const read = (rel: string) => fs.readFileSync(path.join(SRC, rel), "utf8");
     // İMZA C — fason kabul onayı (kapı bastırması senaryosu).
     const confC = randomUUID();
 
-    const mkDev = (confirmationId: string, extra: Record<string, unknown>) => ({
+    // ⚠️ `extra` TİPLİ: `Record<string, unknown>` yayılınca TS'e HİÇBİR bilinen
+    // anahtar katmaz ve `field`/`source` eksik görünür — `createMany` tipi düşer.
+    // Bu tuzak `npm run typecheck` (yalnız `src/`) ile GÖRÜNMEZ; `typecheck:scripts`
+    // gerekir ve commit kapısı `scripts/`e tsc koşturmuyor.
+    type DevExtra = Omit<
+      Prisma.RollPlanDeviationCreateManyInput,
+      "confirmationId" | "rollId" | "workOrderId" | "qtyM" | "createdAt"
+    >;
+    const mkDev = (
+      confirmationId: string,
+      extra: DevExtra,
+    ): Prisma.RollPlanDeviationCreateManyInput => ({
       confirmationId,
       rollId: parent.id,
       workOrderId: wo.id,
