@@ -39,6 +39,8 @@
 // Koşum: npx tsx scripts/test_gun_anahtari_kaynagi.ts   (DB GEREKMEZ)
 // =============================================================================
 import { execFileSync } from "node:child_process";
+import { atlamaDefteri } from "./lib/atlama";
+import { curumeKolu } from "./lib/circir-kolu";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -53,6 +55,9 @@ function check(label: string, ok: boolean, extra = ""): void {
     console.log(`❌ ${label}${extra ? " — " + extra : ""}`);
   }
 }
+
+// Çürüme kolu commit kapısında uyarıya düşünce defterde ADLI görünür (strict → kırmızı).
+const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 
 const KOK = path.resolve(__dirname, "..");
 
@@ -108,6 +113,41 @@ export function taranacakDosyalar(kok: string): string[] {
     // yaptı: §1'de "BEYANSIZ" ve §2'de 48 → 51. Muafiyet kapsam DARALTMASI
     // değil, ÖLÇÜM KOŞULUDUR.
     .filter((f) => f !== "scripts/test_gun_anahtari_kaynagi.ts");
+}
+
+export type BeyanKarar = {
+  /** Gerçekte var, beyanda YOK ⇒ yeni ihlal. */
+  beyansiz: string[];
+  /** Beyanda var, gerçekte YOK ⇒ borç kapandı, beyan bayat. */
+  bayat: string[];
+  /** İkisinde de var ama ADET ayrışıyor ⇒ beyanı tazele. */
+  adetSapan: string[];
+};
+
+/**
+ * Beyanlı tabanın İKİ YÖNLÜ kararı — SAF, ve bu saflık bir SINIF kararıdır:
+ * karar bir fonksiyonda yaşadığı sürece sondası DOSYA İÇİNDE koşar (kalıcı, "K"
+ * sınıfı). Kollar `if` içinde gömülü kalsaydı doğruluğu yalnız dosya DIŞINDA
+ * koşulup GERİ ALINMIŞ bir mutasyon zinciriyle gösterilebilirdi ("B" sınıfı) ve
+ * kanıt bir daha koşmazdı — yalnız commit mesajında bir cümle olarak kalırdı.
+ *
+ * ⚠️ Sayı değil ADRES döner: "43 → 44" bir teşhis değildir.
+ */
+export function beyanKarari(
+  gercek: Record<string, number>,
+  taban: Record<string, number>,
+): BeyanKarar {
+  const beyansiz: string[] = [];
+  const adetSapan: string[] = [];
+  for (const [ad, n] of Object.entries(gercek)) {
+    if (taban[ad] === undefined) beyansiz.push(ad);
+    else if (taban[ad] !== n) adetSapan.push(`${ad} (${n} ↔ beyan ${taban[ad]})`);
+  }
+  return {
+    beyansiz: beyansiz.sort(),
+    bayat: Object.keys(taban).filter((ad) => gercek[ad] === undefined).sort(),
+    adetSapan: adetSapan.sort(),
+  };
 }
 
 export function tara(kok: string): { anahtar: Record<string, number>; digerSatir: number; dosya: number } {
@@ -174,26 +214,32 @@ function main(): void {
   );
   console.log("");
 
-  // ── §1 ANAHTAR SINIFI — iki yönlü, dosya dosya ────────────────────────────
+  // ── §1 ANAHTAR SINIFI — iki yönlü, dosya dosya, SAF KARARLA ───────────────
   console.log("§1 — ANAHTAR sınıfı (ayraçsız gün anahtarı) beyanlı mı");
-  for (const [f, n] of Object.entries(anahtar).sort()) {
-    const beyan = ANAHTAR_TABAN[f];
-    check(
-      `§1 ${f} beyanlı`,
-      beyan !== undefined && beyan.adet === n,
-      beyan === undefined
-        ? `${n} satır BEYANSIZ ⇒ gün anahtarını ${"`factoryYmd`/`ddmmyy`"} ile kur, ya da ` +
-            "ANAHTAR_TABAN'a GEREKÇESİYLE yaz (yönetici oturum yazar)"
-        : beyan.adet !== n
-          ? `${n} satır ↔ beyan ${beyan.adet} ⇒ beyanı tazele`
-          : `${n} satır · ${beyan.gerekce}`,
-    );
-  }
-  // ⭐ İKİ YÖNLÜ: borç kapandıysa beyan da kapanır.
-  for (const f of Object.keys(ANAHTAR_TABAN)) {
-    if (anahtar[f] === undefined) {
-      check(`§1 ⭐ ${f} hâlâ ANAHTAR sınıfında`, false, "sınıftan ÇIKTI ⇒ ANAHTAR_TABAN'dan SİL");
-    }
+  const tabanAdet: Record<string, number> = Object.fromEntries(
+    Object.entries(ANAHTAR_TABAN).map(([f, v]) => [f, v.adet]),
+  );
+  const k = beyanKarari(anahtar, tabanAdet);
+  check(
+    "§1a ⭐ BEYANSIZ anahtar dosyası yok",
+    k.beyansiz.length === 0,
+    k.beyansiz.length === 0
+      ? `${Object.keys(anahtar).length} dosya, hepsi beyanlı`
+      : `${k.beyansiz.join(", ")} ⇒ gün anahtarını ${"`factoryYmd`/`ddmmyy`"} ile kur, ya da ` +
+          "ANAHTAR_TABAN'a GEREKÇESİYLE yaz (sabiti yönetici oturum yazar)",
+  );
+  check(
+    "§1b ⭐ beyan BAYAT değil (borç kapandıysa girdi de kapanır)",
+    k.bayat.length === 0,
+    k.bayat.length === 0 ? "beyan taze" : `${k.bayat.join(", ")} ⇒ sınıftan ÇIKTI, ANAHTAR_TABAN'dan SİL`,
+  );
+  check(
+    "§1c beyan ADEDİ gerçekle aynı",
+    k.adetSapan.length === 0,
+    k.adetSapan.length === 0 ? "adetler eşit" : `${k.adetSapan.join(" · ")} ⇒ beyanı tazele`,
+  );
+  for (const [f, v] of Object.entries(ANAHTAR_TABAN).sort()) {
+    if (anahtar[f] !== undefined) console.log(`   ↳ ${f} (${v.adet}): ${v.gerekce}`);
   }
   console.log("");
 
@@ -204,11 +250,7 @@ function main(): void {
     digerSatir <= DIGER_TABAN,
     digerSatir <= DIGER_TABAN ? `${digerSatir} ≤ ${DIGER_TABAN}` : `${digerSatir} > ${DIGER_TABAN} ⇒ YENİ ihlal eklendi`,
   );
-  check(
-    "§2b ⭐ taban ÇÜRÜMEDİ (düştüyse sabiti indir)",
-    digerSatir >= DIGER_TABAN,
-    digerSatir >= DIGER_TABAN ? `${digerSatir}` : `${digerSatir} < ${DIGER_TABAN} ⇒ DIGER_TABAN'ı ${digerSatir} yap`,
-  );
+  curumeKolu(check, ATLAMA.atla, "§2b ⭐ taban ÇÜRÜMEDİ (düştüyse sabiti yönetici indirir)", digerSatir, DIGER_TABAN);
   console.log("");
 
   // ── §3 SONDALAR — sınıflandırıcının kendisi ───────────────────────────────
@@ -230,6 +272,44 @@ function main(): void {
   check("§3e satır-içi yorum sayılmaz", satirSinifi("const x = 1; // d.getFullYear() eski hâli") === null);
   check("§3f blok yorumu gövdesi sayılmaz", satirSinifi(" * Eski hâli `date.getFullYear()` idi") === null);
   check("§3g tarih olmayan satır null", satirSinifi("const a = b.getTotal();") === null);
+  // ⭐ CIRCIR KOLLARI (K) SINIFINA ÇEVRİLDİ (1e hükmü 2026-09-14): karar saf
+  // fonksiyonda olduğu için üç yönü SENTETİK girdiyle burada, HER KOŞUMDA
+  // ölçülür. Eskiden yalnız dosya dışında koşulup GERİ ALINMIŞ bir mutasyon
+  // zinciriyle gösterilebiliyordu — o kanıt bir daha koşmaz.
+  check(
+    "§3j ⭐ ARTIŞ kolu: beyansız dosya KIRMIZI verir",
+    beyanKarari({ "yeni.ts": 1 }, {}).beyansiz.join() === "yeni.ts",
+  );
+  check(
+    "§3k ⭐ DÜŞÜŞ kolu: kapanan borç BAYAT beyan olur",
+    beyanKarari({}, { "kapandi.ts": 1 }).bayat.join() === "kapandi.ts",
+  );
+  check(
+    "§3l ⭐ ADET sapması yakalanır (aynı dosya, farklı sayı)",
+    beyanKarari({ "a.ts": 2 }, { "a.ts": 1 }).adetSapan[0]?.startsWith("a.ts (2 ↔ beyan 1)") === true,
+  );
+  check(
+    "§3m beyanlı + eşit ⇒ üç liste de BOŞ (yanlış pozitif yok)",
+    (() => {
+      const r = beyanKarari({ "a.ts": 1 }, { "a.ts": 1 });
+      return r.beyansiz.length === 0 && r.bayat.length === 0 && r.adetSapan.length === 0;
+    })(),
+  );
+  // ⭐ ÇÜRÜME KOLUNUN KİP DALI — `curumeKolu` enjekte edilmiş `check`/`atla` ile
+  // ölçülür: kapı kipinde ATLAR (çıkış 0), bayraksız SERT kalır.
+  {
+    const izKapi: string[] = [];
+    const izCI: string[] = [];
+    const eski = process.env.TEKSERP_KAPI_ADIMI;
+    process.env.TEKSERP_KAPI_ADIMI = "commit";
+    curumeKolu(() => izKapi.push("check"), () => izKapi.push("atla"), "sonda", 5, 9);
+    delete process.env.TEKSERP_KAPI_ADIMI;
+    curumeKolu((_l, ok) => izCI.push(ok ? "yeşil" : "kırmızı"), () => izCI.push("atla"), "sonda", 5, 9);
+    if (eski === undefined) delete process.env.TEKSERP_KAPI_ADIMI;
+    else process.env.TEKSERP_KAPI_ADIMI = eski;
+    check("§3n ⭐ çürüme: kapı kipinde ATLAR (uyarı)", izKapi.join() === "atla", izKapi.join() || "-");
+    check("§3o ⭐ çürüme: bayraksız SERT (kırmızı)", izCI.join() === "kırmızı", izCI.join() || "-");
+  }
   check(
     "§3h ⭐ tek kaynak çağrısı TEMİZ sayılır",
     satirSinifi("const ymd = factoryYmd(date);") === null,
@@ -237,7 +317,7 @@ function main(): void {
   );
   console.log("");
 
-  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   process.exit(fail > 0 ? 1 : 0);
 }
 

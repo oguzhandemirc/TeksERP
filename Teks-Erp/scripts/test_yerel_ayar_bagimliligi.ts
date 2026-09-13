@@ -29,6 +29,8 @@
 // Koşum: npx tsx scripts/test_yerel_ayar_bagimliligi.ts   (DB GEREKMEZ)
 // =============================================================================
 import { execFileSync } from "node:child_process";
+import { atlamaDefteri } from "./lib/atlama";
+import { commitKapisiMi, curumeKolu } from "./lib/circir-kolu";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -43,6 +45,9 @@ function check(label: string, ok: boolean, extra = ""): void {
     console.log(`❌ ${label}${extra ? " — " + extra : ""}`);
   }
 }
+
+// Çürüme kolu commit kapısında uyarıya düşünce defterde ADLI görünür (strict → kırmızı).
+const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 
 const REPO = path.resolve(__dirname, "..", "..");
 const KAPSAM = ["Teks-Erp/src", "Teks-Erp/scripts", "Electron/src", "mobil/src"];
@@ -164,10 +169,12 @@ function main(): void {
       ? `${b.aletArgumansiz.length} ≤ ${ALET_TABAN} · gerekçe: geliştirici konsolu`
       : `${b.aletArgumansiz.length} > ${ALET_TABAN} ⇒ YENİ örtük locale eklendi`,
   );
-  check(
+  curumeKolu(
+    check,
+    ATLAMA.atla,
     "§2b ⭐ taban ÇÜRÜMEDİ (düştüyse sabiti yönetici indirir)",
-    b.aletArgumansiz.length >= ALET_TABAN,
-    b.aletArgumansiz.length >= ALET_TABAN ? `${b.aletArgumansiz.length}` : `${b.aletArgumansiz.length} < ${ALET_TABAN}`,
+    b.aletArgumansiz.length,
+    ALET_TABAN,
   );
   console.log("");
 
@@ -178,10 +185,12 @@ function main(): void {
     b.hamFold <= HAM_FOLD_TABAN,
     b.hamFold <= HAM_FOLD_TABAN ? `${b.hamFold} ≤ ${HAM_FOLD_TABAN}` : `${b.hamFold} > ${HAM_FOLD_TABAN} ⇒ yeni ham katlama`,
   );
-  check(
-    "§3b ⭐ taban ÇÜRÜMEDİ (düştüyse sabiti yönetici indirir)",
-    b.hamFold >= HAM_FOLD_TABAN,
-    b.hamFold >= HAM_FOLD_TABAN ? `${b.hamFold}` : `${b.hamFold} < ${HAM_FOLD_TABAN} ⇒ yardımcıya taşındı, sabiti indir`,
+  curumeKolu(
+    check,
+    ATLAMA.atla,
+    "§3b ⭐ taban ÇÜRÜMEDİ (yardımcıya taşındıysa sabiti yönetici indirir)",
+    b.hamFold,
+    HAM_FOLD_TABAN,
   );
   console.log("");
 
@@ -198,10 +207,26 @@ function main(): void {
   check("§4e açık locale'li Intl sayılmaz", !argumansizMi('const f = new Intl.NumberFormat("tr-TR");'));
   check("§4f satır-sonu yorumu sayılmaz", !argumansizMi("const x = 1; // n.toLocaleString() kullanma"));
   check("§4g blok yorumu gövdesi sayılmaz", !argumansizMi(" * ⚠️ `toLocaleDateString()` KULLANMA"));
+  // ⭐ ÇÜRÜME KOLU (K) SINIFINDA: `curumeKolu`ya enjekte edilmiş `check`/`atla` ile
+  // iki kip DOSYA İÇİNDE ölçülür — kapı kipinde ATLAR (çıkış 0), bayraksız SERT.
+  {
+    const izKapi: string[] = [];
+    const izCI: string[] = [];
+    const eski = process.env.TEKSERP_KAPI_ADIMI;
+    process.env.TEKSERP_KAPI_ADIMI = "commit";
+    curumeKolu(() => izKapi.push("check"), () => izKapi.push("atla"), "sonda", 5, 9);
+    delete process.env.TEKSERP_KAPI_ADIMI;
+    curumeKolu((_l, ok) => izCI.push(ok ? "yeşil" : "kırmızı"), () => izCI.push("atla"), "sonda", 5, 9);
+    if (eski === undefined) delete process.env.TEKSERP_KAPI_ADIMI;
+    else process.env.TEKSERP_KAPI_ADIMI = eski;
+    check("§4i ⭐ çürüme: kapı kipinde ATLAR (uyarı)", izKapi.join() === "atla", izKapi.join() || "-");
+    check("§4j ⭐ çürüme: bayraksız SERT (kırmızı)", izCI.join() === "kırmızı", izCI.join() || "-");
+    check("§4k ⭐ commitKapisiMi env'i geri yüklendi", process.env.TEKSERP_KAPI_ADIMI === eski);
+  }
   check("§4h locale'siz olmayan satır temiz", !argumansizMi("const s = fmtFactoryDate(d);"));
   console.log("");
 
-  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   process.exit(fail > 0 ? 1 : 0);
 }
 
