@@ -49,13 +49,42 @@ export function kuralDosyalari(): KuralKaynagi {
 
 export type BekciAlani = { dosya: string; satir: number; icerik: string; tamSatir: string };
 
-/** `· bekçi: `…`` alanları — dosya + satır + backtick'ler arası içerik + tam satır. */
+/** Alanın yaşayabileceği parça: bir sonraki kardeş alana ya da `<sub>`e kadar. */
+const ALAN_SONU = / <sub>| · (?:Kapanır|Öncül|Çapa|KAPANDI):|$/;
+/** Alanı kapatan backtick: ardından ayraç gelen İLK backtick. */
+const KAPANIS = /`(?= ·| —| <sub>|$)/;
+
+/**
+ * `· bekçi: `…`` alanları — dosya + satır + içerik + tam satır.
+ *
+ * ⚠️ İÇERİK İLK BACKTICK'TE KESİLMEZ (ölçüldü 2026-09-13, 5e): eski yüklem
+ * `bekçi: \`[^\`]*\`` alanın İÇİNDEKİ backtick'te duruyor, yarısını okuyup
+ * "dengesiz parantez" diyordu — kesik cırcırının 6 kaleminin 4'ü bu artefakttı
+ * (`sebep-katalogu.md:32` 9 → 64 karakter). Sahte borç tabanı yukarıda tutuyor,
+ * gerçek borca yer açıyordu: *bir kapı kendi ayrıştırıcısının darlığını sayıya
+ * çevirebilir.* Şimdi: alanın parçası kardeş alana/`<sub>`e kadar; kapanış,
+ * ardından ayraç gelen İLK backtick; öyle bir backtick yoksa (alan `(…)`
+ * açıklamasıyla sürüyorsa) eski davranış — ilk backtick. 600/600 alan, 12'si
+ * daha uzun okundu, hiçbiri kaybolmadı (index'te ölçüldü).
+ * Sondalar (geçici worktree, 2026-09-13): iç backtick + dengeli parantez → kesik
+ * SAYILMADI ✓ · `x.ts` ("a" · "b") biçimi → kısa ad okundu ✓ · 80'lik → +1 ✓ ·
+ * iç backtick'li alanın SONUNDAKİ uydurma ad → "1 çözülmeyen" (alan sonuna kadar
+ * okunduğunun kanıtı) ✓.
+ */
 export function bekciAlanlari(dosyalar: Map<string, string>): BekciAlani[] {
   const out: BekciAlani[] = [];
+  const BASLIK = "bekçi: `";
   for (const [dosya, metin] of dosyalar) {
     metin.split("\n").forEach((s, i) => {
-      for (const m of s.matchAll(/bekçi: `([^`]*)`/g)) {
-        out.push({ dosya, satir: i + 1, icerik: m[1]!, tamSatir: s });
+      let from = 0;
+      for (;;) {
+        const j = s.indexOf(BASLIK, from);
+        if (j < 0) break;
+        const bas = j + BASLIK.length;
+        const parca = s.slice(bas, bas + (ALAN_SONU.exec(s.slice(bas))?.index ?? 0));
+        const kapanis = KAPANIS.exec(parca)?.index ?? parca.indexOf("`");
+        if (kapanis >= 0) out.push({ dosya, satir: i + 1, icerik: parca.slice(0, kapanis), tamSatir: s });
+        from = bas;
       }
     });
   }
