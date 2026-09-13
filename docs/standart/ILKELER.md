@@ -37,7 +37,32 @@ Bu repodaki arızaların en pahalı sınıfı **sessizce yutulan** koddur: kural
 
 ## 5 · İsimlendirme
 
-- **[IL-16]** Tanımlayıcılar **İngilizce ve ASCII**; kullanıcıya görünen metin, hata mesajı, yorum, belge ve commit mesajı **Türkçe**. Kapsam **`src/`** (üretim kodu); `scripts/` bekçileri HARİÇ — orada Türkçe adlandırma yerleşik düzendir (299 ölçüldü) ve bekçi iç araçtır, sözleşme taşımaz · zorlama: eslint:`no-restricted-syntax` (Türkçe KARAKTER) **+ bekçi `test_identifier_language.ts` (ASCII yazılmış Türkçe KELİME, ad kümesi ratchet'i, commit kapısında)** · kanıt: eslint yalnız karakteri ölçüyordu; 2026-09-10'da tek oturumda 8 tanımlayıcı (`cozAdRejimi`, `zamanlayiciAcik`…) kapıdan geçti — kuralın yarısı ölçülmüyordu. Devralınan 134 ad dondurulmuş, küme yalnız KÜÇÜLÜR
+- **[IL-16]** Tanımlayıcıda **ASCII-dışı karakter YAZILMAZ** (`ş ğ ı ö ü ç` ve büyükleri); kullanıcıya görünen metin, hata mesajı, yorum, belge ve commit mesajı **Türkçe**. Kapsam **`src/`**; `scripts/` bekçileri HARİÇ — orada Türkçe adlandırma yerleşik düzendir ve bekçi iç araçtır, sözleşme taşımaz · zorlama: eslint:`no-restricted-syntax` + bekçi:`test_identifier_language.ts` · kanıt: kural ESLint'te CANLI ve ısırıyor · devralınan: yok
+- **[IL-32]** **Fabrikanın sözlüğü Türkçe KALIR; genel Türkçe GİRMEZ.** Ölçüt: *bu kelimenin tam karşılığı olan bir İngilizce terim var mı?* YOK ⇒ fabrikanın kelimesidir ve meşrudur (`fason` · `kartela` · `tambur` · `cari` · `kursun`). VAR ⇒ girmez (`surum`→`version` · `kapsam`→`scope` · `sonuc`→`result`). Mevcut genel Türkçe adlar için **çeviri turu YOK**, dondurulur · zorlama: **insan:sınıflandırma ELLE yapıldı ve kök listesi kalıcı bir dosyada DEĞİL** (`scripts/out/tr-kokler.mjs`, gitignore'da) — bu kural bugün bir MANDAL değil bir BEYANDIR · kanıt: ölçüm 2026-09-13, aşağıda
+
+> **[IL-16] ile [IL-32] AYNI CÜMLEDEYDİ ve bu bir kusurdu** (2026-09-13'te ayrıldı):
+> *ASCII* ile *İngilizce* iki ayrı değişmezdir ve **fabrika sözlüğü tamamen ASCII'dir** —
+> `fason` · `tambur` · `cari` hiçbirinde ASCII-dışı karakter yok, yani ASCII kuralı o adları
+> **hiç bağlamıyordu**. Tek satırda iki değişmez taşıyan bir kural, mandalın hangisini
+> dondurduğunu belirsizleştirir: biri boş kümede koşarken öteki hiç ölçülmemiş olabilir.
+>
+> **ÖLÇÜM (d9, taban `a2cedff5`, üç proje `src/`, `scripts/` ve `*.test.*` hariç):**
+> 31.159 bildirim adının **876'sı (%2,8)** Türkçe — 591 fabrika sözlüğü (25 kök) + 285 genel
+> (64 kök). ⚠️ **876 bir ALT SINIRDIR:** sayım DESENDEN yapıldı ve yalnız BİLDİRİMLERİ gördü;
+> nesne özelliği · sınıf metodu · parametre · yıkım adları (~40.700) hiç sayılmadı.
+> ⚠️ Yüklem **ASCII-dışı karakter DEĞİL, SÖZLÜKTÜR** (İngilizce eleme → kök eşleşmesi);
+> elemesiz ilk turda `modul`→*module*, `ver`→*verify* eşleşip sayı 1.667 çıkmıştı.
+> ⚠️ **591/285 ayrımı ELLE yapıldı** (896 artığın ≥5 kez geçen 211'i) ve kök listesi
+> gitignore'lu bir dosyada — bu yüzden [IL-32] mandal değil beyandır. Mandal olacaksa
+> **önce liste bir kural belgesi olmalı.**
+>
+> ⚠️ **VE ZORLAMASI OLAN AMA HİÇ ISIRMAYAN BİR KURAL, ÖLÇÜLÜYOR SANILIR** — dilekten
+> tehlikelidir. Ölçüldü: `5c668a9e..a2cedff5` (106 commit / 235 dosya) aralığında **32 yeni
+> Türkçe ad** girdi, bekçinin **GÖRDÜĞÜ 0**, taban dosyası **hiç değişmedi**. Bekçi bugün
+> 876'nın yalnız **127'sini** görüyor (%15); kalan **749** kapsam dışı.
+> Komut: `node scripts/out/olc4.mjs` (⚠️ `scripts/out/` gitignore'da — kalıcı olması
+> gerekiyorsa araç `scripts/` altına inmeli ve bekçi sözleşmesine tabi olmalı).
+
 - **[IL-17]** Sabit `UPPER_SNAKE` · tip ve sınıf `PascalCase` · geri kalan `camelCase`; boolean `is/has/can/should` ön eki alır; async fonksiyon adı fiille başlar · zorlama: eslint:`@typescript-eslint/naming-convention` · kanıt: `Teks-Erp/eslint.config.mjs` `NAMING_CONVENTION` — üç kademeli daraltmayla 43 → 37 → 2 ihlal ölçüldü; kalan 2 düzeltildi · devralınan: bilinçli kaçışlar (`__xForTests`) allow-deseninde
 - **[IL-18]** Dosya adı türü söyler: backend `x.service.ts` · `x.helper.ts` · `x.routes.ts` · `x.controller.ts` · `x.middleware.ts` · `x.job.ts` · bekçi `test_x.ts`; Electron `XPage.tsx` + 5-dosya kalıbı; mobil `XScreen.tsx` · zorlama: insan:ad kalıbı AST'den ölçülmez · kanıt: `BACKEND.md`, `ELECTRON.md`, `MOBIL.md`
 - **[IL-19]** `$transaction` closure parametresi **DAİMA `tx`** — ESLint'in "tx içinde `Promise.all` yasak" guard'ı isim tabanlıdır, başka bir ad kuralı KÖR eder · zorlama: eslint:`no-restricted-syntax` (dolaylı) · kanıt: `eslint.config.mjs` `TX_PROMISE_ALL`; 196 `$transaction`ın 183'ü açık `(tx)` biçimi

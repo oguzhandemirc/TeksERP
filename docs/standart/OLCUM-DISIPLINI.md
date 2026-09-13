@@ -198,6 +198,29 @@ körüne güncellenerek ölür** (kapının dokuzuncu ölüm biçimi).
 Kapısı yazılmayan bir "kapandı" cümlesi, yazıldığı gün doğrudur ve ertesi gün
 yanlışlanamaz hâle gelir.
 
+**Ve "kapısı var" demek yetmez — ÜÇ AYRI DURUM vardır, üçü aynı görünür:**
+
+| Durum | Ne var, ne yok | Düzeltme |
+|---|---|---|
+| **DİLEK** — hiç uygulanmamış kural | cümle var, uyum ÖLÇÜLMEMİŞ | ölç, sonra kuralı gerçeğe göre yaz |
+| **KAPISIZ SAYI** — mandal düzyazıda | sayı var, onu okuyan kapı YOK | kapıyı kur; sayıyı GÜNCELLEME (bkz. § Mandal) |
+| **YANLIŞ ADLA ANILAN GERÇEK KAPSAM** | kapsam VAR, atıftaki ad yanlış | **atfı düzelt** — kapı yazma |
+
+*(Üç vaka, 2026-09-13: `ILKELER.md` tanımlayıcı kuralı — 876 ad, hiç ısırmamış · `devralınan:`
+tavanları — kapısızken 18→30 ve 53→78, `be330599` ile kapandı · `test_surum_notlari.ts` —
+üç yerde anılıyor, YOK; ama kapsamı `Electron/src/lib/surum-notlari.test.ts` ve
+`scripts/check-surum-notlari.mjs` olarak VAR.)*
+
+⚠️ **Üçüncüsü en tehlikesiz görünüp en çok zaman yiyendir:** okuyan bekçiyi arar, bulamaz,
+**yazmaya kalkar** ve var olanı İKİZLER.
+📌 Panzehir: **bir bekçi adını belgeye yazmadan önce `git ls-files | grep` ile varlığını
+ÖLÇ** — çıkış kodunu okuyarak, `2>/dev/null` yazmadan (bkz. `OLCUM-DISIPLINI-ARAC.md`
+§ Boş çıktı bir ÖLÇÜM değildir).
+
+⚠️ **Ve dördüncü, en sinsi hâli:** ***zorlaması OLAN ama hiç ISIRMAYAN kural, ölçülüyor
+SANILIR*** — dilekten tehlikelidir, çünkü `zorlama:` etiketi okuyanı rahatlatır. *(d9:
+`ILKELER.md`'nin bekçisi 106 commit boyunca giren 32 Türkçe adın SIFIRINI gördü.)*
+
 ## Kimlik yazma — repo PUBLIC
 
 Ölçüldü 2026-09-13: depo **herkese açık** (`gh repo view` → `visibility: PUBLIC`).
