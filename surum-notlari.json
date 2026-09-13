@@ -88,6 +88,11 @@
           "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Sayım stornosu, sayımdan sonra yoluna devam etmiş toplar için (üretime alındı, fasona çıktı, sevk edildi, fireye ayrıldı) artık defter satırı uydurmuyor: o toplar için storno durur ve “geri alınacak giriş kaydı bulunamadı” der. Önceden ters satır topun o anki durumundan türetiliyor, örneğin “sevk edilmiş durumda depoya girdi” gibi hiç olmamış bir olay yazılabiliyordu. Sayımın kendi iptal satırı duruyorsa storno eskisi gibi çalışır."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "yeni",
+          "metin": "Fason mal kabulü artık iptal edilebilir: kabulden doğan top depoda duruyor, çuvala girmemiş ve depoda başka hareket görmemişse iptal geçer; aksi hâlde iptal reddedilir ve engel sebebi topun adıyla listelenir. Eskiden son adım fason kabulü hiç iptal edilemiyordu."
         }
       ]
     },
