@@ -41,8 +41,40 @@ const BANS = [
   { re: /npm\s+run\s+build:win\b/i, why: "Ham `npm run build:win` YASAK — bir önceki müşterinin yayın adresiyle derler. `./deploy/electron-paketle.sh <müşteri>` kullan." },
   { re: /gradlew\s+assembleRelease\b/i, why: "`./gradlew assembleRelease` ELLE ÇAĞRILMAZ — `cd mobil && npm run build:apk -- --musteri=<kod>` (adres doğrulaması + bundle kontrolü)." },
 ];
+/**
+ * Komut satırını ayrı KOMUTLARA böler — yasak, kendi argümanları içinde aranır.
+ *
+ * VAKA (2026-09-13): `git push -q origin main && … && stat -f '%m %N' …` komutu
+ * `git push --force` YASAĞINA takıldı. `--force` yoktu: yüklem `git push`u ve
+ * bambaşka bir komuttaki `-f`i AYNI SATIRDA görüp birleştirdi (`[^\n]*` tüm
+ * satırı yutuyor). Kullanıcı komutu ikiye bölünce geçti.
+ *
+ * ⚠️ YANLIŞ KIRMIZININ MALİYETİ YANLIŞ YEŞİLDEN FARKLI AMA KÜÇÜK DEĞİL: kapının
+ * kendi mesajı kaçışı (`TEKSERP_HOOK_SKIP=1`) yazıyor, yani yanlış pozitif üreten
+ * bir kapı kaçışı NORMALLEŞTİRİR.
+ *
+ * ⚠️ BÖLME YALNIZ DARALTMAZ, KEŞKİNLEŞTİRİR — iki yönü de var:
+ *   · `git push … && … -f …`        → artık YEŞİL  (yanlış pozitif gitti)
+ *   · `prisma migrate dev && echo --create-only` → artık KIRMIZI (yanlış
+ *     NEGATİF gitti: lookahead tüm satıra bakıyordu ve alakasız bir `--create-only`
+ *     yasağı susturuyordu)
+ *   · `psql -c "DELETE FROM a; DELETE FROM b WHERE c"` → artık KIRMIZI (ilk
+ *     ifadede WHERE yok; eskiden satırdaki ikinci WHERE onu örtüyordu)
+ *
+ * ⚠️ TIRNAK İÇİ AYIRAÇLAR: bölme naiftir (tırnak saymaz). Hata yönü ölçüldü ve
+ * GENİŞ tarafa düşüyor — tırnak içindeki `;` bölünürse yasak METNİ parçanın
+ * içinde kalır, yani kapı hâlâ görür. Daraltan bir bölünme üretmiyor.
+ */
+function komutParcalari(satir) {
+  return satir
+    .split(/&&|\|\||[;\n]|(?<!\|)\|(?!\|)/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+const PARCALAR = komutParcalari(cmd);
+
 for (const b of BANS) {
-  if (b.re.test(cmd)) {
+  if (PARCALAR.some((p) => b.re.test(p))) {
     process.stderr.write(`⛔ Komut kapısı: ${b.why}\n(kaçış yalnız kullanıcı kararıyla: TEKSERP_HOOK_SKIP=1)\n`);
     process.exit(2);
   }

@@ -412,6 +412,7 @@ Alanlar: bölüm başlıkları aşağıda. **Sayı YAZILMAZ** — güncel dağı
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Teks-Erp/scripts/test_bash_guard_scope.ts` | Komut kapısının (`scripts/claude-hooks/bash-guard.mjs`) yasağı KENDİ komutunda araması: komut satırı ayıraçlarla parçalara bölünür ve yasak parçalarda aranır. Üç yön birden ölçülür — gerçek ihlaller hâlâ kırmızı · yanlış pozitifler gitti · bölme İKİ yanlış negatifi de kapattı. Kapı gerçek hook sözleşmesiyle (stdin JSON) çağrılır, `TEKSERP_HOOK_SKIP` miras alınmaz | | ✓ | 2026-09-13 |
 | `Teks-Erp/scripts/test_logger_kanali.ts` | Backend log kanalı sözleşmesi: `SEVIYE [alan] mesaj` biçimi · akış ayrımı (bilgi→stdout, hata/uyarı→stderr) · bir hata = TEK etiketli satır (sayılabilirlik) · `src/` içinde çıplak `console` yok · ESLint `no-console` açık | | ✓ | 2026-09-07 |
 | `Teks-Erp/scripts/test_ortam_bagimliligi_tavani.ts` | [TD-17] TAVANI (yalnız düşer): "herhangi bir aktif kayıt" 109 dosya · ham `username: "admin"` 129 dosya; körlük zemini 400. ⚠️ İhlal demiyor, BAĞIMLILIK TAŞIYAN DOSYA SAYISI diyor — yönü zorlar | | ✓ | 2026-09-06 |
 | `Teks-Erp/scripts/test_negatif_sonda_kapsami.ts` | Kayıtlı negatif sonda TABANI (yalnız yükselir) — bugün 79/461 (%17,1); körlük zemini 400 dosya. ⚠️ Kapsam CIRCIRI, ispat değil: metinle kandırılabilir, ölçtüğü şey gerilemenin durması | | ✓ | 2026-09-06 |
