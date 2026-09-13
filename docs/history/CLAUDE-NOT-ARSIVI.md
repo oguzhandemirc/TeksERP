@@ -8200,3 +8200,45 @@ tipi, `TartiPaket/destinationDefault.ts`, `PaketlemeScreen` (`destinationTouched
 tablet `destinationDefault.test.ts` (3). Üç kapı: migration EVET (additive, backend önce) · izin
 HAYIR · OTA yeter (tablet yalnız okur). Sürüm notu maddesi (her-ikisi).
 
+## 2026-09-13 — KAPANMIŞ BORÇ AÇIK GÖRÜNÜR: kapanma koşulunu yazan not, koşulun SAĞLANDIĞINI da yazmalı [ÇEKİRDEK]
+
+**Vaka.** `SETTINGS_PASSWORD_{SET,ROTATED,REVOKED,USED,FAILED,LOCKED}` etiketleri 2026-09-12'de
+(`0922c2cb`) elle eklendi ve o gün **mekanik kapısı yoktu**: `test_audit_labels` §3 etiket
+kümesini KAYNAKTAN dizge tarayarak kuruyordu, bu yüzden `action: SETTINGS_PASSWORD_EVENTS.FAILED`
+gibi SABİT üzerinden yazılan çağrıları hiç görmüyordu ⇒ o altı olaya *"Türkçesi var mı"* sorusu
+hiç sorulmuyordu. Kör nokta teorik değildi: ekran üretimde ham `SETTINGS_PASSWORD_FAILED` basmıştı.
+
+**Borç notu kapanma koşulunu YAZMIŞTI:** *"`logEvent` action'ının adlandırılmış birliğe
+bağlanması **+** bekçinin toplama yönteminin o birliği okuması."* İkisi de sonradan sağlandı —
+küme artık beyan edilmiş sözleşmeden (`Teks-Erp/src/constants/system-events.ts`) okunuyor ve
+`Electron/src/lib/audit-labels.ts` → `EVENT_ACTION_LABELS` aynasıyla İKİ YÖNLÜ karşılaştırılıyor.
+**Ama koşulun sağlandığı, borcu AÇAN nota yazılmadı.**
+
+**Sonuç:** kalem 2026-09-13'te *"açık borç"* olarak yeniden iş verildi. Ölçülmeseydi var olan bir
+kapının İKİZİ yazılacaktı — ve iki kapı iki gerçek demektir; hangisinin doğru olduğu ancak biri
+kırmızı verdiğinde anlaşılırdı.
+
+**Ölçüm — sonda, cümle değil.** Sözleşmeye yedinci ad eklendi (`SETTINGS_PASSWORD_SONDA`),
+etiketi bilerek yazılmadı:
+
+    ❌ sözleşmedeki HER adın Türkçesi var (arşiv dâhil) — SETTINGS_PASSWORD_SONDA
+    ❌ yazılabilir her adın en az bir çağrı yeri var   — SETTINGS_PASSWORD_SONDA
+    === Sonuç: 10 geçti, 2 başarısız ===
+
+İKİ ayrı yüklemden kırmızı. Geri alma `cp` + `shasum -c` (OK). ⚠️ Sonda bilerek `system-events.ts`
+üzerinden kuruldu, `audit-labels.ts` üzerinden değil: o dosyada o an başka bir oturum çalışıyordu.
+*Aynı kusuru iki dosyadan ölçebiliyorsan BOŞ olanı seçmek bir ölçüm kararıdır* — çekişmeli dosyada
+sonda atmak, sondanın sonucunu başkasının yarım işine bağlar.
+
+**KURAL (bu notun asıl içeriği).** *Bir borç notu kapanma koşulunu yazıyorsa, KOŞULUN
+SAĞLANDIĞINI da AYNI nota yazmak zorundadır.* Kapanış başka bir yere yazılırsa borç orada
+kapanır ama burada yaşamaya devam eder. ⇒ Ve bu sınıfın maliyeti diğer bayatlama biçimlerinden
+farklıdır: ötekiler **yanlış bir şey söyler**, bu **doğru bir şeyi FAZLA UZUN söyler** ve bedeli
+*yapılmış işi tekrar yaptırmaktır*.
+
+**Yeniden gündeme gelirse:** tartışma değil SONDA — sözleşmeye sahte bir ad ekle, kapı kırmızı
+veriyorsa kalem kapalıdır, yeni bekçi yazılmaz.
+
+**Kod çapaları:** `Teks-Erp/src/constants/system-events.ts` (beyan edilmiş sözleşme) ·
+`Electron/src/lib/audit-labels.ts` → `EVENT_ACTION_LABELS` (ayna) ·
+bekçi `Teks-Erp/scripts/test_system_event_names.ts` (§5 `satisfies` bağı dâhil, 12 kontrol).
