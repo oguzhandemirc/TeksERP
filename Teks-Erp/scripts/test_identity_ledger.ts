@@ -18,6 +18,31 @@
 //     B-c gerçek bekçi haritada hiç anılmıyor
 //     B-d HARİTA bir bekçiyi alana atamış ama ALAN LİSTESİNDE yok  ← asıl sınıf
 //
+// ⭐ NEGATİF SONDA ENVANTERİ (2026-09-13) — BEŞ SINIFIN BEŞİ DE ISIRDI.
+//   Bu kapı dört kez YORUMLANDI ama hiç SONDALANMAMIŞTI. Her sonda ayrı, geri
+//   alma `cp` + sha256 (`git checkout --` izlenmeyen dosyada no-op'tur).
+//     S1  parti.md listesine OLMAYAN ad          → 1 B-a  (+1 B-b, doğru)
+//     S2  haritadan bir adı sil (listede kalsın) → 2 B-b  (+1 B-c, doğru)
+//     S3  haritanın ATADIĞI alanın listesinden sil → 1 B-d
+//     S4  arşivden bir BAŞLIK sil                → "ARŞİVDEN 1 BAŞLIK DÜŞTÜ"
+//     M13 `Backend:` desenini boz                → 0 B-a/0 B-b + BEYAN satırı
+//   ⚠️ S1 ve S3 ilk denemede YANLIŞ NEGATİF verdi: `sed` çapası tutmamıştı ve
+//   mutasyon HİÇ UYGULANMAMIŞTI. ⇒ ***Bir negatif sonda, mutasyonun UYGULANDIĞINI
+//   de ölçmelidir — uygulanmamış bir mutasyonun yeşili, kapının yeşili sanılır.***
+//   (S3 ikinci kez de tutmadı: `test_batch_number` diye bir bekçi yok, adı
+//   `test_batch_number_format`. Çapa ELLE değil PROGRAMLA seçildi.)
+//
+// ⚠️ MANDAL DEĞİL TARAYICI — ama BİR İSTİSNAYLA, ve istisna CI'da ÖLÜ:
+//   Taban dosyası YOK (`*-baseline.json` aranmadı, hiç doğmadı) ⇒ B-a/B-b/B-c/B-d
+//   saf DURUM tutarlılığıdır: doğduğu gün ısırabilir, bir kümeyi dondurmaz.
+//   §1 YÖN A ise bir MANDAL: tabanı `merge-base HEAD origin/main`.
+//   ⭐ ÖLÇÜLDÜ 2026-09-13: CI'da `HEAD == origin/main` ⇒ merge-base = HEAD'in
+//   KENDİSİ ⇒ `git show HEAD:ARŞİV` çalışma ağacıyla BİREBİR ⇒ düşen başlık
+//   kümesi HER ZAMAN boş. **YÖN A CI'da VAKUMEN YEŞİLDİR ve orada hiç ısıramaz.**
+//   Yalnız bir ÖZELLİK DALINDA (taban gerçek bir ata) anlamlıdır — S4 bunu izole
+//   ağaçta kanıtladı. ⇒ *Bir mandalın tabanı dinamikse, tabanın HEAD'e eşitlendiği
+//   ortamda mandal yoktur; yeşili "korundu" değil "karşılaştıracak şey yoktu" der.*
+//
 // GÜN-BİR ÖLÇÜM (2026-09-12): B-a 0 · B-b 0 · B-c 2 · B-d 13. Taban dosyası
 // GEREKMEDİ. B-d'nin 13'ünün beşi bu haftanın defter turunda yazılıp haritaya
 // girmiş ama alan koşum listesine bağlanmamış bekçiler — yani fasona dokunan
