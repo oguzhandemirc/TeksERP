@@ -171,6 +171,15 @@ Aynı yüklem, aynı ağaç, aynı ayrıştırıcı — **farklı rejim, farklı
 > *yük* (hangi hacim) · *rejim* (DB var/yok · sunucu ayakta/değil · fikstür dolu/boş ·
 > STRICT açık/kapalı).
 
+⚠️ **REJİM ekseninin ÖLÇÜM ALETİNE dönen yüzü** *(d9, 2026-09-13)*: bir alet yalnız TEK bir
+rejimde kayıt tutuyorsa ve ölçtüğü olay BAŞKA bir rejimde gerçekleşiyorsa, o alet penceresi
+dolsa da **hüküm veremez** — eşiği YAPISAL OLARAK dolmaz. Sıklık defteri
+(`Teks-Erp/scripts/lib/siklik-defteri.ts`) tam bunu yaşadı: eşik `≥3 kırmızı` istiyordu,
+kırmızılar YALNIZ CI'da oluyordu, defter ise yalnız yerel ağaca yazıyordu (10 kayıt, onu da
+yeşil + yerel). ⇒ **Bir aletin KAPSAMI ölçtüğü olayın rejimini içermiyorsa, önce kapsam BEYAN
+edilir, sonra eşik o kapsamda anlamlı hâle getirilir** — ve tek yönlü veri bir satırı KAPATMAZ,
+yalnız aramayı öbür rejime taşır.
+
 ⚠️ **Ve asıl uyarı sayıda değil, LİSTENİN KENDİSİNDE:** bu liste tek günde **iki → üç →
 beş** oldu. *"Üç parçadır"* cümlesi yazıldığı gün doğruydu ve aynı gün bayatladı. ⇒
 Eksen sayısını ezberleme; **eksen listesini AÇIK yaz** ve yeni bir sayı üretirken sor:

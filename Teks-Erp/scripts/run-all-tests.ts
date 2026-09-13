@@ -19,7 +19,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { dbAdi, defteYaz } from "./lib/siklik-defteri";
+import { agacAdi, dbAdi, defteYaz, rejimAdi } from "./lib/siklik-defteri";
 import {
   FABRIKA_HACIM_ESIGI,
   fixtureHedefEngeli,
@@ -363,6 +363,10 @@ async function main() {
   const shaRes = spawnSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8", cwd: SCRIPTS_DIR });
   const kirliRes = spawnSync("git", ["status", "--porcelain"], { encoding: "utf8", cwd: SCRIPTS_DIR });
   const HEAD_SHA = `${(shaRes.stdout ?? "?").trim() || "?"}${(kirliRes.stdout ?? "").trim() ? "+" : ""}`;
+  // REJİM ve AĞAÇ defterin KAPSAM eksenleridir: bir kayıt, üretildiği rejimin
+  // (yerel/CI) ya da ağacın dışında sayılamaz — iki ağacın dosyası ayrıdır.
+  const REJIM = rejimAdi();
+  const AGAC = agacAdi(SCRIPTS_DIR);
   let sonKosan: string | null = null;
 
   // Geçit SIRASI load-bearing: DB koruması tip kontrolünden ÖNCE ve filtreden
@@ -632,7 +636,7 @@ async function main() {
     // koşucunun özeti kesmez: ne etiketi (fold_catalog vakası) ne teşhisi (bu vaka).
     const ilkKirmizi = ilkKirmiziBlogu(r.out);
     results.push({ file, ok: r.ok, summary: r.summary + retryNote, ms, flaky, skipped: r.skipped, bilinmeyenAtlama: r.bilinmeyenAtlama, sessizYesil: r.sessizYesil, ilkKirmizi });
-    // SIKLIK DEFTERİ — yalnız `IZLENEN` kümesindeki bekçi için (bugün tek dosya),
+    // SIKLIK DEFTERİ — yalnız `IZLENEN` haritasındaki bekçi için (bugün BOŞ),
     // zaten koşmuş bir sonuçtan tek satır: EKSTRA KOŞUM YOK. Karar kuralı ve iki
     // tasarım gerekçesi `scripts/lib/siklik-defteri.ts` başlığında ve o kural
     // defterde TEK KAYIT oluşmadan ÖNCE commit edildi.
@@ -641,6 +645,8 @@ async function main() {
       sha: HEAD_SHA,
       mod: filter ? "tek" : "tam",
       db: dbAdi(process.env.DATABASE_URL),
+      rejim: REJIM,
+      agac: AGAC,
       sonuc: r.ok ? "yesil" : "kirmizi",
       ozet: r.summary + retryNote,
       ilk: ilkKirmizi ?? null,

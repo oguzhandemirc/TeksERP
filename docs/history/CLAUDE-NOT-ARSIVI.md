@@ -8474,3 +8474,51 @@ deposuz top satırsız) 30 → 35/0 · `test_stok_defteri_bag_olcumu §4g` 33/0.
 (cp+sha256 a02f641a): yazım kaldır → §8a/b/c/d ❌ · aynı mutasyon → §4g ❌ (adjustRollQty:KAPISIZ).
 Sürüm notu (ea): "elle düzeltilen metraj artık Depo Hareketleri'nde görünür" — sahadaki as-of rakamı
 DEĞİŞİR (elle düzeltilen toplarda defter ilk kez durumu izler).
+
+## 2026-09-13 — SIKLIK DEFTERİNİN KAPSAMI DARALDI: bir alet, ölçtüğü olayın REJİMİNDE kayıt tutmuyorsa hüküm veremez [ÇEKİRDEK]
+
+**Olgu.** `test_fold_catalog`ın ARALIKLI sınıfının sebebini ölçerek bulmak için bir *sıklık defteri*
+kuruldu (`94f59ce0`; alet `Teks-Erp/scripts/lib/siklik-defteri.ts`, veri `Teks-Erp/siklik-defteri.jsonl`,
+`.gitignore`'lu). Karar kuralı bilerek **veriden ÖNCE** commit edildi: pencere 10 kayıt ya da 2026-09-27,
+hüküm eşiği `≥10 kayıt ∧ ≥3 yeşil ∧ ≥3 kırmızı`, ve dört soru (artık · ortam · sürüklenme · gerçekten
+aralıklı) her birinin yanlışlayanıyla birlikte yazıldı.
+
+**Kusur (ölçüldü 2026-09-13).** Eşiğin kırmızı yarısı **yapısal olarak dolamazdı**. Defterde 10 kayıt
+birikti; **onu da yeşil, onu da yerel**. Kırmızılar YALNIZ CI'da oluyordu, CI'ın ağacı koşum bitince yok
+oluyor ve CI commit atmıyor ⇒ kırmızı bir kaydın defterde belirmesinin YOLU YOKTU. İkinci bir eksen daha
+ölçüldü: 10 kaydın **7'si `wt-d9`, 3'ü ortak ağaç**, üç ayrı DB — yani "10 kayıt" tek bir sayı bile
+değildi, iki ayrı dosyanın toplamıydı ve kimse toplamıyordu. ⇒ Defterin satırı, 5e'nin beş ekseninden
+(*yüklem · ağaç · ayrıştırıcı · yük · rejim*, `74bc6d88`) **ikisini taşımıyordu: REJİM ve AĞAÇ.**
+
+**Hükmü defter değil TEŞHİS verdi.** Aralıklılık `675211b2` ile kapandı: yüklem `!m.includes("9-KAT")`
+SINIRSIZDI ve sonda değeri `TEST-KAT-${Date.now()}-KAT` damga 9 ile bittiğinde `…9-KAT` alt dizgisini
+içeriyordu ⇒ sıklık `Date.now() % 10 === 9` (1/10); CI'daki iki kırmızının ikisinde de damga 9 ile
+bitiyordu. İstatistik beklemeye gerek kalmadı — *ve bu, defterin bir başarısı değil, kapsamının kanıtıdır.*
+
+**Karar (1e hükmü, şık (b)).** (a) — "CI kayıtlarını deftere taşı" — REDDEDİLDİ: CI'dan commit yok, kayıt
+taşınamaz. Uygulanan (b): **defterin kapsamı "YEREL REJİM, TEK AĞAÇ" diye BEYAN EDİLDİ.** Her satır artık
+`rejim` (`yerel`/`ci`) ve `agac` (worktree adı ya da `ortak`) damgası taşır; iki ağacın kayıtları
+TOPLANMAZ; CI'ın stdout satırı bir KAYIT değil bir İZDİR ve CI kırmızıları `gh run` ile AYRI sayılır.
+Pencere artık alete değil **izlenen bekçiye** aittir (`IZLENEN` bir `Map`: dosya → `{acilis, pencereSon}`),
+çünkü alete asılı tek bir global tarih, konusu kapanınca sıradaki bekçiye BAYAT bir pencere devrederdi.
+
+**Eşik nasıl anlamlı hâle geldi — ve kural neden GEREKÇEYE düşmedi.** Yeni ⑤: `≥HEDEF_KAYIT` kayıt tek
+yönlüyse hüküm **"YEREL REJİMDE ÜRETİLEMEDİ"**; satır ARALIKLI KALIR ve arama REJİM eksenine taşınır.
+Veriden sonra bir kuralı değiştirmek, tanımı gereği "veriye bakıp seçilmiş ölçüt" riskini taşır; bu
+değişikliğin ölçüsü şudur: **yeni ⑤ hiçbir yeni izin VERMEZ, bir izni GERİ ALIR.** Eski ⑤ "10/10 aynı
+cevapsa satır aralıklı değildir, yeşilse SİLİNİR" diyordu — yani eldeki 10 yeşil kaydın satırı
+KAPATMASINA izin veriyordu. Yeni kural bunu yasaklıyor. Kural net SIKILAŞTI; kendi verisini kendi lehine
+kapatan bir ölçüt olmadı.
+
+**Kalıcı ders.** *Bir ölçüm aleti, ölçtüğü olayın gerçekleştiği REJİMDE kayıt tutmuyorsa penceresi dolsa
+da hüküm veremez.* ⇒ Bir alet kurarken önce sorulur: **bu aletin KAPSAMI, ölçmek istediğim olayın rejimini
+İÇERİYOR MU?** İçermiyorsa kapsam beyan edilir ve eşik o kapsamda anlamlı hâle getirilir; aksi hâlde eşik
+dolmaz ve alet, sessizce bir GÜNLÜĞE dönüşür. Kural satırı `docs/standart/OLCUM-DISIPLINI.md` (REJİM
+ekseni bölümü), harita satırı `Teks-Erp/docs/BEKCI-HARITASI.md` ARALIKLI satırında — ikinci bir yere
+yazılmadı.
+
+**Durum.** `IZLENEN` bugün BOŞ (tek konusu kapandı); alet dormant, sıradaki ARALIKLI satır için hazır.
+Sonda (2026-09-13): `agacAdi` izole ağaçta `wt-d9` / ortak ağaçta `ortak`, `rejimAdi` `CI=true` ve
+`GITHUB_ACTIONS=true` ile `ci`, `CI=false` ile `yerel`; koşucu kablolaması geçici bir `IZLENEN` girdisiyle
+koşuldu ve satır `"rejim":"yerel","agac":"wt-d9"` damgasıyla düştü, `CI=true` ile `"rejim":"ci"`; girdi
+geri alınınca kayıt sayısı 0 (dormant doğrulandı).

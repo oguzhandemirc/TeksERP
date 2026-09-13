@@ -1,25 +1,29 @@
 // =============================================================================
 // SIKLIK DEFTERİ — ARALIKLI bir bekçinin sebebini ÖLÇEREK bulmak için
 // =============================================================================
-// Kapsam: `IZLENEN` kümesi — bugün TEK dosya (`test_fold_catalog.ts`).
 // Maliyet: SIFIR ekstra koşum. Zaten koşan bir bekçinin sonucundan tek satır.
 //
-// ⭐ NEDEN VAR: `test_fold_catalog` aynı ağaçta iki ardışık CI turunda iki farklı
-//    cevap verdi (`8f68c367` → 24/1 KIRMIZI · `2e188894` → YEŞİL; arada bu
-//    bekçiye ve kat kataloğuna dokunan değişiklik YOK). Sınıfı **aralıklı**,
-//    sebebi **BİLİNMİYOR**. İki gözlem bir dağılım değildir.
+// ⛔ KAPSAM — YEREL REJİM, TEK AĞAÇ. Bu defter YALNIZ kendi çalışma ağacında
+//    koşan bekçilerin kaydını tutar. CI turları bu dosyaya YAZILMAZ (CI'ın ağacı
+//    koşum bitince yok olur ve CI commit atmaz) ⇒ **CI kırmızıları defterin
+//    KONUSU DEĞİLDİR**, `gh run` ile ayrıca sayılır. Her satır `rejim` ve `agac`
+//    damgası taşır ki bir kayıt, üretildiği rejimin/ağacın DIŞINDA sayılamasın.
 //
 // =============================================================================
-// ⚖️ KARAR KURALI — SONUÇLAR GÖRÜLMEDEN YAZILDI
+// ⚖️ KARAR KURALI
 // =============================================================================
-// Bu blok defterde TEK BİR KAYIT oluşmadan önce commit edildi. Git damgası
-// bunun kanıtıdır: kural verinin ÖNÜNDE durur. Sonra yazılan bir ölçüt, veriye
-// bakıp seçilmiş demektir — ve o artık bir ölçüt değil bir GEREKÇEDİR.
+// Bu blok defterde TEK BİR KAYIT oluşmadan önce commit edildi (`94f59ce0`). Git
+// damgası bunun kanıtıdır: kural verinin ÖNÜNDE durur. Sonra yazılan bir ölçüt,
+// veriye bakıp seçilmiş demektir — ve o artık bir ölçüt değil bir GEREKÇEDİR.
 //
-// PENCERE .......: 10 kayıt YA DA 2026-09-27 — hangisi önce dolarsa.
-// HÜKÜM EŞİĞİ ...: ≥10 kayıt VE ≥3 yeşil VE ≥3 kırmızı.
-//   Eşik dolmazsa HÜKÜM YAZILMAZ, satır ARALIKLI kalır. **"veri yetmedi" meşru
-//   bir sonuçtur** ve sezgiyle doldurulmaz.
+// PENCERE .......: bir bekçi `IZLENEN`e girdiği GÜN açılır ve o satırın kendi
+//   `pencereSon` tarihinde ya da `HEDEF_KAYIT` kayıtta kapanır. Pencere ALETE
+//   değil İZLENEN BEKÇİYE aittir (aletin tek bir global tarihi, konusu kapanınca
+//   sıradaki bekçiye BAYAT bir pencere devrederdi).
+// HÜKÜM EŞİĞİ ...: **AYNI AĞAÇTA** ≥`HEDEF_KAYIT` kayıt VE ≥3 yeşil VE ≥3 kırmızı.
+//   İki ağacın kayıtları TOPLANMAZ — ağaç bir ölçüm eksenidir, ve iki ağacın
+//   dosyası ayrıdır (ölçüldü 2026-09-13: 10 kaydın 7'si `wt-d9`, 3'ü ortak ağaç,
+//   üç ayrı DB; hiçbir dosya tek başına eşiğe varmıyordu ve kimse toplamıyordu).
 //
 // Sorular SABİT SIRADA sorulur; her birinin YANLIŞLAYANI önceden yazılmıştır:
 //
@@ -39,47 +43,74 @@
 //      YANLIŞLAR: sha sırasında yeşil → kırmızı → yeşil.
 //
 //   ④ GERÇEKTEN ARALIKLI: ①②③ hiçbiri açıklamıyorsa — yani AYNI sha, AYNI db,
-//      AYNI mod, AYNI `onceki` ile iki kayıt AYRIŞIYORSA. Bu kelimeyi hak eden
-//      TEK kanıt budur. Daha azı, ölçülmemiş bir değişkeni olan ①/②/③'tür.
+//      AYNI mod, AYNI `onceki`, AYNI ağaç ile iki kayıt AYRIŞIYORSA. Bu kelimeyi
+//      hak eden TEK kanıt budur. Daha azı, ölçülmemiş bir değişkeni olan ①/②/③'tür.
 //
-//   ⑤ 10/10 AYNI cevap ise: satır ARALIKLI DEĞİLDİR — ilk iki turun ayrışması
-//      kendisi bir artefakttı. Satır o cevabın sınıfına düşer (yeşilse SİLİNİR).
+//   ⑤ ≥`HEDEF_KAYIT` kayıt TEK YÖNLÜ ise (hepsi yeşil ya da hepsi kırmızı):
+//      hüküm **"YEREL REJİMDE ÜRETİLEMEDİ"**. Satır ARALIKLI KALIR ve arama
+//      REJİM eksenine taşınır (`gh run`). ⛔ Bu, "aralıklı değilmiş" DEMEK
+//      DEĞİLDİR ve satırı SİLDİRMEZ: gözlenen kırmızılar defterin KAYDETMEDİĞİ
+//      bir rejimde olduysa, o rejimde hiçbir şey ölçülmemiştir.
 //
-// ⚠️ DEFTER BİR TEŞHİS ALETİDİR, BİR ONARIM DEĞİL. Pencere boyunca
-//    `test_fold_catalog` DEĞİŞTİRİLMEZ; değiştirilirse pencere SIFIRLANIR.
-//    Yoksa ölçtüğün şey olay değil, kendi düzeltmendir (*kontrol grubu kirli*).
+//   ⑥ `<HEDEF_KAYIT` kayıt: **"veri yetmedi"** — meşru bir sonuçtur, sezgiyle
+//      doldurulmaz. Hüküm YAZILMAZ, satır ARALIKLI kalır.
+//
+// ⚠️ DEFTER BİR TEŞHİS ALETİDİR, BİR ONARIM DEĞİL. Pencere boyunca izlenen bekçi
+//    DEĞİŞTİRİLMEZ; değiştirilirse pencere SIFIRLANIR. Yoksa ölçtüğün şey olay
+//    değil, kendi düzeltmendir (*kontrol grubu kirli*).
 //
 // ⚠️ HİÇBİR KAYIT DEFTERDEN ÇIKARILMAZ — "bu koşum sayılmaz" denmez. Aletin
 //    kendi sondası da bir koşumdur ve defterdeki İLK kayıt odur. Kaydı niyetine
 //    göre elemek, hangi turun "gerçek" olduğuna ÇÖZÜMLEME ANINDA karar vermek
-//    demektir; sonuca göre seçim tam oradan sızar. Ayrımı `db`/`mod` alanları
-//    zaten taşıyor ve ①②③ soruları onları kullanıyor — eleme ORADA yapılır,
-//    kayıt kabulünde değil.
+//    demektir; sonuca göre seçim tam oradan sızar. Ayrımı `db`/`mod`/`agac`
+//    alanları zaten taşıyor ve ①②③④ soruları onları kullanıyor — eleme ORADA
+//    yapılır, kayıt kabulünde değil.
+//
+// =============================================================================
+// 📌 KURALIN DEĞİŞTİĞİ YER — ve neden bu bir GEREKÇE değil
+// =============================================================================
+// İlk kural "≥3 kırmızı" istiyordu ve bu eşik **yapısal olarak dolamazdı**:
+// kırmızılar YALNIZ CI'da oluyordu, defter ise yalnız yerel ağaçta kayıt tutuyor
+// (ölçüldü 2026-09-13: 10 kayıt, 10'u da yerel, 10'u da yeşil). ⇒ Kural veriden
+// önce yazılmıştı ama ÖLÇÜLEMEZ bir şey soruyordu.
+// Kuralı değiştirmek de bir karardır (1e hükmü, 2026-09-13, şık (b); arşivde
+// gerekçesiyle). Değişikliğin post-hoc gerekçeye düşmemesinin ölçüsü şudur:
+// **yeni ⑤ hiçbir yeni İZİN vermez, bir izni GERİ ALIR.** Eski ⑤ "10/10 aynı
+// cevapsa satır aralıklı değildir, yeşilse SİLİNİR" diyordu — yani eldeki 10
+// yeşil kaydın satırı KAPATMASINA izin veriyordu. Yeni ⑤ bunu YASAKLIYOR ve
+// yerine yalnız bir yön değişikliği koyuyor. Kural NET SIKILAŞTI; veriye
+// bakılarak seçilmiş bir ölçüt, tuttuğu veriyi kendi lehine kapatırdı.
 //
 // =============================================================================
 // ⚠️ İKİ TASARIM KARARI, GEREKÇESİYLE
 // =============================================================================
 // **① Defter dosyası İZLENMEZ (`.gitignore`), ama satır STDOUT'a da basılır.**
 // Bu ağaçta altı oturum çalışıyor; izlenen bir dosyaya her `npm test`in yazması
-// herkesin `git status`unu kirletir ve commit kapısını zehirler. Ama aralıklılık
-// **CI'da** gözlendi ve yalnız yerel dosya tutmak CI turlarını KAYBEDERDİ.
-// Çözüm ikisi birden: yerelde satır dosyaya, her yerde satır stdout'a — CI'ın
-// kendi log'u o turun kalıcı deposudur ve `SIKLIK-DEFTERİ` ile grep'lenir.
+// herkesin `git status`unu kirletir ve commit kapısını zehirler. Stdout satırı
+// CI'da da basılır ve `SIKLIK-DEFTERİ` ile grep'lenir — ama o satır bir KAYIT
+// DEĞİL bir İZDİR: hiçbir yerde toplanmaz, hüküm eşiğine girmez (yukarıdaki
+// kapsam cümlesi). CI'ın sayımı `gh run`ındır.
 //
 // **② Yazma hatası bekçiyi KIRMIZI YAPMAZ ama SESSİZ de kalmaz.** Bir teşhis
-// aleti ölçtüğü şeyi düşüremez. Ama `.catch(() => {})` bu gece bir kök nedeni
-// tam 13 kez sakladı — o yüzden yutulan hata BASILIR.
+// aleti ölçtüğü şeyi düşüremez. Ama `.catch(() => {})` bir kök nedeni tam 13 kez
+// sakladı (2026-09-13) — o yüzden yutulan hata BASILIR.
 // =============================================================================
+import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
-/** Defterin kapsamı — BİLEREK tek dosya. Genişletmek bir KARARDIR, kayma değil. */
-export const IZLENEN = new Set(["test_fold_catalog.ts"]);
+/**
+ * İzlenen bekçiler ve HER BİRİNİN KENDİ penceresi. Bir satır eklemek pencereyi
+ * AÇAR; `acilis` o günün tarihidir. Genişletmek bir KARARDIR, kayma değil.
+ *
+ * BUGÜN BOŞ: tek konusu `test_fold_catalog.ts` idi ve aralıklılığı `675211b2`
+ * ile açıklandı (sınırsız alt dizgi eşleşmesi, 1/10) — defterle değil TEŞHİSLE.
+ * Alet dormant kalır: sıradaki ARALIKLI satır için hazır, ve boş kümede
+ * `defteYaz` hiçbir şey yapmaz.
+ */
+export const IZLENEN = new Map<string, { acilis: string; pencereSon: string }>();
 
-/** Pencerenin kapanış günü. Dolduğunda koşucu GÖRÜNÜR bir uyarı basar. */
-export const PENCERE_SON = "2026-09-27";
-
-/** Hüküm için gereken kayıt sayısı (ve her yönden en az 3). */
+/** Hüküm için gereken kayıt sayısı (ve her yönden en az 3), TEK AĞAÇTA. */
 export const HEDEF_KAYIT = 10;
 
 const DEFTER = join(__dirname, "..", "..", "siklik-defteri.jsonl");
@@ -93,6 +124,10 @@ export interface DefterKaydi {
   mod: "tam" | "tek";
   /** YALNIZ veritabanı ADI — bağlantı dizesi ve parola ASLA yazılmaz. */
   db: string;
+  /** REJİM ekseni: bu satır hangi koşum rejiminde doğdu (kapsam cümlesi). */
+  rejim: "yerel" | "ci";
+  /** AĞAÇ ekseni: worktree adı ya da "ortak". İki ağacın kaydı TOPLANMAZ. */
+  agac: string;
   sonuc: "yesil" | "kirmizi";
   ozet: string;
   /** Kırmızı yüklemin ADI — sayı bir teşhis değildir, adres gerekir. */
@@ -115,14 +150,34 @@ export function dbAdi(url: string | undefined): string {
   }
 }
 
+/** Koşum rejimi — CI'ın satırı bir İZ'dir, kayıt değil (kapsam cümlesi). */
+export function rejimAdi(env: NodeJS.ProcessEnv = process.env): "yerel" | "ci" {
+  return env.CI === "true" || env.GITHUB_ACTIONS === "true" ? "ci" : "yerel";
+}
+
+/**
+ * Çalışma ağacının adı: izole worktree'de dizin adı (`wt-d9`), ortak ağaçta
+ * "ortak". `git rev-parse --git-dir` izole ağaçta `.git/worktrees/<ad>` döner —
+ * `hizli-mandallar.mjs`in izole-ağaç ölçütüyle aynı kaynak.
+ */
+export function agacAdi(cwd: string = process.cwd()): string {
+  try {
+    const gitDir = execFileSync("git", ["rev-parse", "--git-dir"], { cwd, encoding: "utf8" }).trim();
+    return gitDir.includes("/worktrees/") ? basename(gitDir) : "ortak";
+  } catch {
+    return "?";
+  }
+}
+
 /**
  * Bir satır yaz. Zaten koşmuş bir bekçinin sonucundan türer — ekstra koşum YOK.
  * Kapsam dışıysa hiçbir şey yapmaz.
  */
 export function defteYaz(k: DefterKaydi): void {
-  if (!IZLENEN.has(k.dosya)) return;
+  const pencere = IZLENEN.get(k.dosya);
+  if (!pencere) return;
   const satir = JSON.stringify({ t: new Date().toISOString(), ...k });
-  // CI'ın log'u bu turun kalıcı deposu — grep'lenebilir sabit ön ek.
+  // CI'da da basılır ama orada bir İZ'dir: sabit ön ek grep'lenebilsin diye.
   console.log(`📓 SIKLIK-DEFTERİ ${satir}`);
   try {
     appendFileSync(DEFTER, `${satir}\n`);
@@ -131,9 +186,9 @@ export function defteYaz(k: DefterKaydi): void {
     // arızasını da saklamaz.
     console.log(`   ⚠️ sıklık defteri YAZILAMADI (kayıt yalnız log'da): ${(e as Error).message}`);
   }
-  if (new Date().toISOString().slice(0, 10) > PENCERE_SON) {
+  if (new Date().toISOString().slice(0, 10) > pencere.pencereSon) {
     console.log(
-      `   ⚠️ SIKLIK DEFTERİ PENCERESİ DOLDU (${PENCERE_SON}) — hüküm yazılmadı.\n` +
+      `   ⚠️ SIKLIK DEFTERİ PENCERESİ DOLDU (${k.dosya}, ${pencere.pencereSon}) — hüküm yazılmadı.\n` +
         `      Karar kuralı: scripts/lib/siklik-defteri.ts başlığı. Kapanmayan pencere bir defter değil, bir GÜNLÜKTÜR.`,
     );
   }
