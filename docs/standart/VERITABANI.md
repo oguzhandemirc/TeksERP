@@ -4,7 +4,7 @@ Bu dosya "yeni bir tablo/kolon/migration nasıl yazılır" sorusunun cevabıdır
 
 Kural biçimi ve zorlama etiketleri: [`README.md`](README.md). Katman-üstü ilkeler: [`ILKELER.md`](ILKELER.md). Kadans: [`TEST-VE-DERLEME.md`](TEST-VE-DERLEME.md).
 
-**Burada tekrarlanmayan, işaret edilen yerler:** `Teks-Erp/CLAUDE.md` § "Veritabanı ve Prisma" (14 DB kuralı) · `docs/KOD-KURALLARI.md` (partial index drift · `notIn: []` · `now() AT TIME ZONE 'UTC'` · `applied_steps_count` · `EXPRESSION_UNIQUES` girdisi · cursor sözleşmesi) · `docs/RECETELER.md` (§ enum'a yeni değer, § yeni migration) · `docs/kurallar/deploy-kurulum.md` · kök `CLAUDE.md` § Veri ve defter.
+**Burada tekrarlanmayan, işaret edilen yerler:** `Teks-Erp/CLAUDE.md` § "Veritabanı kuralları" (14 DB kuralı) · `docs/KOD-KURALLARI.md` (partial index drift · `notIn: []` · `now() AT TIME ZONE 'UTC'` · `applied_steps_count` · `EXPRESSION_UNIQUES` girdisi · cursor sözleşmesi) · `docs/RECETELER.md` (§ enum'a yeni değer, § yeni migration) · `docs/kurallar/deploy-kurulum.md` · kök `CLAUDE.md` § Veri ve defter.
 
 Ham ölçümler: [`kesif/sema-migration.json`](../history/standart-2026-09-05/kesif/sema-migration.json) · [`olcum/faz0-acik-olcumler.json`](../history/standart-2026-09-05/olcum/faz0-acik-olcumler.json).
 
@@ -108,7 +108,7 @@ Varsayılan silme SOFT'tur (kök `CLAUDE.md` § Veri ve defter). Bugün geçerli
 
 ## 10 · Sorgu, Decimal, zaman
 
-14 numaralı DB kural listesi `Teks-Erp/CLAUDE.md` § "Veritabanı ve Prisma"dadır (cursor pagination · `select` ≠ `include` · `$queryRaw` · `createMany` · kısa tx · snapshot JSON). Burada yalnız **yeni kodda zorunlu** iki tanesi kural satırı olarak durur:
+14 numaralı DB kural listesi `Teks-Erp/CLAUDE.md` § "Veritabanı kuralları"dadır (cursor pagination · `select` ≠ `include` · `$queryRaw` · `createMany` · kısa tx · snapshot JSON). Burada yalnız **yeni kodda zorunlu** iki tanesi kural satırı olarak durur:
 
 - **[DB-33]** Para/metraj kolonu `Decimal` + `@db.Decimal(p,s)`'tir ve ölçek kataloğuna uyar — metraj `(12,3)` · tutar `(14,2)` · kur `(18,6)`; okuma/yazma yolu `Prisma.Decimal` ya da DB-side `increment`/`decrement` kullanır, JS float kullanmaz · zorlama: insan:`Number(qty|amount|total)` çağrılarının çoğu sunum/serileştirmedir (95 vuruş ölçüldü, tek tek doğrulanmadı) — AST ayıramaz · kanıt: 97 Decimal kolon; `Prisma.Decimal` 662 kullanım, increment/decrement 34 · devralınan: yok
 - **[DB-34]** `Json` kolon yalnız snapshot/config/audit yükü içindir; Prisma JSON filtresiyle sorgulanmaz ve liste sorgusunda `omit` ile düşürülür · zorlama: insan:eksik `omit` yalnız yanıt boyutunda görünür, kapı kurulmadı · kanıt: 25 Json kolon, Prisma JSON filtresi 0; emsal `traveler-card.service.ts:751` (`omit: { snapshot: true }`) · devralınan: 1 sorgu index'siz (`system_logs.newData`, §12)
