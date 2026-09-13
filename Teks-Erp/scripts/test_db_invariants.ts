@@ -457,6 +457,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // o yüklem `services/helpers/production-line.helper.ts`te yaşar ve
   // `test_production_line` §1 onun DAVRANIŞINI ölçer (varlığını değil).
   { table: "machines", name: "machines_productionLineCount_pos" },
+  // 2026-09-13 (dokuma yazma yüzeyi) — migration 20260913241000. P1 bilerek
+  // erteledi ("kapısız CHECK, yazanı olmayan kısıt"); servisin 400'ü ilk hat,
+  // bu CHECK son hat (çift yüklem). SUBCONTRACTED ⇔ subcontractorId DOLU.
+  { table: "weaving_orders", name: "weaving_orders_party_ck" },
   // 2026-09-13 (dokuma P2b-1) — migration 20260913240000.
   // ⚠️ `shift_definitions_window_sane` üçü birden tutar: pencere gün içinde
   // başlar (0..1439) · süre POZİTİF · mola süreyi AŞMAZ. Üçü de POT'un (planlı
