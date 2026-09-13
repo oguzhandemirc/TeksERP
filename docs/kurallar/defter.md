@@ -101,7 +101,15 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 
 ## Mevcut defter envanteri (2026-09-13 ölçümü — kapısı `test_defter_ters_yol`)
 
-> ⚠️ **`WarehouseMovement` bir STOK DEFTERİ DEĞİLDİR** (2026-09-11 ölçümü). Satır yalnız topun `warehouseId`'si DOLUYKEN yazılır (`warehouse-ledger.helper.ts:49`); üretimdeki top depoya statü terfisiyle girer ve terfi bilinçli olarak satır yazmaz. Ölçüm: defter sonrası doğan 1.231 topun 751'inde satır var, 87 top depoda ama defterde hiç yok; mutabakat farkı −5.369,3 m; `CANCELLED` 69 topun 0'ında CANCEL satırı var. Bugünkü hâli KENDİ İÇİNDE TUTARLIDIR (girişi olmayanın çıkışı da yok) — ama "depoda ne var" sorusunu CEVAPLAMAZ. Stok defterine dönüşmesi ayrı karardır.
+> ⚠️ **`WarehouseMovement` bir STOK DEFTERİDİR (2026-09-13) ama GEÇMİŞİ EKSİKTİR.** Yazar kümesi kapandı — 10 terfi yolu depo damgalıyor, stok kümesinden çıkan yollar deposuz topu 409 ile durduruyor, ters yollar `reversesMovementId` ile bağlı. **Kapalı KALMASINI ölçen kapı: `test_stok_defteri_bag_olcumu` (K = 0 ∧ V).** ⚠️ *Kapısız bir "tamdır", tarihsiz bir sayıdan farksızdır* — on birinci bir terfi yolu yazılırsa cümleyi o kapı yalanlar, okuyanın güvenmesi gerekmez.
+>
+> **Eksik olan GEÇMİŞTİR ve bu bir VERİ olgusudur; yazar düzelterek kapanmaz.** Ölçüm — taban: ağaç `810331bf`, DB `tekserp_fabrika_dev` (fabrikanın canlı yedeği, salt okuma), 2026-09-13:
+>
+> · Defter başlangıcından (2026-09-04) sonra doğan **1.259** topun **516**'sı `WAREHOUSE` statüsünde olup defterde **hiç satırı yok**; bu küme yedek tarihine kadar **günde ~100 top** büyüyordu (10 · 68 · 117 · 31 · 127 · 173). ⚠️ Sayı bir zaman damgasıdır, ölçüm değil: boşluk akıyordu ve yazar kümesinin kapanması onu **durdurdu**, geçmişi onarmadı.
+> · **368** `CANCELLED` topun karşı `CANCEL` satırı yok.
+> · Canlı stok ↔ defter neti mutabakatı **epoch'tan ÖNCE TANIMSIZDIR** (778 satırın 721'i statüsüz ⇒ stok-kümesi uçlu Σ onları tanım gereği dışarıda bırakır; karşılaştırmanın bir tarafı yok). Hesaplanabilir bir fark üretilebilir ama **anlamlı değildir** — Σ ve as-of ancak açılış fotoğrafından sonra okunur.
+>
+> ⚠️ **Geçmişin onarımı KULLANICI KARARIDIR** (geçmiş veriye dokunur); ölçüldü ve bekliyor.
 
 | Defter | Kapsam | Append-only | Ters yol |
 |---|---|---|---|
