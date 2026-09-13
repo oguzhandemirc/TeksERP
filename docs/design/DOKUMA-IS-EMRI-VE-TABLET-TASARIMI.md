@@ -170,7 +170,7 @@ Kısıt adı kolona hizalanır (proje alışkanlığı: `machines_warp_beam_slot
 
 ⚠️ Bu, §1.2'nin aynı sınıfıdır (**birleştirilmiş eksen**): üç bağımsız gerçeği tek sayıya bindiren model, her uçta sessizce yanlış olur ve yalnız test edilen uçta doğru çalışır. Raşel/çift-enli ayrımında aynı hata bir kez yakalandı (`DOKUMA-TEZGAH-IZLEME-TASARIMI.md` §10/#23: *"ÜRETİLEN KUMAŞ SAYISI, TÜKETİLEN LEVENT SAYISINDAN BAĞIMSIZ BİR EKSENDİR"*).
 
-### 2.2 · Dokuma işinin kabı — `WeavingOrder` (tam tasarım, ŞEMAYA YAZILMADI)
+### 2.2 · Dokuma işinin kabı — `WeavingOrder` (tam tasarım, **ŞEMAYA YAZILDI** — P1, `77b69da9`)
 
 **Sınıfı: İŞ KABI** — `WorkOrder` emsali. Mutasyona uğrar ⇒ `createdAt` + `updatedAt` + künye (`DoffEvent`in DEFTER sınıfından farklı; o append-only'dir).
 
@@ -196,7 +196,11 @@ model WeavingOrder {
 
   /// KİM DOKUYOR. `WarpBeamOrigin` kalıbının kardeşi — ikinci bir desen icat edilmez.
   executionKind    WeavingExecutionKind
-  /// XOR: `SUBCONTRACTED` ise DOLU, `IN_HOUSE` ise NULL (CHECK `weaving_orders_party_ck`).
+  /// XOR: `SUBCONTRACTED` ise DOLU, `IN_HOUSE` ise NULL.
+  /// ⚠️ CHECK `weaving_orders_party_ck` **HENÜZ YOK** — bu satır bir dönem var gibi
+  /// yazıyordu. P1'in migration'ı onu bilerek ertelemişti: *kapısız bir CHECK,
+  /// yazanı olmayan bir kısıttır* ⇒ yazma yüzeyiyle AYNI dilimde iner. Birincil
+  /// doğrulama servis kapısındadır (`resolveSupplierParty` kalıbı).
   /// ⚠️ İKİNCİ HATTIR — birincil doğrulama `resolveSupplierParty` kalıbındaki tek kapıda.
   subcontractorId  String? @db.Uuid
 
@@ -208,20 +212,31 @@ model WeavingOrder {
   /// KAPANIŞ — açık karardır, türetilmez (§2.2a).
   closedAt     DateTime? @db.Timestamptz
   closedById   String?   @db.Uuid
-  /// İPTAL — soft, sebep kataloğundan.
+  /// İPTAL — soft. ⚠️ Sebep **SERBEST METİNDİR** (`VarChar(300)`), sebep
+  /// kataloğundan DEĞİL: bu satır bir dönem "kataloğundan" diyordu ve aşağıdaki
+  /// alanla çelişiyordu. Kataloğa bağlamak yeni bir `ReasonPresetKind` değeri
+  /// ister ve o GERİ ALINAMAZ (PG enum değeri düşürülemez).
+  /// ⏳ BORÇ, kapanma koşuluyla: `ReasonPresetKind.MACHINE_STOP` dilimi (P2b-2)
+  ///    indiğinde, dokuma işi iptalinin kendi `kind`ini hak edip etmediği
+  ///    KULLANIM ÖLÇÜLEREK sorulur — bugün kullanım verisi sıfırdır.
   cancelledAt  DateTime? @db.Timestamptz
   cancelledById String?  @db.Uuid
   cancelReason String?   @db.VarChar(300)
 
-  runs MachineRun[]
+  machineRuns MachineRun[]   // ⚠️ ad `runs` DEĞİL — şema `machineRuns` (P1'de indi)
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt      @db.Timestamptz
   createdById String? @db.Uuid
   updatedById String? @db.Uuid
 
+  // ⚠️ ŞEMADA BEŞ index var, burada iki yazılıydı — belge eksikti, şema değil.
+  // Dördü domain FK'sı ([DB-12]), biri ekran sorgusu (eşitlik önce).
   @@index([status, plannedStartDate])
   @@index([itemId])
+  @@index([colorId])
+  @@index([warpSpecId])
+  @@index([subcontractorId])
   @@map("weaving_orders")
 }
 
@@ -229,7 +244,7 @@ enum WeavingExecutionKind { IN_HOUSE  SUBCONTRACTED }
 enum WeavingOrderStatus   { PLANNED  IN_PROGRESS  COMPLETED  CANCELLED }
 ```
 
-**Numara üreteci:** `workOrderNumber` emsali — sequence okuma **tx İÇİNDE**, `withBarcodeRetry`. Advisory uzay gerekir; envanter bugün **8031**'de bitiyor ve tezgah tasarımı **8032**'yi (vardiya mührü), devere **8033**'ü rezerve etmiş — ikisi de henüz *yazılmamış tasarım rezervasyonu*. ⇒ `WEAVING_ORDER_LOCK_NS = 8034`, ama **iniş anında `period-guard.helper.ts` başlığından yeniden ölçülür** (rezervasyonlar sırayla inmemiş olabilir).
+**Numara üreteci:** `workOrderNumber` emsali — sequence okuma **tx İÇİNDE**, `withBarcodeRetry`. Advisory uzay gerekir. ⚠️ **`WEAVING_ORDER_LOCK_NS = 8032` İNDİ** (`services/helpers/weaving-order.helper.ts:24`, envanter `period-guard.helper.ts:57`). Bu satır bir dönem *"8032 vardiya mührüne rezerve, dokuma işine 8034"* diyordu ve **YANLIŞTI** — iniş anında envanterden yeniden ölçüldü ve sıradaki boş numara 8032 çıktı; rezervasyonlar sırayla inmemişti. 📌 Aynı bayat numara bu belge ailesinde **ÜÇ kez** çıktı (`dokuma.md` bir kez d9 tarafından kapatıldı, bu belge taşımaya devam etti). ⇒ ***Bir bayat sayıyı bir belgede düzeltmek, onu taşıyan ötekini düzeltmez*** — ve ***bir rezervasyon SAYI tutarsa bayatlar; SORU ve ÖLÇÜM YERİ tutarsa bayatlamaz.*** Sonraki uzay buradan değil **envanterden** okunur.
 
 #### (a) Kapanış ölçütü — AÇIK KARAR, türetilmez
 
@@ -337,7 +352,7 @@ Dokuma işi **üçüncü bir yetenektir** ve ikisiyle de aynı şey değil:
 
 ## §3 · Tablet yüzeyi — dokumacının ekranı
 
-> Kök kural: *"Bir yetenek 'VAR' sayılmak için üçü birden: motor + **en az bir çıkış yüzeyi** + izin ataması."* Devere ve tezgah bugün **yüzeysizdir** ⇒ kendi kuralımıza göre o modüller **yok** sayılır. Bu bölüm o yüzeyi kurar.
+> Kök kural: *"Bir yetenek 'VAR' sayılmak için üçü birden: motor + **en az bir çıkış yüzeyi** + izin ataması."* ⚠️ **Bu cümle DEVERE için BAYAT** (ölçüldü 2026-09-13): Çözgü Kartları ekranı indi (`Electron/src/pages/WarpSpecs/`, route `definitions/warp-specs`, uç `/api/warp-specs`) ⇒ devere artık yüzeysiz DEĞİL. **Tezgah** bugün de yüzeysizdir ⇒ kendi kuralımıza göre o modüller **yok** sayılır. Bu bölüm o yüzeyi kurar.
 
 ### 3.1 · ⚠️ FAZ SIRASI DÜZELTMESİ — `DoffEvent` Faz 3'ten Faz 1b'ye çekilir
 
