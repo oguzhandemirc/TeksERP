@@ -34,6 +34,7 @@
 //    ve her koşum tavanı kendi sayımından üretti. Bekçi VAKUMEN YEŞİLDİ; sonda
 //    olmasa fark edilmezdi.
 // =============================================================================
+import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -203,19 +204,98 @@ check(
   TR_KOKLER.some((k) => "musterilistesi".includes(k)),
 );
 
+// =============================================================================
+// ⚠️ TARAMA KÜMESİ TAM, HÜKÜM DAR — ve bu ayrım load-bearing (2026-09-13).
+// =============================================================================
+// Bu kapı 2026-09-13 gecesi BENİ durdurdu: iki satırlık bir BELGE commit'i
+// atıyordum ve kırmızı, başka bir oturumun **commit edilmemiş** `pg-tool.helper.ts`
+// dosyasındaki `hatalar` adındandı. Ağacı altı oturum paylaşıyor ⇒ ağaçta bir
+// ihlal görmek, onu BU COMMIT'İN getirdiğini göstermez.
+//
+// Aynı ailenin bu repoda dördüncü vakası:
+//   check-migrations GATE 1/4 → geçici indeksi okuyordu   → gerçek indeks
+//   check-lint-baseline       → "kurala DEĞDİ Mİ"         → headSayim(): HEAD ↔ ağaç
+//   kimlik tekilliği kapısı   → ağacı okuyordu            → HEAD ↔ ağaç (820ade01)
+//   BU KAPI                   → ağacı okuyordu            → ↓
+//
+// İKİ AYRI DARALTMA GEREKİYOR ve biri ötekinin yerine geçmez:
+//   ① KAPSAM  — bulgu BU COMMIT'in dosyalarında mı? (başkasının WIP'i beni durduramaz)
+//   ② NEDENSELLİK — ad HEAD'de zaten var mıydı? (dosyaya DOKUNMAK ihlali ÜRETMEK değildir)
+// ①'siz kapı yanlış kişiyi durdurur; ②'siz kapı, ihlalli bir dosyaya virgül
+// ekleyeni suçlar. lint kapısında ikisini ayrı ayrı ödedik.
+//
+// ⚠️ TARAMA KÜMESİ DARALTILMAZ: mandal aynı kümeyi ölçmeli, yoksa "küme küçüldü"
+// hükmü kapsam daralmasından doğar ve taban sahte sıkışır.
+// ⚠️ Kapsam listesi YOKSA (CI, tam paket) hüküm TAM kalır — inen her ihlal görünür.
+const KOMIT_KUMESI = process.env.TEKSERP_KOMIT_DOSYALARI
+  ? new Set(process.env.TEKSERP_KOMIT_DOSYALARI.split("\n").map((s) => s.trim()).filter(Boolean))
+  : null;
+
+/** O dosyanın HEAD'deki hâlinde bu ad zaten var mıydı? */
+function headdeVarMi(dosya: string, ad: string): boolean {
+  try {
+    const ham = execFileSync("git", ["show", `HEAD:${dosya}`], {
+      cwd: KOK,
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    for (const m of yorumsuz(ham).matchAll(BILDIRIM)) if (m[1] === ad) return true;
+    return false;
+  } catch {
+    // Dosya HEAD'de yok (yeni dosya) ⇒ ad da yok. Sessiz yutmuyoruz: yeni dosya
+    // zaten bu commit'in eseridir ve ihlali ona yazmak DOĞRUDUR.
+    return false;
+  }
+}
+
 console.log("\n§2 — ratchet: küme yalnız KÜÇÜLÜR");
 console.log(`   bugün ${bugun.length} · devralınan ${taban.adlar.length}`);
+
+const ayristir = (k: string): { dosya: string; ad: string } => {
+  const i = k.lastIndexOf("::");
+  return { dosya: k.slice(0, i), ad: k.slice(i + 2) };
+};
+let hukumKumesi = yeniler;
+let kapsamDisi: string[] = [];
+let zatenHeadde: string[] = [];
+if (KOMIT_KUMESI) {
+  kapsamDisi = yeniler.filter((k) => !KOMIT_KUMESI.has(ayristir(k).dosya));
+  const kapsamda = yeniler.filter((k) => KOMIT_KUMESI.has(ayristir(k).dosya));
+  zatenHeadde = kapsamda.filter((k) => {
+    const { dosya, ad } = ayristir(k);
+    return headdeVarMi(dosya, ad);
+  });
+  hukumKumesi = kapsamda.filter((k) => !zatenHeadde.includes(k));
+  // GÖRÜNÜRLÜK: daraltılan her şey BASILIR. Sessiz daraltma, kapıyı sessizce öldürür.
+  if (kapsamDisi.length > 0)
+    console.log(
+      `   ⓘ ${kapsamDisi.length} yeni ad BU COMMIT'İN DIŞINDA (başka oturumun ağaçtaki işi) — hüküm verilmedi:\n` +
+        `      ${kapsamDisi.slice(0, 3).join(" · ")}${kapsamDisi.length > 3 ? ` (+${kapsamDisi.length - 3})` : ""}`,
+    );
+  if (zatenHeadde.length > 0)
+    console.log(
+      `   ⓘ ${zatenHeadde.length} ad HEAD'de ZATEN vardı — dosyaya dokunmak ihlali üretmek değildir:\n` +
+        `      ${zatenHeadde.slice(0, 3).join(" · ")}`,
+    );
+}
+
 check(
   "⭐ üretim kodunda YENİ Türkçe tanımlayıcı YOK",
-  yeniler.length === 0,
-  yeniler.length > 0
-    ? `${yeniler.length} YENİ: ${yeniler.slice(0, 5).join(" · ")}` +
-      (yeniler.length > 5 ? ` (+${yeniler.length - 5})` : "") +
+  hukumKumesi.length === 0,
+  hukumKumesi.length > 0
+    ? `${hukumKumesi.length} YENİ: ${hukumKumesi.slice(0, 5).join(" · ")}` +
+      (hukumKumesi.length > 5 ? ` (+${hukumKumesi.length - 5})` : "") +
       "  → İngilizce ad ver, ya da gerekçesiyle MUAFLAR'a ekle"
-    : "temiz",
+    : KOMIT_KUMESI
+      ? `bu commit temiz (kapsam ${KOMIT_KUMESI.size} dosya)`
+      : "temiz",
 );
 
-if (kalkanlar.length > 0 && yeniler.length === 0) {
+// ⚠️ TABAN YALNIZ TAM KOŞUMDA SIKIŞIR. Kapsamı daraltılmış (hook) koşumda ağaç
+// BAŞKA OTURUMLARIN commit edilmemiş işini taşıyor; tabanı oradan yazmak, henüz
+// inmemiş bir durumu "devralınan" ilan etmek olurdu — ve o iş geri alınırsa taban
+// var olmayan adları taşır. Sıkışma bir ÖLÇÜMDÜR, yan etki değil.
+if (!KOMIT_KUMESI && kalkanlar.length > 0 && yeniler.length === 0) {
   console.log(`   ↓ küme sıkışıyor: ${taban.adlar.length} → ${bugun.length} (${kalkanlar.length} ad çevrildi)`);
   writeFileSync(TAVAN_DOSYA, JSON.stringify({ adlar: bugun }, null, 2) + "\n");
 }

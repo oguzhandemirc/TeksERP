@@ -102,6 +102,12 @@ if (staged.some((f) => /^(Teks-Erp|Electron|mobil)\/src\/.*\.tsx?$/.test(f))) {
     ad: "tanımlayıcı dili",
     cwd: "Teks-Erp",
     cmd: ["npx", ["tsx", "scripts/test_identifier_language.ts"]],
+    // ⚠️ KAPSAM LİSTESİ BURADAN GİDER, bekçi kendisi TÜRETMEZ. Altı oturum aynı
+    // ağacı paylaşıyor: bekçi ağaca baksa BAŞKASININ commit edilmemiş dosyasındaki
+    // ihlalden bizi durdururdu (2026-09-13 gecesi tam olarak bu oldu). Liste
+    // `stagedFiles()`ten gelir — `git status`tan DEĞİL: kısmi commit'te geçici
+    // indeks yüzünden o yanlış cevap verir.
+    env: { TEKSERP_KOMIT_DOSYALARI: staged.join("\n") },
   });
 }
 
@@ -139,7 +145,7 @@ for (const adim of adimlar) {
     cwd: join(REPO, adim.cwd),
     encoding: "utf8",
     timeout: 600_000,
-    env: process.env,
+    env: { ...process.env, ...(adim.env ?? {}) },
     ...(adim.stdin === undefined ? {} : { input: adim.stdin }),
   });
   const sn = ((Date.now() - t0) / 1000).toFixed(1);
