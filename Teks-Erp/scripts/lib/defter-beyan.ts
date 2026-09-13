@@ -239,8 +239,8 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   D("SackAllocation", "sipariş karşılama defteri — MALİ ETKİSİ OLAN tek tahsis defteri", { tur: "YOK" }, [],
     ["src/services/shipping.service.ts"],
     { silen: ["src/services/shipping.service.ts"], borc: [{
-      ne: "sil-yaz (3 deleteMany); değişim geçmişi AUDIT'e yazılıyor (tx dışında, best-effort, 6 ayda arşivlenir)",
-      kanit: "shipping.service.ts deleteMany ×3: writeShipmentAllocationsTx · setShipmentOrders · cancelPlannedShipmentTx · flushAllocationAudit tx DIŞINDA · kod yorumu tabloyu \"mali etkisi olan tek defter\" diyor",
+      ne: "sil-yaz (3 deleteMany, tek dosya); değişim geçmişi AUDIT'e yazılıyor (tx dışında, best-effort, 6 ayda arşivlenir). Kapanır: tahsis satırı SİLİNMEZ, versiyonlanır (`validUntil` damgası; `@@unique([sackId, orderLineId])` partial'a döner: `validUntil IS NULL`) ya da ters kayıt alır; `OrderLine.shippedQty` gibi Σ okuyucular yalnız açık versiyonu toplar",
+      kanit: "shipping.service.ts:2072 writeShipmentAllocationsTx · :2823 setShipmentOrders · :3578 cancelPlannedShipmentTx (kapının tarayıcısı, 2026-09-13) · flushAllocationAudit :2138 tx DIŞINDA · kod yorumu tabloyu \"mali etkisi olan tek defter\" diyor. ÖLÇÜM SINIRI: üç site TEK dosyada — §10 dosya taneciklidir, kısmi kapanış (1–2 site) kapıya GÖRÜNMEZ, yalnız dosya boşalınca ÖLÜ SİLME kırmızısı gelir",
       sahibi: "sevkiyat alanı",
     }] }),
 
@@ -266,8 +266,8 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   D("SackTagAssignment", "çuval izi (etiket) ataması", { tur: "YOK" }, [],
     ["src/services/sack-tag.service.ts"],
     { silen: ["src/services/sack-tag.service.ts"], borc: [{
-      ne: "YALNIZ ELLE KALDIRMA yolunda satır fiziksel siliniyor — SEVK yolu ZATEN soft (clearedAt + clearedShipmentId, undoDispatch geri alıyor, applyTagsTx'te diriliş dalı var)",
-      kanit: "sack-tag.service.ts applyTagsTx deleteMany ×2 (removeAll · remove) · ACTIVE_TAG_WHERE süzgeç olarak sack-search.service.ts'te kullanılıyor",
+      ne: "YALNIZ ELLE KALDIRMA yolunda satır fiziksel siliniyor — SEVK yolu ZATEN soft (clearedAt + clearedShipmentId, undoDispatch geri alıyor, applyTagsTx'te diriliş dalı var). Kapanır (mekanizma HAZIR, şema değişmez): removeAll/remove dalları deleteMany yerine `updateMany { clearedAt: now, clearedShipmentId: null }` yazar (null = elle kaldırma, sevk temizliğinden ayrışır; undoDispatch onu DİRİLTMEZ çünkü clearedShipmentId ile arar); diriliş dalı `clearedAt: { not: null }` ile zaten yakalar → beyan {DAMGA clearedAt} + tersYazan applyTagsTx",
+      kanit: "sack-tag.service.ts:488 (removeAll) · :492 (remove) deleteMany, ikisi ACTIVE_TAG_WHERE = { clearedAt: null } süzgeçli (kapının tarayıcısı, 2026-09-13) · yazan tek dosya, createMany :511 skipDuplicates. Kapanır ölçülür: `silen` boşalır → §10 ÖLÜ SİLME kırmızı",
       sahibi: "sevkiyat alanı",
     }] }),
 

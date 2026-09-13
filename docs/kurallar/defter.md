@@ -126,7 +126,7 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 | `RollVariance` | fire · düzeltme · aşım | ✅ | ✅ `reversedAt` |
 | `SwatchStockReduction` + `SwatchStockReductionItem` | kartela düşümü + kalemleri | ✅ `reversedAt` damgası | ✅ damga (negatif satır CHECK yüzünden yasak); kalemi ölü kabule bağlı kartela dönmez (2026-09-11) |
 | `PaymentAllocation` | fatura kapama | ✅ `revokedAt` damgası | ✅ damga (negatif satır CHECK yüzünden yasak) |
-| `SackAllocation` | sipariş karşılama | ❌ sil-yaz (rebalance) | ❌ |
+| `SackAllocation` | sipariş karşılama | ❌ sil-yaz (rebalance; 3 site tek dosyada, kısmi kapanış §10'a görünmez) | ❌ **BORÇ** — Kapanır: satır silinmez, `validUntil` ile versiyonlanır (unique partial'a döner) ya da ters kayıt alır; `silen` boşalınca §10 ÖLÜ SİLME kırmızı |
 | `PrintedDocument` | belge versiyonu | yarı — `updatedAt` VAR (2026-09-13'te düzeltildi; eskiden ✅ yazıyordu) | ✅ `supersededAt`/`voidedAt` |
 | `ShipmentEvent` **(yeni)** | sevkiyat durum defteri, 6 olay | ✅ | ✅ DISPATCHED↔UNDISPATCHED · INVOICED↔INVOICE_CLEARED |
 | `SackWeighing` **(yeni)** | çuval tartı ölçümü | ✅ | ✅ CLEARED olayı |
@@ -139,7 +139,7 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 | `MachineStopEvent` | duruş defteri; olguları değişmez, KARARI (`reasonCode`) değişir ve değişim `MachineStopReclass`a düşer | yarı (`updatedAt`) | ✅ `revokedAt` damgası (şema `d4cc3ea0`); yazma yüzeyi HENÜZ YOK (P2b-1 şema-only) — ⚠️ iki yaşam süresi tek tabloda (tasarım §4): insan kararlı BUDANMAZ, makine sınıflı kovayla budanır; budayıcı indiği gün kapı §10 `silen` beyanını ister |
 | `DoffEvent` | doff (top alma) olayı — topu DOĞURAN kayıt (`Roll.doffEventId`, `Restrict`: doff silinemez, top ona bağlı); `counterAtDoff` sayaç fotoğrafı; `clientToken` idempotent | ✅ (`updatedAt` yok) | ✅ `revokedAt` + `revokedById` damgası (şema `44b34d23`, P3); yazma yüzeyi HENÜZ YOK (`yazan: []` ölçüldü) — beyansız ilk yazıcı `test_defter_ters_yol` §5'te kırmızı (sonda ile doğrulandı 2026-09-13) |
 | `MachineStopReclass` | sebep DEĞİŞİM defteri (`from→to`); "ne oldu değişmez"in doğru yeri: karar revize edilir, revizyonun kendisi değişmez | ✅ | ❌ **BORÇ (tasarımlı)** — ters yolu karşı kayıt (`to→from`) olacak, yazma yüzeyi de ters yolu da henüz yok; reclass yazan uç doğduğunda kapı §5 kırmızı verir |
-| `SackTagAssignment` | çuval izi (etiket) ataması | ✅ | ❌ **BORÇ — yalnız ELLE KALDIRMA yolunda** (`applyTagsTx`): satır fiziksel siliniyor. Sevk yolu ZATEN soft (`clearedAt`+`clearedShipmentId`, `undoDispatch` geri alır) |
+| `SackTagAssignment` | çuval izi (etiket) ataması | ✅ | ❌ **BORÇ — yalnız ELLE KALDIRMA yolunda** (`applyTagsTx` :488/:492): satır fiziksel siliniyor. Sevk yolu ZATEN soft (`clearedAt`+`clearedShipmentId`, `undoDispatch` geri alır). Kapanır (şema değişmez): iki dal `updateMany { clearedAt: now, clearedShipmentId: null }` yazar, diriliş dalı zaten yakalar; `silen` boşalınca §10 ÖLÜ SİLME kırmızı |
 
 ## Geçersiz kılınan kurallar
 
