@@ -8,12 +8,14 @@
 //
 // Çalıştır: npx tsx scripts/test_direct_ship_scenarios.ts
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { ensureTestDyeHouse, ensureTestSander } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus, StepStatus, WorkOrderStatus, PrintedDocType, PrintedDocStatus } from "@prisma/client";
 
 let ITEM = "", GRADE = "", ADMIN = "", ST_BOYA = "", ST_ZIMPARA = "", ST_TAMBUR = "", SUB_BOYER = "", SUB_KESTEL = "", CUSTOMER = "";
+let GRADE_CODE = "";
 const WIDTH = 250;
 
 async function resolveFixtures(): Promise<void> {
@@ -22,7 +24,9 @@ async function resolveFixtures(): Promise<void> {
     return v.id;
   };
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "Item PATOS");
-  GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "QualityGrade");
+  const _gradeRow = await roleGrade("FIRST");
+  GRADE = _gradeRow.id;
+  GRADE_CODE = _gradeRow.code;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
   ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON");
   ST_ZIMPARA = need(await prisma.station.findFirst({ where: { code: "ZIMPARA_FASON" }, select: { id: true } }), "ZIMPARA_FASON");
@@ -50,7 +54,7 @@ function barcode(): string { bc++; return `TST-DSS-${Math.floor(Math.random() * 
 
 const woIds: string[] = [], stepIds: string[] = [], orderIds: string[] = [];
 async function stockRoll(qty: number): Promise<string> {
-  const r = await prisma.roll.create({ data: { barcode: barcode(), itemId: ITEM, initialQty: qty, currentQty: qty, status: RollStatus.STOCK, qualityGrade: "1.KALITE", qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN } });
+  const r = await prisma.roll.create({ data: { barcode: barcode(), itemId: ITEM, initialQty: qty, currentQty: qty, status: RollStatus.STOCK, qualityGrade: GRADE_CODE, qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN } });
   return r.id;
 }
 async function makeWo(steps: Array<{ stationId: string; seq: number }>): Promise<{ woId: string; stepIds: string[] }> {

@@ -15,6 +15,7 @@
 // (DB'deki diğer serbest toplara karışmadan tek-tek deterministik kontrol.)
 
 import { RollStatus, RollEntrySource, StationType } from "@prisma/client";
+import { roleGrade } from "./fixture-quality-grade";
 import type { Request } from "express";
 import prisma, { pool } from "../src/lib/prisma";
 import { InventoryService } from "../src/services/inventory.service";
@@ -194,10 +195,13 @@ async function main(): Promise<void> {
   });
   check("Depodaki (WAREHOUSE) top GÖRÜNMEZ", !(await isEligible(warehouse, stepAId)));
 
+  // Fire kalitesi ROLDEN (karar ①) — ölçülen şey "fire kalite serbest stokta
+  // görünmez", fabrikanın kodu değil.
+  const fireGrade = await roleGrade("SCRAP");
   const fire = await makeRoll({
     status: RollStatus.STOCK,
     currentStepId: null,
-    qualityGrade: "FIRE",
+    qualityGrade: fireGrade.code,
   });
   check("FIRE kalite serbest stok GÖRÜNMEZ", !(await isEligible(fire, stepAId)));
 

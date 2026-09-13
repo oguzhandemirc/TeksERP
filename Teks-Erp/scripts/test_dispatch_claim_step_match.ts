@@ -13,6 +13,7 @@
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { SubcontractorService } from "../src/services/subcontractor.service";
@@ -30,6 +31,7 @@ const sub = new SubcontractorService();
 const cards = new TravelerCardService();
 
 let ITEM = "", GRADE = "", ADMIN = "", ST_BOYA = "", SUB_BOYER = "";
+let GRADE_CODE = "";
 const WIDTH = 250;
 const woIds: string[] = [];
 let bc = 0;
@@ -41,7 +43,9 @@ async function resolveFixtures(): Promise<void> {
     return v.id;
   };
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "Item PATOS");
-  GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "QualityGrade 1.KALITE");
+  const _gradeRow = await roleGrade("FIRST");
+  GRADE = _gradeRow.id;
+  GRADE_CODE = _gradeRow.code;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
   ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON");
   SUB_BOYER = (await ensureTestDyeHouse()).id;
@@ -52,7 +56,7 @@ async function makeStockRoll(qty: number): Promise<{ id: string; barcode: string
   const r = await prisma.roll.create({
     data: {
       barcode: code, itemId: ITEM, initialQty: qty, currentQty: qty,
-      status: RollStatus.STOCK, qualityGrade: "1.KALITE", qualityGradeId: GRADE,
+      status: RollStatus.STOCK, qualityGrade: GRADE_CODE, qualityGradeId: GRADE,
       width: WIDTH, createdById: ADMIN,
     },
     select: { id: true },

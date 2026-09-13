@@ -3,6 +3,7 @@
 //   toplar YENİ partiye (P2, splitFrom=P1) + YENİ karta ayrılır. Sevkin partisi = P1.
 // Çalıştır: npx tsx scripts/test_batch_partial_dispatch_autosplit.ts
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { ensureTestSander } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { WorkOrderService } from "../src/services/workorder.service";
@@ -24,7 +25,9 @@ let woId = "";
 async function main(): Promise<void> {
   const need = (v: { id: string } | null, l: string): string => { if (!v) throw new Error(`Seed eksik: ${l}`); return v.id; };
   const ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS");
-  const GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "1.KALITE");
+  const _gradeRow = await roleGrade("FIRST");
+  const GRADE = _gradeRow.id;
+  const GRADE_CODE = _gradeRow.code;
   const ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
   const ST_ZIMPARA = need(await prisma.station.findFirst({ where: { code: "ZIMPARA_FASON" }, select: { id: true } }), "ZIMPARA_FASON");
   const SUB_KESTEL = (await ensureTestSander()).id;
@@ -44,7 +47,7 @@ async function main(): Promise<void> {
 
   const bcs = [barcode(), barcode(), barcode()];
   for (const b of bcs) {
-    await prisma.roll.create({ data: { barcode: b, itemId: ITEM, initialQty: 300, currentQty: 300, status: RollStatus.STOCK, qualityGrade: "1.KALITE", qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN } });
+    await prisma.roll.create({ data: { barcode: b, itemId: ITEM, initialQty: 300, currentQty: 300, status: RollStatus.STOCK, qualityGrade: GRADE_CODE, qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN } });
   }
 
   // attachRolls → parti P1 + kart RK1 doğar

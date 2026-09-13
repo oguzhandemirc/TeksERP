@@ -3,6 +3,7 @@
 //   Güncel şema: refakat kartı İŞ EMRİ başına (workOrderId @unique).
 // Çalıştır: npx tsx scripts/test_batch_split_new_wo_modes.ts
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { RollStatus, WorkOrderStatus } from "@prisma/client";
 
@@ -38,6 +39,8 @@ const createdWoIds = new Set<string>();
 type Ctx = {
   ITEM: string;
   GRADE: string;
+  /** Kalite KODU — rolden çözülür (karar ①), fabrikanın kodu gömülü değil. */
+  GRADE_CODE: string;
   ADMIN: string;
   ST_BOYA: string;
   ST_TAMBUR: string;
@@ -55,7 +58,7 @@ async function seedRefs(): Promise<Ctx> {
   };
   return {
     ITEM: need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS"),
-    GRADE: need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "1.KALITE"),
+    ...(await (async () => { const g = await roleGrade("FIRST"); return { GRADE: g.id, GRADE_CODE: g.code }; })()),
     ADMIN: need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin"),
     ST_BOYA: need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON"),
     ST_TAMBUR: need(await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }), "TAMBUR_1"),
@@ -108,7 +111,7 @@ async function mkAttachedParty(c: Ctx, woId: string, n: number): Promise<{ batch
   const bcs = Array.from({ length: n }, () => bc());
   for (const b of bcs)
     await prisma.roll.create({
-      data: { barcode: b, itemId: c.ITEM, initialQty: 100, currentQty: 100, status: RollStatus.STOCK, qualityGrade: "1.KALITE", qualityGradeId: c.GRADE, width: WIDTH, createdById: c.ADMIN },
+      data: { barcode: b, itemId: c.ITEM, initialQty: 100, currentQty: 100, status: RollStatus.STOCK, qualityGrade: c.GRADE_CODE, qualityGradeId: c.GRADE, width: WIDTH, createdById: c.ADMIN },
     });
   const attach = await wos.attachRolls(woId, bcs, c.ADMIN);
   const batchId = attach.data!.batch!.id;

@@ -25,6 +25,7 @@
 // İzolasyon: dedicated TEST kullanıcıları + makineler — dev verisi atıf dallarına karışamaz.
 // =============================================================================
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { WorkSessionService } from "../src/services/work-session.service";
 import { WorkSessionActivityService } from "../src/services/work-session-activity.service";
 import type { SessionActivityEvent } from "../src/services/work-session-activity.service";
@@ -54,10 +55,8 @@ const key = (e: SessionActivityEvent) => `${e.kind}:${e.id}`;
 async function main() {
   const ts = Date.now();
   const item = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS");
-  const grade = need(
-    await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }),
-    "1.KALITE",
-  );
+  // Kalite ROLDEN (karar ①): fabrikanın kodu bekçiye çakılı olmasın.
+  const grade = await roleGrade("FIRST");
   const tamburStation = need(
     await prisma.station.findFirst({ where: { kind: StationKind.TAMBUR, isActive: true }, select: { id: true } }),
     "TAMBUR istasyonu",
@@ -170,7 +169,7 @@ async function main() {
     const mkRoll = async () => {
       const r = await prisma.roll.create({
         data: { barcode: null, itemId: item.id, status: RollStatus.IN_PRODUCTION,
-          currentQty: 100, initialQty: 100, width: 150, qualityGrade: "1.KALITE", qualityGradeId: grade.id,
+          currentQty: 100, initialQty: 100, width: 150, qualityGrade: grade.code, qualityGradeId: grade.id,
           createdById: user.id, currentStepId: stepId, entrySource: "SUBCONTRACTOR_RETURN",
           createdAt: at(-60) }, select: { id: true } });
       rollIds.push(r.id);
@@ -233,19 +232,19 @@ async function main() {
     const rollKK1 = await prisma.roll.create({
       data: { barcode: `TEST-KK1-${ts}`,
         itemId: item.id, status: RollStatus.STOCK, currentQty: 120, initialQty: 120, width: 150,
-        qualityGrade: "1.KALITE", qualityGradeId: grade.id, entrySource: "SUPPLIER_RECEIPT",
+        qualityGrade: grade.code, qualityGradeId: grade.id, entrySource: "SUPPLIER_RECEIPT",
         createdById: user.id, createdMachineId: machineA.id, createdAt: at(185) }, select: { id: true } });
     rollIds.push(rollKK1.id);
     // Pencere dışı giriş (görünmemeli)
     const rollOut = await prisma.roll.create({
       data: { barcode: null, itemId: item.id, status: RollStatus.STOCK, currentQty: 50, initialQty: 50,
-        qualityGrade: "1.KALITE", qualityGradeId: grade.id, entrySource: "SUPPLIER_RECEIPT",
+        qualityGrade: grade.code, qualityGradeId: grade.id, entrySource: "SUPPLIER_RECEIPT",
         createdById: user.id, createdMachineId: machineA.id, createdAt: at(240) }, select: { id: true } });
     rollIds.push(rollOut.id);
     // Pencere içi ama BAŞKA makine + başka operatör (görünmemeli)
     const rollOther = await prisma.roll.create({
       data: { barcode: null, itemId: item.id, status: RollStatus.STOCK, currentQty: 50, initialQty: 50,
-        qualityGrade: "1.KALITE", qualityGradeId: grade.id, entrySource: "SUPPLIER_RECEIPT",
+        qualityGrade: grade.code, qualityGradeId: grade.id, entrySource: "SUPPLIER_RECEIPT",
         createdById: user2.id, createdMachineId: machineB.id, createdAt: at(185) }, select: { id: true } });
     rollIds.push(rollOther.id);
 

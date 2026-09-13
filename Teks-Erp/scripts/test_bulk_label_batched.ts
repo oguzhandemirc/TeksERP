@@ -10,6 +10,7 @@
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { LabelService } from "../src/services/label.service";
 import { WorkOrderStatus, RollStatus } from "@prisma/client";
 
@@ -36,6 +37,7 @@ const svc = new LabelService();
 let ITEM = "",
   COLOR = "",
   GRADE = "",
+  GRADE_CODE = "",
   ADMIN = "",
   STATION = "";
 let testCustomerId = "";
@@ -46,7 +48,9 @@ const stamp = Date.now().toString().slice(-7);
 
 async function setup(): Promise<string[]> {
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS").id;
-  GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "1.KALITE").id;
+  const _gradeRow = await roleGrade("FIRST");
+  GRADE = _gradeRow.id;
+  GRADE_CODE = _gradeRow.code;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin").id;
   STATION = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON").id;
   const allowed = await prisma.itemAllowedColor.findFirst({ where: { itemId: ITEM }, select: { colorId: true } });
@@ -104,7 +108,7 @@ async function setup(): Promise<string[]> {
         currentQty: 100,
         initialQty: 100,
         width: 150,
-        qualityGrade: "1.KALITE",
+        qualityGrade: GRADE_CODE,
         qualityGradeId: GRADE,
         createdById: ADMIN,
         producedInStepId: cfg.producedInStepId ?? null,

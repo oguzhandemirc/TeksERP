@@ -6,6 +6,7 @@
 //   Refakat kartı WO başına (parti yeni kart üretmez), TravelerCard.workOrderId @unique.
 // Çalıştır: npx tsx scripts/test_batch_redye_three_paths.ts
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { RollStatus } from "@prisma/client";
 
@@ -25,7 +26,9 @@ let woId = "";
 async function main(): Promise<void> {
   const need = (v: { id: string } | null, l: string): string => { if (!v) throw new Error(`Seed eksik: ${l}`); return v.id; };
   const ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS");
-  const GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "1.KALITE");
+  const _gradeRow = await roleGrade("FIRST");
+  const GRADE = _gradeRow.id;
+  const GRADE_CODE = _gradeRow.code;
   const ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
   const ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON");
   const ST_TAMBUR = need(await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }), "TAMBUR_1");
@@ -56,7 +59,7 @@ async function main(): Promise<void> {
 
   // 4 STOCK top → attach → parti P1 (boyahane adımında IN_PRODUCTION).
   const bcs = [bc(), bc(), bc(), bc()];
-  for (const b of bcs) await prisma.roll.create({ data: { barcode: b, itemId: ITEM, initialQty: 100, currentQty: 100, status: RollStatus.STOCK, qualityGrade: "1.KALITE", qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN } });
+  for (const b of bcs) await prisma.roll.create({ data: { barcode: b, itemId: ITEM, initialQty: 100, currentQty: 100, status: RollStatus.STOCK, qualityGrade: GRADE_CODE, qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN } });
   const attach = await wos.attachRolls(woId, bcs, ADMIN);
   const p1Id = attach.data!.batch!.id;
 

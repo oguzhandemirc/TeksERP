@@ -38,6 +38,7 @@ import {
   WorkOrderStatus,
 } from "@prisma/client";
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { InventoryService } from "../src/services/inventory.service";
 import { WorkOrderService } from "../src/services/workorder.service";
@@ -151,7 +152,9 @@ async function main(): Promise<void> {
   // HOP 0 — Master data'yı BUSINESS-KEY ile çöz (hardcoded UUID yok)
   // ===========================================================================
   const item = await prisma.item.findFirst({ where: { code: "PATOS", isActive: true }, select: { id: true } });
-  const grade = await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true, targetStatus: true } });
+  // Kalite ROLDEN (karar ①); `targetStatus` hâlâ okunuyor çünkü akış onu ölçüyor.
+  const gradeRow = await roleGrade("FIRST");
+  const grade = await prisma.qualityGrade.findUnique({ where: { id: gradeRow.id }, select: { id: true, targetStatus: true } });
   const processStation = await prisma.station.findFirst({
     where: { kind: StationKind.PROCESS_QC, isActive: true },
     select: { id: true, code: true },
@@ -257,7 +260,7 @@ async function main(): Promise<void> {
       colorId: null, // renksiz/ham → üretim akışına girer (STOCK)
       initialQty: RAW_QTY,
       width: WIDTH,
-      qualityGrade: "1.KALITE",
+      qualityGrade: gradeRow.code,
     },
     userId,
   );
@@ -335,7 +338,7 @@ async function main(): Promise<void> {
     {
       rollId,
       decisions: [],
-      cuts: [{ length: CUT_LEN, qualityGrade: "1.KALITE", relatedErrorIds: [] }],
+      cuts: [{ length: CUT_LEN, qualityGrade: gradeRow.code, relatedErrorIds: [] }],
       foldType: "2-KAT",
     },
     userId,

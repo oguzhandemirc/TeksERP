@@ -18,6 +18,7 @@
 //    `if (foreignById.size > 0)` FOREIGN_BATCH kapısı kapatıldı -> 2 kontrol
 //    KIRMIZI. Geri alındığında yeşil.
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { WorkOrderService } from "../src/services/workorder.service";
@@ -26,6 +27,7 @@ import { RollStatus } from "@prisma/client";
 
 let ITEM = "";
 let GRADE = "";
+ let GRADE_CODE = "";
 let ADMIN = "";
 let ST_BOYA = "";
 let ST_TAMBUR = "";
@@ -38,7 +40,9 @@ async function resolveFixtures(): Promise<void> {
     return v.id;
   };
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "Item PATOS");
-  GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "QualityGrade 1.KALITE");
+  const _gradeRow = await roleGrade("FIRST");
+  GRADE = _gradeRow.id;
+  GRADE_CODE = _gradeRow.code;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "User admin");
   ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "Station BOYA_FASON");
   ST_TAMBUR = need(await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }), "Station TAMBUR_1");
@@ -77,7 +81,7 @@ async function stockRoll(qty: number): Promise<{ id: string; barcode: string }> 
       initialQty: qty,
       currentQty: qty,
       status: RollStatus.STOCK,
-      qualityGrade: "1.KALITE",
+      qualityGrade: GRADE_CODE,
       qualityGradeId: GRADE,
       width: WIDTH,
       createdById: ADMIN,

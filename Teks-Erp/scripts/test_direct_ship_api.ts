@@ -6,6 +6,7 @@
 //
 // Çalıştır (dev DB + .env JWT_SECRET): npx tsx scripts/test_direct_ship_api.ts
 import type { AddressInfo } from "net";
+import { roleGrade } from "./fixture-quality-grade";
 import app from "../src/app";
 import prisma from "../src/lib/prisma";
 import { ensureTestAdmin } from "./fixture-test-user";
@@ -16,6 +17,7 @@ import { AuthService } from "../src/services/auth.service";
 import { RollStatus } from "@prisma/client";
 
 let ITEM = "", GRADE = "", ADMIN = "", ST_BOYA = "", SUB_BOYER = "", CUSTOMER = "";
+let GRADE_CODE = "";
 // Geçici 0-izinli kullanıcı (seed test kullanıcıları kaldırıldı — test kendi üretir/temizler).
 let NOPERM_USER_ID = "";
 const NOPERM_USERNAME = `dsapinoperm${Date.now()}`;
@@ -34,7 +36,9 @@ const woIds: string[] = [], stepIds: string[] = [], orderIds: string[] = [];
 async function resolveFixtures(): Promise<void> {
   const need = (v: { id: string } | null, l: string): string => { if (!v) throw new Error(`fixture eksik: ${l}`); return v.id; };
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS");
-  GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "grade");
+  const _gradeRow = await roleGrade("FIRST");
+  GRADE = _gradeRow.id;
+  GRADE_CODE = _gradeRow.code;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
   ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON");
   SUB_BOYER = (await ensureTestDyeHouse()).id;
@@ -55,7 +59,7 @@ async function makeDispatch(): Promise<string> {
   });
   await prisma.$transaction((tx) => cards.createForWorkOrder(tx, wo.id, ADMIN));
   woIds.push(wo.id); stepIds.push(wo.steps[0].id);
-  const r = await prisma.roll.create({ data: { barcode: barcode(), itemId: ITEM, initialQty: 300, currentQty: 300, status: RollStatus.STOCK, qualityGrade: "1.KALITE", qualityGradeId: GRADE, width: 250, createdById: ADMIN } });
+  const r = await prisma.roll.create({ data: { barcode: barcode(), itemId: ITEM, initialQty: 300, currentQty: 300, status: RollStatus.STOCK, qualityGrade: GRADE_CODE, qualityGradeId: GRADE, width: 250, createdById: ADMIN } });
   const d = await sub.dispatch({ workOrderId: wo.id, stepId: wo.steps[0].id, subcontractorId: SUB_BOYER, rollIds: [r.id] }, ADMIN);
   return (d.data as { id: string }).id;
 }

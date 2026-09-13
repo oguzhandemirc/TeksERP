@@ -3,6 +3,7 @@
 //   birleş (diğer kart VOID, boşalan silinir); SEPARATE → parti başına ayrı sevk.
 // Çalıştır: npx tsx scripts/test_batch_multibatch_dispatch.ts
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { ensureTestSander } from "./fixture-subcontractor";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { SubcontractorService } from "../src/services/subcontractor.service";
@@ -11,6 +12,7 @@ import { RollStatus } from "@prisma/client";
 const WIDTH = 250;
 const wos = new WorkOrderService();
 const sub = new SubcontractorService();
+let GRADE_CODE = "";
 let pass = 0, fail = 0;
 function check(l: string, ok: boolean, x = ""): void { if (ok) { pass++; console.log(`  ✓ ${l}${x ? ` — ${x}` : ""}`); } else { fail++; console.log(`  ✗ FAIL: ${l}${x ? ` — ${x}` : ""}`); } }
 let bcN = 0;
@@ -19,7 +21,7 @@ let woId = "";
 
 async function attachWave(item: string, grade: string, admin: string, n: number): Promise<{ batchId: string; rollIds: string[] }> {
   const bcs = Array.from({ length: n }, () => bc());
-  for (const b of bcs) await prisma.roll.create({ data: { barcode: b, itemId: item, initialQty: 100, currentQty: 100, status: RollStatus.STOCK, qualityGrade: "1.KALITE", qualityGradeId: grade, width: WIDTH, createdById: admin } });
+  for (const b of bcs) await prisma.roll.create({ data: { barcode: b, itemId: item, initialQty: 100, currentQty: 100, status: RollStatus.STOCK, qualityGrade: GRADE_CODE, qualityGradeId: grade, width: WIDTH, createdById: admin } });
   const res = await wos.attachRolls(woId, bcs, admin);
   const rolls = await prisma.roll.findMany({ where: { barcode: { in: bcs } }, select: { id: true } });
   return { batchId: res.data!.batch!.id, rollIds: rolls.map((r) => r.id) };
@@ -28,7 +30,9 @@ async function attachWave(item: string, grade: string, admin: string, n: number)
 async function main(): Promise<void> {
   const need = (v: { id: string } | null, l: string): string => { if (!v) throw new Error(`Seed eksik: ${l}`); return v.id; };
   const ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS");
-  const GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "1.KALITE");
+  const _gradeRow = await roleGrade("FIRST");
+  const GRADE = _gradeRow.id;
+  GRADE_CODE = _gradeRow.code;
   const ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
   const ST_ZIMPARA = need(await prisma.station.findFirst({ where: { code: "ZIMPARA_FASON" }, select: { id: true } }), "ZIMPARA_FASON");
   const SUB = (await ensureTestSander()).id;

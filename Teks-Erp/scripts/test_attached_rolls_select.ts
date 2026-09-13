@@ -10,6 +10,7 @@
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { WorkOrderStatus, RollStatus } from "@prisma/client";
 
@@ -48,6 +49,7 @@ const svc = new WorkOrderService();
 let ITEM = "",
   COLOR = "",
   GRADE = "",
+  GRADE_CODE = "",
   ADMIN = "",
   STATION = "";
 const woIds: string[] = [];
@@ -56,7 +58,9 @@ const stamp = Date.now().toString().slice(-7);
 
 async function main(): Promise<void> {
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS").id;
-  GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "1.KALITE").id;
+  const _gradeRow = await roleGrade("FIRST");
+  GRADE = _gradeRow.id;
+  GRADE_CODE = _gradeRow.code;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin").id;
   STATION = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON").id;
   // ⚠️ Renk ORTAMDAN SEÇİLMEZ, test kendisi üretir. Eskiden "PATOS'un izinli
@@ -103,7 +107,7 @@ async function main(): Promise<void> {
         currentQty: 100,
         initialQty: 100,
         width: 150,
-        qualityGrade: "1.KALITE",
+        qualityGrade: GRADE_CODE,
         qualityGradeId: GRADE,
         createdById: ADMIN,
         producedInStepId: link === "produced" ? stepId : null,
