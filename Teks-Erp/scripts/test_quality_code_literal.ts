@@ -129,7 +129,7 @@ const AGACLAR: Array<{ kok: string; tavan: number; dilim: string; sadece?: RegEx
   // ⚠️ Tavan SAYAÇTAN okunur, bu bekçinin DÖKÜMÜNDEN değil: döküm §-başına
   // kırpılır, `grep -c` basılmayan ihlalleri saymaz. Sayı yalnız SIKILAŞAN
   // yönde hareket eder. İniş hikâyesi commit mesajlarında.
-  { kok: "Teks-Erp/scripts", tavan: 111, dilim: "bekçi borcu — dilim 1+2+3 indi", sadece: /\/scripts\/test_[^/]+\.ts$/ },
+  { kok: "Teks-Erp/scripts", tavan: 109, dilim: "bekçi borcu — dilim 1+2+3 indi", sadece: /\/scripts\/test_[^/]+\.ts$/ },
   { kok: "mobil/src", tavan: 0, dilim: "(ii) — indi 2026-09-13" },
   { kok: "Electron/src", tavan: 0, dilim: "(iii) — indi 2026-09-13" },
 ];
@@ -357,6 +357,12 @@ function yakindaKaliteVar(n: tsc.Node, sf: tsc.SourceFile): boolean {
  * Etiket sözlükleri (alan adı → Türkçe metin) (B)'ye benzer ama kod TAŞIMAZ;
  * onlar MUAF listesinde gerekçeleriyle durur ve iki yönlü denetlenir.
  */
+/** Prisma süzgeç operatörleri — kod yuvası bunların KENDİSİ değil, bir ÜST alandır. */
+const SUZGEC_OPERATORLERI = new Set([
+  "not", "in", "notIn", "equals", "contains", "startsWith", "endsWith",
+  "lt", "lte", "gt", "gte", "has", "hasSome", "hasEvery",
+]);
+
 function kaliteBaglamiMi(n: tsc.Node, sf: tsc.SourceFile): string | null {
   const p = n.parent;
   if (!p) return null;
@@ -389,6 +395,22 @@ function kaliteBaglamiMi(n: tsc.Node, sf: tsc.SourceFile): string | null {
     // ayar/belge ANAHTARI taşır; yalnız `..._CODE` bir kod yuvasıdır.
     if (/^[A-Z0-9_]+$/.test(ad) && !/_CODE$/.test(ad)) return null;
     return `${ad}: "${deger}"`;
+  }
+  // (B2) PRISMA SÜZGEÇ OPERATÖRÜ — `qualityGrade: { not: "FIRE" }`.
+  // ⚠️ Operatörün KENDİ adı (`not`/`notIn`) bir kod yuvası değildir; yuva BİR ÜST
+  // alandır. Bu sınıf ölçüldü (2026-09-13) ve mandalın KÖR NOKTASIYDI: katalog
+  // değişince `not: "FIRE"` HİÇBİR satırı elemez ⇒ bekçi kırmızı vermez, sessizce
+  // BAŞKA bir şey ölçmeye başlar. Yani kaçırdığı şey, en tehlikeli sınıftı.
+  {
+    let alt: tsc.Node = n;
+    if (alt.parent && tsc.isArrayLiteralExpression(alt.parent)) alt = alt.parent; // `notIn: ["FIRE"]`
+    const opAta = alt.parent;
+    if (opAta && tsc.isPropertyAssignment(opAta) && tsc.isIdentifier(opAta.name) && SUZGEC_OPERATORLERI.has(opAta.name.text)) {
+      const alanAta = opAta.parent?.parent;
+      if (alanAta && tsc.isPropertyAssignment(alanAta) && tsc.isIdentifier(alanAta.name) && kodYuvasiMi(alanAta.name.text, n, sf)) {
+        return `${alanAta.name.text}: { ${opAta.name.text}: "${(n as tsc.StringLiteralLike).text}" }`;
+      }
+    }
   }
   if (tsc.isVariableDeclaration(p) && kodYuvasiMi(p.name.getText(sf), n, sf)) {
     // SCREAMING_SNAKE sabit: yalnız `..._CODE` bir KOD yuvasıdır. `_ERROR`,

@@ -17,6 +17,7 @@
 // =============================================================================
 import type { Request } from "express";
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { InventoryService } from "../src/services/inventory.service";
 import { buildPagination } from "../src/utils/query-parser";
 import { AppError } from "../src/utils/app-error";
@@ -81,10 +82,7 @@ async function main(): Promise<void> {
     data: { code: `TEST-PERF-ITEM-${stamp}`, name: `TEST PERF ÜRÜN ${stamp}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
-  const grade = await prisma.qualityGrade.findUnique({
-    where: { code: "1.KALITE" },
-    select: { id: true },
-  });
+  const grade = await roleGrade("FIRST");
 
   // Benzersiz barcode: TEST-PERF-<index>-<ms zaman damgası>. itemId scope'u + teste
   // özel ürün sayesinde DB'deki diğer rollere karışmadan deterministik kontrol.
@@ -95,8 +93,8 @@ async function main(): Promise<void> {
     initialQty: 50,
     currentQty: 50,
     status: RollStatus.STOCK,
-    qualityGrade: "1.KALITE",
-    qualityGradeId: grade?.id ?? null,
+    qualityGrade: grade.code,
+    qualityGradeId: grade.id,
     entrySource: RollEntrySource.SUPPLIER_RECEIPT,
   }));
 
@@ -187,9 +185,14 @@ async function main(): Promise<void> {
     // [status, createdAt] composite index mevcut → Seq Scan beklenmiyor.
     // Tutamadığı ortamda (planner küçük tabloda seq scan seçebilir) FALLBACK:
     // sorgunun birkaç yüz ms altında tamamlandığını ölç.
+    // Kod ROLDEN çözülür ve ÖLÇÜM PENCERESİNİN DIŞINDA: `m0`dan sonra bir DB
+    // gidişi eklemek, ölçtüğümüz süreyi ölçüm aracının kendisiyle şişirirdi.
+    // EXPLAIN parametre almaz (bağlı değişken GENEL plan ürettirir, ölçtüğümüz
+    // plan o değildir) ⇒ tırnak kaçışıyla gömülür.
+    const scrapCode = (await roleGrade("SCRAP")).code;
     const explainSql =
       `EXPLAIN SELECT id FROM rolls WHERE status = 'STOCK' ` +
-      `AND "qualityGrade" <> 'FIRE' ORDER BY "createdAt" DESC LIMIT 50`;
+      `AND "qualityGrade" <> '${scrapCode.replace(/'/g, "''")}' ORDER BY "createdAt" DESC LIMIT 50`;
     const planRows = (await prisma.$queryRawUnsafe(explainSql)) as Array<
       Record<string, string>
     >;
@@ -198,7 +201,7 @@ async function main(): Promise<void> {
 
     const m0 = Date.now();
     await prisma.roll.findMany({
-      where: { status: RollStatus.STOCK, qualityGrade: { not: "FIRE" } },
+      where: { status: RollStatus.STOCK, qualityGrade: { not: scrapCode } },
       orderBy: { createdAt: "desc" },
       take: 50,
     });

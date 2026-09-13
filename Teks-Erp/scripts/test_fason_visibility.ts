@@ -10,6 +10,8 @@
 //
 // Çalıştır: npx tsx scripts/test_fason_visibility.ts
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
+import { atlamaDefteri } from "./lib/atlama";
 import { InventoryService } from "../src/services/inventory.service";
 import { Request } from "express";
 
@@ -20,6 +22,10 @@ const reqOf = (q: Record<string, string>) =>
 
 let pass = 0;
 let fail = 0;
+// Atlama SAYI ile beyan edilir; sessiz `console.log` koşucuya ulaşmaz.
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
 function check(label: string, cond: boolean, extra = ""): void {
   if (cond) {
     pass++;
@@ -45,11 +51,19 @@ async function main(): Promise<void> {
   const qtyCat = Math.round(summary.byCategory.reduce((a, c) => a + c.totalQty, 0) * 10) / 10;
 
   // --- 2) Toplam tutarlılığı: total == Σcat == Σfirm == DB sayımı (FIRE-hariç) ---
+  // ⚠️ Referans sayım KODU DEĞİL ROLÜ sorar. Kod yazılsaydı, kataloğu farklı olan
+  // bir kurulumda `not: "FIRE"` HİÇBİR satırı elemez: servis fireyi doğru dışlar,
+  // bu sayım dışlamaz ve kontrol ya sahte kırmızı ya sahte yeşil verir.
+  const scrapCode = (await roleGrade("SCRAP")).code;
   const dbCount = await prisma.roll.count({
     where: {
       status: "AT_SUBCONTRACTOR",
-      OR: [{ qualityGrade: null }, { qualityGrade: { not: "FIRE" } }],
+      OR: [{ qualityGrade: null }, { qualityGrade: { not: scrapCode } }],
     },
+  });
+  // KÖRLÜK ZEMİNİ: fire DIŞLAMASI, dışlanacak top yoksa hiçbir şey kanıtlamaz.
+  const dbScrapAtSub = await prisma.roll.count({
+    where: { status: "AT_SUBCONTRACTOR", qualityGrade: scrapCode },
   });
   check("total.rollCount == Σ byCategory == Σ bySubcontractor",
     summary.total.rollCount === sumCat && sumCat === sumFirm,
@@ -67,6 +81,17 @@ async function main(): Promise<void> {
     `haric=${summary.total.rollCount}/${dbCount} tüm=${withFire.total.rollCount}/${dbAll}`);
   check("includeFire=true sayısı >= includeFire=false (FIRE toplar eklenir, çıkmaz)",
     withFire.total.rollCount >= summary.total.rollCount);
+  // ⚠️ Yukarıdaki iki fire kontrolü, fasonda fire top YOKKEN her iki tarafı da aynı
+  // sayıya indirir ve VAKUMEN geçer — yeşilleri "dışlama çalışıyor" demez.
+  // Bu bir ARIZA değil VERİ durumudur (ölçüldü: fabrika kopyasında da 0) ⇒ kırmızı
+  // değil, BEYAN.
+  if (dbScrapAtSub === 0) {
+    ATLAMA.atla(
+      "fire-dışlama kapsaması",
+      `fasonda '${scrapCode}' rolünde top yok — iki fire kontrolü vakumen geçti`,
+      2,
+    );
+  }
 
   // --- 3) Grup alanları iyi biçimli ---
   check("her firma grubu: rollCount>0 & totalQty sonlu & (id yoksa name='Bilinmiyor')",
@@ -128,7 +153,7 @@ async function main(): Promise<void> {
     );
     check("var olmayan firma filtresi boş küme döndürür", empty.data.length === 0);
   } else {
-    console.log("  … (gerçek firmalı AT_SUBCONTRACTOR topu yok — filtre/stats paritesi atlandı)");
+    ATLAMA.atla("filtre/stats paritesi", "gerçek firmalı AT_SUBCONTRACTOR topu yok", 4);
   }
 
   // --- 6) Kategori filtresi paritesi (gerçek kategorili top varsa) ---
@@ -141,10 +166,11 @@ async function main(): Promise<void> {
       catFiltered.data.length === realCat.rollCount,
       `liste=${catFiltered.data.length} özet=${realCat.rollCount}`);
   } else {
-    console.log("  … (gerçek kategorili AT_SUBCONTRACTOR topu yok — kategori filtresi paritesi atlandı)");
+    ATLAMA.atla("kategori filtresi paritesi", "gerçek kategorili AT_SUBCONTRACTOR topu yok", 1);
   }
 
-  console.log(`\n=== ${pass} geçti, ${fail} başarısız ===\n`);
+  // Koşucu `Sonuç:` ekini okur — atlama beyanı ancak bu satırda görünür.
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===\n`);
 }
 
 main()
