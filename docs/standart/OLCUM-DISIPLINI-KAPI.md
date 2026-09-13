@@ -65,7 +65,7 @@ SANILIR*** — dilekten tehlikelidir, çünkü `zorlama:` etiketi okuyanı rahat
 
 ## Kapının ÖLÜMÜ ve KIRMIZININ sınıflandırılması → ayrı dosya
 Bir kapıyı **yazmak** ile bir kapının **ölümünü/kırmızısını okumak** ayrı iki iştir.
-İkincisi — sekiz ölüm biçimi, yerel yeşilin başkasının düzeltmesi olması, ağacı okuyan
+İkincisi — kapının ölüm biçimleri, yerel yeşilin başkasının düzeltmesi olması, ağacı okuyan
 her araç, kancaya yapılan commit'siz değişiklik, kırmızıyı sınıflandırma, yeşilin iki
 uçla sınırlı oluşu — [`OLCUM-DISIPLINI-KAPI-OLUMU.md`](OLCUM-DISIPLINI-KAPI-OLUMU.md)'de.
 

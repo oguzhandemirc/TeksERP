@@ -33,14 +33,15 @@ Karar hikâyeleri (tarih, ölçüm, hangi alternatif neden reddedildi) `docs/his
 | [`TEST-VE-DERLEME-BEKCI.md`](TEST-VE-DERLEME-BEKCI.md) | Bir bekçinin **güvencesi** (§4: yeşil ≠ kapsandı) ve **yazımı** (§5: yeni bekçi) |
 | [`TEST-VE-DERLEME-SINIRLAR.md`](TEST-VE-DERLEME-SINIRLAR.md) | Bilinen sınırlar (§7) ve **bilerek kırmızı bekçiler** (§8) — paket kırmızı verdiğinde ilk bakılacak liste; her satır "kim kapatabilir" taşır |
 | [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | Ölçüm YÖNTEMİ: pozitif kontrol ↔ örnekle doğrulama, atıfta eşik, yapısal sonda, sayı/çapa/kimlik yazma, teşhis mi ölçüm mü |
-| [`OLCUM-DISIPLINI-KAPI-OLUMU.md`](OLCUM-DISIPLINI-KAPI-OLUMU.md) | Kapının ÖLÜMÜ ve kırmızının okunması: sekiz ölüm biçimi, yerel yeşil, kırmızıyı sınıflandırma |
-| [`OLCUM-DISIPLINI-KAPI.md`](OLCUM-DISIPLINI-KAPI.md) | Ölçümü KAPIYA çevirmek: mandal yazma, **kapının dokuz ölüm biçimi**, kırmızıyı sınıflandırma, yerel yeşil ↔ HEAD |
+| [`OLCUM-DISIPLINI-KAPI-OLUMU.md`](OLCUM-DISIPLINI-KAPI-OLUMU.md) | Kapının ÖLÜMÜ ve kırmızının okunması: ölüm biçimleri, yerel yeşil, kırmızıyı sınıflandırma, tetik ↔ tanı |
+| [`OLCUM-DISIPLINI-KAPI.md`](OLCUM-DISIPLINI-KAPI.md) | Ölçümü KAPIYA çevirmek: mandal yazma, cırcır tabanı, iki sonda kuralı, tavanın ikinci işlevi (ölüm biçimleri KAPI-OLUMU'nda) |
 | [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | KATMAN 1b — ölçümün **KURGUSU**: soru, kontrol grubu, ortam, deneyin kurulumu |
 | [`OLCUM-DISIPLINI-ORTAK-AGAC.md`](OLCUM-DISIPLINI-ORTAK-AGAC.md) | KATMAN 1c — ölçüm ORTAMI **paylaşılıyorsa**: ortak ağaç/indeks/ref, `node_modules`, kilit |
 | [`OLCUM-DISIPLINI-YUKLEM.md`](OLCUM-DISIPLINI-YUKLEM.md) | KATMAN 1a′ — **ne sorduğun**: desenin kapsamı, eşleşmenin sınırı, popülasyon üyeliği |
 | [`OLCUM-DISIPLINI-SUREC.md`](OLCUM-DISIPLINI-SUREC.md) | Komutun **süreci ve ortamı**: kabuk, asılı süreç, kancanın git ortamı, yıkıcı yol sondası |
 | [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) | KATMAN 1a — ölçümün **ARACI**: desen, komut, ayrıştırıcı, aracın varsayılanı ve kapsamı |
 | [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) | Arıza sınıfı kataloğu **KATMAN 2** — ölçümden sonraki adım (*sayı doğru; ondan ÇIKARILAN ne?*); hiçbir pozitif kontrol bu katmanı yakalamaz |
+| [`OLCUM-DISIPLINI-DIZIN.md`](OLCUM-DISIPLINI-DIZIN.md) | **BAŞLIK DİZİNİ** — dokuz ölçüm dosyasının her başlığı tek tabloda; *"bu zaten hangi başlığın altında?"* sorusunun `grep`siz cevabı. Her satır bir çapadır, iki yönden de kapı altındadır |
 
 ## Kural biçimi
 
