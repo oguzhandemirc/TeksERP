@@ -20,6 +20,7 @@ import { readFileSync } from "node:fs";
 import { relative } from "node:path";
 import * as ts from "typescript";
 import { CONTEXT_COMPLETIONS, tipliProgram } from "../revoke-ast-tarama";
+export { tipliProgram };
 
 /** Satır DOĞURAN delegate metotları. */
 export const YARATAN = new Set(["create", "createMany", "createManyAndReturn", "upsert"]);
@@ -75,14 +76,25 @@ function iciceModel(
  * her yeri döndürür. `tabloAdi` ham SQL için gerekir (model → tablo eşlemesi
  * şemadan türetilemez; `@@map` okunmaz, çağıran verir).
  */
+/** Bir kez kurulan tip denetleyicili program — üç tarama paylaşır. */
+export type TipliProgram = ReturnType<typeof tipliProgram>;
+
 export function defterYazimlariniTara(
   kok: string,
   hedefler: Map<string, { delegate: string; tablo: string }>,
   dosyaSuzgeci: (rel: string) => boolean,
   tsconfigAdi = "tsconfig.scripts.json",
   metodlar: Set<string> = YARATAN,
+  /**
+   * Önceden kurulmuş program. VERİLMEZSE her çağrı `ts.createProgram`ı yeniden
+   * kurar — kapı üç taramayı aynı tsconfig'le yapıyor ve programı ÜÇ KEZ kuruyordu
+   * (ölçüldü 2026-09-13: yüklü makinede 52 sn; d9'un 45 sn tavanı "bitmedi" dedi,
+   * DB asılı kalması SANILDI — ölçüm: kapı DB'ye dokunmuyor, koşucu da 4 sn'de
+   * fail-closed). Tek program, üç tarama.
+   */
+  hazirProgram?: TipliProgram,
 ): { bulgular: YazimYeri[]; cozulemeyen: string[]; taranan: string[] } {
-  const { program, checker } = tipliProgram(kok, tsconfigAdi);
+  const { program, checker } = hazirProgram ?? tipliProgram(kok, tsconfigAdi);
   const delegateModel = new Map([...hedefler].map(([model, c]) => [c.delegate, model]));
   const tabloModel = new Map([...hedefler].map(([model, c]) => [c.tablo, model]));
   const bulgular: YazimYeri[] = [];
@@ -152,6 +164,8 @@ export function defterYazimlariniTara(
 export function sembolReferanslari(
   kok: string,
   dosyalar: string[],
+  /** Varsa programın kaynak dosyası kullanılır — 1.100 dosyayı ikinci kez parse etmemek için. */
+  hazirProgram?: TipliProgram,
 ): Map<string, { tanim: { dosya: string; bas: number; son: number }[]; disReferans: number; icReferans: number }> {
   const sonuc = new Map<string, { tanim: { dosya: string; bas: number; son: number }[]; disReferans: number; icReferans: number }>();
   const tanimlar: { ad: string; dosya: string; bas: number; son: number }[] = [];
@@ -159,7 +173,7 @@ export function sembolReferanslari(
 
   for (const abs of dosyalar) {
     const rel = relative(kok, abs);
-    const sf = ts.createSourceFile(abs, readFileSync(abs, "utf8"), ts.ScriptTarget.Latest, true);
+    const sf = hazirProgram?.program.getSourceFile(abs) ?? ts.createSourceFile(abs, readFileSync(abs, "utf8"), ts.ScriptTarget.Latest, true);
     const gez = (n: ts.Node): void => {
       let ad: string | null = null;
       if ((ts.isFunctionDeclaration(n) || ts.isMethodDeclaration(n)) && n.name) ad = n.name.getText(sf);

@@ -47,7 +47,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { DEFTER_BEYANI, STOK_OLAY_BEYANI, type DefterBeyani } from "./lib/defter-beyan";
 import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
-import { SILEN, defterYazimlariniTara, sembolReferanslari } from "./lib/defter-yazim-tarama";
+import { SILEN, defterYazimlariniTara, sembolReferanslari, tipliProgram } from "./lib/defter-yazim-tarama";
 import { semaAlanlari } from "./revoke-ast-tarama";
 import { walkTs } from "./lib/ts-tarama";
 
@@ -170,7 +170,11 @@ for (const b of defterler) {
 
 console.log("\n=== §4 Ters yazan sembol var mı ve çağrılıyor mu ===");
 const tsDosyalar = [...walkTs(join(KOK, "src")), ...walkTs(join(KOK, "scripts"))];
-const referanslar = sembolReferanslari(KOK, tsDosyalar);
+// TEK PROGRAM, DÖRT TÜKETİCİ — §4 (sembol referansları) · §5 (src yaratan) · §8 (scripts yaratan)
+// · §10 (src silen). Programı her seferinde kurmak ve dosyaları yeniden parse etmek
+// koşumu katlıyordu (ölçüldü 2026-09-13, yüklü makinede 52 sn → tek program 38 sn).
+const PROGRAM = tipliProgram(KOK, "tsconfig.scripts.json");
+const referanslar = sembolReferanslari(KOK, tsDosyalar, PROGRAM);
 for (const b of defterler) {
   for (const t of b.tersYazan ?? []) {
     const kayit = referanslar.get(t.sembol);
@@ -205,7 +209,7 @@ const hedefler = new Map(
     { delegate: b.model.charAt(0).toLowerCase() + b.model.slice(1), tablo: tabloAdi.get(b.model) ?? "" },
   ]),
 );
-const tarama = defterYazimlariniTara(KOK, hedefler, (rel) => rel.startsWith("src/"));
+const tarama = defterYazimlariniTara(KOK, hedefler, (rel) => rel.startsWith("src/"), "tsconfig.scripts.json", undefined, PROGRAM);
 const kesfedilen = new Map<string, Set<string>>();
 for (const y of tarama.bulgular) {
   if (!kesfedilen.has(y.model)) kesfedilen.set(y.model, new Set());
@@ -242,7 +246,7 @@ for (const b of DEFTER_BEYANI.filter((x) => x.sinif === "TELEMETRI")) {
 }
 
 console.log("\n=== §8 scripts/ ayrımı — fikstür keşifle muaf ===");
-const scriptTarama = defterYazimlariniTara(KOK, hedefler, (rel) => rel.startsWith("scripts/"));
+const scriptTarama = defterYazimlariniTara(KOK, hedefler, (rel) => rel.startsWith("scripts/"), "tsconfig.scripts.json", undefined, PROGRAM);
 const scriptYazanlar = [...new Set(scriptTarama.bulgular.map((b) => b.dosya))].filter((d) => !fiksturMu(d)).sort();
 const beyansizScript = scriptYazanlar.filter((d) => !(d in SCRIPT_SINIFI));
 check("§8a doğrudan defter yazan her script sınıflanmış", beyansizScript.length === 0,
@@ -307,7 +311,7 @@ for (const b of DEFTER_BEYANI.filter((x) => x.sinif === "PIVOT_YAPILANDIRMA")) {
 }
 
 console.log("\n=== §10 Deftere fiziksel silme — doktrin YASAKLAR, beyansız silme kırmızı ===");
-const silmeTarama = defterYazimlariniTara(KOK, hedefler, (rel) => rel.startsWith("src/"), "tsconfig.scripts.json", SILEN);
+const silmeTarama = defterYazimlariniTara(KOK, hedefler, (rel) => rel.startsWith("src/"), "tsconfig.scripts.json", SILEN, PROGRAM);
 const silenDosyalar = new Map<string, Set<string>>();
 for (const y of silmeTarama.bulgular) {
   if (!silenDosyalar.has(y.model)) silenDosyalar.set(y.model, new Set());
