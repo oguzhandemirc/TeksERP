@@ -179,7 +179,12 @@ function yonB() {
     .map((f) => f.slice(0, -3));
   for (const alan of alanlar) {
     const liste = alanListesi(alan);
-    if (!liste) continue;
+    // ⚠️ `"bicimsiz"` bir STRING ve TRUTHY'dir — `!liste` onu ELEMEZ ve aşağıdaki
+    // `for…of` onun KARAKTERLERİNİ gezer (8 harf × alan sayısı kadar sahte B-a/B-b).
+    // Ölçüldü 2026-09-13: bu tam olarak benim yaptığım hataydı ve ürettiği 216+216
+    // sayısını bir BULGU sanıp raporladım. ⇒ Sentinel değer eklerken her tüketiciyi
+    // ADIYLA ele: `!x` bir sentinel'i elemez, `x === SENTINEL` eler.
+    if (!liste || liste === "bicimsiz") continue;
     for (const n of liste) if (!gercek.has(n)) hatalar.push(`B-a ${alan}.md listesinde "${n}" var, DOSYA YOK`);
     for (const n of liste) if (!haritaAdlar.has(n)) hatalar.push(`B-b ${alan}.md listesinde "${n}" var, HARİTADA yok`);
   }
@@ -229,15 +234,15 @@ function yonB() {
 
   // ⚠️ KAPI KENDİ KAPSAM KAYBINI İLAN EDER — ve kaybın YÖNÜ ölçüldü, DEVRALINMADI.
   //
-  // İlk tarif (bana iletilen): *"biçimi tutmayan alanda B-a/B-b HİÇ KOŞMAZ,
-  // alan kısmen ÖLÇÜLMEZ ve kapı bunu söylemez."* ⇒ ÖLÇTÜM, **YÖNÜ TERS**:
-  // `alanListesi` boş küme dönünce B-a/B-b susmaz, o alana dokunan HER dosya
-  // için *"bekçi koşulmadı"* der. Sonda (M13, tüm alanlar biçimsiz): **216 B-a +
-  // 216 B-b** yanlış kırmızı. ⇒ Kayıp EKSİK ÖLÇÜM değil **YANLIŞ ÖLÇÜM**.
-  // Sahada görünmemesinin sebebi: B-a/B-b yalnız DEĞİŞEN dosyalar için konuşur ve
-  // tek biçimsiz alan (`dokuma`) fark kümesine nadiren giriyordu.
-  // ⇒ ***Bir kapsam kaybının yönünü ölçmeden ilan etme: "ölçmedi" ile "yanlış
-  //   ölçtü" farklı kalemlerdir ve farklı kişileri arattırır.***
+  // ⚠️ İLK TARİF DOĞRUYDU, BENİM "DÜZELTMEM" YANLIŞTI (2026-09-13):
+  // *"biçimi tutmayan alanda B-a/B-b HİÇ KOŞMAZ, alan kısmen ÖLÇÜLMEZ"* — DOĞRU.
+  // Eski kod boş küme dönüyordu, boş küme üzerinde `for…of` hiçbir şey yapmaz.
+  // Ben "yönü ters" deyip **216 B-a + 216 B-b** rapor ettim; o sayı ÖLÇÜMÜN
+  // KENDİSİNDEN değil BENİM EKLEDİĞİM sentinel'den doğmuştu: `"bicimsiz"` truthy
+  // bir string ve `!liste` onu elemiyordu ⇒ `for…of` 8 KARAKTERİ geziyordu
+  // (8 × 27 alan = 216). ⇒ ***Bir mutasyonun ürettiği sayıyı bulgu saymadan önce,
+  //   o sayının MUTASYONUN KENDİSİNDEN gelip gelmediğini ölç.*** Sonda aracı
+  //   ölçtüğü şeyin içine karıştığında ürettiği sayı bir ölçüm değildir.
   // Ölçüldü 2026-09-13: 27 alan dosyasından biçimsiz **0** (tek vaka `dokuma`ydı,
   // 01 aynı turda `Backend:` satırıyla kapattı).
   if (bicimsizBeyan.length > 0) {
@@ -246,8 +251,8 @@ function yonB() {
         `\`Backend:\` biçiminde DEĞİL — koşum listesi OKUNAMADI: ${bicimsizBeyan.sort().join(", ")}`,
     );
     console.log(
-      `      ⚠️ SONUÇ: o alanlar BOŞ LİSTEYLE ölçülür ⇒ alana dokunan her dosya için ` +
-        `B-a/B-b YANLIŞ KIRMIZI verebilir (eksik ölçüm DEĞİL, yanlış ölçüm).`,
+      `      ⚠️ SONUÇ: o alanlarda B-a/B-b ÖLÇÜLMEDİ (liste okunamadı ⇒ karşılaştıracak ` +
+        `küme yok). Kapı bu alanlar için "temiz" DEMİYOR, "BAKMADIM" diyor.`,
     );
     console.log(`      (biçim borcu BELGE SAHİBİNDE; bu satır kapıyı kırmızı YAPMAZ)`);
   }
