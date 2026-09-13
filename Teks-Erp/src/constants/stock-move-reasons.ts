@@ -87,6 +87,15 @@ export const STOCK_MOVE_REASON = {
    * `warehouseStampManyTx` iptal yolunda varsayılan depoyu yazabilir.
    */
   FASON_DISPATCH_CANCEL: "FASON_DISPATCH_CANCEL",
+  /**
+   * Fason kabul iptali — `FASON_RECEIPT` satırının TERSİ (doğan top depodan çıktı).
+   *
+   * Yalnız SON adım kabulünde doğan top depoya girer ve ileri satırı alır; ara
+   * adımda doğan top (`IN_PRODUCTION`) satırsızdır ve iptalde ters satır da
+   * aranmaz (`bulunamayan`, hata değil). Orijinal (tüketilen) topların geri
+   * gelişi stok dışı → stok dışıdır, satır yazılmaz.
+   */
+  FASON_RECEIPT_CANCEL: "FASON_RECEIPT_CANCEL",
   /** Kartela firmasına çıkış (`WAREHOUSE → AT_KARTELA`, stok kümesinden ÇIKIŞ). */
   KARTELA_DISPATCH: "KARTELA_DISPATCH",
   /**

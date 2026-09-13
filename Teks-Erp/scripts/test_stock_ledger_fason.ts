@@ -141,6 +141,40 @@ async function woKur(
   return { woId: wo.id, fasonStep, rollId };
 }
 
+/**
+ * Fason SON adım ama iş emri AÇIK kalır: iki adımlı rota (KURSUN → BOYA_FASON),
+ * X topu fason adımından sevk edilir, Y topu 1. adımda bekler ⇒ kabul born topu
+ * WAREHOUSE doğurur ama WO tamamlanmaz (tek adımlı rotada kabul WO'yu KAPATIR ve
+ * `cancelReceipt` "tamamlanmış iş emri" kapısına takılır — ölçüldü).
+ */
+async function woKurSonAdimAcik(etiket: string, qty: number): Promise<{ woId: string; fasonStep: string; rollId: string }> {
+  const wo = await prisma.workOrder.create({
+    data: {
+      workOrderNumber: `${TAG}-${etiket}`,
+      type: "STOCK_PRODUCTION",
+      status: "IN_PROGRESS",
+      targetQuantity: 1000,
+      targetItemId: ITEM,
+      steps: {
+        create: [
+          { stationId: ST_KURSUN, stepSequence: 1, status: StepStatus.PENDING },
+          { stationId: ST_BOYA, stepSequence: 2, status: StepStatus.PENDING },
+        ],
+      },
+    },
+    include: { steps: { orderBy: { stepSequence: "asc" } } },
+  });
+  woIds.push(wo.id);
+  await prisma.$transaction((tx) => cards.createForWorkOrder(tx, wo.id, ADMIN));
+  const fasonStep = wo.steps[1]!.id;
+  const bekleyen = await stokTopu(qty, RollStatus.IN_PRODUCTION);
+  await prisma.roll.update({ where: { id: bekleyen }, data: { currentStepId: wo.steps[0]!.id } });
+  const rollId = await stokTopu(qty, RollStatus.IN_PRODUCTION);
+  await prisma.roll.update({ where: { id: rollId }, data: { currentStepId: fasonStep } });
+  await sub.dispatch({ workOrderId: wo.id, stepId: fasonStep, subcontractorId: SUB, rollIds: [rollId] }, ADMIN);
+  return { woId: wo.id, fasonStep, rollId };
+}
+
 const bornTop = (woId: string) =>
   prisma.roll.findFirstOrThrow({
     where: { parentReceipt: { workOrderId: woId }, parentRollId: null },
@@ -336,6 +370,124 @@ async function main(): Promise<void> {
     "§3b Kısmi kabulün born topu satırını ALDI (körlük zemini)",
     dC.filter((x) => x.eventType === WarehouseEventType.ENTRY).length === 1,
     `satır=${dC.length}`,
+  );
+
+  // ═══ §9 · §10 — FASON KABUL İPTALİ: giriş satırının TERSİ bağlı doğar ═══
+  // 2026-09-13'e kadar `cancelReceipt` deftere HİÇ dokunmuyordu (82 ölçtü):
+  // doğan topu ham `updateMany` ile CANCELLED yapıyor, defter "kumaş depoya
+  // girdi" demeye devam ediyordu. Üstelik WAREHOUSE doğan top "güvenli statü"
+  // sayılmadığı için son adım kabulü HİÇ iptal edilemiyordu — ters yol yoktu
+  // diye kapı kapalıydı. Şimdi ters satır var, kapı çuvalsız/hareketsiz topa açık.
+  const ka = await woKurSonAdimAcik("KABUL-IPTAL", 300);
+  await sub.receive(
+    { workOrderId: ka.woId, stepId: ka.fasonStep, subcontractorId: SUB, returns: [{ rollId: ka.rollId }], newRolls: [{ qty: 290 }] },
+    ADMIN,
+  );
+  const bornKa = await bornTop(ka.woId);
+  rollIds.push(bornKa.id);
+  const woKa = await prisma.workOrder.findUniqueOrThrow({ where: { id: ka.woId }, select: { status: true } });
+  check(
+    "§9z POZİTİF KONTROL: son adım kabulü born topu WAREHOUSE doğurdu ve iş emri AÇIK kaldı",
+    bornKa.status === RollStatus.WAREHOUSE && woKa.status !== "COMPLETED",
+    `born=${bornKa.status} · wo=${woKa.status}`,
+  );
+  const receiptA = await prisma.subcontractorReceipt.findFirstOrThrow({
+    where: { workOrderId: ka.woId, cancelledAt: null }, select: { id: true },
+  });
+  const oncekiGiris = await prisma.warehouseMovement.findFirstOrThrow({
+    where: { rollId: bornKa.id, reasonCode: STOCK_MOVE_REASON.FASON_RECEIPT },
+    select: { id: true, qty: true, toWarehouseId: true, toStatus: true, createdAt: true },
+  });
+  await sub.cancelReceipt(receiptA.id, `${TAG} kabul iptali sondası`, ADMIN, [bornKa.id]);
+  const dA2 = await prisma.warehouseMovement.findMany({
+    where: { rollId: bornKa.id },
+    select: {
+      id: true, eventType: true, qty: true, reasonCode: true,
+      fromWarehouseId: true, fromStatus: true, toWarehouseId: true, toStatus: true, reversesMovementId: true,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  const tersA = dA2.find((x) => x.reasonCode === STOCK_MOVE_REASON.FASON_RECEIPT_CANCEL);
+  const girisSonra = dA2.find((x) => x.id === oncekiGiris.id);
+  const bornA2 = await prisma.roll.findUniqueOrThrow({ where: { id: bornKa.id }, select: { status: true, cancelReasonCode: true } });
+  const ebeveynA = await prisma.roll.findUniqueOrThrow({ where: { id: ka.rollId }, select: { status: true } });
+  check(
+    "§9 ⭐ KABUL İPTALİ: ters satır BAĞLI ve uçlar AYNALANMIŞ — from {depo, WAREHOUSE} → to {∅, ∅} · FASON_RECEIPT_CANCEL",
+    tersA !== undefined &&
+      tersA.reversesMovementId === oncekiGiris.id &&
+      tersA.fromWarehouseId === oncekiGiris.toWarehouseId &&
+      tersA.fromStatus === RollStatus.WAREHOUSE &&
+      tersA.toWarehouseId === null &&
+      tersA.toStatus === null &&
+      Number(tersA.qty) === Number(oncekiGiris.qty),
+    JSON.stringify(tersA),
+  );
+  check(
+    "§9b İLERİ SATIR NE SİLİNDİ NE DEĞİŞTİ — iki satır yan yana (append-only)",
+    girisSonra !== undefined &&
+      girisSonra.toWarehouseId === oncekiGiris.toWarehouseId &&
+      Number(girisSonra.qty) === Number(oncekiGiris.qty) &&
+      dA2.length === 2,
+    `${dA2.length} satır: ${dA2.map((x) => x.reasonCode).join(" → ")}`,
+  );
+  check(
+    "§9c Doğan top CANCELLED (sebep kodlu), ebeveyn fasona geri döndü (AT_SUBCONTRACTOR)",
+    bornA2.status === RollStatus.CANCELLED && bornA2.cancelReasonCode !== null && ebeveynA.status === RollStatus.AT_SUBCONTRACTOR,
+    `born=${bornA2.status}/${String(bornA2.cancelReasonCode)} · ebeveyn=${ebeveynA.status}`,
+  );
+
+  // §9d — KAPI DAR: depoda kabul girişi DIŞINDA hareket görmüş doğan top iptali BLOKLAR.
+  // Yalnız giriş satırını terslemek ikinci hareketi askıda bırakırdı (Σ bozulur).
+  const d = await woKurSonAdimAcik("SON2", 120);
+  await sub.receive(
+    { workOrderId: d.woId, stepId: d.fasonStep, subcontractorId: SUB, returns: [{ rollId: d.rollId }], newRolls: [{ qty: 110 }] },
+    ADMIN,
+  );
+  const bornD = await bornTop(d.woId);
+  rollIds.push(bornD.id);
+  await prisma.warehouseMovement.create({
+    data: {
+      rollId: bornD.id,
+      eventType: WarehouseEventType.TRANSFER,
+      qty: 110,
+      reasonCode: STOCK_MOVE_REASON.TRANSFER,
+      fromWarehouseId: bornD.warehouseId,
+      fromStatus: RollStatus.WAREHOUSE,
+      toWarehouseId: bornD.warehouseId,
+      toStatus: RollStatus.WAREHOUSE,
+    },
+  });
+  const receiptD = await prisma.subcontractorReceipt.findFirstOrThrow({
+    where: { workOrderId: d.woId, cancelledAt: null }, select: { id: true },
+  });
+  const blok = await sub.cancelReceipt(receiptD.id, `${TAG} blok sondası`, ADMIN, [bornD.id]).then(
+    () => ({ status: 200, msg: "" }),
+    (e: unknown) => ({ status: (e as { statusCode?: number }).statusCode ?? 0, msg: String((e as Error).message ?? "") }),
+  );
+  const dD = await defter(bornD.id);
+  check(
+    "§9d ⭐ KAPI DAR: depoda başka hareket görmüş doğan topun kabulü iptal EDİLEMEZ (409) ve defter DEĞİŞMEDİ",
+    blok.status === 409 && blok.msg.includes("Depoda başka hareket") && dD.length === 2,
+    `status=${blok.status} · ${blok.msg.slice(0, 80)} · satır=${dD.length}`,
+  );
+  const onizleme = await sub.getCancelPreview(receiptD.id);
+  check(
+    "§9e Önizleme aynı sebebi söylüyor (select ↔ where boğaz ikizi: 'Depoda başka hareket görmüş')",
+    onizleme.data.bornRolls.some((r) => r.id === bornD.id && !r.safeToCancel && r.blockingReasons.includes("Depoda başka hareket görmüş")),
+    JSON.stringify(onizleme.data.bornRolls.map((r) => r.blockingReasons)),
+  );
+
+  // §10 — UFUK/OLAY YOKLUĞU: ara adım kabulünün iptali satır YAZMAZ (giriş satırı hiç yoktu).
+  const receiptB = await prisma.subcontractorReceipt.findFirstOrThrow({
+    where: { workOrderId: b.woId, cancelledAt: null }, select: { id: true },
+  });
+  await sub.cancelReceipt(receiptB.id, `${TAG} ara adım iptali`, ADMIN, [bornB.id]);
+  const dB2 = await defter(bornB.id);
+  const bornB2 = await prisma.roll.findUniqueOrThrow({ where: { id: bornB.id }, select: { status: true } });
+  check(
+    "§10 ⭐ ARA ADIM kabul iptali satır YAZMAZ (ileri satır yoktu — olay yokluğu) ama top yine CANCELLED",
+    dB2.length === 0 && bornB2.status === RollStatus.CANCELLED,
+    `satır=${dB2.length} · top=${bornB2.status}`,
   );
 }
 

@@ -8242,3 +8242,75 @@ veriyorsa kalem kapalıdır, yeni bekçi yazılmaz.
 **Kod çapaları:** `Teks-Erp/src/constants/system-events.ts` (beyan edilmiş sözleşme) ·
 `Electron/src/lib/audit-labels.ts` → `EVENT_ACTION_LABELS` (ayna) ·
 bekçi `Teks-Erp/scripts/test_system_event_names.ts` (§5 `satisfies` bağı dâhil, 12 kontrol).
+
+## 2026-09-13 — KOŞUM YAZMA YÜZEYİ (P2b, `MachineRun` aç/kapa/geri al): sed yeten yerde kilit yok, pencere KURULARAK ölçüldü [ÇEKİRDEK]
+
+**Karar (1e hükmü, 6e uyguladı).** `MachineRun` şemada vardı (P2), yüzeyi yoktu. Üç uç indi:
+`POST /api/machine-runs` · `/:id/close` · `/:id/revoke`; izin `loom:run` + `loom:run-revoke`
+(ikisi `WEB_PRODUCTION_SUPERVISOR`), kapı `requireProductionEnabled` — `dokuma`/`tezgah` anahtarı
+ekransız olduğu için kapı takılmadı (`test_screen_catalog §10b` gerekçesi, 01 ve 9b ile aynı).
+
+**Ölçülen tasarım boşlukları (tasarım belgesi bunları YAZMIYORDU, uygulama seçti):**
+- Açılışta iş emri durumu: `PLANNED`/`IN_PROGRESS` açık, `COMPLETED`/`CANCELLED` 409
+  `WEAVING_ORDER_NOT_OPEN`; `SUBCONTRACTED` 400. **`PLANNED → IN_PROGRESS` otomatik geçişi YAZILMADI**
+  — `WeavingOrder.status`un ikinci yazarı olurdu; 9b'nin yüzeyine bırakıldı (açık karar).
+- Kapanışta `picksAtClose · producedM · observedSecAtClose` ELLE beyan (telemetri yok); duruş
+  terimleri NULL ("ölçülmedi" ≠ 0), ingest dilimi tek yazara ekler.
+- Geri alma açık VE kapanmış koşumda serbest; mühürlü vardiya kapısı (`SHIFT_SEALED`) mühür
+  yüzeyiyle doğacak borç.
+- `startedAt`/`endedAt` beyan; aralık dışı → sunucu saati + `warnings` (400 değil).
+  Örtüşme (`PRODUCTION_LINE_OVERLAP`) uygulama kontrolü — exclusion seddi yok, bilinçli.
+
+**Pencere ölçümü (bekçinin asıl iş).** `test_machine_run §5` eski hâliyle *"SED ölçümüdür, pencere
+ölçümü DEĞİL"* diyordu. Yeni §5: gate-tx aynı hatta commit'siz koşum yazar → servisin precheck'i
+(READ COMMITTED) görmez → INSERT sedde bekler (`pg_blocking_pids` ile kanıtlandı, `bekleyen=1`) →
+gate commit → kaybeden `MACHINE_RUN_RACE`. Ayırt edici KOD: precheck görseydi
+`PRODUCTION_LINE_OCCUPIED` üretirdi (§8 körlük zemini). ⇒ *"pencere vardı ve kapalıydı"* cümlesi
+artık bir ölçümdür. Aynı kalıp §12d/e'de iş iptali ile yarış için kuruldu (`updateMany` claim
+satır kilidinde bekledi → 409).
+
+**Negatif sondalar (cp + sha256 geri alma, `a6f3945a`):** yüklem çağrısı kaldırıldı → §7a/§7c ❌ ·
+iş claim'i kaldırıldı → §12d/§12e/§12f ❌ (koşum iptal edilmiş işe SIZDI, n=1) · kapanış
+claim'inden `closedTermsAt IS NULL` düşürüldü → §9c/§9d ❌ (donmuş terim EZİLDİ).
+
+**Kapanan borç:** P4b *"yüklem var, çağrı yok"* — koşul aynı nota yazıldı (`dokuma.md` başlık,
+`production-line.helper.ts` başlık), bekçi `test_production_line §4`.
+
+**Karşı taraf sözleşmesi (9b'ye):** iş emri kapatma/iptal yolu açık koşum SAYMADAN önce kendi
+`status` claim'ini almalı; aksi hâlde iki tx birbirini görmez ve iptal edilmiş işte açık koşum
+kalır. Ölçümü bu gece yalnız benim taraftan yapıldı (§12d).
+
+**Kod çapaları:** `src/services/machine-run.service.ts` (`openMachineRun` · `closeMachineRunTx` ·
+`revokeMachineRun`) · `helpers/machine-run-open.helper.ts` (tx-öncesi doğrulamalar) · `src/routes/machine-run.routes.ts` · `helpers/token-replay.helper.ts`
+(`assertMachineRunReplayAlive`) · `scripts/test_machine_run.ts` (39) · `scripts/test_production_line.ts` (§4).
+
+## 2026-09-13 — FASON KABUL İPTALİ ters yolu İNDİ: kapı, ters yol olmadığı için kapalıydı [ÇEKİRDEK]
+
+**Borç (82 ölçtü, `defter-beyan.ts` FASON_RECEIPT BORC satırı):** `cancelReceipt` stok
+defterine hiç dokunmuyordu — doğan topu ham `updateMany` ile CANCELLED yapıyor, giriş satırı
+(`FASON_RECEIPT`, yalnız son adım kabulünde doğar) tersiz kalıyordu: iptalden sonra defter
+"kumaş depoya girdi" der, çıktığını söyleyen satır yoktu.
+
+**Ölçülen ikinci katman (6e):** kusur ERİŞİLEMEZDİ. `computeBornRollBlockingReasons` güvenli
+statü kümesi `{STOCK, IN_PRODUCTION}` idi ve şerhi *"WAREHOUSE … iz tutarsızlığı yaratır"*
+diyordu — yani son adım kabulünün doğurduğu WAREHOUSE top hiç cascade edilemiyor, kabul hiç
+iptal edilemiyordu. Tutarsızlığın sebebi tam olarak eksik ters satırdı. ⇒ *Ters yolu olmayan
+ileri yol önce KAPIYI kapatır, sonra kapalı kapı kusuru gizler.* Üçüncü katman: tek adımlı
+rotada kabul iş emrini KAPATIR (`COMPLETED`) ve iptal o kapıya takılır — bekçi fikstürü bu
+yüzden iki adımlı rota + 1. adımda bekleyen ikinci topla kuruldu (§9z pozitif kontrol).
+
+**Uygulama:** `STOCK_MOVE_REASON.FASON_RECEIPT_CANCEL` · `cancelReceipt` adım 0'da
+`reverseLatestScopedStockMove(bornRollIds, {FASON_RECEIPT, workOrderStepId:null})` (ara adım
+topu `bulunamayan`, hata değil) · güvenli küme `BORN_ROLL_SAFE_STATUSES`e WAREHOUSE eklendi,
+karşılığında iki YENİ engel: `sackId` dolu · kabul girişi dışında canlı defter satırı
+(`BORN_ROLL_FOREIGN_STOCK_MOVE`) — select ve Prisma where boğaz ikiz (§9e önizleme aynı
+sebebi söylüyor). Beyan `BAGLI_TERS`/`TERS_KODU` çiftine çevrildi.
+
+**Bekçi:** `test_stock_ledger_fason` 13 → 19 (§9 bağlı ters satır · §9b ileri satır değişmedi ·
+§9c top CANCELLED sebep kodlu, ebeveyn AT_SUBCONTRACTOR · §9d kapı dar 409 · §9e önizleme ikizi ·
+§10 ara adım olay yokluğu). Negatif sondalar (cp+sha256 `992e4cc1`): ters çağrı kaldır → §9/§9b ❌ ·
+yabancı-hareket engeli düşür → §9d/§9e ❌ (satır=3: giriş + yabancı + ters, ikinci hareket askıda).
+
+**Ürün etkisi (sürüm notu adayı, kullanıcı onayında):** son adım fason kabulü, doğan top
+çuvalsız ve hareketsizken artık İPTAL EDİLEBİLİR; eskiden "Durum: WAREHOUSE" ile reddediliyordu.
+Rakam düşürmez; bir kapı açar.

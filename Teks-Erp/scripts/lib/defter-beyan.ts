@@ -275,7 +275,12 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   // yazan bir defterin ters yazanını da ister. Sınıflar DEVRALINMADI, şemanın kendi
   // şerhlerinden ve tasarım §4 tablosundan ÖLÇÜLDÜ.
   D("MachineRun", "tezgah koşumu — kapanışta DONAN üretim/duruş terimleri taşır (picksAtClose · producedM · stopSecAtClose · closedTermsAt); şerhi birebir: \"kova budandıktan sonra KOŞUM EKSENİ bu terimlerden cevaplanır\" ⇒ kova telemetri, koşum onun donmuş DEFTERİ; tasarım §4 BUDANMAZ; üç bağ Restrict; `clientToken` idempotent; makine kalıcı silme guard'ını besler (karar ufku). Randıman raporu henüz yok ⇒ \"satır silinince rapor değişir mi\" sondası KONUSUZ, okuyucusu koşum ekseni raporu olacak (01 düzeltmesi: karne vardiya×makine, runId taşımaz, DEFTER'i teyit eder çürütemez)",
-    { tur: "DAMGA", kolon: "revokedAt" }, [], [], { yari: true }),
+    { tur: "DAMGA", kolon: "revokedAt" },
+    // 2026-09-13 (6e, P2b yazma yüzeyi): açan `openMachineRun`, kapatan `closeMachineRunTx`
+    // (tek yazar, terimler donar), geri alan `revokeMachineRun` — üçü aynı dosyada.
+    [{ dosya: "src/services/machine-run.service.ts", sembol: "revokeMachineRun" }],
+    ["src/services/machine-run.service.ts"],
+    { yari: true }),
 
   D("MachineStopEvent", "duruş defteri — duruşun OLGULARI (startedAt · endedAt · pickCounter · stopKey) değişmez, KARARI (reasonCode · lossClass) değişir ve her değişim `MachineStopReclass`a satır yazar ⇒ doktrinin durum+defter çifti tek tabloda: reasonCode DURUM, reclass DEFTER. ⚠️ İKİ YAŞAM SÜRESİ tek tabloda (tasarım §4): insan kararlı duruş BUDANMAZ, makine sınıflı duruş kovayla budanır — yüklem `classifiedById IS NOT NULL OR reasonSource IN (OPERATOR,SUPERVISOR)`. Budayıcı bugün YOK; indiği gün §10 `silen` beyanını ister ve tasarım §4 sed ③/④ (tek helper + BEFORE DELETE trigger) onunla birlikte doğar. 01'in guard muafiyetiyle aynı okuma: \"duruş bir DEFTERDİR, guard ingest dilimiyle gelecek\"",
     { tur: "DAMGA", kolon: "revokedAt" }, [], [], { yari: true }),
@@ -392,10 +397,11 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   //    Ters helper KAPSAMLARI (reverse*/reasonCode) tarandı: ROLL_CANCEL · KARTELA_CANCEL ·
   //    PRODUCTION_RECEIPT · RETURN_CANCEL · STOCK_COUNT · FASON_DISPATCH_CANCEL ·
   //    TAMBUR_UNDO — beşinin HİÇBİRİ yok. Kapanma koşulu her `kanit`in sonunda.
-  FASON_RECEIPT: { tur: "BORC",
-    ne: "ters yolu YOK — fason kabul iptali stok defterine HİÇ dokunmuyor: ne bağlı ters satır ne karşı olay",
-    kanit: "yazan: subcontractor.service.ts:3347 (ENTRY, doğan topa). Geri alma: `cancelReceipt` (:5257-5615) gövdesinde reverse*/postStockMove çağrısı SIFIR; doğan topları `tx.roll.updateMany` ile doğrudan CANCELLED yapıyor (softDelete/InventoryService üzerinden DEĞİL ⇒ ROLL_CANCEL satırı da doğmuyor). İptalden sonra defter \"kumaş depoya girdi\" der, çıktığını söyleyen satır yok. Kapanır: cancelReceipt doğan toplar için `reverseLatestScopedStockMove(bornRollIds, {reasonCode: FASON_RECEIPT})` ya da FASON_RECEIPT_CANCEL kodlu bağlı ters satır yazar; o commit bu satırı BAGLI_TERS + TERS_KODU çiftine çevirir",
-    sahibi: "fason alanı (6e)" },
+  // 2026-09-13 (6e): 82'nin ölçtüğü "ters yolu YOK" borcu KAPANDI — `cancelReceipt`
+  // doğan toplar için giriş satırını `FASON_RECEIPT_CANCEL` ile tersliyor
+  // (`reverseLatestScopedStockMove`, bekçi `test_stock_ledger_fason §9`).
+  FASON_RECEIPT: { tur: "BAGLI_TERS", kod: "FASON_RECEIPT_CANCEL" },
+  FASON_RECEIPT_CANCEL: { tur: "TERS_KODU", ileri: "FASON_RECEIPT" },
   DISPOSITION: { tur: "BORC",
     ne: "ters yolu KISMİ — bağımsız \"iş emrini yeniden aç\" yolu yok; tambur-undo FULL yalnız ÇOCUK topların satırlarını tersler",
     kanit: "yazan: roll-disposition.helper.ts:304 (PRODUCTION, WO kapanışında dispozisyon alan her topa). Geri alma: workorder*.ts içinde reopen/undoClose YOK; `WO_CANCEL_DISPOSITION` (workorder.service.ts:3844) İLERİ bir olaydır (WO iptali), ters değil. tambur-undo applyFull (:1673) `reverseAllRollStockMoves(ids)` ile ÇOCUKLARIN tüm satırlarını tersler (TAMBUR_UNDO bağlı) — dispozisyon satırı çocuk üstündeyse terslenir, kaynak/kardeş top üstündeyse TERSLENMEZ. Kapanır: WO yeniden açma yolu doğduğunda dispozisyon satırlarını `reverseLatestScopedStockMove(rollIds, {reasonCode: DISPOSITION, workOrderStepId})` ile tersler; ya da tambur-undo FULL kapsamı dispozisyon alan TÜM topları kapsar ve `test_stock_ledger_tambur_undo` bunu ölçer",

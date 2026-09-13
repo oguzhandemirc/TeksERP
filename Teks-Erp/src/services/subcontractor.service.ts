@@ -24,7 +24,7 @@ import { openLineWhere } from "./helpers/order-line-scope.helper";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { resolveTargetWarehouseId, warehouseStampManyTx } from "./helpers/warehouse.helper";
 import { postStockMoves } from "./helpers/warehouse-ledger.helper";
-import { reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
+import { reverseLatestScopedStockMove, reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
 import { assertRollsHaveWarehouse, WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { v4 as uuidv4 } from "uuid";
@@ -200,20 +200,41 @@ export interface BornRollPreviewItem {
 
 type BornRollDownstreamShape = {
   status: RollStatus;
+  sackId: string | null;
   operations: { id: string }[];
   movements: { exitedAt: Date | null }[];
   children: { id: string }[];
   dispatchItems: { id: string }[];
+  /** Kabul girişi DIŞINDA geri alınmamış stok defteri satırı (transfer/sevk vb.). */
+  warehouseMovements: { id: string }[];
 };
+
+/**
+ * Doğan topun kabul girişi DIŞINDAKİ canlı stok defteri satırları — depoya girdikten
+ * sonra transfer/çuval/sevk görmüşse iptal yalnız giriş satırını tersleyemez.
+ * `computeBornRollBlockingReasons` (select) ve `blockingCondition` (where) BOĞAZ İKİZ.
+ */
+const BORN_ROLL_FOREIGN_STOCK_MOVE: Prisma.WarehouseMovementWhereInput = {
+  reasonCode: { not: STOCK_MOVE_REASON.FASON_RECEIPT },
+  reversesMovementId: null,
+  reversedBy: { none: {} },
+};
+
+/** Doğan topun cascade iptalinde güvenli statüler — tek kaynak, iki ikizde de okunur. */
+const BORN_ROLL_SAFE_STATUSES: readonly RollStatus[] = [
+  RollStatus.STOCK,
+  RollStatus.IN_PRODUCTION,
+  // SON adım kabulünde doğan top depoya girer; iptal artık giriş satırını
+  // `FASON_RECEIPT_CANCEL` ile tersliyor (2026-09-13) — çuvalsız ve başka
+  // defter satırı yoksa iz tutarlı kalır.
+  RollStatus.WAREHOUSE,
+];
 
 /**
  * Bir bornRoll cascade iptal edilebilir mi? Downstream'i olan (operasyon
  * görmüş, sonraki istasyona geçmiş, Tambur'da bölünmüş, başka fasona
- * gönderilmiş) Roll'lar iptal edilemez — önce manuel temizlik gerekir.
- *
- * SAFE statüler: STOCK, IN_PRODUCTION. Diğerleri (TAMBUR_CONSUMED,
- * WAREHOUSE, SCRAP, A1_STOCK, AT_SUBCONTRACTOR vb.) cascade'i tetiklerse
- * iz tutarsızlığı yaratır.
+ * gönderilmiş, çuvala girmiş, depoda başka hareket görmüş) Roll'lar iptal
+ * edilemez — önce manuel temizlik gerekir.
  */
 function computeBornRollBlockingReasons(roll: BornRollDownstreamShape): string[] {
   const reasons: string[] = [];
@@ -229,8 +250,13 @@ function computeBornRollBlockingReasons(roll: BornRollDownstreamShape): string[]
   if (roll.dispatchItems.length > 0) {
     reasons.push("Başka fason sevkinde");
   }
-  const safeStatuses: RollStatus[] = [RollStatus.STOCK, RollStatus.IN_PRODUCTION];
-  if (!safeStatuses.includes(roll.status)) {
+  if (roll.sackId) {
+    reasons.push("Çuvala girmiş");
+  }
+  if (roll.warehouseMovements.length > 0) {
+    reasons.push("Depoda başka hareket görmüş");
+  }
+  if (!BORN_ROLL_SAFE_STATUSES.includes(roll.status)) {
     reasons.push(`Durum: ${roll.status}`);
   }
   return reasons;
@@ -4737,11 +4763,9 @@ export class SubcontractorService {
         { movements: { some: { ...ACTIVE_MOVEMENT, exitedAt: { not: null } } } },
         { children: { some: {} } },
         { dispatchItems: { some: {} } },
-        {
-          status: {
-            notIn: [RollStatus.STOCK, RollStatus.IN_PRODUCTION],
-          },
-        },
+        { sackId: { not: null } },
+        { warehouseMovements: { some: BORN_ROLL_FOREIGN_STOCK_MOVE } },
+        { status: { notIn: [...BORN_ROLL_SAFE_STATUSES] } },
       ],
     };
     if (params?.cancellable === "yes") {
@@ -5146,6 +5170,9 @@ export class SubcontractorService {
             children: { select: { id: true }, take: 1 },
             // Başka fason sevkinde mi
             dispatchItems: { select: { id: true }, take: 1 },
+            // Çuvala girmiş mi / depoda kabul girişi dışında hareket görmüş mü
+            sackId: true,
+            warehouseMovements: { where: BORN_ROLL_FOREIGN_STOCK_MOVE, select: { id: true }, take: 1 },
           },
         },
       },
@@ -5268,6 +5295,8 @@ export class SubcontractorService {
             movements: { where: ACTIVE_MOVEMENT, select: { exitedAt: true } },
             children: { select: { id: true }, take: 1 },
             dispatchItems: { select: { id: true }, take: 1 },
+            sackId: true,
+            warehouseMovements: { where: BORN_ROLL_FOREIGN_STOCK_MOVE, select: { id: true }, take: 1 },
           },
         },
       },
@@ -5356,6 +5385,8 @@ export class SubcontractorService {
             movements: { where: ACTIVE_MOVEMENT, select: { exitedAt: true } },
             children: { select: { id: true }, take: 1 },
             dispatchItems: { select: { id: true }, take: 1 },
+            sackId: true,
+            warehouseMovements: { where: BORN_ROLL_FOREIGN_STOCK_MOVE, select: { id: true }, take: 1 },
           },
         });
         for (const roll of freshBornRolls) {
@@ -5388,6 +5419,19 @@ export class SubcontractorService {
           reason: "FASON_KABUL_IPTAL",
           userId,
         });
+        // STOK DEFTERİ: son adım kabulünde doğan top depoya `FASON_RECEIPT` ile
+        // girmişti — o satırın TERSİ yazılır (ileri satır silinmez, değişmez).
+        // Ara adımda doğan top satırsızdır → `bulunamayan`, hata değil (ufuk).
+        await reverseLatestScopedStockMove(
+          tx,
+          bornRollIds,
+          { reasonCode: STOCK_MOVE_REASON.FASON_RECEIPT, workOrderStepId: null },
+          {
+            reasonCode: STOCK_MOVE_REASON.FASON_RECEIPT_CANCEL,
+            userId: userId ?? null,
+            notes: `Fason kabul iptali (${receipt.receiptNo})`,
+          },
+        );
         // RollProperty: receipt'ten inherit edilmişti, sil
         await tx.rollProperty.deleteMany({
           where: { rollId: { in: bornRollIds } },
