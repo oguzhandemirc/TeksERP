@@ -307,9 +307,42 @@ function yonB() {
 function main() {
   console.log("=== KİMLİK DEFTERİ KAPISI ===");
   let taban = "";
-  try { taban = git("merge-base", "HEAD", "origin/main").trim(); } catch { taban = ""; }
-  if (taban) { console.log(`  taban: ${taban.slice(0, 8)} (merge-base HEAD origin/main)`); yonA(taban); }
-  else console.log("  ⚠️  origin/main okunamadı → YÖN A ATLANDI (ölçülmedi, yeşil değil)");
+  // ⚠️ ÜÇ SONUÇ, İKİ DEĞİL — ve üçüncüsü SESSİZ DEĞİL (1e hükmü 2026-09-13).
+  // §1 YÖN A bir MANDALDIR ve tabanı DİNAMİK. Ölçüldü: CI'da `HEAD == origin/main`
+  // ⇒ merge-base HEAD'in KENDİSİ ⇒ karşılaştırılan iki şey BİREBİR ⇒ mandal ORADA
+  // YOKTUR. Eskiden bu durumda sessizce yeşil basıyordu ve *"korundu"* diye
+  // okunuyordu. Artık taban ÜÇ yoldan biriyle kurulur ve hangisi olduğu BASILIR.
+  let tabanKaynak = "";
+  // ① özellik dalı: merge-base gerçek bir ATA (HEAD'den farklı)
+  try {
+    const mb = git("merge-base", "HEAD", "origin/main").trim();
+    const head = git("rev-parse", "HEAD").trim();
+    if (mb && mb !== head) { taban = mb; tabanKaynak = "merge-base HEAD origin/main (özellik dalı)"; }
+  } catch { /* origin/main yok — ②'ye düş */ }
+  // ② CI: push'tan ÖNCEKİ uç. Ölçüldü 2026-09-13: bir push 1–2 commit taşıyor,
+  //    yani bu taban push'un TAMAMINI kapsar (HEAD~1 kapsamazdı).
+  if (!taban) {
+    const before = (process.env.CI_BEFORE_SHA ?? "").trim();
+    // ⚠️ İLK PUSH / FORCE-PUSH / YENİ DAL → `000…0`; force-push sonrası sha
+    // ULAŞILAMAZ olabilir. İkisi de `git show`u patlatır ⇒ ÇÖKEN SONDA olurdu.
+    // Bu yüzden hem sıfır-sha elenir hem VARLIĞI `cat-file -e` ile ÖLÇÜLÜR.
+    if (before && !/^0+$/.test(before)) {
+      try { git("cat-file", "-e", `${before}^{commit}`); taban = before; tabanKaynak = "CI_BEFORE_SHA (push aralığı)"; }
+      catch { /* çözülemedi — ③'e düş */ }
+    }
+  }
+  // ③ taban YOK: ölçmedik ve bunu SÖYLÜYORUZ.
+  if (taban) {
+    console.log(`  taban: ${taban.slice(0, 8)} (${tabanKaynak})`);
+    yonA(taban);
+  } else {
+    console.log(
+      "  ⚠️  YÖN A ÖLÇÜLMEDİ — taban kurulamadı (merge-base = HEAD, ve CI_BEFORE_SHA yok/çözülemedi).",
+    );
+    console.log(
+      "      Bu bölüm YEŞİL DEĞİL, BAKILMADI: arşivden başlık düşse bu koşum GÖRMEZDİ.",
+    );
+  }
   yonB();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);

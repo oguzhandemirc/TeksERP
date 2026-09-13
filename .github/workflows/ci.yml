@@ -76,6 +76,13 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/teks_ci?schema=public
+      # ⚠️ `test_identity_ledger` §1 YÖN A bir MANDAL ve tabanı DİNAMİK. CI'da
+      # `HEAD == origin/main` olduğu için merge-base HEAD'in KENDİSİDİR ⇒ karşılaştırılan
+      # iki şey birebir ⇒ mandal ORADA YOKTUR (ölçüldü 2026-09-13; sessizce yeşil basıyordu).
+      # Push'tan ÖNCEKİ uç gerçek bir tabandır ve bir push 1–2 commit taşıyor (ölçüldü) ⇒
+      # bu değer push'un TAMAMINI kapsar. ⚠️ İlk push/force-push'ta `000…0` gelir; bekçi
+      # onu ve çözülemeyen sha'yı ELEYİP "YÖN A ÖLÇÜLMEDİ" diye BEYAN eder (sessiz yeşil YOK).
+      CI_BEFORE_SHA: ${{ github.event.before }}
       JWT_SECRET: ci-test-secret-not-for-production
       PORT: "4000"
     steps:
@@ -235,6 +242,13 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/teks_ci?schema=public
+      # ⚠️ `test_identity_ledger` §1 YÖN A bir MANDAL ve tabanı DİNAMİK. CI'da
+      # `HEAD == origin/main` olduğu için merge-base HEAD'in KENDİSİDİR ⇒ karşılaştırılan
+      # iki şey birebir ⇒ mandal ORADA YOKTUR (ölçüldü 2026-09-13; sessizce yeşil basıyordu).
+      # Push'tan ÖNCEKİ uç gerçek bir tabandır ve bir push 1–2 commit taşıyor (ölçüldü) ⇒
+      # bu değer push'un TAMAMINI kapsar. ⚠️ İlk push/force-push'ta `000…0` gelir; bekçi
+      # onu ve çözülemeyen sha'yı ELEYİP "YÖN A ÖLÇÜLMEDİ" diye BEYAN eder (sessiz yeşil YOK).
+      CI_BEFORE_SHA: ${{ github.event.before }}
       JWT_SECRET: ci-test-secret-not-for-production
       PORT: "4000"
     steps:
