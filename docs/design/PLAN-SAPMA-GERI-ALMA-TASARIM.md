@@ -49,7 +49,33 @@ En ağır hâli: `finalize` kaynağında `qtyM` topun TAMAMIDIR. Geri alınıp y
 
 ⇒ **Kapıya `revokedAt IS NULL` süzgeci ucuz sigorta DEĞİL, gerçek onarımdır.** Ve yanında ikinci bir iş doğar: **kabul iptali `fason-receipt` satırlarını damgalamalıdır** (`confirmationId` düzeyinde, §3 taneciği) — yoksa süzgeç boş küme üzerinde çalışır.
 
-📌 **Yan bulgu (ayrı ve küçük açık):** `cancelReceipt` cascade'i doğan topu **hiçbir sebep kodu/metni yazmadan** iptal ediyor. Projede iptal sebebi kataloglu (`ROLL_CANCEL`); bu yolda top *sebepsiz* iptal oluyor ve `isUndoSourcedByAudit` çıpası da boşa düşüyor.
+### ②b · Restore guard'ı nasıl kapanır — ⚠️ SEBEP KODU YAZMAK YETMEZ, TERS ETKİ EDER
+
+İki oturumda da *"cascade sebep kodu yazsaydı engel tetiklenirdi, kusur hiç doğmazdı"* denildi. **Ölçüm bunu iki yarısında da yalanlıyor.**
+
+Altıncı sinyal tek bir `if`tir (`roll-cancel-restore.helper.ts:137`):
+
+```ts
+if (s.cancelReasonCode === TAMBUR_UNDO_CANCEL_CODE || s.undoSourcedByAudit) { … }
+```
+
+| dal | sebep kodu yazılırsa (ör. `FASON_KABUL_IPTAL`) |
+|---|---|
+| `=== TAMBUR_UNDO_CANCEL_CODE` | **eşleşmez** — farklı kod |
+| `undoSourcedByAudit` | ⚠️ `inventory.service.ts:2631`: **`if (cancelReasonCode) return false;`** — kod DOLU olduğu an audit sorgusu hiç koşmaz, **`false` döner** |
+
+⇒ **Sebep kodu yazmak engeli GETİRMEZ; ikinci dalı da kapatır.** (Bugün o dal zaten boşa düşüyor: audit sorgusu yalnız `'TAMBUR_UNDO%'` olaylarını arıyor, `:2649`.)
+
+**Doğru onarım: guard'a YENİ BİR DAL** — kabul iptaliyle düşmüş topun diriltilmesi reddedilir.
+
+**Gerekçe altıncı sinyalinkiyle BİREBİR AYNI ve ölçüldü:** `cancelReceipt` tam kabul edilmiş kaynak topu `SUBCONTRACTOR_CONSUMED → AT_SUBCONTRACTOR`'a geri alıyor. ⇒ Doğan top diriltilirse **aynı kumaş iki yerde sayılır**: dirilen doğan top + fasondaki kaynak top. Altıncı sinyalin kendi cümlesi zaten bunu söylüyor: *"parça diriltilirse aynı metraj iki yerde sayılır ve hiçbir ekranda uyarı çıkmaz — fark ancak fiziksel sayımda görülür."*
+
+⚠️ **DAVRANIŞ DEĞİŞİKLİĞİ — sürüm notu maddesi doğurur:** bugün diriltilebilen bir top diriltilemez olur.
+> *"Fason kabulü iptal edilirken düşen toplar artık 'İptali Geri Al' ile diriltilemiyor — kumaş fasona geri döndüğü için aynı metraj iki yerde sayılıyordu. **Malı yeniden almak için kabulü yeniden yapın.**"*
+
+⚠️ **Son cümle pazarlık dışı.** Kapı haklı olabilir ama operatöre ne yapacağını söylemezse doğru davranışı pahalı kılar — ve pahalı doğru davranışın yerini er geç ucuz yanlış davranış alır. 409 gövdesindeki mesaj da aynı cümleyi taşır, sürüm notuna bırakılmaz.
+
+📌 Sebep kodu **yine de yazılmalı** — engel olduğu için değil, iptal sebebi kataloglu olduğu ve bu yolda top bugün **sebepsiz** iptal olduğu için. Engeli getiren **yeni dal**, kod değil; ikisini karıştırmak kusuru *kapatılmış sanmaya* yol açar.
 
 ### ②-eski · İlk çürütme — iki ayağı geçerli, üçüncüsü düştü
 
@@ -143,6 +169,6 @@ updateMany WHERE { rollId: { in: bornRollIds }, source: "fason-receipt", revoked
 
 ## §9 · Açık sorular
 
-- **Yan bulgu, ayrı iş:** `cancelReceipt` cascade'i doğan topu **sebep kodu/metni yazmadan** iptal ediyor (`:5294-5300`) — projede iptal sebebi kataloglu olmasına rağmen. Bu tasarımın kapsamı dışında ama aynı turda ölçüldü.
+- **Kapsama ALINDI (§2b):** `cancelReceipt`in sebepsiz iptali ve restore guard'ının yeni dalı. Bu bir yan bulgu değil, aynı kusurun onarım yüzeyi.
 - **Kapsam dışı bırakıldı:** iptal edilmiş TOPUN (Tambur dışı, Envanter'den `softDelete`) sapma satırı da karnede kalıyor. Bu ayrı bir sorudur — *"top iptal edildi"* ile *"onay geri alındı"* aynı şey değil; biri malı, öteki imzayı iptal eder. Damga mekanizması kurulduktan sonra ayrıca sorulmalı.
 - **`RollOperation` mirası:** kesimde çocuklara yazılan `KURSUN_APPLIED`/`QC2_COMPLETED` satırları geri almada **hiç damgalanmıyor** (`tambur.service.ts:3266-3277`) — bu tasarımın kapsamı dışında ama aynı ailede duran ikinci bir açık.
