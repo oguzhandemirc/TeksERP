@@ -41,7 +41,7 @@
 
 ### Değişmezler
 
-- **[ÇEKİRDEK]** Panel yayın adresi TEK KAYNAK: `shared/update-feed.ts` ↔ `package.json > build.publish` (ayrışma SESSİZ arıza; `publish` bloğu kalkarsa electron-builder `latest.yml` HİÇ üretmez). `artifactName` ASCII kalır, `${productName}` YASAK (ad `latest.yml`de URL'dir; `Ş`+boşluk 404 üretir). · bekçi: `Electron/src/test/update-feed-url.test.ts (5 it) + deploy/electron-paketle.sh § "2) Tutarlılık bekçisi" (derlemeden ÖNCE aynı vitest dosyasını koşar, kırmızıda durur; kesik alan tamamlandı 2026-09-13)` <sub>(CLAUDE.md:88, CLAUDE.md:78)</sub>
+- **[ÇEKİRDEK]** Panel yayın adresi TEK KAYNAK: `shared/update-feed.ts` ↔ `package.json > build.publish` (ayrışma SESSİZ arıza; `publish` bloğu kalkarsa electron-builder `latest.yml` HİÇ üretmez). `artifactName` ASCII kalır, `${productName}` YASAK (ad `latest.yml`de URL'dir; `Ş`+boşluk 404 üretir). · bekçi: `Electron/src/test/update-feed-url.test.ts (5 it) + deploy/electron-paketle.sh "Tutarlılık bekçisi" adımı (derlemeden ÖNCE aynı vitest dosyasını koşar, kırmızıda durur; kesik alan tamamlandı 2026-09-13)` <sub>(CLAUDE.md:88, CLAUDE.md:78)</sub>
 
 ### Tuzaklar
 

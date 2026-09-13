@@ -111,7 +111,7 @@ const TABAN = 0;
  *     | awk '{ a=gsub(/\(/,"("); b=gsub(/\)/,")"); if (length($0)==80 || a!=b) n++ } END { print n }'
  *   (awk'ta `length` BYTE sayabilir — kapı KARAKTER sayar; fark Türkçe harflerden.)
  */
-const KESIK_TABAN = 70;
+const KESIK_TABAN = 63;
 
 /** Üretecin kesme imzası ya da dengesiz parantez — alan bütün değil. */
 function kesikMi(a: BekciAlani): boolean {
