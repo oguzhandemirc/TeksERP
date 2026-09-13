@@ -7,6 +7,7 @@ import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { AppError } from "../src/utils/app-error";
 import { RollStatus } from "@prisma/client";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let ITEM = "", GRADE = "", ADMIN = "", ST_ZIMPARA = "", ST_BOYA = "", ST_TAMBUR = "", SUB_KESTEL = "", SUB_BOYER = "";
 let GRADE_CODE = "";
@@ -34,7 +35,7 @@ function check(label: string, ok: boolean, extra = ""): void {
 let bc = 0;
 function barcode(): string { bc++; return `TST-RSK-${Math.floor(Math.random() * 0xffffff).toString(16).toUpperCase()}${bc}`; }
 async function freeStock(qty: number): Promise<string> {
-  const r = await prisma.roll.create({ data: { barcode: barcode(), itemId: ITEM, initialQty: qty, currentQty: qty, status: RollStatus.STOCK, qualityGrade: GRADE_CODE, qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN } });
+  const r = await prisma.roll.create({ data: { barcode: barcode(), itemId: ITEM, initialQty: qty, currentQty: qty, status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(), qualityGrade: GRADE_CODE, qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN } });
   return r.id;
 }
 

@@ -18,6 +18,7 @@ import { WorkOrderService } from "../src/services/workorder.service";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus } from "@prisma/client";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 const svc = new WorkOrderService();
 const sub = new SubcontractorService();
@@ -83,7 +84,7 @@ async function main(): Promise<void> {
     const roll = await prisma.roll.create({
       data: {
         barcode: barcode(), itemId: ITEM, initialQty: 300, currentQty: 300,
-        status: RollStatus.STOCK, qualityGrade: GRADE_CODE, qualityGradeId: GRADE,
+        status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(), qualityGrade: GRADE_CODE, qualityGradeId: GRADE,
         width: WIDTH, createdById: ADMIN,
       },
     });

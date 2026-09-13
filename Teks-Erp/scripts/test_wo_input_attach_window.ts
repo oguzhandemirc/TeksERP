@@ -21,6 +21,7 @@ import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { computeWoMaterial } from "../src/services/helpers/coverage.helper";
 import { RollStatus } from "@prisma/client";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0, fail = 0;
 function check(label: string, cond: boolean, extra = ""): void {
@@ -59,7 +60,7 @@ async function makeStockRoll(qty: number): Promise<{ id: string; barcode: string
   const r = await prisma.roll.create({
     data: {
       barcode: code, itemId: ITEM, initialQty: qty, currentQty: qty,
-      status: RollStatus.STOCK, qualityGrade: GRADE_CODE, qualityGradeId: GRADE,
+      status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(), qualityGrade: GRADE_CODE, qualityGradeId: GRADE,
       width: WIDTH, createdById: ADMIN,
     },
     select: { id: true },

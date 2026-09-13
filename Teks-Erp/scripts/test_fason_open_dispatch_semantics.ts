@@ -40,6 +40,7 @@ import { WorkOrderService } from "../src/services/workorder.service";
 import { workOrderFasonQuickService } from "../src/services/workorder-fason-quick.service";
 import { RollStatus } from "@prisma/client";
 import { randomUUID } from "crypto";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0,
   fail = 0;
@@ -135,7 +136,7 @@ async function makeRoll(qty = 100): Promise<string> {
       itemId: ITEM,
       initialQty: qty,
       currentQty: qty,
-      status: RollStatus.STOCK,
+      status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(),
       width: 250,
       createdById: ADMIN,
     },

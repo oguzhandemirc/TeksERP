@@ -32,6 +32,7 @@ import { WorkOrderManualMoveService } from "../src/services/workorder-manual-mov
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0;
 let fail = 0;
@@ -89,7 +90,7 @@ async function main(): Promise<void> {
       itemId: ITEM,
       initialQty: 120,
       currentQty: 120,
-      status: RollStatus.STOCK,
+      status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(),
       width: 250,
       createdById: ADMIN,
     },

@@ -25,6 +25,7 @@ import { TravelerCardService } from "../src/services/traveler-card.service";
 import { VARIANCE_SOURCES } from "../src/constants/variance-reasons";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0;
 let fail = 0;
@@ -83,7 +84,7 @@ async function kurSevk(qtys: number[], tekAdim = false): Promise<{ woId: string;
   for (const q of qtys) {
     bc++;
     const r = await prisma.roll.create({
-      data: { barcode: `TST-RRG-${`${Date.now()}`.slice(-7)}${bc}`, itemId: ctx.item, initialQty: q, currentQty: q, status: RollStatus.STOCK, width: 250, createdById: ctx.admin },
+      data: { barcode: `TST-RRG-${`${Date.now()}`.slice(-7)}${bc}`, itemId: ctx.item, initialQty: q, currentQty: q, status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(), width: 250, createdById: ctx.admin },
       select: { id: true },
     });
     rollIds.push(r.id);

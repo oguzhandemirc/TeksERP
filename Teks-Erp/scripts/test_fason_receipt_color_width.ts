@@ -29,6 +29,7 @@ import { ensureTestDyeHouse, ensureTestSander } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus } from "@prisma/client";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = ""): void {
@@ -112,7 +113,7 @@ async function setup(o: SetupOpts): Promise<{ woId: string; fasonStep: string; n
     const r = await prisma.roll.create({
       data: {
         barcode: barcode(), itemId: ITEM, initialQty: 300, currentQty: 300,
-        status: RollStatus.STOCK,
+        status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(),
         width: o.rollWidth ?? null,
         createdById: ADMIN,
       },

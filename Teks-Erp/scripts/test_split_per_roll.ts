@@ -22,6 +22,7 @@ import { SubcontractorService } from "../src/services/subcontractor.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus, WorkOrderStatus } from "@prisma/client";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let ITEM = "", GRADE = "", ADMIN = "", ST_BOYA = "", ST_TAMBUR = "";
 let GRADE_CODE = "";
@@ -49,7 +50,7 @@ function check(label: string, cond: boolean, extra = ""): void {
 let bc = 0;
 const barcode = () => `TST-SPR-${Math.floor(Math.random() * 0xffffff).toString(16).toUpperCase()}${bc++}`;
 async function stockRoll(qty: number): Promise<string> {
-  const r = await prisma.roll.create({ data: { barcode: barcode(), itemId: ITEM, initialQty: qty, currentQty: qty, status: RollStatus.STOCK, qualityGrade: GRADE_CODE, qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN } });
+  const r = await prisma.roll.create({ data: { barcode: barcode(), itemId: ITEM, initialQty: qty, currentQty: qty, status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(), qualityGrade: GRADE_CODE, qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN } });
   return r.id;
 }
 // Fixture kaçış kapısı: `no-explicit-any` bekçi kapsamında AÇIK DEĞİL

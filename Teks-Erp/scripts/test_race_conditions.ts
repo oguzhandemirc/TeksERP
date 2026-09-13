@@ -31,6 +31,7 @@ import { touchOrderLinesTx } from "../src/services/helpers/order-status.helper";
 import { touchWorkOrderTx } from "../src/services/helpers/workorder-locks.helper";
 import { AppError } from "../src/utils/app-error";
 import { RollStatus } from "@prisma/client";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0, fail = 0;
 function check(label: string, cond: boolean, extra = ""): void {
@@ -98,7 +99,7 @@ async function resolveFixtures(): Promise<void> {
 }
 
 async function stockRoll(qty: number): Promise<string> {
-  const r = await prisma.roll.create({ data: { barcode: barcode(), itemId: ITEM, initialQty: qty, currentQty: qty, status: RollStatus.STOCK, qualityGrade: GRADE_CODE, qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN } });
+  const r = await prisma.roll.create({ data: { barcode: barcode(), itemId: ITEM, initialQty: qty, currentQty: qty, status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(), qualityGrade: GRADE_CODE, qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN } });
   return r.id;
 }
 async function makeWoBoya(): Promise<{ woId: string; stepId: string }> {

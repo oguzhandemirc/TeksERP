@@ -15,6 +15,7 @@ import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { AuthService } from "../src/services/auth.service";
 import { RollStatus } from "@prisma/client";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let ITEM = "", GRADE = "", ADMIN = "", ST_BOYA = "", SUB_BOYER = "", CUSTOMER = "";
 let GRADE_CODE = "";
@@ -59,7 +60,7 @@ async function makeDispatch(): Promise<string> {
   });
   await prisma.$transaction((tx) => cards.createForWorkOrder(tx, wo.id, ADMIN));
   woIds.push(wo.id); stepIds.push(wo.steps[0].id);
-  const r = await prisma.roll.create({ data: { barcode: barcode(), itemId: ITEM, initialQty: 300, currentQty: 300, status: RollStatus.STOCK, qualityGrade: GRADE_CODE, qualityGradeId: GRADE, width: 250, createdById: ADMIN } });
+  const r = await prisma.roll.create({ data: { barcode: barcode(), itemId: ITEM, initialQty: 300, currentQty: 300, status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(), qualityGrade: GRADE_CODE, qualityGradeId: GRADE, width: 250, createdById: ADMIN } });
   const d = await sub.dispatch({ workOrderId: wo.id, stepId: wo.steps[0].id, subcontractorId: SUB_BOYER, rollIds: [r.id] }, ADMIN);
   return (d.data as { id: string }).id;
 }

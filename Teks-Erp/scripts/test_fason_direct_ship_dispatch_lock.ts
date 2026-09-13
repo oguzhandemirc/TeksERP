@@ -27,6 +27,7 @@ import { TravelerCardService } from "../src/services/traveler-card.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0;
 let fail = 0;
@@ -79,7 +80,7 @@ async function woKur(): Promise<{ woId: string; stepId: string }> {
 async function topKur(qty: number): Promise<string> {
   bc++;
   const r = await prisma.roll.create({
-    data: { barcode: `TST-DSL-${`${Date.now()}`.slice(-7)}${bc}`, itemId: ctx.item, initialQty: qty, currentQty: qty, status: RollStatus.STOCK, width: 250, createdById: ctx.admin },
+    data: { barcode: `TST-DSL-${`${Date.now()}`.slice(-7)}${bc}`, itemId: ctx.item, initialQty: qty, currentQty: qty, status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(), width: 250, createdById: ctx.admin },
     select: { id: true },
   });
   return r.id;

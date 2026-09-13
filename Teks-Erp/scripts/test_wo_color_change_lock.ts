@@ -32,6 +32,7 @@ import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { WorkOrderLinkService } from "../src/services/workorder-link.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0;
 let fail = 0;
@@ -114,7 +115,7 @@ async function senaryo(tag: string): Promise<{ woId: string; boyaStep: string; r
       itemId: ITEM,
       initialQty: 100,
       currentQty: 100,
-      status: RollStatus.STOCK,
+      status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(),
       width: 250,
       createdById: ADMIN,
     },

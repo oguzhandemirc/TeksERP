@@ -29,6 +29,7 @@ import { WorkOrderService } from "../src/services/workorder.service";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0;
 let fail = 0;
@@ -198,7 +199,7 @@ async function main(): Promise<void> {
           itemId: item.id,
           initialQty: 100,
           currentQty: 100,
-          status: "STOCK",
+          status: "STOCK", warehouseId: await fixtureWarehouseId(),
           width: 250,
           createdById: admin.id,
         },

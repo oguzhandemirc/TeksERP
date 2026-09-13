@@ -24,6 +24,7 @@ import {
   PrintedDocStatus,
   TravelerCardStatus,
 } from "@prisma/client";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let ITEM = "";
 let GRADE = "";
@@ -84,7 +85,7 @@ async function stockRoll(qty: number): Promise<string> {
       itemId: ITEM,
       initialQty: qty,
       currentQty: qty,
-      status: RollStatus.STOCK,
+      status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(),
       qualityGrade: GRADE_CODE,
       qualityGradeId: GRADE,
       width: WIDTH,

@@ -24,6 +24,7 @@ import { SubcontractorService } from "../src/services/subcontractor.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus } from "@prisma/client";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let ITEM = "";
 let GRADE = "";
@@ -80,7 +81,7 @@ async function stockRoll(qty: number): Promise<{ id: string; barcode: string }> 
       itemId: ITEM,
       initialQty: qty,
       currentQty: qty,
-      status: RollStatus.STOCK,
+      status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(),
       qualityGrade: GRADE_CODE,
       qualityGradeId: GRADE,
       width: WIDTH,

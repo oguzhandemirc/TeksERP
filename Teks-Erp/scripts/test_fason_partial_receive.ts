@@ -28,6 +28,7 @@ import { VARIANCE_SOURCES } from "../src/constants/variance-reasons";
 import { ACTIVE_MOVEMENT } from "../src/services/helpers/roll-movement.helper";
 import { RollStatus, RollVarianceKind } from "@prisma/client";
 import { randomUUID } from "crypto";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = ""): void {
@@ -85,7 +86,7 @@ async function setup(tag: string, qty = 100): Promise<{ woId: string; boyaStep: 
   allStepIds.push(boyaStep, kursunStep);
   await prisma.$transaction((tx) => cards.createForWorkOrder(tx, wo.id, ADMIN));
   const r = await prisma.roll.create({
-    data: { barcode: barcode(), itemId: ITEM, initialQty: qty, currentQty: qty, status: RollStatus.STOCK, width: 250, createdById: ADMIN },
+    data: { barcode: barcode(), itemId: ITEM, initialQty: qty, currentQty: qty, status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(), width: 250, createdById: ADMIN },
     select: { id: true },
   });
   return { woId: wo.id, boyaStep, kursunStep, rollId: r.id };
@@ -346,7 +347,7 @@ async function main(): Promise<void> {
   {
     const a = await setup("P11a", 100);
     const b = await prisma.roll.create({
-      data: { barcode: barcode(), itemId: ITEM, initialQty: 100, currentQty: 100, status: RollStatus.STOCK, width: 250, createdById: ADMIN },
+      data: { barcode: barcode(), itemId: ITEM, initialQty: 100, currentQty: 100, status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(), width: 250, createdById: ADMIN },
       select: { id: true },
     });
     await sub.dispatch({ workOrderId: a.woId, stepId: a.boyaStep, subcontractorId: SUB_BOYER, rollIds: [a.rollId, b.id] }, ADMIN);

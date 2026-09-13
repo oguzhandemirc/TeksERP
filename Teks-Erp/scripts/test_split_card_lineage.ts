@@ -27,6 +27,7 @@ import { SubcontractorService } from "../src/services/subcontractor.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus, TravelerCardStatus } from "@prisma/client";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 // Fixture'lar business key ile çözülür (hardcoded UUID seed reset'inde geçersizleşir
 // — UUID migration sonrası kardeş testlerle aynı desen).
@@ -70,7 +71,7 @@ function barcode(): string {
 async function stockRoll(qty: number): Promise<string> {
   const r = await prisma.roll.create({
     data: { barcode: barcode(), itemId: ITEM, initialQty: qty, currentQty: qty,
-      status: RollStatus.STOCK, qualityGrade: GRADE_CODE, qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN },
+      status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(), qualityGrade: GRADE_CODE, qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN },
   });
   return r.id;
 }

@@ -20,6 +20,7 @@ import { ShippingService } from "../src/services/shipping.service";
 import { buildDispatchAccountingExport } from "../src/services/accounting-export.service";
 import { printedDocumentService } from "../src/services/printed-document.service";
 import { RollStatus, PrintedDocType } from "@prisma/client";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0;
 let fail = 0;
@@ -94,11 +95,11 @@ async function main(): Promise<void> {
   const stepId = wo.steps[0]!.id;
   await prisma.$transaction((tx) => cards.createForWorkOrder(tx, wo.id, ADMIN));
 
-  const mkRoll = (qty: number) =>
+  const mkRoll = async (qty: number) =>
     prisma.roll.create({
       data: {
         barcode: `TST-ADS-R${qty}-${ts}`, itemId: ITEM, colorId: color.id,
-        initialQty: qty, currentQty: qty, status: RollStatus.STOCK,
+        initialQty: qty, currentQty: qty, status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(),
         qualityGrade: GRADE_ROW.code, qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN,
       },
       select: { id: true },

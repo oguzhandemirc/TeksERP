@@ -37,6 +37,8 @@ import {
 } from "../src/services/helpers/workorder-target-color.helper";
 import { assertRollMatchesPlan } from "../src/services/helpers/tambur-plan-gate.helper";
 import { FASON_RECEIPT_DEVIATION_SOURCE } from "../src/constants/tambur-plan-gate";
+import { fixtureWarehouseId } from "./fixture-warehouse";
+import { WAREHOUSE_STOCK_STATUSES } from "../src/services/helpers/warehouse-stock.helper";
 
 let pass = 0;
 let fail = 0;
@@ -127,6 +129,9 @@ async function mkRoll(data: {
       initialQty: data.qty ?? 100,
       currentQty: data.qty ?? 100,
       status: data.status,
+      // Stok kümesindeki top DEPOLU doğar — fason sevki (K6) deposuz topu 409 ile
+      // durduruyor ve deposuz bir STOK topu üretimde mümkün değil.
+      warehouseId: WAREHOUSE_STOCK_STATUSES.includes(data.status) ? await fixtureWarehouseId() : null,
       currentStepId: data.currentStepId ?? null,
       width: 250,
       createdById: ADMIN,

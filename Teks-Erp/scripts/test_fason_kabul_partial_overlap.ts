@@ -14,6 +14,7 @@ import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus } from "@prisma/client";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = ""): void {
@@ -69,7 +70,7 @@ async function setup(tag: string, count: number): Promise<{ woId: string; boyaSt
   await prisma.$transaction((tx) => cards.createForWorkOrder(tx, wo.id, ADMIN));
   const rollIds: string[] = [];
   for (let i = 0; i < count; i++) {
-    const r = await prisma.roll.create({ data: { barcode: barcode(), itemId: ITEM, initialQty: 300, currentQty: 300, status: RollStatus.STOCK, width: 250, createdById: ADMIN }, select: { id: true } });
+    const r = await prisma.roll.create({ data: { barcode: barcode(), itemId: ITEM, initialQty: 300, currentQty: 300, status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(), width: 250, createdById: ADMIN }, select: { id: true } });
     rollIds.push(r.id);
   }
   return { woId: wo.id, boyaStep, kursunStep, rollIds };

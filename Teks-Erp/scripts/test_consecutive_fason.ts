@@ -13,6 +13,7 @@ import { ensureTestDyeHouse, ensureTestSander } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus, StepStatus } from "@prisma/client";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 // Fixture id'leri seed'den runtime'da çözülür: seed her çalıştığında yeni uuid
 // üretir → hardcoded id re-seed sonrası kırılırdı. Business key (code/username) ile bağla.
@@ -73,7 +74,7 @@ async function stockRoll(qty: number): Promise<string> {
       itemId: ITEM,
       initialQty: qty,
       currentQty: qty,
-      status: RollStatus.STOCK,
+      status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(),
       qualityGrade: GRADE_CODE,
       qualityGradeId: GRADE,
       width: WIDTH,

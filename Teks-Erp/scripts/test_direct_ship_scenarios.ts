@@ -14,6 +14,7 @@ import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus, StepStatus, WorkOrderStatus, PrintedDocType, PrintedDocStatus } from "@prisma/client";
 import { atlamaDefteri } from "./lib/atlama";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let ITEM = "", GRADE = "", ADMIN = "", ST_BOYA = "", ST_ZIMPARA = "", ST_TAMBUR = "", SUB_BOYER = "", SUB_KESTEL = "", CUSTOMER = "";
 let GRADE_CODE = "";
@@ -62,7 +63,7 @@ function barcode(): string { bc++; return `TST-DSS-${Math.floor(Math.random() * 
 
 const woIds: string[] = [], stepIds: string[] = [], orderIds: string[] = [];
 async function stockRoll(qty: number): Promise<string> {
-  const r = await prisma.roll.create({ data: { barcode: barcode(), itemId: ITEM, initialQty: qty, currentQty: qty, status: RollStatus.STOCK, qualityGrade: GRADE_CODE, qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN } });
+  const r = await prisma.roll.create({ data: { barcode: barcode(), itemId: ITEM, initialQty: qty, currentQty: qty, status: RollStatus.STOCK, warehouseId: await fixtureWarehouseId(), qualityGrade: GRADE_CODE, qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN } });
   return r.id;
 }
 async function makeWo(steps: Array<{ stationId: string; seq: number }>): Promise<{ woId: string; stepIds: string[] }> {
