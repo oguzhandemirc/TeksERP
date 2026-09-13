@@ -92,11 +92,21 @@ jobs:
       # 2026-09-13: istemci 18.6 ↔ sunucu 16.15 → `SET transaction_timeout` PG17+).
       # Bu satır CI'ın çiftini GÖRÜNÜR kılar; yerel 100 ↔ CI 97 farkının atfı da
       # buradan okunacak. Çıkış kodunu etkilemez.
+      # ⚠️ `|| true` KAPIYI korur, ÖLÇÜMÜ korumaz — ilk yazımda üçüncü satır
+      # sessizce düştü (`psql: invalid URI query parameter: "schema"`; Prisma
+      # biçimindeki `?schema=public` psql'e geçmiyor) ve sunucu sürümü HİÇ
+      # basılmadı. Yeşil kaldığı için fark edilmedi. ⇒ Her satır artık
+      # başarısızlığını ADIYLA basar: üç etiket bekleniyor, üçü de görünmeli.
+      # ⚠️ VE BORUYA SOKMA: `psql … | sed … || echo` içinde `||` BORUNUN (yani
+      #    sed'in) çıkışını görür, psql'inkini DEĞİL — hata yine yutulur.
+      #    Ölçüldü: `false | sed … || echo X` hiçbir şey basmıyor. Değişkene al.
       - name: PostgreSQL istemci/sunucu sürümü (ölçüm)
         run: |
-          pg_dump --version || echo "pg_dump YOK"
-          psql --version || echo "psql YOK"
-          psql "$DATABASE_URL" -tAc "SHOW server_version" || true
+          pg_dump --version || echo "ISTEMCI-DUMP: pg_dump YOK"
+          psql --version    || echo "ISTEMCI-PSQL: psql YOK"
+          srv=$(psql "${DATABASE_URL%%\?*}" -tAc "SHOW server_version" 2>&1) \
+            && echo "SUNUCU: $srv" \
+            || echo "SUNUCU: OKUNAMADI ($srv)"
       - name: Prisma generate
         run: npx prisma generate
       - name: Migrate deploy (tüm migration'ları uygula)
