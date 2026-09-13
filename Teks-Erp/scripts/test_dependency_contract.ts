@@ -11,7 +11,7 @@
 //   (a) [KU-12] `bonjour-service` backend + Electron'da TAM SABİT ve aynı sürüm
 //   (b) [KU-18] Backend'in her `dependencies` girdisi gerçek `require()` ile
 //       çözülüyor; ESM-only paket kümesi BEYAN EDİLMİŞ listeyle birebir
-//   (c) [KU-04/KU-08] Üç projenin `dependencies`i ile KUTUPHANELER.md §2
+//   (c) [KU-04/KU-08] Üç projenin `dependencies`i ile KUTUPHANELER-TABLO.md §2
 //       tablosu arasındaki fark boş (devralınan kayıtsızlar donmuş listede)
 //
 // KAPSAM `dependencies`tir; `devDependencies` MUAF. Gerekçe: §2 tabloları araç
@@ -186,9 +186,13 @@ const KAYIT_BEKLEYEN: Record<string, string[]> = {
 
 type Tablo = { tum: Set<string>; iddia: Set<string> };
 function tabloOku(): Record<string, Tablo> {
-  const md = readFileSync(join(REPO, "docs", "standart", "KUTUPHANELER.md"), "utf8");
+  // §2 tablosu 2026-09-13'te KUTUPHANELER-TABLO.md'ye bölündü (envanter ayrıldı, kural kaldı).
+  // Bölüm numarası §2 olarak KORUNDU — aşağıdaki regex'e dokunulmadı.
+  const md = readFileSync(join(REPO, "docs", "standart", "KUTUPHANELER-TABLO.md"), "utf8");
   const bolumler = new Map<string, string>();
-  const re = /^### (2\.\d) [^\n]*\n([\s\S]*?)(?=^### |^## )/gm;
+  // Girdi-sonu şartı: SON alt bölüm (§2.3) kendisinden sonra başlık olmadığı için
+  // eskiden BOŞ dönüyordu — körlük zemini kontrolü bunu yakaladı (2026-09-13).
+  const re = /^### (2\.\d) [^\n]*\n([\s\S]*?)(?=^### |^## |(?![\s\S]))/gm;
   for (let m = re.exec(md); m; m = re.exec(md)) bolumler.set(m[1], m[2]);
 
   const esle: Record<string, string> = { "2.1": "backend", "2.2": "electron", "2.3": "mobil" };
@@ -218,7 +222,7 @@ function tabloOku(): Record<string, Tablo> {
 }
 
 function bolumC(): void {
-  console.log("\n── (c) KUTUPHANELER.md §2 ↔ dependencies farkı [KU-04] ──");
+  console.log("\n── (c) KUTUPHANELER-TABLO.md §2 ↔ dependencies farkı [KU-04] ──");
   const tablolar = tabloOku();
   check("körlük zemini: üç alt bölüm de bulundu", Object.keys(tablolar).length === 3);
 
