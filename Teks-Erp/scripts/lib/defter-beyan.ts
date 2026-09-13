@@ -370,8 +370,15 @@ export type OlayTersYolu =
   | { tur: "KARSI_OLAY"; kod: string; gerekce: string }
   /** Tersi `reversesMovementId` ile BAĞLI yazılır. */
   | { tur: "BAGLI_TERS"; kod: string }
-  /** Bu kodun KENDİSİ bir ters kayıttır; hangi ilerinin tersi olduğunu söyler. */
-  | { tur: "TERS_KODU"; ileri: string }
+  /**
+   * Bu kodun KENDİSİ bir ters kayıttır; hangi ilerinin tersi olduğunu söyler.
+   * Birden çok ileri kod AYNI ters kodla terslenebilir (ölçüldü 2026-09-13:
+   * `TAMBUR_UNDO` hem `TAMBUR_FINALIZE`ın PRODUCTION satırını hem `CUT_SPLIT`in
+   * TRANSFORM çiftini tersler — `reverseAllRollStockMoves` ve
+   * `reverseTransformGroupsOf` aynı sebep kodunu yazar). Tek string'e sığdırmak,
+   * ikinci ileri kodu §13d'de YANLIŞ asimetri diye düşürürdü.
+   */
+  | { tur: "TERS_KODU"; ileri: string | string[] }
   /** Kodun tarif ettiği iş BAŞKA BİR DEFTERDE yaşıyor — ölü değil, YERİNDEN OLMUŞ. */
   | { tur: "BASKA_DEFTER"; nerede: string; gerekce: string }
   /** Ters yolu YOK ya da ÖLÇÜLMEDİ — muafiyet değil, görünür borç. */
@@ -383,7 +390,7 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   PRODUCTION_RECEIPT: { tur: "BAGLI_TERS", kod: "KURSUN_REOPEN" },
   KURSUN_REOPEN: { tur: "TERS_KODU", ileri: "PRODUCTION_RECEIPT" },
   TAMBUR_FINALIZE: { tur: "BAGLI_TERS", kod: "TAMBUR_UNDO" },
-  TAMBUR_UNDO: { tur: "TERS_KODU", ileri: "TAMBUR_FINALIZE" },
+  TAMBUR_UNDO: { tur: "TERS_KODU", ileri: ["TAMBUR_FINALIZE", "CUT_SPLIT"] },
   ENTRY_RECEIPT: { tur: "KARSI_OLAY", kod: "ROLL_CANCEL", gerekce: "topun doğuşunun tersi kayıttan düşmesidir; ayrı olay, bağ yok" },
   ROLL_CANCEL: { tur: "BAGLI_TERS", kod: "CANCEL_RESTORE" },
   CANCEL_RESTORE: { tur: "TERS_KODU", ileri: "ROLL_CANCEL" },
@@ -417,10 +424,18 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
     ne: "ters yolu KISMİ — bağımsız \"iş emrini yeniden aç\" yolu yok; tambur-undo FULL yalnız ÇOCUK topların satırlarını tersler",
     kanit: "yazan: roll-disposition.helper.ts:304 (PRODUCTION, WO kapanışında dispozisyon alan her topa). Geri alma: workorder*.ts içinde reopen/undoClose YOK; `WO_CANCEL_DISPOSITION` (workorder.service.ts:3844) İLERİ bir olaydır (WO iptali), ters değil. tambur-undo applyFull (:1673) `reverseAllRollStockMoves(ids)` ile ÇOCUKLARIN tüm satırlarını tersler (TAMBUR_UNDO bağlı) — dispozisyon satırı çocuk üstündeyse terslenir, kaynak/kardeş top üstündeyse TERSLENMEZ. Kapanır: WO yeniden açma yolu doğduğunda dispozisyon satırlarını `reverseLatestScopedStockMove(rollIds, {reasonCode: DISPOSITION, workOrderStepId})` ile tersler; ya da tambur-undo FULL kapsamı dispozisyon alan TÜM topları kapsar ve `test_stock_ledger_tambur_undo` bunu ölçer",
     sahibi: "iş emri alanı (01)" },
-  CUT_SPLIT: { tur: "BORC",
-    ne: "ters yolu YARIM — çocuğun girişi terslenir, EBEVEYNİN çıkışı terslenmez: TRANSFORM çifti geri almada net sıfır KALMAZ",
-    kanit: "yazan: tambur.service.ts:2451/2460/2914/2923 (TRANSFORM çifti: ebeveyn çıkışı + çocuk girişi; `test_stock_ledger_transform` §A/§C ölçüyor). Geri alma: tambur-undo depo-kesimi dalı (:1256 \"parent serbest depoda; currentQty VE initialQty geri\") ebeveyni `tx.roll.update` ile DURUM olarak geri yazar ama defterde ebeveyne dokunan HİÇBİR ters çağrı yok — dosyadaki üç ters çağrının üçü de (:1167 :1393 :1673) yalnız çocuk(lar)ı hedefler, `parentId` hiçbir ters çağrıya girmez. `test_stock_ledger_transform`ta geri alma bölümü YOK (0 eşleşme); `test_stock_ledger_tambur_undo` ÜRETİM finalize yolunu ölçer (orada ebeveynin depo satırı yoktur, çocuk-tek doğru). Ev kuralı \"top birleştirilmez, iptal edilir\" (mukerrer.md): ters yol birleştirme değil, çocuk iptali + ebeveyn qty geri — eksik olan ebeveynin DEFTER satırı. Kapanır: depo-kesimi geri alması ebeveynin TRANSFORM çıkış satırını da bağlı tersler (`reverseLatestScopedStockMove([parentId], {reasonCode: CUT_SPLIT})`) ve `test_stock_ledger_transform`a \"geri al → grup neti 0\" bölümü girer",
-    sahibi: "tambur alanı (01)" },
+  // CUT_SPLIT — BORÇ KAPANDI (01, `c2a10e88`, koşullu sürüm; 82 statik okuma → 01 çalıştırma:
+  // 100 → kes 40 → geri al ⇒ durum 100 ↔ defter 60 ayrışması kapandı). Ters yol
+  // `reverseTransformGroupsOf` (warehouse-ledger-reverse.helper.ts:262): çocuğun üye
+  // olduğu açık TRANSFORM gruplarının BÜTÜN ileri satırları (ebeveyn OUT dahil),
+  // reasonCode TAMBUR_UNDO, `reversesMovementId` bağlı. ⚠️ KOŞULLU: yalnız metraj
+  // EBEVEYNE GERİ KONAN dallarda — applySingle `if (!parentArchived)` (:1174),
+  // SINGLE_RESTORE (:1408) ve FULL (:1697) koşulsuz. "Kaynak ARŞİVDE" dalında metraj
+  // geri dönmez, ebeveynin OUT'u GERÇEK kalır ve terslenmez (RECORD_CORRECTION yazılır)
+  // — ilk koşulsuz sürüm orada TERS ayrışma üretiyordu (durum 0 ↔ defter 40).
+  // Ölçen: `test_stock_ledger_tambur_undo` §11 beş dal (A depo-restore · B adım-restore ·
+  // C kaynak-arşivde · D SINGLE_RESTORE · E FULL), consistency §31 yetim sondası.
+  CUT_SPLIT: { tur: "BAGLI_TERS", kod: "TAMBUR_UNDO" },
   CUT_DISCARD: { tur: "BORC",
     ne: "ters yazıcısı YOK — kesim kalanının atılması (ADJUST çıkış) hiçbir geri alma dalında terslenmez; TERMİNAL olabilir (SCRAP ile aynı sınıf), hüküm sahibinde",
     kanit: "yazan: tambur.service.ts:2939 (`finalizeWarehouseCut` discard dalı, tek ÇIKIŞ satırı — `test_stock_ledger_transform` §D, grup YOK). Geri alma: satır EBEVEYN üstünde ve tambur-undo ebeveyn satırını hiçbir dalda terslemiyor (CUT_SPLIT kanıtıyla aynı). Semantik: kalanı atmak SCRAP gibi bir KARARDIR (kök CLAUDE.md SCRAP'ı karar sayar, tablo TERMINAL tutar) — ama o hüküm CUT_DISCARD için YAZILI DEĞİL ve analoji ölçüm değildir. Kapanır: sahibi TERMINAL hükmü verir (satır TERMINAL + gerekçeye döner) YA DA depo-kesimi geri alması discard satırını bağlı tersler",

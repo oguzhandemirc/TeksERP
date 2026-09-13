@@ -360,8 +360,9 @@ console.log("\n=== §13 OLAY DÜZEYİ — her sebep kodunun ters yolu beyanlı m
   // §13c ATIFLAR GERÇEK Mİ — kod yeniden adlandırılırsa kapı sessiz kalamaz.
   const oluAtif: string[] = [];
   for (const [kod, b] of Object.entries(STOK_OLAY_BEYANI)) {
-    const hedef = b.tur === "BAGLI_TERS" || b.tur === "KARSI_OLAY" ? b.kod : b.tur === "TERS_KODU" ? b.ileri : null;
-    if (hedef && !kodlar.includes(hedef)) oluAtif.push(`${kod} → ${hedef}`);
+    // TERS_KODU.ileri tek kod ya da küme — her üye ayrı atıftır, hepsi katalogda olmalı.
+    const hedefler: string[] = b.tur === "BAGLI_TERS" || b.tur === "KARSI_OLAY" ? [b.kod] : b.tur === "TERS_KODU" ? ([] as string[]).concat(b.ileri) : [];
+    for (const hedef of hedefler) if (!kodlar.includes(hedef)) oluAtif.push(`${kod} → ${hedef}`);
   }
   check("§13c ters yol atıfları katalogda var", oluAtif.length === 0,
     oluAtif.length ? `ÖLÜ ATIF: ${oluAtif.join(" · ")}` : "tüm atıflar çözüldü");
@@ -372,7 +373,8 @@ console.log("\n=== §13 OLAY DÜZEYİ — her sebep kodunun ters yolu beyanlı m
   for (const [kod, b] of Object.entries(STOK_OLAY_BEYANI)) {
     if (b.tur !== "BAGLI_TERS" || b.kod === kod) continue;
     const karsi = STOK_OLAY_BEYANI[b.kod];
-    if (!karsi || karsi.tur !== "TERS_KODU" || karsi.ileri !== kod) {
+    // `ileri` tek kod ya da küme: bir ters kod birden çok ileriyi tersleyebilir (TAMBUR_UNDO).
+    if (!karsi || karsi.tur !== "TERS_KODU" || !([] as string[]).concat(karsi.ileri).includes(kod)) {
       asimetri.push(`${kod} → ${b.kod} (karşı beyan: ${karsi ? karsi.tur : "YOK"})`);
     }
   }
