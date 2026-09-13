@@ -174,6 +174,63 @@ function main(): void {
   const yerelKimlik = [gitConfig("user.name"), gitConfig("user.email")].filter((v) => v !== null);
   check("§4c ⭐ ortak config: user.name/email YEREL değil (global'den gelir)", yerelKimlik.length === 0, yerelKimlik.length ? `yerelde: ${yerelKimlik.join(" / ")}` : "temiz");
 
+  // ── §5 KAPI DEFTERİ (1e hükmü 2026-09-14) ───────────────────────────────────
+  // Satır biçimi tek kontrol; asıl sonda: defter YAZILAMIYORKEN kapı düşmez ve
+  // uyarı basmaz. Kapının çıkış kodu adımlardan gelir; defter yalnız izdir —
+  // izin kapıyı değiştirebilmesinin tek yolu bir istisnanın sızmasıdır, o ölçülür.
+  console.log("\n§5 — kapı defteri: biçim + best-effort");
+  const defterKos = (env: Record<string, string>, kod: string) =>
+    spawnSync("node", ["--input-type=module", "-e", kod], { encoding: "utf8", env: { ...process.env, ...env }, cwd: KOK });
+  const defterMod = JSON.stringify(join(KOK, "scripts/hooks/lib/kapi-defteri.mjs"));
+  const r5a = defterKos(
+    {},
+    `const { defterSatiri } = await import(${defterMod});\n` +
+      `process.stdout.write(defterSatiri({ wt: "/tam/yol/wt-0c", adim: "hızlı\\tmandallar", sonuc: "❌", sn: "10.53", cikis: 1 }));`,
+  );
+  const satir = r5a.stdout;
+  const kolonlar = satir.replace(/\n$/, "").split("\t");
+  check(
+    "§5a ⭐ defter satırı biçimi: zaman · wt · adım · ✅/❌/⏭ · sn · çıkış (6 kolon, tek satır, wt'de yol yok)",
+    r5a.status === 0 &&
+      kolonlar.length === 6 &&
+      /^\d{4}-\d{2}-\d{2}T/.test(kolonlar[0]) &&
+      !kolonlar[1].includes("/") &&
+      kolonlar[1].endsWith("wt-0c") &&
+      kolonlar[2] === "hızlı mandallar" &&
+      kolonlar[3] === "❌" &&
+      kolonlar[4] === "10.5" &&
+      kolonlar[5] === "1" &&
+      satir.endsWith("\n") &&
+      satir.split("\n").length === 2,
+    JSON.stringify(satir),
+  );
+
+  // Yazılamayan hedef: DİZİN (EISDIR) — appendFileSync fırlatır. Beklenen: dönüş false,
+  // istisna yok, stderr boş. Sonda hedefi sahte (kendi tmp'i), gerçek defter yok sayılır.
+  const r5b = defterKos(
+    { TEKSERP_KAPI_DEFTERI: KOK },
+    `const { deftereYaz } = await import(${defterMod});\n` +
+      `const ok = deftereYaz({ wt: "x", adim: "y", sonuc: "✅", sn: 1, cikis: 0 });\n` +
+      `process.stdout.write(JSON.stringify(ok));`,
+  );
+  check(
+    "§5b ⭐ defter yazılamıyorsa: istisna YOK, stderr BOŞ, çıkış 0 (kapı düşmez)",
+    r5b.status === 0 && r5b.stdout === "false" && r5b.stderr === "",
+    `çıkış=${r5b.status} stdout=${r5b.stdout} stderr=${JSON.stringify(r5b.stderr).slice(0, 80)}`,
+  );
+
+  // Kablolama: pre-commit defteri YALNIZ deftereYaz ile yazar (doğrudan appendFileSync
+  // yok → yutulmayan istisna yolu yok) ve semafor bekleme satırı düşülüyor.
+  const preCommit = readFileSync(join(KOK, "scripts/hooks/pre-commit.mjs"), "utf8");
+  const defterKaynak = readFileSync(join(KOK, "scripts/hooks/lib/kapi-defteri.mjs"), "utf8");
+  check(
+    "§5c pre-commit deftere yalnız deftereYaz ile yazıyor, semafor beklemesini de düşüyor",
+    (preCommit.match(/deftereYaz\(/g) ?? []).length >= 4 && !/appendFileSync/.test(preCommit) && /adim: "semafor bekleme"/.test(preCommit),
+  );
+  const tryIcinde = (k: string) => /try \{\s*appendFileSync\([\s\S]*?\} catch \{/.test(k);
+  check("§5d kapi-defteri.mjs appendFileSync'i try/catch içinde tutuyor", tryIcinde(defterKaynak));
+  check("   ↳ sonda: try sökülmüş kopyada ısırıyor", !tryIcinde(defterKaynak.replace("try {", "{")));
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);
 }

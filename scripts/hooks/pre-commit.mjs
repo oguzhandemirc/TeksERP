@@ -24,12 +24,15 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { deftereYaz } from "./lib/kapi-defteri.mjs";
 import { etkilenenProjeler, stagedFiles } from "./lib/staged.mjs";
 import { slotAl } from "./lib/semafor.mjs";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+// Kapı defteri: wt BASENAME'i (wt-0c · Teks-Erp), tam yol ve kimlik yok — lib/kapi-defteri.mjs.
+const WT = basename(REPO);
 
 if (process.env.TEKSERP_HOOK_SKIP === "1") {
   process.stderr.write("⚠️  commit kapısı ATLANDI (TEKSERP_HOOK_SKIP=1)\n");
@@ -213,7 +216,10 @@ if (adimlar.length === 0) process.exit(0);
 // genelinde en çok KAPASITE kapı aynı anda koşar — ölçüm ve tuzaklar lib/semafor.mjs.
 // Yalnız doküman/sürüm-notu kapısı (saniyeler, MB'lar) sıraya girmez.
 const agirVar = adimlar.some((a) => a.env === AGIR_ADIM_ENV || a.ad.endsWith(" · test"));
+const semaforBasladi = Date.now();
 const slotBirak = agirVar ? slotAl() : () => {};
+// Bekleme süresi deftere — semafor kapasitesi (2/3/4) sahadan bu satırla ölçülür.
+if (agirVar) deftereYaz({ wt: WT, adim: "semafor bekleme", sonuc: "✅", sn: (Date.now() - semaforBasladi) / 1000, cikis: 0 });
 
 process.stderr.write(`⏳ commit kapısı: ${adimlar.length} adım (${adimlar.map((a) => a.ad).join(" · ")})\n`);
 
@@ -239,21 +245,37 @@ for (const adim of adimlar) {
     ...(adim.stdin === undefined ? {} : { input: adim.stdin }),
   });
   const sn = ((Date.now() - t0) / 1000).toFixed(1);
+  const cikis = r.status ?? r.error?.code;
   if (r.status === 0 && !r.error) {
     process.stderr.write(`   ✅ ${adim.ad} (${sn}s)\n`);
+    deftereYaz({ wt: WT, adim: adim.ad, sonuc: "✅", sn, cikis });
     // Yeşil adımın çıktısı yutulur — ⏭ BEYANI hariç: kapsam kaybı sessiz olamaz
     // (ölüm biçimi ⑪). Beyan satırı adımın kendi çıktısında "⏭" ile başlar.
     for (const satir of `${r.stdout || ""}\n${r.stderr || ""}`.split("\n")) {
-      if (satir.trim().startsWith("⏭")) process.stderr.write(`   ${satir.trim()}\n`);
+      if (satir.trim().startsWith("⏭")) {
+        process.stderr.write(`   ${satir.trim()}\n`);
+        deftereYaz({ wt: WT, adim: `${adim.ad} · ${satir.trim().slice(0, 80)}`, sonuc: "⏭", sn, cikis });
+      }
     }
     continue;
   }
   const govde = `${r.stdout || ""}\n${r.stderr || ""}`.split("\n").filter(Boolean).slice(-30).join("\n");
   process.stderr.write(
-    `   ❌ ${adim.ad} KIRMIZI (${sn}s, çıkış ${r.status ?? r.error?.code})\n` +
+    `   ❌ ${adim.ad} KIRMIZI (${sn}s, çıkış ${cikis})\n` +
       `${govde.replace(/^/gm, "      | ")}\n\n` +
       `⛔ Commit atılmadı. Bilerek geçmek gerekiyorsa: TEKSERP_HOOK_SKIP=1 git commit …\n`,
   );
+  // Isıran mandalın adı teşhis için yeter; ilk ❌ satırı da alınır (koşucu biçimi: "❌ test_x …"),
+  // mutlak yollar kırpılır — defterde tam yol/oturum kimliği taşınmaz.
+  const ilkKirmizi = govde
+    .split("\n")
+    .find((s) => s.includes("❌"))
+    ?.split(`${REPO}/`)
+    .join("")
+    .replace(/\/(?:private\/)?tmp\/claude-501\/\S*?\/scratchpad\//g, "")
+    .trim()
+    .slice(0, 120);
+  deftereYaz({ wt: WT, adim: ilkKirmizi ? `${adim.ad} · ${ilkKirmizi}` : adim.ad, sonuc: "❌", sn, cikis });
   slotBirak();
   process.exit(1);
 }
@@ -273,6 +295,8 @@ if (headBasta && headSonda && headBasta !== headSonda) {
   );
 }
 
-process.stderr.write(`✅ commit kapısı temiz (${((Date.now() - basladi) / 1000).toFixed(1)}s)\n`);
+const toplamSn = ((Date.now() - basladi) / 1000).toFixed(1);
+process.stderr.write(`✅ commit kapısı temiz (${toplamSn}s)\n`);
+deftereYaz({ wt: WT, adim: `kapı · toplam (${adimlar.length} adım)`, sonuc: "✅", sn: toplamSn, cikis: 0 });
 slotBirak();
 process.exit(0);
