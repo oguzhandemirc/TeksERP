@@ -221,6 +221,24 @@ engeller, **başlatılamayan kanca daima non-blocking**tir. Tek kalıcı koruma
 yapılandırmanın DOĞRULUĞUNU ölçmektir — `Teks-Erp/scripts/test_hook_config.ts`
 (`1e364f1b`), bugün bilerek kırmızı: `TEST-VE-DERLEME-SINIRLAR.md` §8.
 
+## Yerel yeşil, BAŞKASININ commit edilmemiş düzeltmesi olabilir
+
+Bir commit kapısı **çalışma ağacını** okur; CI **HEAD'i** okur. Ortak ağaçta ikisi aynı
+şey değildir: bir eş oturumun henüz **commit etmediği** düzeltmesi senin koşumunu
+yeşile boyar, ama commit'in HEAD'e indiğinde o düzeltme orada YOKTUR.
+
+> **Bir kapıyı, kapatacağı ihlal HEAD'de AÇIKKEN indirme** — yerel yeşil yeterli
+> değildir, ihlalin **commit edilmiş** olduğu ölçülür.
+
+*(Vaka 2026-09-13: kimlik tekilliği kapısı çalışma ağacında yeşildi çünkü bir eş oturum
+çakışan kimliği düzeltmişti; HEAD'de çakışma DURUYORDU. Kapı o hâlde inseydi ilk CI
+koşumunda kırmızı verecek ve düzeltmeyi yapan değil, **ondan sonra commit atan herkes**
+cezalanacaktı.)*
+
+**Ölçüm:** yüklemini çalışma ağacına değil `git show HEAD:<yol>` içeriğine uygula.
+Kardeşleri § Zengin kontrol grubu ve § Pencerenin BOŞ olduğunu ölçmek
+(`OLCUM-DISIPLINI-SINIFLAR.md`).
+
 ## Kırmızıyı sınıflandırma
 
 `gerçek kusur · testin kendi hatası · çevresel · yapısal olarak ölçülemez`
