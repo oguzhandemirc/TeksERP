@@ -53,7 +53,7 @@
 
 ### Kararlar
 
-- **[ÇEKİRDEK]** Electron güncelleyici: `autoUpdater`a modül gövdesinde DOKUNMA (`updater()` getter); `autoInstallOnAppQuit=false`; şerit YALNIZ `ready` (error körleştirir); güncelleme ZORUNLU (`UpdateGate` + 2 dk geri sayım, 20 sn kurulum bekçisi, 5 dk tekrar); zamanlayıcı YALNIZ main'de: 30 sn + 15 dk. · bekçi: `yok (kod yorumları)` <sub>(CLAUDE.md:88, CLAUDE.md:78)</sub>
+- **[ÇEKİRDEK]** Electron güncelleyici: `autoUpdater`a modül gövdesinde DOKUNMA (`updater()` getter); `autoInstallOnAppQuit=false`; şerit YALNIZ `ready` (error körleştirir); güncelleme ZORUNLU (`UpdateGate` + 2 dk geri sayım, 20 sn kurulum bekçisi, 5 dk tekrar); zamanlayıcı YALNIZ main'de: 30 sn + 15 dk. · bekçi: `yok — zamanlayıcı yarısı HARİÇ: update-check-interval.test.ts (15 dk kaynaktan · tek setInterval yalnız main · renderer'da setTimeout yok; ölçüldü 2026-09-13, eski beyan "yok (kod yorumları)" bu yarıyı görmüyordu); getter · autoInstallOnAppQuit · şerit-yalnız-ready · UpdateGate süreleri için bekçi yok (update-gate-escape.test.ts yalnız kaçış yolunu ölçer)` · Kapanır: `Electron'da bir bekçi updater.ipc.ts üstünde şunları ölçtüğünde — (i) "autoInstallOnAppQuit = false" satırı var (bugün 1), (ii) electronUpdater.autoUpdater'a getter gövdesi dışından erişim 0 (bugün: 1 tip + 1 getter, 0 dışarıdan), (iii) şerit yalnız "ready" olayına bağlı, error körleştirmiyor — ve bekçi haritasına yazıldığında` · Öncül: ölçüldü <sub>(CLAUDE.md:88, CLAUDE.md:78)</sub>
 
 ## Tablet (mobil)
 
@@ -65,7 +65,7 @@
 
 ### Tuzaklar
 
-- **[ÇEKİRDEK]** `usesCleartextTraffic` app.json → `android` altında GEÇERSİZ (SDK 54 sessizce atar); yalnız `expo-build-properties` android bloğu geçerli. `android/` git dışı prebuild ÇIKTISI: eski klasör doğru görünür, prebuild'de bayrak düşer → APK hiç istek yollayamaz. BEKÇİ YOK: prebuild sonrası grep'le bak. · bekçi: `yok (bilinçli; script yalnız grep komutunu hatırlatır)` <sub>(CLAUDE.md:66)</sub>
+- **[ÇEKİRDEK]** `usesCleartextTraffic` app.json → `android` altında GEÇERSİZ (SDK 54 sessizce atar); yalnız `expo-build-properties` android bloğu geçerli. `android/` git dışı prebuild ÇIKTISI: eski klasör doğru görünür, prebuild'de bayrak düşer → APK hiç istek yollayamaz. BEKÇİ YOK: prebuild sonrası grep'le bak. · bekçi: `yok (bilinçli; mobil/scripts/build-apk.mjs yalnız grep komutunu BASAR, koşmaz)` · Kapanır: `build-apk.mjs (ya da yayinla) android/app/src/main/AndroidManifest.xml içinde android:usesCleartextTraffic="true" yokken çıkış kodu sıfır-dışı ile DURDUĞUNDA — bugün o script'te bayrağı okuyan satır 0, hatırlatan satır 1; kapı, hatırlatmayı komuta çevirdiğinde ve negatif sondası (bayrak silinmiş manifest → kırmızı) kaydedildiğinde` · Öncül: ölçüldü <sub>(CLAUDE.md:66)</sub>
 - **[ÇEKİRDEK]** Bundle doğrulama: release bundle Hermes bytecode — ASCII dizeler düz metin, Türkçe karakterli dizeler UTF-16 tablosuna gider ve grep BULMAZ; dizeler uç uca ('sonrasında harf gelmesin' sondajı eşleşmeyi eler). Hep ASCII dize ara. Sıcak Metro/Gradle önbelleği env'i görmez: HIZLI build bayat adrestir. · bekçi: `build-apk.mjs önbellek silme + bundle geri okuma` <sub>(CLAUDE.md:66)</sub>
 
 ### Reçeteler

@@ -33,6 +33,10 @@
 //   C+ iyi biçimli `**BORÇ:**` bloğu                → 1 blok · 0 bozuk  ✓
 //   C− `**Öncül:**` silindi                         → "eksik alan (1/3)" ✓
 //   C− `**Çapa:** test_helpers.ts:275`              → "Çapa SATIR NUMARASI" ✓
+//   ── ikinci tur (2026-09-13, index'e geçiş + sıkı yüklem; worktree'de) ──
+//   B− iç backtick'li `Kapanır:`, STAGE'li          → 35 → 36  (sayılmadı) ✓
+//   B+ çift tırnaklı `Kapanır:`, STAGE'li           → 35 → 35  (sayıldı)   ✓
+//   B  aynı ihlal STAGE'siz                         → index 35 · ℹ️ ağaç 36 ✓
 //
 // ⚠️ B+ (POZİTİF sonda) BİR KUSUR BULDU ve negatif sonda onu göremezdi:
 // yüklem `Kapanır:`ı `bekçi:` backtick'lerinin İÇİNDE arıyordu, oysa `Kapanır:`
@@ -44,6 +48,7 @@
 // =============================================================================
 import { readdirSync, readFileSync } from "fs";
 import { basename, join } from "path";
+import { type BekciAlani, bekciAlanlari, KOK, kuralDosyalari } from "./lib/kural-dosyalari";
 
 let pass = 0;
 let fail = 0;
@@ -52,7 +57,6 @@ function check(label: string, ok: boolean, detay?: string): void {
   else { fail++; console.log(`❌ ${label}${detay ? ` — ${detay}` : ""}`); }
 }
 
-const KOK = join(__dirname, "..", "..");
 const KURALLAR = join(KOK, "docs", "kurallar");
 
 /**
@@ -64,23 +68,14 @@ const KURALLAR = join(KOK, "docs", "kurallar");
  * yok, kapanma koşulu yok. Kapsamı düzeltince sayı 37 oldu.
  * => Bir tabanın DEĞERİ, yükleminin KAPSAMIYLA birlikte taşınır; kapsam
  *    değişince eski sayı yanlış değil KONUSUZ olur.
- * Üreten komut:
- *   grep -rhoE 'bekçi: `(YOK|yok|BELİRSİZ)[^`]*`' docs/kurallar/*.md | wc -l
+ *
+ * ⚠️ TABAN INDEX'TEN ÖLÇÜLÜR (ne ağaç ne HEAD) — gerekçe `lib/kural-dosyalari.ts`.
+ * Üreten komut (index'ten; iç backtick'li `Kapanır:` alanı SAYILMAZ):
+ *   for f in $(git ls-files docs/kurallar/*.md); do git show ":$f"; done \
+ *     | grep -E 'bekçi: `(YOK|yok|BELİRSİZ)' \
+ *     | grep -vE 'Kapanır: `[^`]+`( ·| <sub>|$)' | wc -l
  */
-const B_TABAN = 31;  // 5e: superadmin ×3 + yetki-izin ×3 kapanma kosulu aldi (§65↔§78 tek mekanizma tek cumle)
-
-/** `· bekçi: `…`` alanları — dosya + satır + içerik. */
-function bekciAlanlari(): Array<{ dosya: string; satir: number; icerik: string; tamSatir: string }> {
-  const out: Array<{ dosya: string; satir: number; icerik: string; tamSatir: string }> = [];
-  for (const ad of readdirSync(KURALLAR).filter((f) => f.endsWith(".md"))) {
-    readFileSync(join(KURALLAR, ad), "utf8").split("\n").forEach((s, i) => {
-      for (const m of s.matchAll(/bekçi: `([^`]*)`/g)) {
-        out.push({ dosya: `docs/kurallar/${ad}`, satir: i + 1, icerik: m[1]!, tamSatir: s });
-      }
-    });
-  }
-  return out;
-}
+const B_TABAN = 17;
 
 /** Koşulsuz borç beyanı: adlandırılmış bekçi YOK. */
 const KOSULSUZ = /^(YOK|yok|BELİRSİZ)/;
@@ -93,8 +88,14 @@ const KOSULSUZ = /^(YOK|yok|BELİRSİZ)/;
  * => Yüklem tabanı DÜŞÜREMEYEN bir cırcır, hiç kapı olmamasından KÖTÜDÜR:
  *    borç kapatılamaz, sayı hiç inmez ve kapı ilk sıkışmada susturulur.
  *    Negatif sonda bunu göremezdi — yalnız POZİTİF sonda gösterdi.
+ *
+ * ⚠️ Kapanış backtick'inden sonra AYRAÇ şart (` ·` / ` <sub>` / satır sonu).
+ * Alan backtick'le sınırlıdır; cümlenin İÇİNDEKİ backtick alanı erken kapatır
+ * ve gevşek yüklem KESİK cümleyi "var" sayar (ölçüldü 2026-09-13: dört satır,
+ * bağımsız grep 6 sayarken kapı 5 saydı — iki yüklem iki soru soruyordu).
+ * Cümle içinde ad gerekiyorsa çift tırnak: "next.station.kind !== TAMBUR".
  */
-const KAPANIR = /Kapanır:\s*`[^`]+`/;
+const KAPANIR = /Kapanır:\s*`[^`]+`(?=\s*(?:·|<sub>|$))/;
 
 /** C kolu: opt-in borç bloğu ve zorunlu alanları. */
 const BORC_ISARETCISI = /\*\*BORÇ:\*\*/;
@@ -135,12 +136,15 @@ function borcBloklari(): Array<{ dosya: string; satir: number; blok: string }> {
 function main(): void {
   console.log("=== Borç notu biçimi — B (cırcır) + C (mandal) ===\n");
 
-  const alanlar = bekciAlanlari();
-  check("`bekçi:` alanı okunabildi", alanlar.length >= 400, `${alanlar.length} iddia`);
+  const dosyalar = kuralDosyalari();
+  const alanlar = bekciAlanlari(dosyalar.index);
+  check("`bekçi:` alanı okunabildi", alanlar.length >= 400, `${alanlar.length} iddia · kaynak: ${dosyalar.kaynak}`);
 
   // ── B KOLU — koşulsuz borç, `Kapanır:` taşımayan ─────────────────────────
+  const kapanirsizOlc = (a: BekciAlani[]): BekciAlani[] =>
+    a.filter((x) => KOSULSUZ.test(x.icerik)).filter((x) => !KAPANIR.test(x.tamSatir));
   const kosulsuz = alanlar.filter((a) => KOSULSUZ.test(a.icerik));
-  const kapanirsiz = kosulsuz.filter((a) => !KAPANIR.test(a.tamSatir));
+  const kapanirsiz = kapanirsizOlc(alanlar);
   check(
     `⭐ B — \`Kapanır:\` taşımayan koşulsuz borç ≤ taban (${B_TABAN})`,
     kapanirsiz.length <= B_TABAN,
@@ -153,6 +157,12 @@ function main(): void {
   );
   for (const a of kapanirsiz.slice(0, 8)) console.log(`     ${a.dosya}:${a.satir}  ${a.icerik.slice(0, 52)}`);
   if (kapanirsiz.length > 8) console.log(`     … +${kapanirsiz.length - 8} satır`);
+  // Ağaç ≠ index ise fark BİLGİDİR, tabana esas değildir — commit'lenmemiş
+  // düzenlemeler (senin ya da başka oturumun) sayıyı iki yöne de oynatır.
+  const agacta = kapanirsizOlc(bekciAlanlari(dosyalar.agac)).length;
+  if (dosyalar.kaynak === "index" && agacta !== kapanirsiz.length) {
+    console.log(`     ℹ️ çalışma ağacında ${agacta} (commit'lenmemiş fark ${agacta - kapanirsiz.length > 0 ? "+" : ""}${agacta - kapanirsiz.length}; tabana ESAS DEĞİL — önce stage'le)`);
+  }
 
   // ── C KOLU — opt-in borç bloğu iyi biçimli mi (tavan 0) ──────────────────
   const bloklar = borcBloklari();

@@ -36,10 +36,18 @@
 // belirteçleri arıyordu (bkz. `CIPLAK_BEKCI_DESENI`).
 // => Tutmayan bir sonda İKİ şeyin işareti olabilir: sonda kurgu YA DA KAPI KÖR.
 //    Hangisinin sustuğu ölçülmeden "temiz" hükmü kurulamaz.
+//
+// ── KESİK ALAN CIRCIRI — sondalar (2026-09-13, worktree, index'ten) ─────────
+//   K− 80 karakterlik alan, STAGE'li              → 72 → 73 ✓
+//   K− dengesiz parantez, STAGE'li                → 72 → 73 ✓  (⚠️ ilk deneme
+//      SUSTU: sondanın kendi satırında kapanış backtick'i yoktu ⇒ alan hiç
+//      doğmadı — sonda kurguydu, kapı değil; düzeltilince ısırdı)
+//   K+ var olan kesik alan tamamlandı (kalite.md:38) → 72 → 71 ✓
+//   K  aynı 80'lik STAGE'siz                      → index 72 · ℹ️ ağaç 73 ✓
 // =============================================================================
 import { execFileSync } from "child_process";
-import { readdirSync, readFileSync } from "fs";
-import { basename, join } from "path";
+import { basename } from "path";
+import { type BekciAlani, bekciAlanlari, KOK, kuralDosyalari } from "./lib/kural-dosyalari";
 
 let pass = 0;
 let fail = 0;
@@ -47,9 +55,6 @@ function check(label: string, ok: boolean, detay?: string): void {
   if (ok) { pass++; console.log(`✅ ${label}${detay ? ` — ${detay}` : ""}`); }
   else { fail++; console.log(`❌ ${label}${detay ? ` — ${detay}` : ""}`); }
 }
-
-const KOK = join(__dirname, "..", "..");
-const KURALLAR = join(KOK, "docs", "kurallar");
 
 /**
  * Devralınan KESİK ad borcu — YALNIZ DÜŞER. **10 → 5 → 0 (2026-09-13).**
@@ -86,18 +91,33 @@ const KURALLAR = join(KOK, "docs", "kurallar");
  */
 const TABAN = 0;
 
-/** `· bekçi: `…`` alanının İÇERİĞİ (backtick'ler arası), dosya başına. */
-function bekciAlanlari(): Array<{ dosya: string; satir: number; icerik: string }> {
-  const out: Array<{ dosya: string; satir: number; icerik: string }> = [];
-  for (const ad of readdirSync(KURALLAR).filter((f) => f.endsWith(".md"))) {
-    const satirlar = readFileSync(join(KURALLAR, ad), "utf8").split("\n");
-    satirlar.forEach((s, i) => {
-      for (const m of s.matchAll(/bekçi: `([^`]*)`/g)) {
-        out.push({ dosya: `docs/kurallar/${ad}`, satir: i + 1, icerik: m[1]! });
-      }
-    });
-  }
-  return out;
+/**
+ * KESİK ALAN TABANI — YALNIZ DÜŞER. Ölçüldü 2026-09-13 (HEAD da0d3ced):
+ * 598 alanın uzunluk dağılımında 79→3 · **80→66** · 81→1 · 82→0. Bu bir
+ * yazım alışkanlığı değil, 2026-09-05 üretecinin 80 karakterde KESME İMZASI —
+ * alanlar kelime ortasında bitiyor ("…kırmızı gös", "…READ", "…, te").
+ * 66'nın 37'sinde parantez dengesiz; 80 dışı 6 alanda daha dengesiz parantez var.
+ * ⇒ Kesik alan, kesilen adı ADAY OLARAK BİLE doğurmaz (`kalite.md:38`
+ *    "…test_kursun_bypass, te" — `te` hiçbir desene uymadığı için üstteki
+ *    cırcır 0'da kalıyordu). Popülasyon aranan şeyin DOĞRU biçiminden türeyince,
+ *    YANLIŞ biçim popülasyonun dışında kalır — tam da ölçülmek istenen şey.
+ *
+ * Yüklem: uzunluk === 80 (imza) ∨ parantez dengesiz. Elle yazılmış bir alan
+ * 80'e denk gelirse bir karakter oynat — imza, kanıt değil işarettir ve
+ * yanlış pozitifin bedeli bir karakterdir.
+ * Üreten komut (index'ten):
+ *   for f in $(git ls-files docs/kurallar/*.md); do git show ":$f"; done \
+ *     | grep -oE 'bekçi: `[^`]*`' | sed 's/^bekçi: `//; s/`$//' \
+ *     | awk '{ a=gsub(/\(/,"("); b=gsub(/\)/,")"); if (length($0)==80 || a!=b) n++ } END { print n }'
+ *   (awk'ta `length` BYTE sayabilir — kapı KARAKTER sayar; fark Türkçe harflerden.)
+ */
+const KESIK_TABAN = 70;
+
+/** Üretecin kesme imzası ya da dengesiz parantez — alan bütün değil. */
+function kesikMi(a: BekciAlani): boolean {
+  const ac = (a.icerik.match(/\(/g) ?? []).length;
+  const kapa = (a.icerik.match(/\)/g) ?? []).length;
+  return [...a.icerik].length === 80 || ac !== kapa;
 }
 
 /**
@@ -135,9 +155,10 @@ function repoDosyaAdlari(): Set<string> {
 function main(): void {
   console.log("=== Kural dosyalarındaki `bekçi:` atıfları çözülür mü ===\n");
 
-  const alanlar = bekciAlanlari();
+  const dosyalar = kuralDosyalari();
+  const alanlar = bekciAlanlari(dosyalar.index);
   const gercek = repoDosyaAdlari();
-  check("`bekçi:` alanı bulundu", alanlar.length >= 400, `${alanlar.length} iddia`);
+  check("`bekçi:` alanı bulundu", alanlar.length >= 400, `${alanlar.length} iddia · kaynak: ${dosyalar.kaynak}`);
   check("repo dosya adları okunabildi", gercek.size >= 1000, `${gercek.size} benzersiz ad`);
 
   // Dosya adı ANMAYAN alanlar: `BELİRSİZ`, `YOK (yazılacak)`, düz metin sed.
@@ -171,6 +192,33 @@ function main(): void {
   );
   for (const [ad, yer] of cozulmeyen) console.log(`     ${yer.dosya}:${yer.satir}  → ${ad}`);
 
+  // ── KESİK ALAN — üretecin 80 karakter imzası ∨ dengesiz parantez ─────────
+  const kesik = alanlar.filter(kesikMi);
+  check(
+    `⭐ KESİK \`bekçi:\` alanı ≤ taban (${KESIK_TABAN})`,
+    kesik.length <= KESIK_TABAN,
+    `${kesik.length} kesik (80 karakter: ${kesik.filter((a) => [...a.icerik].length === 80).length})`,
+  );
+  check(
+    "kesik tabanı ÇÜRÜMEMİŞ (gerçek < taban ise tabanı düşür)",
+    kesik.length >= KESIK_TABAN,
+    `gerçek ${kesik.length} · taban ${KESIK_TABAN}`,
+  );
+  for (const a of kesik.slice(0, 5)) console.log(`     ${a.dosya}:${a.satir}  …${a.icerik.slice(-36)}`);
+  if (kesik.length > 5) console.log(`     … +${kesik.length - 5} alan`);
+  const agactaKesik = bekciAlanlari(dosyalar.agac).filter(kesikMi).length;
+  const agactaCozulmeyen = (() => {
+    const adlar = new Set<string>();
+    for (const a of bekciAlanlari(dosyalar.agac)) {
+      for (const ad of a.icerik.match(DOSYA_ADI_DESENI) ?? []) adlar.add(ad);
+      for (const n of a.icerik.replace(DOSYA_ADI_DESENI, " ").match(CIPLAK_BEKCI_DESENI) ?? []) adlar.add(`${n}.ts`);
+    }
+    return [...adlar].filter((ad) => !gercek.has(ad)).length;
+  })();
+  if (dosyalar.kaynak === "index" && (agactaKesik !== kesik.length || agactaCozulmeyen !== cozulmeyen.length)) {
+    console.log(`     ℹ️ çalışma ağacında: çözülmeyen ${agactaCozulmeyen} · kesik ${agactaKesik} (commit'lenmemiş fark; tabana ESAS DEĞİL — önce stage'le)`);
+  }
+
   // ── KAPSAM BEYANI — yeşilin NE DEMEK OLMADIĞI ─────────────────────────────
   console.log(
     `\n   ⛔ BU KOLUN ÖLÇMEDİĞİ (yeşil "borç notları kapı altında" DEMEK DEĞİLDİR):\n` +
@@ -178,11 +226,10 @@ function main(): void {
       `        olup olmadığı BU KOLDA ÖLÇÜLMEZ — B kolu inmedi.\n` +
       `      · Adı geçen bekçinin o kuralı gerçekten ölçtüğü ölçülmez (atıf ≠ koruma).\n` +
       `      · Dosya adı anmayan ${adAnmayan} düz-metin atıf kapsam DIŞI.\n` +
-      `   ⚠️ SONUÇ ÇALIŞMA AĞACINA BAĞLIDIR: yüklem dosya VARLIĞINI ve belge\n` +
-      `      METNİNİ okur, ikisi de commit'lenmemiş düzenlemelerden etkilenir.\n` +
-      `      Ortak ağaçta iki oturum FARKLI sayı görebilir (ölçüldü 2026-09-13:\n` +
-      `      10 ↔ 6; fark, benim 2 dk sonra yaptığım sahnelenmemiş belge\n` +
-      `      düzeltmesiydi). Sayıyı taşırken AĞACI da beyan et.\n`,
+      `      · KESİK alanın İÇİNDE hangi adın kaybolduğu — kesik alan sayılır,\n` +
+      `        kaybolan ad bilinemez; "0 çözülmeyen" o adlar için bir şey söylemez.\n` +
+      `   ⚠️ BELGE METNİ INDEX'TEN okunur (ne ağaç ne HEAD; gerekçe lib/kural-dosyalari.ts);\n` +
+      `      dosya VARLIĞI ise git ls-files'tan — o da index. Ağaç farkı ℹ️ ile basılır.\n`,
   );
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

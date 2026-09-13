@@ -27,7 +27,7 @@
 
 ### Yasaklar
 
-- **[ÇEKİRDEK]** İkinci KK istasyonu TANIMLANABİLİR (Faz A) ama Kurşun→KK→Tambur üçlü rota KURULMAZ: kurşun bypass uygunluğu hâlâ 'sonraki adım Tambur' TÜRÜNE bakar ve sessizce kapanır (Faz B R3'e kadar). · bekçi: `yok (yalnız panel yorumu)` <sub>(CLAUDE.md:100, arşiv:121)</sub>
+- **[ÇEKİRDEK]** İkinci KK istasyonu TANIMLANABİLİR (Faz A) ama Kurşun→KK→Tambur üçlü rota KURULMAZ: kurşun bypass uygunluğu hâlâ 'sonraki adım Tambur' TÜRÜNE bakar ve sessizce kapanır (Faz B R3'e kadar). · bekçi: `yok (yalnız panel yorumu)` · Kapanır: `kursun-bypass-eligibility.helper.ts içindeki "next.station.kind !== StationKind.TAMBUR" karşılaştırması 0'a indiğinde (bugün 1; ölçüm: grep -c "kind !== StationKind.TAMBUR" o dosyada) VE test_kursun_bypass Kurşun→KK→Tambur üçlü rotada yeşil verdiğinde` · Öncül: ölçüldü <sub>(CLAUDE.md:100, arşiv:121)</sub>
 
 ### Tuzaklar
 
@@ -35,7 +35,7 @@
 
 ### Kararlar
 
-- **[ÇEKİRDEK]** Faz B AÇIK — türe bağlı kalan yerler: `assertWoAtStepKind(PROCESS_QC)` (R1), bypass 'sonraki adım TAMBUR' şartı (R3), mobil ekran seçimi kind→ekran (R4, APK), RollError açılış yeri (R5, partial unique 409), dashboard ham SQL (R6), `QC2_COMPLETED` semantiği (R9), roll-finalize son-adım dalı (R10). İlk farklı-topolojili müşteride; canlı fabrikada talepsiz değiştirilmez. · bekçi: `yok (plan dokümanı; regresyon yüzeyi: test_e2e_full_flow, test_kursun_bypass, te` <sub>(CLAUDE.md:100, CLAUDE.md:174, CLAUDE.md:176)</sub>
+- **[ÇEKİRDEK]** Faz B AÇIK — türe bağlı kalan yerler: `assertWoAtStepKind(PROCESS_QC)` (R1), bypass 'sonraki adım TAMBUR' şartı (R3), mobil ekran seçimi kind→ekran (R4, APK), RollError açılış yeri (R5, partial unique 409), dashboard ham SQL (R6), `QC2_COMPLETED` semantiği (R9), roll-finalize son-adım dalı (R10). İlk farklı-topolojili müşteride; canlı fabrikada talepsiz değiştirilmez. · bekçi: `yok (plan dokümanı; regresyon yüzeyi: test_e2e_full_flow, test_kursun_bypass, test_kursun_regime_lock, test_qc2_idempotency, mobil stationScreens.test.ts + useVisibleScreens.test.ts — plan "tile-visibility.test" der, o ad yok)` · Kapanır: `yedi R'nin her birinde "türe bakan karşılaştırma" sayısı 0 olduğunda — bugünkü sayım (2026-09-13, grep): R1 kursun-qc.service assertWoAtStepKind(…PROCESS_QC) 1 · R3 bypass helper kind!==TAMBUR 1 · R4 mobil/src PROCESS_QC 23 satır · R5 RollError yazan üç serviste PROCESS_QC 29 satır · R6 dashboard.service ham SQL kind='RAW_QC' 1 · R9 src QC2_COMPLETED 42 satır · R10 roll-finalize.helper StationKind 0 (jenerik; plan listesi bunu güncellemedi); "Faz B kapandı" bu yedi sayının yedisi de 0 iken denir, öncesinde denmez` · Öncül: ölçüldü <sub>(CLAUDE.md:100, CLAUDE.md:174, CLAUDE.md:176)</sub>
 - **[PROFİL]** Seed kalite hedefleri: 1.KALİTE ve A1 → WAREHOUSE (ikisi de SATILABİLİR), FİRE → SCRAP (2026-08-20 'fire çöpe gider', migration 20260820030000). Kalite kodu koda GÖMÜLMEZ (`code === 'FIRE'` reddedildi) — kova `targetStatus`/katalogdan çözülür. <sub>(CLAUDE.md:17)</sub>
 
 ## Backend
