@@ -23,7 +23,8 @@ import { sackBlockMessage } from "./helpers/sack-invariants.helper";
 import { openLineWhere } from "./helpers/order-line-scope.helper";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { resolveTargetWarehouseId, warehouseStampManyTx } from "./helpers/warehouse.helper";
-import { writeWarehouseMovements } from "./helpers/warehouse-ledger.helper";
+import { postStockMoves } from "./helpers/warehouse-ledger.helper";
+import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { v4 as uuidv4 } from "uuid";
 import { ApiResponse } from "../types/api.types";
 import {
@@ -3263,20 +3264,24 @@ export class SubcontractorService {
         // ⚠️ Koşulsuz yazım depoya girmemiş malı depoda gösteriyordu (ölçüm:
         // bu kurulumda fason dönüşü girişlerinin 57/57'si böyleydi).
         if (bornStatus === RollStatus.WAREHOUSE) {
-          await writeWarehouseMovements(
+          await postStockMoves(
             tx,
             bornRollInputs.map(({ id, nr }) => ({
               rollId: id,
               eventType: WarehouseEventType.ENTRY,
               qty: nr.qty,
-              toWarehouseId: bornWarehouseId,
+              // ⚠️ YALNIZ `to` UCU VAR ve bu doğru: top BU ANDA DOĞDU, öncesi yok.
+              // Ebeveynin çıkışı fason SEVKİNDE yazılır (ayrı olay) — burada `from`
+              // yazmak aynı malı iki kez düşmek olurdu.
+              to: { warehouseId: bornWarehouseId, status: bornStatus },
+              reasonCode: STOCK_MOVE_REASON.FASON_RECEIPT,
               userId: userId ?? null,
               notes: `Fason dönüşü (${receipt.receiptNo})`,
             })),
-            // Fason dönüşünde 0 metrajlı kabul kalemi veri hatasıdır (kabul
-            // miktarı zaten uçta doğrulanıyor) — sessiz atlama defteri eksiltir.
-            { onUnwritable: "throw" },
           );
+          // ⚠️ POLİTİKA ARGÜMANI YOK: yeni kapı 0 metrajda/uçsuz satırda her zaman
+          // FIRLATIR. Fason dönüşünde 0 metrajlı kabul kalemi veri hatasıdır (kabul
+          // miktarı uçta doğrulanıyor) — sessiz atlama defteri eksiltirdi (K6).
         }
 
         // Receipt-seviyesi özellikler tüm born roll'larda aynı (resolvedAppliedPropertyIds)

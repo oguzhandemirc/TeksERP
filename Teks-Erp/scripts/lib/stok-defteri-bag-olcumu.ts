@@ -76,12 +76,30 @@ export interface KapisizYol {
 }
 
 /**
- * ⚠️ Kartela sevki hiçbir kayıt bırakmıyor — ne eski ne yeni kapıyla. Bu yüzden
- * AST "eski kapı çağıranı" taramasına GÖRÜNMEZ ve K'yı eksik gösterir.
+ * ⚠️ Bu yollar hiçbir kayıt bırakmıyor — ne eski ne yeni kapıyla. Bu yüzden AST
+ * "eski kapı çağıranı" taramasına GÖRÜNMEZLER ve K'yı eksik gösterirler.
  * `receive`/`cancelReceipt` burada YOK: kartela tüketimi (`AT_KARTELA →
  * KARTELA_CONSUMED`) stok dışından stok dışınadır ve satır yazmaz (tasarım §64).
+ *
+ * 🔴 BU LİSTE ELLE TUTULUYOR VE EKSİK OLABİLİR — bir kez eksik çıktı:
+ * **fason sevki** (2026-09-13) aylarca listede yoktu, yani K onu HİÇ saymadı.
+ *
+ * ⚠️ YENİ ÜYE NASIL ARANIR (eksik üyeyi bulan ölçüm, tekrarlanabilir olsun diye):
+ *   ① KOD: servis dosyasında defter yazan çağrı sayısını say —
+ *      `grep -c "postStockMove\|writeWarehouseMovement" <servis>`; stok kümesinden
+ *      ÇIKARAN bir yol varken sayı 0 ise o yol kapısızdır.
+ *      (Fasonda tüm serviste TEK çağrı vardı: kabul. Sevk hiç yazmıyordu.)
+ *   ② VERİ: stok kümesi DIŞI statüdeki topun defterde ÇIKIŞ ucu var mı —
+ *      `AT_SUBCONTRACTOR` 187 topun **187**'sinde yoktu (fabrika kopyası, 2026-09-13).
+ * ⇒ ②, ①'den güçlüdür: kod yolundan bağımsızdır ve listeye eklenmeyi BEKLEMEZ.
+ * `test_consistency`in "stok dışı + çıkış satırı yok" bölümü bu ölçünün kalıcı hâli.
  */
 export const BILINEN_KAPISIZ_YOLLAR: readonly KapisizYol[] = [
+  {
+    dosya: "src/services/subcontractor.service.ts",
+    fonksiyon: "dispatch",
+    ad: "fason sevki (WAREHOUSE → AT_SUBCONTRACTOR)",
+  },
   {
     dosya: "src/services/kartela.service.ts",
     fonksiyon: "dispatch",
