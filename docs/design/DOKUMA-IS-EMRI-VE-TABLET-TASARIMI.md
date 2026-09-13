@@ -718,6 +718,62 @@ UPDATE doff_events SET revokedAt = now(), revokedById = :u, revokeReason = :r
 
 **minVersion (reçete 13):** `WEAVING` değerini ÜRETEN uç bu commit'le doğar ⇒ eski panel/tablet `entrySource=WEAVING` görebilir. Panel aynaları P3'te indi (etiketler hazır); tablet union'ı `WEAVING` içeriyor ama `PURCHASE_RECEIPT`/`SEMI_FINISHED` yok (devralınan). "Eski istemci ne yapar": bilinmeyen değeri **ham basar, çökmez** (`rollEntrySourceLabels` lookup, `?? value`) — ölçülmeden yazılmaz, o commit'te ölçülür.
 
+### 3.8c · Çelişmeli doğrulama — doff backend (P3b) ↔ §3.8b (2026-09-14, 1c)
+
+**Taban:** `origin/main` 75b1eb0d+ (dilim: 20fb880d servis+bekçi · a218f68c route+izin · 3b80b22b etiket). **Yöntem:** 6 bağımsız Opus okuyucu × 3 mercek (doktrin · mekanik · pencere), salt-okunur kod↔sözleşme karşılaştırması; koşum gerektiren her iddia 1c'nin kendi klon DB'sinde sondayla ölçüldü. Kod YAZILMADI; kod kusurları taze 01 oturumuna kalemdir. Üç sonuç: ÖLÇÜLDÜ / ÖLÇÜLEMEDİ / İHLAL.
+
+#### Hüküm — mekanizma AYAKTA
+
+İki yazar-iki tx-tek bağ düzeni, iki pencere, kilit sırası ve dört durumlu idempotency **kanıtla** ayakta; çürüyen parçalar mesaj/kırpma/uyarı/HTTP yüzeyi/retry tükenmesi/test hijyeni sınıfında. Yeni kural: `docs/standart/ESZAMANLILIK.md` **[ES-26]** — *bloklanma ≠ pencere kapandı; kilit ayrı ifadede önce, claim sonra (EvalPlanQual yalnız hedef satırı tazeler); düzen READ COMMITTED'a bağlı.*
+
+| # | Ölçüm (kendi klon DB) | Sonuç |
+|---|---|---|
+| B | `test_machine_doff_source` taban | **20/0** |
+| M1 | `revokeDoff` başındaki ayrı `FOR UPDATE` kaldırıldı (cp+sha256 geri) | §5b-**2/3/5** kırmızı (17/3): iptal bloklandı, uyanınca `NOT EXISTS` eski snapshot'la geçti, top iptal edilmiş doff'a bağlı — dosya başlığı "§5b-2/3" diyor, **5 de kırmızı** |
+| M2 | `claimDoffForRollTx` `FOR UPDATE` → düz SELECT | §5b-**4/5** kırmızı (18/2) — ikinci pencere gerçek |
+| W2 | iki eşzamanlı `revokeDoff` | OK · `DOFF_ALREADY_REVOKED`; tek damga, tek sebep |
+| W3 | tx-B claim aldı, top yazdı, **ROLLBACK** | iptal bloklandı → tx-B düşünce damgaladı (revoked, top 0) — asılı kalma yok |
+| W4 | aynı doff'a iki eşzamanlı KK1 bağı | OK · OK (2 top, serileşti); ardından iptal `DOFF_HAS_ROLLS` |
+| W6 | aynı `clientToken` iki paralel `openDoff` | 1 satır, aynı id; ikincisi "yeniden gönderim" |
+| W7 | tx-B doff satırını **22 s** tuttu | iptal **P2028** (tx timeout 20 s) → `error.middleware` 503; doff canlı, top bağlı — yanlış durum YOK, ama 409 değil 503 |
+| W8 | bloklanmayan iptalin süresi | **3 ms** (bekçi eşiği 400 ms; pay ×130) |
+| W9 | aynı makineye N paralel `openDoff` (günlük kod sırası oku-sonra-yaz + `withBarcodeRetry` 5 deneme) | N=10: 10/10 tekil kod · **N=25: 23 başarılı, 2 hata** "Barkod üretimi 5 denemede başarısız oldu" — retry tükeniyor; kod öneki GÜN bazlı, makine değil |
+
+#### A · Kod kusuru — taze 01'e kalem (öncelik sırasıyla)
+
+1. **409 `DOFF_HAS_ROLLS` mesajı yanlış çare söylüyor** (`machine-doff.service.ts:235` "önce topu iptal edin, indirme sonra geri alınır") — yüklem statüye BAKMAZ (§5d bunu ölçüyor): operatör topu iptal eder (geri alınamaz ikinci defter satırı), indirme yine geri alınmaz. Çelişki §3.8'in kendi "şu topu önce iptal et" cümlesinden kopyalanmış. Doğru cümle: *"Bu indirmeden top doğmuş — indirme artık geri alınamaz; yanlış top kendi iptal yolundan gider."* Sözleşme cümlesi de düzeltilir.
+2. **`take: 20` hem listeyi hem SAYIYI kırpıyor** (`:228` → `:235` `${fresh.rolls.length}`; `details.barcodes/rollIds` 20 ile kesik, `+N` yok). Adıyla anılan emsal `warehouse-stock.helper.ts:82-91` listeyi kırpıp SAYIYI kırpmaz. `pieceCount` 1000'e kadar meşru. Düzeltme: `_count` ile gerçek sayı, details TAM ya da `truncated/total`.
+3. **Replay dönüşleri `warnings` taşımıyor** (`:135`, `:181`): çevrimdışı yeniden gönderimde operatörün göreceği tek cevap replay cevabıdır ve "iş emri metresine GİRMİYOR" orada susuyor — §3.8 "sessiz atlama görünmezlik özelliğidir" şartının tam ortası. Uyarı `machineRunId`/koşumdan yeniden türetilebilir; replay de aynı `warnings`i döndürür. Bekçi §2a yalnız ilk çağrıyı ölçüyor → replay'de de ölçülür.
+4. **Kod üretimi yarışta tükeniyor** (W9: 25 paralelde 2 hata) ve hata metni yanlış nesneyi adlandırıyor ("Barkod üretimi…", `barcode-retry.ts:54`). Sözleşme ② (iii) "başka satır okuyup karar vermiyor" cümlesi yanlış: tx günün kodlarını okuyup sırayı türetiyor (`:150-155`, klasik oku-sonra-yaz). Sonuç (advisory kilit gerekmez) 10 paralelde tutuyor, 25'te tutmuyor; **8029 "kod tekilliği" uzayı tam bu iş için envanterde** — ya kod üretimi 8029 altında serileşir ya deneme sayısı/jitter büyür; mesaj "indirme kodu" der. Karar 1e'de (§C.2).
+5. **KK1 HTTP ucu `doffEventId` almıyor** (`inventory.controller.ts:20-49 initialEntrySchema`, şema strict DEĞİL ⇒ tablet gönderirse **sessizce düşer**, 201 döner, bağ kurulmaz). Sözleşme ① bunu "bugünkü uç ← yeni opsiyonel alan" diye bu dilime yazıyor; bugün `Roll.doffEventId` üretimde hiçbir uçtan yazılamaz ⇒ `claimDoffForRollTx`, `DOFF_HAS_ROLLS` ve §5b pencereleri sahada **erişilemez** (bekçi yeşil, yüzey yok — "mandal mı tarayıcı mı" sınıfı). Tablet/KK1 dilimiyle iner: `doffEventId` (uuid, opt-in) + `entrySource=WEAVING` kapısı + uçtan uca bekçi kalemi; `minVersion` ölçümü o commit'te.
+6. **Test hijyeni** (`test_machine_doff_source.ts`): (a) [ES-19]/[TD-19] ihlali — no-op `.catch` reddedilemeyen `kapi/kapi2`ya konmuş, reddedebilen `txB/txB2` ilk `await`e kadar sahipsiz (:150→:157, :182→:189); erken red = süreç Sonuç satırı basılmadan ölür, `finally` temizliği koşmaz. (b) §3 `warehouseMovement.count()` GLOBAL — paralel koşan başka bekçi sahte kırmızı verir; `rollId`/`createdAt` ile daraltılır. (c) başlıktaki negatif sonda kümeleri eksik: M1 = §5b-2/3/**5**, M2 = §5b-4/5; sözleşme ⑤ satır 1/2/4'ün negatif sondaları hiç koşulmamış. (d) "kanıt SIRA" deniyor ama sıra karşılaştırılmıyor, yalnız t+400 ms bayrakları — [ES-20] gereği sonuç ayakları (§5b-2/3/5) asıl kanıt, bu doğru; taban süresi (W8: 3 ms) başlığa ölçülmüş sabit olarak yazılır.
+
+#### B · Sözleşme bayat — §3.8b düzeltme listesi (docs, 01 ya da 1e)
+
+1. ④ SQL'i tek `updateMany` gösteriyor; kod önce **ayrı ifadede** `SELECT … FOR UPDATE` alıyor ve bu LOAD-BEARING (M1). ③'teki "tx-C'nin UPDATE'i … uyanınca yüklemi yeniden değerlendirir ve count=0 → 409" cümlesi **yanlış** (EvalPlanQual alt sorguyu tazelemez); doğrusu [ES-26].
+2. ③ SQL'i `AND "revokedAt" IS NULL FOR UPDATE` yazıyor; kod yüklemi SELECT'ten çıkarıp sonra kontrol ediyor ki 404/409 ayrışsın (`machine-doff-link.helper.ts:47-59`) — kodun tercihi doğru, SQL güncellenir. ⑤ satır 4'ün negatif sondası ("claim'den `revokedAt IS NULL` düşürülünce") bu yüzden tanımsız; denk mutasyon `:53-59` bloğunu silmektir.
+3. ② adım 7 audit yükü: kodda `doffEventId` anahtarı yok (kimlik `recordId`de), `machineCode`+`code` var.
+4. ② (iii) gerekçesi (bkz. A.4); (ii) "çarpışmayı kendi çözer" — 25 paralelde çözmüyor.
+5. Kodda var, sözleşmede yok: hata kodları `DOFF_RUN_MISMATCH` · `RUN_REVOKED` (aynı ad `assertMachineRunReplayAlive`ta başka anlam) · `DOFF_LINK_REQUIRES_WEAVING`; replay gövde karşılaştırması (`machineId · productionLineNo · pieceCount` — `machineRunId/counterAtDoff/doffedAt` dışarıda, hangi alanların KİMLİK olduğu yazılı değil); `pieceCount ≤ 1000` ve `counterAtDoff` tam/negatif değil yalnız Zod'da; `productionLineNo` CHECK'i; koşum var ama `weavingOrderId` yoksa **üçüncü uyarı dalı** (`:120-122`) — §3.8 kova tablosu bu hâli "ana sayı"ya koyar, oysa iş emrine ulaşamaz: **dördüncü kova** ("koşumlu ama işsiz doff") adıyla eklenir.
+6. Module kapısı: route `requireProductionEnabled`, sözleşme `dokuma.enabled` (route şerhi bilinçli erteleme diyor) — sözleşmeye "ekran dilimine kadar production.enabled" cümlesi.
+7. `createdMachineId` NULL ise makine kontrolü hiç koşmaz (`helper:60`): makinesiz KK1 oturumu başka makinenin indirmesine top bağlayabilir — sözleşme "uyuşmuyorsa 409" der, "damga yoksa" hâlini yazmaz; karar (§C.3).
+8. minVersion cümlesi konusuz kaldı (üreten uç doğmadı, A.5).
+
+#### C · 1e kararı bekleyen
+
+1. A.1 mesaj + §3.8 cümlesi (kod + belge, tek commit).
+2. A.4: kod üretimi 8029 altında mı, deneme/jitter mi; hata metni.
+3. B.7: makinesiz KK1 girişinde doff bağı — reddet (409) mi, kabul + uyarı mı?
+4. `counterSource` "kararı backend verir" (§3.7/§3.8 şerhi): kod istemci beyanını olduğu gibi yazıyor (`routes:33`, `service:164`); `SIMULATED` çapraz kontrolü (cihaz bayrağı) bu dilimin mi tablet diliminin mi?
+5. W7: 20 s'i aşan kilit beklemesi P2028 → 503 (tekrar dene). Kabul edilebilir davranış; §3.8b ④'e tek cümle.
+6. §3.8 raporunun üç (dört) kovası ve "koşumsuz doff oranı" karnesi henüz yok — DoffEvent'i okuyan hiçbir rapor yok; hangi dilim?
+
+#### Ölçülmeyen / açık
+
+- HTTP uçtan uca pencere (bekçi servisi doğrudan çağırıyor); KK1 ucu alanı gelince ölçülür.
+- Panel/tablet `WEAVING` etiketi "ham basar, çökmez" iddiası (Electron/mobil'de `loom:` 0 eşleşme) — üreten uç doğduğunda.
+- `DEBUG=prisma:query` ile `updateMany … rolls:{none:{}}`in tek `UPDATE … NOT EXISTS` mi yoksa `SELECT`+`UPDATE … IN` mi ürettiği; M1'in kırmızısı davranışı zaten ölçüyor, SQL biçimi [ES-26]'nın gerekçe cümlesini kesinleştirir.
+
 ### 3.9 · Bu bölümün açık bıraktıkları
 
 - **Dokuma işinin planlama ekranı** (panel tarafı) — bu belgenin kapsamı dışı, `WeavingOrder` CRUD'u standart master-data kalıbı.
