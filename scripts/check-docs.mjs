@@ -183,6 +183,13 @@ const CLAUDE_MD_SIZE_CAPS = { "CLAUDE.md": 36 * 1024, "Teks-Erp/CLAUDE.md": 24 *
 // `docs/standart/*.md` aynı tavana bağlanır: standart dosyaları da "her yeni
 // bulguyu buraya da yazayım" baskısı altındadır ve şişince okunmaz olurlar.
 // Dosya listesi SABİT DEĞİL taranır — yeni bir standart dosyası tavansız doğmasın.
+// Advisory eşiği ÖLÇÜLDÜ, seçilmedi: uyarının işe yaraması için TEK BİR düzenlemeden
+// büyük olması gerekir, yoksa kıran ekleme uyarı hiç görünmeden gelir. 2026-09-13'te
+// ölçülen tek-commit büyümeleri: +310 · ~1.600 · ~2.500 · +2.726 bayt (en büyüğü
+// TEST-VE-DERLEME.md). 3 KB bu en büyük tek adımdan geniştir ve bugün 20 tavanlı
+// dosyanın yalnız 3'ünü işaretler — uyarı gürültüye dönüşmez.
+const NEAR_CAP_BYTES = 3 * 1024;
+
 const STANDART_DIR = "docs/standart";
 if (existsSync(join(REPO_ROOT, STANDART_DIR))) {
   for (const name of readdirSync(join(REPO_ROOT, STANDART_DIR))) {
@@ -191,11 +198,27 @@ if (existsSync(join(REPO_ROOT, STANDART_DIR))) {
 }
 
 const sizeFails = [];
+const sizeNear = [];
 for (const [rel, cap] of Object.entries(CLAUDE_MD_SIZE_CAPS)) {
   const p = join(REPO_ROOT, rel);
   if (!existsSync(p)) continue;
   const size = statSync(p).size;
   if (size > cap) sizeFails.push({ rel, size, cap });
+  else if (cap - size < NEAR_CAP_BYTES) sizeNear.push({ rel, kalan: cap - size });
+}
+
+// --- ADVISORY: tavana yaklaşan dosyalar (CI'ı ETKİLEMEZ) ---
+// Kapı bugüne kadar yalnız İHLAL ANINDA konuşuyordu; kalan boşluğu kimse göremiyordu.
+// 2026-09-13'te DÖRT dosya aynı gün duvara dayandı (23 · 1 · 168 · 745 bayt kala) ve
+// hiçbiri bilerek yapılmadı — birini büyüten oturumun kalan boşluğu görmesinin yolu yoktu.
+if (sizeNear.length) {
+  console.log(`⚠️  ADVISORY — ${sizeNear.length} dosya boyut tavanına yaklaştı (CI'ı etkilemez):`);
+  for (const n of sizeNear.sort((x, y) => x.kalan - y.kalan)) {
+    console.log(`    ${n.rel}: ${n.kalan} bayt kaldı`);
+  }
+  console.log("    → Bir sonraki ekleme kapıyı kırabilir ve BAŞKASININ commit'ini durdurur.");
+  console.log("    → Çare tavanı yükseltmek DEĞİL, dosyayı bölmektir: kural kalır, ENVANTER ayrılır");
+  console.log("      (emsal: VERITABANI/ESZAMANLILIK/TEST-VE-DERLEME/KUTUPHANELER bölmeleri, arşiv 2026-09-13).\n");
 }
 if (sizeFails.length) {
   console.error(`❌ Belge boyut tavanı aşıldı (${sizeFails.length}): yeni karar notu ARŞİVE, kural docs/kurallar/<alan>.md'ye yazılır; standart dosyası büyüyorsa kanıt ölçüm dosyasına iner.`);
