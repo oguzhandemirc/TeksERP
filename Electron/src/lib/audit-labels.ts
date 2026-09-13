@@ -124,6 +124,7 @@ export const TABLE_LABELS: Record<string, string> = {
   PERMISSION_TEMPLATE: "Yetki Şablonu",
   SYSTEM_SETTING: "Sistem Ayarı",
   WORK_SESSION: "Çalışma Oturumu",
+  MACHINE_RUN: "Tezgah Koşumu",
   KURSUN_BYPASS_ASSIGNMENT: "Kurşun Dağıtım Ataması",
   PERIPHERAL_TEMPLATE_ROUTE: "Cihaz–Şablon Yönlendirmesi",
   // Boot uzlaştırması + panel işleri: tablo adı küçük harfle yazılmış

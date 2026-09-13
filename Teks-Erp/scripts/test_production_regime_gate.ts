@@ -68,6 +68,7 @@ const KAPILI: ReadonlyArray<{ dosya: string; mount: string }> = [
   { dosya: "routes/traveler-card.routes.ts", mount: "/api/traveler-cards" },
   { dosya: "routes/batch.routes.ts", mount: "/api/batches" },
   { dosya: "routes/station-capability.routes.ts", mount: "/api/station-capabilities" },
+  { dosya: "routes/machine-run.routes.ts", mount: "/api/machine-runs" },
 ];
 
 /**

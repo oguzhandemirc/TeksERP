@@ -7,12 +7,9 @@
 // Bu yüzden yazma yüzeyinden ÖNCE inebilir: çağrısız bir yüklem erişilemez bir dal
 // üretmez, yalnız yanlış yazılmış olabilir — ve bekçisi tam olarak onu ölçer.
 //
-// ⚠️ BORÇ — KAPANMA KOŞULUYLA BİRLİKTE: bu yüklem BUGÜN HİÇBİR YERDEN ÇAĞRILMIYOR.
-// İlk çağrı yeri `MachineRun` açma ucudur — o yüzey P2b'den AYRILDI ve 6e'nin
-// diliminde doğuyor (2026-09-13). O gün iki şey birden
-// yapılır: ① çağrı eklenir ② bekçiye "çağrıldığı YOL" ayağı eklenir — çünkü
-// yüklemin doğru olması onun ÇAĞRILDIĞI anlamına gelmez ("kolon var, yüklem yok"un
-// bir kademe yukarısı: "yüklem var, çağrı yok").
+// Çağıran yol: `openMachineRun` → `machine-run-open.helper.ts` `resolveOpenContext` (bekçi: `test_production_line §4`
+// + `test_machine_run §7`). Yüklemin doğru olması ÇAĞRILDIĞI anlamına gelmez;
+// bekçi davranışı yoldan ölçer, varlığı değil.
 //
 // NEDEN DB'DE DEĞİL: PostgreSQL satırlar arası CHECK desteklemez —
 // `machine_runs.productionLineNo <= machines.productionLineCount` iki tablo

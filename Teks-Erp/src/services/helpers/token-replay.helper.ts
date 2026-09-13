@@ -100,3 +100,22 @@ export function assertWeavingOrderReplayAlive(existing: {
     { code: "WEAVING_ORDER_CANCELLED", weavingOrderId: existing.id, weavingOrderNumber: existing.weavingOrderNumber },
   );
 }
+
+/**
+ * Token'la bulunan tezgah koşumu hâlâ canlı mı — geri alınmışsa 409 `RUN_REVOKED`.
+ *
+ * Koşumun "ölü" hâli statü değil DAMGADIR (`revokedAt`); geri alınmış koşumu
+ * "zaten açık" diye döndürmek, randımanın paydasından çıkarılmış bir kaydı
+ * tablete canlıymış gibi gösterirdi.
+ */
+export function assertMachineRunReplayAlive(existing: {
+  id: string;
+  revokedAt: Date | null;
+}): void {
+  if (!existing.revokedAt) return;
+  throw AppError.conflict(
+    "Bu koşum daha önce açılıp geri alınmış — yeniden açmak için formu yeniden açın " +
+      "(aynı gönderim tekrar edilemez).",
+    { code: "RUN_REVOKED", runId: existing.id, revokedAt: existing.revokedAt },
+  );
+}

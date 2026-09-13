@@ -12,11 +12,9 @@
 //   §3 VARSAYILAN  Var olan her makine `productionLineCount = 1` ile yaşıyor mu
 //               — "sıfır fark" iddiasının ölçümü.
 //
-// ⛔ NE ÖLÇMÜYOR — ve bu BORÇ, adıyla: yüklem BUGÜN HİÇBİR YERDEN ÇAĞRILMIYOR.
-//   Bu bekçi "yüklem doğru" der, "yüklem koşuyor" DEMEZ. İlk çağrı yeri P2b'de
-//   `MachineRun` açma ucudur; o gün buraya §4 eklenir ve ÇAĞRILDIĞI YOLU ölçer.
-//   ⇒ "kolon var, yüklem yok"un bir kademe yukarısı: "yüklem var, çağrı yok".
-//   Kapanma koşulu yazılı olduğu için bu borç sessizce yaşlanmaz.
+//   §4 ÇAĞRI    yüklem koşum açan YOLDAN çağrılıyor mu — `openMachineRun` ile
+//               3. hat 2 hatlı makinede 400 alıyor mu. (P4b borcu 2026-09-13'te
+//               P2b yazma yüzeyiyle kapandı: "yüklem var, çağrı yok" → var.)
 //
 // ⚠️ DB'ye YAZAR (§2/§3 fikstürü) → `hedefDbEngeli()` ilk adımdır.
 // =============================================================================
@@ -24,6 +22,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { assertProductionLineValid } from "../src/services/helpers/production-line.helper";
+import { openMachineRun } from "../src/services/machine-run.service";
 import { AppError } from "../src/utils/app-error";
 
 let pass = 0;
@@ -139,7 +138,26 @@ async function main(): Promise<void> {
       data: { productionLineCount: 2 },
     });
     check("§2b çift enli değer (2) kabul edilir", cift.productionLineCount === 2);
+
+    // ── §4 ÇAĞRILDIĞI YOL — borcun kapanışı (P2b, 2026-09-13) ────────────────
+    // Yüklemin doğru olması ÇAĞRILDIĞI anlamına gelmez. Buradan koşum açan
+    // servis çağrılır ve 3. hat (makine 2 hatlı) 400 `PRODUCTION_LINE_OUT_OF_RANGE`
+    // ile düşmeli; düşmüyorsa yüklem yolda değildir. Tamamlayıcı davranış
+    // ölçümü `test_machine_run §7`de (kabul dalı + tek hatlı varsayılan).
+    const asan = await openMachineRun({ machineId: makine.id, productionLineNo: 3 }).then(
+      () => ({ status: 200, code: null as string | null }),
+      (e: unknown) => ({
+        status: e instanceof AppError ? e.statusCode : 0,
+        code: e instanceof AppError ? String((e.details as { code?: unknown } | undefined)?.code ?? "") : null,
+      }),
+    );
+    check(
+      "§4 koşum açan yol yüklemi ÇAĞIRIYOR — 3. hat 2 hatlı makinede 400 PRODUCTION_LINE_OUT_OF_RANGE",
+      asan.status === 400 && asan.code === "PRODUCTION_LINE_OUT_OF_RANGE",
+      `status=${asan.status} code=${asan.code}`,
+    );
   } finally {
+    await prisma.machineRun.deleteMany({ where: { machine: { stationId: station.id } } });
     await prisma.machine.deleteMany({ where: { stationId: station.id } });
     await prisma.station.deleteMany({ where: { id: station.id } });
   }

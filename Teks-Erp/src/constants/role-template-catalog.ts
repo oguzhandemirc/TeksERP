@@ -327,6 +327,10 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // kapatır, türetilmez) ve iptal bir durum geçişidir — planlama okur.
       "weavingorder:read",
       "weavingorder:write",
+      // Tezgah koşumu: aç/kapa günlük iş, geri alma paydayı değiştirir — ikisi
+      // de süpervizörde; tablet dilimi indiğinde aç/kapa operatör paketine iner.
+      "loom:run",
+      "loom:run-revoke",
     ],
   },
   {

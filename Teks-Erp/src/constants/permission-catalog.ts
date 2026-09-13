@@ -80,6 +80,11 @@ export const PERMISSION_CATALOG = [
   // dokuma planlamacısı aynı kişi olmak zorunda değil.
   { code: "warpspec:read", module: "MASTER_DATA", category: "web", description: "Çözgü kartı (tel · iplik · tarak) listesi/detay görüntüleme" },
   { code: "warpspec:write", module: "MASTER_DATA", category: "web", description: "Çözgü kartı oluşturma/düzenleme" },
+  // ── Dokuma / tezgah koşumu (2026-09-13, P2b) ───────────────────────────────
+  // Geri alma AYRI kod: koşum randımanın PAYDASINI taşır, geri almak günlük
+  // aç/kapa işinden ayrı bir yetkidir (`shipping:undo-dispatch` emsali).
+  { code: "loom:run", module: "PRODUCTION", category: "web", description: "Tezgah koşumu açma/kapatma (üretim hattı başına tek açık koşum)" },
+  { code: "loom:run-revoke", module: "PRODUCTION", category: "web", description: "Tezgah koşumunu geri alma (damga; randıman paydasından çıkarır)" },
   { code: "quality:read", module: "QUALITY", category: "web", description: "Kalite derecesi tanımlarını görüntüleme" },
   { code: "quality:write", module: "QUALITY", category: "web", description: "Kalite derecesi tanımlama/düzenleme" },
   { code: "property:read", module: "QUALITY", category: "web", description: "Özellik (renk/desen vb.) tanımlarını görüntüleme" },

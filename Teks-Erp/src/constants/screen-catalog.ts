@@ -405,6 +405,11 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // kapı iki yönlü, bayat muaf kırmızı verir.
   { code: "weavingorder:read", reason: "Dokuma işi ekranı ayrı dilimde iner; yüzey önce, ekran sonra (2026-09-13)." },
   { code: "weavingorder:write", reason: "Dokuma işi ekranı ayrı dilimde iner; yüzey önce, ekran sonra (2026-09-13)." },
+  // Dokuma P2b (2026-09-13): koşum yazma yüzeyi backend'de doğdu, ekranı tablet
+  // TEZGAH ekranıdır (DOKUMA-IS-EMRI §3.2) ve henüz yok. Ekran doğduğu gün bu iki
+  // satır ölü muaf olur ve bekçi kırmızı verir — silinmesi o dilimin işidir.
+  { code: "loom:run", reason: "Koşum aç/kapa — tablet tezgah ekranı (dokuma dilimi) henüz doğmadı; backend-only." },
+  { code: "loom:run-revoke", reason: "Koşum geri alma — panel/tablet yüzeyi dokuma dilimiyle doğacak; backend-only." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */
