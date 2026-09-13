@@ -252,3 +252,21 @@ raporda YAZ.
 aradım; üçüncü bir biçim varsa bu ikisi görmez."**
 *(Kaynak: oturum ölçümü 2026-09-13, sha yok; paket envanteri belgesi.)*
 Kardeşi § Boş çıktı bir ÖLÇÜM değildir ve `OLCUM-DISIPLINI-SINIFLAR.md` § "Bende yok".
+
+### Bir yüklem, aradığı şeyin BOZULMUŞ hâlini aramaz — bozulma ADAYI yok eder
+Sınırsız eşleşmenin **tersi**: sınır o kadar dardır ki kusurlu örnek **aday bile
+olmaz**. Cırcır 0'da kalır, çünkü sayacak bir şey doğmamıştır.
+
+*(Vaka 2026-09-13, ölçüldü: bir kural satırının `bekçi:` alanı `…test_kursun_bypass, te`
+diye kesikti — ad, `test_` önekini bile tamamlamıyordu. Kesik-ad cırcırının yüklemi
+`/\btest_[a-z0-9_]+\b/` ve `te` ona UYMUYOR ⇒ aday hiç doğmadı, kapı sessiz kaldı.
+Alan tam okunuyordu; kusur okumada değil **popülasyonun tanımındaydı**.)*
+
+> **Popülasyonu, aradığın şeyin DOĞRU biçiminden türetirsen, YANLIŞ biçim popülasyonun
+> dışında kalır** — ve tam da ölçmek istediğin şey odur.
+
+**Savunma:** popülasyonu **alandan** türet (her `bekçi:` alanının virgülle ayrılmış her
+öğesi bir adaydır), sonra her adayın geçerli biçime uyup uymadığını sor. O zaman
+`te` bir **yokluk** değil bir **kırmızı** olur.
+Kardeşleri § Boş çıktı bir ÖLÇÜM değildir · § Tarama, aradığı şeyin YAZILIŞ BİÇİMİNİ
+değil KENDİSİNİ sormalı.
