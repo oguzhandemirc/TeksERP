@@ -71,7 +71,7 @@
 
 ### Tuzaklar
 
-- **[ÇEKİRDEK]** Satıcı yüzeyi görünürlüğü VE yazılabilirliği TEK supaplı yüklem `isSuperadminGateOpen` (`superadmin-gate.ts`, kopya yasak): karo · route · palet · FeatureFlagSection · SettingsSurfacePage · ModuleProfilePage. Supapsız yükleme dönmeden ÖNCE ikinci yazma yüzeyi kur — yoksa modüller açılamaz. · bekçi: `superadmin-gate.test.ts + settings-surface.test.ts + SystemHubPage.superadmin.te` <sub>(CLAUDE.md:99, CLAUDE.md:102, CLAUDE.md:103)</sub>
+- **[ÇEKİRDEK]** Satıcı yüzeyi görünürlüğü VE yazılabilirliği TEK supaplı yüklem `isSuperadminGateOpen` (`superadmin-gate.ts`, kopya yasak): karo · route · palet · FeatureFlagSection · SettingsSurfacePage · ModuleProfilePage. Supapsız yükleme dönmeden ÖNCE ikinci yazma yüzeyi kur — yoksa modüller açılamaz. · bekçi: `superadmin-gate.test.ts + settings-surface.test.ts + SystemHubPage.superadmin.test.tsx` <sub>(CLAUDE.md:99, CLAUDE.md:102, CLAUDE.md:103)</sub>
 - **[ÇEKİRDEK]** Ayar kategorisinde modül = KİLİT (`moduleKey`, `superadminOnly` ikizi); `regime` (kategoriyi gizleme) yalnız `productionEnabled|financeEnabled` içindir, modül anahtarlarına genişletilmez (§14 kırmızı). Kilit İSTEMCİ-TARAFLI: bant 'dondu' der, 'etkisiz' DEMEZ — API alt bayrağı yazmaya devam eder. · bekçi: `test_feature_flag_contract §14` <sub>(CLAUDE.md:102, CLAUDE.md:106)</sub>
 - **[ÇEKİRDEK]** Yedi modül şalteri DAİMA `cekirdek` (kendini gizleyemez); aidiyet = satırın YÖNETTİĞİ yüzey, enforcement yeri değil (`kk1DuplicateGuardEnabled` → üretim, `pricingEnabled` → çekirdek, fason/kartela → `planlanan:*`); süzgeç ÇAĞIRANDA — görsel saklama kapalı bayrağı PATCH'e yazmaya devam ederdi. · bekçi: `flag-modules.test.ts (şalter·çekirdek) + SettingsSurfacePage.modules.test.tsx` <sub>(CLAUDE.md:103)</sub>
 

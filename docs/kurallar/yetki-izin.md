@@ -67,7 +67,7 @@
 
 ### Değişmezler
 
-- **[ÇEKİRDEK]** Panelde satıcı kapısı TEK yüklem `isSuperadminGateOpen` (supaplı: `isSystemAccount || !systemAccountExists`) — karo·route (`ProtectedRoute.requireSystemAccount`)·palet·FeatureFlagSection ondan beslenir; supapsız görünürlük yüklemi (`isSystemAccountIdentity`) geri getirilmez (kilitlenme). · bekçi: `Electron superadmin-gate.test.ts (tüketiciler bu dosyadan ithal eder) + SystemHu` <sub>(arşiv:2217, arşiv:2057)</sub>
+- **[ÇEKİRDEK]** Panelde satıcı kapısı TEK yüklem `isSuperadminGateOpen` (supaplı: `isSystemAccount || !systemAccountExists`) — karo·route (`ProtectedRoute.requireSystemAccount`)·palet·FeatureFlagSection ondan beslenir; supapsız görünürlük yüklemi (`isSystemAccountIdentity`) geri getirilmez (kilitlenme). · bekçi: `Electron superadmin-gate.test.ts (tüketiciler bu dosyadan ithal eder) + SystemHubPage.superadmin.test.tsx` <sub>(arşiv:2217, arşiv:2057)</sub>
 
 ### Tuzaklar
 
