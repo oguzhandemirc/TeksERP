@@ -10,12 +10,12 @@
 
 ### Değişmezler
 
-- **[ÇEKİRDEK]** `generateBatchNumberTx`'in İLK ifadesi `pg_advisory_xact_lock(8022, 1)` olmalı — okumalardan önce. Sonraya alınırsa TOCTOU açılır ve aynı gün doğan iki parti sessizce aynı kodu alır (hata yok, log yok). · bekçi: `scripts/test_batch_number_format.ts §2 ('Kilit: alınıyor mu ve İLK mi?', iki rej` <sub>(CLAUDE.md:161)</sub>
-- **[ÇEKİRDEK]** Advisory uzay 8022 parti no üretecine aittir ve KK1 mükerrer guard'ının 8021'inden AYRI tutulur; iki alt sistem birbirini sessizce serileştirmemeli. Uzay envanteri `helpers/period-guard.helper.ts` başlığında. · bekçi: `scripts/test_batch_number_format.ts §2 (BATCH_NUMBER_LOCK_NS !== DUPLICATE_GUARD` <sub>(CLAUDE.md:161)</sub>
+- **[ÇEKİRDEK]** `generateBatchNumberTx`'in İLK ifadesi `pg_advisory_xact_lock(8022, 1)` olmalı — okumalardan önce. Sonraya alınırsa TOCTOU açılır ve aynı gün doğan iki parti sessizce aynı kodu alır (hata yok, log yok). · bekçi: `scripts/test_batch_number_format.ts §2 (kısa rejim: kilit alınıyor ve çağrı sırasında İLK) ve §3 (günlük rejim: kilit alınıyor ve İLK) — iki rejimde de ölçülür; sahte tx çağrı sırasını kaydeder, kilit sona taşınırsa kırmızı; negatif sonda: kilit silinince 4 kırmızı` <sub>(CLAUDE.md:161 · kaynak: batch.service.ts:122-134 · test:191-202, :222-226 · arşiv:3236, ölçüldü 2026-09-13)</sub>
+- **[ÇEKİRDEK]** Advisory uzay 8022 parti no üretecine aittir ve KK1 mükerrer guard'ının 8021'inden AYRI tutulur; iki alt sistem birbirini sessizce serileştirmemeli. Uzay envanteri `helpers/period-guard.helper.ts` başlığında. · bekçi: `scripts/test_batch_number_format.ts §2 (BATCH_NUMBER_LOCK_NS !== DUPLICATE_GUARD_LOCK_NS ve ilk çağrı lock(BATCH_NUMBER_LOCK_NS,1) — sabit yazılmaz, KK1'in kendi sabitiyle karşılaştırılır); envanter satırı test_advisory_lock_namespaces (tek sahiplik + envanter ile kod iki yönlü)` <sub>(CLAUDE.md:161 · kaynak: batch.service.ts:96 (8022) · duplicate-guard.helper.ts:33 (8021) · period-guard.helper.ts:46-47 · test:207-212, ölçüldü 2026-09-13)</sub>
 
 ### Yasaklar
 
-- **[ÇEKİRDEK]** Partinin KİMLİĞİ yalnız `Batch.id`'dir — hiçbir yerde `batchNumber` ile lookup YAPMA (findUnique/findFirst dahil). Numara benzersiz değildir; aynı numarayı yıllar içinde onlarca parti alır. · bekçi: `yok (kimlik tarafı); kısıtın kalktığını scripts/test_batch_number_format.ts §6 c` <sub>(CLAUDE.md:161)</sub>
+- **[ÇEKİRDEK]** Partinin KİMLİĞİ yalnız `Batch.id`'dir — hiçbir yerde `batchNumber` ile lookup YAPMA (findUnique/findFirst dahil). Numara benzersiz değildir; aynı numarayı yıllar içinde onlarca parti alır. · bekçi: `yok (kimlik tarafı — batchNumber ile lookup tarayıcısı yazılmadı; bugün src'de eşitlikle where yok); kısıtın kalktığını scripts/test_batch_number_format.ts §6 canlı DB'de pg_indexes ile ölçer (batches_batchNumber_key yok, batches_createdAt_idx var)` <sub>(CLAUDE.md:161 · kaynak: test:301-316 · batch.service.ts:134 tek batchNumber where'i (startsWith/gte sayaç), ölçüldü 2026-09-13)</sub>
 - **[ÇEKİRDEK]** `batches.batchNumber` üzerinde `@unique` YOKTUR ve GERİ KONMAZ (migration 20260805120000_batch_short_number). Kısıt geri gelirse sarma ilk tekrarda 500 verir ve üretim durur. · bekçi: `scripts/test_batch_number_format.ts §6 (pg_indexes taraması)` <sub>(CLAUDE.md:161)</sub>
 
 ### Kararlar
@@ -34,7 +34,7 @@
 
 ### Tuzaklar
 
-- **[ÇEKİRDEK]** Sayaç sorgusunun regex'i `^P(0[1-9]|[1-9][0-9])$` LOAD-BEARING: gevşerse eski günlük kodlar sızar, parse null döner ve sayaç her seferinde P01'e düşer (canlı P01 dururken ikinci P01 doğar). · bekçi: `scripts/test_batch_number_format.ts §1 (SQL süzgeci gevşeyince 2 kırmızı — negat` <sub>(CLAUDE.md:161)</sub>
+- **[ÇEKİRDEK]** Sayaç sorgusunun regex'i `^P(0[1-9]|[1-9][0-9])$` LOAD-BEARING: gevşerse eski günlük kodlar sızar, parse null döner ve sayaç her seferinde P01'e düşer (canlı P01 dururken ikinci P01 doğar). · bekçi: `scripts/test_batch_number_format.ts §1 (sahte tx'ten yakalanan SQL deseni eski günlük kodları ve P00'ı DIŞLAR, P01-P99'u KABUL eder; DB'de yalnız eski kodlar varken P01'den başlar; parse ikinci hattı ayrı — negatif sonda: SQL süzgeci gevşeyince 2 kırmızı)` <sub>(CLAUDE.md:161 · kaynak: batch.service.ts:164 · test:160-189 · arşiv:3236, ölçüldü 2026-09-13)</sub>
 
 ## Geçersiz kılınan kurallar — bunlara UYMA
 
