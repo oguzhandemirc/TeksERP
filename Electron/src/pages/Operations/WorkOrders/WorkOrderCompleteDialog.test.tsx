@@ -132,7 +132,7 @@ describe("WorkOrderCompleteDialog (kapanış dispozisyonu)", () => {
     await chooseDisposition(user, /Bitmiş depo/i);
     // Sebep girilmeden hâlâ kapalı (min 3 karakter).
     expect(confirmBtn()).toBeDisabled();
-    await user.type(screen.getByPlaceholderText(/sipariş iptal/i), "depoya"); // kısa: marj [EL-40]
+    await user.type(screen.getByPlaceholderText(/sipariş iptal/i), "depoya"); // kısa: marj [EL-42]
     await waitFor(() => expect(confirmBtn()).toBeEnabled());
 
     await user.click(confirmBtn());
