@@ -55,7 +55,7 @@
 //   elemanları etiket tasarımcısının ÖNİZLEMESİNDE hiç görünmüyor, tasarımcı
 //   onları yanlış konumlandırıyordu. Bu kalem taramada YOKTU; kapı buldu.
 // =============================================================================
-import { readdirSync, readFileSync, statSync } from "fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { join, relative } from "path";
 import * as tsc from "typescript";
 
@@ -558,6 +558,30 @@ function main(): void {
   check("muaf listesi ÖLÜ satır taşımıyor (iki yönlü)", oluMuaf.length === 0, oluMuaf.join(", ") || "0 ölü");
   check("her muafın gerekçesi yazılı", Object.values(MUAF).every((g) => g.gerekce.length > 30), `${Object.keys(MUAF).length} muaf`);
   console.log(`   (muaf sayısı: ${Object.keys(MUAF).length} — bu sayı ARTMAMALI; büyüyen muaf listesi kapıyı sessizce öldürür)\n`);
+
+  // ── REÇETE — kapı "yanlış" der, "doğrusu şu" da demeli ────────────────────
+  // ⚠️ Kapı yalnız ihlali basarsa, doğru yolu ARAMANIN maliyeti çarpan kişiye
+  // yazılır; kapı öldürmez ama pahalılaştırır. Doğru biçim ucuzdur ve çoğunluk
+  // pratiğidir (ölçüldü 2026-09-13: 65 bekçi `roleGrade` kullanıyor).
+  //
+  // ⚠️ VE REÇETENİN KENDİSİ BİR İDDİADIR: yol ya da ad değişirse kapı YANLIŞ
+  // yol tarif eder. Bu yüzden metin yazılmaz, ÖLÇÜLÜR — dosya yoksa ya da
+  // dışa aktarım adı değiştiyse aşağıdaki kontrol KIRMIZI verir.
+  const receteYolu = join(KOK, "Teks-Erp", "scripts", "fixture-quality-grade.ts");
+  const receteVar = existsSync(receteYolu);
+  const receteAdi = receteVar && /export\s+(async\s+)?function\s+roleGrade\b/.test(readFileSync(receteYolu, "utf8"));
+  check(
+    "reçete CANLI — kapının tarif ettiği çözüm gerçekten var",
+    receteVar && receteAdi,
+    receteVar ? (receteAdi ? "roleGrade() · scripts/fixture-quality-grade.ts" : "dosya var ama `roleGrade` dışa aktarımı YOK") : "scripts/fixture-quality-grade.ts YOK",
+  );
+  if (ihlaller.length > 0 && receteVar && receteAdi) {
+    console.log(
+      "\n   ⤷ DÜZELTME: kaliteyi ROLDEN çöz — " +
+        `import { roleGrade } from "./fixture-quality-grade";  →  (await roleGrade("FIRST")).code\n` +
+        "     Literal ÖLÇÜMÜN KENDİSİYSE (katalogda bilerek OLMAYAN kod) muaf listesine gerekçesiyle yaz.\n",
+    );
+  }
 
   // ── Bölüm dökümü — hangi kuralın kaç ihlali var ──────────────────────────
   for (const bolum of ["§1", "§2", "§3", "§4"] as const) {
