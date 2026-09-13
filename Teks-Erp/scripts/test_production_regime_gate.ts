@@ -69,6 +69,10 @@ const KAPILI: ReadonlyArray<{ dosya: string; mount: string }> = [
   { dosya: "routes/batch.routes.ts", mount: "/api/batches" },
   { dosya: "routes/station-capability.routes.ts", mount: "/api/station-capabilities" },
   { dosya: "routes/machine-run.routes.ts", mount: "/api/machine-runs" },
+  // Dokuma işi yazma yüzeyi (2026-09-13). Kapıyı doğduğu gün taşıyordu ama bu
+  // listede ANILMIYORDU ⇒ bekçi 12 taşıyıcının 11'ini doğruluyor, 12'nci hakkında
+  // hiçbir şey söylemiyordu. §1e o boşluğu kapatan koldur.
+  { dosya: "routes/weaving-order.routes.ts", mount: "/api/weaving-orders" },
 ];
 
 /**
@@ -178,6 +182,50 @@ function main(): void {
     eksikDosya.map((x) => x.dosya).join(", "),
   );
   check("§1d Körlük zemini: middleware dosyası okunabildi", fs.existsSync(MW), MW);
+
+  // ── §1e ⭐ KAPSAM — kapıyı TAŞIYAN her dosya listede ANILIR ────────────────
+  //
+  // ⚠️ NEDEN AYRI BİR KOL: §1c yalnız ÖLÜ girdiyi arar (listede var, dosya yok).
+  // Ters yön — dosya var, kapıyı taşıyor, ama HİÇBİR listede anılmıyor — ölçülmüyordu.
+  // Ölçüldü 2026-09-13: ağaçta 12 dosya `requireProductionEnabled` taşıyordu,
+  // `KAPILI` 11 satırdı; `weaving-order.routes.ts` ikisinin de dışındaydı ve bekçi
+  // 41/0 YEŞİL veriyordu. O gün biri o dosyadan kapıyı silse hiçbir şey kırmızı
+  // vermezdi. Sınıf: *kapsamını bir LİSTEYLE beyan eden bekçi, listenin DIŞINDA
+  // kalanı göremez* — pozitif ad listesiyle çalışmanın ödenmemiş bedeli.
+  //
+  // ⚠️ BU KOLUN KAPSAMI: liste DIŞINDA kalan KAPI TAŞIYICIYI ölçer. Kapı
+  // TAŞIMAYAN bir dosyanın kapıyı taşıMAsı gerekip gerekmediğini ÖLÇMEZ — o §3'ün
+  // işidir ("bilinçli kapısız" listesi) ve oraya girmek bir KARARDIR, ölçüm değil.
+  //
+  // Taban YOK, sert kural: `weaving-order.routes.ts` bu commit'te listeye alındı.
+  const routeDizini = path.join(SRC, "routes");
+  const tumRouteDosyalari = fs
+    .readdirSync(routeDizini)
+    .filter((f) => f.endsWith(".routes.ts"))
+    .map((f) => `routes/${f}`);
+  const kapiTasiyan = tumRouteDosyalari.filter((rel) =>
+    fs.readFileSync(path.join(SRC, rel), "utf8").includes(KAPI),
+  );
+  const anilan = new Set([...KAPILI, ...BILINCLI_KAPISIZ].map((x) => x.dosya));
+  const listesiz = kapiTasiyan.filter((rel) => !anilan.has(rel));
+  // KÖRLÜK ZEMİNİ: tarama hiç dosya görmezse "listesiz yok" VAKUMEN doğru olur.
+  check(
+    "§1e Körlük zemini: route dizini tarandı ve kapı taşıyan dosya bulundu",
+    tumRouteDosyalari.length >= 50 && kapiTasiyan.length >= 10,
+    `${tumRouteDosyalari.length} route dosyası · ${kapiTasiyan.length} kapı taşıyor · ${anilan.size} listede anılı`,
+  );
+  check(
+    `⭐ §1e \`${KAPI}\` taşıyan her dosya listede ANILIR`,
+    listesiz.length === 0,
+    listesiz.length === 0 ? `${kapiTasiyan.length} taşıyıcının ${kapiTasiyan.length}'i anılı` : listesiz.join(", "),
+  );
+  if (listesiz.length > 0) {
+    console.log(
+      "   YAPILACAK: dosyayı `KAPILI`ya (mount adresiyle) ekle. Kapıyı taşımaması\n" +
+        "   gerekiyorsa kapıyı SİL ve `BILINCLI_KAPISIZ`a gerekçesiyle yaz — ikisi de\n" +
+        "   bir KARAR; bu kol yalnız 'hiçbir yerde yazılı değil' hâlini yasaklar.",
+    );
+  }
 
   // ── §2 ⭐ KAPI VAR · KİMLİKTEN SONRA · TÜM UÇLARDAN ÖNCE ──────────────────
   for (const k of KAPILI) {
