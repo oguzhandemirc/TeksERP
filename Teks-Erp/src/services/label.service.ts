@@ -24,7 +24,7 @@ import {
   readScrapGradeLabelEnabled,
 } from "./system-setting.service";
 import { LabelKind, PrinterLanguage, Prisma, RollStatus, type LabelTemplate, type LabelTemplateVariant } from "@prisma/client";
-import { sampleQualityCode } from "./helpers/quality-role.helper";
+import { sampleQualityCode, loadCustomerNamePolicy } from "./helpers/quality-role.helper";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
@@ -391,6 +391,18 @@ export class LabelService {
           colorMasterAlias = colorAlias?.alias ?? null;
         }
       }
+    }
+
+    // ⚠️ KALİTE POLİTİKASI — belge tarafıyla AYNI karar (`QualityGrade.skipCustomerName`).
+    // Ev kuralı: "müşteri adı zinciri ETİKETLE AYNI; ikinci bir semantik açmak aynı
+    // topun etiketi ile irsaliyesinde FARKLI ad basması demektir." Zinciri burada
+    // KESERİZ (override + master birlikte düşer) ⇒ `resolveName` bizim adımıza iner.
+    // Etikette karışıklık sorusu yok: etiket TEK topundur.
+    if (customerId && (await loadCustomerNamePolicy(prisma)).skips(null, roll.qualityGrade)) {
+      itemOverride = null;
+      itemMasterAlias = null;
+      colorOverride = null;
+      colorMasterAlias = null;
     }
 
     const itemNameResolved = resolveName(

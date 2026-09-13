@@ -75,6 +75,7 @@ import {
 } from "./helpers/shipping-weigh-gate.helper";
 // "Müşterideki ad" zinciri (2026-09-04) — etiketle AYNI cascade, tek kaynak.
 import { loadShipmentCustomerNames } from "./helpers/shipment-customer-name.helper";
+import { loadCustomerNamePolicy } from "./helpers/quality-role.helper";
 import { batchLoadAliases, batchLoadAliasesMulti, resolveName } from "./helpers/customer-name.helper";
 import { specMatch } from "./helpers/allocation.helper";
 import {
@@ -5229,7 +5230,10 @@ async function collectShipmentDocContent(
         // İlişkinin `name`i yetmez: override `OrderLine`da, master alias
         // `CustomerItemAlias`ta ve ikisi de KİMLİKLE eşlenir (ada göre eşleme,
         // aynı adı taşıyan iki kartı sessizce birleştirirdi).
-        select: { id: true, seq: true, sackNo: true, weightKg: true, rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, currentQty: true, width: true, itemId: true, colorId: true, item: { select: { name: true } }, color: { select: { name: true } }, batch: { select: { batchNumber: true } } } } },
+        // `qualityGradeId`/`qualityGrade` (2026-09-13) — "müşterideki ad" POLİTİKA
+        // anahtarı (`QualityGrade.skipCustomerName`). İkisi birden: FK canlı topta
+        // dolu, kod eski/iade satırlarında tek kalan olabilir.
+        select: { id: true, seq: true, sackNo: true, weightKg: true, rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, currentQty: true, width: true, itemId: true, colorId: true, qualityGradeId: true, qualityGrade: true, item: { select: { name: true } }, color: { select: { name: true } }, batch: { select: { batchNumber: true } } } } },
       },
     },
   });
@@ -5254,6 +5258,12 @@ async function collectShipmentDocContent(
       color: { select: { name: true } },
       // Barkod + parti CANLI toptan okunur: iade ikisini de DEĞİŞTİRMEZ
       // (metraj/kalite değişebilir — onlar iade anındaki `prev*` alanlarından).
+      // ⚠️ KALİTE de kimlikler kadar ŞART (2026-09-13): "müşterideki ad" politikası
+      // kaliteye bakar; taşımazsak iade satırı politikayı ATLAR ve alt kalite mal
+      // müşterinin adıyla basılır — FAIL-SAFE'in TERS yönü. İade ANINDAKİ kalite
+      // doğru olandır (top sonradan yeniden derecelenmiş olabilir).
+      prevQualityGradeId: true,
+      prevQualityGrade: true,
       roll: { select: { barcode: true, batch: { select: { batchNumber: true } } } },
     },
   });
@@ -5281,6 +5291,8 @@ async function collectShipmentDocContent(
       colorId: rr.colorId,
       item: { name: rr.item?.name ?? "" },
       color: rr.color ? { name: rr.color.name } : null,
+      qualityGradeId: rr.prevQualityGradeId,
+      qualityGrade: rr.prevQualityGrade,
       batch: rr.roll.batch ? { batchNumber: rr.roll.batch.batchNumber } : null,
     } as unknown as (typeof sh.sacks)[number]["rolls"][number];
     const arr = returnsBySack.get(rr.prevSackId);
@@ -5315,9 +5327,25 @@ async function collectShipmentDocContent(
     itemIds: sacksGross.flatMap((sk) => sk.rolls.map((r) => r.itemId)),
     colorIds: sacksGross.flatMap((sk) => sk.rolls.map((r) => r.colorId ?? "")),
   });
+  // MÜŞTERİ ADI POLİTİKASI (2026-09-13) — `QualityGrade.skipCustomerName`.
+  // Karar SATIR düzeyindedir: sütunu `resolveDocNameMode` açar/kapatır, bu politika
+  // yalnız o satırın HÜCRESİNİ boşaltır (bkz. schema notu).
+  const namePolicy = await loadCustomerNamePolicy(db);
+  // ⚠️ TİP, GERÇEKTEN YAZILAN ALANLARI SAYAR: `customerItemOnly`/`customerColorOnly`
+  // aşağıda kuruluyordu ama bu tipte YOKTU (birleşim genişlemesi sayesinde derleyici
+  // susuyordu) ve `products` eşlemesi onları zaten düşürüyor. Tipe alındılar ki
+  // "yazılıyor ama çıktıya gitmiyor" görünür olsun — davranış DEĞİŞMEDİ.
   const productMap = new Map<
     string,
-    { name: string; customerName: string | null; rollCount: number; totalMeters: Prisma.Decimal }
+    {
+      name: string;
+      customerName: string | null;
+      customerItemOnly: string | null;
+      customerColorOnly: string | null;
+      skipsCustomerName: boolean;
+      rollCount: number;
+      totalMeters: Prisma.Decimal;
+    }
   >();
   const sackRows = sacksGross.map((sk) => {
     let sackMeters = D0();
@@ -5328,8 +5356,12 @@ async function collectShipmentDocContent(
       // GRUPLAMA ANAHTARI BİZİM ADIMIZDIR ve öyle KALIR: müşteri adına göre
       // gruplasaydık iki farklı ürün aynı alias altında birleşir, adet/metraj
       // sessizce toplanırdı. Müşteri adı gruba TAŞINIR, grubu belirlemez.
-      const ci = customerNames.itemName(r.itemId, r.colorId);
-      const cc = customerNames.colorName(r.colorId);
+      // ⚠️ FAIL-SAFE: işaretli kalitede müşteri adı HİÇ çözülmez. Çözüp sonra
+      // gizlemek, karışık satırda ilk topun adının gruba yapışmasına açık kapı
+      // bırakırdı (grup `customerName`ini İLK top kurar).
+      const rollSkips = namePolicy.skips(r.qualityGradeId, r.qualityGrade);
+      const ci = rollSkips ? null : customerNames.itemName(r.itemId, r.colorId);
+      const cc = rollSkips ? null : customerNames.colorName(r.colorId);
       const custName =
         ci || cc
           ? [ci ?? r.item.name, cc ?? r.color?.name ?? "", widthStr].filter(Boolean).join(" ")
@@ -5352,9 +5384,14 @@ async function collectShipmentDocContent(
           customerName: custName,
           customerItemOnly: custItemOnly,
           customerColorOnly: custColorOnly,
+          skipsCustomerName: false,
           rollCount: 0,
           totalMeters: D0(),
         };
+      // ⚠️ KARIŞIK SATIRIN KURALI: grubun müşteri adını İLK top kurar, ama işaret
+      // TÜM toplara sorulur ve OR'lanır. Tek bir işaretli top satırı bizim adımıza
+      // düşürür — "en az bir alt kalite varsa müşterinin adını iliştirme".
+      if (rollSkips) g.skipsCustomerName = true;
       g.rollCount += 1;
       g.totalMeters = g.totalMeters.plus(r.currentQty);
       productMap.set(stokAdi, g);
@@ -5362,11 +5399,17 @@ async function collectShipmentDocContent(
     return { code: sk.sackNo ?? `#${sk.seq}`, seq: sk.seq ?? 0, totalMeters: Number(sackMeters), totalKg: sk.weightKg != null ? Number(sk.weightKg) : 0, packageCount: sk.rolls.length };
   });
 
+  // ⚠️ ÇEKİ SATIRI TOP BAŞINADIR — orada karışıklık sorusu YOKTUR, politika
+  // doğrudan o topun kalitesine sorulur. (Ürün özetindeki OR'lama yalnız GRUP
+  // satırı için gerekliydi.)
   const cekiRows = sacksGross.flatMap((sk) =>
-    sk.rolls.map((r, idx) => ({ rollId: r.id, sackCode: sk.sackNo ?? `#${sk.seq}`, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", customerDesen: customerNames.itemName(r.itemId, r.colorId), customerVaryant: customerNames.colorName(r.colorId), width: r.width != null ? Number(r.width) : null, meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0, batchNumber: r.batch?.batchNumber ?? null }))
+    sk.rolls.map((r, idx) => {
+      const skips = namePolicy.skips(r.qualityGradeId, r.qualityGrade);
+      return { rollId: r.id, sackCode: sk.sackNo ?? `#${sk.seq}`, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", customerDesen: skips ? null : customerNames.itemName(r.itemId, r.colorId), customerVaryant: skips ? null : customerNames.colorName(r.colorId), width: r.width != null ? Number(r.width) : null, meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0, batchNumber: r.batch?.batchNumber ?? null };
+    })
   );
 
-  const products = [...productMap.values()].map((p) => ({ name: p.name, customerName: p.customerName, rollCount: p.rollCount, totalMeters: Number(p.totalMeters) }));
+  const products = [...productMap.values()].map((p) => ({ name: p.name, customerName: p.skipsCustomerName ? null : p.customerName, rollCount: p.rollCount, totalMeters: Number(p.totalMeters) }));
   const totalRolls = products.reduce((s, p) => s + p.rollCount, 0);
   const totalMeters = Number(sackRows.reduce((s, r) => s.plus(r.totalMeters), D0()));
   const totalKg = Number(sackRows.reduce((s, r) => s.plus(r.totalKg), D0()));

@@ -177,9 +177,9 @@ async function main() {
       // `test_quality_code_literal.ts` §5 bu üç satırın rolünü ölçer.
       // role = "hangi satırı YAZAYIM" (rol) · targetStatus = "hangi rafa" (kova):
       // A1 ikisinde de farklıdır (rol SECOND, kova WAREHOUSE) ve öyle kalır.
-      { code: "1.KALITE", name: "1. Kalite",       color: "#10b981", sortOrder: 10, role: "FIRST",  targetStatus: "WAREHOUSE", returnTargetStatus: "WAREHOUSE", skipLabel: false },
-      { code: "A1",       name: "A1 (Alt Kalite)", color: "#f59e0b", sortOrder: 20, role: "SECOND", targetStatus: "WAREHOUSE", returnTargetStatus: "A1_STOCK",  skipLabel: false },
-      { code: "FIRE",     name: "Fire",            color: "#ef4444", sortOrder: 30, role: "SCRAP",  targetStatus: "SCRAP",     returnTargetStatus: "SCRAP",     skipLabel: true },
+      { code: "1.KALITE", name: "1. Kalite",       color: "#10b981", sortOrder: 10, role: "FIRST",  targetStatus: "WAREHOUSE", returnTargetStatus: "WAREHOUSE", skipLabel: false, skipCustomerName: false },
+      { code: "A1",       name: "A1 (Alt Kalite)", color: "#f59e0b", sortOrder: 20, role: "SECOND", targetStatus: "WAREHOUSE", returnTargetStatus: "A1_STOCK",  skipLabel: false, skipCustomerName: true  },
+      { code: "FIRE",     name: "Fire",            color: "#ef4444", sortOrder: 30, role: "SCRAP",  targetStatus: "SCRAP",     returnTargetStatus: "SCRAP",     skipLabel: true, skipCustomerName: false },
     ],
   });
   console.log("✅ 3 kalite sınıfı (1.KALITE/A1/FIRE — roller: FIRST/SECOND/SCRAP)");

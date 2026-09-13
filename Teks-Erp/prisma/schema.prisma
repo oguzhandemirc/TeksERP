@@ -3085,6 +3085,28 @@ model QualityGrade {
   /// Katalog Electron'da SALT-OKUNUR olduğu için bu kolon seed/migration ile yönetilir.
   skipLabel Boolean @default(false)
 
+  /// Bu kalitedeki mal MÜŞTERİDEKİ ADLA basılmaz — belgede de etikette de BİZİM
+  /// adımız çıkar (kullanıcı kararı: "a1 kumaşlarda kim için çıkarsa çıksın
+  /// bizdeki adı yazsın").
+  ///
+  /// NEDEN KALİTEDE, statüde ya da kodda değil:
+  ///   Hangi kalitede müşteri adı basılmayacağı bir POLİTİKADIR, dispozisyondan
+  ///   TÜRETİLEMEZ: A1_STOCK'a inen iki kademeden biri müşteri adı alabilir,
+  ///   öteki almayabilir. `skipLabel` ile aynı sınıf, aynı gerekçe.
+  ///   `code === "A1"` gömmek reddedildi — katalog kodu fabrikaya AÇIK bir alan.
+  ///
+  /// ⚠️ KARAR SATIR DÜZEYİNDEDİR, SÜTUN DÜZEYİNDE DEĞİL: `resolveDocNameMode`
+  /// sütunun çizilip çizilmeyeceğine karar verir (belge geneli); bu kolon o
+  /// satırın HÜCRESİNİ belirler. Sütunu kapatsaydı tek bir A1 topu bütün
+  /// belgeden müşteri ad sütununu silerdi.
+  ///
+  /// ⚠️ FAIL-SAFE YÖNÜ: karışık satırda (aynı ürün+renk, farklı kalite) EN AZ BİR
+  /// top bu işareti taşıyorsa satır BİZİM adımıza düşer. Kaçınılan risk müşterinin
+  /// ürün adını alt kalite mala iliştirmektir; bizim adımıza düşmek her zaman
+  /// güvenli taraftır (boş ad taşıyan irsaliye hukuken sakat).
+  /// Katalog Electron'da SALT-OKUNUR olduğu için bu kolon seed/migration ile yönetilir.
+  skipCustomerName Boolean @default(false)
+
   rolls       Roll[]
   rollReturns RollReturn[]
 

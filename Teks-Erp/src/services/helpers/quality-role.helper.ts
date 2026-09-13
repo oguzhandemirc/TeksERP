@@ -190,3 +190,40 @@ export async function loadQualityRoles(db: ReadDb = prismaClient): Promise<Quali
     },
   };
 }
+
+// =============================================================================
+// MÜŞTERİ ADI POLİTİKASI — "bu kalitede müşterideki ad basılır mı"
+// =============================================================================
+// ⚠️ OKUMA yolu: `isActive` SÜZMEZ. Belge geçmiş bir sevkiyatı da çizer ve o
+// topun kalitesi bugün pasifleştirilmiş olabilir; politika o satır için hâlâ
+// geçerlidir (`roleOf`in aynı gerekçesi).
+//
+// ⚠️ HEM id HEM kod tutulur: canlı top FK taşır (`qualityGradeId`), iade satırı
+// ise `prevQualityGrade*` alanlarından gelir ve eski kayıtlarda yalnız KOD
+// dolu olabilir. Tek anahtara güvenmek o satırları sessizce "istisna yok"
+// tarafına düşürürdü — ve bu, FAIL-SAFE'in TERS yönü.
+export interface CustomerNamePolicy {
+  /** Bu top müşterideki adla basılmaz mı? (id ya da kod — hangisi varsa) */
+  skips(gradeId: string | null | undefined, gradeCode: string | null | undefined): boolean;
+  /** İşaretli kalite var mı — körlük zemini için (0 ise politika hiç uygulanmaz). */
+  readonly markedCount: number;
+}
+
+export async function loadCustomerNamePolicy(
+  db: PrismaClient | Prisma.TransactionClient = prismaClient,
+): Promise<CustomerNamePolicy> {
+  const rows = await db.qualityGrade.findMany({
+    where: { skipCustomerName: true },
+    select: { id: true, code: true },
+  });
+  const ids = new Set(rows.map((r) => r.id));
+  const codes = new Set(rows.map((r) => r.code));
+  return {
+    skips(gradeId, gradeCode) {
+      if (gradeId && ids.has(gradeId)) return true;
+      if (gradeCode && codes.has(gradeCode)) return true;
+      return false;
+    },
+    markedCount: rows.length,
+  };
+}
