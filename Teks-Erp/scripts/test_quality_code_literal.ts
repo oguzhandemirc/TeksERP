@@ -96,6 +96,11 @@ const SEMA_ENUMLARI: Map<string, Set<string>> = (() => {
   return harita;
 })();
 
+/** Şemadaki TÜM enum değerleri — `kodOlamazMi` için düz küme. */
+const SEMA_ENUM_DEGERLERI: Set<string> = new Set(
+  [...SEMA_ENUMLARI.values()].flatMap((s) => [...s]),
+);
+
 /** Birleşim, aynı adlı şema enum'unun AYNASI mı (üyeler birebir örtüşüyor mu)? */
 function semaAynasiMi(tipAdi: string, uyeler: string[]): boolean {
   const enumDegerleri = SEMA_ENUMLARI.get(tipAdi);
@@ -121,7 +126,9 @@ const AGACLAR: Array<{ kok: string; tavan: number; dilim: string; sadece?: RegEx
   // `backfill-*` fixture/araç kurucularıdır — fixture kendi kurduğu kataloğu
   // koduyla okur, orası "gömülü varsayım" değil senaryonun TANIMIDIR.
   // Kapsam dışı bırakılan scripts/ dosyalarındaki sayı 37.
-  // 244 → 216: bekçi borcu Dilim 1 (20 dosya role bağlandı). Katalog bağımlılık
+  // 244 → 216 → 197: Dilim 1 (20 dosya) + ENUM DEĞERİ istisnası (20 sahte
+  // isabet: `roleGrade("FIRST")`). Gerçek borç 196; +1 d9.
+  // (eski satır) 244 → 216: bekçi borcu Dilim 1 (20 dosya role bağlandı). Katalog bağımlılık
   // ölçümü 61 → 42 (docs/ops/KATALOG-KODU-BAGIMLILIK-OLCUMU.md).
   //
   // ⚠️ TAVAN ÖNCE 163 YAZILMIŞTI ve YANLIŞTI: sayı, bekçinin KENDİ ÇIKTISINDAN
@@ -131,7 +138,7 @@ const AGACLAR: Array<{ kok: string; tavan: number; dilim: string; sadece?: RegEx
   // çıkarmak, listeyi üreten kapının kendi sınırını ölçmek olur.)
   // 251 → 246: bu turda beş bekçi literali daha katalogdan çözülür oldu
   // (test_tambur_over_quantity ön koşulunu kendi kurunca). Mandal işledi.
-  { kok: "Teks-Erp/scripts", tavan: 216, dilim: "bekçi borcu — dilim 1 indi (61→42)", sadece: /\/scripts\/test_[^/]+\.ts$/ },
+  { kok: "Teks-Erp/scripts", tavan: 197, dilim: "bekçi borcu — dilim 1 indi (61→42)", sadece: /\/scripts\/test_[^/]+\.ts$/ },
   { kok: "mobil/src", tavan: 0, dilim: "(ii) — indi 2026-09-13" },
   { kok: "Electron/src", tavan: 0, dilim: "(iii) — indi 2026-09-13" },
 ];
@@ -306,6 +313,16 @@ const NOTR_KOD_YUVASI = /^(code|currentCode|defaultCode|effectiveCode)$/;
  * geçiyor ve her birine ayrı satır yazmak listeyi şişirirdi.
  */
 function kodOlamazMi(deger: string): boolean {
+  // ⚠️ ŞEMA ENUM DEĞERİ bir katalog kodu DEĞİLDİR (2026-09-13).
+  // `roleGrade("FIRST")` çağrısı bu kuralı tetikliyordu: çağrı adı `/grade/i`
+  // desenine uyuyor ve `"FIRST"` ilk argüman. Ama `FIRST` bir
+  // `QualityGradeRole` üyesidir — KAPALI bir küme, fabrikaya açık bir kod
+  // değil. Aynı gerekçe §3'ün ayna istisnasında da kullanıldı.
+  // ⚠️ Bu düzeltme olmadan MANDAL KENDİ KENDİNİ KİRLETİYORDU: düzelttiğim her
+  // dosya bir `roleGrade(...)` çağrısı ekliyor ⇒ borç düştükçe sayı geri
+  // tırmanıyordu. Sayı "kalan borç" değil "kalan borç + uygulanan düzeltme"
+  // ölçüyordu — ölçtüğünü sandığın şeyi ölçmeyen bir sayaç.
+  if (SEMA_ENUM_DEGERLERI.has(deger)) return true;
   if (deger.length > 32) return true;
   if (deger.startsWith("/")) return true;
   if (/^[\s\p{P}\p{S}]+$/u.test(deger)) return true;
