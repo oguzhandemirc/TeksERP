@@ -1,5 +1,6 @@
 import apiClient from "@/services/apiClient";
 import type { ApiResponse, PaginatedResponse, QueryParams } from "@/types/api";
+import { lowerTr } from "../../lib/tr-case";
 
 // =============================================================================
 // ÇUVAL İZİ (ETİKET) KATALOĞU — SERVİS (2026-09-04)
@@ -109,9 +110,9 @@ export const sackTagService = {
    */
   getAll: async (params: QueryParams): Promise<PaginatedResponse<SackTag>> => {
     const rows = await sackTagService.list(false);
-    const term = params.search?.trim().toLocaleLowerCase("tr") ?? "";
+    const term = params.search ? lowerTr(params.search.trim()) : "";
     const data = term
-      ? rows.filter((r) => r.name.toLocaleLowerCase("tr").includes(term))
+      ? rows.filter((r) => lowerTr(r.name).includes(term))
       : rows;
     return {
       success: true,

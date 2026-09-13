@@ -16,6 +16,7 @@ import {
 import { useAuthStore } from "@/store/auth";
 import { useTabsStore } from "@/store/tabs";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { upperTr } from "../../lib/tr-case";
 
 interface Props {
   onToggleSidebar: () => void;
@@ -30,9 +31,9 @@ function initials(name?: string): string {
   // doğrusu "İŞ". Baş harf kullanıcının adıdır; yanlış harf yanlış kişiyi
   // gösteriyormuş gibi okunur.
   if (parts.length >= 2) {
-    return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toLocaleUpperCase("tr");
+    return upperTr((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? ""));
   }
-  return name.slice(0, 2).toLocaleUpperCase("tr");
+  return upperTr(name.slice(0, 2));
 }
 
 export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {

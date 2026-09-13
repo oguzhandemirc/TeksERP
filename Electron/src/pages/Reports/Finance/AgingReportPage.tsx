@@ -40,6 +40,7 @@ import {
   type CariKind,
   type Currency,
 } from "./service";
+import { lowerTr } from "../../../lib/tr-case";
 
 export function AgingReportPage() {
   const [sp, setSp] = useSearchParams();
@@ -89,11 +90,11 @@ export function AgingReportPage() {
   const [detailRow, setDetailRow] = useState<AgingCariRow | null>(null);
   const [statementTarget, setStatementTarget] = useState<StatementTarget | null>(null);
 
-  const needle = filters.search.trim().toLocaleLowerCase("tr");
+  const needle = lowerTr(filters.search.trim());
   const matches = (r: AgingCariRow) =>
     !needle ||
-    r.name.toLocaleLowerCase("tr").includes(needle) ||
-    r.code.toLocaleLowerCase("tr").includes(needle);
+    lowerTr(r.name).includes(needle) ||
+    lowerTr(r.code).includes(needle);
 
   const visibleIds = useMemo(() => {
     const ids = new Set<string>();

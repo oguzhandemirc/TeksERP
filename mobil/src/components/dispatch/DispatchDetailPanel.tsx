@@ -5,6 +5,7 @@ import dayjs from 'dayjs';
 
 import type { SubcontractorDispatch } from '../../types/models';
 import { fasonNoteLabel } from '../../utils/labels';
+import { upperTr } from '../../utils/trCase';
 
 /**
  * Bir sevkin tüm detayları — toplar, plaka/sürücü, planlanan vs sevk firması,
@@ -134,7 +135,7 @@ export default function DispatchDetailPanel({
         {dispatch.instruction && (
           <View style={styles.instructionBox}>
             <Text style={styles.instructionLabel}>
-              {fasonNoteLabel(dispatch.step?.station?.name).toLocaleUpperCase('tr-TR')}
+              {upperTr(fasonNoteLabel(dispatch.step?.station?.name))}
             </Text>
             <Text style={styles.instructionText}>{dispatch.instruction}</Text>
           </View>

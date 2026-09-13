@@ -40,6 +40,7 @@ import {
 } from "@/lib/search/search-targets";
 import { isRollTabEntryVisible } from "@/pages/Operations/Rolls/tabs-regime";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { lowerTr } from "../../lib/tr-case";
 
 interface Props {
   open: boolean;
@@ -261,7 +262,7 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
                 >
                   <Search className="mr-2 h-4 w-4 shrink-0 opacity-60" />
                   <span className="text-muted-foreground">
-                    Tüm {g.label.toLocaleLowerCase("tr")} içinde ara…
+                    Tüm {lowerTr(g.label)} içinde ara…
                   </span>
                 </CommandItem>
               )}

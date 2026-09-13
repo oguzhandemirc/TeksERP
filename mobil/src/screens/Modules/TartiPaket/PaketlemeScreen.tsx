@@ -51,6 +51,7 @@ import {
 import { usePermissions } from '../../../hooks/usePermission';
 import type { MainStackParamList } from '../../../navigation/types';
 import { foldSearchText } from '../../../utils/searchFold';
+import { upperTr } from '../../../utils/trCase';
 
 // =============================================================================
 // Paketleme — ÇUVAL DEPO akış (MÜŞTERİ-BAZLI). Param: { customerId, branchId? }.
@@ -365,7 +366,7 @@ export default function PaketlemeScreen() {
       // çuval AKTİF yapılır (tamamen istemci; liste ve setActiveSack zaten elde).
       if (isSackCode(code)) {
         const target = sacksRef.current.find(
-          (s) => s.sackNo.toLocaleUpperCase('tr') === code.toLocaleUpperCase('tr'),
+          (s) => upperTr(s.sackNo) === upperTr(code),
         );
         if (target) {
           setActiveSack(target.id);

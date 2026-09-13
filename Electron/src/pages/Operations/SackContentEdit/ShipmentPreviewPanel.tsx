@@ -3,12 +3,13 @@ import { Callout } from "@/components/ui/callout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { CreateShipmentPreview } from "./types";
+import { lowerTr } from "../../../lib/tr-case";
 
 const fmtM = (n: number) => `${n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 })} m`;
 
 /** Uyarı tonu — mükerrer sevk kırmızı (danger), diğerleri amber (warning). */
 function warnTone(text: string): "danger" | "warning" {
-  return text.toLocaleLowerCase("tr-TR").includes("mükerrer") ? "danger" : "warning";
+  return lowerTr(text).includes("mükerrer") ? "danger" : "warning";
 }
 
 interface Props {

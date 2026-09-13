@@ -27,6 +27,7 @@ import apiClient from "@/services/apiClient";
 import type { ItemType } from "@/types/enums";
 // C4 — tedarikçi iki tablodan gelebilir; XOR ve okuma önceliği TEK saf katmanda.
 import type { SupplierRefLike } from "@/components/forms/supplierParty";
+import { lowerTr } from "../../../lib/tr-case";
 
 /** Backend `Currency` enum'unun aynası (Electron backend'i import edemez). */
 export type PoCurrency = "TRY" | "USD" | "EUR" | "GBP" | "RUB";
@@ -52,7 +53,7 @@ export function toNum(value: DecimalLike | null | undefined): number {
 export function fmtQty(value: DecimalLike | null | undefined, unit?: string | null): string {
   const n = toNum(value);
   const text = n.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
-  return unit ? `${text} ${unit.toLocaleLowerCase("tr")}` : text;
+  return unit ? `${text} ${lowerTr(unit)}` : text;
 }
 
 export interface SupplierRef {

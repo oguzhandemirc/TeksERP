@@ -22,6 +22,7 @@ import { useDeviceType, useIsPortrait } from '../../hooks/useDeviceType';
 import { operatorColor, operatorInitials } from '../../utils/operatorColor';
 import type { MobileUser, LoginResponse } from '../../types/auth';
 import type { RootStackParamList } from '../../navigation/types';
+import { upperTr } from '../../utils/trCase';
 
 const COLORS = {
   bg: '#0f172a',
@@ -67,8 +68,8 @@ function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
   if (parts.length === 0) return '?';
   // toLocaleUpperCase('tr'): düz toUpperCase 'ışık' → 'IS' üretiyordu, doğrusu 'İŞ'.
-  if (parts.length === 1) return parts[0].slice(0, 2).toLocaleUpperCase('tr');
-  return (parts[0][0] + parts[parts.length - 1][0]).toLocaleUpperCase('tr');
+  if (parts.length === 1) return upperTr(parts[0].slice(0, 2));
+  return upperTr(parts[0][0] + parts[parts.length - 1][0]);
 }
 
 /** Kilit modu bağlamı — LoginScreen `lock` prop'u ile kilit ekranı olarak da

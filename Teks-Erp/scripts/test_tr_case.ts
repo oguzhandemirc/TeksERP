@@ -12,7 +12,11 @@
 //    ya da ham `toLocaleUpperCase` ile ayrışırsa bugün olmayan bir kusur doğar
 //    ("İPLİK" anahtarı "IPLIK" ile aranır) ve yalnız bu sonda görür.
 //    Negatif sonda: bir adaptörde `upperTr(r.code)` → `r.code.toUpperCase()`.
+// §3 ÜÇ KOPYA BAYT-BAYT — backend · Electron · mobil ayrı projedir, ortak modül
+//    import edilemez (search-fold emsali); md5 eşitliği ölçülür. Negatif sonda:
+//    bir kopyada bir karakter değiştir → kırmızı.
 
+import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { lowerTr, upperTr } from "../src/utils/tr-case";
@@ -64,6 +68,19 @@ for (const f of adapters) {
   check(`§2 okuyan ${f}: ham toLocale yok · anahtarda toUpperCase yok`, !rawFold && !asciiOnKey);
 }
 check("§2 kod haritası kuran adaptör sayısı ≥ 14 (yazan↔okuyan çifti var)", okuyan >= 14, `okuyan=${okuyan}`);
+
+// --- §3 -----------------------------------------------------------------------
+const copies = [
+  join(__dirname, "..", "src", "utils", "tr-case.ts"),
+  join(__dirname, "..", "..", "Electron", "src", "lib", "tr-case.ts"),
+  join(__dirname, "..", "..", "mobil", "src", "utils", "trCase.ts"),
+];
+const md5s = copies.map((f) => createHash("md5").update(readFileSync(f)).digest("hex"));
+check("§3 üç kopyanın md5'i eşit (backend · Electron · mobil)", new Set(md5s).size === 1, md5s.map((h) => h.slice(0, 8)).join(" "));
+check(
+  "§3 kopyalarda \"tr-TR\" KOD satırında yalnız TR_LOCALE sabitinde (yorum sayılmaz)",
+  copies.every((f) => (readFileSync(f, "utf8").replace(/^\s*\/\/.*$/gm, "").match(/"tr-TR"/g) ?? []).length === 1),
+);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

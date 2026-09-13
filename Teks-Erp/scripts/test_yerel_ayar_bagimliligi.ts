@@ -136,7 +136,10 @@ const ALET_TABAN = 14;
  */
 // 113 → 54 (2026-09-14, entegratör 1e): ea backend parçası (upperTr/lowerTr, 7bc091bb) birleşik ağaçta ölçüldü;
 // kalan 54 = Electron 17 + mobil 20 (parça 2, ea) + 12 test oracle'ı (muaf adayı) + helper içi.
-const HAM_FOLD_TABAN = 54;
+// 54 → 30 (2026-09-14, ea — kapı zorladı, 1e istisnası; tren sonunda 1e ölçer): Electron 17 + mobil 11 ürün sitesi
+// upperTr/lowerTr'ye; kalan 30 (ölçüldü 2026-09-14, `npx tsx scripts/test_yerel_ayar_bagimliligi.ts` §3 dökümü) = 12 backend +
+// 9 mobil test oracle'ı + 3 audit_repro_E-2-01 (asimetriyi belgeleyen referans) — muaf adayları — + helper içi (3 kopya × 2).
+const HAM_FOLD_TABAN = 30;
 
 function main(): void {
   console.log("\n=== Yerel ayar bağımlılığı (süreç locale'i) ===\n");

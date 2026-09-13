@@ -13,6 +13,7 @@ import {
 } from '../../../services/workOrderDocuments';
 import { colors, spacing, radius } from '../../../theme';
 import { useDeviceSettingsStore, type DocPageSize } from '../../../store/deviceSettingsStore';
+import { upperTr } from '../../../utils/trCase';
 
 // =============================================================================
 // İŞ EMRİ BELGELERİ — sahadaki operatör iş emrine basınca TÜM belgelerine
@@ -115,7 +116,7 @@ export default function WorkOrderDocumentsSheet({
   const renderItem = (row: Row) => {
     if (row.kind === 'header') {
       return (
-        <Text style={styles.groupHeader}>{row.label.toLocaleUpperCase('tr')}</Text>
+        <Text style={styles.groupHeader}>{upperTr(row.label)}</Text>
       );
     }
     const d = row.doc;

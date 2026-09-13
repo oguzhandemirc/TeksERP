@@ -25,6 +25,7 @@
 // varsayımı KESİNMİŞ GİBİ sunmamak zorunda (bkz. `FIFO_HINT`).
 // =============================================================================
 import { toNum, type DecimalLike } from "./service";
+import { lowerTr } from "../../../lib/tr-case";
 
 export type FulfillmentState = "NONE" | "PARTIAL" | "COMPLETE" | "OVER";
 
@@ -89,7 +90,7 @@ export function remainingText(
   unit?: string | null,
   opts?: { shortClosed?: boolean },
 ): string {
-  const u = unit ? ` ${unit.toLocaleLowerCase("tr")}` : "";
+  const u = unit ? ` ${lowerTr(unit)}` : "";
   const n = (v: number) => v.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
   if (f.excess > 0) return `${n(f.excess)}${u} fazla geldi`;
   if (f.state === "COMPLETE") return "Tamamlandı";

@@ -142,6 +142,7 @@ import type {
   Roll,
   Customer,
 } from '../../../types/models';
+import { upperTr } from '../../../utils/trCase';
 
 // =============================================================================
 // Multi-job state — Tambur'da operatör paralel iş yürütebilir (KursunQc paralel).
@@ -5415,7 +5416,7 @@ function OrdersDetailModal({
                 <View style={ordersModalStyles.orderHeaderRow}>
                   <View style={ordersModalStyles.avatar}>
                     <Text style={ordersModalStyles.avatarText}>
-                      {(o.customerName || '?').trim().charAt(0).toLocaleUpperCase('tr')}
+                      {upperTr((o.customerName || '?').trim().charAt(0))}
                     </Text>
                   </View>
                   <Text style={ordersModalStyles.customerName} numberOfLines={1}>

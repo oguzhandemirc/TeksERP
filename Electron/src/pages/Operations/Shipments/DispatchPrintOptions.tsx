@@ -1,5 +1,6 @@
 import { FileStack, Layers, MessageSquareText, Tag } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { lowerTr } from "../../../lib/tr-case";
 
 /** Belgedeki üç veri listesi — backend `DISPATCH_LIST_SECTIONS` ile aynı sıra/anahtar. */
 export const DISPATCH_LISTS = [
@@ -95,7 +96,7 @@ export function DispatchPrintOptionsContent({
                 type="button"
                 className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground"
                 onClick={() => only(l.key)}
-                title={`Yalnız ${l.label.toLocaleLowerCase("tr")} bas`}
+                title={`Yalnız ${lowerTr(l.label)} bas`}
               >
                 yalnız bu
               </button>

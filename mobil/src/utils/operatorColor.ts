@@ -10,6 +10,8 @@
 // tonlar (fabrika ortamı, uzaktan/eldivenle okunur).
 // =============================================================================
 
+import { upperTr } from './trCase';
+
 /** Operatör bandı vurgu paleti — birbirinden görsel olarak uzak 12 ton. */
 export const OPERATOR_PALETTE = [
   '#2563eb', // blue-600
@@ -55,6 +57,6 @@ export function operatorInitials(name: string | null | undefined): string {
   if (!n) return '?';
   const parts = n.split(/\s+/);
   // toLocaleUpperCase('tr'): düz toUpperCase 'ışık' → 'IS' üretiyordu, doğrusu 'İŞ'.
-  if (parts.length === 1) return parts[0].slice(0, 2).toLocaleUpperCase('tr');
-  return (parts[0][0] + parts[parts.length - 1][0]).toLocaleUpperCase('tr');
+  if (parts.length === 1) return upperTr(parts[0].slice(0, 2));
+  return upperTr(parts[0][0] + parts[parts.length - 1][0]);
 }

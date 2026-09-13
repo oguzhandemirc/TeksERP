@@ -25,6 +25,7 @@ import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import * as Haptics from 'expo-haptics';
 import Pager from './Pager';
 import { colors } from '../theme';
+import { upperTr } from '../utils/trCase';
 
 /** Türkçe harmanlama — MODÜL SABİTİ (comparator içinde kurmak pahalıdır). */
 const TR_COLLATOR = new Intl.Collator('tr', { numeric: true });
@@ -281,7 +282,7 @@ export default function PickerModal(props: Props) {
     const seen = new Map<string, number>();
     dataWithLeading.forEach((o, i) => {
       if (o.value === LEADING_ACTION_VALUE) return;
-      const ch = (o.label?.trim()?.[0] ?? '').toLocaleUpperCase('tr');
+      const ch = upperTr(o.label?.trim()?.[0] ?? '');
       if (ch && !seen.has(ch)) seen.set(ch, i);
     });
     return Array.from(seen.entries()).map(([letter, index]) => ({ letter, index }));

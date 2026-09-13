@@ -19,6 +19,7 @@
 import { dayEndIso, dayStartIso } from "@/pages/Finance/Cheques/dates";
 import { rollStatusLabels, type RollStatus } from "@/types/enums";
 import type { DecimalLike, StockCountLine, StockCountStatus } from "./service";
+import { lowerTr, upperTr } from "../../../lib/tr-case";
 
 // -----------------------------------------------------------------------------
 // SAYI
@@ -323,12 +324,12 @@ export function filterRollLines(
   lines: readonly StockCountLine[],
   f: RollViewFilter,
 ): StockCountLine[] {
-  const needle = f.search.trim().toLocaleUpperCase("tr");
+  const needle = upperTr(f.search.trim());
   return lines.filter((l) => {
     if (l.kind !== "ROLL") return false;
     if (f.onlyUncounted && l.found !== null) return false;
     if (!needle) return true;
-    const hay = `${l.roll?.barcode ?? ""} ${lineLabel(l)}`.toLocaleUpperCase("tr");
+    const hay = upperTr(`${l.roll?.barcode ?? ""} ${lineLabel(l)}`);
     return hay.includes(needle);
   });
 }
@@ -478,7 +479,7 @@ export function completeBlockReason(
   lineCount: number,
 ): string | null {
   if (status !== "DRAFT") {
-    return `Bu sayım ${STATUS_LABEL[status].toLocaleLowerCase("tr")} — yeniden tamamlanamaz.`;
+    return `Bu sayım ${lowerTr(STATUS_LABEL[status])} — yeniden tamamlanamaz.`;
   }
   // ⚠️ SINIR, BACKEND'İN SAYDIĞI KÜME ÜZERİNDEN ÖLÇÜLÜR: `found === false`
   // işaretli TÜM top satırları (`stock-count.service`: `missing = lines.filter(

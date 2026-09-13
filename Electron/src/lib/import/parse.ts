@@ -9,6 +9,7 @@
 // yorum katmanı demektir ve iki katman er ya da geç ayrışır.
 
 import type { ImportColumn, ImportRowInput } from "@/services/importService";
+import { upperTr } from "../tr-case";
 
 export interface ParsedFile {
   /** Dosyadaki başlık satırının hücreleri (ham). */
@@ -27,10 +28,7 @@ export interface MappedRows {
 
 /** Türkçe-duyarsız başlık karşılaştırma anahtarı. */
 function headerKey(s: string): string {
-  return s
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLocaleUpperCase("tr-TR")
+  return upperTr(s.replace(/\s+/g, " ").trim())
     .replace(/[İI]/g, "I")
     .replace(/[Şş]/g, "S")
     .replace(/[Ğğ]/g, "G")
@@ -182,7 +180,7 @@ function cellToText(value: unknown): string {
 // --- Ortak giriş noktası ------------------------------------------------------
 
 export async function parseSpreadsheet(file: File): Promise<ParsedFile> {
-  const name = file.name.toLocaleLowerCase("en-US");
+  const name = file.name.toLowerCase();
   if (name.endsWith(".xlsx") || name.endsWith(".xlsm")) return parseXlsx(file);
   if (name.endsWith(".csv") || name.endsWith(".txt")) return parseCsv(await file.text());
   throw new Error("Desteklenmeyen dosya türü — .xlsx ya da .csv yükleyin.");

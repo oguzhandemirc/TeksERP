@@ -5,6 +5,8 @@
 // operatör elle seçer (isim kimlik taşımaz). Saf/native-bağımsız — birim test edilir.
 // =============================================================================
 
+import { upperTr } from '../../utils/trCase';
+
 export interface MatchablePeripheral {
   name: string;
   code: string;
@@ -19,8 +21,7 @@ export interface MatchablePeripheral {
  * Bu SADECE eşleştirme anahtarıdır (görüntüleme değil), agresif katlama uygun.
  */
 function canon(s: string): string {
-  return (s || '')
-    .toLocaleUpperCase('tr-TR')
+  return upperTr(s || '')
     .replace(/İ/g, 'I')
     .replace(/Ş/g, 'S')
     .replace(/Ğ/g, 'G')
