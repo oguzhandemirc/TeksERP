@@ -344,6 +344,18 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
       kanit: "kapının tarayıcısı (defterYazimlariniTara, SILEN) 2026-09-14: inventory.service.ts:4531 · workorder.service.ts:6009 — ikisi de deftere yazmıyor, replace izi yalnız audit'te (inventory F119, tx dışında). Kapanır: `silen` boşalır → §10 ÖLÜ SİLME kırmızı → beyan DEFTER {DAMGA validUntil}",
       sahibi: "rota/renk alanı",
     }] },
+  // ③a listesinde olup beyanda OLMAYAN üçüncü ticari pivot (ölçüldü 2026-09-14): `updatedAt`
+  // taşıdığı için §1 evreninin dışında kalıyordu — "yarı" ile evrene alındı. Kolon ölü:
+  // in-place yazan yok (update/updateMany 0), allocatedQty yalnız yaratılırken yazılır.
+  { model: "WorkOrderToOrderLine", sinif: "PIVOT_TICARI", yari: true,
+    gerekce: "iş emri ↔ sipariş kalemi bağı + `allocatedQty` (Decimal, sipariş birimi): `WorkOrder.type` bu bağın AYNASIDIR, sipariş karşılaması ve refakat kartının sipariş bloğu bu bağdan okunur — ticari sonuç taşır (③a, kök CLAUDE.md); `updatedAt` var ama in-place yazan 0 (ölçüldü 2026-09-14)",
+    yazan: ["src/services/workorder-link.service.ts", "src/services/helpers/workorder-clone.helper.ts", "src/services/workorder.service.ts"],
+    silen: ["src/services/workorder-link.service.ts", "src/services/workorder.service.ts", "src/services/order.service.ts"],
+    borc: [{
+      ne: "5 site fiziksel siliyor — unlinkOrderLine :467 (elle bağ kaldırma, tek satır delete) · WO replace :5816 (drop-and-recreate) · cancelOrderLine :529 · sipariş softDelete :2944 · cancelWithActions :3361 (sipariş/kalem iptali bağı koparır). \"Bu iş emri hangi sipariş için açıldı\" olgusu iz bırakmadan kaybolur — K5 şerhi (2026-08-29) FK Cascade'i kapattı ama uygulama katmanı aynı kaybı beş yoldan üretiyor. Kapanır: K1/K2 ile aynı DAMGA deseni (`unlinkedAt`+`unlinkedById`; `@@id([workOrderId, orderLineId])` bileşik anahtar ⇒ yeniden bağlama SackTagAssignment gibi diriliş dalıyla ya da vekil id + partial unique ile); okuyucu turu 58 `orderLinks` atfı + 17 delegate okuması süzgeç alır; `WorkOrder.type` aynası açık bağ sayısından türer",
+      kanit: "kapının tarayıcısı (defterYazimlariniTara YARATAN/SILEN, 2026-09-14, taban 3b65daea): yaratan 4 site / 3 dosya, silen 5 site / 3 dosya; değişim izi deftere yazılmıyor. Kapanır ölçülür: `silen` boşalır → §10 ÖLÜ SİLME kırmızı → beyan DEFTER {DAMGA unlinkedAt}",
+      sahibi: "iş emri / sipariş alanı",
+    }] },
   { model: "WorkOrderTargetProperty", sinif: "PIVOT_TICARI",
     gerekce: "iş emri hedef özelliği — topun özelliğiyle aynı sınıf (2026-09-11 kararı)",
     yazan: ["src/services/helpers/workorder-clone.helper.ts", "src/services/workorder.service.ts"],

@@ -128,6 +128,7 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 | `RollVariance` | fire · düzeltme · aşım | ✅ | ✅ `reversedAt` |
 | `SwatchStockReduction` + `SwatchStockReductionItem` | kartela düşümü + kalemleri | ✅ `reversedAt` damgası | ✅ damga (negatif satır CHECK yüzünden yasak); kalemi ölü kabule bağlı kartela dönmez (2026-09-11) |
 | `PaymentAllocation` | fatura kapama | ✅ `revokedAt` damgası | ✅ damga (negatif satır CHECK yüzünden yasak) |
+| `WorkOrderToOrderLine` | iş emri ↔ sipariş kalemi bağı + `allocatedQty`; `WorkOrder.type` bu bağın aynası | yarı (`updatedAt`, in-place yazan 0) | ❌ **BORÇ** — 5 site fiziksel siliyor (unlinkOrderLine · WO replace · cancelOrderLine · sipariş softDelete · cancelWithActions); "hangi sipariş için açıldı" izi kaybolur. Kapanır: DAMGA `unlinkedAt`+`unlinkedById` (K1/K2 deseni; bileşik anahtar ⇒ diriliş dalı ya da vekil id), `silen` boşalınca §10 ÖLÜ SİLME kırmızı (2026-09-14 ölçümü) |
 | `SackAllocation` | sipariş karşılama | ❌ sil-yaz (rebalance; 3 site tek dosyada, kısmi kapanış §10'a görünmez) | ❌ **BORÇ** — Kapanır: satır silinmez, `validUntil` ile versiyonlanır (unique partial'a döner) ya da ters kayıt alır; `silen` boşalınca §10 ÖLÜ SİLME kırmızı |
 | `PrintedDocument` | belge versiyonu | yarı — `updatedAt` VAR (2026-09-13'te düzeltildi; eskiden ✅ yazıyordu) | ✅ `supersededAt`/`voidedAt` |
 | `ShipmentEvent` **(yeni)** | sevkiyat durum defteri, 6 olay | ✅ | ✅ DISPATCHED↔UNDISPATCHED · INVOICED↔INVOICE_CLEARED |

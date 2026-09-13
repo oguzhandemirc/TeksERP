@@ -81,6 +81,7 @@ const SCRIPT_SINIFI: Record<string, "SEED" | "DEMO" | "DENETIM_REPRO"> = {
   "scripts/demo_tambur_3parti.ts": "DEMO",
   "scripts/audit_repro_D-A-02.ts": "DENETIM_REPRO",
   "scripts/audit_repro_KYY-1-01.ts": "DENETIM_REPRO",
+  "scripts/audit_repro_KYY-2-26.ts": "DENETIM_REPRO",
   "scripts/audit_repro_KYY-3-01.ts": "DENETIM_REPRO",
   "scripts/audit_repro_KYY-3-03.ts": "DENETIM_REPRO",
   "scripts/audit_repro_S-3-02.ts": "DENETIM_REPRO",
