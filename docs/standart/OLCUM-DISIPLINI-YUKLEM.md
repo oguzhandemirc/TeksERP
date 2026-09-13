@@ -161,3 +161,29 @@ envanterle** kurulur; ikisi de yoksa iddia daraltılır. Envanter iki bağımsı
 çıkarılırsa fark bilgidir, gürültü değil.
 Kardeşleri § Bir POPÜLASYONU saymadan önce ÜYELİĞİNİ sına · § Sınırsız eşleşme
 (`OLCUM-DISIPLINI-SINIFLAR.md`) · `CLAUDE.md` § Commit kapısı (kapı bekçileri koşmaz).
+
+### NE sorduğun kadar NEREYE sorduğun — yetenek ORTAK LIB'e çıkınca dosya bazlı envanter körleşir
+Bir yüklem aynı anda **hem gevşek hem dar** olabilir: alakasızı içeri alır *ve* aradığını
+kaçırır. Bu ikisi çelişmez, çünkü biri **deseni**, öteki **bakılan yeri** ilgilendirir.
+
+*(Vaka 2026-09-13, iki oturum bağımsız ölçtü: "hangi bekçiler dizin tarıyor" sorusuna
+`scripts/test_*.ts` içinde `readdirSync`/`glob`/`ls-files` aranarak cevap verilmek istendi.
+Ölçüm 2026-09-13 — 534 bekçi dosyasının **69**'u listeyi kendi içinde üretiyor; ama liste üreten
+**5 ortak lib** var (`keyfi-arama-taramasi` · `kural-dosyalari` · `ts-tarama` ·
+`stok-defteri-bag-olcumu` · `regime-gate-scan`) ve onları **26** bekçi import ediyor.
+`test_*.ts` üstünde yapılan tarama bu 26'yı GÖRMEZ ve görmediğini SÖYLEMEZ. Bir oturumu
+CI'da ısıran mandal tam o gizlenen kümedeydi.)*
+
+> **Yetenek ortak bir lib'e çıkarıldığı an, dosya bazlı her envanterin kör noktası
+> doğar** — ve envanter yine de "tamam" görünür, çünkü kaçırdığı şeyin adı listede yoktur.
+
+**Savunma:** "hepsi" derken kümeyi nasıl ürettiğini yaz **ve o üretimin, aradığın şeyin
+SAKLANABİLECEĞİ her yeri gezdiğini ayrıca söyle** — doğrudan kullanım + dolaylı
+(import/devir) kullanım iki ayrı sorudur. İkisini de soramıyorsan tüketici koşum (tam
+paket) tek dürüst yoldur.
+
+⚠️ **İki yön, tek aile:** § Yüklemi GEVŞEK bir cırcır'da desen kuralın ÖNERDİĞİ kalıpla
+eşleşiyordu (**doğru kodu ihlal saydı**); burada yüklemin baktığı yer yanlıştı (**ihlali
+hiç görmedi**). *Ne sorduğun* ve *nereye sorduğun* — bu dosyanın iki ekseni.
+*(İki bağımsız ölçüm 26 ↔ 25 verdi; fark import yazımından ve **bilgidir**: bir envanteri
+iki yoldan çıkarmanın amacı tam olarak bu farkı görünür kılmaktır.)*
