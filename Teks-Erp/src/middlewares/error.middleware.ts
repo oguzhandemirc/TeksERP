@@ -315,6 +315,23 @@ const CHECK_CONSTRAINT_MESSAGES: Record<string, string> = {
   purchase_order_lines_qty_positive: "Alış siparişi satırının miktarı sıfırdan büyük olmalı.",
   purchase_order_lines_received_nonneg: "Alış siparişinde teslim alınan miktar negatif olamaz.",
   item_prices_price_nonneg: "Fiyat negatif olamaz.",
+  // ── Dokuma (2026-09-13). İkisi de bugün yazma yüzeyi olmadan indi; bu satırlar
+  // yüzey açıldığı gün operatörün ham kısıt adı görmemesi için ÖNCEDEN yazıldı.
+  // `machines_productionLineCount_pos` P4b'de eklenmiş, mesajı BORÇ kalmıştı
+  // (ölçüldü: `POST /api/machines` gövdesinde alan yazılabiliyor, 0 → 409 ham ad).
+  machines_productionLineCount_pos:
+    "Makinenin üretim hattı sayısı en az 1 olmalı.",
+  machine_runs_productionLineNo_pos: "Üretim hattı numarası en az 1 olmalı.",
+  shift_definitions_window_sane:
+    "Vardiya penceresi geçersiz — başlangıç gün içinde (0–1439 dk), süre pozitif, mola süreden kısa olmalı.",
+  shift_instances_time_order: "Vardiya penceresinin bitişi başlangıcından sonra olmalı.",
+  machine_stop_events_time_order: "Duruşun bitişi başlangıcından önce olamaz.",
+  machine_stop_events_durationSec_nonneg: "Duruş süresi negatif olamaz.",
+  // `MACHINE_STOP` kind'ında kayıp sınıfı ZORUNLU ve `MINOR` YASAK (süre sınıfı,
+  // sebep sınıfı değil). Buraya düşmek "katalog satırı sınıfsız yazıldı" demektir
+  // — boot job'ı 5 denemeden sonra `PERMISSION_CATALOG_RECONCILE_FAILED` basar.
+  reason_presets_machine_class_chk:
+    "Tezgah duruş sebebi bir kayıp sınıfı taşımalı (plansız / kurulum / planlı / çalışma dışı) — 'mikro duruş' bir sebep sınıfı değildir.",
 };
 
 // =============================================================================

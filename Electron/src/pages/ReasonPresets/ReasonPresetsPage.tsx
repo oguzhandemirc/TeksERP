@@ -11,9 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { Callout } from "@/components/ui/callout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useVisibleKindTabs } from "./useVisibleKindTabs";
 import {
   KIND_STORES_TEXT,
-  KIND_TABS,
   reasonPresetService,
   type ReasonPreset,
   type ReasonPresetKind,
@@ -91,7 +91,8 @@ export function ReasonPresetsPage() {
     reorder.mutate(next.map((r) => r.id));
   };
 
-  const activeTab = KIND_TABS.find((t) => t.kind === tab)!;
+  const visibleTabs = useVisibleKindTabs();
+  const activeTab = visibleTabs.find((t) => t.kind === tab) ?? visibleTabs[0]!;
 
   return (
     <PageShell>
@@ -111,14 +112,14 @@ export function ReasonPresetsPage() {
       <PageBody className="p-6">
         <Tabs value={tab} onValueChange={(v) => setTab(v as ReasonPresetKind)}>
           <TabsList>
-            {KIND_TABS.map((t) => (
+            {visibleTabs.map((t) => (
               <TabsTrigger key={t.kind} value={t.kind}>
                 {t.title}
               </TabsTrigger>
             ))}
           </TabsList>
 
-          {KIND_TABS.map((t) => (
+          {visibleTabs.map((t) => (
             <TabsContent key={t.kind} value={t.kind} className="mt-4 space-y-3">
               <Callout tone="info">{t.hint}</Callout>
 

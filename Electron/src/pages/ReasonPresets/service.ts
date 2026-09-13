@@ -14,7 +14,8 @@ export type ReasonPresetKind =
   | "ROLL_MANUAL_ENTRY"
   | "ROLL_CANCEL"
   | "WORK_ORDER_REWORK"
-  | "ORDER_CANCEL";
+  | "ORDER_CANCEL"
+  | "MACHINE_STOP";
 
 export interface ReasonPreset {
   id: string;
@@ -49,9 +50,19 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
   // Sipariş iptalinde satıra GÖRÜNEN metin yazılır (`Order.cancelReason`) +
   // kod (`cancelReasonCode`) — top iptaliyle aynı sözleşme.
   ORDER_CANCEL: true,
+  // Tezgah duruşunda satıra yalnız KOD yazılır (`MachineStopEvent.reasonCode`);
+  // kayıp sınıfı preset'ten kopyalanıp donar. Sunucu tablosuyla birebir.
+  MACHINE_STOP: false,
 };
 
-export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string }[] = [
+/**
+ * ⚠️ `modul` alanı: sekme yalnız o modül AÇIKKEN çizilir. Tezgahı KAPALI
+ * fabrikada (referans profil) `MACHINE_STOP` satırları DB'ye düşer (boot job'ı
+ * bayrağa bakmaz — izin kataloğu denklemi) ama bu sekme ÇİZİLMEZ: koşulsuz
+ * eklenmesi beşinci bir sekme doğurur ve K3'ü (sıfır fark) ihlal ederdi.
+ * Parite bekçisi sekmenin VARLIĞINI ister, GÖRÜNÜRLÜĞÜNÜ değil — ikisi ayrı.
+ */
+export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; modul?: "tezgahEnabled" }[] = [
   {
     kind: "ROLL_SCRAP",
     title: "Fire",
@@ -81,6 +92,12 @@ export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string }[
     kind: "ORDER_CANCEL",
     title: "Sipariş İptali",
     hint: "Müşteri neden vazgeçti. İlk satırlar MÜŞTERİ kararıdır (satışın bakması gereken sinyal), son ikisi bizim kayıt/tedarik sorunumuzdur — rapor ikisini ayırır.",
+  },
+  {
+    kind: "MACHINE_STOP",
+    title: "Tezgah Duruşu",
+    hint: "Tezgah neden durdu. Her sebep bir KAYIP SINIFI taşır (plansız / kurulum / planlı / çalışma dışı) ve randıman raporu o sınıfa göre gruplar; sınıf sebepten kopyalanıp duruşa donar. Kısa kopuşlar buraya girmez — onlar süre sınıfıdır, sebep değil.",
+    modul: "tezgahEnabled",
   },
 ];
 

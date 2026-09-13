@@ -130,9 +130,19 @@ model ReasonPreset {
 //    `permission-catalog.job.ts`in izin→rol→sebep ZİNCİRİNDEDİR (`:36` import,
 //    `:157` çağrı) ve 5 denemeden sonra `hata()` + `PERMISSION_CATALOG_RECONCILE_FAILED`
 //    audit satırı basar (`:177`, `:184`). Zarar "katalog sessizce boş" DEĞİL,
-//    "MACHINE_STOP satırları ve sonraki kind'lar hiç doğmaz + boot zinciri ortasında
-//    düştüğü için o turda ROL ŞABLONLARI da yazılmaz"dır; boş kind'da sunucu ve
-//    tablet gömülü kataloğa düşer.
+//    "MACHINE_STOP satırları ve sonraki kind'lar hiç doğmaz"dır; boş kind'da
+//    sunucu ve tablet gömülü kataloğa düşer.
+//    ⛔ DÜZELTİLDİ (2026-09-13, ölçüldü): bu satır bir dönem *"boot zinciri
+//    ORTASINDA düştüğü için o turda ROL ŞABLONLARI da yazılmaz"* diyordu ve
+//    YANLIŞTI. Zincir `permission-catalog.job.ts:150-157`te şu sırada koşar:
+//      reconcilePermissionCatalog() → reconcileRoleTemplates() → reconcileReasonPresets()
+//    Presetler EN SONDUR ⇒ düşerse izinler ve rol şablonları ZATEN yazılmış olur.
+//    Patlama yarıçapı dar: yalnız preset satırları doğmaz. ⚠️ Aynı-commit kuralı
+//    YİNE geçerlidir — katalog sabiti CHECK'i ihlal eden satır taşırsa job HER
+//    boot'ta 5 deneme + kalıcı kırmızı verir; kural düşmedi, yalnız zarar cümlesi.
+//    ⇒ Bir TEHLİKE cümlesi de bayatlar — ve tehlikeyi BÜYÜTEN bayatlık, küçülten
+//    kadar zararlıdır: yanlış yere ağırlık verdirir ve sorgulanmaz (dikkatli
+//    davranmaya yol açan bir abartıyı kimse çürütmez).
 //    (`runReasonPresetReconciliation` ÖLÜ KODDUR — repoda yalnız kendi tanımında
 //     geçer; canlı yol yukarıdaki zincirdir.)
 ```

@@ -24,7 +24,13 @@ export type ReasonPresetKind =
    * yani bu değer cihaza fiilen geliyor. Union'da olmaması bir tip yalanıydı:
    * `KIND_LABELS[kind]` o satır için `undefined` verir ve sebep adsız çizilir.
    */
-  | 'ORDER_CANCEL';
+  | 'ORDER_CANCEL'
+  /**
+   * Tezgah duruşu (dokuma P2b-2) — tablette YÜZEYİ HENÜZ YOK (duruş sınıflandırma
+   * ekranı Faz 2), ama liste ucu bu kind'ı da döndürür: union'da olmaması
+   * `ORDER_CANCEL`daki aynı tip yalanı olurdu.
+   */
+  | 'MACHINE_STOP';
 
 export interface ReasonPreset {
   id: string;
@@ -56,6 +62,9 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
   // Sipariş iptalinde satıra GÖRÜNEN metin yazılır (`Order.cancelReason`) + kod
   // (`cancelReasonCode`) — top iptaliyle aynı sözleşme. Sunucudaki tabloyla bir.
   ORDER_CANCEL: true,
+  // Tezgah duruşunda satıra yalnız KOD yazılır; kayıp sınıfı sunucuda preset'ten
+  // kopyalanıp donar. Sunucudaki tabloyla birebir.
+  MACHINE_STOP: false,
 };
 
 export const KIND_LABELS: Record<ReasonPresetKind, string> = {
@@ -65,6 +74,7 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   ROLL_CANCEL: 'Top iptal sebepleri',
   WORK_ORDER_REWORK: 'Yeniden üretim sebepleri',
   ORDER_CANCEL: 'Sipariş iptal sebepleri',
+  MACHINE_STOP: 'Tezgah duruş sebepleri',
 };
 
 export const reasonPresetService = {

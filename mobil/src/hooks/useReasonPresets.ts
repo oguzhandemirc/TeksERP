@@ -80,6 +80,17 @@ function builtin(kind: ReasonPresetKind): ReasonPreset[] {
       // Gömülü liste yazmak, sunucudaki fabrika metinleriyle sessizce ayrışan
       // ikinci bir katalog demek olurdu; burada zeminin koruduğu bir karar yok.
       return [];
+    case 'MACHINE_STOP':
+      // ⚠️ BORÇ, kapanma koşuluyla: tasarım (`dokuma.md` § Tablet) tezgah duruşu
+      // için gömülü zemini ZORUNLU sayar — sunucusuzken katalog boş dönerse sebep
+      // zorunlu olan duruş kaydedilemez ve tezgah ekranda KİLİTLENİR. O risk bir
+      // TABLET EKRANI varken doğar; bugün duruş sınıflandırma ekranı YOK (Faz 2).
+      // Ekransız zemin, okuyucusu olmayan 23 satırlık ölü koddur ve sunucu
+      // kataloğuyla sessizce ayrışır. ⇒ Zemin, ekranı açan dilimde ONUNLA gelir
+      // (`constants/loomStopReasons.ts`, GERÇEK katalog kodlarıyla — bu kind metin
+      // saklamaz, kodu istemci gönderir; `WORK_ORDER_REWORK` kalıbı). O gün bu
+      // dal boş bırakılırsa tasarımın kilitlenme uyarısı gerçek olur.
+      return [];
   }
 }
 
@@ -90,6 +101,7 @@ const BUILTIN: Record<ReasonPresetKind, ReasonPreset[]> = {
   ROLL_CANCEL: builtin('ROLL_CANCEL'),
   WORK_ORDER_REWORK: builtin('WORK_ORDER_REWORK'),
   ORDER_CANCEL: builtin('ORDER_CANCEL'),
+  MACHINE_STOP: builtin('MACHINE_STOP'),
 };
 
 /** Gömülü satır düzenlenemez — henüz sunucudan okunmamış bir zemindir. */

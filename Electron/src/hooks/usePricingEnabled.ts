@@ -47,6 +47,16 @@ export function usePricingEnabled(): boolean {
  * yardımcıları ÇİZİLMEZ. Ters varsayılan, sunucuya ulaşamayan bir panelde
  * fabrikaya demo düğmeleri gösterirdi.
  */
+/**
+ * Tezgah izleme modülü açık mı (`tezgah.enabled`). Yüklenene dek KAPALI —
+ * fail-closed: modülün yüzeyleri (Hazır Sebepler'deki duruş sekmesi) referans
+ * profilde hiç belirmemeli, "bir an görünüp kaybolan" sekme de sıfır fark değildir.
+ */
+export function useTezgahEnabled(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.tezgahEnabled ?? false;
+}
+
 export function useDemoModeEnabled(): boolean {
   const q = useFeatureFlags();
   return q.data?.data?.demoModeEnabled ?? false;

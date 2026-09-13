@@ -144,6 +144,11 @@ enum ReasonPresetKind {
   /// Sipariş iptali — "müşteri neden vazgeçti". 2026-08-26'ya kadar sebep
   /// HİÇBİR yerde tutulmuyordu (audit bile yalnız status yazıyordu).
   ORDER_CANCEL
+  /// Tezgah duruşu — "makine neden durdu" (dokuma P2b-2). ⚠️ METİN SAKLAMAZ:
+  /// duruş satırına yalnız KOD yazılır (`MachineStopEvent.reasonCode`, FK'sız)
+  /// ve kayıp sınıfı preset'ten KOPYALANIP DONAR — katalog değişse geçmiş rapor
+  /// değişmez.
+  MACHINE_STOP
   /// Hızlı İş Emri — depodaki BİTMİŞ topu yeniden üretime alma sebebi
   /// ("ton tutmadı", "leke"…). Metin SAKLAMAZ: kod + serbest metin iş emrinin
   /// `parameters.rework` alanına yazılır, metin ayrıca 1. adımın notuna geçip
@@ -4229,6 +4234,18 @@ model ReasonPreset {
   /// label/fullText'e eşit olan temizlenir. Belirsizlik (iki satır aynı eski adı
   /// taşıyor) → çözücü kod UYDURMAZ, NULL döner.
   legacyTexts  String[]         @default([])
+  /// DURUŞUN KAYIP SINIFI — YALNIZ `kind = MACHINE_STOP`ta anlamlı (dokuma P2b-2).
+  /// NULL = sınıflandırılmamış ⇒ rapor UNPLANNED sayar.
+  /// ⚠️ `stopPlanned` diye İKİNCİ bir kolon YOKTUR: planlı/plansız buradan türer,
+  /// tek helper'da ("çift yüklem" sınıfı).
+  /// ⚠️ `MINOR` BURAYA ASLA YAZILMAZ: MINOR bir SÜRE sınıfıdır (mikro-duruş
+  /// eşiğinin altı), SEBEP sınıfı değil — 45 dakikalık bir kopuşu MINOR saymak
+  /// kullanılabilirliği hiç düşürmezdi. Şema-dışı CHECK
+  /// `reason_presets_machine_class_chk` ikisini de tutar: MACHINE_STOP ise
+  /// NOT NULL VE <> 'MINOR'.
+  /// ⚠️ Preset'in sınıfı duruş satırına KOPYALANIR ve orada DONAR
+  /// (`MachineStopEvent.lossClass`) — katalog değişse geçmiş rapor değişmez.
+  stopLossClass MachineStopLossClass?
 
   createdById String? @db.Uuid
   updatedById String? @db.Uuid

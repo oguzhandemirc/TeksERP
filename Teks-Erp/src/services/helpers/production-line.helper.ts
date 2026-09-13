@@ -8,7 +8,8 @@
 // üretmez, yalnız yanlış yazılmış olabilir — ve bekçisi tam olarak onu ölçer.
 //
 // ⚠️ BORÇ — KAPANMA KOŞULUYLA BİRLİKTE: bu yüklem BUGÜN HİÇBİR YERDEN ÇAĞRILMIYOR.
-// İlk çağrı yeri P2b'de doğacak `MachineRun` açma ucudur. O gün iki şey birden
+// İlk çağrı yeri `MachineRun` açma ucudur — o yüzey P2b'den AYRILDI ve 6e'nin
+// diliminde doğuyor (2026-09-13). O gün iki şey birden
 // yapılır: ① çağrı eklenir ② bekçiye "çağrıldığı YOL" ayağı eklenir — çünkü
 // yüklemin doğru olması onun ÇAĞRILDIĞI anlamına gelmez ("kolon var, yüklem yok"un
 // bir kademe yukarısı: "yüklem var, çağrı yok").

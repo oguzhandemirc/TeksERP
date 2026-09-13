@@ -62,6 +62,12 @@ export async function reconcileReasonPresets(): Promise<ReasonPresetReconcileRes
           label: seed.label,
           fullText: KIND_STORES_TEXT[kind] ? (seed.fullText ?? seed.label) : null,
           requiresText: seed.requiresText ?? false,
+          // Yalnız MACHINE_STOP'ta dolu; DB CHECK `reason_presets_machine_class_chk`
+          // o kind'da NULL'ı ve MINOR'ı REDDEDER — katalog satırı sınıfsız yazılırsa
+          // INSERT 23514 ile düşer ve bu job 5 denemeden sonra kalıcı kırmızı verir
+          // (`PERMISSION_CATALOG_RECONCILE_FAILED`). Katalog + CHECK + bu satır
+          // AYNI commit'te değişir.
+          stopLossClass: seed.stopLossClass ?? null,
           sortOrder: isFirstInstall ? i : nextOrder++,
           isSystem: true,
         },

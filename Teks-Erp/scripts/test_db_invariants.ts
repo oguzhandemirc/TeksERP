@@ -472,6 +472,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "shift_instances", name: "shift_instances_time_order" },
   { table: "machine_stop_events", name: "machine_stop_events_time_order" },
   { table: "machine_stop_events", name: "machine_stop_events_durationSec_nonneg" },
+  // 2026-09-13 (dokuma P2b-2) — migration 20260913243000, CANLI tabloya CHECK.
+  // İki ayak: MACHINE_STOP ise `stopLossClass` NOT NULL ve <> 'MINOR' (MINOR bir
+  // SÜRE sınıfıdır, sebep sınıfı değil). Katalog + job + bu CHECK aynı commit'te.
+  { table: "reason_presets", name: "reason_presets_machine_class_chk" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_dispatchedQty_pos" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_dispatchedWeight_nonneg" },
   { table: "kartela_dispatch_items", name: "kartela_dispatch_items_dispatchedQty_pos" },

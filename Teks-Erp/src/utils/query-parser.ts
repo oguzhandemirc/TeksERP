@@ -139,6 +139,14 @@ export const DATE_ONLY_COLUMNS: ReadonlySet<string> = new Set([
   // kapanışı" takvim günüdür. Bugün `dateFields` whitelist'inde DEĞİL; yine de
   // burada durur, çünkü liste ŞEMAYI aynalar.
   "periodEnd",
+  // MachineStopEvent.factoryDay (dokuma P2b-1, 2026-09-13) — duruşun FABRİKA GÜNÜ:
+  // gece vardiyası BAŞLADIĞI güne yazılır, raporun group-by ekseni, doğuşta donar.
+  // Mutlak an ayrı kolonlarda (`startedAt`/`endedAt`, timestamptz). Bugün filtre
+  // whitelist'inde DEĞİL; burada durur çünkü liste ŞEMAYI aynalar.
+  // ⚠️ Aynı alan `test_timestamptz_contract`ın DATE_ONLY_FIELDS'inde de beyanlı —
+  // İKİ kapı aynı alanı FARKLI listeden okur; birine beyan etmek ötekine beyan
+  // etmek değildir (P2b-1'de bu satır eksik kaldı, CI §5d2 ile yakaladı).
+  "factoryDay",
 ]);
 
 /**

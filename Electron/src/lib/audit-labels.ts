@@ -462,6 +462,7 @@ export const ENUM_LABELS: Record<string, string> = {
   ROLL_RECORD_CORRECTION: "Kayıt düzeltme sebebi",
   WORK_ORDER_REWORK: "Yeniden üretim sebebi",
   ORDER_CANCEL: "Sipariş iptal sebebi",
+  MACHINE_STOP: "Tezgah duruş sebebi",
   // TravelerTemplateMode
   BUILTIN: "Yerleşik",
   SECTIONS: "Bölümlü",
@@ -829,7 +830,12 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   PENDING: "sipariş/adım/cihaz — üçü de 'Bekliyor'",
   APPROVED: "sipariş ve cihaz — ikisi de 'Onaylandı'",
   COMPLETED: "yedi durum enum'u — hepsinde 'Tamamlandı'",
-  PLANNED: "iş emri / DOKUMA İŞİ / sevkiyat / sevkiyat olayı — dördü de 'Planlandı'",
+  // ⚠️ 2026-09-13: metin "dördü" diyordu, gerçek BEŞ — `MachineStopLossClass.PLANNED`
+  // (planlı duruş) P2b-1'de eklendi ve bekçi SAYIYI değil VARLIĞI ölçtüğü için
+  // metin sessizce bayatladı. "Planlandı" planlı duruş için de doğru cevaptır
+  // (o duruş PLANLANMIŞTIR) ⇒ ortak Türkçe tutuyor, yalnız sayı düzeltildi.
+  PLANNED:
+    "iş emri / dokuma işi / sevkiyat / sevkiyat olayı / planlı duruş (MachineStopLossClass) — beşi de 'Planlandı'",
   SUPERSEDED: "iş emri ve basılı belge — ikisi de 'Eski Versiyon'",
   ACTIVE: "yedi durum enum'u — hepsinde 'Aktif'",
   VOIDED: "refakat kartı ve basılı belge — ikisi de 'İptal'",

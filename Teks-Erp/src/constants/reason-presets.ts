@@ -36,6 +36,13 @@ export type ReasonPresetSeed = {
    */
   readonly fullText?: string;
   readonly requiresText?: boolean;
+  /**
+   * DURUŞUN KAYIP SINIFI — yalnız `MACHINE_STOP` kind'ında dolar ve ZORUNLUDUR
+   * (DB CHECK `reason_presets_machine_class_chk`). ⚠️ `MINOR` YAZILAMAZ: MINOR bir
+   * SÜRE sınıfıdır, sebep sınıfı değil. Job bu alanı satıra yazmazsa INSERT 23514
+   * ile düşer ⇒ CHECK + bu katalog + job AYNI commit'te değişir.
+   */
+  readonly stopLossClass?: "UNPLANNED" | "SETUP" | "PLANNED" | "NON_SCHEDULED";
 };
 
 /**
@@ -61,6 +68,10 @@ export const KIND_STORES_TEXT = {
   // Sipariş iptalinde satıra GÖRÜNEN metin yazılır (`Order.cancelReason`) —
   // top iptaliyle aynı sözleşme. Kod ayrıca `cancelReasonCode`'a düşer.
   ORDER_CANCEL: true,
+  // Tezgah duruşunda satıra YALNIZ KOD yazılır (`MachineStopEvent.reasonCode`,
+  // FK'sız — `Roll.cancelReasonCode` emsali); metin yoktur. Kayıp sınıfı
+  // preset'ten KOPYALANIP DONAR (`lossClass`), katalog değişse geçmiş değişmez.
+  MACHINE_STOP: false,
   // `as const satisfies` — değerler LİTERAL kalsın (true/false), ama eksik kind
   // yine derlemede düşsün. `Record<..., boolean>` yazılsaydı literaller boolean'a
   // genişler ve `TextReasonKind` bu tablodan TÜRETİLEMEZDİ (aşağıdaki nota bak).
@@ -74,6 +85,7 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   ROLL_CANCEL: "Top iptal sebepleri",
   WORK_ORDER_REWORK: "Yeniden üretim sebepleri",
   ORDER_CANCEL: "Sipariş iptal sebepleri",
+  MACHINE_STOP: "Tezgah duruş sebepleri",
 };
 
 /**
@@ -188,6 +200,56 @@ export const ORDER_CANCEL_REASONS: readonly ReasonPresetSeed[] = [
   { code: "DIGER", label: "Diğer", requiresText: true },
 ] as const;
 
+/**
+ * TEZGAH DURUŞU — 23 sistem sebebi, dört kayıp sınıfında (dokuma P2b-2, tasarım §2.7).
+ *
+ * ⚠️ KODLAR ASLA DEĞİŞMEZ (rapor anahtarı); Türkçe etiketler panelden düzenlenir.
+ * ⚠️ `stopLossClass` HER satırda ZORUNLU ve `MINOR` YOK — MINOR bir SEBEP sınıfı
+ *    değil bir SÜRE sınıfıdır (mikro-duruş eşiğinin altı) ve tek helper'da türer;
+ *    45 dakikalık bir çözgü kopuşunu MINOR saymak kullanılabilirliği hiç
+ *    düşürmezdi (tasarım denetimi B2). DB CHECK ikisini de tutar.
+ * ⚠️ Kopuş sebepleri (`*_KOPUSU`, `IPLIK_BITTI`) UNPLANNED: makine kendi kendine
+ *    durdu. `LEVENT_BAGLAMA`/`TAHAR`/`TARAK_DEGISIMI` ile `DESEN_DEGISIMI` AYRI
+ *    kodlar — saha kaynağının ana bulgusu: bir levent → çok desen; levent değişimi
+ *    pahalı, atkı/desen değişimi ucuz; kurulum defteri ikisini AYIRMAK zorunda.
+ * ⚠️ `TESPIT_EDILEMEDI` bir KARARDIR, "sınıflandırılmamış" değil: sınıflandırılmamış
+ *    duruş `reasonCode = NULL`dır ve kuyrukta bekler; bu kod kuyruğu temizlemez,
+ *    "bakıldı, sebep bulunamadı" der.
+ * ⚠️ Bu satırlar TEZGAH MODÜLÜ KAPALI kurulumda da DB'ye düşer (job bayrağa
+ *    bakmaz — izin kataloğu denklemi). Görünürlük kapısı PANELDEDİR: `KIND_TABS`
+ *    sekmesi yalnız `tezgahEnabled` açıkken çizilir.
+ */
+export const MACHINE_STOP_REASONS: readonly ReasonPresetSeed[] = [
+  // ── Kopuşlar ve malzeme (UNPLANNED) — makine kendi kendine durdu
+  { code: "COZGU_KOPUSU", label: "Çözgü kopuşu", stopLossClass: "UNPLANNED" },
+  { code: "ATKI_KOPUSU", label: "Atkı kopuşu", stopLossClass: "UNPLANNED" },
+  { code: "KENAR_KOPUSU", label: "Kenar kopuşu", stopLossClass: "UNPLANNED" },
+  { code: "IPLIK_BITTI", label: "İplik bitti", stopLossClass: "UNPLANNED" },
+  // ── Arıza ve dış etken (UNPLANNED)
+  { code: "MEKANIK_ARIZA", label: "Mekanik arıza", stopLossClass: "UNPLANNED" },
+  { code: "ELEKTRIK_ARIZA", label: "Elektrik arızası", stopLossClass: "UNPLANNED" },
+  { code: "ELEKTRIK_KESINTISI", label: "Elektrik kesintisi", stopLossClass: "UNPLANNED" },
+  { code: "HAVA_BASINCI", label: "Hava basıncı düştü", stopLossClass: "UNPLANNED" },
+  { code: "JAKAR_ARIZA", label: "Jakar arızası", stopLossClass: "UNPLANNED" },
+  { code: "OPERATOR_YOK", label: "Operatör yok", stopLossClass: "UNPLANNED" },
+  { code: "KUMAS_TAMIR", label: "Kumaş tamiri", stopLossClass: "UNPLANNED" },
+  { code: "TESPIT_EDILEMEDI", label: "Sebep tespit edilemedi", stopLossClass: "UNPLANNED" },
+  // ── Kurulum (SETUP) — levent değişimi ile desen değişimi AYRI kodlar
+  { code: "LEVENT_BAGLAMA", label: "Levent bağlama", stopLossClass: "SETUP" },
+  { code: "TAHAR", label: "Tahar", stopLossClass: "SETUP" },
+  { code: "TARAK_DEGISIMI", label: "Tarak değişimi", stopLossClass: "SETUP" },
+  { code: "DESEN_DEGISIMI", label: "Desen değişimi", stopLossClass: "SETUP" },
+  { code: "TOP_ALMA", label: "Top alma", stopLossClass: "SETUP" },
+  // ── Planlı (PLANNED)
+  { code: "PLANLI_BAKIM", label: "Planlı bakım", stopLossClass: "PLANNED" },
+  { code: "TEMIZLIK", label: "Temizlik", stopLossClass: "PLANNED" },
+  { code: "MOLA", label: "Mola", stopLossClass: "PLANNED" },
+  { code: "VARDIYA_DEVRI", label: "Vardiya devri", stopLossClass: "PLANNED" },
+  // ── Çalışma dışı (NON_SCHEDULED) — POT'tan düşülür
+  { code: "SIPARIS_YOK", label: "Sipariş yok", stopLossClass: "NON_SCHEDULED" },
+  { code: "TEZGAH_KAPALI", label: "Tezgah kapalı", stopLossClass: "NON_SCHEDULED" },
+] as const;
+
 /** Kind → sistem satırları. Sıra ANLAMLIDIR (dizideki sıra `sortOrder` olur). */
 export const REASON_PRESET_CATALOG: Record<ReasonPresetKind, readonly ReasonPresetSeed[]> = {
   ROLL_SCRAP: SCRAP_REASONS,
@@ -196,6 +258,7 @@ export const REASON_PRESET_CATALOG: Record<ReasonPresetKind, readonly ReasonPres
   ROLL_CANCEL: CANCEL_REASONS,
   WORK_ORDER_REWORK: REWORK_REASONS,
   ORDER_CANCEL: ORDER_CANCEL_REASONS,
+  MACHINE_STOP: MACHINE_STOP_REASONS,
 };
 
 export const REASON_PRESET_KINDS = Object.keys(REASON_PRESET_CATALOG) as ReasonPresetKind[];
