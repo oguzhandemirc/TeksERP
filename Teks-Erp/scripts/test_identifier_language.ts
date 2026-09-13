@@ -37,6 +37,12 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import {
+  TEKNIK_TERIMLER,
+  TR_DOMAIN_OLCULEN,
+  TR_DOMAIN_ONGORULEN,
+  TR_GENEL,
+} from "./lib/tr-kokler";
 
 const KOK = join(__dirname, "..", "..");
 const TAVAN_DOSYA = join(__dirname, "identifier-language-baseline.json");
@@ -49,21 +55,41 @@ function check(label: string, ok: boolean, detail = ""): void {
 }
 
 /**
- * Türkçe kök listesi — tanımlayıcının İÇİNDE geçtiğinde yakalanır.
+ * Türkçe kök listesi — **d9'un ölçülmüş kataloğundan İTHAL EDİLİR, kopyalanmaz.**
  *
- * ⚠️ Liste KAPSAYICI DEĞİL, TEMSİLİ: amaç her Türkçe kelimeyi yakalamak değil,
- * yeni Türkçe adlandırmayı ilk denemede görünür kılmak. Eksik bir kök, kuralı
- * geçersiz kılmaz — bir sonraki turda eklenir.
+ * ⚠️ İKİ LİSTE İKİ GERÇEK OLUR. Eski hâlinde bu dosya kendi 52 kökünü taşıyordu
+ * ve `tr-kokler.ts` ayrı yaşıyordu; biri güncellenip öteki unutulduğunda kapı
+ * sessizce başka bir şey ölçer. Kaynak TEK: `lib/tr-kokler.ts`.
+ *
+ * ⭐ YÜKLEM DEĞİŞTİ (2026-09-13, 1e'nin politika kararı + d9'un ölçümü):
+ *   ESKİ: "52 köklük listede geçen ad YOK"     → ne ısırdı ne sıktı (106 commit, 0 hareket)
+ *   YENİ: "GENEL Türkçe kümesinden YENİ ad YOK" → fabrikanın sözlüğü MUAF
+ * Gerekçe: fabrikanın 591 Türkçe adı (`fason` · `kartela` · `tambur` · `cari` …)
+ * aylardır duruyor, kimse borç saymadı ve çevrilse kod DAHA AZ okunur olurdu.
+ * Bu bir borç değil bir KARAR ⇒ muafiyet KURALLA kurulur, elle listeyle değil.
  */
-const TR_KOKLER = [
-  "musteri", "siparis", "sevkiyat", "cuval", "urun", "renk", "kumas", "parti",
-  "satir", "kayit", "sonuc", "deger", "adet", "toplam", "liste", "secim",
-  "gecerli", "kapali", "acik", "yeni", "eski", "dosya", "klasor", "hedef",
-  "kaynak", "cikti", "girdi", "sayfa", "rejim", "ayar", "kapi", "bekci",
-  "sonda", "damga", "olcum", "zamanlayici", "yedek", "onarim", "onarilabilir",
-  "bosluk", "kazanc", "ozet", "baslik", "aciklama", "uyari", "hata", "bilgi",
-  "gorulen", "kuruldu", "imza", "tavan", "coz",
-];
+const TR_GENEL_KOK = TR_GENEL as readonly string[];
+const DOMAIN_KOK = [...TR_DOMAIN_OLCULEN, ...TR_DOMAIN_ONGORULEN] as readonly string[];
+
+/**
+ * ELEME ADIMI — d9'un ① numaralı tuzağı, ama ÖLÇÜLDÜ ve maliyeti SIFIR çıktı.
+ *
+ * d9'un uyarısı: *"liste tek başına ölçüm aracı değil, yarısı"* — eşleşen
+ * segmentin kendisi İngilizce olmamalı (`al`→alert · `modul`→module). Elemesiz
+ * koşum 1.667, elemeli 876 demişti.
+ *
+ * ⚠️ AMA BU KAPININ LİSTESİNDE O SORUN YOK ve bunu ölçtüm: d9 kısa/çakışan
+ * kökleri zaten `TR_KAPSAM_DISI_GEREKCELI`ye ayırmış. `TR_GENEL` ile üç projede
+ * eşleşen **75 benzersiz segmentin** İngilizce sözlükte olanı **TEK**: `sure`
+ * (İngilizce "sure" ↔ Türkçe "süre").
+ *
+ * ⚠️ VE BU YÜZDEN SİSTEM SÖZLÜĞÜ KULLANILMAZ. `/usr/share/dict/words` bu
+ * makinede var (235.976 satır) ama GitHub runner imajında **garanti değil** ⇒
+ * kapı ortamdan ortama BAŞKA hüküm verirdi. O sınıfın adı konmuş:
+ * *tek ORTAMDA ölçülmüş beklenti*. ⇒ Sözlük bir **üretim aracıdır**, çalışma
+ * zamanı bağımlılığı değil: ölçüm sözlükle YAPILIR, sonucu BURAYA donar.
+ */
+const EN_SOZLUK_CAKISMASI = new Set(["sure"]);
 
 /**
  * Tanımlayıcıyı camelCase parçalarına ayırır.
@@ -145,8 +171,18 @@ function tara(kokler: { ad: string; dizin: string }[]): Bulgu[] {
         const ad = m[1]!;
         if (MUAFLAR.has(ad)) continue;
         const segs = parcalar(ad);
-        const kok = TR_KOKLER.find((k) =>
-          segs.some((sg) => !EN_CAKISMA.has(sg) && sg.startsWith(k)),
+        // FABRİKANIN SÖZLÜĞÜ MUAF — ve muafiyet KURALLA kurulur: adın herhangi
+        // bir parçası bir domain kökü taşıyorsa ad meşrudur. Elle muaf listesi
+        // değil; `tr-kokler.ts` politikanın tek kaynağı.
+        if (segs.some((sg) => DOMAIN_KOK.some((k) => sg.startsWith(k)))) continue;
+        const kok = TR_GENEL_KOK.find((k) =>
+          segs.some(
+            (sg) =>
+              !EN_CAKISMA.has(sg) &&
+              !TEKNIK_TERIMLER.includes(sg as (typeof TEKNIK_TERIMLER)[number]) &&
+              !EN_SOZLUK_CAKISMASI.has(sg) &&
+              sg.startsWith(k),
+          ),
         );
         if (kok) bulgular.push({ dosya: dosya.replace(KOK + "/", ""), ad, kok });
       }
@@ -193,15 +229,41 @@ console.log("\n§1 — körlük zemini");
 // ⚠️ "Kapı görmedi" ≠ "uygun". Sınır basılmazsa yeşil, KAPSAM sanılır — listeyi
 // genişletmek bu cümleyi geçersiz kılmaz, çünkü sınır ne kadar genişlerse
 // genişlesin SINIR KALIR. Basmak listeyi genişletmekten ÖNCE gelir.
+// ⚠️ VE İKİNCİ BİR SINIR VAR, ONU DA BASIYORUZ (2026-09-13, d9'un ölçümü +
+// benim doğrulamam): kapı yalnız BİLDİRİM adlarına bakıyor — nesne özelliği,
+// sınıf metodu, fonksiyon parametresi HİÇ okunmuyor. d9 bunu *"kapsam eksik"*
+// diye okudu; ölçtüm, öyle değil:
+//   `Teks-Erp/src`: bildirim 7.735 benzersiz · özellik-ama-bildirim-değil 2.551
+//   bunların ≥451'i PRİSMA şema alanı/enum değeri ⇒ YENİDEN ADLANDIRILAMAZ
+//   (`CANCELLED` · `BANK_TRANSFER` · `BOUNCE_CANCEL`); Zod anahtarı, API yanıt
+//   şekli, belge şablon alanı ÖLÇÜLMEDİ ve aynı sınıfta.
+// ⇒ Kapsamı özelliklere genişletmek, DÜZELTİLMESİ YASAK olan ihlaller üretirdi
+//   ve böyle bir kapı iki haftada gerekçesiz muaf listesine dönüp ÖLÜR.
+//   *Bildirim, yazarın adı SERBESTÇE seçtiği yerdir; özellik çoğu zaman bir
+//   SÖZLEŞMENİN aynasıdır.* Kural yalnız serbest seçim olan yerde anlamlıdır.
+// ⚠️ SAYISIZ BİR KAPSAM CÜMLESİ BÜYÜKLÜK SANILMAZ — d9'un şartı: sayı da bassın,
+//   yoksa bir sonraki ölçen yine "%85 görünmüyor" diye kusur okur.
 console.log(
-  `   ⚠️ KAPSAM: sözlükte ${TR_KOKLER.length} kök var; kapı YALNIZ bu kökleri taşıyan adı görür.\n` +
-    `      Listede olmayan bir Türkçe kök SESSİZCE geçer — yeşil "tarandı" demektir, "temiz" değil.`,
+  `   ⚠️ KAPSAM 1/2 — KÖK: ${TR_GENEL_KOK.length} genel Türkçe kök aranır; fabrikanın\n` +
+    `      sözlüğü (${DOMAIN_KOK.length} kök: fason · kartela · tambur …) KURALLA MUAF — Türkçe KALIR.\n` +
+    `      Listede olmayan bir genel Türkçe kök SESSİZCE geçer.\n` +
+    `   ⚠️ KAPSAM 2/2 — TÜR: yalnız BİLDİRİM adları (const/let/function/class/…).\n` +
+    `      Nesne özelliği · metod · parametre OKUNMAZ (${2551} benzersiz ad; ≥451'i Prisma\n` +
+    `      şema alanı/enum ⇒ yeniden adlandırılamaz; Zod/API/şablon ölçülmedi).\n` +
+    `      ⇒ Yeşil "üretim kodu temiz" DEĞİL, "SERBEST SEÇİLEN adlar temiz" demektir.`,
 );
 check("dosyalar tarandı", bulgular.length >= 0);
-check("Türkçe kök listesi dolu", TR_KOKLER.length > 20, `${TR_KOKLER.length} kök`);
+check("genel Türkçe kök listesi dolu", TR_GENEL_KOK.length > 20, `${TR_GENEL_KOK.length} kök`);
 check(
   "⭐ sonda: liste GERÇEKTEN yakalıyor (uydurma bir ad denendi)",
-  TR_KOKLER.some((k) => "musterilistesi".includes(k)),
+  TR_GENEL_KOK.some((k) => "musterilistesi".includes(k)) || TR_GENEL_KOK.includes("liste"),
+);
+// KÖRLÜK ZEMİNİ: `tr-kokler.ts` boşalır ya da ithal kopar ise yukarıdaki her
+// yüklem VAKUMEN yeşil olur ve kapı hiçbir şey aramadan "temiz" der.
+check(
+  "§0 körlük zemini: fabrika sözlüğü de dolu (muafiyet gerçekten kuruluyor)",
+  DOMAIN_KOK.length > 20,
+  `${DOMAIN_KOK.length} domain kökü`,
 );
 
 // =============================================================================
