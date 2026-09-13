@@ -134,6 +134,19 @@ yukarıdaki madde bu turdan ÖNCE de yazılıydı.
 YÜKLEMDİR.** *(Vaka 2026-09-13: aynı soruya dört tur — 87/50/43 → 24/90/17 → 47/20 →
 14 — ve arada ağaçta hiçbir şey değişmedi; her turda "sembol"ün ve "yol"un tanımı
 sessizce değişmişti. Üçüncü sayı bir plana çevrilmişti.)*
+**ÇÖZÜLMÜŞ EMSAL (2026-09-13) — dört sayı, dördü de DOĞRU:** *"kaç kesik alan var"*
+sorusuna dört oturum dört sayı verdi (64 · 68 · 70 · 72) ve hiçbiri yanlış değildi:
+
+| sayı | yüklem | ağaç |
+|---|---|---|
+| **64** | uzunluk `=== 80`, kural satırındaki **her** backtick span'ı | bir oturumun ağacı |
+| **57** | uzunluk `=== 80`, yalnız **`bekçi:` alanı** | kapının kendi ölçümü |
+| **63** | `=== 80` **∨ parantez dengesiz**, `bekçi:` alanı | aynı ağaç |
+| 68 · 70 · 72 | aynı ikili yüklem | **başka ağaçlar**, farklı commit'ler |
+
+⇒ Sayıyı iki şey birden oynattı: **yüklem** (tek imza ↔ iki imza; her span ↔ tek alan) ve
+**ağaç** (kimin commit'leri dâhil). ⇒ Bir sayı taşınırken **ikisini birden** taşımalı.
+
 > **Yüklem yazılmadıkça sayı TAŞINAMAZ** — ve alan kişi de sorumludur: yüklemsiz gelen
 > bir sayıyı yüklemini sormadan plana çevirmek, onu üretmekle aynı sınıftır.
 

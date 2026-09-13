@@ -247,6 +247,18 @@ hiçbiri dikkatle önlenmez, çünkü üçü de *başkasının* zamanlamasına b
 (§ Pencerenin BOŞ olduğunu ölçmek) — ve paylaşılan `node_modules` üstünde hiç değildir
 (§ Paylaşılan `node_modules` üstünde worktree).
 
+### Başka oturumun AĞAÇ-BÜTÜNÜ komutu, sondanı ZAMANDA DONDURUR
+`stash` · `checkout` · `reset --hard` · `clean` ağacın **tamamının** fotoğrafını alır —
+senin sondan o an ağaçtaysa **fotoğrafa girer**. Geri alman gerçek ağacı temizler ve
+`shasum` ile doğrulanır; ama **donmuş kopya sonra geri gelebilir** (pop, çakışma
+çözümü, checkout).
+*(Vaka 2026-09-13, sıra ÖLÇÜLDÜ: sonda eklendi → başka oturum `git stash --keep-index`
+çalıştırdı → sonda `cp` + `shasum -c` ile geri alındı (doğrulandı, ağaç temiz) → pop
+çakışmasında satır "süren sonda" sanılıp ağaca geri yazıldı → pathspec'li commit onu
+aldı. Teşhis ea'nın; ilk okumam "indekste kaldı" idi ve YANLIŞTI.)*
+> **Ortak ağaçta `stash`/`checkout`/`reset --hard`/`clean` YOK** — bu kuralın
+> mekanizması budur: komut senin değil, AĞACIN tamamının zamanını oynatır.
+
 ### `.git/index.lock` bir KUYRUK değil, bir REDDİR
 Paylaşımlı ağaçta eşzamanlı commit **serileştirilmez**; ikincisi düşer.
 *(Vaka: iki oturum aynı anda commit attı. Doğru hamle kilidi SİLMEK değildi — gerçek

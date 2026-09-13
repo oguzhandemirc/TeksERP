@@ -222,6 +222,18 @@ Kaynak: oturum ölçümü 2026-09-13, sha yok; kapanış `e05da096`.)*
 **Savunma:** devralınan kusur beklentisi yazarken **kapandı mı diye ölç** ve beklentiye
 bir TARİH ver; tarihi geçen beklenti kalkar.
 
+### Kesiklik, YANLIŞ bir iddiayı OKUNAMAZ kılarak KORUR
+Kesik bir alan yalnız bilgi kaybı değildir: okunamayan yarı, **yanlışlığı da saklar**.
+Tamamlayınca ortaya çıkan şey çoğu kez eksik bilgi değil, **bayat bir iddiadır**.
+*(Vaka 2026-09-13: bir kural alanı `bekçi: BELİRSİZ — adlı bekçi yok (karo↔route için
+tile-route-per` diye kesikti. Ağaçtan tamamlanınca `tile-route-permission.test.ts`
+**VAR** çıktı — 12 yerde anılıyor ve tam o hizayı ölçüyor. Yani kesiklik, bayat bir
+`BELİRSİZ` beyanını okunamaz kılarak koruyordu.)*
+> **Ölçünce KAPANAN değil, YANLIŞ ETİKETLENMİŞ çıkan borç** — aynı gün üç vaka:
+> bir `BELİRSİZ` (bekçi vardı) · bir `_CANCEL` ekseni (konusuz çıktı) · bu.
+**Savunma:** kesik alanı kozmetik sayma; tamamladıktan SONRA iddianın hâlâ doğru olup
+olmadığını ayrıca ölç.
+
 ### İki operasyonel kural
 
 - **Paket içinde kırmızı + tek başına yeşil ⇒ kusur kodda değil, koşumun DURUMUNDA.**
