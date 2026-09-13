@@ -477,7 +477,7 @@ KK1'de top yaratılırken, `dokuma.enabled` açıksa ve açık doff olayı varsa
 
 ### 3.6 · Çevrimdışı ve idempotency
 
-Dört eylemin dördü de **kuyruğa girer** (`STATION_MUT` + `OFFLINE_AWARE`) — ⚠️ **GEÇERSİZ → 2026-09-14 (yalnız DOFF için, 1e kararı):** doff online-only + anlık toast, kuyruğa GİRMEZ (§3.9 B); öteki üç eylem kendi diliminde karar alır — tezgah başında ağ en zayıf yerdir ve duruş bildirimi gecikirse **randımanın paydası bozulur**.
+Dört eylemin dördü de **kuyruğa girer** (`STATION_MUT` + `OFFLINE_AWARE`) — ⚠️ **GEÇERSİZ → 2026-09-14 (1e hükmü, DÖRT eylem için):** `kk1.md` "kayıt kuyruğu kaldırıldı, anlık toast"; tezgah ekranının dört eylemi de online-only + `announceFailure` anlık toast, `STATION_MUT` kuyruğuna GİRMEZ (§3.9 B ve J.5) — tezgah başında ağ en zayıf yerdir ve duruş bildirimi gecikirse **randımanın paydası bozulur**.
 
 Üç dosya, üçü de zorunlu (`RECETELER.md:295`): `offline/mutations.ts:44` anahtar (`['station', …]` olmak ZORUNDA) · `:149` `setMutationDefaults` · `offline/stationLabels.ts:16` etiket (etiketsiz anahtarı bekçi düşürür).
 
@@ -784,8 +784,8 @@ UPDATE doff_events SET revokedAt = now(), revokedById = :u, revokeReason = :r
 
 | ön koşul | ölçüm | sahibi |
 |---|---|---|
-| `StationKind.WEAVING` (§3.3: oturum makineyle, ekran "liste değil TEZGAH") | **YOK** — `schema.prisma` `enum StationKind` = RAW_QC · PROCESS_QC · TAMBUR · SHIPPING…; `work-session.service.ts:33 SESSIONABLE_STATION_KINDS` ve `:38 STATION_KIND_PERM`de yok. Enum reçetesi 13 adım, **geri alınamaz**; `minVersion` tetiği (eski tablet `StationKind` union'ında yeni değer → `stationScreens.ts` haritası çözemez) | 01 (şema penceresi) |
-| Açık koşum / bugünkü indirme **LİSTE uçları** | **YOK** — `machine-run.routes.ts` ve `machine-doff.routes.ts`te `router.get` sıfır (yalnız `weaving-order.routes.ts:95/:129`). Ekran "hangi koşuma" ve "hangi indirmeyi geri al" sorularını listesiz soramaz | 01 (backend) — ya da ilk dilimde ekran yalnız **kendi kaydettiği** indirmeleri geri alır (yerel durum, aşağıda C) |
+| `StationKind.WEAVING` (§3.3: oturum makineyle, ekran "liste değil TEZGAH") | **YOK** — `schema.prisma` `enum StationKind` = RAW_QC · PROCESS_QC · TAMBUR · SHIPPING…; `work-session.service.ts:33 SESSIONABLE_STATION_KINDS` ve `:38 STATION_KIND_PERM`de yok. Enum reçetesi 13 adım, **geri alınamaz**; `minVersion` tetiği (eski tablet `StationKind` union'ında yeni değer → `stationScreens.ts` haritası çözemez) | **01 (şema penceresi, 1e hükmü):** tezgah rotada ADIM değildir ama tablet oturumu istasyon-tabanlı olduğu için tezgah bir `WEAVING` İSTASYONU olur — **rota şablonuna GİREMEZ** kapısıyla (`docs/kurallar/dokuma.md` "dokuma topun rotasında adım değil"); 6e'nin K2 penceresi ondan sonra |
+| Açık koşum / bugünkü indirme **LİSTE uçları** | **YOK** — `machine-run.routes.ts` ve `machine-doff.routes.ts`te `router.get` sıfır (yalnız `weaving-order.routes.ts:95/:129`). Ekran "hangi koşuma" ve "hangi indirmeyi geri al" sorularını listesiz soramaz | **01 backend, "Backend ÖNCE"** (1e hükmü: makine başına GET — açık koşumlar · bugünkü indirmeler · bağlanmamış indirmeler); ilk dilim yerel durumla YAPILMAZ |
 | `dokuma.enabled` + `requireDokumaEnabled` | **YOK** (0c getiriyor) | 0c |
 | KK1 ucunda `doffEventId` alanı (§3.8c A.5) | **YOK** — `inventory.controller.ts:20 initialEntrySchema`; şema strict değil ⇒ tablet gönderirse **sessizce düşer** | 01 |
 
@@ -817,8 +817,8 @@ UPDATE doff_events SET revokedAt = now(), revokedById = :u, revokeReason = :r
 
 #### C · Doff GERİ AL
 
-- **Ne listelenir:** liste ucu ⓪ inene kadar ekran yalnız **bu oturumda kaydettiği** indirmeleri (yerel durum, `code` + saat + parça) geri alabilir; liste ucu gelince "bugün bu makinede" (`revokedAt IS NULL` süzülü, geri alınmışlar soluk). Karar 1e'de (§J.2).
-- **İzin:** revoke web'de ayrı kod (`loom:doff-revoke`, defterden satır düşürür). Tablet eşi **`mobile:dokuma-geri-al`** — ekran-içi **yetenek** izni (`SCREEN_CATALOG` `capabilities`, emsal `mobile:tambur-duzelt`); izni olmayanda buton çizilmez, ucun guard'ı da onu kabul eder (aşağıda ①).
+- **Ne listelenir:** "bugün bu makinede" (liste ucu ⓪, `revokedAt IS NULL` süzülü, geri alınmışlar soluk). **HÜKÜM (1e):** yerel-durum geçici çözümü YOK — liste ucu backend'den önce iner.
+- **İzin — HÜKÜM (1e): EVET, ayrı yetenek izni.** Revoke web'de ayrı kod (`loom:doff-revoke`, defterden satır düşürür); tablet eşi **`mobile:dokuma-geri-al`** — ekran-içi **yetenek** izni (`SCREEN_CATALOG` `capabilities`, emsal `mobile:tambur-duzelt`; geri alma ayrı yetkidir — `shipping:undo-dispatch` emsali); izni olmayanda buton çizilmez, ucun guard'ı da onu kabul eder (aşağıda ①).
 - **Sebep:** serbest metin ≤300 **zorunlu** (`revokeSchema`), `ReasonPresetKind` genişletilmez (§3.8b ④; `revokeMachineRun` emsali) — `ModalTextInput`.
 - **409 `DOFF_HAS_ROLLS`:** modal, `details.barcodes[]`/`rollIds[]` **adıyla** listeler (Fason Kabul `CancelReceiptModal` kalıbı: önizleme + kalem listesi); metin **doğru çare**: *"Bu indirmeden top doğmuş — indirme artık geri alınamaz; yanlış top kendi iptal yolundan gider."* (§3.8c A.1, 1e kararı; "önce topu iptal edin" YAZILMAZ — yüklem statüye bakmaz). ⚠️ backend bugün listeyi ve SAYIYI `take:20` ile kırpıyor (A.2) — ekran `total`/`truncated` gelene dek "+N" basamaz, sayıyı ham listeden okur. `DOFF_ALREADY_REVOKED` → satırı soluklaştır, "zaten geri alınmış".
 
@@ -826,7 +826,7 @@ UPDATE doff_events SET revokedAt = now(), revokedById = :u, revokeReason = :r
 
 - `dokumaEnabled` açıkken KK1 formuna **iki soru**: *"Bu top dokuma mı?"* (`entrySource: WEAVING` — ÇIKARILMAZ, SORULUR; §3.5) ve evetse *"hangi indirmeden?"* (bağlanmamış son indirmeler listesi — ⓪ liste ucu; cevap yoksa `doffEventId: null`, rapor "doff'suz top" kovası). Kapalıyken **hiçbiri çizilmez**, payload bugünkü (§3.7/12).
 - Payload iki yeni alan: `entrySource` (yalnız `WEAVING` için) + `doffEventId` — istek gövdesini elle kuran katman **sessiz allowlist**: `roll.service.ts:161 InitialEntryRequest` tipi + backend `initialEntrySchema` **ikisi birden** (kök kural: "alan iki uçta da sözleşmeye eklenir").
-- ⚠️ **AÇIK ÇELİŞKİ (ölçüldü, §J.1):** backend bağ kontrolü `claimDoffForRollTx(createdMachineId)` — KK1'in makine damgası `inventory.controller.ts:311 stamp?.machineId ?? req.device?.machineId` (RAW_QC oturumu **istasyon** kapsamlı, makinesi yok; cihazın statik ataması varsa o). 1e kararı "makinesiz KK1'de bağ **reddedilir** (400)". Oysa doff'un `machineId`si TEZGAHtır, KK1 muayene masasıdır — damga olsa bile tezgahla **eşleşmez** ⇒ sözleşme ③ "uyuşmuyorsa 409" kuralı normal akışta bağı **yapısal olarak imkânsız** kılar. Ekran bunu çözemez; karar 1e'de.
+- ⚠️ **ÇELİŞKİ ÖLÇÜLDÜ → HÜKÜM (1e, 2026-09-14) = (a):** backend bağ kontrolü `claimDoffForRollTx(createdMachineId)` KK1'in makine damgasını (`inventory.controller.ts:311 stamp?.machineId ?? req.device?.machineId` — RAW_QC oturumu **istasyon** kapsamlı; damga muayene istasyonunu taşır, tezgahı değil) doff'un makinesiyle karşılaştırıyordu; damga olsa bile tezgahla eşleşmez ⇒ hiç geçemeyen kontrol **ölü kapıdır**. **Hüküm:** bağ KK1'de **açık LİSTE seçimidir** (çıkarım değil); makine eşleşmesi **YALNIZ KK1 cihazı bir tezgaha bağlıysa** (tezgah başı KK1: `req.device.machineId` dolu ve o makine tezgah) denetlenir; masa KK1'de (damgasız ya da damgası muayene istasyonunun) bağ **KABUL**. Önceki "makinesiz KK1'de 400" kararı **GEÇERSİZ**. Kod 01'de (KK1 ucu `doffEventId` alanıyla aynı dilim), `dokuma.md` kural satırı + arşiv notu 01'de; bekçi `test_machine_doff_source §4c` ("başka makinenin doff'una top → 409") **tezgah başı KK1** fikstürüyle kalır, masa-KK1 fikstürü (damgasız) **kabul** ölçer.
 
 #### E · Bayrak — `dokuma.enabled`in tablet eşi ("kapalıyken sıfır fark")
 
@@ -835,11 +835,12 @@ UPDATE doff_events SET revokedAt = now(), revokedById = :u, revokeReason = :r
 - **Bayrağın kaynağı:** `useFeatureFlags()` (`hooks/useFeatureFlags.ts:11`, `GET /feature-flags`, persist'li) — backend şeması modül anahtarlarını taşıyor (`feature-flag.routes.ts:250 productionEnabled`), tablet `FeatureFlags` tipi (`services/featureFlag.service.ts:20`) taşımıyor ⇒ `dokumaEnabled` alanı + `DEFAULT_FEATURE_FLAGS`ta **`false`** (fail-closed; `useTezgahEnabled` panel emsali: yüklenene dek false) + `useDokumaEnabled()`.
 - **Sıfır fark ölçütü:** bayrak kapalıyken (a) grid'de kart yok, (b) navigator'da route yok (aynı liste), (c) KK1'de iki soru çizilmiyor, (d) açılışta yeni istek yok (`feature-flags` zaten çekiliyor). ⚠️ `NoAccess` kapısı ham yetkide kalır (koşul sağlanmadı diye "yetkin yok" denmez — `useVisibleScreens` yorumu).
 - Backend tarafında 403 `MODULE_DISABLED`: tablette **kart yok ⇒ istek yok**; yine de gelirse jenerik 403 toast (ölçüldü: özel dal yok) — kabul, çünkü yüzey kapalı.
+- **HÜKÜM (1e):** tablet dilimi `ConditionalScreens` + `FeatureFlags.dokumaEnabled` (`false` varsayılan, fail-closed) getirir. Bugünkü tablet **üretim ekranlarının** (KK1 · Kurşun · Tambur · Hızlı İş Emri · Kurşun Dağıtım) `production.enabled`a bakmadan gösterilmesi **ayrı kalem, acil değil** — backend 403 `MODULE_DISABLED` ile kapalı.
 
 #### F · Enum aynası (d9 bekçisi `Teks-Erp/scripts/test_mobil_enum_aynasi.ts`)
 
 - `RollEntrySource`: `mobil/src/types/models.ts:94` union **`WEAVING` VAR** (`:105`), `PURCHASE_RECEIPT`/`SEMI_FINISHED` de var (13a4ca45 ile kapandı). Etiket haritası (`rollEntrySourceLabels`) **mobilde de backend'de de YOK** — "bilinmeyen değeri ham basar" iddiası (§3.8b minVersion) konusuz: basan yüzey yok.
-- `MachineDataSource` **mobilde YOK** (yalnız backend `schema.prisma:1739`, route `z.nativeEnum`). Ekran `counterSource` gönderdiği için union **eklenir** (`models.ts`) — eklenmezse d9 bekçisi **sessiz kalır** (kesişim boş, ölçüm yok); eklenince iki yönlü sapma ölçülür (`:76 sapmaOlc`).
+- `MachineDataSource` **mobilde YOK** (yalnız backend `schema.prisma:1739`, route `z.nativeEnum`). Ekran `counterSource` gönderdiği için union **tablet dilimiyle eklenir** (`models.ts`, 1e hükmü) — bugün eklenmezse d9 bekçisi **sessiz kalır** (kesişim boş); d9 aynayı **boş kümede KIRMIZI** verecek şekilde düzeltiyor (1e → d9); eklenince iki yönlü sapma ölçülür (`:76 sapmaOlc`).
 - `StationKind` union'ına `WEAVING` (⓪ ile), `stationScreens.ts` iki harita.
 
 #### G · Dört kapı — tablet envanteri (panel belgesinin ①–④ ikizi)
@@ -865,13 +866,17 @@ UPDATE doff_events SET revokedAt = now(), revokedById = :u, revokeReason = :r
 6. Geri al: `DOFF_HAS_ROLLS` modali barkodları listeler ve metni "geri alınamaz" der (metin bekçisi, `duplicateEntryChoice.test.ts` kalıbı).
 7. Sürüm notu: **tablet + backend** (yeni ekran + yeni izin + enum değeri `StationKind.WEAVING` ⇒ `minVersion` sorusu ⓪'da cevaplanır; reçete 13/17).
 
-#### J · 1e kararı bekleyen
+#### J · HÜKÜMLER (1e, 2026-09-14) — hepsi verildi
 
-1. **KK1 makine damgası ↔ doff makinesi** (D): bağ kontrolü tezgah≠muayene masası nedeniyle normal akışta imkânsız — (a) kontrol yalnız damga VARSA ve tezgah başı KK1 (cihaz makineye bağlı) için; damgasız KK1'de bağ **kabul** (liste seçimidir, çıkarım değil), (b) 1e kararı aynen (400) ⇒ bağ yalnız tezgah başı KK1'de; (c) bağ KK1'de değil tezgah ekranında (doff kaydı sonrası "top KK1'e gitti" eşlemesi) — §3.5 kararına aykırı.
-2. Liste uçları (açık koşum · bugünkü indirme · bağlanmamış indirme) — 01 backend kalemi mi, ilk dilim yerel durumla mı çıkar?
-3. Revoke izni tablette: ayrı yetenek `mobile:dokuma-geri-al` (öneri) mi, `mobile:dokuma` yeter mi?
-4. `StationKind.WEAVING` şema penceresi (01) ve `minVersion`.
-5. §3.6 "dört eylem kuyruğa girer" cümlesi: doff için geçersiz (bu bölüm); koşum/duruş/levent için karar o dilimde.
+1. **KK1 makine damgası ↔ doff makinesi → (a):** bağ KK1'de açık LİSTE seçimi; makine eşleşmesi yalnız KK1 cihazı bir tezgaha bağlıysa denetlenir; masa KK1'de bağ KABUL; "makinesiz KK1'de 400" kararı GEÇERSİZ (hiç geçemeyen kontrol ölü kapıdır). Kod + `dokuma.md` kural satırı + arşiv notu **01**.
+2. **Liste uçları → 01 backend**, "Backend ÖNCE" (makine başına GET: açık koşumlar · bugünkü indirmeler · bağlanmamış indirmeler); ilk dilim yerel durumla YAPILMAZ.
+3. **Revoke izni → EVET**, ayrı yetenek `mobile:dokuma-geri-al` (geri alma ayrı yetkidir, `undo-dispatch` emsali).
+4. **`StationKind.WEAVING` → 01** şema penceresi; tezgah rota şablonuna GİREMEZ kapısıyla; 6e'nin K2 penceresi ondan sonra.
+5. **§3.6 kuyruk cümlesi → DÖRT eylem için GEÇERSİZ** (`kk1.md`: kuyruk kalktı, anlık toast); §3.6'ya şerh işlendi.
+6. **`MachineDataSource` mobil union → tablet dilimiyle**; d9 ayna mandalı boş kümede KIRMIZI verecek şekilde düzeltiliyor.
+7. **Bulgu E → tablet dilimi** `ConditionalScreens` + `FeatureFlags.dokumaEnabled` (`false`, fail-closed); mevcut üretim ekranlarının `production.enabled`a bakmaması ayrı kalem, acil değil.
+
+**Ekip:** 0c panel dilimi → sonra TABLET doff UI KODU (bu bölüm); 01 backend ön koşullar (⓪ WEAVING · liste GET'leri · KK1 `doffEventId` + (a)) + defter kalemleri; 47 çelişmeli doğrulama (panel dilimi, sonra tablet dilimi — "kapalıyken sıfır fark" tablet ayağı dahil).
 
 ### 3.10 · Bu bölümün açık bıraktıkları
 
