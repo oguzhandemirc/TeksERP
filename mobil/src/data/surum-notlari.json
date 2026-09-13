@@ -18,10 +18,10 @@
   "yayinlar": [
     {
       "id": "2026-09-13",
-      "baslik": "Sipariş kalemine birim geldi: metre, kilo, adet — kilo/adet kalemde karşılama ölçülmez, sipariş kendiliğinden kapanmaz; depo defteri kesimi, fasonu, transferi ve kartelayı görüyor, deposuz top kalmıyor",
+      "baslik": "Yanlış işlemler geri alınabiliyor (kartela, sayım, çek, toplu aktarım, fason kabulü); depo defteri kesimi, fasonu, transferi ve kartelayı görüyor; sipariş kalemine birim geldi; sevk irsaliyesi tek pencerede",
       "surumler": {
-        "panel": "1.3.3",
-        "tablet": "1.0.8"
+        "panel": "1.3.2",
+        "tablet": "1.0.7"
       },
       "maddeler": [
         {
@@ -37,7 +37,7 @@
         {
           "kapsam": "panel",
           "tip": "iyilestirme",
-          "metin": "Toplu sipariş yükleme şablonuna “Birim” sütunu eklendi (Metre / Kilogram / Adet). Boş bırakılırsa kalemin kartındaki birim kullanılır. Mevcut “Miktar (m)” başlığı değişmedi; indirilmiş eski şablonlar aynen çalışır. Üretim dengesi ve stok karnesi gibi metre toplayan ekranlar kilo/adet kalemi artık ayırt ediyor: o kalemler metre talebine girmez. İş emri açarken sipariş kalemi seçme ekranlarında (panel ve tablet) kilo/adet kalem listede kalır, üretime alınabilir; yalnız “Açık” rakamı yerine “ölçülmüyor” yazar — metre uydurulmaz. Sevkiyat tahsisi değişmedi."
+          "metin": "Toplu sipariş yükleme şablonuna “Birim” sütunu eklendi (Metre / Kilogram / Adet). Boş bırakılırsa kalemin kartındaki birim kullanılır. Mevcut “Miktar (m)” başlığı değişmedi; indirilmiş eski şablonlar aynen çalışır. Üretim dengesi ve stok karnesi gibi metre toplayan ekranlar kilo/adet kalemi artık ayırt ediyor: o kalemler metre talebine girmez. İş emri açarken sipariş kalemi seçme ekranlarında (panel ve tablet) kilo/adet kalem listede kalır, üretime alınabilir; yalnız “Açık” rakamı yerine “ölçülmüyor” yazar — metre uydurulmaz. Sevkiyat tahsisi değişmedi. Kartında kilo ya da adet yazan bir ürüne daha önce sipariş kalemi açılmışsa, güncellemeyle o kalemler de kilo/adet sayılır ve üretim dengesindeki metre talebi bu yüzden DÜŞER; yalnız metreyle satan kurulumda rakam değişmez."
         },
         {
           "kapsam": "her-ikisi",
@@ -50,19 +50,24 @@
           "metin": "Alt kalite olarak işaretlenen kalitelerde sevk belgesi ve etiket, müşterinin kendi ürün adını DEĞİL bizim ürün adımızı basıyor — top kime gidiyorsa gitsin. Kurulumda bu işaret 2. kaliteye konuludur. Aynı üründen ve renkten hem 1. kalite hem alt kalite top taşıyan bir satırda da bizim adımız basılır. Müşteri adı sütunu yerinde kalır; yalnız o satırın hücresinde bizim adımız görünür. 1. kalite malda hiçbir şey değişmedi."
         },
         {
+          "kapsam": "her-ikisi",
+          "tip": "iyilestirme",
+          "metin": "Kalite kodlarını (1K, 2K, HURDA gibi) kataloğu düzenleyerek yeniden adlandırmak artık ekranları bozmuyor: panel ve tablet “birinci kalite / ikinci kalite / fire” ayrımını koddan değil kalite kartındaki rolden okuyor. Önceden kodu değiştirmek, kodu ezberlemiş ekran ve raporların yanlış davranmasına yol açabiliyordu. Kod değiştirmediyseniz hiçbir şey değişmez. Kataloğa yeni kalite eklerken rolünü seçin — rolsüz kalite hiçbir kümeye girmez. Panelde katalog değişikliği en geç 5 dakika içinde görünür; hemen görmek için sayfayı yenileyin."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Kalite karnesindeki “1. kalite payı” artık kalite kartındaki role (birinci kalite) göre hesaplanıyor, listedeki sıraya göre değil. Kalite kataloğunda sıralamayı değiştirdiyseniz ya da pasife aldığınız bir kalite sıralamada en üstteyse rakam değişir: önceden pasif ya da yanlış sıradaki kalite sessizce “en üst kalite” sayılıyordu ve hiçbir uyarı çıkmıyordu. Kataloğa dokunulmadıysa rakam aynıdır."
+        },
+        {
           "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Kesilen (bölünen) top artık Depo Hareketleri’nde iki satır olarak görünüyor: ana toptan çıkış ve yeni toptan giriş — ikisi aynı dönüşüm grubunda, toplamı sıfır. Önceden kesim deftere hiç yazılmıyordu; 100 metrelik top 40+60 diye bölündüğünde defter “hiçbir şey olmadı” diyor, geçmiş bir tarihe göre alınan stok kesiti yeni topu hiç göremiyordu. Depo toplamı değişmez, yalnız hareket listesi iki satır uzar. Ana toptan düşülen metraj kesim metresi değil, ana topun gerçekten kaybettiği metrajdır: aşımlı kesimde ana top 60 kaybeder, yeni top 100 ile doğar. Bu sürümden önceki kesimler geriye dönük yazılmaz."
         },
         {
           "kapsam": "panel",
-          "tip": "duzeltme",
-          "metin": "Fasona sevk iptal edildiğinde top depoya döner ve Depo Hareketleri’ne bu dönüşü gösteren, sevk satırına bağlı bir giriş satırı yazılır. Önceden iptal topu geri getiriyor ama deftere hiçbir şey yazmıyordu; defter malı sonsuza kadar fasonda sayıyor, depo toplamı olduğundan az görünüyordu. Geri dönüş deposu sevk satırındaki depodur, o anki varsayılan depo değil — mal hangi raftan çıktıysa oraya döner. Fasona çıkış bu sürümden önce yapılmışsa (defterde çıkış satırı yoksa) iptal satır yazmaz; çıkışı hiç kaydedilmemiş malı deftere giriş yazmak stok toplamını şişirirdi. Geçmiş onarılmaz, mutabakat raporu bu satırları “ufuk öncesi” diye ayırır."
-        },
-        {
-          "kapsam": "panel",
           "tip": "iyilestirme",
-          "metin": "Depo Hareketleri artık fasona çıkışı, fasondan kabulü, depolar arası transferi ve kartela çıkış/dönüşünü de satır olarak gösteriyor; geri alınan her hareketin tersi ileri satıra bağlı yazılıyor ve transferin tersi uçları yer değiştirerek doğuyor. Önceden fasona çıkış ve kartela deftere hiç girmiyordu, transfer geri alınınca ileri satır duruyordu — depo toplamı ile raftaki top sayımı bu yüzden ayrışabiliyordu. Bu sürümden önceki hareketler geriye dönük yazılmaz: eski hareketler için defter ile top listesi arasındaki fark bilinen ve kabul edilmiş bir durumdur; mutabakat raporundaki “defter ufku” bölümü bu farkı ayrı sayar, kusur olarak göstermez."
+          "metin": "Depo Hareketleri artık fasona çıkışı, fasondan kabulü, fasona sevk iptalini, depolar arası transferi ve kartela çıkış/dönüşünü de satır olarak gösteriyor; geri alınan her hareketin tersi ileri satıra bağlı yazılıyor ve transferin tersi uçları yer değiştirerek doğuyor. Önceden fasona çıkış ve kartela deftere hiç girmiyordu; fasona sevk iptali topu geri getiriyor ama deftere hiçbir şey yazmıyordu (defter malı sonsuza kadar fasonda sayıyor, depo toplamı olduğundan az görünüyordu); transfer geri alınınca ileri satır duruyordu — depo toplamı ile raftaki top sayımı bu yüzden ayrışabiliyordu. Fason iptalinde geri dönüş deposu sevk satırındaki depodur, o anki varsayılan depo değil — mal hangi raftan çıktıysa oraya döner. Bu sürümden önceki hareketler geriye dönük yazılmaz: fasona çıkış bu sürümden önce yapılmışsa (defterde çıkış satırı yoksa) iptal de satır yazmaz, çünkü çıkışı hiç kaydedilmemiş malı deftere giriş yazmak stok toplamını şişirirdi. Eski hareketler için defter ile top listesi arasındaki fark bilinen ve kabul edilmiş bir durumdur; mutabakat raporundaki “defter ufku” bölümü bu farkı ayrı sayar, kusur olarak göstermez."
         },
         {
           "kapsam": "panel",
@@ -72,57 +77,12 @@
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Plan sapması karnesi geri alınmış onayları artık saymıyor; rakam bu yüzden düşebilir — eksilen, daha önce iki kez sayılan onaylardır. Önceden Tambur’da onaylanan bir sapma (renk ya da en planla uyuşmuyor), top geri alınıp yeniden tamburlandığında karnede iki kez sayılıyordu: imza sayısı da metraj da ikiye katlanıyordu. Fason kabulü iptal edilip top geri doğduğunda da eski onay topa yapışık kalıyor, Tambur aynı soruyu bir daha sormuyordu. Şimdi geri alma onayı damgalar: karne yalnız yürürlükteki onayları sayar, Tambur soruyu yeniden sorar. Renk ve en birlikte sapmışsa ikisi tek onaydır ve birlikte geri alınır."
+          "metin": "Deposu tanımlı olmayan bir top sevk edilemiyor ve iade alınamıyor; uyarı hangi topların eksik olduğunu barkodlarıyla sayar. Önceden bu durum sessizce geçiyordu: sevkiyat tamamlanıyor, mal çıkıyor, ama o topun çıkışı depo defterine HİÇ yazılmıyordu — aynı sevkiyatta iki top çıkıp defterde tek satır görünebiliyordu. Artık işlem durur ve eksik topları listeler; deposunu belirledikten sonra sevk/iade normal şekilde tamamlanır. Deposu tanımsız topunuz yoksa günlük işte bir değişiklik olmaz; uyarı yalnız eski bir yedekten dönülürse ya da dışarıdan aktarılan eski kayıtlarda görünebilir."
         },
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Kalite karnesindeki “1. kalite payı” artık kalite kartındaki role (birinci kalite) göre hesaplanıyor, listedeki sıraya göre değil. Kalite kataloğunda sıralamayı değiştirdiyseniz ya da pasife aldığınız bir kalite sıralamada en üstteyse rakam değişir: önceden pasif ya da yanlış sıradaki kalite sessizce “en üst kalite” sayılıyordu ve hiçbir uyarı çıkmıyordu. Kataloğa dokunulmadıysa rakam aynıdır."
-        },
-        {
-          "kapsam": "her-ikisi",
-          "tip": "iyilestirme",
-          "metin": "Kalite kodlarını (1K, 2K, HURDA gibi) kataloğu düzenleyerek yeniden adlandırmak artık ekranları bozmuyor: panel ve tablet “birinci kalite / ikinci kalite / fire” ayrımını koddan değil kalite kartındaki rolden okuyor. Önceden kodu değiştirmek, kodu ezberlemiş ekran ve raporların yanlış davranmasına yol açabiliyordu. Kod değiştirmediyseniz hiçbir şey değişmez. Kataloğa yeni kalite eklerken rolünü seçin — rolsüz kalite hiçbir kümeye girmez. Panelde katalog değişikliği en geç 5 dakika içinde görünür; hemen görmek için sayfayı yenileyin."
-        },
-        {
-          "kapsam": "panel",
-          "tip": "duzeltme",
-          "metin": "Sayım stornosu, sayımdan sonra yoluna devam etmiş toplar için (üretime alındı, fasona çıktı, sevk edildi, fireye ayrıldı) artık defter satırı uydurmuyor: o toplar için storno durur ve “geri alınacak giriş kaydı bulunamadı” der. Önceden ters satır topun o anki durumundan türetiliyor, örneğin “sevk edilmiş durumda depoya girdi” gibi hiç olmamış bir olay yazılabiliyordu. Sayımın kendi iptal satırı duruyorsa storno eskisi gibi çalışır."
-        },
-        {
-          "kapsam": "tablet",
-          "tip": "yeni",
-          "metin": "Fason mal kabulü artık iptal edilebilir: kabulden doğan top depoda duruyor, çuvala girmemiş ve depoda başka hareket görmemişse iptal geçer; aksi hâlde iptal reddedilir ve engel sebebi topun adıyla listelenir. Eskiden son adım fason kabulü hiç iptal edilemiyordu."
-        },
-        {
-          "kapsam": "her-ikisi",
-          "tip": "duzeltme",
-          "metin": "Depoda kesilmiş bir top tabletten geri alındığında Depo Hareketleri ile topun metrajı artık aynı sayıyı söylüyor. Önceden geri alma yalnız yeni topun giriş satırını tersliyor, ana topun kesim çıkışı defterde açık kalıyordu: top listesinde 100 metre görünen ana top defterde 60 sayılıyordu. Şimdi kesim çıkışı da terslenir — ama yalnız metraj gerçekten ana topa geri konuyorsa. Geri alma sırasında “kayıt yanlıştı” seçeneğini seçip kaynak topu arşivde bırakırsanız kaynak metrajı eskisi gibi değişmez ve defter de buna uyar; yeni topun satırı düzeltme kaydı olarak kalır. Kapanışla biten kesimin kendi fire/artık çıkışı bu geri almada terslenmez. Bu sürümden önce yarım geri alınmış kesimler kendiliğinden düzelmez; mutabakat raporu bunları ayrı bir bölümde sayar."
-        },
-        {
-          "kapsam": "her-ikisi",
-          "tip": "duzeltme",
-          "metin": "Tambur kapanışında “fire” seçilen kalan parça artık tek başına geri alınamaz: o parçada yalnız “Tüm İşlemi Geri Al” sunulur, “Tek Parça İptali” ve “İş Emrine Geri Al” görünmez; eski ekrandan denenirse “kapanışın fire kalanıdır, kapanışı tümden geri alın” uyarısıyla reddedilir. Sıradan kesim parçalarında değişiklik yok."
-        },
-        {
-          "kapsam": "panel",
-          "tip": "duzeltme",
-          "metin": "Elle metraj düzeltmesi (Envanter → Metrajı Düzelt) artık Depo Hareketleri’nde bir “Düzeltme” satırı olarak görünür ve depo stok toplamı düzeltmeyi hemen izler; eskiden düzeltme yalnız sapma defterinde kalır, depo hareketlerinde görünmezdi. Düzeltilmiş topların depo stok raporundaki (tarihe göre) rakamı bu nedenle DEĞİŞİR. Bu sürümden önce yapılmış düzeltmeler geriye dönük yazılmaz; yalnız bundan sonraki düzeltmeler görünür."
-        }
-      ]
-    },
-    {
-      "id": "2026-09-12",
-      "baslik": "Yanlış yapılan işlemler geri alınabiliyor: kartela düşümü, sayım, çek, toplu aktarım; sevk irsaliyesi tek pencerede toplandı",
-      "surumler": {
-        "panel": "1.3.2",
-        "tablet": "1.0.7"
-      },
-      "maddeler": [
-        {
-          "kapsam": "panel",
-          "tip": "duzeltme",
-          "metin": "Bir iadeyi geri aldığınızda depo defterine ters kayıt düşüyor. Önceden iade kabulü “Depo Hareketleri” ekranına bir giriş satırı yazıyordu; iadeyi geri aldığınızda o giriş defterde DURUYOR, yani mal gelmediği hâlde depoya girmiş görünüyordu ve depo toplamı sessizce şişiyordu. Artık geri alma, girişin tersini bugünün tarihiyle yazar ve iki satır birbirine bağlı görünür. Geçmiş kayıtlar olduğu gibi kalır — hiçbir eski satır silinmez ya da değiştirilmez; düzeltme ileriye dönüktür. Aynı iadeyi ikinci kez geri almaya çalışırsanız işlem reddedilir, ikinci bir ters satır yazılmaz."
+          "metin": "Bir iadeyi geri aldığınızda depo defterine ters kayıt düşüyor. Önceden iade kabulü “Depo Hareketleri” ekranına bir giriş satırı yazıyordu; iadeyi geri aldığınızda o giriş defterde DURUYOR, yani mal gelmediği hâlde depoya girmiş görünüyordu ve depo toplamı sessizce şişiyordu. Artık geri alma, girişin tersini bugünün tarihiyle yazar ve iki satır birbirine bağlı görünür. Geçmiş kayıtlar olduğu gibi kalır — hiçbir eski satır silinmez ya da değiştirilmez; düzeltme ileriye dönüktür. Aynı iadeyi ikinci kez geri almaya çalışırsanız işlem reddedilir, ikinci bir ters satır yazılmaz. Sevk stornosu ile iade bu defterde birbirine karışmaz; ikisi farklı şeydir: sevk stornosu “bu mal hiç çıkmadı” demektir ve sevki geri alır; iade ise “mal çıktı, müşteri geri gönderdi” demektir ve sevk rakamını DEĞİŞTİRMEZ. Bu yüzden iadeyi geri aldığınızda sevkiyat kaydına dokunulmaz — top yeniden “müşteride” sayılır, sevk edilmiş metraj olduğu gibi kalır; sevk raporlarındaki rakamlar bu değişiklikten etkilenmez."
         },
         {
           "kapsam": "panel",
@@ -132,12 +92,12 @@
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Deposu tanımlı olmayan bir top sevk edilemiyor ve iade alınamıyor; uyarı hangi topların eksik olduğunu barkodlarıyla sayar. Önceden bu durum sessizce geçiyordu: sevkiyat tamamlanıyor, mal çıkıyor, ama o topun çıkışı depo defterine HİÇ yazılmıyordu — aynı sevkiyatta iki top çıkıp defterde tek satır görünebiliyordu. Artık işlem durur ve eksik topları listeler; deposunu belirledikten sonra sevk/iade normal şekilde tamamlanır. Deposu tanımsız topunuz yoksa günlük işte bir değişiklik olmaz; uyarı yalnız eski bir yedekten dönülürse ya da dışarıdan aktarılan eski kayıtlarda görünebilir."
+          "metin": "Elle metraj düzeltmesi (Envanter → Metrajı Düzelt) artık Depo Hareketleri’nde bir “Düzeltme” satırı olarak görünür ve depo stok toplamı düzeltmeyi hemen izler; eskiden düzeltme yalnız sapma defterinde kalır, depo hareketlerinde görünmezdi. Düzeltilmiş topların depo stok raporundaki (tarihe göre) rakamı bu nedenle DEĞİŞİR. Bu sürümden önce yapılmış düzeltmeler geriye dönük yazılmaz; yalnız bundan sonraki düzeltmeler görünür."
         },
         {
           "kapsam": "panel",
-          "tip": "iyilestirme",
-          "metin": "Sevk stornosu ile iade artık depo defterinde birbirine karışmıyor. İkisi farklı şeydir: sevk stornosu “bu mal hiç çıkmadı” demektir ve sevki geri alır; iade ise “mal çıktı, müşteri geri gönderdi” demektir ve sevk rakamını DEĞİŞTİRMEZ. Bunun sonucu olarak bir iadeyi geri aldığınızda sevkiyat kaydına dokunulmaz — top yeniden “müşteride” sayılır, sevk edilmiş metraj olduğu gibi kalır. Sevk raporlarındaki rakamlar bu değişiklikten etkilenmez."
+          "tip": "duzeltme",
+          "metin": "Depo hareketleri ekranı (Depolar → bir depo → Hareketler) tanımadığı bir hareket türüyle karşılaşınca boş sayfaya düşüyordu; artık türü ham adıyla basıyor ve ekran çalışmaya devam ediyor. Bu sürümle deftere yeni hareket türleri girdiği için (üretim, fason/kartela, kesim, düzeltme) eski panel bu ekranı açamaz — panel güncellemesi sunucuyla aynı pencerede yapılır."
         },
         {
           "kapsam": "panel",
@@ -146,8 +106,43 @@
         },
         {
           "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Kartela Stoğu ekranına “Düşüm Geçmişi” geldi: yanlış düşülen kartela geri alınabiliyor. Önceden düşüm tek yönlüydü — yanlışlıkla 50 kartela düşüldüyse stok bir daha geri gelmiyor, hangi kartelaların düşüldüğü de hiçbir ekranda görünmüyordu. Artık her düşümün hangi kartelaları kapsadığı listede duruyor ve geri alınabiliyor. Düşülen kartela sevkiyata girmiş, çuvala konmuş ya da kabulü iptal edilmişse geri alma yapılmaz ve sebebi yazılır. Bu ekrandan önce yapılmış eski düşümlerde hangi kartelaların düşüldüğü kayıtlı olmadığı için onlar geri alınamaz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Tamamlanmış bir stok sayımı stornolanabiliyor (Stok Sayımı → sayım detayı → “Stornola”). Yanlış “bulunamadı” işaretiyle tamamlanan bir sayım o topları iptal ediyordu ve tek çıkış yolu topları tek tek geri almaktı — o yol da depo hareketine ve sapma kaydına ters satır yazmıyordu. Artık tek belgeden dönülüyor: onaydan önce hangi topların ve hangi iplik kalemlerinin geri geleceği tek tek listeleniyor, sayım listesinin kendisi silinmiyor ve satırda “Stornolandı” rozeti çıkıyor. Yalnız deponun EN SON tamamlanmış sayımı stornolanabilir; araya başka sayım girdiyse önce o geri alınır. Sayımın düşürdüğü bir top daha önce elle geri alınmışsa storno yine yapılır: o topun durumuna dokunulmaz, yalnız depo hareketine ve sapma kaydına ters satır yazılır ve önizlemede bu toplar “yalnız kayıt” diye ayrı listelenir. Yetki gerekir: top düzeltme ve iplik yazma yetkisi birlikte aranır. Ters satır sayımın kendi iptal kaydından okunur, topun o anki durumundan türetilmez: top sayımdan sonra yoluna devam etmişse (üretime alındı, fasona çıktı, sevk edildi, fireye ayrıldı) “sevk edilmiş durumda depoya girdi” gibi hiç olmamış bir olay yazılmaz; iptal kaydı bu bilgiyi taşımıyorsa (eski kayıt) storno o top için durur ve “top stok dışına çıkmış ve geri giriş anı kayıtlı değil” der. Stornoyla depoya geri dönen toplar Depo Hareketleri’nde “İptal stornosu” olarak görünür, yani topun neden geri geldiği hareketin kendisinden okunur."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Çeklerde karşılıksız, ciro, ödendi ve iade işlemleri geri alınabiliyor. Önceden yalnız tahsilatın geri alması vardı; yanlış girilen bir “karşılıksız” ya da “ciro” damgası cari bakiyeyi KALICI yanlış bırakıyordu ve düzeltmenin hiçbir yolu yoktu. Artık dördünün de geri alması var: para aynı kasadan/bankadan geri çekilir, cari satırı ters kayıtla kapanır ve çek bir önceki durumuna döner. Onay penceresi işlemden önce hangi tutarın nereye döneceğini ve çekin hangi duruma geçeceğini cümleyle yazar. Eski kayıt silinmez, ters kayıt bugünün tarihine yazılır — kapanmış dönemin rakamı değişmez."
+        },
+        {
+          "kapsam": "her-ikisi",
           "tip": "duzeltme",
-          "metin": "Sistem → Bağlı İstemciler listesinde eski panel kurulumları da görünüyor. Önceden bir makinedeki panel kendi künyesini bildiremeyecek kadar eskiyse listede “sürümü bilinmiyor” olarak değil, HİÇ görünmüyordu — yani tam da güncellenmesi gereken makineler kaçıyordu. Fabrikada 2.5.0'da kalmış bir panel bu yüzden haftalarca fark edilmedi; o makinede rapor menüsünün tamamı çalışmıyordu. Artık künyesini bildirmeyen panelin sürümü bağlantı bilgisinden okunuyor ve satırda “sürümünü bildirmiyor — adres bilgisinden okundu” notu çıkıyor. Makine güncellenip künyesini bildirmeye başlayınca not kendiliğinden kalkar. Tabletler için bu yol kullanılmaz: tabletin adres bilgisi uygulama sürümünü taşımaz, oradan okumak olmayan bir sürüm numarası gösterirdi."
+          "metin": "Depoda kesilmiş bir top tabletten geri alındığında Depo Hareketleri ile topun metrajı artık aynı sayıyı söylüyor. Önceden geri alma yalnız yeni topun giriş satırını tersliyor, ana topun kesim çıkışı defterde açık kalıyordu: top listesinde 100 metre görünen ana top defterde 60 sayılıyordu. Şimdi kesim çıkışı da terslenir — ama yalnız metraj gerçekten ana topa geri konuyorsa. Geri alma sırasında “kayıt yanlıştı” seçeneğini seçip kaynak topu arşivde bırakırsanız kaynak metrajı eskisi gibi değişmez ve defter de buna uyar; yeni topun satırı düzeltme kaydı olarak kalır. Tambur kapanışında “fire” seçilen kalan parça ise tek başına geri alınamaz: o parçada yalnız “Tüm İşlemi Geri Al” sunulur, “Tek Parça İptali” ve “İş Emrine Geri Al” görünmez; eski ekrandan denenirse “kapanışın fire kalanıdır, kapanışı tümden geri alın” uyarısıyla reddedilir — kapanışın kendi fire/artık çıkışı parça geri almasında terslenmez. Sıradan kesim parçalarında değişiklik yok. Bu sürümden önce yarım geri alınmış kesimler kendiliğinden düzelmez; mutabakat raporu bunları ayrı bir bölümde sayar."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "yeni",
+          "metin": "Fason mal kabulü artık iptal edilebilir: kabulden doğan top depoda duruyor, çuvala girmemiş ve depoda başka hareket görmemişse iptal geçer; aksi hâlde iptal reddedilir ve engel sebebi topun adıyla listelenir. Eskiden son adım fason kabulü hiç iptal edilemiyordu."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Fasondan doğrudan müşteriye sevk yapılmış (fasondan sevk kaydı olan) bir fason sevkiyatı artık iptal edilemiyor; deneyince hangi fasondan-sevk numarası yüzünden kilitli olduğu yazıyor. Önceden mal müşteriye çıkmış olmasına rağmen fason sevki iptal edilebiliyordu ve fasoncu karnesi yanlış çıkıyordu. İş emri iptalinde bu sevkler atlanır; fasonda kalan mal mevcut “kalan gelmeyecek” kararıyla kapatılır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Konumu Düzelt ile geri taşınan bir top KK2'yi yeniden yaptığında adım kapanmıyor, top adımda takılı kalıyordu. Sebebi şuydu: geri alınan işlem ve hareket kayıtları siliniyordu ve adımın “bitti mi” sorusunun cevabı bu kayıtlardan sayılıyordu, yani silinmiş bir iz adımı yanlış durumda bırakıyordu. Artık geri alınan kayıt SİLİNMİYOR, geri alındı diye işaretleniyor — böylece “bu topa kurşun uygulandı mı, KK2'den geçti mi, fasona gitti mi” sorusunun cevabı geriye dönük değişmiyor ve top adımı yeniden işleyebiliyor. Yan etkisi şu: geçmişinde geri alınmış hareket bulunan bir adım artık iş emri rotasından silinemiyor ve istasyonu değiştirilemiyor; o adımın defter geçmişi vardır, gerekiyorsa iş emri üzerinden ilerletilir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Geri alınan işlemlerin izi artık kalıcı: bir tahsilatın faturaya kapaması çözüldüğünde kayıt siliniyordu, sevkiyat geri alındığında “sevk edildi” bilgisi siliniyordu, çuval yeniden tartıldığında önceki kilo hiçbir yerde kalmıyordu. Üçü de artık “ne zaman, kim, hangi gerekçeyle” bilgisiyle saklanıyor. Yaşlandırma, kur farkı ve kasa raporlarının rakamları DEĞİŞMEZ — geri alınan satırlar bu hesaplara girmez. Bunun görünür sonucu: Sevkiyatlar listesindeki “Tarih” sütunu, sevkiyatı geri aldığınızda son sevk anını göstermeye devam eder; eskiden kaydın oluşturulma tarihine dönüyordu. Belgenin kendisi ve rakamlar değişmez."
         },
         {
           "kapsam": "panel",
@@ -172,37 +167,27 @@
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Sistem → Yedekler ekranındaki “Otomatik yedek saati” artık gerçeği söylüyor. Gece yedeğini sunucudaki ayrı bir zamanlanmış görev alan kurulumlarda (bu sunucuda öyle: program kapalıyken de yedek alınsın diye böyle kurulmuş) saat kutusu kilitleniyor ve “saat buradan değişmez, sunucudaki görevden ayarlanır” yazıyor. Eskiden kutu açıktı, saati değiştirebiliyordunuz ve hiçbir şey olmuyordu — ekran bir saat gösteriyor, sistem başka saatte yedek alıyordu."
-        },
-        {
-          "kapsam": "panel",
-          "tip": "iyilestirme",
-          "metin": "Makine dışı yedek hedefi artık yanlış yazılamıyor. Hedefi iki nokta üst üste olmadan (örneğin “gdrive”) kaydetmek, yedeklerin sunucudaki bir klasöre kopyalanmasına yol açıyordu — yani veritabanıyla aynı diske — ve ekran buna “başarılı” diyordu. Artık böyle bir hedef kaydedilemiyor, kayıtlı olan varsa uyarı veriliyor ve “Bağlantıyı test et” düğmesi de yanılmıyor. Hedef gerçekten uzaktaysa hiçbir şey değişmez."
-        },
-        {
-          "kapsam": "panel",
-          "tip": "yeni",
-          "metin": "Kartela Stoğu ekranına “Düşüm Geçmişi” geldi: yanlış düşülen kartela geri alınabiliyor. Önceden düşüm tek yönlüydü — yanlışlıkla 50 kartela düşüldüyse stok bir daha geri gelmiyor, hangi kartelaların düşüldüğü de hiçbir ekranda görünmüyordu. Artık her düşümün hangi kartelaları kapsadığı listede duruyor ve geri alınabiliyor. Düşülen kartela sevkiyata girmiş, çuvala konmuş ya da kabulü iptal edilmişse geri alma yapılmaz ve sebebi yazılır. Bu ekrandan önce yapılmış eski düşümlerde hangi kartelaların düşüldüğü kayıtlı olmadığı için onlar geri alınamaz."
-        },
-        {
-          "kapsam": "panel",
-          "tip": "yeni",
-          "metin": "Tamamlanmış bir stok sayımı stornolanabiliyor (Stok Sayımı → sayım detayı → “Stornola”). Yanlış “bulunamadı” işaretiyle tamamlanan bir sayım o topları iptal ediyordu ve tek çıkış yolu topları tek tek geri almaktı — o yol da depo hareketine ve sapma kaydına ters satır yazmıyordu. Artık tek belgeden dönülüyor: onaydan önce hangi topların ve hangi iplik kalemlerinin geri geleceği tek tek listeleniyor, sayım listesinin kendisi silinmiyor ve satırda “Stornolandı” rozeti çıkıyor. Yalnız deponun EN SON tamamlanmış sayımı stornolanabilir; araya başka sayım girdiyse önce o geri alınır. Sayımın düşürdüğü bir top daha önce elle geri alınmışsa storno yine yapılır: o topun durumuna dokunulmaz, yalnız depo hareketine ve sapma kaydına ters satır yazılır ve önizlemede bu toplar “yalnız kayıt” diye ayrı listelenir. Yetki gerekir: top düzeltme ve iplik yazma yetkisi birlikte aranır."
-        },
-        {
-          "kapsam": "panel",
-          "tip": "yeni",
-          "metin": "Çeklerde karşılıksız, ciro, ödendi ve iade işlemleri geri alınabiliyor. Önceden yalnız tahsilatın geri alması vardı; yanlış girilen bir “karşılıksız” ya da “ciro” damgası cari bakiyeyi KALICI yanlış bırakıyordu ve düzeltmenin hiçbir yolu yoktu. Artık dördünün de geri alması var: para aynı kasadan/bankadan geri çekilir, cari satırı ters kayıtla kapanır ve çek bir önceki durumuna döner. Onay penceresi işlemden önce hangi tutarın nereye döneceğini ve çekin hangi duruma geçeceğini cümleyle yazar. Eski kayıt silinmez, ters kayıt bugünün tarihine yazılır — kapanmış dönemin rakamı değişmez."
+          "metin": "Plan sapması karnesi geri alınmış onayları artık saymıyor; rakam bu yüzden düşebilir — eksilen, daha önce iki kez sayılan onaylardır. Önceden Tambur’da onaylanan bir sapma (renk ya da en planla uyuşmuyor), top geri alınıp yeniden tamburlandığında karnede iki kez sayılıyordu: imza sayısı da metraj da ikiye katlanıyordu. Fason kabulü iptal edilip top geri doğduğunda da eski onay topa yapışık kalıyor, Tambur aynı soruyu bir daha sormuyordu. Şimdi geri alma onayı damgalar: karne yalnız yürürlükteki onayları sayar, Tambur soruyu yeniden sorar. Renk ve en birlikte sapmışsa ikisi tek onaydır ve birlikte geri alınır."
         },
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Depo hareketleri ekranı (Depolar → bir depo → Hareketler) tanımadığı bir hareket türüyle karşılaşınca boş sayfaya düşüyordu; artık türü ham adıyla basıyor ve ekran çalışmaya devam ediyor. Ayrıca sayım stornosuyla depoya geri dönen toplar listede “İptal stornosu” olarak görünüyor, yani topun neden geri geldiği hareketin kendisinden okunuyor."
+          "metin": "Fasoncu karnesinde fasondan doğrudan müşteriye giden metre artık BAŞARILI TESLİM sayılıyor — fire oranı “işlenen metre başına kayıp” demektir. Tabloda “Dönen” hücresinin altında “+N m müşteriye” satırı, dışa aktarımda “Müşteriye (m)” kolonu var. Fasondan doğrudan müşteriye sevk yapılmış fasoncularda fire oranı bu yüzden DÜŞER — eksilen, daha önce kayıp sayılan teslimattır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Paketleme → Çuvallar ekranında çuvallar sevk hazırlığına göre gruplanabiliyor. Aynı carinin farklı günlerde çıkacak iki hazırlığı tek havuzda bekliyordu ve “Hemen Sevk Et” içi dolu her çuvalı alıyordu; salı tırı için basılan düğme gelecek haftanın çuvallarını da gönderiyordu. Artık listenin üstünde grup şeridi (P1 · P2 · Gruplanmamış, sayaçlarıyla) ve satırda grup sütunu var; seçili çuvallar “Parti Ata” ile bir gruba yaftalanır, şeritten tıklanınca liste yalnız o grubu gösterir ve döküm yalnız o grubu basar. Grup bir yaftadır: stok düşmez, çuvalı kilitlemez, başka bir sevkin o çuvalı almasını engellemez; çuval havuzdan çıkınca gruptan kendiliğinden düşer, grup boşalınca numarası yeniden kullanılır. Grup adı hiçbir belgeye basılmaz; döküm kâğıdının başlığında cari adı, grup adı ve basım anı yazar. Bu özellik KAPALI gelir: Genel Ayarlar → Sevkiyat → Paketleme grubu."
         },
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Konumu Düzelt ile geri taşınan bir top KK2'yi yeniden yaptığında adım kapanmıyor, top adımda takılı kalıyordu. Sebebi şuydu: geri alınan işlem ve hareket kayıtları siliniyordu ve adımın “bitti mi” sorusunun cevabı bu kayıtlardan sayılıyordu, yani silinmiş bir iz adımı yanlış durumda bırakıyordu. Artık geri alınan kayıt SİLİNMİYOR, geri alındı diye işaretleniyor — böylece “bu topa kurşun uygulandı mı, KK2'den geçti mi, fasona gitti mi” sorusunun cevabı geriye dönük değişmiyor ve top adımı yeniden işleyebiliyor. Yan etkisi şu: geçmişinde geri alınmış hareket bulunan bir adım artık iş emri rotasından silinemiyor ve istasyonu değiştirilemiyor; o adımın defter geçmişi vardır, gerekiyorsa iş emri üzerinden ilerletilir."
+          "metin": "Sistem → Bağlı İstemciler listesinde eski panel kurulumları da görünüyor. Önceden bir makinedeki panel kendi künyesini bildiremeyecek kadar eskiyse listede “sürümü bilinmiyor” olarak değil, HİÇ görünmüyordu — yani tam da güncellenmesi gereken makineler kaçıyordu. Fabrikada 2.5.0'da kalmış bir panel bu yüzden haftalarca fark edilmedi; o makinede rapor menüsünün tamamı çalışmıyordu. Artık künyesini bildirmeyen panelin sürümü bağlantı bilgisinden okunuyor ve satırda “sürümünü bildirmiyor — adres bilgisinden okundu” notu çıkıyor. Makine güncellenip künyesini bildirmeye başlayınca not kendiliğinden kalkar. Tabletler için bu yol kullanılmaz: tabletin adres bilgisi uygulama sürümünü taşımaz, oradan okumak olmayan bir sürüm numarası gösterirdi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Belge tasarımı ekranındaki şablon önizlemesi, belge tasarımını görüntüleme yetkisiyle giren büro personeli için artık açılıyor. Ekranın kendisi bu yetkiyle açılıyordu ama sağdaki önizleme hâlâ yönetici ayarı yetkisi istiyordu: tasarımcı soldaki ayarı yapıyor, önizleme sessizce boş kalıyordu (bu sunucunun kayıtlarında 4 kez yaşandı)."
         },
         {
           "kapsam": "panel",
@@ -221,36 +206,6 @@
         },
         {
           "kapsam": "panel",
-          "tip": "iyilestirme",
-          "metin": "Geri alınan işlemlerin izi artık kalıcı: bir tahsilatın faturaya kapaması çözüldüğünde kayıt siliniyordu, sevkiyat geri alındığında “sevk edildi” bilgisi siliniyordu, çuval yeniden tartıldığında önceki kilo hiçbir yerde kalmıyordu. Üçü de artık “ne zaman, kim, hangi gerekçeyle” bilgisiyle saklanıyor. Yaşlandırma, kur farkı ve kasa raporlarının rakamları DEĞİŞMEZ — geri alınan satırlar bu hesaplara girmez."
-        },
-        {
-          "kapsam": "panel",
-          "tip": "duzeltme",
-          "metin": "Sevkiyatlar listesindeki “Tarih” sütunu, sevkiyatı geri aldığınızda artık son sevk anını göstermeye devam ediyor; eskiden kaydın oluşturulma tarihine dönüyordu. Sebebi şu: sevk damgası artık geri almada silinmiyor, geri alma ayrı bir satır olarak yazılıyor. Belgenin kendisi ve rakamlar değişmez."
-        },
-        {
-          "kapsam": "panel",
-          "tip": "duzeltme",
-          "metin": "Fasoncu karnesinde fasondan doğrudan müşteriye giden metre artık BAŞARILI TESLİM sayılıyor — fire oranı “işlenen metre başına kayıp” demektir. Tabloda “Dönen” hücresinin altında “+N m müşteriye” satırı, dışa aktarımda “Müşteriye (m)” kolonu var."
-        },
-        {
-          "kapsam": "panel",
-          "tip": "yeni",
-          "metin": "Paketleme → Çuvallar ekranında çuvallar sevk hazırlığına göre gruplanabiliyor. Aynı carinin farklı günlerde çıkacak iki hazırlığı tek havuzda bekliyordu ve “Hemen Sevk Et” içi dolu her çuvalı alıyordu; salı tırı için basılan düğme gelecek haftanın çuvallarını da gönderiyordu. Artık listenin üstünde grup şeridi (P1 · P2 · Gruplanmamış, sayaçlarıyla) ve satırda grup sütunu var; seçili çuvallar “Parti Ata” ile bir gruba yaftalanır, şeritten tıklanınca liste yalnız o grubu gösterir ve döküm yalnız o grubu basar. Grup bir yaftadır: stok düşmez, çuvalı kilitlemez, başka bir sevkin o çuvalı almasını engellemez; çuval havuzdan çıkınca gruptan kendiliğinden düşer, grup boşalınca numarası yeniden kullanılır. Grup adı hiçbir belgeye basılmaz; döküm kâğıdının başlığında cari adı, grup adı ve basım anı yazar. Bu özellik KAPALI gelir: Genel Ayarlar → Sevkiyat → Paketleme grubu."
-        },
-        {
-          "kapsam": "panel",
-          "tip": "duzeltme",
-          "metin": "Belge tasarımı ekranındaki şablon önizlemesi, belge tasarımını görüntüleme yetkisiyle giren büro personeli için artık açılıyor. Ekranın kendisi bu yetkiyle açılıyordu ama sağdaki önizleme hâlâ yönetici ayarı yetkisi istiyordu: tasarımcı soldaki ayarı yapıyor, önizleme sessizce boş kalıyordu (bu sunucunun kayıtlarında 4 kez yaşandı)."
-        },
-        {
-          "kapsam": "panel",
-          "tip": "duzeltme",
-          "metin": "Fasondan doğrudan müşteriye sevk yapılmış (fasondan sevk kaydı olan) bir fason sevkiyatı artık iptal edilemiyor; deneyince hangi fasondan-sevk numarası yüzünden kilitli olduğu yazıyor. Önceden mal müşteriye çıkmış olmasına rağmen fason sevki iptal edilebiliyordu ve fasoncu karnesi yanlış çıkıyordu. İş emri iptalinde bu sevkler atlanır; fasonda kalan mal mevcut “kalan gelmeyecek” kararıyla kapatılır."
-        },
-        {
-          "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Çevre Birimleri ekranında cihazın “Birim” alanı serbest yazı değil, listeden seçim oldu (kg · g · m · cm · mm). Önceden bu kutuya ne yazılırsa yazılıyordu ve yazılan şey hesaba HİÇ girmiyordu: cihazdan gelen değeri çeviren tek alan “Ölçek”ti. Yani kurulumcu “Birim: g” yazıp Ölçek'i 1 bıraktığında kantardan gelen 14.500 gram 14.500 KİLO olarak kaydediliyordu — 14,5 kiloluk bir çuval sevk irsaliyesinde 14,5 TON görünürdü. Ekran bir şey söylüyor, sistem başka bir şey hesaplıyordu. Artık birimi seçtiğinizde Ölçek kendiliğinden doğru değere ayarlanır (g seçilirse 0,001; cm seçilirse 0,01) ve isterseniz Ölçek'i elle değiştirmeye devam edebilirsiniz — yarım kiloluk adımlarla çalışan tuhaf bir cihaz için bu kapı kapanmadı. Mevcut cihaz kayıtlarında bir değişiklik yapılmadı; ayarları olduğu gibi çalışmaya devam eder."
         },
@@ -262,7 +217,17 @@
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Sistem → Sistem Kayıtları ekranında veri düzeltme işlemlerinin adı Türkçe görünüyor. Fabrikada bir veri eksikliği sonradan tamamlandığında (örneğin eski topların depo bağı ya da üretim tarihleri geriye dönük dolduruluyor) bu işlem kendi kaydını bırakır. O kayıtların yedisinin Türkçe karşılığı yoktu: ekran “ROLL_WAREHOUSE_BACKFILL” gibi ham kod basacaktı. Bu satırlardan henüz hiç oluşmadı, yani kimse ham kod görmedi — eksiklik ilk düzeltme koşmadan önce kapatıldı. Artık her biri “Top depo bağı geriye dönük dolduruldu (betik)” gibi okunur bir ifadeyle listelenir."
+          "metin": "Sistem → Yedekler ekranındaki “Otomatik yedek saati” artık gerçeği söylüyor. Gece yedeğini sunucudaki ayrı bir zamanlanmış görev alan kurulumlarda (program kapalıyken de yedek alınsın diye böyle kurulan sunucularda) saat kutusu kilitleniyor ve “saat buradan değişmez, sunucudaki görevden ayarlanır” yazıyor. Eskiden kutu açıktı, saati değiştirebiliyordunuz ve hiçbir şey olmuyordu — ekran bir saat gösteriyor, sistem başka saatte yedek alıyordu."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Makine dışı yedek hedefi artık yanlış yazılamıyor. Hedefi iki nokta üst üste olmadan (örneğin “gdrive”) kaydetmek, yedeklerin sunucudaki bir klasöre kopyalanmasına yol açıyordu — yani veritabanıyla aynı diske — ve ekran buna “başarılı” diyordu. Artık böyle bir hedef kaydedilemiyor, kayıtlı olan varsa uyarı veriliyor ve “Bağlantıyı test et” düğmesi de yanılmıyor. Hedef gerçekten uzaktaysa hiçbir şey değişmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Sistem → Sistem Kayıtları ekranında geriye dönük veri düzeltmelerinin (örneğin eski topların depo bağının doldurulması) bıraktığı kayıtlar artık “Top depo bağı geriye dönük dolduruldu (betik)” gibi okunur bir ifadeyle listeleniyor; önceden bu satırlar ham kodla basılacaktı."
         },
         {
           "kapsam": "tablet",
