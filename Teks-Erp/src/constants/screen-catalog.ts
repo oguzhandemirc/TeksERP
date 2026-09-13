@@ -410,6 +410,10 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // satır ölü muaf olur ve bekçi kırmızı verir — silinmesi o dilimin işidir.
   { code: "loom:run", reason: "Koşum aç/kapa — tablet tezgah ekranı (dokuma dilimi) henüz doğmadı; backend-only." },
   { code: "loom:run-revoke", reason: "Koşum geri alma — panel/tablet yüzeyi dokuma dilimiyle doğacak; backend-only." },
+  // Dokuma P3b (2026-09-13): doff yazma yüzeyi backend'de doğdu; ekranı tablet tezgah
+  // ekranının "İndir" eylemi (DOKUMA-IS-EMRI §3.4) ve henüz yok — ekranla ölü muaf olur.
+  { code: "loom:doff", reason: "Top indirme kaydı — tablet tezgah ekranı (dokuma dilimi) henüz doğmadı; backend-only." },
+  { code: "loom:doff-revoke", reason: "Top indirme geri alma — yüzey dokuma dilimiyle doğacak; backend-only." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

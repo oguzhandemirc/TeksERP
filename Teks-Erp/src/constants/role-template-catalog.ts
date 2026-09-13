@@ -331,6 +331,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // de süpervizörde; tablet dilimi indiğinde aç/kapa operatör paketine iner.
       "loom:run",
       "loom:run-revoke",
+      "loom:doff",
+      "loom:doff-revoke",
     ],
   },
   {

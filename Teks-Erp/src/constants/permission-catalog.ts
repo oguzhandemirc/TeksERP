@@ -85,6 +85,9 @@ export const PERMISSION_CATALOG = [
   // aç/kapa işinden ayrı bir yetkidir (`shipping:undo-dispatch` emsali).
   { code: "loom:run", module: "PRODUCTION", category: "web", description: "Tezgah koşumu açma/kapatma (üretim hattı başına tek açık koşum)" },
   { code: "loom:run-revoke", module: "PRODUCTION", category: "web", description: "Tezgah koşumunu geri alma (damga; randıman paydasından çıkarır)" },
+  // Top indirme (doff): kaydetmek günlük iş, geri almak defterden satır düşürür — ayrı kod (loom:run çifti emsali).
+  { code: "loom:doff", module: "PRODUCTION", category: "web", description: "Top indirme (doff) kaydetme — tezgahtan kumaş indiği anın defteri" },
+  { code: "loom:doff-revoke", module: "PRODUCTION", category: "web", description: "Top indirmeyi geri alma (damga; yalnız top doğurmamış indirmede)" },
   { code: "quality:read", module: "QUALITY", category: "web", description: "Kalite derecesi tanımlarını görüntüleme" },
   { code: "quality:write", module: "QUALITY", category: "web", description: "Kalite derecesi tanımlama/düzenleme" },
   { code: "property:read", module: "QUALITY", category: "web", description: "Özellik (renk/desen vb.) tanımlarını görüntüleme" },
