@@ -23,7 +23,8 @@ import { join } from "node:path";
 export const KAPASITE = 3;
 /** Tek kapının boşta ölçülmüş süresi — bekleme tahmini için. */
 const TEK_KAPI_SN = 46;
-const KOK = join(tmpdir(), "tekserp-kapi-semafor");
+// Sonda kendi kökünü verir (gerçek kapıların semaforuna dokunmasın); üretimde env YOK.
+const KOK = process.env.TEKSERP_SEMAFOR_KOK ?? join(tmpdir(), "tekserp-kapi-semafor");
 
 function canliMi(pid) {
   try {

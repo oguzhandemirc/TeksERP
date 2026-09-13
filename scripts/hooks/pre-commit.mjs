@@ -160,6 +160,29 @@ if (staged.some((f) => /^(Teks-Erp\/scripts\/|docs\/standart\/|docs\/kurallar\/)
   adimlar.push({ ad: "hızlı mandallar", cwd: ".", cmd: ["node", ["scripts/hooks/hizli-mandallar.mjs"]] });
 }
 
+// KAPININ KENDİSİ (1e hükmü 2026-09-14): hook'u ve kapı betiklerini değiştiren
+// commit, hook tarafından ÖLÇÜLMÜYORDU (kök `scripts/` hiçbir tetikte değil —
+// aynı gün üç kapı commit'i adımsız indi, bekçiler elle koşuldu). Tetik dördüncü
+// dizin: `scripts/hooks/**` + kök `scripts/*.mjs` (check-*/kapi-kapsami — kapı
+// adımlarının kendileri). Üç ölçüm: kapsam bekçisi · hook config · semafor sondası.
+if (staged.some((f) => /^scripts\/(hooks\/|[^/]+\.mjs$)/.test(f))) {
+  adimlar.push({
+    ad: "kapının kendisi · kapsam",
+    cwd: "Teks-Erp",
+    cmd: ["npx", ["tsx", "scripts/test_commit_gate_scope.ts"]],
+    env: { DATABASE_URL: "postgresql://kapi:kapi@127.0.0.1:1/kapi_test?schema=public" },
+    gitEnvSil: true,
+  });
+  adimlar.push({
+    ad: "kapının kendisi · hook config",
+    cwd: "Teks-Erp",
+    cmd: ["npx", ["tsx", "scripts/test_hook_config.ts"]],
+    env: { DATABASE_URL: "postgresql://kapi:kapi@127.0.0.1:1/kapi_test?schema=public" },
+    gitEnvSil: true,
+  });
+  adimlar.push({ ad: "kapının kendisi · semafor sondası", cwd: ".", cmd: ["node", ["scripts/hooks/lib/semafor-sonda.mjs"]], gitEnvSil: true });
+}
+
 // Doküman kapısı: ölü link + CLAUDE.md boyut tavanı.
 if (staged.some((f) => f.endsWith(".md"))) {
   adimlar.push({ ad: "doküman kapısı", cwd: ".", cmd: ["node", ["scripts/check-docs.mjs"]] });
@@ -200,7 +223,16 @@ for (const adim of adimlar) {
     cwd: join(REPO, adim.cwd),
     encoding: "utf8",
     timeout: 600_000,
-    env: { ...process.env, ...(adim.env ?? {}) },
+    // `gitEnvSil`: git, hook sürecine GIT_DIR/GIT_INDEX_FILE/GIT_PREFIX verir ve bunlar
+    // çocuğa iner. Geçici repoda `git init/add/commit` yapan bir adım (kapsam bekçisi)
+    // o env ile GERÇEK repoya commit atar — 2026-09-14'te oldu: "taban" commit'i
+    // dalıma indi, 3977 dosya silindi, reset ile döndü. Yalnız işaretli adımlarda
+    // sökülür: index okuyan adımlar (identifier_language `git show :yol`) pathspec
+    // commit'inde GEÇİCİ index'i GIT_INDEX_FILE'dan bulur, onlara dokunulmaz.
+    env: {
+      ...(adim.gitEnvSil ? Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("GIT_"))) : process.env),
+      ...(adim.env ?? {}),
+    },
     ...(adim.stdin === undefined ? {} : { input: adim.stdin }),
   });
   const sn = ((Date.now() - t0) / 1000).toFixed(1);
