@@ -2,7 +2,7 @@
 
 [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md)'in ölçüm ALETİNE ait yarısı; 2026-09-13'te oradan **bölünerek** geldi (o dosya tavana 1,6 KB kalmıştı ve aktif yazılıyordu; tavan yükseltilmedi).
 
-**Çizgi:** buradaki sınıflarda kusur **aletin kendisindedir** — desen, komut, ayrıştırıcı, aracın varsayılanı, aracın kapsamı. Ölçümün **KURGUSUNA** ait sınıflar (soru, kontrol grubu, ortam, deneyin kurulumu) `OLCUM-DISIPLINI-SINIFLAR.md`'de; **KATMAN 2** (sayı doğru; ondan çıkarılan ne) [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md)'de; yöntem ve kapı ölümleri [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md)'de.
+**Çizgi:** buradaki sınıflarda kusur **aletin kendisindedir** — desen, komut, ayrıştırıcı, aracın varsayılanı, aracın kapsamı. Ölçümün **KURGUSUNA** ait sınıflar (soru, kontrol grubu, deneyin kurulumu) `OLCUM-DISIPLINI-SINIFLAR.md`'de; **paylaşılan ORTAMA** ait olanlar [`OLCUM-DISIPLINI-ORTAK-AGAC.md`](OLCUM-DISIPLINI-ORTAK-AGAC.md)'de; **KATMAN 2** (sayı doğru; ondan çıkarılan ne) [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md)'de; yöntem ve kapı ölümleri [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md)'de.
 
 ⚠️ **Numaralar KORUNDU** — §1 ve §4 burada, ötekiler orada; dizide boşluk vardır ve bu bilinçlidir. **Bir sınıf ADIYLA anılır**, numara yalnız listenin sırasıdır.
 

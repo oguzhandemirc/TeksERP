@@ -42,7 +42,7 @@ aramaktır.**
 
 ## Arıza sınıfları → ayrı dosya
 
-Katalog iki katmanlıdır — **KATMAN 1** ölçümün kendisi (*sayı doğru mu?*), **KATMAN 2** ölçümden sonraki adım (*sayı doğru; ondan ÇIKARILAN ne?*) — üç dosyada yaşar: KATMAN 1 ikiye ayrıldı — [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) (ölçümün **ARACI**) ve [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) (ölçümün **KURGUSU**); KATMAN 2 [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md)'de.
+Katalog iki katmanlıdır — **KATMAN 1** ölçümün kendisi (*sayı doğru mu?*), **KATMAN 2** ölçümden sonraki adım (*sayı doğru; ondan ÇIKARILAN ne?*) — üç dosyada yaşar: KATMAN 1 üçe ayrıldı — [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) (ölçümün **ARACI**), [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) (ölçümün **KURGUSU**) ve [`OLCUM-DISIPLINI-ORTAK-AGAC.md`](OLCUM-DISIPLINI-ORTAK-AGAC.md) (ölçüm **ORTAMI paylaşılıyorsa**); KATMAN 2 [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md)'de.
 
 Bölünme sebebi ölçüldü: katalog 2026-09-13'te tek günde **+16 sınıf** aldı ve bu dosya tavana dayanacaktı. Ayrım çizgisi bugünkü dört bölmeyle aynı — **YÖNTEM kalır, sınıf ENVANTERİ ayrılır**; sınıflar büyür, aşağıdaki yöntem kuralları büyümez.
 

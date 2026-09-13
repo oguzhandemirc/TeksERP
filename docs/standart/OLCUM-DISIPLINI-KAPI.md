@@ -4,7 +4,7 @@
 
 **Çizgi:** orası ölçümün **NASIL YAPILDIĞI ve NASIL YAZILDIĞI** (kurtarıcı ikili · sayı · çapa · kimlik · teşhis mi ölçüm mü); **burası ölçümün NASIL ZORLANDIĞI** — bir ölçümü kapıya çevirmek ayrı bir iştir ve kendi arıza sınıfları vardır.
 
-Arıza sınıfı kataloğu üç dosyada: [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) (ölçümün aracı) · [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) (ölçümün kurgusu) · [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) (ölçümden sonraki adım).
+Arıza sınıfı kataloğu dört dosyada: [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) (ölçümün aracı) · [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) (ölçümün kurgusu) · [`OLCUM-DISIPLINI-ORTAK-AGAC.md`](OLCUM-DISIPLINI-ORTAK-AGAC.md) (paylaşılan ortam) · [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) (ölçümden sonraki adım).
 
 ---
 
@@ -132,8 +132,8 @@ koşumunda kırmızı verecek ve düzeltmeyi yapan değil, **ondan sonra commit 
 cezalanacaktı.)*
 
 **Ölçüm:** yüklemini çalışma ağacına değil `git show HEAD:<yol>` içeriğine uygula.
-Kardeşleri § Zengin kontrol grubu ve § Pencerenin BOŞ olduğunu ölçmek
-(`OLCUM-DISIPLINI-SINIFLAR.md`).
+Kardeşleri § Zengin kontrol grubu (`OLCUM-DISIPLINI-SINIFLAR.md`) ve § Pencerenin BOŞ
+olduğunu ölçmek (`OLCUM-DISIPLINI-ORTAK-AGAC.md`).
 
 ### Kapsam: yalnız bekçi değil, AĞACI OKUYAN HER ARAÇ
 
