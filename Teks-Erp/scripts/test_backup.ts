@@ -132,6 +132,7 @@ async function main(): Promise<void> {
   const testStart = new Date();
   /** 12c-2'de yaratılan geçici top (restore-impact sayımı için) — finally siler. */
   let impactRollId: string | null = null;
+  let impactItemId: string | null = null;
 
   // Env'i import'tan ÖNCE kur (yukarıdaki not).
   process.env.BACKUP_DIR = backupDir;
@@ -464,12 +465,27 @@ async function main(): Promise<void> {
       // `npm run seed` NE `seed:fixtures` top üretir; dev DB'deki toplar elle/demo
       // işlerden kalmaydı. Sonuç: yerelde geçiyor, TEMİZ CI DB'sinde "yeni top sayısı > 0"
       // düşüyordu (2026-07-30 CI bulgusu). `finally` siler.
-      const impactItem = await prisma.item.findFirst({ where: { isActive: true }, select: { id: true } });
-      if (impactItem) {
+      // ⚠️ KALEM ARANMAZ, YARATILIR (2026-09-13). Eskiden `item.findFirst({isActive})`
+      // ile ORTAMDAN kalem bulunuyordu; bulunamazsa top hiç doğmuyor ve 12c-2'nin
+      // iki yüklemi (`totalCreated > 0` · `yeni top sayısı > 0`) ÇÖKMEDEN DÜŞÜYORDU.
+      // CI'da yeşildi ama yeşili KENDİNE AİT DEĞİLDİ: `ci.yml`in ayrı ve zorunlu
+      // `seed:fixtures` adımı kalem üretiyordu. ⇒ Bir bekçinin yeşili kendi dışındaki
+      // bir adıma bağlıysa o bekçi kendine yetmiyordur; o adım bir gün taşınırsa
+      // bekçi SESSİZCE düşer ve sebep başka yerde aranır.
+      const impactItemRow = await prisma.item.create({
+        data: {
+          code: `TST-BKP-${Date.now().toString().slice(-9)}`,
+          name: "TEST — yedek etki sondası kalemi",
+          itemType: "FABRIC",
+        },
+        select: { id: true },
+      });
+      impactItemId = impactItemRow.id;
+      {
         const r = await prisma.roll.create({
           data: {
             barcode: `TEST-IMPACT-${Date.now().toString().slice(-9)}`,
-            itemId: impactItem.id,
+            itemId: impactItemRow.id,
             initialQty: 1,
             currentQty: 1,
             qualityGrade: "1.KALITE",
@@ -594,10 +610,22 @@ async function main(): Promise<void> {
     // Test kendi yarattığını siler: geçici klasör + bu koşumun audit satırları
     // + 12c-2'nin geçici topu.
     fs.rmSync(root, { recursive: true, force: true });
+    // ⚠️ TEMİZLİĞİN SON ADIMI SUSTURULMAZ (2026-09-13, 6e'nin ölçümü): eskiden
+    // `.catch(() => {})` vardı ve silme düşerse ARTIK sessizce birikiyordu —
+    // faturası sonraki bekçiye çıkar ve orada "aralıklı" diye okunur. Testi
+    // düşürmüyoruz (temizlik bir yüklem değil) ama SESSİZ de kalmıyoruz.
+    const temizle = async (ad: string, f: () => Promise<unknown>): Promise<void> => {
+      try {
+        await f();
+      } catch (e) {
+        console.log(`  ⚠️ TEMİZLİK DÜŞTÜ: ${ad} — ${e instanceof Error ? e.message.split("\n")[0] : String(e)}`);
+      }
+    };
     if (impactRollId) {
-      await prisma.roll.deleteMany({ where: { id: impactRollId } }).catch(() => {
-        /* best-effort — testi düşürmez */
-      });
+      await temizle("12c-2 topu", () => prisma.roll.deleteMany({ where: { id: impactRollId! } }));
+    }
+    if (impactItemId) {
+      await temizle("12c-2 kalemi", () => prisma.item.deleteMany({ where: { id: impactItemId! } }));
     }
     try {
       await prisma.systemLog.deleteMany({
