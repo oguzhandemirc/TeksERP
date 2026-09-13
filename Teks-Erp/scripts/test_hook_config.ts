@@ -120,13 +120,24 @@ function main(): void {
   for (const k of kancalar) {
     const yol = scriptYolu(k.cmd);
     if (!yol) continue;
+    const ok = dizindenBagimsiz(yol);
     check(
       `§2 ${k.olay} → dizinden bağımsız`,
-      dizindenBagimsiz(yol),
-      dizindenBagimsiz(yol)
-        ? "mutlak / ${CLAUDE_PROJECT_DIR}"
-        : `GÖRELİ ('${yol}') — kabuk alt dizine kayınca kanca SESSİZCE ölür`,
+      ok,
+      ok ? "mutlak / ${CLAUDE_PROJECT_DIR}" : `GÖRELİ ('${yol}') — kabuk kökten çıkınca kanca SESSİZCE ölür`,
     );
+    // ⚠️ KIRMIZI, DÜZELTMEYİ BASAR. Haklı olup ne istediğini söylemeyen bir kapı,
+    // "doğru davranışı pahalı kılmak" ölüm sınıfının kardeşidir: kırmızıyı gören
+    // kişi "ne yapmalıyım" sorusunu sormak zorunda kalmamalı.
+    if (!ok) {
+      const duzeltilmis = k.cmd.replace(yol, `"$\{CLAUDE_PROJECT_DIR}"/${yol.replace(/^\.\//, "")}`);
+      console.error(
+        `      → DÜZELT (.claude/settings.json, tek satır):\n` +
+          `        "command": ${JSON.stringify(duzeltilmis)}\n` +
+          `      ⚠️ Bu dosya KULLANICININ denetim yüzeyidir; düzeltmeyi kullanıcı uygular.\n` +
+          `        \${CLAUDE_PROJECT_DIR} Claude Code'un kendi genişlettiği yer tutucudur.`,
+      );
+    }
   }
 
   console.log("\n§3 — sondalar: yüklemler gerçekten ısırıyor mu");

@@ -93,5 +93,23 @@ durdurmali(
   'psql -c "DELETE FROM a; DELETE FROM b WHERE c = 1"',
 );
 
+
+console.log("\n§4 — ÖLÇÜLMÜŞ YANLIŞ POZİTİFLER (4.962 komutluk ölü-kapı korpusundan)");
+// ⚠️ Bu beş vaka UYDURULMADI: kapının hiç koşmadığı pencerede gerçekten yazılmış
+// komutlardan alındı. Korpusta 26 kırmızının 22'si bu sınıftaydı.
+gecmeli("§4a CSS sınıfı `truncate` (JSX yazan komut)", `cat > /tmp/x.tsx <<'EOF'\n<div className="truncate text-sm">x</div>\nEOF`);
+gecmeli("§4b grep deseni içinde yasak kelime", 'grep -rni "delete from work_sessions" src | head -20');
+gecmeli("§4c echo etiketi", 'echo "=== TRUNCATE/DROP gecen red ==="');
+gecmeli("§4d tırnak içi `\\|` boru sanılmıyor", 'grep -n "ArrowUp\\|truncate\\|w-\\[" x.tsx | head -20');
+gecmeli("§4e yorumlayıcı heredoc gövdesi PROGRAM'dır, kabuk komutu değil", `python3 - <<'PY'\ns = "TRUNCATE"\nprint(s)\nPY`);
+gecmeli("§4f git commit mesajı (heredoc) komut değildir", `git commit -F- <<'EOF'\nornek: prisma migrate dev && echo --create-only\nEOF`);
+
+console.log("\n§5 — AYNI KORPUSTAN GERÇEK İHLALLER: hâlâ KIRMIZI olmalı");
+// ⚠️ §4 tek başına ölçülseydi, yasağı tamamen silmek de bekçiyi yeşil yapardı.
+durdurmali("§5a ⭐ gerçek `DROP DATABASE` (korpustan)", 'psql "$ADMIN" -c "DROP DATABASE IF EXISTS tekserp_d5_c_test" >/dev/null 2>&1');
+durdurmali("§5b ⭐ gerçek WHERE'siz DELETE (korpustan)", 'psql -q -h localhost -U tekserp -d t -c "DELETE FROM warehouse_movements; DELETE FROM rolls;"');
+durdurmali("§5c ⭐ metin KOMUTA dönüşüyorsa atlanmaz (`echo … | psql`)", 'echo "DROP DATABASE x" | psql "$ADMIN"');
+durdurmali("§5d ⭐ psql heredoc'u VERİ DEĞİLDİR (gövde çalıştırılır)", `psql "$ADMIN" <<'EOF'\nDROP DATABASE tekserp_x;\nEOF`);
+
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

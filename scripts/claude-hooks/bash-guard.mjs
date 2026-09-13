@@ -11,6 +11,7 @@
 // geçirirdi ve hangisinin doğru olduğu belli olmazdı (kök CLAUDE.md § Tek kaynak).
 // =============================================================================
 import { readFileSync, existsSync } from "node:fs";
+import { calistirilacakParcalar } from "./lib/komut-cozumleme.mjs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,7 +37,10 @@ const BANS = [
   { re: /prisma\s+migrate\s+dev\b(?![^\n]*--create-only)/i, why: "`prisma migrate dev` (create-only'siz) YASAK — iki DEFERRABLE composite FK'yı DROP etmek ister. Yeni migration: `prisma migrate dev --create-only` + DropForeignKey satırlarını sil; pull'lanmış migration: `npm run prisma:migrate` (deploy)." },
   { re: /prisma\s+db\s+push\b/i, why: "`prisma db push` YASAK — migration defteri olmadan şema yazar, drift bekçisi kırmızıya döner. Migration yaz." },
   { re: /\b(TRUNCATE|DROP\s+(TABLE|DATABASE|SCHEMA))\b/i, why: "`TRUNCATE` / `DROP TABLE|DATABASE` YASAK — canlı veri kuralı. Kopya DB'de çalış (`db-copy`), toplu düzeltme script'i dry-run + `--apply`." },
-  { re: /\bDELETE\s+FROM\b(?![^\n]*\bWHERE\b)/i, why: "WHERE'siz `DELETE FROM` YASAK — toplu DELETE canlı veri kuralına aykırı; soft delete ya da dry-run'lı script." },
+  { re: /\bDELETE\s+FROM\b(?![^;\n]*\bWHERE\b)/i, /* WHERE araması İFADEYLE sınırlı (`[^;\n]*`): `;`den sonraki WHERE BAŞKA bir
+     ifadeye aittir. Eski `[^\n]*` satırdaki herhangi bir WHERE'i kabul ediyordu ve
+     `DELETE FROM a; DELETE FROM b WHERE c` sessizce geçiyordu (ölçüldü 2026-09-13). */
+    why: "WHERE'siz `DELETE FROM` YASAK — toplu DELETE canlı veri kuralına aykırı; soft delete ya da dry-run'lı script." },
   { re: /git\s+push\b[^\n]*(--force\b|\s-f\b)/i, why: "`git push --force` YASAK — paylaşılan dalın geçmişini ezer. Gerekiyorsa kullanıcı `!` ile kendisi koşar." },
   { re: /npm\s+run\s+build:win\b/i, why: "Ham `npm run build:win` YASAK — bir önceki müşterinin yayın adresiyle derler. `./deploy/electron-paketle.sh <müşteri>` kullan." },
   { re: /gradlew\s+assembleRelease\b/i, why: "`./gradlew assembleRelease` ELLE ÇAĞRILMAZ — `cd mobil && npm run build:apk -- --musteri=<kod>` (adres doğrulaması + bundle kontrolü)." },
@@ -61,17 +65,17 @@ const BANS = [
  *   · `psql -c "DELETE FROM a; DELETE FROM b WHERE c"` → artık KIRMIZI (ilk
  *     ifadede WHERE yok; eskiden satırdaki ikinci WHERE onu örtüyordu)
  *
- * ⚠️ TIRNAK İÇİ AYIRAÇLAR: bölme naiftir (tırnak saymaz). Hata yönü ölçüldü ve
- * GENİŞ tarafa düşüyor — tırnak içindeki `;` bölünürse yasak METNİ parçanın
- * içinde kalır, yani kapı hâlâ görür. Daraltan bir bölünme üretmiyor.
+ * ⚠️ İKİNCİ TUR (aynı gün): bölme yetmedi. Kapının 4.962 kez hiç koşmadığı ölü
+ * pencerenin komutları KORPUS olarak çıkarıldı ve kapı onlara karşı ölçüldü:
+ * **26 kırmızı, 22'si YANLIŞ POZİTİF** (CSS sınıfı `truncate`, grep deseni, echo
+ * etiketi, check etiketi, `python3 - <<PY` gövdesi). Kök: yasak, ÇALIŞTIRILAN
+ * komut ile ARANAN/YAZILAN metni ayırt etmiyordu — heredoc vakası bunun bir alt
+ * hâliydi. Bölme + tırnak farkındalığı + metin-boru-hattı + heredoc alıcısı
+ * ayrımı `lib/komut-cozumleme.mjs`e taşındı; aynı korpusta **26 → 8** ve kalan
+ * 8'in **7'si GERÇEK ihlal** (4 `DROP DATABASE`, 3 WHERE'siz `DELETE FROM`).
+ * Gerekçeler, sınırlar ve ölçümler o dosyanın başlığında.
  */
-function komutParcalari(satir) {
-  return satir
-    .split(/&&|\|\||[;\n]|(?<!\|)\|(?!\|)/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-}
-const PARCALAR = komutParcalari(cmd);
+const PARCALAR = calistirilacakParcalar(cmd);
 
 for (const b of BANS) {
   if (PARCALAR.some((p) => b.re.test(p))) {
