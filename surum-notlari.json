@@ -238,6 +238,36 @@
           "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "İade irsaliyesinin belge numarası (IADE-GGAAYY-…) tarih parçasını artık fabrika gününden alıyor. Sunucusu farklı bir saat diliminde kurulmuş bir işletmede gece yarısı ile 03:00 arasında oluşturulan iade bir önceki günün numarasını taşıyabiliyordu; sunucusu Türkiye saatinde çalışan işletmede hiçbir numara değişmez. Daha önce basılmış belgeler yeniden numaralanmaz. Belgelerdeki tarih ve saat alanları (irsaliye, çeki listesi, refakat kartı, fatura ve makbuzlar) da aynı kurala geçti: hepsi fabrika gününü basar."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "duzeltme",
+          "metin": "Mal kabulden gelen bir topun metresi “Düzelt” ekranından değiştirildiğinde bu düzeltme artık Depo Hareketleri’nde bir düzeltme satırı olarak görünür ve alış faturası taslağı ile sipariş karşılaması bu düzeltilmiş kabul metrajını okur. Önceden düzeltme yalnız topun üstünde kalıyor, defter ve fatura taslağı eski kabul rakamını kullanıyordu. Kabul metrajı düzeltilmiş bir mal kabulünüz varsa fatura taslağındaki ve karşılamadaki rakam bu yüzden değişebilir; düzeltme yapılmamış kabulde hiçbir rakam değişmez."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "duzeltme",
+          "metin": "Çuval Düzelt ekranından yapılan renk, en ya da kalite düzeltmesi topun üstündeki özellik bayraklarını (ör. desen, ekstra işlem işaretleri) artık silmiyor. Önceden tablet yalnız renk/en gönderdiğinde sistem bunu “özellik yok” sayıyor ve topun bütün bayraklarını sessizce kaldırıyordu. Panelden yapılan düzeltmede davranış değişmedi; orada bayrak listesi zaten tam gönderiliyordu. Daha önce bu yolla silinmiş bayraklar kendiliğinden geri gelmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "İş emri iptal önizlemesi iptal edilmiş ya da Tambur’da tüketilmiş topları artık listelemiyor; önceden bu toplar hem listede hem “işlenmiş top” sayacında görünüyor, aynı penceredeki parti kırılımı ise onları saymıyordu — iki sayı ayrışıyordu. İptalin kendisi zaten yalnız üretimdeki toplara dokunuyordu; değişen yalnız önizlemedir. Geçmişinde iptal edilmiş ya da tüketilmiş top bulunan iş emirlerinde “işlenmiş” sayısı bu yüzden düşer."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "iyilestirme",
+          "metin": "Kapalı bir modülün ekranları artık hiçbir yüzeyden açılmıyor: tablette kapalı modülün kartı çizilmez, panelde kapalı modülün sayfası adres çubuğundan yazılarak da açılamaz ve yetkisiz sayfasına düşer. Önceden tablet kartı gösterip dokununca “modül kapalı” hatası veriyor, panelde ise adres çubuğuna yazılan yol sayfayı çizip sunucudan hata alıyordu. Bütün modülleri açık kullanan işletmede hiçbir şey değişmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Alış faturası taslağı ve sipariş karşılaması, mal kabul topunun metresini artık kabul anındaki değerden (depo defterindeki kabul satırı) okuyor; topun sonradan kesilmesi, kesimin geri alınması ya da Tambur’daki aşımlar bu rakamı değiştirmiyor. Önceden aşımlı bir kesim geri alındığında topun metresi kabul edilenden büyük kalabiliyor ve fatura taslağı ile karşılama bu şişmiş rakamı kullanıyordu. Böyle bir topunuz varsa taslak ve karşılama rakamı kabul anına döner; kabul satırı deftere yazılmadan önce alınmış (bu sürümden eski) mallarda topun kayıtlı metresi kullanılır ve ekran bunu uyarıyla söyler."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "yeni",
+          "metin": "İstasyon türlerine “Dokuma tezgahı” eklendi. Bu türde istasyonu olmayan işletmede hiçbir şey değişmez. Bu türde istasyon açıldıysa eski tablet sürümü o istasyonda oturum açamaz ve eski panel sürümü istasyon listesinde tür etiketini boş basar; ikisi de güncellemeyle düzelir."
         }
       ]
     },
