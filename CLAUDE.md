@@ -39,7 +39,7 @@ Her adım istasyon kataloğu + rota şablonundan kurulur; **TOPUN rotası için*
 
 ### Eşzamanlılık
 - Durum geçişi ATOMİK CLAIM: `updateMany WHERE {id, beklenen-durum}` + `count===0 → 409`; `findUnique→if→update` YASAK; `tx.*` çağrıları `Promise.all` ile paralelleştirilmez. Count-0 tanısı tx içinde taze okumayla ve sayaç kaynaklarında simetrik.
-- Advisory kilit tx'in **İLK ifadesi**dir (sonra alınan kilit hiçbir şey kazandırmaz, TOCTOU); her uzayın TEK sahibi olur ve envanter `helpers/period-guard.helper.ts` başlığındadır (8021 KK1 mükerrer · 8022 parti no · 8023 sevkiyat · 8024 oturum · 8025 izin · 8026 cari dönem · 8027 alış siparişi · 8028 kasa/banka · 8029 kod tekilliği · 8030 master-data birleştirme · 8031 paketleme grubu numarası); envanter bekçiyle ölçülür (`test_advisory_lock_namespaces`) — tam liste ve gerekçeler `docs/standart/ESZAMANLILIK.md`. Tek tx'te birden çok kilit deterministik sırada; PG 40P01/40001 → 409 "tekrar deneyin".
+- Advisory kilit tx'in **İLK ifadesi**dir (sonra alınan kilit hiçbir şey kazandırmaz, TOCTOU); her uzayın TEK sahibi olur ve envanter `helpers/period-guard.helper.ts` başlığındadır (8021 KK1 mükerrer · 8022 parti no · 8023 sevkiyat · 8024 oturum · 8025 izin · 8026 cari dönem · 8027 alış siparişi · 8028 kasa/banka · 8029 kod tekilliği · 8030 master-data birleştirme · 8031 paketleme grubu numarası · 8032 dokuma işi numarası); envanter bekçiyle ölçülür (`test_advisory_lock_namespaces`) — tam liste ve gerekçeler `docs/standart/ESZAMANLILIK.md`. Tek tx'te birden çok kilit deterministik sırada; PG 40P01/40001 → 409 "tekrar deneyin".
 - Durum ↔ sayaç çifti olan modelde iki yazar da karşı koşulu kendi atomik WHERE'ine koyar + DB CHECK seddi (çift yüklem kuralı).
 - **İdempotency:** kayıt yaratan uçlar `clientToken @unique` taşır (15 model; ölçüldü 2026-09-05); istemci token'ı MANTIKSAL DENEME başına bir kez üretir; token yalnız sonucu belirsiz bırakan hatada (ağ/zaman aşımı/5xx) yapışır, kesin 4xx'te yapışmaz; replay dört durumlu (`helpers/token-replay.helper.ts`).
 
@@ -94,6 +94,7 @@ Her adım istasyon kataloğu + rota şablonundan kurulur; **TOPUN rotası için*
 | İş emri · sipariş bağı | `docs/kurallar/is-emri.md` | Tip bağın aynası; iki bağ yolu iki sözleşme; kapanış dispozisyonu; giriş noktası; quick-start tek giriş |
 | Rota · renk · özellik · kapsama | `docs/kurallar/rota-renk.md` | Renk kısıt değil reçete; özellik gerçek kısıt, boş doğamaz; hedef siparişten; kapsama uyarır; renk kilidi mala bakar |
 | Kalite · istasyon yeteneği | `docs/kurallar/kalite.md` | Kalite = istasyon yeteneği, boğaz ikiz; `RollError` Tambur kararıyla kapanır; Faz B açık |
+| **Dokuma · dokuma işi · doff** ⚠️ kâğıtta | `docs/kurallar/dokuma.md` | Tezgah kendi VARLIĞI, topun rotasında adım değil; `MachineStopEvent` `MachineRun`ın defteri, ayrı varlık değil; top KK1'de doğar (`entrySource=WEAVING`); elle giriş birinci sınıf, rapor "ölçüldü mü elle mi" taşır |
 | Parti (Batch) | `docs/kurallar/parti.md` | Kimlik yalnız `Batch.id`; P01…P99 körlemesine sarar (profil); 8022 ilk ifade |
 | Yarı mamul | `docs/kurallar/yari-mamul.md` | Arzdır, düşülmez; `RAW_STOCK` bilerek geniş; `rollScope` fail-closed |
 | Refakat kartı | `docs/kurallar/refakat-karti.md` | WO ile doğar; plan canlı, sunum canlı, içerik yalnız geçersiz kartta donuk; `resolvePrintPlan` tek karar |
