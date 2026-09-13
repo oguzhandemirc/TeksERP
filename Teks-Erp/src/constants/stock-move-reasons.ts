@@ -45,6 +45,23 @@ export const STOCK_MOVE_REASON = {
    * Sevkin `SHIPMENT` satırına DOKUNULMAZ.
    */
   RETURN_CANCEL: "RETURN_CANCEL",
+  /**
+   * Müşteriye sevk — mal stok kümesinden ÇIKTI (`→ SHIPPED`).
+   *
+   * ⚠️ Çıkış ucu `warehouseId` TAŞIMAZ (K1: `SHIPPED` stok kümesinde değil), ama
+   * `Roll.warehouseId` BİLEREK temizlenmez — "en son hangi depodaydı" izi ve
+   * sevk stornosunun geri dönüş adresi odur. Yani topun deposu ile defterin ucu
+   * ayrı iki şeydir ve burada ayrışmaları meşrudur.
+   */
+  SHIPMENT_DISPATCH: "SHIPMENT_DISPATCH",
+  /**
+   * Sevk stornosu — `SHIPMENT_DISPATCH` satırının TERSİ (mal rafına geri döndü).
+   *
+   * ⚠️ Storno ≠ iade: iade malı MÜŞTERİDEN geri alır (`CUSTOMER_RETURN`), storno
+   * ise sevkin HİÇ OLMAMASI gerektiğini söyler. İleri satır SİLİNMEZ; ters satır
+   * ona `reversesMovementId` ile bağlanır ve ikisi birlikte "çıktı ve geri geldi" der.
+   */
+  SHIPMENT_CANCEL: "SHIPMENT_CANCEL",
   /** Fason firmasına çıkış / dönüş. */
   FASON_DISPATCH: "FASON_DISPATCH",
   FASON_RECEIPT: "FASON_RECEIPT",

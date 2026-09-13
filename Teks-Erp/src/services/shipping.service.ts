@@ -32,7 +32,9 @@ import {
   SackWeighingKind,
 } from "@prisma/client";
 import prisma from "../lib/prisma";
-import { writeWarehouseMovements } from "./helpers/warehouse-ledger.helper";
+import { postStockMove, postStockMoves } from "./helpers/warehouse-ledger.helper";
+import { reverseLegacyStockMove, reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
+import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { assertRollsHaveWarehouse } from "./helpers/warehouse-stock.helper";
 import { writeShipmentEvent } from "./helpers/shipment-event.helper";
 import { weightWarning } from "./helpers/measurement-threshold.helper";
@@ -3335,23 +3337,38 @@ export class ShippingService {
     // ("en son hangi depodaydı" izi + sevk stornosunun geri dönüş adresi), o yüzden
     // çıkışı yalnız bu defter kaydeder. Tek `createMany` (perf kuralı 9).
     if (flipped > 0) {
+      // ⚠️ YÜKLEMDE `preShipStatus: { not: null }` VAR ve bu bir SÜZGEÇ DEĞİL,
+      // KANIT koşuludur (K: stok defterine taşıma, 2026-09-13). Çıkış ucunun
+      // statüsü UYDURULAMAZ; onu yalnız bu tx'in yukarıdaki flip'i yazar
+      // (`preShipStatus: g.status`). `preShipStatus` NULL olan top bu karardan
+      // ÖNCE sevk edilmiştir — onun satırı (varsa) eski kapıdan yazıldı ve
+      // `preEpoch`e düşer; burada ikinci kez yazılmaz.
+      // Ölçüldü (fabrika kopyası 2026-09-13): 2.173 SHIPPED topun tamamı
+      // `preShipStatus = WAREHOUSE`, 1'i NULL (karar öncesi), deposuz 0.
       const shippedRows = await tx.roll.findMany({
-        where: { shipmentId, status: RollStatus.SHIPPED },
-        select: { id: true, currentQty: true, warehouseId: true },
+        where: { shipmentId, status: RollStatus.SHIPPED, preShipStatus: { not: null } },
+        select: { id: true, currentQty: true, warehouseId: true, preShipStatus: true },
       });
-      await writeWarehouseMovements(
+      await postStockMoves(
         tx,
         shippedRows.map((r) => ({
           rollId: r.id,
           eventType: WarehouseEventType.SHIPMENT,
           qty: r.currentQty,
-          fromWarehouseId: r.warehouseId,
+          // ÇIKIŞ: topun durduğu raf + sevk ÖNCESİ statüsü (kanıt).
+          from: { warehouseId: r.warehouseId, status: r.preShipStatus as RollStatus },
+          // GİRİŞ: stok kümesi DIŞI ⇒ depo YOK (K1 uç şekli). `Roll.warehouseId`
+          // temizlenmez; defterin ucu ile topun alanı ayrı iki şeydir.
+          to: { warehouseId: null, status: RollStatus.SHIPPED },
+          reasonCode: STOCK_MOVE_REASON.SHIPMENT_DISPATCH,
           shipmentId,
           userId: userId ?? null,
         })),
-        // Sevk brüt ve defterden türer: 0 metraj veri hatası, uçsuz top atlanır.
-        { onUnwritable: "throw" },
       );
+      // ⚠️ POLİTİKA ARGÜMANI YOK ve olmaması KASITLI: eski kapı `onUnwritable`
+      // ile "atla mı fırlat mı" sorusunu çağırana bırakıyordu; yeni kapı her
+      // zaman FIRLATIR. Sevk brüt ve defterden türer — uçsuz/0 metrajlı satırı
+      // sessizce atlamak, malı defterden kaçırmaktı (K6).
     }
     // Tahsisler artık DISPATCHED sevkiyatta → shippedQty defterden yeniden hesaplanır.
     const sevkiyat = await tx.shipment.findUnique({
@@ -3723,6 +3740,63 @@ export class ShippingService {
    * açık rejimde de "kapat" seçilebilir. Storno yetkisi (`shipping:undo-dispatch`)
    * kapanışı da kapsar: aynı kararın parçası, ayrıca `shipping:write` aranmaz.
    */
+  /**
+   * Sevk stornosunun DEFTER ayağı — ayrı metot çünkü `undoDispatch` gövdesi
+   * `max-lines-per-function` sınırına dayandı (kapı 2026-09-13'te durdurdu) ve
+   * tavanı yükseltmek bir karardır; dokunulan yer sınıra çekilir.
+   *
+   * ⚠️ GENELLEŞTİRİLMEDİ: tek çağıranı var. İkinci çağıran çıktığında
+   * `warehouse-ledger-reverse.helper`a taşınır — bugün taşımak, yarının şeklini
+   * bilmeden dondurmak olurdu.
+   */
+  private async writeUndoDispatchLedgerTx(
+    tx: Prisma.TransactionClient,
+    shipmentId: string,
+    userId?: string,
+  ): Promise<void> {
+    const backRows = await tx.roll.findMany({
+      where: { shipmentId, status: { not: RollStatus.SHIPPED } },
+      select: { id: true, currentQty: true, warehouseId: true, status: true },
+    });
+    // ⚠️ TERS SATIR BAĞLI DOĞAR (tasarım D2a): her storno satırı KENDİ ileri
+    // `SHIPMENT` satırını `reversesMovementId` ile işaret eder. Bağsız yazılsaydı
+    // (eski hâl) çift storno DB unique'ine çarpmazdı ve "bu satır ters kayıt mı"
+    // sorusu cevapsız kalırdı. Σ yönden gelir, bağdan değil — bağ TESPİT içindir.
+    for (const r of backRows) {
+      const ileri = await tx.warehouseMovement.findFirst({
+        where: {
+          rollId: r.id,
+          shipmentId,
+          eventType: WarehouseEventType.SHIPMENT,
+          reversesMovementId: null,
+          reversedBy: { none: {} },
+        },
+        orderBy: { createdAt: "asc" },
+        select: { id: true, fromStatus: true, toStatus: true },
+      });
+      const ters = {
+        eventType: WarehouseEventType.SHIPMENT_REVERSAL,
+        reasonCode: STOCK_MOVE_REASON.SHIPMENT_CANCEL,
+        userId: userId ?? null,
+      };
+      if (ileri && (ileri.fromStatus !== null || ileri.toStatus !== null)) {
+        await reverseStockMove(tx, ileri.id, ters); // yön AYNALANIR, metraj ileri satırdan
+        continue;
+      }
+      // Geri dönüş ucu topun ŞU ANKİ rafı/statüsü — storno yukarıdaki flip'te onu
+      // zaten geri koydu, yani uç CANLI VERİDEN değil BU TX'İN yazdığından okunuyor.
+      const geri = { warehouseId: r.warehouseId, status: r.status };
+      if (ileri) {
+        // ESKİ KAYIT DALI (K4): statüsüz ileri satır aynalanamaz, uç elle kurulur
+        // ama BAĞ kurulur (epoch sondası `reverseLegacyStockMove` içinde).
+        await reverseLegacyStockMove(tx, ileri.id, { ...ters, to: geri });
+        continue;
+      }
+      // İleri satır HİÇ yok (karar öncesi sevk): bağ kurulamaz, satır bağsız doğar.
+      await postStockMove(tx, { rollId: r.id, qty: r.currentQty, shipmentId, ...ters, to: geri });
+    }
+  }
+
   async undoDispatch(
     shipmentId: string,
     reason: string,
@@ -3814,22 +3888,7 @@ export class ShippingService {
       // kendi `warehouseId`'sinde duruyor (sevkte temizlenmiyor) → ayrı snapshot
       // gerekmez. SHIPMENT satırı SİLİNMEZ: defter append-only, çıkış gerçekten
       // olmuştu; iki satır birlikte "çıktı ve geri geldi" der.
-      if (restored > 0) {
-        const backRows = await tx.roll.findMany({
-          where: { shipmentId, status: { not: RollStatus.SHIPPED } },
-          select: { id: true, currentQty: true, warehouseId: true },
-        });
-        await writeWarehouseMovements(
-          tx,
-          backRows.map((r) => ({
-            rollId: r.id,
-            eventType: WarehouseEventType.SHIPMENT_REVERSAL,
-            qty: r.currentQty,
-            toWarehouseId: r.warehouseId,
-            shipmentId,
-            userId: userId ?? null,
-          })), { onUnwritable: "throw" });
-      }
+      if (restored > 0) await this.writeUndoDispatchLedgerTx(tx, shipmentId, userId);
 
       // Tahsisler SİLİNMEZ — `shippedQty` defterden türetilir ve yalnız DISPATCHED
       // sevkiyattaki tahsisleri sayar; sevkiyat PLANNED olunca karşılanma kendiliğinden
