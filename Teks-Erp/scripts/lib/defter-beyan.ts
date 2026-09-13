@@ -355,6 +355,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     borc: [{
       ne: "5 site fiziksel siliyor — unlinkOrderLine :467 (elle bağ kaldırma, tek satır delete) · WO replace :5816 (drop-and-recreate) · cancelOrderLine :529 · sipariş softDelete :2944 · cancelWithActions :3361 (sipariş/kalem iptali bağı koparır). \"Bu iş emri hangi sipariş için açıldı\" olgusu iz bırakmadan kaybolur — K5 şerhi (2026-08-29) FK Cascade'i kapattı ama uygulama katmanı aynı kaybı beş yoldan üretiyor. Kapanır: K1/K2 ile aynı DAMGA deseni (`unlinkedAt`+`unlinkedById`; `@@id([workOrderId, orderLineId])` bileşik anahtar ⇒ yeniden bağlama SackTagAssignment gibi diriliş dalıyla ya da vekil id + partial unique ile); okuyucu turu 58 `orderLinks` atfı + 17 delegate okuması süzgeç alır; `WorkOrder.type` aynası açık bağ sayısından türer",
       kanit: "kapının tarayıcısı (defterYazimlariniTara YARATAN/SILEN, 2026-09-14, taban 3b65daea): yaratan 4 site / 3 dosya, silen 5 site / 3 dosya; değişim izi deftere yazılmıyor. Kapanır ölçülür: `silen` boşalır → §10 ÖLÜ SİLME kırmızı → beyan DEFTER {DAMGA unlinkedAt}",
+      tasarim: "docs/design/WOTOL-BAG-DAMGA-PLAN.md",
       sahibi: "iş emri / sipariş alanı",
     }] },
   { model: "WorkOrderTargetProperty", sinif: "PIVOT_TICARI",
