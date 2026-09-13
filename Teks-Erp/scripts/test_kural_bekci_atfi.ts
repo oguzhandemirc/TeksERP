@@ -111,7 +111,7 @@ const TABAN = 0;
  *     | awk '{ a=gsub(/\(/,"("); b=gsub(/\)/,")"); if (length($0)==80 || a!=b) n++ } END { print n }'
  *   (awk'ta `length` BYTE sayabilir — kapı KARAKTER sayar; fark Türkçe harflerden.)
  */
-const KESIK_TABAN = 21;  // 63 → 50 → 21 (2026-09-13, entegratör 1e): tren sonunda BİRLEŞİK index'te ölçüldü — ea ayrıştırıcı −2 · 5e 17 + 11 alan · sabite trende TEK yazar; kalan 21: 01 13 · 6e 8
+const KESIK_TABAN = 14;  // 63 → 50 → 21 → 14 (2026-09-13, entegratör 1e): tren sonunda BİRLEŞİK index'te ölçüldü — ea ayrıştırıcı −2 · 5e 17 + 11 · 6e 7 · sabite trende TEK yazar; kalan 14: 01 13 · 6e 1
 
 /** Üretecin kesme imzası ya da dengesiz parantez — alan bütün değil. */
 function kesikMi(a: BekciAlani): boolean {
