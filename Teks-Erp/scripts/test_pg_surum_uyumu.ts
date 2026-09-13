@@ -23,6 +23,8 @@
 //
 // DB gerektirmez. jest/vitest YOK (CLAUDE.md).
 // =============================================================================
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   clientMajorVersion,
   serverVersionNumber,
@@ -120,6 +122,46 @@ async function main(): Promise<void> {
   check("§6c null/boş/çöp → null (ölçülemedi)",
     serverVersionNumber(null) === null && serverVersionNumber("") === null && serverVersionNumber("abc") === null);
   check("§6d `0` → null (sıfır bir sürüm değildir)", serverVersionNumber("0") === null);
+
+  // ═══ §7 — KABLOLAMA ŞEKLİ: karar ÜRÜNDE nasıl bağlanmış ═════════════════════
+  // ⭐ NEDEN ŞEKİL, NEDEN DAVRANIŞ DEĞİL: kapının DAVRANIŞI ortama bağlıdır —
+  // `client-newer` dalını basmak için sunucudan YENİ bir istemci gerekir ve CI'da
+  // çift UYUMLU (ikisi de 16). Davranışı burada koşmak, bekçiyi "yalnız bir
+  // makinede koşan" sınıfına düşürürdü. Ama **asıl sessizce bozulabilecek şey
+  // davranış değil BAĞLANTIDIR**: iki çağrı yerinin ASİMETRİSİ (yedek DURUR,
+  // geri yükleme UYARIR) ve bayrağın sırası. Onlar kaynaktan ölçülebilir.
+  // ⚠️ Kaynak taraması bir yüklem DEĞİL bir TRIPWIRE'dır: davranışı kanıtlamaz,
+  // yalnız kararın yerinden OYNADIĞINI söyler.
+  console.log("\n── §7 kablolama şekli (kaynak) ──");
+  const kaynakOku = (yol: string): string => readFileSync(join(__dirname, "..", "src", "services", yol), "utf8");
+  const yedekKaynak = kaynakOku("backup.service.ts");
+  const kopyaKaynak = kaynakOku("db-copy.service.ts");
+
+  check("§7a yedek yolu kapıyı ÇAĞIRIYOR", /await measureVersionCompat\(/.test(yedekKaynak));
+  check("§7b geri yükleme yolu kapıyı ÇAĞIRIYOR", /await measureVersionCompat\(/.test(kopyaKaynak));
+  check("§7c iki yol da TEK SQL kaynağını kullanıyor (ayrı yazılırsa biri bayatlar)",
+    yedekKaynak.includes("SERVER_VERSION_SQL") && kopyaKaynak.includes("SERVER_VERSION_SQL"));
+
+  // ⭐ ASİMETRİ KİLİDİ — bu iki satır bilerek FARKLI ve farkı kaybolursa kapı ya
+  // gereksiz yere durur ya da sessizce geçer.
+  const yedekDurur = /if \(compat\.result === "client-newer"\)[\s\S]{0,200}?return finish\(\s*false/.test(yedekKaynak);
+  check("§7d ⭐ YEDEK yolu `client-newer`da DURUYOR (fail-closed)", yedekDurur);
+  const kopyaDurmaz =
+    /await measureVersionCompat\(/.test(kopyaKaynak) &&
+    !/if \(compat\.result === "client-newer"\)[\s\S]{0,200}?return\b/.test(kopyaKaynak);
+  check("§7e ⭐ GERİ YÜKLEME yolu `client-newer`da DURMUYOR (uyarır, devam eder)", kopyaDurmaz);
+  check("§7f geri yükleme uyarısı `pg_restore` HATA METNİNE de iliştiriliyor",
+    /compatMessage \? ` \[\$\{compatMessage\}\]` : ""/.test(kopyaKaynak));
+
+  // ⭐ SIRA KİLİDİ — `3bc2c092` regresyonunun tekrarını önler: bayrak ilk
+  // `await`ten ÖNCE dikilmezse iki eşzamanlı yedek de kapıdan geçer.
+  const bayrakYeri = yedekKaynak.indexOf("\n  running = true;");
+  const awaitYeri = yedekKaynak.indexOf("await measureVersionCompat(");
+  check("§7g ⭐ `running = true` kapının `await`inden ÖNCE (karşılıklı dışlama sırası)",
+    bayrakYeri > 0 && awaitYeri > 0 && bayrakYeri < awaitYeri,
+    `bayrak=${bayrakYeri} await=${awaitYeri}`);
+  check("§7h ⭐ kapının erken dönüşü bayrağı KENDİ indiriyor (sızdırılmış kilit yok)",
+    /if \(compat\.result === "client-newer"\)\s*\{\s*running = false;/.test(yedekKaynak));
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);
