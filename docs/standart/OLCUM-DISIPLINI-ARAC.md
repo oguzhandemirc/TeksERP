@@ -137,6 +137,16 @@ Aracın kurulu olması, ölçtüğün sistemle **aynı sürüm hattında** oldu�
 *(d9: `pg_dump` 18.6 ↔ sunucu 16.15 — araç vardı, uyumlu değildi.)*
 **Savunma:** sürüm bağımlı araçta iki sürümü de yaz.
 
+### Bir LİSTE tek başına ölçüm aracı değildir — ELEME adımı onun yarısıdır
+Kök/desen listesiyle çalışan her ölçümde liste *neyi arayacağını*, eleme adımı *neyi
+saymayacağını* söyler. Eleme yazılmazsa liste **kendi çakışmalarını sayar**.
+*(Ölçüldü 2026-09-13: 2–3 harfli Türkçe kökler İngilizceyle çakışıyor — `al`→alert ·
+`ver`→verify · `ad`→admin · `bul`→bulk. Elemesiz tur **1.667**, elemeli tur **876**;
+fark tamamen aracın kendi gürültüsüydü.)*
+> **Bir listeyi kurala bağlarken elemeyi de bağla** — yoksa kural, listenin değil
+> çakışmanın ölçüsü olur.
+Kardeşi § Tarama, aradığı şeyin YAZILIŞ BİÇİMİNİ değil KENDİSİNİ sormalı.
+
 ### Boş çıktı bir ÖLÇÜM değildir — iki dünya aynı boşluğu üretir
 *"Yok"* ile *"var ama eşleşmedi"* **aynı boş çıktıyı** verir. Ayıran şey çıktı değil
 **ÇIKIŞ KODUDUR** — ve `2>/dev/null` mesajı yutar ama **kodu yutmaz**:

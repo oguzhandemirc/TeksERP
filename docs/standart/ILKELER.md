@@ -63,6 +63,25 @@ Bu repodaki arızaların en pahalı sınıfı **sessizce yutulan** koddur: kural
 > Komut: `node scripts/out/olc4.mjs` (⚠️ `scripts/out/` gitignore'da — kalıcı olması
 > gerekiyorsa araç `scripts/` altına inmeli ve bekçi sözleşmesine tabi olmalı).
 
+**[IL-32] BEYANDAN MANDALA nasıl terfi eder — dört şart, hepsi ölçüldü (d9, 2026-09-13):**
+
+1. **Kök listesi TEK KAYNAKTA yaşamalı ve o kaynak bekçidir**, belge değil.
+   Bugün iki liste var: bekçinin `TR_KOKLER`'i (52 kök, `test_identifier_language.ts:58`)
+   ve ölçümün listesi (39 + 87 kök, `scripts/out/` — **gitignore'lu**). ⚠️ Listeyi bu
+   belgeye KOPYALAMAK çözüm değildir: aynı soruyu cevaplayan ikinci bir kaynak, ilkiyle
+   birlikte değişmediği gün yanlış olur. **Ölçümün listesi bekçiye birleştirilir.**
+2. **ELEME ADIMI da kurala girer — liste tek başına ölçüm aracının YARISIDIR.**
+   `TR_GENEL`'in 2–3 harfli kökleri İngilizceyle çakışır (`al`→alert · `ver`→verify ·
+   `ad`→admin · `bul`→bulk); onları yalnız *"eşleşen segmentin KENDİSİ İngilizce
+   olmayacak"* adımı kurtarıyor. Elemesiz ölçüm 876 yerine **1.667** verdi.
+3. **`EN_CAKISMA` kümesi DEVRALINIR, sıfırdan kurulmaz** — bekçide ölçülerek kurulmuş
+   (`:79`); `parti` gibi hem fabrika kökü hem `partial/partition` öneki olan adlar orada
+   adıyla duruyor.
+4. **Ölçülmüş kök ≠ öngörülmüş kök.** Yazılı 39 fabrika kökünün **25'i** bugün `src/`te
+   eşleşti; kalan 14'ü (`levent` · `havuz` · `dokuma` · `cozgu` · `hasil` · `irsaliye` …)
+   ölçümden değil ÖNGÖRÜDEN geliyor. Mandal kurulurken bu ayrım korunur — öngörülmüş kök
+   bir tavanı doldurmaz.
+
 - **[IL-17]** Sabit `UPPER_SNAKE` · tip ve sınıf `PascalCase` · geri kalan `camelCase`; boolean `is/has/can/should` ön eki alır; async fonksiyon adı fiille başlar · zorlama: eslint:`@typescript-eslint/naming-convention` · kanıt: `Teks-Erp/eslint.config.mjs` `NAMING_CONVENTION` — üç kademeli daraltmayla 43 → 37 → 2 ihlal ölçüldü; kalan 2 düzeltildi · devralınan: bilinçli kaçışlar (`__xForTests`) allow-deseninde
 - **[IL-18]** Dosya adı türü söyler: backend `x.service.ts` · `x.helper.ts` · `x.routes.ts` · `x.controller.ts` · `x.middleware.ts` · `x.job.ts` · bekçi `test_x.ts`; Electron `XPage.tsx` + 5-dosya kalıbı; mobil `XScreen.tsx` · zorlama: insan:ad kalıbı AST'den ölçülmez · kanıt: `BACKEND.md`, `ELECTRON.md`, `MOBIL.md`
 - **[IL-19]** `$transaction` closure parametresi **DAİMA `tx`** — ESLint'in "tx içinde `Promise.all` yasak" guard'ı isim tabanlıdır, başka bir ad kuralı KÖR eder · zorlama: eslint:`no-restricted-syntax` (dolaylı) · kanıt: `eslint.config.mjs` `TX_PROMISE_ALL`; 196 `$transaction`ın 183'ü açık `(tx)` biçimi
