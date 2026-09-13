@@ -1686,6 +1686,7 @@ Kalan atlamalar üç biçimde ve strict hiçbirini görmez:
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Teks-Erp/scripts/test_gun_anahtari_kaynagi.ts` | Gün anahtarının TEK KAYNAKTAN (`factoryYmd`/`factoryDayKeyUtcMidnight`/`ddmmyy`) türetildiğini, süreç saat diliminden DEĞİL: ayraçsız birleştirme = ANAHTAR (dosya dosya beyanlı taban, iki yönlü) · ayraçlı/tek erişimci = GÖSTERİM (cırcır). ⚠️ Kusur SAHADA GÖRÜNMEZ (host Europe/Istanbul) ama `Dockerfile`'da `TZ` yok ⇒ konteynerde her gece 00:00–03:00 arası gün kayar; `test_latency_persist` bu yüzden üç saatlik pencerede kırmızı verip ARALIKLI sanılmıştı (2026-09-14) | | ✓ **dört kol ölçüldü**: ANAHTAR artış (beyansız dosya) ❌ · ANAHTAR düşüş (`ddmmyy`ye çevir) ❌ · DİĞER artış (49>48) ❌ · DİĞER düşüş (47<48) ❌ | 2026-09-14 |
 | `Teks-Erp/scripts/test_advisory_lock_namespaces.ts` | Advisory kilit uzaylarının TEK sahipli olduğunu ve `period-guard.helper.ts` başlığındaki envanterin kodla İKİ YÖNLÜ örtüştüğünü (kodda var-envanterde yok da, tersi de kırmızı); ayrıca çağrıda çıplak sayı ve kopya envanter listesi yasağı. |  |  |  |
 | `Teks-Erp/scripts/test_consistency.ts` | consistency-check.sql'in mekanik ikizi: denormalize defter alanları + 24 bölümlük drift taraması (§20 WorkOrderStep.status ve §21-24 ön muhasebe SQL'd | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_consistency_derived.ts` | §21-§26: türetilmiş alanların kaynağından kopmadığını ölçer (WO.type←bağ, WO.status←adımlar, bypass açıklığı←WO canlılığı, fason kalem açıklığı, label | ✓ | ✓ |  |
