@@ -300,10 +300,10 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   D("MachineStopReclass", "sebep DEĞİŞİM defteri — \"ne oldu değişmez\" kuralının NERESİNDE: duruşun olguları değişmez, SINIFLANDIRMASI bir KARARDIR ve karar revize edilir; revizyonun kendisi bu deftere from→to satırı olarak düşer ve o satır bir daha değişmez (append-only, updatedAt YOK). Ters yolu karşı kayıttır (to→from yeni satır), damga değil — bir kararı geri almak onu silmek değil tersini yazmaktır",
     { tur: "YOK" }, [], [],
     { borc: [{
-      ne: "ters yolu KARŞI KAYIT olacak (to→from) ama yazma yüzeyi de ters yolu da henüz YOK (P2b-1 şema-only)",
-      kanit: "src/ içinde machineStopReclass yaratan 0 yol (keşif 2026-09-13); şemada damga/ters bağ kolonu yok ve olmaması DOĞRU — mekanizma karşı kayıt. Kapanma: reclass yazan uç doğduğunda §5 kırmızı verir; o commit `yazan` + karşı-kayıt yolunu beyan eder ve bu borç silinir",
+      ne: "ters yolu KARŞI KAYIT olacak (to→from) ama yazma yüzeyi de ters yolu da henüz YOK — duruş tablosu FAZ 1b'de vardiya amirinin ELLE girişiyle doğar (tasarım §2.7), reclass ucu onunla gelir; P2b yalnız KOŞUM yüzeyini getirdi (MachineRun), duruş yazan 0 kaldı",
+      kanit: "src/ içinde machineStopEvent yaratan 0, machineStopReclass yaratan 0 yol (kapının tarayıcısı, 2026-09-13 taze taban 6a0981c4); şemada damga/ters bağ kolonu yok ve olmaması DOĞRU — mekanizma karşı kayıt. Kapanır ÖLÇÜLÜR (sonda 2026-09-13: sahte `tx.machineStopReclass.create` → §5 YENİ YOL ❌): reclass yazan uç doğduğunda o commit `yazan` + karşı-kayıt yolunu beyan eder. ⚠️ ÇEVİRME GÜNÜNÜN REÇETESİ: tipolojide karşı kaydın TÜRÜ YOK — KARSI_OLAY enum çifti ister, reclass'ın karşısı from↔to takasıdır; ya `KARSI_KAYIT` türü açılır (tersYazan aynı fonksiyon, ölçüm: to→from satırı yazan yol) ya da §13d simetrisi bu tabloya uygulanmaz diye beyan edilir. İkinci şerh: karşı kayıt MÜHÜR SINIRINA tabidir (tasarım \"GERİ ALMA DA MÜHÜR SINIRINA TABİDİR\": SEALED vardiyada 409 SHIFT_SEALED → unseal → satır → RESEAL) — ters yazan bu kapıyı taşımıyorsa beyan çevrilmez",
       tasarim: "docs/design/DOKUMA-TEZGAH-IZLEME-TASARIMI.md",
-      sahibi: "dokuma alanı (01, P2b)",
+      sahibi: "dokuma alanı — Faz 1b elle duruş girişi dilimi (01 ana hat)",
     }] }),
 
   // ── SATIRLAR — ters yolu EBEVEYNİNDE ──────────────────────────────────────
