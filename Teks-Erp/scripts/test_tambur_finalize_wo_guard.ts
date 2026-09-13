@@ -16,6 +16,7 @@
 // business-key ile çözülür (hardcoded UUID yok).
 import { Prisma, RollStatus, StationKind } from "@prisma/client";
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { TamburService } from "../src/services/tambur.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 
@@ -37,6 +38,8 @@ let woId: string | null = null;
       where: { kind: StationKind.TAMBUR },
       select: { id: true },
     });
+    // Kalite ROLDEN çözülür: kod fabrikaya, rol kuruluma aittir.
+    const gradeCode = (await roleGrade("FIRST")).code;
 
     const wo = await prisma.workOrder.create({
       data: { workOrderNumber: `TEST-IE-${stamp}`, status: "IN_PROGRESS" },
@@ -64,7 +67,7 @@ let woId: string | null = null;
           // devralır. Parent gradesizken `quality.gradeRequiredEnabled` AÇIK bir
           // kurulumda kuyruk kapısı 400 GRADE_REQUIRED veriyor ve bu bekçi
           // (iptal/devredilmiş WO guard'ı) konusunu ölçemeden düşüyordu.
-          qualityGrade: "1.KALITE",
+          qualityGrade: gradeCode,
         },
         select: { id: true },
       });
@@ -80,7 +83,7 @@ let woId: string | null = null;
     await prisma.workOrder.update({ where: { id: wo.id }, data: { status: "CANCELLED" } });
     let threw: string | null = null;
     try {
-      await svc.finalize({ rollId: roll1.id, decisions: [], cuts: [{ length: 40, qualityGrade: "1.KALITE", relatedErrorIds: [] }] });
+      await svc.finalize({ rollId: roll1.id, decisions: [], cuts: [{ length: 40, qualityGrade: gradeCode, relatedErrorIds: [] }] });
     } catch (e) { threw = (e as Error).message; }
     // NOT: /iptal/i Türkçe 'İ' (U+0130) ile eşleşmez — sabit alt-dizgiyle kontrol.
     ok(threw !== null && threw.includes("finalize edilemez"), "iptal WO'da finalize reddedildi", threw ?? "hata yok!");
@@ -96,7 +99,7 @@ let woId: string | null = null;
     if (preCutChild) rollIds.push(preCutChild.id);
     ok(!!preCutChild, "finalize öncesi cutOpenFabric çocuğu doğdu (30m)");
 
-    const res = await svc.finalize({ rollId: roll1.id, decisions: [], cuts: [{ length: 40, qualityGrade: "1.KALITE", relatedErrorIds: [] }] });
+    const res = await svc.finalize({ rollId: roll1.id, decisions: [], cuts: [{ length: 40, qualityGrade: gradeCode, relatedErrorIds: [] }] });
     const children = res.data.splitRolls;
     children.forEach((c) => rollIds.push(c.id));
     ok(children.length === 2, "kesim + kalan kuyruk = 2 çocuk", `n=${children.length}`);
@@ -126,7 +129,7 @@ let woId: string | null = null;
     // ── 5b. İdempotent retry cevabı YALNIZ finalize'ın kendi çocuklarını döner ──
     // (eski davranış: parent'ın TÜM TAMBUR_SPLIT çocukları — pre-cut C0 dahil —
     //  dönüyordu; istemci retry'de C0'a mükerrer etiket basardı.)
-    const retry = await svc.finalize({ rollId: roll1.id, decisions: [], cuts: [{ length: 40, qualityGrade: "1.KALITE", relatedErrorIds: [] }] });
+    const retry = await svc.finalize({ rollId: roll1.id, decisions: [], cuts: [{ length: 40, qualityGrade: gradeCode, relatedErrorIds: [] }] });
     ok(/idempotent/i.test(retry.message ?? ""), "retry idempotent yola düştü", retry.message ?? "");
     ok(
       retry.data.splitRolls.length === 2 &&

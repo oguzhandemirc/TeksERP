@@ -17,6 +17,7 @@
 // Çalıştır: npx tsx scripts/test_quickstart_dispatch.ts
 // =============================================================================
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { printedDocumentService } from "../src/services/printed-document.service";
@@ -26,6 +27,7 @@ import { RollStatus } from "@prisma/client";
 let ITEM = "";
 let ITEM_NAME = "";
 let GRADE = "";
+let GRADE_CODE = "";
 let ADMIN = "";
 let ST_BOYA = "";
 let CAT_BOYA = "";
@@ -50,10 +52,9 @@ async function resolveFixtures(): Promise<void> {
   );
   ITEM = item.id;
   ITEM_NAME = item.name;
-  GRADE = need(
-    await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }),
-    "QualityGrade 1.KALITE",
-  ).id;
+  const gradeRow = await roleGrade("FIRST");
+  GRADE = gradeRow.id;
+  GRADE_CODE = gradeRow.code;
   ADMIN = need(
     await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }),
     "User admin",
@@ -129,7 +130,7 @@ async function makeStockRoll(qty: number, width = 150): Promise<string> {
       initialQty: qty,
       currentQty: qty,
       status: RollStatus.STOCK,
-      qualityGrade: "1.KALITE",
+      qualityGrade: GRADE_CODE,
       qualityGradeId: GRADE,
       width,
       createdById: ADMIN,

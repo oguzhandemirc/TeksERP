@@ -129,7 +129,7 @@ const AGACLAR: Array<{ kok: string; tavan: number; dilim: string; sadece?: RegEx
   // ⚠️ Tavan SAYAÇTAN okunur, bu bekçinin DÖKÜMÜNDEN değil: döküm §-başına
   // kırpılır, `grep -c` basılmayan ihlalleri saymaz. Sayı yalnız SIKILAŞAN
   // yönde hareket eder. İniş hikâyesi commit mesajlarında.
-  { kok: "Teks-Erp/scripts", tavan: 137, dilim: "bekçi borcu — dilim 1+2 indi", sadece: /\/scripts\/test_[^/]+\.ts$/ },
+  { kok: "Teks-Erp/scripts", tavan: 111, dilim: "bekçi borcu — dilim 1+2+3 indi", sadece: /\/scripts\/test_[^/]+\.ts$/ },
   { kok: "mobil/src", tavan: 0, dilim: "(ii) — indi 2026-09-13" },
   { kok: "Electron/src", tavan: 0, dilim: "(iii) — indi 2026-09-13" },
 ];

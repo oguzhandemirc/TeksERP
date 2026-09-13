@@ -47,6 +47,7 @@ import * as bcrypt from "bcryptjs";
 import app from "../src/app";
 import prisma, { pool } from "../src/lib/prisma";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { roleGrade } from "./fixture-quality-grade";
 import { InventoryService } from "../src/services/inventory.service";
 import { TamburManualService } from "../src/services/tambur-manual.service";
 
@@ -350,11 +351,12 @@ async function main(): Promise<void> {
     // =========================================================================
     const coreReason = "manuel mod: top tamburda takıldı, bitmiş mal elle alındı";
     const coreToken = randomUUID();
+    const coreGradeCode = (await roleGrade("FIRST")).code;
     const coreBody = {
       itemId,
       initialQty: 412.5,
       width: 150,
-      qualityGrade: "1.KALITE",
+      qualityGrade: coreGradeCode,
       reason: coreReason,
       clientToken: coreToken,
       // colorId GÖNDERİLMEDİ → RENKSİZ. Eski sezgi bunu STOCK'a düşürürdü.
@@ -415,7 +417,7 @@ async function main(): Promise<void> {
       check("en (width) yazıldı", Number(roll.width) === 150, String(roll.width));
       check(
         "kalite kodu + katalog referansı yazıldı",
-        roll.qualityGrade === "1.KALITE" && roll.qualityGradeId !== null,
+        roll.qualityGrade === coreGradeCode && roll.qualityGradeId !== null,
         `${String(roll.qualityGrade)} / ${String(roll.qualityGradeId)}`,
       );
       check("clientToken kayda yazıldı", roll.clientToken === coreToken);

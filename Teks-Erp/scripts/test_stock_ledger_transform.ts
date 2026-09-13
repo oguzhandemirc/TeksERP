@@ -34,6 +34,7 @@
 // =============================================================================
 import { RollStatus, WarehouseEventType } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { InventoryService } from "../src/services/inventory.service";
 import { TamburService } from "../src/services/tambur.service";
 import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
@@ -140,7 +141,7 @@ async function cut(parentId: string, cutLength: number): Promise<string> {
     // açıkken kesim 400 GRADE_REQUIRED'a düşer, defter hiç ölçülemezdi.
     cutLength,
     rawDestination: "WAREHOUSE",
-    qualityGrade: "1.KALITE",
+    qualityGrade: (await roleGrade("FIRST")).code,
   });
   const childId = (res.data as { childRoll?: { id: string } }).childRoll?.id;
   if (!childId) throw new Error("kesim çocuğu doğmadı — fikstür kurulamadı");
@@ -328,9 +329,11 @@ async function main(): Promise<void> {
     ? await prisma.roll.findUnique({ where: { id: eChild }, select: { status: true, qualityGrade: true } })
     : null;
   const eRows = await rowsOf([eParent, eChild]);
+  // `remainingAction:"scrap"` SCRAP rolünün kodunu yazar (ROLE_BY_REMAINING_ACTION).
+  const scrapCode = (await roleGrade("SCRAP")).code;
   check(
-    "§E1 Bitmiş ebeveynin `scrap` çocuğu FIRE kalitesiyle ama WAREHOUSE statüsünde doğuyor (mal rafta)",
-    eChildRow?.status === RollStatus.WAREHOUSE && eChildRow?.qualityGrade === "FIRE",
+    `§E1 Bitmiş ebeveynin \`scrap\` çocuğu ${scrapCode} kalitesiyle ama WAREHOUSE statüsünde doğuyor (mal rafta)`,
+    eChildRow?.status === RollStatus.WAREHOUSE && eChildRow?.qualityGrade === scrapCode,
     `statü=${String(eChildRow?.status)} kalite=${String(eChildRow?.qualityGrade)}`,
   );
   check(

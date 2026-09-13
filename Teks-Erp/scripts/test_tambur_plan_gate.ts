@@ -14,13 +14,14 @@
 //      Kumaş farkı HER ZAMAN 400; zaten uyumlu satır 400 (yanlış kapı);
 //      IN_PRODUCTION top yetkisiz permissions ile rollsFailed'a düşer ama bağ
 //      yine kurulur (kısmi başarı bilinçli).
-// Fixture TEST- prefix'li, kendi ürettiğini siler; seed'e yalnız kalite
-// kodu (1.KALITE) ile bağlanır.
+// Fixture TEST- prefix'li, kendi ürettiğini siler; kaliteye yalnız ROL üzerinden
+// bağlanır (kod fabrikaya aittir, rol her kurulumda aynı).
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Prisma, RollStatus, StationKind } from "@prisma/client";
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { TamburService } from "../src/services/tambur.service";
 import { workOrderLinkService } from "../src/services/workorder-link.service";
 import {
@@ -77,6 +78,8 @@ const batchIds: string[] = [];
       }),
     ]);
     itemIds.push(item.id, item2.id);
+    // Kalite ROLDEN çözülür: kod fabrikaya, rol kuruluma aittir.
+    const gradeCode = (await roleGrade("FIRST")).code;
 
     /** WO + aktif TAMBUR adımı + adımda 1 top. */
     const makeWoWithRoll = async (opts: {
@@ -117,7 +120,7 @@ const batchIds: string[] = [];
           // kurulumda kuyruk kapısı 400 GRADE_REQUIRED veriyor ve bu bekçi kendi
           // konusunu (plan sapması) ölçemeden düşüyordu. KK1 (RAW_QC) bir kalite
           // istasyonu olduğu için üretimdeki topun kaliteli olması gerçekçidir.
-          qualityGrade: "1.KALITE",
+          qualityGrade: gradeCode,
         },
         select: { id: true },
       });
@@ -128,7 +131,7 @@ const batchIds: string[] = [];
     const finalizeArgs = (rollId: string, confirm?: boolean) => ({
       rollId,
       decisions: [],
-      cuts: [{ length: 40, qualityGrade: "1.KALITE", relatedErrorIds: [] as string[] }],
+      cuts: [{ length: 40, qualityGrade: gradeCode, relatedErrorIds: [] as string[] }],
       ...(confirm ? { confirmMismatch: true } : {}),
     });
 

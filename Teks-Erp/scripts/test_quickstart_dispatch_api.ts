@@ -15,6 +15,7 @@ import type { AddressInfo } from "net";
 import bcrypt from "bcryptjs";
 import app from "../src/app";
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { RollStatus } from "@prisma/client";
@@ -74,7 +75,7 @@ async function main(): Promise<void> {
   try {
     // ── Fixture'lar (seed business-key) ──
     const item = await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } });
-    const grade = await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } });
+    const grade = await roleGrade("FIRST");
     const admin = await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } });
     const boya = await prisma.station.findFirst({
       where: { code: "BOYA_FASON" },
@@ -97,7 +98,7 @@ async function main(): Promise<void> {
           initialQty: qty,
           currentQty: qty,
           status: RollStatus.STOCK,
-          qualityGrade: "1.KALITE",
+          qualityGrade: grade.code,
           qualityGradeId: grade.id,
           width: 150,
           createdById: admin.id,

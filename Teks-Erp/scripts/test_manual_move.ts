@@ -3,6 +3,7 @@
 //   (fasonda/çuval/downstream-işlem engel) + WAREHOUSE reopen + önizleme.
 // Çalıştır: npx tsx scripts/test_manual_move.ts
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { ACTIVE_MOVEMENT } from "../src/services/helpers/roll-movement.helper";
 import { RollStatus, WorkOrderStatus, RollOperationType } from "@prisma/client";
@@ -23,13 +24,15 @@ let bcN = 0;
 function bc(): string { bcN++; return `TST-MOV-${Math.floor(Math.random() * 0xffffff).toString(16).toUpperCase()}${bcN}`; }
 const woIds = new Set<string>();
 
-type Ctx = { ITEM: string; GRADE: string; ADMIN: string; ST_INT: string; ST_BOYA: string; ST_TAMBUR: string; CAT_BOYA: string; COLOR: string };
+type Ctx = { ITEM: string; GRADE: string; GRADE_CODE: string; ADMIN: string; ST_INT: string; ST_BOYA: string; ST_TAMBUR: string; CAT_BOYA: string; COLOR: string };
 
 async function seed(): Promise<Ctx> {
   const need = (v: { id: string } | null, l: string): string => { if (!v) throw new Error(`Seed eksik: ${l}`); return v.id; };
+  const grade = await roleGrade("FIRST");
   return {
     ITEM: need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS"),
-    GRADE: need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "1.KALITE"),
+    GRADE: grade.id,
+    GRADE_CODE: grade.code,
     ADMIN: need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin"),
     ST_INT: need(await prisma.station.findFirst({ where: { type: "INTERNAL", code: { notIn: ["TAMBUR_1"] } }, select: { id: true } }), "INTERNAL"),
     ST_BOYA: need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON"),
@@ -55,7 +58,7 @@ async function mkWo(c: Ctx, steps: { stationId: string; colorStep?: boolean }[],
 
 async function mkParty(c: Ctx, woId: string, stepId: string, n: number): Promise<{ batchId: string; rollIds: string[] }> {
   const bcs = Array.from({ length: n }, () => bc());
-  for (const b of bcs) await prisma.roll.create({ data: { barcode: b, itemId: c.ITEM, initialQty: 100, currentQty: 100, status: RollStatus.STOCK, qualityGrade: "1.KALITE", qualityGradeId: c.GRADE, width: WIDTH, createdById: c.ADMIN } });
+  for (const b of bcs) await prisma.roll.create({ data: { barcode: b, itemId: c.ITEM, initialQty: 100, currentQty: 100, status: RollStatus.STOCK, qualityGrade: c.GRADE_CODE, qualityGradeId: c.GRADE, width: WIDTH, createdById: c.ADMIN } });
   const attach = await svc.attachRolls(woId, bcs, c.ADMIN);
   const batchId = (attach.data as { batch: { id: string } }).batch.id;
   const rollIds = (await prisma.roll.findMany({ where: { batchId }, select: { id: true } })).map((r) => r.id);

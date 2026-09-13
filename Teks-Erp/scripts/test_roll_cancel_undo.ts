@@ -27,6 +27,7 @@
 import { randomUUID } from "crypto";
 import { TAMBUR_UNDO_CANCEL_CODE } from "../src/constants/reason-presets";
 import prisma, { pool } from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { InventoryService } from "../src/services/inventory.service";
 import {
   resolveRollRestoreBlockReason,
@@ -482,7 +483,7 @@ async function main(): Promise<void> {
     // ölçülmeden. Operatörün kesimde kalite seçmesinin birebir karşılığı.
     const kesim = await new TamburService().cutWarehouseRoll(
       kaynak.id,
-      { cutLength: 40, qualityGrade: "1.KALITE" },
+      { cutLength: 40, qualityGrade: (await roleGrade("FIRST")).code },
       adminId,
     );
     const cocuk = (kesim.data as { childRoll: { id: string } }).childRoll;

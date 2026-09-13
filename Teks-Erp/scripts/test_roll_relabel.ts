@@ -12,6 +12,7 @@
 //   8-10. Etiket bayat: relabel→labelDirty=true, baskı→false, no-op→temiz kalır
 // =============================================================================
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { InventoryService } from "../src/services/inventory.service";
 import { ShippingService } from "../src/services/shipping.service";
 import { LabelService } from "../src/services/label.service";
@@ -73,11 +74,14 @@ async function main() {
   const CONF_KEY = "shipping.confirmationEnabled";
   let prevConf: { value: unknown } | null | undefined;
 
+  // Relabel hedefi ROLDEN çözülür: kod fabrikaya, rol kuruluma aittir.
+  const targetGradeCode = (await roleGrade("SECOND")).code;
+
   try {
     // 1+2) Serbest topu relabel
     await inv.applyManualProperties(
       r1.id,
-      { colorId: colorB.id, propertyIds: prop ? [prop.id] : [], width: 200, qualityGrade: "A1" },
+      { colorId: colorB.id, propertyIds: prop ? [prop.id] : [], width: 200, qualityGrade: targetGradeCode },
       undefined,
     );
     const r1After = await prisma.roll.findUnique({
@@ -86,7 +90,7 @@ async function main() {
     });
     check("Renk değişti (A→B)", r1After?.colorId === colorB.id);
     check("En değişti (150→200)", Number(r1After?.width) === 200);
-    check("Kalite değişti (B→A1, katalog doğrulandı + FK senkron)", r1After?.qualityGrade === "A1");
+    check(`Kalite değişti (B→${targetGradeCode}, katalog doğrulandı + FK senkron)`, r1After?.qualityGrade === targetGradeCode);
     if (prop) check("Özellik atandı (replace)", r1After?.properties.length === 1 && r1After.properties[0].propertyId === prop.id);
 
     // 5) Renksiz yap
@@ -167,7 +171,7 @@ async function main() {
         propertyIds: r1Cur!.properties.map((p) => p.propertyId),
         width: r1Cur!.width != null ? Number(r1Cur!.width) : null,
         // `applyManualProperties` `qualityGrade?: string` bekler (nullable DEĞİL).
-        // Bu noktada değer "A1" (yukarıda doğrulandı) → dönüşüm davranışı değiştirmez.
+        // Bu noktada değer SECOND rolünün kodu (yukarıda doğrulandı) → dönüşüm davranışı değiştirmez.
         qualityGrade: r1Cur!.qualityGrade ?? undefined,
       },
       undefined,

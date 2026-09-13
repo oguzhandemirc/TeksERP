@@ -21,6 +21,7 @@
 // =============================================================================
 import { WarehouseEventType } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { InventoryService } from "../src/services/inventory.service";
 import { TamburService } from "../src/services/tambur.service";
 import { writeWarehouseMovement } from "../src/services/helpers/warehouse-ledger.helper";
@@ -70,7 +71,7 @@ async function main(): Promise<void> {
   const cut = await tambur.cutWarehouseRoll(parentId, {
     cutLength: 40,
     rawDestination: "WAREHOUSE",
-    qualityGrade: "1.KALITE",
+    qualityGrade: (await roleGrade("FIRST")).code,
   });
   const childId = (cut.data as { childRoll?: { id: string } }).childRoll?.id;
   if (childId) rollIds.push(childId);

@@ -19,13 +19,22 @@
 
 import { RollStatus, ShipmentStatus, RollEntrySource } from "@prisma/client";
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { returnService } from "../src/services/return.service";
 import { fixtureWarehouseId } from "./fixture-warehouse";
+import { atlamaDefteri } from "./lib/atlama";
 
 const FLAG_KEY = "return.gradingEnabled";
 
 let pass = 0;
 let fail = 0;
+// ⚠️ ATLAMA ARTIK SAYILIR VE BEYAN EDİLİR (2026-09-13). Eskiden `check(…, true)`
+// ile GEÇTİ sayılıyordu: kapsam kaybı sıfır değil EKSİ idi — kapsanmayan şey
+// yeşili ARTIRIYORDU. Bu daldan geçen koşum "ölçtüm" değil "bakamadım" der.
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
+
 function check(label: string, ok: boolean, detail = "") {
   if (ok) {
     pass++;
@@ -69,7 +78,7 @@ async function makeShippedRoll(itemId: string, width: number, shipmentId: string
       initialQty: 100,
       currentQty: 100,
       status: RollStatus.SHIPPED,
-      qualityGrade: "1.KALITE",
+      qualityGrade: (await roleGrade("FIRST")).code,
       entrySource: RollEntrySource.SUPPLIER_RECEIPT,
       shipmentId,
       // Sevk edilmiş top deposunu KORUR (sevkte temizlenmiyor) — deposuz SHIPPED
@@ -91,11 +100,16 @@ async function makeShippedRoll(itemId: string, width: number, shipmentId: string
   }
   const userId = admin.id;
 
-  const gFire = await prisma.qualityGrade.findUnique({ where: { code: "FIRE" }, select: { id: true, returnTargetStatus: true } });
-  const gA1 = await prisma.qualityGrade.findUnique({ where: { code: "A1" }, select: { id: true, returnTargetStatus: true } });
-  if (!gFire || !gA1) throw new Error("FIRE/A1 kalite yok — önce npx ts-node scripts/seed-return.ts");
-  check("Ön koşul: FİRE iade rafı=SCRAP", gFire.returnTargetStatus === RollStatus.SCRAP, String(gFire.returnTargetStatus));
-  check("Ön koşul: A1 iade rafı=A1_STOCK", gA1.returnTargetStatus === RollStatus.A1_STOCK, String(gA1.returnTargetStatus));
+  // İade rafı ROLDEN çözülür; rafın DEĞERİ fabrikanın yapılandırmasıdır (ön koşul).
+  const rowOfRole = async (role: "SCRAP" | "SECOND") => {
+    const { id, code } = await roleGrade(role);
+    const row = await prisma.qualityGrade.findUniqueOrThrow({ where: { id }, select: { id: true, returnTargetStatus: true } });
+    return { ...row, code };
+  };
+  const gFire = await rowOfRole("SCRAP");
+  const gA1 = await rowOfRole("SECOND");
+  check(`Ön koşul: ${gFire.code} (fire) iade rafı=SCRAP`, gFire.returnTargetStatus === RollStatus.SCRAP, String(gFire.returnTargetStatus));
+  check(`Ön koşul: ${gA1.code} (2. kalite) iade rafı=A1_STOCK`, gA1.returnTargetStatus === RollStatus.A1_STOCK, String(gA1.returnTargetStatus));
 
   const reason = await prisma.returnReason.findFirst({ select: { id: true } });
 
@@ -200,10 +214,15 @@ async function makeShippedRoll(itemId: string, width: number, shipmentId: string
     createdReturns.push(c11.data.id);
     check("11. Katalog nedeni (reasonId) ile iade kabul", !!c11.data.id);
   } else {
-    check("11. Katalog nedeni testi atlandı (ReturnReason yok)", true);
+    ATLAMA.atla("katalog nedeni (reasonId) ile iade", "ReturnReason kaydı yok");
   }
 
-  console.log(`\n${pass}/${pass + fail} geçti${fail ? ` — ${fail} BAŞARISIZ` : ""}`);
+  // ⚠️ ÖZET BİÇİMİ DEĞİŞTİ ve bu SKIP MUHASEBESİNİN ÖTESİNDE bir değişikliktir.
+  // Eski hâli `18/18 geçti` idi ve koşucunun `slash` dalına düşüyordu; o biçimin
+  // `, N atlandı` için YERİ YOK. Koşucu atlamayı YALNIZ `Sonuç:` satırından okur
+  // ve bu BİLEREK böyledir (serbest regex üç dosyada hayalet sayı üretmişti).
+  // ⇒ Beyan edilebilmesi için biçim `Sonuç:` kalıbına taşındı.
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
 })()
   .catch((e) => {
     console.error("Test hatası:", e);

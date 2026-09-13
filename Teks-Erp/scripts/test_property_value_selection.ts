@@ -30,6 +30,7 @@
 //      yoktu, operatör dolduruyor veri ulaşmıyor" vakasının bekçisi)
 // =============================================================================
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import {
   assertPropertySelectionsValid,
   copyStationCapabilitiesToRoll,
@@ -328,7 +329,7 @@ async function main() {
     // ölçülmeden. Kalite seçimi kesimin doğal parçasıdır.
     const cut = await tamburSvc.cutWarehouseRoll(r2, {
       cutLength: 40,
-      qualityGrade: "1.KALITE",
+      qualityGrade: (await roleGrade("FIRST")).code,
     });
     const childId = cut.data!.childRoll.id;
     rollIds.push(childId);

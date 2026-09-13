@@ -14,6 +14,7 @@
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import {
@@ -50,9 +51,9 @@ async function resolveFixtures(): Promise<void> {
     return v.id;
   };
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "Item PATOS");
-  const grade = await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true, code: true } });
-  GRADE = need(grade, "QualityGrade");
-  GRADE_CODE = grade!.code;
+  const grade = await roleGrade("FIRST");
+  GRADE = grade.id;
+  GRADE_CODE = grade.code;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
   ST_KURSUN = need(await prisma.station.findFirst({ where: { code: "KURSUN_KK2" }, select: { id: true } }), "KURSUN_KK2");
   ST_TAMBUR = need(await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }), "TAMBUR_1");
@@ -82,7 +83,7 @@ async function stockRoll(qty: number): Promise<{ id: string; barcode: string }> 
   const r = await prisma.roll.create({
     data: {
       barcode: code, itemId: ITEM, initialQty: qty, currentQty: qty,
-      status: RollStatus.STOCK, qualityGrade: "1.KALITE", qualityGradeId: GRADE,
+      status: RollStatus.STOCK, qualityGrade: GRADE_CODE, qualityGradeId: GRADE,
       width: WIDTH, createdById: ADMIN,
     },
     select: { id: true },

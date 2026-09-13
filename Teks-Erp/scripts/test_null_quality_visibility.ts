@@ -5,6 +5,7 @@
 // Koşum: npx tsx scripts/test_null_quality_visibility.ts
 // =============================================================================
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { RollStatus } from "@prisma/client";
 import { InventoryService } from "../src/services/inventory.service";
 import type { Request } from "express";
@@ -37,8 +38,10 @@ async function main(): Promise<void> {
   };
 
   try {
-    const nullId = await mk(null, `TNULLQ-${stamp}-N`);   // kalitesiz (Belirsiz)
-    const fireId = await mk("FIRE", `TNULLQ-${stamp}-F`);  // fire → varsayılan listede YOK
+    // Dışlanan kova ROLDEN çözülür: "fire" bu fabrikanın kodudur, SCRAP her fabrikada aynı.
+    const scrapCode = (await roleGrade("SCRAP")).code;
+    const nullId = await mk(null, `TNULLQ-${stamp}-N`);         // kalitesiz (Belirsiz)
+    const fireId = await mk(scrapCode, `TNULLQ-${stamp}-F`);    // fire → varsayılan listede YOK
 
     // 1) Varsayılan WAREHOUSE listesi (kalite filtresi override edilmeden → FIRE dışlanır).
     const listRes = (await inv.findAllRolls(
@@ -46,7 +49,7 @@ async function main(): Promise<void> {
     )) as { data: Array<{ id: string }> };
     const ids = new Set(listRes.data.map((r) => r.id));
     check("Kalitesiz (NULL) top varsayılan listede GÖRÜNÜR", ids.has(nullId));
-    check("FIRE top varsayılan listede GÖRÜNMEZ (dışlandı)", !ids.has(fireId));
+    check(`'${scrapCode}' top varsayılan listede GÖRÜNMEZ (dışlandı)`, !ids.has(fireId));
 
     // 2) İstatistik — NULL kalite "BELIRSIZ" kovasında; FIRE stat'ta da yok.
     const statRes = (await inv.getRollStats(req({ "filter[status]": "ALL" }))) as {
@@ -54,7 +57,7 @@ async function main(): Promise<void> {
     };
     const byQuality = statRes.data.byQuality ?? {};
     check("İstatistikte 'BELIRSIZ' kovası var (NULL kalite)", (byQuality["BELIRSIZ"] ?? 0) >= 1, JSON.stringify(byQuality));
-    check("İstatistikte 'FIRE' kovası yok (dışlandı)", !("FIRE" in byQuality));
+    check(`İstatistikte '${scrapCode}' kovası yok (dışlandı)`, !(scrapCode in byQuality));
   } finally {
     await prisma.roll.deleteMany({ where: { id: { in: created } } }).catch(() => {});
   }
