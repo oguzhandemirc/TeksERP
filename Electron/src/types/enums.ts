@@ -56,6 +56,9 @@ export const StationKind = {
   SUBCONTRACTOR: "SUBCONTRACTOR",
   SHIPPING: "SHIPPING",
   OTHER: "OTHER",
+  // Dokuma ⓪ (2026-09-14): tezgah — rotada ADIM DEĞİL, yalnız oturum istasyonu.
+  // Formda `dokumaEnabled` kapalıyken GİZLENİR (stationKindVisibility.ts).
+  WEAVING: "WEAVING",
 } as const;
 export type StationKind = (typeof StationKind)[keyof typeof StationKind];
 
@@ -66,6 +69,7 @@ export const stationKindLabels: Record<StationKind, string> = {
   SUBCONTRACTOR: "Fason / Dış İşlem",
   SHIPPING: "Sevkiyat / Tartı",
   OTHER: "Diğer",
+  WEAVING: "Dokuma Tezgahı",
 };
 
 export const DefectSeverity = {

@@ -8779,3 +8779,53 @@ KK1 listelerinde görünmezdi — görünürlük boşluğu, kırılma değil; sa
 Tek kaynak `mobil/src/constants/kk1EntrySources.ts`: `KK1_LIST_ENTRY_SOURCES` (+WEAVING) ve
 `rollEntrySourceLabels: Record<RollEntrySource, string>` ("Dokuma") — rozet yüzeyi doğduğu gün buradan okur;
 union büyüyünce `Record` derlemede durur ("ham basar" sınıfı doğmadan kapanır). Bekçi `kk1EntrySources.test`.
+
+## 2026-09-14 — `StationKind.WEAVING` İNDİ: oturum istasyonu ama ROTA ADIMI DEĞİL; "makinesiz KK1'de 400"un tersi bir kapı [ÇEKİRDEK]
+
+**Bağlam.** Tezgah topun rotasında adım değil, kendi varlığı (dokuma.md §1). Ama tablet oturumu
+istasyon tabanlıdır (`PlaceConfirmView`: istasyon → makine) ve 47 ölçtü: şemada/`SESSIONABLE`da
+WEAVING olmadan tezgah başında oturum açılamıyor. ⇒ enum değeri (13 adım, geri alınamaz) 01'de
+şema penceresiyle indi; ekran 0c'nin tablet dilimine kaldı.
+
+**İki kapı, iki yön.** ① OTURUM: `SESSIONABLE_STATION_KINDS += WEAVING`, izin `mobile:dokuma`
+(`STATION_KIND_PERM`). ⚠️ Satır olmasaydı `needM` undefined kalır ve HER mobil oturum izni tezgah
+açardı — fail-OPEN; bu yüzden izin kodu ekrandan ÖNCE kataloğa girdi (SCREENLESS gerekçeli, ekran
+doğunca ölü muaf → kapı kırmızı → satır düşer). Tezgah YALNIZ MAKİNEYLE açılır (`STATION_MACHINE_ONLY`):
+koşum/indirme makineye bağlanır, istasyon-modu oturum onları atıfsız doğururdu — SHIPPING'in tersi.
+② ROTA: bugün böyle bir kapı YOKTU — rota şablonu ve WO rotası istasyonu id ile aldığı için bir
+WEAVING istasyonu SESSİZCE adım olabilirdi. Tek helper `assertStationsRoutable`
+(`NON_ROUTABLE_STATION_KINDS`), iki çağıran (`route.service.validateSteps` · `workorder.service
+.assertRouteRefsActive`), 400 `STATION_NOT_ROUTABLE`. Kapı var/aktif okumasına BİNMEZ — ayrı ve adlı,
+bekçi çağrı yolunu ölçsün diye.
+
+**Ayna ve görünürlük (1e hükmü).** Backend'de "kapalı modülde WEAVING istasyonu yaratma" kapısı YOK
+(çekirdek yol, zararsız istasyon); panel istasyon formu türü yalnız `dokuma.enabled` açıkken ÇİZER —
+"kapalı modülün bayrağı çizilmez"in istasyon-türü ayağı; ayna DOKUNULMAZ (tip/etiket tam), yalnız
+form seçeneği süzülür ve mevcut değer korunur (SHIPPING vakası: gizlenen seçenek formu sessizce
+OTHER'a düşürürdü). `ENUM_LABELS.WEAVING` RollEntrySource dilindeydi ("Dokumadan İndi") ⇒ çakışma
+`SHARED_ENUM_VALUES`ta beyan + `STATION.kind` override "Dokuma Tezgahı" (ortak Türkçe yetmez).
+Mobil: `StationKind` union'a girdi, `SessionStationKind`e BİLEREK GİRMEDİ — ekran yok; eski/yeni
+tablet `isSessionStationKind('WEAVING')` false ⇒ tezgahta oturum açamaz, çökmez.
+
+**minVersion HAYIR (ölçüldü).** Eski tablet: oturum açamaz, çökmez. Eski panel: `stationKindLabels
+[WEAVING]` undefined basar ve formda düzenleyemez — ama backend önce inince referans fabrikada
+WEAVING istasyonu HENÜZ YOK (istasyonu yeni panel açar) ⇒ kırılma yok; sürüm notu maddesi
+tablet+panel (ea).
+
+**Doff bağı düzeltmesi (aynı commit, 47 ölçtü).** Hüküm (a) "eşleşme yalnız KK1 cihazı bir TEZGAHA bağlıysa"
+idi, kod "damga doluysa" diyordu — yarım: klonda son 60 günün KK1 toplarının 2190/2205'i `createdMachineId`
+dolu ve HEPSİ muayene (RAW_QC) makinesi ⇒ masa KK1'den doff bağı her seferinde 409. "Tezgah mı?" sorusu
+`StationKind.WEAVING`i ister, o yüzden düzeltme bu commit'e girdi: damgadaki makinenin istasyonu WEAVING
+değilse karşılaştırma YOK (kabul). Bekçi fikstürü dört dala açıldı (tezgah farklı → 409 · muayene damgası →
+kabul · aynı tezgah → kabul · null → kabul); negatif sonda: "tezgah mı" koşulu kaldırılınca §4c2 kırmızı.
+⇒ *Bir kural "X ise" diyorsa kodun yüklemi de X'i sormalı — "X'e benzer bir şey doluysa" aynı kural değildir.*
+
+**Ölçüm.** `test_station_kind_weaving` 7/0 (§1 oturum · §2 makine zorunlu · §3 rota kapısı üç yol ·
+§4 körlük zemini TAMBUR girer); dört negatif sonda: SESSIONABLE'dan düşür → §1a/§1b/§2 · izin satırı
+sil → §1b (fail-open) · MACHINE_ONLY boşalt → §2 · NON_ROUTABLE boşalt → §3a/b/c/§4. Electron
+`stationKindVisibility.test.ts` 3/0 (iki negatif sonda). Sweep: audit_labels 22/0 · enum_add_value
+11/0 · schema_drift 4/0 · db_invariants 187/0 · permission/role kataloğu (boot uzlaştırması sonrası)
+24/0 · 21/0 · screen_catalog 37/0 · swagger 12/0 · route_auth 15/0 · mobile_screen_permissions 6/0 ·
+work_session 23/0 · mobil_enum_aynasi 34/0 · production_regime_gate 40/0 · feature_flag_contract 78/0.
+Ders: *bir tür değeri eklemek iki soru sorar — "kim açar" (oturum) ve "nereye giremez" (rota);
+ikincisi sorulmazsa yeni tür var olan her listeye SESSİZCE sızar.*

@@ -20,6 +20,7 @@ import prisma from "../lib/prisma";
 import { SHRINK_REASON_CODE } from "../constants/variance-reasons";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
+import { assertStationsRoutable } from "./helpers/station-routable.helper";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
 import {
   parseQueryParams,
@@ -539,6 +540,8 @@ async function assertRouteRefsActive(
     if (live.length !== stationIds.length) {
       throw AppError.badRequest("Rotada bulunmayan veya pasif istasyon var");
     }
+    // Tezgah rotada adım değildir — tür kapısı ayrı ve adlı (400 STATION_NOT_ROUTABLE).
+    await assertStationsRoutable(prisma, stationIds);
   }
   const categoryIds = [
     ...new Set(steps.map((s) => s.requiredCategoryId).filter((x): x is string => !!x)),

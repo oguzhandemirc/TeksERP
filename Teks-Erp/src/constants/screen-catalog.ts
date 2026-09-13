@@ -415,6 +415,10 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // ekranının "İndir" eylemi (DOKUMA-IS-EMRI §3.4) ve henüz yok — ekranla ölü muaf olur.
   { code: "loom:doff", reason: "Top indirme kaydı — tablet tezgah ekranı (dokuma dilimi) henüz doğmadı; backend-only." },
   { code: "loom:doff-revoke", reason: "Top indirme geri alma — yüzey dokuma dilimiyle doğacak; backend-only." },
+  // Dokuma ⓪ (2026-09-14): oturum kapısı izni ekrandan ÖNCE doğdu (StationKind.WEAVING ile
+  // aynı commit — yoksa tezgah oturumu fail-open). Tablet TEZGAH ekranı SCREEN_CATALOG'a
+  // girdiği gün bu satır ölü muaf olur ve bekçi kırmızı verir — silinmesi o dilimin işidir.
+  { code: "mobile:dokuma", reason: "Tezgah oturum izni — tablet tezgah ekranı (0c dokuma dilimi) henüz doğmadı; oturum kapısı için erken." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

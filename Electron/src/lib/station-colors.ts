@@ -26,6 +26,10 @@ export function stationToneForKind(kind: string): StationToneKey {
     // istasyonu varsayılan `process` tonuna düşüyordu.
     case "SHIPPING":
       return "depo";
+    // Tezgah üretim hattıdır; rota adımı olmadığı için chip'te nadiren çizilir —
+    // çizildiğinde process tonu (ham→işlem) doğru komşuluktur.
+    case "WEAVING":
+      return "process";
     default:
       return "process";
   }

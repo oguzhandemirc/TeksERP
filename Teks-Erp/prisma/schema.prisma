@@ -34,6 +34,7 @@ enum StationKind {
   SUBCONTRACTOR // Fason / boyahane (dış işlem)
   SHIPPING // Sevkiyat/tartı — üretim dışı, MAKİNESİZ istasyon (istasyona-bağlı donanım + istasyon-oturumu)
   OTHER // Diğer / özel istasyon
+  WEAVING // Dokuma tezgahı — rotada ADIM DEĞİL, yalnız OTURUM istasyonu (tezgah = makine; rota şablonuna giremez)
 }
 
 /// `FabricProperty` veri tipi — gerekçe ve tuzaklar için o modelin notuna bak.

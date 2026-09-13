@@ -57,6 +57,17 @@ export function useTezgahEnabled(): boolean {
   return q.data?.data?.tezgahEnabled ?? false;
 }
 
+/**
+ * Dokuma modülü açık mı (`dokuma.enabled`, ebeveyni `production.enabled`). Yüklenene
+ * dek KAPALI — fail-closed. İstasyon formunda `WEAVING` türü yalnız bununla çizilir
+ * ("kapalı modülün bayrağı çizilmez" kuralının istasyon-türü ayağı, 1e 2026-09-14).
+ */
+export function useDokumaEnabled(): boolean {
+  const q = useFeatureFlags();
+  const d = q.data?.data;
+  return (d?.productionEnabled ?? false) && (d?.dokumaEnabled ?? false);
+}
+
 export function useDemoModeEnabled(): boolean {
   const q = useFeatureFlags();
   return q.data?.data?.demoModeEnabled ?? false;

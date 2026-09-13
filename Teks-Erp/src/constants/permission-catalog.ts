@@ -262,5 +262,10 @@ export const PERMISSION_CATALOG = [
   // kullanıcı kararı: yarı mamul girişi RENKLİ mal kabulüdür ve yanlışlıkla
   // yapılırsa top ham stoğa "boyalı" olarak düşer.
   { code: "mobile:kk1-yari-mamul", module: "MOBILE", category: "mobile", description: "KK1 — dışarıdan alınan yarı mamul kabulü (renkli giriş)" },
+  // Dokuma ⓪ (2026-09-14): tezgah başı oturum izni — `StationKind.WEAVING` istasyonunda
+  // oturum açmak bunu ister (work-session STATION_KIND_PERM). Ekranı (tablet TEZGAH)
+  // 0c'nin dilimiyle doğar; o güne kadar SCREENLESS gerekçeli. Geri alma yetkisi
+  // (`mobile:dokuma-geri-al`) ayrı kod, tablet dilimiyle (DOKUMA-IS-EMRI §3.9 J.3).
+  { code: "mobile:dokuma", module: "MOBILE", category: "mobile", description: "Mobil — Tezgah (dokuma) ekranı: koşum · duruş · indirme; WEAVING istasyonunda oturum" },
   { code: "mobile:*", module: "MOBILE", category: "mobile", description: "Tüm mobil ekranlar (wildcard)" },
 ] as const satisfies readonly PermissionCatalogEntry[];

@@ -7,7 +7,9 @@ import { Input } from "@/components/ui/input";
 import { stationKindLabels, stationTypeLabels, StationType, type StationKind } from "@/types/enums";
 import { subcontractorCategoryService } from "@/pages/SubcontractorCategories/service";
 import type { SubcontractorCategory } from "@/pages/SubcontractorCategories/types";
+import { useDokumaEnabled } from "@/hooks/usePricingEnabled";
 import { stationFormDefaults, stationFormSchema, type StationFormValues } from "./schema";
+import { visibleStationKindLabels } from "./stationKindVisibility";
 import type { Station } from "./types";
 
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
@@ -20,6 +22,8 @@ interface Props {
 }
 
 export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
+  // WEAVING türü yalnız dokuma modülü açıkken seçilebilir (mevcut değer korunur).
+  const dokumaEnabled = useDokumaEnabled();
   const defaults: StationFormValues = initial
     ? {
         name: initial.name,
@@ -82,7 +86,7 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
                   <EnumSelect<StationKind>
                     value={field.value}
                     onChange={field.onChange}
-                    labels={stationKindLabels}
+                    labels={visibleStationKindLabels({ dokumaEnabled }, field.value) as Record<StationKind, string>}
                   />
                 )}
               />

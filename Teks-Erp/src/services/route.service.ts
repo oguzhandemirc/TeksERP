@@ -13,6 +13,7 @@ import { BaseService, type BaseServiceConfig } from "./base.service";
 import { stepCanApplyColor, stepCanApplyProperty } from "./helpers/step-capability.helper";
 import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 import { AppError } from "../utils/app-error";
+import { assertStationsRoutable } from "./helpers/station-routable.helper";
 import type { ApiResponse } from "../types/api.types";
 
 /**
@@ -165,9 +166,9 @@ export class RouteService extends BaseService {
         where: { id: { in: stationIds }, isActive: true },
         select: { id: true },
       });
-      if (found.length !== stationIds.length) {
-        throw AppError.badRequest("Rota adımında bulunmayan veya pasif istasyon var");
-      }
+      if (found.length !== stationIds.length) throw AppError.badRequest("Rota adımında bulunmayan veya pasif istasyon var");
+      // Tezgah rotada adım değildir — tür kapısı ayrı ve adlı (400 STATION_NOT_ROUTABLE).
+      await assertStationsRoutable(prisma, stationIds);
     }
 
     const categoryIds = pick("requiredCategoryId");

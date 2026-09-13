@@ -1,0 +1,18 @@
+-- =============================================================================
+-- DOKUMA ⓪ — `StationKind.WEAVING` (2026-09-14) — GERİ ALINAMAZ enum değeri
+-- =============================================================================
+-- Tezgah topun ROTASINDA ADIM DEĞİLDİR (dokuma.md); ama tablet oturumu istasyon
+-- tabanlıdır ve tezgah başı oturum bir istasyon türü ister. WEAVING yalnız
+-- OTURUM istasyonudur: `SESSIONABLE_STATION_KINDS`e girer, rota şablonuna ve iş
+-- emri rotasına GİREMEZ (`assertStationsRoutable`, 400 STATION_NOT_ROUTABLE).
+-- TEK İFADE, AYRI DOSYA: PG yeni enum değerini onu yaratan tx'te KULLANDIRMAZ
+-- (55P04); değeri kullanan hiçbir ifade buraya girmez. `IF NOT EXISTS`: defter
+-- dışı açılmış bir değer sonraki `migrate deploy`i düşürmesin.
+-- ⚠️ minVersion HAYIR (ölçüldü): eski tablet `isSessionStationKind('WEAVING')`
+--   false ⇒ oturum açamaz, çökmez; eski panel etiketi undefined basar ama
+--   referans fabrikada WEAVING istasyonu YOK (istasyonu yeni panel açar).
+-- Aynalar (reçete 3–11): work-session SESSIONABLE/STATION_KIND_PERM · station
+--   adapter · swagger · Electron enums/audit-labels/station-colors/Stations şeması ·
+--   mobil models.ts — aynı commit.
+-- =============================================================================
+ALTER TYPE "StationKind" ADD VALUE IF NOT EXISTS 'WEAVING';

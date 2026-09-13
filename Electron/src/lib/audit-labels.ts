@@ -777,6 +777,9 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   // uyarısı bu — `MINOR` bir SEBEP sınıfı DEĞİL, bir SÜRE sınıfıdır ve
   // `ReasonPreset.stopLossClass`a asla yazılamaz.
   "MACHINE_STOP_EVENT.lossClass": { MINOR: "Mikro duruş (eşik altı)" },
+  // StationKind.WEAVING (dokuma ⓪, 2026-09-14) — istasyon TÜRÜ; global `WEAVING`
+  // RollEntrySource dilinde ("Dokumadan İndi", topun kaynağı). Ortak Türkçe YETMEZ.
+  "STATION.kind": { WEAVING: "Dokuma Tezgahı" },
 };
 
 /**
@@ -819,6 +822,9 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
     "(kusur ne kadar büyük), ikincisinde bir SÜRE sınıfı (mikro-duruş eşiğinin altı). " +
     "MACHINE_STOP_EVENT.lossClass override'ı ile ayrıldı (2026-09-13)",
   EXTERNAL: "StationType(dış istasyon) ve WarehouseEventType(dış hareket) — ikisi de 'Dış'",
+  WEAVING:
+    "RollEntrySource(top tezgahtan indi) ve StationKind(istasyon bir tezgah) — ortak Türkçe YETMEZ: " +
+    "ilki topun KAYNAĞI, ikincisi istasyonun TÜRÜ. STATION.kind override'ı ile ayrıldı (2026-09-14)",
   SUBCONTRACTOR: "istasyon/mükerrer-varlık/cari — üçü de aynı gerçek kişiyi işaret eder: 'Fason'",
   OTHER: "istasyon türü ve ödeme yöntemi — ikisi de 'Diğer'",
   YARN: "kalem türü ve sayım satırı türü — ikisi de 'İplik'",

@@ -333,6 +333,9 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "loom:run-revoke",
       "loom:doff",
       "loom:doff-revoke",
+      // Tezgah oturumu (⓪, 2026-09-14): ekran doğana kadar süpervizör paketinde;
+      // tablet dilimiyle operatör paketine iner (loom:run ile aynı vaat).
+      "mobile:dokuma",
     ],
   },
   {

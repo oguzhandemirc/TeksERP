@@ -12,8 +12,9 @@
 //      koşumlu ama İŞSİZ doff da uyarır (dördüncü kova)
 //   §3 tx-A stok defterine satır YAZMAZ, top YAZMAZ (fikstür ürününe daraltılmış sayım —
 //      global sayım paralel bekçide sahte kırmızı verirdi)
-//   §4 KK1: WEAVING + doffEventId bağ kurar; revoked doff 409; başka makinenin doff'u 409;
-//      WEAVING olmayan topa doff 400; MASA KK1'de (makinesiz) bağ KABUL, eşleşme yalnız tezgah-bağlı KK1'de;
+//   §4 KK1: WEAVING + doffEventId bağ kurar; revoked doff 409; TEZGAH damgası farklı tezgaha 409;
+//      MUAYENE (RAW_QC) makinesi damgalı masa KK1 → KABUL (§4c2); WEAVING olmayan topa doff 400;
+//      damgasız (null) → KABUL (§4e) — eşleşme YALNIZ damgadaki makinenin istasyonu WEAVING ise;
 //      HTTP şeması `doffEventId`i TAŞIR ve yarı mamulle birlikte reddeder
 //   §5 DOFF_CANCEL: topsuz doff damgalanır, Roll dokunulmaz; toplu doff 409 DOFF_HAS_ROLLS
 //      barkodlarla; İPTAL EDİLMİŞ topla da 409 (statüye bakılmaz); mesaj çare ÖNERMEZ;
@@ -37,6 +38,7 @@
 //   · replay'den `deriveRunWarnings` düşürülünce: §1d/§1e kırmızı.
 //   · `nextDoffCodeTx`ten `lockCodeScopeTx` düşürülünce: §6b kırmızı (kilit beklemedi).
 //   · `claimDoffForRollTx`e "damga yoksa 400" konunca: §4e kırmızı (ölü kapı, 1e hükmü).
+//   · "tezgah mı" koşulu (`station.kind !== WEAVING → return`) kaldırılınca: §4c2 kırmızı — masa KK1 hep 409 (47'nin bulgusu).
 //   · şemadan `doffEventId` düşürülünce: §4f kırmızı (alan sessizce düşer).
 //   · `diagnoseRevokeRefusal`e `take: 20` konunca: §5e kırmızı (sayı 20'ye kırpılır).
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım.
@@ -74,11 +76,18 @@ async function main(): Promise<void> {
   if (engel) { console.log(`⛔ ${engel}`); process.exit(1); }
   console.log("\n=== Top indirme (DoffEvent): kaydet · bağla · geri al · pencere ===\n");
   const ek = Date.now().toString(36);
+  // Fikstür: bir TEZGAH istasyonu (WEAVING) + iki tezgah, bir MUAYENE istasyonu (RAW_QC) + bir
+  // muayene makinesi — masa KK1'in damgası budur (47 ölçtü: KK1 toplarının 2190/2205'i muayene
+  // makinesiyle damgalı; eşleşme yalnız TEZGAH damgasına bakar, yoksa masa KK1 hep 409'du).
   const station = await prisma.station.create({
-    data: { name: `TEST-DF-IST-${ek}`, code: `TEST-DF-S-${ek}`.toUpperCase().slice(0, 32), type: "INTERNAL", kind: "PROCESS_QC", isActive: true },
+    data: { name: `TEST-DF-IST-${ek}`, code: `TEST-DF-S-${ek}`.toUpperCase().slice(0, 32), type: "INTERNAL", kind: "WEAVING", isActive: true },
+  });
+  const muayeneSt = await prisma.station.create({
+    data: { name: `TEST-DF-KK1-${ek}`, code: `TEST-DF-Q-${ek}`.toUpperCase().slice(0, 32), type: "INTERNAL", kind: "RAW_QC", isActive: true },
   });
   const makine = await prisma.machine.create({ data: { stationId: station.id, name: `TEST-DF-M1-${ek}`, code: `TEST-DF-M1-${ek}`.toUpperCase().slice(0, 32), isActive: true } });
   const makine2 = await prisma.machine.create({ data: { stationId: station.id, name: `TEST-DF-M2-${ek}`, code: `TEST-DF-M2-${ek}`.toUpperCase().slice(0, 32), isActive: true } });
+  const muayene = await prisma.machine.create({ data: { stationId: muayeneSt.id, name: `TEST-DF-KK1M-${ek}`, code: `TEST-DF-KQ-${ek}`.toUpperCase().slice(0, 32), isActive: true } });
   const item = await prisma.item.create({ data: { code: `TEST-DF-${ek}`, name: `TEST-DF-${ek} kumaş`, itemType: "FABRIC" }, select: { id: true } });
   const inventory = new InventoryService();
   const taban = { machineId: makine.id, productionLineNo: 1, pieceCount: 2, counterSource: MachineDataSource.OPERATOR };
@@ -145,8 +154,16 @@ async function main(): Promise<void> {
     check("§4b geri alınmış doff'a top → 409 DOFF_NOT_LINKABLE", !r4b.ok && kod(r4b.e) === "DOFF_NOT_LINKABLE", r4b.ok ? "geçti" : kod(r4b.e));
     if (r4b.ok) rollIds.push((r4b.v.data as { id: string }).id);
     const r4c = await bekle(inventory.createInitialEntry({ itemId: item.id, initialQty: 50 }, undefined, makine2.id, false, { forcedEntrySource: RollEntrySource.WEAVING, doffEventId: d1.data!.id }));
-    check("§4c başka makinenin doff'una top → 409 DOFF_NOT_LINKABLE", !r4c.ok && kod(r4c.e) === "DOFF_NOT_LINKABLE", r4c.ok ? "geçti" : kod(r4c.e));
+    check("§4c TEZGAH damgası (WEAVING) farklı tezgahın doff'una → 409 DOFF_NOT_LINKABLE", !r4c.ok && kod(r4c.e) === "DOFF_NOT_LINKABLE", r4c.ok ? "geçti" : kod(r4c.e));
     if (r4c.ok) rollIds.push((r4c.v.data as { id: string }).id);
+    // §4c2 — MASA KK1'in gerçek hâli: damga MUAYENE makinesi (RAW_QC). Tezgah değil ⇒ karşılaştırılmaz, KABUL.
+    const d4c2 = await openDoff({ ...taban });
+    doffIds.push(d4c2.data!.id);
+    const r4c2 = await bekle(inventory.createInitialEntry({ itemId: item.id, initialQty: 50 }, undefined, muayene.id, false, { forcedEntrySource: RollEntrySource.WEAVING, doffEventId: d4c2.data!.id }));
+    const r4c2Id = r4c2.ok ? (r4c2.v.data as { id: string }).id : null;
+    if (r4c2Id) rollIds.push(r4c2Id);
+    const r4c2Row = r4c2Id ? await prisma.roll.findUnique({ where: { id: r4c2Id }, select: { doffEventId: true, createdMachineId: true } }) : null;
+    check("§4c2 MUAYENE makinesi damgalı (RAW_QC, masa KK1) → bağ KABUL, damga korunur", r4c2.ok && r4c2Row?.doffEventId === d4c2.data!.id && r4c2Row.createdMachineId === muayene.id, r4c2.ok ? `doff=${r4c2Row?.doffEventId === d4c2.data!.id}` : kod(r4c2.e));
     const r4d = await bekle(inventory.createInitialEntry({ itemId: item.id, initialQty: 50 }, undefined, makine.id, false, { forcedEntrySource: RollEntrySource.MANUAL_ENTRY, doffEventId: d1.data!.id }));
     check("§4d WEAVING olmayan topa doff → 400 DOFF_LINK_REQUIRES_WEAVING", !r4d.ok && kod(r4d.e) === "DOFF_LINK_REQUIRES_WEAVING", r4d.ok ? "geçti" : kod(r4d.e));
     if (r4d.ok) rollIds.push((r4d.v.data as { id: string }).id);
@@ -297,8 +314,8 @@ async function main(): Promise<void> {
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
     await prisma.doffEvent.deleteMany({ where: { machineId: { in: [makine.id, makine2.id] } } });
     await prisma.machineRun.deleteMany({ where: { machineId: { in: [makine.id, makine2.id] } } });
-    await prisma.machine.deleteMany({ where: { stationId: station.id } });
-    await prisma.station.deleteMany({ where: { id: station.id } });
+    await prisma.machine.deleteMany({ where: { stationId: { in: [station.id, muayeneSt.id] } } });
+    await prisma.station.deleteMany({ where: { id: { in: [station.id, muayeneSt.id] } } });
     await prisma.item.deleteMany({ where: { id: item.id } });
   }
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

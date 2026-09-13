@@ -1,0 +1,25 @@
+import { describe, expect, it } from "vitest";
+import { StationKind, stationKindLabels } from "@/types/enums";
+import { visibleStationKindLabels } from "./stationKindVisibility";
+
+// Negatif sonda (2026-09-14): `FLAG_GATED_STATION_KINDS`ten WEAVING düşürülünce
+// "kapalıyken gizli" ayağı kırmızı; süzgeçten `kind !== current` düşürülünce
+// "mevcut değer korunur" ayağı kırmızı.
+describe("visibleStationKindLabels — WEAVING yalnız dokuma açıkken", () => {
+  it("bayrak KAPALI: WEAVING listede yok, öteki türler tam", () => {
+    const v = visibleStationKindLabels({ dokumaEnabled: false }, null);
+    expect(v.WEAVING).toBeUndefined();
+    expect(Object.keys(v).sort()).toEqual(
+      Object.keys(stationKindLabels).filter((k) => k !== StationKind.WEAVING).sort(),
+    );
+  });
+  it("bayrak AÇIK: ayna tam, etiket aynadan", () => {
+    const v = visibleStationKindLabels({ dokumaEnabled: true }, null);
+    expect(v).toEqual(stationKindLabels);
+    expect(v.WEAVING).toBe("Dokuma Tezgahı");
+  });
+  it("bayrak KAPALI ama düzenlenen istasyon WEAVING: mevcut değer korunur (OTHER'a düşmez)", () => {
+    const v = visibleStationKindLabels({ dokumaEnabled: false }, StationKind.WEAVING);
+    expect(v.WEAVING).toBe("Dokuma Tezgahı");
+  });
+});

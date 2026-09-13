@@ -28,9 +28,12 @@ const TABLE = "WORK_SESSION";
 
 /**
  * Oturum açılabilen istasyon türleri — mobil StationKind→ekran registry'sinin
- * backend aynası (RAW_QC→KK1, PROCESS_QC→KK2/Kurşun, TAMBUR→Tambur, SHIPPING→Tartı/Paket).
+ * backend aynası (RAW_QC→KK1, PROCESS_QC→KK2/Kurşun, TAMBUR→Tambur, SHIPPING→Tartı/Paket,
+ * WEAVING→Tezgah). ⚠️ WEAVING tabletin `SessionStationKind` union'ında HENÜZ YOK
+ * (ekran 0c'nin tablet dilimiyle doğar) — backend önce iner, tablet o güne kadar
+ * tezgahta oturum açamaz (fail-closed, çökme yok).
  */
-export const SESSIONABLE_STATION_KINDS = ["RAW_QC", "PROCESS_QC", "TAMBUR", "SHIPPING"] as const;
+export const SESSIONABLE_STATION_KINDS = ["RAW_QC", "PROCESS_QC", "TAMBUR", "SHIPPING", "WEAVING"] as const;
 
 // F221: StationKind → o istasyonda oturum açmak için gereken MOBILE izni. mobile:*
 // ve * wildcard'ları matchesPermission ile geçer; yalnız ilgili izne sahip operatör
@@ -40,6 +43,9 @@ const STATION_KIND_PERM: Record<string, string> = {
   PROCESS_QC: "mobile:kk2-kursun",
   TAMBUR: "mobile:tambur",
   SHIPPING: "mobile:tarti-paket",
+  // Tezgah oturumu `mobile:dokuma` ister. Satır olmasaydı `needM` undefined kalır ve
+  // HER mobil oturum izni tezgah açardı — fail-OPEN; izin kataloğa bu yüzden ⓪ ile girdi.
+  WEAVING: "mobile:dokuma",
 };
 
 /** Oturum açma yetkisi olan mobil ekran izinleri (routes + peripheral for-session paylaşır). */
@@ -48,11 +54,19 @@ export const MOBILE_SESSION_PERMS = [
   "mobile:kk2-kursun",
   "mobile:tambur",
   "mobile:tarti-paket",
+  "mobile:dokuma",
 ] as const;
 
 function isSessionableKind(kind: StationKind): boolean {
   return (SESSIONABLE_STATION_KINDS as readonly string[]).includes(kind);
 }
+
+/**
+ * YALNIZ MAKİNEYLE açılan türler: tezgah = makine (`MachineRun`/`DoffEvent` makineye
+ * bağlanır); istasyon-modu oturum makine damgasız kalır ve koşum/indirme atıfsız
+ * doğar. SHIPPING'in tersi (o makinesiz istasyon).
+ */
+const MACHINE_ONLY_STATION_KINDS: readonly StationKind[] = ["WEAVING"];
 
 function isP2002(e: unknown): boolean {
   return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
@@ -240,6 +254,13 @@ export class WorkSessionService {
       if (!station) throw AppError.badRequest("İstasyon bulunamadı veya pasif");
       if (!isSessionableKind(station.kind)) {
         throw AppError.badRequest("Bu istasyon türünde çalışma oturumu açılamaz");
+      }
+      if (MACHINE_ONLY_STATION_KINDS.includes(station.kind)) {
+        throw AppError.badRequest("Tezgah oturumu makine seçilerek açılır — istasyon-modu oturum tezgahta yok", {
+          code: "STATION_MACHINE_ONLY",
+          stationId: station.id,
+          kind: station.kind,
+        });
       }
       // F221: istasyon türü izni (makine dalıyla aynı).
       const needS = STATION_KIND_PERM[station.kind];

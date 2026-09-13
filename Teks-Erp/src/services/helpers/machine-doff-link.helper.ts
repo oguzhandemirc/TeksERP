@@ -11,7 +11,7 @@
 // `updateMany` ile "dokunma" kilidi burada YASAK: `DoffEvent` append-only,
 // `updatedAt` taşımaz — satıra yazmadan kilit almak için tek yol FOR UPDATE.
 // =============================================================================
-import { Prisma, RollEntrySource } from "@prisma/client";
+import { Prisma, RollEntrySource, StationKind } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 
 type Tx = Prisma.TransactionClient;
@@ -30,11 +30,13 @@ interface KilitliDoff {
  *   "doff'suz top" kovasında ayrı gösterir).
  * - `entrySource !== WEAVING` iken doff verilmişse 400: bağ yalnız dokuma topuna aittir.
  * - Satır yoksa 404; `revokedAt` doluysa 409 `DOFF_NOT_LINKABLE`.
- * - Makine eşleşmesi YALNIZ KK1 cihazı bir tezgaha bağlıysa denetlenir (tezgah
- *   başı KK1): `createdMachineId` doluysa doff'un makinesiyle uyuşmalı — çıkarım
- *   değil kontrol. Masa KK1'de (damga yok) bağ KABUL: bağ zaten açık liste
- *   seçimidir ve KK1 damgası muayene istasyonunu taşır, tezgahı değil — "damga
- *   yoksa 400" hiç geçemeyen ölü bir kapı olurdu (1e hükmü 2026-09-13, 47 ölçtü).
+ * - Makine eşleşmesi YALNIZ KK1 cihazı bir TEZGAHA bağlıysa denetlenir: damgadaki
+ *   makinenin istasyonu `WEAVING` ise doff'un makinesiyle uyuşmalı (409). RAW_QC/
+ *   PROCESS_QC/başka/istasyonsuz damga ve `null` damga → KABUL (masa KK1). Ölçüldü
+ *   (47, klon son 60 gün): KK1 toplarının 2190/2205'i damgalı ve HEPSİ muayene
+ *   makinesi — "damga doluysa karşılaştır" masa KK1'den bağı HER seferinde 409'a
+ *   düşürüyordu; "damga yoksa 400" ise hiç geçemeyen ölü kapıydı (1e hükmü (a),
+ *   2026-09-13/14). Bağ zaten KK1'de açık LİSTE seçimidir; çıkarım değil kontrol.
  */
 export async function claimDoffForRollTx(
   tx: Tx,
@@ -61,12 +63,17 @@ export async function claimDoffForRollTx(
       revokedAt: doff.revokedAt,
     });
   }
-  if (args.createdMachineId && args.createdMachineId !== doff.machineId) {
-    throw AppError.conflict("Bu indirme başka bir makineye ait — topun makinesiyle uyuşmuyor.", {
-      code: "DOFF_NOT_LINKABLE",
-      doffEventId: doff.id,
-      doffMachineId: doff.machineId,
-      rollMachineId: args.createdMachineId,
-    });
-  }
+  if (!args.createdMachineId || args.createdMachineId === doff.machineId) return;
+  // "Tezgah mı?" — damgadaki makinenin istasyon türü; yalnız WEAVING karşılaştırılır.
+  const stamped = await tx.machine.findUnique({
+    where: { id: args.createdMachineId },
+    select: { station: { select: { kind: true } } },
+  });
+  if (stamped?.station.kind !== StationKind.WEAVING) return;
+  throw AppError.conflict("Bu indirme başka bir tezgaha ait — topun tezgahıyla uyuşmuyor.", {
+    code: "DOFF_NOT_LINKABLE",
+    doffEventId: doff.id,
+    doffMachineId: doff.machineId,
+    rollMachineId: args.createdMachineId,
+  });
 }
