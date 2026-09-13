@@ -506,6 +506,12 @@ model User {
   updatedMachines          Machine[]          @relation("MachineUpdatedBy")
   createdMachineSpecs      MachineSpec[]      @relation("MachineSpecCreatedBy")
   updatedMachineSpecs      MachineSpec[]      @relation("MachineSpecUpdatedBy")
+  createdShiftDefinitions  ShiftDefinition[]  @relation("ShiftDefinitionCreatedBy")
+  updatedShiftDefinitions  ShiftDefinition[]  @relation("ShiftDefinitionUpdatedBy")
+  createdMachineCollectors MachineCollector[] @relation("MachineCollectorCreatedBy")
+  updatedMachineCollectors MachineCollector[] @relation("MachineCollectorUpdatedBy")
+  machineStopsClassified   MachineStopEvent[] @relation("MachineStopClassifiedBy")
+  machineStopReclasses     MachineStopReclass[] @relation("MachineStopReclassBy")
   createdPeripheralDevices PeripheralDevice[] @relation("PeripheralDeviceCreatedBy")
   updatedPeripheralDevices PeripheralDevice[] @relation("PeripheralDeviceUpdatedBy")
   createdProductRecipes    ProductRecipe[]    @relation("ProductRecipeCreatedBy")
@@ -942,6 +948,10 @@ model Machine {
   machineRuns    MachineRun[]
   /// Tezgah künyesi — `Cascade` (künye makinesiz anlamsız). Referans profilde BOŞ.
   machineSpec    MachineSpec?
+  /// Tezgah duruşları — `Restrict`; guard'ı ingest diliminde (yazan yol orada doğar).
+  machineStops   MachineStopEvent[]
+  /// Toplayıcı kapsamı — `Cascade` (kapsam satırı makinesiz anlamsız).
+  collectorLinks MachineCollectorLink[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -1684,6 +1694,8 @@ model MachineRun {
   /// ⚠️ ÜÇ OPSİYONEL BAĞ DA `onDelete: Restrict`. Prisma'nın opsiyonel ilişkideki
   /// varsayılanı `SetNull`dır ve o, gerçekleşmiş bir koşumun BAĞLAMINI sessizce
   /// siler — yani ileri kaydı DEĞİŞTİRMEK olur (defter doktrini yasağı).
+  stops        MachineStopEvent[]
+
   machine      Machine       @relation(fields: [machineId], references: [id], onDelete: Restrict)
   weavingOrder WeavingOrder? @relation("MachineRunWeavingOrder", fields: [weavingOrderId], references: [id], onDelete: Restrict)
   item         Item?         @relation("MachineRunItem", fields: [itemId], references: [id], onDelete: Restrict)
@@ -1706,6 +1718,320 @@ model MachineRun {
   //    Bu, `MACHINE_DELETE_GUARDS`taki TERS yönle çelişmez; ikisi ayrı soru sorar
   //    ve gerekçeleri `guarded-hard-remove.ts` → `machineRunCount`ta yan yanadır.
   @@map("machine_runs")
+}
+
+/// ÖLÇÜM/KARAR KAYNAĞI — bir sayının ya da sınıflandırmanın NEREDEN geldiği.
+/// ⚠️ `@default` ALMAZ: değeri yazan her yol kaynağını AÇIKÇA beyan eder.
+/// `SIMULATED` uydurulmuş değerin beyanıdır ve `OPERATOR`dan AYRI durur —
+/// birleştirmek o beyanı yok ederdi.
+enum MachineDataSource {
+  MACHINE
+  INFERRED
+  OPERATOR
+  SUPERVISOR
+  SIMULATED
+}
+
+/// DURUŞUN RANDIMANA ETKİSİ. ⚠️ `MINOR` BURAYA ASLA YAZILMAZ — o bir SÜRE
+/// sınıfıdır, sebep sınıfı değil: yalnız mikro-duruş eşiğinin altındaki
+/// duruşlardan TÜRER ve tek helper'da yaşar. 45 dakikalık bir kopuşu `MINOR`
+/// saymak kullanılabilirliği hiç düşürmezdi (kayıp yalnız performansta erirdi).
+enum MachineStopLossClass {
+  UNPLANNED
+  SETUP
+  PLANNED
+  NON_SCHEDULED
+  MINOR
+}
+
+/// SİNYALİN ANLAMI (marka bağımsız) — taşıma katmanı ayrı bir alanda yaşar.
+enum MachineSignalKind {
+  RUN_CONTACT
+  PICK_COUNTER
+  COURSE_COUNTER
+  RACK_COUNTER
+  RUN_SECONDS
+  INSTANT_RPM
+  WARP_STOP
+  WEFT_STOP
+  OPERATOR_STOP
+  STOP_CODE
+  FABRIC_LENGTH
+}
+
+/// DURUŞU KİM KAPATTI. `WATCHDOG` = ajan sustu ⇒ süre bir TAHMİNDİR ve
+/// persentillerden dışlanır; sonradan gelen gerçek kapanış bir ÇELİŞKİ değil
+/// bir DÜZELTMEDİR (ileri damga null'lanmaz, yeni damga eklenir).
+enum MachineStopEndSource {
+  SIGNAL
+  OPERATOR
+  WATCHDOG
+}
+
+/// VARDİYA KATALOĞU — "A vardiyası 08:00'de başlar, 8 saat".
+model ShiftDefinition {
+  id   String @id @default(uuid()) @db.Uuid
+  /// Rapor anahtarı — ASLA düzenlenmez (`ReasonPreset.code` emsali).
+  code String @unique @db.VarChar(8)
+  name String @db.VarChar(100)
+
+  /// ⚠️ `@db.Time`/`DateTime` DEĞİL: bu MUTLAK AN değil TAKVİM KURALIDIR.
+  /// Mutlak ana çeviren tek kaynak `constants/time.ts` (Europe/Istanbul);
+  /// çıplak `DATE_TRUNC` yasak.
+  startMinute         Int
+  durationMinutes     Int
+  /// PLANLI mola — POT'tan düşülüp düşülmeyeceğine bayrak karar verir.
+  plannedBreakMinutes Int @default(0)
+
+  /// Hangi haftagünleri (0=Pazar..6=Cumartesi). ⚠️ BOŞ = HER GÜN, ve bu sihirli
+  /// değerin gerekçesi bu cümledir: boş dizi "kısıt yok" demektir, "hiçbiri"
+  /// değil. Yedi elemanlı dizi aynı bilgiyi iki biçimde tutardı.
+  activeWeekdays Int[]   @default([])
+  sortOrder      Int     @default(0)
+  isActive       Boolean @default(true)
+
+  /// KATLANMIŞ ARAMA GÖLGESİ — değeri DB üretir (`GENERATED ALWAYS AS … STORED`),
+  /// uygulama HİÇ yazmaz. Ham SQL'de **NOT NULL**: nullable bir fold + unique,
+  /// PG'nin NULLS DISTINCT davranışı yüzünden sınırsız "adsız" satır kabul ederdi.
+  nameFold String? @default(dbgenerated())
+
+  instances ShiftInstance[]
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt      @db.Timestamptz
+  createdById String?  @db.Uuid
+  updatedById String?  @db.Uuid
+  createdBy   User?    @relation("ShiftDefinitionCreatedBy", fields: [createdById], references: [id])
+  updatedBy   User?    @relation("ShiftDefinitionUpdatedBy", fields: [updatedById], references: [id])
+
+  @@unique([nameFold])
+  @@index([isActive, sortOrder])
+  @@map("shift_definitions")
+}
+
+/// VARDİYA PENCERESİ — (tanım × fabrika günü), MATERYALİZE.
+/// Neden satır, neden "okumada hesapla" değil: ① iptal/tatil vardiyasının evi
+/// (`isCancelled` → payda 0, satır SİLİNMEZ) ② makinesiz planlı süre —
+/// kullanılabilirliğin paydası makineden bağımsızdır ③ kararlı gruplama anahtarı.
+///
+/// ⚠️ TANIM DEĞİŞİRSE MATERYALİZE PENCERELER BAYAT KALIR: `@@unique` job'ı
+/// idempotent yapar ve TAM BU YÜZDEN ikinci koşum bayat satırı DÜZELTMEZ.
+/// Tanım güncellenince bugünden SONRAKİ ve karnesi MÜHÜRLENMEMİŞ pencereler
+/// yeniden hesaplanır (üstüne yazılır, satır silinmez); mühürlü pencere DEĞİŞMEZ.
+model ShiftInstance {
+  id                String   @id @default(uuid()) @db.Uuid
+  shiftDefinitionId String   @db.Uuid
+  /// Fabrika günü çıpası — gece yarısını geçen vardiya BAŞLADIĞI güne yazılır.
+  factoryDayKey     DateTime @db.Timestamptz
+
+  startsAt DateTime @db.Timestamptz
+  endsAt   DateTime @db.Timestamptz
+
+  isCancelled  Boolean @default(false)
+  cancelReason String? @db.VarChar(300)
+
+  shiftDefinition ShiftDefinition    @relation(fields: [shiftDefinitionId], references: [id], onDelete: Restrict)
+  stops           MachineStopEvent[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt      @db.Timestamptz
+
+  /// Job iki kez koşarsa ikinci satır DOĞMAZ ⇒ advisory kilit GEREKMEZ.
+  @@unique([shiftDefinitionId, factoryDayKey])
+  @@index([startsAt])
+  @@map("shift_instances")
+}
+
+/// KENAR TOPLAYICI — fabrika LAN'ında koşan ajanın kimliği.
+///
+/// ⛔ SIR KOLONLARI BU DİLİMDE BİLEREK YOK: `tokenHash` · `tokenIssuedAt` ·
+/// `tokenRotatedAt` burada DEĞİL, ingest dilimindedir ve oraya HİJYENİYLE
+/// BİRLİKTE iner (nasıl saklanır — bcrypt · log/audit/sürüm notuna girmeme
+/// kuralının o kolona bağlanması · dönme ve iptal yolu · ve bunları ÖLÇEN bekçi).
+/// Gerekçe: yazma yüzeyi yokken sır kolonu güvenli GÖRÜNÜR, ama kurallarından
+/// ÖNCE var olur ve ilk yazan kişi kuralları arayıp bulamaz.
+/// ⇒ Bir sırrı taşıyan kolon, onu koruyan KURALLARLA aynı dilimde iner;
+/// tablo daha erken inebilir, sır inemez. **Eksiklik değil, SIRA.**
+model MachineCollector {
+  id String @id @default(uuid()) @db.Uuid
+  /// Ajanın ilk açılışta üretip diskte tuttuğu yerel UUID (`Device.deviceId`
+  /// emsali) — KİMLİKTİR, sır değildir.
+  collectorKey String       @unique @db.VarChar(64)
+  name         String       @db.VarChar(100)
+  /// DB üretir, uygulama yazmaz; ham SQL'de NOT NULL (bkz. `ShiftDefinition`).
+  nameFold     String?      @default(dbgenerated())
+  hostname     String?      @db.VarChar(128)
+  agentVersion String?      @db.VarChar(32)
+  status       DeviceStatus @default(PENDING)
+
+  /// Bu toplayıcı YALNIZ bu kuruluma basar — yedekten dönmüş bir kopyaya canlı
+  /// veri basma sınıfını kapatır.
+  installationId String? @db.VarChar(64)
+  clockSkewMs    Int?
+
+  /// GERİ ALMA — toplayıcı hard delete EDİLMEZ, damgalanır; bu yüzden ona
+  /// bakan FK'lar `Restrict` olsa da ölçümü kilitlemez.
+  revokedAt   DateTime? @db.Timestamptz
+  revokedById String?   @db.Uuid
+  isActive    Boolean   @default(true)
+
+  machines MachineCollectorLink[]
+  stops    MachineStopEvent[]
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt      @db.Timestamptz
+  createdById String?  @db.Uuid
+  updatedById String?  @db.Uuid
+  createdBy   User?    @relation("MachineCollectorCreatedBy", fields: [createdById], references: [id])
+  updatedBy   User?    @relation("MachineCollectorUpdatedBy", fields: [updatedById], references: [id])
+
+  @@unique([nameFold])
+  @@index([status])
+  @@map("machine_collectors")
+}
+
+/// YAZMA KAPSAMI — fail-closed. ⚠️ `machineId` UNIQUE: bir makinenin TEK yazarı
+/// olur. İki toplayıcı aynı tezgaha basarsa upsert'ler birbirini sessizce ezer
+/// ve açık-duruş seddi ajana SONSUZ 409 gibi görünürdü; bu bir yapılandırma
+/// hatasıdır ve onay ekranında 409 ile söylenir.
+model MachineCollectorLink {
+  collectorId String @db.Uuid
+  machineId   String @unique @db.Uuid
+
+  collector MachineCollector @relation(fields: [collectorId], references: [id], onDelete: Cascade)
+  machine   Machine          @relation(fields: [machineId], references: [id], onDelete: Cascade)
+
+  /// M:N pivot → `updatedAt` YOK (kök kural).
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@id([collectorId, machineId])
+  @@map("machine_collector_machines")
+}
+
+/// TEZGAH DURUŞU — SPAN (açılır/kapanır), bu yüzden `updatedAt` TAŞIR.
+/// Geri alma SİLME değil `revokedAt` damgasıdır.
+///
+/// ⚠️ İKİ YAŞAM SINIFI TEK TABLODA — bilinçli istisna. Sınırı İNSAN KARARIDIR,
+/// sebep değil: bir insan karar vermiş duruş DEFTERDİR (budanmaz); makineden
+/// türeyen sınıflandırma ya da sınıflandırılmamış + vardiyası mühürlü duruş
+/// TELEMETRİDİR. Sınırın "sebep var mı" olması, otomatik sınıflamayla birlikte
+/// duruşların ÇOĞUNU kalıcılaştırırdı (dokumada duruşların çoğu kopuştur).
+model MachineStopEvent {
+  id        String  @id @default(uuid()) @db.Uuid
+  machineId String  @db.Uuid
+  runId     String? @db.Uuid
+
+  /// ⚠️ KİMLİK SAAT DEĞİL TOKEN'DIR: ajanın duruşu ilk gördüğünde ürettiği UUID
+  /// (`clientToken` kalıbı) ve kalemin ömrü boyunca DEĞİŞMEZ — açılış, kapanış ve
+  /// yeniden gönderim AYNI anahtarla gelir. Kimliği `(makine, başlangıç, kaynak)`
+  /// üçlüsünden kurup saniyeye yuvarlamak bir kimlik çözümü değil bir semptom
+  /// bastırıcısıydı: 1 sn kayan tekrar gönderim yine ikinci satır açabiliyordu.
+  stopKey String @db.Uuid
+
+  /// İKİ TARİH: `startedAt` AJAN saatidir ve SÜRE bundan hesaplanır; `createdAt`
+  /// sunucu gerçeğidir ve DEFTERİN KRONOLOJİSİDİR.
+  /// ⚠️ `startedAt` KİMLİK DEĞİL VERİDİR — ham ajan damgası düzeltilmeden saklanır.
+  startedAt DateTime  @db.Timestamptz
+  endedAt   DateTime? @db.Timestamptz
+  /// WATCHDOG'un yazdığı GEÇİCİ kapanışın izi — gerçek kapanış gelip `endedAt`i
+  /// düzeltince bile KALIR: geçici değer, geçici olduğunu kolonda söyler.
+  provisionalEndedAt DateTime? @db.Timestamptz
+  durationSec        Int?
+  /// Süre şüphesinin TEK izi — kimliğin parçası DEĞİL.
+  clockSkewMs        Int?
+  endSource      MachineStopEndSource?
+  /// İleri damga null'lanmaz; düzeltme YENİ damga ekler.
+  endCorrectedAt DateTime? @db.Timestamptz
+
+  /// BU DURUŞ HANGİ LEVENT YUVASINDA DOĞDU? NULL = bilinmiyor ve Pareto onu
+  /// "atanmamış" kovasında AYRI gösterir — tahminle bir levende YAZILMAZ.
+  /// ⚠️ Kırılım BURADA yaşar; kopuş sayaçları ÇOĞULLAŞTIRILMAZ.
+  beamSlot Int?
+
+  /// MAKİNE GERÇEĞİ — ham kod ÇEVRİLMEDEN saklanır; marka enum'u büyütmek
+  /// fork'un ilk sinyalidir.
+  signalKind  MachineSignalKind?
+  rawStopCode String?            @db.VarChar(32)
+
+  /// SINIFLANDIRMA — NULL = KARAR YOK. ⚠️ "Sınıflandırılmamış" diye bir sebep
+  /// YOKTUR (olsaydı kuyruk onunla temizlenirdi); "tespit edilemedi" bir KARARDIR.
+  /// `reasonCode` FK'SIZ (`Roll.cancelReasonCode` emsali) ve `lossClass`
+  /// preset'ten KOPYALANIP DONAR — katalog değişse geçmiş rapor değişmez.
+  reasonCode     String?               @db.VarChar(64)
+  lossClass      MachineStopLossClass?
+  reasonNote     String?               @db.VarChar(300)
+  reasonSource   MachineDataSource?
+  classifiedById String?               @db.Uuid
+  classifiedAt   DateTime?             @db.Timestamptz
+
+  /// SINIFLANDIRMA BORCU — kapanışta tek helper yazar.
+  requiresReason Boolean @default(false)
+
+  /// BAĞLAM — doğuşta DONDURULUR (raporun group-by eksenleri). Sonradan
+  /// eklenen bir bağlam kolonu geçmişi sessizce sınıflandırılamaz yapardı.
+  shiftInstanceId String?  @db.Uuid
+  /// @db.Date muafı — `test_timestamptz_contract` envanterinde.
+  factoryDay      DateTime @db.Date
+  /// Kova budansa bile duran üretim çıpası.
+  pickCounter     Decimal? @db.Decimal(18, 0)
+
+  source      MachineDataSource
+  collectorId String?           @db.Uuid
+
+  /// GERİ ALMA — hayalet duruş SİLİNMEZ, damgalanır.
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  revokeReason String?   @db.VarChar(300)
+
+  machine       Machine              @relation(fields: [machineId], references: [id], onDelete: Restrict)
+  run           MachineRun?          @relation(fields: [runId], references: [id], onDelete: Restrict)
+  shiftInstance ShiftInstance?       @relation(fields: [shiftInstanceId], references: [id], onDelete: Restrict)
+  classifiedBy  User?                @relation("MachineStopClassifiedBy", fields: [classifiedById], references: [id])
+  collector     MachineCollector?    @relation(fields: [collectorId], references: [id], onDelete: Restrict)
+  reclasses     MachineStopReclass[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt      @db.Timestamptz
+
+  @@index([machineId, startedAt])
+  @@index([factoryDay, machineId])
+  @@index([reasonCode, startedAt])
+  @@index([shiftInstanceId])
+  @@index([runId])
+  @@index([collectorId])
+  // ŞEMA-DIŞI ÜÇ PARTIAL INDEX (migration 20260913240000, `test_db_invariants` §1):
+  //   machine_stops_one_open_per_machine_uq (machineId)
+  //     WHERE "endedAt" IS NULL AND "revokedAt" IS NULL        ← tek açık duruş seddi
+  //   machine_stops_key_uq (machineId, stopKey) WHERE "revokedAt" IS NULL
+  //     ← replay seddi. `revokedAt` yüklemi ŞART: geri alınmış duruş yer işgal etmez.
+  //   machine_stops_duty_idx (startedAt)
+  //     WHERE "requiresReason" AND "reasonCode" IS NULL AND "revokedAt" IS NULL
+  @@map("machine_stop_events")
+}
+
+/// DEFTER (append-only, `updatedAt` YOK) — duruş sebebinin DEĞİŞİM geçmişi.
+/// ⚠️ İlk sınıflandırma (NULL → değer) boş bırakılmış bir kararı doldurur ve
+/// yerinde yapılır; DEĞİŞTİRME (değer → değer) kayıtlı gerçeği değiştirir ve
+/// defter doktrini bunu yerinde yapmayı yasaklar. İz audit'e bırakılamaz —
+/// audit 6 ayda arşivlenir ve iş kaynağı olarak okunamaz.
+model MachineStopReclass {
+  id             String                @id @default(uuid()) @db.Uuid
+  stopEventId    String                @db.Uuid
+  fromReasonCode String?               @db.VarChar(64)
+  toReasonCode   String?               @db.VarChar(64)
+  fromLossClass  MachineStopLossClass?
+  toLossClass    MachineStopLossClass?
+  reason         String?               @db.VarChar(300)
+  actedById      String?               @db.Uuid
+
+  stopEvent MachineStopEvent @relation(fields: [stopEventId], references: [id], onDelete: Restrict)
+  actedBy   User?            @relation("MachineStopReclassBy", fields: [actedById], references: [id])
+
+  /// Append-only defter → `updatedAt` YOK.
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([stopEventId, createdAt])
+  @@map("machine_stop_reclasses")
 }
 
 /// TEZGAH KÜNYESİ — makinenin teknik kimliği ve izleme hâli.

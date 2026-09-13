@@ -85,6 +85,14 @@ const DATE_ONLY_FIELDS = new Set([
   // Kasa/banka kapanışı — CariPeriodClose'un hesap-bazlı ikizi, aynı gerekçe:
   // takvim günü anahtarı + partial unique'lerin parçası.
   "CashPeriodClose.periodEnd",
+  // Duruşun FABRİKA GÜNÜ (2026-09-13, dokuma P2b-1) — raporun group-by ekseni ve
+  // doğuşta DONDURULUR. Takvim günü anahtarıdır, an değil: gece vardiyası
+  // BAŞLADIĞI güne yazılır ve o atıf `constants/time.ts`ten (Europe/Istanbul)
+  // türer. Timestamptz olsaydı aynı vardiya, sunucunun saat dilimine göre iki
+  // farklı güne düşerdi — `ExchangeRate.rateDate` ile birebir aynı gerekçe.
+  // ⚠️ Duruşun MUTLAK anı ayrı kolonlarda (`startedAt`/`endedAt`) ve ikisi de
+  // timestamptz; bu alan onların yerine geçmez, yanlarında durur.
+  "MachineStopEvent.factoryDay",
 ]);
 
 // Prisma'nın kendi defteri — bizim şemamız değil, zaten timestamptz.

@@ -690,6 +690,34 @@ export const ENUM_LABELS: Record<string, string> = {
   OFF: "İzleme kapalı",
   SHADOW: "Gölge mod",
   LIVE: "Yayında",
+
+  // ── Tezgah duruş defteri (dokuma P2b-1, 2026-09-13)
+  // MachineDataSource — bir sayının ya da kararın NEREDEN geldiği.
+  // ⚠️ `SIMULATED` `OPERATOR`dan AYRI: farklı güven sınıfı. Uydurulmuş değer
+  // beyanıyla gider; birleştirmek o beyanı yok ederdi.
+  MACHINE: "Makine",
+  OPERATOR: "Operatör",
+  INFERRED: "Çıkarım",
+  SUPERVISOR: "Vardiya amiri",
+  // MachineStopLossClass — duruşun randımana etkisi.
+  UNPLANNED: "Plansız duruş",
+  SETUP: "Kurulum",
+  NON_SCHEDULED: "Çalışma dışı",
+  // MachineSignalKind — sinyalin ANLAMI (marka bağımsız).
+  RUN_CONTACT: "Çalışma kontağı",
+  PICK_COUNTER: "Atkı sayacı",
+  COURSE_COUNTER: "Sıra sayacı",
+  RACK_COUNTER: "Rack sayacı",
+  RUN_SECONDS: "Çalışma saati sayacı",
+  INSTANT_RPM: "Anlık devir",
+  WARP_STOP: "Çözgü kopuşu",
+  WEFT_STOP: "Atkı kopuşu",
+  OPERATOR_STOP: "Elle durdurma",
+  STOP_CODE: "Duruş kodu",
+  FABRIC_LENGTH: "Kumaş metre sayacı",
+  // MachineStopEndSource — duruşu kim kapattı.
+  SIGNAL: "Sinyal",
+  WATCHDOG: "Bekçi (ajan sustu)",
 };
 
 // =============================================================================
@@ -737,6 +765,13 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   // `değer → Türkçe` haritasının ilk göreni tutmasından doğuyor ve bekçisi
   // YOKTU (aynı sınıf `ITEM_PRICE.kind`te bir kez ELLE yakalanmıştı).
   "CHEQUE.event": { RETURN: "Çek iade edildi", CANCEL: "Çek kaydı iptal edildi" },
+  // MachineStopLossClass.MINOR (2026-09-13) — global cevap "Küçük"tür ve o
+  // `DefectSeverity` dilinde yazılmıştır (kusur şiddeti). Duruş tarafında MINOR
+  // bir şiddet değil bir SÜRE sınıfıdır: mikro-duruş eşiğinin ALTINDA kalan
+  // duruş. "Küçük duruş" demek onu bir sebep gibi gösterirdi; tasarımın kendi
+  // uyarısı bu — `MINOR` bir SEBEP sınıfı DEĞİL, bir SÜRE sınıfıdır ve
+  // `ReasonPreset.stopLossClass`a asla yazılamaz.
+  "MACHINE_STOP_EVENT.lossClass": { MINOR: "Mikro duruş (eşik altı)" },
 };
 
 /**
@@ -769,6 +804,15 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
  */
 export const SHARED_ENUM_VALUES: Record<string, string> = {
   // ── Ortak Türkçe TÜM paylaşanlar için doğru ────────────────────────────────
+  // ── Tezgah duruş defteri (dokuma P2b-1, 2026-09-13)
+  OPERATOR:
+    "MachineDataSource(değeri operatör girdi) ve MachineStopEndSource(duruşu operatör kapattı) — ikisinde de eylemi yapan OPERATÖRDÜR",
+  SIMULATED:
+    "SackWeightSource ve MachineDataSource — ikisi de UYDURULMUŞ değerin beyanıdır; ortak Türkçe tam da o beyanı taşır",
+  MINOR:
+    "DefectSeverity ve MachineStopLossClass — ortak Türkçe YETMEZ: ilkinde bir ŞİDDET " +
+    "(kusur ne kadar büyük), ikincisinde bir SÜRE sınıfı (mikro-duruş eşiğinin altı). " +
+    "MACHINE_STOP_EVENT.lossClass override'ı ile ayrıldı (2026-09-13)",
   EXTERNAL: "StationType(dış istasyon) ve WarehouseEventType(dış hareket) — ikisi de 'Dış'",
   SUBCONTRACTOR: "istasyon/mükerrer-varlık/cari — üçü de aynı gerçek kişiyi işaret eder: 'Fason'",
   OTHER: "istasyon türü ve ödeme yöntemi — ikisi de 'Diğer'",

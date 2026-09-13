@@ -379,6 +379,32 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("revokedAt" IS NULL)`,
     why: "doğal anahtar: aynı hatta aynı anda iki koşum açılırsa karnenin donmuş paydasının hangisinden geldiği belirsizleşir",
   },
+  // machine_stop_events — şema-dışı üç partial (2026-09-13, dokuma P2b-1,
+  // migration 20260913240000). ⚠️ `revokedAt IS NULL` yüklemi İKİ SEDDE DE ŞART:
+  // geri alınmış duruş yer işgal etmez, yoksa yeni duruş açılamaz ve yeniden
+  // gönderim sonsuza dek reddedilirdi. Silme guard'larındaki ters yönle
+  // çelişmez — sed "şu an açık mı", guard "iş yapıldı mı" diye sorar.
+  {
+    table: "machine_stop_events",
+    index: "machine_stops_one_open_per_machine_uq",
+    uniq: true,
+    predicate: `(("endedAt" IS NULL) AND ("revokedAt" IS NULL))`,
+    why: "makine başına TEK açık duruş — süre iki kez sayılmasın",
+  },
+  {
+    table: "machine_stop_events",
+    index: "machine_stops_key_uq",
+    uniq: true,
+    predicate: `("revokedAt" IS NULL)`,
+    why: "replay seddi: anahtar ajan üretimi TOKEN'dır, saat değil — aynı duruş saat kaysa da TEK satır",
+  },
+  {
+    table: "machine_stop_events",
+    index: "machine_stops_duty_idx",
+    uniq: false,
+    predicate: `("requiresReason" AND ("reasonCode" IS NULL) AND ("revokedAt" IS NULL))`,
+    why: "sınıflandırma kuyruğu — sebebi bekleyen duruşlar taraması",
+  },
   // ⚠️ `machine_runs_clientToken_key` BURAYA GİRMEZ — o düz (partial olmayan) bir
   //    unique ve şemadaki `@unique`ten doğuyor; `weaving_orders_clientToken_key`
   //    emsali. PG düz unique'te de çok sayıda NULL'a izin verir.
@@ -431,6 +457,17 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // o yüklem `services/helpers/production-line.helper.ts`te yaşar ve
   // `test_production_line` §1 onun DAVRANIŞINI ölçer (varlığını değil).
   { table: "machines", name: "machines_productionLineCount_pos" },
+  // 2026-09-13 (dokuma P2b-1) — migration 20260913240000.
+  // ⚠️ `shift_definitions_window_sane` üçü birden tutar: pencere gün içinde
+  // başlar (0..1439) · süre POZİTİF · mola süreyi AŞMAZ. Üçü de POT'un (planlı
+  // süre) girdisidir; sıfır süre paydayı sessizce çökertir, mola > süre negatif
+  // POT üretir. ⚠️ `shift_instances_time_order` EŞİTLİĞİ de reddeder (sıfır
+  // uzunluklu pencere randımanı 0/0'a düşürür); duruş tarafındaki kardeşi ise
+  // eşitliğe İZİN VERİR (anlık duruş gerçek bir olaydır) — fark bilinçli.
+  { table: "shift_definitions", name: "shift_definitions_window_sane" },
+  { table: "shift_instances", name: "shift_instances_time_order" },
+  { table: "machine_stop_events", name: "machine_stop_events_time_order" },
+  { table: "machine_stop_events", name: "machine_stop_events_durationSec_nonneg" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_dispatchedQty_pos" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_dispatchedWeight_nonneg" },
   { table: "kartela_dispatch_items", name: "kartela_dispatch_items_dispatchedQty_pos" },

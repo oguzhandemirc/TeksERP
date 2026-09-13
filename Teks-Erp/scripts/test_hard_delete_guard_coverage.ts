@@ -205,6 +205,11 @@ const EXPECTED: Record<string, string> = {
   // Cascade ile sessizce ölebilir hâle gelir ⇒ önizlemeye 409 guard'ı O DİLİMDE
   // eklenir ve bu satır "guarded"a döner. Guard, ihlal edebilecek ilk yüzeyle
   // birlikte doğar — öncesinde erişilemez bir dalı korurdu.
+  // Dokuma P2b-1 (2026-09-13). Kapsam satırı makinesiz anlamsızdır — ve bu
+  // Cascade veri KAYBETMEZ: hangi toplayıcının hangi makineye bastığı bir
+  // YAPILANDIRMADIR, bir defter satırı değil. Makine silinirse o yapılandırma
+  // da konusuz kalır. ⚠️ Duruş DEFTERİ ayrı ve `Restrict` — o silinmez.
+  "Machine <- MachineCollectorLink.machine : Cascade": "cascade-intended — toplayıcı kapsamı makinesiz anlamsız (yapılandırma, defter değil)",
   "Machine <- MachineSpec.machine : Cascade": "cascade-intended — künye makinesiz anlamsız (yazma yüzeyi gelince baselineRunHours guard'ı eklenir)",
   "Station <- PeripheralDevice.station : SetNull": "guarded (peripheralCount — stationId VEYA machine.stationId)",
   "Station <- Roll.entryStation : SetNull": "guarded (rollEntryStationCount, 2026-08-05) — makine damgası olmayan girişleri de kapsar",
@@ -289,6 +294,17 @@ const MACHINE_GUARD_EXEMPT: Record<string, string> = {
   // "bakiyesi dolu künye" guard'ını ekler.
   "machineSpec.machineId":
     "künye Cascade ile birlikte ölür (makinesiz anlamsız); bakiye guard'ı yazma yüzeyiyle gelecek",
+  // Dokuma P2b-1 (2026-09-13) — ikisi de YAZMA YÜZEYİ olmadan indi.
+  // ⚠️ `machineStopEvent.machineId` `Restrict`tir ve duruş bir DEFTERDİR: guard
+  // GEREKLİ olacak (aksi hâlde operatör okunabilir 409 yerine ham P2003 görür,
+  // `machineSpec`te ÖLÇÜLEN davranış). Bugün eklenmedi çünkü duruş yazan hiçbir
+  // uç yok ⇒ sayaç her zaman 0 döner ve guard erişilemez bir dalı korur.
+  // ⇒ Duruş yazma ucunu (ingest) açan dilim bu satırı SİLER ve
+  //   `MACHINE_DELETE_GUARDS`a `machineStopCount` ekler.
+  "machineStopEvent.machineId":
+    "duruş defteri henüz yazılmıyor; `machineStopCount` guard'ı ingest dilimiyle gelecek (Restrict ⇒ o gün ZORUNLU)",
+  "machineCollectorLink.machineId":
+    "kapsam satırı Cascade ile birlikte ölür — yapılandırmadır, defter değil; sayım guard'ı gerekmez",
 };
 
 // =============================================================================
