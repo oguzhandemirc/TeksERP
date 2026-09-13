@@ -47,6 +47,7 @@ import { OrderStatus, RollStatus, ShipmentStatus } from "@prisma/client";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { readFileSync } from "fs";
 import { join } from "path";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0;
 let fail = 0;
@@ -78,6 +79,10 @@ async function makeSack(tag: string, qty: number): Promise<string> {
   sackIds.push(sack.id);
   const roll = await prisma.roll.create({
     data: {
+        // Sevk edilebilmek icin deposu DOLU olmali: deposuz bir top stok
+        // kumesinden cikamaz (`assertRollsHaveWarehouse`, 409). Uretimde
+        // deposuz top dogamaz, fikstur de uretmemeli.
+        warehouseId: await fixtureWarehouseId(),
       barcode: `TST-SOL-${tag}-${ts}`,
       itemId,
       initialQty: qty,

@@ -22,6 +22,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { RollStatus, ShipmentStatus } from "@prisma/client";
 import { shippingService } from "../src/services/shipping.service";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -54,6 +55,10 @@ async function cuvalKur(n: number, metraj = 50): Promise<string> {
   for (let i = 0; i < n; i++) {
     const roll = await prisma.roll.create({
       data: {
+        // Sevk edilebilmek icin deposu DOLU olmali: deposuz bir top stok
+        // kumesinden cikamaz (`assertRollsHaveWarehouse`, 409). Uretimde
+        // deposuz top dogamaz, fikstur de uretmemeli.
+        warehouseId: await fixtureWarehouseId(),
         barcode: `${P}-R${rollIds.length}`,
         itemId: ITEM,
         initialQty: metraj,

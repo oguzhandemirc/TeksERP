@@ -53,6 +53,7 @@ import { sanitizeDocumentsConfig } from "../src/services/system-setting.service"
 import { docConfigSchema } from "../src/controllers/printed-document.controller";
 import { AppError } from "../src/utils/app-error";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0;
 let fail = 0;
@@ -122,6 +123,10 @@ async function main(): Promise<void> {
   const mkRoll = async (qty: number, sackId: string): Promise<string> => {
     const r = await prisma.roll.create({
       data: {
+        // Sevk edilebilmek icin deposu DOLU olmali: deposuz bir top stok
+        // kumesinden cikamaz (`assertRollsHaveWarehouse`, 409). Uretimde
+        // deposuz top dogamaz, fikstur de uretmemeli.
+        warehouseId: await fixtureWarehouseId(),
         barcode: `TEST-TAG-R${++rollSeq}-${ts}`,
         itemId: item.id,
         status: "WAREHOUSE",

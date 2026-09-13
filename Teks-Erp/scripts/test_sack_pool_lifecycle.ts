@@ -25,6 +25,7 @@
 import { RollStatus, ShipmentStatus, OrderStatus, RollEntrySource } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 const SETTING_KEY = "shipping.confirmationEnabled";
 const ship = new ShippingService();
@@ -71,6 +72,10 @@ async function makeOrder(lineQty: number, width: number, deadlineDaysFromNow?: n
 async function makeRoll(qty: number, width: number, status: RollStatus = RollStatus.WAREHOUSE): Promise<string> {
   const roll = await prisma.roll.create({
     data: {
+        // Sevk edilebilmek icin deposu DOLU olmali: deposuz bir top stok
+        // kumesinden cikamaz (`assertRollsHaveWarehouse`, 409). Uretimde
+        // deposuz top dogamaz, fikstur de uretmemeli.
+        warehouseId: await fixtureWarehouseId(),
       barcode: `TEST-WH-${Date.now()}-${Math.floor(Math.random() * 1e9)}`,
       itemId, colorId: null, width,
       initialQty: qty, currentQty: qty,

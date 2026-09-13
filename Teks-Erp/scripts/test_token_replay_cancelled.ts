@@ -26,6 +26,7 @@ import { RollStatus } from "@prisma/client";
 import { randomUUID } from "crypto";
 import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0;
 let fail = 0;
@@ -164,6 +165,10 @@ async function main(): Promise<void> {
     const kumas = await prisma.item.findFirst({ where: { isActive: true, mergedIntoId: null }, select: { id: true } });
     const topSevk = await prisma.roll.create({
       data: {
+        // Sevk edilebilmek icin deposu DOLU olmali: deposuz bir top stok
+        // kumesinden cikamaz (`assertRollsHaveWarehouse`, 409). Uretimde
+        // deposuz top dogamaz, fikstur de uretmemeli.
+        warehouseId: await fixtureWarehouseId(),
         barcode: `${dmg}R`.slice(0, 30),
         itemId: kumas!.id,
         initialQty: 50,

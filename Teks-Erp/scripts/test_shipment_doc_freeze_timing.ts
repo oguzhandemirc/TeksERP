@@ -30,6 +30,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";
 import { printedDocumentService } from "../src/services/printed-document.service";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 const ship = new ShippingService();
 const TS = Date.now();
@@ -62,6 +63,10 @@ async function run(): Promise<void> {
 
   const roll = await prisma.roll.create({
     data: {
+        // Sevk edilebilmek icin deposu DOLU olmali: deposuz bir top stok
+        // kumesinden cikamaz (`assertRollsHaveWarehouse`, 409). Uretimde
+        // deposuz top dogamaz, fikstur de uretmemeli.
+        warehouseId: await fixtureWarehouseId(),
       barcode: `${P}-R1`, itemId, width: 150, initialQty: 100, currentQty: 100,
       status: RollStatus.WAREHOUSE, qualityGrade: "1.KALITE",
       entrySource: RollEntrySource.SUPPLIER_RECEIPT,

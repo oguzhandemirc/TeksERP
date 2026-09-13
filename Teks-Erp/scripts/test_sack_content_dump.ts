@@ -25,6 +25,7 @@ import { withSackConstraintSuspended } from "./fixture-sack-constraint";
 import { ShippingService } from "../src/services/shipping.service";
 import { SackSearchService } from "../src/services/sack-search.service";
 import { AppError } from "../src/utils/app-error";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 const ship = new ShippingService();
 const search = new SackSearchService();
@@ -87,6 +88,10 @@ async function main(): Promise<void> {
   const makeRoll = async (qty: number, width: number, grade = "1.KALITE"): Promise<string> => {
     const r = await prisma.roll.create({
       data: {
+        // Sevk edilebilmek icin deposu DOLU olmali: deposuz bir top stok
+        // kumesinden cikamaz (`assertRollsHaveWarehouse`, 409). Uretimde
+        // deposuz top dogamaz, fikstur de uretmemeli.
+        warehouseId: await fixtureWarehouseId(),
         barcode: `TST-CDUMP-${ts}-${Math.floor(Math.random() * 1e9)}`,
         itemId: item.id, colorId: color?.id ?? null, width,
         initialQty: qty, currentQty: qty,

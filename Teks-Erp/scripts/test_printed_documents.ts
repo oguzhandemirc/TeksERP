@@ -17,6 +17,7 @@ import { PrintedDocType, PrintedDocStatus } from "@prisma/client";
 import { kartelaService } from "../src/services/kartela.service";
 import { shippingService } from "../src/services/shipping.service";
 import { printedDocumentService } from "../src/services/printed-document.service";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0;
 let fail = 0;
@@ -83,6 +84,10 @@ async function main(): Promise<void> {
   const mkRoll = async (qty: number): Promise<string> => {
     const r = await prisma.roll.create({
       data: {
+        // Sevk edilebilmek icin deposu DOLU olmali: deposuz bir top stok
+        // kumesinden cikamaz (`assertRollsHaveWarehouse`, 409). Uretimde
+        // deposuz top dogamaz, fikstur de uretmemeli.
+        warehouseId: await fixtureWarehouseId(),
         barcode: u("RL"),
         itemId: item!.id,
         colorId: color!.id,

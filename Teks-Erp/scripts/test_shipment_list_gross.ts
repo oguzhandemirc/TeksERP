@@ -32,6 +32,7 @@ import prisma from "../src/lib/prisma";
 import { printedDocumentService } from "../src/services/printed-document.service";
 import { shippingService } from "../src/services/shipping.service";
 import { returnService } from "../src/services/return.service";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0;
 let fail = 0;
@@ -91,9 +92,13 @@ async function main() {
     data: { sackNo: `TEST-SLG-SK-${ts}`, customerId: customer.id, shipmentId: shipment.id, seq: 1, weightKg: 50 },
     select: { id: true },
   });
-  const mkRoll = (n: number, qty: number) =>
+  const mkRoll = async (n: number, qty: number) =>
     prisma.roll.create({
       data: {
+        // Sevk edilebilmek icin deposu DOLU olmali: deposuz bir top stok
+        // kumesinden cikamaz (`assertRollsHaveWarehouse`, 409). Uretimde
+        // deposuz top dogamaz, fikstur de uretmemeli.
+        warehouseId: await fixtureWarehouseId(),
         barcode: `TEST-SLG-R${n}-${ts}`,
         itemId: item.id,
         colorId: color.id,

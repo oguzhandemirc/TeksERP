@@ -34,6 +34,7 @@ import {
   readShippingAllowOverAllocation,
 } from "../src/services/system-setting.service";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -81,6 +82,10 @@ async function setFlag(key: string, value: Prisma.InputJsonValue | null): Promis
 async function topKur(width: number, qty: number, colorId: string | null): Promise<string> {
   const roll = await prisma.roll.create({
     data: {
+        // Sevk edilebilmek icin deposu DOLU olmali: deposuz bir top stok
+        // kumesinden cikamaz (`assertRollsHaveWarehouse`, 409). Uretimde
+        // deposuz top dogamaz, fikstur de uretmemeli.
+        warehouseId: await fixtureWarehouseId(),
       barcode: `${P}-R${rollIds.length}`,
       itemId: ITEM,
       colorId,

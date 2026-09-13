@@ -28,6 +28,7 @@
 import { ItemType, RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0;
 let fail = 0;
@@ -83,6 +84,10 @@ async function main(): Promise<void> {
   temizle.sack.push(cuval.id);
   const top = await prisma.roll.create({
     data: {
+        // Sevk edilebilmek icin deposu DOLU olmali: deposuz bir top stok
+        // kumesinden cikamaz (`assertRollsHaveWarehouse`, 409). Uretimde
+        // deposuz top dogamaz, fikstur de uretmemeli.
+        warehouseId: await fixtureWarehouseId(),
       barcode: `${STAMP}-R`.slice(0, 30),
       itemId: kumas.id,
       initialQty: 500,
