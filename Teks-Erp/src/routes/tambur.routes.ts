@@ -831,8 +831,15 @@ router.post(
  *     summary: Top Kesme bitir — parent topu arşivle, kalan için karar
  *     description: |
  *       Top Kesme oturumunu kapatır: parent Roll TAMBUR_CONSUMED'a çekilir.
- *       Kalan kumaş varsa `remainingAction`'a göre 1.KALITE/A1/FIRE child Roll
- *       oluşturulur veya discard edilir.
+ *       Kalan kumaş varsa child Roll oluşturulur veya discard edilir.
+ *
+ *       Kalanın KALİTESİ iki yoldan çözülür (2026-09-13):
+ *       `remainingGradeId` verilmişse O katalog satırı; verilmemişse
+ *       `remainingAction` → üretim ROLÜ → katalogdaki rollü satır
+ *       (`keep_1kalite`→FIRST, `keep_a1`→SECOND, `scrap`/`discard`→SCRAP).
+ *       Sözleşme adları eski tablet için korunur; katalog kodu artık GÖMÜLÜ
+ *       DEĞİLDİR. Katalogda ilgili rol atanmamışsa 400 döner (fail-closed —
+ *       eskiden sessizce Hazır Depo'ya yazılıyordu).
  *     parameters:
  *       - in: path
  *         name: id

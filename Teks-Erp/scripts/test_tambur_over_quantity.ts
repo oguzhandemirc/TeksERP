@@ -57,12 +57,49 @@ async function expectReject(label: string, fn: () => Promise<unknown>) {
   }
 }
 
+let createdGradeId: string | null = null;
+/** Ön koşuldan çözülen kalite KODU — literal yerine bu kullanılır. */
+let kaliteKodu = "";
+
 async function setFlag(v: boolean) {
   await prisma.systemSetting.upsert({
     where: { key: FLAG_KEY },
     update: { value: v },
     create: { key: FLAG_KEY, value: v, description: "test geçici" },
   });
+}
+
+/**
+ * KALİTE ROLÜ ÖN KOŞULU — testin KENDİ kurduğu, ortamda UMDUĞU değil.
+ *
+ * ⚠️ 2026-09-13 (karar ①): `cutOpenFabric` artık kalite kodunu katalogdaki
+ * FIRST rolünden çözüyor ve rol yoksa FAIL-CLOSED 400 veriyor. Bu bekçi
+ * aşım davranışını ölçüyor — kalite kataloğuyla hiçbir ilgisi yok — ama
+ * TOHUMSUZ bir DB'de (migration uygulanmış, sıfır satır) altıncı yüklemde
+ * "1. kalite rolü atanmamış" ile düşüyordu. Ölçtüğü kuralın ön koşulunu
+ * ortamdan UMMAK, `test_tambur_over_quantity`i ortam bağımlısı yapar
+ * (d5'in `5999690c` ile kapattığı sınıfın aynısı: kalem/renk yoksa çök).
+ *
+ * Rol varsa DOKUNMAZ (fabrika kataloğunu değiştirmez); yoksa `TEST-OQ`
+ * damgalı geçici bir satır yaratır ve `cleanup` onu siler.
+ */
+async function ensureFirstRoleGrade(): Promise<string> {
+  const mevcut = await prisma.qualityGrade.findFirst({
+    where: { role: "FIRST", isActive: true },
+    select: { code: true },
+  });
+  if (mevcut) return mevcut.code;
+  const olusan = await prisma.qualityGrade.create({
+    data: {
+      code: `TEST-OQ-K1-${rnd()}`,
+      name: `TEST-OQ 1. Kalite ${rnd()}`,
+      role: "FIRST",
+      targetStatus: RollStatus.WAREHOUSE,
+    },
+    select: { id: true, code: true },
+  });
+  createdGradeId = olusan.id;
+  return olusan.code;
 }
 
 /**
@@ -96,7 +133,7 @@ async function makeWarehouseRoll(itemId: string, qty: number) {
       initialQty: qty,
       currentQty: qty,
       status: RollStatus.WAREHOUSE,
-      qualityGrade: "1.KALITE",
+      qualityGrade: kaliteKodu,
       entrySource: RollEntrySource.TAMBUR_SPLIT,
     },
     select: { id: true },
@@ -149,7 +186,7 @@ async function makeOpenFabricRollOnTamburStep(itemId: string, qty: number) {
       initialQty: qty,
       currentQty: qty,
       status: RollStatus.IN_PRODUCTION,
-      qualityGrade: "1.KALITE",
+      qualityGrade: kaliteKodu,
       entrySource: RollEntrySource.SUBCONTRACTOR_RETURN,
       currentStepId: step.id,
     },
@@ -177,6 +214,9 @@ async function trackChildren(parentId: string) {
 
 async function main() {
   console.log("=== Tambur Over-Quantity Testi ===\n");
+  // ÖN KOŞUL ÖNCE: `cutOpenFabric` FIRST rolünü ister (karar ①) — bu bekçi
+  // aşımı ölçüyor, kalite kataloğunu değil; ön koşulu ortamdan UMMAZ, kurar.
+  kaliteKodu = await ensureFirstRoleGrade();
   const itemId = await testItemId();
 
   // ───────── FLAG KAPALI: aşan giriş reddedilmeli ─────────
@@ -198,7 +238,7 @@ async function main() {
     tambur.finalize({
       rollId: finReject,
       decisions: [],
-      cuts: [{ length: 150, qualityGrade: "1.KALITE", relatedErrorIds: [] }],
+      cuts: [{ length: 150, qualityGrade: kaliteKodu, relatedErrorIds: [] }],
     }),
   );
 
@@ -280,8 +320,8 @@ async function main() {
     rollId: fin,
     decisions: [],
     cuts: [
-      { length: 120, qualityGrade: "1.KALITE", relatedErrorIds: [] },
-      { length: 30, qualityGrade: "1.KALITE", relatedErrorIds: [] },
+      { length: 120, qualityGrade: kaliteKodu, relatedErrorIds: [] },
+      { length: 30, qualityGrade: kaliteKodu, relatedErrorIds: [] },
     ],
   });
   await trackChildren(fin);
@@ -372,6 +412,11 @@ async function cleanup() {
   }
   if (createdStationId) {
     await prisma.station.deleteMany({ where: { id: createdStationId } }).catch(temizlikHatasi);
+  }
+  // Kalite EN SON: toplar ona FK ile bağlı (rolls.qualityGradeId). Yalnız BU
+  // testin yarattığı satır silinir — fabrika kataloğuna dokunulmaz.
+  if (createdGradeId) {
+    await prisma.qualityGrade.deleteMany({ where: { id: createdGradeId } }).catch(temizlikHatasi);
   }
   console.log("Cleanup: test kayıtları silindi.");
 }

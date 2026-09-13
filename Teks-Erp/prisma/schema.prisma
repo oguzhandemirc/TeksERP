@@ -2909,6 +2909,29 @@ model WorkOrderToOrderLine {
 // 6. PRODUCTION DATA - Errors & Defects
 // =============================================================================
 
+/// Katalog satırının ÜRETİM ROLÜ — "bu fabrikada '1. kalite yaz' dendiğinde
+/// HANGİ SATIR yazılır?" (2026-09-13, karar ①).
+///
+/// ⚠️ `targetStatus` ile KARIŞTIRILMAZ — ikisi AYRI soru sorar:
+///   • `targetStatus` = KOVA: "bu kalite hangi RAFA iner" (fire mi, satılabilir mi).
+///   • `role`         = ROL : "aksiyon '1./2./fire' dediğinde hangi satırı yazayım".
+/// Bu fabrikada `A1`in `targetStatus`u WAREHOUSE ama rolü SECOND'dır; iki soru
+/// tek alana bindirilseydi tambur kesimi ve tablet varsayılanı kod literaline
+/// geri dönmek zorunda kalırdı (tam da bu kararın kaldırdığı kırılganlık).
+///
+/// ÜÇÜNCÜ soru olan SUNUM ("hangi rozet rengi/sırası") role KATLANMAZ ve
+/// `color` + `sortOrder`dan okunur: dört kademeli bir katalogda üç rol vardır,
+/// dördüncü kademe rolsüzdür ama rozetini kaybetmemelidir.
+///
+/// NULL MEŞRUDUR: rolsüz kademe tanımlanabilir (ör. ikinci bir fire kademesi —
+/// kovası SCRAP'tir, rolü yoktur). Rolsüz katalogda rol isteyen yazma yolu
+/// FAIL-CLOSED 400 verir; sessizce Hazır Depo'ya yazmaz.
+enum QualityGradeRole {
+  FIRST // 1. kalite — varsayılan üretim çıktısı
+  SECOND // 2. kalite — satılabilir alt kademe
+  SCRAP // Fire — üretim sayılmaz
+}
+
 /// Kalite derecesi kataloğu — Tambur/QC kararlarında operatör ekranında
 /// buton olarak çıkar. Admin yönetir. Roll.qualityGrade alanı bu katalogdan
 /// seçilen code'un snapshot'ıdır (katalog değişse bile eski toplar bozulmaz).
@@ -2923,6 +2946,14 @@ model QualityGrade {
   /// Tambur'da bu kalite seçildiğinde çocuk top'un alacağı hedef RollStatus.
   /// 1. Kalite → WAREHOUSE, alt kaliteler (A1/A2/2.K) → A1_STOCK, FİRE → SCRAP.
   targetStatus RollStatus @default(SCRAP)
+
+  /// ÜRETİM ROLÜ — gerekçe ve `targetStatus`tan farkı: `enum QualityGradeRole`.
+  /// Tekillik PARTIAL'dır: `WHERE role IS NOT NULL AND "isActive"` (migration
+  /// `20260913120000_quality_grade_role`). Pasif satır rolünü TARİH olarak
+  /// taşımaya devam eder — `1.KALITE`yi pasifleştirip yerine `1K` koyan fabrika
+  /// eskinin rolünü önce null'lamak zorunda kalmaz. Çözücü `role + isActive`
+  /// okur (`helpers/quality-role.helper.ts`).
+  role QualityGradeRole?
 
   /// İADE'ye özel hedef statü — müşteri iadesinde (returnGradingEnabled açık) bu
   /// kalite seçilirse top bu statüye iner (FİRE→SCRAP, A1→A1_STOCK, 1.Kalite→WAREHOUSE).
@@ -2998,6 +3029,12 @@ model QualityGrade {
   // Bu kolonun index'i NON-PARTIAL bir @@unique tarafından kapsanıyor ([DB-12]) —
   // ayrı @@index migration 20260905172000 ile DÜŞÜRÜLDÜ (EXPLAIN ile doğrulandı).
   @@index([descriptionFold])
+  /// ROL SEDDİ — rol başına EN FAZLA BİR AKTİF satır. Index PARTIAL'dır
+  /// (`WHERE "role" IS NOT NULL AND "isActive"`); Prisma 7 predicate farkını
+  /// drift saymaz ama index↔unique farkını SAYAR, bu yüzden şemada `@@unique`
+  /// durur (`nameFold` emsali). Migration `20260913120000_quality_grade_role`,
+  /// envanter `test_db_invariants.ts` PARTIAL_INDEXES.
+  @@unique([role])
   @@map("quality_grades")
 }
 

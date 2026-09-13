@@ -12,7 +12,8 @@
 // aggregate'ler yalnız sayfadaki çuvallar için (over-fetch yok).
 // =============================================================================
 
-import { Prisma, RollStatus, ShipmentStatus } from "@prisma/client";
+import { Prisma, RollStatus, ShipmentStatus, QualityGradeRole } from "@prisma/client";
+import { loadQualityRoles } from "./helpers/quality-role.helper";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
@@ -120,9 +121,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * Kalite filtresi değerlerini KODA çevirir. Panel standart `multi-lookup`
  * kullandığı için UUID gönderir; uçlar/scriptler kodla da çağırabilir.
  *
- * ⚠️ Katalog KODU hiçbir yere gömülmez ("A1" karşılaştırması yalnız statü
- * eşlemesi içindir): fabrika kaliteyi yeniden adlandırırsa liste kendiliğinden
- * doğru kalır (2026-08-09 "1. KALİTE koda gömülmez" kuralının kardeşi).
+ * ⚠️ Katalog KODU hiçbir yere gömülmez — 2026-09-13'te son istisna da kalktı:
+ * statü eşlemesi artık `QualityGradeRole.SECOND` rolünden çözülüyor, gömülü
+ * "A1" karşılaştırması YOK. Fabrika kaliteyi yeniden adlandırırsa liste
+ * kendiliğinden doğru kalır (2026-08-09 "1. KALİTE koda gömülmez" kardeşi).
  */
 async function resolveQualityCodes(values: string[]): Promise<string[]> {
   if (values.length === 0) return [];
@@ -342,9 +344,18 @@ export async function buildSackSearchWhere(params: SackSearchParams): Promise<{
   // sonuç" değil EKSİK sonuç verirdi ki bu daha tehlikelidir.
   const qualityCodes = await resolveQualityCodes(toIdList(params.qualityGrade));
   if (qualityCodes.length) {
+    // "2. kalite seçildiyse A1_STOCK statüsündeki toplar da gelsin" — kod
+    // KATALOGDAN, gömülü `"A1"` DEĞİL (karar ①). Soru ROL sorusudur: kova
+    // (`targetStatus`) bu fabrikada yanlış cevap verirdi, çünkü A1'in
+    // targetStatus'u WAREHOUSE'tur ⇒ `a1Codes` BOŞ döner ve bu genişletme
+    // SESSİZCE kapanırdı.
+    // ⚠️ `roleOf` PASİF satırları da okur: seçilen kod pasifleştirilmiş olsa
+    // bile geçmiş topların üstünde duruyor ve aramaya girmeli.
+    const roles = await loadQualityRoles(prisma);
+    const secondPicked = qualityCodes.some((c) => roles.roleOf(c) === QualityGradeRole.SECOND);
     rollFilter.OR = [
       { qualityGrade: { in: qualityCodes } },
-      ...(qualityCodes.includes("A1") ? [{ status: RollStatus.A1_STOCK }] : []),
+      ...(secondPicked ? [{ status: RollStatus.A1_STOCK }] : []),
     ];
   }
   const hasContentFilter = Object.keys(rollFilter).length > 0;

@@ -54,7 +54,15 @@ async function main(): Promise<void> {
     return v.id;
   };
   const ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "Item PATOS");
-  const GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "QualityGrade");
+  // Kalite KATALOGDAN, koddan DEĞİL (2026-09-13, karar ①): gömülü kod, kataloğu
+  // `1K/2K/HURDA` olan bir fikstürde bu bekçiyi çökertirdi — ürün rolle
+  // çalışırken bekçinin literalde kalması listenin bir sonraki sitesidir.
+  const GRADE_ROW = await prisma.qualityGrade.findFirst({
+    where: { role: "FIRST", isActive: true },
+    select: { id: true, code: true },
+  });
+  if (!GRADE_ROW) throw new Error("Test verisi yetersiz — FIRST rollü aktif QualityGrade yok (önce npm run seed).");
+  const GRADE = GRADE_ROW.id;
   const ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
   const ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON");
   const SUB_BOYER = (await ensureTestDyeHouse()).id;
@@ -91,7 +99,7 @@ async function main(): Promise<void> {
       data: {
         barcode: `TST-ADS-R${qty}-${ts}`, itemId: ITEM, colorId: color.id,
         initialQty: qty, currentQty: qty, status: RollStatus.STOCK,
-        qualityGrade: "1.KALITE", qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN,
+        qualityGrade: GRADE_ROW.code, qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN,
       },
       select: { id: true },
     });

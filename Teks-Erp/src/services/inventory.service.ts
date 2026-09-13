@@ -177,7 +177,7 @@ import {
   partitionTargetableIds,
 } from "./helpers/targetable-property.helper";
 import { generateRollBarcodeTx, type RollBarcodeType } from "./helpers/roll-barcode.helper";
-import { finalizeRollsAtLastStep, finalBarcodeType } from "./helpers/roll-finalize.helper";
+import { finalizeRollsAtLastStep, finalBarcodeType, loadProducedBuckets } from "./helpers/roll-finalize.helper";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.helper";
 import { uyari } from "../lib/logger";
@@ -1309,8 +1309,16 @@ export class InventoryService {
    * Roll listesi + istatistiklerin paylaştığı tek filtre kaynağı.
    * findAllRolls (liste) ve getRollStats (özet) bu metodu çağırır —
    * filtre eşleşmediğinde istatistik listeden sapar.
+   *
+   * `fireCodes` DIŞARIDAN geçilir (metot SENKRON kalır): kova sorusu katalogdan
+   * çözülür ama `getRollStatsBatch` bu metodu N kez çağırır — içeride
+   * yükleseydik istek başına N katalog sorgusu olurdu. Üç çağıran da kümeyi bir
+   * kez çözüp aynı değeri geçer, "tek where" kuralı korunur.
    */
-  private buildRollWhere(params: QueryParams): Record<string, unknown> {
+  private buildRollWhere(
+    params: QueryParams,
+    fireCodes: readonly string[],
+  ): Record<string, unknown> {
     const f = params.filters;
 
     // Base where: buildWhereClause sadece düz Roll alanları için. Nested ilişki
@@ -1473,14 +1481,21 @@ export class InventoryService {
     delete where.includeFire;
     if (qualityGradeFilter) {
       where.qualityGrade = qualityGradeFilter;
-    } else if (!includeFire) {
-      // Postgres `<>` NULL-hostile: düz `{ not: "FIRE" }` kalitesi NULL (kaliteye
+    } else if (!includeFire && fireCodes.length > 0) {
+      // Postgres `<>` NULL-hostile: düz `{ notIn }` kalitesi NULL (kaliteye
       // bakılmadı) topları da dışlardı. Kalite artık nullable → null FIRE değildir,
       // Envanter listesinde/istatistiğinde kalmalı. where.AND'e OR olarak ekle
       // (status/renk scope'ları where.AND'i zaten kullanıyor olabilir).
+      //
+      // FİRE KÜMESİ KATALOGDAN (`targetStatus = SCRAP`), kod GÖMÜLÜ DEĞİL —
+      // kataloğu `1K/2K/HURDA` olan fabrikada gömülü `"FIRE"` hiçbir şey
+      // dışlamaz ve fire satılabilir stok sayılırdı (karar ①).
+      // ⚠️ BOŞ KÜMEDE YAN TÜMCE HİÇ EKLENMEZ (yukarıdaki `length > 0`):
+      // `notIn: []` ESLint'te YASAK, ve SCRAP kademesi olmayan katalogda eski
+      // `not: "FIRE"` de zaten hiçbir şeyi dışlamıyordu → davranış birebir aynı.
       where.AND = [
         ...(Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : []),
-        { OR: [{ qualityGrade: null }, { qualityGrade: { not: "FIRE" } }] },
+        { OR: [{ qualityGrade: null }, { qualityGrade: { notIn: [...fireCodes] } }] },
       ];
     }
 
@@ -1769,7 +1784,8 @@ export class InventoryService {
     const params = parseQueryParams(req);
     // sortBy güvenlik süzgeci — bilinmeyen kolon (500) + indekssiz keyfi sort engellenir.
     params.sortBy = resolveSortBy(params.sortBy, ROLL_SORTABLE_FIELDS);
-    const where = this.buildRollWhere(params);
+    const { fireCodes } = await loadProducedBuckets(prisma);
+    const where = this.buildRollWhere(params, fireCodes);
 
     // Sevkiyat rezervasyonu: WAREHOUSE top bir çuval/sevkiyata bağlıysa "serbest depo"
     // DEĞİLDİR — listede "Çuvalda" rozeti için sevkiyat no/durum + çuval no döner.
@@ -2127,7 +2143,8 @@ export class InventoryService {
 
   async getRollStats(req: Request): Promise<ApiResponse<RollStats>> {
     const params = parseQueryParams(req);
-    const where = this.buildRollWhere(params) as Prisma.RollWhereInput;
+    const { fireCodes } = await loadProducedBuckets(prisma);
+    const where = this.buildRollWhere(params, fireCodes) as Prisma.RollWhereInput;
 
     // TEK TARAMA: (status, qualityGrade) bazlı groupBy bir scan'de hem count
     // hem sum'ları döndürür. Eskiden 3 ayrı sorgu vardı (aggregate + groupBy
@@ -2182,11 +2199,15 @@ export class InventoryService {
   async getRollStatsBatch(
     items: Array<{ key: string; filters?: Record<string, unknown> }>,
   ): Promise<ApiResponse<Array<{ key: string; totalCount: number; totalQty: number }>>> {
+    // Kova kümesi İSTEK BAŞINA bir kez — döngü içinde çözülseydi N katalog
+    // sorgusu olurdu (bu uç 20+ karo için tek istekte çağrılır).
+    const { fireCodes } = await loadProducedBuckets(prisma);
     const data = await Promise.all(
       items.map(async (it) => {
-        const where = this.buildRollWhere({
-          filters: it.filters ?? {},
-        } as QueryParams) as Prisma.RollWhereInput;
+        const where = this.buildRollWhere(
+          { filters: it.filters ?? {} } as QueryParams,
+          fireCodes,
+        ) as Prisma.RollWhereInput;
         const agg = await prisma.roll.aggregate({
           where,
           _count: { _all: true },
@@ -2254,9 +2275,19 @@ export class InventoryService {
   ): Promise<ApiResponse<RollSubcontractorSummary>> {
     // FIRE dışlama koşulu (liste buildRollWhere ile aynı semantik): includeFire
     // açıksa boş fragment → FIRE toplar da sayılır.
-    const fireClause = includeFire
-      ? Prisma.empty
-      : Prisma.sql`AND (r."qualityGrade" IS NULL OR r."qualityGrade" <> 'FIRE')`;
+    //
+    // Kova KATALOGDAN (`targetStatus = SCRAP`) — gömülü `'FIRE'` kaldırıldı
+    // (karar ①); bu fragment `buildRollWhere`in BOĞAZ İKİZİdir ve onunla
+    // BİRLİKTE değişir (ikisi aynı soruyu cevaplar, ayrışırsa şerit ile tablo
+    // aynı fabrikada iki farklı toplam basar).
+    // ⚠️ BOŞ KÜMEDE FRAGMENT BOŞ KALIR: `NOT IN ()` PG'de SÖZDİZİMİ HATASIDIR
+    // (Prisma.join boş dizide de patlar) — ve SCRAP kademesi olmayan katalogda
+    // eski `<> 'FIRE'` zaten hiçbir şeyi dışlamıyordu → davranış birebir aynı.
+    const { fireCodes } = await loadProducedBuckets(prisma);
+    const fireClause =
+      includeFire || fireCodes.length === 0
+        ? Prisma.empty
+        : Prisma.sql`AND (r."qualityGrade" IS NULL OR r."qualityGrade" NOT IN (${Prisma.join(fireCodes)}))`;
     // Paylaşılan CTE — rolls tarafı @@index([status, createdAt]), kalemler
     // @@index([rollId]), anti-join @@index([sourceDispatchItemId]) kullanır.
     const baseCte = Prisma.sql`

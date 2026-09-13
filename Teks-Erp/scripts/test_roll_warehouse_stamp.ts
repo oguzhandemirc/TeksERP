@@ -31,6 +31,8 @@ const tambur = new TamburService();
 
 let pass = 0;
 let fail = 0;
+/** Beyanlı atlanan kontrol sayısı — özet satırında AYNI satırda basılır. */
+let atlandi = 0;
 function check(label: string, ok: boolean, detail = ""): void {
   if (ok) {
     pass++;
@@ -175,23 +177,43 @@ async function main(): Promise<void> {
   // `qualityGrade` AÇIKÇA: giriş topu gradesiz doğuyor,
   // `quality.gradeRequiredEnabled` AÇIKKEN kesim GRADE_REQUIRED verirdi ve
   // depo damgası bekçisi kendi konusunu ölçemezdi.
-  const cut = await tambur.cutWarehouseRoll(parentId, {
-    cutLength: 40,
-    rawDestination: "WAREHOUSE",
-    qualityGrade: "1.KALITE",
+  //
+  // ⚠️ KOD KATALOGDAN, LİTERALDEN DEĞİL (2026-09-13, karar ①): burada
+  // `"1.KALITE"` yazılıydı ve `cutWarehouseRoll` açık kodu STRICT çözdüğü için
+  // o kodun bulunmadığı bir fikstürde bekçi ÇÖKÜYORDU — dört check basılıyor,
+  // özet beş diyordu ve E1/E2 ile İKİ POPÜLASYON KONTROLÜ hiç koşmuyordu.
+  // Ürün rolle çalışırken bekçinin literalde kalması, listenin bir sonraki
+  // sitesi olmaktır.
+  const firstGrade = await prisma.qualityGrade.findFirst({
+    where: { role: "FIRST", isActive: true },
+    select: { code: true },
   });
-  const childId = (cut.data as { childRoll?: { id: string } }).childRoll?.id;
-  if (childId) createdRollIds.push(childId);
-  const childRow = childId
-    ? await prisma.roll.findUnique({ where: { id: childId }, select: { warehouseId: true } })
-    : null;
+  // ⚠️ ATLAMA E1/E2 İLE SINIRLI, `return` YOK: aşağıdaki İKİ POPÜLASYON
+  // kontrolü ("bu koşumda doğan her top damgalı" · "test-dışı deposuz top
+  // yok") kesimden BAĞIMSIZDIR ve 6e'nin deposuz-top kararının dayandığı
+  // kapıdır. Erken dönüş onları da yutardı — çökmenin yaptığı tam buydu.
+  if (!firstGrade) {
+    console.log("⏭️  E1/E2: katalogda FIRST rollü aktif kalite yok — ATLANDI (2 kontrol)");
+    atlandi += 2;
+  } else {
+    const cut = await tambur.cutWarehouseRoll(parentId, {
+      cutLength: 40,
+      rawDestination: "WAREHOUSE",
+      qualityGrade: firstGrade.code,
+    });
+    const childId = (cut.data as { childRoll?: { id: string } }).childRoll?.id;
+    if (childId) createdRollIds.push(childId);
+    const childRow = childId
+      ? await prisma.roll.findUnique({ where: { id: childId }, select: { warehouseId: true } })
+      : null;
 
-  check("E1) Kesim çocuğu doğdu", Boolean(childId));
-  check(
-    "E2) ⭐ Çocuk EBEVEYNİN deposunda (varsayılana sapmadı)",
-    childRow?.warehouseId === alt.id,
-    `çocuk=${childRow?.warehouseId} · ebeveyn=${alt.id} · varsayılan=${def.id}`,
-  );
+    check("E1) Kesim çocuğu doğdu", Boolean(childId));
+    check(
+      "E2) ⭐ Çocuk EBEVEYNİN deposunda (varsayılana sapmadı)",
+      childRow?.warehouseId === alt.id,
+      `çocuk=${childRow?.warehouseId} · ebeveyn=${alt.id} · varsayılan=${def.id}`,
+    );
+  }
 
   // ── Körlük zemini ───────────────────────────────────────────────────────
   check(
@@ -240,7 +262,10 @@ async function main(): Promise<void> {
   check(
     "Test-dışı deposuz top yok (canlı veri damgalı)",
     nullReal === 0,
-    `deposuz(test-dışı)=${nullReal} · test artığı=${nullTotal - nullReal}` +
+    // ⚠️ PAYDA BASILIR: "0 bulundu çünkü 5.813 top tarandı" ile "0 bulundu
+    // çünkü hiç top yok" çıktıdan ayırt edilemiyordu — iki ortamda bayt bayt
+    // aynı satır çıkıyordu (ölçüldü 2026-09-13).
+    `taranan=${await prisma.roll.count()} · deposuz(test-dışı)=${nullReal} · test artığı=${nullTotal - nullReal}` +
       (nullReal > 0 ? ` · ${await deposuzTanisi(runStart, def)}` : ""),
   );
 }
@@ -269,7 +294,7 @@ main()
     } catch (e) {
       console.warn("Temizlik uyarısı:", (e as Error).message.slice(0, 160));
     }
-    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${atlandi ? `, ${atlandi} atlandı` : ""} ===`);
     await prisma.$disconnect();
     await pool.end();
     process.exit(fail > 0 ? 1 : 0);

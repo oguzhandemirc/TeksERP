@@ -27,6 +27,11 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { resolveQualityGradeId, resolveQualityGradeIdStrict } from "./helpers/quality-grade.helper";
+import {
+  loadQualityRoles,
+  resolveRemainingGradeCode,
+  type RemainingAction,
+} from "./helpers/quality-role.helper";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { resolveTargetWarehouseId } from "./helpers/warehouse.helper";
 import {
@@ -38,7 +43,7 @@ import {
   VARIANCE_SOURCES,
   varianceKindForRemainingAction,
 } from "../constants/variance-reasons";
-import { WarehouseEventType, RollVarianceKind } from "@prisma/client";
+import { WarehouseEventType, RollVarianceKind, QualityGradeRole } from "@prisma/client";
 import { factoryDayStart } from "../constants/time";
 import {
   decodeDynamicCursor,
@@ -2606,7 +2611,10 @@ export class TamburService {
   async finalizeWarehouseCut(
     rollId: string,
     data: {
-      remainingAction?: "keep_1kalite" | "keep_a1" | "scrap" | "discard";
+      remainingAction?: RemainingAction;
+      /// KALAN için AÇIK katalog seçimi (yeni tablet). Verilirse `remainingAction`
+      /// rol eşlemesini EZER; verilmezse eski sözleşme aynen çalışır.
+      remainingGradeId?: string | null;
       notes?: string | null;
       /// SAPMA SEBEBİ (2026-08-09) — `finalizeOpenFabric` ile aynı sözleşme.
       varianceReasonCode?: string | null;
@@ -2669,16 +2677,20 @@ export class TamburService {
 
     const action = data.remainingAction ?? "discard";
     // Ham parent: kalan parça ham kalır — "keep_*" → ham STOCK (üretime devam),
-    // "scrap" → FIRE/SCRAP. Bitmiş parent: klasik kalite kodu, çıktı WAREHOUSE.
+    // "scrap" → fire rolü. Bitmiş parent: klasik kalite kodu, çıktı WAREHOUSE.
+    //
+    // KOD KATALOGDAN (karar ①): sözleşme adı → ROL → katalog satırı. Rolsüz
+    // katalogda 400 (fail-closed) — eskiden gömülü literal yazılıyor,
+    // `resolveQualityGradeId` lenient olduğu için `qualityGradeId` null kalıyor
+    // ve fire SATILABİLİR STOK sayılıyordu.
+    // ⚠️ Ham parent'ın "keep_*" dalı `parent.qualityGrade`i MİRAS alır ve
+    // katalogdan ÇÖZÜLMEZ: ebeveynin snapshot'ı pasifleşmiş bir kademeyi
+    // gösteriyor olabilir ve geçmişi cezalandırmak yanlış cevap.
     const childQualityGrade = isRawParent
       ? action === "scrap"
-        ? "FIRE"
+        ? await resolveRemainingGradeCode(prisma, "scrap", data.remainingGradeId)
         : parent.qualityGrade
-      : action === "keep_1kalite"
-        ? "1.KALITE"
-        : action === "keep_a1"
-          ? "A1"
-          : "FIRE";
+      : await resolveRemainingGradeCode(prisma, action, data.remainingGradeId);
     const childStatus: RollStatus = isRawParent
       ? action === "scrap"
         ? RollStatus.SCRAP
@@ -3090,13 +3102,21 @@ export class TamburService {
     // Geri uyum: tablet eski input'u (status A1_STOCK/SCRAP) gönderebilir.
     // Yeni kurguda status her zaman WAREHOUSE; eski status değerleri
     // qualityGrade'e dönüştürülür (explicit qualityGrade override eder).
-    const statusToQuality: Record<string, string> = {
-      WAREHOUSE: "1.KALITE",
-      A1_STOCK: "A1",
-      SCRAP: "FIRE",
+    //
+    // Eski STATÜ → ROL → katalog satırı (karar ①). Statü burada "hangi rafa"
+    // değil "operatör hangi düğmeye bastı" bilgisini taşıyor — eski tabletin
+    // kalite kararının statüye kodlanmış hâli, yani ROL sorusu.
+    // Rolsüz katalogda 400 (fail-closed); eskiden "1.KALITE" literaline düşüp
+    // katalog dışı snapshot yazılıyordu.
+    const roles = await loadQualityRoles(prisma);
+    const roleByLegacyStatus: Record<string, QualityGradeRole> = {
+      WAREHOUSE: QualityGradeRole.FIRST,
+      A1_STOCK: QualityGradeRole.SECOND,
+      SCRAP: QualityGradeRole.SCRAP,
     };
     const resolvedQualityGrade =
-      data.qualityGrade ?? statusToQuality[data.status] ?? "1.KALITE";
+      data.qualityGrade ??
+      roles.require(roleByLegacyStatus[data.status] ?? QualityGradeRole.FIRST).code;
     const childStatus = RollStatus.WAREHOUSE;
     const tamburStepId = parent.currentStep.id;
     const woId = parent.currentStep.workOrderId;
@@ -3114,8 +3134,9 @@ export class TamburService {
     const cutIntentSnapshot = buildIntentSnapshot(cutIntent);
     const cutLabelCustomerId = labelCustomerIdOf(cutIntent);
 
-    // Operatör explicit kod verdiyse SIKI doğrula (katalog+aktif); sistem-türetimli
-    // ("1.KALITE"/"A1"/"FIRE" sabitleri) lenient kalır.
+    // Operatör explicit kod verdiyse SIKI doğrula (katalog+aktif); rolden çözülen
+    // kod ZATEN aktif katalog satırından geldiği için lenient yol yeterli
+    // (karar ① sonrası burada artık gömülü sabit YOK).
     const resolvedQualityGradeId = data.qualityGrade
       ? await resolveQualityGradeIdStrict(resolvedQualityGrade)
       : await resolveQualityGradeId(resolvedQualityGrade);
@@ -3411,7 +3432,10 @@ export class TamburService {
   async finalizeOpenFabric(
     openFabricRollId: string,
     data: {
-      remainingAction?: "keep_1kalite" | "keep_a1" | "scrap" | "discard";
+      remainingAction?: RemainingAction;
+      /// KALAN için AÇIK katalog seçimi (yeni tablet). Verilirse `remainingAction`
+      /// rol eşlemesini EZER; verilmezse eski sözleşme aynen çalışır.
+      remainingGradeId?: string | null;
       scrapRemaining?: boolean;
       notes?: string | null;
       /// Tambur kararı — WO.foldType (planlama) override. Verilmezse planlanan
@@ -3518,10 +3542,15 @@ export class TamburService {
     }
 
     // remainingAction varsa onu kullan; yoksa eski scrapRemaining'den türet.
-    const action: "keep_1kalite" | "keep_a1" | "scrap" | "discard" =
+    const action: RemainingAction =
       data.remainingAction ?? (data.scrapRemaining === true ? "scrap" : "discard");
-    const childQualityGrade: string =
-      action === "keep_1kalite" ? "1.KALITE" : action === "keep_a1" ? "A1" : "FIRE";
+    // Kod KATALOGDAN (karar ①) — `finalizeWarehouseCut` ile AYNI kapı; eşleme
+    // burada ikinci kez yazılsaydı iki yüzey sessizce ayrışırdı.
+    const childQualityGrade: string = await resolveRemainingGradeCode(
+      prisma,
+      action,
+      data.remainingGradeId,
+    );
     const tamburStepId = parent.currentStep.id;
     const woId = parent.currentStep.workOrderId;
     // Miras kopyası DEĞER-FARKINDA (2026-08-11, denetim F6): kesim çocuğu

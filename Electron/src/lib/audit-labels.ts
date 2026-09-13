@@ -318,6 +318,12 @@ export const ENUM_LABELS: Record<string, string> = {
   SUBCONTRACTOR_CONSUMED: "Fasonda Kapandı",
   AT_KARTELA: "Kartelada",
   KARTELA_CONSUMED: "Kartelada Kapandı",
+  // QualityGradeRole (2026-09-13) — "bu fabrikada 1./2./fire kalitesi HANGİ
+  // KATALOG SATIRI". `RollStatus`taki `SCRAP` ile AYNI anahtarı paylaşır ve
+  // paylaşması sorun değil: iki enum da o değere "Fire" der. `FIRST`/`SECOND`
+  // ise yeni — yazılmazsa audit yükünde ham `FIRST` görünürdü.
+  FIRST: "1. Kalite",
+  SECOND: "2. Kalite",
   // RollOperationType
   KURSUN_APPLIED: "Kurşun Geçildi",
   QC2_COMPLETED: "KK2 Tamamlandı",

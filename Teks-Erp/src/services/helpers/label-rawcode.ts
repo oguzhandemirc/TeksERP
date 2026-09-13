@@ -93,9 +93,17 @@ export function buildRawCodePreview(
   return { content: filled, contentType: PREVIEW_CONTENT_TYPE[language] };
 }
 
-export function mockPayload(kind: LabelKind): LabelPayload {
+/**
+ * `qualityCode` ÇAĞIRANDAN gelir (karar ①): burada gömülü sabit yazmak iki
+ * kusur üretiyordu — kod yerine AD ("1. Kalite") basılıyordu ve fabrikanın
+ * kataloğu farklıysa hiç eşleşmiyordu. Çözücü `sampleQualityCode`
+ * (`helpers/quality-role.helper.ts`); bu fonksiyon SENKRON kalsın diye
+ * parametre olarak alınır. Varsayılan `""` = "kalitesiz" sentinel'i, yani
+ * koşullu eleman fail-closed BASILMAZ.
+ */
+export function mockPayload(kind: LabelKind, qualityCode: string | null = ""): LabelPayload {
   const base = {
-    rollId: "preview", barcode: "T120726F0001", status: "STOCK", qualityGrade: "1. Kalite",
+    rollId: "preview", barcode: "T120726F0001", status: "STOCK", qualityGrade: qualityCode ?? "",
     widthCm: 152, lengthMeters: 47.5, weightKg: 14.8, markedForKartela: true,
     itemCode: "PA-60S", itemName: "Cotton Lining 60s", itemNameDefault: "Pamuk Astar 60s", itemNameSource: "OVERRIDE",
     colorCode: "BJ", colorName: "Beige", colorNameDefault: "Bej", colorNameSource: "OVERRIDE",

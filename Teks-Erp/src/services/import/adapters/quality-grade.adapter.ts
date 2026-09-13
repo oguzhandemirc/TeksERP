@@ -68,6 +68,27 @@ const COLUMNS: ImportColumn[] = [
     example: "Bitmiş Depo",
   },
   {
+    // ROL — "hangi satırı YAZAYIM" sorusu; `targetStatus` ("hangi rafa iner")
+    // ile KARIŞTIRILMAZ. Bu sütun ZORUNLUDUR ama katalog satırı başına değil
+    // KATALOG başına: fabrikanın en az bir satırı FIRST rolünü taşımalıdır,
+    // yoksa tambur/tablet kesimi fail-closed 400 verir. Panelde kalite kataloğu
+    // SALT-OKUNUR olduğu için (QualityGradesPage) rolü atamanın saha yolu
+    // BUDUR — sütun olmasaydı ikinci müşteri 400'den çıkamazdı.
+    key: "role",
+    label: "Üretim Rolü",
+    type: "enum",
+    enumValues: [
+      { value: "FIRST", label: "1. Kalite" },
+      { value: "SECOND", label: "2. Kalite" },
+      { value: "SCRAP", label: "Fire" },
+    ],
+    help:
+      "Operatör 'fire kes' dediğinde hangi kalitenin yazılacağını belirler. " +
+      "Her rolden EN FAZLA BİR aktif kalite olabilir. Boş bırakılabilir " +
+      "(rolsüz kademe); temizlemek için NULL yazın.",
+    example: "1. Kalite",
+  },
+  {
     key: "returnTargetStatus",
     label: "İade Hedef Statüsü",
     type: "enum",
@@ -103,6 +124,7 @@ export const qualityGradeImportAdapter: ImportAdapter = {
     "Kalite kodunu SİZ yazarsınız — sistem üretmez ve kod sonradan değiştirilemez.",
     "Tambur Hedef Statüsü yeni kayıtta zorunludur: boş bırakılan derece topu FİREYE yazar.",
     "İade Hedef Statüsü yalnız iade akışında okunur; Tambur kararını etkilemez.",
+    "Üretim Rolü kataloğun en az bir satırında dolu olmalıdır: '1. Kalite' rolü atanmamışsa Tambur ve tablet kesimi hata verir.",
     "Aynı ada sahip ikinci bir kalite derecesi eklenemez (Türkçe harf duyarsız karşılaştırma).",
   ],
 
@@ -112,7 +134,7 @@ export const qualityGradeImportAdapter: ImportAdapter = {
       // Beyan edilen HER sütun seçilir — eksik alan UPDATE diff'inden düşerdi.
       select: {
         id: true, code: true, name: true, description: true, color: true,
-        sortOrder: true, targetStatus: true, returnTargetStatus: true, isActive: true,
+        sortOrder: true, role: true, targetStatus: true, returnTargetStatus: true, isActive: true,
       },
     });
     const map = new Map<string, Record<string, unknown>>();
@@ -153,7 +175,7 @@ export const qualityGradeImportAdapter: ImportAdapter = {
       orderBy: { code: "asc" },
       select: {
         code: true, name: true, description: true, color: true,
-        sortOrder: true, targetStatus: true, returnTargetStatus: true, isActive: true,
+        sortOrder: true, role: true, targetStatus: true, returnTargetStatus: true, isActive: true,
       },
     });
     return rows.map((r) => ({
@@ -162,6 +184,7 @@ export const qualityGradeImportAdapter: ImportAdapter = {
       description: r.description ?? "",
       color: r.color ?? "",
       sortOrder: String(r.sortOrder),
+      role: r.role ?? "",
       targetStatus: r.targetStatus,
       returnTargetStatus: r.returnTargetStatus ?? "",
       isActive: r.isActive ? "Evet" : "Hayır",

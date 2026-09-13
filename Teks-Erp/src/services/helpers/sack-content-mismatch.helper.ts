@@ -29,8 +29,9 @@
 // =============================================================================
 
 import prisma from "../../lib/prisma";
-import { LabelKind, RollStatus } from "@prisma/client";
+import { LabelKind, RollStatus, QualityGradeRole } from "@prisma/client";
 import { collectBoundKeys } from "./label-context-fit";
+import { loadQualityRoles } from "./quality-role.helper";
 
 export type MismatchKind =
   /** 🔴 Etiket hedef müşteri için FARKLI çıkardı — aksiyon: etiketi yenile. */
@@ -106,6 +107,12 @@ interface MismatchLookups {
   nameBy: Map<string, string>;
   /** templateId → bu şablon müşteriye bağlı bir alan basıyor mu. */
   nameVisibleByTemplate: Map<string, boolean>;
+  /**
+   * `QualityGradeRole.SECOND` rolünü taşıyan katalog kodları — "2. kalite mi"
+   * sorusunun tek kaynağı (karar ①, gömülü `"A1"` kalktı).
+   * PASİF satırlar DA dahildir: kod geçmiş topların üstünde duruyor.
+   */
+  secondCodes: Set<string>;
 }
 
 /**
@@ -133,12 +140,21 @@ async function loadLookups(
   const itemIds = [...new Set(rolls.map((r) => r.itemId))];
   const colorIds = [...new Set(rolls.map((r) => r.colorId).filter((c): c is string => !!c))];
 
+  // ⚠️ ROL KODLARI ERKEN ÇÖZÜLÜR — aşağıdaki erken dönüşün ÖNÜNDE olmak
+  // ZORUNDA: 2. kalite uyarısı hedef müşteriden BAĞIMSIZDIR (müşterisiz
+  // çuvalda da geçerli, bkz. evaluateSack). Erken dönüşün arkasında kalsaydı
+  // tam o durumda küme boş gelir ve uyarı SESSİZCE ölürdü — bu kararın
+  // düzelttiği kusurun kendisi, yeni bir yerde.
+  const roles = await loadQualityRoles(prisma);
+  const secondCodes = new Set(roles.codesOf(QualityGradeRole.SECOND));
+
   const empty: MismatchLookups = {
     routeBy: new Map(),
     itemAliasBy: new Map(),
     colorAliasBy: new Map(),
     nameBy: new Map(),
     nameVisibleByTemplate: new Map(),
+    secondCodes,
   };
   if (customerIds.length === 0) return empty;
 
@@ -188,6 +204,7 @@ async function loadLookups(
     colorAliasBy: new Map(colorAliases.map((a) => [`${a.customerId}|${a.colorId}`, a.alias])),
     nameBy: new Map(customers.map((c) => [c.id, c.name])),
     nameVisibleByTemplate,
+    secondCodes,
   };
 }
 
@@ -220,16 +237,23 @@ function evaluateSack(
   if (rolls.length === 0) return out;
 
   // ── 2. KALİTE — hedef müşteriden BAĞIMSIZ (müşterisiz çuvalda da geçerli).
-  // `A1_STOCK` statüsü VE `A1` kalite kodu ayrı ayrı bakılır: top çuvala
+  // `A1_STOCK` statüsü VE 2. kalite KODU ayrı ayrı bakılır: top çuvala
   // girerken statüsü değişebiliyor ama kalite kodu topun üstünde kalıcıdır.
+  // Kod kümesi KATALOGDAN gelir (`role = SECOND`), gömülü `"A1"` değil —
+  // kataloğu `2K` olan fabrikada gömülü kod bu uyarıyı hiç doğurmazdı.
   for (const r of rolls) {
-    if (r.status === RollStatus.A1_STOCK || r.qualityGrade === "A1") {
+    if (r.status === RollStatus.A1_STOCK || (r.qualityGrade && lk.secondCodes.has(r.qualityGrade))) {
       out.push({
         kind: "SECOND_QUALITY",
         severity: "warning",
         rollId: r.id,
         barcode: r.barcode,
-        message: "2. kalite (A1) top — müşteri çuvalına kazara girmiş olabilir",
+        // Kodu mesaja BASIYORUZ: fabrikanın kendi kodunu görsün ("A1" sabit
+        // metni yanlış katalogda yanıltıcıydı). Statüden gelen uyarıda kod
+        // olmayabilir — o zaman sade metin.
+        message: r.qualityGrade
+          ? `2. kalite (${r.qualityGrade}) top — müşteri çuvalına kazara girmiş olabilir`
+          : "2. kalite top — müşteri çuvalına kazara girmiş olabilir",
       });
     }
   }

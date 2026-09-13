@@ -46,6 +46,7 @@ import { validateCanvasLayout, readCanvasLayout, CanvasValidationError } from ".
 import { assertContextRenderable } from "./helpers/label-context-fit";
 import { LABEL_ICON_CATEGORIES, LABEL_ICONS, labelIconSvg } from "../config/label-icons";
 import { mockPayload } from "./helpers/label-rawcode";
+import { sampleQualityCode } from "./helpers/quality-role.helper";
 import { fieldDisplayValue } from "./helpers/label-field-values";
 import { renderNativePreviewSvg, svgToPreviewHtml } from "./helpers/native-preview";
 import { mmToDots } from "./helpers/native-label.shared";
@@ -1036,7 +1037,7 @@ export class LabelTemplateService {
    * ({{key}}) yer-tutucusuna geri çevirir → uzman bunu kopyalayıp/düzenleyip kaydeder.
    */
   async getDefaultCode(kind: LabelKind, language: PrinterLanguage): Promise<ApiResponse<{ code: string }>> {
-    const payload = mockPayload(kind);
+    const payload = mockPayload(kind, await sampleQualityCode(prisma));
     const tpl = await this.findDefault(kind);
     // rawCode'u sıyır → otomatik üretim (şablonun alanlarıyla); değerler fieldDisplayValue
     // formatında çıkar → aşağıdaki geri-çevirme birebir eşleşir.
@@ -1095,7 +1096,7 @@ export class LabelTemplateService {
       native: string;
     }>
   > {
-    const payload = mockPayload(kind);
+    const payload = mockPayload(kind, await sampleQualityCode(prisma));
     // Yerleşim (satır aralığı + QR + metraj bandı) canlı önizlemeye yansısın → template'e göm.
     const template = {
       kind,
@@ -1172,7 +1173,7 @@ export class LabelTemplateService {
       if (e instanceof CanvasValidationError) throw AppError.badRequest(e.message);
       throw e;
     }
-    const payload = mockPayload(opts.kind);
+    const payload = mockPayload(opts.kind, await sampleQualityCode(prisma));
     if (opts.qualityGrade !== undefined) payload.qualityGrade = opts.qualityGrade;
     // Cihaz seçiliyse medya (dpi/gap) + dil O CİHAZDAN çözülür — "Bu Bilgisayar"da
     // seçili Cihaz Kaydı yazıcısı (ör. Argox PPLB) editör Test Baskısı'nda da gerçek

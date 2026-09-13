@@ -337,6 +337,18 @@ const PARTIAL_INDEXES: Array<{
   { table: "customers", index: "customers_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "ad mükerreri DB seddi — tombstone hariç (prod'da eksikse: temizlik + enforce bekliyor)" },
   { table: "items", index: "items_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "ad mükerreri DB seddi — tombstone hariç (prod'da eksikse: temizlik + enforce bekliyor)" },
   { table: "subcontractors", index: "subcontractors_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "ad mükerreri DB seddi — tombstone hariç (prod'da eksikse: temizlik + enforce bekliyor)" },
+  // quality_grades — üretim rolü seddi (2026-09-13, karar ①, migration
+  // 20260913120000). PREDICATE'te `isActive` VAR: pasif satır rolünü TARİH
+  // olarak taşır, yoksa "1.KALITE'yi pasifleştirip 1K koy" geçişi önce eski
+  // rolü null'lamayı zorunlu kılardı. YUMUŞAK KAPI: mükerrer aktif rol varsa
+  // migration index'i atlar → burası kırmızı verir ve "enforce bekliyor" der.
+  {
+    table: "quality_grades",
+    index: "quality_grades_role_key",
+    uniq: true,
+    predicate: `((role IS NOT NULL) AND "isActive")`,
+    why: "rol başına tek AKTİF kalite — 'fire yaz' dendiğinde hangi satır yazılacağı tekil olsun",
+  },
   // label_templates / variants — şema-DIŞI unique'ler
   { table: "label_templates", index: "label_templates_one_default_per_kind", uniq: true, predicate: `("isDefault" = true)`, why: "kind başına TEK varsayılan şablon" },
   { table: "label_template_variants", index: "label_template_variants_one_primary", uniq: true, predicate: `("isPrimary" = true)`, why: "şablon başına TEK primary varyant" },

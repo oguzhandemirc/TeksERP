@@ -111,9 +111,17 @@ const cutOpenFabricSchema = z.object({
 // (alan adı yorumda geçse de yeter), o yüzden şema dışarı veriliyor.
 export const finalizeOpenFabricSchema = z.object({
   // Yeni: kalan metre için operatör kararı. Verilmezse scrapRemaining'den türetilir.
+  // ⚠️ Ad `keep_1kalite` bir KATALOG KODUNUN sözleşmeye sızmış hâlidir ve
+  // BİLİNÇLİ KORUNUR (2026-09-13, karar ①): sahadaki eski tablet bunu
+  // göndermeye devam eder, `minVersion` gerekmez. Sunucu adı ROLE çevirir.
   remainingAction: z
     .enum(["keep_1kalite", "keep_a1", "scrap", "discard"])
     .optional(),
+  // KALAN için AÇIK katalog seçimi (yeni tablet kataloğu listeler). Verilirse
+  // `remainingAction` rol eşlemesini EZER.
+  // ⚠️ BU SATIR OLMADAN ALAN SESSİZCE KAYBOLUR: `z.object` tanımadığı anahtarı
+  // atar, istemci gönderir, sunucu hiç görmez (foldType dersi).
+  remainingGradeId: z.string().uuid("Geçersiz kalite ID").optional().nullable(),
   // Eski param — geri uyum (mobile geçince kaldırılabilir).
   scrapRemaining: z.boolean().optional(),
   notes: z.string().max(1000).optional().nullable(),
@@ -200,6 +208,9 @@ export const finalizeWarehouseCutSchema = z.object({
   remainingAction: z
     .enum(["keep_1kalite", "keep_a1", "scrap", "discard"])
     .optional(),
+  // `finalizeOpenFabricSchema` ile AYNI sözleşme — oradaki iki notu da taşır
+  // (sözleşme adı korunur · Zod'a yazılmayan alan sessizce kaybolur).
+  remainingGradeId: z.string().uuid("Geçersiz kalite ID").optional().nullable(),
   notes: z.string().max(1000).optional().nullable(),
   // SAPMA SEBEBİ — `finalizeOpenFabricSchema` ile aynı sözleşme (bkz. oradaki not).
   varianceReasonCode: z.string().max(64).optional().nullable(),

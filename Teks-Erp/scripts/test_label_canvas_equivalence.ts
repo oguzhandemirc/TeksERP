@@ -14,6 +14,23 @@ import { renderLabel } from "../src/services/helpers/label-renderer.registry";
 import { resolveLabelFormat } from "../src/services/helpers/label-format.resolver";
 import { flowTemplateToCanvas } from "../src/services/helpers/label-flow-to-canvas";
 import { mockPayload } from "../src/services/helpers/label-rawcode";
+
+/**
+ * Bu bekçinin ÖLÇTÜĞÜ şey iki çizicinin eşdeğerliğidir, kalite kataloğu DEĞİL —
+ * bu yüzden kod burada SABİTTİR ve katalogdan çözülmez (fikstür tanımı, gömülü
+ * varsayım değil). Uzunluğu geometriyi etkilediği için değeri DEĞİŞTİRİLMEZ.
+ *
+ * ⚠️ KAPSAM DIŞI — BU BİR TERCİH, ÇÖZÜM DEĞİL (2026-09-13):
+ * `qualityGrade: ""` (KALİTESİZ top) bu bekçinin kapsamı DIŞINDADIR. Orada iki
+ * çizici `customerName` üzerinde AYRIŞIYOR: dönüştürücü düşürüyor, akış
+ * basıyor. Sabit kod o dalı ölçmez, SUSTURUR — ve saha vakası gerçek
+ * (`Roll.qualityGrade` nullable, KK1 "Belirsiz" bırakabiliyor).
+ * Açık bulgu, sahibi belge/etiket alanı; kuyrukta.
+ */
+const SABIT_KALITE_KODU = "1.KALITE";
+const KAPSAM_DISI_BEYANI =
+  '⚠️ KAPSAM DIŞI: qualityGrade:"" (kalitesiz top) ölçülmüyor — iki çizici ' +
+  "orada customerName'de ayrışıyor (açık bulgu 2026-09-13, belge/etiket alanı).";
 import { fieldDisplayValue } from "../src/services/helpers/label-field-values";
 import { escapeHtml } from "../src/services/helpers/label-html.shared";
 import { asciiFold, cleanCtlCp1254 } from "../src/services/helpers/native-label.shared";
@@ -38,13 +55,19 @@ async function main() {
     check("aktif akış şablonu yok — dönüşüm kanıtlanacak şablon bulunamadı", false);
     return;
   }
-  console.log(`${templates.length} şablon karşılaştırılıyor (veri sadakati)...\n`);
+  console.log(`${templates.length} şablon karşılaştırılıyor (veri sadakati)...`);
+  console.log(`${KAPSAM_DISI_BEYANI}\n`);
 
   for (const t of templates) {
     const kind = t.kind!;
     const tag = `[${kind}] ${t.name}`;
     const format = await resolveLabelFormat({ kind });
-    const payload = { ...mockPayload(kind), kind };
+    // ⚠️ KALİTE KODU AÇIKÇA VERİLİR (2026-09-13, karar ①): `mockPayload`ın
+    // varsayılanı artık `""` ("kalitesiz" sentinel'i) ve boş kalite ETİKET
+    // GEOMETRİSİNİ değiştirir — bu bekçi iki çizicinin AYNI yükte aynı alanları
+    // basmasını ölçer, yükün kendisini değil. Sabit bir kod vererek ölçüm
+    // katalogdan da bağımsız kalır.
+    const payload = { ...mockPayload(kind, SABIT_KALITE_KODU), kind };
     const flowTemplate = { ...t, rawCode: null } as LabelTemplate;
     const layout = flowTemplateToCanvas(
       {

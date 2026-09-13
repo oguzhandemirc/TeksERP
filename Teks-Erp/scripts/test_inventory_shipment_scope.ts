@@ -31,11 +31,25 @@ function check(label: string, ok: boolean, detail = ""): void {
 const inv = new InventoryService();
 const ship = new ShippingService();
 // buildRollWhere private — teste özel erişim (çağıran prod yolu findAllRolls ile aynı).
-const buildWhere = (filters: Record<string, unknown>): Record<string, unknown> =>
-  (inv as unknown as { buildRollWhere: (p: QueryParams) => Record<string, unknown> }).buildRollWhere({
-    filters: filters as QueryParams["filters"],
-    page: 1, pageSize: 50, sortBy: "createdAt", sortOrder: "desc",
-  } as QueryParams);
+// ⚠️ `fireCodes` ÇAĞIRANDAN gelir (2026-09-13, karar ①): fire kümesi artık
+// katalogdan çözülüyor ve metoda parametre olarak giriyor. Bu erişim `as
+// unknown as` ile tip kapısını atladığı için imza değişikliğini DERLEYİCİ
+// GÖREMEZ — parametre atlanırsa hata çalışma zamanında çıkar (ve çıktı).
+const buildWhere = (
+  filters: Record<string, unknown>,
+  fireCodes: readonly string[] = [],
+): Record<string, unknown> =>
+  (
+    inv as unknown as {
+      buildRollWhere: (p: QueryParams, f: readonly string[]) => Record<string, unknown>;
+    }
+  ).buildRollWhere(
+    {
+      filters: filters as QueryParams["filters"],
+      page: 1, pageSize: 50, sortBy: "createdAt", sortOrder: "desc",
+    } as QueryParams,
+    fireCodes,
+  );
 
 const W = 7734; // izole spec — başka test topu bu ende olmasın
 const createdRolls: string[] = [];

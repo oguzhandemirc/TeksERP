@@ -116,11 +116,18 @@ async function main(): Promise<void> {
     // Birleşim daraltılırsa yarı mamul TABLETTEN görünmez olur; dar kapsamlar
     // gevşerse envanterdeki ayrım sessizce geri alınır.
     const scopeIds = async (scope: string): Promise<string[]> => {
+      // ⚠️ `fireCodes` ikinci parametre (2026-09-13, karar ①) — `as unknown as`
+      // tip kapısını atladığı için eksikliği derleyici görmez, çalışma
+      // zamanında patlar. Bu bekçi fire süzgecini ölçmüyor → boş küme yeterli
+      // (boş kümede yan tümce zaten hiç eklenmez).
       const where = (
         svc as unknown as {
-          buildRollWhere: (p: { filters: Record<string, string> }) => Record<string, unknown>;
+          buildRollWhere: (
+            p: { filters: Record<string, string> },
+            f: readonly string[],
+          ) => Record<string, unknown>;
         }
-      ).buildRollWhere({ filters: { rollScope: scope, status: "ALL" } });
+      ).buildRollWhere({ filters: { rollScope: scope, status: "ALL" } }, []);
       const rows = await prisma.roll.findMany({
         where: { AND: [where as never, { id: { in: rollIds } }] },
         select: { id: true },

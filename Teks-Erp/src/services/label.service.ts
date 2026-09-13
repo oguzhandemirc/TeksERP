@@ -24,6 +24,7 @@ import {
   readScrapGradeLabelEnabled,
 } from "./system-setting.service";
 import { LabelKind, PrinterLanguage, Prisma, RollStatus, type LabelTemplate, type LabelTemplateVariant } from "@prisma/client";
+import { sampleQualityCode } from "./helpers/quality-role.helper";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
@@ -600,7 +601,7 @@ export class LabelService {
       rollId: "preview",
       barcode: "T120726H0001",
       status: "STOCK",
-      qualityGrade: "1. Kalite",
+      qualityGrade: (await sampleQualityCode(prisma)) ?? "",
       widthCm: 152,
       lengthMeters: 47.5,
       weightKg: 14.8,
@@ -682,7 +683,7 @@ export class LabelService {
       rollId: "preview",
       barcode: "T120726H0001",
       status: "STOCK",
-      qualityGrade: "1. Kalite",
+      qualityGrade: (await sampleQualityCode(prisma)) ?? "",
       widthCm: 152,
       lengthMeters: 47.5,
       weightKg: 14.8,
@@ -1052,11 +1053,14 @@ export class LabelService {
   /** Örnek (mock) top etiketi render girdisi — Test Et için. peripheralId medyayı (geometri) belirler. */
   private async buildSampleRenderInput(peripheralId?: string | null): Promise<LabelRenderInput> {
     const sampleBarcode = "T120726F0001";
+    const sampleGrade = await sampleQualityCode(prisma);
     const payload: LabelPayload = {
       rollId: "ornek-id",
       barcode: sampleBarcode,
       status: "WAREHOUSE",
-      qualityGrade: "1.KALITE",
+      // `""` = "kalitesiz" sentinel'i (gerçek topta `roll.qualityGrade ?? ""`);
+      // koşullu eleman o hâlde fail-closed BASILMAZ.
+      qualityGrade: sampleGrade ?? "",
       widthCm: 150,
       lengthMeters: 320,
       weightKg: 42,
@@ -1854,7 +1858,7 @@ export class LabelService {
     }
 
     const kind: LabelKind = template.kind ?? LabelKind.ROLL_FINISHED;
-    const payload = mockPayload(kind);
+    const payload = mockPayload(kind, await sampleQualityCode(prisma));
 
     // Roll native ile AYNI cihaz çözümü: format (medya/dpi), dil, raster modu.
     // Şablon/varyant rota kısmı yok sayılır (serbest şablonun rotası olamaz).

@@ -20,12 +20,18 @@ const MOBILE_QUALITY_READ = ["mobile:kk1", "mobile:kk2-kursun", "mobile:tambur",
 // yazabilir → bozuk Tambur çıktısı. Tambur/iade için ANLAMLI alt kümeyle sınırla.
 const qgTargetEnum = z.enum(["WAREHOUSE", "A1_STOCK", "STOCK", "SCRAP"]);
 const qgReturnEnum = z.enum(["WAREHOUSE", "A1_STOCK", "SCRAP"]);
+// ROL (2026-09-13, karar ①) — `targetStatus`tan AYRI soru: o "hangi rafa iner",
+// bu "aksiyon '1./2./fire' dediğinde hangi satır yazılır". Şema `.passthrough()`
+// olduğu için alan buraya yazılmasa da geçerdi — ama o zaman `role: "BANANA"`
+// Zod'dan geçip Prisma'da 500 olurdu; enum burada 400'e çevirir.
+const qgRoleEnum = z.enum(["FIRST", "SECOND", "SCRAP"]);
 
 // UPDATE (PATCH): kısmi — targetStatus opsiyonel.
 const qgUpdateSchema = z
   .object({
     targetStatus: qgTargetEnum.optional(),
     returnTargetStatus: qgReturnEnum.nullable().optional(),
+    role: qgRoleEnum.nullable().optional(),
   })
   .passthrough();
 
@@ -34,6 +40,10 @@ const qgUpdateSchema = z
 const qgCreateSchema = z
   .object({
     targetStatus: qgTargetEnum,
+    // Rol OPSİYONEL: rolsüz kademe meşrudur (ör. ikinci bir fire kademesi —
+    // kovası SCRAP'tir, rolü yoktur). Zorunluluk SATIR düzeyinde değil KATALOG
+    // düzeyindedir ve yazma anında fail-closed olarak ölçülür.
+    role: qgRoleEnum.nullable().optional(),
     returnTargetStatus: qgReturnEnum.nullable().optional(),
   })
   .passthrough();
@@ -47,12 +57,13 @@ function makeQgValidator(schema: z.ZodTypeAny, msg: string) {
 const validateQgCreate = makeQgValidator(
   qgCreateSchema,
   "Kalite derecesi oluştururken hedef statü (targetStatus) zorunludur: " +
-    "WAREHOUSE/A1_STOCK/STOCK/SCRAP. returnTargetStatus yalnız WAREHOUSE/A1_STOCK/SCRAP olabilir.",
+    "WAREHOUSE/A1_STOCK/STOCK/SCRAP. returnTargetStatus yalnız WAREHOUSE/A1_STOCK/SCRAP, " +
+    "role yalnız FIRST/SECOND/SCRAP olabilir.",
 );
 const validateQgUpdate = makeQgValidator(
   qgUpdateSchema,
   "Geçersiz kalite durumu: targetStatus yalnız WAREHOUSE/A1_STOCK/STOCK/SCRAP, " +
-    "returnTargetStatus yalnız WAREHOUSE/A1_STOCK/SCRAP olabilir.",
+    "returnTargetStatus yalnız WAREHOUSE/A1_STOCK/SCRAP, role yalnız FIRST/SECOND/SCRAP olabilir.",
 );
 
 export const qualityGradeService = new BaseService({
