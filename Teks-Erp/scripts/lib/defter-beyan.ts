@@ -409,7 +409,7 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   PRODUCTION_RECEIPT: { tur: "BAGLI_TERS", kod: "KURSUN_REOPEN", tersYazan: [{ dosya: "src/services/kursun-qc.service.ts", sembol: "reopenStep" }] },
   KURSUN_REOPEN: { tur: "TERS_KODU", ileri: "PRODUCTION_RECEIPT" },
   TAMBUR_FINALIZE: { tur: "BAGLI_TERS", kod: "TAMBUR_UNDO", tersYazan: [{ dosya: "src/services/tambur-undo.service.ts", sembol: "applySingle" }, { dosya: "src/services/tambur-undo.service.ts", sembol: "applySingleRestore" }, { dosya: "src/services/tambur-undo.service.ts", sembol: "applyFull" }] },
-  TAMBUR_UNDO: { tur: "TERS_KODU", ileri: ["TAMBUR_FINALIZE", "CUT_SPLIT", "CUT_DISCARD", "SCRAP"] },
+  TAMBUR_UNDO: { tur: "TERS_KODU", ileri: ["TAMBUR_FINALIZE", "CUT_SPLIT", "CUT_DISCARD", "SCRAP", "OVERAGE"] },
   ENTRY_RECEIPT: { tur: "KARSI_OLAY", kod: "ROLL_CANCEL", gerekce: "topun doğuşunun tersi kayıttan düşmesidir; ayrı olay, bağ yok",
     tersYazan: [{ dosya: "src/services/inventory.service.ts", sembol: "softDelete" }] },
   ROLL_CANCEL: { tur: "BAGLI_TERS", kod: "CANCEL_RESTORE", tersYazan: [{ dosya: "src/services/inventory.service.ts", sembol: "restoreCancelledRoll" }] },
@@ -471,14 +471,21 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   // (§19, 409 UNDO_SCRAP_REMAINDER_FULL_ONLY). İki defter (stok + sapma) birlikte döner — eski
   // "iki defter farklı tersliyor" borcu bu yüzden kapandı.
   CUT_DISCARD: { tur: "BAGLI_TERS", kod: "TAMBUR_UNDO", tersYazan: [{ dosya: "src/services/tambur-undo.service.ts", sembol: "reverseVarianceBoundStockMovesTx" }] },
-  OVERAGE: { tur: "BORC",
-    // ⚠️ İLK YAZIM TERSİNİ İDDİA ETMİŞTİ ("stok satırı ebeveynde, terslenmez; sapma
-    // terslenir") ve 01'in ÇALIŞTIRMASIYLA ÇÜRÜDÜ (2026-09-13). Taze tabanda yeniden
-    // ölçüldü: statik okuma `rollId`yi yanlış topa bağlamıştı. Çürütülen satır silinmez,
-    // düzeltilir — envanterin güvenilirliği çürütülen satırlarını da taşımasıyla ölçülür.
-    ne: "iki defter AYRIŞIYOR ama ilk yazımın TERSİ yönde: stok ADJUST satırı (çocukta) geri almada bağlı terslenir, sapma defterindeki OVERAGE (ebeveynde) terslenmez",
-    kanit: "yazan: tambur.service.ts:2480 (`cutWarehouseRoll`, ADJUST, `rollId: child.id` — ÇOCUĞA; aşım DEVİR değil KEŞİFtir, gruba girmez; `test_stock_ledger_transform` §B/§B2). RollVariance OVERAGE ise EBEVEYNE yazılır (:2415 · :3342 `rollId: parent.id`). Geri alma: tambur-undo `reverseAllRollStockMoves([childId])` çocuğun tüm satırlarını tersler ⇒ stok tarafı TAMBUR_UNDO ile bağlı terslenir (01 çalıştırdı: çocuk OVERAGE stok satırı terslendi); ebeveyndeki sapma satırı aynı koşumda TERSLENMEDİ (ebeveyn cur=120 / init=220, OVERAGE:20 duruyor). Yani §13'ün kapsamı olan stok tarafı mekanik olarak BAGLI_TERS biçimindedir; açık kalan soru SAPMA tarafı ve semantiği: keşif geri alınır mı, yoksa ebeveynin init=220'si gerçek olup sapma yerinde mi durmalı? Kapanır: sahibi hüküm verir — (a) \"keşif TERMİNAL, sapma durur\" ⇒ bu satır BAGLI_TERS/TAMBUR_UNDO olur ve sapma tarafı RollVariance beyanında şerh alır; (b) \"geri alma sapmayı da damgalar\" ⇒ tambur-undo :1815 yüklemi OVERAGE'ı kapsar ve test_stock_ledger_tambur_undo ölçer. Hüküm P3 sonrası (1e sırası)",
-    sahibi: "tambur alanı (01)" },
+  // OVERAGE — BORÇ KAPANDI (6e ②+④ ef5a40f8 + şema 154998a8 `RollVariance.sourceRollId`; hüküm 1c).
+  // İKİ DEFTER, İKİ SINIF — ve ikisi birlikte doğru:
+  //   · SAPMA defteri (RollVariance OVERAGE, EBEVEYNDE): TERMİNAL — keşif geri alınmaz, satır
+  //     terslenmez, ebeveynde kalır; `restoreBumpTx` mevcut canlı OVERAGE sapmasını bulur ya da
+  //     TAMBUR_UNDO_RESTORE kaynaklı yenisini yazar, initialQty yalnız AŞIMDA bump alır (§12).
+  //   · STOK defteri (ADJUST, ÇOCUKTA, reasonCode OVERAGE): BAGLI_TERS/TAMBUR_UNDO — çocuğun
+  //     satırı `reverseAllRollStockMoves` ile bağlı terslenir ve ebeveyn stok kümesindeyse AYNI
+  //     `rollVarianceId` ile +aşım ADJUST ebeveyne TAŞINIR (`readChildOverageRowsTx` →
+  //     `transferOverageRowsToParentTx`, `restoreBumpTx` tek kaynak, dört geri alma dalı çağırır).
+  //   Bekçi: test_stock_ledger_tambur_undo §12 — durum = defter = 120, canlı OVERAGE n=1 Σ=20,
+  //   taşıma satırı aynı rollVarianceId; initialQty şişmez (100 → 100).
+  // Tarihçe: ilk yazım tersini iddia etmişti (stok ebeveynde/terslenmez, sapma terslenir), 01'in
+  // çalıştırmasıyla çürüdü (e3d63964 düzeltti); bugün iki defterin AYRI sınıfta olması ölçülmüş ve
+  // kasıtlı — "iki defter farklı tersliyor" bir kusur değil, keşfin doğası.
+  OVERAGE: { tur: "BAGLI_TERS", kod: "TAMBUR_UNDO", tersYazan: [{ dosya: "src/services/tambur-undo.service.ts", sembol: "restoreBumpTx" }] },
   MANUAL_ADJUST: { tur: "BORC",
     // ⚠️ "YAZARSIZ" DEĞİL "YAZARI BİLİNMİYOR" (ea'nın ayrımı): ilki bir ölçüm
     // sonucu gibi okunur, oysa ölçtüğümüz tek şey MAIN'DE yazar görmediğimiz.
