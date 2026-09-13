@@ -147,6 +147,14 @@ sorusuna dört oturum dört sayı verdi (64 · 68 · 70 · 72) ve hiçbiri yanl�
 ⇒ Sayıyı iki şey birden oynattı: **yüklem** (tek imza ↔ iki imza; her span ↔ tek alan) ve
 **ağaç** (kimin commit'leri dâhil). ⇒ Bir sayı taşınırken **ikisini birden** taşımalı.
 
+⚠️ **ÜÇÜNCÜ EKSEN, aynı gün ortaya çıktı — AYRIŞTIRICI SÜRÜMÜ.** Yukarıdaki dört sayının
+dördü de, alanı `` bekçi: `[^`]*` `` ile okuyan ESKİ ayrıştırıcıyla ölçüldü; o ayrıştırıcı
+alanın içindeki backtick'te duruyordu. Düzeltilince (`556b151a`) **aynı yüklem, aynı ağaç,
+farklı sayı** verdi: dört alan "kesik" olmaktan çıktı, 11 bekçi adı da alanın okunmayan
+yarısından ortaya geldi. ⇒ Bir sayının kimliği **üç** parçadır: *yüklem · ağaç ·
+ayrıştırıcı*. Üçüncüsü en sessizidir, çünkü kimse aracın sürümünü yazmaz.
+(Sınıf: `OLCUM-DISIPLINI-ARAC.md` § Kapı, kendi AYRIŞTIRICISININ darlığını SAYIYA çevirebilir.)
+
 > **Yüklem yazılmadıkça sayı TAŞINAMAZ** — ve alan kişi de sorumludur: yüklemsiz gelen
 > bir sayıyı yüklemini sormadan plana çevirmek, onu üretmekle aynı sınıftır.
 
