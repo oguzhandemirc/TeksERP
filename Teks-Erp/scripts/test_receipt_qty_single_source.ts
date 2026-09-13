@@ -71,10 +71,10 @@ check(
     /export function receiptQtyWarning\b/.test(helperSrc),
 );
 check(
-  "helper defter ENTRY + ENTRY_CORRECTION okuyor (initialQty yalnız ufuk-öncesi yedek)",
-  /ENTRY_RECEIPT/.test(yorumsuz(helperSrc)) &&
-    /ENTRY_CORRECTION/.test(yorumsuz(helperSrc)) &&
-    /WarehouseEventType\.ENTRY\b/.test(yorumsuz(helperSrc)) &&
+  "helper defteri TEK LİSTEDEN okuyor (RECEIPT_QTY_REASONS ∋ ENTRY_RECEIPT; initialQty yalnız ufuk-öncesi yedek)",
+  /export const RECEIPT_QTY_REASONS\b/.test(helperSrc) &&
+    /RECEIPT_QTY_REASONS[^\n]*ENTRY_RECEIPT/.test(yorumsuz(helperSrc)) &&
+    /reasonCode: \{ in: \[\.\.\.RECEIPT_QTY_REASONS\] \}/.test(yorumsuz(helperSrc)) &&
     /ledgerHorizonStart\(\)/.test(yorumsuz(helperSrc)),
 );
 

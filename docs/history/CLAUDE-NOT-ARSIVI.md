@@ -8609,8 +8609,11 @@ say" atfı da kısmi geri almada (bump'sız) düşer.
 **Hüküm (1e, şık B — C yazılmayacak):** "kabul anı metrajı" bir NE OLDU'dur ve defterde zaten yazılı; `initialQty`
 DURUM kolonudur, para okuyucusu durumdan türetilmez. `createInitialEntry` fiş topuna depo defteri ENTRY
 satırı yazar (`ENTRY_RECEIPT`, `goodsReceiptId`) — altı durumun altısında 100. Tek helper
-`helpers/receipt-qty.helper.ts` `receiptQtyByRollTx(tx, rollIds) → Map<rollId,{qty,source}>` = ENTRY +
-Σ `ENTRY_CORRECTION` (işaretli; yazıcı `applyManualProperties`, 6e diliminde; sabit ilk günden). ÜÇ SONUÇ
+`helpers/receipt-qty.helper.ts` `receiptQtyByRollTx(tx, rollIds) → Map<rollId,{qty,source}>` = `RECEIPT_QTY_REASONS`
+listesindeki satırların işaretli toplamı (bugün yalnız ENTRY_RECEIPT). Giriş ölçümü düzeltmesi satırı
+(`applyManualProperties`) 6e'nin yazıcısıyla TEK commit'te gelir: sabit + yazıcı + §13a ters-yol beyanı +
+7. fikstür durumu — 1e 2026-09-14: yazıcısız sebep kodu ölü katalog kodudur ve `test_defter_ters_yol §13a`
+beyansız kodu reddeder (tren 46 ölçtü; `ENTRY_CORRECTION` sabiti bu dilimden ÇIKARILDI). ÜÇ SONUÇ
 fail-closed: satır var → defter · satır yok ∧ ufuk öncesi → `initialQty`, source `INITIAL_QTY_FALLBACK`,
 iki yüzeyde `ApiResponse.warnings` cümlesi · satır yok ∧ ufuk sonrası → 409 `RECEIPT_LEDGER_ROW_MISSING`
 (K=0 kapısı delinmiş demektir; para okuyucusu sessiz geçmez). Ufuk tek kaynak `src/constants/ledger-horizon.ts`
@@ -8625,7 +8628,7 @@ Masadaki ikinci şık (ölçülmedi): bump'ı keşif anına taşımak (kesimde `
 **Bekçi:** `test_receipt_qty_readers` (gerçek fiş + PO, altı durum × iki okuyucu = 100 + uyarı yok; §E/§F
 ikinci fişle üç sonuç: ufuk-öncesi yedek + iki yüzeyde warnings · ufuk-sonrası iki yüzeyde 409; doğduğu gün
 11/4 — §D1/§D2/§G1/§G2 kırmızı, düzeltmeyle yeşil) · `test_receipt_qty_single_source` (DB'siz: helper üç
-ihraç + ENTRY/ENTRY_CORRECTION/ufuk okuyor, iki okuyucu import ediyor, kodda çıplak `initialQty` yok; yüklem
+ihraç + RECEIPT_QTY_REASONS/ufuk okuyor, iki okuyucu import ediyor, kodda çıplak `initialQty` yok; yüklem
 üç biçimi görür, şerhi görmez — kendi sondası). Negatif sondalar
 (cp+sha256): helper `initialQty`ye döndürüldü → 4 ❌ · ③ dalı fail-open → §F1/§F2/§F3 ❌ · taslak uyarısı
 düşürüldü → §E3 ❌ · PO'ya `_sum initialQty` geri → §2 ❌ · invoice import silindi → §1 ❌. Komşular: goods_receipt_invoice 38/0 · purchase_order 122/0 · finance_invoice 46/0.

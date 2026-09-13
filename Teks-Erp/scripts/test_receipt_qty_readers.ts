@@ -19,8 +19,8 @@
 // 2026-09-13: 6 durumun 4'ünde yanlış) — bu yüzden ALTISI da assert edilir.
 // §E/§F ikinci fişle ÜÇ SONUCU ölçer: ufuk-öncesi satırsız top → `initialQty`
 // yedeği + `warnings` cümlesi (iki yüzeyde) · ufuk-sonrası satırsız top → 409
-// `RECEIPT_LEDGER_ROW_MISSING` (iki yüzeyde). 7. durum (giriş düzeltmesi
-// `ENTRY_CORRECTION`) yazıcısıyla birlikte 6e diliminde eklenir.
+// `RECEIPT_LEDGER_ROW_MISSING` (iki yüzeyde). 7. durum (giriş ölçümü düzeltmesi
+// satırı, `RECEIPT_QTY_REASONS`e yeni üye) yazıcısıyla birlikte 6e diliminde eklenir.
 //
 // NEGATİF SONDALAR (2026-09-13/14, cp + sha256 ile geri alındı, `git checkout --` değil):
 // helper `initialQty`ye döndürüldü → §D1/§D2/§G1/§G2 (4 ❌) · ③ dalı fail-open yapıldı
