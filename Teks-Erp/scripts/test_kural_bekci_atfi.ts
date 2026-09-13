@@ -66,9 +66,17 @@ const KURALLAR = join(KOK, "docs", "kurallar");
  *   superadmin.md:13 → test_db_invariants (§10)
  *   yetki-izin.md:20 → test_superadmin (§④ SUPAP)
  *   yetki-izin.md:23 → test_superadmin_visible (§4)
- *   is-emri.md:19    → ⛔ BEKÇİ YOK — ve bu da bir ÖLÇÜM sonucudur: tek `test_h*`
- *                      adayı `test_helpers` kuralı ETKİSİZLEŞTİRİYOR (`:275-278`),
- *                      ölçmüyor. Kural satırına BORÇ + kapanma koşulu yazıldı.
+ *   is-emri.md:19    → ⛔ BEKÇİ YOK (2026-09-13) — bu da bir sonuçtur: tek `test_h*`
+ *                      adayı `test_helpers`, kuralı ETKİSİZLEŞTİRİYOR: sahte
+ *                      `workOrderStep.findUnique` her adayı `stepSequence: 1`
+ *                      döndürüyor ⇒ "giriş noktası" dalı hiç ayrışmıyor.
+ *                      Kural satırına BORÇ + kapanma koşulu yazıldı.
+ *                      ⚠️ Çapa SATIR NUMARASI DEĞİL SEMBOL: ilk yazımda `:275-278`
+ *                      yazılmıştı ve `test_olcum_iddiasi` onu çıplak sayı diye
+ *                      yakaladı — haklı olarak, çünkü satır numarası nottan hızlı
+ *                      bayatlar (aynı gün ölçüldü: `defter-beyan.ts`in beş
+ *                      kaleminde beş çapa da kaymıştı).
+ *                      Yeri: `grep -n 'workOrderStep' scripts/test_helpers.ts`
  * ⇒ ***Bir atfı doldurmak için OLMAYAN bir korumayı VAR göstermek, boş
  *   bırakmaktan kötüdür*** — bu yüzden beşincisi tahminle doldurulmadı, `YOK` yazıldı.
  *
