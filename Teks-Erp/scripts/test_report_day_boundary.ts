@@ -15,19 +15,20 @@
 //
 // Çözüm: gün sınırı artık AÇIKÇA yazılıyor — `src/constants/time.ts` →
 // `factoryDaySql()` (`AT TIME ZONE 'Europe/Istanbul'`). Bu bekçi o sözleşmenin
-// üç cephesini kilitler:
-//   1) `factoryDaySql` gerçekten fabrika gününü üretiyor mu (canlı PG ile),
-//   2) uçtan uca bir rapor (audit `daily`) gece yarısı sonrası olayı DOĞRU güne
+// cephelerini ADIYLA kilitler — sayısı yazılmaz, aşağıdaki `CEPHELER`den
+// hesaplanır ve §0 bu listeyi o diziyle karşılaştırır (başlık "üç" derken kod
+// dört bölüm basıyordu; sayı ya hesaplanır ya izini taşır):
+//   1) JS yardımcıları (`factoryDayStart` / `factoryDayKeyUtcMidnight`) SÜREÇ
+//      saat diliminden bağımsız mı — beklenen değerler `TZ` env'ine değil
+//      mutlak epoch'a göre yazıldı,
+//   2) `factoryDaySql` gerçekten fabrika gününü üretiyor mu (canlı PG ile),
+//   3) uçtan uca bir rapor (audit `daily`) gece yarısı sonrası olayı DOĞRU güne
 //      yazıyor mu — fixture 01:30 Europe/Istanbul anında,
-//   3) `src/` içinde `factoryDaySql`'i BYPASS eden çıplak gün-kesme kaldı mı
+//   4) `src/` içinde `factoryDaySql`'i BYPASS eden çıplak gün-kesme kaldı mı
 //      (yeni gelen biri `DATE_TRUNC('day', ...)` yazdığı gün sessizce UTC'ye
 //      geri döneriz — bu adım o kapıyı kapatır),
-//   4) audit raporunun ifade istatistiği (sl_day_exact) yeni ifadeyle eşleşiyor
+//   5) audit raporunun ifade istatistiği (sl_day_exact) yeni ifadeyle eşleşiyor
 //      mu — eşleşmezse sonuç DOĞRU kalır ama sorgu ~2x yavaşlar (sessiz regresyon).
-//
-// JS tarafı (`factoryDayStart` / `factoryDayKeyUtcMidnight`) SÜREÇ saat
-// diliminden bağımsız olmalı; bu yüzden beklenen değerler `TZ` env'ine değil
-// mutlak epoch'a göre yazıldı.
 // =============================================================================
 
 import * as fs from "node:fs";
@@ -64,12 +65,42 @@ const SAME_DAY_NOON = new Date("2026-08-01T09:00:00.000Z");
 const TEST_TABLE = `TZDAY-${Date.now()}`;
 const createdLogIds: string[] = [];
 
+// Cephelerin TEK kaynağı: bölüm başlıkları buradan basılır, başlıktaki liste
+// buna karşı ölçülür. Sayı hiçbir yere elle yazılmaz.
+const CEPHELER = [
+  "JS gün sınırı yardımcıları",
+  "factoryDaySql (canlı PostgreSQL)",
+  "Uçtan uca — getSystemLogSummary().daily",
+  "factoryDaySql'i BYPASS eden çıplak gün-kesme",
+  "sl_day_exact ifade istatistiği",
+] as const;
+let basilanCephe = 0;
+function cephe(n: number): void {
+  basilanCephe++;
+  console.log(`${n === 1 ? "" : "\n"}── ${n}) ${CEPHELER[n - 1]} ──`);
+}
+
+/** Dosyanın kendi başlığındaki `N)` maddeleri — ilk `import`a kadar. */
+function baslikCepheSayisi(): number {
+  const satirlar = fs.readFileSync(__filename, "utf8").split("\n");
+  const sinir = satirlar.findIndex((s) => s.startsWith("import "));
+  return satirlar.slice(0, sinir).filter((s) => /^\/\/ {3}\d+\) /.test(s)).length;
+}
+
 async function main(): Promise<void> {
   console.log("\n=== Rapor gün sınırı (fabrika takvim günü) bekçisi ===");
   console.log(`FACTORY_TIMEZONE = ${FACTORY_TIMEZONE}\n`);
 
+  // ── 0) Başlık kendini ölçer — bayat "üç cephe" cümlesi burada kırmızıya düşer
+  const baslikta = baslikCepheSayisi();
+  check(
+    "§0 başlıktaki cephe listesi = CEPHELER",
+    baslikta === CEPHELER.length,
+    `başlık ${baslikta} · dizi ${CEPHELER.length}`,
+  );
+
   // ── 1) JS yardımcıları — süreç saat diliminden BAĞIMSIZ ───────────────────
-  console.log("── 1) JS gün sınırı yardımcıları ──");
+  cephe(1);
   check(
     "factoryYmd: 22:30Z → fabrika günü ertesi gün",
     factoryYmd(NIGHT_SHIFT) === "2026-08-01",
@@ -97,7 +128,7 @@ async function main(): Promise<void> {
   );
 
   // ── 2) factoryDaySql — canlı PG ile ───────────────────────────────────────
-  console.log("\n── 2) factoryDaySql (canlı PostgreSQL) ──");
+  cephe(2);
   const tzRow = await prisma.$queryRaw<Array<{ TimeZone: string }>>`SHOW TimeZone`;
   const sessionTz = tzRow[0]?.TimeZone;
   check(
@@ -129,7 +160,7 @@ async function main(): Promise<void> {
   );
 
   // ── 3) Uçtan uca: audit `daily` serisi ────────────────────────────────────
-  console.log("\n── 3) Uçtan uca — getSystemLogSummary().daily ──");
+  cephe(3);
   for (const at of [NIGHT_SHIFT, SAME_DAY_NOON]) {
     const row = await prisma.systemLog.create({
       data: {
@@ -174,7 +205,7 @@ async function main(): Promise<void> {
   );
 
   // ── 4) Kaçak gün-kesme taraması (src/) ────────────────────────────────────
-  console.log("\n── 4) factoryDaySql'i BYPASS eden çıplak gün-kesme ──");
+  cephe(4);
   const SRC = path.resolve(__dirname, "..", "src");
   const offenders: string[] = [];
   const walk = (dir: string): void => {
@@ -223,7 +254,7 @@ async function main(): Promise<void> {
   );
 
   // ── 5) İfade istatistiği ifadeyle eşleşiyor mu ────────────────────────────
-  console.log("\n── 5) sl_day_exact ifade istatistiği ──");
+  cephe(5);
   const statRows = await prisma.$queryRaw<Array<{ def: string }>>`
     SELECT pg_get_statisticsobjdef(oid) AS def
     FROM pg_statistic_ext WHERE stxname = 'sl_day_exact'
@@ -255,6 +286,9 @@ main()
     } catch {
       /* temizlik best-effort */
     }
+    // Basılan bölüm ≠ dizi ⇒ bir cephe hiç koşmadı (erken hata) ya da diziye
+    // girmeden eklendi; ikisi de "yeşil ama eksik"tir.
+    check("§0b basılan bölüm sayısı = CEPHELER", basilanCephe === CEPHELER.length, `${basilanCephe} / ${CEPHELER.length}`);
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();
     process.exit(fail > 0 ? 1 : 0);
