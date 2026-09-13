@@ -33,6 +33,11 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
     // 2026-09-13 (dokuma P1) — üç `weaving_orders` bağı da MOVE: referans bağ,
     // tekillik kısıtı yok; taşınmazsa dokuma işi ölü kayda bağlı kalır.
     { kind: "MOVE", model: "WeavingOrder", table: "weaving_orders", column: "itemId", label: "Dokuma işi" },
+    // 2026-09-13 (dokuma P2) — koşumun "ne dokunuyor" ekseni. Aynı sınıf: referans
+    // bağ, `machine_runs`ta `itemId` üstünde tekillik kısıtı yok. ⚠️ Koşum bir
+    // DEFTER satırıdır ve geri alınmışı da taşınır — birleştirme kimliği
+    // değiştirir, geçmişi değil.
+    { kind: "MOVE", model: "MachineRun", table: "machine_runs", column: "itemId", label: "Tezgah koşumu" },
     {
       kind: "CONFLICT",
       model: "ItemAllowedColor",

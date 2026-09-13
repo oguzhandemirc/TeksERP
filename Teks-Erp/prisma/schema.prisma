@@ -920,6 +920,8 @@ model Machine {
   /// Kurşun bypass: bu MAKİNEYE atanan işler. Atama makine bazındadır — tek
   /// PROCESS_QC istasyonu altında N fiziksel kurşun makinesi vardır.
   kursunBypasses KursunBypassAssignment[]
+  /// Tezgah koşumları — `Restrict`, ve `MACHINE_DELETE_GUARDS`ta sayacı var.
+  machineRuns    MachineRun[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -1540,6 +1542,9 @@ model WeavingOrder {
   color          Color?         @relation("WeavingOrderColor", fields: [colorId], references: [id], onDelete: Restrict)
   warpSpec       WarpSpec?      @relation("WeavingOrderWarpSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
   subcontractor  Subcontractor? @relation("WeavingOrderSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
+  /// Bu işi hangi tezgah koşumları icra etti. `SUBCONTRACTED` işte BOŞ kalır —
+  /// fasona verilen dokumanın koşumu bizde tutulmaz.
+  machineRuns    MachineRun[]   @relation("MachineRunWeavingOrder")
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt      @db.Timestamptz
@@ -1553,6 +1558,110 @@ model WeavingOrder {
   @@index([warpSpecId])
   @@index([subcontractorId])
   @@map("weaving_orders")
+}
+
+/// TEZGAH KOŞUMU — bir desen/parti tezgahta ne zamandan ne zamana koştu.
+/// SPAN/DEFTER: açılır ve kapanır, bu yüzden `updatedAt` TAŞIR (`RollMovement`
+/// emsali); geri alma SİLME değil `revokedAt` damgasıdır.
+///
+/// ⚠️ Randımanın PAYDASI buradan doğar: teorik devir TEZGAHIN değil İŞİN
+/// özelliğidir. Bu yüzden hedef devir değişince koşum KAPANIR ve yenisi açılır —
+/// tek satırda iki devir tutmak paydayı belirsizleştirir.
+///
+/// ⚠️ BUDANAMAZ. `machineRunCount` makine silme kararını besliyor
+/// (`MACHINE_DELETE_GUARDS`) ⇒ `defter.md` ölçütüyle: bir satır bir KARARI
+/// besliyorsa saklama süresi o kararın ufkuyla sınırlıdır. Budanırsa
+/// silinemeyen bir makine sessizce silinebilir hâle gelir.
+model MachineRun {
+  id        String  @id @default(uuid()) @db.Uuid
+  machineId String  @db.Uuid
+  /// İdempotency — koşum açma/kapama tablet çevrimdışı kuyruğundan gelir
+  /// (`STATION_MUT` + `OFFLINE_AWARE`) ve kuyruk TEKRAR GÖNDERİR. Doğal anahtar
+  /// (`machineId`, `productionLineNo`, `startedAt`) replay'i 409'a düşürürdü;
+  /// token onu ÖZGÜN SONUCA çevirir (`token-replay.helper` dört durumu).
+  clientToken String? @unique @db.Uuid
+
+  /// HANGİ ÇIKTI HATTI. Çift enli tezgah yan yana İKİ ayrı kumaş koşar ve
+  /// üretilen kumaş sayısı tüketilen levent sayısından BAĞIMSIZ bir eksendir
+  /// (raşel: N levent → 1 kumaş; çift enli: 1-2 levent → 2 kumaş).
+  /// ⚠️ Tek hatlı makinede sabit `1`'dir ⇒ aşağıdaki iki sed bugünkü ile AYNI
+  /// kümeyi reddeder: davranış birebir korunur.
+  /// ⚠️ BORÇ (P4): "hat no makinenin `productionLineCount`'unu aşamaz"
+  /// doğrulaması `MachineSpec` dilimindeki SERVİS kapısına yazılır — PG'de
+  /// satırlar arası CHECK yoktur. Bugün ERİŞİLEMEZ (referans profilde çok hatlı
+  /// makine yok), ama erişilemez bir borç da borçtur.
+  productionLineNo Int @default(1) @db.SmallInt
+
+  startedAt DateTime  @db.Timestamptz
+  endedAt   DateTime? @db.Timestamptz
+
+  /// HANGİ DOKUMA İŞİ. NULL MEŞRUDUR — iş emirsiz koşum olur (numune, deneme).
+  /// ⚠️ `workOrderStepId` DEĞİL: dokuma topun rotasında bir ADIM değil, topu
+  /// DOĞURAN ayrı bir varlıktır (`DOKUMA-IS-EMRI-VE-TABLET-TASARIMI.md` §1.4).
+  weavingOrderId String? @db.Uuid
+  /// "Ne dokunuyor" — adıma ihtiyaç duymayan iki eksen.
+  itemId         String? @db.Uuid
+  colorId        String? @db.Uuid
+  /// ⚠️ LEVENT BAĞI KOLON DEĞİLDİR. "Koşum sırasında hangi leventler bağlıydı"
+  /// levent defterinden TÜRETİLİR (MOUNTED/DISMOUNTED aralıklarının bu span ile
+  /// kesişimi) — FK ikinci kaynak olur, MOUNT_CANCEL'de sarkar ve çift leventli
+  /// tezgahta tek FK zaten yetmez ("tek kaynak satır" sınıfı).
+
+  /// HEDEF DEVİR (atkı/dk) — randımanın paydası. NULL → `MachineSpec`in nominal
+  /// değerine düşer; o da NULL ise PERFORMANS HESAPLANMAZ ve rapor
+  /// "P: ölçülemedi" der (uydurulmaz).
+  targetPicksPerMin Int?
+  /// DONMUŞ ATKI SIKLIĞI — TEZGAH ÜSTÜ (HAM) atkı/cm, mamul DEĞİL. Mamul metre
+  /// `× (1 − takeUp)` ile AYRI bir büyüklüktür ve burada hesaplanmaz; iki anlam
+  /// aynı kolonda yaşayamaz. NULL meşru → metre üretilmez, randıman yine çıkar.
+  /// ⚠️ Buradan türetilen metre HİÇBİR YERDE STOK YAZMAZ — tek miktar gerçeği
+  /// `Roll` ölçümüdür.
+  unitsPerCm Decimal? @db.Decimal(8, 3)
+
+  // ── KAPANIŞTA DONAN ÜRETİM VE DURUŞ TERİMLERİ ───────────────────────────────
+  // Örneklem kovası budandıktan sonra KOŞUM EKSENİ bu terimlerden cevaplanır,
+  // kovadan değil: karnenin taneciği vardiya×makinedir ve `runId` taşımaz, yani
+  // "bu işte kaç metre üretildi / kaç saat durduk" retention penceresinden sonra
+  // karneye sorulamaz. Tek yazar koşumu kapatan yoldur.
+  picksAtClose       Int?
+  producedM          Decimal? @db.Decimal(12, 3)
+  observedSecAtClose Int?
+  stopSecAtClose     Int?
+  stopCountAtClose   Int?
+  /// Atomik claim çıpası: kapanış `WHERE closedTermsAt IS NULL` ile iddia edilir.
+  closedTermsAt      DateTime? @db.Timestamptz
+
+  /// GERİ ALMA — yanlış açılmış koşum randımanın PAYDASINI taşır; tersi olmayan
+  /// ileri olay, geri alınamayan bir iş demektir. Duruşların `runId`si DEĞİŞMEZ.
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  revokeReason String?   @db.VarChar(300)
+
+  /// ⚠️ ÜÇ OPSİYONEL BAĞ DA `onDelete: Restrict`. Prisma'nın opsiyonel ilişkideki
+  /// varsayılanı `SetNull`dır ve o, gerçekleşmiş bir koşumun BAĞLAMINI sessizce
+  /// siler — yani ileri kaydı DEĞİŞTİRMEK olur (defter doktrini yasağı).
+  machine      Machine       @relation(fields: [machineId], references: [id], onDelete: Restrict)
+  weavingOrder WeavingOrder? @relation("MachineRunWeavingOrder", fields: [weavingOrderId], references: [id], onDelete: Restrict)
+  item         Item?         @relation("MachineRunItem", fields: [itemId], references: [id], onDelete: Restrict)
+  color        Color?        @relation("MachineRunColor", fields: [colorId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt      @db.Timestamptz
+
+  @@index([machineId, startedAt])
+  @@index([weavingOrderId])
+  @@index([itemId])
+  @@index([colorId])
+  // ŞEMA-DIŞI İKİ PARTIAL UNIQUE (migration 20260913220000, `test_db_invariants` §1):
+  //   machine_runs_one_open_per_prod_line_uq (machineId, productionLineNo)
+  //     WHERE "endedAt" IS NULL AND "revokedAt" IS NULL
+  //   machine_runs_natural_uq (machineId, productionLineNo, startedAt)
+  //     WHERE "revokedAt" IS NULL
+  // ⚠️ `revokedAt IS NULL` yüklemi İKİSİNDE DE ŞARTTIR — geri alınmış koşum
+  //    sedde YER İŞGAL ETMEZ, yoksa aynı hatta yeni koşum hiç açılamaz.
+  //    Bu, `MACHINE_DELETE_GUARDS`taki TERS yönle çelişmez; ikisi ayrı soru sorar
+  //    ve gerekçeleri `guarded-hard-remove.ts` → `machineRunCount`ta yan yanadır.
+  @@map("machine_runs")
 }
 
 // =============================================================================
@@ -1602,6 +1711,7 @@ model Item {
   customerAliases    CustomerItemAlias[]
   productRecipes     ProductRecipe[]
   weavingOrders      WeavingOrder[]         @relation("WeavingOrderItem")
+  machineRuns        MachineRun[]           @relation("MachineRunItem")
   rollReturns        RollReturn[]
   swatchReductions   SwatchStockReduction[]
   /// Bu KUMAŞI besleyen çözgü kartı (N:1) — devere modülü.
@@ -5528,6 +5638,7 @@ model Color {
   workOrderTargets    WorkOrder[]            @relation("WorkOrderTargetColor")
   swatches            Swatch[]
   weavingOrders       WeavingOrder[]      @relation("WeavingOrderColor")
+  machineRuns         MachineRun[]        @relation("MachineRunColor")
   stationCapabilities StationColor[]
   /// Müşteri-bazlı isim alias'ları — etiket basımında "müşterideki adı" için.
   customerAliases     CustomerColorAlias[]

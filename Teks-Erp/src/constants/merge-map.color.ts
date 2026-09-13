@@ -24,6 +24,9 @@ export const COLOR_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "Swatch", table: "swatches", column: "colorId", label: "Kartela" },
     { kind: "MOVE", model: "RollReturn", table: "roll_returns", column: "colorId", label: "İade" },
     { kind: "MOVE", model: "WeavingOrder", table: "weaving_orders", column: "colorId", label: "Dokuma işi" },
+    // 2026-09-13 (dokuma P2) — koşumun renk ekseni; `itemId` bacağıyla aynı sınıf
+    // (referans bağ, tekillik kısıtı yok). Geri alınmış koşum da taşınır.
+    { kind: "MOVE", model: "MachineRun", table: "machine_runs", column: "colorId", label: "Tezgah koşumu" },
     {
       kind: "CONFLICT",
       model: "ItemAllowedColor",

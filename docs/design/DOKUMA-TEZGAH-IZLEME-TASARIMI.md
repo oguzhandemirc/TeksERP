@@ -100,7 +100,8 @@ model MachineCollector {          // §2.4'te tanımlanıyor
 }
 
 // MachineRun'un üç opsiyonel bağının karşılıkları (§2.8) — FAZ 2:
-model WorkOrderStep { machineRuns MachineRun[] }
+// ⚠️ `WorkOrderStep` DEĞİL `WeavingOrder` (§1.4 kararı, 2026-09-13'te uygulandı).
+model WeavingOrder  { machineRuns MachineRun[] }
 model Item          { machineRuns MachineRun[] }
 model Color         { machineRuns MachineRun[] }
 
@@ -878,11 +879,27 @@ model MachineStopReclass {
 model MachineRun {
   id        String    @id @default(uuid()) @db.Uuid
   machineId String    @db.Uuid
+  /// ⚠️ İDEMPOTENCY (2026-09-13, P2 inişinde eklendi — tasarımda EKSİKTİ):
+  /// koşum aç/kapa tablet çevrimdışı kuyruğundan gelir (§3.6: `STATION_MUT` +
+  /// `OFFLINE_AWARE`) ve kuyruk TEKRAR GÖNDERİR. Doğal anahtar tekrarı 409'a
+  /// düşürürdü; token onu özgün sonuca çevirir (`token-replay.helper`).
+  clientToken String? @unique @db.Uuid
+  /// ⚠️ §10/#23(b) bu kolonun üç tabloya girdiğini söylüyordu ve aşağıdaki İKİ
+  /// partial unique onu kullanıyor, ama model bloğunda BEYAN EDİLMEMİŞTİ
+  /// (2026-09-13'te P2 yazılırken yakalandı: index var olmayan kolona düşerdi).
+  /// ⚠️ ÜST SINIR (`Machine.productionLineCount`) DB'de kurulamaz — satırlar
+  /// arası CHECK yok; doğrulama P4'ün SERVİS kapısına borçtur.
+  productionLineNo Int @default(1) @db.SmallInt
   startedAt DateTime  @db.Timestamptz
   endedAt   DateTime? @db.Timestamptz
 
   /// Bağ OPSİYONEL: iş emirsiz koşum meşrudur (numune, deneme).
-  workOrderStepId String? @db.Uuid
+  /// ⚠️ `workOrderStepId` **KALKTI** (`DOKUMA-IS-EMRI-VE-TABLET-TASARIMI.md`
+  /// §1.4 / §2.2d): dokuma topun rotasında bir ADIM değil, topu DOĞURAN ayrı bir
+  /// varlıktır ⇒ bağ dokuma işinin kendi kabınadır. Cümle korundu, işaret ettiği
+  /// yer değişti. ⚠️ Bu blok o kararı bir tur geç uyguladı — aradaki sürede
+  /// `WorkOrderStep` hard delete guard'ı için üretilen iş kalemi KONUSUZDU.
+  weavingOrderId  String? @db.Uuid
   itemId          String? @db.Uuid
   colorId         String? @db.Uuid
   /// ⚠️ LEVENT BAĞI **KOLON DEĞİLDİR** — `warpBeamId` (ve `mountId`/`mountedEventId`)
@@ -939,7 +956,7 @@ model MachineRun {
   /// opsiyonel ilişkide `SetNull`dır ve o, gerçekleşmiş bir koşumun BAĞLAMINI
   /// sessizce siler — yani ileri kaydı DEĞİŞTİRMEK olur (doktrin yasağı).
   machine       Machine        @relation(fields: [machineId], references: [id], onDelete: Restrict)
-  workOrderStep WorkOrderStep? @relation(fields: [workOrderStepId], references: [id], onDelete: Restrict)
+  weavingOrder  WeavingOrder?  @relation(fields: [weavingOrderId], references: [id], onDelete: Restrict)
   item          Item?          @relation(fields: [itemId], references: [id], onDelete: Restrict)
   color         Color?         @relation(fields: [colorId], references: [id], onDelete: Restrict)
   stops         MachineStopEvent[]
@@ -948,7 +965,9 @@ model MachineRun {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@index([machineId, startedAt])
-  @@index([workOrderStepId])
+  @@index([weavingOrderId])
+  @@index([itemId])
+  @@index([colorId])
   @@map("machine_runs")
 }
 // ŞEMA-DIŞI PARTIAL UNIQUE (⚠️ revokedAt yüklemi ŞART — geri alınmış koşum
@@ -967,8 +986,10 @@ model MachineRun {
 //        işgal etmez, aynı an meşru biçimde yeniden açılabilir.
 ```
 
-> **⚠️ `WorkOrderStep` GERÇEKTEN hard delete ediliyor ve `MachineRun` o silmenin guard'ında yok.** Ölçüldü: `workorder.service.ts:5697` `await tx.workOrderStep.delete({ where: { id: old.id } })`, guard ise aynı bloktaki `old._count` toplamından kuruluyor (`:5691-5696`) — `machineRuns` o sayıma girmiyor. Restrict FK'sı olmasa bağ sessizce kopar, Restrict FK'sı olunca **P2003 → generic 400** düşer.
-> **Faz 2 iş kalemi (aynı commit):** `_count` kümesine `machineRuns` eklenir ve 409 mesajına *"bu adıma bağlı tezgah koşumu var"* satırı girer · `MACHINE_DELETE_GUARDS` bu fazda **İKİ sayaç** daha alır — `machineRunCount` + `machineCounterEventCount` (fazlama **TEK KAYNAK §2.1'dedir:** Faz 1a → `machineShiftStatCount` · Faz 1b → `machineStopCount` · Faz 2 → bu ikisi), böylece liste Faz 2 sonunda **dört** tezgah Restrict FK'sını (`MachineShiftStat` · `MachineStopEvent` · `MachineRun` · `MachineCounterEvent`) adıyla sayar · panel önizlemesi bunları listeler · `test_hard_delete_guard_coverage`in `EXPECTED` envanterine Faz 2'nin Cascade çocukları yazılır (`WATCHED`a `"Machine"` **Faz 1a'da** eklendi, §2.3).
+> **⛔ GEÇERSİZ → 2026-09-13.** Bu kutu *"`WorkOrderStep` hard delete ediliyor ve `MachineRun` o silmenin guard'ında yok"* diyordu ve bir Faz 2 iş kalemi üretiyordu. **`MachineRun`ın `WorkOrderStep`e FK'sı KALKTI** (§1.4) ⇒ kalem **konusuz**; `workorder.service.ts`in `_count` bloğuna eklenecek bir şey yok. Ölçüm iki kez doğrulandı: silme satırı bugün `:5729`da (belgedeki `:5697` de bayattı) ve `MachineRun` oraya artık hiç bağlanmıyor.
+> 📌 **Ders — ölçümün iki katmanı ayrı ayrı bayatlar:** bu kutunun SATIR NUMARASI da (gösterici) PREMİSİ de (bağ hâlâ duruyor mu) bayatlamıştı, ve yalnız göstericiyi doğrulamak kalemi ayakta tutuyordu. *Bir belge iddiasında hem göstericiyi hem önermeyi doğrula; önermenin bayatlaması sessizdir.*
+> **Yerine geçen ölçüm:** `weavingOrderId`in Restrict'i için guard GEREKMİYOR — `WeavingOrder`ın hard delete yolu YOK (ölçüldü 2026-09-13: `guarded-hard-remove.ts`te beş yüzey var (station · route · machine · recipe · defectType), `weavingOrder.delete` `src/` içinde 0 eşleşme).
+> **Yürürlükte kalan kalem:** `MACHINE_DELETE_GUARDS` bu fazda **İKİ sayaç** daha alır — `machineRunCount` + `machineCounterEventCount` (fazlama **TEK KAYNAK §2.1'dedir:** Faz 1a → `machineShiftStatCount` · Faz 1b → `machineStopCount` · Faz 2 → bu ikisi), böylece liste Faz 2 sonunda **dört** tezgah Restrict FK'sını (`MachineShiftStat` · `MachineStopEvent` · `MachineRun` · `MachineCounterEvent`) adıyla sayar · panel önizlemesi bunları listeler · `test_hard_delete_guard_coverage`in `EXPECTED` envanterine Faz 2'nin Cascade çocukları yazılır (`WATCHED`a `"Machine"` **Faz 1a'da** eklendi, §2.3).
 
 ### 2.9 · Durum ve sayaç kararı (FAZ 2)
 

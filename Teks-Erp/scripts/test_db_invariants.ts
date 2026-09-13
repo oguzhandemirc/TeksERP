@@ -358,6 +358,30 @@ const PARTIAL_INDEXES: Array<{
   // work_sessions — şema-DIŞI unique'ler
   { table: "work_sessions", index: "work_sessions_active_machine_uq", uniq: true, predicate: `(("endedAt" IS NULL) AND ("machineId" IS NOT NULL))`, why: "makine başına TEK aktif oturum" },
   { table: "work_sessions", index: "work_sessions_active_device_uq", uniq: true, predicate: `("endedAt" IS NULL)`, why: "cihaz başına TEK aktif oturum" },
+  // machine_runs — şema-DIŞI iki unique (2026-09-13, dokuma P2, migration
+  // 20260913220000). ⚠️ Anahtar `machineId` YALNIZ DEĞİL: çift enli tezgah yan
+  // yana iki ayrı kumaş koşar. Tek hatlı makinede `productionLineNo` sabit 1'dir
+  // ⇒ reddedilen küme `work_sessions` emsaliyle aynı şekli korur.
+  // ⚠️ `revokedAt IS NULL` yüklemi İKİSİNDE DE ŞART — geri alınmış koşum sedde
+  //    yer işgal etmemeli. Silme guard'ındaki TERS yön bilinçlidir (ayrı soru);
+  //    gerekçeler `guarded-hard-remove.ts` → `machineRunCount`ta yan yana.
+  {
+    table: "machine_runs",
+    index: "machine_runs_one_open_per_prod_line_uq",
+    uniq: true,
+    predicate: `(("endedAt" IS NULL) AND ("revokedAt" IS NULL))`,
+    why: "üretim hattı başına TEK açık koşum — randımanın paydası tekil olsun",
+  },
+  {
+    table: "machine_runs",
+    index: "machine_runs_natural_uq",
+    uniq: true,
+    predicate: `("revokedAt" IS NULL)`,
+    why: "doğal anahtar: aynı hatta aynı anda iki koşum açılırsa karnenin donmuş paydasının hangisinden geldiği belirsizleşir",
+  },
+  // ⚠️ `machine_runs_clientToken_key` BURAYA GİRMEZ — o düz (partial olmayan) bir
+  //    unique ve şemadaki `@unique`ten doğuyor; `weaving_orders_clientToken_key`
+  //    emsali. PG düz unique'te de çok sayıda NULL'a izin verir.
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -396,6 +420,11 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "warp_specs", name: "warp_specs_ends_positive" },
   { table: "warp_specs", name: "warp_specs_selvedge_sane" },
   { table: "warp_specs", name: "warp_specs_reed_positive" },
+  // 2026-09-13 (dokuma P2) — migration 20260913220000_machine_run: üretim hattı
+  // numarası 1'den küçük olamaz. ÜST sınır (makinenin `productionLineCount`'u)
+  // burada kurulamaz — satırlar arası CHECK yoktur; o doğrulama P4'ün servis
+  // kapısına borçtur ve orada `MachineSpec` ile birlikte iner.
+  { table: "machine_runs", name: "machine_runs_productionLineNo_pos" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_dispatchedQty_pos" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_dispatchedWeight_nonneg" },
   { table: "kartela_dispatch_items", name: "kartela_dispatch_items_dispatchedQty_pos" },

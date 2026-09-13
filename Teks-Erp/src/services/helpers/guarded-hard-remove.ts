@@ -262,6 +262,20 @@ const MACHINE_DELETE_GUARDS: DependencyGuard[] = [
     message: (n) => `Bu makineye ${n} cihaz (tablet) atanmış — önce cihaz atamasını kaldırın.`,
   },
   {
+    // ⚠️ `revokedAt` SÜZÜLMEZ — ve bu, `machine_runs`ın İKİ PARTIAL UNIQUE'indeki
+    // TERS yönle çelişmez; ikisi AYRI SORU sorar ve gerekçeleri bilerek yan yana:
+    //   • sed  (`machine_runs_one_open_per_prod_line_uq`, `…_natural_uq`):
+    //     `revokedAt IS NULL` ŞART — soru "şu an açık mı". Geri alınmış koşum yer
+    //     işgal etmemeli, yoksa aynı hatta yeni koşum hiç açılamaz.
+    //   • guard (burası): süzülmez — soru "bu makinede iş yapıldı mı". Geri
+    //     alınmış koşum da o makinenin üretim geçmişinin kanıtıdır ve silme
+    //     guard'ı daha muhafazakâr olmalıdır.
+    // Birini ötekine bakarak "tutarlı" yapmak ya sedi tıkar ya guard'ı gevşetir.
+    key: "machineRunCount",
+    count: (id) => prisma.machineRun.count({ where: { machineId: id } }),
+    message: (n) => `Bu makinede ${n} dokuma koşumu kayıtlı — kalıcı silinemez. Pasife alın.`,
+  },
+  {
     // `KursunBypassAssignment.machineId` RESTRICT'tir, yani silme zaten P2003'e
     // düşer — ama operatör jenerik "bağlı kayıt var" yerine HANGİ izin engellediğini
     // görmeli; atama satırı append-only bypass izidir, silinmez.

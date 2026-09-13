@@ -2,7 +2,9 @@
 
 > Alan kural dosyası — bu alana dokunmadan ÖNCE okunur. Hikâye, ölçüm ve gerekçe tasarım belgelerinde; burada yalnız bugün geçerli kural. Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın seçimi.
 
-> ⚠️ **BU ALAN BUGÜN TAMAMEN KÂĞITTADIR.** Ölçüldü 2026-09-13: şemada `WeavingOrder` · `DoffEvent` · `MachineRun` · `MachineSpec` **yok**; `machine%` öneki altında yalnız `machines` var. Burada yazılı kurallar **tasarım hükümleridir** ve kodda karşılıkları henüz doğmadı — okuyan onları bugünün haritası sanmasın. Kural satırları şema inerken kodun sözleşmesi olur.
+> ⚠️ **BU ALAN KISMEN KÂĞITTADIR — şema PARÇA PARÇA iniyor.** Ölçüldü 2026-09-13: **`WeavingOrder` İNDİ** (P1, `77b69da9`) · **`MachineRun` İNDİ** (P2, migration `20260913220000`). **Hâlâ YOK:** `MachineSpec` (P4) · `MachineStopEvent` ailesi + `ShiftInstance` + `MachineCollector` (P2b) · `DoffEvent` + `RollEntrySource.WEAVING` (P3). Sıra: **P1 ✅ → P2 ✅ → P4 → P2b → P3.** O tabloları anan kural satırları **hâlâ tasarım hükmüdür**; inmiş olanlarınki kodun sözleşmesidir.
+>
+> ⚠️ **YAZMA YÜZEYİ HENÜZ YOK:** inen iki tablonun servisi/ucu/izni yazılmadı. Bir yetenek "VAR" sayılmak için üçü birden gerekir (motor + çıkış yüzeyi + izin ataması) — bugün yalnız şema var.
 >
 > **Kaynak belgeler:** `docs/design/DOKUMA-IS-EMRI-VE-TABLET-TASARIMI.md` (iş emri bağı · süreç takibi · tablet · `DoffEvent` · `WeavingOrder`) · `docs/design/DOKUMA-TEZGAH-IZLEME-TASARIMI.md` (koşum · duruş · randıman · mühür) · `docs/design/DEVERE-LEVENT-TARAMASI.md` (levent ve defteri).
 
@@ -20,6 +22,8 @@
 - **[ÇEKİRDEK]** Levent bitince koşum BİTMEZ — koşumu bitiren üçtür: desen/renk değişti · hedef devir değişti · iş bitti; levent değişimi `WarpBeamEvent`e yazılır ve koşum sürer. <sub>(DOKUMA-IS-EMRI §2.3)</sub>
 - **[ÇEKİRDEK]** Talep metre, icra levent, çıktı toptur — üç ayrı eksen tek sayıya bindirilmez; metre↔levent çevrimi take-up ister ve take-up bugün YOKTUR, yani "bu iş kaç levent eder" HESAPLANMAZ. <sub>(DOKUMA-IS-EMRI §2.1)</sub>
 - **[ÇEKİRDEK]** `MachineDataSource` alanları `@default` ALMAZ — sayaç/ölçüm değerini yazan her yol kaynağını AÇIKÇA beyan eder, `SIMULATED` dahil; kararı backend verir. <sub>(DOKUMA-IS-EMRI §3.8)</sub>
+- **[ÇEKİRDEK]** Açık koşum tekilliği MAKİNE değil **ÜRETİM HATTI** başınadır (`machine_runs_one_open_per_prod_line_uq`) — çift enli tezgah yan yana iki ayrı kumaş koşar; yalnız makineye kilitlemek bunu yapısal olarak imkânsız kılar. Tek hatlı makinede `productionLineNo` sabit 1'dir ⇒ reddedilen küme değişmez. <sub>(DOKUMA-TEZGAH §2.8, §10/#23b)</sub>
+- **[ÇEKİRDEK]** `machine_runs`ın iki sedi `revokedAt IS NULL` yüklemini ŞART koşar (geri alınmış koşum yer işgal etmez), silme guard'ı ise `revokedAt`i BİLEREK SÜZMEZ (geri alınmış koşum da o makinede üretim yapıldığının kanıtıdır) — **iki ters yön, iki ayrı soru**; gerekçeleri `guarded-hard-remove.ts` → `machineRunCount`ta yan yana yazılıdır ve biri ötekine bakılarak "tutarlı" yapılmaz. <sub>(DOKUMA-TEZGAH §2.8)</sub>
 
 ### Yasaklar
 
@@ -65,6 +69,9 @@
 - `test_reason_preset_kind_parity` — `LOOM_STOP` aynalarının iki yönlü eşitliği.
 - `test_db_invariants` — yeni CHECK/partial index/trigger envantere yazılmadan geçmez.
 - `test_timestamptz_contract` — yeni `DateTime` alanları.
+- **`test_machine_run`** (2026-09-13, P2 ile doğdu) — `machine_runs`ın iki sedi (hat başına tek açık koşum · doğal anahtar), `revokedAt`in sedde ŞART / guard'da SÜZÜLMEZ ters yönü, `productionLineNo >= 1` CHECK'i, eşzamanlı açılış ve silme guard'ı. ⚠️ §5 **SED ölçümüdür, TOCTOU penceresi ölçümü DEĞİL** — koşum açan servis P2b'de doğunca o bölüm yeniden yazılır (başlıkta yazılı).
+- `test_hard_delete_guard_coverage` — `Machine`e gelen her FK ya guard'da sayılıyor ya gerekçeli muaf. ⚠️ Guard'ları **REGEX** okur: sayaç `prisma.<model>.count({ where: { <kolon>:` biçiminde **DÜZ** yazılmalı, helper'a sarmalanırsa bekçi "guard yok" sayar (ölçüldü 2026-09-13, negatif sonda).
+- `test_master_data_merge_fk_coverage` — şemadan türer: birleştirilebilir varlığa (`item`·`color`·`customer`·`subcontractor`) giden her yeni FK `MERGE_MAP`e satır ister.
 
 **HENÜZ YOK (şema inerken yazılacak, ne ölçeceği yazılı):**
 - `test_machine_doff_source` — ⚠️ adı `DOKUMA-TEZGAH-IZLEME-TASARIMI.md:1874`te geçiyor ama **dosya yoktur**. Üç şey ölçecek: ① `WEAVING` ile doğan topun kaynağı ve `DoffEvent` bağı · ② türetilen metrenin stok yazmadığı (AST: `producedM` ile `Roll` miktar yazan yol aynı ifadede geçemez) · ③ `DOFF_CANCEL` yüklemi, **negatif sondayla** (`NOT EXISTS` düşürülünce kırmızı vermeli).
@@ -117,3 +124,4 @@ Rapor *"her şey tutuyor"* demez, *"şu tarihten sonrası ölçülü"* der.
 - **`unitsPerCm`in kalıcı evi belirsiz** (kaynak: `WarpSpec` ailesi; **sert bağımlılık eklenmez**). Faz 1–2'de elle girilir ve donar. <sub>(DOKUMA-TEZGAH §10/#9)</sub>
 - **Fason dokuma bloke:** `SubcontractorDispatchItem.rollId` **NOT NULL** ⇒ fasona yapısal olarak yalnız TOP gidebilir, iplik/levent gidemez. Ayrı dilim; dokuma kararından bağımsız ve Faz 1'i bloklamıyor.
 - ~~**Advisory uzay numarası kesinleşmedi**~~ **KAPANDI 2026-09-13** — ölçüldü: `WEAVING_ORDER_LOCK_NS = 8032` indi (`helpers/weaving-order.helper.ts:24`, envanter `period-guard.helper.ts:57`). ⚠️ Önerilen `8034` **kullanılmadı** ve bu satır bir gün boyunca bayat kaldı. ⇒ *Numara çakışması sessizdir* uyarısı doğruydu ama **eksikti: bayat REZERVASYON da sessizdir.** Sonraki uzay için numara buradan değil, **`period-guard.helper.ts` başlığından** okunur.
+  ⚠️ **`MachineRun` advisory uzayı ALMADI ve almayacak** (2026-09-13, P2): koşum tekilliği DB seddiyle kurulur (iki partial unique), yarışın kaybedeni P2002 alır ve servis 409'a çevirir — `work_sessions` emsali. *Her tekillik sorusu bir kilit istemez; sed yeten yerde kilit ikinci bir yazar yolu açar.*
