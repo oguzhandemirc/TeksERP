@@ -46,6 +46,10 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
   // karo yüklemine vermek, ticaret kapalıyken Çözgü Kartları karosunu çizer ve
   // tıklayan kullanıcı 403 yerdi (backend kapısı zinciri ölçüyor).
   const devereEnabled = iplikEnabled && (flagsQuery.data?.data?.devereEnabled ?? false);
+  // ⚠️ ETKİN DEĞER (iki halka): dokuma → production. Belirsizken FALSE — fabrikada
+  // karo bir an belirip kaybolmamalı ("sıfır görünür fark"); backend kapısı
+  // `requireDokumaEnabled` aynı sırayı ölçer.
+  const dokumaEnabled = productionEnabled && (flagsQuery.data?.data?.dokumaEnabled ?? false);
 
   // ⚠️ ÇIKIŞ BEKLEYEN SEVKİYAT SONDASI KALDIRILDI (2026-09-01, birleştirme).
   // 2026-08-22 kararı Sevk Kapısı karosunu SAF BAYRAĞA bağladı ve `sack-store/
@@ -61,5 +65,6 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
     iplikEnabled,
     depoMultiEnabled,
     devereEnabled,
+    dokumaEnabled,
   };
 }

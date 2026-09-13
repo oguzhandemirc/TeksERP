@@ -103,6 +103,8 @@ const TASARIM_S10: Record<string, string[]> = {
   perde: ["production.enabled", "finance.enabled", "kumasTeknik.enabled"],
   // 2026-09-12 — hedef kitle kararı: DOKUYAN perdeci ayrı satır. Mevcut `perde`
   // (kumaşı hazır alan kurulum) bilinçle DEĞİŞMEDİ; tezgah izleme Faz 4'te açılır.
+  // 2026-09-13 — dokuma işi anahtarı: dokuyan perdeci ve dokuma profili AÇAR (1e ürün
+  // kararı); `basit` (referans) KAPALI kalır — varsayılan = bugünkü davranış.
   "perde-dokuma": [
     "production.enabled",
     "finance.enabled",
@@ -110,6 +112,7 @@ const TASARIM_S10: Record<string, string[]> = {
     "iplik.enabled",
     "kumasTeknik.enabled",
     "devere.enabled",
+    "dokuma.enabled",
   ],
   dokuma: [
     "production.enabled",
@@ -119,6 +122,7 @@ const TASARIM_S10: Record<string, string[]> = {
     "kumasTeknik.enabled",
     "tezgah.enabled",
     "devere.enabled",
+    "dokuma.enabled",
   ],
   tam: [...MODULE_SETTING_KEYS],
 };
@@ -133,9 +137,10 @@ async function main(): Promise<void> {
     MODULE_PROFILE_IDS.length >= 2,
     `${MODULE_PROFILE_IDS.length} profil → ${MODULE_PROFILE_IDS.join(", ")}`,
   );
-  check("§1b Körlük zemini: MODULE_SETTING_KEYS dolu", beklenen.length === 8, `n=${beklenen.length}`);
+  // 2026-09-13: dokuz anahtar (dokuma.enabled ekran dilimiyle doğdu).
+  check("§1b Körlük zemini: MODULE_SETTING_KEYS dolu", beklenen.length === 9, `n=${beklenen.length}`);
   check(
-    "§1c Körlük zemini: açıklama sabiti sekiz anahtarı da taşıyor",
+    "§1c Körlük zemini: açıklama sabiti dokuz anahtarı da taşıyor",
     beklenen.every((k) => (MODULE_DESCRIPTIONS[k] ?? "").length > 5),
     `n=${Object.keys(MODULE_DESCRIPTIONS).length}`,
   );

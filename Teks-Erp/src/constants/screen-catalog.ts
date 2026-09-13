@@ -47,7 +47,8 @@ export type ModulKey =
   | "depoMultiEnabled"
   | "kumasTeknikEnabled"
   | "tezgahEnabled"
-  | "devereEnabled";
+  | "devereEnabled"
+  | "dokumaEnabled";
 
 /**
  * Kapatılamaz çekirdek bloklar (MODUL-BAYRAK-TASARIM §2).
@@ -87,6 +88,7 @@ export const EKRAN_MODUL_DEGERLERI: ReadonlySet<string> = new Set<EkranModul>([
   "kumasTeknikEnabled",
   "tezgahEnabled",
   "devereEnabled",
+  "dokumaEnabled",
   "cekirdek:ana-veri",
   "cekirdek:stok-giris",
   "cekirdek:siparis-musteri",
@@ -161,6 +163,7 @@ const CAP_LABEL: Record<string, string> = {
   "goods-receipt:write": "Mal kabul fişi açıp düzenleyebilir",
   "warehouse:write": "Depo tanımı ve sayım düzenleyebilir",
   "yarn:write": "İplik stok hareketi girebilir",
+  "weavingorder:write": "Dokuma işi açıp düzenleyebilir, kapatıp iptal edebilir",
   "price:write": "Kalem fiyatı tanımlayabilir",
   "finance:write": "Cari/kasa/banka kartı düzenleyebilir",
   "finance:invoice": "Fatura kesip iptal edebilir",
@@ -252,6 +255,9 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "operations/relabel-station", app: "desktop", modul: "cekirdek:stok-giris", title: "Yeniden Etiketle", requires: ["label:edit", "roll:write"], capabilities: [] },
   { key: "operations/accounting-dispatch", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Sevkiyatlar (Muhasebe)", requires: ["report:sales", "shipping:read"], capabilities: ["shipping:invoice"] },
   { key: "operations/kartela", app: "desktop", modul: "planlanan:kartela", title: "Kartela Takibi", requires: ["kartela:read"], capabilities: ["kartela:write"] },
+  // Dokuma işi planlama (2026-09-13, ekran dilimi). Modül `dokumaEnabled` — üretime
+  // bağımlı, tezgah izlemenin kardeşi; referans profilde KAPALI.
+  { key: "operations/weaving-orders", app: "desktop", modul: "dokumaEnabled", title: "Dokuma İşleri", requires: ["weavingorder:read"], capabilities: ["weavingorder:write"] },
   { key: "operations/returns", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "İade Takibi", requires: ["return:read"], capabilities: ["return:write"] },
   { key: "reports/production", app: "desktop", modul: "productionEnabled", title: "Üretim", requires: ["report:production"], capabilities: [] },
   { key: "reports/sales", app: "desktop", modul: "cekirdek:siparis-musteri", title: "Sipariş & Sevkiyat", requires: ["report:sales"], capabilities: [] },
@@ -400,11 +406,6 @@ export const EKRANSIZ_MODULLER: ReadonlyArray<{ modul: ModulKey; reason: string 
 export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: string }> = [
   { code: "admin:*", reason: "Wildcard — tek tek ekran beyanı anlamsız." },
   { code: "mobile:*", reason: "Wildcard — tüm mobil ekranları kapsar." },
-  // Dokuma işi yazma yüzeyi ekrandan ÖNCE indi (2026-09-13). Ekran dilimi
-  // (`SCREEN_CATALOG` girdisi + karo + route) inince bu iki satır DÜŞER —
-  // kapı iki yönlü, bayat muaf kırmızı verir.
-  { code: "weavingorder:read", reason: "Dokuma işi ekranı ayrı dilimde iner; yüzey önce, ekran sonra (2026-09-13)." },
-  { code: "weavingorder:write", reason: "Dokuma işi ekranı ayrı dilimde iner; yüzey önce, ekran sonra (2026-09-13)." },
   // Dokuma P2b (2026-09-13): koşum yazma yüzeyi backend'de doğdu, ekranı tablet
   // TEZGAH ekranıdır (DOKUMA-IS-EMRI §3.2) ve henüz yok. Ekran doğduğu gün bu iki
   // satır ölü muaf olur ve bekçi kırmızı verir — silinmesi o dilimin işidir.

@@ -29,6 +29,7 @@ export const MODULE_FLAG_KEYS = [
   "kumasTeknikEnabled",
   "tezgahEnabled",
   "devereEnabled",
+  "dokumaEnabled",
 ] as const;
 
 export type ModuleFlagKey = (typeof MODULE_FLAG_KEYS)[number];
@@ -44,6 +45,7 @@ export const MODULE_DEPENDENCIES: Readonly<Partial<Record<ModuleFlagKey, ModuleF
   iplikEnabled: "ticaretEnabled",
   tezgahEnabled: "productionEnabled",
   devereEnabled: "iplikEnabled",
+  dokumaEnabled: "productionEnabled",
 };
 
 /** Hata mesajlarında ve panelde kullanılan Türkçe modül adı. */
@@ -56,6 +58,7 @@ export const MODULE_LABELS: Readonly<Record<ModuleFlagKey, string>> = {
   kumasTeknikEnabled: "Kumaş teknik kartı",
   tezgahEnabled: "Tezgah izleme",
   devereEnabled: "Devere / levent",
+  dokumaEnabled: "Dokuma işi",
 };
 
 /**
@@ -77,6 +80,7 @@ export const MODULE_FIELD_BY_SETTING_KEY: Readonly<Record<string, ModuleFlagKey>
   "kumasTeknik.enabled": "kumasTeknikEnabled",
   "tezgah.enabled": "tezgahEnabled",
   "devere.enabled": "devereEnabled",
+  "dokuma.enabled": "dokumaEnabled",
 };
 
 /**

@@ -828,11 +828,10 @@ app.use("/api/product-recipes", productRecipeRoutes);
 // Çözgü kartları (devere modülü) — router'ın kendi kapısı: verifyToken +
 // requireDevereEnabled (ticaret → iplik → devere zinciri) + requirePermission.
 app.use("/api/warp-specs", warpSpecRoutes);
-// Dokuma işleri — router'ın kendi kapısı: verifyToken + requireProductionEnabled
-// (dokuma modül anahtarı ekran dilimiyle doğacak) + requirePermission.
+// Dokuma modülü (üç router, tek kapı): verifyToken + requireDokumaEnabled
+// (production → dokuma zinciri kapının içinde) + requirePermission.
 app.use("/api/weaving-orders", weavingOrderRoutes);
-// Tezgah koşumu (aç/kapa/geri al) — router'ın kendi kapısı: verifyToken +
-// requireProductionEnabled + requirePermission (loom:run · loom:run-revoke).
+// Tezgah koşumu (aç/kapa/geri al) — loom:run · loom:run-revoke.
 app.use("/api/machine-runs", machineRunRoutes);
 app.use("/api/machine-doffs", machineDoffRoutes);
 app.use("/api/rolls", inventoryRoutes);

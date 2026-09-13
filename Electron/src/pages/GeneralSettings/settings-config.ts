@@ -607,6 +607,17 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Kapalıyken (varsayılan) çözgü kartı uçları 403 verir ve karo çizilmez; kumaş/iplik kartlarındaki devere alanları (denye · çözgü kartı) gösterilmez. ⚠️ İPLİK MODÜLÜNE BAĞLIDIR, o da TİCARETE: levent doğarken iplik kg defterine çıkış yazılır, yani iplik kapalıyken bu anahtar açılamaz (kaydetmede hata verir). Kapatma sırası terstir — önce Devere, sonra İplik, sonra Ticaret. Kumaşı hazır alan kurulumlarda kapalı kalır.",
       },
       {
+        // ⚠️ SIRA LOAD-BEARING: Dokuma işi, Üretim'in ALTINDA durur (ön koşul
+        // `production.enabled`); tezgah izlemenin KARDEŞİDİR, çocuğu değil.
+        key: "dokumaEnabled",
+        title: "Dokuma işi modülünü aç",
+        summary:
+          "Dokuma İşleri ekranı (planlama · kapat · iptal) açılır; tezgah koşumu ve top indirme uçları çalışır.",
+        defaultOn: false,
+        audience: ["Planlamacı", "Yönetim"],
+        desc: "Kapalıyken (varsayılan) dokuma işi · tezgah koşumu · top indirme uçları 403 verir ve Dokuma İşleri karosu çizilmez. ⚠️ ÜRETİM MODÜLÜNE BAĞLIDIR: Üretim kapalıyken bu anahtar açılamaz (kaydetmede hata verir). Tezgah izlemeden BAĞIMSIZDIR — fasona dokutan firmada dokuma işi vardır, tezgah yoktur. Kumaşı hazır alan kurulumlarda kapalı kalır.",
+      },
+      {
         key: "depoMultiEnabled",
         title: "Çoklu depo modülünü aç",
         summary:

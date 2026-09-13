@@ -14,6 +14,7 @@ import {
   ShoppingCart,
   SwatchBook,
   Tags,
+  Spool,
   Truck,
   Undo2,
   Wrench,
@@ -33,6 +34,7 @@ import {
   isProductBalanceVisible,
   isWorkOrdersVisible,
 } from "./production-regime";
+import { isWeavingOrdersVisible } from "./WeavingOrders/weaving-regime";
 
 /**
  * Karo görünürlüğünün bağlı olduğu ÇALIŞMA ANI durumu (hub + komut paleti).
@@ -79,6 +81,13 @@ export interface OperationsVisibilityContext {
    * ekranındaki toggle'ın kendi yazdığını geri okuması için döner.
    */
   devereEnabled: boolean;
+  /**
+   * DOKUMA İŞİ modülü (`dokuma.enabled`) — ETKİN değer (`production && dokuma`),
+   * ham değil; tek çözüm noktası `useOperationsVisibilityContext`. Tezgah
+   * izlemenin KARDEŞİ, çocuğu değil. Backend kapısı `requireDokumaEnabled`
+   * (`weaving-order` · `machine-run` · `machine-doff` router'ları).
+   */
+  dokumaEnabled: boolean;
   /**
    * Ön muhasebe modülü açık mı (`finance.enabled`) — fiilen "bu bir TİCARET
    * kurulumu" anahtarı. Tanımlar menüsünün cari rejimi buna bakar: bayrak
@@ -207,6 +216,20 @@ export const operationsTiles: OperationsTile[] = [
     permission: "workorder:read",
     // Backend ikizi `production-balance.routes` → `requireProductionEnabled`.
     visibleWhen: isProductBalanceVisible,
+  },
+  {
+    // DOKUMA İŞİ (2026-09-13, ekran dilimi): backend `weaving-order.routes`
+    // `requireDokumaEnabled` taşır; karo aynı bayrağa bağlı — referans profilde
+    // KAPALI, karo çizilmez. Yüklem SAF modülden DOĞRUDAN geçirilir (palet
+    // kimlik testi `toBe`).
+    key: "weaving-orders",
+    title: "Dokuma İşleri",
+    description: "Ne dokunacak, ne kadar, kimde — dokuma işi planlama; koşum ve top indirme tabletten",
+    icon: Spool,
+    to: "/operations/weaving-orders",
+    group: "production",
+    permission: "weavingorder:read",
+    visibleWhen: isWeavingOrdersVisible,
   },
   {
     key: "rolls",

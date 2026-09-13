@@ -47,6 +47,7 @@ import { VatSummaryPage } from "@/pages/Reports/Finance/VatSummaryPage";
 import { FxDiffPage } from "@/pages/Reports/Finance/FxDiffPage";
 // Paket D (2026-08-14) — hepsi NAMED export.
 import { YarnStockPage } from "@/pages/Operations/Yarn/YarnStockPage";
+import { WeavingOrdersPage } from "@/pages/Operations/WeavingOrders/WeavingOrdersPage";
 import { PurchaseOrdersPage } from "@/pages/Operations/PurchaseOrders/PurchaseOrdersPage";
 import { ItemPricesPage } from "@/pages/Definitions/ItemPrices/ItemPricesPage";
 import { WarehouseTransfersPage } from "@/pages/Operations/WarehouseTransfers/WarehouseTransfersPage";
@@ -412,6 +413,16 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="warehouse:read">
         <YarnStockPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Dokuma İşleri — karo izniyle BİREBİR (`weavingorder:read`); yazma ekran
+    // içinde `PermissionGate`. Modül kapısı backend'de (`requireDokumaEnabled`).
+    path: "operations/weaving-orders",
+    element: (
+      <ProtectedRoute requirePermission="weavingorder:read">
+        <WeavingOrdersPage />
       </ProtectedRoute>
     ),
   },

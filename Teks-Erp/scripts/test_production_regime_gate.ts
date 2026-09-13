@@ -68,14 +68,10 @@ const KAPILI: ReadonlyArray<{ dosya: string; mount: string }> = [
   { dosya: "routes/traveler-card.routes.ts", mount: "/api/traveler-cards" },
   { dosya: "routes/batch.routes.ts", mount: "/api/batches" },
   { dosya: "routes/station-capability.routes.ts", mount: "/api/station-capabilities" },
-  { dosya: "routes/machine-run.routes.ts", mount: "/api/machine-runs" },
-  // Dokuma işi yazma yüzeyi (2026-09-13). Kapıyı doğduğu gün taşıyordu ama bu
-  // listede ANILMIYORDU ⇒ bekçi 12 taşıyıcının 11'ini doğruluyor, 12'nci hakkında
-  // hiçbir şey söylemiyordu. §1e o boşluğu kapatan koldur.
-  { dosya: "routes/weaving-order.routes.ts", mount: "/api/weaving-orders" },
-  // Dokuma doff yüzeyi (2026-09-13). §1e ilk gününde bu dosyayı yakaladı: kapıyı
-  // doğuştan taşıyordu ama listede yoktu — tarayıcı kolu tam bunun için var.
-  { dosya: "routes/machine-doff.routes.ts", mount: "/api/machine-doffs" },
+  // Dokuma üçlüsü (`weaving-order` · `machine-run` · `machine-doff`) 2026-09-13'e
+  // dek buradaydı; ekran dilimiyle `requireDokumaEnabled`a geçti ve kendi rejim
+  // bekçisine taşındı (`test_dokuma_regime_gate` — aynı KAPILI/sıra ölçümü).
+  // §1e onları burada ARAMAZ: kapı metnini artık taşımıyorlar.
 ];
 
 /**
@@ -199,8 +195,10 @@ function main(): void {
   // ⚠️ BU KOLUN KAPSAMI: liste DIŞINDA kalan KAPI TAŞIYICIYI ölçer. Kapı
   // TAŞIMAYAN bir dosyanın kapıyı taşıMAsı gerekip gerekmediğini ÖLÇMEZ — o §3'ün
   // işidir ("bilinçli kapısız" listesi) ve oraya girmek bir KARARDIR, ölçüm değil.
+  // Başka bir kapı adına geçen dosya (dokuma üçlüsü → `requireDokumaEnabled`,
+  // 2026-09-13) bu kolun da §3'ün de dışına çıkar; onu kendi bekçisi ölçer.
   //
-  // Taban YOK, sert kural: `weaving-order.routes.ts` bu commit'te listeye alındı.
+  // Taban YOK, sert kural.
   const routeDizini = path.join(SRC, "routes");
   const tumRouteDosyalari = fs
     .readdirSync(routeDizini)

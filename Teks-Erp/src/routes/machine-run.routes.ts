@@ -1,9 +1,9 @@
 // =============================================================================
 // TeksERP — Tezgah Koşumu (MachineRun) Routes · aç / kapa / geri al
 // =============================================================================
-// ⚠️ ÜÇ KAPI SIRAYLA: `verifyToken` → `requireProductionEnabled` (koşum bir
-// ÜRETİM olayıdır; `dokuma`/`tezgah` alt anahtarı ekransız olduğu için henüz
-// kapı değil — ekransız kapı `test_screen_catalog §10b`'de kırmızı verir) →
+// ⚠️ ÜÇ KAPI SIRAYLA: `verifyToken` → `requireDokumaEnabled` (koşum dokumanın
+// koşumudur; kapı ön koşulu üretimi ÖNCE ölçer — ekran dilimiyle doğdu
+// 2026-09-13, kardeş yollar aynı kapsama: bekçi `test_dokuma_regime_gate`) →
 // `requirePermission` (kişi bunu yapabilir mi).
 //
 // Geri alma AYRI izindir (`loom:run-revoke`): randımanın paydasını değiştirir,
@@ -15,13 +15,13 @@ import { Router } from "express";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
-import { requireProductionEnabled } from "../middlewares/module.middleware";
+import { requireDokumaEnabled } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { closeMachineRun, openMachineRun, revokeMachineRun } from "../services/machine-run.service";
 
 const router = Router();
 
-router.use(verifyToken, requireProductionEnabled);
+router.use(verifyToken, requireDokumaEnabled);
 
 const openSchema = z
   .object({
@@ -67,7 +67,7 @@ const revokeSchema = z
  *     responses:
  *       201: { description: Koşum açıldı (aynı token yeniden gelirse özgün koşum döner) }
  *       400: { description: Doğrulama / hat aralığı / fason iş (WEAVING_ORDER_SUBCONTRACTED) }
- *       403: { description: Üretim modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ *       403: { description: Dokuma işi modülü kapalı (MODULE_DISABLED) ya da yetki yok }
  *       409: { description: PRODUCTION_LINE_OCCUPIED · PRODUCTION_LINE_OVERLAP · MACHINE_RUN_RACE · WEAVING_ORDER_NOT_OPEN · CLIENT_TOKEN_COLLISION · RUN_REVOKED }
  */
 router.post("/", requirePermission("loom:run"), async (req, res, next) => {

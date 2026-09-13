@@ -33,6 +33,8 @@ function ctx(over: Partial<OperationsVisibilityContext> = {}): OperationsVisibil
     ticaretEnabled: false,
     iplikEnabled: false,
     devereEnabled: false,
+    // Dokuma işi de ETKİN değer (production && dokuma); fabrikada KAPALI.
+    dokumaEnabled: false,
     ...over,
   };
 }

@@ -64,7 +64,7 @@ export type PlanlananModulSahibi = "planlanan:fason" | "planlanan:kartela";
  */
 export type HideableModule = Exclude<
   ModuleFlagKey,
-  "kumasTeknikEnabled" | "tezgahEnabled" | "devereEnabled"
+  "kumasTeknikEnabled" | "tezgahEnabled" | "devereEnabled" | "dokumaEnabled"
 >;
 
 export type FlagOwner = HideableModule | "cekirdek" | PlanlananModulSahibi;
@@ -94,6 +94,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   kumasTeknikEnabled: "cekirdek",
   tezgahEnabled: "cekirdek",
   devereEnabled: "cekirdek",
+  dokumaEnabled: "cekirdek",
 
   // --- ÜRETİM (`operations/work-orders` · KK1 · Tambur · Kurşun · Parti) -----
   targetQuantityEnabled: "productionEnabled",

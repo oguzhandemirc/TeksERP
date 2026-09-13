@@ -39,6 +39,7 @@ export const MODULE_FLAG_KEYS: ReadonlySet<string> = new Set([
   "kumasTeknikEnabled",
   "tezgahEnabled",
   "devereEnabled",
+  "dokumaEnabled",
 ]);
 
 /** Aynı sekiz modülün DB anahtarı (`system_settings.key`). */
@@ -51,6 +52,7 @@ export const MODULE_SETTING_KEYS: ReadonlySet<string> = new Set([
   "kumasTeknik.enabled",
   "tezgah.enabled",
   "devere.enabled",
+  "dokuma.enabled",
 ]);
 
 /**
@@ -63,6 +65,9 @@ export const MODULE_SETTING_KEYS: ReadonlySet<string> = new Set([
  *   iş emri yoktur.
  * • Devere (çözgü hazırlama/levent) iplik kg defterini TÜKETİR: levent doğarken
  *   `WARP_ISSUE` hareketi yazılır, yani iplik kapalıyken levent doğamaz.
+ * • Dokuma işi üretimin bir alt yüzeyidir ve tezgah izlemenin KARDEŞİDİR, çocuğu
+ *   değil: fasona dokutan firmada dokuma işi var tezgah yok, yalnız devere
+ *   makinesini izleyen firmada tersi (DOKUMA-IS-EMRI §2.5).
  *
  * İKİ YERDE UYGULANIR ve ikisi de gerekli: yazma yolunda (`setFeatureFlags`
  * 400 verir — tutarsız çift hiç DOĞMAZ) ve okuma yolunda (middleware; elle
@@ -77,6 +82,7 @@ export const MODULE_DEPENDENCIES: Readonly<Record<string, string>> = {
   iplikEnabled: "ticaretEnabled",
   tezgahEnabled: "productionEnabled",
   devereEnabled: "iplikEnabled",
+  dokumaEnabled: "productionEnabled",
 };
 
 /** Hata mesajlarında ve panelde kullanılan Türkçe modül adı. */
@@ -89,4 +95,5 @@ export const MODULE_LABELS: Readonly<Record<string, string>> = {
   kumasTeknikEnabled: "Kumaş teknik kartı",
   tezgahEnabled: "Tezgah izleme",
   devereEnabled: "Devere / levent",
+  dokumaEnabled: "Dokuma işi",
 };

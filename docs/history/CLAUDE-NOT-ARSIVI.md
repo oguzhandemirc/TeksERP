@@ -8522,3 +8522,28 @@ Sonda (2026-09-13): `agacAdi` izole ağaçta `wt-d9` / ortak ağaçta `ortak`, `
 `GITHUB_ACTIONS=true` ile `ci`, `CI=false` ile `yerel`; koşucu kablolaması geçici bir `IZLENEN` girdisiyle
 koşuldu ve satır `"rejim":"yerel","agac":"wt-d9"` damgasıyla düştü, `CI=true` ile `"rejim":"ci"`; girdi
 geri alınınca kayıt sayısı 0 (dormant doğrulandı).
+
+## 2026-09-13 — DOKUMA EKRAN DİLİMİ İNDİ: bayrak + kapı + ekran tek commit, "dört dosya" öncülü 28 çıktı [ÇEKİRDEK]
+
+**Neden tek commit (1e kararı):** `test_screen_catalog §10b` ekransız modül kapısını, muaf kolu bayat muafı,
+`test_production_regime_gate §1e` listede anılmayan taşıyıcıyı kırmızı yapar — parça parça iniş her adımda bir
+kapıyı kırardı. Dilim: `operations/weaving-orders` ekranı (karo · route · palet · manifesto) + `dokuma.enabled`
+(ön koşul `production`, tezgahın KARDEŞİ) + `requireDokumaEnabled` üç router'da (`weaving-order` · `machine-run` ·
+`machine-doff`; `machine-run` 1e'nin ölçüm sonrası kapsam düzeltmesi) + `SCREENLESS_PERMISSIONS`tan iki
+`weavingorder:*` düştü + yeni bekçi `test_dokuma_regime_gate` + `modul-bayrak.md`ye kural satırı.
+
+**Ölçüm ①:** sözleşmenin "`dokumaEnabled` DÖRT dosyada doğar" cümlesi öncüldü; devere'nin ayak izi 28 dosya
+(backend 9 · bekçi 6 · Electron 13, döküm `DOKUMA-PANEL-EKRAN-KAPILARI.md` § İNDİ). Grandfathering damgası
+`20260913260000` sabit `false` `WHERE EXISTS rolls` (dünkü davranış ölçüldü: hiçbir istemci dokuma uçlarını
+çağırmıyordu — Electron + mobil `git grep` 0). Profiller: `basit` KAPALI · `perde-dokuma`/`dokuma`/`tam` AÇIK (1e).
+
+**Ölçüm ② — "bayrak kapalıyken hiçbir şey değişmez":** istemci tarafında sıfır fark; tek görünür fark izinli
+doğrudan API çağrısının 2xx yerine 403 `MODULE_DISABLED` alması. `test_dokuma_regime_gate §7` bunu KİLİTLER:
+dokuma uçlarını çağıran her istemci dosyası allowlist'te (bugün tek: `WeavingOrders/service.ts`), o ekranın
+manifestosu `dokumaEnabled`, karosu saf yüklemle `dokumaEnabled` okuyor, route'u `weavingorder:read`. Beş
+negatif sonda 3/1/1/1/1 ❌ (production dalı silindi · kapı uçların sonuna · başka dosyadan çağrı · yüklem
+`return true` · bağımlılık satırı silindi), md5 ile birebir geri alındı.
+
+**Ortam notu (worktree):** `tekserp_rev1e_test` klonunda üç modül damgası yoktu (`rolls` dolu, modül satırı
+1/8) → `test_module_grandfathering §2b` kırmızı; iki eski damga SQL'i idempotent olarak elle koşuldu, kod
+hatası değil. Sürüm notu: madde YOK — ekran referans fabrikada çizilmez (bayrak kapalı), cümle ölçüldü.

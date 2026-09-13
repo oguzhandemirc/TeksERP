@@ -115,3 +115,36 @@ React tarafında bayrak okumanın ve fail-closed varsayılanın biçimi.
    `tile-visibility.test.ts` · `CommandPalette.test.tsx`.
 5. Negatif sonda: bayrak KAPALIYKEN karo çizilmiyor VE route `/forbidden`e düşüyor —
    ikisi ayrı ayrı ölçülür (biri karoyu, öteki ucu korur).
+
+---
+
+## İNDİ — 2026-09-13 (0c, tek commit) ve ölçülen ayak izi düzeltmesi
+
+**Beş kapanış ölçütü de yeşil:** `SCREEN_CATALOG` `operations/weaving-orders` eklendi, `SCREENLESS_PERMISSIONS`tan iki
+`weavingorder:*` satırı düştü · `dokumaEnabled` doğdu, referans profilde KAPALI (`basit`), `perde-dokuma` · `dokuma` · `tam`
+AÇIK (1e ürün kararı) · karo + route + palet birebir, yüklem saf (`isWeavingOrdersVisible`) · bekçiler yeşil
+(`test_screen_catalog` 33/0 · `test_feature_flag_contract` 78/0 · `test_module_flags` 82/0 · `test_module_profile` 58/0 ·
+`tile-visibility.test` · `CommandPalette.test`) · negatif sonda İKİ yönlü: karo `ctx({dokumaEnabled:false})` → çizilmez
+(`tile-visibility.test`), route `/forbidden`a düşer (`ProtectedRoute requirePermission="weavingorder:read"`, `test_screen_catalog §4`).
+
+**④'ün "dört dosya" cümlesi ÖNCÜLDÜ (5e: modüle ÖZGÜ dört yeri saymış, jenerik bayrak sözleşmesini atlamıştı), ölçülen ayak izi 28 dosyadır** — ölçüm 2026-09-13, taban `05c6dbbb`, yüklem `git grep -l -E 'devereEnabled|devere\.enabled|readDevereEnabled|requireDevereEnabled' -- ':!docs' ':!*.md'` (kod + bekçi/test dahil, belge hariç; devere emsali):
+`Teks-Erp/src` 8 (`app.ts` · `constants/module-flags` · `constants/module-profiles` · `constants/screen-catalog` ·
+`middlewares/module.middleware` · `routes/feature-flag.routes` · `routes/warp-spec.routes` · `services/system-setting.service`) +
+`Teks-Erp/prisma` 1 (grandfathering migration) + `Teks-Erp/scripts` 7 (`test_devere_regime_gate` · `test_feature_flag_contract` ·
+`test_module_flag_off` · `test_module_flags` · `test_module_grandfathering` · `test_module_profile` · `test_production_flow_api`) +
+`Electron` 12 (`CommandPalette.test` · `boss-menu.test` · `lib/module-flags` · `Definitions/tile-config` · `GeneralSettings/flag-modules` ·
+`GeneralSettings/settings-config` · `Operations/tile-config` · `Operations/tile-visibility.test` · `Operations/useOperationsVisibility` ·
+`ModuleProfile/moduleProfile.helpers.test` · `WarpSpecs/service` · `services/featureFlagService`) — 5e aynı yüklemle bağımsız doğruladı
+(2026-09-14, iki tabanda da 28; kova dökümü onun sayımı). ⚠️ Bu REÇETENİN ayak izidir; DİLİMİN gerçeği ayrı bir sayıdır —
+0c'nin fiili commit'i 33 değişen + 14 yeni dosya (ekran dosyaları + yeni bekçi dahil). İkisi farklı soruların cevabıdır,
+karıştırılırsa sonraki tahmin yine dar çıkar. Yeni modül anahtarı reçetesi bu sayıyı taşımalı.
+
+**Mobil ayna KAPSAM DIŞI (ölçüldü 2026-09-14, `git grep -l -iE 'dokumaEnabled|dokuma\.enabled' -- mobil` → 0):** tablet bugün
+dokuma bayrağını okumuyor; reçetenin 11. adımı tablet dilimi geldiğinde uygulanır. ⚠️ Bu adımın mekanik bekçisi YOKTUR
+(`test_feature_flag_contract` yalnız backend `src` + iki Electron dosyasını ölçer) — atlanırsa hiçbir kapı kırmızı vermez.
+
+**Kapsam düzeltmesi (1e):** `machine-run.routes.ts` de `requireDokumaEnabled`a geçti — koşum dokumanın koşumudur, kapı
+takarken kardeş yollar aynı kapsama. `test_production_regime_gate` `KAPILI`si 14 → 11 (üç dosya `requireProductionEnabled`
+metnini artık taşımıyor; §1e onları aramaz), yeni bekçi `test_dokuma_regime_gate` aynı ölçümü (kapı · sıra · kapsam) dokuma
+adına yapar ve §7 ile "bayrak kapalıyken hiçbir şey değişmez" cümlesini KİLİTLER: ekran inerken ölçüldü — Electron + mobil
+kaynağında dokuma uçlarını çağıran dosya 0'dı; bugün tek dosya var ve dokuma karosunun arkasında.

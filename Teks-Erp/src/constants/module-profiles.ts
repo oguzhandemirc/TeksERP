@@ -68,6 +68,7 @@ export const MODULE_FIELD_BY_SETTING_KEY: Readonly<Record<string, string>> = {
   "kumasTeknik.enabled": "kumasTeknikEnabled",
   "tezgah.enabled": "tezgahEnabled",
   "devere.enabled": "devereEnabled",
+  "dokuma.enabled": "dokumaEnabled",
 };
 
 /**
@@ -91,6 +92,7 @@ export const MODULE_DESCRIPTIONS: Readonly<Record<string, string>> = {
   "kumasTeknik.enabled": "Kumaş teknik kartı modülü (en · gramaj · kompozisyon · atkı/çözgü)",
   "tezgah.enabled": "Dokuma tezgah izleme modülü",
   "devere.enabled": "Devere / levent modülü (çözgü kartı · levent stoğu · levent defteri)",
+  "dokuma.enabled": "Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme)",
 };
 
 /** Yedi anahtarı `false` doğuran taban — profil satırları yalnız AÇTIKLARINI yazar. */
@@ -160,7 +162,7 @@ export const MODULE_PROFILES: Readonly<Record<ModuleProfileId, ModuleProfile>> =
     ad: "Perde üreticisi — dokuyan",
     aciklama:
       "Üretim + ön muhasebe + ticaret + iplik kg defteri + teknik kart + devere " +
-      "(çözgü hazırlama/levent). Tezgah izleme kapalı — Faz 4'te açılır.",
+      "(çözgü hazırlama/levent) + dokuma işi. Tezgah izleme kapalı — Faz 4'te açılır.",
     moduller: acik(
       "production.enabled",
       "finance.enabled",
@@ -168,6 +170,7 @@ export const MODULE_PROFILES: Readonly<Record<ModuleProfileId, ModuleProfile>> =
       "iplik.enabled",
       "kumasTeknik.enabled",
       "devere.enabled",
+      "dokuma.enabled",
     ),
     bayraklar: {},
   },
@@ -175,7 +178,7 @@ export const MODULE_PROFILES: Readonly<Record<ModuleProfileId, ModuleProfile>> =
     ad: "Dokuma / örme",
     aciklama:
       "Üretim + ön muhasebe + ticaret + iplik kg defteri + teknik kart + devere + " +
-      "tezgah izleme. Çoklu depo kapalı (tek depo).",
+      "dokuma işi + tezgah izleme. Çoklu depo kapalı (tek depo).",
     moduller: acik(
       "production.enabled",
       "finance.enabled",
@@ -184,12 +187,13 @@ export const MODULE_PROFILES: Readonly<Record<ModuleProfileId, ModuleProfile>> =
       "kumasTeknik.enabled",
       "tezgah.enabled",
       "devere.enabled",
+      "dokuma.enabled",
     ),
     bayraklar: {},
   },
   tam: {
     ad: "Tam",
-    aciklama: "Yedi modülün hepsi açık — demo ve iç test kurulumları.",
+    aciklama: "Dokuz modülün hepsi açık — demo ve iç test kurulumları.",
     moduller: acik(...MODULE_SETTING_KEYS),
     bayraklar: {},
   },

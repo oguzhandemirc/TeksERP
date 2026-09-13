@@ -1,9 +1,9 @@
 // =============================================================================
 // TeksERP — Top İndirme (DoffEvent) Routes · kaydet / geri al
 // =============================================================================
-// ÜÇ KAPI SIRAYLA (machine-run emsali): `verifyToken` → `requireProductionEnabled`
-// (doff bir ÜRETİM olayıdır; `dokuma.enabled` alt anahtarı ekran dilimiyle doğar —
-// ekransız kapı `test_screen_catalog §10b`'de kırmızı verir) → `requirePermission`.
+// ÜÇ KAPI SIRAYLA (machine-run emsali): `verifyToken` → `requireDokumaEnabled`
+// (doff dokumanın olayıdır; kapı ön koşulu üretimi ÖNCE ölçer — ekran dilimiyle
+// doğdu 2026-09-13, bekçi `test_dokuma_regime_gate`) → `requirePermission`.
 // Geri alma AYRI izin (`loom:doff-revoke`): defterden satır düşürür.
 // Tablet dilimi indiğinde uçlar `requireAnyPermission("loom:doff", ...MOBILE)`
 // biçimine geçer; mobil izin kodu o dilimle doğar.
@@ -13,13 +13,13 @@ import { z } from "zod";
 import { MachineDataSource } from "@prisma/client";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
-import { requireProductionEnabled } from "../middlewares/module.middleware";
+import { requireDokumaEnabled } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { openDoff, revokeDoff } from "../services/machine-doff.service";
 
 const router = Router();
 
-router.use(verifyToken, requireProductionEnabled);
+router.use(verifyToken, requireDokumaEnabled);
 
 const openSchema = z
   .object({
@@ -56,7 +56,7 @@ const revokeSchema = z
  *     responses:
  *       201: { description: İndirme kaydedildi (aynı token yeniden gelirse özgün kayıt döner) }
  *       400: { description: Doğrulama / hat aralığı (PRODUCTION_LINE_OUT_OF_RANGE) / makine pasif }
- *       403: { description: Üretim modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ *       403: { description: Dokuma işi modülü kapalı (MODULE_DISABLED) ya da yetki yok }
  *       404: { description: Koşum yok }
  *       409: { description: DOFF_RUN_MISMATCH · RUN_REVOKED · DOFF_REVOKED · CLIENT_TOKEN_COLLISION }
  */

@@ -61,6 +61,7 @@ import { Request, Response, NextFunction } from "express";
 import {
   readDepoMultiEnabled,
   readDevereEnabled,
+  readDokumaEnabled,
   readIplikEnabled,
   readProductionEnabled,
   readTicaretEnabled,
@@ -212,6 +213,39 @@ export async function requireProductionEnabled(
     const enabled = await readProductionEnabled();
     if (!enabled) {
       throw modulKapali("production", "Üretim");
+    }
+    next();
+  } catch (e) {
+    next(e);
+  }
+}
+
+/**
+ * Dokuma işi modülü: dokuma işi (`WeavingOrder`) · tezgah koşumu · top indirme.
+ *
+ * ⚠️ ÖN KOŞUL ÖNCE ÖLÇÜLÜR (`MODULE_DEPENDENCIES.dokumaEnabled = productionEnabled`):
+ * dokuma üretimin alt yüzeyidir, tezgah izlemenin KARDEŞİ (çocuğu değil). Yazma
+ * yolu tutarsız çiftin doğmasını engeller (`setFeatureFlags` 400); burası elle
+ * SQL / eski dump / yarım profil kaynaklı bir çifte karşı ikinci hattır. Mesaj
+ * EKSİK OLANI söyler (iplik kapısının dersi).
+ */
+export async function requireDokumaEnabled(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const production = await readProductionEnabled();
+    if (!production) {
+      throw AppError.forbidden(
+        "Dokuma işi modülü Üretim modülüne bağlıdır; Üretim modülü bu kurulumda kapalı. " +
+          "Sistem → Modüller bölümünden açılabilir.",
+        { code: "MODULE_DISABLED", modul: "production", dependent: "dokuma" },
+      );
+    }
+    const enabled = await readDokumaEnabled();
+    if (!enabled) {
+      throw modulKapali("dokuma", "Dokuma işi");
     }
     next();
   } catch (e) {

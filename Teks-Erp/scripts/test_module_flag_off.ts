@@ -123,7 +123,9 @@ type ModulAlani =
   | "depoMultiEnabled"
   | "productionEnabled"
   // 2026-09-12: zincirin üçüncü halkası (devere → iplik → ticaret).
-  | "devereEnabled";
+  | "devereEnabled"
+  // 2026-09-13: dokuma işi (dokuma → production; tezgahın kardeşi).
+  | "dokumaEnabled";
 
 interface ModulTanimi {
   /** `FeatureFlags` alanı (PATCH gövdesinde kullanılan ad). */
@@ -185,6 +187,22 @@ const MODULLER: ModulTanimi[] = [
     onKosul: { alan: "iplikEnabled", beklenenModulKodu: "iplik" },
   },
   {
+    // DOKUMA (2026-09-13, ekran dilimi): üretime bağımlı; kapı ön koşulu ÖNCE ölçer
+    // ve eksik olanı söyler (`requireDokumaEnabled` başlığı). Üç router tek kapı.
+    alan: "dokumaEnabled",
+    dbAnahtari: "dokuma.enabled",
+    middleware: "requireDokumaEnabled",
+    okuyucu: "readDokumaEnabled",
+    modulKodu: "dokuma",
+    routeDosyalari: [
+      "routes/weaving-order.routes.ts",
+      "routes/machine-run.routes.ts",
+      "routes/machine-doff.routes.ts",
+    ],
+    sondalar: ["/api/weaving-orders"],
+    onKosul: { alan: "productionEnabled", beklenenModulKodu: "production" },
+  },
+  {
     alan: "depoMultiEnabled",
     dbAnahtari: "depo.multiEnabled",
     middleware: "requireDepoMultiEnabled",
@@ -242,6 +260,7 @@ const ALAN_DB_ANAHTARI: Record<string, string> = {
   kumasTeknikEnabled: "kumasTeknik.enabled",
   tezgahEnabled: "tezgah.enabled",
   devereEnabled: "devere.enabled",
+  dokumaEnabled: "dokuma.enabled",
 };
 
 /** HTTP sondalarının 200 alabilmesi için gereken izinler. */
@@ -259,6 +278,8 @@ const SONDA_IZINLERI = [
   // çarpar; bu izin olmadan "modül AÇIKKEN 2xx" körlük zemini modül yüzünden
   // değil YETKİ yüzünden kırmızı verir ve yanlış hikâye anlatır (ölçüldü).
   "warpspec:read",
+  // Dokuma sondası (`/api/weaving-orders`) — aynı gerekçe.
+  "weavingorder:read",
 ];
 
 const TEST_USERNAME = `bekci.modul.${process.pid}`;

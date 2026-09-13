@@ -96,18 +96,23 @@ describe("kapatırsan gizlenecek ekranlar", () => {
 describe("bağımlılık oku", () => {
   it("⭐ TERS yön + GEÇİŞLİ: Ticaret kapanırsa İplik VE Devere kapanır", () => {
     expect(modulesThatDependOn("ticaretEnabled")).toEqual(["iplikEnabled", "devereEnabled"]);
-    expect(modulesThatDependOn("productionEnabled")).toEqual(["tezgahEnabled"]);
+    // 2026-09-13: dokuma işi de üretime bağlı (tezgahın kardeşi) — BFS sırası tablo sırası.
+    expect(modulesThatDependOn("productionEnabled")).toEqual(["tezgahEnabled", "dokumaEnabled"]);
     expect(modulesThatDependOn("iplikEnabled")).toEqual(["devereEnabled"]);
   });
 
   it("bağımlısı olmayan modülde liste boş", () => {
     expect(modulesThatDependOn("financeEnabled")).toEqual([]);
     expect(modulesThatDependOn("devereEnabled")).toEqual([]);
+    expect(modulesThatDependOn("dokumaEnabled")).toEqual([]);
+    // Kardeşlik: tezgah dokumaya bağlı DEĞİL.
+    expect(modulesThatDependOn("tezgahEnabled")).toEqual([]);
   });
 
   it("düz yön: İplik açılmadan önce Ticaret açık olmalı", () => {
     expect(moduleRequires("iplikEnabled")).toBe("ticaretEnabled");
     expect(moduleRequires("tezgahEnabled")).toBe("productionEnabled");
+    expect(moduleRequires("dokumaEnabled")).toBe("productionEnabled");
     expect(moduleRequires("ticaretEnabled")).toBeUndefined();
   });
 });

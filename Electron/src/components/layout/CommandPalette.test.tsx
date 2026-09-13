@@ -36,6 +36,7 @@ vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
     ticaretEnabled: false,
     iplikEnabled: false,
     devereEnabled: false,
+    dokumaEnabled: false,
     ...regime,
   }),
 }));

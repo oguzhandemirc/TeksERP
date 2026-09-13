@@ -16,6 +16,7 @@ import {
   isRoutesVisible,
   isTravelerCardVisible,
 } from "@/pages/Definitions/production-regime";
+import { isWeavingOrdersVisible } from "./WeavingOrders/weaving-regime";
 
 /**
  * Karo görünürlüğünün doğruluk tablosu.
@@ -49,6 +50,8 @@ function ctx(
     // Devere de ETKİN değer (ticaret && iplik && devere); fabrikada KAPALI →
     // Çözgü Kartları karosu çizilmemeli.
     devereEnabled: false,
+    // Dokuma işi de ETKİN değer (production && dokuma); fabrikada KAPALI.
+    dokumaEnabled: false,
     ...over,
   };
 }
@@ -120,6 +123,20 @@ describe("karo bağlantıları", () => {
     ).toBe(false);
   });
 
+  it("⭐ Dokuma İşleri: karo yalnız DOKUMA modülü açıkken çizilir (fabrika = kapalı)", () => {
+    const t = tile("weaving-orders");
+    expect(t).toBeDefined();
+    // Yüklem KİMLİĞİ — palet aynı nesneyi taşır; route izniyle birebir.
+    expect(t?.visibleWhen).toBe(isWeavingOrdersVisible);
+    expect(t?.permission).toBe("weavingorder:read");
+    // ⭐ "Sıfır görünür fark": referans profilde (dokuma KAPALI) karo YOK.
+    expect(t?.visibleWhen?.(ctx())).toBe(false);
+    expect(t?.visibleWhen?.(ctx({ dokumaEnabled: true }))).toBe(true);
+    // Yüklem ÜRETİME BAKMAZ — zincir (production && dokuma) bağlamı kuran hook'ta
+    // çözülür; burada ikinci kez kurulmaz.
+    expect(t?.visibleWhen?.(ctx({ dokumaEnabled: true, productionEnabled: false }))).toBe(true);
+  });
+
   it("⭐ Depo Transferi çoklu depo modülü KAPALIYKEN çizilmez", () => {
     const predicate = tile("warehouse-transfers")?.visibleWhen;
     expect(predicate).toBeDefined();
@@ -163,6 +180,7 @@ describe("karo bağlantıları", () => {
       "sack-store",
       "stock-counts",
       "warehouse-transfers",
+      "weaving-orders",
       "work-orders",
       "yarn-stock",
     ]);

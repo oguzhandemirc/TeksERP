@@ -93,6 +93,7 @@ const ADMIN_ROUTES = path.join(SRC, "routes/admin.routes.ts");
 const MIGRASYONLAR: string[] = [
   "20260902230000_modul_anahtarlari_grandfathering",
   "20260912120000_devere_modul_anahtari",
+  "20260913260000_dokuma_modul_anahtari",
 ].map((d) => path.join(KOK, "prisma/migrations", d, "migration.sql"));
 
 /**
