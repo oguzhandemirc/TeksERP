@@ -307,7 +307,18 @@ function istemciHizasiBeyani(): void {
     console.log("⚠️  İSTEMCİ HİZASI ÖLÇÜLEMEDİ — şema ya da üretilmiş kopya okunamadı (hüküm YOK)");
     return;
   }
-  if (agac === istemci) return;
+  // ⚠️ HİZALI HÂLİ DE BASILIR — ve bu, kalemin KENDİ doktrininin dördüncü hâli.
+  // Sessiz bırakınca "hizalı" ile "hiç koşmadı" çıktıda AYNI görünüyordu (1e
+  // doğrularken tam buna düştü: satır yok → "kapı koşmuyor" sandı, oysa ağacı
+  // hizalıydı). Üçüncü hizanın GÖRÜNMEZ olması bu kalemin var olma sebebiydi;
+  // sağlıklı hâlini görünmez bırakmak aynı sorunu BİR KAT YUKARIDA kurardı.
+  // ⚠️ TEK SATIR: kayma hâli uzun kalır (ne yapılacağını söyler), hizalı hâli
+  // kısa — `Hedef DB` / `Hedef hacim` satırlarıyla aynı blokta ENVANTERDİR.
+  // Ve çağrı bir gün refactor'da düşerse SATIRIN YOKLUĞU fark edilir.
+  if (agac === istemci) {
+    console.log(`→ İstemci hizası: ✅ hizalı (${agac})`);
+    return;
+  }
   console.log(
     "⚠️  ÜRETİLMİŞ İSTEMCİ ŞEMANDAN FARKLI — ayrışan şey ALAN KÜMESİ (biçim DEĞİL).\n" +
       `      ağaç ${agac} ↔ istemci ${istemci}\n` +
