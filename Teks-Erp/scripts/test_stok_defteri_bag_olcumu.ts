@@ -204,8 +204,11 @@ async function main(): Promise<void> {
     // kapısız yol → 3 → kırmızı. Yeşile inmesi listeden üye SİLMEKLE değil yolun
     // deftere yazmasıyla (`bagli: true`) olur; taban düşürmeyi entegratör yazar.
     // İki sonda (2026-09-13): üye ekle → 3 ❌ · rescue'ya kapı çağrısı yaz → 1, çürüme ❌.
-    const K_TABAN = 2;
-    const K_UYELER: readonly string[] = ["rescueStuckRoll", "cutOpenFabric"];
+    // 2 → 0 (2026-09-14, entegratör 1e): 01'in TAMBUR_CUT/RESCUE girişleri + kapı helper'ı
+    // kaydı (`production-entry-ledger.helper`) birleşik trende ölçüldü — K=0. Üye kümesi
+    // BOŞ: yeni kapısız yol (6e §4h türetmesi dahil) doğrudan kırmızı.
+    const K_TABAN = 0;
+    const K_UYELER: readonly string[] = [];
     const kapisizlar = gercekKy.yollar.filter((y) => !y.bagli);
     check(
       `§4e ⭐ gerçek ağaçta K ≤ taban (${K_TABAN}) — kapısız stok yolu KÜMESİ`,
