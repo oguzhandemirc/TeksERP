@@ -46,6 +46,7 @@ import { randomUUID } from "node:crypto";
 import { ItemType, RollStatus, StationKind, StationType, ShipmentStatus } from "@prisma/client";
 import app from "../src/app";
 import prisma, { pool } from "../src/lib/prisma";
+import { writeWarehouseMovement } from "../src/services/helpers/warehouse-ledger.helper";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { strictMi } from "./lib/http-bekci-kapisi";
@@ -280,6 +281,48 @@ async function main(): Promise<void> {
         hrk3.some((h) => h.eventType === "SHIPMENT"),
         `top SHIPPED ama defter satırları: ${hrk3.map((h) => h.eventType).join(",") || "HİÇ"} — hasWarehouseEnd() süzgeci yuttu (warehouse-ledger.helper.ts:88)`);
     }
+    // ═══ §5 — §4a'nın MEKANİZMASI, akış OLMADAN ══════════════════════════════
+    // ⭐ NEDEN VAR: §4a kapı yüzünden YAPISAL olarak basılamıyor (deposuz bir top
+    // SHIPPED olamıyor) ve bunu beyan ediyor. Ama **beyan, kapsamın yerine geçmez**:
+    // §4a'nın koruduğu MEKANİZMA — `onUnwritable: "throw"`, yani deposuz satırın
+    // SESSİZCE atlanmasının yerine geçen politika — bir katman ALTTA ölçülebilir.
+    // Ölçüldü 2026-09-13: gerçek top, gerçek sevkiyat, kapı atlatma GEREKMİYOR;
+    // fırlatma insert'ten ÖNCE oluyor.
+    // ⇒ Akışın ölçülemezliği KALICI bir gerçektir; mekanizmanınki DEĞİLDİ.
+    console.log("\n── §5 Yazılamaz satır politikası (birim) ──");
+    let firlatti: string | null = null;
+    try {
+      await prisma.$transaction(async (tx) => {
+        await writeWarehouseMovement(
+          tx as never,
+          { rollId: deposuz.id, eventType: "SHIPMENT", qty: 10, fromWarehouseId: null, toWarehouseId: null },
+          { onUnwritable: "throw" },
+        );
+      });
+    } catch (e) {
+      firlatti = e instanceof Error ? e.message : String(e);
+    }
+    check("§5a ⭐ iki depo ucu da boşken `throw` politikası FIRLATIYOR (eski sessiz atlama geri gelmedi)",
+      firlatti !== null && /iki depo ucu da boş/.test(firlatti),
+      firlatti ? firlatti.slice(0, 110) : "FIRLATMADI — satır sessizce atlandı");
+
+    let skipDonus: boolean | null = null;
+    let skipHata: string | null = null;
+    try {
+      await prisma.$transaction(async (tx) => {
+        skipDonus = await writeWarehouseMovement(
+          tx as never,
+          { rollId: deposuz.id, eventType: "SHIPMENT", qty: 10, fromWarehouseId: null, toWarehouseId: null },
+          { onUnwritable: "skip" },
+        );
+      });
+    } catch (e) {
+      skipHata = e instanceof Error ? e.message.slice(0, 60) : String(e);
+    }
+    check("§5b `skip` politikası hâlâ sessizce false dönüyor (iki politika AYRI durmalı)",
+      skipHata === null && skipDonus === false,
+      skipHata ? `hata: ${skipHata}` : `döndü: ${String(skipDonus)}`);
+
     if (ship3) {
       const s3 = await prisma.shipment.findUnique({ where: { id: ship3 }, select: { status: true } });
       check("§4b deposuz topla kurulan sevkiyat DISPATCHED olmadı",
