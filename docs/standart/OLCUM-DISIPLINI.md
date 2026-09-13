@@ -162,7 +162,18 @@ mi, "bugün böyle" mi?*
   defter boşluğu günde ~100 top büyüyordu — "şu kadar eksik" cümlesi ertesi gün yanlış.)*
   Büyüyen bir boşluk sayı ile değil, **hız ve tarih** ile yazılır.
 
+- **Bir belge bir bekçiden söz ederken SAYIYI değil ARM'ı yazar.** Kontrol sayısı
+  bir koşumun özelliğidir (döngüler, atlanan HTTP turu, fixture) ve sessizce
+  bayatlar; **bölüm adı ile o bölümün İDDİASI** bekçi yeniden yazılmadıkça durur.
+  *(Vaka 2026-09-13: iki kural satırı `test_superadmin_visible (30 kontrol)` diyordu,
+  kaynakta 27 vardı. 30'u 27 ile değiştirmek aynı bayatlamayı bir yıl sonra tekrar
+  kurmaktı; yerine `§1 (gizleme sembolleri kaynakta YOK) + §6 (yetki bozulmadı)`
+  yazıldı — okuyan hem NEREYE bakacağını hem NE beklediğini görüyor.)*
+  Sayı yine de yazılacaksa **yanına neyin sayısı olduğu** yazılır
+  (`§7 (8; …)` = o bölümdeki kontrol adedi, koşum adedi değil).
+
 > **Var olmayan bir sayı bayatlayamaz.**
+> Var olması gerekiyorsa, **yanında yükleminin adı durur.**
 
 ## Çapa yazma
 
