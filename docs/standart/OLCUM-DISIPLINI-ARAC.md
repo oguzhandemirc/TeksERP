@@ -153,6 +153,15 @@ Yeni yazılan `OLCUM-DISIPLINI-DIZIN.md` izlenmiyordu ⇒ kapı **"dizin: YOK"**
 gözümün önünde dururken. `git add` sonrası aynı koşumda 141 satır belirdi. Kapı doğruydu,
 EVRENİ eksikti.)*
 
+⚠️ **Ve bu sınıf YALNIZ BOŞ kümeyle sessiz olmaz — küme dolu ama EKSİK olabilir.**
+*(İkinci vaka, d9 2026-09-14: aynı sınıf, ama tasarım anında yakalandı — bir bekçinin
+hedef kümesi `git ls-files src scripts` ile kuruluyordu ve negatif sonda dosyası
+izlenmediği için sonda ISIRMADI; kapıyı değil SONDANIN SESSİZLİĞİ ele verdi. O koşumda
+1.168 dosya taranıyordu: "kapsam boş" alarmı ÇALMAZDI, yalnız yeni dosya eksikti.
+Çare `--cached --others --exclude-standard`.)*
+⇒ **Körlük zemini (`kapsam > 0`) bu sınıfı YAPISAL OLARAK göremez** — eksiklik sayıyı
+sıfıra indirmez, bir azaltır.
+
 > **Bir aracın EVRENİ de bir yüklemdir:** `git ls-files` (indeks) · `find`/`readdir`
 > (çalışma ağacı, `.gitignore`'u görmez) · `git show HEAD:` (son commit) · `git diff --cached`
 > (sahne) **dört FARKLI kümedir** ve aynı soruya farklı cevap verirler.

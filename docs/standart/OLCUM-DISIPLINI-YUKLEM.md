@@ -64,8 +64,8 @@ Kardeşi § Boş çıktı bir ÖLÇÜM değildir ve `OLCUM-DISIPLINI-SINIFLAR.md
 
 ### Sınırsız eşleşme — sınırını BEYAN ETMEYEN yüklem alakasızı içeri alır
 Bir yüklem yanlış olmadan **sınırsız** olabilir: aradığını bulur, ama **aramadığını da**
-bulur. Dört biçim ölçüldü: *kelime sınırı yok* · *bağlam sınırı yok* · *boş küme her şeye
-uyar* · *kesişimle tanımlanan kapsam yokluğu göremez*. Panzehir aynı: sınırı BEYAN et (boşluk/`\b`, alanı daralt, boş kümeyi ayrı ele al).
+bulur. Beş biçim ölçüldü: *kelime sınırı yok* · *bağlam sınırı yok* · *boş küme her şeye
+uyar* · *kesişimle tanımlanan kapsam yokluğu göremez* · *sınır doğru ama metin uydurma*. Panzehir aynı: sınırı BEYAN et (boşluk/`\b`, alanı daralt, boş kümeyi ayrı ele al).
 
 | # | vaka | gevşeklik | sonuç |
 |---|---|---|---|
@@ -74,6 +74,7 @@ uyar* · *kesişimle tanımlanan kapsam yokluğu göremez*. Panzehir aynı: sın
 | c | **`!m.includes("9-KAT")`** | alt dizgi | **kurbanı KENDİ fikstürü** — vaka dosyasında |
 | d | ayna kapsamı = *backend ∩ mobil* *(2026-09-14)* | kesişim | 81 backend enum ↔ 16 mobil tip ⇒ **13 kapsamda**; kalan 68'in ölçülmediği basılmıyordu — vaka dosyasında |
 | e | sır kapısı `LIKE '%'\|\|PIN\|\|'%'` *(2026-09-14)* | rakam sınırı yok | altı haneli PIN log korpusunda **%1,07/PIN** çakışıyor; rakam sınırıyla **%0,12** (8,6×) — vaka dosyasında |
+| f | üç kolon `\|\|` ile birleştirilip desen birleşime uygulandı *(2026-09-14)* | sınır DOĞRU, metin UYDURMA | birleşim, hiçbir kolonda olmayan komşuluk üretir — vaka dosyasında |
 
 ⇒ **Vakaların ÖLÇÜM ayrıntısı ayrı dosyada:** [`OLCUM-DISIPLINI-SINIRSIZ.md`](OLCUM-DISIPLINI-SINIRSIZ.md) — her vakanın korpusu,
 paydası, kapsam beyanı ve panzehri. Burada **kural ve tablo** kalır; vaka envanteri

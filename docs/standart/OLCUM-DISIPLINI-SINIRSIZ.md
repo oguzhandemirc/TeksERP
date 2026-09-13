@@ -54,7 +54,7 @@ Kardeşleri § NE sorduğun kadar NEREYE sorduğun · § Bir adın geçmesi bir 
 değildir · § Bir yüklem, aradığı şeyin BOZULMUŞ hâlini aramaz (bunun TERSİ).
 
 ### (e) KISA + SAYISAL + KALABALIK KORPUS — çakışma bir ÇARPIMDIR
-*(d9 ölçümü 2026-09-14; düzeltme bu satır yazılırken inmemişti — sha inince eklenir.)*
+*(d9 ölçümü 2026-09-14; düzeltme `9aa4a4d7`.)*
 Sır kapısı audit kolonlarını `LIKE '%'||PIN||'%'` ile tarıyordu: yüklem DOĞRU, sınır
 BEYAN EDİLMEMİŞ. Bedeli sırrın BİÇİMİ belirliyor — `quickPin` altı hane ve yalnız rakam
 (`randomInt(0, 1_000_000)` + `padStart(6,"0")`) ⇒ her PIN uzun bir sayının İÇİNDE geçebilir.
@@ -75,7 +75,31 @@ doğrulama değildir** — iki ayrı korpus, iki ayrı payda.
 gösterir; gerçek bir SIZINTIYI **dışlamaz**. Ayırt edici yön (kanıt değil): sızıntı bir
 KOD YOLU olurdu ve PIN her turda yeniden rastgele yazıldığı için 1/59 değil **~59/59**
 beklenirdi.
+⭐ **Daraltmanın işe yaradığı UÇTAN UCA ölçüldü, ve üçüncü satır olmadan gösterilemezdi**
+*(d9, `9aa4a4d7`)*: yeni yüklem + gerçek sızıntı → **85/1 ❌** · yeni yüklem + rakama
+yapışık çakışma → **86/0 ✅** · **eski yüklem + AYNI çakışma → 78/1 ❌ yanlış pozitif.**
+Üçüncüsü kontrol grubudur: onsuz "yeni yüklem yeşil" cümlesi, daraltmanın (B) çakışmayı
+KESTİĞİNİ değil yalnız bugün eşleşme olmadığını gösterirdi.
+
 📌 Panzehir üç sonuçlu (bkz. § Bir deneyin ÜÇ olası sonucunun anlamı, deney koşulmadan
 ÖNCE yazılır (`OLCUM-DISIPLINI-CIKARIM.md`)): ① sınırlı eşleşme → **KIRMIZI (sızıntı)** ·
 ② yalnız geniş eşleşme → **sınıflandırılmış NOT** (sayı + sınıf basılır, **eşleşen metin
 BASILMAZ**) · ③ hiç yok → sessiz yeşil.
+
+### (f) BİRLEŞTİRME, hiçbir kolonda var olmayan bir KOMŞULUK uydurur
+Önceki biçimlerde yüklem gevşekti. Burada **yüklem SINIRLI, sınırladığı DİZİ yanlış**:
+üç kolon `||` ile birleştirilip desen birleşime uygulanınca, `newData` `…98` ile bitip
+`oldData` `6412…` ile başlıyorsa birleşimde **`986412` DOĞAR** — hiçbir kolonda geçmeyen
+bir dizi. Rakam sınırı düzgün çalışır; yanlış olan metnin KENDİSİDİR.
+
+*(d9, 2026-09-14 — ⚠️ **ÖLÇÜLMEDİ ve ölçülmedi diye yazılıyor:** bu biçim koşulmadı,
+yazım anında yakalandı ve yüklem kolon kolona çevrildi (`newData ~ d OR oldData ~ d OR
+changes ~ d`, `9aa4a4d7`). Kanıt ANALİTİKTİR, istatistiksel değil; buraya bir oran
+yazmak sınıfın kendisini çürütürdü.)*
+
+> ***Bir sınır yüklemi, sınırladığı metnin İNŞASINI da kapsamak zorundadır.*** Teşhis
+> hangi metni okuyorsa iddia da onu okumalı — boğaz ikizinin metin tarafı: geniş sorgu
+> kolon kolon bakarken iddia birleşime bakıyordu.
+📌 Ayırt edici soru: *"ölçtüğüm dizi, sistemde GERÇEKTEN o hâliyle var mı, yoksa ölçüm
+için mi kuruldu?"* — kurulduysa sınır artık o kurgunun sınırıdır, olgunun değil.
+Kardeşi § Mutasyonun ürettiği sayı, MUTASYONDAN gelmiş olabilir (`OLCUM-DISIPLINI-ARAC.md`).
