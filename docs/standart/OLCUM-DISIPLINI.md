@@ -343,6 +343,21 @@ yanlışmış.** Arka durak varsayımı iki katmanda birden çürüdü.
 yanlış mekanizma · yanlış zamanlama — üçü de *"ölçüm yapıldı"* satırını sorunsuz geçer.
 Sorulacak şey *"ölçtüm mü"* değil, ***"bu ölçüm yanlış bir dünyada FARKLI çıkar mıydı"***.
 
+## Teşhis mi, ölçüm mü — kurala çevirmeden önce
+
+> **Bir teşhis, ölçülmeden kurala çevrildiğinde yanlışlığı da KURUMSALLAŞIR** — ve
+> düzeltmesi artık bir commit gerektirir.
+
+*(Vaka 2026-09-13, üç adımlı zincir: bir oturum ölçmeden teşhis koydu · ikincisi onu
+kurala çevirip İNDİRDİ · üçüncüsü ölçüp çürüttü. Kural kalıcı bir dosyaya yazılmıştı.)*
+
+⇒ Kurala çevirmeden önce sor: **bu bir ÖLÇÜM mü, bir TEŞHİS mi?** — teşhisin sahibi
+yönetici oturum olsa bile. Teşhis bir hipotezdir; kural bir taahhüt.
+
+⚠️ Ve **yanlış panzehir, panzehirsizlikten kötüdür**: doğru refleksi tüketir. Yanlış
+çıkan bir sınıf düzeltilirken **mekanizması** değiştirilir, başlığı değil — okuyan aynı
+adı arayıp yeni mekanizmayı bulmalı.
+
 ## Hangi hipotez ölçülür
 
 > **Bir hipotezin değeri DOĞRU ÇIKMASIYLA değil, ölçülmesinin UCUZ ve sonucunun AYIRT

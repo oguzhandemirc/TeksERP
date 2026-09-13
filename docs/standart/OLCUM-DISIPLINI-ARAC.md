@@ -137,16 +137,24 @@ Aracın kurulu olması, ölçtüğün sistemle **aynı sürüm hattında** oldu�
 *(d9: `pg_dump` 18.6 ↔ sunucu 16.15 — araç vardı, uyumlu değildi.)*
 **Savunma:** sürüm bağımlı araçta iki sürümü de yaz.
 
-### Bir YOKLUK iddiası, bakılan DİZİNİ gösterir
-Monorepo'da aynı adı taşıyan iki dizin varken (`scripts/` ↔ `Teks-Erp/scripts/`,
-`src/` ↔ `Teks-Erp/src/`), `ls`in ya da `find`in boş dönmesi **bir ölçüm değildir** —
-aracın `cwd`sini gösterir.
-*(İki vaka, aynı gece: biri "`test_advisory_lock_namespaces` yok" dedi — vardı, komşu
-kökteydi; öteki kapıyı `Teks-Erp/Teks-Erp/`den koşturup `MODULE_NOT_FOUND` aldı ve az
-kalsın "kapı bozuk" diyecekti.)*
-**Savunma:** yokluk iddiasını **`git ls-files | grep`** ile kur — git ağacın TAMAMINA
-bakar, senin `cwd`ine değil. Kardeşi `OLCUM-DISIPLINI-SINIFLAR.md` § "Bende yok" bir
-ölçüm değildir.
+### Boş çıktı bir ÖLÇÜM değildir — iki dünya aynı boşluğu üretir
+*"Yok"* ile *"var ama eşleşmedi"* **aynı boş çıktıyı** verir. Ayıran şey çıktı değil
+**ÇIKIŞ KODUDUR** — ve `2>/dev/null` mesajı yutar ama **kodu yutmaz**:
+
+```
+grep -c DESEN <var olan dosya>   → çıktı boş, çıkış 1   (dosya var, eşleşme yok)
+grep -c DESEN <olmayan dosya>    → çıktı boş, çıkış 2   (dosya yok)
+```
+*(Ölçüldü 2026-09-13: `2>/dev/null` ile İKİ çıktı da boş, iki çıkış kodu FARKLI.
+Vaka 01'e ait: bir bekçinin "yok" sanılması, dosya yerindeyken desenin eşleşmemesiydi.)*
+
+> **Yokluk iddiasını POZİTİF kanıtla kur:** `git ls-files | grep` (ağacın tamamı,
+> `cwd`den bağımsız) — ya da `ls <yol>` çalıştır ve **çıkış kodunu OKU, stderr'i yutma**.
+
+⚠️ **Ayrı ve hâlâ geçerli bir vaka — aynı üst sınıftan:** bir kapı yanlış dizinden
+koşturulup `MODULE_NOT_FOUND` verdi ve az kalsın *"kapı bozuk"* denecekti. Monorepo'da
+`cwd` gerçekten önemlidir; ama 01'in vakasında **sebep o değildi**. Ve evde zaten yazılı
+olan satırın ihlali: **`>/dev/null` gerekçeyi yutar.**
 
 ### Bir tarayıcı, kendi TARİF ETTİĞİ şeyin ÖRNEĞİNİ gerçek sanır
 Biçim tarif eden belgeler (`README`, şablon, başlık örneği) tarayıcının kapsamı
