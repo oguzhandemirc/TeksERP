@@ -142,6 +142,24 @@ aynı yöntemi koşturması, ölçümü **tekrarlar**, doğrulamaz.
 *(d5 ölçüm + formülasyon · 1e'nin "yazan yolları say, adı arama" şartı bunu
 önceden söylüyordu ve ilk turda yine literal sayıldı.)*
 
+**Kardeşi — MALİYET tahmini de bir popülasyon iddiasıdır ve REÇETEYE karşı ölçülür.**
+Bir tasarım belgesine *"bu dilim dört dosya getirir"* diye yazmak, bir dosya kümesinin
+üyeliğini ilan etmektir; hafızadan yazıldığında ölçülen şey **kişinin o an düşündüğü
+alt küme**dir. *(Vaka 2026-09-13: ekran dilimi sözleşmesine "bayrak DA getirir (dört
+dosya)" yazıldı — modüle ÖZGÜ dört yer sayılmıştı. Ölçüldü: `docs/RECETELER.md`
+§ yeni feature flag bir MODÜL anahtarı için **16 adım** listeliyor ve emsal bir
+ekransız modül anahtarı (`tezgahEnabled`) bugün **20 kod dosyasında** yaşıyor —
+13 ürün + 7 test/fikstür. Atlanan küme rastgele değil: jenerik bayrak sözleşmesinin
+tamamı — `SETTING_KEYS` → okuyucu → `FeatureFlags` → `getFeatureFlags` →
+`setFeatureFlags` → Zod şeması → Electron aynası → panel satırı → `flag-modules` →
+mobil ayna → grandfathering migration.)*
+
+⇒ Kural: ***bir işin büyüklüğünü hafızadan değil, o işin REÇETESİNDEN say.*** Reçete
+varsa tahmin bir ölçüm değildir; reçete yoksa sayı yerine *"ölçülmedi"* yazılır.
+📌 Ayırt edici soru: *"bu dörtte hangi ADIMLAR var, ve reçetedeki geri kalanı KİM
+yapıyor?"* — cevabı olmayan her maliyet sayısı, yapılacak işin bir kısmını
+GÖRÜNMEZ kılar ve dilimi planlayan kişi onu başkasının borcu sanır.
+
 ### Yüklemi GEVŞEK bir cırcır, DOĞRU kodu da ihlal sayar — kapı düzeltmeyi CEZALANDIRIR
 Bir cırcırın sayısı, kuralın cümlesiyle aynı şeyi ölçmüyorsa iki kusur birden doğar:
 sayı yanlış OLUR **ve tek görünür çare (tavanı yükseltmek) ihlal olmayan bir şeyi
