@@ -66,6 +66,10 @@ gönderir.
 Üçüncüsü bugüne kadar yazılı değildi; ilk ikisi kök `CLAUDE.md` § Tek kaynak'ta
 "boğaz-ikiz" olarak duruyor. O cümlenin genişletilmesi kullanıcının yetkisindedir;
 burada bekçi yüzeyi için yazılıdır.
+Kardeşleri § Teşhis mi, ölçüm mü (teşhis KURALA çevrilmeden önce) ve
+§ Bir kapının TETİĞİ bir OLAYI ölçer; TANISI bir ANLAM iddia eder
+(`OLCUM-DISIPLINI-KAPI-OLUMU.md`) — **üçü aynı ayrımın üç yüzü**: burada teşhisin
+YÜKLEMİ, orada teşhisin KİPİ, ötekinde teşhisin KURALA dönüşmesi.
 
 ## Doğru çıkması yöntemi doğrulamaz
 Sonuç doğru olduğu için yöntemi aklamak, başlı başına bir ölçüm hatasıdır.
@@ -301,6 +305,8 @@ yönetici oturum olsa bile. Teşhis bir hipotezdir; kural bir taahhüt.
 ⚠️ Ve **yanlış panzehir, panzehirsizlikten kötüdür**: doğru refleksi tüketir. Yanlış
 çıkan bir sınıf düzeltilirken **mekanizması** değiştirilir, başlığı değil — okuyan aynı
 adı arayıp yeni mekanizmayı bulmalı.
+Kardeşleri § Teşhis mesajı da bir yüklemdir ve § Bir kapının TETİĞİ bir OLAYI ölçer;
+TANISI bir ANLAM iddia eder (`OLCUM-DISIPLINI-KAPI-OLUMU.md`).
 
 ## Hangi hipotez ölçülür
 

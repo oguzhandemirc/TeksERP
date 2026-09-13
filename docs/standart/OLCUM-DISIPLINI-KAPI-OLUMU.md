@@ -249,6 +249,8 @@ envanterin güvenilirliği, çürütülen satırlarını da taşımasıyla ölç
 Kardeşleri § Bir kapının "neden kırmızı" cevabı, kapının ÇALIŞTIĞINI varsayar ·
 `OLCUM-DISIPLINI-YUKLEM.md` § Sınırsız eşleşme (yüklem neyi tutar) ve § NE sorduğun kadar
 NEREYE sorduğun (yüklem nereye bakar) — bu ikisi tetiğe, buradaki tanıya aittir.
+Ve `OLCUM-DISIPLINI.md` § Teşhis mesajı da bir yüklemdir (tanının YÜKLEMİ) ·
+§ Teşhis mi, ölçüm mü — kurala çevirmeden önce (tanının KURALA dönüşmesi).
 
 ### Bir kırmızının MESAJI, hangi kontrolün kırmızı olduğunu söylemez
 Kontrol **etiketi** ile kontrol **mesajı** ayrı iki bilgidir ve yalnız etiket hangi

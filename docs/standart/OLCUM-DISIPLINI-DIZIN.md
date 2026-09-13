@@ -24,6 +24,17 @@ bir kereye mahsus üretildi (2026-09-13); bundan sonrasını üreteç değil KAP
 Sayı bir ölçümdür ve bu satır da kapı altındadır: **147 başlık / 10 dosya**
 (ölçüldü 2026-09-13; kapı her koşumda yeniden sayar ve sayı tutmazsa kırmızı verir).
 
+⚙️ **MÜKERRER TARAMASI (dizinin ilk kullanımı, 2026-09-14):** 147 başlık çiftlenip
+sözcük örtüşmesi (Jaccard ≥ 0,28) ölçüldü → **9 aday, mükerrer YOK**; dokuzun altısı
+*"→ ayrı dosya"* işaretçi başlığı, üçü bilerek koşut sınıf (`Sayı yazma` ↔ `Çapa yazma`,
+⑦ ↔ ⑧ — metinleri birbirine zaten atıf yapıyor). Bulunan tek gerçek boşluk **eksik
+KARDEŞ BAĞI**ydı, mükerrer değil: teşhis üçlüsü (yüklem · kip · kurala dönüşme) birbirine
+işaret etmiyordu; aynı commit'te bağlandı.
+⚠️ **Bu taramanın SINIRI beyan edilir:** sözcük örtüşmesi yalnız AYNI KELİMELERLE yazılmış
+iki başlığı görür — *aynı sınıfı BAŞKA kelimelerle yazan* iki başlığı **göremez**, ki bu
+dizinin var oluş sebebi tam olarak odur. ⇒ Tarama, okumanın yerine geçmez; **yeni sınıf
+açan kişi tabloyu yine baştan sona okur.**
+
 | # | başlık | dosya |
 |---|---|---|
 |  | § Kurtarıcı kurallar — birbirinin tersi, ikisi de üç saniye | (`OLCUM-DISIPLINI.md`) |
