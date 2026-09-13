@@ -13,6 +13,7 @@
 //   §3 Deposuz top DAMGALANIR ve satırı yazılır (sessiz atlama 2026-09-13'te kalktı)
 //   §4 Dispozisyon motoru (WO kapanış) depoya indirirken PRODUCTION satırı yazar
 //   §5 İptal (CANCELLED) satır YAZMAZ — stok dışından stok dışına
+//   §6 Dispozisyon motoru da depo DAMGALAR (ikinci ortak motor)
 // =============================================================================
 import { Prisma, RollForm, RollStatus, WarehouseEventType } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -126,6 +127,28 @@ async function main(): Promise<void> {
     `satır=${mDisp.length} sebep=${String(mDisp[0]?.reasonCode)}`,
   );
   check("§5 ⭐ İptal satır YAZMADI (stok dışından stok dışına)", (await movementsOf(rCancel)).length === 0);
+
+  // ── §6 — DİSPOZİSYON MOTORU da damgalar (ikinci ortak motor) ──────────────
+  // `roll-disposition.helper` üç çağıranın (WO kapanış · WO iptal · parti düşürme)
+  // ortak boğazıdır; damgasız hâlde deposuz topu defter süzgecinde ATLIYORDU.
+  const rDispNoWh = await mkRoll("F", gWh.code, gWh.id, null);
+  await prisma.$transaction(async (tx) => {
+    await applyRollDispositionsTx(tx, {
+      origin: "WO_CLOSE", reason: "bekçi: deposuz topu depoya indir",
+      rolls: [snap(rDispNoWh)], dispositions: [{ rollId: rDispNoWh, action: "WAREHOUSE", qualityGradeId: gWh.id }],
+    });
+  });
+  const dispNoWhRoll = await prisma.roll.findUnique({
+    where: { id: rDispNoWh }, select: { warehouseId: true },
+  });
+  const mDispNoWh = await movementsOf(rDispNoWh);
+  check(
+    "§6 ⭐ Dispozisyonda deposuz top DAMGALANDI ve satırı YAZILDI",
+    dispNoWhRoll?.warehouseId === warehouse.id && mDispNoWh.length === 1 &&
+      mDispNoWh[0]?.toWarehouseId === warehouse.id &&
+      mDispNoWh[0]?.reasonCode === STOCK_MOVE_REASON.DISPOSITION,
+    `damga=${String(dispNoWhRoll?.warehouseId === warehouse.id)} satır=${mDispNoWh.length}`,
+  );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }

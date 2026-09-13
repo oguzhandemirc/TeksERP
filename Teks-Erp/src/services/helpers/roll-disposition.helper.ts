@@ -22,6 +22,7 @@
 // =============================================================================
 import { WarehouseEventType, Prisma, RollStatus } from "@prisma/client";
 import { WAREHOUSE_STOCK_STATUSES } from "./warehouse-stock.helper";
+import { warehouseStampManyTx } from "./warehouse.helper";
 import { postStockMove, qtyYazilabilir } from "./warehouse-ledger.helper";
 import { STOCK_MOVE_REASON } from "../../constants/stock-move-reasons";
 import { AppError } from "../../utils/app-error";
@@ -280,13 +281,20 @@ export async function applyRollDispositionsTx(
     // `warehouseId`/`currentQty` çağıranın anlık görüntüsünden DEĞİL, claim'den
     // SONRA taze okunur — araya giren bir işlem metrajı değiştirmiş olabilir.
     if (WAREHOUSE_STOCK_STATUSES.includes(target)) {
+      // ⚠️ DEPO DAMGASI TERFİNİN PARÇASIDIR (2026-09-13): mal stok kümesine
+      // giriyorsa deposu DOLU olmak zorunda. Damgasız hâlde aşağıdaki süzgeç
+      // deposuz topu ATLIYOR ve hatayı görünmez kılıyordu — tek semptom
+      // `WAREHOUSE`/`STOCK` statüsünde `warehouseId: null` bir satırdı.
+      // Damga claim'den SONRA koşar ve mevcut depoyu EZMEZ.
+      await warehouseStampManyTx(tx, ids);
       const fresh = await tx.roll.findMany({
         where: { id: { in: ids } },
         select: { id: true, warehouseId: true, currentQty: true },
       });
       for (const f of fresh) {
-        // 0 metrajlı top için hareket YAZILMAZ (deposuz dalla aynı sınıf) —
-        // aksi halde WO kapanışı kapının haklı fırlatmasıyla 500'e düşerdi.
+        // 0 metrajlı top için hareket YAZILMAZ — taşınacak mal yok. Deposuzluk
+        // ARTIK bu sınıfta değil: damga onu yukarıda kapattı, yani buraya düşen
+        // deposuz bir top damganın çalışmadığını söyler (varsayılan depo yok).
         if (!f.warehouseId || !qtyYazilabilir(f.currentQty)) continue;
         await postStockMove(tx, {
           rollId: f.id,
