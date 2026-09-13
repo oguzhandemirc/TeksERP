@@ -256,3 +256,40 @@ yoksa **tek soruya iki KATMANDA mı**? İlki bölünür; ikincisi bölünmez, ya
 
 📌 Ve bu, gecenin genel dersinin kapı yüzü: **tavan bir ARAÇTIR, bir HÜKÜM değil** —
 sayı doğru, çıkarım ayrı bir iş.
+
+## Cırcıra İKİ sonda gerekir — negatif sonda yetmez
+
+Bir cırcır (taban yalnız düşer) iki ayrı yeteneği vardır ve **negatif sonda yalnız
+birini ölçer**:
+
+```
+NEGATİF sonda : ihlal ekle  → sayı ARTAR, kapı kırmızı   ✓ "kapı ısırıyor mu"
+POZİTİF sonda : borcu KAPAT → sayı DÜŞER                  ✓ "taban inebiliyor mu"
+```
+
+> **Tabanı DÜŞÜREMEYEN bir cırcır, kapısızlıktan KÖTÜDÜR** — borç kapatılamaz, sayı hiç
+> inmez, kapı ilk sıkışmada susturulur, üstelik *"çalışıyor"* görünerek.
+
+*(Vaka `ce666b78`, 2026-09-13: B kolunun pozitif sondası, negatif sondanın **yapısal
+olarak göremeyeceği** bir kusuru buldu — yüklem `Kapanır:` alanını `bekçi:`
+backtick'lerinin İÇİNDE arıyordu, oysa o bir KARDEŞ alan. Bir kurala kapanma koşulu
+eklemek sayıyı düşürmüyordu. `B−` 37→38 kırmızı ✓ · `B+` 38→37 TUTMADI ✗.)*
+
+📌 Ve bu, *"sonda doğru alana dokunduğunu da ölçmelidir"* kuralının bir adım ötesi:
+**doğru alana dokunuldu, kapı kırmızı verdi, VE YİNE DE bozuktu.** İkisi farklı şey
+ölçüyor.
+
+## Commit kapısı BEKÇİLERİ koşmaz
+
+Commit kapısı tip + lint + lint tavanı + hızlı testi koşar; **bekçileri koşmaz.**
+⇒ Yeni bir dosya **yalnız ELLE koşturulduğu kadar ölçülür.**
+
+> **Yeni bir dosya yazdığında, o dizini tarayan BÜTÜN tarayıcılara koştur** — yalnız
+> seni yakalayana değil.
+
+*(Vaka `643cc52c`, 2026-09-13: aynı gün İKİ oturum aynı bedeli CI'da ödedi — ikisi de
+kendi indirdikleri mandalın saatler sonra kendi yeni dosyalarını yakalamasıyla. Biri
+altı tarayıcıyı birden koşturarak dersi genelleştirdi.)*
+
+📌 **Kendine uygulanmayan kural için tek çare KAPIDIR**; *"bunu biliyorum"* bir kapı
+değildir. İki vakada da yakalayan belge değil kapı oldu.

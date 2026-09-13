@@ -216,3 +216,15 @@ aynı yöntemi koşturması, ölçümü **tekrarlar**, doğrulamaz.
 ② yüklemi kapanışa taşı (doğrudan çağrı değil, ulaşılan tüm yazma yolları).
 *(d5 ölçüm + formülasyon · 1e'nin "yazan yolları say, adı arama" şartı bunu
 önceden söylüyordu ve ilk turda yine literal sayıldı.)*
+
+### Mutasyonun ürettiği sayı, MUTASYONDAN gelmiş olabilir
+Bir sondanın ürettiği sayıyı bulgu saymadan önce, o sayının **mutasyonun KENDİSİNDEN**
+gelip gelmediğini ölç. Sonda aracı ölçtüğü şeyin içine karıştığında ürettiği sayı bir
+ölçüm DEĞİLDİR.
+*(Vaka `5ac6e830`, 2026-09-13: bir sentinel değer (`"bicimsiz"`) truthy bir string
+olduğu için eleme koşulundan geçti ve döngü onun **8 KARAKTERİNİ** gezdi — 8 × 27 = 216
+sahte kırmızı. Sayı bir bulgu sanıldı ve onunla başka bir oturumun DOĞRU teşhisi
+"düzeltildi". Sentinel adıyla elenince aynı mutasyonda sonuç **0 · 0**.)*
+> **`!x` bir sentinel'i ELEMEZ** — sentinel ekleyen, her TÜKETİCİYİ adıyla eler.
+Kardeşi § 4 · Araç ölçümün içinde.
+

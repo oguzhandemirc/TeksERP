@@ -255,6 +255,22 @@ aynı dallar. *(1e/6e)* Kardeşi § Paylaşılan `node_modules` üstünde worktr
 **Savunma:** commit öncesi dalı ve hedefi AYRI adımda oku
 (`git rev-parse --abbrev-ref HEAD` · `git rev-parse HEAD main`), sonra commit et.
 
+### Aynı KÖR NOKTAYI paylaşan iki ölçüm birbirini DOĞRULAMAZ
+Bağımsızlık **KAYNAKTA değil YÖNTEMDE** olmalı. Farklı kişilerin aynı yöntemi
+koşturması ölçümü **TEKRARLAR, doğrulamaz**.
+*(Vaka `39c963b4`, 2026-09-13: iki oturum bağımsız ölçtü, İKİSİ DE "6 izsiz script"
+buldu — ve ikisi de yanlıştı. Pozitif kontrol sayıyı çökertti: 1 gerçek ihlal + servis
+üzerinden yazanlar (iz VAR) + populasyonun üyesi bile olmayan salt-okunur bir kapı.
+Ortak kör nokta: ikisi de literal desen aradı, DOLAYLI çağrıyı göremedi.)*
+> **Bir yüklem "yazma yolu"nu KAPANIŞINA kadar izlemiyorsa** (script → servis →
+> audit/Prisma), meşru olanları ihlal gösterir.
+**Savunma:** "iki bağımsız araç" derken araçların **yöntemi** farklı mı, onu ölç.
+
+### Aynı kusuru İKİ dosyadan ölçebiliyorsan BOŞ olanı seçmek bir ÖLÇÜM KARARIDIR
+Çekişmeli bir dosyada sonda atmak, sondanın sonucunu **başkasının yarım işine** bağlar.
+*(Vaka `73919ea0`, 2026-09-13: sonda bilerek karşı taraftan kuruldu, çünkü asıl dosyada
+o an başka bir oturum çalışıyordu.)*
+
 ## KATMAN 2 · Ölçümden sonraki adım → ayrı dosya
 
 [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) (`docs/standart/OLCUM-DISIPLINI-CIKARIM.md`) — 2026-09-13'te buradan bölündü; katalog o gün **+20 sınıf** aldı ve bu dosya tavana 1.667 bayt kalmıştı. Tavan yükseltilmedi.

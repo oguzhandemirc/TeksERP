@@ -185,6 +185,34 @@ Kardeşi § "Bu benim değil" bir ÖLÇÜM olmalı.
 ama kapsam değildir; "beyan ettim" ile "ölçtüm" aynı cümle değil. *(1e)*
 Kardeşleri § "Atlanan" sayısı bir ALT SINIRDIR ve § Bir atlama, komşusunu da götürürse.
 
+### Ad kalıbı bir ÖLÇÜT değildir
+*"`_CANCEL` yok"* ile *"geri alınamıyor"* **ayrı şeylerdir**. Ölçüt, mekanizmanın
+**BEYAN EDİLMİŞ** olmasıdır; adı serbesttir.
+*(Vaka `9d2e2bb1`, 2026-09-13: kök kural ters yolu ENUM ADIYLA tanımlıyordu
+(`*_CANCEL`). Ölçüldü: 13 olay türünün 6'sının tersi MEKANİZMA olarak VAR ama adı
+`_CANCEL` değil — net ters yine kendisi · karşı grup · `reversedAt` damgası ·
+`reversesMovementId` bağı. Kapı zaten dört mekanizmayı BEYANDAN okuyordu; kök cümle
+okuyanı tek biçime yönlendiriyordu.)*
+
+### Bir borç, koşulu sağlandığı için değil ÖNCÜLÜ yanlış olduğu için de kapanabilir
+Borcu kapatmadan önce **öncülünü yanlışlanabilir bir sondayla sına** — kapanış
+"yapıldı"dan değil "gerekmiyormuş"tan da gelebilir.
+*(Vaka `76b5a739`, 2026-09-13: not *"aynı ilişki iki rejimle kapanıyor"* diyordu; sonda
+gösterdi ki ikinci rejim bir silme damgası değil bir denormdu — öncül yanlıştı.)*
+
+### Kapanma koşulunu yazan not, KOŞULUN SAĞLANDIĞINI da aynı nota yazmalıdır
+Kapanış başka bir yere yazılırsa borç **orada kapanır, burada yaşamaya devam eder**.
+*(Vaka `73919ea0`, 2026-09-13: kapalı bir borcun notu hâlâ *"bekçisi YOK"* diyordu ve iş
+olarak dağıtıldı; ölçülmeseydi var olan bir kapının İKİZİ yazılacaktı — **iki kapı iki
+gerçek demektir**.)*
+> **Bu sınıfın maliyeti ötekilerden farklıdır:** diğer bayatlama biçimleri YANLIŞ bir
+> şey söyler; bu **DOĞRU bir şeyi FAZLA UZUN** söyler, ve bedeli yapılmış işi tekrar
+> yaptırmaktır.
+
+### Kapsamını yazmayan borç, okuyanı YANLIŞ YERE gönderir
+*(Aynı commit: *"sevkte iz kayboluyor"* sanılan borcun kapsamı ölçülünce yalnız ELLE
+KALDIRMA yoluna daraldı; sevk yolu zaten soft'tu.)*
+
 ### İki operasyonel kural
 
 - **Paket içinde kırmızı + tek başına yeşil ⇒ kusur kodda değil, koşumun DURUMUNDA.**

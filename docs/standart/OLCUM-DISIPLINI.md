@@ -167,6 +167,11 @@ mi, "bugün böyle" mi?*
 2. **`dosya:satır` bir ÇAPA değildir ama bir KONUMDUR**, ve ayırt edici bir sembol
    yokken hâlâ en iyisidir. ⇒ Kural *"satırı sil"* DEMEZ; **"ayırt edici bir sembol
    VARSA onu EKLE"** der. Ekleme, silmeden farklı bir iştir.
+3. **Deterministik bir çapa varsa, sayı çapası KALDIRILIR — tazelenmez.** Bayat satır
+   numaralarını güncellemek *saati sıfırlamaktır*: aynı çapa yarın yine kayar.
+   *(Vaka `76b5a739`, 2026-09-13: bir tablodaki 12 şema satır çapasının 12'si de kaymıştı
+   (~600 satır). Sayılar tazelenmedi, çapalar KALDIRILDI — model adı zaten deterministik
+   bir çapadır: `grep "^model X"`.)*
 
 *(Vaka 2026-09-13: 14 "dönüştürülebilir" çapa adayının 3'ü iyileşiyordu, 10'u
 `dosya:satır`dan DAHA belirsiz bir yere işaret ediyordu, 1'i sahte eşleşmeydi —
