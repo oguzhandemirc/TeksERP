@@ -19,8 +19,32 @@
 //      toplam şişer, oran kayar, hiçbir hata çıkmaz.
 //   3. Fason atfı — firması çözülemeyen fason topu "Fabrika içi"ne yazılırsa
 //      rapor tam da cevaplamak için var olduğu sorunun TERSİNİ söyler.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// 2026-09-13 — §2b: "1. kalite" ROLDEN çözülür, SIRALAMADAN değil
+//
+// Karne başlığı `sortOrder`ın İLK satırını "en üst kalite" sayıyordu ve
+// `isActive` SÜZMÜYORDU. İki kusur, ikincisi ağır:
+//   (a) pasifleştirilmiş bir kademe en küçük `sortOrder`a sahipse başlık
+//       metriği sessizce ona kayardı;
+//   (b) `QualityGradeRole.FIRST`in İKİNCİ tanımıydı — karar ① `role`ü
+//       indirdiği gün bu satır "aynı soruyu cevaplayan iki yol" sınıfına
+//       düştü. Kusuru karar üretmedi ama karar DOĞURDU; bırakmak, karar ①'in
+//       indiği gün kendi tutarsızlığını taşıması olurdu.
+//
+// ⚠️ (a) BUGÜN ISIRMIYORDU (canlıda üç kalite de aktif ve sıra doğru) — yani
+// bu bölüm bir onarım değil, bir SED. O yüzden fixture tuzağı KENDİ kurar:
+// pasif bir kademeyi `sortOrder = 0` ile katalogun önüne koyar.
+//
+// NEGATİF SONDA — KOŞTURULDU (2026-09-13): servis eski davranışa
+// (`catalog[0]`) geri çevrildi → bu bölüm **2 KIRMIZI** verdi (31/2); rol
+// hâline dönünce 33/0. Dosya `cp`+sha256 ile BİREBİR geri yüklendi.
+// Beklenen kod da ORTAMDAN değil KATALOGDAN çözülür (`role=FIRST AND isActive`)
+// — sabit yazsaydık bekçi tam da ölçtüğü kusuru işlerdi.
+// ─────────────────────────────────────────────────────────────────────────────
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
+import { RollStatus, QualityGradeRole } from "@prisma/client";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { getQualityScorecard } from "../src/services/reports/quality-scorecard.report.service";
@@ -39,6 +63,8 @@ function check(label: string, ok: boolean, extra = ""): void {
 }
 
 const TAG = `TEST-QSC-${Date.now()}`;
+/** Bu bekçinin yarattığı kalite satırları — `finally`de FK sırasına göre silinir. */
+const createdGradeIds: string[] = [];
 const RANGE: DateRange = {
   from: new Date("2099-03-01T00:00:00.000Z"),
   to: new Date("2099-03-31T23:59:59.999Z"),
@@ -172,6 +198,49 @@ async function main(): Promise<void> {
   );
   const fireRow = sc.byItem.find((r) => r.key === item2.id);
   check("SCRAP (fire) SAYILIR — üretim sonucudur", fireRow !== undefined && fireRow.totalQty === 220, `gelen: ${fireRow?.totalQty}`);
+
+  // ── 2b) "1. KALİTE" ROLDEN ÇÖZÜLÜR, SIRALAMADAN DEĞİL ─────────────────────
+  // Beklenen cevap ORTAMDAN değil KATALOGDAN çözülür — sabit kod yazsaydık
+  // bekçi tam da ölçtüğü kusuru işlerdi.
+  const firstRow = await prisma.qualityGrade.findFirst({
+    where: { role: QualityGradeRole.FIRST, isActive: true },
+    select: { code: true },
+  });
+  const firstRoleCode = firstRow?.code ?? null;
+  // Karne başlığı 2026-09-13'e kadar `sortOrder`ın İLK satırını "en üst kalite"
+  // sayıyordu ve `isActive` süzmüyordu. İki kusur:
+  //   (a) PASİFLEŞTİRİLMİŞ bir kademe en küçük sortOrder'a sahipse başlık
+  //       metriği sessizce ona kayardı;
+  //   (b) daha ağırı — `role=FIRST`in İKİNCİ bir tanımıydı (karar ①).
+  // Bu bölüm (a)'yı SAHADA kurar: pasif bir kademeyi sortOrder=0 ile katalogun
+  // önüne koyar ve başlığın DEĞİŞMEDİĞİNİ ölçer. Eski kodda burası kırmızıydı.
+  const tuzak = await prisma.qualityGrade.create({
+    data: {
+      code: `${TAG}-PASIF`,
+      name: `${TAG} Pasif Kademe`,
+      sortOrder: 0, // katalogun EN BAŞI — eski kod bunu "1. kalite" sayardı
+      isActive: false,
+      targetStatus: RollStatus.WAREHOUSE,
+    },
+    select: { id: true, code: true },
+  });
+  createdGradeIds.push(tuzak.id);
+  const scPasif = await getQualityScorecard(RANGE);
+  check(
+    "⭐ PASİF kademe sortOrder=0 olsa bile başlık metriği DEĞİŞMEZ (rolden çözülür)",
+    scPasif.topGradeCode !== tuzak.code,
+    `topGradeCode=${scPasif.topGradeCode} (tuzak: ${tuzak.code})`,
+  );
+  check(
+    "başlık metriği FIRST rolünün satırını gösterir",
+    scPasif.topGradeCode === firstRoleCode,
+    `topGradeCode=${scPasif.topGradeCode} · FIRST rolü=${firstRoleCode}`,
+  );
+  check(
+    "kod ve AD aynı satırdan gelir (eskiden ad catalog[0]'dandı)",
+    scPasif.summary.topGrade === null || scPasif.summary.topGrade.code === scPasif.topGradeCode,
+    `code=${scPasif.summary.topGrade?.code} · topGradeCode=${scPasif.topGradeCode}`,
+  );
 
   // ── 3) TEK KAYNAK: kırılım toplamları özetle BİREBİR ──────────────────────
   // Dört tabloyu ayrı sorgulardan üretmenin klasik arızası: birbirini tutmayan
@@ -318,6 +387,10 @@ main()
   .finally(async () => {
     if (createdRollIds.length > 0) {
       await prisma.roll.deleteMany({ where: { id: { in: createdRollIds } } });
+    }
+    // Kalite EN SON: toplar ona FK ile bağlı (`rolls.qualityGradeId`).
+    if (createdGradeIds.length > 0) {
+      await prisma.qualityGrade.deleteMany({ where: { id: { in: createdGradeIds } } });
     }
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();

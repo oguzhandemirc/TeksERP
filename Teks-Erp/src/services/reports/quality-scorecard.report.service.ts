@@ -36,17 +36,28 @@
 // o an saklanmıyor. Sonradan kesilen top karnede küçülür. Aynı restatement
 // ailesinden; başka bir kolon eklemeden verilebilecek en doğru cevap bu.
 //
-// ── "1. KALİTE" KODA GÖMÜLMEZ ───────────────────────────────────────────────
-// Başlık metriği "katalogda EN ÜST SIRADAKİ kalitenin payı"dır ve o kalite
-// `quality_grades.sortOrder` ile veriden çözülür (canlı: 1.KALITE=10, A1=20,
-// FIRE=30). Kodda `code === "1.KALITE"` araması YAPILMAZ: fabrika kaliteyi
-// yeniden adlandırabilir/sıralayabilir (kalite kataloğu panelden yönetiliyor) ve
-// sabit kod o gün sessizce yanlış bir karne üretirdi. Ekran da başlığı bu addan
-// yazar — yani katalog değişince kart kendiliğinden doğru kalır.
+// ── "1. KALİTE" KODA GÖMÜLMEZ — KAYNAK SIRALAMA DEĞİL, ROL ──────────────────
+// Başlık metriği "1. kalitenin payı"dır ve o kalite katalogtaki
+// `role = FIRST` satırından çözülür (`helpers/quality-role.helper.ts`).
+// Kodda `code === "1.KALITE"` araması YAPILMAZ: fabrika kaliteyi yeniden
+// adlandırabilir ve sabit kod o gün sessizce yanlış bir karne üretirdi.
+//
+// ⚠️ 2026-09-13 DEĞİŞİKLİĞİ — eskiden kaynak `sortOrder` idi ("en ÜST SIRADAKİ
+// kalite") ve dosya "'1. kalite' kavramı kodda YOK" diyordu. O cümle karar ①
+// ile GEÇERSİZ oldu: kavram artık kodda VAR ve adı `QualityGradeRole.FIRST`.
+// Sıralamayı kaynak bırakmak iki kusur taşıyordu:
+//   1) `isActive` süzülmüyordu — PASİFLEŞTİRİLMİŞ bir kademe en küçük
+//      `sortOrder`a sahipse "en üst kalite" o olurdu (sessiz yanlış karne);
+//   2) daha ağırı: aynı soruya İKİNCİ bir cevap veriyordu. "Bu fabrikada 1.
+//      kalite hangi satır" sorusunun tek kaynağı `role`dür; sıralama bir SUNUM
+//      tercihidir ve bir gün rol ile ayrışır.
+// `sortOrder` bu dosyada YALNIZ kırılım satırlarının GÖSTERİM sırası için
+// okunmaya devam eder — hangi kalitenin "1. kalite" olduğunu artık söylemez.
 // =============================================================================
 
 import prisma from "../../lib/prisma";
-import { Prisma } from "@prisma/client";
+import { Prisma, QualityGradeRole } from "@prisma/client";
+import { loadQualityRoles } from "../helpers/quality-role.helper";
 import type { DateRange } from "./_shared";
 import { factoryDaySql } from "../../constants/time";
 import { K18_DEAD_STATUSES } from "../batch.service";
@@ -73,7 +84,7 @@ export interface ScorecardBreakdownRow {
   label: string;
   rollCount: number;
   totalQty: number;
-  /** En üst sıradaki kalitenin bu satırdaki metrajı. */
+  /** 1. kalite rolündeki (`role=FIRST`) kalitenin bu satırdaki metrajı. */
   topGradeQty: number;
   topGradePct: number;
   /** Kalite kodu → metraj (ekranda kolonlar bu sözlükten çizilir). */
@@ -89,7 +100,7 @@ export interface QualityScorecardSummary {
   gradedQty: number;
   /** Kalitesi HİÇ belirlenmemiş metraj — "0" ile karıştırılmamalı, "bilinmiyor". */
   ungradedQty: number;
-  /** Katalogda en üst sıradaki kalite ve payı; katalog boşsa null. */
+  /** 1. kalite rolündeki kalite ve payı; rol atanmamışsa null (kart çizilmez). */
   topGrade: { code: string; name: string; qty: number; pct: number } | null;
   prevRollCount?: number;
   prevTotalQty?: number;
@@ -103,7 +114,7 @@ export interface QualityScorecard {
   byColor: ScorecardBreakdownRow[];
   bySubcontractor: ScorecardBreakdownRow[];
   daily: Array<{ day: string; totalQty: number; topGradeQty: number; topGradePct: number }>;
-  /** Karne hangi kaliteyi "en üst" saydı — ekran başlığı bunu kullanır. */
+  /** Karne hangi kaliteyi "1. kalite" saydı (rolden) — ekran başlığı bunu kullanır. */
   topGradeCode: string | null;
   /** Kalite kodlarının katalog sırası — tablo kolonlarının sırası bundan gelir. */
   gradeOrder: Array<{ code: string; name: string }>;
@@ -294,12 +305,18 @@ export async function getQualityScorecard(
   range: DateRange,
   compareRange: DateRange | null = null,
 ): Promise<QualityScorecard> {
-  // Katalog sırası veriden gelir — "1. kalite" kavramı kodda YOK (dosya başlığı).
+  // Katalog GÖSTERİM sırası veriden gelir (kırılım satırları bu sırayla çizilir).
   const catalog = await prisma.qualityGrade.findMany({
     orderBy: { sortOrder: "asc" },
     select: { id: true, code: true, name: true, sortOrder: true },
   });
-  const topCode = catalog[0]?.code ?? null;
+  // "1. kalite" ROLDEN çözülür, SIRALAMADAN değil (dosya başlığı, karar ①).
+  // `find` kullanılır `require` değil: karne bir OKUMA yüzeyidir — rolsüz
+  // katalogda 400 vermek yerine başlık metriğini `null` bırakır (ekran
+  // "1. kalite payı" kartını çizmez). Yazma yolları `require` ile fail-closed.
+  const roles = await loadQualityRoles(prisma);
+  const topGrade = roles.find(QualityGradeRole.FIRST);
+  const topCode = topGrade?.code ?? null;
 
   const [cells, prevCells, dailyRows, unanchored] = await Promise.all([
     collectPeriod(range),
@@ -409,10 +426,11 @@ export async function getQualityScorecard(
     totalQty: round1(totalQty),
     gradedQty: round1(totalQty - ungradedQty),
     ungradedQty: round1(ungradedQty),
-    topGrade:
-      topCode && catalog[0]
-        ? { code: topCode, name: catalog[0].name, qty: round1(topQty), pct: pctOf(topQty, totalQty) }
-        : null,
+    // Ad da ROL satırından gelir — `catalog[0].name` sıralamanın ilkiydi ve
+    // rolle ayrışabilirdi (kod bir satırı, ad başka satırı gösterirdi).
+    topGrade: topGrade
+      ? { code: topGrade.code, name: topGrade.name, qty: round1(topQty), pct: pctOf(topQty, totalQty) }
+      : null,
   };
   if (compareRange) {
     summary.prevRollCount = prevTotals.rolls;
