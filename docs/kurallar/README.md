@@ -16,6 +16,7 @@
 | Kalite · İstasyon yeteneği | `docs/kurallar/kalite.md` | 2026-08-02, 2026-08-06, 2026-09-03 |
 | Parti (Batch) | `docs/kurallar/parti.md` |  |
 | Yarı mamul | `docs/kurallar/yari-mamul.md` | 2026-08-26, 2026-08-27 |
+| Dokuma · Dokuma işi · Doff ⚠️ **kâğıtta** | `docs/kurallar/dokuma.md` | 2026-09-13 |
 | Refakat kartı | `docs/kurallar/refakat-karti.md` | 2026-08-05 |
 | Belge · Etiket · Şablon | `docs/kurallar/belge-etiket.md` | 2026-07-30, 2026-08-05, 2026-08-13, 2026-09-04 |
 | Mükerrer · nameFold seddi | `docs/kurallar/mukerrer.md` | 2026-08-21, 2026-08-22, 2026-08-25 |
