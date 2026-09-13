@@ -159,6 +159,22 @@ bir başkasının ağaçtaki commit'siz düzeltmesindendi.)*
 iki tarafı da oku, yalnız ARTIŞI kırmızı say. Kural bir **gözlem**, kalıp onun
 **panzehiri**.
 
+### En ağır biçimi: KANCAYA yapılan commit'siz değişiklik
+
+> **Bir KANCAYA yapılan commit'siz değişiklik, HERKESİN kapısını sessizce değiştirir.**
+
+Kaynak dosyada commit'siz bir değişiklik yalnız **ölçümü bulandırır**; kancada
+(`scripts/hooks/*`, `.githooks/*`) **altyapıyı değiştirir** — bir hatası olsa her
+oturumun commit'i etkilenir ve kimse sahibine atfetmez, çünkü değişiklik hiçbir
+commit'te görünmez.
+
+> **Kapı değişiklikleri ağaçta BEKLEMEZ: ya commit'lidir, ya yoktur.**
+
+*(Vaka 2026-09-13: bir oturum commit kapısının `✅ Teks-Erp · tip (+scripts)` satırından
+"boşluk kapandı, sayaç durdu" sonucunu çıkardı. Ölçüm: `git status --porcelain` → `M`,
+`git show HEAD:scripts/hooks/pre-commit.mjs | grep typecheck:scripts` → BOŞ. Kapı
+değişikliği ağaçta bekliyordu.)*
+
 ## Kırmızıyı sınıflandırma
 
 `gerçek kusur · testin kendi hatası · çevresel · yapısal olarak ölçülemez`
@@ -217,3 +233,26 @@ yanlışmış.** Arka durak varsayımı iki katmanda birden çürüdü.
 **Ve ölçümün VARLIĞI, ölçümün işe yaradığının kanıtı değildir** *(6e)*: yanlış DB ·
 yanlış mekanizma · yanlış zamanlama — üçü de *"ölçüm yapıldı"* satırını sorunsuz geçer.
 Sorulacak şey *"ölçtüm mü"* değil, ***"bu ölçüm yanlış bir dünyada FARKLI çıkar mıydı"***.
+
+## Tavanın beyan edilmemiş ikinci işlevi
+
+> **Bir boyut tavanı yalnız büyümeyi durdurmaz; DUVARA DAYANDIĞI YER, dosyanın bölünme
+> çizgisini gösterir** — ve o çizgi önceden tahmin edilemez, ancak baskı altında görünür.
+
+*(2026-09-13: altı dosya duvara dayandı; beşinde çizgi net çıktı — yöntem ↔ kapı,
+araç ↔ kurgu, kural ↔ envanter…)*
+
+⚠️ **AMA TAVAN YANILABİLİR — ve bugün bir kez yanıldı.** `BACKEND.md` duvara dayandı ve
+**hiçbir dikiş göstermedi**: "içerik yanlış dosyada" hipotezi ölçüldü ve çürüdü
+(taşınabilir aday **%4**), gerçek sebep **kanıt kuyruğuydu** (`zorlama:` + `kanıt:` +
+`devralınan:` = dosyanın **%44'ü**). Orada bölmeye kalkmak **yapay bir çizgi** çizmek
+olurdu.
+
+> **Tavan bir dikiş gösterir — dosyanın içinde gerçekten İKİ İŞ varsa. Yoksa gösterdiği
+> şey dikiş değil, işin kendi BOYUTUDUR.**
+
+**Ayırt eden soru:** baskı noktasındaki içerik **iki farklı SORUYA mı** cevap veriyor,
+yoksa **tek soruya iki KATMANDA mı**? İlki bölünür; ikincisi bölünmez, yalnız ölçülür.
+
+📌 Ve bu, gecenin genel dersinin kapı yüzü: **tavan bir ARAÇTIR, bir HÜKÜM değil** —
+sayı doğru, çıkarım ayrı bir iş.

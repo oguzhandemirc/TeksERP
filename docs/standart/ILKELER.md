@@ -65,9 +65,13 @@ Bu repodaki arızaların en pahalı sınıfı **sessizce yutulan** koddur: kural
 
 **[IL-32] BEYANDAN MANDALA nasıl terfi eder — dört şart, hepsi ölçüldü (d9, 2026-09-13):**
 
-1. **Kök listesi TEK KAYNAKTA yaşamalı ve o kaynak bekçidir**, belge değil.
-   Bugün iki liste var: bekçinin `TR_KOKLER`'i (52 kök, `test_identifier_language.ts:58`)
-   ve ölçümün listesi (39 + 87 kök, `scripts/out/` — **gitignore'lu**). ⚠️ Listeyi bu
+1. **Kök listesi TEK KAYNAKTA yaşamalı ve o kaynak KODDUR**, belge değil.
+   ⏳ **KISMEN karşılandı (durum 2026-09-13):** liste artık ayrı ve izlenen bir eser —
+   `Teks-Erp/scripts/lib/tr-kokler.ts`, dört küme (`TR_DOMAIN_OLCULEN` 25 kök/591 ad ·
+   `TR_DOMAIN_ONGORULEN` 13 kök/0 ad · `TR_GENEL` 64 kök/285 ad ·
+   `TR_KAPSAM_DISI_GEREKCELI`). ⚠️ Ama ölçüldü: dosya bugün **indekste, HEAD'de DEĞİL**
+   (`git show HEAD:` boş) — yani şart **henüz kapanmadı**, inince kapanır. Bekçinin
+   kendi `TR_KOKLER`'i (52 kök) o dosyayı `import` edene kadar İKİ liste yaşıyor. ⚠️ Listeyi bu
    belgeye KOPYALAMAK çözüm değildir: aynı soruyu cevaplayan ikinci bir kaynak, ilkiyle
    birlikte değişmediği gün yanlış olur. **Ölçümün listesi bekçiye birleştirilir.**
 2. **ELEME ADIMI da kurala girer — liste tek başına ölçüm aracının YARISIDIR.**

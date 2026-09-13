@@ -147,6 +147,15 @@ fark tamamen aracın kendi gürültüsüydü.)*
 > çakışmanın ölçüsü olur.
 Kardeşi § Tarama, aradığı şeyin YAZILIŞ BİÇİMİNİ değil KENDİSİNİ sormalı.
 
+⭐ **Ve elemenin kendisi listede DURMALIDIR:**
+> **Eksik bir listeyi "unutulmuş" sanmak, yanlış bir listeden daha kolaydır.**
+> Bilerek dışarıda bırakılan üyeler **gerekçesiyle listede durur** — yoksa sonraki kişi
+> onları "eksik" sanıp ekler ve elemeyi bozar.
+
+*(Emsal: `TR_KAPSAM_DISI_GEREKCELI` — 2–3 harfli çakışan kökler dışarıda tutulduklarını
+ADIYLA ve GEREKÇESİYLE söyleyen bir küme olarak duruyor.)* Bu, *"reddedilen bir şıkkın
+gerekçesi yazılmazsa altı ay sonra yeniden önerilir"* kuralının **veri dosyası** yüzüdür.
+
 ### Boş çıktı bir ÖLÇÜM değildir — iki dünya aynı boşluğu üretir
 *"Yok"* ile *"var ama eşleşmedi"* **aynı boş çıktıyı** verir. Ayıran şey çıktı değil
 **ÇIKIŞ KODUDUR** — ve `2>/dev/null` mesajı yutar ama **kodu yutmaz**:
