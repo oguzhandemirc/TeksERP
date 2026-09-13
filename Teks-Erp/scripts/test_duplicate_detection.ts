@@ -113,11 +113,25 @@ async function main(): Promise<void> {
   //   • sed VARSA  → ikinci kaydın REDDEDİLDİĞİ ölçülür (daha güçlü garanti),
   //   • sed YOKSA  → eski tespit senaryosu aynen koşar.
   // Sabit varsayım yazmak, testi ortama göre yanlış yerden kırmızıya düşürürdü.
-  let colB: { id: string } | null = null;
+  /**
+ * ⚠️ ÇIPLAK `catch` YASAK — bir yokluğa mekanizma atfetmek, o mekanizmayı ÖLÇMEK değildir.
+ * Bağlantı koptuğunda · fikstürde yazım hatası olduğunda · ALAKASIZ bir unique ihlalinde
+ * (ör. fikstürün kendi `code`u çakışırsa `colors_code_key` de P2002 verir) çıplak `catch`
+ * hepsini "sed engelledi" sayar ve YEŞİL basar. Bu yüzden iki şey birden ölçülür:
+ * hata KODU (`P2002`) **ve** KISITA ÖZGÜ ad. Ölçüldü 2026-09-13: aynı kod, ÜÇ farklı kısıt
+ * (`tr_fold_color(name::text)` · `"nameFold"` · `upper(code::text)`).
+ */
+function p2002Kisit(e: unknown, kisitDeseni: RegExp): boolean {
+  const p = e as { code?: string; message?: string };
+  return p?.code === "P2002" && kisitDeseni.test(p.message ?? "");
+}
+
+let colB: { id: string } | null = null;
   let sedEngelledi = false;
   try {
     colB = await prisma.color.create({ data: { code: `${TAG}-R2`, name: `${TAG} 055-BEYAZ`, hex: "#fffffe" }, select: { id: true } });
-  } catch {
+  } catch (e) {
+    if (!p2002Kisit(e, /tr_fold_color\(name/)) throw e;   // beklenmedik hata SESSİZ KALMAZ
     sedEngelledi = true;
   }
   created.colors.push(colA.id, ...(colB ? [colB.id] : []));
@@ -125,7 +139,7 @@ async function main(): Promise<void> {
     check(
       "renk ad seddi exact-fold ikizi ÜRETİLEMEZ kıldı (tespitten güçlü garanti)",
       true,
-      "colors_nameFoldColor_key kurulu",
+      "P2002 · tr_fold_color(name) — kısıt ADIYLA doğrulandı",
     );
   }
   const itA = await prisma.item.create({ data: { code: `${TAG.toLowerCase()}-aktivo`, name: `${TAG} Aktivo Bir`, itemType: "FABRIC" }, select: { id: true } });
@@ -135,8 +149,9 @@ async function main(): Promise<void> {
   let itB: { id: string } | null = null;
   try {
     itB = await prisma.item.create({ data: { code: `${TAG}-AKTIVO`, name: `${TAG} Aktivo Dokuma`, itemType: "FABRIC" }, select: { id: true } });
-  } catch {
-    check("kumaş kod seddi harf-ikizini ÜRETİLEMEZ kıldı", true, "items_code_fold_key kurulu");
+  } catch (e) {
+    if (!p2002Kisit(e, /upper\(code|items_code_fold/)) throw e;   // beklenmedik hata SESSİZ KALMAZ
+    check("kumaş kod seddi harf-ikizini ÜRETİLEMEZ kıldı", true, "P2002 · upper(code) — kısıt ADIYLA doğrulandı");
   }
   const itC = await prisma.item.create({ data: { code: `${TAG}-KV1`, name: `${TAG} Kristal V-01`, itemType: "FABRIC" }, select: { id: true } });
   const itD = await prisma.item.create({ data: { code: `${TAG}-KV2`, name: `${TAG} Kristal V-02`, itemType: "FABRIC" }, select: { id: true } });

@@ -150,6 +150,24 @@ function trackItem(res: { data: unknown }): { id: string; code: string } {
   return item;
 }
 
+/**
+ * ⚠️ ÇIPLAK `catch` YASAK (2026-09-13): bir yokluğa mekanizma atfetmek, o mekanizmayı
+ * ÖLÇMEK değildir. Bu dosyada İKİ mekanizma var ve **etiket onları ayırmak zorundadır**:
+ *   · **SED**   → DB katmanı, `P2002` + kısıt `upper(code::text)` / `items_code_fold`
+ *   · **GUARD** → uygulama katmanı, `assertNameNotDuplicate` → **409**
+ * Kural kitabı ikisini bilerek ayırıyor (*"uygulama bekçisi anlaşılır 409'u verir; DB seddi
+ * yalnız yarış/config/import/elle SQL yollarını kapatan SESSİZ SON HATTIR"*), o yüzden
+ * ikisini tek etikette "sed" diye anmak kural kitabını da yalanlar.
+ */
+function sedMi(e: unknown): boolean {
+  const p = e as { code?: string; message?: string };
+  return p?.code === "P2002" && /upper\(code|items_code_fold/.test(p.message ?? "");
+}
+function guardMi(e: unknown): boolean {
+  const p = e as { statusCode?: number; status?: number; message?: string };
+  return (p?.statusCode ?? p?.status) === 409;
+}
+
 async function main(): Promise<void> {
   try {
     // ── [1] KÖRLÜK ZEMİNİ: doğru katlama fonksiyonu kullanılıyor mu ───────────
@@ -228,9 +246,10 @@ async function main(): Promise<void> {
         histA.code !== histB.code && foldCodeForCompare(histA.code) === foldCodeForCompare(histB.code),
         `${histA.code} ↔ ${histB.code}`,
       );
-    } catch {
+    } catch (e) {
+      if (!sedMi(e)) throw e;   // beklenmedik hata SESSİZ KALMAZ
       check(
-        "DB seddi case-ikizini ÜRETİLEMEZ kıldı (uygulama guard'ından güçlü garanti)",
+        "DB seddi case-ikizini ÜRETİLEMEZ kıldı (uygulama guard'ından güçlü garanti) — P2002 · upper(code)",
         true,
         "items_code_fold_key kurulu",
       );
@@ -360,6 +379,7 @@ async function main(): Promise<void> {
     // notu). `isActive:false` muaf DEĞİL: kısmi index yalnız mezar taşını
     // dışlıyor. Sed yoksa (temizlik bekleyen prod) senaryo aynen koşar.
     let ikizKuruldu = true;
+    let ikizKurulduEngeli = "(engel yok)";
     try {
       console.log("\n[4b] Aktif harf-ikizi varken tam eşleşmeli diriltme");
       const twinCode = `TEST-TWIN-${TS}`;
@@ -408,15 +428,20 @@ async function main(): Promise<void> {
       );
 
       // ── [5] Harf farkıyla eşleşen PASİF kayıt(lar) → 409, çıkış yolu söylenir ─
-    } catch {
+    } catch (e) {
+      // İki mekanizma da meşru ön koşul engelidir; AMA hangisi olduğu BASILIR ve
+      // üçüncü bir şey olursa SESSİZ KALMAZ (etiket "sed" diyorsa guard'ı sed sanmayalım).
+      if (!sedMi(e) && !guardMi(e)) throw e;
+      ikizKurulduEngeli = sedMi(e) ? "SED (P2002 · upper(code))" : "GUARD (409 · assertNameNotDuplicate)";
       ikizKuruldu = false;
     }
     if (!ikizKuruldu) {
-      check("[4b] harf-ikizi senaryosu ATLANDI — sed onu üretilemez kıldı", true);
+      check("[4b] harf-ikizi senaryosu ATLANDI — ön koşulu engelleyen: " + ikizKurulduEngeli, true);
     }
     // ⚠️ [5] de case-ikizi üretiyor (canlı MC155/Mc155/mc155 emsali) — sed
     // kurulu DB'de kurulamaz. Aynı uyarlama.
     let ikiz5 = true;
+    let ikiz5Engeli = "(engel yok)";
     try {
       console.log("\n[5] Harf farkıyla pasif eş (canlı MC155/Mc155/mc155 emsali)");
       const ambCode = `TEST-AMB-${TS}`;
@@ -454,11 +479,15 @@ async function main(): Promise<void> {
         ambMsg,
       );
 
-    } catch {
+    } catch (e) {
+      // İki mekanizma da meşru ön koşul engelidir; AMA hangisi olduğu BASILIR ve
+      // üçüncü bir şey olursa SESSİZ KALMAZ (etiket "sed" diyorsa guard'ı sed sanmayalım).
+      if (!sedMi(e) && !guardMi(e)) throw e;
+      ikiz5Engeli = sedMi(e) ? "SED (P2002 · upper(code))" : "GUARD (409 · assertNameNotDuplicate)";
       ikiz5 = false;
     }
     if (!ikiz5) {
-      check("[5] pasif harf-eşi senaryosu ATLANDI — sed onu üretilemez kıldı", true);
+      check("[5] pasif harf-eşi senaryosu ATLANDI — ön koşulu engelleyen: " + ikiz5Engeli, true);
     }
 
     // §6 yalnız tarihsel ikiz GERÇEKTEN varsa ölçülebilir. Sed kurulu bir DB'de

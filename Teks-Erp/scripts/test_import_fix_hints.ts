@@ -116,8 +116,13 @@ async function main(): Promise<void> {
     let a2: { id: string } | null = null;
     try {
       a2 = await prisma.color.create({ data: { code: `${uniq}-A2`.slice(0, 32), name: ambigName } });
-    } catch {
-      check("renk ad seddi BELİRSİZ ad durumunu üretilemez kıldı", true, "colors_nameFoldColor_key kurulu");
+    } catch (e) {
+      // ⚠️ ÇIPLAK `catch` YASAK: bir yokluğa mekanizma atfetmek onu ÖLÇMEK değildir.
+      // Alakasız bir unique ihlali (fikstürün kendi `code`u) de P2002 verir ⇒ kod YETMEZ,
+      // kısıt ADI da ölçülür. Beklenmedik hata sessizce yeşile dönmez.
+      const p = e as { code?: string; message?: string };
+      if (!(p?.code === "P2002" && /tr_fold_color\(name/.test(p.message ?? ""))) throw e;
+      check("renk ad seddi BELİRSİZ ad durumunu üretilemez kıldı", true, "P2002 · tr_fold_color(name) — kısıt ADIYLA doğrulandı");
     }
     created.push(a1.id, ...(a2 ? [a2.id] : []));
     if (a2) {
