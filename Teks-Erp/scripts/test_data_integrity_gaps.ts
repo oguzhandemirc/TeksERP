@@ -24,9 +24,17 @@ import { ProductRecipeService } from "../src/services/product-recipe.service";
 import { RouteService, ROUTE_SERVICE_CONFIG } from "../src/services/route.service";
 import { ItemService } from "../src/services/item.service";
 import { ColorService } from "../src/services/color.service";
+import { atlamaDefteri } from "./lib/atlama";
 
 let pass = 0;
 let fail = 0;
+// ⚠️ ATLAMA ARTIK SAYILIR VE BEYAN EDİLİR (2026-09-13). Eskiden `check(…, true)`
+// ile GEÇTİ sayılıyordu: kapsam kaybı sıfır değil EKSİ idi — kapsanmayan şey
+// yeşili ARTIRIYORDU. Bu daldan geçen koşum "ölçtüm" değil "bakamadım" der.
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
+
 function check(label: string, ok: boolean, extra = "") {
   if (ok) { pass++; console.log(`✅ ${label}${extra ? " — " + extra : ""}`); }
   else { fail++; console.log(`❌ ${label}${extra ? " — " + extra : ""}`); }
@@ -82,7 +90,7 @@ async function main() {
       made.templateIds.push((t1 as { id: string }).id);
       await expectReject("Şablon: tr-duyarsız ad mükerrer 409",
         () => PermissionManagementService.createTemplate({ name: `tdg şablon ${sfx}`, permissionIds: [perm.id] }, undefined), "zaten var");
-    } else { check("Şablon testi atlandı (permission yok)", true); }
+    } else { ATLAMA.atla("şablon tr-duyarsız mükerrer testi", "permission yok"); }
 
     // --- 4) Kullanıcı adı harf-duyarsız ---
     const u1 = await PermissionManagementService.createUser(
@@ -169,7 +177,7 @@ async function main() {
     await prisma.customer.deleteMany({ where: { id: { in: made.customerIds } } }).catch(() => {});
   }
 
-  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   await prisma.$disconnect();
   process.exit(fail > 0 ? 1 : 0);
 }

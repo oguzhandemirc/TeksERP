@@ -13,6 +13,7 @@ import { ensureTestDyeHouse, ensureTestSander } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus, StepStatus, WorkOrderStatus, PrintedDocType, PrintedDocStatus } from "@prisma/client";
+import { atlamaDefteri } from "./lib/atlama";
 
 let ITEM = "", GRADE = "", ADMIN = "", ST_BOYA = "", ST_ZIMPARA = "", ST_TAMBUR = "", SUB_BOYER = "", SUB_KESTEL = "", CUSTOMER = "";
 let GRADE_CODE = "";
@@ -39,6 +40,13 @@ async function resolveFixtures(): Promise<void> {
 const sub = new SubcontractorService();
 const cards = new TravelerCardService();
 let pass = 0, fail = 0;
+// ⚠️ ATLAMA ARTIK SAYILIR VE BEYAN EDİLİR (2026-09-13). Eskiden `check(…, true)`
+// ile GEÇTİ sayılıyordu: kapsam kaybı sıfır değil EKSİ idi — kapsanmayan şey
+// yeşili ARTIRIYORDU. Bu daldan geçen koşum "ölçtüm" değil "bakamadım" der.
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
+
 function check(label: string, cond: boolean, extra = ""): void {
   if (cond) { pass++; console.log(`  ✓ ${label}${extra ? ` — ${extra}` : ""}`); }
   else { fail++; console.log(`  ✗ FAIL: ${label}${extra ? ` — ${extra}` : ""}`); }
@@ -170,7 +178,7 @@ async function main(): Promise<void> {
       const ord = await prisma.order.create({ data: { orderNumber: `TST-DSS-NM-${stamp}`, customerId: CUSTOMER, status: "APPROVED", lines: { create: [{ itemId: otherItem.id, width: WIDTH, quantity: 100 }] } }, include: { lines: true } });
       orderIds.push(ord.id);
       await expectThrow("eşleşmeyen item satırı → reddedilir", () => sub.executeDirectShip({ dispatchId: dId, reason: "eşleşmeyen satır", customerId: CUSTOMER, orderLineAllocations: [{ orderLineId: ord.lines[0].id, qty: 50 }] }, ADMIN), "eşleşmiyor");
-    } else { check("(eşleşmeyen item testi atlandı — başka item yok)", true); }
+    } else { ATLAMA.atla("eşleşmeyen item satırı testi", "başka aktif item yok"); }
     // iptal sipariş
     const cancLine = await makeOrderLine(200);
     await prisma.order.updateMany({ where: { lines: { some: { id: cancLine } } }, data: { status: "CANCELLED" } });
@@ -321,7 +329,7 @@ async function main(): Promise<void> {
   }
 
   console.log(`\n──────────────────────────────────────────`);
-  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
 }
 
 async function cleanup(): Promise<void> {

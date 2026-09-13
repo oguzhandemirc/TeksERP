@@ -49,9 +49,17 @@ import { TamburManualService } from "../src/services/tambur-manual.service";
 import { createManualMoveFixture } from "./fixture-manual-move";
 import { RollStatus } from "@prisma/client";
 import { readBatchAutoCreateEnabled } from "../src/services/system-setting.service";
+import { atlamaDefteri } from "./lib/atlama";
 
 let pass = 0;
 let fail = 0;
+// ⚠️ ATLAMA ARTIK SAYILIR VE BEYAN EDİLİR (2026-09-13). Eskiden `check(…, true)`
+// ile GEÇTİ sayılıyordu: kapsam kaybı sıfır değil EKSİ idi — kapsanmayan şey
+// yeşili ARTIRIYORDU. Bu daldan geçen koşum "ölçtüm" değil "bakamadım" der.
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
+
 function check(label: string, ok: boolean, extra = ""): void {
   if (ok) {
     pass++;
@@ -271,7 +279,7 @@ async function main(): Promise<void> {
       select: { id: true },
     });
     if (!otherItem) {
-      check("(atlandı) ikinci aktif ürün yok", true);
+      ATLAMA.atla("ikinci aktif ürün senaryosu", "ikinci aktif ürün yok");
     } else {
       let e5 = errInfo(null);
       try {
@@ -351,7 +359,7 @@ async function main(): Promise<void> {
     console.log("\n(temizlendi — TEST-PB fixture'ları silindi)");
   }
 
-  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   await prisma.$disconnect();
   await pool.end();
   process.exitCode = fail > 0 ? 1 : 0;

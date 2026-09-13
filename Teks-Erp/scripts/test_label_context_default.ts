@@ -13,11 +13,19 @@ import {
 } from "../src/services/helpers/label-routing.resolver";
 import { AppError } from "../src/utils/app-error";
 import type { LabelKind } from "@prisma/client";
+import { atlamaDefteri } from "./lib/atlama";
 
 const KIND = "ROLL_RAW" as LabelKind; // string literal — modül-üstü enum deref TDZ yasağı
 
 let pass = 0;
 let fail = 0;
+// ⚠️ ATLAMA ARTIK SAYILIR VE BEYAN EDİLİR (2026-09-13). Eskiden `check(…, true)`
+// ile GEÇTİ sayılıyordu: kapsam kaybı sıfır değil EKSİ idi — kapsanmayan şey
+// yeşili ARTIRIYORDU. Bu daldan geçen koşum "ölçtüm" değil "bakamadım" der.
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
+
 function check(label: string, ok: boolean, extra = "") {
   if (ok) { pass++; console.log(`✅ ${label}${extra ? " — " + extra : ""}`); }
   else { fail++; console.log(`❌ ${label}${extra ? " — " + extra : ""}`); }
@@ -106,7 +114,7 @@ async function main() {
     check("hardDelete(A): müşteri atamaları temizlendi", routes === 0);
     check("hardDelete(A): deletedAt damgalı + pasif", aDeleted?.deletedAt != null && aDeleted?.isActive === false);
   } else {
-    check("hardDelete müşteri-atama temizliği (müşteri fixture yok — atlandı)", true);
+    ATLAMA.atla("hardDelete müşteri-atama temizliği", "müşteri fixture yok");
   }
 
   // --- Geri yükleme: C'yi default'luktan düşür, orijinali geri koy ---
@@ -145,6 +153,6 @@ main()
       console.error("Cleanup hatası:", e);
     }
     await prisma.$disconnect();
-    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
     process.exit(fail > 0 ? 1 : 0);
   });

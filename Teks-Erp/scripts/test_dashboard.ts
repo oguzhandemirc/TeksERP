@@ -8,9 +8,17 @@
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { DashboardService } from "../src/services/dashboard.service";
+import { atlamaDefteri } from "./lib/atlama";
 
 let pass = 0;
 let fail = 0;
+// ⚠️ ATLAMA ARTIK SAYILIR VE BEYAN EDİLİR (2026-09-13). Eskiden `check(…, true)`
+// ile GEÇTİ sayılıyordu: kapsam kaybı sıfır değil EKSİ idi — kapsanmayan şey
+// yeşili ARTIRIYORDU. Bu daldan geçen koşum "ölçtüm" değil "bakamadım" der.
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
+
 function check(label: string, ok: boolean, extra = "") {
   if (ok) { pass++; console.log(`✅ ${label}${extra ? " — " + extra : ""}`); }
   else { fail++; console.log(`❌ ${label}${extra ? " — " + extra : ""}`); }
@@ -35,7 +43,7 @@ async function main() {
       typeof r.id === "string" && typeof r.code === "string" && typeof Number(r.queueCount) === "number",
     );
   } else {
-    check("istasyon yok — boş dizi kabul (şekil testi atlandı)", true);
+    ATLAMA.atla("istasyon şekil testi", "istasyon yok");
   }
 
   // 3) Açık hata sayacı canlı: TEST rollError yarat → openCount artar
@@ -67,14 +75,14 @@ async function main() {
       const after = await DashboardService.getDefectsSummary();
       check("yeni açık hata openCount'u artırdı", after.openCount === before.openCount + 1, `${before.openCount}→${after.openCount}`);
     } else {
-      check("item/defectType yok — canlı sayaç testi atlandı", true);
+      ATLAMA.atla("canlı hata sayacı testi", "item/defectType yok");
     }
   } finally {
     if (errorId) await prisma.rollError.delete({ where: { id: errorId } }).catch(() => {});
     if (rollId) await prisma.roll.delete({ where: { id: rollId } }).catch(() => {});
   }
 
-  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   await prisma.$disconnect();
   process.exit(fail > 0 ? 1 : 0);
 }
