@@ -366,10 +366,19 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
 export type OlayTersYolu =
   /** Tersi YOK ve olmamalı — kararın kendisi nihaidir. */
   | { tur: "TERMINAL"; gerekce: string }
-  /** Tersi AYRI BİR İLERİ OLAYDIR (bağ yok, karşı yön). */
-  | { tur: "KARSI_OLAY"; kod: string; gerekce: string }
-  /** Tersi `reversesMovementId` ile BAĞLI yazılır. */
-  | { tur: "BAGLI_TERS"; kod: string }
+  /**
+   * Tersi AYRI BİR İLERİ OLAYDIR (bağ yok, karşı yön). `tersYazan`: karşı olayı
+   * yazan fonksiyon — §13f onu kodda arar.
+   */
+  | { tur: "KARSI_OLAY"; kod: string; gerekce: string; tersYazan: TersYazan[] }
+  /**
+   * Tersi `reversesMovementId` ile BAĞLI yazılır. `tersYazan`: ters satırı yazan
+   * fonksiyon(lar) — §13f onu kodda arar. NEDEN (1c ölçtü 2026-09-13): `CUT_DISCARD`ı
+   * bu kümeye kod YOKKEN eklemek kapıyı 168/0 yeşil bırakıyordu — beyan ile kod
+   * arasında hiçbir bağ ölçülmüyordu, yalan söyleyen yeşil. Sembol adı bir çapadır:
+   * yeniden adlandırılır ya da silinirse kapı düşer.
+   */
+  | { tur: "BAGLI_TERS"; kod: string; tersYazan: TersYazan[] }
   /**
    * Bu kodun KENDİSİ bir ters kayıttır; hangi ilerinin tersi olduğunu söyler.
    * Birden çok ileri kod AYNI ters kodla terslenebilir (ölçüldü 2026-09-13:
@@ -385,29 +394,36 @@ export type OlayTersYolu =
   | { tur: "BORC"; ne: string; kanit: string; sahibi: string };
 
 export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
-  PRODUCTION_ISSUE: { tur: "KARSI_OLAY", kod: "WO_DETACH", gerekce: "attachRolls ↔ detachRolls, ikisi de PRODUCTION olayı, karşı yön" },
-  WO_DETACH: { tur: "TERS_KODU", ileri: "PRODUCTION_ISSUE" },
-  PRODUCTION_RECEIPT: { tur: "BAGLI_TERS", kod: "KURSUN_REOPEN" },
+  PRODUCTION_ISSUE: { tur: "KARSI_OLAY", kod: "WO_DETACH", gerekce: "attachRolls ↔ detachRolls, ikisi de PRODUCTION olayı, karşı yön",
+    tersYazan: [{ dosya: "src/services/workorder.service.ts", sembol: "detachRolls" }] },
+  // WO_DETACH TERS_KODU DEĞİL (ölçüldü 2026-09-13): yazıcısı `detachRolls` `postStockMove` ile
+  // İLERİ satır yazar (eventType PRODUCTION, reasonCode WO_DETACH), `reverseStockMove` ile
+  // bağlı ters DEĞİL — 1e'nin işaret ettiği tutarsızlık. Karşı olay çifti SİMETRİKTİR:
+  // attach'ın karşısı detach, detach'ın karşısı attach.
+  WO_DETACH: { tur: "KARSI_OLAY", kod: "PRODUCTION_ISSUE", gerekce: "detachRolls ↔ attachRolls — karşı yön, ileri satır (postStockMove), bağ yok",
+    tersYazan: [{ dosya: "src/services/workorder.service.ts", sembol: "attachRolls" }] },
+  PRODUCTION_RECEIPT: { tur: "BAGLI_TERS", kod: "KURSUN_REOPEN", tersYazan: [{ dosya: "src/services/kursun-qc.service.ts", sembol: "reopenStep" }] },
   KURSUN_REOPEN: { tur: "TERS_KODU", ileri: "PRODUCTION_RECEIPT" },
-  TAMBUR_FINALIZE: { tur: "BAGLI_TERS", kod: "TAMBUR_UNDO" },
+  TAMBUR_FINALIZE: { tur: "BAGLI_TERS", kod: "TAMBUR_UNDO", tersYazan: [{ dosya: "src/services/tambur-undo.service.ts", sembol: "applySingle" }, { dosya: "src/services/tambur-undo.service.ts", sembol: "applySingleRestore" }, { dosya: "src/services/tambur-undo.service.ts", sembol: "applyFull" }] },
   TAMBUR_UNDO: { tur: "TERS_KODU", ileri: ["TAMBUR_FINALIZE", "CUT_SPLIT"] },
-  ENTRY_RECEIPT: { tur: "KARSI_OLAY", kod: "ROLL_CANCEL", gerekce: "topun doğuşunun tersi kayıttan düşmesidir; ayrı olay, bağ yok" },
-  ROLL_CANCEL: { tur: "BAGLI_TERS", kod: "CANCEL_RESTORE" },
+  ENTRY_RECEIPT: { tur: "KARSI_OLAY", kod: "ROLL_CANCEL", gerekce: "topun doğuşunun tersi kayıttan düşmesidir; ayrı olay, bağ yok",
+    tersYazan: [{ dosya: "src/services/inventory.service.ts", sembol: "softDelete" }] },
+  ROLL_CANCEL: { tur: "BAGLI_TERS", kod: "CANCEL_RESTORE", tersYazan: [{ dosya: "src/services/inventory.service.ts", sembol: "restoreCancelledRoll" }] },
   CANCEL_RESTORE: { tur: "TERS_KODU", ileri: "ROLL_CANCEL" },
-  CUSTOMER_RETURN: { tur: "BAGLI_TERS", kod: "RETURN_CANCEL" },
+  CUSTOMER_RETURN: { tur: "BAGLI_TERS", kod: "RETURN_CANCEL", tersYazan: [{ dosya: "src/services/return.service.ts", sembol: "cancelReturn" }] },
   RETURN_CANCEL: { tur: "TERS_KODU", ileri: "CUSTOMER_RETURN" },
-  TRANSFER: { tur: "BAGLI_TERS", kod: "TRANSFER_CANCEL" },
+  TRANSFER: { tur: "BAGLI_TERS", kod: "TRANSFER_CANCEL", tersYazan: [{ dosya: "src/services/warehouse-transfer.service.ts", sembol: "cancel" }] },
   TRANSFER_CANCEL: { tur: "TERS_KODU", ileri: "TRANSFER" },
-  SHIPMENT_DISPATCH: { tur: "BAGLI_TERS", kod: "SHIPMENT_CANCEL" },
+  SHIPMENT_DISPATCH: { tur: "BAGLI_TERS", kod: "SHIPMENT_CANCEL", tersYazan: [{ dosya: "src/services/shipping.service.ts", sembol: "writeUndoDispatchLedgerTx" }] },
   SHIPMENT_CANCEL: { tur: "TERS_KODU", ileri: "SHIPMENT_DISPATCH" },
-  KARTELA_DISPATCH: { tur: "BAGLI_TERS", kod: "KARTELA_CANCEL" },
+  KARTELA_DISPATCH: { tur: "BAGLI_TERS", kod: "KARTELA_CANCEL", tersYazan: [{ dosya: "src/services/kartela.service.ts", sembol: "cancelDispatch" }] },
   KARTELA_CANCEL: { tur: "TERS_KODU", ileri: "KARTELA_DISPATCH" },
-  STOCK_COUNT: { tur: "BAGLI_TERS", kod: "STOCK_COUNT" },
+  STOCK_COUNT: { tur: "BAGLI_TERS", kod: "STOCK_COUNT", tersYazan: [{ dosya: "src/services/stock-count-reversal.service.ts", sembol: "reverseTx" }] },
   SCRAP: { tur: "TERMINAL", gerekce: "gerçek fire kararı; doktrin onu arşivleme değil KARAR sayar (kök CLAUDE.md) — geri alınacak şey top değil kararın kendisidir" },
   OPENING: { tur: "TERMINAL", gerekce: "defterin epoch fotoğrafı; ÖNCESİ YOK, dolayısıyla tersi de yok (warehouse-ledger-reverse.helper.ts epoch şerhi)" },
   SHRINK: { tur: "BASKA_DEFTER", nerede: "RollVariance", gerekce: "çekme ÖLÇÜMdür ve `SHRINK_REASON_CODE=\"FASON_CEKME\"` ile varyans defterine yazılır; stok defterinde hiç yazarı yok (ölçüldü 2026-09-13: 0 yazar / 0 satır)" },
 
-  FASON_DISPATCH: { tur: "BAGLI_TERS", kod: "FASON_DISPATCH_CANCEL" },
+  FASON_DISPATCH: { tur: "BAGLI_TERS", kod: "FASON_DISPATCH_CANCEL", tersYazan: [{ dosya: "src/services/subcontractor.service.ts", sembol: "cancel" }] },
   FASON_DISPATCH_CANCEL: { tur: "TERS_KODU", ileri: "FASON_DISPATCH" },
   // ── Beş kod 2026-09-13'te ÖLÇÜLDÜ (82): geri alma yolları OKUNDU, tahmin edilmedi.
   //    Ölçüm STATİKTİR (kod okuması; çalıştırılmadı). Yöntem: her kodun yazan yolu +
@@ -418,7 +434,7 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   // 2026-09-13 (6e): 82'nin ölçtüğü "ters yolu YOK" borcu KAPANDI — `cancelReceipt`
   // doğan toplar için giriş satırını `FASON_RECEIPT_CANCEL` ile tersliyor
   // (`reverseLatestScopedStockMove`, bekçi `test_stock_ledger_fason §9`).
-  FASON_RECEIPT: { tur: "BAGLI_TERS", kod: "FASON_RECEIPT_CANCEL" },
+  FASON_RECEIPT: { tur: "BAGLI_TERS", kod: "FASON_RECEIPT_CANCEL", tersYazan: [{ dosya: "src/services/subcontractor.service.ts", sembol: "cancelReceipt" }] },
   FASON_RECEIPT_CANCEL: { tur: "TERS_KODU", ileri: "FASON_RECEIPT" },
   DISPOSITION: { tur: "BORC",
     ne: "ters yolu KISMİ — bağımsız \"iş emrini yeniden aç\" yolu yok; tambur-undo FULL yalnız ÇOCUK topların satırlarını tersler",
@@ -435,7 +451,7 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   // — ilk koşulsuz sürüm orada TERS ayrışma üretiyordu (durum 0 ↔ defter 40).
   // Ölçen: `test_stock_ledger_tambur_undo` §11 beş dal (A depo-restore · B adım-restore ·
   // C kaynak-arşivde · D SINGLE_RESTORE · E FULL), consistency §31 yetim sondası.
-  CUT_SPLIT: { tur: "BAGLI_TERS", kod: "TAMBUR_UNDO" },
+  CUT_SPLIT: { tur: "BAGLI_TERS", kod: "TAMBUR_UNDO", tersYazan: [{ dosya: "src/services/tambur-undo.service.ts", sembol: "applySingle" }, { dosya: "src/services/tambur-undo.service.ts", sembol: "applySingleRestore" }, { dosya: "src/services/tambur-undo.service.ts", sembol: "applyFull" }] },
   CUT_DISCARD: { tur: "BORC",
     ne: "ters yazıcısı YOK — kesim kalanının atılması (ADJUST çıkış) hiçbir geri alma dalında terslenmez; TERMİNAL olabilir (SCRAP ile aynı sınıf), hüküm sahibinde",
     kanit: "yazan: tambur.service.ts:2939 (`finalizeWarehouseCut` discard dalı, tek ÇIKIŞ satırı — `test_stock_ledger_transform` §D, grup YOK). Geri alma: satır EBEVEYN üstünde ve tambur-undo ebeveyn satırını hiçbir dalda terslemiyor (CUT_SPLIT kanıtıyla aynı). Semantik: kalanı atmak SCRAP gibi bir KARARDIR (kök CLAUDE.md SCRAP'ı karar sayar, tablo TERMINAL tutar) — ama o hüküm CUT_DISCARD için YAZILI DEĞİL ve analoji ölçüm değildir. Kapanır: sahibi TERMINAL hükmü verir (satır TERMINAL + gerekçeye döner) YA DA depo-kesimi geri alması discard satırını bağlı tersler",

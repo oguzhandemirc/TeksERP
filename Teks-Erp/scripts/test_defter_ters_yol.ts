@@ -38,7 +38,8 @@
 //      ters yolu olması HER OLAYININ ters yolu olduğunu söylemez. Bu kol her
 //      `STOCK_MOVE_REASON` kodunun ters yolunu beyana karşı doğrular (evren iki
 //      yönlü · atıflar katalogda gerçek mi · ileri↔ters SİMETRİK mi · beyanlı
-//      kodun yazarı var mı). ⚠️ Kapsamı SEBEP KODU TAŞIYAN satırlardır.
+//      kodun yazarı var mı · §13f her bağlı/karşı çiftin ters yazanı kodda ÇAPALI mı —
+//      KARSI_OLAY da simetrik denetlenir). ⚠️ Kapsamı SEBEP KODU TAŞIYAN satırlardır.
 //
 // DB GEREKTİRMEZ: statik analiz (AST + tip denetleyicisi). Prisma istemcisi
 // açılmaz, havuz kurulmaz.
@@ -375,11 +376,24 @@ console.log("\n=== §13 OLAY DÜZEYİ — her sebep kodunun ters yolu beyanlı m
   // Tek yönlü beyan, ters yolun yanlış koda bağlanmasını SESSİZCE geçirir.
   const asimetri: string[] = [];
   for (const [kod, b] of Object.entries(STOK_OLAY_BEYANI)) {
-    if (b.tur !== "BAGLI_TERS" || b.kod === kod) continue;
-    const karsi = STOK_OLAY_BEYANI[b.kod];
-    // `ileri` tek kod ya da küme: bir ters kod birden çok ileriyi tersleyebilir (TAMBUR_UNDO).
-    if (!karsi || karsi.tur !== "TERS_KODU" || !([] as string[]).concat(karsi.ileri).includes(kod)) {
-      asimetri.push(`${kod} → ${b.kod} (karşı beyan: ${karsi ? karsi.tur : "YOK"})`);
+    if (b.tur === "BAGLI_TERS" && b.kod !== kod) {
+      const karsi = STOK_OLAY_BEYANI[b.kod];
+      // `ileri` tek kod ya da küme: bir ters kod birden çok ileriyi tersleyebilir (TAMBUR_UNDO).
+      if (!karsi || karsi.tur !== "TERS_KODU" || !([] as string[]).concat(karsi.ileri).includes(kod)) {
+        asimetri.push(`${kod} → ${b.kod} (karşı beyan: ${karsi ? karsi.tur : "YOK"})`);
+      }
+    }
+    // KARSI_OLAY da simetriktir: A'nın karşısı B ise B ya "karşım A" der (KARSI_OLAY) ya A'nın
+    // bağlı tersidir (TERS_KODU) ya da kendi ters yolu olan bir ileri olaydır (BAGLI_TERS —
+    // ENTRY_RECEIPT → ROLL_CANCEL: iptalin kendi tersi CANCEL_RESTORE). BORC/TERMINAL/
+    // BASKA_DEFTER bir karşı olay olamaz: yolu olmayan bir şeye "karşı yön" demek boş atıftır.
+    if (b.tur === "KARSI_OLAY") {
+      const karsi = STOK_OLAY_BEYANI[b.kod];
+      const uygun = karsi && (
+        (karsi.tur === "KARSI_OLAY" && karsi.kod === kod) ||
+        (karsi.tur === "TERS_KODU" && ([] as string[]).concat(karsi.ileri).includes(kod)) ||
+        karsi.tur === "BAGLI_TERS");
+      if (!uygun) asimetri.push(`${kod} ⇄ ${b.kod} (karşı olay beyanı: ${karsi ? karsi.tur : "YOK"})`);
     }
   }
   check("§13d ileri ↔ ters simetrik", asimetri.length === 0,
@@ -391,6 +405,24 @@ console.log("\n=== §13 OLAY DÜZEYİ — her sebep kodunun ters yolu beyanlı m
     .filter(([, b]) => b.tur !== "BORC" && b.tur !== "BASKA_DEFTER")
     .map(([k]) => k)
     .filter((k) => !kodKullanimi.has(k));
+  // §13f OLAY DÜZEYİ TERS YAZAN — beyan ile kod arasındaki BAĞ. 1c ölçtü: bir kodu
+  // BAGLI_TERS kümesine kod yokken eklemek kapıyı yeşil bırakıyordu (yalan söyleyen
+  // yeşil). Her BAGLI_TERS ve KARSI_OLAY çifti ters/karşı satırı YAZAN fonksiyonu adıyla
+  // beyan eder; sembol o dosyada tanımlı ve tanımı dışında çağrılıyor olmalı.
+  const olayTersYazanEksik: string[] = [];
+  for (const [kod, b] of Object.entries(STOK_OLAY_BEYANI)) {
+    if (b.tur !== "BAGLI_TERS" && b.tur !== "KARSI_OLAY") continue;
+    if (b.tersYazan.length === 0) { olayTersYazanEksik.push(`${kod}: tersYazan BOŞ`); continue; }
+    for (const ty of b.tersYazan) {
+      const kayit = referanslar.get(ty.sembol);
+      const tanimli = kayit?.tanim.some((x) => x.dosya === ty.dosya) ?? false;
+      if (!tanimli) { olayTersYazanEksik.push(`${kod}: \`${ty.sembol}\` ${ty.dosya} içinde YOK`); continue; }
+      if ((kayit!.disReferans + kayit!.icReferans) === 0) olayTersYazanEksik.push(`${kod}: \`${ty.sembol}\` hiç çağrılmıyor`);
+    }
+  }
+  check("§13f her bağlı/karşı çiftin ters yazanı kodda var ve çağrılıyor", olayTersYazanEksik.length === 0,
+    olayTersYazanEksik.length ? olayTersYazanEksik.join(" · ") : `${Object.values(STOK_OLAY_BEYANI).filter((b) => b.tur === "BAGLI_TERS" || b.tur === "KARSI_OLAY").length} çift, hepsi çapalı`);
+
   check("§13e beyanlı kodun yazarı var", yazarsiz.length === 0,
     yazarsiz.length ? `YAZARI YOK: ${yazarsiz.join(", ")} — kod ölü mü, yazarı mı? (ikisi ayrı sonuç)` : "hepsi kullanılıyor");
 }
