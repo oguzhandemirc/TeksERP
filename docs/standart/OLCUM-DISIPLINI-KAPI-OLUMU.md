@@ -247,3 +247,28 @@ sebep ancak etiket geri gelince göründü.)*
 etiketi de kırpabilir; kırmızı ararken süzgeci **etiket satırına** kur, mesaja değil.
 Kardeşleri § Bir kapının TETİĞİ bir OLAYI ölçer; TANISI bir ANLAM iddia eder ·
 `OLCUM-DISIPLINI-SINIFLAR.md` § SONDA ailesi (e: çıktı kırpıldı).
+
+### …ve etiketi SÜZGEÇ de yiyebilir — damga süzgecinin deseni metnin içinde de geçer
+Üstteki sınıfın ikinci kapısı: etiket **basılmış** olabilir ve yine de elinize
+ulaşmayabilir, çünkü araya koyduğunuz **damga süzgeci** onu yutmuştur. Bu, *araç
+gözlenenin içinde* ailesinin (`OLCUM-DISIPLINI-ARAC.md` § 4) log tarafındaki hâlidir:
+süzgecin deseni, süzdüğü metnin İÇİNDE de geçiyor.
+
+*(Vaka 2026-09-13, yeniden üretildi: CI logundan damga `sed 's/.*Z //'` ile kesiliyordu.
+Bekçi etiketi **`… GÖRÜNMEZ`** — yani **Z ile bitiyor**. `.*` açgözlü olduğu için süzgeç
+SON `Z ` eşleşmesine kadar her şeyi sildi ve geriye yalnız mesaj kaldı.)*
+
+```
+ham      : 2026-09-13T10:22:31.004Z ❌ pasif değer hata listesinde GÖRÜNMEZ — 'X' geçerli değil
+.*Z      : — 'X' geçerli değil                       ← etiket VE ❌ işareti gitti
+^[0-9…]Z : ❌ pasif değer hata listesinde GÖRÜNMEZ — 'X' geçerli değil
+```
+
+⚠️ **Kayıp yalnız etiket değil, KIRMIZI İŞARETİNİN KENDİSİ (`❌`) oldu** — yani çıktı
+"hiç kırmızı yok" gibi okundu. Rapor *"etiket yok"* diye çıktı; etiket vardı.
+
+> **Damga süzgeci BAŞLANGICA ÇAPALI olur** (`^[0-9T:.-]+Z `) ya da hiç süzme.
+> Serbest `.*` içeren her süzgeç, süzdüğü metnin kendi kelimelerine açıktır.
+
+Kardeşi § Bir kırmızının MESAJI, hangi kontrolün kırmızı olduğunu söylemez ·
+`OLCUM-DISIPLINI-YUKLEM.md` § Sınırsız eşleşme (aynı gevşeklik, ölçüm tarafında).
