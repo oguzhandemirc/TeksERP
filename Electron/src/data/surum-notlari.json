@@ -18,7 +18,7 @@
   "yayinlar": [
     {
       "id": "2026-09-13",
-      "baslik": "Sipariş kalemine birim geldi: metre, kilo, adet — kilo/adet kalemde karşılama ölçülmez, sipariş kendiliğinden kapanmaz",
+      "baslik": "Sipariş kalemine birim geldi: metre, kilo, adet — kilo/adet kalemde karşılama ölçülmez, sipariş kendiliğinden kapanmaz; depo defteri kesimi, fasonu, transferi ve kartelayı görüyor, deposuz top kalmıyor",
       "surumler": {
         "panel": "1.3.3",
         "tablet": "1.0.8"
@@ -48,6 +48,46 @@
           "kapsam": "her-ikisi",
           "tip": "yeni",
           "metin": "Alt kalite olarak işaretlenen kalitelerde sevk belgesi ve etiket, müşterinin kendi ürün adını DEĞİL bizim ürün adımızı basıyor — top kime gidiyorsa gitsin. Kurulumda bu işaret 2. kaliteye konuludur. Aynı üründen ve renkten hem 1. kalite hem alt kalite top taşıyan bir satırda da bizim adımız basılır. Müşteri adı sütunu yerinde kalır; yalnız o satırın hücresinde bizim adımız görünür. 1. kalite malda hiçbir şey değişmedi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Kesilen (bölünen) top artık Depo Hareketleri’nde iki satır olarak görünüyor: ana toptan çıkış ve yeni toptan giriş — ikisi aynı dönüşüm grubunda, toplamı sıfır. Önceden kesim deftere hiç yazılmıyordu; 100 metrelik top 40+60 diye bölündüğünde defter “hiçbir şey olmadı” diyor, geçmiş bir tarihe göre alınan stok kesiti yeni topu hiç göremiyordu. Depo toplamı değişmez, yalnız hareket listesi iki satır uzar. Ana toptan düşülen metraj kesim metresi değil, ana topun gerçekten kaybettiği metrajdır: aşımlı kesimde ana top 60 kaybeder, yeni top 100 ile doğar. Bu sürümden önceki kesimler geriye dönük yazılmaz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Fasona sevk iptal edildiğinde top depoya döner ve Depo Hareketleri’ne bu dönüşü gösteren, sevk satırına bağlı bir giriş satırı yazılır. Önceden iptal topu geri getiriyor ama deftere hiçbir şey yazmıyordu; defter malı sonsuza kadar fasonda sayıyor, depo toplamı olduğundan az görünüyordu. Geri dönüş deposu sevk satırındaki depodur, o anki varsayılan depo değil — mal hangi raftan çıktıysa oraya döner. Fasona çıkış bu sürümden önce yapılmışsa (defterde çıkış satırı yoksa) iptal satır yazmaz; çıkışı hiç kaydedilmemiş malı deftere giriş yazmak stok toplamını şişirirdi. Geçmiş onarılmaz, mutabakat raporu bu satırları “ufuk öncesi” diye ayırır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Depo Hareketleri artık fasona çıkışı, fasondan kabulü, depolar arası transferi ve kartela çıkış/dönüşünü de satır olarak gösteriyor; geri alınan her hareketin tersi ileri satıra bağlı yazılıyor ve transferin tersi uçları yer değiştirerek doğuyor. Önceden fasona çıkış ve kartela deftere hiç girmiyordu, transfer geri alınınca ileri satır duruyordu — depo toplamı ile raftaki top sayımı bu yüzden ayrışabiliyordu. Bu sürümden önceki hareketler geriye dönük yazılmaz: eski hareketler için defter ile top listesi arasındaki fark bilinen ve kabul edilmiş bir durumdur; mutabakat raporundaki “defter ufku” bölümü bu farkı ayrı sayar, kusur olarak göstermez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Üretimden çıkan, iptali geri alınan, fason iptalinden dönen ya da iş emrinden çıkarılan her top artık mutlaka bir depoya yazılıyor; deposu yoksa kurulumun varsayılan deposu. Önceden bu yolların bir kısmı topu “depoda” durumuna geçirip depo alanını boş bırakabiliyordu: böyle bir top Depolar ekranında hiçbir depoda sayılmıyor, top listesinde ise “depoda” görünüyordu. Varsayılan depo bulunamıyorsa işlem artık durur ve hangi topların deposuz kaldığını barkoduyla söyler; sessizce geçmez. Bu sürümden önce deposuz kalmış toplar kendiliğinden düzelmez — sunucu her açılışta sayısını uyarı olarak yazar, mutabakat raporunda ayrı bölüm olarak görünür ve toplu düzeltme aracıyla kapatılır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Plan sapması karnesi geri alınmış onayları artık saymıyor; rakam bu yüzden düşebilir — eksilen, daha önce iki kez sayılan onaylardır. Önceden Tambur’da onaylanan bir sapma (renk ya da en planla uyuşmuyor), top geri alınıp yeniden tamburlandığında karnede iki kez sayılıyordu: imza sayısı da metraj da ikiye katlanıyordu. Fason kabulü iptal edilip top geri doğduğunda da eski onay topa yapışık kalıyor, Tambur aynı soruyu bir daha sormuyordu. Şimdi geri alma onayı damgalar: karne yalnız yürürlükteki onayları sayar, Tambur soruyu yeniden sorar. Renk ve en birlikte sapmışsa ikisi tek onaydır ve birlikte geri alınır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Kalite karnesindeki “1. kalite payı” artık kalite kartındaki role (birinci kalite) göre hesaplanıyor, listedeki sıraya göre değil. Kalite kataloğunda sıralamayı değiştirdiyseniz ya da pasife aldığınız bir kalite sıralamada en üstteyse rakam değişir: önceden pasif ya da yanlış sıradaki kalite sessizce “en üst kalite” sayılıyordu ve hiçbir uyarı çıkmıyordu. Kataloğa dokunulmadıysa rakam aynıdır."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "iyilestirme",
+          "metin": "Kalite kodlarını (1K, 2K, HURDA gibi) kataloğu düzenleyerek yeniden adlandırmak artık ekranları bozmuyor: panel ve tablet “birinci kalite / ikinci kalite / fire” ayrımını koddan değil kalite kartındaki rolden okuyor. Önceden kodu değiştirmek, kodu ezberlemiş ekran ve raporların yanlış davranmasına yol açabiliyordu. Kod değiştirmediyseniz hiçbir şey değişmez. Kataloğa yeni kalite eklerken rolünü seçin — rolsüz kalite hiçbir kümeye girmez. Panelde katalog değişikliği en geç 5 dakika içinde görünür; hemen görmek için sayfayı yenileyin."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Sayım stornosu, sayımdan sonra yoluna devam etmiş toplar için (üretime alındı, fasona çıktı, sevk edildi, fireye ayrıldı) artık defter satırı uydurmuyor: o toplar için storno durur ve “geri alınacak giriş kaydı bulunamadı” der. Önceden ters satır topun o anki durumundan türetiliyor, örneğin “sevk edilmiş durumda depoya girdi” gibi hiç olmamış bir olay yazılabiliyordu. Sayımın kendi iptal satırı duruyorsa storno eskisi gibi çalışır."
         }
       ]
     },
