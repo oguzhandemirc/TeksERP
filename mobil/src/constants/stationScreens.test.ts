@@ -17,8 +17,8 @@ describe('stationScreens registry', () => {
     }
   });
 
-  it('tam 4 oturumlu ekran var (KK1/KursunQc/Tambur/TartiPaket)', () => {
-    expect(SESSION_SCREEN_KEYS.sort()).toEqual(['KK1', 'KursunQc', 'Tambur', 'TartiPaket'].sort());
+  it('tam 5 oturumlu ekran var (KK1/KursunQc/Tambur/TartiPaket)', () => {
+    expect(SESSION_SCREEN_KEYS.sort()).toEqual(['KK1', 'KursunQc', 'Tambur', 'TartiPaket', 'Dokuma'].sort());
   });
 
   it('oturumlu ekranların hepsi MOBILE_SCREENS kaydında mevcut', () => {

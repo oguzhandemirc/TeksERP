@@ -8864,3 +8864,31 @@ shippedQty 300→900 · damga `deleteMany`e çevrildi → §1b/§2a/§2c/§3a2/�
 **Sınır:** eski (bugüne dek silinmiş) tahsislerin izi yok — geçmiş onarılmaz (kullanıcı kararı);
 bundan sonra damga. Storno (`undoDispatch`) tahsise dokunmaz (bugün de dokunmuyordu).
 
+
+## 2026-09-14 — TABLET DOFF DİLİMİ İNDİ: Tezgah ekranı (top indir + geri al), WEAVING oturumu, kuyruksuz, SIMULATED beyanlı [ÇEKİRDEK]
+
+**Kapsam (1e; §3.9):** yalnız (4) TOP İNDİR ve geri alması; koşum aç/kapa · duruş · levent ayrı dilim; KK1'in
+iki sorusu ("dokuma mı · hangi indirmeden") ayrı dilim (⓪ KK1 `doffEventId` ucu 01'de indi, tablet formu bekliyor).
+**Ön koşullar (01):** `StationKind.WEAVING` SESSIONABLE + `mobile:dokuma` (fa3f9d1f) · üç GET (`/machine-runs?open=true` ·
+`/machine-doffs?machineId` · `unlinked=true`) (6a0b09f5 → origin b367ae6b). Dilim onların üstüne kuruldu.
+
+**Ne indi:** mobil `Dokuma` ekranı (`screens/Modules/Dokuma/` — ince kabuk 84 satır + `DoffEntryView` · `DoffTodayList` ·
+`DoffFailureModal` + hook'lar `useDoffEntry` (bileşim) · `useDoffMeter` (HAL, `useSackWeigh` kalıbı) · `useDoffLists` ·
+`useDoffMutations` + saf `doffAttempt.ts` / `doffPayload.ts` testli) · `services/doff.service.ts` · kayıt zinciri
+(`MobilePermission` +2 · `MobileScreenKey.Dokuma` · `MOBILE_SCREENS` · `moduleAccents` · `SCREEN_LOADERS` · `stationScreens`
+WEAVING iki harita · `SCREEN_MODULE.Dokuma` · `FeatureFlags.dokumaEnabled` false + `useDokumaEnabled`) · backend
+`permission-catalog` `mobile:dokuma-geri-al` (dar rol muafı) · doff uçları `requireAnyPermission(... MOBILE_DOKUMA)` ·
+`SCREEN_CATALOG` `Dokuma` satırı (+ `mobile:dokuma` muafı düştü, `loom:*` gerekçesi güncellendi) · oturum yükünde
+`machine.productionLineCount` (hat seçici yalnız çok hatlı makinede; ek alan, eski tablet yok sayar).
+
+**Kararlar:** kuyruk YOK — `networkMode:'always'`, çevrimdışıyken İNDİR kilitli (dokuma.md eski "dördü de kuyruğa
+girer" satırı GEÇERSİZ → 1e J.5). `counterSource` her yükte beyan: cihaz `MACHINE` · elle `OPERATOR` · simüle
+**`SIMULATED`** — KK1'in beyansız metre yolu tekrarlanmadı. `clientToken` üç alanlı parmak izi (backend `resolveReplay`
+ile aynı), belirsiz hatada yapışır. Geri alma ayrı yetenek izni; `DOFF_HAS_ROLLS` modal barkod adıyla "geri alınamaz".
+**Bekçi:** `doffAttempt.test` (7) · `doffPayload.test` (11) · `stationScreens.test` 5 ekran · `useVisibleScreens.test`
+(Dokuma yalnız dokuma açıkken, üretime bağlı, satır-yok KAPALI) · `screenModules.test` · backend `test_mobile_screen_permissions`
+(revoke = yetenek muafı) · `test_role_template_catalog §2` (muaf) · `test_screen_catalog §3b` (Dokuma aynası) · mobil jest
+94/94 (909) · mobil tsc/lint tavanı temiz (iki uzun fonksiyon bölündü, `SCREEN_LOADERS` `require` satırı adlı muaf).
+**Ölçülemedi:** gerçek tezgah sayacı (BT-SPP METER cihazı) — HAL yolu `useSackWeigh` ile aynı kodec/transport; sahada
+ölçülür. Sürüm notu: tablet + backend (yeni ekran + yeni izin; `StationKind.WEAVING` ⓪ ile — `minVersion` sorusu 01'in
+notunda); referans fabrikada `dokuma.enabled` KAPALI ⇒ kart yok, etki 0.

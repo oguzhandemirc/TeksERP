@@ -10,8 +10,9 @@ import { MOBILE_SCREENS } from '../types/permissions';
 describe('screenModules — ekran → modül aynası', () => {
   it('üretim modülünün beş ekranı tabloda; çekirdek/planlanan ekranlar tabloda DEĞİL', () => {
     expect(Object.keys(SCREEN_MODULE).sort()).toEqual(
-      ['HizliIsEmri', 'KK1', 'KursunDagitim', 'KursunQc', 'Tambur'].sort()
+      ['Dokuma', 'HizliIsEmri', 'KK1', 'KursunDagitim', 'KursunQc', 'Tambur'].sort()
     );
+    expect(SCREEN_MODULE.Dokuma).toBe('dokumaEnabled');
     for (const k of ['Depo', 'TartiPaket', 'Sevkiyat', 'IadeGirisi', 'Siparis', 'Kumas', 'FasonSevk', 'KartelaSevk']) {
       expect(SCREEN_MODULE[k as keyof typeof SCREEN_MODULE]).toBeUndefined();
     }
@@ -31,8 +32,17 @@ describe('screenModules — ekran → modül aynası', () => {
   });
 
   it('⭐ modül AÇIK → hiçbir ekran false değil (bugünkü liste birebir)', () => {
-    const c = conditionalScreens({ productionEnabled: true });
+    const c = conditionalScreens({ productionEnabled: true, dokumaEnabled: true });
     expect(Object.values(c).every((v) => v === true)).toBe(true);
+  });
+
+  it('⭐ dokuma: satır-yok KAPALI (fail-closed) ve ÜRETİME bağlı (zincir tek yerde)', () => {
+    expect(DEFAULT_FEATURE_FLAGS.dokumaEnabled).toBe(false);
+    expect(conditionalScreens(undefined).Dokuma).toBe(false);
+    expect(conditionalScreens({ productionEnabled: true, dokumaEnabled: true }).Dokuma).toBe(true);
+    // Üretim kapalıyken dokuma açık olsa da ETKİN kapalı — backend requireDokumaEnabled sırası.
+    expect(conditionalScreens({ productionEnabled: false, dokumaEnabled: true }).Dokuma).toBe(false);
+    expect(resolveMobileModuleState({ productionEnabled: false, dokumaEnabled: true }).dokumaEnabled).toBe(false);
   });
 
   it('⭐ bayrak OKUNAMADI → backend satır-yok yönü: üretim AÇIK (fabrikada sıfır fark)', () => {

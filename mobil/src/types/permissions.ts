@@ -32,6 +32,9 @@ export type MobilePermission =
   // panelden SEÇİLİ Tambur operatörüne verilir. Backend uçları bunu ya da
   // süpervizör yetkisi `roll:manual-adjust`'ı kabul eder (requireAnyPermission).
   | 'mobile:tambur-duzelt'
+  // Dokuma (2026-09-14): TEZGAH ekranı + geri alma yeteneği (ayrı yetki, `mobile:tambur-duzelt` emsali).
+  | 'mobile:dokuma'
+  | 'mobile:dokuma-geri-al'
   | 'mobile:*';
 
 /**
@@ -71,7 +74,8 @@ export type MobileScreenKey =
   | 'HizliIsEmri'
   | 'Siparis'
   | 'Kumas'
-  | 'KursunDagitim';
+  | 'KursunDagitim'
+  | 'Dokuma';
 
 export interface MobileScreenMeta {
   key: MobileScreenKey;
@@ -200,6 +204,15 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     label: 'Kurşun Dağıtım',
     icon: 'clipboard-flow-outline',
     description: 'Fason dönüşü iş emirlerini fiziksel kurşun makinelerine dağıt',
+  },
+  {
+    // Tablet TEZGAH ekranı (2026-09-14, dokuma dilimi): top indirme + geri alma;
+    // koşum aç/kapa ve duruş sonraki dilim. WEAVING istasyonunda oturum ister.
+    key: 'Dokuma',
+    permission: 'mobile:dokuma',
+    label: 'Tezgah',
+    icon: 'package-down',
+    description: 'Tezgahtan inen topu kaydet — indirme ve geri alma',
   },
 ];
 

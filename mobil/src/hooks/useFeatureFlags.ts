@@ -26,6 +26,12 @@ export function useProductionEnabled(): boolean {
   return useFeatureFlags().data?.productionEnabled ?? DEFAULT_FEATURE_FLAGS.productionEnabled;
 }
 
+/** Dokuma modülü açık mı? Default FALSE (backend satır-yok değeri) — Tezgah kartı
+ *  bayrak yüklenene dek çizilmez; kapı `useVisibleScreens`tedir. */
+export function useDokumaEnabled(): boolean {
+  return useFeatureFlags().data?.dokumaEnabled ?? DEFAULT_FEATURE_FLAGS.dokumaEnabled;
+}
+
 /** KK1 ham en girişi açık mı? Yüklenene kadar / hata halinde false (gizli). */
 export function useRawWidthEnabled(): boolean {
   return useFeatureFlags().data?.rawWidthEnabled ?? false;

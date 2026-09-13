@@ -7,7 +7,7 @@ import { SCREEN_MODULE } from "../constants/screenModules";
 
 // Bayrak hook'u MOCK: gerçek hook React Query ister; burada ölçülen şey koşul
 // elemesinin bayrağa NASIL bağlandığıdır, sorgunun kendisi değil.
-let mockFlagsData: { productionEnabled?: boolean } | undefined;
+let mockFlagsData: { productionEnabled?: boolean; dokumaEnabled?: boolean } | undefined;
 jest.mock("./useFeatureFlags", () => ({
   useFeatureFlags: () => ({ data: mockFlagsData }),
 }));
@@ -19,7 +19,8 @@ function setPerms(permissions: string[]) {
 const keys = () =>
   renderHook(() => useVisibleScreens()).result.current.visibleScreens.map((s) => s.key);
 const ALL = MOBILE_SCREENS.map((s) => s.key);
-const PRODUCTION = Object.keys(SCREEN_MODULE);
+const PRODUCTION = Object.entries(SCREEN_MODULE).filter(([, m]) => m === 'productionEnabled').map(([k]) => k);
+const DOKUMA = Object.entries(SCREEN_MODULE).filter(([, m]) => m === 'dokumaEnabled').map(([k]) => k);
 
 // =============================================================================
 // 2026-09-14: KOŞULLU EKRAN GERÇEK — tablet modül kapısı.
@@ -34,7 +35,7 @@ const PRODUCTION = Object.keys(SCREEN_MODULE);
 // =============================================================================
 describe("useVisibleScreens (izin ∖ modülü kapalı ekranlar)", () => {
   beforeEach(() => {
-    mockFlagsData = { productionEnabled: true };
+    mockFlagsData = { productionEnabled: true, dokumaEnabled: true };
   });
   afterEach(() => {
     act(() => useAuthStore.setState({ user: null }));
@@ -47,18 +48,28 @@ describe("useVisibleScreens (izin ∖ modülü kapalı ekranlar)", () => {
 
   it("⭐ KAPALI: üretim modülünün beş ekranı elenir, çekirdek ekranlar kalır", () => {
     setPerms(["mobile:*"]);
-    mockFlagsData = { productionEnabled: false };
+    mockFlagsData = { productionEnabled: false, dokumaEnabled: true };
     const visible = keys();
     for (const k of PRODUCTION) expect(visible).not.toContain(k);
-    expect(visible).toEqual(ALL.filter((k) => !PRODUCTION.includes(k)));
+    // Dokuma üretime BAĞLI: üretim kapalıyken o da elenir (zincir tek yerde).
+    expect(visible).toEqual(ALL.filter((k) => !PRODUCTION.includes(k) && !DOKUMA.includes(k)));
     expect(visible).toContain("Depo");
     expect(visible).toContain("Sevkiyat");
   });
 
-  it("⭐ bayrak OKUNAMADI (data yok): backend satır-yok yönü — üretim AÇIK, liste bugünkü", () => {
+  it("⭐ bayrak OKUNAMADI (data yok): backend satır-yok yönü — üretim AÇIK, dokuma KAPALI (referans fabrika)", () => {
     setPerms(["mobile:*"]);
     mockFlagsData = undefined;
-    expect(keys()).toEqual(ALL);
+    expect(keys()).toEqual(ALL.filter((k) => !DOKUMA.includes(k)));
+    expect(keys()).not.toContain("Dokuma");
+  });
+
+  it("⭐ Tezgah kartı yalnız DOKUMA modülü açıkken (fail-closed; referans fabrikada 0 fark)", () => {
+    setPerms(["mobile:dokuma"]);
+    mockFlagsData = { productionEnabled: true, dokumaEnabled: false };
+    expect(keys()).toEqual([]);
+    mockFlagsData = { productionEnabled: true, dokumaEnabled: true };
+    expect(keys()).toEqual(["Dokuma"]);
   });
 
   it("Kurşun Dağıtım kurşun bayrağı/sayaçtan BAĞIMSIZ, yalnız ÜRETİM modülüne bağlı (regresyon)", () => {

@@ -298,6 +298,11 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
     path: "POST /quick-create",
     why: "Saha içi desen oluşturma ayrı bir YETENEK yetkisi (`mobile:kk1-desen`) — her KK1 operatörü ürün kartı açamasın.",
   },
+  {
+    screen: "mobile:dokuma",
+    path: "POST /:p/revoke",
+    why: "Top indirmeyi geri alma ayrı bir YETENEK yetkisi (`mobile:dokuma-geri-al`, 2026-09-14) — defterden satır düşürür; izni olmayanda buton çizilmez, uç da onu ister.",
+  },
   // ── Tambur ekranının EK yetenek yetkileri (2026-08-17'de burada belgelendi) ──
   // Ekranın ana yetkisi `mobile:tambur`; aşağıdaki dört aksiyon BİLİNÇLİ olarak
   // ayrı yetki ister. "Ekran açılıyor ama şu tuş çalışmıyor" sorusunun cevabı

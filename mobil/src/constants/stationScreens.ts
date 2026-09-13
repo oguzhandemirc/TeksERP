@@ -10,7 +10,7 @@
 
 import type { MobileScreenKey } from '../types/permissions';
 
-export type SessionStationKind = 'RAW_QC' | 'PROCESS_QC' | 'TAMBUR' | 'SHIPPING';
+export type SessionStationKind = 'RAW_QC' | 'PROCESS_QC' | 'TAMBUR' | 'SHIPPING' | 'WEAVING';
 
 /** Yerin türü → açılacak ekran. */
 export const SCREEN_BY_STATION_KIND: Record<SessionStationKind, MobileScreenKey> = {
@@ -18,6 +18,7 @@ export const SCREEN_BY_STATION_KIND: Record<SessionStationKind, MobileScreenKey>
   PROCESS_QC: 'KursunQc',
   TAMBUR: 'Tambur',
   SHIPPING: 'TartiPaket', // ekran etiketi "Sevkiyat" (tartım+paket+irsaliye)
+  WEAVING: 'Dokuma', // tezgah = makine; rotada adım DEĞİL, yalnız oturum istasyonu (2026-09-14)
 };
 
 /** Ekran → beklediği yer türü (SessionGate bu eşleşmeyi dayatır). */
@@ -26,6 +27,7 @@ export const STATION_KIND_BY_SCREEN: Partial<Record<MobileScreenKey, SessionStat
   KursunQc: 'PROCESS_QC',
   Tambur: 'TAMBUR',
   TartiPaket: 'SHIPPING',
+  Dokuma: 'WEAVING',
 };
 
 /** Oturum (yer onayı) gerektiren ekranlar. */

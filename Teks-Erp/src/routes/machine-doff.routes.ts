@@ -5,14 +5,15 @@
 // (doff dokumanın olayıdır; kapı ön koşulu üretimi ÖNCE ölçer — ekran dilimiyle
 // doğdu 2026-09-13, bekçi `test_dokuma_regime_gate`) → `requirePermission`.
 // Geri alma AYRI izin (`loom:doff-revoke`): defterden satır düşürür.
-// Tablet dilimi indiğinde uçlar `requireAnyPermission("loom:doff", ...MOBILE)`
-// biçimine geçer; mobil izin kodu o dilimle doğar.
+// Tablet dilimi (2026-09-14): yazma uçları `requireAnyPermission("loom:doff", ...MOBILE_DOKUMA)`
+// — tablet TEZGAH ekranının izni (`mobile:dokuma`) kabul edilir; geri alma
+// `mobile:dokuma-geri-al` (ekran-içi yetenek). Bekçi `test_mobile_screen_permissions`.
 // =============================================================================
 import { Router } from "express";
 import { z } from "zod";
 import { MachineDataSource } from "@prisma/client";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
+import { requireAnyPermission } from "../middlewares/rbac.middleware";
 import { requireDokumaEnabled } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { AppError } from "../utils/app-error";
@@ -27,6 +28,8 @@ router.use(verifyToken, requireDokumaEnabled);
 // Yazma izni olan (loom:doff) da okur; ayrı bir `loom:read` kodu AÇILMADI —
 // listeler yazma yüzeyinin yüzüdür, tek başına verilen bir yetki değil.
 const MOBILE_DOKUMA = ["mobile:dokuma"] as const;
+/** Geri alma ayrı yetenek izni (`mobile:tambur-duzelt` · `shipping:undo-dispatch` emsali). */
+const MOBILE_DOKUMA_GERI_AL = ["mobile:dokuma-geri-al"] as const;
 
 const listSchema = z
   .object({
@@ -126,7 +129,7 @@ const revokeSchema = z
  *       404: { description: Koşum yok }
  *       409: { description: DOFF_RUN_MISMATCH · RUN_REVOKED · DOFF_REVOKED · CLIENT_TOKEN_COLLISION }
  */
-router.post("/", requirePermission("loom:doff"), async (req, res, next) => {
+router.post("/", requireAnyPermission("loom:doff", ...MOBILE_DOKUMA), async (req, res, next) => {
   try {
     const b = openSchema.parse(req.body ?? {});
     res.status(201).json(await openDoff(b, req.user?.userId));
@@ -151,7 +154,7 @@ router.post("/", requirePermission("loom:doff"), async (req, res, next) => {
  *       404: { description: İndirme yok }
  *       409: { description: DOFF_ALREADY_REVOKED · DOFF_HAS_ROLLS }
  */
-router.post("/:id/revoke", requirePermission("loom:doff-revoke"), async (req, res, next) => {
+router.post("/:id/revoke", requireAnyPermission("loom:doff-revoke", ...MOBILE_DOKUMA_GERI_AL), async (req, res, next) => {
   try {
     const id = assertValidUuid(req.params.id, "id");
     const b = revokeSchema.parse(req.body ?? {});

@@ -23,6 +23,8 @@ export interface SessionMachine {
   id: string;
   code: string;
   name: string;
+  /** Üretim hattı sayısı (çift enli tezgah = 2). Eski sunucu göndermez → 1 varsayılır. */
+  productionLineCount?: number | null;
 }
 
 export interface ActiveWorkSession {

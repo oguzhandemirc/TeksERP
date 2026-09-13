@@ -173,4 +173,5 @@ export const moduleAccents: Record<MobileScreenKey, { tint: string; bg: string }
   // Kurşun ailesi (amber) ama KursunQc'den KOYU tonla ayrışır: aynı işin planlama
   // yüzü olduğu anlaşılsın, istasyon ekranıyla karıştırılmasın.
   KursunDagitim: { tint: '#b45309', bg: '#fde68a' },
+  Dokuma: { tint: '#0f766e', bg: '#ccfbf1' },
 };

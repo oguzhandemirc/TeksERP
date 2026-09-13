@@ -77,7 +77,9 @@ function isP2002(e: unknown): boolean {
 export const SESSION_INCLUDE = {
   user: { select: { id: true, username: true, fullName: true } },
   device: { select: { id: true, deviceId: true, name: true, kind: true } },
-  machine: { select: { id: true, code: true, name: true } },
+  // `productionLineCount` (2026-09-14): tezgah ekranı çok hatlı makinede hat seçici çizer;
+  // tek hatta seçici yok. Ek alan — eski tablet yok sayar.
+  machine: { select: { id: true, code: true, name: true, productionLineCount: true } },
   station: { select: { id: true, code: true, name: true, kind: true } },
 } as const;
 

@@ -334,6 +334,8 @@ const mobile: ScreenEntry[] = [
   { key: "Siparis", app: "mobile", modul: "cekirdek:siparis-musteri", title: "Sipariş", requires: ["mobile:siparis"], capabilities: [] },
   { key: "Kumas", app: "mobile", modul: "cekirdek:ana-veri", title: "Kumaş Ekle", requires: ["mobile:kumas"], capabilities: [] },
   { key: "KursunDagitim", app: "mobile", modul: "productionEnabled", title: "Kurşun Dağıtım", requires: ["mobile:kursun-dagitim"], capabilities: [] },
+  // Tablet TEZGAH ekranı (2026-09-14, dokuma dilimi): top indirme + geri alma; koşum/duruş sonraki dilim.
+  { key: "Dokuma", app: "mobile", modul: "dokumaEnabled", title: "Tezgah", requires: ["mobile:dokuma"], capabilities: [{ code: "mobile:dokuma-geri-al", label: "Top indirmeyi geri alabilir" }] },
 ];
 
 /** Tüm ekranlar — masaüstü yetenek kodları etiketlenmiş hâlde. */
@@ -413,12 +415,10 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   { code: "loom:run-revoke", reason: "Koşum geri alma — panel/tablet yüzeyi dokuma dilimiyle doğacak; backend-only." },
   // Dokuma P3b (2026-09-13): doff yazma yüzeyi backend'de doğdu; ekranı tablet tezgah
   // ekranının "İndir" eylemi (DOKUMA-IS-EMRI §3.4) ve henüz yok — ekranla ölü muaf olur.
-  { code: "loom:doff", reason: "Top indirme kaydı — tablet tezgah ekranı (dokuma dilimi) henüz doğmadı; backend-only." },
-  { code: "loom:doff-revoke", reason: "Top indirme geri alma — yüzey dokuma dilimiyle doğacak; backend-only." },
-  // Dokuma ⓪ (2026-09-14): oturum kapısı izni ekrandan ÖNCE doğdu (StationKind.WEAVING ile
-  // aynı commit — yoksa tezgah oturumu fail-open). Tablet TEZGAH ekranı SCREEN_CATALOG'a
-  // girdiği gün bu satır ölü muaf olur ve bekçi kırmızı verir — silinmesi o dilimin işidir.
-  { code: "mobile:dokuma", reason: "Tezgah oturum izni — tablet tezgah ekranı (0c dokuma dilimi) henüz doğmadı; oturum kapısı için erken." },
+  // Doff'un tablet yüzeyi DOĞDU (2026-09-14): tablet `mobile:dokuma` / `mobile:dokuma-geri-al` ile
+  // çağırır; `loom:*` web kodları panelsiz kalır — panel doff yüzeyi yok, kod API/entegrasyon için.
+  { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
+  { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

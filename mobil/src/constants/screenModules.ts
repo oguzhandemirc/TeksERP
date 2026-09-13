@@ -23,7 +23,7 @@ import type { MobileScreenKey } from '../types/permissions';
 import { DEFAULT_FEATURE_FLAGS, type FeatureFlags } from '../services/featureFlag.service';
 
 /** Tablette ekranı olan modül anahtarları (`FeatureFlags` alan adıyla). */
-export type MobileModuleFlag = 'productionEnabled';
+export type MobileModuleFlag = 'productionEnabled' | 'dokumaEnabled';
 
 /** Ekran → modül. Satırı olmayan ekran koşulsuzdur (yalnız izin). */
 export const SCREEN_MODULE: Partial<Record<MobileScreenKey, MobileModuleFlag>> = {
@@ -32,6 +32,8 @@ export const SCREEN_MODULE: Partial<Record<MobileScreenKey, MobileModuleFlag>> =
   Tambur: 'productionEnabled',
   HizliIsEmri: 'productionEnabled',
   KursunDagitim: 'productionEnabled',
+  // Tablet TEZGAH ekranı (2026-09-14) — dokuma modülü; tezgah izlemenin kardeşi, üretime bağlı.
+  Dokuma: 'dokumaEnabled',
 };
 
 export type MobileModuleState = Record<MobileModuleFlag, boolean>;
@@ -40,8 +42,12 @@ export type MobileModuleState = Record<MobileModuleFlag, boolean>;
 export function resolveMobileModuleState(
   flags: Partial<Pick<FeatureFlags, MobileModuleFlag>> | undefined | null
 ): MobileModuleState {
+  // ⚠️ ETKİN değer: dokuma → production zinciri burada çözülür (backend `requireDokumaEnabled`
+  // ve panel `useOperationsVisibilityContext` ile aynı sıra).
+  const productionEnabled = flags?.productionEnabled ?? DEFAULT_FEATURE_FLAGS.productionEnabled;
   return {
-    productionEnabled: flags?.productionEnabled ?? DEFAULT_FEATURE_FLAGS.productionEnabled,
+    productionEnabled,
+    dokumaEnabled: productionEnabled && (flags?.dokumaEnabled ?? DEFAULT_FEATURE_FLAGS.dokumaEnabled),
   };
 }
 

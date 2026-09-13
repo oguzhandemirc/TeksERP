@@ -30,6 +30,9 @@ const SCREEN_LOADERS: Record<MobileScreenKey, () => GatedScreen> = {
   KartelaKabul: () => require('../screens/Modules/KartelaKabul/KartelaKabulScreen').default,
   IadeGirisi: () => require('../screens/Modules/IadeGirisi/IadeGirisiScreen').default,
   HizliIsEmri: () => require('../screens/Modules/HizliIsEmri/HizliIsEmriScreen').default,
+  // Lazy `require` bu tablonun kalıbı (üstteki 15 satırla aynı); tavan sabit kalsın diye adlı muaf.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  Dokuma: () => require('../screens/Modules/Dokuma/DokumaScreen').default,
   Siparis: () => require('../screens/Modules/Siparis/SiparisScreen').default,
   Kumas: () => require('../screens/Modules/Kumas/KumasScreen').default,
   KursunDagitim: () => require('../screens/Modules/KursunDagitim/KursunDagitimScreen').default,

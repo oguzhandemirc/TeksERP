@@ -30,9 +30,8 @@ export type StationKind =
   | 'SUBCONTRACTOR'
   | 'SHIPPING'
   | 'OTHER'
-  // 2026-09-14 (dokuma ⓪): tezgah — rotada ADIM DEĞİL, oturum istasyonu. Tablette
-  // ekranı henüz YOK ⇒ `SessionStationKind`e (stationScreens.ts) GİRMEDİ, bilerek:
-  // tezgahta oturum açılamaz, çökmez (fail-closed); ekran diliminde iki harita eklenir.
+  // 2026-09-14 (dokuma ⓪ → tablet dilimi): tezgah — rotada ADIM DEĞİL, oturum
+  // istasyonu; `SessionStationKind` + `stationScreens.ts` iki haritası `Dokuma`ya açar.
   | 'WEAVING';
 // ⚠️ BACKEND `StepStatus` İLE ELLE SENKRON (schema.prisma → `enum StepStatus`).
 // NEDEN 'CANCELLED' ÇIKARILDI (2026-07-31 denetimi): backend enum'unda yalnız
