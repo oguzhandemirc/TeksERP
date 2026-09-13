@@ -92,8 +92,16 @@ import { allocate, specMatch, type RollSpec, type LineForAlloc } from "./helpers
 // Kabulde ölçülen eni iş emrine yansıtmak için (2026-08-17, madde 12).
 import { workOrderLinkService } from "./workorder-link.service";
 import { recordVarianceTx } from "./helpers/roll-variance.helper";
-import { recordPlanDeviationTx } from "./helpers/tambur-plan-gate.helper";
+import {
+  recordPlanDeviationTx,
+  revokePlanDeviationsTx,
+  findPlanDeviationConfirmationsTx,
+} from "./helpers/tambur-plan-gate.helper";
 import { FASON_RECEIPT_DEVIATION_SOURCE } from "../constants/tambur-plan-gate";
+import {
+  FASON_RECEIPT_CANCEL_CODE,
+  FASON_RECEIPT_CANCEL_TEXT,
+} from "../constants/reason-presets";
 import { allocateShrink } from "./helpers/subcontractor-shrink.helper";
 import {
   SHRINK_REASON_CODE,
@@ -5291,16 +5299,39 @@ export class SubcontractorService {
           reason: "FASON_KABUL_IPTAL",
           userId,
         });
+        // PLAN-SAPMA İMZASI (2026-09-13): kabulde "plandan farklı renk" onaylandıysa
+        // deftere satır yazılmıştı ve Tambur kapısı o satırı görüp soruyu BİR DAHA
+        // SORMUYOR. Kabul iptal edilince o onay geçersizdir — damgalanmazsa, doğan
+        // top diriltildiğinde satır topa geri yapışır ve kapı susmaya devam eder.
+        // ⚠️ Tanecik `confirmationId`: burada imza top başına tektir ama yüklem yine
+        // imza kümesinden geçer (yarım damgalanmış imza tutarlı görünür).
+        const receiptConfirmations = await findPlanDeviationConfirmationsTx(tx, {
+          rollId: { in: bornRollIds },
+        });
+        await revokePlanDeviationsTx(tx, {
+          confirmationIds: receiptConfirmations,
+          reason: "FASON_KABUL_IPTAL",
+          userId,
+        });
         // RollProperty: receipt'ten inherit edilmişti, sil
         await tx.rollProperty.deleteMany({
           where: { rollId: { in: bornRollIds } },
         });
         // Roll status → CANCELLED, currentStepId temizle
+        // ⚠️ SEBEP KODU 2026-09-13'te EKLENDİ: bu yol topu SEBEPSİZ iptal ediyordu
+        //    (data yalnız status + currentStepId), oysa iptal sebebi kataloglu. İki
+        //    işi var — izi satırın KENDİSİNDE bırakmak (audit 6 ayda arşivlenir) ve
+        //    restore guard'ının yedinci dalını beslemek.
+        //    ⚠️ Engeli getiren şey bu KOD değil guard'ın DALI; kod tek başına hiçbir
+        //    engel getirmez (`isUndoSourcedByAudit` ilk satırı kodu görünce `false`
+        //    döner). İkisini karıştırmak kusuru "kapatılmış sanmaya" yol açar.
         await tx.roll.updateMany({
           where: { id: { in: bornRollIds } },
           data: {
             status: RollStatus.CANCELLED,
             currentStepId: null,
+            cancelReasonCode: FASON_RECEIPT_CANCEL_CODE,
+            cancelReason: FASON_RECEIPT_CANCEL_TEXT,
           },
         });
         // Nextstep recompute (cascade roll'lar oradan çıktı, status değişebilir)

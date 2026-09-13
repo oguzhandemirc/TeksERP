@@ -32,6 +32,7 @@ import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
 import { factoryDaySql } from "../../constants/time";
+import { ACTIVE_DEVIATION } from "../helpers/tambur-plan-gate.helper";
 import { round1 } from "./_breakdown";
 
 // ---------- Tipler -----------------------------------------------------------
@@ -104,7 +105,12 @@ export async function getPlanDeviationScorecard(
   range: DateRange,
   compareRange: DateRange | null,
 ): Promise<PlanDeviationScorecard> {
-  const where = { createdAt: { gte: range.from, lte: range.to } };
+  // ⚠️ GERİ ALINMIŞ İMZA SAYILMAZ (2026-09-13): tümden geri alınmış bir kapanışın
+  // sapması karnede tam ağırlıkla duruyordu. `finalize` kaynağında `qtyM` topun
+  // TAMAMI olduğu için geri alınıp yeniden finalize edilen top İKİ tam imza + İKİ
+  // tam metraj üretiyordu. Süzgeç ÜÇ sorgunun ÜÇÜNDE de var — biri unutulursa
+  // kusur yarım kapanır (gün serisi ham SQL'de, karşılaştırma dönemi aşağıda).
+  const where = { ...ACTIVE_DEVIATION, createdAt: { gte: range.from, lte: range.to } };
 
   const rows = await prisma.rollPlanDeviation.findMany({
     where,
@@ -185,6 +191,7 @@ export async function getPlanDeviationScorecard(
       SELECT DISTINCT ON ("confirmationId") "confirmationId", "createdAt", "qtyM" AS qty
       FROM roll_plan_deviations
       WHERE "createdAt" >= ${range.from} AND "createdAt" <= ${range.to}
+        AND "revokedAt" IS NULL
       ORDER BY "confirmationId", "createdAt"
     ) per_conf
     GROUP BY 1
@@ -209,7 +216,7 @@ export async function getPlanDeviationScorecard(
   let previous: PlanDeviationScorecard["previous"] = null;
   if (compareRange) {
     const prevRows = await prisma.rollPlanDeviation.findMany({
-      where: { createdAt: { gte: compareRange.from, lte: compareRange.to } },
+      where: { ...ACTIVE_DEVIATION, createdAt: { gte: compareRange.from, lte: compareRange.to } },
       select: { confirmationId: true, qtyM: true },
     });
     const prevMap = collapseByConfirmation(prevRows);

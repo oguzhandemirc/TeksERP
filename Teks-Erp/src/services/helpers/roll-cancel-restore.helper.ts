@@ -34,7 +34,10 @@
 // =============================================================================
 
 import { RollStatus } from "@prisma/client";
-import { TAMBUR_UNDO_CANCEL_CODE } from "../../constants/reason-presets";
+import {
+  TAMBUR_UNDO_CANCEL_CODE,
+  FASON_RECEIPT_CANCEL_CODE,
+} from "../../constants/reason-presets";
 
 /**
  * Geri alınabilirlik kararı için gereken TÜM sinyaller. Çağıran bunları tek
@@ -139,6 +142,23 @@ export function resolveRollRestoreBlockReason(s: RollRestoreSignals): string | n
       "Bu parça bir Tambur geri almasıyla iptal edilmiş ve metrajı kaynak topa " +
       "iade edilmiş — geri alınamaz. Aynı metrajı yeniden elde etmek için kaynak " +
       "topu tekrar kesin."
+    );
+  }
+  // ⚠️ YEDİNCİ SİNYAL (2026-09-13): iptal bir FASON KABUL İPTALİNİN ürünü mü?
+  // Altıncı sinyalin gerekçesinin BİREBİR AYNISI, yalnız ikinci giriş: kabul
+  // iptali kaynak topu `SUBCONTRACTOR_CONSUMED → AT_SUBCONTRACTOR` geri alır
+  // (ölçüldü) ⇒ doğan top diriltilirse AYNI KUMAŞ İKİ YERDE sayılır — dirilen
+  // doğan top + fasondaki kaynak top. Ve önceki beş sinyal bunu GÖREMİYORDU:
+  // cascade hareketi siliyor değil GERİ ALIYOR (`movementCount` `ACTIVE_MOVEMENT`
+  // sayar ⇒ 0) ve `currentStepId`i null'a çekiyor ⇒ top "hiç yaşamamış" görünür.
+  //
+  // ⚠️ MESAJ ÇIKIŞ YOLUNU DA SÖYLER: haklı olup ne istediğini söylemeyen bir kapı
+  // doğru davranışı pahalı kılar, pahalı doğru davranışın yerini ucuz yanlış alır.
+  if (s.cancelReasonCode === FASON_RECEIPT_CANCEL_CODE) {
+    return (
+      "Bu top bir fason kabulü iptaliyle düşmüş ve kumaş fasona geri dönmüş — " +
+      "diriltilirse aynı metraj iki yerde sayılır. Malı yeniden almak için " +
+      "kabulü yeniden yapın."
     );
   }
   return null;

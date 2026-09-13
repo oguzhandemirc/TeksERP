@@ -86,6 +86,10 @@ export async function assertRollMatchesPlan(
     // de eşleşmeli: plan sonradan değiştiyse o onay bu duruma ait değildir.
     const confirmedAtReceipt = await prisma.rollPlanDeviation.findFirst({
       where: {
+        // ⚠️ GERİ ALINMIŞ ONAY SORUYU BASTIRMAZ (2026-09-13): kabul iptal edilip
+        // doğan top diriltilirse satır topa geri yapışıyordu ve Tambur soruyu bir
+        // daha SORMUYORDU — onayı üreten kabul artık yokken.
+        ...ACTIVE_DEVIATION,
         rollId: roll.id,
         field: "color",
         source: FASON_RECEIPT_DEVIATION_SOURCE,
@@ -199,4 +203,63 @@ export async function recordPlanDeviationTx(
       confirmedById: input.confirmedById ?? null,
     })),
   });
+}
+
+/** Yürürlükteki (geri alınmamış) sapma imzası — okuyan HER yol bundan geçer. */
+export const ACTIVE_DEVIATION = { revokedAt: null } as const;
+
+export interface RevokePlanDeviationArgs {
+  /** Damgalanacak kapı-geçişi(leri). Kapsam BURADAN gelir, çağıran ne bulduysa. */
+  confirmationIds: string[];
+  /** `TAMBUR_UNDO` / `TAMBUR_UNDO_SINGLE` / `FASON_KABUL_IPTAL` gibi. */
+  reason: string;
+  userId?: string | null;
+}
+
+/**
+ * Sapma imzasını GERİ ALIR — satırı SİLMEZ, içeriğini DEĞİŞTİRMEZ.
+ *
+ * ⚠️ TANECİK `confirmationId`, SATIR DEĞİL. Renk+en birlikte sapan bir geçiş İKİ
+ * satır ama BİR imzadır; tek satırı damgalamak imzayı YARIM geri alır ve yarım
+ * geri alınmış bir imza hiç geri alınmamıştan KÖTÜDÜR — karne onu tutarlı görür
+ * (`COUNT(DISTINCT confirmationId)` yine sayar, `qtyM` yine tek okunur).
+ *
+ * `revokedAt: null` yüklemi ŞART: çift geri alma ikinci kez damgalamaz ve
+ * undo→yeniden-finalize→undo döngüsünde ESKİ imza yeni damgayı yemez.
+ *
+ * @returns damgalanan SATIR sayısı (imza sayısı değil — bir imza 1–2 satırdır).
+ */
+export async function revokePlanDeviationsTx(
+  tx: Prisma.TransactionClient,
+  args: RevokePlanDeviationArgs,
+): Promise<number> {
+  if (args.confirmationIds.length === 0) return 0;
+  const res = await tx.rollPlanDeviation.updateMany({
+    where: { ...ACTIVE_DEVIATION, confirmationId: { in: args.confirmationIds } },
+    data: {
+      revokedAt: new Date(),
+      revokedById: args.userId ?? null,
+      revokeReason: args.reason,
+    },
+  });
+  return res.count;
+}
+
+/**
+ * Bir kapanışın imzalarını bulur — damgalamadan ÖNCEKİ adım (tanecik iki adımlı).
+ *
+ * ⚠️ `revokedAt: null` süzgeci döngüyü KENDİLİĞİNDEN çözer: geri al → yeniden
+ * finalize → tekrar geri al senaryosunda ilk kapanışın imzaları zaten damgalıdır
+ * ve yüklemin dışında kalır. Ek bir zaman/sıra koşuluna gerek YOKTUR.
+ */
+export async function findPlanDeviationConfirmationsTx(
+  tx: Prisma.TransactionClient,
+  where: Prisma.RollPlanDeviationWhereInput,
+): Promise<string[]> {
+  const rows = await tx.rollPlanDeviation.findMany({
+    where: { ...ACTIVE_DEVIATION, ...where },
+    select: { confirmationId: true },
+    distinct: ["confirmationId"],
+  });
+  return rows.map((r) => r.confirmationId);
 }

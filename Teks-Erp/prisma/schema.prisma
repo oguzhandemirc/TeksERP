@@ -3417,7 +3417,13 @@ model RollVariance {
 //   • `cut` (per-cut model) → kesim başına, `childRollId` = o kesimin çocuğu.
 //   • `finalize-open-fabric` → kalan kuyruk çocuğu + tx-içi TAZE kalan metraj.
 //
-// Append-only: satır SİLİNMEZ, GÜNCELLENMEZ (bu yüzden `updatedAt` yok).
+// Append-only: satır SİLİNMEZ ve İÇERİĞİ GÜNCELLENMEZ (bu yüzden `updatedAt` yok).
+// TEK İSTİSNA GERİ ALMA DURUM BAYRAĞIDIR (`revokedAt`/`revokedById`/`revokeReason`,
+// 2026-09-13): imza SİLİNMEZ, geçersiz İŞARETLENİR — `RollOperation.revokedAt` ve
+// `RollVariance.reversedAt` emsali, `VERITABANI.md` [DB-38] carve-out'u.
+// ⚠️ DAMGANIN TANECİĞİ `confirmationId`DİR, SATIR DEĞİL: renk+en birlikte saparsa
+// 2 satır ama BİR imza doğar; tek satırı damgalamak imzayı YARIM geri almaktır ve
+// yarım geri alınmış bir imza hiç geri alınmamıştan KÖTÜDÜR — tutarlı görünür.
 // =============================================================================
 model RollPlanDeviation {
   id String @id @default(uuid()) @db.Uuid
@@ -3453,6 +3459,16 @@ model RollPlanDeviation {
 
   /// İmzayı atan operatör. Nullable — dahili/testte userId olmayabilir.
   confirmedById String? @db.Uuid
+
+  /// GERİ ALMA DAMGASI (2026-09-13) — kapı geçişi geri alındığında imza geçersiz
+  /// işaretlenir; SATIR SİLİNMEZ, İÇERİĞİ DEĞİŞMEZ (ileri kaydı ne siler ne değiştirir).
+  /// Damgalayan dört dal: Tambur FULL undo · SINGLE · SINGLE_RESTORE · fason
+  /// `cancelReceipt` cascade. Karne ve Tambur kapısı `revokedAt: null` süzer —
+  /// dördü birden, çünkü biri unutulursa kusur YARIM kapanır.
+  /// ⚠️ Tanecik `confirmationId` (model başlığı).
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  revokeReason String?   @db.VarChar(300)
 
   createdAt DateTime @default(now()) @db.Timestamptz
 

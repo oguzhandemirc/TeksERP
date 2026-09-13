@@ -72,6 +72,10 @@
 // =============================================================================
 
 import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
+import {
+  revokePlanDeviationsTx,
+  findPlanDeviationConfirmationsTx,
+} from "./helpers/tambur-plan-gate.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { reverseAllRollStockMoves } from "./helpers/warehouse-ledger-reverse.helper";
@@ -1166,6 +1170,19 @@ export class TamburUndoService {
         notes: TAMBUR_UNDO_CANCEL_TEXT,
       });
 
+      // PLAN-SAPMA: YALNIZ bu çocuğa bağlı imza (2026-09-13). O kesimin metrajı
+      // depoda kalmadı ⇒ karne o kadar fazla sayardı.
+      // ⛔ `finalize` imzası (childRollId NULL) DAMGALANMAZ: kardeşler ayakta,
+      // topun geri kalanı hâlâ sapan kimlikle depoda.
+      const singleConfirmations = await findPlanDeviationConfirmationsTx(tx, {
+        childRollId: childId,
+      });
+      await revokePlanDeviationsTx(tx, {
+        confirmationIds: singleConfirmations,
+        reason: "TAMBUR_UNDO_SINGLE",
+        userId,
+      });
+
       const len = child.initialQty;
       let restoredTo: string;
       if (parentArchived) {
@@ -1477,6 +1494,19 @@ export class TamburUndoService {
         });
       }
 
+      // 4a) PLAN-SAPMA: YALNIZ bu çocuğa bağlı imza damgalanır (2026-09-13).
+      //     ⛔ `finalize` kaynaklı imza (childRollId NULL, qtyM = topun TAMAMI)
+      //     DAMGALANMAZ — kardeşler iptal edilmiyor, topun geri kalanı hâlâ sapan
+      //     kimlikle depoda ve o onay AYAKTA. FULL'den ayrıldığı yer burası.
+      const restoreConfirmations = await findPlanDeviationConfirmationsTx(tx, {
+        childRollId: childId,
+      });
+      await revokePlanDeviationsTx(tx, {
+        confirmationIds: restoreConfirmations,
+        reason: "TAMBUR_UNDO_SINGLE",
+        userId,
+      });
+
       // 5) finalize kaynağın property'lerini silmişti — iptal edilen çocuğun
       //    kopyasından geri kur (FULL 6 ile aynı, donör = bu çocuk).
       const parentPropCount = await tx.rollProperty.count({ where: { rollId: parentId } });
@@ -1753,6 +1783,22 @@ export class TamburUndoService {
           rollIds: [parentId],
           workOrderStepIds: [stepId],
           operationTypes: [RollOperationType.TAMBUR_PROCESSED],
+          reason: "TAMBUR_UNDO",
+          userId,
+        });
+        // 5a) PLAN-SAPMA İMZASINI GERİ AL (2026-09-13). Kapı geçişinin TAMAMI geri
+        //     alınıyor ⇒ plan-dışı kimliğin depoya inmesine izin veren onay artık
+        //     geçersiz. Damgalanmazsa karne o kapanışı saymaya devam eder ve
+        //     yeniden finalize edilen top İKİ tam imza + İKİ tam metraj üretir
+        //     (`finalize` kaynağında `qtyM` topun TAMAMIdır).
+        //     ⚠️ `revokedAt: null` yüklemi undo→yeniden-finalize→undo döngüsünü
+        //     KENDİLİĞİNDEN çözer: eski imzalar zaten damgalı, kümeye girmez.
+        const fullConfirmations = await findPlanDeviationConfirmationsTx(tx, {
+          rollId: parentId,
+          workOrderStepId: stepId,
+        });
+        await revokePlanDeviationsTx(tx, {
+          confirmationIds: fullConfirmations,
           reason: "TAMBUR_UNDO",
           userId,
         });

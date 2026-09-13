@@ -117,6 +117,24 @@ export const MANUAL_ENTRY_REASONS: readonly ReasonPresetSeed[] = [
 export const TAMBUR_UNDO_CANCEL_CODE = "TAMBUR_GERI_ALMA";
 export const TAMBUR_UNDO_CANCEL_TEXT = "Tambur geri alması — metraj kaynak topa iade edildi";
 
+/**
+ * FASON KABUL İPTALİ — cascade ile düşen doğan top (2026-09-13).
+ *
+ * ⚠️ Bu yol bugüne kadar topu SEBEPSİZ iptal ediyordu (`data` yalnız `status` +
+ * `currentStepId`), oysa iptal sebebi katalogludur. İki ayrı iş yapıyor:
+ *   1) izi satırın kendisinde bırakır (audit 6 ayda arşivlenir — üstteki ders),
+ *   2) restore guard'ın YENİ DALINI besler.
+ *
+ * ⚠️ AMA ENGELİ GETİREN ŞEY BU KOD DEĞİL, GUARD'IN DALIDIR. Sebep kodu yazmak
+ * tek başına hiçbir engel getirmez — `isUndoSourcedByAudit` ilk satırı
+ * `if (cancelReasonCode) return false;` olduğu için kod DOLU olduğu an audit
+ * dalı da kapanır (ölçüldü 2026-09-13). İkisini karıştırmak kusuru "kapatılmış
+ * sanmaya" yol açar.
+ */
+export const FASON_RECEIPT_CANCEL_CODE = "FASON_KABUL_IPTAL";
+export const FASON_RECEIPT_CANCEL_TEXT =
+  "Fason kabulü iptal edildi — kumaş fasona geri döndü";
+
 export const CANCEL_REASONS: readonly ReasonPresetSeed[] = [
   { code: "MUKERRER", label: "Mükerrer", fullText: "Mükerrer giriş — aynı top iki kez kaydedildi" },
   { code: "YANLIS_METRAJ", label: "Yanlış metraj", fullText: "Yanlış metraj girildi" },
