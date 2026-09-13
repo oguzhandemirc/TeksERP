@@ -152,7 +152,7 @@ function main(): void {
       '"${CLAUDE_PROJECT_DIR}"/scripts/claude-hooks/bash-guard.mjs',
   );
 
-  // ── §4 ORTAK .git/config TEMİZ Mİ (tripwire, 2026-09-14) ─────────────────
+  // ── §4 ORTAK .git/config TEMİZ Mİ (tripwire, 2026-09-13) ─────────────────
   // Hook'a alınan bir bekçi git'in GIT_DIR'ını miras alıp `git init/config`i
   // GERÇEK repoya koştu: ortak config'e `core.bare=true` (ana ağaçta `git reset`
   // "bare repository" ile düştü) ve `user.name=bekci` yazıldı — bir origin commit'i

@@ -55,7 +55,7 @@ function check(ad: string, ok: boolean, detay = "") {
 console.log("\n§1 — GATE 1/4 gerçek indeksi okuyor mu");
 
 const havuz = mkdtempSync(join(tmpdir(), "tekserp-gate-"));
-// ⚠️ GİT ORTAMI İZOLE (2026-09-14, iki kez ısırdı): bu bekçi hook'a alınınca git'in
+// ⚠️ GİT ORTAMI İZOLE (2026-09-13, iki kez ısırdı): bu bekçi hook'a alınınca git'in
 // hook'a verdiği GIT_DIR/GIT_INDEX_FILE miras kaldı — `git init/config/commit`
 // GEÇİCİ dizini değil GERÇEK repoyu gördü: dala "taban" commit'i indi, ortak
 // .git/config'e core.bare=true + user.name=bekci yazıldı, bir origin commit'i o
