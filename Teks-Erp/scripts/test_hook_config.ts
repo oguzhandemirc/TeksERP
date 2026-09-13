@@ -35,8 +35,9 @@
 //    söyler.
 // =============================================================================
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join, isAbsolute } from "node:path";
+import { tmpdir } from "node:os";
 
 const KOK = join(__dirname, "..", "..");
 const AYAR_YOLU = join(KOK, ".claude", "settings.json");
@@ -206,6 +207,34 @@ function main(): void {
     JSON.stringify(satir),
   );
 
+  // ⏭ kolu — sahada henüz gözlenmedi (336 satırın hepsi izole ağaçtan, d9 ölçtü
+  // 2026-09-14); satır biçimi yalnız ❌ ile sondalanmıştı. Glif her üç kolda ölçülür.
+  const r5aTik = defterKos(
+    {},
+    `const { defterSatiri } = await import(${defterMod});\n` +
+      `process.stdout.write(defterSatiri({ wt: "wt-x", adim: "hızlı mandallar · ⏭ ortak ağaçta atlandı", sonuc: "⏭", sn: 0, cikis: 0 }));`,
+  );
+  const k5aTik = r5aTik.stdout.replace(/\n$/, "").split("\t");
+  check("§5a′ ⭐ ⏭ (beyanla atlandı) satırı da biçime uyuyor", r5aTik.status === 0 && k5aTik.length === 7 && k5aTik[3] === "⏭", JSON.stringify(r5aTik.stdout));
+
+  // TANIMSIZ GLİF: sessiz "?" DEĞİL — satır yazılmaz, stderr'e tek satır, çıkış 0.
+  // (Glif ya da beyan öneki yeniden adlandırılırsa defter sessizce "?"le dolmasın.)
+  const glifDizin = mkdtempSync(join(tmpdir(), "tekserp-defter-glif-"));
+  const glifDefter = join(glifDizin, "defter.tsv");
+  const r5e = defterKos(
+    { TEKSERP_KAPI_DEFTERI: glifDefter },
+    `const { deftereYaz } = await import(${defterMod});\n` +
+      `const ok = deftereYaz({ wt: "x", adim: "y", sonuc: "✔", sn: 1, cikis: 0 });\n` +
+      `process.stdout.write(JSON.stringify(ok));`,
+  );
+  const glifYazildi = existsSync(glifDefter);
+  rmSync(glifDizin, { recursive: true, force: true });
+  check(
+    "§5e ⭐ tanımsız glif: satır YAZILMAZ + stderr'e TEK satır + çıkış 0 (kapı düşmez)",
+    r5e.status === 0 && r5e.stdout === "false" && !glifYazildi && r5e.stderr.trim().split("\n").length === 1 && /tanımsız sonuç glifi/.test(r5e.stderr),
+    `çıkış=${r5e.status} stdout=${r5e.stdout} dosya=${glifYazildi} stderr=${JSON.stringify(r5e.stderr).slice(0, 100)}`,
+  );
+
   // Yazılamayan hedef: DİZİN (EISDIR) — appendFileSync fırlatır. Beklenen: dönüş false,
   // istisna yok, stderr boş. Sonda hedefi sahte (kendi tmp'i), gerçek defter yok sayılır.
   const r5b = defterKos(
@@ -255,6 +284,34 @@ function main(): void {
   check(
     "§6c pre-commit kapı kipini BÜTÜN adımlara ilan ediyor (process.env.TEKSERP_KAPI_ADIMI = \"commit\")",
     /process\.env\.TEKSERP_KAPI_ADIMI = "commit"/.test(preCommit),
+  );
+
+  // ── §7 ADIM SIRASI: ucuz KAYIT adımları önce, ağırlar sonra (1e hükmü 2026-09-14) ──
+  // Defter ölçümü: ilk 336 satırın 5 ❌'i de kayıt sınıfı ve tip+lint'ten SONRA düştü —
+  // iki `identity_ledger` ısırığında 144 ve 165 sn boşa gitti. Sıralama kararlı olmalı:
+  // lint tavanı lint'in raporunu okur, lint'in hemen ardında kalır.
+  console.log("\n§7 — adım sırası: ucuz kayıt adımları önce, ağırlar sonra (kararlı)");
+  const siraMod = JSON.stringify(join(KOK, "scripts/hooks/lib/adim-sirasi.mjs"));
+  const r7 = defterKos(
+    {},
+    `const { sirala } = await import(${siraMod});\n` +
+      `const a = [{ ad: "tip", agir: true }, { ad: "lint", agir: true }, { ad: "lint tavanı", agir: true }, { ad: "test", agir: true }, { ad: "migration hijyeni" }, { ad: "hızlı mandallar" }, { ad: "kapının kendisi" }, { ad: "doküman kapısı" }];\n` +
+      `process.stdout.write(sirala(a).map((x) => x.ad).join("|"));`,
+  );
+  check(
+    "§7a ⭐ ucuzlar başa, ağırlar sona; grup içi sıra korunur (lint → lint tavanı bitişik)",
+    r7.stdout === "migration hijyeni|hızlı mandallar|kapının kendisi|doküman kapısı|tip|lint|lint tavanı|test",
+    r7.stdout || r7.stderr.slice(0, 120),
+  );
+  const agirSayisi = (preCommit.match(/agir: true/g) ?? []).length;
+  check(
+    "§7b pre-commit dört ağır adımı (tip · lint · tavan · test) `agir: true` ile işaretliyor ve `sirala(` üzerinden koşuyor",
+    agirSayisi === 4 && /const sirali = sirala\(adimlar\)/.test(preCommit) && /for \(const adim of sirali\)/.test(preCommit),
+    `agir işareti ${agirSayisi}`,
+  );
+  check(
+    "§7c semafor slotu İLK AĞIR ADIMDAN önce alınıyor (ucuz adımlar slot tutmaz, kayıt ısırığında slot alınmaz)",
+    /if \(adim\.agir && !slotBirak\) slotAlVeYaz\(\);/.test(preCommit) && !/const slotBirak = agirVar/.test(preCommit),
   );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

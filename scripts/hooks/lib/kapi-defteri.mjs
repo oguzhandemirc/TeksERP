@@ -9,8 +9,15 @@
 // kapı-DIŞI tsc/tsx koşumlarını saymaz; ısırığın yükle ilişkisi yalnız bu sütunla ölçülür.
 // Kimlik/sır YOK. Append-only; okuyan `cut -f`/awk ile keser.
 //
-// ⚠️ BEST-EFFORT: defter yüzünden kapı ASLA düşmez, uyarı da basmaz — yazılamıyorsa
-//    sessiz. Kapının kararı adımların çıkış kodudur; defter yalnız izdir.
+// KAPSAM BEYANI: yalnız BU MAKİNENİN commit kapıları ve `agir-is.mjs` ile sarmalanan
+//    işler; CI kapıları burada yok, tmpdir temizlenirse iz gider. Bir ölçüm aracıdır,
+//    defter/denetim kaydı değil (saklama süresi sonlu — kök CLAUDE.md § telemetri).
+//
+// ⚠️ BEST-EFFORT: defter yüzünden kapı ASLA düşmez — yazılamıyorsa sessiz. Tek istisna
+//    TANIMSIZ GLİF: ✅/❌/⏭ dışı bir sonuç satır OLMAZ (sessiz "?" değil) ve stderr'e tek
+//    satır düşer; çıkış kodu yine değişmez — glif/beyan öneki yeniden adlandırılırsa
+//    defter sessizce "?"le dolmasın (sessiz kapı ölümü ailesi, d9 ölçtü 2026-09-14).
+//    Kapının kararı adımların çıkış kodudur; defter yalnız izdir.
 // =============================================================================
 import { appendFileSync } from "node:fs";
 import { loadavg, tmpdir } from "node:os";
@@ -20,14 +27,16 @@ import { join } from "node:path";
 export const DEFTER_YOLU = process.env.TEKSERP_KAPI_DEFTERI ?? join(tmpdir(), "tekserp-kapi-defteri.tsv");
 
 const temizle = (s) => String(s ?? "").replace(/[\t\r\n]+/g, " ").trim();
+export const GLIFLER = ["✅", "❌", "⏭"];
 
-/** Tek satırın biçimi — bekçi bu fonksiyonu ölçer, dosyayı değil. */
+/** Tek satırın biçimi — bekçi bu fonksiyonu ölçer, dosyayı değil. Tanımsız glif → null. */
 export function defterSatiri({ wt, adim, sonuc, sn, cikis }) {
+  if (!GLIFLER.includes(sonuc)) return null;
   const kolon = [
     new Date().toISOString(),
     temizle(wt).replace(/[\\/]/g, "_") || "-",
     temizle(adim) || "-",
-    ["✅", "❌", "⏭"].includes(sonuc) ? sonuc : "?",
+    sonuc,
     Number.isFinite(Number(sn)) ? Number(sn).toFixed(1) : "-",
     cikis === null || cikis === undefined ? "-" : temizle(cikis),
     loadavg()[0].toFixed(1),
@@ -37,8 +46,13 @@ export function defterSatiri({ wt, adim, sonuc, sn, cikis }) {
 
 /** Append; hata yutulur (bkz. başlık). Döner: yazıldı mı (yalnız teşhis/bekçi için). */
 export function deftereYaz(kayit) {
+  const satir = defterSatiri(kayit);
+  if (satir === null) {
+    process.stderr.write(`   kapı defteri: tanımsız sonuç glifi ${JSON.stringify(kayit?.sonuc)} — satır yazılmadı (${GLIFLER.join(" ")})\n`);
+    return false;
+  }
   try {
-    appendFileSync(DEFTER_YOLU, defterSatiri(kayit));
+    appendFileSync(DEFTER_YOLU, satir);
     return true;
   } catch {
     return false;

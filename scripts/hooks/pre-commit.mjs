@@ -26,6 +26,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { sirala } from "./lib/adim-sirasi.mjs";
 import { deftereYaz } from "./lib/kapi-defteri.mjs";
 import { etkilenenProjeler, stagedFiles } from "./lib/staged.mjs";
 import { slotAl } from "./lib/semafor.mjs";
@@ -99,6 +100,7 @@ for (const proje of etkilenenProjeler(REPO, staged)) {
     cwd: proje.ad,
     cmd: genis ? ["npm", ["run", "typecheck:scripts"]] : proje.typecheck,
     env: AGIR_ADIM_ENV,
+    agir: true,
   });
   // Lint doğrudan değil KAPI üzerinden: taranan küme aynı kalır (tavan aynı kümeyi
   // ölçmek zorunda), yalnız verdikt commit'in kendi dosyalarına daralır. Staged liste
@@ -111,6 +113,7 @@ for (const proje of etkilenenProjeler(REPO, staged)) {
     cmd: ["node", ["scripts/hooks/lint-gate.mjs", `--proje=${proje.ad}`, `--rapor=${join(RAPOR_DIZINI, `${proje.ad}.json`)}`]],
     stdin: `${staged.join("\n")}\n`,
     env: AGIR_ADIM_ENV,
+    agir: true,
   });
   const anahtar = { "Teks-Erp": "backend", Electron: "electron", mobil: "mobil" }[proje.ad];
   if (existsSync(join(REPO, proje.ad, "lint-baseline.json"))) {
@@ -122,9 +125,10 @@ for (const proje of etkilenenProjeler(REPO, staged)) {
       cmd: ["node", ["scripts/check-lint-baseline.mjs", `--proje=${anahtar}`, "--commit-kapisi", `--rapor=${join(RAPOR_DIZINI, `${proje.ad}.json`)}`]],
       stdin: `${staged.join("\n")}\n`,
       env: AGIR_ADIM_ENV,
+      agir: true, // lint'in raporunu okur — kararlı sıralama onu lint'in ardında tutar
     });
   }
-  if (proje.test) adimlar.push({ ad: `${proje.ad} · test`, cwd: proje.ad, cmd: proje.test });
+  if (proje.test) adimlar.push({ ad: `${proje.ad} · test`, cwd: proje.ad, cmd: proje.test, agir: true });
 }
 
 // Migration/bekçi hijyeni: bu bekçinin değeri YERELDEDİR (CI'da temiz checkout
@@ -217,18 +221,26 @@ if (staged.some((f) => SURUM_NOTU_YOLLARI.has(f))) {
 
 if (adimlar.length === 0) process.exit(0);
 
+// UCUZ KAYIT ADIMLARI ÖNCE (doküman · mandallar · hijyen · kapının kendisi), ağırlar
+// sonra — ısırıkların tamamı kayıt sınıfı ve tip+lint'ten sonra düşüyordu (lib/adim-sirasi.mjs).
+const sirali = sirala(adimlar);
+
 // KAPI SEMAFORU (1e hükmü 2026-09-13): ağır adım (tsc/eslint/test) varsa makine
 // genelinde en çok KAPASITE kapı aynı anda koşar — ölçüm ve tuzaklar lib/semafor.mjs.
-// Yalnız doküman/sürüm-notu kapısı (saniyeler, MB'lar) sıraya girmez.
-const agirVar = adimlar.some((a) => a.env === AGIR_ADIM_ENV || a.ad.endsWith(" · test"));
-const semaforBasladi = Date.now();
-const slotBirak = agirVar ? slotAl() : () => {};
-// Bekleme süresi deftere — semafor kapasitesi (2/3/4) sahadan bu satırla ölçülür.
-if (agirVar) deftereYaz({ wt: WT, adim: "semafor bekleme", sonuc: "✅", sn: (Date.now() - semaforBasladi) / 1000, cikis: 0 });
+// Slot İLK AĞIR ADIMDAN HEMEN ÖNCE alınır: ucuz adımlar slot tutmaz, kayıt ısırığında
+// slot hiç alınmaz. Yalnız doküman/sürüm-notu kapısı (saniyeler, MB'lar) sıraya girmez.
+let slotBirak = null;
+const slotAlVeYaz = () => {
+  const t = Date.now();
+  slotBirak = slotAl();
+  // Bekleme süresi deftere — semafor kapasitesi (2/3/4) sahadan bu satırla ölçülür.
+  deftereYaz({ wt: WT, adim: "semafor bekleme", sonuc: "✅", sn: (Date.now() - t) / 1000, cikis: 0 });
+};
 
-process.stderr.write(`⏳ commit kapısı: ${adimlar.length} adım (${adimlar.map((a) => a.ad).join(" · ")})\n`);
+process.stderr.write(`⏳ commit kapısı: ${sirali.length} adım (${sirali.map((a) => a.ad).join(" · ")})\n`);
 
-for (const adim of adimlar) {
+for (const adim of sirali) {
+  if (adim.agir && !slotBirak) slotAlVeYaz();
   const t0 = Date.now();
   const r = spawnSync(adim.cmd[0], adim.cmd[1], {
     cwd: join(REPO, adim.cwd),
@@ -281,7 +293,7 @@ for (const adim of adimlar) {
     .trim()
     .slice(0, 120);
   deftereYaz({ wt: WT, adim: ilkKirmizi ? `${adim.ad} · ${ilkKirmizi}` : adim.ad, sonuc: "❌", sn, cikis });
-  slotBirak();
+  slotBirak?.();
   process.exit(1);
 }
 
@@ -302,6 +314,6 @@ if (headBasta && headSonda && headBasta !== headSonda) {
 
 const toplamSn = ((Date.now() - basladi) / 1000).toFixed(1);
 process.stderr.write(`✅ commit kapısı temiz (${toplamSn}s)\n`);
-deftereYaz({ wt: WT, adim: `kapı · toplam (${adimlar.length} adım)`, sonuc: "✅", sn: toplamSn, cikis: 0 });
-slotBirak();
+deftereYaz({ wt: WT, adim: `kapı · toplam (${sirali.length} adım)`, sonuc: "✅", sn: toplamSn, cikis: 0 });
+slotBirak?.();
 process.exit(0);
