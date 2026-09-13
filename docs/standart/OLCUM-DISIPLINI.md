@@ -155,6 +155,13 @@ yarısından ortaya geldi. ⇒ Bir sayının kimliği **üç** parçadır: *yük
 ayrıştırıcı*. Üçüncüsü en sessizidir, çünkü kimse aracın sürümünü yazmaz.
 (Sınıf: `OLCUM-DISIPLINI-ARAC.md` § Kapı, kendi AYRIŞTIRICISININ darlığını SAYIYA çevirebilir.)
 
+⚠️ **Farkı çözen şey SAYI değil SATIRDIR.** İki bağımsız ölçüm ayrıldığında sayıları
+karşılaştırmak yetmez — *hangi satır* sorusuna inilmeden fark kapanmaz.
+*(Vaka 2026-09-13: iki oturum 26 ↔ 25 ölçtü ve **ikisi de karşı tarafın haklı olduğunu
+varsaydı** — biri kendi sayısını "dar" sanıp yükseğini yazdı, öteki kendi desenini
+suçladı. Fark ancak tek bir satıra inilince çözüldü: fazlalık bir YORUM satırıydı,
+doğru sayı 25'ti. İkisi de emin olsaydı yanlış sayı kalacaktı.)*
+
 > **Yüklem yazılmadıkça sayı TAŞINAMAZ** — ve alan kişi de sorumludur: yüklemsiz gelen
 > bir sayıyı yüklemini sormadan plana çevirmek, onu üretmekle aynı sınıftır.
 

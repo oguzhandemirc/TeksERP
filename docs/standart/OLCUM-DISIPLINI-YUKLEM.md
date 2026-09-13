@@ -170,8 +170,8 @@ kaçırır. Bu ikisi çelişmez, çünkü biri **deseni**, öteki **bakılan yer
 `scripts/test_*.ts` içinde `readdirSync`/`glob`/`ls-files` aranarak cevap verilmek istendi.
 Ölçüm 2026-09-13 — 534 bekçi dosyasının **69**'u listeyi kendi içinde üretiyor; ama liste üreten
 **5 ortak lib** var (`keyfi-arama-taramasi` · `kural-dosyalari` · `ts-tarama` ·
-`stok-defteri-bag-olcumu` · `regime-gate-scan`) ve onları **26** bekçi import ediyor.
-`test_*.ts` üstünde yapılan tarama bu 26'yı GÖRMEZ ve görmediğini SÖYLEMEZ. Bir oturumu
+`stok-defteri-bag-olcumu` · `regime-gate-scan`) ve onları **25** bekçi import ediyor.
+`test_*.ts` üstünde yapılan tarama bu 25'i GÖRMEZ ve görmediğini SÖYLEMEZ. Bir oturumu
 CI'da ısıran mandal tam o gizlenen kümedeydi.)*
 
 > **Yetenek ortak bir lib'e çıkarıldığı an, dosya bazlı her envanterin kör noktası
@@ -185,5 +185,26 @@ paket) tek dürüst yoldur.
 ⚠️ **İki yön, tek aile:** § Yüklemi GEVŞEK bir cırcır'da desen kuralın ÖNERDİĞİ kalıpla
 eşleşiyordu (**doğru kodu ihlal saydı**); burada yüklemin baktığı yer yanlıştı (**ihlali
 hiç görmedi**). *Ne sorduğun* ve *nereye sorduğun* — bu dosyanın iki ekseni.
-*(İki bağımsız ölçüm 26 ↔ 25 verdi; fark import yazımından ve **bilgidir**: bir envanteri
-iki yoldan çıkarmanın amacı tam olarak bu farkı görünür kılmaktır.)*
+*(İki bağımsız ölçüm önce 26 ↔ 25 verdi ve fark ÇÖZÜLDÜ — aşağıdaki § Bir adın geçmesi
+bir BAĞIMLILIK değildir. Doğru sayı **25**; 26'daki fazlalık bir YORUM satırıydı.)*
+
+### Bir adın geçmesi bir BAĞIMLILIK değildir
+Kod tabanında bir adın geçmesi üç şeyden biri olabilir: **bağımlılık · atıf · tesadüf.**
+Envanter yalnız birincisini sayar; yüklem ADI arıyorsa üçünü birden sayar.
+
+> **Envanter yüklemi ADI değil BAĞI aramalı** — `from "…"` · `require(` · gerçek çağrı.
+> Aksi hâlde **iyi yorumlanmış kod, kötü yazılmış bir yüklemin en büyük yanlış-pozitif
+> kaynağı** olur: belgeleme kalitesi yüksek dosyalar envanteri şişirir.
+
+*(Vaka 2026-09-13, ölçüldü: "şu ortak lib'i kaç bekçi kullanıyor" sorusuna `lib/<ad>`
+metni aranarak **26**, gerçek import aranarak **25** cevabı çıktı. Tek fark
+`test_consistency.ts:120` — bir YORUM satırı: `// Ölçü: scripts/lib/stok-defteri-bag-olcumu.ts (K = 0, …)`.
+Dosya o lib'i import etmiyor, ondan BAHSEDİYOR. Aynı imzanın ikinci vakası aynı gün:
+bir `grep` 6 eşleşme verdi, gerçek 3'tü — fazlalık bir **constraint adı** ile bir
+**emsal yorumu**ydu.)*
+
+**Savunma:** envanter sorusunu iki sütun yaz — **BAĞ** (koşar/import eder) ve **ATIF**
+(adı geçer). İkisi farklı sorudur ve ikisinin de meşru kullanımı vardır; karıştırmak
+"bu bekçi o taramayı koşar" cümlesini sessizce yanlışlar.
+Kardeşleri § NE sorduğun kadar NEREYE sorduğun · § Sınırsız eşleşme
+(`OLCUM-DISIPLINI-SINIFLAR.md`).
