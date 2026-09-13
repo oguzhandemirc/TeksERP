@@ -48,6 +48,8 @@
 import { execFileSync } from "child_process";
 import { basename } from "path";
 import { type BekciAlani, bekciAlanlari, KOK, kuralDosyalari } from "./lib/kural-dosyalari";
+import { curumeKolu } from "./lib/circir-kolu";
+import { atlamaDefteri } from "./lib/atlama";
 
 let pass = 0;
 let fail = 0;
@@ -55,6 +57,8 @@ function check(label: string, ok: boolean, detay?: string): void {
   if (ok) { pass++; console.log(`✅ ${label}${detay ? ` — ${detay}` : ""}`); }
   else { fail++; console.log(`❌ ${label}${detay ? ` — ${detay}` : ""}`); }
 }
+// Çürüme kolu commit kapısında uyarıya düşünce defterde görünür (strict → kırmızı).
+const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 
 /**
  * Devralınan KESİK ad borcu — YALNIZ DÜŞER. **10 → 5 → 0 (2026-09-13).**
@@ -219,11 +223,7 @@ function main(): void {
   );
   // ⚠️ Taban ÇÜRÜMESİN: gerçek sayı tabanın ALTINA inerse tabanı düşür. Yoksa
   // kapı sessizce genişler ve kazanılan temizlik geri verilebilir hâle gelir.
-  check(
-    "taban ÇÜRÜMEMİŞ (gerçek < taban ise tabanı düşür)",
-    cozulmeyen.length >= TABAN,
-    `gerçek ${cozulmeyen.length} · taban ${TABAN}`,
-  );
+  curumeKolu(check, ATLAMA.atla, "taban ÇÜRÜMEMİŞ (gerçek < taban ise tabanı düşür)", cozulmeyen.length, TABAN);
   for (const [ad, yer] of cozulmeyen) console.log(`     ${yer.dosya}:${yer.satir}  → ${ad}`);
 
   // ── KESİK ALAN — üretecin 80 karakter imzası ∨ dengesiz parantez ─────────
@@ -233,11 +233,7 @@ function main(): void {
     kesik.length <= KESIK_TABAN,
     `${kesik.length} kesik (80 karakter: ${kesik.filter((a) => [...a.icerik].length === 80).length})`,
   );
-  check(
-    "kesik tabanı ÇÜRÜMEMİŞ (gerçek < taban ise tabanı düşür)",
-    kesik.length >= KESIK_TABAN,
-    `gerçek ${kesik.length} · taban ${KESIK_TABAN}`,
-  );
+  curumeKolu(check, ATLAMA.atla, "kesik tabanı ÇÜRÜMEMİŞ (gerçek < taban ise tabanı düşür)", kesik.length, KESIK_TABAN);
   for (const a of kesik.slice(0, 5)) console.log(`     ${a.dosya}:${a.satir}  …${a.icerik.slice(-36)}`);
   if (kesik.length > 5) console.log(`     … +${kesik.length - 5} alan`);
   const agactaKesik = bekciAlanlari(dosyalar.agac).filter(kesikMi).length;
@@ -296,7 +292,7 @@ function main(): void {
       `      dosya VARLIĞI ise git ls-files'tan — o da index. Ağaç farkı ℹ️ ile basılır.\n`,
   );
 
-  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   process.exit(fail > 0 ? 1 : 0);
 }
 

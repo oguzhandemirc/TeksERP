@@ -55,6 +55,8 @@
 import { readdirSync, readFileSync } from "fs";
 import { basename, join } from "path";
 import { type BekciAlani, bekciAlanlari, kardesAlan, KOK, kuralDosyalari } from "./lib/kural-dosyalari";
+import { curumeKolu } from "./lib/circir-kolu";
+import { atlamaDefteri } from "./lib/atlama";
 
 let pass = 0;
 let fail = 0;
@@ -62,6 +64,8 @@ function check(label: string, ok: boolean, detay?: string): void {
   if (ok) { pass++; console.log(`✅ ${label}${detay ? ` — ${detay}` : ""}`); }
   else { fail++; console.log(`❌ ${label}${detay ? ` — ${detay}` : ""}`); }
 }
+// Çürüme kolu commit kapısında uyarıya düşünce defterde görünür (strict → kırmızı).
+const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 
 const KURALLAR = join(KOK, "docs", "kurallar");
 
@@ -157,11 +161,7 @@ function main(): void {
     kapanirsiz.length <= B_TABAN,
     `${kosulsuz.length} koşulsuz · ${kapanirsiz.length} kapanma koşulu YOK`,
   );
-  check(
-    "B tabanı ÇÜRÜMEMİŞ (gerçek < taban ise tabanı düşür)",
-    kapanirsiz.length >= B_TABAN,
-    `gerçek ${kapanirsiz.length} · taban ${B_TABAN}`,
-  );
+  curumeKolu(check, ATLAMA.atla, "B tabanı ÇÜRÜMEMİŞ (gerçek < taban ise tabanı düşür)", kapanirsiz.length, B_TABAN);
   for (const a of kapanirsiz.slice(0, 8)) console.log(`     ${a.dosya}:${a.satir}  ${a.icerik.slice(0, 52)}`);
   if (kapanirsiz.length > 8) console.log(`     … +${kapanirsiz.length - 8} satır`);
   // Ağaç ≠ index ise fark BİLGİDİR, tabana esas değildir — commit'lenmemiş
@@ -197,7 +197,7 @@ function main(): void {
       `        bloğu bağlar ⇒ "işaretçiyi hiç yazma" kaçışı AÇIK ve bilinçlidir.\n`,
   );
 
-  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   process.exit(fail > 0 ? 1 : 0);
 }
 

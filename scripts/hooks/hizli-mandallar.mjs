@@ -70,6 +70,9 @@ function kos(ad) {
         ...process.env,
         DATABASE_URL: "postgresql://mandal:mandal@127.0.0.1:1/mandal_test?schema=public",
         SKIP_TYPECHECK: "1",
+        // Cırcırların ÇÜRÜME kolu (gerçek < taban) commit kapısında UYARI, CI'da sert —
+        // sabiti yalnız entegratör yazar; borcu ödeyenin commit'i düşmesin (scripts/lib/circir-kolu.ts).
+        TEKSERP_KAPI_ADIMI: "commit",
       },
     });
     let out = "";
