@@ -8678,3 +8678,27 @@ kırpılmaz (`details.total`; `warehouse-stock.helper` emsali). P2028 (KK1 kilid
 (1e C.5). Test hijyeni: reddedebilen `txB` promise'i sahipli ([ES-19]); §3 sayımı fikstür ürününe daraldı
 (global `count()` paralel bekçide sahte kırmızı); başlık negatif sonda kümeleri düzeltildi (M1 =
 §5b-2/3/**5**). Kural satırları `docs/kurallar/dokuma.md`, sözleşme §3.8b kodun aynası.
+
+## 2026-09-14 — TABLET MODÜL KAPISI: `useVisibleScreens` koşulu gerçek oldu, `SCREEN_CATALOG.modul` artık tablette de okunuyor [ÇEKİRDEK]
+
+**Ölçüm (0c, 47'nin bulgu E'si):** mobil kaynakta `production.enabled` / `MODULE_DISABLED` hiç geçmiyordu;
+ekranlar yalnız izinle gizleniyor, kapalı modülün kartı çiziliyor, tıklayan backend'den 403 yiyip jenerik
+toast görüyordu. `useVisibleScreens.ConditionalScreens` 2026-08-05'ten beri BOŞ ama bilerek duruyordu.
+Hangi modüllerin mobil ekranı var: `SCREEN_CATALOG` mobil satırları × `ModulKey` → yalnız
+`productionEnabled` (KK1 · KursunQc · Tambur · HizliIsEmri · KursunDagitim); kalan 10 ekran çekirdek ya da
+planlanan (fason/kartela, anahtarı yok).
+
+**Ne indi:** `mobil/src/constants/screenModules.ts` `SCREEN_MODULE` (ekran → modül, kataloğun aynası) +
+saf `conditionalScreens(flags)`; `useVisibleScreens` koşulu buradan dolar — kart ve navigator aynı listeden.
+`FeatureFlags.productionEnabled` aynası + `DEFAULT_FEATURE_FLAGS.productionEnabled = true`.
+**Varsayılan yönü kararı:** 1e "fail-closed (false)" demişti; backend okuyucusu satır yoksa TRUE döner ve
+panel `resolveSettingsModuleState` aynı yönü taşır — üretim için `false`, referans fabrikada (production
+AÇIK, tek canlı kurulum) bayrak yüklenene dek KK1/Tambur kartlarını kaybettirir, "varsayılan = bugünkü
+davranış" kuralını tablette bozardı. Yön bu yüzden ALAN BAŞINA backend'le aynı: `production` true, yeni
+modüller (dokuma) false. Reçete ㉒ buna göre düzeltildi.
+
+**Bekçi:** `useVisibleScreens.test.ts` üç sonda (kapalı → beş ekran elenir · açık → `MOBILE_SCREENS`
+birebir · data yok → birebir) + Kurşun Dağıtım regresyonu korundu (yalnız üretim modülüne bağlı) ·
+`screenModules.test.ts` · `test_screen_catalog §3b` manifesto ↔ tablo iki yönlü (negatif sonda: tablodan
+KK1 silindi → 1 ❌ · manifestoda Tambur çekirdeğe çevrildi → 1 ❌; md5 geri). Sürüm notu adayı (ea'ya):
+"kapalı modülün tablet ekranları artık görünmez" — referans fabrikada production AÇIK ⇒ etki 0.

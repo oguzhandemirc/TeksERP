@@ -17,6 +17,10 @@ import {
 export const DEFAULT_COMPANY_NAME = 'Adnan Şahin Tekstil';
 
 export interface FeatureFlags {
+  /** ÜRETİM MODÜLÜ (`production.enabled`) — tabletteki tek modül kapısı bugün
+   *  (KK1 · Kurşun · Tambur · Hızlı İş Emri · Kurşun Dağıtım; `constants/screenModules.ts`).
+   *  Backend satır yoksa TRUE döner; ayna da öyle. */
+  productionEnabled: boolean;
   pricingEnabled: boolean;
   targetQuantityEnabled: boolean;
   /** KK1 ham kumaş girişinde "en (cm)" alanı gösterilsin mi (default false). */
@@ -124,6 +128,9 @@ export interface FeatureFlags {
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
+  // Backend/Electron ile AYNI YÖN (satır yoksa AÇIK): üretim fabrikanın varsayılan
+  // rejimidir; false'a düşmek bayrak yüklenene dek KK1/Tambur kartlarını kaybettirirdi.
+  productionEnabled: true,
   pricingEnabled: false,
   targetQuantityEnabled: false,
   rawWidthEnabled: false,

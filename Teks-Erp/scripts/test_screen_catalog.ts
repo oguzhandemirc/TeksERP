@@ -420,6 +420,46 @@ function main(): void {
   check("her mobil ekran manifestoda", mobileMissing.length === 0, mobileMissing.join(", "));
   check("mobil ekranların giriş izni birebir", mobileMismatch.length === 0, mobileMismatch.join(", "));
 
+  // ── 3b) ⭐ MOBİL MODÜL AYNASI — manifesto `modul` ↔ tablet `SCREEN_MODULE` ─
+  // 2026-09-14'e dek `modul` mobil satırlarda backend-only bir beyandı: tablet
+  // onu okumuyor, kapalı modülün kartını çizip 403 yiyordu. Artık tablet
+  // `constants/screenModules.ts`ten okuyor; ayna İKİ YÖNLÜ birebirlenir —
+  // manifestoda `ModulKey` taşıyan her mobil ekran tabloda AYNI anahtarla, tabloda
+  // olan her ekran manifestoda aynı modülle. Çekirdek/planlanan ekranlar tabloya
+  // GİRMEZ (kapatılabilir anahtarları yok). Negatif sonda (2026-09-14): tablodan
+  // KK1 satırı silindi → §3b ❌ (1); manifestoda Tambur `cekirdek:stok-giris`e
+  // çevrildi → §3b ❌ (1).
+  const MOBILE_SCREEN_MODULES = path.join(ROOT, "mobil", "src", "constants", "screenModules.ts");
+  const mobilModulAynasi = new Map<string, string>();
+  if (fs.existsSync(MOBILE_SCREEN_MODULES)) {
+    const kaynak = yorumlariSok(fs.readFileSync(MOBILE_SCREEN_MODULES, "utf8"));
+    const blok = kaynak.slice(kaynak.indexOf("export const SCREEN_MODULE"), kaynak.indexOf("};", kaynak.indexOf("export const SCREEN_MODULE")));
+    for (const m of blok.matchAll(/^\s*([A-Za-z0-9_]+):\s*'([A-Za-z0-9_]+)'/gm)) mobilModulAynasi.set(m[1]!, m[2]!);
+  }
+  check(
+    "§3b Körlük zemini: tablet SCREEN_MODULE tablosu okundu",
+    mobilModulAynasi.size >= 3,
+    `${mobilModulAynasi.size} satır (${MOBILE_SCREEN_MODULES})`,
+  );
+  const manifestoModullu = SCREEN_CATALOG.filter(
+    (s) => s.app === "mobile" && MODULE_FLAG_KEYS.has(s.modul),
+  );
+  const aynaSapma: string[] = [];
+  for (const s of manifestoModullu) {
+    const tablet = mobilModulAynasi.get(s.key);
+    if (tablet !== s.modul) aynaSapma.push(`${s.key}: manifesto=${s.modul} tablet=${tablet ?? "YOK"}`);
+  }
+  for (const [key, modul] of mobilModulAynasi) {
+    const entry = byKey.get(`mobile:${key}`);
+    if (!entry) aynaSapma.push(`${key}: tabloda var, manifestoda YOK`);
+    else if (entry.modul !== modul) aynaSapma.push(`${key}: tablet=${modul} manifesto=${entry.modul}`);
+  }
+  check(
+    "§3b ⭐ Mobil `modul` beyanı ↔ tablet SCREEN_MODULE BİREBİR (iki yönlü)",
+    aynaSapma.length === 0,
+    aynaSapma.length ? aynaSapma.join(" · ") : `${manifestoModullu.length} modüllü mobil ekran hizalı`,
+  );
+
   // ── 4) Her Electron route izni bir ekranda beyan edilmiş ─────────────────
   // Alt yollar (`:id`, `new`, `edit`) ebeveyne katlanır — manifesto EKRAN
   // seviyesindedir, route seviyesinde değil.

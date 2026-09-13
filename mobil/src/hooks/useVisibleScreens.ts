@@ -1,41 +1,36 @@
 import { useMemo } from 'react';
 import { usePermissions } from './usePermission';
-import type { MobileScreenKey, MobileScreenMeta } from '../types/permissions';
+import { useFeatureFlags } from './useFeatureFlags';
+import { conditionalScreens } from '../constants/screenModules';
+import type { MobileScreenMeta } from '../types/permissions';
 
 // =============================================================================
-// GÖRÜNÜR EKRANLAR = izinli ekranlar ∖ koşulu sağlanmayan ekranlar
+// GÖRÜNÜR EKRANLAR = izinli ekranlar ∖ modülü KAPALI ekranlar
 //
-// `usePermissions().allowedScreens` YETKİYİ söyler; bazı ekranlar ayrıca bir
-// düzen koşuluna bağlanabilir (yetki var ama düzen o fabrikada kurulu değil). Bu
-// ayrımı tek yerde yapıyoruz ki "ekranı kaydeden" (MainNavigator) ile "grid'de
+// `usePermissions().allowedScreens` YETKİYİ söyler; modül anahtarı (`production.enabled`
+// …) DÜZENİ söyler — yetki var ama modül o fabrikada kapalıysa ekran çizilmez.
+// Ayrım tek yerde yapılır ki "ekranı kaydeden" (MainNavigator) ile "grid'de
 // gösteren" (useModuleOrder → ModuleSelect) aynı listeyi görsün: aksi hâlde
 // kartı gizleyip route'u açık bırakmak (ya da tersi) mümkün olur.
 //
-// ⚠️ ŞU AN KOŞULLU EKRAN YOK (2026-08-05). Tek koşullu ekran Kurşun Dağıtım'dı
-// (`kursunBypassEnabled || pendingKursunAssignments > 0`); Electron tarafında
-// Kurşun Sırası + Kurşun Dağıtım "Kurşun Planlama"da birleşip bayraktan
-// bağımsızlaşınca mobil ikizi de aynı hizaya çekildi. Gerekçe: ekran artık yalnız
-// "yeni dağıtım" yapmıyor — bekleyen kuyruğu da gösteriyor, yani bayrak kapalıyken
-// de anlamlı. Ayrıca karo `mobile:kursun-dagitim` ile zaten dar bir izne bağlı;
-// izni olmayan kimse görmüyor.
-//
-// Mekanizma BİLİNÇLİ olarak DURUYOR (tip + filtre): yeni bir düzen-koşullu ekran
-// çıkarsa tek satırla eklenir ve iki tüketici de otomatik hizalanır. Silinseydi
-// bir sonraki sefer koşul yine iki yere kopyalanırdı.
+// 2026-09-14'e dek koşul kümesi BOŞTU (mekanizma bilerek duruyordu): tablette
+// modül kapısı yoktu, kapalı modülün kartı çiziliyor ve backend 403
+// `MODULE_DISABLED` basıyordu. Koşul artık `constants/screenModules.ts`ten
+// (kataloğun `modul` aynası) dolar; kapalı modülde kart yok ⇒ istek yok.
+// Varsayılan yön alan başına backend'le aynı (üretim AÇIK) — bayrak yüklenene
+// dek liste bugünkünün birebir aynısıdır.
 //
 // ⚠️ NoAccess kapısı (RootNavigator.hasAnyMobileScreen) BİLİNÇLİ olarak HAM
-// yetkide kalır: koşul sağlanmadı diye kullanıcıyı "hiç yetkin yok" ekranına
+// yetkide kalır: modül kapalı diye kullanıcıyı "hiç yetkin yok" ekranına
 // atmayız — yetkisi durur, düzen kapalıdır.
 // =============================================================================
 
-/** Koşula bağlı ekranlar: anahtar → o an gösterilmeli mi. */
-type ConditionalScreens = Partial<Record<MobileScreenKey, boolean>>;
-
 export function useVisibleScreens() {
   const { allowedScreens } = usePermissions();
+  const flags = useFeatureFlags().data;
 
   return useMemo(() => {
-    const conditional: ConditionalScreens = {};
+    const conditional = conditionalScreens(flags);
     const visibleScreens: MobileScreenMeta[] = allowedScreens.filter(
       (s) => conditional[s.key] !== false
     );
@@ -44,5 +39,5 @@ export function useVisibleScreens() {
       hasAnyVisibleScreen: visibleScreens.length > 0,
       hasMultipleVisibleScreens: visibleScreens.length > 1,
     };
-  }, [allowedScreens]);
+  }, [allowedScreens, flags]);
 }

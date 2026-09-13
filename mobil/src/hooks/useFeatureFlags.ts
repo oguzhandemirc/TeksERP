@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { featureFlagService } from '../services/featureFlag.service';
+import { DEFAULT_FEATURE_FLAGS, featureFlagService } from '../services/featureFlag.service';
 import { useAuthStore } from '../store/authStore';
 
 // Feature flag'ler app genelinde tek query — React Query cache'i AsyncStorage'a
@@ -18,6 +18,12 @@ export function useFeatureFlags() {
     staleTime: 5 * 60 * 1000,
     enabled: hasToken,
   });
+}
+
+/** Üretim modülü açık mı? Default TRUE (backend satır-yok değeri) — yüklenene
+ *  kadar üretim ekranları BUGÜNKÜ gibi çizilir. Kapı `useVisibleScreens`tedir. */
+export function useProductionEnabled(): boolean {
+  return useFeatureFlags().data?.productionEnabled ?? DEFAULT_FEATURE_FLAGS.productionEnabled;
 }
 
 /** KK1 ham en girişi açık mı? Yüklenene kadar / hata halinde false (gizli). */
