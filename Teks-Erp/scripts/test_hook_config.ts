@@ -44,6 +44,7 @@ const AYAR_YOLU = join(KOK, ".claude", "settings.json");
 
 let pass = 0;
 let fail = 0;
+let skip = 0; // ⏭ beyanla atlanan kontrol — özet satırında sayılır (bekçi sözleşmesi)
 function check(label: string, ok: boolean, detay = ""): void {
   if (ok) {
     pass++;
@@ -263,23 +264,48 @@ function main(): void {
 
   // ── §6 ELECTRON VITEST ZAMAN AŞIMI KİPE BAĞLI (1e hükmü 2026-09-14) ──────────
   // Kapı kipinde 20 sn (yük altında CPU açlığı 5 sn'yi aşıyordu: load ≈ 25'te 3 test,
-  // tek başına 21 sn), bayraksız 5 sn (CI, elle koşum). Config GERÇEKTEN yüklenir:
-  // regex'le "20_000 yazıyor mu" değil, "yüklenen değer ne" ölçülür — iki kipte.
+  // tek başına 21 sn), bayraksız 5 sn (CI, elle koşum).
+  //
+  // ⚠️ ÜÇ SONUÇ (hotfix 2026-09-14, CI iki tur kırmızı — d9 mekanizmayı yeniden üretti):
+  //    config'i GERÇEKTEN yüklemek Electron'un bağımlılıklarını ister (vitest/config,
+  //    @vitejs/plugin-react). CI'ın Backend job'ı `npm ci`yi yalnız Teks-Erp'te koşar ⇒
+  //    `Electron/node_modules` YOK ⇒ yükleme oradan ölçülemez. Bekçi başka paketin
+  //    kurulumuna bağlıydı ve bunu beyan etmiyordu (araç ortamın içinde, gözlenenin
+  //    dışında). Şimdi: bağımlılık VARSA gerçek yükleme (§6a/§6b) · YOKSA ⏭ "yükleme
+  //    ÖLÇÜLEMEDİ" beyanı — ve METİN ölçümü (§6d) HER İKİ dalda koşar: ifade dosyada
+  //    yoksa ❌. Sessiz yeşil değil, beyanlı; asıl yükleme sondası Electron job'ında
+  //    (Electron/src/test/vitest-timeout-mode.test.ts, aynı hüküm).
   console.log("\n§6 — Electron vitest zaman aşımı kipe bağlı mı");
-  const configOku = (env: Record<string, string | undefined>) => {
-    const ortam = { ...process.env, ...env };
-    if (env.TEKSERP_KAPI_ADIMI === undefined) delete ortam.TEKSERP_KAPI_ADIMI;
-    const r = spawnSync(
-      join(KOK, "Teks-Erp/node_modules/.bin/tsx"),
-      ["--eval", 'import c from "./vitest.config.ts"; process.stdout.write(String(c.test?.testTimeout))'],
-      { cwd: join(KOK, "Electron"), encoding: "utf8", env: ortam, timeout: 60_000 },
-    );
-    return r.status === 0 ? r.stdout.trim() : `HATA(${r.status}): ${r.stderr.slice(0, 120)}`;
-  };
-  const kapiKipi = configOku({ TEKSERP_KAPI_ADIMI: "commit" });
-  const bayraksiz = configOku({ TEKSERP_KAPI_ADIMI: undefined });
-  check("§6a ⭐ kapı kipinde (TEKSERP_KAPI_ADIMI=commit) testTimeout 20000", kapiKipi === "20000", kapiKipi);
-  check("§6b ⭐ bayraksız (CI / elle) testTimeout 5000", bayraksiz === "5000", bayraksiz);
+  const vitestConfigKaynak = readFileSync(join(KOK, "Electron/vitest.config.ts"), "utf8");
+  const kipIfadesi = (k: string) =>
+    /const KAPI_KIPI = process\.env\.TEKSERP_KAPI_ADIMI === "commit"/.test(k) && /testTimeout: KAPI_KIPI \? 20_000 : 5_000/.test(k);
+  check("§6d ⭐ vitest.config.ts kip ifadesini taşıyor (KAPI_KIPI ? 20_000 : 5_000) — metin ölçümü, her ortamda", kipIfadesi(vitestConfigKaynak));
+  check("   ↳ sonda: ifade bozulmuş kopyada ısırıyor", !kipIfadesi(vitestConfigKaynak.replace("? 20_000 : 5_000", "? 5_000 : 5_000")));
+
+  // Sonda anahtarı TEKSERP_SONDA_ELECTRON_BAGIMLILIK_YOK=1: CI'ın Backend job'ını yerelde taklit eder.
+  const electronBagimlilik =
+    process.env.TEKSERP_SONDA_ELECTRON_BAGIMLILIK_YOK !== "1" &&
+    existsSync(join(KOK, "Electron/node_modules/vitest")) &&
+    existsSync(join(KOK, "Electron/node_modules/@vitejs/plugin-react"));
+  if (!electronBagimlilik) {
+    skip++;
+    console.log("   ⏭ §6a/§6b yükleme ÖLÇÜLEMEDİ — Electron/node_modules (vitest · @vitejs/plugin-react) kurulu değil; metin ölçümü (§6d) ayakta, yükleme sondası Electron job'ında");
+  } else {
+    const configOku = (env: Record<string, string | undefined>) => {
+      const ortam = { ...process.env, ...env };
+      if (env.TEKSERP_KAPI_ADIMI === undefined) delete ortam.TEKSERP_KAPI_ADIMI;
+      const r = spawnSync(
+        join(KOK, "Teks-Erp/node_modules/.bin/tsx"),
+        ["--eval", 'import c from "./vitest.config.ts"; process.stdout.write(String(c.test?.testTimeout))'],
+        { cwd: join(KOK, "Electron"), encoding: "utf8", env: ortam, timeout: 60_000 },
+      );
+      return r.status === 0 ? r.stdout.trim() : `HATA(${r.status}): ${r.stderr.slice(0, 120)}`;
+    };
+    const kapiKipi = configOku({ TEKSERP_KAPI_ADIMI: "commit" });
+    const bayraksiz = configOku({ TEKSERP_KAPI_ADIMI: undefined });
+    check("§6a ⭐ kapı kipinde (TEKSERP_KAPI_ADIMI=commit) testTimeout 20000 (gerçek yükleme)", kapiKipi === "20000", kapiKipi);
+    check("§6b ⭐ bayraksız (CI / elle) testTimeout 5000 (gerçek yükleme)", bayraksiz === "5000", bayraksiz);
+  }
   // Kip her adıma pre-commit'ten iner; yalnız mandallara verilirse vitest 5 sn'de kalır.
   check(
     "§6c pre-commit kapı kipini BÜTÜN adımlara ilan ediyor (process.env.TEKSERP_KAPI_ADIMI = \"commit\")",
@@ -314,7 +340,7 @@ function main(): void {
     /if \(adim\.agir && !slotBirak\) slotAlVeYaz\(\);/.test(preCommit) && !/const slotBirak = agirVar/.test(preCommit),
   );
 
-  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${skip > 0 ? `, ${skip} atlandı` : ""} ===`);
   process.exit(fail > 0 ? 1 : 0);
 }
 
