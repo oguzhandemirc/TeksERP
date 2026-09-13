@@ -91,7 +91,7 @@ export interface UnwritableRowPolicy {
  * onurlandırıp uçsuzluk için eziyordu.
  *
  * ⚠️ Bu satırdaki sayı bir İDDİADIR ve süresi dolar: **ölçüldü 2026-09-13,
- * `tekserp_fabrika_dev` — deposuz top 0.** Sayı yeniden sıfırdan büyürse (yeni bir
+ * fabrikanın canlı yedeğinde — deposuz top 0.** Sayı yeniden sıfırdan büyürse (yeni bir
  * doğuş yolu resolver'ı atlarsa) bu kapı sahada sevki durdurur; o gün doğru iş
  * kapıyı gevşetmek değil backfill koşmaktır.
  */
