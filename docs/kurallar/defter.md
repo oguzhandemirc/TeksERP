@@ -58,7 +58,7 @@ Durum tabloları **"şu an ne"**yi tutar; defterler **"ne oldu"**yu tutar ve "ne
 
 **Bu bölüm bir hard-delete sınıfı AÇMAZ.** Yukarıdaki iki sınıf kanonik kalır. Budanabilirlik bir *silme izni* değil, **satırın yaşam süresidir** — ve yaşam süresi, model sınıfından (`KATALOG` · `DEFTER` · `PİVOT`) **bağımsız bir eksendir**. Dördüncü bir *sınıf* açmak iki ekseni tek listeye bindirir ve *"append-only bir katalog budanabilir mi"* gibi cevapsız sorular doğurur.
 
-- **[ÇEKİRDEK]** Bir satırın telemetri olup olmadığı YARGIYLA değil YANLIŞLANABİLİR BİR SONDAYLA belirlenir: **ham örnek silindiğinde raporlanan hiçbir sayı değişmiyorsa o satır telemetridir.** *"İş kararına girmez"* bir yargıdır ve ölçüt olarak kullanılmaz. · bekçi: `YOK (yazılacak — okuma manifesti üzerinden budama sondası)` <sub>(arşiv:2026-09-12 devere · tasarım: `docs/design/DOKUMA-TEZGAH-IZLEME-TASARIMI.md` §4 "Saklama, budama ve iki sınıfın tek tablodaki bedeli")</sub>
+- **[ÇEKİRDEK]** Bir satırın telemetri olup olmadığı YARGIYLA değil YANLIŞLANABİLİR BİR SONDAYLA belirlenir: **ham örnek silindiğinde raporlanan hiçbir sayı değişmiyorsa o satır telemetridir — ama bir KARARI besliyorsa saklama süresi o kararın UFKUYLA sınırlıdır.** *"İş kararına girmez"* bir yargıdır ve ölçüt olarak kullanılmaz. Kuralın "sayı" kelimesi 2026-09-13'te dar bulundu: `TravelerCardScan` hiçbir rapora girmiyor ama istasyon KALICI SİLME guard'ı okutma sayar (`guarded-hard-remove.ts` `scanCount` → 409) — budama o kararı sessizce serbest bırakır ve silinemeyen bir istasyon silinebilir hâle gelir. Budamadan önce ya guard'a kalıcı ikinci tanık verilir (`machineHistoryCount` zaten orada) ya budama o ufku aşmaz. (⚠️ Kök `CLAUDE.md` hâlâ dar hâli taşıyor.) · bekçi: `YOK (yazılacak — okuma manifesti üzerinden budama sondası)` <sub>(arşiv:2026-09-12 devere · tasarım: `docs/design/DOKUMA-TEZGAH-IZLEME-TASARIMI.md` §4 "Saklama, budama ve iki sınıfın tek tablodaki bedeli")</sub>
 - **[ÇEKİRDEK]** İş kararına giren her sayı **budamadan ÖNCE kalıcı kolona DONAR**; budayıcı açık koşumun penceresine, açık vardiyaya ve MÜHÜRSÜZ pencereye DOKUNMAZ. Geçmiş bir özet yeniden hesaplandığında değişiyorsa, budama değil o özetin kalıcılığı kusurludur. · bekçi: `YOK (yazılacak — negatif sonda: yüklemden mühür koşulu düşürülünce KIRMIZI vermeli)` <sub>(arşiv:2026-09-12 devere)</sub>
 - **[ÇEKİRDEK]** Aynı ölçüt **audit'i de kapsar**: kalıcı sayaç/rapor `SystemLog`tan değil kalıcı kolondan okunduğu için audit satırı silindiğinde raporlanan hiçbir sayı değişmez ⇒ audit telemetri yaşam süresindedir ve **6 aylık arşivlenmesi bir istisna değil bu kuralın örneğidir.** `DEFTER` "iş defteri / kanıt defteri" diye BÖLÜNMEZ. <sub>(arşiv:2026-09-12 devere)</sub>
 
@@ -81,6 +81,9 @@ Durum tabloları **"şu an ne"**yi tutar; defterler **"ne oldu"**yu tutar ve "ne
 
 - **[ÇEKİRDEK]** Deftere `RESTRICT` ile bağlı bir satır eklemek, o ebeveyni SİLEN HER YERİ ödev yapar — üretim kodu, script ve **bekçi fikstürlerinin temizliği** dâhil: defter satırı ebeveyninden ÖNCE silinir. Temizlik süzgeci kendi koşumunun id'lerine değil FİKSTÜR DAMGASINA bağlanır, yoksa önceki başarısız temizliğin bıraktığı kalıntı bir sonraki koşumu düşürür. ⚠️ Temizlik hatası `.catch(() => {})` ile YUTULMAZ: yutulan hata "temizlik başarılı" ile aynı çıktıya iner, kalıntı büyür ve KOMŞU bekçileri kirletir (ölçüldü 2026-09-12: `ImportRunLine` indi, `test_import_framework` düştü, `test_import_idempotency` aynı hatayı sessizce yuttu ve artık satırlar yönetici oturumun "önceden vardı" ölçümünü bozdu). · bekçi: `test_import_revert.ts` (doğru sıra emsali) <sub>(arşiv:2026-09-12)</sub>
 
+- **[ÇEKİRDEK]** Karar defteri de defterdir: bir satır raporlanan bir sayıya ya da bir KARARA giriyorsa ters yolu olmak zorundadır. `RollPlanDeviation` bugün ikisine de giriyor (karne `plan-deviation-scorecard` ham SQL ile sayıyor; Tambur kapısı `fason-receipt` satırını görürse soruyu sormuyor) ama damga kolonu YOK, `tambur-undo` ona dokunmuyor ve kabul iptali + diriltme zinciri geri alınmış bir onayı CANLI bırakıyor (`cancelReceipt` hareketi geri alır, restore guard'ı `ACTIVE_MOVEMENT` saydığı için görmez, `currentStepId` null'a çekilir, `cancelReasonCode` hiç yazılmaz ⇒ doğan top diriltilebilir). Onarımın iki ayağı AYRILAMAZ: okuyan yollara `revokedAt IS NULL` süzgeci **ve** kabul iptalinin `fason-receipt` satırlarını damgalaması — süzgeç tek başına boş küme üzerinde çalışır. · bekçi: `test_defter_ters_yol.ts` §6 (borç görünür) <sub>(arşiv:2026-09-13)</sub>
+- **[ÇEKİRDEK]** Mali etkisi olan bir defterin geçmişi AUDIT'e yazılamaz: `SackAllocation` sipariş karşılamasını belirler, sil-yaz edilir ve değişim izi `AuditService.log` ile tx DIŞINDA tutulur — best-effort olduğu için düşerse sessiz kalır ve 6 ayda arşivlenir. Bu, "audit'e uzanma ihtiyacı bir defter eksikliğinin işaretidir" kuralının en net örneğidir ve izin AUDIT'te olması borcu kapatmaz. · bekçi: `test_defter_ters_yol.ts` §6/§10 <sub>(arşiv:2026-09-13)</sub>
+
 ### Reçeteler
 
 - **[ÇEKİRDEK]** Yeni defter açarken sekiz soru: ① hangi olaylar (enum) · ② her ilerinin tersi var mı · ③ append-only mi (`updatedAt` YOK) · ④ aktör kolonu (`createdById`) · ⑤ kaynak belge FK'ları · ⑥ miktar `Decimal` + ölçek kataloğu ([DB-33]) · ⑦ index: `(varlıkId, createdAt)` + olay+tarih · ⑧ mutabakat bekçisi (Σ hareket ↔ canlı durum). <sub>(arşiv:2026-09-10)</sub>
@@ -90,16 +93,16 @@ Durum tabloları **"şu an ne"**yi tutar; defterler **"ne oldu"**yu tutar ve "ne
 
 Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, kural satırına dönüşür.
 
-- **`WarehouseMovement` GERÇEK STOK DEFTERİNE dönüşecek.** `warehouseId` atayan HER yol deftere bağlanır — statü terfisi (`STOCK → WAREHOUSE`) dahil; bugün terfi bilinçli olarak satır yazmıyor ve defter yalnız dışarıdan gelen malı görüyor. Hedef: Σhareket ↔ canlı stok mutabakatı ve as-of kesit. Ön koşul: `RETURN_REVERSAL` ters yolu (`CANCEL_REVERSAL` 2026-09-11'de sayım stornosuyla doğdu; elle "iptali geri al" henüz yazmıyor).
+- **`WarehouseMovement` GERÇEK STOK DEFTERİNE dönüşecek.** `warehouseId` atayan HER yol deftere bağlanır — statü terfisi (`STOCK → WAREHOUSE`) dahil; bugün terfi bilinçli olarak satır yazmıyor ve defter yalnız dışarıdan gelen malı görüyor. Hedef: Σhareket ↔ canlı stok mutabakatı ve as-of kesit. Ön koşul: `RETURN_REVERSAL` ters yolu — **hâlâ açık** (doğrulandı 2026-09-13). Cümlenin ikinci yarısı KAPANDI: elle "iptali geri al" 2026-09-12'den beri ters kayıt yazıyor (`restoreCancelledRoll` → `reverseLatestScopedStockMove`, bekçi `test_stock_ledger_cancel_restore`).
 - **`RollProperty` / `WorkOrderTargetProperty` ③a'dır** (yukarı bak) — 7 site sil-yazdan versiyonlamaya geçecek.
 
-## Mevcut defter envanteri (2026-09-10 ölçümü)
+## Mevcut defter envanteri (2026-09-13 ölçümü — kapısı `test_defter_ters_yol`)
 
 > ⚠️ **`WarehouseMovement` bir STOK DEFTERİ DEĞİLDİR** (2026-09-11 ölçümü). Satır yalnız topun `warehouseId`'si DOLUYKEN yazılır (`warehouse-ledger.helper.ts:49`); üretimdeki top depoya statü terfisiyle girer ve terfi bilinçli olarak satır yazmaz. Ölçüm: defter sonrası doğan 1.231 topun 751'inde satır var, 87 top depoda ama defterde hiç yok; mutabakat farkı −5.369,3 m; `CANCELLED` 69 topun 0'ında CANCEL satırı var. Bugünkü hâli KENDİ İÇİNDE TUTARLIDIR (girişi olmayanın çıkışı da yok) — ama "depoda ne var" sorusunu CEVAPLAMAZ. Stok defterine dönüşmesi ayrı karardır.
 
 | Defter | Kapsam | Append-only | Ters yol |
 |---|---|---|---|
-| `WarehouseMovement` | depo giriş/çıkış, 8 olay | ✅ | TRANSFER ✅ · SHIPMENT ✅ · **RETURN ❌** · CANCEL ⚠️ yalnız sayım stornosu (`CANCEL_REVERSAL` + `reversesMovementId` bağı, 2026-09-12) — elle "iptali geri al" hâlâ yazmıyor |
+| `WarehouseMovement` | depo giriş/çıkış, **13 olay** (`EXTERNAL` hiçbir yerden yazılmıyor; `OPENING_BALANCE` yalnız açılış fotoğrafı script'inden) | ✅ ölçüldü (`update`/`delete` yolu yok) | ✅ `reversesMovementId` + üç ters helper (`reverseStockMove` · `reverseAllRollStockMoves` · `reverseLatestScopedStockMove`) · **BORÇ: `RETURN` ters yolsuz** — `cancelReturn` defterin hiçbir yoluna dokunmuyor |
 | `CariTransaction` `:6611` | cari borç/alacak, 11 kaynak | ✅ | ✅ `reversesTxnId` |
 | `ChequeEvent` `:7208` | çek durum defteri, 14 olay | ✅ | ✅ `*_CANCEL` (2026-09-11) — CANCEL'ın tersi yok (kendisi storno) |
 | `CashTransaction` `:6898` | kasa/banka | yarı (`status: CANCELLED`) | ✅ |
@@ -110,10 +113,15 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 | `SwatchStockReduction` + `SwatchStockReductionItem` | kartela düşümü + kalemleri | ✅ `reversedAt` damgası | ✅ damga (negatif satır CHECK yüzünden yasak); kalemi ölü kabule bağlı kartela dönmez (2026-09-11) |
 | `PaymentAllocation` `:7249` | fatura kapama | ✅ `revokedAt` damgası | ✅ damga (negatif satır CHECK yüzünden yasak) |
 | `SackAllocation` `:4939` | sipariş karşılama | ❌ sil-yaz (rebalance) | ❌ |
-| `PrintedDocument` `:4388` | belge versiyonu | ✅ | ✅ SUPERSEDED/VOIDED |
+| `PrintedDocument` `:4388` | belge versiyonu | yarı — `updatedAt` VAR (2026-09-13'te düzeltildi; eskiden ✅ yazıyordu) | ✅ `supersededAt`/`voidedAt` |
 | `ShipmentEvent` **(yeni)** | sevkiyat durum defteri, 6 olay | ✅ | ✅ DISPATCHED↔UNDISPATCHED · INVOICED↔INVOICE_CLEARED |
 | `SackWeighing` **(yeni)** | çuval tartı ölçümü | ✅ | ✅ CLEARED olayı |
-| `RollPlanDeviation` `:3278` · `TravelerCardScan` `:3538` | karar / okutma | ✅ | — |
+| `RollPlanDeviation` `:3278` | plan-dışı kimlikle inen metrajın KARAR defteri | ✅ | ❌ **BORÇ — damga kolonu bile yok** (aşağıdaki kural satırına bak) |
+| `TravelerCardScan` `:3538` | okutma | ✅ | — TELEMETRİ (sonda koşuldu: hiçbir yüzey okutma SAYISI basmıyor) · budama ufku guard'a bağlı |
+| `ImportRunLine` | içe aktarım geri sarmasının tek kaynağı (ileri satır **iç içe** `lines.createMany` ile yazılır) | ✅ | ✅ `revertedAt` + `revertSkipReason` |
+| `MergeOperation` (+`Source`/`Ref`) | master-data birleştirme karar defteri | ✅ | ✅ `revertedAt` (LIFO, fotoğraftan) |
+| `ShipmentOrder` | sevkiyat ↔ sipariş bağı | ✅ | ❌ **BORÇ** — aynı ilişki iki rejimle kapanıyor: fiziksel `deleteMany` (`:1964`) ve `isActive:false` (`:3547`) |
+| `SackTagAssignment` | çuval izi (etiket) ataması | ✅ | ❌ **BORÇ** — "geçersiz iz" kavramı kurulmuş (`ACTIVE_TAG_WHERE`) ama satır fiziksel siliniyor |
 
 ## Geçersiz kılınan kurallar
 
@@ -128,7 +136,7 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 
 Backend: `test_stock_ledger_cancel_restore`, `test_stock_ledger_entry`, `test_stock_ledger_helper`, `test_stock_ledger_issue`, `test_stock_ledger_kursun_reopen`, `test_stock_ledger_production`, `test_stock_ledger_tambur`, `test_stock_ledger_tambur_undo`, `test_stock_ledger_transform`, `test_roll_movement_revoke`, `test_roll_operation_revoke`, `test_cheque_reversal`, `test_stock_count_reversal`, `test_swatch_stock_reduction_reversal`, `test_work_session_history_guard`, `test_warehouse_ledger`, `test_warehouse_movements`, `test_master_data_merge_revert`
 
-**Bu alanın genel kapısı YOK — kuralların çoğu bugün ölçülmemiştir** ([DB-35]: kapısız kural bir niyet beyanıdır). Tek tek ölçülen kurallar:
+**Bu alanın genel kapısı `scripts/test_defter_ters_yol.ts`** (2026-09-13): her append-only modelin SINIFINI ve her defterin ters yol MEKANİZMASINI beyandan okuyup şemaya ve koda karşı doğrular — 12 bölüm, beyan tablosu `scripts/lib/defter-beyan.ts`. Mekanizma ÇIKARILMAZ BEYAN EDİLİR (dört biçim: damga · ters bağ · tipli enum çifti · net karşı olay); tek kurallı bir kapı en az altı yanlış kırmızı üretirdi. Kapı ayrıca satır yaratan İLERİ yol kümesini beyanla karşılaştırır (yeni yol → kırmızı, ölü beyan → kırmızı), deftere beyansız `delete`i düşürür ve "satırın ters yolu ebeveynindedir" / "saf yapılandırma pivotu" çürütmelerinin zayıf halkasını ölçer. Tip denetleyicili: iç içe ilişki yazımı bağlamsal tipten çözülür (`prisma.importRunLine.create` HİÇ YOK, satırlar `lines: { createMany }` ile doğuyor). Tek tek ölçülen kurallar:
 
 - `scripts/test_roll_movement_revoke.ts` — hareket damgası, partial unique, geri alma sonrası adım durumu (recompute), AST+tip taraması (§6).
 - `scripts/test_roll_operation_revoke.ts` — operasyon damgası, partial unique, upsert tuzağı (§8), AST+tip taraması (§7).

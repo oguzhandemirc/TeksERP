@@ -7969,3 +7969,123 @@ bildirecekti. Ham sembol ekseni %83 yanlış pozitif verdi ve terk edilmedi, **y
 **Üç kapı.** Migration YOK · izin YOK · APK YOK. Kalan 80 sayı iddiası için sıra kurulmadı
 (bant "0-2 bayat"). ⚠️ `BACKEND.md` bu turda 1.060 bayt boşluğa indi — advisory onu işaretliyor
 ve artık AKTİF YAZILAN bir dosya; bölme adayı.
+
+## 2026-09-13 — DEFTER TERS YOL KAPISI: mekanizma çıkarılmaz, BEYAN edilir [ÇEKİRDEK]
+
+Alan dosyası: `docs/kurallar/defter.md`. Kapı: `scripts/test_defter_ters_yol.ts` (117 ölçüm, 12 bölüm,
+DB'siz, 21 sn). Beyan tablosu: `scripts/lib/defter-beyan.ts` — şemadaki **44 append-only modelin tamamı**
+sınıflı (DEFTER · SATIR_EBEVEYN · PIVOT_YAPILANDIRMA · PIVOT_TICARI · TELEMETRI · DURUM).
+
+**Kapısı olmayan kural.** *"Deftere yazan her ileri kaynağın `*_CANCEL` ters yolu olmalı"* cümlesi
+2026-09-10'dan beri yazılıydı ve **hiçbir şey tarafından ölçülmüyordu** — [DB-35]'in defter alanındaki
+örneği. Önce envanter ölçüldü (19 defter), sonra kapı yazıldı. Sıra bilinçliydi: kapıyı envanterden
+önce yazmak, ölçülmemiş bir kuralı koda gömmek olurdu.
+
+**⭐ Belgedeki tablonun EKSENİ yanlıştı ve bu kapının biçimini belirledi.** Envanter tablosu ters yolu
+*enum değeri* olarak sayıyordu (`TRANSFER ✅ · RETURN ❌`). Oysa `warehouse-ledger.helper.ts`'in kendi
+şerhi diyor ki `*_REVERSAL` değerleri **YALNIZ BETİMLEYİCİDİR**; *"bu satır ters kayıt mı"* sorusunun tek
+cevabı `reversesMovementId IS NOT NULL` (tasarım §D2a). Enum adına bakan bir ölçüm 13 değerin 9'una
+*"tersi yok"* der ve **altısında yanılır**: `ADJUST`ın tersi net ters `ADJUST`, `TRANSFORM`un tersi karşı
+grup, `RollVariance`ın tersi bir damga. ⇒ Doğru eksen **ileri yazan YOL başına**: o yolu geri alan uç bir
+ters helper çağırıyor mu. ⇒ Ve kapı mekanizmayı **ÇIKARMAZ, BEYANDAN OKUR** — dört biçim ölçüldü (damga ·
+ters bağ · tipli enum çifti · net karşı olay) ve tek kurallı bir kapı en az altı yanlış kırmızı üretirdi.
+*Bir kapı, koruduğu kuralın tek bir biçimi olduğunu varsayamaz.*
+**Sınıf adı:** *bir adın taşıdığı iddia, mekanizmanın kendisi değildir* (`producedInStepId` · `skipLabel` ·
+`salesChannel` emsalleri; kaynak kodun kendi şerhinden bulundu, belgeden değil).
+
+**Üç belgelenmiş borcun hükmü.** ① İade (`RETURN`) ters yolsuz — GEÇERLİ: `return.service.ts:576` `RETURN`
+yazıyor, `cancelReturn` (:838, uçtan çağrılıyor) defterin hiçbir yoluna dokunmuyor; `editReturn` yalnız
+sebep/not değiştiriyor, metraja dokunmuyor. Sahada 5 iade / 0 iptal ve beşi de defter yazıcısından
+(2026-08-14) önce doğduğu için `RETURN` satırı hiç yok — **yokluğa mekanizma atfedilmedi.**
+② *"Elle iptali geri al defter yazmıyor"* — **BAYAT**, 2026-09-12'de kapanmış (`restoreCancelledRoll` →
+`reverseLatestScopedStockMove`, bekçi `test_stock_ledger_cancel_restore`). ⚠️ Ama aynı cümlenin `RETURN`
+yarısı hâlâ geçerli: ***bayat bir cümlenin YARISI bayat olabilir*** — tamamını silmek ikinci bir kusur olurdu.
+③ `SackAllocation` sil-yaz — GEÇERLİ ve belgedekinden **ağır**: değişim geçmişi 2026-08-29'da **audit'e**
+yazılmış (`flushAllocationAudit`, tx DIŞINDA, best-effort) ve kodun kendi yorumu tabloyu *"MALİ ETKİSİ OLAN
+tek defter"* diyor. ⇒ ***Mali etkisi olan bir defterin geçmişi, 6 ayda arşivlenen ve düşerse sessiz kalan
+bir yere yazılıyor*** — *"audit'e uzanma ihtiyacı bir defter eksikliğinin işaretidir"* kuralının en net örneği.
+
+**⑥ "Defter mi telemetri mi" sondası iki ters yolsuz tabloya koşuldu ve FARKLI çıktılar.**
+`RollPlanDeviation` = **DEFTER**: canlı uç var (`quality.routes.ts:67` → `plan-deviation-scorecard`, ham SQL
+`COUNT/SUM`) **ve** karar okuması var (`tambur-plan-gate.helper.ts:87`). `TravelerCardScan` = **TELEMETRİ**:
+hiçbir rapor/panel/tablet yüzeyi okutma SAYISI basmıyor (ham SQL ve `_count: { scans }` dahil tarandı).
+⇒ **Kural düzeltildi:** *bir satır silindiğinde raporlanan hiçbir sayı değişmiyorsa o satır DEFTER DEĞİLDİR —
+**ama bir KARARI besliyorsa saklama süresi o KARARIN UFKUYLA sınırlıdır.*** Kuralın *"sayı"* kelimesi dardı:
+`scanCount` guard'ı hiçbir rapora girmiyor ama **kalıcı silmeyi engelliyor** (`guarded-hard-remove.ts:126`
+→ 409) ve budama o kararı **sessizce serbest bırakır**. İki çıkış: ya guard'a kalıcı ikinci tanık
+(`machineHistoryCount` zaten orada), ya budama o ufku aşmaz. ⚠️ Kök `CLAUDE.md` bu düzeltmeyi henüz taşımıyor.
+
+**`RollPlanDeviation` kusuru — iki ayağı var ve ikincisinin MEKANİZMASI bir tur çürütülüp geri alındı.**
+① Karne fazla sayıyor: rapor `where`i yalnız `createdAt`, `roll.status` hiçbir sorguda yok; `finalize`
+kaynağında `qtyM` topun tamamı ⇒ geri alınıp yeniden finalize edilen top **iki tam imza + iki tam metraj**.
+② Kapı soruyu bastırıyor — ama yolu `tambur-undo` DEĞİL: `cancelReceipt` hareketi silmiyor **geri alıyor**
+(`revokeRollMovements` :5284 + `revokeRollOperations` :5414) → restore guard'ı `ACTIVE_MOVEMENT` saydığı için
+geri alınmışı **görmüyor** (0) → cascade `currentStepId`i null'a çekiyor → `cancelReasonCode` HİÇ yazılmıyor →
+`batchId` engeli 2026-08-25'te kalkmış ⇒ doğan top restore guard'ının **sekiz sinyalinin hepsinden geçer**,
+diriltilir ve `fason-receipt` sapma satırı CANLI döner (satır kabulde **doğan topa** yazılıyor:
+`subcontractor.service.ts:3302`). Onarımın iki ayağı AYRILAMAZ: `revokedAt IS NULL` süzgeci **ve** kabul
+iptalinin o satırları damgalaması — süzgeç tek başına boş küme üzerinde çalışır.
+**Aktarım dersi (yönetici oturumun kendi tespiti):** ***bir bulgunun mekanizmasını, onu bulan kişiden ikinci
+elden alıp genişletmek, "doğru gözlemden yanlış mekanizma" sınıfının aktarım hâlidir***; ve ***bir iddiayı
+çürüten zincirin en zayıf halkası ÖLÇÜLMEMİŞ olanıdır — onu ölçmemek çürütmeyi değil GÜVENİ üretir.***
+
+**⭐ Muafiyetin her gerekçesi bir ÇÜRÜTMEDİR ve zayıf halkası ayrıca ölçülür.** Dördü ölçüldü, **biri kırıldı**:
+`SystemLog` = telemetri gerekçesinin zayıf halkası audit'in bir sayaçta okunmasıydı
+(`backup-impact.service.ts:331`). Sınıf **ayakta kaldı** çünkü o satır *"İş kaybı DEĞİL — iz kaydı"* etiketiyle
+`system` grubunda ve kod arşivleme ufkunu ZATEN biliyor: `:404 _min(createdAt)` ile kapsamı ölçüp yetmiyorsa
+*"ölçülemedi"* diyor, **0 demiyor**. ⇒ ***Bir sınıflandırmanın doğru kalması yetmez; gerekçesinin de ölçülmüş
+olması gerekir*** — yoksa bir sonraki kişi sınıfı doğru bulur, sebebini uydurur. Ayrıca *"ters yolu
+ebeveynindedir"* çürütmesi **hiç ölçülmemişti** (ebeveynin ters yolu var mı? → 3 beyanlı DEFTER + 7
+`cancelledAt`) ve *"saf yapılandırma pivotu"* için **ölçülebilir vekil** bulundu (*miktar/para taşıyan pivot saf
+ayar değildir* → `Decimal` yok). İkisi de §11/§12 olarak **kapıya çevrildi**: çürütmeyi bir kapıya çevirmek,
+gerekçeyi her koşumda ölçülür kılar.
+
+**Aracın kendi kör noktaları — üçü ölçüldü, üçü kapatıldı.**
+① **Delegate yüklemi iç içe ilişki yazımını görmez:** `ImportRunLine`ın ileri satırları
+`lines: { createMany }` ile doğuyor, `prisma.importRunLine.create` **HİÇ YOK**. Ad bazlı iç içe yüklem ise
+belirsiz (`lines` = `InvoiceLine` | `ImportRunLine` | `PurchaseOrderLine`; 6 bulgunun 4'ü yanlış pozitif) ⇒
+model **BAĞLAMSAL TİPTEN** çözülür. ② **Prisma'nın iki ad düzeni var ve tek kalıp birini kaçırır:**
+`<Model>CreateNestedManyWithout<X>Input` yakalandı, `<Model>UpdateManyWithout<X>NestedInput` KAÇTI — aynı
+`upsert`in `create:` dalı görülürken `update:` dalı görünmüyordu (gevşek araçla çapraz kontrol ederek
+yakalandı). ③ **Kapsam SESSİZCE boştu:** kök `tsconfig.json` yalnız `src/**` içerir; `scripts/` taraması
+sıfır bulgu verdi ve sebebi kapsamdı ⇒ `tipliProgram` tsconfig adını parametre aldı ve kapı artık
+**kapsamın DOLU olduğunu da ölçüyor** (§9). *Kapsamı tarayan, kapsamın dolu olduğunu da ölçmek zorundadır.*
+
+**"Uçtan erişilebilir mi" ÖLÇÜLEMEDİ ve soru DARALTILDI.** Elle kurulan ad/ithal grafiği **dört nesilde**
+yanlış negatif verdi — her nesilde yeni bir dolaylama biçimi: `this.service.X` → yerel
+`const c = new Ctrl()` → sınıf alanı ok fonksiyonu (`undoDispatch = async () => {}`). Pozitif kontrol
+(`undoDispatch` kesin bir uçtur) her nesilde düştü; gevşetilmiş sürüm ise **her şeye EVET** dedi
+(1.251 → 10.727 ad, ayırt gücü sıfır). Soru *"tanımı dışında HİÇ referansı var mı"*ya daraltıldı ve o hâliyle
+cevaplandı (2.744 fonksiyonun 58'i sıfır referanslı = %2,1 ayırt gücü; 21 ters yazım yerinin hepsinin
+referansı var ⇒ **ölü ters yol bulunmadı**). ⇒ ***Ölçülemeyen bir soruyu ölçülebilir bir soruyla değiştirmek,
+ölçülmemiş bir cevap uydurmaktan iyidir — yeter ki değişimin kendisi yazılsın.***
+
+**Fikstür muafiyeti KEŞİFLE kuruldu, elle liste değil:** ölçüt koşucunun kendi süzgecidir
+(`run-all-tests.ts` → `scripts/` KÖKÜNDEKİ `^test_.*\.ts$`). `scripts/`te defter yazan 12 dosya sınıflandı
+(SEED · DEMO · DENETIM_REPRO) ve beyanı ölü düşerse kırmızı verir. ⚠️ `acilis_fotografi_stok_defteri.ts`
+kapsamın neden elle liste olamayacağının kanıtı: o **funnel'ı çağırıyor** (`postStockMoves`), doğrudan
+yazmıyor — yani doğru disiplini uyguluyor ve beyan gerektirmiyor.
+
+**Dokuz negatif sonda, dokuzu da iki yönlü** (kırmızı → yeşil): beyansız ileri yol §5 · beyansız
+`deleteMany` §10 · ters sembol yeniden adlandırıldı §4a · mekanizma kolonu yeniden adlandırıldı §3 · borçlu
+modelde damga belirdi §6b · yeni append-only model §1a · ebeveynin damgası kaldırıldı §11 · pivota `Decimal`
+eklendi §12. Şema sondalarında geri alma `cp` + **sha256 eşitliğiyle** doğrulandı (ortak çalışma ağacı,
+`git checkout` YOK). ⚠️ Ve kapı **kendi beyanındaki hatayı yakaladı**: `YarnMovement` yanlışlıkla *"yarı"*
+işaretlenmişti, şemada tam append-only.
+
+**İkinci tarama altyapısı KURULMADI:** `revoke-ast-tarama.ts`ten `semaAlanlari` + yeni `tipliProgram` ihraç
+edildi (katkısız). Refactor iki yolla doğrulandı: ① iki sürümün çıktısı birebir aynı (`rollMovement`
+61/22/22/0/5 · `rollOperation` 34/10/2/0/5, sayılar sıfır değil) ② **iki bekçi gerçekten koşturuldu**
+(19/0 ve 14/0, kendi `_test` hedefinde, `.env`e dokunmadan). İkincisi gerekliydi: ***"aynı sayı" ile "aynı
+davranış" AYRI iddialardır.*** Test hedefi de refleksle değil **ölçülmüş ihtiyaç üzerine** kuruldu.
+
+**Yedi açık borç her koşumda GÖRÜNÜR basılır** (muafiyet listesine gömülmez, çünkü gömülen borç görünmez
+olur): `RETURN` · `SackAllocation` · `RollPlanDeviation` · `ShipmentOrder` (aynı ilişki iki rejimle kapanıyor:
+`deleteMany` :1964 / `isActive:false` :3547) · `SackTagAssignment` (*"geçersiz iz"* kavramı kurulmuş
+`ACTIVE_TAG_WHERE` ama satır fiziksel siliniyor) · `RollProperty` + `WorkOrderTargetProperty` (③a).
+
+**Satır modelleri için hüküm:** *bir satırın ters yolu, ait olduğu BELGENİN ters yoludur* — ancak satır
+**bağımsız düzenlenemiyorsa**. Beş model temiz; `InvoiceLine` sil-yaz yapıyor ama **atomik claim
+`status: DRAFT`** arkasında ⇒ hard-delete sınıf ④ (*fark CLAIM'dir*, "bağımsız sil-yaz" ile karıştırılmaz);
+`ShipmentOrder` + `SackTagAssignment` `SackAllocation` ailesinde ⇒ **borç**; `subcontractorDispatchItem`
+sınırda ve **sınırda olduğu söylenerek** geçirildi (5 bağımsız yazım, 0 silme).

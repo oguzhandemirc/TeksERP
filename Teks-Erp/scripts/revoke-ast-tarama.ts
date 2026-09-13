@@ -52,8 +52,15 @@ const OKUMA_GUNCELLEME = new Set([
 ]);
 const SQL_ANAHTAR = new Set(["where", "set", "on", "join", "left", "right", "inner", "full", "cross", "group", "order", "using", "limit", "returning", "as"]);
 
-/** Şemadaki her modelin alan adı → tip adı eşlemesi (`[]`/`?` atılmış). */
-function semaAlanlari(kok: string): Map<string, Map<string, string>> {
+/**
+ * Şemadaki her modelin alan adı → tip adı eşlemesi (`[]`/`?` atılmış).
+ *
+ * İHRAÇ EDİLDİ (2026-09-13): defter ters-yol kapısı da şema alanlarını ve TS
+ * programını okuyor. İkinci bir tarama altyapısı bir hafta sonra bundan ayrışır
+ * ve iki bekçi iki farklı kapsam iddia eder — o yüzden program + şema okuması
+ * TEK YERDE yaşar.
+ */
+export function semaAlanlari(kok: string): Map<string, Map<string, string>> {
   const sema = readFileSync(join(kok, "prisma", "schema.prisma"), "utf8");
   const modeller = new Map<string, Map<string, string>>();
   let aktif: Map<string, string> | null = null;
@@ -77,14 +84,36 @@ const ARGUMAN_ANAHTARLARI = new Set([
   "AND", "OR", "NOT", "some", "none", "every", "is", "isNot", "data", "omit",
 ]);
 
-export function aktifYuklemTara(kok: string, tanimlar: AktifYuklemTanimi[]): Map<string, TaramaSonucu> {
-  const cfg = ts.readConfigFile(join(kok, "tsconfig.json"), ts.sys.readFile);
+/**
+ * Tip denetleyicili `ts.Program` — tsconfig'ten, TEK KAYNAK (bkz. `semaAlanlari` şerhi).
+ *
+ * ⚠️ `tsconfigAdi` ÖNEMLİ: kök `tsconfig.json` YALNIZ `src/**` içerir. `scripts/`i
+ * de taraması gereken bir kapı varsayılanla kurulursa program o dosyaları HİÇ
+ * görmez ve tarama SESSİZCE boş döner (ölçüldü 2026-09-13: scripts/ taraması
+ * sıfır bulgu verdi, sebebi kapsamdı). Kapsamı tarayan, kapsamın DOLU olduğunu da
+ * ölçmek zorundadır.
+ */
+export function tipliProgram(kok: string, tsconfigAdi = "tsconfig.json"): {
+  program: ts.Program;
+  checker: ts.TypeChecker & { getContextualType(e: ts.Expression, flags: number): ts.Type | undefined };
+} {
+  const cfg = ts.readConfigFile(join(kok, tsconfigAdi), ts.sys.readFile);
   const parsed = ts.parseJsonConfigFileContent(cfg.config, ts.sys, kok);
   const program = ts.createProgram(parsed.fileNames, { ...parsed.options, noEmit: true });
-  const checker = program.getTypeChecker() as ts.TypeChecker & {
-    getContextualType(e: ts.Expression, flags: number): ts.Type | undefined;
+  return {
+    program,
+    checker: program.getTypeChecker() as ts.TypeChecker & {
+      getContextualType(e: ts.Expression, flags: number): ts.Type | undefined;
+    },
   };
-  const COMPLETIONS = 4; // ContextFlags.Completions — çıkarım adayını değil kısıt tipini verir
+}
+
+/** `ts.ContextFlags.Completions` — çıkarım adayını değil KISIT tipini verir. */
+export const CONTEXT_COMPLETIONS = 4;
+
+export function aktifYuklemTara(kok: string, tanimlar: AktifYuklemTanimi[]): Map<string, TaramaSonucu> {
+  const { program, checker } = tipliProgram(kok);
+  const COMPLETIONS = CONTEXT_COMPLETIONS;
 
   const modeller = semaAlanlari(kok);
   const sonuclar = new Map<string, TaramaSonucu>();
