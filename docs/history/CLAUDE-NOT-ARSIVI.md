@@ -8314,3 +8314,19 @@ yabancı-hareket engeli düşür → §9d/§9e ❌ (satır=3: giriş + yabancı 
 **Ürün etkisi (sürüm notu adayı, kullanıcı onayında):** son adım fason kabulü, doğan top
 çuvalsız ve hareketsizken artık İPTAL EDİLEBİLİR; eskiden "Durum: WAREHOUSE" ile reddediliyordu.
 Rakam düşürmez; bir kapı açar.
+
+### GEÇERSİZ → 2026-09-13
+
+**ESKİ:** "Metraj geri koyma İKİ DALDA FARKLI: üretim yalnız currentQty, depo (cutWarehouseRoll)
+currentQty+initialQty birlikte (tek taraf → sahte AŞIM)" (`docs/kurallar/top-duzeltme.md` kuralı;
+2026-08-12 gece SINGLE_RESTORE notu ve 2026-08-22 aşım koruması notundan).
+**YENİ:** iki dalda AYNI kural — kesim `initialQty`ye DOKUNMAZ (2026-08-29 denetimi, BULGU-T2-016:
+kolon üretim anı snapshot'ıdır), geri alma `currentQty`yi geri koyar ve `initialQty`yi yalnız aşımda
+`initialBump` ile yukarı çeker (+ OVERAGE sapma satırı). **Neden bayatladı:** kesim tarafı 08-29'da
+değişti, kural cümlesi ve undo'nun depo dalı değişmedi — `tambur-undo.service.ts:1256-1264` yorumu hâlâ
+*"kesim ikisini birden düşmüştü"* diyor ve `+len` ekliyor (`:1465-1475` aynı). 01 çalıştırarak ölçtü:
+100 m depo topu → 40 m kes → geri al ⇒ `initialQty` 100→140. 6e kod ağacı + fabrika kopyasında ölçtü:
+altı okuyucu etkilenir (`rollWhole` metraj-düzeltme kapısı · WO üretilen metraj `_sum.initialQty` ·
+coverage Σkök · üretim raporu · ikiz kapısı · etiket "100 / 140"), saha etkisi bugün 0 (geri alınmış
+depo kesimi 0, initialQty > giriş defteri 0). Düzeltme 1e hükmüyle initialBump deseni; bekçi
+`test_stock_ledger_tambur_undo §12` (tren #5 sonrası, 6e). Kural satırı `Kapanır:` taşıyor.
