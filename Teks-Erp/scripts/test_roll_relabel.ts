@@ -47,8 +47,10 @@ async function main() {
     data: { code: `TST-RLB-I-${ts}`, name: `TEST RLB ÜRÜN ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
-  const colorA = await prisma.color.create({ data: { code: `RLB-A-${ts}`, name: "RLB MAVİ" }, select: { id: true } });
-  const colorB = await prisma.color.create({ data: { code: `RLB-B-${ts}`, name: "RLB YEŞİL" }, select: { id: true } });
+  // Ad da koşum başına BENZERSİZ: sabit ad, çöken bir koşumun artığıyla katlanmış-ad
+  // tekilliğine (tr_fold_color) çarpar ve asıl hatayı maskeler (d9 ölçtü 2026-09-14).
+  const colorA = await prisma.color.create({ data: { code: `RLB-A-${ts}`, name: `RLB MAVİ ${ts}` }, select: { id: true } });
+  const colorB = await prisma.color.create({ data: { code: `RLB-B-${ts}`, name: `RLB YEŞİL ${ts}` }, select: { id: true } });
   const prop = await prisma.fabricProperty.findFirst({ where: { isActive: true }, select: { id: true } });
 
   const mkRoll = (n: number) =>
