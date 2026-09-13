@@ -40,6 +40,7 @@ import { RECEIPT_LEDGER_ROW_MISSING } from "../src/services/helpers/receipt-qty.
 import { invoiceService } from "../src/services/invoice.service";
 import { purchaseOrderService } from "../src/services/purchase-order.service";
 import { TamburService } from "../src/services/tambur.service";
+import { InventoryService } from "../src/services/inventory.service";
 import { TamburUndoService } from "../src/services/tambur-undo.service";
 
 let pass = 0;
@@ -190,6 +191,26 @@ async function main(): Promise<void> {
   await kes(f.parent, 60);
   await kes(f.parent, 70);
   await durum(f, "G", "bump'lı ebeveyn yeniden kesildi");
+
+  // ── 7. DURUM — GİRİŞ ÖLÇÜMÜ DÜZELTMESİ (6e, 2026-09-14): bütün topta Düzelt diyaloğu
+  //    currentQty = initialQty = m yazar; defter ENTRY_CORRECTION satırı alır (yukarı → to
+  //    +fark, aşağı → from −fark) ve okuyucular ENTRY + Σ düzeltme = DÜZELTİLMİŞ metrajı
+  //    okur — initialQty'den değil defterden (satırı silince §H yedeğe DÜŞMEZ, 409 verir).
+  const h = await fisKur(wh.id);
+  const inventory = new InventoryService();
+  await inventory.applyManualProperties(h.parent, { colorId: null, currentQty: 110, reason: "bekçi §H: giriş ölçümü +10" });
+  const hUst = await prisma.warehouseMovement.findMany({ where: { rollId: h.parent, reasonCode: "ENTRY_CORRECTION" }, select: { qty: true, toWarehouseId: true, fromWarehouseId: true, rollVarianceId: true, goodsReceiptId: true } });
+  check("§Hz fikstür: +10 düzeltmesi ENTRY_CORRECTION giriş ucu (+10) yazdı, sapma satırına ve fişe bağlı", hUst.length === 1 && Number(hUst[0]!.qty) === 10 && hUst[0]!.toWarehouseId !== null && hUst[0]!.fromWarehouseId === null && hUst[0]!.rollVarianceId !== null && hUst[0]!.goodsReceiptId === h.receipt, JSON.stringify(hUst));
+  const h1 = await okuyucular(h);
+  check("§H1 ⭐ +10 düzeltmesi sonrası alış faturası taslağı 110 m (defterden)", h1.taslak === 110, `taslak=${h1.taslak}`);
+  check("§H2 ⭐ +10 düzeltmesi sonrası sipariş karşılaması 110 m", h1.karsilama === 110, `karşılama=${h1.karsilama}`);
+  await inventory.applyManualProperties(h.parent, { colorId: null, currentQty: 90, reason: "bekçi §H: giriş ölçümü −20" });
+  const hAlt = await prisma.warehouseMovement.findFirst({ where: { rollId: h.parent, reasonCode: "ENTRY_CORRECTION", fromWarehouseId: { not: null } }, select: { qty: true } });
+  check("§Hz2 fikstür: −20 düzeltmesi çıkış ucu (−20) yazdı", Number(hAlt?.qty) === 20, `qty=${hAlt?.qty}`);
+  const h2 = await okuyucular(h);
+  check("§H3 ⭐ 110 → 90 düzeltmesi sonrası iki okuyucu 90 m (işaretli Σ: 100 + 10 − 20)", h2.taslak === 90 && h2.karsilama === 90, `taslak=${h2.taslak} karşılama=${h2.karsilama}`);
+  const hRoll = await prisma.roll.findUniqueOrThrow({ where: { id: h.parent }, select: { initialQty: true, currentQty: true } });
+  check("§H4 durum = defter: initialQty = currentQty = 90", Number(hRoll.initialQty) === 90 && Number(hRoll.currentQty) === 90, `initialQty=${Number(hRoll.initialQty)} current=${Number(hRoll.currentQty)}`);
 
   // ── ÜÇ SONUÇ — ikinci fiş, defter satırı BİLEREK silinir (sonda DB) ───────
   const g = await fisKur(wh.id);

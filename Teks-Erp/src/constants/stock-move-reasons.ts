@@ -131,6 +131,13 @@ export const STOCK_MOVE_REASON = {
   OVERAGE: "OVERAGE",
   /** Elle metraj düzeltmesi. */
   MANUAL_ADJUST: "MANUAL_ADJUST",
+  /**
+   * GİRİŞ ÖLÇÜMÜ düzeltmesi (`applyManualProperties`, bütün topta currentQty = initialQty = m)
+   * — `MANUAL_ADJUST`tan farkı: düzeltilen şey topun KABUL metrajıdır (initialQty de taşınır);
+   * kabul-anı okuyucuları (`RECEIPT_QTY_REASONS`) bu kodu ENTRY ile birlikte işaretli toplar.
+   * Tersi ters yönde ikinci düzeltmedir (karşı olay kendisi, MANUAL_ADJUST emsali).
+   */
+  ENTRY_CORRECTION: "ENTRY_CORRECTION",
   /** Kesme anı açılış fotoğrafı. */
   OPENING: "OPENING",
 } as const;

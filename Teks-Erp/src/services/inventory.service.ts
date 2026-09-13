@@ -11,6 +11,7 @@ import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { claimDoffForRollTx } from "./helpers/machine-doff-link.helper";
 import { postRescueEntryTx } from "./helpers/production-entry-ledger.helper";
+import { postEntryCorrectionTx } from "./helpers/entry-correction-ledger.helper";
 import { normalizeScanCode } from "../utils/code-format";
 import { AuditService } from "./audit.service";
 import { normalizeFoldType, resolveFoldTypeForWrite } from "./helpers/fold-type";
@@ -4243,6 +4244,8 @@ export class InventoryService {
         foldType: true,
         initialQty: true,
         currentQty: true,
+        warehouseId: true,
+        goodsReceiptId: true,
         shipmentId: true,
         shipment: { select: { status: true } },
         sackId: true,
@@ -4532,6 +4535,11 @@ export class InventoryService {
           throw AppError.conflict(
             `${upperTr(neden.charAt(0))}${neden.slice(1)} — düzeltme uygulanmadı. Ekranı yenileyip güncel değerlerle tekrar deneyin.`,
           );
+        }
+        // 1b) GİRİŞ ÖLÇÜMÜ DÜZELTMESİ DEFTERE (tek yazıcı, claim'in arkasında aynı tx):
+        // sapma + stok defteri ENTRY_CORRECTION — kabul-anı okuyucuları bunu toplar (K §4g).
+        if (rollData.currentQty !== undefined && metrajChanged) {
+          await postEntryCorrectionTx(tx, { roll, yeniQty: new Prisma.Decimal(data.currentQty as number), reason: data.reason, userId: userId ?? null });
         }
       }
 

@@ -76,6 +76,12 @@ export const VARIANCE_SOURCES = {
   /** Depoda SAYIM metraj düzeltmesi (G4, 2026-08-14) — `inventory.service.adjustRollQty`. */
   WAREHOUSE_QTY_ADJUST: "WAREHOUSE_QTY_ADJUST",
   /**
+   * GİRİŞ ÖLÇÜMÜ düzeltmesi (2026-09-14) — `inventory.service.applyManualProperties`, bütün
+   * topta `currentQty = initialQty = m`. `WAREHOUSE_QTY_ADJUST`tan farkı: kabul metrajı
+   * (initialQty) da taşınır; stok defteri satırı `ENTRY_CORRECTION` koduyla bağlı.
+   */
+  ENTRY_QTY_CORRECTION: "ENTRY_QTY_CORRECTION",
+  /**
    * TAM STOK SAYIMI fark fişi (J2 #19, 2026-08-15) — `stock-count.service.complete`.
    *
    * ⚠️ `WAREHOUSE_QTY_ADJUST` ile KARIŞTIRMA, ikisi ayrı soruyu yanıtlar:

@@ -545,4 +545,11 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   // §13d simetri kendine döner (KARSI_OLAY ⇄ kendisi); §13f çapa yazıcının kendisi.
   MANUAL_ADJUST: { tur: "KARSI_OLAY", kod: "MANUAL_ADJUST", gerekce: "elle metraj düzeltmesinin tersi ters yönde ikinci bir elle düzeltmedir — aynı kod, ters işaret, rollVarianceId ile sapma defterine bağlı; geri alma ucu yok ve olmamalı (operatör kararı, damga değil olgu)",
     tersYazan: [{ dosya: "src/services/inventory.service.ts", sembol: "adjustRollQty" }] },
+  // ENTRY_CORRECTION — giriş ölçümü düzeltmesi (6e 2026-09-14, 1e ② a): `applyManualProperties`
+  // bütün topta currentQty = initialQty = m yazarken ADJUST satırı (düşükse from −fark, yüksekse
+  // to +fark, `rollVarianceId` ENTRY_QTY_CORRECTION sapmasına bağlı, goodsReceiptId'li). Kabul-anı
+  // okuyucuları (`RECEIPT_QTY_REASONS`) ENTRY ile birlikte işaretli toplar. Tersi MANUAL_ADJUST
+  // emsali: geri alma ucu yok, ters yönde ikinci düzeltme yeni olgudur ⇒ karşı olay KENDİSİ.
+  ENTRY_CORRECTION: { tur: "KARSI_OLAY", kod: "ENTRY_CORRECTION", gerekce: "giriş ölçümü düzeltmesinin tersi ters yönde ikinci bir düzeltmedir — aynı kod, ters işaret, rollVarianceId ile sapma defterine bağlı; geri alma ucu yok (operatör kararı, damga değil olgu)",
+    tersYazan: [{ dosya: "src/services/inventory.service.ts", sembol: "applyManualProperties" }] },
 };

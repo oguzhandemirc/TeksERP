@@ -46,7 +46,7 @@ type Db = Prisma.TransactionClient | typeof prisma;
  * Kabul-anı metrajına GİREN sebep kodları — tek liste. Yeni üye yalnız yazıcısı
  * ve ters-yol beyanıyla birlikte gelir (giriş ölçümü düzeltmesi: 6e dilimi).
  */
-export const RECEIPT_QTY_REASONS: readonly string[] = [STOCK_MOVE_REASON.ENTRY_RECEIPT];
+export const RECEIPT_QTY_REASONS: readonly string[] = [STOCK_MOVE_REASON.ENTRY_RECEIPT, STOCK_MOVE_REASON.ENTRY_CORRECTION];
 
 export type ReceiptQtySource = "LEDGER" | "INITIAL_QTY_FALLBACK";
 export interface ReceiptQty {
