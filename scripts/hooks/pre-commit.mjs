@@ -53,8 +53,30 @@ const headOku = () => {
 };
 const headBasta = headOku();
 
+// ⚠️ `scripts/` 2026-09-13'e kadar HİÇBİR commit kapısının tip kapsamında değildi
+// (6e ölçtü, ve boşluk ölçüldükten BİR SAAT sonra `main`e dört TS2739 indirdi).
+// Sebep: `tsconfig.json` include = ["src/**/*"] ⇒ 554 dosyalık `scripts/` dışarıda,
+// ve tek koşan yer `npm test`in tip geçidiydi — o da filtreli koşumda düşüyor.
+//
+// ⚠️ EK ADIM DEĞİL, DEĞİŞTİRME: `tsconfig.scripts.json` `src`i DE kapsıyor
+// (ölçüldü: 487 ⊂ 1143 kök dosya) ⇒ ikisini birden koşmak aynı 487'yi iki kez
+// derlerdi. Geniş config DARI KAPSAR, yerine geçer.
+//
+// ⚠️ BEDEL YALNIZ RİSKİ TAŞIYAN COMMIT'E YÜKLENİR (ölçüldü: 37 sn ↔ 67 sn).
+// Her backend commit'ine +30 sn eklemek kapının İKİNCİ ölüm biçimini doğurur:
+// yavaş kapı kaçışa iter ve kaçılan kapı hiç koşmaz. `scripts/` ya da `prisma/`
+// dokunulmuyorsa dar config zaten doğru cevabı verir.
+const genisTip = (ad) =>
+  ad === "Teks-Erp" &&
+  staged.some((f) => /^Teks-Erp\/(scripts|prisma)\//.test(f));
+
 for (const proje of etkilenenProjeler(REPO, staged)) {
-  adimlar.push({ ad: `${proje.ad} · tip`, cwd: proje.ad, cmd: proje.typecheck });
+  const genis = genisTip(proje.ad);
+  adimlar.push({
+    ad: `${proje.ad} · tip${genis ? " (+scripts)" : ""}`,
+    cwd: proje.ad,
+    cmd: genis ? ["npm", ["run", "typecheck:scripts"]] : proje.typecheck,
+  });
   // Lint doğrudan değil KAPI üzerinden: taranan küme aynı kalır (tavan aynı kümeyi
   // ölçmek zorunda), yalnız verdikt commit'in kendi dosyalarına daralır. Staged liste
   // stdin'den geçer — kapı tabanı yeniden türetmesin (bkz. lint-gate.mjs § KÜME).
