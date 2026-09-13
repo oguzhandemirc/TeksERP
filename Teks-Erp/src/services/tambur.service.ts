@@ -1274,8 +1274,9 @@ export class TamburService {
         },
       });
 
-      // Parent retire olduğu için RollProperty bindirme gereksiz — sil.
-      await tx.rollProperty.deleteMany({ where: { rollId: data.rollId } });
+      // Parent'ın RollProperty'si SİLİNMEZ (2026-09-14): TAMBUR_CONSUMED ebeveyn
+      // özelliğini taşımaya devam eder — geri almada (`tambur-undo` donör dalı,
+      // count === 0 koşullu) çocuktan kopyalamak yerine kendi satırları durur.
 
       // Per-roll Tambur işlem log'u (parent üzerinde — kopyalanmaz).
       if (oldStepId) {

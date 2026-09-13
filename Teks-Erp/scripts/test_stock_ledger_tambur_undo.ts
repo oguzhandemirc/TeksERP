@@ -139,6 +139,20 @@ async function main(): Promise<void> {
 
   // ── SENARYO A — tek çocuk geri alma (SINGLE / SINGLE_RESTORE) ─────────────
   const parentA = await senaryo("A", warehouse.id, station.id, 300);
+  // Ebeveyne bir özellik yaz — finalize'ın ebeveyn retire'ı ÖZELLİĞİ SİLMEMELİ
+  // (③a ticari pivot, 2026-09-14): TAMBUR_CONSUMED ebeveyn satırını taşımaya devam
+  // eder; geri almada donör dalı (count === 0 koşullu) hiç girmez, satır sayısı sabit.
+  // Fikstür İŞ ANAHTARIYLA (code) kurulur, ortamda aranmaz (keyfi arama mandalı).
+  const anyProp = await prisma.fabricProperty.upsert({
+    where: { code: "TEST-SLTU-OLU-OZ" },
+    create: { code: "TEST-SLTU-OLU-OZ", name: "TEST ölü top özelliği", valueType: "FLAG" },
+    update: {}, select: { id: true },
+  });
+  await prisma.rollProperty.upsert({
+    where: { rollId_propertyId: { rollId: parentA, propertyId: anyProp.id } },
+    create: { rollId: parentA, propertyId: anyProp.id }, update: {},
+  });
+  const parentPropsBefore = await prisma.rollProperty.count({ where: { rollId: parentA } });
   const resA = await tambur.finalize({
     rollId: parentA,
     decisions: [],
@@ -154,6 +168,10 @@ async function main(): Promise<void> {
   const scrapA = cocuklarA.find((c) => c.status === RollStatus.SCRAP);
   check("§0 Kurulum: iki çocuk doğdu", cocuklarA.length === 2 && !!whA && !!scrapA, `çocuk=${cocuklarA.length}`);
   if (!whA) throw new Error("Depo çocuğu doğmadı — senaryo kurulamadı");
+
+  const parentPropsAfterFinalize = await prisma.rollProperty.count({ where: { rollId: parentA } });
+  check("§0b ⭐ Finalize ebeveynin ÖZELLİK satırını SİLMEDİ (TAMBUR_CONSUMED'da kalır)", parentPropsAfterFinalize === parentPropsBefore, `önce=${parentPropsBefore} sonra=${parentPropsAfterFinalize}`);
+  check("§0c çocuk özelliği DEVRALDI", (await prisma.rollProperty.count({ where: { rollId: whA.id } })) >= 1);
 
   const ileriA = await satirlar(whA.id);
   check("§1 Finalize depo çocuğuna tek PRODUCTION girişi yazdı", ileriA.length === 1 && net(ileriA) === 200, `satır=${ileriA.length} net=${net(ileriA)}`);
@@ -182,6 +200,8 @@ async function main(): Promise<void> {
     `canlı=${String(canliA?.currentQty)} ters=${String(tersA?.qty)}`,
   );
   check("§5 Fire (SCRAP) çocuk: ne ileri ne ters satır", scrapA ? (await satirlar(scrapA.id)).length === 0 : false);
+  const parentPropsAfterUndo = await prisma.rollProperty.count({ where: { rollId: parentA } });
+  check("§5b geri alma ebeveyn özelliğini ÇOĞALTMADI (donör dalı girmedi, sayı sabit)", parentPropsAfterUndo === parentPropsBefore, `önce=${parentPropsBefore} sonra=${parentPropsAfterUndo}`);
 
   // ── SENARYO B — FULL geri alma, İKİ depo çocuğu ───────────────────────────
   const parentB = await senaryo("B", warehouse.id, station.id, 300);
@@ -553,6 +573,7 @@ async function cleanup(): Promise<void> {
       await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
       await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
       await prisma.rollProperty.deleteMany({ where: { rollId: { in: rollIds } } });
+      await prisma.fabricProperty.deleteMany({ where: { code: "TEST-SLTU-OLU-OZ" } }).catch(() => {});
       await prisma.systemLog.deleteMany({ where: { recordId: { in: rollIds } } });
       await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
     }

@@ -5432,10 +5432,9 @@ export class SubcontractorService {
             notes: `Fason kabul iptali (${receipt.receiptNo})`,
           },
         );
-        // RollProperty: receipt'ten inherit edilmişti, sil
-        await tx.rollProperty.deleteMany({
-          where: { rollId: { in: bornRollIds } },
-        });
+        // RollProperty SİLİNMEZ (2026-09-14): top CANCELLED'a gidiyor, özelliği
+        // onunla kalır — silmek ölü topun geçmişini kesmekti (③a ticari pivot).
+        // Yeniden kabul YENİ top yaratır, unique çakışmaz.
         // Roll status → CANCELLED, currentStepId temizle
         // ⚠️ SEBEP KODU 2026-09-13'te EKLENDİ: bu yol topu SEBEPSİZ iptal ediyordu
         //    (data yalnız status + currentStepId), oysa iptal sebebi kataloglu. İki
@@ -5980,7 +5979,8 @@ export class SubcontractorService {
         reason: "FASON_TRANSFER_GERI_AL",
         userId,
       });
-      await tx.rollProperty.deleteMany({ where: { rollId: { in: bornRollIds } } });
+      // RollProperty SİLİNMEZ (2026-09-14): born top CANCELLED'a gidiyor, özelliği
+      // onunla kalır (③a ticari pivot; cancelReceipt ile aynı hüküm).
       const cancelledBorn = await tx.roll.updateMany({
         where: {
           id: { in: bornRollIds },

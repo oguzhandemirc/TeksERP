@@ -111,8 +111,26 @@ async function main(): Promise<void> {
   check("Preview born toplar 2", prev.bornRolls.length === 2, `adet=${prev.bornRolls.length}`);
   check("Preview kaynak kabul >=1", prev.sourceReceipts.length >= 1, `adet=${prev.sourceReceipts.length}`);
 
+  // Born'lara özellik yaz — geri alma ÖZELLİĞİ SİLMEMELİ (③a ticari pivot, 2026-09-14).
+  // Fikstür İŞ ANAHTARIYLA (code) kurulur, ortamda aranmaz (keyfi arama mandalı).
+  const anyProp = await prisma.fabricProperty.upsert({
+    where: { code: "TEST-FUT-OLU-OZ" },
+    create: { code: "TEST-FUT-OLU-OZ", name: "TEST ölü top özelliği", valueType: "FLAG" },
+    update: {}, select: { id: true },
+  });
+  for (const r of bornBefore) {
+    await prisma.rollProperty.upsert({
+      where: { rollId_propertyId: { rollId: r.id, propertyId: anyProp.id } },
+      create: { rollId: r.id, propertyId: anyProp.id }, update: {},
+    });
+  }
+  const bornPropsBefore = await prisma.rollProperty.count({ where: { rollId: { in: bornBefore.map((r) => r.id) } } });
+  check("ön koşul — born'larda özellik satırı var", bornPropsBefore >= bornBefore.length, `n=${bornPropsBefore}`);
+
   // Geri al
   await sub.undoTransfer(boyaDispatchId, "yanlış aktarım — geri alma testi", ADMIN);
+  const bornPropsAfter = await prisma.rollProperty.count({ where: { rollId: { in: bornBefore.map((r) => r.id) } } });
+  check("⭐ Geri alma born'ların ÖZELLİK satırını SİLMEDİ (ölü topta kalır)", bornPropsAfter === bornPropsBefore, `önce=${bornPropsBefore} sonra=${bornPropsAfter}`);
 
   const boyaD = await prisma.subcontractorDispatch.findUnique({ where: { id: boyaDispatchId }, select: { cancelledAt: true } });
   check("Boyahane sevki CANCELLED", boyaD?.cancelledAt !== null, String(boyaD?.cancelledAt !== null));
@@ -233,6 +251,7 @@ async function cleanup(): Promise<void> {
     await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.rollProperty.deleteMany({ where: { rollId: { in: rollIds } } });
+    await prisma.fabricProperty.deleteMany({ where: { code: "TEST-FUT-OLU-OZ" } }).catch(() => {});
     await prisma.subcontractorReceiptItem.deleteMany({ where: { receiptId: { in: receiptIds } } });
     await prisma.subcontractorReceiptProperty.deleteMany({ where: { receiptId: { in: receiptIds } } });
     await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: { in: dispatchIds } } });

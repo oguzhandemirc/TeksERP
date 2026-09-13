@@ -128,7 +128,25 @@ async function main(): Promise<void> {
   check("CR1: ilk kabulde 1 canlı born @ Kurşun", (await bornLive(a)) === 1 && born1.status === RollStatus.IN_PRODUCTION && born1.currentStepId === a.kursunStep);
   check("CR1: ilk kabul sonrası Boyahane ACTIVE (r2 dışarıda)", (await boyaStatus(a)) === StepStatus.ACTIVE);
 
+  // Born'a bir özellik yaz — iptal ÖZELLİĞİ SİLMEMELİ (③a ticari pivot, 2026-09-14):
+  // top CANCELLED'a gider, satırı onunla kalır. Fikstür doğrudan yazar (inheritance
+  // değil, sitenin kendisi ölçülüyor).
+  // Fikstür İŞ ANAHTARIYLA (code) kurulur, ortamda aranmaz (keyfi arama mandalı).
+  const anyProp = await prisma.fabricProperty.upsert({
+    where: { code: "TEST-FCR-OLU-OZ" },
+    create: { code: "TEST-FCR-OLU-OZ", name: "TEST ölü top özelliği", valueType: "FLAG" },
+    update: {}, select: { id: true },
+  });
+  await prisma.rollProperty.upsert({
+    where: { rollId_propertyId: { rollId: born1.id, propertyId: anyProp.id } },
+    create: { rollId: born1.id, propertyId: anyProp.id }, update: {},
+  });
+  const born1PropsBefore = await prisma.rollProperty.count({ where: { rollId: born1.id } });
+  check("ön koşul — born1'de özellik satırı var", born1PropsBefore >= 1, `n=${born1PropsBefore}`);
+
   await sub.cancelReceipt(born1.parentReceiptId!, "saha testi: kabul iptali", ADMIN, [born1.id]);
+  const born1PropsAfter = await prisma.rollProperty.count({ where: { rollId: born1.id } });
+  check("CR1: ⭐ iptal born'un ÖZELLİK satırını SİLMEDİ (ölü topta kalır)", born1PropsAfter === born1PropsBefore, `önce=${born1PropsBefore} sonra=${born1PropsAfter}`);
   const born1After = await prisma.roll.findUnique({ where: { id: born1.id }, select: { status: true, currentStepId: true } });
   check("CR1: iptal → born roll CANCELLED + currentStepId null", born1After?.status === RollStatus.CANCELLED && born1After?.currentStepId === null);
   const r1After = await prisma.roll.findUnique({ where: { id: a.rollIds[0] }, select: { status: true, currentStepId: true } });
@@ -186,6 +204,7 @@ async function cleanup(): Promise<void> {
     await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.rollProperty.deleteMany({ where: { rollId: { in: rollIds } } });
+    await prisma.fabricProperty.deleteMany({ where: { code: "TEST-FCR-OLU-OZ" } }).catch(() => {});
     await prisma.subcontractorReceiptItem.deleteMany({ where: { receiptId: { in: receiptIds } } });
     await prisma.subcontractorReceiptProperty.deleteMany({ where: { receiptId: { in: receiptIds } } });
     await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: { in: dispatchIds } } });
