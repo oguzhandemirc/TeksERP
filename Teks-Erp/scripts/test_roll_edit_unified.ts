@@ -228,6 +228,10 @@ async function cleanup(): Promise<void> {
     await prisma.rollProperty.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
+    // Metraj düzeltmesi 2026-09-14'ten beri deftere yazar (ENTRY_CORRECTION + sapma satırı):
+    // çocuklar topun ÖNCE silinir (RESTRICT), yoksa temizlik FK'ya çarpar ve kalıntı büyür.
+    await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: rollIds } } });
+    await prisma.rollVariance.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
     console.log("(test verisi temizlendi)");
   } catch (e) {

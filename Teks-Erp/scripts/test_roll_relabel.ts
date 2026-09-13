@@ -234,6 +234,10 @@ async function main() {
     }
     await prisma.rollProperty.deleteMany({ where: { rollId: { in: [r1.id, r2.id, r3.id] } } });
     await prisma.fabricProperty.deleteMany({ where: { code: "TEST-RELABEL-FAZ0" } }).catch(() => {});
+    // Metraj düzeltmesi 2026-09-14'ten beri deftere yazar (ENTRY_CORRECTION + sapma satırı):
+    // çocuklar topun ÖNCE silinir (RESTRICT), yoksa temizlik FK'ya çarpar ve kalıntı büyür.
+    await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: [r1.id, r2.id, r3.id] } } });
+    await prisma.rollVariance.deleteMany({ where: { rollId: { in: [r1.id, r2.id, r3.id] } } });
     await prisma.roll.deleteMany({ where: { id: { in: [r1.id, r2.id, r3.id] } } });
     await prisma.color.deleteMany({ where: { id: { in: [colorA.id, colorB.id] } } });
     await prisma.item.delete({ where: { id: item.id } }).catch(() => {});
