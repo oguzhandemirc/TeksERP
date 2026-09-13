@@ -168,8 +168,8 @@ const MOBILDE_BEKLENEN: Record<string, string> = {
   TravelerCardStatus: "bugün mobilde aynalı (ölçüldü 2026-09-14)",
   WorkOrderStatus: "bugün mobilde aynalı (ölçüldü 2026-09-14)",
   WorkOrderType: "bugün mobilde aynalı (ölçüldü 2026-09-14)",
-  // Bugün mobilde YOK; borç `BEKLENEN_EKSIK`te beyanlı (aşağıda).
-  MachineDataSource: "tablet dilimi BEKLENİYOR — beyanlı eksik",
+  // 2026-09-14: beyanlı eksikti (BEKLENEN_EKSIK), 0c mobil union'ı getirdi; borç kapandı.
+  MachineDataSource: "bugün mobilde aynalı (ölçüldü 2026-09-14)",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -187,13 +187,8 @@ const MOBILDE_BEKLENEN: Record<string, string> = {
 // bedelini yalnız borcun sahibi değil, o listeye bakan herkes öder. Emsal:
 // stok defterinin `K_TABAN` cırcırı.
 // ─────────────────────────────────────────────────────────────────────────────
-const BEKLENEN_EKSIK: Record<string, { tarih: string; sahip: string; kapanis: string }> = {
-  MachineDataSource: {
-    tarih: "2026-09-14",
-    sahip: "0c/47 — tablet dilimi",
-    kapanis: "mobil `models.ts`e `MachineDataSource` union'ı doğunca bu girdi SİLİNİR",
-  },
-};
+// BUGÜN BOŞ (2026-09-14): `MachineDataSource` girdisi union doğunca §0h gereği silindi.
+const BEKLENEN_EKSIK: Record<string, { tarih: string; sahip: string; kapanis: string }> = {};
 
 function main(): void {
   console.log("\n=== Mobil enum aynası — backend enum ↔ mobil union ===\n");

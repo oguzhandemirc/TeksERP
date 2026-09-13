@@ -105,6 +105,17 @@ export type RollEntrySource =
   // 2026-09-13 (dokuma P3): tezgahtan inip KK1'de doğan top.
   | 'WEAVING';
 
+// Backend `MachineDataSource` enum'unun BİREBİR aynası (2026-09-14, tablet doff
+// dilimi öncülü): tezgah sayacı / koşum / duruş kaynağı — kim söyledi? Ekran
+// her yükte GÖNDERİR (`@default` yok), uydurma değer `SIMULATED` beyanıyla
+// gider, kararı backend verir. `test_mobil_enum_aynasi` iki yönlü ölçer.
+export type MachineDataSource =
+  | 'MACHINE'
+  | 'INFERRED'
+  | 'OPERATOR'
+  | 'SUPERVISOR'
+  | 'SIMULATED';
+
 // =============================================================================
 // Master data — Color, FabricProperty
 // =============================================================================

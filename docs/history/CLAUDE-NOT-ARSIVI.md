@@ -8764,3 +8764,18 @@ dokunulmaz. **Bekçi:** `ProtectedRoute.module.test.tsx` (kapalı+izin → /forb
 dokunulmaz · alt yol · izin önce) · `route-modules.test.ts` (açıkken 130 route'un 0'ı kapanır; referans
 fabrikada kapananlar tam altı modülün ekranları). Sürüm notu adayı: "kapalı modülün panel sayfası adres
 çubuğundan da açılmaz" — referans fabrikada etki 0 (production açık; kapalı modüllerin izinleri atanmamış).
+
+## 2026-09-14 — TABLET İKİ KALEM: `MachineDataSource` aynası (beyanlı borç kapandı) + KK1 liste kapsamına `WEAVING` [ÇEKİRDEK]
+
+**① Ayna:** backend `MachineDataSource` (MACHINE · INFERRED · OPERATOR · SUPERVISOR · SIMULATED) mobilde
+YOKTU; d9'un ayna mandalı bunu `BEKLENEN_EKSIK`te beyanlı borç tutuyordu (girdi VAR ∧ union YOK → sesli).
+0c union'ı `models.ts`e getirdi ve AYNI commit'te girdiyi sildi — üç sonuç kuralı: girdi VAR ∧ union VAR
+→ bayat beyan ❌ (§0h). `MOBILDE_BEKLENEN` gerekçesi "bugün mobilde aynalı"ya döndü; §1 birebir 5 değer,
+35/0. Tablet doff dilimi `counterSource`u bu union'dan gönderir.
+
+**② KK1 kapsamı:** ölçüldü — tablette `entrySource` SEÇİCİ ya da ROZET yok; kapsam iki yerde elle yazılmış
+CSV (`Son Kayıtlar` + `Tüm Girişler`) ve `WEAVING`i tanımıyordu (01 ölçtü: tezgahtan inip KK1'de doğan top
+KK1 listelerinde görünmezdi — görünürlük boşluğu, kırılma değil; sahada WEAVING'li top 0 ⇒ görünür fark 0).
+Tek kaynak `mobil/src/constants/kk1EntrySources.ts`: `KK1_LIST_ENTRY_SOURCES` (+WEAVING) ve
+`rollEntrySourceLabels: Record<RollEntrySource, string>` ("Dokuma") — rozet yüzeyi doğduğu gün buradan okur;
+union büyüyünce `Record` derlemede durur ("ham basar" sınıfı doğmadan kapanır). Bekçi `kk1EntrySources.test`.

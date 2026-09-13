@@ -78,6 +78,7 @@ import { findGradeByRole } from '../../../utils/qualityRole';
 import { sessionBucketKey, useSessionEntriesStore } from '../../../store/sessionEntriesStore';
 import { useSessionStore } from '../../../store/sessionStore';
 import { useAuthStore } from '../../../store/authStore';
+import { KK1_LIST_ENTRY_SOURCE_CSV } from '../../../constants/kk1EntrySources';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { itemService } from '../../../services/item.service';
 import {
@@ -775,10 +776,9 @@ export default function KK1Screen() {
         sortBy: 'createdAt',
         sortOrder: 'desc',
         filters: {
-          // ⚠️ SEMI_FINISHED bu listede OLMAK ZORUNDA: KK1'in kendi yarı mamul
-          // modu bu kaynakla top yazıyor. Listede olmadığı sürece operatör az
-          // önce girdiği topu "Son Kayıtlar"da göremiyordu (2026-08-26).
-          entrySource: 'SUPPLIER_RECEIPT,MANUAL_ENTRY,SEMI_FINISHED',
+          // Kapsam TEK KAYNAK (`constants/kk1EntrySources.ts`): yarı mamul (2026-08-26
+          // dersi) ve tezgahtan inen top (WEAVING, 2026-09-14) burada yaşar.
+          entrySource: KK1_LIST_ENTRY_SOURCE_CSV,
           // Kimlik henüz yüklenmediyse (teorik açılış yarışı) filtre GÖNDERME —
           // boş string tüm listeyi sessizce boşaltırdı.
           ...(authUserId ? { createdById: authUserId } : {}),
@@ -2738,7 +2738,7 @@ function RollHistoryModal({
         // Zorunlu kapsam EN SONA yazılır: bayrak kapalıyken çipten sızabilecek
         // herhangi bir createdById'yi de ezer (savunma hattı — çip zaten yok).
         filters: {
-          entrySource: 'SUPPLIER_RECEIPT,MANUAL_ENTRY,SEMI_FINISHED',
+          entrySource: KK1_LIST_ENTRY_SOURCE_CSV,
           ...fp.filters,
           ...forcedCreatorFilter(allEntries, authUserId),
         },
