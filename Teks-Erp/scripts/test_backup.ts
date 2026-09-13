@@ -19,9 +19,14 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { spawnSync } from "child_process";
+import { atlamaDefteri } from "./lib/atlama";
 
 let pass = 0;
 let fail = 0;
+const defter = atlamaDefteri((m) => {
+  fail++;
+  console.log(`  ✗ FAIL: ${m}`);
+});
 function check(label: string, ok: boolean, detail?: string): void {
   if (ok) {
     pass += 1;
@@ -360,132 +365,148 @@ async function main(): Promise<void> {
     const gOld = impactSvc.restoreGuards({ ...gBase, isNewest: false, newerBackupName: "tekserp_yeni.dump" });
     check("guard: en yeni değil → geçer + uyarı", gOld.canRestore && gOld.warnings.some((w) => w.includes("tekserp_yeni.dump")));
 
-    // --- 12b) Cutoff GELECEKTE → iş kaybı sayımları 0 olmalı
-    // Adı parse edilemeyen bir dosya + gelecek mtime → cutoff = mtime (gelecek).
-    // Bu aynı zamanda mtime-fallback dalını da doğrular.
-    const futureName = "elden_gelecek.dump";
-    const futurePath = path.join(backupDir, futureName);
-    fs.copyFileSync(result.file!, futurePath);
-    const future = new Date(Date.now() + 60 * 60 * 1000);
-    fs.utimesSync(futurePath, future, future);
+    // ⚠️ 12b–12c-3 YEDEK DOSYASINA BAĞLIDIR. Eskiden `result.file!` yazıyordu ve
+    // yedek üretilmediği her rejimde bekçi ÇÖKÜYORDU (`ERR_INVALID_ARG_TYPE`,
+    // satır 368) — çöken bir sonda, sonda değildir: 94 kontrol yerinden 62'si
+    // koşup "53 geçti, 9 başarısız" basıyordu ve DÜŞEN ≥32 kontrolü özet HİÇ
+    // SÖYLEMİYORDU. ⇒ Çöken sondanın kırmızı sayısı bir ölçüm değildir.
+    // Adet `"?"`: dallar yüzünden kaç kontrolün düştüğü YAPISAL olarak bilinemez;
+    // oraya bir sayı yazmak aynı yalanın küçük puntolusu olurdu.
+    const dumpYolu = result.file;
+    if (!dumpYolu) {
+      defter.atla(
+        "§12b–12c-3 geri yükleme etkisi (cutoff · audit rollup · pre-restore önerisi)",
+        `yedek dosyası üretilmedi — ${result.message}`,
+        "?",
+      );
+    } else {
+      // --- 12b) Cutoff GELECEKTE → iş kaybı sayımları 0 olmalı
+      // Adı parse edilemeyen bir dosya + gelecek mtime → cutoff = mtime (gelecek).
+      // Bu aynı zamanda mtime-fallback dalını da doğrular.
+      const futureName = "elden_gelecek.dump";
+      const futurePath = path.join(backupDir, futureName);
+      fs.copyFileSync(dumpYolu, futurePath);
+      const future = new Date(Date.now() + 60 * 60 * 1000);
+      fs.utimesSync(futurePath, future, future);
 
-    const impFuture = await impactSvc.getRestoreImpact(futureName);
-    check("impact: gelecek cutoff için sonuç döndü", !!impFuture);
-    if (impFuture) {
-      check("impact: cutoff kaynağı mtime (ad çözülemedi)", impFuture.cutoff.source === "mtime");
-      check("impact: mtime fallback uyarısı verildi", impFuture.warnings.some((w) => w.includes("dosya adından çözülemedi")));
-      const bizRows = impFuture.groups.filter((g) => g.key !== "system").flatMap((g) => g.rows);
-      check("impact: gelecek cutoff → tüm iş sayımları 0", bizRows.every((r) => r.count === 0), JSON.stringify(bizRows.filter((r) => r.count !== 0).map((r) => `${r.key}=${r.count}`)));
-      check("impact: totalCreated 0", impFuture.totalCreated === 0);
-      check("impact: measuredAllRows true (hiçbir satır düşmedi)", impFuture.measuredAllRows);
-      check("impact: 4 grup döndü", impFuture.groups.length === 4);
-      check("impact: safetyBackup adı pre-restore_ ile başlıyor", impFuture.safetyBackup?.fileName.startsWith("pre-restore_") === true);
-      // Performans kanaryası: enum-IN hilesi düşerse (ya da biri "sadeleştirirse")
-      // rolls/orders seq scan'e döner ve bu eşik aşılır.
-      check("impact: durationMs < 10sn (performans kanaryası)", impFuture.durationMs < 10_000, `${impFuture.durationMs}ms`);
-    }
-
-    // --- 12c) Cutoff GEÇMİŞTE → sayımlar > 0 + audit rollup
-    // Test için DOMAIN audit satırları yaz (finally'de silinir).
-    await prisma.systemLog.createMany({
-      data: [
-        { action: "CREATE", tableName: "TEST_IMPACT", recordId: "1", category: "DOMAIN" },
-        { action: "CREATE", tableName: "TEST_IMPACT", recordId: "2", category: "DOMAIN" },
-        { action: "UPDATE", tableName: "TEST_IMPACT", recordId: "1", category: "DOMAIN" },
-      ],
-    });
-
-    const pastName = "elden_dun.dump";
-    const pastPath = path.join(backupDir, pastName);
-    fs.copyFileSync(result.file!, pastPath);
-    const past = new Date(Date.now() - 5 * 60 * 1000); // 5dk önce
-    fs.utimesSync(pastPath, past, past);
-
-    const impPast = await impactSvc.getRestoreImpact(pastName);
-    check("impact: geçmiş cutoff için sonuç döndü", !!impPast);
-    if (impPast) {
-      check("impact: en yeni yedek DEĞİL uyarısı", !impPast.isNewest && impPast.warnings.some((w) => w.includes("en yeni yedek DEĞİL")));
-      // audit.available sözleşmesi: kapsam cutoff'a uzanıyorsa true, uzanmıyorsa false.
-      // Mutlak değer yerine INVARIANT'ı doğrula (dev DB'nin log yaşı bilinemez).
-      const oldest = impPast.audit.oldestLogAt ? new Date(impPast.audit.oldestLogAt).getTime() : null;
-      const cut = new Date(impPast.cutoff.at).getTime();
-      const expectedAvailable = oldest !== null && oldest <= cut;
-      check("impact: audit.available invariant'ı tutuyor", impPast.audit.available === expectedAvailable, `available=${impPast.audit.available} oldest=${impPast.audit.oldestLogAt} cutoff=${impPast.cutoff.at}`);
-      if (impPast.audit.available) {
-        const row = impPast.audit.byTable.find((t) => t.tableName === "TEST_IMPACT");
-        if (row) {
-          // Sakin ortam (CI'ın temiz DB'si dahil): fixture listede → katı doğrulama.
-          check("impact: audit rollup TEST_IMPACT satırını buldu", true);
-          check("impact: rollup CREATE=2 UPDATE=1", row.created === 2 && row.updated === 1, JSON.stringify(row));
-        } else {
-          // byTable BİLİNÇLİ top-12 (backup-impact.service slice(0,12) — UI kararı).
-          // Yoğun dev DB'de aynı 5dk penceresine 12+ tabloya audit yazan koşular
-          // (örn. ardışık tam test paketleri) fixture'ı listeden MEŞRU şekilde iter
-          // — "ortam verisine bağımlı olma" kuralı gereği yokluk hata değil,
-          // yokluğun SEBEBİ doğrulanır: liste dolu VE en küçüğü fixture'dan yoğun.
-          const totals = impPast.audit.byTable.map((t) => t.total);
-          const min = totals.length ? Math.min(...totals) : 0;
-          check(
-            "impact: TEST_IMPACT top-12 dışı — listedekilerin hepsi daha yoğun (slice meşru)",
-            impPast.audit.byTable.length === 12 && min >= 3,
-            JSON.stringify({ listLen: impPast.audit.byTable.length, minTotal: min }),
-          );
-        }
-        check("impact: rollup UPDATE'leri sayıyor (INSERT-only sınırının telafisi)", impPast.audit.updated >= 1);
+      const impFuture = await impactSvc.getRestoreImpact(futureName);
+      check("impact: gelecek cutoff için sonuç döndü", !!impFuture);
+      if (impFuture) {
+        check("impact: cutoff kaynağı mtime (ad çözülemedi)", impFuture.cutoff.source === "mtime");
+        check("impact: mtime fallback uyarısı verildi", impFuture.warnings.some((w) => w.includes("dosya adından çözülemedi")));
+        const bizRows = impFuture.groups.filter((g) => g.key !== "system").flatMap((g) => g.rows);
+        check("impact: gelecek cutoff → tüm iş sayımları 0", bizRows.every((r) => r.count === 0), JSON.stringify(bizRows.filter((r) => r.count !== 0).map((r) => `${r.key}=${r.count}`)));
+        check("impact: totalCreated 0", impFuture.totalCreated === 0);
+        check("impact: measuredAllRows true (hiçbir satır düşmedi)", impFuture.measuredAllRows);
+        check("impact: 4 grup döndü", impFuture.groups.length === 4);
+        check("impact: safetyBackup adı pre-restore_ ile başlıyor", impFuture.safetyBackup?.fileName.startsWith("pre-restore_") === true);
+        // Performans kanaryası: enum-IN hilesi düşerse (ya da biri "sadeleştirirse")
+        // rolls/orders seq scan'e döner ve bu eşik aşılır.
+        check("impact: durationMs < 10sn (performans kanaryası)", impFuture.durationMs < 10_000, `${impFuture.durationMs}ms`);
       }
-    }
 
-    // --- 12c-2) ÇOK ESKİ cutoff → sayımlar > 0 olmalı.
-    // Bu kontrol olmadan 12b trivially geçerdi: bir hata yüzünden tüm sayımlar
-    // sessizce 0 dönse de "gelecek cutoff → 0" iddiası tutardı. Burada sorguların
-    // gerçekten koştuğunu ve filtrenin çalıştığını kanıtlıyoruz.
-    //
-    // ⚠️ TOPU TEST KENDİ YARATIR — eski hâli "seed verisi var" varsayıyordu ama NE
-    // `npm run seed` NE `seed:fixtures` top üretir; dev DB'deki toplar elle/demo
-    // işlerden kalmaydı. Sonuç: yerelde geçiyor, TEMİZ CI DB'sinde "yeni top sayısı > 0"
-    // düşüyordu (2026-07-30 CI bulgusu). `finally` siler.
-    const impactItem = await prisma.item.findFirst({ where: { isActive: true }, select: { id: true } });
-    if (impactItem) {
-      const r = await prisma.roll.create({
-        data: {
-          barcode: `TEST-IMPACT-${Date.now().toString().slice(-9)}`,
-          itemId: impactItem.id,
-          initialQty: 1,
-          currentQty: 1,
-          qualityGrade: "1.KALITE",
-          width: 100,
-          status: "WAREHOUSE",
-          entrySource: "SUPPLIER_RECEIPT",
-        },
-        select: { id: true },
+      // --- 12c) Cutoff GEÇMİŞTE → sayımlar > 0 + audit rollup
+      // Test için DOMAIN audit satırları yaz (finally'de silinir).
+      await prisma.systemLog.createMany({
+        data: [
+          { action: "CREATE", tableName: "TEST_IMPACT", recordId: "1", category: "DOMAIN" },
+          { action: "CREATE", tableName: "TEST_IMPACT", recordId: "2", category: "DOMAIN" },
+          { action: "UPDATE", tableName: "TEST_IMPACT", recordId: "1", category: "DOMAIN" },
+        ],
       });
-      impactRollId = r.id;
+
+      const pastName = "elden_dun.dump";
+      const pastPath = path.join(backupDir, pastName);
+      fs.copyFileSync(dumpYolu, pastPath);
+      const past = new Date(Date.now() - 5 * 60 * 1000); // 5dk önce
+      fs.utimesSync(pastPath, past, past);
+
+      const impPast = await impactSvc.getRestoreImpact(pastName);
+      check("impact: geçmiş cutoff için sonuç döndü", !!impPast);
+      if (impPast) {
+        check("impact: en yeni yedek DEĞİL uyarısı", !impPast.isNewest && impPast.warnings.some((w) => w.includes("en yeni yedek DEĞİL")));
+        // audit.available sözleşmesi: kapsam cutoff'a uzanıyorsa true, uzanmıyorsa false.
+        // Mutlak değer yerine INVARIANT'ı doğrula (dev DB'nin log yaşı bilinemez).
+        const oldest = impPast.audit.oldestLogAt ? new Date(impPast.audit.oldestLogAt).getTime() : null;
+        const cut = new Date(impPast.cutoff.at).getTime();
+        const expectedAvailable = oldest !== null && oldest <= cut;
+        check("impact: audit.available invariant'ı tutuyor", impPast.audit.available === expectedAvailable, `available=${impPast.audit.available} oldest=${impPast.audit.oldestLogAt} cutoff=${impPast.cutoff.at}`);
+        if (impPast.audit.available) {
+          const row = impPast.audit.byTable.find((t) => t.tableName === "TEST_IMPACT");
+          if (row) {
+            // Sakin ortam (CI'ın temiz DB'si dahil): fixture listede → katı doğrulama.
+            check("impact: audit rollup TEST_IMPACT satırını buldu", true);
+            check("impact: rollup CREATE=2 UPDATE=1", row.created === 2 && row.updated === 1, JSON.stringify(row));
+          } else {
+            // byTable BİLİNÇLİ top-12 (backup-impact.service slice(0,12) — UI kararı).
+            // Yoğun dev DB'de aynı 5dk penceresine 12+ tabloya audit yazan koşular
+            // (örn. ardışık tam test paketleri) fixture'ı listeden MEŞRU şekilde iter
+            // — "ortam verisine bağımlı olma" kuralı gereği yokluk hata değil,
+            // yokluğun SEBEBİ doğrulanır: liste dolu VE en küçüğü fixture'dan yoğun.
+            const totals = impPast.audit.byTable.map((t) => t.total);
+            const min = totals.length ? Math.min(...totals) : 0;
+            check(
+              "impact: TEST_IMPACT top-12 dışı — listedekilerin hepsi daha yoğun (slice meşru)",
+              impPast.audit.byTable.length === 12 && min >= 3,
+              JSON.stringify({ listLen: impPast.audit.byTable.length, minTotal: min }),
+            );
+          }
+          check("impact: rollup UPDATE'leri sayıyor (INSERT-only sınırının telafisi)", impPast.audit.updated >= 1);
+        }
+      }
+
+      // --- 12c-2) ÇOK ESKİ cutoff → sayımlar > 0 olmalı.
+      // Bu kontrol olmadan 12b trivially geçerdi: bir hata yüzünden tüm sayımlar
+      // sessizce 0 dönse de "gelecek cutoff → 0" iddiası tutardı. Burada sorguların
+      // gerçekten koştuğunu ve filtrenin çalıştığını kanıtlıyoruz.
+      //
+      // ⚠️ TOPU TEST KENDİ YARATIR — eski hâli "seed verisi var" varsayıyordu ama NE
+      // `npm run seed` NE `seed:fixtures` top üretir; dev DB'deki toplar elle/demo
+      // işlerden kalmaydı. Sonuç: yerelde geçiyor, TEMİZ CI DB'sinde "yeni top sayısı > 0"
+      // düşüyordu (2026-07-30 CI bulgusu). `finally` siler.
+      const impactItem = await prisma.item.findFirst({ where: { isActive: true }, select: { id: true } });
+      if (impactItem) {
+        const r = await prisma.roll.create({
+          data: {
+            barcode: `TEST-IMPACT-${Date.now().toString().slice(-9)}`,
+            itemId: impactItem.id,
+            initialQty: 1,
+            currentQty: 1,
+            qualityGrade: "1.KALITE",
+            width: 100,
+            status: "WAREHOUSE",
+            entrySource: "SUPPLIER_RECEIPT",
+          },
+          select: { id: true },
+        });
+        impactRollId = r.id;
+      }
+      const ancientName = "elden_2021.dump";
+      const ancientPath = path.join(backupDir, ancientName);
+      fs.copyFileSync(dumpYolu, ancientPath);
+      const ancient = new Date(2021, 0, 1);
+      fs.utimesSync(ancientPath, ancient, ancient);
+
+      const impAncient = await impactSvc.getRestoreImpact(ancientName);
+      check("impact: 2021 cutoff → totalCreated > 0 (sorgular gerçekten koştu)", (impAncient?.totalCreated ?? 0) > 0, `total=${impAncient?.totalCreated}`);
+      check("impact: 2021 cutoff → yeni top sayısı > 0", ((impAncient?.groups.find((g) => g.key === "production")?.rows.find((r) => r.key === "roll")?.count) ?? 0) > 0);
+
+      // --- 12c-3) `pre-restore_` dosyaları "daha yeni yedek" olarak ÖNERİLMEZ.
+      // Onlar terk edilmek üzere olan durumun kopyası; mtime'a göre listenin başında
+      // oturabilirler ama daha iyi bir dönüş noktası DEĞİLDİR.
+      const freshPreRestore = path.join(backupDir, "pre-restore_20260730_235959.dump");
+      fs.copyFileSync(dumpYolu, freshPreRestore);
+      const veryFresh = new Date(Date.now() + 30 * 60 * 1000); // en yeni mtime
+      fs.utimesSync(freshPreRestore, veryFresh, veryFresh);
+
+      const impVsPreRestore = await impactSvc.getRestoreImpact(path.basename(dumpYolu));
+      check(
+        "impact: pre-restore_ dosyası 'daha yeni yedek' olarak önerilmiyor",
+        impVsPreRestore?.newerBackup?.name.startsWith("pre-restore_") !== true,
+        `önerilen=${impVsPreRestore?.newerBackup?.name}`,
+      );
+      fs.rmSync(freshPreRestore, { force: true });
     }
-    const ancientName = "elden_2021.dump";
-    const ancientPath = path.join(backupDir, ancientName);
-    fs.copyFileSync(result.file!, ancientPath);
-    const ancient = new Date(2021, 0, 1);
-    fs.utimesSync(ancientPath, ancient, ancient);
-
-    const impAncient = await impactSvc.getRestoreImpact(ancientName);
-    check("impact: 2021 cutoff → totalCreated > 0 (sorgular gerçekten koştu)", (impAncient?.totalCreated ?? 0) > 0, `total=${impAncient?.totalCreated}`);
-    check("impact: 2021 cutoff → yeni top sayısı > 0", ((impAncient?.groups.find((g) => g.key === "production")?.rows.find((r) => r.key === "roll")?.count) ?? 0) > 0);
-
-    // --- 12c-3) `pre-restore_` dosyaları "daha yeni yedek" olarak ÖNERİLMEZ.
-    // Onlar terk edilmek üzere olan durumun kopyası; mtime'a göre listenin başında
-    // oturabilirler ama daha iyi bir dönüş noktası DEĞİLDİR.
-    const freshPreRestore = path.join(backupDir, "pre-restore_20260730_235959.dump");
-    fs.copyFileSync(result.file!, freshPreRestore);
-    const veryFresh = new Date(Date.now() + 30 * 60 * 1000); // en yeni mtime
-    fs.utimesSync(freshPreRestore, veryFresh, veryFresh);
-
-    const impVsPreRestore = await impactSvc.getRestoreImpact(path.basename(result.file!));
-    check(
-      "impact: pre-restore_ dosyası 'daha yeni yedek' olarak önerilmiyor",
-      impVsPreRestore?.newerBackup?.name.startsWith("pre-restore_") !== true,
-      `önerilen=${impVsPreRestore?.newerBackup?.name}`,
-    );
-    fs.rmSync(freshPreRestore, { force: true });
 
     // --- 12d) Olmayan dosya → null (rota katmanı 404 döndürecek)
     check("impact: olmayan dosya → null", (await impactSvc.getRestoreImpact("yok_boyle.dump")) === null);
@@ -670,6 +691,6 @@ main()
     }
   })
   .finally(() => {
-    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${defter.ozetEki()} ===`);
     process.exit(fail > 0 ? 1 : 0);
   });
