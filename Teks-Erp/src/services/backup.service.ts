@@ -36,7 +36,17 @@ import {
   pgToolArgs,
   type PgConn,
 } from "./helpers/pg-conn.helper";
-import { pgTool, runTool } from "./helpers/pg-tool.helper";
+import {
+  SUNUCU_SURUM_SQL,
+  istemciSurumu,
+  pgTool,
+  runTool,
+  sunucuSurumNumarasi,
+  surumUyumuMetni,
+  surumUyumuOlc,
+} from "./helpers/pg-tool.helper";
+import prisma from "../lib/prisma";
+import { uyari } from "../lib/logger";
 
 const BACKUP_DIR = process.env.BACKUP_DIR;
 // Offsite (makine dışı) ikinci kopya hedefi — NAS/UNC/harici disk. Y-4: tek disk
@@ -216,6 +226,28 @@ export async function runBackupJob(trigger: BackupTrigger): Promise<BackupRunRes
   const conn = parseDatabaseUrl();
   if (!conn) {
     return finish(false, "DATABASE_URL çözümlenemedi — yedek alınamaz.", null);
+  }
+
+  // --- 0) İSTEMCİ ↔ SUNUCU SÜRÜM UYUMU (fail-closed)
+  // Sunucudan YENİ bir `pg_dump` ile alınan yedek BUGÜN sorunsuz görünür, LAZIM
+  // OLDUĞU GÜN açılmaz (ölçüldü: istemci 18 ↔ sunucu 16 → geri yüklemede
+  // "unrecognized configuration parameter transaction_timeout"). Açılamayan bir
+  // yedek, rotasyonla sağlam olanların yerini de alır ⇒ tek meşru davranış DURMAK.
+  // ⚠️ "Sürüm okunamadı" DURDURMAZ, yalnız iz bırakır: `PG_BIN_DIR` yoksa PATH'e
+  // düşülüyor ve araç bulunamayan her kurulumda yedeği durdurmak, çözdüğümüzden
+  // büyük bir arıza olurdu (üç sonuç, iki değil).
+  const uyum = await surumUyumuOlc(
+    () => istemciSurumu("pg_dump"),
+    async () => {
+      const r = await prisma.$queryRawUnsafe<Array<{ v: string }>>(SUNUCU_SURUM_SQL);
+      return sunucuSurumNumarasi(r[0]?.v);
+    },
+  );
+  if (uyum.sonuc === "istemci-yeni") {
+    return finish(false, surumUyumuMetni(uyum, "yedek"), null);
+  }
+  if (uyum.sonuc === "olculemedi") {
+    uyari("yedek", surumUyumuMetni(uyum, "yedek"));
   }
 
   running = true;

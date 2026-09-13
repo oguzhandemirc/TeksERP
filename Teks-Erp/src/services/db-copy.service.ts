@@ -40,7 +40,15 @@ import {
   type AdminCapability,
 } from "./helpers/pg-admin-client";
 import { pgToolArgs, quoteIdent, quoteLiteral, withDatabase } from "./helpers/pg-conn.helper";
-import { pgTool, runTool } from "./helpers/pg-tool.helper";
+import {
+  SUNUCU_SURUM_SQL,
+  istemciSurumu,
+  pgTool,
+  runTool,
+  sunucuSurumNumarasi,
+  surumUyumuMetni,
+  surumUyumuOlc,
+} from "./helpers/pg-tool.helper";
 import { hata } from "../lib/logger";
 import {
   readDbGuc,
@@ -580,6 +588,24 @@ async function runCopyJob(
   // `--exit-on-error` VAR: varsayılan "hataları say ve devam et" yarım bir
   // veritabanını başarı gibi gösterirdi.
   setPhase("restoring");
+  // İSTEMCİ ↔ SUNUCU SÜRÜM UYUMU — burada DURMAZ, UYARIR.
+  // Yedek yolundan farkı bilinçli: orada uyumsuz istemci ileride açılamayacak bir
+  // dosya ÜRETİR (sessiz, gecikmeli kayıp); burada uyumsuzluk `pg_restore`u ZATEN
+  // ve HEMEN düşürür (`--exit-on-error`) — yani arıza görünür ve kendi hata
+  // yolundan raporlanır. Ön kapı takmak, gerçek hatayı gizlemekten başka bir şey
+  // yapmazdı; uyarı ise "kod 1" çıktısına SEBEBİ ekler.
+  const uyum = await surumUyumuOlc(
+    () => istemciSurumu("pg_restore"),
+    async () => {
+      const r = await prisma.$queryRawUnsafe<Array<{ v: string }>>(SUNUCU_SURUM_SQL);
+      return sunucuSurumNumarasi(r[0]?.v);
+    },
+  );
+  const uyumMetni = uyum.sonuc === "uyumlu" ? null : surumUyumuMetni(uyum, "geri-yükleme");
+  if (uyumMetni) {
+    hata("db-copy", uyumMetni);
+    setPhase("restoring", uyumMetni);
+  }
   const jobs = Number(process.env.PG_RESTORE_JOBS) > 1 ? Number(process.env.PG_RESTORE_JOBS) : 1;
   const restore = await runTool(
     pgTool("pg_restore"),
@@ -596,6 +622,7 @@ async function runCopyJob(
     await finishJob(
       false,
       `pg_restore başarısız (kod ${restore.code}): ${restore.stderr.trim().slice(0, 400)}` +
+        (uyumMetni ? ` [${uyumMetni}]` : "") +
         (dropErr ? ` — kopya SİLİNEMEDİ (${dropErr}), elle silin.` : " — kopya silindi."),
       "restoring",
     );
