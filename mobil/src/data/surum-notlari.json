@@ -233,6 +233,11 @@
           "kapsam": "tablet",
           "tip": "iyilestirme",
           "metin": "Kartela kabulü geri alınamadığında hangi kartelaların engellediği tek tek listeleniyor. Önceden yalnız kaç kartelanın engellediği yazıyordu; operatör hangi kartelayı sevkiyattan ya da çuvaldan çıkaracağını bilemiyordu, şimdi kartela numaraları ekranda sıralanıyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "İade irsaliyesinin belge numarası (IADE-GGAAYY-…) tarih parçasını artık fabrika gününden alıyor. Sunucusu farklı bir saat diliminde kurulmuş bir işletmede gece yarısı ile 03:00 arasında oluşturulan iade bir önceki günün numarasını taşıyabiliyordu; sunucusu Türkiye saatinde çalışan işletmede hiçbir numara değişmez. Daha önce basılmış belgeler yeniden numaralanmaz."
         }
       ]
     },

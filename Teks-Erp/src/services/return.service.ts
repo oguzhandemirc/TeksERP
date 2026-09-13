@@ -17,7 +17,7 @@
 // =============================================================================
 
 import { Prisma, RollStatus, OrderStatus, PrintedDocType, ShipmentStatus, WarehouseEventType } from "@prisma/client";
-import { normalizeScanCode } from "../utils/code-format";
+import { ddmmyy, normalizeScanCode } from "../utils/code-format";
 import { postStockMove } from "./helpers/warehouse-ledger.helper";
 import { reverseLegacyStockMove, reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
@@ -1127,6 +1127,17 @@ export const returnService = new ReturnService();
 // satırıdır (defter satır bazlı kalır — brüt kuralı, `prevSackId` geri-ekleme, iade
 // raporları), ama BELGE tektir: sourceId = liderin id'si, kalemler `returnGroupId`
 // ile toplanır. Tekil iadede (`returnGroupId` NULL) davranış AYNEN eskisi gibi.
+
+/**
+ * İade belge numarası `IADE-GGAAYY-<id6>`. GGAAYY FABRİKA gününden (`ddmmyy` →
+ * `factoryYmd`), sürecin saat diliminden DEĞİL: UTC host'ta 00:00–03:00 arası
+ * oluşturulan iade önceki günün numarasını taşıyordu (kimlik kusuru; İstanbul
+ * saatli sunucuda etki 0). Saf fonksiyon — sondası DB'siz koşar.
+ */
+export function returnDocumentNo(createdAt: Date, id: string): string {
+  return `IADE-${ddmmyy(createdAt)}-${id.slice(0, 6).toUpperCase()}`;
+}
+
 async function buildReturnDispatchDoc(
   db: PrintedDocDb,
   returnId: string,
@@ -1175,9 +1186,7 @@ async function buildReturnDispatchDoc(
     },
   });
 
-  const d = rr.createdAt;
-  const p = (x: number) => String(x).padStart(2, "0");
-  const documentNo = `IADE-${p(d.getDate())}${p(d.getMonth() + 1)}${String(d.getFullYear()).slice(2)}-${rr.id.slice(0, 6).toUpperCase()}`;
+  const documentNo = returnDocumentNo(rr.createdAt, rr.id);
 
   const doc: ReturnDispatchDoc = {
     header: {
