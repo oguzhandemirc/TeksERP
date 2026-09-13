@@ -32,7 +32,8 @@ Karar hikâyeleri (tarih, ölçüm, hangi alternatif neden reddedildi) `docs/his
 | [`TEST-VE-DERLEME.md`](TEST-VE-DERLEME.md) | Ne zaman ne koşar, hangi kapı nerede (§1–§6) |
 | [`TEST-VE-DERLEME-SINIRLAR.md`](TEST-VE-DERLEME-SINIRLAR.md) | Bilinen sınırlar (§7) ve **bilerek kırmızı bekçiler** (§8) — paket kırmızı verdiğinde ilk bakılacak liste; her satır "kim kapatabilir" taşır |
 | [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | Ölçüm YÖNTEMİ: pozitif kontrol ↔ örnekle doğrulama, teşhis mesajı da bir yüklemdir, atıfta eşik, yapısal sonda, sayı yazma, **kapının ölüm biçimleri** |
-| [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | Arıza sınıfı kataloğu **KATMAN 1** — ölçümün kendisi (*sayı doğru mu?*) |
+| [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | KATMAN 1b — ölçümün **KURGUSU**: soru, kontrol grubu, ortam, deneyin kurulumu |
+| [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) | KATMAN 1a — ölçümün **ARACI**: desen, komut, ayrıştırıcı, aracın varsayılanı ve kapsamı |
 | [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) | Arıza sınıfı kataloğu **KATMAN 2** — ölçümden sonraki adım (*sayı doğru; ondan ÇIKARILAN ne?*); hiçbir pozitif kontrol bu katmanı yakalamaz |
 
 ## Kural biçimi

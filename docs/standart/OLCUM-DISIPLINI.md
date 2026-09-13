@@ -36,7 +36,7 @@ aramaktır.**
 
 ## Arıza sınıfları → ayrı dosya
 
-Katalog iki katmanlıdır — **KATMAN 1** ölçümün kendisi (*sayı doğru mu?*), **KATMAN 2** ölçümden sonraki adım (*sayı doğru; ondan ÇIKARILAN ne?*) — sırasıyla [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) ve [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md)'de yaşar.
+Katalog iki katmanlıdır — **KATMAN 1** ölçümün kendisi (*sayı doğru mu?*), **KATMAN 2** ölçümden sonraki adım (*sayı doğru; ondan ÇIKARILAN ne?*) — üç dosyada yaşar: KATMAN 1 ikiye ayrıldı — [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) (ölçümün **ARACI**) ve [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) (ölçümün **KURGUSU**); KATMAN 2 [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md)'de.
 
 Bölünme sebebi ölçüldü: katalog 2026-09-13'te tek günde **+16 sınıf** aldı ve bu dosya tavana dayanacaktı. Ayrım çizgisi bugünkü dört bölmeyle aynı — **YÖNTEM kalır, sınıf ENVANTERİ ayrılır**; sınıflar büyür, aşağıdaki yöntem kuralları büyümez.
 
@@ -124,6 +124,13 @@ yukarıdaki madde bu turdan ÖNCE de yazılıydı.
 
 > **"Sağlıklı" burada "yanlış değil" demektir, "doğrulanabilir" demek DEĞİL.**
 
+⚠️ **Ve bir sayı değişmediği hâlde birkaç kez DEĞİŞTİYSE, değişen şey sayı değil
+YÜKLEMDİR.** *(Vaka 2026-09-13: aynı soruya dört tur — 87/50/43 → 24/90/17 → 47/20 →
+14 — ve arada ağaçta hiçbir şey değişmedi; her turda "sembol"ün ve "yol"un tanımı
+sessizce değişmişti. Üçüncü sayı bir plana çevrilmişti.)*
+> **Yüklem yazılmadıkça sayı TAŞINAMAZ** — ve alan kişi de sorumludur: yüklemsiz gelen
+> bir sayıyı yüklemini sormadan plana çevirmek, onu üretmekle aynı sınıftır.
+
 Ayırt etme yöntemi: *cümleyi bugün okuyan biri ondan ne çıkarır — "o gün böyleydi"
 mi, "bugün böyle" mi?*
 
@@ -138,6 +145,27 @@ mi, "bugün böyle" mi?*
 
 > **Var olmayan bir sayı bayatlayamaz.**
 
+## Çapa yazma
+
+> **Bir çapa, işaret ettiği yeri TEK BAŞINA bulduruyorsa çapadır.**
+
+Ölçüsü ucuz: `git grep -l <sembol> | wc -l`. Ölçüldü 2026-09-13 —
+`resolve` **858 dosyada** geçiyor (çapa DEĞİL) · `$transaction` 252 · `buffer` 73 ·
+`setItem` 43 · `EN_AZ_TABLO_TOKEN` **2** (çapa).
+
+⚠️ **İki şerh, yoksa kural kendi tuzağına düşer:**
+
+1. **Ayırt edicilik ZAMANLA DÜŞER.** Bugün 2 dosyada geçen bir sembol yarın 40'ta
+   geçebilir. ⇒ Çapayı seçerken sayıyı da yaz — `EN_AZ_TABLO_TOKEN (2, 2026-09-13)` —
+   yoksa çapa kuralının kendisi bayatlar.
+2. **`dosya:satır` bir ÇAPA değildir ama bir KONUMDUR**, ve ayırt edici bir sembol
+   yokken hâlâ en iyisidir. ⇒ Kural *"satırı sil"* DEMEZ; **"ayırt edici bir sembol
+   VARSA onu EKLE"** der. Ekleme, silmeden farklı bir iştir.
+
+*(Vaka 2026-09-13: 14 "dönüştürülebilir" çapa adayının 3'ü iyileşiyordu, 10'u
+`dosya:satır`dan DAHA belirsiz bir yere işaret ediyordu, 1'i sahte eşleşmeydi —
+gösterdiği sembol o dosyada hiç geçmiyordu. Dönüşüm işi bu ölçümle İPTAL edildi.)*
+
 ## Mandal (tavan) yazma
 
 Bir mandal — `devralınan: N`, `lint-baseline.json`, herhangi bir "yalnız düşer" sayısı —
@@ -148,6 +176,19 @@ iki kuralla hareket eder:
 **Yükseltmek ihlali ONAYLAMAK, düşürmek kazanımı KİLİTLEMEKTİR** — ve düşürme
 **düzeltmeyle AYNI commit'te** olur, yoksa kazanım bir sonraki eklemede sessizce geri
 verilir. *(1e)*
+
+> **Bir mandalın tabanı, ihlali ADIYLA söyleyebiliyorsa SAYI değil KÜME olmalıdır.**
+> Ön koşul: küme üyelerinin **sabit kimliği** olmalı. *(d5 ve ea, bağımsız olarak aynı
+> sonuca vardı.)*
+
+*Vakalar:* `lint-baseline` **"455 > 454"** dedi — hangi fonksiyon olduğu ARANARAK
+bulundu · `test_quality_code_literal` **"217 > 216"** dedi — kaynağın kendi düzeltmesi
+olduğu ARANARAK bulundu. Karşı örnek: `test_identifier_language` tabanı **adlarla**
+tuttu, teşhis sıfır saniye sürdü.
+
+⚠️ **Ters tuzak:** `dosya::satır` bir küme GİBİ görünür ama üyelerinin sabit kimliği
+YOKTUR — satır kayar, küme değişir, kapı gürültü üretir. Ve **gürültülü bir kapı, körü
+körüne güncellenerek ölür** (kapının dokuzuncu ölüm biçimi).
 
 ## "Kapalıdır" diyen cümle kapıyı adıyla taşır
 
@@ -191,6 +232,10 @@ DEĞİL** — sıra iki oturumda çakıştı; bir kapı ölümü ADIYLA anılır
 7. **Koruduğu şeyle İLGİSİZ bir sebeple SESSİZCE ölmek** — aşağıda; ilk altıdan
    ayrı bir sınıftır çünkü **ilk altısında kapı KOŞUYORDU**.
 8. **Uzakta hiç AÇILMAMAK — ve gürültülü ölmek** — aşağıda; 7'den farkı sesidir.
+9. **Gürültülü taban** — ihlali ADIYLA söyleyemeyen bir mandal (`455 > 454`) her
+   kırmızıda arama gerektirir; maliyet teşhisten büyür ve taban **körü körüne
+   güncellenmeye** başlar. Kapı koşar, sayı doğrudur, koruduğu şey erir. Panzehir
+   § Mandal (tavan) yazma'da: taban sayı değil KÜME olsun. *(d5/ea)*
 
 İlk üçünde kapı yanlış davranır; *gürültü*de doğru davranır ve yine ölür;
 *doğru davranışı pahalı kılmak*ta **kapı doğru, kurban haklı**. Yedincide kapı hiç

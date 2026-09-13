@@ -240,12 +240,15 @@ const duranDupes = [...agacDupes].filter(([id]) => headDupes.has(id));
 if (duranDupes.length) {
   console.log(`⚠️  ADVISORY — ${duranDupes.length} kural kimliği çakışması HEAD'de DURUYOR (bu commit getirmedi, CI'ı etkilemez):`);
   for (const [id, yer] of duranDupes) console.log(`    [${id}]  ${yer}`);
-  console.log("    → Sahibi boştaki bir kimliğe taşımalı; eski kimlik YENİDEN KULLANILMAZ (arşiv atıfları ona bakıyor).\n");
+  console.log("    → Sahibi YENİ olanı boştaki bir kimliğe taşımalı; ESKİ kimlik yerinde kalır.\n");
 }
 if (yeniDupes.length) {
   console.error(`❌ Bu commit ${yeniDupes.length} YENİ kural kimliği çakışması getiriyor: bir kimlik tek kurala aittir ve çakışma ona yapılan HER atfı belirsizleştirir.`);
   for (const [id, yer] of yeniDupes) console.error(`    [${id}]  ${yer}`);
-  console.error("    → Sonradan yazılana BOŞTAKİ bir kimlik ver.");
+  console.error("    → YENİ olanı kaydır (boştaki bir kimliğe), eskiyi YERİNDE BIRAK.");
+  console.error("      Sebep: bir kimliğin değiştirilme maliyeti GÖREBİLDİĞİN atıflarla değil");
+  console.error("      GÖREMEDİĞİN atıflarla ölçülür — arşiv, commit mesajları, eş oturumların");
+  console.error("      defterleri grep'lenebilir ama DÜZELTİLEMEZ.");
   process.exit(1);
 }
 
