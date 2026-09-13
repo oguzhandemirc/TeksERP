@@ -129,7 +129,10 @@ const AGACLAR: Array<{ kok: string; tavan: number; dilim: string; sadece?: RegEx
   // ⚠️ Tavan SAYAÇTAN okunur, bu bekçinin DÖKÜMÜNDEN değil: döküm §-başına
   // kırpılır, `grep -c` basılmayan ihlalleri saymaz. Sayı yalnız SIKILAŞAN
   // yönde hareket eder. İniş hikâyesi commit mesajlarında.
-  { kok: "Teks-Erp/scripts", tavan: 109, dilim: "bekçi borcu — dilim 1+2+3 indi", sadece: /\/scripts\/test_[^/]+\.ts$/ },
+  // ⚠️ TAVAN 0'A İNMEZ ve bu bilinçlidir: kalan küme DÜZELTİLMESİ YANLIŞ OLAN
+  // sınıfları taşır (bilerek katalog DIŞI kodlar, belge örnek verisi, ad biçimi).
+  // Sayı bir BORÇ değil, beyan edilmiş bir BİLEŞİMDİR; bileşim commit mesajında.
+  { kok: "Teks-Erp/scripts", tavan: 108, dilim: "bekçi borcu — dilim 1-4 indi; kalan sınıflar beyanlı", sadece: /\/scripts\/test_[^/]+\.ts$/ },
   { kok: "mobil/src", tavan: 0, dilim: "(ii) — indi 2026-09-13" },
   { kok: "Electron/src", tavan: 0, dilim: "(iii) — indi 2026-09-13" },
 ];
@@ -327,6 +330,11 @@ function kodYuvasiMi(ad: string | null, n?: tsc.Node, sf?: tsc.SourceFile): bool
   // `...Enabled` bir BAYRAK ANAHTARIDIR (`qualityGradeRequiredEnabled`); değeri
   // modül adı ya da boolean'dır, katalog kodu değil.
   if (/Enabled$/.test(ad)) return false;
+  // SCREAMING_SNAKE bir ANAHTAR sabitidir (`QUALITY_GRADE_REQUIRED_ENABLED`,
+  // `..._LABEL`); yalnız `..._CODE` bir kod yuvasıdır.
+  // ⚠️ Bu kural ATAMA dallarında vardı ama KARŞILAŞTIRMA dalında YOKTU — aynı ad
+  // iki dalda iki farklı cevap alıyordu. Yuva sorusunun tek evi burasıdır.
+  if (/^[A-Z0-9_]+$/.test(ad) && !/_CODE$/.test(ad)) return false;
   if (KOD_YUVASI.test(ad)) return true;
   if (NOTR_KOD_YUVASI.test(ad) && n && sf) return yakindaKaliteVar(n, sf);
   return false;
@@ -391,9 +399,7 @@ function kaliteBaglamiMi(n: tsc.Node, sf: tsc.SourceFile): string | null {
     const deger = (n as tsc.StringLiteralLike).text;
     // Prisma sıralama yönü — `orderBy: { code: "asc" }` bir kod değildir.
     if (deger === "asc" || deger === "desc") return null;
-    // SCREAMING_SNAKE ANAHTAR sabitleri (`QUALITY_CERTIFICATE`, `..._ENABLED`)
-    // ayar/belge ANAHTARI taşır; yalnız `..._CODE` bir kod yuvasıdır.
-    if (/^[A-Z0-9_]+$/.test(ad) && !/_CODE$/.test(ad)) return null;
+    // (SCREAMING_SNAKE anahtar kuralı `kodYuvasiMi`de — tek ev.)
     return `${ad}: "${deger}"`;
   }
   // (B2) PRISMA SÜZGEÇ OPERATÖRÜ — `qualityGrade: { not: "FIRE" }`.
@@ -413,13 +419,10 @@ function kaliteBaglamiMi(n: tsc.Node, sf: tsc.SourceFile): string | null {
     }
   }
   if (tsc.isVariableDeclaration(p) && kodYuvasiMi(p.name.getText(sf), n, sf)) {
-    // SCREAMING_SNAKE sabit: yalnız `..._CODE` bir KOD yuvasıdır. `_ERROR`,
-    // `_LABEL`, `_ENABLED`, `_CERTIFICATE` ile biten sabitler mesaj/anahtar
-    // taşır (ölçüldü: beş sahte kırmızı). `__SENTINEL__` biçimli değer de
-    // katalog kodu değildir — bilerek katalogda BULUNAMAYACAK bir işarettir.
+    // `__SENTINEL__` biçimli değer katalog kodu değildir — bilerek katalogda
+    // BULUNAMAYACAK bir işarettir. (SCREAMING_SNAKE kuralı `kodYuvasiMi`de.)
     const ad = p.name.getText(sf);
     const deger = (n as tsc.StringLiteralLike).text;
-    if (/^[A-Z0-9_]+$/.test(ad) && !/_CODE$/.test(ad)) return null;
     if (/^__.*__$/.test(deger)) return null;
     return `${ad} = "${deger}"`;
   }
