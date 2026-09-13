@@ -52,7 +52,7 @@ Backend'in dört kırmızısından **yalnız biri listede** (`test_hook_config` 
 
 | Kırmızı | Hüküm | Dayanak |
 |---|---|---|
-| `test_fold_catalog` 24/1 | **GERÇEK** | *"araç yok, kanıtlanamaz"* diye kapatılmıştı; araç eksikliği bilginin sınırı sanılmıştı (`OLCUM-DISIPLINI-SINIFLAR.md` § "Ölçemiyoruz" ile "aracı kurmadık"). Koşucu düzeltmesi inince CI kırmızı yüklemin ADINI basacak |
+| `test_fold_catalog` 24/1 | **GERÇEK** | *"araç yok, kanıtlanamaz"* diye kapatılmıştı; araç eksikliği bilginin sınırı sanılmıştı (`OLCUM-DISIPLINI-ARAC.md` § "Ölçemiyoruz" ile "aracı kurmadık"). Koşucu düzeltmesi inince CI kırmızı yüklemin ADINI basacak |
 | `test_scan_code_case` 18/1 | **ORTAM, gerçek değil** | PostgreSQL planlayıcısı küçük tabloda index seçmez, Seq Scan'e düşer; CI'ın DB'si taze ve küçük. Yerelde tam migre DB'de yeşil. "Hangi veride" alanı eksikti, hüküm değil |
 | `test_script_guards` 43/1 | **ZATEN DÜZELTİLDİ** | `71f59957` (`scripts/test_script_guards.ts` +2). CI `8f68c367`'yi koştu, düzeltme ondan SONRA indi — sonraki turda yeşile döner |
 
@@ -76,7 +76,7 @@ Bu listedeki her satır ikisinden biridir ve **ayrımı karıştırmak pahalıd�
 *(1e/d9)* Bir KUYRUK satırı tarihini geçirirse artık kuyruk değildir: ya karar olmuştur
 (bilerek), ya da unutulmuştur — ikisi de yeniden hüküm ister.
 
-> **Bayat KIRMIZI, bayat yeşilden pahalıdır** (`OLCUM-DISIPLINI.md` § Kırmızıyı
+> **Bayat KIRMIZI, bayat yeşilden pahalıdır** (`OLCUM-DISIPLINI-KAPI-OLUMU.md` § Kırmızıyı
 > sınıflandırma): bayat kırmızı **var olmayan bir işi kuyruğa koyar** ve bir oturumu
 > ona bağlar. Bu listenin var olma sebebi tam olarak budur.
 

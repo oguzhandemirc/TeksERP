@@ -239,7 +239,7 @@ turu; a maddesi sha'lı — `5ac6e830`)*:
 | a | araç gözlenenin içinde | sentinel elenmedi, 8 karakteri gezildi → 216 sahte kırmızı (§ Mutasyonun ürettiği sayı) |
 | b | **mutasyon UYGULANMADI** | `sed` çapası tutmadı; "kapı ısırmadı" görüldü. İkinci denemede hedef bekçi **yoktu** (ad yanlıştı) |
 | c | **beyan basılmadı** | beyan ÖZET satırındaydı; tüm dosyalar elenince özet hiç koşmadı — *"sessiz dışlama olmasın"* satırı tam o durumda sessizdi |
-| d | sonuç okunmadı | ölçüm ile eylem aynı zincirdeydi (`-ARAC.md` § KABUK ailesi c) |
+| d | sonuç okunmadı | ölçüm ile eylem aynı zincirdeydi (`OLCUM-DISIPLINI-ARAC.md` § KABUK ailesi c) |
 | e | çıktı kırpıldı | `tail` beyanın bulunduğu başı kesti (aynı yer, f) |
 | f | **düzenleme artığı** | bir belgede kesik ad artığı kaldı; ölü link olmadığı için belge kapısı görmedi |
 | g | ⚠️ **YANLIŞ ALAN** | mutasyon `Backend:` alanına yazıldı, kapı `bekçi:` alanını okuyor → ısırmadı. Doğru alana yazılınca ISIRDI |
