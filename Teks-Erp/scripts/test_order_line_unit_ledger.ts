@@ -36,6 +36,7 @@ import prisma from "../src/lib/prisma";
 import { OrderService } from "../src/services/order.service";
 import { recomputeOrderStatusTx } from "../src/services/helpers/order-status.helper";
 import { ImportService } from "../src/services/import/import.service";
+import { ensureTestAdmin } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { randomUUID } from "node:crypto";
 
@@ -250,7 +251,8 @@ async function main(): Promise<void> {
     check("⑦ §1 süzgeci: KG satır (tahsis 100, shippedQty 0) mutabakata GİRMEZ", rows.length === 0, `${rows.length} satır`);
 
     // ── ⑧ içe aktarım yolu ─────────────────────────────────────────────────
-    const admin = await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } });
+    // Ham yönetici adı aranmaz — fixture kendi yöneticisini kurar (ortam bağımlılığı tavanı).
+    const admin = await ensureTestAdmin();
     const token = randomUUID();
     importTokens.push(token);
     const ref = `TST-OLU-REF-${ts}`;
@@ -262,7 +264,7 @@ async function main(): Promise<void> {
         { rowNo: 3, cells: { ref, customerCode: `TST-OLU-CUS-${ts}`, itemCode: `TST-OLU-ITM-MT-${ts}`, quantity: "5", unit: "Kilogram" } },
       ],
       { clientToken: token, fileName: `TST-OLU-${ts}.csv`, mode: "upsert" },
-      admin?.id,
+      admin.id,
     );
     const impLines = await prisma.orderLine.findMany({
       where: { order: { customerId: customer.id, id: { notIn: orderIds } } },
