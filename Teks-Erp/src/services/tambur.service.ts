@@ -17,6 +17,7 @@
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { postStockMove, qtyYazilabilir } from "./helpers/warehouse-ledger.helper";
+import { postOpenFabricChildEntryTx } from "./helpers/production-entry-ledger.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { randomUUID } from "node:crypto";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
@@ -3212,21 +3213,8 @@ export class TamburService {
         },
       });
 
-      // STOK DEFTERİ — çocuk depoda doğdu: üretimden depoya GİRİŞ (hüküm §11 giriş
-      // kalemi). Ebeveyn IN_PRODUCTION = stok dışı, satır YALNIZ çocukta; bu yol
-      // 2026-09-13'e kadar satırsızdı (K kümesinin üyesi), geri alma
-      // `reverseAllRollStockMoves` ile bu satırı tersler. Koşulsuz: metraj > 0
-      // yukarıda doğrulandı, depo çözücüden geldi — deposuz/0 çocuk kapının
-      // kendi seddinde DURUR, sessizce atlanmaz.
-      await postStockMove(tx, {
-        rollId: child.id,
-        eventType: WarehouseEventType.PRODUCTION,
-        qty: child.initialQty,
-        to: { warehouseId: child.warehouseId, status: child.status },
-        reasonCode: STOCK_MOVE_REASON.TAMBUR_CUT,
-        workOrderStepId: tamburStepId,
-        userId: userId ?? null,
-      });
+      // STOK DEFTERİ — çocuk depoda doğdu: üretimden depoya GİRİŞ (hüküm §11 giriş kalemi).
+      await postOpenFabricChildEntryTx(tx, child, tamburStepId, userId);
 
       if (propertySnapshot.length > 0) {
         await tx.rollProperty.createMany({
@@ -3705,7 +3693,6 @@ export class TamburService {
           });
         }
         remainingChildId = child.id;
-
         // PLAN-SAPMA DEFTERİ — YALNIZ bu dalda: kapı pre-tx `currentQty > 0`
         // gördü ama tx içindeki TAZE kalan 0'a düşmüş olabilir (araya kesim
         // girdi). O durumda depoya inen bir şey yok → 0 metrajlık satır

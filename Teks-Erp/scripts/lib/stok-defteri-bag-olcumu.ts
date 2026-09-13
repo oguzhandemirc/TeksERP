@@ -57,6 +57,7 @@ export const YENI_KAPI_HELPERLARI: readonly string[] = [
   ESKI_KAPI_HELPER,
   "src/services/helpers/warehouse-ledger-reverse.helper.ts",
   "src/services/helpers/production-issue-ledger.helper.ts",
+  "src/services/helpers/production-entry-ledger.helper.ts",
 ];
 
 export const YENI_KAPI_FONKSIYONLARI: readonly string[] = [
@@ -67,6 +68,10 @@ export const YENI_KAPI_FONKSIYONLARI: readonly string[] = [
   "reverseLatestScopedStockMove",
   "reverseAllRollStockMoves",
   "postProductionIssuesTx",
+  // Üretimden depoya GİRİŞ (01, 2026-09-14): sarmalayıcı servis METODU tarayıcıya
+  // görünmez (ölçüldü: K=1 okundu, satır yazılıyordu) — kapı fonksiyonu helper'da.
+  "postOpenFabricChildEntryTx",
+  "postRescueEntryTx",
 ];
 
 /**
