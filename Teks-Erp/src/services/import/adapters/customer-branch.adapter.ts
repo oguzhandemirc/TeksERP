@@ -29,7 +29,7 @@ import { CustomerBranchService, type CustomerBranchInput } from "../../customer-
 import { foldNameForCompare } from "../../helpers/name-normalize.helper";
 import { resolveReference } from "../import-lookup";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
-import { upperTr } from "../../../utils/tr-case";
+import { importKey } from "../import-key";
 
 // Servisin modül düzeyinde paylaşılan tekili yok (route dosyası kendi örneğini
 // yerelde kuruyor ve dışa açmıyor) — burada kendi örneğimizi kuruyoruz. Servis
@@ -138,7 +138,7 @@ export const customerBranchImportAdapter: ImportAdapter = {
       where: { code: { in: customerCodes, mode: "insensitive" } },
       select: { id: true, code: true, name: true },
     });
-    const customerByCode = new Map(customers.map((c) => [upperTr(c.code), c]));
+    const customerByCode = new Map(customers.map((c) => [importKey(c.code), c]));
     if (customers.length === 0) return map;
 
     // 2) O müşterilerin TÜM şubeleri (pasifler dahil — pasif şube "yok" değildir,
@@ -160,11 +160,11 @@ export const customerBranchImportAdapter: ImportAdapter = {
     }
 
     for (const { raw, parts } of parsed) {
-      const customer = customerByCode.get(upperTr(parts.customerCode));
+      const customer = customerByCode.get(importKey(parts.customerCode));
       if (!customer) continue;
       const hit = branchIndex.get(`${customer.id}:${foldNameForCompare(parts.branchName)}`);
       if (!hit) continue;
-      map.set(upperTr(raw), {
+      map.set(importKey(raw), {
         id: hit.id,
         customerId: hit.customerId,
         externalKey: `${hit.customer.code}${KEY_SEP}${hit.name}`,

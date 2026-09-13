@@ -23,7 +23,7 @@ import type {
   ImportFixHint,
   PreparedRow,
 } from "../import.types";
-import { upperTr } from "../../../utils/tr-case";
+import { importKey } from "../import-key";
 
 const COLUMNS: ImportColumn[] = [
   // ── Başlık sütunları (grubun İLK satırından okunur) ────────────────────────
@@ -180,7 +180,7 @@ export const routeImportAdapter: ImportAdapter = {
     });
     const map = new Map<string, Record<string, unknown>>();
     for (const r of rows) {
-      map.set(upperTr(r.code ?? ""), {
+      map.set(importKey(r.code ?? ""), {
         ...r,
         customerCode: r.customer?.code ?? null,
         // Motor çocuk diff'ini SÜTUN ANAHTARLARIYLA karşılaştırır — mevcut

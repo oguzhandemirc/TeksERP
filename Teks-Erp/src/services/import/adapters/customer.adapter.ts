@@ -14,7 +14,7 @@
 import prisma from "../../../lib/prisma";
 import { customerService } from "../../../routes/customer.routes";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
-import { upperTr } from "../../../utils/tr-case";
+import { importKey } from "../import-key";
 
 const COLUMNS: ImportColumn[] = [
   {
@@ -89,7 +89,7 @@ export const customerImportAdapter: ImportAdapter = {
       },
     });
     const map = new Map<string, Record<string, unknown>>();
-    for (const r of rows) map.set(upperTr(r.code), r as Record<string, unknown>);
+    for (const r of rows) map.set(importKey(r.code), r as Record<string, unknown>);
     return map;
   },
 

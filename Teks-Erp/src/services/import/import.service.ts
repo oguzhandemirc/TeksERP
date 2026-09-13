@@ -52,6 +52,7 @@ import type {
   PreparedRow,
 } from "./import.types";
 import { upperTr } from "../../utils/tr-case";
+import { importKey } from "./import-key";
 
 function emptyContext(userId?: string): ImportContext {
   return { userId, cache: new Map() };
@@ -192,7 +193,7 @@ async function prepareRows(
         units.push(p);
         continue;
       }
-      const norm = upperTr(key);
+      const norm = importKey(key);
       const childValues: Record<string, unknown> = {};
       for (const c of childCols) if (p.values[c] !== undefined) childValues[c] = p.values[c];
 
@@ -225,7 +226,7 @@ async function prepareRows(
     for (const p of prepared) {
       const key = p.result.key;
       if (!key) continue;
-      const norm = upperTr(key);
+      const norm = importKey(key);
       const firstRow = seen.get(norm);
       if (firstRow !== undefined) {
         p.result.errors.push({
@@ -246,7 +247,7 @@ async function prepareRows(
   // --- 4. karar + diff ------------------------------------------------------
   for (const p of units) {
     const key = p.result.key;
-    const found = key ? (existing.get(upperTr(key)) ?? existing.get(key) ?? null) : null;
+    const found = key ? (existing.get(importKey(key)) ?? existing.get(key) ?? null) : null;
     p.existing = found;
     p.result.targetId = (found?.id as string | undefined) ?? null;
 

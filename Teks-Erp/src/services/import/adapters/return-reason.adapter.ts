@@ -7,7 +7,7 @@
 import prisma from "../../../lib/prisma";
 import { returnReasonService } from "../../../routes/return-reason.routes";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
-import { upperTr } from "../../../utils/tr-case";
+import { importKey } from "../import-key";
 
 const COLUMNS: ImportColumn[] = [
   {
@@ -76,7 +76,7 @@ export const returnReasonImportAdapter: ImportAdapter = {
       select: { id: true, code: true, name: true, description: true, color: true, sortOrder: true, isActive: true },
     });
     const map = new Map<string, Record<string, unknown>>();
-    for (const r of rows) map.set(upperTr(r.code), r as Record<string, unknown>);
+    for (const r of rows) map.set(importKey(r.code), r as Record<string, unknown>);
     return map;
   },
 

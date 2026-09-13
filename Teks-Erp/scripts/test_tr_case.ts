@@ -8,10 +8,13 @@
 //    varsayılanı) "iplik" → "IPLIK" üretir; helper bunu üretirse KIRMIZI.
 //    Negatif sonda: tr-case.ts'te `toLocaleUpperCase(TR_LOCALE)` → `toUpperCase()`.
 // §2 SİMETRİ — içe aktarımda YAZAN (`import.service.ts` anahtar katlaması) ile
-//    OKUYAN (16 adaptörün kod haritası) aynı helper'ı çağırır; biri `toUpperCase()`
-//    ya da ham `toLocaleUpperCase` ile ayrışırsa bugün olmayan bir kusur doğar
-//    ("İPLİK" anahtarı "IPLIK" ile aranır) ve yalnız bu sonda görür.
-//    Negatif sonda: bir adaptörde `upperTr(r.code)` → `r.code.toUpperCase()`.
+//    OKUYAN (16 adaptörün kod haritası) aynı helper'ı (`importKey` =
+//    foldCodeForCompare) çağırır; biri `upperTr`/`toUpperCase()`/ham `toLocale`
+//    ile ayrışırsa bugün olmayan bir kusur doğar ("sip" anahtarı "SİP" ile
+//    aranır, DB'deki "SIP" bulunmaz) ve yalnız bu sonda görür.
+//    Negatif sonda: bir adaptörde `importKey(r.code)` → `upperTr(r.code)`.
+// §4 KOD ANAHTARI i/İ — "Sip" · "SIP" · "sİp" tek anahtara düşer (importKey);
+//    `upperTr` düşürmezdi (fabrika kopyasında 2 kod bu sınıfta, çarpışma 0).
 // §3 ÜÇ KOPYA BAYT-BAYT — backend · Electron · mobil ayrı projedir, ortak modül
 //    import edilemez (search-fold emsali); md5 eşitliği ölçülür. Negatif sonda:
 //    bir kopyada bir karakter değiştir → kırmızı.
@@ -20,6 +23,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { lowerTr, upperTr } from "../src/utils/tr-case";
+import { importKey } from "../src/services/import/import-key";
 
 let pass = 0;
 let fail = 0;
@@ -50,24 +54,39 @@ check("§1 kod tuzağı belgelendi: upperTr('sip') = 'SİP' ≠ 'SIP'", upperTr(
 
 // --- §2 -----------------------------------------------------------------------
 const ROOT = join(__dirname, "..", "src", "services", "import");
-const writer = readFileSync(join(ROOT, "import.service.ts"), "utf8");
-check("§2 yazan (import.service) upperTr ile katlıyor", /upperTr\(key\)/.test(writer) && /from "\.\.\/\.\.\/utils\/tr-case"/.test(writer));
-check("§2 yazan'da ham toLocale*Case yok", !/toLocale(Upper|Lower)Case\(/.test(writer.replace(/\/\/.*$/gm, "")));
+const writer = readFileSync(join(ROOT, "import.service.ts"), "utf8").replace(/\/\/.*$/gm, "");
+check("§2 yazan (import.service) anahtarı importKey ile katlıyor", (writer.match(/importKey\(key\)/g) ?? []).length === 3 && /from "\.\/import-key"/.test(writer));
+check("§2 yazan'da ham toLocale*Case yok, anahtarda upperTr yok", !/toLocale(Upper|Lower)Case\(/.test(writer) && !/upperTr\(key\)/.test(writer));
 
 const adapterDir = join(ROOT, "adapters");
 const adapters = readdirSync(adapterDir).filter((f) => f.endsWith(".adapter.ts"));
 let okuyan = 0;
 for (const f of adapters) {
   const src = readFileSync(join(adapterDir, f), "utf8").replace(/\/\/.*$/gm, "");
-  const foldsCode = /\.code\b[^;\n]*\)/.test(src) && /upperTr\(/.test(src);
+  const foldsCode = /importKey\((\w+\.code|parts\.\w+|raw)/.test(src);
   const rawFold = /toLocale(Upper|Lower)Case\(/.test(src);
-  // Harita ANAHTARI üzerinde `toUpperCase()` YASAK — yazanla ayrışır. (fabric-property'nin
-  // `c.trim().toUpperCase()`ı özellik DEĞERİ kodunu ayrıştırır, harita anahtarı değil — eskiden "en-US".)
-  const asciiOnKey = /\b(\w+\.code|customerCode|targetCode|raw|key|keyValue)(\s*\?\?\s*"")?\)?\.toUpperCase\(\)/.test(src);
+  // Harita ANAHTARI üzerinde upperTr/toUpperCase() YASAK — yazanla ayrışır. (fabric-property'nin
+  // `c.trim().toUpperCase()`ı özellik DEĞERİ kodunu ayrıştırır, harita anahtarı değil.)
+  const otherOnKey =
+    /upperTr\((\w+\.code|parts\.\w+|raw)\b/.test(src) ||
+    /(\w+\.code|customerCode|targetCode|raw)(\s*\?\?\s*"")?\)?\.toUpperCase\(\)/.test(src);
   if (foldsCode) okuyan++;
-  check(`§2 okuyan ${f}: ham toLocale yok · anahtarda toUpperCase yok`, !rawFold && !asciiOnKey);
+  check(`§2 okuyan ${f}: anahtar importKey · ham toLocale yok · upperTr/toUpperCase anahtarda yok`, !rawFold && !otherOnKey);
 }
 check("§2 kod haritası kuran adaptör sayısı ≥ 14 (yazan↔okuyan çifti var)", okuyan >= 14, `okuyan=${okuyan}`);
+for (const f of ["import-lookup.ts", "import-revert.branches.ts"]) {
+  const src = readFileSync(join(ROOT, f), "utf8").replace(/\/\/.*$/gm, "");
+  check(`§2 ${f} anahtarı importKey ile`, /importKey\(/.test(src) && !/upperTr\((value|keyValue)\)/.test(src));
+}
+
+// --- §4 -----------------------------------------------------------------------
+const variants = ["Sip", "SIP", "sİp", "sip", " sip "];
+const keys = new Set(variants.map(importKey));
+check("§4 importKey: i/İ/ı/I ve boşluk varyantları TEK anahtar", keys.size === 1 && keys.has("SIP"), [...keys].join(","));
+check("§4 upperTr aynı varyantları ayırır (eski delik belgelendi)", new Set(variants.map((v) => upperTr(v.trim()))).size > 1);
+// Fabrika kopyasındaki sınıf (kod değeri YAZILMAZ): 'i' içeren kodun eski/yeni anahtarı farklıdır.
+check("§4 'i' içeren sentetik kod: upperTr ≠ importKey, importKey ASCII", upperTr("mitra-01") !== importKey("mitra-01") && importKey("mitra-01") === "MITRA-01");
+check("§4 'i' içermeyen kod: iki katlama aynı (geçiş anahtarı değiştirmez)", upperTr("kumas-055") === importKey("kumas-055"));
 
 // --- §3 -----------------------------------------------------------------------
 const copies = [

@@ -30,6 +30,7 @@ import { normalizeDisplayName } from "../../helpers/name-normalize.helper";
 import { resolveReference } from "../import-lookup";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
 import { upperTr } from "../../../utils/tr-case";
+import { importKey } from "../import-key";
 
 // Servisin paylaşılan tekili yok (controller kendi private örneğini kuruyor);
 // servis durumsuz olduğu için burada kendi örneğimizi kuruyoruz.
@@ -151,7 +152,7 @@ async function loadCustomers(
     where: { code: { in: codes, mode: "insensitive" } },
     select: { id: true, code: true, name: true },
   });
-  return new Map(rows.map((r) => [upperTr(r.code), r]));
+  return new Map(rows.map((r) => [importKey(r.code), r]));
 }
 
 function parseKeys(keys: string[]): Array<{ raw: string; parts: AliasKeyParts }> {
@@ -237,7 +238,7 @@ export const customerItemAliasImportAdapter: ImportAdapter = {
       where: { code: { in: itemCodes, mode: "insensitive" } },
       select: { id: true, code: true, name: true },
     });
-    const itemByCode = new Map(items.map((i) => [upperTr(i.code), i]));
+    const itemByCode = new Map(items.map((i) => [importKey(i.code), i]));
     if (items.length === 0) return map;
 
     const rows = await prisma.customerItemAlias.findMany({
@@ -250,12 +251,12 @@ export const customerItemAliasImportAdapter: ImportAdapter = {
     const byPair = new Map(rows.map((r) => [`${r.customerId}:${r.itemId}`, r]));
 
     for (const { raw, parts } of parsed) {
-      const customer = customerByCode.get(upperTr(parts.customerCode));
-      const item = itemByCode.get(upperTr(parts.targetCode));
+      const customer = customerByCode.get(importKey(parts.customerCode));
+      const item = itemByCode.get(importKey(parts.targetCode));
       if (!customer || !item) continue;
       const hit = byPair.get(`${customer.id}:${item.id}`);
       if (!hit) continue;
-      map.set(upperTr(raw), {
+      map.set(importKey(raw), {
         id: hit.id,
         // `name` sütun DEĞİL — motorun satır etiketi olarak kullandığı alan.
         name: `${customer.name} · ${item.name}`,
@@ -340,7 +341,7 @@ export const customerColorAliasImportAdapter: ImportAdapter = {
       where: { code: { in: colorCodes, mode: "insensitive" } },
       select: { id: true, code: true, name: true },
     });
-    const colorByCode = new Map(colors.map((c) => [upperTr(c.code), c]));
+    const colorByCode = new Map(colors.map((c) => [importKey(c.code), c]));
     if (colors.length === 0) return map;
 
     // `assigned=true, alias=null` satırları da EŞLEŞİR: kayıt fiziksel olarak
@@ -356,12 +357,12 @@ export const customerColorAliasImportAdapter: ImportAdapter = {
     const byPair = new Map(rows.map((r) => [`${r.customerId}:${r.colorId}`, r]));
 
     for (const { raw, parts } of parsed) {
-      const customer = customerByCode.get(upperTr(parts.customerCode));
-      const color = colorByCode.get(upperTr(parts.targetCode));
+      const customer = customerByCode.get(importKey(parts.customerCode));
+      const color = colorByCode.get(importKey(parts.targetCode));
       if (!customer || !color) continue;
       const hit = byPair.get(`${customer.id}:${color.id}`);
       if (!hit) continue;
-      map.set(upperTr(raw), {
+      map.set(importKey(raw), {
         id: hit.id,
         name: `${customer.name} · ${color.name}`,
         externalKey: `${customer.code}${KEY_SEP}${color.code}`,
