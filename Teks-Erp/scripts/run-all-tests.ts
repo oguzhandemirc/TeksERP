@@ -51,6 +51,20 @@ const SESSIZ_YESIL_DEVRALINAN: ReadonlySet<string> = new Set<string>([]);
 // cmd.exe üzerinden çözer; Linux/CI'da (shell:false) doğrudan çalışır.
 const IS_WIN = process.platform === "win32";
 
+/** ❌ satırı + altındaki `↳` teşhis satırları (≤5), toplam ≤400 karakter; ❌ yoksa undefined. */
+export function ilkKirmiziBlogu(out: string, enCokTeshis = 5, enCokKarakter = 400): string | undefined {
+  const satirlar = out.split("\n");
+  const i = satirlar.findIndex((l) => /^\s*(❌|✗)\s/.test(l));
+  if (i < 0) return undefined;
+  const blok = [satirlar[i]!.trim()];
+  for (let j = i + 1; j < satirlar.length && blok.length <= enCokTeshis; j++) {
+    const t = satirlar[j]!.trim();
+    if (!t.startsWith("↳")) break;
+    blok.push(t);
+  }
+  return blok.join("\n         ").slice(0, enCokKarakter);
+}
+
 /**
  * TİP KONTROLÜ GEÇİDİ — paketten ÖNCE koşar (~28sn).
  *
@@ -610,7 +624,13 @@ async function main() {
     // NOT: retry olduysa `ms` İKİ denemenin toplamıdır (bu yüzden aşağıda "2 deneme"
     // etiketi basılıyor — 360sn'lik bir satır sessizce şaşırtmasın).
     const retryNote = retried ? (flaky ? " (2. denemede)" : ` (2 deneme de düştü; 1.: ${firstSummary})`) : "";
-    const ilkKirmizi = r.out.split("\n").find((l) => /^\s*(❌|✗)\s/.test(l))?.trim().slice(0, 150);
+    // İLK KIRMIZI = ❌ satırı + hemen altındaki `↳` teşhis satırları (en çok 5), 400
+    // karakter. Tek satır + 150 ile ÇOK SATIRLI HİÇBİR TEŞHİS koşucudan geçemiyordu:
+    // test_superadmin_provision'ın "(A) SIZINTI mı (B) ÇAKIŞMA mı" ayrımı CI'da
+    // basıldı ama ❌ satırında `—`'den sonrası boştu, güvenlik sınıfı bir kırmızı
+    // sınıflandırılamadan bekledi (d9 ölçtü, 2026-09-13). Bekçinin söylemek istediğini
+    // koşucunun özeti kesmez: ne etiketi (fold_catalog vakası) ne teşhisi (bu vaka).
+    const ilkKirmizi = ilkKirmiziBlogu(r.out);
     results.push({ file, ok: r.ok, summary: r.summary + retryNote, ms, flaky, skipped: r.skipped, bilinmeyenAtlama: r.bilinmeyenAtlama, sessizYesil: r.sessizYesil, ilkKirmizi });
     // SIKLIK DEFTERİ — yalnız `IZLENEN` kümesindeki bekçi için (bugün tek dosya),
     // zaten koşmuş bir sonuçtan tek satır: EKSTRA KOŞUM YOK. Karar kuralı ve iki
