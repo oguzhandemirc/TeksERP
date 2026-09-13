@@ -67,7 +67,7 @@ const KURALLAR = join(KOK, "docs", "kurallar");
  * Üreten komut:
  *   grep -rhoE 'bekçi: `(YOK|yok|BELİRSİZ)[^`]*`' docs/kurallar/*.md | wc -l
  */
-const B_TABAN = 37;
+const B_TABAN = 31;  // 5e: superadmin ×3 + yetki-izin ×3 kapanma kosulu aldi (§65↔§78 tek mekanizma tek cumle)
 
 /** `· bekçi: `…`` alanları — dosya + satır + içerik. */
 function bekciAlanlari(): Array<{ dosya: string; satir: number; icerik: string; tamSatir: string }> {

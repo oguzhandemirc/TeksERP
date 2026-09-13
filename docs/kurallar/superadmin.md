@@ -21,7 +21,7 @@
 
 - **[ÇEKİRDEK]** `isSystemAccount` panelden/API'den ATANAMAZ ve mevcut kullanıcı YÜKSELTİLMEZ: hiçbir Zod şemasına/yazma yoluna girmez; tek yazar `scripts/superadmin-olustur.ts` (`src/` DIŞINDA, sunucu paketine girmez). · bekçi: `test_superadmin_visible ('Alan panelden ATANAMAZ' kolu) + test_superadmin_provision` <sub>(CLAUDE.md:104, CLAUDE.md:105)</sub>
 - **[ÇEKİRDEK]** SIR HİJYENİ: süperadmin parolası/PIN/TOTP ve ayar şifresi repoya, log'a, sürüm notuna, audit yüküne GİRMEZ; log satırında sır da kullanıcı adı da yok. `.env`de kalan `SUPERADMIN_*` uyarısı YALNIZ ANAHTAR ADI basar; job tam anahtar literali taşımaz (`Object.keys(process.env)` + ön ek). · bekçi: `test_superadmin_provision §6 (literal/process.env.X deseni yok) + §8 (sentinel u` <sub>(CLAUDE.md:301, CLAUDE.md:97, CLAUDE.md:105)</sub>
-- **[ÇEKİRDEK]** Modül profili uygulama için YAZMA UCU YOK: `PATCH /feature-flags` tek kapı (süperadmin guard + ayar şifresi zinciri ikinci kez KURULMAZ — §12.5 kapı çoğaltma yasağı); `GET /api/admin/module-profile` salt okuma, fark SUNUCUDA hesaplanır. · bekçi: `BELİRSİZ — notta adlı bekçi yok` <sub>(arşiv:2134)</sub>
+- **[ÇEKİRDEK]** Modül profili uygulama için YAZMA UCU YOK: `PATCH /feature-flags` tek kapı (süperadmin guard + ayar şifresi zinciri ikinci kez KURULMAZ — §12.5 kapı çoğaltma yasağı); `GET /api/admin/module-profile` salt okuma, fark SUNUCUDA hesaplanır. · bekçi: `BELİRSİZ — notta adlı bekçi yok` · Kapanır: `modül bayrağı YAZAN, `feature-flags` DIŞINDA modül bayrağı YAZAN bir uç belirdiğinde kırmızı veren bir yüklem, `test_route_auth_coverage`in rota envanterinden türetilerek yazıldığında` · Öncül: ölçüldü <sub>(arşiv:2134)</sub>
 
 ### Kararlar
 
@@ -61,8 +61,8 @@
 
 ### Reçeteler
 
-- **[ÇEKİRDEK]** Karo döngüsü DIŞINDAKİ palet girdileri (`ops:work-order-new`, `def:station-capabilities`) modül/süperadmin kapısını ELLE taşır (karosuz ekranda palet tek keşif yolu). 'Kapatırsan gizlenir' önizlemesi masaüstü/tableti AYRI sayar; manifesto okunamazsa liste ÇİZİLMEZ. · bekçi: `BELİRSİZ — notta bu üç kural için adlı bekçi yok (karo↔route için tile-route-per` <sub>(CLAUDE.md:102)</sub>
-- **[ÇEKİRDEK]** Electron `withSettingsPassword` sarmalayıcısı: istek önce şifresiz gider; 403 REQUIRED/INVALID → `SettingsPasswordDialog` (App'te bir kez mount) → başlıkla tekrar; LOCKED kalan süre. Her kayıtta sorulur, oturumda HATIRLANMAZ; şifre state'te yalnız diyalog açıkken, log/toast/localStorage'a girmez. · bekçi: `yok (backend↔Electron ayna bekçisi yalnız sabitleri kıyaslar)` <sub>(CLAUDE.md:98)</sub>
+- **[ÇEKİRDEK]** Karo döngüsü DIŞINDAKİ palet girdileri (`ops:work-order-new`, `def:station-capabilities`) modül/süperadmin kapısını ELLE taşır (karosuz ekranda palet tek keşif yolu). 'Kapatırsan gizlenir' önizlemesi masaüstü/tableti AYRI sayar; manifesto okunamazsa liste ÇİZİLMEZ. · bekçi: `BELİRSİZ — notta bu üç kural için adlı bekçi yok (karo↔route için tile-route-per` · Kapanır: `karo döngüsü DIŞINDAKİ palet girdileri bir kümeye çıkarılıp her birinde modül/süperadmin kapısının varlığı ölçüldüğünde (bugün ELLE taşınıyor ve küme beyanlı değil)` · Öncül: ölçüldü <sub>(CLAUDE.md:102)</sub>
+- **[ÇEKİRDEK]** Electron `withSettingsPassword` sarmalayıcısı: istek önce şifresiz gider; 403 REQUIRED/INVALID → `SettingsPasswordDialog` (App'te bir kez mount) → başlıkla tekrar; LOCKED kalan süre. Her kayıtta sorulur, oturumda HATIRLANMAZ; şifre state'te yalnız diyalog açıkken, log/toast/localStorage'a girmez. · bekçi: `yok (backend↔Electron ayna bekçisi yalnız sabitleri kıyaslar)` · Kapanır: `Electron'da ayar YAZAN her isteğin `withSettingsPassword` sarmalayıcısından geçtiğini ölçen bir PANEL bekçisi yazıldığında — `test_settings_password` yalnız BACKEND ucunu ölçüyor (ölçüldü: 8 dosya sarmalayıcıyı anıyor, hiçbir panel testi kullanımını ölçmüyor)` · Öncül: ölçüldü <sub>(CLAUDE.md:98)</sub>
 
 ### Kararlar
 
