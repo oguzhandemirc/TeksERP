@@ -70,12 +70,22 @@ const genisTip = (ad) =>
   ad === "Teks-Erp" &&
   staged.some((f) => /^Teks-Erp\/(scripts|prisma)\//.test(f));
 
+// AĞIR ADIMLARA HEAP PAYI (ölçüldü 2026-09-14, d5): tsc 3,3 GB · eslint 3,4–3,5 GB
+// tepe RSS, Node'un varsayılan heap tavanı 4192 MB — 700 MB kaldı; proje %20
+// büyüyünce eşzamanlılıktan BAĞIMSIZ "Reached heap limit" gelir. Tavan 6144'e
+// çekilir (24 GB makinede 3 eşzamanlı kapı 9,4 GB'de paging'siz). npm → node
+// zincirinde NODE_OPTIONS aynen iner; kullanıcının kendi NODE_OPTIONS'ı korunur.
+const AGIR_ADIM_ENV = {
+  NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --max-old-space-size=6144`.trim(),
+};
+
 for (const proje of etkilenenProjeler(REPO, staged)) {
   const genis = genisTip(proje.ad);
   adimlar.push({
     ad: `${proje.ad} · tip${genis ? " (+scripts)" : ""}`,
     cwd: proje.ad,
     cmd: genis ? ["npm", ["run", "typecheck:scripts"]] : proje.typecheck,
+    env: AGIR_ADIM_ENV,
   });
   // Lint doğrudan değil KAPI üzerinden: taranan küme aynı kalır (tavan aynı kümeyi
   // ölçmek zorunda), yalnız verdikt commit'in kendi dosyalarına daralır. Staged liste
@@ -85,6 +95,7 @@ for (const proje of etkilenenProjeler(REPO, staged)) {
     cwd: ".",
     cmd: ["node", ["scripts/hooks/lint-gate.mjs", `--proje=${proje.ad}`]],
     stdin: `${staged.join("\n")}\n`,
+    env: AGIR_ADIM_ENV,
   });
   const anahtar = { "Teks-Erp": "backend", Electron: "electron", mobil: "mobil" }[proje.ad];
   if (existsSync(join(REPO, proje.ad, "lint-baseline.json"))) {
@@ -95,6 +106,7 @@ for (const proje of etkilenenProjeler(REPO, staged)) {
       // karşılaştırılabilir olmalı), yalnız VERDİKT bu commit'in dosyalarına bakar.
       cmd: ["node", ["scripts/check-lint-baseline.mjs", `--proje=${anahtar}`, "--commit-kapisi"]],
       stdin: `${staged.join("\n")}\n`,
+      env: AGIR_ADIM_ENV,
     });
   }
   if (proje.test) adimlar.push({ ad: `${proje.ad} · test`, cwd: proje.ad, cmd: proje.test });
