@@ -14,7 +14,10 @@
 --    koşmak "sorunlu satırları" basar ama hiçbir otomasyon farkı göremez.
 --    Bu dosya operatörün satırları GÖZLE görmesi için duruyor. Bir bölümün mantığı
 --    değişecekse ÖNCE burada değişir, sonra test'e kopyalanır (iki yüzey tek gerçek).
---    Test ayrıca burada olmayan bir §20 taşır: WorkOrderStep.status mutabakatı.
+--    Test ayrıca burada olmayan §20–§28'i taşır (ilki: WorkOrderStep.status
+--    mutabakatı). ⚠️ Yeni bölüm numarası İKİ dosyanın BİRLEŞİMİNDEN seçilir:
+--    burada 19'dan sonrası boş görünür ama test 28'e kadar doludur; 20 yazmak
+--    sessizce ikinci bir §20 üretirdi (ölçüldü 2026-09-13, §29 bu yüzden 29).
 --
 -- Ne zaman: 3 ayda bir (ARCHITECTURE.md §10.2 ile) veya şüphe anında. Salt-okunur.
 --           §7 için EK OLARAK: kartela / tambur / fason akışına dokunan her sürümden
@@ -333,6 +336,28 @@ FROM direct_shipments ds
 LEFT JOIN subcontractor_direct_ship_allocations dsa ON dsa."directShipmentId" = ds.id
 GROUP BY ds.id, ds."totalQty"
 HAVING ds."totalQty" <> COALESCE(SUM(dsa.qty), 0);
+
+\echo ''
+\echo '== 29) Stok kümesinde DEPOSUZ top (sevki/iadesi 409 ile durur) =='
+-- Stok defterinin "nerede" sorusunu depo cevaplar: stok statüsündeki bir topun
+-- deposu NULL ise o top hiçbir Σ'ya giremez ve sevki/iadesi kapıda durur
+-- (`assertRollsHaveWarehouse`, 2026-09-13).
+--
+-- ⚠️ NEDEN MIGRATION YETMEZ: `20260913120000_deposuz_stok_topu_uyarisi` aynı sayıyı
+-- ölçer ama BİR KEZ koşar — bugün temiz olup yarın kirlenen kurulumu görmez.
+-- Kirlenme yolu gerçek: deposuz bir topu stok kümesine çeken statü terfisi yolları
+-- damgayı garanti etmiyor. Bu bölüm her `npm test` koşumunda aynı soruyu sorar.
+--
+-- Kırmızı çıkarsa üç şeyden biridir (bölümü daraltma): onarılmamış geçmiş veri
+-- (`scripts/backfill_roll_warehouse.ts`) · damgasız bir terfi yolu · deposuz top
+-- kuran bir bekçi fikstürü (ölçüldü 2026-09-13: `test_tambur_cut_concurrency` ve
+-- `test_tambur_over_quantity` 24 kalıntı top bırakıyordu).
+SELECT r.id::text AS kayit, r.barcode, r.status::text AS durum, r."currentQty" AS metraj
+FROM rolls r
+WHERE r."warehouseId" IS NULL
+  AND r.status IN ('STOCK', 'WAREHOUSE', 'A1_STOCK', 'RETURNED_FROM_SUBCONTRACTOR')
+ORDER BY r."createdAt" DESC
+LIMIT 50;
 
 \echo ''
 \echo '== Tutarlılık kontrolü bitti. Yukarıda hiç satır YOKSA sistem sağlıklı. =='

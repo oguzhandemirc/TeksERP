@@ -142,6 +142,31 @@ async function main(): Promise<void> {
   const left = await prisma.roll.count({ where: { warehouseId: null } });
   console.log(`\n✅ ${written} kayıt güncellendi. Kalan deposuz top: ${left}`);
 
+  // ── HALKAYI KAPAT — bu betik bir KAPININ ön koşuludur, kapıyı da ölçer ────
+  // `assertRollsHaveWarehouse` (sevk · iade) deposuz topu 409 ile durduruyor ve
+  // `20260913120000_deposuz_stok_topu_uyarisi` bu betiği ADIYLA söylüyor. Ön
+  // koşulu sağlayan araç, koşulun SAĞLANDIĞINI da söylemek zorunda — yoksa
+  // koşan kişi "bitti mi" sorusunu başka bir yerden sormak zorunda kalır.
+  //
+  // ⚠️ `left` YETMEZ: o HER statüdeki deposuz topu sayar. Kapı yalnız STOK
+  // KÜMESİNDEKİ topa bakar; üretimde/fasonda/sevk edilmiş deposuz bir top kapıyı
+  // tetiklemez. İki sayıyı karıştırmak "kapı hâlâ kırmızı" yanılgısı üretir.
+  const kapiKalan = await prisma.roll.count({
+    where: { warehouseId: null, status: { in: [...WAREHOUSE_STOCK_STATUSES] } },
+  });
+  console.log(
+    kapiKalan === 0
+      ? "✅ SEVK/İADE KAPISI YEŞİL — stok kümesinde deposuz top kalmadı."
+      : `⚠️  SEVK/İADE KAPISI HÂLÂ KIRMIZI — stok kümesinde ${kapiKalan} deposuz top var;` +
+          " bu topların sevki/iadesi 409 ile durmaya devam eder.",
+  );
+  if (left > 0) {
+    console.log(
+      `   (kapsam notu: kalan ${left} deposuz topun ${left - kapiKalan} tanesi stok kümesi DIŞINDA` +
+        " — üretimde/fasonda/sevk edilmiş; kapı onlara bakmaz.)",
+    );
+  }
+
   // ── İZ — HAM SQL İKİ KAT KÖRDÜR ─────────────────────────────────────────
   // Yukarıdaki `UPDATE` ne audit yazar ne `updatedAt`i tazeler (Prisma'nın
   // `@updatedAt`i uygulama katmanındadır, DB trigger'ı yok). Yani bu koşum

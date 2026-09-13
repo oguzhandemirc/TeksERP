@@ -774,6 +774,33 @@ FROM (
 LEFT JOIN yarn_stocks s ON s."itemId" = m."itemId" AND s."warehouseId" = m."warehouseId"
 WHERE s."itemId" IS NULL`,
   },
+  {
+    id: "29",
+    // Stok defterinin "nerede" sorusunu depo cevaplar: stok statüsündeki bir topun
+    // deposu NULL ise o top hiçbir Σ'ya giremez ve sevki/iadesi kapıda durur
+    // (`assertRollsHaveWarehouse`, 2026-09-13).
+    //
+    // ⚠️ NEDEN MIGRATION YETMEZ ve bu bölüm VAR: `20260913120000_deposuz_stok_topu_
+    // uyarisi` aynı sayıyı ölçer ama BİR KEZ koşar — bugün temiz olup yarın kirlenen
+    // kurulumu görmez. Kirlenme yolu gerçek: deposuz bir topu stok kümesine çeken
+    // statü terfisi yolları damgayı garanti etmiyor (ölçüldü 2026-09-13).
+    //
+    // ⚠️ FİKSTÜR SÜZGECİ BİLİNÇLİ: bekçi fikstürleri deposuz stok topu kuruyor ve
+    // kalıntı bırakıyor (ölçüldü: `test_tambur_cut_concurrency` + `test_tambur_
+    // over_quantity`, 24 top). O fikstürler ayrı bir borçtur; bu bölüm ÜRETİM
+    // verisini ölçer, yoksa kapı kendi test artığıyla kalıcı kırmızı yanar.
+    title: "Stok kümesinde DEPOSUZ top (sevki/iadesi 409 ile durur)",
+    noise: {
+      where: `WHERE ${notFixture("drift.barcode")}`,
+      why: "bekçi fikstürleri deposuz stok topu bırakıyor (ayrı borç, §29 üretimi ölçer)",
+    },
+    sql: `
+SELECT r.id::text AS kayit, r.barcode, r.status::text AS durum,
+       r."currentQty"::text AS metraj
+FROM rolls r
+WHERE r."warehouseId" IS NULL
+  AND r.status IN ('STOCK', 'WAREHOUSE', 'A1_STOCK', 'RETURNED_FROM_SUBCONTRACTOR')`,
+  },
 ];
 
 async function driftCount(s: Section): Promise<number> {
