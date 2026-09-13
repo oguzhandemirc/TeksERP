@@ -1,6 +1,6 @@
 # Tambur geri alma — hüküm dosyası (2026-09-13)
 
-> **Durum:** HÜKÜM BEKLİYOR — kararı yönetici oturum (1e) verir; bu dosya her kalem için ÖLÇÜLMÜŞ şıkları, bedellerini ve çürütme sonuçlarını taşır. Kod yazılmadı; sondalar geçici, commit dışı.
+> **Durum:** **HÜKÜM VERİLDİ (1e, 2026-09-14) — §11.** Bu dosya her kalem için ÖLÇÜLMÜŞ şıkları, bedellerini ve çürütme sonuçlarını taşır; §0–§10 1c'nin ölçümü, §11 yöneticinin kararı ve iş dağılımı. Kod yazılmadı; sondalar geçici, commit dışı.
 > **Taban:** `origin/main` **`c1b973e2`** — içinde 01'in depo-kesimi geri alma düzeltmesi (`c2a10e88`), 6e'nin `initialQty` düzeltmesi (`edbd3ea0`, undo iki dalı `initialBump`; bekçi §12 üç ayak), 82'nin beyan yapısı (`31844dbc`, `CUT_SPLIT` → `BAGLI_TERS`, `TERS_KODU.ileri` küme), dokuma P3 (`44b34d23`). Bütün sondalar bu tabanda koşuldu; ilk tur (`a54e4d54` + 01 cherry-pick) yalnız ④'te fark verdi ve o fark §6'da yazılı.
 > **Kalemler:** ① `CUT_DISCARD` (ve kapanış `SCRAP` ikizi) · ② `OVERAGE` · ③ `DISPOSITION` (+ K=0 kapısının körlüğü) · ④ `initialQty` etkileşimi · ⑤ beyan yapısı (kalan iş). Çürütme turu (§9) her kalemde en az bir öncülü düzeltti; düzeltilmiş hâl aşağıdadır, ilk yazım silinmedi, "ÇÜRÜDÜ →" ile işaretli.
 > **İlgili:** `docs/kurallar/defter.md` · `docs/kurallar/tambur.md` · `docs/kurallar/top-duzeltme.md` · `Teks-Erp/scripts/lib/defter-beyan.ts` (`STOK_OLAY_BEYANI`) · `Teks-Erp/src/services/tambur-undo.service.ts` · `Teks-Erp/src/services/helpers/warehouse-ledger-reverse.helper.ts` · `Teks-Erp/scripts/lib/stok-defteri-bag-olcumu.ts`
@@ -233,3 +233,23 @@ Ebeveyne `len` döner (çocuğun metrajı, ebeveynin kaybettiği devir değil) �
 5. **Scrap-kalan çocuğu (①b3):** SINGLE_RESTORE sapmayı da damgalasın mı, yoksa o çocuğa yalnız FULL mü sunulsun? İkincisi daha dar; istemcinin bugün ne gösterdiği ölçülmedi.
 6. **Kabul-anı okuyucuları (④):** alış faturası / sipariş karşılama `initialQty`yi "değişmez" varsayıyor, `initialBump` bunu bugün de bozuyor. Kalıcı çözüm ②'den bağımsız: kabul anı metrajı kendi kolonunda (mal kabul satırı) ya da okuyucular `initialQty − Σ canlı TAMBUR OVERAGE`. Sahibi finans/mal kabul alanı.
 7. **Sıra önerisi:** ⑤ §13f + §13d (statik, kapı önce) → ① (b1+b2+b3, §13–§15/§18/§19) → `test_tambur_undo §11` çevrimi + `sourceRefId` → ④+② (a ya da b, §16–§17, 6e §12d) → ③ (üç yol + K=0 üyeleri + yeni bekçi) → §10.6 ayrı dilim.
+
+---
+
+## §11 · HÜKÜM (1e, 2026-09-14) — karar, gerekçe, iş dağılımı
+
+Ölçüt tek: **ledger-first** — "ne oldu" değişmez, ters kayıt bugüne ve bağlı; aynı kararın iki defteri birlikte döner; keşif bir olgudur. Şıklar 1c'nin ölçümüyle seçildi, ölçülmeyen yerde dar olan tercih edildi.
+
+| Kalem | Karar | Gerekçe (tek cümle) | Sahip |
+|---|---|---|---|
+| ① `CUT_DISCARD` + kapanış `SCRAP` | **(b1)+(b2)+(b3-DAR)**: FULL 5b damgasıyla bağlı satırlar terslenir; arşiv-SINGLE ile ölmüş çocukların grubu FULL'de terslenir (S9); **scrap-kalan çocuğuna SINGLE/SINGLE_RESTORE SUNULMAZ, yalnız FULL** (409, sebep metni) — §10.5 dar şık | sapma damgası ile depo etkisi tek kararın iki defteri; kapanışın kalanı bir kesim parçası değildir, ona parça geri alması vermek 60↔0'ı KALICI kılıyor (S10) | **6e** (kod + §13/§14/§15/§18/§19) · **ea** sürüm notu tek cümle (b3-dar davranış değişikliği) · istemci "iş emrine geri al" görünürlüğü ölçülür, tablet alanı |
+| ② `OVERAGE` | **(a) KEŞİF TERMİNAL — keşif ebeveyne taşınır** (depo dalı taşıma satırı aynı bağla; üretim dalı sapma-yalnız; klasik finalize bugünkü davranış BEYANLA); bump sapması yalnız karşılanmayan kısım | ölçüm olgudur, kesimi geri almak kumaşı geri ölçmez; para okuyucularına sızıntı BUGÜN de var ve ②'den bağımsız kalemdir (§10.6) | **6e** (üç dal + §16/§17 + 6e §12d); `test_tambur_undo §11` ÖNCE çevrilir |
+| §10.2 `sourceRefId` | **AYRI KOLON**: `RollVariance.sourceRollId` (nullable `@db.Uuid`, FK `Roll` Restrict, add-only migration); `sourceRefId` belge kimliği kalır, polimorfikleşmez | kolonun anlamı iddiadır; iki anlam tek kolonda okuyucuyu kör eder | **6e** (② ile aynı dilim; şema penceresi 1e'den) |
+| ③ `DISPOSITION` | **(b)** beyan `KARSI_OLAY = PRODUCTION_ISSUE` + "çocuk kapsamında `TAMBUR_UNDO` ile bağlı da terslenir" şerhi; **üç satırsız çıkış yolu `PRODUCTION_ISSUE` yazar** (manuel taşıma · elle top · redye; `attachRolls` deseni) + yeni `test_stock_ledger_manual_move`; `BILINEN_KAPISIZ_YOLLAR` +5 (kapı kırmızıya DÖNER, borç görünür) | rafa giriş terminal olamaz; K=0 iddiası çürüdü (K ≥ 5, kör), borç görünür yer değiştirir | **1c** (üç yol + bekçi + iniş öncesi fabrika kopyasında "bu yollarla üretime alınmış raf topu" sayısı; >0 ise onarım yok, ufuk sonrası) · liste üyeleri **6e** onayıyla · `rescueStuckRoll` + `cutOpenFabric` çocuğu (giriş yönü, üretim dalının defteri) **AYRI KALEM**, 01 doff'tan sonra |
+| ④ `initialQty` | ② ile birlikte: sapma satırı yalnız karşılanmayan kısım; `top-duzeltme.md:20` + `tambur.md:27` daralır, arşive "KISMİ → 2026-09-14"; `test_consistency` sonda kalemi `initialQty = giriş + Σ canlı OVERAGE(ebeveyn, TAMBUR_*)` | `edbd3ea0` tek başına 20 m aşımı 40 m yazıyor (S6) | **6e** |
+| ⑤ beyan | **önce statik**: §13f (olay düzeyi `tersYazan`) + §13d `KARSI_OLAY` denetimi; `WO_DETACH` tutarsızlığı; **sonra kod indikçe**: `CUT_DISCARD`/`SCRAP`/`OVERAGE` → `BAGLI_TERS`, `DISPOSITION` → `KARSI_OLAY` | erken beyan yalan söyleyen yeşil | **82** |
+| §10.1 kapanış kimliği | AYRI KALEM, ertelendi (5b bugün tüm canlı kapanış sapmalarını damgalıyor, ① aynı kümeyi izler — tutarlı) | bloklayan yok | — |
+| §10.4 `CUT_SCRAP` | AÇILMAZ | `SCRAP`ın tek yazıcısı kapanış | — |
+| §10.6 kabul-anı okuyucuları | AYRI KALEM: alış faturası taslağı + sipariş karşılama `initialQty − Σ canlı TAMBUR OVERAGE` okur (kolon açmadan) | sızıntı bugün var, ② seçiminden bağımsız | **9b** (finans), ekran diliminden sonra |
+
+**Sıra (§10.7 aynen):** ⑤ statik (82) → ① (6e) → `§11` çevrimi + `sourceRollId` (6e, şema penceresi) → ②+④ (6e) → ③ (1c) → §10.6 (9b). Her § iki sondayla; tek fikstür yasak; sürüm notu yalnız ①(b3-dar).
