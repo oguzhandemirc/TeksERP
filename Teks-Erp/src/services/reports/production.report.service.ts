@@ -12,7 +12,7 @@
 //     Tambur kalıtım kopyalarını dışlar (çift sayım önlenir).
 // =============================================================================
 
-import { ACTIVE_OPERATION } from "./../helpers/roll-operation.helper";
+import { ACTIVE_OPERATION, OWN_OPERATION } from "./../helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT } from "../helpers/roll-movement.helper";
 import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
@@ -140,7 +140,7 @@ export async function getTravelerTrace(rollId: string): Promise<TravelerTraceRes
       },
     }),
     prisma.rollOperation.findMany({
-      where: { ...ACTIVE_OPERATION, rollId, inheritedFromParentRollId: null },
+      where: { ...ACTIVE_OPERATION, ...OWN_OPERATION, rollId },
       orderBy: { createdAt: "asc" },
       select: {
         operationType: true,

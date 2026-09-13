@@ -9,7 +9,7 @@
 //   - Rolls attached to a WO change status from STOCK → IN_PRODUCTION.
 // =============================================================================
 
-import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
+import { ACTIVE_OPERATION, OWN_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { postStockMove, qtyYazilabilir } from "./helpers/warehouse-ledger.helper";
@@ -2718,7 +2718,7 @@ export class WorkOrderService {
         select: { workOrderStepId: true, rollId: true, enteredAt: true, exitedAt: true },
       }),
       prisma.rollOperation.findMany({
-        where: { ...ACTIVE_OPERATION, rollId: { in: rollIds }, inheritedFromParentRollId: null },
+        where: { ...ACTIVE_OPERATION, ...OWN_OPERATION, rollId: { in: rollIds } },
         select: {
           workOrderStepId: true,
           operationType: true,

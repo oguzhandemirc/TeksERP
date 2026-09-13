@@ -41,7 +41,7 @@
 // `helpers/kursun-bypass-guard.helper.ts` dosyasında yaşar.
 // =============================================================================
 
-import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
+import { ACTIVE_OPERATION, OWN_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { randomUUID } from "crypto";
 import { normalizeScanCode } from "../utils/code-format";
@@ -875,9 +875,9 @@ export class KursunBypassService {
         //      adımda FİİLEN yapılmış QC2 engeller.
         const qc2Count = await tx.rollOperation.count({
           where: { ...ACTIVE_OPERATION,
+            ...OWN_OPERATION,
             workOrderStepId: step.id,
             operationType: RollOperationType.QC2_COMPLETED,
-            inheritedFromParentRollId: null,
           },
         });
         if (qc2Count > 0) {

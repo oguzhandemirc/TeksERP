@@ -158,6 +158,10 @@ export const DuplicateRollsService = {
              r."clientToken", r."createdById", u."fullName" AS "operatorName",
              r."createdMachineId", r."labelPrintedAt", r."sackId", r."shipmentId",
              (SELECT COUNT(*)::int FROM roll_movements m WHERE m."rollId" = r.id AND m."revokedAt" IS NULL) AS moves,
+             -- ⚠️ inheritedFromParentRollId süzgeci BİLEREK YOK ve gerekmez: aşağıdaki
+             -- r."parentRollId" IS NULL bu sorguyu çocuk OLMAYAN toplara kapatıyor,
+             -- miras op ise yalnız parent→çocuk kopyasında doğar ⇒ burada yapısal olarak
+             -- hiç bulunamaz. (OWN_OPERATION sabitinin uygulanmadığı yerlerden biri.)
              (SELECT COUNT(*)::int FROM roll_operations o WHERE o."rollId" = r.id AND o."revokedAt" IS NULL) AS ops
       FROM rolls r
       LEFT JOIN items i ON i.id = r."itemId"

@@ -22,6 +22,26 @@ type Tx = Prisma.TransactionClient;
 /** Geri alınmamış (yürürlükteki) operasyon izi. */
 export const ACTIVE_OPERATION = { revokedAt: null } as const;
 
+/**
+ * Topun KENDİ operasyonu — Tambur/fason bölünmesinde parent'tan kopyalananlar hariç.
+ *
+ * ⚠️ `ACTIVE_OPERATION`dan FARKLI OLARAK HER OKUYUCUYA UYGULANMAZ: yalnız
+ * "bu adımda FİİLEN iş yapıldı mı" sorusunu soran SAYIM ve UYGUNLUK yolları
+ * kullanır. Üç sınıf bunu bilerek KULLANMAZ ve kullanmamalıdır:
+ *   • kalıtım zincirinin kaynağı (süzerse zincir kopar, torun topta hiç op kalmaz)
+ *   • topun geçmişini gösteren yüzey (çocuk kartında "kurşun yapılmış" görünmesi
+ *     kalıtımın AMACIDIR)
+ *   • "bu topa hiç dokunuldu mu" tipi tekil varlık kapısı (miras izi de
+ *     dokunulmuşluktur)
+ *
+ * ⚠️ Bu yüzden AST kapısı YAZILMADI ve yazılmamalıdır: enforce edilecek küme 8,
+ * muaf küme 33 (ölçüldü 2026-09-13). Muaf listesi enforce edileni aşan bir
+ * tripwire kapı değil LİSTEDİR — bakımsız kalır, sonra "yeşil" diye okunur.
+ * Kapı bir gün gerekirse YALNIZ agregat/uygunluk sınıfını ölçer, 41 okumanın
+ * tamamını değil.
+ */
+export const OWN_OPERATION = { inheritedFromParentRollId: null } as const;
+
 export interface RevokeOperationsArgs {
   rollIds: string[];
   workOrderStepIds?: string[];

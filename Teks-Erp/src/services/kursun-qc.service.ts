@@ -14,7 +14,7 @@
 // Tespitte `detectedAtStepId` + `detectedByUserId` + `detectedAt` doldurulur.
 // =============================================================================
 
-import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
+import { ACTIVE_OPERATION, OWN_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT, revokeRollMovements } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { normalizeScanCode } from "../utils/code-format";
@@ -831,10 +831,10 @@ export class KursunQcService {
     const rollIds = openMovements.map((m) => m.rollId);
     const completedQc2 = await prisma.rollOperation.findMany({
       where: { ...ACTIVE_OPERATION,
+        ...OWN_OPERATION,
         workOrderStepId: step.id,
         operationType: RollOperationType.QC2_COMPLETED,
         rollId: { in: rollIds },
-        inheritedFromParentRollId: null,
       },
       select: { rollId: true },
     });
@@ -1436,10 +1436,10 @@ export class KursunQcService {
       // Tambur kalıtım kayıtları sayılmaz — bu step'te fiilen yapılan QC2.
       prisma.rollOperation.findMany({
         where: { ...ACTIVE_OPERATION,
+          ...OWN_OPERATION,
           workOrderStepId: stepId,
           rollId: { in: rollIds },
           operationType: RollOperationType.QC2_COMPLETED,
-          inheritedFromParentRollId: null,
         },
         select: { rollId: true },
       }),

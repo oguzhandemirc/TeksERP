@@ -31,7 +31,7 @@ import {
   StepStatus,
   type PrismaClient,
 } from "@prisma/client";
-import { ACTIVE_OPERATION } from "./roll-operation.helper";
+import { ACTIVE_OPERATION, OWN_OPERATION } from "./roll-operation.helper";
 import { ACTIVE_MOVEMENT } from "./roll-movement.helper";
 import { AppError } from "../../utils/app-error";
 import { resolveKursunBypassEnabled } from "../system-setting.service";
@@ -126,10 +126,10 @@ export async function loadBypassEligibilitySignals(
 
   const qc2Ops = await db.rollOperation.findMany({
     where: { ...ACTIVE_OPERATION,
+      // Tambur kalıtımı FİİLEN yapılmış QC2 değildir (gerekçe: `OWN_OPERATION`).
+      ...OWN_OPERATION,
       workOrderStepId: { in: stepIds },
       operationType: RollOperationType.QC2_COMPLETED,
-      // Tambur kalıtımı (inheritedFromParentRollId) FİİLEN yapılmış QC2 değildir.
-      inheritedFromParentRollId: null,
     },
     select: { workOrderStepId: true },
     distinct: ["workOrderStepId"],
