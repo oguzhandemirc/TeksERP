@@ -13,7 +13,9 @@
 // geriye doğru kurulamaz (saha kopyasında 37 OVERAGE satırı / 382,1 m vardı ve
 // hangisinin bu yüzden doğduğu AYIRT EDİLEMEDİ).
 //
-// §1 EŞZAMANLI AŞIM  — iki paralel 120 m kesim: biri geçer, diğeri 409 alır
+// §1 EŞZAMANLI AŞIM  — iki paralel 120 m kesim: biri geçer, diğeri 409 alır.
+//                      PENCERE gate-tx satır kilidiyle KURULUR ve kurulduğu
+//                      ÖLÇÜLÜR; kurulamazsa kalem "yarış ölçülmedi" der (2026-09-13)
 // §2 DEFTER          — yazılan aşım GERÇEK aşımdır (bayat değerden değil)
 // §3 REGRESYON       — ARDIŞIK aşım kesimi hâlâ serbest (2026-08-12 saha kuralı:
 //                      fazlalık tek kesimde bitmeyebilir; 0'daki topta ikinci
@@ -22,11 +24,16 @@
 // §5 DEĞİŞMEZ        — Σçocuk + kalan − Σaşım = giriş metrajı (zamanlamadan
 //                      bağımsız; defter payı bayat metrajdan yazılırsa bozulur)
 // §6 BAYAT OKUMA     — pencere elle açılır: karar + defter payı TAZE metrajdan
+//
+// ⚠️ §4 ve §5'e AYNI PENCEREYİ EKLEMEYİN: o ikisi SONUÇ değil DEĞİŞMEZ ölçüyor
+// (`Σçocuk ≤ giriş`, `Σçocuk + kalan − Σaşım = giriş`) ve değişmez zamanlamadan
+// bağımsızdır. Pencere yalnız SONUCU ölçen kalemde gereklidir — §1 tek örnekti.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { TamburService } from "../src/services/tambur.service";
 import { RollStatus, RollVarianceKind } from "@prisma/client";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
+import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0;
 let fail = 0;
@@ -76,6 +83,15 @@ async function cocuklar(parentId: string): Promise<number> {
 }
 
 async function main(): Promise<void> {
+  // ⚠️ İLK İFADE: bu bekçi global `SystemSetting` YAZIYOR (aşım bayrağı). Kapı
+  // yoktu — ortak ağaçtaki `.env` fabrikanın canlı yedeğini gösterdiğinde bir
+  // koşum oraya yazardı (1e'nin §8 bulgusu, 2026-09-13).
+  const dbEngeli = hedefDbEngeli();
+  if (dbEngeli) {
+    console.error(`❌ DURDURULDU: ${dbEngeli}`);
+    fail++;
+    return;
+  }
   const item = await prisma.item.create({
     data: { code: `TST-TCC-${ts}`, name: `Test Kesim Eşzamanlılık ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
@@ -99,12 +115,72 @@ async function main(): Promise<void> {
   });
 
   // ═══ §1 — iki paralel aşım kesimi ═══
+  //
+  // ⚠️ PENCERE ELLE KURULUR VE KURULDUĞU ÖLÇÜLÜR (2026-09-13). İlk yazımda §1
+  // yalnız `Promise.allSettled` ile iki çağrıyı başlatıyordu ve ÖRTÜŞMEYİ
+  // garanti etmiyordu. İkinci çağrının taze okuması birincinin COMMIT'inden
+  // SONRA düşerse `tazeKalan=0` olur, `0 < 120` aşım dalı EŞLEŞİR ve kesim
+  // kabul edilir — ki bu §3'ün MEŞRU ilan ettiği sonuçtur (0'a inmiş topta
+  // ikinci aşım kesimi serbest). Yani bekçi, ürün doğru çalışırken kırmızı
+  // veriyordu ve teşhisi "atomik claim kaybı"na gönderiyordu.
+  //
+  // Ölçüldü (2026-09-13, aynı commit, aynı DB): ardışık koşum → 2 başarı /
+  // 240 m çocuk / 140 m aşım 2 satır; gerçekten eşzamanlı koşum → 1 başarı +
+  // 409 / 120 m / 20 m 1 satır. CI'ın kırmızısı birinci sütundu.
+  //
+  // Kural: bir eşzamanlılık bekçisi ÖNCE pencereyi kurduğunu kanıtlar; kuramadıysa
+  // bu bir yüklem sonucu değil, ÖLÇÜM ARIZASIDIR. Pencere bir gate-tx'in topa
+  // aldığı satır kilidiyle kurulur: iki çağrı da KİLİTSİZ taze okumasını yapar
+  // (100 m görür), sonra ikisi de `updateMany`de kilide takılır. Gate açılınca
+  // biri eşleşir (100 → 0), diğerinin iyimser yüklemi (`currentQty: 100`) artık
+  // eşleşmez → P2025 → 409.
   console.log("\n=== §1: 100 m'lik top, iki tablet aynı anda 120 m kesiyor ===");
   const p1 = await depoTopu("A", 100);
-  const sonuc = await Promise.allSettled([
-    tambur.cutWarehouseRoll(p1, { cutLength: 120 }, userId),
-    tambur.cutWarehouseRoll(p1, { cutLength: 120 }, userId),
-  ]);
+  let gateAc!: () => void;
+  const gateKapisi = new Promise<void>((res) => {
+    gateAc = res;
+  });
+  const gateTx = prisma.$transaction(
+    async (tx) => {
+      // Satır kilidi: iki kesim de `updateMany`de burada bekleyecek.
+      await tx.$queryRaw`SELECT id FROM rolls WHERE id = ${p1}::uuid FOR UPDATE`;
+      await gateKapisi;
+    },
+    { timeout: 60_000, maxWait: 10_000 },
+  );
+  // Kural: gate promise'ine `await`ten ÖNCE no-op `.catch` — aksi hâlde bekçi
+  // kendi kurduğu pencerede "unhandled rejection" ile düşer.
+  gateTx.catch(() => {});
+  const kesim1 = tambur.cutWarehouseRoll(p1, { cutLength: 120 }, userId);
+  const kesim2 = tambur.cutWarehouseRoll(p1, { cutLength: 120 }, userId);
+  kesim1.catch(() => {});
+  kesim2.catch(() => {});
+  // PENCERE ÖLÇÜMÜ: iki arka uç da BU topun satır kilidinde bekliyor mu? Bekleme
+  // sayısı 2'ye ulaşmazsa yarış HİÇ KURULMADI ve §1'in sonucu yorumlanamaz.
+  const bekleyenSayisi = async (): Promise<number> => {
+    const rows = await prisma.$queryRaw<{ n: bigint }[]>`
+      SELECT count(*)::bigint AS n
+      FROM pg_stat_activity a
+      WHERE a.datname = current_database()
+        AND a.pid <> pg_backend_pid()
+        AND cardinality(pg_blocking_pids(a.pid)) > 0`;
+    return Number(rows[0]?.n ?? 0);
+  };
+  let bekleyen = 0;
+  const sonAn = Date.now() + 20_000;
+  while (Date.now() < sonAn) {
+    bekleyen = await bekleyenSayisi();
+    if (bekleyen >= 2) break;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  check(
+    "§1: PENCERE KURULDU — iki kesim de topun satır kilidinde bekliyor (yarış ölçülebilir)",
+    bekleyen >= 2,
+    bekleyen >= 2 ? `${bekleyen} arka uç bekliyor` : `YARIŞ ÖLÇÜLMEDİ: yalnız ${bekleyen} arka uç bekledi — aşağıdaki §1/§2 sonuçları yorumlanamaz`,
+  );
+  gateAc();
+  await gateTx.catch(() => {});
+  const sonuc = await Promise.allSettled([kesim1, kesim2]);
   const basarili = sonuc.filter((r) => r.status === "fulfilled").length;
   const reddedilen = sonuc.filter((r) => r.status === "rejected");
   check("§1: YALNIZ BİRİ geçti", basarili === 1, `${basarili} başarılı / ${reddedilen.length} red`);
