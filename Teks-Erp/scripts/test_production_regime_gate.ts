@@ -73,6 +73,9 @@ const KAPILI: ReadonlyArray<{ dosya: string; mount: string }> = [
   // listede ANILMIYORDU ⇒ bekçi 12 taşıyıcının 11'ini doğruluyor, 12'nci hakkında
   // hiçbir şey söylemiyordu. §1e o boşluğu kapatan koldur.
   { dosya: "routes/weaving-order.routes.ts", mount: "/api/weaving-orders" },
+  // Dokuma doff yüzeyi (2026-09-13). §1e ilk gününde bu dosyayı yakaladı: kapıyı
+  // doğuştan taşıyordu ama listede yoktu — tarayıcı kolu tam bunun için var.
+  { dosya: "routes/machine-doff.routes.ts", mount: "/api/machine-doffs" },
 ];
 
 /**
