@@ -187,12 +187,17 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
 const ASGARI_ROUTE_DOSYASI = 10;
 const ASGARI_CAGRI = 50;
 
+// §3b körlük zemini: tarayıcı MOBILE_* kümesini hiç göremezse "ihlal yok" cümlesi
+// VAKUMEN doğru olur ve hiçbir şey korunmaz. Ölçüldü 2026-09-13: 64 çağrı.
+const MOBIL_ASGARI_CAGRI = 40;
+
 type CagriYeri = {
   dosya: string; // repo köküne göreli
   satir: number;
   fonksiyon: string;
   kodlar: string[];
   cozulemeyen: string[]; // çözülemeyen argümanın kaynak metni
+  yayilanlar: string[]; // `...SABIT` biçiminde yayılan sabitlerin ADLARI (çözülsün ya da çözülmesin)
 };
 
 const sfCache = new Map<string, ts.SourceFile>();
@@ -345,10 +350,14 @@ function cagriYerleri(sf: ts.SourceFile): CagriYeri[] {
           kural === "hepsi" ? [...node.arguments] : node.arguments[kural] ? [node.arguments[kural]] : [];
         const kodlar: string[] = [];
         const cozulemeyen: string[] = [];
+        const yayilanlar: string[] = [];
         for (const arg of argumanlar) {
           if (ts.isStringLiteralLike(arg)) {
             kodlar.push(arg.text);
           } else if (ts.isSpreadElement(arg) && ts.isIdentifier(arg.expression)) {
+            // Ad, çözülsün ya da çözülmesin kaydedilir: guard TÜRÜ sorusu kodların
+            // kendisini değil, HANGİ KÜMENİN yayıldığını sorar.
+            yayilanlar.push(arg.expression.text);
             const cozum = diziSabitiCoz(sf, arg.expression.text);
             if (cozum) kodlar.push(...cozum);
             else cozulemeyen.push(arg.getText(sf));
@@ -362,6 +371,7 @@ function cagriYerleri(sf: ts.SourceFile): CagriYeri[] {
           fonksiyon: fn,
           kodlar,
           cozulemeyen,
+          yayilanlar,
         });
       }
     }
@@ -582,6 +592,50 @@ async function main(): Promise<void> {
     );
   } else {
     console.log("   ℹ️  Hiçbir endpoint wildcard İSTEMİYOR (doğru: wildcard verilir, istenmez).");
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // 3b) MOBİL GUARD TÜRÜ — MOBILE_* kümesi yayan uç `requireAnyPermission` ile
+  //     korunur (`docs/kurallar/yetki-izin.md` [ÇEKİRDEK] mobil uç kuralı)
+  //
+  // NEDEN: `requirePermission` TEK izin ister; mobil ekranın dokunduğu uçta
+  // yazılırsa saha kullanıcısı 403 alır ve mesaj sebebi SÖYLEMEZ ("yetkiniz yok",
+  // "bu uç yalnız web iznine bakıyor" değil). Kaçış sessizdir: derleme geçer,
+  // web kullanıcısı etkilenmez, yalnız tablet düşer.
+  //
+  // ⚠️ ÖLÇÜLMEYEN YARI — bilinçli, uydurulmadı: bu bölüm *"MOBILE_* YAYAN uçta
+  // guard TÜRÜ"* sorusunu ölçer. *"Mobil ekranın dokunduğu bir uçta MOBILE_*
+  // kümesi HİÇ YOK MU"* sorusunu ölçMEZ — o, mobil çağrı envanteri ister
+  // (`mobil/src`te çağrıların çoğu şablon literali + dinamik segment) ve bu
+  // bekçinin kapsamı DEĞİLDİR. Kural satırı bu sınırı beyan ediyor.
+  //
+  // TABAN YOK — devralınan ihlal SIFIR (ölçüldü 2026-09-13: MOBILE_* yayan 64
+  // route çağrısının 64'ü `requireAnyPermission`). Mandal değil, SERT kural:
+  // sıfırdan başlayan bir cırcır zaten sert kuraldır, taban sabiti onu süsler.
+  // ───────────────────────────────────────────────────────────────────────────
+  console.log("\n── 3b) Mobil guard türü ──");
+  const mobilCagrilari = routeCagrilari.filter((c) =>
+    c.yayilanlar.some((y) => y.startsWith("MOBILE_"))
+  );
+  check(
+    "körlük zemini: MOBILE_* kümesi yayan route çağrısı bulundu",
+    mobilCagrilari.length >= MOBIL_ASGARI_CAGRI,
+    `${mobilCagrilari.length} çağrı (asgari ${MOBIL_ASGARI_CAGRI})`
+  );
+  const yanlisTur = mobilCagrilari.filter((c) => c.fonksiyon !== "requireAnyPermission");
+  check(
+    "⭐ MOBILE_* yayan her uç `requireAnyPermission` ile korunuyor",
+    yanlisTur.length === 0,
+    yanlisTur.length === 0
+      ? `${mobilCagrilari.length} çağrının ${mobilCagrilari.length}'i requireAnyPermission`
+      : yanlisTur.map((c) => `${c.dosya}:${c.satir} → ${c.fonksiyon}()`).join(" · ")
+  );
+  if (yanlisTur.length > 0) {
+    console.log(
+      "   YAPILACAK: bu uçlarda `requirePermission(X)` yerine\n" +
+        "   `requireAnyPermission(X, ...MOBILE_Y)` yaz — tek izin isteyen guard\n" +
+        "   saha kullanıcısını 403'ler ve sebebi hiçbir yüzeyde yazmaz."
+    );
   }
 
   // ───────────────────────────────────────────────────────────────────────────
