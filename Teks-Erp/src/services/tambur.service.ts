@@ -1339,6 +1339,10 @@ export class TamburService {
       // açıkken kabul edildi; burada YALNIZ kayda geçirilir. Üç kesim yolunun
       // (bu, cutOpenFabric, cutWarehouseRoll) üçü de aynı hesabı kullanır —
       // `overageOf` tek kaynak, kopyalanırsa defter sessizce eksik kalır.
+      // ⚠️ `sourceRollId` BİLEREK YOK (hüküm ② "klasik finalize bugünkü davranış
+      // BEYANLA"): aşım N çocuğun TOPLAMINDAN doğar, tek bir çocuğa atfedilemez.
+      // Geri alma bu keşfi kimseye saymaz ve bump'ı bugünkü gibi yazar — atıfsız
+      // keşif "karşılanmamış" sayılır (sessiz yanlış atıf yerine açık fazla sayım).
       await recordVarianceTx(tx, {
         rollId: data.rollId,
         workOrderStepId: oldStepId,
@@ -2418,6 +2422,9 @@ export class TamburService {
           // Defter payı da TAZE metrajdan (bayat değer 140 m'lik aşımı 20 m yazıyordu).
           qty: overageQty,
           source: VARIANCE_SOURCES.TAMBUR_OVERCUT,
+          // KEŞİF EBEVEYNDE, KAYNAĞI ÇOCUK: geri alma bu çocuğun keşfini buradan bulur
+          // ve bump'ı yalnız karşılanmayan kısım için yazar (hüküm ②).
+          sourceRollId: child.id,
           userId,
         });
       }
@@ -3345,6 +3352,9 @@ export class TamburService {
           // Defter payı da TAZE metrajdan (bayat değer aşımı eksik yazıyordu).
           qty: overageOf(data.lengthMeters, tazeKalan),
           source: VARIANCE_SOURCES.TAMBUR_OVERCUT,
+          // KEŞİF EBEVEYNDE, KAYNAĞI ÇOCUK (hüküm ②) — üretim dalında stok satırı yok,
+          // geri alma yalnız bump'ı bu keşifle karşılar.
+          sourceRollId: child.id,
           userId,
         });
       }

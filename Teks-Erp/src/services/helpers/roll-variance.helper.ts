@@ -35,6 +35,12 @@ export interface RecordVarianceInput extends VarianceReasonInput {
    * da tersleme komşu satırları da süpürür (bkz. şema notu).
    */
   sourceRefId?: string | null;
+  /**
+   * Sapmayı doğuran TOP — kesim keşfi (`TAMBUR_OVERCUT`) ebeveyne yazılırken hangi
+   * çocuktan geldiği. Geri alma "bu çocuğun keşfi ne kadar" sorusunu buradan sorar
+   * (hüküm ② 2026-09-14); `sourceRefId` belgeyi söyler, bu kolon topu.
+   */
+  sourceRollId?: string | null;
   userId?: string | null;
 }
 
@@ -70,6 +76,7 @@ export async function recordVarianceTx(
       reasonText,
       source: input.source,
       sourceRefId: input.sourceRefId ?? null,
+      sourceRollId: input.sourceRollId ?? null,
       createdById: input.userId ?? null,
     },
     select: { id: true },
@@ -110,6 +117,7 @@ export async function recordVariancesTx(
         reasonText,
         source: input.source,
         sourceRefId: input.sourceRefId ?? null,
+        sourceRollId: input.sourceRollId ?? null,
         createdById: input.userId ?? null,
       };
     })

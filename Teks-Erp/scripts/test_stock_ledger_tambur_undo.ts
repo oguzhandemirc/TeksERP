@@ -30,6 +30,8 @@
 //   §13–§19 ⭐ KAPANIŞIN İKİ DEFTERİ BİRLİKTE DÖNER (hüküm ① b1+b2+b3-DAR, 2026-09-14): FULL discard/
 //      scrap bağlı çıkışı tersler (§13/§14) · SINGLE_RESTORE dokunmaz (§15) · arşiv-SINGLE → FULL (§18) ·
 //      scrap-kalan çocuğuna yalnız FULL (§19, 409 UNDO_SCRAP_REMAINDER_FULL_ONLY)
+//   §16 · §17 ⭐ GERÇEK AŞIM (hüküm ② a): keşif terminal, ebeveyne taşınır — SINGLE×3 ve FULL'de
+//      durum = defter = 120, canlı OVERAGE n=1 Σ=20, taşıma satırı aynı rollVarianceId
 //       — durum = defter. ⚠️ Bu ayak iki bekçinin ARASINDAKİ DİKİŞİ ölçer: §3
 //       finalize yolunu (ebeveyn çıkışı YOK), `test_stock_ledger_transform` kesimin
 //       İLERİ yolunu ölçüyordu; TRANSFORM çiftinin GERİ ALINMASI ikisinin arasında
@@ -72,6 +74,7 @@ interface Satir {
   fromStatus: RollStatus | null;
   toStatus: RollStatus | null;
   reasonCode: string | null;
+  rollVarianceId: string | null;
   reversesMovementId: string | null;
 }
 
@@ -82,7 +85,7 @@ async function satirlar(rollId: string): Promise<Satir[]> {
     select: {
       id: true, eventType: true, qty: true,
       fromWarehouseId: true, toWarehouseId: true, fromStatus: true, toStatus: true,
-      reasonCode: true, reversesMovementId: true,
+      reasonCode: true, reversesMovementId: true, rollVarianceId: true,
     },
   });
 }
@@ -491,6 +494,50 @@ async function main(): Promise<void> {
     const f19k = await depoKesimi();
     const onizK = (await undo.getUndoPreview(f19k.cocuk)).data as { options: Array<{ mode: string }> };
     check("§19e kapı DAR: sıradan kesim parçasına SINGLE hâlâ sunuluyor", onizK.options.some((o) => o.mode === "SINGLE"), JSON.stringify(onizK.options.map((o) => o.mode)));
+
+    // ── §16 · §17 ⭐ GERÇEK AŞIM — KEŞİF TERMİNAL, EBEVEYNE TAŞINIR (hüküm ② a, 2026-09-14) ──
+    // 100 m depo topu → 40·40·40 (3.'de kesim anı keşfi: ebeveynde TAMBUR_OVERCUT 20,
+    // sourceRollId = 3. çocuk; çocukta OVERAGE +20 stok satırı). Eski kod geri almada
+    // bump için İKİNCİ OVERAGE yazıyor (Σ 40) ve çocuğun +20'sini tersleyip ebeveyne
+    // taşımıyordu (durum 120 ↔ defter 100; 1c ölçtü). Ölçüt: durum = defter = 120 ∧
+    // canlı OVERAGE n=1 Σ=20 ∧ taşıma satırı ebeveynde aynı rollVarianceId ile.
+    async function asimliKesim(): Promise<{ ebeveyn: string; cocuklar: string[] }> {
+      const pRes = await inventory.createInitialEntry(
+        { itemId, initialQty: 100 }, undefined, undefined, false, { forcedStatus: "WAREHOUSE" },
+      );
+      const ebeveyn = (pRes.data as { id: string }).id;
+      rollIds.push(ebeveyn);
+      const cocuklar: string[] = [];
+      for (let i = 0; i < 3; i++) {
+        const cRes = await tambur.cutWarehouseRoll(ebeveyn, { cutLength: 40, rawDestination: "WAREHOUSE", qualityGrade: gradeFirst });
+        const cocuk = (cRes.data as { childRoll?: { id: string } }).childRoll?.id;
+        if (!cocuk) throw new Error(`aşımlı kesim ${i + 1}. çocuğu doğmadı`);
+        cocuklar.push(cocuk); rollIds.push(cocuk);
+      }
+      return { ebeveyn, cocuklar };
+    }
+    const asimOlc = async (ebeveyn: string) => {
+      const r = await prisma.roll.findUniqueOrThrow({ where: { id: ebeveyn }, select: { currentQty: true, initialQty: true } });
+      const rows = await satirlar(ebeveyn);
+      const asim = await prisma.rollVariance.findMany({ where: { rollId: ebeveyn, kind: "OVERAGE", reversedAt: null }, select: { id: true, qty: true, source: true, sourceRollId: true } });
+      const tasima = rows.filter((x) => x.reasonCode === STOCK_MOVE_REASON.OVERAGE && x.reversesMovementId === null);
+      return { current: Number(r.currentQty), initial: Number(r.initialQty), net: net(rows), asim, tasima };
+    };
+    // §16 SINGLE ×3 (= 6e §12d)
+    const f16 = await asimliKesim();
+    const kesif16 = await prisma.rollVariance.findFirst({ where: { rollId: f16.ebeveyn, source: "TAMBUR_OVERCUT" }, select: { id: true, qty: true, sourceRollId: true } });
+    check("§16z pozitif kontrol: 3. kesim ebeveyne TAMBUR_OVERCUT 20 yazdı, sourceRollId = 3. çocuk", Number(kesif16?.qty) === 20 && kesif16?.sourceRollId === f16.cocuklar[2], JSON.stringify(kesif16));
+    for (const c of [...f16.cocuklar].reverse()) await undo.applyUndo(c, undefined, { mode: "SINGLE", reason: "bekçi §16" });
+    const d16 = await asimOlc(f16.ebeveyn);
+    check("§16 ⭐ aşımlı SINGLE×3: DURUM = DEFTER = 120, initialQty 120", d16.current === 120 && d16.net === 120 && d16.initial === 120, `durum=${d16.current} defter=${d16.net} initial=${d16.initial}`);
+    check("§16b canlı OVERAGE n=1 Σ=20 (bump keşifle karşılandı, ikinci satır YOK)", d16.asim.length === 1 && Number(d16.asim[0]!.qty) === 20 && d16.asim[0]!.source === "TAMBUR_OVERCUT", JSON.stringify(d16.asim.map((a) => `${a.source}:${a.qty}`)));
+    check("§16c keşfin depo etkisi EBEVEYNE TAŞINDI: OVERAGE +20 satırı aynı rollVarianceId ile", d16.tasima.length === 1 && Number(d16.tasima[0]!.qty) === 20 && d16.tasima[0]!.rollVarianceId === kesif16?.id, JSON.stringify(d16.tasima.map((t) => ({ qty: t.qty, v: t.rollVarianceId === kesif16?.id }))));
+    // §17 FULL (aşımlı kesimler + discard kapanışı → arşiv → FULL)
+    const f17 = await asimliKesim();
+    await tambur.finalizeWarehouseCut(f17.ebeveyn, { remainingAction: "discard", varianceReasonCode: null, varianceReasonText: "bekçi §17" });
+    await undo.applyUndo(f17.ebeveyn, undefined, { mode: "FULL", reason: "bekçi §17 aşımlı FULL" });
+    const d17 = await asimOlc(f17.ebeveyn);
+    check("§17 ⭐ aşımlı FULL: DURUM = DEFTER = 120, canlı OVERAGE n=1 Σ=20, taşıma satırı ebeveynde", d17.current === 120 && d17.net === 120 && d17.asim.length === 1 && Number(d17.asim[0]!.qty) === 20 && d17.tasima.length === 1, `durum=${d17.current} defter=${d17.net} asim=${JSON.stringify(d17.asim.map((a) => `${a.source}:${a.qty}`))} taşıma=${d17.tasima.length}`);
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

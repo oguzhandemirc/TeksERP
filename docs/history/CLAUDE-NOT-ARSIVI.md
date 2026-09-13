@@ -8416,3 +8416,37 @@ Negatif sondalar (cp+sha256 `e2142b30`): b1 kaldır → 6 ❌ (§13/§14/§18/§
 ❌ (60) · b3 kaldır → §19a/b ❌ (SINGLE 200 döndü).
 **Sürüm notu (yalnız b3-dar):** ea'ya koşul dili. Şema yok; beyan çevrimi (`CUT_DISCARD`/`SCRAP` →
 `BAGLI_TERS`/`TAMBUR_UNDO`) 82'de "kod indikten sonra".
+
+## 2026-09-14 — TAMBUR GERİ ALMA HÜKMÜ ②+④ İNDİ: keşif TERMİNAL, ebeveyne taşınır; bump yalnız karşılanmayan kısım [ÇEKİRDEK]
+
+**KISMİ → 2026-09-14:** `top-duzeltme.md` metraj satırının "geri alma yalnız AŞIMDA yukarı çeker +
+OVERAGE/TAMBUR_UNDO_RESTORE sapma satırı" cümlesi DARALDI — sapma satırı yalnız keşifle karşılanmayan
+kısım için doğar. (`tambur.md:27`nin aynı daralması 01'de.)
+
+**Ölçüm (1c, çalıştırıldı):** 100 m depo topu → 40·40·40 (3.'de kesim anı keşfi `TAMBUR_OVERCUT` 20,
+ebeveynde) → SINGLE×3 ⇒ bump 20 için İKİNCİ canlı OVERAGE (`TAMBUR_UNDO_RESTORE`): n=2 Σ=40, gerçek 20;
+ayrıca çocuğun OVERAGE +20 stok satırı terslenip ebeveyne taşınmıyor ⇒ durum 120 ↔ defter 100. Aynı çift
+üretim dalında ve FULL'de; `test_tambur_undo §11` bunu ✅ kilitliyordu — **önce o çevrildi** (dcaf7851).
+
+**Hüküm ②(a):** keşif bir OLGUDUR (kesimi geri almak kumaşı geri ölçmez). Ölçüm ②'yi daralttı: sapma
+ZATEN ebeveynde (`tambur.service.ts` cutOpenFabric/cutWarehouseRoll `rollId: parent`), taşınacak olan
+yalnız çocuğun STOK satırı. Uygulama:
+- Kesim anı keşfi `sourceRollId = çocuk` ile yazılır (cutWarehouseRoll · cutOpenFabric); klasik
+  `finalize` N çocuğun toplamından doğduğu için ATIFSIZ kalır ve karşılamaz — BEYANLI (sessiz yanlış
+  atıf yerine açık fazla sayım). `RollVariance.sourceRollId` add-only (20260913252000); `sourceRefId`
+  belge kimliği kalır (iki yazıcı: fason makbuzu · sayım fişi).
+- `restoreBumpTx` (dört dal): bump = max(0, yeniCurrent − initial); sapma satırı yalnız
+  `bump − Σ keşif(karşılayan küme)`. **Karşılayan küme sıra bağımsızdır:** Tambur geri almasıyla iptal
+  edilmiş kardeşler ∪ şimdi iptal edilen — aşım 3. kesimde keşfedilir ama bump 3→2→1 sırasında 1.'de
+  doğar (ilk sürüm yalnız "bu çocuk"a bakıyordu ve §16b'de çifti yeniden üretti). Σ bump = Σ keşif olduğu
+  için aynı keşif iki bump'ı karşılayamaz — cebir kapatır, sayaç gerekmez.
+- Depo dalı: çocuğun OVERAGE stok satırları terslenmeden ÖNCE okunur, ebeveyn stok kümesine dönünce
+  aynı `rollVarianceId` ile ADJUST +aşım yazılır (`transferOverageRowsToParentTx`); üretimde yazılmaz.
+
+**Bekçi:** `test_tambur_undo §11` 2 ❌ → yeşil · `test_stock_ledger_tambur_undo` §16 (SINGLE×3: 120=120,
+n=1 Σ=20, taşıma satırı aynı bağ) · §17 (aşımlı FULL) → 62/0 · `test_consistency §33` sonda kalemi
+`initialQty = giriş + Σ canlı TAMBUR aşımı` (CHECK `rolls_qty_le_initial`in kör yönü; 1c'ye iletildi).
+Negatif sondalar (cp+sha256 31b1edf0/09923e49): karşılama kaldır → §16b/§17 + §11 ❌ (çift) · taşıma
+kaldır → §16/§16c ❌ (durum 120 ↔ defter 100) · kesim anı `sourceRollId` kaldır → §16z/§16b/§17 ❌.
+**Ders (aynı gece ikinci kez):** ilk P3 sondası hiç ısırmadı — perl deseni bağlamı bulamadı, `grep -c`
+0 dedi; sonda "uygulanmadı" ile "ısırmadı" ayrı sonuçlardır, ikincisi ancak birincisi 1 ise okunur.

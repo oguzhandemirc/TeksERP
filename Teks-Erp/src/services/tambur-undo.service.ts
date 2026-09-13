@@ -79,6 +79,7 @@ import {
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { reverseAllRollStockMoves, reverseStockMove, reverseTransformGroupsOf } from "./helpers/warehouse-ledger-reverse.helper";
+import { postStockMove } from "./helpers/warehouse-ledger.helper";
 import { warehouseStampManyTx } from "./helpers/warehouse.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
@@ -93,12 +94,13 @@ import {
   RollOperationType,
   RollEntrySource,
   RollVarianceKind,
+  WarehouseEventType,
   WorkOrderStatus,
 } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { recordVarianceTx } from "./helpers/roll-variance.helper";
-import { VARIANCE_SOURCES } from "../constants/variance-reasons";
+import { VARIANCE_SOURCES, type VarianceSource } from "../constants/variance-reasons";
 import { resolveTamburUndoFullSameDayOnly } from "./system-setting.service";
 import { factoryDayStart } from "../constants/time";
 import { AuditService } from "./audit.service";
@@ -256,6 +258,110 @@ export class TamburUndoService {
   ): Promise<ApiResponse<unknown>> {
     const ctx = await this.resolveContext(rollId, opts);
     return { success: true, data: ctx };
+  }
+
+  /**
+   * AŞIM BUMP'I — yalnız KEŞİFLE KARŞILANMAYAN kısım (hüküm ② a, 2026-09-14).
+   *
+   * Geri konan metraj kayıtlı girişi aşarsa `initialQty` fark kadar yukarı çekilir
+   * (CHECK `currentQty ≤ initialQty`). Ama o fark çoğu kez YENİ bir olgu değildir:
+   * kesim anında ebeveyne `TAMBUR_OVERCUT` keşfi zaten yazıldı ve `sourceRollId` o
+   * çocuğu adlıyor. Aynı 20 m için ikinci bir canlı OVERAGE yazmak Σ'yı ikiye
+   * katlıyordu (1c ölçtü: n=2 Σ=40, gerçek 20). Sapma satırı yalnız
+   * `bump − Σ(bu çocukların keşfi)` > 0 ise yazılır; `sourceRollId`siz eski keşif
+   * (klasik finalize, göç öncesi veri) kimseye sayılmaz — açık fazla sayım, sessiz
+   * yanlış atıf yerine.
+   */
+  private async restoreBumpTx(
+    tx: Prisma.TransactionClient,
+    args: {
+      parentId: string; childIds: string[]; newCurrent: Prisma.Decimal; parentInitial: Prisma.Decimal;
+      workOrderStepId: string | null; userId: string | undefined;
+      /** Karşılanmayan kısmın kaynağı — tekil dallarda RESTORE, FULL'de FULL. */
+      source?: VarianceSource;
+    },
+  ): Promise<Prisma.Decimal> {
+    const initialBump = args.newCurrent.greaterThan(args.parentInitial)
+      ? args.newCurrent.minus(args.parentInitial)
+      : new Prisma.Decimal(0);
+    if (!initialBump.greaterThan(0)) return initialBump;
+    // KARŞILAYAN KEŞİF KÜMESİ = bu ailenin Tambur geri almasıyla iptal edilmiş
+    // çocukları ∪ şimdi iptal edilenler. Sıra bağımsızlığı bundan: aşım 3. kesimde
+    // keşfedilir ama bump hangi parçanın geri alınışında girişi aştıysa orada doğar
+    // (3→2→1 sırasında 1.'de). Σ bump = Σ keşif olduğu için (her aşım kesimi kendi
+    // keşfini yazar) aynı keşif iki bump'ı karşılayamaz — cebir kapatıyor, sayaç gerekmez.
+    const undoneSiblings = await tx.roll.findMany({
+      where: { parentRollId: args.parentId, cancelReasonCode: TAMBUR_UNDO_CANCEL_CODE },
+      select: { id: true },
+    });
+    const coveringChildIds = [...new Set([...args.childIds, ...undoneSiblings.map((r) => r.id)])];
+    const covered = await tx.rollVariance.aggregate({
+      where: {
+        rollId: args.parentId,
+        kind: RollVarianceKind.OVERAGE,
+        source: VARIANCE_SOURCES.TAMBUR_OVERCUT,
+        reversedAt: null,
+        sourceRollId: { in: coveringChildIds },
+      },
+      _sum: { qty: true },
+    });
+    const uncovered = initialBump.minus(covered._sum.qty ?? new Prisma.Decimal(0));
+    if (uncovered.greaterThan(0)) {
+      await recordVarianceTx(tx, {
+        rollId: args.parentId,
+        workOrderStepId: args.workOrderStepId,
+        kind: RollVarianceKind.OVERAGE,
+        qty: uncovered,
+        source: args.source ?? VARIANCE_SOURCES.TAMBUR_UNDO_RESTORE,
+        userId: args.userId,
+      });
+    }
+    return initialBump;
+  }
+
+  /**
+   * Çocukların terslenmemiş AŞIM stok satırları (`OVERAGE`, kesim anı keşfinin
+   * depo etkisi) — geri alma çocuğun bütün satırlarını terslemeden ÖNCE okunur.
+   */
+  private async readChildOverageRowsTx(
+    tx: Prisma.TransactionClient,
+    childIds: string[],
+  ): Promise<Array<{ qty: Prisma.Decimal; rollVarianceId: string | null }>> {
+    if (childIds.length === 0) return [];
+    return tx.warehouseMovement.findMany({
+      where: { rollId: { in: childIds }, reasonCode: STOCK_MOVE_REASON.OVERAGE, reversesMovementId: null, reversedBy: { none: {} } },
+      select: { qty: true, rollVarianceId: true },
+    });
+  }
+
+  /**
+   * KEŞİF TERMİNAL — depo etkisi EBEVEYNE TAŞINIR (hüküm ② a): çocuğun aşım satırı
+   * terslendi (kumaş o çocukta değil) ama kumaş yok olmadı, ebeveyne döndü. Ebeveyn
+   * stok kümesindeyse aynı `rollVarianceId` ile ADJUST +aşım yazılır; üretimdeyse
+   * yazılmaz (üretim dalının stok defteri yok — sapma-yalnız).
+   */
+  private async transferOverageRowsToParentTx(
+    tx: Prisma.TransactionClient,
+    parentId: string,
+    rows: Array<{ qty: Prisma.Decimal; rollVarianceId: string | null }>,
+    userId: string | undefined,
+  ): Promise<number> {
+    if (rows.length === 0) return 0;
+    const parent = await tx.roll.findUnique({ where: { id: parentId }, select: { warehouseId: true, status: true } });
+    if (!parent || parent.warehouseId === null || !WAREHOUSE_STOCK_STATUSES.includes(parent.status)) return 0;
+    for (const r of rows) {
+      await postStockMove(tx, {
+        rollId: parentId,
+        eventType: WarehouseEventType.ADJUST,
+        qty: r.qty,
+        to: { warehouseId: parent.warehouseId, status: parent.status },
+        reasonCode: STOCK_MOVE_REASON.OVERAGE,
+        rollVarianceId: r.rollVarianceId,
+        userId: userId ?? null,
+        notes: TAMBUR_UNDO_CANCEL_TEXT,
+      });
+    }
+    return rows.length;
   }
 
   /**
@@ -1274,6 +1380,7 @@ export class TamburUndoService {
       // 100 ↔ defter 60). Kaynak ARŞİVDE dalında metraj geri DÖNMEZ (aşağıda
       // RECORD_CORRECTION): orada ebeveynin OUT'u gerçek kalır — terslenirse
       // defter ebeveyne 40 m yazar, durum 0 der. Defter durumu izler, tersi değil.
+      const childOverageRows = parentArchived ? [] : await this.readChildOverageRowsTx(tx, [childId]);
       if (!parentArchived) {
         await reverseTransformGroupsOf(tx, [childId], {
           reasonCode: STOCK_MOVE_REASON.TAMBUR_UNDO,
@@ -1345,19 +1452,9 @@ export class TamburUndoService {
         });
         const parentInitial = parentRow?.initialQty ?? new Prisma.Decimal(0);
         const newCurrent = (parentRow?.currentQty ?? new Prisma.Decimal(0)).plus(len);
-        const initialBump = newCurrent.greaterThan(parentInitial)
-          ? newCurrent.minus(parentInitial)
-          : new Prisma.Decimal(0);
-        if (initialBump.greaterThan(0)) {
-          await recordVarianceTx(tx, {
-            rollId: parentId,
-            workOrderStepId: child.producedInStepId,
-            kind: RollVarianceKind.OVERAGE,
-            qty: initialBump,
-            source: VARIANCE_SOURCES.TAMBUR_UNDO_RESTORE,
-            userId,
-          });
-        }
+        const initialBump = await this.restoreBumpTx(tx, {
+          parentId, childIds: [childId], newCurrent, parentInitial, workOrderStepId: child.producedInStepId, userId,
+        });
         const claimed = await tx.roll.updateMany({
           where: { id: parentId, status: RollStatus.IN_PRODUCTION, currentStepId: child.producedInStepId },
           data: {
@@ -1380,19 +1477,9 @@ export class TamburUndoService {
         });
         const parentInitial = parentRow?.initialQty ?? new Prisma.Decimal(0);
         const newCurrent = (parentRow?.currentQty ?? new Prisma.Decimal(0)).plus(len);
-        const initialBump = newCurrent.greaterThan(parentInitial)
-          ? newCurrent.minus(parentInitial)
-          : new Prisma.Decimal(0);
-        if (initialBump.greaterThan(0)) {
-          await recordVarianceTx(tx, {
-            rollId: parentId,
-            workOrderStepId: null,
-            kind: RollVarianceKind.OVERAGE,
-            qty: initialBump,
-            source: VARIANCE_SOURCES.TAMBUR_UNDO_RESTORE,
-            userId,
-          });
-        }
+        const initialBump = await this.restoreBumpTx(tx, {
+          parentId, childIds: [childId], newCurrent, parentInitial, workOrderStepId: null, userId,
+        });
         const claimed = await tx.roll.updateMany({
           where: {
             id: parentId,
@@ -1407,6 +1494,7 @@ export class TamburUndoService {
         if (claimed.count !== 1) {
           throw AppError.conflict("Kaynak top artık serbest depoda değil — tek parça iptali yapılamadı");
         }
+        await this.transferOverageRowsToParentTx(tx, parentId, childOverageRows, userId);
         restoredTo = "WAREHOUSE";
       }
       return { childBarcode: child.barcode, restoredLen: Number(len), restoredTo };
@@ -1533,6 +1621,7 @@ export class TamburUndoService {
       // DEPO DEFTERİ — ÖNCE grup (ebeveyn OUT + çocuk IN), sonra çocuğun kalan
       // ileri satırları. Bu modda metraj ebeveyne DAİMA geri konur (aşağısı),
       // yani grup koşulsuz terslenir (applySingle'daki koşulun gerekçesi orada).
+      const childOverageRows = await this.readChildOverageRowsTx(tx, [childId]);
       await reverseTransformGroupsOf(tx, [childId], {
         reasonCode: STOCK_MOVE_REASON.TAMBUR_UNDO,
         userId: userId ?? null,
@@ -1557,19 +1646,9 @@ export class TamburUndoService {
       // deftere yazılır (FULL invariantının tekil ikizi — imkânsız satır kalmaz).
       const parentInitial = parentRow?.initialQty ?? new Prisma.Decimal(0);
       const newCurrent = (parentRow?.currentQty ?? new Prisma.Decimal(0)).plus(restored);
-      const initialBump = newCurrent.greaterThan(parentInitial)
-        ? newCurrent.minus(parentInitial)
-        : new Prisma.Decimal(0);
-      if (initialBump.greaterThan(0)) {
-        await recordVarianceTx(tx, {
-          rollId: parentId,
-          workOrderStepId: stepId,
-          kind: RollVarianceKind.OVERAGE,
-          qty: initialBump,
-          source: VARIANCE_SOURCES.TAMBUR_UNDO_RESTORE,
-          userId,
-        });
-      }
+      const initialBump = await this.restoreBumpTx(tx, {
+        parentId, childIds: [childId], newCurrent, parentInitial, workOrderStepId: stepId, userId,
+      });
 
       // 2) Kaynağın hareketini yeniden aç (üretim akışı) — FULL ile aynı.
       //    Geri alınmış kapalı hareket seçilmez ve yeniden açılmaz.
@@ -1620,6 +1699,7 @@ export class TamburUndoService {
       if (revived.count !== 1) {
         throw AppError.conflict("Kaynak top bu sırada değişti — geri alma iptal edildi");
       }
+      await this.transferOverageRowsToParentTx(tx, parentId, childOverageRows, userId);
 
       // 4) TAMBUR_PROCESSED izini geri al (gerekçe fonksiyon yorumunda).
       if (stepId) {
@@ -1812,6 +1892,7 @@ export class TamburUndoService {
       // ebeveyn kapanış öncesine DÖNDÜĞÜ için her OUT'u da terslenir. Kapanışın
       // kendi çıkışı (CUT_DISCARD / SCRAP, grupsuz) BURADA TERSLENMEZ — açık borç,
       // hükmü sahibinde (defter-beyan §13).
+      const childOverageRows = await this.readChildOverageRowsTx(tx, ids);
       await reverseTransformGroupsOf(tx, ids, {
         reasonCode: STOCK_MOVE_REASON.TAMBUR_UNDO,
         userId: userId ?? null,
@@ -1843,19 +1924,10 @@ export class TamburUndoService {
       // KAYDA GEÇİRMEK doğru cevaptır (2026-08-09 kullanıcı kararı: "aşım da
       // sapma olarak kayda geçsin").
       const parentInitial = parentRow?.initialQty ?? new Prisma.Decimal(0);
-      const initialBump = restored.greaterThan(parentInitial)
-        ? restored.minus(parentInitial)
-        : new Prisma.Decimal(0);
-      if (initialBump.greaterThan(0)) {
-        await recordVarianceTx(tx, {
-          rollId: parentId,
-          workOrderStepId: stepId,
-          kind: RollVarianceKind.OVERAGE,
-          qty: initialBump,
-          source: VARIANCE_SOURCES.TAMBUR_UNDO_FULL,
-          userId,
-        });
-      }
+      const initialBump = await this.restoreBumpTx(tx, {
+        parentId, childIds: ids, newCurrent: restored, parentInitial, workOrderStepId: stepId, userId,
+        source: VARIANCE_SOURCES.TAMBUR_UNDO_FULL,
+      });
 
       // 2) Parent movement'ı yeniden aç (finalize kapatmıştı). Yoksa taze aç.
       //    Depo kesiminde adım YOK → hareket de yok; bu blok atlanır.
@@ -1913,6 +1985,7 @@ export class TamburUndoService {
       if (revived.count !== 1) {
         throw AppError.conflict("Kaynak top bu sırada değişti — geri alma iptal edildi");
       }
+      await this.transferOverageRowsToParentTx(tx, parentId, childOverageRows, userId);
 
       // 4) Bu finalize'ın kapattığı hata kayıtlarını yeniden aç (adım varsa).
       const reopened = stepId

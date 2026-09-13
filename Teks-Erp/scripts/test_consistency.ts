@@ -981,6 +981,48 @@ WHERE v."reversedAt" IS NOT NULL
   AND m."reversesMovementId" IS NULL
   AND NOT EXISTS (SELECT 1 FROM warehouse_movements rv WHERE rv."reversesMovementId" = m.id)`,
   },
+  {
+    id: "33",
+    // initialQty = GİRİŞ + Σ CANLI TAMBUR AŞIMI — hüküm ②/④ (2026-09-14). `initialQty`
+    // üretim anı snapshot'ıdır; onu yalnız aşım (kesim anı keşfi TAMBUR_OVERCUT ya da
+    // geri almanın karşılanmayan bump'ı TAMBUR_UNDO_RESTORE/FULL) yukarı çeker ve her
+    // artış sapma defterinde canlı bir OVERAGE satırıyla açıklanır. Eşitlik bozuksa
+    // ya bump satırsız yazıldı (sessiz şişme, 100→140 sınıfı) ya aşım iki kez sayıldı
+    // (Σ 40 / gerçek 20 sınıfı). CHECK `rolls_qty_le_initial` bu yönü GÖRMEZ (1c'ye
+    // iletildi) — bu kalem o kör tarafın sondası.
+    //
+    // KAPSAM: yalnız canlı TAMBUR_* OVERAGE sapması olan ve stok defterinde terslenmemiş
+    // bir GİRİŞ ucu (ENTRY ya da TRANSFORM IN) olan toplar — giriş metrajı defterden
+    // okunur, ufuk öncesi toplar kapsam dışı (girişi yok).
+    title: "initialQty ≠ giriş metrajı + Σ canlı TAMBUR aşımı (sessiz şişme ya da çift sayım)",
+    miras: {
+      taban: null,
+      tarih: "2026-09-14",
+      nerede: "izole ağaç, sonda DB — canlı ölçüm YOK",
+      not: "sayı > 0 ⇒ o topların initialQty'si açıklanamayan bir farkla oynamış; onarım kullanıcı kararı",
+    },
+    noise: {
+      where: `WHERE ${notFixtureSql("drift.barcode")} AND ${notFixtureItemOfRollSql("drift.kayit")}`,
+      why: "§16/§17 fikstürü gerçek servisten doğar (üretim barkodu) — barkod VEYA kalem kodu ön ekinden elenir",
+    },
+    sql: `
+SELECT r.id::text AS kayit, r.barcode, r."initialQty"::text AS metraj, r."createdAt"::text AS dogum
+FROM rolls r
+JOIN LATERAL (
+  SELECT m.qty FROM warehouse_movements m
+   WHERE m."rollId" = r.id AND m."toWarehouseId" IS NOT NULL AND m."fromWarehouseId" IS NULL
+     AND m."reversesMovementId" IS NULL
+     AND NOT EXISTS (SELECT 1 FROM warehouse_movements rv WHERE rv."reversesMovementId" = m.id)
+   ORDER BY m."createdAt" ASC LIMIT 1) giris ON true
+WHERE EXISTS (
+    SELECT 1 FROM roll_variances v
+     WHERE v."rollId" = r.id AND v.kind = 'OVERAGE' AND v."reversedAt" IS NULL
+       AND v.source IN ('TAMBUR_OVERCUT','TAMBUR_UNDO_RESTORE','TAMBUR_UNDO_FULL'))
+  AND r."initialQty" <> giris.qty + (
+    SELECT COALESCE(SUM(v.qty), 0) FROM roll_variances v
+     WHERE v."rollId" = r.id AND v.kind = 'OVERAGE' AND v."reversedAt" IS NULL
+       AND v.source IN ('TAMBUR_OVERCUT','TAMBUR_UNDO_RESTORE','TAMBUR_UNDO_FULL'))`,
+  },
 ];
 
 async function driftCount(s: Section): Promise<number> {
