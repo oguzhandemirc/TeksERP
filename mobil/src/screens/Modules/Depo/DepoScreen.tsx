@@ -23,6 +23,8 @@ import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
 
 import ScreenChrome from '../../../components/ScreenChrome';
+import { qualityGradeService } from '../../../services/qualityGrade.service';
+import { roleOfCode, gradeColor, type QualityGradeLike } from '../../../utils/qualityRole';
 import RefreshButton from '../../../components/RefreshButton';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import DetailSheet, {
@@ -209,6 +211,19 @@ export default function DepoScreen() {
 
   // Stats — TÜM filtreye uyan rolların aggregate'i (sayfaya bağlı değil).
   // Liste ile aynı filtre seti, ayrı endpoint.
+  // Kalite kataloğu — top rozetleri "bu kalite 2. kalite mi / fire mi" sorusunu
+  // sorar ve cevabı KATALOGDADIR (karar ①). ⚠️ Bu ekran kataloğu HİÇ
+  // yüklemiyordu; o yüzden soruyu ancak gömülü `=== 'A1'` / `=== 'FIRE'`
+  // literalleriyle cevaplayabiliyordu ve kataloğu `2K/HURDA` olan bir fabrikada
+  // HİÇBİR top rozet almazdı. Anahtar diğer ekranlarla AYNI ⇒ react-query
+  // tekilleştirir, maliyet paylaşılan tek fetch.
+  const gradesQuery = useQuery({
+    queryKey: ['quality-grades', 'active'],
+    queryFn: () => qualityGradeService.list({ pageSize: 100 }),
+    staleTime: 10 * 60 * 1000,
+  });
+  const grades = gradesQuery.data?.data ?? [];
+
   const rollStatsQuery = useQuery({
     queryKey: ['rolls', 'depo', 'stats', mode, effectiveSearch] as const,
     queryFn: () =>
@@ -646,7 +661,7 @@ export default function DepoScreen() {
                 ) : null
               }
               renderItem={({ item }) => (
-                <RollListRow roll={item} onPress={() => setDetailRoll(item)} />
+                <RollListRow grades={grades} roll={item} onPress={() => setDetailRoll(item)} />
               )}
             />
           )}
@@ -730,9 +745,14 @@ function StatBox({
 }
 
 function RollListRow({
+  grades,
   roll,
   onPress,
 }: {
+  /** Kalite kataloğu — rozet kararı ve rengi buradan (aşağıdaki nota bak).
+   *  Prop, context DEĞİL: bu dosyada context emsali yok ve tek ekran için
+   *  context makinesi ağır; zincir tek kademe. */
+  grades: readonly QualityGradeLike[];
   roll: RollListItem;
   onPress: () => void;
 }) {
@@ -756,16 +776,27 @@ function RollListRow({
                   {trLabel(ROLL_STATUS_LABEL, roll.status)}
                 </Text>
               </View>
-              {roll.qualityGrade === 'A1' && (
-                <View style={[styles.statusPill, styles.statusPillA1]}>
-                  <Text style={styles.statusPillText}>A1</Text>
-                </View>
-              )}
-              {roll.qualityGrade === 'FIRE' && (
-                <View style={[styles.statusPill, styles.statusPillFire]}>
-                  <Text style={styles.statusPillText}>Fire</Text>
-                </View>
-              )}
+              {/* ROZET ROLDEN, KODDAN DEĞİL (karar ①). Bugünkü davranış birebir:
+                  yalnız 2. kalite ve fire rozet alır — ROLSÜZ bir kademe (ör.
+                  dört kademeli katalogun dördüncüsü) eskiden de rozetsizdi.
+                  Rozet METNİ fabrikanın KENDİ kodudur; rengi katalogtan gelir,
+                  yoksa bugünkü sabit renklere düşer. */}
+              {(() => {
+                const role = roleOfCode(grades, roll.qualityGrade);
+                if (role !== 'SECOND' && role !== 'SCRAP') return null;
+                const katalogRengi = gradeColor(grades, roll.qualityGrade);
+                return (
+                  <View
+                    style={[
+                      styles.statusPill,
+                      role === 'SCRAP' ? styles.statusPillFire : styles.statusPillA1,
+                      katalogRengi ? { backgroundColor: katalogRengi } : null,
+                    ]}
+                  >
+                    <Text style={styles.statusPillText}>{roll.qualityGrade}</Text>
+                  </View>
+                );
+              })()}
               {roll.markedForKartela && (
                 <View style={[styles.statusPill, styles.statusPillKartela]}>
                   <Text style={styles.statusPillKartelaText}>Kartelalık</Text>

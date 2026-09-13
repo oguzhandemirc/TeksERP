@@ -1,6 +1,18 @@
-// Legacy string literal type — KK1 form'unda hardcoded picker için kullanılır.
-// Yeni admin-yönetimli katalog için aşağıdaki `QualityGrade` interface'ine bak.
-export type QualityGradeCode = '1.KALITE' | 'A1' | '2.KALITE' | 'FIRE';
+// ⚠️ `QualityGradeCode` SİLİNDİ (2026-09-13, karar ①). Birleşim
+// `'1.KALITE' | 'A1' | '2.KALITE' | 'FIRE'` idi ve iki kusur taşıyordu:
+//   1) fabrikanın kataloğunu TİP DÜZEYİNDE sabitliyordu (katalog kodu admin
+//      tarafından yazılır, `1K/2K/HURDA` de olabilir);
+//   2) `'2.KALITE'` bu fabrikada HİÇ YOK — tip, var olmayan bir kodu gerçek
+//      sayıyordu. Hayalet değer sessizce zarar verir (aşağıdaki StationType
+//      notunun tarif ettiği sınıf).
+// Ölçüldü: TEK tüketicisi kendi tanımıydı. Kalite kodu artık `QualityGrade`
+// kataloğundan gelir, rolü `QualityGradeRole`den.
+
+/**
+ * Kalite kataloğu satırının ÜRETİM ROLÜ — backend `enum QualityGradeRole`in
+ * aynası (schema.prisma). Rol başına EN FAZLA BİR AKTİF satır (partial unique).
+ */
+export type QualityGradeRole = 'FIRST' | 'SECOND' | 'SCRAP';
 
 export type CompanyType = 'CUSTOMER' | 'SUBCONTRACTOR' | 'BOTH';
 // ⚠️ BACKEND `enum StationType` İLE ELLE SENKRON (schema.prisma). 2026-09-03
@@ -1196,6 +1208,16 @@ export interface QualityGrade {
   sortOrder: number;
   isActive: boolean;
   targetStatus: RollStatus;
+  /**
+   * ÜRETİM ROLÜ (2026-09-13, karar ①) — "aksiyon '1./2./fire' dediğinde hangi
+   * satır yazılır". `targetStatus` ile KARIŞTIRILMAZ: o "hangi rafa iner"
+   * (kova) sorusunu cevaplar. Bu fabrikada `A1`in targetStatus'u WAREHOUSE
+   * ama rolü SECOND'dır — iki soru, iki alan.
+   * Rozet rengi/sırası ÜÇÜNCÜ sorudur ve `color`/`sortOrder`dan okunur.
+   * ⚠️ Eski sunucuda alan YOK → optional; çözücü (`utils/qualityRole.ts`)
+   * bulamazsa `null` döner ve çağıran kendi kararını verir.
+   */
+  role?: QualityGradeRole | null;
   /** Bu kalitedeki top ÜRETİM ANINDA otomatik etiket ALMAZ (sahada FİRE).
    *  Kural kalitede yaşar: etiket politikası dispozisyondan AYRI bir karardır
    *  (tasarım anında ayrıca zorunluydu — FİRE o gün WAREHOUSE'a iniyordu; aynı

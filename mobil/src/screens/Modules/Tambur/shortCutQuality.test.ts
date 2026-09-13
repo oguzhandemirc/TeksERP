@@ -1,13 +1,17 @@
-import { shortCutOverride, shortCutRevert, SHORT_CUT_QUALITY_CODE } from './shortCutQuality';
+import { shortCutOverride, shortCutRevert } from './shortCutQuality';
 
 // Kısa kesim → otomatik A1 kuralının bekçisi. Kural TEK dosyada yaşar ve üç
 // yol (elle uzunluk / makine ölçümü / "kalanı kes") aynı fonksiyonu çağırır —
 // buradaki sınırlar gevşerse üç yol birden gevşer.
 
+// ⚠️ Katalog KODLARI burada FİXTÜR TANIMIDIR, gömülü varsayım değil: kural
+// artık koda değil ROLE bakıyor (karar ①), ve fikstür bilerek bu fabrikanın
+// kodlarını taşır ki "rol doğru satırı buluyor mu" ölçülebilsin.
+// `SECOND` rolü `A1`de; kural onu ADIYLA değil ROLÜYLE bulmalı.
 const GRADES = [
-  { code: '1.KALITE', name: '1. Kalite' },
-  { code: 'A1', name: 'A1 (2. Kalite)' },
-  { code: 'FIRE', name: 'Fire' },
+  { code: '1.KALITE', name: '1. Kalite', role: 'FIRST' as const, isActive: true },
+  { code: 'A1', name: 'A1 (2. Kalite)', role: 'SECOND' as const, isActive: true },
+  { code: 'FIRE', name: 'Fire', role: 'SCRAP' as const, isActive: true },
 ];
 
 const base = {
@@ -21,7 +25,7 @@ const base = {
 
 describe('shortCutOverride — kısa kesim otomatik A1', () => {
   it('mutlu yol: bayrak açık + eşik altı + varsayılan kalite → A1 döner', () => {
-    expect(shortCutOverride(base)?.code).toBe(SHORT_CUT_QUALITY_CODE);
+    expect(shortCutOverride(base)?.code).toBe('A1');
   });
 
   it('BAYRAK KAPALIYKEN asla ateşlemez (kullanıcı isteği: sadece aktifken)', () => {
@@ -48,7 +52,7 @@ describe('shortCutOverride — kısa kesim otomatik A1', () => {
   });
 
   it('A1 katalogda yoksa FAIL-CLOSED — kural hiç ateşlemez, kod uydurulmaz', () => {
-    const noA1 = GRADES.filter((g) => g.code !== 'A1');
+    const noA1 = GRADES.filter((g) => g.role !== 'SECOND');
     expect(shortCutOverride({ ...base, grades: noA1 })).toBeNull();
   });
 
@@ -60,7 +64,7 @@ describe('shortCutOverride — kısa kesim otomatik A1', () => {
 });
 
 describe('shortCutRevert — elle yazımda eşik üstüne çıkınca geri dönüş', () => {
-  const rev = { enabled: true, thresholdM: 15, lengthM: 120, currentCode: 'A1', autoApplied: true };
+  const rev = { enabled: true, thresholdM: 15, lengthM: 120, currentCode: 'A1', autoApplied: true, grades: GRADES };
 
   it('kuralın yazdığı A1, uzunluk eşiği aşınca varsayılana döner', () => {
     // Senaryo: "12" yazdı (A1 oldu) → "120"ye tamamladı. Geri dönüş olmasaydı

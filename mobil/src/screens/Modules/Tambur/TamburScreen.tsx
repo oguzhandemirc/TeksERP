@@ -69,7 +69,8 @@ import {
 } from '../../../components/filters/rollHistoryFilter';
 import AppModal from '../../../components/AppModal';
 import TamburOrderLinkSheet from './TamburOrderLinkSheet';
-import { shortCutOverride, shortCutRevert, SHORT_CUT_QUALITY_CODE } from './shortCutQuality';
+import { shortCutOverride, shortCutRevert } from './shortCutQuality';
+import { findGradeByRole, gradeColor } from '../../../utils/qualityRole';
 import { resolveShortCutConfig } from './resolveShortCutConfig';
 import TamburSendToDyeModal from './TamburSendToDyeModal';
 import LabelTargetSheet, { type LabelTargetContext } from '../../../components/LabelTargetSheet';
@@ -197,15 +198,19 @@ const EMPTY_ERROR_ENTRY: ErrorEntryState = {
   startMeter: '',
   defectTypeId: '',
 };
-// Default kesim girişi: kalite "1.KALITE" pre-select (seed sabit kayıt).
-// Operatör çoğunlukla 1. kalite kesim yapar; A1/Fire ihtiyaç anında değiştirir.
-/** Varsayılan kalite — tek kaynak (sıfırlama ayarı da bunu kullanır). */
-const DEFAULT_QUALITY_CODE = '1.KALITE';
-const DEFAULT_QUALITY_NAME = '1. Kalite';
+// Default kesim girişi: kalite ön seçimi KATALOGDAN gelir (karar ①).
+// Operatör çoğunlukla 1. kalite kesim yapar; 2. kalite/fire ihtiyaç anında değişir.
+//
+// ⚠️ 2026-09-13 — burada `DEFAULT_QUALITY_CODE = '1.KALITE'` sabiti vardı ve
+// yorumu "seed sabit kayıt" diyordu. Kod fabrikaya AÇIK bir alandır; kataloğu
+// `1K` olan kurulumda sabit hiçbir satırı bulmaz ve tablet var olmayan bir kod
+// gönderirdi. Ön seçim artık `role = FIRST` satırından ÇALIŞMA ZAMANINDA
+// çözülür (`defaultQualityCode`, bileşen içinde) — modül düzeyinde katalog
+// yok, o yüzden boş başlar ve katalog gelince dolar.
 const EMPTY_VOLUNTARY_ENTRY: VoluntaryEntryState = {
   length: '',
-  qualityGrade: DEFAULT_QUALITY_CODE,
-  qualityName: DEFAULT_QUALITY_NAME,
+  qualityGrade: '',
+  qualityName: '',
   targetOrderLineId: null,
   targetCustomerId: null,
   targetCustomerName: undefined,
@@ -691,7 +696,8 @@ export default function TamburScreen() {
   // "Kime" — sipariş kısayollarına ek olarak listeden (müşteriye göre aranabilir)
   // açık sipariş satırı seçme picker'ı. Her iki kesim akışı paylaşır.
   const [kimePickerOpen, setKimePickerOpen] = useState(false);
-  const [recutQualityGrade, setRecutQualityGrade] = useState<string>('1.KALITE');
+  // Boş başlar; katalog gelince `defaultQualityCode`a çekilir (aşağıdaki effect).
+  const [recutQualityGrade, setRecutQualityGrade] = useState<string>('');
   const [recutScannerOpen, setRecutScannerOpen] = useState(false);
   // "Kime?" — depo topundan kesilen parça hangi siparişe (null = stok). Etiket buradan basılır.
   const [recutTargetLineId, setRecutTargetLineId] = useState<string | null>(null);
@@ -807,7 +813,27 @@ export default function TamburScreen() {
     queryFn: () => qualityGradeService.list({ pageSize: 100 }),
     staleTime: 10 * 60 * 1000,
   });
-  const qualityGrades = qualityGradesQuery.data?.data ?? [];
+  // ⚠️ KENDİ useMemo'SUNDA: `?? []` her render'da YENİ dizi üretir ve bu diziye
+  // bağlı her `useMemo`/`useEffect` her render'da yeniden koşardı (rol çözümü
+  // dahil). Katalog nadiren değişen bir veridir; kimliğini sabitlemek hem
+  // gereksiz işi hem `exhaustive-deps` uyarısını kaldırır.
+  const qualityGrades = useMemo(
+    () => qualityGradesQuery.data?.data ?? [],
+    [qualityGradesQuery.data],
+  );
+  // VARSAYILAN KALİTE — katalogtaki `role = FIRST` satırı (karar ①), sabit kod
+  // DEĞİL. Katalog henüz gelmediyse ya da rol atanmamışsa boş kalır; ön seçim
+  // yapılmaz ve operatör kaliteyi kendisi seçer (tablet bir OKUMA yüzeyidir —
+  // burada 400 atılmaz; fail-closed sunucu tarafındadır).
+  const defaultGrade = useMemo(
+    () => findGradeByRole(qualityGrades, 'FIRST'),
+    [qualityGrades],
+  );
+  const defaultQualityCode = defaultGrade?.code ?? '';
+  const defaultQualityName = defaultGrade?.name ?? '';
+  // KISA KESİM kalitesi de ROLDEN (`SECOND`) — `shortCutQuality.ts` ile aynı
+  // kaynak; burada ikinci kez kod yazılsaydı iki yüzey sessizce ayrışırdı.
+  const secondQualityCode = findGradeByRole(qualityGrades, 'SECOND')?.code ?? null;
 
   /**
    * FİRE KAPISI — bu topun kalitesi "etiketsiz" mi (ve kural açık mı)?
@@ -1337,7 +1363,7 @@ export default function TamburScreen() {
           ...w.voluntaryEntry,
           length: '',
           ...(resetQualityAfterCut
-            ? { qualityGrade: DEFAULT_QUALITY_CODE, qualityName: DEFAULT_QUALITY_NAME }
+            ? { qualityGrade: defaultQualityCode, qualityName: defaultQualityName }
             : {}),
         },
       }));
@@ -1708,7 +1734,7 @@ export default function TamburScreen() {
         setRecutResolvedRollId(null);
         setRecutRollMeta(null);
         setRecutCutLength('');
-        setRecutQualityGrade('1.KALITE');
+        setRecutQualityGrade(defaultQualityCode);
         setRecutLastParentRoll(null);
         qc.invalidateQueries({ queryKey: ['rolls'] });
       // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
@@ -1788,7 +1814,7 @@ export default function TamburScreen() {
           ...w.voluntaryEntry,
           length: '',
           ...(resetQualityAfterCut
-            ? { qualityGrade: DEFAULT_QUALITY_CODE, qualityName: DEFAULT_QUALITY_NAME }
+            ? { qualityGrade: defaultQualityCode, qualityName: defaultQualityName }
             : {}),
         },
       }));
@@ -1908,7 +1934,7 @@ export default function TamburScreen() {
       thresholdM: shortCutThresholdM,
       lengthM: length,
       currentCode: work.voluntaryEntry.qualityGrade,
-      defaultCode: DEFAULT_QUALITY_CODE,
+      defaultCode: defaultQualityCode,
       grades: qualityGrades,
     });
     if (shortCutSug) {
@@ -1942,7 +1968,7 @@ export default function TamburScreen() {
         // Operatör kesimler arasında değiştirirse her çocuk kendi değerini taşır.
         foldType: work.foldType,
         status,
-        qualityGrade: qg?.code ?? '1.KALITE',
+        qualityGrade: qg?.code ?? defaultQualityCode,
         targetOrderLineId: work.voluntaryEntry.targetOrderLineId,
         targetCustomerId: work.voluntaryEntry.targetCustomerId,
         markedForKartela: markAsKartela,
@@ -2182,7 +2208,7 @@ export default function TamburScreen() {
       thresholdM: shortCutThresholdM,
       lengthM: len,
       currentCode: recutQualityGrade,
-      defaultCode: DEFAULT_QUALITY_CODE,
+      defaultCode: defaultQualityCode,
       grades: qualityGrades,
     });
     const revert =
@@ -2192,16 +2218,18 @@ export default function TamburScreen() {
         lengthM: len,
         currentCode: recutQualityGrade,
         autoApplied: shortCutAutoRecutRef.current,
+        grades: qualityGrades,
       }) ||
       (!Number.isFinite(len) &&
         shortCutAutoRecutRef.current &&
-        recutQualityGrade === SHORT_CUT_QUALITY_CODE);
+        secondQualityCode !== null &&
+        recutQualityGrade === secondQualityCode);
     if (sug) {
       shortCutAutoRecutRef.current = true;
       setRecutQualityGrade(sug.code);
     } else if (revert) {
       shortCutAutoRecutRef.current = false;
-      setRecutQualityGrade(DEFAULT_QUALITY_CODE);
+      setRecutQualityGrade(defaultQualityCode);
     }
     setRecutCutLength(v);
   };
@@ -2242,7 +2270,7 @@ export default function TamburScreen() {
       thresholdM: shortCutThresholdM,
       lengthM: cut,
       currentCode: recutQualityGrade,
-      defaultCode: DEFAULT_QUALITY_CODE,
+      defaultCode: defaultQualityCode,
       grades: qualityGrades,
     });
     if (recutShortCutSug) {
@@ -2485,7 +2513,7 @@ export default function TamburScreen() {
       thresholdM: shortCutThresholdM,
       lengthM: qty,
       currentCode: work.voluntaryEntry.qualityGrade,
-      defaultCode: DEFAULT_QUALITY_CODE,
+      defaultCode: defaultQualityCode,
       grades: manualQualityGrades,
     });
     if (manualShortCutSug) {
@@ -2765,7 +2793,7 @@ export default function TamburScreen() {
             thresholdM: shortCutThresholdM,
             lengthM: len,
             currentCode: current,
-            defaultCode: DEFAULT_QUALITY_CODE,
+            defaultCode: defaultQualityCode,
             grades: qualityGrades,
           });
           // Boş/geçersiz uzunluk da geri döndürür: input silinip "kalanı kes"e
@@ -2778,10 +2806,12 @@ export default function TamburScreen() {
               lengthM: len,
               currentCode: current,
               autoApplied: shortCutAutoMainRef.current,
+              grades: qualityGrades,
             }) ||
             (!Number.isFinite(len) &&
               shortCutAutoMainRef.current &&
-              current === SHORT_CUT_QUALITY_CODE);
+              secondQualityCode !== null &&
+              current === secondQualityCode);
           if (sug) shortCutAutoMainRef.current = true;
           else if (revert) shortCutAutoMainRef.current = false;
           setWork((w) => ({
@@ -2792,7 +2822,7 @@ export default function TamburScreen() {
               ...(sug
                 ? { qualityGrade: sug.code, qualityName: sug.name }
                 : revert
-                  ? { qualityGrade: DEFAULT_QUALITY_CODE, qualityName: DEFAULT_QUALITY_NAME }
+                  ? { qualityGrade: defaultQualityCode, qualityName: defaultQualityName }
                   : {}),
             },
           }));
@@ -2818,7 +2848,8 @@ export default function TamburScreen() {
           // Otomatik yazılmış A1 uzunlukla birlikte gider (bayat kalite kalmasın).
           const revert =
             shortCutAutoMainRef.current &&
-            work.voluntaryEntry.qualityGrade === SHORT_CUT_QUALITY_CODE;
+            secondQualityCode !== null &&
+            work.voluntaryEntry.qualityGrade === secondQualityCode;
           if (revert) shortCutAutoMainRef.current = false;
           setWork((w) => ({
             ...w,
@@ -2826,7 +2857,7 @@ export default function TamburScreen() {
               ...w.voluntaryEntry,
               length: '',
               ...(revert
-                ? { qualityGrade: DEFAULT_QUALITY_CODE, qualityName: DEFAULT_QUALITY_NAME }
+                ? { qualityGrade: defaultQualityCode, qualityName: defaultQualityName }
                 : {}),
             },
           }));
@@ -2993,7 +3024,7 @@ export default function TamburScreen() {
     setRecutTargetCustomerId(null);
     setRecutTargetCustomerName(undefined);
     setRecutCutLength('');
-    setRecutQualityGrade('1.KALITE');
+    setRecutQualityGrade(defaultQualityCode);
     setRecutRawDestination('STOCK');
     setRecutLastParentRoll(null);
     // Kartelalık işareti akışa özgüdür — X ile kapatınca da sıfırla; yoksa
@@ -4449,6 +4480,7 @@ export default function TamburScreen() {
 
       {/* Etiket basımı modal'ı — finalize/post-split sonrası */}
       <LabelPrintModal
+        grades={qualityGrades}
         rolls={pendingPrintRolls}
         batchNumber={activeJob?.stepSummary.batchNumber ?? null}
         onDismiss={() => setPendingPrintRolls([])}
@@ -4537,7 +4569,7 @@ export default function TamburScreen() {
             setRecutResolvedRollId(null);
             setRecutRollMeta(null);
             setRecutCutLength('');
-            setRecutQualityGrade('1.KALITE');
+            setRecutQualityGrade(defaultQualityCode);
             setRecutLastParentRoll(null);
             qc.invalidateQueries({ queryKey: ['rolls'] });
       // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
@@ -4820,6 +4852,7 @@ export default function TamburScreen() {
 
       {/* Tambur'dan çıkmış toplar listesi — geçmişten etiket yeniden basımı */}
       <RecentOutputModal
+        grades={qualityGrades}
         visible={recentOutputOpen}
         onDismiss={() => setRecentOutputOpen(false)}
         // TOPLU baskı — hedef zaten yazıldı, kuyruğa ver ve listeyi kapat.
@@ -5130,6 +5163,7 @@ export default function TamburScreen() {
 // "Bas" butonu).
 // ─────────────────────────────────────────────────────────────────────────────
 function RollLabelCard({
+  grades,
   roll,
   index,
   isPrinting,
@@ -5147,14 +5181,17 @@ function RollLabelCard({
   /** Verilirse kart gövdesine dokunmak etiket önizlemesini açar (son basılan
    *  etiketi göster). "Bas" butonu ayrı dokunma hedefi olarak kalır. */
   onPreview?: (roll: Roll) => void;
+  /** Kalite kataloğu — rozet rengi buradan gelir (aşağıdaki nota bak). */
+  grades: readonly QualityGrade[];
 }) {
   const color = roll.color ?? null;
-  const gradeBg =
-    roll.qualityGrade === 'FIRE'
-      ? '#fee2e2'
-      : roll.qualityGrade === 'A1'
-        ? '#fef3c7'
-        : '#dcfce7';
+  // ROZET RENGİ KATALOGDAN (karar ①, ÜÇÜNCÜ soru). Burada
+  // `qualityGrade === 'FIRE' ? kırmızı : === 'A1' ? sarı : yeşil` vardı; iki
+  // kusur taşıyordu: (1) kataloğu `2K/HURDA` olan fabrikada HER top yeşil
+  // rozet alırdı; (2) rengi ROLE bağlamak da yanlış olurdu — dört kademeli
+  // katalogda üç rol vardır, dördüncü kademe rozetsiz kalırdı. Renk kalitenin
+  // KENDİ alanıdır (`color`), rolün değil.
+  const gradeBg = gradeColor(grades, roll.qualityGrade) ?? '#dcfce7';
   const body = (
     <View style={resplitStyles.labelLeft}>
       <View style={resplitStyles.labelTopLine}>
@@ -5239,6 +5276,7 @@ function RollLabelCard({
 // Her satırın "Bas" butonu LabelPrinter'ı (expo-print) tetikler.
 // ─────────────────────────────────────────────────────────────────────────────
 function LabelPrintModal({
+  grades,
   rolls,
   batchNumber,
   onDismiss,
@@ -5246,6 +5284,8 @@ function LabelPrintModal({
   onPrintStock,
   printingRollId,
 }: {
+  /** Kalite kataloğu — rozet rengi alt karta buradan iner. */
+  grades: readonly QualityGrade[];
   rolls: Roll[];
   batchNumber?: string | null;
   onDismiss: () => void;
@@ -5279,6 +5319,7 @@ function LabelPrintModal({
         <ScrollView contentContainerStyle={{ padding: 8, gap: 6 }}>
           {rolls.map((roll, idx) => (
             <RollLabelCard
+              grades={grades}
               key={roll.id}
               roll={roll}
               index={idx}
@@ -5787,6 +5828,7 @@ const noteModalStyles = StyleSheet.create({
 // Bas / Yeni Etiket). (Eski "Etiket Değiştir" RelabelPickerModal'i kaldırıldı;
 // yönlendirme artık Çıkanlar önizlemesindeki "Yeni Etiket" butonundan yapılıyor.)
 function RelabelRollRow({
+  grades,
   roll,
   onPress,
   onUndo,
@@ -5803,11 +5845,12 @@ function RelabelRollRow({
   /** Toplu seçim açık — satır solunda kutucuk, dokunma seçer (önizlemez). */
   selectMode?: boolean;
   selected?: boolean;
+  /** Kalite kataloğu — rozet rengi buradan (RollLabelCard ile aynı gerekçe). */
+  grades: readonly QualityGrade[];
 }) {
   const color = roll.color ?? null;
   const grade = roll.qualityGrade ?? '—';
-  const gradeBg =
-    grade === 'FIRE' ? '#fee2e2' : grade === 'A1' ? '#fef3c7' : '#dcfce7';
+  const gradeBg = gradeColor(grades, roll.qualityGrade) ?? '#dcfce7';
   // "Manuel Ekle" modunda kartsız doğan top. Listede kesim çocuklarıyla YAN YANA
   // durur (ikisi de Tambur çıktısı, ikisinin de etiketi buradan yeniden basılır),
   // ama kimlikleri farklı: birinin arkasında bir iş emri var, diğerinin yok.
@@ -6149,6 +6192,7 @@ function archivedStatusText(status: string): string {
 // Tambur'dan çıkmış son toplar listesi — etiketleri sonradan tekrar basmak için
 // ─────────────────────────────────────────────────────────────────────────────
 function RecentOutputModal({
+  grades,
   visible,
   onDismiss,
   onPrint,
@@ -6157,6 +6201,8 @@ function RecentOutputModal({
   onBulkPrint,
   onUndone,
 }: {
+  /** Kalite kataloğu — rozet rengi alt satıra buradan iner. */
+  grades: readonly QualityGrade[];
   visible: boolean;
   onDismiss: () => void;
   /** "Bas" — mevcut etiketi aynen tekrar bas. */
@@ -6573,6 +6619,7 @@ function RecentOutputModal({
           // Aynı dokunuşun iki anlamı olması kafa karıştırır, o yüzden mod
           // açıkken satır aksiyonları (geri al) da çizilmez.
           <RelabelRollRow
+            grades={grades}
             roll={roll}
             stacked={isCompactPortrait}
             selectMode={selectMode}

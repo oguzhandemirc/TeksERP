@@ -4,6 +4,8 @@ import { Surface, Text, ActivityIndicator, Icon, Divider, Button, IconButton } f
 import { useQuery } from '@tanstack/react-query';
 import AppModal from '../../../components/AppModal';
 import { packingService, type SackStoreShipmentLite } from '../../../services/packing.service';
+import { qualityGradeService } from '../../../services/qualityGrade.service';
+import { roleOfCode } from '../../../utils/qualityRole';
 
 const fmtM = (m: number) => m.toLocaleString('tr-TR', { maximumFractionDigits: 2 });
 const fmtKg = (kg: number | null) => (kg != null ? `${kg.toLocaleString('tr-TR')} kg` : 'tartılmadı');
@@ -28,6 +30,17 @@ export default function SackContentsModal({ shipment, onDismiss, onRemoveSack, r
     staleTime: 30_000,
   });
   const detail = q.data?.data;
+  // Kalite kataloğu — "bu top 1. kalite mi" sorusunu cevaplamak için (karar ①).
+  // ⚠️ Bu ekran kataloğu HİÇ yüklemiyordu; o yüzden soruyu ancak gömülü bir
+  // literalle cevaplayabiliyordu (`!== '1.KALITE'`). Anahtar diğer ekranlarla
+  // AYNI (`['quality-grades','active']`) ⇒ react-query tekilleştirir, maliyet
+  // paylaşılan tek fetch. Mantık saf fonksiyonda (`utils/qualityRole.ts`).
+  const gradesQuery = useQuery({
+    queryKey: ['quality-grades', 'active'],
+    queryFn: () => qualityGradeService.list({ pageSize: 100 }),
+    staleTime: 10 * 60 * 1000,
+  });
+  const grades = gradesQuery.data?.data ?? [];
 
   return (
     <AppModal visible={shipment !== null} onDismiss={onDismiss} position="bottom">
@@ -105,7 +118,12 @@ export default function SackContentsModal({ shipment, onDismiss, onRemoveSack, r
                               {r.item.name}
                               {r.color ? ` · ${r.color.name}` : ''}
                               {r.width != null ? ` · ${r.width}cm` : ''}
-                              {r.qualityGrade && r.qualityGrade !== '1.KALITE' ? ` · ${r.qualityGrade}` : ''}
+                              {/* 1. kalite GİZLENİR (norm), diğerleri yazılır — rol
+                                  sorusudur, kod değil. Katalog gelmeden rol
+                                  çözülemez; o an kod yazılır (bilgi kaybı yok). */}
+                              {r.qualityGrade && roleOfCode(grades, r.qualityGrade) !== 'FIRST'
+                                ? ` · ${r.qualityGrade}`
+                                : ''}
                             </Text>
                             <Text style={styles.rollQty}>{fmtM(r.qty)}m</Text>
                           </View>

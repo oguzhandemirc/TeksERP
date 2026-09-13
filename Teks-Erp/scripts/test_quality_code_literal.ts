@@ -75,6 +75,35 @@ function check(label: string, ok: boolean, detay?: string): void {
 const KOK = join(__dirname, "..", "..");
 
 /**
+ * ŞEMADAKİ ENUM'LAR — §3'ün AYNA İSTİSNASI için.
+ *
+ * ⚠️ §3 "kalite adlı tip takma adında string-literal birleşimi" arıyordu ve
+ * `type QualityGradeRole = 'FIRST' | 'SECOND' | 'SCRAP'`i de yakalıyordu —
+ * oysa o bir KAPALI enum'un istemci AYNASIDIR (`CompanyType`/`StationType`
+ * emsali), fabrikanın AÇIK katalog kodları değil. Ayrım yapısaldır ve
+ * tahmine gerek yok: birleşimin ÜYELERİ şemadaki aynı adlı enum'un
+ * değerleriyle birebir örtüşüyorsa o bir aynadır.
+ * Örtüşmüyorsa (ör. silinen `QualityGradeCode = '1.KALITE' | 'A1' | …`)
+ * kural yine KIRMIZI verir — kurgu tip yakalanmaya devam eder.
+ */
+const SEMA_ENUMLARI: Map<string, Set<string>> = (() => {
+  const harita = new Map<string, Set<string>>();
+  const ham = readFileSync(join(KOK, "Teks-Erp/prisma/schema.prisma"), "utf8").replace(/\/\/[^\n]*/g, "");
+  for (const m of ham.matchAll(/^enum\s+(\w+)\s*\{([^}]*)\}/gm)) {
+    const degerler = new Set([...m[2]!.matchAll(/^\s*([A-Z][A-Z0-9_]*)\s*$/gm)].map((v) => v[1]!));
+    harita.set(m[1]!, degerler);
+  }
+  return harita;
+})();
+
+/** Birleşim, aynı adlı şema enum'unun AYNASI mı (üyeler birebir örtüşüyor mu)? */
+function semaAynasiMi(tipAdi: string, uyeler: string[]): boolean {
+  const enumDegerleri = SEMA_ENUMLARI.get(tipAdi);
+  if (!enumDegerleri) return false;
+  return uyeler.length === enumDegerleri.size && uyeler.every((u) => enumDegerleri.has(u));
+}
+
+/**
  * TARANAN AĞAÇLAR ve TAVANLARI — tavan YALNIZ DÜŞER.
  *
  * Ölçüm 2026-09-13, (i) dilimi indikten sonra. Backend 0'a indi; mobil ve
@@ -100,9 +129,9 @@ const AGACLAR: Array<{ kok: string; tavan: number; dilim: string; sadece?: RegEx
   // çıkarmak, listeyi üreten kapının kendi sınırını ölçmek olur.)
   // 251 → 246: bu turda beş bekçi literali daha katalogdan çözülür oldu
   // (test_tambur_over_quantity ön koşulunu kendi kurunca). Mandal işledi.
-  { kok: "Teks-Erp/scripts", tavan: 246, dilim: "bekçi borcu — ayrı dilim", sadece: /\/scripts\/test_[^/]+\.ts$/ },
-  { kok: "mobil/src", tavan: 19, dilim: "(ii) — bekliyor" },
-  { kok: "Electron/src", tavan: 20, dilim: "(iii) — bekliyor" },
+  { kok: "Teks-Erp/scripts", tavan: 244, dilim: "bekçi borcu — ayrı dilim", sadece: /\/scripts\/test_[^/]+\.ts$/ },
+  { kok: "mobil/src", tavan: 0, dilim: "(ii) — indi 2026-09-13" },
+  { kok: "Electron/src", tavan: 0, dilim: "(iii) — indi 2026-09-13" },
 ];
 
 /**
@@ -122,21 +151,48 @@ const MUAF: Record<string, { gerekce: string; izinli: string[] }> = {
       "bu yüzden rol de burada AÇIKÇA yazılır (2026-08-10 appliesColor tuzağı).",
     izinli: ["1.KALITE", "A1", "FIRE"],
   },
+  "Electron/src/lib/audit-field-labels.ts": {
+    gerekce:
+      "Backend `constants/audit-field-labels.ts`in AYNASI — aynı sınıf, aynı " +
+      "gerekçe: alan adı → Türkçe ETİKET sözlüğü, katalog kodu taşımaz.",
+    izinli: ["Kalite", "Alt top kalitesi", "Kalan parçanın kalitesi"],
+  },
+  "Electron/src/lib/import/template.ts": {
+    gerekce:
+      "İçe aktarım şablonunun VARLIK ADI sözlüğü (kullanıcıya 'kalite' diye " +
+      "gösterilir); değer bir katalog kodu değil, ekranda okunan kelime.",
+    izinli: ["kalite"],
+  },
+  "Electron/src/pages/Operations/Shipments/detail/ShipmentDetailToolbar.tsx": {
+    gerekce:
+      "Facet çipi ön eki (`Record<FacetKind, string>`): 'quality' yuvası bir " +
+      "SÜZGEÇ BOYUTUNUN adıdır, kalite kodu değil; değeri ekranda basılan başlık.",
+    izinli: ["Kalite"],
+  },
+  "Electron/src/pages/Reports/tile-config.ts": {
+    gerekce:
+      "Rapor KATEGORİSİ başlığı ('quality' = kalite raporları kümesi). Yuva bir " +
+      "kategori anahtarıdır, kalite satırı değil.",
+    izinli: ["Kalite"],
+  },
   "Teks-Erp/src/constants/audit-field-labels.ts": {
     gerekce:
       "Alan adı → Türkçe ETİKET sözlüğü. Değerler kullanıcıya gösterilen metindir, " +
       "katalog kodu DEĞİL; burada kod hiç bulunmaz.",
     izinli: ["Kalite", "Alt top kalitesi", "Kalan parçanın kalitesi"],
   },
-  "Teks-Erp/src/services/helpers/native-label.shared.ts": {
-    gerekce: "Kalitesi OLMAYAN topun etiketinde basılan tire — kod değil, boşluk işareti.",
-    izinli: ["-"],
-  },
   "Teks-Erp/src/services/inventory.service.ts": {
     gerekce:
       "`byQuality` özet haritasında NULL kalitenin kova ANAHTARI. Kod değil sentinel; " +
       "değiştirmek panelin okuduğu yanıt anahtarını kırar (sözleşme tetiği).",
     izinli: ["BELIRSIZ"],
+  },
+  "mobil/src/store/deviceSettingsStore.ts": {
+    gerekce:
+      "`tamburResetQualityAfterCut` cihaz ayarının BOOLEAN-AS-STRING okuması. " +
+      "Yuva adı ('tamburResetQuality') kalite desenine takılıyor ama değer " +
+      "'true'/'false'; katalog koduyla hiçbir ilgisi yok.",
+    izinli: ["true", "false"],
   },
   "Teks-Erp/src/services/document-render/sample-data.ts": {
     gerekce:
@@ -235,9 +291,32 @@ const KOD_YUVASI = /^(.*quality.*|.*grade.*)$/i;
  */
 const NOTR_KOD_YUVASI = /^(code|currentCode|defaultCode|effectiveCode)$/;
 
+/**
+ * Bir DEĞERİN katalog kodu OLAMAYACAĞI yapısal olarak biliniyor mu?
+ *
+ * ⚠️ Bunlar muafiyet DEĞİL, kuralın sınırıdır — üçü de şemadan/dilden çıkar:
+ *   • 32 karakterden uzun: `QualityGrade.code` `@db.VarChar(32)`. Yardım
+ *     metinleri, hata cümleleri buradan düşer.
+ *   • Yol (`/api/…`): servis tanımı, kod değil.
+ *   • Noktalama-yalnız (`—`, `-`, `?`, `N/A`): "değer yok" YER TUTUCUSU.
+ *     Bir katalog kodu asla yalnız noktalamadan oluşmaz.
+ * Sonuncusu dosya başına muafiyet yazmaktan iyidir: aynı şekil üç ağaçta da
+ * geçiyor ve her birine ayrı satır yazmak listeyi şişirirdi.
+ */
+function kodOlamazMi(deger: string): boolean {
+  if (deger.length > 32) return true;
+  if (deger.startsWith("/")) return true;
+  if (/^[\s\p{P}\p{S}]+$/u.test(deger)) return true;
+  if (/^(N\/A|n\/a)$/.test(deger)) return true;
+  return false;
+}
+
 function kodYuvasiMi(ad: string | null, n?: tsc.Node, sf?: tsc.SourceFile): boolean {
   if (!ad) return false;
   if (/Ids?$/.test(ad)) return false; // `qualityGradeId` bir FK'dır, kod değil
+  // `...Enabled` bir BAYRAK ANAHTARIDIR (`qualityGradeRequiredEnabled`); değeri
+  // modül adı ya da boolean'dır, katalog kodu değil.
+  if (/Enabled$/.test(ad)) return false;
   if (KOD_YUVASI.test(ad)) return true;
   if (NOTR_KOD_YUVASI.test(ad) && n && sf) return yakindaKaliteVar(n, sf);
   return false;
@@ -271,6 +350,7 @@ function yakindaKaliteVar(n: tsc.Node, sf: tsc.SourceFile): boolean {
 function kaliteBaglamiMi(n: tsc.Node, sf: tsc.SourceFile): string | null {
   const p = n.parent;
   if (!p) return null;
+  if (kodOlamazMi((n as tsc.StringLiteralLike).text)) return null;
 
   // (A) karşılaştırma ya da ?? varsayılanı
   if (tsc.isBinaryExpression(p)) {
@@ -388,7 +468,13 @@ function main(): void {
           tsc.isUnionTypeNode(nd.type) &&
           nd.type.types.some((t) => tsc.isLiteralTypeNode(t) && tsc.isStringLiteralLike(t.literal))
         ) {
-          ekle("§3", nd, `type ${nd.name.text}`);
+          const uyeler = nd.type.types
+            .filter((t): t is tsc.LiteralTypeNode => tsc.isLiteralTypeNode(t))
+            .filter((t) => tsc.isStringLiteralLike(t.literal))
+            .map((t) => (t.literal as tsc.StringLiteralLike).text);
+          // AYNA İSTİSNASI: kapalı bir şema enum'unun istemci kopyası kusur
+          // değildir; fabrikanın AÇIK katalog kodlarını tipe gömmek kusurdur.
+          if (!semaAynasiMi(nd.name.text, uyeler)) ekle("§3", nd, `type ${nd.name.text}`);
         }
         // §4 — kalite nesnesinin ADINA uygulanan regex
         if (

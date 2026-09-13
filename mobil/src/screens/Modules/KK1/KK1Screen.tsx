@@ -74,6 +74,7 @@ import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRefresh';
 import { LabelPrinter } from '../../../components/LabelPrinter';
 import { isWorkSessionLost } from '../../../services/api';
+import { findGradeByRole } from '../../../utils/qualityRole';
 import { sessionBucketKey, useSessionEntriesStore } from '../../../store/sessionEntriesStore';
 import { useSessionStore } from '../../../store/sessionStore';
 import { useAuthStore } from '../../../store/authStore';
@@ -722,17 +723,24 @@ export default function KK1Screen() {
     [qualityGradesQuery.data],
   );
 
-  // Kalite: KK1 ham girişte "1. Kalite" DEFAULT seçili gelir (operatör isteği). Katalog
+  // Kalite: KK1 ham girişte 1. kalite DEFAULT seçili gelir (operatör isteği). Katalog
   // (async) yüklenince, form boşsa BİR KEZ ön-seçilir; operatör sonra toggle ile kaldırıp
-  // "Belirsiz" (backend null) yapabilir → tekrar zorlamayız. 1.Kalite katalogda yoksa
+  // "Belirsiz" (backend null) yapabilir → tekrar zorlamayız. Rol atanmamışsa
   // (admin kaldırmışsa) boş kalır. Kalite hâlâ OPSİYONEL — yalnız varsayılan değişti.
+  //
+  // ⚠️ 2026-09-13 (karar ①) — burada `qg.code === '1.KALITE' || /1\s*\.?\s*kalite/i
+  // .test(qg.name)` vardı ve İKİ ayrı kırılganlık taşıyordu:
+  //   1) KOD sabiti: kataloğu `1K` olan fabrikada eşleşmezdi;
+  //   2) AD REGEX'i: koda değil ADA bakıyordu, yani kod kataloğunu düzeltmek onu
+  //      HİÇ ETKİLEMEZDİ — üstelik "2. Kalite" adı da `/1\s*\.?\s*kalite/`
+  //      desenine takılmaz ama "1.Kalite Ekstra" takılırdı (ad serbest metindir).
+  // Artık `role = FIRST` satırı aranır. Bir sabite kapı kurarken aynı sabitin AD
+  // üzerinden kurulmuş hâli AYRICA aranır — bu site o dersin kaynağıdır.
   const didPreselectQualityRef = useRef(false);
   useEffect(() => {
     if (didPreselectQualityRef.current || qualityGrades.length === 0) return;
     didPreselectQualityRef.current = true;
-    const first = qualityGrades.find(
-      (qg) => qg.code === '1.KALITE' || /1\s*\.?\s*kalite/i.test(qg.name),
-    );
+    const first = findGradeByRole(qualityGrades, 'FIRST');
     if (first) setForm((f) => (f.qualityGrade === '' ? { ...f, qualityGrade: first.code } : f));
   }, [qualityGrades]);
 

@@ -20,17 +20,19 @@
 //     kaliteyi elle değiştirir ve uzunluğu yeniden düzenlemedikçe kural
 //     yeniden ateşlemez.
 //   • Eşik ALTINDA (<) — eşiğe eşit uzunluk kısa sayılmaz ("15 m altı" dili).
-//   • A1 KATALOGDAN çözülür; katalogda yoksa/pasifse kural HİÇ ateşlemez
-//     (fail-closed — kataloga olmayan kod yazılmaz, çökme de olmaz).
+//   • 2. KALİTE KATALOGDAN çözülür; katalogda yoksa/pasifse kural HİÇ ateşlemez
+//     (fail-closed — kataloğa olmayan kod yazılmaz, çökme de olmaz).
+//
+// ⚠️ 2026-09-13 (karar ①) — KOD DEĞİL ROL: burada `SHORT_CUT_QUALITY_CODE = 'A1'`
+// sabiti vardı. `A1` bu fabrikanın kodudur; kataloğu `2K` olan bir kurulumda
+// sabit hiçbir satırı bulamaz ve kural SESSİZCE hiç ateşlemezdi — yani "kısa
+// parça 2. kaliteye yazılsın" ayarı açık görünüp çalışmazdı. Artık
+// `role = SECOND` satırı aranır (`utils/qualityRole.ts`).
 // =============================================================================
+import { findGradeByRole, type QualityGradeLike } from '../../../utils/qualityRole';
 
-/** Kısa kesimin yazılacağı kalite kodu — fabrika kataloğundaki 2. kalite. */
-export const SHORT_CUT_QUALITY_CODE = 'A1';
-
-export interface ShortCutGrade {
-  code: string;
-  name: string;
-}
+/** Çözücünün ihtiyacı olan en dar şekil — ekranın tam kataloğu da uyar. */
+export type ShortCutGrade = QualityGradeLike;
 
 export interface ShortCutArgs {
   /** Ayar bayrağı (cihaz tercihi) — kapalıyken kural YOK. */
@@ -58,7 +60,7 @@ export function shortCutOverride(args: ShortCutArgs): ShortCutGrade | null {
   if (!Number.isFinite(lengthM) || lengthM <= 0) return null;
   if (lengthM >= thresholdM) return null;
   if (currentCode !== defaultCode) return null;
-  return grades.find((g) => g.code === SHORT_CUT_QUALITY_CODE) ?? null;
+  return findGradeByRole(grades, 'SECOND');
 }
 
 /**
@@ -74,12 +76,15 @@ export function shortCutRevert(args: {
   thresholdM: number | null;
   lengthM: number;
   currentCode: string | null | undefined;
-  /** A1'i bu oturumda kural mı yazdı (ekran ref ile izler). */
+  /** 2. kaliteyi bu oturumda kural mı yazdı (ekran ref ile izler). */
   autoApplied: boolean;
+  /** Ekranın yüklediği katalog — "2. kalite hangi kod" buradan çözülür. */
+  grades: readonly ShortCutGrade[];
 }): boolean {
-  const { enabled, thresholdM, lengthM, currentCode, autoApplied } = args;
+  const { enabled, thresholdM, lengthM, currentCode, autoApplied, grades } = args;
   if (!autoApplied) return false;
-  if (currentCode !== SHORT_CUT_QUALITY_CODE) return false;
+  // Geri dönüş yalnız kuralın YAZDIĞI koddan olur; kod katalogdan çözülür.
+  if (currentCode !== findGradeByRole(grades, 'SECOND')?.code) return false;
   // Bayrak/eşik bu arada kapandıysa da geri dön — otomatik yazımın dayanağı kalktı.
   if (!enabled || thresholdM == null || thresholdM <= 0) return true;
   return Number.isFinite(lengthM) && lengthM >= thresholdM;
