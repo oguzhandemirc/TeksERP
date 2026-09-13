@@ -358,6 +358,16 @@ aynı dallar. *(1e/6e)* Kardeşi § Paylaşılan `node_modules` üstünde worktr
 **Savunma:** commit öncesi dalı ve hedefi AYRI adımda oku
 (`git rev-parse --abbrev-ref HEAD` · `git rev-parse HEAD main`), sonra commit et.
 
+### Bir tarayıcı, kendi TARİF ETTİĞİ şeyin ÖRNEĞİNİ gerçek sanır
+Biçim tarif eden belgeler (`README`, şablon, başlık örneği) tarayıcının kapsamı
+dışında bırakılır — ve bu **bir muafiyet değil, TANIM GEREĞİDİR**: orada duran şey bir
+kural değil, **kuralın resmidir**. *(5e teşhis · d5 formülasyon)*
+*(Vaka 2026-09-13: kimlik tekilliği kapısı üç çakışma bildirdi; üçüncüsü
+`docs/standart/README.md`'deki `- **[BE-07]** <emir kipi…>` biçim örneğiydi. Aynı sınıf
+aynı gece bir başka oturuma dört kez çarptı.)*
+⚠️ Ters yönü de var ve bu belgede yaşandı: *yasağı anlatan cümle, yasağın kendisi
+sayılabilir* (§ Dolaylılık'ın ters yönü).
+
 ## KATMAN 2 · Ölçümden sonraki adım → ayrı dosya
 
 [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) (`docs/standart/OLCUM-DISIPLINI-CIKARIM.md`) — 2026-09-13'te buradan bölündü; katalog o gün **+20 sınıf** aldı ve bu dosya tavana 1.667 bayt kalmıştı. Tavan yükseltilmedi.

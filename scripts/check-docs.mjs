@@ -21,6 +21,7 @@
 // =============================================================================
 
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { join, relative, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -199,6 +200,53 @@ if (existsSync(join(REPO_ROOT, STANDART_DIR))) {
   for (const name of readdirSync(join(REPO_ROOT, STANDART_DIR))) {
     if (name.endsWith(".md")) CLAUDE_MD_SIZE_CAPS[`${STANDART_DIR}/${name}`] = 24 * 1024;
   }
+}
+
+// --- GATE: kural KİMLİĞİ tekil (2026-09-13) ---
+// SORUSU: "bu COMMIT yeni bir çakışma GETİRİYOR mu" — "ağaç temiz mi" DEĞİL.
+// İki taraf da okunur (ağaç ↔ `git show HEAD:`) ve yalnız ARTIŞ kırmızıdır. Sebep
+// ölçüldü: kapı yalnız ağacı okusaydı, bir eş oturumun commit EDİLMEMİŞ düzeltmesi
+// sahte yeşil üretirdi; yalnız HEAD'i okusaydı bu commit'in GETİRDİĞİ çakışmayı bir
+// commit geç yakalardı. HEAD'de DURAN çakışma advisory kalır — yoksa kapı, ihlali
+// yapanı değil ondan sonra commit atan herkesi cezalandırır.
+// Kimlik çakışmasının bedeli özel: ona yapılan HER ATFI belirsizleştirir ("BE-41
+// gereği" diyen commit mesajı yarın hangi kuralı kastettiğini söyleyemez).
+// ⚠️ `README.md` KAPSAM DIŞI ve bu bir muafiyet değil TANIM GEREĞİ: orası kural
+//    BİÇİMİNİ tarif eder (`- **[BE-07]** <emir kipi…>`); orada duran şey bir kural
+//    değil, kuralın resmidir. (5e teşhis · d5 formülasyon, 2026-09-13)
+const ID_RE = /^- \*\*\[([A-ZÇĞİÖŞÜ]{2,3}-[0-9]+[a-z]?)\]\*\*/;
+function idCakismalari(oku) {
+  const gorulen = new Map(), dupes = new Map();
+  if (!existsSync(join(REPO_ROOT, STANDART_DIR))) return dupes;
+  for (const name of readdirSync(join(REPO_ROOT, STANDART_DIR))) {
+    if (!name.endsWith(".md") || name === "README.md") continue;
+    const rel = `${STANDART_DIR}/${name}`;
+    (oku(rel) ?? "").split("\n").forEach((ln, i) => {
+      const m = ID_RE.exec(ln);
+      if (!m) return;
+      if (gorulen.has(m[1])) dupes.set(m[1], `ilk: ${gorulen.get(m[1])} · tekrar: ${rel}:${i + 1}`);
+      else gorulen.set(m[1], `${rel}:${i + 1}`);
+    });
+  }
+  return dupes;
+}
+const agacDupes = idCakismalari((rel) => readFileSync(join(REPO_ROOT, rel), "utf8"));
+const headDupes = idCakismalari((rel) => {
+  try { return execFileSync("git", ["show", `HEAD:${rel}`], { cwd: REPO_ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); }
+  catch { return ""; }
+});
+const yeniDupes = [...agacDupes].filter(([id]) => !headDupes.has(id));
+const duranDupes = [...agacDupes].filter(([id]) => headDupes.has(id));
+if (duranDupes.length) {
+  console.log(`⚠️  ADVISORY — ${duranDupes.length} kural kimliği çakışması HEAD'de DURUYOR (bu commit getirmedi, CI'ı etkilemez):`);
+  for (const [id, yer] of duranDupes) console.log(`    [${id}]  ${yer}`);
+  console.log("    → Sahibi boştaki bir kimliğe taşımalı; eski kimlik YENİDEN KULLANILMAZ (arşiv atıfları ona bakıyor).\n");
+}
+if (yeniDupes.length) {
+  console.error(`❌ Bu commit ${yeniDupes.length} YENİ kural kimliği çakışması getiriyor: bir kimlik tek kurala aittir ve çakışma ona yapılan HER atfı belirsizleştirir.`);
+  for (const [id, yer] of yeniDupes) console.error(`    [${id}]  ${yer}`);
+  console.error("    → Sonradan yazılana BOŞTAKİ bir kimlik ver.");
+  process.exit(1);
 }
 
 const sizeFails = [];
