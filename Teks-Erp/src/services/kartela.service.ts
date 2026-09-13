@@ -39,6 +39,7 @@ import {
   buildNextDynamicCursor,
 } from "../utils/cursor";
 import { warehouseStampManyTx } from "./helpers/warehouse.helper";
+import { assertRollsHaveWarehouse } from "./helpers/warehouse-stock.helper";
 
 // Liste filtre/sayfalama parametreleri — hem offset (mobil) hem cursor (admin)
 // modunu besler. cursor||mode==="cursor" → cursor response; aksi halde offset.
@@ -210,6 +211,8 @@ export class KartelaService {
         sack: { select: { sackNo: true } },
         currentQty: true,
         weightKg: true,
+        // K6 kapısı için: deposuz top stok kümesinden çıkamaz.
+        warehouseId: true,
       },
     });
     if (rolls.length !== data.rollIds.length) {
@@ -273,6 +276,15 @@ export class KartelaService {
         );
       }
     }
+
+    // K6 — DEPOSUZ TOP STOK KÜMESİNDEN ÇIKAMAZ. Kartela sevki malı `WAREHOUSE`tan
+    // `AT_KARTELA`ya, yani stok kümesinin DIŞINA taşır; defter satırının bir depo
+    // ucu olmak zorunda. Kapı idempotency replay'inden SONRA durur: replay'de
+    // toplar zaten `AT_KARTELA` olduğu için buraya hiç gelmez (üstteki guard'ın
+    // kendi gerekçesiyle aynı sıra).
+    // ⚠️ Tek kaynak: sevk ve iade yollarıyla AYNI helper — ayrı yazılsaydı üç yol
+    // üç farklı mesaj ve üç farklı kod döndürürdü.
+    assertRollsHaveWarehouse(rolls, "Kartelaya gönderilemez");
 
     const totalQty = rolls.reduce(
       (s, r) => s.plus(r.currentQty),

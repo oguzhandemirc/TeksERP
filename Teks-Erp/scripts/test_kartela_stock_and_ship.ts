@@ -17,6 +17,7 @@ import { kartelaService } from "../src/services/kartela.service";
 import { shippingService } from "../src/services/shipping.service";
 import { AppError } from "../src/utils/app-error";
 import { RollStatus } from "@prisma/client";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0,
   fail = 0;
@@ -63,6 +64,9 @@ async function stockCount(itemId: string, colorId: string | null): Promise<numbe
 async function makeWarehouseRoll(colorId: string | null): Promise<string> {
   const r = await prisma.roll.create({
     data: {
+      // Stok kumesinden cikabilmek icin deposu DOLU olmali (K6 kapisi):
+      // uretimde deposuz top dogamaz, fikstur de uretmemeli.
+      warehouseId: await fixtureWarehouseId(),
       barcode: `TEST-KRTROLL-${TS}-${rollIds.length}`,
       itemId: ITEM,
       colorId,
@@ -122,6 +126,9 @@ async function birthSwatches(colorId: string | null, count: number): Promise<voi
 async function depotSackWithRoll(): Promise<string> {
   const roll = await prisma.roll.create({
     data: {
+      // Stok kumesinden cikabilmek icin deposu DOLU olmali (K6 kapisi):
+      // uretimde deposuz top dogamaz, fikstur de uretmemeli.
+      warehouseId: await fixtureWarehouseId(),
       barcode: `TEST-KRT-GROLL-${TS}-${rollIds.length}`,
       itemId: ITEM,
       initialQty: 10,

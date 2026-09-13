@@ -73,6 +73,7 @@ import { InventoryService } from "../src/services/inventory.service";
 import { collectRollStepScopeTx } from "../src/services/helpers/roll-step-scope.helper";
 import { ensureWorkOrderInProgress } from "../src/services/helpers/roll-step.helper";
 import { applyRollDispositionsTx } from "../src/services/helpers/roll-disposition.helper";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0;
 let fail = 0;
@@ -157,6 +158,9 @@ async function makeRoll(
 ): Promise<string> {
   const r = await prisma.roll.create({
     data: {
+      // Stok kumesinden cikabilmek icin deposu DOLU olmali (K6 kapisi):
+      // uretimde deposuz top dogamaz, fikstur de uretmemeli.
+      warehouseId: await fixtureWarehouseId(),
       barcode: `TEST-RCSR-${stamp}-${randomUUID().slice(0, 8).toUpperCase()}`,
       itemId,
       initialQty: 100,

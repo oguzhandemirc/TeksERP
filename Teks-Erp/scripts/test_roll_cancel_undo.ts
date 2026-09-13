@@ -33,6 +33,7 @@ import {
   resolveRestoreTargetStatus,
 } from "../src/services/helpers/roll-cancel-restore.helper";
 import { RollStatus } from "@prisma/client";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0;
 let fail = 0;
@@ -64,6 +65,9 @@ async function makeRoll(opts: {
   const barcode = `T-TEST-${randomUUID().slice(0, 8).toUpperCase()}`;
   const roll = await prisma.roll.create({
     data: {
+      // Stok kumesinden cikabilmek icin deposu DOLU olmali (K6 kapisi):
+      // uretimde deposuz top dogamaz, fikstur de uretmemeli.
+      warehouseId: await fixtureWarehouseId(),
       itemId: item.id,
       barcode,
       initialQty: opts.qty ?? 100,

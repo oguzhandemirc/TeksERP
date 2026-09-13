@@ -21,7 +21,7 @@ import {
   writeWarehouseMovements,
 } from "./helpers/warehouse-ledger.helper";
 import { reverseLatestScopedStockMove } from "./helpers/warehouse-ledger-reverse.helper";
-import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
+import { assertRollsHaveWarehouse, WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { AppError } from "../utils/app-error";
 import { assertMasterDataLiveTx, lockAgainstMergeTx } from "./helpers/master-data-live.helper";
@@ -3407,6 +3407,27 @@ export class InventoryService {
     // shipmentId null'lanabiliyordu — sevk edilmiş mal canlı veriden siliniyordu.
     if (!CANCELABLE_ROLL_STATUSES.includes(existing.status)) {
       throw AppError.conflict(nonCancelableRollReason(existing.status));
+    }
+
+    // K6 — STOK KÜMESİNDEN DÜŞEN topun deposu olmak zorunda: defter çıkış satırının
+    // bir `from` ucu gerekir, yoksa mal kayıttan düşer ama defter çıkışı görmez
+    // (aşağıdaki `ledgerRowWritten` onu sessizce atlıyordu — audit'e yazılıyordu ama
+    // audit iş kaynağı değil).
+    //
+    // ⚠️ BEDELİ BİLEREK ÖDENİYOR: iptal, bozuk kaydın ÇARESİDİR ve burada 409
+    // vermek o çareyi geçici olarak kapatır. Alternatif (deposuz topu damgalayıp
+    // düşürmek) daha kötü: topun hangi depoda olduğunu BİLMİYORUZ ve varsayılanı
+    // yazmak kanıtsız bir olgu uydurmaktır ("kanıtsız satıra dokunulmaz").
+    // ⚠️ Maruziyet ölçüldü (2026-09-13, fabrikanın canlı yedeği): stok kümesinde
+    // deposuz top 0 ⇒ bu dal bugün ulaşılamaz. Ulaşılırsa çözüm backfill'dir,
+    // kapıyı gevşetmek değil — mesaj betiği adıyla söyler.
+    // ⚠️ Stok DIŞI statüden iptal (IN_PRODUCTION) depo İSTEMEZ: o mal zaten stokta
+    // değil, çıkış satırı da doğmaz.
+    if (WAREHOUSE_STOCK_STATUSES.includes(existing.status)) {
+      assertRollsHaveWarehouse(
+        [{ id: existing.id, barcode: existing.barcode, warehouseId: existing.warehouseId }],
+        isScrap ? "Fire edilemez" : "İptal edilemez",
+      );
     }
 
     // Açık fason sevkiyatına bağlı mı?
