@@ -34,6 +34,7 @@ import { TamburService } from "../src/services/tambur.service";
 import { RollStatus, RollVarianceKind } from "@prisma/client";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { fixtureWarehouseId } from "./fixture-warehouse";
 
 let pass = 0;
 let fail = 0;
@@ -69,6 +70,12 @@ async function depoTopu(tag: string, qty: number): Promise<string> {
       // kapısından kırmızıya düşürüyordu — yarış guard'ı hiç ölçülmeden
       // 409 yerine 400 GRADE_REQUIRED dönüyordu.
       qualityGrade: "1.KALITE",
+      // ⚠️ DEPO FIKSTÜRDE (2026-09-13): "depo topu"nun deposu olmak ZORUNDA —
+      // deposuz stok topu K1 uç şeklini ihlal eder, hiçbir Σ'ya girmez ve
+      // sevki/iadesi kapıda durur. Deposuz doğan bu fikstür `test_consistency §29`
+      // ile `test_roll_warehouse_stamp`i kırmızı tutuyordu (ölçüldü: 88 top).
+      // K7 4. adımı (`rolls_stock_requires_warehouse_ck`) bu şekli DB'de yasaklar.
+      warehouseId: await fixtureWarehouseId(),
     },
     select: { id: true },
   });
@@ -359,12 +366,30 @@ async function cleanup(): Promise<void> {
   }
   const hepsi = await prisma.roll.findMany({ where: { itemId }, select: { id: true } }).catch(() => []);
   const ids = [...new Set([...rollIds, ...hepsi.map((r) => r.id)])];
-  // ⚠️ RESTRICT FK: sapma defteri topu kilitler.
+  // ⚠️ `warehouseMovement` SİLİNMİYORDU ve her silme `.catch(() => {})` ile
+  // susturulmuştu: kesim yolu stok defterine satır yazdığı için `roll.deleteMany`
+  // `warehouse_movements_rollId_fkey`e (Restrict) çarpıyor, hata yutuluyor ve
+  // FİKSTÜR KALIYORDU. Ölçüldü 2026-09-13: 88 deposuz `TST-TCC-*` stok topu
+  // birikmişti ve `test_consistency §29` ile `test_roll_warehouse_stamp` onu
+  // raporluyordu — yani temizliğin sessiz başarısızlığı İKİ bekçiyi kırmızı
+  // tutuyordu. Sıra: ters satırlar (self-FK `Restrict`) → hareketler → sapma.
+  await prisma.warehouseMovement.deleteMany({ where: { reversesMovement: { rollId: { in: ids } } } }).catch(() => {});
+  await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: ids } } }).catch(() => {});
   await prisma.rollVariance.deleteMany({ where: { rollId: { in: ids } } }).catch(() => {});
   await prisma.rollOperation.deleteMany({ where: { rollId: { in: ids } } }).catch(() => {});
   await prisma.rollMovement.deleteMany({ where: { rollId: { in: ids } } }).catch(() => {});
   await prisma.roll.deleteMany({ where: { parentRollId: { in: ids } } }).catch(() => {});
-  await prisma.roll.deleteMany({ where: { id: { in: ids } } }).catch(() => {});
+  // ⚠️ SON ADIM SUSTURULMAZ: buraya kadar her şey silindiyse bu çağrı başarılı
+  // olmak ZORUNDA. Yutulursa artık sessizce kalır ve başka bekçiyi kırmızı yapar
+  // (yukarıdaki 88 top tam bu yüzden birikti) — temizlik başarısızlığı GÖRÜNÜR olur.
+  const kalan = await prisma.roll
+    .deleteMany({ where: { id: { in: ids } } })
+    .then(() => null)
+    .catch((e: Error) => e.message.replace(/\s+/g, " ").slice(-200));
+  if (kalan) {
+    fail++;
+    console.error(`❌ Temizlik YARIDA KALDI — deposuz fikstür topu bırakıldı: ${kalan}`);
+  }
   if (itemId) await prisma.item.deleteMany({ where: { id: itemId } }).catch(() => {});
 }
 

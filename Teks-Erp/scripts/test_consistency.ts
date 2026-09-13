@@ -77,6 +77,28 @@ function notFixture(column: string): string {
   return `(${column} IS NULL OR (${conds}))`;
 }
 
+/**
+ * Topun KALEMİ fixture ön eki taşımıyor mu — `<kolon>` topun id'sini (text) verir.
+ *
+ * ⚠️ NEDEN BARKOD YETMEZ (ölçüldü 2026-09-13): fikstürünü GERÇEK servisten kuran
+ * bekçi (`inventory.createInitialEntry`) topa ÜRETİM FORMATINDA barkod verir
+ * (`T130926F2770`) — `TEST-`/`TST-` ön eki yoktur ve barkoda bakan süzgeç o topu
+ * ÜRETİM verisi sanar. §29 dört satırı tam böyle raporladı; kimlikleri KALEM
+ * kodundan çözüldü (`TEST-SSTR-…-KM`). Kalem kodu fikstürün elinde kalan tek
+ * güvenilir imzadır, çünkü barkodu servis üretir.
+ *
+ * Süzgeç DIŞARIDAN korele alt sorguyla uygulanır: `consistency-check.sql`den
+ * AYNEN kopyalanan sorgunun metni değişmez (kopya kayması bu dosyanın en pahalı
+ * hatası olurdu).
+ */
+function notFixtureItemOfRoll(rollIdColumn: string): string {
+  const conds = FIXTURE_PREFIXES.map((p) => `i2.code LIKE '${p}%'`).join(" OR ");
+  return `NOT EXISTS (
+    SELECT 1 FROM rolls r2 JOIN items i2 ON i2.id = r2."itemId"
+    WHERE r2.id = ${rollIdColumn}::uuid AND (${conds})
+  )`;
+}
+
 interface Section {
   /** consistency-check.sql'deki bölüm numarası (izlenebilirlik için birebir) */
   id: string;
@@ -792,9 +814,17 @@ WHERE s."itemId" IS NULL`,
     // over_quantity`, 24 top). O fikstürler ayrı bir borçtur; bu bölüm ÜRETİM
     // verisini ölçer, yoksa kapı kendi test artığıyla kalıcı kırmızı yanar.
     title: "Stok kümesinde DEPOSUZ top (sevki/iadesi 409 ile durur)",
+    // ⚠️ AYIRT EDİCİ BARKOD ÖN EKİ YETMEZ (ölçüldü 2026-09-13): fikstürünü GERÇEK
+    // servisten kuran bekçi (`inventory.createInitialEntry`) topa ÜRETİM FORMATINDA
+    // barkod verir (`T130926F2770`), yani `TEST-`/`TST-` ön eki TAŞIMAZ ve bu bölüm
+    // onu ÜRETİM verisi sanar. Dört satır tam böyle raporlandı; kimlikleri kalem
+    // kodundan çözüldü (`TEST-SSTR-…-KM` = `test_stock_count_reversal` §6p/§6r,
+    // 22 m + 12 m). Bu yüzden süzgeç İKİ kolona bakar: topun barkodu VEYA kaleminin
+    // kodu fikstür ön eki taşıyorsa satır test artığıdır. Fabrikada `TEST-` kalem
+    // yok, yani ölçüm kaybı bilinen ve sıfır.
     noise: {
-      where: `WHERE ${notFixture("drift.barcode")}`,
-      why: "bekçi fikstürleri deposuz stok topu bırakıyor (ayrı borç, §29 üretimi ölçer)",
+      where: `WHERE ${notFixture("drift.barcode")} AND ${notFixtureItemOfRoll("drift.kayit")}`,
+      why: "bekçi fikstürleri deposuz stok topu bırakıyor — barkod VEYA kalem kodu ön ekinden elenir (ayrı borç, §29 üretimi ölçer)",
     },
     sql: `
 SELECT r.id::text AS kayit, r.barcode, r.status::text AS durum,
