@@ -116,7 +116,9 @@ anahtarı (`devere.enabled`, KAPALI doğar).
 - Uçlar: `/api/weaving-orders` · `/api/machine-runs` · `/api/machine-doffs` ·
   `/api/warp-specs`. İzinler: `weavingorder:read/write` · `loom:run/run-revoke` ·
   `loom:doff/doff-revoke` · `warpspec:read/write` (uzlaştırma boot'ta kataloğa
-  girer, ATAMAZ; `d927ab01` çözgü kartı izinlerini dar rollere atadı).
+  girer, ATAMAZ; `d927ab01` `warpspec:*` kodlarını sistem rol ŞABLONLARINA ekledi —
+  `role-template-catalog.ts`, boot uzlaştırması "yalnız ekle": var olan şablona eksik
+  izni ekler, kullanıcıya/mevcut role atama YAZMAZ, izin çıkarmaz; ölçüldü 2026-09-14).
 - `ReasonPresetKind.MACHINE_STOP` + 23 sebep kaydı boot uzlaştırmasıyla doğar.
 - Modül anahtarı `devere.enabled` KAPALI doğar (`90c17cca` `2e0145a2`); kapalıyken
   çözgü uçları 403 `MODULE_DISABLED`. Dokuma ekranı ve bayrağı ayrı dilim (9b).
