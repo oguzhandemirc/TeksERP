@@ -61,5 +61,3 @@ export function bekciAlanlari(dosyalar: Map<string, string>): BekciAlani[] {
   }
   return out;
 }
-
-/** ornek: docs/kurallar/SONDA_YOK.md okunur */
