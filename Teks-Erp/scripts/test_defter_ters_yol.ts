@@ -366,7 +366,7 @@ console.log("\n=== §13 OLAY DÜZEYİ — her sebep kodunun ters yolu beyanlı m
   const oluAtif: string[] = [];
   for (const [kod, b] of Object.entries(STOK_OLAY_BEYANI)) {
     // TERS_KODU.ileri tek kod ya da küme — her üye ayrı atıftır, hepsi katalogda olmalı.
-    const hedefler: string[] = b.tur === "BAGLI_TERS" || b.tur === "KARSI_OLAY" ? [b.kod] : b.tur === "TERS_KODU" ? ([] as string[]).concat(b.ileri) : [];
+    const hedefler: string[] = b.tur === "BAGLI_TERS" ? [b.kod] : b.tur === "KARSI_OLAY" ? ([] as string[]).concat(b.kod) : b.tur === "TERS_KODU" ? ([] as string[]).concat(b.ileri) : [];
     for (const hedef of hedefler) if (!kodlar.includes(hedef)) oluAtif.push(`${kod} → ${hedef}`);
   }
   check("§13c ters yol atıfları katalogda var", oluAtif.length === 0,
@@ -388,12 +388,15 @@ console.log("\n=== §13 OLAY DÜZEYİ — her sebep kodunun ters yolu beyanlı m
     // ENTRY_RECEIPT → ROLL_CANCEL: iptalin kendi tersi CANCEL_RESTORE). BORC/TERMINAL/
     // BASKA_DEFTER bir karşı olay olamaz: yolu olmayan bir şeye "karşı yön" demek boş atıftır.
     if (b.tur === "KARSI_OLAY") {
-      const karsi = STOK_OLAY_BEYANI[b.kod];
-      const uygun = karsi && (
-        (karsi.tur === "KARSI_OLAY" && karsi.kod === kod) ||
-        (karsi.tur === "TERS_KODU" && ([] as string[]).concat(karsi.ileri).includes(kod)) ||
-        karsi.tur === "BAGLI_TERS");
-      if (!uygun) asimetri.push(`${kod} ⇄ ${b.kod} (karşı olay beyanı: ${karsi ? karsi.tur : "YOK"})`);
+      // `kod` küme olabilir — her karşı kod ayrı ayrı simetrik olmalı.
+      for (const karsiKod of ([] as string[]).concat(b.kod)) {
+        const karsi = STOK_OLAY_BEYANI[karsiKod];
+        const uygun = karsi && (
+          (karsi.tur === "KARSI_OLAY" && ([] as string[]).concat(karsi.kod).includes(kod)) ||
+          (karsi.tur === "TERS_KODU" && ([] as string[]).concat(karsi.ileri).includes(kod)) ||
+          karsi.tur === "BAGLI_TERS");
+        if (!uygun) asimetri.push(`${kod} ⇄ ${karsiKod} (karşı olay beyanı: ${karsi ? karsi.tur : "YOK"})`);
+      }
     }
   }
   check("§13d ileri ↔ ters simetrik", asimetri.length === 0,
