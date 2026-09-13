@@ -12,6 +12,7 @@
 //   `test_dispatch_report_gross` · `test_shipment_scope_lock` · `…direct_ship` → 0
 //   `test_stock_ledger_return`     → SHIPPED topu ve SHIPMENT satırını ELLE kuruyor
 // ⇒ yedi bekçi yeşildi ve yedisi de "regresyon yok" diyordu, "kapsandı" demiyordu.
+// (sayım 2026-09-13, `grep -c warehouseMovement scripts/test_<ad>.ts`)
 // Bu dosya o boşluğu kapatır: fikstür GERÇEK servisi koşturur.
 //
 // ÖLÇÜLENLER
@@ -25,7 +26,8 @@
 //   §6 ⭐ `preShipStatus` NULL topa yeni ileri satır YAZILMAZ — yüklem bir SÜZGEÇ
 //      değil KANIT koşulu (çıkış ucunun statüsü uydurulamaz)
 //   §7 ⭐ SESSİZ ATLAMA YOK: stok kümesi DIŞI statüden sevk 4xx ile REDDEDİLİR.
-//      ⚠️ Reddeden kapı ÖLÇÜLDÜ: hayalet-top iddiası (400), stok defteri kapısı DEĞİL
+//      ⚠️ Reddeden kapı ÖLÇÜLDÜ (2026-09-13, bu bekçinin §7 koşumu): hayalet-top
+//      iddiası 400 döndürüyor, stok defteri kapısı DEĞİL
 //      — defterin §64 kontrolü bu yolda SON ÇARE ağı. Asıl iddia: eski kapının
 //      `hasWarehouseEnd` süzgeci geri GELMEDİ (K6).
 //   §8 POZİTİF KONTROL: fikstür gerçekten sevk etti (sevkiyat DISPATCHED, top SHIPPED)
