@@ -195,9 +195,10 @@ function main(): void {
         "  → sayıya TARİH ya da ÜRETEN KOMUT ekle"
       : "temiz",
   );
+  // ÖLÇEN YAZMAZ (1e hükmü): sıkışma ölçümdür, yan etki değil; tek yazma yolu --yaz
+  // (entegratör trende). Otomatik yazım commit kapısında kirli dosya bırakıyordu.
   if (kalkan.length && yeni.length === 0) {
-    console.log(`   ↓ küme sıkışıyor: ${taban.size} → ${dosyalar.length} (${kalkan.length} dosya nitelendirildi) — --yaz`);
-    writeFileSync(TABAN_DOSYA, `${JSON.stringify({ _not: "ÇIPLAK ölçüm iddiası taşıyan DOSYA kümesi — yalnız KÜÇÜLÜR. Ölçüm: --yaz", _agac: agacDamgasi(), dosyalar }, null, 2)}\n`);
+    console.log(`   ↓ küme sıkışıyor: ${taban.size} → ${dosyalar.length} (${kalkan.length} dosya nitelendirildi) — --yaz ile daralt (entegratör trende)`);
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

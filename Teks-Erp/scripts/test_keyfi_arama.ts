@@ -139,9 +139,11 @@ function main(): void {
         "  → fikstürünü İŞ ANAHTARIYLA kur (`code`/`username`), ortamda arama"
       : "temiz",
   );
+  // ÖLÇEN YAZMAZ (1e hükmü): sıkışma bir ÖLÇÜMDÜR, yan etki değil — taban yazımı
+  // entegratörün tren-sonu işi (KESIK/B/K sabitleriyle aynı düzen). Otomatik yazım
+  // commit kapısında sahnelenmemiş kirli dosya bıraktı (173→171); tek yol --yaz.
   if (kalkan.length && yeni.length === 0) {
-    console.log(`   ↓ küme sıkışıyor: ${taban.size} → ${uyeler.length} (${kalkan.length} çift fikstüre bağlandı) — --yaz`);
-    tabanYaz(uyeler, o);
+    console.log(`   ↓ küme sıkışıyor: ${taban.size} → ${uyeler.length} (${kalkan.length} çift fikstüre bağlandı) — --yaz ile daralt (entegratör trende)`);
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

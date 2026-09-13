@@ -212,9 +212,18 @@ const bulgular = tara([
  */
 const anahtar = (b: Bulgu): string => `${b.dosya}::${b.ad}`;
 const bugun = bulgular.map(anahtar).sort();
-if (!existsSync(TAVAN_DOSYA)) {
+// ÖLÇEN YAZMAZ (1e hükmü 2026-09-14): tek yazma yolu --yaz — kurulum da sıkışma da.
+// Otomatik yazım ⑳ sınıfıydı (taban AĞAÇTAN): commit kapısında sahnelenmemiş
+// kirli dosya, ortak ağaçta yabancı WIP'den sahte sıkışma. Taban yazımı
+// entegratörün tren-sonu işidir (KESIK/B/K sabitleriyle aynı düzen).
+if (process.argv.includes("--yaz")) {
   writeFileSync(TAVAN_DOSYA, JSON.stringify({ adlar: bugun }, null, 2) + "\n");
-  console.log(`   (taban dosyası kuruldu: ${bugun.length} devralınan ad)`);
+  console.log(`✍️  taban yazıldı: ${bugun.length} devralınan ad`);
+  process.exit(0);
+}
+if (!existsSync(TAVAN_DOSYA)) {
+  console.error("❌ taban dosyası yok — önce --yaz ile üret");
+  process.exit(1);
 }
 const taban = JSON.parse(readFileSync(TAVAN_DOSYA, "utf8")) as { adlar: string[] };
 const tabanKume = new Set(taban.adlar);
@@ -353,13 +362,10 @@ check(
       : "temiz",
 );
 
-// ⚠️ TABAN YALNIZ TAM KOŞUMDA SIKIŞIR. Kapsamı daraltılmış (hook) koşumda ağaç
-// BAŞKA OTURUMLARIN commit edilmemiş işini taşıyor; tabanı oradan yazmak, henüz
-// inmemiş bir durumu "devralınan" ilan etmek olurdu — ve o iş geri alınırsa taban
-// var olmayan adları taşır. Sıkışma bir ÖLÇÜMDÜR, yan etki değil.
-if (!KOMIT_KUMESI && kalkanlar.length > 0 && yeniler.length === 0) {
-  console.log(`   ↓ küme sıkışıyor: ${taban.adlar.length} → ${bugun.length} (${kalkanlar.length} ad çevrildi)`);
-  writeFileSync(TAVAN_DOSYA, JSON.stringify({ adlar: bugun }, null, 2) + "\n");
+// Sıkışma bir ÖLÇÜMDÜR, yan etki değil: burada yazılmaz (tek yol --yaz, yukarıda).
+// Eski hook-koruması ("kapsamlı koşumda yazma") tek yolla gereksizleşti, kalktı.
+if (kalkanlar.length > 0 && yeniler.length === 0) {
+  console.log(`   ↓ küme sıkışıyor: ${taban.adlar.length} → ${bugun.length} (${kalkanlar.length} ad çevrildi) — --yaz ile daralt (entegratör trende)`);
 }
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
