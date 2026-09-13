@@ -31,7 +31,8 @@ Karar hikâyeleri (tarih, ölçüm, hangi alternatif neden reddedildi) `docs/his
 | [`ESZAMANLILIK-ENVANTER.md`](ESZAMANLILIK-ENVANTER.md) | Kilit uzayı envanteri (§3) ve bilinen boşluklar (§6) — 2026-09-13'te `ESZAMANLILIK.md`'den bölündü, §3/§6 numaraları çapalar kopmasın diye korundu |
 | [`TEST-VE-DERLEME.md`](TEST-VE-DERLEME.md) | Ne zaman ne koşar, hangi kapı nerede (§1–§6) |
 | [`TEST-VE-DERLEME-SINIRLAR.md`](TEST-VE-DERLEME-SINIRLAR.md) | Bilinen sınırlar (§7) ve **bilerek kırmızı bekçiler** (§8) — paket kırmızı verdiğinde ilk bakılacak liste; her satır "kim kapatabilir" taşır |
-| [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | Ölçüm YÖNTEMİ: pozitif kontrol ↔ örnekle doğrulama, teşhis mesajı da bir yüklemdir, atıfta eşik, yapısal sonda, sayı yazma, **kapının ölüm biçimleri** |
+| [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | Ölçüm YÖNTEMİ: pozitif kontrol ↔ örnekle doğrulama, atıfta eşik, yapısal sonda, sayı/çapa/kimlik yazma, teşhis mi ölçüm mü |
+| [`OLCUM-DISIPLINI-KAPI.md`](OLCUM-DISIPLINI-KAPI.md) | Ölçümü KAPIYA çevirmek: mandal yazma, **kapının dokuz ölüm biçimi**, kırmızıyı sınıflandırma, yerel yeşil ↔ HEAD |
 | [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | KATMAN 1b — ölçümün **KURGUSU**: soru, kontrol grubu, ortam, deneyin kurulumu |
 | [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) | KATMAN 1a — ölçümün **ARACI**: desen, komut, ayrıştırıcı, aracın varsayılanı ve kapsamı |
 | [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) | Arıza sınıfı kataloğu **KATMAN 2** — ölçümden sonraki adım (*sayı doğru; ondan ÇIKARILAN ne?*); hiçbir pozitif kontrol bu katmanı yakalamaz |

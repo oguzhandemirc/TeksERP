@@ -17,6 +17,12 @@ Buradaki kurallar **mekanik değildir ve mekanikleştirilemez** — tek kullanı
 
 > **Her ölçümü raporlarken NEYİ ölçtüğünü ve NASIL doğruladığını yaz.**
 
+> ⚠️ **Bir ölçümü KAPIYA çevirmek ayrı bir iştir ve ayrı dosyadadır:**
+> [`OLCUM-DISIPLINI-KAPI.md`](OLCUM-DISIPLINI-KAPI.md) — mandal yazma · kapının ölüm
+> biçimleri · kırmızıyı sınıflandırma · yerel yeşil ↔ HEAD · "kapalıdır" diyen cümle ·
+> ölçüm bir kararı değiştirebiliyor mu. **Burası ölçümün NASIL YAPILDIĞI ve NASIL
+> YAZILDIĞI**; orası ölçümün NASIL ZORLANDIĞI.
+
 ## Kurtarıcı kurallar — birbirinin tersi, ikisi de üç saniye
 
 ```
@@ -166,61 +172,6 @@ mi, "bugün böyle" mi?*
 `dosya:satır`dan DAHA belirsiz bir yere işaret ediyordu, 1'i sahte eşleşmeydi —
 gösterdiği sembol o dosyada hiç geçmiyordu. Dönüşüm işi bu ölçümle İPTAL edildi.)*
 
-## Mandal (tavan) yazma
-
-Bir mandal — `devralınan: N`, `lint-baseline.json`, herhangi bir "yalnız düşer" sayısı —
-iki kuralla hareket eder:
-
-> **Mandal yalnız SIKILAŞTIRAN yönde ve yalnız AZ ÖNCE ÖLÇÜLEN değere hareket eder.**
-
-**Yükseltmek ihlali ONAYLAMAK, düşürmek kazanımı KİLİTLEMEKTİR** — ve düşürme
-**düzeltmeyle AYNI commit'te** olur, yoksa kazanım bir sonraki eklemede sessizce geri
-verilir. *(1e)*
-
-> **Bir mandalın tabanı, ihlali ADIYLA söyleyebiliyorsa SAYI değil KÜME olmalıdır.**
-> Ön koşul: küme üyelerinin **sabit kimliği** olmalı. *(d5 ve ea, bağımsız olarak aynı
-> sonuca vardı.)*
-
-*Vakalar:* `lint-baseline` **"455 > 454"** dedi — hangi fonksiyon olduğu ARANARAK
-bulundu · `test_quality_code_literal` **"217 > 216"** dedi — kaynağın kendi düzeltmesi
-olduğu ARANARAK bulundu. Karşı örnek: `test_identifier_language` tabanı **adlarla**
-tuttu, teşhis sıfır saniye sürdü.
-
-⚠️ **Ters tuzak:** `dosya::satır` bir küme GİBİ görünür ama üyelerinin sabit kimliği
-YOKTUR — satır kayar, küme değişir, kapı gürültü üretir. Ve **gürültülü bir kapı, körü
-körüne güncellenerek ölür** (kapının dokuzuncu ölüm biçimi).
-
-## "Kapalıdır" diyen cümle kapıyı adıyla taşır
-
-> **Bir belgede *"tamdır / kapalıdır / artık olmuyor"* diyen her cümle, onu kapalı
-> tutan KAPIYI adıyla taşır; taşımıyorsa cümle bir ÖLÇÜM değil bir ANIDIR.** *(1e)*
-
-Kapısı yazılmayan bir "kapandı" cümlesi, yazıldığı gün doğrudur ve ertesi gün
-yanlışlanamaz hâle gelir.
-
-**Ve "kapısı var" demek yetmez — ÜÇ AYRI DURUM vardır, üçü aynı görünür:**
-
-| Durum | Ne var, ne yok | Düzeltme |
-|---|---|---|
-| **DİLEK** — hiç uygulanmamış kural | cümle var, uyum ÖLÇÜLMEMİŞ | ölç, sonra kuralı gerçeğe göre yaz |
-| **KAPISIZ SAYI** — mandal düzyazıda | sayı var, onu okuyan kapı YOK | kapıyı kur; sayıyı GÜNCELLEME (bkz. § Mandal) |
-| **YANLIŞ ADLA ANILAN GERÇEK KAPSAM** | kapsam VAR, atıftaki ad yanlış | **atfı düzelt** — kapı yazma |
-
-*(Üç vaka, 2026-09-13: `ILKELER.md` tanımlayıcı kuralı — 876 ad, hiç ısırmamış · `devralınan:`
-tavanları — kapısızken 18→30 ve 53→78, `be330599` ile kapandı · `test_surum_notlari.ts` —
-üç yerde anılıyor, YOK; ama kapsamı `Electron/src/lib/surum-notlari.test.ts` ve
-`scripts/check-surum-notlari.mjs` olarak VAR.)*
-
-⚠️ **Üçüncüsü en tehlikesiz görünüp en çok zaman yiyendir:** okuyan bekçiyi arar, bulamaz,
-**yazmaya kalkar** ve var olanı İKİZLER.
-📌 Panzehir: **bir bekçi adını belgeye yazmadan önce `git ls-files | grep` ile varlığını
-ÖLÇ** — çıkış kodunu okuyarak, `2>/dev/null` yazmadan (bkz. `OLCUM-DISIPLINI-ARAC.md`
-§ Boş çıktı bir ÖLÇÜM değildir).
-
-⚠️ **Ve dördüncü, en sinsi hâli:** ***zorlaması OLAN ama hiç ISIRMAYAN kural, ölçülüyor
-SANILIR*** — dilekten tehlikelidir, çünkü `zorlama:` etiketi okuyanı rahatlatır. *(d9:
-`ILKELER.md`'nin bekçisi 106 commit boyunca giren 32 Türkçe adın SIFIRINI gördü.)*
-
 ## Kimlik yazma — repo PUBLIC
 
 Ölçüldü 2026-09-13: depo **herkese açık** (`gh repo view` → `visibility: PUBLIC`).
@@ -234,137 +185,6 @@ Belgelerdeki ölçümler bu yüzden iki farklı sınıfa ayrılır:
 
 Ayırt etme yöntemi: *bu dizgeyi bir yabancı okuduğunda fabrikanın hangi kaydına
 işaret ettiğini bulabilir mi?* Bulabiliyorsa kimliktir ve çıkar.
-
-## Kapının ölüm biçimleri
-
-Ölçümü kapıya çevirirken hepsini birden gözet; hepsi kapıyı **kaldırmadan**
-işlevsizleştirir. Aşağıdaki numaralar **bu listenin sırasıdır, kalıcı kimlik
-DEĞİL** — sıra iki oturumda çakıştı; bir kapı ölümü ADIYLA anılır.
-
-1. **Yanlış kırmızı** — doğru işte kırmızı verirse ilk hafta devre dışı bırakılır.
-2. **Yavaşlık** — bedel değişenle orantılı olmaktan çıkarsa kaçış kullanılmaya
-   başlanır.
-3. **Gürültü** — çıktısı okunmayacak kadar uzunsa ikinci gün göz ardı edilir.
-   **Doğru olması kurtarmaz.**
-4. **Erken sertlik** — tavsiye olması gereken bir ölçüm kapıya çevrilirse kural
-   tümden sökülür.
-5. **Okunmayan tavsiye** — çıktısı kimsenin bakmadığı yere düşen tavsiye hiç yoktur.
-6. **Doğru davranışı pahalı kılmak** — başka bir kurala uyanı cezalandıran kapı,
-   o kuralın terk edilmesini öğretir. *(Vaka: ortak ağaç disiplini gereği pathspec
-   ile commit atan kişiyi, kapının kendisi durduruyordu.)*
-7. **Koruduğu şeyle İLGİSİZ bir sebeple SESSİZCE ölmek** — aşağıda; ilk altıdan
-   ayrı bir sınıftır çünkü **ilk altısında kapı KOŞUYORDU**.
-8. **Uzakta hiç AÇILMAMAK — ve gürültülü ölmek** — aşağıda; 7'den farkı sesidir.
-9. **Gürültülü taban** — ihlali ADIYLA söyleyemeyen bir mandal (`455 > 454`) her
-   kırmızıda arama gerektirir; maliyet teşhisten büyür ve taban **körü körüne
-   güncellenmeye** başlar. Kapı koşar, sayı doğrudur, koruduğu şey erir. Panzehir
-   § Mandal (tavan) yazma'da: taban sayı değil KÜME olsun. *(d5/ea)*
-
-İlk üçünde kapı yanlış davranır; *gürültü*de doğru davranır ve yine ölür;
-*doğru davranışı pahalı kılmak*ta **kapı doğru, kurban haklı**. Yedincide kapı hiç
-koşmaz.
-
-⚠️ **`okunmayan tavsiye`nin alt maddesi — ölçüldü 2026-09-13:** *bir uyarıyı OKUMAK
-ölçüm sayılmaz; okumamak ise mazeret değildir.* **Yazılı bir uyarı bir kapı
-değildir** — aynı gün dört kez doğrulandı: `check-migrations` `[ADVISORY] RESTRICT` ·
-`roll-entry-station.helper` başlığı · `roll-step.helper` salınım notu · kök
-`CLAUDE.md`'nin cleanup sırası kuralı. Dördü de yazılıydı, dördü de okunmamıştı.
-
-### ⑦ Kapı, koruduğu şeyle ilgisiz bir sebeple sessizce ölebilir
-
-Ölçüm (2026-09-13; 36 oturum günlüğü / 150.712 satır, `toolUseID` ile kesin eşleme):
-`.claude/settings.json:23` komut kapısını **göreli yolla** çağırıyor; kabuk depo
-kökünden kaydığı an node dosyayı bulamıyor ve Claude Code hatayı **NON-BLOCKING**
-sayıyor. **4.962 ölü-kapı olayı · 24 ayrı yanlış dizin.** O komutların 27'si bir
-yasağa uyuyordu; **23'ü desenin yanlış pozitifi**, 4'ü gerçek DB düşürmeydi (dördü de
-oturumun kendi sonda DB'si). **Canlı veri kaybı ÖLÇÜLMEDİ.**
-
-> **Yapılandırılmış bir kapı da bir kapı DEĞİLDİR — koştuğu ölçülmedikçe.**
-
-⚠️ **Bir kapının ölü olduğunu, o kapının KENDİ ÇIKTISINDAN öğrenemezsin.** Ölü kapı
-çıktı üretmez; ölçüm dışarıdan, oturum günlüklerinden geldi.
-
-⚠️ **Fail-open yapılandırmayla kapatılamaz** (platform sınırı): yalnız çıkış kodu 2
-engeller, **başlatılamayan kanca daima non-blocking**tir. Tek kalıcı koruma
-yapılandırmanın DOĞRULUĞUNU ölçmektir — `Teks-Erp/scripts/test_hook_config.ts`
-(`1e364f1b`), bugün bilerek kırmızı: `TEST-VE-DERLEME-SINIRLAR.md` §8.
-
-## Yerel yeşil, BAŞKASININ commit edilmemiş düzeltmesi olabilir
-
-Bir commit kapısı **çalışma ağacını** okur; CI **HEAD'i** okur. Ortak ağaçta ikisi aynı
-şey değildir: bir eş oturumun henüz **commit etmediği** düzeltmesi senin koşumunu
-yeşile boyar, ama commit'in HEAD'e indiğinde o düzeltme orada YOKTUR.
-
-> **Bir kapıyı, kapatacağı ihlal HEAD'de AÇIKKEN indirme** — yerel yeşil yeterli
-> değildir, ihlalin **commit edilmiş** olduğu ölçülür.
-
-*(Vaka 2026-09-13: kimlik tekilliği kapısı çalışma ağacında yeşildi çünkü bir eş oturum
-çakışan kimliği düzeltmişti; HEAD'de çakışma DURUYORDU. Kapı o hâlde inseydi ilk CI
-koşumunda kırmızı verecek ve düzeltmeyi yapan değil, **ondan sonra commit atan herkes**
-cezalanacaktı.)*
-
-**Ölçüm:** yüklemini çalışma ağacına değil `git show HEAD:<yol>` içeriğine uygula.
-Kardeşleri § Zengin kontrol grubu ve § Pencerenin BOŞ olduğunu ölçmek
-(`OLCUM-DISIPLINI-SINIFLAR.md`).
-
-## Kırmızıyı sınıflandırma
-
-`gerçek kusur · testin kendi hatası · çevresel · yapısal olarak ölçülemez`
-
-Dördüncüsü düzeltilecek bir şey değildir; "gerekçesi ölçülmüş atlama"nın karşılığıdır.
-**Etiketi ölçmeden yapıştırma** — çevresel olan düzeltilebilir, yapısal olan yalnız
-başka bir ortamda ölçülebilir; ikisini ayırmadan verilen hüküm ya gerçek bir kusuru
-gizler ya çalışan bir kapıyı gevşetir.
-
-⚠️ **`ARALIKLI` (flaky) bir teşhis DEĞİL, sebebi BULAMAYINCA varılan sınıftır.**
-Aramadan varılırsa teşhis değil, **teşhisi erteleyen bir etikettir**. *(1e, kendi
-hükmünü daraltarak.)*
-
-> **Bayat KIRMIZI, bayat yeşilden PAHALIDIR.** Bayat yeşil yanlış güven verir; bayat
-> kırmızı **var olmayan bir işi kuyruğa koyar** ve bir oturumu ona bağlar. *(d9)*
-
-### ⑧ Uzaktaki kapı, ürünle ilgisiz bir sebeple HİÇ açılmayabilir
-
-Faturalandırma · kota · izin — uzak koşucu işi **başlatmaz**, ama koşum **KIRMIZI
-raporlar**. ⑦'den farkı tam burada: ⑦ sessizce ölür, **⑧ gürültülü ölür ve gürültüsü
-onu CANLI gösterir.**
-
-**Ölçüm (2026-09-13 01:0x, `gh run list` ile bağımsız doğrulandı):** son başarılı koşum
-**2026-08-10 09:50 → 10:02 (11 dk 49 sn)**; ondan 2026-09-13 00:48'e kadar koşumların
-hepsi FAILURE ve **3–39 saniye** sürmüş (gerçek paket ~6,5 dk). Altı job'un altısı
-*"The job was not started because recent account payments have failed…"* ile hiç
-başlamamış. ⇒ **34 gün boyunca uzakta hiçbir test koşmadı.**
-
-> **Koşum SÜRESİ bir sağlık göstergesidir.** 6,5 dakikalık bir paketin 3 saniyede
-> kırmızı vermesi testin değil **KAPININ** raporudur.
-
-> **VAKA KAPANDI — 2026-09-13.** Sınıf geçerli, vakası bitti: 00:55:34'te başlayan
-> koşum (`8f68c367`) altı job'u da gerçekten çalıştırdı. Pencere **2026-08-10 →
-> 2026-09-13 00:48**'dir ve *"CI ölü"* cümlesi bugünden sonra ŞİMDİKİ ZAMANDA
-> kurulamaz.
-
-⚠️ Bu, § Geç ölçüm sınıfının **bu belge yazılırken yaşanmış** örneğidir: ortam
-ölçümün kendisi sırasında değişti, ve ilk yazım şimdiki zamanlı olsaydı aynı gün
-bayatlayacaktı.
-
-⚠️ **Ve kapı açılır açılmaz iş gördü:** 34 günün ilk gerçek koşumunda `Mobil (tsc +
-jest)` KIRMIZI verdi. Ölü kapının gizlediği kusurlar, kapı açıldığı gün toplu gelir —
-*kapının kapalı olduğu süre, biriken kusurun ölçüsüdür.*
-
-⚠️ **O 34 gün boyunca push öncesi tek gerçek kapı yerel `npm test`ti.** Bu, *"bir
-tasarımın 'arka durağı var' cümlesi de bir İDDİADIR"* kuralının en pahalı örneği: aynı
-hafta `.githooks/`te `pre-push` olmadığı ölçülmüştü — **aynı iddia bir kat yukarıda da
-yanlışmış.** Arka durak varsayımı iki katmanda birden çürüdü.
-
-## Ölçüm bir KARARI değiştirebiliyor mu
-
-> **Ölçüm ile eylem AYNI atomik adımdaysa, ölçüm kararı değiştiremez — yalnız kayda
-> geçer.** Kendisinden sonra geleni durduramayan bir kapı, kapı değil **GÜNLÜKTÜR**.
-> *(6e)*
-
-**Ve ölçümün VARLIĞI, ölçümün işe yaradığının kanıtı değildir** *(6e)*: yanlış DB ·
-yanlış mekanizma · yanlış zamanlama — üçü de *"ölçüm yapıldı"* satırını sorunsuz geçer.
-Sorulacak şey *"ölçtüm mü"* değil, ***"bu ölçüm yanlış bir dünyada FARKLI çıkar mıydı"***.
 
 ## Teşhis mi, ölçüm mü — kurala çevirmeden önce
 
