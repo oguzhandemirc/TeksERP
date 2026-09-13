@@ -93,6 +93,7 @@ let pass = 0;
 let fail = 0;
 const ok = (m: string) => { pass++; console.log(`  ✅ ${m}`); };
 const no = (m: string) => { fail++; console.log(`  ❌ ${m}`); };
+const ok2 = (m: string, k: boolean) => (k ? ok(m) : no(m));
 
 const oku = (rel: string) => (existsSync(path.join(REPO, rel)) ? readFileSync(path.join(REPO, rel), "utf8") : "");
 const git = (...a: string[]) => execFileSync("git", a, { cwd: REPO, encoding: "utf8" });
@@ -152,6 +153,37 @@ function yonA(taban: string) {
 }
 
 // =============================================================================
+/**
+ * (BÖLÜM, bekçi) çifti başına HARİTA SATIRI sayısı.
+ *
+ * ⚠️ `Set` DEĞİL, ve körlük tam oradaydı: §2'nin kendi `haritaBolum` yapısı bölüm
+ * başına bir `Set` tutuyor ⇒ aynı bölümde aynı bekçi iki kez yazılırsa ikinci
+ * satır HİÇBİR kontrole ulaşmadan silinir. `test_weaving_order` `## dokuma`
+ * bölümünde iki kez kayıtlıydı ve hizalama sayısını ("549 = 549") hiç bozmadı;
+ * elle bulundu (d9, 2026-09-14). *Bir kapının kör noktası yükleminde değil,
+ * VERİ YAPISI seçiminde olabilir.*
+ *
+ * ⛔ YÜKLEM "ad başına ≤1" DEĞİL: bir bekçinin İKİ AYRI bölümde satırı olması
+ * BİLİNÇLİDİR (0c ölçtü: `test_dokuma_regime_gate` `## modul-bayrak` + `## dokuma`).
+ * Ad bazlı yüklem bugün **373 yanlış pozitif** üretirdi (ölçüldü 2026-09-14:
+ * 373 bekçi birden çok bölümde geçiyor, `test_audit_followups` altı bölümde).
+ * ⇒ Yüklemin ilk hâli ÇÜRÜTÜLDÜ ve kapsam bölüme daraltıldı.
+ */
+export function bolumSatirSayilari(haritaMetni: string): Map<string, number> {
+  const say = new Map<string, number>();
+  let bolum: string | null = null;
+  for (const line of haritaMetni.split("\n")) {
+    const m = /^##\s+([a-z0-9-]+)\s*(\(\d+\))?\s*$/.exec(line);
+    if (m) { bolum = m[1]; continue; }
+    if (!bolum || !line.startsWith("|")) continue;
+    const ad = /\bscripts\/(test_[a-z0-9_]+)\.ts\b/.exec(line)?.[1];
+    if (!ad) continue;
+    const k = `${bolum}::${ad}`;
+    say.set(k, (say.get(k) ?? 0) + 1);
+  }
+  return say;
+}
+
 // YÖN B — gerçekte var olan üye kümede yok
 // =============================================================================
 function yonB() {
@@ -285,6 +317,17 @@ function yonB() {
     console.log(`  ⚠️  [ADVISORY] ${uyarilar.length} bekçi haritada bir kovada ama HİÇBİR alan koşum listesinde yok`);
     console.log(`      (alan dosyası olmayan harita bölümleri; bilinen borç, kapıyı KIRMIZI yapmaz)`);
   }
+  // ── §2c (BÖLÜM, bekçi) başına ≤1 satır — SERT, taban 0 (borçsuz kapı) ──────
+  const cift = bolumSatirSayilari(haritaMetni);
+  const mukerrer = [...cift].filter(([, n]) => n > 1).map(([k, n]) => `${k} ×${n}`);
+  if (mukerrer.length === 0) ok(`§2c (bölüm, bekçi) başına tek satır (${cift.size} çift)`);
+  else no(`§2c ⭐ AYNI BÖLÜMDE MÜKERRER satır: ${mukerrer.join(" · ")} ⇒ birleştir (§2'nin \`Set\`i bunu GÖREMEZ)`);
+  // Sondalar — yüklem hem ısırmalı hem BİLİNÇLİ çift satırı geçirmeli.
+  const sondaKirmizi = bolumSatirSayilari("## a\n| `scripts/test_x.ts` |\n| `scripts/test_x.ts` |\n");
+  ok2("§2c sonda: aynı bölümde iki kez → yakalanır", [...sondaKirmizi.values()].some((n) => n > 1));
+  const sondaYesil = bolumSatirSayilari("## a\n| `scripts/test_x.ts` |\n## b\n| `scripts/test_x.ts` |\n");
+  ok2("§2c sonda: İKİ AYRI bölümde aynı ad → geçer (0c'nin bilinçli çifti)", [...sondaYesil.values()].every((n) => n === 1));
+
   if (hatalar.length === 0) ok(`bekçi kümesi hizalı (${gercek.size} gerçek · ${haritaAdlar.size} haritada)`);
   else {
     // ⚠️ İKİ SINIF AYRI SAYILIR (2026-09-13). Tek toplam basıldığında sayı
