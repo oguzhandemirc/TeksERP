@@ -58,6 +58,7 @@ import { releaseAllocationsForInvoiceTx } from "./payment-allocation.service";
 // D2 — kalem fiyatı ÇÖZÜM SIRASININ TEK KAYNAĞI. Sıra burada KOPYALANMAZ.
 import { resolveItemPricesFor } from "./item-price.service";
 import { describeContractPricing, loadContractPrices } from "./helpers/contract-price.helper";
+import { receiptQtyByRollTx, receiptQtyWarning } from "./helpers/receipt-qty.helper";
 // Sınıf 5 — fişin satırları TEK KAYNAK assembler'dan okunur; `rolls`/`yarnMovements`
 // tablolarına doğrudan gitmek (eski davranış) her tüketicide ayrı bir "hangi
 // tablo" kararı doğuruyordu. (Döngü yok: goods-receipt.service bu dosyayı
@@ -461,8 +462,10 @@ export class InvoiceService {
    * (softDelete qtyOut=0 semantiği) — faturaya girerse gelmeyen mala para
    * ödenir.
    *
-   * ⚠️ Miktar `currentQty` DEĞİL `initialQty`: fatura MAL KABUL ANINI belgeler;
-   * top sonradan kesilir/sevk edilirse tedarikçiye borcumuz değişmez.
+   * ⚠️ Miktar `currentQty` DEĞİL, KABUL-ANI metrajı (`receiptQtyByRollTx`, depo
+   * defteri ENTRY satırı): fatura MAL KABUL ANINI belgeler; top sonradan
+   * kesilir/sevk edilirse tedarikçiye borcumuz değişmez. Topun giriş metrajı
+   * kolonu da olmaz — tambur geri alması onu aşımda yukarı çeker (hüküm §10.6).
    */
   async createDraftFromGoodsReceipt(
     goodsReceiptId: string,
@@ -606,6 +609,14 @@ export class InvoiceService {
     const contract = await loadContractPrices(receipt.purchaseOrderId);
     const contractPriceOf = (itemId: string): Prisma.Decimal | null => contract.priceOf(itemId);
 
+    // Kabul-anı metrajı TEK KAYNAKTAN (hüküm §10.6): tek sorgu, fişteki her top.
+    const receiptQty = await receiptQtyByRollTx(prisma, fabricLines.map((l) => l.id));
+    const qtyOf = (rollId: string): Prisma.Decimal => {
+      const q = receiptQty.get(rollId);
+      if (!q) throw AppError.conflict("Fiş topunun kabul metrajı okunamadı — listeyi yenileyip tekrar deneyin.");
+      return q.qty;
+    };
+
     const groups = new Map<
       string,
       { itemId: string; description: string; qty: Prisma.Decimal; unitPrice: Prisma.Decimal; unit: string }
@@ -616,12 +627,12 @@ export class InvoiceService {
       const key = `${r.itemId}|${r.colorName ?? ""}|${price.toString()}`;
       const existing = groups.get(key);
       if (existing) {
-        existing.qty = existing.qty.plus(D(r.initialQty));
+        existing.qty = existing.qty.plus(qtyOf(r.id));
       } else {
         groups.set(key, {
           itemId: r.itemId,
           description: r.colorName ? `${r.itemName} · ${r.colorName}` : r.itemName,
-          qty: D(r.initialQty),
+          qty: qtyOf(r.id),
           unitPrice: price,
           // Etiket tek sözlükten: "MT" enum kodu belgeye "m" olarak basılır.
           unit: unitLabel(r.itemUnit),
@@ -722,7 +733,10 @@ export class InvoiceService {
       pricedItems: contract.pricedItems.size,
       conflictItems: contract.conflictItems.size,
     });
-    return priceNote ? { ...created, message: `${created.message ?? ""}${priceNote}` } : created;
+    const draft = priceNote ? { ...created, message: `${created.message ?? ""}${priceNote}` } : created;
+    // Ufuk-öncesi fiş topu: kabul metrajı defterden değil giriş kolonundan okundu — beyan.
+    const receiptQtyNote = receiptQtyWarning(receiptQty);
+    return receiptQtyNote ? { ...draft, warnings: [...(draft.warnings ?? []), receiptQtyNote] } : draft;
   }
 
   /**
@@ -750,7 +764,7 @@ export class InvoiceService {
       });
       if (dup) {
         throw AppError.conflict(
-          `${label} için zaten bir fatura var: ${dup.docNo} (${dup.status === "DRAFT" ? "taslak" : "onaylı"}). Yeni fatura için önce onu iptal edin.`,
+          `${label} için zaten bir fatura var: ${dup.docNo} (${dup.status === "DRAFT" ? "draft" : "onaylı"}). Yeni fatura için önce onu iptal edin.`,
         );
       }
     }

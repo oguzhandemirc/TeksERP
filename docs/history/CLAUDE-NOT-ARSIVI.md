@@ -8588,3 +8588,44 @@ aday DÜŞER · geçici dizinde `data: { preShipStatus: null }` yazan dosya → 
 DB'li dört (`--probe` §27a · §27c · §27g · §28a, tx içinde ROLLBACK). Kapı `test_snapshot_kolonlari`
 13/0, `test_consistency_derived` 43/0 (sonda DB `tekserp_6e3_test`).
 
+
+## 2026-09-13 — Kabul-anı okuyucuları (§10.6): formül çürüdü, kaynak depo defterinin ENTRY satırı [ÇEKİRDEK]
+
+**Olgu (1c §6, 9b sondası):** alış faturası taslağı (`createDraftFromGoodsReceipt`) ve alış siparişi
+karşılaması (`computeReceivedByItemTx`) "fatura MAL KABUL ANINI belgeler" diyerek `Roll.initialQty`
+okuyordu; tambur geri alması aşımlı kesimde `initialQty`yi yukarı çeker (`restoreBumpTx`). Gerçek fiş
+topuyla ölçüldü (100 m → `cutWarehouseRoll` 40·40·40 → SINGLE geri almalar): tümü geri alınınca
+`initialQty` 120 ve **taslak 120, karşılama 120**; yeniden kesimde de 120 kalır.
+
+**Hükümdeki formül ÇÜRÜDÜ:** `initialQty − Σ canlı TAMBUR OVERAGE` altı durumun DÖRDÜNDE yanlış
+(3 kesim çocuklar canlı → 80 · 3./2. çocuk geri, bump yok → 80 · yeniden kesim → 90); yalnız "kabul"
+ve "tümü geri" durumlarında 100. Sebep: keşif (`TAMBUR_OVERCUT`) KESİM anında yazılır, bump GERİ ALMA
+anında doğar; `restoreBumpTx`in "Σ bump = Σ keşif" cebri yalnız bütün çocuklar geri alınmış duruma
+özgüdür. Aynı sebeple `test_consistency §33` (initialQty = giriş + Σ canlı aşım) canlı-çocuklu ve
+yeniden-kesilmiş ebeveynde kırmızı verir; fabrika kopyasında yeşil kalması kapsamının BOŞ olması
+(giriş ucu terslenmemiş aşımlı top 0/72) — 6e'ye iletildi. "OVERCUT'ı yalnız geri alınmış çocuğuyla
+say" atfı da kısmi geri almada (bump'sız) düşer.
+
+**Hüküm (1e, şık B — C yazılmayacak):** "kabul anı metrajı" bir NE OLDU'dur ve defterde zaten yazılı; `initialQty`
+DURUM kolonudur, para okuyucusu durumdan türetilmez. `createInitialEntry` fiş topuna depo defteri ENTRY
+satırı yazar (`ENTRY_RECEIPT`, `goodsReceiptId`) — altı durumun altısında 100. Tek helper
+`helpers/receipt-qty.helper.ts` `receiptQtyByRollTx(tx, rollIds) → Map<rollId,{qty,source}>` = ENTRY +
+Σ `ENTRY_CORRECTION` (işaretli; yazıcı `applyManualProperties`, 6e diliminde; sabit ilk günden). ÜÇ SONUÇ
+fail-closed: satır var → defter · satır yok ∧ ufuk öncesi → `initialQty`, source `INITIAL_QTY_FALLBACK`,
+iki yüzeyde `ApiResponse.warnings` cümlesi · satır yok ∧ ufuk sonrası → 409 `RECEIPT_LEDGER_ROW_MISSING`
+(K=0 kapısı delinmiş demektir; para okuyucusu sessiz geçmez). Ufuk tek kaynak `src/constants/ledger-horizon.ts`
+(`LEDGER_HORIZON_DAY = "2026-09-13"`, `test_consistency` DEFTER_UFKU oradan). `adjustRollQty` initialQty
+yazmıyor ⇒ MANUAL_ADJUST toplanmaz (bugünkü davranış). tambur.md:27 / top-duzeltme.md:20 DEĞİŞMEZ. Fabrika kopyası: `goods_receipts` 0 · `purchase_orders` 0 · fiş topu 0 ⇒ etkilenen 0;
+sürüm notu KOŞUL diliyle (ea). Delik (6e §4g): `applyManualProperties` (bütün topta
+`currentQty = initialQty = m`) deftere satır yazmıyor ve `MIKTAR_YOLLARI`nda yok — o yol bağlanınca helper
+ENTRY + düzeltme satırlarını toplar; o güne kadar düzeltilmiş fiş topunda defter düzeltme-öncesini söyler.
+Masadaki ikinci şık (ölçülmedi): bump'ı keşif anına taşımak (kesimde `initialQty += aşım`) formülü ve
+§33'ü her durumda doğru kılar ama "kesim initialQty'ye dokunmaz" kuralını çevirir — 6e/1e hükmü.
+
+**Bekçi:** `test_receipt_qty_readers` (gerçek fiş + PO, altı durum × iki okuyucu = 100 + uyarı yok; §E/§F
+ikinci fişle üç sonuç: ufuk-öncesi yedek + iki yüzeyde warnings · ufuk-sonrası iki yüzeyde 409; doğduğu gün
+11/4 — §D1/§D2/§G1/§G2 kırmızı, düzeltmeyle yeşil) · `test_receipt_qty_single_source` (DB'siz: helper üç
+ihraç + ENTRY/ENTRY_CORRECTION/ufuk okuyor, iki okuyucu import ediyor, kodda çıplak `initialQty` yok; yüklem
+üç biçimi görür, şerhi görmez — kendi sondası). Negatif sondalar
+(cp+sha256): helper `initialQty`ye döndürüldü → 4 ❌ · ③ dalı fail-open → §F1/§F2/§F3 ❌ · taslak uyarısı
+düşürüldü → §E3 ❌ · PO'ya `_sum initialQty` geri → §2 ❌ · invoice import silindi → §1 ❌. Komşular: goods_receipt_invoice 38/0 · purchase_order 122/0 · finance_invoice 46/0.

@@ -93,6 +93,7 @@ import {
   type ResolvedSupplierParty,
 } from "./helpers/supplier-party.helper";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
+import { receiptQtyByRollTx, receiptQtyWarning } from "./helpers/receipt-qty.helper";
 import type { ApiResponse } from "../types/api.types";
 import { uyari } from "../lib/logger";
 
@@ -177,6 +178,8 @@ export interface PurchaseOrderSyncResult {
   status: PurchaseOrderStatus;
   /** Senkron gerçekten bir şey değiştirdi mi (idempotent tekrarda `false`). */
   changed: boolean;
+  /** Ufuk-öncesi fiş topu: kabul metrajı defterden değil yedekten okundu (hüküm §10.6). */
+  warnings?: string[];
   lines: PurchaseOrderSyncLine[];
   /** Fazla kabul edilen kalemlerin `lineNo`'ları — çağıran bunu mesaja basar. */
   overReceiptLines: number[];
@@ -221,9 +224,11 @@ async function nextPurchaseOrderNo(tx: Prisma.TransactionClient, date: Date): Pr
  * `YarnMovement` satırlarından (kg) gelir. Yalnız birine bakmak, ipliği de
  * satan bir kurulumda siparişin YARISINI sessizce "hiç gelmedi" gösterirdi.
  *
- * ⚠️ TOPTA `initialQty` KULLANILIR, `currentQty` DEĞİL: sipariş KABUL ANINI
- * ölçer. Top sonradan kesilir/sevk edilirse tedarikçiye ısmarladığımız miktar
- * değişmez (alış faturasının `initialQty` seçmesiyle aynı gerekçe).
+ * ⚠️ TOPTA KABUL-ANI METRAJI KULLANILIR (`receiptQtyByRollTx`, depo defteri
+ * ENTRY satırı), `currentQty` DEĞİL: sipariş KABUL ANINI ölçer. Top sonradan
+ * kesilir/sevk edilirse tedarikçiye ısmarladığımız miktar değişmez (alış
+ * faturasıyla aynı kaynak, hüküm §10.6). Topun giriş metrajı kolonu da olmaz:
+ * tambur geri alması onu aşımda yukarı çeker ve karşılama şişerdi.
  *
  * ⚠️ İPTAL FİŞ KAYNAKTAN DÜŞER (`status: ACTIVE` süzgeci) — iptal "bu mal hiç
  * gelmedi" demektir; saymak, gelmemiş malı gelmiş göstermek olurdu.
@@ -237,7 +242,7 @@ async function nextPurchaseOrderNo(tx: Prisma.TransactionClient, date: Date): Pr
 async function computeReceivedByItemTx(
   tx: Prisma.TransactionClient,
   purchaseOrderId: string,
-): Promise<Map<string, Prisma.Decimal>> {
+): Promise<{ byItem: Map<string, Prisma.Decimal>; warning: string | null }> {
   const out = new Map<string, Prisma.Decimal>();
 
   const receipts = await tx.goodsReceipt.findMany({
@@ -245,18 +250,18 @@ async function computeReceivedByItemTx(
     select: { id: true },
   });
   const receiptIds = receipts.map((r) => r.id);
-  if (receiptIds.length === 0) return out;
+  if (receiptIds.length === 0) return { byItem: out, warning: null };
 
   const add = (itemId: string, delta: Prisma.Decimal): void => {
     out.set(itemId, (out.get(itemId) ?? ZERO).plus(delta));
   };
 
-  const rollRows = await tx.roll.groupBy({
-    by: ["itemId"],
+  const rolls = await tx.roll.findMany({
     where: { goodsReceiptId: { in: receiptIds }, status: { not: RollStatus.CANCELLED } },
-    _sum: { initialQty: true },
+    select: { id: true, itemId: true },
   });
-  for (const row of rollRows) add(row.itemId, row._sum.initialQty ?? ZERO);
+  const receiptQty = await receiptQtyByRollTx(tx, rolls.map((r) => r.id));
+  for (const r of rolls) add(r.itemId, receiptQty.get(r.id)?.qty ?? ZERO);
 
   const yarnRows = await tx.yarnMovement.groupBy({
     by: ["itemId", "kind"],
@@ -270,7 +275,8 @@ async function computeReceivedByItemTx(
   }
 
   for (const [itemId, value] of out) if (value.lt(0)) out.set(itemId, ZERO);
-  return out;
+  // Ufuk-öncesi fiş topu: kabul metrajı yedekten okundu — beyan yukarı taşınır.
+  return { byItem: out, warning: receiptQtyWarning(receiptQty) };
 }
 
 interface LineRow {
@@ -346,7 +352,7 @@ export async function syncPurchaseOrderTx(
     lines: LineRow[],
     status: PurchaseOrderStatus,
     changed: boolean,
-    unmatchedItemIds: string[] = [],
+    extra: { unmatchedItemIds?: string[]; warning?: string | null } = {},
   ): PurchaseOrderSyncResult => {
     const mapped = lines
       .sort((a, b) => a.lineNo - b.lineNo)
@@ -358,7 +364,8 @@ export async function syncPurchaseOrderTx(
       changed,
       lines: mapped,
       overReceiptLines: mapped.filter((l) => l.over).map((l) => l.lineNo),
-      unmatchedItemIds,
+      unmatchedItemIds: extra.unmatchedItemIds ?? [],
+      ...(extra.warning ? { warnings: [extra.warning] } : {}),
     };
   };
 
@@ -366,7 +373,8 @@ export async function syncPurchaseOrderTx(
   // ROLLUP'tır; iptal ise ayrı bir karardır.
   if (po.status === PurchaseOrderStatus.CANCELLED) return toResult(po.lines, po.status, false);
 
-  const receivedByItem = await computeReceivedByItemTx(tx, purchaseOrderId);
+  const received = await computeReceivedByItemTx(tx, purchaseOrderId);
+  const receivedByItem = received.byItem;
   const orderedItemIds = new Set(po.lines.map((l) => l.itemId));
   const unmatchedItemIds = [...receivedByItem.keys()].filter((itemId) => !orderedItemIds.has(itemId));
   const distributed = distributeFifo(po.lines, receivedByItem);
@@ -400,7 +408,7 @@ export async function syncPurchaseOrderTx(
     if (claimed.count > 0) changed = true;
   }
 
-  return toResult(nextLines, nextStatus, changed, unmatchedItemIds);
+  return toResult(nextLines, nextStatus, changed, { unmatchedItemIds, warning: received.warning });
 }
 
 /**
@@ -1041,6 +1049,7 @@ export class PurchaseOrderService {
     return {
       success: true,
       data: await this.getById(id),
+      ...(sync.warnings ? { warnings: sync.warnings } : {}),
       message: sync.changed
         ? `${sync.orderNo} kaynaktan yeniden hesaplandı — rakamlar güncellendi.`
         : `${sync.orderNo} zaten günceldi — değişiklik yok.`,
@@ -1174,7 +1183,7 @@ export class PurchaseOrderService {
     });
     if (!po) throw AppError.notFound("Alış siparişi bulunamadı.");
 
-    const receivedByItem = await computeReceivedByItemTx(prisma, id);
+    const receivedByItem = (await computeReceivedByItemTx(prisma, id)).byItem;
     const live = distributeFifo(
       po.lines.map((l) => ({ id: l.id, lineNo: l.lineNo, itemId: l.itemId, qty: l.qty, receivedQty: l.receivedQty })),
       receivedByItem,

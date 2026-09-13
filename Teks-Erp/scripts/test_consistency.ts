@@ -30,6 +30,7 @@
 import { Prisma } from "@prisma/client";
 import { notFixtureSql, notFixtureItemOfRollSql } from "./lib/fikstur-imzasi";
 import prisma from "../src/lib/prisma";
+import { LEDGER_HORIZON_DAY } from "../src/constants/ledger-horizon";
 import { DISPOSITION_NOTE_PREFIXES } from "../src/services/helpers/roll-disposition.helper";
 import { chequeCashEventTypesSql, chequeCashInflowSql } from "../src/services/helpers/cheque-cash-events.helper";
 
@@ -124,7 +125,8 @@ interface Section {
 // Ölçü: `scripts/lib/stok-defteri-bag-olcumu.ts` (K, kapısı
 // `test_stok_defteri_bag_olcumu §4e`).
 // ─────────────────────────────────────────────────────────────────────────────
-const DEFTER_UFKU: string | null = "2026-09-13";
+// TEK KAYNAK ürün tarafında (`constants/ledger-horizon.ts`): para okuyucusu da aynı çizgiyi sorar.
+const DEFTER_UFKU: string | null = LEDGER_HORIZON_DAY;
 
 /** Stok kümesi DIŞI statüler — buraya düşen topun defterde ÇIKIŞ ucu olmalıydı. */
 /** Stok kümesi İÇİ statüler — giriş/çıkış uçlarının anlamlı olduğu küme. */

@@ -114,8 +114,15 @@ export const STOCK_MOVE_REASON = {
   SHRINK: "SHRINK",
   /** Kesimde aşım. */
   OVERAGE: "OVERAGE",
-  /** Elle metraj düzeltmesi. */
+  /** Elle metraj düzeltmesi (`adjustRollQty`, yalnız `currentQty`). */
   MANUAL_ADJUST: "MANUAL_ADJUST",
+  /**
+   * GİRİŞ ÖLÇÜMÜ DÜZELTMESİ — bütün topta `currentQty = initialQty = m`
+   * (`applyManualProperties`): "giriş baştan yanlış ölçülmüştü". Kabul-anı
+   * okuyucusu (`helpers/receipt-qty.helper.ts`) ENTRY satırına bu satırları
+   * işaretli ekler (to +, from −); yazıcı 6e diliminde, sabit ilk günden burada.
+   */
+  ENTRY_CORRECTION: "ENTRY_CORRECTION",
   /** Kesme anı açılış fotoğrafı. */
   OPENING: "OPENING",
 } as const;
