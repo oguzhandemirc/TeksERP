@@ -240,3 +240,26 @@ olmadığını ayrıca ölç.
   Sıra, paylaşılan DB, artık veri — ayırt edici koşum sırasını değiştirmektir.
 - **Bir düzeltme, komşu bir kusurun SEMPTOMUNU kaldırabilir — kusuru değil.**
   Yeşile dönen şeyin, düzelttiğini sandığın şey olduğunu ayrıca ölç.
+
+### Bir kısıtın VARLIĞI, onu okuyan kodun o ihlalde ÇÖKECEĞİ anlamına gelmez
+Şemada bir FK/CHECK görmek, "bu kural ihlal edilince patlar" cümlesini **kanıtlamaz**.
+Kod anahtarı/id'yi **önce çözüyorsa** ihlal veritabanına hiç ULAŞMAZ: kısıt masum kalır,
+davranışı belirleyen **uygulama katmanıdır** — ve uygulama katmanının cevabı çoğu kez
+"çökme" değil **"sessiz eksik"**tir.
+
+*(Vaka 2026-09-13, ölçüldü: bir reçeteye "izin → rol şablonu sırası load-bearing (FK)"
+yazıldı, ima "ters sırada kırılır"dı. `PermissionTemplateItem.permissionId → Permission.id`
+FK'sı gerçekten var (`@@id([templateId, permissionId])` ile birlikte). Ama
+`role-template-catalog.job.ts:67-68` önce `permission.findMany` ile `code → id` haritası
+kuruyor; çözülemeyen kod `:111`de **uyarıyla atlanıyor** ("N izin DB'de yok, atlandı"),
+`:151`de şablonun tamamı atlanabiliyor. Ters sırada hata YOK — şablon bir sonraki boot'a
+kadar EKSİK kalıyor. Cümle daraldı: *"kırılır" → "sessiz eksik"*.)*
+
+> **"Kırılır" demeden önce ihlalin HANGİ KATMANDA yakalandığını ölç** — DB kısıtı mı,
+> uygulama kodu mu. İkisi farklı iki arıza üretir ve yalnız biri gürültülüdür.
+
+⚠️ **Bu, § "Yokluğa mekanizma atfetmek"in AYNADAKİ hâlidir:** orada olmayan bir şeye
+mekanizma atfedilir, burada **var olan** bir şeye **yanlış** mekanizma. Ortak imza:
+mekanizma ÖLÇÜLMEDEN, varlıktan ya da yokluktan ÇIKARILIYOR.
+**Savunma:** kısıtı gören cümle, kısıta giden YOLU da okumalı. Emsal çift: abartılı hâl
+`b8a1084f` → ölçülmüş hâl `40e4a26b`; ikisinin yan yana durması sınıfın kanıtıdır.

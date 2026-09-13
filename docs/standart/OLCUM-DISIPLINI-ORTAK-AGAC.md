@@ -109,3 +109,32 @@ ile sıraya sok ve çıkış kodunu OKU.
 aynı dallar. *(1e/6e)* Kardeşi § Paylaşılan `node_modules` üstünde worktree.
 **Savunma:** commit öncesi dalı ve hedefi AYRI adımda oku
 (`git rev-parse --abbrev-ref HEAD` · `git rev-parse HEAD main`), sonra commit et.
+
+### INDEX'ten okuyan bir kapının sondası, ATILABİLİR bir indekse kurulur
+Ortak ağaçta negatif sondanın bilinen bedeli **geri almadır**: dosyayı boz, ölç, `cp` +
+`shasum -c` ile döndür, ve bu arada başka bir oturumun ağaç-bütünü komutu sondanı
+fotoğraflayabilir. Ama ölçtüğün kapı içeriği **index'ten** okuyorsa bu bedelin tamamı
+GEREKSİZDİR: mutasyonu gerçek ağaca değil **atılabilir bir `GIT_INDEX_FILE`'a** yaz.
+
+```sh
+TMP=$(mktemp -u); GIT_INDEX_FILE=$TMP git read-tree origin/main
+B=$(git hash-object -w <bozulmuş-dosya>)
+GIT_INDEX_FILE=$TMP git update-index --cacheinfo 100644,$B,<yol>
+GIT_INDEX_FILE=$TMP npx tsx scripts/<kapı>.ts     # kapı bu indeksi okur
+rm -f $TMP                                        # geri alma adımı YOK
+```
+
+*(Vaka 2026-09-13: `Çapa:` kolunun üç sondası — ① Kapanır'sız çözülmeyen çapa → kırmızı
+② aynı çapaya `Kapanır:` → yeşil ③ mevcut yedi → yeşil — bu yolla koşuldu. Üçü de
+**`origin/main` içeriği** üstünde ölçüldü, oysa dal başka bir tabandaydı; ağaç ve gerçek
+indeks sonda boyunca hiç değişmedi ve sonrasında ikisi de ayrı ayrı ölçülerek temiz
+bulundu.)*
+
+> **Geri alınması gereken en güvenli değişiklik, HİÇ YAPILMAMIŞ olandır.** `git show :`
+> ve `git ls-files` `GIT_INDEX_FILE`'ı onurlandırır; kapı index'ten okuyorsa sondanın
+> çalışma ağacına dokunması için bir sebep yoktur.
+
+⚠️ **Sınırı:** yalnız içeriği index/HEAD'den okuyan kapılar için geçerlidir. Ağacı
+okuyan bir kapıda (`readdirSync`, `fs.readFileSync`) bu teknik sondayı GÖRÜNMEZ kılar —
+yani yeşil, sondanın tutmadığının değil **hiç kurulmadığının** işareti olur.
+Kardeşleri § Başka oturumun AĞAÇ-BÜTÜNÜ komutu · § Ortak ağaçta ölçülen sayı.
