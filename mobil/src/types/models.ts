@@ -85,9 +85,11 @@ export type RollStatus =
   | 'AT_KARTELA' // Bitmiş top kartela fasonunda
   | 'KARTELA_CONSUMED'; // Kartela kabulünde kapandı — metraj Swatch'lara gitti
 
-// Backend enum'uyla (Teks-Erp RollEntrySource) birebir — SUPPLIER_RECEIPT = mobil
-// KK1 istasyon taraması, MANUAL_ENTRY = Electron admin "Manuel Top Ekle" (2026-07-15
-// ayrıştırıldı), TAMBUR_MANUAL = Tambur "Manuel Ekle" modu, kartsız (2026-08-03).
+// Backend enum'uyla (Teks-Erp RollEntrySource) BİREBİR — ve bu artık bir iddia
+// değil ÖLÇÜM: `test_mobil_enum_aynasi` iki yönlü karşılaştırır (2026-09-13).
+// SUPPLIER_RECEIPT = mobil KK1 istasyon taraması, MANUAL_ENTRY = Electron admin
+// "Manuel Top Ekle" (2026-07-15 ayrıştırıldı), TAMBUR_MANUAL = Tambur "Manuel
+// Ekle" modu, kartsız (2026-08-03).
 // Önceki 'KK1_INITIAL'/'MANUAL' değerleri backend'de HİÇ var olmadı.
 export type RollEntrySource =
   | 'SUPPLIER_RECEIPT'
@@ -95,9 +97,12 @@ export type RollEntrySource =
   | 'TAMBUR_SPLIT'
   | 'SUBCONTRACTOR_RETURN'
   | 'TAMBUR_MANUAL'
-  // 2026-09-13 (dokuma P3): tezgahtan inip KK1'de doğan top. ⚠️ Bu union backend'in
-  // gerisinde — PURCHASE_RECEIPT (2026-08-13) ve SEMI_FINISHED (2026-08-17) burada YOK;
-  // devralınan açık, sahibi tablet alanı.
+  // 2026-08-13 / 2026-08-17: backend'e eklenmiş ama mobil union'a HİÇ girmemişti;
+  // sapmayı ölçen bekçi yoktu ⇒ backend bu değeri gönderince tip YALAN SÖYLÜYORDU
+  // (derleyici susar, `switch` dalı düşer, arayüz boş etiket basar).
+  | 'PURCHASE_RECEIPT'
+  | 'SEMI_FINISHED'
+  // 2026-09-13 (dokuma P3): tezgahtan inip KK1'de doğan top.
   | 'WEAVING';
 
 // =============================================================================
