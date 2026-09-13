@@ -71,8 +71,12 @@ async function main(): Promise<void> {
   const customer = await prisma.customer.findFirst({ where: { isActive: true }, select: { id: true } });
   const admin = await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } });
   if (!customer || !admin) throw new Error("Fikstür eksik (customer/admin) — önce npm run seed.");
-  const gFire = await prisma.qualityGrade.findUnique({
-    where: { code: "FIRE" }, select: { id: true, returnTargetStatus: true, isActive: true },
+  // ⚠️ KALİTE KODU SABİTLENMEZ: `code` fabrikaya açık bir alandır (admin yeniden
+  // adlandırabilir, ikinci bir fire kademesi tanımlayabilir). Aranan şey kodun adı
+  // değil DAVRANIŞI: iade rafı SCRAP olan aktif bir kalite. Katalogdan çözülür.
+  const gFire = await prisma.qualityGrade.findFirst({
+    where: { returnTargetStatus: RollStatus.SCRAP, isActive: true },
+    select: { id: true, returnTargetStatus: true, isActive: true },
   });
 
   itemId = (await prisma.item.create({
