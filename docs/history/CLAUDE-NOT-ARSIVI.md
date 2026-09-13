@@ -8742,3 +8742,25 @@ cutOpenFabric çocuğu **0**, ufuk sonrası kurtarma **0** ⇒ backfill YOK. Tü
 (kurtarma 3) — defter-öncesi miras, kullanıcı kararıyla ONARILMAZ; `test_consistency`in ufuk sonrası asimetri
 ölçüsü bunları görmez (giriş de yok). Defterden okunan as-of depo toplamı bundan sonra bu çocukları da sayar —
 rakam YÜKSELİR (gerçeğe yaklaşır), düşmez; sürüm notu gerekip gerekmediği ea'da.
+
+\n
+## 2026-09-14 — PANEL ROUTE MODÜL KAPISI: `ProtectedRoute` artık `SCREEN_CATALOG.modul`ü (ayna) okuyor — "route /forbidden'a düşer" hayali mekanizma oldu [ÇEKİRDEK]
+
+**Ölçüm (5e, 47 doğrulaması ⑤):** dokuma sözleşmesi *"bayrak kapalıyken route `/forbidden`a düşer"* diyordu;
+`ProtectedRoute` yalnız oturum + izne bakıyordu (bayrak atfı 0), emsal `yarn-stock` dahil hiçbir ekranda modül kapısı
+yoktu ⇒ bayrak KAPALI + izin VAR (`admin:*`) + adres çubuğundan URL → sayfa çizilir, backend 403 `MODULE_DISABLED`
+basar. Sözleşme cümlesi mekanizma ölçülmeden yazılmıştı; 0c'nin İNDİ metni onu kopyalamıştı (5e düzeltti). Ders:
+kapanış ölçütü ölçtüğü mekanizmanın adını taşır ("hangi dosya, hangi satır").
+
+**Hüküm (1e):** panel geneli TEK mekanizma; `SCREEN_CATALOG.modul` tek kaynak; kapalıysa mevcut `/forbidden`
+(ayrı sayfa yok); yön alan başına satır-yok değeri; açıkken davranış birebir. **Ölçüm:** manifesto uçtan
+çekilemez (`GET /api/admin/screens` `admin:users ∨ admin:settings` ister; operatör alamaz) ⇒ tablet `SCREEN_MODULE`
+emsaliyle AYNA: `Electron/src/lib/route-modules.ts` `ROUTE_MODULE` (28 masaüstü ekranı, kataloğun `ModulKey`
+taşıyan satırları) + `test_screen_catalog §4b` iki yönlü (sonda: tablodan `operations/work-orders` silindi → 1 ❌ ·
+tabloya `operations/rolls` eklendi → 1 ❌). `ProtectedRoute` izin kapılarından SONRA, kimlik kapısından ÖNCE
+`isRouteModuleOpen(pathname, ctx)`; ctx `useOperationsVisibilityContext` (etkin zincir + yön tek yerde). Alt
+yollar (`:id` · `new` · `edit` · üçüncü segment) ebeveyne katlanır; modülsüz (çekirdek · planlanan · hub) yol
+dokunulmaz. **Bekçi:** `ProtectedRoute.module.test.tsx` (kapalı+izin → /forbidden · açık → çizilir · modülsüz →
+dokunulmaz · alt yol · izin önce) · `route-modules.test.ts` (açıkken 130 route'un 0'ı kapanır; referans
+fabrikada kapananlar tam altı modülün ekranları). Sürüm notu adayı: "kapalı modülün panel sayfası adres
+çubuğundan da açılmaz" — referans fabrikada etki 0 (production açık; kapalı modüllerin izinleri atanmamış).

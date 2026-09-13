@@ -460,6 +460,40 @@ function main(): void {
     aynaSapma.length ? aynaSapma.join(" · ") : `${manifestoModullu.length} modüllü mobil ekran hizalı`,
   );
 
+  // ── 4b) ⭐ PANEL MODÜL AYNASI — manifesto `modul` ↔ `lib/route-modules.ts` ──
+  // 2026-09-14'e dek `ProtectedRoute` yalnız izne bakıyordu; bayrak KAPALI + izin
+  // VAR + URL → sayfa çiziliyor, backend 403 basıyordu. Artık route kapısı
+  // `ROUTE_MODULE`dan okur (manifesto uçtan çekilemez: `/api/admin/screens`
+  // admin ister). Ayna İKİ YÖNLÜ: manifestoda `ModulKey` taşıyan her masaüstü
+  // ekran tabloda AYNI anahtarla, tabloda olan her ekran manifestoda aynı modülle.
+  // Negatif sonda (2026-09-14): tablodan `operations/work-orders` silindi → §4b ❌ (1);
+  // tabloya `operations/rolls: "productionEnabled"` eklendi → §4b ❌ (1).
+  const ROUTE_MODULES = path.join(ROOT, "Electron", "src", "lib", "route-modules.ts");
+  const panelModulAynasi = new Map<string, string>();
+  if (fs.existsSync(ROUTE_MODULES)) {
+    const kaynak = yorumlariSok(fs.readFileSync(ROUTE_MODULES, "utf8"));
+    const bas = kaynak.indexOf("export const ROUTE_MODULE");
+    const blok = kaynak.slice(bas, kaynak.indexOf("\n};", bas));
+    for (const m of blok.matchAll(/^\s*"?([A-Za-z0-9_\/-]+)"?:\s*"([A-Za-z0-9_]+)"/gm)) panelModulAynasi.set(m[1]!, m[2]!);
+  }
+  check("§4b Körlük zemini: panel ROUTE_MODULE tablosu okundu", panelModulAynasi.size >= 20, `${panelModulAynasi.size} satır`);
+  const masaustuModullu = SCREEN_CATALOG.filter((s) => s.app === "desktop" && MODULE_FLAG_KEYS.has(s.modul));
+  const panelSapma: string[] = [];
+  for (const s of masaustuModullu) {
+    const panel = panelModulAynasi.get(s.key);
+    if (panel !== s.modul) panelSapma.push(`${s.key}: manifesto=${s.modul} panel=${panel ?? "YOK"}`);
+  }
+  for (const [key, modul] of panelModulAynasi) {
+    const entry = byKey.get(`desktop:${key}`);
+    if (!entry) panelSapma.push(`${key}: tabloda var, manifestoda YOK`);
+    else if (entry.modul !== modul) panelSapma.push(`${key}: panel=${modul} manifesto=${entry.modul}`);
+  }
+  check(
+    "§4b ⭐ Masaüstü `modul` beyanı ↔ panel ROUTE_MODULE BİREBİR (iki yönlü)",
+    panelSapma.length === 0,
+    panelSapma.length ? panelSapma.join(" · ") : `${masaustuModullu.length} modüllü masaüstü ekran hizalı`,
+  );
+
   // ── 4) Her Electron route izni bir ekranda beyan edilmiş ─────────────────
   // Alt yollar (`:id`, `new`, `edit`) ebeveyne katlanır — manifesto EKRAN
   // seviyesindedir, route seviyesinde değil.
