@@ -202,6 +202,7 @@ function yonB() {
   // aynı ayrımı kullanıyor (ölü-link GATE, kaldırılmış-sembol ADVISORY).
   const tumListeler = new Set<string>();
   const bicimsizAlanlar = new Set<string>();
+  const bicimsizBeyan: string[] = [];
   for (const alan of alanlar) {
     const l = alanListesi(alan);
     if (l && l !== "bicimsiz") for (const n of l) tumListeler.add(n);
@@ -211,10 +212,11 @@ function yonB() {
     if (liste === "bicimsiz") {
       if (!bicimsizAlanlar.has(alan)) {
         bicimsizAlanlar.add(alan);
-        hatalar.push(
-          `B-e docs/kurallar/${alan}.md "## Bekçiler" bölümü DOLU ama \`Backend:\` biçiminde DEĞİL ` +
-            `— kapı o alanın koşum listesini OKUYAMIYOR (B-a/B-b de o alanda koşmadı)`,
-        );
+        // ⚠️ BEYAN, KIRMIZI DEĞİL (1e hükmü 2026-09-13). Biçim borcu BELGE
+        // SAHİBİNDEDİR; kapıyı kırmızıya boğmak ölüm biçimi ③ (sürekli kırmızı =
+        // sessiz) üretirdi — ve bu kapı zaten bir KUYRUK göstergesi.
+        // ⇒ Kapı KENDİ KAPSAM KAYBINI ilan eder ama commit'i durdurmaz.
+        bicimsizBeyan.push(alan);
       }
       continue;
     }
@@ -225,6 +227,30 @@ function yonB() {
   }
   for (const n of gercek) if (!haritaAdlar.has(n)) hatalar.push(`B-c "${n}" gerçek bekçi, HARİTADA hiç anılmıyor`);
 
+  // ⚠️ KAPI KENDİ KAPSAM KAYBINI İLAN EDER — ve kaybın YÖNÜ ölçüldü, DEVRALINMADI.
+  //
+  // İlk tarif (bana iletilen): *"biçimi tutmayan alanda B-a/B-b HİÇ KOŞMAZ,
+  // alan kısmen ÖLÇÜLMEZ ve kapı bunu söylemez."* ⇒ ÖLÇTÜM, **YÖNÜ TERS**:
+  // `alanListesi` boş küme dönünce B-a/B-b susmaz, o alana dokunan HER dosya
+  // için *"bekçi koşulmadı"* der. Sonda (M13, tüm alanlar biçimsiz): **216 B-a +
+  // 216 B-b** yanlış kırmızı. ⇒ Kayıp EKSİK ÖLÇÜM değil **YANLIŞ ÖLÇÜM**.
+  // Sahada görünmemesinin sebebi: B-a/B-b yalnız DEĞİŞEN dosyalar için konuşur ve
+  // tek biçimsiz alan (`dokuma`) fark kümesine nadiren giriyordu.
+  // ⇒ ***Bir kapsam kaybının yönünü ölçmeden ilan etme: "ölçmedi" ile "yanlış
+  //   ölçtü" farklı kalemlerdir ve farklı kişileri arattırır.***
+  // Ölçüldü 2026-09-13: 27 alan dosyasından biçimsiz **0** (tek vaka `dokuma`ydı,
+  // 01 aynı turda `Backend:` satırıyla kapattı).
+  if (bicimsizBeyan.length > 0) {
+    console.log(
+      `  ⚠️  [ADVISORY] ${bicimsizBeyan.length} alan dosyasının "## Bekçiler" bölümü DOLU ama ` +
+        `\`Backend:\` biçiminde DEĞİL — koşum listesi OKUNAMADI: ${bicimsizBeyan.sort().join(", ")}`,
+    );
+    console.log(
+      `      ⚠️ SONUÇ: o alanlar BOŞ LİSTEYLE ölçülür ⇒ alana dokunan her dosya için ` +
+        `B-a/B-b YANLIŞ KIRMIZI verebilir (eksik ölçüm DEĞİL, yanlış ölçüm).`,
+    );
+    console.log(`      (biçim borcu BELGE SAHİBİNDE; bu satır kapıyı kırmızı YAPMAZ)`);
+  }
   if (uyarilar.length > 0) {
     console.log(`  ⚠️  [ADVISORY] ${uyarilar.length} bekçi haritada bir kovada ama HİÇBİR alan koşum listesinde yok`);
     console.log(`      (alan dosyası olmayan harita bölümleri; bilinen borç, kapıyı KIRMIZI yapmaz)`);
@@ -240,8 +266,7 @@ function yonB() {
     // ***Bir bekçiyi TARİF etmek onu BAĞLAMAK değildir.***
     const bc = hatalar.filter((h) => h.startsWith("B-c")).length;
     const bd = hatalar.filter((h) => h.startsWith("B-d")).length;
-    const be = hatalar.filter((h) => h.startsWith("B-e")).length;
-    const kirilim = [bc ? `${bc} B-c (envanter)` : "", bd ? `${bd} B-d (KAPSAM)` : "", be ? `${be} B-e (BİÇİM)` : ""]
+    const kirilim = [bc ? `${bc} B-c (envanter)` : "", bd ? `${bd} B-d (KAPSAM)` : ""]
       .filter(Boolean)
       .join(" · ");
     no(`${hatalar.length} ayrışma — ${kirilim} — bir alana dokunan kişi onu koruyan bekçiyi KOŞMUYOR:`);
