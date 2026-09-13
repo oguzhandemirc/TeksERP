@@ -78,7 +78,7 @@ import {
 } from "./helpers/tambur-plan-gate.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
-import { reverseAllRollStockMoves, reverseTransformGroupsOf } from "./helpers/warehouse-ledger-reverse.helper";
+import { reverseAllRollStockMoves, reverseStockMove, reverseTransformGroupsOf } from "./helpers/warehouse-ledger-reverse.helper";
 import { warehouseStampManyTx } from "./helpers/warehouse.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
@@ -258,6 +258,73 @@ export class TamburUndoService {
     return { success: true, data: ctx };
   }
 
+  /**
+   * Damgalanan kapanış sapmalarına `rollVarianceId` ile BAĞLI, henüz
+   * terslenmemiş stok satırlarını (`CUT_DISCARD` · `SCRAP` çıkışı) bugüne
+   * tersler. Bağ karar verir, sebep kodu değil — yarın aynı bağla yazılan her
+   * satır kendiliğinden kurala girer.
+   */
+  private async reverseVarianceBoundStockMovesTx(
+    tx: Prisma.TransactionClient,
+    varianceIds: string[],
+    userId: string | undefined,
+  ): Promise<number> {
+    if (varianceIds.length === 0) return 0;
+    const boundRows = await tx.warehouseMovement.findMany({
+      where: { rollVarianceId: { in: varianceIds }, reversesMovementId: null, reversedBy: { none: {} } },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    });
+    for (const m of boundRows) {
+      await reverseStockMove(tx, m.id, {
+        reasonCode: STOCK_MOVE_REASON.TAMBUR_UNDO,
+        userId: userId ?? null,
+        notes: TAMBUR_UNDO_CANCEL_TEXT,
+      });
+    }
+    return boundRows.length;
+  }
+
+  /**
+   * Arşiv-SINGLE ile ölmüş çocukların TRANSFORM gruplarında kalan (ebeveyn OUT)
+   * satırlarını tersler. `reverseTransformGroupsOf` grubu topun TERSLENMEMİŞ
+   * satırından bulur; ölü çocuğun IN'i o gün terslendiği için grup oradan
+   * bulunamaz — grup kimliği çocuğun ileri satırından (terslenmiş de olsa) okunur,
+   * gruptaki henüz terslenmemiş üyeler (OVERAGE hariç) bugüne terslenir.
+   */
+  private async reverseDeadChildGroupsTx(
+    tx: Prisma.TransactionClient,
+    deadChildIds: string[],
+    userId: string | undefined,
+  ): Promise<number> {
+    if (deadChildIds.length === 0) return 0;
+    const members = await tx.warehouseMovement.findMany({
+      where: { rollId: { in: deadChildIds }, transformGroupId: { not: null }, reversesMovementId: null },
+      select: { transformGroupId: true },
+      distinct: ["transformGroupId"],
+    });
+    const groupIds = members.map((u) => u.transformGroupId).filter((g): g is string => g !== null);
+    if (groupIds.length === 0) return 0;
+    const openMembers = await tx.warehouseMovement.findMany({
+      where: {
+        transformGroupId: { in: groupIds },
+        reasonCode: { not: STOCK_MOVE_REASON.OVERAGE },
+        reversesMovementId: null,
+        reversedBy: { none: {} },
+      },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    });
+    for (const m of openMembers) {
+      await reverseStockMove(tx, m.id, {
+        reasonCode: STOCK_MOVE_REASON.TAMBUR_UNDO,
+        userId: userId ?? null,
+        notes: TAMBUR_UNDO_CANCEL_TEXT,
+      });
+    }
+    return openMembers.length;
+  }
+
   /** Geri almayı uygular. Önizlemedeki mod tx içinde TAZE yeniden çözülür. */
   async applyUndo(
     rollId: string,
@@ -402,13 +469,36 @@ export class TamburUndoService {
   // Bağlam çözümü (preview + apply ortak)
   // ───────────────────────────────────────────────────────────────────────────
 
+  /**
+   * Dokunulan çocuk, kapanışın `scrap` KALANI mı? Yapısal işaret yok (çocuk da
+   * `TAMBUR_SPLIT` doğar); tanım hükümdeki üçlü: SCRAP statüsü ∧ TAMBUR_SPLIT ∧
+   * ebeveynde o metraja eşit, canlı `TAMBUR_WAREHOUSE_FINALIZE` SCRAP sapması.
+   */
+  private async isScrapRemainderChild(
+    child: { status: RollStatus; entrySource: RollEntrySource | null; initialQty: Prisma.Decimal },
+    parentId: string,
+  ): Promise<boolean> {
+    if (child.status !== RollStatus.SCRAP || child.entrySource !== RollEntrySource.TAMBUR_SPLIT) return false;
+    const sapma = await prisma.rollVariance.findFirst({
+      where: {
+        rollId: parentId,
+        reversedAt: null,
+        kind: RollVarianceKind.SCRAP,
+        source: VARIANCE_SOURCES.TAMBUR_WAREHOUSE_FINALIZE,
+        qty: child.initialQty,
+      },
+      select: { id: true },
+    });
+    return sapma !== null;
+  }
+
   private async resolveContext(
     rollId: string,
     opts?: UndoRequestOptions,
   ): Promise<UndoContext> {
     const roll = await prisma.roll.findUnique({
       where: { id: rollId },
-      select: { id: true, parentRollId: true, status: true, entrySource: true },
+      select: { id: true, parentRollId: true, status: true, entrySource: true, initialQty: true },
     });
     if (!roll) throw AppError.notFound("Top bulunamadı");
 
@@ -449,8 +539,15 @@ export class TamburUndoService {
     // anlamlı — kaynak yaşıyorsa SINGLE metrajı zaten geri veriyor, ikinci bir
     // "geri koy" seçeneği aynı işi iki adla sunmak olurdu. Tümden geri alma
     // yalnız kapanmış kaynakta.
-    const canOfferSingle = touchedChildId !== null;
-    const canOfferRestore = touchedChildId !== null && parentArchived;
+    // ⚠️ KAPANIŞIN SCRAP-KALANI bir "kesim parçası" DEĞİLDİR (hüküm ① b3-DAR,
+    // 2026-09-14): ham ebeveynde `scrap` kapanışı gerçek bir SCRAP çocuğu doğurur;
+    // ona SINGLE/SINGLE_RESTORE sunulursa metraj ebeveyne döner, kapanış sapması
+    // canlı kalır, `SCRAP` çıkışı terslenmez ve ebeveyn dirildiği için FULL bir
+    // daha sunulmaz ⇒ KALICI 60 ↔ 0 (S10, çalıştırılarak ölçüldü). Kalan yalnız
+    // kapanışla birlikte geri alınır: FULL.
+    const isScrapRemainder = touchedChildId !== null && parentArchived && (await this.isScrapRemainderChild(roll, parentId));
+    const canOfferSingle = touchedChildId !== null && !isScrapRemainder;
+    const canOfferRestore = touchedChildId !== null && parentArchived && !isScrapRemainder;
     const canOfferFull = parentArchived || roll.status === RollStatus.TAMBUR_CONSUMED;
     const defaultMode: UndoMode = canOfferSingle ? "SINGLE" : "FULL";
 
@@ -469,6 +566,13 @@ export class TamburUndoService {
             ? canOfferRestore
             : canOfferFull;
       if (!available) {
+        if (isScrapRemainder && opts.mode !== "FULL") {
+          throw AppError.conflict(
+            "Bu top kapanışın FİRE kalanıdır, bir kesim parçası değil — tek başına iptal edilemez; " +
+              "kapanışı tümden geri alın (Tüm İşlemi Geri Al).",
+            { code: "UNDO_SCRAP_REMAINDER_FULL_ONLY", parentId },
+          );
+        }
         throw AppError.conflict(
           opts.mode === "FULL"
             ? "Bu top için tümden geri alma artık yapılamıyor (kapanış bu sırada değişmiş olabilir) — ekranı yenileyin"
@@ -497,7 +601,7 @@ export class TamburUndoService {
     // (kaç top, kaç metre) taşımak zorunda. Tek modu hesaplayıp diğerini
     // "muhtemelen yapılabilir" diye göstermek, tam da düzeltmeye çalıştığımız
     // "diyalog yapmayacağı şeyi ilan ediyor" hatası olurdu.
-    const single = touchedChildId
+    const single = touchedChildId && canOfferSingle
       ? await this.previewSingle(touchedChildId, parent, parentArchived)
       : null;
     const restore =
@@ -1855,32 +1959,48 @@ export class TamburUndoService {
       //     ⚠️ Aşım (OVERAGE) satırları KAPSAM DIŞI: onlar kesim anında doğdu ve
       //     kesimler gerçekten yapıldı; kapanışın terslenmesi onları geçersiz
       //     kılmaz. Süzgeç bu yüzden `source` üzerinden dar tutulur.
-      const reversedVariances = await tx.rollVariance.updateMany({
+      //     ⚠️ AYNI KARARIN İKİ DEFTERİ BİRLİKTE DÖNER (hüküm ① b1, 2026-09-14):
+      //     kapanış sapması `rollVarianceId` ile stok defterine bağlı bir ÇIKIŞ
+      //     yazmıştı (`CUT_DISCARD` / `SCRAP`); damga tek başına o çıkışı defterde
+      //     yetim bırakıyordu (100 ↔ 60 / 100 ↔ 0, ölçüldü). Damgalanan sapmalar
+      //     ÖNCE okunur, sonra bağlı satırları bağ üzerinden terslenir — sebep
+      //     koduna bakılmaz, bağ karar verir.
+      const closingVariances = await tx.rollVariance.findMany({
         where: {
           rollId: parentId,
           reversedAt: null,
-          source: {
-            in: [
-              VARIANCE_SOURCES.TAMBUR_FINALIZE,
-              VARIANCE_SOURCES.TAMBUR_WAREHOUSE_FINALIZE,
-            ],
-          },
+          source: { in: [VARIANCE_SOURCES.TAMBUR_FINALIZE, VARIANCE_SOURCES.TAMBUR_WAREHOUSE_FINALIZE] },
         },
+        select: { id: true },
+      });
+      const reversedVariances = await tx.rollVariance.updateMany({
+        where: { id: { in: closingVariances.map((v) => v.id) }, reversedAt: null },
         data: { reversedAt: new Date(), reversedById: userId ?? null },
       });
+      await this.reverseVarianceBoundStockMovesTx(tx, closingVariances.map((v) => v.id), userId);
       // ÇOCUK-KAPSAMLI tekil-iptal düzeltmeleri de terslenir (2026-08-12) —
       // `computeRestoredQty` o metrajı geri saydı; satır canlı kalsaydı dönem
       // raporu aynı metrajı hem stokta hem sapmada görürdü (senkron sözleşmesi:
       // restore-toplamına giren HER kaynak burada da terslenir).
-      const reversedChildVariances = await tx.rollVariance.updateMany({
+      //     ⚠️ SÖZLEŞMENİN DEFTER AYAĞI (hüküm ① b2, S9): arşiv-SINGLE ile ölmüş
+      //     çocuk `status ≠ CANCELLED` kümesine girmediği için yukarıdaki grup
+      //     terslemesi onu görmüyordu; ebeveynin CUT_SPLIT çıkışı yetim kalıyordu
+      //     (100 ↔ 0). Damgalanan sapmanın `rollId`si = ölü çocuk ⇒ onun grubu da.
+      const deadChildVariances = await tx.rollVariance.findMany({
         where: {
           reversedAt: null,
           kind: RollVarianceKind.RECORD_CORRECTION,
           source: VARIANCE_SOURCES.TAMBUR_UNDO_SINGLE,
           roll: { parentRollId: parentId },
         },
+        select: { id: true, rollId: true },
+      });
+      const reversedChildVariances = await tx.rollVariance.updateMany({
+        where: { id: { in: deadChildVariances.map((v) => v.id) }, reversedAt: null },
         data: { reversedAt: new Date(), reversedById: userId ?? null },
       });
+      const deadChildIds = [...new Set(deadChildVariances.map((v) => v.rollId))];
+      await this.reverseDeadChildGroupsTx(tx, deadChildIds, userId);
 
       // 6) finalize parent'ın property'lerini SİLMİŞTİ — çocuk kopyasından geri kur.
       const parentPropCount = await tx.rollProperty.count({ where: { rollId: parentId } });

@@ -27,6 +27,9 @@
 //   §10 ⭐ YAPISAL değişmez: iptal edilmiş her çocuğun ileri satırı terslenmiş
 //   §11 ⭐ DEPO KESİMİ (TRANSFORM çifti) geri alınınca EBEVEYNİN çıkışı da terslenir
 //   §12 ⭐ initialQty ŞİŞMEZ: kesim düşürmez, geri alma yalnız AŞIMDA bump + OVERAGE (6e, 2026-09-13)
+//   §13–§19 ⭐ KAPANIŞIN İKİ DEFTERİ BİRLİKTE DÖNER (hüküm ① b1+b2+b3-DAR, 2026-09-14): FULL discard/
+//      scrap bağlı çıkışı tersler (§13/§14) · SINGLE_RESTORE dokunmaz (§15) · arşiv-SINGLE → FULL (§18) ·
+//      scrap-kalan çocuğuna yalnız FULL (§19, 409 UNDO_SCRAP_REMAINDER_FULL_ONLY)
 //       — durum = defter. ⚠️ Bu ayak iki bekçinin ARASINDAKİ DİKİŞİ ölçer: §3
 //       finalize yolunu (ebeveyn çıkışı YOK), `test_stock_ledger_transform` kesimin
 //       İLERİ yolunu ölçüyordu; TRANSFORM çiftinin GERİ ALINMASI ikisinin arasında
@@ -394,6 +397,100 @@ async function main(): Promise<void> {
       d12c.asim.length === 1 && Number(d12c.asim[0]!.qty) === 40 && d12c.asim[0]!.source === "TAMBUR_UNDO_RESTORE",
       JSON.stringify(d12c.asim),
     );
+
+    // ── §13–§19 ⭐ KAPANIŞIN İKİ DEFTERİ BİRLİKTE DÖNER (hüküm ① b1+b2+b3-DAR, 2026-09-14) ──
+    // Kapanış sapması (`RECORD_CORRECTION`/`SCRAP`) stok defterine `rollVarianceId` ile
+    // BAĞLI bir çıkış yazar (`CUT_DISCARD`/`SCRAP`). FULL 5b sapmayı damgalıyor ama bağlı
+    // çıkışı terslemiyordu ⇒ 100 ↔ 60 / 100 ↔ 0 (1c ölçtü). Ölçüt her ayakta: ebeveyn
+    // DURUM = DEFTER ∧ bağlı çıkış `reversesMovementId` ile terslenmiş ∧ sapma damgalı.
+    /** HAM ebeveyn (STOCK) fikstürü — `scrap` kapanışı SCRAP statülü gerçek çocuk doğurur. */
+    async function hamKesimi(kapanis: "scrap" | "discard"): Promise<{ ebeveyn: string; cocuk: string; kalan: string | null }> {
+      const pRes = await inventory.createInitialEntry(
+        { itemId, initialQty: 100 }, undefined, undefined, false, { forcedStatus: "STOCK" },
+      );
+      const ebeveyn = (pRes.data as { id: string }).id;
+      rollIds.push(ebeveyn);
+      const cRes = await tambur.cutWarehouseRoll(ebeveyn, { cutLength: 40, rawDestination: "WAREHOUSE", qualityGrade: gradeFirst });
+      const cocuk = (cRes.data as { childRoll?: { id: string } }).childRoll?.id;
+      if (!cocuk) throw new Error("ham kesim çocuğu doğmadı — §14 kurulamadı");
+      rollIds.push(cocuk);
+      const f = await tambur.finalizeWarehouseCut(ebeveyn, { remainingAction: kapanis, varianceReasonCode: null, varianceReasonText: "bekçi §14" });
+      const kalan = (f.data as { remainingChild: { id: string } | null }).remainingChild?.id ?? null;
+      if (kalan) rollIds.push(kalan);
+      return { ebeveyn, cocuk, kalan };
+    }
+    const bagliCikis = async (ebeveyn: string, kod: string) => {
+      const rows = await prisma.warehouseMovement.findMany({
+        where: { rollId: ebeveyn, reasonCode: kod, reversesMovementId: null },
+        select: { id: true, rollVarianceId: true, reversedBy: { select: { id: true, reasonCode: true } } },
+      });
+      return rows[0] ?? null;
+    };
+    const durumDefter = async (id: string) => {
+      const r = await prisma.roll.findUniqueOrThrow({ where: { id }, select: { currentQty: true, status: true } });
+      return { current: Number(r.currentQty), status: r.status, net: net(await satirlar(id)) };
+    };
+
+    // §13 FULL discard: CUT_DISCARD çıkışı bağlı terslenir ⇒ 100 = 100.
+    const f13 = await depoKesimi("discard");
+    const c13once = await bagliCikis(f13.ebeveyn, STOCK_MOVE_REASON.CUT_DISCARD);
+    check("§13z pozitif kontrol: discard kapanışı sapmaya BAĞLI CUT_DISCARD çıkışı yazdı", c13once !== null && c13once.rollVarianceId !== null && c13once.reversedBy.length === 0, JSON.stringify(c13once));
+    await undo.applyUndo(f13.cocuk, undefined, { mode: "FULL", reason: "bekçi §13 discard FULL" });
+    const d13 = await durumDefter(f13.ebeveyn);
+    const c13 = await bagliCikis(f13.ebeveyn, STOCK_MOVE_REASON.CUT_DISCARD);
+    const v13 = c13once ? await prisma.rollVariance.findUnique({ where: { id: c13once.rollVarianceId! }, select: { reversedAt: true } }) : null;
+    check("§13 ⭐ FULL discard: DURUM = DEFTER (100 = 100)", d13.current === 100 && d13.net === 100, `durum=${d13.current} defter=${d13.net}`);
+    check("§13b CUT_DISCARD çıkışı BAĞ üzerinden terslendi (TAMBUR_UNDO, reversesMovementId) ve sapma damgalı", c13?.reversedBy.length === 1 && c13.reversedBy[0]!.reasonCode === STOCK_MOVE_REASON.TAMBUR_UNDO && v13?.reversedAt !== null, JSON.stringify({ ters: c13?.reversedBy, sapma: v13 }));
+
+    // §14 HAM scrap FULL: SCRAP çıkışı (bağlı) terslenir, SCRAP çocuğu iptal ⇒ 100 = 100.
+    const f14 = await hamKesimi("scrap");
+    const kalan14 = f14.kalan ? await prisma.roll.findUnique({ where: { id: f14.kalan }, select: { status: true } }) : null;
+    check("§14z pozitif kontrol: ham scrap kapanışı SCRAP statülü kalan çocuğu doğurdu + bağlı SCRAP çıkışı", kalan14?.status === RollStatus.SCRAP && (await bagliCikis(f14.ebeveyn, STOCK_MOVE_REASON.SCRAP)) !== null, `kalan=${kalan14?.status}`);
+    await undo.applyUndo(f14.cocuk, undefined, { mode: "FULL", reason: "bekçi §14 scrap FULL" });
+    const d14 = await durumDefter(f14.ebeveyn);
+    const c14 = await bagliCikis(f14.ebeveyn, STOCK_MOVE_REASON.SCRAP);
+    check("§14 ⭐ ham scrap FULL: DURUM = DEFTER (100 = 100)", d14.current === 100 && d14.net === 100, `durum=${d14.current} defter=${d14.net}`);
+    check("§14b SCRAP çıkışı BAĞ üzerinden terslendi", c14?.reversedBy.length === 1 && c14.reversedBy[0]!.reasonCode === STOCK_MOVE_REASON.TAMBUR_UNDO, JSON.stringify(c14?.reversedBy));
+
+    // §15 SINGLE_RESTORE (discard kapanışlı): kapanış sapması ve bağlı çıkış DOKUNULMAZ ⇒ 40 = 40.
+    const f15 = await depoKesimi("discard");
+    await undo.applyUndo(f15.cocuk, undefined, { mode: "SINGLE_RESTORE", reason: "bekçi §15" });
+    const d15 = await durumDefter(f15.ebeveyn);
+    const c15 = await bagliCikis(f15.ebeveyn, STOCK_MOVE_REASON.CUT_DISCARD);
+    check("§15 ⭐ SINGLE_RESTORE: kapanışın CUT_DISCARD çıkışı TERSLENMEDİ ve durum = defter (40 = 40)", c15 !== null && c15.reversedBy.length === 0 && d15.current === 40 && d15.net === 40, `durum=${d15.current} defter=${d15.net} ters=${c15?.reversedBy.length}`);
+
+    // §18 arşiv-SINGLE → FULL (S9): ölü çocuğun grubu FULL'de terslenir ⇒ 100 = 100.
+    const f18 = await depoKesimi("discard");
+    await undo.applyUndo(f18.cocuk, undefined, { mode: "SINGLE", reason: "bekçi §18 arşiv-SINGLE" });
+    const d18a = await durumDefter(f18.ebeveyn);
+    check("§18z pozitif kontrol: arşiv-SINGLE sonrası ebeveyn 0 = 0 (metraj dönmedi, OUT gerçek)", d18a.current === 0 && d18a.net === 0, `durum=${d18a.current} defter=${d18a.net}`);
+    await undo.applyUndo(f18.ebeveyn, undefined, { mode: "FULL", reason: "bekçi §18 FULL" });
+    const d18 = await durumDefter(f18.ebeveyn);
+    const cocuk18 = await satirlar(f18.cocuk);
+    check("§18 ⭐ arşiv-SINGLE ile ölmüş çocuğun grubu FULL'de terslendi: DURUM = DEFTER (100 = 100)", d18.current === 100 && d18.net === 100, `durum=${d18.current} defter=${d18.net}`);
+    check("§18b ölü çocuğun defter neti 0 (IN'i terslenmiş)", net(cocuk18) === 0, `net=${net(cocuk18)}`);
+
+    // §19 scrap-kalan çocuğu: SINGLE/SINGLE_RESTORE SUNULMAZ (409, kod), yalnız FULL.
+    const f19 = await hamKesimi("scrap");
+    const kalan19 = f19.kalan!;
+    const oniz = (await undo.getUndoPreview(kalan19)).data as { options: Array<{ mode: string }>; defaultMode: string };
+    check("§19a ⭐ scrap-kalan çocuğuna önizleme yalnız FULL sunar (defaultMode FULL)", oniz.options.every((o) => o.mode === "FULL") && oniz.defaultMode === "FULL", JSON.stringify({ modes: oniz.options.map((o) => o.mode), def: oniz.defaultMode }));
+    for (const m of ["SINGLE", "SINGLE_RESTORE"] as const) {
+      const r = await undo.applyUndo(kalan19, undefined, { mode: m, reason: "bekçi §19" }).then(
+        () => ({ status: 200, code: null as string | null }),
+        (e: unknown) => ({ status: (e as { statusCode?: number }).statusCode ?? 0, code: String(((e as { details?: { code?: unknown } }).details?.code) ?? "") }),
+      );
+      check(`§19b ${m} scrap-kalan çocuğuna 409 UNDO_SCRAP_REMAINDER_FULL_ONLY`, r.status === 409 && r.code === "UNDO_SCRAP_REMAINDER_FULL_ONLY", `status=${r.status} code=${r.code}`);
+    }
+    const d19once = await durumDefter(f19.ebeveyn);
+    check("§19c reddedilen denemeler hiçbir şey yazmadı (ebeveyn 0 = 0, sapma canlı)", d19once.current === 0 && d19once.net === 0 && (await prisma.rollVariance.count({ where: { rollId: f19.ebeveyn, kind: "SCRAP", reversedAt: null } })) === 1, `durum=${d19once.current} defter=${d19once.net}`);
+    await undo.applyUndo(kalan19, undefined, { mode: "FULL", reason: "bekçi §19 FULL" });
+    const d19 = await durumDefter(f19.ebeveyn);
+    check("§19d scrap-kalan çocuğundan FULL: DURUM = DEFTER (100 = 100), sapma damgalı", d19.current === 100 && d19.net === 100 && (await prisma.rollVariance.count({ where: { rollId: f19.ebeveyn, kind: "SCRAP", reversedAt: null } })) === 0, `durum=${d19.current} defter=${d19.net}`);
+    // Normal kesim parçası SCRAP-KALAN SAYILMAZ (kapı dar): §11A'nın çocuğuna SINGLE hâlâ sunulur.
+    const f19k = await depoKesimi();
+    const onizK = (await undo.getUndoPreview(f19k.cocuk)).data as { options: Array<{ mode: string }> };
+    check("§19e kapı DAR: sıradan kesim parçasına SINGLE hâlâ sunuluyor", onizK.options.some((o) => o.mode === "SINGLE"), JSON.stringify(onizK.options.map((o) => o.mode)));
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

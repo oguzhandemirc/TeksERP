@@ -8387,3 +8387,32 @@ yanlış düğüme uygulandı*.
 `test_consistency` başlığındaki "K = 0" cümlesi ve `defter.md:19` Kapanır'ı çürütülmüş hâliyle
 yeniden yazıldı; `STOK_DISI_STATULER`de IN_PRODUCTION olmaması (asimetri ölçüsü bu yolları görmez)
 1c'nin kalemi (hüküm §11).
+
+## 2026-09-14 — TAMBUR GERİ ALMA HÜKMÜ ① İNDİ: kapanışın iki defteri birlikte döner (b1+b2+b3-DAR) [ÇEKİRDEK]
+
+**Hüküm (1e, `TAMBUR-GERI-ALMA-HUKUM-2026-09-13.md` §11):** `CUT_DISCARD` ve kapanış `SCRAP`ı
+terminal değil BAĞLI TERS — 1c'nin S2/S4/S9/S10 ölçümleri üzerine.
+- **(b1)** `applyFull` 5b: damgalanacak kapanış sapmaları ÖNCE okunur, damgadan sonra
+  `rollVarianceId` ile bağlı, terslenmemiş stok satırları `reverseStockMove` ile `TAMBUR_UNDO`
+  sebebiyle bugüne terslenir (`reverseVarianceBoundStockMovesTx`). Sebep koduna bakılmaz — bağ karar
+  verir; yarın aynı bağla yazılan her satır kendiliğinden kurala girer. Ölçüldü: discard 100 ↔ 60 ve
+  ham scrap 100 ↔ 40 ayrışmaları 100 = 100 oldu.
+- **(b2)** arşiv-SINGLE ile ölmüş çocuğun grubu: FULL'ün çocuk kümesi `status ≠ CANCELLED` olduğu
+  için ölü çocuk görülmüyor, ebeveynin `CUT_SPLIT` OUT'u yetim kalıyordu. Damgalanan
+  `TAMBUR_UNDO_SINGLE` sapmasının `rollId`si = ölü çocuk ⇒ grubu terslenir. ⚠️ `reverseTransformGroupsOf`
+  grubu topun TERSLENMEMİŞ satırından bulur; ölü çocuğun IN'i o gün terslendiği için grup oradan
+  bulunamaz (ilk deneme §18'de 100 ↔ 60 verdi) — grup kimliği çocuğun ileri satırından (terslenmiş de
+  olsa) okunur, kalan üyeler terslenir (`reverseDeadChildGroupsTx`).
+- **(b3-DAR)** ham ebeveynde `scrap` kapanışı gerçek bir SCRAP çocuğu doğurur; ona SINGLE/SINGLE_RESTORE
+  sunulursa KALICI 60 ↔ 0 (S10). Kapı `resolveContext`te: tanım SCRAP ∧ TAMBUR_SPLIT ∧ ebeveynde eşit
+  metrajlı canlı `TAMBUR_WAREHOUSE_FINALIZE` SCRAP sapması ⇒ yalnız FULL, 409 `UNDO_SCRAP_REMAINDER_FULL_ONLY`.
+  Önizleme de sunulmayan modu HESAPLAMAZ (ilk deneme `options`ta SINGLE basıyordu — önizleme ve apply
+  aynı yüklemden geçmeliydi, §19a bunu ölçtü). `applySingle`e dokunulmadı (S1 tutuyor).
+
+**Bekçi:** `test_stock_ledger_tambur_undo` 41 → 57 (§13 discard FULL · §14 ham scrap FULL · §15
+SINGLE_RESTORE dokunmaz · §18 arşiv-SINGLE → FULL · §19 scrap-kalan yalnız FULL + kapı dar) ·
+`test_consistency §32` sonda kalemi (damgalı sapma, bağlı çıkışı terslenmemiş; fabrika kopyası 0).
+Negatif sondalar (cp+sha256 `e2142b30`): b1 kaldır → 6 ❌ (§13/§14/§18/§19d defter 40) · b2 kaldır → §18
+❌ (60) · b3 kaldır → §19a/b ❌ (SINGLE 200 döndü).
+**Sürüm notu (yalnız b3-dar):** ea'ya koşul dili. Şema yok; beyan çevrimi (`CUT_DISCARD`/`SCRAP` →
+`BAGLI_TERS`/`TAMBUR_UNDO`) 82'de "kod indikten sonra".

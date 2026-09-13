@@ -950,6 +950,37 @@ WHERE cik."reasonCode" = 'CUT_SPLIT'
        AND gir."reversesMovementId" IS NULL
        AND EXISTS (SELECT 1 FROM warehouse_movements rv2 WHERE rv2."reversesMovementId" = gir.id))`,
   },
+  {
+    id: "32",
+    // DAMGALI SAPMA, BAĞLI ÇIKIŞI YETİM — kapanış sapması (`RECORD_CORRECTION` /
+    // `SCRAP`, kaynak TAMBUR_*FINALIZE) FULL geri almada damgalanmış (`reversedAt`)
+    // ama `rollVarianceId` ile ona bağlı stok çıkışı (`CUT_DISCARD` / `SCRAP`)
+    // terslenmemiş: aynı kararın iki defteri ayrı yöne bakıyor (hüküm ① b1,
+    // 2026-09-14; ölçüldü 100 ↔ 60 / 100 ↔ 0). Kod `reverseVarianceBoundStockMovesTx`
+    // ile kapandı; bu bölüm o günden ÖNCE açılmış yetimleri SAYAR.
+    //
+    // ⚠️ SONDA KALEMİ, ONARIM DEĞİL (§31 ile aynı sınıf): sayı kullanıcıya iletilir.
+    // Bağ karar verir, sebep kodu değil — yarın aynı bağla yazılan her satır girer.
+    title: "DAMGALI kapanış sapması, bağlı stok çıkışı TERSLENMEMİŞ (aynı kararın iki defteri ayrışmış)",
+    miras: {
+      taban: null,
+      tarih: "2026-09-14",
+      nerede: "izole ağaç, sonda DB — canlı ölçüm YOK",
+      not: "sayı > 0 ⇒ o ebeveynlerin defteri kapanışın kalanı kadar EKSİK sayıyor; onarım kullanıcı kararı",
+    },
+    noise: {
+      where: `WHERE ${notFixtureSql("drift.barcode")} AND ${notFixtureItemOfRollSql("drift.kayit")}`,
+      why: "§13/§14 fikstürü gerçek servisten doğar (üretim barkodu) — barkod VEYA kalem kodu ön ekinden elenir",
+    },
+    sql: `
+SELECT p.id::text AS kayit, p.barcode, m.qty::text AS metraj, m."createdAt"::text AS dogum
+FROM warehouse_movements m
+JOIN roll_variances v ON v.id = m."rollVarianceId"
+JOIN rolls p ON p.id = m."rollId"
+WHERE v."reversedAt" IS NOT NULL
+  AND m."reversesMovementId" IS NULL
+  AND NOT EXISTS (SELECT 1 FROM warehouse_movements rv WHERE rv."reversesMovementId" = m.id)`,
+  },
 ];
 
 async function driftCount(s: Section): Promise<number> {
