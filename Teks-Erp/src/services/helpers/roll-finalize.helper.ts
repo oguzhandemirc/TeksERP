@@ -9,6 +9,7 @@
 // =============================================================================
 import { WarehouseEventType, Prisma, RollStatus, RollForm, type PrismaClient } from "@prisma/client";
 import { WAREHOUSE_STOCK_STATUSES } from "./warehouse-stock.helper";
+import { warehouseStampTx } from "./warehouse.helper";
 import { postStockMove, qtyYazilabilir } from "./warehouse-ledger.helper";
 import { STOCK_MOVE_REASON } from "../../constants/stock-move-reasons";
 import { reserveRollBarcodesInOrderTx, type RollBarcodeType } from "./roll-barcode.helper";
@@ -200,30 +201,41 @@ export async function finalizeRollsAtLastStep(
     }
     const resolvedQualityGradeId =
       r.qualityGradeId ?? (r.qualityGrade ? idByCode.get(r.qualityGrade) ?? null : null);
+    // ⚠️ DEPO DAMGASI TERFİNİN PARÇASIDIR: mal stok kümesine giriyorsa deposu
+    // DOLU olmak zorunda, yoksa "depoda ama hangi depoda belli değil" bir top
+    // doğar — defter satırı da (aşağıda) sessizce atlanır, yani hata görünmez.
+    // Damga mevcut depoyu EZMEZ; yalnız NULL'sa varsayılanı yazar.
+    const stampedWarehouse = WAREHOUSE_STOCK_STATUSES.includes(status)
+      ? await warehouseStampTx(tx, r.warehouseId)
+      : {};
     await tx.roll.update({
       where: { id: r.id },
       data: {
         status,
         currentStepId: null,
         form: RollForm.ACIK,
+        ...stampedWarehouse,
         ...(barcodeGenerated ? { barcode } : {}),
         ...(resolvedQualityGradeId && resolvedQualityGradeId !== r.qualityGradeId
           ? { qualityGradeId: resolvedQualityGradeId }
           : {}),
       },
     });
+    // Damga bir depo yazdıysa defter satırı da ONU kullanmalı — yoksa satır hâlâ
+    // `r.warehouseId` (NULL) okuyup atlanır ve damga deftere yansımaz.
+    const effectiveWarehouseId = stampedWarehouse.warehouseId ?? r.warehouseId;
     // DEPO DEFTERİ — üretimden depoya GİRİŞ. Fire (SCRAP) satır yazmaz: top
     // üretime girerken zaten stoktan çıkmıştı, geri gelmiyor.
     // ⚠️ 0 metraj kapıya GİRMEZ: taşınacak mal yok, yani hareket de yok — bu
     // SCRAP/deposuz dallarıyla aynı sınıf meşru atlama. Süzülmezse kapı haklı
     // olarak fırlatır ve kurşun açık kumaşın (`currentQty: 0`) depoya inmesi
     // adım kapatmayı 500'e düşürürdü.
-    if (r.warehouseId && WAREHOUSE_STOCK_STATUSES.includes(status) && qtyYazilabilir(r.currentQty)) {
+    if (effectiveWarehouseId && WAREHOUSE_STOCK_STATUSES.includes(status) && qtyYazilabilir(r.currentQty)) {
       await postStockMove(tx, {
         rollId: r.id,
         eventType: WarehouseEventType.PRODUCTION,
         qty: r.currentQty,
-        to: { warehouseId: r.warehouseId, status },
+        to: { warehouseId: effectiveWarehouseId, status },
         reasonCode: STOCK_MOVE_REASON.PRODUCTION_RECEIPT,
         workOrderStepId: opts?.workOrderStepId ?? null,
       });

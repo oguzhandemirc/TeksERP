@@ -10,7 +10,7 @@
 // ÖLÇÜLENLER
 //   §1 Son adım finalize: depoya inen topa PRODUCTION satırı (yön, statü, metraj, sebep)
 //   §2 Fire (SCRAP) satır YAZMAZ — top üretime girerken zaten stoktan çıkmıştı
-//   §3 Deposuz top satır YAZMAZ (yazılacak depo yok; sessiz atlama BURADA meşru)
+//   §3 Deposuz top DAMGALANIR ve satırı yazılır (sessiz atlama 2026-09-13'te kalktı)
 //   §4 Dispozisyon motoru (WO kapanış) depoya indirirken PRODUCTION satırı yazar
 //   §5 İptal (CANCELLED) satır YAZMAZ — stok dışından stok dışına
 // =============================================================================
@@ -80,7 +80,27 @@ async function main(): Promise<void> {
   );
   check("§1c Sebep kodu PRODUCTION_RECEIPT", mWh[0]?.reasonCode === STOCK_MOVE_REASON.PRODUCTION_RECEIPT, String(mWh[0]?.reasonCode));
   check("§2 ⭐ Fire (SCRAP) satır YAZMADI", (await movementsOf(rScrap)).length === 0);
-  check("§3 Deposuz top satır YAZMADI", (await movementsOf(rNoWh)).length === 0);
+  // ⚠️ §3 2026-09-13'te TERS ÇEVRİLDİ. Eski hâli "deposuz top satır YAZMADI" diyordu
+  // ve gerekçesi "yazılacak depo yok, sessiz atlama burada meşru"ydu. Terfi artık
+  // DEPO DAMGALIYOR (`warehouseStampTx`): mal stok kümesine giriyorsa deposu dolu
+  // olmak zorunda, yoksa "depoda ama hangi depoda belli değil" bir top doğuyor ve
+  // defter satırının atlanması o hatayı GÖRÜNMEZ kılıyordu.
+  const noWhRows = await movementsOf(rNoWh);
+  const noWhRoll = await prisma.roll.findUnique({
+    where: { id: rNoWh }, select: { warehouseId: true },
+  });
+  check(
+    "§3 ⭐ Deposuz top DAMGALANDI ve satırı YAZILDI (sessiz atlama kalktı)",
+    noWhRoll?.warehouseId !== null && noWhRows.length === 1 &&
+      noWhRows[0]?.toWarehouseId === noWhRoll?.warehouseId &&
+      noWhRows[0]?.toStatus === RollStatus.WAREHOUSE,
+    `damgalandı=${noWhRoll?.warehouseId !== null} satır=${noWhRows.length}`,
+  );
+  check(
+    "§3b ⭐ Damga VARSAYILAN depoya yazdı (terfi malı TAŞIMAZ, yalnız NULL'u doldurur)",
+    noWhRoll?.warehouseId === warehouse.id,
+    `damga=${String(noWhRoll?.warehouseId)} varsayılan=${warehouse.id}`,
+  );
 
   // ── §4 + §5 — dispozisyon motoru ──────────────────────────────────────────
   const rDisp = await mkRoll("D", gWh.code, gWh.id, warehouse.id);
