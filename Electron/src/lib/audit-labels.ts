@@ -711,6 +711,75 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   // ⚠️ `CHEQUE.kind` bilerek override ALMAZ: global "Verdiğimiz (kendi
   // çekimiz)" onun için zaten doğrudur.
   "CHEQUE.status": { ISSUED: "Verildi" },
+  // ChequeEventType (2026-09-13) — `cheque.service` audit yüküne `event: "..."`
+  // yazıyor (`:1598` RETURN · `:1840` CANCEL) ve o değerler `WarehouseEventType`
+  // ile ÇAKIŞIYOR. Global cevap DEPO dilinde yazılmış:
+  //   RETURN → "İade girişi"     (müşteri iadesinin DEPOYA girişi)
+  //   CANCEL → "Kayıttan düşme"  (top iptali/fire — depodan düştü)
+  // Çekin iadesi bir depo girişi, çek olayının iptali bir fire DEĞİLDİR;
+  // denetim ekranı bu iki olayı yanlış Türkçeyle basıyordu. Kusur, düz
+  // `değer → Türkçe` haritasının ilk göreni tutmasından doğuyor ve bekçisi
+  // YOKTU (aynı sınıf `ITEM_PRICE.kind`te bir kez ELLE yakalanmıştı).
+  "CHEQUE.event": { RETURN: "Çek iade edildi", CANCEL: "Çek kaydı iptal edildi" },
+};
+
+/**
+ * PAYLAŞILAN ENUM DEĞERLERİ — BEYAN EDİLMİŞ BİRLİK (2026-09-13).
+ *
+ * ⚠️ BİR DEĞERİN PAYLAŞILMASI KUSUR DEĞİLDİR; BEYAN EDİLMEMİŞ OLMASI KUSURDUR.
+ * Aşağıdaki 25 satır 25 borç değil, 25 ONAYLANMIŞ ortaklıktır.
+ *
+ * NEDEN VAR: `ENUM_LABELS` düz `değer → Türkçe`dir ve bir değeri birden çok
+ * enum paylaşabilir (ölçüldü 2026-09-13: 239 değerin 25'i paylaşımlı,
+ * `CANCELLED` tek başına 14 enum'da). Harita ilk göreni tutar ⇒ paylaşılan bir
+ * değerde TEK cevap verilir. O cevap tüm paylaşanlar için doğruysa sorun yok;
+ * değilse denetim ekranı yanlış Türkçe basar ve DERLEYİCİ SUSAR.
+ *
+ * Bu liste kusuru değil, kusurun SESSİZLİĞİNİ kapatır: `test_audit_labels`
+ * şemadaki her çakışmayı bu listede arar. Yeni bir enum değeri var olan bir
+ * değerle çakıştığında kapı KIRMIZI verir ve yazan kişiyi tek bir soruyla
+ * yüzleştirir: *ortak Türkçe bu yeni enum için de doğru mu?* Doğruysa buraya
+ * satır eklenir, değilse `FIELD_ENUM_OVERRIDES`a girdi yazılır.
+ *
+ * ⚠️ Liste İKİ YÖNLÜ denetlenir: şemadan düşmüş bir çakışma burada kalırsa
+ * (ölü satır) kapı yine kırmızı verir — tek yönlü beyan listeleri şişer ve
+ * şişmiş bir liste kapının kendisi olur.
+ */
+export const SHARED_ENUM_VALUES: Record<string, string> = {
+  // ── Ortak Türkçe TÜM paylaşanlar için doğru ────────────────────────────────
+  EXTERNAL: "StationType(dış istasyon) ve WarehouseEventType(dış hareket) — ikisi de 'Dış'",
+  SUBCONTRACTOR: "istasyon/mükerrer-varlık/cari — üçü de aynı gerçek kişiyi işaret eder: 'Fason'",
+  OTHER: "istasyon türü ve ödeme yöntemi — ikisi de 'Diğer'",
+  YARN: "kalem türü ve sayım satırı türü — ikisi de 'İplik'",
+  SCRAP: "sapma türü / top statüsü / kalite rolü — üçünde de 'Fire'",
+  SCALE: "tartı kaynağı ve çevre birimi türü — ikisi de 'Kantar'",
+  MANUAL: "tartı kaynağı ve kur kaynağı — ikisi de 'Elle girildi'",
+  CANCELLED: "on dört durum enum'u — hepsinde 'İptal' (en geniş ortaklık)",
+  CUSTOMER: "firma türü / mükerrer-varlık / cari — üçü de 'Müşteri'",
+  PENDING: "sipariş/adım/cihaz — üçü de 'Bekliyor'",
+  APPROVED: "sipariş ve cihaz — ikisi de 'Onaylandı'",
+  COMPLETED: "altı durum enum'u — hepsinde 'Tamamlandı'",
+  PLANNED: "iş emri / sevkiyat / sevkiyat olayı — üçü de 'Planlandı'",
+  SUPERSEDED: "iş emri ve basılı belge — ikisi de 'Eski Versiyon'",
+  ACTIVE: "yedi durum enum'u — hepsinde 'Aktif'",
+  VOIDED: "refakat kartı ve basılı belge — ikisi de 'İptal'",
+  DISPATCHED: "sevkiyat ve sevkiyat olayı — ikisi de 'Sevk Edildi'",
+  PARTIAL: "içe aktarım ve alış siparişi — ikisi de 'Kısmi'",
+  DRAFT: "fatura ve sayım — ikisi de 'Taslak'",
+  IN: "ödeme yönü ve iplik hareketi — ikisi de 'Giriş'",
+  OUT: "ödeme yönü ve iplik hareketi — ikisi de 'Çıkış'",
+  ISSUED: "ChequeKind ve ChequeStatus — global 'Verdiğimiz (kendi çekimiz)' ikisinde de doğru; durum alanı ayrıca CHEQUE.status override'ı taşır",
+
+  // ── Ortak Türkçe YETMEYEN — FIELD_ENUM_OVERRIDES ile ayrılmış ──────────────
+  PURCHASE:
+    "InvoiceType('Alış Faturası') ve PriceKind — ortak cevap PriceKind için YANLIŞ; " +
+    "ITEM_PRICE.kind override'ı ile ayrıldı (bu kusur 2026 öncesinde ELLE yakalandı, bekçisi yoktu)",
+  RETURN:
+    "WarehouseEventType('İade girişi') ve ChequeEventType — ortak cevap çek için YANLIŞ; " +
+    "CHEQUE.event override'ı ile ayrıldı (2026-09-13)",
+  CANCEL:
+    "WarehouseEventType('Kayıttan düşme') ve ChequeEventType — ortak cevap çek için YANLIŞ; " +
+    "CHEQUE.event override'ı ile ayrıldı (2026-09-13)",
 };
 
 /** Audit değeri bağlamı — `tableName` yoksa yalnız global harita kullanılır. */
