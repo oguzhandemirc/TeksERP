@@ -32,13 +32,19 @@
 //   §10 Deftere fiziksel silme — beyansız silme kırmızı (doktrin yasağı)
 //   §11 "Ters yolu ebeveynindedir" çürütmesinin zayıf halkası: EBEVEYNİN ters yolu var mı
 //   §12 "Saf yapılandırma pivotu" çürütmesinin zayıf halkası: miktar/para taşıyor mu
+//   §13 ⭐ OLAY DÜZEYİ — §6'nın TANECİK ikizi. §1–§12 MODELİ ölçer; bir defterin
+//      ters yolu olması HER OLAYININ ters yolu olduğunu söylemez. Bu kol her
+//      `STOCK_MOVE_REASON` kodunun ters yolunu beyana karşı doğrular (evren iki
+//      yönlü · atıflar katalogda gerçek mi · ileri↔ters SİMETRİK mi · beyanlı
+//      kodun yazarı var mı). ⚠️ Kapsamı SEBEP KODU TAŞIYAN satırlardır.
 //
 // DB GEREKTİRMEZ: statik analiz (AST + tip denetleyicisi). Prisma istemcisi
 // açılmaz, havuz kurulmaz.
 // =============================================================================
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { DEFTER_BEYANI, type DefterBeyani } from "./lib/defter-beyan";
+import { DEFTER_BEYANI, STOK_OLAY_BEYANI, type DefterBeyani } from "./lib/defter-beyan";
+import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
 import { SILEN, defterYazimlariniTara, sembolReferanslari } from "./lib/defter-yazim-tarama";
 import { semaAlanlari } from "./revoke-ast-tarama";
 import { walkTs } from "./lib/ts-tarama";
@@ -300,6 +306,70 @@ check("§9c yazım bulundu (fikstür körlüğü değil)", tarama.bulgular.lengt
 const cozulemeyen = [...new Set([...tarama.cozulemeyen, ...scriptTarama.cozulemeyen])];
 console.log(`ℹ️  tipi çözülemeyen iç içe yazım: ${cozulemeyen.length}${cozulemeyen.length ? ` → ${cozulemeyen.slice(0, 8).join(" · ")}` : ""}`);
 console.log("ℹ️  (çözülemeyen satırlar Prisma yazımı OLMAYABİLİR — `summary: { create: n }` gibi sayaç nesneleri de bu kalıba düşer; sıfırdan farklıysa GÖZLE bakılır, sessizce geçilmez)");
+
+console.log("\n=== §13 OLAY DÜZEYİ — her sebep kodunun ters yolu beyanlı mı ===");
+{
+  const kodlar = Object.values(STOCK_MOVE_REASON) as string[];
+  const beyanlilar = Object.keys(STOK_OLAY_BEYANI);
+  // Kullanım taraması KATALOĞUN KENDİSİNİ dışlar — tanım bir kullanım değildir
+  // (aksi hâlde her kod "kullanılıyor" görünür ve §13e hiçbir şey ölçmez).
+  const katalogYolu = join(KOK, "src/constants/stock-move-reasons.ts");
+  const kodKullanimi = new Set<string>();
+  for (const dosya of tsDosyalar) {
+    if (dosya === katalogYolu) continue;
+    const metin = readFileSync(dosya, "utf8");
+    for (const k of kodlar) if (metin.includes(`STOCK_MOVE_REASON.${k}`)) kodKullanimi.add(k);
+  }
+  // §13a/§13b EVREN İKİ YÖNLÜ — yeni kod beyansız kalamaz, ölü beyan da duramaz.
+  const beyansiz = kodlar.filter((k) => !(k in STOK_OLAY_BEYANI));
+  check("§13a her sebep kodu beyanlı", beyansiz.length === 0,
+    beyansiz.length ? `BEYANSIZ: ${beyansiz.join(", ")} — yeni sebep kodu ters yolunu da beyan eder` : `${kodlar.length} kod`);
+  const hayalet = beyanlilar.filter((k) => !kodlar.includes(k));
+  check("§13b beyanda hayalet kod yok", hayalet.length === 0,
+    hayalet.length ? `katalogda YOK: ${hayalet.join(", ")}` : `${beyanlilar.length} beyan`);
+
+  // §13c ATIFLAR GERÇEK Mİ — kod yeniden adlandırılırsa kapı sessiz kalamaz.
+  const oluAtif: string[] = [];
+  for (const [kod, b] of Object.entries(STOK_OLAY_BEYANI)) {
+    const hedef = b.tur === "BAGLI_TERS" || b.tur === "KARSI_OLAY" ? b.kod : b.tur === "TERS_KODU" ? b.ileri : null;
+    if (hedef && !kodlar.includes(hedef)) oluAtif.push(`${kod} → ${hedef}`);
+  }
+  check("§13c ters yol atıfları katalogda var", oluAtif.length === 0,
+    oluAtif.length ? `ÖLÜ ATIF: ${oluAtif.join(" · ")}` : "tüm atıflar çözüldü");
+
+  // §13d SİMETRİ — "A'nın tersi B" diyorsan B de "ben A'nın tersiyim" demeli.
+  // Tek yönlü beyan, ters yolun yanlış koda bağlanmasını SESSİZCE geçirir.
+  const asimetri: string[] = [];
+  for (const [kod, b] of Object.entries(STOK_OLAY_BEYANI)) {
+    if (b.tur !== "BAGLI_TERS" || b.kod === kod) continue;
+    const karsi = STOK_OLAY_BEYANI[b.kod];
+    if (!karsi || karsi.tur !== "TERS_KODU" || karsi.ileri !== kod) {
+      asimetri.push(`${kod} → ${b.kod} (karşı beyan: ${karsi ? karsi.tur : "YOK"})`);
+    }
+  }
+  check("§13d ileri ↔ ters simetrik", asimetri.length === 0,
+    asimetri.length ? `TEK YÖNLÜ: ${asimetri.join(" · ")}` : "her bağlı çift iki yönlü beyanlı");
+
+  // §13e ÖLÜ BEYAN — borç/başka-defter DIŞINDA beyan edilen kodun yazarı olmalı.
+  // (Borç zaten "yazarı yok" diyebilir; BASKA_DEFTER'in yazarı tanımı gereği yok.)
+  const yazarsiz = Object.entries(STOK_OLAY_BEYANI)
+    .filter(([, b]) => b.tur !== "BORC" && b.tur !== "BASKA_DEFTER")
+    .map(([k]) => k)
+    .filter((k) => !kodKullanimi.has(k));
+  check("§13e beyanlı kodun yazarı var", yazarsiz.length === 0,
+    yazarsiz.length ? `YAZARI YOK: ${yazarsiz.join(", ")} — kod ölü mü, yazarı mı? (ikisi ayrı sonuç)` : "hepsi kullanılıyor");
+}
+
+const olayBorclari = Object.entries(STOK_OLAY_BEYANI).filter(([, b]) => b.tur === "BORC");
+console.log(`\n=== AÇIK OLAY BORÇLARI (${olayBorclari.length}/${Object.keys(STOK_OLAY_BEYANI).length}) — sebep kodu düzeyi ===`);
+console.log("ℹ️  ⚠️ KAPSAM: bu kol yalnız SEBEP KODU TAŞIYAN satırları konuşur. Fabrika yedeğinde");
+console.log("ℹ️  (tekserp_fabrika_dev, ölçüm 2026-09-13) 778 satırın 721'i sebep kodsuzdur — ufuk öncesi");
+console.log("ℹ️  eski küme, kullanıcı kararıyla ONARILMAYACAK. Buradaki yeşil o satırlar hakkında");
+console.log("ℹ️  hiçbir şey söylemez. (Sayı DAMGALIDIR: kapı statiktir, DB'ye bakmaz.)");
+for (const [kod, b] of olayBorclari) {
+  if (b.tur !== "BORC") continue;
+  console.log(`  • ${kod}: ${b.ne}\n      kanıt: ${b.kanit}\n      sahibi: ${b.sahibi}`);
+}
 
 const acikBorclar = DEFTER_BEYANI.flatMap((b) => (b.borc ?? []).map((x) => ({ model: b.model, ...x })));
 console.log(`\n=== AÇIK DEFTER BORÇLARI (${acikBorclar.length}) — muaf değil, GÖRÜNÜR ===`);

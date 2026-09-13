@@ -303,3 +303,93 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   // ── DURUM ──────────────────────────────────────────────────────────────────
   { model: "UserRecoveryCode", sinif: "DURUM", gerekce: "tek kullanımlık kurtarma kodu; tüketimi `usedAt` ile işaretlenir, defter değil" },
 ];
+
+// =============================================================================
+// OLAY DÜZEYİ — TANECİK BEYANI
+// =============================================================================
+// NEDEN AYRI BİR TABLO: bir defterin ters yolu olması, o defterin HER OLAYININ
+// ters yolu olduğunu SÖYLEMEZ. `WarehouseMovement` tek tablodur ama 13 olay tipi
+// ve 28 sebep kodu taşır; yukarıdaki model düzeyi beyan `reversesMovementId`i
+// görüp yeşil verir ve tek tek olayları hiç sormaz. `FASON_DISPATCH` bu boşlukta
+// yaşadı: ileri satır yazıldı (39), tersi hiç yazılmadı, kapı 127/0 yeşildi.
+//
+// NEDEN AD KALIBI DEĞİL: "her ileriye bir `*_CANCEL`" kuralı burada da yanlıştır.
+// `SCRAP` terminaldir, `ENTRY_RECEIPT`in tersi `ROLL_CANCEL`dır, `PRODUCTION_ISSUE`un
+// tersi `WO_DETACH`tır — hiçbirinin adında `CANCEL` geçmez. ⇒ "`_CANCEL` yok" ile
+// "geri alınamıyor" AYRI ŞEYLERDİR ve liste grep'le üretilemez; beyan gerekir.
+//
+// ⚠️ KAPSAM — BU TABLO DEFTERİN TAMAMINI KONUŞMAZ. Sebep kodu TAŞIYAN satırları
+// konuşur. Fabrika yedeğinde (`tekserp_fabrika_dev`, ölçüm 2026-09-13) 778
+// satırın 721'i sebep kodsuzdur (ufuk öncesi eski küme; kullanıcı kararıyla
+// ONARILMAYACAK) ⇒ bu koldaki yeşil, o satırlar hakkında HİÇBİR ŞEY söylemez.
+// Sayı damgalıdır çünkü kapı statiktir (DB'ye bakmaz); tazelenmesi elle yapılır.
+// =============================================================================
+
+export type OlayTersYolu =
+  /** Tersi YOK ve olmamalı — kararın kendisi nihaidir. */
+  | { tur: "TERMINAL"; gerekce: string }
+  /** Tersi AYRI BİR İLERİ OLAYDIR (bağ yok, karşı yön). */
+  | { tur: "KARSI_OLAY"; kod: string; gerekce: string }
+  /** Tersi `reversesMovementId` ile BAĞLI yazılır. */
+  | { tur: "BAGLI_TERS"; kod: string }
+  /** Bu kodun KENDİSİ bir ters kayıttır; hangi ilerinin tersi olduğunu söyler. */
+  | { tur: "TERS_KODU"; ileri: string }
+  /** Kodun tarif ettiği iş BAŞKA BİR DEFTERDE yaşıyor — ölü değil, YERİNDEN OLMUŞ. */
+  | { tur: "BASKA_DEFTER"; nerede: string; gerekce: string }
+  /** Ters yolu YOK ya da ÖLÇÜLMEDİ — muafiyet değil, görünür borç. */
+  | { tur: "BORC"; ne: string; kanit: string; sahibi: string };
+
+export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
+  PRODUCTION_ISSUE: { tur: "KARSI_OLAY", kod: "WO_DETACH", gerekce: "attachRolls ↔ detachRolls, ikisi de PRODUCTION olayı, karşı yön" },
+  WO_DETACH: { tur: "TERS_KODU", ileri: "PRODUCTION_ISSUE" },
+  PRODUCTION_RECEIPT: { tur: "BAGLI_TERS", kod: "KURSUN_REOPEN" },
+  KURSUN_REOPEN: { tur: "TERS_KODU", ileri: "PRODUCTION_RECEIPT" },
+  TAMBUR_FINALIZE: { tur: "BAGLI_TERS", kod: "TAMBUR_UNDO" },
+  TAMBUR_UNDO: { tur: "TERS_KODU", ileri: "TAMBUR_FINALIZE" },
+  ENTRY_RECEIPT: { tur: "KARSI_OLAY", kod: "ROLL_CANCEL", gerekce: "topun doğuşunun tersi kayıttan düşmesidir; ayrı olay, bağ yok" },
+  ROLL_CANCEL: { tur: "BAGLI_TERS", kod: "CANCEL_RESTORE" },
+  CANCEL_RESTORE: { tur: "TERS_KODU", ileri: "ROLL_CANCEL" },
+  CUSTOMER_RETURN: { tur: "BAGLI_TERS", kod: "RETURN_CANCEL" },
+  RETURN_CANCEL: { tur: "TERS_KODU", ileri: "CUSTOMER_RETURN" },
+  TRANSFER: { tur: "BAGLI_TERS", kod: "TRANSFER_CANCEL" },
+  TRANSFER_CANCEL: { tur: "TERS_KODU", ileri: "TRANSFER" },
+  SHIPMENT_DISPATCH: { tur: "BAGLI_TERS", kod: "SHIPMENT_CANCEL" },
+  SHIPMENT_CANCEL: { tur: "TERS_KODU", ileri: "SHIPMENT_DISPATCH" },
+  KARTELA_DISPATCH: { tur: "BAGLI_TERS", kod: "KARTELA_CANCEL" },
+  KARTELA_CANCEL: { tur: "TERS_KODU", ileri: "KARTELA_DISPATCH" },
+  STOCK_COUNT: { tur: "BAGLI_TERS", kod: "STOCK_COUNT" },
+  SCRAP: { tur: "TERMINAL", gerekce: "gerçek fire kararı; doktrin onu arşivleme değil KARAR sayar (kök CLAUDE.md) — geri alınacak şey top değil kararın kendisidir" },
+  OPENING: { tur: "TERMINAL", gerekce: "defterin epoch fotoğrafı; ÖNCESİ YOK, dolayısıyla tersi de yok (warehouse-ledger-reverse.helper.ts epoch şerhi)" },
+  SHRINK: { tur: "BASKA_DEFTER", nerede: "RollVariance", gerekce: "çekme ÖLÇÜMdür ve `SHRINK_REASON_CODE=\"FASON_CEKME\"` ile varyans defterine yazılır; stok defterinde hiç yazarı yok (ölçüldü 2026-09-13: 0 yazar / 0 satır)" },
+
+  FASON_DISPATCH: { tur: "BORC",
+    ne: "TERS YOLU YOK — fason sevk iptali topu AT_SUBCONTRACTOR → STOCK'a döndürüyor ama deftere HİÇBİR satır yazmıyor; katalogda FASON_*_CANCEL kodu da yok",
+    kanit: "subcontractor.service.ts `cancel` (soft cancel) gövdesinde tek defter çağrısı yok · ölçüldü 2026-09-13: 39 ileri / 0 ters / 0 bağlı",
+    sahibi: "fason alanı (6e)" },
+  FASON_RECEIPT: { tur: "BORC",
+    ne: "ÖLÇÜLMEDİ — fason kabulünün geri alınması deftere satır yazıyor mu bilinmiyor",
+    kanit: "yazan: subcontractor.service.ts `receiveInner` (ENTRY). Geri alma yolu ARANMADI",
+    sahibi: "fason alanı" },
+  DISPOSITION: { tur: "BORC",
+    ne: "ÖLÇÜLMEDİ — iş emri kapanış dispozisyonunun geri alınması deftere satır yazıyor mu bilinmiyor",
+    kanit: "yazan: roll-disposition.helper.ts `applyRollDispositionsTx` (PRODUCTION). Geri alma yolu ARANMADI",
+    sahibi: "iş emri alanı" },
+  CUT_SPLIT: { tur: "BORC",
+    ne: "ÖLÇÜLMEDİ — depo kesiminin geri alınması ebeveyn/çocuk satırlarını tersliyor mu bilinmiyor (net sıfır olay, iki uçlu)",
+    kanit: "yazan: tambur.service.ts `cutWarehouseRoll` · `finalizeWarehouseCut` (TRANSFORM ×4). Geri alma yolu ARANMADI",
+    sahibi: "tambur alanı" },
+  CUT_DISCARD: { tur: "BORC",
+    ne: "ÖLÇÜLMEDİ — kesim kalanının atılması geri alınabiliyor mu bilinmiyor",
+    kanit: "yazan: tambur.service.ts `finalizeWarehouseCut` (ADJUST)",
+    sahibi: "tambur alanı" },
+  OVERAGE: { tur: "BORC",
+    ne: "ÖLÇÜLMEDİ — kesimde aşım düzeltmesinin tersi bilinmiyor",
+    kanit: "yazan: tambur.service.ts `cutWarehouseRoll` (ADJUST)",
+    sahibi: "tambur alanı" },
+  MANUAL_ADJUST: { tur: "BORC",
+    // ⚠️ "YAZARSIZ" DEĞİL "YAZARI BİLİNMİYOR" (ea'nın ayrımı): ilki bir ölçüm
+    // sonucu gibi okunur, oysa ölçtüğümüz tek şey MAIN'DE yazar görmediğimiz.
+    ne: "YAZARI BİLİNMİYOR ama SATIRI VAR — sınıfı belirlenemiyor",
+    kanit: "main'de 0 yazar; git geçmişinde de yok (`-S` yalnız kataloğa eklendiği `15410b07` ve tasarım notunu buluyor). `tekserp_ea_test`te 24 satır: 2026-09-12 08:17–08:24Z, ardışık ÜRETİM barkodları, eventType CANCEL — yani tek bir toplu koşum ve `15410b07`den SONRA. Sahibi ea'ya soruldu: KENDİSİ DEĞİL (üç ölçüm: tarih · barkod öneki · yazdığı tablolar). ⇒ yazar inmemiş bir çalışma ağacında yaşamış olabilir ve bu git'ten YANLIŞLANAMAZ",
+    sahibi: "AÇIK — sahibi bulunamadı" },
+};
