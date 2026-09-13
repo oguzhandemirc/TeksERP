@@ -395,7 +395,150 @@ Yeni ekran, ölçülmüş 10 mobil kusurun hiçbirini tekrarlamaz:
 
 ⚠️ **SIMULATED boşluğu tekrarlanmayacak:** `source:'SIMULATED'` beyanı bugün **yalnız SCALE/çuval tartısı yolunda** var; METER yolunda yok. Doff sayacı bir ölçüm cihazıdır ⇒ **beyanı baştan taşır** ve kararı backend verir.
 
-### 3.8 · Bu bölümün açık bıraktıkları
+### 3.8 · `DoffEvent` — model tasarımı (ŞEMAYA YAZILMADI, hüküm bekliyor)
+
+**Sınıfı: DEFTER** (`docs/standart/VERITABANI.md` §2) — *"ne oldu"* tutar, `updatedAt` almaz, kronolojisi `createdAt`tir, künye yerine AKTÖR taşır.
+
+```prisma
+/// TOP İNDİRME — tezgahtan kumaş indiği AN. Append-only: satır SİLİNMEZ,
+/// GÜNCELLENMEZ (bu yüzden `updatedAt` yok); geri alma `revokedAt` damgasıdır.
+/// ⚠️ TOP BURADA DOĞMAZ — bu olay yalnız "indi" der; `Roll` KK1'de doğar (§3.5).
+model DoffEvent {
+  id               String   @id @default(uuid()) @db.Uuid
+  machineId        String   @db.Uuid
+  productionLineNo Int      @default(1)
+
+  /// KOŞUM BAĞI OPSİYONEL: operatör koşumu açmayı unutmuş olabilir. Fiziksel
+  /// olarak OLMUŞ bir olayı kaydetmeyi reddetmek, onu atıfsız kaydetmekten
+  /// kötüdür (kurşun `machineId=null` emsali: ATIF UYDURULMAZ). Koşum yoksa
+  /// `ApiResponse.warnings` — 400 DEĞİL.
+  machineRunId     String?  @db.Uuid
+
+  /// ⚠️ `weavingOrderId` KOLON DEĞİLDİR — koşumdan türetilir. FK ikinci kaynak
+  /// olurdu ("tek kaynak satır" sınıfı); `MachineRun.warpBeamId`in silinme
+  /// gerekçesiyle aynı.
+
+  /// Operatörün "İndir"e bastığı an (`clientEnteredAt` kalıbı; makul aralık
+  /// dışındaysa sunucu saatine düşülür). Kronoloji yine `createdAt`tir.
+  doffedAt         DateTime @db.Timestamptz
+  /// Kaç parça indi. CHECK >= 1 — sıfır parçalı doff bir doff değildir.
+  /// Gevşetme yolu tek ifadelidir; sıkmak veri temizliği ister.
+  pieceCount       Int
+
+  /// ⚠️ SAYACIN O ANDAKİ DEĞERİ — tasarımın belirsizlik kapatıcısı.
+  /// Tezgah belgesi (§ sayaç kalitesi) "16-bit sarma ile operatörün doff'ta
+  /// sayacı sıfırlaması AYIRT EDİLEMEYEBİLİR" deyip insana bırakmıştı. Değeri
+  /// doff anında kaydetmek belirsizliği KAYNAĞINDA kapatır: sıfırlama artık
+  /// beyan edilmiş bir olaydır, yorumlanacak bir anomali değil.
+  /// NULL meşru = okunamadı (elle giriş yolu kapatılamaz).
+  counterAtDoff    Decimal? @db.Decimal(18, 0)
+  /// Sayaç nereden geldi. `@default` VERİLMEZ — her yazar açıkça beyan eder.
+  /// ⚠️ `SIMULATED` beyanı BURADA doğar; bugün beyan yalnız SCALE yolunda var,
+  /// METER yolunda yok — o boşluk tekrarlanmıyor. Kararı backend verir.
+  counterSource    MachineDataSource
+
+  /// Fiziksel etikete yazılan kısa kod (`buildDailyCode` emsali, kartela `KRT`).
+  /// Elle yazılabilir olması yeter — tezgaha yazıcı ŞART DEĞİL.
+  code             String   @unique @db.VarChar(32)
+  notes            String?  @db.VarChar(300)
+
+  /// Çevrimdışı kuyruk idempotency'si (`offline/entryAttempt.ts` kalıbı).
+  clientToken      String?  @unique @db.Uuid
+
+  /// GERİ ALMA — `MachineRun`/`MachineStopEvent` ile aynı kalıp; kısmi
+  /// unique'ler `WHERE revokedAt IS NULL` taşır.
+  revokedAt        DateTime? @db.Timestamptz
+  revokedById      String?   @db.Uuid
+  revokeReason     String?   @db.VarChar(300)
+
+  createdAt        DateTime @default(now()) @db.Timestamptz
+  createdById      String?  @db.Uuid
+
+  machine     Machine     @relation(fields: [machineId], references: [id], onDelete: Restrict)
+  machineRun  MachineRun? @relation(fields: [machineRunId], references: [id], onDelete: Restrict)
+  rolls       Roll[]
+
+  @@index([machineId, doffedAt])
+  @@map("doff_events")
+}
+```
+
+Ve `Roll` tarafında tek kolon:
+
+```prisma
+/// BU TOP HANGİ İNDİRMEDEN? NULL = atanmamış (bilinmiyor) — TAHMİN EDİLMEZ.
+/// KK1 sorar (③ aksiyon anında seçim); cevap yoksa boş kalır ve raporda
+/// "atanmamış" kovasında AYRI gösterilir (`beamSlot`un aynı kalıbı).
+doffEventId String? @db.Uuid
+```
++ `@@index([doffEventId])` (domain FK, [DB-12]) + FK `onDelete: Restrict`.
+
+#### Ters yol — `DOFF_CANCEL` (aynı tasarımda, sonraya bırakılmaz)
+
+> Kök kural: *deftere yazan her ileri kaynağın `*_CANCEL` ters yolu olmalı.* *"Sonra ekleriz"* ters yolu olmayan olay üretir.
+
+**Ölçüt "bir top VAR mı" değil, "doff İLERİ SONUÇ YAZDI MI"dır** — ve bu ayrım kuralı basitleştirir:
+
+```
+DOFF_CANCEL açık  ⇔  NOT EXISTS (SELECT 1 FROM rolls WHERE "doffEventId" = :id)
+```
+
+**Statüye BAKILMAZ.** İptal edilmiş ya da fire yapılmış top da sayılır: bir kez top doğduysa doff **tarihsel bir olgudur** ve topun sonraki kaderi onu değiştirmez. Topun iptali kendi defter satırını yazar; doff kendi satırında kalır. İkisi de doğrudur, ikisi de durur — *geri alma ileri kaydı ne siler ne değiştirir.*
+
+⇒ Tek yüklem, tek sorgu, tek satırlık bekçi. Üç dallı statü kontrolü yok.
+
+⚠️ **`Roll.doffEventId`i `null`'lamak YASAKTIR** — kök kuralın *"ileri damgayı `null`'lamak ters kayıt DEĞİLDİR"* satırının tam kapsamında (`dispatchedAt` · `weighedAt` · `invoicedAt` ailesi). Bağ koparılmaz; doff geri alınamaz, top kendi iptal yolundan gider.
+
+#### 409 TOPU ADIYLA SÖYLER — soyut sayı yetmez
+
+Kök kural: *yıkıcı işlemde arayüz etkilenen HER kaydı listeler.* Bu yüzden 409 gövdesi:
+
+```json
+{ "details": { "code": "DOFF_HAS_ROLLS",
+               "barcodes": ["F250913-0042", "F250913-0043"],
+               "rollIds": ["…", "…"] } }
+```
+
+Operatör *"geri alamazsın"* değil, **"şu topu önce iptal et"** görür. Emsal: `ROLL_WAREHOUSE_MISSING` (`{code, barcodes[], rollIds[]}`).
+
+#### ⚠️ (1)+(2) GERİLİMİ — koşumsuz doff iş emrinin metresini SESSİZCE eksiltir
+
+İki karar tek tek doğru ama **birlikte bir boşluk açıyor** (1e'nin ölçümü, ilk taslakta kaçırdım):
+
+- `weavingOrderId` kolon değil ⇒ iş emrine **koşum üzerinden** ulaşılıyor
+- `machineRunId` nullable ⇒ **koşumsuz doff meşru**
+
+⇒ Koşumsuz bir doff'un iş emrine ulaşan **hiçbir yolu yok.** O doff'tan doğan top gerçek, metre gerçek — ama *"bu dokuma iş emri kaç metre üretti"* sorusunun cevabına **girmiyor.** Ve kimse fark etmez, çünkü toplam **makul** görünür.
+
+> **Sessiz atlama bir dayanıklılık özelliği değil, bir GÖRÜNMEZLİK özelliğidir.**
+
+**Şart: rapor ÜÇ SAYI basar ve TOPLAMAZ.**
+
+| kova | yüklem | ne anlatır |
+|---|---|---|
+| **iş emrine bağlı doff metresi** | `machineRunId` dolu → koşum → iş emri | ana sayı |
+| **koşumsuz doff (atıfsız)** | `machineRunId IS NULL` | ⚠️ metre gerçek, iş emrine giremiyor |
+| **doff'suz top** | `entrySource = WEAVING AND doffEventId IS NULL` | top gerçek, doff'a bağlanamadı |
+
+İkinci ve üçüncü kova **adıyla** gösterilir; ana sayıya karışmaz, gizlenmez. Bu kolonların NULL kalmasının meşru olmasının tek sebebi budur.
+
+**Ve `warnings` metni KAYBI söyler, yalnız durumu değil:**
+
+> ❌ *"Açık koşum bulunamadı."*
+> ✅ **"Koşum açılmadığı için bu indirme iş emri metresine GİRMİYOR."**
+
+Operatör *"tamam, sonra açarım"* değil **"bunu şimdi düzeltmeliyim"** düşünmeli.
+
+📌 **Ve oranı ÖLÇ:** karne *"koşumsuz doff oranı"*nı bassın. Sık çıkıyorsa bu bir veri modeli kararı değil **bir arayüz kusurudur** — tablet koşumu kendisi açmalı. Sayı olmadan bu bilinemez.
+
+#### Bekçi
+
+`test_machine_doff_source.ts` (adı tezgah belgesinde zaten var, **fazı Faz 1b olarak okunur**) üç şeyi ölçer:
+1. `WEAVING` ile doğan topun kaynağı ve `DoffEvent` bağı,
+2. **türetilen metrenin stok yazmadığı** — AST: `producedM` ile `Roll` miktar yazan yol **aynı ifadede geçemez**,
+3. `DOFF_CANCEL` yüklemi — **negatif sonda**: yüklemden `NOT EXISTS` düşürülünce kırmızı vermeli.
+
+### 3.9 · Bu bölümün açık bıraktıkları
 
 - **Dokuma işinin planlama ekranı** (panel tarafı) — bu belgenin kapsamı dışı, `WeavingOrder` CRUD'u standart master-data kalıbı.
 - **`unitsPerCm`in kalıcı evi** — tezgah tasarımı §10/#9 zaten açık bırakmış (kaynak: `WarpSpec` ailesi, **sert bağımlılık eklenmez**). Faz 1-2'de elle girilir ve donar.
