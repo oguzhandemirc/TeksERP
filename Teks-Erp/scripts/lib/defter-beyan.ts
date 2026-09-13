@@ -263,13 +263,16 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     ["src/services/shipping.service.ts"],
     { silen: ["src/services/shipping.service.ts"] }),
 
-  D("SackTagAssignment", "çuval izi (etiket) ataması", { tur: "YOK" }, [],
-    ["src/services/sack-tag.service.ts"],
-    { silen: ["src/services/sack-tag.service.ts"], borc: [{
-      ne: "YALNIZ ELLE KALDIRMA yolunda satır fiziksel siliniyor — SEVK yolu ZATEN soft (clearedAt + clearedShipmentId, undoDispatch geri alıyor, applyTagsTx'te diriliş dalı var). Kapanır (mekanizma HAZIR, şema değişmez): removeAll/remove dalları deleteMany yerine `updateMany { clearedAt: now, clearedShipmentId: null }` yazar (null = elle kaldırma, sevk temizliğinden ayrışır; undoDispatch onu DİRİLTMEZ çünkü clearedShipmentId ile arar); diriliş dalı `clearedAt: { not: null }` ile zaten yakalar → beyan {DAMGA clearedAt} + tersYazan applyTagsTx",
-      kanit: "sack-tag.service.ts:488 (removeAll) · :492 (remove) deleteMany, ikisi ACTIVE_TAG_WHERE = { clearedAt: null } süzgeçli (kapının tarayıcısı, 2026-09-13) · yazan tek dosya, createMany :511 skipDuplicates. Kapanır ölçülür: `silen` boşalır → §10 ÖLÜ SİLME kırmızı",
-      sahibi: "sevkiyat alanı",
-    }] }),
+  // BORÇ KAPANDI (2026-09-14): elle kaldırma da soft — `applyTagsTx` remove/removeAll
+  // `clearedAt`+`clearedById` damgalar (`clearedShipmentId` NULL = elle; sevk temizliği
+  // `performDispatchTx`→`clearSackTagsOnDispatchTx` adres yazar). Ters yol iki yazıcı:
+  // storno adresle (`restoreSackTagsOnUndoDispatchTx`), yeniden bırakma ① dalıyla
+  // (`applyTagsTx`, künye taze). Satır artık hiçbir yoldan silinmiyor (§10 ölçer).
+  D("SackTagAssignment", "çuval izi (etiket) ataması — damga çifti clearedAt/clearedById; adres kolonu clearedShipmentId sevk ↔ elle ayrımı",
+    { tur: "DAMGA", kolon: "clearedAt" },
+    [{ dosya: "src/services/sack-tag.service.ts", sembol: "restoreSackTagsOnUndoDispatchTx" },
+     { dosya: "src/services/sack-tag.service.ts", sembol: "applyTagsTx" }],
+    ["src/services/sack-tag.service.ts"]),
 
   // ── TEZGAH DEFTERLERİ (dokuma P2/P2b-1, 2026-09-13) — yazma yüzeyi HENÜZ YOK ──
   // Dört model şema-only indi; hiçbirinin `src/`de satır yaratan yolu yok (ölçüldü:

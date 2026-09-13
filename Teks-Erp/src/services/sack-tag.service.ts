@@ -297,9 +297,9 @@ export const SackTagService = {
    * önce temizlenmişleri dirilt (künye TAZE damgalanır — yeni bir bırakmadır),
    * sonra kalanları yaz.
    *
-   * ⚠️ KALDIRMA SERT SİLER ama YALNIZ ETKİN satırı: temizlenmiş satır stornonun
-   * adresidir (`clearedShipmentId`), ona dokunmak geri almayı sessizce boşa
-   * çıkarırdı.
+   * ⚠️ KALDIRMA SOFT DAMGADIR ve YALNIZ ETKİN satıra dokunur: temizlenmiş satır
+   * stornonun adresidir (`clearedShipmentId`), ona dokunmak geri almayı sessizce
+   * boşa çıkarırdı. Elle kaldırılan satır `clearedShipmentId` NULL ile ayrışır.
    */
   async setSackTags(sackId: string, tagIds: string[], userId?: string): Promise<ApiResponse<SackTagBadge[]>> {
     const sack = await prisma.sack.findUnique({ where: { id: sackId }, select: { id: true } });
@@ -482,27 +482,33 @@ async function applyTagsTx(
   removeAll: boolean,
   userId?: string,
 ): Promise<{ added: number; removed: number }> {
+  // KALDIRMA SOFT DAMGADIR, SİLME DEĞİL (2026-09-14): satır `clearedAt`+`clearedById`
+  // alır, `clearedShipmentId` NULL kalır — sevk temizliğinden ayrışır; storno
+  // (`restoreSackTagsOnUndoDispatchTx`) adresle aradığı için elle kaldırılanı
+  // diriltmez, yeniden bırakma ① dalıyla diriltir. Defter satırı silinmez.
+  const clearData = { clearedAt: new Date(), clearedShipmentId: null, clearedById: userId ?? null };
   let removed = 0;
   if (removeAll) {
     removed = (
-      await tx.sackTagAssignment.deleteMany({ where: { sackId: { in: sackIds }, ...ACTIVE_TAG_WHERE } })
+      await tx.sackTagAssignment.updateMany({ where: { sackId: { in: sackIds }, ...ACTIVE_TAG_WHERE }, data: clearData })
     ).count;
   } else if (remove.length) {
     removed = (
-      await tx.sackTagAssignment.deleteMany({
+      await tx.sackTagAssignment.updateMany({
         where: { sackId: { in: sackIds }, tagId: { in: remove }, ...ACTIVE_TAG_WHERE },
+        data: clearData,
       })
     ).count;
   }
 
   let added = 0;
   if (add.length) {
-    // ① DİRİLİŞ — sevkte temizlenmiş satırı yeniden etkin yap. Künye TAZE
-    //    damgalanır: bu yeni bir bırakmadır, eski bırakanın adına yazılamaz.
+    // ① DİRİLİŞ — sevkte ya da elle temizlenmiş satırı yeniden etkin yap. Künye
+    //    TAZE damgalanır: bu yeni bir bırakmadır, eski bırakanın adına yazılamaz.
     added += (
       await tx.sackTagAssignment.updateMany({
         where: { sackId: { in: sackIds }, tagId: { in: add }, clearedAt: { not: null } },
-        data: { clearedAt: null, clearedShipmentId: null, createdById: userId ?? null, createdAt: new Date() },
+        data: { clearedAt: null, clearedShipmentId: null, clearedById: null, createdById: userId ?? null, createdAt: new Date() },
       })
     ).count;
     // ② YENİ SATIRLAR — `skipDuplicates` idempotency: ağ-retry mükerrer satır

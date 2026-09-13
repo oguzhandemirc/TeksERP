@@ -481,6 +481,7 @@ model User {
   invoicedDirectShipments    DirectShipment[]         @relation("DirectShipmentInvoicedBy")
   weighedSacks               Sack[]                   @relation("SackWeighedBy")
   sackTagAssignments         SackTagAssignment[]      @relation("SackTagAssignmentCreatedBy")
+  sackTagAssignmentsCleared  SackTagAssignment[]      @relation("SackTagAssignmentClearedBy")
   swatchStockReductions      SwatchStockReduction[]   @relation("SwatchStockReductionCreatedBy")
   swatchStockReductionsReversed SwatchStockReduction[] @relation("SwatchStockReductionReversedBy")
   kursunBypassAssigned       KursunBypassAssignment[] @relation("KursunBypassAssignedBy")
@@ -5759,6 +5760,12 @@ model SackTagAssignment {
   /// süpürürdü. FK DEĞİL, düz adres kolonu — `sourceRefId` ile aynı desen.
   clearedShipmentId String? @db.Uuid
 
+  /// ELLE KALDIRMA da SOFT (2026-09-14): `applyTagsTx` remove/removeAll dalları
+  /// satırı silmiyor, `clearedAt` damgalıyor — `clearedShipmentId` NULL kalır, bu
+  /// yüzden sevk temizliğinden ayrışır (storno onu diriltmez). Kim kaldırdı:
+  /// `revokedAt`+`revokedById` çiftiyle aynı desen.
+  clearedById String? @db.Uuid
+
   /// ⚠️ CASCADE ZORUNLU: `removeSack` gerçek `tx.sack.delete` yapıyor
   /// (`shipping.service.ts`). Restrict bırakılsaydı ETİKETLİ BOŞ ÇUVAL BİR DAHA
   /// SİLİNEMEZDİ ve hata operatöre ham FK mesajı olarak çıkardı.
@@ -5767,6 +5774,7 @@ model SackTagAssignment {
   /// 409'u Türkçe söyler; katalogdan çıkarma `isActive:false` iledir.
   tag       SackTag @relation(fields: [tagId], references: [id], onDelete: Restrict)
   createdBy User?   @relation("SackTagAssignmentCreatedBy", fields: [createdById], references: [id])
+  clearedBy User?   @relation("SackTagAssignmentClearedBy", fields: [clearedById], references: [id])
 
   createdAt DateTime @default(now()) @db.Timestamptz
 

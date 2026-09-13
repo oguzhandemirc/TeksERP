@@ -24,6 +24,9 @@
 //       (409 DEĞİL) · `add`+`remove` aynı çağrıda serbest
 //   §9  Katalog: kod addan türer/değişmez · kullanımdaki etiket 409 · migration
 //       O-22 DEFERRABLE composite FK'ları KORUDU
+//   §10 ELLE KALDIRMA SOFT (2026-09-14): satır silinmez, `clearedAt`+`clearedById`
+//       damgalanır, `clearedShipmentId` NULL kalır; yeniden bırakma aynı satırı
+//       diriltir; storno elle kaldırılanı GETİRMEZ (adresle arar)
 //
 // ⚠️ NEGATİF SONDALAR ÜRÜN KODU ÜZERİNDE ÖLÇÜLDÜ (2026-09-04) — ALTISI DA kırmızı
 // verdi, her biri sonra md5 ile birebir geri alındı:
@@ -35,6 +38,10 @@
 //   5. `sack_tag_assignments_sackId_fkey` DB'de RESTRICT'e çevrildi → 3 ❌
 //      (durum kodu −1 = ham Prisma FK hatası; tam da öngörülen arıza)
 //   6. toplu uçtaki DISPATCHED atlaması etkisizleştirildi → 3 ❌
+//   7. (2026-09-14) `applyTagsTx` kaldırma dalları `deleteMany`ye geri çevrildi →
+//      §10 kırmızı (satır yok) · storno adres yerine `sackId`+`clearedAt` ile
+//      diriltir hâle getirildi → "ELLE kaldırılanı GETİRMEDİ" kırmızı (ayrışma
+//      sondası). İkisi de commit mesajında sayılarıyla.
 //
 // ⚠️ 4. SONDA İLK YAZIMDA ISIRMADI (ölçüldü): §1'de yalnız FİLTRE kontrol
 // ediliyordu ve filtre satırı hiç döndürmediği için rozetin ne bastığı GÖRÜNMÜYORDU
@@ -370,6 +377,53 @@ async function main(): Promise<void> {
       data: { removed: number };
     };
     check("§8 `removeAll` tüm izleri kaldırdı", all.data.removed === 1 && (await SackTagService.getSackTags(sBos.id)).data.length === 0);
+
+    // =====================================================================
+    console.log("\n[§10] ELLE KALDIRMA SOFT DAMGADIR — satır silinmez, storno onu diriltmez");
+    // `removeAll` az önce sBos'taki t3 izini kaldırdı. Defter doktrini: satır
+    // DURMALI, `clearedAt`+`clearedById` almalı, `clearedShipmentId` NULL kalmalı
+    // (sevk temizliğinden ayrışma — storno adresle arar, elle kaldırılanı bulmaz).
+    const manuallyCleared = await prisma.sackTagAssignment.findUnique({
+      where: { sackId_tagId: { sackId: sBos.id, tagId: t3 } },
+      select: { clearedAt: true, clearedShipmentId: true, clearedById: true },
+    });
+    check(
+      "⭐ §10 elle kaldırılan satır SİLİNMEDİ — clearedAt damgalı, clearedShipmentId NULL, clearedById = kaldıran",
+      manuallyCleared !== null && manuallyCleared.clearedAt !== null && manuallyCleared.clearedShipmentId === null && manuallyCleared.clearedById === admin.id,
+      JSON.stringify(manuallyCleared),
+    );
+    // Yeniden bırakma ① dalıyla diriltir — satır sayısı 1 kalır, damga sıfırlanır.
+    await SackTagService.bulkTags({ sackIds: [sBos.id], add: [t3] }, admin.id);
+    const revived = await prisma.sackTagAssignment.findMany({
+      where: { sackId: sBos.id, tagId: t3 },
+      select: { clearedAt: true, clearedById: true },
+    });
+    check(
+      "§10 yeniden bırakma AYNI satırı diriltti (1 satır, clearedAt/clearedById NULL)",
+      revived.length === 1 && revived[0]!.clearedAt === null && revived[0]!.clearedById === null,
+      JSON.stringify(revived),
+    );
+    // Sevk + storno: elle kaldırılan iz stornoyla GERİ GELMEZ (adres NULL), sevkte
+    // temizlenen gelir. sPool §1'de storno edilmişti (PLANNED), yeniden sevk edilir.
+    const tElle = await mkTag("ELLE KALDIRILDI", "#123456");
+    await SackTagService.setSackTags(sPool.id, [tKontrol, tEksik, t3, tSonrasi, tElle], admin.id);
+    // Tekil uçtan kaldırma (toplu uç §10 başında `removeAll` ile ölçüldü) — iki
+    // giriş de aynı `applyTagsTx` gövdesinden geçer; §AUDIT'in son satırı SACK_TAGS kalır.
+    await SackTagService.setSackTags(sPool.id, [tKontrol, tEksik, t3, tSonrasi], admin.id);
+    check("ön koşul — elle kaldırma sonrası 4 etkin iz", (await SackTagService.getSackTags(sPool.id)).data.length === 4);
+    await shippingService.dispatchShipment(shipment.id, { plateNumber: "34TAG02" }, admin.id);
+    check("§10 ikinci sevk izleri temizledi", (await SackTagService.getSackTags(sPool.id)).data.length === 0);
+    await shippingService.undoDispatch(shipment.id, "TEST — elle kaldırılan iz storno ölçümü", admin.id);
+    const afterUndo = (await SackTagService.getSackTags(sPool.id)).data.map((t) => t.id);
+    check(
+      "⭐ §10 STORNO sevkte temizlenen 4 izi getirdi, ELLE kaldırılanı GETİRMEDİ",
+      afterUndo.length === 4 && !afterUndo.includes(tElle),
+      `${afterUndo.length} iz, elle kaldırılan ${afterUndo.includes(tElle) ? "DİRİLDİ" : "duruyor"}`,
+    );
+    check(
+      "§10 hiçbir yol satır silmedi — sPool'da 5 satır (4 etkin + 1 elle temiz)",
+      (await prisma.sackTagAssignment.count({ where: { sackId: sPool.id } })) === 5,
+    );
 
     // =====================================================================
     console.log("\n[§9b] KULLANIMDAKİ ETİKET SİLİNEMEZ (Restrict'in Türkçe sesi)");
