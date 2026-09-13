@@ -26,6 +26,7 @@
 //      ÖLÇÜLDÜ — 2 ileri + 2 ters, toplam net 0
 //   §10 ⭐ YAPISAL değişmez: iptal edilmiş her çocuğun ileri satırı terslenmiş
 //   §11 ⭐ DEPO KESİMİ (TRANSFORM çifti) geri alınınca EBEVEYNİN çıkışı da terslenir
+//   §12 ⭐ initialQty ŞİŞMEZ: kesim düşürmez, geri alma yalnız AŞIMDA bump + OVERAGE (6e, 2026-09-13)
 //       — durum = defter. ⚠️ Bu ayak iki bekçinin ARASINDAKİ DİKİŞİ ölçer: §3
 //       finalize yolunu (ebeveyn çıkışı YOK), `test_stock_ledger_transform` kesimin
 //       İLERİ yolunu ölçüyordu; TRANSFORM çiftinin GERİ ALINMASI ikisinin arasında
@@ -351,6 +352,47 @@ async function main(): Promise<void> {
 
     // E) FULL, kalan "keep" ile ikinci çocuk olmuş: ebeveyn kapanış öncesine döner, İKİ grup da terslenir (100 ↔ 100).
     await dalOlc("E", await depoKesimi("keep_1kalite"), "FULL", 2);
+
+    // ── §12 ⭐ initialQty ŞİŞMEZ — kesim düşürmez, geri alma yalnız AŞIMDA bump'lar ──
+    // 2026-08-29'dan beri `cutWarehouseRoll` initialQty'ye dokunmaz; undo'nun iki dalı
+    // ise "kesim ikisini düşmüştü" varsayıp `+len` ekliyordu ⇒ her depo-kesimi geri
+    // alması girişi şişiriyordu (100→140; okuyucular: rollWhole kapısı · WO üretilen
+    // metraj · coverage · rapor · ikiz kapısı). Üç dal, ölçüt aynı: initialQty
+    // DEĞİŞMEZ, yalnız yeniCurrent > initial ise fark kadar bump + OVERAGE satırı.
+    const initialDurumu = async (id: string) => {
+      const r = await prisma.roll.findUniqueOrThrow({ where: { id }, select: { initialQty: true, currentQty: true } });
+      const asim = await prisma.rollVariance.findMany({ where: { rollId: id, kind: "OVERAGE", reversedAt: null }, select: { qty: true, source: true } });
+      return { initial: Number(r.initialQty), current: Number(r.currentQty), asim };
+    };
+    // A) SINGLE, ebeveyn canlı depoda (tambur-undo :1268 dalı): 100 → kes 40 → geri al ⇒ 100/100, bump YOK.
+    const f12a = await depoKesimi();
+    await undo.applyUndo(f12a.cocuk, undefined, { mode: "SINGLE", reason: "bekçi §12a" });
+    const d12a = await initialDurumu(f12a.ebeveyn);
+    check("§12a ⭐ SINGLE depo geri alma initialQty'yi ŞİŞİRMEZ (100 → 100) ve currentQty 100", d12a.initial === 100 && d12a.current === 100, `initial=${d12a.initial} current=${d12a.current}`);
+    check("§12a aşım YOK ⇒ OVERAGE satırı yazılmadı", d12a.asim.length === 0, `overage=${d12a.asim.length}`);
+    // B) SINGLE_RESTORE, kaynak arşivde (:1465 dalı, stepId yok): 40 m ebeveyne döner ⇒ 40/100, bump YOK.
+    const f12b = await depoKesimi("discard");
+    await undo.applyUndo(f12b.cocuk, undefined, { mode: "SINGLE_RESTORE", reason: "bekçi §12b" });
+    const d12b = await initialDurumu(f12b.ebeveyn);
+    check("§12b ⭐ SINGLE_RESTORE (arşiv dalı) initialQty'yi ŞİŞİRMEZ (100 → 100), currentQty 40", d12b.initial === 100 && d12b.current === 40, `initial=${d12b.initial} current=${d12b.current}`);
+    // C) AŞIM: 08-29 ÖNCESİ verinin ikizi — ebeveynin initialQty'si kesimle DÜŞÜRÜLMÜŞ
+    //    (fikstür 100 → 60 = kesim sonrası current; DB CHECK `rolls_qty_le_initial` daha
+    //    aşağısına izin vermez); geri alma currentQty'yi 100'e çıkarır ⇒ 100 > 60 ⇒ bump 40
+    //    + OVERAGE 40 (TAMBUR_UNDO_RESTORE). `currentQty <= initialQty` korunur, fark deftere.
+    const f12c = await depoKesimi();
+    await prisma.roll.update({ where: { id: f12c.ebeveyn }, data: { initialQty: 60 } });
+    await undo.applyUndo(f12c.cocuk, undefined, { mode: "SINGLE", reason: "bekçi §12c" });
+    const d12c = await initialDurumu(f12c.ebeveyn);
+    check(
+      "§12c ⭐ AŞIMDA yalnız fark kadar bump (60 → 100) ve currentQty ≤ initialQty korunur",
+      d12c.initial === 100 && d12c.current === 100,
+      `initial=${d12c.initial} current=${d12c.current}`,
+    );
+    check(
+      "§12c aşım DEFTERE yazıldı: tek OVERAGE 40, kaynak TAMBUR_UNDO_RESTORE",
+      d12c.asim.length === 1 && Number(d12c.asim[0]!.qty) === 40 && d12c.asim[0]!.source === "TAMBUR_UNDO_RESTORE",
+      JSON.stringify(d12c.asim),
+    );
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

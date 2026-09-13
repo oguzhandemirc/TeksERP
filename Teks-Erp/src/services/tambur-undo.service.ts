@@ -1266,15 +1266,39 @@ export class TamburUndoService {
         }
         restoredTo = "IN_PRODUCTION";
       } else {
-        // cutWarehouseRoll: parent serbest depoda; currentQty VE initialQty geri
-        // (kesim ikisini birden düşmüştü).
+        // cutWarehouseRoll: parent serbest depoda. Kesim yalnız `currentQty`
+        // düşmüştü (`initialQty` üretim anı snapshot'ı, tambur.service şerhi) →
+        // yalnız o geri konur; `initialQty` yalnız AŞIMDA yukarı çekilir ve fark
+        // deftere yazılır — düz `+len` her geri almada girişi şişiriyordu (ölçüldü 2026-09-13: 100→140).
+        const parentRow = await tx.roll.findUnique({
+          where: { id: parentId },
+          select: { initialQty: true, currentQty: true },
+        });
+        const parentInitial = parentRow?.initialQty ?? new Prisma.Decimal(0);
+        const newCurrent = (parentRow?.currentQty ?? new Prisma.Decimal(0)).plus(len);
+        const initialBump = newCurrent.greaterThan(parentInitial)
+          ? newCurrent.minus(parentInitial)
+          : new Prisma.Decimal(0);
+        if (initialBump.greaterThan(0)) {
+          await recordVarianceTx(tx, {
+            rollId: parentId,
+            workOrderStepId: null,
+            kind: RollVarianceKind.OVERAGE,
+            qty: initialBump,
+            source: VARIANCE_SOURCES.TAMBUR_UNDO_RESTORE,
+            userId,
+          });
+        }
         const claimed = await tx.roll.updateMany({
           where: {
             id: parentId,
             status: { in: [RollStatus.WAREHOUSE, RollStatus.STOCK] },
             sackId: null, shipmentId: null,
           },
-          data: { currentQty: { increment: len }, initialQty: { increment: len } },
+          data: {
+            currentQty: { increment: len },
+            ...(initialBump.greaterThan(0) ? { initialQty: { increment: initialBump } } : {}),
+          },
         });
         if (claimed.count !== 1) {
           throw AppError.conflict("Kaynak top artık serbest depoda değil — tek parça iptali yapılamadı");
@@ -1422,22 +1446,16 @@ export class TamburUndoService {
         select: { preTamburCloseStatus: true, initialQty: true, currentQty: true },
       });
 
-      // Metraj geri koyma İKİ DALDA FARKLI — `applySingle`ın canlı-kaynak
-      // dallarının birebir aynası (ayna bozulursa aynı kesimin canlı/arşiv geri
-      // alması farklı muhasebe üretir):
-      //  • ÜRETİM akışı (`cutOpenFabric`): kesim yalnız `currentQty` düşmüştü →
-      //    yalnız o geri konur; `initialQty` orijinal girişte durur.
-      //  • DEPO kesimi (`cutWarehouseRoll`): kesim İKİSİNİ birden düşmüştü →
-      //    ikisi birden geri konur (aksi hâlde sahte AŞIM satırı doğardı).
-      // Aşım koruması yalnız üretim dalında anlamlı: geri konan metraj kayıtlı
-      // girişi aşarsa `initialQty` yukarı çekilir ve fark deftere yazılır
-      // (FULL invariantının tekil ikizi — imkânsız satır bırakılmaz).
+      // Metraj geri koyma İKİ DALDA AYNI KURAL — `applySingle`ın canlı-kaynak
+      // dallarının birebir aynası: kesim her iki dalda da yalnız `currentQty`
+      // düşmüştü (`initialQty` üretim anı snapshot'ı), yalnız o geri konur; geri
+      // konan metraj kayıtlı girişi aşarsa `initialQty` yukarı çekilir ve fark
+      // deftere yazılır (FULL invariantının tekil ikizi — imkânsız satır kalmaz).
       const parentInitial = parentRow?.initialQty ?? new Prisma.Decimal(0);
       const newCurrent = (parentRow?.currentQty ?? new Prisma.Decimal(0)).plus(restored);
-      const initialBump =
-        stepId && newCurrent.greaterThan(parentInitial)
-          ? newCurrent.minus(parentInitial)
-          : new Prisma.Decimal(0);
+      const initialBump = newCurrent.greaterThan(parentInitial)
+        ? newCurrent.minus(parentInitial)
+        : new Prisma.Decimal(0);
       if (initialBump.greaterThan(0)) {
         await recordVarianceTx(tx, {
           rollId: parentId,
@@ -1488,11 +1506,7 @@ export class TamburUndoService {
           status: revivedStatus,
           currentStepId: stepId,
           currentQty: { increment: restored },
-          ...(stepId
-            ? initialBump.greaterThan(0)
-              ? { initialQty: { increment: initialBump } }
-              : {}
-            : { initialQty: { increment: restored } }),
+          ...(initialBump.greaterThan(0) ? { initialQty: { increment: initialBump } } : {}),
           // Kapanış-öncesi kayıt tüketildi — bir sonraki kapanış kendi
           // değerini yazacak (FULL ile aynı gerekçe).
           preTamburCloseQty: null,
