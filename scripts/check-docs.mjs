@@ -265,6 +265,73 @@ if (tarihsizSayilar.length) {
   process.exit(1);
 }
 
+// --- GATE: KODDAN BELGEYE ÇAPA (2026-09-13) ---
+// VAKA (5e): `KUTUPHANELER.md §2` bölündü, bir bekçi o tabloyu DOSYADAN okuyordu
+// ve kırıldı — `check-docs` GÖRMEDİ. Belge kapısı yalnız `.md → dosya` linklerine
+// bakıyordu; oysa BİR KODUN OKUDUĞU BELGE YOLU DA BİR ÇAPADIR ve belge taşınınca
+// sessizce kopar. Eksik olan yön KODDAN BELGEYE.
+//
+// ⚠️ KAPSAM DAR VE ÖLÇÜLMÜŞ: yalnız bir DOSYA SİSTEMİ çağrısında kullanılan yollar.
+// Ağaçta ölçüldü — yorumlarda geçen ~20 belge atfı (prose) KAPSAM DIŞI: onlar
+// koparsa belge bayatlar, kod ÇALIŞMAYA DEVAM EDER. Gerçekten okuyan: 3 bekçi.
+// Bu ayrım olmasaydı kapı 20 yanlış pozitifle doğardı.
+//
+// İki yazım biçimi de tanınır (ölçüldü, ikisi de ağaçta var):
+//   readFileSync("docs/x/y.md")                    → tek literal
+//   readFileSync(join(REPO, "docs", "standart", "y.md"))  → parçalı join
+// Parçalı biçimde `docs`tan SONRAKİ her parça literal olmalı; değilse yol
+// DİNAMİKTİR ve sessizce atlanır (uydurma bir yol üretip yanlış kırmızı vermeyiz).
+const KOD_UZANTI = /\.(ts|tsx|mjs|cjs|js)$/;
+const FS_CAGRISI = /\b(readFileSync|readFile|existsSync|statSync|createReadStream)\s*\(/;
+const TEK_LITERAL = /["'`](docs\/[A-Za-z0-9._/-]+\.(?:md|json))["'`]/g;
+const JOIN_PARCALI = /join\s*\(([^()]*)\)/g;
+
+function kodDosyalari(dir, out = []) {
+  for (const name of readdirSync(dir)) {
+    if (SKIP_DIRS.has(name)) continue;
+    const full = join(dir, name);
+    const st = statSync(full);
+    if (st.isDirectory()) kodDosyalari(full, out);
+    else if (KOD_UZANTI.test(name)) out.push(full);
+  }
+  return out;
+}
+
+const kodCapalari = [];
+for (const file of kodDosyalari(REPO_ROOT)) {
+  const rel = relative(REPO_ROOT, file).replace(/\\/g, "/");
+  // ⚠️ YORUMLAR ELENİR — bu kapı İLK KOŞUMDA KENDİNİ yakaladı: başlığındaki
+  // `join(REPO, "docs", "standart", "y.md")` ÖRNEĞİ gerçek bir çağrı sanıldı.
+  // Bugün DÖRDÜNCÜ kez aynı sınıf: bir tarayıcının ilk kurbanı kendi belgesidir.
+  const src = readFileSync(file, "utf8")
+    .split("\n")
+    .map((l) => (l.trim().startsWith("//") || l.trim().startsWith("*") ? "" : l))
+    .join("\n");
+  if (!FS_CAGRISI.test(src)) continue; // dosya hiç okuma yapmıyorsa atıfları prose'dur
+  const aday = new Set();
+  for (const m of src.matchAll(TEK_LITERAL)) aday.add(m[1]);
+  for (const m of src.matchAll(JOIN_PARCALI)) {
+    const parcalar = m[1].split(",").map((x) => x.trim());
+    const i = parcalar.findIndex((p) => /^["'`]docs["'`]$/.test(p));
+    if (i < 0) continue;
+    const kuyruk = parcalar.slice(i);
+    if (!kuyruk.every((p) => /^["'`][A-Za-z0-9._-]+["'`]$/.test(p))) continue; // dinamik
+    aday.add(kuyruk.map((p) => p.slice(1, -1)).join("/"));
+  }
+  for (const p of aday) {
+    if (!/\.(md|json)$/.test(p)) continue;
+    if (!existsSync(join(REPO_ROOT, p))) kodCapalari.push({ rel, path: p });
+  }
+}
+if (kodCapalari.length) {
+  console.error(
+    `❌ Doküman bekçisi ${kodCapalari.length} ÖLÜ KOD→BELGE ÇAPASI buldu — bir kod bu belgeyi\n` +
+      `   OKUYOR ama dosya YOK. Belge taşındıysa kodu güncelle; bölündüyse yeni dosyayı göster.\n`,
+  );
+  for (const c of kodCapalari) console.error(`  ${c.rel}\n      okur: '${c.path}' — MEVCUT DEĞİL\n`);
+  process.exit(1);
+}
+
 // --- GATE: ölü-link (CI FAIL) ---
 if (deadLinks.length === 0) {
   console.log(`✅ Doküman bekçisi: ölü doküman-link yok (${mdFiles.length} .md tarandı).`);
