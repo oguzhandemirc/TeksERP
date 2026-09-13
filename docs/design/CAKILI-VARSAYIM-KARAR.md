@@ -20,7 +20,7 @@
 
 # Çakılı varsayım — ilk üçün KARARI (2026-09-12 gece, Fable; salt okuma, ağaca yazılmadı)
 
-> Ölçümler `tekserp_fabrika_dev` (fabrikanın canlı yedeği, `TEST-` hariç) ve ağaç `129cd330`+. Her kararda beş soru: mekanizma+DÜZEY · bugünkü davranışın ölçülmüş korunma cümlesi · geçiş · (③) okut/kaldır · kapsam ("mal başka yoldan girer mi").
+> Ölçümler fabrikanın dev kopyası (fabrikanın canlı yedeği, `TEST-` hariç) ve ağaç `129cd330`+. Her kararda beş soru: mekanizma+DÜZEY · bugünkü davranışın ölçülmüş korunma cümlesi · geçiş · (③) okut/kaldır · kapsam ("mal başka yoldan girer mi").
 
 ---
 
@@ -90,7 +90,7 @@
 
 # Mobil ikinci tur — A/B/C/D KARARI (2026-09-12 gece, Fable; salt okuma, ağaca yazılmadı)
 
-> Ölçüm `tekserp_fabrika_dev` + ağaç. Beş soru: mekanizma+DÜZEY · bugünkü davranış birebir (ölçülmüş) · geçiş · kapsam. B kısa.
+> Ölçüm fabrikanın dev kopyası + ağaç. Beş soru: mekanizma+DÜZEY · bugünkü davranış birebir (ölçülmüş) · geçiş · kapsam. B kısa.
 
 ---
 

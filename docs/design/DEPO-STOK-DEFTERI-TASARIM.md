@@ -2,7 +2,7 @@
 
 > **Durum: CANLI TASARIM.** Ölçüm bitti, kararlar alınıyor. Uygulama üç commit'e bölündü (§9).
 > Doktrin: `docs/kurallar/defter.md`. Karar mercii bu belgedir; uygulayan oturum burada yazanı tartışmaz, uygular.
-> Ölçüm tarihi 2026-09-12, hedef `tekserp_fabrika_dev` (fabrikanın 11 Eylül 03:00 yedeği), **test artığı süzülmüş**.
+> Ölçüm tarihi 2026-09-12, hedef fabrikanın dev kopyası (fabrikanın 11 Eylül 03:00 yedeği), **test artığı süzülmüş**.
 
 ## 0. Tek cümle
 
@@ -64,7 +64,7 @@ ya metraj (kesim, çekme, düzeltme, aşım) ekseninde.
 Fason dönüşünde doğan toplar ara adımda **üretime** doğuyor (`bornStatus = IN_PRODUCTION`) ama defter koşulsuz
 `ENTRY` yazıyor. Bu fabrikada fason-dönüşü ENTRY'lerinin **57/57'si** böyle: 34 IN_PRODUCTION + 23 TAMBUR_CONSUMED,
 **32.044 m**. Yani bugünkü defter yalnız eksik değil, bir yerde de **fazla** sayıyor. Ayrıntı ve sıra: §3.1.
-⚠️ `tekserp_fabrika_dev` kopyasında 2026-09-12'de 69 / 33.148 m görünür: fazladan 12 satır `TST-` iş emirli TEST
+⚠️ fabrikanın dev kopyası kopyasında 2026-09-12'de 69 / 33.148 m görünür: fazladan 12 satır `TST-` iş emirli TEST
 ARTIĞIDIR (bekçi koşumlarının fixture'ları, `clean_test_residue.ts` kapsamı), fabrika verisi değil — onarım script'i
 (`scripts/onarim_fason_donus_entry.ts`) bunları "TEST ARTIĞI" diye ayırır ve terslemez; gerçek sayı 57 / 32.044 m.
 
@@ -272,7 +272,7 @@ derlenmeyen ara durum bırakılmaz, şema yazımı + `generate` + ona bağlı ko
    kolonlar + index'ler · CHECK'ler `NOT VALID` · ayrı `VALIDATE CONSTRAINT`. Damga bandı **`20260912150000`**
    (bant dağıtımı tek elden yöneticide; 130000/130100 ea'da, 140000 özellik pivotunda, 120100+ 01'de — dev DB'ye daha küçük damgalı migration sonradan uygulanırsa
    `migrate deploy` sırası ile defter sırası ayrışır, hijyen bekçisi bunu görür).
-3. `apply-migration.ts --apply` → `tekserp_fabrika_dev` (şema; **veri backfill'i DEĞİL**, o ertelendi).
+3. `apply-migration.ts --apply` → fabrikanın dev kopyası (şema; **veri backfill'i DEĞİL**, o ertelendi).
 4. `prisma generate`.
 5. Helper + servis yazımları (tek kaynak `warehouse-stock.helper.ts`, defter yazım yolları, ters kayıt helper'ı).
 6. `typecheck` + `test_schema_drift` + `test_db_invariants` + yeni bekçiler.

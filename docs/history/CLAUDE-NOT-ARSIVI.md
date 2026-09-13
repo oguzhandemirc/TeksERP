@@ -5343,7 +5343,7 @@ APK **yok**.
 ## 2026-09-11 — Dev veritabanı FABRİKANIN CANLI YEDEĞİ oldu + beş migration canlı şemada doğrulandı [ÇEKİRDEK]
 
 Kullanıcı fabrikanın `20260911_030001` yedeğini getirdi ve dev hedefi olmasını
-istedi. `dump/tekserp_yeni_20260911_030001.dump` → `tekserp_fabrika_dev`
+istedi. `dump/tekserp_yeni_20260911_030001.dump` → fabrikanın dev kopyası
 (5,3 MB custom dump → 54 MB DB). Eski `tekserp_demo` SİLİNMEDİ, duruyor.
 
 ### Beş migration GERÇEK ŞEMADA doğrulandı — uyum tam
@@ -5385,7 +5385,7 @@ KULLANMAMIŞ, yani 5980ff06'nın düzelttiği hata sahada hiç ateşlenmemiş. A
 `scripts/db-guard.ts` izin listesi SON EKE bakar (`_dev` · `_test` · `_local` ·
 `_demo`) ve dosyanın kendi başlığı bunu zaten yazmış: *"tehlike sunucuda değil
 GELİŞTİRİCİ MAKİNESİNDE … dev DB'nin KENDİSİ (bu projede dev DB, prod'un
-kopyasıdır)"*. `tekserp_fabrika_dev` `_dev` ile bittiği için
+kopyasıdır)"*. fabrikanın dev kopyası `_dev` ile bittiği için
 `clean_test_residue.ts --apply` ve `reset-operational.ts` bu hedefte KOŞAR.
 
 Bu soyut bir risk değil: aynı gün `clean_test_residue --apply` demo DB'de **468
@@ -5395,7 +5395,7 @@ ayrışıyor). Fabrika verisinde `TEST-` önekli kayıt YOK (ölçüldü: top 0,
 0, kalem 0) yani betik bugün gerçek satır silmez — ama bekçiler bu hedefte
 koştukça fixture birikir ve o fixture'lar silinirken aynı sınıf hasar doğar.
 
-**Kural: `tekserp_fabrika_dev` hedefinde yıkıcı betik ELLE ONAY olmadan
+**Kural: fabrikanın dev kopyası hedefinde yıkıcı betik ELLE ONAY olmadan
 koşulmaz.** `docs/GELISTIRME-DONGUSU.md`'ye yazıldı.
 
 ### Üç kapı
@@ -5510,7 +5510,7 @@ yok → §7a.
 
 ### Test ortamı — fabrika DB'sinde paket YANILTIYOR
 
-`npm test` `tekserp_fabrika_dev`de 399/477: kırmızı 78'in **70'i** "Seed fixture
+`npm test` fabrikanın dev kopyasında 399/477: kırmızı 78'in **70'i** "Seed fixture
 eksik: PATOS" ile çöktü — ve bunlar tam da bu değişikliği ölçen akış bekçileri
 (manual_move, fason undo/cancel, split, batch). Fixture'lı ayrı DB kuruldu
 (`tekserp_b4b_test`: migrate deploy + seed + seed:fixtures): **472/477**. Kalan
@@ -5680,7 +5680,7 @@ bir okumayla çürütülmeye çalışıldı (5 ölçüm + 5 doğrulama ajanı).
 | İncelenmeli | 1 | `cancel()` adım yeniden değerlendirmesi (`subcontractor.service.ts` ~2128): K4c + kardeş sevk iptali artık "sonsuza dek ACTIVE" yerine mevcut yanlış dala düşer (makbuz yoksa PENDING, `startedAt` silinir). Aynı dal bugün TAM doğrudan sevkte de var; kök kusur `receiptCount`un tek kanıt sayılması. Ağırlık artmadı, düzeltilmedi. |
 | Risk | 0 | Yeni açılan hiçbir yol tüketilmiş topa yazamaz: kabul/iptal/taşıma yolları topu ayrıca `AT_SUBCONTRACTOR` ile claim eder. |
 
-Canlı veri: `tekserp_fabrika_dev`'de doğrudan sevk operasyonu **0** (DSK 0, damgalı
+Canlı veri: fabrikanın dev kopyasında doğrudan sevk operasyonu **0** (DSK 0, damgalı
 sevk 0, `directShipmentId` dolu top 0) → bugün hiçbir rakam değişmez; düzeltme
 önleyicidir. `directShipmentId` kolonundan önceki (2026-07-15 öncesi) alt küme
 sevkleri helper'da açık görünmeye devam ederdi — fabrikada böyle satır yok.
@@ -5699,7 +5699,7 @@ sevkleri helper'da açık görünmeye devam ederdi — fabrikada böyle satır y
   silinince 8a/8b kırmızı · açık listesi süzgeci + bölünme düşümü silinince 7d/8a
   kırmızı · §24b OR ve §24c süzgeci silinince iki sonda kırmızı. Hepsi geri alındı,
   yeşil.
-- Paket fixture'lı ayrı DB'de koşuldu (`tekserp_fabrika_dev`'de değil).
+- Paket fixture'lı ayrı DB'de koşuldu (fabrikanın dev kopyasında değil).
 
 ### Yan bulgular — DÜZELTİLMEDİ (ölçüm sırasında çıktı, yöneticiye bildirildi)
 
@@ -6550,7 +6550,7 @@ kodunu ekler.
 
 ### Bulgu
 
-Ortak çalışma ağacındaki `Teks-Erp/.env` `tekserp_fabrika_dev`i — fabrikanın
+Ortak çalışma ağacındaki `Teks-Erp/.env` fabrikanın dev kopyasını — fabrikanın
 canlı yedeğini — gösteriyor. Açık `DATABASE_URL` verilmeden koşulan HER bekçi
 oraya yazar; tam paket 1.500'den fazla `deleteMany` gönderir. `productionDbGate`
 yalnız HOST'a bakıyordu ve fabrika yedeği de localhost'ta olduğu için kapı bu
@@ -6954,7 +6954,7 @@ Aynı dilimde KAPI BOŞLUĞU kapanacak: `test_migration_hygiene.ts` ad sırası 
 ### Olay
 
 Şema dilimi yazılırken `scripts/apply-migration.ts` DDL'i (bir kısmi index + iki
-CHECK) **fabrikanın canlı yedeğine** (`tekserp_fabrika_dev`) uyguladı; oysa hedef
+CHECK) **fabrikanın canlı yedeğine** (fabrikanın dev kopyası) uyguladı; oysa hedef
 bir test veritabanıydı. Veri etkilenmedi — yalnız DDL.
 
 ### Kök sebep
@@ -8094,7 +8094,7 @@ sınırda ve **sınırda olduğu söylenerek** geçirildi (5 bağımsız yazım,
 
 **Saha sorusu / ölçüm.** Miktar zinciri metre varsayıyordu; `Item.unit` (MT/KG/ADET) mal kabul
 dışında hiç okunmuyordu. Kiloyla satan bir örmecide 1000 kg'lık satır ~1000 m sevkte sessizce
-KAPANIYOR ve kg'a metre fiyatı çarpılıyordu. Ölçüldü (`tekserp_fabrika_dev`, `8ce92cb3`):
+KAPANIYOR ve kg'a metre fiyatı çarpılıyordu. Ölçüldü (fabrikanın dev kopyası, `8ce92cb3`):
 245/245 kalem MT · 474/474 sipariş satırı MT · `order_lines.unit` yok · `invoice_lines` 0 satır
 (finans bu fabrikada hiç yazmamış) · d9'un HTTP sondası: MT kalem ve KG kalem 100 m sevkte
 **birebir aynı** sonucu veriyordu (shippedQty 100, COMPLETED, uyarı yok).

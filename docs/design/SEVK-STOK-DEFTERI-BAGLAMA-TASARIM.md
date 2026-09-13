@@ -8,7 +8,7 @@
 
 Stok kümesine giren ya da ondan çıkan HER top hareketi **tipli iki uçla** (`from`/`to` = depo + statü) tek kapıdan (`postStockMove*`) yazılır; **stok dışı uç** (SHIPPED · AT_KARTELA · CANCELLED) depo taşımaz ama statü taşır; deftere yazan her ileri yolun **bağlı ters yolu** vardır; sevk satırı **brüttür ve değişmez** (storno = bağlı ters satır, iade = ayrı ileri satır); geçmiş 721 satır **dokunulmaz**, epoch onları tarihsel iz yapar; **yeni bayrak açılmaz**.
 
-## 1 · Ölçüm — bugünkü gerçek (2026-09-12, `tekserp_fabrika_dev`, ağaç `129cd330`)
+## 1 · Ölçüm — bugünkü gerçek (2026-09-12, fabrikanın dev kopyası, ağaç `129cd330`)
 
 | Yol | Çağrı yeri | Bugün yazdığı | Ters yolu bugün |
 |---|---|---|---|

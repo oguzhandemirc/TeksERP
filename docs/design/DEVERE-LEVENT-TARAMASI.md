@@ -199,7 +199,7 @@ enum YarnCountSystem { DEN  DTEX  NE  NM }   // DEN/DTEX doğru sistem, NE/NM te
 
 | Ölçüm | Sonuç |
 |---|---|
-| **Veri** — 35 `tekserp*` DB'sinin tamamı | Kolonun bulunduğu 18 DB'de `count("linearDensityDen") = 0`; kalan 17'de kolon HİÇ YOK (`tekserp_demo` dahil). `tekserp_fabrika_dev`: 245 item, 0 dolu denye |
+| **Veri** — 35 `tekserp*` DB'sinin tamamı | Kolonun bulunduğu 18 DB'de `count("linearDensityDen") = 0`; kalan 17'de kolon HİÇ YOK (`tekserp_demo` dahil). fabrikanın dev kopyası: 245 item, 0 dolu denye |
 | **Sözleşme** — alan adıyla arama | **DOLU:** Electron 7 dosya (form + Zod + WarpSpecs) · `item.service.ts` create/update · `warp-spec.routes.ts:27` API cevabı · `item.adapter.ts` round-trip. mobil 0 |
 | **Sahadaki panel** | `linearDensityDen`in Electron'a girdiği commit **1.3.1'in ATASI DEĞİL** (`merge-base --is-ancestor` → HAYIR); `package.json` bugün 1.3.1, 1.3.2 hiç yayınlanmadı ⇒ **7 dosya sahada YOK** |
 

@@ -7,7 +7,7 @@
 1. Node >= 22 kullan (backend engines şartı). <sub>(Teks-Erp/package.json:4-6 "engines": { "node": ">=22" }; .github/workflows/ci.yml:86 node-version: 22)</sub> — atlanırsa: Eski Node'da tsx/Prisma 7 çalışmaz; hata mesajı sürüm sebebini söylemez.
 2. Dev veritabanı Docker konteyneri `tekserp-local-db` ayakta olmalı (55433->5432). <sub>(docker ps: 'tekserp-local-db  0.0.0.0:55433->5432/tcp  Up 2 days'; Teks-Erp/CLAUDE.md:138 aynı konteyneri adlandırır)</sub> — atlanırsa: Tüm bekçiler ECONNREFUSED'a düşer; run-all-tests bunu 'altyapı hatası' sayıp 1 kez yeniden dener (run-all-tests.ts:180-187), sonra kırmızı.
 3. `Teks-Erp/.env` var olmalı ve DATABASE_URL yerel geliştirme DB'sini göstermeli (PORT=4000).
-   ⚠️ **2026-09-11'den beri dev hedefi `tekserp_fabrika_dev`** — fabrikanın
+   ⚠️ **2026-09-11'den beri dev hedefi fabrikanın dev kopyası** — fabrikanın
    `20260911_030001` yedeğinin restore'u (5.784 top, 116 sevkiyat, GERÇEK VERİ).
    Eski `tekserp_demo` duruyor ama artık kullanılmıyor. DB adı PROFİL değeridir,
    koda sabitlenmez.

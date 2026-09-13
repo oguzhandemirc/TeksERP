@@ -63,12 +63,27 @@ function check(label: string, ok: boolean, detay = ""): void {
   }
 }
 
-function tsDosyalari(d: string, out: string[] = []): string[] {
+/**
+ * ⚠️ KAPSAM (DOSYA TÜRÜ) — beyan edilir, çünkü 2026-09-13'te BEYAN EDİLMEMİŞTİ ve
+ * bir kör nokta üretti: kapı yalnız `.ts/.tsx/.mjs` tarıyordu, `docs/` HİÇ
+ * taranmıyordu — oysa kural (*"repo PUBLIC ⇒ commit mesajında ve BELGEDE sayı
+ * serbest, KİMLİK yok"*) belgeleri SAYIYOR, kapı SAYMIYORDU. 6e ölçtü: kodda 8
+ * satır (dördü muaf, kapı haklı olarak yeşil) · belgede **23 satır**, hepsi
+ * kapsam dışı. Başlıktaki kapsam beyanı SINIF sınırlarını (IP · e-posta · alan
+ * adı) sayıyordu, DOSYA TÜRÜ sınırını saymıyordu.
+ *
+ * TARANAN : `.ts` `.tsx` `.mjs` (kod) + `.md` (belge) — `src/` `scripts/` `docs/`
+ * TARANMAYAN: `.json` `.sh` `.ps1` `.yml` `.env*` — ölçüldü (2026-09-13): bugün
+ *   hiçbirinde ad yok; ama "yok" ≠ "kapsanıyor". Yarın bir `.yml`e yazılırsa bu
+ *   kapı GÖRMEZ. Sınırı genişletmek bu cümleyi geçersiz kılmaz — sınır KALIR.
+ */
+const TARANAN_UZANTI = /\.(ts|tsx|mjs|md)$/;
+function dosyalar(d: string, out: string[] = []): string[] {
   for (const n of readdirSync(d)) {
-    if (n === "node_modules" || n === "dist" || n === "out") continue;
+    if (n === "node_modules" || n === "dist" || n === "out" || n === ".git") continue;
     const p = join(d, n);
-    if (statSync(p).isDirectory()) tsDosyalari(p, out);
-    else if (/\.(ts|tsx|mjs)$/.test(p)) out.push(p);
+    if (statSync(p).isDirectory()) dosyalar(p, out);
+    else if (TARANAN_UZANTI.test(p)) out.push(p);
   }
   return out;
 }
@@ -76,14 +91,20 @@ function tsDosyalari(d: string, out: string[] = []): string[] {
 function main(): void {
   console.log("=== Kimlik sızıntısı bekçisi ===\n");
 
-  const dosyalar = [...tsDosyalari(join(KOK, "src")), ...tsDosyalari(join(KOK, "scripts"))];
+  const REPO = join(KOK, "..");
+  const taranan = [
+    ...dosyalar(join(KOK, "src")),
+    ...dosyalar(join(KOK, "scripts")),
+    ...dosyalar(join(KOK, "docs")),
+    ...dosyalar(join(REPO, "docs")),
+  ];
   // KÖRLÜK ZEMİNİ: tarama boşa düşerse "sızıntı yok" ile "hiçbir şeye bakılmadı"
   // aynı yeşile çıkar.
-  check("§0a körlük zemini: dosyalar tarandı", dosyalar.length > 400, `${dosyalar.length} dosya`);
+  check("§0a körlük zemini: dosyalar tarandı", taranan.length > 400, `${taranan.length} dosya`);
 
   const bulgular: string[] = [];
   const muafBulunan = new Set<string>();
-  for (const f of dosyalar) {
+  for (const f of taranan) {
     const rel = relative(KOK, f).replace(/\\/g, "/");
     const src = readFileSync(f, "utf8");
     if (!src.includes(FABRIKA_DB)) continue;
