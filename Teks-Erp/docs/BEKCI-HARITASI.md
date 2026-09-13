@@ -5,6 +5,19 @@
 Alanlar: bölüm başlıkları aşağıda. **Sayı YAZILMAZ** — güncel dağılım için `grep -c '^| .Teks-Erp/scripts/' Teks-Erp/docs/BEKCI-HARITASI.md`.
 
 
+> ⛔ **BU DOSYA BÜTÜN OKUNMAZ — alan başlığından girilir.** Ölçüldü 2026-09-14: **475 KB /
+> 2.073 satır**, %97'si tablo satırı; repodaki en büyük CANLI belge. Bütün okumak bir
+> oturumun bağlamının büyük kısmını yer ve hiçbir soruyu daha iyi cevaplamaz.
+> **Erişim biçimi** (`bekci-kos` skill'inin kullandığı): `grep -n '<servis/konu>' <bu dosya>`
+> ya da alan bölümünü aç — `grep '## <alan>' -A 60 <bu dosya>`.
+> ⚠️ **Dosya BÖLÜNMEDİ ve bu bir karardır (1e, 2026-09-14), muafiyet değil:** bölme
+> reçetesinin çizgisi *"kural kalır, ENVANTER ayrılır"* burada tanımsız (%2 nesir), dosya
+> zaten 41 alan bölümüne bölünmüş, ve bir KOD okuyucusu (`scripts/test_identity_ledger.ts`)
+> + 40 canlı belge atfı var. Boyut tavanı da bilerek konmadı — gerekçe
+> `scripts/check-docs.mjs` boyut kapısının yanında yazılıdır.
+> 📌 **Çakışma kuralı:** harita satırı ekleyen commit **yalnız kendi alan bölümüne**
+> dokunur (7 günde 105 commit ölçüldü, dokuz oturum tek dosyada).
+
 ## bilerek-kirmizi — (bekçi × VERİ) listesi
 
 > ⚠️ **Bu bir BEKÇİ listesi değil, bir (bekçi × VERİ) listesidir.** Aynı bekçi bir veritabanında kırmızı, ötekinde yeşildir ve **ikisi de doğrudur**. Ölçüldü 2026-09-13: aynı ağaçta üç oturum üç FARKLI kırmızı listesi çıkardı (`tekserp_e2e_test` · `tekserp_ea_test` · fabrika yedeği). Bu yüzden her satır **hangi veride görünür** alanını taşır; o alan olmadan liste doğru satırlar/yanlış bağlam olur — biri fikstürde koşup "demek düzelmiş" der.
