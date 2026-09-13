@@ -288,7 +288,7 @@ async function main() {
 
   console.log(`\n=== Backend test suite — ${files.length} dosya ===\n`);
 
-  const results: { file: string; ok: boolean; summary: string; ms: number; flaky: boolean; skipped: number }[] = [];
+  const results: { file: string; ok: boolean; summary: string; ms: number; flaky: boolean; skipped: number; ilkKirmizi?: string }[] = [];
 
   /**
    * Süreç anormal mi bitti ve neden? Tek ayırt edici `res.error.code` — ÖLÇÜLDÜ
@@ -424,7 +424,8 @@ async function main() {
     // NOT: retry olduysa `ms` İKİ denemenin toplamıdır (bu yüzden aşağıda "2 deneme"
     // etiketi basılıyor — 360sn'lik bir satır sessizce şaşırtmasın).
     const retryNote = retried ? (flaky ? " (2. denemede)" : ` (2 deneme de düştü; 1.: ${firstSummary})`) : "";
-    results.push({ file, ok: r.ok, summary: r.summary + retryNote, ms, flaky, skipped: r.skipped });
+    const ilkKirmizi = r.out.split("\n").find((l) => /^\s*(❌|✗)\s/.test(l))?.trim().slice(0, 150);
+    results.push({ file, ok: r.ok, summary: r.summary + retryNote, ms, flaky, skipped: r.skipped, ilkKirmizi });
     const icon = r.ok ? (flaky ? "⚠️" : "✅") : "❌";
     const skipNote = r.skipped > 0 ? ` ⚠️ ${r.skipped} atlandı` : "";
     console.log(
@@ -437,6 +438,20 @@ async function main() {
       // (Eski `&& r.status !== 0` koşulu ÖLÜ kodu: `ok === (status === 0)` olduğu
       // için zaten örtük. Öldürülen testte de tail İSTİYORUZ — timeout kill'inde
       // stdout sağlam kalır, yani asılmadan hemen önceki satırlar teşhisin ta kendisi.)
+      // ⚠️ KIRMIZI YÜKLEMİN ADI — KUYRUKTAN ÖNCE (2026-09-13).
+      // Kuyruk son 16 satırdır ve bekçi 25 kontrol basıyorsa kırmızı yüklem
+      // ORTADA kalır: CI raporu `24 geçti, 1 başarısız` der ve HANGİSİ olduğunu
+      // söylemez. ÖLÇÜLDÜ — `test_fold_catalog` bir hafta bu yüzden teşhissiz
+      // kaldı; sayı bir TEŞHİS DEĞİLDİR, bir ADRES gerekir.
+      const kirmiziYuklemler = r.out
+        .split("\n")
+        .filter((l) => /^\s*(❌|✗)\s/.test(l))
+        .map((l) => l.trim());
+      if (kirmiziYuklemler.length > 0) {
+        console.log(`   ↳ KIRMIZI YÜKLEM (${kirmiziYuklemler.length}):`);
+        for (const y of kirmiziYuklemler.slice(0, 10)) console.log(`   | ${y}`);
+        if (kirmiziYuklemler.length > 10) console.log(`   | (+${kirmiziYuklemler.length - 10} yüklem daha)`);
+      }
       const tail = r.out.trim().split("\n").slice(-16).join("\n");
       const head = r.killed ? `   ↳ ${r.killed}` : `   ↳ çıkış kodu ${r.status}`;
       console.log(`${head}\n${tail.replace(/^/gm, "   | ")}`);
@@ -449,7 +464,11 @@ async function main() {
   console.log(`\n=== ÖZET: ${results.length - failed.length}/${results.length} dosya geçti · ${(totalMs / 1000).toFixed(0)}s ===`);
   if (failed.length > 0) {
     console.log("Başarısız:");
-    for (const f of failed) console.log(`  ❌ ${f.file} — ${f.summary}`);
+    // Özet satırı da ADRES taşır: "hangi dosya" yetmez, "hangi yüklem" gerekir.
+    for (const f of failed) {
+      console.log(`  ❌ ${f.file} — ${f.summary}`);
+      if (f.ilkKirmizi) console.log(`       ↳ ${f.ilkKirmizi}`);
+    }
   }
   // ATLANAN KONTROLLER exit kodunu düşürmez ama GİZLENMEZ: beş bekçi (finance /
   // module_flag_off / module_profile / settings_password / superadmin) HTTP
