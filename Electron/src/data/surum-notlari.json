@@ -37,7 +37,7 @@
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Deposu tanımlı olmayan bir top sevk edilemiyor ve iade alınamıyor; uyarı hangi topların eksik olduğunu barkodlarıyla sayar. Önceden bu durum sessizce geçiyordu: sevkiyat tamamlanıyor, mal çıkıyor, ama o topun çıkışı depo defterine HİÇ yazılmıyordu — aynı sevkiyatta iki top çıkıp defterde tek satır görünebiliyordu. Artık işlem durur ve eksik topları listeler; deposunu belirledikten sonra sevk/iade normal şekilde tamamlanır. BU FABRİKADA deposu tanımsız top bulunmuyor, yani günlük işte bir değişiklik beklenmez; uyarı yalnız eski bir yedekten dönülürse ya da dışarıdan aktarılan eski kayıtlarda görünebilir."
+          "metin": "Deposu tanımlı olmayan bir top sevk edilemiyor ve iade alınamıyor; uyarı hangi topların eksik olduğunu barkodlarıyla sayar. Önceden bu durum sessizce geçiyordu: sevkiyat tamamlanıyor, mal çıkıyor, ama o topun çıkışı depo defterine HİÇ yazılmıyordu — aynı sevkiyatta iki top çıkıp defterde tek satır görünebiliyordu. Artık işlem durur ve eksik topları listeler; deposunu belirledikten sonra sevk/iade normal şekilde tamamlanır. Deposu tanımsız topunuz yoksa günlük işte bir değişiklik olmaz; uyarı yalnız eski bir yedekten dönülürse ya da dışarıdan aktarılan eski kayıtlarda görünebilir."
         },
         {
           "kapsam": "panel",
