@@ -190,9 +190,10 @@ function main(): void {
   const satir = r5a.stdout;
   const kolonlar = satir.replace(/\n$/, "").split("\t");
   check(
-    "§5a ⭐ defter satırı biçimi: zaman · wt · adım · ✅/❌/⏭ · sn · çıkış (6 kolon, tek satır, wt'de yol yok)",
+    "§5a ⭐ defter satırı biçimi: zaman · wt · adım · ✅/❌/⏭ · sn · çıkış · load1 (7 kolon, tek satır, wt'de yol yok)",
     r5a.status === 0 &&
-      kolonlar.length === 6 &&
+      kolonlar.length === 7 &&
+      /^\d+\.\d$/.test(kolonlar[6]) &&
       /^\d{4}-\d{2}-\d{2}T/.test(kolonlar[0]) &&
       !kolonlar[1].includes("/") &&
       kolonlar[1].endsWith("wt-0c") &&
