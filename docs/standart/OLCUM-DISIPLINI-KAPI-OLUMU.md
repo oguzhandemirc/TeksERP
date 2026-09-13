@@ -153,6 +153,26 @@ hükmünü daraltarak.)*
 > **Bayat KIRMIZI, bayat yeşilden PAHALIDIR.** Bayat yeşil yanlış güven verir; bayat
 > kırmızı **var olmayan bir işi kuyruğa koyar** ve bir oturumu ona bağlar. *(d9)*
 
+⚠️ **POPÜLASYONUN TAMAMI aynı anda kırmızıysa önce ALETİ şüphelen.** Gerçek kusur
+DAĞILIR: on dosyanın üçü, kırk kuralın altısı. *"Hepsi"* bir kusur deseni değil, bir
+ALET desenidir — yanlış yazılmış tek bir yüklem her üyeyi aynı anda düşürür.
+*(Vaka 2026-09-14: bir ön kontrol, dizin dosyasının **10 dosyanın 10'unda** "beyan YOK"
+dedi; sebep desende bir karakterdi — `` `) `` yazılmıştı, doğrusu `` `] ``. Düzeltilince
+10/10 temiz. Aynı gün gerçek kapı aynı veriyi 9/9 yeşil ölçmüştü ⇒ iki ölçüm ÇELİŞİYORDU
+ve çelişkinin tarafı hangisiyse hatalı olan oydu.)*
+📌 Ucuz ayırt edici: **oranı oku.** %100 ve %0 aletin imzasıdır; aradaki her şey
+olgununkidir. ⇒ Önce pozitif kontrol (*bu desen BİLİNEN bir üyeyi buluyor mu?*), sonra
+hüküm. Kardeşi § 1 · Araç bozuk (`OLCUM-DISIPLINI-ARAC.md`).
+
+⚠️ **Ve karşı uçta: SÜREKLİ bir kırmızı sessiz değildir, DUYULMAZDIR.** Her turda kırmızı
+basan bir kapı listeyi okuyanın gözünde arka plana karışır ve **YENİ bir kırmızıyı da
+gizler**; bedelini yalnız borcun sahibi değil, o listeye bakan herkes öder. *(d9,
+`c3ba2d94`, ölçüldü 2026-09-14; emsal: stok defterinin `K_TABAN` cırcırı.)*
+📌 Panzehir, kapıyı gevşetmek DEĞİL: beklenen kırmızıyı **BEYAN** et — tarih + sahip +
+KAPANIŞ KOŞULU taşıyan bir girdi (`BEKLENEN_EKSIK` kalıbı). Beyanlı olan kırmızı basmaz,
+**beyansız olan basar**; ve beyan kendi kendini tazeler: koşul gerçekleşince girdi ölü
+muaf olur ve kapı onu da söyler.
+
 ### ⑧ Uzaktaki kapı, ürünle ilgisiz bir sebeple HİÇ açılmayabilir
 
 Faturalandırma · kota · izin — uzak koşucu işi **başlatmaz**, ama koşum **KIRMIZI

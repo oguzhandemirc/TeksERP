@@ -21,7 +21,7 @@ kalamaz). ⇒ **Dizin bayatlayamaz; bayatlatmayı deneyen commit durur.** İlk d
 bir kereye mahsus üretildi (2026-09-13); bundan sonrasını üreteç değil KAPI tutar —
 üretece bağlı bir dizin, üreteç koşulmadığı gün sessizce bayatlardı.
 
-Sayı bir ölçümdür ve bu satır da kapı altındadır: **141 başlık / 10 dosya**
+Sayı bir ölçümdür ve bu satır da kapı altındadır: **143 başlık / 10 dosya**
 (ölçüldü 2026-09-13; kapı her koşumda yeniden sayar ve sayı tutmazsa kırmızı verir).
 
 | # | başlık | dosya |
@@ -72,6 +72,8 @@ Sayı bir ölçümdür ve bu satır da kapı altındadır: **141 başlık / 10 d
 |  | § Bir adın geçmesi bir BAĞIMLILIK değildir | (`OLCUM-DISIPLINI-YUKLEM.md`) |
 |  | § Üyelik yalnız HANGİ DOSYALAR değil, HANGİ KOŞULLARDA sorusunu da taşır | (`OLCUM-DISIPLINI-YUKLEM.md`) |
 |  | § (c) Kurbanı bekçinin KENDİ fikstürü — alt dizgi | (`OLCUM-DISIPLINI-SINIRSIZ.md`) |
+|  | § (d) KESİŞİMLE tanımlanan kapsam, YOKLUĞU göremez | (`OLCUM-DISIPLINI-SINIRSIZ.md`) |
+|  | § (e) KISA + SAYISAL + KALABALIK KORPUS — çakışma bir ÇARPIMDIR | (`OLCUM-DISIPLINI-SINIRSIZ.md`) |
 |  | § KABUK ailesi — "komut çalıştı" ile "ölçüm okundu" ayrı şeylerdir | (`OLCUM-DISIPLINI-SUREC.md`) |
 |  | § ASILI KALMAK, çalışmanın DELİLİ değildir — stdin bekleyen komut "yavaş" görünür | (`OLCUM-DISIPLINI-SUREC.md`) |
 |  | § KANCA ailesi — kendi repo'sunu kuran araç, KANCANIN git ortamını MİRAS ALIR | (`OLCUM-DISIPLINI-SUREC.md`) |
@@ -175,7 +177,7 @@ Sayı bir ölçümdür ve bu satır da kapı altındadır: **141 başlık / 10 d
 | [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | YÖNTEM — ölçüm nasıl yapılır, nasıl YAZILIR (15 başlık) |
 | [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) | KATMAN 1a — ölçümün ARACI (16 başlık) |
 | [`OLCUM-DISIPLINI-YUKLEM.md`](OLCUM-DISIPLINI-YUKLEM.md) | KATMAN 1a′ — YÜKLEM (ne sorduğun) (14 başlık) |
-| [`OLCUM-DISIPLINI-SINIRSIZ.md`](OLCUM-DISIPLINI-SINIRSIZ.md) | YÜKLEM'in § Sınırsız eşleşme VAKA envanteri (1 başlık) |
+| [`OLCUM-DISIPLINI-SINIRSIZ.md`](OLCUM-DISIPLINI-SINIRSIZ.md) | YÜKLEM'in § Sınırsız eşleşme VAKA envanteri (3 başlık) |
 | [`OLCUM-DISIPLINI-SUREC.md`](OLCUM-DISIPLINI-SUREC.md) | komutun SÜRECİ ve ORTAMI (4 başlık) |
 | [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | KATMAN 1b — ölçümün KURGUSU (31 başlık) |
 | [`OLCUM-DISIPLINI-ORTAK-AGAC.md`](OLCUM-DISIPLINI-ORTAK-AGAC.md) | KATMAN 1c — PAYLAŞILAN AĞAÇ, ÇOK OTURUM (8 başlık) |

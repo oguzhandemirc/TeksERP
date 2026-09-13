@@ -64,14 +64,16 @@ Kardeşi § Boş çıktı bir ÖLÇÜM değildir ve `OLCUM-DISIPLINI-SINIFLAR.md
 
 ### Sınırsız eşleşme — sınırını BEYAN ETMEYEN yüklem alakasızı içeri alır
 Bir yüklem yanlış olmadan **sınırsız** olabilir: aradığını bulur, ama **aramadığını da**
-bulur. Üç biçim ölçüldü: *kelime sınırı yok* · *bağlam sınırı yok* · *boş küme her şeye
-uyar*. Panzehir aynı: sınırı BEYAN et (boşluk/`\b`, alanı daralt, boş kümeyi ayrı ele al).
+bulur. Dört biçim ölçüldü: *kelime sınırı yok* · *bağlam sınırı yok* · *boş küme her şeye
+uyar* · *kesişimle tanımlanan kapsam yokluğu göremez*. Panzehir aynı: sınırı BEYAN et (boşluk/`\b`, alanı daralt, boş kümeyi ayrı ele al).
 
 | # | vaka | gevşeklik | sonuç |
 |---|---|---|---|
 | a | `grep _shipped` *(2026-09-13)* | alt dizgi | 6 eşleşme, gerçek **3** — fazlalık bir *constraint adı* + bir *emsal yorumu* |
 | b | `lib/<ad>` metni arandı *(2026-09-13)* | ad ≠ bağ | 26 ↔ gerçek **25**; fark bir YORUM satırıydı (§ Bir adın geçmesi bir BAĞIMLILIK değildir) |
 | c | **`!m.includes("9-KAT")`** | alt dizgi | **kurbanı KENDİ fikstürü** — vaka dosyasında |
+| d | ayna kapsamı = *backend ∩ mobil* *(2026-09-14)* | kesişim | 81 backend enum ↔ 16 mobil tip ⇒ **13 kapsamda**; kalan 68'in ölçülmediği basılmıyordu — vaka dosyasında |
+| e | sır kapısı `LIKE '%'\|\|PIN\|\|'%'` *(2026-09-14)* | rakam sınırı yok | altı haneli PIN log korpusunda **%1,07/PIN** çakışıyor; rakam sınırıyla **%0,12** (8,6×) — vaka dosyasında |
 
 ⇒ **Vakaların ÖLÇÜM ayrıntısı ayrı dosyada:** [`OLCUM-DISIPLINI-SINIRSIZ.md`](OLCUM-DISIPLINI-SINIRSIZ.md) — her vakanın korpusu,
 paydası, kapsam beyanı ve panzehri. Burada **kural ve tablo** kalır; vaka envanteri

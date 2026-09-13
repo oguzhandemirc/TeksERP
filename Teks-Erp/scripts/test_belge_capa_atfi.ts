@@ -38,9 +38,10 @@
 //    Kalan tek yanlış pozitif (`§2'deki bir kerelik son elle tur … (`…KURULUM.md`)`)
 //    ① ile eleniyor: hedefte hiç numaralı başlık yok ⇒ o `§2` bir bölüm atfı değil.
 //    ⇒ Ters sıra, düz sırayla AYNI semantiği kullanır; değişen yalnız SIRA'dır.
-//    ⚠️ Ters kolun NUMARALI dalı bugün 0 örnekle koşuyor (ölçüldü 2026-09-13):
-//       ters yazım ağaçta yalnız başlık METNİYLE kullanılıyor. Dal, düz sıranın
-//       aynası olduğu için duruyor — ama körlük zeminini METİN dalı taşıyor.
+//    ⚠️ Ters kolun NUMARALI dalı ÇOK İNCE bir zeminde koşuyor: 2026-09-13'te 0 örnek,
+//       2026-09-14'te 1 (vaka dosyasının `§ 1 · Araç bozuk (`…-ARAC.md`)` kardeş atfı).
+//       Körlük zeminini METİN dalı taşıyor; numaralı dal düz sıranın aynası olduğu
+//       için duruyor, bugünkü kapsamı değil YARINKİ yazımı korumak üzere.
 //
 // ⭐ BAŞLIK DİZİNİ İKİ YÖNDEN ölçülür (2026-09-13, 5e):
 //    `docs/standart/OLCUM-DISIPLINI-DIZIN.md` ölçüm disiplini dosyalarının her başlığını
