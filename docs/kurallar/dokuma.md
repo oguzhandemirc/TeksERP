@@ -70,9 +70,50 @@
 - `test_machine_doff_source` — ⚠️ adı `DOKUMA-TEZGAH-IZLEME-TASARIMI.md:1874`te geçiyor ama **dosya yoktur**. Üç şey ölçecek: ① `WEAVING` ile doğan topun kaynağı ve `DoffEvent` bağı · ② türetilen metrenin stok yazmadığı (AST: `producedM` ile `Roll` miktar yazan yol aynı ifadede geçemez) · ③ `DOFF_CANCEL` yüklemi, **negatif sondayla** (`NOT EXISTS` düşürülünce kırmızı vermeli).
 - `test_weaving_order` — kapanış kapısı (açık koşumla 409 + koşum adları), iptalin defter satırlarına dokunmadığı, `plannedM`in kapanış tetiklemediği.
 
+## Raporların sözleşmesi — üç soru cümlesi
+
+> **Bir rapor bir ÖLÇÜM TANIMIDIR.** Yanlış tanımlanmış bir rapor yanlış bir bekçiden
+> pahalıdır: kimse onu sorgulamaz, **karar ondan verilir.** Bu yüzden her cümle
+> **yanlışlanabilir** yazılır ve yanlışlanma koşulu yanına konur.
+
+**① RANDIMAN**
+> *"Şu tezgah, şu vardiyada, planlı süresinin %A'sında çalıştı (KULLANILABİLİRLİK); çalıştığı sürede hedef devrin %P'sini tutturdu (PERFORMANS) — ve bu iki sayı **ÇARPILMAZ, ayrı sunulur**."*
+> **Yanlışlanır:** kova toplamı planlı süreyi aşarsa · `targetPicksPerMin` NULL iken bir performans sayısı basılırsa.
+
+⚠️ **PAYDA TEK DEĞİL ÜÇ** ve hangisinin hangi orana girdiğini **kova** belirler (ISO 22400-2 + SEMI E10 + Nakajima; `MachineStopLossClass`):
+`NON_SCHEDULED` → **hiçbir paydada yok** · `PLANNED` → planlı süreden düşülür · `UNPLANNED`/`SETUP` → KULLANILABİLİRLİK kaybı · `MINOR` → **PERFORMANS** kaybı, kullanılabilirlik DEĞİL.
+⇒ *"Randıman"* tek bir sayı değildir; tek yüzdeye çökertilirse üç farklı büyüklük aynı adla anılır.
+⚠️ **DÖRDÜNCÜ DURUM: "ölçülemedi".** `MachineRun.targetPicksPerMin` NULL → `MachineSpec.nominalPicksPerMin` yedeği → o da NULL ise **performans HESAPLANMAZ**, rapor *"P: ölçülemedi"* der. Boş hücre değil **beyandır**. (`picksPerRev` yalnız TAVANA girer, paydaya ASLA.)
+
+**② DURUŞ PARETO**
+> *"Şu tezgahta şu aralıkta en çok süreyi yiyen duruş SEBEBİ şudur (N olay, T dakika), ve bu sebep şu KOVAYA düşer."*
+> **Yanlışlanır:** `NON_SCHEDULED` bir paydaya girerse · `MINOR` bir SEBEP gibi listelenirse · serbest metin bir satır üretirse.
+
+⚠️ **İKİ EKSEN, KARIŞTIRILMAZ:** `ReasonPreset.code` = **SEBEP** (sıralama ekseni) · `MachineStopLossClass` = **SÜRE SINIFI** (gruplama ekseni). Tasarımın şerhi: *"`MINOR` bir SEBEP SINIFI DEĞİL, bir SÜRE SINIFIDIR"* — yalnız `tezgah.stopEventMinSeconds` altındaki duruşlardan türer ve `ReasonPreset.stopLossClass`a ASLA yazılamaz.
+⇒ Tek eksende sunulursa *"mikro duruşlar"* bir sebep gibi görünür ve **operatöre yanlış iş verir** — raporun yanlış olmasının en pahalı biçimi.
+⚠️ Sebep **serbest metin DEĞİL**: `reasonCode` → `ReasonPreset.code` (FK'SIZ, `Roll.cancelReasonCode` emsali) ve etiket **kopyalanıp DONAR** — katalog değişse geçmiş rapor değişmez.
+
+**③ VARDİYA KARNESİ**
+> *"A vardiyası (fabrika günü X, 08:00+8s) şu tezgahlarda şu üretimi yaptı; satırların K'sı ÖLÇÜLDÜ, L'si ELLE girildi, M'si ölçülemedi."*
+> **Yanlışlanır:** gün sınırı `src/constants/time.ts` dışından gelirse · `source` kırılımı toplamda erirse · mühürlenmiş karne sonradan değişirse.
+
+## Raporların İKİ DEĞİŞMEZİ
+
+**① ELLE GİRİŞ BİRİNCİ SINIFTIR ve toplamda ERİMEZ.**
+Veri çekilemeyen tezgahlar için elle giriş olacak ⇒ raporun **her toplam satırı** `MachineShiftStat.source` kırılımını taşır. **Tek yüzdeye çökertme YASAK:** *"%78"* denmez, *"%78 (ölçülen 62, elle 16)"* denir.
+⚠️ `SIMULATED` `OPERATOR`dan **AYRI** durur — farklı güven sınıfı; kök `CLAUDE.md` *"uydurulmuş değer `source:'SIMULATED'` beyanıyla gider"* diyor ve birleştirmek o beyanı **yok eder**.
+**Bekçisi:** toplam satırı kırılım toplamına eşit mi **ve** kırılım basılıyor mu. (Şema gerektirmez.)
+
+**② UFUK YAZILIR — ve HER UFKUN TEK KAYNAĞI, AYRI ADI VAR.**
+Rapor *"her şey tutuyor"* demez, *"şu tarihten sonrası ölçülü"* der.
+⚠️ **Dokuma ufku ≠ defter ufku.** Ölçüldü 2026-09-13: `DEFTER_UFKU` **bekçi tarafında** yaşıyor (`scripts/test_consistency.ts:121`), ürün tarafında karşılığı **yok** ve bugün değeri **`null`**. İkisi farklı sorulara cevap verir — *defter ufku* = depoya yazan son kapısız yolun kapandığı gün; *dokuma ufku* = tezgah verisinin toplanmaya başladığı gün. ⇒ Dokuma raporu `DEFTER_UFKU`yu **OKUMAZ**; kendi ufkunu `src/constants/` altında **ayrı adla** ilan eder.
+📌 Birleştirmek, iki farklı güvenilirlik sınırını tek sayıya çökertmek olurdu — ①'de `source` için reddedilen şeyin aynısı.
+
+⚠️ **Beş tablonun beşi de bugün ŞEMADA YOK** (`ShiftDefinition` · `MachineShiftStat` · `MachineStopEvent` · `MachineRun` · `MachineSpec`) — bu bölüm raporların SÖZLEŞMESİDİR, uygulama değil.
+
 ## Açık sorular
 
 - **Koşumsuz doff oranı ölçülmedi.** Sık çıkıyorsa bu bir veri modeli kararı değil bir ARAYÜZ kusurudur (tablet koşumu kendisi açmalı) — karne bu oranı basmalı ve sayı görülmeden karar verilmemeli.
 - **`unitsPerCm`in kalıcı evi belirsiz** (kaynak: `WarpSpec` ailesi; **sert bağımlılık eklenmez**). Faz 1–2'de elle girilir ve donar. <sub>(DOKUMA-TEZGAH §10/#9)</sub>
 - **Fason dokuma bloke:** `SubcontractorDispatchItem.rollId` **NOT NULL** ⇒ fasona yapısal olarak yalnız TOP gidebilir, iplik/levent gidemez. Ayrı dilim; dokuma kararından bağımsız ve Faz 1'i bloklamıyor.
-- **Advisory uzay numarası kesinleşmedi:** envanter bugün `8031`de bitiyor, `8032` (tezgah vardiya mührü) ve `8033` (devere) yazılmamış tasarım rezervasyonudur. `WEAVING_ORDER_LOCK_NS` için `8034` önerildi ama **iniş anında `helpers/period-guard.helper.ts` başlığından yeniden ölçülür** — numara çakışması sessizdir.
+- ~~**Advisory uzay numarası kesinleşmedi**~~ **KAPANDI 2026-09-13** — ölçüldü: `WEAVING_ORDER_LOCK_NS = 8032` indi (`helpers/weaving-order.helper.ts:24`, envanter `period-guard.helper.ts:57`). ⚠️ Önerilen `8034` **kullanılmadı** ve bu satır bir gün boyunca bayat kaldı. ⇒ *Numara çakışması sessizdir* uyarısı doğruydu ama **eksikti: bayat REZERVASYON da sessizdir.** Sonraki uzay için numara buradan değil, **`period-guard.helper.ts` başlığından** okunur.
