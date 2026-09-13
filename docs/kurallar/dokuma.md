@@ -2,13 +2,10 @@
 
 > Alan kural dosyası — bu alana dokunmadan ÖNCE okunur. Hikâye, ölçüm ve gerekçe tasarım belgelerinde; burada yalnız bugün geçerli kural. Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın seçimi.
 
-> ⚠️ **BU ALAN KISMEN KÂĞITTADIR — şema PARÇA PARÇA iniyor.** Ölçüldü 2026-09-13: **`WeavingOrder` İNDİ** (P1, `77b69da9`) · **`MachineRun` İNDİ** (P2, `c07396e6`) · **`MachineSpec` + `LoomShedType` + `MachineMonitoringState` İNDİ** (P4, migration `20260913230000`). **Hâlâ YOK:** `Machine.productionLineCount`/`warpBeamSlots` + hat no doğrulaması (P4b) · `MachineStopEvent` ailesi + `ShiftInstance` + `MachineCollector` (P2b) · `DoffEvent` + `RollEntrySource.WEAVING` (P3). Sıra: **P1 ✅ → P2 ✅ → P4 ✅ → P4b → P2b → P3.**
+> ⚠️ **BU ALAN KISMEN KÂĞITTADIR — şema PARÇA PARÇA iniyor.** Ölçüldü 2026-09-13: **`WeavingOrder` İNDİ** (P1, `77b69da9`) · **`MachineRun` İNDİ** (P2, `c07396e6`) · **`MachineSpec` + `LoomShedType` + `MachineMonitoringState` İNDİ** (P4, migration `20260913230000`). **Hâlâ YOK:** `Machine.warpBeamSlots` (LEVENT belgesinin tek parçalı sürümüne ait) · `MachineStopEvent` ailesi + `ShiftInstance` + `MachineCollector` (P2b) · `DoffEvent` + `RollEntrySource.WEAVING` (P3). Sıra: **P1 ✅ → P2 ✅ → P4 ✅ → P4b ✅ → P2b → P3.**
 >
-> ⛔ **P4b HERHANGİ BİR YAZMA YÜZEYİNDEN ÖNCE İNER.** Bugün `productionLineNo ≤ productionLineCount` doğrulaması yok ve bu tehlikesiz, çünkü o alanı yazan uç da yok; P2b ilk yazma yüzeyini açtığı gün borç tehlikesiz olmaktan çıkar. *Bir doğrulama borcu, onu ihlal edebilecek ilk yüzeyden önce kapanır.* O tabloları anan kural satırları **hâlâ tasarım hükmüdür**; inmiş olanlarınki kodun sözleşmesidir.
->
-> ⚠️ **YAZMA YÜZEYİ HENÜZ YOK:** inen iki tablonun servisi/ucu/izni yazılmadı. Bir yetenek "VAR" sayılmak için üçü birden gerekir (motor + çıkış yüzeyi + izin ataması) — bugün yalnız şema var.
->
-> **Kaynak belgeler:** `docs/design/DOKUMA-IS-EMRI-VE-TABLET-TASARIMI.md` (iş emri bağı · süreç takibi · tablet · `DoffEvent` · `WeavingOrder`) · `docs/design/DOKUMA-TEZGAH-IZLEME-TASARIMI.md` (koşum · duruş · randıman · mühür) · `docs/design/DEVERE-LEVENT-TARAMASI.md` (levent ve defteri).
+> ✅ **P4b İNDİ:** `Machine.productionLineCount` (`@default(1)`, CHECK `>= 1`) + `assertProductionLineValid` yüklemi. ⚠️ **Yüklem BUGÜN HİÇBİR YERDEN ÇAĞRILMIYOR** — ilk çağrı yeri P2b'nin koşum açma ucudur ve o gün bekçiye "çağrıldığı YOL" ayağı eklenir. Borç kapanma koşuluyla yazılıdır.
+> 📌 Bir **guard** bir YOLU korur (yol yoksa erişilemez dal); bir **yüklem** bir SORUYU cevaplar ve çağrısız da doğru ya da yanlıştır ⇒ yazma yüzeyinden önce inebilir, ama bekçisi **davranışını** ölçmek zorundadır, varlığını değil.
 
 ---
 
@@ -67,7 +64,7 @@
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>`
 
-Backend: `test_devere_regime_gate`, `test_audit_labels`, `test_reason_preset_kind_parity`, `test_db_invariants`, `test_timestamptz_contract`, `test_machine_run`, `test_hard_delete_guard_coverage`, `test_master_data_merge_fk_coverage`
+Backend: `test_devere_regime_gate`, `test_audit_labels`, `test_reason_preset_kind_parity`, `test_db_invariants`, `test_timestamptz_contract`, `test_machine_run`, `test_hard_delete_guard_coverage`, `test_master_data_merge_fk_coverage`, `test_production_line`
 
 > ⚠️ **Yukarıdaki `Backend:` satırı KAPININ okuduğu biçimdir, süs değil.** `test_identity_ledger.ts:158` alan koşum listesini yalnız `## Bekçiler` başlığından sonraki `Backend:` satırından ayrıştırır (`` `ad` `` aralarında). Aşağıdaki madde imli açıklamalar **insan içindir ve kapı onları GÖRMEZ**: bu dosya 2026-09-13'te madde imli listeyi taşıyordu ve `test_machine_run` tarif edilmiş olduğu hâlde kapı onu **B-d (KAPSAM eksiği)** saydı. ⇒ *Bir belge bölümünü doldurmak, o bölümü okuyan kapıyı beslemek değildir — kapı bölümü değil BİÇİMİ okur.* Yeni bekçi **iki yere birden** yazılır: `Backend:` satırına (bağ) ve aşağıya (tarif).
 

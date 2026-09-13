@@ -911,6 +911,22 @@ model Machine {
   name      String  @db.VarChar(100)
   isActive  Boolean @default(true)
 
+  /// KAÇ KUMAŞ — makinenin ÇIKTI ekseni. Çift enli tezgah yan yana İKİ ayrı kumaş
+  /// dokur; raşel N levent tüketir ama TEK kumaş örer. ⚠️ Bu eksen tüketilen
+  /// LEVENT sayısından BAĞIMSIZDIR ve ikisini tek sayıya bindiren model birini
+  /// mutlaka yanlış anlatır — üstelik bir uçta doğru çalıştığı için yanlışlık
+  /// SESSİZ kalır (test edilen uç, çalışan uçtur).
+  ///
+  /// ⚠️ CHECK `>= 1` ve yönü ÖLÇÜYLE DEĞİL TERSİNE ÇEVRİLEBİLİRLİKLE seçildi:
+  /// karşı senaryo arandı (izlenen ama üretmeyen ekipman) ve BULUNAMADI, çünkü
+  /// "sayacı yok" hâli zaten `productionLineNo` NULL ile ifade ediliyor. Karşı
+  /// örnek yokken ucuz yönde yanılırız: `>= 1` → gevşetmek tek ifadeli migration;
+  /// `>= 0` → sıkmak veri temizliği ister.
+  ///
+  /// `@default(1)` = BUGÜNKÜ DAVRANIŞ: tek hatlı makinede `productionLineNo`
+  /// sabit 1'dir, yani `machine_runs`ın sedleri bugünküyle AYNI kümeyi reddeder.
+  productionLineCount Int @default(1) @db.SmallInt
+
   // Relations
   station        Station                  @relation(fields: [stationId], references: [id])
   devices        Device[]

@@ -425,6 +425,12 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // burada kurulamaz — satırlar arası CHECK yoktur; o doğrulama P4'ün servis
   // kapısına borçtur ve orada `MachineSpec` ile birlikte iner.
   { table: "machine_runs", name: "machine_runs_productionLineNo_pos" },
+  // 2026-09-13 (dokuma P4b) — migration 20260913235000: makinenin hat SAYISI.
+  // ⚠️ Bu CHECK yalnız ALT sınırı tutar. ÜST sınır (`machine_runs.productionLineNo
+  // <= machines.productionLineCount`) DB'de KURULAMAZ — satırlar arası CHECK yok;
+  // o yüklem `services/helpers/production-line.helper.ts`te yaşar ve
+  // `test_production_line` §1 onun DAVRANIŞINI ölçer (varlığını değil).
+  { table: "machines", name: "machines_productionLineCount_pos" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_dispatchedQty_pos" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_dispatchedWeight_nonneg" },
   { table: "kartela_dispatch_items", name: "kartela_dispatch_items_dispatchedQty_pos" },
