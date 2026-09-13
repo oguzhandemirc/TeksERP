@@ -14,8 +14,9 @@
 --    koşmak "sorunlu satırları" basar ama hiçbir otomasyon farkı göremez.
 --    Bu dosya operatörün satırları GÖZLE görmesi için duruyor. Bir bölümün mantığı
 --    değişecekse ÖNCE burada değişir, sonra test'e kopyalanır (iki yüzey tek gerçek).
---    Test ayrıca burada olmayan §20–§28'i taşır (ilki: WorkOrderStep.status
---    mutabakatı). ⚠️ Yeni bölüm numarası İKİ dosyanın BİRLEŞİMİNDEN seçilir:
+--    Test ayrıca burada olmayan §20–§28 ve §32–§33'ü taşır (ilki: WorkOrderStep.status
+--    mutabakatı); §30/§30b/§31 DEFTER UFKU bölümleri 2026-09-14'ten beri BURADA da var
+--    (operatör sürüm notundaki "mutabakat raporundaki defter ufku bölümü" bu üçüdür). ⚠️ Yeni bölüm numarası İKİ dosyanın BİRLEŞİMİNDEN seçilir:
 --    burada 19'dan sonrası boş görünür ama test 28'e kadar doludur; 20 yazmak
 --    sessizce ikinci bir §20 üretirdi (ölçüldü 2026-09-13, §29 bu yüzden 29).
 --
@@ -362,4 +363,81 @@ ORDER BY r."createdAt" DESC
 LIMIT 50;
 
 \echo ''
-\echo '== Tutarlılık kontrolü bitti. Yukarıda hiç satır YOKSA sistem sağlıklı. =='
+\echo '== 30) DEFTER UFKU — ufuktan SONRA doğmuş, deftere GİRMİŞ ama çıkışı YAZILMAMIŞ top (asimetri; beklenen 0) =='
+-- Stok defteri (`WarehouseMovement`) 2026-09-13'ten beri MİKTAR defteridir ve yazar
+-- kümesi kapalıdır; ufuktan (`src/constants/ledger-horizon.ts`, LEDGER_HORIZON_DAY)
+-- SONRA doğan bir top stok kümesine girişini yazmışsa çıkışını da yazmalıdır.
+-- Buradaki satır bir KAPISIZ YOLUN imzasıdır (mekanik ikizi `test_consistency §30`, SERT).
+-- Ufuk: -v defter_ufku='2026-09-13' ile değiştirilir (varsayılan aşağıda).
+\set defter_ufku '2026-09-13'
+SELECT r.id::text AS kayit, r.barcode, r.status::text AS durum,
+       r."currentQty"::text AS metraj, r."createdAt"::text AS dogum
+FROM rolls r
+WHERE r.status IN ('SHIPPED','AT_SUBCONTRACTOR','AT_KARTELA','SCRAP','CANCELLED',
+                   'SUBCONTRACTOR_CONSUMED','TAMBUR_CONSUMED','KARTELA_CONSUMED')
+  -- ASİMETRİ: stok kümesine GİRMİŞ olmalı…
+  AND EXISTS (
+    SELECT 1 FROM warehouse_movements gir
+     WHERE gir."rollId" = r.id AND gir."toStatus" IN ('STOCK','WAREHOUSE','A1_STOCK','RETURNED_FROM_SUBCONTRACTOR'))
+  -- …ama çıkışı YAZILMAMIŞ olmalı.
+  AND NOT EXISTS (
+    SELECT 1 FROM warehouse_movements cik
+     WHERE cik."rollId" = r.id AND cik."fromStatus" IN ('STOCK','WAREHOUSE','A1_STOCK','RETURNED_FROM_SUBCONTRACTOR'))
+  AND r."createdAt" >= :'defter_ufku'::date
+ORDER BY r."createdAt" DESC
+LIMIT 50;
+
+\echo ''
+\echo '== 30b) DEFTER UFKU ÖNCESİ — ufuktan ÖNCE doğmuş, stok kümesi dışında ama defterde ÇIKIŞI OLMAYAN top (BİLGİ, MİRAS) =='
+-- ⚠️ Bu bölüm bir KUSUR listesi DEĞİLDİR: ufuk öncesi toplar deftere hiç girmemiş ya da
+-- eski (statüsüz) kapıdan yazılmış olabilir; eksik geçmiş ONARILMAYACAK (kullanıcı kararı
+-- 2026-09-13: "bundan sonraki kayıtlar sağlam olsun yeter"). Sayı, canlı ↔ defter
+-- mutabakatının ufuktan önce neden TANIMSIZ olduğunu operatöre GÖSTERİR. Yalnız sayı basılır;
+-- satırlar istenirse LIMIT'li liste aşağıdaki sorgudan alınır.
+SELECT COUNT(*)                                                     AS ufuk_oncesi_cikissiz_top,
+       COUNT(*) FILTER (WHERE NOT EXISTS (
+         SELECT 1 FROM warehouse_movements m WHERE m."rollId" = r.id)) AS hic_defter_satiri_olmayan,
+       MIN(r."createdAt")::text                                     AS en_eski_dogum,
+       MAX(r."createdAt")::text                                     AS en_yeni_dogum
+FROM rolls r
+WHERE r.status IN ('SHIPPED','AT_SUBCONTRACTOR','AT_KARTELA','SCRAP','CANCELLED',
+                   'SUBCONTRACTOR_CONSUMED','TAMBUR_CONSUMED','KARTELA_CONSUMED')
+  AND NOT EXISTS (
+    SELECT 1 FROM warehouse_movements cik
+     WHERE cik."rollId" = r.id AND cik."fromStatus" IN ('STOCK','WAREHOUSE','A1_STOCK','RETURNED_FROM_SUBCONTRACTOR'))
+  AND r."createdAt" < :'defter_ufku'::date;
+
+\echo ''
+\echo '== 31) YARIM GERİ ALINMIŞ KESİM — çocuk girişi terslenmiş, ebeveyn çıkışı terslenmemiş VE durum ≠ defter (MİRAS/SONDA) =='
+-- Depo kesimi geri alınırken çocuğun IN satırı terslenmiş ama ebeveynin OUT'u terslenmemiş:
+-- ebeveynin defteri kesilen metraj kadar EKSİK sayar (ölçüldü 2026-09-13: 100 ↔ 60; kod
+-- `reverseTransformGroupsOf` ile kapandı, bu bölüm o günden ÖNCE açılmış yetimleri SAYAR).
+-- Üçüncü koşul (durum ≠ defter) ŞART: "kaynak arşivde" geri alması (SINGLE, RECORD_CORRECTION)
+-- ilk ikisini MEŞRU sağlar — metraj ebeveyne dönmez, OUT gerçek kalır, 0 = 0.
+-- Mekanik ikizi `test_consistency §31` (miras: yalnız ARTIŞ kırmızı). Onarım kullanıcı kararı.
+SELECT p.id::text AS kayit, p.barcode, cik.qty::text AS metraj, cik."createdAt"::text AS dogum
+FROM warehouse_movements cik
+JOIN rolls p ON p.id = cik."rollId"
+WHERE cik."reasonCode" = 'CUT_SPLIT'
+  AND cik."fromWarehouseId" IS NOT NULL
+  AND cik."transformGroupId" IS NOT NULL
+  AND cik."reversesMovementId" IS NULL
+  -- ebeveynin çıkışı TERSLENMEMİŞ…
+  AND NOT EXISTS (SELECT 1 FROM warehouse_movements rv WHERE rv."reversesMovementId" = cik.id)
+  -- …ebeveynin DURUMU defterinden ayrışmış (arşiv dalı 0 = 0 ile buradan elenir)…
+  AND p."currentQty" <> (
+    SELECT COALESCE(SUM(CASE WHEN m."toWarehouseId" IS NOT NULL THEN m.qty ELSE 0 END
+                     - CASE WHEN m."fromWarehouseId" IS NOT NULL THEN m.qty ELSE 0 END), 0)
+      FROM warehouse_movements m WHERE m."rollId" = p.id)
+  -- …ama aynı grubun ÇOCUK girişi TERSLENMİŞ (yarım geri alma imzası).
+  AND EXISTS (
+    SELECT 1 FROM warehouse_movements gir
+     WHERE gir."transformGroupId" = cik."transformGroupId"
+       AND gir."toWarehouseId" IS NOT NULL
+       AND gir."reversesMovementId" IS NULL
+       AND EXISTS (SELECT 1 FROM warehouse_movements rv2 WHERE rv2."reversesMovementId" = gir.id))
+ORDER BY cik."createdAt" DESC
+LIMIT 50;
+
+\echo ''
+\echo '== Tutarlılık kontrolü bitti. §30b BİLGİ (miras sayısı) dışında yukarıda hiç satır YOKSA sistem sağlıklı. =='
