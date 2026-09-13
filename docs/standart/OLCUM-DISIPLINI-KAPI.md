@@ -357,3 +357,31 @@ olur** ve kimse bunu kendi koşumundan anlayamaz.
 ve bekçi yeniden koşturularak 33/0'a döndüğü görüldü.)*
 Kardeşi § Yerel yeşil ↔ HEAD: orada yeşil başkasının işinden gelir, burada **senin geri
 almadığın bozuktan**.
+
+### Bir mandalın TANECİĞİ, neyi ve NE ZAMAN ısırabileceğini belirler
+*"Mandal doğduğu gün ısıramaz"* cümlesi **fazla geniştir ve yanlıştır**. Doğrusu: bir
+mandal **devralınan popülasyonu** ısıramaz — ama **anahtar uzayında YENİ bir üyeyi**
+doğduğu gün ısırır. Hangisinin olacağını belirleyen şey mandalın **taneciğidir**.
+
+*(Vaka 2026-09-13: `test_olcum_iddiasi` mandalı — anahtarı bir SAYI değil, çıplak ölçüm
+iddiası taşıyan **DOSYA KÜMESİ**. İndiği gün yeni bir bekçi dosyası
+(`test_stock_ledger_tambur_undo.ts:274`, çıplak "ölçüldü") tabanda olmadığı için
+**hemen kırmızı verdi**. Aynı gün, aynı mandal, aynı taban.)*
+
+⚠️ **Ve her taneciğin kendi kör noktası vardır — bu mandal onu kendi ağzından basıyor:**
+*"Tanecik DOSYA: aynı dosyaya İKİNCİ bir çıplak iddia eklemek mandalı UYANDIRMAZ."*
+Ölçüldü 2026-09-13: taban **63 dosya**, ağaçta **87 çıplak iddia** ⇒ 24 iddia taban
+dosyalarının İÇİNDE yaşıyor ve mandala görünmez. Kör nokta teorik değil, **canlı**.
+
+| tanecik | doğduğu gün ısırır mı | kör noktası |
+|---|---|---|
+| SAYI (N ihlal) | hayır — N'e kadar sessiz | hangi satırlar olduğu bilinmez; ihlal takası serbest |
+| KÜME (dosya/ad) | **evet** — yeni üye anında | mevcut üyenin İÇİNDEKİ ikinci ihlal |
+| yok (taban 0) | evet, her şeye | yok — ama ancak devralınan borç AYNI commit'te ödenirse kurulabilir |
+
+> **Bir kapıyı yargılamadan önce türünü değil ANAHTARINI sor:** *neyi sayıyor, ve benim
+> eklediğim şey o anahtarda YENİ mi?* "Mandal mı tarayıcı mı" ayrımı bu soruyu
+> cevaplamaz — ikisi de anahtarına göre ısırır ya da susar.
+
+**Savunma:** mandal yazarken taneciği **başlığa** yaz ve kör noktasını **aynı cümlede**
+beyan et; okuyan, yeşilin neyi kapsamadığını kapının kendisinden öğrensin.
