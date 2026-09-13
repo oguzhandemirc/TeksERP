@@ -34,113 +34,13 @@ Ortak hâli: **sayıya değil örneğe bak.**
 Ve en ucuzu: **bir iddiayı sınamanın en ucuz yolu, iddianın verdiği ÖRNEĞİ ağaçta
 aramaktır.**
 
-## Arıza sınıfları
+## Arıza sınıfları → ayrı dosya
 
-### 1 · Araç bozuk
-Çıktı boş ya da anlamsız gelir; fark edilir, en ucuz sınıf.
-**Savunma:** çıktıyı okumadan sonuç yazma.
+Katalog iki katmanlıdır — **KATMAN 1** ölçümün kendisi (*sayı doğru mu?*), **KATMAN 2** ölçümden sonraki adım (*sayı doğru; ondan ÇIKARILAN ne?*) — sırasıyla [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) ve [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md)'de yaşar.
 
-### 2 · Soru yanlış
-Araç çalışır, cevap **ayırt edici değildir** — aynı çıktıyı iki farklı dünya da
-üretirdi.
-**Savunma:** *"bu kanıt, alternatif dünyada FARKLI olur muydu?"* Cevap hayırsa
-kanıt değildir.
+Bölünme sebebi ölçüldü: katalog 2026-09-13'te tek günde **+16 sınıf** aldı ve bu dosya tavana dayanacaktı. Ayrım çizgisi bugünkü dört bölmeyle aynı — **YÖNTEM kalır, sınıf ENVANTERİ ayrılır**; sınıflar büyür, aşağıdaki yöntem kuralları büyümez.
 
-### 3 · Kural cümlesi yanlış
-Araç ve soru doğru, **dünya modeli** yanlış. İki ölçüm doğrudur, aralarındaki
-çıkarım ölçüsüzdür.
-**Savunma:** arızayı **izole ortamda yeniden üret**. Üretemiyorsan kuralın yanlış.
-
-### 4 · Araç ölçümün içinde
-`ps | grep` kendini sayar; sonda, ölçtüğü sinyalin taşıyıcısını kirletir.
-**Savunma:** `pgrep -f` ya da `grep -v grep`. Sonda argümanı, ölçülen sinyalin
-taşıyıcısıyla **aynı kanaldan geçmemeli**.
-
-### 5 · Kontrol grubu kirli
-"Öncesi"ni ölçerken ortam zaten "sonrası"dır.
-**Savunma:** ortamın da "öncesi" olduğunu ayrıca ölç — ilgili tabloların boş
-olduğunu saymak genellikle tek sorgudur.
-**İkinci yüzeyi:** ortam **ölçüm sırasında** değişir. O zaman tek yol, **ölçüm
-öncesi ve sonrası ucu karşılaştırmak**.
-*Vaka: bir bekçi için "zaten kırmızıydı" hükmü, test edilen değişikliğin kendi
-artığını taşıyan DB'de verildi. Temiz ayırt edici koşulunca hüküm değişti.*
-
-### 6 · Ölçüt doğru ama dar
-Bir davranışı ölçer, değişmezin tamamını değil. Sızıntı **iki koşum arasındaki
-farkta** yaşar, tek koşumun içinde değil.
-**Savunma:** ölçütün neyi DIŞARIDA bıraktığını yaz.
-
-### 7 · Geçmiş zamanlı beyan, karşılıksız
-"Yapıldı" yazar, ağaçta yapılmamıştır.
-**Savunma:** **geçmiş zamanla yazılmış her "yapıldı" cümlesi ölçülmemiş bir
-iddiadır** — yazmadan önce ağaçta ara.
-
-### 8 · Ölçülen değişken SABİT
-Araç çalışır, soru doğrudur, kontrol grubu temizdir — ama **kontrolün baktığı şey
-iki değer alamaz**. Cevap her zaman aynıdır, yeşil kalır, kimse şüphelenmez.
-
-> **Bir kontrolün anlamlı olması için, ölçtüğü şeyin İKİ DEĞER alabilmesi gerekir.**
-
-Vaka: bir bekçiye *"varsayılan depo var mı"* kontrolü yazılmak üzereydi — ama
-`main()`in ilk işi `ensureDefaultWarehouse()` çağırmaktı. Cevap her koşumda "var"
-olurdu. Ölçülebilir sinyal **durum değil EYLEM**ti (`action=promoted/created`).
-
-**Teşhis yöntemi — kuralın en kullanışlı yarısı:**
-> **Negatif sondayı KURAMIYORSAN, kontrol bir sabiti ölçüyordur. Kuramamak zaten
-> teşhistir.**
-
-Yani sonda yalnız bekçiyi doğrulamaz, **kontrolün anlamlı olup olmadığını da
-ortaya çıkarır.** Sondayı kuramadığın an düzeltilecek şey sonda değil kontroldür.
-
-### 9 · Geç ölçüm — anlık ölçümle pencere iddiası
-İddianın konusu bir **zaman aralığı**, ölçüm ise **şu an**. Sonuç doğru çıkabilir,
-iddia yine de kurulmamıştır.
-**Kurtarma:** ölçümü iddianın aralığını **kuşatacak** biçimde al — aralığın
-başından bir damga (koşum başlangıcı, son commit zamanı) ile karşılaştır.
-Kuşatamıyorsan iddiayı daralt: *"şu an temiz"* de, *"o sırada temizdi"* deme.
-### Çöken sonda, sonda değildir
-Negatif sonda kırmızı verdi diye geçerli değildir; kırmızının **ölçmek istediğin
-KONTROLDEN** geldiği ayrıca doğrulanır.
-**Ayırt edici:** FAIL **satır sayısı** ↔ özet **sayısı**. Uyuşmuyorsa fark bir
-çökmedir. *(Vaka: özet "3 başarısız" dedi, ekranda 2 FAIL vardı; üçüncüsü bir
-`.catch()`ten geliyordu — bölümün hiçbir kontrolü koşmamıştı.)*
-**Kurtarma:** sondayı **sahte nesneyle kurma** — gerçek çağrıyı **gerçek ama
-yanlış girdiyle** koştur. Sahte nesne kod yolunu değil, kod yolunun **kurulumunu**
-kırar.
-
-### Zıt iki cevap = ortam farkı
-Aynı script, aynı ağaç, aynı saniye **zıt iki cevap** veriyorsa bu bir kapı hatası
-değil bir **ortam farkıdır** — ve ortam farkı her zaman bulunabilir. Çelişkiyi
-*"tuhaf"* diye geçmek, teşhisi kaçırmanın en yaygın yolu.
-*(Vaka: aynı kapı elle YEŞİL, hook içinde KIRMIZI. Sebep: kısmi/pathspec commit'te
-git geçici indeks kuruyor ve başkasının sahnelenmiş dosyası hook'a untracked
-görünüyor.)*
-**Kurtarma:** iki ortamın **farkını** ölç (env · cwd · indeks · kullanıcı), sonucu değil.
-
-### Kaçışın asıl maliyeti
-Bir kaçışın asıl maliyeti bir kuralı çiğnemek değil — **bir sorunun sorulmasını
-engellemektir.** Kaçış varken teşhise ihtiyaç duyulmaz; çelişki **ilginç olmaktan
-çıkar.** *(Vaka: aynı kırmızıya üç kez kaçışla yaklaşıldı, dördüncüde ölçümle —
-kök sebep dördüncüde çıktı.)*
-
-### Dolaylılık — desen tabanlı ölçümün varsayılan kör noktası
-Bir desen *"şu metni içeriyor mu"* diye soruyorsa, metnin **bir adım dolaylı** hâli
-için **ayrı bir sonda** yazılır.
-*(Aynı kök bir gecede üç kez: ham SQL içine gömülü `UPDATE` · sabit üzerinden
-verilen olay adı · şablon değişkenine gömülü `DROP TABLE`.)*
-**Kurtarma cümlesi:** *"sondayı kurmasaydım deseni yeterince dar sanacaktım."*
-
-⚠️ Bu sınıfın **ters yönü de var ve bu belge yazılırken yaşandı:** komut kapısı,
-yukarıdaki `DROP TABLE` dizgesini **belge örneği** olarak yazmayı engelledi. Desen
-metni bağlamdan bağımsız eşliyor ⇒ *yasağı anlatan cümle de yasağın kendisi
-sayılıyor.* Yani dolaylılık kör noktasının bedeli iki yönlü: desen bir adım
-dolaylıyı **kaçırır**, düz metni **fazladan yakalar**.
-
-### Çelişki yüklemi ≠ farklılık yüklemi
-Bir çelişki yüklemi kurarken **"hangi değerler birlikte YANLIŞ"** sorusunu,
-**"hangi değerler FARKLI"** sorusundan ayır.
-*(Vaka: `unit <> 'kg' AND scale IS NULL` üç "çelişki" buldu; üçü de metre cihazıydı
-ve m→m çarpanı 1 doğruydu.)*
+⚠️ **KATMAN 2 daha sinsidir:** Katman 1'de ölçüm yanlıştır ve pozitif kontrol/örnekle doğrulama onu yakalar. Katman 2'de gözlem DOĞRUDUR ve doğrulanmıştır — bu yüzden ondan çıkarılan açıklama da doğrulanmış sanılır. **Hiçbir pozitif kontrol o katmanı yakalamaz.**
 
 ## Teşhis mesajı da bir yüklemdir
 
@@ -215,27 +115,69 @@ mi, "bugün böyle" mi?*
 
 > **Var olmayan bir sayı bayatlayamaz.**
 
+## Kimlik yazma — repo PUBLIC
+
+Ölçüldü 2026-09-13: depo **herkese açık** (`gh repo view` → `visibility: PUBLIC`).
+Belgelerdeki ölçümler bu yüzden iki farklı sınıfa ayrılır:
+
+- **Sayı SERBEST** — 4.962 olay · 2.205 topun 1.678'i · 103/0/3. Vakayı taşıyan şey
+  budur.
+- **KİMLİK YOK** — barkod · çuval no · parti no · müşteri/cari adı · kullanıcı adı ·
+  cihaz kimliği. Vaka *"bir top"*, *"bir müşteri kartı"*, *"bir tablet"* ile
+  anlatılır; somut kimlik hiçbir şey eklemez.
+
+Ayırt etme yöntemi: *bu dizgeyi bir yabancı okuduğunda fabrikanın hangi kaydına
+işaret ettiğini bulabilir mi?* Bulabiliyorsa kimliktir ve çıkar.
+
 ## Kapının ölüm biçimleri
 
 Ölçümü kapıya çevirirken hepsini birden gözet; hepsi kapıyı **kaldırmadan**
-işlevsizleştirir. Bugüne kadar altı tanesi adlandırıldı — **numaralanmıyorlar**,
-çünkü sıra iki oturumda çakıştı ve başlıktaki sayı zaten borçtur.
+işlevsizleştirir. Aşağıdaki numaralar **bu listenin sırasıdır, kalıcı kimlik
+DEĞİL** — sıra iki oturumda çakıştı; bir kapı ölümü ADIYLA anılır.
 
 1. **Yanlış kırmızı** — doğru işte kırmızı verirse ilk hafta devre dışı bırakılır.
 2. **Yavaşlık** — bedel değişenle orantılı olmaktan çıkarsa kaçış kullanılmaya
    başlanır.
 3. **Gürültü** — çıktısı okunmayacak kadar uzunsa ikinci gün göz ardı edilir.
    **Doğru olması kurtarmaz.**
-
 4. **Erken sertlik** — tavsiye olması gereken bir ölçüm kapıya çevrilirse kural
    tümden sökülür.
 5. **Okunmayan tavsiye** — çıktısı kimsenin bakmadığı yere düşen tavsiye hiç yoktur.
 6. **Doğru davranışı pahalı kılmak** — başka bir kurala uyanı cezalandıran kapı,
    o kuralın terk edilmesini öğretir. *(Vaka: ortak ağaç disiplini gereği pathspec
    ile commit atan kişiyi, kapının kendisi durduruyordu.)*
+7. **Koruduğu şeyle İLGİSİZ bir sebeple SESSİZCE ölmek** — aşağıda; ilk altıdan
+   ayrı bir sınıftır çünkü **ilk altısında kapı KOŞUYORDU**.
+8. **Uzakta hiç AÇILMAMAK — ve gürültülü ölmek** — aşağıda; 7'den farkı sesidir.
 
-İlk üçünde kapı yanlış davranır; 3'te doğru davranır ve yine ölür; 6'da **kapı
-doğru, kurban haklı** — en sinsisi budur.
+İlk üçünde kapı yanlış davranır; *gürültü*de doğru davranır ve yine ölür;
+*doğru davranışı pahalı kılmak*ta **kapı doğru, kurban haklı**. Yedincide kapı hiç
+koşmaz.
+
+⚠️ **`okunmayan tavsiye`nin alt maddesi — ölçüldü 2026-09-13:** *bir uyarıyı OKUMAK
+ölçüm sayılmaz; okumamak ise mazeret değildir.* **Yazılı bir uyarı bir kapı
+değildir** — aynı gün dört kez doğrulandı: `check-migrations` `[ADVISORY] RESTRICT` ·
+`roll-entry-station.helper` başlığı · `roll-step.helper` salınım notu · kök
+`CLAUDE.md`'nin cleanup sırası kuralı. Dördü de yazılıydı, dördü de okunmamıştı.
+
+### ⑦ Kapı, koruduğu şeyle ilgisiz bir sebeple sessizce ölebilir
+
+Ölçüm (2026-09-13; 36 oturum günlüğü / 150.712 satır, `toolUseID` ile kesin eşleme):
+`.claude/settings.json:23` komut kapısını **göreli yolla** çağırıyor; kabuk depo
+kökünden kaydığı an node dosyayı bulamıyor ve Claude Code hatayı **NON-BLOCKING**
+sayıyor. **4.962 ölü-kapı olayı · 24 ayrı yanlış dizin.** O komutların 27'si bir
+yasağa uyuyordu; **23'ü desenin yanlış pozitifi**, 4'ü gerçek DB düşürmeydi (dördü de
+oturumun kendi sonda DB'si). **Canlı veri kaybı ÖLÇÜLMEDİ.**
+
+> **Yapılandırılmış bir kapı da bir kapı DEĞİLDİR — koştuğu ölçülmedikçe.**
+
+⚠️ **Bir kapının ölü olduğunu, o kapının KENDİ ÇIKTISINDAN öğrenemezsin.** Ölü kapı
+çıktı üretmez; ölçüm dışarıdan, oturum günlüklerinden geldi.
+
+⚠️ **Fail-open yapılandırmayla kapatılamaz** (platform sınırı): yalnız çıkış kodu 2
+engeller, **başlatılamayan kanca daima non-blocking**tir. Tek kalıcı koruma
+yapılandırmanın DOĞRULUĞUNU ölçmektir — `Teks-Erp/scripts/test_hook_config.ts`
+(`1e364f1b`), bugün bilerek kırmızı: `TEST-VE-DERLEME-SINIRLAR.md` §8.
 
 ## Kırmızıyı sınıflandırma
 
@@ -245,3 +187,36 @@ Dördüncüsü düzeltilecek bir şey değildir; "gerekçesi ölçülmüş atlam
 **Etiketi ölçmeden yapıştırma** — çevresel olan düzeltilebilir, yapısal olan yalnız
 başka bir ortamda ölçülebilir; ikisini ayırmadan verilen hüküm ya gerçek bir kusuru
 gizler ya çalışan bir kapıyı gevşetir.
+
+### ⑧ Uzaktaki kapı, ürünle ilgisiz bir sebeple HİÇ açılmayabilir
+
+Faturalandırma · kota · izin — uzak koşucu işi **başlatmaz**, ama koşum **KIRMIZI
+raporlar**. ⑦'den farkı tam burada: ⑦ sessizce ölür, **⑧ gürültülü ölür ve gürültüsü
+onu CANLI gösterir.**
+
+**Ölçüm (2026-09-13 01:0x, `gh run list` ile bağımsız doğrulandı):** son başarılı koşum
+**2026-08-10 09:50 → 10:02 (11 dk 49 sn)**; ondan 2026-09-13 00:48'e kadar koşumların
+hepsi FAILURE ve **3–39 saniye** sürmüş (gerçek paket ~6,5 dk). Altı job'un altısı
+*"The job was not started because recent account payments have failed…"* ile hiç
+başlamamış. ⇒ **34 gün boyunca uzakta hiçbir test koşmadı.**
+
+> **Koşum SÜRESİ bir sağlık göstergesidir.** 6,5 dakikalık bir paketin 3 saniyede
+> kırmızı vermesi testin değil **KAPININ** raporudur.
+
+> **VAKA KAPANDI — 2026-09-13.** Sınıf geçerli, vakası bitti: 00:55:34'te başlayan
+> koşum (`8f68c367`) altı job'u da gerçekten çalıştırdı. Pencere **2026-08-10 →
+> 2026-09-13 00:48**'dir ve *"CI ölü"* cümlesi bugünden sonra ŞİMDİKİ ZAMANDA
+> kurulamaz.
+
+⚠️ Bu, § Geç ölçüm sınıfının **bu belge yazılırken yaşanmış** örneğidir: ortam
+ölçümün kendisi sırasında değişti, ve ilk yazım şimdiki zamanlı olsaydı aynı gün
+bayatlayacaktı.
+
+⚠️ **Ve kapı açılır açılmaz iş gördü:** 34 günün ilk gerçek koşumunda `Mobil (tsc +
+jest)` KIRMIZI verdi. Ölü kapının gizlediği kusurlar, kapı açıldığı gün toplu gelir —
+*kapının kapalı olduğu süre, biriken kusurun ölçüsüdür.*
+
+⚠️ **O 34 gün boyunca push öncesi tek gerçek kapı yerel `npm test`ti.** Bu, *"bir
+tasarımın 'arka durağı var' cümlesi de bir İDDİADIR"* kuralının en pahalı örneği: aynı
+hafta `.githooks/`te `pre-push` olmadığı ölçülmüştü — **aynı iddia bir kat yukarıda da
+yanlışmış.** Arka durak varsayımı iki katmanda birden çürüdü.

@@ -22,13 +22,18 @@ Karar hikâyeleri (tarih, ölçüm, hangi alternatif neden reddedildi) `docs/his
 |---|---|
 | [`ILKELER.md`](ILKELER.md) | Katman-üstü ilkeler, isimlendirme, boyut felsefesi, kural yazma ölçütü |
 | [`BACKEND.md`](BACKEND.md) | Route / controller / service / helper / reports / jobs — ne içerir, servis metodu anatomisi, hata ve yanıt şekli |
-| [`VERITABANI.md`](VERITABANI.md) | Model şablonu, index kuralları, enum, migration yazımı, şema-dışı nesne envanteri |
+| [`VERITABANI.md`](VERITABANI.md) | Model şablonu (§1), model sınıfları (§2), künye FK (§3), index (§4), enum (§5), `///` gerekçe (§6), soft delete (§9), Decimal/zaman (§10), boyut (§13) |
+| [`VERITABANI-MIGRATION.md`](VERITABANI-MIGRATION.md) | Migration yazımı (§7) ve şema-dışı nesne envanteri (§8) — 2026-09-13'te `VERITABANI.md`'den bölündü, §7/§8 numaraları çapalar kopmasın diye korundu |
 | [`ELECTRON.md`](ELECTRON.md) | Panel: sayfa kalıbı, servis/şema/kolon dosyaları, izin aynası, boyut |
 | [`MOBIL.md`](MOBIL.md) | Tablet: ekran kalıbı (kabuk + görünüm + hook + saf mantık), offline kuyruk, OTA/APK sınırı |
 | [`KUTUPHANELER.md`](KUTUPHANELER.md) | Katman × ihtiyaç → kütüphane tablosu, yeni bağımlılık karar kaydı, ölü paket teşhisi |
-| [`ESZAMANLILIK.md`](ESZAMANLILIK.md) | Yarış ve idempotency tutumu, karar tablosu, mekanizma envanteri, bilinen boşluklar |
-| [`TEST-VE-DERLEME.md`](TEST-VE-DERLEME.md) | Ne zaman ne koşar, hangi kapı nerede, bilinen sınırlar |
-| [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | Ölçüm aracının kendisi: yedi arıza sınıfı, pozitif kontrol ↔ örnekle doğrulama, kapının üç ölüm biçimi |
+| [`ESZAMANLILIK.md`](ESZAMANLILIK.md) | Yarış ve idempotency tutumu (§1), karar tablosu (§2), bekçi yazımı (§4), istemci tarafı (§5), yanlış refleks listesi (§7), beklenen uyarı (§8) |
+| [`ESZAMANLILIK-ENVANTER.md`](ESZAMANLILIK-ENVANTER.md) | Kilit uzayı envanteri (§3) ve bilinen boşluklar (§6) — 2026-09-13'te `ESZAMANLILIK.md`'den bölündü, §3/§6 numaraları çapalar kopmasın diye korundu |
+| [`TEST-VE-DERLEME.md`](TEST-VE-DERLEME.md) | Ne zaman ne koşar, hangi kapı nerede (§1–§6) |
+| [`TEST-VE-DERLEME-SINIRLAR.md`](TEST-VE-DERLEME-SINIRLAR.md) | Bilinen sınırlar (§7) ve **bilerek kırmızı bekçiler** (§8) — paket kırmızı verdiğinde ilk bakılacak liste; her satır "kim kapatabilir" taşır |
+| [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | Ölçüm YÖNTEMİ: pozitif kontrol ↔ örnekle doğrulama, teşhis mesajı da bir yüklemdir, atıfta eşik, yapısal sonda, sayı yazma, **kapının ölüm biçimleri** |
+| [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | Arıza sınıfı kataloğu **KATMAN 1** — ölçümün kendisi (*sayı doğru mu?*) |
+| [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) | Arıza sınıfı kataloğu **KATMAN 2** — ölçümden sonraki adım (*sayı doğru; ondan ÇIKARILAN ne?*); hiçbir pozitif kontrol bu katmanı yakalamaz |
 
 ## Kural biçimi
 
@@ -94,7 +99,7 @@ Bunlar bilinçli olarak ertelendi; her biri ayrı bir karar ve iştir:
 - Devralınan kodda toplu kampanyalar: yorum kısaltma, class→fonksiyon, `include`→`select`, ham hex → token.
 - Araç zinciri hizalama (üç TypeScript ve iki ESLint ana sürümü).
 - Backend'de yapılandırılmış logger (bugün 137 `console` çağrısı fiilen tek kanal).
-- Mobilde şema doğrulama katmanı (`zod` yok) — `ESZAMANLILIK.md` § Bilinen boşluklar.
+- Mobilde şema doğrulama katmanı (`zod` yok) — `ESZAMANLILIK-ENVANTER.md` §6 bilinen boşluklar.
 
 ## Bu standart nereden çıktı
 

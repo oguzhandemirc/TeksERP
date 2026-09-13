@@ -7727,3 +7727,139 @@ değil"i söylüyor.
 (§0 · §1.3 · §3.7 · §3.9 yeni · §4.1 · §4.3 · §4.4 · §4.5 · §4.6 · §4.7 · §4.8 · §4.9 ·
 §5 · §7 · §8 · §9.7 yeni) ve `docs/design/DOKUMA-TEZGAH-IZLEME-TASARIMI.md` (§2.2 · §2.9 ·
 §5.6 · §7.3 · §10/#19 · §10/#22 yeni + `Loom*` → `Machine*` nötr ad turu).
+
+## 2026-09-13 — Kapı ölümünün İKİ YENİ BİÇİMİ: sessiz ölü kanca ve hiç açılmayan uzak kapı [ÇEKİRDEK]
+
+**Soru.** Kapı ölüm sınıfları bugüne kadar kapının KOŞTUĞUNU varsayıyordu (yanlış kırmızı ·
+yavaşlık · gürültü · erken sertlik · okunmayan tavsiye · doğru davranışı pahalı kılmak).
+Bugün iki bağımsız ölçüm bu varsayımı çürüttü.
+
+**⑦ Sessiz ölüm — yapılandırma.** `.claude/settings.json:23` komut kapısını GÖRELİ yolla
+çağırıyor (`node scripts/claude-hooks/bash-guard.mjs`). Kabuk depo kökünden kaydığı an node
+dosyayı bulamıyor ve Claude Code hatayı NON-BLOCKING sayıyor. Ölçüm (d5; 36 oturum günlüğü /
+150.712 satır, `toolUseID` ile kesin eşleme): **4.962 ölü-kapı olayı · 24 ayrı yanlış dizin.**
+O komutların 27'si bir yasağa uyuyordu; 23'ü desenin yanlış pozitifi, 4'ü gerçek DB düşürme
+(dördü de oturumun kendi sonda DB'si). **Canlı veri kaybı ÖLÇÜLMEDİ.** Fail-open bir ayarla
+kapatılamaz (platform sınırı): yalnız çıkış kodu 2 engeller, başlatılamayan kanca daima
+non-blocking. Tek kalıcı koruma yapılandırmanın DOĞRULUĞUNU ölçmek → `scripts/test_hook_config.ts`
+(`1e364f1b`). ⚠️ **Düzeltme İNMEDİ:** `8f68c367` kapının KAPSAMINI düzeltti (`bash-guard.mjs`
++10/-1, `docs/kurallar/genel.md` +2 satır, yanlış pozitif 22→0), yolu değil. Ölçüldü 2026-09-13:
+`settings.json:23` hâlâ göreli, bekçi 8 geçti/1 başarısız. Düzeltme kullanıcının denetim
+yüzeyindedir ve kullanıcı kararı bekliyor.
+
+**⑧ Gürültülü ölüm — uzak kapı hiç açılmıyor.** `gh run list` ile ölçüldü: son başarılı koşum
+**2026-08-10 09:50 → 10:02 (11 dk 49 sn)**; ondan 2026-09-13 00:48'e kadar koşumların hepsi
+FAILURE ve **3–39 saniye** (gerçek paket dakikalar sürer). Altı job'un altısı faturalandırma
+engeliyle hiç başlamamış ⇒ **34 gün boyunca uzakta hiçbir test koşmadı.** ⑦'den farkı sesidir:
+⑦ sessizce ölür, ⑧ KIRMIZI raporlar ve gürültüsü onu canlı gösterir. Panzehir: **koşum SÜRESİ
+bir sağlık göstergesidir** — dakikalarca süren bir paketin 3 saniyede kırmızı vermesi testin
+değil KAPININ raporudur.
+
+**VAKA KAPANDI, SINIF DURUYOR.** Pencere 2026-08-10 → 2026-09-13 00:48'dir; 00:55:34'te başlayan
+koşum (`8f68c367`) altı job'u da gerçekten çalıştırdı. ⚠️ Bu kapanış **ölçümün kendisi sırasında**
+oldu — ilk yazım şimdiki zamanlı olsaydı aynı gün bayatlardı (geç ölçüm sınıfının canlı örneği).
+
+**İlk koşumun faturası.** Backend **501/505 dosya · 871 sn** (yerelde ölçülen ~390 sn'nin iki
+katı — fark ayrı bir ölçüm kalemi), Mobil **866/867**, Electron · E2E · Yük testi · Doküman
+bekçisi yeşil. Backend'in dört kırmızısından yalnız biri bilerek-kırmızı listesinde
+(`test_hook_config` §2); listede OLMAYAN üçü gerçek: `test_fold_catalog` 24/1 ·
+`test_scan_code_case` 18/1 · `test_script_guards` 43/1. Mobil kırmızısı
+`mobil/src/test/update-feed-url.test.ts:76` — kod imzalama sertifikası dosyası yok; yüklem ayrı
+bir `it`e çıkarıldığı için komşu yapılandırma kontrollerini GÖTÜRMEDİ. 📌 `test_consistency`
+§1c/§1d listede ama CI'da YEŞİL: taze DB'de o veri yok — aynı satır yerelde kırmızı, uzakta
+yeşil (fakir/zengin kontrol grubu).
+
+**Üç kapı.** Migration YOK · yeni izin YOK · APK YOK. Değişen: `docs/standart/OLCUM-DISIPLINI.md`
+(§ Kapının ölüm biçimleri 7–8, § Kimlik yazma), `docs/standart/TEST-VE-DERLEME-SINIRLAR.md`
+(§8 yeni). ⚠️ Kapı ölüm listesi baştan ALTI maddeydi — eş oturumların "beş" sayımı
+`okunmayan tavsiye`yi atlıyordu; yeni sınıflar bu yüzden ⑦ ve ⑧'dir, ⑥ ve ⑦ değil.
+
+## 2026-09-13 — `docs/standart/` ALTI BÖLME: kural kalır, ENVANTER ayrılır [ÇEKİRDEK]
+
+**Soru.** Belge boyut tavanı (`scripts/check-docs.mjs`, `docs/standart/*.md` ≤ 24 KB) bir günde
+DÖRT dosyada birden duvara dayandı ve beşincisi yazarken doldu:
+
+```
+VERITABANI.md         23 bayt kalmıştı
+KUTUPHANELER.md        1 bayt        (ölçüldü — asıl acil olan buydu)
+ESZAMANLILIK.md      168 bayt        (tek paragraf yazılınca)
+TEST-VE-DERLEME.md   745 bayt        (başka bir oturumun commit'i büyüttü)
+OLCUM-DISIPLINI.md              (tek turda +27 sınıf)
+```
+
+**Karar: BÖL, TAVANI YÜKSELTME.** Tavan bir borç sayacı değil, bağlam diyetinin tasarım
+kısıtıdır (kök `CLAUDE.md` 42k→12k turunun ürünü); yükseltmek kısıtı iptal eder, bölmek korur.
+
+**Ayrım çizgisi altısında da aynı: KURAL kalır, ENVANTER ayrılır** — çünkü envanterler büyür,
+kurallar büyümez.
+
+| Kalan (kural) | Ayrılan (envanter) |
+|---|---|
+| `VERITABANI.md` §1–6, §9–13 | `VERITABANI-MIGRATION.md` §7 migration · §8 şema-dışı nesne |
+| `KUTUPHANELER.md` §1–9 | donmuş hüküm tablosu → `docs/history/standart-2026-09-05/olu-paket-hukum-tablosu.md` |
+| `ESZAMANLILIK.md` §1,2,4,5,7,8 | `ESZAMANLILIK-ENVANTER.md` §3 kilit uzayı · §6 bilinen boşluklar |
+| `TEST-VE-DERLEME.md` §1–6 | `TEST-VE-DERLEME-SINIRLAR.md` §7 sınırlar · §8 bilerek-kırmızı |
+| `OLCUM-DISIPLINI.md` yöntem | `-SINIFLAR.md` KATMAN 1 · `-CIKARIM.md` KATMAN 2 |
+
+**⚠️ BÖLÜM NUMARALARI KORUNDU — bu kararın en önemli parçası.** Ayrılan dosya §1'den değil
+kendi numarasından başlar (`VERITABANI-MIGRATION.md` §7'den, `ESZAMANLILIK-ENVANTER.md` §3'ten),
+ve bırakılan dosyada numaranın yerinde bir yönlendirme satırı durur. Gerekçe: *bir çapa, işaret
+ettiği şey taşındığında kopmamalıdır.* Böylece `RECETELER.md`, `docs/kurallar/*.md`, arşiv notları
+ve kök `CLAUDE.md`nin `ESZAMANLILIK.md` atfı tek sıçramayla hedefini buluyor — hiçbiri
+düzenlenmedi. Düzenlenen çapalar yalnız içerik atfı yapanlardı (`RECETELER.md` 4 satır, iki README).
+
+**Bir ID çakışması ölçülerek çözüldü.** `[DB-31]` İKİ ayrı kuralda kullanılıyordu (§7 "uygulanmış
+migration dosyası hiç değişmez" ve §9 "hard delete iki sınıf") ve arşivde her ikisine de bu
+kimlikle atıf var. Migration olanı `[DB-39]` oldu; hangi arşiv atfının hangisine gittiği
+`VERITABANI-MIGRATION.md` başlığında yazılı.
+
+**Ölçülen yan bulgu — kapı ancak İHLAL ANINDA konuşuyor.** Dört dosyanın dördü de aynı gün
+duvara geldi ve kimse bilerek yapmadı; `TEST-VE-DERLEME.md`yi büyüten oturumun kalan boşluğu
+görmesinin yolu yoktu. Açık iş: `check-docs.mjs`e "tavana < 2 KB kaldı" advisory'si.
+Bugün dar kalanlar: `BACKEND.md` 1.635 · `ELECTRON.md` 1.619 · `KUTUPHANELER.md` 2.153 ·
+`MOBIL.md` 2.333 bayt.
+
+**Üç kapı.** Migration YOK · izin YOK · APK YOK. Altı bölmenin altısında negatif sonda koşuldu
+(dosyaya dolgu → tavan kapısı kırmızı → `cp` + sha256 ile geri), `node scripts/check-docs.mjs`
+rc=0 (161 .md, ölü link yok).
+
+## 2026-09-13 — Ölçüm disiplini kataloğu İKİ KATMANLI oldu: +27 sınıf [ÇEKİRDEK]
+
+**Soru.** Altı oturumun bir günlük ölçüm turu 27 yeni arıza sınıfı üretti. Katalog tek listeydi
+ve sınıfların yarısı ölçümün kendisiyle değil **ölçümden SONRAKİ adımla** ilgiliydi.
+
+**Karar: iki katman.** **KATMAN 1 — ölçümün kendisi** (*sayı doğru mu?*) ·
+**KATMAN 2 — ölçümden sonraki adım** (*sayı doğru; ondan ÇIKARILAN ne?*).
+
+⚠️ **Ayrımın gerekçesi ölçüldü, estetik değil:** Katman 1'de ölçüm yanlıştır ve kurtarıcı ikili
+(sıfırda pozitif kontrol / sıfırdan farklıda örnekle doğrulama) onu yakalar. **Katman 2'de gözlem
+DOĞRUDUR ve doğrulanmıştır** — bu yüzden ondan çıkarılan açıklama da doğrulanmış sanılır.
+**Hiçbir pozitif kontrol o katmanı yakalamaz.** Emsal: aynı doğru kapı gözlemini paylaşan üç
+oturum, üç ayrı uydurma mekanizma üretti.
+
+**Turun en pahalı üç cümlesi:**
+- *Daha iyi bir araç ikinci turu gereksiz kılmaz — ikinci turu TERK ETME İSTEĞİNİ üretir.*
+  (AST `grep`i değiştirdi ve yine kaçırdı: `ShorthandPropertyAssignment`'ta `status:` token'ı
+  yoktur; kaçan site üretimin ana finalize boğazıydı.)
+- *Bir tasarımın "arka durağı var" cümlesi de bir İDDİADIR.* Aynı hafta iki katmanda birden
+  çürüdü: `.githooks/`te `pre-push` YOK, ve üstündeki CI 34 gündür koşmuyordu.
+- *Beklenmedik bir kırmızı gördüğünde ilk soru "ürün ne yaptı" değil, "BEN ne koşturdum" olmalı.*
+  Üç vaka: hazırlık refleksi ORTAMI bozdu (paylaşılan `node_modules`e `prisma generate`),
+  pozitif kontrol LİNT kapısını bozdu, düşen temizlik MUTABAKAT kapısını bozdu — üçünde de ilk
+  teşhis "ürün kusuru" yönündeydi.
+
+**Ve bir yapısal uyarı:** paylaşılan `node_modules` üstünde worktree **izolasyon değil TAKLİTTİR**
+— ortak ağaç riskinin altıncı ısırığı ve ilk beşin panzehirleri (pathspec commit · worktree ·
+adıyla stage'leme) burada TUTMAZ, çünkü onlar *dosya* üzerindeydi, bu **üretilmiş artefakt**
+üzerinde.
+
+**Kimlik kuralı (repo PUBLIC).** Ölçüldü: `gh repo view` → `visibility: PUBLIC`. Belge
+ölçümlerinde **sayı serbest, KİMLİK yok** (barkod · çuval/parti no · müşteri-cari adı · kullanıcı
+adı · fabrika DB adı). Ayırt etme: *bu dizgeyi bir yabancı okuduğunda fabrikanın hangi kaydına
+işaret ettiğini bulabilir mi?* Kural `docs/standart/OLCUM-DISIPLINI.md` § Kimlik yazma'da.
+
+**Üç kapı.** Migration YOK · izin YOK · APK YOK. `docs/KOD-KURALLARI.md`ye iki keskinleştirme
+indi (ayrı notlar değil, mevcut kuralların tanımları): *"kendi PID'in" = DİNLEYEN sürecin PID'i*
+(`npx` iki kademe ekler; tanım yazılmazsa kural kendi ihlalini üretir) ve *çıkış kodunu ayrı
+yazdırmadan `&&`/`||` zincirinden sonuç cümlesi kurma* (bir zincirin son cümlesi zincirin
+başarısını değil yalnız SON ADIMINI anlatır).
