@@ -21,7 +21,7 @@
 //      kapsam dışıdır; sayıları basılır.
 // => Bir kapı, ölçmediğini ÇIKTISINDA söylemezse yeşili komşu boşluğu örter.
 //
-// ── CIRCIR: taban 10, YALNIZ DÜŞER ─────────────────────────────────────────
+// ── CIRCIR: taban 10 → 5 → 0, YALNIZ DÜŞER ─────────────────────────────────
 // ⚠️ Bu kol doğduğu gün YEŞİL DEĞİL: 10 gerçek ihlalle doğuyor (kural
 // dosyalarında adlar KESİK yazılmış — `test_h`, `test_superad`, kelime
 // ortasında kapanan backtick). Tabanı 0 yapmak erken sertlik olurdu; 10'a
@@ -52,13 +52,31 @@ const KOK = join(__dirname, "..", "..");
 const KURALLAR = join(KOK, "docs", "kurallar");
 
 /**
- * Devralınan KESİK ad borcu — YALNIZ DÜŞER.
- * 10 → 5: dördü tek adaya çözüldü ve tamamlandı, biri kapının SAHTE POZİTİFİYDİ
- * (`scripts/test_surum.mjs`). Kalan 5 GERÇEKTEN belirsiz (`test_h` 5 aday,
- * `test_dispa` 5, `test_db` 3, `test_superad`/`test_superadmi` 3) ⇒ tamamlamak
- * o kuralın hangi bekçiyle korunduğuna KARAR VERMEK olurdu; sahiplerinde.
+ * Devralınan KESİK ad borcu — YALNIZ DÜŞER. **10 → 5 → 0 (2026-09-13).**
+ *
+ * 10 → 5: dördü tek adaya çözüldü, biri kapının SAHTE POZİTİFİYDİ
+ * (`scripts/test_surum.mjs` — `.mjs` dosyasına `.ts` ekliyordu).
+ *
+ * 5 → 0: kalan beşi *"GERÇEKTEN belirsiz, tamamlamak KARAR VERMEK olurdu"* diye
+ * bırakılmıştı. ⚠️ O cümle **yarısı doğruydu**: tamamlamak karar vermek olurdu —
+ * ama *"hangi bekçinin o kuralı GERÇEKTEN ölçtüğü"* bir KARAR değil bir ÖLÇÜMDÜR.
+ * Beşi de kuralın cümlesi ↔ adayların YÜKLEMİ okunarak çözüldü (`dc2b6083`):
+ *   sevkiyat.md:28   → test_dispatch_report_gross   (⚠️ adı DAHA YAKIN olan
+ *                      `test_dispatch_report`ta 0 eşleşme — ad yol göstermedi)
+ *   superadmin.md:13 → test_db_invariants (§10)
+ *   yetki-izin.md:20 → test_superadmin (§④ SUPAP)
+ *   yetki-izin.md:23 → test_superadmin_visible (§4)
+ *   is-emri.md:19    → ⛔ BEKÇİ YOK — ve bu da bir ÖLÇÜM sonucudur: tek `test_h*`
+ *                      adayı `test_helpers` kuralı ETKİSİZLEŞTİRİYOR (`:275-278`),
+ *                      ölçmüyor. Kural satırına BORÇ + kapanma koşulu yazıldı.
+ * ⇒ ***Bir atfı doldurmak için OLMAYAN bir korumayı VAR göstermek, boş
+ *   bırakmaktan kötüdür*** — bu yüzden beşincisi tahminle doldurulmadı, `YOK` yazıldı.
+ *
+ * ⚠️ TABAN 0 ARTIK SERT: yeni bir kesik ad İLK GÜNDEN kırmızı verir. Doğduğu gün
+ * 10'la doğması *"erken sertlik olmasın"* diyeydi; sertlik artık erken değil,
+ * KAZANILMIŞ. ⇒ *Bir cırcırın 0'a inmesi, kapının nihayet doğduğu andır.*
  */
-const TABAN = 5;
+const TABAN = 0;
 
 /** `· bekçi: `…`` alanının İÇERİĞİ (backtick'ler arası), dosya başına. */
 function bekciAlanlari(): Array<{ dosya: string; satir: number; icerik: string }> {
