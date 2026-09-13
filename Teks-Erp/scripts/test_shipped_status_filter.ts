@@ -40,7 +40,7 @@ function check(label: string, ok: boolean, extra = ""): void {
   }
 }
 
-const TAG = `TEST-SHIPFILTER-${Date.now()}`;
+const TAG = `TSF-${Date.now()}`;  // `code` VarChar(32) — kısa tutulur
 // ⚠️ UZAK GELECEK: gerçek fabrika verisiyle karışmasın. 2095 `test_shipment_
 // scorecard`ın penceresi — çakışmasın diye 2096.
 const RANGE: DateRange = {
@@ -51,17 +51,26 @@ const PENCERE_ICI = new Date("2096-04-15T10:00:00.000Z");
 
 const MIKTAR = { dispatched: 500, planned: 700, cancelled: 900 } as const;
 
-const ids = { rolls: [] as string[], shipments: [] as string[] };
+const ids = { rolls: [] as string[], shipments: [] as string[], item: "", customer: "" };
 
 async function main(): Promise<void> {
   console.log("\n=== `_shipped.ts` status süzgeci — ANOMALİ ile ölçülür ===\n");
 
-  const item = await prisma.item.findFirst({ where: { isActive: true }, select: { id: true } });
-  const customer = await prisma.customer.findFirst({ where: { isActive: true }, select: { id: true } });
-  if (!item || !customer) {
-    check("ön koşul: aktif ürün + müşteri var", false, "fixture eksik");
-    return;
-  }
+  // ⛔ ORTAMDA ARAMA YOK — `findFirst({ isActive: true })` "ne bulursan" demektir
+  // ve bekçiyi ORTAMA yaslar: fikstür değişince sessizce başka bir kaydı ölçer.
+  // Kendi fikstürünü İŞ ANAHTARIYLA (`code` @unique) kurmak, bekçiyi ortamdan
+  // BAĞIMSIZ yapar. (d5'in keyfi-arama mandalı bunu ölçer; bu dosya onu bir kez
+  // kırdı — yeni dosya, dizinini tarayan BÜTÜN tarayıcılara koşturulur.)
+  const item = await prisma.item.create({
+    data: { code: `${TAG}-I`, name: `${TAG} kumaş`, itemType: "FABRIC" },
+    select: { id: true },
+  });
+  ids.item = item.id;
+  const customer = await prisma.customer.create({
+    data: { code: `${TAG}-C`, name: `${TAG} müşteri` },
+    select: { id: true },
+  });
+  ids.customer = customer.id;
 
   const mkShipment = async (ek: string, status: "DISPATCHED" | "PLANNED" | "CANCELLED") => {
     const s = await prisma.shipment.create({
@@ -151,6 +160,9 @@ main()
   .finally(async () => {
     if (ids.rolls.length) await prisma.roll.deleteMany({ where: { id: { in: ids.rolls } } });
     if (ids.shipments.length) await prisma.shipment.deleteMany({ where: { id: { in: ids.shipments } } });
+    // ⚠️ FK sırası: top → sevkiyat → ürün/müşteri.
+    if (ids.customer) await prisma.customer.deleteMany({ where: { id: ids.customer } });
+    if (ids.item) await prisma.item.deleteMany({ where: { id: ids.item } });
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();
     await pool.end();
