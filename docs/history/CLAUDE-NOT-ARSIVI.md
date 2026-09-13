@@ -8547,3 +8547,44 @@ negatif sonda 3/1/1/1/1 ❌ (production dalı silindi · kapı uçların sonuna 
 **Ortam notu (worktree):** `tekserp_rev1e_test` klonunda üç modül damgası yoktu (`rolls` dolu, modül satırı
 1/8) → `test_module_grandfathering §2b` kırmızı; iki eski damga SQL'i idempotent olarak elle koşuldu, kod
 hatası değil. Sürüm notu: madde YOK — ekran referans fabrikada çizilmez (bayrak kapalı), cümle ölçüldü.
+
+## 2026-09-14 — SNAPSHOT KOLONLARI BEYANI: üçüncü sınıf şemadan türer, yazıcı kümesi AST ile ölçülür [ÇEKİRDEK]
+
+**Borç:** `defter.md` ÜÇÜNCÜ SINIF satırı (2026-09-13) sınıfı tanımlıyor ama bekçisi YOK'tu; elle
+"12 şerh / ≥9 kolon" sayımı bir liste değil bir grep'ti. **İniş (6e):** `scripts/lib/snapshot-kolonlari.ts`
+— 34 beyan: (a) geri alma girdisi 4 (`preShipStatus` · `preCancelStatus` · `preTamburCloseQty/Status`),
+(b) donmuş ileri değer 20, MUAF 10 (kapalı gerekçe kümesi: BELGE_DEFTERI · ONBELLEK · KARAR_SATIRI ·
+DEFTER_SATIRI · SERH_ATFI). 82'nin `defter-beyan.ts`ine dokunulmadı — o olayın tersini, bu kolonun
+sınıfını beyan eder.
+
+**Şemadan türeyen kapı (`test_snapshot_kolonlari`):** aday = şerhinin İLK cümlesinde imza taşıyan
+skaler alan (snapshot · anındaki · donar · donmuş; Türkçe harf için `\b` değil `\p{L}` sınırı).
+Ölçüldü 2026-09-13: tüm şerhte 37 aday / 13'ü atıf ("snapshot alanı GEREKMEZ", "donmuş belge
+çekirdeğine GİRMEZ"), ilk cümlede 23 aday / 4'ü atıf — atıf MUAF/SERH_ATFI olarak beyana girer,
+sessiz elenmez. Bedeli: imzası ilk cümlede olmayan gerçek snapshot (`preShipStatus` ·
+`entryStationId` · `rollValue`) aday olarak türemez ve `adayDegil` gerekçesiyle elle girer; kapı
+"adayDegil ⇔ türemedi" çelişkisini de ölçer. Kendi şerhi olmayan alan, aynı modelde onu tırnakla
+anan blok cümlesini devralır (`lossClass` böyle aday oldu). Aday ⊆ beyan ∧ beyan ⊆ şema.
+
+**Yazıcı kümesi:** tip denetleyicisiz AST (504 dosya, ~2 sn): `data:`/`create:`/`update:` altındaki
+atama en yakın `<x>.<delegate>.<yazan metod>` çağrısına bağlanır; iç içe ilişki yazımı
+(`items: { create: [...] }`) hedef modeli şemadaki ilişki tipinden çözer (`dispatchedQty` yalnız
+böyle yazılıyor); `return { success, data }` ApiResponse yükü kardeş anahtardan tanınır; çözülemeyen
+yazım sayılır ve kırmızıdır. (a)'da yazan/tüketen (null'layan) ayrı kümeler — `preTamburCloseQty`
+yazan yalnız `tambur.service`, tüketen yalnız `tambur-undo.service`; beyansız yeni tüketen kırmızı.
+
+**DB ayağı (`test_consistency_derived` §27/§28, 16 bölüm, SQL beyandan):** (a) tüketilince null
+(§27a–d) + eşik sonrası tüketilmeden null değil (§27e–g; eşik kolon migration'ının ertesi fabrika
+günü, `SNAPSHOT_SINCE` ile ileri alınır — `PLAN_GATE_SINCE` emsali); (b) canonical çiftiyle
+ayrışmamış (`qualityGrade` · `prevQualityGrade` · `errorType` · `lossClass`), ≤ 0 değil, iptal sevkin
+kalemi silinmemiş, kartela toplamı kalemden kopmamış, fatura kuru > 0. Fabrika kopyası (salt okuma,
+2026-09-13 23:59, fabrikanın canlı yedeğinin dev kopyası): 15/16 drift 0 — popülasyon: preShip dolu 2.173 / SHIPPED
+2.174 (1 null 07-20, karar öncesi) · preTambur dolu 240 / TAMBUR_CONSUMED 250 (10 null ≤ 08-08) ·
+preCancel null 215'in hepsi `cancelledAt`sız eski iptal · roll_returns 5 · kartela sevki 0;
+§28h ÖLÇÜLEMEDİ (`machine_stop_events` yedekte yok — yedek ufku 09-11).
+
+**Sondalar:** DB'siz üç (`--sonda`: beyansız `/// Olay anındaki foo` alanı → §1 ❌ · imza silinince
+aday DÜŞER · geçici dizinde `data: { preShipStatus: null }` yazan dosya → beyansız tüketen ❌) +
+DB'li dört (`--probe` §27a · §27c · §27g · §28a, tx içinde ROLLBACK). Kapı `test_snapshot_kolonlari`
+13/0, `test_consistency_derived` 43/0 (sonda DB `tekserp_6e3_test`).
+

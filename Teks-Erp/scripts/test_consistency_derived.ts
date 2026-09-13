@@ -14,6 +14,11 @@
 //        kalan-kapama DURUM bayrağı ↔ sapma defteri aynası (d)
 //   §25  Roll.labelDirty                 ← etiketi etkileyen son değişimin ANI
 //   §26  Roll.colorId                    ← iş emrinin hedef rengi (+ sapma defteri)
+//   §27  SNAPSHOT (a) geri alma girdisi   ← tüketilince null, tüketilmeden dolu
+//   §28  SNAPSHOT (b) donmuş ileri değer  ← canonical çiftiyle/kalemiyle ayrışmamış, silinmemiş
+//        (§27/§28 sorguları `scripts/lib/snapshot-kolonlari.ts` BEYANINDAN gelir — kolon
+//        sınıfı ile ayağı tek yerde yaşasın; bu iki bölümün SQL ikizi dosyasında karşılığı YOK,
+//        statik yarısı `test_snapshot_kolonlari`)
 //
 // Ortak nokta: hiçbirinde DB seddi YOKTUR; tek koruma yazan kod yolunun
 // disiplinidir. §21 tam olarak böyle bulundu (2026-08-21, commit 74d92085):
@@ -37,6 +42,7 @@
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
+import { SNAPSHOT_KOLONLARI, anahtar } from "./lib/snapshot-kolonlari";
 
 let pass = 0,
   fail = 0;
@@ -381,6 +387,14 @@ WHERE r.status IN ('WAREHOUSE', 'A1_STOCK')
         SELECT 1 FROM roll_plan_deviations d
         WHERE d."rollId" = r.id OR d."childRollId" = r.id)`,
   },
+  // §27/§28 — beyandan türer: her `sql` ayağı bir bölüm, başlık kolon adıyla
+  ...SNAPSHOT_KOLONLARI.flatMap((b) =>
+    (b.sql ?? []).map((q) => ({
+      id: q.id,
+      title: `SNAPSHOT ${b.sinif === "GERI_ALMA_GIRDISI" ? "(a)" : "(b)"} ${anahtar(b)} — ${q.baslik}`,
+      sql: q.sql,
+    }))
+  ),
 ];
 
 type Db = Prisma.TransactionClient;
@@ -407,7 +421,7 @@ async function driftSamples(s: Section, db: Db = prisma): Promise<string[]> {
 // =============================================================================
 async function runGate(): Promise<void> {
   console.log("\n=== Türetilmiş-alan tutarlılık kapısı (consistency-check-derived.sql ikizi) ===");
-  console.log(`${SECTIONS.length} bölüm · §26 dışında drift satırı sayısı 0 olmalı\n`);
+  console.log(`${SECTIONS.length} bölüm (§27/§28 snapshot beyanından ${SECTIONS.filter((s) => /^2[78]/.test(s.id)).length}) · §26 dışında drift satırı sayısı 0 olmalı\n`);
 
   for (const s of SECTIONS) {
     let n: number;
@@ -874,6 +888,58 @@ const PROBES: Probe[] = [
     expect: ["26", "26b"],
     build: async (tx) => {
       await buildPlanDeviationRoll(tx, new Date(PLAN_GATE_SINCE.getTime() + 24 * 60 * 60 * 1000));
+    },
+  },
+  {
+    // (a) sınıfı: sevk geri alındı ama girdi null'lanmadı (bayat snapshot) — ya da iade
+    // yolu dışında bir yol topu raftan alıp snapshot'ı bıraktı.
+    id: "27a",
+    what: "Depodaki topta preShipStatus dolu kalmış (tüketilmeden), iade satırı yok",
+    expect: ["27a"],
+    build: async (tx) => {
+      const itemId = await seedItem(tx);
+      await tx.roll.create({
+        data: { barcode: tag("T"), itemId, initialQty: 50, currentQty: 50, status: "WAREHOUSE", preShipStatus: "WAREHOUSE" },
+      });
+    },
+  },
+  {
+    // (a) sınıfı: parent geri alınıp dirildi ama kapanış snapshot'ı null'lanmadı.
+    id: "27c",
+    what: "Dirilmiş parent (IN_PRODUCTION) preTamburCloseQty taşıyor",
+    expect: ["27c"],
+    build: async (tx) => {
+      const itemId = await seedItem(tx);
+      await tx.roll.create({
+        data: { barcode: tag("T"), itemId, initialQty: 100, currentQty: 100, status: "IN_PRODUCTION", preTamburCloseQty: 100 },
+      });
+    },
+  },
+  {
+    // (a) sınıfının öteki yönü: kapanış yolu girdiyi YAZMADAN parent'ı emekli etmiş.
+    // `statusChangedAt`i trigger yazar; fixture doğrudan TAMBUR_CONSUMED doğduğu için damga bugündür.
+    id: "27g",
+    what: "Eşik sonrası TAMBUR_CONSUMED parent preTamburCloseQty taşımıyor (kapanış girdi yazmamış)",
+    expect: ["27g"],
+    build: async (tx) => {
+      const itemId = await seedItem(tx);
+      await tx.roll.create({
+        data: { barcode: tag("T"), itemId, initialQty: 100, currentQty: 0, status: "TAMBUR_CONSUMED" },
+      });
+    },
+  },
+  {
+    // (b) sınıfı: canonical id dururken donmuş kod silinmiş — "snapshot'ı canlıdan
+    // yeniden türetiriz" düşüncesinin ilk adımı.
+    id: "28a",
+    what: "qualityGradeId dolu, donmuş qualityGrade kodu NULL",
+    expect: ["28a"],
+    build: async (tx) => {
+      const itemId = await seedItem(tx);
+      const qg = await tx.qualityGrade.create({ data: { code: tag("QG"), name: "Sonda kalite" } });
+      await tx.roll.create({
+        data: { barcode: tag("T"), itemId, initialQty: 50, currentQty: 50, status: "WAREHOUSE", qualityGradeId: qg.id, qualityGrade: null },
+      });
     },
   },
 ];
