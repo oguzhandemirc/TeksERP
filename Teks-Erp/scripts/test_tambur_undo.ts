@@ -21,7 +21,7 @@
 //   §6 DEPO KESİMİ ÇIKMAZI kapandı (9 kaynağın 6'sı bu durumdaydı)
 //   §7 Sapma defteri TERSLENİR (hayalet fire kalmaz)
 //   §11 ÜRETİM AKIŞINDA tekil geri alma da AŞIMI KORUR (canlı ↔ arşiv aynası)
-//       ⚠️ 2026-09-14 ÇEVRİLDİ (hüküm ②): Σ canlı OVERAGE = gerçek aşım, tek satır, sourceRollId adlı
+//       ⚠️ 2026-09-13 ÇEVRİLDİ (hüküm ②): Σ canlı OVERAGE = gerçek aşım, tek satır, sourceRollId adlı
 //
 // Fixture kendi verisini üretir (ortam verisine bağımlı DEĞİL), finally'de siler.
 // =============================================================================
@@ -755,7 +755,7 @@ async function main(): Promise<void> {
       Number(s11After?.initialQty) === 120,
       `init=${s11After?.initialQty}`,
     );
-    // ⚠️ ÇEVRİLDİ 2026-09-14 (hüküm ② a, KEŞİF TERMİNAL): eski ayak "TAMBUR_UNDO_RESTORE
+    // ⚠️ ÇEVRİLDİ 2026-09-13 (hüküm ② a, KEŞİF TERMİNAL): eski ayak "TAMBUR_UNDO_RESTORE
     // tek satır 20" bekliyor ve DEĞİŞMEZİN TERSİNİ kilitliyordu — aşım kesim anında
     // ebeveyne TAMBUR_OVERCUT 20 olarak zaten yazılmıştı; geri almanın bump'ı aynı 20
     // için İKİNCİ bir canlı OVERAGE doğuruyordu (Σ 40, gerçek aşım 20; 1c ölçtü).

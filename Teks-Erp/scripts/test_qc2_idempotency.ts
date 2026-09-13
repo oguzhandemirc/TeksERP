@@ -14,7 +14,7 @@
 // Seddi yalnız düz `create` kontrolü ölçer. Kontrol tutuldu (uygulama yolu bu),
 // etiketi "sed" iddiasından arındırıldı; ⭐ yalnız gerçekten sed ölçen ikisinde.
 //
-// ⚠️ FİKSTÜR KENDİ KENDİNE — ortamdaki veriye BAĞIMLI DEĞİL (2026-09-14):
+// ⚠️ FİKSTÜR KENDİ KENDİNE — ortamdaki veriye BAĞIMLI DEĞİL (2026-09-13):
 // eski sürüm `findFirst` ile "herhangi bir PROCESS_QC adımı + herhangi bir top"
 // arıyordu; CI'nın taze `_test` klonunda (migrate deploy sonrası, seed'siz) ikisi de
 // yok ⇒ ⏭ beyanla dönüyor, HİÇBİR ŞEY ölçmüyordu (d9 sessizliği beyana çevirdi,
@@ -23,7 +23,7 @@
 // kurar ve `finally`de FK sırasıyla söker. Seed'e, istasyon kataloğuna, admin'e
 // ihtiyaç yok — boş DB'de de aynı iki kontrol koşar.
 //
-// SONDALAR (2026-09-14, taze seed'siz `_test` klonu + dolu yerel `_test`; geri alma
+// SONDALAR (2026-09-13, taze seed'siz `_test` klonu + dolu yerel `_test`; geri alma
 // cp + sha256 / index için saklanan indexdef):
 //   · pozitif kontrol: seed'siz taze DB'de 7/0 (fikstür 2 + ölçüm 4 + temizlik 1),
 //     dolu DB'de de 7/0

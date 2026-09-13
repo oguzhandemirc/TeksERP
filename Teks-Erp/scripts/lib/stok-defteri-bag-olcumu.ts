@@ -161,7 +161,7 @@ export const BILINEN_KAPISIZ_YOLLAR: readonly KapisizYol[] = [
   },
 ];
 /**
- * K'NIN ÜÇÜNCÜ EKSENİ — YERİNDE MİKTAR DEĞİŞTİREN YOLLAR (2026-09-14, hüküm MANUAL_ADJUST).
+ * K'NIN ÜÇÜNCÜ EKSENİ — YERİNDE MİKTAR DEĞİŞTİREN YOLLAR (2026-09-13, hüküm MANUAL_ADJUST).
  *
  * K yalnız stok kümesine GİRİŞ/ÇIKIŞ yollarını sayıyordu; topu yerinde bırakıp
  * `currentQty`sini değiştiren yol tanımı gereği görünmezdi — elle metraj düzeltmesi

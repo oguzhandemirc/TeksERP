@@ -4816,7 +4816,7 @@ export class WorkOrderService {
         // metraj claim ÖNCESİ durumdan okunur (`candidates` tx içinde tazedir);
         // claim sonrası statü artık IN_PRODUCTION'dır ve "nereden çıktı"yı söylemez.
         // Yazıcı TEK (`production-issue-ledger.helper`): manuel taşıma · elle top ·
-        // redye ayırma aynı yüklemi ve aynı satırı yazar (2026-09-14, hüküm §5).
+        // redye ayırma aynı yüklemi ve aynı satırı yazar (2026-09-13, hüküm §5).
         await postProductionIssuesTx(tx, succeeded, { workOrderStepId: firstStepId, userId: userId ?? null });
         if (claimedIds.size !== candidates.length) {
           for (const r of candidates) {

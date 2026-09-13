@@ -4095,7 +4095,7 @@ model RollVariance {
   /// TAMBUR_UNDO_SINGLE. Sebep "neden", kaynak "nerede" sorusunu yanıtlar.
   source          String           @db.VarChar(64)
   /// Sapmayı DOĞURAN BELGENİN kimliği (`SUBCONTRACTOR_RETURN`: `SubcontractorReceipt.id`;
-  /// `STOCK_COUNT`: `StockCount.id` — 2026-09-14'te ölçüldü, iki yazıcı). TERSLEMENİN
+  /// `STOCK_COUNT`: `StockCount.id` — 2026-09-13'te ölçüldü, iki yazıcı). TERSLEMENİN
   /// ADRESİDİR ve BELGE kimliği KALIR: top kimliği ayrı kolondadır (`sourceRollId`),
   /// çünkü bir kolonun anlamı iddiadır ve iki anlam tek kolonda okuyucuyu kör eder.
   ///
@@ -4106,7 +4106,7 @@ model RollVariance {
   /// teslimatın meşru sapmasını da sessizce terslerdi.
   sourceRefId     String?          @db.Uuid
   /// Sapmayı DOĞURAN TOP — sapma satırı EBEVEYNE yazıldığında (kesim keşfi ebeveyne
-  /// taşınır: hüküm ② 2026-09-14) hangi çocuktan geldiği. Tersleme ve mutabakat
+  /// taşınır: hüküm ② 2026-09-13) hangi çocuktan geldiği. Tersleme ve mutabakat
   /// "bu çocuğun keşfi" sorusunu buradan sorar; `sourceRefId` belgeyi, bu kolon topu
   /// söyler. `Restrict`: keşfin kaynağı olan top silinemez (defter satırı ona bakıyor).
   sourceRollId    String?          @db.Uuid

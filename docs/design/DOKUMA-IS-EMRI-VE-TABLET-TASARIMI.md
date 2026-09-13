@@ -718,7 +718,7 @@ UPDATE doff_events SET revokedAt = now(), revokedById = :u, revokeReason = :r
 
 **minVersion (reçete 13):** `WEAVING` değerini ÜRETEN uç bu commit'le doğar ⇒ eski panel/tablet `entrySource=WEAVING` görebilir. Panel aynaları P3'te indi (etiketler hazır); tablet union'ı `WEAVING` içeriyor ama `PURCHASE_RECEIPT`/`SEMI_FINISHED` yok (devralınan). "Eski istemci ne yapar": bilinmeyen değeri **ham basar, çökmez** (`rollEntrySourceLabels` lookup, `?? value`) — ölçülmeden yazılmaz, o commit'te ölçülür.
 
-### 3.8c · Çelişmeli doğrulama — doff backend (P3b) ↔ §3.8b (2026-09-14, 1c)
+### 3.8c · Çelişmeli doğrulama — doff backend (P3b) ↔ §3.8b (2026-09-13, 1c)
 
 **Taban:** `origin/main` 75b1eb0d+ (dilim: 20fb880d servis+bekçi · a218f68c route+izin · 3b80b22b etiket). **Yöntem:** 6 bağımsız Opus okuyucu × 3 mercek (doktrin · mekanik · pencere), salt-okunur kod↔sözleşme karşılaştırması; koşum gerektiren her iddia 1c'nin kendi klon DB'sinde sondayla ölçüldü. Kod YAZILMADI; kod kusurları taze 01 oturumuna kalemdir. Üç sonuç: ÖLÇÜLDÜ / ÖLÇÜLEMEDİ / İHLAL.
 

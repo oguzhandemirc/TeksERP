@@ -372,7 +372,7 @@ export type OlayTersYolu =
    * yazan fonksiyon — §13f onu kodda arar.
    */
   | { tur: "KARSI_OLAY"; kod: string | string[]; gerekce: string; tersYazan: TersYazan[] }
-  // ↑ `kod` küme olabilir: bir karşı olay birden çok ileriyi karşılar (ölçüldü 2026-09-14:
+  // ↑ `kod` küme olabilir: bir karşı olay birden çok ileriyi karşılar (ölçüldü 2026-09-13:
   //   PRODUCTION_ISSUE hem WO_DETACH'ın hem DISPOSITION'ın karşısı — raftan üretime giriş,
   //   iki farklı çıkışın ortak geri yolu). TAMBUR_UNDO.ileri kümesiyle aynı ders.
   /**

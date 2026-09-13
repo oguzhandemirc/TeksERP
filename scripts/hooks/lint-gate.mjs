@@ -127,7 +127,7 @@ function main() {
   }
 
   // --rapor=<yol>: rapor oraya yazılır ve SİLİNMEZ — lint tavanı aynı JSON'u okur,
-  // eslint bir kapıda İKİ kez koşmaz (ölçüldü 2026-09-14: 19 sn + 3,5 GB tasarruf).
+  // eslint bir kapıda İKİ kez koşmaz (ölçüldü 2026-09-13: 19 sn + 3,5 GB tasarruf).
   const raporArg = process.argv.slice(2).find((a) => a.startsWith("--rapor="))?.split("=")[1];
   const gecici = raporArg ? null : mkdtempSync(join(tmpdir(), "tekserp-lint-"));
   const rapor = raporArg ?? join(gecici, "eslint.json");

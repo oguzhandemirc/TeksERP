@@ -100,7 +100,7 @@ function olc(proje) {
   const { dizin, argv: lintArgv } = PROJELER[proje];
   let ham;
   // --rapor=<yol>: lint-gate'in az önce yazdığı JSON — aynı küme (argv birebir,
-  // yukarıdaki sözleşme), eslint ikinci kez koşmaz (ölçüldü 2026-09-14: 19 sn +
+  // yukarıdaki sözleşme), eslint ikinci kez koşmaz (ölçüldü 2026-09-13: 19 sn +
   // 3,5 GB / kapı). Verilmiş ama okunamıyorsa ARIZA: sessizce kendim koşup yeşil
   // geçmek bir kablolama hatasını 19 sn'lik bir yavaşlığa gizlerdi.
   const raporYolu = process.argv.slice(2).find((a) => a.startsWith("--rapor="))?.split("=")[1];

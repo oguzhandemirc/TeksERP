@@ -72,7 +72,7 @@ const genisTip = (ad) =>
   ad === "Teks-Erp" &&
   staged.some((f) => /^Teks-Erp\/(scripts|prisma)\//.test(f));
 
-// AĞIR ADIMLARA HEAP PAYI (ölçüldü 2026-09-14, d5): tsc 3,3 GB · eslint 3,4–3,5 GB
+// AĞIR ADIMLARA HEAP PAYI (ölçüldü 2026-09-13, d5): tsc 3,3 GB · eslint 3,4–3,5 GB
 // tepe RSS, Node'un varsayılan heap tavanı 4192 MB — 700 MB kaldı; proje %20
 // büyüyünce eşzamanlılıktan BAĞIMSIZ "Reached heap limit" gelir. Tavan 6144'e
 // çekilir (24 GB makinede 3 eşzamanlı kapı 9,4 GB'de paging'siz). npm → node
@@ -98,7 +98,7 @@ for (const proje of etkilenenProjeler(REPO, staged)) {
   adimlar.push({
     ad: `${proje.ad} · lint`,
     cwd: ".",
-    // TEK ESLİNT KOŞUMU (ölçüldü 2026-09-14): lint ve tavan aynı kümeyi ayrı ayrı
+    // TEK ESLİNT KOŞUMU (ölçüldü 2026-09-13): lint ve tavan aynı kümeyi ayrı ayrı
     // tarıyordu (19 sn + 3,5 GB × 2). Rapor bir kez yazılır, tavan onu okur.
     cmd: ["node", ["scripts/hooks/lint-gate.mjs", `--proje=${proje.ad}`, `--rapor=${join(RAPOR_DIZINI, `${proje.ad}.json`)}`]],
     stdin: `${staged.join("\n")}\n`,
@@ -160,7 +160,7 @@ if (staged.some((f) => /^(Teks-Erp\/scripts\/|docs\/standart\/|docs\/kurallar\/)
   adimlar.push({ ad: "hızlı mandallar", cwd: ".", cmd: ["node", ["scripts/hooks/hizli-mandallar.mjs"]] });
 }
 
-// KAPININ KENDİSİ (1e hükmü 2026-09-14): hook'u ve kapı betiklerini değiştiren
+// KAPININ KENDİSİ (1e hükmü 2026-09-13): hook'u ve kapı betiklerini değiştiren
 // commit, hook tarafından ÖLÇÜLMÜYORDU (kök `scripts/` hiçbir tetikte değil —
 // aynı gün üç kapı commit'i adımsız indi, bekçiler elle koşuldu). Tetik dördüncü
 // dizin: `scripts/hooks/**` + kök `scripts/*.mjs` (check-*/kapi-kapsami — kapı
@@ -209,7 +209,7 @@ if (staged.some((f) => SURUM_NOTU_YOLLARI.has(f))) {
 
 if (adimlar.length === 0) process.exit(0);
 
-// KAPI SEMAFORU (1e hükmü 2026-09-14): ağır adım (tsc/eslint/test) varsa makine
+// KAPI SEMAFORU (1e hükmü 2026-09-13): ağır adım (tsc/eslint/test) varsa makine
 // genelinde en çok KAPASITE kapı aynı anda koşar — ölçüm ve tuzaklar lib/semafor.mjs.
 // Yalnız doküman/sürüm-notu kapısı (saniyeler, MB'lar) sıraya girmez.
 const agirVar = adimlar.some((a) => a.env === AGIR_ADIM_ENV || a.ad.endsWith(" · test"));
@@ -225,7 +225,7 @@ for (const adim of adimlar) {
     timeout: 600_000,
     // `gitEnvSil`: git, hook sürecine GIT_DIR/GIT_INDEX_FILE/GIT_PREFIX verir ve bunlar
     // çocuğa iner. Geçici repoda `git init/add/commit` yapan bir adım (kapsam bekçisi)
-    // o env ile GERÇEK repoya commit atar — 2026-09-14'te oldu: "taban" commit'i
+    // o env ile GERÇEK repoya commit atar — 2026-09-13'te oldu: "taban" commit'i
     // dalıma indi, 3977 dosya silindi, reset ile döndü. Yalnız işaretli adımlarda
     // sökülür: index okuyan adımlar (identifier_language `git show :yol`) pathspec
     // commit'inde GEÇİCİ index'i GIT_INDEX_FILE'dan bulur, onlara dokunulmaz.

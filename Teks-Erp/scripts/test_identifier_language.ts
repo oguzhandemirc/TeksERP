@@ -212,7 +212,7 @@ const bulgular = tara([
  */
 const anahtar = (b: Bulgu): string => `${b.dosya}::${b.ad}`;
 const bugun = bulgular.map(anahtar).sort();
-// ÖLÇEN YAZMAZ (1e hükmü 2026-09-14): tek yazma yolu --yaz — kurulum da sıkışma da.
+// ÖLÇEN YAZMAZ (1e hükmü 2026-09-13): tek yazma yolu --yaz — kurulum da sıkışma da.
 // Otomatik yazım ⑳ sınıfıydı (taban AĞAÇTAN): commit kapısında sahnelenmemiş
 // kirli dosya, ortak ağaçta yabancı WIP'den sahte sıkışma. Taban yazımı
 // entegratörün tren-sonu işidir (KESIK/B/K sabitleriyle aynı düzen).

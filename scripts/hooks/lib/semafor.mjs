@@ -1,7 +1,7 @@
 // =============================================================================
 // KAPI SEMAFORU — makine genelinde en çok N eşzamanlı ağır kapı (zero-dep)
 // =============================================================================
-// ⭐ NEDEN VAR (ölçüldü 2026-09-14, d5; 24 GB / 10 çekirdek; 1e hükmü): bir
+// ⭐ NEDEN VAR (ölçüldü 2026-09-13, d5; 24 GB / 10 çekirdek; 1e hükmü): bir
 //    backend kapısı (tsc + eslint ×2) tepe 3,5 GB, boşta 43 sn. Eşzamanlı:
 //      N=1 43 sn · N=2 52 · N=3 74 (9,4 GB, paging yok) · N=4 130 (RSS platoda,
 //      paging) · N=6 332 sn (swap +1,1 GB, load 20) — gecenin 470–767 sn'si bu.

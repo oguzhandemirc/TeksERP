@@ -38,7 +38,7 @@ export interface RecordVarianceInput extends VarianceReasonInput {
   /**
    * Sapmayı doğuran TOP — kesim keşfi (`TAMBUR_OVERCUT`) ebeveyne yazılırken hangi
    * çocuktan geldiği. Geri alma "bu çocuğun keşfi ne kadar" sorusunu buradan sorar
-   * (hüküm ② 2026-09-14); `sourceRefId` belgeyi söyler, bu kolon topu.
+   * (hüküm ② 2026-09-13); `sourceRefId` belgeyi söyler, bu kolon topu.
    */
   sourceRollId?: string | null;
   userId?: string | null;

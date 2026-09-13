@@ -27,7 +27,7 @@
 //      (iki bağımsız kaynak; yazım öncesi bu eşitlik 4 yolda bozuluyordu)
 //   §Z Körlük zemini: fikstür gerçekten satır üretti
 //
-// İKİ SONDA (koşuldu 2026-09-14): helper çağrıları kaldırılınca §1/§3/§4 kırmızı
+// İKİ SONDA (koşuldu 2026-09-13): helper çağrıları kaldırılınca §1/§3/§4 kırmızı
 // (negatif); helper ile §H boşluğu 0 (pozitif — yazım öncesi 100·n idi).
 // =============================================================================
 import { randomUUID } from "node:crypto";

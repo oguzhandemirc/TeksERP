@@ -27,7 +27,7 @@
 //   §10 ⭐ YAPISAL değişmez: iptal edilmiş her çocuğun ileri satırı terslenmiş
 //   §11 ⭐ DEPO KESİMİ (TRANSFORM çifti) geri alınınca EBEVEYNİN çıkışı da terslenir
 //   §12 ⭐ initialQty ŞİŞMEZ: kesim düşürmez, geri alma yalnız AŞIMDA bump + OVERAGE (6e, 2026-09-13)
-//   §13–§19 ⭐ KAPANIŞIN İKİ DEFTERİ BİRLİKTE DÖNER (hüküm ① b1+b2+b3-DAR, 2026-09-14): FULL discard/
+//   §13–§19 ⭐ KAPANIŞIN İKİ DEFTERİ BİRLİKTE DÖNER (hüküm ① b1+b2+b3-DAR, 2026-09-13): FULL discard/
 //      scrap bağlı çıkışı tersler (§13/§14) · SINGLE_RESTORE dokunmaz (§15) · arşiv-SINGLE → FULL (§18) ·
 //      scrap-kalan çocuğuna yalnız FULL (§19, 409 UNDO_SCRAP_REMAINDER_FULL_ONLY)
 //   §16 · §17 ⭐ GERÇEK AŞIM (hüküm ② a): keşif terminal, ebeveyne taşınır — SINGLE×3 ve FULL'de
@@ -401,7 +401,7 @@ async function main(): Promise<void> {
       JSON.stringify(d12c.asim),
     );
 
-    // ── §13–§19 ⭐ KAPANIŞIN İKİ DEFTERİ BİRLİKTE DÖNER (hüküm ① b1+b2+b3-DAR, 2026-09-14) ──
+    // ── §13–§19 ⭐ KAPANIŞIN İKİ DEFTERİ BİRLİKTE DÖNER (hüküm ① b1+b2+b3-DAR, 2026-09-13) ──
     // Kapanış sapması (`RECORD_CORRECTION`/`SCRAP`) stok defterine `rollVarianceId` ile
     // BAĞLI bir çıkış yazar (`CUT_DISCARD`/`SCRAP`). FULL 5b sapmayı damgalıyor ama bağlı
     // çıkışı terslemiyordu ⇒ 100 ↔ 60 / 100 ↔ 0 (1c ölçtü). Ölçüt her ayakta: ebeveyn
@@ -495,7 +495,7 @@ async function main(): Promise<void> {
     const onizK = (await undo.getUndoPreview(f19k.cocuk)).data as { options: Array<{ mode: string }> };
     check("§19e kapı DAR: sıradan kesim parçasına SINGLE hâlâ sunuluyor", onizK.options.some((o) => o.mode === "SINGLE"), JSON.stringify(onizK.options.map((o) => o.mode)));
 
-    // ── §16 · §17 ⭐ GERÇEK AŞIM — KEŞİF TERMİNAL, EBEVEYNE TAŞINIR (hüküm ② a, 2026-09-14) ──
+    // ── §16 · §17 ⭐ GERÇEK AŞIM — KEŞİF TERMİNAL, EBEVEYNE TAŞINIR (hüküm ② a, 2026-09-13) ──
     // 100 m depo topu → 40·40·40 (3.'de kesim anı keşfi: ebeveynde TAMBUR_OVERCUT 20,
     // sourceRollId = 3. çocuk; çocukta OVERAGE +20 stok satırı). Eski kod geri almada
     // bump için İKİNCİ OVERAGE yazıyor (Σ 40) ve çocuğun +20'sini tersleyip ebeveyne

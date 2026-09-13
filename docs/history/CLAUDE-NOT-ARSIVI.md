@@ -8331,7 +8331,7 @@ coverage Σkök · üretim raporu · ikiz kapısı · etiket "100 / 140"), saha 
 depo kesimi 0, initialQty > giriş defteri 0). Düzeltme 1e hükmüyle initialBump deseni; bekçi
 `test_stock_ledger_tambur_undo §12` (tren #5 sonrası, 6e). Kural satırı `Kapanır:` taşıyor.
 
-## 2026-09-14 — RAFTAN ÜRETİME GİREN ÜÇ YOL SATIRSIZDI: yazıcı teke indi, K=0 kapısı KÖRDÜ [ÇEKİRDEK]
+## 2026-09-13 — RAFTAN ÜRETİME GİREN ÜÇ YOL SATIRSIZDI: yazıcı teke indi, K=0 kapısı KÖRDÜ [ÇEKİRDEK]
 
 **Olgu (1c ölçtü, hüküm dosyası §5; 1e hükmü §11 ③):** stok kümesindeki top üretime dört
 yoldan giriyordu ve yalnız `attachRolls` ("Yeniden Üretime Al") `PRODUCTION_ISSUE` çıkışı
@@ -8388,7 +8388,7 @@ yanlış düğüme uygulandı*.
 yeniden yazıldı; `STOK_DISI_STATULER`de IN_PRODUCTION olmaması (asimetri ölçüsü bu yolları görmez)
 1c'nin kalemi (hüküm §11).
 
-## 2026-09-14 — TAMBUR GERİ ALMA HÜKMÜ ① İNDİ: kapanışın iki defteri birlikte döner (b1+b2+b3-DAR) [ÇEKİRDEK]
+## 2026-09-13 — TAMBUR GERİ ALMA HÜKMÜ ① İNDİ: kapanışın iki defteri birlikte döner (b1+b2+b3-DAR) [ÇEKİRDEK]
 
 **Hüküm (1e, `TAMBUR-GERI-ALMA-HUKUM-2026-09-13.md` §11):** `CUT_DISCARD` ve kapanış `SCRAP`ı
 terminal değil BAĞLI TERS — 1c'nin S2/S4/S9/S10 ölçümleri üzerine.
@@ -8417,9 +8417,9 @@ Negatif sondalar (cp+sha256 `e2142b30`): b1 kaldır → 6 ❌ (§13/§14/§18/§
 **Sürüm notu (yalnız b3-dar):** ea'ya koşul dili. Şema yok; beyan çevrimi (`CUT_DISCARD`/`SCRAP` →
 `BAGLI_TERS`/`TAMBUR_UNDO`) 82'de "kod indikten sonra".
 
-## 2026-09-14 — TAMBUR GERİ ALMA HÜKMÜ ②+④ İNDİ: keşif TERMİNAL, ebeveyne taşınır; bump yalnız karşılanmayan kısım [ÇEKİRDEK]
+## 2026-09-13 — TAMBUR GERİ ALMA HÜKMÜ ②+④ İNDİ: keşif TERMİNAL, ebeveyne taşınır; bump yalnız karşılanmayan kısım [ÇEKİRDEK]
 
-**KISMİ → 2026-09-14:** `top-duzeltme.md` metraj satırının "geri alma yalnız AŞIMDA yukarı çeker +
+**KISMİ → 2026-09-13:** `top-duzeltme.md` metraj satırının "geri alma yalnız AŞIMDA yukarı çeker +
 OVERAGE/TAMBUR_UNDO_RESTORE sapma satırı" cümlesi DARALDI — sapma satırı yalnız keşifle karşılanmayan
 kısım için doğar. (`tambur.md:27`nin aynı daralması 01'de.)
 
@@ -8451,7 +8451,7 @@ kaldır → §16/§16c ❌ (durum 120 ↔ defter 100) · kesim anı `sourceRollI
 **Ders (aynı gece ikinci kez):** ilk P3 sondası hiç ısırmadı — perl deseni bağlamı bulamadı, `grep -c`
 0 dedi; sonda "uygulanmadı" ile "ısırmadı" ayrı sonuçlardır, ikincisi ancak birincisi 1 ise okunur.
 
-## 2026-09-14 — MANUAL_ADJUST: katalogda ölü kod, elle metraj yolu deftere yazmıyordu — K'nın ÜÇÜNCÜ EKSENİ [ÇEKİRDEK]
+## 2026-09-13 — MANUAL_ADJUST: katalogda ölü kod, elle metraj yolu deftere yazmıyordu — K'nın ÜÇÜNCÜ EKSENİ [ÇEKİRDEK]
 
 **Ölçüm (6e):** `STOCK_MOVE_REASON.MANUAL_ADJUST` src'de 0 yazıcı, fabrika kopyasında 0 satır (82'nin
 gördüğü 24 satır bir test DB'sinde tek seferlik koşum izi). Elle metraj yolu (`adjustRollQty`,

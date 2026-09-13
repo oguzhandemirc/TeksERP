@@ -17,7 +17,7 @@
 //      alır ve sapma defteri farkı İKİ KEZ görmez (tek satır)
 //   §7 İş emri adımına bağlı FREE_STOCK topu 409 (currentStepId guard'ı)
 //   §8 STOK DEFTERİ: elle düzeltme ADJUST satırı yazar — iki yön, rollVarianceId bağlı, Δnet = Δcurrent;
-//      deposuz top satır almaz (hüküm 2026-09-14; öncesinde yol defter YAZMIYORDU)
+//      deposuz top satır almaz (hüküm 2026-09-13; öncesinde yol defter YAZMIYORDU)
 //
 // Fixture kendi verisini üretir (ortam verisine bağımlı DEĞİL), finally'de
 // siler. ⚠️ RollVariance FK'sı RESTRICT — top silinmeden ÖNCE variance satırı
@@ -332,8 +332,8 @@ async function main(): Promise<void> {
       err?.message ?? "hata yok",
     );
 
-    // ── §8 STOK DEFTERİ — elle düzeltme ADJUST satırı yazar, iki yön (hüküm 2026-09-14) ──
-    // 2026-09-14'e kadar bu yol deftere HİÇ yazmıyordu (şerhi "konum defteri, ADJUST yok"
+    // ── §8 STOK DEFTERİ — elle düzeltme ADJUST satırı yazar, iki yön (hüküm 2026-09-13) ──
+    // 2026-09-13'e kadar bu yol deftere HİÇ yazmıyordu (şerhi "konum defteri, ADJUST yok"
     // diyordu — ikisi de bayattı): elle düzeltilmiş top için durum ≠ defter (500 → 480:
     // defter 500). K bu yolu tanımı gereği görmüyordu (yerinde miktar değiştiren, giriş/çıkış
     // değil). Ölçüt: Δnet(defter) = Δcurrent, her iki yönde; satır `rollVarianceId` ile bağlı;

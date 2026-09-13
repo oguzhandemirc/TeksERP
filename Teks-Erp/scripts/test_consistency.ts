@@ -956,7 +956,7 @@ WHERE cik."reasonCode" = 'CUT_SPLIT'
     // `SCRAP`, kaynak TAMBUR_*FINALIZE) FULL geri almada damgalanmış (`reversedAt`)
     // ama `rollVarianceId` ile ona bağlı stok çıkışı (`CUT_DISCARD` / `SCRAP`)
     // terslenmemiş: aynı kararın iki defteri ayrı yöne bakıyor (hüküm ① b1,
-    // 2026-09-14; ölçüldü 100 ↔ 60 / 100 ↔ 0). Kod `reverseVarianceBoundStockMovesTx`
+    // 2026-09-13; ölçüldü 100 ↔ 60 / 100 ↔ 0). Kod `reverseVarianceBoundStockMovesTx`
     // ile kapandı; bu bölüm o günden ÖNCE açılmış yetimleri SAYAR.
     //
     // ⚠️ SONDA KALEMİ, ONARIM DEĞİL (§31 ile aynı sınıf): sayı kullanıcıya iletilir.
@@ -964,7 +964,7 @@ WHERE cik."reasonCode" = 'CUT_SPLIT'
     title: "DAMGALI kapanış sapması, bağlı stok çıkışı TERSLENMEMİŞ (aynı kararın iki defteri ayrışmış)",
     miras: {
       taban: null,
-      tarih: "2026-09-14",
+      tarih: "2026-09-13",
       nerede: "izole ağaç, sonda DB — canlı ölçüm YOK",
       not: "sayı > 0 ⇒ o ebeveynlerin defteri kapanışın kalanı kadar EKSİK sayıyor; onarım kullanıcı kararı",
     },
@@ -983,7 +983,7 @@ WHERE v."reversedAt" IS NOT NULL
   },
   {
     id: "33",
-    // initialQty = GİRİŞ + Σ CANLI TAMBUR AŞIMI — hüküm ②/④ (2026-09-14). `initialQty`
+    // initialQty = GİRİŞ + Σ CANLI TAMBUR AŞIMI — hüküm ②/④ (2026-09-13). `initialQty`
     // üretim anı snapshot'ıdır; onu yalnız aşım (kesim anı keşfi TAMBUR_OVERCUT ya da
     // geri almanın karşılanmayan bump'ı TAMBUR_UNDO_RESTORE/FULL) yukarı çeker ve her
     // artış sapma defterinde canlı bir OVERAGE satırıyla açıklanır. Eşitlik bozuksa
@@ -997,7 +997,7 @@ WHERE v."reversedAt" IS NOT NULL
     title: "initialQty ≠ giriş metrajı + Σ canlı TAMBUR aşımı (sessiz şişme ya da çift sayım)",
     miras: {
       taban: null,
-      tarih: "2026-09-14",
+      tarih: "2026-09-13",
       nerede: "izole ağaç, sonda DB — canlı ölçüm YOK",
       not: "sayı > 0 ⇒ o topların initialQty'si açıklanamayan bir farkla oynamış; onarım kullanıcı kararı",
     },

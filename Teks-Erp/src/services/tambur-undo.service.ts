@@ -261,7 +261,7 @@ export class TamburUndoService {
   }
 
   /**
-   * AŞIM BUMP'I — yalnız KEŞİFLE KARŞILANMAYAN kısım (hüküm ② a, 2026-09-14).
+   * AŞIM BUMP'I — yalnız KEŞİFLE KARŞILANMAYAN kısım (hüküm ② a, 2026-09-13).
    *
    * Geri konan metraj kayıtlı girişi aşarsa `initialQty` fark kadar yukarı çekilir
    * (CHECK `currentQty ≤ initialQty`). Ama o fark çoğu kez YENİ bir olgu değildir:
@@ -646,7 +646,7 @@ export class TamburUndoService {
     // "geri koy" seçeneği aynı işi iki adla sunmak olurdu. Tümden geri alma
     // yalnız kapanmış kaynakta.
     // ⚠️ KAPANIŞIN SCRAP-KALANI bir "kesim parçası" DEĞİLDİR (hüküm ① b3-DAR,
-    // 2026-09-14): ham ebeveynde `scrap` kapanışı gerçek bir SCRAP çocuğu doğurur;
+    // 2026-09-13): ham ebeveynde `scrap` kapanışı gerçek bir SCRAP çocuğu doğurur;
     // ona SINGLE/SINGLE_RESTORE sunulursa metraj ebeveyne döner, kapanış sapması
     // canlı kalır, `SCRAP` çıkışı terslenmez ve ebeveyn dirildiği için FULL bir
     // daha sunulmaz ⇒ KALICI 60 ↔ 0 (S10, çalıştırılarak ölçüldü). Kalan yalnız
@@ -2032,7 +2032,7 @@ export class TamburUndoService {
       //     ⚠️ Aşım (OVERAGE) satırları KAPSAM DIŞI: onlar kesim anında doğdu ve
       //     kesimler gerçekten yapıldı; kapanışın terslenmesi onları geçersiz
       //     kılmaz. Süzgeç bu yüzden `source` üzerinden dar tutulur.
-      //     ⚠️ AYNI KARARIN İKİ DEFTERİ BİRLİKTE DÖNER (hüküm ① b1, 2026-09-14):
+      //     ⚠️ AYNI KARARIN İKİ DEFTERİ BİRLİKTE DÖNER (hüküm ① b1, 2026-09-13):
       //     kapanış sapması `rollVarianceId` ile stok defterine bağlı bir ÇIKIŞ
       //     yazmıştı (`CUT_DISCARD` / `SCRAP`); damga tek başına o çıkışı defterde
       //     yetim bırakıyordu (100 ↔ 60 / 100 ↔ 0, ölçüldü). Damgalanan sapmalar

@@ -4614,7 +4614,7 @@ export class InventoryService {
    *   • sayım YÜKSEK → `OVERAGE` ("kayıtlıdan fazla çıktı") — tambur aşımının
    *     depo ikizi.
    *
-   * Stok defterine (`WarehouseMovement`) ADJUST satırı da yazılır (hüküm 2026-09-14):
+   * Stok defterine (`WarehouseMovement`) ADJUST satırı da yazılır (hüküm 2026-09-13):
    * defter 2026-09-13'ten beri MİKTAR defteridir (Σ = durum) ve elle düzeltme
    * miktarı yerinde değiştiren tek kapısız yoldu — sapma satırı `rollVarianceId`
    * ile bağlanır (aynı kararın iki defteri). Geri alma yok: ters yönde ikinci
