@@ -899,6 +899,53 @@ WHERE r.status IN (${STOK_DISI_STATULER})
      WHERE cik."rollId" = r.id AND cik."fromStatus" IN (${STOK_ICI_STATULER}))
   ${DEFTER_UFKU ? `AND r."createdAt" >= '${DEFTER_UFKU}'` : ""}`,
   },
+  {
+    id: "31",
+    // YETİM TRANSFORM ÇIKIŞI — depo kesimi geri alınmış (çocuğun IN'i terslenmiş)
+    // ama EBEVEYNİN OUT'u terslenmemiş. Kusur 2026-09-13'te ölçüldü (100 m ebeveyn
+    // → kes 40 → geri al ⇒ durum 100 ↔ defter 60) ve `reverseTransformGroupsOf`
+    // ile kapandı; bu bölüm o günden ÖNCE sahada açılmış yetimleri SAYAR.
+    //
+    // ⚠️ SONDA KALEMİ, ONARIM DEĞİL (1e, kullanıcının "geçmişi onarma" kuralı):
+    // sayı görülür, kullanıcıya iletilir, backfill AYRI karardır. Yüklem ÜÇ parçalı:
+    // çocuk IN terslenmiş ∧ ebeveyn OUT terslenmemiş ∧ ebeveynde DURUM ≠ DEFTER.
+    // Üçüncü parça şart: "kaynak arşivde" geri alması (SINGLE, RECORD_CORRECTION)
+    // ilk ikisini MEŞRU olarak sağlar — metraj ebeveyne dönmez, OUT gerçek kalır,
+    // durum 0 = defter 0. O dal sayılırsa sonda kendi yanlış pozitifini üretir.
+    title: "YETİM TRANSFORM çıkışı: depo kesimi geri alınmış, ebeveynin OUT'u terslenmemiş VE durum ≠ defter (yarım geri alma)",
+    miras: {
+      taban: null,
+      tarih: "2026-09-13",
+      nerede: "izole ağaç, sonda DB — canlı ölçüm YOK",
+      not: "sayı > 0 ⇒ o ebeveynlerin defteri kesilen metraj kadar EKSİK sayıyor; onarım kullanıcı kararı",
+    },
+    noise: {
+      where: `WHERE ${notFixtureSql("drift.barcode")} AND ${notFixtureItemOfRollSql("drift.kayit")}`,
+      why: "§11 fikstürü gerçek servisten doğar (üretim barkodu) — barkod VEYA kalem kodu ön ekinden elenir",
+    },
+    sql: `
+SELECT p.id::text AS kayit, p.barcode, cik.qty::text AS metraj, cik."createdAt"::text AS dogum
+FROM warehouse_movements cik
+JOIN rolls p ON p.id = cik."rollId"
+WHERE cik."reasonCode" = 'CUT_SPLIT'
+  AND cik."fromWarehouseId" IS NOT NULL
+  AND cik."transformGroupId" IS NOT NULL
+  AND cik."reversesMovementId" IS NULL
+  -- ebeveynin çıkışı TERSLENMEMİŞ…
+  AND NOT EXISTS (SELECT 1 FROM warehouse_movements rv WHERE rv."reversesMovementId" = cik.id)
+  -- …ebeveynin DURUMU defterinden ayrışmış (arşiv dalı 0 = 0 ile buradan elenir)…
+  AND p."currentQty" <> (
+    SELECT COALESCE(SUM(CASE WHEN m."toWarehouseId" IS NOT NULL THEN m.qty ELSE 0 END
+                     - CASE WHEN m."fromWarehouseId" IS NOT NULL THEN m.qty ELSE 0 END), 0)
+      FROM warehouse_movements m WHERE m."rollId" = p.id)
+  -- …ama aynı grubun ÇOCUK girişi TERSLENMİŞ (yarım geri alma imzası).
+  AND EXISTS (
+    SELECT 1 FROM warehouse_movements gir
+     WHERE gir."transformGroupId" = cik."transformGroupId"
+       AND gir."toWarehouseId" IS NOT NULL
+       AND gir."reversesMovementId" IS NULL
+       AND EXISTS (SELECT 1 FROM warehouse_movements rv2 WHERE rv2."reversesMovementId" = gir.id))`,
+  },
 ];
 
 async function driftCount(s: Section): Promise<number> {

@@ -25,11 +25,24 @@
 //   §9 ⭐ İKİ TUR: "her tur hayalet metre ekler" iddiası tambur tarafında
 //      ÖLÇÜLDÜ — 2 ileri + 2 ters, toplam net 0
 //   §10 ⭐ YAPISAL değişmez: iptal edilmiş her çocuğun ileri satırı terslenmiş
+//   §11 ⭐ DEPO KESİMİ (TRANSFORM çifti) geri alınınca EBEVEYNİN çıkışı da terslenir
+//       — durum = defter. ⚠️ Bu ayak iki bekçinin ARASINDAKİ DİKİŞİ ölçer: §3
+//       finalize yolunu (ebeveyn çıkışı YOK), `test_stock_ledger_transform` kesimin
+//       İLERİ yolunu ölçüyordu; TRANSFORM çiftinin GERİ ALINMASI ikisinin arasında
+//       sahipsizdi ve kusur oradaydı (2026-09-13, 82 statik okudu, 01 çalıştırdı:
+//       100 m ebeveyn → kes 40 → geri al ⇒ durum 100 ↔ defter 60). İki kapının
+//       yeşili, aralarındaki dikişi yeşil yapmaz.
+//       ⚠️ BEŞ DAL, BEŞ FİKSTÜR (A depo-restore · B adım-restore · C kaynak-arşivde ·
+//       D SINGLE_RESTORE · E FULL): ilk sürüm tek fikstürle yeşildi ve koşulsuz grup
+//       terslemesi C dalında TERS ayrışma üretiyordu (durum 0 ↔ defter 40) — defter
+//       durumu izler, koşul "ebeveyne metraj geri konuyorsa". Tek fikstür yasak.
 // =============================================================================
 import { RollStatus, WarehouseEventType } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { TamburService } from "../src/services/tambur.service";
 import { TamburUndoService } from "../src/services/tambur-undo.service";
+import { InventoryService } from "../src/services/inventory.service";
+import { roleGrade } from "./fixture-quality-grade";
 import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
 
 let pass = 0;
@@ -252,6 +265,93 @@ async function main(): Promise<void> {
     iptalliCocuklar.length >= 3 && oksuz.length === 0,
     `iptalli=${iptalliCocuklar.length} öksüz=${oksuz.length}`,
   );
+
+  // ── §11 ⭐ DEPO KESİMİ + GERİ ALMA — grup terslemesi EBEVEYNİN DURUMUNU İZLER ──
+  // Kesim bir DÖNÜŞÜMDÜR: ebeveyn OUT + çocuk IN, aynı `transformGroupId`, grup
+  // neti sıfır. Geri alma yalnız ÇOCUĞU tersliyordu ⇒ ebeveynin OUT'u yetim, durum
+  // 100 ↔ defter 60. Düzeltme grubu tersler — AMA yalnız metrajın ebeveyne GERİ
+  // KONDUĞU dallarda: "kaynak arşivde" dalında metraj dönmez (RECORD_CORRECTION),
+  // orada koşulsuz grup terslemesi TERS ayrışma üretir (durum 0 ↔ defter 40; ölçüldü,
+  // ilk sürüm tek fikstürle yeşildi). Beş geri alma dalı, HER BİRİ KENDİ FİKSTÜRÜYLE:
+  //   A SINGLE depo-restore · B SINGLE adım-restore · C SINGLE kaynak-arşivde ·
+  //   D SINGLE_RESTORE · E FULL. Ölçüt her dalda aynı: ÇOCUK net 0 ∧ EBEVEYN durum = defter.
+  {
+    const inventory = new InventoryService();
+    const gradeFirst = (await roleGrade("FIRST")).code;
+    /** Depo ebeveyni (100 m) + 40 m kesim; istenirse kalan kapanışı. */
+    async function depoKesimi(kapanis?: "discard" | "keep_1kalite"): Promise<{ ebeveyn: string; cocuk: string; kalan: string | null }> {
+      const pRes = await inventory.createInitialEntry(
+        { itemId, initialQty: 100 }, undefined, undefined, false, { forcedStatus: "WAREHOUSE" },
+      );
+      const ebeveyn = (pRes.data as { id: string }).id;
+      rollIds.push(ebeveyn);
+      const cRes = await tambur.cutWarehouseRoll(ebeveyn, { cutLength: 40, rawDestination: "WAREHOUSE", qualityGrade: gradeFirst });
+      const cocuk = (cRes.data as { childRoll?: { id: string } }).childRoll?.id;
+      if (!cocuk) throw new Error("depo kesimi çocuğu doğmadı — §11 kurulamadı");
+      rollIds.push(cocuk);
+      let kalan: string | null = null;
+      if (kapanis) {
+        const f = await tambur.finalizeWarehouseCut(ebeveyn, { remainingAction: kapanis, varianceReasonCode: null, varianceReasonText: "bekçi §11" });
+        kalan = (f.data as { remainingChild: { id: string } | null }).remainingChild?.id ?? null;
+        if (kalan) rollIds.push(kalan);
+      }
+      return { ebeveyn, cocuk, kalan };
+    }
+    /** Dalın ortak ölçümü: fırlatmadı · çocuk net 0 · ebeveyn durum = defter · ters satır sayısı · statüsüz yok. */
+    async function dalOlc(ad: string, f: { ebeveyn: string; cocuk: string; kalan: string | null }, mode: "SINGLE" | "SINGLE_RESTORE" | "FULL", beklenenTers: number): Promise<void> {
+      const grupOnce = (await satirlar(f.ebeveyn)).filter((r) => r.reasonCode === STOCK_MOVE_REASON.CUT_SPLIT).map((r) => r.id);
+      let hata: unknown = null;
+      try {
+        await undo.applyUndo(f.cocuk, undefined, { mode, reason: `bekçi §11${ad}` });
+      } catch (e) { hata = e; }
+      // Aynı satırı iki kez tersleme `reversesMovementId` unique'inde P2002 verir — "sessiz başarı" değil KIRMIZI (6e).
+      check(`§11${ad} geri alma fırlatmadı (${mode})`, hata === null, hata ? String((hata as Error).message).slice(0, 80) : "");
+      const pe = await satirlar(f.ebeveyn);
+      const ce = await satirlar(f.cocuk);
+      const canli = await prisma.roll.findUnique({ where: { id: f.ebeveyn }, select: { currentQty: true, status: true } });
+      const ters = pe.filter((r) => r.reversesMovementId !== null);
+      check(`§11${ad} çocuğun defter neti 0`, net(ce) === 0, `net=${net(ce)}`);
+      if (f.kalan) {
+        const ke = await satirlar(f.kalan);
+        check(`§11${ad} kalan parçanın defter neti ${mode === "FULL" ? "0 (o da geri alındı)" : "60 (dokunulmadı)"}`, net(ke) === (mode === "FULL" ? 0 : 60), `net=${net(ke)}`);
+      }
+      check(
+        `§11${ad} ⭐ DURUM = DEFTER (ebeveyn ${canli?.status})`,
+        Number(canli?.currentQty) === net(pe),
+        `durum=${canli?.currentQty} defter=${net(pe)}`,
+      );
+      check(
+        `§11${ad} ebeveynde ${beklenenTers} ters satır, hepsi TRANSFORM çıkışını hedefliyor`,
+        ters.length === beklenenTers && ters.every((t) => grupOnce.includes(t.reversesMovementId!)),
+        `ters=${ters.length} hedefler=${ters.map((t) => (grupOnce.includes(t.reversesMovementId!) ? "grup" : "?")).join(",") || "-"}`,
+      );
+      // 6e'nin şartı: TRANSFORM uçları hep statülü ⇒ `statusuzAtlanan` 0 olmalı.
+      const statusuz = [...pe, ...ce].filter((r) => r.fromStatus === null && r.toStatus === null);
+      check(`§11${ad} statüsüz satır yok`, statusuz.length === 0, `statüsüz=${statusuz.length}`);
+    }
+
+    // A) SINGLE, ebeveyn CANLI depoda → metraj ebeveyne döner ⇒ OUT terslenir (durum 100 ↔ defter 100).
+    await dalOlc("A", await depoKesimi(), "SINGLE", 1);
+
+    // B) SINGLE, adım-restore (finalize çocuğu, ebeveyn ÜRETİMDE): ebeveynin stok defteri YOKTUR,
+    //    grup çağrısı 0 döner; ölçülebilir olan "ebeveyne satır sızmadı" — Senaryo A'nın verisi.
+    const ebeveynA = await satirlar(parentA);
+    check("§11B SINGLE adım-restore: üretimdeki ebeveyne stok satırı sızmadı (grup 0 döner)", ebeveynA.length === 0, `satır=${ebeveynA.length}`);
+
+    // C) SINGLE, kaynak ARŞİVDE (kalan discard ile kapatıldı): metraj DÖNMEZ, RECORD_CORRECTION
+    //    yazılır ⇒ ebeveynin OUT'u GERÇEK kalır, terslenmez (durum 0 ↔ defter 0). Koşulsuz grup
+    //    terslemesi burada 0 ↔ 40 üretiyordu — bu dal o kusurun bekçisi.
+    const fC = await depoKesimi("discard");
+    await dalOlc("C", fC, "SINGLE", 0);
+    const sapmaC = await prisma.rollVariance.findFirst({ where: { rollId: fC.cocuk, kind: "RECORD_CORRECTION", reversedAt: null }, select: { qty: true } });
+    check("§11C arşiv dalı çocuğa RECORD_CORRECTION 40 yazdı (metraj deftere değil sapmaya gitti)", Number(sapmaC?.qty) === 40, `sapma=${sapmaC ? Number(sapmaC.qty) : "yok"}`);
+
+    // D) SINGLE_RESTORE, kaynak arşivde ama "kumaş elimde": 40 m ebeveyne döner ⇒ OUT terslenir (40 ↔ 40).
+    await dalOlc("D", await depoKesimi("discard"), "SINGLE_RESTORE", 1);
+
+    // E) FULL, kalan "keep" ile ikinci çocuk olmuş: ebeveyn kapanış öncesine döner, İKİ grup da terslenir (100 ↔ 100).
+    await dalOlc("E", await depoKesimi("keep_1kalite"), "FULL", 2);
+  }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }

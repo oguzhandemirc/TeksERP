@@ -119,6 +119,9 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
       { dosya: "src/services/helpers/warehouse-ledger-reverse.helper.ts", sembol: "reverseLegacyStockMove" },
       { dosya: "src/services/helpers/warehouse-ledger-reverse.helper.ts", sembol: "reverseAllRollStockMoves" },
       { dosya: "src/services/helpers/warehouse-ledger-reverse.helper.ts", sembol: "reverseLatestScopedStockMove" },
+      // Beşincisi GRUP kapsamı: TRANSFORM çifti (ebeveyn OUT + çocuk IN) tek kalem
+      // olarak terslenir — topa göre ters alma çocuğu görüp ebeveyni yetim bırakıyordu.
+      { dosya: "src/services/helpers/warehouse-ledger-reverse.helper.ts", sembol: "reverseTransformGroupsOf" },
     ],
     ["src/services/helpers/warehouse-ledger.helper.ts"],
     // `RETURN` borcu KAPANDI (2026-09-13): `cancelReturn` artık `RETURN_CANCEL`

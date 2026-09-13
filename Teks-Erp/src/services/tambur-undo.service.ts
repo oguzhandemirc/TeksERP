@@ -78,7 +78,7 @@ import {
 } from "./helpers/tambur-plan-gate.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
-import { reverseAllRollStockMoves } from "./helpers/warehouse-ledger-reverse.helper";
+import { reverseAllRollStockMoves, reverseTransformGroupsOf } from "./helpers/warehouse-ledger-reverse.helper";
 import { warehouseStampManyTx } from "./helpers/warehouse.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
@@ -1164,6 +1164,19 @@ export class TamburUndoService {
       // DEPO DEFTERİ — çocuğun doğarken yazdığı GİRİŞ satırı terslenir. Yoksa
       // iptal edilen metraj defterde depoda kalır ve her geri alma turu depoya
       // hayalet metre ekler (yeniden finalize ikinci bir giriş yazar).
+      // ⚠️ ÖNCE GRUP, AMA YALNIZ EBEVEYN GERİ ALINIYORSA: depo kesimi çocuğu bir
+      // TRANSFORM çiftiyle doğar (ebeveyn OUT + çocuk IN). Ebeveyne metraj geri
+      // konan dallarda çiftin iki ucu da terslenir, yoksa OUT yetim kalır (durum
+      // 100 ↔ defter 60). Kaynak ARŞİVDE dalında metraj geri DÖNMEZ (aşağıda
+      // RECORD_CORRECTION): orada ebeveynin OUT'u gerçek kalır — terslenirse
+      // defter ebeveyne 40 m yazar, durum 0 der. Defter durumu izler, tersi değil.
+      if (!parentArchived) {
+        await reverseTransformGroupsOf(tx, [childId], {
+          reasonCode: STOCK_MOVE_REASON.TAMBUR_UNDO,
+          userId: userId ?? null,
+          notes: TAMBUR_UNDO_CANCEL_TEXT,
+        });
+      }
       await reverseAllRollStockMoves(tx, [childId], {
         reasonCode: STOCK_MOVE_REASON.TAMBUR_UNDO,
         userId: userId ?? null,
@@ -1389,7 +1402,14 @@ export class TamburUndoService {
         throw AppError.conflict("Parça bu sırada başka bir akışa girdi — geri alınamadı, yenileyin");
       }
 
-      // DEPO DEFTERİ — applySingle ile aynı: giriş satırı terslenir (bkz. orası).
+      // DEPO DEFTERİ — ÖNCE grup (ebeveyn OUT + çocuk IN), sonra çocuğun kalan
+      // ileri satırları. Bu modda metraj ebeveyne DAİMA geri konur (aşağısı),
+      // yani grup koşulsuz terslenir (applySingle'daki koşulun gerekçesi orada).
+      await reverseTransformGroupsOf(tx, [childId], {
+        reasonCode: STOCK_MOVE_REASON.TAMBUR_UNDO,
+        userId: userId ?? null,
+        notes: TAMBUR_UNDO_CANCEL_TEXT,
+      });
       await reverseAllRollStockMoves(tx, [childId], {
         reasonCode: STOCK_MOVE_REASON.TAMBUR_UNDO,
         userId: userId ?? null,
@@ -1670,6 +1690,15 @@ export class TamburUndoService {
 
       // DEPO DEFTERİ — TÜM çocukların giriş satırları terslenir. FULL'de öksüz
       // satır sayısı çocuk sayısı kadar olurdu (2026-08-09 vakasında 14 top).
+      // ⚠️ ÖNCE GRUP: her depo-kesimi çocuğu kendi TRANSFORM grubunu getirir;
+      // ebeveyn kapanış öncesine DÖNDÜĞÜ için her OUT'u da terslenir. Kapanışın
+      // kendi çıkışı (CUT_DISCARD / SCRAP, grupsuz) BURADA TERSLENMEZ — açık borç,
+      // hükmü sahibinde (defter-beyan §13).
+      await reverseTransformGroupsOf(tx, ids, {
+        reasonCode: STOCK_MOVE_REASON.TAMBUR_UNDO,
+        userId: userId ?? null,
+        notes: TAMBUR_UNDO_CANCEL_TEXT,
+      });
       await reverseAllRollStockMoves(tx, ids, {
         reasonCode: STOCK_MOVE_REASON.TAMBUR_UNDO,
         userId: userId ?? null,

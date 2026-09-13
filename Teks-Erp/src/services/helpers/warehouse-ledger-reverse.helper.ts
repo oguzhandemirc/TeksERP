@@ -11,6 +11,7 @@
 // =============================================================================
 import { WarehouseEventType, type Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
+import { STOCK_MOVE_REASON } from "../../constants/stock-move-reasons";
 import { postStockMove, type StockMoveEnd } from "./warehouse-ledger.helper";
 
 type Tx = Prisma.TransactionClient;
@@ -234,6 +235,75 @@ export async function reverseAllRollStockMoves(
     reversed++;
   }
   return { reversed, statusuzAtlanan };
+}
+
+/**
+ * Verilen topların katıldığı TRANSFORM GRUPLARININ tüm ileri satırlarını tersler —
+ * çocuğun girişi KADAR ebeveynin çıkışı da. "Kesimi geri al" yolunun kapısı.
+ *
+ * ⚠️ NEDEN AYRI KAPI (ölçüldü 2026-09-13, CUT_SPLIT): kesim bir DÖNÜŞÜMDÜR ve
+ * defterde İKİ uçlu bir gruptur (ebeveyn OUT + çocuk IN, aynı `transformGroupId`,
+ * grup neti sıfır). Geri alma yalnız ÇOCUĞU tersliyordu (`reverseAllRollStockMoves`
+ * kapsamı TOP'tur, grup değil) ⇒ ebeveynin OUT'u yetim kalıyor, durum tablosu
+ * `currentQty`yi geri koyarken defter "40 m çıktı" demeye devam ediyordu:
+ * durum 100 ↔ defter 60. ***Grup neti sıfır DOĞAR ve sıfır ÖLMELİDİR*** — bir
+ * ucunu terslemek ötekini yetim bırakır.
+ *
+ * ⚠️ OVERAGE satırı gruba GİRMEZ (aşım keşiftir, devir değil) ⇒ burada terslenmez
+ * ve bu bilinçlidir: keşfin geri alınıp alınmayacağı ayrı bir hükümdür.
+ * ⚠️ Çok kesimli ebeveynde YALNIZ verilen çocukların grupları terslenir; öteki
+ * çocukların OUT'ları durur (SINGLE geri alma). FULL, her çocuğu getirir.
+ * ⚠️ Yeni bir YAZICI AÇMAZ: `reverseStockMove` çağırır — ters satır bugüne
+ * tarihli, ileri satır ne silinir ne değişir, aynı satır iki kez terslenemez.
+ *
+ * Çağrı sırası: ÖNCE bu, SONRA `reverseAllRollStockMoves` — ikincisi çocuğun
+ * TRANSFORM IN'ini terslenmiş görür ve atlar, kalan ileri satırlarını tersler.
+ */
+export async function reverseTransformGroupsOf(
+  tx: Tx,
+  rollIds: string[],
+  args: { reasonCode: string; userId?: string | null; notes?: string | null },
+): Promise<{ groups: number; reversed: number; statusuzAtlanan: number }> {
+  if (rollIds.length === 0) return { groups: 0, reversed: 0, statusuzAtlanan: 0 };
+  const uyeler = await tx.warehouseMovement.findMany({
+    where: {
+      rollId: { in: rollIds },
+      transformGroupId: { not: null },
+      reversesMovementId: null,
+      reversedBy: { none: {} },
+    },
+    select: { transformGroupId: true },
+    distinct: ["transformGroupId"],
+  });
+  const groupIds = uyeler.map((u) => u.transformGroupId).filter((g): g is string => g !== null);
+  if (groupIds.length === 0) return { groups: 0, reversed: 0, statusuzAtlanan: 0 };
+  const forwards = await tx.warehouseMovement.findMany({
+    where: {
+      transformGroupId: { in: groupIds },
+      // OVERAGE bugün grup damgası TAŞIMAZ (ölçüldü: `tambur.service.ts`teki tek
+      // OVERAGE yazımı `transformGroupId` geçmez). Yine de AÇIKÇA dışlanır: yarın
+      // bir yazar keşif satırını gruba damgalarsa, keşif sessizce "devir" gibi
+      // terslenmesin — "gruba girmez" kolonla değil sebep koduyla doğrulanır (6e).
+      reasonCode: { not: STOCK_MOVE_REASON.OVERAGE },
+      reversesMovementId: null,
+      reversedBy: { none: {} },
+    },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, fromStatus: true, toStatus: true },
+  });
+  let reversed = 0;
+  let statusuzAtlanan = 0;
+  for (const f of forwards) {
+    // TRANSFORM uçları hep statülü yazılır; bu dal teoride boş — ama sözleşme
+    // `reverseAllRollStockMoves` ile aynı kalsın diye AYNI şekilde sayılır.
+    if (f.fromStatus === null && f.toStatus === null) {
+      statusuzAtlanan++;
+      continue;
+    }
+    await reverseStockMove(tx, f.id, args);
+    reversed++;
+  }
+  return { groups: groupIds.length, reversed, statusuzAtlanan };
 }
 
 /** Hangi ileri satırın terslendiği — TİP DÜZEYİNDE zorunlu, unutulamaz. */
