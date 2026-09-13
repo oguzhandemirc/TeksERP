@@ -4,8 +4,10 @@
 // Çalıştırma: npx tsx scripts/run-all-tests.ts devralinan_tavan
 //
 // ⭐ NEDEN VAR (5e'nin ölçümü, 2026-09-13): `docs/standart/*.md` kural satırları
-//    `· devralınan: N` alanı taşır ve bu bir TAVANDIR — yalnız düşer. İki tavan
-//    SESSİZCE aşılmış: `[BE-29]` 18 → 30 · `[BE-30]` 53 → 78.
+//    `· devralınan: N` alanı taşır ve bu bir TAVANDIR — yalnız düşer. Bir tavan
+//    SESSİZCE aşılmış: `[BE-29]` 18 → 30. (`[BE-30]` "53 → 78" de sanıldı;
+//    78 kurala UYAN dosyaları da sayan bir grep'ti — gerçek 53, hiç yükselmedi.
+//    Aynı grep bu bekçiye de girdi ve ilk kurbanı kurala uyan bir dosya oldu.)
 //    Sebep tek cümle: **`lint-baseline.json`ın aksine bu alanı HİÇBİR KAPI
 //    OKUMUYORDU.** Beyan edilmiş bir tavan, ölçülmediği sürece bir temennidir.
 //
@@ -77,10 +79,29 @@ const GERCEK: Record<string, () => number> = {
       .split("\n")
       .filter((l) => l.trim() && !/\.helper\.ts$/.test(l))
       .length,
-  "BACKEND.md::BE-30": () =>
-    execFileSync("grep", ["-rl", "verifyToken,", "src/routes"], { cwd: join(KOK, "Teks-Erp"), encoding: "utf8" })
-      .split("\n")
-      .filter(Boolean).length,
+  // ⚠️ BE-30'un yasakladığı şey "handler başına verifyToken"dır; kuralın
+  // ÖNERDİĞİ `router.use(verifyToken, requireXEnabled)` da aynı `verifyToken,`
+  // literalini taşır. Düz grep ikisini birlikte saydı (78→79 "ihlali" kurala
+  // UYAN bir dosyaydı). Ölçülen: toplu kapısı OLMAYAN ve handler'ında
+  // `verifyToken,` geçen route dosyası.
+  "BACKEND.md::BE-30": () => {
+    const ROUTES = join(KOK, "Teks-Erp", "src", "routes");
+    const dosyalar = (d: string, out: string[] = []): string[] => {
+      for (const n of readdirSync(d, { withFileTypes: true })) {
+        if (n.isDirectory()) dosyalar(join(d, n.name), out);
+        else if (n.name.endsWith(".ts")) out.push(join(d, n.name));
+      }
+      return out;
+    };
+    return dosyalar(ROUTES).filter((f) => {
+      const satirlar = readFileSync(f, "utf8").split("\n");
+      const topluKapi = satirlar.some((l) => /router\.use\(\s*verifyToken/.test(l));
+      const handlerBasina = satirlar.some(
+        (l) => /verifyToken,/.test(l) && !/router\.use\(/.test(l) && !/^\s*\/\//.test(l) && !/\bimport\b/.test(l),
+      );
+      return handlerBasina && !topluKapi;
+    }).length;
+  },
 };
 
 function main(): void {
