@@ -4,10 +4,18 @@
 
 import { RollOperationType } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
+// ⚠️ ERKEN `return` SESSİZ YEŞİL ÜRETİYORDU: fikstür yoksa `=== Sonuç` satırı
+// HİÇ basılmıyor, `exitCode` 0 kalıyordu ⇒ "çıkış 0 ∧ özet yok ∧ beyan yok".
+// Ortam sınıfı: yerel _test DB'de veri VAR, CI'da YOK — kusur yalnız CI'da görünür.
+import { atlamaDefteri } from "./lib/atlama";
 
 // F266: scripts/test_*.ts sözleşmesi — check() sayaçları + '=== Sonuç ===' satırı.
 let pass = 0;
 let fail = 0;
+const atlama = atlamaDefteri((mesaj) => {
+  fail++;
+  console.log(`❌ ${mesaj}`);
+});
 function check(label: string, ok: boolean, extra = "") {
   if (ok) {
     pass++;
@@ -16,6 +24,22 @@ function check(label: string, ok: boolean, extra = "") {
     fail++;
     console.log(`❌ ${label}${extra ? ` — ${extra}` : ""}`);
   }
+}
+
+let ozetBasildi = false;
+/** Özet satırı HER çıkış yolunda basılır — erken dönüş dâhil. */
+function ozetBas(): void {
+  if (ozetBasildi) return;
+  ozetBasildi = true;
+  // ⛔ SIFIR ÖLÇÜM YEŞİL OLAMAZ — ve bu yüklem erken dönüşten DAHA GENİŞTİR:
+  // beklenmeyen bir hata da gövdeyi hiç kontrol koşturmadan bitirebilir ve
+  // sessizce `0 geçti, 0 başarısız` bastırır. İlk düzeltmem yalnız erken
+  // dönüşü kapatmıştı; sonda hata dalını ortaya çıkardı.
+  if (pass + fail === 0 && !atlama.bilinmeyenVar && atlama.sayi === 0) {
+    atlama.atla("TÜM BÖLÜMLER", "hiçbir kontrol koşmadı — fikstür yok ya da gövde erken düştü", "?");
+  }
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${atlama.ozetEki()} ===`);
+  process.exitCode = fail > 0 ? 1 : 0;
 }
 
 async function main() {
@@ -47,7 +71,13 @@ async function main() {
       select: { id: true },
     });
     if (!step || !roll) {
-      console.log("Test verisi yetersiz — PROCESS_QC step veya roll yok.");
+      // ⛔ SESSİZCE DÖNME: kaç kontrol düştüğü YAPISAL OLARAK bilinemez (erken
+      // dönüş) ⇒ adet "?" ile beyan edilir, `TEKSERP_STRICT=1` altında KIRMIZI.
+      atlama.atla(
+        "QC2 idempotency — TÜM BÖLÜMLER",
+        `fikstür yok: PROCESS_QC adımı ${step ? "var" : "YOK"}, uygun top ${roll ? "var" : "YOK"}`,
+        "?",
+      );
       return;
     }
     rollId = roll.id;
@@ -129,8 +159,7 @@ async function main() {
     console.log("Cleanup: önceden var olan satıra dokunulmadı.");
   }
 
-  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-  process.exitCode = fail > 0 ? 1 : 0;
+  ozetBas();
 }
 
 main()
@@ -145,6 +174,7 @@ main()
   // sonra 180sn koşucu zaman aşımı + SIGTERM (boş DB'de birebir üretildi). Yerelde
   // görünmüyordu çünkü dev DB dolu olduğu için erken-dönüş yoluna hiç girilmiyor.
   .finally(async () => {
+    ozetBas(); // erken dönüşte de basılır
     await prisma.$disconnect();
     await pool.end().catch(() => {});
   });
