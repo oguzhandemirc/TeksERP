@@ -244,6 +244,65 @@ const s4 = degerlendirmeyiKos(
 check("⭐ severity 1 (uyarı) kapıyı KIRMIZI yapmaz — o tavanın işi", s4.kod === 0);
 
 // =============================================================================
+// §2b — ARIZA ≠ İHLAL: `ruleId: null` iki sınıftır, yalnız `fatal` arızadır
+// =============================================================================
+// VAKA (2026-09-13): kullanılmayan bir `eslint-disable` yorumu (ESLint 9,
+// reportUnusedDisableDirectives: "error" → { ruleId: null, severity: 2 }) tavanda
+// "parse hatası / ARIZA (çıkış 2)" diye kapıyı HERKESE kapattı — verdikt (benim/
+// yabancı) hiç sorulmadı. Gerçek parse çökmesi { ruleId: null, fatal: true } ise
+// ARIZA kalmalı. İki şekil de gerçek eslint çıktısından alındı, uydurulmadı.
+// Uçtan uca ölçülür: gerçek check-lint-baseline.mjs, sentetik `--rapor`, kapı kipi.
+console.log("\n§2b — tavan: kullanılmayan eslint-disable İHLAL, fatal parse ARIZA");
+
+const UNUSED = {
+  ruleId: null,
+  message: "Unused eslint-disable directive (no problems were reported from 'no-console').",
+  line: 7,
+  column: 1,
+  severity: 2,
+};
+const FATAL = { ruleId: null, fatal: true, severity: 2, message: "Parsing error: Expression expected.", line: 3, column: 17 };
+// Zemin (EN_AZ_DOSYA.backend = 900) kapsam sinyalidir; sentetik rapor onu boş dosyalarla aşar.
+const dolgu = Array.from({ length: 905 }, (_, i) => ({ filePath: join(KOK, `Teks-Erp/src/dolgu_${i}.ts`), messages: [] }));
+const sondaDosya = "Teks-Erp/src/zz_sonda_unused_directive.ts";
+
+function tavaniKos(mesaj: Record<string, unknown>) {
+  const dizin = mkdtempSync(join(tmpdir(), "tekserp-tavan-"));
+  const raporYolu = join(dizin, "eslint.json");
+  writeFileSync(raporYolu, JSON.stringify([...dolgu, { filePath: join(KOK, sondaDosya), messages: [mesaj] }]));
+  try {
+    return spawnSync(
+      "node",
+      ["scripts/check-lint-baseline.mjs", "--proje=backend", `--rapor=${raporYolu}`, "--commit-kapisi"],
+      { cwd: KOK, encoding: "utf8", input: `${sondaDosya}\n`, timeout: 60_000 },
+    );
+  } finally {
+    rmSync(dizin, { recursive: true, force: true });
+  }
+}
+
+const t1 = tavaniKos(UNUSED);
+const t1Cikti = `${t1.stdout}\n${t1.stderr}`;
+check("⭐ kullanılmayan eslint-disable → İHLAL (çıkış 1), ARIZA değil", t1.status === 1 && !/ARIZA|parse hatası/.test(t1Cikti), `çıkış=${t1.status}`);
+check(
+  "   ↳ rapor `dosya:satır` gösteriyor ve kuralı adlandırıyor",
+  t1Cikti.includes(`${sondaDosya}:7`) && t1Cikti.includes("unused-disable-directive"),
+);
+
+const t2 = tavaniKos(FATAL);
+const t2Cikti = `${t2.stdout}\n${t2.stderr}`;
+check("⭐ fatal parse çökmesi → ARIZA (çıkış 2) KORUNUYOR", t2.status === 2 && /parse hatası/.test(t2Cikti), `çıkış=${t2.status}`);
+
+// Aynı ayrım lint kapısının ETİKETİNDE: gereksiz yorum "parse" diye etiketlenmez.
+const s5 = degerlendirmeyiKos(["Teks-Erp/src/benim.ts"], [{ filePath: benimDosya, messages: [UNUSED] }]);
+check(
+  "lint kapısı etiketi: unused-disable-directive (parse değil)",
+  s5.kod === 1 && s5.satirlar.some((x) => x.includes("unused-disable-directive")) && !s5.satirlar.some((x) => /\bparse\b/.test(x)),
+);
+const s6 = degerlendirmeyiKos(["Teks-Erp/src/benim.ts"], [{ filePath: benimDosya, messages: [FATAL] }]);
+check("lint kapısı etiketi: fatal → parse", s6.kod === 1 && s6.satirlar.some((x) => /\bparse\b/.test(x)));
+
+// =============================================================================
 // §3 — kablolama tripwire'ları (her biri BOZULMUŞ KOPYAYA karşı da ölçülür)
 // =============================================================================
 console.log("\n§3 — kablolama yerinde mi (ve tripwire gerçekten ısırıyor mu)");
@@ -294,6 +353,19 @@ tripwire(
   "scripts/check-lint-baseline.mjs",
   (k) => /headSayim\(/.test(k) && /--stdin-filename/.test(k) && /> \(h\[a\.kural\] \?\? 0\)/.test(k),
   (k) => k.replace(/> \(h\[a\.kural\] \?\? 0\)/, ">= 0"),
+);
+
+tripwire(
+  "tavan ve lint kapısı `ruleId: null`ı TEK helper'dan anahtarlıyor (kuralAnahtari) — parse ≠ unused directive",
+  "scripts/check-lint-baseline.mjs",
+  (k) => (k.match(/kuralAnahtari\(m\)/g) ?? []).length >= 2 && !/if \(!m\.ruleId\)/.test(k),
+  (k) => k.replace(/kuralAnahtari\(m\)/g, "m.ruleId"),
+);
+tripwire(
+  "   ↳ lint-gate etiketi de aynı helper'dan",
+  "scripts/hooks/lint-gate.mjs",
+  (k) => /kuralAnahtari\(m\) \?\? "parse"/.test(k),
+  (k) => k.replace(/kuralAnahtari\(m\) \?\? "parse"/, 'm.ruleId ?? "parse"'),
 );
 
 tripwire(

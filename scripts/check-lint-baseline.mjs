@@ -29,6 +29,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { kuralAnahtari } from "./hooks/lib/eslint-mesaj.mjs";
 import { STDIN_ARIZA_MESAJI, stdinListesi } from "./hooks/lib/stdin-liste.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -148,24 +149,29 @@ function olc(proje) {
   const kuralDosyalari = {};
   // Kural → dosya → adet. "Aşımı KİM getirdi" sorusu ancak KATKI DEĞİŞİMİYLE cevaplanır.
   const kuralDosyaSayim = {};
+  // Kural → dosya → satırlar: aşım raporu `dosya:satır` basar, okuyan doğrudan gider.
+  const kuralDosyaSatir = {};
   let hata = 0;
   for (const d of dosyalar) {
     const repoRel = d.filePath.startsWith(REPO_ROOT)
       ? d.filePath.slice(REPO_ROOT.length + 1).replace(/\\/g, "/")
       : d.filePath;
     for (const m of d.messages ?? []) {
-      // ruleId null = parse hatası (config/sözdizimi). Baseline'a giremez, ARIZADIR.
-      if (!m.ruleId) {
+      // Yalnız fatal (config/sözdizimi çökmesi) ARIZADIR; kural adı olmayan öbür mesaj
+      // (kullanılmayan eslint-disable) sentetik anahtarla İHLAL sayılır — hooks/lib/eslint-mesaj.mjs.
+      const kural = kuralAnahtari(m);
+      if (kural === null) {
         console.error(`❌ ${proje}: ${d.filePath}:${m.line} — parse hatası: ${m.message}`);
         process.exit(2);
       }
-      sayim[m.ruleId] = (sayim[m.ruleId] ?? 0) + 1;
-      (kuralDosyalari[m.ruleId] ??= new Set()).add(repoRel);
-      ((kuralDosyaSayim[m.ruleId] ??= {})[repoRel] ??= 0), (kuralDosyaSayim[m.ruleId][repoRel] += 1);
+      sayim[kural] = (sayim[kural] ?? 0) + 1;
+      (kuralDosyalari[kural] ??= new Set()).add(repoRel);
+      ((kuralDosyaSayim[kural] ??= {})[repoRel] ??= 0), (kuralDosyaSayim[kural][repoRel] += 1);
+      ((kuralDosyaSatir[kural] ??= {})[repoRel] ??= []).push(m.line);
       if (m.severity === 2) hata++;
     }
   }
-  return { sayim, kuralDosyalari, kuralDosyaSayim, dosyaSayisi: dosyalar.length, hata };
+  return { sayim, kuralDosyalari, kuralDosyaSayim, kuralDosyaSatir, dosyaSayisi: dosyalar.length, hata };
 }
 
 
@@ -204,7 +210,12 @@ function headSayim(proje, repoRel) {
     if (!ham.trim().startsWith("[")) return null; // ölçemedik → "arttı" VARSAYMA, geniş tarafa düş
   }
   const out = {};
-  for (const d of JSON.parse(ham)) for (const m of d.messages ?? []) if (m.ruleId) out[m.ruleId] = (out[m.ruleId] ?? 0) + 1;
+  // Aynı anahtarlama (sentetik anahtar dahil): HEAD'deki gereksiz eslint-disable sayılmazsa
+  // eski bir yorum "bu commit getirdi" diye yanlış kişiyi durdurur.
+  for (const d of JSON.parse(ham)) for (const m of d.messages ?? []) {
+    const kural = kuralAnahtari(m);
+    if (kural !== null) out[kural] = (out[kural] ?? 0) + 1;
+  }
   return out;
 }
 
@@ -216,7 +227,7 @@ for (const proje of SECILEN) {
     console.error(`Bilinmeyen proje: ${proje} (${Object.keys(PROJELER).join(", ")})`);
     process.exit(2);
   }
-  const { sayim, kuralDosyalari, kuralDosyaSayim, dosyaSayisi, hata } = olc(proje);
+  const { sayim, kuralDosyalari, kuralDosyaSayim, kuralDosyaSatir, dosyaSayisi, hata } = olc(proje);
 
   if (dosyaSayisi < EN_AZ_DOSYA[proje]) {
     console.error(
@@ -292,7 +303,10 @@ for (const proje of SECILEN) {
       // bir küme yoktur ve "BU COMMIT'TE" yazmak uydurma bir iddia olurdu.
       const etiket = STAGED ? `  [${benim.includes(a) ? "BU COMMIT'TE" : "commit dışı"}]` : "";
       yaz(`   ${a.kural}: ${a.adet} > ${a.tavan}${etiket}`);
-      for (const f of (bende.length ? bende : dosyalar).slice(0, 5)) yaz(`     · ${f}`);
+      for (const f of (bende.length ? bende : dosyalar).slice(0, 5)) {
+        const satirlar = kuralDosyaSatir[a.kural]?.[f] ?? [];
+        yaz(`     · ${f}${satirlar.length ? `:${satirlar.slice(0, 5).join(",")}` : ""}`);
+      }
     }
     if (benim.length > 0) {
       console.error(

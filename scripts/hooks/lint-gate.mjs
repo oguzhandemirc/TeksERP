@@ -44,6 +44,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { kuralAnahtari } from "./lib/eslint-mesaj.mjs";
 import { PROJELER, stagedFiles } from "./lib/staged.mjs";
 import { STDIN_ARIZA_MESAJI, stdinListesi } from "./lib/stdin-liste.mjs";
 
@@ -74,7 +75,7 @@ export function degerlendir(sonuclar, staged, projeAdi, repo = REPO) {
     satirlar.push(`❌ ${projeAdi}: commit'e giren ${benim.length} dosyada ${toplam} lint hatası`);
     for (const d of benim) {
       for (const m of d.hatalar.slice(0, 10)) {
-        satirlar.push(`   ${d.yol}:${m.line}:${m.column}  ${m.ruleId ?? "parse"}  ${m.message}`);
+        satirlar.push(`   ${d.yol}:${m.line}:${m.column}  ${kuralAnahtari(m) ?? "parse"}  ${m.message}`);
       }
       if (d.hatalar.length > 10) satirlar.push(`   ${d.yol}: (+${d.hatalar.length - 10} hata daha)`);
     }
