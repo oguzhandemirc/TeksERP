@@ -132,11 +132,21 @@ async function main() {
     check("§5a eşzamanlı open → tam biri kazanır (davranış)", wins === 1 && losses + occupied === 1,
       `wins=${wins} p2002=${losses} occupied=${occupied}`);
 
-    // ⭐ PENCERE KANITI — ve kanıt burada `pg_blocking_pids` GEREKTİRMEZ:
-    // kaybeden P2002 aldıysa İKİSİ DE precheck'ten geçmiş demektir (aksi hâlde
-    // ikincisi MACHINE_OCCUPIED alırdı ve INSERT'e hiç gelmezdi). Yani
-    // ***`p2002 === 1` pencerenin KURULDUĞUNUN kendisidir*** — sed yolunun
-    // (partial unique → P2002 → 409 SESSION_RACE) gerçekten basıldığını söyler.
+    // ⭐ PENCERE KANITI — burada `pg_blocking_pids` GEREKTİRMEZ, ama SEBEBİ
+    // "P2002 alındı" DEĞİL: **bu akışta iki durum FARKLI kod üretiyor.**
+    //   örtüşmedi → ikinci çağrı precheck'e takılır → MACHINE_OCCUPIED
+    //   örtüştü   → ikisi de precheck'ten geçer → INSERT → P2002 → SESSION_RACE
+    // İki sonuç AYRIŞTIĞI için kod tanık olabiliyor.
+    //
+    // ⚠️ GENELLEŞTİRME SINIRI (01'in P2 ölçümü, 2026-09-13 — bende yoktu):
+    // ***Kaybedenin hata kodu, ancak ÖRTÜŞMEYEN durumda FARKLI bir sonuç
+    // üretiyorsa pencere tanığıdır.*** `machine_runs`ta böyle bir ayırt edici
+    // YOK (servis yok, iki INSERT doğrudan sedde çarpıyor) ⇒ orada `p2002 === 1`
+    // yalnız SEDİN çalıştığını kanıtlar, ÖRTÜŞMEYİ değil. Ayırt edici yoksa ya
+    // gate-tx kurulur (`e78b8057`) ya pencerenin ölçülmediği BEYAN edilir.
+    // ⇒ Bu bölümü başka bir bekçiye kopyalamadan önce sor: *"örtüşmeyen durumda
+    //   BAŞKA bir kod geliyor mu?"* Gelmiyorsa kod tanık DEĞİLDİR.
+    //
     // Ölçüldü 2026-09-13: üç ardışık koşumda 3/3 `p2002=1`.
     // ⇒ Kurulamazsa bu bir YÜKLEM SONUCU DEĞİL ÖLÇÜM ARIZASIDIR: sed yolu
     //   ölçülmemiştir ve §5a'nın yeşili onu kapsamaz.
