@@ -486,10 +486,15 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   // çalıştırmasıyla çürüdü (e3d63964 düzeltti); bugün iki defterin AYRI sınıfta olması ölçülmüş ve
   // kasıtlı — "iki defter farklı tersliyor" bir kusur değil, keşfin doğası.
   OVERAGE: { tur: "BAGLI_TERS", kod: "TAMBUR_UNDO", tersYazan: [{ dosya: "src/services/tambur-undo.service.ts", sembol: "restoreBumpTx" }] },
-  MANUAL_ADJUST: { tur: "BORC",
-    // ⚠️ "YAZARSIZ" DEĞİL "YAZARI BİLİNMİYOR" (ea'nın ayrımı): ilki bir ölçüm
-    // sonucu gibi okunur, oysa ölçtüğümüz tek şey MAIN'DE yazar görmediğimiz.
-    ne: "YAZARI BİLİNMİYOR ama SATIRI VAR — sınıfı belirlenemiyor",
-    kanit: "main'de 0 yazar; git geçmişinde de yok (`-S` yalnız kataloğa eklendiği `15410b07` ve tasarım notunu buluyor). `tekserp_ea_test`te 24 satır: 2026-09-12 08:17–08:24Z, ardışık ÜRETİM barkodları, eventType CANCEL — yani tek bir toplu koşum ve `15410b07`den SONRA. Sahibi ea'ya soruldu: KENDİSİ DEĞİL (üç ölçüm: tarih · barkod öneki · yazdığı tablolar). ⇒ yazar inmemiş bir çalışma ağacında yaşamış olabilir ve bu git'ten YANLIŞLANAMAZ",
-    sahibi: "AÇIK — sahibi bulunamadı" },
+  // MANUAL_ADJUST — BORÇ KAPANDI (6e 5b15a635, hüküm 1e şık a). Eski beyan "YAZARI BİLİNMİYOR ama
+  // SATIRI VAR — sınıfı belirlenemiyor" ÇÜRÜDÜ: main'de yazar yoktu çünkü katalog kodu ÖLÜYDÜ;
+  // ea'nın test hedefindeki 24 satır tek seferlik bir koşum iziydi (fabrika kopyasında 0). "Sahibi
+  // bulunamadı" da düştü: `roll:manual-adjust` SoD üçlüsü → top-düzeltme alanı (6e).
+  // Yazıcı artık VAR: `adjustRollQty` (inventory.service.ts) `postStockMove` ile ADJUST yazar —
+  // düşükse `from` −fark, yüksekse `to` +fark — ve `rollVarianceId` ile sapma satırına BAĞLI.
+  // Ters yolu DAMGA ya da bağlı ters DEĞİL: geri alma ucu yok; ters yönde ikinci elle düzeltme
+  // yeni bir OLGUDUR ⇒ karşı olay KENDİSİ (aynı kod, ters işaret, sapma defterinde karşı satır).
+  // §13d simetri kendine döner (KARSI_OLAY ⇄ kendisi); §13f çapa yazıcının kendisi.
+  MANUAL_ADJUST: { tur: "KARSI_OLAY", kod: "MANUAL_ADJUST", gerekce: "elle metraj düzeltmesinin tersi ters yönde ikinci bir elle düzeltmedir — aynı kod, ters işaret, rollVarianceId ile sapma defterine bağlı; geri alma ucu yok ve olmamalı (operatör kararı, damga değil olgu)",
+    tersYazan: [{ dosya: "src/services/inventory.service.ts", sembol: "adjustRollQty" }] },
 };
