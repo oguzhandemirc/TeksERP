@@ -206,43 +206,28 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/master-data-unmerge.service.ts", sembol: "revertTx" }],
     ["src/services/master-data-merge.service.ts"]),
 
-  // ── DEFTER + BORÇ (ters yolu YOK; muaf DEĞİL, GÖRÜNÜR borç) ────────────────
-  D("RollPlanDeviation", "plan-dışı kimlikle inen metrajın KARAR defteri", { tur: "YOK" }, [],
-    ["src/services/helpers/tambur-plan-gate.helper.ts"],
-    { borc: [{
-      ne: "ters yol YOK, damga kolonu bile yok; geri alınan kapanışın sapması karnede sayılmaya devam ediyor",
-      // İKİ kusur da GEÇERLİ; ikincisinin MEKANİZMASI bir tur çürütülüp geri alındı:
-      //   ① Karne fazla sayar — rapor where'i YALNIZ `createdAt` (:107/:187/:212),
-      //      `roll.status` hiçbir sorguda yok; `finalize` kaynağında qtyM TOPUN
-      //      TAMAMI ⇒ geri alınıp yeniden finalize edilen top iki tam imza +
-      //      iki tam metraj üretir.
-      //   ② Kapı soruyu bastırır — ama yolu `tambur-undo` DEĞİL, KABUL İPTALİ +
-      //      DİRİLTME zinciri: `cancelReceipt` hareketi silmiyor GERİ ALIYOR →
-      //      restore guard'ı `ACTIVE_MOVEMENT` sayıyor, geri alınmışı görmüyor (0) →
-      //      cascade `currentStepId`i null'a çekiyor → `cancelReasonCode` HİÇ
-      //      yazılmıyor ⇒ doğan top restore guard'ının HER sinyalinden geçer,
-      //      diriltilir ve `fason-receipt` sapma satırı CANLI kalıp Tambur'da
-      //      soruyu bastırır. Sapma satırı kabulde DOĞAN topa yazılır
-      //      (subcontractor.service.ts:3302 `bornRollInputs`), iptal onu cascade eder.
-      //      ⚠️ Onarımın iki ayağı AYRILAMAZ: `revokedAt IS NULL` süzgeci + kabul
-      //      iptalinin `fason-receipt` satırlarını DAMGALAMASI; yoksa süzgeç boş
-      //      küme üzerinde çalışır.
-      kanit: "canlı uç quality.routes.ts:67 ham SQL COUNT/SUM (where yalnız createdAt) · tambur-undo bu satıra DOKUNMUYOR · cancelReceipt+restore zinciri ölçüldü (roll-cancel-restore.helper.ts:88 sekiz sinyal) · damga kolonu yok",
-      // ÇÖZÜM TASARLANDI (2026-09-13), UYGULANMADI. Karar: DAMGA (`revokedAt` +
-      // `revokedById` + `revokeReason`), karşı kayıt REDDEDİLDİ — karne onayı
-      // `COUNT(DISTINCT confirmationId)` ile sayıyor, karşı satır ya onay sayısını
-      // artırır ya `qtyM`yi belirsizleştirir. Tanecik SATIR DEĞİL `confirmationId`
-      // (renk + en birlikte saparsa 2 satır ama BİR imza; yarım damga bir imzayı
-      // yarım geri almaktır). Dört damgalayan dal: FULL · SINGLE (yalnız
-      // `childRollId`e bağlı; `finalize` satırı DAMGALANMAZ, topun geri kalanı hâlâ
-      // sapan kimlikle depoda) · SINGLE_RESTORE · cancelReceipt cascade. Üç okuyucu
-      // süzer (karne: findMany + ham SQL gün serisi + karşılaştırma dönemi) + kapı.
-      // ⚠️ `revokedAt` kolonu indiği AN bu kapı §6b'den KIRMIZI verir ve beyanın
-      // `{ tur: "DAMGA", kolon: "revokedAt" }`a çevrilmesini ister — kusur değil,
-      // beyanın güncellenme çağrısıdır.
-      tasarim: "docs/design/PLAN-SAPMA-GERI-ALMA-TASARIM.md",
-      sahibi: "tambur alanı (tasarım 01, uygulama sahibine verilecek)",
-    }] }),
+  // ── DEFTER (ters yol 2026-09-13te KAPANDI — borç girdisi kaldırıldı) ───────
+  D("RollPlanDeviation", "plan-dışı kimlikle inen metrajın KARAR defteri",
+    { tur: "DAMGA", kolon: "revokedAt" },
+    [
+      // DÖRT damgalayan dal — ölçüldü 2026-09-13, dördü de canlı.
+      { dosya: "src/services/tambur-undo.service.ts", sembol: "applyFull" },
+      { dosya: "src/services/tambur-undo.service.ts", sembol: "applySingle" },
+      { dosya: "src/services/tambur-undo.service.ts", sembol: "applySingleRestore" },
+      { dosya: "src/services/subcontractor.service.ts", sembol: "cancelReceipt" },
+    ],
+    ["src/services/helpers/tambur-plan-gate.helper.ts"]),
+  // ⚠️ TANECİK `confirmationId`, SATIR DEĞİL: renk+en birlikte saparsa 2 satır ama
+  //    BİR imza; tek satırı damgalamak imzayı YARIM geri alır ve yarım geri alınmış
+  //    bir imza hiç geri alınmamıştan KÖTÜDÜR — karne onu tutarlı GÖRÜR.
+  // ⚠️ ONARIMIN İKİ AYAĞI AYRILAMAZ ve ikisi de indi: `revokedAt IS NULL` süzgeci
+  //    DÖRT okuyucuda (karne findMany + ham SQL gün serisi + karşılaştırma dönemi +
+  //    Tambur kapısının `findFirst`i) VE kabul iptalinin `fason-receipt` satırlarını
+  //    damgalaması. Süzgeç tek başına boş küme üzerinde çalışırdı.
+  // ⚠️ SINGLE dallarında `finalize` imzası DAMGALANMAZ (childRollId NULL, qtyM =
+  //    topun TAMAMI): kardeşler ayakta, topun geri kalanı hâlâ sapan kimlikle depoda.
+  // Uygulama: 4b666d33 · tasarım: docs/design/PLAN-SAPMA-GERI-ALMA-TASARIM.md
+  // Bekçi: scripts/test_plan_deviation_undo.ts (25 kontrol, iki negatif sonda koşuldu)
 
   D("SackAllocation", "sipariş karşılama defteri — MALİ ETKİSİ OLAN tek tahsis defteri", { tur: "YOK" }, [],
     ["src/services/shipping.service.ts"],
