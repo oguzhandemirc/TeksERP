@@ -43,6 +43,11 @@
           "kapsam": "her-ikisi",
           "tip": "yeni",
           "metin": "Müşteri kartına “Sevk varsayılanı” alanı geldi: Yurtiçi, Yurtdışı ya da Yok. Bu müşteriye sevkiyat kurarken panelde ve tablette yurtiçi/yurtdışı seçicisi bu değerle açılır; her sevkte yeniden seçmek gerekmez. Bu bir varsayılandır, kilit değil: aynı müşteriye hem yurtiçi hem ihracat sevkiyatı yapıyorsanız seçiciyi o sevk için değiştirirsiniz ve seçiminiz sonradan değişmez. Geçmiş sevkiyatlara dokunulmaz; boş bırakılan müşteride ekran eskisi gibi yurtiçinden başlar. Toplu müşteri yükleme şablonuna da “Sevk Varsayılanı” sütunu eklendi."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "yeni",
+          "metin": "Alt kalite olarak işaretlenen kalitelerde sevk belgesi ve etiket, müşterinin kendi ürün adını DEĞİL bizim ürün adımızı basıyor — top kime gidiyorsa gitsin. Kurulumda bu işaret 2. kaliteye konuludur. Aynı üründen ve renkten hem 1. kalite hem alt kalite top taşıyan bir satırda da bizim adımız basılır. Müşteri adı sütunu yerinde kalır; yalnız o satırın hücresinde bizim adımız görünür. 1. kalite malda hiçbir şey değişmedi."
         }
       ]
     },
