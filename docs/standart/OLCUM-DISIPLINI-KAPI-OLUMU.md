@@ -229,3 +229,21 @@ envanterin güvenilirliği, çürütülen satırlarını da taşımasıyla ölç
 Kardeşleri § Bir kapının "neden kırmızı" cevabı, kapının ÇALIŞTIĞINI varsayar ·
 `OLCUM-DISIPLINI-YUKLEM.md` § Sınırsız eşleşme (yüklem neyi tutar) ve § NE sorduğun kadar
 NEREYE sorduğun (yüklem nereye bakar) — bu ikisi tetiğe, buradaki tanıya aittir.
+
+### Bir kırmızının MESAJI, hangi kontrolün kırmızı olduğunu söylemez
+Kontrol **etiketi** ile kontrol **mesajı** ayrı iki bilgidir ve yalnız etiket hangi
+iddianın düştüğünü söyler. Mesaj paylaşılabilir: iki ayrı kontrol aynı metni basıyorsa,
+elde yalnız mesaj kalınca **geçen** ile **düşen** birbirinden ayırt edilemez.
+
+*(Vaka 2026-09-13, d9: bir aralıklı kırmızının kökü, `❌` **etiketi** görünene kadar
+bulunamadı — koşucunun son-30 satır penceresi etiketi düşürüyordu ve elde kalan mesaj,
+**geçen** bir kontrolünkiyle birebir aynıydı. Üç hipotez kuruldu, üçü de yanlıştı; kök
+sebep ancak etiket geri gelince göründü.)*
+
+> **Kırmızıyı ADIYLA oku.** Pencere kırpıyorsa pencereyi büyüt, mesajdan tahmin yürütme —
+> *"mesaj şuna benziyor"* bir teşhis değil, bir benzerlik gözlemidir.
+
+**Savunma:** koşum çıktısını kırpan her araç (pencere, `tail`, `head`, grep süzgeci)
+etiketi de kırpabilir; kırmızı ararken süzgeci **etiket satırına** kur, mesaja değil.
+Kardeşleri § Bir kapının TETİĞİ bir OLAYI ölçer; TANISI bir ANLAM iddia eder ·
+`OLCUM-DISIPLINI-SINIFLAR.md` § SONDA ailesi (e: çıktı kırpıldı).

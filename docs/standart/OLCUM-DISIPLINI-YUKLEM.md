@@ -62,6 +62,36 @@ aradım; üçüncü bir biçim varsa bu ikisi görmez."**
 *(Kaynak: oturum ölçümü 2026-09-13, sha yok; paket envanteri belgesi.)*
 Kardeşi § Boş çıktı bir ÖLÇÜM değildir ve `OLCUM-DISIPLINI-SINIFLAR.md` § "Bende yok".
 
+### Sınırsız eşleşme — sınırını BEYAN ETMEYEN yüklem alakasızı içeri alır
+Bir yüklem yanlış olmadan **sınırsız** olabilir: aradığını bulur, ama **aramadığını da**
+bulur. Üç biçim ölçüldü: *kelime sınırı yok* · *bağlam sınırı yok* · *boş küme her şeye
+uyar*. Panzehir aynı: sınırı BEYAN et (boşluk/`\b`, alanı daralt, boş kümeyi ayrı ele al).
+
+| # | vaka (2026-09-13) | gevşeklik | sonuç |
+|---|---|---|---|
+| a | `grep _shipped` | alt dizgi | 6 eşleşme, gerçek **3** — fazlalık bir *constraint adı* + bir *emsal yorumu* |
+| b | `lib/<ad>` metni arandı | ad ≠ bağ | 26 ↔ gerçek **25**; fark bir YORUM satırıydı (§ Bir adın geçmesi bir BAĞIMLILIK değildir) |
+| c | **`!m.includes("9-KAT")`** | alt dizgi | **kurbanı KENDİ fikstürü** — aşağıda |
+
+⭐ **(c) ailenin en pahalı biçimi, çünkü kurban bekçinin KENDİ ürettiği değer.**
+*(d9, ölçüldü: sonda değeri `TEST-KAT-${Date.now()}-KAT`. Damga **9 ile bittiğinde**
+dizgi `…5549-KAT` oluyor ve `"9-KAT"` alt dizgisini İÇERİYOR ⇒ yüklem alakasız bir
+değerle eşleşiyor. "Aralıklılık" gizemi değil **damga aritmetiği**: `Date.now() % 10 === 9`
+⇒ 1/10; CI'daki iki kırmızının ikisi de 9 ile bitiyordu — `1789324255549` · `1789323101009`.
+Üç hipotez kuruldu (başka testin fikstür kalıntısı · kendi kalıntısı · bayat önbellek) ve
+**üçü de yanlıştı**. Düzeltme `675211b2`: liste artık TOKEN olarak okunuyor, dört sonda,
+biri (§0c) eski yüklemin yanılgısını BELGELİYOR.)*
+
+> **Bir bekçi, kendi fikstürünü ortama koyduğu anda KENDİ YÜKLEMİNİN GİRDİSİ hâline
+> gelir.** ⇒ Sınırı beyan etmek yetmez; ayrıca sor: ***sondanın ÜRETTİĞİ değer, sondanın
+> YÜKLEMİNE girdi olabilir mi?***
+
+⚠️ **Ve aralıklılık bir teşhis değil bir SORUDUR:** "bazen kırmızı" gördüğünde önce
+*"hangi girdi 1/N olasılıkla değişiyor"* diye sor — zaman damgası, rastgele ad, sıra,
+saat. Gizem çoğu kez aritmetiktir.
+Kardeşleri § NE sorduğun kadar NEREYE sorduğun · § Bir adın geçmesi bir BAĞIMLILIK
+değildir · § Bir yüklem, aradığı şeyin BOZULMUŞ hâlini aramaz (bunun TERSİ).
+
 ### Bir yüklem, aradığı şeyin BOZULMUŞ hâlini aramaz — bozulma ADAYI yok eder
 Sınırsız eşleşmenin **tersi**: sınır o kadar dardır ki kusurlu örnek **aday bile
 olmaz**. Cırcır 0'da kalır, çünkü sayacak bir şey doğmamıştır.
@@ -139,7 +169,7 @@ yazmak bu ailenin en sık ikinci hatasıdır* — düzeltmeyi de iki yönden öl
 söylüyor (*"aşılmış bir tavanı yeni değere çekmek onu ölçmek değil ONAYLAMAKTIR"*) — ama
 yüklem gevşekken bu cümle yetmez, çünkü ortada onaylanacak bir ihlal bile yoktur.
 **Sıra: önce YÜKLEMİ düzelt, sonra tabanı gerçek sayıya indir.**
-Kardeşleri § Sınırsız eşleşme (`OLCUM-DISIPLINI-SINIFLAR.md`) · § Tarama, aradığı şeyin
+Kardeşleri § Sınırsız eşleşme · § Tarama, aradığı şeyin
 YAZILIŞ BİÇİMİNİ değil KENDİSİNİ sormalı.
 
 ### Bir "HEPSİ" iddiası, kümeyi üreten yüklem kadar doğrudur
