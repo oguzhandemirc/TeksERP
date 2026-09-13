@@ -27,6 +27,9 @@ import {
   type VeriOlcumu,
   kToplam,
   MIKTAR_YOLLARI,
+  MIKTAR_MUAF,
+  BILINEN_KAPISIZ_YOLLAR,
+  miktarAdaylari,
 } from "./lib/stok-defteri-bag-olcumu";
 
 let pass = 0;
@@ -117,6 +120,27 @@ async function main(): Promise<void> {
     gecici.push(k4);
     const o4 = eskiKapiCagiranlari(k4);
     check("§1g helper dosyası yok → aracSaglam=false", !o4.aracSaglam);
+
+    // §1h — türetme aracı sentetik ağaçta: tipli veri nesnesine atama (`d.currentQty = 1`)
+    // GÖRÜLÜR, kapı çağıran fonksiyon bağlı, çağırmayan aday-kapısız. Sonda: (a) literal
+    // yerine tipli atama → aday; (b) kapı çağrısı → bağlı; (c) `where.currentQty` → aday değil.
+    const kok5 = sentetikAgac(HELPER_GOVDE, {
+      "services/a.service.ts": [
+        'import { Prisma } from "@prisma/client";',
+        "export async function tipliAtama(tx: any) { const d: Prisma.RollUncheckedUpdateManyInput = {}; d.currentQty = 1; await tx.roll.updateMany({ where: { id: 'x' }, data: d }); }",
+        "export async function literalBagli(tx: any) { await tx.roll.update({ where: { id: 'x' }, data: { currentQty: 2 } }); await postStockMove(tx, {}); }",
+        "export async function yalnizSuzgec(tx: any) { return tx.roll.findMany({ where: { currentQty: { gt: 0 } } }); }",
+        "declare function postStockMove(a: any, b: any): Promise<void>;",
+      ].join("\n"),
+    });
+    gecici.push(kok5);
+    fs.mkdirSync(path.join(kok5, "prisma"), { recursive: true });
+    fs.writeFileSync(path.join(kok5, "prisma", "schema.prisma"), 'model Roll {\n  id String @id\n  currentQty Decimal\n  @@map("rolls")\n}\n');
+    const o5 = miktarAdaylari(kok5);
+    const ad5 = (f: string) => o5.adaylar.find((a) => a.fonksiyon === f);
+    check("§1h tipli veri nesnesine atama ADAY ve kapısız", ad5("tipliAtama") !== undefined && ad5("tipliAtama")!.bagli === false, JSON.stringify(o5.adaylar.map((a) => a.fonksiyon)));
+    check("§1h literal + kapı çağrısı → bağlı", ad5("literalBagli")?.bagli === true, ad5("literalBagli")?.bulunanKapi ?? "∅");
+    check("§1h where süzgeci aday DEĞİL", ad5("yalnizSuzgec") === undefined);
 
     // §2 V — veri izi (stub)
     const t1 = new Date("2026-09-10T10:00:00Z");
@@ -228,6 +252,26 @@ async function main(): Promise<void> {
       "§4g ⭐ yerinde miktar değiştiren HER yol deftere bağlı (kapısız = 0, sert)",
       miktar.aracSaglam && miktar.yollar.every((y) => y.bagli),
       miktar.yollar.map((y) => `${y.fonksiyon}:${y.bagli ? y.bulunanKapi : "KAPISIZ"}`).join(" · "),
+    );
+    // §4h — ÜÇÜNCÜ EKSENİN ADAYLARI TÜRETİLİR (2026-09-14): `currentQty` yazan her update
+    // fonksiyonu (nesne literali YA DA tipli veri nesnesine atama) aday; aday ya beyanlı
+    // (MIKTAR_YOLLARI · BILINEN_KAPISIZ · MIKTAR_MUAF) ya gövdesinde/1-alt kapı çağırıyor
+    // olmalı. Elle liste kapı değildi: `applyManualProperties` `rollData.currentQty = m`
+    // ile yazıyordu, reçete (`grep currentQty:`) göremedi. SERT, taban yok.
+    const turetilen = miktarAdaylari(path.resolve(__dirname, ".."));
+    check("§4h körlük zemini: currentQty yazan aday fonksiyon ≥ 10, çözülemeyen 0", turetilen.adaylar.length >= 10 && turetilen.cozulemeyen.length === 0, `aday=${turetilen.adaylar.length} · çözülemeyen=${turetilen.cozulemeyen.length}`);
+    const adayAnahtar = (d: string, f: string): string => `${d}::${f}`;
+    const adaySet = new Set(turetilen.adaylar.map((a) => adayAnahtar(a.dosya, a.fonksiyon)));
+    const bayatMuaf = MIKTAR_MUAF.filter((m) => !adaySet.has(adayAnahtar(m.dosya, m.fonksiyon)));
+    check("§4h MIKTAR_MUAF bayat değil (her muaf hâlâ currentQty yazıyor)", bayatMuaf.length === 0, bayatMuaf.map((m) => m.fonksiyon).join(", ") || `${MIKTAR_MUAF.length} muaf güncel`);
+    const beyanli = new Set([...MIKTAR_YOLLARI, ...BILINEN_KAPISIZ_YOLLAR, ...MIKTAR_MUAF].map((y) => adayAnahtar(y.dosya, y.fonksiyon)));
+    const korNokta = turetilen.adaylar.filter((a) => !a.bagli && !beyanli.has(adayAnahtar(a.dosya, a.fonksiyon)));
+    check(
+      "§4h ⭐ KÖR NOKTA = ∅ — currentQty yazan, beyansız ve kapı çağırmayan fonksiyon yok",
+      korNokta.length === 0,
+      korNokta.length === 0
+        ? `${turetilen.adaylar.length} aday: bağlı ${turetilen.adaylar.filter((a) => a.bagli).length} · beyanlı ${turetilen.adaylar.filter((a) => !a.bagli).length}`
+        : korNokta.map((a) => `${a.dosya}::${a.fonksiyon}:${a.satirlar.join(",")}`).join(" · "),
     );
     console.log(
       `   bilgi: gerçek ağaçta (${gercek.agac}) K = ${kTotal} — eski kapı ${gercek.cagiranlar.length} ` +

@@ -37,6 +37,7 @@ import { execSync } from "node:child_process";
 import * as ts from "typescript";
 import type { PrismaClient, RollStatus } from "@prisma/client";
 import { Prisma, WarehouseEventType } from "@prisma/client";
+import { kolonYazicilari, semaAlanlari } from "./snapshot-kolonlari";
 
 /** Konum defteri kapısı — statüsüz satır yazan iki fonksiyon. */
 export const ESKI_KAPI_FONKSIYONLARI: readonly string[] = ["writeWarehouseMovement", "writeWarehouseMovements"];
@@ -166,6 +167,14 @@ export const BILINEN_KAPISIZ_YOLLAR: readonly KapisizYol[] = [
     fonksiyon: "cutOpenFabric",
     ad: "üretim kesimi çocuğu (WAREHOUSE doğar, satır yok) — GİRİŞ",
   },
+  {
+    // §4h türetmesi buldu (2026-09-14): açık kumaş finalize çocuğu da WAREHOUSE doğuyordu,
+    // klasik `finalize` PRODUCTION satırı yazarken bu kardeşi yazmıyordu. 01 aynı gün
+    // bağladı (`bagli: true`); listede KALIR — silinirse kapı o yolu bir daha görmez.
+    dosya: "src/services/tambur.service.ts",
+    fonksiyon: "finalizeOpenFabric",
+    ad: "açık kumaş finalize çocuğu (WAREHOUSE doğar, satır yok) — GİRİŞ",
+  },
 ];
 /**
  * K'NIN ÜÇÜNCÜ EKSENİ — YERİNDE MİKTAR DEĞİŞTİREN YOLLAR (2026-09-13, hüküm MANUAL_ADJUST).
@@ -175,14 +184,43 @@ export const BILINEN_KAPISIZ_YOLLAR: readonly KapisizYol[] = [
  * (`adjustRollQty`, 500 → 480) deftere hiç yazmıyordu ve K=0 yine doğruydu. Defter
  * 2026-09-13'ten beri MİKTAR defteri (Σ = durum) ⇒ bu eksen de kapılıdır. Ölçüm aynı
  * yöntemle (gövdede yeni kapı çağrısı); taban YOK, SERT: listedeki her yol bağlı olmalı.
- * Yeni üye reçetesi: `currentQty` yazan `updateMany`/`update` içeren, statü
- * değiştirmeyen servis yolları — `grep -n "currentQty:" src/services/*.ts`.
+ * Yeni üye ARANMAZ, TÜRETİLİR (`miktarAdaylari`, §4h): `grep "currentQty:"` reçetesi tipli veri
+ * nesnesine atamayı (`rollData.currentQty = m`) göremedi — `applyManualProperties` böyle
+ * yazıyordu (ölçüldü 2026-09-14). Kapı: aday ∖ (beyanlı ∪ kapı çağıran) = ∅.
  */
 export const MIKTAR_YOLLARI: readonly KapisizYol[] = [
   {
     dosya: "src/services/inventory.service.ts",
     fonksiyon: "adjustRollQty",
     ad: "elle metraj düzeltmesi (PATCH /rolls/:id/qty) — YERİNDE MİKTAR",
+  },
+  {
+    // Bütün topta ölçüm düzeltmesi: currentQty = initialQty = m. Yazıcısı ENTRY_CORRECTION
+    // (ADJUST, ±fark, ENTRY_QTY_CORRECTION sapmasına bağlı) — 2026-09-14.
+    dosya: "src/services/inventory.service.ts",
+    fonksiyon: "applyManualProperties",
+    ad: "bütün top metraj düzeltmesi (Düzelt diyaloğu, currentQty = initialQty = m) — YERİNDE MİKTAR",
+  },
+];
+
+/**
+ * `currentQty` yazan ama satır YAZMAMASI MEŞRU olan yollar — top o anda STOK KÜMESİ
+ * DIŞINDADIR, defterin Σ'sı onu saymaz. Beyan İKİ YÖNLÜ ölçülür: fonksiyon hâlâ
+ * `currentQty` yazıyor olmalı (yazmıyorsa muaf bayat → kırmızı). Yeni muaf bir KARARDIR:
+ * "top stok kümesi dışında mı" sorusu koddan doğrulanır, adı buraya yazılır.
+ */
+export const MIKTAR_MUAF: readonly (KapisizYol & { neden: string })[] = [
+  {
+    dosya: "src/services/inventory.service.ts",
+    fonksiyon: "kursunFinish",
+    ad: "kurşun ölçümü (IN_PRODUCTION topa ölçülen metraj)",
+    neden: "top üretimde, stok kümesi dışı — PRODUCTION_ISSUE ile çıkmış, finalize'da metrajıyla girer",
+  },
+  {
+    dosya: "src/services/subcontractor.service.ts",
+    fonksiyon: "createFasonShipChild",
+    ad: "fason kısmi sevk çocuğu (AT_SUBCONTRACTOR doğar)",
+    neden: "çocuk stok kümesi dışında doğar; fason kabulü onu satırıyla içeri alır",
   },
 ];
 
@@ -387,6 +425,94 @@ export function kapisizYolOlcumu(kok: string, liste: readonly KapisizYol[] = BIL
     return { aracSaglam: false, aracNotu: sorunlar.join(" · "), yollar };
   }
   return { aracSaglam: true, aracNotu: null, yollar };
+}
+
+export interface MiktarAdayi {
+  dosya: string;
+  fonksiyon: string;
+  satirlar: number[];
+  /** Gövdesinde ya da AYNI dosyadaki bir alt çağrısında yeni kapı çağrısı var. */
+  bagli: boolean;
+  bulunanKapi: string | null;
+}
+
+/**
+ * K'NIN ÜÇÜNCÜ EKSENİNİN TÜRETİLEN ADAYLARI — `Roll.currentQty`yi `update`/`updateMany` ile
+ * (nesne literali YA DA `Prisma.Roll…UpdateInput` tipli değişkene atama ile) yazan HER
+ * fonksiyon. Elle liste (`MIKTAR_YOLLARI`) kapı değildir: `applyManualProperties`
+ * `rollData.currentQty = m` yazıyordu ve reçete (`grep currentQty:`) onu göremedi
+ * (ölçüldü 2026-09-14). Kapı: aday ∖ (MIKTAR_YOLLARI ∪ BILINEN_KAPISIZ_YOLLAR ∪ MIKTAR_MUAF ∪
+ * gövdesinde kapı çağıran) = ∅. `create` sayılmaz (doğum, giriş ekseni ayrı soru).
+ */
+export function miktarAdaylari(kok: string): { adaylar: MiktarAdayi[]; taranan: number; cozulemeyen: string[] } {
+  const { yazimlar, cozulemeyen, taranan } = kolonYazicilari(
+    [{ model: "Roll", alan: "currentQty", tablo: "rolls" }],
+    semaAlanlari(fs.readFileSync(path.join(kok, "prisma", "schema.prisma"), "utf8")),
+    kok,
+    path.join(kok, "src"),
+  );
+  const guncelleyen = yazimlar.filter((w) => w.metod.startsWith("update"));
+  const dosyaSatir = new Map<string, number[]>();
+  for (const w of guncelleyen) dosyaSatir.set(w.dosya, [...(dosyaSatir.get(w.dosya) ?? []), w.satir]);
+  const adaylar: MiktarAdayi[] = [];
+  for (const [dosya, satirlar] of dosyaSatir) {
+    const sf = ts.createSourceFile(dosya, fs.readFileSync(path.join(kok, dosya), "utf8"), ts.ScriptTarget.Latest, true);
+    const fonksiyonlar = new Map<string, ts.Node>();
+    const topla = (n: ts.Node): void => {
+      if ((ts.isMethodDeclaration(n) || ts.isFunctionDeclaration(n)) && n.name) fonksiyonlar.set(n.name.getText(sf), n);
+      else if (ts.isPropertyDeclaration(n) && n.initializer && ts.isArrowFunction(n.initializer)) fonksiyonlar.set(n.name.getText(sf), n);
+      n.forEachChild(topla);
+    };
+    sf.forEachChild(topla);
+    const satirAraligi = (n: ts.Node): [number, number] => [
+      sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1,
+      sf.getLineAndCharacterOfPosition(n.getEnd()).line + 1,
+    ];
+    const cagrilar = (n: ts.Node): Set<string> => {
+      const out = new Set<string>();
+      const gez = (m: ts.Node): void => {
+        if (ts.isCallExpression(m)) {
+          const ad = callee(m);
+          if (ad) out.add(ad);
+        }
+        m.forEachChild(gez);
+      };
+      n.forEachChild(gez);
+      return out;
+    };
+    const gruplar = new Map<string, number[]>();
+    for (const satir of satirlar) {
+      // En DAR kapsayan adlı fonksiyon
+      let secilen: string | null = null;
+      let secilenBoy = Infinity;
+      for (const [ad, n] of fonksiyonlar) {
+        const [b, e] = satirAraligi(n);
+        if (b <= satir && satir <= e && e - b < secilenBoy) { secilen = ad; secilenBoy = e - b; }
+      }
+      const ad = secilen ?? "(adsız)";
+      gruplar.set(ad, [...(gruplar.get(ad) ?? []), satir]);
+    }
+    for (const [fonksiyon, sats] of gruplar) {
+      const govde = fonksiyonlar.get(fonksiyon);
+      let bulunanKapi: string | null = null;
+      if (govde) {
+        const dogrudan = cagrilar(govde);
+        bulunanKapi = [...dogrudan].find((c) => YENI_KAPI_FONKSIYONLARI.includes(c)) ?? null;
+        if (!bulunanKapi) {
+          // bir alt: aynı dosyadaki çağrılan fonksiyonların gövdesi (private helper deseni)
+          for (const c of dogrudan) {
+            const alt = fonksiyonlar.get(c);
+            if (!alt) continue;
+            bulunanKapi = [...cagrilar(alt)].find((x) => YENI_KAPI_FONKSIYONLARI.includes(x)) ?? null;
+            if (bulunanKapi) { bulunanKapi = `${c}→${bulunanKapi}`; break; }
+          }
+        }
+      }
+      adaylar.push({ dosya, fonksiyon, satirlar: sats.sort((a, b) => a - b), bagli: bulunanKapi !== null, bulunanKapi });
+    }
+  }
+  adaylar.sort((a, b) => `${a.dosya}:${a.fonksiyon}`.localeCompare(`${b.dosya}:${b.fonksiyon}`));
+  return { adaylar, taranan, cozulemeyen };
 }
 
 export interface AileSonSatiri {

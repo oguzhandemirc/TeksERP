@@ -677,6 +677,34 @@ function degerSinifi(init: ts.Expression | undefined): KolonYazimi["deger"] {
   return "deger";
 }
 
+const PRISMA_GIRDI_TIPI = /\bPrisma\.([A-Z]\w*?)(?:Unchecked)?(Create|Update)(?:Many)?Input\b/;
+
+/**
+ * `degisken` bu düğümün KAPSAMINDA Prisma girdi tipiyle bildirilmiş mi (const/let ya da
+ * parametre)? En yakın kapsayan fonksiyondan dışa doğru bakılır; ilk bulunan bildirim kazanır.
+ */
+function tipliVeriNesnesiModeli(sf: ts.SourceFile, n: ts.Node, degisken: string): { model: string; metod: string } | null {
+  let kapsam: ts.Node | undefined = n.parent;
+  while (kapsam) {
+    let bulunan: { model: string; metod: string } | null = null;
+    const ara = (d: ts.Node): void => {
+      if (bulunan) return;
+      if ((ts.isVariableDeclaration(d) || ts.isParameter(d)) && ts.isIdentifier(d.name) && d.name.text === degisken && d.type) {
+        const m = PRISMA_GIRDI_TIPI.exec(d.type.getText(sf));
+        if (m) bulunan = { model: m[1]!, metod: m[2]!.toLowerCase() };
+      }
+      if (!ts.isFunctionLike(d) || d === kapsam) d.forEachChild(ara);
+    };
+    ara(kapsam);
+    if (bulunan) return bulunan;
+    if (ts.isFunctionLike(kapsam) || ts.isSourceFile(kapsam)) {
+      if (ts.isSourceFile(kapsam)) return null;
+    }
+    kapsam = kapsam.parent;
+  }
+  return null;
+}
+
 /**
  * `hedefler` kolonlarını `data:`/`create:`/`update:` altında yazan her yer — doğrudan
  * delegate çağrısı ya da ilişki üzerinden iç içe (`items: { create: [...] }`; hedef model
@@ -775,6 +803,21 @@ export function kolonYazicilari(
           yazimlar.push({ model, alan, dosya: rel, satir: satirNo(n), metod: metod!, deger: degerSinifi(init), icIce });
         }
         // aynı adlı alan başka modelde (ör. başka modelin `qty`si) → bizim kolon değil
+      }
+      // ④ TİPLİ VERİ NESNESİNE ATAMA — `rollData.currentQty = m` (nesne sonra `data: rollData`
+      // ile geçer). Nesne literali değil, o yüzden ①'in gözünden kaçar; ölçüldü 2026-09-14:
+      // `applyManualProperties` initialQty/currentQty'yi tam böyle yazıyordu ve K'nın "yeni üye
+      // reçetesi" (`grep currentQty:`) de görmüyordu. Model, değişkenin/parametrenin TİP
+      // ADINDAN çözülür: `Prisma.<Model>[Unchecked](Create|Update)[Many]Input`.
+      if (ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+        ts.isPropertyAccessExpression(n.left) && ts.isIdentifier(n.left.expression) && alanlar.has(n.left.name.text)) {
+        const alan = n.left.name.text;
+        const degisken = n.left.expression.text;
+        const tipModeli = tipliVeriNesnesiModeli(sf, n, degisken);
+        if (tipModeli) {
+          const hedef = alanlar.get(alan)!.find((h) => h.model === tipModeli.model);
+          if (hedef) yazimlar.push({ model: tipModeli.model, alan, dosya: rel, satir: satirNo(n), metod: `${tipModeli.metod} (veri nesnesi)`, deger: degerSinifi(n.right), icIce: false });
+        }
       }
       // Ham SQL UPDATE/INSERT — tablo + tırnaklı kolon adı
       if (ts.isTemplateExpression(n) || ts.isNoSubstitutionTemplateLiteral(n) || ts.isStringLiteral(n)) {
