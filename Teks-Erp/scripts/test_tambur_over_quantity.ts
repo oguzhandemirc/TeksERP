@@ -34,6 +34,7 @@ const createdRolls: string[] = [];
 const createdSteps: string[] = [];
 const createdWOs: string[] = [];
 let createdStationId: string | null = null;
+let createdItemId: string | null = null;
 
 let pass = 0;
 let fail = 0;
@@ -64,12 +65,19 @@ async function setFlag(v: boolean) {
   });
 }
 
-async function firstActiveItemId(): Promise<string> {
-  const item = await prisma.item.findFirst({
-    where: { isActive: true },
+/**
+ * Testin KENDİ kalemi — ortamdaki "herhangi bir aktif Item" DEĞİL.
+ *
+ * ⚠️ 2026-09-13: burası `item.findFirst({ isActive: true })` idi ([TD-38] ihlali);
+ * aktif kalemi olmayan bir DB'de bekçi ilk satırda düşerdi ve ölçtüğü kuralın
+ * (aşım davranışı) bununla hiçbir ilgisi yok.
+ */
+async function testItemId(): Promise<string> {
+  const item = await prisma.item.create({
+    data: { code: `TEST-OQ-${rnd()}`, name: `TEST-OQ Kumaş ${rnd()}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
-  if (!item) throw new Error("Test verisi yetersiz — aktif Item yok (önce npm run seed).");
+  createdItemId = item.id;
   return item.id;
 }
 
@@ -169,7 +177,7 @@ async function trackChildren(parentId: string) {
 
 async function main() {
   console.log("=== Tambur Over-Quantity Testi ===\n");
-  const itemId = await firstActiveItemId();
+  const itemId = await testItemId();
 
   // ───────── FLAG KAPALI: aşan giriş reddedilmeli ─────────
   await setFlag(false);
@@ -305,30 +313,65 @@ async function main() {
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
 
+/**
+ * Temizlik adımı düşerse YUTMAZ, GÖRÜNÜR kılar.
+ *
+ * ⚠️ 2026-09-13: burada `.catch(() => {})` vardı ve GERÇEK bir arızayı sessizce
+ * sakladı — `warehouse_movements.rollVarianceId` RESTRICT'i yüzünden sapma silme
+ * düşüyor, arkasındaki top silme de düşüyor ve bekçi her koşumda 7 top bırakıyordu.
+ * Temizlik hatası testi KIRMIZI yapmamalı (ölçülen şey o değil) ama SESSİZ de
+ * kalmamalı: sessiz temizlik, bir sonraki koşumun ortamını bozar ve fatura
+ * BAŞKA bir bekçiye çıkar (`test_consistency §10`).
+ */
+function temizlikHatasi(e: unknown): void {
+  const m = e instanceof Error ? e.message : String(e);
+  console.error(`   ⚠️ temizlik adımı düştü: ${m.replace(/\s+/g, " ").slice(0, 200)}`);
+}
+
 async function cleanup() {
   // Testte yarattığımız geçici flag satırını tamamen kaldır → reader default'a
   // (kayıt yok = TRUE/açık) döner, ortam başlangıç durumuna gelir.
-  await prisma.systemSetting.deleteMany({ where: { key: FLAG_KEY } }).catch(() => {});
+  await prisma.systemSetting.deleteMany({ where: { key: FLAG_KEY } }).catch(temizlikHatasi);
 
   if (createdRolls.length) {
-    await prisma.systemLog.deleteMany({ where: { recordId: { in: createdRolls } } }).catch(() => {});
-    await prisma.rollProperty.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(() => {});
-    await prisma.rollVariance.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(() => {});
-    await prisma.rollOperation.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(() => {});
-    await prisma.rollMovement.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(() => {});
+    await prisma.systemLog.deleteMany({ where: { recordId: { in: createdRolls } } }).catch(temizlikHatasi);
+    await prisma.rollProperty.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(temizlikHatasi);
+    // ⚠️ STOK DEFTERİ ÖNCE (2026-09-13). `warehouse_movements.rollVarianceId` →
+    // `roll_variances` bağı RESTRICT'tir (stok defteri altyapısı, 2026-09-12).
+    // Kesim/finalize yapan bu bekçi defter satırı ÜRETİYOR; sapma ondan önce
+    // silinemez. ÖLÇÜM: bu satır yokken temizlik düşüyordu ve bekçi her koşumda
+    // 7 top + 5 sapma bırakıyordu (`test_consistency §10`nun "adımsız
+    // IN_PRODUCTION top" kırmızısı bunların ÜÇÜNÜ görüyordu — artığın yarısından
+    // azı). Kural kök CLAUDE.md'de zaten yazılıydı; bu dosya onu uygulamıyordu.
+    await prisma.warehouseMovement
+      .deleteMany({
+        where: {
+          OR: [
+            { rollId: { in: createdRolls } },
+            { rollVariance: { rollId: { in: createdRolls } } },
+          ],
+        },
+      })
+      .catch(temizlikHatasi);
+    await prisma.rollVariance.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(temizlikHatasi);
+    await prisma.rollOperation.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(temizlikHatasi);
+    await prisma.rollMovement.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(temizlikHatasi);
     // Önce çocuklar (parentRollId set), sonra parent'lar.
-    await prisma.roll.deleteMany({ where: { id: { in: createdRolls }, parentRollId: { not: null } } }).catch(() => {});
-    await prisma.roll.deleteMany({ where: { id: { in: createdRolls } } }).catch(() => {});
+    await prisma.roll.deleteMany({ where: { id: { in: createdRolls }, parentRollId: { not: null } } }).catch(temizlikHatasi);
+    await prisma.roll.deleteMany({ where: { id: { in: createdRolls } } }).catch(temizlikHatasi);
   }
   if (createdSteps.length) {
-    await prisma.rollOperation.deleteMany({ where: { workOrderStepId: { in: createdSteps } } }).catch(() => {});
-    await prisma.workOrderStep.deleteMany({ where: { id: { in: createdSteps } } }).catch(() => {});
+    await prisma.rollOperation.deleteMany({ where: { workOrderStepId: { in: createdSteps } } }).catch(temizlikHatasi);
+    await prisma.workOrderStep.deleteMany({ where: { id: { in: createdSteps } } }).catch(temizlikHatasi);
   }
   if (createdWOs.length) {
-    await prisma.workOrder.deleteMany({ where: { id: { in: createdWOs } } }).catch(() => {});
+    await prisma.workOrder.deleteMany({ where: { id: { in: createdWOs } } }).catch(temizlikHatasi);
+  }
+  if (createdItemId) {
+    await prisma.item.deleteMany({ where: { id: createdItemId } }).catch(temizlikHatasi);
   }
   if (createdStationId) {
-    await prisma.station.deleteMany({ where: { id: createdStationId } }).catch(() => {});
+    await prisma.station.deleteMany({ where: { id: createdStationId } }).catch(temizlikHatasi);
   }
   console.log("Cleanup: test kayıtları silindi.");
 }
