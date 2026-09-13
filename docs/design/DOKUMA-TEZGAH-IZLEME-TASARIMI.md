@@ -276,6 +276,9 @@ enum MachineSealAction { SEAL  UNSEAL  RESEAL }
 enum MachineMonitoringState { OFF  SHADOW  LIVE }
 ```
 
+> **⚠️ `OFF` İKİ ENUM'DA OLACAK — ve bu bir SORU, bir rezervasyon değil.** `MachineMonitoringState` P4'te indi (2026-09-13) ve o gün ölçüldü: üç değerinin hiçbiri şemadaki çakışmalarda yoktu ⇒ `SHARED_ENUM_VALUES` beyanı **gerekmedi**. Yukarıdaki `MachineRunState` de bir `OFF` taşıyor ve Faz 2'de iniyor; indiği gün `OFF` **çakışmaya dönüşür**, `test_audit_labels` §4 beyan ister ve şu soru açılır: ***"izleme kapalı" ile "makine kapalı" için ORTAK bir Türkçe doğru mu?*** Doğruysa `SHARED_ENUM_VALUES`e satır, değilse `FIELD_ENUM_OVERRIDES`a girdi.
+> 📌 **Burada bilerek ne YAZILMADI:** eklenecek satırın metni, sayısı ve o günkü çakışma sayısı. ***Bir rezervasyon SAYI ya da AD tutarsa bayatlar; SORU ve ÖLÇÜM YERİ tutarsa bayatlamaz.*** Numara çakışması patlar, bayat rezervasyon **hiç patlamaz** (aynı gün `dokuma.md`nin `8034` rezervasyonu böyle bayatlamıştı, gerçek `8032`ydi). Çakışmanın güncel hâli buradan okunmaz: `schema.prisma` ↔ `SHARED_ENUM_VALUES`ten **ölçülür** ve kapı ikisini iki yönlü karşılaştırır.
+
 ### 2.3 · Makine künyesi ve sinyal haritası
 
 ```prisma
@@ -413,7 +416,10 @@ model PeripheralSignal {
 >
 > **⚠️ Silinmiş cihazın aktif sinyali — asıl sed YÜKLEMDEDİR, Cascade değil.** `PeripheralDevice` fiziksel olarak SİLİNMEZ, **mezar taşı alır** (`peripheral.service.ts:204-224`: *"KALICI silme — fiziksel DELETE DEĞİL… `deletedAt` damgalanır"*). Dolayısıyla `PeripheralSignal.peripheral … onDelete: Cascade` pratikte **ölü bir yoldur** ve yalnız son hat olarak durur; gerçek risk, silinmiş cihazın sinyalinin ingest kapsamında yaşamaya devam etmesidir. Kapsam çözümü `signal.isActive AND peripheral.deletedAt IS NULL` koşulunu **TEK helper'da** taşır (boğaz-ikizi Prisma parçasıyla birlikte değişir, §3.3/7): silinmiş cihazın aktif sinyali kapsamda görünmez, kalem **403 `MACHINE_NOT_IN_SCOPE`** alır.
 >
-> **⚠️ `MachineSpec` Cascade'i KALIR ama önizleme künyeyi ADIYLA listeler.** `Machine` bugün `test_hard_delete_guard_coverage`in `WATCHED` kümesinde **yok** (`:32` — yalnız `Item`, `Customer`, `Device`), yani tezgahın Cascade çocukları eksiksizlik taramasına hiç girmiyor. İki satır: **(1)** `WATCHED`a `"Machine"` eklenir ve `EXPECTED` envanterine her Cascade kendi gerekçesiyle yazılır (Faz 1a'da yalnız `Machine <- MachineSpec.machine : Cascade` — *"cascade-intended: künye makinesiz anlamsız"*). **(2)** Silme önizlemesi tezgah künyesini adıyla listeler; `baselineRunHours` DOLUYSA satır bir **GUARD**'dır (ERP öncesi çalışma saati bakiyesi **elle girilmiş** veridir, sessizce ölemez) → 409 + *"önce bakiyeyi not alın"*. Audit `oldData` yalnız `Machine` skalarlarını taşır (`guarded-hard-remove.ts:269`), yani iz oraya bırakılamaz.
+> **⚠️ `MachineSpec` Cascade'i KALIR ama önizleme künyeyi ADIYLA listeler.**
+> ⛔ **(1) GEÇERSİZ → 2026-09-13.** Bu madde *"`WATCHED`a `"Machine"` eklenir"* diyordu; `WATCHED` **artık elle tutulmuyor**, `ENDPOINT_TARGETS`ten TÜRÜYOR ve `"station.routes.ts#machineHardRemove": "Machine"` orada zaten var (`test_hard_delete_guard_coverage.ts:92`, `:123-125`). Elle ekleme yapılacak bir şey yok.
+> 📌 **Sınıf:** ***şemadan/uçlardan TÜREYEN bir listeye "elle ekle" diyen talimat, kapı türemeye geçtiği gün ölür ve ölümü sessizdir*** — talimatı okuyan, yapacak bir şey bulamayınca ya kapıyı yanlış sanır ya maddeyi atlar. Yürürlükte kalan tek iş `EXPECTED` envanterine satır yazmaktır ve P4'te yazıldı: `"Machine <- MachineSpec.machine : Cascade"` → *cascade-intended*.
+> **(2) BORÇ, yüzeyle birlikte doğacak.** Silme önizlemesi tezgah künyesini adıyla listeler; `baselineRunHours` DOLUYSA satır bir **GUARD**'dır (ERP öncesi çalışma saati bakiyesi **elle girilmiş** veridir, sessizce ölemez) → 409 + *"önce bakiyeyi not alın"*. ⚠️ **P4'te YAZILMADI ve sebebi ölçülebilir:** o alanı yazan hiçbir uç yok ⇒ bakiye hiç dolamaz ⇒ guard **erişilemez bir dalı** korur ve "basılmayan dalın yeşili" üretirdi. Bugün yerine `MACHINE_GUARD_EXEMPT`te gerekçeli bir muafiyet var ve muafiyetin kendisi bu borcu adıyla taşıyor. Kural: ***bir guard, onu ihlal edebilecek ilk YÜZEYLE birlikte doğar.*** Künye yazma ucunu açan dilim muafiyeti siler, guard'ı ekler. Audit `oldData` yalnız `Machine` skalarlarını taşır, yani iz oraya bırakılamaz.
 
 ### 2.4 · Toplayıcı kimliği (FAZ 2)
 

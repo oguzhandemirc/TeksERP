@@ -227,3 +227,41 @@ export const rollEntrySourceLabels: Record<RollEntrySource, string> = {
   SEMI_FINISHED: "Yarı Mamul (Dış Alım)",
 };
 
+
+// ── TEZGAH KÜNYESİ (dokuma P4, 2026-09-13) ───────────────────────────────────
+// ⚠️ Backend `enum LoomShedType` (schema.prisma) ile BİREBİR.
+// Ad `Loom*` KALIR ve bilinçlidir: ağızlık açmak gerçekten dokuma tezgahının
+// fiziğidir. Çözgülü örme (raşel) ağızlık açmaz ⇒ alan NULL kalır ve
+// `shedType IS NULL` tam olarak "bu makine o sınıftan değil" der.
+export const LoomShedType = {
+  ARMUR: "ARMUR",
+  JAKAR: "JAKAR",
+  KAM: "KAM",
+} as const;
+export type LoomShedType = (typeof LoomShedType)[keyof typeof LoomShedType];
+
+export const loomShedTypeLabels: Record<LoomShedType, string> = {
+  ARMUR: "Armür",
+  JAKAR: "Jakar",
+  KAM: "Kam (Eksantrik)",
+};
+
+// ⚠️ Backend `enum MachineMonitoringState` ile BİREBİR.
+// "Bu makinenin verisi rapora giriyor mu" sorusunun TEK kaynağı. `isMonitored`
+// gibi tek bir boolean YOKTUR: gölge mod bir reçete cümlesi değil bir durumdur,
+// ve iki kolon "çift yüklem" sınıfı olurdu.
+// GÖLGE: veri yazılır, karne hesaplanır, ama DEFTER raporları onu süzer ve dışa
+// aktarımda gölge damgası taşır — kanal kabulü kanıtlanmadan rakam yayınlanmaz.
+export const MachineMonitoringState = {
+  OFF: "OFF",
+  SHADOW: "SHADOW",
+  LIVE: "LIVE",
+} as const;
+export type MachineMonitoringState =
+  (typeof MachineMonitoringState)[keyof typeof MachineMonitoringState];
+
+export const machineMonitoringStateLabels: Record<MachineMonitoringState, string> = {
+  OFF: "İzleme Kapalı",
+  SHADOW: "Gölge Mod",
+  LIVE: "Yayında",
+};

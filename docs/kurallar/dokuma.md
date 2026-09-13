@@ -2,7 +2,9 @@
 
 > Alan kural dosyası — bu alana dokunmadan ÖNCE okunur. Hikâye, ölçüm ve gerekçe tasarım belgelerinde; burada yalnız bugün geçerli kural. Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın seçimi.
 
-> ⚠️ **BU ALAN KISMEN KÂĞITTADIR — şema PARÇA PARÇA iniyor.** Ölçüldü 2026-09-13: **`WeavingOrder` İNDİ** (P1, `77b69da9`) · **`MachineRun` İNDİ** (P2, migration `20260913220000`). **Hâlâ YOK:** `MachineSpec` (P4) · `MachineStopEvent` ailesi + `ShiftInstance` + `MachineCollector` (P2b) · `DoffEvent` + `RollEntrySource.WEAVING` (P3). Sıra: **P1 ✅ → P2 ✅ → P4 → P2b → P3.** O tabloları anan kural satırları **hâlâ tasarım hükmüdür**; inmiş olanlarınki kodun sözleşmesidir.
+> ⚠️ **BU ALAN KISMEN KÂĞITTADIR — şema PARÇA PARÇA iniyor.** Ölçüldü 2026-09-13: **`WeavingOrder` İNDİ** (P1, `77b69da9`) · **`MachineRun` İNDİ** (P2, `c07396e6`) · **`MachineSpec` + `LoomShedType` + `MachineMonitoringState` İNDİ** (P4, migration `20260913230000`). **Hâlâ YOK:** `Machine.productionLineCount`/`warpBeamSlots` + hat no doğrulaması (P4b) · `MachineStopEvent` ailesi + `ShiftInstance` + `MachineCollector` (P2b) · `DoffEvent` + `RollEntrySource.WEAVING` (P3). Sıra: **P1 ✅ → P2 ✅ → P4 ✅ → P4b → P2b → P3.**
+>
+> ⛔ **P4b HERHANGİ BİR YAZMA YÜZEYİNDEN ÖNCE İNER.** Bugün `productionLineNo ≤ productionLineCount` doğrulaması yok ve bu tehlikesiz, çünkü o alanı yazan uç da yok; P2b ilk yazma yüzeyini açtığı gün borç tehlikesiz olmaktan çıkar. *Bir doğrulama borcu, onu ihlal edebilecek ilk yüzeyden önce kapanır.* O tabloları anan kural satırları **hâlâ tasarım hükmüdür**; inmiş olanlarınki kodun sözleşmesidir.
 >
 > ⚠️ **YAZMA YÜZEYİ HENÜZ YOK:** inen iki tablonun servisi/ucu/izni yazılmadı. Bir yetenek "VAR" sayılmak için üçü birden gerekir (motor + çıkış yüzeyi + izin ataması) — bugün yalnız şema var.
 >
@@ -23,6 +25,8 @@
 - **[ÇEKİRDEK]** Talep metre, icra levent, çıktı toptur — üç ayrı eksen tek sayıya bindirilmez; metre↔levent çevrimi take-up ister ve take-up bugün YOKTUR, yani "bu iş kaç levent eder" HESAPLANMAZ. <sub>(DOKUMA-IS-EMRI §2.1)</sub>
 - **[ÇEKİRDEK]** `MachineDataSource` alanları `@default` ALMAZ — sayaç/ölçüm değerini yazan her yol kaynağını AÇIKÇA beyan eder, `SIMULATED` dahil; kararı backend verir. <sub>(DOKUMA-IS-EMRI §3.8)</sub>
 - **[ÇEKİRDEK]** Açık koşum tekilliği MAKİNE değil **ÜRETİM HATTI** başınadır (`machine_runs_one_open_per_prod_line_uq`) — çift enli tezgah yan yana iki ayrı kumaş koşar; yalnız makineye kilitlemek bunu yapısal olarak imkânsız kılar. Tek hatlı makinede `productionLineNo` sabit 1'dir ⇒ reddedilen küme değişmez. <sub>(DOKUMA-TEZGAH §2.8, §10/#23b)</sub>
+- **[ÇEKİRDEK]** İzleme hâli TEK kolondur (`MachineSpec.monitoringState`, `OFF` doğar) — `isMonitored` gibi ikinci bir boolean AÇILMAZ: iki kolan "çift yüklem" sınıfıdır ve tek boolean, kanal kabul testinden bağımsız açılabildiği için ters bağlı bir röleyi %100 randımanla MÜHÜRLETİRDİ. Gölge mod bir reçete cümlesi değil bir DURUMDUR. <sub>(DOKUMA-TEZGAH §2.3)</sub>
+- **[ÇEKİRDEK]** `MachineSpec` satırının VARLIĞI *"bu makine izleniyor"* demektir, *"bu makine bir dokuma tezgahıdır"* DEĞİL; ne olduğu ayrı bir etiketten okunur ve o etiket zorunlu bile değildir (`shedType IS NULL` zaten "bu makine o sınıftan değil" der). `Machine.kind` enum'u AÇILMAZ. <sub>(DOKUMA-TEZGAH §2.3)</sub>
 - **[ÇEKİRDEK]** `machine_runs`ın iki sedi `revokedAt IS NULL` yüklemini ŞART koşar (geri alınmış koşum yer işgal etmez), silme guard'ı ise `revokedAt`i BİLEREK SÜZMEZ (geri alınmış koşum da o makinede üretim yapıldığının kanıtıdır) — **iki ters yön, iki ayrı soru**; gerekçeleri `guarded-hard-remove.ts` → `machineRunCount`ta yan yana yazılıdır ve biri ötekine bakılarak "tutarlı" yapılmaz. <sub>(DOKUMA-TEZGAH §2.8)</sub>
 
 ### Yasaklar

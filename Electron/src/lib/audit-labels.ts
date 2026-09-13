@@ -677,6 +677,19 @@ export const ENUM_LABELS: Record<string, string> = {
   TCMB: "TCMB",
   BOTH: "Hem müşteri hem tedarikçi",
 
+  // ── Tezgah künyesi (dokuma P4, 2026-09-13) — LoomShedType
+  ARMUR: "Armür",
+  JAKAR: "Jakar",
+  KAM: "Kam (Eksantrik)",
+  // ── MachineMonitoringState
+  // ⚠️ Bu üç değer bugün ÇAKIŞMASIZ (ölçüldü: şemada 26 çakışmanın hiçbirinde
+  // yoklar), o yüzden `SHARED_ENUM_VALUES` beyanı gerekmedi. Faz 2'nin makine
+  // DURUM enum'u da bir `OFF` getirecek; o gün çakışma doğar ve "izleme kapalı"
+  // ile "makine kapalı" için ORTAK bir Türkçe doğru mu sorusu açılır.
+  // Çakışmanın güncel hâli buradan değil, `SHARED_ENUM_VALUES`ten ÖLÇÜLÜR.
+  OFF: "İzleme kapalı",
+  SHADOW: "Gölge mod",
+  LIVE: "Yayında",
 };
 
 // =============================================================================
@@ -730,11 +743,17 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
  * PAYLAŞILAN ENUM DEĞERLERİ — BEYAN EDİLMİŞ BİRLİK (2026-09-13).
  *
  * ⚠️ BİR DEĞERİN PAYLAŞILMASI KUSUR DEĞİLDİR; BEYAN EDİLMEMİŞ OLMASI KUSURDUR.
- * Aşağıdaki 25 satır 25 borç değil, 25 ONAYLANMIŞ ortaklıktır.
+ * Aşağıdaki satırlar borç değil, ONAYLANMIŞ ortaklıklardır.
+ *
+ * ⚠️ BU BAŞLIKTA SAYI YAZMIYOR ve bu bilinçlidir: önceki hâli *"25 satır / 239
+ * değerin 25'i"* diyordu ve bayatlamıştı (gerçek 26/241 idi; dokuma P4 ile
+ * 26/247 oldu). Sayı taşıyan her başlık, listeye satır ekleyen HER commit'in
+ * bakım borcudur ve o borç sessizce ödenmez. Güncel sayı ÖLÇÜLÜR — kaynak
+ * `schema.prisma` + bu liste, ve `test_audit_labels` §4 ikisini iki yönlü
+ * karşılaştırır.
  *
  * NEDEN VAR: `ENUM_LABELS` düz `değer → Türkçe`dir ve bir değeri birden çok
- * enum paylaşabilir (ölçüldü 2026-09-13: 239 değerin 25'i paylaşımlı,
- * `CANCELLED` tek başına 14 enum'da). Harita ilk göreni tutar ⇒ paylaşılan bir
+ * enum paylaşabilir (`CANCELLED` tek başına 14 enum'da). Harita ilk göreni tutar ⇒ paylaşılan bir
  * değerde TEK cevap verilir. O cevap tüm paylaşanlar için doğruysa sorun yok;
  * değilse denetim ekranı yanlış Türkçe basar ve DERLEYİCİ SUSAR.
  *

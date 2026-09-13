@@ -198,6 +198,14 @@ const EXPECTED: Record<string, string> = {
   "Machine <- Roll.createdMachine : SetNull": "guarded (rollCreatedCount) — KK1 giriş atfı",
   "Machine <- RollMovement.machine : SetNull": "guarded (rollMovementCount) — revokedAt süzülmez, geri alınmış hareket de üretim kanıtı",
   "Machine <- RollOperation.machine : SetNull": "guarded (rollOperationCount) — kurşun/QC2 damgası",
+  // Dokuma P4 (2026-09-13). Cascade BİLİNÇLİ: künye makinesiz anlamsızdır.
+  // ⚠️ Bu satır guard'ın YOKLUĞUNU beyan eder, VARLIĞINI değil — ve bugün doğru:
+  // künyenin yazma yüzeyi yok, yani `baselineRunHours` (ERP öncesi çalışma saati
+  // bakiyesi, ELLE girilen veri) hiç dolamaz. O yüzey açıldığı gün dolu bakiye
+  // Cascade ile sessizce ölebilir hâle gelir ⇒ önizlemeye 409 guard'ı O DİLİMDE
+  // eklenir ve bu satır "guarded"a döner. Guard, ihlal edebilecek ilk yüzeyle
+  // birlikte doğar — öncesinde erişilemez bir dalı korurdu.
+  "Machine <- MachineSpec.machine : Cascade": "cascade-intended — künye makinesiz anlamsız (yazma yüzeyi gelince baselineRunHours guard'ı eklenir)",
   "Station <- PeripheralDevice.station : SetNull": "guarded (peripheralCount — stationId VEYA machine.stationId)",
   "Station <- Roll.entryStation : SetNull": "guarded (rollEntryStationCount, 2026-08-05) — makine damgası olmayan girişleri de kapsar",
   "Station <- StationColor.station : Cascade": "cascade-intended — istasyon renk yapılandırması istasyonsuz anlamsız",
@@ -273,6 +281,14 @@ function machineGuardTargets(): string[] {
 const MACHINE_GUARD_EXEMPT: Record<string, string> = {
   "peripheralDevice.machineId":
     "donanım BLOKLAMAZ: silmede machineId=null'a çekilir (kayıt + ayar korunur, atamasız boşa çıkar)",
+  // Dokuma P4 (2026-09-13). ⚠️ Muafiyet SÜRESİZ DEĞİL, yazma yüzeyine bağlı:
+  // künyenin `baselineRunHours` alanı ERP öncesi çalışma saati bakiyesidir ve
+  // ELLE girilir — dolu bir bakiye Cascade ile sessizce ölmemeli. Bugün o alanı
+  // yazan hiçbir uç YOK (P4 şema-only), yani guard erişilemez bir dalı korurdu.
+  // Künye yazma ucunu açan dilim bu satırı SİLER ve `MACHINE_DELETE_GUARDS`a
+  // "bakiyesi dolu künye" guard'ını ekler.
+  "machineSpec.machineId":
+    "künye Cascade ile birlikte ölür (makinesiz anlamsız); bakiye guard'ı yazma yüzeyiyle gelecek",
 };
 
 // =============================================================================
