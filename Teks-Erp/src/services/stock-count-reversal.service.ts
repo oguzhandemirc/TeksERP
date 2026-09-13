@@ -11,10 +11,14 @@
 // onun iplik bakiyesini ve raf gerçeğini yalanlardı (fason LIFO iptal emsali).
 //
 // ⚠️ HEP-YA-HİÇ, AMA ÇIKIŞSIZ DEĞİL: sayımın düşürdüğü top arada ELLE geri
-// alınmışsa (`inventory.restoreCancelledRoll` — o yol defter yazmaz) storno
+// alınmışsa (`inventory.restoreCancelledRoll`) storno
 // REDDEDİLMEZ; o top `LEDGER_ONLY` dalına düşer: statüsüne DOKUNULMAZ, yalnız
 // defter karşılığı (CANCEL_REVERSAL + sapma damgası) yazılır. Reddetmek, LIFO ile
 // birleşince o deponun TÜM eski sayımlarının storno yolunu kalıcı kapatıyordu.
+// ⚠️ O YOL ARTIK DEFTER YAZIYOR (2026-09-12) — eski yorum "defter yazmaz" diyordu ve
+// bayattı. Ama kapsamı `ROLL_CANCEL`dır; sayımın `STOCK_COUNT` sebep kodlu satırını
+// BULAMAZ, yani iki yol aynı iptali iki kez geri almıyor. Bu ayrım load-bearing:
+// kapsam genişletilirse çift ters kayıt doğar.
 // ⚠️ ÇİFT YAZIM SEDDİ TEK ALANDADIR: "bu geri alma deftere yazıldı mı" sorusunun
 // cevabı, ileri (CANCEL) satırının terslenmiş olup olmadığıdır — `reversesMovementId`
 // zinciri (tasarım D2a/D2b). Satır zaten terslenmişse ters kayıt YAZILMAZ, yalnız
@@ -34,7 +38,7 @@ import { syncPurchaseOrderSafely } from "./purchase-order.service";
 import { readIplikEnabled } from "./system-setting.service";
 import { applyYarnMovementTx, yarnMovementSign } from "./yarn.service";
 import { postStockMove } from "./helpers/warehouse-ledger.helper";
-import { reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
+import { reverseLegacyStockMove, reverseStockMove } from "./helpers/warehouse-ledger-reverse.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { stockCountCancelReason, stockCountVoidReason } from "./stock-count.service";
 import {
@@ -175,21 +179,40 @@ async function reverseTx(tx: Prisma.TransactionClient, stockCountId: string, rea
     // ESKİ KAYIT DALI (grandfathering, tasarım D2b): ileri satır yok ya da `fromStatus`
     // taşımıyor — yön aynalanamaz, uç elle kurulur ve satır BAĞSIZ kalır. Σ etkilenmez
     // (katkı yönden gelir, bağdan değil); yeni yazan yol bağı doldurmak zorundadır.
-    if (!r.ledgerToStatus) {
-      throw AppError.internal(
-        `${r.barcode ?? r.rollId}: ters kaydın giriş ucu kurulamadı (statü bilinmiyor).`,
+    // ⚠️ KANIT YOKSA SATIR YAZILMAZ, 409 (2026-09-13). Eski hâlde `ledgerToStatus`
+    // topun BUGÜNKÜ statüsüne düşüyordu ve top geri alındıktan sonra yoluna devam
+    // etmişse satır "stok kümesine IN_PRODUCTION statüsünde girdi" diyordu — hiç
+    // olmamış bir olay. Kanıt ileri satırın `fromStatus`/`fromWarehouseId` ucudur;
+    // yoksa tek iz audit'tedir ve audit 6 ayda arşivlenir ⇒ iş kararına dayanak
+    // olamaz. `internal` DEĞİL `conflict`: bu bir program hatası değil, veri durumu.
+    if (!r.ledgerToStatus || !r.ledgerToWarehouseId) {
+      throw AppError.conflict(
+        `${r.barcode ?? r.rollId}: top stok dışına çıkmış ve geri giriş anı kayıtlı değil — ` +
+          "sayım stornosu bu topun ters satırını yazamaz.",
+        { code: "REVERSAL_ENTRY_UNKNOWN", rollId: r.rollId },
       );
     }
-    await postStockMove(tx, {
-      rollId: r.rollId,
+    // ⚠️ BAĞSIZ DEĞİL, BAĞLI: ileri satır VARSA (statüsüz eski kayıt) K4 dalı
+    // kullanılır — bağ `reversesMovementId`e düşer, çift storno DB unique'ine
+    // çarpar. Eski yorum "satır BAĞSIZ kalır" diyordu; o bağsızlık bu commit'te
+    // kapandı. İleri satır HİÇ yoksa bağ kurulamaz ve satır bağsız doğar.
+    const ters = {
       eventType: WarehouseEventType.CANCEL_REVERSAL,
-      qty: r.qty,
-      to: { warehouseId: plan.warehouseId, status: r.ledgerToStatus },
       reasonCode: STOCK_MOVE_REASON.STOCK_COUNT,
-      stockCountId: plan.countId,
+      to: { warehouseId: r.ledgerToWarehouseId, status: r.ledgerToStatus },
       userId: userId ?? null,
       notes: note,
-    });
+    };
+    if (r.cancelMovementId) {
+      await reverseLegacyStockMove(tx, r.cancelMovementId, ters);
+    } else {
+      await postStockMove(tx, {
+        rollId: r.rollId,
+        qty: r.qty,
+        stockCountId: plan.countId,
+        ...ters,
+      });
+    }
   }
   if (plan.rolls.length > 0) {
     // Sapma damgası HER dalda atılır (defter satırını başkası yazmış olsa bile

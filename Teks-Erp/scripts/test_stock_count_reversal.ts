@@ -17,7 +17,9 @@
 //      sıra korunursa ikisi de stornolanır (eski bağsız sapma metinle bulunur)
 //   §6 ⭐ ÇIKIŞ DALLARI: elle geri alınmış top stornoyu BLOKLAMAZ — statüsüne
 //      dokunulmaz, yalnız defter karşılığı yazılır (LEDGER_ONLY); ters satırı
-//      zaten yazılmış topta satır TEKRAR YAZILMAZ, yalnız sapma damgalanır
+//      zaten yazılmış topta satır TEKRAR YAZILMAZ, yalnız sapma damgalanır.
+//      Ters satırın GİRİŞ UCU ileri satırın kanıtından gelir (topun bugünkü
+//      statüsünden DEĞİL); kanıt yoksa uç uydurulmaz, işlem 409'da durur
 //   §7 Kaynak: iptal metni tek kaynaktan; storno servisinde defter silme yok;
 //      rota iki izni birden ister
 // =============================================================================
@@ -308,20 +310,31 @@ async function main(): Promise<void> {
 
   // §6l ⭐ ESKİ KAYIT DALI (grandfathering, tasarım D2b): ②-c öncesi yazılmış ileri
   // satır `fromStatus` TAŞIMAZ, yani yön aynalanamaz. Storno PATLAMAMALI — uç elle
-  // kurulur ve satır BAĞSIZ kalır (Σ yönden gelir, bağdan değil).
+  // kurulur.
+  //
+  // ⚠️ "BAĞSIZ" İDDİASI 2026-09-13'te TERS ÇEVRİLDİ: statüsüz ileri satırın tersi
+  // artık `reverseLegacyStockMove` (K4) ile yazılıyor ⇒ satır BAĞLI doğuyor
+  // (`reversesMovementId` → ileri satır). Bağsızlığın bedeli vardı: çift storno
+  // seddi (DB unique) bağ olmadan çalışmaz ve "bu satır ters kayıt mı" sorusu
+  // cevapsız kalırdı. Bağ yalnız ileri satır HİÇ yoksa kurulamaz.
   const r7 = await makeRoll(wh.id, fabric.id, 25, RollStatus.WAREHOUSE);
   const cL = await runCount(wh.id, [r7]);
   await prisma.$executeRaw`UPDATE warehouse_movements SET "fromStatus" = NULL
     WHERE "stockCountId" = ${cL.id}::uuid AND "eventType" = 'CANCEL'::"WarehouseEventType"`;
+  // Bağın HANGİ satıra kurulduğunu ölç: `!== null` "bağlı" der, "doğru satıra bağlı" DEMEZ.
+  const fwdL = await prisma.warehouseMovement.findFirstOrThrow({
+    where: { rollId: r7, stockCountId: cL.id, eventType: WarehouseEventType.CANCEL },
+    select: { id: true },
+  });
   await stockCountReversalService.reverse(cL.id, "eski satir dali", ADMIN);
   const legacyRev = await prisma.warehouseMovement.findMany({
     where: { rollId: r7, stockCountId: cL.id, eventType: WarehouseEventType.CANCEL_REVERSAL },
     select: { reversesMovementId: true, toWarehouseId: true, toStatus: true },
   });
   check(
-    "§6l ⭐ fromStatus'suz ileri satırda storno BAĞSIZ ters satır yazdı (uç elle kuruldu)",
+    "§6l ⭐ fromStatus'suz ileri satırda storno BAĞLI ters satır yazdı (uç elle kuruldu, bağ ileri satıra)",
     legacyRev.length === 1 &&
-      legacyRev[0]!.reversesMovementId === null &&
+      legacyRev[0]!.reversesMovementId === fwdL.id &&
       legacyRev[0]!.toWarehouseId === wh.id &&
       legacyRev[0]!.toStatus === RollStatus.WAREHOUSE,
     JSON.stringify(legacyRev),
@@ -407,6 +420,80 @@ async function main(): Promise<void> {
   const revOfFwdN = await prisma.warehouseMovement.count({ where: { reversesMovementId: fwdN.id } });
   check("§6n2 ⭐ Yeni ters satır yazılmadı (ileri satırın tek tersi duruyor)", revOfFwdN === 1, `n=${revOfFwdN}`);
 
+  // §6p ⭐ TOP STOK KÜMESİNDEN ÇIKMIŞ (LEDGER_ONLY dalı, ölçülmemiş bileşim 2026-09-13):
+  // sayım topu düşürdü → elle geri alındı → top yoluna devam etti ve artık stok
+  // kümesinde DEĞİL (sevk edildi, deposu boş). Ters satırın giriş ucu KANITTAN
+  // gelmeli (ileri satırın `fromStatus`/`fromWarehouseId`ı = topun sayım anında
+  // gözlendiği raf), topun BUGÜNKÜ statüsünden değil — yoksa satır "top stok
+  // kümesine SHIPPED statüsünde girdi" der ki böyle bir olay HİÇ olmadı ve
+  // statüsü stok kümesinde olmayan ucun deposu da olamaz (K1 uç şekli).
+  //
+  // Ölçülen dal AYNALAMA dalıdır (`reverseStockMove`): ileri satır `fromStatus`
+  // taşıdığı için uç ondan aynalanır. İkizi §6r, ileri satır statü taşımadığında
+  // planın `ledgerToStatus`ını ölçer — ikisi birlikte iki dalı kapatır.
+  const r10 = await makeRoll(wh.id, fabric.id, 22, RollStatus.WAREHOUSE);
+  const cP = await runCount(wh.id, [r10]);
+  await inventory.restoreCancelledRoll(r10, undefined, { reason: "elle geri alındı (stok dışı sondası)" });
+  // Topu stok kümesinin DIŞINA taşı: statü + depo birlikte değişir (deposuz stok
+  // topu ayrı bir ihlaldir; bu sonda onu değil "uç nereden geliyor"u ölçüyor).
+  await prisma.roll.update({ where: { id: r10 }, data: { status: RollStatus.SHIPPED, warehouseId: null } });
+  // POZİTİF KONTROL: sonda iddia ettiği durumu GERÇEKTEN kurdu mu — kurmadıysa
+  // aşağıdaki iki kontrol "stok dışı" senaryosunu hiç ölçmemiş olur (vakumen yeşil).
+  const r10Setup = await prisma.roll.findUniqueOrThrow({ where: { id: r10 }, select: { status: true, warehouseId: true } });
+  check(
+    "§6p1 Sonda kurulumu: top stok kümesinin DIŞINDA (SHIPPED, deposuz)",
+    r10Setup.status === RollStatus.SHIPPED && r10Setup.warehouseId === null,
+    `${r10Setup.status}/${String(r10Setup.warehouseId)}`,
+  );
+  const prevP = (await stockCountReversalService.preview(cP.id)).data!;
+  check(
+    "§6p0 Stok dışına çıkmış top LEDGER_ONLY dalında (statüsüne dokunulmaz)",
+    prevP.rolls.find((r) => r.rollId === r10)?.action === "LEDGER_ONLY",
+    JSON.stringify(prevP.rolls.map((r) => r.action)),
+  );
+  await stockCountReversalService.reverse(cP.id, "stok disina cikmis top", ADMIN);
+  const revP = await prisma.warehouseMovement.findMany({
+    where: { rollId: r10, stockCountId: cP.id, eventType: WarehouseEventType.CANCEL_REVERSAL },
+    select: { toWarehouseId: true, toStatus: true },
+  });
+  check(
+    "§6p ⭐ Ters satırın giriş ucu KANITTAN (sayımın gözlediği raf), topun bugünkü SHIPPED statüsünden DEĞİL",
+    revP.length === 1 && revP[0]!.toStatus === RollStatus.WAREHOUSE && revP[0]!.toWarehouseId === wh.id,
+    JSON.stringify(revP),
+  );
+  const r10After = await prisma.roll.findUniqueOrThrow({ where: { id: r10 }, select: { status: true, warehouseId: true } });
+  check(
+    "§6p2 Topun statüsü ve deposu DEĞİŞMEDİ (defter karşılığı yazıldı, top geri çağrılmadı)",
+    r10After.status === RollStatus.SHIPPED && r10After.warehouseId === null,
+    `${r10After.status}/${String(r10After.warehouseId)}`,
+  );
+
+  // §6r ⭐ KANIT YOK → SATIR UYDURULMAZ, 409. §6p'nin ikizi: aynı bileşimde ileri
+  // satır `fromStatus` TAŞIMAZSA (②-c öncesi eski kayıt) giriş ucu hiçbir yerden
+  // türetilemez — `target` da boştur, çünkü top bu sayım tarafından iptalli değil.
+  // Eski kod burada topun o anki statüsünü yazardı; artık işlem DURUR.
+  const r11 = await makeRoll(wh.id, fabric.id, 12, RollStatus.WAREHOUSE);
+  const cR = await runCount(wh.id, [r11]);
+  await inventory.restoreCancelledRoll(r11, undefined, { reason: "elle geri alındı (kanıtsız sonda)" });
+  await prisma.roll.update({ where: { id: r11 }, data: { status: RollStatus.SHIPPED, warehouseId: null } });
+  await prisma.$executeRaw`UPDATE warehouse_movements SET "fromStatus" = NULL
+    WHERE "stockCountId" = ${cR.id}::uuid AND "eventType" = 'CANCEL'::"WarehouseEventType"`;
+  const kanitsiz = await expectErr(() => stockCountReversalService.reverse(cR.id, "kanitsiz storno", ADMIN));
+  check(
+    "§6r ⭐ Kanıt yoksa storno 409 REVERSAL_ENTRY_UNKNOWN (uç UYDURULMADI)",
+    kanitsiz?.status === 409 && kanitsiz.code === "REVERSAL_ENTRY_UNKNOWN",
+    JSON.stringify(kanitsiz),
+  );
+  const revR = await prisma.warehouseMovement.count({
+    where: { rollId: r11, stockCountId: cR.id, eventType: WarehouseEventType.CANCEL_REVERSAL },
+  });
+  const cRHead = await prisma.stockCount.findUniqueOrThrow({ where: { id: cR.id }, select: { reversedAt: true } });
+  check(
+    "§6r2 409 sonrası tx geri sarıldı: ters satır yok, storno damgası yok",
+    revR === 0 && cRHead.reversedAt === null,
+    `satır=${revR} damga=${String(cRHead.reversedAt)}`,
+  );
+
   // §7
   const svc = readFileSync(join(__dirname, "../src/services/stock-count-reversal.service.ts"), "utf8");
   // Plan katmanı AYRI dosyada (karar ↔ yazım ayrımı): tarama İKİSİNİ birden okur,
@@ -453,6 +540,20 @@ main()
     try {
       const counts = await prisma.stockCount.findMany({ where: { warehouseId: { in: warehouseIds } }, select: { id: true } });
       const ids = counts.map((c) => c.id);
+      // ⚠️ TERS SATIRLAR ÖNCE ve KÜME BAĞDAN BULUNUR: `reversesMovementId` kendine
+      // bakan bir FK ve `onDelete: Restrict` — RESTRICT satır satır denetlenir (NO
+      // ACTION gibi ifade sonuna ÖTELENMEZ), yani ileri satırla tersini tek
+      // `deleteMany` silmek P2003'e düşer ve temizlik sessizce yarıda kalırdı
+      // (ölçüldü 2026-09-13: 19 depo · 217 sayım artığı birikmişti).
+      //
+      // ⚠️ ÇOCUK KÜMESİ KAPSAMDAN DEĞİL BAĞDAN: elle geri alma yolunun yazdığı
+      // `CANCEL_REVERSAL` satırları `stockCountId` TAŞIMAZ, yani "sayımın satırları"
+      // süzmesine girmezler ama sayımın `CANCEL` satırını işaret ederler. Küme
+      // `reversesMovement` ilişkisinden okunur; her defter satırının `rollId`i
+      // olduğu için bu süzme çocukların tamamını kapsar.
+      if (rollIds.length) {
+        await prisma.warehouseMovement.deleteMany({ where: { reversesMovement: { rollId: { in: rollIds } } } });
+      }
       if (ids.length) {
         await prisma.yarnMovement.deleteMany({ where: { stockCountId: { in: ids } } });
         await prisma.warehouseMovement.deleteMany({ where: { stockCountId: { in: ids } } });
@@ -473,7 +574,12 @@ main()
       }
       if (warehouseIds.length) await prisma.warehouse.deleteMany({ where: { id: { in: warehouseIds } } });
     } catch (e) {
-      console.warn("Temizlik uyarısı:", (e as Error).message.slice(0, 300));
+      // ⚠️ UYARI DEĞİL KIRMIZI: `console.warn` koşucunun yeşil çıktısında görünmez,
+      // yani yarıda kalan temizlik ölçülmemiş bir artık bırakır (ölçüldü 2026-09-13).
+      fail++;
+      // Mesajın SONU okunur: Prisma'nın FK hatasında sebep (`constraint`) en sonda,
+      // başta ise yalnız çağrı yeri ve kod dökümü var.
+      console.error("❌ Temizlik YARIDA KALDI — artık bırakıldı:", (e as Error).message.replace(/\s+/g, " ").slice(-300));
     }
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();

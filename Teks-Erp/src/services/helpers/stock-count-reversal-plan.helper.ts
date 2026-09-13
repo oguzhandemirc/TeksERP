@@ -38,8 +38,14 @@ export interface ReversalRollPlan {
   cancelMovementId: string | null;
   /** İleri satır `fromStatus` taşıyor mu — taşımıyorsa yön aynalanamaz, uç elle kurulur. */
   cancelHasStatus: boolean;
-  /** Bağsız dalda ters satırın GİRİŞ ucundaki statü (rafına dönen top için hedef raf). */
+  /**
+   * Ters satırın GİRİŞ ucundaki statü — KANITTAN türetilir (ileri satırın
+   * `fromStatus`ı), topun bugünkü statüsünden DEĞİL. `null` ⇒ kanıt yok ⇒ satır
+   * yazılmaz, çağıran 409 verir.
+   */
   ledgerToStatus: RollStatus | null;
+  /** Ters satırın GİRİŞ ucundaki depo — aynı kanıttan (`fromWarehouseId`). */
+  ledgerToWarehouseId: string | null;
   action: ReversalRollAction;
   /** Dalın gerekçesi (LEDGER_ONLY/ALREADY_REVERSED) — önizlemede görünür. */
   note: string | null;
@@ -135,7 +141,13 @@ async function planRolls(db: Db, count: CountHead): Promise<ReversalRollPlan[]> 
       eventType: WarehouseEventType.CANCEL,
       reversesMovementId: null,
     },
-    select: { id: true, rollId: true, fromStatus: true, reversedBy: { select: { id: true }, take: 1 } },
+    // ⚠️ `fromWarehouseId` de okunur: ters satırın GİRİŞ UCU bu satırın kanıtıdır.
+    // Sayımın deposunu kullanmak yaklaşıktır — top geri alındıktan sonra transfer
+    // olmuşsa sayımın deposu artık topun yeri değildir.
+    select: {
+      id: true, rollId: true, fromStatus: true, fromWarehouseId: true,
+      reversedBy: { select: { id: true }, take: 1 },
+    },
     // Sıra TANIMLI olmalı: aşağıdaki Map'te "son kazanır" ve sırasız okuma aynı
     // girdide farklı satır seçebilirdi (top başına birden çok ileri satır olabilir).
     orderBy: { createdAt: "asc" },
@@ -183,9 +195,24 @@ async function planRolls(db: Db, count: CountHead): Promise<ReversalRollPlan[]> 
       goodsReceiptId: roll?.goodsReceiptId ?? null,
       cancelMovementId: cancel?.id ?? null,
       cancelHasStatus: cancel?.fromStatus != null,
-      // Rafına dönen topta hedef raf; dokunulmayan topta topun BUGÜNKÜ statüsü
-      // (elle geri alınmış top zaten bir rafta duruyor).
-      ledgerToStatus: target ?? roll?.status ?? null,
+      // ⚠️ UÇ KANITTAN TÜRETİLİR, topun BUGÜNKÜ statüsünden DEĞİL (2026-09-13).
+      //
+      // Eski zincir `target ?? roll?.status` idi ve `LEDGER_ONLY` dalında `target`
+      // boş olduğu için topun O ANKİ statüsünü yazıyordu. Top geri alındıktan sonra
+      // yoluna devam etmişse (üretime alındı · fasona çıktı · sevk edildi · fire)
+      // satır "top stok kümesine IN_PRODUCTION statüsünde girdi" diyordu — HİÇ
+      // OLMAMIŞ bir olay. Kanıt sayımın KENDİ ileri `CANCEL` satırındadır: sayım
+      // topu düşürürken gözlediği rafı hem `preCancelStatus`a hem o satırın
+      // `fromStatus`/`fromWarehouseId` ucuna yazar, elle geri alma da TAM o rafa
+      // döner. `preCancelStatus` kanıt DEĞİL: geri alma onu aynı update'te
+      // `null`'lar, yani storno anında boştur.
+      //
+      // ⚠️ `roll?.status` FALLBACK'İ BİLEREK KALDIRILDI: kanıt yoksa satır
+      // yazılmamalı ve servis bunu zaten `!r.ledgerToStatus` ile 409'a çeviriyor.
+      // Yani düzeltme bir dal EKLEMEK değil, yanlış bir fallback'i ÇIKARMAK.
+      ledgerToStatus: target ?? cancel?.fromStatus ?? null,
+      /** Ters satırın giriş ucundaki depo — ileri satırın kanıtı. */
+      ledgerToWarehouseId: cancel?.fromWarehouseId ?? null,
       action,
       note,
       blocker,
