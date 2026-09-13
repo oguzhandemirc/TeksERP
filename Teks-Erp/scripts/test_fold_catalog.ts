@@ -35,6 +35,23 @@ function check(label: string, ok: boolean, extra = "") {
   if (ok) { pass++; console.log(`✅ ${label}${extra ? " — " + extra : ""}`); }
   else { fail++; console.log(`❌ ${label}${extra ? " — " + extra : ""}`); }
 }
+/**
+ * Hata mesajındaki "Tanımlı değerler: A, B, C." listesini TOKEN olarak okur.
+ *
+ * ⛔ NEDEN `m.includes("9-KAT")` DEĞİL (2026-09-13, CI'da iki kez kırmızı):
+ * sonda değeri `TEST-KAT-${Date.now()}-KAT` ve zaman damgası `9` ile bittiğinde
+ * dizgi `…5549-KAT` oluyor ⇒ **`"9-KAT"` alt dizgisini İÇERİYOR**. Yüklem
+ * sınırsız olduğu için ALAKASIZ bir değerle eşleşti ve bekçi 10 koşumun
+ * 1'inde kırmızı verdi (ölçüldü: yerel 15 koşumda 1, CI'da iki kırmızının
+ * ikisinde de damga `9` ile bitiyor). Sınırı beyan etmeyen yüklem alakasızla
+ * eşleşir — panzehir: VİRGÜLLE ayrılmış listeyi TOKEN olarak oku.
+ */
+export function tanimliDegerler(mesaj: string): string[] {
+  const m = mesaj.match(/Tanımlı değerler:\s*(.*?)\.\s/);
+  if (!m) return [];
+  return m[1].split(",").map((x) => x.trim()).filter(Boolean);
+}
+
 async function expectErr(label: string, part: string, fn: () => Promise<unknown>) {
   try { await fn(); check(label, false, "hata bekleniyordu"); }
   catch (e) { const m = e instanceof Error ? e.message : String(e); check(label, m.includes(part), m); }
@@ -60,6 +77,14 @@ const propSvc = new FabricPropertyService({
 });
 
 async function main() {
+  // ── §0 YÜKLEM SONDALARI (DB'siz) — sınırsız eşleşme geri gelmesin ───────
+  const SAHTE = "'X' geçerli bir kat değeri değil. Tanımlı değerler: 2-KAT, TEST-KAT-1789324255549-KAT, 7-KAT. Yeni bir kat…";
+  check("§0a ⭐ token okuma: '…5549-KAT' 9-KAT SAYILMAZ", !tanimliDegerler(SAHTE).includes("9-KAT"));
+  check("§0b ⭐ gerçek 9-KAT listede ise SAYILIR",
+    tanimliDegerler("'X' geçerli bir kat değeri değil. Tanımlı değerler: 2-KAT, 9-KAT. Yeni…").includes("9-KAT"));
+  check("§0c ⭐ eski sınırsız yüklem YANILIYORDU", SAHTE.includes("9-KAT"));
+  check("§0d liste okunamazsa boş döner", tanimliDegerler("alakasız metin").length === 0);
+
   const ts = Date.now();
   // Kataloğu TESTİN KENDİSİ kurar — ortamdaki veriye bağımlı olma kuralı.
   // Gerçek "KAT" satırına DOKUNULMAZ; ayrı bir sonda özelliği kullanılır ve
@@ -161,7 +186,7 @@ async function main() {
       check("pasif değer hata listesinde görünmez", false, "hata bekleniyordu");
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
-      check("pasif değer hata listesinde GÖRÜNMEZ", !m.includes("9-KAT"), m);
+      check("pasif değer hata listesinde GÖRÜNMEZ", !tanimliDegerler(m).includes("9-KAT"), m);
     }
 
     // ── 6) FAIL-OPEN: katalog yoksa değer geçer ─────────────────────────────
