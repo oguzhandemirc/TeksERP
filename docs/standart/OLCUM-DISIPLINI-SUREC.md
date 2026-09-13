@@ -106,6 +106,37 @@ Bir aracı yeni bir koşum ortamına taşımak, onu **yeniden ölçmeyi** gerekt
 Kardeşleri § 4 · Araç ölçümün içinde · `OLCUM-DISIPLINI-ORTAK-AGAC.md` § Başka oturumun
 AĞAÇ-BÜTÜNÜ komutu.
 
+### ÜRETİLMİŞ istemci ağaçla hizalı mı — `rebase`/`cherry-pick` şemayı taşır, ÜRETİLENİ taşımaz
+`@prisma/client` kaynak değil **ÜRETİLMİŞ ARTIFAKTTIR**: `git` onu taşımaz. Şema değişikliği
+içeren bir commit'i `rebase`/`cherry-pick`le aldıktan sonra `prisma generate` koşulmazsa,
+ağaçtaki kod YENİ enum/alana bakar, istemci ESKİSİNİ bilir ⇒ bekçi **ürün kodunda** hata
+gösterir. Okuyan kusuru üründe arar; oysa kusur ölçüm ORTAMINDADIR.
+*(d9, 2026-09-14 — sınıf REJİM: aynı yüklem, aynı ağaç, farklı ortam, farklı sonuç.)*
+
+> **Üretilmiş her artifakt bir ölçüm ÖN KOŞULUDUR:** ölçmeden önce *"elimdeki üretilmiş
+> şey, ölçtüğüm ağaçtan mı doğdu?"* diye sor. Cevap "bilmiyorum"sa ölçüm henüz başlamadı.
+📌 Ucuz kontrol — şemadaki TÜM enum'ları üretilmiş istemciyle karşılaştırır (tek enum
+sormak, sorduğun enum eskiyse yanıltır):
+```bash
+cd Teks-Erp && node -e '
+const fs=require("fs"), c=require("@prisma/client");
+const sema=fs.readFileSync("prisma/schema.prisma","utf8");
+let ayrik=0, n=0;
+for (const m of sema.matchAll(/^enum\s+(\w+)\s*\{([^}]*)\}/gm)) {
+  n++; const u=c[m[1]];
+  const eksik=(m[2].match(/^\s*([A-Z0-9_]+)/gm)||[]).map(s=>s.trim()).filter(d=>!u||!(d in u));
+  if (eksik.length) { console.log("✗", m[1], eksik.join(",")); ayrik++; }
+}
+console.log(`sema enum ${n} · ayrisan ${ayrik}`);'
+```
+*(Ölçüldü 2026-09-14: 81 şema enum'u, ayrışan 0 — yani o gün ortam hizalıydı ve bu da bir
+ölçümdür; "koştum, temiz" demek için sayıyı görmek gerekir.)*
+⚠️ **Ve izole çalışma ağacında bu kontrol PAYLAŞILAN bir şeyi ölçer:** `node_modules`
+sembolik bağla ana ağaca bağlıysa üretilmiş istemci de ORTAKTIR — *"benim ağacımda hizalı"*
+cümlesi, başka bir oturumun `generate`inin sonucu olabilir ve o oturum şemayı geri alırsa
+sessizce bozulur. Kardeşi `OLCUM-DISIPLINI-ORTAK-AGAC.md` § Paylaşılan `node_modules`
+üstünde worktree, izolasyon değil TAKLİTTİR.
+
 ### Yıkıcı bir yolun DÜZELTMESİ, önce KURBAN EDİLEBİLİR bir hedefte sınanır
 Bir yolun yıkıcı olduğu **biliniyorsa**, *"düzelttim"* iddiasının ilk ölçümü gerçek
 hedefte yapılmaz. Düzeltme yarım uygulanmış olabilir ve sonda, düzeltmeyi değil

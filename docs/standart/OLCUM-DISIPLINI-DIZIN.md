@@ -21,7 +21,7 @@ kalamaz). ⇒ **Dizin bayatlayamaz; bayatlatmayı deneyen commit durur.** İlk d
 bir kereye mahsus üretildi (2026-09-13); bundan sonrasını üreteç değil KAPI tutar —
 üretece bağlı bir dizin, üreteç koşulmadığı gün sessizce bayatlardı.
 
-Sayı bir ölçümdür ve bu satır da kapı altındadır: **150 başlık / 11 dosya**
+Sayı bir ölçümdür ve bu satır da kapı altındadır: **151 başlık / 11 dosya**
 (ölçüldü 2026-09-13; kapı her koşumda yeniden sayar ve sayı tutmazsa kırmızı verir).
 
 ⚙️ **MÜKERRER TARAMASI (dizinin ilk kullanımı, 2026-09-14):** 147 başlık çiftlenip
@@ -94,6 +94,7 @@ açan kişi tabloyu yine baştan sona okur.**
 |  | § KABUK ailesi — "komut çalıştı" ile "ölçüm okundu" ayrı şeylerdir | (`OLCUM-DISIPLINI-SUREC.md`) |
 |  | § ASILI KALMAK, çalışmanın DELİLİ değildir — stdin bekleyen komut "yavaş" görünür | (`OLCUM-DISIPLINI-SUREC.md`) |
 |  | § KANCA ailesi — kendi repo'sunu kuran araç, KANCANIN git ortamını MİRAS ALIR | (`OLCUM-DISIPLINI-SUREC.md`) |
+|  | § ÜRETİLMİŞ istemci ağaçla hizalı mı — `rebase`/`cherry-pick` şemayı taşır, ÜRETİLENİ taşımaz | (`OLCUM-DISIPLINI-SUREC.md`) |
 |  | § Yıkıcı bir yolun DÜZELTMESİ, önce KURBAN EDİLEBİLİR bir hedefte sınanır | (`OLCUM-DISIPLINI-SUREC.md`) |
 |  | § Katalog iki katmanlıdır | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
 |  | § KATMAN 1 · Arıza sınıfları — ölçümün kendisi | (`OLCUM-DISIPLINI-SINIFLAR.md`) |
@@ -197,7 +198,7 @@ açan kişi tabloyu yine baştan sona okur.**
 | [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) | KATMAN 1a — ölçümün ARACI (18 başlık) |
 | [`OLCUM-DISIPLINI-YUKLEM.md`](OLCUM-DISIPLINI-YUKLEM.md) | KATMAN 1a′ — YÜKLEM (ne sorduğun) (15 başlık) |
 | [`OLCUM-DISIPLINI-SINIRSIZ.md`](OLCUM-DISIPLINI-SINIRSIZ.md) | YÜKLEM'in § Sınırsız eşleşme VAKA envanteri (4 başlık) |
-| [`OLCUM-DISIPLINI-SUREC.md`](OLCUM-DISIPLINI-SUREC.md) | komutun SÜRECİ ve ORTAMI (4 başlık) |
+| [`OLCUM-DISIPLINI-SUREC.md`](OLCUM-DISIPLINI-SUREC.md) | komutun SÜRECİ ve ORTAMI (5 başlık) |
 | [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | KATMAN 1b — ölçümün KURGUSU (31 başlık) |
 | [`OLCUM-DISIPLINI-ORTAK-AGAC.md`](OLCUM-DISIPLINI-ORTAK-AGAC.md) | KATMAN 1c — PAYLAŞILAN AĞAÇ, ÇOK OTURUM (8 başlık) |
 | [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) | KATMAN 2 — ölçümden sonraki adım (31 başlık) |
