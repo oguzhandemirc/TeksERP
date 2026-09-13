@@ -126,16 +126,19 @@ React tarafında bayrak okumanın ve fail-closed varsayılanın biçimi.
      `router.use(verifyToken, requireDokumaEnabled)` (`weaving-order` · `machine-run` ·
      `machine-doff`), ölçen `test_dokuma_regime_gate §2a/§2b` (kapı + sıra) ve `§6g`
      (dokuma yüzeyine dokunan HER router kapıyı taşıyor).
-   ⚠️ **Route bayrağa BAKMAZ ve bu bilinçlidir (D1, 2026-09-14).** `ProtectedRoute` yalnız
-   oturum + izin okur (`components/ProtectedRoute.tsx`; dosyada tek bir bayrak atfı yok) —
-   panelde bugün HİÇBİR ekranın bayrak-duyarlı route kapısı yok, emsal `operations/yarn-stock`
-   dâhil. ⇒ Bayrak KAPALI + izin VARKEN elle yazılan URL boş kabuk çizer ve liste isteği
-   403 alır; gezinme yoluyla sıfır görünür fark KARO + PALET gizliliğinden gelir.
-   ⇒ **Eski cümle ("route `/forbidden`e düşer") GEÇERSİZ — 2026-09-14.** Var olmayan bir
-   mekanizmayı ölçüt yazıyordu; bkz. `docs/standart/OLCUM-DISIPLINI-CIKARIM.md`
-   § Bir KAPANIŞ ÖLÇÜTÜ, ölçtüğü MEKANİZMANIN adını taşımalı.
-   ⇒ Bayrak-duyarlı route kapısı (`ProtectedRoute` `SCREEN_CATALOG`tan `modul` okur) AYRI
-   DİLİMDİR (1e hükmü (B), sahibi 47); indiği gün bu ölçüt yeniden yazılır.
+   · **route `/forbidden`e düşer** — ⭐ **İNDİ 2026-09-14 (B dilimi, 47/0c `f6d5e83a`)**:
+     `ProtectedRoute` artık yol → modül aynasını okuyor (`components/ProtectedRoute.tsx:65`
+     `isRouteModuleOpen(location.pathname, moduleCtx)` → `/forbidden`), ayna
+     `lib/route-modules.ts` (`ROUTE_MODULE`) ve kaynağı `SCREEN_CATALOG.modul`; ölçen
+     `test_screen_catalog §4b` (ayna İKİ YÖNLÜ, 28 satır) · `ProtectedRoute.module.test.tsx`
+     · `route-modules.test.ts`. **Panel geneli tek mekanizma** — emsaller de aynı aynadan.
+   ⚠️ **Bu cümlenin ÖNCEKİ hâli GEÇERSİZDİ (2026-09-13 → 2026-09-14):** aynı metin
+   yazılıyken mekanizma YOKTU — `ProtectedRoute` yalnız oturum + izin okuyordu ve panelde
+   hiçbir ekranın bayrak-duyarlı route kapısı yoktu. Cümle bugün doğru; **dünkü hâli bir
+   ölçüt değil bir temenniydi** ve doğrulanırken kendi kendini onaylatmıştı
+   (`docs/standart/OLCUM-DISIPLINI-CIKARIM.md` § Bir KAPANIŞ ÖLÇÜTÜ, ölçtüğü MEKANİZMANIN
+   adını taşımalı). Aradaki fark ÖLÇÜLEBİLİR: dün `ProtectedRoute.tsx`te bayrak atfı 0'dı,
+   bugün `:65`.
 
 ---
 
@@ -148,7 +151,8 @@ AÇIK (1e ürün kararı) · karo + route + palet birebir, yüklem saf (`isWeavi
 `tile-visibility.test` · `CommandPalette.test`) · negatif sonda İKİ yönlü: karo `ctx({dokumaEnabled:false})` → çizilmez
 (`tile-visibility.test`) · backend kapısı 403 `MODULE_DISABLED` döner (`requireDokumaEnabled`, üç router'da ilk `router.use`;
 ölçen `test_dokuma_regime_gate` — **bu bekçinin sayısı 0c'nin ölçümüdür, 5e'nin ağacında `DATABASE_URL` olmadığı için
-KOŞULMADI**). Route `ProtectedRoute` ile yalnız İZNE bakar.
+KOŞULMADI**). Route de bayrağa bakar — **(B) dilimiyle 2026-09-14'te indi** (`f6d5e83a`): `ProtectedRoute` → `isRouteModuleOpen` →
+`/forbidden`, ayna `ROUTE_MODULE` ↔ `SCREEN_CATALOG.modul` (`test_screen_catalog §4b`, iki yönlü, 28 satır).
 ⚠️ **Bu cümlenin ÖNCEKİ hâli ("route `/forbidden`a düşer", delil `test_screen_catalog §4`) ÇÜRÜDÜ ve 2026-09-14'te
 DÜZELTİLDİ** (47 ölçtü — D1/D2; 5e yazdı — sözleşme cümlesi 5e'nin hatasıydı). İki cümle yan yana bırakılmaz.
 
