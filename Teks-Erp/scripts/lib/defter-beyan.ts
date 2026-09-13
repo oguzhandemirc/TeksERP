@@ -342,6 +342,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     borc: [{
       ne: "2 site SİL-YAZ (top düzeltme FLAG replace · WO hedef → top FLAG replace) — versiyon kolonu (validUntil) + okuyucu turu ister, şema penceresi. 3 ÖLÜ TOP TEMİZLİĞİ sitesi 2026-09-14'te KAPANDI: fason kabul iptali · fason transfer geri alma · kesimde ebeveyn retire artık silmiyor, satır ölü topta kalır (okuyucular ölçüldü: fabric-property CHOICE→FLAG sayacı zaten ölü topu sayıyordu, tambur-undo donör dalı count===0 koşullu, WO processedCount rollWhere statü süzmüyor — sınıf değişmedi)",
       kanit: "kapının tarayıcısı (defterYazimlariniTara, SILEN) 2026-09-14: inventory.service.ts:4531 · workorder.service.ts:6009 — ikisi de deftere yazmıyor, replace izi yalnız audit'te (inventory F119, tx dışında). Kapanır: `silen` boşalır → §10 ÖLÜ SİLME kırmızı → beyan DEFTER {DAMGA validUntil}",
+      tasarim: "docs/design/OZELLIK-PIVOT-SURUMLEME-PLAN.md",
       sahibi: "rota/renk alanı",
     }] },
   // ③a listesinde olup beyanda OLMAYAN üçüncü ticari pivot (ölçüldü 2026-09-14): `updatedAt`
@@ -363,6 +364,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     borc: [{
       ne: "2 site SİL-YAZ (WO güncelleme drop-and-recreate · WO hedef özellik replace); değişim izi deftere yazılmıyor",
       kanit: "kapının tarayıcısı (SILEN) 2026-09-13: workorder.service.ts:5812 · :5983. Kapanır: `silen` boşalır → §10 ÖLÜ SİLME kırmızı → beyan DEFTER {DAMGA validUntil}",
+      tasarim: "docs/design/OZELLIK-PIVOT-SURUMLEME-PLAN.md",
       sahibi: "rota/renk alanı",
     }] },
 

@@ -6,6 +6,24 @@
 
 > ⚠️ **SATIR NUMARALARI OYNAKTIR.** Ölçüm anında (2026-09-12) çalışma ağacında 40'tan fazla commit'lenmemiş dosya vardı; `subcontractor.service.ts` · `workorder.service.ts` · `kartela.service.ts` · `schema.prisma` şu anda başka oturumlarca değiştiriliyor. Aşağıdaki numaralar **bugün ölçülmüştür**, yarın kaymış olabilir. Hedefi daima **sembol adıyla** bul (fonksiyon/sabit adı verildi), numarayı yalnız teyit için kullan.
 
+## 0. Durum tazelemesi (2026-09-14, 82 — taban `3b65daea`)
+
+Bu bölüm planı DEĞİŞTİRMEZ, ölçer: hangi satır indi, hangi satır numarası kaydı, ne bekliyor.
+
+**İnen (planın kendi maddeleriyle):**
+- **Y2 bitti** — `tambur.service.ts` finalize ebeveyn silmesi kalktı, damga konmadı (plan birebir); bekçi `test_stock_ledger_tambur_undo` §0b/§0c/§5b (K3(a), `3b65daea`).
+- **Y10 / Y11 yarım** — `cancelReceipt` ve `undoTransfer` artık SİLMİYOR (bekçi `test_fason_receive_cancel_rereceive` · `test_fason_undo_transfer`), ama `revokeRollProperties(... FASON_KABUL_IPTAL / FASON_TRANSFER_GERI_AL)` damgası Faz 1 helper'ını bekliyor. Bugünkü hâl: satır aktif kalır (top zaten CANCELLED, okurlar canlı topa bakar). Faz 2e o iki satırı ekler.
+- **Risk #9 kapandı** — `getCancelImpact` `rollWhere` `K18_DEAD_STATUSES` süzer (`585b1274`): TAMBUR_CONSUMED ebeveyn "işlenmiş" sayılmaz. Fabrika kopyası: 67/125 açık WO listede ölü satır taşıyordu, 3'ünün sayısı düşer.
+- **Kapı** — `test_defter_ters_yol` §5/§10 artık `RollProperty`/`WorkOrderTargetProperty`yi `yazan`/`silen` ile tarıyor (`dbc2d930`); `silen` boşaldığı gün "ÖLÜ SİLME BEYANI" kırmızı verir ⇒ Faz 2c/2d'nin bitişi ölçülür. Beyan bu belgeyi `tasarim` olarak atfeder (§6c ölü atıf denetimi).
+
+**Bekleyen (sıra 1e'de: 01 WEAVING şeması → 6e K2 `SackAllocation` → bu plan):** Faz 0 (`inventory.controller.ts:685/:725` `?? []` hâlâ duruyor) · Faz 1 (şema/migration/helper/okur turu — `revokedAt` kolonu yok, `property-revoke.helper.ts` yok) · 2a–2e.
+
+**Satır numaraları (2026-09-14):** Y1 `:211` (aynı) · Y3 `tambur-undo.service.ts:1730` · Y4 `:2079` · Y5 `inventory.service.ts:4531/:4535` · Y7 `workorder.service.ts:5812` (yanında `WorkOrderToOrderLine.deleteMany :5816` — ayrı borç, beyanda) · Y8 `:5983/:5985` · Y9 `:6009/:6020` · Y10 `subcontractor.service.ts:5436` (silme yok) · Y11 `:5983` (silme yok).
+
+**Desen şerhi (1e'nin "tek kalıp" sorusu):** Bu planın `revokedAt`/`revokedById` seçimi evin deseni (`ACTIVE_OPERATION`/`ACTIVE_MOVEMENT`, `revoke-ast-tarama.ts`). K1 (`SackTagAssignment`) ve K2 (`SackAllocation`) `clearedAt` kullanıyor — K1'de kolon ZATEN vardı (sevk temizliği), K2 K1'in kardeşi. Üç tablo aynı MEKANİZMA (DAMGA + partial unique), iki kolon adı; yeni açılan her tablo `revokedAt` alır. Kolon adı beyanda `mekanizma.kolon` olarak taşınır, kapı adı değil türü ölçer.
+
+---
+
 ---
 
 ## 1. Karar ve gerekçe
