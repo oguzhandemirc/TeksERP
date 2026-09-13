@@ -268,6 +268,11 @@
           "kapsam": "her-ikisi",
           "tip": "yeni",
           "metin": "İstasyon türlerine “Dokuma tezgahı” eklendi. Bu türde istasyonu olmayan işletmede hiçbir şey değişmez. Bu türde istasyon açıldıysa eski tablet sürümü o istasyonda oturum açamaz ve eski panel sürümü istasyon listesinde tür etiketini boş basar; ikisi de güncellemeyle düzelir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Çuvaldan elle kaldırılan iz artık kayıttan silinmiyor; “kaldırıldı” damgası alıyor (kim, ne zaman). Önceden elle kaldırma satırı yok ediyor, izin o çuvalda bir zamanlar bulunduğu hiçbir yerden okunamıyordu. Elle kaldırılan iz, sevkiyat geri alındığında geri gelmez — yalnız sevkle kendiliğinden temizlenen izler döner; aynı izi yeniden bırakırsanız damga kalkar ve iz tazelenir. Çuval listesi, iz süzgeci, rozetler ve belgeler değişmez; hiçbir rakam değişmez."
         }
       ]
     },
