@@ -20,7 +20,10 @@ export async function withBarcodeRetry<T>(
   // partial unique'i (ör. WO başına tek-ACTIVE-kart) retry'a girmemeli — koleksiyon
   // kalıcıdır, retry boşa döner; predicate false dönerse o P2002 propagate olur ve
   // çağıran (print/reprint) onu anlamlı 409'a çevirir.
-  isRetryable?: (err: Prisma.PrismaClientKnownRequestError) => boolean
+  isRetryable?: (err: Prisma.PrismaClientKnownRequestError) => boolean,
+  // Tükenme mesajındaki NESNE — çağıran barkod üretmiyorsa ("İndirme kodu")
+  // operatör yanlış şeyi aramasın. Verilmezse tarihsel metin.
+  subject: string = "Barkod",
 ): Promise<T> {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -52,6 +55,6 @@ export async function withBarcodeRetry<T>(
     }
   }
   throw AppError.conflict(
-    `Barkod üretimi ${maxAttempts} denemede başarısız oldu, lütfen tekrar deneyin.`
+    `${subject} üretimi ${maxAttempts} denemede başarısız oldu, lütfen tekrar deneyin.`
   );
 }

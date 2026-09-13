@@ -30,7 +30,11 @@ interface KilitliDoff {
  *   "doff'suz top" kovasında ayrı gösterir).
  * - `entrySource !== WEAVING` iken doff verilmişse 400: bağ yalnız dokuma topuna aittir.
  * - Satır yoksa 404; `revokedAt` doluysa 409 `DOFF_NOT_LINKABLE`.
- * - `createdMachineId` verildiyse doff'un makinesiyle uyuşmalı — çıkarım değil kontrol.
+ * - Makine eşleşmesi YALNIZ KK1 cihazı bir tezgaha bağlıysa denetlenir (tezgah
+ *   başı KK1): `createdMachineId` doluysa doff'un makinesiyle uyuşmalı — çıkarım
+ *   değil kontrol. Masa KK1'de (damga yok) bağ KABUL: bağ zaten açık liste
+ *   seçimidir ve KK1 damgası muayene istasyonunu taşır, tezgahı değil — "damga
+ *   yoksa 400" hiç geçemeyen ölü bir kapı olurdu (1e hükmü 2026-09-13, 47 ölçtü).
  */
 export async function claimDoffForRollTx(
   tx: Tx,

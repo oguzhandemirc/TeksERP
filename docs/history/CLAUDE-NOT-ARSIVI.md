@@ -8629,3 +8629,52 @@ ihraç + ENTRY/ENTRY_CORRECTION/ufuk okuyor, iki okuyucu import ediyor, kodda ç
 üç biçimi görür, şerhi görmez — kendi sondası). Negatif sondalar
 (cp+sha256): helper `initialQty`ye döndürüldü → 4 ❌ · ③ dalı fail-open → §F1/§F2/§F3 ❌ · taslak uyarısı
 düşürüldü → §E3 ❌ · PO'ya `_sum initialQty` geri → §2 ❌ · invoice import silindi → §1 ❌. Komşular: goods_receipt_invoice 38/0 · purchase_order 122/0 · finance_invoice 46/0.
+
+## 2026-09-13 — DOFF BACKEND A1–A6 KAPANDI: kod sırası 8029'a, replay uyarı taşır, KK1 ucu `doffEventId`; "makinesiz KK1'de 400" kararı GEÇERSİZ → 2026-09-13 [ÇEKİRDEK]
+
+**Bağlam.** P3b doff backend'i (20fb880d · a218f68c · 3b80b22b) 1c'nin çelişmeli doğrulamasından (fa7255d8,
+`DOKUMA-IS-EMRI-VE-TABLET-TASARIMI.md` §3.8c) altı kod kalemi ve sekiz bayat sözleşme maddesiyle çıktı;
+mekanizma (iki yazar · iki tx · tek bağ · iki pencere) AYAKTAYDI, çürüyen parçalar mesaj/kırpma/uyarı/HTTP
+yüzeyi/retry tükenmesi/test hijyeni sınıfındaydı. Hepsi tek commit'te kapandı; bekçi 20/0 → 31/0, dokuz
+negatif sonda (her biri hedeflediği bölümü kırmızı yaptı, `cp+sha256` ile geri).
+
+**Kod sırası 8029 altında (1e kararı C.2).** İndirme kodu `DF+GGAAYY+NNNN` günlük sıradır ve klasik
+oku-sonra-yaz'dır; kilitsiz sürüm 25 paralel kayıtta `withBarcodeRetry`nin beş denemesini tüketiyordu (1c
+W9: 23/2; 10 paralelde 10/10 — *10'da tutan 25'te tutmaz*). Yeni uzay AÇILMADI: `nextDoffCodeTx` mevcut 8029
+"kod tekilliği" helper'ını (`lockCodeScopeTx(tx, "doffEvent", <günlük önek>)`) tx'in İLK ifadesi olarak
+çağırır; retry yalnız `code_key` P2002 kemeri. Bekçi §6b: elle tutulan kilit kaydı BLOKLAR (sıra kanıtı,
+400 ms) ve 25 paralel 25 tekil kod / 0 hata; kilit düşürülünce ikisi de kırmızı. Sözleşmenin *"tek yazar —
+başka satır okuyup karar vermiyor"* cümlesi YANLIŞTI (kod sırası okuyordu), düzeltildi; tükenme mesajı artık
+nesne adıyla ("İndirme kodu üretimi …", helper `subject` parametresi).
+
+**Replay uyarı taşır (A.3).** Çevrimdışı yeniden gönderimde operatörün gördüğü tek cevap replay cevabıdır;
+"iş emri metresine GİRMİYOR" orada susuyordu — §3.8'in *"sessiz atlama görünmezliktir"* şartının tam ortası.
+Uyarı `deriveRunWarnings(machineRunId)` ile kayıttan yeniden türetilir, ilk kayıt ve replay (sıralı VE
+paralel P2002 dalı) aynı kaynaktan; koşumlu-ama-işsiz doff dördüncü kova olarak adlandı.
+
+**KK1 ucu `doffEventId` (A.5).** `initialEntrySchema` düz `z.object` (strict DEĞİL — sahadaki eski APK
+gerekçesi, bilinçli asimetri) ⇒ listede olmayan alan SESSİZCE düşüyor, tablet gönderse bağsız 201
+dönüyordu; `claimDoffForRollTx`, `DOFF_HAS_ROLLS` ve iki pencere sahada erişilemezdi (bekçi yeşil, yüzey
+yok). Alan şemaya girdi; verilince `forcedEntrySource: WEAVING`, `semiFinished` ile birlikte 400 (refine).
+Doff'suz `WEAVING` topu HTTP'den bugün yazılamaz — tablet dilimi ayrı bayrak + mobil izinle açar.
+**minVersion ÖLÇÜLDÜ, gerekmez:** eski istemci alanı göndermez ⇒ WEAVING üretmez; gördüğünde panel/tablet
+etiketi hazır, çökme yok; tek boşluk tablet KK1 listesinin `entrySource` süzgecinin WEAVING'i içermemesi
+(görünürlük, kırılma değil) — tablet dilimi genişletir.
+
+**⛔ GEÇERSİZ → 2026-09-13: "makine damgası olmayan KK1 oturumunda doff bağı 400 (fail-closed)".** 1e'nin
+ilk kararıydı (§3.8c C.3), aynı gün kod+bekçiye indi (§4e kırmızı/yeşil ölçüldü) ve aynı gün 47'nin
+ölçümüyle GERİ ALINDI: KK1 damgası **muayene istasyonunu** taşır, tezgahı değil; masa KK1'de damga hiç
+olmaz ⇒ "damga yoksa 400" hiç geçemeyen ÖLÜ bir kapı olurdu ve tezgahtan inen top masada hiç
+bağlanamazdı. **Hüküm:** bağ KK1'de AÇIK LİSTE seçimidir; makine eşleşmesi YALNIZ KK1 cihazı bir tezgaha
+bağlıysa denetlenir (tezgah başı KK1: damga ≠ doff makinesi → 409 `DOFF_NOT_LINKABLE`), masa KK1'de bağ
+KABUL. Kod ilk hâline döndü (`createdMachineId && …`), bekçi §4e "masa KK1 bağ kabul" ölçer, negatif sonda
+("damga yoksa 400" konunca kırmızı) koşuldu. ⇒ *Ders: fail-closed bir kapı yazmadan önce "bu kapıyı kim
+GEÇER" sorulur — hiç geçemeyen kapı korumaz, yolu kapatır.*
+
+**Öteki kalemler.** `DOFF_HAS_ROLLS` mesajı çare önermez (eski "önce topu iptal et" yanlış çareydi — yüklem
+statüye bakmaz, iptal doff'u geri alınabilir yapmaz); liste TAM okunur, mesajda 20'de kırpılır, SAYI
+kırpılmaz (`details.total`; `warehouse-stock.helper` emsali). P2028 (KK1 kilidi tx zaman aşımını aşınca,
+1c W7 22 s) → 409 `DOFF_LINK_IN_PROGRESS` "tekrar deneyin" — 503 "sunucu yoğun" değil, DURUM çatışması
+(1e C.5). Test hijyeni: reddedebilen `txB` promise'i sahipli ([ES-19]); §3 sayımı fikstür ürününe daraldı
+(global `count()` paralel bekçide sahte kırmızı); başlık negatif sonda kümeleri düzeltildi (M1 =
+§5b-2/3/**5**). Kural satırları `docs/kurallar/dokuma.md`, sözleşme §3.8b kodun aynası.

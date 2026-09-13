@@ -612,7 +612,7 @@ Kök kural: *yıkıcı işlemde arayüz etkilenen HER kaydı listeler.* Bu yüzd
                "rollIds": ["…", "…"] } }
 ```
 
-Operatör *"geri alamazsın"* değil, **"şu topu önce iptal et"** görür. Emsal: `ROLL_WAREHOUSE_MISSING` (`{code, barcodes[], rollIds[]}`).
+Operatör topu **adıyla** görür; mesaj çare ÖNERMEZ: *"Bu indirmeden N top doğmuş — indirme artık geri alınamaz; yanlış top kendi iptal yolundan gider."* (Eski cümle *"şu topu önce iptal et"* yanlış çareydi — yüklem statüye bakmadığı için topu iptal etmek doff'u geri alınabilir yapmaz; düzeltildi 2026-09-13, §3.8c A.1.) Liste mesajda 20'de kırpılır, SAYI kırpılmaz (`… (+N)`); `details` tam liste + `total`. Emsal: `ROLL_WAREHOUSE_MISSING` (`{code, barcodes[], rollIds[]}`).
 
 #### ⚠️ (1)+(2) GERİLİMİ — koşumsuz doff iş emrinin metresini SESSİZCE eksiltir
 
@@ -631,9 +631,10 @@ Operatör *"geri alamazsın"* değil, **"şu topu önce iptal et"** görür. Ems
 |---|---|---|
 | **iş emrine bağlı doff metresi** | `machineRunId` dolu → koşum → iş emri | ana sayı |
 | **koşumsuz doff (atıfsız)** | `machineRunId IS NULL` | ⚠️ metre gerçek, iş emrine giremiyor |
+| **koşumlu ama İŞSİZ doff** | `machineRunId` dolu ∧ koşumun `weavingOrderId IS NULL` | ⚠️ koşum var, iş emri yok — yine giremiyor (dördüncü kova, §3.8c B.5) |
 | **doff'suz top** | `entrySource = WEAVING AND doffEventId IS NULL` | top gerçek, doff'a bağlanamadı |
 
-İkinci ve üçüncü kova **adıyla** gösterilir; ana sayıya karışmaz, gizlenmez. Bu kolonların NULL kalmasının meşru olmasının tek sebebi budur.
+İkinci, üçüncü ve dördüncü kova **adıyla** gösterilir; ana sayıya karışmaz, gizlenmez. Bu kolonların NULL kalmasının meşru olmasının tek sebebi budur.
 
 **Ve `warnings` metni KAYBI söyler, yalnız durumu değil:**
 
@@ -651,72 +652,80 @@ Operatör *"tamam, sonra açarım"* değil **"bunu şimdi düzeltmeliyim"** dü�
 2. **türetilen metrenin stok yazmadığı** — AST: `producedM` ile `Roll` miktar yazan yol **aynı ifadede geçemez**,
 3. `DOFF_CANCEL` yüklemi — **negatif sonda**: yüklemden `NOT EXISTS` düşürülünce kırmızı vermeli.
 
-### 3.8b · Doff akışı — uygulama sözleşmesi (KOD YOK; şema P3 ile indi, yazan uç bu sözleşmeyle doğar)
+### 3.8b · Doff akışı — uygulama sözleşmesi (KOD İNDİ: P3b 20fb880d/a218f68c/3b80b22b; §3.8c kalemleri 2026-09-13'te 01 kapattı — bu metin KODUN aynasıdır)
 
-Yazıldı 2026-09-13, P3 (`DoffEvent` + `RollEntrySource.WEAVING`) origin'e indikten sonra. Emsaller ölçülerek seçildi: `openMachineRun` / `revokeMachineRun` (`machine-run.service.ts`), `createInitialEntry` (`inventory.service.ts:668`, `forcedEntrySource` :735/:961), `token-replay.helper.ts` (dört durum).
+Yazıldı 2026-09-13, P3 (`DoffEvent` + `RollEntrySource.WEAVING`) origin'e indikten sonra; 1c'nin çelişmeli doğrulaması (§3.8c) sonrası aynı gün koda hizalandı. Emsaller ölçülerek seçildi: `openMachineRun` / `revokeMachineRun` (`machine-run.service.ts`), `createInitialEntry` (`inventory.service.ts`, `forcedEntrySource`), `token-replay.helper.ts` (dört durum). Kod: `machine-doff.service.ts` · `helpers/machine-doff-open.helper.ts` (uyarı + kod) · `helpers/machine-doff-link.helper.ts` (KK1 bağı).
 
 #### ① İki yazar, iki tx, tek bağ
 
 ```
 TABLET (tezgah ekranı)                       KK1 (muayene masası)
-  POST /api/machine-doffs                      POST /api/inventory/initial-entry (bugünkü uç)
-  tx-A: DoffEvent INSERT                       tx-B: createInitialEntry(…, { forcedEntrySource: WEAVING,
-        (koşum bağı opsiyonel)                        doffEventId })            ← yeni opsiyonel alan
+  POST /api/machine-doffs                      POST /api/rolls/initial-entry (bugünkü uç)
+  tx-A: DoffEvent INSERT                       body.doffEventId (uuid, opsiyonel) ⇒
+        (koşum bağı opsiyonel)                 tx-B: createInitialEntry(…, { forcedEntrySource: WEAVING, doffEventId })
 ```
 
 **Doff tx'i (tx-A) top YAZMAZ, stok defterine DOKUNMAZ.** Tek satır doğar: `DoffEvent`. Top KK1'de, KK1'in bugünkü motoruyla, ikinci tx'te doğar (§3.5 kararı; *"ikinci giriş motoru yazılmaz"*). İki tx'i birbirine bağlayan tek şey `Roll.doffEventId`dir ve o bağ **KK1 anında** kurulur — doff anında değil, sonradan bir "eşle" ekranıyla da değil.
 
+**HTTP sözleşmesi (KK1 ucu):** `initialEntrySchema.doffEventId` (uuid, opsiyonel/null) — şema düz `z.object` (strict DEĞİL, sahadaki eski APK gerekçesi) olduğu için alan LİSTEDE olmak zorundadır; listede değilken tablet gönderse **sessizce düşüyor ve bağsız 201 dönüyordu** (§3.8c A.5). Verilirse controller `forcedEntrySource: WEAVING` + `doffEventId` geçirir; statü zorlanmaz (dokuma ham çıkar, renk sezgisi doğru). `semiFinished` ile birlikte 400 (Zod refine) — bir top hem dışarıdan hem tezgahtan gelmez. ⚠️ **Doff'suz `WEAVING` topu HTTP'den bugün YAZILAMAZ** — onu tablet dilimi ayrı bir bayrak + mobil izin koduyla açar (`semiFinished` emsali); servis düzeyinde `forcedEntrySource: WEAVING` + `doffEventId: null` meşru kalır (§3.5 "cevap yoksa NULL kalır").
+
 #### ② tx-A'nın sırası (openMachineRun kalıbı, adım adım)
 
-1. **Replay — yaratmadan ÖNCE:** `clientToken` doluysa `findUnique({ clientToken })`; varsa **özgün sonuç döner** (`message: "İndirme zaten kayıtlı (yeniden gönderim)"`). Dördüncü durum: kayıt `revokedAt` doluysa `assertDoffReplayAlive` 409 `DOFF_REVOKED` — *"yazıldı ama sonradan iptal edildi"*, `assertMachineRunReplayAlive` (`token-replay.helper.ts:111`) ikizi.
-2. **Bağlam çözümü (tx dışı, okuma):** makine aktif mi · `assertProductionLineValid(no, machine.productionLineCount)` (P4b yüklemi; ikinci çağıranı bu uç olur) · `machineRunId` verildiyse koşum aynı makinede ve `revokedAt IS NULL` mı (**atıf uydurulmaz**: verilmediyse aranmaz, `warnings` ile "Koşum açılmadığı için bu indirme iş emri metresine GİRMİYOR" — §3.8 gerilim şartı).
+1. **Replay — yaratmadan ÖNCE:** `clientToken` doluysa `findUnique({ clientToken })`; varsa **özgün sonuç döner** (`message: "İndirme zaten kayıtlı (yeniden gönderim)"`) ve **`warnings` yeniden türetilir** (`deriveRunWarnings(existing.machineRunId)` — çevrimdışı yeniden gönderimde operatörün göreceği tek cevap replay cevabıdır; uyarı orada susarsa kayıp görünmez olur). Kimlik alanları (`assertReplayPayloadMatches`): `machineId · productionLineNo · pieceCount`; `machineRunId`/`counterAtDoff`/`doffedAt` kimlik DEĞİL (aynı form düzeltilmiş sayaçla yeniden gönderilebilir) — uyuşmazlık 409 `CLIENT_TOKEN_COLLISION`. Dördüncü durum: kayıt `revokedAt` doluysa `assertDoffReplayAlive` 409 `DOFF_REVOKED` — *"yazıldı ama sonradan iptal edildi"*, `assertMachineRunReplayAlive` ikizi.
+2. **Bağlam çözümü (tx dışı, okuma):** makine aktif mi (400) · `assertProductionLineValid(no, machine.productionLineCount)` (P4b yüklemi; ikinci çağıranı bu uç) · `machineRunId` verildiyse koşum var mı (404), aynı makinede mi (409 `DOFF_RUN_MISMATCH`), canlı mı (409 `RUN_REVOKED` — aynı ad `assertMachineRunReplayAlive`ta başka anlam taşır, bilinçli) · koşum var ama `weavingOrderId` yoksa uyarı *"Koşum bir dokuma işine bağlı değil — … GİRMİYOR"* (**dördüncü kova**). **Atıf uydurulmaz:** verilmediyse aranmaz, `warnings` *"Koşum açılmadığı için bu indirme iş emri metresine GİRMİYOR"* (§3.8 gerilim şartı). Uyarı metinleri tek kaynak `machine-doff-open.helper.ts` (`WARN_RUN_MISSING` · `WARN_RUN_WITHOUT_ORDER`), ilk kayıt ve replay aynı fonksiyondan.
 3. **Damga:** `doffedAt` = `resolveRunStamp(input.doffedAt, "indirme zamanı")` — makul aralık dışındaysa sunucu saatine düşer ve `warnings`e yazılır (`clientEnteredAt` kalıbı). Kronoloji yine `createdAt`.
-4. **Kod:** `code` sunucuda `buildDailyCode` ailesiyle üretilir, `withBarcodeRetry` içinde (unique çarpışmasında yeniden dene; istemciden kod alınmaz — etiket koddan basılır, kod etiketten okunmaz).
-5. **INSERT** — tek ifade; `pieceCount >= 1` ve `productionLineNo >= 1` CHECK'leri DB'de (`error.middleware` Türkçe mesajı hazır).
-6. **P2002 dalı:** aynı token iki paralel istekte ikinci INSERT `doff_events_clientToken_key`e çarpar → `findUnique` ile replay (openMachineRun `isClientTokenP2002` dalı birebir).
-7. **Audit** tx DIŞINDA, best-effort: `MACHINE_DOFF` (`newData: { doffEventId, machineRunId, pieceCount, counterSource }`).
+4. **Kod — 8029 altında, tx'in İLK ifadesi:** `nextDoffCodeTx(tx, doffedAt)` önce `lockCodeScopeTx(tx, "doffEvent", <günlük önek>)` alır (uzay 8029 "kod tekilliği", sahibi `code-unique.helper.ts`; yeni uzay AÇILMADI, envanter değişmedi), sonra günün kodlarını okur ve `DF+GGAAYY+NNNN` üretir. Neden kilit: günlük sıra klasik **oku-sonra-yaz**dır; kilitsiz sürüm 25 paralel kayıtta `withBarcodeRetry`yi tüketiyordu (1c W9: 23 başarılı / 2 hata; 10 paralelde 10/10 — *"10'da tutan 25'te tutmaz"*). `withBarcodeRetry` yalnız `doff_events_code_key` P2002 **kemeri** olarak kalır; tükenme mesajı "İndirme kodu üretimi …" (nesne adıyla; helper `subject` parametresi). İstemciden kod alınmaz — etiket koddan basılır, kod etiketten okunmaz.
+5. **INSERT** — tek ifade; `pieceCount >= 1` ve `productionLineNo >= 1` CHECK'leri DB'de (`error.middleware` Türkçe mesajı hazır); `pieceCount ≤ 1000` ve `counterAtDoff` tam/negatif-değil yalnız Zod'da (route şeması).
+6. **P2002 dalı:** aynı token iki paralel istekte ikinci INSERT `doff_events_clientToken_key`e çarpar → `findUnique` ile replay (openMachineRun `isClientTokenP2002` dalı birebir); replay dönüşü de `warnings` taşır (bekçi §1e).
+7. **Audit** tx DIŞINDA, best-effort: `action: CREATE`, `recordId = doffEventId`, `newData: { event: "MACHINE_DOFF", machineId, machineCode, machineRunId, pieceCount, counterSource, code }` (kimlik `recordId`de, yükte tekrar YOK).
 
-⚠️ **Advisory kilit YOK — gerekçe ADIYLA:** kilit, DB seddinin koruyamadığı bir yarışı serileştirmek içindir (`ESZAMANLILIK.md` karar tablosu). Doff'ta o yarış yok: (i) **partial unique yok** — "tek açık doff" diye bir sed yoktur, bir hatta günde N doff meşru; (ii) **doğal anahtar yok** — `code` sunucuda üretilir ve `withBarcodeRetry` çarpışmayı kendi çözer; (iii) **tek yazar** — tx-A'nın tek INSERT'i var, başka satır okuyup karar vermiyor (TOCTOU yüzeyi yok). Kalan tek unique `doff_events_clientToken_key` idempotency içindir ve P2002 dalı (adım 6) onu taşır. Koşum tarafındaki 8032 uzayı iş numarası içindir, doff'a genişletilmez (envanter `period-guard.helper.ts` değişmez; `test_advisory_lock_namespaces` bunu ölçer).
+⚠️ **Advisory kilit yalnız KOD SIRASI için — gerekçe ADIYLA:** kilit, DB seddinin koruyamadığı bir yarışı serileştirmek içindir (`ESZAMANLILIK.md` karar tablosu). Doff satırının kendisinde o yarış yok: (i) **partial unique yok** — "tek açık doff" diye bir sed yoktur, bir hatta günde N doff meşru; (ii) **satır tek yazarlı** — tx-A tek INSERT yapar; ama **kod sırası oku-sonra-yaz'dır** ve o okuma 8029 altında serileşir (adım 4) — *"başka satır okuyup karar vermiyor"* cümlesi YANLIŞTI (§3.8c A.4/B.4); (iii) kalan tek unique `doff_events_clientToken_key` idempotency içindir ve P2002 dalı (adım 6) onu taşır. Koşum tarafındaki 8032 uzayı iş numarası içindir, doff'a genişletilmez (`test_advisory_lock_namespaces` envanteri ölçer).
 
 #### ③ tx-B — KK1'de bağ kurulur (createInitialEntry'ye iki opsiyonel alan)
 
-`opts.forcedEntrySource: WEAVING` + `opts.doffEventId`. Sıra tx İÇİNDE ve **satır kilidiyle**, düz okuma DEĞİL:
+`opts.forcedEntrySource: WEAVING` + `opts.doffEventId`. Sıra tx İÇİNDE ve **satır kilidiyle**, düz okuma DEĞİL (`claimDoffForRollTx`):
 
 ```sql
-SELECT id, "machineId" FROM doff_events WHERE id = $1 AND "revokedAt" IS NULL FOR UPDATE   -- tx-B, Roll INSERT'ten ÖNCE
+SELECT id, "machineId", "revokedAt" FROM doff_events WHERE id = $1 FOR UPDATE   -- tx-B, Roll INSERT'ten ÖNCE
+-- yüklem (`revokedAt IS NULL`) SELECT'te DEĞİL, sonra kontrol edilir: geri alınmış satır da
+-- kilitlenir ki 404 (satır yok) ile 409 (geri alınmış) ayrışsın (§3.8c B.2)
 ```
 
-Neden `FOR UPDATE` (emsal `cash-balance-guard.helper.ts:30-36`): tx-B düz `findUnique` ile okusa, `DOFF_CANCEL` (tx-C) `NOT EXISTS rolls` yüklemini KENDİ snapshot'ında değerlendirir — tx-B'nin henüz commit etmediği topu görmez, damgalar; tx-B commit eder ⇒ **iptal edilmiş doff'a bağlı top**. İki atomik claim tek başına doğru, aralarındaki PENCERE açık (CUT_SPLIT dersinin eşzamanlılık ikizi: *"iki kapının yeşili dikişi yeşil yapmaz"*). Satır kilidi pencereyi kapatır: tx-C'nin `UPDATE`i tx-B commit edene kadar bloklanır, sonra yüklemi yeniden değerlendirir ve `count=0 → 409 DOFF_HAS_ROLLS`. (`updateMany` ile "dokunma" kilidi kullanılamaz: `DoffEvent` append-only, `updatedAt` yok — `touchWarehouseSackTx` kalıbı burada yasak.) Satır yoksa 404, `revokedAt` doluysa 409 `DOFF_NOT_LINKABLE` (iptal edilmiş indirmeye top bağlanmaz); `machineId` KK1 oturumunun makine damgasıyla uyuşmuyorsa 409 aynı kod (başka makinenin indirmesine top bağlanmaz — *çıkarım değil kontrol*). `doffEventId` verilmeden `WEAVING` yazılabilir (§3.5: "cevap yoksa NULL kalır", rapor "doff'suz top" kovası); `doffEventId` verilip `entrySource` başka bir şeyse 400 — bağ yalnız dokuma topuna aittir.
+Neden `FOR UPDATE` (emsal `cash-balance-guard.helper.ts`): tx-B düz `findUnique` ile okusa, `DOFF_CANCEL` (tx-C) `NOT EXISTS rolls` yüklemini KENDİ snapshot'ında değerlendirir — tx-B'nin henüz commit etmediği topu görmez, damgalar; tx-B commit eder ⇒ **iptal edilmiş doff'a bağlı top**. İki atomik claim tek başına doğru, aralarındaki PENCERE açık (CUT_SPLIT dersinin eşzamanlılık ikizi: *"iki kapının yeşili dikişi yeşil yapmaz"*). Satır kilidi pencereyi kapatır — ama **bloklanma ≠ pencere kapandı** ([ES-26]): tx-C'nin tek `updateMany … NOT EXISTS`i kilitte bloklanıp uyanınca alt sorguyu ESKİ snapshot'la değerlendirir (PG EvalPlanQual yalnız hedef satırı tazeler); bu yüzden tx-C **önce ayrı ifadede `FOR UPDATE` alır, claim'i SONRA** koşar (④). (`updateMany` ile "dokunma" kilidi kullanılamaz: `DoffEvent` append-only, `updatedAt` yok — `touchWarehouseSackTx` kalıbı burada yasak.) Sıra: `doffEventId` yoksa hiçbir şey yapılmaz · `entrySource ≠ WEAVING` iken doff verilmişse 400 `DOFF_LINK_REQUIRES_WEAVING` · satır yoksa 404 · `revokedAt` doluysa 409 `DOFF_NOT_LINKABLE` · **makine eşleşmesi YALNIZ KK1 cihazı bir tezgaha bağlıysa denetlenir** (tezgah başı KK1: `createdMachineId` dolu ve doff'un makinesiyle uyuşmuyorsa 409 `DOFF_NOT_LINKABLE`, *çıkarım değil kontrol*); **masa KK1'de (damga yok) bağ KABUL** — bağ zaten KK1'de AÇIK LİSTE seçimidir ve KK1 damgası muayene istasyonunu taşır, tezgahı değil; "damga yoksa 400" hiç geçemeyen ÖLÜ bir kapı olurdu (1e hükmü §3.8c C.3, 47 ölçtü, 2026-09-13; §3.9 J.1 çelişkisi böyle kapandı). `doffEventId` verilmeden `WEAVING` yazılabilir (servis düzeyi; §3.5: "cevap yoksa NULL kalır", rapor "doff'suz top" kovası).
 
 `Roll.doffEventId` ileri damgadır: **`null`'lanmaz, değiştirilmez** (§3.8 yasağı). Yanlış bağ = topun iptali + yeniden giriş (top kendi ters yolundan gider), doff'a dokunulmaz.
 
 #### ④ Geri alma — `DOFF_CANCEL` (damga, silme değil)
 
-```
-UPDATE doff_events SET revokedAt = now(), revokedById = :u, revokeReason = :r
- WHERE id = :id AND revokedAt IS NULL
-   AND NOT EXISTS (SELECT 1 FROM rolls WHERE "doffEventId" = :id)      -- statüye BAKILMAZ
+```sql
+SELECT id FROM doff_events WHERE id = :id FOR UPDATE;                    -- ① ayrı ifade, ÖNCE (LOAD-BEARING, [ES-26])
+UPDATE doff_events SET "revokedAt" = now(), "revokedById" = :u, "revokeReason" = :r
+ WHERE id = :id AND "revokedAt" IS NULL
+   AND NOT EXISTS (SELECT 1 FROM rolls WHERE "doffEventId" = :id);       -- ② claim, statüye BAKILMAZ
 ```
 
-- `updateMany` + `count === 0 → 409`; tanı tx içinde taze okumayla: satır yoksa 404, `revokedAt` doluysa 409 `DOFF_ALREADY_REVOKED`, top varsa 409 `DOFF_HAS_ROLLS` + `barcodes[]`/`rollIds[]` (§3.8 gövdesi). `revokeMachineRun` claim'iyle aynı kalıp (`:305-309`).
+- `updateMany` + `count === 0 → 409`; tanı tx içinde taze okumayla (`diagnoseRevokeRefusal`): satır yoksa 404, `revokedAt` doluysa 409 `DOFF_ALREADY_REVOKED`, top varsa 409 `DOFF_HAS_ROLLS` — mesaj *"Bu indirmeden N top doğmuş — indirme artık geri alınamaz; yanlış top kendi iptal yolundan gider (…)"*, **çare önermez**; liste TAM okunur (`pieceCount` 1000'e kadar meşru), mesajda 20'de kırpılır `… (+N)`, `details: { total, barcodes[], rollIds[] }` tam (`warehouse-stock.helper` emsali: liste kırpılır, SAYI kırpılmaz). `revokeMachineRun` claim'iyle aynı kalıp.
 - **Roll'a ne olur: HİÇBİR ŞEY.** Yüklem zaten "hiç top doğurmamış doff" der; top varsa doff geri alınamaz. İptal edilmiş/fire topu da sayılır — doff tarihsel olgudur.
+- **KK1 kilidi tx zaman aşımından uzun tutarsa** (1c W7: 22 s) iptal `P2028` ile düşer → **409 `DOFF_LINK_IN_PROGRESS` "birkaç saniye sonra tekrar deneyin"** (`mapRevokeTimeout`; 1e kararı §3.8c C.5 — 503 "sunucu yoğun" DEĞİL, bir DURUM çatışması: satır o an topa bağlanıyor). Yanlış durum doğmaz: doff canlı, top bağlı kalır.
 - Geri alınmış doff **koşumun defterinden düşmez** (`machineRunId` bağı kalır); rapor `revokedAt IS NULL` süzer, guard (`doffEventCount`) süzmez — `machineRunCount` ile aynı iki-soru ayrımı.
 - `revokeReason` zorunlu (`SEBEP` seçicisi `ReasonPresetKind` genişletmez: serbest metin 300, `revokeMachineRun` emsali). Audit `MACHINE_DOFF_REVOKE`.
 
-#### ⑤ Bekçi kalemleri (yazan uçla AYNI commit'te; `test_machine_doff_source.ts` §3.8'de adlandırıldı)
+**Hata kodları (tam küme):** `CLIENT_TOKEN_COLLISION` · `DOFF_REVOKED` · `DOFF_RUN_MISMATCH` · `RUN_REVOKED` · `DOFF_LINK_REQUIRES_WEAVING` · `DOFF_NOT_LINKABLE` · `DOFF_ALREADY_REVOKED` · `DOFF_HAS_ROLLS` · `DOFF_LINK_IN_PROGRESS`. Modül kapısı: route bugün `requireProductionEnabled`; ekran dilimiyle `requireDokumaEnabled`a geçer (0c, `DOKUMA-PANEL-EKRAN-KAPILARI.md`).
 
-| # | ölçer | negatif sonda |
+#### ⑤ Bekçi kalemleri (`test_machine_doff_source.ts`, 31/0 — 2026-09-13; her satırın negatif sondası koşuldu)
+
+| # | ölçer | negatif sonda (ölçüldü 2026-09-13/14, cp+sha256 ile geri) |
 |---|---|---|
-| 1 | replay: aynı token ikinci istekte AYNI id, ikinci satır YOK; revoked kayıtta 409 | token süzgeci kaldırılınca ikinci satır doğar → kırmızı |
-| 2 | koşumsuz doff 201 + `warnings` KAYBI söyler; koşum başka makinedeyse 409 | uyarı metni "bulunamadı"ya dönerse kırmızı (metin ölçülür) |
-| 3 | tx-A stok defterine satır yazmaz (`warehouse_movements` sayısı değişmez) — §3.8 bekçi maddesi 2'nin çalışma-zamanı ikizi | |
-| 4 | KK1 `WEAVING` + `doffEventId`: bağ kurulur; revoked doff'a 409; başka makinenin doff'una 409 | claim'den `revokedAt IS NULL` düşürülünce kırmızı |
-| 5 | `DOFF_CANCEL`: topsuz doff → `revokedAt` dolu, Roll dokunulmadı; toplu doff → 409 `DOFF_HAS_ROLLS` barkodlarla; iptal edilmiş topla da 409 (statüye bakılmaz) | `NOT EXISTS` düşürülünce kırmızı (§3.8 maddesi 3) |
-| 5b | ⭐ **PENCERE** (iki yazar iki tx): tx-B elle açık tutulur — `FOR UPDATE` alındı, Roll INSERT edildi, commit EDİLMEDİ; eşzamanlı `DOFF_CANCEL` başlatılır; ölçülen: iptal çağrısı tx-B commit'inden ÖNCE dönmez (süre ölçümü: iptal promise'i, tx-B commit'inden sonra çözülür) VE sonucu 409 `DOFF_HAS_ROLLS`; sonra doff `revokedAt IS NULL`, top bağlı. Gate-tx promise'ine `await`ten önce no-op `.catch` (yarış bekçisi sözleşmesi). ⚠️ `p2002===1` ya da "iki satır yok" pencereyi KANITLAMAZ — kanıt, bloklanan çağrının SIRASI ve sonucudur | `FOR UPDATE` → düz `findUnique` yapılınca iptal beklemeden döner ve doff damgalanır (top iptal edilmiş doff'a bağlı) → kırmızı |
-| 6 | `defter-beyan.ts` `DoffEvent` satırı: `yazan` + `tersYazan` dolar (bugün `[]`); §5 ilk yazıcıyı zaten kırmızı yapar — o kırmızı bu commit'in imzasıdır | |
-| 7 | `test_advisory_lock_namespaces`: envanter değişmedi (kilit eklenmedi) | |
+| 1 | replay: aynı token ikinci istekte AYNI id, ikinci satır YOK; revoked kayıtta 409; **replay cevabı `warnings` taşır** — sıralı (§1d) ve paralel P2002 dalı (§1e) | `resolveReplay`den `deriveRunWarnings` düşürülünce §1d/§1e/§2c kırmızı |
+| 2 | koşumsuz doff 201 + `warnings` KAYBI söyler; koşum başka makinedeyse 409; **koşumlu ama işsiz doff da uyarır** (§2c, ilk cevap + replay) | `WARN_RUN_MISSING` "Açık koşum bulunamadı."a çevrilince §1d/§1e/§2a kırmızı (metin ölçülür) |
+| 3 | tx-A stok defterine satır yazmaz, top yazmaz — sayım **fikstür ürününe daraltılmış** (global `count()` paralel bekçide sahte kırmızı verirdi, §3.8c A.6b) | |
+| 4 | KK1 `WEAVING` + `doffEventId`: bağ kurulur; revoked doff'a 409; başka makinenin doff'una 409; WEAVING olmayan topa 400; **masa KK1'de bağ kabul** (§4e); **HTTP şeması alanı taşır ve yarı mamulle reddeder** (§4f) | `machine-doff-link.helper.ts` `revokedAt` bloğu silinince §4b kırmızı · "damga yoksa 400" konunca §4e kırmızı · şemadan `doffEventId` düşürülünce §4f kırmızı (alan sessizce düşer) |
+| 5 | `DOFF_CANCEL`: topsuz doff → `revokedAt` dolu, Roll dokunulmadı; toplu doff → 409 `DOFF_HAS_ROLLS` barkodlarla, **mesaj çare önermez** (§5b'); iptal edilmiş topla da 409; **21 topta sayı kırpılmaz** (§5e); **P2028 → 409** (§5f) | `NOT EXISTS` düşürülünce §5b/§5d/§5b-2/3 kırmızı · eski mesaj geri konunca §5b' kırmızı · `take: 20` geri konunca §5e kırmızı · P2028 eşlemesi kaldırılınca §5f kırmızı |
+| 5b | ⭐ **İKİ PENCERE** (iki yazar iki tx): (1) tx-B topu yazmış, commit etmemiş — iptal bloklanır, sonra 409; (2) tx-B claim'i almış, topu HENÜZ yazmamış — iptal yine bloklanır. Kanıt bloklanan çağrının SIRASI ve sonucudur (taban süresi 3 ms, eşik 400 ms). Reddedebilen `txB` promise'ine no-op `.catch` (sahipsiz red süreci Sonuç satırsız öldürür, [ES-19]) | `claimDoffForRollTx` `FOR UPDATE` → düz SELECT: §5b-4/5 kırmızı · `revokeDoff` başındaki ayrı `FOR UPDATE` kaldırılınca §5b-2/3/**5** kırmızı |
+| 6 | kod biçimi ve günlük sıra; **8029: elle tutulan kilit kaydı BLOKLAR** (§6b-1/2, sıra kanıtı) ve **25 paralel kayıt 25 tekil kod / 0 hata** (§6b-3) | `nextDoffCodeTx`ten `lockCodeScopeTx` düşürülünce §6b-1 ve §6b-3 kırmızı (25'te 23/2 sınıfı) |
+| 7 | `test_advisory_lock_namespaces`: envanter değişmedi (uzay açılmadı, 8029 helper'ı kullanıldı) 14/0 | |
 
-**minVersion (reçete 13):** `WEAVING` değerini ÜRETEN uç bu commit'le doğar ⇒ eski panel/tablet `entrySource=WEAVING` görebilir. Panel aynaları P3'te indi (etiketler hazır); tablet union'ı `WEAVING` içeriyor ama `PURCHASE_RECEIPT`/`SEMI_FINISHED` yok (devralınan). "Eski istemci ne yapar": bilinmeyen değeri **ham basar, çökmez** (`rollEntrySourceLabels` lookup, `?? value`) — ölçülmeden yazılmaz, o commit'te ölçülür.
+**minVersion (reçete 13) — ÖLÇÜLDÜ 2026-09-13:** `WEAVING` değerini HTTP'den ÜRETEN uç bu commit'le doğdu (KK1 `doffEventId`). "Eski istemci ne yapar": ① eski tablet/panel alanı hiç göndermez ⇒ **WEAVING üretmez**; ② üretilmiş bir WEAVING topu gördüğünde panel etiketi hazır (`enums.ts` "Dokuma (Tezgahtan)", `audit-labels`, `activity-utils`), tablet union'ı `WEAVING` içeriyor (`mobil/src/types/models.ts`) — **çökme yok**; ③ ⚠️ tablet KK1 listesi sunucuya `entrySource: 'SUPPLIER_RECEIPT,MANUAL_ENTRY,SEMI_FINISHED'` süzgeci gönderir (`KK1Screen.tsx`) ⇒ eski tablette WEAVING top **KK1 listesinde görünmez** (görünürlük boşluğu, kırılma değil). ⇒ `minVersion` GEREKMEZ; süzgeci tablet doff dilimi genişletir.
 
 ### 3.8c · Çelişmeli doğrulama — doff backend (P3b) ↔ §3.8b (2026-09-13, 1c)
 
@@ -739,7 +748,9 @@ UPDATE doff_events SET revokedAt = now(), revokedById = :u, revokeReason = :r
 | W8 | bloklanmayan iptalin süresi | **3 ms** (bekçi eşiği 400 ms; pay ×130) |
 | W9 | aynı makineye N paralel `openDoff` (günlük kod sırası oku-sonra-yaz + `withBarcodeRetry` 5 deneme) | N=10: 10/10 tekil kod · **N=25: 23 başarılı, 2 hata** "Barkod üretimi 5 denemede başarısız oldu" — retry tükeniyor; kod öneki GÜN bazlı, makine değil |
 
-#### A · Kod kusuru — taze 01'e kalem (öncelik sırasıyla)
+> ✅ **KAPANDI 2026-09-13/14 (01, tek commit):** A.1–A.6 kod, B.1–B.8 §3.8b metni; C.1 mesaj + §3.8 cümlesi · C.2 **8029** (`nextDoffCodeTx`, tx ilk ifadesi; retry kemer) · C.3 **masa KK1'de bağ KABUL, eşleşme yalnız tezgah-bağlı KK1'de** (ilk "400" kararı aynı gün GEÇERSİZ — ölü kapı) · C.5 **409 `DOFF_LINK_IN_PROGRESS`** (P2028) · C.4 `counterSource` çapraz kontrolü tablet UI dilimi · C.6 rapor kovaları d9'un rapor dilimi. Bekçi 20/0 → **31/0**, dokuz negatif sonda §3.8b ⑤ tablosunda. Aşağıdaki A/B listeleri **doğrulama kaydıdır**, açık borç değil.
+
+#### A · Kod kusuru — taze 01'e kalem (öncelik sırasıyla) — KAPANDI
 
 1. **409 `DOFF_HAS_ROLLS` mesajı yanlış çare söylüyor** (`machine-doff.service.ts:235` "önce topu iptal edin, indirme sonra geri alınır") — yüklem statüye BAKMAZ (§5d bunu ölçüyor): operatör topu iptal eder (geri alınamaz ikinci defter satırı), indirme yine geri alınmaz. Çelişki §3.8'in kendi "şu topu önce iptal et" cümlesinden kopyalanmış. Doğru cümle: *"Bu indirmeden top doğmuş — indirme artık geri alınamaz; yanlış top kendi iptal yolundan gider."* Sözleşme cümlesi de düzeltilir.
 2. **`take: 20` hem listeyi hem SAYIYI kırpıyor** (`:228` → `:235` `${fresh.rolls.length}`; `details.barcodes/rollIds` 20 ile kesik, `+N` yok). Adıyla anılan emsal `warehouse-stock.helper.ts:82-91` listeyi kırpıp SAYIYI kırpmaz. `pieceCount` 1000'e kadar meşru. Düzeltme: `_count` ile gerçek sayı, details TAM ya da `truncated/total`.

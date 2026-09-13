@@ -17,7 +17,7 @@ import { RollEntrySource, RollStatus } from "@prisma/client";
 import "../types/express-augment";
 
 // Zod validation schemas
-const initialEntrySchema = z.object({
+export const initialEntrySchema = z.object({
   itemId:       z.string().uuid("Geçersiz ürün ID"),
   colorId:      z.string().uuid("Geçersiz renk ID").optional().nullable(),
   initialQty:   z.number().positive("Miktar pozitif olmalı").max(999_999_999, "Miktar çok büyük"),
@@ -47,6 +47,20 @@ const initialEntrySchema = z.object({
    *     Depo'ya düşer, üretime hiç girmez ve operatör onu ham stokta arardı.
    */
   semiFinished: z.boolean().optional(),
+  /**
+   * TEZGAHTAN İNEN TOP (dokuma §3.8b, 2026-09-13): tablet doff kaydının id'si.
+   * Verilirse top `entrySource=WEAVING` ile doğar ve bağ KK1 tx'inde doff satırı
+   * kilitlenerek kurulur (`claimDoffForRollTx`); makine eşleşmesi yalnız tezgah-bağlı
+   * KK1'de denetlenir, masa KK1'de bağ kabul (bağ açık liste seçimidir).
+   * Yarı mamulle birlikte verilemez — bir top hem dışarıdan hem tezgahtan gelmez.
+   * ⚠️ Şema düz `z.object` olduğu için bu alan LİSTEDE olmak zorunda: listede
+   * olmayan alan sessizce düşer ve bağ kurulmadan 201 döner (ölçüldü §3.8c A.5).
+   */
+  doffEventId: z.string().uuid("Geçersiz indirme ID").optional().nullable(),
+}).superRefine((v, ctx) => {
+  if (v.semiFinished && v.doffEventId) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["doffEventId"], message: "Yarı mamul girişine indirme bağı verilemez — top ya dışarıdan gelir ya tezgahtan iner." });
+  }
 });
 // ⚠️ Bu şema BİLEREK düz `z.object` (strict DEĞİL): bilinmeyen alan sessizce
 // atılır. `feature-flag.routes.ts`'te strict doğru karardı (panel ↔ backend, tek
@@ -279,7 +293,7 @@ export class InventoryController {
    */
   async createInitialEntry(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { confirmDuplicate, semiFinished, ...body } = initialEntrySchema.parse(req.body);
+      const { confirmDuplicate, semiFinished, doffEventId, ...body } = initialEntrySchema.parse(req.body);
       // Yarı mamul kabulü AYRI bir yetenek yetkisi ister (2026-08-17 kullanıcı
       // kararı): yetkisi olmayan operatörde ekran bugünkü gibi kalır ve renk
       // seçemez. Kapı BURADA — istemcinin kutuyu gizlemesine güvenilmez.
@@ -335,6 +349,9 @@ export class InventoryController {
                 forcedStatus: RollStatus.STOCK,
               }
             : {}),
+          // Tezgahtan inen top: kaynak WEAVING, bağ KK1 tx'inde (doff satırı
+          // kilitli). Statü zorlanmaz — dokuma ham çıkar, renk sezgisi doğru.
+          ...(doffEventId ? { forcedEntrySource: RollEntrySource.WEAVING, doffEventId } : {}),
         },
       );
       res.status(201).json(result);

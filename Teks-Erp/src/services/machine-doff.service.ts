@@ -7,14 +7,18 @@
 // (`claimDoffForRollTx`). Sözleşme: DOKUMA-IS-EMRI-VE-TABLET-TASARIMI §3.8b.
 //
 //   • KAYDET — tek INSERT; stok defterine DOKUNMAZ, koşum bağı OPSİYONEL
-//             (koşum yoksa 400 değil `warnings`: "iş emri metresine GİRMİYOR").
-//             ⛔ Advisory kilit YOK — gerekçe adıyla: partial unique yok ("tek
-//             açık doff" seddi yok), doğal anahtar yok (kod sunucuda üretilir,
-//             `withBarcodeRetry` çarpışmayı çözer), tek yazar (TOCTOU yüzeyi
-//             yok). Tek unique `clientToken` idempotency içindir.
+//             (koşum yoksa 400 değil `warnings`: "iş emri metresine GİRMİYOR";
+//             uyarı REPLAY'de de döner — çevrimdışı yeniden gönderimde tek cevap odur).
+//             Advisory kilit yalnız KOD SIRASI için (8029, tx'in ilk ifadesi —
+//             `nextDoffCodeTx`): günlük sıra oku-sonra-yaz'dır ve 25 paralelde
+//             retry tükeniyordu. Başka kilit yok: partial unique yok ("tek açık
+//             doff" seddi yok), satır tek yazarlı. Tek unique `clientToken`
+//             idempotency içindir.
 //   • GERİ AL — `revokedAt` damgası; yalnız hiç top doğurmamış indirmede açık
 //             (`NOT EXISTS rolls.doffEventId`, statüye BAKILMAZ — iptal edilmiş
-//             top da doff'u tarihsel olgu yapar). Top varsa 409 topu ADIYLA söyler.
+//             top da doff'u tarihsel olgu yapar). Top varsa 409 topu ADIYLA söyler
+//             ve çare ÖNERMEZ: doff artık geri alınamaz, yanlış top kendi iptal
+//             yolundan gider (topu iptal etmek yüklemi değiştirmez).
 //
 // ⚠️ İKİ TARİH: `doffedAt` istemcinin BEYANIDIR (makul aralık dışındaysa sunucu
 // saatine düşer, `warnings` söyler); `createdAt` kronolojidir.
@@ -25,16 +29,19 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { isClientTokenP2002, p2002Mentions } from "../utils/p2002";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { assertDoffReplayAlive } from "./helpers/token-replay.helper";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { resolveRunStamp } from "./helpers/machine-run-open.helper";
 import { assertProductionLineValid } from "./helpers/production-line.helper";
+import { deriveRunWarnings, nextDoffCodeTx, WARN_RUN_WITHOUT_ORDER } from "./helpers/machine-doff-open.helper";
 import type { ApiResponse } from "../types/api.types";
 
+export { DOFF_CODE_PREFIX } from "./helpers/machine-doff-open.helper";
+
 const TABLE = "DOFF_EVENT";
-/** Fiziksel etiket kodu: `DF` + GGAAYY + NNNN (≤ 32). */
-export const DOFF_CODE_PREFIX = "DF";
+/** 409 mesajındaki barkod listesi kırpılır, SAYI kırpılmaz (`warehouse-stock.helper` emsali). */
+const MESSAGE_BARCODE_LIMIT = 20;
+const REPLAY_MESSAGE = "İndirme zaten kayıtlı (yeniden gönderim)";
 
 export const DOFF_SELECT = {
   id: true,
@@ -73,7 +80,13 @@ async function findByToken(clientToken: string): Promise<DoffEventDto | null> {
   return prisma.doffEvent.findUnique({ where: { clientToken }, select: DOFF_SELECT });
 }
 
-function resolveReplay(existing: DoffEventDto, input: OpenDoffInput): DoffEventDto {
+/**
+ * Replay cevabı — özgün sonuç + koşum uyarısı YENİDEN türetilir (kayıttaki
+ * `machineRunId`den). Kimlik alanları: makine · hat · adet; `machineRunId`/
+ * `counterAtDoff`/`doffedAt` kimlik DEĞİL (aynı form, düzeltilmiş sayaç
+ * yeniden gönderilebilir).
+ */
+async function resolveReplay(existing: DoffEventDto, input: OpenDoffInput): Promise<ApiResponse<DoffEventDto>> {
   assertDoffReplayAlive(existing);
   assertReplayPayloadMatches(
     [
@@ -84,7 +97,8 @@ function resolveReplay(existing: DoffEventDto, input: OpenDoffInput): DoffEventD
     "Bu form daha önce başka bir indirme için kaydedilmiş — yeni indirme için formu yeniden açın.",
     { doffEventId: existing.id },
   );
-  return existing;
+  const warnings = await deriveRunWarnings(existing.machineRunId);
+  return { success: true, data: existing, message: REPLAY_MESSAGE, ...(warnings.length ? { warnings } : {}) };
 }
 
 /** Makine aktif · hat aralıkta · koşum (verildiyse) aynı makinede ve canlı. */
@@ -95,45 +109,37 @@ async function resolveDoffContext(input: OpenDoffInput): Promise<{ machineCode: 
   });
   if (!machine) throw AppError.badRequest("Makine bulunamadı veya pasif", { machineId: input.machineId });
   assertProductionLineValid(input.productionLineNo, machine.productionLineCount);
-  const warnings: string[] = [];
-  if (input.machineRunId) {
-    const run = await prisma.machineRun.findUnique({
-      where: { id: input.machineRunId },
-      select: { id: true, machineId: true, revokedAt: true, weavingOrderId: true },
+  // Atıf UYDURULMAZ: koşum verilmediyse açık koşum aranıp bağlanmaz; kayıp
+  // adıyla söylenir (`deriveRunWarnings`, replay ile aynı kaynak).
+  if (!input.machineRunId) return { machineCode: machine.code, warnings: await deriveRunWarnings(null) };
+  const run = await prisma.machineRun.findUnique({
+    where: { id: input.machineRunId },
+    select: { id: true, machineId: true, revokedAt: true, weavingOrderId: true },
+  });
+  if (!run) throw AppError.notFound("Koşum bulunamadı", { machineRunId: input.machineRunId });
+  if (run.machineId !== machine.id) {
+    throw AppError.conflict("Koşum başka bir makineye ait — indirme ona bağlanamaz.", {
+      code: "DOFF_RUN_MISMATCH",
+      machineRunId: run.id,
+      runMachineId: run.machineId,
+      machineId: machine.id,
     });
-    if (!run) throw AppError.notFound("Koşum bulunamadı", { machineRunId: input.machineRunId });
-    if (run.machineId !== machine.id) {
-      throw AppError.conflict("Koşum başka bir makineye ait — indirme ona bağlanamaz.", {
-        code: "DOFF_RUN_MISMATCH",
-        machineRunId: run.id,
-        runMachineId: run.machineId,
-        machineId: machine.id,
-      });
-    }
-    if (run.revokedAt) {
-      throw AppError.conflict("Koşum geri alınmış — indirme ona bağlanamaz.", {
-        code: "RUN_REVOKED",
-        machineRunId: run.id,
-        revokedAt: run.revokedAt,
-      });
-    }
-    if (!run.weavingOrderId) {
-      warnings.push("Koşum bir dokuma işine bağlı değil — bu indirme iş emri metresine GİRMİYOR.");
-    }
-  } else {
-    // Atıf UYDURULMAZ: açık koşum aranıp bağlanmaz. Kayıp adıyla söylenir.
-    warnings.push("Koşum açılmadığı için bu indirme iş emri metresine GİRMİYOR.");
   }
-  return { machineCode: machine.code, warnings };
+  if (run.revokedAt) {
+    throw AppError.conflict("Koşum geri alınmış — indirme ona bağlanamaz.", {
+      code: "RUN_REVOKED",
+      machineRunId: run.id,
+      revokedAt: run.revokedAt,
+    });
+  }
+  return { machineCode: machine.code, warnings: run.weavingOrderId ? [] : [WARN_RUN_WITHOUT_ORDER] };
 }
 
 export async function openDoff(input: OpenDoffInput, userId?: string): Promise<ApiResponse<DoffEventDto>> {
   // ① Replay — yaratmadan ÖNCE.
   if (input.clientToken) {
     const existing = await findByToken(input.clientToken);
-    if (existing) {
-      return { success: true, data: resolveReplay(existing, input), message: "İndirme zaten kayıtlı (yeniden gönderim)" };
-    }
+    if (existing) return resolveReplay(existing, input);
   }
   // ② Bağlam (tx dışı okuma) · ③ damga.
   const ctx = await resolveDoffContext(input);
@@ -142,17 +148,13 @@ export async function openDoff(input: OpenDoffInput, userId?: string): Promise<A
 
   let created: DoffEventDto;
   try {
-    // ④ Kod sunucuda, günlük sıra; ⑤ tek INSERT. Yalnız KOD çarpışması yeniden
-    // denenir — token P2002'si retry'a GİRMEZ, aşağıda replay'e döner.
+    // ④ Kod sunucuda, günlük sıra, 8029 kilidi tx'in İLK ifadesi (`nextDoffCodeTx`);
+    // ⑤ tek INSERT. Retry yalnız `code_key` P2002 kemeri — token P2002'si retry'a
+    // GİRMEZ, aşağıda replay'e döner.
     created = await withBarcodeRetry(
       () =>
         prisma.$transaction(async (tx) => {
-          const prefix = dailyCodePrefix(DOFF_CODE_PREFIX, stamp.value);
-          const codes = await tx.doffEvent.findMany({
-            where: { code: { gte: prefix, startsWith: prefix } },
-            select: { code: true },
-          });
-          const code = buildDailyCode(DOFF_CODE_PREFIX, nextDailySeq(codes.map((c) => c.code), prefix), stamp.value);
+          const code = await nextDoffCodeTx(tx, stamp.value);
           return tx.doffEvent.create({
             data: {
               machineId: input.machineId,
@@ -172,14 +174,13 @@ export async function openDoff(input: OpenDoffInput, userId?: string): Promise<A
         }),
       undefined,
       (err) => p2002Mentions(err, /doff_events_code_key/),
+      "İndirme kodu",
     );
   } catch (e) {
     // ⑥ Aynı token iki paralel istekte: ikinci INSERT token unique'ine çarpar → replay.
     if (input.clientToken && isClientTokenP2002(e)) {
       const existing = await findByToken(input.clientToken);
-      if (existing) {
-        return { success: true, data: resolveReplay(existing, input), message: "İndirme zaten kayıtlı (yeniden gönderim)" };
-      }
+      if (existing) return resolveReplay(existing, input);
     }
     throw e;
   }
@@ -203,6 +204,43 @@ export async function openDoff(input: OpenDoffInput, userId?: string): Promise<A
 }
 
 /**
+ * `count=0` tanısı — tx içinde taze okuma. Top listesi TAM okunur (`pieceCount`
+ * 1000'e kadar meşru); mesajdaki liste kırpılır, SAYI kırpılmaz.
+ */
+async function diagnoseRevokeRefusal(tx: Prisma.TransactionClient, doffEventId: string): Promise<AppError> {
+  const fresh = await tx.doffEvent.findUnique({
+    where: { id: doffEventId },
+    select: { revokedAt: true, rolls: { select: { id: true, barcode: true }, orderBy: { createdAt: "asc" } } },
+  });
+  if (!fresh) return AppError.notFound("İndirme kaydı bulunamadı", { doffEventId });
+  if (fresh.revokedAt) {
+    return AppError.conflict("Bu indirme zaten geri alınmış.", { code: "DOFF_ALREADY_REVOKED", doffEventId, revokedAt: fresh.revokedAt });
+  }
+  const barcodes = fresh.rolls.map((r) => r.barcode);
+  const shown = barcodes.slice(0, MESSAGE_BARCODE_LIMIT);
+  const tail = barcodes.length > shown.length ? ` … (+${barcodes.length - shown.length})` : "";
+  return AppError.conflict(
+    `Bu indirmeden ${barcodes.length} top doğmuş — indirme artık geri alınamaz; yanlış top kendi iptal yolundan gider ` +
+      `(${shown.join(", ")}${tail}).`,
+    { code: "DOFF_HAS_ROLLS", doffEventId, total: barcodes.length, barcodes, rollIds: fresh.rolls.map((r) => r.id) },
+  );
+}
+
+/**
+ * KK1'in `FOR UPDATE`i doff satırını tx zaman aşımından uzun tutarsa iptal
+ * P2028 ile düşer. Bu "sunucu yoğun" (503) DEĞİL bir DURUM çatışmasıdır: satır
+ * o an topa bağlanıyor — 409 "tekrar deneyin" (ölçüldü 2026-09-13, §3.8c W7;
+ * karar 1e). Başka her hata olduğu gibi geçer.
+ */
+export function mapRevokeTimeout(e: unknown, doffEventId: string): unknown {
+  if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== "P2028") return e;
+  return AppError.conflict("Bu indirme şu anda KK1'de topa bağlanıyor — birkaç saniye sonra tekrar deneyin.", {
+    code: "DOFF_LINK_IN_PROGRESS",
+    doffEventId,
+  });
+}
+
+/**
  * GERİ ALMA — damga. Açık yüklem: `revokedAt IS NULL AND NOT EXISTS rolls`.
  * Roll'a HİÇBİR ŞEY olmaz — top varsa doff geri alınamaz, top kendi ters
  * yolundan gider. `count=0` tanısı tx içinde taze okumayla.
@@ -222,27 +260,9 @@ export async function revokeDoff(doffEventId: string, reason: string, userId?: s
       where: { id: doffEventId, revokedAt: null, rolls: { none: {} } },
       data: { revokedAt: new Date(), revokedById: userId ?? null, revokeReason: reason },
     });
-    if (claim.count === 0) {
-      const fresh = await tx.doffEvent.findUnique({
-        where: { id: doffEventId },
-        select: { revokedAt: true, rolls: { select: { id: true, barcode: true }, take: 20 } },
-      });
-      if (!fresh) throw AppError.notFound("İndirme kaydı bulunamadı", { doffEventId });
-      if (fresh.revokedAt) {
-        throw AppError.conflict("Bu indirme zaten geri alınmış.", { code: "DOFF_ALREADY_REVOKED", doffEventId, revokedAt: fresh.revokedAt });
-      }
-      throw AppError.conflict(
-        `Bu indirmeden doğmuş ${fresh.rolls.length} top var — önce topu iptal edin, indirme sonra geri alınır.`,
-        {
-          code: "DOFF_HAS_ROLLS",
-          doffEventId,
-          barcodes: fresh.rolls.map((r) => r.barcode),
-          rollIds: fresh.rolls.map((r) => r.id),
-        },
-      );
-    }
+    if (claim.count === 0) throw await diagnoseRevokeRefusal(tx, doffEventId);
     return tx.doffEvent.findUniqueOrThrow({ where: { id: doffEventId }, select: DOFF_SELECT });
-  });
+  }).catch((e: unknown) => { throw mapRevokeTimeout(e, doffEventId); });
   await AuditService.log({
     userId,
     action: "UPDATE",
