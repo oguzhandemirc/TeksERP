@@ -237,23 +237,34 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     ["src/services/shipping.service.ts"],
     { silen: ["src/services/shipping.service.ts"], borc: [{
       ne: "sil-yaz (3 deleteMany); değişim geçmişi AUDIT'e yazılıyor (tx dışında, best-effort, 6 ayda arşivlenir)",
-      kanit: "shipping.service.ts:2066/2817/3546 deleteMany · flushAllocationAudit tx DIŞINDA · kod yorumu tabloyu \"mali etkisi olan tek defter\" diyor",
+      kanit: "shipping.service.ts deleteMany ×3: writeShipmentAllocationsTx · setShipmentOrders · cancelPlannedShipmentTx · flushAllocationAudit tx DIŞINDA · kod yorumu tabloyu \"mali etkisi olan tek defter\" diyor",
       sahibi: "sevkiyat alanı",
     }] }),
 
-  D("ShipmentOrder", "sevkiyat ↔ sipariş bağı", { tur: "YOK" }, [],
+  // ⚠️ ESKİ BORÇ KAPANDI (2026-09-13) — ÖNCÜLÜ YANLIŞTI, koşulu sağlandığı için değil.
+  // Not "aynı ilişki iki rejimle kapanıyor: deleteMany ve isActive:false" diyordu.
+  // Sonda (yanlışlanabilir): BİR SOFT-DELETE GERİ ALINMAZ. `undoDispatch` `isActive`i
+  // `true`ya çeviriyor ⇒ o bir silme damgası değil, `shipment.status = PLANNED`
+  // denormu — şema zaten böyle tanımlıyor. İki farklı soru yan yana görülüp aynı
+  // sanılmış. Kural: "iki yol var" demek, ikisinin AYNI soruyu cevapladığı
+  // ölçülmeden bir borç değil bir GÖZLEMDİR.
+  //
+  // AÇIK SORU (borç DEĞİL — öncülü henüz ölçülmedi): `setShipmentOrdersTx`in
+  // `deleteMany`i "bu sevkiyat eskiden şu siparişi kapsıyordu" izini siler ve
+  // kapsam sevk SONRASI da değişebilir (test_shipment_order_ledger §5 onarım yolu).
+  // Ölçülen: iz siliniyor. ÖLÇÜLMEYEN: silinmemeli mi — kapsam replace'i meşru
+  // olabilir; asıl soru sevk sonrası değişimin bir deftere yazılıp yazılmadığı.
+  D("ShipmentOrder", "sevkiyat ↔ sipariş bağı; isActive = shipment.status PLANNED denormu",
+    { tur: "DAMGA", kolon: "isActive" },
+    [{ dosya: "src/services/shipping.service.ts", sembol: "undoDispatch" }],
     ["src/services/shipping.service.ts"],
-    { silen: ["src/services/shipping.service.ts"], borc: [{
-      ne: "AYNI ilişki iki rejimle kapanıyor: fiziksel deleteMany ve isActive:false — hangisinin doğru olduğu yazılı değil",
-      kanit: "shipping.service.ts:1964 setShipmentOrdersTx deleteMany · :3547 updateMany({isActive:false})",
-      sahibi: "sevkiyat alanı",
-    }] }),
+    { silen: ["src/services/shipping.service.ts"] }),
 
   D("SackTagAssignment", "çuval izi (etiket) ataması", { tur: "YOK" }, [],
     ["src/services/sack-tag.service.ts"],
     { silen: ["src/services/sack-tag.service.ts"], borc: [{
-      ne: "\"geçersiz iz\" kavramı KURULMUŞ (ACTIVE_TAG_WHERE) ama satır yine fiziksel siliniyor",
-      kanit: "sack-tag.service.ts:488/492 deleteMany · ACTIVE_TAG_WHERE sack-search.service.ts:211/431'de süzgeç olarak kullanılıyor",
+      ne: "YALNIZ ELLE KALDIRMA yolunda satır fiziksel siliniyor — SEVK yolu ZATEN soft (clearedAt + clearedShipmentId, undoDispatch geri alıyor, applyTagsTx'te diriliş dalı var)",
+      kanit: "sack-tag.service.ts applyTagsTx deleteMany ×2 (removeAll · remove) · ACTIVE_TAG_WHERE süzgeç olarak sack-search.service.ts'te kullanılıyor",
       sahibi: "sevkiyat alanı",
     }] }),
 

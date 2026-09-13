@@ -113,26 +113,26 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 
 | Defter | Kapsam | Append-only | Ters yol |
 |---|---|---|---|
-| `WarehouseMovement` | depo giriş/çıkış, **13 olay** (`EXTERNAL` hiçbir yerden yazılmıyor; `OPENING_BALANCE` yalnız açılış fotoğrafı script'inden) | ✅ ölçüldü (`update`/`delete` yolu yok) | ✅ `reversesMovementId` + dört ters helper (`reverseStockMove` · `reverseLegacyStockMove` · `reverseAllRollStockMoves` · `reverseLatestScopedStockMove`) · **`RETURN` ✅ kapandı** (`RETURN_CANCEL`, bağlı, 2026-09-13) · TRANSFER ✅ bağsız · SHIPMENT ✅ bağsız · CANCEL ⚠️ yalnız sayım stornosu bağlı (elle "iptali geri al" `ROLL_CANCEL` kapsamıyla yazar, sayımın satırını bulamaz) · **BORÇ: `EXTERNAL` (fason doğumu · kartela) ters yolsuz** |
-| `CariTransaction` `:6611` | cari borç/alacak, 11 kaynak | ✅ | ✅ `reversesTxnId` |
-| `ChequeEvent` `:7208` | çek durum defteri, 14 olay | ✅ | ✅ `*_CANCEL` (2026-09-11) — CANCEL'ın tersi yok (kendisi storno) |
-| `CashTransaction` `:6898` | kasa/banka | yarı (`status: CANCELLED`) | ✅ |
-| `YarnMovement` `:7399` | iplik stoğu | ✅ | ✅ ADJUST_IN/OUT |
-| `RollMovement` `:3587` | topun adım içi giriş/çıkışı | yarı — `updatedAt` (açık satır çıkışta kapanır, Faz 2 açık) · `revokedAt` damgası | ✅ damga + PARTIAL unique (`exitedAt IS NULL AND revokedAt IS NULL`) |
-| `RollOperation` `:3108` | kurşun/QC2/tambur/fason kanıtı | ✅ `revokedAt` damgası | ✅ damga + PARTIAL unique |
-| `RollVariance` `:3175` | fire · düzeltme · aşım | ✅ | ✅ `reversedAt` |
+| `WarehouseMovement` | depo giriş/çıkış, **13 olay** (`EXTERNAL` 2026-09-13'ten beri YAZILIYOR — kartela ×3 + fason sevki ×1; `OPENING_BALANCE` yalnız açılış fotoğrafı script'inden) | ✅ ölçüldü (`update`/`delete` yolu yok) | ✅ `reversesMovementId` + dört ters helper (`reverseStockMove` · `reverseLegacyStockMove` · `reverseAllRollStockMoves` · `reverseLatestScopedStockMove`) · **`RETURN` ✅ kapandı** (`RETURN_CANCEL`, bağlı, 2026-09-13) · TRANSFER ✅ bağsız · SHIPMENT ✅ bağsız · `EXTERNAL`/kartela ✅ bağlı (`KARTELA_CANCEL`) · CANCEL ⚠️ yalnız sayım stornosu bağlı (elle "iptali geri al" `ROLL_CANCEL` kapsamıyla yazar, sayımın satırını bulamaz) · **BORÇ: `EXTERNAL`/fason sevki TERS YOLSUZ** — `FASON_DISPATCH` ileri satırı var, fason sevk iptali (`soft cancel`) topu `AT_SUBCONTRACTOR → STOCK`a döndürüyor ama deftere HİÇBİR satır yazmıyor; katalogda `FASON_*_CANCEL` sebep kodu yok (ölçüldü 2026-09-13: 39 ileri / 0 ters / 0 bağlı) |
+| `CariTransaction` | cari borç/alacak, 11 kaynak | ✅ | ✅ `reversesTxnId` |
+| `ChequeEvent` | çek durum defteri, 14 olay | ✅ | ✅ `*_CANCEL` (2026-09-11) — CANCEL'ın tersi yok (kendisi storno) |
+| `CashTransaction` | kasa/banka | yarı (`status: CANCELLED`) | ✅ |
+| `YarnMovement` | iplik stoğu | ✅ | ✅ ADJUST_IN/OUT |
+| `RollMovement` | topun adım içi giriş/çıkışı | yarı — `updatedAt` (açık satır çıkışta kapanır, Faz 2 açık) · `revokedAt` damgası | ✅ damga + PARTIAL unique (`exitedAt IS NULL AND revokedAt IS NULL`) |
+| `RollOperation` | kurşun/QC2/tambur/fason kanıtı | ✅ `revokedAt` damgası | ✅ damga + PARTIAL unique |
+| `RollVariance` | fire · düzeltme · aşım | ✅ | ✅ `reversedAt` |
 | `SwatchStockReduction` + `SwatchStockReductionItem` | kartela düşümü + kalemleri | ✅ `reversedAt` damgası | ✅ damga (negatif satır CHECK yüzünden yasak); kalemi ölü kabule bağlı kartela dönmez (2026-09-11) |
-| `PaymentAllocation` `:7249` | fatura kapama | ✅ `revokedAt` damgası | ✅ damga (negatif satır CHECK yüzünden yasak) |
-| `SackAllocation` `:4939` | sipariş karşılama | ❌ sil-yaz (rebalance) | ❌ |
-| `PrintedDocument` `:4388` | belge versiyonu | yarı — `updatedAt` VAR (2026-09-13'te düzeltildi; eskiden ✅ yazıyordu) | ✅ `supersededAt`/`voidedAt` |
+| `PaymentAllocation` | fatura kapama | ✅ `revokedAt` damgası | ✅ damga (negatif satır CHECK yüzünden yasak) |
+| `SackAllocation` | sipariş karşılama | ❌ sil-yaz (rebalance) | ❌ |
+| `PrintedDocument` | belge versiyonu | yarı — `updatedAt` VAR (2026-09-13'te düzeltildi; eskiden ✅ yazıyordu) | ✅ `supersededAt`/`voidedAt` |
 | `ShipmentEvent` **(yeni)** | sevkiyat durum defteri, 6 olay | ✅ | ✅ DISPATCHED↔UNDISPATCHED · INVOICED↔INVOICE_CLEARED |
 | `SackWeighing` **(yeni)** | çuval tartı ölçümü | ✅ | ✅ CLEARED olayı |
-| `RollPlanDeviation` `:3278` | plan-dışı kimlikle inen metrajın KARAR defteri | ✅ | ❌ **BORÇ — damga kolonu bile yok** (aşağıdaki kural satırına bak) |
-| `TravelerCardScan` `:3538` | okutma | ✅ | — TELEMETRİ (sonda koşuldu: hiçbir yüzey okutma SAYISI basmıyor) · budama ufku guard'a bağlı |
+| `RollPlanDeviation` | plan-dışı kimlikle inen metrajın KARAR defteri | ✅ | ❌ **BORÇ — damga kolonu bile yok** (aşağıdaki kural satırına bak) |
+| `TravelerCardScan` | okutma | ✅ | — TELEMETRİ (sonda koşuldu: hiçbir yüzey okutma SAYISI basmıyor) · budama ufku guard'a bağlı |
 | `ImportRunLine` | içe aktarım geri sarmasının tek kaynağı (ileri satır **iç içe** `lines.createMany` ile yazılır) | ✅ | ✅ `revertedAt` + `revertSkipReason` |
 | `MergeOperation` (+`Source`/`Ref`) | master-data birleştirme karar defteri | ✅ | ✅ `revertedAt` (LIFO, fotoğraftan) |
-| `ShipmentOrder` | sevkiyat ↔ sipariş bağı | ✅ | ❌ **BORÇ** — aynı ilişki iki rejimle kapanıyor: fiziksel `deleteMany` (`:1964`) ve `isActive:false` (`:3547`) |
-| `SackTagAssignment` | çuval izi (etiket) ataması | ✅ | ❌ **BORÇ** — "geçersiz iz" kavramı kurulmuş (`ACTIVE_TAG_WHERE`) ama satır fiziksel siliniyor |
+| `ShipmentOrder` | sevkiyat ↔ sipariş bağı; `isActive` = `shipment.status = PLANNED` **denormu** | ✅ | ✅ borç KAPANDI (2026-09-13, öncülü yanlıştı) — `undoDispatch` `isActive`i `true`ya çevirir, yani o bir silme damgası değil; `deleteMany` yalnız `setShipmentOrdersTx` kapsam replace'i. AÇIK SORU (borç değil): sevk SONRASI kapsam değişimi bir deftere yazılıyor mu |
+| `SackTagAssignment` | çuval izi (etiket) ataması | ✅ | ❌ **BORÇ — yalnız ELLE KALDIRMA yolunda** (`applyTagsTx`): satır fiziksel siliniyor. Sevk yolu ZATEN soft (`clearedAt`+`clearedShipmentId`, `undoDispatch` geri alır) |
 
 ## Geçersiz kılınan kurallar
 
