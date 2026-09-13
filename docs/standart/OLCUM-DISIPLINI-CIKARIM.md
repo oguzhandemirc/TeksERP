@@ -234,6 +234,24 @@ tile-route-per` diye kesikti. Ağaçtan tamamlanınca `tile-route-permission.tes
 **Savunma:** kesik alanı kozmetik sayma; tamamladıktan SONRA iddianın hâlâ doğru olup
 olmadığını ayrıca ölç.
 
+### Bayat KURAL, doğru uygulama — kod, belgedeki cümleye sadık kalarak bozulur
+Bayatlama yalnız BEYAN metninde olmaz: **KURAL metni** de bayatlar, ve kod kurala sadık
+kaldığı için "doğru" görünen bir kusur üretir. Fark: bayat beyan yanlış bir şey SÖYLER;
+bayat kural yanlış bir şey YAPTIRIR — ve yaptırdığı şey her denetimde "kurala uygun" çıkar.
+*(Vaka 2026-09-13: `top-duzeltme.md` kuralı "depo kesimi geri alınınca currentQty+initialQty
+birlikte geri konur" diyordu; 2026-08-29'da kesim `initialQty`ye dokunmaz oldu, kural cümlesi
+değişmedi. Undo'nun depo dalı kurala sadık kalıp `+len` eklemeye devam etti — 01 çalıştırdı:
+100 m top, 40 m kes, geri al ⇒ `initialQty` 100→140. Şişme bir yazım hatası değildi, bayat
+kuralın koda aynasıydı; kodu düzeltmek kuralı düzeltmeden yalnız bir aynayı kırardı.)*
+**Ayırt edici soru:** kusurlu kod bir kural cümlesine ATIF yapıyor mu (yorumda "kesim ikisini
+birden düşmüştü")? Yapıyorsa önce o cümlenin BUGÜN doğru olup olmadığını ölç — cümle yanlışsa
+düzeltme iki yerdir (kural + kod) ve kural önce iner, yoksa bir sonraki okuyucu aynı aynayı
+yeniden kurar.
+**Savunma:** davranışı değiştiren her commit, o davranışı anan kural cümlelerini `grep` ile
+sayar ve ya günceller ya "GEÇERSİZ → tarih" ile arşive taşır; kural belgesinde iki cümle yan
+yana kalmaz (kök `CLAUDE.md` § Belge disiplini). Bekçi: `test_kural_bekci_atfi` yalnız ADI
+ölçer, cümlenin doğruluğunu değil — bu sınıfın kapısı bugün yok, savunma elle.
+
 ### İki operasyonel kural
 
 - **Paket içinde kırmızı + tek başına yeşil ⇒ kusur kodda değil, koşumun DURUMUNDA.**
