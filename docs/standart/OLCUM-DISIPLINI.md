@@ -151,9 +151,33 @@ sorusuna dört oturum dört sayı verdi (64 · 68 · 70 · 72) ve hiçbiri yanl�
 dördü de, alanı `` bekçi: `[^`]*` `` ile okuyan ESKİ ayrıştırıcıyla ölçüldü; o ayrıştırıcı
 alanın içindeki backtick'te duruyordu. Düzeltilince (`556b151a`) **aynı yüklem, aynı ağaç,
 farklı sayı** verdi: dört alan "kesik" olmaktan çıktı, 11 bekçi adı da alanın okunmayan
-yarısından ortaya geldi. ⇒ Bir sayının kimliği **üç** parçadır: *yüklem · ağaç ·
-ayrıştırıcı*. Üçüncüsü en sessizidir, çünkü kimse aracın sürümünü yazmaz.
-(Sınıf: `OLCUM-DISIPLINI-ARAC.md` § Kapı, kendi AYRIŞTIRICISININ darlığını SAYIYA çevirebilir.)
+yarısından ortaya geldi. (Sınıf: `OLCUM-DISIPLINI-ARAC.md` § Kapı, kendi AYRIŞTIRICISININ darlığını SAYIYA çevirebilir.)
+
+⚠️ **DÖRDÜNCÜ ve BEŞİNCİ EKSEN, aynı gün — YÜK ve REJİM.** *(d9, ölçüldü 2026-09-13.)*
+534 bekçi **ulaşılamaz DB** ile tarandı ve *"kusur kovası BOŞ"* denildi. Doğruydu —
+**o rejimde.** Saatler sonra CI'da `test_qc2_idempotency` ısırdı: *"çıkış 0 ∧ özet yok ∧
+beyan yok"*. Sebep dosyanın kendisinde yazılı — `:50-51` fikstür bulunamayınca bir satır
+basıp `return` ediyor ve `=== Sonuç ===` satırı `:132`de, yani **erken dönüşten SONRA**.
+
+| rejim | PROCESS_QC adımı · uygun top | sonuç |
+|---|---|---|
+| bir oturumun `_test` DB'si | 10 · 206 | dal tetiklenmez, dosya normal koşar |
+| CI'ın taze DB'si | 0 · 0 | **erken dönüş, SESSİZ** |
+
+Aynı yüklem, aynı ağaç, aynı ayrıştırıcı — **farklı rejim, farklı sayı.**
+
+> **Bir sayının kimliği, ölçümün KOŞULLARIDIR.** Bugüne kadar adı konmuş eksenler:
+> *yüklem* (ne sordun) · *ağaç* (hangi commit) · *ayrıştırıcı* (aracın hangi sürümü) ·
+> *yük* (hangi hacim) · *rejim* (DB var/yok · sunucu ayakta/değil · fikstür dolu/boş ·
+> STRICT açık/kapalı).
+
+⚠️ **Ve asıl uyarı sayıda değil, LİSTENİN KENDİSİNDE:** bu liste tek günde **iki → üç →
+beş** oldu. *"Üç parçadır"* cümlesi yazıldığı gün doğruydu ve aynı gün bayatladı. ⇒
+Eksen sayısını ezberleme; **eksen listesini AÇIK yaz** ve yeni bir sayı üretirken sor:
+*bu sayıyı, benimkinden farklı bir koşulda ölçen biri farklı bulur muydu?*
+
+**Savunma (d9):** bir tablo üretirken **başlığına damgaları ÖNCE yaz, satırları sonra
+doldur** — sonradan eklenen damga, eksik olanı hatırlatmaz.
 
 ⚠️ **Farkı çözen şey SAYI değil SATIRDIR.** İki bağımsız ölçüm ayrıldığında sayıları
 karşılaştırmak yetmez — *hangi satır* sorusuna inilmeden fark kapanmaz.

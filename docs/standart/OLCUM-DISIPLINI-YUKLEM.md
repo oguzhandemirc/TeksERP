@@ -208,3 +208,20 @@ bir `grep` 6 eşleşme verdi, gerçek 3'tü — fazlalık bir **constraint adı*
 "bu bekçi o taramayı koşar" cümlesini sessizce yanlışlar.
 Kardeşleri § NE sorduğun kadar NEREYE sorduğun · § Sınırsız eşleşme
 (`OLCUM-DISIPLINI-SINIFLAR.md`).
+
+### Üyelik yalnız HANGİ DOSYALAR değil, HANGİ KOŞULLARDA sorusunu da taşır
+Bir popülasyonu doğru saymak yetmez: *"bu popülasyonda kusur yok"* ile *"bu
+popülasyonun BU REJİMDEKİ davranışında kusur yok"* farklı iki cümledir ve ikincisi
+yazılmazsa okuyan birincisini anlar.
+
+*(Vaka 2026-09-13, d9: 534 bekçi ulaşılamaz DB ile tarandı, *"kusur kovası boş"* denildi.
+Popülasyon doğruydu — 534'ün 534'ü tarandı. Ama rejim popülasyonun parçası sayılmamıştı:
+DB'siz rejimde bir dosyanın fikstür-yok dalı hiç tetiklenmiyordu, DB'li taze rejimde
+tetikleniyor ve dosya özet satırını basmadan sessizce çıkıyordu.)*
+
+> **Üyeliği sınarken iki soruyu birlikte sor:** *hangi öğeler* **ve** *hangi koşullarda*.
+> İkincisi yazılmayan bir "0", kapsamı okunmadan taşınır.
+
+**Savunma:** popülasyon cümlesinin yanına rejimi damgala (DB var/yok · sunucu ayakta mı ·
+fikstür dolu mu · STRICT açık mı); `OLCUM-DISIPLINI.md` § Sayı yazma'daki eksen listesi
+bunun tam hâlidir.
