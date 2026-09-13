@@ -12,6 +12,26 @@
 Çıktı boş ya da anlamsız gelir; fark edilir, en ucuz sınıf.
 **Savunma:** çıktıyı okumadan sonuç yazma.
 
+### Aracın DOĞRU cevap verdiği koşum, onu DOĞRULAMAZ — yanlış demesi gereken yerde sına
+Bir ölçüm aracını *"çalıştı"* diye kabul etmek, onu yalnız **doğru cevabı zaten bildiğin**
+bir koşumda görmektir. Araç o koşumda doğruyu söylerken **başka bir soruyu** cevaplıyor
+olabilir; ayrımı ancak **yanlış demesi GEREKEN** bir girdi gösterir.
+
+*(Vaka 2026-09-14, kusur 5e'de: *"bir commit indi mi"* sorusuna
+`git merge-base --is-ancestor <sha> origin/main` aracı seçildi ve **doğru** çalıştı —
+çünkü elimdeki sha, entegratörün gönderdiği CHERRY-PICK sha'sıydı. Aracı kendi orijinal
+sha'mla hiç denemedim. Denenince: orijinal ✗ "inmemiş", cherry-pick'i ✓ "inmiş" —
+**aynı içerik, iki cevap.** Araç bozuk değildi; SORUSU başkaydı: *"bu sha ata mı"* ≠
+*"bu içerik indi mi"*.)*
+
+> **Negatif sonda yalnız KAPIYA değil, ÖLÇÜM ARACINA da uygulanır:** aracı, cevabın
+> **HAYIR olması gereken** bir girdiyle koş. Hayır demiyorsa ölçtüğün şey senin sandığın
+> şey değildir.
+📌 Ucuz biçim: her araç seçiminde iki girdi hazırla — biri olumlu, biri **olumsuz kontrol**.
+Olumsuz kontrol yoksa, aracın kapsamını değil yalnız o günkü şansını ölçmüş olursun.
+Kardeşleri § 1 · Araç bozuk · § Bir tarayıcı, kendi TARİF ETTİĞİ şeyin ÖRNEĞİNİ gerçek
+sanır · § Boş çıktı bir ÖLÇÜM değildir.
+
 ### 4 · Araç ölçümün içinde
 `ps | grep` kendini sayar; sonda, ölçtüğü sinyalin taşıyıcısını kirletir.
 **Savunma:** `pgrep -f` ya da `grep -v grep`. Sonda argümanı, ölçülen sinyalin
