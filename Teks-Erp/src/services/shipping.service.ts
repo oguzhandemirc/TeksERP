@@ -5409,7 +5409,13 @@ async function collectShipmentDocContent(
     })
   );
 
-  const products = [...productMap.values()].map((p) => ({ name: p.name, customerName: p.skipsCustomerName ? null : p.customerName, rollCount: p.rollCount, totalMeters: Number(p.totalMeters) }));
+  // ⚠️ AYRIK KİP İKİZLERİ SNAPSHOT'A GİRER (2026-09-13 düzeltmesi): bu iki alan
+  // yukarıda KURULUYOR ama eşleme onları DÜŞÜRÜYORDU ⇒ `docProductColorSplit`
+  // açıldığında "MÜŞTERİ VARYANT" sütunu çiziliyor, hücresi HEP BOŞ kalıyor ve
+  // "MÜŞTERİ STOK ADI" birleşik adı basmaya devam ediyordu — yani bayrağın var
+  // oluş gerekçesi ("yarı çevrilmiş ad basılmasın") sağlanmıyordu.
+  // Fail-safe aynen uygulanır: işaretli kalite satırında ikizler de düşer.
+  const products = [...productMap.values()].map((p) => ({ name: p.name, customerName: p.skipsCustomerName ? null : p.customerName, customerItemOnly: p.skipsCustomerName ? null : p.customerItemOnly, customerColorOnly: p.skipsCustomerName ? null : p.customerColorOnly, rollCount: p.rollCount, totalMeters: Number(p.totalMeters) }));
   const totalRolls = products.reduce((s, p) => s + p.rollCount, 0);
   const totalMeters = Number(sackRows.reduce((s, r) => s.plus(r.totalMeters), D0()));
   const totalKg = Number(sackRows.reduce((s, r) => s.plus(r.totalKg), D0()));

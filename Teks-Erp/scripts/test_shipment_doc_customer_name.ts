@@ -143,6 +143,36 @@ function renderSample(
   );
 }
 
+/** §9 ikiz sondası — ürün satırına ayrık ikizleri KOYARAK/KOYMAYARAK bas. */
+const IKIZ_URUN = "TSTIKIZ ÜRÜN";
+const IKIZ_RENK = "TSTIKIZ RENK";
+function renderIkizVaryanti(ikizVar: boolean, colorSplit: boolean): string {
+  const doc = JSON.parse(
+    JSON.stringify(SAMPLE_PRINTED_DOCS[PrintedDocType.SHIPMENT_DISPATCH]),
+  ) as { products: Record<string, unknown>[] };
+  doc.products = [
+    {
+      name: "TSTIKIZ STOK",
+      customerName: `${IKIZ_URUN} ${IKIZ_RENK}`,
+      ...(ikizVar ? { customerItemOnly: IKIZ_URUN, customerColorOnly: IKIZ_RENK } : {}),
+      rollCount: 1,
+      totalMeters: 100,
+    },
+  ];
+  return renderShipmentDispatchHtml(
+    {
+      schemaVersion: 1,
+      frozenAt: "2026-09-13T00:00:00.000Z",
+      company: { name: "Test", letterhead: { addressLine: "", phone: "", taxInfo: "" } },
+      docConfigOverride: null,
+      doc: doc as unknown as Record<string, unknown>,
+    },
+    { itemNameMode: "musterideki", productColorSplit: colorSplit },
+  );
+}
+const renderIkizli = (split: boolean): string => renderIkizVaryanti(true, split);
+const renderIkizsiz = (split: boolean): string => renderIkizVaryanti(false, split);
+
 async function run(): Promise<void> {
   // ---------------------------------------------------------------------------
   console.log("\n§1 — VARSAYILAN `bizdeki`: çıktı BUGÜNKÜNÜN AYNISI");
@@ -669,6 +699,32 @@ async function run(): Promise<void> {
   check(
     "⭐ ayrık kipte ürün listesine MÜŞTERİ VARYANT sütunu geliyor",
     ayrik.includes("MÜŞTERİ VARYANT"),
+  );
+  // ⚠️ SÜTUNUN VARLIĞI YETMEZ — HÜCRE DOLU MU (2026-09-13 kusuru).
+  // Bu bölüm 2026-09-06'dan beri YEŞİLDİ ve özellik ÇALIŞMIYORDU: `collect…`
+  // `customerItemOnly`/`customerColorOnly` alanlarını kuruyor ama `products`
+  // eşlemesi onları DÜŞÜRÜYORDU ⇒ sütun çiziliyor, hücresi hep BOŞ, ve
+  // "MÜŞTERİ STOK ADI" birleşik adı basmaya devam ediyordu. Yani bayrağın var
+  // oluş gerekçesi ("yarı çevrilmiş ad basılmasın") sağlanmıyordu.
+  // => Bir bayrağın bekçisi, bayrağın ÜRETTİĞİ YAPIYI değil VAAT ETTİĞİ SONUCU
+  //    ölçmelidir: "sütun var" bir yapı, "renk kendi hücresinde" bir sonuçtur.
+  const ikizliDoc = (await shippingService.getDispatchReport(SHIPMENT)).data as {
+    products: { customerItemOnly?: string | null; customerColorOnly?: string | null }[];
+  };
+  const ikizliSatir = ikizliDoc.products.find((p) => p.customerItemOnly);
+  check(
+    "⭐ fiş ucu AYRIK İKİZLERİ taşıyor (snapshot'a giriyor — yalnız kuruluyor değil)",
+    !!ikizliSatir?.customerItemOnly,
+    `itemOnly=${String(ikizliSatir?.customerItemOnly)} colorOnly=${String(ikizliSatir?.customerColorOnly)}`,
+  );
+  check(
+    "⭐ ayrık kipte MÜŞTERİ VARYANT hücresi DOLU (sütun değil, DEĞER)",
+    renderIkizli(true).includes(`<td class="l">${IKIZ_RENK}</td>`),
+    `beklenen hücre: ${IKIZ_RENK}`,
+  );
+  check(
+    "⭐ ikizler KAPALI kipte çıktıya SIZMIYOR (bayt eşitliği)",
+    renderIkizli(false) === renderIkizsiz(false),
   );
   check(
     "⭐ `bizdeki` rejiminde bayrak AÇIK olsa da müşteri sütunu ÇIKMAZ (rejim üstte)",
