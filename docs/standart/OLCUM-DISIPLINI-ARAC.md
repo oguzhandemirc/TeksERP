@@ -17,24 +17,11 @@
 **Savunma:** `pgrep -f` ya da `grep -v grep`. Sonda argümanı, ölçülen sinyalin
 taşıyıcısıyla **aynı kanaldan geçmemeli**.
 
-### Dolaylılık — desen tabanlı ölçümün varsayılan kör noktası
-Bir desen *"şu metni içeriyor mu"* diye soruyorsa, metnin **bir adım dolaylı** hâli
-için **ayrı bir sonda** yazılır.
-*(Aynı kök bir gecede üç kez: ham SQL içine gömülü `UPDATE` · sabit üzerinden
-verilen olay adı · şablon değişkenine gömülü `DROP TABLE`.)*
-**Kurtarma cümlesi:** *"sondayı kurmasaydım deseni yeterince dar sanacaktım."*
+### Yüklem (ne sorduğun) sınıfları → ayrı dosya
+Aletin **çalışması** ile aletin **ne sorduğu** ayrı iki kusur ailesidir. İkincisi —
+desenin kapsamı, eşleşmenin sınırı, popülasyonun üyeliği, gevşek ya da dar yüklem —
+[`OLCUM-DISIPLINI-YUKLEM.md`](OLCUM-DISIPLINI-YUKLEM.md)'de.
 
-⚠️ Bu sınıfın **ters yönü de var ve bu belge yazılırken yaşandı:** komut kapısı,
-yukarıdaki `DROP TABLE` dizgesini **belge örneği** olarak yazmayı engelledi. Desen
-metni bağlamdan bağımsız eşliyor ⇒ *yasağı anlatan cümle de yasağın kendisi
-sayılıyor.* Yani dolaylılık kör noktasının bedeli iki yönlü: desen bir adım
-dolaylıyı **kaçırır**, düz metni **fazladan yakalar**.
-
-### Çelişki yüklemi ≠ farklılık yüklemi
-Bir çelişki yüklemi kurarken **"hangi değerler birlikte YANLIŞ"** sorusunu,
-**"hangi değerler FARKLI"** sorusundan ayır.
-*(Vaka: `unit <> 'kg' AND scale IS NULL` üç "çelişki" buldu; üçü de metre cihazıydı
-ve m→m çarpanı 1 doğruydu.)*
 
 ### Aracın VARSAYILANI ≠ olgunun özelliği — iki biçim
 Araç DOĞRU çalışıyor, çıktısı da doğru; yanlış okunan şey **varsayılan ayarıdır**.
@@ -61,27 +48,6 @@ basmıyordu; "listede yok" ⇒ "koşmadı" sanıldı.)*
 **Savunma:** sınırı ve sessizliği olan her araçta (yığın derinliği, sonuç tavanı,
 `head`, `grep -m`, ajan çıktı kırpması, "yalnız hataları bas" modu) **politikayı ÖNCE
 oku**, sonra ölç.
-
-### Sezgisel eşleme, ölçümün KENDİSİNİ yakalayabilir
-§4'ün (araç ölçümün içinde) sezgisel akrabası: "en yakın komut" gibi bir buluşsal,
-ölçüm script'inin kendi çağrısını eşleştirir.
-*(Vaka: kesin anahtara — `toolUseID` — geçilince sayı 4.123 → **4.962**, yanlış dizin
-1 → **24**.)*
-**Savunma:** eşlemeyi **yakınlıkla değil KİMLİKLE** kur.
-
-### Aracı değiştirmek kapsamı genişletmez — YÜKLEMİ genişletmek genişletir
-*(Vaka: bir envanter `grep` yerine AST ile kuruldu; **AST de kaçırdı** —
-`ShorthandPropertyAssignment`'ta, yani `data: { status, … }` yazımında, metinde
-`status:` token'ı YOKTUR. Kaçan site üretimin ana finalize boğazıydı.)*
-⚠️ Asıl tehlike aracın kaçırması değil: **AST daha hassas olduğu için insanı "artık
-kaçırmam" diye rahatlatır.** Kaçırdığı şey aynı sınıftandır, yalnız daha SESSİZ.
-> **Daha iyi bir araç ikinci turu gereksiz kılmaz — ikinci turu TERK ETME İSTEĞİNİ
-> üretir.**
-
-### Tarama, aradığı şeyin YAZILIŞ BİÇİMİNİ değil KENDİSİNİ sormalı
-`status:` aramak bir **biçim** sorusudur; *"bu nesne `status` taşıyor mu"* bir
-**anlam** sorusu. Ve belirsiz kalan aday **temiz sayılmaz** — fail-closed.
-*(Aynı vaka: soru anlam düzeyine çekilince 13 → **16** aday.)*
 
 ### "Ölçemiyoruz" ile "ölçmek için aracı KURMADIK" aynı cümle değildir
 Araç eksikliğini bir **bilgi sınırı** sanmak. İlki dünyanın özelliği, ikincisi
@@ -185,38 +151,6 @@ aynı gece bir başka oturuma dört kez çarptı.)*
 ⚠️ Ters yönü de var ve bu belgede yaşandı: *yasağı anlatan cümle, yasağın kendisi
 sayılabilir* (§ Dolaylılık'ın ters yönü).
 
-### Bir POPÜLASYONU saymadan önce ÜYELİĞİNİ sına
-
-Bir kümenin üyelerini saymak, onların o kümeye ait olduğunu **varsayar**. Üyelik
-sınanmazsa sayı üç ayrı şeyi tek rakama sıkıştırır ve hiçbiri görünmez.
-
-*(Vaka 2026-09-13, `--apply` script'lerinin iz bırakması.* Dolaşan sayı: **"27
-script'in 6'sı hiç iz bırakmıyor"**. İki oturum bağımsız ölçtü ve **ikisi de 6
-buldu**. Pozitif kontrol — *"bu altısı gerçekten YAZIYOR mu?"* — sayıyı çökertti:*
-
-| ölçülen | gerçek sınıf |
-|---|---|
-| `backfill-record-provenance` | **gerçekten izsiz yazıyor** (ham SQL — ne audit ne `updatedAt`) |
-| `setup-ticaret` | **servis üzerinden yazıyor** ⇒ iz VAR; `systemSettingService` · `PermissionManagementService` · `ensureDefaultWarehouse` audit'i kendileri atıyor. Desen taraması dolaylı çağrıyı görmedi |
-| `db-guard` | **hiç yazmıyor** — salt-okunur bir kapı, popülasyonun üyesi bile değil |
-
-⇒ *"6 izsiz"* = **1 gerçek ihlal + servis üzerinden yazanlar + popülasyona ait
-olmayanlar.** Bir yüklem "yazma yolu"nu **kapanışıyla** izlemiyorsa (script →
-servis → audit/Prisma), meşru script'leri ihlal gösterir.
-
-> ***İki bağımsız ölçüm aynı sayıya vardı ve ikisi de yanlıştı. Aynı KÖR NOKTAYI
-> paylaşan iki ölçüm birbirini DOĞRULAMAZ.***
-
-⚠️ Bu, *"kritik iddiada iki bağımsız ARAÇ kullan"* kuralının ince yeri:
-**bağımsızlık KAYNAKTA değil YÖNTEMDE olmalı.** İki oturum, iki kaynak — ama tek
-yöntem (literal desen araması) ve tek kör nokta (dolaylılık). Farklı kişilerin
-aynı yöntemi koşturması, ölçümü **tekrarlar**, doğrulamaz.
-
-📌 Panzehir iki adımlı: ① üyeliği sına (*"bu dosya gerçekten YAZIYOR mu?"*),
-② yüklemi kapanışa taşı (doğrudan çağrı değil, ulaşılan tüm yazma yolları).
-*(d5 ölçüm + formülasyon · 1e'nin "yazan yolları say, adı arama" şartı bunu
-önceden söylüyordu ve ilk turda yine literal sayıldı.)*
-
 ### Mutasyonun ürettiği sayı, MUTASYONDAN gelmiş olabilir
 Bir sondanın ürettiği sayıyı bulgu saymadan önce, o sayının **mutasyonun KENDİSİNDEN**
 gelip gelmediğini ölç. Sonda aracı ölçtüğü şeyin içine karıştığında ürettiği sayı bir
@@ -246,30 +180,6 @@ vakalar üç ayrı oturumun KENDİ hataları)*:
 **Savunma:** ölçümü eylemden ayır (`RC=$?` hemen işin ardından), zinciri kısalt, ve
 kırpan her komutun (`head` · `tail` · `-m` · ajan çıktı sınırı) kapsamı daralttığını
 raporda YAZ.
-
-### Bir YOKLUK iddiası, arandığı DESENLE yazılır
-*"Başka kırıcı çift YOK"* değil — **"`DROP COLUMN` ve `delete data\.` desenleriyle
-aradım; üçüncü bir biçim varsa bu ikisi görmez."**
-*(Kaynak: oturum ölçümü 2026-09-13, sha yok; paket envanteri belgesi.)*
-Kardeşi § Boş çıktı bir ÖLÇÜM değildir ve `OLCUM-DISIPLINI-SINIFLAR.md` § "Bende yok".
-
-### Bir yüklem, aradığı şeyin BOZULMUŞ hâlini aramaz — bozulma ADAYI yok eder
-Sınırsız eşleşmenin **tersi**: sınır o kadar dardır ki kusurlu örnek **aday bile
-olmaz**. Cırcır 0'da kalır, çünkü sayacak bir şey doğmamıştır.
-
-*(Vaka 2026-09-13, ölçüldü: bir kural satırının `bekçi:` alanı `…test_kursun_bypass, te`
-diye kesikti — ad, `test_` önekini bile tamamlamıyordu. Kesik-ad cırcırının yüklemi
-`/\btest_[a-z0-9_]+\b/` ve `te` ona UYMUYOR ⇒ aday hiç doğmadı, kapı sessiz kaldı.
-Alan tam okunuyordu; kusur okumada değil **popülasyonun tanımındaydı**.)*
-
-> **Popülasyonu, aradığın şeyin DOĞRU biçiminden türetirsen, YANLIŞ biçim popülasyonun
-> dışında kalır** — ve tam da ölçmek istediğin şey odur.
-
-**Savunma:** popülasyonu **alandan** türet (her `bekçi:` alanının virgülle ayrılmış her
-öğesi bir adaydır), sonra her adayın geçerli biçime uyup uymadığını sor. O zaman
-`te` bir **yokluk** değil bir **kırmızı** olur.
-Kardeşleri § Boş çıktı bir ÖLÇÜM değildir · § Tarama, aradığı şeyin YAZILIŞ BİÇİMİNİ
-değil KENDİSİNİ sormalı.
 
 ### Kapı, kendi AYRIŞTIRICISININ darlığını SAYIYA çevirebilir — ve sayı CIRCIRA girer
 Bir kapı alanı okurken kullandığı sınır, alanın gerçek sınırı olmayabilir. O zaman kapı
@@ -321,3 +231,25 @@ kabul etmesidir (`OLCUM-DISIPLINI-ORTAK-AGAC.md`).
 satır sayısı ⇒ mükerrer`) ve farkı **kırmızı** yap. Emsal: kural kimliği tekilliği
 `scripts/check-docs.mjs`te tam bu yüzden ayrı bir kapıdır — `- **[ID]**` satırları da bir
 beyan tablosudur ve mükerrer ID sessizdi.
+
+### ASILI KALMAK, çalışmanın DELİLİ değildir — stdin bekleyen komut "yavaş" görünür
+Uzun süren bir adım iki şeyden biridir: **iş yapıyor** ya da **bir girdi bekliyor**. İkisi
+dışarıdan AYNIDIR — çıktı yok, çıkış kodu yok, ilerleme yok. Ve bekleme hâli kendini
+"paket yavaş" diye okutur, çünkü o açıklama zaten hazırdadır.
+
+*(Vaka 2026-09-13, ölçüldü: bir commit 3 dakika "kapı koşuyor" sanıldı. Gerçekte kabuk,
+commit mesajının İÇİNDEKİ backtick'leri komut ikamesi olarak çalıştırmıştı — mesajda
+geçen `cp` hata bastı, `shasum -c` argümansız kalıp **stdin'i** beklemeye oturdu. Kapı
+hiç başlamamıştı; teşhis `ps`te sürecin ÇOCUĞUNU görmekle geldi: `perl … shasum -c`.)*
+
+> **Bir şey uzun sürüyorsa, NE yaptığını sor — süreyi değil, ÇOCUK SÜRECİ ölç.**
+> `pgrep -P <pid>` üç saniyede cevap verir; "herhalde testler" bir saat yer.
+
+⚠️ **Ve bu, bugünün üçüncü yüzeyi:** aynı sınıf (§ Kapı, kendi AYRIŞTIRICISININ darlığını
+SAYIYA çevirebilir) önce `Kapanır:` alanında, sonra `bekçi:` alanında, sonunda **KABUKTA**
+çıktı. Sınıf markdown'a ait değil: **ayraç içerikte de geçebiliyorsa, ayrıştırıcı içeriği
+ÇALIŞTIRIR.** Komut mesajı, alan değeri, log satırı — hiçbiri "sadece veri" değildir.
+
+**Savunma:** serbest metin bir komuta ARGÜMAN olarak değil DOSYA olarak geçer
+(`git commit -F <dosya>`, heredoc); ve asılı kalan süreç önce `pgrep -P` ile açılır,
+öldürülürken kendi PID'i adıyla öldürülür (`pkill -f <desen>` başkasının işini alır).

@@ -77,7 +77,7 @@ hangi modelde yaşadığını taşımaz.
 tolerans satırı yorum içinde · `grep` artefaktından kurulup başkasına iş olarak
 verilen liste.)*
 **Savunma:** dizgeyi taşıyan her listeye **nerede yaşadığını** yaz; taşıyamıyorsan
-liste bir iş tanımı değil bir arama çıktısıdır. Yakın akrabaları: KATMAN 1 § Dolaylılık ve § Teşhis mesajı da bir yüklemdir.
+liste bir iş tanımı değil bir arama çıktısıdır. Yakın akrabaları: KATMAN 1 `OLCUM-DISIPLINI-YUKLEM.md` § Dolaylılık ve § Teşhis mesajı da bir yüklemdir.
 
 ### "0 mı?" ile "0 KALACAK mı?" aynı ölçümle cevaplanmaz
 İlki bir **SAYIM**, ikincisi bir **YAZAR ENVANTERİ**.

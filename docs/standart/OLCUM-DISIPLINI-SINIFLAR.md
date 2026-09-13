@@ -249,6 +249,17 @@ turu; a maddesi sha'lı — `5ac6e830`)*:
 
 > **Sonda, MUTASYONUN UYGULANDIĞINI ve DOĞRU ALANA dokunduğunu da ölçer.**
 
+### Bir sondanın DÜNKÜ sonucu, bugünkü koda dair bir iddia değildir
+Sonda bir kereye mahsus bir tören değil, **bir ölçümdür** — ve ölçümler bayatlar.
+Fikstür, taban, kapsam ya da kapının kendisi değiştiyse *"bekçi hâlâ ısırıyor mu"*
+YENİDEN sorulur; eski yeşil devralınmaz.
+*(Vaka 2026-09-13: bir düzeltmeden sonra negatif sonda devralınmayıp yeniden koşuldu —
+fikstür değişmişti; ısırdı ve rakam 500'den 2100'e çıktı. Devralınsaydı "sonda geçerli"
+cümlesi doğru görünecek, dayandığı ölçüm ise başka bir koda ait olacaktı.)*
+> **Sondayı kod değişince değil, SONDANIN DÜNYASI değişince yenile** — fikstür, taban,
+> kapsam, kapı. Dördünden biri oynadıysa dünkü sonuç bir anıdır, delil değil.
+Kardeşi § SONDA ailesi ve `OLCUM-DISIPLINI-YUKLEM.md` § Bir "HEPSİ" iddiası.
+
 ### Tutmayan bir sonda İKİ şeyden birini söyler: kurgu yanlış YA DA kapı KÖR
 *"Sonda tutmadı, demek ki temiz"* üçüncü bir seçenek değildir.
 *(Vaka `b35a7a32` → `222cbf14`, 2026-09-13: bir sonda tutmadı; sebep kapının UZANTISIZ
