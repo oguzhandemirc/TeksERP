@@ -128,7 +128,7 @@ export const PROJELER = [
     ad: "Electron",
     typecheck: ["npm", ["run", "typecheck:plain"]],
     lint: ["npm", ["run", "lint"]],
-    test: ["npx", ["vitest", "run"]], // ölçüm: 23 sn
+    test: ["npx", ["vitest", "run"]], // ölçüm 2026-09-14: 225 dosya/2397 test — 77 sn (load ~15) · 210 sn (load 40–50)
   },
   {
     ad: "mobil",

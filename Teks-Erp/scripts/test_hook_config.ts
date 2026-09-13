@@ -232,6 +232,31 @@ function main(): void {
   check("§5d kapi-defteri.mjs appendFileSync'i try/catch içinde tutuyor", tryIcinde(defterKaynak));
   check("   ↳ sonda: try sökülmüş kopyada ısırıyor", !tryIcinde(defterKaynak.replace("try {", "{")));
 
+  // ── §6 ELECTRON VITEST ZAMAN AŞIMI KİPE BAĞLI (1e hükmü 2026-09-14) ──────────
+  // Kapı kipinde 20 sn (yük altında CPU açlığı 5 sn'yi aşıyordu: load ≈ 25'te 3 test,
+  // tek başına 21 sn), bayraksız 5 sn (CI, elle koşum). Config GERÇEKTEN yüklenir:
+  // regex'le "20_000 yazıyor mu" değil, "yüklenen değer ne" ölçülür — iki kipte.
+  console.log("\n§6 — Electron vitest zaman aşımı kipe bağlı mı");
+  const configOku = (env: Record<string, string | undefined>) => {
+    const ortam = { ...process.env, ...env };
+    if (env.TEKSERP_KAPI_ADIMI === undefined) delete ortam.TEKSERP_KAPI_ADIMI;
+    const r = spawnSync(
+      join(KOK, "Teks-Erp/node_modules/.bin/tsx"),
+      ["--eval", 'import c from "./vitest.config.ts"; process.stdout.write(String(c.test?.testTimeout))'],
+      { cwd: join(KOK, "Electron"), encoding: "utf8", env: ortam, timeout: 60_000 },
+    );
+    return r.status === 0 ? r.stdout.trim() : `HATA(${r.status}): ${r.stderr.slice(0, 120)}`;
+  };
+  const kapiKipi = configOku({ TEKSERP_KAPI_ADIMI: "commit" });
+  const bayraksiz = configOku({ TEKSERP_KAPI_ADIMI: undefined });
+  check("§6a ⭐ kapı kipinde (TEKSERP_KAPI_ADIMI=commit) testTimeout 20000", kapiKipi === "20000", kapiKipi);
+  check("§6b ⭐ bayraksız (CI / elle) testTimeout 5000", bayraksiz === "5000", bayraksiz);
+  // Kip her adıma pre-commit'ten iner; yalnız mandallara verilirse vitest 5 sn'de kalır.
+  check(
+    "§6c pre-commit kapı kipini BÜTÜN adımlara ilan ediyor (process.env.TEKSERP_KAPI_ADIMI = \"commit\")",
+    /process\.env\.TEKSERP_KAPI_ADIMI = "commit"/.test(preCommit),
+  );
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);
 }

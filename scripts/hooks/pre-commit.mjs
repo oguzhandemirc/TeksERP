@@ -39,6 +39,11 @@ if (process.env.TEKSERP_HOOK_SKIP === "1") {
   process.exit(0);
 }
 
+// KAPI KİPİ beyanı — her adım miras alır: cırcır çürüme kolu uyarıya iner (circir-kolu.ts),
+// Electron vitest zaman aşımı 5 → 20 sn'ye çıkar (yük altında CPU açlığı, kod hatası değil).
+// CI ve elle koşum bu env'i görmez, sert davranış orada kalır.
+process.env.TEKSERP_KAPI_ADIMI = "commit";
+
 const staged = stagedFiles(REPO);
 if (staged.length === 0) process.exit(0);
 
