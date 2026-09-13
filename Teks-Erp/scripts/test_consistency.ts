@@ -29,6 +29,7 @@
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import { notFixtureSql, notFixtureItemOfRollSql } from "./lib/fikstur-imzasi";
+import { atlamaDefteri } from "./lib/atlama";
 import prisma from "../src/lib/prisma";
 import { LEDGER_HORIZON_DAY } from "../src/constants/ledger-horizon";
 import { DISPOSITION_NOTE_PREFIXES } from "../src/services/helpers/roll-disposition.helper";
@@ -39,6 +40,7 @@ const CHEQUE_CASH_INFLOW = chequeCashInflowSql("e");
 
 let pass = 0,
   fail = 0;
+const defter = atlamaDefteri(() => { fail++; });
 function check(label: string, ok: boolean, extra = ""): void {
   if (ok) {
     pass++;
@@ -96,6 +98,12 @@ interface Section {
    * ölçüldüğü DB ile birlikte; büyürse yeni bir kapısız yol açılmış demektir.
    */
   miras?: { taban: number | null; tarih: string; nerede: string; not: string };
+  /**
+   * KAPSAM SAYACI — bölümün baktığı popülasyon. 0 ise bölüm ✅ DEĞİL ⏭ basar
+   * (SESSİZ YEŞİL kuralı: "0 drift çünkü 0 top" ile "0 drift çünkü tutarlı"
+   * aynı yeşile inemez — §33 fabrika kopyasında tam böyle yeşildi, 0/72).
+   */
+  kapsam?: { sql: string; ne: string };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -993,10 +1001,35 @@ WHERE v."reversedAt" IS NOT NULL
     // (Σ 40 / gerçek 20 sınıfı). CHECK `rolls_qty_le_initial` bu yönü GÖRMEZ (1c'ye
     // iletildi) — bu kalem o kör tarafın sondası.
     //
-    // KAPSAM: yalnız canlı TAMBUR_* OVERAGE sapması olan ve stok defterinde terslenmemiş
-    // bir GİRİŞ ucu (ENTRY ya da TRANSFORM IN) olan toplar — giriş metrajı defterden
-    // okunur, ufuk öncesi toplar kapsam dışı (girişi yok).
-    title: "initialQty ≠ giriş metrajı + Σ canlı TAMBUR aşımı (sessiz şişme ya da çift sayım)",
+    // ⚠️ DARALTILDI (2026-09-14, 1e hükmü; 9b'nin altı durumlu sondası S-A/S-G'de kırmızı
+    // verdi): keşif KESİM anında yazılır, bump GERİ ALMA anında doğar — çocuklardan biri
+    // CANLIYKEN ebeveynin initialQty'si henüz aşımı taşımaz ve eşitlik ancak bütün
+    // çocuklar geri alınınca tutar. Yazıcı değişmez (bump keşif anına taşınmaz);
+    // yüklem "canlı çocuğu olmayan ebeveyn"e daraltılır: CANCELLED dışında çocuğu olan
+    // ebeveyn kapsam dışı. Giriş terimi ENTRY + Σ ENTRY_CORRECTION (işaretli; bütün
+    // topta giriş düzeltmesi initialQty'yi taşır, 9b helper'ıyla aynı toplam).
+    //
+    // KAPSAM: canlı TAMBUR_* OVERAGE sapması olan, stok defterinde terslenmemiş bir GİRİŞ
+    // ucu (ENTRY ya da TRANSFORM IN) olan ve canlı çocuğu OLMAYAN toplar — giriş metrajı
+    // defterden okunur, ufuk öncesi toplar kapsam dışı (girişi yok). Kapsam 0 ⇒ ⏭ (sayı
+    // basılır), ✅ değil.
+    title: "initialQty ≠ giriş metrajı + Σ canlı TAMBUR aşımı (sessiz şişme ya da çift sayım) — canlı çocuğu olmayan ebeveynde",
+    kapsam: {
+      ne: "canlı TAMBUR_* OVERAGE sapması olan, defterde giriş ucu olan, canlı çocuksuz top",
+      sql: `
+SELECT COUNT(*)::int AS n
+FROM rolls r
+WHERE EXISTS (
+    SELECT 1 FROM roll_variances v
+     WHERE v."rollId" = r.id AND v.kind = 'OVERAGE' AND v."reversedAt" IS NULL
+       AND v.source IN ('TAMBUR_OVERCUT','TAMBUR_UNDO_RESTORE','TAMBUR_UNDO_FULL'))
+  AND EXISTS (
+    SELECT 1 FROM warehouse_movements m
+     WHERE m."rollId" = r.id AND m."toWarehouseId" IS NOT NULL AND m."fromWarehouseId" IS NULL
+       AND m."reversesMovementId" IS NULL
+       AND NOT EXISTS (SELECT 1 FROM warehouse_movements rv WHERE rv."reversesMovementId" = m.id))
+  AND NOT EXISTS (SELECT 1 FROM rolls c WHERE c."parentRollId" = r.id AND c.status <> 'CANCELLED')`,
+    },
     miras: {
       taban: null,
       tarih: "2026-09-13",
@@ -1020,10 +1053,16 @@ WHERE EXISTS (
     SELECT 1 FROM roll_variances v
      WHERE v."rollId" = r.id AND v.kind = 'OVERAGE' AND v."reversedAt" IS NULL
        AND v.source IN ('TAMBUR_OVERCUT','TAMBUR_UNDO_RESTORE','TAMBUR_UNDO_FULL'))
-  AND r."initialQty" <> giris.qty + (
-    SELECT COALESCE(SUM(v.qty), 0) FROM roll_variances v
-     WHERE v."rollId" = r.id AND v.kind = 'OVERAGE' AND v."reversedAt" IS NULL
-       AND v.source IN ('TAMBUR_OVERCUT','TAMBUR_UNDO_RESTORE','TAMBUR_UNDO_FULL'))`,
+  AND NOT EXISTS (SELECT 1 FROM rolls c WHERE c."parentRollId" = r.id AND c.status <> 'CANCELLED')
+  AND r."initialQty" <> giris.qty
+    + (SELECT COALESCE(SUM(CASE WHEN d."toWarehouseId" IS NOT NULL THEN d.qty ELSE -d.qty END), 0)
+         FROM warehouse_movements d
+        WHERE d."rollId" = r.id AND d."reasonCode" = 'ENTRY_CORRECTION'
+          AND d."reversesMovementId" IS NULL
+          AND NOT EXISTS (SELECT 1 FROM warehouse_movements rv WHERE rv."reversesMovementId" = d.id))
+    + (SELECT COALESCE(SUM(v.qty), 0) FROM roll_variances v
+        WHERE v."rollId" = r.id AND v.kind = 'OVERAGE' AND v."reversedAt" IS NULL
+          AND v.source IN ('TAMBUR_OVERCUT','TAMBUR_UNDO_RESTORE','TAMBUR_UNDO_FULL'))`,
   },
 ];
 
@@ -1059,6 +1098,15 @@ async function main(): Promise<void> {
       continue;
     }
     const suffix = s.noise ? ` [gürültü filtresi: ${s.noise.why}]` : "";
+    if (s.kapsam) {
+      const rows = await prisma.$queryRaw<Array<{ n: number }>>(Prisma.raw(s.kapsam.sql));
+      const kapsam = Number(rows[0]?.n ?? 0);
+      if (kapsam === 0) {
+        defter.atla(`§${s.id} ${s.title}`, `kapsam 0 (${s.kapsam.ne}) — 0 drift bir ölçüm değil`);
+        continue;
+      }
+      console.log(`   ℹ §${s.id} kapsam ${kapsam} top (${s.kapsam.ne})`);
+    }
     if (s.miras) {
       // MİRAS: mutlak sayı beklenen, ARTIŞ kırmızı. Sayı HER KOŞUMDA basılır —
       // "0 bulundu çünkü hiç bakılmadı" ile "0 bulundu çünkü temiz" ayrılsın.
@@ -1088,7 +1136,7 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${defter.ozetEki()} ===`);
   if (fail > 0) {
     console.log(
       "\nDÜŞTÜYSE: bir denormalize alan defterden kopmuş ya da bir akış nesneyi\n" +
