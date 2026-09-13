@@ -45,6 +45,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, dirname, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
+import { STDIN_ARIZA_MESAJI, stdinListesi } from "./hooks/lib/stdin-liste.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MIGRATIONS_DIR = "Teks-Erp/prisma/migrations";
@@ -129,11 +130,13 @@ function statusEntries(pathspec) {
 const KOMIT_KIPI = process.argv.includes("--commit-kapisi");
 const KOMIT_KUMESI = KOMIT_KIPI
   ? (() => {
-      try {
-        return readFileSync(0, "utf8").split("\n").map((s) => s.trim()).filter(Boolean);
-      } catch {
-        return []; // stdin okunamadı → küme boş → takipsiz kapılar yumuşak
+      // ZAMAN AŞIMLI (2026-09-13): açık boru + EOF yok = sonsuz askı; 5 sn'de ARIZA.
+      const { kip, liste } = stdinListesi();
+      if (kip === "zaman-asimi") {
+        console.error(`❌ migration hijyeni: ${STDIN_ARIZA_MESAJI}`);
+        process.exit(2);
       }
+      return liste ?? []; // TTY/kapalı → küme boş → takipsiz kapılar yumuşak
     })()
   : null;
 // Takipsiz kapıların SERTLİĞİ: bayraksız her zaman sert; commit kipinde yalnız

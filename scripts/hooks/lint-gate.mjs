@@ -45,6 +45,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PROJELER, stagedFiles } from "./lib/staged.mjs";
+import { STDIN_ARIZA_MESAJI, stdinListesi } from "./lib/stdin-liste.mjs";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -104,13 +105,14 @@ export function degerlendir(sonuclar, staged, projeAdi, repo = REPO) {
  * sayılıp kırmızı yerine uyarı alırdı. Elle koşumda (stdin yok) kendimiz türetiriz.
  */
 function stagedKume() {
-  try {
-    const ham = readFileSync(0, "utf8");
-    if (ham.trim().length > 0) return ham.split("\n").map((s) => s.trim()).filter(Boolean);
-  } catch {
-    /* stdin TTY ya da kapalı — elle koşum */
+  // ZAMAN AŞIMLI (2026-09-13): açık boru + EOF yok = sonsuz askı; 5 sn'de ARIZA.
+  const { kip, liste } = stdinListesi();
+  if (kip === "zaman-asimi") {
+    console.error(`❌ lint-gate: ${STDIN_ARIZA_MESAJI}`);
+    process.exit(2);
   }
-  return stagedFiles(REPO);
+  if (liste && liste.length > 0) return liste;
+  return stagedFiles(REPO); // TTY / kapalı / boş boru — elle koşum
 }
 
 function main() {

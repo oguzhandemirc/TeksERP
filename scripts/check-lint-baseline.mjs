@@ -29,6 +29,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { STDIN_ARIZA_MESAJI, stdinListesi } from "./hooks/lib/stdin-liste.mjs";
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -77,8 +78,14 @@ const KOMIT_KIPI = process.argv.includes("--commit-kapisi");
 const STAGED = KOMIT_KIPI
   ? new Set(
       (() => {
+        // ZAMAN AŞIMLI (2026-09-13): açık boru + EOF yok = sonsuz askı; 5 sn'de ARIZA.
+        const { kip, liste } = stdinListesi();
+        if (kip === "zaman-asimi") {
+          console.error(`❌ lint tavanı: ${STDIN_ARIZA_MESAJI}`);
+          process.exit(2);
+        }
         try {
-          return readFileSync(0, "utf8").split("\n").map((s) => s.trim()).filter(Boolean);
+          return liste ?? [];
         } catch {
           return [];
         }

@@ -76,6 +76,14 @@ try {
     join(havuz, "scripts/check-migrations.mjs"),
     readFileSync(join(KOK, "scripts/check-migrations.mjs"), "utf8"),
   );
+  // Kapı betiği artık bağımlılık taşıyor (stdin zaman aşımı, 2026-09-13): kopya
+  // yalnız betik değil, import ettiği kütüphane — yoksa havuzda "module not found"
+  // ile çöker ve sekiz kontrol birden kırmızı düşer (bu kapı bunu ölçtü).
+  mkdirSync(join(havuz, "scripts/hooks/lib"), { recursive: true });
+  writeFileSync(
+    join(havuz, "scripts/hooks/lib/stdin-liste.mjs"),
+    readFileSync(join(KOK, "scripts/hooks/lib/stdin-liste.mjs"), "utf8"),
+  );
   writeFileSync(join(havuz, "Teks-Erp/prisma/migrations/20260101_taban/migration.sql"), "SELECT 1;\n");
   writeFileSync(join(havuz, "Teks-Erp/scripts/test_taban.ts"), "export const x = 1;\n");
   g(["init", "-q", "."]);
