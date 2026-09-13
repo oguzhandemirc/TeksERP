@@ -17,6 +17,7 @@
 // Rota: [1] BOYA_FASON (EXTERNAL) → [2] KURSUN_KK2 (INTERNAL)   (F'de tek adım)
 // Çalıştır: npx tsx scripts/test_fason_partial_receive_overcount.ts
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
@@ -24,6 +25,7 @@ import { RollStatus, RollForm, StepStatus } from "@prisma/client";
 
 let ITEM = "";
 let GRADE = "";
+let GRADE_CODE = "";
 let ADMIN = "";
 let ST_BOYA = "";
 let ST_KURSUN = "";
@@ -36,7 +38,9 @@ async function resolveFixtures(): Promise<void> {
     return v.id;
   };
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "Item PATOS");
-  GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "QualityGrade 1.KALITE");
+  const _gradeRow = await roleGrade("FIRST");
+  GRADE = _gradeRow.id;
+  GRADE_CODE = _gradeRow.code;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "User admin");
   ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "Station BOYA_FASON");
   ST_KURSUN = need(await prisma.station.findFirst({ where: { code: "KURSUN_KK2" }, select: { id: true } }), "Station KURSUN_KK2");
@@ -86,7 +90,7 @@ async function stockRoll(qty: number): Promise<string> {
       initialQty: qty,
       currentQty: qty,
       status: RollStatus.STOCK,
-      qualityGrade: "1.KALITE",
+      qualityGrade: GRADE_CODE,
       qualityGradeId: GRADE,
       width: WIDTH,
       createdById: ADMIN,

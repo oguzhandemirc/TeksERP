@@ -14,6 +14,7 @@
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { TamburService } from "../src/services/tambur.service";
 import { AppError } from "../src/utils/app-error";
@@ -48,14 +49,14 @@ let ITEM = "",
   STATION_ANY = "",
   STATION_TAMBUR = "",
   DEFECT = "";
+let GRADE_CODE = "";
 const woIds: string[] = [];
 
 async function resolveFixtures(): Promise<void> {
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "Item PATOS").id;
-  GRADE = need(
-    await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }),
-    "QualityGrade 1.KALITE"
-  ).id;
+  const _gradeRow = await roleGrade("FIRST");
+  GRADE = _gradeRow.id;
+  GRADE_CODE = _gradeRow.code;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin").id;
   STATION_ANY = need(
     await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }),
@@ -160,7 +161,7 @@ async function testTamburDuplicateError(): Promise<void> {
       initialQty: 100,
       currentQty: 100,
       status: RollStatus.IN_PRODUCTION,
-      qualityGrade: "1.KALITE",
+      qualityGrade: GRADE_CODE,
       qualityGradeId: GRADE,
       width: WIDTH,
       createdById: ADMIN,

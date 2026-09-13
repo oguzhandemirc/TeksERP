@@ -12,6 +12,7 @@
 // =============================================================================
 
 import { v4 as uuidv4 } from "uuid";
+import { roleGrade } from "./fixture-quality-grade";
 import prisma from "../src/lib/prisma";
 import { TamburService } from "../src/services/tambur.service";
 import { WorkOrderStatus, RollStatus, StationKind } from "@prisma/client";
@@ -38,6 +39,7 @@ let ITEM = "",
   ADMIN = "",
   COLOR = "",
   STATION_TAMBUR = "";
+let GRADE_CODE = "";
 const woIds: string[] = [];
 const parentIds: string[] = [];
 let seq = 0;
@@ -45,7 +47,9 @@ const tok = () => uuidv4(); // idempotency anahtarı (barkod artık sunucu-atana
 
 async function resolveFixtures(): Promise<void> {
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS").id;
-  GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "1.KALITE").id;
+  const _gradeRow = await roleGrade("FIRST");
+  GRADE = _gradeRow.id;
+  GRADE_CODE = _gradeRow.code;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin").id;
   COLOR = need(await prisma.color.findFirst({ where: { isActive: true }, select: { id: true } }), "renk").id;
   STATION_TAMBUR = need(await prisma.station.findFirst({ where: { kind: StationKind.TAMBUR }, select: { id: true } }), "TAMBUR").id;
@@ -57,7 +61,7 @@ async function warehouseRoll(qty: number): Promise<string> {
       barcode: `TST-TCI-${seq++}-${Date.now().toString().slice(-5)}`,
       itemId: ITEM, colorId: COLOR, status: RollStatus.WAREHOUSE,
       currentQty: qty, initialQty: qty, width: 150,
-      qualityGrade: "1.KALITE", qualityGradeId: GRADE, createdById: ADMIN,
+      qualityGrade: GRADE_CODE, qualityGradeId: GRADE, createdById: ADMIN,
     },
     select: { id: true },
   });
@@ -79,7 +83,7 @@ async function openFabricRoll(qty: number): Promise<string> {
     data: {
       barcode: null, itemId: ITEM, colorId: COLOR, status: RollStatus.IN_PRODUCTION,
       currentQty: qty, initialQty: qty, width: 150,
-      qualityGrade: "1.KALITE", qualityGradeId: GRADE, createdById: ADMIN,
+      qualityGrade: GRADE_CODE, qualityGradeId: GRADE, createdById: ADMIN,
       currentStepId: wo.steps[0].id, entrySource: "SUBCONTRACTOR_RETURN",
     },
     select: { id: true },

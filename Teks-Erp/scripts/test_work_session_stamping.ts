@@ -13,6 +13,7 @@
 //      istasyon donanımı; oturum yok → BOŞ liste (fail-closed)
 // =============================================================================
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { InventoryService } from "../src/services/inventory.service";
 import { TamburService } from "../src/services/tambur.service";
 import { PeripheralDeviceService } from "../src/services/peripheral.service";
@@ -48,7 +49,8 @@ async function main() {
   const ts = Date.now();
   const admin = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
   const item = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS");
-  const grade = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "1.KALITE");
+  const grade = await roleGrade("FIRST");   // satırın KENDİSİ — aşağıda `grade.id` okunuyor
+  const gradeCode = grade.code;
   const color = need(await prisma.color.findFirst({ where: { isActive: true }, select: { id: true } }), "renk");
   const tamburStation = need(
     await prisma.station.findFirst({ where: { kind: StationKind.TAMBUR, isActive: true }, select: { id: true } }),
@@ -122,7 +124,7 @@ async function main() {
       data: {
         barcode: null, itemId: item.id, colorId: color.id, status: RollStatus.IN_PRODUCTION,
         currentQty: 100, initialQty: 100, width: 150,
-        qualityGrade: "1.KALITE", qualityGradeId: grade.id, createdById: admin.id,
+        qualityGrade: gradeCode, qualityGradeId: grade.id, createdById: admin.id,
         currentStepId: stepId, entrySource: "SUBCONTRACTOR_RETURN",
       },
       select: { id: true },

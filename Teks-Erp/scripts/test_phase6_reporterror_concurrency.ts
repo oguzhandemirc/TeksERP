@@ -11,6 +11,7 @@
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { TamburService } from "../src/services/tambur.service";
 import { AppError } from "../src/utils/app-error";
 import { WorkOrderStatus, RollStatus, StationKind } from "@prisma/client";
@@ -38,11 +39,14 @@ let ITEM = "",
   ADMIN = "",
   STATION_TAMBUR = "",
   DEFECT = "";
+let GRADE_CODE = "";
 const woIds: string[] = [];
 
 async function resolveFixtures(): Promise<void> {
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS").id;
-  GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "1.KALITE").id;
+  const _gradeRow = await roleGrade("FIRST");
+  GRADE = _gradeRow.id;
+  GRADE_CODE = _gradeRow.code;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin").id;
   STATION_TAMBUR = need(await prisma.station.findFirst({ where: { kind: StationKind.TAMBUR }, select: { id: true } }), "TAMBUR").id;
   DEFECT = need(await prisma.defectType.findFirst({ where: { isActive: true }, select: { id: true } }), "DefectType").id;
@@ -70,7 +74,7 @@ async function makeTamburRoll(): Promise<{ rollId: string; stepId: string }> {
       initialQty: 100,
       currentQty: 100,
       status: RollStatus.IN_PRODUCTION,
-      qualityGrade: "1.KALITE",
+      qualityGrade: GRADE_CODE,
       qualityGradeId: GRADE,
       width: 150,
       createdById: ADMIN,

@@ -7,6 +7,7 @@
 //
 // Çalıştır: npx ts-node scripts/test_wo_branch_split.ts
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { WorkOrderService } from "../src/services/workorder.service";
@@ -16,6 +17,7 @@ import { RollStatus, StepStatus } from "@prisma/client";
 // Fixture id'leri seed'den runtime'da çözülür (re-seed sonrası hardcoded id kırılırdı).
 let ITEM = "";
 let GRADE = "";
+let GRADE_CODE = "";
 let ADMIN = "";
 let ST_BOYA = "";
 let ST_TAMBUR = "";
@@ -27,7 +29,9 @@ async function resolveFixtures(): Promise<void> {
     return v.id;
   };
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "Item PATOS");
-  GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "QualityGrade 1.KALITE");
+  const _gradeRow = await roleGrade("FIRST");
+  GRADE = _gradeRow.id;
+  GRADE_CODE = _gradeRow.code;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "User admin");
   ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "Station BOYA_FASON");
   ST_TAMBUR = need(await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }), "Station TAMBUR_1");
@@ -53,7 +57,7 @@ function barcode(): string {
 async function stockRoll(qty: number): Promise<string> {
   const r = await prisma.roll.create({
     data: { barcode: barcode(), itemId: ITEM, initialQty: qty, currentQty: qty,
-      status: RollStatus.STOCK, qualityGrade: "1.KALITE", qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN },
+      status: RollStatus.STOCK, qualityGrade: GRADE_CODE, qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN },
   });
   return r.id;
 }

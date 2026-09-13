@@ -16,6 +16,7 @@
 //
 // Çalıştır: npx tsx scripts/test_split_per_roll.ts
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { WorkOrderService } from "../src/services/workorder.service";
@@ -23,12 +24,15 @@ import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus, WorkOrderStatus } from "@prisma/client";
 
 let ITEM = "", GRADE = "", ADMIN = "", ST_BOYA = "", ST_TAMBUR = "";
+let GRADE_CODE = "";
 const WIDTH = 250;
 
 async function resolveFixtures(): Promise<void> {
   const need = (v: { id: string } | null, l: string): string => { if (!v) throw new Error(`fixture eksik: ${l}`); return v.id; };
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS");
-  GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "grade");
+  const _gradeRow = await roleGrade("FIRST");
+  GRADE = _gradeRow.id;
+  GRADE_CODE = _gradeRow.code;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
   ST_BOYA = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON");
   ST_TAMBUR = need(await prisma.station.findFirst({ where: { code: "TAMBUR_1" }, select: { id: true } }), "TAMBUR_1");
@@ -45,7 +49,7 @@ function check(label: string, cond: boolean, extra = ""): void {
 let bc = 0;
 const barcode = () => `TST-SPR-${Math.floor(Math.random() * 0xffffff).toString(16).toUpperCase()}${bc++}`;
 async function stockRoll(qty: number): Promise<string> {
-  const r = await prisma.roll.create({ data: { barcode: barcode(), itemId: ITEM, initialQty: qty, currentQty: qty, status: RollStatus.STOCK, qualityGrade: "1.KALITE", qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN } });
+  const r = await prisma.roll.create({ data: { barcode: barcode(), itemId: ITEM, initialQty: qty, currentQty: qty, status: RollStatus.STOCK, qualityGrade: GRADE_CODE, qualityGradeId: GRADE, width: WIDTH, createdById: ADMIN } });
   return r.id;
 }
 // Fixture kaçış kapısı: `no-explicit-any` bekçi kapsamında AÇIK DEĞİL

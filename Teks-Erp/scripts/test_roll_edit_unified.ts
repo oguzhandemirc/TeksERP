@@ -17,6 +17,7 @@
 // =============================================================================
 
 import prisma, { pool } from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { InventoryService } from "../src/services/inventory.service";
 import { RollStatus } from "@prisma/client";
 
@@ -34,6 +35,7 @@ async function expectThrow(label: string, fn: () => Promise<unknown>, msgPart?: 
 }
 
 let ITEM = "", GRADE = "", ADMIN = "", COLOR = "";
+let GRADE_CODE = "";
 const rollIds: string[] = [];
 let bc = 0;
 function barcode(): string { bc++; return `TST-EDIT-${Math.floor(Math.random() * 0xffffff).toString(16).toUpperCase()}${bc}`; }
@@ -44,7 +46,9 @@ async function resolveFixtures(): Promise<void> {
     return v.id;
   };
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "Item PATOS");
-  GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "QualityGrade");
+  const _gradeRow = await roleGrade("FIRST");
+  GRADE = _gradeRow.id;
+  GRADE_CODE = _gradeRow.code;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
   const allowed = await prisma.itemAllowedColor.findFirst({ where: { itemId: ITEM }, select: { colorId: true } });
   COLOR = allowed?.colorId
@@ -55,7 +59,7 @@ async function makeRoll(status: RollStatus, qty = 100): Promise<string> {
   const r = await prisma.roll.create({
     data: {
       barcode: barcode(), itemId: ITEM, initialQty: qty, currentQty: qty,
-      status, qualityGrade: "1.KALITE", qualityGradeId: GRADE,
+      status, qualityGrade: GRADE_CODE, qualityGradeId: GRADE,
       entrySource: "SUPPLIER_RECEIPT", createdById: ADMIN,
     },
     select: { id: true },

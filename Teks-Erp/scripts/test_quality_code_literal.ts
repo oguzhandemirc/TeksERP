@@ -126,19 +126,10 @@ const AGACLAR: Array<{ kok: string; tavan: number; dilim: string; sadece?: RegEx
   // `backfill-*` fixture/araç kurucularıdır — fixture kendi kurduğu kataloğu
   // koduyla okur, orası "gömülü varsayım" değil senaryonun TANIMIDIR.
   // Kapsam dışı bırakılan scripts/ dosyalarındaki sayı 37.
-  // 244 → 216 → 197: Dilim 1 (20 dosya) + ENUM DEĞERİ istisnası (20 sahte
-  // isabet: `roleGrade("FIRST")`). Gerçek borç 196; +1 d9.
-  // (eski satır) 244 → 216: bekçi borcu Dilim 1 (20 dosya role bağlandı). Katalog bağımlılık
-  // ölçümü 61 → 42 (docs/ops/KATALOG-KODU-BAGIMLILIK-OLCUMU.md).
-  //
-  // ⚠️ TAVAN ÖNCE 163 YAZILMIŞTI ve YANLIŞTI: sayı, bekçinin KENDİ ÇIKTISINDAN
-  // `grep -c` ile alınmıştı — oysa döküm §-başına kırpılıyor, yani basılmayan
-  // ihlaller sayılmamıştı. Gerçek sayı sayaçtan okunarak 251 ölçüldü.
-  // ("Ölçüm aracı gözlenenin içinde" sınıfı — kırpılmış bir listeden sayı
-  // çıkarmak, listeyi üreten kapının kendi sınırını ölçmek olur.)
-  // 251 → 246: bu turda beş bekçi literali daha katalogdan çözülür oldu
-  // (test_tambur_over_quantity ön koşulunu kendi kurunca). Mandal işledi.
-  { kok: "Teks-Erp/scripts", tavan: 197, dilim: "bekçi borcu — dilim 1 indi (61→42)", sadece: /\/scripts\/test_[^/]+\.ts$/ },
+  // ⚠️ Tavan SAYAÇTAN okunur, bu bekçinin DÖKÜMÜNDEN değil: döküm §-başına
+  // kırpılır, `grep -c` basılmayan ihlalleri saymaz. Sayı yalnız SIKILAŞAN
+  // yönde hareket eder. İniş hikâyesi commit mesajlarında.
+  { kok: "Teks-Erp/scripts", tavan: 137, dilim: "bekçi borcu — dilim 1+2 indi", sadece: /\/scripts\/test_[^/]+\.ts$/ },
   { kok: "mobil/src", tavan: 0, dilim: "(ii) — indi 2026-09-13" },
   { kok: "Electron/src", tavan: 0, dilim: "(iii) — indi 2026-09-13" },
 ];

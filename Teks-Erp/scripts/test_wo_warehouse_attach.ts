@@ -7,6 +7,7 @@
 // Koşum: npx tsx scripts/test_wo_warehouse_attach.ts
 // =============================================================================
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus } from "@prisma/client";
@@ -21,6 +22,7 @@ const svc = new WorkOrderService();
 const cards = new TravelerCardService();
 
 let ITEM = "", GRADE = "", ADMIN = "", COLOR = "", ST_KURSUN = "";
+let GRADE_CODE = "";
 const woIds: string[] = [];
 const sackIds: string[] = [];
 const rollIds: string[] = [];
@@ -35,7 +37,9 @@ const barcode = (): string => `TST-WHA-${Math.floor(Math.random() * 0xffffff).to
 async function fixtures(): Promise<void> {
   const need = (v: { id: string } | null, l: string): string => { if (!v) throw new Error(`fixture eksik: ${l}`); return v.id; };
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS");
-  GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "1.KALITE");
+  const _gradeRow = await roleGrade("FIRST");
+  GRADE = _gradeRow.id;
+  GRADE_CODE = _gradeRow.code;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
   COLOR = need(await prisma.color.findFirst({ where: { isActive: true }, select: { id: true } }), "color");
   ST_KURSUN = need(await prisma.station.findFirst({ where: { code: "KURSUN_KK2" }, select: { id: true } }), "KURSUN_KK2");
@@ -46,7 +50,7 @@ async function makeRoll(status: RollStatus, colorId: string | null): Promise<{ i
   const r = await prisma.roll.create({
     data: {
       barcode: code, itemId: ITEM, colorId, initialQty: 100, currentQty: 100,
-      status, qualityGrade: "1.KALITE", qualityGradeId: GRADE, width: 250, createdById: ADMIN,
+      status, qualityGrade: GRADE_CODE, qualityGradeId: GRADE, width: 250, createdById: ADMIN,
     },
     select: { id: true },
   });

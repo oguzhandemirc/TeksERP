@@ -11,6 +11,7 @@
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { InventoryService } from "../src/services/inventory.service";
 import { RollStatus } from "@prisma/client";
 
@@ -26,6 +27,7 @@ async function expectThrow(label: string, fn: () => Promise<unknown>): Promise<v
 
 const inv = new InventoryService();
 let ITEM = "", GRADE = "", ADMIN = "", COLOR = "", PROPERTY = "";
+let GRADE_CODE = "";
 const rollIds: string[] = [];
 let bc = 0;
 function barcode(): string { bc++; return `TST-MAN-${Math.floor(Math.random() * 0xffffff).toString(16).toUpperCase()}${bc}`; }
@@ -36,7 +38,9 @@ async function resolveFixtures(): Promise<void> {
     return v.id;
   };
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "Item PATOS");
-  GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "QualityGrade 1.KALITE");
+  const _gradeRow = await roleGrade("FIRST");
+  GRADE = _gradeRow.id;
+  GRADE_CODE = _gradeRow.code;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
   // Item allowed-list varsa onun içinden seç (aksi halde applyManualProperties reddeder).
   const allowedColor = await prisma.itemAllowedColor.findFirst({ where: { itemId: ITEM }, select: { colorId: true } });
@@ -52,7 +56,7 @@ async function makeRoll(status: RollStatus, withBarcode: boolean): Promise<strin
     data: {
       barcode: withBarcode ? barcode() : null,
       itemId: ITEM, initialQty: 100, currentQty: 100,
-      status, qualityGrade: "1.KALITE", qualityGradeId: GRADE,
+      status, qualityGrade: GRADE_CODE, qualityGradeId: GRADE,
       entrySource: withBarcode ? "SUPPLIER_RECEIPT" : "SUBCONTRACTOR_RETURN",
       createdById: ADMIN,
     },

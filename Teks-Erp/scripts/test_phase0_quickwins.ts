@@ -15,6 +15,7 @@
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { OrderService } from "../src/services/order.service";
 import { AuditService } from "../src/services/audit.service";
 import { RollStatus } from "@prisma/client";
@@ -44,15 +45,15 @@ let ITEM = "",
   CUSTOMER = "",
   ADMIN = "",
   STATION = "";
+let GRADE_CODE = "";
 const orderIds: string[] = [];
 const woIds: string[] = [];
 
 async function resolveFixtures(): Promise<void> {
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "Item PATOS").id;
-  GRADE = need(
-    await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }),
-    "QualityGrade 1.KALITE"
-  ).id;
+  const _gradeRow = await roleGrade("FIRST");
+  GRADE = _gradeRow.id;
+  GRADE_CODE = _gradeRow.code;
   CUSTOMER = need(await prisma.customer.findFirst({ where: { code: "MUS-001" }, select: { id: true } }), "MUS-001").id;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin").id;
   STATION = need(
@@ -148,7 +149,7 @@ async function testCancelPreviewGrouping(): Promise<void> {
         initialQty: 10,
         currentQty: 10,
         status: RollStatus.WAREHOUSE,
-        qualityGrade: "1.KALITE",
+        qualityGrade: GRADE_CODE,
         qualityGradeId: GRADE,
         width: WIDTH,
         createdById: ADMIN,

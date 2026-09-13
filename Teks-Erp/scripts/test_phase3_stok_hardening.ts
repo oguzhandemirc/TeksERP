@@ -9,6 +9,7 @@
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { InventoryService } from "../src/services/inventory.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { AppError } from "../src/utils/app-error";
@@ -39,15 +40,22 @@ let ITEM = "",
   ADMIN = "",
   COLOR = "",
   GRADE_1 = "",
-  GRADE_A1 = "",
+  GRADE_2 = "",
   STATION = "";
+let GRADE_1_CODE = "";
+let GRADE_2_CODE = "";
 const woIds: string[] = [];
 
 async function resolveFixtures(): Promise<void> {
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "Item PATOS").id;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin").id;
-  GRADE_1 = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "1.KALITE").id;
-  GRADE_A1 = need(await prisma.qualityGrade.findFirst({ where: { code: "A1" }, select: { id: true } }), "A1").id;
+  const firstRow = await roleGrade("FIRST");
+  GRADE_1 = firstRow.id;
+  GRADE_1_CODE = firstRow.code;
+  // Relabel hedefi: topun MEVCUT kodundan farklı, GEÇERLİ bir katalog kodu.
+  const secondRow = await roleGrade("SECOND");
+  GRADE_2 = secondRow.id;
+  GRADE_2_CODE = secondRow.code;
   STATION = need(await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } }), "BOYA_FASON").id;
   // PATOS izinli renk (liste boşsa = sınırsız → herhangi aktif renk).
   const allowed = await prisma.itemAllowedColor.findFirst({ where: { itemId: ITEM }, select: { colorId: true } });
@@ -68,7 +76,7 @@ async function testRelabelQuality(): Promise<void> {
       currentQty: 100,
       initialQty: 100,
       width: 150,
-      qualityGrade: "1.KALITE",
+      qualityGrade: GRADE_1_CODE,
       qualityGradeId: GRADE_1,
       entrySource: "SUPPLIER_RECEIPT",
     },
@@ -88,15 +96,15 @@ async function testRelabelQuality(): Promise<void> {
 
   await inv.applyManualProperties(
     roll.id,
-    { colorId: COLOR, propertyIds: [], width: 150, qualityGrade: "A1" },
+    { colorId: COLOR, propertyIds: [], width: 150, qualityGrade: GRADE_2_CODE },
     ADMIN
   );
   const after = await prisma.roll.findUnique({
     where: { id: roll.id },
     select: { qualityGrade: true, qualityGradeId: true },
   });
-  check("relabel geçerli kod → snapshot 'A1'", after?.qualityGrade === "A1");
-  check("relabel → qualityGradeId FK senkron (A1)", after?.qualityGradeId === GRADE_A1, after?.qualityGradeId ?? "null");
+  check(`relabel geçerli kod → snapshot '${GRADE_2_CODE}'`, after?.qualityGrade === GRADE_2_CODE);
+  check("relabel → qualityGradeId FK senkron", after?.qualityGradeId === GRADE_2, after?.qualityGradeId ?? "null");
 
   await prisma.roll.deleteMany({ where: { id: roll.id } });
 }

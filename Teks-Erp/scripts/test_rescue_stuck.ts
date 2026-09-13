@@ -8,6 +8,7 @@
 // Koşum: npx tsx scripts/test_rescue_stuck.ts
 // =============================================================================
 import prisma from "../src/lib/prisma";
+import { roleGrade } from "./fixture-quality-grade";
 import { InventoryService } from "../src/services/inventory.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus, StepStatus } from "@prisma/client";
@@ -25,13 +26,16 @@ async function expectThrow(label: string, fn: () => Promise<unknown>, codeSubstr
 const inv = new InventoryService();
 const cards = new TravelerCardService();
 let ITEM = "", GRADE = "", ADMIN = "", ST_KURSUN = "";
+let GRADE_CODE = "";
 const woIds: string[] = [];
 const rollIds: string[] = [];
 
 async function fixtures(): Promise<void> {
   const need = (v: { id: string } | null, l: string): string => { if (!v) throw new Error(`fixture eksik: ${l}`); return v.id; };
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS");
-  GRADE = need(await prisma.qualityGrade.findFirst({ where: { code: "1.KALITE" }, select: { id: true } }), "1.KALITE");
+  const _gradeRow = await roleGrade("FIRST");
+  GRADE = _gradeRow.id;
+  GRADE_CODE = _gradeRow.code;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin");
   ST_KURSUN = need(await prisma.station.findFirst({ where: { code: "KURSUN_KK2" }, select: { id: true } }), "KURSUN_KK2");
 }
@@ -52,7 +56,7 @@ async function makeStuck(barcode: string | null): Promise<{ rollId: string; step
   const roll = await prisma.roll.create({
     data: {
       barcode, itemId: ITEM, initialQty: 100, currentQty: 100, weightKg: 20,
-      status: RollStatus.IN_PRODUCTION, qualityGrade: "1.KALITE", qualityGradeId: GRADE,
+      status: RollStatus.IN_PRODUCTION, qualityGrade: GRADE_CODE, qualityGradeId: GRADE,
       width: 250, currentStepId: stepId, producedInStepId: stepId, createdById: ADMIN,
     },
     select: { id: true },
@@ -107,7 +111,7 @@ async function main(): Promise<void> {
     {
       const r = await prisma.roll.create({
         data: { barcode: `TST-RSC-E-${Date.now()}`, itemId: ITEM, initialQty: 100, currentQty: 100,
-          status: RollStatus.WAREHOUSE, qualityGrade: "1.KALITE", qualityGradeId: GRADE, createdById: ADMIN },
+          status: RollStatus.WAREHOUSE, qualityGrade: GRADE_CODE, qualityGradeId: GRADE, createdById: ADMIN },
         select: { id: true },
       });
       rollIds.push(r.id);
