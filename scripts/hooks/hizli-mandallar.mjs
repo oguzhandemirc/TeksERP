@@ -12,7 +12,7 @@
 //
 // KÜME (ölçüldü 2026-09-13, d5): 534 bekçinin 105'i DB'siz geçiyor, 95'i ≤5 sn;
 //    bunların `Teks-Erp/scripts/` | `docs/standart/` | `docs/kurallar/`ı KONU
-//    edinen 12'si burada (+13. `belge_capa_atfi`, 2026-09-14). Küme ELLE listelenir — "scripts/ altında DB'siz olan
+//    edinen 12'si burada (+13. `belge_capa_atfi` · 14. `gun_anahtari_kaynagi` · 15. `yerel_ayar_bagimliligi`, 2026-09-14). Küme ELLE listelenir — "scripts/ altında DB'siz olan
 //    her şey" gibi türetilmiş bir kapsam, DB'siz görünen ama vakumen yeşil kalan
 //    bekçiyi de (0/0, çıkış 0 — iki emsal var) kapıya sokardı.
 //
@@ -51,6 +51,8 @@ const MANDALLAR = [
   "test_negatif_sonda_kapsami", // scripts · ağaç
   "test_keyfi_arama", // scripts · ağaç (dosya::model mandalı)
   "test_belge_capa_atfi", // tüm takipli *.md `X.md § N` çapaları · ağaç · 1,3–2,4 sn (13., 1e hükmü 2026-09-14)
+  "test_gun_anahtari_kaynagi", // src+scripts gün anahtarı tek kaynak (ANAHTAR sert · gösterim cırcır) · ağaç+others · 0,6 sn (14., 2026-09-14)
+  "test_yerel_ayar_bagimliligi", // src+scripts toLocale*/Intl yerel bağımlılığı (§1 sert + iki cırcır) · ağaç+others · 0,7 sn (15., 2026-09-14)
 ];
 
 function izoleAgacMi() {
