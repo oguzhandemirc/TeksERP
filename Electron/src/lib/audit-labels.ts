@@ -125,6 +125,7 @@ export const TABLE_LABELS: Record<string, string> = {
   SYSTEM_SETTING: "Sistem Ayarı",
   WORK_SESSION: "Çalışma Oturumu",
   MACHINE_RUN: "Tezgah Koşumu",
+  DOFF_EVENT: "Top İndirme",
   KURSUN_BYPASS_ASSIGNMENT: "Kurşun Dağıtım Ataması",
   PERIPHERAL_TEMPLATE_ROUTE: "Cihaz–Şablon Yönlendirmesi",
   // Boot uzlaştırması + panel işleri: tablo adı küçük harfle yazılmış
