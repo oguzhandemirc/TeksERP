@@ -204,9 +204,29 @@ başka bir oturum `git commit -F … -- <yol>` biçimini kullanıyordu ve o hiç
 > **Panzehir: stage etme.** `git commit -- <pathspec>` tek adımdır ve indekste pencere
 > bırakmaz. `git add` + `git commit` iki adımdır; aradaki her saniye açık bir kapıdır.
 
+⚠️ **İSTİSNA — ve kuralın kendi tuzağı:** pathspec commit **izlenmeyen dosyayı ALMAZ**.
+YENİ dosya için `git add -- <yol>` ZORUNLUDUR; pencere daraltılabilir, **kapatılamaz**.
+*(İki bağımsız vaka, aynı gece: biri `error: pathspec … did not match any file(s) known
+to git`, öteki pathspec listesini değişkene koyup çıkış 128 aldı.)*
+📌 Ve bu bir teselli değil bir ÖLÇÜTTÜR: git burada **sessizce yanlış yapmıyor,
+gürültüyle duruyor** — hiçbir şey yazılmaz, yarım commit oluşmaz. *Bir disiplinin kendi
+tuzağı varsa, o tuzağın SESLİ olması disiplini kurtarır.*
+
 ⚠️ Ortak ağaç riskinin **yedinci ısırığı** ve önceki panzehirlerin en çok güvenileni
 (*"adıyla stage'le"*) tam burada yetersiz kalıyor — çünkü o kural **kendi commit'ini**
 dar tutar, **başkasınınkini** değil.
+
+### Fikstürünü kendi kuran bekçi, KURDUĞUNU da ölçmek zorundadır
+Bir ORM'in `data` nesnesindeki `undefined` **sessizce atılır**: alan hiç yazılmaz, hata
+çıkmaz, satır oluşur. Fikstür adımı **hiç çalışmadan** yeşil görünür.
+*(Vaka 2026-09-13: bir bekçi var olmayan bir enum üyesi yazdı — `RollStatus.DISPATCHED`,
+gerçeği `SHIPPED`. ORM `undefined`ı attı, fikstürün "topu stok dışına çıkar" adımı hiç
+koşmadı ve senaryo ÖLÇÜLMEMİŞ olarak yeşil kalacaktı.)* *(6e)*
+> **Süzgeç no-op'u SONUCU değiştirir; `data` no-op'u FİKSTÜRÜ değiştirir** — ikincisi
+> daha sessizdir, çünkü geriye kırmızı verecek bir şey kalmaz.
+
+**Savunma: pozitif kontrol** — bu vakayı yakalayan tek şey oydu. Fikstür kurulduktan
+sonra kurulanı GERİ OKU ve beklediğin değerde olduğunu ölç; yazdığını varsayma.
 
 ### `.git/index.lock` bir KUYRUK değil, bir REDDİR
 Paylaşımlı ağaçta eşzamanlı commit **serileştirilmez**; ikincisi düşer.
