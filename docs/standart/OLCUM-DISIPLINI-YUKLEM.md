@@ -158,6 +158,22 @@ varsa tahmin bir ölçüm değildir; reçete yoksa sayı yerine *"ölçülmedi"*
 yapıyor?"* — cevabı olmayan her maliyet sayısı, yapılacak işin bir kısmını
 GÖRÜNMEZ kılar ve dilimi planlayan kişi onu başkasının borcu sanır.
 
+### Sayma BİRİMİ, iddianın birimiyle aynı olmalı — yoksa cırcır yanlış pozitif üretir
+Bir cırcır iki sayıyı karşılaştırır ve ikisinin de **aynı birimde** olduğunu varsayar.
+Taban "ham satır" sayarken sonda "etiketli bulgu" sayıyorsa fark bir ihlal değil bir
+**birim hatasıdır** — ve kapı onu ihlal diye basar.
+
+*(Vaka d9, 2026-09-14, `test_snapshot_kolonlari`: ham satır **4**, etiketli sonda **3**.
+Aradaki 1, kodun değil SAYMANIN farkıydı.)*
+
+> **Bir sayı, YANINDA birimi yazılmadan bir tabana konulmaz.** *"4"* bir ölçüm değildir;
+> *"4 ham satır"* ölçümdür — ve tabanla karşılaştırılabilir olması için tabanın da
+> ham satır sayması gerekir.
+📌 Panzehir: tabanı üreten komut ile kontrolü koşturan komut **AYNI yüklemden** doğsun
+(tek fonksiyon, iki çağrı); ikisi ayrı yazıldığında birimleri de ayrışır. Kardeşi
+§ İki sayı yan yana durunca aynı birimde sanılır (`OLCUM-DISIPLINI-CIKARIM.md`) — orada
+RAPORDAKİ iki sayı, burada TABAN ile ÖLÇÜM.
+
 ### Yüklemi GEVŞEK bir cırcır, DOĞRU kodu da ihlal sayar — kapı düzeltmeyi CEZALANDIRIR
 Bir cırcırın sayısı, kuralın cümlesiyle aynı şeyi ölçmüyorsa iki kusur birden doğar:
 sayı yanlış OLUR **ve tek görünür çare (tavanı yükseltmek) ihlal olmayan bir şeyi

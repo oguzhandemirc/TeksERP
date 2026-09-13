@@ -21,7 +21,7 @@ kalamaz). ⇒ **Dizin bayatlayamaz; bayatlatmayı deneyen commit durur.** İlk d
 bir kereye mahsus üretildi (2026-09-13); bundan sonrasını üreteç değil KAPI tutar —
 üretece bağlı bir dizin, üreteç koşulmadığı gün sessizce bayatlardı.
 
-Sayı bir ölçümdür ve bu satır da kapı altındadır: **146 başlık / 10 dosya**
+Sayı bir ölçümdür ve bu satır da kapı altındadır: **147 başlık / 10 dosya**
 (ölçüldü 2026-09-13; kapı her koşumda yeniden sayar ve sayı tutmazsa kırmızı verir).
 
 | # | başlık | dosya |
@@ -67,6 +67,7 @@ Sayı bir ölçümdür ve bu satır da kapı altındadır: **146 başlık / 10 d
 |  | § Sınırsız eşleşme — sınırını BEYAN ETMEYEN yüklem alakasızı içeri alır | (`OLCUM-DISIPLINI-YUKLEM.md`) |
 |  | § Bir yüklem, aradığı şeyin BOZULMUŞ hâlini aramaz — bozulma ADAYI yok eder | (`OLCUM-DISIPLINI-YUKLEM.md`) |
 |  | § Bir POPÜLASYONU saymadan önce ÜYELİĞİNİ sına | (`OLCUM-DISIPLINI-YUKLEM.md`) |
+|  | § Sayma BİRİMİ, iddianın birimiyle aynı olmalı — yoksa cırcır yanlış pozitif üretir | (`OLCUM-DISIPLINI-YUKLEM.md`) |
 |  | § Yüklemi GEVŞEK bir cırcır, DOĞRU kodu da ihlal sayar — kapı düzeltmeyi CEZALANDIRIR | (`OLCUM-DISIPLINI-YUKLEM.md`) |
 |  | § Bir "HEPSİ" iddiası, kümeyi üreten yüklem kadar doğrudur | (`OLCUM-DISIPLINI-YUKLEM.md`) |
 |  | § NE sorduğun kadar NEREYE sorduğun — yetenek ORTAK LIB'e çıkınca dosya bazlı envanter körleşir | (`OLCUM-DISIPLINI-YUKLEM.md`) |
@@ -179,7 +180,7 @@ Sayı bir ölçümdür ve bu satır da kapı altındadır: **146 başlık / 10 d
 |---|---|
 | [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | YÖNTEM — ölçüm nasıl yapılır, nasıl YAZILIR (15 başlık) |
 | [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) | KATMAN 1a — ölçümün ARACI (17 başlık) |
-| [`OLCUM-DISIPLINI-YUKLEM.md`](OLCUM-DISIPLINI-YUKLEM.md) | KATMAN 1a′ — YÜKLEM (ne sorduğun) (14 başlık) |
+| [`OLCUM-DISIPLINI-YUKLEM.md`](OLCUM-DISIPLINI-YUKLEM.md) | KATMAN 1a′ — YÜKLEM (ne sorduğun) (15 başlık) |
 | [`OLCUM-DISIPLINI-SINIRSIZ.md`](OLCUM-DISIPLINI-SINIRSIZ.md) | YÜKLEM'in § Sınırsız eşleşme VAKA envanteri (4 başlık) |
 | [`OLCUM-DISIPLINI-SUREC.md`](OLCUM-DISIPLINI-SUREC.md) | komutun SÜRECİ ve ORTAMI (4 başlık) |
 | [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | KATMAN 1b — ölçümün KURGUSU (31 başlık) |

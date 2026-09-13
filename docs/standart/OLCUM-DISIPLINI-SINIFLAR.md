@@ -260,6 +260,16 @@ turu; a maddesi sha'lı — `5ac6e830`)*:
 ölüdür; burada **kapı sağlamdır, SONDA ölüdür** — ve ölü bir sonda kapıyı
 *doğrulanmış* gösterir, yani zararı kapının ölümünden daha uzun yaşar.
 
+⭐ **Ve sondanın İKİ SINIFI vardır; hangisi olduğu YAZILIR** *(d9, 2026-09-14)*:
+**(K) KALICI** — sondanın kendisi dosyada yaşar (`--sonda` kolu, fikstür, sahte girdi) ve
+her koşumda YENİDEN koşulabilir; iddiası dosyanın kendisiyle doğrulanır.
+**(B) BİR KEZLİK** — mutasyon zinciri elle kuruldu, ölçüldü, geri alındı; dosyada iz
+KALMAZ. Kanıtı yalnızca **commit sha'sıdır** — mesajda mutasyon, beklenen kırmızı ve geri
+alma doğrulaması yazılıysa.
+⚠️ ⇒ ***(B) sınıfı bir sonda iddiası, ATIFSIZ doğrulanamaz.*** *"Negatif sonda yapıldı"*
+cümlesi (B)'de tek başına bir temennidir; okuyanın elinde onu yanlışlayacak hiçbir şey
+yoktur. (K)'de cümle gereksizdir — dosya zaten orada.
+
 ### Bir sondanın DÜNKÜ sonucu, bugünkü koda dair bir iddia değildir
 Sonda bir kereye mahsus bir tören değil, **bir ölçümdür** — ve ölçümler bayatlar.
 Fikstür, taban, kapsam ya da kapının kendisi değiştiyse *"bekçi hâlâ ısırıyor mu"*
