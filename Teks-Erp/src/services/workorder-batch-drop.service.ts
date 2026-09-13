@@ -23,6 +23,8 @@ import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
+import { warehouseStampManyTx } from "./helpers/warehouse.helper";
+import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import {
   assertBatchInWorkOrderTx,
   deleteIfEmptyAndTracelessTx,
@@ -391,6 +393,10 @@ class WorkOrderBatchDropService {
         }
         let claimed = 0;
         for (const [target, ids] of idsByTarget) {
+          // Hedef STOK KÜMESİNDEYSE depo damgası terfinin parçası (flip'ten ÖNCE).
+          if (WAREHOUSE_STOCK_STATUSES.includes(target)) {
+            await warehouseStampManyTx(tx, ids);
+          }
           const res = await tx.roll.updateMany({
             where: { id: { in: ids }, status: RollStatus.IN_PRODUCTION, sackId: null, shipmentId: null },
             data: { status: target, currentStepId: null, batchId: null },

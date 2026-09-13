@@ -75,6 +75,8 @@ import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { reverseAllRollStockMoves } from "./helpers/warehouse-ledger-reverse.helper";
+import { warehouseStampManyTx } from "./helpers/warehouse.helper";
+import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import {
@@ -1436,6 +1438,13 @@ export class TamburUndoService {
       const revivedStatus = stepId
         ? RollStatus.IN_PRODUCTION
         : (parentRow?.preTamburCloseStatus ?? RollStatus.WAREHOUSE);
+      // Diriliş STOK KÜMESİNE dönüyorsa depo damgası dirilişin parçası (claim'den
+      // ÖNCE — sonra `status` değişmiş olur ve yüklem eşleşmez). `TAMBUR_CONSUMED`
+      // topun deposu NULL olabilir ve damgasız hâlde "depoda ama hangi depoda belli
+      // değil" olarak geri gelirdi. Damga mevcut depoyu EZMEZ.
+      if (WAREHOUSE_STOCK_STATUSES.includes(revivedStatus)) {
+        await warehouseStampManyTx(tx, [parentId]);
+      }
       const revived = await tx.roll.updateMany({
         where: { id: parentId, status: RollStatus.TAMBUR_CONSUMED },
         data: {
@@ -1701,6 +1710,13 @@ export class TamburUndoService {
       const revivedStatus = stepId
         ? RollStatus.IN_PRODUCTION
         : (parentRow?.preTamburCloseStatus ?? RollStatus.WAREHOUSE);
+      // Diriliş STOK KÜMESİNE dönüyorsa depo damgası dirilişin parçası (claim'den
+      // ÖNCE — sonra `status` değişmiş olur ve yüklem eşleşmez). `TAMBUR_CONSUMED`
+      // topun deposu NULL olabilir ve damgasız hâlde "depoda ama hangi depoda belli
+      // değil" olarak geri gelirdi. Damga mevcut depoyu EZMEZ.
+      if (WAREHOUSE_STOCK_STATUSES.includes(revivedStatus)) {
+        await warehouseStampManyTx(tx, [parentId]);
+      }
       const revived = await tx.roll.updateMany({
         where: { id: parentId, status: RollStatus.TAMBUR_CONSUMED },
         data: {

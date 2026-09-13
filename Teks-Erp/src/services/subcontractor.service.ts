@@ -22,7 +22,7 @@ import { withBarcodeRetry } from "../utils/barcode-retry";
 import { sackBlockMessage } from "./helpers/sack-invariants.helper";
 import { openLineWhere } from "./helpers/order-line-scope.helper";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
-import { resolveTargetWarehouseId } from "./helpers/warehouse.helper";
+import { resolveTargetWarehouseId, warehouseStampManyTx } from "./helpers/warehouse.helper";
 import { writeWarehouseMovements } from "./helpers/warehouse-ledger.helper";
 import { v4 as uuidv4 } from "uuid";
 import { ApiResponse } from "../types/api.types";
@@ -2102,6 +2102,10 @@ export class SubcontractorService {
       //    edilirse aynı partiyle yola çıkar (lot kimliği kalıcı). Korunan
       //    batchId'nin BAŞKA iş emrinin sevkine sızması dispatch() içindeki
       //    cross-WO parti guard'ı (FOREIGN_BATCH → 400) ile engellenir.
+      // Terfi topu STOK KÜMESİNE sokuyor ⇒ depo damgası terfinin parçası
+      // (flip'ten ÖNCE; mevcut depoyu EZMEZ). Fasona çıkış yolunda depo kapısı
+      // olmadığı için deposuz bir top tur atıp buradan stok kümesine dönebiliyordu.
+      await warehouseStampManyTx(tx, rollIds);
       const reverted = await tx.roll.updateMany({
         where: {
           id: { in: rollIds },

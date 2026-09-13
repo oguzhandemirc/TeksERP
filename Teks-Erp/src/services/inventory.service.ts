@@ -13,7 +13,7 @@ import { normalizeScanCode } from "../utils/code-format";
 import { AuditService } from "./audit.service";
 import { normalizeFoldType, resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
-import { resolveTargetWarehouseId, warehouseStampTx } from "./helpers/warehouse.helper";
+import { resolveTargetWarehouseId, warehouseStampManyTx, warehouseStampTx } from "./helpers/warehouse.helper";
 import {
   postStockMove,
   qtyYazilabilir,
@@ -3924,6 +3924,13 @@ export class InventoryService {
     // ⚠️ Claim kaybedilirse tx İÇİNDE fırlatılmaz: dönen 0 ile dışarıda 409
     // atılır, böylece "kaybeden" ile "gerçek hata" ayrı yollardan geçer.
     const { claimCount, ledger } = await prisma.$transaction(async (tx) => {
+      // Hedef STOK KÜMESİNDEYSE depo damgası terfinin parçası (claim'den ÖNCE —
+      // sonra `status` değişmiş olur ve yüklem eşleşmez). İptal edilmiş bir topun
+      // deposu NULL olabilir; damgasız hâlde top "depoda ama hangi depoda belli
+      // değil" olarak dirilirdi. Damga mevcut depoyu EZMEZ.
+      if (WAREHOUSE_STOCK_STATUSES.includes(target)) {
+        await warehouseStampManyTx(tx, [id]);
+      }
       const c = await tx.roll.updateMany({
         where: { id, status: RollStatus.CANCELLED },
         data: {

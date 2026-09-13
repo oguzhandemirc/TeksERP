@@ -13,6 +13,7 @@ import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { postStockMove, qtyYazilabilir } from "./helpers/warehouse-ledger.helper";
+import { warehouseStampManyTx, warehouseStampWhereTx } from "./helpers/warehouse.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import prisma from "../lib/prisma";
 import { SHRINK_REASON_CODE } from "../constants/variance-reasons";
@@ -3753,12 +3754,19 @@ export class WorkOrderService {
         // üretimdeki topları STOCK'a geri çek. `producedInStepId` (üretim izi)
         // KORUNUR. Bitmiş depo malları (WAREHOUSE/TAMBUR_CONSUMED) ve
         // fason ürünleri (yukarıda bloklandı) DOKUNULMAZ.
+        // ⚠️ DAMGA STATÜ FLIP'İNDEN ÖNCE: terfi topu STOK KÜMESİNE sokuyor ve
+        // deposuz bir top orada "depoda ama hangi depoda belli değil" hâline
+        // düşerdi (defter kapısı onu sessizce atlardı). Flip'ten SONRA aynı yüklem
+        // artık eşleşmez — `status` ve `currentStepId` değişmiş olur. Damga mevcut
+        // depoyu EZMEZ, yalnız NULL'u doldurur.
+        const hamTopWhere = {
+          currentStepId: { in: stepIds },
+          status: RollStatus.IN_PRODUCTION,
+          entrySource: { not: RollEntrySource.SUBCONTRACTOR_RETURN },
+        } satisfies Prisma.RollWhereInput;
+        await warehouseStampWhereTx(tx, hamTopWhere);
         await tx.roll.updateMany({
-          where: {
-            currentStepId: { in: stepIds },
-            status: RollStatus.IN_PRODUCTION,
-            entrySource: { not: RollEntrySource.SUBCONTRACTOR_RETURN },
-          },
+          where: hamTopWhere,
           data: {
             status: RollStatus.STOCK,
             currentStepId: null,
@@ -4574,11 +4582,14 @@ export class WorkOrderService {
         // status STOCK). producedInStepId KORUNUR — lineage; step kaydı
         // hala DB'de (soft delete). Bu sayede ileride "bu top hangi WO'dan
         // çıktı?" sorgusu cevap verir.
+        // Damga flip'ten ÖNCE (gerekçe: `softDelete` yolundaki aynı not).
+        const arsivTopWhere = {
+          currentStepId: { in: stepIds },
+          status: RollStatus.IN_PRODUCTION,
+        } satisfies Prisma.RollWhereInput;
+        await warehouseStampWhereTx(tx, arsivTopWhere);
         await tx.roll.updateMany({
-          where: {
-            currentStepId: { in: stepIds },
-            status: RollStatus.IN_PRODUCTION,
-          },
+          where: arsivTopWhere,
           data: {
             status: RollStatus.STOCK,
             currentStepId: null,
@@ -6304,6 +6315,11 @@ export class WorkOrderService {
       // Hedef duruma göre gruplanmış ATOMİK claim'ler (aynı WHERE guard'ı; toplam count kontrolü).
       let claimedCount = 0;
       for (const [target, ids] of idsByTarget) {
+        // Hedef STOK KÜMESİNDEYSE depo damgası terfinin parçası (flip'ten ÖNCE —
+        // sonra yüklem eşleşmez). Damga mevcut depoyu EZMEZ.
+        if (WAREHOUSE_STOCK_STATUSES.includes(target)) {
+          await warehouseStampManyTx(tx, ids);
+        }
         const res = await tx.roll.updateMany({
           where: {
             id: { in: ids },

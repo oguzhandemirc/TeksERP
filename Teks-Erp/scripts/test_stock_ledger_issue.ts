@@ -15,7 +15,7 @@
 //   §5 ⭐ İş emrinden ÇIKARMA (detach) GİRİŞ yazar — çıkışın karşılığı
 //   §6 ⭐ Giriş metrajı ÇIKARMA ANINDAKİ metrajdır (ters kayıt olsaydı eski
 //      metraj geri yazılır ve üretimde eriyen mal stoğa fazla girerdi)
-//   §7 Deposuz top çıkarmada da satır YAZMAZ
+//   §7 Çıkarmada deposuz top DAMGALANIR (terfi); §3 ile karıştırma — o ÇIKIŞtır
 // =============================================================================
 import { RollStatus, WarehouseEventType } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -116,7 +116,21 @@ async function main(): Promise<void> {
   );
   const netWh = whAfter.reduce((a, r) => a + (r.toWarehouseId ? Number(r.qty) : 0) - (r.fromWarehouseId ? Number(r.qty) : 0), 0);
   check("§6b Net = üretimde eriyen fark (−120 + 90 = −30)", netWh === -30, `net=${netWh}`);
-  check("§7 Deposuz top çıkarmada da satır YAZMADI", (await rowsOf(rNoWh.id)).length === 0);
+  // ⚠️ §7 2026-09-13'te TERS ÇEVRİLDİ. ÇIKARMA (detach) topu STOK KÜMESİNE geri
+  // sokar, yani bir TERFİdir ve artık depo damgalar (`warehouseStampManyTx`).
+  // ⚠️ §3 ile karıştırma: o İŞ EMRİNE ALMA, yani stoktan ÇIKIŞ — terfi değil,
+  // damga oraya uygulanmaz ve deposuz topun çıkışı hâlâ satırsızdır. Aynı bekçide
+  // iki yön, iki farklı doğru cevap.
+  const detachNoWhRows = await rowsOf(rNoWh.id);
+  const detachNoWhRoll = await prisma.roll.findUnique({
+    where: { id: rNoWh.id }, select: { warehouseId: true },
+  });
+  check(
+    "§7 ⭐ Çıkarmada deposuz top DAMGALANDI ve GİRİŞ satırı yazıldı",
+    detachNoWhRoll?.warehouseId !== null && detachNoWhRows.length === 1 &&
+      detachNoWhRows[0]?.toWarehouseId === detachNoWhRoll?.warehouseId,
+    `damgalandı=${detachNoWhRoll?.warehouseId !== null} satır=${detachNoWhRows.length}`,
+  );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }

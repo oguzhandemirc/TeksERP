@@ -139,11 +139,35 @@ export async function warehouseStampTx(
  */
 export async function warehouseStampManyTx(db: Db, rollIds: string[]): Promise<number> {
   if (rollIds.length === 0) return 0;
-  const eksik = await db.roll.count({ where: { id: { in: rollIds }, warehouseId: null } });
+  return warehouseStampWhereTx(db, { id: { in: rollIds } });
+}
+
+/**
+ * Damganın YÜKLEM ikizi — id listesi yerine `where` alır.
+ *
+ * Toplu terfi yollarının bir kısmı id toplamaz, doğrudan yüklemle yazar
+ * (`updateMany({ where: { currentStepId: { in: stepIds }, status: IN_PRODUCTION } })`).
+ * Onlara id toplatmak sıcak yolda fazladan bir `findMany` demekti; damga aynı
+ * yüklemi `warehouseId: null` ile daraltarak koşar.
+ *
+ * ⚠️ İKİ BİÇİM, TEK KARAR: "terfi eden topun deposu ne olacak" sorusunun cevabı
+ * tek yerde (`resolveTargetWarehouseId`) yaşar; bu ikizler yalnız KİMİ damgalayacağını
+ * söyler. `writeWarehouseMovement`/`writeWarehouseMovements` ikizliğiyle aynı desen.
+ *
+ * ⚠️ ÇÖZÜMLEYİCİ YALNIZ İHTİYAÇ VARSA çağrılır (önce `count`): `resolveTargetWarehouseId`
+ * gerekirse varsayılan depoyu YARATIR, yani koşulsuz çağırmak hiç deposu olmayan bir
+ * kurulumda yan etki üretirdi.
+ */
+export async function warehouseStampWhereTx(
+  db: Db,
+  where: Prisma.RollWhereInput,
+): Promise<number> {
+  const eksikWhere = { ...where, warehouseId: null } satisfies Prisma.RollWhereInput;
+  const eksik = await db.roll.count({ where: eksikWhere });
   if (eksik === 0) return 0;
   const targetWarehouseId = await resolveTargetWarehouseId(db);
   const res = await db.roll.updateMany({
-    where: { id: { in: rollIds }, warehouseId: null },
+    where: eksikWhere,
     data: { warehouseId: targetWarehouseId },
   });
   return res.count;
