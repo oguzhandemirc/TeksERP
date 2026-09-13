@@ -386,26 +386,32 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
 
   FASON_DISPATCH: { tur: "BAGLI_TERS", kod: "FASON_DISPATCH_CANCEL" },
   FASON_DISPATCH_CANCEL: { tur: "TERS_KODU", ileri: "FASON_DISPATCH" },
+  // ── Beş kod 2026-09-13'te ÖLÇÜLDÜ (82): geri alma yolları OKUNDU, tahmin edilmedi.
+  //    Ölçüm STATİKTİR (kod okuması; çalıştırılmadı). Yöntem: her kodun yazan yolu +
+  //    o işin iptal/geri alma yolunda ters helper çağrısı ya da karşı olay var mı.
+  //    Ters helper KAPSAMLARI (reverse*/reasonCode) tarandı: ROLL_CANCEL · KARTELA_CANCEL ·
+  //    PRODUCTION_RECEIPT · RETURN_CANCEL · STOCK_COUNT · FASON_DISPATCH_CANCEL ·
+  //    TAMBUR_UNDO — beşinin HİÇBİRİ yok. Kapanma koşulu her `kanit`in sonunda.
   FASON_RECEIPT: { tur: "BORC",
-    ne: "ÖLÇÜLMEDİ — fason kabulünün geri alınması deftere satır yazıyor mu bilinmiyor",
-    kanit: "yazan: subcontractor.service.ts `receiveInner` (ENTRY). Geri alma yolu ARANMADI",
-    sahibi: "fason alanı" },
+    ne: "ters yolu YOK — fason kabul iptali stok defterine HİÇ dokunmuyor: ne bağlı ters satır ne karşı olay",
+    kanit: "yazan: subcontractor.service.ts:3347 (ENTRY, doğan topa). Geri alma: `cancelReceipt` (:5257-5615) gövdesinde reverse*/postStockMove çağrısı SIFIR; doğan topları `tx.roll.updateMany` ile doğrudan CANCELLED yapıyor (softDelete/InventoryService üzerinden DEĞİL ⇒ ROLL_CANCEL satırı da doğmuyor). İptalden sonra defter \"kumaş depoya girdi\" der, çıktığını söyleyen satır yok. Kapanır: cancelReceipt doğan toplar için `reverseLatestScopedStockMove(bornRollIds, {reasonCode: FASON_RECEIPT})` ya da FASON_RECEIPT_CANCEL kodlu bağlı ters satır yazar; o commit bu satırı BAGLI_TERS + TERS_KODU çiftine çevirir",
+    sahibi: "fason alanı (6e)" },
   DISPOSITION: { tur: "BORC",
-    ne: "ÖLÇÜLMEDİ — iş emri kapanış dispozisyonunun geri alınması deftere satır yazıyor mu bilinmiyor",
-    kanit: "yazan: roll-disposition.helper.ts `applyRollDispositionsTx` (PRODUCTION). Geri alma yolu ARANMADI",
-    sahibi: "iş emri alanı" },
+    ne: "ters yolu KISMİ — bağımsız \"iş emrini yeniden aç\" yolu yok; tambur-undo FULL yalnız ÇOCUK topların satırlarını tersler",
+    kanit: "yazan: roll-disposition.helper.ts:304 (PRODUCTION, WO kapanışında dispozisyon alan her topa). Geri alma: workorder*.ts içinde reopen/undoClose YOK; `WO_CANCEL_DISPOSITION` (workorder.service.ts:3844) İLERİ bir olaydır (WO iptali), ters değil. tambur-undo applyFull (:1673) `reverseAllRollStockMoves(ids)` ile ÇOCUKLARIN tüm satırlarını tersler (TAMBUR_UNDO bağlı) — dispozisyon satırı çocuk üstündeyse terslenir, kaynak/kardeş top üstündeyse TERSLENMEZ. Kapanır: WO yeniden açma yolu doğduğunda dispozisyon satırlarını `reverseLatestScopedStockMove(rollIds, {reasonCode: DISPOSITION, workOrderStepId})` ile tersler; ya da tambur-undo FULL kapsamı dispozisyon alan TÜM topları kapsar ve `test_stock_ledger_tambur_undo` bunu ölçer",
+    sahibi: "iş emri alanı (01)" },
   CUT_SPLIT: { tur: "BORC",
-    ne: "ÖLÇÜLMEDİ — depo kesiminin geri alınması ebeveyn/çocuk satırlarını tersliyor mu bilinmiyor (net sıfır olay, iki uçlu)",
-    kanit: "yazan: tambur.service.ts `cutWarehouseRoll` · `finalizeWarehouseCut` (TRANSFORM ×4). Geri alma yolu ARANMADI",
-    sahibi: "tambur alanı" },
+    ne: "ters yolu YARIM — çocuğun girişi terslenir, EBEVEYNİN çıkışı terslenmez: TRANSFORM çifti geri almada net sıfır KALMAZ",
+    kanit: "yazan: tambur.service.ts:2451/2460/2914/2923 (TRANSFORM çifti: ebeveyn çıkışı + çocuk girişi; `test_stock_ledger_transform` §A/§C ölçüyor). Geri alma: tambur-undo depo-kesimi dalı (:1256 \"parent serbest depoda; currentQty VE initialQty geri\") ebeveyni `tx.roll.update` ile DURUM olarak geri yazar ama defterde ebeveyne dokunan HİÇBİR ters çağrı yok — dosyadaki üç ters çağrının üçü de (:1167 :1393 :1673) yalnız çocuk(lar)ı hedefler, `parentId` hiçbir ters çağrıya girmez. `test_stock_ledger_transform`ta geri alma bölümü YOK (0 eşleşme); `test_stock_ledger_tambur_undo` ÜRETİM finalize yolunu ölçer (orada ebeveynin depo satırı yoktur, çocuk-tek doğru). Ev kuralı \"top birleştirilmez, iptal edilir\" (mukerrer.md): ters yol birleştirme değil, çocuk iptali + ebeveyn qty geri — eksik olan ebeveynin DEFTER satırı. Kapanır: depo-kesimi geri alması ebeveynin TRANSFORM çıkış satırını da bağlı tersler (`reverseLatestScopedStockMove([parentId], {reasonCode: CUT_SPLIT})`) ve `test_stock_ledger_transform`a \"geri al → grup neti 0\" bölümü girer",
+    sahibi: "tambur alanı (01)" },
   CUT_DISCARD: { tur: "BORC",
-    ne: "ÖLÇÜLMEDİ — kesim kalanının atılması geri alınabiliyor mu bilinmiyor",
-    kanit: "yazan: tambur.service.ts `finalizeWarehouseCut` (ADJUST)",
-    sahibi: "tambur alanı" },
+    ne: "ters yazıcısı YOK — kesim kalanının atılması (ADJUST çıkış) hiçbir geri alma dalında terslenmez; TERMİNAL olabilir (SCRAP ile aynı sınıf), hüküm sahibinde",
+    kanit: "yazan: tambur.service.ts:2939 (`finalizeWarehouseCut` discard dalı, tek ÇIKIŞ satırı — `test_stock_ledger_transform` §D, grup YOK). Geri alma: satır EBEVEYN üstünde ve tambur-undo ebeveyn satırını hiçbir dalda terslemiyor (CUT_SPLIT kanıtıyla aynı). Semantik: kalanı atmak SCRAP gibi bir KARARDIR (kök CLAUDE.md SCRAP'ı karar sayar, tablo TERMINAL tutar) — ama o hüküm CUT_DISCARD için YAZILI DEĞİL ve analoji ölçüm değildir. Kapanır: sahibi TERMINAL hükmü verir (satır TERMINAL + gerekçeye döner) YA DA depo-kesimi geri alması discard satırını bağlı tersler",
+    sahibi: "tambur alanı (01)" },
   OVERAGE: { tur: "BORC",
-    ne: "ÖLÇÜLMEDİ — kesimde aşım düzeltmesinin tersi bilinmiyor",
-    kanit: "yazan: tambur.service.ts `cutWarehouseRoll` (ADJUST)",
-    sahibi: "tambur alanı" },
+    ne: "stok defteri tarafında ters yazıcı YOK; sapma defteri (RollVariance) tarafında VAR — iki defter aynı olayı farklı tersliyor",
+    kanit: "yazan: tambur.service.ts:2480 (`cutWarehouseRoll`, ADJUST, ebeveyne — aşım DEVİR değil KEŞİFtir, gruba girmez; `test_stock_ledger_transform` §B/§B2). Geri alma: tambur-undo `rollVariance.updateMany({reversedAt})` (:1815 ebeveyn · :1832 çocuk) SAPMA satırını damgalar, ama stok defterindeki ADJUST satırı ebeveyn üstünde ve ebeveyn satırı hiçbir dalda terslenmez. Semantik soru açık: keşif geri alınır mı (yanlış keşfin düzeltmesi ayrı ileri olay RECORD_CORRECTION olabilir) — ölçüm cevaplamaz. Kapanır: sahibi \"keşif TERMİNAL\" hükmü verir ve sapma tarafındaki damganın stok tarafında neden olmadığını yazar, YA DA geri alma ADJUST satırını da bağlı tersler; iki defter aynı cevabı verene kadar açık",
+    sahibi: "tambur alanı (01)" },
   MANUAL_ADJUST: { tur: "BORC",
     // ⚠️ "YAZARSIZ" DEĞİL "YAZARI BİLİNMİYOR" (ea'nın ayrımı): ilki bir ölçüm
     // sonucu gibi okunur, oysa ölçtüğümüz tek şey MAIN'DE yazar görmediğimiz.
