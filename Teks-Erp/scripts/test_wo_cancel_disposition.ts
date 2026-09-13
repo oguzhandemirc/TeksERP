@@ -10,6 +10,9 @@
 //   E) KARIŞIK: gönderilmeyen toplar toplu yoldan STOCK'a (not `WO_CANCELLED`) —
 //      açıkça gönderilen STOCK satırı motora GİTMEZ (aynı karar = aynı satır).
 //   F) BAYAT KAPSAM: işlemde olmayan top için karar → 400 + tam rollback.
+//   G) ÖNİZLEME ÖLÜ TOPU SAYMAZ (2026-09-14): iptal edilmiş / Tambur'da tüketilmiş
+//      top `getCancelImpact` listesine, `rollCount`a ve `processedCount`a girmez —
+//      iptal ona dokunmaz, parti kırılımı zaten süzüyordu (iki bölüm ayrışmasın).
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
@@ -343,6 +346,37 @@ async function main(): Promise<void> {
         select: { status: true },
       });
       check("yabancı top da dokunulmadı", foreignRoll?.status === RollStatus.IN_PRODUCTION);
+    }
+
+    // === G) ÖNİZLEME ÖLÜ TOPU SAYMAZ ===
+    console.log("\n=== G) getCancelImpact — ölü top listeye/sayılara girmez ===");
+    {
+      const { woId } = await makeWo();
+      const live = await attachedRoll(woId, 500);
+      const dead1 = await attachedRoll(woId, 400);
+      const dead2 = await attachedRoll(woId, 300);
+      // Ölü topa "işlenmiş" izi ver (özellik) — processedCount'a girmemeli. Fikstür
+      // özelliği İŞ ANAHTARIYLA (code) kurulur, ortamda aranmaz.
+      const prop = await prisma.fabricProperty.upsert({
+        where: { code: "TEST-WOCD-OLU-OZ" },
+        create: { code: "TEST-WOCD-OLU-OZ", name: "TEST ölü top özelliği", valueType: "FLAG" },
+        update: {}, select: { id: true },
+      });
+      await prisma.rollProperty.upsert({
+        where: { rollId_propertyId: { rollId: dead1, propertyId: prop.id } },
+        create: { rollId: dead1, propertyId: prop.id }, update: {},
+      });
+      await prisma.roll.update({ where: { id: dead1 }, data: { status: RollStatus.CANCELLED } });
+      await prisma.roll.update({ where: { id: dead2 }, data: { status: RollStatus.TAMBUR_CONSUMED } });
+
+      const impact = (await svc.getCancelImpact(woId)).data as {
+        rollCount: number; processedCount: number; rolls: { id: string }[];
+      };
+      check("G rollCount yalnız canlı top (1)", impact.rollCount === 1, String(impact.rollCount));
+      check("G liste yalnız canlı topu taşıyor", impact.rolls.length === 1 && impact.rolls[0]!.id === live, impact.rolls.map((r) => r.id).join(","));
+      check("G özellikli ÖLÜ top processedCount'a girmedi (0)", impact.processedCount === 0, String(impact.processedCount));
+      await prisma.rollProperty.deleteMany({ where: { rollId: dead1 } });
+      await prisma.fabricProperty.deleteMany({ where: { code: "TEST-WOCD-OLU-OZ" } }).catch(() => {});
     }
   } finally {
     // Cleanup — test kendi yarattığını siler.

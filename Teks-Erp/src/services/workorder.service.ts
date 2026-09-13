@@ -2872,11 +2872,16 @@ export class WorkOrderService {
     }
 
     const stepIds = wo.steps.map((s) => s.id);
+    // Ölü top (iptal/tüketilmiş) önizlemeye GİRMEZ: iptal ona dokunmaz (softDelete
+    // yalnız IN_PRODUCTION'ı çeker) ve aşağıdaki parti kırılımı zaten K18 ile süzüyor
+    // — iki bölüm ayrışmasın. Ölçüldü 2026-09-14 (fabrika kopyası): 67 açık WO'nun
+    // listesinde ölü satır vardı, 3'ünün "işlenmiş" sayısı değişir.
     const rollWhere = {
       OR: [
         { producedInStepId: { in: stepIds } },
         { currentStepId: { in: stepIds } },
       ],
+      status: { notIn: K18_DEAD_STATUSES },
     };
     // M-11: liste 200 ile sınırlı (UI) ama SAYILAR limitsiz count'tan gelir —
     // 200+ toplu WO'da onay ekranı eksik sayı göstermesin; truncated bayrağı
