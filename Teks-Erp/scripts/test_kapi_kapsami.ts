@@ -87,11 +87,19 @@ function main(): void {
     // çözemiyor ve kapı `-1` alıyor. Kapı doğru davrandı (ARIZA dedi, "0 dosya"
     // demedi) ama YANLIŞ YERDEN ölçüyordu: üç projeyi TEK job'dan.
     //
-    // ⚠️ VE BEYAN BİR ÇÖZÜM DEĞİL, BİR BORÇ KAYDIYDI. (b) ile kapandı: kapsam
-    // artık Electron ve mobil'in KENDİ CI job'larında, bağımlılıkları kurulu
-    // hâlde ölçülüyor (`ci.yml` → "Kapı kapsamı" adımı). Buradaki beyan, YEREL
-    // koşumda ya da bağımlılığın kurulu olmadığı herhangi bir ortamda hâlâ
-    // gereklidir — ölçülemeyen kapsam sessiz geçmemeli.
+    // ⚠️ BEYAN BİR BORÇ KAYDIYDI; ARTIK BİR ÇAPRAZ REFERANS. (b) indi ve ÖLÇÜLDÜ
+    // (koşum 34742637890): Electron job'ı 26 + 1.410 dosya, mobil job'ı 406 dosya,
+    // ikisi de "0 sorunlu". Kapsam gerçekten ölçülüyor — ama BAŞKA BİR JOB'DA.
+    //
+    // ⚠️ BEYAN KALDIRILMADI ve bu ÖLÇÜLMÜŞ bir karar. Kaldırsaydık bu koşum
+    // "her şeyi ölçtüm" diye okunurdu — oysa Backend job'ı Electron/mobil'e
+    // BAKMADI. Atlama bu koşum için GERÇEK; koşucunun "yeşil ≠ kapsandı"
+    // satırına katılması DOĞRU.
+    //   ⇒ *Başka bir yerde ölçülüyor olmak, BURADA ölçülmüş olmak değildir —
+    //     beyan kalkarsa o ayrım kaybolur.*
+    // Değişen tek şey METİN: artık "borç" değil, "nerede ölçülüyor" diyor.
+    // Sebep ↔ borç ↔ çapraz referans üç ayrı cümledir ve okuyan hangisi
+    // olduğunu görmelidir.
     const { kod, satirlar } = cekirdek(proje);
     for (const l of satirlar) console.log(`   ${l}`);
     // Çekirdeğin çıkış kodu ÜÇ DURUMLU ve "ölçemedim" ≠ "ihlal buldum":
@@ -99,7 +107,7 @@ function main(): void {
     if (kod === 2) {
       ATLAMA.atla(
         `${proje} tip kapısı kapsamı`,
-        "bu kapsam BURADA ÖLÇÜLMÜYOR — bağımlılıkları kurulu değil (CI'da kendi job'ında ölçülür)",
+        `bu koşum ${proje} kapsamına BAKMADI (bağımlılık yok) — CI'da "${proje}" job'ının "Kapı kapsamı" adımı ölçüyor`,
       );
       continue;
     }
