@@ -319,7 +319,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
 // "geri alınamıyor" AYRI ŞEYLERDİR ve liste grep'le üretilemez; beyan gerekir.
 //
 // ⚠️ KAPSAM — BU TABLO DEFTERİN TAMAMINI KONUŞMAZ. Sebep kodu TAŞIYAN satırları
-// konuşur. Fabrika yedeğinde (`tekserp_fabrika_dev`, ölçüm 2026-09-13) 778
+// konuşur. Fabrika yedeğinde (fabrikanın dev kopyası, ölçüm 2026-09-13) 778
 // satırın 721'i sebep kodsuzdur (ufuk öncesi eski küme; kullanıcı kararıyla
 // ONARILMAYACAK) ⇒ bu koldaki yeşil, o satırlar hakkında HİÇBİR ŞEY söylemez.
 // Sayı damgalıdır çünkü kapı statiktir (DB'ye bakmaz); tazelenmesi elle yapılır.

@@ -363,7 +363,7 @@ console.log("\n=== §13 OLAY DÜZEYİ — her sebep kodunun ters yolu beyanlı m
 const olayBorclari = Object.entries(STOK_OLAY_BEYANI).filter(([, b]) => b.tur === "BORC");
 console.log(`\n=== AÇIK OLAY BORÇLARI (${olayBorclari.length}/${Object.keys(STOK_OLAY_BEYANI).length}) — sebep kodu düzeyi ===`);
 console.log("ℹ️  ⚠️ KAPSAM: bu kol yalnız SEBEP KODU TAŞIYAN satırları konuşur. Fabrika yedeğinde");
-console.log("ℹ️  (tekserp_fabrika_dev, ölçüm 2026-09-13) 778 satırın 721'i sebep kodsuzdur — ufuk öncesi");
+console.log("ℹ️  (fabrikanın dev kopyası, ölçüm 2026-09-13) 778 satırın 721'i sebep kodsuzdur — ufuk öncesi");
 console.log("ℹ️  eski küme, kullanıcı kararıyla ONARILMAYACAK. Buradaki yeşil o satırlar hakkında");
 console.log("ℹ️  hiçbir şey söylemez. (Sayı DAMGALIDIR: kapı statiktir, DB'ye bakmaz.)");
 for (const [kod, b] of olayBorclari) {
