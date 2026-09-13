@@ -7863,3 +7863,40 @@ indi (ayrı notlar değil, mevcut kuralların tanımları): *"kendi PID'in" = D�
 (`npx` iki kademe ekler; tanım yazılmazsa kural kendi ihlalini üretir) ve *çıkış kodunu ayrı
 yazdırmadan `&&`/`||` zincirinden sonuç cümlesi kurma* (bir zincirin son cümlesi zincirin
 başarısını değil yalnız SON ADIMINI anlatır).
+
+## 2026-09-13 — ORTAK AĞACIN YEDİNCİ ISIRIĞI: adıyla stage'lemek yetmez, indeks paylaşılan durumdur [ÇEKİRDEK]
+
+**Olay.** 05:19'da, adıyla stage'lenmiş üç dosya (`docs/standart/KUTUPHANELER.md` ·
+`KUTUPHANELER-TABLO.md` · `Teks-Erp/scripts/test_dependency_contract.ts`) **komşu bir oturumun
+commit'ine girdi** (`d0a30962 docs(dokuma): DoffEvent…`). O oturum `git add <kendi dosyası> &&
+git commit` çağırdı; pathspec olmadığı için `git commit` **indeksteki her şeyi** aldı.
+
+**Kaybolan şey dosya değil GEREKÇEDİR.** İş ağaçta duruyor ve doğru; ama commit mesajı
+başkasınındır ve artık ne olduğunu YANLIŞ anlatır. Bu yüzden o gerekçe buraya yazılıyor:
+
+> **KUTUPHANELER §2 bölmesi bir bekçiyi kırdı ve BELGE KAPISI GÖRMEDİ.** Çapa bir doküman
+> linki değil KOD'du: `test_dependency_contract.ts:189` doğrudan `KUTUPHANELER.md`yi okuyup §2
+> tablosunu ayrıştırıyordu. Bölmeden sonra 21 geçti / 6 başarısız. **Yakalayan şey bekçinin
+> KENDİ "körlük zemini" kontrolü oldu** ("electron tablo jetonu dolu — 0 jeton"): boş tabloyla
+> sessiz yeşil vermedi. Düzeltirken **ikinci** kör nokta çıktı — bölüm regex'i `(?=^### |^## )`
+> SON alt bölümü (§2.3) hiç yakalamıyordu, ardında başlık olmadığı için; eski dosyada onu
+> `## 3` kapatıyordu, yani bekçi **belge DÜZENİNE bağımlıydı ve kimse bilmiyordu**. Girdi-sonu
+> şartı `(?![\s\S])` eklendi (ara hata: önce `\z` yazıldı, JS'te geçersiz, 22/5'e düştü).
+> Sonuç 27/0 = bölme öncesi tabanla aynı. Negatif sonda: tablodan bir paket çıkarıldı → 25/2
+> iki yönlü kırmızı → `cp` + sha256 ile geri.
+
+**Sınıf.** Ortak ağaç riskinin **yedinci** ısırığı, ve en çok güvenilen panzehirin
+(*"`git add -A` yok, dosyayı adıyla stage'le"*) yetersiz kaldığı yer: o kural **kendi
+commit'ini** dar tutar, **başkasınınkini** değil. `git add` + `git commit` İKİ adımdır ve
+aradaki her saniye paylaşılan indekste açık bir kapıdır.
+
+> **Panzehir: stage ETME.** `git commit -- <pathspec>` tek adımdır ve pencere bırakmaz.
+
+Aynı dakikada bir başka oturum `git commit -F … -- <yol>` biçimini kullanıyordu ve **hiç
+etkilenmedi** — doğru biçim ağaçta zaten vardı, yazılı değildi.
+
+**Geçmiş YENİDEN YAZILMADI.** `d0a30962` push edilmemişti (`origin/main` = `8f68c367`), ama
+beş oturumun yerel görüşünde duruyor ve hepsi aynı anda commit atıyordu; rebase/amend bu yükte
+düzelttiğinden fazlasını kırardı. İleri doğru düzeltildi: gerekçe bu nota, kural kataloğa.
+
+**Üç kapı.** Migration YOK · izin YOK · APK YOK.

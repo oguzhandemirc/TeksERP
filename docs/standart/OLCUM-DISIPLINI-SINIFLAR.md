@@ -264,6 +264,21 @@ disiplini yakaladı.)*
 > **kapsam** ayrışır (tam-proje lint ≠ commit kapısı) · **sınır** ayrışır (kırpılmış
 > yığın, § Aracın VARSAYILANI) · **özne** ayrışır (sarmalayıcı ≠ iş, burası).
 
+### Adıyla stage'lemek YETMEZ — indeks paylaşılan DURUMDUR
+Ortak ağaçta `git add <dosya>` doğru refleks ama **koruma değil**: dosyan artık
+PAYLAŞILAN indekstedir ve **başka bir oturumun pathspec'siz `git commit`i onu kendi
+commit'ine alır.** Kayıp dosya değil, **gerekçedir** — iş ağaçta durur, commit mesajı
+başkasınındır ve o mesaj artık ne olduğunu YANLIŞ anlatır.
+*(Vaka 2026-09-13 05:19: adıyla stage'lenmiş üç dosya, komşu bir oturumun
+`git add <kendi dosyası> && git commit` çağrısıyla onun commit'ine girdi. Aynı anda
+başka bir oturum `git commit -F … -- <yol>` biçimini kullanıyordu ve o hiç etkilenmedi.)*
+> **Panzehir: stage etme.** `git commit -- <pathspec>` tek adımdır ve indekste pencere
+> bırakmaz. `git add` + `git commit` iki adımdır; aradaki her saniye açık bir kapıdır.
+
+⚠️ Ortak ağaç riskinin **yedinci ısırığı** ve önceki panzehirlerin en çok güvenileni
+(*"adıyla stage'le"*) tam burada yetersiz kalıyor — çünkü o kural **kendi commit'ini**
+dar tutar, **başkasınınkini** değil.
+
 ### `.git/index.lock` bir KUYRUK değil, bir REDDİR
 Paylaşımlı ağaçta eşzamanlı commit **serileştirilmez**; ikincisi düşer.
 *(Vaka: iki oturum aynı anda commit attı. Doğru hamle kilidi SİLMEK değildi — gerçek
@@ -284,6 +299,29 @@ site, ölçünce **on** çıktı. ③ *"komut metinleri bende yok"* — metinler
 günlüklerindeydi.)*
 **Savunma:** her negatif bulgu için **ters yönü** ölç (hedeften kaynağa, çağrandan
 çağırana); ölçemiyorsan cümleyi zayıflat. Kardeşi: § "Bende yok" bir ölçüm değildir.
+
+### Bir ÇAPA doküman linki olmayabilir — kod da bir dosyayı okur
+Belge kapısı yalnız **link** arar. Ama bir bekçinin `readFileSync` ile okuduğu yol da
+bir çapadır, ve taşındığında **sessizce kopar** — belge kapısı yeşil kalır.
+*(Vaka 2026-09-13: bir standart dosyasının §2 tablosu ayrı dosyaya bölündü;
+`check-docs` rc=0 verdi, ama bir bekçi o tabloyu doğrudan okuyup ayrıştırıyordu ve
+21/6'ya düştü.)*
+**Savunma:** bir belgeyi taşımadan önce **koddan da ara** (`grep -r "<dosya adı>"
+scripts/ src/`), yalnız `.md` linklerinden değil.
+
+📌 **Öneri (uygulanmadı):** belge kapısı, KAYNAK KODDA geçen `docs/…` yollarını da çapa
+saysın. Bugünkü bakış açısı *"bu linkin hedefi var mı"*; eksik olan yön **koddan
+belgeye** olan bağ. Sahibi kapı alanıdır, bu belge yalnız sınıfı kaydeder.
+
+⭐ **Yakalayan şey bekçinin KENDİ körlük zemini oldu** — "ayrıştırdığım tablo BOŞ mu"
+diye soran bir kontrol, tablo boşalınca sessiz yeşil vermek yerine kırmızı verdi.
+> **Girdisini ayrıştıran her bekçi, girdinin BOŞ gelmesini de bir kırmızı saymalıdır.**
+> Boş girdi her yüklemi "ihlal yok" ile geçirir; körlük zemini olmayan bekçi,
+> kaynağı kaybolduğu gün EN GÜRÜLTÜSÜZ biçimde ölür.
+
+⚠️ Ve düzeltirken **ikinci** bir kör nokta çıktı: aynı bekçinin bölüm regex'i son alt
+bölümü hiç yakalamıyordu (ardında başlık yoktu), yani **belge DÜZENİNE bağımlıydı** ve
+bunu kimse bilmiyordu. *Bir kusuru düzeltmek, komşusunu görünür kılar.*
 
 ## KATMAN 2 · Ölçümden sonraki adım → ayrı dosya
 

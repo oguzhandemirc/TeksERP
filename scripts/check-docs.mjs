@@ -188,6 +188,10 @@ const CLAUDE_MD_SIZE_CAPS = { "CLAUDE.md": 36 * 1024, "Teks-Erp/CLAUDE.md": 24 *
 // ölçülen tek-commit büyümeleri: +310 · ~1.600 · ~2.500 · +2.726 bayt (en büyüğü
 // TEST-VE-DERLEME.md). 3 KB bu en büyük tek adımdan geniştir ve bugün 20 tavanlı
 // dosyanın yalnız 3'ünü işaretler — uyarı gürültüye dönüşmez.
+// ÖNCELİKLENDİRME ÖLÇÜTÜ (ölçüldü 2026-09-13): bu listedeki bir dosyayı BÖLMEK
+// otomatik değildir. Duvara dayanan dört dosyanın dördü de AKTİF YAZILANDI;
+// BACKEND.md ve MOBIL.md 8 gündür dokunulmamıştı. Bir tavana olan UZAKLIK bir risk
+// değildir; ona doğru giden HIZ risktir — durgun bir dosya dar olabilir ve hiç kırılmaz.
 const NEAR_CAP_BYTES = 3 * 1024;
 
 const STANDART_DIR = "docs/standart";
