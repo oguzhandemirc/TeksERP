@@ -139,13 +139,8 @@ const ANAHTAR_TABAN: Record<string, { adet: number; gerekce: string }> = {
       "⚠️ Beyan fabrika-günü doktrininden ÖNCE yazıldı; yedek dosya adının " +
       "fabrika gününü mü sunucu saatini mi taşıyacağı AYRI bir karar (sahibi: yedek alanı)",
   },
-  "src/services/return.service.ts": {
-    adet: 1,
-    gerekce:
-      "⛔ BORÇ — `IADE-GGAAYY-<id>` belge numarası elle kuruluyor (`:1180`), oysa " +
-      "`ddmmyy()` tam bunun için var ve dosya `code-format`tan ZATEN import ediyor. " +
-      "`ddmmyy(rr.createdAt)` ile kapanır; sahibi sevkiyat/iade alanı (2026-09-14, d9 ölçtü)",
-  },
+  // `src/services/return.service.ts` (IADE-GGAAYY borcu) 2026-09-14'te `ddmmyy` ile
+  // kapandı (ea 142ef1f6) ve aynı trende ANAHTAR listesinden düştü — entegratör 1e.
   "scripts/audit_repro_E-2-01.ts": {
     adet: 1,
     gerekce:
@@ -160,7 +155,9 @@ const ANAHTAR_TABAN: Record<string, { adet: number; gerekce: string }> = {
  * `fmtDate` üç satırıdır — yani bu sayı bir kusur sayısı değil, bir KOPYA
  * sayısıdır ve tek bir paylaşılan yardımcıyla toptan düşer.
  */
-const DIGER_TABAN = 48;
+// 48 → 39 (2026-09-14, entegratör 1e): document-render `fmtDate` kopyaları tek
+// yardımcıya taşındı (ea 546c6445); aynı trende ölçüldü.
+const DIGER_TABAN = 39;
 
 function main(): void {
   console.log("\n=== Gün anahtarı TEK KAYNAKTAN mı? (süreç saat dilimi taraması) ===\n");
