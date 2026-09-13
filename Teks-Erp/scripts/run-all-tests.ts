@@ -16,7 +16,8 @@
 // dotenv var olan değişkenin ÜSTÜNE YAZMAZ.
 import "dotenv/config";
 import { spawnSync } from "node:child_process";
-import { readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { dbAdi, defteYaz } from "./lib/siklik-defteri";
 import {
@@ -279,6 +280,43 @@ async function hacimGeciti(): Promise<void> {
   );
 }
 
+/**
+ * Şemanın SEMANTİK imzası — model/enum adları + alan adları kümesi.
+ * Biçime ve öznitelik sırasına DUYARSIZ, alan EKSİKLİĞİNE duyarlı.
+ */
+function semaImzasi(yol: string): string | null {
+  try {
+    const satirlar = readFileSync(yol, "utf8").split("\n");
+    const adlar: string[] = [];
+    for (const l of satirlar) {
+      const m = /^\s*(?:model|enum)\s+([A-Za-z][A-Za-z0-9_]*)/.exec(l) ?? /^\s{2}([a-zA-Z][A-Za-z0-9_]*)/.exec(l);
+      if (m) adlar.push(m[1]!);
+    }
+    return createHash("sha256").update(adlar.sort().join("\n")).digest("hex").slice(0, 16);
+  } catch {
+    return null;
+  }
+}
+
+/** Ağaç ↔ üretilmiş istemci hizası: BEYAN eder, çıkış kodunu ETKİLEMEZ. */
+function istemciHizasiBeyani(): void {
+  const agac = semaImzasi(join(SCRIPTS_DIR, "..", "prisma", "schema.prisma"));
+  const istemci = semaImzasi(join(SCRIPTS_DIR, "..", "node_modules", ".prisma", "client", "schema.prisma"));
+  // İstemci kopyası yoksa SESSİZ KALMA: "ölçemedim" ile "hizalı" aynı değil.
+  if (!agac || !istemci) {
+    console.log("⚠️  İSTEMCİ HİZASI ÖLÇÜLEMEDİ — şema ya da üretilmiş kopya okunamadı (hüküm YOK)");
+    return;
+  }
+  if (agac === istemci) return;
+  console.log(
+    "⚠️  ÜRETİLMİŞ İSTEMCİ ŞEMANDAN FARKLI — ayrışan şey ALAN KÜMESİ (biçim DEĞİL).\n" +
+      `      ağaç ${agac} ↔ istemci ${istemci}\n` +
+      "      Ortak `node_modules/.prisma` en son `generate` koşanın hâlini taşır.\n" +
+      "      ⇒ Çözüm TEK KOMUT: npm run prisma:generate\n" +
+      "      (Bu bir İHLAL değil HİZA KAYMASIDIR; çıkış kodu etkilenmez.)",
+  );
+}
+
 async function main() {
   // Opsiyonel filtre: `npx tsx scripts/run-all-tests.ts <substring>` → yalnız
   // adı eşleşen test'leri koşar (tek test/alt-küme doğrulaması için).
@@ -296,6 +334,35 @@ async function main() {
   // BAĞIMSIZ koşar. Tek test koşmak da yazma yapar — tehlike filtreyle azalmaz.
   productionDbGate();
   await hacimGeciti();
+
+  // ⚠️ ÜRETİLMİŞ İSTEMCİ HİZASI — BEYAN, KAPI DEĞİL (2026-09-13, 6e'nin vakası).
+  //
+  // VAKA: 6e'nin tam paketinde 55 kırmızı çıktı ve çoğu fasonla İLGİSİZDİ; hepsi
+  // aynı hatayı veriyordu — `ColumnNotFound: skipCustomerName of relation
+  // quality_grades`. Kök sebep: `node_modules/.prisma` DOKUZ OTURUMUN ORTAK
+  // MUTASYON NOKTASI; son `generate` koşan herkesin istemcisini değiştirir.
+  //
+  // ⚠️ EN SİNSİ YANI: `prisma migrate status` **"up to date"** diyordu ve HAKLIYDI
+  // — ağaca göre doğru. ⇒ ÜÇ ŞEYİN hizası ölçülmeli: AĞAÇ · DB · ÜRETİLMİŞ
+  // İSTEMCİ. Bugüne dek ikisini ölçen bir disiplinimiz vardı ve üçüncüyü
+  // görmüyordu.
+  //
+  // ⚠️ NEDEN HAM sha DEĞİL — ölçüldü ve KENDİ ağacımda yanlış pozitif verdi:
+  //     ham sha256                 : 7d6d87f1… ≠ 72228d6c…   FARKLI
+  //     boşluk normalize edilmiş   : 222ac021… ≠ 6321985a…   HÂLÂ FARKLI
+  //     model+enum+ALAN ADI kümesi : e69b4996…  = e69b4996…   AYNI  ← doğru yüklem
+  //   ve istemcim GERÇEKTE sağlamdı (`skipCustomerName` iki tarafta da var).
+  //   Prisma kopyalarken şemayı YENİDEN BİÇİMLENDİRİYOR; fark biçim + öznitelik
+  //   sırası. Ham sha ile yazılsaydı kapı DOĞDUĞU GÜN yanlış kişiyi durdururdu.
+  //   ⇒ *İki dosyanın sha'sı farklı olabilir ve yine de aynı ŞEYİ söyleyebilir —
+  //     karşılaştırma neyi sorduğunu bilmeli.*
+  //   Pozitif kontrol: şemadan `skipCustomerName` çıkarılınca imza DEĞİŞTİ
+  //   (`e69b4996…` → `f4d88acd…`) ⇒ yüklem gerçek vakayı yakalıyor.
+  //
+  // ⚠️ VE BU BİR KAPI DEĞİL: kayma BAŞKASININ MEŞRU eyleminden doğuyor ve
+  // düzeltmesi TEK KOMUT. *Bir kaymanın kaynağı başkasının meşru eylemiyse,
+  // yaptırım o kaymayı YAŞAYANA verilmez.* Çıkış kodu ETKİLENMEZ (ölçüldü: 14 ms).
+  istemciHizasiBeyani();
 
   // ⚠️ ATLANAN GEÇİT BEYAN EDİLİR (2026-09-13, 6e'nin ölçümü — ve bugün bir hata
   // geçirdi). Bu iki geçit filtreli koşumda BİLEREK atlanıyor (iterasyon hızlı
