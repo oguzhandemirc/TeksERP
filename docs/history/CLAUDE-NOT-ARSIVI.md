@@ -8362,3 +8362,28 @@ tek top, kaynak statü yükte yok) — onarım yok, ufuk sonrası. Giriş yönü
 `cutOpenFabric` çocuğu) bu notun dışında, ayrı sahip. K=0 kapısı üyeliği 6e'de: öneri üç üyeyi
 DÜŞÜRMEK değil, `postProductionIssuesTx`i `YENI_KAPI_FONKSIYONLARI`na eklemek — üyeler kalır,
 çağrı kaldırılırsa kapı kırmızıya döner.
+
+## 2026-09-13 — STOK DEFTERİ "K = 0" İKİ KATMANDA ÇÜRÜDÜ: eksik liste + ASSERT ETMEYEN KAPI [ÇEKİRDEK]
+
+**Katman 1 (1c ölçtü):** `BILINEN_KAPISIZ_YOLLAR` beş yolu saymıyordu — elle taşıma (`manualMove`) ·
+elle top "buraya al" (`createManualRoll`) · redye (`newColorRedye`) · takılı top kurtarma
+(`rescueStuckRoll`, IN_PRODUCTION→WAREHOUSE) · üretim kesimi çocuğu (`cutOpenFabric`, WAREHOUSE doğar,
+0 satır). Kütüphanenin kendi "yeni üye reçetesi ①" (üç serviste `postStockMove|writeWarehouseMovement`
+= 0 ∧ stok kümesini değiştiren yol) üçünü buluyordu — 6e uygulamamıştı: *kendine uygulanmayan kural*.
+**Katman 2 (6e ölçtü, ağır olan):** `test_stok_defteri_bag_olcumu §4` gerçek ağacın K'sını yalnız
+`bilgi:` satırına basıyordu, HİÇBİR `check` ona bağlı değildi — "K = 0 kapısı" diye belgede ve
+hafızada taşınan şey bir kapı değil bir çıktı satırıydı. K 5'e çıksa da yeşil kalırdı. Kapı ölümü
+kataloğuna 10. biçim olarak girdi: **assert etmeyen kapı**.
+
+**Hüküm (1e):** çıkış üçlüsü 1c'nin tek yazıcısına (`postProductionIssuesTx`, tren #15) bağlandı ve
+listede KALDI (kapı, çağrı kaldırılırsa yeniden sayar); `postProductionIssuesTx` yeni kapı listesine
+girdi; §4e **cırcır** `K_TABAN = 2`, taban sayı değil KÜME (rescueStuckRoll · cutOpenFabric — giriş
+yönü, 01 doff sonrası); §4f çürüme kolu. Sert değil cırcır: sert olsaydı 01 iki girişi yazana dek
+main kırmızı kalır, *sürekli kırmızı duyulmaz* (kapı ölümü 3/8).
+**Sondalar (cp+sha256):** üye ekle → K=3 ❌ · rescue'ya kapı çağrısı yaz → K=1, §4f çürüme ❌.
+⚠️ İlk S2 denemesi ISIRMADI: çağrı metot GÖVDESİNE değil parametre listesine düşmüştü (sondanın
+kendisi geçersiz, ölçüm yanlış yerde) — "sondanın kendisi geçerli mi" sınıfı, beşinci yol: *mutasyon
+yanlış düğüme uygulandı*.
+`test_consistency` başlığındaki "K = 0" cümlesi ve `defter.md:19` Kapanır'ı çürütülmüş hâliyle
+yeniden yazıldı; `STOK_DISI_STATULER`de IN_PRODUCTION olmaması (asimetri ölçüsü bu yolları görmez)
+1c'nin kalemi (hüküm §11).

@@ -112,13 +112,17 @@ interface Section {
 // taşınabilir, bu ölçü veriyi ölçüyor). Tarih ufku DB'den BAĞIMSIZDIR: "ufuktan
 // sonra doğan top" her kurulumda aynı anlama gelir ve beklenen değer **0**'dır.
 //
-// ⚠️ UFUK AÇILDI — 2026-09-13: yazar kümesi KAPANDI (K = 0; sevk ×2 · fason kabul ·
-// fason sevki · transfer ×2 · kartela ×2 deftere bağlandı) ve bölüm artık SERT:
+// ⚠️ UFUK AÇILDI — 2026-09-13: SEVK AİLESİ deftere bağlandı (sevk ×2 · fason kabul ·
+// fason sevki · transfer ×2 · kartela ×2) ve bölüm artık SERT. ⚠️ "K = 0" iddiası aynı
+// gece ÇÜRÜDÜ (1c): üretim tarafında beş kapısız yol daha var (elle taşıma · elle top ·
+// redye · rescue · cutOpenFabric çocuğu) — K = 5, `test_stok_defteri_bag_olcumu §4e`
+// bilerek kırmızı; ve STOK_DISI_STATULER'de IN_PRODUCTION olmadığı için buradaki
+// asimetri ölçüsü o yolları GÖRMEZ (1c'nin kalemi, hüküm dosyası §11).
 // ufuktan SONRA doğan bir topun stok kümesine girişi yazılmış ama çıkışı
 // yazılmamışsa bu bir KUSURDUR, beklenen değer 0. Ufuktan ÖNCESİ mirastır ve
 // kullanıcı kararıyla onarılmayacak ⇒ yüklem `createdAt >= UFUK` ile sınırlanır.
-// Ölçü: `scripts/lib/stok-defteri-bag-olcumu.ts` (K = 0, kapısı
-// `test_stok_defteri_bag_olcumu`).
+// Ölçü: `scripts/lib/stok-defteri-bag-olcumu.ts` (K, kapısı
+// `test_stok_defteri_bag_olcumu §4e`).
 // ─────────────────────────────────────────────────────────────────────────────
 const DEFTER_UFKU: string | null = "2026-09-13";
 

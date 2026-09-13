@@ -7,7 +7,9 @@
 //      helper'da tanım yoksa "araç bozuk" der (fail-closed) — negatif sondalar.
 //   §2 V aracı stub istemcide üç hâli doğru sınıflar (statüsüz yeni / eski / yok).
 //   §3 Karar K ∧ V'dir; araç bozukken "bağlı" DEMEZ.
-//   §4 Körlük zemini: gerçek ağaçta araç sağlam ve ≥80 dosya tarıyor.
+//   §4 Körlük zemini: gerçek ağaçta araç sağlam ve ≥80 dosya tarıyor; §4e ⭐ gerçek K CIRCIR
+//      (K_TABAN=2, üye KÜMESİ adıyla; 2026-09-13 gece'ye dek yalnız bilgi satırıydı — kapı
+//      sanılan şey kapı değildi) · §4f taban çürümemiş.
 // DB'ye dokunmaz.
 // =============================================================================
 import * as fs from "node:fs";
@@ -194,6 +196,26 @@ async function main(): Promise<void> {
       `ölçülen yol=${gercekKy.yollar.length}`,
     );
     const kTotal = gercek.cagiranlar.length + gercekKy.yollar.filter((y) => !y.bagli).length;
+    // §4e — GERÇEK AĞAÇTA K, CIRCIR. 2026-09-13 gece'ye kadar bu sayı yalnız "bilgi"
+    // satırıydı, HİÇ assert edilmiyordu: "K = 0 kapısı" diye anılan şey bir kapı
+    // DEĞİLDİ (assert etmeyen kapı — 1c'nin beş yolu bulmasıyla ölçüldü). Taban
+    // SAYI değil KÜME: iki üye adıyla (giriş yönü, 01 doff sonrası yazacak); yeni bir
+    // kapısız yol → 3 → kırmızı. Yeşile inmesi listeden üye SİLMEKLE değil yolun
+    // deftere yazmasıyla (`bagli: true`) olur; taban düşürmeyi entegratör yazar.
+    // İki sonda (2026-09-13): üye ekle → 3 ❌ · rescue'ya kapı çağrısı yaz → 1, çürüme ❌.
+    const K_TABAN = 2;
+    const K_UYELER: readonly string[] = ["rescueStuckRoll", "cutOpenFabric"];
+    const kapisizlar = gercekKy.yollar.filter((y) => !y.bagli);
+    check(
+      `§4e ⭐ gerçek ağaçta K ≤ taban (${K_TABAN}) — kapısız stok yolu KÜMESİ`,
+      kTotal <= K_TABAN && kapisizlar.every((y) => K_UYELER.includes(y.fonksiyon)),
+      `K=${kTotal}: ${kapisizlar.map((y) => y.fonksiyon).join(" · ") || "-"}`,
+    );
+    check(
+      "§4f K tabanı ÇÜRÜMEMİŞ (gerçek < taban ise tabanı ve üye kümesini düşür)",
+      kTotal >= K_TABAN,
+      `gerçek ${kTotal} · taban ${K_TABAN}`,
+    );
     console.log(
       `   bilgi: gerçek ağaçta (${gercek.agac}) K = ${kTotal} — eski kapı ${gercek.cagiranlar.length} ` +
         `[${gercek.cagiranlar.map((c) => `${c.dosya}:${c.satir}`).join(", ") || "yok"}] + kapısız yol ` +

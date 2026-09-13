@@ -42,6 +42,13 @@ DEĞİL** — sıra iki oturumda çakıştı; bir kapı ölümü ADIYLA anılır
    kırmızıda arama gerektirir; maliyet teşhisten büyür ve taban **körü körüne
    güncellenmeye** başlar. Kapı koşar, sayı doğrudur, koruduğu şey erir. Panzehir
    § Mandal (tavan) yazma'da: taban sayı değil KÜME olsun. *(d5/ea)*
+10. **Assert etmeyen kapı** — ölçüm yapılır, sayı **basılır**, ama hiçbir `check`
+   ona bağlı değildir; "K = 0 kapısı" diye anılan şey bir **bilgi satırıdır**. Kapı
+   koşar, çıktısı doğrudur, sayı 5'e çıksa da yeşil kalır — ve herkes o sayıyı "kapı
+   tutuyor" diye taşır. *(Vaka 2026-09-13: `test_stok_defteri_bag_olcumu §4` gerçek
+   ağacın K'sını `bilgi:` satırına basıyordu; beş kapısız yol bulunduğunda anlaşıldı.
+   Panzehir: her basılan sayı ya bir `check`in konusudur ya "bilgi" damgasını
+   TAŞIR ve belgede kapı diye anılmaz.)* *(6e/1c)*
 
 İlk üçünde kapı yanlış davranır; *gürültü*de doğru davranır ve yine ölür;
 *doğru davranışı pahalı kılmak*ta **kapı doğru, kurban haklı**. Yedincide kapı hiç

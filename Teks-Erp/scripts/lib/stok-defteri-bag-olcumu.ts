@@ -47,10 +47,16 @@ export const ESKI_KAPI_HELPER = "src/services/helpers/warehouse-ledger.helper.ts
  * BİRİ bulunmalı. Ters yazıcılar da listededir: yalnız geri alma yapan bir yol
  * (kartela sevk iptali) ileri satır yazmaz ama deftere bağlıdır.
  */
-/** Yeni kapı İKİ dosyada yaşar: yazma kapısı + ters kayıt kapısı. */
+/**
+ * Yeni kapı ÜÇ dosyada yaşar: yazma kapısı + ters kayıt kapısı + üretime çıkış
+ * kapısı (`postProductionIssuesTx`, 1c 2026-09-13 — elle taşıma · elle top ·
+ * redye · attachRolls tek yazıcıdan geçer). Üyeler listeden DÜŞÜRÜLMEZ: kapı
+ * çağrısı kalkarsa yol yeniden "kapısız" sayılır ve K artar.
+ */
 export const YENI_KAPI_HELPERLARI: readonly string[] = [
   ESKI_KAPI_HELPER,
   "src/services/helpers/warehouse-ledger-reverse.helper.ts",
+  "src/services/helpers/production-issue-ledger.helper.ts",
 ];
 
 export const YENI_KAPI_FONKSIYONLARI: readonly string[] = [
@@ -60,6 +66,7 @@ export const YENI_KAPI_FONKSIYONLARI: readonly string[] = [
   "reverseLegacyStockMove",
   "reverseLatestScopedStockMove",
   "reverseAllRollStockMoves",
+  "postProductionIssuesTx",
 ];
 
 /**
@@ -81,8 +88,9 @@ export interface KapisizYol {
  * `receive`/`cancelReceipt` burada YOK: kartela tüketimi (`AT_KARTELA →
  * KARTELA_CONSUMED`) stok dışından stok dışınadır ve satır yazmaz (tasarım §64).
  *
- * 🔴 BU LİSTE ELLE TUTULUYOR VE EKSİK OLABİLİR — bir kez eksik çıktı:
- * **fason sevki** (2026-09-13) aylarca listede yoktu, yani K onu HİÇ saymadı.
+ * 🔴 BU LİSTE ELLE TUTULUYOR VE EKSİK OLABİLİR — İKİ kez eksik çıktı:
+ * **fason sevki** (2026-09-13) aylarca listede yoktu, yani K onu HİÇ saymadı; aynı
+ * gece **beş yol** daha (1c ölçtü) — ve reçete ① onları buluyordu, uygulanmamıştı.
  *
  * ⚠️ YENİ ÜYE NASIL ARANIR (eksik üyeyi bulan ölçüm, tekrarlanabilir olsun diye):
  *   ① KOD: servis dosyasında defter yazan çağrı sayısını say —
@@ -119,6 +127,37 @@ export const BILINEN_KAPISIZ_YOLLAR: readonly KapisizYol[] = [
     dosya: "src/services/kartela.service.ts",
     fonksiyon: "cancelDispatch",
     ad: "kartela sevk iptali (AT_KARTELA → WAREHOUSE)",
+  },
+  // ── 2026-09-13 gece (1c ölçtü, 6e ekledi): liste İKİNCİ kez eksik çıktı — beş yol.
+  //    Reçete ① üçünü buluyor (üç serviste postStockMove/writeWarehouseMovement = 0,
+  //    hepsi stok kümesinden ÇIKARIYOR ya da stok kümesine SOKUYOR). K=0 iddiası
+  //    (2026-09-13 öğle) bu yüzden KÖRDÜ. Çıkış üçlüsü aynı gece 1c'nin tek yazıcısına
+  //    bağlandı (`postProductionIssuesTx`, listede KALIR — `bagli: true` sayılır);
+  //    giriş ikilisi 01'de (doff sonrası) ⇒ K = 2, cırcır tabanı (`test_… §4e`).
+  {
+    dosya: "src/services/workorder-manual-move.service.ts",
+    fonksiyon: "manualMove",
+    ad: "elle taşıma (WAREHOUSE/STOCK → adım, IN_PRODUCTION) — ÇIKIŞ",
+  },
+  {
+    dosya: "src/services/tambur-manual.service.ts",
+    fonksiyon: "createManualRoll",
+    ad: "elle top 'buraya al' (STOCK/WAREHOUSE → adım) — ÇIKIŞ",
+  },
+  {
+    dosya: "src/services/workorder-split.service.ts",
+    fonksiyon: "newColorRedye",
+    ad: "redye (STOCK/WAREHOUSE → yeni iş emri adımı) — ÇIKIŞ",
+  },
+  {
+    dosya: "src/services/inventory.service.ts",
+    fonksiyon: "rescueStuckRoll",
+    ad: "takılı top kurtarma (IN_PRODUCTION → WAREHOUSE) — GİRİŞ",
+  },
+  {
+    dosya: "src/services/tambur.service.ts",
+    fonksiyon: "cutOpenFabric",
+    ad: "üretim kesimi çocuğu (WAREHOUSE doğar, satır yok) — GİRİŞ",
   },
 ];
 /** Eski kapının bugün yazdığı olay aileleri (V'nin aile bazlı bilgi satırı). */
