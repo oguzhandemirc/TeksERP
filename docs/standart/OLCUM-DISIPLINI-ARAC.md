@@ -298,3 +298,26 @@ bulgu bir satırın değil, **alan biçiminin** özelliğidir: backtick'le sın�
 serbest-metin alanı bu sınıftadır.
 Kardeşleri § Bir tarayıcı, kendi TARİF ETTİĞİ şeyin ÖRNEĞİNİ gerçek sanır ·
 § Bir yüklem, aradığı şeyin BOZULMUŞ hâlini aramaz.
+
+### Anahtarla kurulan bir BEYAN TABLOSU, mükerreri SESSİZCE yutar
+`new Map(anahtar → satır)` ile kurulan her envanter/beyan tablosu aynı anahtarın ikinci
+girdisini **hata vermeden ezer**. Kapı tabloyu okur, tek satır görür, **yeşil kalır** —
+oysa kaynakta iki beyan vardır ve biri hiç ölçülmemiştir.
+
+*(Vaka 2026-09-13, 01 ölçtü: `defter-beyan.ts`'de aynı model İKİ KEZ beyan edildi — bayat
+tabanda kırmızı olan bir bölüm için yazıldı, ama `main`de başka bir oturum zaten
+yazmıştı; üç yollu birleştirme ikisini de aldı. `test_defter_ters_yol` 165/0 YEŞİL
+döndü. `beyanMap` mükerreri sessizce çökertiyordu; "beyan tablosunda model TEKİLDİR"
+diye bir sonda yoktu.)*
+
+> **Bir tablo anahtarla kuruluyorsa, o anahtarın TEKİLLİĞİ ayrı bir iddiadır** — ve
+> ölçülmedikçe kurulmamıştır. Tablo büyüdükçe iddia daha da görünmez olur.
+
+⚠️ **Ortak ağaç bu sınıfın DOĞUM YOLUDUR:** mükerreri üreten şey yazarın dikkatsizliği
+değil, iki oturumun aynı satırı birbirinden habersiz yazması ve birleştirmenin ikisini de
+kabul etmesidir (`OLCUM-DISIPLINI-ORTAK-AGAC.md`).
+
+**Savunma:** tabloyu kuran yerde `size` ile ham satır sayısını karşılaştır (`Map.size <
+satır sayısı ⇒ mükerrer`) ve farkı **kırmızı** yap. Emsal: kural kimliği tekilliği
+`scripts/check-docs.mjs`te tam bu yüzden ayrı bir kapıdır — `- **[ID]**` satırları da bir
+beyan tablosudur ve mükerrer ID sessizdi.
