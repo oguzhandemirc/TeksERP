@@ -28,6 +28,7 @@ import {
   TRAVELER_LOOP_KEYS,
   TRAVELER_LOOPS,
 } from "../../config/traveler-card-fields";
+import { fmtDate, fmtDateTime } from "./fmt-date";
 
 /** Tüm döngülerin satır alanları (düzleştirilmiş) — bilinmeyen-anahtar taramasında kabul edilir. */
 const LOOP_ROW_KEYS = new Set(TRAVELER_LOOPS.flatMap((l) => l.fields.map((f) => f.key)));
@@ -48,22 +49,6 @@ function escapeHtml(v: unknown): string {
 function fmtNum(n: number | null | undefined): string {
   if (n == null || Number.isNaN(n)) return "—";
   return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-}
-
-function fmtDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  const p = (x: number) => String(x).padStart(2, "0");
-  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`;
-}
-
-function fmtDateTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  const p = (x: number) => String(x).padStart(2, "0");
-  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 /** Motorun çözebildiği tekil değerler + tekrar blokları için satır listeleri. */
@@ -109,8 +94,8 @@ export function buildRawContext(
       routeName: snapshot.routeTemplate?.name ?? "",
       targetQuantity: fmtNum(snapshot.targetQuantity),
       targetWeight: fmtNum(snapshot.targetWeight),
-      startDate: fmtDate(snapshot.plannedStartDate),
-      endDate: fmtDate(snapshot.plannedEndDate),
+      startDate: fmtDate(snapshot.plannedStartDate, "—"),
+      endDate: fmtDate(snapshot.plannedEndDate, "—"),
 
       batchCount: String(batches.length),
       batchRollTotal: String(batches.reduce((s, b) => s + b.rollCount, 0)),

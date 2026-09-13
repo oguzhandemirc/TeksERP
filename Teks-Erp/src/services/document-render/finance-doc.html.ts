@@ -30,6 +30,7 @@ import { buildDocTable } from "./doc-table";
 import { DOC_DENSITY, docChromeCss, resolveDocPageSize, scaleW } from "./doc-density";
 import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
 import type { PrintedDocSnapshot } from "../printed-document.service";
+import { fmtDate } from "./fmt-date";
 
 /** Fatura kalemi — tutarlar STRING (Decimal serileştirmesi; float'a çevrilmez). */
 export interface InvoiceDocLine {
@@ -172,12 +173,6 @@ function fmtQty(v: string | null | undefined): string {
   return n.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
 }
 
-function fmtDate(v: string | null): string {
-  if (!v) return "—";
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("tr-TR");
-}
-
 /** Bölüm açık mı — ayar yoksa AÇIK (blocklist semantiği, belge emsali). */
 const sectionOn = (sections: Record<string, boolean> | undefined, key: string): boolean =>
   sections?.[key] !== false;
@@ -302,7 +297,7 @@ function renderFinanceDoc(
         <div class="title">${esc(title)}</div>
         ${copyBadge}
         ${sectionOn(cfg.sections, "documentNo") ? `<div class="ln">Belge No: <b>${esc(opts.documentNo)}</b></div>` : ""}
-        ${sectionOn(cfg.sections, "date") ? `<div class="ln">Tarih: <b>${esc(fmtDate(opts.date))}</b></div>` : ""}
+        ${sectionOn(cfg.sections, "date") ? `<div class="ln">Tarih: <b>${esc(fmtDate(opts.date, "—"))}</b></div>` : ""}
         ${opts.headerLines.join("")}
       </div>
     </header>
@@ -370,7 +365,7 @@ export function renderInvoiceInternalHtml(snapshot: PrintedDocSnapshot, meta: Re
     configKey: "fatura",
     headerLines: [
       sectionOn(cfg.sections, "dueDate") && h.dueDate
-        ? `<div class="ln">Vade: <b>${esc(fmtDate(h.dueDate))}</b></div>`
+        ? `<div class="ln">Vade: <b>${esc(fmtDate(h.dueDate, "—"))}</b></div>`
         : "",
       sectionOn(cfg.sections, "externalNo") && h.externalNo
         ? `<div class="ln">Belge/İrsaliye No: <b>${esc(h.externalNo)}</b></div>`
@@ -493,7 +488,7 @@ export function renderReconciliationLetterHtml(
     : "";
 
   const declaration =
-    `${fmtDate(h.asOf)} tarihi itibarıyla defterlerimizde görünen yukarıdaki bakiyeler için ` +
+    `${fmtDate(h.asOf, "—")} tarihi itibarıyla defterlerimizde görünen yukarıdaki bakiyeler için ` +
     "mutabakatınızı rica ederiz. Mutabık iseniz belgeyi kaşeleyip imzalayarak tarafımıza iade " +
     "etmenizi, mutabık değilseniz farkın gerekçesini bildirmenizi rica ederiz.\n" +
     "BORÇ bakiyesi tarafınızın firmamıza, ALACAK bakiyesi firmamızın tarafınıza olan borcunu ifade eder.";
@@ -505,7 +500,7 @@ export function renderReconciliationLetterHtml(
       // ⚠️ KESİT TARİHİ BAŞLIKTA ve "Tarih"ten AYRI satırda: ikisi farklı günler
       // olabilir ve karıştırılırsa mektup başka bir dönemi anlatıyor sanılır.
       sectionOn(cfg.sections, "asOf")
-        ? `<div class="ln">Bakiye Tarihi: <b>${esc(fmtDate(h.asOf))}</b></div>`
+        ? `<div class="ln">Bakiye Tarihi: <b>${esc(fmtDate(h.asOf, "—"))}</b></div>`
         : "",
     ].filter(Boolean),
     partyLines: [
@@ -566,8 +561,8 @@ export function renderChequeDeliveryNoteHtml(
           { key: "no", label: "SIRA", align: "c", width: "40px", cell: (_r, i) => String(i + 1) },
           { key: "docNo", label: "BELGE NO", align: "l", cellClass: "mono", cell: (r) => esc(r.docNo) },
           { key: "serialNo", label: "SERİ NO", align: "l", cellClass: "mono", cell: (r) => esc(r.serialNo ?? "—") },
-          { key: "issueDate", label: "KEŞİDE", align: "c", width: "80px", cell: (r) => esc(fmtDate(r.issueDate)) },
-          { key: "dueDate", label: "VADE", align: "c", width: "80px", cell: (r) => esc(fmtDate(r.dueDate)) },
+          { key: "issueDate", label: "KEŞİDE", align: "c", width: "80px", cell: (r) => esc(fmtDate(r.issueDate, "—")) },
+          { key: "dueDate", label: "VADE", align: "c", width: "80px", cell: (r) => esc(fmtDate(r.dueDate, "—")) },
           { key: "drawer", label: "KEŞİDECİ", align: "l", cell: (r) => esc(r.drawerName ?? "—") },
           { key: "bank", label: "BANKA", align: "l", cell: (r) => esc(r.bankName ?? "—") },
           { key: "currency", label: "PARA", align: "c", width: "50px", cell: (r) => esc(r.currency) },

@@ -27,6 +27,7 @@ import {
 import { buildDocTable } from "./doc-table";
 import { DOC_DENSITY, docChromeCss, resolveDocPageSize } from "./doc-density";
 import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
+import { fmtDate } from "./fmt-date";
 
 interface FasonReceiptRoll {
   sequence: number;
@@ -74,14 +75,6 @@ function esc(v: unknown): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-function fmtDate(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const p = (x: number) => String(x).padStart(2, "0");
-  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`;
 }
 
 function sectionOn(sections: Record<string, boolean> | undefined, key: string): boolean {

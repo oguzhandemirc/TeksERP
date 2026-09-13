@@ -62,6 +62,7 @@ import {
 } from "./fason-ceki.density";
 import { fasonFieldCss } from "./fason-ceki.fields";
 import { buildDocTable } from "./doc-table";
+import { fmtDate } from "./fmt-date";
 
 interface FasonCekiRoll {
   sequence: number;
@@ -182,13 +183,6 @@ function fmtMetre(n: number | null | undefined): string {
 function fmtCm(n: number | null | undefined): string {
   if (n == null) return "";
   return String(Math.round(n));
-}
-
-function fmtDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const p = (x: number) => String(x).padStart(2, "0");
-  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`;
 }
 
 /** Boş/yinelenen değerleri atıp sırayı koruyan liste (kumaş adları, renkler). */

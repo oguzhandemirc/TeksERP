@@ -42,6 +42,7 @@ import {
   scaleW,
 } from "./doc-density";
 import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
+import { fmtDate } from "./fmt-date";
 
 /** Belge etiketleri — cfg.language: tr | en | auto (auto → EXPORT sevkiyatta EN). */
 const LABELS = {
@@ -328,14 +329,6 @@ function fmtTr(n: number | null | undefined, dec: number): string {
 const fmtQty = (n: number | null | undefined): string => fmtTr(n, 2);
 /** Adet (top/paket): tam sayı. */
 const fmtCount = (n: number | null | undefined): string => fmtTr(n, 0);
-
-function fmtDate(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const p = (x: number) => String(x).padStart(2, "0");
-  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`;
-}
 
 /** Bir bölüm açık mı — yalnız açıkça false ise gizle (varsayılan: göster). */
 function sectionOn(sections: Record<string, boolean> | undefined, key: string): boolean {

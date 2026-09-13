@@ -150,6 +150,27 @@ export function factoryYmd(at: Date = new Date()): string {
   return `${String(y).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
+/** `at` anının FABRİKA günü, Türkçe belge biçimi `GG.AA.YYYY`. */
+export function factoryDateTr(at: Date): string {
+  const { y, m, d } = factoryParts(at);
+  return `${String(d).padStart(2, "0")}.${String(m).padStart(2, "0")}.${y}`;
+}
+
+/**
+ * `at` anının FABRİKA günü ve saati, `GG.AA.YYYY SS:DD`. Saat de fabrika
+ * dilimindendir — `getHours()` süreç dilimini okur ve UTC sunucuda 3 saat kayar.
+ */
+export function factoryDateTimeTr(at: Date): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: FACTORY_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(at);
+  const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? "00";
+  return `${factoryDateTr(at)} ${get("hour")}:${get("minute")}`;
+}
+
 /**
  * `@db.Date` kolonlarına yazılacak takvim günü anahtarı.
  * Prisma + adapter-pg `DateTime`'ı UTC'ye çevirip DATE kolonuna UTC gün-parçasını

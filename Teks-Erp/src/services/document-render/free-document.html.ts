@@ -12,6 +12,7 @@ import {
   docBlankGridCss, docBlankGridHtml,
   DOC_LOGO_CSS, DOC_STAMPS_CSS, docCopyBadge, docBlocksHtml, docPrintNoteHtml, docStampsBar,
 } from "./doc-style";
+import { fmtDate } from "./fmt-date";
 
 export interface FreeDocumentSnapshot {
   company: { name: string; letterhead: CompanyLetterhead; logoHash?: string | null };
@@ -29,13 +30,6 @@ interface RenderMeta {
 
 function esc(v: unknown): string {
   return String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-function fmtDate(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const p = (x: number) => String(x).padStart(2, "0");
-  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`;
 }
 
 export function renderFreeDocumentHtml(snapshot: FreeDocumentSnapshot, meta: RenderMeta = {}): string {

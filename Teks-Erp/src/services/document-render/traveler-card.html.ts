@@ -26,6 +26,7 @@ import { resolveSectionOrder, type TravelerSectionKey } from "./traveler-card.se
 import { docBlankGridCss, docBlankGridHtml } from "./doc-style";
 import { travelerFieldCss } from "./traveler-card.fields";
 import { renderRawTemplate, buildRawContext, wrapRawDocument } from "./traveler-card-raw";
+import { fmtDate, fmtDateTime } from "./fmt-date";
 
 interface SnapStep {
   id: string;
@@ -135,21 +136,6 @@ function fmtNum(n: number | null | undefined): string {
   return Math.round(n)
     .toString()
     .replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-}
-
-function fmtDate(iso: string | null | undefined, fallback = "—"): string {
-  if (!iso) return fallback;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return fallback;
-  const p = (x: number) => String(x).padStart(2, "0");
-  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`;
-}
-
-function fmtDateTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  const p = (x: number) => String(x).padStart(2, "0");
-  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 // Boyut/kalınlık YALNIZ default'tan (md/normal) farklıysa inline override edilir —
@@ -355,8 +341,8 @@ export function renderTravelerCardHtml(
   add(sf.targetQuantity, "Hedef Metraj", `${esc(fmtNum(snapshot.targetQuantity))} m`, true);
   add(sf.targetWeight, "Hedef Ağırlık", snapshot.targetWeight != null ? `${esc(fmtNum(snapshot.targetWeight))} kg` : "—");
   add(sf.foldType, "Kat Tipi", esc(snapshot.foldType ?? "—"));
-  add(sf.startDate, "Başlangıç", esc(fmtDate(snapshot.plannedStartDate)));
-  add(sf.endDate, "Bitiş", esc(fmtDate(snapshot.plannedEndDate)));
+  add(sf.startDate, "Başlangıç", esc(fmtDate(snapshot.plannedStartDate, "—")));
+  add(sf.endDate, "Bitiş", esc(fmtDate(snapshot.plannedEndDate, "—")));
   const grid = gridCells.length ? `<div class="grid">${gridCells.join("")}</div>` : "";
 
   const propsBlock =

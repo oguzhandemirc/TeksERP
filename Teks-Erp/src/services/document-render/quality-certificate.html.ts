@@ -26,6 +26,7 @@ import {
 import { buildDocTable } from "./doc-table";
 import { DOC_DENSITY, docChromeCss, resolveDocPageSize, scaleW } from "./doc-density";
 import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
+import { fmtDate } from "./fmt-date";
 
 interface QualityGradeRow {
   grade: string;
@@ -72,13 +73,6 @@ function fmtQty(n: number | null | undefined): string {
   if (n == null || Number.isNaN(n)) return "";
   const [int, frac] = Math.abs(n).toFixed(2).split(".");
   return (n < 0 ? "-" : "") + int.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + (frac ? `,${frac}` : "");
-}
-function fmtDate(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const p = (x: number) => String(x).padStart(2, "0");
-  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()}`;
 }
 function sectionOn(sections: Record<string, boolean> | undefined, key: string): boolean {
   return sections?.[key] !== false;
