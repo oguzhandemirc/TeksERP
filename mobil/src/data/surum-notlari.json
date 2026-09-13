@@ -93,6 +93,11 @@
           "kapsam": "tablet",
           "tip": "yeni",
           "metin": "Fason mal kabulü artık iptal edilebilir: kabulden doğan top depoda duruyor, çuvala girmemiş ve depoda başka hareket görmemişse iptal geçer; aksi hâlde iptal reddedilir ve engel sebebi topun adıyla listelenir. Eskiden son adım fason kabulü hiç iptal edilemiyordu."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "duzeltme",
+          "metin": "Depoda kesilmiş bir top tabletten geri alındığında Depo Hareketleri ile topun metrajı artık aynı sayıyı söylüyor. Önceden geri alma yalnız yeni topun giriş satırını tersliyor, ana topun kesim çıkışı defterde açık kalıyordu: top listesinde 100 metre görünen ana top defterde 60 sayılıyordu. Şimdi kesim çıkışı da terslenir — ama yalnız metraj gerçekten ana topa geri konuyorsa. Geri alma sırasında “kayıt yanlıştı” seçeneğini seçip kaynak topu arşivde bırakırsanız kaynak metrajı eskisi gibi değişmez ve defter de buna uyar; yeni topun satırı düzeltme kaydı olarak kalır. Kapanışla biten kesimin kendi fire/artık çıkışı bu geri almada terslenmez. Bu sürümden önce yarım geri alınmış kesimler kendiliğinden düzelmez; mutabakat raporu bunları ayrı bir bölümde sayar."
         }
       ]
     },
