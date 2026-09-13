@@ -126,6 +126,7 @@ AÇIK (1e ürün kararı) · karo + route + palet birebir, yüklem saf (`isWeavi
 (`test_screen_catalog` 33/0 · `test_feature_flag_contract` 78/0 · `test_module_flags` 82/0 · `test_module_profile` 58/0 ·
 `tile-visibility.test` · `CommandPalette.test`) · negatif sonda İKİ yönlü: karo `ctx({dokumaEnabled:false})` → çizilmez
 (`tile-visibility.test`), route `/forbidden`a düşer (`ProtectedRoute requirePermission="weavingorder:read"`, `test_screen_catalog §4`).
+⚠️ **Son cümle ÇÜRÜDÜ (47, 2026-09-14, aşağıda D1):** route izne bakar, bayrağa değil; gösterilen iki delil bayrağı ölçmez.
 
 **④'ün "dört dosya" cümlesi ÖNCÜLDÜ (5e: modüle ÖZGÜ dört yeri saymış, jenerik bayrak sözleşmesini atlamıştı), ölçülen ayak izi 28 dosyadır** — ölçüm 2026-09-13, taban `05c6dbbb`, yüklem `git grep -l -E 'devereEnabled|devere\.enabled|readDevereEnabled|requireDevereEnabled' -- ':!docs' ':!*.md'` (kod + bekçi/test dahil, belge hariç; devere emsali):
 `Teks-Erp/src` 8 (`app.ts` · `constants/module-flags` · `constants/module-profiles` · `constants/screen-catalog` ·
@@ -144,7 +145,76 @@ dokuma bayrağını okumuyor; reçetenin 11. adımı tablet dilimi geldiğinde u
 (`test_feature_flag_contract` yalnız backend `src` + iki Electron dosyasını ölçer) — atlanırsa hiçbir kapı kırmızı vermez.
 
 **Kapsam düzeltmesi (1e):** `machine-run.routes.ts` de `requireDokumaEnabled`a geçti — koşum dokumanın koşumudur, kapı
-takarken kardeş yollar aynı kapsama. `test_production_regime_gate` `KAPILI`si 14 → 11 (üç dosya `requireProductionEnabled`
+takarken kardeş yollar aynı kapsama. `test_production_regime_gate` `KAPILI`si 13 → 10 (ölçüm düzeltildi 47, 2026-09-14: "14 → 11" tip satırını sayan grep gürültüsüydü, D3) (üç dosya `requireProductionEnabled`
 metnini artık taşımıyor; §1e onları aramaz), yeni bekçi `test_dokuma_regime_gate` aynı ölçümü (kapı · sıra · kapsam) dokuma
 adına yapar ve §7 ile "bayrak kapalıyken hiçbir şey değişmez" cümlesini KİLİTLER: ekran inerken ölçüldü — Electron + mobil
 kaynağında dokuma uçlarını çağıran dosya 0'dı; bugün tek dosya var ve dokuma karosunun arkasında.
+
+---
+
+## Doğrulama — 2026-09-14 (47, çelişmeli; kod `c27dbfd3`, taban `origin/main` `c3ba2d94`)
+
+**Sonuç: dört kapı ve bayrak MEKANİĞİ AYAKTA; kapanış ölçütü 5'in ikinci yarısı ÇÜRÜDÜ, üç ölçüm kaydı yanlış, iki envanter boşluğu.**
+Yöntem: klon DB (`tekserp_1c_test`, migration 281/281) üzerinde bekçi koşumu + 6 bağımsız Opus okuyucu (mercek: dört-kapı ×2 ·
+mekanik ×2 · sıfır-fark ×2, salt-okunur ağaç; komut `Workflow`, 311 araç çağrısı) + iddiaların kodda elle doğrulanması.
+Davranışsal (güvenlik/veri) kusur BULUNMADI; asıl sed backend'dir ve ölçülüyor.
+
+### Ölçüldü ✅
+
+| ne | sonuç | nasıl |
+|---|---|---|
+| ① üç router `verifyToken → requireDokumaEnabled → requirePermission`; jenerik `requireModule` yok | ✅ | `test_dokuma_regime_gate` 33/0 (§6a/§6c ×3) |
+| ② `SCREEN_CATALOG` satırı + iki `weavingorder:*` muafı düştü; `loom:*` muafı CANLI (hiçbir ekran istemiyor; düşse `permissionsWithoutScreen` dolar) | ✅ | `test_screen_catalog` 33/0; bayatlık yüklemi `screensUsing(code).length > 0` |
+| ③ karo yüklemi saf, palet otomatik, izin aynası birebir; §9c/§9e çözücüsü alt dizindeki `weaving-regime.ts`i gerçekten çözüyor | ✅ | Electron vitest 43/43 (`tile-visibility` · `CommandPalette` · `weaving-regime` · `boss-menu` · `ModuleProfile`) |
+| ④ bayrak: `basit`te KAPALI, `perde-dokuma`/`dokuma`/`tam` AÇIK; ön koşul kapının İÇİNDE (`production` önce, 403 `dependent:"dokuma"`); `setFeatureFlags` bağımlılığı 400 | ✅ | `test_module_flags` 82/0 · `test_module_profile` 58/0 · `test_feature_flag_contract` 78/0 · `test_production_regime_gate` 40/0 · `test_route_auth_coverage` 15/0 · `test_swagger` 12/0 |
+| grandfathering: sabit `false`, `WHERE EXISTS rolls`, `ON CONFLICT DO NOTHING`; klon DB'de satır `dokuma.enabled=false` MEVCUT | ✅ | psql; `test_module_grandfathering §2b` ve `test_module_flag_off §3` klonda KIRMIZI ama ORTAM kaynaklı (öteki modüllerin grandfathering satırları rev1e klonunda yok; kod hatası değil) |
+| "varsayılan = bugünkü davranış" öncülü | ✅ | `c27dbfd3~1`de Electron+mobil'de dokuma ucu çağıran dosya 0, bugün 1 (`WeavingOrders/service.ts`) |
+| Electron etkin değer `productionEnabled && (dokuma ?? false)` — yüklenirken karo çizilmez | ✅ | `useOperationsVisibility.ts`; not: `productionEnabled ?? true` üretim için fail-open ama dokuma etkin değeri yine `false` kalır |
+| mobil KAPSAM DIŞI | ✅ | `git grep -iE 'dokumaEnabled|dokuma\.enabled' -- mobil` → 0; tablet ayağı `DOKUMA-IS-EMRI-VE-TABLET-TASARIMI.md` §3.9 bulgu E ile sonraya |
+| bayrak ayak izi | 32 dosya | `git grep -l -E 'dokumaEnabled|dokuma\.enabled|readDokumaEnabled|requireDokumaEnabled' -- ':!docs' ':!*.md'` @ `c3ba2d94`; aynı yüklem devere için bugün 30 (yukarıdaki 28 `05c6dbbb` tabanıydı); fark = ekran dosyaları + migration adı. Sayı tabana bağlıdır, reçeteye "≈30, yüklemle ölç" yazılmalı |
+
+### Çürüdü ❌ — kalemler (sahibi 1e'nin kararı; 47 kod/sözleşme değiştirmedi)
+
+- **D1 · Kapanış ölçütü 5'in ikinci yarısı kodda KARŞILIKSIZ.** `Electron/src/components/ProtectedRoute.tsx` yalnız `user` ·
+  `canEnterApp` · `requirePermission` · `requireAnyPermission` · `requireSystemAccount` okur; bayrak dalı YOK
+  (`grep -c 'MODULE_DISABLED\|dokumaEnabled\|useFeatureFlags'` → 0). `content-routes.tsx` dokuma route'u yalnız
+  `requirePermission="weavingorder:read"` taşır. ⇒ bayrak KAPALIYKEN `weavingorder:read` (ya da `["*"]` süperadmin) taşıyan
+  kullanıcı adres çubuğu / kalıcı sekme defteri (`store/tabs.ts` `persist("teks.tabs")` → `TabRouter` doğrudan mount) ile
+  `/operations/weaving-orders`ı AÇAR; `WeavingOrdersPage` mount'ta koşulsuz `useDataTable` sorgusu atar (`enabled` geçirilmez),
+  backend 403 `MODULE_DISABLED` döner, hata paneli basılır. **Sıfır fark cümlesi bu yolda tutmaz; ölçütün istediği "iki ayrı
+  sonda" fiilen TEK sondadır (izin).** Bu dilime özgü sapma DEĞİL, projenin yazılı konvansiyonu: `content-routes.tsx` finans
+  yorumu *"görünürlük kapısı bayrak: menü satırı çizilmez ve backend her ucu 403'ler"*; emsal `operations/yarn-stock` da aynı
+  biçimde. ⇒ kusur "kod emsalden saptı" değil, **"sözleşme var olmayan bir mekanizmayı ölçüt yazdı, indiriş onu yapılmış ilan etti"**.
+  Karar 1e'de: **(a)** ölçüt 5 konvansiyona DARALTILIR ("karo çizilmez + backend 403; route izin kapısı") — 47 önerisi, backend
+  sed zaten ölçülü · **(b)** `ProtectedRoute`a bayrak ayağı (`requireModuleFlag`) doğar, dokuma + emsaller ona bağlanır, negatif
+  sonda (vitest + memory router, `dokumaEnabled:false` + `weavingorder:read` → `/forbidden`) yazılır — ayrı dilim, üç emsal ekranı kapsar.
+- **D2 · "İNDİ" bölümünün delil atfı GEÇERSİZ.** `test_screen_catalog §4` diye bir bölüm yok (`grep -c '§4'` → 0); dosyanın
+  "── 4)" bölümü *"her Electron route izni bir ekranda beyan edilmiş"* = izin↔manifesto hizası, bayrak-kapalı yönlendirme değil.
+  Aynı sınıf: `test_dokuma_regime_gate` başlığı (satır 22–23) *"ne karo, ne route, ne istek"* der ama §7e yalnız
+  `requirePermission="weavingorder:read"` metnini arar ve **§7b etiketi** *"(kapalı modülde istek atan yüzey yok)"* ölçtüğünden
+  BÜYÜK — yüklem "çağıran dosya allowlist'te"dir. Kapının dördüncü ölüm biçimi (etiket ölçümü aşar). Kalem (0c): §7b etiketi ve
+  başlık ölçtüğüne daraltılır; "istek atan yüzey yok" ancak (b) seçilirse §7f olarak doğar.
+- **D3 · Sayı kaydı yanlış: `KAPILI` 14 → 11 DEĞİL, 13 → 10.** `sed -n '/^const KAPILI/,/^\];/p' scripts/test_production_regime_gate.ts | grep -c '{ dosya: "routes/'`
+  → 10; `git show c27dbfd3~1:…` aynı komut → 13. "14/11" `grep -c 'dosya:'`in tip bildirim satırını (`ReadonlyArray<{ dosya: string…`)
+  saymasıdır — aracın kendi gürültüsü. Belgede yukarıda düzeltildi; commit mesajı ve arşiv notu (varsa) 1e'de.
+- **D4 · Envanter boşluğu: `Electron/src/pages/Operations/WeavingOrders/weaving-regime.test.ts`** (dilimle YENİ) ne
+  `Teks-Erp/docs/BEKCI-HARITASI.md`de ne `docs/kurallar/modul-bayrak.md` İstemci listesinde ne `dokuma.md`de
+  (`grep -c weaving-regime` üçünde 0); kardeşleri (`yarn-regime.test` · `production-regime.test` · `tile-visibility.test`) kayıtlı,
+  backend bekçisi aynı commit'te İKİ yere yazılmış. Haritada olmayan bekçi koşulmaz ve `test_identity_ledger` yalnız
+  `Teks-Erp/scripts/test_*.ts`yi ölçtüğü için hiçbir kapı kırmızı vermez. Kalem (0c): üç dosyaya satır.
+- **D5 · Bayat kod yorumu:** `Teks-Erp/src/constants/module-flags.ts` `MODULE_SETTING_KEYS` üstü *"Aynı sekiz modülün DB anahtarı"*
+  — küme artık dokuz (`dokuma.enabled`); aynı commit `module-profiles.ts` `tam` açıklamasını "Dokuz"a çevirmiş, bunu atlamış.
+  (`module-flags.ts` başlığındaki "YEDİ", `module-profiles.ts`/`screen-catalog.ts`/`module-profile.job.ts`teki "yedi" bu dilimden
+  ÖNCE de bayattı — aynı sınıf, ayrı borç; elle sayım yasağı kapsamında.)
+- **D6 · Sözleşme kendi eski cümlesini bırakmış:** ④ *"`router.use`ta `requireProductionEnabled`in yanına"* — inen kod YANINA değil
+  YERİNE koydu (kapı üretimi kendi içinde okur), `test_production_regime_gate` KAPILI'sından üç dosya bu yüzden düştü. Plan cümlesi
+  ölçümle yan yana duruyor; "İNDİ: yerine" şerhi düşülmeli.
+- **Küçük (canlı delik değil):** `test_dokuma_regime_gate`in route taraması düz `readdirSync` — `src/routes/reports/` altındaki
+  8 router görülmez; bugün hiçbiri üretim/dokuma kapısı taşımıyor (`grep -rl` → 0), kural cümlesinden dar. Dokunma yüklemi ham SQL'i
+  ve transitif helper'ı görmez. Kapsam beyanı dosya başlığına yazılmalı.
+
+### Ölçülemedi ⚠️
+
+- Bayrak KAPALIYKEN uçların CANLI 403 verdiği (`test_module_flag_off` `/api/weaving-orders` sondası) klon DB'de ortam kırmızısına
+  takıldı (yukarıda); kapının KURULDUĞU ölçüldü, ÇALIŞTIĞI temiz DB'de 1e/0c tarafından ölçülmeli: `npx tsx scripts/run-all-tests.ts module_flag_off`.
+- Kalıcı sekme ile açılış sondası (bayrak açıkken sekme açık → bayrak kapatılır → yeniden boot): yazılmadı, D1'in kararına bağlı.
