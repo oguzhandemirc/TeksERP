@@ -9,7 +9,7 @@
 // ama çocuk TAM istenen metrajla doğar; çocuk toplamı ebeveynin `initialQty`sini
 // geçince geri alma `currentQty > initialQty` gibi imkânsız bir satır bırakıyordu.
 //
-// DÜZELTMESİ ZATEN VAR (e1437eb3 · 2026-08-10): aşımda `initialQty` YUKARI çekilir
+// DÜZELTMESİ ZATEN VAR (`e1437eb3` · 2026-08-10): aşımda `initialQty` YUKARI çekilir
 // ve fark deftere OVERAGE olarak yazılır (`tambur-undo.service.ts` §"METRAJ GERİ
 // KOYMA"; kural: `docs/kurallar/tambur.md` — "restore > initialQty ise initialQty
 // yukarı + deftere OVERAGE"). Bu onarım YENİ bir semantik icat ETMEZ; bugünkü

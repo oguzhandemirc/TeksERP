@@ -4,7 +4,7 @@
 //           npx tsx scripts/fix_fason_directship_initialqty.ts --apply --onay=<N> --kod-yayinda [--sec=<barkod|id>,...]
 // =============================================================================
 // Hata: `createFasonShipChild` ebeveynin `currentQty`siyle birlikte `initialQty`sini de
-// çocuğun metrajı kadar düşürüyordu (düzeltme 5980ff06 · bkz. arşiv 2026-09-11 fason initialQty).
+// çocuğun metrajı kadar düşürüyordu (düzeltme `5980ff06` · bkz. arşiv 2026-09-11 fason initialQty).
 // Doğrudan sevk terminaldir; hasar kendiliğinden kapanmaz.
 //
 // İMZA — bağımsız çapa `SubcontractorDispatchItem.dispatchedQty` (D: fasona sevk anındaki metraj).

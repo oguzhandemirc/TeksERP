@@ -474,7 +474,7 @@ async function seedReturnReady(ardaOrderId: string): Promise<void> {
   console.log(`   Electron : İş Emirleri → WO-${STAMP}-FULL → "Tam Ekran Aç" (dağılım şeridi + dallar)`);
   console.log(`   Mobil    : refakat kartını okut → KK1 / Fason Sevk / Fason Kabul / Kurşun / Tambur / Depo`);
   // NOT (2026-08-01 denetimi): burada `npm run seed:sevkiyat` öneriliyordu. O script
-  // 2026-07-11 çuval havuzu geçişinde (449a410) dosyasıyla birlikte silinmişti ama
+  // 2026-07-11 çuval havuzu geçişinde (`449a410`) dosyasıyla birlikte silinmişti ama
   // package.json satırı ve bu satır kalmıştı → operatöre var olmayan bir komut
   // söyleniyordu. Çuval-depo fixture'ı artık `npm run seed:fixtures` içinde.
   console.log(`   Sevkiyat : çuval-depo durumları için \`npm run seed:fixtures\``);

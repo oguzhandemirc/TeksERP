@@ -3,7 +3,7 @@
 // Çalıştır: npx tsx scripts/fix_duplicate_master_data.ts          (dry-run)
 //           npx tsx scripts/fix_duplicate_master_data.ts --apply  (gerçekten siler)
 //
-// NEDEN: ad-mükerrer guard'ı 2026-07-30'da geldi (8442aef); bu 3 çift 16-23
+// NEDEN: ad-mükerrer guard'ı 2026-07-30'da geldi (`8442aef`); bu 3 çift 16-23
 // Temmuz'da, korumadan ÖNCE açılmış. Guard tasarım gereği yalnız YENİ mükerreri
 // engeller, geriye dönük temizlemez. Kalıcı silme burada meşru: master-data
 // hard-delete kök CLAUDE.md'de bilinçli istisna olarak listeli ve fabrika verisi

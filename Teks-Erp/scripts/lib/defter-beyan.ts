@@ -291,7 +291,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   //    damgalaması. Süzgeç tek başına boş küme üzerinde çalışırdı.
   // ⚠️ SINGLE dallarında `finalize` imzası DAMGALANMAZ (childRollId NULL, qtyM =
   //    topun TAMAMI): kardeşler ayakta, topun geri kalanı hâlâ sapan kimlikle depoda.
-  // Uygulama: 4b666d33 · tasarım: docs/design/PLAN-SAPMA-GERI-ALMA-TASARIM.md
+  // Uygulama: `4b666d33` · tasarım: docs/design/PLAN-SAPMA-GERI-ALMA-TASARIM.md
   // Bekçi: scripts/test_plan_deviation_undo.ts (25 kontrol, iki negatif sonda koşuldu)
 
   // ⭐ BORÇ KAPANDI (K2, 6e 2026-09-14): sil-yaz BİTTİ — üç `deleteMany` sitesi (writeShipmentAllocationsTx ·
@@ -424,7 +424,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/helpers/property-revoke.helper.ts", sembol: "revokeRollProperties" },
      { dosya: "src/services/helpers/property-revoke.helper.ts", sembol: "setRollPropertyValueTx" },
      { dosya: "src/services/helpers/property-revoke.helper.ts", sembol: "applyRollFlagSetTx" }],
-    // 3c53deaf (G2): miras yazımı tambur.service'ten helper'a (`inheritRollPropertiesTx`) taşındı.
+    // `3c53deaf` (G2): miras yazımı tambur.service'ten helper'a (`inheritRollPropertiesTx`) taşındı.
     ["src/services/helpers/property-revoke.helper.ts", "src/services/inventory.service.ts",
       "src/services/subcontractor.service.ts", "src/services/workorder.service.ts",
       "src/services/tambur-undo.service.ts"]),
@@ -540,7 +540,7 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   KARTELA_DISPATCH: { tur: "BAGLI_TERS", kod: "KARTELA_CANCEL", tersYazan: [{ dosya: "src/services/kartela.service.ts", sembol: "cancelDispatch" }] },
   KARTELA_CANCEL: { tur: "TERS_KODU", ileri: "KARTELA_DISPATCH" },
   STOCK_COUNT: { tur: "BAGLI_TERS", kod: "STOCK_COUNT", tersYazan: [{ dosya: "src/services/stock-count-reversal.service.ts", sembol: "reverseTx" }] },
-  // SCRAP (stok sebep kodu) TERMINAL DEĞİL (6e ① 6a59aa6c, hüküm ① b1+b2+b3-dar): TEK yazıcısı
+  // SCRAP (stok sebep kodu) TERMINAL DEĞİL (6e ① `6a59aa6c`, hüküm ① b1+b2+b3-dar): TEK yazıcısı
   // depo kesimi kapanışının ham-scrap dalı (tambur.service.ts:2938, CUT_DISCARD ile aynı ternary)
   // ve FULL geri alma `reverseVarianceBoundStockMovesTx` ile bağlı tersler (§14). Kök CLAUDE.md'nin
   // "SCRAP gerçek fire kararıdır" cümlesi RollStatus.SCRAP / RollVariance KARARINI anlatır — bu
@@ -562,7 +562,7 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   // (`reverseLatestScopedStockMove`, bekçi `test_stock_ledger_fason §9`).
   FASON_RECEIPT: { tur: "BAGLI_TERS", kod: "FASON_RECEIPT_CANCEL", tersYazan: [{ dosya: "src/services/subcontractor.service.ts", sembol: "cancelReceipt" }] },
   FASON_RECEIPT_CANCEL: { tur: "TERS_KODU", ileri: "FASON_RECEIPT" },
-  // DISPOSITION — KARŞI OLAY (1c ③ 75b1eb0d): kapanış dispozisyonu topu üretimden RAFA indirir
+  // DISPOSITION — KARŞI OLAY (1c ③ `75b1eb0d`): kapanış dispozisyonu topu üretimden RAFA indirir
   // (PRODUCTION çıkışı); karşı yönü raftan ÜRETİME giriş = PRODUCTION_ISSUE, artık TEK helper
   // `postProductionIssuesTx` yazar (raftan üretime giren üç satırsız yol da ona bağlandı). Bağ yok,
   // karşı yön var. ⚠️ ÇOCUK KAPSAMI ŞERHİ: tambur-undo FULL yalnız ÇOCUK topların satırlarını
@@ -587,13 +587,13 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   // Ölçen: `test_stock_ledger_tambur_undo` §11 beş dal (A depo-restore · B adım-restore ·
   // C kaynak-arşivde · D SINGLE_RESTORE · E FULL), consistency §31 yetim sondası.
   CUT_SPLIT: { tur: "BAGLI_TERS", kod: "TAMBUR_UNDO", tersYazan: [{ dosya: "src/services/tambur-undo.service.ts", sembol: "applySingle" }, { dosya: "src/services/tambur-undo.service.ts", sembol: "applySingleRestore" }, { dosya: "src/services/tambur-undo.service.ts", sembol: "applyFull" }] },
-  // CUT_DISCARD — BORÇ KAPANDI (6e ① 6a59aa6c): kapanışın sapmaya BAĞLI çıkışı (rollVarianceId)
+  // CUT_DISCARD — BORÇ KAPANDI (6e ① `6a59aa6c`): kapanışın sapmaya BAĞLI çıkışı (rollVarianceId)
   // FULL geri almada `reverseVarianceBoundStockMovesTx` ile bağlı terslenir (§13, durum=defter 100=100);
   // SINGLE_RESTORE dokunmaz (§15, bilinçli — kapanış kararı ayakta); scrap-kalan çocuğuna yalnız FULL
   // (§19, 409 UNDO_SCRAP_REMAINDER_FULL_ONLY). İki defter (stok + sapma) birlikte döner — eski
   // "iki defter farklı tersliyor" borcu bu yüzden kapandı.
   CUT_DISCARD: { tur: "BAGLI_TERS", kod: "TAMBUR_UNDO", tersYazan: [{ dosya: "src/services/tambur-undo.service.ts", sembol: "reverseVarianceBoundStockMovesTx" }] },
-  // OVERAGE — BORÇ KAPANDI (6e ②+④ ef5a40f8 + şema 154998a8 `RollVariance.sourceRollId`; hüküm 1c).
+  // OVERAGE — BORÇ KAPANDI (6e ②+④ `ef5a40f8` + şema `154998a8` `RollVariance.sourceRollId`; hüküm 1c).
   // İKİ DEFTER, İKİ SINIF — ve ikisi birlikte doğru:
   //   · SAPMA defteri (RollVariance OVERAGE, EBEVEYNDE): TERMİNAL — keşif geri alınmaz, satır
   //     terslenmez, ebeveynde kalır; `restoreBumpTx` mevcut canlı OVERAGE sapmasını bulur ya da

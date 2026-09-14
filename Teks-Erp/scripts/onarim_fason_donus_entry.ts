@@ -6,13 +6,13 @@
 //
 // NEDEN: fason dönüşünde ara adımda doğan top üretime doğar (IN_PRODUCTION) ama
 // defter koşulsuz ENTRY + toWarehouseId yazıyordu — mal rafa hiç girmediği hâlde
-// depoda görünüyordu. Kod tarafı cb1d0304 ile İLERİYE dönük kapandı (yalnız
+// depoda görünüyordu. Kod tarafı `cb1d0304` ile İLERİYE dönük kapandı (yalnız
 // bornStatus = WAREHOUSE ise satır yazılır). Geçmişteki yanlış satırlar
 // DÜZELTİLMEZ (defter satırı UPDATE/DELETE edilmez): her biri bugüne yazılan,
 // `reversesMovementId` ile orijinaline bağlı bir TERS KAYITLA kapanır
 // (tasarım: docs/design/DEPO-STOK-DEFTERI-TASARIM.md §D2a, §3.1 GO/NO-GO #1).
 //
-// ⚠️ bb709bd9 ("516 topluk delik") BU ONARIMLA İLGİSİZ ve BACKFILL DEĞİLDİR:
+// ⚠️ `bb709bd9` ("516 topluk delik") BU ONARIMLA İLGİSİZ ve BACKFILL DEĞİLDİR:
 // o commit tambur finalize çocuğunun doğumunda PRODUCTION satırını İLERİYE
 // dönük yazar; 516 sayısı deliğin ölçüsüdür, onarılmaz. Geçmiş 516 top açılış
 // fotoğrafına kalır (`scripts/acilis_fotografi_stok_defteri.ts`).

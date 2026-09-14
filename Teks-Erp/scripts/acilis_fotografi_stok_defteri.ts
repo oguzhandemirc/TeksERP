@@ -26,7 +26,7 @@
 // 20260912150000): fotoğraftan önceki her satır preEpoch=true olur, as-of/Σ
 // okumaları onları dışarıda bırakır.
 //
-// ⚠️ bb709bd9 ("tambur finalize çocuğu depoya girişi yazıyor — 516 topluk delik")
+// ⚠️ `bb709bd9` ("tambur finalize çocuğu depoya girişi yazıyor — 516 topluk delik")
 // BACKFILL DEĞİLDİR: o commit İLERİYE dönük yazar, geçmişteki 516 top BU
 // fotoğrafla kapanır. Bir sonraki okuyan bunu backfill sanmasın.
 //
