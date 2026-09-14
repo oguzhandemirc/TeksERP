@@ -21,18 +21,26 @@ interface Props {
   withReason: boolean;
   onChange: (lines: YarnLineDraft[]) => void;
   disabled?: boolean;
+  /** Faz 2: kartın ipliğine ait aktif lotlar; `undefined` = eski sunucu, lot seçici ÇİZİLMEZ (form birebir eski). */
+  lots?: { id: string; lotNo: string; balanceKg: number }[];
+  /** `devere.lotRequired` (sunucudan): "Lot yok" seçeneği çizilmez. */
+  lotRequired?: boolean;
 }
+
+const NO_LOT = '__no_lot__';
 
 let seq = 1;
 const nextKey = (): string => `l${Date.now().toString(36)}-${seq++}`;
 
-export default function YarnLinesEditor({ title, lines, warehouses, withReason, onChange, disabled }: Props) {
+export default function YarnLinesEditor({ title, lines, warehouses, withReason, onChange, disabled, lots, lotRequired }: Props) {
   const [pickerFor, setPickerFor] = useState<string | null>(null);
+  const [lotPickerFor, setLotPickerFor] = useState<string | null>(null);
+  const lotLabel = (id: string | null) => (id ? (lots?.find((l) => l.id === id)?.lotNo ?? '?') : 'Lot yok');
   const multi = warehouses.length > 1;
   const defaultWarehouseId = warehouses[0]?.id ?? null;
   const update = (key: string, patch: Partial<YarnLineDraft>) => onChange(lines.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   const remove = (key: string) => onChange(lines.filter((l) => l.key !== key));
-  const add = () => onChange([...lines, { key: nextKey(), warehouseId: defaultWarehouseId, qtyKg: '', reasonCode: null }]);
+  const add = () => onChange([...lines, { key: nextKey(), warehouseId: defaultWarehouseId, qtyKg: '', reasonCode: null, lotId: null }]);
   const warehouseName = (id: string | null) => warehouses.find((w) => w.id === id)?.name ?? 'Depo seç';
 
   return (
@@ -49,6 +57,11 @@ export default function YarnLinesEditor({ title, lines, warehouses, withReason, 
                 <Text style={l.warehouseId ? styles.fieldText : styles.fieldPlaceholder}>{warehouseName(l.warehouseId)}</Text>
               </TouchableRipple>
             ) : null}
+            {lots ? (
+              <TouchableRipple onPress={() => setLotPickerFor(l.key)} style={styles.field} accessibilityRole="button" disabled={disabled}>
+                <Text style={l.lotId ? styles.fieldText : styles.fieldPlaceholder}>{lotLabel(l.lotId)}</Text>
+              </TouchableRipple>
+            ) : null}
             <NumpadInput value={l.qtyKg} onChangeText={(t) => update(l.key, { qtyKg: t })} allowDecimal numpadMaxLength={8} numpadLabel={`${title} kg`} placeholder="kg" style={styles.kg} editable={!disabled} />
             <IconButton icon="close" onPress={() => remove(l.key)} disabled={disabled} accessibilityLabel="Satırı kaldır" />
           </View>
@@ -58,6 +71,22 @@ export default function YarnLinesEditor({ title, lines, warehouses, withReason, 
         </View>
       ))}
       {lines.length === 0 ? <Text style={styles.empty}>{withReason ? 'Dip iadesi yok.' : 'Satır ekleyin — cağlığa yüklenen brüt kg.'}</Text> : null}
+      {/* Lot seçici: "Lot yok" AÇIK bir seçenektir (sessiz lotsuz yazım olmasın); lotRequired açıkken çizilmez. */}
+      <PickerModal
+        visible={lotPickerFor !== null}
+        title="İplik lotu seç"
+        options={[
+          ...(lotRequired ? [] : [{ value: NO_LOT, label: 'Lot yok', sublabel: 'lotsuz çıkış — levent lot izlemesine girmez' }]),
+          ...(lots ?? []).map((lot) => ({ value: lot.id, label: lot.lotNo, sublabel: `${lot.balanceKg} kg` })),
+        ]}
+        selectedValue={lines.find((l) => l.key === lotPickerFor)?.lotId ?? NO_LOT}
+        emptyText="Bu ipliğin aktif lotu yok — mal kabulde lot numarası yazılınca doğar."
+        onDismiss={() => setLotPickerFor(null)}
+        onSelect={(v) => {
+          if (lotPickerFor) update(lotPickerFor, { lotId: v === NO_LOT ? null : v });
+          setLotPickerFor(null);
+        }}
+      />
       <PickerModal
         visible={pickerFor !== null}
         title="Depo seç"

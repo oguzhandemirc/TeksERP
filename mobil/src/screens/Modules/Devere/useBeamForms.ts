@@ -16,11 +16,13 @@ interface Deps {
   defaultWarehouseId: string | null;
   open: (m: FormModal) => void;
   current: FormModal | null;
+  /** `devere.lotRequired` sunucudan (bağlam ucu); alan yoksa false. */
+  lotRequired: boolean;
 }
 
 const toNum = (s: string): number => Number(s.replace(',', '.'));
 
-export function useBeamForms({ attemptRef, mutations, defaultWarehouseId, open, current }: Deps) {
+export function useBeamForms({ attemptRef, mutations, defaultWarehouseId, open, current, lotRequired }: Deps) {
   const [planForm, setPlanForm] = useState<PlanForm>(EMPTY_PLAN);
   const [windForm, setWindForm] = useState<WindForm | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -49,11 +51,11 @@ export function useBeamForms({ attemptRef, mutations, defaultWarehouseId, open, 
 
   const submitWind = useCallback(() => {
     if (current?.kind !== 'wind' || !windForm) return;
-    const v = validateWind(windForm, current.beam.originKind);
+    const v = validateWind(windForm, current.beam.originKind, lotRequired);
     if (!v.ok) return setFormError(v.message);
     const fingerprint = windFingerprint({ beamId: current.beam.id, lengthM: toNum(windForm.lengthM) });
     mutations.wind.mutate({ beamId: current.beam.id, originKind: current.beam.originKind, form: windForm, token: tokenForBeam(attemptRef.current, fingerprint), fingerprint });
-  }, [current, windForm, mutations.wind, attemptRef]);
+  }, [current, windForm, mutations.wind, attemptRef, lotRequired]);
 
   /** Çakışma modalı "yeni olarak gönder": yapışan token düşer, aynı yük taze token'la gider. */
   const resendAsNew = useCallback(() => {

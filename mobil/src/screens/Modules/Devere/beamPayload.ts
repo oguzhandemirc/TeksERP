@@ -32,6 +32,8 @@ export interface YarnLineDraft {
   warehouseId: string | null;
   qtyKg: string;
   reasonCode: string | null;
+  /** Faz 2: lot; null = "Lot yok" (operatör AÇIKÇA seçer — sessiz lotsuz yazım olmasın). */
+  lotId: string | null;
 }
 
 export interface WindForm {
@@ -85,7 +87,7 @@ export function initialWindForm(beam: { plannedLengthM: number; originKind: Warp
     lengthM: String(beam.plannedLengthM),
     kgSource: inHouse ? 'WEIGHED' : 'THEORETICAL',
     machineId: null,
-    issues: inHouse ? [{ key: 'i1', warehouseId: defaultWarehouseId, qtyKg: '', reasonCode: null }] : [],
+    issues: inHouse ? [{ key: 'i1', warehouseId: defaultWarehouseId, qtyKg: '', reasonCode: null, lotId: null }] : [],
     returns: [],
     breakCount: '',
   };
@@ -101,12 +103,14 @@ function validateLines(lines: YarnLineDraft[], label: string, needsReason: boole
   return { ok: true };
 }
 
-export function validateWind(f: WindForm, originKind: WarpBeamOrigin): Validation {
+export function validateWind(f: WindForm, originKind: WarpBeamOrigin, lotRequired = false): Validation {
   const m = num(f.lengthM);
   if (m == null || m <= 0) return { ok: false, message: 'Sarılan metre 0’dan büyük olmalı.' };
   if (originKind !== 'IN_HOUSE') return { ok: true };
   if (!f.machineId) return { ok: false, message: 'Devere makinesi seçin.' };
   if (f.issues.length === 0) return { ok: false, message: 'En az bir brüt iplik çıkışı satırı gerekir.' };
+  // `devere.lotRequired` SUNUCUDAN okunur; istemci kapısı yalnız erken uyarı (sunucu 400 zaten verir).
+  if (lotRequired && f.issues.some((l) => !l.lotId)) return { ok: false, message: 'Lot zorunlu: her iplik çıkış satırında lot seçin.' };
   const i = validateLines(f.issues, 'İplik çıkışı', false);
   if (!i.ok) return i;
   const r = validateLines(f.returns, 'Dip iadesi', true);
@@ -125,8 +129,8 @@ export function buildWindPayload(f: WindForm, originKind: WarpBeamOrigin, client
     lengthM: num(f.lengthM) ?? 0,
     kgSource: f.kgSource,
     machineId: inHouse ? f.machineId : null,
-    yarnIssues: inHouse ? f.issues.map((l) => ({ warehouseId: l.warehouseId ?? '', qtyKg: num(l.qtyKg) ?? 0 })) : [],
-    yarnReturns: inHouse ? f.returns.map((l) => ({ warehouseId: l.warehouseId ?? '', qtyKg: num(l.qtyKg) ?? 0, reasonCode: l.reasonCode ?? '' })) : [],
+    yarnIssues: inHouse ? f.issues.map((l) => ({ warehouseId: l.warehouseId ?? '', qtyKg: num(l.qtyKg) ?? 0, lotId: l.lotId })) : [],
+    yarnReturns: inHouse ? f.returns.map((l) => ({ warehouseId: l.warehouseId ?? '', qtyKg: num(l.qtyKg) ?? 0, reasonCode: l.reasonCode ?? '', lotId: l.lotId })) : [],
     breakCount: inHouse && f.breakCount.trim() !== '' ? (num(f.breakCount) ?? null) : null,
     clientToken,
   };

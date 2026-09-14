@@ -45,6 +45,10 @@ export interface TabletContext {
   warehouses: { id: string; name: string; isDefault: boolean }[];
   subcontractors: { id: string; name: string }[];
   suppliers: { id: string; name: string; type: 'CUSTOMER' | 'SUPPLIER' | 'BOTH' }[];
+  /** Faz 2 (lot): kart ipliklerinin aktif lotları, türetilen bakiyeyle. Eski sunucu göndermez → form lot sormaz. */
+  yarnLots?: { id: string; lotNo: string; itemId: string; balanceKg: number }[];
+  /** `devere.lotRequired` SUNUCUDAN — istemci tahmin etmez; alan yoksa false (bugünkü davranış). */
+  lotRequired?: boolean;
 }
 
 /** Backend `createSchema` ile birebir (.strict — fazla anahtar 400). */
@@ -62,6 +66,8 @@ export interface PlanWarpBeamRequest {
 export interface YarnLineRequest {
   warehouseId: string;
   qtyKg: number;
+  /** Faz 2: lot etiketi; null = lotsuz (sunucu uyarır, lotRequired açıksa 400). */
+  lotId: string | null;
 }
 
 /** Backend `windSchema` ile birebir. */

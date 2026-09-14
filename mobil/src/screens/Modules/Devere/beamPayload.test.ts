@@ -1,6 +1,6 @@
 import { buildPlanPayload, buildWindPayload, classifyBeamFailure, initialWindForm, isSameLocalDay, theoreticalKg, validatePlan, validateWind, EMPTY_PLAN, type WindForm } from './beamPayload';
 
-const line = (qtyKg: string, reasonCode: string | null = null, warehouseId: string | null = 'w1') => ({ key: `k${qtyKg}`, warehouseId, qtyKg, reasonCode });
+const line = (qtyKg: string, reasonCode: string | null = null, warehouseId: string | null = 'w1', lotId: string | null = null) => ({ key: `k${qtyKg}`, warehouseId, qtyKg, reasonCode, lotId });
 
 // ⭐ NEGATİF SONDA (ölçüldü 2026-09-14): köken XOR dalı kaldırılınca §plan/3 KIRMIZI · `returnKg > issueKg`
 //    kapısı kaldırılınca §wind/4 KIRMIZI · fason kökende `yarnIssues` gönderilince §wind/6 KIRMIZI.
@@ -67,7 +67,25 @@ describe('validateWind / buildWindPayload — windSchema aynası', () => {
     expect(fason.yarnReturns).toEqual([]);
     expect(fason.breakCount).toBeNull();
     const ic = buildWindPayload({ ...inHouse, lengthM: '1180,5', returns: [line('5', 'TELEF')], breakCount: '3' }, 'IN_HOUSE', 'tok');
-    expect(ic).toEqual({ lengthM: 1180.5, kgSource: 'WEIGHED', machineId: 'm1', yarnIssues: [{ warehouseId: 'w1', qtyKg: 50 }], yarnReturns: [{ warehouseId: 'w1', qtyKg: 5, reasonCode: 'TELEF' }], breakCount: 3, clientToken: 'tok' });
+    expect(ic).toEqual({ lengthM: 1180.5, kgSource: 'WEIGHED', machineId: 'm1', yarnIssues: [{ warehouseId: 'w1', qtyKg: 50, lotId: null }], yarnReturns: [{ warehouseId: 'w1', qtyKg: 5, reasonCode: 'TELEF', lotId: null }], breakCount: 3, clientToken: 'tok' });
+  });
+  // Devere Faz 2 A3 (lot). ⭐ NEGATİF SONDA: `buildWindPayload` satırından `lotId` düşünce ⑧ ❌ · `validateWind`
+  //    lotRequired dalı kaldırılınca ⑨ ❌ · kapalıyken (lotRequired=false) lotsuz satır reddedilince ⑩ ❌.
+  it('⑧ ⭐ lot etiketi yüke girer (allowlist) — "Lot yok" null gider, sessiz düşmez', () => {
+    const p = buildWindPayload({ ...inHouse, issues: [line('50', null, 'w1', 'lotA')], returns: [line('5', 'TELEF', 'w1', 'lotA')] }, 'IN_HOUSE', 'tok');
+    expect(p.yarnIssues[0]).toEqual({ warehouseId: 'w1', qtyKg: 50, lotId: 'lotA' });
+    expect(p.yarnReturns[0]).toEqual({ warehouseId: 'w1', qtyKg: 5, reasonCode: 'TELEF', lotId: 'lotA' });
+    expect(buildWindPayload(inHouse, 'IN_HOUSE', 'tok').yarnIssues[0]!.lotId).toBeNull();
+  });
+  it('⑨ lotRequired AÇIK (sunucudan): lotsuz çıkış satırı istemcide de reddedilir, lotlu geçer', () => {
+    expect(validateWind(inHouse, 'IN_HOUSE', true).ok).toBe(false);
+    expect(validateWind({ ...inHouse, issues: [line('50', null, 'w1', 'lotA')] }, 'IN_HOUSE', true).ok).toBe(true);
+    // dip iadesi lotu zorunlu DEĞİL (sunucu yalnız uyarır)
+    expect(validateWind({ ...inHouse, issues: [line('50', null, 'w1', 'lotA')], returns: [line('5', 'TELEF')] }, 'IN_HOUSE', true).ok).toBe(true);
+  });
+  it('⑩ ⭐ lotRequired KAPALI / alan yok: lotsuz satır BİREBİR eski davranış (kabul)', () => {
+    expect(validateWind(inHouse, 'IN_HOUSE', false).ok).toBe(true);
+    expect(validateWind(inHouse, 'IN_HOUSE').ok).toBe(true);
   });
   it('7 nominal kg sunucu formülünün aynası: 4000 tel × 150 den × 1000 m / 9.000.000 = 66,667', () => {
     expect(theoreticalKg(4000, 150, 1000)).toBe(66.667);

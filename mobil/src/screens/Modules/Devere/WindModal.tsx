@@ -28,6 +28,9 @@ export default function WindModal({ state }: { state: DevereScreenState }) {
   const nominal = theoreticalKg(beam.warpSpec.endsCount, denier, Number(f.lengthM.replace(',', '.')));
   const machineName = ctx?.machines.find((m) => m.id === f.machineId)?.name ?? '';
   const warehouses = ctx?.warehouses ?? [];
+  // Faz 2: lot adayları kartın ipliğine süzülür; sunucu göndermiyorsa (eski) seçici çizilmez. Kapı sunucudan.
+  const lots = ctx?.yarnLots ? ctx.yarnLots.filter((l) => l.itemId === beam.warpSpec.yarnItem.id) : undefined;
+  const lotRequired = ctx?.lotRequired ?? false;
   const set = (patch: Partial<typeof f>) => state.setWindForm({ ...f, ...patch });
 
   return (
@@ -49,8 +52,8 @@ export default function WindModal({ state }: { state: DevereScreenState }) {
         {inHouse ? (
           <>
             <Field label="Devere makinesi" value={machineName} placeholder="Seçilmedi" onPress={() => setMachinePicker(true)} />
-            <YarnLinesEditor title="Brüt iplik çıkışı (cağlık)" lines={f.issues} warehouses={warehouses} withReason={false} onChange={(issues) => set({ issues })} disabled={state.busy} />
-            <YarnLinesEditor title="Dip iadesi" lines={f.returns} warehouses={warehouses} withReason onChange={(returns) => set({ returns })} disabled={state.busy} />
+            <YarnLinesEditor title={lotRequired ? 'Brüt iplik çıkışı (cağlık) — lot ZORUNLU' : 'Brüt iplik çıkışı (cağlık)'} lines={f.issues} warehouses={warehouses} withReason={false} onChange={(issues) => set({ issues })} disabled={state.busy} lots={lots} lotRequired={lotRequired} />
+            <YarnLinesEditor title="Dip iadesi" lines={f.returns} warehouses={warehouses} withReason onChange={(returns) => set({ returns })} disabled={state.busy} lots={lots} />
             <Text style={styles.label}>Kopuş adedi (isteğe bağlı)</Text>
             <NumpadInput value={f.breakCount} onChangeText={(t) => set({ breakCount: t })} allowDecimal={false} numpadMaxLength={5} numpadLabel="Kopuş" placeholder="—" style={styles.input} />
           </>

@@ -34,7 +34,7 @@ export function useDevereScreen() {
 
   const mutations = useBeamMutations({ attemptRef, onDone: () => setModal(null), onCollision: setCollision });
   const defaultWarehouseId = context.data?.warehouses.find((w) => w.isDefault)?.id ?? context.data?.warehouses[0]?.id ?? null;
-  const forms = useBeamForms({ attemptRef, mutations, defaultWarehouseId, open: setModal, current: modal?.kind === 'plan' || modal?.kind === 'wind' ? modal : null });
+  const forms = useBeamForms({ attemptRef, mutations, defaultWarehouseId, open: setModal, current: modal?.kind === 'plan' || modal?.kind === 'wind' ? modal : null, lotRequired: context.data?.lotRequired ?? false });
   const closeModal = useCallback(() => {
     setModal(null);
     forms.clearFormError();

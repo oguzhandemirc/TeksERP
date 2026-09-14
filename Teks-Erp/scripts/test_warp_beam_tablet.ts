@@ -17,7 +17,8 @@
 // =============================================================================
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { StationType } from "@prisma/client";
+import { Prisma, StationType } from "@prisma/client";
+import { SETTING_KEYS } from "../src/services/system-setting.service";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { getWarpBeamTabletContext } from "../src/services/warp-beam-tablet.service";
@@ -76,6 +77,8 @@ const ALLOW = {
   warehouses: ["id", "name", "isDefault"],
   subcontractors: ["id", "name"],
   suppliers: ["id", "name", "type"],
+  // Faz 2 A3: lot adayları — allowlist `map`; `notes`/`supplierId` sızmaz.
+  yarnLots: ["id", "lotNo", "itemId", "balanceKg"],
 } as const;
 
 async function main(): Promise<void> {
@@ -98,6 +101,14 @@ async function main(): Promise<void> {
   const sub = await prisma.subcontractor.create({ data: { code: `${TAG}-F`, name: `${TAG} fasoncu` }, select: { id: true } });
   // Cari satırı BİLEREK zengin: vergi no + adres — bunlar cevaba SIZMAMALI.
   const cari = await prisma.customer.create({ data: { code: `${TAG}-C`, name: `${TAG} tedarikçi`, type: "SUPPLIER", taxNumber: "9990001112", address: `${TAG} gizli adres` }, select: { id: true } });
+  // A3: lot adayları — aktif (listede), pasif ve yabancı kalem (listede DEĞİL); notes/supplierId sızmamalı.
+  const lot = await prisma.yarnLot.create({ data: { itemId: yarn.id, lotNo: `${TAG}-LOT`, supplierId: cari.id, notes: `${TAG} gizli not` }, select: { id: true } });
+  const lotPasif = await prisma.yarnLot.create({ data: { itemId: yarn.id, lotNo: `${TAG}-LOTP`, isActive: false }, select: { id: true } });
+  // Çözgü kartı OLMAYAN iplik kalemi: lotu bağlamda ÇİZİLMEZ (aday yalnız kart iplikleri).
+  const yarnKartsiz = await prisma.item.create({ data: { code: `${TAG}-IPK`, name: `${TAG} kartsız`, itemType: "YARN", unit: "KG" }, select: { id: true } });
+  const lotYabanci = await prisma.yarnLot.create({ data: { itemId: yarnKartsiz.id, lotNo: `${TAG}-LOTY` }, select: { id: true } });
+  const lotRequiredFoto = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_LOT_REQUIRED }, select: { value: true } });
+  await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.DEVERE_LOT_REQUIRED } });
   try {
     const ctx = (await getWarpBeamTabletContext()).data;
     for (const [liste, alanlar] of Object.entries(ALLOW) as [keyof typeof ALLOW, readonly string[]][]) {
@@ -116,7 +127,15 @@ async function main(): Promise<void> {
     const s0 = ctx.warpSpecs.find((s) => s.id === specDenyesiz.id);
     check("§3a denyeli kart: `denier` = resolveDenier(item) (300)", s1?.denier === 300, String(s1?.denier));
     check("§3b denyesiz kart: `denier` null (form 'kartta denye yok' uyarısı çizer, kaydet 400 bekler)", s0 != null && s0.denier === null);
+    console.log("\n── §4 lot adayları + lotRequired (A3) ──");
+    const lotSatir = ctx.yarnLots.find((l) => l.id === lot.id);
+    check("§4a kart ipliğinin aktif lotu listede, türetilen bakiyeyle (0 — hareket yok)", lotSatir != null && lotSatir.lotNo === `${TAG}-LOT` && lotSatir.itemId === yarn.id && lotSatir.balanceKg === 0);
+    check("§4b pasif lot ve çözgü kartı olmayan kalemin lotu listede DEĞİL", !ctx.yarnLots.some((l) => l.id === lotPasif.id) && !ctx.yarnLots.some((l) => l.id === lotYabanci.id));
+    check("§4c lotRequired sunucudan, satır yokken false (bugünkü davranış)", ctx.lotRequired === false);
   } finally {
+    await prisma.yarnLot.deleteMany({ where: { id: { in: [lot.id, lotPasif.id, lotYabanci.id] } } });
+    await prisma.item.delete({ where: { id: yarnKartsiz.id } }).catch(() => undefined);
+    if (lotRequiredFoto) await prisma.systemSetting.upsert({ where: { key: SETTING_KEYS.DEVERE_LOT_REQUIRED }, create: { key: SETTING_KEYS.DEVERE_LOT_REQUIRED, value: lotRequiredFoto.value as Prisma.InputJsonValue }, update: { value: lotRequiredFoto.value as Prisma.InputJsonValue } });
     await prisma.warpSpec.deleteMany({ where: { id: { in: [spec.id, specDenyesiz.id, specPasif.id] } } });
     await prisma.item.deleteMany({ where: { id: { in: [yarn.id, yarnDenyesiz.id] } } });
     await prisma.machine.delete({ where: { id: mk.id } }).catch(() => undefined);
