@@ -16,6 +16,8 @@
 //      DÖNER, NULL yalnız vardiya hiç yoksa) VE sınıflama 409 SHIFT_CANCELLED
 //   §9 liste: açık + kuyruk yüklemi (boğaz ikizi `CLASSIFICATION_QUEUE_WHERE`)
 //   §10 defter-beyan çapası: yazan/tersYazan sembolleri gerçek (beyan 82 ile aynı trende)
+//   §11 BEFORE DELETE seddi (migration 20260914091000): insan kararlı duruş DELETE → RAISE; sınıfsız silinir
+//   §12 YUVA (F4, `Machine.warpBeamSlots`): tek yuvada beamSlot 400 · aralık dışı 400 · uygun yazılır · CHECK >= 0
 //
 // NEGATİF SONDALAR (2026-09-14, cp+sha256): reclassify'dan defter satırı kaldırıldı → §5b/§5e ❌ ·
 // classify claim'inden `reasonCode: null` düşürüldü → §4c ❌ (ikinci sınıflandırma yerinde ezdi).
@@ -200,6 +202,29 @@ async function main(): Promise<void> {
   const l2 = await listMachineStops({ queueOnly: true, limit: 500 });
   check("§9b kuyruk: hepsi sebepsiz ∧ requiresReason ∧ geri alınmamış", l2.data.every((s) => s.reasonCode === null && s.requiresReason && s.revokedAt === null));
 
+  // ── §11 BEFORE DELETE seddi: insan kararlı duruş SİLİNEMEZ (sınıfsız silinir) ───────
+  const trg1 = await prisma.machineStopEvent.create({ data: { machineId: makine3.id, stopKey: crypto.randomUUID(), startedAt: S1, endedAt: S1, factoryDay: gunBasi, source: MachineDataSource.SUPERVISOR, reasonCode: "MOLA", lossClass: "PLANNED", reasonSource: MachineDataSource.SUPERVISOR } });
+  const trg2 = await prisma.machineStopEvent.create({ data: { machineId: makine3.id, stopKey: crypto.randomUUID(), startedAt: S1, endedAt: S1, factoryDay: gunBasi, source: MachineDataSource.SUPERVISOR, requiresReason: true } });
+  ids.stops.push(trg1.id, trg2.id);
+  let silHata: string | null = null;
+  try { await prisma.machineStopEvent.delete({ where: { id: trg1.id } }); } catch (e) { silHata = (e as Error).message; }
+  check("§11a ⭐ insan kararlı duruş DELETE → DB RAISE (trigger), satır durur", silHata !== null && /silinemez|restrict/i.test(silHata) && (await prisma.machineStopEvent.count({ where: { id: trg1.id } })) === 1, silHata?.slice(0, 80) ?? "hata yok");
+  let silOk = true;
+  try { await prisma.machineStopEvent.delete({ where: { id: trg2.id } }); } catch { silOk = false; }
+  check("§11b sınıfsız (makine/insan kararı yok) duruş silinebilir — sed yalnız insan kararına", silOk && (await prisma.machineStopEvent.count({ where: { id: trg2.id } })) === 0);
+
+  // ── §12 YUVA (F4): beamSlot yalnız warpBeamSlots > 1 makinede, 1..N ───────────────
+  const tekYuva = await hata(() => openManualStop({ machineId: makine3.id, startedAt: S1, beamSlot: 1, clientToken: crypto.randomUUID() }, undefined));
+  check("§12a tek yuvalı makinede beamSlot → 400 BEAM_SLOT_NOT_APPLICABLE", tekYuva?.statusCode === 400 && kod(tekYuva) === "BEAM_SLOT_NOT_APPLICABLE", kod(tekYuva));
+  await prisma.machine.update({ where: { id: makine3.id }, data: { warpBeamSlots: 2 } });
+  const tasan = await hata(() => openManualStop({ machineId: makine3.id, startedAt: S1, beamSlot: 3, clientToken: crypto.randomUUID() }, undefined));
+  check("§12b 2 yuvalı makinede beamSlot 3 → 400 BEAM_SLOT_OUT_OF_RANGE", tasan?.statusCode === 400 && kod(tasan) === "BEAM_SLOT_OUT_OF_RANGE", kod(tasan));
+  const uygun = await openManualStop({ machineId: makine3.id, startedAt: S1, beamSlot: 2, clientToken: crypto.randomUUID() }, undefined);
+  ids.stops.push(uygun.data.id);
+  check("§12c 2 yuvalı makinede beamSlot 2 yazıldı", uygun.data.beamSlot === 2);
+  const negatif = await hata(() => prisma.machine.update({ where: { id: makine3.id }, data: { warpBeamSlots: -1 } }));
+  check("§12d warpBeamSlots < 0 DB CHECK (machines_warp_beam_slots_nonneg) reddeder", negatif === null && (await prisma.machine.findUnique({ where: { id: makine3.id }, select: { warpBeamSlots: true } }))?.warpBeamSlots === 2);
+
   // ── §10 beyan çapası (statik) ─────────────────────────────────────────────
   const beyan = readFileSync(join(__dirname, "lib", "defter-beyan.ts"), "utf8");
   const svc = readFileSync(join(__dirname, "..", "src", "services", "machine-stop.service.ts"), "utf8");
@@ -211,6 +236,8 @@ async function cleanup(): Promise<void> {
     const stops = await prisma.machineStopEvent.findMany({ where: { OR: [{ id: { in: ids.stops } }, { machineId: { in: [ids.makine, ids.makine2, ids.makine3].filter(Boolean) } }] }, select: { id: true } });
     const sid = stops.map((s) => s.id);
     await prisma.machineStopReclass.deleteMany({ where: { stopEventId: { in: sid } } });
+    // BEFORE DELETE seddi insan kararlı satırı korur — fikstür temizliği ÖNCE kararı siler (üretim yolu değil).
+    await prisma.machineStopEvent.updateMany({ where: { id: { in: sid } }, data: { classifiedById: null, reasonSource: null } });
     await prisma.machineStopEvent.deleteMany({ where: { id: { in: sid } } });
     if (ids.preset) await prisma.reasonPreset.deleteMany({ where: { id: ids.preset } });
     await prisma.shiftInstance.deleteMany({ where: { id: { in: [ids.shift, ids.shiftCancelled].filter(Boolean) } } });

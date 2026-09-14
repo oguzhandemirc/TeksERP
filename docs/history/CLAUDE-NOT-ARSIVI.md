@@ -9043,3 +9043,25 @@ CommandPalette 46/46 · screen_catalog 37/0 · dokuma_regime_gate 41/0 · route_
 permission_catalog 24/0 · role_template 21/0 · machine_stop_manual 36/0 · loom_lists 12/0 · production_regime_gate
 40/0 · mobile_screen_permissions 6/0 · module_flags 82/0 · feature_flag_contract 78/0 · audit_labels 22/0 · mandallar yeşil.
 **Ölçülemedi:** gerçek vardiya verisiyle liste (ShiftInstance üretimi Faz 1a karne diliminde); mühürlü vardiya.
+## 2026-09-14 — FAZ 1b TAMAMLAYICI ŞEMA: `Machine.warpBeamSlots` (F4) + insan kararlı duruş SİLİNEMEZ trigger'ı (sed ④) [ÇEKİRDEK]
+
+**Neden:** 47'nin Faz 1b doğrulaması F4'ü açık bıraktı — `beamSlot` yuva sayısına karşı doğrulanamıyordu
+(kolon yoktu; 1 yuvalı tezgaha `beamSlot=7` 201). Tasarım §2.7 BEFORE DELETE seddini Faz 1b'ye
+koyuyordu, P2b-1 şema-only dilimi getirmemişti.
+
+**İniş (6e, şema penceresi 1e):** migration `…_machine_warp_beam_slots` (`SMALLINT NOT NULL DEFAULT 1`,
+CHECK `machines_warp_beam_slots_nonneg >= 0` — karşı örnek var: cağlıktan beslenen çözgü makinesi;
+`productionLineCount`taki `>= 1` ile çelişmez) + `…_machine_stop_block_classified_delete`
+(fonksiyon `machine_stop_block_classified_delete`, `restrict_violation`; yüklem İNSAN KARARINA daraltılmış —
+makine sınıflı satır budanabilir). `assertBeamSlotValid` (helper, tek yer): `> 1` makinede 1..N, `<= 1`
+makinede alan yazılamaz (400 `BEAM_SLOT_NOT_APPLICABLE` / `BEAM_SLOT_OUT_OF_RANGE`); açılış ve
+sınıflama ondan geçer. `test_db_invariants` CHECK + TRIGGERS + EXPECTED_FUNCTIONS (fonksiyon sorgusu
+artık envanterden okur, sabit `tr_fold` listesi kalktı); error.middleware CHECK etiketi.
+BaseController: `warpBeamSlots` makine gövdesinden yazılabilir (productionLineCount emsali), doğrulama DB CHECK.
+
+**Ölçüm:** `test_machine_stop_manual` 36 → 42/0 (§11 trigger: insan kararlı DELETE → RAISE, sınıfsız silinir;
+§12 yuva: tek yuva 400 · aralık dışı 400 · uygun yazılır · CHECK) · db_invariants 194/0 · schema_drift 4/0 ·
+defter_ters_yol 199/0 · machine_run 41/0 · doff 32/0 · production_line 12/0 · loom_lists 12/0 ·
+hard_delete_guard_coverage 17/0 · timestamptz 12/0 · snapshot 9/0. Fikstür temizliği: insan kararlı satır
+önce `classifiedById/reasonSource = NULL`, sonra DELETE.
+

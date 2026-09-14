@@ -35,6 +35,7 @@ import { factoryDayKeyUtcMidnight } from "../constants/time";
 import {
   MACHINE_STOP_SELECT,
   type MachineStopDto,
+  assertBeamSlotValid,
   assertStopShiftWritableTx,
   loadStop,
   normalizeNote,
@@ -113,9 +114,10 @@ export async function openManualStop(input: OpenManualStopInput, userId?: string
   let created: MachineStopDto;
   try {
     created = await prisma.$transaction(async (tx) => {
-      const machine = await tx.machine.findUnique({ where: { id: input.machineId }, select: { id: true, isActive: true } });
+      const machine = await tx.machine.findUnique({ where: { id: input.machineId }, select: { id: true, isActive: true, warpBeamSlots: true } });
       if (!machine) throw AppError.notFound("Makine bulunamadı", { machineId: input.machineId });
       if (!machine.isActive) throw AppError.badRequest("Pasif makineye duruş girilemez.", { code: "MACHINE_INACTIVE" });
+      assertBeamSlotValid(machine, input.beamSlot);
       const preset = input.reasonCode ? await resolveStopPreset(tx, input.reasonCode) : null;
       const shiftInstanceId = await resolveShiftInstanceId(tx, started.value);
       await assertStopShiftWritableTx(tx, { shiftInstanceId, machineId: machine.id });
@@ -210,9 +212,10 @@ export async function closeManualStop(stopId: string, endedAtIn: Date | null | u
 // ─────────────────────────────────────────────────────────────────────────────
 export async function classifyStop(stopId: string, input: ClassifyStopInput, userId?: string, source: MachineDataSource = MachineDataSource.SUPERVISOR): Promise<ApiResponse<MachineStopDto>> {
   const classified = await prisma.$transaction(async (tx) => {
-    const cur = await tx.machineStopEvent.findUnique({ where: { id: stopId }, select: { shiftInstanceId: true, machineId: true } });
+    const cur = await tx.machineStopEvent.findUnique({ where: { id: stopId }, select: { shiftInstanceId: true, machineId: true, machine: { select: { warpBeamSlots: true } } } });
     if (!cur) throw AppError.notFound("Duruş bulunamadı", { stopId });
     await assertStopShiftWritableTx(tx, cur);
+    assertBeamSlotValid(cur.machine, input.beamSlot);
     const preset = await resolveStopPreset(tx, input.reasonCode);
     const claim = await tx.machineStopEvent.updateMany({
       where: { id: stopId, reasonCode: null, revokedAt: null },

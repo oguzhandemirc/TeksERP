@@ -321,6 +321,7 @@ const CHECK_CONSTRAINT_MESSAGES: Record<string, string> = {
   // (ölçüldü: `POST /api/machines` gövdesinde alan yazılabiliyor, 0 → 409 ham ad).
   machines_productionLineCount_pos:
     "Makinenin üretim hattı sayısı en az 1 olmalı.",
+  machines_warp_beam_slots_nonneg: "Makinenin levent yuva sayısı negatif olamaz.",
   machine_runs_productionLineNo_pos: "Üretim hattı numarası en az 1 olmalı.",
   doff_events_pieceCount_pos: "İndirilen parça sayısı en az 1 olmalı.",
   doff_events_productionLineNo_pos: "Üretim hattı numarası en az 1 olmalı.",

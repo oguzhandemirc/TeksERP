@@ -494,6 +494,7 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // o yüklem `services/helpers/production-line.helper.ts`te yaşar ve
   // `test_production_line` §1 onun DAVRANIŞINI ölçer (varlığını değil).
   { table: "machines", name: "machines_productionLineCount_pos" },
+  { table: "machines", name: "machines_warp_beam_slots_nonneg" },
   // 2026-09-13 (dokuma yazma yüzeyi) — migration 20260913241000. P1 bilerek
   // erteledi ("kapısız CHECK, yazanı olmayan kısıt"); servisin 400'ü ilk hat,
   // bu CHECK son hat (çift yüklem). SUBCONTRACTED ⇔ subcontractorId DOLU.
@@ -681,6 +682,15 @@ const EXPRESSION_UNIQUES: Array<{ table: string; index: string; expr: string; pr
 // ─────────────────────────────────────────────────────────────────────────────
 const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: string }> = [
   {
+    table: "machine_stop_events",
+    trigger: "machine_stop_events_block_classified_delete",
+    // İnsan kararlı duruş (classifiedById dolu ∨ reasonSource ∈ {OPERATOR,SUPERVISOR}) DEFTERDİR:
+    // budayıcı ve her başka yol silemez — tasarım §4 sed ④ (Faz 1b, 2026-09-14). Makine
+    // sınıflı duruş telemetridir, kovayla budanır; trigger ona dokunmaz.
+    timing: ["BEFORE DELETE", "FOR EACH ROW"],
+    why: "insan kararlı duruş satırı silinemez — geri alma revokedAt damgasıdır; budama yalnız makine sınıflı satırı düşürür",
+  },
+  {
     table: "rolls",
     trigger: "rolls_stamp_production_timestamps",
     // BEFORE zorunlu: AFTER trigger NEW'i değiştiremez → damgalama sessizce
@@ -733,6 +743,12 @@ const REQUIRED_EXTENSIONS: Array<{ name: string; why: string }> = [
 const TOLERATED_EXTENSIONS = new Set(["unaccent"]);
 
 const EXPECTED_FUNCTIONS: Array<{ name: string; volatility: string; bodyFragments: string[]; why: string }> = [
+  {
+    name: "machine_stop_block_classified_delete",
+    volatility: "v",
+    bodyFragments: ['"classifiedById" IS NOT NULL', "'OPERATOR', 'SUPERVISOR'", "RAISE EXCEPTION"],
+    why: "duruş silme seddinin gövdesi: yüklem İNSAN KARARINA daraltılmış olmalı (makine sınıflı satır budanabilir)",
+  },
   {
     name: "tr_fold",
     volatility: "i", // IMMUTABLE — index/GENERATED ifadesinde kullanılabilmesi için ŞART
@@ -1101,7 +1117,7 @@ async function main(): Promise<void> {
   const liveFns = await prisma.$queryRaw<Array<{ proname: string; vol: string; body: string }>>`
     SELECT p.proname, p.provolatile::text AS vol, pg_get_functiondef(p.oid) AS body
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-    WHERE n.nspname = 'public' AND p.prokind = 'f' AND p.proname = ANY(ARRAY['tr_fold', 'tr_fold_color'])
+    WHERE n.nspname = 'public' AND p.prokind = 'f' AND p.proname = ANY(${EXPECTED_FUNCTIONS.map((f) => f.name)})
   `;
   const fnByName = new Map(liveFns.map((f) => [f.proname, f]));
   for (const exp of EXPECTED_FUNCTIONS) {

@@ -43,6 +43,23 @@ export const MACHINE_STOP_SELECT = {
 
 export type MachineStopDto = Prisma.MachineStopEventGetPayload<{ select: typeof MACHINE_STOP_SELECT }>;
 
+/**
+ * YUVA DOĞRULAMASI (F4): `beamSlot` yalnız `warpBeamSlots > 1` olan makinede ve 1..warpBeamSlots
+ * aralığında yazılır; `<= 1` makinede alan çizilmez (verilirse 400). NULL her zaman serbest —
+ * "atanmamış" kovası tahminle doldurulmaz.
+ */
+export function assertBeamSlotValid(machine: { warpBeamSlots: number }, beamSlot: number | null | undefined): void {
+  if (beamSlot == null) return;
+  if (machine.warpBeamSlots <= 1) {
+    throw AppError.badRequest("Bu makinede levent yuvası seçilmez (tek yuva).", { code: "BEAM_SLOT_NOT_APPLICABLE", warpBeamSlots: machine.warpBeamSlots });
+  }
+  if (beamSlot < 1 || beamSlot > machine.warpBeamSlots) {
+    throw AppError.badRequest(`Levent yuvası 1..${machine.warpBeamSlots} aralığında olmalı.`, {
+      code: "BEAM_SLOT_OUT_OF_RANGE", beamSlot, warpBeamSlots: machine.warpBeamSlots,
+    });
+  }
+}
+
 /** Katalogdaki AKTİF MACHINE_STOP satırı; kayıp sınıfı zorunlu (CHECK). Yoksa 400. */
 export async function resolveStopPreset(tx: Tx, code: string): Promise<{ code: string; lossClass: MachineStopLossClass }> {
   const trimmed = code.trim();
