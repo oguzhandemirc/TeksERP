@@ -102,6 +102,10 @@ async function main(): Promise<void> {
   const sub = await prisma.subcontractor.create({ data: { code: `${TAG}-F`, name: `${TAG} fasoncu` }, select: { id: true } });
   await prisma.yarnMovement.create({ data: { itemId: yarn.id, warehouseId: wh.id, kind: YarnMovementKind.IN, qtyKg: 1000 } });
   await prisma.yarnStock.create({ data: { itemId: yarn.id, warehouseId: wh.id, balanceKg: 1000 } });
+  // §13 (K4) ikinci depo — fikstür BURADA doğar, temizliği finally'de (defter silme yalnız teardown'da, §10b2).
+  const wh2 = await prisma.warehouse.create({ data: { code: `${TAG}-D2`, name: `${TAG} depo 2` }, select: { id: true } });
+  await prisma.yarnMovement.create({ data: { itemId: yarn.id, warehouseId: wh2.id, kind: YarnMovementKind.IN, qtyKg: 500 } });
+  await prisma.yarnStock.create({ data: { itemId: yarn.id, warehouseId: wh2.id, balanceKg: 500 } });
   const beamIds: string[] = [];
   try {
     console.log("\n── §1 Körlük zemini ──");
@@ -200,9 +204,6 @@ async function main(): Promise<void> {
     check("§12 ⭐ ikinci READY aynı gövde (tr_fold: küçük harf) → 409 WARP_BEAM_PHYSICAL_BUSY (ham P2002 değil), meşgul levent adıyla", kod(e12) === "WARP_BEAM_PHYSICAL_BUSY" && String((e12?.details as { busyBeamNo?: string } | undefined)?.busyBeamNo) === p8.data.beamNo, kod(e12));
 
     console.log("\n── §13 K4 kanonik kilit sırası (ters depo sırasıyla paralel sarım) ──");
-    const wh2 = await prisma.warehouse.create({ data: { code: `${TAG}-D2`, name: `${TAG} depo 2` }, select: { id: true } });
-    await prisma.yarnStock.create({ data: { itemId: yarn.id, warehouseId: wh2.id, balanceKg: 500 } });
-    await prisma.yarnMovement.create({ data: { itemId: yarn.id, warehouseId: wh2.id, kind: YarnMovementKind.IN, qtyKg: 500 } });
     let kilitHatasi = 0;
     for (let tur = 0; tur < 6; tur++) {
       const a = await createWarpBeam({ warpSpecId: spec.id, plannedLengthM: 10, originKind: WarpBeamOrigin.IN_HOUSE });
@@ -215,9 +216,6 @@ async function main(): Promise<void> {
       for (const r of sonuc) if (r.status === "rejected") kilitHatasi++;
     }
     check("§13 ⭐ ters depo sırasıyla 6 tur paralel sarım: kilit çakışması (40P01/P2010) YOK, 12/12 geçti", kilitHatasi === 0, `red=${kilitHatasi}`);
-    await prisma.yarnMovement.deleteMany({ where: { warehouseId: wh2.id } });
-    await prisma.yarnStock.deleteMany({ where: { warehouseId: wh2.id } });
-    await prisma.warehouse.delete({ where: { id: wh2.id } }).catch(() => undefined);
   } finally {
     await prisma.yarnMovement.deleteMany({ where: { OR: [{ warpBeamId: { in: beamIds } }, { itemId: yarn.id }] } });
     await prisma.yarnStock.deleteMany({ where: { itemId: yarn.id } });
@@ -226,6 +224,7 @@ async function main(): Promise<void> {
     await prisma.warpSpec.delete({ where: { id: spec.id } }).catch(() => undefined);
     await prisma.item.delete({ where: { id: yarn.id } }).catch(() => undefined);
     await prisma.warehouse.delete({ where: { id: wh.id } }).catch(() => undefined);
+    await prisma.warehouse.delete({ where: { id: wh2.id } }).catch(() => undefined);
     await prisma.subcontractor.delete({ where: { id: sub.id } }).catch(() => undefined);
     await prisma.machine.deleteMany({ where: { id: { in: [mk.id, mkDiger.id] } } });
     await prisma.station.deleteMany({ where: { id: { in: [st.id, stDiger.id] } } });
