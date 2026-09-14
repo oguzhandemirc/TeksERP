@@ -17,7 +17,9 @@
 //   · `listOpenMachineRuns` where'inden `endedAt: null` düşürülünce: §1a kırmızı
 //   · `listDoffsForDay` where'inden `revokedAt: null` düşürülünce: §2a/§2b/§4 kırmızı
 //   · `listUnlinkedDoffs` where'inden `rolls: { none: {} }` düşürülünce: §3a kırmızı
-//   · GET'lerden `mobile:dokuma` düşürülünce: §5 kırmızı
+//   · GET'lerden `mobile:dokuma` düşürülünce: §5 kırmızı — §5b bunu BELLEK İÇİNDE her koşumda
+//     tekrarlar (yüklem `...MOBILE_DOKUMA` ile `)` arasına başka izin (`...MOBILE_KK1`) sığdırır;
+//     eski birebir metin yüklemi KK1 izni eklenince sahte kırmızı verdi, 2026-09-14)
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım.
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -112,8 +114,13 @@ async function main(): Promise<void> {
     const kok = path.resolve(__dirname, "..");
     const runR = readFileSync(path.join(kok, "src/routes/machine-run.routes.ts"), "utf8");
     const doffR = readFileSync(path.join(kok, "src/routes/machine-doff.routes.ts"), "utf8");
-    const getOk = (t: string): boolean => /router\.get\("\/", requireAnyPermission\("loom:run", "loom:doff", \.\.\.MOBILE_DOKUMA\)/.test(t) && /MOBILE_DOKUMA = \["mobile:dokuma"\] as const/.test(t) && /router\.use\(verifyToken, requireDokumaEnabled\)/.test(t);
+    const getOk = (t: string): boolean => /router\.get\("\/", requireAnyPermission\("loom:run", "loom:doff", \.\.\.MOBILE_DOKUMA[^)]*\)/.test(t) && /MOBILE_DOKUMA = \["mobile:dokuma"\] as const/.test(t) && /router\.use\(verifyToken, requireDokumaEnabled\)/.test(t);
     check("§5 iki GET requireAnyPermission(... mobile:dokuma) ile ve requireDokumaEnabled altında", getOk(runR) && getOk(doffR), `run=${getOk(runR)} doff=${getOk(doffR)}`);
+    // §5b ⭐ sonda bellek içi: MOBILE_DOKUMA düşürülünce yüklem kırmızı (KK1 izni kalsa bile).
+    // Yalnız GET satırından düşürülür (ilk eşleşme başka bir uç olabilir — düz string replace TUZAK).
+    const runKirp = runR.replace(/(router\.get\("\/", requireAnyPermission\("loom:run", "loom:doff"), \.\.\.MOBILE_DOKUMA\)/, "$1)");
+    const doffKirp = doffR.replace(/(router\.get\("\/", requireAnyPermission\("loom:run", "loom:doff", )\.\.\.MOBILE_DOKUMA, /, "$1");
+    check("§5b ⭐ sonda: iki GET'ten `...MOBILE_DOKUMA` düşürülünce §5 kırmızı", runKirp !== runR && doffKirp !== doffR && !getOk(runKirp) && !getOk(doffKirp));
   } finally {
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
     await prisma.doffEvent.deleteMany({ where: { machineId: { in: machineIds } } });
