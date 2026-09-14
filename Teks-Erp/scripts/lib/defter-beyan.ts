@@ -204,8 +204,8 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/cash-transaction.service.ts", sembol: "cancel" }],
     ["src/services/cash-transaction.service.ts"], { yari: true }),
 
-  D("YarnMovement", "iplik stok defteri; devere 1b çiftleri: çözgü çıkışı ↔ tersi · dip iadesi ↔ tersi (brüt çıkış + ayrı iade, §3.7)",
-    { tur: "KARSI_OLAY", enumAdi: "YarnMovementKind", ciftler: [["ADJUST_IN", "ADJUST_OUT"], ["IN", "OUT"], ["WARP_ISSUE", "WARP_ISSUE_REVERSAL"], ["WARP_RETURN", "WARP_RETURN_REVERSAL"]] },
+  D("YarnMovement", "iplik stok defteri; devere 1b çiftleri: çözgü çıkışı ↔ tersi · dip iadesi ↔ tersi (brüt çıkış + ayrı iade, §3.7); fason G1 çiftleri: fasona çıkış ↔ iptali · fasondan dönüş ↔ iptali (kalem bağı `dispatchItemId`, fasondaki bakiye TÜRETİLİR)",
+    { tur: "KARSI_OLAY", enumAdi: "YarnMovementKind", ciftler: [["ADJUST_IN", "ADJUST_OUT"], ["IN", "OUT"], ["WARP_ISSUE", "WARP_ISSUE_REVERSAL"], ["WARP_RETURN", "WARP_RETURN_REVERSAL"], ["SUBCONTRACT_OUT", "SUBCONTRACT_OUT_CANCEL"], ["SUBCONTRACT_RETURN", "SUBCONTRACT_RETURN_CANCEL"]] },
     [{ dosya: "src/services/yarn.service.ts", sembol: "applyYarnMovementTx" }],
     ["src/services/yarn.service.ts"]),
 

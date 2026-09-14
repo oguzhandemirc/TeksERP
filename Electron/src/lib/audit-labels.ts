@@ -644,6 +644,12 @@ export const ENUM_LABELS: Record<string, string> = {
   ESTIMATED: "Tahmin",
   WARP_BEAM_ADJUST: "Levent kalan düzeltmesi",
   WARP_BEAM_SCRAP: "Levent hurda / artık",
+  // Fason G1 (2026-09-15): iplik defteri fason türleri · dönüş sebep kataloğu (kalem türü `YARN` ItemType ile ORTAK — :349)
+  SUBCONTRACT_OUT: "Fasona iplik çıkışı",
+  SUBCONTRACT_OUT_CANCEL: "Fasona iplik çıkışı iptali",
+  SUBCONTRACT_RETURN: "Fasondan iplik dönüşü",
+  SUBCONTRACT_RETURN_CANCEL: "Fasondan iplik dönüşü iptali",
+  YARN_SUBCONTRACT_RETURN: "Fasondan iplik dönüş sebebi",
   // ───────────────────────────────────────────────────────────────────────
   // TİCARET PAKETİ ENUM DEĞERLERİ (merge, 2026-09-01)
   // Bekçi `test_audit_labels` §4 her Prisma enum değerinin Türkçesini ister;
@@ -882,7 +888,7 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
     "ilki topun KAYNAĞI, ikincisi istasyonun TÜRÜ. STATION.kind override'ı ile ayrıldı (2026-09-14)",
   SUBCONTRACTOR: "istasyon/mükerrer-varlık/cari — üçü de aynı gerçek kişiyi işaret eder: 'Fason'",
   OTHER: "istasyon türü ve ödeme yöntemi — ikisi de 'Diğer'",
-  YARN: "kalem türü ve sayım satırı türü — ikisi de 'İplik'",
+  YARN: "kalem türü, sayım satırı türü ve fason sevk kalemi türü (G1) — üçü de 'İplik'",
   SCRAP: "sapma türü / top statüsü / kalite rolü — üçünde de 'Fire'",
   SCALE: "tartı kaynağı ve çevre birimi türü — ikisi de 'Kantar'",
   MANUAL: "tartı kaynağı ve kur kaynağı — ikisi de 'Elle girildi'",

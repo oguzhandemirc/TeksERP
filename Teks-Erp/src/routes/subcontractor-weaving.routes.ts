@@ -21,6 +21,8 @@ import {
   previewCancelWeavingReceipt,
 } from "../services/subcontractor-weaving-receipt.service";
 import { getWeavingTabletContext } from "../services/subcontractor-weaving-tablet.service";
+import { readIplikEnabled } from "../services/system-setting.service";
+import { AppError } from "../utils/app-error";
 
 const router = Router();
 
@@ -29,10 +31,22 @@ router.use(verifyToken, requireDokumaEnabled);
 const MOBILE_FASON_SEVK = ["mobile:fason-sevk"] as const;
 const MOBILE_FASON_KABUL = ["mobile:fason-kabul"] as const;
 
+const yarnLineSchema = z
+  .object({
+    itemId: z.string().uuid("Geçersiz iplik kartı"),
+    warehouseId: z.string().uuid("Geçersiz depo"),
+    lotId: z.string().uuid("Geçersiz lot").nullish(),
+    qtyKg: z.number().positive("İplik kg pozitif olmalı").max(100_000),
+  })
+  .strict();
+
 const dispatchSchema = z
   .object({
     weavingOrderId: z.string().uuid("Geçersiz dokuma işi"),
-    warpBeamIds: z.array(z.string().uuid("Geçersiz levent")).min(1, "En az bir levent seçilmeli").max(50),
+    // G1: levent-yalnız, iplik-yalnız ya da ikisi — serviste "ikisi de boş" 400 (`WEAVING_DISPATCH_EMPTY`).
+    warpBeamIds: z.array(z.string().uuid("Geçersiz levent")).max(50).default([]),
+    /** G1: fasoncuya giden iplik satırları; iplik modülü kapalıysa gövde kapısı 403 (levent/devere emsali). */
+    yarnLines: z.array(yarnLineSchema).max(50, "Tek seferde en fazla 50 iplik satırı").optional(),
     plateNumber: z.string().trim().max(32).nullish(),
     driverName: z.string().trim().max(120).nullish(),
     notes: z.string().trim().max(500).nullish(),
@@ -87,6 +101,10 @@ const receiptSchema = z
 router.post("/dispatches", requireAnyPermission("weavingorder:write", ...MOBILE_FASON_SEVK), async (req, res, next) => {
   try {
     const b = dispatchSchema.parse(req.body ?? {});
+    // Kapalı modülün YAZMA yolu yoktur: iplik satırı yalnız iplik açıkken kabul edilir (tek yazıcı da 403 verir — ikinci hat).
+    if ((b.yarnLines?.length ?? 0) > 0 && !(await readIplikEnabled())) {
+      throw AppError.forbidden("İplik modülü bu kurulumda kapalı; fason sevkine iplik satırı eklenemez. Sistem → Modüller bölümünden açılabilir.", { code: "MODULE_DISABLED", modul: "iplik" });
+    }
     res.status(201).json(await dispatchForWeaving(b, req.user?.userId));
   } catch (e) {
     next(e);

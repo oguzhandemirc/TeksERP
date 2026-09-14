@@ -6,7 +6,7 @@ import { Router } from "express";
 import { SubcontractorController } from "../controllers/subcontractor.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
-import { requireDevereEnabled } from "../middlewares/module.middleware";
+import { requireDevereEnabled, requireIplikEnabled } from "../middlewares/module.middleware";
 
 const MOBILE_FASON_READ = ["mobile:fason-sevk", "mobile:fason-kabul"] as const;
 
@@ -506,6 +506,66 @@ router.post(
   requireDevereEnabled,
   requireAnyPermission("workorder:write", "weavingorder:write", "mobile:fason-kabul"),
   controller.cancelWarpBeamReturn
+);
+
+/**
+ * @openapi
+ * /api/subcontractor/dispatches/{id}/yarn-items/{itemId}/return:
+ *   post:
+ *     tags: [Subcontractor]
+ *     summary: 'G1 — fasona verilen İPLİK DÖNDÜ (YarnMovement SUBCONTRACT_RETURN, depoya +kg; kısmi, sebep kodu zorunlu)'
+ *     description: |
+ *       İplik kalemi kabul makbuzuna GİRMEZ; dönüş iplik defterine yazılır. `qtyKg` dönen kg (Σ dönüş giden aşılamaz,
+ *       400 YARN_RETURN_EXCEEDS); `reasonCode` `YARN_SUBCONTRACT_RETURN` kataloğundan ZORUNLU; depo/lot varsayılan
+ *       çıkışınki. İplik modülü kapalıysa 403 MODULE_DISABLED (fason router'ı kapısızdır; yalnız iplik uçları iplik kapısı taşır).
+ *     responses:
+ *       200: { description: Dönüş kaydedildi (remainingKg = fasonda kalan) }
+ *       403: { description: İplik kapalı }
+ *       409: { description: Sevk iptal edilmiş }
+ */
+router.post(
+  "/dispatches/:id/yarn-items/:itemId/return",
+  verifyToken,
+  requireIplikEnabled,
+  requireAnyPermission("workorder:write", "weavingorder:write"),
+  controller.returnYarn
+);
+
+/**
+ * @openapi
+ * /api/subcontractor/dispatches/{id}/yarn-items/{itemId}/return-cancel:
+ *   post:
+ *     tags: [Subcontractor]
+ *     summary: 'G1 — iplik dönüşü STORNO (SUBCONTRACT_RETURN_CANCEL, depodan −kg; movementId dönüş satırı)'
+ *     responses:
+ *       200: { description: Dönüş iptal edildi }
+ *       403: { description: İplik kapalı }
+ *       409: { description: Dönüş zaten iptal edilmiş (YARN_RETURN_NOT_OPEN) / sevk iptal edilmiş }
+ */
+router.post(
+  "/dispatches/:id/yarn-items/:itemId/return-cancel",
+  verifyToken,
+  requireIplikEnabled,
+  requireAnyPermission("workorder:write", "weavingorder:write"),
+  controller.cancelYarnReturn
+);
+
+/**
+ * @openapi
+ * /api/subcontractor/{subcontractorId}/yarn-balance:
+ *   get:
+ *     tags: [Subcontractor]
+ *     summary: 'G1 K1(b) — fasoncudaki iplik, kalem × lot (TÜRETİLMİŞ — Σ çıkış − iptal − dönüş + dönüş iptali; sanal depo yok)'
+ *     responses:
+ *       200: { description: Satırlar (outKg · returnedKg · remainingKg) }
+ *       403: { description: İplik kapalı }
+ */
+router.get(
+  "/:subcontractorId/yarn-balance",
+  verifyToken,
+  requireIplikEnabled,
+  requireAnyPermission("workorder:read", "weavingorder:read", "warehouse:read"),
+  controller.yarnAtSubcontractor
 );
 
 /**

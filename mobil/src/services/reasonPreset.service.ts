@@ -32,7 +32,9 @@ export type ReasonPresetKind =
   | 'MACHINE_STOP'
   | 'WARP_RETURN'
   | 'WARP_BEAM_ADJUST'
-  | 'WARP_BEAM_SCRAP';
+  | 'WARP_BEAM_SCRAP'
+  /** Fason G1: fasondan iplik dönüş sebebi — tablette ekranı YOK (panel işi); union aynası. */
+  | 'YARN_SUBCONTRACT_RETURN';
 
 export interface ReasonPreset {
   id: string;
@@ -70,6 +72,7 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
   WARP_RETURN: false,
   WARP_BEAM_ADJUST: false,
   WARP_BEAM_SCRAP: false,
+  YARN_SUBCONTRACT_RETURN: false,
 };
 
 export const KIND_LABELS: Record<ReasonPresetKind, string> = {
@@ -83,6 +86,7 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   WARP_RETURN: 'Levent dibi iade sebepleri',
   WARP_BEAM_ADJUST: 'Levent kalan düzeltmesi sebepleri',
   WARP_BEAM_SCRAP: 'Levent hurda / artık dispozisyonu',
+  YARN_SUBCONTRACT_RETURN: 'Fasondan iplik dönüş sebepleri',
 };
 
 export const reasonPresetService = {

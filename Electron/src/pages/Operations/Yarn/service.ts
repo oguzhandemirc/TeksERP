@@ -31,7 +31,7 @@
 import apiClient from "@/services/apiClient";
 
 /** Backend `YarnMovementKind` enum'unun aynası (Electron backend'i import edemez). */
-export type YarnMovementKind = "IN" | "OUT" | "ADJUST_IN" | "ADJUST_OUT" | "WARP_ISSUE" | "WARP_ISSUE_REVERSAL" | "WARP_RETURN" | "WARP_RETURN_REVERSAL";
+export type YarnMovementKind = "IN" | "OUT" | "ADJUST_IN" | "ADJUST_OUT" | "WARP_ISSUE" | "WARP_ISSUE_REVERSAL" | "WARP_RETURN" | "WARP_RETURN_REVERSAL" | "SUBCONTRACT_OUT" | "SUBCONTRACT_OUT_CANCEL" | "SUBCONTRACT_RETURN" | "SUBCONTRACT_RETURN_CANCEL";
 
 /** Decimal kolonun JSON karşılığı — number DA string DE gelebilir (dosya başlığı). */
 export type DecimalLike = number | string;
@@ -184,12 +184,17 @@ export const YARN_KIND_META: Record<YarnMovementKind, YarnKindMeta> = {
   WARP_ISSUE_REVERSAL: { label: "Çözgü çıkışı iptali (+)", short: "Çözgü iptal (+)", sign: 1, adjustment: false, hint: "Sarımın stornosu — iplik depoya döner." },
   WARP_RETURN: { label: "Levent dibi iadesi (+)", short: "Dip (+)", sign: 1, adjustment: false, hint: "Sarım bitince kalan bobin depoya döndü; sebep kodu zorunlu." },
   WARP_RETURN_REVERSAL: { label: "Dip iadesi iptali (−)", short: "Dip iptal (−)", sign: -1, adjustment: false, hint: "Dip iadesinin tersi." },
+  // Fason G1 — yalnız fason sevk kaleminden doğar; bu ekrandan yazılmaz. Fasondaki bakiye türetilir (sanal depo yok).
+  SUBCONTRACT_OUT: { label: "Fasona iplik çıkışı (−)", short: "Fason (−)", sign: -1, adjustment: false, hint: "Fason sevkiyle giden iplik (brüt). Fason sevk kaleminden yazılır." },
+  SUBCONTRACT_OUT_CANCEL: { label: "Fasona çıkış iptali (+)", short: "Fason iptal (+)", sign: 1, adjustment: false, hint: "Fason sevkinin iptali — iplik depoya döner." },
+  SUBCONTRACT_RETURN: { label: "Fasondan iplik dönüşü (+)", short: "Fason dönüş (+)", sign: 1, adjustment: false, hint: "Fasondan dönen iplik (kısmi olabilir); sebep kodu zorunlu." },
+  SUBCONTRACT_RETURN_CANCEL: { label: "Fason dönüşü iptali (−)", short: "Dönüş iptal (−)", sign: -1, adjustment: false, hint: "Dönüşün tersi." },
 };
 
 /** Bu ekrandan YAZILABİLEN türler — WARP_* yalnız levent yazıcısından doğar. */
 export const YARN_KINDS: YarnMovementKind[] = ["IN", "OUT", "ADJUST_IN", "ADJUST_OUT"];
 /** Liste süzgecinin tanıdığı TÜM türler (backend liste şemasıyla birebir). */
-export const YARN_FILTER_KINDS: YarnMovementKind[] = [...YARN_KINDS, "WARP_ISSUE", "WARP_ISSUE_REVERSAL", "WARP_RETURN", "WARP_RETURN_REVERSAL"];
+export const YARN_FILTER_KINDS: YarnMovementKind[] = [...YARN_KINDS, "WARP_ISSUE", "WARP_ISSUE_REVERSAL", "WARP_RETURN", "WARP_RETURN_REVERSAL", "SUBCONTRACT_OUT", "SUBCONTRACT_OUT_CANCEL", "SUBCONTRACT_RETURN", "SUBCONTRACT_RETURN_CANCEL"];
 
 /** Bilinmeyen tür (eski panel, yeni backend enum'u) ekranı ÇÖKERTMEZ — ham kod rozetle basılır (47 K2, 2026-09-14). */
 const UNKNOWN_KIND_META: YarnKindMeta = { label: "Bilinmeyen tür", short: "?", sign: 1, adjustment: false, hint: "Panel bu hareket türünü tanımıyor — panel güncellemesi gerekir." };

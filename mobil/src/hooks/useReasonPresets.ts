@@ -88,6 +88,7 @@ function builtin(kind: ReasonPresetKind): ReasonPreset[] {
     case 'WARP_RETURN':
     case 'WARP_BEAM_ADJUST':
     case 'WARP_BEAM_SCRAP':
+    case 'YARN_SUBCONTRACT_RETURN':
       // Devere tablet ekranı (2026-09-14) sebep kodunu katalogdan seçer; sunucusuzken sarım/söküm
       // zaten yapılamaz (online-only, kuyruk yok) — gömülü zemin bir karar korumaz, BOŞ kalır.
       return [];
@@ -105,6 +106,7 @@ const BUILTIN: Record<ReasonPresetKind, ReasonPreset[]> = {
   WARP_RETURN: builtin('WARP_RETURN'),
   WARP_BEAM_ADJUST: builtin('WARP_BEAM_ADJUST'),
   WARP_BEAM_SCRAP: builtin('WARP_BEAM_SCRAP'),
+  YARN_SUBCONTRACT_RETURN: builtin('YARN_SUBCONTRACT_RETURN'),
 };
 
 /** Gömülü satır düzenlenemez — henüz sunucudan okunmamış bir zemindir. */

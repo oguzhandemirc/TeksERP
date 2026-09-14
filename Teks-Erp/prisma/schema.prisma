@@ -168,6 +168,9 @@ enum ReasonPresetKind {
   WARP_BEAM_ADJUST
   /// Faz 3: levent HURDA/artık dispozisyonu (SCRAPPED zorunlu, EXHAUSTED opsiyonel; telef satışı kapsam dışı).
   WARP_BEAM_SCRAP
+  /// G1: fasona giden ipliğin DÖNÜŞ sebebi (`YarnMovement.reasonCode`, `SUBCONTRACT_RETURN` satırında ZORUNLU, CHECK;
+  /// `defter.md:17` "iade ayrı satır + sebep kodu" ipliğe de uygulanır). Metin saklamaz.
+  YARN_SUBCONTRACT_RETURN
 }
 
 /// Çuval brüt tartısının kaynağı (`Sack.weightSource`). İÇ izdir — belgeye basılmaz.
@@ -2644,6 +2647,8 @@ model Item {
   warpSpec           WarpSpec?              @relation("ItemWarpSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
   /// Bu İPLİĞİ kullanan çözgü kartları (1:N) — silme kapısının bağımlılık kaynağı.
   warpSpecsAsYarn    WarpSpec[]             @relation("WarpSpecYarn")
+  /// G1: fasona giden iplik kalemleri (kind=YARN).
+  subcontractorDispatchYarnItems SubcontractorDispatchItem[] @relation("DispatchItemYarnItem")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -5153,23 +5158,32 @@ model SubcontractorDispatch {
   @@map("subcontractor_dispatches")
 }
 
-/// FASON SEVK KALEMİ TÜRÜ — kapalı küme, pg enum (F1: top | levent). `YARN` F3'te kendi
-/// `ADD VALUE` dosyasıyla doğar (geri alınamaz enum, ihtiyaç ölçülmeden açılmaz).
+/// FASON SEVK KALEMİ TÜRÜ — kapalı küme, pg enum (F1: top | levent · G1: iplik).
 enum SubcontractorDispatchItemKind {
   ROLL
   WARP_BEAM
+  /// G1 (migration 20260915020000): fasona giden İPLİK — `yarnItemId` + `warehouseId` (+ `lotId`),
+  /// `dispatchedQty` = KG (birim kind'dan; DTO `unit: "KG"`), defteri `YarnMovement` (`SUBCONTRACT_*`).
+  YARN
 }
 
-/// POLİMORFİK KALEM (F1): `kind` hangi bağın dolu olduğunu söyler — ROLL ⇒ `rollId`, WARP_BEAM ⇒ `warpBeamId`
-/// (DB XOR CHECK `subcontractor_dispatch_items_kind_ref_ck`). Levent kaleminde `dispatchedQty` = çıkan metre,
-/// `dispatchedWeight` NULL; kabul makbuzu YAZILMAZ — dönüş levent defterinde `RETURNED_IN`, kalem OUTSTANDING
-/// kümesine GİRMEZ (`OUTSTANDING_ITEM.roll` yüklemi null bağı dışlar; bekçi ölçer).
+/// POLİMORFİK KALEM (F1/G1): `kind` hangi bağın dolu olduğunu söyler — ROLL ⇒ `rollId`, WARP_BEAM ⇒ `warpBeamId`,
+/// YARN ⇒ `yarnItemId`+`warehouseId` (DB üç kollu CHECK `subcontractor_dispatch_items_kind_ref_ck`). Levent kaleminde
+/// `dispatchedQty` = çıkan metre, iplik kaleminde = KG (birim kind'dan; okuyucu tahmin etmez, DTO `unit` taşır),
+/// `dispatchedWeight` NULL; kabul makbuzu YAZILMAZ — dönüş levent defterinde `RETURNED_IN`, iplikte `YarnMovement`
+/// `SUBCONTRACT_RETURN`; kalem OUTSTANDING kümesine GİRMEZ (`OUTSTANDING_ITEM.roll` yüklemi null bağı dışlar).
+/// Başlık `totalQty` = Σ(ROLL + WARP_BEAM) metre — YARN kg'sı ayrı `yarnTotalKg` (consistency §19 `kind<>'YARN'`).
 model SubcontractorDispatchItem {
   id               String   @id @default(uuid()) @db.Uuid
   dispatchId       String   @db.Uuid
   kind             SubcontractorDispatchItemKind @default(ROLL)
   rollId           String?  @db.Uuid
   warpBeamId       String?  @db.Uuid
+  /// G1 iplik kalemi: stok kartı (ItemType.YARN) + çıkış deposu (+ lot); K1(b) fasondaki bakiye TÜRETİLİR
+  /// (`YarnMovement` Σ SUBCONTRACT_OUT − OUT_CANCEL − RETURN + RETURN_CANCEL, `dispatchItemId` üstünden), sanal depo YOK.
+  yarnItemId       String?  @db.Uuid
+  warehouseId      String?  @db.Uuid
+  lotId            String?  @db.Uuid
   dispatchedQty    Decimal  @db.Decimal(12, 3)
   dispatchedWeight Decimal? @db.Decimal(12, 3)
 
@@ -5190,6 +5204,11 @@ model SubcontractorDispatchItem {
   warpBeam     WarpBeam?                  @relation("DispatchItemWarpBeam", fields: [warpBeamId], references: [id], onDelete: Restrict)
   warpBeamEvents WarpBeamEvent[]          @relation("WarpBeamEventDispatchItem")
   receiptItems SubcontractorReceiptItem[] @relation("ReceiptItemSource")
+  yarnItem     Item?                      @relation("DispatchItemYarnItem", fields: [yarnItemId], references: [id], onDelete: Restrict)
+  warehouse    Warehouse?                 @relation("DispatchItemWarehouse", fields: [warehouseId], references: [id], onDelete: Restrict)
+  lot          YarnLot?                   @relation("DispatchItemYarnLot", fields: [lotId], references: [id], onDelete: Restrict)
+  /// İplik kaleminin defteri — `SUBCONTRACT_*` satırları (CHECK `yarn_movements_fason_link_ck` iki yönlü).
+  yarnMovements YarnMovement[]            @relation("YarnMovementDispatchItem")
 
   /// Sevk kalemi defteri → `updatedAt` YOK (konvansiyon). Güncellemeler DURUM
   /// bayrağı (`remainderClosedAt`; defteri `RollVariance`) ya da parti
@@ -5206,6 +5225,10 @@ model SubcontractorDispatchItem {
   @@unique([dispatchId, warpBeamId])
   @@index([rollId])
   @@index([warpBeamId])
+  /// İplik kalemi unique DEĞİL: aynı kalem iki depodan/lottan iki satırla gidebilir.
+  @@index([yarnItemId])
+  @@index([warehouseId])
+  @@index([lotId])
   @@map("subcontractor_dispatch_items")
 }
 
@@ -7799,6 +7822,8 @@ model Warehouse {
   // Paket D (ticaret) — iplik kg-stoğu depo bazlıdır.
   yarnStocks    YarnStock[]
   yarnMovements YarnMovement[]
+  /// G1: bu depodan fasona giden iplik kalemleri.
+  subcontractorDispatchYarnItems SubcontractorDispatchItem[] @relation("DispatchItemWarehouse")
 
   // J2 #19 — tam stok sayımı depo bazlıdır (bir sayım = bir depo).
   stockCounts StockCount[]
@@ -9208,6 +9233,15 @@ enum YarnMovementKind {
   WARP_RETURN
   /// Dip iadesinin tersi.
   WARP_RETURN_REVERSAL
+  /// G1 (migration 20260915021000): fasona İPLİK çıkışı — BRÜT düşer (`dispatchItemId` zorunlu, CHECK
+  /// `yarn_movements_fason_link_ck`; kalem başına TEK çıkış, partial unique). Fasondaki bakiye TÜRETİLİR.
+  SUBCONTRACT_OUT
+  /// Fason çıkışının tersi — sevk iptali (LIFO: açık iade varsa 409).
+  SUBCONTRACT_OUT_CANCEL
+  /// Fasondan İPLİK dönüşü — kısmi, çok satır; sebep kodu ZORUNLU (`YARN_SUBCONTRACT_RETURN`, CHECK).
+  SUBCONTRACT_RETURN
+  /// Dönüşün tersi.
+  SUBCONTRACT_RETURN_CANCEL
 }
 
 /// İplik stoğunun (kalem × depo) DENORMALİZE kg bakiyesi.
@@ -9292,8 +9326,12 @@ model YarnMovement {
   lotId String? @db.Uuid
   /// Bobin adedi — BİLGİ alanıdır, bakiye değil (CHECK `yarn_movements_bobbin_positive`: null ya da > 0).
   bobbinCount Int?
+  /// G1: fason iplik kalemi bağı — `SUBCONTRACT_*` satırı ⇔ bağ dolu (CHECK `yarn_movements_fason_link_ck`);
+  /// kalem başına tek `SUBCONTRACT_OUT` (`yarn_movements_subcontract_out_uq` partial); dönüşte sebep ZORUNLU.
+  dispatchItemId String? @db.Uuid
 
   item         Item          @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  dispatchItem SubcontractorDispatchItem? @relation("YarnMovementDispatchItem", fields: [dispatchItemId], references: [id], onDelete: Restrict)
   warehouse    Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   warpBeam     WarpBeam?     @relation(fields: [warpBeamId], references: [id], onDelete: Restrict)
   lot          YarnLot?      @relation(fields: [lotId], references: [id], onDelete: Restrict)
@@ -9310,6 +9348,7 @@ model YarnMovement {
   @@index([invoiceId])
   @@index([stockCountId])
   @@index([warpBeamId])
+  @@index([dispatchItemId])
   @@index([lotId, createdAt])
   @@map("yarn_movements")
 }
@@ -9331,6 +9370,8 @@ model YarnLot {
   item      Item           @relation("YarnLotItem", fields: [itemId], references: [id], onDelete: Restrict)
   supplier  Customer?      @relation("YarnLotSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
   movements YarnMovement[]
+  /// G1: bu lottan fasona giden iplik kalemleri.
+  subcontractorDispatchYarnItems SubcontractorDispatchItem[] @relation("DispatchItemYarnLot")
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz

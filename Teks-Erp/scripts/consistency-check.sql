@@ -327,10 +327,12 @@ FROM routes GROUP BY 2 HAVING COUNT(*) > 1;
 
 \echo ''
 \echo '== 19) Fason sevk / doğrudan-sevk snapshot toplamı vs kalem toplamı =='
+-- G1 (2026-09-15, H1): `totalQty` METRE toplamıdır (ROLL + WARP_BEAM); iplik kalemi (kind=YARN) kg taşır ve
+-- toplama GİRMEZ — `yarnTotalKg` ayrı okunur. Yüklem bu yüzden kind<>'YARN' süzer.
 SELECT 'subcontractor_dispatches' AS tablo, sd.id::text AS kayit, sd."totalQty" AS kayitli,
        COALESCE(SUM(sdi."dispatchedQty"), 0) AS hesaplanan
 FROM subcontractor_dispatches sd
-LEFT JOIN subcontractor_dispatch_items sdi ON sdi."dispatchId" = sd.id
+LEFT JOIN subcontractor_dispatch_items sdi ON sdi."dispatchId" = sd.id AND sdi.kind <> 'YARN'
 GROUP BY sd.id, sd."totalQty"
 HAVING sd."totalQty" <> COALESCE(SUM(sdi."dispatchedQty"), 0)
 UNION ALL

@@ -312,8 +312,8 @@ WHERE rr."prevQualityGradeId" IS NOT NULL AND rr."prevQualityGrade" IS NULL`,
     alan: "dispatchedQty",
     sinif: "DONMUS_ILERI",
     adayDegil: "şerhsiz kolon; defter.md ÜÇÜNCÜ SINIF satırı adıyla anıyor",
-    yazan: [SVC + "subcontractor-beam.service.ts", SVC + "subcontractor.service.ts"],
-    neden: "fasona çıkan brüt metraj (top: currentQty · levent F1: kalan metre); sevk iptali (cancelledAt) kalemi silmez, metrajı değiştirmez — kısmi kabul topu tüketmez",
+    yazan: [SVC + "subcontractor-beam.service.ts", SVC + "subcontractor.service.ts", SVC + "subcontractor-yarn.service.ts"],
+    neden: "fasona çıkan brüt miktar (top: currentQty m · levent F1: kalan m · iplik G1: kg — birim kind'dan, DTO `unit`); sevk iptali (cancelledAt) kalemi silmez, miktarı değiştirmez — kısmi kabul/dönüş kalemi tüketmez",
     sql: [
       {
         id: "28d",

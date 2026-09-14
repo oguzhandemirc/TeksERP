@@ -25,6 +25,13 @@ export function yarnMovementSign(kind: YarnMovementKind): 1 | -1 {
     case YarnMovementKind.WARP_ISSUE_REVERSAL:
     case YarnMovementKind.WARP_RETURN:
       return 1;
+    // G1 fason iplik (§4.7 ikizi): çıkış ve dönüş iptali DÜŞER; çıkış iptali ve dönüş ARTIRIR.
+    case YarnMovementKind.SUBCONTRACT_OUT:
+    case YarnMovementKind.SUBCONTRACT_RETURN_CANCEL:
+      return -1;
+    case YarnMovementKind.SUBCONTRACT_OUT_CANCEL:
+    case YarnMovementKind.SUBCONTRACT_RETURN:
+      return 1;
   }
 }
 

@@ -6,7 +6,8 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { SubcontractorService } from "../services/subcontractor.service";
 import { cancelWarpBeamReturn, returnWarpBeam } from "../services/subcontractor-beam.service";
-import { readDevereEnabled } from "../services/system-setting.service";
+import { cancelYarnReturn, returnYarn, yarnAtSubcontractor } from "../services/subcontractor-yarn.service";
+import { readDevereEnabled, readIplikEnabled } from "../services/system-setting.service";
 import { AppError } from "../utils/app-error";
 import "../types/express-augment";
 
@@ -18,6 +19,13 @@ const dispatchSchema = z.object({
   rollIds: z.array(z.string().uuid()).max(500, "Tek seferde en fazla 500 top sevk edilebilir").default([]),
   /** F1: fasona verilen leventler (kalem `kind=WARP_BEAM`). Devere kapalıysa 403 (gövde kapısı). */
   warpBeamIds: z.array(z.string().uuid()).max(50, "Tek seferde en fazla 50 levent sevk edilebilir").optional(),
+  /** G1: fasona verilen İPLİK satırları (kalem `kind=YARN`, kg). İplik kapalıysa 403 (gövde kapısı). */
+  yarnLines: z.array(z.object({
+    itemId: z.string().uuid("Geçersiz iplik kartı"),
+    warehouseId: z.string().uuid("Geçersiz depo"),
+    lotId: z.string().uuid("Geçersiz lot").nullish(),
+    qtyKg: z.number().positive("İplik kg pozitif olmalı").max(100_000),
+  }).strict()).max(50, "Tek seferde en fazla 50 iplik satırı").optional(),
   plateNumber: z.string().max(32).optional(),
   driverName: z.string().max(128).optional(),
   notes: z.string().max(1000).optional(),
@@ -27,7 +35,16 @@ const dispatchSchema = z.object({
   allowItemOverride: z.boolean().optional(),
   /** Operatör rota-atlama uyarısını bilinçli onayladı (ROUTE_SKIP geçişi). */
   allowRouteSkip: z.boolean().optional(),
-}).refine((b) => b.rollIds.length > 0 || (b.warpBeamIds?.length ?? 0) > 0, { message: "En az bir top seçmelisiniz", path: ["rollIds"] });
+}).refine((b) => b.rollIds.length > 0 || (b.warpBeamIds?.length ?? 0) > 0 || (b.yarnLines?.length ?? 0) > 0, { message: "En az bir top seçmelisiniz", path: ["rollIds"] });
+
+/** G1 iplik dönüşü — `qtyKg` dönen kg (Σ ≤ giden), `reasonCode` ZORUNLU (katalog `YARN_SUBCONTRACT_RETURN`), depo/lot opsiyonel (varsayılan çıkışınki). */
+const yarnReturnSchema = z.object({
+  qtyKg: z.number().positive("Dönen kg pozitif olmalı").max(100_000),
+  reasonCode: z.string().trim().min(1, "Dönüş sebebi zorunlu").max(64),
+  warehouseId: z.string().uuid("Geçersiz depo").nullish(),
+  lotId: z.string().uuid("Geçersiz lot").nullish(),
+}).strict();
+const yarnReturnCancelSchema = z.object({ movementId: z.string().uuid("Geçersiz dönüş satırı"), reason: z.string().trim().min(3).max(300) }).strict();
 
 /** F1 levent dönüşü — `lengthM` dönen metre (≤ giden), `clientToken` replay anahtarı. */
 const beamReturnSchema = z.object({
@@ -211,6 +228,9 @@ export class SubcontractorController {
     this.getDispatch = this.getDispatch.bind(this);
     this.returnWarpBeam = this.returnWarpBeam.bind(this);
     this.cancelWarpBeamReturn = this.cancelWarpBeamReturn.bind(this);
+    this.returnYarn = this.returnYarn.bind(this);
+    this.cancelYarnReturn = this.cancelYarnReturn.bind(this);
+    this.yarnAtSubcontractor = this.yarnAtSubcontractor.bind(this);
     this.getDispatchDyeOverlay = this.getDispatchDyeOverlay.bind(this);
     this.listReceipts = this.listReceipts.bind(this);
     this.getReceiptPrint = this.getReceiptPrint.bind(this);
@@ -235,6 +255,13 @@ export class SubcontractorController {
           modul: "devere",
         });
       }
+      // G1: iplik satırı yalnız iplik açıkken (aynı gövde kapısı; tek yazıcı `applyYarnMovementTx` ikinci hat).
+      if ((body.yarnLines?.length ?? 0) > 0 && !(await readIplikEnabled())) {
+        throw AppError.forbidden("İplik modülü bu kurulumda kapalı; fason sevkine iplik satırı eklenemez. Sistem → Modüller bölümünden açılabilir.", {
+          code: "MODULE_DISABLED",
+          modul: "iplik",
+        });
+      }
       const result = await this.service.dispatch(body, req.user?.userId);
       res.status(201).json(result);
     } catch (err) {
@@ -248,6 +275,37 @@ export class SubcontractorController {
       const body = beamReturnSchema.parse(req.body);
       const result = await returnWarpBeam(req.params.id as string, { warpBeamId: req.params.beamId as string, ...body }, req.user?.userId);
       res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/subcontractor/dispatches/:id/yarn-items/:itemId/return — G1 iplik fasondan döndü (SUBCONTRACT_RETURN) */
+  async returnYarn(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = yarnReturnSchema.parse(req.body);
+      const result = await returnYarn(req.params.id as string, { dispatchItemId: req.params.itemId as string, ...body }, req.user?.userId);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/subcontractor/dispatches/:id/yarn-items/:itemId/return-cancel — dönüş stornosu (SUBCONTRACT_RETURN_CANCEL) */
+  async cancelYarnReturn(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = yarnReturnCancelSchema.parse(req.body);
+      const result = await cancelYarnReturn(req.params.id as string, { dispatchItemId: req.params.itemId as string, ...body }, req.user?.userId);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** GET /api/subcontractor/:subcontractorId/yarn-balance — K1 (b) fasondaki iplik (türetilmiş, kalem × lot) */
+  async yarnAtSubcontractor(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      res.status(200).json(await yarnAtSubcontractor(req.params.subcontractorId as string));
     } catch (err) {
       next(err);
     }

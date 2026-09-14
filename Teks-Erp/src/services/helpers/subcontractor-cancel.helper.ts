@@ -34,6 +34,8 @@ export interface DispatchCancelSignals {
    * Opsiyonel: top-yalnız yollar (önizleme dahil) 0 sayar.
    */
   returnedBeamCount?: number;
+  /** G1: bu sevkten DÖNMÜŞ (net dönüşü > 0) iplik kalemi sayısı — LIFO; top/levent yolları 0 sayar. */
+  returnedYarnCount?: number;
 }
 
 /**
@@ -72,6 +74,12 @@ export function resolveDispatchCancelBlockReason(s: DispatchCancelSignals): stri
     return (
       `${s.returnedBeamCount} levent bu sevkten dönmüş görünüyor — sevk iptal edilemez. ` +
       "Önce levent dönüşünü iptal edin."
+    );
+  }
+  if ((s.returnedYarnCount ?? 0) > 0) {
+    return (
+      `${s.returnedYarnCount} iplik kalemi bu sevkten dönmüş görünüyor — sevk iptal edilemez. ` +
+      "Önce iplik dönüşünü iptal edin."
     );
   }
   return null;

@@ -437,6 +437,15 @@ const PARTIAL_INDEXES: Array<{
     predicate: `((kind)::text = 'SHIP_OUT'::text)`,
     why: "kalem başına TEK SHIP_OUT — aynı levent aynı sevkten iki kez çıkamaz",
   },
+  // G1 (2026-09-15, migration 20260915023000): iplik kalemi bir kez çıkar; dönüş (SUBCONTRACT_RETURN) kısmi ve
+  // tekrarlanabilir olduğundan yüklem YALNIZ SUBCONTRACT_OUT'tur (F1 ship_out_item_uq ikizi).
+  {
+    table: "yarn_movements",
+    index: "yarn_movements_subcontract_out_uq",
+    uniq: true,
+    predicate: `(kind = 'SUBCONTRACT_OUT'::"YarnMovementKind")`,
+    why: "kalem başına TEK fason iplik çıkışı — yarış/replay ikinci çıkışı DB'de düşer",
+  },
   // Faz 3 (2026-09-14, migration 20260914180200): bir yuvada tek BAĞLI levent; yüklem yalnız MOUNTED
   // (sökülen levent yuvayı bırakır, kolonlar NULL'lanır — `warp_beams_mounted_ck` ikiliyi bağlar).
   {
@@ -525,6 +534,9 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "subcontractor_receipts", name: "subcontractor_receipts_header_ck" },
   { table: "yarn_movements", name: "yarn_movements_warp_link_ck" },
   { table: "yarn_movements", name: "yarn_movements_warp_return_reason_ck" },
+  // G1 fason iplik (2026-09-15): SUBCONTRACT_* ⇔ kalem bağı (warp_link ikizi) · dönüşte sebep zorunlu.
+  { table: "yarn_movements", name: "yarn_movements_fason_link_ck" },
+  { table: "yarn_movements", name: "yarn_movements_fason_return_reason_ck" },
   // Devere Faz 2 (lot): bobin adedi bilgi alanı, null ya da pozitif.
   { table: "yarn_movements", name: "yarn_movements_bobbin_positive" },
   // Vardiya karnesi (dokuma raporları Dilim 1, 2026-09-14, migration 20260914130000):

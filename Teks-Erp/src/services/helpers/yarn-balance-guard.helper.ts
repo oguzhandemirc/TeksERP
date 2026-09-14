@@ -109,7 +109,11 @@ export interface YarnOutflowRef {
  * `readTamburOverQuantityEnabled` emsali): panelden kapatılan bayrak bir
  * sonraki işlemde anında etkisizleşmeli (acil kapatma yolu).
  */
-const GATED_KINDS = new Set<YarnMovementKind>([YarnMovementKind.OUT, YarnMovementKind.WARP_ISSUE, YarnMovementKind.WARP_RETURN_REVERSAL]);
+// G1: fasona çıkış ve dönüş iptali de "bakiyeyi düşüren ileri yol" — aynı kapı, aynı ölçüt.
+const GATED_KINDS = new Set<YarnMovementKind>([
+  YarnMovementKind.OUT, YarnMovementKind.WARP_ISSUE, YarnMovementKind.WARP_RETURN_REVERSAL,
+  YarnMovementKind.SUBCONTRACT_OUT, YarnMovementKind.SUBCONTRACT_RETURN_CANCEL,
+]);
 
 export async function assertYarnBalanceCoversTx(
   tx: Prisma.TransactionClient,

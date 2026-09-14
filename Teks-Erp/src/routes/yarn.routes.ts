@@ -135,7 +135,7 @@ router.get("/stocks", requirePermission("warehouse:read"), async (req, res, next
  *         schema: { type: string, format: uuid }
  *       - in: query
  *         name: kind
- *         schema: { type: string, enum: [IN, OUT, ADJUST_IN, ADJUST_OUT, WARP_ISSUE, WARP_ISSUE_REVERSAL, WARP_RETURN, WARP_RETURN_REVERSAL] }
+ *         schema: { type: string, enum: [IN, OUT, ADJUST_IN, ADJUST_OUT, WARP_ISSUE, WARP_ISSUE_REVERSAL, WARP_RETURN, WARP_RETURN_REVERSAL, SUBCONTRACT_OUT, SUBCONTRACT_OUT_CANCEL, SUBCONTRACT_RETURN, SUBCONTRACT_RETURN_CANCEL] }
  *       - in: query
  *         name: goodsReceiptId
  *         schema: { type: string, format: uuid }
@@ -160,7 +160,7 @@ router.get("/movements", requirePermission("warehouse:read"), async (req, res, n
         itemId: z.string().uuid().optional(),
         warehouseId: z.string().uuid().optional(),
         // Liste süzgeci TÜM türleri tanır; WARP_* satırları yalnız levent yazıcısından doğar (create şeması onları KABUL ETMEZ).
-        kind: z.enum(["IN", "OUT", "ADJUST_IN", "ADJUST_OUT", "WARP_ISSUE", "WARP_ISSUE_REVERSAL", "WARP_RETURN", "WARP_RETURN_REVERSAL"]).optional(),
+        kind: z.enum(["IN", "OUT", "ADJUST_IN", "ADJUST_OUT", "WARP_ISSUE", "WARP_ISSUE_REVERSAL", "WARP_RETURN", "WARP_RETURN_REVERSAL", "SUBCONTRACT_OUT", "SUBCONTRACT_OUT_CANCEL", "SUBCONTRACT_RETURN", "SUBCONTRACT_RETURN_CANCEL"]).optional(),
         goodsReceiptId: z.string().uuid().optional(),
         lotId: z.string().uuid().optional(),
         dateFrom: isoDate.optional(),

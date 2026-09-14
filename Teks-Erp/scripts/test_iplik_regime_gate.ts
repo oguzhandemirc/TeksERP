@@ -165,6 +165,7 @@ const DEFTER_YAZARLARI: ReadonlyArray<{ dosya: string; neden: string }> = [
   { dosya: "services/stock-count-reversal.service.ts", neden: "Sayım stornosu → sayımın net iplik farkının ters ADJUST'u. Ticaret kapılı; iplik kapısı motorun İÇİNDE (§4d), önizleme kapalı modülü engel olarak listeler." },
   { dosya: "services/invoice.service.ts", neden: "Satış faturası stok düşümü → `resolveYarnOutOnInvoiceEnabled` KAPILI (K10)." },
   { dosya: "services/warp-beam-wind.service.ts", neden: "Levent sarımı (IN_HOUSE) → WARP_ISSUE/WARP_RETURN, iptali → tersleri. Devere kapılı; iplik kapısı AKSİYON ANINDA motorun İÇİNDE (§4d) — devere→iplik bağımlılığı yok (K3)." },
+  { dosya: "services/subcontractor-yarn.service.ts", neden: "Fason G1: iplik kalemi (kind=YARN) → SUBCONTRACT_OUT/_CANCEL/RETURN/_CANCEL. Fason router'ı KAPISIZ (top/levent yolları ipliğe dokunmaz); iplik satırı gövde kapısı (`readIplikEnabled` 403) + iplik kapısı AKSİYON ANINDA motorun İÇİNDE (§4d); dönüş/bakiye uçları `requireIplikEnabled` kapılı." },
 ];
 
 function main(): void {

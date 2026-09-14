@@ -77,6 +77,8 @@ export const KIND_STORES_TEXT = {
   // Faz 3: levent kalan düzeltmesi / hurda-artık dispozisyonu — satıra KOD (`WarpBeamEvent.reasonCode`), gerekçe `reason` kolonunda.
   WARP_BEAM_ADJUST: false,
   WARP_BEAM_SCRAP: false,
+  // G1: fasondan iplik dönüşünde satıra YALNIZ KOD (`YarnMovement.reasonCode`, CHECK zorunlu); metin yok.
+  YARN_SUBCONTRACT_RETURN: false,
   // `as const satisfies` — değerler LİTERAL kalsın (true/false), ama eksik kind
   // yine derlemede düşsün. `Record<..., boolean>` yazılsaydı literaller boolean'a
   // genişler ve `TextReasonKind` bu tablodan TÜRETİLEMEZDİ (aşağıdaki nota bak).
@@ -94,6 +96,7 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   WARP_RETURN: "Levent dibi iade sebepleri",
   WARP_BEAM_ADJUST: "Levent kalan düzeltmesi sebepleri",
   WARP_BEAM_SCRAP: "Levent hurda / artık dispozisyonu",
+  YARN_SUBCONTRACT_RETURN: "Fasondan iplik dönüş sebepleri",
 };
 
 /**
@@ -284,6 +287,13 @@ export const WARP_BEAM_SCRAP_REASONS: readonly ReasonPresetSeed[] = [
   { code: "YANLIS_SARIM", label: "Yanlış sarım (kart uyuşmuyor)" },
 ] as const;
 
+/** G1 — fasondan iplik dönüşü: neden geri geldi (kalan · kalite · sevk iptali). Kod değişmez, son aktif gizlenemez. */
+export const YARN_SUBCONTRACT_RETURN_REASONS: readonly ReasonPresetSeed[] = [
+  { code: "KALAN_IPLIK", label: "Kalan iplik (iş bitti, artan döndü)" },
+  { code: "KALITE", label: "Kalite (iplik kullanılamadı / uygun değil)" },
+  { code: "IPTAL", label: "İş iptal edildi (iplik kullanılmadan döndü)" },
+] as const;
+
 /** Kind → sistem satırları. Sıra ANLAMLIDIR (dizideki sıra `sortOrder` olur). */
 export const REASON_PRESET_CATALOG: Record<ReasonPresetKind, readonly ReasonPresetSeed[]> = {
   ROLL_SCRAP: SCRAP_REASONS,
@@ -296,6 +306,7 @@ export const REASON_PRESET_CATALOG: Record<ReasonPresetKind, readonly ReasonPres
   WARP_RETURN: WARP_RETURN_REASONS,
   WARP_BEAM_ADJUST: WARP_BEAM_ADJUST_REASONS,
   WARP_BEAM_SCRAP: WARP_BEAM_SCRAP_REASONS,
+  YARN_SUBCONTRACT_RETURN: YARN_SUBCONTRACT_RETURN_REASONS,
 };
 
 export const REASON_PRESET_KINDS = Object.keys(REASON_PRESET_CATALOG) as ReasonPresetKind[];

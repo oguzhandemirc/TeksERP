@@ -28,6 +28,7 @@ import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { InventoryService } from "./inventory.service";
 import { nextPrefixedSequenceTx } from "./subcontractor.service";
 import { cancelWarpBeamItemsTx, countReturnedBeamItems, dispatchWarpBeamItemsTx } from "./subcontractor-beam.service";
+import { cancelYarnItemsTx, countReturnedYarnItems, dispatchYarnItemsTx, type YarnDispatchLineInput } from "./subcontractor-yarn.service";
 import { WEAVING_ORDER_OPEN_STATUSES } from "./weaving-order.service";
 import { markWeavingOrderInProgressTx } from "./helpers/weaving-order.helper";
 import { assertWeavingBound } from "./helpers/dispatch-header.helper";
@@ -38,6 +39,8 @@ type Tx = Prisma.TransactionClient;
 export interface WeavingDispatchInput {
   weavingOrderId: string;
   warpBeamIds: string[];
+  /** G1: fasoncuya giden İPLİK satırları (kalem `kind=YARN`); levent-yalnız ya da iplik-yalnız sevk meşru. */
+  yarnLines?: YarnDispatchLineInput[];
   plateNumber?: string | null;
   driverName?: string | null;
   notes?: string | null;
@@ -111,8 +114,9 @@ async function claimSubcontractedWeavingOrderTx(tx: Tx, weavingOrderId: string, 
 
 export async function dispatchForWeaving(input: WeavingDispatchInput, userId?: string): Promise<ApiResponse<unknown>> {
   const warpBeamIds = [...new Set(input.warpBeamIds)];
-  if (warpBeamIds.length === 0) {
-    throw AppError.badRequest("Fason dokuma sevkinde en az bir levent seçilmeli", { code: "WEAVING_DISPATCH_EMPTY" });
+  const yarnLines = input.yarnLines ?? [];
+  if (warpBeamIds.length === 0 && yarnLines.length === 0) {
+    throw AppError.badRequest("Fason dokuma sevkinde en az bir levent ya da iplik satırı seçilmeli", { code: "WEAVING_DISPATCH_EMPTY" });
   }
   const created = await prisma.$transaction(async (tx) => {
     const wo = await claimSubcontractedWeavingOrderTx(tx, input.weavingOrderId, userId);
@@ -131,22 +135,25 @@ export async function dispatchForWeaving(input: WeavingDispatchInput, userId?: s
       },
       select: { id: true, dispatchNo: true, weavingOrderId: true, subcontractorId: true, dispatchedAt: true },
     });
-    const beams = await dispatchWarpBeamItemsTx(tx, { dispatchId: dispatch.id, warpBeamIds, userId });
-    // totalQty = Σ kalem (`test_consistency §19`); levent kalemi metre taşır (F1 ile aynı).
-    await tx.subcontractorDispatch.update({ where: { id: dispatch.id }, data: { totalQty: beams.totalM } });
-    return { dispatch, beams, weavingOrderNumber: wo.weavingOrderNumber };
+    const beams = warpBeamIds.length > 0
+      ? await dispatchWarpBeamItemsTx(tx, { dispatchId: dispatch.id, warpBeamIds, userId })
+      : { lines: [], totalM: new Prisma.Decimal(0) };
+    // totalQty = Σ kalem (`test_consistency §19`); levent kalemi metre taşır (F1 ile aynı); iplik kg GİRMEZ (H1).
+    if (beams.lines.length > 0) await tx.subcontractorDispatch.update({ where: { id: dispatch.id }, data: { totalQty: beams.totalM } });
+    const yarn = yarnLines.length > 0 ? await dispatchYarnItemsTx(tx, { dispatchId: dispatch.id, lines: yarnLines, userId }) : null;
+    return { dispatch, beams, yarn, weavingOrderNumber: wo.weavingOrderNumber };
   });
   await AuditService.log({
     userId,
     action: "CREATE",
     tableName: "SUBCONTRACTOR_DISPATCH",
     recordId: created.dispatch.id,
-    newData: { ...created.dispatch, kind: "WEAVING", warpBeamIds, totalM: created.beams.totalM.toString() },
+    newData: { ...created.dispatch, kind: "WEAVING", warpBeamIds, totalM: created.beams.totalM.toString(), ...(created.yarn ? { yarnItemCount: created.yarn.lines.length, yarnTotalKg: created.yarn.totalKg.toString() } : {}) },
   });
   return {
     success: true,
-    data: { ...created.dispatch, beams: created.beams.lines, totalM: created.beams.totalM.toString() },
-    message: `Fason dokuma sevki ${created.dispatch.dispatchNo} açıldı (${created.weavingOrderNumber}, ${warpBeamIds.length} levent)`,
+    data: { ...created.dispatch, beams: created.beams.lines, totalM: created.beams.totalM.toString(), ...(created.yarn ? { yarnItems: created.yarn.lines, yarnTotalKg: created.yarn.totalKg.toString() } : {}) },
+    message: `Fason dokuma sevki ${created.dispatch.dispatchNo} açıldı (${created.weavingOrderNumber}, ${warpBeamIds.length} levent${created.yarn ? `, ${created.yarn.totalKg} kg iplik` : ""})`,
   };
 }
 
@@ -164,20 +171,24 @@ export async function cancelWeavingDispatch(dispatchId: string, reason: string, 
         code: "WARP_BEAM_RETURNED",
       });
     }
+    if ((await countReturnedYarnItems(tx, d.id)) > 0) {
+      throw AppError.conflict("Dönmüş ipliği olan sevk iptal edilemez — önce dönüşü geri alın (LIFO)", { code: "YARN_ITEM_RETURNED" });
+    }
     const claim = await tx.subcontractorDispatch.updateMany({
       where: { id: d.id, cancelledAt: null },
       data: { cancelledAt: new Date(), cancelledById: userId ?? null, cancelReason: reason.trim() },
     });
     if (claim.count === 0) throw AppError.conflict(`Sevk ${d.dispatchNo} zaten iptal edilmiş`, { code: "DISPATCH_CANCELLED" });
     const beams = await cancelWarpBeamItemsTx(tx, { dispatchId: d.id, reason: reason.trim(), userId });
-    return { ...d, beams };
+    const yarnItems = await cancelYarnItemsTx(tx, { dispatchId: d.id, reason: reason.trim(), userId });
+    return { ...d, beams, yarnItems };
   });
   await AuditService.log({
     userId,
     action: "UPDATE",
     tableName: "SUBCONTRACTOR_DISPATCH",
     recordId: result.id,
-    newData: { cancelled: true, kind: "WEAVING", reason, beamsReverted: result.beams },
+    newData: { cancelled: true, kind: "WEAVING", reason, beamsReverted: result.beams, yarnItemsReverted: result.yarnItems },
   });
   return { success: true, data: result, message: `Sevk ${result.dispatchNo} iptal edildi (${result.beams} levent geri READY)` };
 }

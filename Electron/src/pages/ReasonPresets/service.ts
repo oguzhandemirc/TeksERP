@@ -19,7 +19,9 @@ export type ReasonPresetKind =
   | "WARP_RETURN"
   // Faz 3 (devere): kalan düzeltmesi · hurda/artık dispozisyonu
   | "WARP_BEAM_ADJUST"
-  | "WARP_BEAM_SCRAP";
+  | "WARP_BEAM_SCRAP"
+  // Fason G1 (iplik): fasondan iplik dönüş sebebi
+  | "YARN_SUBCONTRACT_RETURN";
 
 export interface ReasonPreset {
   id: string;
@@ -71,6 +73,7 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
   WARP_RETURN: false,
   WARP_BEAM_ADJUST: false,
   WARP_BEAM_SCRAP: false,
+  YARN_SUBCONTRACT_RETURN: false,
 };
 
 /**
@@ -82,7 +85,7 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
  * Dokuma ekranı) — sekme aynı bayrağı okur; `tezgahEnabled` telemetrinindir.
  * Parite bekçisi sekmenin VARLIĞINI ister, GÖRÜNÜRLÜĞÜNÜ değil — ikisi ayrı.
  */
-export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; modul?: "dokumaEnabled" | "devereEnabled" }[] = [
+export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; modul?: "dokumaEnabled" | "devereEnabled" | "iplikEnabled" }[] = [
   {
     kind: "ROLL_SCRAP",
     title: "Fire",
@@ -136,6 +139,12 @@ export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; m
     title: "Levent Hurda / Artık",
     hint: "Levent hurdaya ayrılırken sebep ZORUNLU, bittiğinde (levent dibi) isteğe bağlı dispozisyon: telef, atkılığa aktarım, kopuk çözgü, yanlış sarım. Telef satışı kapsam dışıdır.",
     modul: "devereEnabled",
+  },
+  {
+    kind: "YARN_SUBCONTRACT_RETURN",
+    title: "Fasondan İplik Dönüşü",
+    hint: "Fasona giden iplik geri dönerken sebep ZORUNLUDUR: kalan iplik, kalite, iş iptali. Çıkış brüt yazılır, dönüş ayrı satırla kapanır.",
+    modul: "iplikEnabled",
   },
 ];
 

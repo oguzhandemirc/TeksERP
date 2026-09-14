@@ -66,6 +66,7 @@ import { renderFasonCekiHtml } from "./document-render/fason-ceki.html";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { resolveDispatchCancelBlockReason } from "./helpers/subcontractor-cancel.helper";
 import { cancelWarpBeamItemsTx, countReturnedBeamItems, dispatchWarpBeamItemsTx } from "./subcontractor-beam.service";
+import { cancelYarnItemsTx, countReturnedYarnItems, dispatchYarnItemsTx, listYarnItems, type YarnDispatchLineInput } from "./subcontractor-yarn.service";
 import { renderFasonDirectShipHtml } from "./document-render/fason-direct-ship.html";
 import { renderFasonReceiptHtml, type FasonReceiptDoc } from "./document-render/fason-receipt.html";
 import { buildPagination, buildTextSearch } from "../utils/query-parser";
@@ -748,11 +749,17 @@ export class SubcontractorService {
        * bağımsız — levent-yalnız sevk meşrudur (parti boş doğar). Kapı: devere kapalıysa controller 403.
        */
       warpBeamIds?: string[];
+      /**
+       * G1: fasona verilen İPLİK satırları (kalem `kind=YARN`, `SUBCONTRACT_OUT` aynı tx). Top ve leventten
+       * bağımsız — iplik-yalnız sevk meşrudur. Kapı: iplik kapalıysa controller 403 + tek yazıcı 403.
+       */
+      yarnLines?: YarnDispatchLineInput[];
     },
     userId?: string
   ): Promise<ApiResponse<Record<string, unknown>>> {
     const warpBeamIds = [...new Set(data.warpBeamIds ?? [])];
-    if ((!data.rollIds || data.rollIds.length === 0) && warpBeamIds.length === 0) {
+    const yarnLines = data.yarnLines ?? [];
+    if ((!data.rollIds || data.rollIds.length === 0) && warpBeamIds.length === 0 && yarnLines.length === 0) {
       throw AppError.badRequest("En az bir top seçmelisiniz");
     }
 
@@ -1355,6 +1362,10 @@ export class SubcontractorService {
       if (beamLines) {
         await tx.subcontractorDispatch.update({ where: { id: dispatch.id }, data: { totalQty: totalQty.plus(beamLines.totalM) } });
       }
+      // G1 İPLİK KALEMLERİ — kg `totalQty`ye GİRMEZ (metre toplamı; §19 `kind<>'YARN'`), `yarnTotalKg` ayrı okunur.
+      const yarnItems = yarnLines.length > 0
+        ? await dispatchYarnItemsTx(tx, { dispatchId: dispatch.id, lines: yarnLines, userId })
+        : null;
 
       // RESMİ BELGE — fason sevk irsaliyesi v1 BURADA donar (PrintedDocument).
       // Builder az önce yaratılan dispatch+item'ları aynı tx içinden okur;
@@ -1501,7 +1512,7 @@ export class SubcontractorService {
         });
       }
 
-      return { dispatch, remainderBatches, beamLines };
+      return { dispatch, remainderBatches, beamLines, yarnItems };
       })
     );
 
@@ -1522,6 +1533,7 @@ export class SubcontractorService {
         itemMismatchOverride: !!data.allowItemOverride,
         totalQty: result.beamLines ? totalQty.plus(result.beamLines.totalM) : totalQty,
         ...(result.beamLines ? { warpBeamCount: result.beamLines.lines.length, warpBeamNos: result.beamLines.lines.map((l) => l.beamNo) } : {}),
+        ...(result.yarnItems ? { yarnItemCount: result.yarnItems.lines.length, yarnTotalKg: result.yarnItems.totalKg.toString() } : {}),
       },
     });
 
@@ -2075,8 +2087,10 @@ export class SubcontractorService {
     // F1: levent kalemi top listesine girmez (null bağ); iptal yolu leventi ayrıca geri alır.
     const rollIds = dispatch.items.map((i) => i.rollId).filter((x): x is string => !!x);
     const hasBeamItems = dispatch.items.some((i) => i.kind === SubcontractorDispatchItemKind.WARP_BEAM);
-    // Dönmüş levent (açık RETURNED_IN) sevk iptalini engeller — LIFO; önizleme ile aynı kaynak.
+    const hasYarnItems = dispatch.items.some((i) => i.kind === SubcontractorDispatchItemKind.YARN);
+    // Dönmüş levent (açık RETURNED_IN) / dönmüş iplik sevk iptalini engeller — LIFO; önizleme ile aynı kaynak.
     const returnedBeamCount = hasBeamItems ? await countReturnedBeamItems(prisma, dispatchId) : 0;
+    const returnedYarnCount = hasYarnItems ? await countReturnedYarnItems(prisma, dispatchId) : 0;
 
     // Mal kabul edilmiş sevk iptal edilemez (ReceiptItem.sourceDispatchItem
     // üzerinden bağlı). cancelledAt:null filtresi şart — iptal edilmiş receipt
@@ -2125,6 +2139,7 @@ export class SubcontractorService {
       activeReceiptNo: acceptedReceiptItem?.receipt?.receiptNo ?? null,
       movedRollCount: movedRolls.length,
       returnedBeamCount,
+      returnedYarnCount,
     });
     if (blockReason) {
       throw AppError.conflict(
@@ -2190,6 +2205,10 @@ export class SubcontractorService {
       //     yukarıdaki sayım tx dışında ve bayat olabilir).
       if (hasBeamItems) {
         await cancelWarpBeamItemsTx(tx, { dispatchId, reason: trimmedReason, userId });
+      }
+      // 1a′) G1 İPLİK: SUBCONTRACT_OUT_CANCEL (depoya +kg) — dönmüş kalem tx İÇİNDE de 409 (LIFO).
+      if (hasYarnItems) {
+        await cancelYarnItemsTx(tx, { dispatchId, reason: trimmedReason, userId });
       }
 
       // 1b) RESMİ BELGE — irsaliye VOIDED'e çekilir (baskıda İPTAL filigranı).
@@ -4745,7 +4764,8 @@ export class SubcontractorService {
         },
         step: { include: { station: true } },
         items: {
-          ...(includeBeams ? {} : { where: { kind: SubcontractorDispatchItemKind.ROLL } }),
+          // G1: iplik kalemi `items`e HİÇ girmez (roll/warpBeam null bağıyla eski istemciyi kırmasın) — `yarnItems` ayrı alan.
+          where: { kind: { in: includeBeams ? [SubcontractorDispatchItemKind.ROLL, SubcontractorDispatchItemKind.WARP_BEAM] : [SubcontractorDispatchItemKind.ROLL] } },
           include: {
             roll: {
               include: {
@@ -4764,7 +4784,9 @@ export class SubcontractorService {
 
     if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
     const { _count, ...rest } = dispatch;
-    return { success: true, data: { ...rest, beamItemCount: _count.items } };
+    // G1: iplik kalemleri birimi AÇIK (`unit:"KG"`) ayrı listede; `yarnTotalKg` başlıkta — `totalQty` metredir (H1).
+    const yarn = await listYarnItems(prisma, id);
+    return { success: true, data: { ...rest, beamItemCount: _count.items, yarnItems: yarn.items, yarnTotalKg: yarn.yarnTotalKg } };
   }
 
   async listReceipts(params?: {

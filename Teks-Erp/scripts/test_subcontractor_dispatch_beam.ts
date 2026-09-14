@@ -241,7 +241,7 @@ async function main(): Promise<void> {
       resolveDispatchCancelBlockReason({ cancelledAt: null, directShipmentNo: null, activeReceiptNo: null, movedRollCount: 0, returnedBeamCount: 0 }) === null);
     const cancelGovde = (() => { const t = readFileSync(path.join(ROOT, "src/services/subcontractor.service.ts"), "utf8"); const i = t.indexOf("  async cancel("); return t.slice(i, i + 5000); })();
     check("§4g′ cancel() sinyali SAYIYOR ve helper'a GEÇİRİYOR (countReturnedBeamItems → returnedBeamCount)",
-      /const returnedBeamCount = hasBeamItems \? await countReturnedBeamItems\(/.test(cancelGovde) && /movedRollCount: movedRolls\.length,\s*returnedBeamCount,\s*\}\)/.test(cancelGovde));
+      /const returnedBeamCount = hasBeamItems \? await countReturnedBeamItems\(/.test(cancelGovde) && /movedRollCount: movedRolls\.length,\s*returnedBeamCount,\s*(?:returnedYarnCount,\s*)?\}\)/.test(cancelGovde));
     const rc = await cancelWarpBeamReturn(d2, { warpBeamId: b1.id, reason: `${TAG} yanlış metre` }, admin.id);
     const b1Ev2 = await olaylar(b1.id);
     check("§4h RETURNED_IN_CANCEL: SHIPPED_OUT'a döner, `reversesEventId` = RETURNED_IN, kalan 0", rc.data.status === WarpBeamStatus.SHIPPED_OUT && b1Ev2.at(-1)?.kind === "RETURNED_IN_CANCEL" && b1Ev2.at(-1)?.reversesEventId === ret.data.eventId && (await kalan(b1.id)) === 0);
