@@ -1,10 +1,16 @@
 // =============================================================================
 // TeksERP - Database Seed
 // =============================================================================
-// Tek dosya, "boş DB'den sıfır kurulum" akışı. Her şey `create` ile yazılır;
-// ikinci kez çalıştırılırsa unique constraint hatası verir — bu beklenen.
-// (TEK İSTİSNA: izin satırları — onların ikinci bir yazarı var, backend'in
-//  boot-time uzlaştırması; gerekçe 1. adımın başında.)
+// Tek dosya, "boş DB'den sıfır kurulum" akışı. **İKİNCİ KOŞUM GÜVENLİDİR:** her
+// yazım `upsert` / `createMany(skipDuplicates)` ile yapılır ⇒ satır varsa dokunulmaz,
+// yoksa yaratılır. Bu bir kolaylık değil bir ZORUNLULUK: seed ortasında düşen bir
+// koşum (ölçüldü 2026-09-14, `defect_types` P2002'si) DB'yi YARIM bırakır ve ikinci
+// koşum onu TAMAMLAYABİLMELİDİR. "Zaten seed'li, erken çık" çözümü bu yüzden
+// SEÇİLMEDİ — yarım kalmış kurulumu sessizce "başarılı" gösterirdi.
+//
+// ⚠️ `update: {}` BİLİNÇLİDİR: seed KURULUM aracıdır, uzlaştırıcı değil. Var olan
+// satırın adını/ayarını EZMEZ — paneldeki değişiklik seed koşumuyla geri alınmaz.
+// Tek istisna `defect_types`: satırı migration yer tutucu adla doğurur, seed düzeltir.
 // Yeniden yüklemek için:
 //
 //   PGPASSWORD=... psql -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
@@ -125,8 +131,10 @@ async function main() {
   // her reseed'de tek tek silmek zorunda kalıyordu). Yeni kullanıcılar admin
   // panelinden açılır; HTTP testleri (test_http_api / test_direct_ship_api) kendi
   // geçici 0-izinli kullanıcılarını üretip temizler.
-  const adminUser = await prisma.user.create({
-    data: {
+  const adminUser = await prisma.user.upsert({
+    where: { username: "admin" },
+    update: {},
+    create: {
       username: "admin",
       passwordHash: await hashPassword("123123"),
       fullName: "Sistem Yöneticisi",
@@ -144,6 +152,7 @@ async function main() {
       permissionId: permByCode.get(p.code)!.id,
       grantedById: adminUser.id,
     })),
+    skipDuplicates: true,
   });
   console.log(`✅ Admin'e ${PERMISSION_CATALOG.length} yetki atandı`);
 
@@ -181,6 +190,7 @@ async function main() {
       { code: "A1",       name: "A1 (Alt Kalite)", color: "#f59e0b", sortOrder: 20, role: "SECOND", targetStatus: "WAREHOUSE", returnTargetStatus: "A1_STOCK",  skipLabel: false, skipCustomerName: true  },
       { code: "FIRE",     name: "Fire",            color: "#ef4444", sortOrder: 30, role: "SCRAP",  targetStatus: "SCRAP",     returnTargetStatus: "SCRAP",     skipLabel: true, skipCustomerName: false },
     ],
+    skipDuplicates: true,
   });
   console.log("✅ 3 kalite sınıfı (1.KALITE/A1/FIRE — roller: FIRST/SECOND/SCRAP)");
 
@@ -195,6 +205,7 @@ async function main() {
       { code: "MUSTERI_VAZGECTI", name: "Müşteri Vazgeçti",  color: "#6b7280", sortOrder: 50 },
       { code: "DIGER",            name: "Diğer",            color: "#6b7280", sortOrder: 60 },
     ],
+    skipDuplicates: true,
   });
   console.log("✅ 6 iade nedeni");
 
@@ -213,7 +224,9 @@ async function main() {
     { code: "KURSUN",    name: "Kurşunlu",  category: "İşlem", color: "#64748b", sortOrder: 10 },
     { code: "ZIMPARALI", name: "Zımparalı", category: "Yüzey", color: "#a3a3a3", sortOrder: 20 },
   ];
-  const properties = await Promise.all(propertyData.map((p) => prisma.fabricProperty.create({ data: p })));
+  const properties = await Promise.all(
+    propertyData.map((p) => prisma.fabricProperty.upsert({ where: { code: p.code }, update: {}, create: p })),
+  );
   const propByCode = new Map(properties.map((p) => [p.code, p]));
   console.log(`✅ ${properties.length} kumaş özelliği (KURSUN + ZIMPARALI)`);
 
@@ -223,8 +236,10 @@ async function main() {
   // doğrulaması fail-open'a düşer (çalışır ama özellik hiç görünmez).
   // ⚠️ Kod ASCII: "TUP", "TÜP" DEĞİL — Türkçe karakterli kod, ASCII yazan
   // istemciyi sessizce reddettirir (görünen ad "Tüp" kalır).
-  const katProperty = await prisma.fabricProperty.create({
-    data: {
+  const katProperty = await prisma.fabricProperty.upsert({
+    where: { code: "KAT" },
+    update: {},
+    create: {
       code: "KAT",
       name: "Kat",
       category: "Üretim",
@@ -243,8 +258,10 @@ async function main() {
 
   // --- Fason kategori + firma ---
   const cats = await Promise.all([
-    prisma.subcontractorCategory.create({
-      data: {
+    prisma.subcontractorCategory.upsert({
+      where: { code: "BOYA" },
+    update: {},
+    create: {
         code: "BOYA",
         name: "Boyahane",
         description: "Renk veren fason adım — kabulde Roll.colorId + özellikleri WO'dan kopyalanır",
@@ -252,8 +269,10 @@ async function main() {
         appliesProperty: true,
       },
     }),
-    prisma.subcontractorCategory.create({
-      data: {
+    prisma.subcontractorCategory.upsert({
+      where: { code: "ZIMPARA" },
+    update: {},
+    create: {
         code: "ZIMPARA",
         name: "Zımpara",
         description: "Yüzey işleme — kabulde yalnız özellik (Zımparalı) WO'dan kopyalanır",
@@ -263,8 +282,10 @@ async function main() {
     }),
     // Kartela fason kategorisi — bitmiş top kartelaya bu kategorideki firmalara
     // gönderilir. Renk/özellik uygulamaz (üretim rotasının parçası değil).
-    prisma.subcontractorCategory.create({
-      data: {
+    prisma.subcontractorCategory.upsert({
+      where: { code: "KARTELA" },
+    update: {},
+    create: {
         code: "KARTELA",
         name: "Kartela",
         description: "Bitmiş top → kartela üretimi (kartela sevk/kabul firmaları)",
@@ -276,8 +297,10 @@ async function main() {
   const catByCode = new Map(cats.map((c) => [c.code, c]));
   console.log(`✅ ${cats.length} fason kategori (BOYA, ZIMPARA, KARTELA)`);
 
-  await prisma.subcontractor.create({
-    data: {
+  await prisma.subcontractor.upsert({
+    where: { code: "BOYER" },
+    update: {},
+    create: {
       code: "BOYER",
       name: "Boyer Boyacılık",
       phone: "+90 212 555 1010",
@@ -285,8 +308,10 @@ async function main() {
       categories: { create: [{ categoryId: catByCode.get("BOYA")!.id }] },
     },
   });
-  await prisma.subcontractor.create({
-    data: {
+  await prisma.subcontractor.upsert({
+    where: { code: "KESTEL" },
+    update: {},
+    create: {
       code: "KESTEL",
       name: "Kestel Zımpara",
       phone: "+90 224 555 2020",
@@ -294,8 +319,10 @@ async function main() {
       categories: { create: [{ categoryId: catByCode.get("ZIMPARA")!.id }] },
     },
   });
-  await prisma.subcontractor.create({
-    data: {
+  await prisma.subcontractor.upsert({
+    where: { code: "KARTELAAS" },
+    update: {},
+    create: {
       code: "KARTELAAS",
       name: "Kartela A.Ş.",
       phone: "+90 212 555 3030",
@@ -309,8 +336,10 @@ async function main() {
   // KK1 ham kumaş giriş noktası: bir tablet burada durur, operatör barkod basıp
   // yeni Roll oluşturur. WO step picker'da görünmemesi için allowAsWorkOrderStep=false.
   // İleride 2. bir KK1 noktası açılırsa aynı pattern ile eklenir.
-  const kk1 = await prisma.station.create({
-    data: {
+  const kk1 = await prisma.station.upsert({
+    where: { code: "KK1_1" },
+    update: {},
+    create: {
       code: "KK1_1", name: "KK1 — Ham Mal Girişi", type: "INTERNAL", kind: "RAW_QC",
       department: "KALITE", allowAsWorkOrderStep: false,
     },
@@ -320,14 +349,18 @@ async function main() {
   // BOŞKEN koşar → taze kurulumda bu satır kolon varsayılanıyla (false) doğardı.
   // Faz A'da `stepCanApplyQuality`nin `kind === PROCESS_QC` dalı hatayı örter;
   // Faz B'de o dal kalkınca taze kurulum SESSİZCE kalitesiz doğardı.
-  const kursun = await prisma.station.create({
-    data: {
+  const kursun = await prisma.station.upsert({
+    where: { code: "KURSUN_KK2" },
+    update: {},
+    create: {
       code: "KURSUN_KK2", name: "Kurşun + KK2", type: "INTERNAL", kind: "PROCESS_QC",
       department: "KALITE", appliesQuality: true,
     },
   });
-  const tambur = await prisma.station.create({
-    data: { code: "TAMBUR_1", name: "Tambur", type: "INTERNAL", kind: "TAMBUR", department: "KALITE" },
+  const tambur = await prisma.station.upsert({
+    where: { code: "TAMBUR_1" },
+    update: {},
+    create: { code: "TAMBUR_1", name: "Tambur", type: "INTERNAL", kind: "TAMBUR", department: "KALITE" },
   });
   // ⚠️ YETENEK BAYRAKLARI AÇIKÇA YAZILIR (2026-08-10). Seed ham prisma kullanır,
   // yani `StationService`in "kategoriden tohumla" adımı KOŞMAZ; kolon
@@ -335,15 +368,19 @@ async function main() {
   // VEREMEZ görünürdü ve hedef renkli iş emri "rotada renk veren adım yok" ile
   // reddedilirdi. (Migration'ın geri-doldurma UPDATE'i de kurtarmaz: migration
   // seed'den ÖNCE, tablo boşken koşar.)
-  const boyaFason = await prisma.station.create({
-    data: {
+  const boyaFason = await prisma.station.upsert({
+    where: { code: "BOYA_FASON" },
+    update: {},
+    create: {
       code: "BOYA_FASON", name: "Boyahane (Fason)", type: "EXTERNAL", kind: "SUBCONTRACTOR",
       department: "TERBIYE", defaultCategoryId: catByCode.get("BOYA")!.id,
       appliesColor: true, appliesProperty: true, // = BOYA kategorisinin bayrakları
     },
   });
-  const zimparaFason = await prisma.station.create({
-    data: {
+  const zimparaFason = await prisma.station.upsert({
+    where: { code: "ZIMPARA_FASON" },
+    update: {},
+    create: {
       code: "ZIMPARA_FASON", name: "Zımpara (Fason)", type: "EXTERNAL", kind: "SUBCONTRACTOR",
       department: "TERBIYE", defaultCategoryId: catByCode.get("ZIMPARA")!.id,
       appliesColor: false, appliesProperty: true, // = ZIMPARA kategorisinin bayrakları
@@ -352,8 +389,10 @@ async function main() {
   // Sevkiyat/paketleme noktası: üretim dışı MAKİNESİZ istasyon (StationKind.SHIPPING).
   // Donanım (çuval kantarı) doğrudan İSTASYONA bağlanır (PeripheralDevice.stationId);
   // telefonlar burada makinesiz istasyon-oturumu açar (birden çok tartı telefonu serbest).
-  const sevk = await prisma.station.create({
-    data: {
+  const sevk = await prisma.station.upsert({
+    where: { code: "SEVK_1" },
+    update: {},
+    create: {
       code: "SEVK_1", name: "Sevkiyat / Paketleme", type: "INTERNAL", kind: "SHIPPING",
       department: "SEVKIYAT", allowAsWorkOrderStep: false,
     },
@@ -368,6 +407,7 @@ async function main() {
       { stationId: kursun.id, code: "KK2-M1",    name: "KK2 Makine 1" },
       { stationId: tambur.id, code: "TAMBUR-M1", name: "Tambur Makine 1" },
     ],
+    skipDuplicates: true,
   });
   console.log("✅ 3 makine (KK1-M1, KK2-M1, TAMBUR-M1)");
 
@@ -463,8 +503,10 @@ async function main() {
   for (const sp of stationPrinters) {
     const machineId = mById(sp.machineCode);
     if (!machineId) continue;
-    await prisma.peripheralDevice.create({
-      data: {
+    await prisma.peripheralDevice.upsert({
+      where: { code: sp.code },
+    update: {},
+    create: {
         code: sp.code, name: sp.name, kind: "LABEL_PRINTER", connectionType: "NETWORK_TCP",
         address: sp.address, port: 9100, machineId, languageOverride: "PPLA",
         labelWidthMm: 100, labelHeightMm: 58, labelDpi: 203, labelGapMm: 2,
@@ -479,8 +521,10 @@ async function main() {
   // register-bt ile kendiliğinden eklenir.
   const tamburMachineId = mById("TAMBUR-M1");
   if (tamburMachineId) {
-    const peripheral = await prisma.peripheralDevice.create({
-      data: {
+    const peripheral = await prisma.peripheralDevice.upsert({
+      where: { code: "TAMBUR-ARGOX-01" },
+    update: {},
+    create: {
         code: "TAMBUR-ARGOX-01",
         name: "Tambur Argox (ağ)",
         kind: "LABEL_PRINTER",
@@ -497,8 +541,10 @@ async function main() {
       select: { id: true },
     });
     if (finishedDefault) {
-      await prisma.peripheralTemplateRoute.create({
-        data: { peripheralId: peripheral.id, kind: "ROLL_FINISHED", templateId: finishedDefault.id },
+      await prisma.peripheralTemplateRoute.upsert({
+        where: { peripheralId_kind: { peripheralId: peripheral.id, kind: "ROLL_FINISHED" } },
+    update: {},
+    create: { peripheralId: peripheral.id, kind: "ROLL_FINISHED", templateId: finishedDefault.id },
       });
     }
     console.log("✅ Örnek cihaz kaydı (Tambur Argox, NETWORK_TCP, PPLA)");
@@ -527,12 +573,15 @@ async function main() {
           machineId: tamburMachineId,
         },
       ],
-    });
+    skipDuplicates: true,
+  });
     console.log("✅ Tambur 2-kat/4-kat metre cihazları (METER, BT-SPP, role)");
   }
   if (kk1MachineId) {
-    await prisma.peripheralDevice.create({
-      data: {
+    await prisma.peripheralDevice.upsert({
+      where: { code: "KK1-METRE" },
+    update: {},
+    create: {
         code: "KK1-METRE", name: "KK1 Metre",
         kind: "METER", connectionType: "BLUETOOTH_SPP",
         address: "00:23:09:01:1D:17", role: "PRIMARY",
@@ -558,8 +607,10 @@ async function main() {
   // gider. Backend ayrıca ENFORCE eder (`shipping.simulatedWeightEnabled`, default
   // kapalı → simüle okuma `weighSack`'te 400); bu satır ilk kurulumu da temiz başlatır.
   // Demo/eğitim kurulumunda Cihaz Kaydı'ndan açılıp flag ile birlikte kullanılır.
-  await prisma.peripheralDevice.create({
-    data: {
+  await prisma.peripheralDevice.upsert({
+    where: { code: "SEVK-KANTAR" },
+    update: {},
+    create: {
       code: "SEVK-KANTAR", name: "Sevkiyat Kantarı",
       kind: "SCALE", connectionType: "BLUETOOTH_SPP",
       address: "00:23:09:01:2A:3C", role: "PRIMARY",
@@ -575,13 +626,17 @@ async function main() {
   // ⚠️ MOD AÇIKÇA YAZILIR (2026-08-10). Şema varsayılanı OPTIONAL; KURSUN
   // satırı AUTO olmazsa kurşun özelliği toplara YAZILMAZ ve kurşun bypass
   // ataması "istasyon kurşunu OTOMATİK uygulamıyor" ile reddedilir.
-  await prisma.stationProperty.create({
-    data: { stationId: kursun.id, propertyId: propByCode.get("KURSUN")!.id, mode: "AUTO" },
+  await prisma.stationProperty.upsert({
+    where: { stationId_propertyId: { stationId: kursun.id, propertyId: propByCode.get("KURSUN")!.id } },
+    update: {},
+    create: { stationId: kursun.id, propertyId: propByCode.get("KURSUN")!.id, mode: "AUTO" },
   });
   // Zımpara fason: mod İNERT (fason kabulde özellik `WO.targetProperties`'ten
   // yazılır, `copyStationCapabilitiesToRoll` o yolda çağrılmaz) → OPTIONAL kalır.
-  await prisma.stationProperty.create({
-    data: { stationId: zimparaFason.id, propertyId: propByCode.get("ZIMPARALI")!.id },
+  await prisma.stationProperty.upsert({
+    where: { stationId_propertyId: { stationId: zimparaFason.id, propertyId: propByCode.get("ZIMPARALI")!.id } },
+    update: {},
+    create: { stationId: zimparaFason.id, propertyId: propByCode.get("ZIMPARALI")!.id },
   });
   // Tambur: kat karakteristiği bağı. Mod OPTIONAL — REQUIRED yazmak YALANCI
   // BEYAN olurdu (SEK-5, 2026-08-11): Tambur akışı capability kapısını hiç
@@ -589,8 +644,10 @@ async function main() {
   // aramasından, kayıt `resolveFoldTypeForWrite`'tan geçer; UI zorunlu sorar,
   // backend eski-APK sözleşmesi gereği null fallback kabul eder). Panelde
   // "zorunlu" görünüp hiçbir kapıda uygulanmayan mod, ayarı yanıltıcı yapar.
-  await prisma.stationProperty.create({
-    data: { stationId: tambur.id, propertyId: katProperty.id, mode: "OPTIONAL" },
+  await prisma.stationProperty.upsert({
+    where: { stationId_propertyId: { stationId: tambur.id, propertyId: katProperty.id } },
+    update: {},
+    create: { stationId: tambur.id, propertyId: katProperty.id, mode: "OPTIONAL" },
   });
   console.log("✅ İstasyon yetenekleri (Kurşun=KURSUN/AUTO, Zımpara=ZIMPARALI, Tambur=KAT/OPSİYONEL)");
 
@@ -616,8 +673,10 @@ async function main() {
   console.log("✅ 3 hata tipi (Genel Hata, Yırtık, Lekeli)");
 
   // --- Rota şablonları (generic + 1 ARDA-özel) ---
-  await prisma.route.create({
-    data: {
+  await prisma.route.upsert({
+    where: { code: "STD-BOYA" },
+    update: {},
+    create: {
       code: "STD-BOYA", name: "Standart Boyama", description: "Boya → Kurşun+KK2 → Tambur", isFavorite: true,
       steps: { create: [
         { sequence: 1, stationId: boyaFason.id },
@@ -626,8 +685,10 @@ async function main() {
       ]},
     },
   });
-  await prisma.route.create({
-    data: {
+  await prisma.route.upsert({
+    where: { code: "BOYA-ZIMPARA" },
+    update: {},
+    create: {
       code: "BOYA-ZIMPARA", name: "Boya + Zımpara", description: "Boya → Zımpara → Kurşun+KK2 → Tambur",
       steps: { create: [
         { sequence: 1, stationId: boyaFason.id },
@@ -640,20 +701,26 @@ async function main() {
   console.log("✅ 2 rota şablonu (Standart Boyama, Boya + Zımpara)");
 
   // --- Label template'ler (her LabelKind için default — etiket endpoint'leri için zorunlu) ---
-  await prisma.labelTemplate.create({
-    data: {
+  await prisma.labelTemplate.upsert({
+    where: { name: "Standart Ham Top Etiketi" },
+    update: {},
+    create: {
       name: "Standart Ham Top Etiketi", kind: "ROLL_RAW", isDefault: true,
       fields: buildDefaultFields("ROLL_RAW") as unknown as object,
     },
   });
-  await prisma.labelTemplate.create({
-    data: {
+  await prisma.labelTemplate.upsert({
+    where: { name: "Standart Bitmiş Top Etiketi" },
+    update: {},
+    create: {
       name: "Standart Bitmiş Top Etiketi", kind: "ROLL_FINISHED", isDefault: true,
       fields: buildDefaultFields("ROLL_FINISHED") as unknown as object,
     },
   });
-  await prisma.labelTemplate.create({
-    data: {
+  await prisma.labelTemplate.upsert({
+    where: { name: "Standart Kartela Etiketi" },
+    update: {},
+    create: {
       name: "Standart Kartela Etiketi", kind: "SWATCH", isDefault: true,
       fields: buildDefaultFields("SWATCH") as unknown as object,
     },
@@ -664,8 +731,10 @@ async function main() {
   // şablonsuz çuval baskısı sessizce tire dolu bir TOP etiketi basardı. Bu satırlar
   // yalnız DEV paritesi içindir (production'da seed koşmaz; orada operatör Etiket
   // Stüdyosu'nda kendi çuval şablonunu kurar).
-  const sackTpl = await prisma.labelTemplate.create({
-    data: {
+  const sackTpl = await prisma.labelTemplate.upsert({
+    where: { name: "Standart Çuval Etiketi" },
+    update: {},
+    create: {
       name: "Standart Çuval Etiketi", kind: "SACK",
       // ESKİ AKIŞ (flow) blob'u — asıl tasarım aşağıdaki KANVAS varyantı; varyant
       // varken bu blob HİÇ OKUNMAZ (label-renderer.registry.ts:105). Yine de tutarlı
@@ -706,7 +775,9 @@ async function main() {
     },
     select: { id: true },
   });
-  await prisma.labelContextDefault.create({ data: { kind: "SACK", templateId: sackTpl.id } });
+  await prisma.labelContextDefault.upsert({ where: { kind: "SACK" },
+    update: {},
+    create: { kind: "SACK", templateId: sackTpl.id } });
   console.log("✅ 4 label template (ROLL_RAW + ROLL_FINISHED + SWATCH + SACK kanvas/bağlam-varsayılanı)");
 
   console.log("\n🎉 Seed tamamlandı.\n");
