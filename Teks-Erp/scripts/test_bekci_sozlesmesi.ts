@@ -145,6 +145,23 @@ function kapsam(n: ts.Node): ts.Node | undefined {
 /** Bir dosyadaki "try'dan ÖNCE küresel ayar yazımı" yerleri. SAF — girdi kaynak metni. */
 export function korumasizKureselYazim(ad: string, kaynak: string): string[] {
   const sf = ts.createSourceFile(ad, kaynak, ts.ScriptTarget.Latest, true);
+  // ⚠️ İKİNCİ KORUMA BİÇİMİ: `main().finally(temizlik)` — söz zincirindeki `.finally`,
+  // `try/finally` kadar gerçek bir korumadır ve DAHA GENİŞTİR: main'in TAMAMINI kapsar.
+  // İlk yazımda kapı yalnız `try` DEYİMİNE bakıyordu ve bu biçimi YANLIŞ POZİTİF sayıyordu —
+  // bedeli ölçüldü: "onarmak" için bir bayrak yazımı aşağı taşındı, testin önkoşulu bozuldu
+  // ve CI kırmızı verdi (2026-09-14). ⇒ *Bir kapının "koruma" tanımı eksikse, doğru kodu
+  // ihlal sayar ve onu BOZMAYA zorlar — yanlış pozitifin en pahalı biçimi budur.*
+  // ⚠️ ÖLÇÜT DAR: yalnız DOSYA DÜZEYİNDEKİ giriş zinciri (`main().…finally(…)`). İçerideki
+  // bir söz zincirinin `.finally`si bekçinin tamamını korumaz; metin araması ("dosyada
+  // `.finally(` geçiyor mu") bu ikisini ayıramaz ve kapıyı sessizce boşaltırdı.
+  const ustDuzeyFinally = sf.statements.some((st) => {
+    if (!ts.isExpressionStatement(st)) return false;
+    for (let e: ts.Node = st.expression; ts.isCallExpression(e) || ts.isPropertyAccessExpression(e); e = ts.isCallExpression(e) ? e.expression : e.expression) {
+      if (ts.isPropertyAccessExpression(e) && e.name.text === "finally") return true;
+    }
+    return false;
+  });
+  if (ustDuzeyFinally) return [];
   const tryler: ts.TryStatement[] = [];
   const topla = (n: ts.Node): void => { if (ts.isTryStatement(n) && n.finallyBlock) tryler.push(n); n.forEachChild(topla); };
   topla(sf);
@@ -215,6 +232,10 @@ const KURESEL_YAZIM_TABAN = 3;
     S("async function t() {\n  await prisma.customer.create({ data: {} });\n  try { } finally { }\n}").length === 0);
   check("§s5 `finally` YOKSA sayılmaz (geri alma sözü verilmemiş)",
     S("async function t() {\n  await prisma.systemSetting.upsert({ where: {} });\n  try { } catch { }\n}").length === 0);
+  check("§s7 ⭐ ÜST DÜZEY `main().finally()` KORUR (try/finally kadar gerçek, daha geniş)",
+    S("async function main() {\n  await prisma.systemSetting.upsert({ where: {} });\n}\nmain().finally(async () => { await temizle(); });").length === 0);
+  check("§s8 ⭐ İÇERİDEKİ bir `.finally` korumaz (ölçüt ÜST DÜZEY giriş zinciri)",
+    S("async function main() {\n  await prisma.systemSetting.upsert({ where: {} });\n  await baska().finally(() => {});\n  try { } finally { }\n}").length === 1);
   check("§s6 OKUMA yazım değildir (foto `try` dışında kalabilir)",
     S("async function t() {\n  await prisma.systemSetting.findMany({});\n  try { } finally { }\n}").length === 0);
 }

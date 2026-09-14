@@ -21,6 +21,29 @@
 
 ---
 
+## 2026-09-14 — Kapının "koruma" tanımı eksikse, doğru kodu BOZMAYA zorlar [ÇEKİRDEK]
+
+Sızan bayrak kapısı üç ihlal sayıyordu. Üçüncüsü ölçülünce **ihlal değil YANLIŞ POZİTİF**
+çıktı: `test_tambur_cut_concurrency` bayrağını `main().finally(cleanup)` ile geri alıyor —
+söz zincirindeki `.finally`, `try/finally` kadar gerçek bir korumadır ve **daha geniştir**
+(main'in TAMAMINI kapsar). Kapı yalnız `try` DEYİMİNE baktığı için bunu göremiyordu.
+
+⇒ ***Bir kapının "koruma" tanımı eksikse, doğru kodu ihlal sayar ve onu BOZMAYA zorlar —
+yanlış pozitifin en pahalı biçimi budur.*** Bedeli ölçüldü ve aynı gün ödendi: "onarmak"
+için o dosyadaki bayrak yazımı aşağı taşındı, §1–§4'ün önkoşulu bozuldu ve CI kırmızı verdi.
+*Kapı doğru bir şeyi yanlış gösterdiğinde, hata kapıya değil koda yazılır.*
+
+Kapı düzeltildi ve ölçüt DAR tutuldu: yalnız **dosya düzeyindeki giriş zinciri**
+(`main().…finally(…)`) korur; içerideki bir söz zincirinin `.finally`si korumaz. Metin
+araması ("dosyada `.finally(` geçiyor mu") bu ikisini ayıramaz ve kapıyı sessizce
+boşaltırdı — ölçüt AST'ye bağlandı, iki sonda iki yönü de tutuyor.
+
+Kalan iki gerçek ihlal (`test_p2_auth`) **try'ı YUKARI taşıyarak** kapandı: bayrak yazımı,
+tüketicileri ve temizliği artık aynı `try/finally` içinde. Eski hâlde temizlik main'in
+SONUNDAYDI, yani aradaki herhangi bir hata bayrağı sızdırırdı. Doğrulama iki kez koşuldu —
+bayrak SİLİNMİŞ DB'de ve bayrak KALINTISIYLA: ikisinde de 4/0, ve koşum sonrası kalan
+satır 0. ⇒ Taban 3 → 0; kural artık koşulsuz.
+
 ## 2026-09-14 — "0 bulundu" ancak aracın kalıbı YAZIM VARYANTINI kapsıyorsa ölçümdür [ÇEKİRDEK]
 
 Çıplak `git` spawn'ı migrasyonu "bitti" sanıldı: `grep -rn 'execFileSync("git"'` **0**
