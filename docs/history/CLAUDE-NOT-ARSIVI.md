@@ -9864,3 +9864,21 @@ silindi → "yüzeyini ADIYLA söylüyor" ❌ · ③ muafiyet beyan edildi → �
 ⚠️ Bugün kapsam **0** (tek vaat maddesi bu sabah düzeltildi) ve bu çıktıda BEYAN edilir:
 *"0 vaat maddesi (kapsam 0 — bugün vaat eden madde YOK, kapı ölçmedi)"*. Kapsamı yazılmayan
 bir yeşil, ölçülmemiş olmakla temiz olmayı karıştırır.
+
+---
+
+## 2026-09-14 — `#40` maddesi GERİ BİRLEŞTİ: notun ayırdığı iki yol kodda eşitlendi [ÇEKİRDEK]
+
+Sabahki geri-okuma turu `#40`ı ikiye ayırmıştı (*çuval tartısında uyarı audit'e girer, elle top
+girişinde girmez*) — çünkü ölçüm öyle diyordu. 1e kod kararını verdi, d5 tek satırla kapattı
+(`0cb69080`: `createManualRoll` uyarıyı audit'ten ÖNCE hesaplar ve `newData`ya
+`...(thresholdWarning ? { thresholdWarning } : {})` ile koyar — `finishWeigh` emsaliyle birebir).
+Kapanış **beyanla değil kodla** doğrulandı (`tambur-manual.service.ts:1247` hesap → `:1259`
+audit yükü → `:1312` yanıt) ve madde tek cümleye geri döndü: *"hem çuval tartısında hem elle
+top girişinde"*.
+
+⇒ **Ders: bir notu gerçeğe çekmek çözümün YERİNE geçmez, ONA GİDEN YOLDUR.** Doğru sıra:
+① ölç ② notu bugünkü gerçeğe çek (yayın bekleyemez) ③ asimetriyi sahibine ilet ④ kod inince
+notu GERİ BİRLEŞTİR. ②'de durulursa fabrika kalıcı olarak daha kötü bir üründe kalır ve not
+"iki yoldan biri" cümlesini sonsuza kadar taşır; ④ unutulursa not bu kez GERİ YÖNDE bayatlar.
+Bu yüzden ayrıştırılmış her madde bir BORÇTUR ve sahibi belli olmalıdır.
