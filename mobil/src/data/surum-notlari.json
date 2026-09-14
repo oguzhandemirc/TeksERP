@@ -398,6 +398,11 @@
           "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Devere modülü açık kurulumlarda levent dip iadesi, o levente yazılan iplik çıkışını aşamıyor: çıkış 10 kg ise iade en fazla 10 kg olabilir; aşan giriş sınırı söyleyerek reddedilir. Sınır içindeki iadede hiçbir şey değişmez."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "yeni",
+          "metin": "Paketleme grubu açık kurulumlarda Paketleme ekranına grup şeridi geldi: “Tümü”, panelde kurulan her grup (çuval sayısıyla) ve “Gruplanmamış”. Bir grup seçiliyken liste yalnız o grubun çuvallarını gösterir, top okutma o grubun çuvalına gider ve “Hemen Sevk Et” yalnız o grubun dolu çuvallarını gönderir — buton grubun adını ve adedini yazar. Grup seçilmezse ekran öncekiyle aynı çalışır (havuzun tamamı). Seçili grubun son çuvalı sevk edilince seçim kendiliğinden “Tümü”ye döner. Tablet grup kurmaz ve düzenlemez; bu panel işidir. Paketleme grubu kapalı kurulumda şerit görünmez ve hiçbir şey değişmez."
         }
       ]
     },

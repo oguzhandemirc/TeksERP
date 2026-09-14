@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, StyleSheet } from 'react-native';
 import { resolveDestination } from './destinationDefault';
+import { PackingGroupChips } from './PackingGroupChips';
+import { reconcileSelection, sacksInSelection, selectionName, shipButtonLabel, type PackingGroupSelection } from './packingGroupSelection';
 import {
   Surface,
   Text,
@@ -46,6 +48,7 @@ import {
   useShipmentConfirmationEnabled,
   useShippingManualWeightRestrictedEnabled,
   useShippingWeighRequiredEnabled,
+  usePackingGroupsEnabled,
   FLAGS_KEY,
 } from '../../../hooks/useFeatureFlags';
 import { usePermissions } from '../../../hooks/usePermission';
@@ -61,6 +64,9 @@ import { upperTr } from '../../../utils/trCase';
 // dolu çuvallarından SİPARİŞSİZ sevkiyat kurar; sevk onayı KAPALIYSA backend
 // doğrudan sevk eder, AÇIKSA PLANNED bırakır (çıkış Sevk Çıkışı'ndan). Sipariş
 // eşleştirme/karşılama backend'de (Sevk Çıkışı).
+// PAKETLEME GRUBU (`packingGroupsEnabled`): grup seçiliyse liste VE sevk kümesi
+// yalnız o grubun çuvalları (`sacksInSelection`, tek yüklem); seçim yoksa ya da
+// bayrak kapalıysa havuzun tamamı = bugünkü davranış. Tablet grup kurmaz, seçer.
 // =============================================================================
 
 const kgText = (kg: number | null) => (kg != null ? `${kg.toLocaleString('tr-TR')} kg` : 'tartılmadı');
@@ -162,10 +168,32 @@ export default function PaketlemeScreen() {
   }, [pool, customerDefaultDestination]);
 
   // Render'dan bağımsız güncel çuval listesi (scan callback stale closure önlemi).
+  // Grup seçiliyse okutma hedefi de o grubun çuvalları (aşağıda `groupSacks` atanır).
   const sacksRef = useRef<PoolSack[]>([]);
-  sacksRef.current = sacks;
 
-  const refreshPool = () => void qc.invalidateQueries({ queryKey: ['pool-sacks', customerId] });
+  const refreshPool = () => {
+    void qc.invalidateQueries({ queryKey: ['pool-sacks', customerId] });
+    void qc.invalidateQueries({ queryKey: ['packing-groups', customerId] });
+  };
+
+  // Paketleme grubu seçimi — bayrak kapalıyken grup ucu HİÇ çağrılmaz, şerit çizilmez,
+  // seçim boş kalır ⇒ aşağıdaki süzgeç havuzu aynen geçirir (bayt bayt eski davranış).
+  const packingGroupsEnabled = usePackingGroupsEnabled();
+  const [groupSel, setGroupSel] = useState<PackingGroupSelection>(null);
+  const groupsQ = useQuery({
+    queryKey: ['packing-groups', customerId],
+    queryFn: () => packingService.listPackingGroups(customerId),
+    enabled: packingGroupsEnabled,
+    staleTime: 5_000,
+  });
+  const groups = packingGroupsEnabled ? (groupsQ.data?.data ?? []) : [];
+  // Seçili grup canlıdan düştüyse (son çuvalı sevk edildi) "Tümü"ye dön — ölü gruba kilitli kalma.
+  const groupKey = groups.map((g) => g.id).join(',');
+  useEffect(() => {
+    if (!packingGroupsEnabled || groupsQ.isPending) return;
+    setGroupSel((cur) => reconcileSelection(cur, new Set(groups.map((g) => g.id))));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupKey, packingGroupsEnabled, groupsQ.isPending]);
 
   // Tartı: TEK DOKUNUŞ (oku → doğrudan kaydet). Modal yok; elle giriş ⋮ menüsünde.
   const sackWeigh = useSackWeigh(refreshPool);
@@ -227,16 +255,20 @@ export default function PaketlemeScreen() {
     return res.data?.added ?? count;
   };
 
-  // Dolu (top/kartela içeren) çuvallar — "Hemen Sevk Et" bunları gönderir.
-  const shippableSacks = sacks.filter((s) => s.rollCount + s.swatchCount > 0);
+  // Grup seçimi süzgeci — liste ve sevk kümesi AYNI yüklemden (operatör gördüğünü sevk eder).
+  const groupSacks = sacksInSelection(sacks, groupSel, packingGroupsEnabled);
+  const ungroupedCount = sacks.filter((s) => (s.packingGroupId ?? null) === null).length;
+  // Dolu (top/kartela içeren) çuvallar — "Hemen Sevk Et" bunları gönderir (grup seçiliyse yalnız o grup).
+  const shippableSacks = groupSacks.filter((s) => s.rollCount + s.swatchCount > 0);
+  sacksRef.current = groupSacks;
   const rollCount = sacks.reduce((a, s) => a + s.rollCount, 0);
   const swatchCount = sacks.reduce((a, s) => a + s.swatchCount, 0);
   const totalKg = sacks.reduce((a, s) => a + (s.weightKg ?? 0), 0);
 
-  // Aktif çuval geçersiz/yoksa son çuvala düşür (sacks değişince).
-  const sackKey = sacks.map((s) => s.id).join(',');
+  // Aktif çuval geçersiz/yoksa son çuvala düşür (görünür küme değişince — grup seçimi dahil).
+  const sackKey = groupSacks.map((s) => s.id).join(',');
   useEffect(() => {
-    const ids = sacks.map((s) => s.id);
+    const ids = groupSacks.map((s) => s.id);
     if (ids.length === 0) {
       if (activeSackRef.current) setActiveSack(null);
       return;
@@ -422,10 +454,10 @@ export default function PaketlemeScreen() {
 
   // Saha #8: görünür çuval kümesi (arama + pencereleme).
   const sackQ = foldSearchText(sackSearch);
-  const isLargeSackList = sacks.length > SACK_WINDOW;
+  const isLargeSackList = groupSacks.length > SACK_WINDOW;
   const filteredSacks = sackQ
-    ? sacks.filter((s) => foldSearchText(s.sackNo).includes(sackQ))
-    : sacks;
+    ? groupSacks.filter((s) => foldSearchText(s.sackNo).includes(sackQ))
+    : groupSacks;
   const windowed = sackQ || showAllSacks || !isLargeSackList;
   const visibleSacks = windowed
     ? filteredSacks
@@ -438,8 +470,10 @@ export default function PaketlemeScreen() {
   const unweighed = shippableSacks.filter((s) => (s.weightKg ?? 0) <= 0);
   const canShip = shippableSacks.length > 0 && (!requireWeigh || unweighed.length === 0);
 
+  const groupName = packingGroupsEnabled ? selectionName(groupSel, groups) : null;
+
   let shipHint = '';
-  if (shippableSacks.length === 0) shipHint = 'Dolu çuval yok — çuvala top/kartela okut.';
+  if (shippableSacks.length === 0) shipHint = groupName ? `“${groupName}” grubunda dolu çuval yok.` : 'Dolu çuval yok — çuvala top/kartela okut.';
   else if (requireWeigh && unweighed.length > 0)
     shipHint =
       destination === 'EXPORT'
@@ -619,6 +653,10 @@ export default function PaketlemeScreen() {
                   </Button>
                 </View>
 
+                {packingGroupsEnabled && groups.length > 0 && (
+                  <PackingGroupChips groups={groups} selection={groupSel} ungroupedCount={ungroupedCount} onChange={setGroupSel} />
+                )}
+
                 {isLargeSackList && (
                   <TextInput
                     mode="outlined"
@@ -640,6 +678,8 @@ export default function PaketlemeScreen() {
                     <Text style={styles.emptyText}>Henüz çuval yok</Text>
                     <Text style={styles.emptyHint}>“Yeni Çuval” aç ya da “Top Okut” — ilk çuval otomatik açılır.</Text>
                   </View>
+                ) : groupSacks.length === 0 ? (
+                  <Text style={styles.sackEmpty}>Bu grupta çuval yok.</Text>
                 ) : filteredSacks.length === 0 ? (
                   <Text style={styles.sackEmpty}>“{sackSearch}” ile eşleşen çuval yok.</Text>
                 ) : (
@@ -809,7 +849,9 @@ export default function PaketlemeScreen() {
               <Text style={styles.footerBlockHint}>{shipHint || 'Çuvala top okut, tart.'}</Text>
             ) : (
               <Text style={styles.footerOrderlessHint}>
-                Siparişsiz sevk — havuzdaki dolu çuvallar gider. Sipariş eşleştirme Sevk Çıkışı’nda.
+                {groupName
+                  ? `Siparişsiz sevk — yalnız “${groupName}” grubunun dolu çuvalları gider.`
+                  : 'Siparişsiz sevk — havuzdaki dolu çuvallar gider. Sipariş eşleştirme Sevk Çıkışı’nda.'}
               </Text>
             )}
             <View style={styles.footerRow}>
@@ -823,9 +865,7 @@ export default function PaketlemeScreen() {
                 style={styles.footerBtnFlex}
                 contentStyle={styles.footerBtnContent}
               >
-                {confirmationEnabled
-                  ? `Sevkiyat Kur${shippableSacks.length > 0 ? ` (${shippableSacks.length})` : ''}`
-                  : `Hemen Sevk Et${shippableSacks.length > 0 ? ` (${shippableSacks.length})` : ''}`}
+                {shipButtonLabel({ confirmationEnabled, count: shippableSacks.length, selectionName: groupName })}
               </Button>
             </View>
 

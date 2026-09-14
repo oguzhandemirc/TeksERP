@@ -114,12 +114,31 @@ export interface PoolSack {
    * Eski backend bu alanı GÖNDERMEZ → `?? []` ile okunmalı (opsiyonel).
    */
   tags?: PoolSackTag[];
+  /**
+   * Paketleme grubu (çalışma yaftası) — NULL = "Gruplanmamış". Paketleme ekranı
+   * grup seçiliyse listeyi ve "Hemen Sevk Et" kümesini bu alana göre süzer
+   * (`packingGroupSelection.ts`). Eski backend alanı GÖNDERMEZ → `undefined`,
+   * gruplanmamış sayılır (opsiyonel).
+   */
+  packingGroupId?: string | null;
   branch: { id: string; name: string } | null;
   rollCount: number;
   swatchCount: number;
   totalQty: number;
   rolls: PoolSackRoll[];
   swatches: PoolSackSwatch[];
+}
+/** Canlı paketleme grubu — `GET /shipping/packing-groups` (backend `PackingGroupDto`nun tablet aynası, salt okuma). */
+export interface PackingGroupSummary {
+  id: string;
+  name: string;
+  seq: number | null;
+  note: string | null;
+  sackCount: number;
+  rollCount: number;
+  swatchCount: number;
+  totalQty: number;
+  weightKg: number | null;
 }
 export interface CustomerPoolSacks {
   /** `defaultDestination`: sevk hedefi VARSAYILANI (kilit değil) — paketleme ekranı seçiciyi buradan başlatır. */
@@ -523,6 +542,13 @@ export const packingService = {
   listCustomerPoolSacks: (customerId: string): Promise<ApiResponse<CustomerPoolSacks>> =>
     apiClient
       .get<ApiResponse<CustomerPoolSacks>>(`/shipping/pool/sacks?customerId=${encodeURIComponent(customerId)}`)
+      .then((r) => r.data),
+
+  /** Carinin CANLI paketleme grupları (havuzda çuvalı olanlar). Yalnız `packingGroupsEnabled` açıkken çağrılır;
+   *  tablet grup KURMAZ/DÜZENLEMEZ (panel işi), yalnız seçer. */
+  listPackingGroups: (customerId: string): Promise<ApiResponse<PackingGroupSummary[]>> =>
+    apiClient
+      .get<ApiResponse<PackingGroupSummary[]>>(`/shipping/packing-groups?customerId=${encodeURIComponent(customerId)}`)
       .then((r) => r.data),
 
   // ── Kartela stoğu (seçerek-ekle picker'ını besler) ──

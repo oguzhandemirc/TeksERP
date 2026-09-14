@@ -192,3 +192,10 @@ export function useKursunBypassEnabled(): boolean {
 export function useCustomerBranchesEnabled(): boolean {
   return useFeatureFlags().data?.customerBranchesEnabled ?? true;
 }
+
+/** Paketleme grubu (çalışma yaftası) açık mı? Default FALSE = bugünkü davranış
+ *  (düz liste, "Hemen Sevk Et" havuzun tamamını gönderir). Fail-closed: bayrak
+ *  yüklenemediyse grup şeridi çizilmez ve grup ucu hiç çağrılmaz. */
+export function usePackingGroupsEnabled(): boolean {
+  return useFeatureFlags().data?.packingGroupsEnabled ?? false;
+}

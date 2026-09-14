@@ -18,6 +18,10 @@
 //  §13 Liste filtresi: grup id + "gruplanmamış" sentineli + satırdaki grup adı
 //  §14 Grup dökümü çuval id'lerini SUNUCUDA çözer (eksik sayfa = eksik döküm değil)
 //  §15 Replay GÖVDE KAPISI (F117): aynı token BAŞKA çuval kümesiyle → 409
+//  §16 TABLET SÖZLEŞMESİ (DB'siz, kaynak metni): `PoolSack.packingGroupId` okunur; "Hemen Sevk Et"
+//      kümesi VE görünür liste tek yüklemden (`sacksInSelection`) süzülür; bayrak kapalı ya da seçim
+//      yokken yüklem girdiyi AYNEN döndürür (bayt bayt eski); bayrak varsayılanı false; grup ucu
+//      yalnız bayrak açıkken çağrılır; jest ikizi var (CAKILI-VARSAYIM-TARAMA §4 kardeşi kapandı)
 // =============================================================================
 
 // ⭐ NEGATİF SONDA (2026-09-10, ölçüldü):
@@ -32,6 +36,8 @@
 //   (g) `getContentDump`taki grup çözümü silindi -> §14 kırmızı ("En az bir çuval
 //       seçilmeli" ile düşer; ölçüldü).
 //   (h) `assertReplayPayloadMatches` çağrısı silindi -> §15 KIRMIZI.
+//   (i) 2026-09-15: tablette `shippableSacks` yeniden `sacks.filter(...)` yapıldı -> §16b KIRMIZI;
+//       `sacksInSelection`ın `!enabled` kısa devresi silindi -> §16c KIRMIZI.
 //   Hepsi geri alındığında yeşil.
 
 import { readFileSync } from "node:fs";
@@ -135,6 +141,24 @@ async function main(): Promise<void> {
     join(__dirname, "../src/services/helpers/period-guard.helper.ts"), "utf-8",
   );
   check("§2 envanterde yazılı", /\/\/\s+8031\s+PACKING_GROUP_LOCK_NS/.test(envanter));
+
+  // ---- §16: tablet sözleşmesi (DB'siz, kaynak metni) -------------------------
+  const MOBIL = join(__dirname, "../../mobil/src");
+  const poolSvc = readFileSync(join(MOBIL, "services/packing.service.ts"), "utf-8");
+  const poolIface = poolSvc.slice(poolSvc.indexOf("export interface PoolSack {"), poolSvc.indexOf("export interface CustomerPoolSacks"));
+  check("§16a tablet `PoolSack.packingGroupId` okur (opsiyonel — eski backend göndermez)", /packingGroupId\?: string \| null;/.test(poolIface));
+  const ekran = readFileSync(join(MOBIL, "screens/Modules/TartiPaket/PaketlemeScreen.tsx"), "utf-8");
+  check("§16b ⭐ \"Hemen Sevk Et\" kümesi grup süzgecinden (`groupSacks`), ham havuzdan DEĞİL",
+    /const groupSacks = sacksInSelection\(sacks, groupSel, packingGroupsEnabled\)/.test(ekran)
+      && /const shippableSacks = groupSacks\.filter/.test(ekran) && !/const shippableSacks = sacks\.filter/.test(ekran));
+  check("§16b görünür liste ve okutma hedefi AYNI süzgeçten (`filteredSacks`/`sacksRef` ← groupSacks)",
+    /sacksRef\.current = groupSacks;/.test(ekran) && /: groupSacks;\n/.test(ekran) && !/sacksRef\.current = sacks;/.test(ekran));
+  const yuklem = readFileSync(join(MOBIL, "screens/Modules/TartiPaket/packingGroupSelection.ts"), "utf-8");
+  check("§16c ⭐ bayrak kapalı ya da seçim yok → girdi AYNEN (bayt bayt eski davranış)", /if \(!enabled \|\| selection === null\) return sacks;/.test(yuklem));
+  const flags = readFileSync(join(MOBIL, "hooks/useFeatureFlags.ts"), "utf-8");
+  check("§16d `usePackingGroupsEnabled` varsayılanı false (fail-closed)", /packingGroupsEnabled \?\? false/.test(flags));
+  check("§16e grup ucu yalnız bayrak açıkken çağrılır (`enabled: packingGroupsEnabled`)", /listPackingGroups\(customerId\),\s*enabled: packingGroupsEnabled/.test(ekran));
+  check("§16f jest ikizi var", readFileSync(join(MOBIL, "screens/Modules/TartiPaket/packingGroupSelection.test.ts"), "utf-8").includes("sacksInSelection"));
 
   const c1 = await prisma.customer.create({
     data: { code: `TST-PG-${TS}`, name: `PAKETLEME GRUBU TEST ${TS}` }, select: { id: true },
