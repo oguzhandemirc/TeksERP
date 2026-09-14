@@ -68,6 +68,7 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
   // ── DEVERE · DOKUMA ─────────────────────────────────────────────────────
   "definitions/warp-specs": "devereEnabled",
   "operations/weaving-orders": "dokumaEnabled",
+  "operations/machine-stops": "dokumaEnabled",
 };
 
 /** `:id` · `new` · `edit` segmentleri ebeveyne katlanır (manifesto EKRAN seviyesinde). */

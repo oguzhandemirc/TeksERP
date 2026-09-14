@@ -48,6 +48,7 @@ import { FxDiffPage } from "@/pages/Reports/Finance/FxDiffPage";
 // Paket D (2026-08-14) — hepsi NAMED export.
 import { YarnStockPage } from "@/pages/Operations/Yarn/YarnStockPage";
 import { WeavingOrdersPage } from "@/pages/Operations/WeavingOrders/WeavingOrdersPage";
+import { MachineStopsPage } from "@/pages/Operations/MachineStops/MachineStopsPage";
 import { PurchaseOrdersPage } from "@/pages/Operations/PurchaseOrders/PurchaseOrdersPage";
 import { ItemPricesPage } from "@/pages/Definitions/ItemPrices/ItemPricesPage";
 import { WarehouseTransfersPage } from "@/pages/Operations/WarehouseTransfers/WarehouseTransfersPage";
@@ -423,6 +424,16 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="weavingorder:read">
         <WeavingOrdersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Tezgah Duruşları — karo `permissionAny` ile BİREBİRDİR; eylemler ekran içinde
+    // `PermissionGate` (classify · manual-entry). Modül kapısı backend + ROUTE_MODULE.
+    path: "operations/machine-stops",
+    element: (
+      <ProtectedRoute requireAnyPermission={["loom:manual-entry", "loom:classify"]}>
+        <MachineStopsPage />
       </ProtectedRoute>
     ),
   },

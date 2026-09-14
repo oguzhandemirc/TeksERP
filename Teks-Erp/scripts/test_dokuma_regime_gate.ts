@@ -97,8 +97,10 @@ const DOKUMA_UC_METINLERI = ["/api/weaving-orders", "/api/machine-runs", "/api/m
  * zorundadır (§7c–§7f). Tablet tezgah ekranı doğduğu gün buraya satır eklenir ve
  * aynı gün o ekranın `useVisibleScreens` kapısı ölçülür.
  */
-const IZINLI_ISTEMCI_DOSYALARI: ReadonlyArray<{ dosya: string; ekranKey: string }> = [
-  { dosya: "Electron/src/pages/Operations/WeavingOrders/service.ts", ekranKey: "operations/weaving-orders" },
+const IZINLI_ISTEMCI_DOSYALARI: ReadonlyArray<{ dosya: string; ekranKey: string; izinler: readonly string[] }> = [
+  { dosya: "Electron/src/pages/Operations/WeavingOrders/service.ts", ekranKey: "operations/weaving-orders", izinler: ["weavingorder:read"] },
+  // Tezgah Duruşları (2026-09-14): iki izinden BİRİ açar — route `requireAnyPermission`, manifesto `requires` ikisini de anar.
+  { dosya: "Electron/src/pages/Operations/MachineStops/service.ts", ekranKey: "operations/machine-stops", izinler: ["loom:manual-entry", "loom:classify"] },
 ];
 
 function kapiGovdesi(kod: string): string {
@@ -282,11 +284,11 @@ async function main(): Promise<void> {
   // Allowlist'teki ekranın ÜÇ kapısı: manifesto · karo · route.
   const tileConfig = yorumlariSok(fs.readFileSync(path.join(ELECTRON_SRC, "pages/Operations/tile-config.ts"), "utf8"));
   const contentRoutes = fs.readFileSync(path.join(ELECTRON_SRC, "routes/content-routes.tsx"), "utf8");
-  for (const { ekranKey } of IZINLI_ISTEMCI_DOSYALARI) {
+  for (const { ekranKey, izinler } of IZINLI_ISTEMCI_DOSYALARI) {
     const manifesto = SCREEN_CATALOG.find((s) => s.key === ekranKey);
     check(
-      `§7c ⭐ ${ekranKey} manifestoda \`dokumaEnabled\` beyanlı ve \`weavingorder:read\` istiyor`,
-      manifesto?.modul === "dokumaEnabled" && (manifesto?.requires ?? []).includes("weavingorder:read"),
+      `§7c ⭐ ${ekranKey} manifestoda \`dokumaEnabled\` beyanlı ve [${izinler.join(", ")}] istiyor`,
+      manifesto?.modul === "dokumaEnabled" && izinler.every((p) => (manifesto?.requires ?? []).includes(p)),
       manifesto ? `modul=${manifesto.modul} requires=${manifesto.requires.join(",")}` : "manifestoda YOK",
     );
     // Karo bloğu: `to: "/<ekranKey>"` geçen `{ … }` içinde `visibleWhen: <saf yüklem>`.
@@ -298,10 +300,11 @@ async function main(): Promise<void> {
       yuklem !== null && yuklemDokumayaBagli(tileConfig, yuklem),
       yuklem ? `visibleWhen=${yuklem}` : "karo yok ya da yüklem satır içi/eksik",
     );
-    const routeBlok = /path:\s*"operations\/weaving-orders"([\s\S]{0,400})/.exec(contentRoutes)?.[1] ?? "";
+    const routeBlok = new RegExp(`path:\\s*"${ekranKey.replace("/", "\\/")}"([\\s\\S]{0,400})`).exec(contentRoutes)?.[1] ?? "";
+    // Tek izin `requirePermission="x"`, çok izin `requireAnyPermission={["x", "y"]}` — ikisinde de her izin ADIYLA geçer.
     check(
-      `§7e ⭐ ${ekranKey} route'u \`requirePermission="weavingorder:read"\` ile sarılı`,
-      /requirePermission="weavingorder:read"/.test(routeBlok),
+      `§7e ⭐ ${ekranKey} route'u [${izinler.join(", ")}] ile sarılı (ProtectedRoute)`,
+      /require(Any)?Permission/.test(routeBlok) && izinler.every((p) => routeBlok.includes(`"${p}"`)),
       routeBlok ? "" : "content-routes.tsx'te route YOK",
     );
   }

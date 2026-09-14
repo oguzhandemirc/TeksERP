@@ -19,6 +19,7 @@ import {
   Undo2,
   Wrench,
   type LucideIcon,
+  AlertOctagon,
 } from "lucide-react";
 import type { OperationGroupKey } from "./groups-config";
 // Paket D — görünürlük kuralları SAF katmanda (bileşen içindeki bir `&&`
@@ -35,6 +36,7 @@ import {
   isWorkOrdersVisible,
 } from "./production-regime";
 import { isWeavingOrdersVisible } from "./WeavingOrders/weaving-regime";
+import { isMachineStopsVisible } from "./MachineStops/stop-regime";
 
 /**
  * Karo görünürlüğünün bağlı olduğu ÇALIŞMA ANI durumu (hub + komut paleti).
@@ -230,6 +232,19 @@ export const operationsTiles: OperationsTile[] = [
     group: "production",
     permission: "weavingorder:read",
     visibleWhen: isWeavingOrdersVisible,
+  },
+  {
+    // TEZGAH DURUŞLARI (2026-09-14, Faz 1b web yüzeyi): backend `machine-stop.routes`
+    // `requireDokumaEnabled` taşır; karo aynı bayrağa bağlı. İki izinden BİRİ açar
+    // (route `requireAnyPermission` ile birebir); eylemler ekran içinde izinle.
+    key: "machine-stops",
+    title: "Tezgah Duruşları",
+    description: "Sebep bekleyen duruşlar, sebep atama ve yeniden sınıflandırma, elle duruş girişi",
+    icon: AlertOctagon,
+    to: "/operations/machine-stops",
+    group: "production",
+    permissionAny: ["loom:manual-entry", "loom:classify"],
+    visibleWhen: isMachineStopsVisible,
   },
   {
     key: "rolls",

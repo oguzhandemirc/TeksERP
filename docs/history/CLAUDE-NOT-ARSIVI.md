@@ -9012,3 +9012,34 @@ mobile_screen_permissions 6/0 · permission_catalog 24/0 · role_template 21/0 �
 dokuma_regime_gate 38/0 · reason_preset_kind_parity 43/0 · production_regime_gate 40/0 · audit_labels 22/0 · 12 mandal
 yeşil (identity_ledger ilk koşumda harita satırını modul-bayrak bölümüne koyduğumu yakaladı → dokuma bölümüne taşındı).
 **Ölçülemedi:** gerçek tezgahta duruş (sahada); mühürlü vardiya (`SHIFT_SEALED` henüz şemada yok — kod adıyla hazır).
+
+## 2026-09-14 — PANEL TEZGAH DURUŞLARI EKRANI İNDİ: Faz 1b web yüzeyi — kuyruk · sebep atama · yeniden sınıflandırma (defter görünür) · elle giriş/kapatma/geri alma [ÇEKİRDEK]
+
+**Kapsam (1e; DOKUMA-PANEL-EKRAN-KAPILARI dört-kapı sözleşmesi, emsal Dokuma İşleri):** `pages/Operations/MachineStops/`
+— sayfa (gün + FilterBar: tezgah lookup · kapsam [kuyruk | açık] · vardiya), tablo (`useReactTable` + `DataTable`,
+sayfalama yok: uç 500 tavanı, gün süzgeci), satır menüsü (`loom:classify`: sebep ata · yeniden sınıflandır;
+herkes: değişiklik defteri; `loom:manual-entry`: kapat · geri al), dört diyalog (elle giriş `clientToken`
+diyalog başına; sebep ata/yeniden sınıflandır tek bileşen; kapat/geri al; reclass defteri).
+**Karar — iki izinden BİRİ açar:** `requires: [loom:manual-entry, loom:classify]` (katalogda "herhangi biri
+yeterli"), route `requireAnyPermission`, karo `permissionAny` birebir; `capabilities: []` (eylem izinleri zaten
+`requires`te — ikinci kez yetenek olarak yazılmadı). İki kod ekransız muafından düştü (iki yönlü kol).
+**Karar — kuyruk gün dışı:** kapsam "kuyruk" seçilince gün süzgeci devre dışı; borç hangi günden olursa olsun
+görünür (sınıflandırma borcu bir günün değil tezgahın borcudur).
+**Karar — vardiya süzgeci sunucuda, seçenekler satırlardan:** vardiya listesi ucu yok; `shiftInstanceId`
+parametresi listeye eklendi, seçenekler o günün satırlarından türer (gün ≤ 500 satır). Ayrı vardiya ucu açmak
+bugün gereksiz; ihtiyaç doğarsa (`ShiftInstance` yönetimi) o dilimde.
+**Backend dokunuşu:** `MACHINE_STOP_SELECT` makine · vardiya · sınıflandıran adıyla (ek alan; tablet `MachineStop`
+tipi bilmediği alanı yok sayar); `listMachineStops` `factoryDay` (YYYY-MM-DD → UTC gece yarısı,
+`factoryDayKeyUtcMidnight` kuralı) + `shiftInstanceId`; yeni `GET /machine-stops/:id/reclasses`
+(`STOP_RECLASS_SELECT`, kronolojik, salt okuma — defter okunur, silinmez).
+**Bekçi genişlemesi:** `test_dokuma_regime_gate §7` allowlist satırı `izinler` ile parametreli (§7c manifesto tüm
+izinleri anar, §7e route `requirePermission`/`requireAnyPermission` ikisini de tanır ve her izni ADIYLA arar);
+eski yüklem `weavingorder:read` sabitiydi — ikinci ekran gelince ya kırılacak ya kör kalacaktı.
+**Sondalar (diskte, cp+sha256):** route'tan `loom:classify` düşürüldü → §7e ❌ (40/1); manifestodan düşürüldü →
+§7c ❌ (40/1); ikisi de geri yüklendi, sha eşit.
+**Ölçüm:** backend tsc 0 · Electron tsc 0 · eslint 0 yeni uyarı (tavan: `tile-visibility.test` üst callback 96 satır
+devralınan — yeni test ayrı `describe`) · vitest MachineStops + tile-visibility + route-modules + ProtectedRoute.module +
+CommandPalette 46/46 · screen_catalog 37/0 · dokuma_regime_gate 41/0 · route_auth_coverage 15/0 · swagger 12/0 ·
+permission_catalog 24/0 · role_template 21/0 · machine_stop_manual 36/0 · loom_lists 12/0 · production_regime_gate
+40/0 · mobile_screen_permissions 6/0 · module_flags 82/0 · feature_flag_contract 78/0 · audit_labels 22/0 · mandallar yeşil.
+**Ölçülemedi:** gerçek vardiya verisiyle liste (ShiftInstance üretimi Faz 1a karne diliminde); mühürlü vardiya.

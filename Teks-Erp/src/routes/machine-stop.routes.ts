@@ -15,7 +15,7 @@ import { matchesPermission, requireAnyPermission, requirePermission } from "../m
 import { requireDokumaEnabled } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { classifyStop, closeManualStop, openManualStop, reclassifyStop, revokeStop } from "../services/machine-stop.service";
-import { listMachineStops } from "../services/loom-list.service";
+import { listMachineStops, listStopReclasses } from "../services/loom-list.service";
 
 const router = Router();
 router.use(verifyToken, requireDokumaEnabled);
@@ -34,6 +34,8 @@ const listSchema = z
     machineId: z.string().uuid("Geçersiz makine").optional(),
     open: z.literal("true").optional(),
     queue: z.literal("true").optional(),
+    factoryDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Geçersiz gün (YYYY-MM-DD)").optional(),
+    shiftInstanceId: z.string().uuid("Geçersiz vardiya").optional(),
     limit: z.coerce.number().int().min(1).max(500).optional(),
   })
   .strict();
@@ -52,7 +54,35 @@ const listSchema = z
 router.get("/", requireAnyPermission("loom:manual-entry", "loom:classify", ...MOBILE_DOKUMA), async (req, res, next) => {
   try {
     const q = listSchema.parse(req.query);
-    res.json(await listMachineStops({ machineId: q.machineId, openOnly: q.open === "true", queueOnly: q.queue === "true", limit: q.limit }));
+    res.json(
+      await listMachineStops({
+        machineId: q.machineId,
+        openOnly: q.open === "true",
+        queueOnly: q.queue === "true",
+        factoryDay: q.factoryDay,
+        shiftInstanceId: q.shiftInstanceId,
+        limit: q.limit,
+      }),
+    );
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/machine-stops/{id}/reclasses:
+ *   get:
+ *     tags: [MachineStops]
+ *     summary: Duruşun yeniden sınıflandırma DEFTERİ (from→to · kim · ne zaman · gerekçe; append-only)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Defter satırları (kronolojik) }
+ *       404: { description: Duruş yok }
+ */
+router.get("/:id/reclasses", requireAnyPermission("loom:manual-entry", "loom:classify"), async (req, res, next) => {
+  try {
+    res.json(await listStopReclasses(assertValidUuid(req.params.id, "id")));
   } catch (e) {
     next(e);
   }

@@ -17,6 +17,7 @@ import {
   isTravelerCardVisible,
 } from "@/pages/Definitions/production-regime";
 import { isWeavingOrdersVisible } from "./WeavingOrders/weaving-regime";
+import { isMachineStopsVisible } from "./MachineStops/stop-regime";
 
 /**
  * Karo görünürlüğünün doğruluk tablosu.
@@ -175,6 +176,7 @@ describe("karo bağlantıları", () => {
     expect(conditional.sort()).toEqual([
       "goods-receipts",
       "kursun-dagitim",
+      "machine-stops",
       "product-balance",
       "purchase-orders",
       "sack-store",
@@ -321,5 +323,18 @@ describe("komut paleti — karo yüklemi taşınıyor", () => {
     expect(entry?.visibleWhen).toBe(isKursunPlanningVisible);
     // Silinen ekranın palet girişi de gitmiş olmalı.
     expect(opsEntries.find((e) => e.key === "ops:kursun-queue")).toBeUndefined();
+  });
+});
+
+// Ayrı blok: üstteki `describe` callback'i lint tavanına (80 satır) dayalı; yeni karo testi oraya EKLENMEZ.
+describe("Tezgah Duruşları karosu", () => {
+  const tile = (key: string) => operationsTiles.find((t) => t.key === key);
+  it("⭐ Tezgah Duruşları: karo yalnız DOKUMA modülü açıkken; iki izinden biri (route ile birebir)", () => {
+    const t = tile("machine-stops");
+    expect(t).toBeDefined();
+    expect(t?.visibleWhen).toBe(isMachineStopsVisible);
+    expect(t?.permissionAny).toEqual(["loom:manual-entry", "loom:classify"]);
+    expect(t?.visibleWhen?.(ctx())).toBe(false);
+    expect(t?.visibleWhen?.(ctx({ dokumaEnabled: true }))).toBe(true);
   });
 });

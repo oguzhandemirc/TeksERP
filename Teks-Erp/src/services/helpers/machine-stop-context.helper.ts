@@ -35,6 +35,10 @@ export const MACHINE_STOP_SELECT = {
   revokeReason: true,
   createdAt: true,
   updatedAt: true,
+  // Panel listesi makine · vardiya · sınıflandıranı ADIYLA ister (kim/ne zaman); tablet aynı DTO'yu okur (ek alan, kırmaz).
+  machine: { select: { code: true, name: true } },
+  shiftInstance: { select: { id: true, startsAt: true, endsAt: true, isCancelled: true, shiftDefinition: { select: { code: true, name: true } } } },
+  classifiedBy: { select: { fullName: true } },
 } satisfies Prisma.MachineStopEventSelect;
 
 export type MachineStopDto = Prisma.MachineStopEventGetPayload<{ select: typeof MACHINE_STOP_SELECT }>;

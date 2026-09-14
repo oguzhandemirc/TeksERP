@@ -105,12 +105,30 @@ export async function listUnlinkedDoffs(args: { machineId?: string | null; since
 // ─────────────────────────────────────────────────────────────────────────────
 export const CLASSIFICATION_QUEUE_WHERE = { requiresReason: true, reasonCode: null, revokedAt: null } satisfies Prisma.MachineStopEventWhereInput;
 
-export async function listMachineStops(params: { machineId?: string; openOnly?: boolean; queueOnly?: boolean; limit?: number }): Promise<ApiResponse<MachineStopDto[]>> {
+export interface MachineStopListParams {
+  machineId?: string;
+  openOnly?: boolean;
+  queueOnly?: boolean;
+  /** Fabrika günü anahtarı `YYYY-MM-DD` — `factoryDay` @db.Date kolonu UTC gece yarısı taşır (`factoryDayKeyUtcMidnight`). */
+  factoryDay?: string;
+  shiftInstanceId?: string;
+  limit?: number;
+}
+
+/** `YYYY-MM-DD` → @db.Date kolonunun sakladığı UTC gece yarısı (yerel gece yarısı 1 gün geri etiketlerdi). */
+function factoryDayKeyFromYmd(ymd: string): Date {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
+export async function listMachineStops(params: MachineStopListParams): Promise<ApiResponse<MachineStopDto[]>> {
   const where: Prisma.MachineStopEventWhereInput = {
     revokedAt: null,
     ...(params.machineId ? { machineId: params.machineId } : {}),
     ...(params.openOnly ? { endedAt: null } : {}),
     ...(params.queueOnly ? CLASSIFICATION_QUEUE_WHERE : {}),
+    ...(params.factoryDay ? { factoryDay: factoryDayKeyFromYmd(params.factoryDay) } : {}),
+    ...(params.shiftInstanceId ? { shiftInstanceId: params.shiftInstanceId } : {}),
   };
   const rows = await prisma.machineStopEvent.findMany({
     where,
@@ -118,5 +136,25 @@ export async function listMachineStops(params: { machineId?: string; openOnly?: 
     take: Math.min(Math.max(params.limit ?? 100, 1), 500),
     select: MACHINE_STOP_SELECT,
   });
+  return { success: true, data: rows };
+}
+
+export const STOP_RECLASS_SELECT = {
+  id: true,
+  fromReasonCode: true,
+  toReasonCode: true,
+  fromLossClass: true,
+  toLossClass: true,
+  reason: true,
+  createdAt: true,
+  actedBy: { select: { fullName: true } },
+} satisfies Prisma.MachineStopReclassSelect;
+export type StopReclassDto = Prisma.MachineStopReclassGetPayload<{ select: typeof STOP_RECLASS_SELECT }>;
+
+/** Duruşun yeniden sınıflandırma DEFTERİ (append-only; kronoloji `createdAt`). Salt okuma — ters yol karşı kayıttır, silme yok. */
+export async function listStopReclasses(stopEventId: string): Promise<ApiResponse<StopReclassDto[]>> {
+  const stop = await prisma.machineStopEvent.findUnique({ where: { id: stopEventId }, select: { id: true } });
+  if (!stop) throw AppError.notFound("Duruş bulunamadı");
+  const rows = await prisma.machineStopReclass.findMany({ where: { stopEventId }, orderBy: { createdAt: "asc" }, select: STOP_RECLASS_SELECT });
   return { success: true, data: rows };
 }

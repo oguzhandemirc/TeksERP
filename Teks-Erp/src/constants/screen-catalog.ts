@@ -258,6 +258,9 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // Dokuma işi planlama (2026-09-13, ekran dilimi). Modül `dokumaEnabled` — üretime
   // bağımlı, tezgah izlemenin kardeşi; referans profilde KAPALI.
   { key: "operations/weaving-orders", app: "desktop", modul: "dokumaEnabled", title: "Dokuma İşleri", requires: ["weavingorder:read"], capabilities: ["weavingorder:write"] },
+  // Tezgah duruşları (Faz 1b web yüzeyi, 2026-09-14): elle giriş/kapatma/geri alma `loom:manual-entry`,
+  // sebep atama/yeniden sınıflandırma `loom:classify` — İKİSİNDEN BİRİ ekranı açar, eylemler ekran içinde izinle.
+  { key: "operations/machine-stops", app: "desktop", modul: "dokumaEnabled", title: "Tezgah Duruşları", requires: ["loom:manual-entry", "loom:classify"], capabilities: [] },
   { key: "operations/returns", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "İade Takibi", requires: ["return:read"], capabilities: ["return:write"] },
   { key: "reports/production", app: "desktop", modul: "productionEnabled", title: "Üretim", requires: ["report:production"], capabilities: [] },
   { key: "reports/sales", app: "desktop", modul: "cekirdek:siparis-musteri", title: "Sipariş & Sevkiyat", requires: ["report:sales"], capabilities: [] },
@@ -421,10 +424,6 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // çağırır; `loom:*` web kodları panelsiz kalır — panel doff yüzeyi yok, kod API/entegrasyon için.
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
-  // Dokuma Faz 1b (2026-09-14): duruş elle giriş/sınıflandırma yazma yüzeyi backend'de doğdu;
-  // panel "Duruş girişi/düzeltme" ekranı ve tablet sebep ekranı ayrı dilim — ekranla ölü muaf olur.
-  { code: "loom:manual-entry", reason: "Panel duruş yüzeyi yok; tablet `mobile:dokuma` ile açar/kapatır, geri alma `mobile:dokuma-geri-al` — web kodu vardiya amiri/entegrasyon için." },
-  { code: "loom:classify", reason: "Panel sınıflandırma yüzeyi yok; tablet İLK sebebi `mobile:dokuma` ile atar, YENİDEN sınıflandırma yalnız bu web koduyla (API)." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */
