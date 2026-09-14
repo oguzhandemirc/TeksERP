@@ -9,7 +9,7 @@
 // Ölçüt DOSYA değil YÜKLEMDİR: silme, dosyanın KENDİ ürettiği kimliklere bağlıysa
 // muaftır; ada/öneke dayanıyorsa değildir — çünkü ad bazlı yüklem sınırını beyan
 // etmez ve iki yönden de yanılır: komşunun satırını siler, ya da (ölçüldü
-// `aa5ed65a`) kendi ürettiğini bile bulamaz ve kalıntı bırakır.
+// `cb4c8ac8`) kendi ürettiğini bile bulamaz ve kalıntı bırakır.
 // =============================================================================
 import { relative } from "node:path";
 import * as ts from "typescript";

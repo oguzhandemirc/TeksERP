@@ -410,7 +410,7 @@ console.log("\n=== §10c SONDALAR — kural sentetik vakalarla ısırıyor mu (k
     "}",
   ].join("\n");
   const r2 = sonda(onekKaynak);
-  check("§10c3 ⭐ ÖNEK yüklemi → SINIRSIZ (aa5ed65a'nın kusuru)", r2[0]?.bag === "SINIRSIZ", `gelen: ${r2[0]?.bag} · ${r2[0]?.not}`);
+  check("§10c3 ⭐ ÖNEK yüklemi → SINIRSIZ (cb4c8ac8'in kusuru)", r2[0]?.bag === "SINIRSIZ", `gelen: ${r2[0]?.bag} · ${r2[0]?.not}`);
 
   const zincirKaynak = [
     "const woIds: string[] = [];",
