@@ -104,9 +104,9 @@ Dört katman var ve **hiçbiri rapor taneciğinde değil**:
 - **Mobil/tablet** tarafında rapor yüzeyi var mı diye BAKILMADI (faz masaüstü raporları hakkında).
 - **Kullanım verisi yok:** hangi raporun fabrikada fiilen açıldığı ölçülmedi (`EndpointLatencyDaily` telemetrisi bu soruya cevap verebilir, bu turda okunmadı) ⇒ "hangi rapor gereksiz" sorusu bugün ÖLÇÜLEMEZ, kanaatle cevaplanır.
 
-## 6 · Kullanım ölçümü — **ÖLÇÜLEMEDİ** (yöntem hazır, veri bu oturumda yok)
+## 6 · Kullanım ölçümü — **ÖLÇÜLDÜ 2026-09-15** (fabrika yedeği, 57 günlük pencere)
 
-**Sonuç: ÖLÇÜLEMEDİ.** "Hangi rapor fiilen açılıyor" sorusuna bu turda sayı verilmedi: üretim verisi bu oturumda okunmadı (fabrika yedeğinden okuma yöneticide). Aşağıdaki yöntem, sayının **hangi sorguyla, hangi veritabanında ve hangi şerhlerle** okunacağını sabitler — çürütülebilir biçimde.
+**Sayılar §6.5'te.** Yöntem (§6.1–§6.4) sayı GELMEDEN önce yazıldı ve öyle kaldı — sorgunun ve şerhlerin sonuca göre ayarlanmadığı böyle görünür. Ölçüm, sorguyu fabrika yedeğinde SALT OKUNUR koşan yönetici oturumundan geldi (1e); ham çıktı onda.
 
 ### 6.1 · Kaynak ve şekli (koddan ölçüldü)
 
@@ -149,3 +149,49 @@ Koşum: `psql "$DATABASE_URL" -f <dosya>` — `psql` PATH'te olmayabilir (`/opt/
 ### 6.4 · Bu ölçümün cevaplayamayacağı soru
 
 *"Bu rapor gereksiz mi?"* — düşük sayı, raporun **ayda bir ama kritik** (KDV Dönem Özeti, Kur Farkı) olmasıyla aynı görünür. Kullanım sayısı **kapatma gerekçesi değildir**; yalnız *"önce hangisini iyileştirelim"* sorusunu sıralar. Kapatma kararı fabrikanın beyanıyla alınır — ve zaten fazın kendisi bunu süperadmin anahtarına bağlıyor.
+
+### 6.5 · SAYILAR (ölçüm 2026-09-15 · fabrikanın yedeğinden restore edilmiş YEREL veritabanı, yedek tarihi **2026-09-11**)
+
+**Pencere: 2026-07-16 → 2026-09-11 = 57 gün · 4.910 satır.** ⇒ §6.3①'in "90 gün alt sınırdır" şerhi BURADA SERTLEŞİR: pencere 90 değil **57 gündür**, `gun90` kolonu 90 günü değil *"elde ne varsa onu"* sayar. Taşma kovaları (`(diğer)` · `(statik/diğer)` · `(eşleşmeyen)`) **0 satır** ⇒ §6.3②'nin "sıfır aslında taşmada olabilir" şerhi bu veritabanında DÜŞER: sıfır gerçekten sıfırdır. (`psql`e verirken `DATABASE_URL`den `?schema=` düşürülür.)
+
+| Rapor (bugünkü uç) | 30g | 57g | hata |
+|---|---|---|---|
+| Denetim Kaydı Özeti (`audit/system-log-summary`) | 18 | 20 | 0 |
+| Kullanıcı Aktivitesi (`audit/user-activity`) | 12 | 13 | 0 |
+| Müşteri Karnesi (`customer/scorecard`) | 8 | 8 | 0 |
+| Stok & Ölü Stok (`inventory/scorecard`) | 7 | 7 | 0 |
+| Müşteri Sipariş Profili (`customer/order-profile`) | 7 | 11 | 0 |
+| Sevk & Termin Karnesi (`sales/shipment-scorecard`) | 6 | 6 | 0 |
+| Nerede Takıldı — WIP (`production/wip`) | 5 | 5 | 0 |
+| Kalite Karnesi (`quality/scorecard`) | 5 | 5 | 0 |
+| Operatör İş Hacmi (`production/operator-performance`) | 5 | 7 | 0 |
+| Fire Karnesi (`quality/scrap-scorecard`) | 3 | 3 | 0 |
+| Plan-Sapma Karnesi (`quality/plan-deviation…`) | 2 | 2 | 0 |
+| Parti İzleme — arama (`production/batch-search`) | 2 | 2 | 0 |
+| Fason Karnesi (`subcontract/scorecard`) | 2 | 2 | 0 |
+| İade Karnesi (`sales/return-scorecard`) | 1 | 1 | 0 |
+
+**Hata sayısı 14 satırın 14'ünde 0** — 57 günde tek 5xx yok.
+
+#### Görülmeyen 15 uç — İKİ AYRI SINIF, karıştırılmaz
+
+| Sınıf | Uçlar | Okuma |
+|---|---|---|
+| **A · ÖLÇÜLEMEDİ (modül kapalı)** — 8 | `dokuma/randiman` · `dokuma/durus-pareto` · `dokuma/vardiya-karnesi` · `finance/aging` · `finance/cash-book` · `finance/statement` · `finance/vat-summary` · `finance/fx-diff` | Referans fabrikada dokuma ve finans modülleri KAPALI; sıfır "kullanılmıyor" demek DEĞİL, "bu kurulumda hiç açık olmadı" demektir. Aynı gerekçeyle ekran uçları `cheques/due-summary` ve `machine-shift-stats` de 0 satır. |
+| **B · AÇIK ama 57 günde HİÇ çağrılmamış** — 7 | `sales/order-cancellation` · `sales/order-leadtime` · `sales/demand-analysis` · `sales/order-intake` · `sales/open-order-coverage` · `production/batch-trace/:id` · `production/traveler-trace` | Modülü açık, izni dağıtılmış, çağrısı **sıfır**. Sipariş ailesinin BEŞİ birden burada — envanterdeki yedi `sales` raporunun beşi hiç açılmamış. |
+
+⚠️ `batch-search` 2 çağrı almış ama `batch-trace/:id` **0**: arama yapılmış, sonuca GİRİLMEMİŞ. Tek başına bir raporun "açıldı" sayısı, *işe yaradı* demek değildir — iki adımlı raporlarda ikinci adım ayrı ölçülür.
+
+#### ⚠️ Telemetri KODU AŞIYOR: 9 ÖLÜ anahtar
+
+Çıktıdaki 23 satırın **9'u bugün kodda OLMAYAN** uçlara ait (ölçüldü: `grep` → 0 eşleşme, `src/routes` + `src/services`): `sales/order-fulfillment` (6) · `production/station-efficiency` (8) · `inventory/stock-distribution` (3) · `production/scrap` (1) · `inventory/movements` (1) · `sales/late-delivery` (1) · `customer/alias-stats` (2) · `inventory/roll-aging` (3) · `quality/defect-distribution` (2). Dokuzunun da 30 günlük sayısı 0, 57 günlüğü dolu ⇒ bunlar pencerenin BAŞINDA yaşayan, sonra kaldırılan/yeniden adlandırılan uçlar.
+
+⇒ **Ders: bu tablo "bugünkü uçların kullanımı" değil, "pencere boyunca ÇAĞRILMIŞ anahtarlar"dır.** Envanterle eşlemeden okunursa iki yönlü yanılır: ölü anahtar CANLI rapor sanılır *(23 satırın 9'u)* ve bugünkü uçların kaçının görüldüğü şişer. Doğru sayı: **bugünkü 29 ucun 14'ü görüldü, 15'i görülmedi** (8'i ölçülemez sınıfında). *Telemetri satırı koddan uzun yaşar; kimliği koda karşı doğrulanmadan yorumlanmaz.*
+
+> Tam adın doğrulanması gereken tek satır: `quality/plan-deviation…` — bugünkü uç `quality/plan-deviation-scorecard`. Ham çıktıda anahtar kısaysa bu da onuncu ölü anahtardır ve "görülen" 14 → 13'e iner.
+
+### 6.6 · Sayının SÖYLEDİĞİ ve SÖYLEMEDİĞİ
+
+- **En çok kullanılan iki rapor DENETİM raporları** (18 ve 12) — iş raporlarının hepsi tekli hanelerde. Bu bir kullanım sıralaması değil, bir KULLANICI sıralamasıdır: denetim raporlarını yönetici/geliştirici açar, iş raporlarını fabrika açar. ⇒ *"Rapor ekranını fabrika neredeyse hiç kullanmıyor"* okuması bu veriyle uyumludur ve fazın gerekçesidir.
+- **Faz "kullanılmayanı kapat" değildir.** Sıfırların 8'i ölçülemez (modül kapalı), 7'si açık-ama-çağrılmamış ve hepsinin ortak özelliği ÇIKTI/SÜZGEÇ eksikliği değil — beşi sipariş ailesinden, hepsinin Excel+PDF'i VAR. ⇒ Kullanılmama sebebi çıktı değil; **ekranın bulunabilirliği ve anlaşılırlığı** (§4'ün "kolay anlaşılır ekran" isteği) ya da raporun fabrikanın sorusuna cevap vermemesi. Bu ayrım ölçülmedi — kullanıcıya SORULUR, telemetriden çıkarılmaz.
+- **Düşük sayı kapatma gerekçesi değildir** (§6.4 hükmü ayakta): KDV Dönem Özeti ve Kur Farkı bu pencerede hiç açılmadı ama ikisi de modül kapalı olduğu için ölçülemedi — açık olsalar ayda bir açılırlardı ve yine "düşük" görünürlerdi.
