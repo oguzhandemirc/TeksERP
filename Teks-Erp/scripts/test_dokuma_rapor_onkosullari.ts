@@ -305,8 +305,10 @@ async function main(): Promise<void> {
   const tasiyiciVar = await tabloVarMi(TASIYICI_TABLO);
   if (tasiyiciKarari(tasiyiciVar) === "olculemedi") {
     atlama.atla(
-      "① randıman üç oran · ② Pareto iki eksen · ③ kaynak kırılımı — ÇIKTI bekçileri",
-      `rapor taşıyıcısı '${TASIYICI_TABLO}' YOK ve rapor servisi inmedi — ölçülecek ÇIKTI yok`,
+      "3 BÖLÜM: ① randıman üç oran · ② Pareto iki eksen · ③ kaynak kırılımı — ÇIKTI bekçileri",
+      `rapor taşıyıcısı '${TASIYICI_TABLO}' YOK ve rapor servisi inmedi — ölçülecek ÇIKTI yok. ` +
+        "NE atlandığı BELLİ (üç bölüm, adıyla); KAÇ KONTROL atlandığı bilinemez çünkü o " +
+        "kontroller henüz YAZILMADI — sayı uydurmak ölçüm değil beyan olurdu",
       "?",
     );
     console.log(
