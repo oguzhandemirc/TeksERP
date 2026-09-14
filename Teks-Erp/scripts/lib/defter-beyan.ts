@@ -379,7 +379,21 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/machine-stop.service.ts", sembol: "reclassifyStop" }],
     ["src/services/machine-stop.service.ts"]),
 
+  // ── VARDİYA KARNESİ (dokuma raporları Dilim 1, 01, 2026-09-14) — yazma yüzeyi HENÜZ YOK ──
+  // `MachineShiftStat` DURUM'dur (`updatedAt` VAR, güncel gerçek o satır) ve §1c gereği
+  // BURAYA GİRMEZ; geçmişi aşağıdaki iki defterde. Mühür çevrimi (OPEN→SEALED→OPEN…)
+  // `sealState` + `sealGeneration` ile durumda, her adımı `MachineShiftStatSeal`da.
+  // `yazan: []` ölçülmüş gerçek: mühür/unseal/kapanış job'u Dilim 3'te doğar; o gün §5
+  // "YENİ YOL" der ve `tersYazan` (unseal) beyanı adıyla istenir.
+  D("MachineShiftStatSeal", "mühür DEFTERİ — karnenin mühür/açma/yeniden-mühür izi + terim fotoğrafı; append-only, updatedAt YOK; ters yolu TİPLİ ENUM ÇİFTİ: SEAL'in karşısı UNSEAL (kuşak sayacı artar, `sealedAt` null'lanmaz), RESEAL yeni bir ileri kayıttır ve karşısı yine UNSEAL; doğal anahtar (statId, sealGeneration, action) — bir kuşakta her eylemden en çok BİR satır",
+    { tur: "ENUM_CIFTI", enumAdi: "MachineSealAction", ciftler: [["SEAL", "UNSEAL"], ["RESEAL", "UNSEAL"]] },
+    [], []),
+
   // ── SATIRLAR — ters yolu EBEVEYNİNDE ──────────────────────────────────────
+  // Kırılım satırı bir MÜHÜR KUŞAĞINA aittir (statId + sealGeneration): yeniden hesapta
+  // satır güncellenmez/silinmez, UNSEAL → yeni kuşak → yeni satırlar; eski kuşak durur ve
+  // okuma helper'ı son kuşağı alır. Ters yolu kuşağın (Seal defterinin) ters yoludur.
+  SATIR("MachineShiftStopBreakdown", "MachineShiftStatSeal", "sebep × kayıp sınıfı kırılımı, mühür KUŞAĞI başına; ters yol = YENİ KUŞAK (UNSEAL/RESEAL), satır kendi başına terslenmez; ham unique `machine_shift_stop_breakdowns_uq` sınıflandırılmamış kovayı (reasonCode NULL) COALESCE ile tekil tutar"),
   SATIR("SwatchStockReductionItem", "SwatchStockReduction", "düşümün iptal kümesi; storno kalemden okur"),
   SATIR("MergeOperationSource", "MergeOperation", "birleştirmenin kaynak kaydı"),
   SATIR("MergeOperationRef", "MergeOperation", "taşınan satırın kimlik fotoğrafı"),

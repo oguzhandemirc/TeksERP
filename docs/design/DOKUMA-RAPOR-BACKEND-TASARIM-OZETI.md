@@ -25,7 +25,7 @@
 3. **İzinler — bir yeni kod.** Okuma: `report:production` (mevcut; üç rapor üretim raporudur, `routes/reports/production.routes.ts` emsali) — ayrı `loom:read` AÇILMAZ. Mühür: `loom:manual-entry` (mevcut). Mühür açma: **yeni `loom:shift-unseal`** (geçmiş rakamı değiştirir; `WEB_PRODUCTION_SUPERVISOR` + `SCREENLESS` gerekçeli; `roll:manual-adjust` ailesi, SoD üçlüsüne GİRMEZ). Terim düzeltme (elle vardiya girişi): `loom:manual-entry`.
 4. **Faz 1b'de üretim atkısının kaynağı.** Kova yok ⇒ `picksActual` = Σ `MachineRun.picksAtClose` (**koşumun KAPANDIĞI vardiyaya**, kırpma yok — BEYAN; açık koşum katılmaz ve `warnings` yazar) · `producedM` = Σ `MachineRun.producedM` aynı kural · `targetPickCapacityApt/Pot` koşumların vardiya penceresiyle KESİŞEN dakikalarından (§5.2). Alternatif (tek koşum > 1 vardiya ise atkıyı süreyle orantılamak) Faz 2'ye (kova) bırakılır — orantılama UYDURMADIR.
 
-## 2 · Şema — migration `20260914100000_machine_shift_stats` (pencere: 82 → 6e → 01)
+## 2 · Şema — migration `20260914130000_machine_shift_stats` (İNDİ 2026-09-14, Dilim 1; 100000 bandı devere `125000`in altında kaldığı için 130000)
 
 ```prisma
 enum MachineSealState  { OPEN  SEALED }
@@ -105,9 +105,11 @@ model MachineShiftStopBreakdown {
   @@index([reasonCode])
   @@map("machine_shift_stop_breakdowns")
 }
-// ŞEMA-DIŞI UNIQUE (ham SQL, `test_db_invariants` EXPRESSION_UNIQUES): 
-//   machine_shift_stop_breakdowns_uq UNIQUE NULLS NOT DISTINCT ("statId","sealGeneration","reasonCode","beamSlotNull")
-//   (PG 16 NULLS DISTINCT varsayılanı sınıflandırılmamış kovayı korumasız bırakırdı)
+// ŞEMA-DIŞI UNIQUE (ham SQL, `test_db_invariants` EXPRESSION_UNIQUES):
+//   machine_shift_stop_breakdowns_uq UNIQUE ("statId","sealGeneration", COALESCE("reasonCode",''), "beamSlotNull")
+//   (PG NULLS DISTINCT varsayılanı sınıflandırılmamış kovayı korumasız bırakırdı.)
+//   ⚠️ İNDİ 2026-09-14 (Dilim 1): NULLS NOT DISTINCT DEĞİL — Prisma onu düz unique okuyup `test_schema_drift`te
+//   "DROP INDEX" önerdi; COALESCE ifade indeksi Prisma'ya görünmez ve mevcut envanter sınıfına girer.
 
 /// DEFTER (append-only) — mühür / açma / yeniden mühür izi + terim fotoğrafı.
 model MachineShiftStatSeal {

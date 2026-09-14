@@ -36,7 +36,7 @@ import prisma from "../src/lib/prisma";
 // bağımlılığı DEĞİL ⇒ CI'ın Backend job'ı yalnız Teks-Erp'te `npm ci` koştuğu
 // için import ORADA çözülmezdi. Çöken bir sonda, sonda değildir.
 // (`test_audit_labels` aynı dosyayı aynı sebeple metin okur.)
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 // ⚠️ ATLAMA DEFTERİ ORTAK ALTYAPIDIR, kopyası açılmaz: "ölçemedim" ile "ölçtüm,
 // geçti" aynı sayıya çıkmasın diye. §4 sınıf ④'tür (erken dönüş gibi: kaç
@@ -171,6 +171,21 @@ export function tasiyiciKarari(varMi: boolean): "olculemedi" | "mandal-uyandi" {
   return varMi ? "mandal-uyandi" : "olculemedi";
 }
 
+/**
+ * MANDAL UYANDIKTAN SONRAKİ KARAR — saf (2026-09-14, 01 Dilim 1: taşıyıcı İNDİ).
+ * Taşıyıcı tablo ile rapor YÜZEYİ ayrı dilimlerde iner (özet §8: şema Dilim 1, uçlar
+ * Dilim 4). Ölçülecek ÇIKTI rapor ucuyla doğar ⇒ çıktı bekçisi de onunla (aynı commit).
+ *   · rapor ucu YOK ∧ çıktı bekçisi YOK → "yuzey-bekleniyor" (⏭ beyan, yeşil DEĞİL)
+ *   · rapor ucu VAR ∧ çıktı bekçisi YOK → "bekci-eksik" (❌ — mandalın asıl ısırığı)
+ *   · çıktı bekçisi VAR              → "tamam" (uç olmasa bile bekçi erken gelebilir)
+ * ⚠️ "Taşıyıcı var ⇒ hemen kırmızı" eski hâli Dilim 1–3 arasında CI'ı kırmızı tutardı ve
+ * susturulurdu; kapı gerçek ısırığını (uç var, bekçi yok) sessizce kaybederdi.
+ */
+export function ciktiKarari(raporUcuVar: boolean, ciktiBekcisiVar: boolean): "tamam" | "bekci-eksik" | "yuzey-bekleniyor" {
+  if (ciktiBekcisiVar) return "tamam";
+  return raporUcuVar ? "bekci-eksik" : "yuzey-bekleniyor";
+}
+
 /** ENVANTER İKİ YÖNLÜ — kaybolan kadar DOĞAN kolon da bir olaydır. */
 export function envanterFarki(
   gercek: string[],
@@ -196,6 +211,10 @@ const KAYNAK_KOLONLARI_BEKLENEN = [
   "doff_events.counterSource",
   "machine_stop_events.reasonSource",
   "machine_stop_events.source",
+  // (a) sınıfı — RAPORUN SATIRINDA yaşayan TAŞIYICI (2026-09-14, 01 Dilim 1): karnenin
+  // kaynak kırılımı bu kolondan basılır; `SIMULATED` `OPERATOR`a katılmaz, `INFERRED`
+  // boş tezgah beyanıdır. `@default` YOK — her yazım `resolveShiftSource` ile beyan eder.
+  "machine_shift_stats.source",
 ];
 
 const LOSS_CLASS_BEKLENEN = ["UNPLANNED", "SETUP", "PLANNED", "NON_SCHEDULED", "MINOR"];
@@ -203,6 +222,9 @@ const DATA_SOURCE_BEKLENEN = ["MACHINE", "INFERRED", "OPERATOR", "SUPERVISOR", "
 
 /** Raporun sözleşmede ADIYLA anılan taşıyıcısı (`dokuma.md` § kaynak kırılımı). */
 const TASIYICI_TABLO = "machine_shift_stats";
+/** Rapor YÜZEYİ (özet §5) ve ÇIKTI bekçisi (özet §7) — ikisi Dilim 4'te aynı commit'te doğar. */
+const RAPOR_UCU_YOLU = path.resolve(__dirname, "../src/routes/reports/dokuma.report.routes.ts");
+const CIKTI_BEKCISI_YOLU = path.resolve(__dirname, "test_dokuma_rapor_cikti.ts");
 
 async function kolonlariOku(): Promise<Map<string, Kolon>> {
   const satirlar = await prisma.$queryRawUnsafe<
@@ -319,12 +341,29 @@ async function main(): Promise<void> {
         "               kırmızı (b) SIMULATED OPERATOR'a katılırsa kırmızı",
     );
   } else {
-    check(
-      "§4 ⭐ rapor taşıyıcısı indi ⇒ ÇIKTI bekçileri yazılmış olmalı",
-      false,
-      `'${TASIYICI_TABLO}' var ama ①②③ çıktı bekçileri YOK — sahibi: d9. ` +
-        "Bu kırmızı bir arıza değil bir DEVİRDİR: mandal uyandı.",
-    );
+    // Mandal UYANDI (taşıyıcı 2026-09-14'te indi, migration 20260914130000). Isırık rapor
+    // YÜZEYİYLE gelir: uç var, bekçi yok → kırmızı; uç yok → ⏭ beyan (yeşil değil).
+    const raporUcuVar = existsSync(RAPOR_UCU_YOLU);
+    const ciktiBekcisiVar = existsSync(CIKTI_BEKCISI_YOLU);
+    const karar = ciktiKarari(raporUcuVar, ciktiBekcisiVar);
+    if (karar === "yuzey-bekleniyor") {
+      atlama.atla(
+        "3 BÖLÜM: ① randıman üç oran · ② Pareto iki eksen · ③ kaynak kırılımı — ÇIKTI bekçileri",
+        `taşıyıcı '${TASIYICI_TABLO}' İNDİ ama rapor ucu (${path.basename(RAPOR_UCU_YOLU)}) inmedi — ` +
+          "ölçülecek ÇIKTI yok; çıktı bekçisi rapor ucuyla AYNI commit'te doğar (özet §8 Dilim 4). " +
+          "Uç inip bekçi gelmezse bu dal KIRMIZIDIR.",
+        "?",
+      );
+    } else {
+      check(
+        "§4 ⭐ rapor yüzeyi indi ⇒ ÇIKTI bekçisi yazılmış olmalı",
+        karar === "tamam",
+        karar === "tamam"
+          ? `${path.basename(CIKTI_BEKCISI_YOLU)} var`
+          : `${path.basename(RAPOR_UCU_YOLU)} VAR ama ${path.basename(CIKTI_BEKCISI_YOLU)} YOK — ` +
+            "①②③ çıktı bekçisi rapor ucuyla aynı commit'te iner (sahibi: 01/d9). Mandal ısırdı.",
+      );
+    }
   }
   console.log("");
 
@@ -369,6 +408,11 @@ async function main(): Promise<void> {
   check("§5l ⭐ tabloVarMi OLMAYAN tabloyu görmez", !(await tabloVarMi("__yok_boyle_bir_tablo__")));
   check("§5m ⭐ taşıyıcı VARSA mandal UYANIR", tasiyiciKarari(true) === "mandal-uyandi");
   check("§5n taşıyıcı YOKSA ölçülemedi", tasiyiciKarari(false) === "olculemedi");
+  // ⚠️ İKİNCİ HALKA: uyanan mandalın kararı da halkalarından ölçülür — "uç var, bekçi yok"
+  // dalı bugün BASILMIYOR (uç Dilim 4'te); basılmayan dalın kırmızısı burada kanıtlanır.
+  check("§5n2 ⭐ rapor ucu VAR ∧ çıktı bekçisi YOK → KIRMIZI", ciktiKarari(true, false) === "bekci-eksik");
+  check("§5n3 rapor ucu YOK ∧ bekçi YOK → yüzey bekleniyor (⏭, yeşil değil)", ciktiKarari(false, false) === "yuzey-bekleniyor");
+  check("§5n4 çıktı bekçisi VARSA tamam", ciktiKarari(true, true) === "tamam" && ciktiKarari(false, true) === "tamam");
   // ⚠️ İKİ ÖLÜM YOLU TEK GÖZLEMDE BİRLEŞİR: override silinse de, global cevapla
   // AYNI yazılsa da yüklem aynı eşitliği görür — bu yüzden TEK sonda yeter.
   check("§5o ⭐ eşit etiket (override yok VEYA globalle aynı) reddedilir", !ayrimKorunuyor("Küçük", "Küçük").ok);

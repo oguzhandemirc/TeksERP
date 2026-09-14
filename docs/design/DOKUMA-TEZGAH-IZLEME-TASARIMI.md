@@ -1263,10 +1263,15 @@ model MachineShiftStat {
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
-  /// ⚠️ `productionLineNo` UNIQUE'E GİRER (§10/#23) — ve bu MÜHÜR TANECİĞİNİ BÖLER: bir
+  /// ⛔ GEÇERSİZ → 2026-09-14 (1e hükmü, DOKUMA-RAPOR-BACKEND-TASARIM-OZETI §1/1): tanecik
+  /// (machineId, shiftInstanceId) — `productionLineNo` unique'te YOK, 6e sözleşmesi kazandı
+  /// (`assertStopShiftWritableTx` `findUnique({ machineId_shiftInstanceId })`). Hat kırılımı
+  /// gerekirse EKLEMELİ çocuk tablo `MachineShiftLineStat(statId, productionLineNo)`; bugün doğmaz.
+  /// Canlı şema (migration 20260914130000): `@@unique([machineId, shiftInstanceId])`.
+  /// ~~⚠️ `productionLineNo` UNIQUE'E GİRER (§10/#23) — ve bu MÜHÜR TANECİĞİNİ BÖLER: bir
   /// vardiya×makine artık N karne satırıdır, mühür ise satır başınadır ⇒ N bağımsız mühür.
-  /// Bu yüzden mühür VARDİYA×MAKİNE düzeyinde ATOMİKTİR (§4 "kısmi mühür yok").
-  @@unique([machineId, shiftInstanceId, productionLineNo])
+  /// Bu yüzden mühür VARDİYA×MAKİNE düzeyinde ATOMİKTİR (§4 "kısmi mühür yok").~~
+  @@unique([machineId, shiftInstanceId])
   @@index([factoryDay, machineId])
   @@index([sealedAt])   // kaldırılan Sack.sealedAt ile ilgisi YOK
   @@map("machine_shift_stats")
@@ -1301,10 +1306,15 @@ model MachineShiftStopBreakdown {
 }
 // ŞEMA-DIŞI UNIQUE (ham SQL + test_db_invariants `EXPRESSION_UNIQUES` envanteri):
 //   machine_shift_stop_breakdowns_uq:
-//     UNIQUE NULLS NOT DISTINCT ("statId","sealGeneration","reasonCode")
+//     UNIQUE NULLS NOT DISTINCT ("statId","sealGeneration","reasonCode","beamSlotNull")
 //   (Prisma NULLS NOT DISTINCT üretmez. Alternatif: COALESCE("reasonCode",'')
 //    ifade index'i.) Saha PG 16.9 — `docs/ops/KURULUM.md`.
 //   NEGATİF SONDA: aynı kuşakta iki NULL `reasonCode` satırı → kırmızı.
+//   ⚠️ CANLI ŞEMA (2026-09-14, migration 20260914130000) iki kolon EKLEDİ ve Prisma
+//   tarafındaki `@@unique` KALDIRILDI (tek sed ham SQL'de; ikisi yan yana iki yüklem olurdu):
+//     `reasonLabel` VARCHAR(100) — katalog etiketi KOPYA, DONAR (d9 ②: katalog değişse
+//       geçmiş rapor değişmez) · `beamSlotNull` BOOLEAN — "atanmamış" kovası AYRI satır
+//       (§4 çıktı: beamSlot NULL duruşlar tahminle levende yazılmaz), unique'e girer.
 
 /// DEFTER (append-only) — mühür / mühür açma izi ve DÜZELTME TERS KAYDI.
 /// Kapanmış vardiyaya geç gelen veri karneyi SESSİZCE değiştiremez: mühür
@@ -1554,7 +1564,9 @@ Envanter bugün 8021→8031'de bitiyor (`src/services/helpers/period-guard.helpe
 
 **③ RETENTION'IN DOKUNAMAYACAKLARI.** Budayıcı **açık koşumun** penceresine, **açık vardiyaya** ve **mühürsüz pencereye** DOKUNMAZ. Açık koşum süresiz bir budama muafiyeti üretmesin diye kardeş kural: **`tezgah.maxOpenRunDays` (7) aşan koşum watchdog ile kapanır** (`endedAt` beyan edilir, terimler donar) — aksi hâlde unutulmuş tek bir açık koşum, kendi penceresini sonsuza kadar budanmaz kılardı.
 
-**③b MÜHÜR VARDİYA×MAKİNE DÜZEYİNDE ATOMİKTİR — kısmi mühür YOKTUR** (2026-09-12, §10/#23). `MachineShiftStat`ın unique'ine `productionLineNo` girdiği için bir vardiya×makine artık **N karne satırıdır** ve mühür satır başına verildiğinden **N bağımsız mühür** doğar. Hat 1 mühürlenip hat 2 mühürsüz kalırsa ③'ün *"mühürsüz pencereye dokunmaz"* kuralı o pencerenin **yarısını korur, yarısını budar** — sonra hat 2'nin karnesi yeniden hesaplandığında **değişir.** Tam kaçınmak istediğimiz sürüklenme, yalnız hat ekseninde. Bu yüzden:
+> ⛔ **③b · N9 · P-YAPI GEÇERSİZ → 2026-09-14** (1e hükmü, `DOKUMA-RAPOR-BACKEND-TASARIM-OZETI.md` §1/1; arşiv `2026-09-14 — VARDİYA KARNESİ TANECİĞİ`): `productionLineNo` unique'e GİRMEDİ — canlı şema `@@unique([machineId, shiftInstanceId])` (migration 20260914130000), bir vardiya×makine TEK karne satırıdır ve mühür satır = pencere olduğundan "kısmi mühür" durumu YAPISAL olarak yoktur. Aşağıdaki üç kalem bu boşluğu kapatmak için yazılmıştı; boşluk doğmadı. Hat kırılımı gerekirse EKLEMELİ çocuk tablo `MachineShiftLineStat(statId, productionLineNo)` açılır ve o gün bu üç kalem yeniden sorulur.
+
+~~**③b MÜHÜR VARDİYA×MAKİNE DÜZEYİNDE ATOMİKTİR — kısmi mühür YOKTUR**~~ (2026-09-12, §10/#23). `MachineShiftStat`ın unique'ine `productionLineNo` girdiği için bir vardiya×makine artık **N karne satırıdır** ve mühür satır başına verildiğinden **N bağımsız mühür** doğar. Hat 1 mühürlenip hat 2 mühürsüz kalırsa ③'ün *"mühürsüz pencereye dokunmaz"* kuralı o pencerenin **yarısını korur, yarısını budar** — sonra hat 2'nin karnesi yeniden hesaplandığında **değişir.** Tam kaçınmak istediğimiz sürüklenme, yalnız hat ekseninde. Bu yüzden:
 - Mühürleyici (Faz 1a insan, Faz 2 `machine-shift-close.job`) bir vardiya×makinenin **bütün hat satırlarını TEK TX'te** mühürler.
 - **Budayıcının yüklemi hat başına değil PENCERE başına sorar:** *"bu (machineId, shiftInstanceId) penceresinin HER hattı mühürlü mü?"*
 

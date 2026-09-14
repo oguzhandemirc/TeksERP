@@ -144,6 +144,29 @@ export function factoryDayStart(at: Date = new Date()): Date {
   return new Date(guess);
 }
 
+/**
+ * `at` anının FABRİKA gününde, yerel gece yarısından `minuteOfDay` dakika sonraki
+ * DUVAR SAATİNİN mutlak anı (vardiya penceresi: `startMinute` / `+ durationMinutes`).
+ * `factoryDayStart(at) + dk×60_000` DEĞİL: DST gününde duvar saati ile mutlak fark
+ * ayrışır; ofset iki turla çözülür (`factoryDayStart` ile aynı yöntem). `minuteOfDay`
+ * ≥ 1440 ertesi güne TAŞAR (gece yarısını geçen vardiyanın bitişi).
+ */
+export function factoryMinuteOfDay(at: Date, minuteOfDay: number): Date {
+  const { y, m, d } = factoryParts(at);
+  const wallAsUtc = Date.UTC(y, m - 1, d, 0, minuteOfDay, 0, 0);
+  let guess = wallAsUtc;
+  for (let i = 0; i < 2; i++) {
+    guess = wallAsUtc - factoryOffsetMs(new Date(guess));
+  }
+  return new Date(guess);
+}
+
+/** `at` anının FABRİKA haftagünü (0=Pazar..6=Cumartesi) — `getDay()` süreç dilimini okur. */
+export function factoryWeekday(at: Date): number {
+  const { y, m, d } = factoryParts(at);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
 /** `at` anının FABRİKA takvim günü, `YYYY-MM-DD` (grafik kategorisi / gün anahtarı). */
 export function factoryYmd(at: Date = new Date()): string {
   const { y, m, d } = factoryParts(at);

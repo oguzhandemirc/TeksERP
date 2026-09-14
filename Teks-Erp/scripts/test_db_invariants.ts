@@ -496,6 +496,13 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "warp_beam_events", name: "warp_beam_events_wound_facts_ck" },
   { table: "yarn_movements", name: "yarn_movements_warp_link_ck" },
   { table: "yarn_movements", name: "yarn_movements_warp_return_reason_ck" },
+  // Vardiya karnesi (dokuma raporları Dilim 1, 2026-09-14, migration 20260914130000):
+  // terimler saniye/atkı sayacı (negatif olamaz) · eşik pozitif · SEALED ⇒ kuşak ≥ 1 ∧
+  // sealedAt dolu (claim atlanarak yazılmış satırın imzası) · kırılım sayaçları negatif olamaz.
+  { table: "machine_shift_stats", name: "machine_shift_stats_terms_nonneg" },
+  { table: "machine_shift_stats", name: "machine_shift_stats_threshold_pos" },
+  { table: "machine_shift_stats", name: "machine_shift_stats_seal_ck" },
+  { table: "machine_shift_stop_breakdowns", name: "machine_shift_stop_breakdowns_nonneg" },
   { table: "warp_specs", name: "warp_specs_ends_positive" },
   { table: "warp_specs", name: "warp_specs_selvedge_sane" },
   { table: "warp_specs", name: "warp_specs_reed_positive" },
@@ -699,6 +706,19 @@ const EXPRESSION_UNIQUES: Array<{ table: string; index: string; expr: string; pr
     expr: "upper(code)",
     predicate: `("mergedIntoId" IS NULL)`,
     why: "kumaş kodu harf-duyarsız tekil; tombstone hariç (ön koşul: scripts/fix_kumas_kod_cakismasi.ts)",
+  },
+  {
+    // Vardiya karnesi sebep kırılımı (dokuma raporları Dilim 1, 2026-09-14, migration
+    // 20260914130000). KARIŞIK indeks: ("statId","sealGeneration", COALESCE("reasonCode",''),
+    // "beamSlotNull") — sınıflandırılmamış kova `reasonCode` NULL'dur ve PG'nin NULLS DISTINCT
+    // varsayılanı aynı kuşakta iki "sınıflandırılmamış" satırı sessizce kabul ederdi.
+    // ⚠️ NULLS NOT DISTINCT değil COALESCE: Prisma ifade indeksini görmez (drift yok), düz
+    // NULLS-NOT-DISTINCT unique'i ise "DROP INDEX" diye önerir (ölçüldü 2026-09-14).
+    // Bu envanter yalnız ifadeyi ölçer; düz kolonlar `pg_get_indexdef` ile görülür.
+    table: "machine_shift_stop_breakdowns",
+    index: "machine_shift_stop_breakdowns_uq",
+    expr: `COALESCE("reasonCode", ''::character varying)`,
+    why: "kuşak × sebep × atanmamış-kovası tekil — sınıflandırılmamış kova (NULL) da TEK satır",
   },
 ];
 

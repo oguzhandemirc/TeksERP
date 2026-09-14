@@ -290,6 +290,13 @@ const MACHINE_DELETE_GUARDS: DependencyGuard[] = [
     message: (n) => `Bu makinede ${n} top indirme kaydı var — kalıcı silinemez. Pasife alın.`,
   },
   {
+    // Vardiya karnesi İŞ VERİSİDİR (budanmaz, mühürlü satır resmî rakam); mühür durumu
+    // süzülmez — OPEN karne de o makinede vardiya çalışıldığının kanıtıdır. FK RESTRICT.
+    key: "machineShiftStatCount",
+    count: (id) => prisma.machineShiftStat.count({ where: { machineId: id } }),
+    message: (n) => `Bu makinede ${n} vardiya karnesi var — kalıcı silinemez. Pasife alın.`,
+  },
+  {
     // `KursunBypassAssignment.machineId` RESTRICT'tir, yani silme zaten P2003'e
     // düşer — ama operatör jenerik "bağlı kayıt var" yerine HANGİ izin engellediğini
     // görmeli; atama satırı append-only bypass izidir, silinmez.

@@ -529,6 +529,8 @@ model User {
   updatedMachineCollectors MachineCollector[] @relation("MachineCollectorUpdatedBy")
   machineStopsClassified   MachineStopEvent[] @relation("MachineStopClassifiedBy")
   machineStopReclasses     MachineStopReclass[] @relation("MachineStopReclassBy")
+  machineShiftStatsSealed  MachineShiftStat[] @relation("MachineShiftStatSealedBy")
+  machineShiftSealsActed   MachineShiftStatSeal[] @relation("MachineShiftSealBy")
   createdPeripheralDevices PeripheralDevice[] @relation("PeripheralDeviceCreatedBy")
   updatedPeripheralDevices PeripheralDevice[] @relation("PeripheralDeviceUpdatedBy")
   createdProductRecipes    ProductRecipe[]    @relation("ProductRecipeCreatedBy")
@@ -977,6 +979,8 @@ model Machine {
   /// Tezgah duruşları — `Restrict`; guard'ı ingest diliminde (yazan yol orada doğar).
   machineStops   MachineStopEvent[]
   doffEvents     DoffEvent[]
+  /// Vardiya karneleri — `Restrict`, `MACHINE_DELETE_GUARDS`ta sayacı var (`machineShiftStatCount`).
+  shiftStats     MachineShiftStat[]
   /// Toplayıcı kapsamı — `Cascade` (kapsam satırı makinesiz anlamsız).
   collectorLinks MachineCollectorLink[]
 
@@ -1978,6 +1982,7 @@ model ShiftInstance {
 
   shiftDefinition ShiftDefinition    @relation(fields: [shiftDefinitionId], references: [id], onDelete: Restrict)
   stops           MachineStopEvent[]
+  machineStats    MachineShiftStat[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt      @db.Timestamptz
@@ -2314,6 +2319,172 @@ model MachineSpec {
   updatedBy   User?    @relation("MachineSpecUpdatedBy", fields: [updatedById], references: [id])
 
   @@map("machine_specs")
+}
+
+/// KARNE MÜHÜR DURUMU — `OPEN` doğar; `SEALED` yalnız atomik claim ile yazılır.
+/// ⚠️ `OPEN` `WeavingOrderStatus`/`MachineRun` dilinde de var — `FIELD_ENUM_OVERRIDES`.
+enum MachineSealState {
+  OPEN
+  SEALED
+}
+
+/// MÜHÜR DEFTERİ EYLEMİ — serbest metin dördüncü bir değeri sessizce kabul ederdi.
+enum MachineSealAction {
+  SEAL
+  UNSEAL
+  RESEAL
+}
+
+/// ÖZET / MATERYALİZE KARNE (DURUM) — vardiya × makine. İŞ VERİSİ: budanmaz.
+/// Mühürlü satır yeniden HESAPLANMAZ (`period-guard.helper` gerekçesi: kapanmış
+/// dönem resmî rakamdır). `updatedAt` VAR ve sınıf beyanıdır: güncel gerçek bu
+/// satır, GEÇMİŞİ `MachineShiftStatSeal` defteri taşır (tek tabloda defter+durum olmaz).
+/// Terimler SANİYE ve ATKI cinsinden; oranlar yalnız mühürde denormalize edilir.
+/// Tanecik (machineId, shiftInstanceId) — hat kırılımı gerekirse EKLEMELİ çocuk
+/// tablo (`MachineShiftLineStat`), bu unique bölünmez (1e hükmü 2026-09-14).
+model MachineShiftStat {
+  id              String @id @default(uuid()) @db.Uuid
+  machineId       String @db.Uuid
+  shiftInstanceId String @db.Uuid
+  /// `ShiftInstance.factoryDayKey`ten KOPYA, DONAR — tek yazar materyalizasyon.
+  /// `@db.Date` muafı → `test_timestamptz_contract` envanteri.
+  factoryDay      DateTime @db.Date
+
+  // ── TERİMLER (saniye) — ORAN DEĞİL, rapor bunları TOPLAR ──────────────────
+  calendarSec      Int @default(0)
+  /// Faz 1a/1b: 0 = BEYAN (gözlemci insan). Faz 2 artık yöntemiyle dolar.
+  unobservedSec    Int @default(0)
+  nonScheduledSec  Int @default(0)
+  plannedBreakSec  Int @default(0)
+  potSec           Int @default(0)
+  aptSec           Int @default(0)
+  setupSec         Int @default(0)
+  plannedDownSec   Int @default(0)
+  unplannedDownSec Int @default(0)
+  minorStopSec     Int @default(0)
+  minorStopCount   Int @default(0)
+  stopCount        Int @default(0)
+  /// NULLABLE: `0` = kanal var kopuş yok; `NULL` = ÖLÇÜLMEDİ. Faz 1b'de NULL yazılır.
+  warpStopCount    Int?
+  weftStopCount    Int?
+  /// Sınıflandırılmamış duruş süresi — >0 ise rapor `warnings` çizer.
+  unclassifiedSec  Int @default(0)
+
+  picksActual Int @default(0)
+  /// Faz 2 (kova) terimleri — bu dilimde 0 kalır.
+  gapPicks    Int @default(0)
+  watchdogSec Int @default(0)
+
+  // ── DONMUŞ PAYDALAR — sonradan değişse bu satırın randımanı DEĞİŞMEZ ──────
+  /// Σ(target_i × koşumun APT dakikası) / Σ(target_i × koşumun POT dakikası).
+  /// İKİ TERİM ŞART: tek terim P'yi E'ye çökertir.
+  targetPickCapacityApt Int @default(0)
+  targetPickCapacityPot Int @default(0)
+  /// Yalnız TEK koşumlu vardiyada etiket; birden çok hedef → NULL.
+  targetPicksPerMin     Int?
+  /// Mikro duruş eşiği karneye DONAR (bugün sabit `MINOR_STOP_THRESHOLD_SEC`).
+  stopThresholdSec      Int
+  unitsPerCmAtClose     Decimal? @db.Decimal(8, 3)
+  producedM             Decimal? @db.Decimal(12, 3)
+
+  // ── MÜHÜR ANINDA `loom-efficiency.helper` YAZAR, başka yol yazmaz ──────────
+  availabilityPct  Decimal? @db.Decimal(5, 2)
+  performancePct   Decimal? @db.Decimal(5, 2)
+  effectivenessPct Decimal? @db.Decimal(5, 2)
+  formulaVersion   Int?
+
+  /// `@default` YOK — kaynak her yazımda beyan edilir (`resolveShiftSource`).
+  source          MachineDataSource
+  /// `MachineSpec.monitoringState`ten KOPYA, DONAR — gölge karne LIVE'a terfi etmez.
+  monitoringState MachineMonitoringState
+  /// Faz 2 kapısı (anomali kaynağı yok); Faz 1b `false` kalır, mührü bloke etmez.
+  anomalyAck      Boolean @default(false)
+
+  /// MÜHÜR ÇEVRİMİ tek kolona sığmaz: durum `sealState`, sayaç `sealGeneration`,
+  /// geçmiş `MachineShiftStatSeal`. `sealedAt` ASLA null'lanmaz ("en son ne zaman").
+  sealState      MachineSealState @default(OPEN)
+  sealGeneration Int              @default(0)
+  sealedAt       DateTime?        @db.Timestamptz
+  sealedById     String?          @db.Uuid
+
+  machine       Machine       @relation(fields: [machineId], references: [id], onDelete: Restrict)
+  shiftInstance ShiftInstance @relation(fields: [shiftInstanceId], references: [id], onDelete: Restrict)
+  sealedBy      User?         @relation("MachineShiftStatSealedBy", fields: [sealedById], references: [id])
+  breakdown     MachineShiftStopBreakdown[]
+  seals         MachineShiftStatSeal[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt      @db.Timestamptz
+
+  /// 6e sözleşmesi: `assertStopShiftWritableTx` `findUnique({ machineId_shiftInstanceId })` okur.
+  @@unique([machineId, shiftInstanceId])
+  @@index([factoryDay, machineId])
+  @@index([sealedAt])
+  @@map("machine_shift_stats")
+}
+
+/// DEFTER (append-only, `updatedAt` YOK) — SEBEP × KAYIP SINIFI kırılımı, mühür
+/// KUŞAĞI başına; Pareto burada yaşar. Yeniden hesapta satır GÜNCELLENMEZ/SİLİNMEZ,
+/// YENİ KUŞAK yazılır (ters yol = yeni kuşak); okuma tek helper'dan son kuşak.
+model MachineShiftStopBreakdown {
+  id             String @id @default(uuid()) @db.Uuid
+  statId         String @db.Uuid
+  sealGeneration Int
+  /// NULL = sınıflandırılmamış kova (rapor UNPLANNED sayar, `unclassifiedSec`).
+  reasonCode   String? @db.VarChar(64)
+  /// Katalog etiketi KOPYA — katalog değişse geçmiş rapor değişmez (d9 ②).
+  reasonLabel  String? @db.VarChar(100)
+  lossClass    MachineStopLossClass?
+  /// "Atanmamış" kovası — `beamSlot` NULL duruşlar AYRI sayılır, tahminle levende yazılmaz.
+  beamSlotNull Boolean @default(false)
+  stopCount    Int
+  stopSec      Int
+
+  /// Cascade DEĞİL Restrict: defter satırı sessizce yok olamaz.
+  stat MachineShiftStat @relation(fields: [statId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([statId, sealGeneration])
+  @@index([reasonCode])
+  // ŞEMA-DIŞI UNIQUE (ham SQL, migration 20260914130000, `test_db_invariants` EXPRESSION_UNIQUES):
+  //   machine_shift_stop_breakdowns_uq
+  //     UNIQUE ("statId", "sealGeneration", COALESCE("reasonCode", ''), "beamSlotNull")
+  //   PG varsayılanı NULLS DISTINCT — sınıflandırılmamış kova (reasonCode NULL) korumasız kalırdı;
+  //   COALESCE ifadesi NULL'u tekilleştirir ve Prisma ifade indeksini görmediği için drift üretmez.
+  @@map("machine_shift_stop_breakdowns")
+}
+
+/// DEFTER (append-only, `updatedAt` YOK) — mühür / açma / yeniden mühür izi +
+/// terim fotoğrafı. Kapanmış vardiyaya geç gelen veri karneyi SESSİZCE değiştiremez:
+/// mühür `loom:shift-unseal` ile AÇILIR, yeniden hesaplanır, yeniden mühürlenir ve
+/// her adım burada satır bırakır. Ters yolu YOK — defter kapanıştır.
+model MachineShiftStatSeal {
+  id             String            @id @default(uuid()) @db.Uuid
+  statId         String            @db.Uuid
+  action         MachineSealAction
+  sealGeneration Int
+  /// Tam terim fotoğrafının ARŞİVİ — SORGULANMAZ (GIN yok); "aynen yeniden bas"
+  /// sözleşmesi aşağıdaki beş kolon + `formulaVersion` + breakdown kuşağından okunur.
+  terms          Json
+  potSec                Int
+  aptSec                Int
+  picksActual           Int
+  targetPickCapacityPot Int
+  effectivenessPct      Decimal? @db.Decimal(5, 2)
+  formulaVersion        Int
+  reason         String? @db.VarChar(300)
+  actedById      String? @db.Uuid
+
+  stat    MachineShiftStat @relation(fields: [statId], references: [id], onDelete: Restrict)
+  actedBy User?            @relation("MachineShiftSealBy", fields: [actedById], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  /// DOĞAL ANAHTAR (§2.11): bir kuşakta her eylemden en çok BİR satır.
+  @@unique([statId, sealGeneration, action])
+  @@index([statId, createdAt])
+  @@map("machine_shift_stat_seals")
 }
 
 // =============================================================================

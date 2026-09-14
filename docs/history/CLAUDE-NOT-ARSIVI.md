@@ -9241,3 +9241,27 @@ kapsam DIŞI kalır (belge-etiket.md:50 aynen) — çok müşterili iç özet, y
 **Bekçi:** `Electron accounting-export.name-mode.test.ts` §6/§6b/§6c/§7/§7b (ad rejimi bölümü ayrı dosyaya taşındı — max-lines 300); negatif sonda üç mutasyon (dal kapalı → §6/§6b/§7
 kırmızı · renk fallback → §6b/§7 · ikizsiz düşüş kaldırıldı → §7). Backend değişmedi (`test_shipment_doc_customer_name
 §9/§10` fiş ucunun bayrağı taşıdığını zaten ölçüyor).
+## 2026-09-14 — VARDİYA KARNESİ TANECİĞİ makine×vardiya; tasarım §4 ③b/N9/P-yapı GEÇERSİZ — dokuma raporları Dilim 1 (şema + takvim job'u) [ÇEKİRDEK]
+
+**Hüküm (1e, özet §1/1):** `MachineShiftStat.@@unique([machineId, shiftInstanceId])` — 6e sözleşmesi
+(`assertStopShiftWritableTx` `findUnique({ machineId_shiftInstanceId })`) kazandı; `productionLineNo` unique'e
+GİRMEDİ. `DOKUMA-TEZGAH-IZLEME-TASARIMI.md` §2.10'un üç kolonlu unique'i ve §4 ③b ("kısmi mühür yok"), N9
+(iki hatlı kısmi mühür sondası), P-yapı (budayıcı yüklemi pencere başına) bu tanecikte KONUSUZ: bir vardiya×makine
+TEK karne satırıdır, mühür satır = pencere. Üçü "GEÇERSİZ → 2026-09-14" damgası aldı; hat kırılımı gerekirse
+EKLEMELİ çocuk tablo `MachineShiftLineStat(statId, productionLineNo)` açılır ve o gün üç kalem yeniden sorulur.
+**İnen (01, migration `20260914130000_machine_shift_stats`, idempotent, üç tablo boş doğar):** `MachineSealState`
+· `MachineSealAction` · `MachineShiftStat` (DURUM, `updatedAt` var; 4 CHECK: terimler ≥ 0 · eşik > 0 · SEALED ⇒
+kuşak ≥ 1 ∧ sealedAt dolu) · `MachineShiftStopBreakdown` (DEFTER, kuşak başına; `reasonLabel` + `beamSlotNull`
+eklendi — d9 ② etiket donar, §4 atanmamış kovası ayrı) · `MachineShiftStatSeal` (DEFTER, doğal anahtar) · guard
+`machineShiftStatCount` · `jobs/shift-calendar.job.ts` (M0: bayrak kapalı → "disabled", 30 gün, idempotent, mühürlü
+pencere değişmez) · `factoryMinuteOfDay`/`factoryWeekday` (`constants/time.ts`, DST'ye dayanıklı duvar saati).
+**Ölçüm — NULLS NOT DISTINCT reddedildi:** özet §2'nin `UNIQUE NULLS NOT DISTINCT` sedini Prisma düz unique gibi
+okuyup `test_schema_drift`te `DROP INDEX` önerdi (1 belgesiz fark). `COALESCE("reasonCode",'')` İFADE indeksine
+çevrildi: Prisma ifade indeksini görmez, `test_db_invariants` EXPRESSION_UNIQUES zaten bu sınıfı ölçüyor.
+**Mandal düzeltmesi (`test_dokuma_rapor_onkosullari §4`):** "taşıyıcı indi ⇒ hemen kırmızı" hâli Dilim 1–3
+arasında CI'ı kırmızı tutup susturulurdu; ÜÇ SONUÇLU yapıldı — rapor ucu yok → ⏭ beyan (yeşil değil) · rapor ucu var
+∧ çıktı bekçisi yok → ❌ · bekçi var → ✅; saf `ciktiKarari` §5n2–§5n4 ile ölçülür (basılmayan dalın kırmızısı).
+**Şema damgası:** 1e'nin 100000–119999 penceresi `20260914125000` (devere) uygulanmış olduğu için sıra-dışıydı
+(`test_migration_hygiene` "bekleyen ad en büyükten BÜYÜK"); 130000 bandı alındı.
+**Sonraki dilimler (özet §8):** 2 terim helper + canlı karne · 3 kapanış job'u + mühür/unseal + M6 + `loom:shift-unseal`
+· 4 üç uç + `DOKUMA_UFKU` + çıktı bekçisi.

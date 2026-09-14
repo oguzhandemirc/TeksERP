@@ -93,6 +93,10 @@ const DATE_ONLY_FIELDS = new Set([
   // ⚠️ Duruşun MUTLAK anı ayrı kolonlarda (`startedAt`/`endedAt`) ve ikisi de
   // timestamptz; bu alan onların yerine geçmez, yanlarında durur.
   "MachineStopEvent.factoryDay",
+  // Karnenin FABRİKA GÜNÜ (2026-09-14, dokuma raporları Dilim 1) — `ShiftInstance.factoryDayKey`ten
+  // KOPYA, DONAR; rapor ekseni. `MachineStopEvent.factoryDay` ile aynı gerekçe ve aynı yazım
+  // (`factoryDayKeyUtcMidnight`, UTC gece yarısı).
+  "MachineShiftStat.factoryDay",
 ]);
 
 // Prisma'nın kendi defteri — bizim şemamız değil, zaten timestamptz.

@@ -736,6 +736,14 @@ export const ENUM_LABELS: Record<string, string> = {
   // MachineStopEndSource — duruşu kim kapattı.
   SIGNAL: "Sinyal",
   WATCHDOG: "Bekçi (ajan sustu)",
+
+  // ── Vardiya karnesi mührü (dokuma raporları Dilim 1, 2026-09-14)
+  // MachineSealState — `OPEN` PurchaseOrderStatus ile ÇAKIŞIR → MACHINE_SHIFT_STAT.sealState override'ı.
+  SEALED: "Mühürlü",
+  // MachineSealAction — mühür defterinin eylemi.
+  SEAL: "Mühürlendi",
+  UNSEAL: "Mühür açıldı",
+  RESEAL: "Yeniden mühürlendi",
 };
 
 // =============================================================================
@@ -795,6 +803,9 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   // StationKind.WEAVING (dokuma ⓪, 2026-09-14) — istasyon TÜRÜ; global `WEAVING`
   // RollEntrySource dilinde ("Dokumadan İndi", topun kaynağı). Ortak Türkçe YETMEZ.
   "STATION.kind": { WEAVING: "Dokuma Tezgahı" },
+  // MachineSealState.OPEN (2026-09-14) — karne MÜHÜRSÜZ; global `OPEN` alış siparişi
+  // dilinde ("Açık (mal bekleniyor)"). Ortak Türkçe YETMEZ.
+  "MACHINE_SHIFT_STAT.sealState": { OPEN: "Açık (mühürsüz)" },
 };
 
 /**
@@ -878,6 +889,9 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
   ISSUED: "ChequeKind ve ChequeStatus — global 'Verdiğimiz (kendi çekimiz)' ikisinde de doğru; durum alanı ayrıca CHEQUE.status override'ı taşır",
 
   // ── Ortak Türkçe YETMEYEN — FIELD_ENUM_OVERRIDES ile ayrılmış ──────────────
+  OPEN:
+    "PurchaseOrderStatus('Açık (mal bekleniyor)') ve MachineSealState(karne mühürsüz) — ortak cevap karne için YANLIŞ; " +
+    "MACHINE_SHIFT_STAT.sealState override'ı ile ayrıldı (2026-09-14)",
   PURCHASE:
     "InvoiceType('Alış Faturası') ve PriceKind — ortak cevap PriceKind için YANLIŞ; " +
     "ITEM_PRICE.kind override'ı ile ayrıldı (bu kusur 2026 öncesinde ELLE yakalandı, bekçisi yoktu)",

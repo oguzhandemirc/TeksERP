@@ -409,6 +409,38 @@ WHERE s."reasonCode" IS NOT NULL AND s."lossClass" IS NULL`,
     yazan: [SVC + "machine-run.service.ts"],
     neden: "koşumun ham atkı sıklığı, açılışta donar; kapanış/geri alma dokunmaz",
   },
+  // ── Vardiya karnesi (dokuma raporları Dilim 1, 01, 2026-09-14) — `yazan: []` ÖLÇÜLMÜŞ:
+  //    yazma yüzeyi (kapanış job'u M2 · elle düzeltme M3 · mühür M4) Dilim 3'te doğar; o gün
+  //    §4b "yazan ≠ ölçülen" der ve dosya adıyla beyan ister. Dördü de DONMUŞ İLERİ değer:
+  //    kaynağı sonradan değişse bu satırın rakamı DEĞİŞMEZ (period-guard "resmî rakam" sınıfı).
+  {
+    model: "MachineShiftStat",
+    alan: "factoryDay",
+    sinif: "DONMUS_ILERI",
+    yazan: [],
+    neden: "`ShiftInstance.factoryDayKey`ten materyalizasyonda kopyalanır; rapor ekseni, tek yazar M2",
+  },
+  {
+    model: "MachineShiftStat",
+    alan: "targetPickCapacityApt",
+    sinif: "DONMUS_ILERI",
+    yazan: [],
+    neden: "Σ(target_i × APT dk) — koşumların hedef deviri sonradan düzeltilse karnenin paydası değişmez (kardeşi `targetPickCapacityPot` aynı kural)",
+  },
+  {
+    model: "MachineShiftStat",
+    alan: "stopThresholdSec",
+    sinif: "DONMUS_ILERI",
+    yazan: [],
+    neden: "mikro duruş eşiği karneye donar; eşik değişimi geçmişle kıyaslanamaz seri üretmesin (bugün sabit `MINOR_STOP_THRESHOLD_SEC`)",
+  },
+  {
+    model: "MachineShiftStat",
+    alan: "monitoringState",
+    sinif: "DONMUS_ILERI",
+    yazan: [],
+    neden: "`MachineSpec.monitoringState`ten kopya; gölge karne tezgah sonradan LIVE'a geçse de gölge kalır (geçmiş geriye dönük yayınlanmaz)",
+  },
   {
     model: "RollPlanDeviation",
     alan: "rollValue",
