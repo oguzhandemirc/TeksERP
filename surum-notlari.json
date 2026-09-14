@@ -343,6 +343,16 @@
           "kapsam": "panel",
           "tip": "yeni",
           "metin": "Sebep kataloğuna “Levent dip iadesi” türü geldi (üç hazır sebep: Depoya iade, Atkılık aktarım, Telef); sekmesi yalnız devere modülü açıkken görünür."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Devere modülü açık kurulumlarda aynı metal gövde numarasıyla canlı (hazır ya da planlı) bir levent varken ikinci bir levent sarılamıyor; ekran meşgul leventi adıyla söyler. Büyük/küçük harf farkı ayrı gövde sayılmaz. Sarımı iptal edilmiş leventin gövde numarası yeniden kullanılabilir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Devere modülü açık kurulumlarda levent dip iadesi, o levente yazılan iplik çıkışını aşamıyor: çıkış 10 kg ise iade en fazla 10 kg olabilir; aşan giriş sınırı söyleyerek reddedilir. Sınır içindeki iadede hiçbir şey değişmez."
         }
       ]
     },
