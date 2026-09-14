@@ -10090,3 +10090,43 @@ Okuma OPT-IN `?byLine=1` (Zod enum `["1","0"]`, tanınmayan değer 400): randım
 - **Tablet seçer, kurmaz.** Grup kurma/adlandırma/çuval ekleme panel işidir; tablet yalnız canlı grupları listeler ve seçer. Seçili grup canlıdan düşünce (son çuvalı sevk edildi) seçim "Tümü"ye döner — ölü gruba kilitli "0 çuval" butonu yok (`reconcileSelection`). Transient: seçili grup boşken okutma yeni (gruplanmamış) çuval açar; grup zaten bir sonraki yenilemede listeden düşer.
 
 Sürüm maddesi tablet (tur 2026-09-13). Bekçi `test_packing_group §16` DB'siz kaynak-metni ölçümü + jest `packingGroupSelection.test.ts` 10/10; iki negatif sonda kırmızı görüldü.
+
+---
+
+## 2026-09-15 — Tırnaklı ETİKET kapısı (`check-surum-notlari §9`) ve şartını taşıyan kapının kör noktası [ÇEKİRDEK]
+
+Sürüm notunda tırnaklanan bir ekran/ayar adı **arama anahtarıdır**: operatör onu ekranda arar.
+Hatırlanarak yazıldığında sessizce kayar. Ölçüldü (2026-09-15, 13 yayın · 120 tırnaklı aday):
+**altı ad koddaki yazımından farklıydı** — `#63` "levent yuvası sayısı" ↔ `#69` "Levent yuva
+sayısı" (aynı alan, AYNI YAYIN, iki türlü) · `#51` "Dokuma tezgahı" ↔ "Dokuma Tezgahı" ·
+`#21`'in üç geri-alma kipi · `#71` "Levent dip iadesi" ↔ **"Levent Dibi İadesi"**.
+
+⚠️ **KAPININ İLK HÂLİ, KENDİSİNİ DOĞURAN KUSURU GÖREMİYORDU.** Aday ölçütüne *"büyük harfle
+başlayan"* şartını koymuştum (alıntı cümleleri elemek için). Negatif sonda — `#63`ün eski
+yazımını geri koymak — **YEŞİL kaldı**: çünkü kayışın en sık biçimi tam da harfi KÜÇÜLTMEKTİR,
+ve küçük harfle başlayan dize aday bile olmuyordu. ⇒ **Ders: bir kapıyı doğuran kusur, kapının
+negatif sondası OLMALIDIR.** "Benzer bir ihlal uydurup kırmızı görmek" yetmez; sondayı GERÇEK
+vakadan seç, yoksa kapı ihlalin *başka bir türünü* ölçer ve doğuran türü kaçırır.
+
+**Düzeltilmiş tasarım — ölçüt biçimsel, karar BEYANDA:** aday = tırnaklı ve ≤5 kelime (harf
+şartı YOK). Her aday ya kodda BİREBİR geçer ya da `MUAF_ETIKETLER`de sınıfı + gerekçesiyle
+beyanlıdır (kapalı küme: `ALAN_ADI` · `RAPOR_BOLUMU` · `ORNEK_METIN` · `DINAMIK` · `ALINTI`;
+bugün 17 satır). *"Ekran adı mı alıntı mı"* kararını kapı VERMEZ — veremez de: "bu mal hiç
+çıkmadı" ile "levent yuvası sayısı" biçimsel olarak ayırt edilemez. Kapı kararı yazardan İSTER
+ve sınıfa bağlar; kodda yalnız YAZIMI farklı olan aday ayrıca `[YAZIM KAYIŞI]` diye işaretlenir,
+çünkü onun çaresi "muafiyete yaz" değil "harfi düzelt"tir.
+
+**BEŞ SONDA:** ① `#63`ün küçük harfli eski yazımı → ❌ (kapının doğuş vakası) · ② yalnız harf
+farkı (`Dokuma tezgahı`) → ❌ + `[YAZIM KAYIŞI]` etiketiyle · ③ hiçbir maddede geçmeyen beyan →
+ölü muafiyet ❌ · ④ sınıf kapalı kümenin dışında → ❌ · ⑤ kaynak dizini okunamaz → **ÖLÇÜLEMEDİ**
+❌ ve etiket kolu hiç koşmaz (yoksa "120 etiket kodda yok" diye yanlış bir sel basardı). Geri
+alma `cp`+`sha256`; `surum-notlari.json` sha'sı sonda öncesiyle aynı.
+
+⚠️ Ayrıca §9'un iki kontrol adı §8'inkilerle AYNIYDI ("ölü muafiyet yok…", "muafiyet sınıfları
+kapalı kümede") — bugün defter.md'de düzelttiğim hatanın aynısı, kendi kapımda. Ayrıştırıldı
+(`ölü ETİKET muafiyeti…`). *Bir kontrol adı da bir ADRESTİR.*
+
+**Kapsam (beyanlı):** aday olmayan sınıf = küçük harfle başlayıp kodda hiç bulunmayan dize
+(alıntı cümleden ayırt edilemez) — bu sınıf ÖLÇÜLMEZ ve çıktı bunu yazmaz; yazarın beyanına
+kalır. Kaynak evreni `Electron/src` · `mobil/src` · `Teks-Erp/src` (.ts/.tsx); `scripts/*.sql`
+BİLEREK dışarıda (tutarlılık kontrolü bölüm başlıkları `RAPOR_BOLUMU` sınıfıyla muaf).

@@ -293,6 +293,112 @@ console.log("\n§8 — \"Sonraki sürümde\" vaadi");
     MUAF_VAATLER.filter((x) => !MUAF_SINIFLARI.has(x.sinif)).map((x) => String(x.sinif)).join(" · "));
 }
 
+console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı");
+// Notta tırnaklanan bir ekran/ayar/sekme adı ARAMA ANAHTARIDIR: operatör onu
+// ekranda arar. Hatırlanarak yazıldığında sessizce kayar — ölçüldü 2026-09-15:
+// 65 etiket adayının 6'sı koddaki yazımından farklıydı ("levent yuvası sayısı"
+// ↔ "Levent yuva sayısı" AYNI YAYINDA iki maddede iki türlü; "Levent dip iadesi"
+// ↔ "Levent Dibi İadesi"). Küçük/büyük harf farkı da kayıştır: operatör için
+// "Dokuma tezgahı" ile "Dokuma Tezgahı" aynı şey DEĞİLDİR.
+{
+  const KAYNAK_DIZINLER = ["Electron/src", "mobil/src", "Teks-Erp/src"];
+  const KAYNAK_UZANTI = new Set([".ts", ".tsx"]);
+  const EN_AZ_DOSYA = 500; // altına düşerse tarama BOZUK demektir, "hepsi bulunamadı" değil
+  /** Kapalı küme: muafiyet ancak bu iki sınıftan biriyle yazılır. */
+  const MUAF_SINIFLARI = new Set(["ALAN_ADI", "RAPOR_BOLUMU", "ORNEK_METIN", "DINAMIK", "ALINTI"]);
+  /**
+   * Beyanlı muafiyet — tırnak içinde olup da EKRAN ADI OLMAYAN dizeler.
+   * Yeni satır, sınıfı ve gerekçesiyle gelir; ölü satır da kırmızıdır.
+   */
+  const MUAF_ETIKETLER = [
+    // --- ALAN_ADI: literal ekran etiketi değil, konuşulan alan adı
+    { etiket: "Depo Hareketleri", sinif: "ALAN_ADI", gerekce: "Paneldeki gerçek yol 2026-09-13#15'te veriliyor: Depolar → bir depo → Hareketler." },
+    // --- RAPOR_BOLUMU: `scripts/consistency-check.sql` bölüm başlıkları (bu kapının evreni .ts/.tsx)
+    { etiket: "29) Deposuz top", sinif: "RAPOR_BOLUMU", gerekce: "Tutarlılık kontrolü bölüm başlığı (consistency-check.sql)." },
+    { etiket: "30) Defter ufku", sinif: "RAPOR_BOLUMU", gerekce: "Tutarlılık kontrolü bölüm başlığı (consistency-check.sql)." },
+    { etiket: "30b) Defter ufku öncesi", sinif: "RAPOR_BOLUMU", gerekce: "Tutarlılık kontrolü bölüm başlığı (consistency-check.sql)." },
+    { etiket: "31) Yarım geri alınmış kesim", sinif: "RAPOR_BOLUMU", gerekce: "Tutarlılık kontrolü bölüm başlığı (consistency-check.sql)." },
+    // --- ORNEK_METIN: kullanıcının/kurulumcunun yazdığı örnek değer
+    { etiket: "Birim: g", sinif: "ORNEK_METIN", gerekce: "Kurulumcunun kutuya yazdığı örnek değer (cihaz ölçeği anlatımı)." },
+    { etiket: "üretilen/giriş", sinif: "ORNEK_METIN", gerekce: "İş emri metrajının konuşulan adı, ekranda bu dizeyle yazmıyor." },
+    // --- DINAMIK: kodda şablonla kurulur, sabit dize olarak aranamaz
+    { etiket: "+N m müşteriye", sinif: "DINAMIK", gerekce: "Hücre metni şablonla kurulur (`+{sayı} m müşteriye`), sabit dize yok." },
+    // --- ALINTI: operatöre söylenen cümle / anlatı, ekran etiketi DEĞİL
+    { etiket: "bu mal hiç çıkmadı", sinif: "ALINTI", gerekce: "Sevk stornosunun anlamını anlatan cümle." },
+    { etiket: "mal çıktı, müşteri geri gönderdi", sinif: "ALINTI", gerekce: "İadenin anlamını anlatan cümle." },
+    { etiket: "sevk edilmiş durumda depoya girdi", sinif: "ALINTI", gerekce: "Olmayan bir olayın tarifi (sayım stornosu anlatımı)." },
+    { etiket: "ne zaman, kim, hangi gerekçeyle", sinif: "ALINTI", gerekce: "Saklanan bilginin tarifi, ekranda bu sırayla yazmıyor." },
+    { etiket: "kim, ne zaman, neden", sinif: "ALINTI", gerekce: "Değişiklik defterinin tarifi; kodda farklı sırayla geçiyor." },
+    { etiket: "işlenen metre başına kayıp", sinif: "ALINTI", gerekce: "Fire oranının tanımı." },
+    { etiket: "bunun yerine pasife alın", sinif: "ALINTI", gerekce: "Onay penceresinin verdiği öğüdün özeti." },
+    { etiket: "bunlar kalacak", sinif: "ALINTI", gerekce: "Geri sarma penceresindeki listenin konuşulan adı." },
+    { etiket: "bu rakam neden böyle", sinif: "ALINTI", gerekce: "Sonradan bakan kişinin sorusu." },
+  ];
+
+  let dosyaSayisi = 0;
+  let govde = "";
+  const tara = (d) => {
+    let girisler;
+    try { girisler = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of girisler) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) { tara(p); continue; }
+      if (!KAYNAK_UZANTI.has(path.extname(e.name))) continue;
+      if (p.includes("surum-notlari")) continue; // notun kendi kopyası kaynak DEĞİL
+      govde += fs.readFileSync(p, "utf8") + "\n";
+      dosyaSayisi++;
+    }
+  };
+  for (const d of KAYNAK_DIZINLER) tara(path.join(kok, d));
+
+  // ÜÇ SONUÇ: kaynak okunamadıysa "hiçbir etiket bulunamadı" DEĞİL, ÖLÇÜLEMEDİ.
+  const kaynakOk = dosyaSayisi >= EN_AZ_DOSYA;
+  check("körlük zemini: istemci + sunucu kaynağı okundu", kaynakOk,
+    `${dosyaSayisi} dosya · ${(govde.length / 1e6).toFixed(1)} MB`
+      + (kaynakOk ? "" : ` — ÖLÇÜLEMEDİ: kaynak dizinleri okunamadı, etiket araması YAPILMADI (${KAYNAK_DIZINLER.join(" · ")})`), true);
+
+  if (kaynakOk) {
+    // ETİKET ADAYI: tırnaklı ve ≤5 kelime. **Case ŞARTI YOK** — ölçüldü 2026-09-15:
+    // ilk tasarımda "büyük harfle başlayan" şartı vardı, negatif sonda YEŞİL kaldı
+    // çünkü kayışın en sık biçimi harfi KÜÇÜLTMEKTİR (#63 "levent yuvası sayısı").
+    // Şartı taşıyan kapı, kendisini doğuran kusuru göremiyordu.
+    //
+    // Yüklem TEK ve serttir: aday kodda BİREBİR geçecek ya da BEYANLI muaf olacak.
+    // Alıntı cümleler de aday olur ve muafiyete yazılır — "ekran adı mı alıntı mı"
+    // kararını kapı VERMEZ, yazarın BEYANINA bırakır ve beyanı sınıfa bağlar.
+    const adaylar = new Map();
+    for (const y of yayinlar) {
+      (y.maddeler ?? []).forEach((m, i) => {
+        for (const e of String(m.metin ?? "").matchAll(/“([^”]{3,60})”/g)) {
+          const s2 = e[1];
+          if (s2.split(/\s+/).length > 5) continue;
+          adaylar.set(s2, (adaylar.get(s2) ?? []).concat(`${y.id}#${i}`));
+        }
+      });
+    }
+    const govdeKucuk = govde.toLocaleLowerCase("tr");
+    const muafAdlar = new Set(MUAF_ETIKETLER.map((x) => x.etiket));
+    const cozulmeyen = [];
+    for (const [s2, yerler] of adaylar) {
+      if (muafAdlar.has(s2) || govde.includes(s2)) continue;
+      // Kodda yalnız YAZIMI farklı duruyorsa kusur ADIYLA söylenir: düzeltme
+      // "muafiyete yaz" değil "harfi düzelt"tir.
+      const kayisMi = govdeKucuk.includes(s2.toLocaleLowerCase("tr"));
+      cozulmeyen.push(`${JSON.stringify(s2)}${kayisMi ? " [YAZIM KAYIŞI — kodda farklı harfle var]" : ""} (${yerler.join(", ")})`);
+    }
+    check("körlük zemini: etiket adayı çıkarıldı", adaylar.size > 0,
+      `${adaylar.size} aday · ${MUAF_ETIKETLER.length} beyanlı muaf`, true);
+    check("⭐ tırnaklı ad kodda BİREBİR var ya da BEYANLI muaf", cozulmeyen.length === 0,
+      `${cozulmeyen.length} çözülmeyen: ${cozulmeyen.slice(0, 4).join(" · ")}`
+        + " — ekran adıysa koddan KOPYALA (harf harf), değilse MUAF_ETIKETLER'e sınıfıyla + gerekçesiyle yaz");
+    const oluMuaf = MUAF_ETIKETLER.filter((x) => !adaylar.has(x.etiket));
+    check("ölü ETİKET muafiyeti yok (beyan ↔ madde iki yönlü)", oluMuaf.length === 0,
+      oluMuaf.map((x) => JSON.stringify(x.etiket)).join(" · "));
+    check("etiket muafiyet sınıfları kapalı kümede", MUAF_ETIKETLER.every((x) => MUAF_SINIFLARI.has(x.sinif)),
+      MUAF_ETIKETLER.filter((x) => !MUAF_SINIFLARI.has(x.sinif)).map((x) => String(x.sinif)).join(" · "));
+  }
+}
+
 // --- Yayın kapısı (argümanla ya da künyeden) -----------------------------
 // ÜÇ SONUÇ, İKİ DEĞİL: kapı yeşil · kapı kırmızı · **ÖLÇÜLEMEDİ** (künye okunamadı
 // ya da sürüm alanı biçimsiz). Üçüncüsü sessizce ATLANMAZ — atlansaydı bozuk bir
