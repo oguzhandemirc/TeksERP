@@ -9347,3 +9347,20 @@ düzenlenmez). ③ M3 kapasitesi TEK hedeften (`targetPicksPerMin × APT/POT`): 
 0 → P ölçülemez. ④ RESEAL = ikinci ve sonraki mühürler (gen ≥ 2); UNSEAL kuşak sayacını artırmaz, `sealedAt` kalır.
 ⑤ Advisory uzay AÇILMADI: claim + unique yeter (`MachineRun` emsali); yarış §6 ile ölçüldü (1×200 + 1×409).
 **Dilim 4 (sıradaki):** üç rapor ucu + `DOKUMA_UFKU` + `test_dokuma_rapor_cikti` + §4 mandalının kapanışı.
+## 2026-09-14 — ÜÇ DOKUMA RAPORU indi (Dilim 4): randıman · duruş Pareto · vardiya karnesi; `DOKUMA_UFKU`; §4 mandalı kapandı [ÇEKİRDEK]
+
+**İnen (01):** `services/reports/dokuma.report.service.ts` + `routes/reports/dokuma.report.routes.ts` (`/api/reports/dokuma/randiman`
+· `/durus-pareto` · `/vardiya-karnesi`; `verifyToken → requireDokumaEnabled → report:production`, kapı kendi dosyasında —
+finance emsali) · `constants/dokuma-ufku.ts` (`LOOM_HORIZON_DAY = "2026-09-14"` — belge adı DOKUMA_UFKU; kapı `test_identifier_language` üretim kodunda Türkçe tip/fonksiyon adını reddetti, 7 ad İngilizceye çevrildi, CEVAP ALANLARI Türkçe kaldı; `meta.ufuk` + `ufukOncesiSatir`) ·
+`collectShiftStatRows` (tek toplayıcı; mühürlü kırılım SON KUŞAK DB'den, açık canlı) · `test_dokuma_rapor_cikti` 29/0 (üç
+negatif sonda kırmızı görüldü) · `test_dokuma_rapor_onkosullari §4` mandalı ✅ (uç var ∧ bekçi var; aradaki commit'te
+"uç var ∧ bekçi yok" dalı CANLI ölçüldü — mandal ısırdı, sonra kapandı).
+**Kararlar:** ① Pareto'da `atanmamis` (beamSlot NULL) KESİŞEN levent eksenidir: aynı duruş hem sebebinde hem atanmamış
+kovasında görünür, `toplam`a EKLENMEZ (toplam = Σsebepler + mikro + sınıfsız) — iki eksen tek listeye bindirilmez.
+② Vardiya karnesi `ozet.elle` = OPERATOR + SUPERVISOR (ikisi de insan girişi), `simule` AYRI, `olculemedi` = P null satır.
+③ Ufuk kod sabiti `LOOM_HORIZON_DAY` (repo tarihi, `LEDGER_HORIZON_DAY` emsali); kuruluma özgü ufuk gerekirse PROFİL ayarı ayrı
+karar. ④ Ufuk öncesi satır `startsAt < ufuk` ile sayılır.
+**Sürüm notu:** `surum-notlari.json` kapsamı {panel, tablet, her-ikisi} — backend/API-only bir madde için "iç"/"sunucu"
+kapsamı YOK (kullanıcı kararı, `check-surum-notlari` §"sunucu" REDDEDİLİYOR). Karnenin panel ekranı ayrı dilim ⇒ madde o
+dilimle yazılır; hazır cümle: *"Dokuma tezgahları için vardiya karnesi ve üç rapor geldi (randıman, duruş Pareto, vardiya
+karnesi) — yalnız dokuma modülü açık kurulumda; referans fabrikada hiçbir şey değişmedi."*

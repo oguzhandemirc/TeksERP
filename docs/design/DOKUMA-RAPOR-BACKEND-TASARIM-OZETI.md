@@ -172,6 +172,8 @@ targetPicksPerMin = tek koşum ise target_i, değilse NULL
 
 ## 5 · Okuyucular — `routes/machine-shift-stat.routes.ts` (`/api/machine-shift-stats`) + `routes/reports/dokuma.report.routes.ts` (`/api/reports/dokuma`)
 
+> **İNDİ 2026-09-14 (Dilim 2 karne listesi + Dilim 4 üç rapor):** `open=1` parametresi YOK — mühürsüz satır ZATEN anlık (`live:true`), mühürlü DB'den; `sealState` süzgeci var. Pareto `atanmamis` KESİŞEN levent eksenidir (sebep listesiyle toplanmaz); `mikroDuruslar` ve `siniflandirilmamis` ayrı kovalar; `toplam = Σsebepler + mikro + sınıfsız`. Vardiya karnesi `ozet.elle = OPERATOR + SUPERVISOR`, `simule` ayrı, `olculemedi = P null`. Rapor servisinde bölme aritmetiği YOK (oranlar `loom-efficiency.helper`). Ufuk sabiti kodda `LOOM_HORIZON_DAY = "2026-09-14"` (`constants/dokuma-ufku.ts`; belge adı DOKUMA_UFKU — `test_identifier_language` üretim kodunda Türkçe tanımlayıcı istemez, cevap alanları Türkçe kalır).
+
 Kapı sırası: `verifyToken → requireDokumaEnabled → izin`. Hepsi `report:production` (M3–M5 hariç). Tarih parametreleri `resolveRangeStart/End` (fabrika günü), süzme SUNUCUDA, cursor yok (vardiya×makine ≤ ~22k satır/yıl; `take ≤ 500`).
 
 | uç | döner | sözleşme maddesi |

@@ -14,7 +14,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
 import { MINOR_STOP_THRESHOLD_SEC } from "../constants/loom-shift";
-import { computeShiftTermsPure, type ShiftTerms, type ShiftTermsInput } from "./helpers/loom-shift-terms.helper";
+import { computeShiftTermsPure, type ShiftBreakdownRow, type ShiftTerms, type ShiftTermsInput } from "./helpers/loom-shift-terms.helper";
 import { computeMachineKpis, type LoomKpis } from "./helpers/loom-efficiency.helper";
 
 type Tx = Prisma.TransactionClient | typeof prisma;
@@ -132,11 +132,23 @@ function storedTerms(s: Prisma.MachineShiftStatGetPayload<{ select: typeof STAT_
 }
 
 
+/** Rapor okuyucuları için ek alanlar (`includeBreakdown`): kırılım mühürlüde SON kuşak, açıkta canlı. */
+export interface ShiftStatRowExtra {
+  statId: string | null;
+  breakdown: ShiftBreakdownRow[];
+}
+
+export interface ShiftStatCollectOptions {
+  now?: Date;
+  includeBreakdown?: boolean;
+}
+
 /**
- * Karne listesi — vardiya × tezgah. Süzme SUNUCUDA, liste tavanda kırpılır sayı kırpılmaz.
- * Mühürlü satır DB'den, diğerleri anlık (`live: true`). Cursor yok (≤ ~22k satır/yıl).
+ * Karne satırlarını toplar — vardiya × tezgah. Süzme SUNUCUDA, liste tavanda kırpılır sayı kırpılmaz.
+ * Mühürlü satır DB'den (`live:false`), diğerleri anlık. Rapor uçları da BURADAN okur (tek toplayıcı).
  */
-export async function listShiftStats(p: ShiftStatListParams, now = new Date()): Promise<ApiResponse<ShiftStatRow[]> & { meta: { total: number; truncated: boolean; live: number; sealed: number } }> {
+export async function collectShiftStatRows(p: ShiftStatListParams, opts: ShiftStatCollectOptions = {}): Promise<{ rows: Array<ShiftStatRow & ShiftStatRowExtra>; meta: { total: number; truncated: boolean; live: number; sealed: number } }> {
+  const now = opts.now ?? new Date();
   const fromKey = factoryDayKeyFromYmd(p.from);
   const toKey = factoryDayKeyFromYmd(p.to);
   if (toKey < fromKey) throw AppError.badRequest("Bitiş günü başlangıçtan önce olamaz");
@@ -155,23 +167,33 @@ export async function listShiftStats(p: ShiftStatListParams, now = new Date()): 
   const pairs: Array<{ shift: (typeof shifts)[number]; loom: (typeof looms)[number] }> = [];
   for (const shift of shifts) for (const loom of looms) pairs.push({ shift, loom });
   const total = pairs.length;
-  const rows: ShiftStatRow[] = [];
+  const rows: Array<ShiftStatRow & ShiftStatRowExtra> = [];
   let live = 0;
   let sealed = 0;
   for (const { shift, loom } of pairs.slice(0, SHIFT_STAT_LIST_TAKE)) {
     const s = storedBy.get(`${loom.id}|${shift.id}`);
-    const base = { machineId: loom.id, machine: { code: loom.code, name: loom.name }, shiftInstanceId: shift.id, shiftInstance: shift };
+    const base = { machineId: loom.id, machine: { code: loom.code, name: loom.name }, shiftInstanceId: shift.id, shiftInstance: shift, statId: s?.id ?? null };
     if (s && s.sealState === "SEALED") {
       if (p.sealState === "OPEN") continue;
       sealed += 1;
       const terms = storedTerms(s);
-      rows.push({ ...base, live: false, sealState: "SEALED", sealGeneration: s.sealGeneration, sealedAt: s.sealedAt, terms, kpis: computeMachineKpis(terms), emptyLoom: false, warnings: [] });
+      // Mühürlü kırılım = SON KUŞAK (defter; katalog değişse etiket değişmez).
+      const breakdown = opts.includeBreakdown
+        ? await prisma.machineShiftStopBreakdown.findMany({ where: { statId: s.id, sealGeneration: s.sealGeneration }, select: { reasonCode: true, reasonLabel: true, lossClass: true, beamSlotNull: true, stopCount: true, stopSec: true } })
+        : [];
+      rows.push({ ...base, live: false, sealState: "SEALED", sealGeneration: s.sealGeneration, sealedAt: s.sealedAt, terms, kpis: computeMachineKpis(terms), emptyLoom: false, warnings: [], breakdown });
       continue;
     }
     if (p.sealState === "SEALED") continue;
     live += 1;
-    const { breakdown: _b, warnings, emptyLoom, runCount: _r, ...terms } = await computeShiftTerms(prisma, loom.id, shift.id, { now });
-    rows.push({ ...base, live: true, sealState: "OPEN", sealGeneration: s?.sealGeneration ?? 0, sealedAt: s?.sealedAt ?? null, terms, kpis: computeMachineKpis(terms), emptyLoom, warnings });
+    const { breakdown, warnings, emptyLoom, runCount: _r, ...terms } = await computeShiftTerms(prisma, loom.id, shift.id, { now });
+    rows.push({ ...base, live: true, sealState: "OPEN", sealGeneration: s?.sealGeneration ?? 0, sealedAt: s?.sealedAt ?? null, terms, kpis: computeMachineKpis(terms), emptyLoom, warnings, breakdown: opts.includeBreakdown ? breakdown : [] });
   }
-  return { success: true, data: rows, meta: { total, truncated: total > SHIFT_STAT_LIST_TAKE, live, sealed } };
+  return { rows, meta: { total, truncated: total > SHIFT_STAT_LIST_TAKE, live, sealed } };
+}
+
+/** M1 — karne listesi ucu (kırılımsız). */
+export async function listShiftStats(p: ShiftStatListParams, now = new Date()): Promise<ApiResponse<ShiftStatRow[]> & { meta: { total: number; truncated: boolean; live: number; sealed: number } }> {
+  const { rows, meta } = await collectShiftStatRows(p, { now });
+  return { success: true, data: rows.map(({ statId: _s, breakdown: _b, ...row }) => row), meta };
 }

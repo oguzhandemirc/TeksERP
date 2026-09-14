@@ -200,6 +200,7 @@ const MODULLER: ModulTanimi[] = [
       "routes/machine-doff.routes.ts",
       "routes/machine-stop.routes.ts",
       "routes/machine-shift-stat.routes.ts",
+      "routes/reports/dokuma.report.routes.ts",
     ],
     sondalar: ["/api/weaving-orders"],
     onKosul: { alan: "productionEnabled", beklenenModulKodu: "production" },
