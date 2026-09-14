@@ -358,7 +358,7 @@ const bagOlculemedi = scriptSilme.filter((x) => x.bag === "OLCULEMEDI");
 const teardownDisi = scriptSilme.filter((x) => x.teardown === null);
 // ⚠️ CIRCIR TABANLARI — oturum DOKUNMAZ, entegratör trende ölçüp düşürür.
 const SINIRSIZ_TABAN = 18;
-const TEARDOWN_DISI_TABAN = 58;
+const TEARDOWN_DISI_TABAN = 61;
 
 check("§10b0 körlük zemini: kapsam dolu", scriptSilme.length > 0,
   `${scriptSilme.length} silme çağrısı · ${silmeDelegeleri.size} model (audit/telemetri hariç)`);
