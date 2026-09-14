@@ -14,7 +14,7 @@
 // =============================================================================
 
 import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
-import { ACTIVE_ROLL_PROPERTY, ACTIVE_TARGET_PROPERTY } from "./helpers/property-revoke.helper";
+import { ACTIVE_ROLL_PROPERTY, ACTIVE_TARGET_PROPERTY, revokeRollProperties } from "./helpers/property-revoke.helper";
 import { ACTIVE_MOVEMENT, revokeRollMovements } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
@@ -5434,9 +5434,14 @@ export class SubcontractorService {
             notes: `Fason kabul iptali (${receipt.receiptNo})`,
           },
         );
-        // RollProperty SİLİNMEZ (2026-09-14): top CANCELLED'a gidiyor, özelliği
-        // onunla kalır — silmek ölü topun geçmişini kesmekti (③a ticari pivot).
-        // Yeniden kabul YENİ top yaratır, unique çakışmaz.
+        // RollProperty SİLİNMEZ, DAMGALANIR (③a, Faz 2e): kardeş `revokeRollMovements`
+        // ile aynı sebep kodu — top CANCELLED'a giderken özelliği de "geri alındı"
+        // damgası taşır, satır ölü topta durur. Yeniden kabul YENİ top yaratır.
+        await revokeRollProperties(tx, {
+          rollIds: bornRollIds,
+          reason: STOCK_MOVE_REASON.FASON_RECEIPT_CANCEL,
+          userId: userId ?? null,
+        });
         // Roll status → CANCELLED, currentStepId temizle
         // ⚠️ SEBEP KODU 2026-09-13'te EKLENDİ: bu yol topu SEBEPSİZ iptal ediyordu
         //    (data yalnız status + currentStepId), oysa iptal sebebi kataloglu. İki
@@ -5981,8 +5986,9 @@ export class SubcontractorService {
         reason: "FASON_TRANSFER_GERI_AL",
         userId,
       });
-      // RollProperty SİLİNMEZ (2026-09-14): born top CANCELLED'a gidiyor, özelliği
-      // onunla kalır (③a ticari pivot; cancelReceipt ile aynı hüküm).
+      // RollProperty SİLİNMEZ, DAMGALANIR (③a, Faz 2e): kardeş `revokeRollMovements`
+      // ile aynı sebep — born top CANCELLED'a giderken özelliği damgalı durur.
+      await revokeRollProperties(tx, { rollIds: bornRollIds, reason: "FASON_TRANSFER_GERI_AL", userId });
       const cancelledBorn = await tx.roll.updateMany({
         where: {
           id: { in: bornRollIds },

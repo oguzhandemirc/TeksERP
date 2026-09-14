@@ -145,8 +145,11 @@ async function main(): Promise<void> {
   check("ön koşul — born1'de özellik satırı var", born1PropsBefore >= 1, `n=${born1PropsBefore}`);
 
   await sub.cancelReceipt(born1.parentReceiptId!, "saha testi: kabul iptali", ADMIN, [born1.id]);
-  const born1PropsAfter = await prisma.rollProperty.count({ where: { rollId: born1.id } });
-  check("CR1: ⭐ iptal born'un ÖZELLİK satırını SİLMEDİ (ölü topta kalır)", born1PropsAfter === born1PropsBefore, `önce=${born1PropsBefore} sonra=${born1PropsAfter}`);
+  const born1PropsAfterRows = await prisma.rollProperty.findMany({ where: { rollId: born1.id }, select: { revokedAt: true, revokeReason: true } });
+  check("CR1: ⭐ iptal born'un ÖZELLİK satırını SİLMEDİ (ölü topta kalır)", born1PropsAfterRows.length === born1PropsBefore, `önce=${born1PropsBefore} sonra=${born1PropsAfterRows.length}`);
+  check("CR1: ⭐ özellik satırı DAMGALI, sebep kardeş hareketle aynı (FASON_RECEIPT_CANCEL)",
+    born1PropsAfterRows.every((p) => p.revokedAt !== null && p.revokeReason === "FASON_RECEIPT_CANCEL"),
+    JSON.stringify(born1PropsAfterRows.map((p) => p.revokeReason)));
   const born1After = await prisma.roll.findUnique({ where: { id: born1.id }, select: { status: true, currentStepId: true } });
   check("CR1: iptal → born roll CANCELLED + currentStepId null", born1After?.status === RollStatus.CANCELLED && born1After?.currentStepId === null);
   const r1After = await prisma.roll.findUnique({ where: { id: a.rollIds[0] }, select: { status: true, currentStepId: true } });

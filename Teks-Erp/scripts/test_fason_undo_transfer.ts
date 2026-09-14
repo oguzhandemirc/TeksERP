@@ -129,8 +129,11 @@ async function main(): Promise<void> {
 
   // Geri al
   await sub.undoTransfer(boyaDispatchId, "yanlış aktarım — geri alma testi", ADMIN);
-  const bornPropsAfter = await prisma.rollProperty.count({ where: { rollId: { in: bornBefore.map((r) => r.id) } } });
-  check("⭐ Geri alma born'ların ÖZELLİK satırını SİLMEDİ (ölü topta kalır)", bornPropsAfter === bornPropsBefore, `önce=${bornPropsBefore} sonra=${bornPropsAfter}`);
+  const bornPropsAfterRows = await prisma.rollProperty.findMany({ where: { rollId: { in: bornBefore.map((r) => r.id) } }, select: { revokedAt: true, revokeReason: true } });
+  check("⭐ Geri alma born'ların ÖZELLİK satırını SİLMEDİ (ölü topta kalır)", bornPropsAfterRows.length === bornPropsBefore, `önce=${bornPropsBefore} sonra=${bornPropsAfterRows.length}`);
+  check("⭐ özellik satırları DAMGALI, sebep kardeş hareketle aynı (FASON_TRANSFER_GERI_AL)",
+    bornPropsAfterRows.every((p) => p.revokedAt !== null && p.revokeReason === "FASON_TRANSFER_GERI_AL"),
+    JSON.stringify(bornPropsAfterRows.map((p) => p.revokeReason)));
 
   const boyaD = await prisma.subcontractorDispatch.findUnique({ where: { id: boyaDispatchId }, select: { cancelledAt: true } });
   check("Boyahane sevki CANCELLED", boyaD?.cancelledAt !== null, String(boyaD?.cancelledAt !== null));
