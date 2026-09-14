@@ -132,7 +132,7 @@
         {
           "kapsam": "her-ikisi",
           "tip": "duzeltme",
-          "metin": "Depoda kesilmiş bir top tabletten geri alındığında Depo Hareketleri ile topun metrajı artık aynı sayıyı söylüyor. Önceden geri alma yalnız yeni topun giriş satırını tersliyor, ana topun kesim çıkışı defterde açık kalıyordu: top listesinde 100 metre görünen ana top defterde 60 sayılıyordu. Şimdi kesim çıkışı da terslenir — ama yalnız metraj gerçekten ana topa geri konuyorsa. Geri alma sırasında “kayıt yanlıştı” seçeneğini seçip kaynak topu arşivde bırakırsanız kaynak metrajı eskisi gibi değişmez ve defter de buna uyar; yeni topun satırı düzeltme kaydı olarak kalır. Tambur kapanışında “fire” seçilen kalan parça ise tek başına geri alınamaz: o parçada yalnız “Tüm İşlemi Geri Al” sunulur, “Tek Parça İptali” ve “İş Emrine Geri Al” görünmez; eski ekrandan denenirse “kapanışın fire kalanıdır, kapanışı tümden geri alın” uyarısıyla reddedilir — kapanışın kendi fire/artık çıkışı parça geri almasında terslenmez. Sıradan kesim parçalarında değişiklik yok. Bu sürümden önce yarım geri alınmış kesimler kendiliğinden düzelmez; tutarlılık kontrolü bunları “31) Yarım geri alınmış kesim” bölümünde ayrı sayar."
+          "metin": "Depoda kesilmiş bir top tabletten geri alındığında Depo Hareketleri ile topun metrajı artık aynı sayıyı söylüyor. Önceden geri alma yalnız yeni topun giriş satırını tersliyor, ana topun kesim çıkışı defterde açık kalıyordu: top listesinde 100 metre görünen ana top defterde 60 sayılıyordu. Şimdi kesim çıkışı da terslenir — ama yalnız metraj gerçekten ana topa geri konuyorsa. Geri alma sırasında “kayıt yanlıştı” seçeneğini seçip kaynak topu arşivde bırakırsanız kaynak metrajı eskisi gibi değişmez ve defter de buna uyar; yeni topun satırı düzeltme kaydı olarak kalır. Tambur kapanışında “fire” seçilen kalan parça ise tek başına geri alınamaz: o parçada yalnız “Tüm işlemi geri al” sunulur, “Tek parça iptali” ve “İş emrine geri al” görünmez; eski ekrandan denenirse “kapanışın fire kalanıdır, kapanışı tümden geri alın” uyarısıyla reddedilir — kapanışın kendi fire/artık çıkışı parça geri almasında terslenmez. Sıradan kesim parçalarında değişiklik yok. Bu sürümden önce yarım geri alınmış kesimler kendiliğinden düzelmez; tutarlılık kontrolü bunları “31) Yarım geri alınmış kesim” bölümünde ayrı sayar."
         },
         {
           "kapsam": "tablet",
@@ -282,7 +282,7 @@
         {
           "kapsam": "her-ikisi",
           "tip": "yeni",
-          "metin": "İstasyon türlerine “Dokuma tezgahı” eklendi. Bu türde istasyonu olmayan işletmede hiçbir şey değişmez. Bu türde istasyon açıldıysa eski tablet sürümü o istasyonda oturum açamaz ve eski panel sürümü istasyon listesinde tür etiketini boş basar; ikisi de güncellemeyle düzelir."
+          "metin": "İstasyon türlerine “Dokuma Tezgahı” eklendi. Bu türde istasyonu olmayan işletmede hiçbir şey değişmez. Bu türde istasyon açıldıysa eski tablet sürümü o istasyonda oturum açamaz ve eski panel sürümü istasyon listesinde tür etiketini boş basar; ikisi de güncellemeyle düzelir."
         },
         {
           "kapsam": "panel",
@@ -342,7 +342,7 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Dokuma modülü açık kurulumlarda tezgah kartına “levent yuvası sayısı” geldi (varsayılan 1; cağlıktan beslenen çözgü makinesinde 0 olabilir). Yuva sayısı ikiden azsa duruşta yuva sorulmaz ve hiçbir şey değişmez; iki ve üstünde duruş bir yuvaya bağlanabilir, yuva numarası aralık dışıysa kayıt reddedilir. Ayrıca sebebi bir insan tarafından atanmış (sınıflandırılmış) duruş artık silinemez; yanlışsa yeniden sınıflandırılır ve değişiklik defterde kalır. Sınıflandırılmamış makine kaydı eskisi gibi silinebilir."
+          "metin": "Dokuma modülü açık kurulumlarda tezgah kartına “Levent yuva sayısı” geldi (varsayılan 1; cağlıktan beslenen çözgü makinesinde 0 olabilir). Yuva sayısı ikiden azsa duruşta yuva sorulmaz ve hiçbir şey değişmez; iki ve üstünde duruş bir yuvaya bağlanabilir, yuva numarası aralık dışıysa kayıt reddedilir. Ayrıca sebebi bir insan tarafından atanmış (sınıflandırılmış) duruş artık silinemez; yanlışsa yeniden sınıflandırılır ve değişiklik defterde kalır. Sınıflandırılmamış makine kaydı eskisi gibi silinebilir."
         },
         {
           "kapsam": "panel",
