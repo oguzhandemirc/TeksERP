@@ -85,7 +85,7 @@ async function fixtureKur(scrapCode: string, scrapGradeId: string): Promise<void
 }
 
 /** Teardown — yalnız kendi ürettiği kimlikler, FK sırasıyla. */
-async function fixtureTemizle(): Promise<void> {
+async function temizleFixture(): Promise<void> {
   if (ids.dispatchItems.length) await prisma.subcontractorDispatchItem.deleteMany({ where: { id: { in: ids.dispatchItems } } });
   if (ids.dispatch) await prisma.subcontractorDispatch.deleteMany({ where: { id: ids.dispatch } });
   if (ids.rolls.length) await prisma.roll.deleteMany({ where: { id: { in: ids.rolls } } });
@@ -257,7 +257,7 @@ main()
   })
   .finally(async () => {
     try {
-      await fixtureTemizle();
+      await temizleFixture();
     } catch (e) {
       console.error("temizlik hatası:", e instanceof Error ? e.message : e);
       fail++;
