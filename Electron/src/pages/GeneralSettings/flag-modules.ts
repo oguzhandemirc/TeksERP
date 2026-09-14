@@ -100,6 +100,8 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   // Devere Faz 3 (2026-09-15): tezgah bağı defteri ve bağlama zorunluluğu devere modülünün davranış bayrakları.
   devereMountTracking: "devereEnabled",
   devereMountTrackingRequired: "devereEnabled",
+  // Devere Faz 4 (2026-09-15): otomatik tüketim devere modülünün davranış bayrağı.
+  devereAutoConsume: "devereEnabled",
 
   // --- ÜRETİM (`operations/work-orders` · KK1 · Tambur · Kurşun · Parti) -----
   targetQuantityEnabled: "productionEnabled",

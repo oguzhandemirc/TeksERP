@@ -267,6 +267,8 @@ export const updateSchema = z.strictObject({
   devereLotRequired: z.boolean().optional(),
   devereMountTracking: z.boolean().optional(),
   devereMountTrackingRequired: z.boolean().optional(),
+  // devere.autoConsume — tezgahtan doğan top leventten otomatik tüketim (default false = elle). Backend ENFORCE.
+  devereAutoConsume: z.boolean().optional(),
   dokumaEnabled: z.boolean().optional(),
   targetQuantityEnabled: z.boolean().optional(),
   rawWidthEnabled: z.boolean().optional(),

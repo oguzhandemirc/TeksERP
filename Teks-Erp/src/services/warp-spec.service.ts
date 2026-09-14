@@ -35,6 +35,15 @@ export class WarpSpecService extends BaseService {
       throw AppError.badRequest("Tel adedi zorunludur (devere hesabının ilk çarpanı).");
     }
 
+    // Faz 4 take-up (%): 0 ≤ x < 100 (DB CHECK `warp_specs_take_up_pct_range` ikinci hat); "" / null = bilinmiyor.
+    const takeUp = data.takeUpPct;
+    if (takeUp !== undefined && takeUp !== null && takeUp !== "") {
+      const t = Number(takeUp);
+      if (!Number.isFinite(t) || t < 0 || t >= 100) {
+        throw AppError.badRequest("Take-up yüzdesi 0 ile 100 arasında olmalı (100 hariç).");
+      }
+    }
+
     const yarnItemId = data.yarnItemId;
     if (typeof yarnItemId === "string" && yarnItemId.length > 0) {
       const item = await prisma.item.findUnique({

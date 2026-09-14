@@ -12,6 +12,7 @@ import { ACTIVE_ORDER_LINK } from "./helpers/order-link.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { claimDoffForRollTx } from "./helpers/machine-doff-link.helper";
+import { autoConsumeForRollTx, cancelConsumedForRollTx, reconsumeForRollTx } from "./warp-beam-auto-consume.service";
 import { postRescueEntryTx } from "./helpers/production-entry-ledger.helper";
 import { postEntryCorrectionTx } from "./helpers/entry-correction-ledger.helper";
 import { normalizeScanCode } from "../utils/code-format";
@@ -1043,6 +1044,8 @@ export class InventoryService {
     const { storedEnteredAt, anchorMs } = resolveEntryStamp(data.clientEnteredAt, nowForEntry);
 
     let roll: Awaited<ReturnType<typeof prisma.roll.create>>;
+    // Devere Faz 4: bağlı leventten otomatik tüketim uyarıları (bayrak kapalıyken dizi boş kalır, yanıta girmez).
+    const autoConsumeWarnings: string[] = [];
     try {
       roll = await prisma.$transaction(async (tx) => {
         // TX KAPISI (Sınıf 4 — I1): İLK ifade. Mal Kabul satırı burada fişi
@@ -1237,6 +1240,10 @@ export class InventoryService {
             userId: userId ?? null,
           });
         }
+        // LEVENT TÜKETİMİ (Faz 4) — yalnız tezgahtan inen top (doff bağı); aynı tx, top doğuşundan SONRA.
+        if (opts?.doffEventId) {
+          autoConsumeWarnings.push(...(await autoConsumeForRollTx(tx, { rollId: created.id, doffEventId: opts.doffEventId, fabricLengthM: data.initialQty, userId: userId ?? null })));
+        }
         return created;
       });
     } catch (err) {
@@ -1330,6 +1337,7 @@ export class InventoryService {
       success: true,
       data: roll,
       message: `Top oluşturuldu. Barkod: ${roll.barcode}`,
+      ...(autoConsumeWarnings.length ? { warnings: autoConsumeWarnings } : {}),
     };
   }
 
@@ -3734,6 +3742,8 @@ export class InventoryService {
         );
       }
       const r = await tx.roll.findUniqueOrThrow({ where: { id } });
+      // LEVENT TÜKETİMİ TERS YOLU (Faz 4): yalnız İPTAL ("hiç yoktu") — SCRAP'ta çözgü gerçekten tüketildi, dokunulmaz.
+      if (!isScrap && r.doffEventId) await cancelConsumedForRollTx(tx, id, cancelReasonText ?? "top iptali", userId ?? null);
 
       // DEPO DEFTERİ — mal depodan DÜŞTÜ (kayıt hatalıydı ya da fire).
       // `warehouseId` BİLEREK temizlenmez: "en son hangi depodaydı" izi kalsın ve
@@ -4028,6 +4038,9 @@ export class InventoryService {
           notes: opts?.reason?.trim() || null,
         },
       );
+      // LEVENT TÜKETİMİ (Faz 4) yeniden ileri yol: top dirildi, çözgü yine düşer (bayrak kapalıysa satır yok).
+      const restoredRow = await tx.roll.findUniqueOrThrow({ where: { id }, select: { id: true, doffEventId: true, initialQty: true } });
+      await reconsumeForRollTx(tx, restoredRow, userId ?? null);
       return { claimCount: c.count, ledger: l };
     });
     if (claimCount === 0) {

@@ -1512,6 +1512,10 @@ model WarpSpec {
   endsPerDent Int?
   /// Tarak eni (cm) — bilgi.
   reedWidthCm Decimal? @db.Decimal(6, 2)
+  /// Faz 4 TAKE-UP (%) — çözgü ÷ kumaş oranı: `çözgü = kumaş ÷ (1 − takeUp/100)`. [VERİ] ölçüm üçlüsüne
+  /// (levent · desen · tezgah) bağlıdır, kartta VARSAYILANDIR; NULL = bilinmiyor → otomatik tüketim
+  /// çözgü = kumaş sayar ve UYARIR (ESTIMATED). CHECK `warp_specs_take_up_pct_range` 0 ≤ x < 100.
+  takeUpPct   Decimal? @db.Decimal(5, 2)
   notes       String?  @db.VarChar(500)
   isActive    Boolean  @default(true)
 
@@ -1692,8 +1696,11 @@ model WarpBeamEvent {
   /// WEIGHED kaynağında brüt/dara kg (#13) — dara bilinmiyorsa null, metre ESTIMATED'a düşer.
   grossKg        Decimal?             @db.Decimal(14, 3)
   tareKg         Decimal?             @db.Decimal(14, 3)
-  /// CONSUMED: bu tüketimde dokunan kumaş metresi (bilgi; Faz 4 rollId).
+  /// CONSUMED: bu tüketimde dokunan kumaş metresi (bilgi; Faz 4'te topun `initialQty`si — take-up türetilir: 1 − fabric/lengthM).
   fabricLengthM  Decimal?             @db.Decimal(12, 3)
+  /// Faz 4: bu tüketim HANGİ TOPTAN doğdu (KK1'de WEAVING + doff bağı; `devere.autoConsume`). Çift levent → aynı
+  /// rollId'li iki satır (N:M; `Roll`a levent kolonu AÇILMAZ). Restrict: tüketimi olan top sert silinmez.
+  rollId         String?              @db.Uuid
 
   reasonCode  String?  @db.VarChar(64)
   /// Gerekçe kolona yazılır, audit'e değil.
@@ -1706,11 +1713,13 @@ model WarpBeamEvent {
   reversal WarpBeamEvent? @relation("WarpBeamEventReversal")
   machine  Machine?       @relation("WarpBeamEventMachine", fields: [machineId], references: [id], onDelete: Restrict)
   dispatchItem SubcontractorDispatchItem? @relation("WarpBeamEventDispatchItem", fields: [dispatchItemId], references: [id], onDelete: Restrict)
+  roll         Roll?                      @relation("WarpBeamEventRoll", fields: [rollId], references: [id], onDelete: Restrict)
 
   @@index([beamId, createdAt])
   @@index([machineId, createdAt])
   @@index([kind, createdAt])
   @@index([dispatchItemId])
+  @@index([rollId])
   @@index([beamId, kind, createdAt])
   @@map("warp_beam_events")
 }
@@ -3178,6 +3187,8 @@ model Roll {
   parentReceipt        SubcontractorReceipt?       @relation("RollFromReceipt", fields: [parentReceiptId], references: [id])
   /// `Restrict`: topu doğurmuş indirme silinemez — ileri kaydın bağlamı (defter doktrini).
   doffEvent            DoffEvent?                  @relation(fields: [doffEventId], references: [id], onDelete: Restrict)
+  /// Faz 4: bu toptan otomatik düşen levent tüketimleri (CONSUMED.rollId; çift leventte iki satır).
+  warpBeamEvents       WarpBeamEvent[]             @relation("WarpBeamEventRoll")
   /// Bu rol parent olarak hangi RollOperation kayıtlarına kaynak — Tambur kalıtım izi
   inheritedOperations  RollOperation[]             @relation("RollOperationInherited")
   dispatchItems        SubcontractorDispatchItem[]

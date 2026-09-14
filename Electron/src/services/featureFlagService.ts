@@ -306,6 +306,8 @@ export interface FeatureFlags {
   devereMountTracking: boolean;
   /** Devere Faz 3: bağlamada yöntem + başlangıç saati zorunlu — varsayılan kapalı. */
   devereMountTrackingRequired: boolean;
+  /** Devere Faz 4: tezgahtan doğan top (KK1 WEAVING + indirme bağı) bağlı leventlerden otomatik tüketim düşer — varsayılan kapalı (elle). */
+  devereAutoConsume: boolean;
   /** Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme).
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI, tezgah izlemenin KARDEŞİ: bu alan HAM
    *  değerdir; etkin değer `production && dokuma` (`useOperationsVisibilityContext`). */

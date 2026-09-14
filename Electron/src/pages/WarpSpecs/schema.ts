@@ -44,6 +44,13 @@ export const warpSpecFormSchema = z.object({
     .refine((v) => v === "" || Number(v) > 0, "Tarak eni sayı olmalı")
     .optional()
     .or(z.literal("")),
+  // Faz 4: take-up (%) — çözgü ÷ kumaş; boş = bilinmiyor (otomatik tüketim çözgü = kumaş sayar, uyarır).
+  takeUpPct: z
+    .string()
+    .trim()
+    .refine((v) => v === "" || (Number(v) >= 0 && Number(v) < 100), "Take-up 0–100 arası yüzde olmalı (100 hariç)")
+    .optional()
+    .or(z.literal("")),
   notes: z.string().max(500, "Not en fazla 500 karakter olabilir").optional().or(z.literal("")),
   isActive: z.boolean(),
 });
@@ -59,6 +66,7 @@ export const warpSpecFormDefaults: WarpSpecFormValues = {
   reedNo: "",
   endsPerDent: "",
   reedWidthCm: "",
+  takeUpPct: "",
   notes: "",
   isActive: true,
 };

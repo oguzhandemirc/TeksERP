@@ -36,6 +36,8 @@ export interface WarpBeamEventDto {
   grossKg: number | null;
   tareKg: number | null;
   fabricLengthM: number | null;
+  /** Faz 4: otomatik tüketim hangi toptan (CONSUMED.rollId) — elle tüketimde null. */
+  roll: { id: string; barcode: string | null } | null;
 }
 
 export interface WarpBeamDto {
@@ -96,6 +98,7 @@ export function toWarpBeamEventDto(e: WarpBeamEventRow): WarpBeamEventDto {
     grossKg: num(e.grossKg),
     tareKg: num(e.tareKg),
     fabricLengthM: num(e.fabricLengthM),
+    roll: e.roll,
   };
 }
 

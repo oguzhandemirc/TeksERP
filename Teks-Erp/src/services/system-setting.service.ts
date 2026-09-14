@@ -218,6 +218,10 @@ export const SETTING_KEYS = {
   DEVERE_MOUNT_TRACKING: "devere.mountTracking",
   /** [PROFİL] Devere Faz 3 (#16): bağlamada yöntem + başlangıç saati ZORUNLU mu. DEFAULT false. */
   DEVERE_MOUNT_TRACKING_REQUIRED: "devere.mountTrackingRequired",
+  /** [PROFİL] Devere Faz 4: tezgahtan doğan top (KK1 WEAVING + doff bağı) bağlı leventlerden OTOMATİK
+   *  tüketim düşer mi (`CONSUMED.rollId`). DEFAULT false = bugünkü davranış: tüketim elle yazılır, KK1
+   *  yanıtı bayt bayt aynı. Davranış bayrağı — profile/modül tablosuna GİRMEZ. */
+  DEVERE_AUTO_CONSUME: "devere.autoConsume",
   /** Dokuma işi modülü: dokuma işi planlama · tezgah koşumu · top indirme.
    *  ÜRETİME BAĞIMLI (`MODULE_DEPENDENCIES`), tezgah izlemenin KARDEŞİ — fasona
    *  dokutan firmada dokuma işi var tezgah yok (DOKUMA-IS-EMRI §2.5). */
@@ -1414,6 +1418,7 @@ export interface FeatureFlags {
   devereMountTracking: boolean;
   /** Devere Faz 3: bağlamada yöntem + başlangıç zorunlu mu (varsayılan KAPALI). */
   devereMountTrackingRequired: boolean;
+  devereAutoConsume: boolean;
   /** Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme).
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI: bu alan HAM değerdir; etkin değer
    *  `production && dokuma` ve kapının içinde çözülür. */
@@ -1829,6 +1834,7 @@ export class SystemSettingService {
       devereLotRequired: await readDevereLotRequired(cacheClient),
       devereMountTracking: await readDevereMountTracking(cacheClient),
       devereMountTrackingRequired: await readDevereMountTrackingRequired(cacheClient),
+      devereAutoConsume: await readDevereAutoConsume(cacheClient),
       dokumaEnabled: await readDokumaEnabled(cacheClient),
       targetQuantityEnabled: await readTargetQuantityEnabled(cacheClient),
       rawWidthEnabled: await readRawWidthEnabled(cacheClient),
@@ -2312,6 +2318,12 @@ export class SystemSettingService {
         throw AppError.badRequest("devereMountTrackingRequired boolean olmalı");
       }
       await this.set(SETTING_KEYS.DEVERE_MOUNT_TRACKING_REQUIRED, input.devereMountTrackingRequired, "Devere: bağlamada yöntem ve başlangıç saati zorunlu", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "devereAutoConsume")) {
+      if (typeof input.devereAutoConsume !== "boolean") {
+        throw AppError.badRequest("devereAutoConsume boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.DEVERE_AUTO_CONSUME, input.devereAutoConsume, "Devere: tezgahtan doğan top leventten otomatik tüketim düşer", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "dokumaEnabled")) {
@@ -3740,6 +3752,13 @@ export async function readDevereMountTracking(tx?: Pick<typeof prisma, "systemSe
 export async function readDevereMountTrackingRequired(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_MOUNT_TRACKING_REQUIRED }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
+
+/** Devere Faz 4: tezgahtan doğan top leventten OTOMATİK tüketim düşer mi? Default FALSE (satır yoksa elle — bugünkü davranış). */
+export async function readDevereAutoConsume(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_AUTO_CONSUME }, select: { value: true } });
   return asBoolean(setting?.value);
 }
 

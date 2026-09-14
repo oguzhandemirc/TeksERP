@@ -381,6 +381,11 @@
         },
         {
           "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Tezgahtan inen topun çözgüsü leventten kendiliğinden düşer (devere modülü, tezgah bağı defteri ve Genel Ayarlar › Devere / Levent › “Tezgahtan inen top leventten otomatik düşsün” ayarı açık kurulumlar için; varsayılan kapalı). KK1'de indirme bağıyla kaydedilen topun metresi, indirme anında o tezgahta bağlı her levente ayrı bir çözgü tüketimi olarak yazılır: çözgü metre = kumaş metre ÷ (1 − take-up); take-up Çözgü Kartları formundaki yeni “Take-up (%)” alanından, boşsa çözgü = kumaş sayılır ve KK1 kaydında uyarı verilir; çok hatlı tezgahta top metresi hat payı olarak düşer (uyarıda söylenir). Leventte kalan yetmezse kalana kadar yazılır, kayıt engellenmez, açık miktar uyarıda görünür. Top iptal edilince tüketim ters kayıtla geri döner, iptal geri alınınca yeniden düşer; fire (hurda) topta geri dönmez. Levent detayında tüketim satırı topun barkodunu gösterir. Ayar kapalıyken KK1 kaydı eskisiyle birebir aynıdır, tüketim yalnız elle yazılır; hiçbir mevcut kayıt değişmez."
+        },
+        {
+          "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "İplik hareketleri listesine dört tür geldi: levent sarımına çıkış, çıkışın geri alınması, levent dip iadesi ve iadenin geri alınması. Bunları yalnız Leventler ekranı yazar; elle iplik hareketi formunda seçilemezler. Eksi bakiye kapısı bakiyeyi düşüren yeni türleri de sayar. Eski panel sürümü tanımadığı türü ham adıyla basar, çökmez. Devere modülü kapalı kurulumda bu türler oluşmaz."
         },

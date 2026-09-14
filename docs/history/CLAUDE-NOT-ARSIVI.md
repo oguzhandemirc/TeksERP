@@ -9748,6 +9748,14 @@ söyler. ③ anomali (③), S1/S3/S5/S6, `signals/:id/accept` Faz 2 — bekçi �
 şemada YOK ⇒ `OFF` çakışması yok, beyan gerekmedi (enum inince `test_audit_labels §4` ısırır). ⑤ Özet §8 `warpBeamSlots` satırı
 "İNDİ" (6e 090000). ⑥ Demote'un LIVE→SHADOW ayağı fikstürle ölçüldü (LIVE üretim yolundan üretilemez) — beyanlı.
 
+## 2026-09-15 — DEVERE FAZ 4 İNDİ: tezgahtan inen top leventten OTOMATİK düşer — doff anındaki bağ defterinden, kalan yetmezse kısmi, SCRAP'ta ters yok (6e; hüküm 1e H1–H5) [ÇEKİRDEK] + [PROFİL]
+
+**[ÇEKİRDEK] Nereden düşer:** "şu an bağlı" değil, DOFF ANINDA bağlı olan levent (`beamsMountedDuring(makine, doffedAt, doffedAt)`): KK1 indirmeden saatler sonra gelir, levent o arada sökülmüş/değişmiş olabilir — durum kolonu o an yalan söyler, defter söylemez. Tek yazar KK1 doğuş tx'idir (`autoConsumeForRollTx`, tx açmaz alır); doff yazmaz (§3.8b doktrini korunur). Her levente AYRI satır (çift levent zemin/hav her biri tam boy tüketir — pay bölünürse hav leventi yarım düşer), çok hatlı makinede hat payı `÷ productionLineCount` beyanlı yaklaşıklıktır (uyarı söyler; hat kırılımı inince kardeş toplar kendi payını düşer, toplam = tam boy — bekçi §7).
+**Kalan yetmezse (H3):** KK1 ENGELLENMEZ — top fiziksel gerçektir, levent defteri tahmindir; kalana kadar yazılır, açık miktar uyarıda adıyla. Elle yol sert kalır (`assertCoversRemaining`): elle giren kişi rakamı biliyor, otomatik yol bilmiyor.
+**SCRAP'ta ters yok (H4):** iptal "hiç yoktu" (çözgü de düşmemiş sayılır → CONSUMED_CANCEL); fire "vardı, gitti" (çözgü gerçekten dokundu → tüketim kalır). Aynı ayrım depo defterinde (`qtyOut=0` vs `qtyOut=qtyIn`).
+**[PROFİL]** `devere.autoConsume` DEFAULT false — negatif sonda KK1 yanıtının anahtar kümesini ölçer (`warnings` bile eklenmez). Take-up `WarpSpec.takeUpPct` [VERİ] (kumasTeknik yer tutucu; kartta varsayılan, ölçüm üçlüsüne bağlı olduğu bilinerek); NULL → çözgü = kumaş + uyarı — bilinmeyen sayı uydurulmaz, beyan edilir.
+**Borç (H5):** top metre düzeltmesi tüketimi yeniden hesaplamaz (dokuma.md BORÇ satırı).
+
 ## 2026-09-15 — DEVERE FAZ 3 E3 TABLET İNDİ: Tak devere ekranında, Sök/Tüket/Bitir tezgah ekranında; ikisi de bayrağın arkasında (6e; hüküm 1e H3) [ÇEKİRDEK] + [PROFİL]
 
 **[ÇEKİRDEK] Yüzey ayrımı (H3):** Tak → Levent Sarım ekranı "Tezgahta" sekmesi (`mobile:devere`; yuva seçimi orada, makine listesi bağlam ucundan); Sök/Tüket/Bitir → Tezgah ekranı "Levent" paneli (`mobile:dokuma`; makine OTURUMDAN, tablet makine seçmez). Kalan düzeltme, hurda, tartıyla bitiş ve geri almalar tablette YOK — sebep kataloğu ve önizleme isteyen yıkıcı işler panelde. Zorunlu ayarda tablet başlangıç saatini bağlama anı olarak gönderir: tablet canlı kaydeder, geriye dönük saat girişi panel işidir.

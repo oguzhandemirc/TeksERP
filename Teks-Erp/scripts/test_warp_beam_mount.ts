@@ -60,7 +60,7 @@ function statik(): void {
   console.log("── §0 Statik ──");
   const cift = Object.entries(WARP_BEAM_CANCEL_OF).filter(([k, c]) => warpBeamLengthSign(k as never) + warpBeamLengthSign(c as never) !== 0);
   check("§0a her ileri/ters çiftinin işaret toplamı 0 (geri alma kalanı tam geri getirir)", cift.length === 0, cift.map(([k]) => k).join(","));
-  const svc = ["src/services/warp-beam-mount.service.ts", "src/services/warp-beam-consume.service.ts", "src/services/helpers/warp-beam-ledger.helper.ts", "src/services/helpers/warp-beam-mount.helper.ts"].map((f) => readFileSync(path.join(ROOT, f), "utf8")).join("\n");
+  const svc = ["src/services/warp-beam-mount.service.ts", "src/services/warp-beam-consume.service.ts", "src/services/warp-beam-auto-consume.service.ts", "src/services/helpers/warp-beam-ledger.helper.ts", "src/services/helpers/warp-beam-mount.helper.ts"].map((f) => readFileSync(path.join(ROOT, f), "utf8")).join("\n");
   check("§0b Faz 3 yazarlarında defter satırına update/delete YOK", !/warpBeamEvent\.(update|updateMany|delete|deleteMany|upsert)\(/.test(svc));
   const rt = readFileSync(path.join(ROOT, "src/routes/warp-beam-mount.routes.ts"), "utf8");
   const yikici = ["/:id/scrap", "/:id/events/:eventId/cancel", "/:id/consumed/:eventId/cancel"].filter((p) => !new RegExp(`"${p.replace(/[/:]/g, (c) => "\\" + c)}", requireAnyPermission\\("warpbeam:cancel"`).test(rt));

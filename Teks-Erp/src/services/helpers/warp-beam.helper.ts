@@ -42,6 +42,8 @@ export const WARP_BEAM_EVENT_SELECT = {
   tareKg: true,
   fabricLengthM: true,
   clientToken: true,
+  rollId: true,
+  roll: { select: { id: true, barcode: true } },
   machine: { select: { id: true, code: true, name: true } },
 } satisfies Prisma.WarpBeamEventSelect;
 

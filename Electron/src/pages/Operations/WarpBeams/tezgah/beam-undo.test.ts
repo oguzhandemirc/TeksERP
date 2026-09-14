@@ -10,7 +10,7 @@ import { isLiveBeam, type WarpBeamEvent } from "../types";
 import { undoCandidates, undoMenuEnabled } from "./beam-undo";
 
 const ev = (id: string, kind: string, createdAt: string, extra: Partial<WarpBeamEvent> = {}): WarpBeamEvent =>
-  ({ id, kind, reversesEventId: null, fromStatus: "READY", toStatus: "READY", lengthM: null, machine: null, endsCount: null, denier: null, theoreticalKg: null, kgSource: null, sectionCount: null, endsPerSection: null, breakCount: null, startedAt: null, reasonCode: null, reason: null, createdAt, mountPosition: null, beamRole: null, mountMethod: null, setupStartedAt: null, setupMinutes: null, machineCounter: null, lengthSource: null, grossKg: null, tareKg: null, fabricLengthM: null, ...extra });
+  ({ id, kind, reversesEventId: null, fromStatus: "READY", toStatus: "READY", lengthM: null, machine: null, endsCount: null, denier: null, theoreticalKg: null, kgSource: null, sectionCount: null, endsPerSection: null, breakCount: null, startedAt: null, reasonCode: null, reason: null, createdAt, mountPosition: null, beamRole: null, mountMethod: null, setupStartedAt: null, setupMinutes: null, machineCounter: null, lengthSource: null, grossKg: null, tareKg: null, fabricLengthM: null, roll: null, ...extra });
 
 describe("undoCandidates — LIFO", () => {
   it("① sarılmış + takılmış levent: LIFO adayı MOUNTED, tüketim yok", () => {

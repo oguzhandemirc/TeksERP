@@ -209,7 +209,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/yarn.service.ts", sembol: "applyYarnMovementTx" }],
     ["src/services/yarn.service.ts"]),
 
-  D("WarpBeamEvent", "levent olay defteri (devere 1b + fason F1 + Faz 3 tezgah bağı) — WOUND doğuş gerçekleri değişmez; ters yol tipli çiftler, orijinaline `reversesEventId` (tek ters, çift iptal DB'de imkânsız): WOUND↔WOUND_CANCEL (CANCELLED terminal, PLANNED'a dönmez) · SHIP_OUT↔SHIP_OUT_CANCEL (sevk iptali) · RETURNED_IN↔RETURNED_IN_CANCEL (fason dönüşü stornosu) · Faz 3: MOUNTED/DISMOUNTED/EXHAUSTED/SCRAPPED ↔ *_CANCEL (LIFO — yalnız en yeni aktif durum olayı) · CONSUMED↔CONSUMED_CANCEL (LIFO dışı) · ADJUST_IN/ADJUST_OUT karşı düzeltmeyle kapanır (ters bağ yok, sebep zorunlu); fason satırları sevk kalemine bağlı (`dispatchItemId`, CHECK iki yönlü)",
+  D("WarpBeamEvent", "levent olay defteri (devere 1b + fason F1 + Faz 3 tezgah bağı) — WOUND doğuş gerçekleri değişmez; ters yol tipli çiftler, orijinaline `reversesEventId` (tek ters, çift iptal DB'de imkânsız): WOUND↔WOUND_CANCEL (CANCELLED terminal, PLANNED'a dönmez) · SHIP_OUT↔SHIP_OUT_CANCEL (sevk iptali) · RETURNED_IN↔RETURNED_IN_CANCEL (fason dönüşü stornosu) · Faz 3: MOUNTED/DISMOUNTED/EXHAUSTED/SCRAPPED ↔ *_CANCEL (LIFO — yalnız en yeni aktif durum olayı) · CONSUMED↔CONSUMED_CANCEL (LIFO dışı; Faz 4 `rollId`li satır top iptalinde `cancelConsumedForRollTx`, SCRAP'ta dokunulmaz) · ADJUST_IN/ADJUST_OUT karşı düzeltmeyle kapanır (ters bağ yok, sebep zorunlu); fason satırları sevk kalemine bağlı (`dispatchItemId`, CHECK iki yönlü)",
     { tur: "TERS_BAG", kolon: "reversesEventId" },
     [
       { dosya: "src/services/warp-beam-wind.service.ts", sembol: "cancelWound" },
@@ -217,6 +217,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
       { dosya: "src/services/subcontractor-beam.service.ts", sembol: "cancelWarpBeamReturn" },
       { dosya: "src/services/warp-beam-mount.service.ts", sembol: "cancelStatusEvent" },
       { dosya: "src/services/warp-beam-consume.service.ts", sembol: "cancelConsumed" },
+      { dosya: "src/services/warp-beam-auto-consume.service.ts", sembol: "cancelConsumedForRollTx" },
     ],
     ["src/services/helpers/warp-beam-event.helper.ts"]),
 

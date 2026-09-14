@@ -1,4 +1,4 @@
-import { Controller } from "react-hook-form";
+import { Controller, type UseFormReturn } from "react-hook-form";
 import { Package } from "lucide-react";
 import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { FormField } from "@/components/forms/FormField";
@@ -30,9 +30,19 @@ function buildDefaults(initial?: WarpSpec | null): WarpSpecFormValues {
     reedNo: initial.reedNo ?? "",
     endsPerDent: initial.endsPerDent === null ? "" : String(initial.endsPerDent),
     reedWidthCm: initial.reedWidthCm ?? "",
+    takeUpPct: initial.takeUpPct ?? "",
     notes: initial.notes ?? "",
     isActive: initial.isActive,
   };
+}
+
+/** Faz 4 take-up (%): çözgü ÷ kumaş; boş = bilinmiyor (otomatik tüketim çözgü = kumaş sayar, uyarır). */
+function TakeUpField({ form }: { form: UseFormReturn<WarpSpecFormValues> }) {
+  return (
+    <FormField label="Take-up (%)" htmlFor="takeUpPct" error={form.formState.errors.takeUpPct} hint="Çözgü ÷ kumaş oranı: çözgü = kumaş ÷ (1 − take-up). Boşsa tezgahtan doğan topun otomatik tüketimi çözgü = kumaş sayar ve uyarır.">
+      <Input id="takeUpPct" {...form.register("takeUpPct")} inputMode="decimal" placeholder="ör. 8" />
+    </FormField>
+  );
 }
 
 export function WarpSpecFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
@@ -114,6 +124,7 @@ export function WarpSpecFormDialog({ open, onOpenChange, initial, onSubmit, isSu
           <FormField label="Tarak eni (cm)" htmlFor="reedWidthCm" error={form.formState.errors.reedWidthCm}>
             <Input id="reedWidthCm" {...form.register("reedWidthCm")} inputMode="decimal" placeholder="280" />
           </FormField>
+          <TakeUpField form={form} />
 
           <FormField label="Not" htmlFor="notes" error={form.formState.errors.notes}>
             <Textarea id="notes" {...form.register("notes")} rows={2} placeholder="Tahar planı, jakar koşumu…" />

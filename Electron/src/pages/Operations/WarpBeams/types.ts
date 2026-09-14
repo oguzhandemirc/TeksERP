@@ -43,6 +43,8 @@ export interface WarpBeamEvent {
   grossKg: number | null;
   tareKg: number | null;
   fabricLengthM: number | null;
+  /** Faz 4: otomatik tüketim hangi toptan; elle tüketimde null. */
+  roll: { id: string; barcode: string | null } | null;
 }
 
 export interface WarpBeam {

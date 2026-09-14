@@ -21,6 +21,8 @@ export interface WarpSpec {
   reedNo: string | null;
   endsPerDent: number | null;
   reedWidthCm: string | null;
+  /** Faz 4: take-up (%) — Decimal string; null = bilinmiyor. */
+  takeUpPct: string | null;
   notes: string | null;
   isActive: boolean;
   createdAt: string;

@@ -504,10 +504,10 @@ describe("arama — saf fonksiyon", () => {
 // `resolveSettingsModuleState` devereyi üretime zincirleyince ③ ❌.
 describe("devere kategorisi — lot zorunluluğu modülün arkasında", () => {
   const devere = SETTINGS_CATEGORIES.find((c) => c.id === "devere")!;
-  it("① kategori var, moduleKey devereEnabled, üç satır (lot · tezgah bağı · bağlama zorunlu), hepsi defaultOn false = bugün", () => {
+  it("① kategori var, moduleKey devereEnabled, dört satır (lot · tezgah bağı · bağlama zorunlu · otomatik tüketim), hepsi defaultOn false = bugün", () => {
     expect(devere).toBeDefined();
     expect(devere.moduleKey).toBe("devereEnabled");
-    expect(devere.flags?.map((f) => f.key)).toEqual(["devereLotRequired", "devereMountTracking", "devereMountTrackingRequired"]);
+    expect(devere.flags?.map((f) => f.key)).toEqual(["devereLotRequired", "devereMountTracking", "devereMountTrackingRequired", "devereAutoConsume"]);
     expect(devere.flags?.every((f) => f.defaultOn === false)).toBe(true);
   });
   it("② devere KAPALI → kategori DONUK; AÇIK → değil", () => {

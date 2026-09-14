@@ -528,6 +528,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "warp_beam_events", name: "warp_beam_events_mounted_ck" },
   { table: "warp_beam_events", name: "warp_beam_events_mount_position_positive" },
   { table: "warp_beam_events", name: "warp_beam_events_setup_minutes_nonneg" },
+  // Faz 4 (2026-09-15, migration 20260915030000): take-up 0 ≤ x < 100 (çözgü = kumaş ÷ (1 − x/100) bölen sıfırlanamaz).
+  { table: "warp_specs", name: "warp_specs_take_up_pct_range" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_kind_ref_ck" },
   // G2 fason dokuma (2026-09-14): başlık iş emri adımı XOR dokuma işi — birincil kapı serviste
   { table: "subcontractor_dispatches", name: "subcontractor_dispatches_header_ck" },

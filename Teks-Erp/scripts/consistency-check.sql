@@ -537,5 +537,13 @@ WHERE b.status IN ('EXHAUSTED', 'SCRAPPED')
 GROUP BY b.id, b."beamNo", b.status
 HAVING SUM(CASE WHEN e.kind IN ('WOUND','SHIP_OUT_CANCEL','RETURNED_IN','CONSUMED_CANCEL','ADJUST_IN','EXHAUST_CANCEL','SCRAP_CANCEL') THEN 1 WHEN e.kind IN ('WOUND_CANCEL','SHIP_OUT','RETURNED_IN_CANCEL','CONSUMED','ADJUST_OUT','EXHAUSTED','SCRAPPED') THEN -1 ELSE 0 END * COALESCE(e."lengthM", 0)) <> 0;
 
+\echo '== 45) LEVENT Faz 4 — CONSUMED.rollId topu WEAVING+doff'lu değil ya da olay makinesi ≠ doff makinesi (beklenen 0) =='
+SELECT e.id::text AS olay, r.barcode, r."entrySource"::text AS kaynak, e."machineId"::text AS olay_makine, d."machineId"::text AS doff_makine
+FROM warp_beam_events e
+JOIN rolls r ON r.id = e."rollId"
+LEFT JOIN doff_events d ON d.id = r."doffEventId"
+WHERE e.kind = 'CONSUMED'
+  AND (r."entrySource" <> 'WEAVING' OR r."doffEventId" IS NULL OR e."machineId" IS DISTINCT FROM d."machineId");
+
 \echo ''
 \echo '== Tutarlılık kontrolü bitti. §30b BİLGİ (miras sayısı) dışında yukarıda hiç satır YOKSA sistem sağlıklı. =='

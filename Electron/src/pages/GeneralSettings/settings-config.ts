@@ -1198,6 +1198,13 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Operatör", "Yönetim"],
         desc: "Kapalıyken (varsayılan) yöntem ve saat isteğe bağlıdır; sistem yalnız aynı yuvadan son sökülen levent aynı çözgü kartındansa düğüm önerir. Açıkken ikisi de zorunlu — kurulum süresi raporlarında beyan olarak görünür. Yalnız tezgah bağı defteri açıkken anlamlıdır.",      },
+      {
+        key: "devereAutoConsume",
+        title: "Tezgahtan inen top leventten otomatik düşsün",
+        summary: "KK1'de indirme bağıyla doğan topun metresi, indirme anında tezgahta bağlı leventlerden çözgü tüketimi olarak kendiliğinden yazılır.",
+        defaultOn: false,
+        audience: ["Operatör", "Yönetim"],
+        desc: "Kapalıyken (varsayılan) tüketim yalnız elle yazılır; KK1 kaydı hiç değişmez. Açıkken tezgahtan inen top (dokuma modülü, indirme bağı) kaydedilince indirme anında o tezgahta bağlı her levente ayrı bir tüketim satırı düşer: çözgü metre = kumaş metre ÷ (1 − take-up); take-up çözgü kartından, boşsa çözgü = kumaş sayılır ve uyarı verilir; çok hatlı tezgahta top metresi hat payı olarak düşer. Leventte kalan yetmezse kalana kadar yazılır, KK1 engellenmez, fark uyarıda söylenir. Top iptal edilince tüketim ters kayıtla geri döner; fire (hurda) topta geri dönmez — çözgü gerçekten tüketilmiştir. Yalnız levent tezgah bağı defteri açıkken anlamlıdır.",      },
     ],
   },
   // Depo/satın alma bayrakları bilinçli olarak Muhasebe sekmesinde DEĞİL: bu

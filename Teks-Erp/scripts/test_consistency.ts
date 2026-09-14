@@ -953,6 +953,20 @@ HAVING SUM(${WARP_BEAM_SIGN_SQL} * COALESCE(e."lengthM", 0)) <> 0`,
     kapsam: { ne: "terminal levent", sql: `SELECT COUNT(*)::int AS n FROM warp_beams WHERE status IN ('EXHAUSTED','SCRAPPED')` },
   },
   {
+    id: "45",
+    // Faz 4: otomatik tüketim topun DOFF bağından doğar — rollId'li CONSUMED'ın topu WEAVING + doff'lu olmalı ve
+    // olayın makinesi doff'un makinesi olmalı (levent seçimi doff anındaki bağ defterinden).
+    title: "Levent Faz 4: CONSUMED.rollId topu WEAVING+doff'lu değil ya da olay makinesi ≠ doff makinesi (`autoConsumeForRollTx` tek yazar)",
+    sql: `
+SELECT e.id::text AS olay, r.barcode, r."entrySource"::text AS kaynak, e."machineId"::text AS olay_makine, d."machineId"::text AS doff_makine
+FROM warp_beam_events e
+JOIN rolls r ON r.id = e."rollId"
+LEFT JOIN doff_events d ON d.id = r."doffEventId"
+WHERE e.kind = 'CONSUMED'
+  AND (r."entrySource" <> 'WEAVING' OR r."doffEventId" IS NULL OR e."machineId" IS DISTINCT FROM d."machineId")`,
+    kapsam: { ne: "toplu levent tüketimi", sql: `SELECT COUNT(*)::int AS n FROM warp_beam_events WHERE kind = 'CONSUMED' AND "rollId" IS NOT NULL` },
+  },
+  {
     id: "27",
     // `YarnStock.balanceKg`, DB seddi (CHECK/trigger) OLMAYAN denormalize bir
     // alandır — `CariBalance` ile birebir aynı sınıf. Tek yazar `yarn.service`
