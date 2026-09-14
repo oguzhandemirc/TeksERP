@@ -166,7 +166,7 @@ Koşum: `psql "$DATABASE_URL" -f <dosya>` — `psql` PATH'te olmayabilir (`/opt/
 | Kalite Karnesi (`quality/scorecard`) | 5 | 5 | 0 |
 | Operatör İş Hacmi (`production/operator-performance`) | 5 | 7 | 0 |
 | Fire Karnesi (`quality/scrap-scorecard`) | 3 | 3 | 0 |
-| Plan-Sapma Karnesi (`quality/plan-deviation…`) | 2 | 2 | 0 |
+| Plan-Sapma Karnesi (`quality/plan-deviation-scorecard`) | 2 | 2 | 0 |
 | Parti İzleme — arama (`production/batch-search`) | 2 | 2 | 0 |
 | Fason Karnesi (`subcontract/scorecard`) | 2 | 2 | 0 |
 | İade Karnesi (`sales/return-scorecard`) | 1 | 1 | 0 |
@@ -188,7 +188,7 @@ Koşum: `psql "$DATABASE_URL" -f <dosya>` — `psql` PATH'te olmayabilir (`/opt/
 
 ⇒ **Ders: bu tablo "bugünkü uçların kullanımı" değil, "pencere boyunca ÇAĞRILMIŞ anahtarlar"dır.** Envanterle eşlemeden okunursa iki yönlü yanılır: ölü anahtar CANLI rapor sanılır *(23 satırın 9'u)* ve bugünkü uçların kaçının görüldüğü şişer. Doğru sayı: **bugünkü 29 ucun 14'ü görüldü, 15'i görülmedi** (8'i ölçülemez sınıfında). *Telemetri satırı koddan uzun yaşar; kimliği koda karşı doğrulanmadan yorumlanmaz.*
 
-> Tam adın doğrulanması gereken tek satır: `quality/plan-deviation…` — bugünkü uç `quality/plan-deviation-scorecard`. Ham çıktıda anahtar kısaysa bu da onuncu ölü anahtardır ve "görülen" 14 → 13'e iner.
+> **Doğrulandı (2026-09-15):** ham çıktıdaki anahtar TAM — `GET /api/reports/quality/plan-deviation-scorecard` (2|2). Onuncu ölü anahtar YOK; **görülen 14 sayısı ayakta.** (Şerh burada duruyor ki sayının nasıl kapandığı görünsün: açık soru, ham kaynağa geri okutularak kapandı — beyanla değil.)
 
 ### 6.6 · Sayının SÖYLEDİĞİ ve SÖYLEMEDİĞİ
 
