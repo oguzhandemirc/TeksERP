@@ -23,12 +23,21 @@
 // mutabakat sorgusu yoktu. Kuralları `src/services/helpers/roll-step.helper.ts`
 // içindeki fonksiyondan birebir SQL'e çevrildi (aşağıda satır satır eşleşme notu).
 //
-// Salt-okunur: hiçbir yazma/fixture yok. Üretim DB'sine karşı da koşulabilir —
-// nitekim asıl değeri orada (`DATABASE_URL=<canlı> npx tsx scripts/test_consistency.ts`).
+// İKİ KİP (2026-09-14):
+//   • FİKSTÜR KİPİ — hedef bir fixture DB'siyse (`fixtureHedefEngeli()` null: `_test`
+//     son eki ya da bilinen güvenli ad) levent bölümleri (§34–§41) için KENDİ küçük
+//     fikstürünü kurar ve `finally`de kimlikle siler. Yoksa o bölümler her koşumda
+//     "kapsam 0" ile atlanıyordu — 0 drift bir ölçüm değildi. Bu kipte fikstürün
+//     doldurduğu bölümde kapsam 0 ⏭ DEĞİL ❌'dır: fikstür kırılmışsa bekçi susmaz.
+//   • SALT-OKUNUR KİP — hedef adı fixture kalıbına uymuyorsa (üretim / fabrika kopyası)
+//     HİÇ yazmaz; asıl değeri orada (`DATABASE_URL=<canlı> npx tsx scripts/test_consistency.ts`).
+//     Bilinmeyen ad = salt-okunur (fail-closed).
+// Negatif sonda (kalıcı): `TEKSERP_SONDA_CONS_FIKSTURSUZ=1` fikstürü kurmaz → §34–§41 ❌.
 // Koşum: npx tsx scripts/test_consistency.ts
 // =============================================================================
-import { Prisma } from "@prisma/client";
+import { Prisma, ReasonPresetKind, StationType, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, YarnMovementKind } from "@prisma/client";
 import { yarnInboundKinds } from "../src/services/helpers/yarn-sign.helper";
+import { fixtureHedefEngeli } from "./lib/hedef-db-kapisi";
 /** İplik mutabakatı işareti TEK KAYNAKTAN (`yarnMovementSign`) — elle liste devere 1b'de kırılırdı (§4.9-1). */
 const YARN_INBOUND_SQL = yarnInboundKinds().map((k) => `'${k}'`).join(",");
 import { notFixtureSql, notFixtureItemOfRollSql } from "./lib/fikstur-imzasi";
@@ -1119,7 +1128,8 @@ WHERE v."reversedAt" IS NOT NULL
     // KAPSAM: canlı TAMBUR_* OVERAGE sapması olan, stok defterinde terslenmemiş bir GİRİŞ
     // ucu (ENTRY ya da TRANSFORM IN) olan ve canlı çocuğu OLMAYAN toplar — giriş metrajı
     // defterden okunur, ufuk öncesi toplar kapsam dışı (girişi yok). Kapsam 0 ⇒ ⏭ (sayı
-    // basılır), ✅ değil.
+    // basılır), ✅ değil. Levent fikstürü gibi bir fikstürle DOLDURULMAZ: `noise` süzgeci
+    // fikstür topunu driftten eler, kapsam dolu görünür ama ölçülen yine 0 top olurdu.
     title: "initialQty ≠ giriş metrajı + Σ canlı TAMBUR aşımı (sessiz şişme ya da çift sayım) — canlı çocuğu olmayan ebeveynde",
     kapsam: {
       ne: "canlı TAMBUR_* OVERAGE sapması olan, defterde giriş ucu olan, canlı çocuksuz top",
@@ -1173,6 +1183,115 @@ WHERE EXISTS (
   },
 ];
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LEVENT FİKSTÜRÜ — §34–§41'in kapsamı (fikstür kipinde)
+//
+// Doğrudan prisma ile kurulur, servisten DEĞİL: mutabakat bekçisi servisin yazdığını
+// değil DEFTERİN kendisini ölçer; servis üstünden kurulsa servisle birlikte kırılır ve
+// bekçi kendi kör noktasını paylaşırdı. Üç levent, her bölüme en az bir satır:
+//   A READY (IN_HOUSE, WOUND + WARP_ISSUE + WARP_RETURN, lotlu)         → §35 §36 §38 §39 §40 §41
+//   B CANCELLED (WOUND ↔ WOUND_CANCEL, WARP_ISSUE ↔ WARP_ISSUE_REVERSAL) → §34 §36 §37 §38
+//   C PLANNED (olaysız, ipliksiz)                                        → §36 §37
+// Sebep kodu kendi presetiyle gelir (katalogun uzlaştırılmış olmasına bağlı kalmaz).
+// §27/§28 aynı DB'de koşar: iplik satırları YarnStock satırıyla birlikte doğar, bakiye Σ'ya eşit.
+// ─────────────────────────────────────────────────────────────────────────────
+const TAG = `TEST-CONS-${process.pid}`;
+/** Fikstürün DOLDURDUĞU bölümler — fikstür kipinde bu kümede kapsam 0 ⏭ değil ❌'dır. */
+const FIKSTUR_KAPSAR: ReadonlySet<string> = new Set(["34", "35", "36", "37", "38", "39", "40", "41"]);
+const FIKSTURSUZ_SONDA = process.env.TEKSERP_SONDA_CONS_FIKSTURSUZ === "1";
+
+/** Kurulan kimlikler — `finally` yalnız bunları siler; yarım kurulumda da eksiksiz koşar. */
+interface LeventFiksturKimlikleri {
+  station: string[];
+  machine: string[];
+  item: string[];
+  warpSpec: string[];
+  warehouse: string[];
+  reasonPreset: string[];
+  yarnLot: string[];
+  warpBeam: string[];
+  woundEvent: string[];
+  cancelEvent: string[];
+  yarnMovement: string[];
+  yarnStock: string[];
+}
+function bosKimlikler(): LeventFiksturKimlikleri {
+  return { station: [], machine: [], item: [], warpSpec: [], warehouse: [], reasonPreset: [], yarnLot: [], warpBeam: [], woundEvent: [], cancelEvent: [], yarnMovement: [], yarnStock: [] };
+}
+
+async function kurLeventFiksturu(k: LeventFiksturKimlikleri): Promise<void> {
+  const st = await prisma.station.create({ data: { name: `${TAG}-DEVERE`, code: `${TAG}-DV`, type: StationType.INTERNAL, producesWarpBeam: true }, select: { id: true } });
+  k.station.push(st.id);
+  const mk = await prisma.machine.create({ data: { stationId: st.id, name: `${TAG}-M1`, code: `${TAG}-M1` }, select: { id: true } });
+  k.machine.push(mk.id);
+  const yarn = await prisma.item.create({ data: { code: `${TAG}-IP`, name: `${TAG} iplik`, itemType: "YARN", unit: "KG", linearDensityDen: 300 }, select: { id: true } });
+  k.item.push(yarn.id);
+  const spec = await prisma.warpSpec.create({ data: { code: `${TAG}-CK`, name: `${TAG} çözgü`, yarnItemId: yarn.id, endsCount: 3500 }, select: { id: true } });
+  k.warpSpec.push(spec.id);
+  const wh = await prisma.warehouse.create({ data: { code: `${TAG}-D`, name: `${TAG} depo` }, select: { id: true } });
+  k.warehouse.push(wh.id);
+  const preset = await prisma.reasonPreset.create({ data: { kind: ReasonPresetKind.WARP_RETURN, code: `${TAG}-DIP`, label: `${TAG} dip iadesi` }, select: { id: true, code: true } });
+  k.reasonPreset.push(preset.id);
+  const lot = await prisma.yarnLot.create({ data: { itemId: yarn.id, lotNo: `${TAG}-L1` }, select: { id: true } });
+  k.yarnLot.push(lot.id);
+
+  const hareket = async (data: Omit<Prisma.YarnMovementUncheckedCreateInput, "itemId" | "warehouseId" | "lotId">): Promise<void> => {
+    const m = await prisma.yarnMovement.create({ data: { itemId: yarn.id, warehouseId: wh.id, lotId: lot.id, ...data }, select: { id: true } });
+    k.yarnMovement.push(m.id);
+  };
+  // Kronoloji `createdAt`tir (§36 son olayı ona göre seçer) — aynı milisaniyeye düşmesin.
+  const t0 = new Date(Date.now() - 60_000);
+  const t1 = new Date(t0.getTime() + 1_000);
+  const wound = (lengthM: number) => ({
+    kind: "WOUND", fromStatus: WarpBeamStatus.PLANNED, toStatus: WarpBeamStatus.READY, lengthM, machineId: mk.id,
+    endsCount: 3500, denier: 300, theoreticalKg: (3500 * 300 * lengthM) / 9_000_000, kgSource: WarpKgSource.THEORETICAL, createdAt: t0,
+  });
+
+  await hareket({ kind: YarnMovementKind.IN, qtyKg: 1000 });
+
+  const a = await prisma.warpBeam.create({ data: { beamNo: `${TAG}-A`, warpSpecId: spec.id, status: WarpBeamStatus.READY, plannedLengthM: 1000, originKind: WarpBeamOrigin.IN_HOUSE }, select: { id: true } });
+  k.warpBeam.push(a.id);
+  const aw = await prisma.warpBeamEvent.create({ data: { beamId: a.id, ...wound(1000) }, select: { id: true } });
+  k.woundEvent.push(aw.id);
+  await hareket({ kind: YarnMovementKind.WARP_ISSUE, qtyKg: 120, warpBeamId: a.id });
+  await hareket({ kind: YarnMovementKind.WARP_RETURN, qtyKg: 5, warpBeamId: a.id, reasonCode: preset.code });
+
+  const b = await prisma.warpBeam.create({ data: { beamNo: `${TAG}-B`, warpSpecId: spec.id, status: WarpBeamStatus.CANCELLED, plannedLengthM: 800, originKind: WarpBeamOrigin.IN_HOUSE }, select: { id: true } });
+  k.warpBeam.push(b.id);
+  const bw = await prisma.warpBeamEvent.create({ data: { beamId: b.id, ...wound(800) }, select: { id: true } });
+  k.woundEvent.push(bw.id);
+  const bc = await prisma.warpBeamEvent.create({
+    data: { beamId: b.id, kind: "WOUND_CANCEL", fromStatus: WarpBeamStatus.READY, toStatus: WarpBeamStatus.CANCELLED, lengthM: 800, reversesEventId: bw.id, createdAt: t1 },
+    select: { id: true },
+  });
+  k.cancelEvent.push(bc.id);
+  await hareket({ kind: YarnMovementKind.WARP_ISSUE, qtyKg: 80, warpBeamId: b.id });
+  await hareket({ kind: YarnMovementKind.WARP_ISSUE_REVERSAL, qtyKg: 80, warpBeamId: b.id });
+
+  const c = await prisma.warpBeam.create({ data: { beamNo: `${TAG}-C`, warpSpecId: spec.id, status: WarpBeamStatus.PLANNED, plannedLengthM: 500, originKind: WarpBeamOrigin.IN_HOUSE }, select: { id: true } });
+  k.warpBeam.push(c.id);
+
+  // 1000 − 120 + 5 − 80 + 80 (§27 Σ ile birebir)
+  const ys = await prisma.yarnStock.create({ data: { itemId: yarn.id, warehouseId: wh.id, balanceKg: 885 }, select: { id: true } });
+  k.yarnStock.push(ys.id);
+}
+
+/** Yalnız kurulanı, kimlikle, FK sırasında siler (iptal olayı sardığı olaydan ÖNCE — Restrict). */
+async function temizleLeventFiksturu(k: LeventFiksturKimlikleri): Promise<void> {
+  await prisma.yarnMovement.deleteMany({ where: { id: { in: k.yarnMovement } } });
+  await prisma.yarnStock.deleteMany({ where: { id: { in: k.yarnStock } } });
+  await prisma.warpBeamEvent.deleteMany({ where: { id: { in: k.cancelEvent } } });
+  await prisma.warpBeamEvent.deleteMany({ where: { id: { in: k.woundEvent } } });
+  await prisma.warpBeam.deleteMany({ where: { id: { in: k.warpBeam } } });
+  await prisma.yarnLot.deleteMany({ where: { id: { in: k.yarnLot } } });
+  await prisma.reasonPreset.deleteMany({ where: { id: { in: k.reasonPreset } } });
+  await prisma.warpSpec.deleteMany({ where: { id: { in: k.warpSpec } } });
+  await prisma.item.deleteMany({ where: { id: { in: k.item } } });
+  await prisma.warehouse.deleteMany({ where: { id: { in: k.warehouse } } });
+  await prisma.machine.deleteMany({ where: { id: { in: k.machine } } });
+  await prisma.station.deleteMany({ where: { id: { in: k.station } } });
+}
+
 async function driftCount(s: Section): Promise<number> {
   const sql = `SELECT COUNT(*)::int AS n FROM (${s.sql}\n) drift\n${s.noise?.where ?? ""}`;
   const rows = await prisma.$queryRaw<Array<{ n: number }>>(Prisma.raw(sql));
@@ -1194,6 +1313,24 @@ async function main(): Promise<void> {
   console.log("\n=== Veri tutarlılık kapısı (consistency-check.sql'in mekanik ikizi) ===");
   console.log(`${SECTIONS.length} bölüm · her bölümde drift satırı sayısı 0 olmalı\n`);
 
+  // Kip kararı hedef ADINDAN (fail-closed): fixture kalıbına uymayan ad → tek satır yazılmaz.
+  const saltOkunur = fixtureHedefEngeli();
+  const fiksturKipi = saltOkunur === null;
+  if (!fiksturKipi) console.log(`ℹ SALT-OKUNUR KİP — levent fikstürü kurulmaz, §34–§41 kapsamı veriden gelir. ${saltOkunur}\n`);
+  else if (FIKSTURSUZ_SONDA) console.log("ℹ SONDA: TEKSERP_SONDA_CONS_FIKSTURSUZ=1 — fikstür kurulmuyor, §34–§41 ❌ vermeli\n");
+  const kimlikler = bosKimlikler();
+  try {
+    if (fiksturKipi && !FIKSTURSUZ_SONDA) {
+      await kurLeventFiksturu(kimlikler);
+      console.log(`ℹ levent fikstürü kuruldu (${TAG}: 3 levent · ${kimlikler.yarnMovement.length} iplik satırı · 1 lot)\n`);
+    }
+    await bolumleriKos(fiksturKipi);
+  } finally {
+    await temizleLeventFiksturu(kimlikler);
+  }
+}
+
+async function bolumleriKos(fiksturKipi: boolean): Promise<void> {
   for (const s of SECTIONS) {
     let n: number;
     try {
@@ -1209,7 +1346,13 @@ async function main(): Promise<void> {
       const rows = await prisma.$queryRaw<Array<{ n: number }>>(Prisma.raw(s.kapsam.sql));
       const kapsam = Number(rows[0]?.n ?? 0);
       if (kapsam === 0) {
-        defter.atla(`§${s.id} ${s.title}`, `kapsam 0 (${s.kapsam.ne}) — 0 drift bir ölçüm değil`);
+        // Fikstür kipinde fikstürün doldurması gereken bölüm boşsa bu bir atlama DEĞİL
+        // kırık fikstürdür (ya da sorgu fikstürü görmüyor) — ⏭ ile gizlenmez.
+        if (fiksturKipi && FIKSTUR_KAPSAR.has(s.id)) {
+          check(`§${s.id} ${s.title}`, false, `fikstür kipinde kapsam 0 (${s.kapsam.ne}) — levent fikstürü kurulmadı ya da sorgu onu görmüyor`);
+        } else {
+          defter.atla(`§${s.id} ${s.title}`, `kapsam 0 (${s.kapsam.ne}) — 0 drift bir ölçüm değil`);
+        }
         continue;
       }
       console.log(`   ℹ §${s.id} kapsam ${kapsam} top (${s.kapsam.ne})`);
@@ -1242,16 +1385,6 @@ async function main(): Promise<void> {
       if (n > samples.length) console.log(`      ↳ … +${n - samples.length} satır daha`);
     }
   }
-
-  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${defter.ozetEki()} ===`);
-  if (fail > 0) {
-    console.log(
-      "\nDÜŞTÜYSE: bir denormalize alan defterden kopmuş ya da bir akış nesneyi\n" +
-        "yarım bırakmış. ÖNCE hangi kod yolunun ürettiğini bul — geçmiş satırları\n" +
-        "toplu UPDATE ile 'düzeltmek' kök nedeni gizler ve drift geri gelir.\n" +
-        "Aynı sorguları elle koşmak için: psql <db> -f scripts/consistency-check.sql"
-    );
-  }
 }
 
 main()
@@ -1260,6 +1393,15 @@ main()
     fail++;
   })
   .finally(async () => {
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${defter.ozetEki()} ===`);
+    if (fail > 0) {
+      console.log(
+        "\nDÜŞTÜYSE: bir denormalize alan defterden kopmuş ya da bir akış nesneyi\n" +
+          "yarım bırakmış. ÖNCE hangi kod yolunun ürettiğini bul — geçmiş satırları\n" +
+          "toplu UPDATE ile 'düzeltmek' kök nedeni gizler ve drift geri gelir.\n" +
+          "Aynı sorguları elle koşmak için: psql <db> -f scripts/consistency-check.sql"
+      );
+    }
     await prisma.$disconnect();
     process.exit(fail > 0 ? 1 : 0);
   });
