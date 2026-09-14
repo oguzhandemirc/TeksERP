@@ -4,6 +4,7 @@ import {
   Calculator,
   Factory,
   ShieldCheck,
+  Spool,
   Truck,
   Users,
   Warehouse,
@@ -18,6 +19,7 @@ import { subcontractReportTiles } from "./Subcontract/tile-config";
 import { customerReportTiles } from "./Customer/tile-config";
 import { auditReportTiles } from "./Audit/tile-config";
 import { financeReportTiles } from "./Finance/tile-config";
+import { dokumaReportTiles } from "./Dokuma/tile-config";
 
 export interface ReportTile {
   key: string;
@@ -42,7 +44,7 @@ export interface ReportTile {
    * raporları karosunun bir an kaybolup geri gelmesi demekti ("sıfır görünür
    * fark" ihlali). Zincir tek yerde: `useOperationsVisibilityContext`.
    */
-  featureFlag?: "financeEnabled" | "productionEnabled";
+  featureFlag?: "financeEnabled" | "productionEnabled" | "dokumaEnabled";
 }
 
 /**
@@ -58,6 +60,7 @@ export const reportCategoryTiles: Record<string, HubTile[]> = {
   customer: customerReportTiles,
   audit: auditReportTiles,
   finance: financeReportTiles,
+  dokuma: dokumaReportTiles,
 };
 
 /** Kategori başlığı — rail'in tepesinde gösterilir. */
@@ -70,6 +73,7 @@ export const reportCategoryTitle: Record<string, string> = {
   customer: "Müşteri",
   audit: "Denetim",
   finance: "Ön Muhasebe",
+  dokuma: "Dokuma",
 };
 
 export const reportTiles: ReportTile[] = [
@@ -147,5 +151,17 @@ export const reportTiles: ReportTile[] = [
     to: "/reports/finance",
     permission: "report:finance",
     featureFlag: "financeEnabled",
+  },
+  // Dokuma raporları (Dilim 5, 2026-09-14) — dokuma defterlerinden doğar; referans
+  // fabrikada `dokuma.enabled` KAPALI ⇒ karo HİÇ çizilmez (`Dokuma/dokuma-regime.ts`).
+  // İzin `report:production` (üretim raporudur; ayrı `loom:read` açılmadı — 1e hükmü ③).
+  {
+    key: "dokuma",
+    title: "Dokuma",
+    description: "Tezgah randımanı (K · P · E ayrı), duruş Pareto'su, vardiya karnesi ve mühür",
+    icon: Spool,
+    to: "/reports/dokuma",
+    permission: "report:production",
+    featureFlag: "dokumaEnabled",
   },
 ];

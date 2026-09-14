@@ -101,10 +101,18 @@ const DOKUMA_UC_METINLERI = ["/api/weaving-orders", "/api/machine-runs", "/api/m
  * zorundadır (§7c–§7f). Tablet tezgah ekranı doğduğu gün buraya satır eklenir ve
  * aynı gün o ekranın `useVisibleScreens` kapısı ölçülür.
  */
-const IZINLI_ISTEMCI_DOSYALARI: ReadonlyArray<{ dosya: string; ekranKey: string; izinler: readonly string[] }> = [
-  { dosya: "Electron/src/pages/Operations/WeavingOrders/service.ts", ekranKey: "operations/weaving-orders", izinler: ["weavingorder:read"] },
+/**
+ * `karo`: karonun yaşadığı hub — `operations` (`pages/Operations/tile-config.ts`, saf `visibleWhen`
+ * yüklemi) ya da `reports` (`pages/Reports/tile-config.ts`, `featureFlag: "dokumaEnabled"` —
+ * Raporlar hub'ının bayrak biçimi; palet girişi `regimePredicate(featureFlag)` ile türer).
+ * İki biçim de aynı soruyu sorar: karo YALNIZ `dokumaEnabled` ile çizilir.
+ */
+const IZINLI_ISTEMCI_DOSYALARI: ReadonlyArray<{ dosya: string; ekranKey: string; izinler: readonly string[]; karo: "operations" | "reports" }> = [
+  { dosya: "Electron/src/pages/Operations/WeavingOrders/service.ts", ekranKey: "operations/weaving-orders", izinler: ["weavingorder:read"], karo: "operations" },
   // Tezgah Duruşları (2026-09-14): iki izinden BİRİ açar — route `requireAnyPermission`, manifesto `requires` ikisini de anar.
-  { dosya: "Electron/src/pages/Operations/MachineStops/service.ts", ekranKey: "operations/machine-stops", izinler: ["loom:manual-entry", "loom:classify"] },
+  { dosya: "Electron/src/pages/Operations/MachineStops/service.ts", ekranKey: "operations/machine-stops", izinler: ["loom:manual-entry", "loom:classify"], karo: "operations" },
+  // Dokuma raporları (Dilim 5, 2026-09-14): Raporlar hub'ı karosu; okuma `report:production` (1e hükmü ③).
+  { dosya: "Electron/src/pages/Reports/Dokuma/service.ts", ekranKey: "reports/dokuma", izinler: ["report:production"], karo: "reports" },
 ];
 
 function kapiGovdesi(kod: string): string {
@@ -286,24 +294,38 @@ async function main(): Promise<void> {
   );
 
   // Allowlist'teki ekranın ÜÇ kapısı: manifesto · karo · route.
-  const tileConfig = yorumlariSok(fs.readFileSync(path.join(ELECTRON_SRC, "pages/Operations/tile-config.ts"), "utf8"));
+  const tileConfigs = {
+    operations: yorumlariSok(fs.readFileSync(path.join(ELECTRON_SRC, "pages/Operations/tile-config.ts"), "utf8")),
+    reports: yorumlariSok(fs.readFileSync(path.join(ELECTRON_SRC, "pages/Reports/tile-config.ts"), "utf8")),
+  };
   const contentRoutes = fs.readFileSync(path.join(ELECTRON_SRC, "routes/content-routes.tsx"), "utf8");
-  for (const { ekranKey, izinler } of IZINLI_ISTEMCI_DOSYALARI) {
+  for (const { ekranKey, izinler, karo } of IZINLI_ISTEMCI_DOSYALARI) {
+    const tileConfig = tileConfigs[karo];
     const manifesto = SCREEN_CATALOG.find((s) => s.key === ekranKey);
     check(
       `§7c ⭐ ${ekranKey} manifestoda \`dokumaEnabled\` beyanlı ve [${izinler.join(", ")}] istiyor`,
       manifesto?.modul === "dokumaEnabled" && izinler.every((p) => (manifesto?.requires ?? []).includes(p)),
       manifesto ? `modul=${manifesto.modul} requires=${manifesto.requires.join(",")}` : "manifestoda YOK",
     );
-    // Karo bloğu: `to: "/<ekranKey>"` geçen `{ … }` içinde `visibleWhen: <saf yüklem>`.
+    // Karo bloğu: `to: "/<ekranKey>"` geçen `{ … }` içinde — operations: `visibleWhen: <saf yüklem>`;
+    // reports: `featureFlag: "dokumaEnabled"` (hub'ın bayrak biçimi; karo `ctx[featureFlag]` ile süzülür).
     const toIdx = tileConfig.indexOf(`to: "/${ekranKey}"`);
     const blok = toIdx >= 0 ? tileConfig.slice(tileConfig.lastIndexOf("{", toIdx), tileConfig.indexOf("}", toIdx)) : "";
-    const yuklem = /visibleWhen:\s*([A-Za-z_][A-Za-z0-9_]*)\s*,?/.exec(blok)?.[1] ?? null;
-    check(
-      `§7d ⭐ ${ekranKey} karosu SAF yüklem taşıyor ve yüklem \`dokumaEnabled\`i okuyor`,
-      yuklem !== null && yuklemDokumayaBagli(tileConfig, yuklem),
-      yuklem ? `visibleWhen=${yuklem}` : "karo yok ya da yüklem satır içi/eksik",
-    );
+    if (karo === "operations") {
+      const yuklem = /visibleWhen:\s*([A-Za-z_][A-Za-z0-9_]*)\s*,?/.exec(blok)?.[1] ?? null;
+      check(
+        `§7d ⭐ ${ekranKey} karosu SAF yüklem taşıyor ve yüklem \`dokumaEnabled\`i okuyor`,
+        yuklem !== null && yuklemDokumayaBagli(tileConfig, yuklem),
+        yuklem ? `visibleWhen=${yuklem}` : "karo yok ya da yüklem satır içi/eksik",
+      );
+    } else {
+      const bayrak = /featureFlag:\s*"([A-Za-z]+)"/.exec(blok)?.[1] ?? null;
+      check(
+        `§7d ⭐ ${ekranKey} karosu (Raporlar hub'ı) \`featureFlag: "dokumaEnabled"\` taşıyor`,
+        bayrak === "dokumaEnabled" && izinler.every((p) => blok.includes(`"${p}"`)),
+        bayrak ? `featureFlag=${bayrak}` : "karo yok ya da featureFlag eksik — referans fabrikada karo BELİRİR",
+      );
+    }
     const routeBlok = new RegExp(`path:\\s*"${ekranKey.replace("/", "\\/")}"([\\s\\S]{0,400})`).exec(contentRoutes)?.[1] ?? "";
     // Tek izin `requirePermission="x"`, çok izin `requireAnyPermission={["x", "y"]}` — ikisinde de her izin ADIYLA geçer.
     check(

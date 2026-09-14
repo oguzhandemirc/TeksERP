@@ -40,6 +40,11 @@ import { ChequesPage } from "@/pages/Finance/Cheques/ChequesPage";
 import { AllocationsPage } from "@/pages/Finance/Allocations/AllocationsPage";
 import { PeriodClosePage } from "@/pages/Finance/PeriodClose/PeriodClosePage";
 import { FinanceReportsHubPage } from "@/pages/Reports/Finance/FinanceReportsHubPage";
+import { DokumaReportsHubPage } from "@/pages/Reports/Dokuma/DokumaReportsHubPage";
+import { RandimanPage } from "@/pages/Reports/Dokuma/RandimanPage";
+import { DurusParetoPage } from "@/pages/Reports/Dokuma/DurusParetoPage";
+import { VardiyaKarnesiPage } from "@/pages/Reports/Dokuma/VardiyaKarnesiPage";
+import { KarnePage } from "@/pages/Reports/Dokuma/KarnePage";
 import { AgingReportPage } from "@/pages/Reports/Finance/AgingReportPage";
 import { CashBookPage } from "@/pages/Reports/Finance/CashBookPage";
 import { ChequeDuePage } from "@/pages/Reports/Finance/ChequeDuePage";
@@ -1155,6 +1160,49 @@ export const contentRoutes: RouteObject[] = [
   // (`/reports/finance-aging` gibi) sağ şerit SESSİZCE kaybolur ve komut paleti
   // girişi de doğmaz. Adres değişecekse tek dokunulacak yer
   // `Reports/Finance/tile-config.ts`'teki `to` alanlarıdır.
+  // ── Dokuma raporları (Dilim 5, 2026-09-14) — rejim kapısı `ROUTE_MODULE` aynasından
+  //    (`reports/dokuma` → dokumaEnabled); üç segmentli adres (ReportSideRail şartı); izin
+  //    `report:production` (1e hükmü ③); karne eylemleri ekran içinde PermissionGate.
+  {
+    path: "reports/dokuma",
+    element: (
+      <ProtectedRoute requirePermission="report:production">
+        <DokumaReportsHubPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/dokuma/randiman",
+    element: (
+      <ProtectedRoute requirePermission="report:production">
+        <RandimanPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/dokuma/durus-pareto",
+    element: (
+      <ProtectedRoute requirePermission="report:production">
+        <DurusParetoPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/dokuma/vardiya-karnesi",
+    element: (
+      <ProtectedRoute requirePermission="report:production">
+        <VardiyaKarnesiPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/dokuma/karne",
+    element: (
+      <ProtectedRoute requirePermission="report:production">
+        <KarnePage />
+      </ProtectedRoute>
+    ),
+  },
   {
     path: "reports/finance",
     element: (

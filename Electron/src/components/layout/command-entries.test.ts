@@ -46,6 +46,11 @@ const EXEMPT: Record<string, string> = {
   "/access/devices/:id": "detay yolu",
 };
 
+// Kategori izni KURAL olarak `report:<kategori>`; istisna ADIYLA ve gerekçesiyle (listeye
+// sessizce satır eklenmesin): dokuma raporları ÜRETİM raporudur, ayrı `report:dokuma`
+// açılmadı (1e hükmü 2026-09-14 ③) — route ve karo `report:production`.
+const KATEGORI_IZNI_ISTISNASI: Record<string, string> = { dokuma: "report:production" };
+
 describe("komut paleti kataloğu", () => {
   const paths = new Set(allCommandEntries.map((e) => e.to.split("?")[0]));
 
@@ -63,10 +68,13 @@ describe("komut paleti kataloğu", () => {
     }
   });
 
-  it("rapor girişleri kategorinin iznini taşır (görünür ama /forbidden olmasın)", () => {
+  it("rapor girişleri kategorinin iznini taşır (görünür ama /forbidden olmasın); istisna listesi bayat değil", () => {
     for (const entry of allCommandEntries.filter((e) => e.to.startsWith("/reports/"))) {
-      const domain = entry.to.split("/")[2];
-      expect(entry.permission, `${entry.to} izinsiz`).toBe(`report:${domain}`);
+      const domain = entry.to.split("/")[2] ?? "";
+      expect(entry.permission, `${entry.to} izinsiz`).toBe(KATEGORI_IZNI_ISTISNASI[domain] ?? `report:${domain}`);
+    }
+    for (const cat of Object.keys(KATEGORI_IZNI_ISTISNASI)) {
+      expect(allCommandEntries.some((e) => e.to.startsWith(`/reports/${cat}`)), `${cat} istisnası ölü`).toBe(true);
     }
   });
 

@@ -192,8 +192,8 @@ export async function collectShiftStatRows(p: ShiftStatListParams, opts: ShiftSt
   return { rows, meta: { total, truncated: total > SHIFT_STAT_LIST_TAKE, live, sealed } };
 }
 
-/** M1 — karne listesi ucu (kırılımsız). */
-export async function listShiftStats(p: ShiftStatListParams, now = new Date()): Promise<ApiResponse<ShiftStatRow[]> & { meta: { total: number; truncated: boolean; live: number; sealed: number } }> {
+/** M1 — karne listesi ucu (kırılımsız; `statId` DÖNER — panel mühür eylemleri onunla, `null` = satır henüz yazılmadı). */
+export async function listShiftStats(p: ShiftStatListParams, now = new Date()): Promise<ApiResponse<Array<ShiftStatRow & Pick<ShiftStatRowExtra, "statId">>> & { meta: { total: number; truncated: boolean; live: number; sealed: number } }> {
   const { rows, meta } = await collectShiftStatRows(p, { now });
-  return { success: true, data: rows.map(({ statId: _s, breakdown: _b, ...row }) => row), meta };
+  return { success: true, data: rows.map(({ breakdown: _b, ...row }) => row), meta };
 }

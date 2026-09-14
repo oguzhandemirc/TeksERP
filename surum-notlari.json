@@ -25,6 +25,11 @@
       },
       "maddeler": [
         {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Raporlar'a “Dokuma” geldi: tezgah randımanı (kullanılabilirlik · performans · etkinlik AYRI sütunlarda; hedef devir bilinmiyorsa “ölçülemedi” yazar, sıfır yazmaz), duruş Pareto'su (sebep × süre sınıfı; mikro duruşlar, sınıflandırılmamış ve levent yuvası atanmamış duruşlar ayrı kutularda) ve vardiya karnesi (her satır kaynağını taşır: ölçülen / elle / simüle / boş tezgah). Karneler vardiya bitiminden bir saat sonra kendiliğinden oluşur; vardiya amiri terimleri düzeltip mühürler, mühür açma ayrı bir yetkidir ve gerekçe ister. Yalnız dokuma modülü açık kurulumda görünür — bu fabrikada hiçbir şey değişmedi."
+        },
+        {
           "kapsam": "her-ikisi",
           "tip": "yeni",
           "metin": "Sipariş kalemine artık birim yazılıyor: metre, kilo ya da adet. Kalem eklerken birim ürün kartından kendiliğinden gelir; gerekirse panelde satırda değiştirilir. Metreyle satılan kumaşta hiçbir şey değişmedi. Kiloyla ya da adetle yazılmış bir kalemde ise sistem sevk edilen miktarı ÖLÇMEZ: o satır “karşılama ölçülmüyor” uyarısıyla görünür ve sipariş kendiliğinden kapanmaz; kapatma kararı sizindir. Önceden kilo yazılan bir sipariş metre sayılarak sessizce kapanabiliyordu — artık kapanmaz. Eski tablet sürümü böyle bir kalemi “m” etiketiyle gösterir; rakam doğrudur, etiket güncellemeyle düzelir."

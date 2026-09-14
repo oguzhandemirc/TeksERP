@@ -9364,3 +9364,23 @@ karar. ④ Ufuk öncesi satır `startsAt < ufuk` ile sayılır.
 kapsamı YOK (kullanıcı kararı, `check-surum-notlari` §"sunucu" REDDEDİLİYOR). Karnenin panel ekranı ayrı dilim ⇒ madde o
 dilimle yazılır; hazır cümle: *"Dokuma tezgahları için vardiya karnesi ve üç rapor geldi (randıman, duruş Pareto, vardiya
 karnesi) — yalnız dokuma modülü açık kurulumda; referans fabrikada hiçbir şey değişmedi."*
+## 2026-09-14 — PANEL DOKUMA RAPORLARI EKRANI indi (Dilim 5): Raporlar hub'ının bayrak biçimi, izin aynası, kategori izni istisnası [ÇEKİRDEK]
+
+**Hüküm (1e, tanım 10 madde + dört şart):** Raporlar hub'ına `dokumaEnabled` bayraklı "Dokuma" karosu; route izni
+`report:production` (ayrı `loom:read` yok); karne eylemleri backend uçlarının GERÇEK izniyle birebir; `loom:shift-unseal`
+SCREENLESS'tan düşer; `test_screen_catalog` gevşetilmez; mühür aç sonrası "yeniden hesaplanabilir" cümlesi kullanıcıya görünür.
+**İnen (01):** `pages/Reports/Dokuma/` (Hub · Randıman · Pareto · Vardiya Karnesi · Karne listesi + tablo/diyalog/mutasyon
+dosyaları · `service.ts` · `dokuma-regime.ts` yalnız `formatPct`/`SOURCE_LABELS`) · beş route · `Reports/tile-config.ts`
+karosu (`featureFlag` union'a `dokumaEnabled`) + `reportCategoryTiles/Title` · `ROUTE_MODULE` satırı · `SCREEN_CATALOG`
+`reports/dokuma` · `listShiftStats` artık `statId` döner (panel mühür eylemleri onunla; null = karne yazılmadı → eylem yok)
+· sürüm maddesi (tur 2026-09-13, panel, yeni).
+**Kararlar:** ① Raporlar hub'ında saf `visibleWhen` yüklemi YOK (hub `featureFlag` ile süzer, palet `regimePredicate`) ⇒
+ayrı `isDokumaReportsVisible` yazılmadı (ölü kod olurdu); `test_dokuma_regime_gate §7` `karo: "operations" | "reports"`
+koluyla iki biçimi de ölçer (reports kolu: karo bloğunda `featureFlag: "dokumaEnabled"` + izin dizesi; negatif sonda ❌).
+② `command-entries.test.ts` "kategori izni = `report:<kategori>`" konvansiyonuna ADIYLA istisna: `{ dokuma: "report:production" }`
++ bayatlık ayağı (istisna kategorisinin girişi yoksa ❌) — konvansiyon kalır, istisna gerekçeli.
+③ `loom:manual-entry` iki ekranda (machine-stops `requires`, dokuma `capabilities`) — `test_screen_catalog` kabul ediyor
+(ölçüldü: kod-birden-çok-ekranda §6'da beklenen durum), tek manifesto satırı.
+**Ölçüm dersi:** Reports hub'ı Operations hub'ından farklı bir rejim biçimi taşıyor (`featureFlag` ↔ `visibleWhen`); dokuma
+kapı bekçisi yalnız Operations biçimini biliyordu — ekran gelmeden bekçiye "biçim körlüğü" görünmezdi. Bekçi gevşetilmedi,
+biçim eklendi ve yeni biçimin negatif sondası aynı commit'te görüldü.
