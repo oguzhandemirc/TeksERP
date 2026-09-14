@@ -297,6 +297,14 @@ const MACHINE_DELETE_GUARDS: DependencyGuard[] = [
     message: (n) => `Bu makinede ${n} vardiya karnesi var — kalıcı silinemez. Pasife alın.`,
   },
   {
+    // Künye Cascade ile ölür (makinesiz anlamsız) — AMA `baselineRunHours` ERP öncesi ELLE
+    // girilmiş çalışma saati bakiyesidir, sessizce ölemez: bakiyesi dolu künye silmeyi durdurur
+    // ("önce bakiyeyi not alın"). Guard yazma yüzeyiyle doğdu (B3, 2026-09-14) — P4 muafı düştü.
+    key: "machineSpecBaselineCount",
+    count: (id) => prisma.machineSpec.count({ where: { machineId: id, baselineRunHours: { not: null } } }),
+    message: (n) => `Bu makinenin künyesinde ERP öncesi çalışma saati bakiyesi var (${n}) — önce bakiyeyi not alın, sonra künyeden silin.`,
+  },
+  {
     // `KursunBypassAssignment.machineId` RESTRICT'tir, yani silme zaten P2003'e
     // düşer — ama operatör jenerik "bağlı kayıt var" yerine HANGİ izin engellediğini
     // görmeli; atama satırı append-only bypass izidir, silinmez.

@@ -210,7 +210,7 @@ const EXPECTED: Record<string, string> = {
   // YAPILANDIRMADIR, bir defter satırı değil. Makine silinirse o yapılandırma
   // da konusuz kalır. ⚠️ Duruş DEFTERİ ayrı ve `Restrict` — o silinmez.
   "Machine <- MachineCollectorLink.machine : Cascade": "cascade-intended — toplayıcı kapsamı makinesiz anlamsız (yapılandırma, defter değil)",
-  "Machine <- MachineSpec.machine : Cascade": "cascade-intended — künye makinesiz anlamsız (yazma yüzeyi gelince baselineRunHours guard'ı eklenir)",
+  "Machine <- MachineSpec.machine : Cascade": "cascade-intended — künye makinesiz anlamsız; bakiyesi dolu künye `machineSpecBaselineCount` guard'ıyla silmeyi durdurur (B3, 2026-09-14)",
   "Station <- PeripheralDevice.station : SetNull": "guarded (peripheralCount — stationId VEYA machine.stationId)",
   "Station <- Roll.entryStation : SetNull": "guarded (rollEntryStationCount, 2026-08-05) — makine damgası olmayan girişleri de kapsar",
   "Station <- StationColor.station : Cascade": "cascade-intended — istasyon renk yapılandırması istasyonsuz anlamsız",
@@ -286,14 +286,6 @@ function machineGuardTargets(): string[] {
 const MACHINE_GUARD_EXEMPT: Record<string, string> = {
   "peripheralDevice.machineId":
     "donanım BLOKLAMAZ: silmede machineId=null'a çekilir (kayıt + ayar korunur, atamasız boşa çıkar)",
-  // Dokuma P4 (2026-09-13). ⚠️ Muafiyet SÜRESİZ DEĞİL, yazma yüzeyine bağlı:
-  // künyenin `baselineRunHours` alanı ERP öncesi çalışma saati bakiyesidir ve
-  // ELLE girilir — dolu bir bakiye Cascade ile sessizce ölmemeli. Bugün o alanı
-  // yazan hiçbir uç YOK (P4 şema-only), yani guard erişilemez bir dalı korurdu.
-  // Künye yazma ucunu açan dilim bu satırı SİLER ve `MACHINE_DELETE_GUARDS`a
-  // "bakiyesi dolu künye" guard'ını ekler.
-  "machineSpec.machineId":
-    "künye Cascade ile birlikte ölür (makinesiz anlamsız); bakiye guard'ı yazma yüzeyiyle gelecek",
   // Dokuma P2b-1 (2026-09-13) — ikisi de YAZMA YÜZEYİ olmadan indi.
   // ⚠️ `machineStopEvent.machineId` `Restrict`tir ve duruş bir DEFTERDİR: guard
   // GEREKLİ olacak (aksi hâlde operatör okunabilir 409 yerine ham P2003 görür,

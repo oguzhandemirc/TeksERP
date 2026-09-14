@@ -344,6 +344,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "loom:classify",
       // Karne mührünü açma (Dilim 3): geçmiş rakamı değiştirir — yalnız süpervizör.
       "loom:shift-unseal",
+      // Tezgah künyesi + gölge mod (B3): izleme hâli randımanın güven sınıfıdır — süpervizör.
+      "loom:spec-manage",
       // Tezgah oturumu (⓪, 2026-09-14): ekran doğana kadar süpervizör paketinde;
       // tablet dilimiyle operatör paketine iner (loom:run ile aynı vaat).
       "mobile:dokuma",

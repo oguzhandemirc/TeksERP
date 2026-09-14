@@ -99,6 +99,9 @@ export const PERMISSION_CATALOG = [
   // Vardiya karnesi (dokuma raporları Dilim 3, 2026-09-14): mühür `loom:manual-entry` (günlük kapanış işi);
   // MÜHÜR AÇMA geçmiş rakamı değiştirir — ayrı kod (`roll:manual-adjust` ailesi; SoD üçlüsüne GİRMEZ).
   { code: "loom:shift-unseal", module: "PRODUCTION", category: "web", description: "Vardiya karnesi mührünü açma — mühürlü (resmî) rakamı yeniden hesaba açar (gerekçe zorunlu)" },
+  // Tezgah künyesi + gölge mod (B3, 2026-09-14): künye yazımı, OFF→SHADOW, go-live (üç şart), sebepli demote —
+  // izleme hâlini değiştirmek randıman rakamının GÜVEN sınıfını değiştirir; süpervizör işi.
+  { code: "loom:spec-manage", module: "PRODUCTION", category: "web", description: "Tezgah künyesi ve izleme hâli (OFF→SHADOW→LIVE go-live kapıları, sebepli demote)" },
   { code: "quality:read", module: "QUALITY", category: "web", description: "Kalite derecesi tanımlarını görüntüleme" },
   { code: "quality:write", module: "QUALITY", category: "web", description: "Kalite derecesi tanımlama/düzenleme" },
   { code: "property:read", module: "QUALITY", category: "web", description: "Özellik (renk/desen vb.) tanımlarını görüntüleme" },

@@ -14,3 +14,11 @@ export const MINOR_STOP_THRESHOLD_SEC = 20;
 
 /** Oran formülünün sürümü — mühürde denormalize edilir; formül değişirse artar. */
 export const LOOM_KPI_FORMULA_VERSION = 1;
+
+/**
+ * GÖLGE MOD KABUL EŞİĞİ — LIVE'a geçiş için MÜHÜRLÜ ∧ `monitoringState=SHADOW` donmuş karne
+ * sayısı (DOKUMA-TEZGAH §2.3 ② `SHADOW_TOO_SHORT`, tasarım `tezgah.shadowMinShifts` = 15).
+ * ⚠️ Bugün SABİT (Faz 1b); Faz 2'de `tezgah.*` DAVRANIŞ BAYRAĞINA taşınır — o gün DEFAULT
+ * bu değer olur (= bugünkü davranış), okuyucu `?? SHADOW_MIN_SHIFTS` ile düşer.
+ */
+export const SHADOW_MIN_SHIFTS = 15;

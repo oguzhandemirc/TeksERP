@@ -9453,3 +9453,18 @@ terimlerinindir (raşel/örme hattında birim atkı değil sıra/rack).
 **"Eski istemci ne yapar":** sahada bu alanları gönderen/okuyan istemci YOK — dokuma tablet ekranı paketlenmedi, panel
 dokuma raporları aynı gün indi, `dokuma.enabled` her kurulumda kapalı ⇒ alias/minVersion GEREKMEDİ; tablet `runPayload`
 ve panel `Reports/Dokuma` aynı sha'da yeniden adlandı (mobil jest 33/33).
+## 2026-09-14 — GÖLGE MOD B3 indi: künye yazma yüzeyi, OFF→SHADOW→LIVE kapıları (LIVE beyanlı-erişilemez), bakiye guard'ı [ÇEKİRDEK]
+
+**Hüküm (1e, (a)):** tasarımın `/api/tezgah/specs` + `requireTezgahEnabled`i ekransız doğamaz (`test_screen_catalog §10b`
+`EKRANSIZ_MODULLER` muafına bakmıyor — ölçüldü) ⇒ router `/api/machine-specs`, `requireDokumaEnabled` + yeni `loom:spec-manage`
+(SCREENLESS gerekçeli: "Devreye Alma ekranı ayrı dilim"; WEB_PRODUCTION_SUPERVISOR); Faz 2 ingest ekranıyla kapı taşınır.
+**İnen (01):** `machine-spec.service.ts` (upsert ALLOWLIST — `monitoringState`/damgalar gövdeden yazılamaz; `startShadow` claim;
+`goLive` üç şart; `demoteToShadow` sebepli, `acceptedAt` kalır) · dört uç · `SHADOW_MIN_SHIFTS = 15` (`constants/loom-shift.ts`)
+· `MACHINE_DELETE_GUARDS.machineSpecBaselineCount` (P4 muafı düştü) · audit `MACHINE_SPEC` · `test_machine_shadow_mode` 22/0 + 4 ⏭
+(dört negatif sonda kırmızı görüldü).
+**Kararlar:** ① go-live şart SIRASI ölçülebilirden ölçülemeyene (② → ① → ③): tasarım ①②③ der, ama ① bugün her zaman 409 ⇒
+② ölçülemezdi. ② `PeripheralSignal` yokken ① FAIL-CLOSED `SIGNAL_NOT_ACCEPTED` ("sinyal kabulü Faz 2 ile açılır") ⇒ **LIVE bugün
+erişilemez** — çıkışsız kapı DEĞİL beyanlı kapı: SHADOW erişilir, karneler normal mühürlenir; mesaj ve `dokuma.md` kuralı bunu
+söyler. ③ anomali (③), S1/S3/S5/S6, `signals/:id/accept` Faz 2 — bekçi ⏭ beyanlı (STRICT kırmızı). ④ `MachineRunState` enum
+şemada YOK ⇒ `OFF` çakışması yok, beyan gerekmedi (enum inince `test_audit_labels §4` ısırır). ⑤ Özet §8 `warpBeamSlots` satırı
+"İNDİ" (6e 090000). ⑥ Demote'un LIVE→SHADOW ayağı fikstürle ölçüldü (LIVE üretim yolundan üretilemez) — beyanlı.
