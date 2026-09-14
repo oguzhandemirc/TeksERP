@@ -21,6 +21,28 @@
 
 ---
 
+## 2026-09-15 — ⏭'nin bedelini ödediği gün: sözleşme yazılıydı, tartışma olmadı [ÇEKİRDEK]
+
+Zincir bekçisinin ⑧. adımı (levent tezgaha bağlama) bir gün önce ⏭ BEYANLI kapanmıştı ve
+beyanı boş bir "henüz yok" değildi: **ne bekleneceği servis · durum · sed adıyla yazılıydı**
+(`warp-beam-mount.service::mount/dismount` · `MOUNTED` · yuva seddi · ters yol dismount).
+6e Faz 3 E1 inince adım açıldı ve **beklenen sonuç tartışılmadı — sözleşme neyse o ölçüldü.**
+⇒ ***⏭'nin değeri "bugün yok" demek değil, YARIN NE OLACAĞINI bugünden bağlamaktır.***
+
+Adım fiziksel sırasına yerleşti (② sarım → ③ bağlama → ④ koşum), zincir ①…⑧ oldu ve
+`ATLANAN_TABAN` 1 → 0 ile kural koşulsuzlaştı. Cırcıra **ikinci yön** eklendi: ⏭ sayısı
+ARTARSA adım sessizce kapanmıştır, **DÜŞERSE taban da düşmelidir** — yoksa "8 adım koşuyor"
+ile "7 koşuyor, biri ⏭" aynı yeşile çıkar ve *zincirin BÜYÜMESİ görünmez olur.*
+
+⚠️ **Bağ DURUM değil ADRES ölçer.** İlk yazımda ③ yalnız `status === MOUNTED` ve olay
+sayısına bakıyordu; "MOUNTED" her tezgahta aynı görünür. Zincirin iddiası leventin **BU
+tezgaha, BU yuvaya** takıldığıdır ⇒ ölçüm `currentMachineId`/`currentPosition`a bağlandı.
+Sonda: levent başka tezgaha takıldı → kontrol kırmızı (durum aynı, adres farklı).
+
+⚠️ Fikstür dersi: bağlama kapısı **istasyon kartına** bakıyor (`consumesWarpBeam`), makinenin
+`warpBeamSlots`una değil. Fikstür bunu açmayınca `WARP_BEAM_MACHINE_NOT_LOOM` geldi — *bir
+kapının sorduğu yer, sorduğunu sandığın yer olmayabilir.*
+
 ## 2026-09-14 — Kapının "koruma" tanımı eksikse, doğru kodu BOZMAYA zorlar [ÇEKİRDEK]
 
 Sızan bayrak kapısı üç ihlal sayıyordu. Üçüncüsü ölçülünce **ihlal değil YANLIŞ POZİTİF**
