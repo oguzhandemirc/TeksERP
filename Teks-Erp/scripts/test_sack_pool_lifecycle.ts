@@ -24,6 +24,7 @@
 //    Geri alındığında yeşil.
 import { RollStatus, ShipmentStatus, OrderStatus, RollEntrySource } from "@prisma/client";
 import prisma from "../src/lib/prisma";
+import { ACTIVE_ALLOCATION } from "../src/services/helpers/sack-allocation.helper";
 import { ShippingService } from "../src/services/shipping.service";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 
@@ -107,7 +108,8 @@ async function createShip(sackIds: string[], orderIds?: string[]): Promise<Creat
 const shippedOf = async (lineId: string) =>
   Number((await prisma.orderLine.findUnique({ where: { id: lineId }, select: { shippedQty: true } }))!.shippedQty);
 const allocOf = async (lineId: string) =>
-  Number((await prisma.sackAllocation.aggregate({ where: { orderLineId: lineId }, _sum: { qty: true } }))._sum.qty ?? 0);
+  // K2 (2026-09-14): damgalı (yeniden hesaplanmış) satır Σ'ya girmez — üretim okuyucularıyla aynı yüklem.
+  Number((await prisma.sackAllocation.aggregate({ where: { orderLineId: lineId, ...ACTIVE_ALLOCATION }, _sum: { qty: true } }))._sum.qty ?? 0);
 const statusOf = async (shipmentId: string) =>
   (await prisma.shipment.findUnique({ where: { id: shipmentId }, select: { status: true } }))!.status;
 const rollState = async (barcode: string) =>
