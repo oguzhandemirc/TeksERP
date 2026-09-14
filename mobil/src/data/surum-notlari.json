@@ -308,6 +308,11 @@
           "kapsam": "her-ikisi",
           "tip": "duzeltme",
           "metin": "Tablette Tambur’da hata tipi seçilmeden girilen hata artık listedeki ilk tipe yazılmıyor; kataloğda “varsayılan” işaretli hata tipine yazılır. Kalite → Hata Tipleri’nde bir tipi varsayılan yapabilirsiniz (kurulumda tek varsayılan olur, yenisini işaretlemek eskisini kaldırır). Güncellemeyle, varsayılan tanımlı değilse “GENEL” adlı bir hata tipi oluşturulup varsayılan yapılır; hiç varsayılan yoksa tipsiz hata girişi reddedilir ve ekran tip seçilmesini ister. Geçmiş hata kayıtları değişmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Dokuma modülü açık kurulumlarda panele “Tezgah Duruşları” ekranı geldi (Operasyon menüsü). Tabletten bildirilen sebepsiz duruşlar sınıflandırma kuyruğunda bekler; sebep atanır, gerekirse yeniden sınıflandırılır ve her değişiklik “kim, ne zaman, neden” ile değişiklik defterinde görünür — eski kayıt silinmez. Tabletten girilmemiş bir duruş elle girilir, kapatılır ya da geri alınır. Liste tezgah, gün ve vardiyaya göre süzülür; “kuyruk” ve “açık duruşlar” kapsamı ayrı seçilir. Ekran için duruş sınıflandırma ya da elle giriş yetkilerinden biri yeter. Modül kapalı kurulumda menüde görünmez ve hiçbir şey değişmez."
         }
       ]
     },
