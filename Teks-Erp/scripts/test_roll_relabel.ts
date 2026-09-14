@@ -17,6 +17,7 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import prisma from "../src/lib/prisma";
+import { ACTIVE_ROLL_PROPERTY } from "../src/services/helpers/property-revoke.helper";
 import { roleGrade } from "./fixture-quality-grade";
 import { InventoryService } from "../src/services/inventory.service";
 import { ShippingService } from "../src/services/shipping.service";
@@ -93,7 +94,7 @@ async function main() {
     );
     const r1After = await prisma.roll.findUnique({
       where: { id: r1.id },
-      select: { colorId: true, width: true, qualityGrade: true, properties: { select: { propertyId: true } } },
+      select: { colorId: true, width: true, qualityGrade: true, properties: { where: ACTIVE_ROLL_PROPERTY, select: { propertyId: true } } },
     });
     check("Renk değişti (A→B)", r1After?.colorId === colorB.id);
     check("En değişti (150→200)", Number(r1After?.width) === 200);
@@ -102,8 +103,9 @@ async function main() {
 
     // 5) Renksiz yap
     await inv.applyManualProperties(r1.id, { colorId: null, propertyIds: [] }, undefined);
-    const r1Raw = await prisma.roll.findUnique({ where: { id: r1.id }, select: { colorId: true, properties: true } });
-    check("Renksiz (color null) + özellik temizlendi", r1Raw?.colorId === null && r1Raw.properties.length === 0);
+    const r1Raw = await prisma.roll.findUnique({ where: { id: r1.id }, select: { colorId: true, properties: { select: { revokedAt: true } } } });
+    check("Renksiz (color null) + özellik aktif kümeden çıktı (0 aktif)", r1Raw?.colorId === null && r1Raw.properties.filter((p) => p.revokedAt === null).length === 0);
+    check("çıkan bayrak SİLİNMEDİ, damgalı duruyor (③a)", (r1Raw?.properties.filter((p) => p.revokedAt !== null).length ?? 0) === 1, `damgalı=${r1Raw?.properties.filter((p) => p.revokedAt !== null).length}`);
 
     // 3) DEPODAKİ (havuz) çuvaldaki top relabel EDİLEBİLİR (mühür YOK → çuval her an düzenlenebilir)
     const sackId = ((await ship.openSack({ customerId: customer.id })) as { data: { id: string } }).data.id;
@@ -169,7 +171,7 @@ async function main() {
     // 10) No-op relabel (aynı değerler) → labelDirty set edilmez (temiz kalır)
     const r1Cur = await prisma.roll.findUnique({
       where: { id: r1.id },
-      select: { colorId: true, width: true, qualityGrade: true, properties: { select: { propertyId: true } } },
+      select: { colorId: true, width: true, qualityGrade: true, properties: { where: ACTIVE_ROLL_PROPERTY, select: { propertyId: true } } },
     });
     await inv.applyManualProperties(
       r1.id,
@@ -196,7 +198,7 @@ async function main() {
     const faz0Base = { colorId: r1Cur!.colorId, width: r1Cur!.width != null ? Number(r1Cur!.width) : null, qualityGrade: r1Cur!.qualityGrade ?? undefined };
     await inv.applyManualProperties(r1.id, { ...faz0Base, propertyIds: [faz0Prop.id] }, undefined);
     await label.recordPrintEvent(r1.id, undefined, { stock: true });
-    const flagCount = () => prisma.rollProperty.count({ where: { rollId: r1.id, propertyId: faz0Prop.id } });
+    const flagCount = () => prisma.rollProperty.count({ where: { rollId: r1.id, propertyId: faz0Prop.id, ...ACTIVE_ROLL_PROPERTY } });
     check("11 ön koşul — bayrak yazıldı, etiket temiz", (await flagCount()) === 1 && (await prisma.roll.findUnique({ where: { id: r1.id }, select: { labelDirty: true } }))?.labelDirty === false);
     // (a) alan yok + başka değişiklik yok → bayrak durur, etiket temiz kalır
     await inv.applyManualProperties(r1.id, { ...faz0Base }, undefined);
@@ -210,7 +212,8 @@ async function main() {
     check("11b en değişince etiket bayatladı", r1b?.labelDirty === true);
     // (c) dizi geldi → replace hâlâ çalışır (boş dizi = hepsini kaldır)
     await inv.applyManualProperties(r1.id, { ...faz0Base, width: 210, propertyIds: [] }, undefined);
-    check("11c propertyIds: [] → bayrak KALDIRILDI (replace sözleşmesi korunur)", (await flagCount()) === 0);
+    check("11c propertyIds: [] → bayrak aktif kümeden KALDIRILDI (replace sözleşmesi korunur)", (await flagCount()) === 0);
+    check("11c kaldırılan bayrak damgalı DURUYOR (③a)", (await prisma.rollProperty.count({ where: { rollId: r1.id, propertyId: faz0Prop.id, revokedAt: { not: null } } })) === 1);
     // (d) Controller `undefined`i servise OLDUĞU GİBİ geçirir — `?? []` geri gelirse
     //     yukarıdaki servis kontrolleri yeşil kalır (servisi doğrudan çağırıyoruz),
     //     kusur ROUTE katmanında yaşar. Statik çapa: iki geçiş noktası, sıfır `?? []`.

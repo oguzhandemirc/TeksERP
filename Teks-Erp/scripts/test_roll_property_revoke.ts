@@ -196,6 +196,32 @@ async function main(): Promise<void> {
     `restored=${fullB.propsRestored}`);
   check("§8b sıfır SESSİZ değil — `propsDonorMissing` yanıtta", fullB.propsDonorMissing === true, JSON.stringify(fullB.propsDonorMissing));
 
+  // ── §9 ────────────────────────────────────────────────────────────────────
+  console.log("── §9 applyManualProperties FARK bazlı ──");
+  const p9 = await mkWarehouseRoll("P9");
+  const flag2 = await prisma.fabricProperty.upsert({
+    where: { code: "TEST-RPR-FLAG2" },
+    create: { code: "TEST-RPR-FLAG2", name: "TEST RPR bayrak 2", valueType: "FLAG" },
+    update: {}, select: { id: true },
+  });
+  propIds.push(flag2.id);
+  await inv.applyManualProperties(p9, { colorId: null, propertyIds: [flag.id] }, admin.id);
+  const row9 = await prisma.rollProperty.findFirstOrThrow({ where: { rollId: p9, propertyId: flag.id, ...ACTIVE_ROLL_PROPERTY }, select: { id: true } });
+  // aynı bayrak kalır, ikincisi eklenir → değişmeyen satır AYNI id'de
+  await inv.applyManualProperties(p9, { colorId: null, propertyIds: [flag.id, flag2.id] }, admin.id);
+  const row9b = await prisma.rollProperty.findFirst({ where: { rollId: p9, propertyId: flag.id, ...ACTIVE_ROLL_PROPERTY }, select: { id: true } });
+  check("§9 değişmeyen bayrak AYNI satır id'sinde kaldı (silinip yeniden yazılmadı)", row9b?.id === row9.id);
+  check("§9 giren bayrak yazıldı (2 aktif)", (await prisma.rollProperty.count({ where: { rollId: p9, ...ACTIVE_ROLL_PROPERTY } })) === 2);
+  // flag çıkar → damgalı durur, flag2 aynı satır
+  await inv.applyManualProperties(p9, { colorId: null, propertyIds: [flag2.id] }, admin.id);
+  const gone = await prisma.rollProperty.findUnique({ where: { id: row9.id }, select: { revokedAt: true, revokedById: true, revokeReason: true } });
+  check("§9 ⭐ çıkan bayrak SİLİNMEDİ — damgalı (revokedById = kullanıcı, sebep MANUAL_OVERRIDE)", gone !== null && gone.revokedAt !== null && gone.revokedById === admin.id && (gone.revokeReason ?? "").startsWith("MANUAL_OVERRIDE"), JSON.stringify(gone));
+  check("§9 kalan 1 aktif (flag2) · toplam 2 satır (1 damgalı)", (await prisma.rollProperty.count({ where: { rollId: p9, ...ACTIVE_ROLL_PROPERTY } })) === 1 && (await prisma.rollProperty.count({ where: { rollId: p9 } })) === 2);
+  // yeniden ekle → yeni satır (un-revoke YOK), eski damgalı durur
+  await inv.applyManualProperties(p9, { colorId: null, propertyIds: [flag.id, flag2.id] }, admin.id);
+  const flagRows = await prisma.rollProperty.findMany({ where: { rollId: p9, propertyId: flag.id }, select: { id: true, revokedAt: true } });
+  check("§9 yeniden ekleme YENİ satır açtı, damgalı eski satır durdu (un-revoke yok)", flagRows.length === 2 && flagRows.filter((r) => r.revokedAt === null).length === 1 && flagRows.some((r) => r.id === row9.id && r.revokedAt !== null));
+
   astKontrolleri();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
@@ -212,8 +238,7 @@ async function main(): Promise<void> {
  */
 const BEKLENEN_YAZAR_CAGRI_IHLALI = new Set<string>([]);
 const BEKLENEN_SILME_DOSYALARI = new Set<string>([
-  "src/services/inventory.service.ts", // Y5 → Faz 2c
-  "src/services/workorder.service.ts", // Y7/Y8/Y9 → Faz 2d
+  "src/services/workorder.service.ts", // Y7/Y8/Y9 → Faz 2d (Y5 inventory 2c'de kapandı)
 ]);
 /** "Bu özellik HİÇ kullanıldı mı" sorusunu soran yüzeyler — tarihsel satır da kanıttır. */
 const BEKLENEN_ISTISNA_DOSYALARI = new Set<string>([

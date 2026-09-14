@@ -7,7 +7,7 @@
 // =============================================================================
 
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
-import { ACTIVE_ROLL_PROPERTY } from "./helpers/property-revoke.helper";
+import { ACTIVE_ROLL_PROPERTY, applyRollFlagSetTx } from "./helpers/property-revoke.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { claimDoffForRollTx } from "./helpers/machine-doff-link.helper";
@@ -4467,6 +4467,7 @@ export class InventoryService {
     const existingPropIds = new Set(
       roll.properties.filter((p) => p.property.valueType === "FLAG").map((p) => p.propertyId),
     );
+    let flagDelta: { revokedPropertyIds: string[]; addedPropertyIds: string[] } | null = null;
     const propsChanged =
       propsTouched &&
       (dedupedFlagProps.length !== existingPropIds.size ||
@@ -4517,7 +4518,11 @@ export class InventoryService {
       // düşürdüğü için kesimden SONRA da `initialQty == currentQty` olur, yani
       // guard yeniden hesaplansa bile yeşil kalır. Tek çözüm okunan değeri
       // pinlemektir — "gördüğüm satır hâlâ aynıysa yaz, değilse 409".
-      if (Object.keys(rollData).length > 0) {
+      // Claim KOŞULSUZ (Y6, 2026-09-14): yalnız-özellik düzeltmesinde `rollData` boştur
+      // ama top satırı yine de pinlenir — eskiden o yolda top HİÇ kilitlenmiyordu ve
+      // araya giren kesim/sevk ile özellik yazımı yarışabiliyordu. Boş veri
+      // `updatedAt: new Date()` ile aynı pini koşturur, `count === 0 → 409`.
+      {
         const pin: Prisma.RollWhereInput = {
           id: rollId,
           shipmentId: null,
@@ -4533,7 +4538,10 @@ export class InventoryService {
           pin.currentQty = roll.currentQty;
           pin.initialQty = roll.initialQty;
         }
-        const upd = await tx.roll.updateMany({ where: pin, data: rollData });
+        const upd = await tx.roll.updateMany({
+          where: pin,
+          data: Object.keys(rollData).length > 0 ? rollData : { updatedAt: new Date() },
+        });
         if (upd.count === 0) {
           // Çakışma yolunda TEK ek okuma: operatöre "ne değişti"yi söylemek,
           // "yenileyip tekrar deneyin"i tahmin ettirmekten iyidir.
@@ -4563,19 +4571,18 @@ export class InventoryService {
         }
       }
 
-      // 2) Roll.properties replace — YALNIZ BAYRAK EVRENİ ve YALNIZ alan geldiyse
-      //    (`undefined` = dokunma, Faz 0). SEÇİM satırlarına (valueId taşıyanlar)
-      //    dokunulmaz: silmek operatörün istasyonda yaptığı değer seçimini (50GR)
-      //    yok etmek olurdu ve bunu geri getirecek hiçbir yüzey yoktur (denetim F1).
+      // 2) Roll.properties — YALNIZ BAYRAK EVRENİ ve YALNIZ alan geldiyse (`undefined` =
+      //    dokunma, Faz 0). FARK BAZLI + SÜRÜMLEYEREK (③a, 2026-09-14): çıkan bayrak
+      //    damgalanır (silinmez), giren yazılır, değişmeyen satıra dokunulmaz. SEÇİM
+      //    satırlarına (valueId taşıyanlar) dokunulmaz: operatörün istasyonda yaptığı
+      //    değer seçimini (50GR) yok etmek olurdu (denetim F1).
       if (propsTouched) {
-        await tx.rollProperty.deleteMany({
-          where: { rollId, property: { valueType: "FLAG" } },
+        flagDelta = await applyRollFlagSetTx(tx, {
+          rollId,
+          desired: dedupedFlagProps,
+          reason: data.reason ? `MANUAL_OVERRIDE: ${data.reason}` : "MANUAL_OVERRIDE",
+          userId: userId ?? null,
         });
-        if (dedupedFlagProps.length > 0) {
-          await tx.rollProperty.createMany({
-            data: dedupedFlagProps.map((propertyId) => ({ rollId, propertyId })),
-          });
-        }
       }
 
     });
@@ -4600,6 +4607,9 @@ export class InventoryService {
         // `undefined` = alan gelmedi, bayraklara DOKUNULMADI (Faz 0) — audit'te `[]`
         // ("hepsi silindi") ile karışmasın.
         propertyIds: propsTouched ? dedupedFlagProps : undefined,
+        // Sürümleme izi: hangi bayrak damgalandı, hangisi yeni yazıldı (etiket haritasında).
+        revokedPropertyIds: (flagDelta as { revokedPropertyIds: string[] } | null)?.revokedPropertyIds,
+        addedPropertyIds: (flagDelta as { addedPropertyIds: string[] } | null)?.addedPropertyIds,
         // Sessiz ayırma audit'te GÖRÜNMEZ olmasın: bu id'ler istemciden geldi
         // ama SEÇİM tipli oldukları için bu uç onlara dokunmadı.
         untouchedChoicePropertyIds: untouchedChoiceIds,

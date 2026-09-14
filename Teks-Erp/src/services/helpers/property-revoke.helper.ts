@@ -133,3 +133,47 @@ export async function setRollPropertyValueTx(
   });
   return "versioned";
 }
+
+/**
+ * Topun BAYRAK (FLAG) kümesini istenen kümeye getirir — FARK BAZLI, sürümleyerek.
+ * Çıkanlar tx içinde TAZE okunan aktif satır id'lerine PİNLİ damgalanır (araya giren
+ * yazım sayıyı düşürürse 409), girenler `createMany skipDuplicates`; değişmeyen satıra
+ * DOKUNULMAZ (aynı satır id'si, aynı `createdAt`). SEÇİM satırlarına dokunmaz.
+ * Y5 (top düzeltme) ve Y9 (iş emri hedefi → top) aynı gövdeden geçer.
+ */
+export async function applyRollFlagSetTx(
+  tx: Tx,
+  args: { rollId: string; desired: string[]; reason: string; userId?: string | null },
+): Promise<{ revoked: number; added: number; revokedPropertyIds: string[]; addedPropertyIds: string[] }> {
+  const desired = new Set(args.desired);
+  const active = await tx.rollProperty.findMany({
+    where: { rollId: args.rollId, property: { valueType: "FLAG" }, ...ACTIVE_ROLL_PROPERTY },
+    select: { id: true, propertyId: true },
+  });
+  const leaving = active.filter((r) => !desired.has(r.propertyId));
+  const activeIds = new Set(active.map((r) => r.propertyId));
+  const entering = [...desired].filter((pid) => !activeIds.has(pid));
+  let revoked = 0;
+  if (leaving.length > 0) {
+    revoked = await revokeRollProperties(tx, {
+      rollIds: [args.rollId],
+      ids: leaving.map((r) => r.id),
+      reason: args.reason,
+      userId: args.userId,
+    });
+    if (revoked !== leaving.length) {
+      throw AppError.conflict("Topun özellikleri bu sırada başka bir işlemle değişti — tekrar deneyin.", {
+        code: "PROPERTY_VERSION_CONFLICT",
+      });
+    }
+  }
+  let added = 0;
+  if (entering.length > 0) {
+    const res = await tx.rollProperty.createMany({
+      data: entering.map((propertyId) => ({ rollId: args.rollId, propertyId })),
+      skipDuplicates: true,
+    });
+    added = res.count;
+  }
+  return { revoked, added, revokedPropertyIds: leaving.map((r) => r.propertyId), addedPropertyIds: entering };
+}

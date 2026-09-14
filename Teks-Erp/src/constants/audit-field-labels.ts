@@ -160,6 +160,10 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<string, string>> = {
   remainingChildQuality: "Kalan parçanın kalitesi",
   rotated: "Döndürüldü",
   propsRestored: "Özellikler geri alındı",
+  propsDonorMissing: "Özellik donörü bulunamadı (ebeveyn özelliksiz kaldı)",
+  revokedPropertyIds: "Damgalanan bayraklar",
+  addedPropertyIds: "Eklenen bayraklar",
+  revokeReason: "Damga sebebi",
   reopenedErrors: "Yeniden açılan hatalar",
   reopened: "Yeniden açıldı",
 
