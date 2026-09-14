@@ -167,6 +167,11 @@
         {
           "kapsam": "panel",
           "tip": "duzeltme",
+          "metin": "Sevk fişinin Excel çıktısında müşterinin renk adı da artık irsaliyedeki gibi kendi sütununda: “Müşterideki Stok Adı” ve “Müşterideki Varyant” yan yana. Bu yalnız ürün listesinde müşterinin renk adını ayrı sütuna alan ayar açıkken geçerlidir; ayar kapalıysa dosya eskisiyle birebir aynı çıkar. Önceden Excel bu ayarı hiç dikkate almıyordu: müşterinin o renge karşılığı yoksa bizim renk adımızı müşterinin kumaş adının yanına yapıştırıyordu — aynı sevkiyatın irsaliyesinde o hücre boş kalırken Excel'inde doluydu, üstelik fatura bu fişten kesildiği için müşteride karşılığı olmayan bir renk adı faturaya geçebiliyordu. Artık karşılığı olmayan renk hücresi Excel'de de boş kalır. Bir önceki maddedeki “hücre boş kalmaz” cümlesi ÜRÜN adı sütunu içindir; renk sütununun boş kalması bilinçlidir ve irsaliye de aynı ayar açıkken o hücreyi boş bırakır. Müşteri adları ayrı tutulmadan üretilmiş eski belgelerde Excel eskisi gibi tek birleşik ada düşer. Muhasebenin dönem dökümü değişmedi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
           "metin": "Plan sapması karnesi geri alınmış onayları artık saymıyor; rakam bu yüzden düşebilir — eksilen, daha önce iki kez sayılan onaylardır. Önceden Tambur’da onaylanan bir sapma (renk ya da en planla uyuşmuyor), top geri alınıp yeniden tamburlandığında karnede iki kez sayılıyordu: imza sayısı da metraj da ikiye katlanıyordu. Fason kabulü iptal edilip top geri doğduğunda da eski onay topa yapışık kalıyor, Tambur aynı soruyu bir daha sormuyordu. Şimdi geri alma onayı damgalar: karne yalnız yürürlükteki onayları sayar, Tambur soruyu yeniden sorar. Renk ve en birlikte sapmışsa ikisi tek onaydır ve birlikte geri alınır."
         },
         {
