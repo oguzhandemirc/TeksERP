@@ -109,6 +109,37 @@
 
 **5. Kapsam:** hata tipi yazan üç yol (Tambur `reportError` · KursunQc `addDefect` · inventory `errors` opsiyonel) — üçü de `defectTypeId` alır, uydurma yalnız tablette. Panel hata girişi (Electron) `[0]` uyduruyor mu → **ölçülmedi**, sahibi baksın (grep `defectTypes[0]` Electron/src). Bekçi: `test_db_invariants` partial unique envanteri + mobil "isDefault yoksa tipsiz ekleme blok" negatif sondası.
 
+### A — Çelişmeli doğrulama (2026-09-14, 47; ea `297b71ea` → origin `f87cb6e5`, taban `cb435108`)
+
+**Sonuç: mekanizma ayakta — tek boğaz, 400 kodu gerçek dosyada, tek tx, partial unique seddi, GENEL geçişi canlı dump'ta idempotent, mobil eski backend'de kırılmıyor, panel izin/rozet. Karara göre İKİ SAPMA (hüküm 1e): migration GENEL YARATIYOR (karar "GENEL yoksa hiçbir satır damgalanmaz" diyordu) · KursunQc `'GENEL'` literali kaldı (karar "iki ekran aynı çözücü, kod literali gider" diyordu). Üç küçük kalem (ea), K1 envanter kalemi tren sonunda kapandı (`cb435108`).**
+Yöntem: klon DB'de 16 bekçi (`default_defect_type` 12/0 · `audit_labels` · `route_auth_coverage` · `quality_code_literal` · `null_quality_visibility` · `phase6_reporterror_concurrency` · `kursun_bulk` · `p2_kk2reopen` · `screen_catalog` · `permission_catalog` · `timestamptz_contract` · `mobil_enum_aynasi` · `swagger_spec` yeşil; `db_invariants` ❌ → K1, `cb435108`te kapandı; `migration_hygiene`/`sabit_liste_aynasi` kırmızısı ortam — dal WOTOL'dan önceydi) · en eski canlı dump provası (`tekserp_47prova_test`, 2026-09-11) · yedi sonda `scripts/` dışından · statik okuma. tsc/eslint ea'nın ölçümü, yeniden koşulmadı (tek ağır koşum kuralı).
+
+| karar maddesi | sonuç | nasıl |
+|---|---|---|
+| §1 `isDefault` + partial unique `WHERE isDefault`, katalog satırı düzeyi | ✅ | şema + migration `20260914096000`; envanter `test_db_invariants` (`cb435108`) |
+| §1 tek çözücü; tipsiz giriş varsayılana düşer, varsayılan yoksa 400 | ✅ backend | `resolveDefaultDefectTypeTx` tek boğaz; tipsiz yazan TEK yol `kursunFinish` (`inventory.controller` `defectTypeId` nullable) — Tambur/KursunQc uçları uuid ZORUNLU (Zod), `DefectType` yazan src'de yalnız BaseService + helper; 400 `DEFAULT_DEFECT_TYPE_MISSING` `details.code`ta, bekçi §2 gerçek katalogda tx geri alarak ölçüyor |
+| §1 "iki ekran aynı çözücü, `'GENEL'` terfisi `isDefault` satırını öne alır (kod literali gider)" | ❌ SAPMA | Tambur `find(isDefault)` ✅; **KursunQc `:246-253` hâlâ `code === 'GENEL'` literaliyle sıralıyor** — admin başka tipi varsayılan yapınca KursunQc yine GENEL'i öne koyar; ortak mobil çözücü yok |
+| §1 panel "Varsayılan" seçici, tek satır, çakışma 409 Türkçe | ✅ | form kutusu + rozet; `POST /:id/set-default` + `isDefault:true` gövdesi aynı tx'ten (`setDefaultDefectTypeTx`: eski düşer, yeni yükselir); yarışta P2002 → 409 "Bu 'isDefault' değeri zaten mevcut" (etiket haritasında yok — ham kolon adı) |
+| §2 migration `code='GENEL'` satırını damgalar; **GENEL yoksa hiçbir satır damgalanmaz**, varsayılansız kurulumda 400 + sürüm notu | ❌ SAPMA | migration GENEL yoksa **YARATIR** (`INSERT … WHERE NOT EXISTS`), pasifse **AKTİFLEŞTİRİR** (S4) — ikinci müşterinin kataloğuna literal adlı satır girer; sürüm notu bunu söylüyor ("GENEL adlı tip oluşturulup varsayılan yapılır") ama karar metni tersini söylüyor. Canlı dump: 3 tip, GENEL zaten var → UPDATE dalı, 3/1 varsayılan; ikinci koşum `INSERT 0 0 / UPDATE 0`; varsayılan başka tipte + GENEL pasif → dokunmaz (S3) |
+| §3 `roll_errors` dokunulmaz; eski tablet `[0]` göndermeye devam eder | ✅ | dump'ta tipsiz hata 0 → 0; Tambur/KursunQc sözleşmesi değişmedi |
+| §5 Electron `defectTypes[0]` uydurması (ölçülmemişti) | ✅ kapandı | Electron'da hata girişi yüzeyi YOK (`defectTypeId` yalnız audit etiketinde); uydurma 0 |
+| §5 bekçi: envanter + mobil negatif sonda | ✅ / ⚠️ | envanter `cb435108`; mobil sonda STATİK (`[0]` yok, `find(isDefault)` var) — "isDefault yoksa blok" davranışı ölçülmüyor, tsx'te toast dalı |
+| C1 mobil eski backend'de (`isDefault` undefined) kırılmaz | ✅ | tip `isDefault?`; `find` → undefined → toast "Hata tipi seçilmedi"; liste `isActive:'true'` süzgeçli → pasif varsayılan tablette seçilmez |
+| dört kapı / izin | ✅ n/a | yeni ekran yok: `definitions/defect-types` (`quality:read` · capability `quality:write`) mevcut; sayfa `writePermission="quality:write"`; set-default `requirePermission("quality:write")` + audit tx dışında; `route_auth_coverage` · `swagger_spec` yeşil |
+
+**Sondalar (prova DB):** P1 eş zamanlı iki set-default ×12 → 24/24 ok, her turda tam 1 varsayılan; P1b ZORLANMIŞ pencere (A `updateMany`→bekle→`update`, B araya) → B P2002, tek varsayılan A — sed tutuyor · P2 `create(isActive:false)` + `isDefault:true` → setDefault 400 ama kayıt KALDI · P3 varsayılan pasife alınınca `findDefaultDefectType` null → tipsiz giriş 400, pasife alma anında uyarı yok · P4 `PATCH {isDefault:true}` tek başına → `update({})` ok · P5 tek tx set-default tek varsayılan.
+
+**Kalemler (ea)**
+
+- **K1 · `test_db_invariants` envanteri `defect_types_one_default` — KAPANDI `cb435108`** (297b71ea envanter bekçisini koşmamıştı; #60 tam paket ❌ §1).
+- **K2 · `writeWithDefault` atomik değil (küçük).** create/update ile `setDefaultDefectType` AYRI iki tx: `POST { isActive:false, isDefault:true }` → kayıt yazılır, sonra 400 "pasif tip varsayılan yapılamaz" — istemci 400 görür, satır kalır (P2). Çare: tek `$transaction` (create + `setDefaultDefectTypeTx`) ya da `wantDefault && isActive === false` ön kontrolü.
+- **K3 · Varsayılan pasife alınınca sessizce varsayılansız kalınır (küçük).** `PATCH isActive:false` / `DELETE` (softDelete) mevcut varsayılana dokununca `isDefault` durur ama `findDefaultDefectType` `isActive` ister → tipsiz giriş 400; pasife alma anında ne ret ne `warnings` (P3). Emsal: sebep kataloğu "son aktif satır gizlenemez". Çare: varsayılanı pasife almayı reddet (önce başka tipi varsayılan yap) ya da `isDefault`u düşürüp `warnings` ile söyle.
+- **K4 · KursunQc `'GENEL'` literali (karar §1 sapması, küçük; mobil sahibi).** `KursunQcScreen.tsx:246-253` "Saha #18 GENEL ilk tuş" `code === 'GENEL'`; karar `isDefault` satırını öne almayı ve iki ekranın aynı çözücüyü kullanmasını istiyor. Kalite kodu literali kapısı (`test_quality_code_literal`) bu literali görmüyor (kalite kodu değil, hata tipi kodu).
+
+**Hüküm isteyen (1e):** §2 sapması — migration GENEL yaratsın mı (ea'nın seçimi: yükseltmede 400 sürprizi yok, ikinci müşterinin kataloğuna literal satır girer) yoksa karar metni mi (GENEL yoksa damga yok, tipsiz giriş 400 + sürüm notu)? İki metin bugün yan yana: karar §2 ↔ sürüm notu. Hangisi kalırsa öteki "GEÇERSİZ" damgası alır.
+
+**Notlar:** `resolveDefaultDefectTypeTx(prisma, …)` kursunFinish'te tx DIŞINDA çağrılıyor (ad `Tx` ama `prisma`) — çözüm ile yazım arasında varsayılan değişirse eski varsayılan yazılır, pencere ms; kalem değil · BaseController.create/update ince sarmalayıcı (yalnız `service.create` + 201) — route'un doğrudan servise inmesi doğrulama atlatmıyor · `isDefault` yeni skaler = `sanitizeWriteData`dan geçen yazılabilir alan (kök CLAUDE.md uyarısı) — `true` yolu route'ta yakalanıyor, `false` düz; tasarım böyle · Prova DB `tekserp_47prova_test` DROP listesine.
+
 ---
 
 ## B — `KK1:3379` `isInactive = status === 'SCRAP'` — KISA
