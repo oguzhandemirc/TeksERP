@@ -24,6 +24,7 @@ import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
 import { buildDailyCode } from "../utils/code-format";
 import { AuditService } from "./audit.service";
+import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { InventoryService } from "./inventory.service";
 import { nextPrefixedSequenceTx } from "./subcontractor.service";
 import { cancelWarpBeamItemsTx, countReturnedBeamItems, dispatchWarpBeamItemsTx } from "./subcontractor-beam.service";
@@ -131,6 +132,8 @@ export async function dispatchForWeaving(input: WeavingDispatchInput, userId?: s
       select: { id: true, dispatchNo: true, weavingOrderId: true, subcontractorId: true, dispatchedAt: true },
     });
     const beams = await dispatchWarpBeamItemsTx(tx, { dispatchId: dispatch.id, warpBeamIds, userId });
+    // totalQty = Σ kalem (`test_consistency §19`); levent kalemi metre taşır (F1 ile aynı).
+    await tx.subcontractorDispatch.update({ where: { id: dispatch.id }, data: { totalQty: beams.totalM } });
     return { dispatch, beams, weavingOrderNumber: wo.weavingOrderNumber };
   });
   await AuditService.log({
@@ -181,23 +184,37 @@ export async function cancelWeavingDispatch(dispatchId: string, reason: string, 
 
 // ── Makbuz (TOP doğar) ──────────────────────────────────────────────────────
 
+/** Makbuz replay'i (dört durum): token yoksa null; iptal edilmiş 409; farklı gövde 409; aynı gövde → önceki sonuç. */
+async function findReceiptReplay(input: WeavingReceiptInput): Promise<ApiResponse<unknown> | null> {
+  if (!input.clientToken) return null;
+  const hit = await prisma.subcontractorReceipt.findUnique({
+    where: { clientToken: input.clientToken },
+    select: { id: true, receiptNo: true, cancelledAt: true, weavingOrderId: true, manifestNo: true },
+  });
+  if (hit) {
+    if (hit.cancelledAt) {
+      throw AppError.conflict("Bu kabul denemesi daha önce kaydedilmiş ve İPTAL edilmiş — yeniden deneme yerine yeni kabul açın", {
+        code: "RECEIPT_CANCELLED",
+      });
+    }
+    // Gövde kapısı: aynı token BAŞKA bir işe/irsaliyeye gelirse 409 (dört durumlu replay).
+    assertReplayPayloadMatches(
+      [
+        { ad: "weavingOrderId", mevcut: hit.weavingOrderId, gelen: input.weavingOrderId },
+        { ad: "manifestNo", mevcut: hit.manifestNo ?? "", gelen: input.manifestNo ?? "" },
+      ],
+      "Bu istemci anahtarı BAŞKA bir kabulle kullanılmış — formu yenileyip yeniden deneyin.",
+    );
+    const rolls = await prisma.roll.findMany({ where: { parentReceiptId: hit.id }, select: { id: true, barcode: true } });
+    return { success: true, data: { receipt: hit, rolls, failed: [] }, message: `Kabul zaten yapılmış (idempotent). Makbuz: ${hit.receiptNo}` };
+  }
+  return null;
+}
+
 export async function receiveForWeaving(input: WeavingReceiptInput, userId?: string): Promise<ApiResponse<unknown>> {
   if (input.rolls.length === 0) throw AppError.badRequest("Makbuzda en az bir top olmalı", { code: "WEAVING_RECEIPT_EMPTY" });
-  if (input.clientToken) {
-    const hit = await prisma.subcontractorReceipt.findUnique({
-      where: { clientToken: input.clientToken },
-      select: { id: true, receiptNo: true, cancelledAt: true, weavingOrderId: true },
-    });
-    if (hit) {
-      if (hit.cancelledAt) {
-        throw AppError.conflict("Bu kabul denemesi daha önce kaydedilmiş ve İPTAL edilmiş — yeniden deneme yerine yeni kabul açın", {
-          code: "RECEIPT_CANCELLED",
-        });
-      }
-      const rolls = await prisma.roll.findMany({ where: { parentReceiptId: hit.id }, select: { id: true, barcode: true } });
-      return { success: true, data: { receipt: hit, rolls, failed: [] }, message: `Kabul zaten yapılmış (idempotent). Makbuz: ${hit.receiptNo}` };
-    }
-  }
+  const replay = await findReceiptReplay(input);
+  if (replay) return replay;
   const header = await prisma.$transaction(async (tx) => {
     const wo = await claimSubcontractedWeavingOrderTx(tx, input.weavingOrderId, userId);
     const now = new Date();

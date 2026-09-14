@@ -347,8 +347,8 @@ WHERE sd."cancelledAt" IS NOT NULL
     model: "SubcontractorDispatch",
     alan: "totalQty",
     sinif: "DONMUS_ILERI",
-    yazan: [SVC + "batch.service.ts", SVC + "helpers/batch-dispatch-surgery.helper.ts", SVC + "subcontractor.service.ts"],
-    neden: "kalemlerin toplamı; parti cerrahisi (böl/taşı) kalemle birlikte yeniden kurar — kalem toplamıyla mutabakat ayrı bekçide",
+    yazan: [SVC + "batch.service.ts", SVC + "helpers/batch-dispatch-surgery.helper.ts", SVC + "subcontractor.service.ts", SVC + "subcontractor-weaving.service.ts"],
+    neden: "kalemlerin toplamı; parti cerrahisi (böl/taşı) kalemle birlikte yeniden kurar — kalem toplamıyla mutabakat ayrı bekçide; G2 dokuma sevki levent metresini yazar",
     bekci: [{ dosya: "test_consistency.ts", bolum: "19", ne: "subcontractor_dispatches.totalQty = Σ dispatchedQty" }],
   },
   {

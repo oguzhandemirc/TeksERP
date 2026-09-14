@@ -194,8 +194,10 @@ async function main(): Promise<void> {
     const doganlar = await prisma.roll.findMany({ where: { id: { in: k1d.rolls.map((r) => r.id) } }, select: { entrySource: true, parentReceiptId: true, batchId: true, doffEventId: true, status: true, warehouseMovements: { select: { reasonCode: true } } } });
     check("§4b ⭐ doğan top: entrySource=WEAVING, parentReceiptId=makbuz, partisiz, indirmesiz, stok defterinde ENTRY_RECEIPT",
       doganlar.length === 2 && doganlar.every((r) => r.entrySource === RollEntrySource.WEAVING && r.parentReceiptId === k1d.receipt.id && r.batchId === null && r.doffEventId === null && r.warehouseMovements.some((m) => m.reasonCode === "ENTRY_RECEIPT")));
-    const k1r = await receiveForWeaving({ weavingOrderId: fasonIs, clientToken: tok, rolls: [{ initialQty: 1 }] }, admin.id);
-    check("§4c token replay → aynı makbuz, yeni top YOK", (k1r.data as { receipt: { id: string } }).receipt.id === k1d.receipt.id && (await prisma.roll.count({ where: { parentReceiptId: k1d.receipt.id } })) === 2);
+    const k1r = await receiveForWeaving({ weavingOrderId: fasonIs, clientToken: tok, manifestNo: "IRS-1", rolls: [{ initialQty: 480, width: 150 }, { initialQty: 470 }, { initialQty: -5 }] }, admin.id);
+    check("§4c token replay (aynı gövde) → aynı makbuz, yeni top YOK", (k1r.data as { receipt: { id: string } }).receipt.id === k1d.receipt.id && (await prisma.roll.count({ where: { parentReceiptId: k1d.receipt.id } })) === 2);
+    check("§4c′ aynı token BAŞKA işe → 409 CLIENT_TOKEN_COLLISION (gövde kapısı)", kod(await beklenenHata(() => receiveForWeaving({ weavingOrderId: kendiIs, clientToken: tok, rolls: [{ initialQty: 1 }] }, admin.id))) === "CLIENT_TOKEN_COLLISION");
+    check("§2b′ sevk totalQty = Σ levent metresi (consistency §19)", Number((await prisma.subcontractorDispatch.findUniqueOrThrow({ where: { id: d1Id }, select: { totalQty: true } })).totalQty) === 1800);
     check("§4d in-house işe fason kabulü → 409", kod(await beklenenHata(() => receiveForWeaving({ weavingOrderId: kendiIs, rolls: [{ initialQty: 1 }] }, admin.id))) === "WEAVING_ORDER_NOT_SUBCONTRACTED");
     await returnWarpBeam(d1Id, { warpBeamId: b2, lengthM: 30 }, admin.id);
     const ozet = (await getWeavingSubcontractSummary(fasonIs)).data as { totals: { sentM: number; returnedM: number; bornM: number; differenceM: number } };
