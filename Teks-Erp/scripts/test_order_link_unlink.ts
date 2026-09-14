@@ -18,6 +18,9 @@
 //   §6 Refakat kartı sipariş bloğu canlı (açık) bağdan doğar
 //   §7 `replace()` FARK bazlı: kalan bağın satır id'si ve `createdAt`i korunur,
 //      çıkan `WO_REPLACE` ile damgalanır, giren yeni satır
+//   §1b ⭐ seçicisiz `unlinkOrderLinesTx` fırlatır (bütün tabloyu damgalama yolu kapalı)
+//   §8 ⭐ `withActiveOrderLinks` yalnız DÜZ nesneye iner: Date/Decimal/Buffer birebir
+//      (tam paket 2026-09-14: `{ gte: Date }` → `{ gte: {} }` → Prisma _ref 500)
 //   §13 AST + tip denetleyicisi: her okuma/ilişki/ham SQL `ACTIVE_ORDER_LINK`
 //      taşır; src'de `workOrderToOrderLine.delete*` YOK
 // =============================================================================
@@ -25,7 +28,7 @@ import { join } from "node:path";
 import { Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { ensureTestAdmin } from "./fixture-test-user";
-import { ACTIVE_ORDER_LINK, activeOrderLinkCount, unlinkOrderLinesTx } from "../src/services/helpers/order-link.helper";
+import { ACTIVE_ORDER_LINK, activeOrderLinkCount, unlinkOrderLinesTx, withActiveOrderLinks } from "../src/services/helpers/order-link.helper";
 import { workOrderLinkService } from "../src/services/workorder-link.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
@@ -137,6 +140,34 @@ async function main(): Promise<void> {
   await wos.replace(wo.id, { targetItemId: itemId, width: 300, steps: [{ stationId: station.id }], orderLineAllocations: [{ orderLineId: l1, allocatedQty: 120 }] }, admin.id);
   const l3Row = await prisma.workOrderToOrderLine.findFirst({ where: { workOrderId: wo.id, orderLineId: l3 }, select: { unlinkedAt: true, unlinkReason: true } });
   check("§7 çıkan bağ (l3) SİLİNMEDİ — WO_REPLACE damgası", l3Row !== null && l3Row.unlinkedAt !== null && l3Row.unlinkReason === "WO_REPLACE", JSON.stringify(l3Row));
+
+  // ── §1b ───────────────────────────────────────────────────────────────────
+  console.log("── §1b Seçicisiz koparma YASAK ──");
+  const acikOnce = await prisma.workOrderToOrderLine.count({ where: ACTIVE_ORDER_LINK });
+  let err1b: unknown = null;
+  try { await prisma.$transaction((tx) => unlinkOrderLinesTx(tx, { reason: "MANUAL_UNLINK" } as never)); } catch (e) { err1b = e; }
+  check("§1b ⭐ seçicisiz `unlinkOrderLinesTx` fırlatır, BÜTÜN tabloyu damgalamaz", err1b instanceof Error && /seçici yok/.test(err1b.message) && (await prisma.workOrderToOrderLine.count({ where: ACTIVE_ORDER_LINK })) === acikOnce, `açık önce=${acikOnce}`);
+
+  // ── §8 ────────────────────────────────────────────────────────────────────
+  console.log("── §8 withActiveOrderLinks: Date/Decimal düğümleri BİREBİR korunur ──");
+  const d0 = new Date("2026-09-01T00:00:00Z");
+  const dec = new Prisma.Decimal("12.5");
+  const buf = Buffer.from("x");
+  const where8 = {
+    deadline: { gte: d0 },
+    createdAt: { lte: d0 },
+    lines: { some: { quantity: { gt: dec }, workOrderLinks: { some: { workOrder: { workOrderNumber: "X" } } } } },
+    OR: [{ orderNumber: { contains: "A" } }, { orderLinks: { none: {} } }],
+    raw: buf,
+  };
+  const out8 = withActiveOrderLinks(where8) as typeof where8 & { lines: { some: { workOrderLinks: { some: Record<string, unknown> } } }; OR: Array<Record<string, unknown>> };
+  check("§8 ⭐ Date düğümü aynen (referans korunur, {} olmadı)", out8.deadline.gte === d0 && out8.createdAt.lte === d0);
+  check("§8 ⭐ Decimal ve Buffer aynen", out8.lines.some.quantity.gt === dec && out8.raw === buf);
+  check("§8 workOrderLinks.some aktif yüklem aldı", out8.lines.some.workOrderLinks.some.unlinkedAt === null && (out8.lines.some.workOrderLinks.some.workOrder as { workOrderNumber: string }).workOrderNumber === "X");
+  check("§8 orderLinks.none de aktif yüklem aldı", (out8.OR[1] as { orderLinks: { none: Record<string, unknown> } }).orderLinks.none.unlinkedAt === null);
+  // Gerçek uç bu bekçide ÖLÇÜLMEZ: `getOrderStats` çağrısı eski walk altında da yeşil kaldı
+  // (sessiz yeşil — ölçüldü 2026-09-14); ısıran bekçi `test_order_stats` (tarih süzgeci
+  // `{ gte: Date }` → Prisma `_ref`), siparis koşum listesinde.
 
   astKontrolleri();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
