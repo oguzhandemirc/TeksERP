@@ -115,6 +115,11 @@ async function main(): Promise<void> {
     select: { value: true },
   });
   bayrakEski = eski ? eski.value : undefined;
+  await prisma.systemSetting.upsert({
+    where: { key: SETTING_KEYS.TAMBUR_OVER_QUANTITY_ENABLED },
+    create: { key: SETTING_KEYS.TAMBUR_OVER_QUANTITY_ENABLED, value: true },
+    update: { value: true },
+  });
 
   // ═══ §1 — iki paralel aşım kesimi ═══
   //
@@ -322,11 +327,6 @@ async function main(): Promise<void> {
     return row;
   };
   try {
-    await prisma.systemSetting.upsert({
-      where: { key: SETTING_KEYS.TAMBUR_OVER_QUANTITY_ENABLED },
-      create: { key: SETTING_KEYS.TAMBUR_OVER_QUANTITY_ENABLED, value: true },
-      update: { value: true },
-    });
     await tambur.cutWarehouseRoll(p5, { cutLength: 80 }, userId);
   } finally {
     (prisma.roll as unknown as { findUnique: FindUniqueFn }).findUnique = gercek;

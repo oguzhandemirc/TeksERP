@@ -169,11 +169,15 @@ export function korumasizKureselYazim(ad: string, kaynak: string): string[] {
   return out;
 }
 
-// ⚠️ CIRCIR TABANI — oturum DOKUNMAZ (ilk sabit hariç). Bugün 2: ikisi de
-// `test_p2_auth.ts`te ve ŞEKLİ FARKLI — bayrak `try`dan ÖNCEKİ düz akışta TÜKETİLİYOR
-// (kilitlenme denemeleri), yani yazımı içeri almak testin önkoşulunu bozar. Onarımı
-// try'ı yukarı taşımak; ölçülmeden yapılmadı ve borç GÖRÜNÜR bırakıldı.
-const KURESEL_YAZIM_TABAN = 2;
+// ⚠️ CIRCIR TABANI — oturum DOKUNMAZ (ilk sabit hariç). Bugün 3, ÜÇÜ DE AYNI ŞEKİL:
+// bayrak `try`dan ÖNCEKİ düz akışta TÜKETİLİYOR, yani yazımı içeri almak testin
+// ÖNKOŞULUNU bozar (`test_p2_auth` ×2 kilitlenme denemeleri · `test_tambur_cut_concurrency`
+// aşım bayrağı §1–§4'ü besliyor). Onarım try'ı YUKARI taşımaktır, yazımı aşağı değil.
+// ⚠️ ÜÇÜNCÜSÜ BİR REGRESYONLA ÖĞRENİLDİ (2026-09-14): yazım "ondan sonraki ilk try"a
+// taşındı, ama o try §5'in mock try'ıydı — bayrak §1–§4'ü geçti ve CI'da §4 kırmızı
+// verdi. ⇒ *"try'dan önce" bir KONUM ölçüsüdür; hangi try'ın o yazımı KORUDUĞU ayrı bir
+// sorudur ve otomatik taşıma onu bilemez.*
+const KURESEL_YAZIM_TABAN = 3;
 {
   const korumasiz: string[] = [];
   let parseEdilen = 0;
