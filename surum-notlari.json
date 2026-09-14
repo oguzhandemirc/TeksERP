@@ -307,7 +307,7 @@
         {
           "kapsam": "tablet",
           "tip": "yeni",
-          "metin": "Dokuma modülü açık kurulumlarda Tezgah ekranına koşum açma/kapatma geldi: operatör hattaki koşumu bir dokuma işine bağlayarak ya da işsiz açar (desen ve renk işten ön-dolar, değiştirilebilir; hedef devir boş bırakılabilir), kapatırken kapanış devrini yazar (boş = ölçülmedi) ve yanlış açılan koşumu geri alır. Kayıt ağ olmadan kuyruklanmaz, gitmezse anında söyler. Yeni yetki gerekmez; dokuma tabletçisi yetkisi yeter. Modül kapalı kurulumda hiçbir şey değişmez."
+          "metin": "Dokuma modülü açık kurulumlarda Tezgah ekranına koşum açma/kapatma geldi: operatör hattaki koşumu bir dokuma işine bağlayarak ya da işsiz açar (desen ve renk işten ön-dolar, değiştirilebilir; hedef devir ve ham atkı sıklığı boş bırakılabilir — sıklık girilirse rapor atkıdan metre türetir, girilmezse yalnız randıman hesaplanır), kapatırken kapanış devrini yazar (boş = ölçülmedi) ve yanlış açılan koşumu geri alır. Kayıt ağ olmadan kuyruklanmaz, gitmezse anında söyler. Yeni yetki gerekmez; dokuma tabletçisi yetkisi yeter. Modül kapalı kurulumda hiçbir şey değişmez."
         },
         {
           "kapsam": "tablet",

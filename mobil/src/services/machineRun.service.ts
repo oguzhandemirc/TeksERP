@@ -16,6 +16,8 @@ export interface OpenRunRequest {
   itemId: string | null;
   colorId: string | null;
   targetUnitsPerMin: number | null;
+  /** Tezgah üstü (ham) atkı/cm — backend `openSchema.unitsPerCm`; null = metre türetilmez. */
+  unitsPerCm: number | null;
   startedAt: string;
   clientToken: string;
 }

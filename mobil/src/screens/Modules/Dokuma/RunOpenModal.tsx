@@ -1,5 +1,5 @@
 // =============================================================================
-// KOŞUM AÇ — iş emri (opsiyonel) · desen/renk (işten ön-dolu, kilitli değil) · hedef devir
+// KOŞUM AÇ — iş emri (opsiyonel) · desen/renk (işten ön-dolu, kilitli değil) · hedef devir · atkı sıklığı
 // =============================================================================
 import React, { useMemo, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
@@ -74,6 +74,8 @@ export default function RunOpenModal({ state }: { state: RunPanelState }) {
       <Field label="Renk" value={f.colorLabel} placeholder="Renk yok (ham)" onPress={() => setPicker('color')} />
       <Text style={styles.label}>Hedef devir (atkı/dk) — boş: makine tanımındaki yedek</Text>
       <NumpadInput value={f.targetUnitsPerMin} onChangeText={(t) => state.setForm({ ...f, targetUnitsPerMin: t })} allowDecimal={false} numpadMaxLength={5} numpadLabel="Hedef devir" placeholder="ör. 420" style={styles.input} />
+      <Text style={styles.label}>Atkı sıklığı (ham, atkı/cm) — boş: metre türetilmez</Text>
+      <NumpadInput value={f.unitsPerCm} onChangeText={(t) => state.setForm({ ...f, unitsPerCm: t })} allowDecimal numpadMaxLength={7} numpadLabel="Atkı sıklığı" placeholder="ör. 24.5" style={styles.input} />
       <View style={styles.actions}>
         <Button onPress={() => state.setOpenModal(false)} disabled={state.opening}>Vazgeç</Button>
         <Button mode="contained" onPress={state.submitOpen} loading={state.opening} disabled={state.opening}>Koşumu Aç</Button>

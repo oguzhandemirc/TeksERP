@@ -17,6 +17,8 @@ export interface RunOpenForm {
   colorLabel: string;
   /** Numpad metni; boş = yedek. */
   targetUnitsPerMin: string;
+  /** Tezgah üstü (ham) atkı/cm; boş = null → metre türetilmez, randıman yine hesaplanır. */
+  unitsPerCm: string;
 }
 
 export const EMPTY_RUN_FORM: RunOpenForm = {
@@ -26,9 +28,11 @@ export const EMPTY_RUN_FORM: RunOpenForm = {
   colorId: null,
   colorLabel: '',
   targetUnitsPerMin: '',
+  unitsPerCm: '',
 };
 
 export const TARGET_PPM_MAX = 10_000;
+export const UNITS_PER_CM_MAX = 1_000;
 
 /** İş emri seçilince desen/renk ön-dolar (kilitli değil — operatör değiştirebilir). */
 export function prefillFromOrder(f: RunOpenForm, o: WeavingOrderSummary | null): RunOpenForm {
@@ -52,6 +56,12 @@ export function validateRunOpen(f: RunOpenForm): RunValidation {
     if (!Number.isInteger(n) || n <= 0) return { ok: false, message: 'Hedef devir pozitif tam sayı olmalı' };
     if (n > TARGET_PPM_MAX) return { ok: false, message: `Hedef devir en fazla ${TARGET_PPM_MAX} olabilir` };
   }
+  const u = f.unitsPerCm.trim();
+  if (u !== '') {
+    const n = Number(u);
+    if (!Number.isFinite(n) || n <= 0) return { ok: false, message: 'Atkı sıklığı pozitif sayı olmalı' };
+    if (n > UNITS_PER_CM_MAX) return { ok: false, message: `Atkı sıklığı en fazla ${UNITS_PER_CM_MAX} olabilir` };
+  }
   return { ok: true };
 }
 
@@ -64,6 +74,7 @@ export interface RunContext {
 
 export function buildOpenRunPayload(f: RunOpenForm, ctx: RunContext): OpenRunRequest {
   const t = f.targetUnitsPerMin.trim();
+  const u = f.unitsPerCm.trim();
   return {
     machineId: ctx.machineId,
     productionLineNo: ctx.productionLineNo,
@@ -71,6 +82,7 @@ export function buildOpenRunPayload(f: RunOpenForm, ctx: RunContext): OpenRunReq
     itemId: f.itemId,
     colorId: f.colorId,
     targetUnitsPerMin: t === '' ? null : Number(t),
+    unitsPerCm: u === '' ? null : Number(u),
     startedAt: ctx.startedAtIso,
     clientToken: ctx.clientToken,
   };

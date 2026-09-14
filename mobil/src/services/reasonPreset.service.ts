@@ -26,9 +26,8 @@ export type ReasonPresetKind =
    */
   | 'ORDER_CANCEL'
   /**
-   * Tezgah duruşu (dokuma P2b-2) — tablette YÜZEYİ HENÜZ YOK (duruş sınıflandırma
-   * ekranı Faz 2), ama liste ucu bu kind'ı da döndürür: union'da olmaması
-   * `ORDER_CANCEL`daki aynı tip yalanı olurdu.
+   * Tezgah duruşu — tablet Dokuma ekranı `StopReasonModal` bu kind ile seçtirir;
+   * sunucu erişilemezse çevrimdışı zemin `constants/loomStopReasons.ts`.
    */
   | 'MACHINE_STOP'
   | 'WARP_RETURN';

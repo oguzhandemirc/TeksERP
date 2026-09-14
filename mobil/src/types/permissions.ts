@@ -210,8 +210,8 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     description: 'Fason dönüşü iş emirlerini fiziksel kurşun makinelerine dağıt',
   },
   {
-    // Tablet TEZGAH ekranı (2026-09-14, dokuma dilimi): top indirme + geri alma;
-    // koşum aç/kapa ve duruş sonraki dilim. WEAVING istasyonunda oturum ister.
+    // Tablet TEZGAH ekranı (dokuma dilimi): koşum aç/kapa · duruş bildir/sınıfla ·
+    // top indirme; geri almalar `mobile:dokuma-geri-al`. WEAVING istasyonunda oturum ister.
     key: 'Dokuma',
     permission: 'mobile:dokuma',
     label: 'Tezgah',

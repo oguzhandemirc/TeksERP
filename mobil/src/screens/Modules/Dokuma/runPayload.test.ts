@@ -48,7 +48,16 @@ describe('runPayload — koşum aç (§3.4 (1))', () => {
     expect(validateRunOpen({ ...EMPTY_RUN_FORM, targetUnitsPerMin: '10001' }).ok).toBe(false);
     expect(buildOpenRunPayload({ ...EMPTY_RUN_FORM, targetUnitsPerMin: '420' }, ctx).targetUnitsPerMin).toBe(420);
   });
-  it('parmak izi: makine · hat · iş emri · desen (hedef devir ve renk girmez)', () => {
+  it('⭐ atkı sıklığı (ham atkı/cm): boş → null (metre türetilmez); ondalık kabul; 0/negatif/aşırı red', () => {
+    expect(buildOpenRunPayload(EMPTY_RUN_FORM, ctx).unitsPerCm).toBeNull();
+    expect(buildOpenRunPayload({ ...EMPTY_RUN_FORM, unitsPerCm: '24.5' }, ctx).unitsPerCm).toBe(24.5);
+    expect(validateRunOpen({ ...EMPTY_RUN_FORM, unitsPerCm: '' }).ok).toBe(true);
+    expect(validateRunOpen({ ...EMPTY_RUN_FORM, unitsPerCm: '24.5' }).ok).toBe(true);
+    expect(validateRunOpen({ ...EMPTY_RUN_FORM, unitsPerCm: '0' }).ok).toBe(false);
+    expect(validateRunOpen({ ...EMPTY_RUN_FORM, unitsPerCm: '-3' }).ok).toBe(false);
+    expect(validateRunOpen({ ...EMPTY_RUN_FORM, unitsPerCm: '1001' }).ok).toBe(false);
+  });
+  it('parmak izi: makine · hat · iş emri · desen (hedef devir, sıklık ve renk girmez)', () => {
     const a = runFingerprint({ machineId: 'm1', productionLineNo: 1, weavingOrderId: 'wo1', itemId: 'i1' });
     expect(runFingerprint({ machineId: 'm1', productionLineNo: 2, weavingOrderId: 'wo1', itemId: 'i1' })).not.toBe(a);
     expect(runFingerprint({ machineId: 'm1', productionLineNo: 1, weavingOrderId: null, itemId: 'i1' })).not.toBe(a);
