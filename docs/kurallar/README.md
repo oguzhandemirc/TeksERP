@@ -16,7 +16,7 @@
 | Kalite · İstasyon yeteneği | `docs/kurallar/kalite.md` | 2026-08-02, 2026-08-06, 2026-09-03 |
 | Parti (Batch) | `docs/kurallar/parti.md` |  |
 | Yarı mamul | `docs/kurallar/yari-mamul.md` | 2026-08-26, 2026-08-27 |
-| Dokuma · Dokuma işi · Doff ⚠️ **kâğıtta** | `docs/kurallar/dokuma.md` | 2026-09-13 |
+| Dokuma · Dokuma işi · Doff · Tezgah karnesi | `docs/kurallar/dokuma.md` | 2026-09-13, 2026-09-14 |
 | Refakat kartı | `docs/kurallar/refakat-karti.md` | 2026-08-05 |
 | Belge · Etiket · Şablon | `docs/kurallar/belge-etiket.md` | 2026-07-30, 2026-08-05, 2026-08-13, 2026-09-04 |
 | Mükerrer · nameFold seddi | `docs/kurallar/mukerrer.md` | 2026-08-21, 2026-08-22, 2026-08-25 |
@@ -31,3 +31,5 @@
 | Raporlar · Karneler | `docs/kurallar/raporlar.md` | 2026-08-09 |
 | Finans · Sağlamlık sınıfları | `docs/kurallar/finans.md` | 2026-08-02, 2026-09-13 |
 | Genel · Uzak erişim · Konvansiyon | `docs/kurallar/genel.md` | 2026-09-01, 2026-09-13 |
+
+> ⚠️ **"Arşiv tarihleri" kolonu ELLE tutulur ve KAPISI YOKTUR.** Ölçüldü 2026-09-14: 26 satırın 19'u dosyanın kendi en yeni arşiv atfının gerisinde (ör. `fason.md` kolonda 2026-08-19, dosyada 2026-09-14; `belge-etiket.md` 09-04 ↔ 09-14; `tambur.md` 09-03 ↔ 09-14) ve 9 dosyanın atıfları bu kolonun okuyamadığı biçimde (`R:…`, `CLAUDE.md:…`). ⇒ Bir alanın güncel arşiv tarihini bu kolondan OKUMA, dosyanın kendisinden ölç (`grep -oE 'arşiv:?[ ]?2026-[0-9-]+' docs/kurallar/<dosya>.md | sort | tail -1`). Kolon yalnız kaba bir işarettir; ölçülene dek bayat varsayılır.

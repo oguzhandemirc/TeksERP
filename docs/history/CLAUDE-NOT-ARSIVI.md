@@ -9659,3 +9659,55 @@ tablet o statüyü görür): "bugün sarılan" sekmesi READY ∪ SHIPPED_OUT lis
 `beamActionsEnabled` (yalnız PLANNED/READY; fasondaki levente tabletten dokunulmaz — sunucu 409 verirdi). Ders (kök ②): yeni
 dosya/enum yazınca o dizini tarayan BÜTÜN tarayıcılar koşulur — iplik kapısı ve enum aynası fason paketinde değildi.
 
+
+---
+
+## 2026-09-14 — Kural dosyası çelişki turu (bugünkü 65 tren): ad taşan refactor, iki başlıklı bölüm, kapısız dizin kolonu [ÇEKİRDEK]
+
+Bugün `docs/kurallar/` altına 65 commit girdi (18 dosya, +167/−66 satır). Tur üç gerçek bulgu
+buldu; her biri ayrı bir kusur sınıfı.
+
+**① Refactor adı komşu kurala TAŞTI (`defter.md:21`).** `dfff4726` çuval tahsisinin yüklem
+sabitini `ACTIVE_ALLOCATION` → `ACTIVE_SACK_ALLOCATION` yaptı (`payment-allocation.service`
+ile ad çakışması vardı) ve kod tarafında doğruydu. Ama belge tarafında **iki** satır değişti:
+biri gerçekten çuval tahsisi (`defter.md:134`, doğru), öteki `payment_allocations_amount_positive`
+CHECK'ini anlatan ÖDEME tahsisi kuralıydı ve orada helper'ın adı hâlâ `ACTIVE_ALLOCATION`.
+Sonuç: aynı kuralı anlatan iki dosya iki farklı ad söylüyordu — `finans.md:13` `ACTIVE_ALLOCATION`,
+`defter.md:21` `ACTIVE_SACK_ALLOCATION`, ikisinin de bekçisi aynı (`test_payment_allocation.ts §15s`).
+Kodla ölçüldü: `payment-allocation.service.ts:105` `ACTIVE_ALLOCATION = { revokedAt: null }` ·
+`helpers/sack-allocation.helper.ts:14` `ACTIVE_SACK_ALLOCATION = { clearedAt: null }` — iki ayrı
+kolon, iki ayrı defter. Satır düzeltildi ve ikizi ADIYLA anıldı ki bir sonraki sed tekrar taşmasın.
+⇒ **Ders: bir sabiti yeniden adlandıran commit, belge tarafında GEÇEN HER YERİ değil, o ADIN
+SAHİBİ OLAN yerleri değiştirir — aynı dosyada aynı dizge başka bir varlığa ait olabilir.**
+Kod tarafını tip yakalar, belge tarafını hiçbir şey yakalamaz.
+
+**② Tek dosyada AYNI BAŞLIKLI iki bölüm (`defter.md`).** Telemetri doktrini bugün `## Telemetri ≠
+defter` olarak dosyanın sonuna (altı kural + iki ölçüm uyarısı) yazıldı; oysa `###
+Telemetri ≠ defter — ÜÇÜNCÜ HARD-DELETE SINIFI DEĞİL` bölümü zaten vardı ve kural satırları
+oradaydı. İki bölüm çelişmiyordu ama **`§ Telemetri ≠ defter` diye yapılan çapraz atıfın iki
+hedefi oluyordu** — ve iki yerde "kaçıncı sınıf" sorusuna üç farklı cevap duruyordu (başlıkta
+ÜÇÜNCÜ, gövdede *dördüncü*, yeni bölümde *üçüncü* + "⑤ sınıfı önerisi REDDEDİLDİ"). Üst bölüm
+`### Budanan satırın kuralları — telemetri ekseni` oldu (kural satırları orada kalır), doktrin
+tek başlıkta toplandı, ordinal `Üçüncü … (öneri ⑤ numarasıyla geldi)` diye tekilleştirildi.
+⇒ **Ders: bir bölüm başlığı bir ADRESTİR; aynı adı ikinci kez kullanmak, atfı ölçülemez kılar.**
+
+**③ `docs/kurallar/README.md`'nin "Arşiv tarihleri" kolonu kapısız ve sistematik bayat.**
+Ölçüldü: 26 satırın 19'u dosyanın kendi en yeni arşiv atfının gerisinde (`fason.md` kolonda
+2026-08-19 ↔ dosyada 2026-09-14; `belge-etiket.md` 09-04 ↔ 09-14; `tambur.md` 09-03 ↔ 09-14),
+9 dosyanın atıfları ise kolonun okuyamadığı biçimde (`R:…` / `CLAUDE.md:…`). Kolonu bugünkü
+değerlerle tazelemek yarın aynı yalanı üretirdi (kapısı yok) ⇒ kolon KALDI ama üstüne **beyanlı
+kör nokta** yazıldı: tarih arayan okuyucu dosyanın kendisini ölçer, kolonu değil. Ayrıca aynı
+dosyadaki dokuma satırının `⚠️ kâğıtta` etiketi ÇÜRÜMÜŞTÜ (şema P1…P3 + karne indi; kök
+`CLAUDE.md` `6c5b57f6` ile düzeltilmişti, dizin unutulmuştu) — düzeltildi.
+⇒ **Ders: elle tutulan ve kapısı olmayan bir kolonu TAZELEMEK onarım değildir; ya kapı gelir
+ya kolon kör nokta olarak BEYAN edilir. Üçüncü seçenek (sessizce doğru sanmak) en kötüsüdür.**
+
+**Çelişki BULUNMAYAN yerler (ölçüldü, temiz):** `dokuma.md`'nin bugün geçersizleşen iki kuralı
+(çevrimdışı kuyruk → online-only; `requireProductionEnabled` → `requireDokumaEnabled`) **GEÇERSİZ
+damgasıyla** kapatılmış, eski cümle yan yana bırakılmamış · `genel.md` audit muafiyeti ile kök
+`CLAUDE.md`'nin beş sınıfı birebir · `fason.md` F1 ile `dokuma.md` levent kuralları aynı dörtlüyü
+söylüyor · bugün eklenen kural satırlarının tümünde `bekçi:` alanı var (`test_kural_bekci_atfi`
+8/0, 662 iddia · 0 çözülmeyen) — TEK istisna `dokuma.md:38` "duruş damgası iki sözleşme"
+satırıydı: atfı `<sub>(bekçi …)</sub>` biçiminde yazılmıştı, yani **bekçinin ölçtüğü alanın
+DIŞINDA**; 662 atfın 661'i `· bekçi:` alanında. Standart biçime alındı.
+⇒ **Ders: doğru bilgiyi yanlış ALANA yazmak, bilgiyi yazmamakla aynı kapıyı kör bırakır.**
