@@ -46,7 +46,7 @@ const HARITA = "Teks-Erp/docs/BEKCI-HARITASI.md";
 const EN_AZ_SATIR = 1000; // 2026-09-14: 1766 satır; yarısı düşerse tablo kaybı yakalanır
 /** §3 tabanı — YALNIZ DÜŞER; sabiti trende entegratör (1e) yazar (ölçüm 2026-09-14: 538). */
 // 538 → 531 (2026-09-14, entegratör 1e): birleşik ağaçta ölçüldü (yedi hücre sınıflandı).
-const DUZ_TABAN = 512;
+const DUZ_TABAN = 511;
 
 let pass = 0;
 let fail = 0;
