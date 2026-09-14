@@ -440,4 +440,62 @@ ORDER BY cik."createdAt" DESC
 LIMIT 50;
 
 \echo ''
+\echo '== 34) LEVENT — CANCELLED ama kalan metre ≠ 0 (WOUND_CANCEL yazılmamış iptal; beklenen 0) =='
+SELECT b.id::text AS levent, b."beamNo",
+       COALESCE(SUM(CASE WHEN e.kind = 'WOUND' THEN e."lengthM" WHEN e.kind = 'WOUND_CANCEL' THEN -e."lengthM" ELSE 0 END), 0) AS kalan
+FROM warp_beams b LEFT JOIN warp_beam_events e ON e."beamId" = b.id
+WHERE b.status = 'CANCELLED'
+GROUP BY b.id, b."beamNo"
+HAVING COALESCE(SUM(CASE WHEN e.kind = 'WOUND' THEN e."lengthM" WHEN e.kind = 'WOUND_CANCEL' THEN -e."lengthM" ELSE 0 END), 0) <> 0;
+
+\echo ''
+\echo '== 35) LEVENT — READY ama WOUND sayısı ≠ 1 ya da kalan ≤ 0 (beklenen 0) =='
+SELECT b.id::text AS levent, b."beamNo",
+       (SELECT COUNT(*) FROM warp_beam_events e WHERE e."beamId" = b.id AND e.kind = 'WOUND') AS wound_sayisi,
+       COALESCE((SELECT SUM(CASE WHEN e.kind = 'WOUND' THEN e."lengthM" WHEN e.kind = 'WOUND_CANCEL' THEN -e."lengthM" ELSE 0 END) FROM warp_beam_events e WHERE e."beamId" = b.id), 0) AS kalan
+FROM warp_beams b
+WHERE b.status = 'READY'
+  AND ((SELECT COUNT(*) FROM warp_beam_events e WHERE e."beamId" = b.id AND e.kind = 'WOUND') <> 1
+    OR COALESCE((SELECT SUM(CASE WHEN e.kind = 'WOUND' THEN e."lengthM" WHEN e.kind = 'WOUND_CANCEL' THEN -e."lengthM" ELSE 0 END) FROM warp_beam_events e WHERE e."beamId" = b.id), 0) <= 0);
+
+\echo ''
+\echo '== 36) LEVENT — son olayın toStatus''u ≠ durum kolonu (PLANNED ⇒ hiç olay yok; beklenen 0) =='
+SELECT b.id::text AS levent, b."beamNo", b.status AS kayitli, COALESCE(son."toStatus"::text, '(olay yok)') AS defter
+FROM warp_beams b
+LEFT JOIN LATERAL (SELECT e."toStatus" FROM warp_beam_events e WHERE e."beamId" = b.id ORDER BY e."createdAt" DESC, e.id DESC LIMIT 1) son ON true
+WHERE (b.status = 'PLANNED' AND son."toStatus" IS NOT NULL)
+   OR (b.status <> 'PLANNED' AND (son."toStatus" IS NULL OR son."toStatus" <> b.status));
+
+\echo ''
+\echo '== 37) LEVENT — CANCELLED ama net WARP_ISSUE ≠ 0 ya da net WARP_RETURN ≠ 0 (AYRI AYRI); PLANNED ama iplik satırı var (beklenen 0) =='
+SELECT b.id::text AS levent, b."beamNo", b.status AS durum,
+       COALESCE(SUM(CASE WHEN m.kind = 'WARP_ISSUE' THEN m."qtyKg" WHEN m.kind = 'WARP_ISSUE_REVERSAL' THEN -m."qtyKg" ELSE 0 END), 0) AS net_cikis,
+       COALESCE(SUM(CASE WHEN m.kind = 'WARP_RETURN' THEN m."qtyKg" WHEN m.kind = 'WARP_RETURN_REVERSAL' THEN -m."qtyKg" ELSE 0 END), 0) AS net_iade,
+       COUNT(m.id) AS satir
+FROM warp_beams b LEFT JOIN yarn_movements m ON m."warpBeamId" = b.id
+WHERE b.status IN ('CANCELLED', 'PLANNED')
+GROUP BY b.id, b."beamNo", b.status
+HAVING (b.status = 'CANCELLED' AND (
+          COALESCE(SUM(CASE WHEN m.kind = 'WARP_ISSUE' THEN m."qtyKg" WHEN m.kind = 'WARP_ISSUE_REVERSAL' THEN -m."qtyKg" ELSE 0 END), 0) <> 0
+       OR COALESCE(SUM(CASE WHEN m.kind = 'WARP_RETURN' THEN m."qtyKg" WHEN m.kind = 'WARP_RETURN_REVERSAL' THEN -m."qtyKg" ELSE 0 END), 0) <> 0))
+    OR (b.status = 'PLANNED' AND COUNT(m.id) > 0);
+
+\echo ''
+\echo '== 38) LEVENT — köken ↔ defter: IN_HOUSE ⇒ WOUND.machineId dolu ∧ ≥1 WARP_ISSUE; fason/hazır ⇒ machineId NULL ∧ WARP satırı yok (beklenen 0; Faz 5 şerhi belgede) =='
+SELECT b.id::text AS levent, b."beamNo", b."originKind" AS koken,
+       (w."machineId" IS NOT NULL) AS makine_dolu,
+       (SELECT COUNT(*) FROM yarn_movements m WHERE m."warpBeamId" = b.id) AS iplik_satiri
+FROM warp_beams b JOIN warp_beam_events w ON w."beamId" = b.id AND w.kind = 'WOUND'
+WHERE b.status IN ('READY', 'CANCELLED')
+  AND ((b."originKind" = 'IN_HOUSE' AND (w."machineId" IS NULL OR NOT EXISTS (SELECT 1 FROM yarn_movements m WHERE m."warpBeamId" = b.id AND m.kind = 'WARP_ISSUE')))
+    OR (b."originKind" <> 'IN_HOUSE' AND (w."machineId" IS NOT NULL OR EXISTS (SELECT 1 FROM yarn_movements m WHERE m."warpBeamId" = b.id))));
+
+\echo ''
+\echo '== 39) LEVENT — dip iadesi sebep kodu WARP_RETURN kataloğunda YOK (beklenen 0) =='
+SELECT m.id::text AS hareket, m.kind, m."reasonCode"
+FROM yarn_movements m
+WHERE m.kind IN ('WARP_RETURN', 'WARP_RETURN_REVERSAL')
+  AND NOT EXISTS (SELECT 1 FROM reason_presets p WHERE p.kind = 'WARP_RETURN' AND p.code = m."reasonCode");
+
+\echo ''
 \echo '== Tutarlılık kontrolü bitti. §30b BİLGİ (miras sayısı) dışında yukarıda hiç satır YOKSA sistem sağlıklı. =='

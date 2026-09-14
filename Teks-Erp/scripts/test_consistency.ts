@@ -799,6 +799,88 @@ WHERE (i.status = 'CONFIRMED'
   // fatura/storno ve virman dengesi). Bu dosyada id benzersizliğini doğrulayan
   // bir kontrol YOK → mükerrer id sessizce geçer ve iki bölüm tek satır gibi
   // raporlanırdı. Yeni bölüm eklerken en büyük id'yi GERÇEKTEN kontrol et.
+  // ── LEVENT (devere 1b, 2026-09-14) — DEVERE-LEVENT §4.9 "yeni mutabakat bölümleri" (47 K2) ──
+  // Durum kolonu ile olay defteri AYRIŞAMAZ; iplik çifti NET ve AYRI AYRI sıfırlanır (iptalde).
+  // Fikstür süzgeci: `test_warp_beam_lifecycle` levent ve iplik satırlarını `TEST-LV-<pid>` kalem
+  // koduyla kurar ve finally'de siler; kalıntı olursa fabrika verisi sanılmasın.
+  {
+    id: "34",
+    title: "Levent: CANCELLED ⇒ kalan metre 0 (Σ işaret × lengthM) — WOUND_CANCEL yazılmamış iptal",
+    sql: `
+SELECT b.id::text AS levent, b."beamNo",
+       COALESCE(SUM(CASE WHEN e.kind = 'WOUND' THEN e."lengthM" WHEN e.kind = 'WOUND_CANCEL' THEN -e."lengthM" ELSE 0 END), 0)::text AS kalan
+FROM warp_beams b LEFT JOIN warp_beam_events e ON e."beamId" = b.id
+WHERE b.status = 'CANCELLED'
+GROUP BY b.id, b."beamNo"
+HAVING COALESCE(SUM(CASE WHEN e.kind = 'WOUND' THEN e."lengthM" WHEN e.kind = 'WOUND_CANCEL' THEN -e."lengthM" ELSE 0 END), 0) <> 0`,
+    kapsam: { ne: "CANCELLED levent", sql: `SELECT COUNT(*)::int AS n FROM warp_beams WHERE status = 'CANCELLED'` },
+  },
+  {
+    id: "35",
+    title: "Levent: READY ⇒ TAM BİR aktif WOUND ve kalan metre > 0",
+    sql: `
+SELECT b.id::text AS levent, b."beamNo",
+       (SELECT COUNT(*) FROM warp_beam_events e WHERE e."beamId" = b.id AND e.kind = 'WOUND')::text AS wound_sayisi,
+       COALESCE((SELECT SUM(CASE WHEN e.kind = 'WOUND' THEN e."lengthM" WHEN e.kind = 'WOUND_CANCEL' THEN -e."lengthM" ELSE 0 END) FROM warp_beam_events e WHERE e."beamId" = b.id), 0)::text AS kalan
+FROM warp_beams b
+WHERE b.status = 'READY'
+  AND ((SELECT COUNT(*) FROM warp_beam_events e WHERE e."beamId" = b.id AND e.kind = 'WOUND') <> 1
+    OR COALESCE((SELECT SUM(CASE WHEN e.kind = 'WOUND' THEN e."lengthM" WHEN e.kind = 'WOUND_CANCEL' THEN -e."lengthM" ELSE 0 END) FROM warp_beam_events e WHERE e."beamId" = b.id), 0) <= 0)`,
+    kapsam: { ne: "READY levent", sql: `SELECT COUNT(*)::int AS n FROM warp_beams WHERE status = 'READY'` },
+  },
+  {
+    id: "36",
+    title: "Levent: son olayın toStatus'u = WarpBeam.status (durum kolonu ile defter ayrışamaz; PLANNED ⇒ hiç olay yok)",
+    sql: `
+SELECT b.id::text AS levent, b."beamNo", b.status::text AS kayitli, COALESCE(son."toStatus"::text, '(olay yok)') AS defter
+FROM warp_beams b
+LEFT JOIN LATERAL (SELECT e."toStatus" FROM warp_beam_events e WHERE e."beamId" = b.id ORDER BY e."createdAt" DESC, e.id DESC LIMIT 1) son ON true
+WHERE (b.status = 'PLANNED' AND son."toStatus" IS NOT NULL)
+   OR (b.status <> 'PLANNED' AND (son."toStatus" IS NULL OR son."toStatus" <> b.status))`,
+    kapsam: { ne: "tüm leventler", sql: `SELECT COUNT(*)::int AS n FROM warp_beams` },
+  },
+  {
+    id: "37",
+    title: "Levent: CANCELLED ⇒ Σ net WARP_ISSUE = 0 ∧ Σ net WARP_RETURN = 0 — AYRI AYRI (birbirini götürmez); PLANNED ⇒ hiç iplik satırı yok",
+    sql: `
+SELECT b.id::text AS levent, b."beamNo", b.status::text AS durum,
+       COALESCE(SUM(CASE WHEN m.kind = 'WARP_ISSUE' THEN m."qtyKg" WHEN m.kind = 'WARP_ISSUE_REVERSAL' THEN -m."qtyKg" ELSE 0 END), 0)::text AS net_cikis,
+       COALESCE(SUM(CASE WHEN m.kind = 'WARP_RETURN' THEN m."qtyKg" WHEN m.kind = 'WARP_RETURN_REVERSAL' THEN -m."qtyKg" ELSE 0 END), 0)::text AS net_iade,
+       COUNT(m.id)::text AS satir
+FROM warp_beams b LEFT JOIN yarn_movements m ON m."warpBeamId" = b.id
+WHERE b.status IN ('CANCELLED', 'PLANNED')
+GROUP BY b.id, b."beamNo", b.status
+HAVING (b.status = 'CANCELLED' AND (
+          COALESCE(SUM(CASE WHEN m.kind = 'WARP_ISSUE' THEN m."qtyKg" WHEN m.kind = 'WARP_ISSUE_REVERSAL' THEN -m."qtyKg" ELSE 0 END), 0) <> 0
+       OR COALESCE(SUM(CASE WHEN m.kind = 'WARP_RETURN' THEN m."qtyKg" WHEN m.kind = 'WARP_RETURN_REVERSAL' THEN -m."qtyKg" ELSE 0 END), 0) <> 0))
+    OR (b.status = 'PLANNED' AND COUNT(m.id) > 0)`,
+    kapsam: { ne: "CANCELLED + PLANNED levent", sql: `SELECT COUNT(*)::int AS n FROM warp_beams WHERE status IN ('CANCELLED','PLANNED')` },
+  },
+  {
+    id: "38",
+    // §4.9-9 KÖKEN ↔ DEFTER. ⚠️ ŞERH (belge): IN_HOUSE yönü Faz 5'te (ara levent birleşimi) genişleyecek —
+    // o gün "en az bir WARP_ISSUE" ayağı yumuşatılır; bugün 1b'de SERT ve doğru.
+    title: "Levent: köken ↔ defter — IN_HOUSE ⇒ WOUND.machineId dolu ∧ ≥1 WARP_ISSUE; SUBCONTRACT/PURCHASED ⇒ machineId NULL ∧ hiç WARP satırı yok (sarılmış levent)",
+    sql: `
+SELECT b.id::text AS levent, b."beamNo", b."originKind"::text AS koken,
+       (w."machineId" IS NOT NULL)::text AS makine_dolu,
+       (SELECT COUNT(*) FROM yarn_movements m WHERE m."warpBeamId" = b.id)::text AS iplik_satiri
+FROM warp_beams b JOIN warp_beam_events w ON w."beamId" = b.id AND w.kind = 'WOUND'
+WHERE b.status IN ('READY', 'CANCELLED')
+  AND ((b."originKind" = 'IN_HOUSE' AND (w."machineId" IS NULL OR NOT EXISTS (SELECT 1 FROM yarn_movements m WHERE m."warpBeamId" = b.id AND m.kind = 'WARP_ISSUE')))
+    OR (b."originKind" <> 'IN_HOUSE' AND (w."machineId" IS NOT NULL OR EXISTS (SELECT 1 FROM yarn_movements m WHERE m."warpBeamId" = b.id))))`,
+    kapsam: { ne: "sarılmış (READY/CANCELLED) levent", sql: `SELECT COUNT(*)::int AS n FROM warp_beams WHERE status IN ('READY','CANCELLED')` },
+  },
+  {
+    id: "39",
+    title: "Levent: WARP_RETURN(_REVERSAL) reasonCode kataloğun WARP_RETURN kind'ında VAR (`ReasonPreset.code` asla değişmez kuralının defter ikizi)",
+    sql: `
+SELECT m.id::text AS hareket, m.kind::text, m."reasonCode"
+FROM yarn_movements m
+WHERE m.kind IN ('WARP_RETURN', 'WARP_RETURN_REVERSAL')
+  AND NOT EXISTS (SELECT 1 FROM reason_presets p WHERE p.kind = 'WARP_RETURN' AND p.code = m."reasonCode")`,
+    kapsam: { ne: "dip iade satırı", sql: `SELECT COUNT(*)::int AS n FROM yarn_movements WHERE kind IN ('WARP_RETURN','WARP_RETURN_REVERSAL')` },
+  },
   {
     id: "27",
     // `YarnStock.balanceKg`, DB seddi (CHECK/trigger) OLMAYAN denormalize bir
