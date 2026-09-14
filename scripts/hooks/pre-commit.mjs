@@ -29,7 +29,7 @@ import { fileURLToPath } from "node:url";
 import { sirala } from "./lib/adim-sirasi.mjs";
 import { deftereYaz } from "./lib/kapi-defteri.mjs";
 import { etkilenenProjeler, stagedFiles } from "./lib/staged.mjs";
-import { slotAl } from "./lib/semafor.mjs";
+import { agirSurecSayisi, slotAl } from "./lib/semafor.mjs";
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 // Kapı defteri: wt BASENAME'i (wt-0c · Teks-Erp), tam yol ve kimlik yok — lib/kapi-defteri.mjs.
@@ -245,7 +245,8 @@ const slotAlVeYaz = () => {
   const t = Date.now();
   slotBirak = slotAl();
   // Bekleme süresi deftere — semafor kapasitesi (2/3/4) sahadan bu satırla ölçülür.
-  deftereYaz({ wt: WT, adim: "semafor bekleme", sonuc: "✅", sn: (Date.now() - t) / 1000, cikis: 0 });
+  // "ağır N": makinedeki tsc/eslint/vitest/jest sayısı (semaforun görmediği çıplak koşumlar dahil).
+  deftereYaz({ wt: WT, adim: `semafor bekleme · ağır ${agirSurecSayisi()}`, sonuc: "✅", sn: (Date.now() - t) / 1000, cikis: 0 });
 };
 
 process.stderr.write(`⏳ commit kapısı: ${sirali.length} adım (${sirali.map((a) => a.ad).join(" · ")})\n`);
@@ -273,7 +274,9 @@ for (const adim of sirali) {
     ...(adim.stdin === undefined ? {} : { input: adim.stdin }),
   });
   const sn = ((Date.now() - t0) / 1000).toFixed(1);
-  const cikis = r.status ?? r.error?.code;
+  // Sinyalle ölen adım (OOM → SIGKILL) "konuşmadan biter": status null, çıktı boş. Defterde
+  // çıkış kodu değil SİNYAL yazılır ki sessiz kesinti kırmızıdan ayrılsın (d9 ölçtü 2026-09-14).
+  const cikis = r.status ?? r.signal ?? r.error?.code;
   if (r.status === 0 && !r.error) {
     process.stderr.write(`   ✅ ${adim.ad} (${sn}s)\n`);
     deftereYaz({ wt: WT, adim: adim.ad, sonuc: "✅", sn, cikis });

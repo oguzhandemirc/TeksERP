@@ -255,8 +255,8 @@ function main(): void {
   const preCommit = readFileSync(join(KOK, "scripts/hooks/pre-commit.mjs"), "utf8");
   const defterKaynak = readFileSync(join(KOK, "scripts/hooks/lib/kapi-defteri.mjs"), "utf8");
   check(
-    "§5c pre-commit deftere yalnız deftereYaz ile yazıyor, semafor beklemesini de düşüyor",
-    (preCommit.match(/deftereYaz\(/g) ?? []).length >= 4 && !/appendFileSync/.test(preCommit) && /adim: "semafor bekleme"/.test(preCommit),
+    "§5c pre-commit deftere yalnız deftereYaz ile yazıyor, semafor beklemesini (makinedeki ağır süreç sayısıyla) de düşüyor",
+    (preCommit.match(/deftereYaz\(/g) ?? []).length >= 4 && !/appendFileSync/.test(preCommit) && /adim: `semafor bekleme · ağır \$\{agirSurecSayisi\(\)\}`/.test(preCommit),
   );
   const tryIcinde = (k: string) => /try \{\s*appendFileSync\([\s\S]*?\} catch \{/.test(k);
   check("§5d kapi-defteri.mjs appendFileSync'i try/catch içinde tutuyor", tryIcinde(defterKaynak));

@@ -22,6 +22,7 @@
 //    ZAMAN AŞIMI YOK — asılı kalan ≠ ölü; yavaş bir kapıyı süpürmek iki kapıyı
 //    aynı slota sokar. Bekleyen "⏳ N kapı önde (≈M sn)" basar, 30 sn'de bir yeniler.
 // =============================================================================
+import { execFileSync } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -115,3 +116,19 @@ export function slotAl(yaz = (m) => process.stderr.write(m)) {
 
 /** Sonda ve teşhis için: kök dizin. */
 export const SEMAFOR_KOK = KOK;
+
+/**
+ * Makinedeki AĞIR süreç sayısı (tsc · eslint · vitest · jest) — semaforun GÖRMEDİĞİ dahil.
+ * Semafor yalnız kendisine gireni sayar; bir çıplak koşum slot muhasebesini bozar (d9 ölçtü
+ * 2026-09-14: 3/3 dolu görünürken 9 ağır süreç, yük 110, boş bellek 0,1 GB → harness OOM
+ * öldürmesi). Defterde "semafor bekleme" satırına yazılır: beyan edilen ↔ gerçek aynası.
+ * Ölçemezse -1 (ps yok / hata) — sessiz 0 değil.
+ */
+export function agirSurecSayisi() {
+  try {
+    const out = execFileSync("ps", ["-axo", "command="], { encoding: "utf8", maxBuffer: 16 << 20 });
+    return out.split("\n").filter((l) => /\.bin\/(tsc|eslint|vitest|jest)(\s|$)/.test(l)).length;
+  } catch {
+    return -1;
+  }
+}

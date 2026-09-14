@@ -86,8 +86,8 @@ const defter = existsSync(defterYolu) ? readFileSync(defterYolu, "utf8") : "";
 check("④ sarmalayıcı: çocuk slot varken koştu ve çıkış kodu AYNEN taşındı (3)", sarmal.status === 3 && /SLOT 1/.test(sarmal.stdout), `çıkış=${sarmal.status} stdout=${JSON.stringify(sarmal.stdout)}`);
 check("④ sarmalayıcı: slot çıkışta bırakıldı", slotSayisi() === 0, `kalan slot ${slotSayisi()}`);
 check(
-  "④ sarmalayıcı: deftere 'semafor bekleme' ✅ + 'ağır iş' ❌ (çıkış 3) satırları düştü",
-  /\tsemafor bekleme\t✅\t/.test(defter) && /\tağır iş · [^\t]*\t❌\t[\d.]+\t3\t/.test(defter),
+  "④ sarmalayıcı: deftere 'semafor bekleme · ağır N' ✅ + 'ağır iş' ❌ (çıkış 3) satırları düştü",
+  /\tsemafor bekleme · ağır -?\d+\t✅\t/.test(defter) && /\tağır iş · [^\t]*\t❌\t[\d.]+\t3\t/.test(defter),
   JSON.stringify(defter.split("\n").filter(Boolean).map((l) => l.split("\t").slice(2, 6).join("|"))),
 );
 const bos = spawnSync(process.execPath, [SARMAL], { env: { ...process.env, TEKSERP_SEMAFOR_KOK: KOK }, encoding: "utf8" });

@@ -21,7 +21,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import { basename } from "node:path";
 import { deftereYaz } from "./hooks/lib/kapi-defteri.mjs";
-import { slotAl } from "./hooks/lib/semafor.mjs";
+import { agirSurecSayisi, slotAl } from "./hooks/lib/semafor.mjs";
 
 const ayrac = process.argv.indexOf("--");
 const komut = ayrac >= 0 ? process.argv.slice(ayrac + 1) : process.argv.slice(2);
@@ -43,7 +43,7 @@ const ETIKET = komut.map((a) => (a.startsWith("/") ? basename(a) : a)).join(" ")
 
 const t0 = Date.now();
 const slotBirak = slotAl();
-deftereYaz({ wt: WT, adim: "semafor bekleme", sonuc: "✅", sn: (Date.now() - t0) / 1000, cikis: 0 });
+deftereYaz({ wt: WT, adim: `semafor bekleme · ağır ${agirSurecSayisi()}`, sonuc: "✅", sn: (Date.now() - t0) / 1000, cikis: 0 });
 
 const t1 = Date.now();
 const cocuk = spawn(komut[0], komut.slice(1), { stdio: "inherit", env: process.env });
