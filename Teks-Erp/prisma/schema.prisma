@@ -1657,8 +1657,10 @@ model WarpBeamEvent {
   reversesEventId String?        @unique @db.Uuid
   fromStatus      WarpBeamStatus
   toStatus        WarpBeamStatus
-  /// Fason türlerinde ZORUNLU, diğerlerinde YASAK (CHECK iki yönlü): aynı levent zamanla birden çok
-  /// sevke girer; "bu sevkin SHIP_OUT'u" bağsız bulunamazdı. Kalem başına TEK SHIP_OUT (partial unique).
+  /// Fason türlerinde ZORUNLU, WOUND'da OPSİYONEL (G1c: fasona sardırılan leventin doğuşu o fasoncuya giden
+  /// İPLİK kalemine bağlanır — kind=YARN servis kapısı), diğerlerinde YASAK (CHECK `warp_beam_events_fason_item_ck`,
+  /// migration 20260915024000): aynı levent zamanla birden çok sevke girer; "bu sevkin SHIP_OUT'u" bağsız bulunamazdı.
+  /// Kalem başına TEK SHIP_OUT (partial unique).
   dispatchItemId  String?        @db.Uuid
 
   /// Çözgü metresi; > 0 (CHECK).

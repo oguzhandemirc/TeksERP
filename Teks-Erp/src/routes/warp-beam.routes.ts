@@ -62,6 +62,8 @@ const windSchema = z
     breakCount: z.number().int().min(0).nullable().optional(),
     startedAt: z.coerce.date().nullable().optional(),
     clientToken: z.string().uuid().nullable().optional(),
+    /** G1c: fasona sardırılan levent → o fasoncuya giden iplik kalemi (opsiyonel; servis 400 kapısı). */
+    dispatchItemId: z.string().uuid().nullable().optional(),
   })
   .strict();
 const cancelSchema = z.object({ reason: z.string().trim().min(3, "Gerekçe en az 3 karakter").max(300) }).strict();

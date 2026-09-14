@@ -44,6 +44,43 @@ export interface WindWarpBeamInput {
   breakCount?: number | null;
   startedAt?: Date | null;
   clientToken?: string | null;
+  /**
+   * G1c: yalnız SUBCONTRACT kökeninde — leventin sarıldığı iplik hangi fason sevk kaleminden gitti
+   * (`SubcontractorDispatchItem.kind=YARN`, aynı fasoncu, aynı iplik kartı). Opsiyonel; verilirse WOUND
+   * olayı bağı taşır ve fasondaki türetilmiş bakiye leventin nominal kg'sını ayrı kalem olarak düşer.
+   */
+  dispatchItemId?: string | null;
+}
+
+/** G1c — iplik kalemi bağı kapısı (köken kapısı çağıranda): kalem YARN · sevk iptal edilmemiş · fasoncu leventinki · iplik kartı çözgünün ipliği. */
+async function assertYarnDispatchItemTx(
+  tx: Prisma.TransactionClient,
+  dispatchItemId: string,
+  beam: { subcontractorId: string | null; yarnItemId: string },
+): Promise<void> {
+  const item = await tx.subcontractorDispatchItem.findUnique({
+    where: { id: dispatchItemId },
+    select: { kind: true, yarnItemId: true, dispatch: { select: { subcontractorId: true, cancelledAt: true, dispatchNo: true } } },
+  });
+  if (!item || item.kind !== "YARN") throw AppError.badRequest("Böyle bir fason iplik kalemi yok", { code: "WARP_YARN_ITEM_NOT_FOUND" });
+  if (item.dispatch.cancelledAt) throw AppError.conflict(`${item.dispatch.dispatchNo} iptal edilmiş — iplik kalemi bağlanamaz`, { code: "DISPATCH_CANCELLED" });
+  if (item.dispatch.subcontractorId !== beam.subcontractorId) throw AppError.badRequest("İplik kalemi başka bir fasoncuya gitmiş — leventin fasoncusuyla uyuşmuyor", { code: "WARP_YARN_ITEM_MISMATCH" });
+  if (item.yarnItemId !== beam.yarnItemId) throw AppError.badRequest("İplik kalemi çözgü kartının ipliği değil", { code: "WARP_YARN_ITEM_KIND" });
+}
+
+/** Köken ↔ girdi uyumu (tx DIŞI, DB'siz): IN_HOUSE makine+çıkış ister; fason/hazır satır yazmaz; iplik kalemi bağı (G1c) yalnız SUBCONTRACT. */
+function assertOriginInputs(beam: { originKind: WarpBeamOrigin; beamNo: string }, input: WindWarpBeamInput, inHouse: boolean): void {
+  const issues = input.yarnIssues ?? [];
+  const returns = input.yarnReturns ?? [];
+  if (input.dispatchItemId && beam.originKind !== WarpBeamOrigin.SUBCONTRACT) {
+    throw AppError.badRequest(`${beam.beamNo} fasona sardırılmış değil — iplik kalemi bağı yalnız fason kökeninde yazılır`, { code: "WARP_YARN_ITEM_ORIGIN" });
+  }
+  if (inHouse) {
+    if (!input.machineId) throw AppError.badRequest("İçeride sarılan levent için devere makinesi zorunludur");
+    if (issues.length === 0) throw AppError.badRequest("İçeride sarılan levent için en az bir iplik çıkış satırı gerekir (cağlığa yüklenen brüt kg)");
+  } else if (input.machineId || issues.length > 0 || returns.length > 0) {
+    throw AppError.badRequest("Fasona sardırılan ya da hazır alınan levente makine ve iplik satırı yazılmaz — iplik tüketimi bizim defterde değil (§3.9)");
+  }
 }
 
 async function assertDevereMachineTx(tx: Prisma.TransactionClient, machineId: string): Promise<void> {
@@ -94,12 +131,7 @@ export async function windWarpBeam(id: string, input: WindWarpBeamInput, userId?
   const inHouse = beam.originKind === WarpBeamOrigin.IN_HOUSE;
   const issues = input.yarnIssues ?? [];
   const returns = input.yarnReturns ?? [];
-  if (inHouse) {
-    if (!input.machineId) throw AppError.badRequest("İçeride sarılan levent için devere makinesi zorunludur");
-    if (issues.length === 0) throw AppError.badRequest("İçeride sarılan levent için en az bir iplik çıkış satırı gerekir (cağlığa yüklenen brüt kg)");
-  } else if (input.machineId || issues.length > 0 || returns.length > 0) {
-    throw AppError.badRequest("Fasona sardırılan ya da hazır alınan levente makine ve iplik satırı yazılmaz — iplik tüketimi bizim defterde değil (§3.9)");
-  }
+  assertOriginInputs(beam, input, inHouse);
   const theoreticalKg = warpTheoreticalKg(beam.warpSpec.endsCount, denier, lengthM);
   const yarnItemId = beam.warpSpec.yarnItem.id;
   // K4 — KİLİT SIRASI: iplik satırları (kalem sabit) depo → sebep sırasına dizilir; iki paralel sarım depoları
@@ -133,6 +165,7 @@ export async function windWarpBeam(id: string, input: WindWarpBeamInput, userId?
 
   const wound = await prisma.$transaction(async (tx) => {
     if (input.machineId) await assertDevereMachineTx(tx, input.machineId);
+    if (input.dispatchItemId) await assertYarnDispatchItemTx(tx, input.dispatchItemId, { subcontractorId: beam.subcontractorId, yarnItemId });
     const ev = await applyWarpBeamEventTx(tx, {
       beamId: id,
       kind: "WOUND",
@@ -140,6 +173,7 @@ export async function windWarpBeam(id: string, input: WindWarpBeamInput, userId?
       to: WarpBeamStatus.READY,
       data: {
         clientToken: input.clientToken ?? null,
+        dispatchItemId: input.dispatchItemId ?? null,
         lengthM,
         machineId: input.machineId ?? null,
         endsCount: beam.warpSpec.endsCount,

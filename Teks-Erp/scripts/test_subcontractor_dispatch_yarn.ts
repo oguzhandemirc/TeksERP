@@ -19,16 +19,22 @@
 //   §6 DB sedleri — kind_ref_ck üç kol (ROLL/WARP_BEAM kolları aynen) · fason_link_ck iki yönlü · dönüş sebep CHECK
 //   §7 iplik KAPALI — YARN satırı 403 MODULE_DISABLED (modul iplik) + sevk satırı geri alındı; ROLL sevki bayt bayt;
 //      dönüş ucu servis düzeyinde 403
+//   §8 G1c SARILAN LEVENT — fasona sardırılan leventin WOUND olayı iplik kalemine bağlanır (`dispatchItemId`);
+//      bakiyede `sarilanKg` ayrı kalem (nominal, kaynak beyanlı), kalem DTO'sunda `sarilan[]`; kapılar: IN_HOUSE 400
+//      WARP_YARN_ITEM_ORIGIN · başka fasoncu 400 WARP_YARN_ITEM_MISMATCH · YARN olmayan kalem 400 · sarım stornosu
+//      bakiyeden düşer; DB: WOUND bağlı OK, WOUND_CANCEL bağlı 23514, fason türü bağsız 23514 (kol korunur)
 //
 // NEGATİF SONDALAR (kırmızı görülerek, 2026-09-15):
 //   · `yarn-sign.helper` SUBCONTRACT_OUT işareti −1 → +1 → §0e + §3c/§3d/§4 bakiye satırları ❌
 //   · `dispatchYarnItemsTx`ten `applyYarnMovementTx` çağrısı düşürülünce §3c ❌ (kalem var defter yok)
 //   · `returnYarn` Σ≤giden kapısı düşürülünce §4c ❌
+//   · G1c (2026-09-15): `assertYarnDispatchItemTx` fasoncu eşleşmesi düşürülünce §8c ❌ · bakiyede `reversal: null`
+//     süzgeci düşürülünce §8e ❌ (storno edilmiş sarım hâlâ düşülür)
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. İplik bayrağı FOTOĞRAFINA döndürülür.
 // =============================================================================
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { Prisma, RollStatus, StationType, SubcontractorDispatchItemKind, YarnMovementKind } from "@prisma/client";
+import { Prisma, RollStatus, StationType, SubcontractorDispatchItemKind, WarpBeamOrigin, WarpKgSource, YarnMovementKind } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
@@ -36,6 +42,9 @@ import { yarnMovementSign } from "../src/services/helpers/yarn-sign.helper";
 import { applyYarnMovementTx } from "../src/services/yarn.service";
 import { yarnLotBalanceTx } from "../src/services/helpers/yarn-lot.helper";
 import { SubcontractorService } from "../src/services/subcontractor.service";
+import { createWarpBeam } from "../src/services/warp-beam.service";
+import { cancelWound, windWarpBeam } from "../src/services/warp-beam-wind.service";
+import { warpTheoreticalKg } from "../src/constants/warp-beam";
 import { cancelYarnReturn, returnYarn, yarnAtSubcontractor } from "../src/services/subcontractor-yarn.service";
 import { reconcileReasonPresets } from "../src/jobs/reason-preset-catalog.job";
 import { AppError } from "../src/utils/app-error";
@@ -113,11 +122,12 @@ async function main(): Promise<void> {
   statik();
 
   const foto = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEYS.IPLIK_ENABLED }, select: { value: true } });
+  const devereFoto = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_ENABLED }, select: { value: true } });
   const patos = await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } });
   if (!patos) throw new Error("Seed fixture eksik (PATOS)");
   const admin = await ensureTestAdmin();
   const whId = await fixtureWarehouseId();
-  const ids = { st: "", sub: "", yarn: "", lot: "", wh2: "", woIds: [] as string[], rollIds: [] as string[], dispatchIds: [] as string[] };
+  const ids = { st: "", sub: "", sub2: "", yarn: "", lot: "", wh2: "", spec: "", beamIds: [] as string[], woIds: [] as string[], rollIds: [] as string[], dispatchIds: [] as string[] };
   const sevkKaydet = (r: { data: unknown }): string => { const id = (r.data as { id: string }).id; if (!ids.dispatchIds.includes(id)) ids.dispatchIds.push(id); return id; };
   // Beklenmedik BAŞARI da temizliğe girer: sonda kapıyı düşürürse sevk doğar, kayıtsız kalırsa WO silinemez ve kalıntı büyür (ölçüldü 2026-09-15).
   const sevkHatasi = async (fn: () => Promise<{ data: unknown }>): Promise<AppError | null> => beklenenHata(async () => sevkKaydet(await fn()));
@@ -143,7 +153,7 @@ async function main(): Promise<void> {
     ids.st = st.id;
     const sub = await prisma.subcontractor.create({ data: { code: `${TAG}-F`, name: `${TAG} fasoncu` }, select: { id: true } });
     ids.sub = sub.id;
-    const yarn = await prisma.item.create({ data: { code: `${TAG}-IP`, name: `${TAG} iplik`, itemType: "YARN", unit: "KG" }, select: { id: true } });
+    const yarn = await prisma.item.create({ data: { code: `${TAG}-IP`, name: `${TAG} iplik`, itemType: "YARN", unit: "KG", linearDensityDen: 300 }, select: { id: true } });
     ids.yarn = yarn.id;
     const lot = await prisma.yarnLot.create({ data: { itemId: yarn.id, lotNo: `${TAG}-L1` }, select: { id: true } });
     ids.lot = lot.id;
@@ -213,6 +223,43 @@ async function main(): Promise<void> {
       (await pgHata(() => prisma.$executeRaw`INSERT INTO yarn_movements (id, "itemId", "warehouseId", kind, "qtyKg", "dispatchItemId") VALUES (gen_random_uuid(), ${yarn.id}::uuid, ${whId}::uuid, 'IN', 1, ${yItem.id}::uuid)`)) === "23514");
     check("§6c dönüş sebep kodsuz → 23514", (await pgHata(() => prisma.$executeRaw`INSERT INTO yarn_movements (id, "itemId", "warehouseId", kind, "qtyKg", "dispatchItemId") VALUES (gen_random_uuid(), ${yarn.id}::uuid, ${whId}::uuid, 'SUBCONTRACT_RETURN', 1, ${yItem.id}::uuid)`)) === "23514");
 
+    console.log("\n── §8 G1c sarılan levent ──");
+    await prisma.systemSetting.upsert({ where: { key: SETTING_KEYS.DEVERE_ENABLED }, create: { key: SETTING_KEYS.DEVERE_ENABLED, value: "true" }, update: { value: "true" } });
+    const spec = await prisma.warpSpec.create({ data: { code: `${TAG}-CK`, name: `${TAG} çözgü`, yarnItemId: yarn.id, endsCount: 3000 }, select: { id: true } });
+    ids.spec = spec.id;
+    const sub2 = await prisma.subcontractor.create({ data: { code: `${TAG}-F2`, name: `${TAG} başka fasoncu` }, select: { id: true } });
+    ids.sub2 = sub2.id;
+    const w8 = await yeniWo("W8");
+    const d8 = sevkKaydet(await svc.dispatch({ workOrderId: w8.woId, stepId: w8.stepId, subcontractorId: sub.id, rollIds: [], yarnLines: [{ itemId: yarn.id, warehouseId: whId, lotId: lot.id, qtyKg: 50 }] }, admin.id));
+    const y8 = (await prisma.subcontractorDispatchItem.findFirstOrThrow({ where: { dispatchId: d8, kind: SubcontractorDispatchItemKind.YARN }, select: { id: true } })).id;
+    const levent = async (fasoncu: string | null, origin: WarpBeamOrigin) => {
+      const p = await createWarpBeam({ warpSpecId: spec.id, plannedLengthM: 500, originKind: origin, subcontractorId: fasoncu });
+      ids.beamIds.push(p.data.id);
+      return p.data.id;
+    };
+    const b1 = await levent(sub.id, WarpBeamOrigin.SUBCONTRACT);
+    const wound = await windWarpBeam(b1, { lengthM: 500, kgSource: WarpKgSource.THEORETICAL, dispatchItemId: y8 }, admin.id);
+    const nominal = Number(warpTheoreticalKg(3000, 300, 500)); // 3000 × 300 × 500 / 9e6 = 50 kg
+    const ev8 = await prisma.warpBeamEvent.findFirstOrThrow({ where: { beamId: b1, kind: "WOUND" }, select: { dispatchItemId: true, theoreticalKg: true } });
+    check("§8a ⭐ WOUND olayı iplik kalemine bağlı, nominal kg 50 (3000 tel × 300 dn × 500 m / 9e6)", wound.data.status === "READY" && ev8.dispatchItemId === y8 && Number(ev8.theoreticalKg) === nominal && nominal === 50);
+    const bak8 = (await yarnAtSubcontractor(sub.id)).data.find((r) => r.lotId === lot.id)!;
+    check("§8b ⭐ bakiye: çıkış 50 · sarılan 50 (THEORETICAL beyanlı) · kalan 0 — sarılan AYRI kalem, tahmin değil", bak8.outKg === 50 && bak8.sarilanKg === 50 && bak8.sarilanKaynak === "THEORETICAL" && bak8.remainingKg === 0);
+    const dto8 = (await svc.getDispatch(d8)).data as { yarnItems: Array<{ sarilanKg: number; sarilan: Array<{ beamNo: string; kaynak: string | null }>; remainingKg: number }> };
+    check("§8b′ kalem DTO'su `sarilan[]` levent no + kaynak taşır, kalan 0", dto8.yarnItems[0]?.sarilanKg === 50 && dto8.yarnItems[0]?.sarilan.length === 1 && dto8.yarnItems[0]?.sarilan[0]?.kaynak === "THEORETICAL" && dto8.yarnItems[0]?.remainingKg === 0);
+    const b2 = await levent(sub2.id, WarpBeamOrigin.SUBCONTRACT);
+    check("§8c ⭐ başka fasoncunun leventi → 400 WARP_YARN_ITEM_MISMATCH (levent PLANNED kalır)", kod(await beklenenHata(() => windWarpBeam(b2, { lengthM: 10, kgSource: WarpKgSource.THEORETICAL, dispatchItemId: y8 }, admin.id))) === "WARP_YARN_ITEM_MISMATCH" && (await prisma.warpBeam.findUniqueOrThrow({ where: { id: b2 }, select: { status: true } })).status === "PLANNED");
+    const b3 = await levent(null, WarpBeamOrigin.IN_HOUSE);
+    check("§8d IN_HOUSE levent bağ ister → 400 WARP_YARN_ITEM_ORIGIN · ROLL/yok kalem → 400 WARP_YARN_ITEM_NOT_FOUND",
+      kod(await beklenenHata(() => windWarpBeam(b3, { lengthM: 10, kgSource: WarpKgSource.THEORETICAL, machineId: null, yarnIssues: [{ warehouseId: whId, qtyKg: 1 }], dispatchItemId: y8 }, admin.id))) === "WARP_YARN_ITEM_ORIGIN" &&
+      kod(await beklenenHata(() => windWarpBeam(b2, { lengthM: 10, kgSource: WarpKgSource.THEORETICAL, dispatchItemId: r2 }, admin.id))) === "WARP_YARN_ITEM_NOT_FOUND");
+    await cancelWound(b1, `${TAG} yanlış sarım`, admin.id);
+    const bak8e = (await yarnAtSubcontractor(sub.id)).data.find((r) => r.lotId === lot.id)!;
+    check("§8e ⭐ sarım stornosu (WOUND_CANCEL) → sarılan bakiyeden DÜŞER (kalan yeniden 50, kaynak null)", bak8e.sarilanKg === 0 && bak8e.remainingKg === 50 && bak8e.sarilanKaynak === null);
+    check("§8f DB: WOUND_CANCEL kalem bağlı → 23514 (yalnız WOUND açıldı) · fason türü bağsız → 23514 (kol korunur)",
+      (await pgHata(() => prisma.$executeRaw`INSERT INTO warp_beam_events (id, "beamId", kind, "fromStatus", "toStatus", "dispatchItemId") VALUES (gen_random_uuid(), ${b1}::uuid, 'WOUND_CANCEL', 'READY', 'CANCELLED', ${y8}::uuid)`)) === "23514" &&
+      (await pgHata(() => prisma.$executeRaw`INSERT INTO warp_beam_events (id, "beamId", kind, "fromStatus", "toStatus", "lengthM") VALUES (gen_random_uuid(), ${b1}::uuid, 'SHIP_OUT', 'READY', 'SHIPPED_OUT', 1)`)) === "23514");
+    await svc.cancel(d8, `${TAG} iptal`, admin.id);
+
     console.log("\n── §7 İplik kapalı ──");
     await prisma.systemSetting.update({ where: { key: SETTING_KEYS.IPLIK_ENABLED }, data: { value: "false" } });
     const w7 = await yeniWo("W7");
@@ -224,15 +271,16 @@ async function main(): Promise<void> {
     check("§7b ⭐ iplik kapalıyken ROLL sevki bayt bayt (tek ROLL kalemi, yarnItems boş)", ((await svc.getDispatch(d7)).data as { yarnItems: unknown[]; items: unknown[] }).yarnItems.length === 0 && ((await svc.getDispatch(d7)).data as { items: unknown[] }).items.length === 1);
     check("§7c dönüş ucu servis düzeyinde de kapalı → 403", kod(await beklenenHata(() => returnYarn(d2, { dispatchItemId: yItem.id, qtyKg: 1, reasonCode: "IPTAL" }, admin.id))) === "MODULE_DISABLED" || kod(await beklenenHata(() => returnYarn(d2, { dispatchItemId: yItem.id, qtyKg: 1, reasonCode: "IPTAL" }, admin.id))) === "DISPATCH_CANCELLED");
   } finally {
-    await temizle(ids, foto);
+    await temizle(ids, foto, devereFoto);
   }
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await pool.end();
   process.exit(fail > 0 ? 1 : 0);
 }
 
-async function temizle(ids: { st: string; sub: string; yarn: string; lot: string; wh2: string; woIds: string[]; rollIds: string[]; dispatchIds: string[] }, foto: { value: Prisma.JsonValue } | null): Promise<void> {
+async function temizle(ids: { st: string; sub: string; sub2: string; yarn: string; lot: string; wh2: string; spec: string; beamIds: string[]; woIds: string[]; rollIds: string[]; dispatchIds: string[] }, foto: { value: Prisma.JsonValue } | null, devereFoto: { value: Prisma.JsonValue } | null): Promise<void> {
   await prisma.printedDocument.deleteMany({ where: { sourceId: { in: ids.dispatchIds } } });
+  await prisma.warpBeamEvent.deleteMany({ where: { beamId: { in: ids.beamIds } } });
   if (ids.yarn) {
     await prisma.yarnMovement.deleteMany({ where: { itemId: ids.yarn } });
     await prisma.yarnStock.deleteMany({ where: { itemId: ids.yarn } });
@@ -248,13 +296,18 @@ async function temizle(ids: { st: string; sub: string; yarn: string; lot: string
   await prisma.batch.deleteMany({ where: { workOrderId: { in: ids.woIds } } });
   await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: ids.woIds } } });
   await prisma.workOrder.deleteMany({ where: { id: { in: ids.woIds } } });
+  await prisma.warpBeam.deleteMany({ where: { id: { in: ids.beamIds } } });
+  if (ids.spec) await prisma.warpSpec.deleteMany({ where: { id: ids.spec } });
+  if (ids.sub2) await prisma.subcontractor.deleteMany({ where: { id: ids.sub2 } });
   if (ids.lot) await prisma.yarnLot.deleteMany({ where: { id: ids.lot } });
   if (ids.yarn) await prisma.item.deleteMany({ where: { id: ids.yarn } });
   if (ids.sub) await prisma.subcontractor.deleteMany({ where: { id: ids.sub } });
   if (ids.st) await prisma.station.deleteMany({ where: { id: ids.st } });
-  await prisma.systemLog.deleteMany({ where: { recordId: { in: [...ids.dispatchIds, ...ids.woIds] } } });
+  await prisma.systemLog.deleteMany({ where: { recordId: { in: [...ids.dispatchIds, ...ids.woIds, ...ids.beamIds] } } });
   if (foto) await prisma.systemSetting.update({ where: { key: SETTING_KEYS.IPLIK_ENABLED }, data: { value: foto.value as Prisma.InputJsonValue } });
   else await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.IPLIK_ENABLED } });
+  if (devereFoto) await prisma.systemSetting.update({ where: { key: SETTING_KEYS.DEVERE_ENABLED }, data: { value: devereFoto.value as Prisma.InputJsonValue } });
+  else await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.DEVERE_ENABLED } });
 }
 
 main().catch(async (e) => {

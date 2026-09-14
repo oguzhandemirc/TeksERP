@@ -11,7 +11,9 @@
 // Yazıcı TEK: `yarn.service` `applyYarnMovementTx` — iplik modül kapısı ve eksi bakiye kapısı ORADA,
 // aksiyon anında (iplik KAPALI + iplik kalemi → 403 MODULE_DISABLED; top/levent yolları dokunmaz).
 // K1 (b): fasondaki iplik SANAL DEPO DEĞİLDİR — bakiye Σ(OUT − OUT_CANCEL − RETURN + RETURN_CANCEL)
-// ile kalem × lot başına türetilir (`yarnAtSubcontractor`); G1c sarılan leventi ayrı kalem düşer.
+// ile kalem × lot başına türetilir (`yarnAtSubcontractor`); G1c: fasona sardırılan leventin WOUND olayı
+// iplik kalemine bağlanır (`WarpBeamEvent.dispatchItemId`), leventin nominal kg'sı `sarilanKg` olarak AYRI
+// düşer — kaynağı beyanlı (`kgSource`: THEORETICAL/WEIGHED), storno edilmiş sarım (WOUND_CANCEL) sayılmaz.
 // Ters yol KARŞI OLAYDIR (`reverses*` bağı yok; wind servisinin `cancelWound` kalıbı): storno satırı
 // aynı depo/lot/sebep grubuna yazılır, "açık" = grubun net'i > 0. Dönüş ucu panel-yalnız (H6), token'sız
 // (`yarn.routes` create emsali); tablet yüzeyi doğarsa `clientToken` kolonu o dilimde.
@@ -228,8 +230,19 @@ export interface YarnAtSubcontractorRow {
   lotNo: string | null;
   outKg: number;
   returnedKg: number;
-  /** = çıkış − dönüş (net). G1c: sarılan leventler ayrı kalem olarak düşülür. */
+  /** G1c: bu kaleme bağlı (storno edilmemiş) WOUND olaylarının nominal kg toplamı — tahmin değil, beyanlı kaynak. */
+  sarilanKg: number;
+  /** `THEORETICAL` · `WEIGHED` · `KARMA` (iki kaynak) · null (sarım yok). */
+  sarilanKaynak: "THEORETICAL" | "WEIGHED" | "KARMA" | null;
+  /** = çıkış − dönüş − sarılan. */
   remainingKg: number;
+}
+
+type KgSourceMark = YarnAtSubcontractorRow["sarilanKaynak"];
+function mergeKgSource(cur: KgSourceMark, next: "THEORETICAL" | "WEIGHED" | null): KgSourceMark {
+  if (next === null) return cur;
+  if (cur === null || cur === next) return next;
+  return "KARMA";
 }
 
 const FASON_KINDS: YarnMovementKind[] = [YarnMovementKind.SUBCONTRACT_OUT, YarnMovementKind.SUBCONTRACT_OUT_CANCEL, YarnMovementKind.SUBCONTRACT_RETURN, YarnMovementKind.SUBCONTRACT_RETURN_CANCEL];
@@ -240,19 +253,35 @@ export async function yarnAtSubcontractor(subcontractorId: string): Promise<ApiR
     where: { kind: { in: FASON_KINDS }, dispatchItem: { dispatch: { subcontractorId, cancelledAt: null } } },
     select: { kind: true, qtyKg: true, itemId: true, item: { select: { code: true, name: true } }, dispatchItem: { select: { lotId: true, lot: { select: { lotNo: true } } } } },
   });
-  const acc = new Map<string, YarnAtSubcontractorRow & { out: Prisma.Decimal; ret: Prisma.Decimal }>();
+  // G1c: bu fasoncunun iplik kalemlerine bağlı, storno edilmemiş sarımlar (WOUND) — nominal kg, kaynağı beyanlı.
+  const wounds = await prisma.warpBeamEvent.findMany({
+    where: { kind: "WOUND", reversal: null, dispatchItem: { kind: SubcontractorDispatchItemKind.YARN, dispatch: { subcontractorId, cancelledAt: null } } },
+    select: { theoreticalKg: true, kgSource: true, dispatchItem: { select: { yarnItemId: true, lotId: true } } },
+  });
+  type Acc = YarnAtSubcontractorRow & { out: Prisma.Decimal; ret: Prisma.Decimal; sar: Prisma.Decimal };
+  const acc = new Map<string, Acc>();
+  const rowOf = (itemId: string, lotId: string | null, item: { code: string; name: string }, lotNo: string | null): Acc => {
+    const key = `${itemId}|${lotId ?? ""}`;
+    const row = acc.get(key) ?? { itemId, itemCode: item.code, itemName: item.name, lotId, lotNo, outKg: 0, returnedKg: 0, sarilanKg: 0, sarilanKaynak: null, remainingKg: 0, out: D(0), ret: D(0), sar: D(0) };
+    acc.set(key, row);
+    return row;
+  };
   for (const m of rows) {
-    const lotId = m.dispatchItem?.lotId ?? null;
-    const key = `${m.itemId}|${lotId ?? ""}`;
-    const row = acc.get(key) ?? { itemId: m.itemId, itemCode: m.item.code, itemName: m.item.name, lotId, lotNo: m.dispatchItem?.lot?.lotNo ?? null, outKg: 0, returnedKg: 0, remainingKg: 0, out: D(0), ret: D(0) };
+    const row = rowOf(m.itemId, m.dispatchItem?.lotId ?? null, m.item, m.dispatchItem?.lot?.lotNo ?? null);
     if (m.kind === YarnMovementKind.SUBCONTRACT_OUT) row.out = row.out.plus(m.qtyKg);
     else if (m.kind === YarnMovementKind.SUBCONTRACT_OUT_CANCEL) row.out = row.out.minus(m.qtyKg);
     else if (m.kind === YarnMovementKind.SUBCONTRACT_RETURN) row.ret = row.ret.plus(m.qtyKg);
     else row.ret = row.ret.minus(m.qtyKg);
-    acc.set(key, row);
+  }
+  for (const w of wounds) {
+    const key = `${w.dispatchItem?.yarnItemId}|${w.dispatchItem?.lotId ?? ""}`;
+    const row = acc.get(key);
+    if (!row) continue; // kalemin OUT satırı yoksa (iptal edilmiş sevk) sarım da bakiyeye girmez
+    row.sar = row.sar.plus(w.theoreticalKg ?? 0);
+    row.sarilanKaynak = mergeKgSource(row.sarilanKaynak, w.kgSource);
   }
   const data = [...acc.values()]
-    .map(({ out, ret, ...r }) => ({ ...r, outKg: Number(out), returnedKg: Number(ret), remainingKg: Number(out.minus(ret)) }))
+    .map(({ out, ret, sar, ...r }) => ({ ...r, outKg: Number(out), returnedKg: Number(ret), sarilanKg: Number(sar), remainingKg: Number(out.minus(ret).minus(sar)) }))
     .filter((r) => r.outKg > 0 || r.returnedKg !== 0)
     .sort((a, b) => a.itemCode.localeCompare(b.itemCode) || (a.lotNo ?? "").localeCompare(b.lotNo ?? ""));
   return { success: true, data };
@@ -267,19 +296,29 @@ export interface YarnItemDto {
   lotId: string | null;
   dispatchedKg: number;
   returnedKg: number;
+  /** G1c: bu kaleme bağlı sarımların (storno edilmemiş WOUND) nominal kg'sı; `sarilan[]` levent başına beyanlı kaynak. */
+  sarilanKg: number;
+  sarilan: Array<{ beamNo: string; kg: number; kaynak: "THEORETICAL" | "WEIGHED" | null }>;
+  /** = giden − dönen − sarılan. */
   remainingKg: number;
   returns: Array<{ movementId: string; kind: YarnMovementKind; qtyKg: number; warehouseId: string; lotId: string | null; reasonCode: string | null }>;
 }
 
 export async function listYarnItems(client: Pick<typeof prisma, "subcontractorDispatchItem">, dispatchId: string): Promise<{ items: YarnItemDto[]; yarnTotalKg: number }> {
-  const rows = await client.subcontractorDispatchItem.findMany({ where: { dispatchId, kind: SubcontractorDispatchItemKind.YARN }, select: { ...YARN_ITEM_SELECT, yarnItem: { select: { id: true, code: true, name: true } } }, orderBy: { createdAt: "asc" } });
+  const rows = await client.subcontractorDispatchItem.findMany({
+    where: { dispatchId, kind: SubcontractorDispatchItemKind.YARN },
+    select: { ...YARN_ITEM_SELECT, yarnItem: { select: { id: true, code: true, name: true } }, warpBeamEvents: { where: { kind: "WOUND", reversal: null }, select: { theoreticalKg: true, kgSource: true, beam: { select: { beamNo: true } } } } },
+    orderBy: { createdAt: "asc" },
+  });
   let total = D(0);
   const items = rows.map((r) => {
     const ret = returnedNet(r);
     total = total.plus(r.dispatchedQty);
+    const sarilan = r.warpBeamEvents.map((e) => ({ beamNo: e.beam.beamNo, kg: Number(e.theoreticalKg ?? 0), kaynak: e.kgSource }));
+    const sar = r.warpBeamEvents.reduce((a, e) => a.plus(e.theoreticalKg ?? 0), D(0));
     return {
       dispatchItemId: r.id, unit: "KG" as const, item: r.yarnItem!, warehouseId: r.warehouseId!, lotId: r.lotId,
-      dispatchedKg: Number(r.dispatchedQty), returnedKg: Number(ret), remainingKg: Number(D(r.dispatchedQty).minus(ret)),
+      dispatchedKg: Number(r.dispatchedQty), returnedKg: Number(ret), sarilanKg: Number(sar), sarilan, remainingKg: Number(D(r.dispatchedQty).minus(ret).minus(sar)),
       returns: r.yarnMovements.filter((m) => m.kind !== YarnMovementKind.SUBCONTRACT_OUT).map((m) => ({ movementId: m.id, kind: m.kind, qtyKg: Number(m.qtyKg), warehouseId: m.warehouseId, lotId: m.lotId, reasonCode: m.reasonCode })),
     };
   });

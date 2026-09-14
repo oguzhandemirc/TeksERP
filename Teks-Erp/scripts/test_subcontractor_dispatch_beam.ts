@@ -267,7 +267,8 @@ async function main(): Promise<void> {
     const d2Row = await prisma.subcontractorDispatch.findUniqueOrThrow({ where: { id: d2 }, select: { id: true } });
     check("§6a kalem XOR: kind=ROLL + warpBeamId dolu → 23514", (await pgHata(() => prisma.$executeRaw`INSERT INTO subcontractor_dispatch_items (id, "dispatchId", kind, "rollId", "warpBeamId", "dispatchedQty") VALUES (gen_random_uuid(), ${d2Row.id}::uuid, 'ROLL', ${r2}::uuid, ${b2.id}::uuid, 1)`)) === "23514");
     check("§6b kalem XOR: kind=WARP_BEAM + ikisi boş → 23514", (await pgHata(() => prisma.$executeRaw`INSERT INTO subcontractor_dispatch_items (id, "dispatchId", kind, "dispatchedQty") VALUES (gen_random_uuid(), ${d2Row.id}::uuid, 'WARP_BEAM', 1)`)) === "23514");
-    check("§6c fason türü kalem bağsız → 23514 · WOUND kalem bağlı → 23514",
+    // G1c (2026-09-15): WOUND artık bağ TAŞIYABİLİR (fasona sardırılan levent ↔ iplik kalemi); kapalı kalan kol WOUND_CANCEL ile ölçülür.
+    check("§6c fason türü kalem bağsız → 23514 · WOUND_CANCEL kalem bağlı → 23514 (WOUND dışı tür bağ taşıyamaz)",
       (await pgHata(() => prisma.$executeRaw`INSERT INTO warp_beam_events (id, "beamId", kind, "fromStatus", "toStatus", "lengthM") VALUES (gen_random_uuid(), ${b2.id}::uuid, 'SHIP_OUT', 'READY', 'SHIPPED_OUT', 1)`)) === "23514" &&
       (await pgHata(() => prisma.$executeRaw`INSERT INTO warp_beam_events (id, "beamId", kind, "fromStatus", "toStatus", "dispatchItemId") VALUES (gen_random_uuid(), ${b2.id}::uuid, 'WOUND_CANCEL', 'READY', 'CANCELLED', ${d4Item.id}::uuid)`)) === "23514");
     check("§6d kalem başına TEK SHIP_OUT → 23505", (await pgHata(() => prisma.$executeRaw`INSERT INTO warp_beam_events (id, "beamId", kind, "fromStatus", "toStatus", "lengthM", "dispatchItemId") VALUES (gen_random_uuid(), ${b1.id}::uuid, 'SHIP_OUT', 'READY', 'SHIPPED_OUT', 1, ${d4Item.id}::uuid)`)) === "23505");
