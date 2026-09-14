@@ -30,6 +30,18 @@ export const WARP_BEAM_EVENT_SELECT = {
   reason: true,
   createdById: true,
   createdAt: true,
+  // Faz 3 (tezgah bağı / tüketim)
+  mountPosition: true,
+  beamRole: true,
+  mountMethod: true,
+  setupStartedAt: true,
+  setupMinutes: true,
+  machineCounter: true,
+  lengthSource: true,
+  grossKg: true,
+  tareKg: true,
+  fabricLengthM: true,
+  clientToken: true,
   machine: { select: { id: true, code: true, name: true } },
 } satisfies Prisma.WarpBeamEventSelect;
 
@@ -49,6 +61,10 @@ export const WARP_BEAM_SELECT = {
   warpSpec: { select: { id: true, code: true, name: true, endsCount: true, yarnItem: { select: { id: true, code: true, name: true, linearDensityDen: true } } } },
   subcontractor: { select: { id: true, name: true } },
   supplier: { select: { id: true, name: true } },
+  // Faz 3: "şu an nerede" — yalnız MOUNTED'da dolu.
+  currentMachineId: true,
+  currentPosition: true,
+  currentMachine: { select: { id: true, code: true, name: true } },
   // Listede "gerçek metre / kg" WOUND satırından okunur (bir levent bir kez doğar — partial unique).
   events: { where: { kind: "WOUND" }, select: WARP_BEAM_EVENT_SELECT, take: 1 },
   // Faz 2 (lot): liste satırındaki lot özeti — yalnız lotlu çıkış satırlarının lotNo'su (allowlist: id/lotNo dışı gitmez).

@@ -126,15 +126,20 @@ describe('isSameLocalDay — "bugün sarılan" sekmesi', () => {
 });
 
 describe('STATUS_LABEL / beamActionsEnabled — fason F1: SHIPPED_OUT tablette görünür, dokunulmaz', () => {
-  it('dört durumun rozeti var; SHIPPED_OUT "Fasonda"', () => {
-    expect(Object.keys(STATUS_LABEL).sort()).toEqual(['CANCELLED', 'PLANNED', 'READY', 'SHIPPED_OUT']);
+  it('yedi durumun rozeti var (Faz 3: MOUNTED · EXHAUSTED · SCRAPPED); SHIPPED_OUT "Fasonda", MOUNTED "Tezgahta"', () => {
+    expect(Object.keys(STATUS_LABEL).sort()).toEqual(['CANCELLED', 'EXHAUSTED', 'MOUNTED', 'PLANNED', 'READY', 'SCRAPPED', 'SHIPPED_OUT']);
     expect(STATUS_LABEL.SHIPPED_OUT).toBe('Fasonda');
+    expect(STATUS_LABEL.MOUNTED).toBe('Tezgahta');
   });
   it('⭐ eylemler yalnız PLANNED/READY; fasondaki ve iptal levent kapalı (sunucu 409 WARP_BEAM_STATE verirdi)', () => {
     expect(beamActionsEnabled('PLANNED')).toBe(true);
     expect(beamActionsEnabled('READY')).toBe(true);
     expect(beamActionsEnabled('SHIPPED_OUT')).toBe(false);
     expect(beamActionsEnabled('CANCELLED')).toBe(false);
+    // Faz 3: tezgahtaki/terminal levent sarım ekranından dokunulmaz (E3 "Tezgahta" sekmesi ayrı eylem kümesi).
+    expect(beamActionsEnabled('MOUNTED')).toBe(false);
+    expect(beamActionsEnabled('EXHAUSTED')).toBe(false);
+    expect(beamActionsEnabled('SCRAPPED')).toBe(false);
   });
 });
 

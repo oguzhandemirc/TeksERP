@@ -12,7 +12,7 @@
 // • Kalan metre KOLON DEĞİL: Σ warpBeamLengthSign(kind) × lengthM.
 // • Audit tx DIŞINDA, best-effort.
 // =============================================================================
-import { Prisma, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, YarnMovementKind } from "@prisma/client";
+import { Prisma, WarpBeamOrigin, WarpBeamStatus, YarnMovementKind } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
@@ -31,111 +31,15 @@ import {
   remainingByBeam,
   resolveOriginParty,
   warpBeamRemainingM,
-  type WarpBeamEventRow,
-  type WarpBeamRow,
 } from "./helpers/warp-beam.helper";
+import { toWarpBeamDto, toWarpBeamEventDto, type WarpBeamDto, type WarpBeamEventDto } from "./helpers/warp-beam-dto.helper";
 
 const WARP_BEAM_TABLE = "WARP_BEAM";
 const WARP_BEAM_EVENT_TABLE = "WARP_BEAM_EVENT";
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
-const num = (v: Prisma.Decimal | null | undefined): number | null => (v == null ? null : Number(v));
 
-// ── DTO ────────────────────────────────────────────────────────────────────────
-export interface WarpBeamEventDto {
-  id: string;
-  kind: string;
-  reversesEventId: string | null;
-  fromStatus: WarpBeamStatus;
-  toStatus: WarpBeamStatus;
-  lengthM: number | null;
-  machine: { id: string; code: string; name: string } | null;
-  endsCount: number | null;
-  denier: number | null;
-  theoreticalKg: number | null;
-  kgSource: WarpKgSource | null;
-  sectionCount: number | null;
-  endsPerSection: number | null;
-  breakCount: number | null;
-  startedAt: Date | null;
-  reasonCode: string | null;
-  reason: string | null;
-  createdAt: Date;
-}
-
-export interface WarpBeamDto {
-  id: string;
-  beamNo: string;
-  warpSpecId: string;
-  status: WarpBeamStatus;
-  plannedLengthM: number;
-  physicalBeamNo: string | null;
-  notes: string | null;
-  originKind: WarpBeamOrigin;
-  subcontractorId: string | null;
-  supplierId: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-  warpSpec: { id: string; code: string; name: string; endsCount: number; yarnItem: { id: string; code: string; name: string; linearDensityDen: number | null } };
-  subcontractor: { id: string; name: string } | null;
-  supplier: { id: string; name: string } | null;
-  /** WOUND satırı (bir levent bir kez doğar); PLANNED/CANCELLED'da null olabilir. */
-  wound: WarpBeamEventDto | null;
-  /** Σ işaret × lengthM — Faz 1b'de WOUND − WOUND_CANCEL. */
-  remainingM: number;
-  /** Faz 2: bu levente yüklenen iplik lotları (lotNo, tekil, sıralı) — lotsuz sarılan levent boş dizi. */
-  lots: string[];
-}
-
-export function toWarpBeamEventDto(e: WarpBeamEventRow): WarpBeamEventDto {
-  return {
-    id: e.id,
-    kind: e.kind,
-    reversesEventId: e.reversesEventId,
-    fromStatus: e.fromStatus,
-    toStatus: e.toStatus,
-    lengthM: num(e.lengthM),
-    machine: e.machine,
-    endsCount: e.endsCount,
-    denier: num(e.denier),
-    theoreticalKg: num(e.theoreticalKg),
-    kgSource: e.kgSource,
-    sectionCount: e.sectionCount,
-    endsPerSection: e.endsPerSection,
-    breakCount: e.breakCount,
-    startedAt: e.startedAt,
-    reasonCode: e.reasonCode,
-    reason: e.reason,
-    createdAt: e.createdAt,
-  };
-}
-
-// Kalan metre helper'da (`warpBeamRemainingM`); burada yeniden dışa açılır (eski çağıranlar için).
-export { warpBeamRemainingM };
-
-export function toWarpBeamDto(r: WarpBeamRow, remainingM?: number): WarpBeamDto {
-  const wound = r.events[0] ?? null;
-  return {
-    id: r.id,
-    beamNo: r.beamNo,
-    warpSpecId: r.warpSpecId,
-    status: r.status,
-    plannedLengthM: Number(r.plannedLengthM),
-    physicalBeamNo: r.physicalBeamNo,
-    notes: r.notes,
-    originKind: r.originKind,
-    subcontractorId: r.subcontractorId,
-    supplierId: r.supplierId,
-    createdAt: r.createdAt,
-    updatedAt: r.updatedAt,
-    warpSpec: { ...r.warpSpec, yarnItem: { ...r.warpSpec.yarnItem, linearDensityDen: num(r.warpSpec.yarnItem.linearDensityDen) } },
-    subcontractor: r.subcontractor,
-    supplier: r.supplier,
-    wound: wound ? toWarpBeamEventDto(wound) : null,
-    // Listede WOUND tek satırdır; iptalde CANCELLED durumu kalanı 0 yapar (WOUND_CANCEL listeye çekilmez).
-    remainingM: remainingM ?? (r.status === WarpBeamStatus.READY && wound?.lengthM ? Number(wound.lengthM) : 0),
-    lots: [...new Set(r.yarnMovements.map((m) => m.lot?.lotNo).filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b, "tr")),
-  };
-}
+// DTO ve eşleyiciler `helpers/warp-beam-dto.helper.ts`te; eski çağıranlar için buradan da dışa açılır.
+export { toWarpBeamDto, toWarpBeamEventDto, warpBeamRemainingM, type WarpBeamDto, type WarpBeamEventDto };
 
 // ── LİSTE / DETAY ──────────────────────────────────────────────────────────────
 export interface WarpBeamListParams {

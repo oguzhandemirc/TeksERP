@@ -241,6 +241,13 @@ const MACHINE_DELETE_GUARDS: DependencyGuard[] = [
     message: (n) => `Bu makinede ${n} levent sarım kaydı var — kalıcı silinemez. Pasife alın.`,
   },
   {
+    // Devere Faz 3: tezgahta BAĞLI levent ("şu an ne" kolonu, FK RESTRICT) — bağlı levent varken makine
+    // silinemez; önce sökülür (söküm defter olayıdır, sessizce koparılmaz).
+    key: "mountedWarpBeamCount",
+    count: (id) => prisma.warpBeam.count({ where: { currentMachineId: id } }),
+    message: (n) => `Bu makinede ${n} bağlı levent var — önce leventleri sökün.`,
+  },
+  {
     key: "rollOperationCount",
     // ⚠️ `revokedAt` SÜZÜLMEZ — yukarıdaki istasyon guard'ıyla aynı gerekçe.
     count: (id) => prisma.rollOperation.count({ where: { machineId: id } }),

@@ -164,6 +164,10 @@ enum ReasonPresetKind {
   /// ⚠️ METİN SAKLAMAZ: `YarnMovement.reasonCode` yalnız kod (`WARP_RETURN` satırında ZORUNLU, CHECK).
   /// Aksiyon anında seçilir (DEPOYA_IADE · ATKILIK_AKTARIM · TELEF), fabrika sabiti DEĞİL (§9.7b).
   WARP_RETURN
+  /// Faz 3: levent kalan metre DÜZELTMESİ sebebi (ADJUST_IN/OUT — kod zorunlu, metin saklamaz).
+  WARP_BEAM_ADJUST
+  /// Faz 3: levent HURDA/artık dispozisyonu (SCRAPPED zorunlu, EXHAUSTED opsiyonel; telef satışı kapsam dışı).
+  WARP_BEAM_SCRAP
 }
 
 /// Çuval brüt tartısının kaynağı (`Sack.weightSource`). İÇ izdir — belgeye basılmaz.
@@ -883,6 +887,9 @@ model Station {
   /// "devere" bir tür adı olur ve ikinci bir devere istasyonu tanımlanamazdı.
   /// Yüzeyi devere modülü açıkken çizilir; kapalıyken form alanı yoktur.
   producesWarpBeam Boolean @default(false)
+  /// Faz 3: bu istasyonun makinelerine LEVENT BAĞLANIR (dokuma tezgahı / raşel). VARSAYILAN FALSE = bugün.
+  /// Yuva kapısı BUDUR; `Machine.warpBeamSlots` yalnız üst sınırdır (§9.7h).
+  consumesWarpBeam Boolean @default(false)
 
   // Relations
   machines             Machine[]
@@ -969,6 +976,7 @@ model Machine {
   workSessions   WorkSession[]
   rollsCreated   Roll[]                   @relation("RollCreatedMachine") // KK1 girişi makine atfı
   warpBeamEvents WarpBeamEvent[]          @relation("WarpBeamEventMachine") // devere: WOUND.machineId
+  mountedBeams   WarpBeam[]               @relation("WarpBeamCurrentMachine") // Faz 3: yuvadaki leventler
   /// Kurşun bypass: bu MAKİNEYE atanan işler. Atama makine bazındadır — tek
   /// PROCESS_QC istasyonu altında N fiziksel kurşun makinesi vardır.
   kursunBypasses KursunBypassAssignment[]
@@ -1540,6 +1548,28 @@ enum WarpBeamStatus {
   READY
   CANCELLED
   SHIPPED_OUT
+  /// Faz 3: tezgahta/raşelde bağlı (`currentMachineId`/`currentPosition` dolu — CHECK `warp_beams_mounted_ck`).
+  MOUNTED
+  /// Faz 3: bitti — terminal; artık (levent dibi) `EXHAUSTED` olayının `lengthM`si.
+  EXHAUSTED
+  /// Faz 3: hurdaya ayrıldı — terminal; `lengthM` = kalan, sebep zorunlu (`WARP_BEAM_SCRAP`).
+  SCRAPPED
+}
+
+/// Faz 3 — leventi tezgaha BAĞLAMA yöntemi (#16): düğüm · tahar · takım değişimi. Beyan; öneri
+/// aynı `WarpSpec`ten son sökülen levent varsa TYING_IN (istemci ipucu, zorlama değil).
+enum WarpBeamMountMethod {
+  TYING_IN
+  DRAWING_IN
+  HARNESS_CHANGE
+}
+
+/// Faz 3 — "kalan/tüketilen metre nasıl bilindi" (#14): olay üstünde KAYNAK, bayrak değil.
+enum WarpLengthSource {
+  LOOM_COUNTER
+  DIAMETER
+  WEIGHED
+  ESTIMATED
 }
 
 /// LEVENT KÖKENİ — AKSİYON ANINDA seçilir, kurulumda değil: aynı fabrika hem içeride sarar
@@ -1570,6 +1600,10 @@ model WarpBeam {
   plannedLengthM Decimal        @db.Decimal(12, 3)
   /// Metal gövde numarası — demirbaş kartı YOK (Faz 5); numarasız fabrika kayıttan düşmez.
   physicalBeamNo String?        @db.VarChar(32)
+  /// Faz 3 — "şu an nerede": yalnız MOUNTED'da dolu (CHECK `warp_beams_mounted_ck`); yuva seddi
+  /// `warp_beams_machine_position_uq` (bir yuvada tek levent). Olayla AYNI tx'te yazılır (§9.6).
+  currentMachineId String? @db.Uuid
+  currentPosition  Int?    @db.SmallInt
   notes          String?        @db.VarChar(500)
 
   /// KÖKEN ÜÇLÜSÜ — taraf kolonunun TİPİ kökene bağlı, tek kapı `resolveOriginParty` (CHECK ikinci hat):
@@ -1587,6 +1621,7 @@ model WarpBeam {
   yarnMovements YarnMovement[]
   /// Fason sevk kalemleri (F1) — fiziksel çıkış belgesi; olay defteri `SHIP_OUT` bu kaleme bağlanır.
   dispatchItems SubcontractorDispatchItem[] @relation("DispatchItemWarpBeam")
+  currentMachine Machine? @relation("WarpBeamCurrentMachine", fields: [currentMachineId], references: [id], onDelete: Restrict)
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
@@ -1597,6 +1632,7 @@ model WarpBeam {
   @@index([warpSpecId])
   @@index([subcontractorId])
   @@index([supplierId])
+  @@index([currentMachineId])
   @@map("warp_beams")
 }
 
@@ -1636,6 +1672,26 @@ model WarpBeamEvent {
   /// Kullanıcı girdisi; kronoloji `createdAt`.
   startedAt      DateTime?     @db.Timestamptz
 
+  // ── Faz 3 (tezgah bağı / tüketim) — yalnız ilgili türde dolu ──────────────────────────
+  /// MOUNTED: yuva 1..Machine.warpBeamSlots (CHECK `warp_beam_events_mounted_ck`); DISMOUNTED kopyalar.
+  mountPosition  Int?                 @db.SmallInt
+  /// Yuva rolü (zemin · hav · dolgu) — serbest metin, katalog Faz 5.
+  beamRole       String?              @db.VarChar(32)
+  mountMethod    WarpBeamMountMethod?
+  /// Bağlama başlangıcı (beyan); `setupMinutes` yoksa `setupStartedAt → createdAt` türetilir (rapor kaynağını taşır).
+  setupStartedAt DateTime?            @db.Timestamptz
+  /// Bağlama süresi (operatör BEYANI, opsiyonel — #16).
+  setupMinutes   Int?
+  /// Bağlama/söküm/tüketim anında tezgah sayacı (bilgi).
+  machineCounter Decimal?             @db.Decimal(12, 3)
+  /// CONSUMED/ADJUST/EXHAUSTED/DISMOUNTED: metre nasıl bilindi (#14).
+  lengthSource   WarpLengthSource?
+  /// WEIGHED kaynağında brüt/dara kg (#13) — dara bilinmiyorsa null, metre ESTIMATED'a düşer.
+  grossKg        Decimal?             @db.Decimal(14, 3)
+  tareKg         Decimal?             @db.Decimal(14, 3)
+  /// CONSUMED: bu tüketimde dokunan kumaş metresi (bilgi; Faz 4 rollId).
+  fabricLengthM  Decimal?             @db.Decimal(12, 3)
+
   reasonCode  String?  @db.VarChar(64)
   /// Gerekçe kolona yazılır, audit'e değil.
   reason      String?  @db.VarChar(300)
@@ -1652,6 +1708,7 @@ model WarpBeamEvent {
   @@index([machineId, createdAt])
   @@index([kind, createdAt])
   @@index([dispatchItemId])
+  @@index([beamId, kind, createdAt])
   @@map("warp_beam_events")
 }
 

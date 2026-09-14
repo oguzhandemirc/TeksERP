@@ -105,6 +105,13 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "MODULE_DISABLED(iplik) verir (§4d); fason/hazır alım sarımı iplik satırı yazmaz. Route kapısı EKLENEMEZ.",
   },
   {
+    dosya: "routes/warp-beam-mount.routes.ts",
+    neden:
+      "LEVENT TEZGAH BAĞI (devere Faz 3) — `warp-beam.routes.ts`in ALT yönlendiricisi, aynı `requireDevereEnabled` " +
+      "kapısının ardında takılıdır. İplik dokunuşu SALT-OKUMADIR: levent DTO'su (`WARP_BEAM_SELECT`) lot listesini " +
+      "yarnMovements'tan okur; tak/sök/tüket/bitir/hurda iplik defterine YAZMAZ (kg zaten sarımda düştü).",
+  },
+  {
     dosya: "routes/finance.routes.ts",
     neden:
       "ÖN MUHASEBE. Kendi rejim kapısını taşır (`requireFinanceEnabled`). İplik dokunuşu " +

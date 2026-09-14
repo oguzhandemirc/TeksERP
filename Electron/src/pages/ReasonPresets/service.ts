@@ -16,7 +16,10 @@ export type ReasonPresetKind =
   | "WORK_ORDER_REWORK"
   | "ORDER_CANCEL"
   | "MACHINE_STOP"
-  | "WARP_RETURN";
+  | "WARP_RETURN"
+  // Faz 3 (devere): kalan düzeltmesi · hurda/artık dispozisyonu
+  | "WARP_BEAM_ADJUST"
+  | "WARP_BEAM_SCRAP";
 
 export interface ReasonPreset {
   id: string;
@@ -66,6 +69,8 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
   // kayıp sınıfı preset'ten kopyalanıp donar. Sunucu tablosuyla birebir.
   MACHINE_STOP: false,
   WARP_RETURN: false,
+  WARP_BEAM_ADJUST: false,
+  WARP_BEAM_SCRAP: false,
 };
 
 /**
@@ -118,6 +123,18 @@ export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; m
     kind: "WARP_RETURN",
     title: "Levent Dibi İadesi",
     hint: "Sarım bitince bobinde kalan iplik nereye gitti: depoya iade, atkılığa aktarım, telef. Her iade satırında sebep ZORUNLUDUR (brüt çıkış + ayrı iade).",
+    modul: "devereEnabled",
+  },
+  {
+    kind: "WARP_BEAM_ADJUST",
+    title: "Levent Kalan Düzeltmesi",
+    hint: "Leventte kalan metre elle düzeltilirken (+/−) sebep ZORUNLUDUR — sayaç yanlış, ölçüm farkı, kayıt hatası. Yanlış düzeltme silinmez, karşı düzeltmeyle kapanır.",
+    modul: "devereEnabled",
+  },
+  {
+    kind: "WARP_BEAM_SCRAP",
+    title: "Levent Hurda / Artık",
+    hint: "Levent hurdaya ayrılırken sebep ZORUNLU, bittiğinde (levent dibi) isteğe bağlı dispozisyon: telef, atkılığa aktarım, kopuk çözgü, yanlış sarım. Telef satışı kapsam dışıdır.",
     modul: "devereEnabled",
   },
 ];

@@ -265,6 +265,8 @@ export const updateSchema = z.strictObject({
   tezgahEnabled: z.boolean().optional(),
   devereEnabled: z.boolean().optional(),
   devereLotRequired: z.boolean().optional(),
+  devereMountTracking: z.boolean().optional(),
+  devereMountTrackingRequired: z.boolean().optional(),
   dokumaEnabled: z.boolean().optional(),
   targetQuantityEnabled: z.boolean().optional(),
   rawWidthEnabled: z.boolean().optional(),

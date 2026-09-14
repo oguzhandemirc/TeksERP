@@ -437,6 +437,15 @@ const PARTIAL_INDEXES: Array<{
     predicate: `((kind)::text = 'SHIP_OUT'::text)`,
     why: "kalem başına TEK SHIP_OUT — aynı levent aynı sevkten iki kez çıkamaz",
   },
+  // Faz 3 (2026-09-14, migration 20260914180200): bir yuvada tek BAĞLI levent; yüklem yalnız MOUNTED
+  // (sökülen levent yuvayı bırakır, kolonlar NULL'lanır — `warp_beams_mounted_ck` ikiliyi bağlar).
+  {
+    table: "warp_beams",
+    index: "warp_beams_machine_position_uq",
+    uniq: true,
+    predicate: `(status = 'MOUNTED'::"WarpBeamStatus")`,
+    why: "makine × yuva başına TEK bağlı levent — yarışta P2002 → 409 WARP_SLOT_BUSY (ikinci hat)",
+  },
   {
     table: "machine_stop_events",
     index: "machine_stops_one_open_per_machine_uq",
@@ -505,6 +514,11 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "warp_beam_events", name: "warp_beam_events_wound_facts_ck" },
   // F1 (2026-09-14, migration 20260914171000): fason türü ⇔ kalem bağı (iki yönlü) · kalem tür ⇔ bağ XOR'u.
   { table: "warp_beam_events", name: "warp_beam_events_fason_item_ck" },
+  // Faz 3 (2026-09-14, migration 20260914180200): MOUNTED ⇔ (makine ∧ yuva) durum kolonunda ve olayda; yuva ≥ 1; kurulum dk ≥ 0.
+  { table: "warp_beams", name: "warp_beams_mounted_ck" },
+  { table: "warp_beam_events", name: "warp_beam_events_mounted_ck" },
+  { table: "warp_beam_events", name: "warp_beam_events_mount_position_positive" },
+  { table: "warp_beam_events", name: "warp_beam_events_setup_minutes_nonneg" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_kind_ref_ck" },
   // G2 fason dokuma (2026-09-14): başlık iş emri adımı XOR dokuma işi — birincil kapı serviste
   { table: "subcontractor_dispatches", name: "subcontractor_dispatches_header_ck" },
@@ -699,8 +713,8 @@ const EXPRESSION_UNIQUES: Array<{ table: string; index: string; expr: string; pr
     table: "warp_beams",
     index: "warp_beams_physical_live_uq",
     expr: 'tr_fold("physicalBeamNo")',
-    predicate: `((status = ANY (ARRAY['READY'::"WarpBeamStatus", 'SHIPPED_OUT'::"WarpBeamStatus"])) AND ("physicalBeamNo" IS NOT NULL))`,
-    why: "bir metal gövdede iki CANLI çözgü olmaz (devere 1b; F1: fasondaki çözgü de gövdeyi işgal eder; MOUNTED Faz 3'te yükleme eklenir)",
+    predicate: `((status = ANY (ARRAY['READY'::"WarpBeamStatus", 'SHIPPED_OUT'::"WarpBeamStatus", 'MOUNTED'::"WarpBeamStatus"])) AND ("physicalBeamNo" IS NOT NULL))`,
+    why: "bir metal gövdede iki CANLI çözgü olmaz (devere 1b; F1: fasondaki çözgü de gövdeyi işgal eder; Faz 3: tezgahtaki de)",
   },
   { table: "permission_templates", index: "permission_templates_name_lower_uq", expr: "lower(name)" },
   {

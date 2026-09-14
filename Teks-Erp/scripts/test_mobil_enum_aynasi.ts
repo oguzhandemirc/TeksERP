@@ -174,6 +174,8 @@ const MOBILDE_BEKLENEN: Record<string, string> = {
   WarpBeamStatus: "devere tablet dilimiyle aynalandı (2026-09-14)",
   WarpBeamOrigin: "devere tablet dilimiyle aynalandı (2026-09-14)",
   WarpKgSource: "devere tablet dilimiyle aynalandı (2026-09-14)",
+  WarpBeamMountMethod: "devere Faz 3 tezgah bağı (2026-09-14, 6e) — tablet Tak formu yöntem beyanı",
+  WarpLengthSource: "devere Faz 3 tezgah bağı (2026-09-14, 6e) — tüketim/söküm/bitiş ölçüm kaynağı",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

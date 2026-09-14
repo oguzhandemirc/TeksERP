@@ -20,10 +20,13 @@ import { readFilterList } from "../utils/query-parser";
 import { createWarpBeam, deleteWarpBeamDraft, getWarpBeam, listDevereMachines, listWarpBeams, updateWarpBeam } from "../services/warp-beam.service";
 import { getWarpBeamTabletContext } from "../services/warp-beam-tablet.service";
 import { cancelWound, cancelWoundPreview, windWarpBeam } from "../services/warp-beam-wind.service";
+import warpBeamMountRoutes from "./warp-beam-mount.routes";
 import "../types/express-augment";
 
 const router = Router();
 router.use(verifyToken, requireDevereEnabled);
+// Faz 3 tezgah bağı uçları — aynı üç kapının ARDINDA; `/mounted/:machineId` `/:id`den önce eşleşmeli.
+router.use("/", warpBeamMountRoutes);
 
 // Tablet: plan/sar/taslak-sil ekran izniyle, iptal yetenek izniyle (dokuma emsali).
 const MOBILE_DEVERE = ["mobile:devere"] as const;

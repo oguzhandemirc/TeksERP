@@ -46,6 +46,11 @@ import prisma from "../src/lib/prisma";
 import { LEDGER_HORIZON_DAY } from "../src/constants/ledger-horizon";
 import { DISPOSITION_NOTE_PREFIXES } from "../src/services/helpers/roll-disposition.helper";
 import { chequeCashEventTypesSql, chequeCashInflowSql } from "../src/services/helpers/cheque-cash-events.helper";
+import { ACTIVE_FORWARD_EVENT_SQL } from "../src/services/helpers/warp-beam-mount.helper";
+import { WARP_BEAM_EVENT_KINDS, WARP_BEAM_STATUS_EVENT_KINDS, warpBeamLengthSign } from "../src/constants/warp-beam";
+// Faz 3 boğaz-ikizleri: işaret tablosu ve durum olayı kümesi TS sabitinden türetilir (elle kopya yok).
+const WARP_BEAM_STATUS_KINDS_SQL = WARP_BEAM_STATUS_EVENT_KINDS.map((k) => `'${k}'`).join(",");
+const WARP_BEAM_SIGN_SQL = `CASE WHEN e.kind IN (${WARP_BEAM_EVENT_KINDS.filter((k) => warpBeamLengthSign(k) === 1).map((k) => `'${k}'`).join(",")}) THEN 1 WHEN e.kind IN (${WARP_BEAM_EVENT_KINDS.filter((k) => warpBeamLengthSign(k) === -1).map((k) => `'${k}'`).join(",")}) THEN -1 ELSE 0 END`;
 
 const CHEQUE_CASH_TYPES = chequeCashEventTypesSql();
 const CHEQUE_CASH_INFLOW = chequeCashInflowSql("e");
@@ -911,6 +916,41 @@ FROM yarn_movements m JOIN yarn_lots l ON l.id = m."lotId"
 GROUP BY l.id, l."lotNo", m."warehouseId"
 HAVING SUM(CASE WHEN m.kind IN (${YARN_INBOUND_SQL}) THEN m."qtyKg" ELSE -m."qtyKg" END) < 0`,
     kapsam: { ne: "lotlu iplik hareketi", sql: `SELECT COUNT(*)::int AS n FROM yarn_movements WHERE "lotId" IS NOT NULL` },
+  },
+  // ── Devere Faz 3 — TEZGAH BAĞI (§42–§44). Durum kolonu "şu an ne", defter "ne oldu": ikisi LIFO
+  // kuralıyla bağlıdır (aktif son durum olayının toStatus'u = durum). Kalan metre kolon değil, türetilir.
+  {
+    id: "42",
+    title: "Levent: durum/yuva kolonu ≠ en yeni aktif DURUM olayının toStatus/makine/yuva (LIFO — `activeForwardStatusEventTx` SQL ikizi)",
+    sql: `
+WITH e AS (${ACTIVE_FORWARD_EVENT_SQL})
+SELECT b."beamNo", b.status::text AS durum, e.kind AS son_olay, e."toStatus"::text AS olay_durumu,
+       b."currentMachineId"::text AS kolon_makine, e."machineId"::text AS olay_makine, b."currentPosition" AS kolon_yuva, e."mountPosition" AS olay_yuva
+FROM warp_beams b JOIN e ON e."beamId" = b.id
+WHERE b.status <> e."toStatus"
+   OR (b.status = 'MOUNTED' AND (b."currentMachineId" IS DISTINCT FROM e."machineId" OR b."currentPosition" IS DISTINCT FROM e."mountPosition"))`,
+    kapsam: { ne: "durum olaylı levent", sql: `SELECT COUNT(DISTINCT "beamId")::int AS n FROM warp_beam_events WHERE kind IN (${WARP_BEAM_STATUS_KINDS_SQL})` },
+  },
+  {
+    id: "43",
+    title: "Levent: türetilen kalan metre EKSİ (Σ işaret × lengthM < 0 — `assertCoversRemaining` tek kapısının ikinci hattı)",
+    sql: `
+SELECT b."beamNo", b.status::text AS durum, SUM(${WARP_BEAM_SIGN_SQL} * COALESCE(e."lengthM", 0))::text AS kalan
+FROM warp_beams b JOIN warp_beam_events e ON e."beamId" = b.id
+GROUP BY b.id, b."beamNo", b.status
+HAVING SUM(${WARP_BEAM_SIGN_SQL} * COALESCE(e."lengthM", 0)) < 0`,
+    kapsam: { ne: "olaylı levent", sql: `SELECT COUNT(DISTINCT "beamId")::int AS n FROM warp_beam_events` },
+  },
+  {
+    id: "44",
+    title: "Levent: terminal (EXHAUSTED/SCRAPPED) leventte kalan ≠ 0 (bitiş/hurda satırı kalanı sıfırlar; ölçülen artık önce kapatılır)",
+    sql: `
+SELECT b."beamNo", b.status::text AS durum, SUM(${WARP_BEAM_SIGN_SQL} * COALESCE(e."lengthM", 0))::text AS kalan
+FROM warp_beams b JOIN warp_beam_events e ON e."beamId" = b.id
+WHERE b.status IN ('EXHAUSTED', 'SCRAPPED')
+GROUP BY b.id, b."beamNo", b.status
+HAVING SUM(${WARP_BEAM_SIGN_SQL} * COALESCE(e."lengthM", 0)) <> 0`,
+    kapsam: { ne: "terminal levent", sql: `SELECT COUNT(*)::int AS n FROM warp_beams WHERE status IN ('EXHAUSTED','SCRAPPED')` },
   },
   {
     id: "27",

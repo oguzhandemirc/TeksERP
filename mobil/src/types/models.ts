@@ -123,9 +123,13 @@ export type MachineDataSource =
 // (2026-09-14, devere tablet dilimi — DEVERE-LEVENT-TARAMASI §11 F). `test_mobil_enum_aynasi`
 // iki yönlü ölçer. CANCELLED terminaldir (PLANNED'a dönüş yok). SHIPPED_OUT (fason F1) terminal
 // DEĞİL: fasondan dönüşle READY'ye gelir — tablette "Fasonda" rozeti, eylemler kapalı.
-export type WarpBeamStatus = 'PLANNED' | 'READY' | 'SHIPPED_OUT' | 'CANCELLED';
+// Faz 3 (tezgah bağı): MOUNTED tezgahta (sök/tüket/bitir), EXHAUSTED · SCRAPPED terminal.
+export type WarpBeamStatus = 'PLANNED' | 'READY' | 'SHIPPED_OUT' | 'MOUNTED' | 'EXHAUSTED' | 'SCRAPPED' | 'CANCELLED';
 export type WarpBeamOrigin = 'IN_HOUSE' | 'SUBCONTRACT' | 'PURCHASED';
 export type WarpKgSource = 'WEIGHED' | 'THEORETICAL';
+// Backend `WarpBeamMountMethod` · `WarpLengthSource` aynası (devere Faz 3, DEVERE-LEVENT-TARAMASI §4.1).
+export type WarpBeamMountMethod = 'TYING_IN' | 'DRAWING_IN' | 'HARNESS_CHANGE';
+export type WarpLengthSource = 'LOOM_COUNTER' | 'DIAMETER' | 'WEIGHED' | 'ESTIMATED';
 
 // =============================================================================
 // Master data — Color, FabricProperty

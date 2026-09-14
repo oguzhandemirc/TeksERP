@@ -30,6 +30,7 @@ import { isClientTokenP2002, p2002Mentions } from "../utils/p2002";
 import { assertMachineRunReplayAlive } from "./helpers/token-replay.helper";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { assertProductionLineFree, resolveOpenContext, resolveRunStamp } from "./helpers/machine-run-open.helper";
+import { runOpenBeamWarning } from "./helpers/warp-beam-mount.helper";
 import { markWeavingOrderInProgressTx } from "./helpers/weaving-order.helper";
 import type { ApiResponse } from "../types/api.types";
 
@@ -153,6 +154,8 @@ export async function openMachineRun(
   const started = resolveRunStamp(input.startedAt, "başlangıç zamanı");
   const warnings = started.warning ? [started.warning] : [];
   await assertProductionLineFree(machine, input.productionLineNo, started.value);
+  const beamWarning = await runOpenBeamWarning(prisma, machine.id);
+  if (beamWarning) warnings.push(beamWarning);
 
   let created: MachineRunDto;
   let orderTransitioned = false;

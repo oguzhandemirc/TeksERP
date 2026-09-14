@@ -74,6 +74,9 @@ export const KIND_STORES_TEXT = {
   MACHINE_STOP: false,
   // Levent dibi iadesinde satıra YALNIZ KOD yazılır (`YarnMovement.reasonCode`); metin yok.
   WARP_RETURN: false,
+  // Faz 3: levent kalan düzeltmesi / hurda-artık dispozisyonu — satıra KOD (`WarpBeamEvent.reasonCode`), gerekçe `reason` kolonunda.
+  WARP_BEAM_ADJUST: false,
+  WARP_BEAM_SCRAP: false,
   // `as const satisfies` — değerler LİTERAL kalsın (true/false), ama eksik kind
   // yine derlemede düşsün. `Record<..., boolean>` yazılsaydı literaller boolean'a
   // genişler ve `TextReasonKind` bu tablodan TÜRETİLEMEZDİ (aşağıdaki nota bak).
@@ -89,6 +92,8 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   ORDER_CANCEL: "Sipariş iptal sebepleri",
   MACHINE_STOP: "Tezgah duruş sebepleri",
   WARP_RETURN: "Levent dibi iade sebepleri",
+  WARP_BEAM_ADJUST: "Levent kalan düzeltmesi sebepleri",
+  WARP_BEAM_SCRAP: "Levent hurda / artık dispozisyonu",
 };
 
 /**
@@ -264,6 +269,21 @@ export const WARP_RETURN_REASONS: readonly ReasonPresetSeed[] = [
   { code: "TELEF", label: "Telef (dip kullanılamaz, fire)" },
 ] as const;
 
+/** Faz 3 — kalan metre düzeltmesi: ölçüm yolu değişti / sayaç yanlış / çap ölçümü / tartı. */
+export const WARP_BEAM_ADJUST_REASONS: readonly ReasonPresetSeed[] = [
+  { code: "SAYAC_DUZELTME", label: "Tezgah sayacı yanlıştı (yeniden okundu)" },
+  { code: "OLCUM_FARKI", label: "Ölçüm farkı (çap / tartı ile yeniden hesap)" },
+  { code: "KAYIT_HATASI", label: "Kayıt hatası (tüketim yanlış girildi)" },
+] as const;
+
+/** Faz 3 — levent dibi / hurda dispozisyonu (#15). Telef satışı kod olarak YOK — kapsam dışı. */
+export const WARP_BEAM_SCRAP_REASONS: readonly ReasonPresetSeed[] = [
+  { code: "DIP_TELEF", label: "Levent dibi telef (kullanılamaz artık)" },
+  { code: "DIP_ATKILIK", label: "Levent dibi atkılığa aktarıldı" },
+  { code: "KOPUK_COZGU", label: "Kopuk / bozuk çözgü (dokunamaz)" },
+  { code: "YANLIS_SARIM", label: "Yanlış sarım (kart uyuşmuyor)" },
+] as const;
+
 /** Kind → sistem satırları. Sıra ANLAMLIDIR (dizideki sıra `sortOrder` olur). */
 export const REASON_PRESET_CATALOG: Record<ReasonPresetKind, readonly ReasonPresetSeed[]> = {
   ROLL_SCRAP: SCRAP_REASONS,
@@ -274,6 +294,8 @@ export const REASON_PRESET_CATALOG: Record<ReasonPresetKind, readonly ReasonPres
   ORDER_CANCEL: ORDER_CANCEL_REASONS,
   MACHINE_STOP: MACHINE_STOP_REASONS,
   WARP_RETURN: WARP_RETURN_REASONS,
+  WARP_BEAM_ADJUST: WARP_BEAM_ADJUST_REASONS,
+  WARP_BEAM_SCRAP: WARP_BEAM_SCRAP_REASONS,
 };
 
 export const REASON_PRESET_KINDS = Object.keys(REASON_PRESET_CATALOG) as ReasonPresetKind[];

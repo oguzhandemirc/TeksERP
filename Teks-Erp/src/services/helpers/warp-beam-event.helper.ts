@@ -30,12 +30,25 @@ export async function logWarpBeamEventAudit(input: { userId?: string; eventId: s
 
 export async function applyWarpBeamEventTx(
   tx: Prisma.TransactionClient,
-  input: { beamId: string; kind: WarpBeamEventKind; from: WarpBeamStatus; to: WarpBeamStatus; data: Omit<Prisma.WarpBeamEventUncheckedCreateInput, "beamId" | "kind" | "fromStatus" | "toStatus"> },
+  input: {
+    beamId: string;
+    kind: WarpBeamEventKind;
+    from: WarpBeamStatus;
+    to: WarpBeamStatus;
+    data: Omit<Prisma.WarpBeamEventUncheckedCreateInput, "beamId" | "kind" | "fromStatus" | "toStatus">;
+    /** Faz 3: durum kolonları OLAYLA AYNI claim ifadesinde yazılır/temizlenir (§9.6). Verilmezse dokunulmaz. */
+    place?: { currentMachineId: string | null; currentPosition: number | null };
+    /** Faz 3: claim yalnız `from` değil, bağlı makineyi de kilitler (söküm/tüketim yanlış makineden yazılmasın). */
+    whereMachineId?: string | null;
+  },
 ): Promise<WarpBeamEventRow> {
   if (!(await readDevereEnabled(tx))) {
     throw AppError.forbidden("Devere modülü bu kurulumda kapalı — levent defterine yazılamaz. Sistem → Modüller bölümünden açılabilir.", { code: "MODULE_DISABLED", modul: "devere" });
   }
-  const claim = await tx.warpBeam.updateMany({ where: { id: input.beamId, status: input.from }, data: { status: input.to } });
+  const claim = await tx.warpBeam.updateMany({
+    where: { id: input.beamId, status: input.from, ...(input.whereMachineId !== undefined ? { currentMachineId: input.whereMachineId } : {}) },
+    data: { status: input.to, ...(input.place ?? {}) },
+  });
   if (claim.count === 0) {
     const fresh = await tx.warpBeam.findUnique({ where: { id: input.beamId }, select: { status: true, beamNo: true } });
     if (!fresh) throw AppError.notFound("Levent bulunamadı");

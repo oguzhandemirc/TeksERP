@@ -103,13 +103,16 @@ export async function resolveOpenContext(input: {
  * edilen başlangıçtan SONRA bitmiş koşum 409 `PRODUCTION_LINE_OVERLAP`
  * (randımanın paydası çift sayılmasın; exclusion seddi yok, uygulama kontrolü).
  */
+/** AÇIK koşum yüklemi — TEK KAYNAK (partial unique `machine_runs_one_open_per_prod_line_uq` ile aynı); levent söküm kapısı da bunu okur. */
+export const OPEN_MACHINE_RUN_WHERE = { endedAt: null, revokedAt: null } as const;
+
 export async function assertProductionLineFree(
   machine: { id: string; code: string },
   productionLineNo: number,
   startedAt: Date,
 ): Promise<void> {
   const occupant = await prisma.machineRun.findFirst({
-    where: { machineId: machine.id, productionLineNo, endedAt: null, revokedAt: null },
+    where: { machineId: machine.id, productionLineNo, ...OPEN_MACHINE_RUN_WHERE },
     select: { id: true, startedAt: true },
   });
   if (occupant) {

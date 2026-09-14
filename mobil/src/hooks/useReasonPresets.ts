@@ -86,7 +86,9 @@ function builtin(kind: ReasonPresetKind): ReasonPreset[] {
       // istemci gönderir. Sunucusuzken boş dönse sebep zorunlu karar kilitlenirdi (`test_loom_stop_zemin`).
       return LOOM_STOP_REASONS.map((r) => mk(r.code, r.label));
     case 'WARP_RETURN':
-      // Devere tablet ekranı (2026-09-14) sebep kodunu katalogdan seçer; sunucusuzken sarım
+    case 'WARP_BEAM_ADJUST':
+    case 'WARP_BEAM_SCRAP':
+      // Devere tablet ekranı (2026-09-14) sebep kodunu katalogdan seçer; sunucusuzken sarım/söküm
       // zaten yapılamaz (online-only, kuyruk yok) — gömülü zemin bir karar korumaz, BOŞ kalır.
       return [];
   }
@@ -101,6 +103,8 @@ const BUILTIN: Record<ReasonPresetKind, ReasonPreset[]> = {
   ORDER_CANCEL: builtin('ORDER_CANCEL'),
   MACHINE_STOP: builtin('MACHINE_STOP'),
   WARP_RETURN: builtin('WARP_RETURN'),
+  WARP_BEAM_ADJUST: builtin('WARP_BEAM_ADJUST'),
+  WARP_BEAM_SCRAP: builtin('WARP_BEAM_SCRAP'),
 };
 
 /** Gömülü satır düzenlenemez — henüz sunucudan okunmamış bir zemindir. */

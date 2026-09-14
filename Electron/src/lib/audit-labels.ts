@@ -632,6 +632,18 @@ export const ENUM_LABELS: Record<string, string> = {
   WARP_ISSUE_REVERSAL: "Çözgü çıkışı iptali",
   WARP_RETURN: "Levent dibi iadesi",
   WARP_RETURN_REVERSAL: "Levent dibi iadesi iptali",
+  // Devere Faz 3 (2026-09-14): levent durumları · bağlama yöntemi · metre kaynağı · sebep katalogları
+  MOUNTED: "Tezgahta (bağlı)",
+  EXHAUSTED: "Bitti (levent dibi)",
+  SCRAPPED: "Hurdaya ayrıldı",
+  TYING_IN: "Düğüm",
+  DRAWING_IN: "Tahar",
+  HARNESS_CHANGE: "Takım değişimi",
+  LOOM_COUNTER: "Tezgah sayacı",
+  DIAMETER: "Çap ölçümü",
+  ESTIMATED: "Tahmin",
+  WARP_BEAM_ADJUST: "Levent kalan düzeltmesi",
+  WARP_BEAM_SCRAP: "Levent hurda / artık",
   // ───────────────────────────────────────────────────────────────────────
   // TİCARET PAKETİ ENUM DEĞERLERİ (merge, 2026-09-01)
   // Bekçi `test_audit_labels` §4 her Prisma enum değerinin Türkçesini ister;

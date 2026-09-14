@@ -212,6 +212,12 @@ export const SETTING_KEYS = {
    *  ZORUNLU mu. DEFAULT false = bugünkü davranış (lot kaydı bayraksız her kurulumda mümkün,
    *  lotsuz satır yalnız UYARI). Davranış bayrağı — profile/modül tablosuna GİRMEZ. */
   DEVERE_LOT_REQUIRED: "devere.lotRequired",
+  /** [PROFİL] Devere Faz 3: levent TEZGAH BAĞI defteri (tak · sök · tüket · düzelt · bitir · hurda).
+   *  DEFAULT false = bugünkü davranış: levent READY'de kalır, tezgah bağı yok; uçlar 409
+   *  `WARP_MOUNT_TRACKING_OFF` (durum, yetki değil). Davranış bayrağı — profile/modül tablosuna GİRMEZ. */
+  DEVERE_MOUNT_TRACKING: "devere.mountTracking",
+  /** [PROFİL] Devere Faz 3 (#16): bağlamada yöntem + başlangıç saati ZORUNLU mu. DEFAULT false. */
+  DEVERE_MOUNT_TRACKING_REQUIRED: "devere.mountTrackingRequired",
   /** Dokuma işi modülü: dokuma işi planlama · tezgah koşumu · top indirme.
    *  ÜRETİME BAĞIMLI (`MODULE_DEPENDENCIES`), tezgah izlemenin KARDEŞİ — fasona
    *  dokutan firmada dokuma işi var tezgah yok (DOKUMA-IS-EMRI §2.5). */
@@ -1404,6 +1410,10 @@ export interface FeatureFlags {
   /** Devere Faz 2: lot zorunluluğu (içeride sarım iplik çıkışı + mal kabul iplik satırı). Varsayılan KAPALI =
    *  bugünkü davranış: lotsuz satır yazılır, yalnız uyarı üretir. */
   devereLotRequired: boolean;
+  /** Devere Faz 3: tezgah bağı defteri açık mı (varsayılan KAPALI = levent READY'de kalır). */
+  devereMountTracking: boolean;
+  /** Devere Faz 3: bağlamada yöntem + başlangıç zorunlu mu (varsayılan KAPALI). */
+  devereMountTrackingRequired: boolean;
   /** Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme).
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI: bu alan HAM değerdir; etkin değer
    *  `production && dokuma` ve kapının içinde çözülür. */
@@ -1817,6 +1827,8 @@ export class SystemSettingService {
       tezgahEnabled: await readTezgahEnabled(cacheClient),
       devereEnabled: await readDevereEnabled(cacheClient),
       devereLotRequired: await readDevereLotRequired(cacheClient),
+      devereMountTracking: await readDevereMountTracking(cacheClient),
+      devereMountTrackingRequired: await readDevereMountTrackingRequired(cacheClient),
       dokumaEnabled: await readDokumaEnabled(cacheClient),
       targetQuantityEnabled: await readTargetQuantityEnabled(cacheClient),
       rawWidthEnabled: await readRawWidthEnabled(cacheClient),
@@ -2288,6 +2300,18 @@ export class SystemSettingService {
         "Devere: içeride sarımda ve mal kabul iplik satırında lot zorunlu",
         userId
       );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "devereMountTracking")) {
+      if (typeof input.devereMountTracking !== "boolean") {
+        throw AppError.badRequest("devereMountTracking boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.DEVERE_MOUNT_TRACKING, input.devereMountTracking, "Devere: levent tezgah bağı defteri (tak · sök · tüket · bitir)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "devereMountTrackingRequired")) {
+      if (typeof input.devereMountTrackingRequired !== "boolean") {
+        throw AppError.badRequest("devereMountTrackingRequired boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.DEVERE_MOUNT_TRACKING_REQUIRED, input.devereMountTrackingRequired, "Devere: bağlamada yöntem ve başlangıç saati zorunlu", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "dokumaEnabled")) {
@@ -3701,6 +3725,21 @@ export async function readDevereLotRequired(
     where: { key: SETTING_KEYS.DEVERE_LOT_REQUIRED },
     select: { value: true },
   });
+  return asBoolean(setting?.value);
+}
+
+/** Devere Faz 3: tezgah bağı defteri açık mı? Default FALSE (satır yoksa levent READY'de kalır — bugünkü davranış).
+ *  Enforcement reader: cache'siz, aksiyon anında. */
+export async function readDevereMountTracking(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_MOUNT_TRACKING }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
+
+/** Devere Faz 3: bağlamada yöntem + başlangıç zorunlu mu? Default FALSE. */
+export async function readDevereMountTrackingRequired(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_MOUNT_TRACKING_REQUIRED }, select: { value: true } });
   return asBoolean(setting?.value);
 }
 

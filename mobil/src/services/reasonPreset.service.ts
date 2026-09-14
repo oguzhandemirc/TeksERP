@@ -30,7 +30,9 @@ export type ReasonPresetKind =
    * sunucu erişilemezse çevrimdışı zemin `constants/loomStopReasons.ts`.
    */
   | 'MACHINE_STOP'
-  | 'WARP_RETURN';
+  | 'WARP_RETURN'
+  | 'WARP_BEAM_ADJUST'
+  | 'WARP_BEAM_SCRAP';
 
 export interface ReasonPreset {
   id: string;
@@ -66,6 +68,8 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
   // kopyalanıp donar. Sunucudaki tabloyla birebir.
   MACHINE_STOP: false,
   WARP_RETURN: false,
+  WARP_BEAM_ADJUST: false,
+  WARP_BEAM_SCRAP: false,
 };
 
 export const KIND_LABELS: Record<ReasonPresetKind, string> = {
@@ -77,6 +81,8 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   ORDER_CANCEL: 'Sipariş iptal sebepleri',
   MACHINE_STOP: 'Tezgah duruş sebepleri',
   WARP_RETURN: 'Levent dibi iade sebepleri',
+  WARP_BEAM_ADJUST: 'Levent kalan düzeltmesi sebepleri',
+  WARP_BEAM_SCRAP: 'Levent hurda / artık dispozisyonu',
 };
 
 export const reasonPresetService = {

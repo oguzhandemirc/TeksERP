@@ -509,5 +509,31 @@ FROM yarn_movements m JOIN yarn_lots l ON l.id = m."lotId"
 GROUP BY l.id, l."lotNo", m."warehouseId"
 HAVING SUM(CASE WHEN m.kind IN ('IN','ADJUST_IN','WARP_ISSUE_REVERSAL','WARP_RETURN') THEN m."qtyKg" ELSE -m."qtyKg" END) < 0;
 
+\echo '== 42) LEVENT Faz 3 — durum/yuva kolonu ≠ en yeni aktif DURUM olayı (LIFO; beklenen 0) =='
+WITH e AS (
+  SELECT DISTINCT ON (e."beamId") e."beamId", e.kind, e."toStatus", e."machineId", e."mountPosition"
+  FROM warp_beam_events e
+  WHERE e.kind IN ('WOUND','SHIP_OUT','RETURNED_IN','MOUNTED','DISMOUNTED','EXHAUSTED','SCRAPPED')
+    AND NOT EXISTS (SELECT 1 FROM warp_beam_events r WHERE r."reversesEventId" = e.id)
+  ORDER BY e."beamId", e."createdAt" DESC)
+SELECT b."beamNo", b.status::text AS durum, e.kind AS son_olay, e."toStatus"::text AS olay_durumu,
+       b."currentMachineId"::text AS kolon_makine, e."machineId"::text AS olay_makine, b."currentPosition" AS kolon_yuva, e."mountPosition" AS olay_yuva
+FROM warp_beams b JOIN e ON e."beamId" = b.id
+WHERE b.status <> e."toStatus"
+   OR (b.status = 'MOUNTED' AND (b."currentMachineId" IS DISTINCT FROM e."machineId" OR b."currentPosition" IS DISTINCT FROM e."mountPosition"));
+
+\echo '== 43) LEVENT Faz 3 — türetilen kalan metre EKSİ (işaret tablosu constants/warp-beam.ts ile aynı; beklenen 0) =='
+SELECT b."beamNo", b.status::text AS durum, SUM(CASE WHEN e.kind IN ('WOUND','SHIP_OUT_CANCEL','RETURNED_IN','CONSUMED_CANCEL','ADJUST_IN','EXHAUST_CANCEL','SCRAP_CANCEL') THEN 1 WHEN e.kind IN ('WOUND_CANCEL','SHIP_OUT','RETURNED_IN_CANCEL','CONSUMED','ADJUST_OUT','EXHAUSTED','SCRAPPED') THEN -1 ELSE 0 END * COALESCE(e."lengthM", 0))::text AS kalan
+FROM warp_beams b JOIN warp_beam_events e ON e."beamId" = b.id
+GROUP BY b.id, b."beamNo", b.status
+HAVING SUM(CASE WHEN e.kind IN ('WOUND','SHIP_OUT_CANCEL','RETURNED_IN','CONSUMED_CANCEL','ADJUST_IN','EXHAUST_CANCEL','SCRAP_CANCEL') THEN 1 WHEN e.kind IN ('WOUND_CANCEL','SHIP_OUT','RETURNED_IN_CANCEL','CONSUMED','ADJUST_OUT','EXHAUSTED','SCRAPPED') THEN -1 ELSE 0 END * COALESCE(e."lengthM", 0)) < 0;
+
+\echo '== 44) LEVENT Faz 3 — terminal (EXHAUSTED/SCRAPPED) leventte kalan ≠ 0 (beklenen 0) =='
+SELECT b."beamNo", b.status::text AS durum, SUM(CASE WHEN e.kind IN ('WOUND','SHIP_OUT_CANCEL','RETURNED_IN','CONSUMED_CANCEL','ADJUST_IN','EXHAUST_CANCEL','SCRAP_CANCEL') THEN 1 WHEN e.kind IN ('WOUND_CANCEL','SHIP_OUT','RETURNED_IN_CANCEL','CONSUMED','ADJUST_OUT','EXHAUSTED','SCRAPPED') THEN -1 ELSE 0 END * COALESCE(e."lengthM", 0))::text AS kalan
+FROM warp_beams b JOIN warp_beam_events e ON e."beamId" = b.id
+WHERE b.status IN ('EXHAUSTED', 'SCRAPPED')
+GROUP BY b.id, b."beamNo", b.status
+HAVING SUM(CASE WHEN e.kind IN ('WOUND','SHIP_OUT_CANCEL','RETURNED_IN','CONSUMED_CANCEL','ADJUST_IN','EXHAUST_CANCEL','SCRAP_CANCEL') THEN 1 WHEN e.kind IN ('WOUND_CANCEL','SHIP_OUT','RETURNED_IN_CANCEL','CONSUMED','ADJUST_OUT','EXHAUSTED','SCRAPPED') THEN -1 ELSE 0 END * COALESCE(e."lengthM", 0)) <> 0;
+
 \echo ''
 \echo '== Tutarlılık kontrolü bitti. §30b BİLGİ (miras sayısı) dışında yukarıda hiç satır YOKSA sistem sağlıklı. =='

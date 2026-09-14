@@ -15,7 +15,7 @@ export const ORIGIN_LABEL: Record<WarpBeamOrigin, string> = {
 };
 export const KG_SOURCE_LABEL: Record<WarpKgSource, string> = { WEIGHED: 'Tartıldı', THEORETICAL: 'Nominal (hesap)' };
 /** Durum rozeti — `Record` tam: backend'e değer gelince derleme kırılır (enum aynası). */
-export const STATUS_LABEL: Record<WarpBeamStatus, string> = { PLANNED: 'Planlı', READY: 'Hazır', SHIPPED_OUT: 'Fasonda', CANCELLED: 'İptal' };
+export const STATUS_LABEL: Record<WarpBeamStatus, string> = { PLANNED: 'Planlı', READY: 'Hazır', SHIPPED_OUT: 'Fasonda', MOUNTED: 'Tezgahta', EXHAUSTED: 'Bitti', SCRAPPED: 'Hurda', CANCELLED: 'İptal' };
 /** Tablet eylemleri (sar · sil · iptal) yalnız bu durumlarda; SHIPPED_OUT levent tabletten dokunulmaz (dönüş fason ekranında). */
 export function beamActionsEnabled(status: WarpBeamStatus): boolean {
   return status === 'PLANNED' || status === 'READY';
