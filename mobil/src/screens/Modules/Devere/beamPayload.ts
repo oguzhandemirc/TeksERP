@@ -161,8 +161,9 @@ interface FailureLike {
   details?: { code?: string; modul?: string } | null;
 }
 
-const REFRESH_LIST = new Set(['WARP_BEAM_STATE', 'WARP_BEAM_NOT_PLANNED', 'WARP_BEAM_NOT_WOUND', 'WARP_BEAM_CANCELLED']);
-const REFRESH_CONTEXT = new Set(['WARP_BEAM_MACHINE_NOT_DEVERE', 'WARP_DENIER_MISSING', 'WARP_BEAM_ORIGIN_PARTY']);
+// Faz 3: yuva doldu / kalan aşıldı / açık koşum → liste tazelenir; makine levent tüketmez / yuva aralığı / bayrak kapalı → bağlam tazelenir.
+const REFRESH_LIST = new Set(['WARP_BEAM_STATE', 'WARP_BEAM_NOT_PLANNED', 'WARP_BEAM_NOT_WOUND', 'WARP_BEAM_CANCELLED', 'WARP_SLOT_BUSY', 'WARP_BEAM_REMAINING_EXCEEDED', 'WARP_DISMOUNT_OPEN_RUN']);
+const REFRESH_CONTEXT = new Set(['WARP_BEAM_MACHINE_NOT_DEVERE', 'WARP_DENIER_MISSING', 'WARP_BEAM_ORIGIN_PARTY', 'WARP_BEAM_MACHINE_NOT_LOOM', 'WARP_SLOT_OUT_OF_RANGE', 'WARP_MOUNT_TRACKING_OFF', 'WARP_MOUNT_METHOD_REQUIRED']);
 
 /** `details.code` → ekran eylemi. Bilinmeyen kod düz mesaj; kod uydurulmaz. */
 export function classifyBeamFailure(error: unknown, fallback: string): BeamFailureAction {

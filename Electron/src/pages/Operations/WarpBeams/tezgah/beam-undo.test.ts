@@ -5,7 +5,7 @@
 // yeniden aday olur); `UNDOABLE_STATUS_KINDS`e "WOUND" eklenince ③ kırmızı.
 // =============================================================================
 import { describe, expect, it } from "vitest";
-import { loomCell } from "../columns";
+import { loomCell, statusMeta } from "../columns";
 import { isLiveBeam, type WarpBeamEvent } from "../types";
 import { undoCandidates, undoMenuEnabled } from "./beam-undo";
 
@@ -53,6 +53,10 @@ describe("menü yüklemleri", () => {
   it("kalan defteri (tüket/düzelt/bitir/hurda) yalnız CANLI leventte: READY · MOUNTED", () => {
     expect(isLiveBeam("READY") && isLiveBeam("MOUNTED")).toBe(true);
     expect(["PLANNED", "SHIPPED_OUT", "EXHAUSTED", "SCRAPPED", "CANCELLED"].some((s) => isLiveBeam(s as never))).toBe(false);
+  });
+  it("⭐ durum rozeti: bilinmeyen durum ham adıyla nötr rozet (eski panel yeni sunucuda ÇÖKMEZ)", () => {
+    expect(statusMeta("MOUNTED").label).toBe("Tezgahta");
+    expect(statusMeta("YENI_DURUM")).toEqual({ label: "Bilinmeyen durum (YENI_DURUM)", badgeClass: expect.stringContaining("slate") });
   });
   it("tezgah hücresi: bağlıysa makine · yuva, değilse —", () => {
     expect(loomCell({ currentMachine: null, currentPosition: null })).toBe("—");

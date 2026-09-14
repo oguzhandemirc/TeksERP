@@ -7,9 +7,9 @@ import { CompanyType } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { ApiResponse } from "../types/api.types";
 import { resolveDenier } from "../constants/warp-beam";
-import { listDevereMachines } from "./warp-beam.service";
+import { listDevereMachines, listLoomMachines } from "./warp-beam.service";
 import { yarnLotBalancesTx } from "./helpers/yarn-lot.helper";
-import { readDevereLotRequired } from "./system-setting.service";
+import { readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired } from "./system-setting.service";
 
 /**
  * Tablet form bağlamı — TEK uç, TEK izin (`mobile:devere`), DEVERE-LEVENT-TARAMASI §11 D2.
@@ -37,6 +37,12 @@ export interface WarpBeamTabletContextDto {
   yarnLots: Array<{ id: string; lotNo: string; itemId: string; balanceKg: number }>;
   /** `devere.lotRequired` — form kapıyı SUNUCUDAN okur, tahmin etmez (1e A3 ek şart ②). */
   lotRequired: boolean;
+  /** Faz 3 (E3): levent BAĞLANABİLEN makineler (istasyonu levent tüketen), yuva sayısıyla — Tak formu (allowlist). */
+  loomMachines: Array<{ id: string; code: string; name: string; stationName: string; warpBeamSlots: number }>;
+  /** `devere.mountTracking` — "Tezgahta" sekmesi yalnız açıkken çizilir; alan yoksa/false = bugünkü ekran. */
+  mountTracking: boolean;
+  /** `devere.mountTrackingRequired` — Tak formunda yöntem zorunlu (sunucu da 400 verir). */
+  mountTrackingRequired: boolean;
 }
 
 export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTabletContextDto>> {
@@ -53,6 +59,7 @@ export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTa
   const lotRows = yarnItemIds.length > 0 ? await prisma.yarnLot.findMany({ where: { isActive: true, itemId: { in: yarnItemIds } }, orderBy: { lotNo: "asc" }, select: { id: true, lotNo: true, itemId: true } }) : [];
   const balances = await yarnLotBalancesTx(prisma, lotRows.map((l) => l.id));
   const lotRequired = await readDevereLotRequired();
+  const [loomMachines, mountTracking, mountTrackingRequired] = [await listLoomMachines().then((r) => r.data), await readDevereMountTracking(), await readDevereMountTrackingRequired()];
   return {
     success: true,
     data: {
@@ -63,6 +70,9 @@ export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTa
       suppliers: suppliers.map((c) => ({ id: c.id, name: c.name, type: c.type })).sort((a, b) => supplierRank(a.type) - supplierRank(b.type) || a.name.localeCompare(b.name, "tr")),
       yarnLots: lotRows.map((l) => ({ id: l.id, lotNo: l.lotNo, itemId: l.itemId, balanceKg: Number(balances.get(l.id) ?? 0) })),
       lotRequired,
+      loomMachines,
+      mountTracking,
+      mountTrackingRequired,
     },
   };
 }

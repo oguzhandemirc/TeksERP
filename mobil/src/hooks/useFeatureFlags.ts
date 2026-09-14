@@ -37,6 +37,12 @@ export function useDevereEnabled(): boolean {
   return useFeatureFlags().data?.devereEnabled ?? DEFAULT_FEATURE_FLAGS.devereEnabled;
 }
 
+/** Devere Faz 3: tezgah bağı defteri açık mı — devere modülüne BAĞLI (ikisi de açık olmalı). */
+export function useDevereMountTracking(): boolean {
+  const f = useFeatureFlags().data;
+  return (f?.devereEnabled ?? DEFAULT_FEATURE_FLAGS.devereEnabled) && (f?.devereMountTracking ?? DEFAULT_FEATURE_FLAGS.devereMountTracking);
+}
+
 /** KK1 ham en girişi açık mı? Yüklenene kadar / hata halinde false (gizli). */
 export function useRawWidthEnabled(): boolean {
   return useFeatureFlags().data?.rawWidthEnabled ?? false;

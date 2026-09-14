@@ -79,6 +79,8 @@ const ALLOW = {
   suppliers: ["id", "name", "type"],
   // Faz 2 A3: lot adayları — allowlist `map`; `notes`/`supplierId` sızmaz.
   yarnLots: ["id", "lotNo", "itemId", "balanceKg"],
+  // Faz 3 E3: bağlanabilir makineler — allowlist `map`; `productionLineCount`/`isActive` sızmaz.
+  loomMachines: ["id", "code", "name", "stationName", "warpBeamSlots"],
 } as const;
 
 async function main(): Promise<void> {
@@ -99,6 +101,10 @@ async function main(): Promise<void> {
   const st = await prisma.station.create({ data: { name: `${TAG}-DEVERE`, code: `${TAG}-DV`.slice(0, 32), type: StationType.INTERNAL, producesWarpBeam: true }, select: { id: true } });
   const mk = await prisma.machine.create({ data: { stationId: st.id, name: `${TAG}-M1`, code: `${TAG}-M1`.slice(0, 32) }, select: { id: true } });
   const sub = await prisma.subcontractor.create({ data: { code: `${TAG}-F`, name: `${TAG} fasoncu` }, select: { id: true } });
+  // Faz 3 E3: levent TÜKETEN istasyon + makine (Tak formu adayı); devere makinesi (üstteki) bu listeye GİRMEZ.
+  const stLoom = await prisma.station.create({ data: { name: `${TAG}-DOKUMA`, code: `${TAG}-DK`.slice(0, 32), type: StationType.INTERNAL, consumesWarpBeam: true }, select: { id: true } });
+  const loom = await prisma.machine.create({ data: { stationId: stLoom.id, name: `${TAG}-T1`, code: `${TAG}-T1`.slice(0, 32), warpBeamSlots: 2, productionLineCount: 3 }, select: { id: true } });
+  const mountFoto = await prisma.systemSetting.findMany({ where: { key: { in: [SETTING_KEYS.DEVERE_MOUNT_TRACKING, SETTING_KEYS.DEVERE_MOUNT_TRACKING_REQUIRED] } }, select: { key: true, value: true } });
   // Cari satırı BİLEREK zengin: vergi no + adres — bunlar cevaba SIZMAMALI.
   const cari = await prisma.customer.create({ data: { code: `${TAG}-C`, name: `${TAG} tedarikçi`, type: "SUPPLIER", taxNumber: "9990001112", address: `${TAG} gizli adres` }, select: { id: true } });
   // A3: lot adayları — aktif (listede), pasif ve yabancı kalem (listede DEĞİL); notes/supplierId sızmamalı.
@@ -109,7 +115,7 @@ async function main(): Promise<void> {
   const lotYabanci = await prisma.yarnLot.create({ data: { itemId: yarnKartsiz.id, lotNo: `${TAG}-LOTY` }, select: { id: true } });
   const lotRequiredFoto = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_LOT_REQUIRED }, select: { value: true } });
   try {
-    await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.DEVERE_LOT_REQUIRED } });
+    await prisma.systemSetting.deleteMany({ where: { key: { in: [SETTING_KEYS.DEVERE_LOT_REQUIRED, SETTING_KEYS.DEVERE_MOUNT_TRACKING, SETTING_KEYS.DEVERE_MOUNT_TRACKING_REQUIRED] } } });
     const ctx = (await getWarpBeamTabletContext()).data;
     for (const [liste, alanlar] of Object.entries(ALLOW) as [keyof typeof ALLOW, readonly string[]][]) {
       const rows = ctx[liste] as Record<string, unknown>[];
@@ -132,6 +138,13 @@ async function main(): Promise<void> {
     check("§4a kart ipliğinin aktif lotu listede, türetilen bakiyeyle (0 — hareket yok)", lotSatir != null && lotSatir.lotNo === `${TAG}-LOT` && lotSatir.itemId === yarn.id && lotSatir.balanceKg === 0);
     check("§4b pasif lot ve çözgü kartı olmayan kalemin lotu listede DEĞİL", !ctx.yarnLots.some((l) => l.id === lotPasif.id) && !ctx.yarnLots.some((l) => l.id === lotYabanci.id));
     check("§4c lotRequired sunucudan, satır yokken false (bugünkü davranış)", ctx.lotRequired === false);
+    console.log("\n── §5 tezgah bağı bağlamı (E3) ──");
+    const loomSatir = ctx.loomMachines.find((m) => m.id === loom.id);
+    check("§5a levent tüketen istasyonun makinesi loomMachines'ta, yuva sayısıyla (2), istasyon adıyla", loomSatir != null && loomSatir.warpBeamSlots === 2 && loomSatir.stationName === `${TAG}-DOKUMA`);
+    check("§5b devere makinesi loomMachines'ta DEĞİL (üreten ≠ tüketen)", !ctx.loomMachines.some((m) => m.id === mk.id));
+    check("§5c ⭐ iki bayrak sunucudan, satır yokken false (bugünkü ekran: sekme yok)", ctx.mountTracking === false && ctx.mountTrackingRequired === false);
+    await prisma.systemSetting.upsert({ where: { key: SETTING_KEYS.DEVERE_MOUNT_TRACKING }, create: { key: SETTING_KEYS.DEVERE_MOUNT_TRACKING, value: "true" }, update: { value: "true" } });
+    check("§5d bayrak satırı true → bağlam true (tahmin değil okuma)", (await getWarpBeamTabletContext()).data.mountTracking === true);
   } finally {
     await prisma.yarnLot.deleteMany({ where: { id: { in: [lot.id, lotPasif.id, lotYabanci.id] } } });
     await prisma.item.delete({ where: { id: yarnKartsiz.id } }).catch(() => undefined);
@@ -140,6 +153,13 @@ async function main(): Promise<void> {
     await prisma.item.deleteMany({ where: { id: { in: [yarn.id, yarnDenyesiz.id] } } });
     await prisma.machine.delete({ where: { id: mk.id } }).catch(() => undefined);
     await prisma.station.delete({ where: { id: st.id } }).catch(() => undefined);
+    await prisma.machine.delete({ where: { id: loom.id } }).catch(() => undefined);
+    await prisma.station.delete({ where: { id: stLoom.id } }).catch(() => undefined);
+    for (const key of [SETTING_KEYS.DEVERE_MOUNT_TRACKING, SETTING_KEYS.DEVERE_MOUNT_TRACKING_REQUIRED]) {
+      const eski = mountFoto.find((f) => f.key === key);
+      if (eski) await prisma.systemSetting.upsert({ where: { key }, create: { key, value: eski.value as Prisma.InputJsonValue }, update: { value: eski.value as Prisma.InputJsonValue } });
+      else await prisma.systemSetting.deleteMany({ where: { key } });
+    }
     await prisma.subcontractor.delete({ where: { id: sub.id } }).catch(() => undefined);
     await prisma.customer.delete({ where: { id: cari.id } }).catch(() => undefined);
   }

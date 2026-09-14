@@ -28,6 +28,9 @@ export interface FeatureFlags {
    *  Levent Sarım ekranı bayrak yüklenene dek ÇİZİLMEZ; üretim zincirine BAĞLI DEĞİL
    *  (panel `useOperationsVisibility` aynası: hazır levent alan fabrika üretimsiz de açar). */
   devereEnabled: boolean;
+  /** Devere Faz 3: levent tezgah bağı defteri (`devere.mountTracking`) — default FALSE (satır-yok değeri).
+   *  Tezgah ekranı "Levent" paneli ve Levent Sarım "Tezgahta" sekmesi yalnız AÇIKKEN çizilir. */
+  devereMountTracking: boolean;
   pricingEnabled: boolean;
   targetQuantityEnabled: boolean;
   /** KK1 ham kumaş girişinde "en (cm)" alanı gösterilsin mi (default false). */
@@ -142,6 +145,8 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   dokumaEnabled: false,
   // Backend satır-yok değeri FALSE — bayrak yüklenene dek Levent Sarım kartı ÇİZİLMEZ.
   devereEnabled: false,
+  // Backend satır-yok değeri FALSE — kapalıyken Tezgah/Levent ekranları Faz 1b ile birebir.
+  devereMountTracking: false,
   pricingEnabled: false,
   targetQuantityEnabled: false,
   rawWidthEnabled: false,

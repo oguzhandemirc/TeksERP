@@ -9748,6 +9748,12 @@ söyler. ③ anomali (③), S1/S3/S5/S6, `signals/:id/accept` Faz 2 — bekçi �
 şemada YOK ⇒ `OFF` çakışması yok, beyan gerekmedi (enum inince `test_audit_labels §4` ısırır). ⑤ Özet §8 `warpBeamSlots` satırı
 "İNDİ" (6e 090000). ⑥ Demote'un LIVE→SHADOW ayağı fikstürle ölçüldü (LIVE üretim yolundan üretilemez) — beyanlı.
 
+## 2026-09-15 — DEVERE FAZ 3 E3 TABLET İNDİ: Tak devere ekranında, Sök/Tüket/Bitir tezgah ekranında; ikisi de bayrağın arkasında (6e; hüküm 1e H3) [ÇEKİRDEK] + [PROFİL]
+
+**[ÇEKİRDEK] Yüzey ayrımı (H3):** Tak → Levent Sarım ekranı "Tezgahta" sekmesi (`mobile:devere`; yuva seçimi orada, makine listesi bağlam ucundan); Sök/Tüket/Bitir → Tezgah ekranı "Levent" paneli (`mobile:dokuma`; makine OTURUMDAN, tablet makine seçmez). Kalan düzeltme, hurda, tartıyla bitiş ve geri almalar tablette YOK — sebep kataloğu ve önizleme isteyen yıkıcı işler panelde. Zorunlu ayarda tablet başlangıç saatini bağlama anı olarak gönderir: tablet canlı kaydeder, geriye dönük saat girişi panel işidir.
+**[PROFİL] Sıfır fark:** sekme ve panel yalnız `devere.mountTracking` açıkken; sekme kapısı bağlam ucundan (`mountTracking`), panel kapısı bayrak aynasından (`useDevereMountTracking` devere modülüne bağlı) — ikisi de sunucu okuması, tahmin değil. Eski tablet yeni durumları rozetsiz gösterir, eylem çıkmaz; minVersion HAYIR.
+**Ölçüldü:** Faz 3 hata kodları tablet sınıflandırıcısına eklendi (yuva dolu / kalan aşıldı / açık koşum → liste tazele; makine levent tüketmez / yuva aralığı / bayrak kapalı / yöntem zorunlu → bağlam tazele) — kod uydurulmaz, bilinmeyen kod düz mesaj.
+
 ## 2026-09-15 — DEVERE FAZ 3 E2 PANEL İNDİ: Leventler tezgah menüsü bayrağın arkasında, istasyon/makine devere alanları AÇIK doğrulamayla yazılır (6e; hüküm 1e H4) [ÇEKİRDEK] + [PROFİL]
 
 **[ÇEKİRDEK] Yazma yüzeyi (H4):** `Station.producesWarpBeam/consumesWarpBeam` ve `Machine.warpBeamSlots` `BaseController` skaler tuzağıyla zaten gövdeden yazılabiliyordu (ölçüldü 2026-09-13); E2 bunu "kazara" değil "bilerek" yazılabilir yaptı — route'ta `passthrough` Zod middleware'i yalnız bu alanları doğrular (yuva 0..32 tam sayı; metin `"2"` reddedilir, panel sayı yollar), diğer alanlara dokunmaz; `test_station_devere_fields` middleware'i doğrudan çağırır + dört ucun middleware taşıdığını statik ölçer. İstasyon TÜRÜ kuralı (consumesWarpBeam yalnız WEAVING mi?) yazılmadı: raşel/örme istasyonu `OTHER` türünde olabilir, kural ölçülmeden yazılmaz.

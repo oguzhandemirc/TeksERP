@@ -11,6 +11,11 @@ export function lotSummary(b: Pick<WarpBeam, "lots" | "wound">): string {
   return `${b.lots.length} lot`;
 }
 
+/** Durum rozeti — sözlükte olmayan değer Türkçe yedek + ham adla nötr sınıfla döner (eski panel yeni durumu çizer, patlamaz; 5e). */
+export function statusMeta(status: string): { label: string; badgeClass: string } {
+  return (WARP_BEAM_STATUS_META as Record<string, { label: string; badgeClass: string } | undefined>)[status] ?? { label: `Bilinmeyen durum (${status})`, badgeClass: "bg-slate-100 text-slate-700 dark:bg-slate-900 dark:text-slate-300" };
+}
+
 /** Tezgah hücresi: bağlıysa "makine · yuva N", değilse "—". */
 export function loomCell(b: Pick<WarpBeam, "currentMachine" | "currentPosition">): string {
   if (!b.currentMachine) return "—";
@@ -85,6 +90,10 @@ export const warpBeamColumns: ColumnDef<WarpBeam>[] = [
   {
     accessorKey: "status",
     header: "Durum",
-    cell: ({ row }) => <Badge className={WARP_BEAM_STATUS_META[row.original.status].badgeClass}>{WARP_BEAM_STATUS_META[row.original.status].label}</Badge>,
+    // Tanınmayan durum (yeni sunucu + eski panel) ham adıyla nötr rozet — liste ÇÖKMEZ (depo hareketleri emsali; 5e bulgusu).
+    cell: ({ row }) => {
+      const meta = statusMeta(row.original.status);
+      return <Badge className={meta.badgeClass}>{meta.label}</Badge>;
+    },
   },
 ];

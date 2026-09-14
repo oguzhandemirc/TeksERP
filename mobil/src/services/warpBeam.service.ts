@@ -8,9 +8,9 @@
 // =============================================================================
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
-import type { WarpBeamOrigin, WarpBeamStatus, WarpKgSource } from '../types/models';
+import type { WarpBeamMountMethod, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, WarpLengthSource } from '../types/models';
 
-export type { WarpBeamOrigin, WarpBeamStatus, WarpKgSource };
+export type { WarpBeamMountMethod, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, WarpLengthSource };
 
 export interface WarpBeamEvent {
   id: string;
@@ -37,6 +37,9 @@ export interface WarpBeam {
   wound: WarpBeamEvent | null;
   remainingM: number;
   createdAt: string;
+  /** Faz 3: yalnız MOUNTED'da dolu; eski sunucu göndermez → undefined (ekran "—"). */
+  currentPosition?: number | null;
+  currentMachine?: { id: string; code: string; name: string } | null;
 }
 
 export interface TabletContext {
@@ -49,6 +52,46 @@ export interface TabletContext {
   yarnLots?: { id: string; lotNo: string; itemId: string; balanceKg: number }[];
   /** `devere.lotRequired` SUNUCUDAN — istemci tahmin etmez; alan yoksa false (bugünkü davranış). */
   lotRequired?: boolean;
+  /** Faz 3 (E3): levent BAĞLANABİLEN makineler (yuva sayısıyla). Eski sunucu göndermez → sekme yok. */
+  loomMachines?: { id: string; code: string; name: string; stationName: string; warpBeamSlots: number }[];
+  /** `devere.mountTracking` / `devere.mountTrackingRequired` SUNUCUDAN; alan yoksa false. */
+  mountTracking?: boolean;
+  mountTrackingRequired?: boolean;
+}
+
+/** Backend `mountSchema` ile birebir (.strict). */
+export interface MountWarpBeamRequest {
+  machineId: string;
+  position: number;
+  mountMethod: WarpBeamMountMethod | null;
+  setupStartedAt: string | null;
+  machineCounter: number | null;
+  clientToken: string;
+}
+/** Backend `dismountSchema` ile birebir. */
+export interface DismountWarpBeamRequest {
+  remainingM: number | null;
+  lengthSource: WarpLengthSource | null;
+  machineCounter: number | null;
+}
+/** Backend `consumeSchema` ile birebir. */
+export interface ConsumeWarpBeamRequest {
+  lengthM: number;
+  lengthSource: WarpLengthSource;
+  machineCounter: number | null;
+  clientToken: string;
+}
+/** Backend `exhaustSchema` ile birebir. */
+export interface ExhaustWarpBeamRequest {
+  residualM: number | null;
+  lengthSource: WarpLengthSource | null;
+}
+export interface MountedBeam {
+  id: string;
+  beamNo: string;
+  position: number | null;
+  warpSpecCode: string;
+  remainingM: number;
 }
 
 /** Backend `createSchema` ile birebir (.strict — fazla anahtar 400). */
@@ -115,4 +158,13 @@ export const warpBeamService = {
   },
   cancel: async (id: string, reason: string): Promise<ApiResponse<WarpBeam>> =>
     (await apiClient.post<ApiResponse<WarpBeam>>(`/warp-beams/${id}/cancel`, { reason })).data,
+  // ── Faz 3 tezgah bağı (E3): Tak devere ekranından, Sök/Tüket/Bitir tezgah ekranından ──
+  mountedOnMachine: async (machineId: string): Promise<MountedBeam[]> => {
+    const res = await apiClient.get<ApiResponse<MountedBeam[]>>(`/warp-beams/mounted/${machineId}`);
+    return res.data.data ?? [];
+  },
+  mount: async (id: string, body: MountWarpBeamRequest): Promise<ApiResponse<WarpBeam>> => (await apiClient.post<ApiResponse<WarpBeam>>(`/warp-beams/${id}/mount`, body)).data,
+  dismount: async (id: string, body: DismountWarpBeamRequest): Promise<ApiResponse<WarpBeam>> => (await apiClient.post<ApiResponse<WarpBeam>>(`/warp-beams/${id}/dismount`, body)).data,
+  consume: async (id: string, body: ConsumeWarpBeamRequest): Promise<ApiResponse<WarpBeam>> => (await apiClient.post<ApiResponse<WarpBeam>>(`/warp-beams/${id}/consume`, body)).data,
+  exhaust: async (id: string, body: ExhaustWarpBeamRequest): Promise<ApiResponse<WarpBeam>> => (await apiClient.post<ApiResponse<WarpBeam>>(`/warp-beams/${id}/exhaust`, body)).data,
 };

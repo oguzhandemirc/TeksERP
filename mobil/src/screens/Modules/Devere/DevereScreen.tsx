@@ -1,7 +1,7 @@
 // =============================================================================
 // LEVENT SARIM EKRANI (kabuk) — devere tablet dilimi (DEVERE-LEVENT-TARAMASI §11)
 // =============================================================================
-// OTURUMSUZ (devere StationKind değil); makine her sarımda seçilir. Liste (planlı ·
+// OTURUMSUZ (devere StationKind değil); makine her sarımda seçilir. Liste (planlı · Faz 3 tezgahta ·
 // bugün sarılan) + üç aksiyon: plan / sar / taslak sil; iptal yetenek izniyle.
 // Kuyruk YOK (online-only); çevrimdışıyken butonlar kilitli, sebebi ayrı yazılır.
 // Kalıp: ince kabuk + görünüm bileşenleri + ekran-hook + saf mantık (MOBIL.md).
@@ -19,6 +19,7 @@ import BeamList from './BeamList';
 import PlanModal from './PlanModal';
 import WindModal from './WindModal';
 import BeamActionModals from './BeamActionModals';
+import MountModal from './MountModal';
 
 export default function DevereScreen() {
   const compact = useDeviceType() === 'phone';
@@ -48,6 +49,7 @@ export default function DevereScreen() {
       <PlanModal state={state} />
       <WindModal state={state} />
       <BeamActionModals state={state} />
+      {state.mountTracking ? <MountModal state={state.mountForm} loomMachines={state.context.data?.loomMachines ?? []} methodRequired={state.context.data?.mountTrackingRequired === true} isOnline={state.isOnline} /> : null}
     </ScreenChrome>
   );
 }

@@ -13,6 +13,7 @@ import type { BeamAttempt } from './devereAttempt';
 import { isSameLocalDay } from './beamPayload';
 import { BEAMS_KEY, CONTEXT_KEY, useBeamMutations } from './useBeamMutations';
 import { useBeamForms, type FormModal } from './useBeamForms';
+import { useMountForm } from './useMountForm';
 
 export type DevereModal = FormModal | { kind: 'cancel'; beam: WarpBeam } | { kind: 'delete'; beam: WarpBeam } | null;
 
@@ -28,6 +29,10 @@ export function useDevereScreen() {
   const planned = useQuery({ queryKey: [...BEAMS_KEY, 'PLANNED'], queryFn: () => warpBeamService.list('PLANNED', 100), staleTime: 15_000 });
   // Sarılmış levent iki durumda yaşar: READY (burada) · SHIPPED_OUT (fasonda, F1) — "bugün sarılan" ikisini de sayar.
   const ready = useQuery({ queryKey: [...BEAMS_KEY, 'WOUND'], queryFn: () => warpBeamService.list(['READY', 'SHIPPED_OUT'], 50), staleTime: 15_000 });
+  // Faz 3 (E3): "Tezgahta" sekmesi — yalnız bağlam `mountTracking` derse çizilir ve sorgulanır (kapalıyken sıfır fark).
+  const mountTracking = context.data?.mountTracking === true;
+  const live = useQuery({ queryKey: [...BEAMS_KEY, 'LIVE'], queryFn: () => warpBeamService.list(['READY', 'MOUNTED'], 100), staleTime: 15_000, enabled: mountTracking });
+  const mountForm = useMountForm({ loomMachines: context.data?.loomMachines ?? [], methodRequired: context.data?.mountTrackingRequired === true, onDone: () => void live.refetch() });
   const todayWound = useMemo(() => {
     const now = new Date();
     return (ready.data ?? []).filter((b) => b.wound && isSameLocalDay(b.wound.createdAt, now));
@@ -41,7 +46,7 @@ export function useDevereScreen() {
     forms.clearFormError();
   }, [forms]);
 
-  const busy = mutations.plan.isPending || mutations.wind.isPending || mutations.deleteDraft.isPending || mutations.cancel.isPending;
+  const busy = mutations.plan.isPending || mutations.wind.isPending || mutations.deleteDraft.isPending || mutations.cancel.isPending || mountForm.pending;
   return {
     ...forms,
     canCancel,
@@ -57,7 +62,12 @@ export function useDevereScreen() {
       void planned.refetch();
       void ready.refetch();
       void context.refetch();
+      if (mountTracking) void live.refetch();
     },
+    mountTracking,
+    liveBeams: live.data ?? [],
+    liveLoading: live.isLoading,
+    mountForm,
     modal,
     setModal,
     closeModal,
