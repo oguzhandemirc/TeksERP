@@ -303,6 +303,11 @@
           "kapsam": "panel",
           "tip": "yeni",
           "metin": "Dokuma modülü açık kurulumlarda tezgah duruşları elle girilip sınıflandırılabiliyor (planlı/plansız/ayar gibi kayıp sınıfı ve sebep); sınıflandırma değiştirildiğinde eski kayıt silinmez, değişiklik defterde durur ve eski not korunur. Aynı duruşun iki kez açılması ve kapanmış vardiyaya duruş yazılması engellenir. Bu sürümde giriş yüzeyi tablettir; panel ekranı sonraki sürümde. Modül kapalı kurulumda hiçbir şey değişmez."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "duzeltme",
+          "metin": "Tablette Tambur’da hata tipi seçilmeden girilen hata artık listedeki ilk tipe yazılmıyor; kataloğda “varsayılan” işaretli hata tipine yazılır. Kalite → Hata Tipleri’nde bir tipi varsayılan yapabilirsiniz (kurulumda tek varsayılan olur, yenisini işaretlemek eskisini kaldırır). Güncellemeyle, varsayılan tanımlı değilse “GENEL” adlı bir hata tipi oluşturulup varsayılan yapılır; hiç varsayılan yoksa tipsiz hata girişi reddedilir ve ekran tip seçilmesini ister. Geçmiş hata kayıtları değişmez."
         }
       ]
     },

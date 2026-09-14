@@ -1862,13 +1862,14 @@ export default function TamburScreen() {
       Toast.show({ type: 'error', text1: 'Metraj sayı olmalı' });
       return;
     }
-    // Hata tipi seçilmediyse listenin ilkini kullan (admin "default" eklemeli)
-    const defectTypeId = work.errorEntry.defectTypeId || defectTypes[0]?.id;
+    // Hata tipi seçilmediyse kataloğun VARSAYILANI (isDefault) — listenin ilki UYDURULMAZ
+    // (sıra bir karar değildir). Varsayılan yoksa kayıt yollanmaz; admin katalogdan tanımlar.
+    const defectTypeId = work.errorEntry.defectTypeId || defectTypes.find((d) => d.isDefault)?.id;
     if (!defectTypeId) {
       Toast.show({
         type: 'error',
-        text1: 'Hata tipi yok',
-        text2: 'Admin önce hata tipi tanımlamalı',
+        text1: 'Hata tipi seçilmedi',
+        text2: 'Bir hata tipi seçin ya da panelden bir tipi varsayılan yapın',
       });
       return;
     }

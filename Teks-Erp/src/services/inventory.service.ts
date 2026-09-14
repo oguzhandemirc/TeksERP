@@ -29,6 +29,7 @@ import { reverseLatestScopedStockMove } from "./helpers/warehouse-ledger-reverse
 import { assertRollsHaveWarehouse, WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import { AppError } from "../utils/app-error";
+import { resolveDefaultDefectTypeTx } from "./helpers/default-defect-type.helper";
 import { assertMasterDataLiveTx, lockAgainstMergeTx } from "./helpers/master-data-live.helper";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { assertRollReplayAlive } from "./helpers/token-replay.helper";
@@ -5525,8 +5526,8 @@ export class InventoryService {
     }
 
     // Hata validasyonu — sadece nokta (startMeter)
-    const errors = data.errors ?? [];
-    for (const e of errors) {
+    const rawErrors = data.errors ?? [];
+    for (const e of rawErrors) {
       if (e.startMeter < 0 || e.startMeter > totalMeters) {
         throw AppError.badRequest(
           `Hata metresi (${e.startMeter}) 0 ile ${totalMeters} arasında olmalı`,
@@ -5537,6 +5538,9 @@ export class InventoryService {
     // DefectType doğrulamaları (varsa) — M-28: isActive da aranır (pasif hata
     // tipiyle kayıt açılamaz — soft-delete giriş guard'ı); eskiden birebir aynı
     // findMany iki kez koşuyordu, tek sorguya indirildi.
+    // Tipsiz satır → kataloğun varsayılanı; varsayılan yoksa 400 (karar A; istemci
+    // listenin ilkini UYDURMAZ). Doğrulama ve yazma bu çözülmüş listeyi okur.
+    const errors = await resolveDefaultDefectTypeTx(prisma, rawErrors);
     const defectIds = [...new Set(errors.map((e) => e.defectTypeId).filter((x): x is string => !!x))];
     const defectMap = new Map<string, string>();
     if (defectIds.length > 0) {

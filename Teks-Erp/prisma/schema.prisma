@@ -3889,6 +3889,10 @@ model DefectType {
   name        String          @db.VarChar(100)
   description String?
   severity    DefectSeverity? // UI renklendirme için
+  /// VARSAYILAN hata tipi (kurulumda en fazla BİR — partial unique `defect_types_one_default`,
+  /// migration'da yaşar). Tipsiz hata girişi bu tipe düşer; hiç yoksa yazma 400 —
+  /// istemci listenin ilkini UYDURMAZ (çakılı varsayım kararı A, 2026-09-14).
+  isDefault   Boolean         @default(false)
   isActive    Boolean         @default(true)
   createdAt   DateTime        @default(now()) @db.Timestamptz
   updatedAt   DateTime        @updatedAt @db.Timestamptz

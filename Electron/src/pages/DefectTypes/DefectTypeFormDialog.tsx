@@ -23,6 +23,7 @@ export function DefectTypeFormDialog({ open, onOpenChange, initial, onSubmit, is
         description: initial.description ?? "",
         severity: (initial.severity ?? "") as DefectTypeFormValues["severity"],
         isActive: initial.isActive,
+        isDefault: initial.isDefault,
       }
     : defectTypeFormDefaults;
 
@@ -77,6 +78,12 @@ export function DefectTypeFormDialog({ open, onOpenChange, initial, onSubmit, is
           </FormField>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" {...form.register("isActive")} /> Aktif
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" {...form.register("isDefault")} /> Varsayılan hata tipi
+            <span className="text-xs text-muted-foreground">
+              — tablette tipi seçilmeyen hata bu tipe yazılır; kurulumda tek varsayılan olur, işaretlemek eskisini kaldırır
+            </span>
           </label>
         </>
       )}

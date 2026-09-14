@@ -20,6 +20,7 @@ export const defectTypeFormSchema = z.object({
     .optional()
     .or(z.literal("")),
   isActive: z.boolean(),
+  isDefault: z.boolean(),
 });
 
 export type DefectTypeFormValues = z.infer<typeof defectTypeFormSchema>;
@@ -29,4 +30,5 @@ export const defectTypeFormDefaults: DefectTypeFormValues = {
   description: "",
   severity: "",
   isActive: true,
+  isDefault: false,
 };
