@@ -44,7 +44,7 @@ const ATLAMA = atlamaDefteri(() => {
 });
 
 /** ⚠️ CIRCIR TABANI — oturum DOKUNMAZ, entegratör trende ölçüp düşürür. */
-const OLU_TABAN = 29;
+const OLU_TABAN = 0;
 
 /** Beyanlı muafiyet: gerçekten sha OLMAYAN ama kalıba uyan literaller. BOŞ DOĞAR. */
 const MUAF: Record<string, string> = {};
