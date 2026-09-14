@@ -80,14 +80,16 @@ const KAPILI: ReadonlyArray<{ dosya: string; mount: string }> = [
   { dosya: "routes/weaving-order.routes.ts", mount: "/api/weaving-orders" },
   { dosya: "routes/machine-run.routes.ts", mount: "/api/machine-runs" },
   { dosya: "routes/machine-doff.routes.ts", mount: "/api/machine-doffs" },
+  // Faz 1b (6e, 2026-09-14): elle duruş girişi — koşumla aynı kapı (`requireDokumaEnabled`).
+  { dosya: "routes/machine-stop.routes.ts", mount: "/api/machine-stops" },
 ];
 
 /** Dokuma-ÖZEL Prisma model erişimcileri ve servisleri — bunlara dokunan router kapılıdır. */
 const DOKUMA_MODELLERI = ["weavingOrder", "machineRun", "doffEvent", "machineStopEvent"];
-const DOKUMA_SERVISLERI = ["weaving-order.service", "machine-run.service", "machine-doff.service"];
+const DOKUMA_SERVISLERI = ["weaving-order.service", "machine-run.service", "machine-doff.service", "machine-stop.service"];
 
 /** Dokuma uçlarının mount adresleri — istemci kaynağında aranan metinler. */
-const DOKUMA_UC_METINLERI = ["/api/weaving-orders", "/api/machine-runs", "/api/machine-doffs"];
+const DOKUMA_UC_METINLERI = ["/api/weaving-orders", "/api/machine-runs", "/api/machine-doffs", "/api/machine-stops"];
 
 /**
  * §7 — dokuma uçlarını çağırmasına İZİN VERİLEN istemci dosyaları (repo köküne göre).
