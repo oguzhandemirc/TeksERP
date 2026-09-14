@@ -42,8 +42,9 @@ export const machineStopService = {
     return apiClient.get<ApiResponse<MachineStop[]>>(`${BASE}?${sp.toString()}`).then((r) => r.data);
   },
   reclasses: (id: string) => apiClient.get<ApiResponse<StopReclass[]>>(`${BASE}/${id}/reclasses`).then((r) => r.data),
-  open: (body: OpenStopPayload) => apiClient.post<ApiResponse<MachineStop>>(BASE, body).then((r) => r.data),
-  close: (id: string, endedAt: string | null) => apiClient.post<ApiResponse<MachineStop>>(`${BASE}/${id}/close`, { endedAt }).then((r) => r.data),
+  /** Aralık dışı damga 400'ü (`STOP_STAMP_OUT_OF_RANGE`) diyalogda ALAN hatasıdır, toast değil — genel toast bastırılır, diğer hataları hook basar. */
+  open: (body: OpenStopPayload) => apiClient.post<ApiResponse<MachineStop>>(BASE, body, { suppressErrorToast: true }).then((r) => r.data),
+  close: (id: string, endedAt: string | null) => apiClient.post<ApiResponse<MachineStop>>(`${BASE}/${id}/close`, { endedAt }, { suppressErrorToast: true }).then((r) => r.data),
   /** İLK karar — claim `reasonCode IS NULL`; ikinci sınıflandırma yerinde ezmez (409). */
   classify: (id: string, body: { reasonCode: string; reasonNote: string | null }) =>
     apiClient.post<ApiResponse<MachineStop>>(`${BASE}/${id}/classify`, body).then((r) => r.data),

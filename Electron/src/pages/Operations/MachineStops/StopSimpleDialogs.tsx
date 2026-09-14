@@ -14,9 +14,10 @@ interface CloseProps {
   isPending: boolean;
   onClose: () => void;
   onConfirm: (endedAt: string | null) => void;
+  stampError?: string | null;
 }
 
-export function StopCloseDialog({ target, isPending, onClose, onConfirm }: CloseProps) {
+export function StopCloseDialog({ target, isPending, onClose, onConfirm, stampError }: CloseProps) {
   const [endedAt, setEndedAt] = useState(nowLocalInput());
   const iso = localInputToIso(endedAt);
   return (
@@ -25,12 +26,13 @@ export function StopCloseDialog({ target, isPending, onClose, onConfirm }: Close
         <DialogHeader>
           <DialogTitle>Duruşu kapat — {target.machine.name}</DialogTitle>
           <DialogDescription>
-            Başlangıç {formatDateTime(target.startedAt)}. Süre başlangıçtan hesaplanır; bitiş başlangıçtan önce olamaz (400). Bitiş en fazla 36 saat geriye / 5 dakika ileriye yazılabilir; dışı sunucu saatine kırpılır ve uyarıyla söylenir.
+            Başlangıç {formatDateTime(target.startedAt)}. Süre başlangıçtan hesaplanır; bitiş başlangıçtan önce olamaz (400). Bitiş en fazla 7 gün geriye / 5 dakika ileriye yazılabilir; dışı REDDEDİLİR (kırpılmaz).
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-1">
           <Label htmlFor="stop-ended">Bitiş</Label>
-          <Input id="stop-ended" type="datetime-local" value={endedAt} onChange={(e) => setEndedAt(e.target.value)} />
+          <Input id="stop-ended" type="datetime-local" value={endedAt} onChange={(e) => setEndedAt(e.target.value)} aria-invalid={!!stampError} />
+          {stampError && <p className="text-destructive text-xs">{stampError}</p>}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isPending}>

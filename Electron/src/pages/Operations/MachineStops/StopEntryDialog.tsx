@@ -20,9 +20,11 @@ interface Props {
   isPending: boolean;
   onClose: () => void;
   onConfirm: (body: OpenStopPayload) => void;
+  /** Sunucunun aralık dışı damga hatası (alan altında, toast değil). */
+  stampError?: string | null;
 }
 
-export function StopEntryDialog({ presets, isPending, onClose, onConfirm }: Props) {
+export function StopEntryDialog({ presets, isPending, onClose, onConfirm, stampError }: Props) {
   const [clientToken] = useState(() => crypto.randomUUID());
   const [machineId, setMachineId] = useState("");
   const [startedAt, setStartedAt] = useState(nowLocalInput());
@@ -37,7 +39,7 @@ export function StopEntryDialog({ presets, isPending, onClose, onConfirm }: Prop
           <DialogTitle>Elle duruş girişi</DialogTitle>
           <DialogDescription>
             Makinede tek açık duruş olabilir (ikincisi 409). Sebep şimdi verilmezse duruş yine açılır; sınıflandırma borcu doğar ve kuyrukta görünür.
-            Başlangıç en fazla 36 saat geriye / 5 dakika ileriye yazılabilir; dışı sunucu saatine kırpılır ve uyarıyla söylenir.
+            Başlangıç en fazla 7 gün geriye / 5 dakika ileriye yazılabilir; dışı REDDEDİLİR (kırpılmaz).
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -58,7 +60,8 @@ export function StopEntryDialog({ presets, isPending, onClose, onConfirm }: Prop
           </div>
           <div className="space-y-1">
             <Label htmlFor="stop-started">Başlangıç</Label>
-            <Input id="stop-started" type="datetime-local" value={startedAt} onChange={(e) => setStartedAt(e.target.value)} />
+            <Input id="stop-started" type="datetime-local" value={startedAt} onChange={(e) => setStartedAt(e.target.value)} aria-invalid={!!stampError} />
+            {stampError && <p className="text-destructive text-xs">{stampError}</p>}
           </div>
           <div className="space-y-1">
             <Label>Sebep (isteğe bağlı)</Label>

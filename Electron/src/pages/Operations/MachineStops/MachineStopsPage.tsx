@@ -41,7 +41,11 @@ export function MachineStopsPage() {
   const filters = useStopFilters(rows);
   const actions = useStopActions(setDialog);
   const { active, labelOf } = useStopReasonPresets();
-  const { open, close, classify, reclassify, revoke } = useMachineStopMutations(() => setDialog(null));
+  const { open, close, classify, reclassify, revoke, stampError, clearStampError } = useMachineStopMutations(() => setDialog(null));
+  const closeDialog = () => {
+    clearStampError();
+    setDialog(null);
+  };
 
   return (
     <PageShell>
@@ -69,7 +73,7 @@ export function MachineStopsPage() {
       </div>
       <StopsTable rows={rows} isLoading={query.isLoading} isError={query.isError} onRetry={() => void query.refetch()} labelOf={labelOf} nowMs={nowMs} actions={actions} />
       {/* Diyaloglar KOŞULLU mount: her açılış taze bileşen ve taze `clientToken`. */}
-      {dialog?.kind === "entry" && <StopEntryDialog presets={active} isPending={open.isPending} onClose={() => setDialog(null)} onConfirm={(b) => open.mutate(b)} />}
+      {dialog?.kind === "entry" && <StopEntryDialog presets={active} isPending={open.isPending} onClose={closeDialog} onConfirm={(b) => open.mutate(b)} stampError={stampError} />}
       {(dialog?.kind === "classify" || dialog?.kind === "reclassify") && (
         <StopReasonDialog
           target={dialog.target}
@@ -85,7 +89,7 @@ export function MachineStopsPage() {
           }
         />
       )}
-      {dialog?.kind === "close" && <StopCloseDialog target={dialog.target} isPending={close.isPending} onClose={() => setDialog(null)} onConfirm={(endedAt) => close.mutate({ id: dialog.target.id, endedAt })} />}
+      {dialog?.kind === "close" && <StopCloseDialog target={dialog.target} isPending={close.isPending} onClose={closeDialog} onConfirm={(endedAt) => close.mutate({ id: dialog.target.id, endedAt })} stampError={stampError} />}
       {dialog?.kind === "revoke" && <StopRevokeDialog target={dialog.target} isPending={revoke.isPending} onClose={() => setDialog(null)} onConfirm={(reason) => revoke.mutate({ id: dialog.target.id, reason })} />}
       {dialog?.kind === "ledger" && <StopReclassLedgerDialog target={dialog.target} labelOf={labelOf} onClose={() => setDialog(null)} />}
     </PageShell>
