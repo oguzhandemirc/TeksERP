@@ -61,7 +61,7 @@ interface PreviewData {
   const kursunStepId = fx.stepIdBySeq[3];
   const tamburStepId = fx.stepIdBySeq[4];
   const [rollA, rollB] = fx.rollIds;
-  let manualRollId: string | null = null;
+  const manualRollIds: string[] = [];
   let testItemId: string | null = null;
   let fx2: Awaited<ReturnType<typeof createManualMoveFixture>> | null = null;
 
@@ -206,16 +206,11 @@ interface PreviewData {
       },
       { machineId: null, stationId: null },
     )).data as { rollId: string; barcode: string | null; alreadyAttached: boolean; colorSource: string };
-    manualRollId = created.rollId;
+    manualRollIds.push(created.rollId);
 
     // ── GERÇEKÇİLİK EŞİĞİ (metraj) — UYARI, blok DEĞİL ─────────────────────────
     // `createManualRoll` dönüşüne `warnings` ekleniyor; eşik altı metrajda (bu
     // fikstürün 123,5'i) uyarı ÇIKMAMALI.
-    // ⚠️ SERVİS DÜZEYİNDE eşik-aşan bir çağrı BİLEREK eklenmedi: bu bekçinin
-    // temizliği TEK `manualRollId` izliyor, ikinci bir top kalıntı bırakır ve
-    // kalıntı sonraki koşumları kirletir. Aynı mekanizmanın servis düzeyindeki
-    // kanıtı ağırlık tarafında duruyor (`test_sack_weigh_source` §3b: warnings
-    // DOLU **ve** kayıt YAZILMIŞ) — eşik yardımcısı ikisinde de aynı dosyadır.
     ok(
       lengthWarning(123.5) === null,
       `eşik altı metraj uyarı ÜRETMEZ (123,5 m < ${LENGTH_WARN_M})`,
@@ -223,6 +218,38 @@ interface PreviewData {
     ok(
       lengthWarning(LENGTH_WARN_M + 1) !== null,
       `eşik üstü metraj uyarı ÜRETİR (${LENGTH_WARN_M + 1} m)`,
+    );
+
+    // === 6b) EŞİK AŞIMI SERVİSTE: uyarı YANITA ve AUDİT YÜKÜNE birlikte girer ===
+    // Yanıttaki uyarı ekranda kaybolur; "bu top girilirken uyarı verildi mi" sorusunun
+    // kalıcı cevabı audit yüküdür (çuval tartısı `finishWeigh` emsali). Kayıt yine YAZILIR.
+    const bigRes = await svc.createManualRoll(
+      {
+        targetStepId: tamburStepId,
+        initialQty: LENGTH_WARN_M + 1,
+        reason: "saha: eşik aşan metraj (sonda)",
+        clientToken: randomUUID(),
+        batchId: fx.batchId,
+      },
+      { machineId: null, stationId: null },
+    );
+    const bigRoll = bigRes.data as { rollId: string };
+    manualRollIds.push(bigRoll.rollId);
+    const bigWarning = bigRes.warnings?.[0] ?? null;
+    ok(bigWarning !== null && bigRes.warnings?.length === 1, `eşik aşımı → yanıtta TEK uyarı (${bigWarning ?? "-"})`);
+    ok(
+      Number((await p.roll.findUniqueOrThrow({ where: { id: bigRoll.rollId }, select: { initialQty: true } })).initialQty) === LENGTH_WARN_M + 1,
+      "eşik aşımı kaydı ENGELLEMEDİ (top yazıldı)",
+    );
+    const bigLog = await p.systemLog.findFirst({
+      where: { tableName: "ROLL", recordId: bigRoll.rollId, action: "CREATE" },
+      orderBy: { createdAt: "desc" },
+      select: { newData: true },
+    });
+    const bigData = bigLog?.newData as Record<string, unknown> | null;
+    ok(
+      typeof bigData?.thresholdWarning === "string" && bigData.thresholdWarning === bigWarning,
+      `audit yükünde thresholdWarning YANITLA AYNI (${String(bigData?.thresholdWarning ?? "YOK")})`,
     );
 
     const mRoll = await p.roll.findUniqueOrThrow({
@@ -269,6 +296,7 @@ interface PreviewData {
         (mData.reason as string).includes("elde bulundu"),
       `manuel top audit'i sebebiyle yazıldı (${String(mData?.event)})`,
     );
+    ok(!("thresholdWarning" in (mData ?? {})), "eşik altı topun audit yükünde thresholdWarning anahtarı YOK (iki yönlü)");
 
     // === 7) İDEMPOTENCY — aynı token, mükerrer top YOK ===
     const retry = (await svc.createManualRoll(
@@ -308,13 +336,13 @@ interface PreviewData {
     fail++;
     console.error("HATA:", e instanceof Error ? e.stack : e);
   } finally {
-    // Manuel top fixture kapsamı DIŞINDA doğdu → önce o sökülür (FK: currentStepId).
-    if (manualRollId) {
-      await p.rollMovement.deleteMany({ where: { rollId: manualRollId } });
-      await p.rollOperation.deleteMany({ where: { rollId: manualRollId } });
-      await p.rollProperty.deleteMany({ where: { rollId: manualRollId } });
-      await p.systemLog.deleteMany({ where: { recordId: manualRollId } });
-      await p.roll.deleteMany({ where: { id: manualRollId } });
+    // Manuel toplar fixture kapsamı DIŞINDA doğdu → önce onlar sökülür (FK: currentStepId).
+    if (manualRollIds.length > 0) {
+      await p.rollMovement.deleteMany({ where: { rollId: { in: manualRollIds } } });
+      await p.rollOperation.deleteMany({ where: { rollId: { in: manualRollIds } } });
+      await p.rollProperty.deleteMany({ where: { rollId: { in: manualRollIds } } });
+      await p.systemLog.deleteMany({ where: { recordId: { in: manualRollIds } } });
+      await p.roll.deleteMany({ where: { id: { in: manualRollIds } } });
     }
     // Taşıma varsayılan parti kararı 'new' → fixture'ın BİLMEDİĞİ bir parti doğdu;
     // fixture teardown'ı yalnız kendi partisini siler ve WO silme FK'ya takılır.
@@ -331,7 +359,7 @@ interface PreviewData {
     if (fx2) await fx2.teardown();
     await fx.teardown();
     if (testItemId) await p.item.deleteMany({ where: { id: testItemId } });
-    console.log("(temizlendi — TEST- fixture WO/parti/toplar + manuel top + ürün silindi)");
+    console.log("(temizlendi — TEST- fixture WO/parti/toplar + manuel toplar + ürün silindi)");
     await p.$disconnect();
   }
 

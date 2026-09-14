@@ -1241,6 +1241,11 @@ export class TamburManualService {
       return { alreadyAttached: false, reopened: reopen.count > 0 };
     });
 
+    // GERÇEKÇİLİK EŞİĞİ — UYARI, blok DEĞİL (ağırlık tarafıyla aynı gerekçe:
+    // metraj elle de cihazdan da girebiliyor, sert tavan meşru yükü reddeder).
+    // Audit'ten ÖNCE hesaplanır: uyarı yalnız yanıta değil kalıcı ize de girer (çuval tartısı emsali).
+    const thresholdWarning = lengthWarning(input.initialQty);
+
     // Zincir-dışı doğumun KALICI sebep izi (dosya başlığı, madde 2).
     await AuditService.log({
       userId: ctx.userId,
@@ -1251,6 +1256,7 @@ export class TamburManualService {
         event: TAMBUR_MANUAL_ROLL_MARKER,
         reason,
         reasonCode,
+        ...(thresholdWarning ? { thresholdWarning } : {}),
         barcode: roll.barcode,
         itemId,
         colorId,
@@ -1283,9 +1289,6 @@ export class TamburManualService {
       },
     });
 
-    // GERÇEKÇİLİK EŞİĞİ — UYARI, blok DEĞİL (ağırlık tarafıyla aynı gerekçe:
-    // metraj elle de cihazdan da girebiliyor, sert tavan meşru yükü reddeder).
-    const thresholdWarning = lengthWarning(input.initialQty);
     return {
       success: true,
       data: {
