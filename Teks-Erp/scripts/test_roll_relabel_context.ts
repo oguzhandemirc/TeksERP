@@ -41,7 +41,8 @@ async function main() {
     select: { id: true },
   });
   const color = await prisma.color.create({
-    data: { code: `RLBC-${ts}`, name: "RLBC MAVİ", hex: "#1e40af" },
+    // Ad da koşum başına BENZERSİZ: sabit ad, çöken koşumun artığıyla katlanmış-ad tekilliğine çarpar (d9 2026-09-14).
+    data: { code: `RLBC-${ts}`, name: `RLBC MAVİ ${ts}`, hex: "#1e40af" },
     select: { id: true },
   });
   const prop = await prisma.fabricProperty.findFirst({ where: { isActive: true }, select: { id: true } });
@@ -203,6 +204,9 @@ async function main() {
       await prisma.shipment.delete({ where: { id } }).catch(() => {});
     }
     await prisma.rollProperty.deleteMany({ where: { rollId: { in: [r1.id, r2.id, r3.id] } } });
+    // Defter çocukları toptan ÖNCE (RESTRICT) — metraj düzeltmesi satır yazar (ENTRY_CORRECTION).
+    await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: [r1.id, r2.id, r3.id] } } });
+    await prisma.rollVariance.deleteMany({ where: { rollId: { in: [r1.id, r2.id, r3.id] } } });
     await prisma.roll.deleteMany({ where: { id: { in: [r1.id, r2.id, r3.id] } } });
     await prisma.workOrderToOrderLine.deleteMany({ where: { workOrderId: wo.id } });
     if (step) await prisma.workOrderStep.deleteMany({ where: { workOrderId: wo.id } });
