@@ -94,6 +94,7 @@ import {
   KursunBypassService,
   type KursunBypassTamburContext,
 } from "./kursun-bypass.service";
+import { TAMBUR_ENTRY_SOURCES } from "../constants/tambur-entry-sources";
 
 
 // Kesim etiket NİYETİ (hedef sipariş kalemi / müşteri var-mı + müşteri isActive;
@@ -1486,7 +1487,7 @@ export class TamburService {
       // operatörün elinde tek çıkar yol topu SIFIRDAN tekrar girmekti — yani
       // envantere mükerrer ("yalancı kopya") stok yazmak. Kaydın kendisi
       // doğruydu, kayıp olan şey ONA ULAŞMAKTI.
-      entrySource: { in: [RollEntrySource.TAMBUR_SPLIT, RollEntrySource.TAMBUR_MANUAL] },
+      entrySource: { in: [...TAMBUR_ENTRY_SOURCES] },
       // Sonradan tüketilen/iptal edilen çocuk (re-cut'ta TAMBUR_CONSUMED,
       // kartela/fason tüketimi, CANCELLED) fiziksel top değil — etiket basılmaz.
       status: { notIn: K18_DEAD_STATUSES },
