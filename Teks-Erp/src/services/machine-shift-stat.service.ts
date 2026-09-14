@@ -47,14 +47,14 @@ export async function loadShiftTermsInput(tx: Tx, machineId: string, shiftInstan
     }),
     await tx.machineRun.findMany({
       where: { machineId, revokedAt: null, ...intersects },
-      select: { id: true, startedAt: true, endedAt: true, picksAtClose: true, producedM: true, targetPicksPerMin: true, unitsPerCm: true },
+      select: { id: true, startedAt: true, endedAt: true, picksAtClose: true, producedM: true, targetUnitsPerMin: true, unitsPerCm: true },
       orderBy: { startedAt: "asc" },
     }),
     await tx.doffEvent.findMany({
       where: { machineId, revokedAt: null, doffedAt: { gte: w.startsAt, lt: w.endsAt } },
       select: { counterSource: true },
     }),
-    await tx.machineSpec.findUnique({ where: { machineId }, select: { nominalPicksPerMin: true, monitoringState: true } }),
+    await tx.machineSpec.findUnique({ where: { machineId }, select: { nominalUnitsPerMin: true, monitoringState: true } }),
   ];
   // Sebep etiketi katalogdan KOPYALANIR (breakdown `reasonLabel` DONAR — katalog değişse rapor değişmez).
   const codes = [...new Set(stops.map((s) => s.reasonCode).filter((c): c is string => c !== null))];
@@ -121,8 +121,8 @@ const STAT_SELECT = {
   id: true, machineId: true, shiftInstanceId: true, sealState: true, sealGeneration: true, sealedAt: true,
   calendarSec: true, unobservedSec: true, nonScheduledSec: true, plannedBreakSec: true, potSec: true, aptSec: true,
   setupSec: true, plannedDownSec: true, unplannedDownSec: true, minorStopSec: true, minorStopCount: true, stopCount: true,
-  warpStopCount: true, weftStopCount: true, unclassifiedSec: true, picksActual: true, gapPicks: true, watchdogSec: true,
-  targetPickCapacityApt: true, targetPickCapacityPot: true, targetPicksPerMin: true, stopThresholdSec: true,
+  warpStopCount: true, weftStopCount: true, unclassifiedSec: true, unitsActual: true, gapUnits: true, watchdogSec: true,
+  targetUnitCapacityApt: true, targetUnitCapacityPot: true, targetUnitsPerMin: true, stopThresholdSec: true,
   unitsPerCmAtClose: true, producedM: true, source: true, monitoringState: true,
 } satisfies Prisma.MachineShiftStatSelect;
 

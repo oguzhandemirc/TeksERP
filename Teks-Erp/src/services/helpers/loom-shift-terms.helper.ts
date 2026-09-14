@@ -43,7 +43,7 @@ export interface ShiftRunInput {
   endedAt: Date | null;
   picksAtClose: number | null;
   producedM: number | null;
-  targetPicksPerMin: number | null;
+  targetUnitsPerMin: number | null;
   unitsPerCm: number | null;
 }
 export interface ShiftTermsInput {
@@ -51,7 +51,7 @@ export interface ShiftTermsInput {
   stops: ShiftStopInput[];
   runs: ShiftRunInput[];
   doffSources: MachineDataSource[];
-  spec: { nominalPicksPerMin: number | null; monitoringState: MachineMonitoringState } | null;
+  spec: { nominalUnitsPerMin: number | null; monitoringState: MachineMonitoringState } | null;
   now: Date;
   stopThresholdSec: number;
   /** M3 (Dilim 3): amir terime elle dokunduysa kaynak SUPERVISOR olur. */
@@ -72,8 +72,8 @@ export interface ShiftTerms {
   potSec: number; aptSec: number; setupSec: number; plannedDownSec: number; unplannedDownSec: number;
   minorStopSec: number; minorStopCount: number; stopCount: number;
   warpStopCount: number | null; weftStopCount: number | null; unclassifiedSec: number;
-  picksActual: number; gapPicks: number; watchdogSec: number;
-  targetPickCapacityApt: number; targetPickCapacityPot: number; targetPicksPerMin: number | null;
+  unitsActual: number; gapUnits: number; watchdogSec: number;
+  targetUnitCapacityApt: number; targetUnitCapacityPot: number; targetUnitsPerMin: number | null;
   stopThresholdSec: number; unitsPerCmAtClose: number | null; producedM: number | null;
   source: MachineDataSource; monitoringState: MachineMonitoringState;
   breakdown: ShiftBreakdownRow[];
@@ -128,8 +128,8 @@ function emptyTerms(input: ShiftTermsInput, calendarSec: number, warnings: strin
   return {
     calendarSec, unobservedSec: 0, nonScheduledSec: 0, plannedBreakSec: 0, potSec: 0, aptSec: 0,
     setupSec: 0, plannedDownSec: 0, unplannedDownSec: 0, minorStopSec: 0, minorStopCount: 0, stopCount: 0,
-    warpStopCount: null, weftStopCount: null, unclassifiedSec: 0, picksActual: 0, gapPicks: 0, watchdogSec: 0,
-    targetPickCapacityApt: 0, targetPickCapacityPot: 0, targetPicksPerMin: null,
+    warpStopCount: null, weftStopCount: null, unclassifiedSec: 0, unitsActual: 0, gapUnits: 0, watchdogSec: 0,
+    targetUnitCapacityApt: 0, targetUnitCapacityPot: 0, targetUnitsPerMin: null,
     stopThresholdSec: input.stopThresholdSec, unitsPerCmAtClose: null, producedM: null,
     source: "INFERRED", monitoringState: input.spec?.monitoringState ?? "OFF",
     breakdown: [], warnings, emptyLoom: true, runCount: 0,
@@ -182,7 +182,7 @@ export function computeShiftTermsPure(input: ShiftTermsInput): ShiftTerms {
       else prod.picks += r.picksAtClose;
       if (r.producedM !== null) { prod.m += r.producedM; prod.mSeen = true; }
     } else if (r.endedAt === null) warnings.push("Açık koşum: atkısı kapandığı vardiyaya yazılır, kapasitesi şu ana kadar sayıldı.");
-    const target = r.targetPicksPerMin ?? input.spec?.nominalPicksPerMin ?? null;
+    const target = r.targetUnitsPerMin ?? input.spec?.nominalUnitsPerMin ?? null;
     if (target === null) { warnings.push("Koşumun hedef deviri yok (koşum ve künye NULL) — kapasiteye girmedi, P ölçülemez."); continue; }
     prod.targets.push(target);
     const from = new Date(Math.max(r.startedAt.getTime(), w.startsAt.getTime()));
@@ -204,9 +204,9 @@ export function computeShiftTermsPure(input: ShiftTermsInput): ShiftTerms {
     setupSec: acc.setup, plannedDownSec: acc.planned, unplannedDownSec: acc.unplanned,
     minorStopSec: acc.minorSec, minorStopCount: acc.minorCount, stopCount: stops.length,
     warpStopCount: null, weftStopCount: null, unclassifiedSec: acc.unclassified,
-    picksActual: prod.picks, gapPicks: 0, watchdogSec: 0,
-    targetPickCapacityApt: Math.round(prod.capApt), targetPickCapacityPot: Math.round(prod.capPot),
-    targetPicksPerMin: prod.targets.length === 1 && single ? prod.targets[0]! : null,
+    unitsActual: prod.picks, gapUnits: 0, watchdogSec: 0,
+    targetUnitCapacityApt: Math.round(prod.capApt), targetUnitCapacityPot: Math.round(prod.capPot),
+    targetUnitsPerMin: prod.targets.length === 1 && single ? prod.targets[0]! : null,
     stopThresholdSec: input.stopThresholdSec,
     unitsPerCmAtClose: single?.unitsPerCm ?? null,
     producedM: prod.mSeen ? Math.round(prod.m * 1000) / 1000 : null,

@@ -44,7 +44,7 @@ export const MACHINE_RUN_SELECT = {
   weavingOrderId: true,
   itemId: true,
   colorId: true,
-  targetPicksPerMin: true,
+  targetUnitsPerMin: true,
   unitsPerCm: true,
   picksAtClose: true,
   producedM: true,
@@ -68,7 +68,7 @@ export interface OpenMachineRunInput {
   weavingOrderId?: string | null;
   itemId?: string | null;
   colorId?: string | null;
-  targetPicksPerMin?: number | null;
+  targetUnitsPerMin?: number | null;
   unitsPerCm?: number | null;
   /** İstemci beyanı; yoksa sunucu saati. */
   startedAt?: Date | null;
@@ -119,7 +119,7 @@ async function auditRunOpened(created: MachineRunDto, userId: string | undefined
       weavingOrderId: created.weavingOrderId,
       itemId: created.itemId,
       colorId: created.colorId,
-      targetPicksPerMin: created.targetPicksPerMin,
+      targetUnitsPerMin: created.targetUnitsPerMin,
     },
   }).catch(() => undefined);
   if (!transitionedOrderId) return;
@@ -173,7 +173,7 @@ export async function openMachineRun(
           weavingOrderId: input.weavingOrderId ?? null,
           itemId,
           colorId,
-          targetPicksPerMin: input.targetPicksPerMin ?? null,
+          targetUnitsPerMin: input.targetUnitsPerMin ?? null,
           unitsPerCm: input.unitsPerCm != null ? new Prisma.Decimal(input.unitsPerCm) : null,
           clientToken: input.clientToken ?? null,
         },

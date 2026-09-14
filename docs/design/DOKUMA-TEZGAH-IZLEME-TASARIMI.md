@@ -335,7 +335,7 @@ model MachineSpec {
 
   /// Koşum hedefi girilmemişse performans paydası için YEDEK. NULL ise
   /// performans HESAPLANMAZ (null) — uydurulmaz.
-  nominalPicksPerMin Int?
+  nominalUnitsPerMin Int?
 
   /// ERP'den ÖNCEKİ çalışma saati bakiyesi. ⚠️ ARTAN SAYAÇ KOLONU DEĞİL — toplam
   /// saat TÜRETİLİR: `baselineRunHours + Σ(karne aptSec, baselineAt sonrası)`.
@@ -349,7 +349,7 @@ model MachineSpec {
   // serialNo · commissionedAt · reedWidthCm · picksPerRev @default(1)
   //
   /// FİZİKSEL üst DEVİR (**devir/dk**) — OLABİLİRLİK TAVANI'nın girdisi (§3.4),
-  /// randıman paydası DEĞİL. ⚠️ ADI `maxPicksPerMin` DEĞİLDİR: atkı/dk ile devir/dk
+  /// randıman paydası DEĞİL. ⚠️ ADI `maxUnitsPerMin` DEĞİLDİR: atkı/dk ile devir/dk
   /// aynı büyüklük değildir ve eski ad `picksPerRev = 2` olan tezgahta tavanı
   /// 2 katına gevşetip kontrolcü çöpünü `OK` damgalıyordu (Fable D1). Atkıya çevrim
   /// `× picksPerRev`tir ve `picksPerRev` YALNIZ tavana girer, PAYDAYA ASLA.
@@ -626,7 +626,7 @@ model MachineInterval {
   runSecCounterEnd   Decimal? @db.Decimal(18, 0)
 
   /// TÜRETİLMİŞ FARK — `deltaQuality != OK` ise NULL. 0 ile KARIŞTIRILMAZ.
-  pickDelta Int?
+  unitDelta Int?
   runSec    Int?
   /// ⚠️ Duruş span'inin BU KOVAYA PAY EDİLMİŞ saniyesi (§5.1) — karne terimleri
   /// buradan toplanır, ham `durationSec`ten DEĞİL.
@@ -649,7 +649,7 @@ model MachineInterval {
   minorStopSec   Int @default(0)
   /// Makinenin BEYAN ETTİĞİ sinyale göre kopuş adedi (insan sınıflandırması
   /// DEĞİL — §5.4 kopuş/10⁵ atkı KPI'ının payı budur).
-  /// ⚠️ NULLABLE ve bu `pickDelta`nın 0/null ayrımının AYNISIDIR: `0` = kanal VAR,
+  /// ⚠️ NULLABLE ve bu `unitDelta`nın 0/null ayrımının AYNISIDIR: `0` = kanal VAR,
   /// o kovada kopuş yok; `NULL` = kanal YOK ya da okunamadı. Tek "durdu" kontağı
   /// olan retrofitte `@default(0)` "bu tezgahta çözgü kopuşu yok" YALANINI üretirdi
   /// ve migration geri alınamaz. NOT NULL'a çevirmek AYRI bir karardır.
@@ -659,8 +659,8 @@ model MachineInterval {
 
   /// ⚠️ İkisi de **ATKI/DK**tır ve bu kovada GÖZLENEN değerlerdir — `MachineSpec`in
   /// fiziksel tavanı (`maxRevPerMin`, **devir/dk**) ile karıştırılmaz (§3.4 birim seddi).
-  avgPicksPerMin Int?
-  maxPicksPerMin Int?
+  avgUnitsPerMin Int?
+  maxUnitsPerMin Int?
 
   deltaQuality MachineDeltaQuality
   source       MachineDataSource
@@ -983,9 +983,9 @@ model MachineRun {
 
   /// HEDEF DEVİR (atkı/dk) — randımanın paydası. DEĞİŞİRSE KOŞUM KAPANIR,
   /// yenisi açılır; tek satırda iki devir tutmak paydayı belirsizleştirir.
-  /// NULL → `MachineSpec.nominalPicksPerMin` yedeği; o da NULL → PERFORMANS
+  /// NULL → `MachineSpec.nominalUnitsPerMin` yedeği; o da NULL → PERFORMANS
   /// HESAPLANMAZ (uydurulmaz, rapor "P: ölçülemedi" der).
-  targetPicksPerMin Int?
+  targetUnitsPerMin Int?
   /// DONMUŞ ATKI SIKLIĞI — **TEZGAH ÜSTÜ (HAM) atkı/cm**, mamul DEĞİL.
   /// `metre = atkı ÷ (hamAtkıPerCm × 100)` ve bu ÇÖZGÜ/HAM metredir; mamul
   /// (bitim sonrası) metre `× (1 − takeUp)` ile AYRI bir büyüklüktür, bu belgede
@@ -998,7 +998,7 @@ model MachineRun {
 
   // ── KAPANIŞTA DONAN ÜRETİM TERİMLERİ (tek yazar: koşumu kapatan) ──────────
   /// ⚠️ Koşum "BUDANMAZ" ilan edilmişti ama içinde ÜRETİM TERİMİ YOKTU: metre
-  /// `MachineInterval.pickDelta`dan doğuyor, karne taneciği ise vardiya×makine
+  /// `MachineInterval.unitDelta`dan doğuyor, karne taneciği ise vardiya×makine
   /// (`runId` taşımaz) — retention penceresinden sonra "bu iş emri adımında kaç
   /// atkı/metre üretildi" CEVAPSIZ kalır, `MachineRun` boş kabuk olarak yaşardı.
   /// `workOrderStepId` taşıyan kayıt tanımı gereği İŞ KARARI verisidir.
@@ -1189,14 +1189,14 @@ model MachineShiftStat {
   /// >0 ise rapor `ApiResponse.warnings` şeridi çizer.
   unclassifiedSec Int @default(0)
 
-  picksActual Int @default(0)
+  unitsActual Int @default(0)
   /// ⚠️ COLLECTOR_GAP'in atkısı — ajan sustuğu pencerede sayaç ilerledi ve ilk
   /// kovada SIÇRAMA olarak geldi. **METRE bunu İÇERİR** (kumaş gerçekten
   /// dokundu), **randımanın PAYINDAN DÜŞÜLÜR ve PAYDASINA HİÇ GİRMEZ**
-  /// (`picksActual − gapPicks`; o sürenin karşılığı `unobservedSec`tir ve
+  /// (`unitsActual − gapUnits`; o sürenin karşılığı `unobservedSec`tir ve
   /// POT'tan zaten düşüldüğü için paydada hiç doğmaz — sıçramayı P'nin payına
   /// koymak gözlenmemiş süreyi ödüllendirirdi, §5.1/§5.2).
-  gapPicks Int @default(0)
+  gapUnits Int @default(0)
   /// ⚠️ WATCHDOG'la GEÇİCİ kapanmış duruşların bu vardiyaya düşen saniyesi.
   /// Terim AYRI basılır: karne "şu kadarı tahmindir" demeden mühürlenemez.
   watchdogSec Int @default(0)
@@ -1204,15 +1204,15 @@ model MachineShiftStat {
   // ── DONMUŞ PAYDALAR — sonradan değişse bu satırın randımanı DEĞİŞMEZ ──
   /// ⚠️ ASIL PAYDALAR BUNLARDIR (atkı cinsinden kapasite). Bir vardiyada İKİ KOŞUM
   /// normaldir (§2.8 "hedef değişirse koşum kapanır" + `DESEN_DEGISIMI` = SETUP) ve
-  /// tek bir `targetPicksPerMin` donduran karne hangi paydayı seçerse seçsin P'yi
+  /// tek bir `targetUnitsPerMin` donduran karne hangi paydayı seçerse seçsin P'yi
   /// yanlış üretirdi; iki hedefi ORTALAMAK ise §5.3/4'ün kendi yasağıdır.
   /// ⚠️ İKİ TERİM ŞART: tek terim P'yi E'ye ÇÖKERTİR (aynı paydayla bölünen iki
   /// oran aynı sayıdır). `…Apt` P'nin paydası, `…Pot` E'nin paydasıdır (§5.2).
-  targetPickCapacityApt Int @default(0)   // Σ(target_i × o koşumun APT dakikası)
-  targetPickCapacityPot Int @default(0)   // Σ(target_i × o koşumun POT dakikası)
+  targetUnitCapacityApt Int @default(0)   // Σ(target_i × o koşumun APT dakikası)
+  targetUnitCapacityPot Int @default(0)   // Σ(target_i × o koşumun POT dakikası)
   /// Yalnız TEK koşumlu vardiyada raporda gösterilecek ETİKET; birden çok hedef
-  /// varsa NULL (payda yine `targetPickCapacity`tir).
-  targetPicksPerMin Int?
+  /// varsa NULL (payda yine `targetUnitCapacity`tir).
+  targetUnitsPerMin Int?
   /// Mikro duruş eşiği değişimi geçmişle kıyaslanamaz seri üretir; eşik karneye
   /// DONAR ve raporun üstüne BASILIR.
   stopThresholdSec  Int
@@ -1335,8 +1335,8 @@ model MachineShiftStatSeal {
   terms          Json
   potSec                Int
   aptSec                Int
-  picksActual           Int
-  targetPickCapacityPot Int
+  unitsActual           Int
+  targetUnitCapacityPot Int
   effectivenessPct      Decimal? @db.Decimal(5, 2)
   formulaVersion Int
   reason         String?  @db.VarChar(300)
@@ -1370,11 +1370,11 @@ model MachineShiftStatSeal {
 | `MachineInterval` | TELEMETRİ | `(machineId, bucketStart)` | yeniden yaz (`restateCount`, yalnız mühürsüz) | kendisi kova | **telemetri budaması** (hard-delete sınıfı DEĞİL) | `loom-retention.helper` | Σ `observedSec` + `unobservedSec` = takvim | `test_machine_prune_safety` |
 | `MachineStopEvent` | SPAN (sebeple DEFTER) | **`(machineId, stopKey)`** (PARTIAL, `revokedAt IS NULL`) | `revokedAt` + `MachineStopReclass` | `shiftInstanceId` + `factoryDay` | **telemetri budaması**, yalnız İNSAN kararsız satırda | `CLASSIFICATION_QUEUE_WHERE` | Σ breakdown + minor ≤ POT | `test_machine_prune_safety` · `test_machine_reclass` |
 | `MachineRun` | SPAN / DEFTER | `(machineId, startedAt)` + tek-açık seddi | `revokedAt` | kapanışta donan terimler | budanmaz | `beamsMountedDuring` (levent) | **Σ(koşum ∩ vardiya) ≤ `potSec`** ve karnenin donmuş paydası açık koşumdan mı geliyor | `test_machine_shift_terms` · `test_machine_run_beam_overlap` |
-| `MachineCounterEvent` | DEFTER (append-only) | `(machineId, signalKind, occurredAt)` WHERE aktif | `supersededByEventId` | `bucketStart` | budanmaz | süpersede-edilmemiş yüklemi | **Σ `acceptedDelta` (aktif) ↔ `picksActual` sapması** | `test_machine_counter_delta` |
+| `MachineCounterEvent` | DEFTER (append-only) | `(machineId, signalKind, occurredAt)` WHERE aktif | `supersededByEventId` | `bucketStart` | budanmaz | süpersede-edilmemiş yüklemi | **Σ `acceptedDelta` (aktif) ↔ `unitsActual` sapması** | `test_machine_counter_delta` |
 | `MachineShiftStat` | ÖZET / KARNE (DURUM) | `(machineId, shiftInstanceId)` | mühür çevrimi + `sealGeneration` | `shiftInstanceId` | budanmaz | `loom-efficiency.helper` | terimler ↔ kova/span toplamı | `test_machine_shift_terms` |
 | `MachineShiftStatSeal` | DEFTER (append-only) | `(statId, sealGeneration, action)` | yok (defter kapanıştır) | `statId` | budanmaz | son-kuşak helper'ı | **son kuşağın terimleri ↔ `MachineShiftStat`ın güncel kolonları BİREBİR** | `test_machine_shift_seal` |
 
-**Eksik üç mutabakat `test_consistency`ye satır olarak yazılır** (kalın yazılanlar): (a) mühürlü vardiyada Σ `acceptedDelta` sapması `picksActual` ile tutarlı mı; (b) Σ(`MachineRun` ∩ vardiya penceresi) ≤ `potSec`; (c) defter ↔ durum ayrışamaz — son kuşağın terimleri güncel kolonlarla birebir.
+**Eksik üç mutabakat `test_consistency`ye satır olarak yazılır** (kalın yazılanlar): (a) mühürlü vardiyada Σ `acceptedDelta` sapması `unitsActual` ile tutarlı mı; (b) Σ(`MachineRun` ∩ vardiya penceresi) ≤ `potSec`; (c) defter ↔ durum ayrışamaz — son kuşağın terimleri güncel kolonlarla birebir.
 
 ---
 
@@ -1455,9 +1455,9 @@ export function deriveCounterDelta(i: {
 }): { delta: number | null; quality: MachineDeltaQuality } { /* … */ }
 ```
 
-1. **Asla fark uydurma.** `ANOMALY` → `pickDelta = null`. Kova 0 üretim GÖSTERMEZ, **"bilinmiyor"** gösterir. `0` ile `null` raporda ayrı kovalardır.
+1. **Asla fark uydurma.** `ANOMALY` → `unitDelta = null`. Kova 0 üretim GÖSTERMEZ, **"bilinmiyor"** gösterir. `0` ile `null` raporda ayrı kovalardır.
 2. **Tavan = fizik.** `maxRevPerMin × picksPerRev × geçen_dk × 1.1`. `maxRevPerMin` NULL ise **tavan uygulanmaz ve kalem `ANOMALY` damgalanır** — uydurulmuş bir tavan sessiz kabul üretirdi.
-   > **⚠️ BİRİM SEDDİ (Fable D1, KRİTİK).** Tavan **devir/dk** okur, randıman paydası **atkı/dk** okur ve sentez ikisine de `maxPicksPerMin` diyordu: `picksPerRev = 2` olan bir tezgahta tavan sessizce **2,2 katına** gevşer, kontrolcü çöpü `OK` damgalanıp doğrudan `picksActual`a girerdi. Adlar ayrıldı: **`maxRevPerMin` = devir/dk** (§2.3) · **`targetPicksPerMin`/`nominalPicksPerMin` = atkı/dk** (§2.8, §2.10). **`picksPerRev` YALNIZ tavana girer, PAYDAYA ASLA** — AST tripwire `picksPerRev` ile `targetPicksPerMin`in aynı ifadede geçmesini yasaklar.
+   > **⚠️ BİRİM SEDDİ (Fable D1, KRİTİK).** Tavan **devir/dk** okur, randıman paydası **atkı/dk** okur ve sentez ikisine de `maxUnitsPerMin` diyordu: `picksPerRev = 2` olan bir tezgahta tavan sessizce **2,2 katına** gevşer, kontrolcü çöpü `OK` damgalanıp doğrudan `unitsActual`a girerdi. Adlar ayrıldı: **`maxRevPerMin` = devir/dk** (§2.3) · **`targetUnitsPerMin`/`nominalUnitsPerMin` = atkı/dk** (§2.8, §2.10). **`picksPerRev` YALNIZ tavana girer, PAYDAYA ASLA** — AST tripwire `picksPerRev` ile `targetUnitsPerMin`in aynı ifadede geçmesini yasaklar.
 3. **`WRAPPED` ile `RESET` ayrımının tek ayırt edicisi olabilirlik tavanıdır.** `RESET` **dürüsttür ama EKSİKTİR**: sıfırlama öncesi atkılar kayıptır. Satır `RESET` damgalanır, `MachineCounterEvent` yazılır, onay olmadan vardiya mühürlenemez. 16-bit sarma ile operatörün doff'ta sayacı sıfırlaması **ayırt edilemeyebilir** — bu yüzden negatif sıçrama sarma diye YORUMLANMAZ (modülüs NULL doğar, §2.3), insana bırakılır.
 4. **Süreklilik ajanda yaşar.** `prev` backend'den okunup yazılmaz (TOCTOU); ajan kovayı kaparken `pickCounterStart` ve `pickCounterEnd`i BİRLİKTE yollar. Ajan yeniden başladığında `prev` yoktur → ilk kova `GAP`, ve `MachineLiveState.lastPickCounter` farkı bir **`MachineCounterEvent` satırı** doğurur: `quality = GAP`, `signalKind = PICK_COUNTER`, `prevValue = MachineLiveState.lastPickCounter`, `nextValue = ilk yeni okuma`, `acceptedDelta = null` (fark ÜRETİLMEZ), `decisionSource = MACHINE`, `decidedById = null` — *"şu andan şu ana görülmedi, aradaki N atkı bu kovaya sığdırılamaz."* ⚠️ Ayrı bir `COLLECTOR_GAP` enum değeri ya da tablosu **AÇILMAZ**; o ad, `GAP` niteliğinin toplayıcı kaynaklı hâli için kullanılan konuşma dilidir.
 
@@ -1616,7 +1616,7 @@ takvim (ShiftInstance penceresi)
 > **Kural:** `unobservedSec = calendarSec − Σ(MachineInterval.observedSec ∩ vardiya penceresi)` — **ARTIK yöntemiyle** hesaplanır, heartbeat aralığından DEĞİL; hiç kova doğmamış pencere bu farkta kendiliğinden görünür. **Heartbeat bir KAYNAK DEĞİLDİR**: nabız ajanın canlılığını söyler, kovanın gözlenmişliğini değil; ikisini karıştırmak "ajan ayaktaydı, demek ki ölçüyordu" yalanını üretir.
 > **Kova içi tutarlılık satır yazılırken zorlanır** (DB CHECK, §2.6): `runSec + stopSec + minorStopSec ≤ observedSec ≤ bucketMinutes × 60`. Üst sınır olmadan bir ajan hatası kovaya kova boyundan uzun gözlem yazar ve `unobservedSec` **negatife** düşerdi.
 > **MUTABAKATIN DOĞRU BİÇİMİ `Σ observedSec + unobservedSec = calendarSec`tir**, *"Σ kova = takvim"* DEĞİL — ikincisi `unobservedSec > 0` olan her vardiyada tanımı gereği kırmızı verir (§4).
-> **COLLECTOR_GAP'in iki yüzü ve `gapPicks`:** ajan sustuktan sonraki ilk kova `GAP` damgalanır; sayaç o sürede ilerlemiştir ve fark ilk kovada **sıçrama** olarak gelir. Karar **terimi ikiye ayırmaktır**: sıçrayan atkı `gapPicks` kolonuna yazılır (§2.10) ve **metre onu İÇERİR** (kumaş gerçekten dokundu, `Roll` bir gün o metreyi gösterecek), **randımanın PAYINDAN DÜŞÜLÜR, PAYDAYA HİÇ GİRMEZ** (`picksActual − gapPicks`; o sürenin karşılığı `unobservedSec`tir ve POT'tan zaten düşüldüğü için paydada hiç doğmaz — sıçramayı P'ye saymak gözlenmemiş süreyi ödüllendirir, saymamak ise üretimi yok sayar; tek sayı ikisini birden yapamaz).
+> **COLLECTOR_GAP'in iki yüzü ve `gapUnits`:** ajan sustuktan sonraki ilk kova `GAP` damgalanır; sayaç o sürede ilerlemiştir ve fark ilk kovada **sıçrama** olarak gelir. Karar **terimi ikiye ayırmaktır**: sıçrayan atkı `gapUnits` kolonuna yazılır (§2.10) ve **metre onu İÇERİR** (kumaş gerçekten dokundu, `Roll` bir gün o metreyi gösterecek), **randımanın PAYINDAN DÜŞÜLÜR, PAYDAYA HİÇ GİRMEZ** (`unitsActual − gapUnits`; o sürenin karşılığı `unobservedSec`tir ve POT'tan zaten düşüldüğü için paydada hiç doğmaz — sıçramayı P'ye saymak gözlenmemiş süreyi ödüllendirir, saymamak ise üretimi yok sayar; tek sayı ikisini birden yapamaz).
 > **Faz 1a'da `unobservedSec = 0`dır ve bu bir BEYANDIR:** telemetri yoktur, gözlemci İNSANDIR ve elle girilen karnede gözlem eksikliği değil **vardiya beyanı** vardır (`source` kolonu ayrımı zaten taşır). Aksi hâlde takvim kadar `unobservedSec` yazılır ve **POT = 0** çıkardı.
 
 ### 5.2 · Formül
@@ -1626,15 +1626,15 @@ POT = takvim − unobservedSec − NON_SCHEDULED − (breakOutOfPot ? plannedBre
 APT = POT − SETUP − PLANNED − UNPLANNED            ← MINOR DÜŞÜLMEZ
 
 A (Kullanılabilirlik) = aptSec / potSec
-P (Performans)        = (picksActual − gapPicks) / targetPickCapacityApt   ← mikro duruş burada erir
-RANDIMAN (E)          = (picksActual − gapPicks) / targetPickCapacityPot
+P (Performans)        = (unitsActual − gapUnits) / targetUnitCapacityApt   ← mikro duruş burada erir
+RANDIMAN (E)          = (unitsActual − gapUnits) / targetUnitCapacityPot
 
-  ⚠️ gapPicks = ajan susmuşken sayacın ilerlediği, ilk kovada SIÇRAMA olarak gelen
+  ⚠️ gapUnits = ajan susmuşken sayacın ilerlediği, ilk kovada SIÇRAMA olarak gelen
      atkı. PAYDAN DÜŞÜLÜR, PAYDAYA HİÇ GİRMEZ (karşılığı unobservedSec'tir ve
      POT'tan zaten düşülmüştür); METREYE DAHİLDİR (§5.6 — kumaş gerçekten dokundu).
 
-  targetPickCapacityApt = Σ(koşum_i.targetPicksPerMin × koşum_i'nin APT dakikası)
-  targetPickCapacityPot = Σ(koşum_i.targetPicksPerMin × koşum_i'nin POT dakikası)
+  targetUnitCapacityApt = Σ(koşum_i.targetUnitsPerMin × koşum_i'nin APT dakikası)
+  targetUnitCapacityPot = Σ(koşum_i.targetUnitsPerMin × koşum_i'nin POT dakikası)
 
 teknikRandıman        = APT / (APT + UNPLANNED)    ← tezgah panolarının "efficiency"si
 Q, OEE                = AYRI ve SONRADAN (kalite kararı Tambur'da, günler sonra)
@@ -1642,25 +1642,25 @@ Q, OEE                = AYRI ve SONRADAN (kalite kararı Tambur'da, günler sonr
 
 **Sektörde "randıman" = A × P'dir, OEE değil** ve klasik dokuma tanımı (gerçekleşen atkı ÷ teorik atkı) de tam olarak budur.
 
-> **⚠️ PAYDA VARDİYA İÇİNDE DEĞİŞEBİLİR (Fable D2, KRİTİK).** Karne taneciği vardiya×makine, ama §2.8 *"hedef değişirse koşum kapanır"* diyor ve `DESEN_DEGISIMI` bir SETUP kodudur — yani **bir vardiyada iki koşum NORMALDİR**. Tek bir `targetPicksPerMin` donduran karne hangi hedefi seçerse seçsin P'yi yanlış üretirdi; ikisini ortalamak ise §5.3/4'ün kendi yasağı ("oranlar ortalanmaz, helper yüzde dizisi kabul etmez").
-> **Karar:** payda bir ORAN değil bir **TERİMDİR** ve toplanır (`targetPickCapacity…`, §2.10); `targetPicksPerMin` yalnız TEK koşumlu vardiyada raporda gösterilecek **etikettir** (birden çok hedefte NULL).
-> **Kimlik sınırı dürüstçe yazılır:** `E = A × P` **tek hedefli** vardiyada birebirdir (bekçi bunu ölçer: tek hedefli fixture'da `|E − A×P| = 0`). Birden çok hedefte fark, hedeflerin POT ağırlıklı dağılımından doğar; rapor E'yi **kendi tanımından** (`picksActual / targetPickCapacityPot`) okur, **çarpımdan değil**. Tek terim kullanmak P'yi E'ye çökertirdi — aynı paydayla bölünen iki oran aynı sayıdır.
+> **⚠️ PAYDA VARDİYA İÇİNDE DEĞİŞEBİLİR (Fable D2, KRİTİK).** Karne taneciği vardiya×makine, ama §2.8 *"hedef değişirse koşum kapanır"* diyor ve `DESEN_DEGISIMI` bir SETUP kodudur — yani **bir vardiyada iki koşum NORMALDİR**. Tek bir `targetUnitsPerMin` donduran karne hangi hedefi seçerse seçsin P'yi yanlış üretirdi; ikisini ortalamak ise §5.3/4'ün kendi yasağı ("oranlar ortalanmaz, helper yüzde dizisi kabul etmez").
+> **Karar:** payda bir ORAN değil bir **TERİMDİR** ve toplanır (`targetUnitCapacity…`, §2.10); `targetUnitsPerMin` yalnız TEK koşumlu vardiyada raporda gösterilecek **etikettir** (birden çok hedefte NULL).
+> **Kimlik sınırı dürüstçe yazılır:** `E = A × P` **tek hedefli** vardiyada birebirdir (bekçi bunu ölçer: tek hedefli fixture'da `|E − A×P| = 0`). Birden çok hedefte fark, hedeflerin POT ağırlıklı dağılımından doğar; rapor E'yi **kendi tanımından** (`unitsActual / targetUnitCapacityPot`) okur, **çarpımdan değil**. Tek terim kullanmak P'yi E'ye çökertirdi — aynı paydayla bölünen iki oran aynı sayıdır.
 
 > **⚠️ Standart etiketi düzeltildi (ölçek merceği B6).** Sentez *"ISO 22400-2'deki adı **Effectiveness**"* diyordu; ISO 22400-2'de `OEE = Availability × Effectiveness × Quality` ve **Effectiveness performans bileşenidir (≈ bizim P'miz), A×P değil.** Çürütme ajanı da aynı hatayı "sağlam" diye onaylamıştı. Rapor başlığına basılacak doğru cümle: *"Randıman = A × P (kalite hariç). ISO 22400-2 karşılığı: OEE = A × E × Q; bizim P ≈ ISO Effectiveness, bizim E ≠ ISO Effectiveness."* **Sayı doğru, yalnız etiket yanlıştı.**
 
-Dokumada `P` tipik olarak 0,97–1,00 bandındadır (tezgah durunca atkı atmaz → her duruş A'ya düşer) — **saha doğrulaması**, bant pilotta ölçülür. **`P > 1` bir hata değil, bir VERİ HATASI SİNYALİDİR** — `targetPicksPerMin` yanlış girilmiştir; rapor `warnings` basar, otomatik düzeltme YAPMAZ.
+Dokumada `P` tipik olarak 0,97–1,00 bandındadır (tezgah durunca atkı atmaz → her duruş A'ya düşer) — **saha doğrulaması**, bant pilotta ölçülür. **`P > 1` bir hata değil, bir VERİ HATASI SİNYALİDİR** — `targetUnitsPerMin` yanlış girilmiştir; rapor `warnings` basar, otomatik düzeltme YAPMAZ.
 
 ### 5.3 · Nerede hesaplanır
 
 > **Terimler SAKLANIR, oran TEK helper'da TÜRETİLİR, mühür anında oran DENORMALİZE edilir.**
 
 1. `MachineShiftStat` yalnız **terimleri** tutar (saniye ve atkı).
-2. `src/services/helpers/loom-efficiency.helper.ts` → `computeMachineKpis(terms)` **TEK yazar ve TEK okuyucudur.** AST tripwire: `src/` içinde `picksActual /` ya da `aptSec /` aritmetiği başka dosyada geçemez.
+2. `src/services/helpers/loom-efficiency.helper.ts` → `computeMachineKpis(terms)` **TEK yazar ve TEK okuyucudur.** AST tripwire: `src/` içinde `unitsActual /` ya da `aptSec /` aritmetiği başka dosyada geçemez.
 3. Mühür anında oranlar + `formulaVersion` satıra yazılır. Denormalize güncel değer meşrudur, **koşulu TEK YAZAR olmasıdır**; ikinci bir yazma yolu açmak (servis içinden doğrudan yazım dahil) "tek kaynak satır" sınıfını kırar ve bekçi bunu AST ile ölçer. *(`Sack.weightKg ↔ SackWeighing` EMSAL DEĞİL UYARIDIR — §2.10.)*
 4. **ORANLAR ASLA ORTALANMAZ.** Haftalık/tezgah-üstü randıman `avg(effectivenessPct)` **değil** `Σpicks / Σ(target × POT)`. Helper **yüzde dizisi KABUL ETMEZ**.
 5. `formulaVersion` değişirse **geçmiş mühür DEĞİŞMEZ**; yeni sürüm yeni vardiyalardan geçerlidir.
 6. **Sınıflandırılmamış süre `UNPLANNED` sayılır** (fail-closed: bilinmeyen rakamı şişirmez, düşürür) **ve** `unclassifiedSec` ayrıca döner + `warnings` yazılır. `stopLossClass IS NULL` de aynı muameleyi görür — yüklem `IS NOT TRUE`/`COALESCE` ile **kötümser** kurulur.
-   > **İSTİSNA — "gözlendi ama hiç üretim yok" ≠ "gözlenmedi".** `SIPARIS_YOK` bir SEBEP KODUDUR ve sınıflandırılmadan `UNPLANNED` sayılır: 8 saat boş duran bir tezgah, vardiya bitmeden sınıflandırılmazsa **%0 randımanla mühürlenir** ve düzeltmesi `loom:shift-unseal` ister — amire her vardiyada, her boş tezgah için zorunluluk çıkar. **Kural:** `observedSec ≈ calendarSec` **VE** `picksActual = 0` **VE** vardiyada hiç açık koşum yoksa, mühürleyici süreyi `nonScheduledSec`e yazar ve `source = INFERRED` damgalar (tezgahın boş durduğu **ÖLÇÜLMÜŞTÜR**, varsayılmamıştır); rapor bunu ayrı satırda beyan eder ve amir mühür öncesi tek tıkla `UNPLANNED`a çevirebilir. Ajan susmuşsa (`observedSec ≈ 0`) bu kural **UYGULANMAZ** — o süre `unobservedSec`tir.
+   > **İSTİSNA — "gözlendi ama hiç üretim yok" ≠ "gözlenmedi".** `SIPARIS_YOK` bir SEBEP KODUDUR ve sınıflandırılmadan `UNPLANNED` sayılır: 8 saat boş duran bir tezgah, vardiya bitmeden sınıflandırılmazsa **%0 randımanla mühürlenir** ve düzeltmesi `loom:shift-unseal` ister — amire her vardiyada, her boş tezgah için zorunluluk çıkar. **Kural:** `observedSec ≈ calendarSec` **VE** `unitsActual = 0` **VE** vardiyada hiç açık koşum yoksa, mühürleyici süreyi `nonScheduledSec`e yazar ve `source = INFERRED` damgalar (tezgahın boş durduğu **ÖLÇÜLMÜŞTÜR**, varsayılmamıştır); rapor bunu ayrı satırda beyan eder ve amir mühür öncesi tek tıkla `UNPLANNED`a çevirebilir. Ajan susmuşsa (`observedSec ≈ 0`) bu kural **UYGULANMAZ** — o süre `unobservedSec`tir.
 7. **SIFIR PAYDA SÖZLEŞMESİ: `computeMachineKpis` sıfır döndürmez, `null` döndürür.** `POT = 0` (iptal vardiya) → `A = P = E = null`; `APT = 0` (tam duruş) → `P = null`, `A = 0` (gerçek: hiç çalışmadı). `null` "ölçülemedi"dir ve toplamada **PAYDAN DA PAYDADAN DA** dışlanır; toplayıcı kaç vardiyanın dışlandığını döner ve rapor bunu körlük zemini olarak basar (*"N vardiya ölçülemedi"*). Yüzde dizisi kabul edilmediği gibi, **`null`ı 0 sayan çağrı da AST tripwire ile yasaklanır** — aksi hâlde iptal vardiyalar haftalık randımanı sessizce aşağı çeker.
 8. **GÖLGE MOD BİR KOLON + KAPIDIR, bir reçete cümlesi değil.** Kolon `MachineSpec.monitoringState` (**OFF → SHADOW → LIVE**, varsayılan OFF = bugünkü davranış, §2.3); kapı `POST /specs/:id/go-live`ın üç şartıdır. **`SHADOW` tezgahın kovası ve duruşu YAZILIR ve karnesi NORMAL MÜHÜRLENİR** — mühürlememek, gölge dönemi ölçülemez kılar ve kabul kapısının ② numaralı şartını (*"15 mühürlü gölge vardiya"*) imkânsızlaştırırdı. Ayrım YAYINDA yapılır: **DEFTER raporları (R1–R5) varsayılan olarak `monitoringState = LIVE` süzer**; gölge karneler yalnız **"Devreye Alma" sekmesinde** (`loom:spec-manage`) görünür ve dışa aktarımda her satır **GÖLGE damgası** taşır. Süzme karnenin **DONMUŞ** `MachineShiftStat.monitoringState` kolonundan yapılır, canlı künyeden değil (§2.10): gölge karne LIVE'a asla terfi etmez. Yüklem `loom-efficiency.helper`in **boğaz-ikizi** olarak TEK helper'da yaşar ve AST tripwire ile korunur. Bekçi **`test_machine_shadow_mode`** (§9).
 
@@ -1669,10 +1669,10 @@ Dokumada `P` tipik olarak 0,97–1,00 bandındadır (tezgah durunca atkı atmaz 
 | | Nerede | Neden |
 |---|---|---|
 | **Anlık devir** | `MachineLiveState.instantPicksPerMin` — tarihçe YOK | 10 sn'lik anlık devir gürültüdür; yılda 63 M satır eder |
-| **Ortalama (çalışırken)** | türetilir: `(picksActual − gapPicks) / APT_dk` | sayaçtan çıkar, örnekleme hatası yok, toplanabilir; `gapPicks` **paydan düşülür** (§5.2) |
-| **Ortalama (genel)** | türetilir: `(picksActual − gapPicks) / POT_dk` | **Kimlik: `randıman = avgOverallPicksPerMin / targetPicksPerMin`** (ikisi de **atkı/dk**; `Rpm` adı devir/dk ile karışıyordu — §3.4 birim seddi). ⚠️ **Kimlik YALNIZ TEK HEDEFLİ vardiyada birebirdir:** birden çok koşum/hedef varsa `targetPicksPerMin` **NULL**'dur (§2.10) ve E bu kimlikten DEĞİL **kendi tanımından** okunur — `(picksActual − gapPicks) / targetPickCapacityPot` (§5.2) |
-| **Hedef** | `MachineRun.targetPicksPerMin` — SAKLANIR | randımanın paydası; işin özelliği, tezgahın değil |
-| **Kopuş yoğunluğu** | `kopuş/10⁵ atkı = (warpStopCount \| weftStopCount) × 100000 / picksActual` | ⚠️ payda ATKIDIR, saat değil — saat bazlı sayım yavaş koşan tezgahı ödüllendirir. **Pay ya da payda NULL ise KPI HESAPLANMAZ** ve rapor "ölçülemedi" der (kanalsız retrofitte sayaç NULL'dır, 0 değil — §2.6) |
+| **Ortalama (çalışırken)** | türetilir: `(unitsActual − gapUnits) / APT_dk` | sayaçtan çıkar, örnekleme hatası yok, toplanabilir; `gapUnits` **paydan düşülür** (§5.2) |
+| **Ortalama (genel)** | türetilir: `(unitsActual − gapUnits) / POT_dk` | **Kimlik: `randıman = avgOverallPicksPerMin / targetUnitsPerMin`** (ikisi de **atkı/dk**; `Rpm` adı devir/dk ile karışıyordu — §3.4 birim seddi). ⚠️ **Kimlik YALNIZ TEK HEDEFLİ vardiyada birebirdir:** birden çok koşum/hedef varsa `targetUnitsPerMin` **NULL**'dur (§2.10) ve E bu kimlikten DEĞİL **kendi tanımından** okunur — `(unitsActual − gapUnits) / targetUnitCapacityPot` (§5.2) |
+| **Hedef** | `MachineRun.targetUnitsPerMin` — SAKLANIR | randımanın paydası; işin özelliği, tezgahın değil |
+| **Kopuş yoğunluğu** | `kopuş/10⁵ atkı = (warpStopCount \| weftStopCount) × 100000 / unitsActual` | ⚠️ payda ATKIDIR, saat değil — saat bazlı sayım yavaş koşan tezgahı ödüllendirir. **Pay ya da payda NULL ise KPI HESAPLANMAZ** ve rapor "ölçülemedi" der (kanalsız retrofitte sayaç NULL'dır, 0 değil — §2.6) |
 
 > ⚠️ **SAYAÇ TÜM SLOTLARI TOPLAR — ve bu düzeltilmiş bir GİZLİ HATADIR** (2026-09-12). `MachineInterval.warpStopCount` *"makinenin beyan ettiği kopuş adedi"* diye tanımlıydı ama **hangi slotlardan toplandığını söylemiyordu**, üstelik aynı belgede `slot = 1 kanoniktir` yazıyordu. İki `WARP_STOP` kanallı bir makinede (zemin + hav çözgüsü) bu ikisi birlikte okunursa **ikinci kanal sessizce sayılmaz: eksik sayım.** **Yeni kural:** *`slot` kanonikliği YALNIZ üretim sayacına aitti ve o da `productionLineNo`ya devredildi (§2.2b); kopuş ve duruş sayaçları aynı `kind`ın TÜM slotlarını TOPLAR.*
 >
@@ -1702,7 +1702,7 @@ Birim iki yerde yaşar ve **ikisi de `machineClass` DEĞİLDİR**:
 
 ⚠️ **`FABRIC_LENGTH` enum'da baştan beri VARDI ama hiçbir formülde kullanılmıyordu** (ölçüldü 2026-09-12). Makinenin kendi metre sayacı varsa **birinci tercih odur**: dönüşüm yapmaz, dolayısıyla sıklık sapmasını metreye yazmaz. `unitsPerCm` NULL ise **metre üretilmez**, randıman yine hesaplanır (eski `unitsPerCm` NULL kuralı aynen geçerli, yalnız adı genelleşti).
 
-Ve türetilen bu metre **ÇÖZGÜ/HAM metredir**, mamul değil. ⚠️ **Metre `gapPicks`i İÇERİR** (randıman onu dışlar, §5.2): ajan susmuşken dokunan kumaş gerçektir ve bir gün `Roll` ölçümünde görünecektir; metreden düşmek, sayaç ile top arasındaki farkı yapay olarak büyütürdü. `unitsPerCm` **TEZGAH ÜSTÜ (HAM) atkı/cm**'dir; mamul (bitim sonrası) metre `× (1 − takeUp)` ile AYRI bir büyüklüktür ve **bu belgede HESAPLANMAZ** (take-up kumaş teknik kartının işi — `docs/design/DEVERE-LEVENT-TARAMASI.md` §4.8: *"Leventin metresi çözgü metresidir, kumaş değil. Aynı kolonda iki anlam yaşayamaz"*). İki anlam aynı kolonda yaşayamaz; mamul metre gerektiğinde ayrı kolon + ayrı helper açılır. `unitsPerCm` NULL ise **metre üretilmez**, randıman yine hesaplanır. Vardiyada **birden çok koşum** varsa metre koşum bazında türetilip toplanır (`unitsPerCmAtClose` NULL kalır, §2.10).
+Ve türetilen bu metre **ÇÖZGÜ/HAM metredir**, mamul değil. ⚠️ **Metre `gapUnits`i İÇERİR** (randıman onu dışlar, §5.2): ajan susmuşken dokunan kumaş gerçektir ve bir gün `Roll` ölçümünde görünecektir; metreden düşmek, sayaç ile top arasındaki farkı yapay olarak büyütürdü. `unitsPerCm` **TEZGAH ÜSTÜ (HAM) atkı/cm**'dir; mamul (bitim sonrası) metre `× (1 − takeUp)` ile AYRI bir büyüklüktür ve **bu belgede HESAPLANMAZ** (take-up kumaş teknik kartının işi — `docs/design/DEVERE-LEVENT-TARAMASI.md` §4.8: *"Leventin metresi çözgü metresidir, kumaş değil. Aynı kolonda iki anlam yaşayamaz"*). İki anlam aynı kolonda yaşayamaz; mamul metre gerektiğinde ayrı kolon + ayrı helper açılır. `unitsPerCm` NULL ise **metre üretilmez**, randıman yine hesaplanır. Vardiyada **birden çok koşum** varsa metre koşum bazında türetilip toplanır (`unitsPerCmAtClose` NULL kalır, §2.10).
 
 > ⚠️ **SAYAÇ ASLA STOK YAZMAZ.** Türetilen metre bir TAHMİNDİR; tek miktar gerçeği `Roll` ölçümüdür. Sayaçtan türeyen metre ile ölçülen `Roll` metresi asla birebir tutmaz (çekme, atkı sıklığı sapması, kenar fire — **saha doğrulaması**: %2–5 bandı pilotta ölçülür). Bu kural yazılı olmazsa birileri "sayaçtan otomatik top açalım" der ve tek-kaynak disiplini çöker.
 >
@@ -1921,8 +1921,8 @@ Telemetri budanabilir (`MachineInterval`, insan kararı almamış + mühürlü d
 
 **Hiç donanım, hiç toplayıcı, hiç telemetri yok.** `MODUL-BAYRAK-TASARIM.md` §8'in kademe ③'ü: *"hiç bağlantı yokken bile randıman raporu çıkar."* Hem satılabilir bir yetenek, hem Faz 2'nin tüm hesap katmanını (karne, formül, mühür, sebep kataloğu) **donanım riski olmadan** doğrulayan iskele. Kullanıcının dört sorusunun dördünü de cevaplar.
 
-**Tablolar (6):** `ShiftDefinition` · `ShiftInstance` · `MachineShiftStat` · `MachineShiftStopBreakdown` · `MachineShiftStatSeal` · `MachineSpec` (kırpılmış: `machineId` · `shedType` · **`monitoringState @default(OFF)`**/`acceptedAt`/`acceptedById`/`acceptedNote`/`demotedAt`/`demotedById`/`demoteReason` · `nominalPicksPerMin` · `baselineRunHours`/`baselineAt` · `notes` + künye). ⚠️ Faz 1a'da elle girilen karne **`monitoringState`i kopyalar** (§2.10) ve elle giriş yüzeyi `OFF` makineye karne yazmaz — gölge/yayın ayrımı Faz 2'de değil, ilk günden şemadadır.
-**`MachineRun` Faz 2'ye itildi:** Faz 1a'da koşum yok, donmuş payda zaten `MachineShiftStat.targetPicksPerMin`te; sonradan eklenmesi saf ekleme.
+**Tablolar (6):** `ShiftDefinition` · `ShiftInstance` · `MachineShiftStat` · `MachineShiftStopBreakdown` · `MachineShiftStatSeal` · `MachineSpec` (kırpılmış: `machineId` · `shedType` · **`monitoringState @default(OFF)`**/`acceptedAt`/`acceptedById`/`acceptedNote`/`demotedAt`/`demotedById`/`demoteReason` · `nominalUnitsPerMin` · `baselineRunHours`/`baselineAt` · `notes` + künye). ⚠️ Faz 1a'da elle girilen karne **`monitoringState`i kopyalar** (§2.10) ve elle giriş yüzeyi `OFF` makineye karne yazmaz — gölge/yayın ayrımı Faz 2'de değil, ilk günden şemadadır.
+**`MachineRun` Faz 2'ye itildi:** Faz 1a'da koşum yok, donmuş payda zaten `MachineShiftStat.targetUnitsPerMin`te; sonradan eklenmesi saf ekleme.
 
 **Migration A:** altı tablo + ham SQL (`ShiftDefinition.nameFold` **GENERATED ALWAYS AS (public.tr_fold("name")) STORED** — Prisma `dbgenerated()` kolonu yaratmaz, yalnız defteri tutar; `@@unique([nameFold])` + `test_db_invariants` `EXPRESSION_UNIQUES`/fold envanteri aynı commit'te; **uygulama bekçisi `assertNameNotDuplicate` KALDIRILMAZ** — anlaşılır 409'u o verir, DB seddi sessiz son hattır).
 **Migration B1 (enum — dosyada TEK ifade):** `ALTER TYPE "ReasonPresetKind" ADD VALUE IF NOT EXISTS 'MACHINE_STOP';`
@@ -2017,7 +2017,7 @@ Telemetri budanabilir (`MachineInterval`, insan kararı almamış + mühürlü d
     - **(a) Künye nullable.** `LoomShedType` ve `LoomWeftInsertion` **NULL olabilir**: çözgülü örme (raşel) ağızlık açmaz ve atkı atmaz. Eski NOT NULL hâli raşeli şemadan yapısal olarak dışlıyordu — `MachineSpec` satırı açılamayan makine izleme kapsamına hiç giremiyordu. **İki enumun ADI `Loom*` KALIR** ve bu bilinçlidir: ağızlık düzeni ile atkı atma sistemi **gerçekten dokumaya özgü fiziktir**; nötr ada çevirmek "her makinenin ağızlığı var" ima ederdi. NULL olmaları tam olarak "bu makine o sınıftan değil"i söyler. ③
     - **(b) Ad ailesi nötr: `MachineSpec` / `MachineRun` / `Machine*` / `machine_*` / `test_machine_*`.** `Loom*` adları raşel kapsama girince yanlış ad olur. **Şemada bugün HİÇBİRİ YOK** (ölçüldü 2026-09-12: `MachineSpec`/`MachineRun`/`MachineInterval` → 0 eşleşme; `Machine*` ad uzayı ve `machine_*` tablo öneki boş, yalnız `machines` dolu) ⇒ **bugün bir belge düzeltmesi, yarın migration + kod turu.** ⚠️ DB bayrak anahtarı `tezgah.enabled` **DEĞİŞMEZ** (§9.2: anahtar kimliktir), yani ad asimetrisi bilinçlidir: modeller nötr, bayrak tarihsel. ③
     - **(c) Birim SİNYALDE, sıklık KOŞUMDA, sınıf yalnız ETİKET.** Metre tek formülden doğar (`sayaçDeltası ÷ (unitsPerCm × 100)`, §5.6) ve `machineClass` üstünde **DALLANMAZ**: dallanmak bir `kind`-dispatch olurdu (kök `CLAUDE.md` yasağı) ve sinyal `PICK_COUNTER` derken sınıf `WARP_KNIT` derse *"hangisi kazanır"* sorusunu doğururdu — çift yüklem. Bu yüzden `machineClass` **zorunlu değildir**. ③
-    - ⚠️ **AÇIK KALAN:** randımanın paydası hâlâ atkı temellidir (`targetPicksPerMin`, `kopuş/10⁵ atkı`) ve çözgülü örmede/kaplama hattında yapısal olarak null kalır — *"ölçülemedi"* değil, **"model uymuyor"**. Ad turu (`pick*` → `unit*`) borç olarak yazıldı, bkz. #24.
+    - ⚠️ **AÇIK KALAN:** randımanın paydası hâlâ atkı temellidir (`targetUnitsPerMin`, `kopuş/10⁵ atkı`) ve çözgülü örmede/kaplama hattında yapısal olarak null kalır — *"ölçülemedi"* değil, **"model uymuyor"**. Ad turu (`pick*` → `unit*`) borç olarak yazıldı, bkz. #24.
 
 23. **ÜRETİLEN KUMAŞ SAYISI, TÜKETİLEN LEVENT SAYISINDAN BAĞIMSIZ BİR EKSENDİR** (2026-09-12; #19'u ezer). **Sınıf: BİRLEŞTİRİLMİŞ EKSEN** — iki bağımsız gerçek tek sayıya bindirilirse model her iki uçta da **sessizce** yanlış olur, çünkü bir uçta doğru çalışır ve **test edilen uç odur.** Ölçüm: raşel **N levent → 1 kumaş → 1 sayaç**; çift enli tezgah **1–2 levent → 2 kumaş → 2 sayaç.** Dört parça:
     - **(a) `Machine.productionLineCount`** (ÇIKTI) `Machine.warpBeamSlots`tan (GİRDİ) ayrıdır; CHECK `>= 1` ve yönü **tersine çevrilebilirlikle** seçildi (karşı örnek arandı, bulunamadı; gevşetmek tek ifadeli migration, sıkmak veri temizliği). Bilinen gevşetme yolu §2.2b'de yazılı. ②
@@ -2026,8 +2026,8 @@ Telemetri budanabilir (`MachineInterval`, insan kararı almamış + mühürlü d
     - **(d) Mühür vardiya×makine düzeyinde ATOMİKTİR** ve budayıcı yüklemi pencere başına sorar (§4 ③b) — `productionLineNo` bir unique'i böldüğü için mühür yüklemi de onunla bölündü. **Genel kural: bir tasarım bir TANECİĞİ ya da bir ANLAMI böldüğünde, ona dayanan HER yüklem ve HER formül yeniden sorulur.** ①
     - ⚠️ Kopuş kırılımı `MachineStopEvent.beamSlot`ta; **sayaç kolonları ÇOĞULLAŞTIRILMAZ** (dört okuyucu ölçüldü, §5.4).
 
-24. **BORÇ — ad turu `pick*` → `unit*`, CI YEŞİLE DÖNDÜKTEN SONRA, TEK COMMIT** (2026-09-12). `unitsPerCm` yapıldı ama hız/kapasite terimleri atkı adında kaldı: `picksActual` · `gapPicks` · `targetPicksPerMin` · `targetPickCapacityApt|Pot` · `pickDelta` · `nominalPicksPerMin` · `avg|maxPicksPerMin` → `unitsActual` · `gapUnits` · `targetUnitsPerMin` · `targetUnitCapacity*` · `unitDelta` · `nominalUnitsPerMin` · `avg|maxUnitsPerMin`. **Neden ertelendi:** CI kırmızıyken 78 geçişlik ad turu inerse sonraki her kırmızıda *"bu turdan mı, öncekilerden mi"* sorusu cevapsız kalır — **kontrol grubu kirli** sınıfı, üstelik önceden görülebilir hâlde.
-    > ⚠️ **SESSİZ KAPI ÖLÜMÜ RİSKİ — asıl tehlike iş yükü değil budur.** §3.4'ün **birim seddi** bir AST tripwire'dır: *"`picksPerRev` ile `targetPicksPerMin` aynı ifadede geçemez"*. **İkisinden yalnız birini yeniden adlandırırsak desen artık eşleşmez ve bekçi KIRMIZI VERMEDEN korumayı bırakır** — kapı duruyor, yeşil veriyor, hiçbir şey ölçmüyor. `picksPerRev → unitsPerRev` **aynı commit'te**; **`maxRevPerMin` DEĞİŞMEZ** (gerçekten devir/dk'dır ve seddin diğer ucudur — ikisi de `unit*` olsaydı sed kendi iki ucunu ayırt edemezdi).
+24. ~~**BORÇ — ad turu `pick*` → `unit*`**~~ **İNDİ 2026-09-14 (01, migration `20260914150000_unit_rename`, idempotent RENAME COLUMN ×9, tek commit, CI yeşil tabanda `13424c8b`):** `picksActual` · `gapPicks` · `targetPicksPerMin` · `targetPickCapacityApt|Pot` · `nominalPicksPerMin` → `unitsActual` · `gapUnits` · `targetUnitsPerMin` · `targetUnitCapacity*` · `nominalUnitsPerMin` (kod + şema + panel + tablet + belgeler; `pickDelta` · `avg|maxPicksPerMin` yalnız bu belgedeydi, `unitDelta` · `avg|maxUnitsPerMin` oldu). **Kapsam dışı, bilinçli:** `picksAtClose` · `pickCounter` · `PICK_COUNTER` — bunlar cihazın GERÇEK atkı sayacının okumalarıdır, soyut üretim birimi değil; `unitsActual = Σ picksAtClose` cümlesi bu ayrımı taşır. "Eski istemci ne yapar": sahada bu alanları gönderen/okuyan istemci YOK (dokuma tablet ekranı paketlenmedi, `dokuma.enabled` her kurulumda kapalı) ⇒ alias/minVersion gerekmedi. **Neden ertelenmişti (2026-09-12):** CI kırmızıyken 78 geçişlik ad turu inerse sonraki her kırmızıda *"bu turdan mı, öncekilerden mi"* sorusu cevapsız kalır — kontrol grubu kirli sınıfı; bu yüzden d9'un CI-yeşil sinyali beklendi.
+    > ⚠️ **SESSİZ KAPI ÖLÜMÜ RİSKİ — asıl tehlike iş yükü değil budur.** §3.4'ün **birim seddi** bir AST tripwire'dır: *"`picksPerRev` ile `targetUnitsPerMin` aynı ifadede geçemez"*. **İkisinden yalnız birini yeniden adlandırırsak desen artık eşleşmez ve bekçi KIRMIZI VERMEDEN korumayı bırakır** — kapı duruyor, yeşil veriyor, hiçbir şey ölçmüyor. `picksPerRev → unitsPerRev` **aynı commit'te**; **`maxRevPerMin` DEĞİŞMEZ** (gerçekten devir/dk'dır ve seddin diğer ucudur — ikisi de `unit*` olsaydı sed kendi iki ucunu ayırt edemezdi).
     > **İNİŞ ŞARTI:** yeniden adlandırmadan sonra tripwire'ın hâlâ SİLAHLI olduğu **negatif sondayla kanıtlanır** — bilerek ihlalli ifade yazılır, kırmızı görülür, geri alınır. **Yeşil koşum bu turda kanıt DEĞİLDİR**, çünkü sorun zaten "yanlışlıkla hep yeşil" olmasıdır.
 
 ---
@@ -2045,7 +2045,7 @@ Telemetri budanabilir (`MachineInterval`, insan kararı almamış + mühürlü d
 | **Çekirdek mimari** | 4/8/6 | 17 | 1 | §3.1 ajan gövdesi · §3.3 uzak/LAN 404 + `EXEMPT` · §6.4 SoD + izin kategorisi · §6.5 panel/mobil ayna · §3.5 `SOURCE_MISMATCH` |
 | **Çürütme izi** | 4/8/5 | 15 | 2 | §5.1 duruşun pay edilmesi · §2.1 üç karşı-ilişki · §5.4 kopuş/10⁵ · §3.5 sıra + `bucketMinutes` · §2.4 `lastSeq` |
 | **Kod gerçekliği** | 3/7/4 | 14 | — | §6.2 panel tip zinciri · §6.1 `REGIME_GATES` düzeltmesi · §5.6 `unitsPerCm` evi yok · §9 `variance-reasons` emsalinin kaldırılması · tüm `dosya:satır` düzeltmeleri |
-| **Ölçek + fazlandırma** | 5/5/3 | 12 | 1 | §9 Faz 1a/1b/2/3 · §5.2 `MINOR` düzeltmesi · §5.2 ISO etiketi · §7.3 levent sahipliği · §2.3 `maxPicksPerMin` nullable |
+| **Ölçek + fazlandırma** | 5/5/3 | 12 | 1 | §9 Faz 1a/1b/2/3 · §5.2 `MINOR` düzeltmesi · §5.2 ISO etiketi · §7.3 levent sahipliği · §2.3 `maxUnitsPerMin` nullable |
 
 **Reddedilen dört bulgu:**
 
@@ -2081,7 +2081,7 @@ Ayrı bir düşmanca denetim, belgenin **yazılmasından önceki sentez metnini*
 | # | Alt iddia | Red gerekçesi (ölçüm) |
 |---|---|---|
 | 1 | *"`MODULE_PLACEHOLDERS` artık ÜÇ elemandır (kumasTeknik·tezgah·devere); belgenin «tek elemana iner» cümlesi yanlış, İKİ eleman kalır"* | **Ölçüldü: bugün İKİ eleman var** (`Electron/src/lib/module-flags.ts:90-93` → `kumasTeknikEnabled`, `tezgahEnabled`); `devereEnabled` bu listeye GİRMEMİŞ. Tezgah emekli olunca **tek eleman kalır** — belgenin mevcut cümlesi ve #4 beklentisi (`["kumasTeknikEnabled"]`) **DOĞRUYDU**. Yalnız çapa biçimi düzeltildi (satır → ad). Hükmün kardeş yarısı (`flag-modules.ts` `Exclude`'unun ÜÇ anahtar taşıdığı) doğrudur ve **işlendi**. |
-| 2 | *"§2.10'a tek `targetPickCapacity` terimi eklenir; `P = picksActual / targetPickCapacity`"* | Tek terim **P'yi E'ye çökertir**: aynı paydayla bölünen iki oran aynı sayıdır ve `A × P = E` kimliği anlamsızlaşır. Hüküm **DÜZELTİLEREK işlendi** — iki terim (`targetPickCapacityApt` P için, `targetPickCapacityPot` E için, §2.10/§5.2) ve kimliğin **tek hedefli vardiyada birebir** olduğu, çok hedefli vardiyada E'nin **kendi tanımından** okunduğu açıkça yazıldı. |
+| 2 | *"§2.10'a tek `targetUnitCapacity` terimi eklenir; `P = unitsActual / targetUnitCapacity`"* | Tek terim **P'yi E'ye çökertir**: aynı paydayla bölünen iki oran aynı sayıdır ve `A × P = E` kimliği anlamsızlaşır. Hüküm **DÜZELTİLEREK işlendi** — iki terim (`targetUnitCapacityApt` P için, `targetUnitCapacityPot` E için, §2.10/§5.2) ve kimliğin **tek hedefli vardiyada birebir** olduğu, çok hedefli vardiyada E'nin **kendi tanımından** okunduğu açıkça yazıldı. |
 
 **Belge dışına taşan iki borç** (bu belge tek başına kapatamaz, `/karar-notu` işidir):
 1. `docs/kurallar/defter.md`ye **«Telemetri ≠ defter» BÖLÜMÜ** (altı kural) — **üçüncü hard-delete sınıfı DEĞİL** (§4); kök `CLAUDE.md` cümlesi kullanıcı onayında. Faz 2 kabul kapısı, bekçisiyle birlikte.
@@ -2099,7 +2099,7 @@ Bu tur **denetim değil, SÖZLEŞME turudur**: ikinci turun açık bıraktığı
 |---|---|---|
 | 1 | **Telemetri hükmü** — `defter.md`ye ÜÇÜNCÜ hard-delete sınıfı AÇILMAYACAK | §4 doktrin kutusu (yeniden yazıldı) · §0 · §1 · §2.11 · §8.3 · §9 Faz 2 kapısı ① · §11a tablosu · §11b borç ① |
 | 2 | **Budama bekçisi sözleşmesi** — okuma kümesi MANİFEST | §4 *"Budama bekçisinin SÖZLEŞMESİ"* (yeni alt bölüm: R1–R7 / T1–T3 · dört AST kuralı · N1–N8) · §2.8 `stopSecAtClose`/`stopCountAtClose` · §4 koşum ekseni · §6.3 `maxOpenRunDays` · §9 Faz 2 |
-| 3 | **Faz 2 zaman/eşzamanlılık sözleşmesi** | §1 (ortak cümle) · §2.6 (`restateCount` + observed CHECK) · §2.7 (`stopKey` · `provisionalEndedAt`) · §2.10 (`gapPicks` · `watchdogSec`) · §3.5 (kimlik · ON CONFLICT ×2 · watchdog · kova boyu) · §5.1 · §5.2 · §5.6 |
+| 3 | **Faz 2 zaman/eşzamanlılık sözleşmesi** | §1 (ortak cümle) · §2.6 (`restateCount` + observed CHECK) · §2.7 (`stopKey` · `provisionalEndedAt`) · §2.10 (`gapUnits` · `watchdogSec`) · §3.5 (kimlik · ON CONFLICT ×2 · watchdog · kova boyu) · §5.1 · §5.2 · §5.6 |
 | 4 | **Gölge mod: reçete değil KOLON + KAPI** | §2.2 (enum üç değerli) · §2.3 (`OFF` varsayılan + demote + üç kapı) · §2.3 `PeripheralSignal.acceptedAt` · §2.10 (donmuş `monitoringState`) · §3.3/7 · §5.3/8 · §6.3 (iki yeni bayrak) · §6.4 · §9 Faz 1a/Faz 2 · §10/#14, #15 · §12 |
 
 **Tersine çevrilen iki cümle:**
@@ -2133,11 +2133,11 @@ Bu tur **yeni karar üretmedi**: bağımsız bir doğrulayıcı belgeyi baştan 
 | 1 | §2.7 başlığı "(FAZ 2)" diyordu, §9 `MachineStopEvent`i **Faz 1b**'de doğuruyordu | Başlık **FAZ 1b** oldu; makine kaynaklı alanların "KOLON 1b / YAZAR 2" ayrımı başlığın altına yazıldı |
 | 2 | `stopEventMinSeconds` "Faz 2" ve *"eşikleyeceği tablo Faz 2'de doğuyor"* diyordu | Bayrak **Faz 1b** — eşiklediği tabloyla AYNI fazda (§6.3); §9 Faz 2'nin bayrak sayısı **13 → 12** |
 | 3 | `CLOCK_SKEW` bir yerde *"aşan PAKET 400"*, başka yerde *"PAKETİ değil KALEMİ düşürür"* | Tek doğru bırakıldı: **kalem düşer, `rejected[]` ile döner**; §6.3'teki paket cümlesi düzeltildi |
-| 4 | §5.4 kimliği `gapPicks`siz yazılmıştı ve çok koşumlu vardiyada `targetPicksPerMin` NULL olabiliyordu | Kimlik `gapPicks`li hâle getirildi + **"yalnız TEK HEDEFLİ vardiyada birebir"** şerhi; çok hedefli vardiyada E **kendi tanımından** okunur |
+| 4 | §5.4 kimliği `gapUnits`siz yazılmıştı ve çok koşumlu vardiyada `targetUnitsPerMin` NULL olabiliyordu | Kimlik `gapUnits`li hâle getirildi + **"yalnız TEK HEDEFLİ vardiyada birebir"** şerhi; çok hedefli vardiyada E **kendi tanımından** okunur |
 | 5 | Guard fazlaması üç yerde üç farklı sayı veriyordu (1a:1 · 1b:1 · 2:2 ↔ *"dört Restrict adıyla"* ↔ *"üç sayaç"*) | **§2.1'in yolu TEK KAYNAK** ilan edildi; §2.8 ve §9 Faz 2 ona hizalandı (**iki sayaç** eklenir, toplam dört) |
 | 6 | Faz 1a bekçi listesinde `Σ observedSec + unobservedSec = calendarSec` vardı — ama Faz 1a'da **kova YOK** ve `unobservedSec = 0` BEYAN ediliyor | Bekçi doğuşta kırmızı verirdi: eşitlik **Faz 2 ayağına** taşındı, Faz 1a'da **kırpma + `Σ breakdown ≤ POT`** kaldı |
 
-**On yedi küçük hizalamanın hepsi kapandı:** eski duruş kimliği (`machineId + startedAt + source`) düzeltmenin içinden temizlendi → **`(machineId, stopKey)`** · bayrak sayısı tek sayıya (**16**) indi ve `stopMatchToleranceSec`in düştüğü not edildi · `minClassificationPct` metinden çıkarıldı (tablo 16 bayrağın tamamıdır) · `gapPicks` üç yerde **"paydan düşülür, paydaya girmez"** oldu · `test_hard_delete_guard_coverage` Faz 1a bekçi listesine eklendi · `anomalyAck` **kolon 1a / kapı 2** olarak hizalandı · *"onaysız mühür 400"* → **409** · `prune_safety` **dört ayak** · Faz 1a bekçi sayımı listeye göre **4 yeni + 10 mevcut** · `machine_intervals_bucket_chk` §2.6 envanterine yazıldı · `MachineShiftStatSeal`e **`@@unique([statId, sealGeneration, action])`** · `MachineRun`a **`machine_runs_natural_uq`** partial unique · `microStop*` → **`minorStop*`** (tek ad) · bölüm numaraları bitişik yapıldı (**§7.1/§7.2/§7.3** ve **§11a–§11d**) ve atıflar hizalandı · izin sayımı *"yedi `loom:*`"* → **altı `loom:*` + bir `mobile:*`**.
+**On yedi küçük hizalamanın hepsi kapandı:** eski duruş kimliği (`machineId + startedAt + source`) düzeltmenin içinden temizlendi → **`(machineId, stopKey)`** · bayrak sayısı tek sayıya (**16**) indi ve `stopMatchToleranceSec`in düştüğü not edildi · `minClassificationPct` metinden çıkarıldı (tablo 16 bayrağın tamamıdır) · `gapUnits` üç yerde **"paydan düşülür, paydaya girmez"** oldu · `test_hard_delete_guard_coverage` Faz 1a bekçi listesine eklendi · `anomalyAck` **kolon 1a / kapı 2** olarak hizalandı · *"onaysız mühür 400"* → **409** · `prune_safety` **dört ayak** · Faz 1a bekçi sayımı listeye göre **4 yeni + 10 mevcut** · `machine_intervals_bucket_chk` §2.6 envanterine yazıldı · `MachineShiftStatSeal`e **`@@unique([statId, sealGeneration, action])`** · `MachineRun`a **`machine_runs_natural_uq`** partial unique · `microStop*` → **`minorStop*`** (tek ad) · bölüm numaraları bitişik yapıldı (**§7.1/§7.2/§7.3** ve **§11a–§11d**) ve atıflar hizalandı · izin sayımı *"yedi `loom:*`"* → **altı `loom:*` + bir `mobile:*`**.
 
 **Düzeltilen çapalar (bu turun tek kod ölçümü):** ① `test_module_flag_off.ts`in 18 HTTP kontrolünü türeten formül **`:551-552`**tedir (`httpKontrolSayisi`); üçüncü turda yazılan **`:524-528` YANLIŞTI** — o aralık profil damgası yorumudur (§8.1 K3-2, §11c tablosu #3). **Sayının kendisi (18) doğruydu.** ② §11a'daki bayat `module-flags.ts:68` → **`:77`** (`:78` tezgah, `:79` devere) — §11c'nin zaten düzelttiği çapa, §11a'da bayat kalmıştı.
 

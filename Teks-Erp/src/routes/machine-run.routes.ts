@@ -80,7 +80,7 @@ const openSchema = z
     weavingOrderId: z.string().uuid("Geçersiz dokuma işi").nullish(),
     itemId: z.string().uuid("Geçersiz ürün").nullish(),
     colorId: z.string().uuid("Geçersiz renk").nullish(),
-    targetPicksPerMin: z.number().int().positive("Hedef devir pozitif olmalı").max(10_000).nullish(),
+    targetUnitsPerMin: z.number().int().positive("Hedef devir pozitif olmalı").max(10_000).nullish(),
     unitsPerCm: z.number().positive("Atkı sıklığı pozitif olmalı").max(1_000).nullish(),
     startedAt: z.coerce.date().nullish(),
     clientToken: z.string().uuid("Geçersiz istemci anahtarı").nullish(),

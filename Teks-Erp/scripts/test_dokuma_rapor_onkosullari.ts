@@ -10,7 +10,7 @@
 //
 // ⇒ Bu dosya üç cümlenin ÖNCÜLLERİNİ ölçer. Öncüller SESSİZCE ölebilir ve
 // öldüklerinde gelecekteki çıktı bekçisi YEŞİL ama BOŞ olur:
-//   ① `targetPicksPerMin` NOT NULL ya da DEFAULT'lu olursa rapor "P: ölçülemedi"
+//   ① `targetUnitsPerMin` NOT NULL ya da DEFAULT'lu olursa rapor "P: ölçülemedi"
 //      dalına HİÇ giremez ve UYDURULMUŞ bir performans basar.
 //   ② `lossClass` NOT NULL ya da DEFAULT'lu olursa "KARAR YOK" temsil edilemez;
 //      her duruş doğuşta sınıflanmış görünür ve Pareto'nun kayıp ekseni yalan söyler.
@@ -282,7 +282,7 @@ async function main(): Promise<void> {
 
   // ── §1 — ① RANDIMAN: "P: ölçülemedi" dalı temsil edilebilir mi ────────────
   console.log("§1 — ① randıman: 'P: ölçülemedi' dalı TEMSİL EDİLEBİLİR mi");
-  for (const yol of ["machine_runs.targetPicksPerMin", "machine_specs.nominalPicksPerMin"]) {
+  for (const yol of ["machine_runs.targetUnitsPerMin", "machine_specs.nominalUnitsPerMin"]) {
     const r = bosDalTemsilEdilebilir(kolonlar.get(yol));
     check(`§1 ${yol} boş dalı taşıyabilir`, r.ok, r.neden);
   }
@@ -334,7 +334,7 @@ async function main(): Promise<void> {
       "?",
     );
     console.log(
-      "      gelince: ① üç oran AYRI basılır, ÇARPILMAZ, targetPicksPerMin ve nominalPicksPerMin\n" +
+      "      gelince: ① üç oran AYRI basılır, ÇARPILMAZ, targetUnitsPerMin ve nominalUnitsPerMin\n" +
         "               ikisi de NULL ise 'P: ölçülemedi' basılır · ② SEBEP × KAYIP SINIFI iki\n" +
         "               ekseni AYRI, beamSlot NULL olan 'atanmamış' kovasında AYRI · ③ toplam =\n" +
         "               Σkırılım, kırılım BASILIR + İKİ YÖNLÜ sonda: (a) kırılım basılmazsa\n" +

@@ -424,10 +424,10 @@ WHERE s."reasonCode" IS NOT NULL AND s."lossClass" IS NULL`,
   },
   {
     model: "MachineShiftStat",
-    alan: "targetPickCapacityApt",
+    alan: "targetUnitCapacityApt",
     sinif: "DONMUS_ILERI",
     yazan: [],
-    neden: "Σ(target_i × APT dk) — koşumların hedef deviri sonradan düzeltilse karnenin paydası değişmez (kardeşi `targetPickCapacityPot` aynı kural)",
+    neden: "Σ(target_i × APT dk) — koşumların hedef deviri sonradan düzeltilse karnenin paydası değişmez (kardeşi `targetUnitCapacityPot` aynı kural)",
   },
   {
     model: "MachineShiftStat",

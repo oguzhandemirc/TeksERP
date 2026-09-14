@@ -61,8 +61,8 @@ export interface EfficiencyRow {
   machineId: string; machine: { code: string; name: string };
   shiftInstanceId: string; factoryDayKey: Date; shift: { code: string; name: string };
   live: boolean; sealState: "OPEN" | "SEALED"; source: MachineDataSource; emptyLoom: boolean;
-  potSec: number; aptSec: number; picksActual: number; producedM: number | null;
-  targetPickCapacityApt: number; targetPickCapacityPot: number; targetPicksPerMin: number | null;
+  potSec: number; aptSec: number; unitsActual: number; producedM: number | null;
+  targetUnitCapacityApt: number; targetUnitCapacityPot: number; targetUnitsPerMin: number | null;
   availabilityPct: number | null; performancePct: number | null; effectivenessPct: number | null;
   olculemedi: { A?: string; P?: string; E?: string };
   warnings: string[];
@@ -79,8 +79,8 @@ export async function efficiencyReport(p: { from: string; to: string; machineId?
   const efficiencyRows: EfficiencyRow[] = rows.map((r) => ({
     machineId: r.machineId, machine: r.machine, shiftInstanceId: r.shiftInstanceId, factoryDayKey: r.shiftInstance.factoryDayKey,
     shift: r.shiftInstance.shiftDefinition, live: r.live, sealState: r.sealState, source: r.terms.source, emptyLoom: r.emptyLoom,
-    potSec: r.terms.potSec, aptSec: r.terms.aptSec, picksActual: r.terms.picksActual, producedM: r.terms.producedM,
-    targetPickCapacityApt: r.terms.targetPickCapacityApt, targetPickCapacityPot: r.terms.targetPickCapacityPot, targetPicksPerMin: r.terms.targetPicksPerMin,
+    potSec: r.terms.potSec, aptSec: r.terms.aptSec, unitsActual: r.terms.unitsActual, producedM: r.terms.producedM,
+    targetUnitCapacityApt: r.terms.targetUnitCapacityApt, targetUnitCapacityPot: r.terms.targetUnitCapacityPot, targetUnitsPerMin: r.terms.targetUnitsPerMin,
     availabilityPct: r.kpis.availabilityPct, performancePct: r.kpis.performancePct, effectivenessPct: r.kpis.effectivenessPct,
     olculemedi: r.kpis.olculemedi, warnings: [...r.warnings, ...r.kpis.warnings],
   }));
@@ -135,12 +135,12 @@ export async function durusParetoReport(p: { from: string; to: string; machineId
 // ─────────────────────────────────────────────────────────────────────────────
 export interface ShiftMachineRow {
   machineId: string; machine: { code: string; name: string }; source: MachineDataSource; live: boolean; sealState: "OPEN" | "SEALED";
-  picksActual: number; producedM: number | null; durusSec: number; emptyLoom: boolean;
+  unitsActual: number; producedM: number | null; durusSec: number; emptyLoom: boolean;
   availabilityPct: number | null; performancePct: number | null; effectivenessPct: number | null; olculemedi: { A?: string; P?: string; E?: string };
 }
 export interface ShiftRow {
   shiftInstanceId: string; shift: { code: string; name: string }; startsAt: Date; endsAt: Date; isCancelled: boolean;
-  uretim: { picksActual: number; producedM: number | null };
+  uretim: { unitsActual: number; producedM: number | null };
   durusSec: number;
   /** Değişmez ①: satır sayısı = Σ kaynak kırılımı; `SIMULATED` `OPERATOR`a katılmaz. */
   kaynakKirilimi: SourceBreakdownTable;
@@ -171,7 +171,7 @@ export async function shiftScorecardReport(p: { factoryDay: string; shiftDefinit
     const mSeen = group.some((r) => r.terms.producedM !== null);
     return {
       shiftInstanceId: group[0]!.shiftInstanceId, shift: s.shiftDefinition, startsAt: s.startsAt, endsAt: s.endsAt, isCancelled: s.isCancelled,
-      uretim: { picksActual: group.reduce((a, r) => a + r.terms.picksActual, 0), producedM: mSeen ? Math.round(group.reduce((a, r) => a + (r.terms.producedM ?? 0), 0) * 1000) / 1000 : null },
+      uretim: { unitsActual: group.reduce((a, r) => a + r.terms.unitsActual, 0), producedM: mSeen ? Math.round(group.reduce((a, r) => a + (r.terms.producedM ?? 0), 0) * 1000) / 1000 : null },
       durusSec: group.reduce((a, r) => a + downSec(r.terms), 0),
       kaynakKirilimi: k,
       ozet: {
@@ -180,7 +180,7 @@ export async function shiftScorecardReport(p: { factoryDay: string; shiftDefinit
       },
       makineler: group.map((r) => ({
         machineId: r.machineId, machine: r.machine, source: r.terms.source, live: r.live, sealState: r.sealState,
-        picksActual: r.terms.picksActual, producedM: r.terms.producedM, durusSec: downSec(r.terms), emptyLoom: r.emptyLoom,
+        unitsActual: r.terms.unitsActual, producedM: r.terms.producedM, durusSec: downSec(r.terms), emptyLoom: r.emptyLoom,
         availabilityPct: r.kpis.availabilityPct, performancePct: r.kpis.performancePct, effectivenessPct: r.kpis.effectivenessPct, olculemedi: r.kpis.olculemedi,
       })),
     };

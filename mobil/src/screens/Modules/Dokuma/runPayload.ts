@@ -16,7 +16,7 @@ export interface RunOpenForm {
   colorId: string | null;
   colorLabel: string;
   /** Numpad metni; boş = yedek. */
-  targetPicksPerMin: string;
+  targetUnitsPerMin: string;
 }
 
 export const EMPTY_RUN_FORM: RunOpenForm = {
@@ -25,7 +25,7 @@ export const EMPTY_RUN_FORM: RunOpenForm = {
   itemLabel: '',
   colorId: null,
   colorLabel: '',
-  targetPicksPerMin: '',
+  targetUnitsPerMin: '',
 };
 
 export const TARGET_PPM_MAX = 10_000;
@@ -46,7 +46,7 @@ export function prefillFromOrder(f: RunOpenForm, o: WeavingOrderSummary | null):
 export type RunValidation = { ok: true } | { ok: false; message: string };
 
 export function validateRunOpen(f: RunOpenForm): RunValidation {
-  const t = f.targetPicksPerMin.trim();
+  const t = f.targetUnitsPerMin.trim();
   if (t !== '') {
     const n = Number(t);
     if (!Number.isInteger(n) || n <= 0) return { ok: false, message: 'Hedef devir pozitif tam sayı olmalı' };
@@ -63,14 +63,14 @@ export interface RunContext {
 }
 
 export function buildOpenRunPayload(f: RunOpenForm, ctx: RunContext): OpenRunRequest {
-  const t = f.targetPicksPerMin.trim();
+  const t = f.targetUnitsPerMin.trim();
   return {
     machineId: ctx.machineId,
     productionLineNo: ctx.productionLineNo,
     weavingOrderId: f.weavingOrderId,
     itemId: f.itemId,
     colorId: f.colorId,
-    targetPicksPerMin: t === '' ? null : Number(t),
+    targetUnitsPerMin: t === '' ? null : Number(t),
     startedAt: ctx.startedAtIso,
     clientToken: ctx.clientToken,
   };

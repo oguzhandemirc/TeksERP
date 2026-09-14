@@ -29,8 +29,8 @@ export interface EfficiencyRow {
   machineId: string; machine: { code: string; name: string };
   shiftInstanceId: string; factoryDayKey: string; shift: { code: string; name: string };
   live: boolean; sealState: SealState; source: DataSource; emptyLoom: boolean;
-  potSec: number; aptSec: number; picksActual: number; producedM: number | null;
-  targetPicksPerMin: number | null;
+  potSec: number; aptSec: number; unitsActual: number; producedM: number | null;
+  targetUnitsPerMin: number | null;
   availabilityPct: number | null; performancePct: number | null; effectivenessPct: number | null;
   olculemedi: { A?: string; P?: string; E?: string };
   warnings: string[];
@@ -56,12 +56,12 @@ export interface ParetoReport {
 
 export interface ShiftMachineRow {
   machineId: string; machine: { code: string; name: string }; source: DataSource; live: boolean; sealState: SealState;
-  picksActual: number; producedM: number | null; durusSec: number; emptyLoom: boolean;
+  unitsActual: number; producedM: number | null; durusSec: number; emptyLoom: boolean;
   availabilityPct: number | null; performancePct: number | null; effectivenessPct: number | null; olculemedi: { A?: string; P?: string; E?: string };
 }
 export interface ShiftRow {
   shiftInstanceId: string; shift: { code: string; name: string }; startsAt: string; endsAt: string; isCancelled: boolean;
-  uretim: { picksActual: number; producedM: number | null };
+  uretim: { unitsActual: number; producedM: number | null };
   durusSec: number;
   kaynakKirilimi: SourceBreakdownTable;
   ozet: { olculen: number; elle: number; simule: number; cikarim: number; olculemedi: number; toplamSatir: number };
@@ -78,8 +78,8 @@ export interface ShiftStatRow {
   live: boolean; sealState: SealState; sealGeneration: number; sealedAt: string | null;
   terms: {
     calendarSec: number; potSec: number; aptSec: number; setupSec: number; plannedDownSec: number; unplannedDownSec: number;
-    minorStopSec: number; nonScheduledSec: number; plannedBreakSec: number; unclassifiedSec: number; picksActual: number;
-    producedM: number | null; targetPicksPerMin: number | null; source: DataSource; stopThresholdSec: number;
+    minorStopSec: number; nonScheduledSec: number; plannedBreakSec: number; unclassifiedSec: number; unitsActual: number;
+    producedM: number | null; targetUnitsPerMin: number | null; source: DataSource; stopThresholdSec: number;
   };
   kpis: LoomKpis;
   emptyLoom: boolean;
@@ -90,13 +90,13 @@ export interface ShiftStatListMeta { total: number; truncated: boolean; live: nu
 /** Backend `PUT /:id/terms` gövdesiyle BİREBİR (Zod `.strict()` — fazla anahtar 400). */
 export interface ShiftTermsCorrection {
   nonScheduledSec?: number; plannedBreakSec?: number; setupSec?: number; plannedDownSec?: number;
-  unplannedDownSec?: number; minorStopSec?: number; unclassifiedSec?: number; picksActual?: number;
-  producedM?: number | null; targetPicksPerMin?: number | null;
+  unplannedDownSec?: number; minorStopSec?: number; unclassifiedSec?: number; unitsActual?: number;
+  producedM?: number | null; targetUnitsPerMin?: number | null;
 }
 
 export interface SealLedgerRow {
   id: string; action: "SEAL" | "UNSEAL" | "RESEAL"; sealGeneration: number; reason: string | null;
-  actedById: string | null; createdAt: string; potSec: number; aptSec: number; picksActual: number; effectivenessPct: string | number | null;
+  actedById: string | null; createdAt: string; potSec: number; aptSec: number; unitsActual: number; effectivenessPct: string | number | null;
 }
 
 export interface RangeParams { from: string; to: string; machineId?: string }

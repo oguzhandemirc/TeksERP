@@ -64,9 +64,9 @@ const termsSchema = z
     unplannedDownSec: nonneg.optional(),
     minorStopSec: nonneg.optional(),
     unclassifiedSec: nonneg.optional(),
-    picksActual: nonneg.optional(),
+    unitsActual: nonneg.optional(),
     producedM: z.coerce.number().min(0).nullable().optional(),
-    targetPicksPerMin: z.coerce.number().int().positive().nullable().optional(),
+    targetUnitsPerMin: z.coerce.number().int().positive().nullable().optional(),
   })
   .strict()
   .refine((b) => Object.values(b).some((v) => v !== undefined), { message: "Düzeltilecek en az bir terim verilmeli" });

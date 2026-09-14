@@ -20,9 +20,9 @@ const TERM_FIELDS: Array<{ key: keyof ShiftTermsCorrection; label: string; unit:
   { key: "plannedDownSec", label: "Planlı duruş", unit: "sn" },
   { key: "unplannedDownSec", label: "Plansız duruş", unit: "sn" },
   { key: "minorStopSec", label: "Mikro duruş", unit: "sn" },
-  { key: "picksActual", label: "Atkı", unit: "atkı" },
+  { key: "unitsActual", label: "Atkı", unit: "atkı" },
   { key: "producedM", label: "Metre", unit: "m" },
-  { key: "targetPicksPerMin", label: "Hedef devir", unit: "atkı/dk" },
+  { key: "targetUnitsPerMin", label: "Hedef devir", unit: "atkı/dk" },
 ];
 
 interface TermsProps { target: ShiftStatRow; isPending: boolean; onClose: () => void; onConfirm: (body: ShiftTermsCorrection) => void }

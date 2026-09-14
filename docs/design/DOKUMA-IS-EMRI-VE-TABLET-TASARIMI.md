@@ -330,7 +330,7 @@ Ve bu karar yeni bir mekanizma istemiyor: `beamsMountedDuring(machineId, from, t
 | sayı | kaynak | cevapladığı soru | stok yazar mı | rapora girer mi |
 |---|---|---|---|---|
 | **ÜRETİLEN** | Σ doff edilen topların **ölçülen** metresi | *"kaç metre teslim edildi?"* | ✅ evet | ✅ evet |
-| **TEZGAHTA** | `pickDelta ÷ unitsPerCm` (türetilen) | *"şu an tezgahta ne kadar var?"* | ❌ **asla** | ❌ yalnız canlı ekran |
+| **TEZGAHTA** | `unitDelta ÷ unitsPerCm` (türetilen) | *"şu an tezgahta ne kadar var?"* | ❌ **asla** | ❌ yalnız canlı ekran |
 
 Aradaki fark **gerçek ve anlamlıdır**: leventte dokunmuş ama henüz indirilmemiş kumaş. Bu bir tutarsızlık değil, **devam eden iştir**.
 
@@ -415,7 +415,7 @@ Gerekenler — hepsi mevcut kalıbın satırları, yeni mekanizma yok:
 
 `MachineRun` açar/kapatır. **Koşumu bitiren üç şey** (§2.3): desen/renk değişti · hedef devir değişti · iş bitti. **Levent değişimi bu üçünde YOK.**
 
-Başlatırken sorulanlar: hangi dokuma işi (`WeavingOrder`, opsiyonel — numune koşumu meşru) · desen/renk (işten ön-dolu, **kilitli değil**) · hedef devir (`targetPicksPerMin`; boş bırakılabilir → `MachineSpec` yedeği → o da yoksa **performans HESAPLANMAZ**, "P: ölçülemedi").
+Başlatırken sorulanlar: hangi dokuma işi (`WeavingOrder`, opsiyonel — numune koşumu meşru) · desen/renk (işten ön-dolu, **kilitli değil**) · hedef devir (`targetUnitsPerMin`; boş bırakılabilir → `MachineSpec` yedeği → o da yoksa **performans HESAPLANMAZ**, "P: ölçülemedi").
 
 #### (2) Duruş bildir
 

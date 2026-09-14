@@ -34,8 +34,8 @@ function termColumns(t: ShiftTerms): TermColumns {
 }
 type StoredStat = Prisma.MachineShiftStatGetPayload<Record<string, never>>;
 const kpiInput = (s: StoredStat) => ({
-  potSec: s.potSec, aptSec: s.aptSec, picksActual: s.picksActual, gapPicks: s.gapPicks,
-  targetPickCapacityApt: s.targetPickCapacityApt, targetPickCapacityPot: s.targetPickCapacityPot,
+  potSec: s.potSec, aptSec: s.aptSec, unitsActual: s.unitsActual, gapUnits: s.gapUnits,
+  targetUnitCapacityApt: s.targetUnitCapacityApt, targetUnitCapacityPot: s.targetUnitCapacityPot,
 });
 
 export type MaterializeOutcome = "created" | "recomputed" | "skipped-sealed" | "skipped-supervisor";
@@ -68,10 +68,10 @@ export async function materializeShiftStatTx(tx: Tx, machineId: string, shiftIns
 // ─────────────────────────────────────────────────────────────────────────────
 export interface ShiftTermsCorrection {
   nonScheduledSec?: number; plannedBreakSec?: number; setupSec?: number; plannedDownSec?: number;
-  unplannedDownSec?: number; minorStopSec?: number; picksActual?: number; producedM?: number | null;
-  targetPicksPerMin?: number | null; unclassifiedSec?: number;
+  unplannedDownSec?: number; minorStopSec?: number; unitsActual?: number; producedM?: number | null;
+  targetUnitsPerMin?: number | null; unclassifiedSec?: number;
 }
-const CORRECTABLE = ["nonScheduledSec", "plannedBreakSec", "setupSec", "plannedDownSec", "unplannedDownSec", "minorStopSec", "picksActual", "producedM", "targetPicksPerMin", "unclassifiedSec"] as const;
+const CORRECTABLE = ["nonScheduledSec", "plannedBreakSec", "setupSec", "plannedDownSec", "unplannedDownSec", "minorStopSec", "unitsActual", "producedM", "targetUnitsPerMin", "unclassifiedSec"] as const;
 
 export async function correctShiftTerms(statId: string, patch: ShiftTermsCorrection, userId?: string): Promise<ApiResponse<{ id: string }>> {
   const changes: Array<{ field: string; old: unknown; new: unknown }> = [];
@@ -82,13 +82,13 @@ export async function correctShiftTerms(statId: string, patch: ShiftTermsCorrect
       (patch[k] !== undefined ? patch[k] : cur[k]) as number | null;
     const potSec = Math.max(0, cur.calendarSec - cur.unobservedSec - (pick("nonScheduledSec") ?? 0) - (pick("plannedBreakSec") ?? 0));
     const aptSec = Math.max(0, potSec - (pick("setupSec") ?? 0) - (pick("plannedDownSec") ?? 0) - (pick("unplannedDownSec") ?? 0));
-    const target = pick("targetPicksPerMin");
+    const target = pick("targetUnitsPerMin");
     const data: Prisma.MachineShiftStatUncheckedUpdateInput = {
       ...Object.fromEntries(CORRECTABLE.filter((k) => patch[k] !== undefined).map((k) => [k, patch[k]])),
       potSec, aptSec,
       // Elle düzeltmede kapasite tek hedeften: koşum kesişimi yeniden kurulmaz (uydurulmaz), hedef yoksa 0 → P ölçülemez.
-      targetPickCapacityApt: target === null ? 0 : Math.round((target * aptSec) / 60),
-      targetPickCapacityPot: target === null ? 0 : Math.round((target * potSec) / 60),
+      targetUnitCapacityApt: target === null ? 0 : Math.round((target * aptSec) / 60),
+      targetUnitCapacityPot: target === null ? 0 : Math.round((target * potSec) / 60),
       source: "SUPERVISOR",
     };
     for (const k of CORRECTABLE) if (patch[k] !== undefined) changes.push({ field: k, old: cur[k], new: patch[k] });
@@ -135,7 +135,7 @@ export async function sealShiftStat(statId: string, userId?: string, now = new D
       data: {
         statId, action, sealGeneration: gen, actedById: userId ?? null,
         terms: JSON.parse(JSON.stringify({ ...termsSnapshot, kpis })) as Prisma.InputJsonValue,
-        potSec: cur.potSec, aptSec: cur.aptSec, picksActual: cur.picksActual, targetPickCapacityPot: cur.targetPickCapacityPot,
+        potSec: cur.potSec, aptSec: cur.aptSec, unitsActual: cur.unitsActual, targetUnitCapacityPot: cur.targetUnitCapacityPot,
         effectivenessPct: kpis.effectivenessPct, formulaVersion: kpis.formulaVersion,
       },
     });
@@ -162,7 +162,7 @@ export async function unsealShiftStat(statId: string, reason: string, userId?: s
       data: {
         statId, action: "UNSEAL", sealGeneration: cur.sealGeneration, reason: trimmed.slice(0, 300), actedById: userId ?? null,
         terms: JSON.parse(JSON.stringify(termsSnapshot)) as Prisma.InputJsonValue,
-        potSec: cur.potSec, aptSec: cur.aptSec, picksActual: cur.picksActual, targetPickCapacityPot: cur.targetPickCapacityPot,
+        potSec: cur.potSec, aptSec: cur.aptSec, unitsActual: cur.unitsActual, targetUnitCapacityPot: cur.targetUnitCapacityPot,
         effectivenessPct: cur.effectivenessPct, formulaVersion: cur.formulaVersion ?? 0,
       },
     });
@@ -173,12 +173,12 @@ export async function unsealShiftStat(statId: string, reason: string, userId?: s
 }
 
 /** Mühür defteri (kuşaklar) — §2.11 mutabakat okuması. */
-export async function listShiftSeals(statId: string): Promise<ApiResponse<Array<{ id: string; action: MachineSealAction; sealGeneration: number; reason: string | null; actedById: string | null; createdAt: Date; potSec: number; aptSec: number; picksActual: number; effectivenessPct: Prisma.Decimal | null }>>> {
+export async function listShiftSeals(statId: string): Promise<ApiResponse<Array<{ id: string; action: MachineSealAction; sealGeneration: number; reason: string | null; actedById: string | null; createdAt: Date; potSec: number; aptSec: number; unitsActual: number; effectivenessPct: Prisma.Decimal | null }>>> {
   const stat = await prisma.machineShiftStat.findUnique({ where: { id: statId }, select: { id: true } });
   if (!stat) throw AppError.notFound("Karne bulunamadı", { statId });
   const rows = await prisma.machineShiftStatSeal.findMany({
     where: { statId }, orderBy: [{ sealGeneration: "asc" }, { createdAt: "asc" }],
-    select: { id: true, action: true, sealGeneration: true, reason: true, actedById: true, createdAt: true, potSec: true, aptSec: true, picksActual: true, effectivenessPct: true },
+    select: { id: true, action: true, sealGeneration: true, reason: true, actedById: true, createdAt: true, potSec: true, aptSec: true, unitsActual: true, effectivenessPct: true },
   });
   return { success: true, data: rows };
 }

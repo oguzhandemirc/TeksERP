@@ -17,7 +17,7 @@ import { dokumaReportsApi, toFactoryYmd, type ShiftMachineRow, type ShiftRow } f
 const columns: ColumnDef<ShiftMachineRow>[] = [
   { accessorKey: "machine.code", header: "Tezgah", cell: ({ row }) => `${row.original.machine.code} · ${row.original.machine.name}` },
   { accessorKey: "source", header: "Kaynak", cell: ({ row }) => (row.original.emptyLoom ? "Boş tezgah" : SOURCE_LABELS[row.original.source]) },
-  { accessorKey: "picksActual", header: "Atkı", cell: ({ getValue }) => fmtInt(getValue() as number) },
+  { accessorKey: "unitsActual", header: "Atkı", cell: ({ getValue }) => fmtInt(getValue() as number) },
   { accessorKey: "producedM", header: "Metre", cell: ({ getValue }) => { const v = getValue() as number | null; return v === null ? "—" : v.toLocaleString("tr-TR"); } },
   { accessorKey: "durusSec", header: "Duruş", cell: ({ getValue }) => fmtSec(getValue() as number) },
   { accessorKey: "availabilityPct", header: "Kullanılabilirlik", cell: ({ getValue }) => formatPct(getValue() as number | null) },
@@ -36,7 +36,7 @@ function ShiftCard({ v }: { v: ShiftRow }) {
           {v.isCancelled ? " · İPTAL" : ""}
         </h3>
         <p className="text-xs text-muted-foreground">
-          Atkı {fmtInt(v.uretim.picksActual)} · Metre {v.uretim.producedM === null ? "—" : v.uretim.producedM.toLocaleString("tr-TR")} · Duruş {fmtSec(v.durusSec)}
+          Atkı {fmtInt(v.uretim.unitsActual)} · Metre {v.uretim.producedM === null ? "—" : v.uretim.producedM.toLocaleString("tr-TR")} · Duruş {fmtSec(v.durusSec)}
         </p>
       </div>
       <p className="text-xs">

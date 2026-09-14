@@ -99,7 +99,7 @@ async function main(): Promise<void> {
   await closeManualStop(d2.data.id, new Date(S0.getTime() + 3 * 3600_000 + 600_000), undefined);
   const dAcik = await openManualStop({ machineId: m.id, startedAt: new Date(S0.getTime() + 5 * 3600_000), source: "SUPERVISOR" }, undefined);
   check("fikstür: duruşlar bu vardiyaya bağlandı", d1.data.shiftInstanceId === sh.id && dAcik.data.shiftInstanceId === sh.id);
-  await prisma.machineRun.create({ data: { machineId: m.id, startedAt: S0, endedAt: new Date(S1.getTime() - 60_000), picksAtClose: 100_000, targetPicksPerMin: 500, closedTermsAt: new Date() } });
+  await prisma.machineRun.create({ data: { machineId: m.id, startedAt: S0, endedAt: new Date(S1.getTime() - 60_000), picksAtClose: 100_000, targetUnitsPerMin: 500, closedTermsAt: new Date() } });
   const scope = { onlyShiftInstanceIds: [sh.id], onlyMachineIds: [m.id] };
 
   // ── §1 M2 ─────────────────────────────────────────────────────────────────
@@ -116,18 +116,18 @@ async function main(): Promise<void> {
   check("§1d factoryDay = ShiftInstance.factoryDayKey KOPYASI", stat.factoryDay.getTime() === sh.factoryDayKey.getTime());
   // Sınıfsız iki duruş: kapalı 600 sn + AÇIK olan pencere sonuna kadar (5 sa → 8 sa = 10800) ⇒ UNPLANNED = unclassified = 11400.
   check("§1e terimler: SETUP 3600 · sınıfsız 11400 UNPLANNED (=unclassified) · atkı 100000 · source OPERATOR (terime elle dokunulmadı)",
-    stat.setupSec === 3600 && stat.unplannedDownSec === 11_400 && stat.unclassifiedSec === 11_400 && stat.picksActual === 100_000 && stat.source === "OPERATOR", `${stat.setupSec}/${stat.unplannedDownSec}/${stat.unclassifiedSec}/${stat.source}`);
+    stat.setupSec === 3600 && stat.unplannedDownSec === 11_400 && stat.unclassifiedSec === 11_400 && stat.unitsActual === 100_000 && stat.source === "OPERATOR", `${stat.setupSec}/${stat.unplannedDownSec}/${stat.unclassifiedSec}/${stat.source}`);
   const r2 = await runShiftCloseOnce(scope);
   check("§1f ikinci koşum yeniden hesaplar, ikinci satır doğmaz", r2 !== "disabled" && r2.recomputed === 1 && r2.created === 0 && (await prisma.machineShiftStat.count({ where: { machineId: m.id } })) === 1);
 
   // ── §2 M3 ─────────────────────────────────────────────────────────────────
-  await correctShiftTerms(stat.id, { picksActual: 120_000, targetPicksPerMin: 500, plannedDownSec: 1200 });
+  await correctShiftTerms(stat.id, { unitsActual: 120_000, targetUnitsPerMin: 500, plannedDownSec: 1200 });
   const s2 = await prisma.machineShiftStat.findUniqueOrThrow({ where: { id: stat.id } });
-  check("§2a ⭐ düzeltme → source SUPERVISOR, atkı 120000, POT sabit, APT yeniden (PLANNED 1200 düştü)", s2.source === "SUPERVISOR" && s2.picksActual === 120_000 && s2.potSec === stat.potSec && s2.aptSec === stat.aptSec - 1200, `${s2.aptSec} ↔ ${stat.aptSec}`);
-  check("§2b kapasite tek hedeften yeniden: 500×APT/60", s2.targetPickCapacityApt === Math.round((500 * s2.aptSec) / 60) && s2.targetPickCapacityPot === Math.round((500 * s2.potSec) / 60));
+  check("§2a ⭐ düzeltme → source SUPERVISOR, atkı 120000, POT sabit, APT yeniden (PLANNED 1200 düştü)", s2.source === "SUPERVISOR" && s2.unitsActual === 120_000 && s2.potSec === stat.potSec && s2.aptSec === stat.aptSec - 1200, `${s2.aptSec} ↔ ${stat.aptSec}`);
+  check("§2b kapasite tek hedeften yeniden: 500×APT/60", s2.targetUnitCapacityApt === Math.round((500 * s2.aptSec) / 60) && s2.targetUnitCapacityPot === Math.round((500 * s2.potSec) / 60));
   const r3 = await runShiftCloseOnce(scope);
   const s2b = await prisma.machineShiftStat.findUniqueOrThrow({ where: { id: stat.id } });
-  check("§2c ⭐ M2 elle düzeltilmiş satıra DOKUNMAZ (skipped-supervisor 1, atkı 120000 kaldı)", r3 !== "disabled" && r3["skipped-supervisor"] === 1 && s2b.picksActual === 120_000);
+  check("§2c ⭐ M2 elle düzeltilmiş satıra DOKUNMAZ (skipped-supervisor 1, atkı 120000 kaldı)", r3 !== "disabled" && r3["skipped-supervisor"] === 1 && s2b.unitsActual === 120_000);
 
   // ── §3 M4 ─────────────────────────────────────────────────────────────────
   const m4 = await sealShiftStat(stat.id, undefined);
@@ -137,10 +137,10 @@ async function main(): Promise<void> {
   const bd1 = await prisma.machineShiftStopBreakdown.findMany({ where: { statId: stat.id, sealGeneration: 1 } });
   check("§3c kırılım kuşak 1: SETUP satırı (etiket KOPYA) + sınıfsız kova (reasonCode NULL) + açık duruş", bd1.length >= 2 && bd1.some((b) => b.reasonCode === preset.code && b.reasonLabel === preset.label && b.lossClass === "SETUP") && bd1.some((b) => b.reasonCode === null), String(bd1.length));
   const seals1 = await listShiftSeals(stat.id);
-  check("§3d Seal defteri: (gen 1, SEAL) terim fotoğrafı stored POT ile birebir", seals1.data.length === 1 && seals1.data[0]?.action === "SEAL" && seals1.data[0]?.potSec === s3.potSec && seals1.data[0]?.picksActual === 120_000);
+  check("§3d Seal defteri: (gen 1, SEAL) terim fotoğrafı stored POT ile birebir", seals1.data.length === 1 && seals1.data[0]?.action === "SEAL" && seals1.data[0]?.potSec === s3.potSec && seals1.data[0]?.unitsActual === 120_000);
   const e3 = await hata(() => sealShiftStat(stat.id, undefined));
   check("§3f ⭐ ikinci mühür 409 SHIFT_SEAL_RACE", kod(e3) === "SHIFT_SEAL_RACE", kod(e3));
-  const e3b = await hata(() => correctShiftTerms(stat.id, { picksActual: 1 }));
+  const e3b = await hata(() => correctShiftTerms(stat.id, { unitsActual: 1 }));
   check("§3g mühürlüde M3 düzeltme 409 SHIFT_SEALED", kod(e3b) === "SHIFT_SEALED", kod(e3b));
   const r4 = await runShiftCloseOnce(scope);
   check("§3h M2 mühürlü satırı atlar", r4 !== "disabled" && r4["skipped-sealed"] === 1);
@@ -183,7 +183,7 @@ async function main(): Promise<void> {
   check("§5h ⭐ kırılım kuşak 1 DURUR, kuşak 2 doğar (sınıfsız kova yok; UNPLANNED sebebi 2 duruş TEK satırda)", bd1b === bd1.length && bd2.length === 2 && !bd2.some((b) => b.reasonCode === null) && p2Row?.stopCount === 2 && p2Row.lossClass === "UNPLANNED", `${bd1b}/${bd2.length}`);
   const e5c = await hata(async () => {
     try {
-      await prisma.machineShiftStatSeal.create({ data: { statId: stat.id, action: "RESEAL", sealGeneration: 2, terms: {}, potSec: 0, aptSec: 0, picksActual: 0, targetPickCapacityPot: 0, formulaVersion: 1 } });
+      await prisma.machineShiftStatSeal.create({ data: { statId: stat.id, action: "RESEAL", sealGeneration: 2, terms: {}, potSec: 0, aptSec: 0, unitsActual: 0, targetUnitCapacityPot: 0, formulaVersion: 1 } });
     } catch (e) { throw e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" ? AppError.conflict("P2002", { code: "P2002" }) : e; }
   });
   check("§5i doğal anahtar (statId, gen, action) sed: mükerrer RESEAL P2002", kod(e5c) === "P2002");

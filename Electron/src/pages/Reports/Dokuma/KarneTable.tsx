@@ -55,7 +55,7 @@ export function buildKarneColumns(a: KarneActions): ColumnDef<ShiftStatRow>[] {
     { accessorKey: "terms.source", header: "Kaynak", cell: ({ row }) => (row.original.emptyLoom ? "Boş tezgah" : SOURCE_LABELS[row.original.terms.source]) },
     { accessorKey: "terms.potSec", header: "Planlı", cell: ({ row }) => fmtSec(row.original.terms.potSec) },
     { accessorKey: "terms.aptSec", header: "Çalıştı", cell: ({ row }) => fmtSec(row.original.terms.aptSec) },
-    { accessorKey: "terms.picksActual", header: "Atkı", cell: ({ row }) => fmtInt(row.original.terms.picksActual) },
+    { accessorKey: "terms.unitsActual", header: "Atkı", cell: ({ row }) => fmtInt(row.original.terms.unitsActual) },
     { accessorKey: "kpis.availabilityPct", header: "K", cell: ({ row }) => formatPct(row.original.kpis.availabilityPct) },
     { accessorKey: "kpis.performancePct", header: "P", cell: ({ row }) => formatPct(row.original.kpis.performancePct) },
     { accessorKey: "kpis.effectivenessPct", header: "E", cell: ({ row }) => formatPct(row.original.kpis.effectivenessPct) },

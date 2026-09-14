@@ -87,10 +87,10 @@ async function main(): Promise<void> {
   await stop(m1, 180, 600, { reasonCode: pUnpl.code, lossClass: "UNPLANNED", beamSlot: null });
   await stop(m1, 240, 15, { reasonCode: pUnpl.code, lossClass: "UNPLANNED", beamSlot: 1 });
   await stop(m1, 300, 300, { beamSlot: 1 }); // sınıfsız ama yuvası belli — atanmamış kovası yalnız yuvası NULL olanı sayar
-  await prisma.machineRun.create({ data: { machineId: m1, startedAt: S0, endedAt: new Date(S1.getTime() - 60_000), picksAtClose: 100_000, targetPicksPerMin: 500, closedTermsAt: new Date(), producedM: "250.5" } });
+  await prisma.machineRun.create({ data: { machineId: m1, startedAt: S0, endedAt: new Date(S1.getTime() - 60_000), picksAtClose: 100_000, targetUnitsPerMin: 500, closedTermsAt: new Date(), producedM: "250.5" } });
   // m2 (SIMULATED duruş; hedef devir YOK → P ölçülemez)
   await stop(m2, 120, 1800, { reasonCode: pUnpl.code, lossClass: "UNPLANNED", beamSlot: 1, source: MachineDataSource.SIMULATED });
-  await prisma.machineRun.create({ data: { machineId: m2, startedAt: S0, endedAt: new Date(S1.getTime() - 60_000), picksAtClose: 50_000, targetPicksPerMin: null, closedTermsAt: new Date() } });
+  await prisma.machineRun.create({ data: { machineId: m2, startedAt: S0, endedAt: new Date(S1.getTime() - 60_000), picksAtClose: 50_000, targetUnitsPerMin: null, closedTermsAt: new Date() } });
   // m3: hiçbir şey → boş tezgah (INFERRED)
   const ymd = factoryYmd(new Date(gun.getTime() + 12 * 3600_000));
   const benim = (r: { machineId: string }) => ids.m.includes(r.machineId);
@@ -143,7 +143,7 @@ async function main(): Promise<void> {
   check("③b ⭐ kaynak kırılımı: elle 1 (OPERATOR/SUPERVISOR) · simüle 1 · çıkarım 1 · ölçülen 0; SIMULATED elle'ye katılmadı", oz.elle === 1 && oz.simule === 1 && oz.cikarim === 1 && oz.olculen === 0, JSON.stringify(oz));
   check("③c ⭐ toplam satır = ölçülen + elle + simüle + çıkarım", oz.toplamSatir === oz.olculen + oz.elle + oz.simule + oz.cikarim && oz.toplamSatir === 3);
   check("③d ölçülemedi = P null satırlar (m2 hedef yok + m3 boş) = 2", oz.olculemedi === 2, String(oz.olculemedi));
-  check("③e üretim toplamı: atkı 150000, metre 250.5; duruş toplamı m1+m2", vs.uretim.picksActual === 150_000 && vs.uretim.producedM === 250.5 && vs.durusSec === 3600 + 600 + 15 + 300 + 1800, `${vs.uretim.picksActual}/${vs.uretim.producedM}/${vs.durusSec}`);
+  check("③e üretim toplamı: atkı 150000, metre 250.5; duruş toplamı m1+m2", vs.uretim.unitsActual === 150_000 && vs.uretim.producedM === 250.5 && vs.durusSec === 3600 + 600 + 15 + 300 + 1800, `${vs.uretim.unitsActual}/${vs.uretim.producedM}/${vs.durusSec}`);
   check("③f mühürlü m1 satırı live:false SEALED; m2/m3 live", vs.makineler.find((x) => x.machineId === m1)?.sealState === "SEALED" && vs.makineler.find((x) => x.machineId === m2)?.live === true);
   check("③g meta.ufuk basılıyor", v.meta.ufuk === LOOM_HORIZON_DAY && v.meta.ufukOncesiSatir >= 3);
   const vFiltre = await shiftScorecardReport({ factoryDay: ymd, shiftDefinitionId: def.id });

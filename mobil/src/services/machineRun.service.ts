@@ -15,7 +15,7 @@ export interface OpenRunRequest {
   weavingOrderId: string | null;
   itemId: string | null;
   colorId: string | null;
-  targetPicksPerMin: number | null;
+  targetUnitsPerMin: number | null;
   startedAt: string;
   clientToken: string;
 }

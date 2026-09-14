@@ -29,7 +29,7 @@ describe('runPayload — koşum aç (§3.4 (1))', () => {
     const p = buildOpenRunPayload(EMPTY_RUN_FORM, ctx);
     expect(p.weavingOrderId).toBeNull();
     expect(p.itemId).toBeNull();
-    expect(p.targetPicksPerMin).toBeNull();
+    expect(p.targetUnitsPerMin).toBeNull();
     expect(p.startedAt).toBe(ctx.startedAtIso);
     expect(p.clientToken).toBe('tok');
   });
@@ -42,11 +42,11 @@ describe('runPayload — koşum aç (§3.4 (1))', () => {
     expect(prefillFromOrder(f, null).weavingOrderId).toBeNull();
   });
   it('hedef devir: boş serbest (yedek MachineSpec); 0/negatif/kesirli/aşırı red', () => {
-    expect(validateRunOpen({ ...EMPTY_RUN_FORM, targetPicksPerMin: '' }).ok).toBe(true);
-    expect(validateRunOpen({ ...EMPTY_RUN_FORM, targetPicksPerMin: '0' }).ok).toBe(false);
-    expect(validateRunOpen({ ...EMPTY_RUN_FORM, targetPicksPerMin: '12.5' }).ok).toBe(false);
-    expect(validateRunOpen({ ...EMPTY_RUN_FORM, targetPicksPerMin: '10001' }).ok).toBe(false);
-    expect(buildOpenRunPayload({ ...EMPTY_RUN_FORM, targetPicksPerMin: '420' }, ctx).targetPicksPerMin).toBe(420);
+    expect(validateRunOpen({ ...EMPTY_RUN_FORM, targetUnitsPerMin: '' }).ok).toBe(true);
+    expect(validateRunOpen({ ...EMPTY_RUN_FORM, targetUnitsPerMin: '0' }).ok).toBe(false);
+    expect(validateRunOpen({ ...EMPTY_RUN_FORM, targetUnitsPerMin: '12.5' }).ok).toBe(false);
+    expect(validateRunOpen({ ...EMPTY_RUN_FORM, targetUnitsPerMin: '10001' }).ok).toBe(false);
+    expect(buildOpenRunPayload({ ...EMPTY_RUN_FORM, targetUnitsPerMin: '420' }, ctx).targetUnitsPerMin).toBe(420);
   });
   it('parmak izi: makine · hat · iş emri · desen (hedef devir ve renk girmez)', () => {
     const a = runFingerprint({ machineId: 'm1', productionLineNo: 1, weavingOrderId: 'wo1', itemId: 'i1' });

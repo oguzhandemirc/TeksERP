@@ -9438,3 +9438,18 @@ biçim eklendi ve yeni biçimin negatif sondası aynı commit'te görüldü.
 **Tasarım:** `cancelDeposit` = en yeni storno kalıbı (`cancelPay`): `requireReversalReason` → `loadForTransition([AT_BANK], RECEIVED)` → `loadForwardEventTx(DEPOSIT)` fail-closed → `claimTx(row, event.fromStatus, { bankAccountId: null })` (başlık bankası DEPOSIT'te doğdu, düşer) → `DEPOSIT_CANCEL` olayı bugüne, `bankAccountId` = hangi bankadan geri alındığı. **Para hareketi YOK ⇒ `assertCashPeriodOpenTx`/8028 kilidi ÇAĞRILMAZ** (DEPOSIT de çağırmıyordu); `CHEQUE_EVENT_CASH_EFFECT.DEPOSIT_CANCEL = {sign:0, reversal:true}`. Tahsil edilmiş çekte 409 metottan değil claim'den doğar (COLLECTED); `COLLECT_CANCEL` ile AT_BANK'a dönen çekte en yeni DEPOSIT okunur, storno MEŞRU (ölçüldü §11n). `REVERSAL_HINT.AT_BANK` eklendi. Route `cheque-reversal.routes.ts` `POST /:id/deposit-cancel`. Migration `20260914140000` tek ifade `ADD VALUE IF NOT EXISTS`. Panel: `deposit-cancel` eylemi (AT_BANK, alınan çek; önizleme "X banka hesabından geri alınacak … para ve cari defter oynamayacak"), etiketler, audit etiketi. Mobil dokunuş 0 (ChequeEventType tablette aynalı değil).
 **Eski istemci (panel 1.3.1):** yeni olay türünü `EVENT_LABEL[type]` sözlüğünde bulamaz, etiket boş basar, TypeError yok; referans fabrikada finans KAPALI; backend+panel 1.3.2 aynı pencerede ⇒ minVersion HAYIR.
 **Bekçi:** `test_cheque_reversal §11` (a–p: PORTFOLIO'ya dönüş · başlık bankası null · bakiye okunarak sabit · olay bankayla ve sebep notta · ileri satır aynen · cari satır yok · bugüne · sebep zorunlu · ikinci storno 409 · yeniden verilebilir · tahsilden sonra 409 yol gösterir · COLLECT_CANCEL sonrası meşru · yön kapısı) + §10e DEPOSIT; dört negatif sonda ⑪–⑭ dosya başlığında; `test_defter_ters_yol` §3e borç 1 → 0 (çift beyanı geri alınınca ❌ ölçüldü). Panel `transitions.test`/`reversal.test` +2.
+## 2026-09-14 — AD TURU `pick*` → `unit*` indi (DOKUMA-TEZGAH #24 borcu): 9 kolon RENAME, tek commit, sayaç okumaları kapsam dışı [ÇEKİRDEK]
+
+**Hüküm (1e, Faz 2 planı ①):** `picksActual` · `gapPicks` · `targetPicksPerMin` · `targetPickCapacityApt|Pot` ·
+`nominalPicksPerMin` → `unitsActual` · `gapUnits` · `targetUnitsPerMin` · `targetUnitCapacity*` · `nominalUnitsPerMin`;
+tek commit, CI yeşil tabanda (`13424c8b`; kontrol grubu temiz kalsın diye d9'un sinyali beklendi).
+**İnen (01):** migration `20260914150000_unit_rename` — pg_temp fonksiyonuyla İDEMPOTENT `RENAME COLUMN` ×9
+(`machine_runs` · `machine_specs` · `machine_shift_stats` ×5 · `machine_shift_stat_seals` ×2; ikinci koşum sessiz,
+ölçüldü); PG `RENAME COLUMN` CHECK ifadesini de günceller (`machine_shift_stats_terms_nonneg` yeni adla, `test_db_invariants`
+211/0); kod 26 dosya (backend · scripts · panel · tablet) + belgeler (kurallar · tasarım · harita; arşiv DOKUNULMADI).
+**Karar — kapsam dışı, bilinçli:** `picksAtClose` · `pickCounter` · `PICK_COUNTER` KALDI: cihazın GERÇEK atkı sayacının
+okumalarıdır, soyut üretim birimi değil; `unitsActual = Σ picksAtClose` cümlesi ayrımı taşır. Soyutlama hız/kapasite
+terimlerinindir (raşel/örme hattında birim atkı değil sıra/rack).
+**"Eski istemci ne yapar":** sahada bu alanları gönderen/okuyan istemci YOK — dokuma tablet ekranı paketlenmedi, panel
+dokuma raporları aynı gün indi, `dokuma.enabled` her kurulumda kapalı ⇒ alias/minVersion GEREKMEDİ; tablet `runPayload`
+ve panel `Reports/Dokuma` aynı sha'da yeniden adlandı (mobil jest 33/33).

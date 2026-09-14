@@ -9,7 +9,7 @@
 //   §2 değişmez: Σ(breakdown \ NON_SCHEDULED).stopSec + … ≤ POT, Σ kova = terimler
 //   §3 BOŞ TEZGAH → nonScheduledSec = takvim, POT 0, source INFERRED, emptyLoom
 //   §4 iptal vardiya → terimler 0, oranlar null
-//   §5 iki koşum → targetPicksPerMin NULL, kapasite TOPLANIR (500×4sa + 700×4sa)
+//   §5 iki koşum → targetUnitsPerMin NULL, kapasite TOPLANIR (500×4sa + 700×4sa)
 //   §6 atkı KAPANDIĞI vardiyaya: açık koşum katılmaz + uyarı; sonraki pencerede kapanan koşum
 //      bu pencereye atkı yazmaz; picksAtClose NULL → uyarı, 0 değil
 //   §7 MINOR süre sınıfı: eşik altı UNPLANNED → minor (APT düşmez); eşik altı PLANNED → PLANNED
@@ -55,8 +55,8 @@ const stop = (s: Partial<Stop> & { startedAt: Date; endedAt: Date | null }): Sto
   reasonCode: "X", reasonLabel: "x", lossClass: "UNPLANNED", beamSlot: 1, source: "OPERATOR", ...s,
 });
 const run = (r: Partial<Run> & { startedAt: Date; endedAt: Date | null }): Run =>
-  ({ id: `r${++seq}`, picksAtClose: null, producedM: null, targetPicksPerMin: 600, unitsPerCm: null, ...r });
-const fullRun = (picks: number, target = 600): Run => run({ startedAt: W0, endedAt: T("2026-04-05T07:59:59.000Z"), picksAtClose: picks, targetPicksPerMin: target });
+  ({ id: `r${++seq}`, picksAtClose: null, producedM: null, targetUnitsPerMin: 600, unitsPerCm: null, ...r });
+const fullRun = (picks: number, target = 600): Run => run({ startedAt: W0, endedAt: T("2026-04-05T07:59:59.000Z"), picksAtClose: picks, targetUnitsPerMin: target });
 
 const ek = Date.now().toString(36);
 const ids = { station: "", station2: "", machine: "", machine2: "", machineOff: "", def: "", shift: "", shiftNext: "", preset: "", stat: "" };
@@ -103,28 +103,28 @@ async function pure(): Promise<void> {
 
   // ── §4 iptal ──────────────────────────────────────────────────────────────
   const t4 = computeShiftTermsPure({ ...base(), window: { ...base().window, isCancelled: true }, stops: karma, runs: [fullRun(1000)] });
-  check("§4a iptal vardiya → takvim 0, terimler 0, kırılım boş", t4.calendarSec === 0 && t4.potSec === 0 && t4.stopCount === 0 && t4.picksActual === 0 && t4.breakdown.length === 0);
+  check("§4a iptal vardiya → takvim 0, terimler 0, kırılım boş", t4.calendarSec === 0 && t4.potSec === 0 && t4.stopCount === 0 && t4.unitsActual === 0 && t4.breakdown.length === 0);
   check("§4b iptal vardiya → oranlar null", computeMachineKpis(t4).availabilityPct === null);
 
   // ── §5 iki koşum ──────────────────────────────────────────────────────────
-  const r5a = run({ startedAt: W0, endedAt: T("2026-04-05T04:00:00.000Z"), picksAtClose: 100_000, targetPicksPerMin: 500 });
-  const r5b = run({ startedAt: T("2026-04-05T04:00:00.000Z"), endedAt: T("2026-04-05T07:59:00.000Z"), picksAtClose: 150_000, targetPicksPerMin: 700 });
+  const r5a = run({ startedAt: W0, endedAt: T("2026-04-05T04:00:00.000Z"), picksAtClose: 100_000, targetUnitsPerMin: 500 });
+  const r5b = run({ startedAt: T("2026-04-05T04:00:00.000Z"), endedAt: T("2026-04-05T07:59:00.000Z"), picksAtClose: 150_000, targetUnitsPerMin: 700 });
   const t5 = computeShiftTermsPure({ ...base(), runs: [r5a, r5b] });
-  check("§5a ⭐ iki koşum → targetPicksPerMin NULL (etiket yok, payda kapasite)", t5.targetPicksPerMin === null && t5.runCount === 2);
-  check("§5b kapasite TOPLANIR: 500×240 + 700×239 = 287300", t5.targetPickCapacityPot === 287_300 && t5.targetPickCapacityApt === 287_300, String(t5.targetPickCapacityPot));
-  check("§5c atkı ikisinden (250000), unitsPerCmAtClose NULL", t5.picksActual === 250_000 && t5.unitsPerCmAtClose === null);
-  const t5b = computeShiftTermsPure({ ...base(), runs: [run({ startedAt: W0, endedAt: T("2026-04-05T07:59:00.000Z"), picksAtClose: 10, targetPicksPerMin: null })] });
-  check("§5d hedef devir NULL ∧ künye yok → kapasite 0 + uyarı (P ölçülemez)", t5b.targetPickCapacityApt === 0 && t5b.warnings.some((w) => /hedef deviri yok/.test(w)) && computeMachineKpis(t5b).performancePct === null);
-  const t5c = computeShiftTermsPure({ ...base(), spec: { nominalPicksPerMin: 400, monitoringState: "OFF" }, runs: [run({ startedAt: W0, endedAt: T("2026-04-05T07:59:00.000Z"), picksAtClose: 10, targetPicksPerMin: null })] });
-  check("§5e hedef NULL → künye nominal yedeği (400×479 = 191600)", t5c.targetPickCapacityPot === 191_600 && t5c.targetPicksPerMin === 400 && t5c.monitoringState === "OFF");
+  check("§5a ⭐ iki koşum → targetUnitsPerMin NULL (etiket yok, payda kapasite)", t5.targetUnitsPerMin === null && t5.runCount === 2);
+  check("§5b kapasite TOPLANIR: 500×240 + 700×239 = 287300", t5.targetUnitCapacityPot === 287_300 && t5.targetUnitCapacityApt === 287_300, String(t5.targetUnitCapacityPot));
+  check("§5c atkı ikisinden (250000), unitsPerCmAtClose NULL", t5.unitsActual === 250_000 && t5.unitsPerCmAtClose === null);
+  const t5b = computeShiftTermsPure({ ...base(), runs: [run({ startedAt: W0, endedAt: T("2026-04-05T07:59:00.000Z"), picksAtClose: 10, targetUnitsPerMin: null })] });
+  check("§5d hedef devir NULL ∧ künye yok → kapasite 0 + uyarı (P ölçülemez)", t5b.targetUnitCapacityApt === 0 && t5b.warnings.some((w) => /hedef deviri yok/.test(w)) && computeMachineKpis(t5b).performancePct === null);
+  const t5c = computeShiftTermsPure({ ...base(), spec: { nominalUnitsPerMin: 400, monitoringState: "OFF" }, runs: [run({ startedAt: W0, endedAt: T("2026-04-05T07:59:00.000Z"), picksAtClose: 10, targetUnitsPerMin: null })] });
+  check("§5e hedef NULL → künye nominal yedeği (400×479 = 191600)", t5c.targetUnitCapacityPot === 191_600 && t5c.targetUnitsPerMin === 400 && t5c.monitoringState === "OFF");
 
   // ── §6 atkı kapandığı vardiyaya ───────────────────────────────────────────
   const acikRun = run({ startedAt: T("2026-04-05T06:00:00.000Z"), endedAt: null, picksAtClose: null });
   const t6 = computeShiftTermsPure({ ...base(), runs: [acikRun] });
-  check("§6a ⭐ açık koşum: atkı 0, kapasite şu ana kadar (600×120=72000) + uyarı", t6.picksActual === 0 && t6.targetPickCapacityPot === 72_000 && t6.warnings.some((w) => /Açık koşum/.test(w)));
+  check("§6a ⭐ açık koşum: atkı 0, kapasite şu ana kadar (600×120=72000) + uyarı", t6.unitsActual === 0 && t6.targetUnitCapacityPot === 72_000 && t6.warnings.some((w) => /Açık koşum/.test(w)));
   const sonraKapanan = run({ startedAt: T("2026-04-05T06:00:00.000Z"), endedAt: T("2026-04-05T10:00:00.000Z"), picksAtClose: 50_000 });
   const t6b = computeShiftTermsPure({ ...base(), runs: [sonraKapanan] });
-  check("§6b ⭐ sonraki pencerede kapanan koşumun atkısı BU pencereye yazılmaz (orantılama yok)", t6b.picksActual === 0 && t6b.targetPickCapacityPot === 72_000);
+  check("§6b ⭐ sonraki pencerede kapanan koşumun atkısı BU pencereye yazılmaz (orantılama yok)", t6b.unitsActual === 0 && t6b.targetUnitCapacityPot === 72_000);
   const sayacsiz = run({ startedAt: W0, endedAt: T("2026-04-05T07:00:00.000Z"), picksAtClose: null });
   const t6c = computeShiftTermsPure({ ...base(), runs: [sayacsiz] });
   check("§6c picksAtClose NULL → atkı 0 DEĞİL ölçülmedi uyarısı", t6c.warnings.some((w) => /sayacı okunmadı/.test(w)));
@@ -153,7 +153,7 @@ async function pure(): Promise<void> {
   const t9 = computeShiftTermsPure({ ...base(), stops: [stop({ startedAt: T("2026-04-05T01:00:00.000Z"), endedAt: T("2026-04-05T02:00:00.000Z") })], runs: [fullRun(200_000)] });
   const k9 = computeMachineKpis(t9);
   check("§9a tek koşum tam pencere: A %87.5 (25200/28800)", k9.availabilityPct === 87.5, String(k9.availabilityPct));
-  check("§9b ⭐ E ≡ A × P (terimler helper'dan: cap 252000 / 288000)", t9.targetPickCapacityApt === 251_990 && Math.abs(k9.effectivenessPct! - (k9.availabilityPct! * k9.performancePct!) / 100) <= 0.02, `${t9.targetPickCapacityApt} · E ${k9.effectivenessPct} A ${k9.availabilityPct} P ${k9.performancePct}`);
+  check("§9b ⭐ E ≡ A × P (terimler helper'dan: cap 252000 / 288000)", t9.targetUnitCapacityApt === 251_990 && Math.abs(k9.effectivenessPct! - (k9.availabilityPct! * k9.performancePct!) / 100) <= 0.02, `${t9.targetUnitCapacityApt} · E ${k9.effectivenessPct} A ${k9.availabilityPct} P ${k9.performancePct}`);
 }
 
 async function db(): Promise<void> {
@@ -185,14 +185,14 @@ async function db(): Promise<void> {
   await prisma.machineStopEvent.create({ data: stopData({}) });
   await prisma.machineStopEvent.create({ data: stopData({ revokedAt: new Date(), revokeReason: "TEST", startedAt: new Date(S0.getTime() + 3 * 3600_000), endedAt: new Date(S0.getTime() + 4 * 3600_000) }) });
   await prisma.machineStopEvent.create({ data: stopData({ machineId: m2.id, startedAt: new Date(S0.getTime() + 5 * 3600_000), endedAt: new Date(S0.getTime() + 6 * 3600_000) }) });
-  await prisma.machineRun.create({ data: { machineId: m.id, startedAt: S0, endedAt: new Date(S1.getTime() - 60_000), picksAtClose: 100_000, targetPicksPerMin: 500, closedTermsAt: new Date(), producedM: "123.456" } });
+  await prisma.machineRun.create({ data: { machineId: m.id, startedAt: S0, endedAt: new Date(S1.getTime() - 60_000), picksAtClose: 100_000, targetUnitsPerMin: 500, closedTermsAt: new Date(), producedM: "123.456" } });
 
   const input = await loadShiftTermsInput(prisma, m.id, sh.id);
   check("§10a yükleyici: geri alınmış ve başka makinenin duruşu HARİÇ (1 duruş)", input.stops.length === 1);
   check("§10b ⭐ sebep etiketi katalogdan KOPYA", input.stops[0]?.reasonLabel === preset.label && input.window.plannedBreakMinutes === 30);
   check("§10c koşum Decimal → sayı (producedM 123.456)", input.runs.length === 1 && input.runs[0]?.producedM === 123.456);
   const terms = await computeShiftTerms(prisma, m.id, sh.id);
-  check("§10d terimler: SETUP 3600, POT 28800−1800, atkı 100000, producedM 123.456", terms.setupSec === 3600 && terms.potSec === 27_000 && terms.picksActual === 100_000 && terms.producedM === 123.456, `${terms.setupSec}/${terms.potSec}/${terms.picksActual}`);
+  check("§10d terimler: SETUP 3600, POT 28800−1800, atkı 100000, producedM 123.456", terms.setupSec === 3600 && terms.potSec === 27_000 && terms.unitsActual === 100_000 && terms.producedM === 123.456, `${terms.setupSec}/${terms.potSec}/${terms.unitsActual}`);
 
   const ymd = factoryYmd(new Date(gun.getTime() + 12 * 3600_000));
   const list = await listShiftStats({ from: ymd, to: ymd });
@@ -204,7 +204,7 @@ async function db(): Promise<void> {
 
   // Mühürlü satır (Dilim 3'ün yazarı yok — fikstür yazar): DB'den, `live:false`, terimler DB'dekiler.
   const stat = await prisma.machineShiftStat.create({
-    data: { machineId: m.id, shiftInstanceId: sh.id, factoryDay: gun, stopThresholdSec: 20, source: "SUPERVISOR", monitoringState: "OFF", potSec: 100, aptSec: 50, picksActual: 7, sealState: "SEALED", sealGeneration: 1, sealedAt: new Date() },
+    data: { machineId: m.id, shiftInstanceId: sh.id, factoryDay: gun, stopThresholdSec: 20, source: "SUPERVISOR", monitoringState: "OFF", potSec: 100, aptSec: 50, unitsActual: 7, sealState: "SEALED", sealGeneration: 1, sealedAt: new Date() },
   });
   ids.stat = stat.id;
   const list2 = await listShiftStats({ from: ymd, to: ymd, machineId: m.id });

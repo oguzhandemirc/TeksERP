@@ -1813,7 +1813,7 @@ model MachineRun {
   /// HEDEF DEVİR (atkı/dk) — randımanın paydası. NULL → `MachineSpec`in nominal
   /// değerine düşer; o da NULL ise PERFORMANS HESAPLANMAZ ve rapor
   /// "P: ölçülemedi" der (uydurulmaz).
-  targetPicksPerMin Int?
+  targetUnitsPerMin Int?
   /// DONMUŞ ATKI SIKLIĞI — TEZGAH ÜSTÜ (HAM) atkı/cm, mamul DEĞİL. Mamul metre
   /// `× (1 − takeUp)` ile AYRI bir büyüklüktür ve burada hesaplanmaz; iki anlam
   /// aynı kolonda yaşayamaz. NULL meşru → metre üretilmez, randıman yine çıkar.
@@ -2288,9 +2288,9 @@ model MachineSpec {
   demoteReason String?   @db.VarChar(300)
 
   /// Koşum hedefi girilmemişse randımanın paydası için YEDEK
-  /// (`MachineRun.targetPicksPerMin` NULL ise buraya düşülür). İkisi de NULL ise
+  /// (`MachineRun.targetUnitsPerMin` NULL ise buraya düşülür). İkisi de NULL ise
   /// PERFORMANS HESAPLANMAZ ve rapor "ölçülemedi" der — uydurulmaz.
-  nominalPicksPerMin Int?
+  nominalUnitsPerMin Int?
 
   /// ERP'den ÖNCEKİ çalışma saati bakiyesi — ELLE girilen veri.
   /// ⚠️ ARTAN SAYAÇ KOLONU DEĞİL: toplam saat `baselineRunHours + Σ(ölçülen süre)`
@@ -2370,18 +2370,18 @@ model MachineShiftStat {
   /// Sınıflandırılmamış duruş süresi — >0 ise rapor `warnings` çizer.
   unclassifiedSec  Int @default(0)
 
-  picksActual Int @default(0)
+  unitsActual Int @default(0)
   /// Faz 2 (kova) terimleri — bu dilimde 0 kalır.
-  gapPicks    Int @default(0)
+  gapUnits    Int @default(0)
   watchdogSec Int @default(0)
 
   // ── DONMUŞ PAYDALAR — sonradan değişse bu satırın randımanı DEĞİŞMEZ ──────
   /// Σ(target_i × koşumun APT dakikası) / Σ(target_i × koşumun POT dakikası).
   /// İKİ TERİM ŞART: tek terim P'yi E'ye çökertir.
-  targetPickCapacityApt Int @default(0)
-  targetPickCapacityPot Int @default(0)
+  targetUnitCapacityApt Int @default(0)
+  targetUnitCapacityPot Int @default(0)
   /// Yalnız TEK koşumlu vardiyada etiket; birden çok hedef → NULL.
-  targetPicksPerMin     Int?
+  targetUnitsPerMin     Int?
   /// Mikro duruş eşiği karneye DONAR (bugün sabit `MINOR_STOP_THRESHOLD_SEC`).
   stopThresholdSec      Int
   unitsPerCmAtClose     Decimal? @db.Decimal(8, 3)
@@ -2469,8 +2469,8 @@ model MachineShiftStatSeal {
   terms          Json
   potSec                Int
   aptSec                Int
-  picksActual           Int
-  targetPickCapacityPot Int
+  unitsActual           Int
+  targetUnitCapacityPot Int
   effectivenessPct      Decimal? @db.Decimal(5, 2)
   formulaVersion        Int
   reason         String? @db.VarChar(300)

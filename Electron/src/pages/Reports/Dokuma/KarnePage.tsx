@@ -32,7 +32,7 @@ function LedgerDialog({ target, onClose }: { target: ShiftStatRow; onClose: () =
           {rows.length === 0 && <li className="text-muted-foreground">Henüz mühür satırı yok.</li>}
           {rows.map((r) => (
             <li key={r.id} className="rounded border px-2 py-1">
-              <b>{r.action}</b> · kuşak {r.sealGeneration} · {new Date(r.createdAt).toLocaleString("tr-TR")} · POT {r.potSec} sn · APT {r.aptSec} sn · atkı {r.picksActual}
+              <b>{r.action}</b> · kuşak {r.sealGeneration} · {new Date(r.createdAt).toLocaleString("tr-TR")} · POT {r.potSec} sn · APT {r.aptSec} sn · atkı {r.unitsActual}
               {r.reason ? <> · gerekçe: {r.reason}</> : null}
             </li>
           ))}
