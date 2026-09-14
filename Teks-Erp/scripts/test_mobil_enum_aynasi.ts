@@ -190,6 +190,71 @@ const MOBILDE_BEKLENEN: Record<string, string> = {
 // BUGÜN BOŞ (2026-09-14): `MachineDataSource` girdisi union doğunca §0h gereği silindi.
 const BEKLENEN_EKSIK: Record<string, { tarih: string; sahip: string; kapanis: string }> = {};
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SABİT LİSTE AYNALARI — enum değil, elle aynalanan SABİT DİZİ çiftleri.
+//
+// ⭐ NEDEN BURADA: §1'in kapsamı Prisma `enum` ↔ mobil `export type`. Ama mobil
+// backend'i import EDEMEZ (bağımsız proje) ve bazı kümeler SABİT DİZİ olarak
+// aynalanıyor. O çiftler §1'in kesişimine HİÇ girmez ⇒ ayrışmaları sessizdir.
+// Eşiğim doluydu: sınıfın İKİ üyesi var (KK1 giriş kaynakları · K18 ölü statüler)
+// ve envanteri yoktu — bu tablo o envanterdir.
+//
+// ⛔ ÇİFT ÖLÇÜM YOK: başka bir bekçi zaten ölçüyorsa burada `olcen` alanı onu
+//    ADIYLA gösterir ve bu mandal o çifti KARŞILAŞTIRMAZ — yalnız envanterde
+//    tutar. İki yerde ölçülen bir şey, biri değiştiğinde hangisinin doğru
+//    olduğu sorusunu doğurur.
+// ─────────────────────────────────────────────────────────────────────────────
+type SabitAyna = { ad: string; beDosya: string; beSabit: string; moDosya: string; moSabit: string; olcen?: string };
+const SABIT_AYNALAR: SabitAyna[] = [
+  {
+    ad: "ölü/arşiv top statüleri",
+    beDosya: "Teks-Erp/src/services/batch.service.ts",
+    beSabit: "K18_DEAD_STATUSES",
+    moDosya: "mobil/src/screens/Modules/Tambur/TamburScreen.tsx",
+    moSabit: "ARCHIVED_ROLL_STATUSES",
+  },
+  {
+    ad: "KK1 giriş kaynakları",
+    beDosya: "Teks-Erp/src/constants/kk1-entry-sources.ts",
+    beSabit: "KK1_ENTRY_SOURCES",
+    moDosya: "mobil/src/constants/kk1EntrySources.ts",
+    moSabit: "KK1_LIST_ENTRY_SOURCES",
+    olcen: "test_kk1_entry_sources.ts §1 (ea) — burada YALNIZ envanterde",
+  },
+];
+
+/** Bir sabit dizinin ÜYE kümesi: `NAME = [...]` bloğundaki BÜYÜK_HARF literalleri. */
+export function sabitUyeleri(kaynak: string, sabitAd: string): Set<string> | null {
+  const i = kaynak.search(new RegExp(`\\b${sabitAd}\\b[^=]*=\\s*\\[`));
+  if (i < 0) return null;
+  // ⚠️ `=` SONRASINDAKİ `[` — `K18_DEAD_STATUSES: RollStatus[] = [...]` satırında
+  // ilk `[` dizi literali DEĞİL, `RollStatus[]`in köşesidir. İlk yazımda onu
+  // aldım ve gövde `[]` çıktı ⇒ iki taraf da BOŞ ⇒ "birebir" diye SAHTE YEŞİL.
+  const esit = kaynak.indexOf("=", i);
+  if (esit < 0) return null;
+  const bas = kaynak.indexOf("[", esit);
+  if (bas < 0) return null;
+  let derinlik = 0;
+  let son = bas;
+  for (let j = bas; j < kaynak.length; j++) {
+    if (kaynak[j] === "[") derinlik++;
+    else if (kaynak[j] === "]") {
+      derinlik--;
+      if (derinlik === 0) {
+        son = j;
+        break;
+      }
+    }
+  }
+  const govde = yorumlariSoy(kaynak.slice(bas, son + 1));
+  // `RollStatus.CANCELLED` ve `'CANCELLED'` biçimlerinin İKİSİ de üyedir.
+  const uyeler = [
+    ...[...govde.matchAll(/['"`]([A-Z][A-Z0-9_]*)['"`]/g)].map((m) => m[1]),
+    ...[...govde.matchAll(/\b[A-Z][A-Za-z0-9]*\.([A-Z][A-Z0-9_]*)/g)].map((m) => m[1]),
+  ];
+  return new Set(uyeler);
+}
+
 function main(): void {
   console.log("\n=== Mobil enum aynası — backend enum ↔ mobil union ===\n");
 
@@ -261,6 +326,58 @@ function main(): void {
       ? "beyan taze"
       : `${eksik.aynaliAmaBeyansiz.join(",")} ⇒ MOBILDE_BEKLENEN'e ekle (yoksa mobilden silindiği gün §1 sessizce susar)`,
   );
+  // ── §0j SABİT LİSTE AYNALARI (enum değil) ─────────────────────────────────
+  for (const c of SABIT_AYNALAR) {
+    if (c.olcen) {
+      console.log(`⏭ §0j ${c.ad}: envanterde, ölçümü BAŞKA bekçide — ${c.olcen}`);
+      continue;
+    }
+    const beK = (() => {
+      try {
+        return readFileSync(path.resolve(__dirname, "../..", c.beDosya), "utf8");
+      } catch {
+        return null;
+      }
+    })();
+    const moK = (() => {
+      try {
+        return readFileSync(path.resolve(__dirname, "../..", c.moDosya), "utf8");
+      } catch {
+        return null;
+      }
+    })();
+    const be = beK === null ? null : sabitUyeleri(beK, c.beSabit);
+    const mo = moK === null ? null : sabitUyeleri(moK, c.moSabit);
+    if (be === null || mo === null) {
+      // ⚠️ ÜÇÜNCÜ SONUÇ: "ölçülemedi" ile "uyumlu" aynı şey değildir.
+      check(
+        `§0j ⭐ ${c.ad}: iki kaynak da OKUNDU`,
+        false,
+        `${be === null ? `${c.beSabit} (${c.beDosya}) bulunamadı` : ""}${mo === null ? ` ${c.moSabit} (${c.moDosya}) bulunamadı` : ""} ⇒ taşındıysa çifti tazele`,
+      );
+      continue;
+    }
+    // ⚠️ KÖRLÜK ZEMİNİ: iki taraf da BOŞSA "birebir" DEĞİL, ÖLÇÜLEMEDİ demektir.
+    // (İlk yazımda bu yoktu ve ayrıştırıcı kusurum sahte yeşil verdi.)
+    if (be.size === 0 || mo.size === 0) {
+      check(
+        `§0j ⭐ ${c.ad}: iki sabit de ÜYE taşıyor (körlük zemini)`,
+        false,
+        `backend ${be.size} · mobil ${mo.size} ⇒ ayrıştırıcı sabiti bulamadı; boş küme EŞLEŞME DEĞİLDİR`,
+      );
+      continue;
+    }
+    const s2 = sapmaOlc(be, mo);
+    check(
+      `§0j ⭐ ${c.ad} aynası birebir (${c.beSabit} ↔ ${c.moSabit})`,
+      !sapmaVar(s2),
+      sapmaVar(s2)
+        ? `${sapmaMetni(s2)} ⇒ mobil backend'i import EDEMEZ, liste ELLE aynalanır: iki yanı AYNI commit'te taşı`
+        : `${be.size} üye`,
+    );
+  }
+  console.log("");
+
   // ⏭ SESLİ: beyan dışı yüzey ölçülmez — ama ölçülmediği GÖRÜNÜR.
   const beyanDisi = [...be.keys()].filter((k) => !MOBILDE_BEKLENEN[k]).sort();
   const mobildeVarBackenddeYok = [...mo.keys()].filter((k) => !be.has(k)).sort();
@@ -310,6 +427,19 @@ function main(): void {
   // ── §3 SONDALAR ───────────────────────────────────────────────────────────
   console.log("§3 — sondalar");
   const S = (a: string[]) => new Set(a);
+  check(
+    "§3p ⭐ sabit üyeleri `=` SONRASINDAKİ diziden okunur (tip köşesi değil)",
+    sabitUyeleri("export const X: RollStatus[] = [ RollStatus.A_B, RollStatus.C_D ];", "X")?.size === 2,
+    "ilk yazımda `RollStatus[]`in köşesi alınıp gövde boş çıkmıştı ⇒ sahte yeşil",
+  );
+  check(
+    "§3r ⭐ tırnaklı ve nitelenmiş üye BİRLİKTE okunur",
+    (() => {
+      const u = sabitUyeleri("const Y = ['A_B', RollStatus.C_D];", "Y");
+      return u?.has("A_B") === true && u?.has("C_D") === true;
+    })(),
+  );
+  check("§3s bulunamayan sabit `null` döner (boş küme DEĞİL)", sabitUyeleri("const Z = 1;", "YOK") === null);
   check("§3a ⭐ eksik değer GERİDE sayılır", sapmaOlc(S(["A", "B"]), S(["A"])).geride.join() === "B");
   check("§3b ⭐ fazla değer FAZLA sayılır", sapmaOlc(S(["A"]), S(["A", "B"])).fazla.join() === "B");
   check("§3c birebir küme sapma vermez", !sapmaVar(sapmaOlc(S(["A"]), S(["A"]))));
