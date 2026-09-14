@@ -22,7 +22,7 @@
 | S3 | `order.service.ts:529` `cancelOrderLine` | `deleteMany` | damga `ORDER_LINE_CANCEL`; `:534` remaining aktif |
 | S4 | `order.service.ts:2944` `softDelete` | `deleteMany` (livePairs) | damga `ORDER_DELETE`; `:2958` remaining aktif |
 | S5 | `order.service.ts:3361` `cancelWithActions` | `deleteMany` | damga `ORDER_CANCEL`; `:3382` remaining aktif |
-| Y1–Y4 | `workorder-link:389` createMany · `workorder:1072` · `:5841` · `workorder-clone.helper:159` | create | `skipDuplicates` yerine **partial unique çakışması 409** ("bu kalem zaten bağlı"); clone yalnız AKTİF bağları kopyalar (`:106` select süzülür) |
+| Y1–Y4 | `workorder-link:389` createMany · `workorder:1072` · `:5841` · `workorder-clone.helper:159` | create | ~~`skipDuplicates` yerine **partial unique çakışması 409**~~ **GEÇERSİZ → 2026-09-14 (1e hükmü): `skipDuplicates` KORUNDU** — servis açık çifti `existing` ile eler (no-op idempotency), doğrudan ikinci açık INSERT DB'de P2002 (bekçi §3); clone yalnız AKTİF bağları kopyalar |
 
 ## 4. Okuyucu envanteri — kim `unlinkedAt: null` süzecek
 
