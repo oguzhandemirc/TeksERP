@@ -95,7 +95,7 @@ Her adım istasyon kataloğu + rota şablonundan kurulur; **TOPUN rotası için*
 | İş emri · sipariş bağı | `docs/kurallar/is-emri.md` | Tip bağın aynası; iki bağ yolu iki sözleşme; kapanış dispozisyonu; giriş noktası; quick-start tek giriş |
 | Rota · renk · özellik · kapsama | `docs/kurallar/rota-renk.md` | Renk kısıt değil reçete; özellik gerçek kısıt, boş doğamaz; hedef siparişten; kapsama uyarır; renk kilidi mala bakar |
 | Kalite · istasyon yeteneği | `docs/kurallar/kalite.md` | Kalite = istasyon yeteneği, boğaz ikiz; `RollError` Tambur kararıyla kapanır; Faz B açık |
-| **Dokuma · dokuma işi · doff** ⚠️ kâğıtta | `docs/kurallar/dokuma.md` | Tezgah kendi VARLIĞI, topun rotasında adım değil; `MachineStopEvent` `MachineRun`ın defteri, ayrı varlık değil; top KK1'de doğar (`entrySource=WEAVING`); elle giriş birinci sınıf, rapor "ölçüldü mü elle mi" taşır |
+| **Dokuma · dokuma işi · doff · tezgah karnesi** (şema P1…P3 + karne indi; otomatik toplama Faz 2 kâğıtta) | `docs/kurallar/dokuma.md` | Tezgah kendi VARLIĞI, topun rotasında adım değil; `MachineStopEvent` `MachineRun`ın defteri, ayrı varlık değil; top KK1'de doğar (`entrySource=WEAVING`); elle giriş birinci sınıf, rapor "ölçüldü mü elle mi" taşır |
 | Parti (Batch) | `docs/kurallar/parti.md` | Kimlik yalnız `Batch.id`; P01…P99 körlemesine sarar (profil); 8022 ilk ifade |
 | Yarı mamul | `docs/kurallar/yari-mamul.md` | Arzdır, düşülmez; `RAW_STOCK` bilerek geniş; `rollScope` fail-closed |
 | Refakat kartı | `docs/kurallar/refakat-karti.md` | WO ile doğar; plan canlı, sunum canlı, içerik yalnız geçersiz kartta donuk; `resolvePrintPlan` tek karar |
