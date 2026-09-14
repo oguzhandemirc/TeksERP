@@ -15,11 +15,15 @@
 //   §3 ⭐ İKİ AKTİF satır yazılamaz — sed görevde (P2002)
 //   §4 Aktif okuma damgalıyı GÖRMEZ: top detayı · düzeltme bağlamı (echo yolu) ·
 //      liste `properties` · iş emri detayı · iş emri kilit yardımcısı
+//   §3b ⭐ İLK YAZIM YARIŞI: aktif satır yokken iki paralel FARKLI değer → biri
+//      "created", kaybeden 409 PROPERTY_VERSION_CONFLICT (skipDuplicates yutmaz)
 //   §8 ⭐ UNDO DONÖRÜ: özelliği olan ebeveyn kesim+finalize+FULL geri alma sonrası
 //      KENDİ satırını taşır (donör dalı girmez, çoğalmaz); §8b UYDURMA YOK —
 //      özelliksiz ebeveyn → çocuk depoda sonradan bayrak kazanır → FULL geri alma →
 //      ebeveyn ÖZELLİKSİZ dirilir (donör = çocuğun doğum-anı satırları) ve
-//      `propsDonorMissing` yanıtta/audit'te görünür (sessiz sıfır yok)
+//      `propsDonorMissing` yanıtta/audit'te görünür (sessiz sıfır yok); §8c POZİTİF dal:
+//      legacy ebeveyn (özelliği hard-delete edilmiş) çocuğun DOĞUM-ANI satırından geri
+//      kurulur (restored=1) — miras satırı çocuğun `createdAt`iyle damgalanır (1c G2)
 //   §10 ⭐ updateTargetProperties yalnız DELTA'yı damgalar: iş emri hedefinden çıkan
 //      bayrak hem hedefte hem bağlı topta damgalanır, giren yazılır, hedefte OLMAYAN
 //      (istasyonda kazanılmış) bayrak topta DURUR; değişmeyen satır aynı id
@@ -38,6 +42,7 @@ import {
   ACTIVE_TARGET_PROPERTY,
   revokeRollProperties,
   revokeTargetProperties,
+  setRollPropertyValueTx,
 } from "../src/services/helpers/property-revoke.helper";
 import { InventoryService } from "../src/services/inventory.service";
 import { TamburService } from "../src/services/tambur.service";
@@ -134,6 +139,47 @@ async function main(): Promise<void> {
   } catch (e) { err3 = e; }
   check("§3 ⭐ İKİ AKTİF satır yazılamadı — sed görevde (P2002)", err3 instanceof Prisma.PrismaClientKnownRequestError && err3.code === "P2002", err3 instanceof Error ? err3.message.split("\n")[0] : "hata yok");
 
+  // ── §3b ───────────────────────────────────────────────────────────────────
+  console.log("── §3b İlk yazım yarışı ──");
+  const flagRace = await prisma.fabricProperty.upsert({
+    where: { code: "TEST-RPR-RACE" },
+    create: { code: "TEST-RPR-RACE", name: "TEST RPR yarış (seçim)", valueType: "CHOICE" },
+    update: {}, select: { id: true },
+  });
+  propIds.push(flagRace.id);
+  const rv1 = await prisma.fabricPropertyValue.upsert({ where: { propertyId_code: { propertyId: flagRace.id, code: "A" } }, create: { propertyId: flagRace.id, code: "A", name: "A" }, update: {}, select: { id: true } });
+  const rv2 = await prisma.fabricPropertyValue.upsert({ where: { propertyId_code: { propertyId: flagRace.id, code: "B" } }, create: { propertyId: flagRace.id, code: "B", name: "B" }, update: {}, select: { id: true } });
+  const raceRoll = await prisma.roll.create({ data: { barcode: `${TAG}-RACE`, itemId, status: RollStatus.WAREHOUSE, initialQty: 10, currentQty: 10, entrySource: "MANUAL_ENTRY" }, select: { id: true } });
+  rollIds.push(raceRoll.id);
+  // KAPILI ÖRTÜŞME: tx1 A'yı yazar ve COMMIT ETMEDEN bekler; tx2 aynı çifte B yazmaya
+  // çalışır — aktif satır görmez (tx1 commit'siz), INSERT'i partial unique'te tx1'in
+  // commit'ine kadar BLOKLANIR, sonra ON CONFLICT DO NOTHING count 0 → yeniden oku →
+  // farklı değer → 409. Pencere sıralı çağrıyla DEĞİL tutulan tx ile kuruluyor
+  // (ilk deneme sıralı düştü ve "versioned" döndü — yarış ölçülmemişti).
+  let release: () => void = () => {};
+  const held = new Promise<void>((r) => { release = r; });
+  const t1 = prisma.$transaction(async (tx) => {
+    const r = await setRollPropertyValueTx(tx, { rollId: raceRoll.id, propertyId: flagRace.id, valueId: rv1.id, reason: "yarış A" });
+    await held;
+    return r;
+  }, { timeout: 15_000 });
+  await new Promise((r) => setTimeout(r, 250));
+  const t2 = prisma.$transaction((tx) => setRollPropertyValueTx(tx, { rollId: raceRoll.id, propertyId: flagRace.id, valueId: rv2.id, reason: "yarış B" }), { timeout: 15_000 });
+  await new Promise((r) => setTimeout(r, 400));
+  const t2Blocked = await prisma.$queryRaw<{ n: bigint }[]>`SELECT count(*)::bigint AS n FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query ILIKE '%roll_properties%'`;
+  release();
+  const raceResults = await Promise.allSettled([t1, t2]);
+  check("§3b ön koşul — pencere GERÇEKTEN kuruldu (tx2 kilitte bekledi)", Number(t2Blocked[0]?.n ?? 0) >= 1, `bekleyen=${String(t2Blocked[0]?.n)}`);
+  const created = raceResults.filter((r) => r.status === "fulfilled" && r.value === "created").length;
+  const conflicts = raceResults.filter((r) => r.status === "rejected" && (r.reason as { statusCode?: number })?.statusCode === 409).length;
+  check("§3b ⭐ paralel farklı değer: 1 created + 1 409 (kaybeden yutulmadı)", created === 1 && conflicts === 1, JSON.stringify(raceResults.map((r) => (r.status === "fulfilled" ? r.value : (r.reason as { statusCode?: number })?.statusCode))));
+  check("§3b tek aktif satır kaldı", (await prisma.rollProperty.count({ where: { rollId: raceRoll.id, propertyId: flagRace.id, ...ACTIVE_ROLL_PROPERTY } })) === 1);
+  const sameAgain = await prisma.$transaction(async (tx) => {
+    const aktif = await tx.rollProperty.findFirstOrThrow({ where: { rollId: raceRoll.id, propertyId: flagRace.id, ...ACTIVE_ROLL_PROPERTY }, select: { valueId: true } });
+    return setRollPropertyValueTx(tx, { rollId: raceRoll.id, propertyId: flagRace.id, valueId: aktif.valueId, reason: "aynı" });
+  });
+  check("§3b aynı değerle tekrar → noop", sameAgain === "noop", sameAgain);
+
   // ── §4 ────────────────────────────────────────────────────────────────────
   console.log("── §4 Aktif okuma damgalıyı görmez ──");
   const detay = (await inv.findRollById(roll.id)).data as unknown as { properties: { propertyId: string; valueId: string | null; revokedAt?: unknown }[] };
@@ -201,6 +247,18 @@ async function main(): Promise<void> {
     (await prisma.rollProperty.count({ where: { rollId: pB } })) === 0 && fullB.propsRestored === 0,
     `restored=${fullB.propsRestored}`);
   check("§8b sıfır SESSİZ değil — `propsDonorMissing` yanıtta", fullB.propsDonorMissing === true, JSON.stringify(fullB.propsDonorMissing));
+  // §8c — POZİTİF dal (1c G2): legacy ebeveyn = özelliği migration öncesi hard-delete edilmiş.
+  // Simülasyon: özellikli ebeveyn kes+finalize (çocuk doğum-anı mirası alır), sonra
+  // ebeveynin satırı elle SİLİNİR (legacy), FULL geri alma donörden 1 satır kurar.
+  const pC = await mkWarehouseRoll("P8C");
+  await prisma.rollProperty.create({ data: { rollId: pC, propertyId: flag.id } });
+  const cC = await cutAndFinalize(pC);
+  const childBirth = await prisma.roll.findUniqueOrThrow({ where: { id: cC }, select: { createdAt: true } });
+  const inherited = await prisma.rollProperty.findFirstOrThrow({ where: { rollId: cC, propertyId: flag.id }, select: { createdAt: true } });
+  check("§8c ⭐ miras satırı çocuğun DOĞUM-ANI damgasını taşıyor (createdAt eşit)", inherited.createdAt.getTime() === childBirth.createdAt.getTime(), `fark=${inherited.createdAt.getTime() - childBirth.createdAt.getTime()} ms`);
+  await prisma.rollProperty.deleteMany({ where: { rollId: pC } }); // legacy simülasyonu (fikstür, ürün yolu değil)
+  const fullC = (await undo.applyUndo(pC, undefined, { mode: "FULL", reason: "bekçi §8c", permissions: [UNDO_FULL_PERMISSION] })).data as { propsRestored: number; propsDonorMissing?: boolean };
+  check("§8c ⭐ legacy ebeveyn donörden GERİ KURULDU (restored=1, aktif 1)", fullC.propsRestored === 1 && !fullC.propsDonorMissing && (await prisma.rollProperty.count({ where: { rollId: pC, propertyId: flag.id, ...ACTIVE_ROLL_PROPERTY } })) === 1, `restored=${fullC.propsRestored}`);
 
   // ── §9 ────────────────────────────────────────────────────────────────────
   console.log("── §9 applyManualProperties FARK bazlı ──");

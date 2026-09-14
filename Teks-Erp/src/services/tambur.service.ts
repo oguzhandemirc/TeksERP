@@ -15,7 +15,7 @@
 // =============================================================================
 
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
-import { ACTIVE_ROLL_PROPERTY } from "./helpers/property-revoke.helper";
+import { ACTIVE_ROLL_PROPERTY, inheritRollPropertiesTx } from "./helpers/property-revoke.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { postStockMove, qtyYazilabilir } from "./helpers/warehouse-ledger.helper";
 import { postOpenFabricChildEntryTx } from "./helpers/production-entry-ledger.helper";
@@ -1144,13 +1144,8 @@ export class TamburService {
         // Parent'tan çocuğa özellik mirası (renk veren fason adımında zaten
         // parent'a kopyalanmıştı).
         if (seg.inheritProperties && parentProperties.length > 0) {
-          await tx.rollProperty.createMany({
-            data: parentProperties.map((p) => ({
-              rollId: splitRoll.id,
-              propertyId: p.propertyId,
-              valueId: p.valueId,
-            })),
-          });
+          // Doğum-anı damgalı miras (geri kurulum donörü bunu sayar).
+          await inheritRollPropertiesTx(tx, { childId: splitRoll.id, rows: parentProperties });
         }
 
         // Kurşun/KK2 yaşam döngüsü kalıtımı: parent'taki op'ları yeni rollId
@@ -2277,14 +2272,7 @@ export class TamburService {
       });
 
       if (propertySnapshot.length > 0) {
-        await tx.rollProperty.createMany({
-          data: propertySnapshot.map((p) => ({
-            rollId: child.id,
-            propertyId: p.propertyId,
-            valueId: p.valueId,
-          })),
-          skipDuplicates: true,
-        });
+        await inheritRollPropertiesTx(tx, { childId: child.id, rows: propertySnapshot });
       }
 
       // KURSUN_APPLIED + QC2_COMPLETED kalıtım — parent topta yapılmış operasyonlar
@@ -2816,14 +2804,7 @@ export class TamburService {
             },
         });
         if (propertySnapshot.length > 0) {
-          await tx.rollProperty.createMany({
-            data: propertySnapshot.map((p) => ({
-              rollId: child.id,
-              propertyId: p.propertyId,
-              valueId: p.valueId,
-            })),
-            skipDuplicates: true,
-          });
+          await inheritRollPropertiesTx(tx, { childId: child.id, rows: propertySnapshot });
         }
         // Kalan child'a da KURSUN/QC2 kalıtımı uygula. Filter YOK — zincirleme
         // inherit (depo topundaki op'lar zaten inherit'li).
@@ -3221,14 +3202,7 @@ export class TamburService {
       await postOpenFabricChildEntryTx(tx, child, tamburStepId, userId);
 
       if (propertySnapshot.length > 0) {
-        await tx.rollProperty.createMany({
-          data: propertySnapshot.map((p) => ({
-            rollId: child.id,
-            propertyId: p.propertyId,
-            valueId: p.valueId,
-          })),
-          skipDuplicates: true,
-        });
+        await inheritRollPropertiesTx(tx, { childId: child.id, rows: propertySnapshot });
       }
 
       // KURSUN_APPLIED + QC2_COMPLETED kalıtım — parent açık kumaşta yapılan
@@ -3687,14 +3661,7 @@ export class TamburService {
             },
         });
         if (propertySnapshot.length > 0) {
-          await tx.rollProperty.createMany({
-            data: propertySnapshot.map((p) => ({
-              rollId: child.id,
-              propertyId: p.propertyId,
-              valueId: p.valueId,
-            })),
-            skipDuplicates: true,
-          });
+          await inheritRollPropertiesTx(tx, { childId: child.id, rows: propertySnapshot });
         }
         remainingChildId = child.id;
         // STOK DEFTERİ — kalan parça da depoda doğar: `cutOpenFabric` çocuğuyla AYNI

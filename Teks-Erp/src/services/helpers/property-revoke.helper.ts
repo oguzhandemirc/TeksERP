@@ -111,11 +111,23 @@ export async function setRollPropertyValueTx(
     select: { id: true, valueId: true },
   });
   if (!active) {
-    await tx.rollProperty.createMany({
+    const ins = await tx.rollProperty.createMany({
       data: [{ rollId: args.rollId, propertyId: args.propertyId, valueId: args.valueId }],
       skipDuplicates: true,
     });
-    return "created";
+    if (ins.count === 1) return "created";
+    // İLK YAZIM YARIŞI (1c bulgusu G1, 2026-09-14): iki paralel istasyon yazımı aktif satır
+    // yokken yarıştı, kaybeden `skipDuplicates` ile yutuldu — "created" demek kaybı
+    // gizlerdi. Tx içinde yeniden oku: aynı değer no-op, farklı değer 409 (ilk yazımda
+    // yarış sürümleme dalı DEĞİL hatadır; operatör tazeleyip görür).
+    const kazanan = await tx.rollProperty.findFirst({
+      where: { rollId: args.rollId, propertyId: args.propertyId, ...ACTIVE_ROLL_PROPERTY },
+      select: { valueId: true },
+    });
+    if (kazanan && (args.valueId === null || kazanan.valueId === args.valueId)) return "noop";
+    throw AppError.conflict("Özellik bu sırada başka bir istasyondan farklı değerle yazıldı — tekrar deneyin.", {
+      code: "PROPERTY_VERSION_CONFLICT",
+    });
   }
   if (args.valueId === null || args.valueId === active.valueId) return "noop";
   const revoked = await tx.rollProperty.updateMany({
@@ -176,4 +188,24 @@ export async function applyRollFlagSetTx(
     added = res.count;
   }
   return { revoked, added, revokedPropertyIds: leaving.map((r) => r.propertyId), addedPropertyIds: entering };
+}
+
+/**
+ * Ebeveynden çocuğa ÖZELLİK MİRASI — satırlar çocuğun `createdAt`iyle damgalanır.
+ * NEDEN (1c bulgusu G2, 2026-09-14): Prisma `@default(now())`ı İFADE BAŞINA üretir
+ * (PG `now()` değil), miras satırı çocuktan milisaniyeler SONRA doğuyordu ve geri
+ * kurulum donörü (`createdAt <= çocuk.createdAt`, tambur-undo `birthPropertiesOf`)
+ * HEP BOŞ kalıyordu. Doğum-anı eşitliği burada, tek yazıcıda kurulur.
+ */
+export async function inheritRollPropertiesTx(
+  tx: Tx,
+  args: { childId: string; rows: { propertyId: string; valueId: string | null }[] },
+): Promise<number> {
+  if (args.rows.length === 0) return 0;
+  const child = await tx.roll.findUniqueOrThrow({ where: { id: args.childId }, select: { createdAt: true } });
+  const res = await tx.rollProperty.createMany({
+    data: args.rows.map((p) => ({ rollId: args.childId, propertyId: p.propertyId, valueId: p.valueId, createdAt: child.createdAt })),
+    skipDuplicates: true,
+  });
+  return res.count;
 }

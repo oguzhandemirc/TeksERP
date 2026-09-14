@@ -14,7 +14,7 @@
 // =============================================================================
 
 import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
-import { ACTIVE_ROLL_PROPERTY, ACTIVE_TARGET_PROPERTY, revokeRollProperties } from "./helpers/property-revoke.helper";
+import { ACTIVE_ROLL_PROPERTY, ACTIVE_TARGET_PROPERTY, inheritRollPropertiesTx, revokeRollProperties } from "./helpers/property-revoke.helper";
 import { ACTIVE_MOVEMENT, revokeRollMovements } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
@@ -595,14 +595,8 @@ async function createFasonShipChild(
     },
   });
   if (props.length > 0) {
-    await tx.rollProperty.createMany({
-      data: props.map((p) => ({
-        rollId: child.id,
-        propertyId: p.propertyId,
-        valueId: p.valueId,
-      })),
-      skipDuplicates: true,
-    });
+    // Doğum-anı damgalı miras (geri kurulum donörü bunu sayar).
+    await inheritRollPropertiesTx(tx, { childId: child.id, rows: props });
   }
   const ops = await tx.rollOperation.findMany({
     where: { ...ACTIVE_OPERATION,
