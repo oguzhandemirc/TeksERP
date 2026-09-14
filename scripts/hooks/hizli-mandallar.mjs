@@ -12,7 +12,7 @@
 //
 // KÜME (ölçüldü 2026-09-13, d5): 534 bekçinin 105'i DB'siz geçiyor, 95'i ≤5 sn;
 //    bunların `Teks-Erp/scripts/` | `docs/standart/` | `docs/kurallar/`ı KONU
-//    edinen 12'si burada (+13. `belge_capa_atfi` · 14. `gun_anahtari_kaynagi` · 15. `yerel_ayar_bagimliligi` · 16. `harita_sonda_atfi` · 17. `fikstur_sabit_ad` · 18. `lookup_beyan_aynasi` · 19. `sha_atfi`, 2026-09-14). Küme ELLE listelenir — "scripts/ altında DB'siz olan
+//    edinen 12'si burada (+13. `belge_capa_atfi` · 14. `gun_anahtari_kaynagi` · 15. `yerel_ayar_bagimliligi` · 16. `harita_sonda_atfi` · 17. `fikstur_sabit_ad` · 18. `lookup_beyan_aynasi` · 19. `sha_atfi` · 20. `audit_muafiyeti`, 2026-09-14). Küme ELLE listelenir — "scripts/ altında DB'siz olan
 //    her şey" gibi türetilmiş bir kapsam, DB'siz görünen ama vakumen yeşil kalan
 //    bekçiyi de (0/0, çıkış 0 — iki emsal var) kapıya sokardı.
 //
@@ -59,6 +59,7 @@ const MANDALLAR = [
   "test_fikstur_sabit_ad", // scripts/test_* fikstürlerinde SABİT ad/kod (P2002 maskesi) · ağaç+others · ~1,5 sn · taban 0 sert (17., d9 yazdı, 2026-09-14)
   "test_lookup_beyan_aynasi", // import LOOKUP_SOURCES beyanı ↔ resolveReference çağrıları · src (import-lookup + tüm src taraması) · ağaç+others · 0,4–1,2 sn · taban 0 sert (18., d9 yazdı, 2026-09-14)
   "test_sha_atfi", // belgelerde backtick'li ÖLÜ sha atfı (git cat-file) · Teks-Erp/scripts + docs + Teks-Erp/docs · 0,4–0,7 sn · taban 0 sert; sığ klonda ⏭ sayıyla (19., d9 yazdı, 2026-09-14)
+  "test_audit_muafiyeti", // "her CUD → audit" istisnaları BEYANLI (AUDIT_EXEMPT_MODELS kapalı küme) · src/services + routes + helpers/jobs · ağaç · 0,7 sn · §2 sert + §7 dosya cırcırı (20., d9 yazdı, 2026-09-14)
 ];
 
 function izoleAgacMi() {

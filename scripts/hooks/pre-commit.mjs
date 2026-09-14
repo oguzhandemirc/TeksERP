@@ -188,7 +188,9 @@ if (staged.some((f) => /^(Teks-Erp|Electron|mobil)\/src\/.*\.tsx?$/.test(f))) {
 // `docs/` BÜTÜNÜ (1e hükmü 2026-09-14, sha_atfi ile): belge_capa_atfi ve sha_atfi TÜM takipli md'yi okur —
 // dar tetik (standart|kurallar) docs/design|ops'taki bayat çapayı/ölü sha'yı kapıda değil CI'da yakalıyordu;
 // eşitlik kuralı sağlanır, bedel docs-only commit'e +~6 sn (kayıt adımları önde).
-if (staged.some((f) => /^(Teks-Erp\/scripts\/|Teks-Erp\/docs\/|Teks-Erp\/src\/services\/import\/|docs\/)/.test(f))) {
+// `Teks-Erp/src/` BÜTÜNÜ (1e hükmü 2026-09-14, audit_muafiyeti ile): bekçi services + routes + helpers +
+// jobs okur — tetik okunandan dar kalamaz; `services/import/` bunun içinde kaldı. Bedel src commit'ine +~1 sn.
+if (staged.some((f) => /^(Teks-Erp\/scripts\/|Teks-Erp\/docs\/|Teks-Erp\/src\/|docs\/)/.test(f))) {
   adimlar.push({ ad: "hızlı mandallar", cwd: ".", cmd: ["node", ["scripts/hooks/hizli-mandallar.mjs"]] });
 }
 
