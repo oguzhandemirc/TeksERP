@@ -9882,3 +9882,42 @@ top girişinde"*.
 notu GERİ BİRLEŞTİR. ②'de durulursa fabrika kalıcı olarak daha kötü bir üründe kalır ve not
 "iki yoldan biri" cümlesini sonsuza kadar taşır; ④ unutulursa not bu kez GERİ YÖNDE bayatlar.
 Bu yüzden ayrıştırılmış her madde bir BORÇTUR ve sahibi belli olmalıdır.
+
+---
+
+## 2026-09-14 — Sürüm notu kapısı artık YAYINA GİDEN HER YOLDA: CI + APK derleme + APK sahaya çıkış [ÇEKİRDEK]
+
+`docs/RECETELER.md`de ÖLÇÜLMÜŞ iki boşluk vardı ve ikisi de aynı cümleyi yalanlıyordu
+(*"not yazılmadan sürüm çıkmaz"*): kapı **CI'da hiç koşmuyordu** (`ci.yml` yalnız
+`test_surum.mjs`) ve **APK yolunda hiç koşmuyordu** (`build-apk.mjs` · `deploy/mobil-yayinla.mjs`
+çağırmıyordu; yalnız panel paketleme ve OTA taşıyordu). Yani native değişiklikle çıkan bir
+tablet sürümü notsuz sahaya gidebiliyordu ve eksiklik ancak BİR SONRAKİ OTA turunda görünüyordu.
+
+**Kapı üç yeni yerde koşuyor, hepsi FAIL-CLOSED ve ÜÇ SONUÇLU (yeşil · kırmızı · ÖLÇÜLEMEDİ):**
+- **CI** (`ci.yml` doküman job'u): `check-surum-notlari.mjs --kunyeden`. Sürümler **künyeden**
+  okunur (`Electron/package.json` · `mobil/app.json` `expo.version`), iş akışına **SABİT
+  YAZILMAZ** — sabit yazılsaydı sürüm yükseldiği gün kapı eski numarayı doğrular, yani hiçbir
+  şey doğrulamazdı. Künye okunamaz ya da sürüm biçimsizse kapı ÖLÇÜLEMEDİ deyip KIRMIZI verir.
+- **APK derleme** (`mobil/scripts/build-apk.mjs` → `surumNotuKapisi()`): gerçek derlemede VE
+  `--check` ucuz yolunda; dosyanın kendi doktrini ("sürüm kapısı ucuz yolda da koşar") izlendi.
+- **APK sahaya çıkış** (`deploy/mobil-yayinla.mjs` → `apkYayinla()`): yükleme BAŞLAMADAN önce.
+
+⚠️ **`--kunyeden` dairesellik DEĞİLDİR ve sınırı beyanlıdır.** Yasak olan, bir script'in
+`surumler.*` alanını künyeden okuyup NOT DOSYASINA YAZMASIdır (o zaman kapı kendi yazdığını
+doğrular). Künyeyi okuyup "sahaya gidecek sürümün notu var mı" diye SORMAK, OTA yolunun
+2026-08'den beri yaptığı şeyin aynısıdır.
+
+**SONDALAR (beş):** ① künye okuması yeşil (panel 1.3.1 · tablet 1.0.7, ikisinin de notu var)
+· ② not kaydı bozuldu (tablet 1.0.7 → 1.0.9) ⇒ `--kunyeden` ❌ **ve** `build:apk --check`
+"SÜRÜM NOTU KAPISI KIRMIZI" ile DURDU · ③ `app.json`dan `expo.version` silindi ⇒ `--kunyeden`
+"künye okunamadı" ❌, `build:apk --check` "ÖLÇÜLEMEDİ" ile DURDU · ④ `mobil-yayinla.mjs --apk`
+notu olmayan sürümle (9.9.9) çağrıldı ⇒ YÜKLEME BAŞLAMADAN durdu · ⑤ sondalar `cp`+`sha256`
+ile geri alındı, `surum-notlari.json` ve `app.json` sha'ları sonda öncesiyle AYNI.
+⚠️ **Beyanlı kör nokta:** `mobil-yayinla.mjs`in YEŞİL dalı bilerek ölçülmedi — ölçmek gerçek
+bir yayın başlatırdı; o dalın kodu `build-apk.mjs`inkiyle aynı biçimdedir ve orada ölçüldü.
+
+⇒ **Ders: bir kapının "var" olması, YAYINA GİDEN her yolda var olması demek değildir.** Kapıyı
+yazarken sorulacak soru "bu kapı kuruldu mu" değil, ***"malın çıktığı başka yol var mı"***dır —
+kardeş bayrak sorusunun kapı hâli. Burada dört çıkış yolundan ikisi kapısızdı ve ikisi de
+ölçülmüş, yazılmış, **açık** duruyordu; boşluğu kapatan şey yeni bir ölçüm değil, ÖLÇÜLMÜŞ
+LİSTEYE DÖNMEK oldu.

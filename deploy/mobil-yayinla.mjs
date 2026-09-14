@@ -453,6 +453,27 @@ async function apkYayinla(apkYol) {
     dur('APK yayını için --surum ve --vc gerekli', 'Örnek: --surum=2.9.8 --vc=55');
   }
 
+  // SÜRÜM NOTU KAPISI — sahaya çıkışın SON adımı da not ister (2026-09-14).
+  // OTA yolu (`yayinla-ota.mjs`) ve panel paketleme bu kapıyı taşıyordu, APK
+  // yolu taşımıyordu: native değişiklikle çıkan sürüm notsuz kuruluyordu.
+  // ⚠️ DAİRESEL DEĞİL: sürüm `--surum` ARGÜMANINDAN gelir, not dosyası onu
+  // üretmez yalnız doğrular. Bekçi çalıştırılamazsa da DURUR (ÖLÇÜLEMEDİ):
+  // koşmayan bir kapı, geçmiş bir kapı değildir.
+  {
+    const bekci = path.join(HERE, '..', 'scripts', 'check-surum-notlari.mjs');
+    const r = spawnSync(process.execPath, [bekci, `--tablet=${surum}`], { stdio: 'inherit' });
+    if (r.error) dur('SÜRÜM NOTU KAPISI ÖLÇÜLEMEDİ', `Bekçi çalıştırılamadı: ${r.error.message}`, `Denenen: ${bekci}`);
+    if (r.status !== 0) {
+      dur(
+        'SÜRÜM NOTU KAPISI KIRMIZI',
+        `${surum} için operatör notu yok ya da not kuralları ihlal edilmiş.`,
+        "1) surum-notlari.json'a bu sürüm için kayıt ekle",
+        '2) node scripts/surum-notlari-kopyala.mjs',
+        '3) komutu tekrarla',
+      );
+    }
+  }
+
   const ad = `TeksERP-${surum}-vc${vc}.apk`;
   if (!/^[\x20-\x7E]+$/.test(ad) || /\s/.test(ad)) {
     // Electron'da `Ş` + boşluk taşıyan dosya adı aktarımda bozulup 404 üretmişti.

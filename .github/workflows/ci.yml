@@ -50,6 +50,15 @@ jobs:
       # üçü de ancak sahada fark edilir.
       - name: Sürüm numarası kuralı
         run: node scripts/test_surum.mjs
+      # Sürüm notu kapısı — paketleme kapısının CI İKİZİ. 2026-09-14'e kadar bu
+      # kapı YALNIZ paketleme/OTA yolunda koşuyordu: not eksikse hata, sahaya
+      # çıkmaya HAZIRLANIRKEN (çoğu zaman gece) görülüyordu. Sürümler künyeden
+      # (`Electron/package.json` · `mobil/app.json`) okunur, iş akışına SABİT
+      # yazılmaz — sabit yazılsaydı sürüm yükseldiğinde kapı eski numarayı
+      # doğrular, yani hiçbir şey doğrulamazdı. Künye okunamazsa kapı ÖLÇÜLEMEDİ
+      # deyip KIRMIZI verir (fail-closed), sessizce atlamaz.
+      - name: Sürüm notu kapısı (künyeden okunan panel + tablet sürümü)
+        run: node scripts/check-surum-notlari.mjs --kunyeden
 
   # ===========================================================================
   # BACKEND — Express + Prisma; Postgres service + migrate deploy + seed + test

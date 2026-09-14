@@ -11,6 +11,13 @@
 //   node scripts/check-surum-notlari.mjs                 # şema + dil + kopya
 //   node scripts/check-surum-notlari.mjs --panel=2.8.3   # + o sürüm için kayıt var mı
 //   node scripts/check-surum-notlari.mjs --tablet=2.9.10
+//   node scripts/check-surum-notlari.mjs --kunyeden   # sürümleri PAKET KÜNYELERİNDEN oku
+//
+// `--kunyeden` CI ve APK yayın yolu içindir: panel sürümü `Electron/package.json`,
+// tablet sürümü `mobil/app.json` (`expo.version`) — yani paketin SAHAYA GİDEN
+// künyesi. Bu dairesel DEĞİLDİR: künye notu üretmez, not künyeyi üretmez; kapı
+// "sahaya gidecek sürümün notu var mı" diye sorar. Yasak olan, bir script'in
+// `surumler.*` alanını künyeden okuyup not dosyasına YAZMASIDIR.
 //
 // ⚠️ KAPI DAİRESEL DEĞİLDİR: beklenen sürüm ARGÜMANDAN gelir, notun kendisi
 // onu üretmez yalnız doğrular. Hiçbir script `surumler.*` alanını package.json
@@ -57,6 +64,8 @@ function check(etiket, ok, detay = "", yesildeDeBas = false) {
   const goster = detay && (!ok || yesildeDeBas);
   console.log(`${ok ? "✅" : "❌"} ${etiket}${goster ? ` — ${detay}` : ""}`);
 }
+
+const KUNYEDEN = process.argv.includes("--kunyeden");
 
 const arg = (ad) => {
   const p = process.argv.find((a) => a.startsWith(`--${ad}=`));
@@ -284,11 +293,44 @@ console.log("\n§8 — \"Sonraki sürümde\" vaadi");
     MUAF_VAATLER.filter((x) => !MUAF_SINIFLARI.has(x.sinif)).map((x) => String(x.sinif)).join(" · "));
 }
 
-// --- Yayın kapısı (argümanla) -------------------------------------------
-const panelSurum = arg("panel");
-const tabletSurum = arg("tablet");
-if (panelSurum || tabletSurum) {
+// --- Yayın kapısı (argümanla ya da künyeden) -----------------------------
+// ÜÇ SONUÇ, İKİ DEĞİL: kapı yeşil · kapı kırmızı · **ÖLÇÜLEMEDİ** (künye okunamadı
+// ya da sürüm alanı biçimsiz). Üçüncüsü sessizce ATLANMAZ — atlansaydı bozuk bir
+// `package.json`, kapıyı hiç koşmamış hâle getirir ve yeşil görünürdü.
+const KUNYELER = [
+  { ad: "panel", rel: "Electron/package.json", oku: (j) => j?.version },
+  { ad: "tablet", rel: path.join("mobil", "app.json"), oku: (j) => j?.expo?.version },
+];
+let panelSurum = arg("panel");
+let tabletSurum = arg("tablet");
+const kunyeHatalari = [];
+const kunyeKaynaklari = [];
+if (KUNYEDEN) {
+  for (const k of KUNYELER) {
+    const tam = path.join(kok, k.rel);
+    let surum = null;
+    try {
+      surum = k.oku(JSON.parse(fs.readFileSync(tam, "utf8")));
+    } catch (e) {
+      kunyeHatalari.push(`${k.rel}: okunamadı (${e.message})`);
+      continue;
+    }
+    if (typeof surum !== "string" || !SURUM_RE.test(surum)) {
+      kunyeHatalari.push(`${k.rel}: sürüm alanı biçimsiz (${JSON.stringify(surum)})`);
+      continue;
+    }
+    kunyeKaynaklari.push(`${k.ad}=${surum} (${k.rel})`);
+    if (k.ad === "panel") panelSurum = surum;
+    else tabletSurum = surum;
+  }
+}
+if (panelSurum || tabletSurum || KUNYEDEN) {
   console.log("\n§6 — Yayın kapısı");
+  if (KUNYEDEN) {
+    check("künyeler okundu (sürüm ARGÜMANDAN değil künyeden, ikisi de notu üretmez)",
+      kunyeHatalari.length === 0,
+      kunyeHatalari.join(" · ") || kunyeKaynaklari.join(" · "), true);
+  }
   if (panelSurum) {
     check(`panel ${panelSurum} için not kaydı var`,
       yayinlar.some((y) => y.surumler?.panel === panelSurum),

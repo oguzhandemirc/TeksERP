@@ -364,6 +364,49 @@ function surumBas() {
 }
 
 /* ------------------------------------------------------------------ *
+ * (f2) Sürüm notu kapısı — APK yolunun OTA ikizi
+ * ------------------------------------------------------------------ */
+
+/**
+ * Not yazılmadan sürüm çıkmaz (kök CLAUDE.md). OTA yolu (`yayinla-ota.mjs`) bu
+ * kapıyı taşıyordu, APK yolu TAŞIMIYORDU (ölçüldü 2026-09-14, `docs/RECETELER.md`
+ * boşluk listesi): native değişiklikle çıkan bir sürüm notsuz sahaya gidebiliyor,
+ * eksiklik ancak bir sonraki OTA turunda görülüyordu.
+ *
+ * ⚠️ ÜÇ SONUÇ: yeşil · kırmızı · ÖLÇÜLEMEDİ (app.json'dan sürüm okunamadı).
+ * Üçüncüsü de DURDURUR — sürümü okunamayan paket için "notu var" denemez ve
+ * sessiz atlama bu kapıyı süse çevirirdi.
+ *
+ * ⚠️ DAİRESEL DEĞİL: beklenen sürüm app.json'dan OKUNUP bekçiye ARGÜMAN verilir;
+ * not dosyası onu üretmez, yalnız doğrular (OTA yolundaki emsalin aynısı).
+ */
+function surumNotuKapisi(s) {
+  baslik('SÜRÜM NOTU KAPISI');
+  if (!s?.appVersion) {
+    dur(
+      'SÜRÜM NOTU KAPISI ÖLÇÜLEMEDİ',
+      'app.json okunamadı ya da `expo.version` yok — hangi sürümün notunu arayacağımız belirsiz.',
+      'Kapı sessizce atlanmaz: önce app.json sürümünü düzelt, sonra komutu tekrarla.',
+    );
+  }
+  const bekci = path.join(PROJECT_ROOT, '..', 'scripts', 'check-surum-notlari.mjs');
+  const r = spawnSync(process.execPath, [bekci, `--tablet=${s.appVersion}`], { stdio: 'inherit' });
+  if (r.error) {
+    dur('SÜRÜM NOTU KAPISI ÖLÇÜLEMEDİ', `Bekçi çalıştırılamadı: ${r.error.message}`, `Denenen: ${bekci}`);
+  }
+  if (r.status !== 0) {
+    dur(
+      'SÜRÜM NOTU KAPISI KIRMIZI',
+      `${s.appVersion} için operatör notu yok ya da not kuralları ihlal edilmiş.`,
+      "1) surum-notlari.json'a bu sürüm için kayıt ekle",
+      '2) node scripts/surum-notlari-kopyala.mjs',
+      '3) komutu tekrarla',
+    );
+  }
+  bilgi(`Sürüm notu kapısı: ✔ ${s.appVersion} için operatör notu var`);
+}
+
+/* ------------------------------------------------------------------ *
  * (c) Bundle önbelleğini ZORLA temizle
  * ------------------------------------------------------------------ */
 
@@ -1035,7 +1078,7 @@ async function main() {
     // çalışıyordu; oysa `--check`'in varlık sebebi "sahaya paket hazırlamadan
     // önce saniyeler içinde doğrula" — sürüm kayması tam olarak orada
     // yakalanmalı, 70 saniyelik derlemenin ortasında değil.
-    surumBas();
+    surumNotuKapisi(surumBas());
     // Güncelleme kapısı ucuz yolda da koşar — "prebuild'i unuttum" hatası
     // 70 saniyelik derlemenin sonunda değil, saniyeler içinde görünsün.
     // android/ henüz üretilmemişse kapı atlanır (androidVarMi zaten söyler).
@@ -1072,6 +1115,7 @@ async function main() {
 
   androidVarMi();
   const s = surumBas();
+  surumNotuKapisi(s);
   guncellemeKapisi();
 
   const derlemeBaslangici = Date.now();
