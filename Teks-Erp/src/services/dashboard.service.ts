@@ -6,7 +6,9 @@
 // içindeydi (Routes→Services katman atlama); tek sahip burası.
 // =============================================================================
 
+import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
+import { KK1_ENTRY_SOURCES } from "../constants/kk1-entry-sources";
 import { factoryDayStart } from "../constants/time";
 
 export interface DefectsSummary {
@@ -126,12 +128,11 @@ export class DashboardService {
         GROUP BY wos."stationId"
       ) disp ON disp."stationId" = s."id"
       LEFT JOIN (
-        -- SUPPLIER_RECEIPT (mobil KK1 taraması) + MANUAL_ENTRY (Electron admin elle
-        -- giriş) ikisi de KK1'in işi olan "bugün gelen ham top" sayısına girer —
-        -- KK1Screen.tsx'teki "Son Kayıtlar" listesiyle aynı kapsam.
+        -- KK1'in işi olan "bugün gelen ham top": kapsam TEK sabitten (KK1_ENTRY_SOURCES,
+        -- mobil KK1 listesiyle birebir) — elle yazılı liste WEAVING/SEMI_FINISHED'ı kaçırıyordu.
         SELECT COUNT("id")::int AS cnt
         FROM "rolls"
-        WHERE "entrySource" IN ('SUPPLIER_RECEIPT', 'MANUAL_ENTRY')
+        WHERE "entrySource"::text IN (${Prisma.join([...KK1_ENTRY_SOURCES])})
           AND "createdAt" >= ${today}
           AND "colorId" IS NULL
       ) e ON s."kind" = 'RAW_QC'

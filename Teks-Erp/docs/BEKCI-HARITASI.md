@@ -1779,6 +1779,7 @@ Kalan atlamalar üç biçimde ve strict hiçbirini görmez:
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Teks-Erp/scripts/test_kk1_entry_sources.ts` | KK1 giriş kaynağı kapsamı TEK KAYNAK: backend `KK1_ENTRY_SOURCES` ↔ mobil `KK1_LIST_ENTRY_SOURCES` küme olarak birebir (mobil dosyası metinden), dashboard KK1 karnesi listeyi elle yazmaz (`Prisma.join`), backend'de kümeyi elle kuran başka okuyucu yok — eski SQL literali `WEAVING`/`SEMI_FINISHED` doğan topu saymıyordu (47 D3, 2026-09-14) |  | ✓B2 (bu commit) — mobil listeden `WEAVING` sil → §1 1/5 ❌ · dashboard'a literal liste geri → §2+§3 3/5 ❌ | |
 | `Teks-Erp/scripts/test_barcode_reservation.ts` | Top barkod sayacının TX ÖNCESİ toplu rezerve edilmesini kilitler (T1<100ms VE T2=30/30 iki koşullu) + sıralı rezervasyonda her barkodun kendi slot tip | ✓ |  |  |
 | `Teks-Erp/scripts/test_depo_roll_cancel_permission.ts` | Top iptalinin üç ucunun (cancel-preview / DELETE / restore-cancel) AYNI izin kümesini taşıdığını, kümenin /initial-entry'ye sızmadığını ve mobile:depo |  |  | ⚠️ Başlık yorumu 2026-08-25'te KALDIRILAN 'ölü etiket onayı'nı hâlâ yaşayan bir guard gibi an |
 | `Teks-Erp/scripts/test_duplicate_rolls.ts` | Hayalet top (mükerrer ham giriş) taraması: sert eleme, kimlik+zaman penceresi, 'asıl' önerisi (etiketi basılan), çuval/sevk engeli, skor, salt-okunurl | ✓ |  |  |

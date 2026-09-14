@@ -10,6 +10,7 @@
 
 ### Değişmezler
 
+- **[ÇEKİRDEK]** "KK1'in işi olan top" kümesi TEK sabittir: backend `constants/kk1-entry-sources.ts` `KK1_ENTRY_SOURCES` ↔ mobil `KK1_LIST_ENTRY_SOURCES` birebir; karne/liste SQL'i kaynak listesini elle yazmaz (`Prisma.join`). · bekçi: `scripts/test_kk1_entry_sources.ts (DB'siz; küme eşitliği + dashboard literal yok)`
 - **[ÇEKİRDEK]** Kayıt-yaratan uçlar istemci `clientToken`'ı taşır; kolon `String? @unique @db.Uuid`. Kapsam ÜÇ MODEL DEĞİL 15: Roll/Order/WorkOrder + SubcontractorReceipt, SwatchStockReduction, Sack, Shipment, ImportRun, WarehouseTransfer, GoodsReceipt, Invoice, Payment, CashTransaction, Cheque, PurchaseOrder. <sub>(CLAUDE.md:171, CLAUDE.md:148)</sub>
 - **[ÇEKİRDEK]** İstemci token'ı MANTIKSAL DENEME başına BİR KEZ üretir ve tekrar denemede AYNI token'ı gönderir; mutate çağrısı başına yeni token üretmek korumayı boşa düşürür. · bekçi: `mobil/src/offline/entryAttempt.test.ts` <sub>(CLAUDE.md:171)</sub>
 - **[ÇEKİRDEK]** Token yalnız sonucu BELİRSİZ bırakan hatadan sonra YAPIŞIR (ağ hatası / zaman aşımı / 5xx — timeout 'yazılmadı' demek DEĞİLDİR). Kesin 4xx'te YAPIŞMAZ: yapışırsa aynı payload'ı sonsuza dek gönderen bir 'Tekrar Dene' döngüsü kurulur. · bekçi: `mobil/src/offline/entryAttempt.test.ts` <sub>(CLAUDE.md:171)</sub>
@@ -101,7 +102,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_barcode_reservation`, `test_depo_roll_cancel_permission`⚠️, `test_duplicate_rolls`, `test_e2e_full_flow`, `test_item_quick_create`, `test_kk1_duplicate_guard`, `test_kk1_weight_flag`, `test_master_data_merge_race`, `test_p1b_barcode_collision`⚠️, `test_roll_barcode`, `test_roll_entry_station`, `test_semi_finished_entry`, `test_tambur_manual_produce`, `test_token_replay_cancelled`, `test_work_session_stamping`
+Backend: `test_barcode_reservation`, `test_kk1_entry_sources`, `test_depo_roll_cancel_permission`⚠️, `test_duplicate_rolls`, `test_e2e_full_flow`, `test_item_quick_create`, `test_kk1_duplicate_guard`, `test_kk1_weight_flag`, `test_master_data_merge_race`, `test_p1b_barcode_collision`⚠️, `test_roll_barcode`, `test_roll_entry_station`, `test_semi_finished_entry`, `test_tambur_manual_produce`, `test_token_replay_cancelled`, `test_work_session_stamping`
 
 İstemci: `fason-receive-attempt.test.ts`, `BarcodeScannerView.test.tsx`, `PickerModal.test.tsx`, `SyncStatusChip.test.tsx`, `rollHistoryFilter.test.ts`, `duplicateEntryChoice.test.ts`, `useReasonPresets.test.tsx`, `announceFailure.test.ts`, `announceWire.test.ts`, `backoff.test.ts`, `barcode.test.ts`, `deadline.test.ts`, `entryAttempt.test.ts`, `flushThenLogout.test.ts`, `mutations.test.ts`, `persistPolicy.test.ts`, `printQueue.test.ts`, `serverReachability.test.ts`, `sessionSwitch.test.ts`, `receiveAttempt.test.ts`, `EntryConflictModal.test.tsx`, `appUpdate.service.test.ts`, `sessionEntriesStore.test.ts`, `queryState.test.ts`
 

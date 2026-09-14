@@ -53,7 +53,7 @@ export const initialEntrySchema = z.object({
    * kilitlenerek kurulur (`claimDoffForRollTx`); makine eşleşmesi yalnız tezgah-bağlı
    * KK1'de denetlenir, masa KK1'de bağ kabul (bağ açık liste seçimidir).
    * Yarı mamulle birlikte verilemez — bir top hem dışarıdan hem tezgahtan gelmez.
-   * ⚠️ Şema düz `z.object` olduğu için bu alan LİSTEDE olmak zorunda: listede
+   * ⚠️ Şema strict OLMAYAN `z.object` (üstünde `superRefine`, ZodEffects) olduğu için bu alan LİSTEDE olmak zorunda: listede
    * olmayan alan sessizce düşer ve bağ kurulmadan 201 döner (ölçüldü §3.8c A.5).
    */
   doffEventId: z.string().uuid("Geçersiz indirme ID").optional().nullable(),
@@ -62,7 +62,7 @@ export const initialEntrySchema = z.object({
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["doffEventId"], message: "Yarı mamul girişine indirme bağı verilemez — top ya dışarıdan gelir ya tezgahtan iner." });
   }
 });
-// ⚠️ Bu şema BİLEREK düz `z.object` (strict DEĞİL): bilinmeyen alan sessizce
+// ⚠️ Bu şema BİLEREK strict DEĞİL (`z.object` + `superRefine` = ZodEffects; `.strict()` yok): bilinmeyen alan sessizce
 // atılır. `feature-flag.routes.ts`'te strict doğru karardı (panel ↔ backend, tek
 // sürüm), ama BURASI istemci ucudur — sahada eski APK'lar var ve strict'e
 // çevirmek yeni bir alan eklendiğinde ters yönü (yeni APK ↔ eski backend) 400'e

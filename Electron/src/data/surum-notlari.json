@@ -273,6 +273,11 @@
           "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Çuvaldan elle kaldırılan iz artık kayıttan silinmiyor; “kaldırıldı” damgası alıyor (kim, ne zaman). Önceden elle kaldırma satırı yok ediyor, izin o çuvalda bir zamanlar bulunduğu hiçbir yerden okunamıyordu. Elle kaldırılan iz, sevkiyat geri alındığında geri gelmez — yalnız sevkle kendiliğinden temizlenen izler döner; aynı izi yeniden bırakırsanız damga kalkar ve iz tazelenir. Çuval listesi, iz süzgeci, rozetler ve belgeler değişmez; hiçbir rakam değişmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Panel ana ekranındaki KK1 karnesi (“bugün gelen ham top” sayacı) artık yarı mamulden ve dokuma tezgahından gelen girişleri de sayıyor; tabletteki KK1 listesiyle aynı kapsamı okur. Önceden yalnız mal kabul ve elle giriş sayılıyordu. Yarı mamul ya da tezgah girişi yapan işletmede bu sayı yükselebilir; yalnız mal kabulle çalışan işletmede değişmez."
         }
       ]
     },

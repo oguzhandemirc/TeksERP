@@ -106,7 +106,7 @@ enum RollEntrySource {
   /// DOKUMADAN İNEN top (2026-09-13, dokuma P3) — üçüncü doğum sınıfı: ne satın
   /// alınmış ne fason dönüşü; fabrikanın KENDİ tezgahında dokunup KK1'de doğmuş.
   /// `DoffEvent` "indi" der, top BURADA doğmaz (KK1 sorar, `doffEventId` bağlar).
-  /// Bu değeri yazan uç P3'te YOK (şema-only) — eski istemci değeri hiç görmez.
+  /// Yazan uç KK1 girişi (`doffEventId` verilince, P3b) — eski istemci değeri etiket/filtrede ham görür, kırılmaz.
   WEAVING
 }
 
@@ -2054,7 +2054,8 @@ model MachineStopReclass {
 /// (`updatedAt` yok, kronoloji `createdAt`); geri alma `revokedAt` damgasıdır ve
 /// yalnız hiç top doğurmamış indirmede açıktır (`DOFF_CANCEL` ⇔ NOT EXISTS rolls).
 /// ⚠️ TOP BURADA DOĞMAZ — bu olay yalnız "indi" der; `Roll` KK1'de doğar
-/// (`entrySource=WEAVING`, `doffEventId` bağı). Yazan uç P3'te YOK (şema-only).
+/// (`entrySource=WEAVING`, `doffEventId` bağı). Yazan uç `POST /api/machine-doffs`,
+/// geri alma `/:id/revoke` (P3b, `machine-doff.routes.ts`; izin `loom:doff` / `loom:doff-revoke`).
 model DoffEvent {
   id               String @id @default(uuid()) @db.Uuid
   machineId        String @db.Uuid
