@@ -1979,7 +1979,9 @@ model MachineStopEvent {
   classifiedById String?               @db.Uuid
   classifiedAt   DateTime?             @db.Timestamptz
 
-  /// SINIFLANDIRMA BORCU — kapanışta tek helper yazar.
+  /// SINIFLANDIRMA BORCU — AÇILIŞTA yazılır (sebepsiz açılış = true; ingest de öyle) ve
+  /// sınıflandırma onu TEMİZLEMEZ: kuyruk yüklemi `requiresReason ∧ reasonCode IS NULL`
+  /// (`CLASSIFICATION_QUEUE_WHERE`), yani borç "sebep geldi mi" ile ödenir, bayrakla değil.
   requiresReason Boolean @default(false)
 
   /// BAĞLAM — doğuşta DONDURULUR (raporun group-by eksenleri). Sonradan

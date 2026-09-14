@@ -74,10 +74,12 @@ export async function assertStopShiftWritableTx(
   }
 }
 
-/** `at` anını kapsayan iptal edilmemiş vardiya (yoksa NULL — tahminle yazılmaz). */
+/** `at` anını kapsayan vardiya — iptal edilmiş olsa da (yoksa NULL — tahminle yazılmaz). */
 export async function resolveShiftInstanceId(tx: Tx, at: Date): Promise<string | null> {
+  // İptal edilmiş vardiya da DÖNER (F1 hükmü, 2026-09-14): iptal ≠ "vardiya yok"; kararı
+  // `assertStopShiftWritableTx` verir (409 SHIFT_CANCELLED). NULL yalnız kapsayan vardiya HİÇ yoksa.
   const s = await tx.shiftInstance.findFirst({
-    where: { isCancelled: false, startsAt: { lte: at }, endsAt: { gt: at } },
+    where: { startsAt: { lte: at }, endsAt: { gt: at } },
     select: { id: true },
     orderBy: { startsAt: "desc" },
   });

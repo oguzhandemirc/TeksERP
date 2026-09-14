@@ -4,15 +4,16 @@
 // =============================================================================
 //   §1 aç: satır doğar, `requiresReason` sebepsizde true / sebepliyle lossClass KOPYA;
 //      vardiya/koşum bağlamı startedAt'ten (yoksa NULL); factoryDay fabrika günü
-//   §2 tek açık duruş seddi: ikinci açılış 409 STOP_ALREADY_OPEN; replay aynı token → aynı satır
+//   §2 tek açık duruş seddi: ikinci açılış 409 STOP_ALREADY_OPEN; replay aynı token → aynı satır; farklı yük → 409 (F2)
 //   §3 kapa: durationSec startedAt'ten, endSource OPERATOR; ikinci kapama 409; bitiş<başlangıç 400
 //   §4 sınıfla: ilk karar claim (NULL→değer), lossClass katalogdan; ikinci sınıfla 409 STOP_ALREADY_CLASSIFIED
 //   §5 yeniden sınıfla: reasonCode değişir, `MachineStopReclass` from→to satırı AYNI tx; bayat from 409;
-//      olgular (startedAt/endedAt/durationSec/stopKey) DEĞİŞMEZ; karşı kayıt (to→from) ikinci satır
+//      olgular (startedAt/endedAt/durationSec/stopKey) DEĞİŞMEZ; karşı kayıt (to→from) ikinci satır; yeni not olayda, eski not satırda (F3)
 //   §6 lossClass DONMUŞ: katalog satırının sınıfı değişse duruş satırı değişmez
 //   §7 geri al: damga, satır durur; geri alınmış duruş sınıflanamaz/kapanamaz; replay 409 STOP_REVOKED;
 //      geri alma seddi boşaltır — aynı makinede yeni duruş açılabilir
-//   §8 iptal vardiya kapısı (tek fonksiyon `assertStopShiftWritableTx`): iptal vardiyadaki duruş 409
+//   §8 iptal vardiya kapısı (tek fonksiyon `assertStopShiftWritableTx`): açılış (F1: kapsayan vardiya iptal olsa da
+//      DÖNER, NULL yalnız vardiya hiç yoksa) VE sınıflama 409 SHIFT_CANCELLED
 //   §9 liste: açık + kuyruk yüklemi (boğaz ikizi `CLASSIFICATION_QUEUE_WHERE`)
 //   §10 defter-beyan çapası: yazan/tersYazan sembolleri gerçek (beyan 82 ile aynı trende)
 //
@@ -50,7 +51,7 @@ async function hata(fn: () => Promise<unknown>): Promise<AppError | null> {
 const kod = (e: AppError | null): string => String(e?.details?.code ?? e?.statusCode ?? "yok");
 
 const ek = Date.now().toString(36);
-const ids = { station: "", makine: "", makine2: "", shiftDef: "", shift: "", shiftCancelled: "", preset: "", stops: [] as string[] };
+const ids = { station: "", makine: "", makine2: "", makine3: "", shiftDef: "", shift: "", shiftCancelled: "", preset: "", stops: [] as string[] };
 
 async function main(): Promise<void> {
   console.log("\n=== Tezgah duruşu ELLE GİRİŞ — tek yazıcı, claim'ler, reclass defteri, damga ===\n");
@@ -65,6 +66,8 @@ async function main(): Promise<void> {
   ids.makine = makine.id;
   const makine2 = await prisma.machine.create({ data: { stationId: station.id, name: `TEST-MS-MAK2-${ek}`, code: `TEST-MS-M2-${ek}`.toUpperCase().slice(0, 32), isActive: true } });
   ids.makine2 = makine2.id;
+  const makine3 = await prisma.machine.create({ data: { stationId: station.id, name: `TEST-MS-MAK3-${ek}`, code: `TEST-MS-M3-${ek}`.toUpperCase().slice(0, 32), isActive: true } });
+  ids.makine3 = makine3.id;
   // Vardiya: S0'ı kapsayan bir örnek + iptal edilmiş bir örnek (§8)
   const shiftDef = await prisma.shiftDefinition.create({
     data: { code: `T${ek}`.toUpperCase().slice(0, 8), name: `TEST-MS vardiya ${ek}`, startMinute: 0, durationMinutes: 60 * 8 },
@@ -79,8 +82,8 @@ async function main(): Promise<void> {
     data: {
       shiftDefinitionId: shiftDef.id,
       factoryDayKey: new Date(gunBasi.getTime() - 86_400_000),
-      startsAt: new Date(S0.getTime() - 30 * 3600_000),
-      endsAt: new Date(S0.getTime() - 28 * 3600_000),
+      startsAt: new Date(S1.getTime() - 7 * 3600_000),
+      endsAt: new Date(S1.getTime() - 5 * 3600_000),
       isCancelled: true,
       cancelReason: "bekçi §8",
     },
@@ -107,6 +110,8 @@ async function main(): Promise<void> {
   check("§2a aynı makinede ikinci açık duruş 409 STOP_ALREADY_OPEN (DB seddi)", ikinci?.statusCode === 409 && kod(ikinci) === "STOP_ALREADY_OPEN", kod(ikinci));
   const replay = await openManualStop({ machineId: makine.id, startedAt: S0, clientToken: token }, undefined);
   check("§2b replay aynı token → aynı satır (yeni satır yok)", replay.data.id === a1.data.id && (await prisma.machineStopEvent.count({ where: { machineId: makine.id } })) === 1);
+  const sahte = await hata(() => openManualStop({ machineId: makine.id, startedAt: new Date(S0.getTime() + 60_000), clientToken: token }, undefined));
+  check("§2c replay PARMAK İZİ: aynı token, farklı startedAt → 409 CLIENT_TOKEN_COLLISION (F2)", sahte?.statusCode === 409 && kod(sahte) === "CLIENT_TOKEN_COLLISION", kod(sahte));
 
   // ── §3 kapa ──────────────────────────────────────────────────────────────
   const geri = await hata(() => closeManualStop(a1.data.id, new Date(S0.getTime() - 60_000), undefined));
@@ -138,6 +143,10 @@ async function main(): Promise<void> {
   const r2 = await reclassifyStop(a1.data.id, { fromReasonCode: "PLANLI_BAKIM", toReasonCode: "MEKANIK_ARIZA", reason: "bekçi §5: karşı kayıt" }, undefined);
   const defter2 = await prisma.machineStopReclass.findMany({ where: { stopEventId: a1.data.id }, orderBy: { createdAt: "asc" } });
   check("§5e ⭐ karşı kayıt: to→from İKİNCİ satır, ilki değişmedi (ters yol = aynı fonksiyon)", r2.data.reasonCode === "MEKANIK_ARIZA" && defter2.length === 2 && defter2[0]!.id === defter[0]!.id && defter2[1]!.fromReasonCode === "PLANLI_BAKIM" && defter2[1]!.toReasonCode === "MEKANIK_ARIZA");
+  const r3 = await reclassifyStop(a1.data.id, { fromReasonCode: "MEKANIK_ARIZA", toReasonCode: "ELEKTRIK_ARIZA", reason: "bekçi §5h", reasonNote: "yeni not §5h" }, undefined);
+  const son3 = await prisma.machineStopReclass.findFirst({ where: { stopEventId: a1.data.id }, orderBy: { createdAt: "desc" }, select: { reason: true } });
+  check("§5h reclass NOTU (F3): olayda yeni not, ESKİ not reclass satırında saklanır — yerinde ezme yok", r3.data.reasonNote === "yeni not §5h" && (son3?.reason ?? "").includes("bekçi §5h") && (son3?.reason ?? "").includes("eski not: bekçi §4"), `olay=${r3.data.reasonNote} · satır=${son3?.reason}`);
+  await reclassifyStop(a1.data.id, { fromReasonCode: "ELEKTRIK_ARIZA", toReasonCode: "MEKANIK_ARIZA", reason: "bekçi §5h geri" }, undefined);
   const noop = await hata(() => reclassifyStop(a1.data.id, { fromReasonCode: "MEKANIK_ARIZA", toReasonCode: "MEKANIK_ARIZA" }, undefined));
   check("§5f aynı koda yeniden sınıflama 400 STOP_RECLASS_NOOP", noop?.statusCode === 400 && kod(noop) === "STOP_RECLASS_NOOP", kod(noop));
   const sinifsiz = await openManualStop({ machineId: makine.id, startedAt: S1, clientToken: crypto.randomUUID() }, undefined);
@@ -173,21 +182,17 @@ async function main(): Promise<void> {
   const yenidenAc = await hata(() => openManualStop({ machineId: makine.id, startedAt: S1, clientToken: acik.data.stopKey }, undefined));
   check("§7f geri alınmış anahtarla replay 409 STOP_REVOKED (canlıymış gibi dönmez)", acikRv.data.revokedAt !== null && yenidenAc?.statusCode === 409 && kod(yenidenAc) === "STOP_REVOKED", kod(yenidenAc));
 
-  // ── §8 iptal vardiya kapısı ───────────────────────────────────────────────
-  const iptalAn = new Date(S0.getTime() - 29 * 3600_000);
-  const iptalde = await hata(() => openManualStop({ machineId: makine2.id, startedAt: iptalAn, clientToken: crypto.randomUUID() }, undefined));
-  // Not: S0−29 sa "makul aralık" dışında kalırsa damga sunucu saatine düşer ve vardiya eşleşmez —
-  // o yüzden sonda satırı doğrudan DB'de kurulur: iptal vardiyaya bağlı bir duruşun sınıflanması 409 verir.
+  // ── §8 iptal vardiya kapısı (F1: kapsayan vardiya iptal olsa da DÖNER, kapı 409) ────
+  const iptalAn = new Date(S1.getTime() - 6 * 3600_000);
+  const iptalde = await hata(() => openManualStop({ machineId: makine3.id, startedAt: iptalAn, clientToken: crypto.randomUUID() }, undefined));
+  check("§8a ⭐ AÇILIŞ: iptal edilmiş vardiyaya düşen duruş 409 SHIFT_CANCELLED (vardiya NULL'a düşmez)", iptalde?.statusCode === 409 && kod(iptalde) === "SHIFT_CANCELLED", kod(iptalde));
+  // Kapama/sınıflama dalı: satır doğrudan DB'de kurulur (iptal vardiyaya bağlı), sınıflanması 409 verir.
   const dbStop = await prisma.machineStopEvent.create({
     data: { machineId: makine2.id, stopKey: crypto.randomUUID(), startedAt: S1, shiftInstanceId: shiftCancelled.id, factoryDay: gunBasi, source: MachineDataSource.SUPERVISOR, requiresReason: true, endedAt: S1 },
   });
   ids.stops.push(dbStop.id);
   const kapali = await hata(() => classifyStop(dbStop.id, { reasonCode: "MOLA" }, undefined));
-  check("§8 ⭐ iptal vardiyadaki duruş 409 SHIFT_CANCELLED (tek kapı: assertStopShiftWritableTx)", kapali?.statusCode === 409 && kod(kapali) === "SHIFT_CANCELLED", `${kod(kapali)} · açılış: ${iptalde ? kod(iptalde) : "açıldı"}`);
-  if (!iptalde) {
-    const x = await prisma.machineStopEvent.findFirst({ where: { machineId: makine2.id, shiftInstanceId: shiftCancelled.id, endedAt: null }, select: { id: true } });
-    if (x) ids.stops.push(x.id);
-  }
+  check("§8b ⭐ iptal vardiyadaki duruşun sınıflanması 409 SHIFT_CANCELLED (tek kapı: assertStopShiftWritableTx)", kapali?.statusCode === 409 && kod(kapali) === "SHIFT_CANCELLED", kod(kapali));
 
   // ── §9 liste ──────────────────────────────────────────────────────────────
   const l1 = await listMachineStops({ machineId: makine2.id, openOnly: true });
@@ -203,14 +208,14 @@ async function main(): Promise<void> {
 
 async function cleanup(): Promise<void> {
   try {
-    const stops = await prisma.machineStopEvent.findMany({ where: { OR: [{ id: { in: ids.stops } }, { machineId: { in: [ids.makine, ids.makine2].filter(Boolean) } }] }, select: { id: true } });
+    const stops = await prisma.machineStopEvent.findMany({ where: { OR: [{ id: { in: ids.stops } }, { machineId: { in: [ids.makine, ids.makine2, ids.makine3].filter(Boolean) } }] }, select: { id: true } });
     const sid = stops.map((s) => s.id);
     await prisma.machineStopReclass.deleteMany({ where: { stopEventId: { in: sid } } });
     await prisma.machineStopEvent.deleteMany({ where: { id: { in: sid } } });
     if (ids.preset) await prisma.reasonPreset.deleteMany({ where: { id: ids.preset } });
     await prisma.shiftInstance.deleteMany({ where: { id: { in: [ids.shift, ids.shiftCancelled].filter(Boolean) } } });
     if (ids.shiftDef) await prisma.shiftDefinition.deleteMany({ where: { id: ids.shiftDef } });
-    await prisma.machine.deleteMany({ where: { id: { in: [ids.makine, ids.makine2].filter(Boolean) } } });
+    await prisma.machine.deleteMany({ where: { id: { in: [ids.makine, ids.makine2, ids.makine3].filter(Boolean) } } });
     if (ids.station) await prisma.station.deleteMany({ where: { id: ids.station } });
   } catch (e) {
     fail++;

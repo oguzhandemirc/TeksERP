@@ -30,6 +30,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { p2002Mentions } from "../utils/p2002";
 import { resolveRunStamp } from "./helpers/machine-run-open.helper";
+import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { factoryDayKeyUtcMidnight } from "../constants/time";
 import {
   MACHINE_STOP_SELECT,
@@ -70,7 +71,10 @@ export interface ReclassifyStopInput {
   /** Beklenen mevcut kod — claim'in çıpası (yarışta bayat karar üzerine yazılmasın). */
   fromReasonCode: string;
   toReasonCode: string;
+  /** Değişikliğin gerekçesi — reclass satırına yazılır. */
   reason?: string | null;
+  /** Olayın YENİ notu (verilirse). Eski not yerinde ezilmez: reclass satırında saklanır (F3). */
+  reasonNote?: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -81,6 +85,9 @@ export async function openManualStop(input: OpenManualStopInput, userId?: string
   const source: MachineDataSource = input.source ?? MachineDataSource.SUPERVISOR;
 
   // ① Replay — yaratmadan ÖNCE: aynı anahtar aynı satırı döner; geri alınmış duruş yeniden açılmaz.
+  const started = resolveRunStamp(input.startedAt, "duruş başlangıcı");
+  const warnings = started.warning ? [started.warning] : [];
+
   const existing = await prisma.machineStopEvent.findFirst({ where: { machineId: input.machineId, stopKey }, select: MACHINE_STOP_SELECT });
   if (existing) {
     if (existing.revokedAt) {
@@ -88,11 +95,20 @@ export async function openManualStop(input: OpenManualStopInput, userId?: string
         code: "STOP_REVOKED", stopId: existing.id, revokedAt: existing.revokedAt,
       });
     }
+    // Replay PARMAK İZİ (F2, koşum/doff emsali): aynı anahtar BAŞKA yükle gelirse 409 —
+    // aynı formun ikinci gönderimi değil, başka bir duruş demektir. Başlangıç sunucu
+    // çözümü üzerinden (istemci beyanı makul aralık dışında düştüyse ikisi de düşer).
+    assertReplayPayloadMatches(
+      [
+        { ad: "machineId", mevcut: existing.machineId, gelen: input.machineId },
+        { ad: "startedAt", mevcut: existing.startedAt.getTime(), gelen: started.value.getTime() },
+        { ad: "reasonCode", mevcut: existing.reasonCode, gelen: input.reasonCode?.trim() ?? null },
+      ],
+      "Bu form daha önce başka bir duruş için kaydedilmiş — yeni duruş için formu yeniden açın.",
+      { stopId: existing.id },
+    );
     return { success: true, data: existing, message: "Duruş zaten kayıtlı (yeniden gönderim)" };
   }
-
-  const started = resolveRunStamp(input.startedAt, "duruş başlangıcı");
-  const warnings = started.warning ? [started.warning] : [];
 
   let created: MachineStopDto;
   try {
@@ -158,6 +174,8 @@ export async function closeManualStop(stopId: string, endedAtIn: Date | null | u
     if (!cur) throw AppError.notFound("Duruş bulunamadı", { stopId });
     await assertStopShiftWritableTx(tx, cur);
     // Süre startedAt'ten; claim WHERE'i başlangıcı da pinler (bitiş < başlangıç 400'e düşer).
+    // `endSource` sabit OPERATOR (F6): enum SIGNAL|OPERATOR|WATCHDOG — insan kapanışının tek değeri;
+    // amir/operatör ayrımı `source`/`reasonSource`ta yaşar, kapanış kaynağı "insan" der.
     // Uygulama saati parametreyle (kök yasak: ham SQL'de çıplak `now()`; sunucu saati tek kaynak `new Date()`).
     const simdi = new Date();
     const rows = await tx.$queryRaw<Array<{ id: string }>>`
@@ -234,14 +252,19 @@ export async function reclassifyStop(stopId: string, input: ReclassifyStopInput,
     throw AppError.badRequest("Yeni sebep mevcut sebeple aynı — değişiklik yok.", { code: "STOP_RECLASS_NOOP" });
   }
   const reclassed = await prisma.$transaction(async (tx) => {
-    const cur = await tx.machineStopEvent.findUnique({ where: { id: stopId }, select: { shiftInstanceId: true, machineId: true, lossClass: true } });
+    const cur = await tx.machineStopEvent.findUnique({ where: { id: stopId }, select: { shiftInstanceId: true, machineId: true, lossClass: true, reasonNote: true } });
     if (!cur) throw AppError.notFound("Duruş bulunamadı", { stopId });
     await assertStopShiftWritableTx(tx, cur);
     const to = await resolveStopPreset(tx, input.toReasonCode);
+    const yeniNot = input.reasonNote === undefined ? undefined : normalizeNote(input.reasonNote);
     // Claim: kayıtlı karar hâlâ beklenen mi (yarışta bayat karar üzerine yazılmaz).
     const claim = await tx.machineStopEvent.updateMany({
       where: { id: stopId, reasonCode: input.fromReasonCode.trim(), revokedAt: null },
-      data: { reasonCode: to.code, lossClass: to.lossClass, reasonSource: MachineDataSource.SUPERVISOR, classifiedById: userId ?? null, classifiedAt: new Date() },
+      data: {
+        reasonCode: to.code, lossClass: to.lossClass, reasonSource: MachineDataSource.SUPERVISOR,
+        classifiedById: userId ?? null, classifiedAt: new Date(),
+        ...(yeniNot !== undefined ? { reasonNote: yeniNot } : {}),
+      },
     });
     if (claim.count === 0) {
       const fresh = await tx.machineStopEvent.findUniqueOrThrow({ where: { id: stopId }, select: { reasonCode: true, revokedAt: true } });
@@ -261,7 +284,10 @@ export async function reclassifyStop(stopId: string, input: ReclassifyStopInput,
         toReasonCode: to.code,
         fromLossClass: cur.lossClass,
         toLossClass: to.lossClass,
-        reason: normalizeNote(input.reason),
+        // Gerekçe + (not değiştiyse) ESKİ not — yerinde ezilen tek şey olay notu olurdu, defter onu taşır.
+        reason: normalizeNote(
+          [input.reason?.trim() || null, yeniNot !== undefined && cur.reasonNote ? `eski not: ${cur.reasonNote}` : null].filter(Boolean).join(" · ") || null,
+        ),
         actedById: userId ?? null,
       },
     });
