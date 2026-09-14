@@ -32,8 +32,8 @@
 // kalıp korumayı bırakması sınıfı).
 // =============================================================================
 import * as fs from "node:fs";
+import { git } from "./git";
 import * as path from "node:path";
-import { execSync } from "node:child_process";
 import * as ts from "typescript";
 import type { PrismaClient, RollStatus } from "@prisma/client";
 import { Prisma, WarehouseEventType } from "@prisma/client";
@@ -278,8 +278,8 @@ function callee(node: ts.CallExpression): string | null {
 
 function agacKimligi(kok: string): string {
   try {
-    const sha = execSync("git rev-parse --short HEAD", { cwd: kok, stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
-    const kirli = execSync("git status --porcelain -- src", { cwd: kok, stdio: ["ignore", "pipe", "ignore"] }).toString().trim().length > 0;
+    const sha = git(["rev-parse", "--short", "HEAD"], { cwd: kok, stdio: "yut" }).trim();
+    const kirli = git(["status", "--porcelain", "--", "src"], { cwd: kok, stdio: "yut" }).trim().length > 0;
     return `${sha}${kirli ? " (src'de commit edilmemiş değişiklik var)" : ""}`;
   } catch {
     return "(git okunamadı)";

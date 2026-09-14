@@ -32,6 +32,7 @@
 //    GİRMEZ. ⇒ Liste bir ALT SINIRDIR, "bunlar yeter" demez. Tam kapsam `npm test`.
 // =============================================================================
 import { execFileSync } from "node:child_process";
+import { git } from "./lib/git";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -153,7 +154,7 @@ function degisenDosyalar(hedef: string): string[] {
       : hedef.includes("..")
         ? ["diff", "--name-only", hedef]
         : ["show", "--name-only", "--format=", hedef];
-  return execFileSync("git", argv, { cwd: REPO, encoding: "utf8" })
+  return git(argv, { cwd: REPO })
     .trim()
     .split("\n")
     .filter((f) => /\.(ts|tsx)$/.test(f) && !f.includes("/scripts/test_"));
@@ -245,8 +246,8 @@ function main(): void {
   if (hedef.includes("..")) {
     let n = 0;
     try {
-      n = execFileSync("git", ["rev-list", "--count", hedef], { cwd: REPO, encoding: "utf8" }).trim().length
-        ? Number(execFileSync("git", ["rev-list", "--count", hedef], { cwd: REPO, encoding: "utf8" }).trim())
+      n = git(["rev-list", "--count", hedef], { cwd: REPO }).trim().length
+        ? Number(git(["rev-list", "--count", hedef], { cwd: REPO }).trim())
         : 0;
     } catch {
       n = 0;
@@ -282,7 +283,7 @@ function main(): void {
   // değişikliğini AYRI sor; ilk yazımda bunu atlayıp odak yolunu hiç
   // tetikleyememiştim (A kademesi 171'de kaldı).
   const aralikArgv = hedef === "--cached" ? ["diff", "--cached", "-U0"] : hedef.includes("..") ? ["diff", "-U0", hedef] : ["diff", "-U0", `${hedef}^`, hedef];
-  const semaDiff = execFileSync("git", [...aralikArgv, "--", "Teks-Erp/prisma/schema.prisma"], { cwd: REPO, encoding: "utf8" });
+  const semaDiff = git([...aralikArgv, "--", "Teks-Erp/prisma/schema.prisma"], { cwd: REPO });
   if (semaDiff.trim() !== "") {
     modeller = odakModeller(semaDiff, readFileSync(path.join(KOK, "prisma/schema.prisma"), "utf8"));
   }
