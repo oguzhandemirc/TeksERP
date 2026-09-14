@@ -9711,3 +9711,39 @@ söylüyor · bugün eklenen kural satırlarının tümünde `bekçi:` alanı va
 satırıydı: atfı `<sub>(bekçi …)</sub>` biçiminde yazılmıştı, yani **bekçinin ölçtüğü alanın
 DIŞINDA**; 662 atfın 661'i `· bekçi:` alanında. Standart biçime alındı.
 ⇒ **Ders: doğru bilgiyi yanlış ALANA yazmak, bilgiyi yazmamakla aynı kapıyı kör bırakır.**
+
+---
+
+## 2026-09-14 — Sürüm notu geri-okuma turu (dokuma tablet dilimleri): "yeni yetki gerekmez" YANLIŞTI, "metre türetir" BUGÜN YOK [ÇEKİRDEK]
+
+Turun kuralı yine tuttu: **sürüm maddesini kaynağına geri okutmak dil denetimi değil KAPI
+denetimidir.** 2026-09-13 yayınının son iki maddesi (`unitsPerCm` cümlesi · lot netliği) koda
+okutuldu; lot maddesi TEMİZ çıktı, dokuma tablet maddeleri iki kusur verdi.
+
+**① "Yeni yetki gerekmez" — GERİ ALMA için yanlış (3 madde).** Koşum (#56) ve duruş (#57)
+maddeleri *"Yeni yetki gerekmez; dokuma tabletçisi yetkisi yeter"* diyor, indirme maddesi (#54)
+geri almayı hiç şartsız anlatıyor. Kod: üç revoke ucu da `requireAnyPermission(<web>,
+"mobile:dokuma-geri-al")` (`machine-doff.routes.ts:159` · `machine-run.routes.ts:175` ·
+`machine-stop.routes.ts:226`) ve `mobile:dokuma-geri-al` **ekran-içi ayrı yetenektir**:
+`role-template-catalog.ts` `ROLE_COVERAGE_EXEMPT` içinde *"Varsayılan operatör paketine
+GİRMEZ, panelden SEÇİLİ kişiye verilir"* diye BEYANLI. `mobile:dokuma` şablonda var (satır 351),
+yetenek yok. ⇒ Notu okuyan fabrika admini yeteneği ATAMAZ, operatörde geri al düğmesi ÇIKMAZ ve
+kusur ancak sahadan telefonla döner. Üç madde de yeteneği ADIYLA (panelde göründüğü etiketle:
+*"Top indirmeyi, koşumu ve duruşu geri alabilir"*) söyleyecek biçimde düzeltildi.
+⇒ **Ders: "yeni yetki gerekmez" cümlesi EKRANIN yetkisini anlatır; ekran içindeki YETENEK ayrı
+bir kapıdır ve notta ayrı cümle ister. Bir maddede iki kapı varsa iki cümle gerekir.**
+
+**② "Sıklık girilirse rapor atkıdan metre türetir" — bugün hiçbir yüzeyde yok.** `unitsPerCm`
+koşuma yazılıyor (`machine-run.service.ts:177`) ve karneye taşınıyor
+(`loom-shift-terms.helper.ts:211` `unitsPerCmAtClose`), ama **hiçbir okuyucu ondan metre
+türetmiyor**: `producedM` yalnız kapanış gövdesinden geliyor (`machine-run.routes.ts:94`) ve
+tablet kapanış formu o alanı HİÇ göndermiyor (`grep producedM mobil/src` = 0 satır), panelde
+koşum yüzeyi yok ⇒ bugün karnede metre pratikte hep "ölçülmedi". Madde gerçeğe çekildi
+(sıklık kaydedilir ve karnede görünür; türetim bu sürümde YOK).
+⇒ **Ders: bir alanın YAZILIYOR olması OKUNUYOR olması değildir. Sürüm notunda geçen her
+"…-den … türetilir" cümlesi, okuyucusu grep'le gösterilene kadar VAADDİR.**
+
+Lot maddesi (#67) doğrulandı: `goods-receipt.service.ts:1206` (mal kabul) ·
+`warp-beam-wind.service.ts:116` (panel + tablet aynı servis) 400 `YARN_LOT_REQUIRED`,
+tablet formu kapıyı sunucudan okuyor (`warp-beam-tablet.service.ts:55`) — "panelde de tabletten
+de" cümlesi kodla birebir.

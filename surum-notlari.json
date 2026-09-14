@@ -297,7 +297,7 @@
         {
           "kapsam": "tablet",
           "tip": "yeni",
-          "metin": "Dokuma modülü açık kurulumlarda tablete “Tezgah” ekranı geldi: tezgah istasyonunda oturum açan operatör topu indirir (metre sayaçtan, elle ya da simülasyonla — kaynağı kayda yazılır), günün indirmelerini görür ve henüz topa bağlanmamış bir indirmeyi geri alabilir. Ekran ağ olmadan kayıt kuyruklamaz; kayıt gitmezse anında söyler. Dokuma modülü kapalı kurulumda kart görünmez ve hiçbir şey değişmez."
+          "metin": "Dokuma modülü açık kurulumlarda tablete “Tezgah” ekranı geldi: tezgah istasyonunda oturum açan operatör topu indirir (metre sayaçtan, elle ya da simülasyonla — kaynağı kayda yazılır), günün indirmelerini görür ve henüz topa bağlanmamış bir indirmeyi geri alabilir — geri alma ayrı yetenektir, panelden verilir (bkz. koşum maddesi). Ekran ağ olmadan kayıt kuyruklamaz; kayıt gitmezse anında söyler. Dokuma modülü kapalı kurulumda kart görünmez ve hiçbir şey değişmez."
         },
         {
           "kapsam": "tablet",
@@ -307,12 +307,12 @@
         {
           "kapsam": "tablet",
           "tip": "yeni",
-          "metin": "Dokuma modülü açık kurulumlarda Tezgah ekranına koşum açma/kapatma geldi: operatör hattaki koşumu bir dokuma işine bağlayarak ya da işsiz açar (desen ve renk işten ön-dolar, değiştirilebilir; hedef devir ve ham atkı sıklığı boş bırakılabilir — sıklık girilirse rapor atkıdan metre türetir, girilmezse yalnız randıman hesaplanır), kapatırken kapanış devrini yazar (boş = ölçülmedi) ve yanlış açılan koşumu geri alır. Kayıt ağ olmadan kuyruklanmaz, gitmezse anında söyler. Yeni yetki gerekmez; dokuma tabletçisi yetkisi yeter. Modül kapalı kurulumda hiçbir şey değişmez."
+          "metin": "Dokuma modülü açık kurulumlarda Tezgah ekranına koşum açma/kapatma geldi: operatör hattaki koşumu bir dokuma işine bağlayarak ya da işsiz açar (desen ve renk işten ön-dolar, değiştirilebilir; hedef devir ve ham atkı sıklığı boş bırakılabilir — hedef devir girilmezse (tezgah künyesinde de yoksa) performans “ölçülemedi” basılır, sıklık ise koşuma kaydedilir ve vardiya karnesinde görünür; metre türetimi bu sürümde YOK, karnede metre yalnız ölçülmüş değerden gelir), kapatırken kapanış devrini yazar (boş = ölçülmedi) ve yanlış açılan koşumu geri alır. Kayıt ağ olmadan kuyruklanmaz, gitmezse anında söyler. Koşum açıp kapatmak için yeni yetki gerekmez; dokuma tabletçisi yetkisi yeter. Tezgah ekranında geri alma AYRI bir yetenektir ve varsayılan tabletçi paketinde YOKTUR: panelde kişiye “Top indirmeyi, koşumu ve duruşu geri alabilir” yeteneği verilmedikçe geri al düğmesi çıkmaz (indirme, koşum ve duruş için tek yetenek). Modül kapalı kurulumda hiçbir şey değişmez."
         },
         {
           "kapsam": "tablet",
           "tip": "yeni",
-          "metin": "Dokuma modülü açık kurulumlarda Tezgah ekranından duruş bildirilebiliyor: “Duruş Bildir” makineyi duruşa alır, “Çalıştı” kapatır, sebep açılışta isteğe bağlı sonradan “Sebep ata” ile zorunlu seçilir (sebep listesi kataloğun dokuma duruş sebepleridir), yanlış duruş geri alınır. Kapanmış ya da mühürlenmiş vardiyaya duruş yazılamaz; ekran engeli adıyla söyler. Yeni yetki gerekmez. Modül kapalı kurulumda hiçbir şey değişmez."
+          "metin": "Dokuma modülü açık kurulumlarda Tezgah ekranından duruş bildirilebiliyor: “Duruş Bildir” makineyi duruşa alır, “Çalıştı” kapatır, sebep açılışta isteğe bağlı sonradan “Sebep ata” ile zorunlu seçilir (sebep listesi kataloğun dokuma duruş sebepleridir), yanlış duruş geri alınır. Kapanmış ya da mühürlenmiş vardiyaya duruş yazılamaz; ekran engeli adıyla söyler. Duruş bildirmek ve sebep atamak için yeni yetki gerekmez; geri alma için aynı ayrı yetenek aranır (aşağıdaki not). Modül kapalı kurulumda hiçbir şey değişmez."
         },
         {
           "kapsam": "panel",
