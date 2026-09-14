@@ -38,6 +38,7 @@ import {
   WorkOrderStatus,
 } from "@prisma/client";
 import prisma from "../src/lib/prisma";
+import { ACTIVE_SACK_ALLOCATION } from "../src/services/helpers/sack-allocation.helper";
 import { roleGrade } from "./fixture-quality-grade";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { InventoryService } from "../src/services/inventory.service";
@@ -99,7 +100,8 @@ const orderStatusOf = async (id: string) =>
 const shippedQtyOf = async (lineId: string) =>
   Number((await prisma.orderLine.findUnique({ where: { id: lineId }, select: { shippedQty: true } }))!.shippedQty);
 const allocOf = async (lineId: string) =>
-  Number((await prisma.sackAllocation.aggregate({ where: { orderLineId: lineId }, _sum: { qty: true } }))._sum.qty ?? 0);
+  // K2 (2026-09-14): damgalı (yeniden hesaplanmış) satır Σ'ya girmez — üretim okuyucularıyla aynı yüklem.
+  Number((await prisma.sackAllocation.aggregate({ where: { orderLineId: lineId, ...ACTIVE_SACK_ALLOCATION }, _sum: { qty: true } }))._sum.qty ?? 0);
 
 /**
  * Bu test TABLET REJİMİNİ ölçer (KK1 → kurşun tabletinde KK2 → Tambur → sevk).
