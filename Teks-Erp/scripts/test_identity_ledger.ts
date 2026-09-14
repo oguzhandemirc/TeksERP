@@ -96,7 +96,7 @@ const no = (m: string) => { fail++; console.log(`  ❌ ${m}`); };
 const ok2 = (m: string, k: boolean) => (k ? ok(m) : no(m));
 
 const oku = (rel: string) => (existsSync(path.join(REPO, rel)) ? readFileSync(path.join(REPO, rel), "utf8") : "");
-const git = (...a: string[]) => execFileSync("git", a, { cwd: REPO, encoding: "utf8" });
+const git = (...a: string[]) => execFileSync("git", a, { cwd: REPO, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 
 /** Kimlik = başlık eksi SAYAÇ. Parantezli sayı kimlik değil TÜRETİLMİŞ veridir. */
 const normBaslik = (h: string) => foldSearchText(h.replace(/\(\s*\d+[^)]*\)/g, "")).trim();
