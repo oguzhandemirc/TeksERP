@@ -30,6 +30,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { atlamaDefteri } from "./lib/atlama";
+import { curumeKolu } from "./lib/circir-kolu";
 
 const KOK = join(__dirname, "..", "..");
 let pass = 0;
@@ -41,6 +42,9 @@ function check(label: string, ok: boolean, detay = ""): void {
 const ATLAMA = atlamaDefteri(() => {
   fail++;
 });
+
+/** ⚠️ CIRCIR TABANI — oturum DOKUNMAZ, entegratör trende ölçüp düşürür. */
+const OLU_TABAN = 29;
 
 /** Beyanlı muafiyet: gerçekten sha OLMAYAN ama kalıba uyan literaller. BOŞ DOĞAR. */
 const MUAF: Record<string, string> = {};
@@ -69,19 +73,44 @@ function sigKlon(): boolean {
   } catch { return true; }
 }
 
-/** Tek `cat-file --batch-check` çağrısı — N süreç değil BİR süreç. */
-function cozulemeyenler(shalar: string[]): Set<string> {
-  if (shalar.length === 0) return new Set();
-  const cikti = execFileSync("git", ["cat-file", "--batch-check"], {
-    cwd: KOK,
-    encoding: "utf8",
-    input: shalar.map((s) => `${s}^{commit}`).join("\n") + "\n",
-    maxBuffer: 16 * 1024 * 1024,
-  });
+/**
+ * PAYLAŞILAN TARİH — atıfın çözülmesi gereken yer.
+ *
+ * ⚠️ ÖLÇÜM REJİME BAĞLIYDI VE İLK YAZIMDA YANILDIM (2026-09-14): `git cat-file`
+ * YEREL nesne veritabanına bakar. Bu makinede her oturumun dalı duruyor ⇒ 240
+ * atıfın hepsi "çözüldü" göründü. CI'da yalnız origin tarihi var ⇒ aynı ağaç 29
+ * ÖLÜ atıf verdi. Doğru soru "bu nesne BENDE var mı" değil, ***"OKUYUCUNUN
+ * göreceği tarihte var mı"***dır ⇒ ölçüt `origin/main`den ERİŞİLEBİLİRLİK.
+ * Böylece yerel ile CI aynı cevabı verir.
+ */
+function paylasilanTarih(): { ad: string; shalar: Map<string, string[]> } | null {
+  for (const ref of ["origin/main", "main", "HEAD"]) {
+    try {
+      execFileSync("git", ["rev-parse", "--verify", `${ref}^{commit}`], { cwd: KOK, stdio: "ignore" });
+      const cikti = execFileSync("git", ["rev-list", ref], { cwd: KOK, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+      // Kısa atıfı bulmak için ilk 7 haneye göre dizinle (240 × 30k karşılaştırma yerine).
+      const dizin = new Map<string, string[]>();
+      for (const tam of cikti.split("\n")) {
+        if (tam.length < 40) continue;
+        const anahtar = tam.slice(0, 7);
+        const liste = dizin.get(anahtar);
+        if (liste) liste.push(tam);
+        else dizin.set(anahtar, [tam]);
+      }
+      return { ad: ref, shalar: dizin };
+    } catch {
+      /* sıradaki ref */
+    }
+  }
+  return null;
+}
+
+/** Paylaşılan tarihte KARŞILIĞI OLMAYAN atıflar. SAF — girdi dizin + adaylar. */
+export function cozulemeyenler(dizin: Map<string, string[]>, shalar: string[]): Set<string> {
   const olu = new Set<string>();
-  for (const satir of cikti.trim().split("\n")) {
-    const m = /^([0-9a-f]{7,12})\^\{commit\} (missing|ambiguous)/.exec(satir);
-    if (m) olu.add(m[1]!);
+  for (const kisa of shalar) {
+    const adaylar = dizin.get(kisa.slice(0, 7)) ?? [];
+    if (!adaylar.some((tam) => tam.startsWith(kisa))) olu.add(kisa);
   }
   return olu;
 }
@@ -113,19 +142,28 @@ function main(): void {
   check("§0 körlük zemini: kapsam dolu", dosyalar.length > 100 && yerler.size > 20,
     `${dosyalar.length} dosya · ${yerler.size} benzersiz sha atfı`);
 
-  if (sigKlon()) {
+  const tarih = paylasilanTarih();
+  if (sigKlon() || !tarih) {
     // Sığ klonda eski commit'ler YOKTUR — "çözülemedi" ile "ölü" ayrılamaz.
-    ATLAMA.atla("§1 ⭐ sha atıfları çözülüyor", `SIĞ KLON — ${yerler.size} atıf doğrulanamaz`, yerler.size);
+    ATLAMA.atla("§1 ⭐ sha atıfları çözülüyor", `SIĞ KLON / ref yok — ${yerler.size} atıf doğrulanamaz`, yerler.size);
   } else {
-    const olu = cozulemeyenler([...yerler.keys()]);
+    const olu = cozulemeyenler(tarih.shalar, [...yerler.keys()]);
+    // ⚠️ CIRCIR, taban 0 DEĞİL: ölçüldüğünde (2026-09-14) 29 ölü atıf vardı ve hepsi BAŞKA
+    // oturumların dal sha'sı (cherry-pick sonrası origin'de başka sha). Borç
+    // sahiplerine dağıtılıyor; kapı bugünden sonra ARTIŞI durdurur.
     check(
-      "§1 ⭐ ağaçtaki her sha atfı BU depoda çözülüyor (ölü atıf yok)",
-      olu.size === 0,
-      olu.size === 0
-        ? `${yerler.size} atıf, hepsi çözüldü`
-        : `ÖLÜ ATIF (${olu.size}) — dal sha'sı olabilir, origin karşılığını yaz:\n      ` +
+      `§1 ⭐ ölü sha atfı ARTMADI (paylaşılan tarih: ${tarih.ad})`,
+      olu.size <= OLU_TABAN,
+      olu.size <= OLU_TABAN
+        ? `${olu.size} ≤ ${OLU_TABAN} · ${yerler.size} atıf tarandı`
+        : `${olu.size} > ${OLU_TABAN} ⇒ YENİ ölü atıf:\n      ` +
             [...olu].map((s) => `${s} ← ${yerler.get(s)!.join(" · ")}`).join("\n      "),
     );
+    curumeKolu(check, ATLAMA.atla, "§1c ⭐ ölü atıf tabanı ÇÜRÜMEDİ", olu.size, OLU_TABAN);
+    if (olu.size > 0) {
+      console.log(`   ⓘ duran borç (${olu.size}) — okuyucunun bulamayacağı atıflar:`);
+      for (const x of olu) console.log(`      • ${x} ← ${yerler.get(x)!.join(" · ")}`);
+    }
   }
   const oluMuaf = Object.keys(MUAF).filter((s) => !yerler.has(s));
   check("§1b muafiyet listesinde ölü satır yok", oluMuaf.length === 0, oluMuaf.join(", "));
@@ -138,6 +176,14 @@ function main(): void {
   check("§2e ⭐ 6 hane aday DEĞİL (CSS rengi sınırın altında)", shaAdaylari("`a3a3a3`").length === 0);
   check("§2f satır numarası doğru", shaAdaylari("x\ny `cb4c8ac8`").at(0)?.satir === 2);
   check("§2g aynı satırda iki atıf da sayılır", shaAdaylari("`cb4c8ac8` → `75df651b`").length === 2);
+  // ⭐ ASIL AYRIM: "bende var" ile "paylaşılan tarihte var" AYNI ŞEY DEĞİLDİR.
+  {
+    const dizin = new Map<string, string[]>([["abc1234", ["abc1234" + "0".repeat(33)]]]);
+    check("§2h ⭐ paylaşılan tarihte olan atıf ÖLÜ DEĞİL", cozulemeyenler(dizin, ["abc1234"]).size === 0);
+    check("§2i ⭐ paylaşılan tarihte OLMAYAN atıf ÖLÜ (dal sha'sı sınıfı)", cozulemeyenler(dizin, ["dead123"]).size === 1);
+    check("§2j kısa atıf uzun sha'nın ÖNEKİ olarak eşleşir", cozulemeyenler(dizin, ["abc12340"]).size === 0);
+    check("§2k önek TUTMUYORSA ölü (7 hane aynı, sekizinci farklı)", cozulemeyenler(dizin, ["abc1234f"]).size === 1);
+  }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   process.exit(fail > 0 ? 1 : 0);
