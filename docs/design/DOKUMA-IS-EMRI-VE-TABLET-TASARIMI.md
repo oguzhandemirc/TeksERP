@@ -216,9 +216,9 @@ model WeavingOrder {
   /// kataloğundan DEĞİL: bu satır bir dönem "kataloğundan" diyordu ve aşağıdaki
   /// alanla çelişiyordu. Kataloğa bağlamak yeni bir `ReasonPresetKind` değeri
   /// ister ve o GERİ ALINAMAZ (PG enum değeri düşürülemez).
-  /// ⏳ BORÇ, kapanma koşuluyla: `ReasonPresetKind.MACHINE_STOP` dilimi (P2b-2)
-  ///    indiğinde, dokuma işi iptalinin kendi `kind`ini hak edip etmediği
-  ///    KULLANIM ÖLÇÜLEREK sorulur — bugün kullanım verisi sıfırdır.
+  /// ~~⏳ BORÇ, kapanma koşuluyla: P2b-2 indiğinde KULLANIM ÖLÇÜLEREK sorulur~~ **ÖLÇÜLDÜ 2026-09-14:**
+  ///    kullanım hâlâ 0 (canlı dokuma kurulumu yok) + iki yapısal gerekçe (tablet yüzeyi · rapor okuyucusu) yok
+  ///    ⇒ `kind` AÇILMADI; yeniden açılma tetiği ve sorgu `dokuma.md` kural satırında (`WeavingOrder.cancelReason`).
   cancelledAt  DateTime? @db.Timestamptz
   cancelledById String?  @db.Uuid
   cancelReason String?   @db.VarChar(300)
