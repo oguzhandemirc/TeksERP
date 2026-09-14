@@ -58,6 +58,18 @@ async function assertReturnReasonTx(tx: Prisma.TransactionClient, code: string):
   return row.code;
 }
 
+/** Aynı gövde numarasında (tr_fold) başka bir CANLI (READY) çözgü varsa 409 — kısıt `warp_beams_physical_live_uq` ikinci hattır. */
+async function assertPhysicalBeamFree(beamId: string, physicalBeamNo: string | null, beamNo: string): Promise<void> {
+  if (!physicalBeamNo) return;
+  const rows = await prisma.$queryRaw<Array<{ beamNo: string }>>`
+    SELECT "beamNo" FROM warp_beams
+    WHERE public.tr_fold("physicalBeamNo") = public.tr_fold(${physicalBeamNo}) AND status = 'READY' AND id <> ${beamId}::uuid
+    LIMIT 1`;
+  if (rows[0]) {
+    throw AppError.conflict(`"${physicalBeamNo}" gövdesinde canlı bir çözgü var: ${rows[0].beamNo} — ${beamNo} sarılamaz; gövdeyi boşaltın ya da başka gövde yazın.`, { code: "WARP_BEAM_PHYSICAL_BUSY", busyBeamNo: rows[0].beamNo });
+  }
+}
+
 function kg(v: number | string, ad: string): Prisma.Decimal {
   const d = D(v).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP);
   if (!d.isFinite() || d.lte(0)) throw AppError.badRequest(`${ad} sıfırdan büyük olmalı`);
@@ -108,6 +120,18 @@ export async function windWarpBeam(id: string, input: WindWarpBeamInput, userId?
   }
   const theoreticalKg = warpTheoreticalKg(beam.warpSpec.endsCount, denier, lengthM);
   const yarnItemId = beam.warpSpec.yarnItem.id;
+  // K4 — KİLİT SIRASI: iplik satırları (kalem sabit) depo → sebep sırasına dizilir; iki paralel sarım depoları
+  // ters sırayla kilitlerse FOR UPDATE 40P01'e düşer (`yarn-balance-guard` başlığı: kanonik sıra her yolun işi).
+  const issuesSorted = [...issues].sort((a, b) => a.warehouseId.localeCompare(b.warehouseId));
+  const returnsSorted = [...returns].sort((a, b) => a.warehouseId.localeCompare(b.warehouseId) || a.reasonCode.localeCompare(b.reasonCode));
+  // K6 — dip iadesi cağlığa yüklenenden FAZLA olamaz (fiziksel imkânsız; net tüketim eksiye düşerdi).
+  const issueKg = issuesSorted.reduce((acc, l) => acc.plus(kg(l.qtyKg, "İplik çıkış kg")), D(0));
+  const returnKg = returnsSorted.reduce((acc, l) => acc.plus(kg(l.qtyKg, "Dip iade kg")), D(0));
+  if (returnKg.gt(issueKg)) {
+    throw AppError.badRequest(`Dönen bobin dibi (${returnKg} kg) cağlığa yüklenen brüt çıkışı (${issueKg} kg) aşamaz.`, { code: "WARP_RETURN_EXCEEDS_ISSUE", issueKg: Number(issueKg), returnKg: Number(returnKg) });
+  }
+  // K5 — aynı metal gövdede canlı çözgü ön kontrolü (Türkçe 409; `physical_live_uq` ikinci hat, ham P2002 dönmesin).
+  await assertPhysicalBeamFree(beam.id, beam.physicalBeamNo, beam.beamNo);
 
   const wound = await prisma.$transaction(async (tx) => {
     if (input.machineId) await assertDevereMachineTx(tx, input.machineId);
@@ -131,10 +155,10 @@ export async function windWarpBeam(id: string, input: WindWarpBeamInput, userId?
         createdById: userId ?? null,
       },
     });
-    for (const line of issues) {
+    for (const line of issuesSorted) {
       await applyYarnMovementTx(tx, { itemId: yarnItemId, warehouseId: line.warehouseId, kind: YarnMovementKind.WARP_ISSUE, qtyKg: kg(line.qtyKg, "İplik çıkış kg"), warpBeamId: id, userId: userId ?? null });
     }
-    for (const line of returns) {
+    for (const line of returnsSorted) {
       const reasonCode = await assertReturnReasonTx(tx, line.reasonCode);
       await applyYarnMovementTx(tx, { itemId: yarnItemId, warehouseId: line.warehouseId, kind: YarnMovementKind.WARP_RETURN, qtyKg: kg(line.qtyKg, "Dip iade kg"), warpBeamId: id, reasonCode, userId: userId ?? null });
     }

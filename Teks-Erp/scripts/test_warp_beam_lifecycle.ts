@@ -18,6 +18,8 @@
 //     süzgeci düştü) → §4a ikinci sarım claim'i GEÇER, ikinci WOUND `one_wound_uq` seddine çarpar (P2002) ⇒
 //     kod WARP_BEAM_STATE değil P2002 ⇒ kırmızı (kapı yerine sed yakaladı — ölçüldü 2026-09-14)
 //   · `constants/warp-beam.ts` WARP_BEAM_EVENT_KINDS'a "MOUNTED" eklendi → §0a iki yönlü eşitlik kırmızı
+//   · (K6) `warp-beam-wind.service.ts` `if (returnKg.gt(issueKg))` → `if (false)` → §11 kırmızı (iade çıkışı aştı, sarım geçti)
+//   · (K5) `assertPhysicalBeamFree` çağrısı düşürüldü → §12 kırmızı: kod WARP_BEAM_PHYSICAL_BUSY değil ham P2002 (sed yakaladı)
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Bayraklar (devere · iplik) FOTOĞRAFINA döndürülür.
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -182,6 +184,40 @@ async function main(): Promise<void> {
     const w6 = await windWarpBeam(p6.data.id, { lengthM: 100, kgSource: WarpKgSource.THEORETICAL });
     check("§10b ⭐ iplik KAPALI: fason levent sarılır (iplik defterine dokunmaz) — hazır levent alan fabrika iplik stoku tutmaz", w6.data.status === WarpBeamStatus.READY);
     await prisma.systemSetting.update({ where: { key: SETTING_KEYS.IPLIK_ENABLED }, data: { value: "true" } });
+
+    console.log("\n── §11 K6 dip iadesi brüt çıkışı aşamaz ──");
+    const p7 = await createWarpBeam({ warpSpecId: spec.id, plannedLengthM: 50, originKind: WarpBeamOrigin.IN_HOUSE });
+    beamIds.push(p7.data.id);
+    check("§11 iade 50 > çıkış 10 → 400 WARP_RETURN_EXCEEDS_ISSUE, PLANNED kaldı", kod(await beklenenHata(() => windWarpBeam(p7.data.id, { lengthM: 50, kgSource: WarpKgSource.WEIGHED, machineId: mk.id, yarnIssues: [{ warehouseId: wh.id, qtyKg: 10 }], yarnReturns: [{ warehouseId: wh.id, qtyKg: 50, reasonCode: "DEPOYA_IADE" }] }))) === "WARP_RETURN_EXCEEDS_ISSUE" && (await prisma.warpBeam.findUnique({ where: { id: p7.data.id }, select: { status: true } }))?.status === WarpBeamStatus.PLANNED);
+
+    console.log("\n── §12 K5 aynı gövdede canlı çözgü → Türkçe 409 ──");
+    const govde = `${TAG}-G1`;
+    const p8 = await createWarpBeam({ warpSpecId: spec.id, plannedLengthM: 40, originKind: WarpBeamOrigin.SUBCONTRACT, subcontractorId: sub.id, physicalBeamNo: govde });
+    const p9 = await createWarpBeam({ warpSpecId: spec.id, plannedLengthM: 40, originKind: WarpBeamOrigin.SUBCONTRACT, subcontractorId: sub.id, physicalBeamNo: govde.toLowerCase() });
+    beamIds.push(p8.data.id, p9.data.id);
+    await windWarpBeam(p8.data.id, { lengthM: 40, kgSource: WarpKgSource.THEORETICAL });
+    const e12 = await beklenenHata(() => windWarpBeam(p9.data.id, { lengthM: 40, kgSource: WarpKgSource.THEORETICAL }));
+    check("§12 ⭐ ikinci READY aynı gövde (tr_fold: küçük harf) → 409 WARP_BEAM_PHYSICAL_BUSY (ham P2002 değil), meşgul levent adıyla", kod(e12) === "WARP_BEAM_PHYSICAL_BUSY" && String((e12?.details as { busyBeamNo?: string } | undefined)?.busyBeamNo) === p8.data.beamNo, kod(e12));
+
+    console.log("\n── §13 K4 kanonik kilit sırası (ters depo sırasıyla paralel sarım) ──");
+    const wh2 = await prisma.warehouse.create({ data: { code: `${TAG}-D2`, name: `${TAG} depo 2` }, select: { id: true } });
+    await prisma.yarnStock.create({ data: { itemId: yarn.id, warehouseId: wh2.id, balanceKg: 500 } });
+    await prisma.yarnMovement.create({ data: { itemId: yarn.id, warehouseId: wh2.id, kind: YarnMovementKind.IN, qtyKg: 500 } });
+    let kilitHatasi = 0;
+    for (let tur = 0; tur < 6; tur++) {
+      const a = await createWarpBeam({ warpSpecId: spec.id, plannedLengthM: 10, originKind: WarpBeamOrigin.IN_HOUSE });
+      const b = await createWarpBeam({ warpSpecId: spec.id, plannedLengthM: 10, originKind: WarpBeamOrigin.IN_HOUSE });
+      beamIds.push(a.data.id, b.data.id);
+      const sonuc = await Promise.allSettled([
+        windWarpBeam(a.data.id, { lengthM: 10, kgSource: WarpKgSource.WEIGHED, machineId: mk.id, yarnIssues: [{ warehouseId: wh.id, qtyKg: 1 }, { warehouseId: wh2.id, qtyKg: 1 }] }),
+        windWarpBeam(b.data.id, { lengthM: 10, kgSource: WarpKgSource.WEIGHED, machineId: mk.id, yarnIssues: [{ warehouseId: wh2.id, qtyKg: 1 }, { warehouseId: wh.id, qtyKg: 1 }] }),
+      ]);
+      for (const r of sonuc) if (r.status === "rejected") kilitHatasi++;
+    }
+    check("§13 ⭐ ters depo sırasıyla 6 tur paralel sarım: kilit çakışması (40P01/P2010) YOK, 12/12 geçti", kilitHatasi === 0, `red=${kilitHatasi}`);
+    await prisma.yarnMovement.deleteMany({ where: { warehouseId: wh2.id } });
+    await prisma.yarnStock.deleteMany({ where: { warehouseId: wh2.id } });
+    await prisma.warehouse.delete({ where: { id: wh2.id } }).catch(() => undefined);
   } finally {
     await prisma.yarnMovement.deleteMany({ where: { OR: [{ warpBeamId: { in: beamIds } }, { itemId: yarn.id }] } });
     await prisma.yarnStock.deleteMany({ where: { itemId: yarn.id } });
