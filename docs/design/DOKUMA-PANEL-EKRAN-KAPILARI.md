@@ -180,6 +180,8 @@ kaynağında dokuma uçlarını çağıran dosya 0'dı; bugün tek dosya var ve 
 
 ---
 
+## İNDİ — 2026-09-14 · ikinci ekran: TEZGAH DURUŞLARI (`operations/machine-stops`, 0c `e480eb97`) — aynı dört kapı (manifesto `dokumaEnabled` + `requires: [loom:manual-entry, loom:classify]` biri yeterli · karo `permissionAny` + saf `isMachineStopsVisible` · route `requireAnyPermission` · `ROUTE_MODULE` satırı), iki izin SCREENLESS'tan düştü, `test_dokuma_regime_gate §7` izin-parametreli; 47 doğrulaması `DOKUMA-TEZGAH-IZLEME-TASARIMI.md` §2.7c.
+
 ## Doğrulama — 2026-09-14 (47, çelişmeli; kod `c27dbfd3`, taban `origin/main` `c3ba2d94`)
 
 **Sonuç: dört kapı ve bayrak MEKANİĞİ AYAKTA; kapanış ölçütü 5'in ikinci yarısı ÇÜRÜDÜ, üç ölçüm kaydı yanlış, iki envanter boşluğu.**

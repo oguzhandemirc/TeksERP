@@ -915,6 +915,31 @@ Yöntem: klon DB'de 18 bekçi — `machine_stop_manual` 33/0 · `defter_ters_yol
 
 **Ölçülemedi:** HTTP katmanı (Zod strict şemalar, `assertValidUuid`) canlı istekle ölçülmedi — statik + `route_auth_coverage`/`swagger`; `MachineShiftStat.sealState` yolu (01 Faz 1a) inmediği için `SHIFT_SEALED` dalı ölçülemez, beyanlı.
 
+### 2.7c · Çelişmeli doğrulama — panel TEZGAH DURUŞLARI ekranı (`e480eb97`, 0c) ↔ `DOKUMA-PANEL-EKRAN-KAPILARI.md` (2026-09-14, 47)
+
+**Sonuç: dört kapı, `dokumaEnabled` bayrağı, iki iznin SCREENLESS'tan düşmesi, `regime_gate §7` izin parametresi, kuyruğun gün-dışılığı, reclass defterinin salt okunması ve `MACHINE_STOP_SELECT` ek alanlarının tableti kırmaması ÖLÇÜLDÜ, ayakta. Bir kalem (H1: panel `warnings` düşürüyor — 36 saat sınırı sessiz), iki küçük not.**
+Yöntem: klon DB'de 13 backend bekçi (`screen_catalog` 37/0 · `dokuma_regime_gate` 41/0 · `permission_catalog` 24/0 · `role_template` 21/0 · `route_auth_coverage` 15/0 · `swagger_spec` 12/0 · `mobil_enum_aynasi` 35/0 · `machine_stop_manual` 36/0 · `loom_lists` 12/0 · `identity_ledger` 4/0 · `kural_bekci_atfi` 8/0 · `audit_labels` 22/0 · `production_regime_gate` 40/0) · Electron vitest **67 dosya 640/640** + `tsc` 0 + eslint temiz · mobil jest 33/33 + `tsc` 0 · statik okuma. Bağımsız Opus okuyucu koşulmadı (bekçi + statik yeter — 1e).
+
+| sözleşme maddesi | sonuç | nasıl |
+|---|---|---|
+| ① route + izin: `machine-stop.routes` `verifyToken → requireDokumaEnabled → requireAnyPermission`; panel route `ProtectedRoute requireAnyPermission={["loom:manual-entry","loom:classify"]}` karo `permissionAny` ile BİREBİR | ✅ | `route_auth_coverage` · `dokuma_regime_gate §7e` (`requireAnyPermission` tanınır, her izin adıyla) |
+| ② `SCREEN_CATALOG` `operations/machine-stops` (`modul: dokumaEnabled`, `requires` iki izin, `capabilities: []`); `loom:manual-entry` + `loom:classify` SCREENLESS'tan DÜŞTÜ (ölü muaf kalmadı) | ✅ | `screen_catalog` 37/0 · `dokuma_regime_gate §7c` |
+| ③ karo saf yüklem `isMachineStopsVisible` (yalnız `dokumaEnabled`; `toBe` kimlik testi), palet otomatik, `ROUTE_MODULE["operations/machine-stops"] = dokumaEnabled` — `ProtectedRoute` bayrak kapalıyken `/forbidden` (B dilimi `f6d5e83a`) | ✅ | `tile-visibility.test` (ayrı `describe`) · `stop-regime.test` · `test_screen_catalog §4b` (ROUTE_MODULE ↔ manifesto iki yönlü) |
+| ④ bayrak: referans profilde karo/palet/route yok; backend 403 `MODULE_DISABLED` | ✅ | `dokuma_regime_gate` (KAPILI listesinde `machine-stop.routes`) · vitest |
+| kuyruk GÜN-DIŞI: `scope === "queue"` iken `factoryDay` gönderilmez — borç hangi günden olursa olsun listelenir; "açık" ve düz liste gün + vardiya süzgeçli, süzme SUNUCUDA (`listMachineStops` `factoryDay` YYYY-MM-DD → UTC gece yarısı = `factoryDayKeyUtcMidnight` ile aynı anahtar) | ✅ | `useStopsPageState.useStopListParams` statik · backend `factoryDayKeyFromYmd` |
+| reclass defteri SALT OKUMA: `GET /machine-stops/:id/reclasses` (`STOP_RECLASS_SELECT`, kronolojik) — yazan uç yok; diyalog yalnız listeler, "geri alma karşı kayıttır" cümlesi ekranda; yeniden sınıflandırma claim çıpası `fromReasonCode = row.reasonCode` (bayat → 409 `STOP_RECLASS_STALE`, interceptor adıyla basar) | ✅ | statik · `machine_stop_manual` 36/0 |
+| `MACHINE_STOP_SELECT` ek alanları (`machine{code,name}` · `shiftInstance{…shiftDefinition}` · `classifiedBy{fullName}`) tableti KIRMAZ: mobil `MachineStop` tipi ek alanı bilmez, yapısal tip, çalışma zamanında yok sayılır | ✅ | mobil `tsc` 0 · jest 33/33 · `mobil_enum_aynasi` 35/0 |
+| izin duvarı ekran içinde: `PermissionGate loom:classify` (sebep ata · yeniden sınıflandır) · `loom:manual-entry` (kapat · geri al); defter herkese; kapat `endedAt` doluyken kapalı, sebep ata yalnız `requiresReason ∧ reasonCode null` | ✅ | statik (`StopRowMenu`) |
+| elle giriş kimliği `clientToken` diyalog başına bir kez (replay aynı satır, 6e F2 sonrası farklı yük 409) | ✅ | statik (`StopEntryDialog`) |
+
+**Kalemler (0c)**
+
+- **H1 · Panel `ApiResponse.warnings`i DÜŞÜRÜYOR (orta).** `useMachineStopMutations.settle` yalnız `res.message` basar; `apiClient` interceptor'ı `warnings` göstermez (grep 0). Backend `openManualStop`/`closeManualStop` `resolveRunStamp` ile `startedAt`/`endedAt` **36 saat geriden / 5 dk ileriden** dışında beyanı SUNUCU SAATİNE düşürür ve bunu `warnings` ile söyler ⇒ amir "Elle duruş girişi"nde 3 gün önceki başlangıcı yazınca kayıt ŞİMDİ olarak açılır, ekran "Duruş açıldı" der — beyan sessizce değişti. Aynı yol kapatma bitişinde. Emsal panel sayfaları `warnings`i açıkça basar (`ManualMoveModal` · `OrdersPage` · `CreateShipmentDialog`). Kalem: `settle` `res.warnings` varsa `toast.warning` (ya da diyalogda amber şerit) + diyalog `datetime-local` alanına "en fazla 36 saat geriye" ipucu; alternatif (1e): geçmiş elle giriş için ayrı bir "geçmişe dönük kayıt" yolu (`clientEnteredAt` kalıbı gibi makul aralığı genişletmek) — Faz 1b elle girişin sahadaki tipik gecikmesi ölçülmeli.
+- **Not · Gün anahtarı panel yerel takvimi (küçük).** `todayKey()`/`nowLocalInput()` panelin yerel saat diliminden gün üretir; fabrika günü `Europe/Istanbul` (`raporlar.md`: takvim günü saat dilimine bağlıdır, açık yazılır). Uzak erişimde (Cloudflare tüneli) farklı dilimden açılan panel bir gün kayabilir; süzme sunucuda ama anahtar istemciden. Emsal: diğer panel sayfaları aynı kalıbı taşıyor mu ölçülmedi — sınıf borcu, bu dilime yazılmaz.
+- **Not · Vardiya seçenekleri o günün satırlarından türer** (`useStopFilters`); kuyruk kapsamında günler karışır, liste "vardiya" etiketlerini karıştırabilir — vardiya listesi ucu doğunca (rapor backend'i M0, `DOKUMA-RAPOR-BACKEND-TASARIM-OZETI.md`) sabit kaynağa geçer.
+
+**Ölçülemedi:** HTTP uçtan uca canlı istek (panel → backend) — statik + bekçi; `test_dokuma_regime_gate §7b` etiketi (İŞ 2 D2) bu dilimde daraltılmadı, 0c'nin ayrı kalemi.
+
 ### 2.8 · Koşum (FAZ 2)
 
 ```prisma
