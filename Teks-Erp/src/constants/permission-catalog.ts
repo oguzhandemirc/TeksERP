@@ -88,6 +88,10 @@ export const PERMISSION_CATALOG = [
   // Top indirme (doff): kaydetmek günlük iş, geri almak defterden satır düşürür — ayrı kod (loom:run çifti emsali).
   { code: "loom:doff", module: "PRODUCTION", category: "web", description: "Top indirme (doff) kaydetme — tezgahtan kumaş indiği anın defteri" },
   { code: "loom:doff-revoke", module: "PRODUCTION", category: "web", description: "Top indirmeyi geri alma (damga; yalnız top doğurmamış indirmede)" },
+  // Duruş (Faz 1b, 2026-09-14): elle giriş (aç/kapa/geri al) günlük iş; sebep KARARI
+  // (sınıfla/yeniden sınıfla) randımanın kovasını belirler — ayrı kod (tasarım §6.4).
+  { code: "loom:manual-entry", module: "PRODUCTION", category: "web", description: "Tezgah duruşu elle girişi — açma/kapatma/geri alma (vardiya amiri)" },
+  { code: "loom:classify", module: "PRODUCTION", category: "web", description: "Tezgah duruşuna sebep atama / yeniden sınıflandırma (kayıp sınıfı kararı)" },
   { code: "quality:read", module: "QUALITY", category: "web", description: "Kalite derecesi tanımlarını görüntüleme" },
   { code: "quality:write", module: "QUALITY", category: "web", description: "Kalite derecesi tanımlama/düzenleme" },
   { code: "property:read", module: "QUALITY", category: "web", description: "Özellik (renk/desen vb.) tanımlarını görüntüleme" },

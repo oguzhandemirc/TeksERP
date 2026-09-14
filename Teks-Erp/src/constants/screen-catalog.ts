@@ -419,6 +419,10 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // çağırır; `loom:*` web kodları panelsiz kalır — panel doff yüzeyi yok, kod API/entegrasyon için.
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
+  // Dokuma Faz 1b (2026-09-14): duruş elle giriş/sınıflandırma yazma yüzeyi backend'de doğdu;
+  // panel "Duruş girişi/düzeltme" ekranı ve tablet sebep ekranı ayrı dilim — ekranla ölü muaf olur.
+  { code: "loom:manual-entry", reason: "Duruş elle giriş — panel duruş ekranı (Faz 1b yüzey dilimi) henüz doğmadı; backend-only." },
+  { code: "loom:classify", reason: "Duruş sınıflandırma — panel/tablet sebep ekranı henüz doğmadı; backend-only." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

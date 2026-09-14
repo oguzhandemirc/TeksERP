@@ -8892,3 +8892,41 @@ ile aynı), belirsiz hatada yapışır. Geri alma ayrı yetenek izni; `DOFF_HAS_
 **Ölçülemedi:** gerçek tezgah sayacı (BT-SPP METER cihazı) — HAL yolu `useSackWeigh` ile aynı kodec/transport; sahada
 ölçülür. Sürüm notu: tablet + backend (yeni ekran + yeni izin; `StationKind.WEAVING` ⓪ ile — `minVersion` sorusu 01'in
 notunda); referans fabrikada `dokuma.enabled` KAPALI ⇒ kart yok, etki 0.
+
+## 2026-09-14 — FAZ 1b ELLE DURUŞ GİRİŞİ İNDİ: beş yol tek servis, reclass DEFTERİ karşı kayıtla, mühür kapısı tek fonksiyonda (bugün iptal vardiya) [ÇEKİRDEK]
+
+**Neden:** `MachineStopEvent` + `MachineStopReclass` P2b-1'de şema-only inmişti; yazıcı yoktu (beyan
+"yazan 0"). K4 kapanış yolu: duruşları vardiya amiri elle girer (donanım yok, tasarım §2.7/§9 Faz 1b).
+
+**İniş (6e, 1e onaylı plan):** `machine-stop.service.ts` TEK yazıcı — `openManualStop` (kimlik
+`stopKey` = istemci token'ı ya da sunucu uuid; replay aynı satır, geri alınmış anahtar 409
+`STOP_REVOKED`; `factoryDay` + `shiftInstanceId` startedAt'ten, kapsayan vardiya yoksa NULL; tek canlı
+koşum varsa `runId`; sebep verilirse kayıp sınıfı katalogdan KOPYA, verilmezse `requiresReason`; tek
+açık duruş seddi P2002 → 409 `STOP_ALREADY_OPEN`) · `closeManualStop` (ham SQL claim: `endedAt IS
+NULL ∧ revokedAt IS NULL ∧ startedAt ≤ bitiş`, `durationSec` DB'de hesaplanır, `endSource=OPERATOR`) ·
+`classifyStop` (ilk karar: claim `reasonCode IS NULL`) · `reclassifyStop` (claim `reasonCode =
+beklenen`; AYNI tx'te `MachineStopReclass` from→to; ters yol = aynı fonksiyon to→from — KARŞI KAYIT) ·
+`revokeStop` (damga). Route `machine-stop.routes.ts` (`verifyToken → requireDokumaEnabled → izin`);
+iki yeni izin `loom:manual-entry` (aç/kapa/geri al) · `loom:classify` (sınıfla/yeniden sınıfla) —
+katalog + `WEB_PRODUCTION_SUPERVISOR` + SCREENLESS gerekçeli (panel/tablet yüzeyi ayrı dilim).
+Şema dokunuşu YOK. Audit modül etiketi `MACHINE_STOP_EVENT` (Electron audit-labels).
+
+**Mühür (1e şık a):** `MachineShiftStatSeal`/`sealState` şemada YOK (Faz 1a karne dilimi inmemiş,
+ölçüldü). Kapı TEK fonksiyon `assertStopShiftWritableTx(tx, { shiftInstanceId, machineId })`
+(`helpers/machine-stop-context.helper.ts`) — kapa · sınıfla · yeniden sınıfla · geri al hepsi ondan
+geçer; bugün yalnız `isCancelled` → 409 `SHIFT_CANCELLED`. 01 sözleşmesi (aynı gece): mühür
+MAKİNE×VARDİYA karnesinin durumu — `MachineShiftStat.sealState` (OPEN|SEALED, `sealGeneration`),
+`findUnique({ machineId_shiftInstanceId })`, satır yoksa OPEN; `ShiftInstance`e kolon konmaz
+(ikinci kaynak). Seal inince aynı yer `SEALED` → 409 `SHIFT_SEALED`. dokuma.md Kapanır satırı ölçülebilir
+(`test_machine_shift_seal` iki ayak). Tasarımdaki BEFORE DELETE trigger (`block_classified_delete`)
+da şemada YOK — beyan onu budayıcıyla birlikte doğuruyor; bu dilimde açılmadı (migration = pencere).
+
+**Ölçüm:** `test_machine_stop_manual` 33/0 (§1–§10) · `test_defter_ters_yol` 191/0 (beyan:
+MachineStopEvent tersYazan `revokeStop`, Reclass yazan `reclassifyStop`, tipoloji KARSI_KAYIT 82'de) ·
+role_template 21/0 · permission_catalog 24/0 · route_auth_coverage 15/0 · swagger 12/0 ·
+production_regime_gate 40/0 · screen_catalog 37/0 · audit_labels 22/0 · identity_ledger 553/553.
+**Negatif sondalar (cp+sha256 71099afa):** reclass defter satırı kaldırıldı → §5c/§5e ❌ · classify
+claim'inden `reasonCode: null` düştü → §4c/§4d/§5a ❌ (ikinci sınıflandırma yerinde ezdi).
+**Sınır:** `tezgah.stopEventMinSeconds` (mikro-duruş eşiği) Faz 2 kovasının; elle giriş eşik
+uygulamaz. `mobile:tezgah-durus` tablet izni tablet dilimiyle.
+

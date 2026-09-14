@@ -18,6 +18,7 @@
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
+import { MACHINE_STOP_SELECT, type MachineStopDto } from "./helpers/machine-stop-context.helper";
 import { AppError } from "../utils/app-error";
 import { factoryDayEnd, factoryDayStart, resolveRangeEnd, resolveRangeStart } from "../constants/time";
 import { MACHINE_RUN_SELECT, type MachineRunDto } from "./machine-run.service";
@@ -97,4 +98,25 @@ export async function listUnlinkedDoffs(args: { machineId?: string | null; since
   });
   const total = await prisma.doffEvent.count({ where });
   return { success: true, data: withRollCount(rows), meta: { total, truncated: total > rows.length, since } };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LİSTE — açık duruşlar + sınıflandırma kuyruğu (boğaz-ikizi: `requiresReason ∧ reasonCode IS NULL`)
+// ─────────────────────────────────────────────────────────────────────────────
+export const CLASSIFICATION_QUEUE_WHERE = { requiresReason: true, reasonCode: null, revokedAt: null } satisfies Prisma.MachineStopEventWhereInput;
+
+export async function listMachineStops(params: { machineId?: string; openOnly?: boolean; queueOnly?: boolean; limit?: number }): Promise<ApiResponse<MachineStopDto[]>> {
+  const where: Prisma.MachineStopEventWhereInput = {
+    revokedAt: null,
+    ...(params.machineId ? { machineId: params.machineId } : {}),
+    ...(params.openOnly ? { endedAt: null } : {}),
+    ...(params.queueOnly ? CLASSIFICATION_QUEUE_WHERE : {}),
+  };
+  const rows = await prisma.machineStopEvent.findMany({
+    where,
+    orderBy: { startedAt: "desc" },
+    take: Math.min(Math.max(params.limit ?? 100, 1), 500),
+    select: MACHINE_STOP_SELECT,
+  });
+  return { success: true, data: rows };
 }

@@ -1,0 +1,196 @@
+// =============================================================================
+// TeksERP — Tezgah DURUŞU (MachineStopEvent) uçları · ELLE GİRİŞ (Faz 1b)
+// =============================================================================
+// ⚠️ ÜÇ KAPI SIRAYLA (machine-run emsali): `verifyToken` → `requireDokumaEnabled`
+// → izin. İki izin ailesi: `loom:manual-entry` (aç · kapa · geri al — vardiya amiri
+// elle girişi) ve `loom:classify` (sınıfla · yeniden sınıfla — sebep KARARI).
+// Tablet dilimi indiğinde uçlar `requireAnyPermission(<web>, "mobile:tezgah-durus")`.
+// Panel/tablet YÜZEYİ ayrı dilimdir; izinler SCREENLESS gerekçeli.
+// =============================================================================
+import { Router } from "express";
+import { z } from "zod";
+import { verifyToken } from "../middlewares/auth.middleware";
+import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
+import { requireDokumaEnabled } from "../middlewares/module.middleware";
+import { assertValidUuid } from "../middlewares/uuid-param.middleware";
+import { classifyStop, closeManualStop, openManualStop, reclassifyStop, revokeStop } from "../services/machine-stop.service";
+import { listMachineStops } from "../services/loom-list.service";
+
+const router = Router();
+router.use(verifyToken, requireDokumaEnabled);
+
+const listSchema = z
+  .object({
+    machineId: z.string().uuid("Geçersiz makine").optional(),
+    open: z.literal("true").optional(),
+    queue: z.literal("true").optional(),
+    limit: z.coerce.number().int().min(1).max(500).optional(),
+  })
+  .strict();
+
+/**
+ * @openapi
+ * /api/machine-stops:
+ *   get:
+ *     tags: [MachineStops]
+ *     summary: Duruş listesi — açık duruşlar (`open=true`) ya da sınıflandırma kuyruğu (`queue=true`)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Duruş listesi (geri alınmışlar hariç) }
+ *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ */
+router.get("/", requireAnyPermission("loom:manual-entry", "loom:classify"), async (req, res, next) => {
+  try {
+    const q = listSchema.parse(req.query);
+    res.json(await listMachineStops({ machineId: q.machineId, openOnly: q.open === "true", queueOnly: q.queue === "true", limit: q.limit }));
+  } catch (e) {
+    next(e);
+  }
+});
+
+const openSchema = z
+  .object({
+    machineId: z.string().uuid("Geçersiz makine"),
+    startedAt: z.coerce.date().nullish(),
+    reasonCode: z.string().trim().min(1).max(64).nullish(),
+    reasonNote: z.string().trim().max(300).nullish(),
+    beamSlot: z.number().int().min(1).max(8).nullish(),
+    clientToken: z.string().uuid("Geçersiz istemci anahtarı").nullish(),
+  })
+  .strict();
+
+/**
+ * @openapi
+ * /api/machine-stops:
+ *   post:
+ *     tags: [MachineStops]
+ *     summary: Elle duruş AÇ (makine başına tek açık duruş)
+ *     description: >
+ *       `clientToken` idempotent — aynı anahtar aynı satırı döner; geri alınmış duruş
+ *       yeniden açılmaz (409 STOP_REVOKED). Açık duruş varsa 409 STOP_ALREADY_OPEN.
+ *       Sebep verilmezse sınıflandırma borcu doğar (`requiresReason`).
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       201: { description: Duruş açıldı }
+ *       400: { description: Geçersiz sebep kodu / pasif makine }
+ *       409: { description: STOP_ALREADY_OPEN · STOP_REVOKED · SHIFT_CANCELLED }
+ */
+router.post("/", requirePermission("loom:manual-entry"), async (req, res, next) => {
+  try {
+    const b = openSchema.parse(req.body ?? {});
+    res.status(201).json(await openManualStop({ ...b, source: "SUPERVISOR" }, req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+const closeSchema = z.object({ endedAt: z.coerce.date().nullish() }).strict();
+
+/**
+ * @openapi
+ * /api/machine-stops/{id}/close:
+ *   post:
+ *     tags: [MachineStops]
+ *     summary: Duruşu KAPAT (süre başlangıçtan hesaplanır)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Kapatıldı }
+ *       400: { description: STOP_END_BEFORE_START }
+ *       409: { description: STOP_ALREADY_CLOSED · STOP_REVOKED · SHIFT_CANCELLED }
+ */
+router.post("/:id/close", requirePermission("loom:manual-entry"), async (req, res, next) => {
+  try {
+    const id = assertValidUuid(req.params.id, "id");
+    const b = closeSchema.parse(req.body ?? {});
+    res.json(await closeManualStop(id, b.endedAt, req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+const classifySchema = z
+  .object({
+    reasonCode: z.string().trim().min(1).max(64),
+    reasonNote: z.string().trim().max(300).nullish(),
+    beamSlot: z.number().int().min(1).max(8).nullish(),
+  })
+  .strict();
+
+/**
+ * @openapi
+ * /api/machine-stops/{id}/classify:
+ *   post:
+ *     tags: [MachineStops]
+ *     summary: İLK sınıflandırma (NULL → sebep) — kayıp sınıfı katalogdan kopyalanır
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Sınıflandırıldı }
+ *       400: { description: REASON_CODE_INVALID }
+ *       409: { description: STOP_ALREADY_CLASSIFIED (yeniden sınıfla yolunu kullan) · STOP_REVOKED }
+ */
+router.post("/:id/classify", requirePermission("loom:classify"), async (req, res, next) => {
+  try {
+    const id = assertValidUuid(req.params.id, "id");
+    const b = classifySchema.parse(req.body ?? {});
+    res.json(await classifyStop(id, b, req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+const reclassifySchema = z
+  .object({
+    fromReasonCode: z.string().trim().min(1).max(64),
+    toReasonCode: z.string().trim().min(1).max(64),
+    reason: z.string().trim().max(300).nullish(),
+  })
+  .strict();
+
+/**
+ * @openapi
+ * /api/machine-stops/{id}/reclassify:
+ *   post:
+ *     tags: [MachineStops]
+ *     summary: YENİDEN sınıflandırma (sebep → sebep) — değişim MachineStopReclass defterine düşer
+ *     description: >
+ *       `fromReasonCode` claim çıpasıdır: kayıtlı karar başkaysa 409 STOP_RECLASS_STALE.
+ *       Ters yolu karşı kayıttır — aynı uç to→from ile.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Yeniden sınıflandırıldı; defter satırı yazıldı }
+ *       409: { description: STOP_RECLASS_STALE · STOP_NOT_CLASSIFIED · STOP_REVOKED }
+ */
+router.post("/:id/reclassify", requirePermission("loom:classify"), async (req, res, next) => {
+  try {
+    const id = assertValidUuid(req.params.id, "id");
+    const b = reclassifySchema.parse(req.body ?? {});
+    res.json(await reclassifyStop(id, b, req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+const revokeSchema = z.object({ reason: z.string().trim().min(3, "Geri alma gerekçesi en az 3 karakter olmalı.").max(300) }).strict();
+
+/**
+ * @openapi
+ * /api/machine-stops/{id}/revoke:
+ *   post:
+ *     tags: [MachineStops]
+ *     summary: Duruşu GERİ AL (damga — satır silinmez)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Geri alındı }
+ *       409: { description: STOP_ALREADY_REVOKED · SHIFT_CANCELLED }
+ */
+router.post("/:id/revoke", requirePermission("loom:manual-entry"), async (req, res, next) => {
+  try {
+    const id = assertValidUuid(req.params.id, "id");
+    const b = revokeSchema.parse(req.body ?? {});
+    res.json(await revokeStop(id, b.reason, req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+export default router;

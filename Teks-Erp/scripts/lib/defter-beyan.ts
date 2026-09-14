@@ -302,13 +302,21 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     ["src/services/machine-doff.service.ts"]),
 
   D("MachineStopEvent", "duruş defteri — duruşun OLGULARI (startedAt · endedAt · pickCounter · stopKey) değişmez, KARARI (reasonCode · lossClass) değişir ve her değişim `MachineStopReclass`a satır yazar ⇒ doktrinin durum+defter çifti tek tabloda: reasonCode DURUM, reclass DEFTER. ⚠️ İKİ YAŞAM SÜRESİ tek tabloda (tasarım §4): insan kararlı duruş BUDANMAZ, makine sınıflı duruş kovayla budanır — yüklem `classifiedById IS NOT NULL OR reasonSource IN (OPERATOR,SUPERVISOR)`. Budayıcı bugün YOK; indiği gün §10 `silen` beyanını ister ve tasarım §4 sed ③/④ (tek helper + BEFORE DELETE trigger) onunla birlikte doğar. 01'in guard muafiyetiyle aynı okuma: \"duruş bir DEFTERDİR, guard ingest dilimiyle gelecek\"",
-    { tur: "DAMGA", kolon: "revokedAt" }, [], [], { yari: true }),
+    // Faz 1b (6e, 2026-09-14): yazma yüzeyi DOĞDU — tek yazıcı `machine-stop.service` (aç · kapa ·
+    // sınıfla · yeniden sınıfla · geri al). Ters yol DAMGA (`revokeStop`); mühür kapısı tek
+    // fonksiyonda (`assertStopShiftWritableTx`, seal modeli inince aynı yer).
+    { tur: "DAMGA", kolon: "revokedAt" },
+    [{ dosya: "src/services/machine-stop.service.ts", sembol: "revokeStop" }],
+    ["src/services/machine-stop.service.ts"], { yari: true }),
 
   D("MachineStopReclass", "sebep DEĞİŞİM defteri — \"ne oldu değişmez\" kuralının NERESİNDE: duruşun olguları değişmez, SINIFLANDIRMASI bir KARARDIR ve karar revize edilir; revizyonun kendisi bu deftere from→to satırı olarak düşer ve o satır bir daha değişmez (append-only, updatedAt YOK). Ters yolu karşı kayıttır (to→from yeni satır), damga değil — bir kararı geri almak onu silmek değil tersini yazmaktır",
-    { tur: "YOK" }, [], [],
+    // Faz 1b (6e, 2026-09-14): yazan DOĞDU — `reclassifyStop` (machine-stop.service), ters yolu
+    // AYNI fonksiyonun to→from çağrısıdır (karşı kayıt). Tipolojide KARSI_KAYIT türü 82'nin
+    // dilimi; o güne dek `YOK` + borç (ters yazan sembolü aşağıda beyanlı: reclassifyStop).
+    { tur: "YOK" }, [{ dosya: "src/services/machine-stop.service.ts", sembol: "reclassifyStop" }], ["src/services/machine-stop.service.ts"],
     { borc: [{
-      ne: "ters yolu KARŞI KAYIT olacak (to→from) ama yazma yüzeyi de ters yolu da henüz YOK — duruş tablosu FAZ 1b'de vardiya amirinin ELLE girişiyle doğar (tasarım §2.7), reclass ucu onunla gelir; P2b yalnız KOŞUM yüzeyini getirdi (MachineRun), duruş yazan 0 kaldı",
-      kanit: "src/ içinde machineStopEvent yaratan 0, machineStopReclass yaratan 0 yol (kapının tarayıcısı, 2026-09-13 taze taban 6a0981c4); şemada damga/ters bağ kolonu yok ve olmaması DOĞRU — mekanizma karşı kayıt. Kapanır ÖLÇÜLÜR (sonda 2026-09-13: sahte `tx.machineStopReclass.create` → §5 YENİ YOL ❌): reclass yazan uç doğduğunda o commit `yazan` + karşı-kayıt yolunu beyan eder. ⚠️ ÇEVİRME GÜNÜNÜN REÇETESİ: tipolojide karşı kaydın TÜRÜ YOK — KARSI_OLAY enum çifti ister, reclass'ın karşısı from↔to takasıdır; ya `KARSI_KAYIT` türü açılır (tersYazan aynı fonksiyon, ölçüm: to→from satırı yazan yol) ya da §13d simetrisi bu tabloya uygulanmaz diye beyan edilir. İkinci şerh: karşı kayıt MÜHÜR SINIRINA tabidir (tasarım \"GERİ ALMA DA MÜHÜR SINIRINA TABİDİR\": SEALED vardiyada 409 SHIFT_SEALED → unseal → satır → RESEAL) — ters yazan bu kapıyı taşımıyorsa beyan çevrilmez",
+      ne: "ters yolu KARŞI KAYIT (to→from, aynı fonksiyon `reclassifyStop`) — YAZICI VAR (Faz 1b, 2026-09-14); tipolojide KARSI_KAYIT türü açılınca `{ tur: \"YOK\" }` düşer (82). Eski metin: yazma yüzeyi de ters yolu da henüz YOK — duruş tablosu FAZ 1b'de vardiya amirinin ELLE girişiyle doğar (tasarım §2.7), reclass ucu onunla gelir; P2b yalnız KOŞUM yüzeyini getirdi (MachineRun), duruş yazan 0 kaldı",
+      kanit: "2026-09-14: machineStopEvent yaratan 1 (machine-stop.service `openManualStop`), machineStopReclass yaratan 1 (`reclassifyStop`); ters yol `reclassifyStop`(to→from) — test_machine_stop_manual §5e karşı kaydı ölçer. Eski ölçüm (2026-09-13, 6a0981c4): ikisi de 0; şemada damga/ters bağ kolonu yok ve olmaması DOĞRU — mekanizma karşı kayıt. Kapanır ÖLÇÜLÜR (sonda 2026-09-13: sahte `tx.machineStopReclass.create` → §5 YENİ YOL ❌): reclass yazan uç doğduğunda o commit `yazan` + karşı-kayıt yolunu beyan eder. ⚠️ ÇEVİRME GÜNÜNÜN REÇETESİ: tipolojide karşı kaydın TÜRÜ YOK — KARSI_OLAY enum çifti ister, reclass'ın karşısı from↔to takasıdır; ya `KARSI_KAYIT` türü açılır (tersYazan aynı fonksiyon, ölçüm: to→from satırı yazan yol) ya da §13d simetrisi bu tabloya uygulanmaz diye beyan edilir. İkinci şerh: karşı kayıt MÜHÜR SINIRINA tabidir (tasarım \"GERİ ALMA DA MÜHÜR SINIRINA TABİDİR\": SEALED vardiyada 409 SHIFT_SEALED → unseal → satır → RESEAL) — ters yazan bu kapıyı taşımıyorsa beyan çevrilmez",
       tasarim: "docs/design/DOKUMA-TEZGAH-IZLEME-TASARIMI.md",
       sahibi: "dokuma alanı — Faz 1b elle duruş girişi dilimi (01 ana hat)",
     }] }),

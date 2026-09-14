@@ -333,6 +333,9 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "loom:run-revoke",
       "loom:doff",
       "loom:doff-revoke",
+      // Duruş elle girişi + sebep kararı (Faz 1b): vardiya amiri işi (tasarım §6.4).
+      "loom:manual-entry",
+      "loom:classify",
       // Tezgah oturumu (⓪, 2026-09-14): ekran doğana kadar süpervizör paketinde;
       // tablet dilimiyle operatör paketine iner (loom:run ile aynı vaat).
       "mobile:dokuma",
