@@ -3,7 +3,8 @@ import type { WarpBeamPlanValues } from "./schema";
 import type { WarpBeamPlanPayload } from "./service";
 import type { WarpBeam } from "./types";
 
-export type PageDialog = { kind: "new" } | { kind: "edit" | "delete" | "wind" | "cancel"; target: WarpBeam } | null;
+export type BeamActionKind = "mount" | "dismount" | "consume" | "adjust" | "exhaust" | "scrap" | "undo";
+export type PageDialog = { kind: "new" } | { kind: "edit" | "delete" | "wind" | "cancel" | BeamActionKind; target: WarpBeam } | null;
 
 /** Form METİN taşır; uç sayı/null bekler ("" → null). */
 export function toPlanPayload(v: WarpBeamPlanValues): WarpBeamPlanPayload {
@@ -26,6 +27,8 @@ export function usePageDialog() {
       onDelete: (r: WarpBeam) => setDialog({ kind: "delete", target: r }),
       onWind: (r: WarpBeam) => setDialog({ kind: "wind", target: r }),
       onCancel: (r: WarpBeam) => setDialog({ kind: "cancel", target: r }),
+      // Faz 3 tezgah bağı — tek açıcı, tür menüden gelir.
+      onBeamAction: (kind: BeamActionKind, r: WarpBeam) => setDialog({ kind, target: r }),
     }),
     [],
   );

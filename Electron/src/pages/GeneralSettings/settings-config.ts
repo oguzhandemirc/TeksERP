@@ -1183,6 +1183,21 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Depocu", "Operatör"],
         desc: "Kapalıyken (varsayılan) lot numarası isteğe bağlıdır: lotsuz satır yazılır, yalnız uyarı verilir ve o levent lot izlemesine girmez. Açıkken içeride sarımda lotsuz iplik çıkış satırı reddedilir, mal kabulde lotsuz iplik satırı fişe girmez (satır sebebiyle düşer). Fasona sardırılan ya da hazır alınan levent iplik satırı yazmadığı için etkilenmez. ⚠️ Açmadan önce depodaki iplik girişlerine lot yazıldığından emin olun: lotsuz giriş lotlu çıkışı karşılamaz.",
       },
+      {
+        key: "devereMountTracking",
+        title: "Levent tezgah bağı defteri",
+        summary: "Hazır levent tezgaha takılır, sökülür, tüketimi ve bitişi kaydedilir; kalan metre olaylardan hesaplanır.",
+        defaultOn: false,
+        audience: ["Operatör", "Yönetim"],
+        desc: "Kapalıyken (varsayılan) levent sarıldıktan sonra \"hazır\" kalır; Leventler ekranında Tak / Sök / Tüket / Düzelt / Bitir / Hurda eylemleri görünmez ve sunucu bu işlemleri reddeder. Açıkken levent bir tezgahın yuvasına takılır (istasyon kartında \"levent tüketir\" işaretli istasyonların makineleri; yuva sayısı makine kartından), tüketim elle ya da sökümde/bitişte ölçülen kalanla yazılır, kalan metre eksiye düşemez; bitiş ve hurda son kayıttır. Geri almalar en son durum olayından başlar (LIFO).",
+      },
+      {
+        key: "devereMountTrackingRequired",
+        title: "Bağlamada yöntem ve başlangıç saati zorunlu olsun",
+        summary: "Levent tezgaha takılırken bağlama yöntemi (düğüm / tahar / takım) ve kurulum başlangıç saati girilmeden kayıt alınmaz.",
+        defaultOn: false,
+        audience: ["Operatör", "Yönetim"],
+        desc: "Kapalıyken (varsayılan) yöntem ve saat isteğe bağlıdır; sistem yalnız aynı yuvadan son sökülen levent aynı çözgü kartındansa düğüm önerir. Açıkken ikisi de zorunlu — kurulum süresi raporlarında beyan olarak görünür. Yalnız tezgah bağı defteri açıkken anlamlıdır.",      },
     ],
   },
   // Depo/satın alma bayrakları bilinçli olarak Muhasebe sekmesinde DEĞİL: bu

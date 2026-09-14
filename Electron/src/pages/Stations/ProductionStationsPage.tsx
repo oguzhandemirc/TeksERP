@@ -103,6 +103,8 @@ const buildStationPayload = (v: StationFormValues, initial: Station | null): Par
   appliesColor: v.appliesColor,
   appliesProperty: v.appliesProperty,
   appliesQuality: v.appliesQuality,
+  producesWarpBeam: v.producesWarpBeam,
+  consumesWarpBeam: v.consumesWarpBeam,
   defaultCategoryId: v.type === "EXTERNAL" ? v.defaultCategoryId ?? null : null,
 });
 
@@ -111,6 +113,7 @@ const buildMachinePayload = (v: MachineFormValues, initial: Machine | null): Par
   // Kod backend'de üretilir (MAK+GGAAYY+NNNN); create'te gönderilmez, edit'te korunur.
   ...(initial?.code ? { code: initial.code } : {}),
   name: v.name,
+  warpBeamSlots: v.warpBeamSlots,
   // Aktif/pasif form dışında yönetilir (Pasife Al / Aktifleştir aksiyonları).
 });
 

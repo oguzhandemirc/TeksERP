@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { stationKindLabels, stationTypeLabels, StationType, type StationKind } from "@/types/enums";
 import { subcontractorCategoryService } from "@/pages/SubcontractorCategories/service";
 import type { SubcontractorCategory } from "@/pages/SubcontractorCategories/types";
-import { useDokumaEnabled } from "@/hooks/usePricingEnabled";
+import { useDevereEnabled, useDokumaEnabled } from "@/hooks/usePricingEnabled";
 import { stationFormDefaults, stationFormSchema, type StationFormValues } from "./schema";
 import { visibleStationKindLabels } from "./stationKindVisibility";
 import type { Station } from "./types";
@@ -24,6 +24,8 @@ interface Props {
 export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
   // WEAVING türü yalnız dokuma modülü açıkken seçilebilir (mevcut değer korunur).
   const dokumaEnabled = useDokumaEnabled();
+  // Devere yetenek kutuları yalnız devere modülü açıkken çizilir (kapalıyken form BİREBİR eski).
+  const devereEnabled = useDevereEnabled();
   const defaults: StationFormValues = initial
     ? {
         name: initial.name,
@@ -34,6 +36,8 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
         appliesColor: initial.appliesColor ?? false,
         appliesProperty: initial.appliesProperty ?? true,
         appliesQuality: initial.appliesQuality ?? false,
+        producesWarpBeam: initial.producesWarpBeam ?? false,
+        consumesWarpBeam: initial.consumesWarpBeam ?? false,
         defaultCategoryId: initial.defaultCategoryId ?? null,
       }
     : stationFormDefaults;
@@ -145,6 +149,16 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
                 <input type="checkbox" {...form.register("appliesQuality")} /> Kalite kontrol
                 uygular (Kurşun + KK2 süreci bu istasyonda yürür)
               </label>
+              {devereEnabled && (
+                <>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" {...form.register("producesWarpBeam")} /> Levent sarar (devere makineleri)
+                  </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" {...form.register("consumesWarpBeam")} /> Levent tüketir (tezgah / raşel — levent yuvaya takılır)
+                  </label>
+                </>
+              )}
             </div>
           </FormField>
           <label className="flex items-center gap-2 text-sm">

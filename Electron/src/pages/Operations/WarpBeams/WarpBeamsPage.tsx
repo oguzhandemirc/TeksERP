@@ -1,9 +1,10 @@
 // =============================================================================
-// LEVENTLER — plan · sar · hazır levent stoğu (panel) · devere Faz 1b
+// LEVENTLER — plan · sar · hazır levent stoğu · Faz 3 tezgah bağı (tak · sök · tüket · düzelt · bitir · hurda · geri al)
 // =============================================================================
 // ⚠️ REJİM: ekran DEVERE modülüne aittir. Karo `isWarpBeamsVisible`; asıl sed backend
 // `requireDevereEnabled`. Okuma `warpbeam:read` (route), yazma `warpbeam:write`, sarım
-// iptali `warpbeam:cancel` (satır menüsü `PermissionGate`).
+// iptali · hurda · geri alma `warpbeam:cancel` (satır menüsü `PermissionGate`). Faz 3 menüsü
+// `devere.mountTracking` açıkken çizilir — kapalıyken ekran Faz 1b ile BİREBİR aynı.
 // ⚠️ "HATA" ile "KAYIT YOK" ayrı ekranlardır (`DataTable.isError`). SÜZME SUNUCUDA.
 // =============================================================================
 import { Plus } from "lucide-react";
@@ -17,6 +18,7 @@ import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { useDataTable } from "@/hooks/useDataTable";
+import { useDevereMountTracking } from "@/hooks/usePricingEnabled";
 import { warpSpecService } from "@/pages/WarpSpecs/service";
 import { warpBeamColumns } from "./columns";
 import { warpBeamService } from "./service";
@@ -24,8 +26,9 @@ import { WarpBeamFormDialog } from "./WarpBeamFormDialog";
 import { WindDialog } from "./WindDialog";
 import { CancelDialog } from "./CancelDialog";
 import { WarpBeamRowMenu } from "./WarpBeamRowMenu";
+import { BeamActionDialogs } from "./tezgah/BeamActionDialogs";
 import { WARP_BEAMS_QUERY_KEY, useWarpBeamMutations } from "./useWarpBeamMutations";
-import { toPlanPayload, usePageDialog } from "./usePageActions";
+import { toPlanPayload, usePageDialog, type BeamActionKind } from "./usePageActions";
 import { WARP_BEAM_ORIGIN_LABEL, WARP_BEAM_STATUSES, WARP_BEAM_STATUS_META, type WarpBeam, type WarpBeamOrigin } from "./types";
 
 const FILTERS: FilterDef[] = [
@@ -35,10 +38,12 @@ const FILTERS: FilterDef[] = [
 ];
 
 const swallow = () => undefined;
+const BEAM_ACTION_KINDS = new Set<string>(["mount", "dismount", "consume", "adjust", "exhaust", "scrap", "undo"]);
 
 export function WarpBeamsPage() {
   const { dialog, setDialog, actions } = usePageDialog();
-  const { save, deleteDraft, wind, cancel } = useWarpBeamMutations(() => setDialog(null));
+  const { save, deleteDraft, wind, cancel, act } = useWarpBeamMutations(() => setDialog(null));
+  const mountTracking = useDevereMountTracking();
   const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<WarpBeam>({
     queryKey: WARP_BEAMS_QUERY_KEY,
     fetchFn: warpBeamService.listCursor,
@@ -76,7 +81,7 @@ export function WarpBeamsPage() {
         pagination={pagination}
         emptyText="Levent yok. Planlamak için “Yeni Levent”."
         onRowClick={(r) => r.status === "PLANNED" && actions.onEdit(r)}
-        rowContextMenu={(r) => <WarpBeamRowMenu row={r} {...actions} />}
+        rowContextMenu={(r) => <WarpBeamRowMenu row={r} mountTracking={mountTracking} {...actions} />}
       />
       {/* Diyaloglar KOŞULLU mount: her açılış taze bileşen ve taze `clientToken`. */}
       {formTarget !== undefined && (
@@ -97,6 +102,7 @@ export function WarpBeamsPage() {
         />
       )}
       {dialog?.kind === "wind" && <WindDialog target={dialog.target} isPending={wind.isPending} onClose={() => setDialog(null)} onConfirm={(body) => wind.mutate({ id: dialog.target.id, body })} />}
+      {dialog && BEAM_ACTION_KINDS.has(dialog.kind) && "target" in dialog && <BeamActionDialogs kind={dialog.kind as BeamActionKind} target={dialog.target} act={act} onClose={() => setDialog(null)} />}
       {dialog?.kind === "cancel" && <CancelDialog target={dialog.target} isPending={cancel.isPending} onClose={() => setDialog(null)} onConfirm={(reason) => cancel.mutate({ id: dialog.target.id, reason })} />}
       {dialog?.kind === "delete" && (
         <ConfirmDialog

@@ -13,6 +13,7 @@ import { WarpBeamMountMethod, WarpLengthSource } from "@prisma/client";
 import { requireAnyPermission } from "../middlewares/rbac.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { cancelStatusEvent, dismountBeam, listMountedOnMachine, mountBeam } from "../services/warp-beam-mount.service";
+import { listLoomMachines } from "../services/warp-beam.service";
 import { adjustBeam, cancelConsumed, consumeBeam, exhaustBeam, scrapBeam, scrapPreview } from "../services/warp-beam-consume.service";
 import "../types/express-augment";
 
@@ -80,6 +81,24 @@ const exhaustSchema = z
 
 const scrapSchema = z.object({ reasonCode: z.string().trim().min(1).max(64), reason: reasonText }).strict();
 const cancelSchema = z.object({ reason: reasonRequired }).strict();
+
+/**
+ * @openapi
+ * /api/warp-beams/loom-machines:
+ *   get:
+ *     tags: [WarpBeams]
+ *     summary: Levent bağlanabilen makineler (istasyonu levent tüketen aktif makineler, yuva sayısıyla) — Faz 3
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Liste }
+ */
+router.get("/loom-machines", requireAnyPermission("warpbeam:read", ...MOBILE_DEVERE, ...MOBILE_DOKUMA), async (_req, res, next) => {
+  try {
+    res.json(await listLoomMachines());
+  } catch (e) {
+    next(e);
+  }
+});
 
 /**
  * @openapi

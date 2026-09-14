@@ -114,9 +114,6 @@ const PANEL_EXEMPT: Record<string, string> = {
   // Dilim 3/4'te yüzeyleri doğduğunda panele girer ve bu iki satır SİLİNİR
   // (muaf listesi iki yönlü denetlenir — panele girip muafta kalırsa kırmızı).
   kumasTeknikEnabled: "yer tutucu — arkasında yüzey YOK; Dilim 3'te panele girer",
-  // Devere Faz 3 E1 (2026-09-14): motor + API yazma yolu var, panel satırları E2 sha'sıyla (aynı tren) gelir; E2 inince SİLİNİR.
-  devereMountTracking: "E1 motor — panel satırı E2 (devere kategorisi) sha'sıyla, aynı tren; o gün silinir",
-  devereMountTrackingRequired: "E1 motor — panel satırı E2 (devere kategorisi) sha'sıyla, aynı tren; o gün silinir",
   tezgahEnabled: "yer tutucu — arkasında yüzey YOK; Dilim 4'te panele girer",
 };
 

@@ -302,6 +302,10 @@ export interface FeatureFlags {
   devereEnabled: boolean;
   /** Devere Faz 2: içeride sarım + mal kabul iplik satırında lot zorunlu (varsayılan kapalı). */
   devereLotRequired: boolean;
+  /** Devere Faz 3: levent tezgah bağı defteri (tak · sök · tüket · bitir · hurda) — varsayılan kapalı. */
+  devereMountTracking: boolean;
+  /** Devere Faz 3: bağlamada yöntem + başlangıç saati zorunlu — varsayılan kapalı. */
+  devereMountTrackingRequired: boolean;
   /** Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme).
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI, tezgah izlemenin KARDEŞİ: bu alan HAM
    *  değerdir; etkin değer `production && dokuma` (`useOperationsVisibilityContext`). */

@@ -11,6 +11,8 @@ export const machineFormSchema = z.object({
     .trim()
     .min(1, "Makine adı boş bırakılamaz")
     .max(100, "Makine adı en fazla 100 karakter olabilir"),
+  // Devere Faz 3: levent yuva sayısı 0..32 (0 = cağlıklı çözgü makinesi); devere kapalıyken alan çizilmez, 1 gider.
+  warpBeamSlots: z.coerce.number().int("Yuva sayısı tam sayı olmalı").min(0, "Yuva sayısı negatif olamaz").max(32, "Yuva sayısı en fazla 32"),
 });
 
 export type MachineFormValues = z.infer<typeof machineFormSchema>;
@@ -18,4 +20,5 @@ export type MachineFormValues = z.infer<typeof machineFormSchema>;
 export const machineFormDefaults: MachineFormValues = {
   stationId: "",
   name: "",
+  warpBeamSlots: 1,
 };

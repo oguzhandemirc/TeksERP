@@ -6,7 +6,7 @@
 // =============================================================================
 import apiClient from "@/services/apiClient";
 import type { ApiResponse, CursorPaginatedResponse, CursorParams } from "@/types/api";
-import type { CancelWoundPreview, WarpBeam, WarpBeamEvent, WarpBeamOrigin, WarpKgSource } from "./types";
+import type { CancelWoundPreview, WarpBeam, WarpBeamEvent, WarpBeamMountMethod, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, WarpLengthSource } from "./types";
 
 const BASE = "/api/warp-beams";
 
@@ -64,6 +64,17 @@ export interface DevereMachine {
   stationName: string;
 }
 
+export interface LoomMachine extends DevereMachine {
+  warpBeamSlots: number;
+}
+/** Faz 3 gövdeleri — route Zod'u ile birebir (`.strict()`; bilinmeyen anahtar 400). */
+export interface MountPayload { machineId: string; position: number; mountMethod?: WarpBeamMountMethod | null; beamRole?: string | null; setupStartedAt?: string | null; setupMinutes?: number | null; machineCounter?: number | null; clientToken: string }
+export interface DismountPayload { remainingM?: number | null; lengthSource?: WarpLengthSource | null; machineCounter?: number | null; reason?: string | null }
+export interface ConsumePayload { lengthM: number; lengthSource: WarpLengthSource; machineCounter?: number | null; fabricLengthM?: number | null; grossKg?: number | null; tareKg?: number | null; reason?: string | null; clientToken: string }
+export interface AdjustPayload { direction: "IN" | "OUT"; lengthM: number; reasonCode: string; reason?: string | null; lengthSource?: WarpLengthSource | null }
+export interface ExhaustPayload { residualM?: number | null; grossKg?: number | null; tareKg?: number | null; lengthSource?: WarpLengthSource | null; reasonCode?: string | null; reason?: string | null; machineCounter?: number | null }
+export interface ScrapPreview { beamNo: string; status: WarpBeamStatus; remainingM: number; currentMachine: { id: string; code: string; name: string } | null; currentPosition: number | null; openRunsOnMachine: number }
+
 export type WarpBeamDetail = WarpBeam & { events: WarpBeamEvent[]; yarnLines: Array<{ id: string; kind: string; qtyKg: number; warehouse: { id: string; name: string }; reasonCode: string | null; createdAt: string }> };
 
 export const warpBeamService = {
@@ -78,4 +89,16 @@ export const warpBeamService = {
   wind: (id: string, body: WindPayload) => apiClient.post<ApiResponse<WarpBeam>>(`${BASE}/${id}/wind`, body).then((r) => r.data),
   cancelPreview: (id: string) => apiClient.get<ApiResponse<CancelWoundPreview>>(`${BASE}/${id}/cancel-preview`).then((r) => r.data),
   cancel: (id: string, reason: string) => apiClient.post<ApiResponse<WarpBeam>>(`${BASE}/${id}/cancel`, { reason }).then((r) => r.data),
+  // ── Faz 3 tezgah bağı ──
+  loomMachines: () => apiClient.get<ApiResponse<LoomMachine[]>>(`${BASE}/loom-machines`).then((r) => r.data),
+  mount: (id: string, body: MountPayload) => apiClient.post<ApiResponse<WarpBeam>>(`${BASE}/${id}/mount`, body).then((r) => r.data),
+  dismount: (id: string, body: DismountPayload) => apiClient.post<ApiResponse<WarpBeam>>(`${BASE}/${id}/dismount`, body).then((r) => r.data),
+  consume: (id: string, body: ConsumePayload) => apiClient.post<ApiResponse<WarpBeam>>(`${BASE}/${id}/consume`, body).then((r) => r.data),
+  adjust: (id: string, body: AdjustPayload) => apiClient.post<ApiResponse<WarpBeam>>(`${BASE}/${id}/adjust`, body).then((r) => r.data),
+  exhaust: (id: string, body: ExhaustPayload) => apiClient.post<ApiResponse<WarpBeam>>(`${BASE}/${id}/exhaust`, body).then((r) => r.data),
+  scrapPreview: (id: string) => apiClient.get<ApiResponse<ScrapPreview>>(`${BASE}/${id}/scrap-preview`).then((r) => r.data),
+  scrap: (id: string, reasonCode: string, reason: string | null) => apiClient.post<ApiResponse<WarpBeam>>(`${BASE}/${id}/scrap`, { reasonCode, reason }).then((r) => r.data),
+  /** LIFO: yalnız en yeni aktif DURUM olayı (MOUNTED · DISMOUNTED · EXHAUSTED · SCRAPPED) geri alınır. */
+  cancelEvent: (id: string, eventId: string, reason: string) => apiClient.post<ApiResponse<WarpBeam>>(`${BASE}/${id}/events/${eventId}/cancel`, { reason }).then((r) => r.data),
+  cancelConsumed: (id: string, eventId: string, reason: string) => apiClient.post<ApiResponse<WarpBeam>>(`${BASE}/${id}/consumed/${eventId}/cancel`, { reason }).then((r) => r.data),
 };

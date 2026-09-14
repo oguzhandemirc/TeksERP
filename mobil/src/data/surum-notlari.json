@@ -371,6 +371,11 @@
         },
         {
           "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Levent TEZGAH BAĞI defteri geldi (devere modülü açık kurulumlar için; Genel Ayarlar › Devere / Levent › “Levent tezgah bağı defteri” açılınca). Leventler ekranında hazır levent sağ tık menüsünden bir tezgahın yuvasına takılır (tezgah listesi istasyon kartında “levent tüketir” işaretli istasyonların makineleri; yuva sayısı makine kartında “Levent yuva sayısı”, dolu yuva reddedilir; bağlama yöntemi düğüm/tahar/takım, kurulum başlangıcı ve süresi, tezgah sayacı isteğe bağlı — “Bağlamada yöntem ve başlangıç saati zorunlu olsun” ayarı açılırsa zorunlu), tezgahtan sökülür (ölçülen kalan girilirse fark önce tüketim ya da ölçüm farkı olarak yazılır), elle tüketim yazılır (tezgah sayacı / çap / tartı / tahmin kaynağıyla; kalan eksiye düşemez), kalan sebep kataloğuyla düzeltilir (Sebep Kataloğu › “Levent Kalan Düzeltmesi”), bitirilir (artık ölçülen metre, tartı ya da yok; artık dispozisyonu isteğe bağlı) ya da hurdaya ayrılır (önizlemeli, sebep zorunlu — Sebep Kataloğu › “Levent Hurda / Artık”; ayrı yetki: sarım iptaliyle aynı). Liste “Tezgah / yuva” sütunu ve kalan metreyi gösterir; yeni durumlar Tezgahta · Bitti · Hurda. Geri alma en son tezgah kaydından başlar (LIFO), tüketimler tek tek geri alınır; hiçbir kayıt silinmez, ters satır yazılır. Açık koşumu olan tezgahtaki son levent sökülemez; koşum leventsiz açılırsa uyarı verilir. Ayar kapalıyken (varsayılan) ekran ve menüler eskisiyle birebir aynıdır, sunucu bu işlemleri reddeder; hiçbir mevcut kayıt değişmez."
+        },
+        {
+          "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "İplik hareketleri listesine dört tür geldi: levent sarımına çıkış, çıkışın geri alınması, levent dip iadesi ve iadenin geri alınması. Bunları yalnız Leventler ekranı yazar; elle iplik hareketi formunda seçilemezler. Eksi bakiye kapısı bakiyeyi düşüren yeni türleri de sayar. Eski panel sürümü tanımadığı türü ham adıyla basar, çökmez. Devere modülü kapalı kurulumda bu türler oluşmaz."
         },

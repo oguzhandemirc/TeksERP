@@ -10,6 +10,7 @@ import { stationHardRemove, machineHardRemove, machineDeletePreview } from "../s
 import { WorkSessionService, MOBILE_SESSION_PERMS } from "../services/work-session.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { validateMachineDevereFields, validateStationDevereFields } from "../middlewares/devere-station-fields.middleware";
 
 // --- Station ---
 export const stationService = new StationService({
@@ -175,11 +176,17 @@ router.get("/:id", verifyToken, requirePermission("station:read"), stationContro
  *               appliesQuality:
  *                 type: boolean
  *                 description: Bu istasyon KALİTE KONTROL (Kurşun + KK2) yürütür mü. Varsayılan false.
+ *               producesWarpBeam:
+ *                 type: boolean
+ *                 description: Devere — bu istasyonun makineleri LEVENT SARAR. Varsayılan false.
+ *               consumesWarpBeam:
+ *                 type: boolean
+ *                 description: Devere Faz 3 — bu istasyonun makinelerine LEVENT BAĞLANIR (dokuma/raşel). Varsayılan false.
  *     responses:
  *       201:
  *         description: İstasyon oluşturuldu
  */
-router.post("/", verifyToken, requirePermission("station:write"), stationController.create);
+router.post("/", verifyToken, requirePermission("station:write"), validateStationDevereFields, stationController.create);
 
 /**
  * @openapi
@@ -218,7 +225,7 @@ router.post("/", verifyToken, requirePermission("station:write"), stationControl
  *       200:
  *         description: Güncellendi
  */
-router.patch("/:id", verifyToken, requirePermission("station:write"), stationController.update);
+router.patch("/:id", verifyToken, requirePermission("station:write"), validateStationDevereFields, stationController.update);
 
 /**
  * @openapi
@@ -361,11 +368,12 @@ machineRouter.get("/:id/delete-preview", verifyToken, requirePermission("station
  *               stationId: { type: string, format: uuid }
  *               code: { type: string, example: "TEZGAH_04" }
  *               name: { type: string, example: "Dokuma Tezgah 4" }
+ *               warpBeamSlots: { type: integer, minimum: 0, maximum: 32, description: "Devere Faz 3 — levent yuva sayısı (0 = cağlıklı çözgü makinesi). Varsayılan 1." }
  *     responses:
  *       201:
  *         description: Makine oluşturuldu
  */
-machineRouter.post("/", verifyToken, requirePermission("station:write"), machineController.create);
+machineRouter.post("/", verifyToken, requirePermission("station:write"), validateMachineDevereFields, machineController.create);
 
 /**
  * @openapi
@@ -384,7 +392,7 @@ machineRouter.post("/", verifyToken, requirePermission("station:write"), machine
  *       200:
  *         description: Güncellendi
  */
-machineRouter.patch("/:id", verifyToken, requirePermission("station:write"), machineController.update);
+machineRouter.patch("/:id", verifyToken, requirePermission("station:write"), validateMachineDevereFields, machineController.update);
 
 /**
  * @openapi

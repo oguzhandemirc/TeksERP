@@ -17,6 +17,10 @@ export interface Station {
    * Renk/özellikten farkı: fason kategorisinden türetilmez, atama listesi yoktur.
    */
   appliesQuality: boolean;
+  /** Devere: bu istasyonun makineleri LEVENT SARAR (WOUND.machineId adayı). */
+  producesWarpBeam: boolean;
+  /** Devere Faz 3: bu istasyonun makinelerine LEVENT BAĞLANIR (dokuma/raşel); yuva kapısı budur. */
+  consumesWarpBeam: boolean;
   defaultCategoryId: string | null;
   defaultCategory?: { id: string; code: string; name: string } | null;
   createdAt: string;

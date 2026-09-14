@@ -11,6 +11,12 @@ export function lotSummary(b: Pick<WarpBeam, "lots" | "wound">): string {
   return `${b.lots.length} lot`;
 }
 
+/** Tezgah hücresi: bağlıysa "makine · yuva N", değilse "—". */
+export function loomCell(b: Pick<WarpBeam, "currentMachine" | "currentPosition">): string {
+  if (!b.currentMachine) return "—";
+  return `${b.currentMachine.name} · yuva ${b.currentPosition ?? "?"}`;
+}
+
 export const warpBeamColumns: ColumnDef<WarpBeam>[] = [
   { accessorKey: "beamNo", header: "Levent No", cell: ({ row }) => <span className="font-mono text-xs">{row.original.beamNo}</span> },
   {
@@ -48,6 +54,8 @@ export const warpBeamColumns: ColumnDef<WarpBeam>[] = [
         <span className="flex flex-col font-mono text-xs">
           <span>{r.wound ? formatM(r.wound.lengthM) : `plan ${formatM(r.plannedLengthM)}`}</span>
           {r.wound && <span className="text-muted-foreground">{formatKg(r.wound.theoreticalKg)} · {r.wound.kgSource ? WARP_KG_SOURCE_LABEL[r.wound.kgSource] : ""}</span>}
+          {/* Faz 3: kalan sunucuda türetilir (Σ işaret × m); sarılan metreden farklıysa tüketim/düzeltme var. */}
+          {r.wound && r.remainingM !== r.wound.lengthM && <span className="text-muted-foreground">kalan {formatM(r.remainingM)}</span>}
         </span>
       );
     },
@@ -61,6 +69,12 @@ export const warpBeamColumns: ColumnDef<WarpBeam>[] = [
         {row.original.physicalBeamNo && <span className="text-muted-foreground font-mono">{row.original.physicalBeamNo}</span>}
       </span>
     ),
+  },
+  {
+    // Faz 3: "şu an ne" — yalnız MOUNTED'da dolu; bayrak kapalıyken hep "—" (sıfır fark).
+    id: "loom",
+    header: "Tezgah / yuva",
+    cell: ({ row }) => <span className="text-xs">{loomCell(row.original)}</span>,
   },
   {
     // Devere Faz 2: lot özeti — tek lot adıyla, N lot sayıyla, lotsuz sarım AÇIKÇA "Lot yok" (iz eksik).

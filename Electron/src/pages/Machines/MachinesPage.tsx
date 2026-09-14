@@ -10,6 +10,8 @@ const buildPayload = (v: MachineFormValues, initial: Machine | null): Partial<Ma
   // Kod backend'de üretilir (MAK+GGAAYY+NNNN); create'te gönderilmez, edit'te korunur.
   ...(initial?.code ? { code: initial.code } : {}),
   name: v.name,
+  // Devere Faz 3: yuva sayısı — allowlist satırı (istek gövdesini elle kuran katman).
+  warpBeamSlots: v.warpBeamSlots,
 });
 
 export function MachinesPage() {

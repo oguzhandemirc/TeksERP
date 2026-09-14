@@ -80,6 +80,18 @@ export function useDevereLotRequired(): boolean {
   return q.data?.data?.devereLotRequired ?? false;
 }
 
+/** Devere Faz 3: levent tezgah bağı defteri açık mı (`devere.mountTracking`). Yüklenene dek KAPALI = bugünkü davranış (levent hazır kalır, yüzey çizilmez). */
+export function useDevereMountTracking(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.devereMountTracking ?? false;
+}
+
+/** Devere Faz 3: bağlamada yöntem + başlangıç saati zorunlu mu (`devere.mountTrackingRequired`). */
+export function useDevereMountTrackingRequired(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.devereMountTrackingRequired ?? false;
+}
+
 export function useDemoModeEnabled(): boolean {
   const q = useFeatureFlags();
   return q.data?.data?.demoModeEnabled ?? false;

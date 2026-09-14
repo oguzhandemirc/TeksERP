@@ -97,6 +97,9 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   dokumaEnabled: "cekirdek",
   // Devere Faz 2 (2026-09-14): lot zorunluluğu devere modülünün davranış bayrağı.
   devereLotRequired: "devereEnabled",
+  // Devere Faz 3 (2026-09-15): tezgah bağı defteri ve bağlama zorunluluğu devere modülünün davranış bayrakları.
+  devereMountTracking: "devereEnabled",
+  devereMountTrackingRequired: "devereEnabled",
 
   // --- ÜRETİM (`operations/work-orders` · KK1 · Tambur · Kurşun · Parti) -----
   targetQuantityEnabled: "productionEnabled",

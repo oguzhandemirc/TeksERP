@@ -35,6 +35,9 @@ export const stationFormSchema = z.object({
   appliesColor: z.boolean(),
   appliesProperty: z.boolean(),
   appliesQuality: z.boolean(),
+  // Devere yetenekleri (modül açıkken çizilir; kapalıyken varsayılan false gider = bugün).
+  producesWarpBeam: z.boolean(),
+  consumesWarpBeam: z.boolean(),
   defaultCategoryId: z.string().nullable().optional(),
 });
 
@@ -53,5 +56,7 @@ export const stationFormDefaults: StationFormValues = {
   // Kalite varsayılanı KAPALI — backend kolon varsayılanıyla aynı. Kalite bir
   // istisnadır: yeni istasyon sessizce KK yürütür hale gelmemeli.
   appliesQuality: false,
+  producesWarpBeam: false,
+  consumesWarpBeam: false,
   defaultCategoryId: null,
 };

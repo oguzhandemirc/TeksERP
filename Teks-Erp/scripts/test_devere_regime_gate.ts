@@ -34,6 +34,8 @@
 //   (Eski ①/② — ticaret dalı/sırası — GEÇERSİZ: zincir artık ölçülmüyor, kapı yalnız devere okur.)
 //   ③ `MODULE_DEPENDENCIES.devereEnabled` silindi → §4a + §4b kırmızı.
 //   ④ `readDevereEnabled`in `asBoolean` varsayılanı `true`ya çevrildi → §5 kırmızı.
+//   ⑤ (2026-09-15, Faz 3 E2) `warp-beam.routes.ts`ten `router.use("/", warpBeamMountRoutes)` düşürüldü
+//      → §6c kırmızı (alt yönlendirici beyanı ÖLÇÜLÜR: ana kapılı VE alt takılı değilse KAPISIZ).
 // =============================================================================
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -154,14 +156,27 @@ async function main(): Promise<void> {
   const DEVERE_MODELLERI = ["warpSpec", "warpBeam", "warpBeamEvent"];
   const dokunanlar: string[] = [];
   const kapisizlar: string[] = [];
+  /**
+   * ALT YÖNLENDİRİCİ beyanı (Faz 3): dosya kapıyı KENDİ taşımaz, kapılı ana router'ın `router.use("/", …)`
+   * ardındadır. Beyan ÖLÇÜLÜR: ana dosya kapıyı taşımalı VE alt dosyayı import edip `router.use` ile takmalı —
+   * ikisi de yoksa alt dosya KAPISIZ sayılır (beyan bayatlarsa kırmızı).
+   */
+  const ALT_YONLENDIRICI: Record<string, string> = { "warp-beam-mount.routes.ts": "warp-beam.routes.ts" };
+  const anaKapiliVeTakili = (alt: string, ana: string): boolean => {
+    const anaMetin = yorumlariSok(fs.readFileSync(path.join(routerDizin, ana), "utf8"));
+    const modul = alt.replace(/\.ts$/, "");
+    const importAdi = new RegExp(`import\\s+(\\w+)\\s+from\\s+"\\./${modul.replace(/\./g, "\\.")}"`).exec(anaMetin)?.[1];
+    return anaMetin.includes(KAPI) && !!importAdi && new RegExp(`router\\.use\\("/",\\s*${importAdi}\\)`).test(anaMetin);
+  };
   for (const f of routerlar) {
     const metin = yorumlariSok(fs.readFileSync(path.join(routerDizin, f), "utf8"));
     const dokunuyor =
       DEVERE_MODELLERI.some((m) => new RegExp(`\\b(prisma|tx)\\.${m}\\b`).test(metin)) ||
-      /WarpSpecService|warpSpecService|warp-beam(-wind)?\.service/.test(metin);
+      /WarpSpecService|warpSpecService|warp-beam(-wind|-mount|-consume)?\.service/.test(metin);
     if (!dokunuyor) continue;
     dokunanlar.push(f);
-    if (!metin.includes(KAPI)) kapisizlar.push(f);
+    const kapili = metin.includes(KAPI) || (ALT_YONLENDIRICI[f] !== undefined && anaKapiliVeTakili(f, ALT_YONLENDIRICI[f]));
+    if (!kapili) kapisizlar.push(f);
   }
   check(
     "§6b Körlük zemini: devere yüzeyi BULUNDU (yoksa §6c vakumen yeşil kalırdı)",

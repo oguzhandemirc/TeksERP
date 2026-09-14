@@ -118,6 +118,16 @@ export async function listDevereMachines(): Promise<ApiResponse<Array<{ id: stri
   return { success: true, data: rows.map((m) => ({ id: m.id, code: m.code, name: m.name, stationName: m.station.name })) };
 }
 
+/** Levent BAĞLANABİLEN makineler — `Station.consumesWarpBeam` istasyonlarının aktif makineleri (yuva sayısıyla; Faz 3). */
+export async function listLoomMachines(): Promise<ApiResponse<Array<{ id: string; code: string; name: string; stationName: string; warpBeamSlots: number }>>> {
+  const rows = await prisma.machine.findMany({
+    where: { isActive: true, station: { consumesWarpBeam: true } },
+    orderBy: { code: "asc" },
+    select: { id: true, code: true, name: true, warpBeamSlots: true, station: { select: { name: true } } },
+  });
+  return { success: true, data: rows.map((m) => ({ id: m.id, code: m.code, name: m.name, stationName: m.station.name, warpBeamSlots: m.warpBeamSlots })) };
+}
+
 // ── PLAN (PLANNED) ──────────────────────────────────────────────────────────────
 export interface WarpBeamCreateInput {
   warpSpecId: string;

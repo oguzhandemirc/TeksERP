@@ -3,6 +3,7 @@ import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { FormField } from "@/components/forms/FormField";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { Input } from "@/components/ui/input";
+import { useDevereEnabled } from "@/hooks/usePricingEnabled";
 import { stationService } from "@/pages/Stations/service";
 import type { Station } from "@/pages/Stations/types";
 import { machineFormDefaults, machineFormSchema, type MachineFormValues } from "./schema";
@@ -20,10 +21,13 @@ interface Props {
 }
 
 export function MachineFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting, defaultStationId }: Props) {
+  // Yuva alanı yalnız devere modülü açıkken çizilir (kapalıyken form BİREBİR eski, değer 1 gider).
+  const devereEnabled = useDevereEnabled();
   const defaults: MachineFormValues = initial
     ? {
         stationId: initial.stationId,
         name: initial.name,
+        warpBeamSlots: initial.warpBeamSlots ?? 1,
       }
     : { ...machineFormDefaults, stationId: defaultStationId ?? machineFormDefaults.stationId };
 
@@ -70,6 +74,11 @@ export function MachineFormDialog({ open, onOpenChange, initial, onSubmit, isSub
               scope={form.watch("stationId")}
             />
           </FormField>
+          {devereEnabled && (
+            <FormField label="Levent yuva sayısı" htmlFor="warpBeamSlots" error={form.formState.errors.warpBeamSlots} hint="Levent tüketen istasyondaki makinede kaç levent aynı anda takılı olabilir (0 = cağlıklı çözgü makinesi).">
+              <Input id="warpBeamSlots" type="number" min={0} max={32} step={1} {...form.register("warpBeamSlots")} />
+            </FormField>
+          )}
         </>
       )}
     </EntityFormDialog>
