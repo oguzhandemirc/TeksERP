@@ -339,26 +339,19 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   PIVOT("ItemAllowedProperty"), PIVOT("ItemAllowedColor"), PIVOT("DevicePeripheral"),
   PIVOT("CustomerStandaloneLabel", "müşteriye bağlı bağımsız etiket tanımı — ayar kümesi (③b)"),
   PIVOT("MachineCollectorLink", "toplayıcı → makine KAPSAM satırı; iki FK de Cascade, Decimal yok, karar/ölçüm taşımaz — 01'in guard muafiyetiyle aynı okuma: \"yapılandırmadır, defter değil\" (③b)"),
-  // ③a TİCARİ pivotların `yazan`/`silen` beyanı, borcun KAPANIŞINI ölçülebilir kılar:
-  // `silen` listesi boşalınca §10 "ÖLÜ SİLME BEYANI" kırmızı verir ve beyan o gün
-  // DEFTER'e çevrilir. Kanıt eskiden bir BELGE CÜMLESİYDİ ("defter.md ③a satırı") —
-  // belge cümlesi ölçüm değildir; "7 site" kapının kendi tarayıcısıyla sayıldı
-  // (2026-09-13): RollProperty 5 + WorkOrderTargetProperty 2, İKİ SINIF — dördü
-  // sil-yaz (replace), üçü ölü topun satırını temizleme (iptal/geri alma/retire).
-  { model: "RollProperty", sinif: "PIVOT_TICARI",
-    gerekce: "topun özelliği rota kapsamasını belirleyen GERÇEK kısıt, ayar değil (2026-09-11 kararı)",
-    // 2026-09-14 Faz 1+2a: istasyon yeteneği yazıcısı `station-capability-transfer.helper`ten
-    // `property-revoke.helper` (`setRollPropertyValueTx`) içine taşındı — yazan listesi onu izler.
-    yazan: ["src/services/helpers/property-revoke.helper.ts", "src/services/inventory.service.ts",
+  // ③a TİCARİ pivot → DEFTER (2026-09-14, OZELLIK-PIVOT-SURUMLEME-PLAN Faz 1–2e): satır
+  // silinmez, `revokedAt` damgalanır; değişiklik = eski aktif satırın damgası + yeni satır.
+  // Ters yazanlar tek helper'da; `silen` YOK (AST kapısı `test_roll_property_revoke` §13d
+  // src'de silme sitesini kırmızı yapar). Mekanizma DAMGA — un-revoke yoktur (yeniden
+  // ekleme YENİ satır); ters yol "geri alma satır yazar" değil "damga" sınıfıdır.
+  D("RollProperty", "topun özelliği ve SEÇİM değeri — rota kapsamasını belirleyen GERÇEK kısıt (2026-09-11 kararı); sürümlenir: değer değişimi (50GR→25GR) eski satırın damgası + yeni satır, partial unique aktif çifti tekil tutar",
+    { tur: "DAMGA", kolon: "revokedAt" },
+    [{ dosya: "src/services/helpers/property-revoke.helper.ts", sembol: "revokeRollProperties" },
+     { dosya: "src/services/helpers/property-revoke.helper.ts", sembol: "setRollPropertyValueTx" },
+     { dosya: "src/services/helpers/property-revoke.helper.ts", sembol: "applyRollFlagSetTx" }],
+    ["src/services/helpers/property-revoke.helper.ts", "src/services/inventory.service.ts",
       "src/services/subcontractor.service.ts", "src/services/workorder.service.ts", "src/services/tambur.service.ts",
-      "src/services/tambur-undo.service.ts"],
-    silen: ["src/services/inventory.service.ts", "src/services/workorder.service.ts"],
-    borc: [{
-      ne: "2 site SİL-YAZ (top düzeltme FLAG replace · WO hedef → top FLAG replace) — versiyon kolonu (validUntil) + okuyucu turu ister, şema penceresi. 3 ÖLÜ TOP TEMİZLİĞİ sitesi 2026-09-14'te KAPANDI: fason kabul iptali · fason transfer geri alma · kesimde ebeveyn retire artık silmiyor, satır ölü topta kalır (okuyucular ölçüldü: fabric-property CHOICE→FLAG sayacı zaten ölü topu sayıyordu, tambur-undo donör dalı count===0 koşullu, WO processedCount rollWhere statü süzmüyor — sınıf değişmedi)",
-      kanit: "kapının tarayıcısı (defterYazimlariniTara, SILEN) 2026-09-14: inventory.service.ts:4531 · workorder.service.ts:6009 — ikisi de deftere yazmıyor, replace izi yalnız audit'te (inventory F119, tx dışında). Kapanır: `silen` boşalır → §10 ÖLÜ SİLME kırmızı → beyan DEFTER {DAMGA validUntil}",
-      tasarim: "docs/design/OZELLIK-PIVOT-SURUMLEME-PLAN.md",
-      sahibi: "rota/renk alanı",
-    }] },
+      "src/services/tambur-undo.service.ts"]),
   // ③a listesinde olup beyanda OLMAYAN üçüncü ticari pivot (ölçüldü 2026-09-14): `updatedAt`
   // taşıdığı için §1 evreninin dışında kalıyordu — "yarı" ile evrene alındı. Kolon ölü:
   // in-place yazan yok (update/updateMany 0), allocatedQty yalnız yaratılırken yazılır.
@@ -372,16 +365,10 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
       tasarim: "docs/design/WOTOL-BAG-DAMGA-PLAN.md",
       sahibi: "iş emri / sipariş alanı",
     }] },
-  { model: "WorkOrderTargetProperty", sinif: "PIVOT_TICARI",
-    gerekce: "iş emri hedef özelliği — topun özelliğiyle aynı sınıf (2026-09-11 kararı)",
-    yazan: ["src/services/helpers/workorder-clone.helper.ts", "src/services/workorder.service.ts"],
-    silen: ["src/services/workorder.service.ts"],
-    borc: [{
-      ne: "2 site SİL-YAZ (WO güncelleme drop-and-recreate · WO hedef özellik replace); değişim izi deftere yazılmıyor",
-      kanit: "kapının tarayıcısı (SILEN) 2026-09-13: workorder.service.ts:5812 · :5983. Kapanır: `silen` boşalır → §10 ÖLÜ SİLME kırmızı → beyan DEFTER {DAMGA validUntil}",
-      tasarim: "docs/design/OZELLIK-PIVOT-SURUMLEME-PLAN.md",
-      sahibi: "rota/renk alanı",
-    }] },
+  D("WorkOrderTargetProperty", "iş emrinin hedef özelliği — topun özelliğiyle aynı sınıf (2026-09-11 kararı); replace/updateTargetProperties FARK bazlı, çıkan damgalanır (WO_REPLACE · WO_TARGET_UPDATE)",
+    { tur: "DAMGA", kolon: "revokedAt" },
+    [{ dosya: "src/services/helpers/property-revoke.helper.ts", sembol: "revokeTargetProperties" }],
+    ["src/services/helpers/workorder-clone.helper.ts", "src/services/workorder.service.ts"]),
 
   // ── TELEMETRİ — budanabilir, ama KARAR UFKU beyan edilir ──────────────────
   { model: "TravelerCardScan", sinif: "TELEMETRI",

@@ -1,6 +1,6 @@
 # Özellik pivotu sürümleme — `RollProperty` / `WorkOrderTargetProperty` (B-5): KARAR ve PLAN
 
-> **Durum: CANLI PLAN.** Karar 2026-09-11'de verildi (`docs/kurallar/defter.md:48`, `:66-71`); ölçümler 2026-09-12'de tazelendi. İş bitince bu belge `docs/history/`e taşınır. Doktrin: `docs/kurallar/defter.md`. Emsal ve ortak zemin: `docs/design/DEFTER-B-BOLUMU-PLAN.md`.
+> **Durum: UYGULANDI (Faz 0–2e, 2026-09-14; Faz 3/4 ayrı bilet).** Karar 2026-09-11'de verildi (`docs/kurallar/defter.md:48`, `:66-71`); ölçümler 2026-09-12'de tazelendi. İş bitince bu belge `docs/history/`e taşınır. Doktrin: `docs/kurallar/defter.md`. Emsal ve ortak zemin: `docs/design/DEFTER-B-BOLUMU-PLAN.md`.
 
 > Bu dosya bir EMİR listesidir: uygulayan oturum burada yazan kararı tartışmaz, uygular. Karara itirazı varsa ÖNCE yöneticiye yazar, sonra kod yazar.
 
@@ -22,7 +22,7 @@ Bu bölüm planı DEĞİŞTİRMEZ, ölçer: hangi satır indi, hangi satır numa
   ⚠️ **"Faz 1 tek başına sahaya çıkabilir" iddiası ÇÜRÜDÜ:** Y1'in `upsert({ where: { rollId_propertyId } })`ü partial unique altında `42P10 there is no unique or exclusion constraint matching the ON CONFLICT specification` ile ölür (ölçüldü, `test_property_value_selection` düştü) — Kurşun/KK2 özellik yazımı kırılır. Bu yüzden 2a Faz 1 ile AYNI commit'te. §8.6 "upsert tuzağı" bu.
   Bekçi yeniden yazımı: `test_property_value_selection` §2 "1 AKTİF + toplam 2, eski damgalı", tüm okumalar aktif süzgeçli, §13'e "ebeveynin damgalı değeri çocuğa GEÇMEDİ" sondası; temizlik `.catch` yutması kaldırıldı (1e/6e ölçtü).
 
-**Bekleyen (pencere 82'de):** 2b (Y3/Y4 donör kısıtı) · 2c (Y5/Y6 `applyRollFlagSetTx`) · 2d (Y7/Y8/Y9) · 2e (Y10/Y11 damga) · beyan çevirisi (PIVOT_TICARI → DEFTER {DAMGA revokedAt}) · audit etiketleri (§7).
+- **2b · 2c · 2d · 2e bitti (2026-09-14, dört ayrı commit):** donör doğum-anı (§3.1, `propsDonorMissing`) · `applyRollFlagSetTx` fark bazlı + koşulsuz claim · replace/updateTargetProperties §3.2 üç parçalı kapı tx içinde, topa yalnız DELTA · cancelReceipt/undoTransfer damgası kardeş sebeple. `src/`de iki modele SİLME 0 (§13d beyan boşaldı). Audit etiketleri iki haritada (§7). **Beyan çevrildi:** PIVOT_TICARI → DEFTER {DAMGA revokedAt}, ters yazanlar helper'da; `defter.md` ③a satırı ve tablo tazelendi, "henüz uygulanmadı" kararı düştü. Bekçi `test_roll_property_revoke` §1–§4 · §8/§8b · §9 · §10 · §13 (37 kontrol). Faz 3 (O16–O19 tx'e taşıma) ve Faz 4 ayrı bilet — plan §9.
 
 **Satır numaraları (2026-09-14):** Y1 `:211` (aynı) · Y3 `tambur-undo.service.ts:1730` · Y4 `:2079` · Y5 `inventory.service.ts:4531/:4535` · Y7 `workorder.service.ts:5812` (yanında `WorkOrderToOrderLine.deleteMany :5816` — ayrı borç, beyanda) · Y8 `:5983/:5985` · Y9 `:6009/:6020` · Y10 `subcontractor.service.ts:5436` (silme yok) · Y11 `:5983` (silme yok).
 
