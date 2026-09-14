@@ -177,7 +177,7 @@ async function main() {
   check("kaldırınca diğer cihazda kalır (paylaşım korunur)", d1c.length === 0 && d2c.length === 1, `dev1=${d1c.length} dev2=${d2c.length}`);
 
   // cleanup (TEST- kayıtları)
-  await prisma.devicePeripheral.deleteMany({ where: { peripheral: { code: "TEST-DEV-METRE" } } });
+  await prisma.devicePeripheral.deleteMany({ where: { peripheralId: testPeri.id } }); // pivot KİMLİKLE silinir (§10b)
   await prisma.peripheralDevice.deleteMany({ where: { code: "TEST-DEV-METRE" } });
   await prisma.device.deleteMany({ where: { deviceId: { in: ["TEST-DEV-FORDEVICE", "TEST-DEV-FORDEVICE-2"] } } });
 

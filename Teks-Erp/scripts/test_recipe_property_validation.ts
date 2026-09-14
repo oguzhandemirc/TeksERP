@@ -28,6 +28,8 @@ function need<T>(v: T | null | undefined, what: string): T {
 const is400 = (e: unknown) => e instanceof AppError && e.statusCode === 400;
 const NONEXISTENT = "00000000-0000-0000-0000-000000000000";
 
+// Koşumun ürettiği reçete KİMLİKLERİ — pivot bunlarla silinir (§10b: önek yüklemi sınırsız).
+const recipeIds: string[] = [];
 const recipes = new ProductRecipeService({
   modelName: "productRecipe",
   tableName: "PRODUCT_RECIPE",
@@ -71,6 +73,7 @@ async function main(): Promise<void> {
       ADMIN
     );
     const dupId = (dupRes.data as { id?: string } | null)?.id;
+    if (dupId) recipeIds.push(dupId);
     check("mükerrer propertyId → success (P2002 değil)", dupRes.success === true && !!dupId);
     if (dupId) {
       const propCount = await prisma.productRecipeProperty.count({ where: { recipeId: dupId } });
@@ -83,8 +86,10 @@ async function main(): Promise<void> {
       ADMIN
     );
     check("geçerli property → success", okRes.success === true);
+    const okId = (okRes.data as { id?: string } | null)?.id;
+    if (okId) recipeIds.push(okId);
   } finally {
-    await prisma.productRecipeProperty.deleteMany({ where: { recipe: { code: { startsWith: "TST-RCP-" } } } }).catch(() => undefined);
+    if (recipeIds.length > 0) await prisma.productRecipeProperty.deleteMany({ where: { recipeId: { in: recipeIds } } });
     await prisma.productRecipe.deleteMany({ where: { code: { startsWith: "TST-RCP-" } } });
     console.log("(test verisi temizlendi)");
   }

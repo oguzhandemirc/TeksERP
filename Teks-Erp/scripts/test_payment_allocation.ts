@@ -1930,12 +1930,12 @@ main()
         await prisma.invoiceLine.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
         // Donmuş belgelerin FK'sı yok (polimorfik sourceId) → ayrıca silinir,
         // yoksa her koşuda birikirler.
-        await prisma.printedDocument.deleteMany({ where: { docType: "INVOICE_INTERNAL", sourceId: { in: invoiceIds } } });
+        await prisma.printedDocument.deleteMany({ where: { sourceId: { in: invoiceIds } } }); // yalnız KİMLİĞE bağlı (sourceId uuid, docType ayırıcısı gereksiz)
         await prisma.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
       }
       if (paymentIds.length > 0) {
         await prisma.cariTransaction.deleteMany({ where: { paymentId: { in: paymentIds } } });
-        await prisma.printedDocument.deleteMany({ where: { docType: "PAYMENT_RECEIPT", sourceId: { in: paymentIds } } });
+        await prisma.printedDocument.deleteMany({ where: { sourceId: { in: paymentIds } } });
         await prisma.payment.deleteMany({ where: { id: { in: paymentIds } } });
       }
       if (cariIds.length > 0) {

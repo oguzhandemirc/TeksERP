@@ -48,6 +48,8 @@ const RANGE: DateRange = {
 async function main(): Promise<void> {
   const ts = Date.now();
   const TAG = `TEST-LT-${ts}`;
+  // Defter satırları (SackAllocation) KİMLİKLE silinir — çuval id'leri burada toplanır (§10b).
+  const sackIds: string[] = [];
 
   try {
     const customer = await prisma.customer.create({
@@ -102,6 +104,7 @@ async function main(): Promise<void> {
       data: { sackNo: `${TAG}-CV`, customerId: customer.id, shipmentId: shipment.id },
       select: { id: true },
     });
+    sackIds.push(sack.id);
     await prisma.sackAllocation.create({
       data: { sackId: sack.id, orderLineId: shipped.lines[0]!.id, qty: 50 },
     });
@@ -159,7 +162,7 @@ async function main(): Promise<void> {
     const cust = r.byCustomer.find((b) => b.label === `${TAG} MUSTERI`);
     check("müşteri kırılımında da sampleSize var", cust?.fullClose.sampleSize === 7, `${cust?.fullClose.sampleSize}`);
   } finally {
-    await prisma.sackAllocation.deleteMany({ where: { sack: { sackNo: { startsWith: TAG } } } });
+    if (sackIds.length > 0) await prisma.sackAllocation.deleteMany({ where: { sackId: { in: sackIds } } });
     await prisma.sack.deleteMany({ where: { sackNo: { startsWith: TAG } } });
     await prisma.shipment.deleteMany({ where: { shipmentNo: { startsWith: TAG } } });
     await prisma.order.deleteMany({ where: { orderNumber: { startsWith: TAG } } });

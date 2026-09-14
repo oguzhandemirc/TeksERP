@@ -39,6 +39,9 @@ function check(label: string, ok: boolean, extra = ""): void {
 async function main(): Promise<void> {
   const ts = Date.now();
   const TAG = `TEST-OLC-${ts}`;
+  // Defter satırları (SackAllocation · WorkOrderToOrderLine) KİMLİKLE silinir — id'ler burada toplanır (§10b).
+  const sackIds: string[] = [];
+  const woIds: string[] = [];
 
   try {
     const customer = await prisma.customer.create({
@@ -102,6 +105,7 @@ async function main(): Promise<void> {
       },
       select: { id: true },
     });
+    woIds.push(wo.id);
     const prev = (await orderService.getLineCancelPreview(o2.id, line2)).data as {
       canCancel: boolean;
       affectedWorkOrders: Array<{ workOrderNumber: string; willBecomeStock: boolean }>;
@@ -143,6 +147,7 @@ async function main(): Promise<void> {
       data: { sackNo: `${TAG}-CV`, customerId: customer.id, shipmentId: shipment.id },
       select: { id: true },
     });
+    sackIds.push(sack.id);
     await prisma.sackAllocation.create({ data: { sackId: sack.id, orderLineId: line3, qty: 40 } });
     await orderService.cancelOrderLine(o3.id, line3);
     const o3after = await readOrder(o3.id);
@@ -179,6 +184,7 @@ async function main(): Promise<void> {
       data: { sackNo: `${TAG}-CV2`, customerId: customer.id, shipmentId: sh2.id },
       select: { id: true },
     });
+    sackIds.push(sk2.id);
     await prisma.sackAllocation.create({ data: { sackId: sk2.id, orderLineId: lineA, qty: 100 } });
     await prisma.sackAllocation.create({ data: { sackId: sk2.id, orderLineId: lineB, qty: 20 } });
     await orderService.cancelOrderLine(o6.id, lineB);
@@ -225,7 +231,7 @@ async function main(): Promise<void> {
     console.log("\n── 7) Hedef kumaşsız iş emrinin son bağı ──");
     const o5 = await mkOrder([{ quantity: 700 }]);
     const line5 = o5.lines[0]!.id;
-    await prisma.workOrder.create({
+    const wo2 = await prisma.workOrder.create({
       data: {
         workOrderNumber: `${TAG}-IE2`,
         type: "ORDER_PRODUCTION",
@@ -234,6 +240,7 @@ async function main(): Promise<void> {
         orderLinks: { create: [{ orderLineId: line5 }] },
       },
     });
+    woIds.push(wo2.id);
     const prev5 = (await orderService.getLineCancelPreview(o5.id, line5)).data as {
       canCancel: boolean;
       blockers: string[];
@@ -311,12 +318,10 @@ async function main(): Promise<void> {
     );
 
   } finally {
-    await prisma.sackAllocation.deleteMany({ where: { sack: { sackNo: { startsWith: TAG } } } });
+    if (sackIds.length > 0) await prisma.sackAllocation.deleteMany({ where: { sackId: { in: sackIds } } });
     await prisma.sack.deleteMany({ where: { sackNo: { startsWith: TAG } } });
     await prisma.shipment.deleteMany({ where: { shipmentNo: { startsWith: TAG } } });
-    await prisma.workOrderToOrderLine.deleteMany({
-      where: { workOrder: { workOrderNumber: { startsWith: TAG } } },
-    });
+    if (woIds.length > 0) await prisma.workOrderToOrderLine.deleteMany({ where: { workOrderId: { in: woIds } } });
     await prisma.workOrder.deleteMany({ where: { workOrderNumber: { startsWith: TAG } } });
     await prisma.order.deleteMany({ where: { orderNumber: { startsWith: TAG } } });
     await prisma.customer.deleteMany({ where: { code: { startsWith: TAG } } });

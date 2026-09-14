@@ -49,11 +49,18 @@ const row = (rowNo: number, cells: Record<string, string>) => ({ rowNo, cells })
  */
 const FIXTURE_FILE = "bekçi.xlsx";
 const baseApply = ImportService.apply.bind(ImportService);
-const applyStamped = (
+// Koşumun ürettiği ImportRun KİMLİKLERİ — defter satırları (ImportRunLine) bunlarla silinir (§10b):
+// `fileName` yüklemi sınırsızdı (aynı adı taşıyan başka koşumun satırını da silerdi).
+const runIds: string[] = [];
+const applyStamped = async (
   entity: Parameters<typeof baseApply>[0],
   rows: Parameters<typeof baseApply>[1],
   opts: Parameters<typeof baseApply>[2] = {},
-) => baseApply(entity, rows, { ...opts, fileName: FIXTURE_FILE });
+) => {
+  const r = await baseApply(entity, rows, { ...opts, fileName: FIXTURE_FILE });
+  if (r?.runId && !runIds.includes(r.runId)) runIds.push(r.runId);
+  return r;
+};
 
 async function main(): Promise<void> {
   console.log("=== İçe aktarım çerçevesi bekçisi ===\n");
@@ -369,10 +376,11 @@ async function main(): Promise<void> {
     // Cleanup — testin kendi yarattığı her şey.
     // ⚠️ SIRA ZORUNLU: `ImportRunLine.importRun` ilişkisi RESTRICT'tir ve motor
     // her koşumda defter satırı yazar ⇒ koşum satırı ÖNCE silinemez (P2003).
-    // Süzgeç `fileName` üzerinden: önceki başarısız temizliklerin bıraktığı
-    // kalıntıyı da toplar, yalnız bu koşumun yazdıklarını değil.
-    await prisma.importRunLine.deleteMany({ where: { importRun: { fileName: FIXTURE_FILE } } });
-    await prisma.importRun.deleteMany({ where: { fileName: FIXTURE_FILE } });
+    // Yalnız BU koşumun ürettiği koşum kimlikleri (§10b): önceki artık `clean_test_residue`nin işi.
+    if (runIds.length > 0) {
+      await prisma.importRunLine.deleteMany({ where: { importRunId: { in: runIds } } });
+      await prisma.importRun.deleteMany({ where: { id: { in: runIds } } });
+    }
     if (created.length > 0) {
       await prisma.color.deleteMany({ where: { id: { in: created } } });
     }

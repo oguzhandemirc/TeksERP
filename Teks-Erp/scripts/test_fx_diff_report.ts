@@ -291,12 +291,12 @@ main()
       if (invoiceIds.length > 0) {
         await prisma.cariTransaction.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
         await prisma.invoiceLine.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
-        await prisma.printedDocument.deleteMany({ where: { docType: "INVOICE_INTERNAL", sourceId: { in: invoiceIds } } });
+        await prisma.printedDocument.deleteMany({ where: { sourceId: { in: invoiceIds } } }); // yalnız KİMLİĞE bağlı (docType ayırıcısı gereksiz: sourceId uuid)
         await prisma.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
       }
       if (paymentIds.length > 0) {
         await prisma.cariTransaction.deleteMany({ where: { paymentId: { in: paymentIds } } });
-        await prisma.printedDocument.deleteMany({ where: { docType: "PAYMENT_RECEIPT", sourceId: { in: paymentIds } } });
+        await prisma.printedDocument.deleteMany({ where: { sourceId: { in: paymentIds } } });
         await prisma.payment.deleteMany({ where: { id: { in: paymentIds } } });
       }
       if (cariIds.length > 0) {

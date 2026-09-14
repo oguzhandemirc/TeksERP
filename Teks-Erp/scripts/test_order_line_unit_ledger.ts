@@ -71,13 +71,13 @@ function check(label: string, ok: boolean, detail = ""): void {
 
 const orderIds: string[] = [];
 const importTokens: string[] = [];
+// Defter (SackAllocation) KİMLİKLE silinir — çuval id'leri (§10b).
+const sackIds: string[] = [];
 const TOLERANCE_M = 5;
 
 async function cleanup(): Promise<void> {
   const kuyruk = `-${ts}`;
-  await prisma.sackAllocation.deleteMany({
-    where: { sack: { sackNo: { startsWith: "TST-OLU-SACK-", endsWith: kuyruk } } },
-  });
+  if (sackIds.length > 0) await prisma.sackAllocation.deleteMany({ where: { sackId: { in: sackIds } } });
   await prisma.sack.deleteMany({ where: { sackNo: { startsWith: "TST-OLU-SACK-", endsWith: kuyruk } } });
   await prisma.shipment.deleteMany({ where: { shipmentNo: { startsWith: "TST-OLU-SH-", endsWith: kuyruk } } });
   if (orderIds.length > 0) {
@@ -194,6 +194,7 @@ async function main(): Promise<void> {
         select: { id: true },
       });
       const sk = await prisma.sack.create({ data: { sackNo: `TST-OLU-SACK-${suffix}-${ts}`, shipmentId: sh.id }, select: { id: true } });
+      sackIds.push(sk.id);
       for (const a of allocs) {
         await prisma.sackAllocation.create({ data: { sackId: sk.id, orderLineId: a.lineId, qty: a.qty } });
       }

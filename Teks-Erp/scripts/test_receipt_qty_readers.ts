@@ -214,7 +214,9 @@ async function main(): Promise<void> {
 
   // ── ÜÇ SONUÇ — ikinci fiş, defter satırı BİLEREK silinir (sonda DB) ───────
   const g = await fisKur(wh.id);
-  await prisma.warehouseMovement.deleteMany({ where: { rollId: g.parent, reasonCode: "ENTRY_RECEIPT" } });
+  // Bilerek silinen satır KİMLİĞİYLE silinir: önce bul, sonra id ile sil (ad/kod yüklemi §10b'de sınırsız sayılır).
+  const fisSatiri = await prisma.warehouseMovement.findFirst({ where: { rollId: g.parent, reasonCode: "ENTRY_RECEIPT" }, select: { id: true } });
+  if (fisSatiri) await prisma.warehouseMovement.delete({ where: { id: fisSatiri.id } });
   const ufukOncesi = new Date(ledgerHorizonStart().getTime() - 24 * 3600 * 1000);
   await prisma.roll.update({ where: { id: g.parent }, data: { createdAt: ufukOncesi } });
   const e = await okuyucular(g);

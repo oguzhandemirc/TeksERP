@@ -799,9 +799,8 @@ async function run(): Promise<void> {
 }
 
 async function teardown(): Promise<void> {
-  await prisma.printedDocument
-    .deleteMany({ where: { sourceId: SHIPMENT || "00000000-0000-0000-0000-000000000000" } })
-    .catch(() => {});
+  // Kimlik yoksa silme yok — sıfır-uuid literal düşüşü yüklemi kimlikten koparıyordu (§10b).
+  if (SHIPMENT) await prisma.printedDocument.deleteMany({ where: { sourceId: SHIPMENT } }).catch(() => {});
   if (rollIds.length) {
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } }).catch(() => {});
   }

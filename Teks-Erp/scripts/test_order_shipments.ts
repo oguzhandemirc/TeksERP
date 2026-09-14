@@ -46,11 +46,14 @@ function check(label: string, ok: boolean, detail = ""): void {
  * sipariş/çuval/sevkiyat artığı `test_consistency` §1 ve §6'yı kırmızıya
  * düşürdü. Bu yüzden temizlik iş anahtarından türer ve `catch`ten de çağrılır.
  */
+// Defter satırları (SackAllocation · SubcontractorDirectShipAllocation) KİMLİKLE silinir (§10b):
+// id'ler modül düzeyinde toplanır ki yarım koşumun `catch`inden de erişilsin; doğmamış satır silinmez.
+const sackIds: string[] = [];
+const orderLineIds: string[] = [];
+
 async function cleanup(): Promise<void> {
   const kuyruk = `-${ts}`;
-  await prisma.subcontractorDirectShipAllocation.deleteMany({
-    where: { orderLine: { order: { orderNumber: `TEST-OSH-${ts}` } } },
-  });
+  if (orderLineIds.length > 0) await prisma.subcontractorDirectShipAllocation.deleteMany({ where: { orderLineId: { in: orderLineIds } } });
   await prisma.directShipment.deleteMany({ where: { shipmentNo: `TST-OSH-DSK-${ts}` } });
   await prisma.subcontractorDispatch.deleteMany({ where: { dispatchNo: `TST-OSH-SD-${ts}` } });
   await prisma.batch.deleteMany({ where: { batchNumber: `TST-OSH-BATCH-${ts}` } });
@@ -58,9 +61,7 @@ async function cleanup(): Promise<void> {
     where: { workOrder: { workOrderNumber: `TEST-OSH-WO-${ts}` } },
   });
   await prisma.workOrder.deleteMany({ where: { workOrderNumber: `TEST-OSH-WO-${ts}` } });
-  await prisma.sackAllocation.deleteMany({
-    where: { sack: { sackNo: { startsWith: "TST-OSH-SACK-", endsWith: kuyruk } } },
-  });
+  if (sackIds.length > 0) await prisma.sackAllocation.deleteMany({ where: { sackId: { in: sackIds } } });
   await prisma.sack.deleteMany({
     where: { sackNo: { startsWith: "TST-OSH-SACK-", endsWith: kuyruk } },
   });
@@ -110,6 +111,7 @@ async function main(): Promise<void> {
     },
     select: { id: true, lines: { select: { id: true }, orderBy: { createdAt: "asc" } } },
   });
+  orderLineIds.push(...order.lines.map((l) => l.id));
   created.push({ table: "order", id: order.id });
   const [l1, l2] = order.lines;
 
@@ -124,10 +126,13 @@ async function main(): Promise<void> {
       },
       select: { id: true },
     }));
-  const mkSack = async (suffix: string, shipmentId: string) =>
-    track("sack", await prisma.sack.create({
+  const mkSack = async (suffix: string, shipmentId: string) => {
+    const sk = track("sack", await prisma.sack.create({
       data: { sackNo: `TST-OSH-SACK-${suffix}-${ts}`, shipmentId }, select: { id: true },
     }));
+    sackIds.push(sk.id);
+    return sk;
+  };
   const mkAlloc = (sackId: string, orderLineId: string, qty: number) =>
     prisma.sackAllocation.create({ data: { sackId, orderLineId, qty }, select: { id: true } });
 

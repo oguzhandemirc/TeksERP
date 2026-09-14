@@ -41,7 +41,10 @@ import { ItemType } from "@prisma/client";
 import { ImportService } from "../src/services/import/import.service";
 
 const STAMP = `AUDITREPRO-BULGU-T1-008-${randomUUID().slice(0, 6).toUpperCase()}`;
-const FILE_STAMP = `${STAMP}.xlsx`; // import_runs temizliği bu damgadan yapılır
+const FILE_STAMP = `${STAMP}.xlsx`;
+// Koşumun ürettiği clientToken'lar — ImportRun kimlikleri bunlardan çözülür, defter satırı KİMLİKLE silinir (§10b).
+const tokens: string[] = [];
+const yeniToken = (): string => { const t = randomUUID(); tokens.push(t); return t; };
 let fail = 0;
 const ok = (m: string) => console.log(`✅ ${m}`);
 const bad = (m: string) => { fail++; console.log(`❌ ${m}`); };
@@ -81,7 +84,7 @@ async function main(): Promise<void> {
     let toplamFazla = 0;
     let maxKopya = 0;
     for (let rep = 0; rep < REPEATS; rep++) {
-      const token = randomUUID();
+      const token = yeniToken();
       const pre = await ordersOf("");
       const rows = makeRows(`${STAMP}-N${N}-R${rep}`, 1, custCode);
       await Promise.allSettled(
@@ -105,7 +108,7 @@ async function main(): Promise<void> {
   // ── §2  Gerçek saha senaryosu: UÇUŞTAKİ koşuma ikinci istek ──────────────
   console.log("\n── §2  1. koşum satırları yazarken 2. istek gelir (istemci 'Tekrar Dene') ──");
   {
-    const token = randomUUID();
+    const token = yeniToken();
     // ⚠️ Dosya, gecikmeden UZUN sürecek kadar büyük olmalı — yoksa 2. istek
     // koşum BİTTİKTEN sonra gelir, replay dalına düşer ve sonda "koruma
     // çalıştı" gibi görünür (ilk yazımda tam bu oldu: 12 satır ≈ 60 ms < 120 ms).
@@ -141,7 +144,7 @@ async function main(): Promise<void> {
       await ImportService.apply(
         "order",
         makeRows(`${STAMP}-T${R}`, R, custCode),
-        { clientToken: randomUUID(), mode: "upsert", fileName: FILE_STAMP },
+        { clientToken: yeniToken(), mode: "upsert", fileName: FILE_STAMP },
         user?.id,
       );
       olcum.push({ r: R, ms: Date.now() - t0 });
@@ -178,9 +181,10 @@ main()
         await prisma.orderLine.deleteMany({ where: { orderId: { in: orderIds } } });
         await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
       }
-      // ⚠️ `ImportRunLine.importRun` RESTRICT: defter satırı ÖNCE silinir.
-      await prisma.importRunLine.deleteMany({ where: { importRun: { fileName: FILE_STAMP } } });
-      const runs = await prisma.importRun.deleteMany({ where: { fileName: FILE_STAMP } });
+      // ⚠️ `ImportRunLine.importRun` RESTRICT: defter satırı ÖNCE silinir — koşum KİMLİKLERİYLE (§10b).
+      const runIds = (await prisma.importRun.findMany({ where: { clientToken: { in: tokens } }, select: { id: true } })).map((r) => r.id);
+      if (runIds.length > 0) await prisma.importRunLine.deleteMany({ where: { importRunId: { in: runIds } } });
+      const runs = runIds.length > 0 ? await prisma.importRun.deleteMany({ where: { id: { in: runIds } } }) : { count: 0 };
       await prisma.itemAllowedColor.deleteMany({ where: { itemId: { in: itemIds } } });
       await prisma.itemAllowedProperty.deleteMany({ where: { itemId: { in: itemIds } } });
       await prisma.systemLog.deleteMany({ where: { recordId: { in: [...itemIds, ...custIds, ...orderIds] } } });
