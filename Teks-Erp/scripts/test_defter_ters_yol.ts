@@ -24,6 +24,8 @@
 //   §2 "yarı" beyanı doğru mu (updatedAt gerçekten var/yok — ölü beyan kırmızı)
 //   §3 Mekanizma ŞEMADA gerçek mi (kolon/enum değeri yeniden adlandırılırsa KIRMIZI);
 //      §3k KARŞI KAYIT: yön kolonları şemada · ters yazan İLERİ yazan dosyada
+//      §3e ⭐ İKİNCİ YÖN: enum mekanizmasında ŞEMADAKİ her değer bir çiftte ya da
+//          gerekçeli çift-dışı listesinde (ölü/gereksiz muaf da kırmızı)
 //   §4 Ters yazan sembol var mı ve tanımı DIŞINDA referansı var mı (ölü ters yol);
 //      §4c yazıcısı olan defterin ters yazıcısı da beyanlı mı (boş liste sessiz yeşildir)
 //   §5 ⭐ Satır yaratan İLERİ yol kümesi beyanla BİREBİR mi (yeni yol → kırmızı,
@@ -47,7 +49,7 @@
 // =============================================================================
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { DEFTER_BEYANI, STOK_OLAY_BEYANI, type DefterBeyani } from "./lib/defter-beyan";
+import { CIFT_DISI_DEGERLER, DEFTER_BEYANI, STOK_OLAY_BEYANI, type CiftDisiDeger, type DefterBeyani } from "./lib/defter-beyan";
 import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
 import { SILEN, defterYazimlariniTara, sembolReferanslari, tipliProgram } from "./lib/defter-yazim-tarama";
 import { TEARDOWN_ADLARI, silmeleriTara, sondaSinifla } from "./lib/silme-bagi";
@@ -189,6 +191,82 @@ for (const b of defterler) {
         : disarida.length ? `ileri yazan kümesinde YOK: ${disarida.map((t) => `${t.sembol}@${t.dosya}`).join(" · ")}`
           : `${tersler.map((t) => t.sembol).join(", ")} — ileri yazan dosyada`);
   }
+}
+
+// §3e — İKİNCİ YÖN. §3 beyandan şemaya bakar; bu kol ŞEMADAN BEYANA bakar: enum'un
+// HER değeri ya bir çiftte ya da gerekçeli çift-dışı listesindedir. Kör olduğu yön,
+// kuralın ihlal edildiği yöndü — enum'a yeni bir İLERİ değer eklemek kapıyı hiç
+// uyandırmıyordu.
+interface CiftDisiOlcum { beyansiz: string[]; oluMuaf: string[]; gereksizMuaf: string[]; sahipsizBorc: string[] }
+function ciftDisiOlcum(degerler: string[], ciftler: [string, string][], muaflar: CiftDisiDeger[]): CiftDisiOlcum {
+  const ciftte = new Set(ciftler.flat());
+  const muafKume = new Set(muaflar.map((m) => m.deger));
+  return {
+    beyansiz: degerler.filter((v) => !ciftte.has(v) && !muafKume.has(v)),
+    // ÖLÜ MUAF: şemadan düşmüş değeri muaf tutmak, kapanmış sanılan bir borçtan kötüdür.
+    oluMuaf: muaflar.filter((m) => !degerler.includes(m.deger)).map((m) => m.deger),
+    // GEREKSİZ MUAF: değer artık bir çiftte — beyan kendi kendisiyle çelişiyor.
+    gereksizMuaf: muaflar.filter((m) => ciftte.has(m.deger)).map((m) => m.deger),
+    sahipsizBorc: muaflar.filter((m) => m.sinif === "BORC" && !m.sahibi?.trim()).map((m) => m.deger),
+  };
+}
+{
+  const enumluMekanizmalar = defterler
+    .map((b) => ({ b, m: b.mekanizma! }))
+    .filter((x): x is { b: DefterBeyani; m: { tur: "ENUM_CIFTI" | "KARSI_OLAY"; enumAdi: string; ciftler: [string, string][] } } =>
+      x.m.tur === "ENUM_CIFTI" || x.m.tur === "KARSI_OLAY");
+  check("§3e0 körlük zemini: enum mekanizmalı defter var", enumluMekanizmalar.length > 0,
+    `${enumluMekanizmalar.length} defter · ${CIFT_DISI_DEGERLER.length} çift-dışı beyan`);
+  const gorulenEnumlar = new Set<string>();
+  for (const { b, m } of enumluMekanizmalar) {
+    gorulenEnumlar.add(m.enumAdi);
+    const degerler = enumDegerleri.get(m.enumAdi) ?? [];
+    const muaflar = CIFT_DISI_DEGERLER.filter((x) => x.enumAdi === m.enumAdi);
+    const o = ciftDisiOlcum(degerler, m.ciftler, muaflar);
+    check(`§3e ${b.model} ${m.enumAdi} her değer çiftte ya da gerekçeli`, o.beyansiz.length === 0,
+      o.beyansiz.length
+        ? `BEYANSIZ değer: ${o.beyansiz.join(", ")} — ileri yol eklendi, ters mekanizması beyan edilmedi (çift kur ya da CIFT_DISI_DEGERLER'e GEREKÇEYLE yaz)`
+        : `${degerler.length} değer · ${m.ciftler.length} çift · ${muaflar.length} gerekçeli çift-dışı`);
+    if (o.oluMuaf.length || o.gereksizMuaf.length) {
+      check(`§3e2 ${b.model} ${m.enumAdi} çift-dışı beyanı BAYAT DEĞİL`, false,
+        [o.oluMuaf.length ? `şemada YOK: ${o.oluMuaf.join(", ")}` : "", o.gereksizMuaf.length ? `artık ÇİFTTE: ${o.gereksizMuaf.join(", ")}` : ""].filter(Boolean).join(" · "));
+    }
+    if (o.sahipsizBorc.length) check(`§3e3 ${b.model} ${m.enumAdi} BORC sınıfının sahibi var`, false, o.sahipsizBorc.join(", "));
+  }
+  // Sahipsiz beyan: hiçbir mekanizmanın konuşmadığı enum için çift-dışı satır yazmak,
+  // ölçülmeyen bir muafiyettir.
+  const sahipsizEnum = [...new Set(CIFT_DISI_DEGERLER.map((x) => x.enumAdi))].filter((e) => !gorulenEnumlar.has(e));
+  check("§3e4 çift-dışı beyanı olan her enum bir mekanizmaya ait", sahipsizEnum.length === 0,
+    sahipsizEnum.length ? `mekanizmasız enum: ${sahipsizEnum.join(", ")}` : `${gorulenEnumlar.size} enum`);
+  // YEŞİLKEN DE BORÇ GÖRÜNÜR — sayı değil ADRES basılır.
+  const borclar = CIFT_DISI_DEGERLER.filter((x) => x.sinif === "BORC");
+  if (borclar.length) {
+    console.log(`   ⓘ çift-dışı BORÇ (${borclar.length}) — ileri yol var, geri yol yok:`);
+    for (const x of borclar) console.log(`      • ${x.enumAdi}.${x.deger} [${x.sahibi}] → ${x.gerekce}`);
+  }
+}
+
+// §3e SONDALARI — ölçüm aracının kendisi yanlışlanır (fonksiyon saf, girdiler sentetik).
+{
+  const D2 = (deger: string, sinif: CiftDisiDeger["sinif"], sahibi?: string): CiftDisiDeger =>
+    ({ enumAdi: "X", deger, sinif, gerekce: "sonda", ...(sahibi ? { sahibi } : {}) });
+  const ciftler: [string, string][] = [["A", "A_CANCEL"]];
+  // ① Enum'a YENİ değer eklendi, beyan edilmedi → yakalanır.
+  check("§3e-s1 ⭐ beyansız yeni enum değeri YAKALANIR",
+    ciftDisiOlcum(["A", "A_CANCEL", "B"], ciftler, []).beyansiz.join() === "B",
+    `gelen: ${ciftDisiOlcum(["A", "A_CANCEL", "B"], ciftler, []).beyansiz.join() || "(boş)"}`);
+  // ② Aynı değer gerekçeli listeye yazıldı → susar (muafiyet ÇALIŞIYOR; yoksa kapı
+  //    kapatılamaz bir kırmızı üretir ve ilk sıkışmada susturulur).
+  check("§3e-s2 ⭐ gerekçeli çift-dışı beyan SUSTURUR",
+    ciftDisiOlcum(["A", "A_CANCEL", "B"], ciftler, [D2("B", "TERMINAL")]).beyansiz.length === 0);
+  // ③ Beyan bayatlarsa iki yönden de kırmızı.
+  check("§3e-s3 şemadan düşen muaf değer → ÖLÜ MUAF",
+    ciftDisiOlcum(["A", "A_CANCEL"], ciftler, [D2("B", "TERMINAL")]).oluMuaf.join() === "B");
+  check("§3e-s4 çifte giren muaf değer → GEREKSİZ MUAF",
+    ciftDisiOlcum(["A", "A_CANCEL"], ciftler, [D2("A_CANCEL", "TERMINAL")]).gereksizMuaf.join() === "A_CANCEL");
+  check("§3e-s5 sahipsiz BORC yakalanır",
+    ciftDisiOlcum(["A", "A_CANCEL", "B"], ciftler, [D2("B", "BORC")]).sahipsizBorc.join() === "B"
+    && ciftDisiOlcum(["A", "A_CANCEL", "B"], ciftler, [D2("B", "BORC", "9b")]).sahipsizBorc.length === 0);
 }
 
 console.log("\n=== §4 Ters yazan sembol var mı ve çağrılıyor mu ===");

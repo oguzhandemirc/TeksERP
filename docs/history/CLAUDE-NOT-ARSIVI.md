@@ -52,6 +52,35 @@ Kapının SEALED ayağı bugün yok — yalnız 409 `SHIFT_CANCELLED` var; müh�
 beyan tablosunda değil. ⇒ *Tek fonksiyonlu ters yolda "kapıyı taşıyor mu" sorusu yapısal
 olarak cevaplanır; iki fonksiyonlu ters yolda ÖLÇÜLMEK zorundadır.*
 
+## 2026-09-14 — Ters yol kapısının §3'ü TEK YÖNLÜYDÜ: enum'un kendi değerleri ölçülmüyordu [ÇEKİRDEK]
+
+`test_defter_ters_yol §3` "beyandaki çiftler ŞEMADA var mı" diye soruyordu. Sorulmayan
+yön şuydu: **şemadaki her değer bir ÇİFTTE mi?** ⇒ bir enum'a yeni bir İLERİ değer
+eklemek kapıyı hiç uyandırmıyordu — yani kapının kör olduğu yön, tam da kuralın
+("deftere yazan her ileri olayın ters mekanizması olur") ihlal edildiği yöndü. Beyanı
+ölçen bir kapı, beyanın SUSTUĞU yeri ölçmüyorsa beyanın kendisini ölçmüyordur.
+
+**Kapı artık iki yönlü (§3e).** Her enum değeri ya bir çiftte ya da `CIFT_DISI_DEGERLER`
+listesinde gerekçesiyle durur; sınıf kümesi KAPALIDIR — `DOGUS` (defterin ilk satırı,
+`fromStatus: null`; tersi nesnenin kendi terminal iptali) · `TERMINAL` (değerin kendisi
+geri yön) · `BORC` (ne doğuş ne terminal: ileri yol var, geri yol YOK — muafiyet değil,
+`sahibi` zorunlu ve kapı her koşumda adresiyle basar). Liste iki yönden de bayatlayamaz:
+şemadan düşmüş muaf değer ❌, artık bir çiftte olan muaf değer ❌.
+
+**Muaf liste BOŞ DOĞMADI — ilk koşum 6 değer ölçtü.** Beşi yapısal (ChequeEventType
+`RECEIVE`/`ISSUE` doğuş · `CANCEL` terminal · ShipmentEventType `PLANNED` doğuş ·
+`CANCELLED` terminal). Altıncısı gerçek bir boşluk: **`ChequeEventType.DEPOSIT`in
+`DEPOSIT_CANCEL`i yok.** Diğer BEŞ eylem değerinin (COLLECT · ENDORSE · BOUNCE · RETURN ·
+PAY) hepsinin `*_CANCEL` çifti var; AT_BANK'tan PORTFOLIO'ya dönüş yalnız `COLLECT_CANCEL`
+üzerinden oluyor (`backTo = collectEvent.fromStatus`) ⇒ yanlış bankaya verilen çek tahsil
+edilmeden geri alınamıyor. Borç görünür yazıldı, sahibi finans alanı.
+
+**Sondalar (beş sentetik + üç uçtan uca).** Sentetikler saf ölçüm fonksiyonunu
+yanlışlar; uçtan uca olanlar gerçek şemayı: `SackWeighingKind`e beyansız değer ekle →
+❌ · aynı değeri gerekçeli listeye yaz → ✅ · şemadan düşür, muaf satırı bırak → ❌.
+İkinci sonda birincisi kadar önemlidir: ***kapatılamayan bir kırmızı, ilk sıkışmada
+susturulur.***
+
 ## 2026-09-13 — Commit kapısı dört kez yanlış kişiyi durdurdu: İKİ mekanizma, iki farklı düzeltme [ÇEKİRDEK]
 
 Bir gecede dört kez commit kapısı, commit'i atan kişinin **kendi işiyle ilgisi olmayan**

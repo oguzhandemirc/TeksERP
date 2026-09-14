@@ -104,6 +104,49 @@ export interface DefterBeyani {
   silen?: string[];
 }
 
+// ── §3e — ENUM MEKANİZMASININ ÖRTMEDİĞİ DEĞERLER ─────────────────────────────
+/**
+ * NEDEN: §3 TEK YÖNLÜYDÜ. Beyandaki çiftlerin ŞEMADA olduğunu ölçüyor, şemadaki her
+ * değerin bir ÇİFTTE olduğunu ölçmüyordu ⇒ enum'a yeni bir İLERİ değer eklemek kapıyı
+ * hiç uyandırmıyordu. "Deftere yazan her ileri olayın ters mekanizması olur" kuralının
+ * tam da ihlal edildiği an sessizdi; kapının kör olduğu yön, kuralın ihlal edildiği
+ * yöndü.
+ *
+ * Çifte girmeyen her değer burada GEREKÇESİYLE durur ve sınıf kümesi KAPALIDIR:
+ *   DOGUS    — defterin İLK satırı (`fromStatus: null`): nesne ondan önce yoktu, tersi
+ *              bir karşı olay değil nesnenin KENDİ terminal iptalidir.
+ *   TERMINAL — değerin KENDİSİ geri yöndür (iptal / terminal durum); tersi aranmaz.
+ *   BORC     — ne doğuş ne terminal: ileri yol VAR, geri yol YOK. Muafiyet DEĞİL,
+ *              GÖRÜNÜR borç — `sahibi` zorunludur ve kapı her koşumda basar.
+ */
+export type CiftDisiSinif = "DOGUS" | "TERMINAL" | "BORC";
+
+export interface CiftDisiDeger {
+  enumAdi: string;
+  deger: string;
+  sinif: CiftDisiSinif;
+  /** Neden çiftsiz — ÖLÇÜMLE (yazan satır / geçiş yönü), anlatıyla değil. */
+  gerekce: string;
+  /** `BORC` sınıfında ZORUNLU: borcun adresi. */
+  sahibi?: string;
+}
+
+export const CIFT_DISI_DEGERLER: CiftDisiDeger[] = [
+  { enumAdi: "ChequeEventType", deger: "RECEIVE", sinif: "DOGUS",
+    gerekce: "çekin deftere GİRİŞİ — `fromStatus: null` (cheque.service `create`); tersi karşı olay değil, nesnenin terminal iptali `CANCEL`" },
+  { enumAdi: "ChequeEventType", deger: "ISSUE", sinif: "DOGUS",
+    gerekce: "verilen çekin deftere GİRİŞİ — `fromStatus: null`, `RECEIVE` ile aynı satırın diğer dalı" },
+  { enumAdi: "ChequeEventType", deger: "CANCEL", sinif: "TERMINAL",
+    gerekce: "`toStatus: CANCELLED` — değerin KENDİSİ geri yön; iptalin iptali yok (terminal durum)" },
+  { enumAdi: "ChequeEventType", deger: "DEPOSIT", sinif: "BORC",
+    gerekce: "PORTFOLIO → AT_BANK ileri geçişi; `DEPOSIT_CANCEL` YOK — ölçüldü 2026-09-14: ChequeEventType'ın diğer BEŞ eylem değerinin (COLLECT · ENDORSE · BOUNCE · RETURN · PAY) hepsinin `*_CANCEL` çifti var, DEPOSIT tek istisna. AT_BANK'tan PORTFOLIO'ya dönüş yalnız `COLLECT_CANCEL` üzerinden (cheque.service, `backTo = collectEvent.fromStatus`) ⇒ yanlış bankaya verilen çek tahsil edilmeden geri alınamıyor",
+    sahibi: "9b — finans alanı (`docs/kurallar/finans.md`)" },
+  { enumAdi: "ShipmentEventType", deger: "PLANNED", sinif: "DOGUS",
+    gerekce: "sevkiyatın DOĞUŞ olayı — `fromStatus: null` (shipping.service, kaynak şerhi \"DOĞUŞ OLAYI\"); tersi `CANCELLED`, karşı olay değil terminal" },
+  { enumAdi: "ShipmentEventType", deger: "CANCELLED", sinif: "TERMINAL",
+    gerekce: "`toStatus: CANCELLED` — değerin KENDİSİ geri yön; sevkiyat iptali terminaldir, PLANNED'a dönmez" },
+];
+
 const D = (
   model: string, gerekce: string, mekanizma: TersMekanizma,
   tersYazan: TersYazan[], yazan: string[], ek: Partial<DefterBeyani> = {},
