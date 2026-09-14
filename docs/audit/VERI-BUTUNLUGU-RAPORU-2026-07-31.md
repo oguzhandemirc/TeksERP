@@ -348,7 +348,7 @@ WHERE rm."exitedAt" IS NULL
 
 \echo ''
 \echo '== 12) Kapanmış movement''ta qtyOut <> qtyIn =='
-\echo '   (2026-07-30 kuralı: "qtyOut = qtyIn" — commit 64263fc. DOĞRULANMALI: kesin cutover.'
+\echo '   (2026-07-30 kuralı: "qtyOut = qtyIn" — commit `64263fc`. DOĞRULANMALI: kesin cutover.'
 \echo '    Cutover''dan ÖNCEki satırlar beklenen/bilinen sapma olabilir, ayrı değerlendir.)'
 SELECT rm.id, rm."rollId", rm."workOrderStepId", rm."qtyIn", rm."qtyOut", rm."exitedAt"
 FROM roll_movements rm

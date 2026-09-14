@@ -210,7 +210,7 @@ kullanım audit'e.
 
 ## Dilim 1 — iş paketleri (bağımlılık sırasıyla)
 
-**P1 · Modül anahtarları (backend):** ✅ UYGULANDI 2026-09-03 (`feature/modul-bayrak` c94035cc · 251767ca · 06e23448; karar notu arşivde "Modül anahtarları P1"). 6 yeni anahtar (`ticaret.enabled`,
+**P1 · Modül anahtarları (backend):** ✅ UYGULANDI 2026-09-03 (`feature/modul-bayrak` `c94035cc` · `251767ca` · `06e23448`; karar notu arşivde "Modül anahtarları P1"). 6 yeni anahtar (`ticaret.enabled`,
 `iplik.enabled`, `depo.multiEnabled`, `kumasTeknik.enabled`,
 `tezgah.enabled` yer tutucu, `production.enabled` terfisi) — her biri dört
 kapıdan; modül başına ADLANDIRILMIŞ middleware, **ad = `require` +
@@ -244,7 +244,7 @@ Grandfathering migration: mevcut DB'ye bugünkü değerler damgalanır.
   sebebi artık Ticaret modülü (eskiden Ön Muhasebe). Fabrikada görünür değişiklik
   yok." — kapsam `panel`; tablet için not gerekmez.
 
-**P2 · Süperadmin:** ✅ UYGULANDI 2026-09-03 (`feature/modul-bayrak` bfddd846 · 745bf3eb · 628f8c12; karar notu arşivde "Süperadmin P2"; planda OLMAYAN üç boşluk kapandı: mobil `has('*')`, backend `includes("admin:*")` ×3, `credentials` ucu düz PIN zinciri). yukarıdaki bölüm — şema kolonu + job + `["*"]` bypass +
+**P2 · Süperadmin:** ✅ UYGULANDI 2026-09-03 (`feature/modul-bayrak` `bfddd846` · `745bf3eb` · `628f8c12`; karar notu arşivde "Süperadmin P2"; planda OLMAYAN üç boşluk kapandı: mobil `has('*')`, backend `includes("admin:*")` ×3, `credentials` ucu düz PIN zinciri). yukarıdaki bölüm — şema kolonu + job + `["*"]` bypass +
 `hasAdminAccess` düzeltmesi + 5 gizleme süzgeci + guard dalı. Bekçi:
 `test_superadmin.ts` (gizlilik: 5 yüzeyde görünmez · yetki: her uca girer ·
 audit: satır yazılır, takma ad basılır · negatif sonda: süzgeç kalkınca kırmızı).

@@ -106,7 +106,7 @@ doğrulanır.
 | # | Senaryo | Adımlar | Beklenen | Sonuç |
 |---|---|---|---|---|
 | 12.1 | Etiket kopya adedi (#6) 🖨️ | Genel Ayarlar → Etiket Baskısı = 2 → bir top etiketi bas | 2 kopya çıkar (üst+alt) | |
-| ~~12.2~~ | ~~Top adı şablonu (#20)~~ | — | ⛔ Özellik kaldırıldı (624f7d9c); senaryo geçersiz | |
+| ~~12.2~~ | ~~Top adı şablonu (#20)~~ | — | ⛔ Özellik kaldırıldı (`624f7d9c`); senaryo geçersiz | |
 | 12.3 | KK2 genel hata (#18) | Mobil KK2 → hata ekle | "GENEL" butonu en başta; tip seçmeden hata girilebilir | |
 
 ## 13. Rota Fason Firma (#14) 🟡

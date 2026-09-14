@@ -103,7 +103,7 @@ olduğunu* ölçmez. Yeşil bekçiyi koşulun kendisi yerine koymak — belge c�
 yerine koymanın aynısı. Gerçek ölçüm:
 
 ```
-K = eski kapı çağıranı (5) + bağsız kapısız yol (2) = 7        (ağaç 8079987c)
+K = eski kapı çağıranı (5) + bağsız kapısız yol (2) = 7        (ağaç `8079987c`)
   src/services/shipping.service.ts:3341          writeWarehouseMovements
   src/services/shipping.service.ts:3821          writeWarehouseMovements
   src/services/subcontractor.service.ts:3266     writeWarehouseMovements

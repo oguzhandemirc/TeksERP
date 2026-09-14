@@ -131,7 +131,7 @@ Yöntem: klon DB'de 16 bekçi (`default_defect_type` 12/0 · `audit_labels` · `
 
 **Kalemler (ea)**
 
-- **K1 · `test_db_invariants` envanteri `defect_types_one_default` — KAPANDI `cb435108`** (f87cb6e5 envanter bekçisini koşmamıştı; #60 tam paket ❌ §1).
+- **K1 · `test_db_invariants` envanteri `defect_types_one_default` — KAPANDI `cb435108`** (`f87cb6e5` envanter bekçisini koşmamıştı; #60 tam paket ❌ §1).
 - **K2 · `writeWithDefault` atomik değil (küçük).** create/update ile `setDefaultDefectType` AYRI iki tx: `POST { isActive:false, isDefault:true }` → kayıt yazılır, sonra 400 "pasif tip varsayılan yapılamaz" — istemci 400 görür, satır kalır (P2). Çare: tek `$transaction` (create + `setDefaultDefectTypeTx`) ya da `wantDefault && isActive === false` ön kontrolü.
 - **K3 · Varsayılan pasife alınınca sessizce varsayılansız kalınır (küçük).** `PATCH isActive:false` / `DELETE` (softDelete) mevcut varsayılana dokununca `isDefault` durur ama `findDefaultDefectType` `isActive` ister → tipsiz giriş 400; pasife alma anında ne ret ne `warnings` (P3). Emsal: sebep kataloğu "son aktif satır gizlenemez". Çare: varsayılanı pasife almayı reddet (önce başka tipi varsayılan yap) ya da `isDefault`u düşürüp `warnings` ile söyle.
 - **K4 · KursunQc `'GENEL'` literali (karar §1 sapması, küçük; mobil sahibi).** `KursunQcScreen.tsx:246-253` "Saha #18 GENEL ilk tuş" `code === 'GENEL'`; karar `isDefault` satırını öne almayı ve iki ekranın aynı çözücüyü kullanmasını istiyor. Kalite kodu literali kapısı (`test_quality_code_literal`) bu literali görmüyor (kalite kodu değil, hata tipi kodu).

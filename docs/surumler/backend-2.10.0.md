@@ -5,7 +5,7 @@
 **Commit:** _(paketleme doldurur)_
 **Önceki saha sürümü:** **2.9.8** (etiket `backend-v2.9.8` = `97d891c2`, 2026-09-07;
 kurulum 2026-09-07 07:51). **2.9.9 hiç sahaya çıkmadı** — bu belgenin ilk hâli o
-numarayla yazılmıştı (7910da55); o sekiz düzeltme aşağıda §2'nin ilk bölümüdür,
+numarayla yazılmıştı (`7910da55`); o sekiz düzeltme aşağıda §2'nin ilk bölümüdür,
 ayrı belge yaşamaz. Küçük hane ELLE artırıldı (yönetici oturum hükmü, 2026-09-13):
 yama = düzeltme, küçük hane = yeni yetenek; bu turda yeni tablolar, yeni enum
 değerleri, yeni uçlar ve 42 migration var — 2.9.9 bunu bir yama gibi gösterirdi.

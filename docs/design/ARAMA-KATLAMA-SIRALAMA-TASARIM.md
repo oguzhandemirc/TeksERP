@@ -71,7 +71,7 @@ daha önce **kör olduğu** mükerreri görüyor. Çözümü: iki kaydı birleş
 - **SAP:** `KNA1-NAME1` girildiği gibi saklanır; **`MCOD1`** onun büyük harfli/normalize "matchcode" gölgesidir, arama ve F4 yardımı oradan koşar. Yani *görünen değer ≠ arama anahtarı*. Bizde D1 tam bunu kurar (`name` ↔ `nameFold`).
 - **Odoo:** `name` girildiği gibi; arama `unaccent(name) ILIKE unaccent(%s)` (`unaccent=True` sunucu bayrağı) + alanlarda `index='trigram'` seçeneği (pg_trgm GIN). D1+D2 birebir bu.
 - **PostgreSQL resmi belge:** `unaccent` STABLE'dır; index/generated kolonda kullanmak için **IMMUTABLE sarmalayıcı** yazılır (belgede önerilen desen). Doğrulandı: sarmalayıcı + GENERATED kolon + Prisma `@default(dbgenerated())` = **drift yok**.
-- **Türk ERP'leri (Logo/Netsis/Mikro):** cari unvan büyük harf pratiği yaygındır ama çoğunlukla kullanıcı alışkanlığıdır, zorlanmaz. Bizde kullanıcı kararıyla ZORLANIYOR (b66829d5) — D5 bunu geri almıyor, yalnız geri alınabilir kılıyor.
+- **Türk ERP'leri (Logo/Netsis/Mikro):** cari unvan büyük harf pratiği yaygındır ama çoğunlukla kullanıcı alışkanlığıdır, zorlanmaz. Bizde kullanıcı kararıyla ZORLANIYOR (`b66829d5`) — D5 bunu geri almıyor, yalnız geri alınabilir kılıyor.
 
 **Değişmeyen üçlü (karıştırılırsa yanlış sonuç):**
 

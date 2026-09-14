@@ -1,9 +1,9 @@
 # Dokuma raporları BACKEND'i — uygulanabilir tasarım özeti (2026-09-14, 47 → taze 01)
 
 > **Bu belge bir ÖZETTİR, yeni tasarım değil.** Kaynakları birleştirir ve bugünkü şemaya karşı ÖLÇÜLMÜŞ hâle indirger: d9 sözleşmesi (`docs/kurallar/dokuma.md` § Raporların sözleşmesi + iki değişmez, `c696cefb`) · ön koşul bekçisi `test_dokuma_rapor_onkosullari` (20 sonda; §4 mandalı taşıyıcı inince UYANIR) · `DOKUMA-TEZGAH-IZLEME-TASARIMI.md` §2.5 / §2.10 / §2.11 / §4 / §5 / §6.4 / §9 Faz 1a · 6e ile bağlayıcı mühür sözleşmesi (`helpers/machine-stop-context.helper.ts` `assertStopShiftWritableTx` docstring'i: `MachineShiftStat.sealState/sealGeneration/sealedAt/sealedById`, `findUnique({ machineId_shiftInstanceId })`, satır yoksa OPEN, SEALED → 409 `SHIFT_SEALED`).
-> **Kod YOK.** Taban `origin/main` 29fac167. Kapsam: şema + migration · terim hesabı · materyalizasyon anı/tetik · mühür çevrimi · okuyucular · kapanış ölçütleri (MEKANİZMA adıyla) · sondalar · dilim sırası. Panel/tablet yüzeyi AYRI dilim.
+> **Kod YOK.** Taban `origin/main` `29fac167`. Kapsam: şema + migration · terim hesabı · materyalizasyon anı/tetik · mühür çevrimi · okuyucular · kapanış ölçütleri (MEKANİZMA adıyla) · sondalar · dilim sırası. Panel/tablet yüzeyi AYRI dilim.
 
-## 0 · Bugün ne var, ne yok (ölçüldü 29fac167)
+## 0 · Bugün ne var, ne yok (ölçüldü `29fac167`)
 
 | var | yok |
 |---|---|

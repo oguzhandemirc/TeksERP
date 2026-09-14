@@ -17,7 +17,7 @@ Stok kümesine giren ya da ondan çıkan HER top hareketi **tipli iki uçla** (`
 | İade (RollReturn) | `return.service.ts:576` `createReturn` | `RETURN` · `toWarehouseId` · `rollReturnId` · statüsüz (0 satır — fabrika henüz iade almamış) | **YOK** — `cancelReturn` (`:838`) topu SHIPPED'e döndürür, defter satırı YAZMAZ |
 | Depolar arası transfer | `warehouse-transfer.service.ts:281` `create` | `TRANSFER` (top + çuval üyesi) · statüsüz (0 satır, tek depo) | `cancel` (`:543`) `TRANSFER_REVERSAL` yazar — BAĞSIZ, defterden okur |
 | Transfer iptali | `warehouse-transfer.service.ts:543` | `TRANSFER_REVERSAL` statüsüz | — (kendisi ters yol) |
-| Fason dönüşü doğumu | `subcontractor.service.ts:3254` `receiveRolls` | `ENTRY` yalnız `bornStatus = WAREHOUSE` ise (cb1d0304) · statüsüz | **YOK** — `cancelReceipt` (`:5148`) doğan topu `CANCELLED` yapar (`:5296`), defter satırı YAZMAZ |
+| Fason dönüşü doğumu | `subcontractor.service.ts:3254` `receiveRolls` | `ENTRY` yalnız `bornStatus = WAREHOUSE` ise (`cb1d0304`) · statüsüz | **YOK** — `cancelReceipt` (`:5148`) doğan topu `CANCELLED` yapar (`:5296`), defter satırı YAZMAZ |
 | **Kartela sevki (ölçüm dışı 7.)** | `kartela.service.ts:326-330` `WAREHOUSE → AT_KARTELA` · `:439` geri dönüş | **HİÇ satır yazmaz** (ne eski ne yeni kapı) | yok |
 
 - `tx.warehouseMovement.create*` yalnız `warehouse-ledger.helper.ts`te (4 site); yeni kapı (`postStockMove*`) 8 serviste, eski kapı (`writeWarehouseMovement(s)`) yukarıdaki 6 sitede. AST ile ölçüldü (`test_stok_defteri_bag_olcumu`).

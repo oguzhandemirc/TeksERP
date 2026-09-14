@@ -93,8 +93,9 @@ BASILMAZ**) · ③ hiç yok → sessiz yeşil.
 bir dizi. Rakam sınırı düzgün çalışır; yanlış olan metnin KENDİSİDİR.
 
 *(d9, 2026-09-14 — ⚠️ **ÖLÇÜLMEDİ ve ölçülmedi diye yazılıyor:** bu biçim koşulmadı,
-yazım anında yakalandı ve yüklem kolon kolona çevrildi (`newData ~ d OR oldData ~ d OR
-changes ~ d`, `14729bcc`). Kanıt ANALİTİKTİR, istatistiksel değil; buraya bir oran
+yazım anında yakalandı ve yüklem kolon kolona çevrildi
+(`newData ~ d OR oldData ~ d OR changes ~ d`, `14729bcc`). Kanıt ANALİTİKTİR,
+istatistiksel değil; buraya bir oran
 yazmak sınıfın kendisini çürütürdü.)*
 
 > ***Bir sınır yüklemi, sınırladığı metnin İNŞASINI da kapsamak zorundadır.*** Teşhis
