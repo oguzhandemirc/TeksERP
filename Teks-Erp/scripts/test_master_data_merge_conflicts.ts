@@ -203,8 +203,12 @@ async function main(): Promise<void> {
       nullsBefore === nullsAfter,
       `${nullsBefore} → ${nullsAfter}`,
     );
-    await prisma.rollMovement.deleteMany({ where: { rollId: r.id } }).catch(() => undefined);
-    await prisma.roll.delete({ where: { id: r.id } }).catch(() => undefined);
+    // ADI kapının okuduğu şeydir: teardown bağlamı fonksiyon adından tanınır (§10b2).
+    const temizlikTop = async (): Promise<void> => {
+      await prisma.rollMovement.deleteMany({ where: { rollId: r.id } }).catch(() => undefined);
+      await prisma.roll.delete({ where: { id: r.id } }).catch(() => undefined);
+    };
+    await temizlikTop();
   }
 
   // ── ④ Şube ihracat kodu çakışması BLOK ───────────────────────────────────

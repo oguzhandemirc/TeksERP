@@ -219,10 +219,14 @@ async function main(): Promise<void> {
   }
 
   // Fixture temizliği — bu koşumun ürünü, kalıcı değil (FK sırası: top → kalem).
-  await prisma.rollProperty.deleteMany({ where: { rollId: kbRoll.id } }).catch(() => {});
-  await prisma.warehouseMovement.deleteMany({ where: { rollId: kbRoll.id } }).catch(() => {});
-  await prisma.roll.deleteMany({ where: { id: kbRoll.id } }).catch(() => {});
-  await prisma.item.deleteMany({ where: { id: kbItem.id } }).catch(() => {});
+  // ADI kapının okuduğu şeydir: teardown bağlamı fonksiyon adından tanınır (§10b2).
+  const temizlikFikstur = async (): Promise<void> => {
+    await prisma.rollProperty.deleteMany({ where: { rollId: kbRoll.id } }).catch(() => {});
+    await prisma.warehouseMovement.deleteMany({ where: { rollId: kbRoll.id } }).catch(() => {});
+    await prisma.roll.deleteMany({ where: { id: kbRoll.id } }).catch(() => {});
+    await prisma.item.deleteMany({ where: { id: kbItem.id } }).catch(() => {});
+  };
+  await temizlikFikstur();
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();

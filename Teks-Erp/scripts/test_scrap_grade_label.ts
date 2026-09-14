@@ -367,13 +367,17 @@ async function main(): Promise<void> {
     check("§6g normal top kapıdan ETKİLENMİYOR", ok);
   }
   // Fixture temizliği — FK sırası: hareketler → top → kademe → kalem.
-  const sgIds = sgRolls.map((r) => r.id);
-  await prisma.rollProperty.deleteMany({ where: { rollId: { in: sgIds } } }).catch(() => {});
-  await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: sgIds } } }).catch(() => {});
-  await prisma.rollMovement.deleteMany({ where: { rollId: { in: sgIds } } }).catch(() => {});
-  await prisma.roll.deleteMany({ where: { id: { in: sgIds } } }).catch(() => {});
-  await prisma.qualityGrade.deleteMany({ where: { id: { in: kademeler.map((k) => k.id) } } }).catch(() => {});
-  await prisma.item.deleteMany({ where: { id: sgItem.id } }).catch(() => {});
+  // ADI kapının okuduğu şeydir: teardown bağlamı fonksiyon adından tanınır (§10b2).
+  const temizlikFikstur = async (): Promise<void> => {
+    const sgIds = sgRolls.map((r) => r.id);
+    await prisma.rollProperty.deleteMany({ where: { rollId: { in: sgIds } } }).catch(() => {});
+    await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: sgIds } } }).catch(() => {});
+    await prisma.rollMovement.deleteMany({ where: { rollId: { in: sgIds } } }).catch(() => {});
+    await prisma.roll.deleteMany({ where: { id: { in: sgIds } } }).catch(() => {});
+    await prisma.qualityGrade.deleteMany({ where: { id: { in: kademeler.map((k) => k.id) } } }).catch(() => {});
+    await prisma.item.deleteMany({ where: { id: sgItem.id } }).catch(() => {});
+  };
+  await temizlikFikstur();
 
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);

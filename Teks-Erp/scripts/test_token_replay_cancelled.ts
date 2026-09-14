@@ -202,14 +202,18 @@ async function main(): Promise<void> {
     // (`entryAttempt` sözleşmesi). 5xx dönseydi token yapışır ve aynı ölü
     // sevkiyat sonsuza dek yeniden sorulurdu.
     check("§6: hata KESİN (4xx) — token bırakılabilsin", e6?.statusCode === 409, `status=${e6?.statusCode}`);
-    await prisma.roll.updateMany({ where: { id: topSevk.id }, data: { sackId: null, shipmentId: null } }).catch(() => undefined);
-    await prisma.rollMovement.deleteMany({ where: { rollId: topSevk.id } }).catch(() => undefined);
-    await prisma.roll.deleteMany({ where: { id: topSevk.id } }).catch(() => undefined);
-    await prisma.sack.updateMany({ where: { id: cuval.id }, data: { shipmentId: null } }).catch(() => undefined);
-    await prisma.shipmentOrder.deleteMany({ where: { shipmentId: kurulan.data.id } }).catch(() => undefined);
-    await prisma.shipment.deleteMany({ where: { id: kurulan.data.id } }).catch(() => undefined);
-    await prisma.sack.deleteMany({ where: { id: cuval.id } }).catch(() => undefined);
-    await prisma.customer.deleteMany({ where: { id: musteri.id } }).catch(() => undefined);
+    // ADI kapının okuduğu şeydir: teardown bağlamı fonksiyon adından tanınır (§10b2).
+    const temizlikSenaryo = async (): Promise<void> => {
+      await prisma.roll.updateMany({ where: { id: topSevk.id }, data: { sackId: null, shipmentId: null } }).catch(() => undefined);
+      await prisma.rollMovement.deleteMany({ where: { rollId: topSevk.id } }).catch(() => undefined);
+      await prisma.roll.deleteMany({ where: { id: topSevk.id } }).catch(() => undefined);
+      await prisma.sack.updateMany({ where: { id: cuval.id }, data: { shipmentId: null } }).catch(() => undefined);
+      await prisma.shipmentOrder.deleteMany({ where: { shipmentId: kurulan.data.id } }).catch(() => undefined);
+      await prisma.shipment.deleteMany({ where: { id: kurulan.data.id } }).catch(() => undefined);
+      await prisma.sack.deleteMany({ where: { id: cuval.id } }).catch(() => undefined);
+      await prisma.customer.deleteMany({ where: { id: musteri.id } }).catch(() => undefined);
+    };
+    await temizlikSenaryo();
   }
 
   // ═══ §5 — kural TEK KAYNAKTA, elle kopyalanmamış ═══

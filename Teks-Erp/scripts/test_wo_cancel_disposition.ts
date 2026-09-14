@@ -375,8 +375,12 @@ async function main(): Promise<void> {
       check("G rollCount yalnız canlı top (1)", impact.rollCount === 1, String(impact.rollCount));
       check("G liste yalnız canlı topu taşıyor", impact.rolls.length === 1 && impact.rolls[0]!.id === live, impact.rolls.map((r) => r.id).join(","));
       check("G özellikli ÖLÜ top processedCount'a girmedi (0)", impact.processedCount === 0, String(impact.processedCount));
-      await prisma.rollProperty.deleteMany({ where: { rollId: dead1 } });
-      await prisma.fabricProperty.deleteMany({ where: { code: "TEST-WOCD-OLU-OZ" } }).catch(() => {});
+      // ADI kapının okuduğu şeydir: teardown bağlamı fonksiyon adından tanınır (§10b2).
+      const temizlikOluOzellik = async (): Promise<void> => {
+        await prisma.rollProperty.deleteMany({ where: { rollId: dead1 } });
+        await prisma.fabricProperty.deleteMany({ where: { code: "TEST-WOCD-OLU-OZ" } }).catch(() => {});
+      };
+      await temizlikOluOzellik();
     }
   } finally {
     // Cleanup — test kendi yarattığını siler.

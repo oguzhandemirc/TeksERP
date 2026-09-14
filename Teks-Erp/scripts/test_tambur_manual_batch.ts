@@ -344,9 +344,12 @@ async function main(): Promise<void> {
     }
     // Bu topu fixture teardown'ından ÖNCE söküyoruz: adıma bağlı olduğu için
     // WO silinemez (FK RESTRICT). Sıra hareket → operasyon → top.
-    await prisma.rollMovement.deleteMany({ where: { rollId: bareData.rollId } });
-    await prisma.rollOperation.deleteMany({ where: { rollId: bareData.rollId } });
-    await prisma.roll.deleteMany({ where: { id: bareData.rollId } });
+    const temizlikBareTop = async (): Promise<void> => {
+      await prisma.rollMovement.deleteMany({ where: { rollId: bareData.rollId } });
+      await prisma.rollOperation.deleteMany({ where: { rollId: bareData.rollId } });
+      await prisma.roll.deleteMany({ where: { id: bareData.rollId } });
+    };
+    await temizlikBareTop();
     createdRolls.splice(createdRolls.indexOf(bareData.rollId), 1);
     await bare.teardown();
   } finally {

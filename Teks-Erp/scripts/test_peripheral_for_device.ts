@@ -186,10 +186,13 @@ async function main() {
   const d2c = (await svc.getForDevice({ deviceId: testDev2.id }, "METER")).data as unknown[];
   check("kaldırınca diğer cihazda kalır (paylaşım korunur)", d1c.length === 0 && d2c.length === 1, `dev1=${d1c.length} dev2=${d2c.length}`);
 
-  // cleanup (TEST- kayıtları)
-  await prisma.devicePeripheral.deleteMany({ where: { peripheralId: testPeri.id } }); // pivot KİMLİKLE silinir (§10b)
-  await prisma.peripheralDevice.deleteMany({ where: { code: "TEST-DEV-METRE" } });
-  await prisma.device.deleteMany({ where: { deviceId: { in: ["TEST-DEV-FORDEVICE", "TEST-DEV-FORDEVICE-2"] } } });
+  // cleanup (TEST- kayıtları) — ADI kapının okuduğu şeydir (§10b2).
+  const cleanupTestKayitlari = async (): Promise<void> => {
+    await prisma.devicePeripheral.deleteMany({ where: { peripheralId: testPeri.id } }); // pivot KİMLİKLE silinir (§10b)
+    await prisma.peripheralDevice.deleteMany({ where: { code: "TEST-DEV-METRE" } });
+    await prisma.device.deleteMany({ where: { deviceId: { in: ["TEST-DEV-FORDEVICE", "TEST-DEV-FORDEVICE-2"] } } });
+  };
+  await cleanupTestKayitlari();
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();

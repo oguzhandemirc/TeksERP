@@ -92,7 +92,7 @@ async function fiksturKur(damga: string, f: Partial<Fikstur>): Promise<void> {
 }
 
 /** FK sırasıyla söker; her adım kendi hatasını yutar ki bir kalıntı diğerlerini bırakmasın. */
-async function fiksturSok(f: Partial<Fikstur>): Promise<void> {
+async function temizleFikstur(f: Partial<Fikstur>): Promise<void> {
   const adimlar: Array<[string, () => Promise<unknown>]> = [
     // Kimlik yoksa adım YOK — `?? ""` gibi bir literal düşüşü yüklemi kimlikten koparır (§10b).
     ["rollOperation", () => (f.rollId ? prisma.rollOperation.deleteMany({ where: { rollId: f.rollId } }) : Promise.resolve())],
@@ -170,7 +170,7 @@ async function main(): Promise<void> {
       await prisma.roll.deleteMany({ where: { id: roll2.id } });
     }
   } finally {
-    await fiksturSok(f);
+    await temizleFikstur(f);
     const [top, ist, kalem] = await Promise.all([
       prisma.roll.count({ where: { barcode: { startsWith: `TEST-QC2-${damga}` } } }),
       prisma.station.count({ where: { code: `TEST-QC2-${damga}` } }),
