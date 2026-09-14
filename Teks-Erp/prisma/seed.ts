@@ -597,13 +597,22 @@ async function main() {
   // --- Hata tipleri ---
   // Saha #18: GENEL — KK2'de hata tipini belirtmek istemeyen operatör için
   // varsayılan/hızlı tuş (mobil ekran code'a göre öne çıkarır).
-  await prisma.defectType.createMany({
-    data: [
-      { code: "GENEL",  name: "Genel Hata", severity: "MINOR" },
-      { code: "YIRTIK", name: "Yırtık",  severity: "MAJOR" },
-      { code: "LEKE",   name: "Lekeli",  severity: "MINOR" },
-    ],
-  });
+  // ⚠️ `createMany` DEĞİL `upsert`: migration `20260914096000_defect_type_is_default`
+  // varsayılan yoksa `GENEL` kodlu tipi KENDİ yaratır ve CI'da sıra `migrate deploy`
+  // → `seed`'tir ⇒ boş DB'de satır seed'den ÖNCE doğar, `createMany` P2002 verirdi.
+  // `isDefault` GÖNDERİLMEZ: hangi tipin varsayılan olduğu migration'ın/panelin
+  // kararıdır, seed onu ezmez.
+  for (const t of [
+    { code: "GENEL",  name: "Genel Hata", severity: "MINOR" as const },
+    { code: "YIRTIK", name: "Yırtık",     severity: "MAJOR" as const },
+    { code: "LEKE",   name: "Lekeli",     severity: "MINOR" as const },
+  ]) {
+    await prisma.defectType.upsert({
+      where: { code: t.code },
+      update: { name: t.name, severity: t.severity, isActive: true },
+      create: t,
+    });
+  }
   console.log("✅ 3 hata tipi (Genel Hata, Yırtık, Lekeli)");
 
   // --- Rota şablonları (generic + 1 ARDA-özel) ---
