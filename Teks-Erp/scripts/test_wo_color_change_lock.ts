@@ -270,15 +270,58 @@ main()
     fail++;
   })
   .finally(async () => {
-    // Temizlik: sapma defteri → hareketler → toplar → adımlar → WO (FK sırası).
-    await prisma.$transaction([
-      prisma.rollVariance.deleteMany({ where: { roll: { OR: [{ id: { in: rollIds } }, { barcode: { startsWith: STAMP } }] } } }),
-      prisma.rollMovement.deleteMany({ where: { roll: { barcode: { startsWith: STAMP } } } }),
-    ]).catch(() => undefined);
-    await prisma.$executeRaw`DELETE FROM rolls WHERE barcode LIKE ${`${STAMP}%`} OR "parentReceiptId" IN (SELECT id FROM subcontractor_receipts WHERE "workOrderId" = ANY(${woIds}::uuid[]))`.catch(
-      () => undefined,
+    // ⚠️ Temizlik KİMLİKLE yapılır, BARKODLA değil: fason kabulünde doğan toplar
+    // BARKODSUZ gelir, `startsWith(STAMP)` süzgeci onları görmez; hareketleri kalır,
+    // `DELETE FROM rolls` FK'ya çarpar ve yutulan `.catch` kalıntıyı SESSİZ bırakırdı
+    // (ölçüldü 2026-09-14: tek sonda DB'sinde 91 WO · 78 açık hareket birikmişti ve
+    // `test_wip_scorecard`i iki kez ortam verisiyle kırmızıya düşüren yığın buydu).
+    let temizlikHatasi: string | null = null;
+    let tumRollIds: string[] = [];
+    const woF = { in: woIds };
+    try {
+      tumRollIds = (
+        await prisma.roll.findMany({
+          where: {
+            OR: [
+              { id: { in: rollIds } },
+              { barcode: { startsWith: STAMP } },
+              { parentReceipt: { workOrderId: { in: woIds } } },
+            ],
+          },
+          select: { id: true },
+        })
+      ).map((r) => r.id);
+      // FK sırası: çocuk → ebeveyn. Hata YUTULMAZ — yakalanır ve KIRMIZI raporlanır.
+      await prisma.rollVariance.deleteMany({ where: { rollId: { in: tumRollIds } } });
+      await prisma.rollOperation.deleteMany({ where: { OR: [{ rollId: { in: tumRollIds } }, { step: { workOrderId: woF } }] } });
+      await prisma.rollPlanDeviation.deleteMany({ where: { OR: [{ rollId: { in: tumRollIds } }, { workOrderId: woF }] } });
+      await prisma.rollMovement.deleteMany({ where: { OR: [{ rollId: { in: tumRollIds } }, { step: { workOrderId: woF } }] } });
+      await prisma.subcontractorReceiptItem.deleteMany({ where: { receipt: { workOrderId: woF } } });
+      await prisma.subcontractorReceiptProperty.deleteMany({ where: { receipt: { workOrderId: woF } } });
+      await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatch: { workOrderId: woF } } });
+      await prisma.roll.deleteMany({ where: { id: { in: tumRollIds } } });
+      await prisma.subcontractorReceipt.deleteMany({ where: { workOrderId: woF } });
+      await prisma.subcontractorDispatch.deleteMany({ where: { workOrderId: woF } });
+      await prisma.workOrderTargetProperty.deleteMany({ where: { workOrderId: woF } });
+      await prisma.travelerCardScan.deleteMany({ where: { card: { workOrderId: woF } } });
+      await prisma.travelerCard.deleteMany({ where: { workOrderId: woF } });
+      await prisma.workOrderToOrderLine.deleteMany({ where: { workOrderId: woF } });
+      await prisma.batch.deleteMany({ where: { workOrderId: woF } });
+      await prisma.workOrderStep.deleteMany({ where: { workOrderId: woF } });
+      await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
+    } catch (e) {
+      temizlikHatasi = (e instanceof Error ? e.message : String(e)).split("\n").slice(0, 3).join(" ").slice(0, 220);
+    }
+    // ⭐ "Temizlik 0 bırakır" bir DİLEK değil İDDİADIR — ölçülmezse sessizce çürür.
+    check("§3a temizlik HATASIZ tamamlandı", temizlikHatasi === null, temizlikHatasi ?? "");
+    const kalanWo = await prisma.workOrder.count({ where: { id: { in: woIds } } });
+    const kalanHareket = await prisma.rollMovement.count({ where: { step: { workOrderId: woF } } });
+    const kalanTop = await prisma.roll.count({ where: { id: { in: tumRollIds } } });
+    check(
+      "§3 ⭐ temizlik KALINTI bırakmadı (WO · hareket · top)",
+      kalanWo === 0 && kalanHareket === 0 && kalanTop === 0,
+      `WO ${kalanWo} · hareket ${kalanHareket} · top ${kalanTop} (${tumRollIds.length} top silindi)`,
     );
-    await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } }).catch(() => undefined);
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();
     await pool.end();

@@ -25,6 +25,62 @@ function check(label: string, ok: boolean, extra = ""): void {
 }
 
 const round1x = (n: number) => Math.round(n * 10) / 10;
+
+/** `oldestWaiting` satırının bu bekçiyi ilgilendiren yüzü. */
+export type BeklemeSatiri = { barcode: string | null; daysWaiting: number };
+
+export type ListeKarari = {
+  sirali: boolean;
+  tavanTamam: boolean;
+  /** ⭐ VERİDEN BAĞIMSIZ: yaş negatif OLAMAZ (gelecek tarihli `enteredAt` / işaret hatası). */
+  negatifYok: boolean;
+  fiksturSatirlari: number;
+  /** `null` = ÖLÇÜLEMEDİ: fikstür satırlarımız 25'lik listeye hiç girmedi. */
+  fiksturHepsiPozitif: boolean | null;
+};
+
+/**
+ * Listenin SÖZLEŞMESİ — SAF (girdi liste, çıktı karar; DB yok, ortam yok).
+ * ⚠️ "her satırın bekleme günü POZİTİF" iddiası veriden bağımsız DEĞİLDİR: az önce
+ * istasyona giren gerçek bir top `round1` sonrası 0,0 gün verir ve ürün doğruyken
+ * bekçiyi kırmızıya düşürür. Veriden bağımsız olan iddia NEGATİF OLMAMAK'tır;
+ * "pozitif" yalnız KENDİ fikstürlerimiz için söylenebilir (3 ve 10 gün geriye yazılırlar).
+ */
+export function listeKarari(liste: BeklemeSatiri[], fiksturEtiketi: string, tavan = 25): ListeKarari {
+  const fikstur = liste.filter((r) => r.barcode?.startsWith(fiksturEtiketi));
+  return {
+    sirali: liste.every((r, i) => i === 0 || (liste[i - 1]?.daysWaiting ?? 0) >= r.daysWaiting),
+    tavanTamam: liste.length <= tavan,
+    negatifYok: liste.every((r) => r.daysWaiting >= 0),
+    fiksturSatirlari: fikstur.length,
+    fiksturHepsiPozitif: fikstur.length === 0 ? null : fikstur.every((r) => r.daysWaiting > 0),
+  };
+}
+
+/** Eski (kusurlu) iddia — yalnız sondada, farkı GÖSTERMEK için yaşar. */
+const eskiIddia = (liste: BeklemeSatiri[]): boolean => liste.every((r) => r.daysWaiting > 0);
+
+const sat = (barcode: string | null, daysWaiting: number): BeklemeSatiri => ({ barcode, daysWaiting });
+
+/** §0 — saf sondalar. DB'ye dokunmaz; ön koşul düşse de koşar. */
+function sondalar(): void {
+  console.log("── 0) Sondalar (saf, DB'siz) ──");
+  const ETI = "TEST-WIP-X";
+  // ⭐ ASIL SONDA: TAZE hareket (0,0 gün) — eski iddia ısırır, yeni iddia ısırmaz.
+  const taze = [sat(`${ETI}-R0`, 10), sat(`${ETI}-R1`, 3), sat("KOMSU-1", 0)];
+  check("§0a ⭐ TAZE satır (0 gün) → ESKİ iddia KIRMIZI (ürün doğruyken)", eskiIddia(taze) === false);
+  check("§0b ⭐ TAZE satır → yeni sözleşme YEŞİL (negatif yok)", listeKarari(taze, ETI).negatifYok);
+  check("§0c ⭐ TAZE satır → fikstür kolu YEŞİL (bizimkiler 3 ve 10 gün)", listeKarari(taze, ETI).fiksturHepsiPozitif === true);
+  // Kol BOŞ bir totoloji değil: gelecek tarihli `enteredAt` negatif yaş üretir (bkz. ENTERED yorumu).
+  check("§0d ⭐ NEGATİF yaş → yeni kol ISIRIR", listeKarari([sat("KOMSU-1", -0.5)], ETI).negatifYok === false);
+  check("§0e ⭐ FİKSTÜR satırı 0 gün → fikstür kolu ISIRIR", listeKarari([sat(`${ETI}-R0`, 0)], ETI).fiksturHepsiPozitif === false);
+  check("§0f ⭐ fikstür listede YOK → ÜÇÜNCÜ sonuç (null, ölçülemedi)", listeKarari([sat("KOMSU-1", 5)], ETI).fiksturHepsiPozitif === null);
+  check("§0g sıra bozuk → sirali ISIRIR", listeKarari([sat("A", 1), sat("B", 9)], ETI).sirali === false);
+  check("§0h tavan aşıldı → tavanTamam ISIRIR", listeKarari(Array.from({ length: 26 }, () => sat("A", 1)), ETI, 25).tavanTamam === false);
+  check("§0i boş liste körlük zemini: fikstür kolu ÖLÇÜLEMEDİ der, YEŞİL demez", listeKarari([], ETI).fiksturHepsiPozitif === null);
+  console.log("");
+}
+
 const TAG = `TEST-WIP-${Date.now()}`;
 const DAY = 86_400_000;
 // ⚠️ Fixture GEÇMİŞE kurulur, diğer karne testlerindeki gibi geleceğe DEĞİL.
@@ -52,6 +108,8 @@ const ids = {
 
 async function main(): Promise<void> {
   console.log("\n=== WIP Karnesi bekçisi ===\n");
+
+  sondalar();
 
   const item = await prisma.item.findFirst({ where: { isActive: true }, select: { id: true } });
   if (!item) { console.log("❌ Ön koşul yok"); fail++; return; }
@@ -177,14 +235,24 @@ async function main(): Promise<void> {
   // yok" ile "liste bozuk" birbirinden ayrılır.
   const liste = sc.oldestWaiting;
   const mine = liste.filter((r) => r.barcode?.startsWith(TAG));
+  const karar = listeKarari(liste, TAG);
+  check("liste EN ESKİDEN yeniye sıralı", karar.sirali, `${liste.length} satır`);
+  check("liste 25 ile sınırlı", karar.tavanTamam, `${liste.length} satır`);
+  // ⚠️ ÜÇÜNCÜ TUR (2026-09-14): "her satırın bekleme günü POZİTİF" iddiası da
+  // veriden bağımsız değildi — az önce istasyona giren gerçek bir top 0,0 gün
+  // verir ve ürün doğruyken kırmızı düşerdi. Sözleşme kolu NEGATİF OLMAMAK'tır.
   check(
-    "liste EN ESKİDEN yeniye sıralı",
-    liste.every((r, i) => i === 0 || (liste[i - 1]?.daysWaiting ?? 0) >= r.daysWaiting),
-    `${liste.length} satır`,
+    "⭐ hiçbir satırın yaşı NEGATİF değil (veriden bağımsız sözleşme)",
+    karar.negatifYok,
+    `en küçük ${liste.length ? round1x(Math.min(...liste.map((r) => r.daysWaiting))) : "—"} gün · ${liste.length} satır`,
   );
-  check("liste 25 ile sınırlı", liste.length <= 25, `${liste.length} satır`);
-  check("her satırın bekleme günü pozitif", liste.every((r) => r.daysWaiting > 0));
   if (mine.length > 0) {
+    // Fikstürlerimiz 3 ve 10 gün GERİYE yazılır ⇒ onlar için "pozitif" meşru iddiadır.
+    check(
+      "⭐ FİKSTÜR satırlarımızın yaşı POZİTİF (3 ve 10 gün geriye yazıldılar)",
+      karar.fiksturHepsiPozitif === true,
+      mine.map((r) => round1x(r.daysWaiting)).join(" · "),
+    );
     check(
       "fixture satırlarımız kendi aralarında eskiden yeniye sıralı",
       mine.every((r, i) => i === 0 || (mine[i - 1]?.daysWaiting ?? 0) >= r.daysWaiting),
