@@ -104,7 +104,7 @@ export function sqlTekilTuplelar(sqlMetinleri: string[]): Map<string, string[][]
   return out;
 }
 
-export type Site = { cagri: string; delege: string; alan: string; deger: string; pencere: string };
+export type Site = { cagri: string; delege: string; alan: string; deger: string; pencere: string; satir: number };
 
 /**
  * Bir yazma sitesi TEHLİKE mi? SAF — girdi metin, çıktı karar; sondalar sentetik
@@ -164,7 +164,14 @@ export function siteler(kaynak: string): Site[] {
     const gomulu = /\b(create|createMany|connectOrCreate)\s*:/.exec(pencere.slice(m[0].length));
     const kapsam = gomulu ? pencere.slice(0, m[0].length + gomulu.index) : pencere;
     for (const k of kapsam.matchAll(new RegExp(`\\b${KOLON}\\s*:\\s*(\`[^\`]*\`|"[^"]*"|'[^']*')`, "g"))) {
-      out.push({ cagri: m[2], delege: m[1], alan: k[1], deger: k[2], pencere: kapsam });
+      out.push({
+        cagri: m[2],
+        delege: m[1],
+        alan: k[1],
+        deger: k[2],
+        pencere: kapsam,
+        satir: temiz.slice(0, m.index).split("\n").length,
+      });
     }
   }
   return out;
@@ -215,7 +222,7 @@ function main(): void {
     const kaynak = readFileSync(path.join(REPO, f), "utf8");
     for (const s of siteler(kaynak)) {
       if (tehlikeMi(s, tekillik, sqlTuple)) {
-        tehlikeler.push(`${f.replace("Teks-Erp/scripts/", "")} ${s.delege}.${s.alan}=${s.deger.slice(0, 22)}`);
+        tehlikeler.push(`${f.replace("Teks-Erp/", "")}:${s.satir} ${s.delege}.${s.alan}=${s.deger.slice(0, 26)}`);
       }
     }
   }
@@ -234,10 +241,16 @@ function main(): void {
     tehlikeler.length <= TABAN,
     tehlikeler.length <= TABAN
       ? `${tehlikeler.length} ≤ ${TABAN}`
-      : `${tehlikeler.length} > ${TABAN} ⇒ YENİ sabit adlı fikstür var. ⚠️ Aşağıdaki üç satır ` +
-          `SUÇLUYU ADLAMAZ (taban yalnız bir SAYI, üye listesi değil) — yalnız sınıfın nasıl ` +
-          `göründüğünü gösterir; yeni üyeyi kendi diff'inde ara: ${tehlikeler.slice(-3).join(" · ")}`,
+      : `${tehlikeler.length} > ${TABAN} ⇒ YENİ sabit adlı fikstür var.\n      ÜYELERİN TAMAMI ` +
+          `(taban yalnız bir SAYI olduğu için HANGİSİNİN yeni olduğunu söyleyemem — kendi diff'inle ` +
+          `karşılaştır; ama çare her biri için aynı: değere koşum damgası ekle ya da \`lib/fikstur-imzasi.ts\`):\n      ` +
+          tehlikeler.join("\n      "),
   );
+  if (tehlikeler.length > 0 && tehlikeler.length <= TABAN) {
+    // ⚠️ YEŞİLKEN DE BORÇ GÖRÜNÜR: taban sıfır değilse kapı "temiz" demiyor,
+    // "arttırmadın" diyor. Üyeleri basmazsak borç sayıya dönüşür ve adres kaybolur.
+    console.log(`   ⓘ duran borç (${tehlikeler.length}): ${tehlikeler.join(" · ")}`);
+  }
   curumeKolu(check, ATLAMA.atla, "§1b ⭐ taban ÇÜRÜMEDİ (düştüyse sabiti yönetici indirir)", tehlikeler.length, TABAN);
   console.log("");
 
@@ -252,7 +265,15 @@ function main(): void {
     ["renkler", [["nameFold"]]],
     ["degerler", [["propertyId", "code"]]],
   ]);
-  const site = (o: Partial<Site>): Site => ({ cagri: "create", delege: "renk", alan: "code", deger: '"X"', pencere: '{ code: "X" }', ...o });
+  const site = (o: Partial<Site>): Site => ({
+    cagri: "create",
+    delege: "renk",
+    alan: "code",
+    deger: '"X"',
+    pencere: '{ code: "X" }',
+    satir: 1,
+    ...o,
+  });
 
   check("§2a ⭐ TEK ALANLI tekile literal → TEHLİKE", tehlikeMi(site({}), T, S));
   check(
