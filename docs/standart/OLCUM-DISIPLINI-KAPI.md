@@ -206,9 +206,20 @@ dosyalarının İÇİNDE yaşıyor ve mandala görünmez. Kör nokta teorik değ
 
 | tanecik | doğduğu gün ısırır mı | kör noktası |
 |---|---|---|
-| SAYI (N ihlal) | hayır — N'e kadar sessiz | hangi satırlar olduğu bilinmez; ihlal takası serbest |
+| SAYI (N ihlal) | **BOŞLUĞU varsa** hayır — N'e kadar sessiz | hangi satırlar olduğu bilinmez; ihlal takası serbest |
 | KÜME (dosya/ad) | **evet** — yeni üye anında | mevcut üyenin İÇİNDEKİ ikinci ihlal |
 | yok (taban 0) | evet, her şeye | yok — ama ancak devralınan borç AYNI commit'te ödenirse kurulabilir |
+
+⚠️ **SAYI taneciğinde belirleyici olan tanecik değil BOŞLUKTUR (taban − gerçek).**
+Taban ölçülen değere EŞİT konursa boşluk sıfırdır ve cırcır, küme taneciği gibi **ilk
+yeni üyede** ısırır; "N'e kadar sessiz" satırı boşluk bırakılmış cırcırları anlatır.
+*(Vaka 2026-09-14: `test_defter_ters_yol` §10b2 — `TEARDOWN_DISI_TABAN` ölçülen değere
+(61) çakılmıştı. İndiği gün, aynı trende gelen bir dilim teardown DIŞINDA defter satırı
+silince **62 > 61** verdi ve commit trenden düştü. Kapı doğduğu gün ısırdı; taban
+sabitine dokunulmadı, ihlal onarıldı — cırcırın doğru yönü budur.)*
+⇒ Cırcır yazarken boşluğu BİLEREK seç: sıfır boşluk anında ısırır ama devralınan borcu
+kapatma baskısı yaratır; boşluk bırakmak borç ödemeyi kolaylaştırır, **karşılığında ilk
+N ihlali görünmez kılar**. Üçüncü seçenek yok, ve seçim yazılmazsa ölçülemez.
 
 > **Bir kapıyı yargılamadan önce türünü değil ANAHTARINI sor:** *neyi sayıyor, ve benim
 > eklediğim şey o anahtarda YENİ mi?* "Mandal mı tarayıcı mı" ayrımı bu soruyu
