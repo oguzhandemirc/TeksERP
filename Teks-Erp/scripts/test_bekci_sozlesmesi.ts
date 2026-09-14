@@ -234,7 +234,7 @@ const KURESEL_YAZIM_TABAN = 3;
   const GIT_SPAWN = new RegExp(`(execFileSync|execSync)\\(\\s*["\`]${"git"}`);
   // ⚠️ TABAN SATIR DEĞİL EŞLEŞME sayar: `grep | wc -l` 22 diyordu, gerçek 24 —
   // bir satırda iki spawn olabiliyor. Sayılan şeyin TANECİĞİ yazılmazsa taban yanlış kurulur.
-  const CIPLAK_GIT_TABAN = 24;
+  const CIPLAK_GIT_TABAN = 18;
   const ciplak: string[] = [];
   const tara = (dizin: string): void => {
     for (const e of readdirSync(dizin, { withFileTypes: true })) {
