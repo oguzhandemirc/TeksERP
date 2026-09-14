@@ -168,7 +168,7 @@ async function seed() {
   console.log(`  Temizlik: npx ts-node scripts/seed-tambur-test-roll.ts --clean\n`);
 }
 
-async function clean() {
+async function cleanup() {
   // İşaret `parameters` JSON'unda; index YOK → seq scan. Dev-only temizlik
   // script'i olduğu için kabul edilebilir (CLAUDE.md'nin GIN-index kuralı
   // sorgulanan ENDPOINT'ler içindir, elle koşulan bakım script'i için değil).
@@ -236,7 +236,7 @@ async function clean() {
 
 const isClean = process.argv.includes("--clean");
 
-(isClean ? clean() : seed())
+(isClean ? cleanup() : seed())
   .catch((e) => {
     console.error("Hata:", e);
     process.exitCode = 1;

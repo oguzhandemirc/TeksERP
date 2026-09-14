@@ -510,7 +510,7 @@ async function damgaVeYabanciSenaryolari(): Promise<void> {
   }
 }
 
-async function svcTemizle(): Promise<void> {
+async function temizleSvc(): Promise<void> {
   if (svcIds.wos.length === 0) return;
   const woIds = svcIds.wos;
   const dispatchIds = svcIds.dispatches;
@@ -549,7 +549,7 @@ main()
   .catch((e) => { console.error("HATA:", e); fail++; })
   .finally(async () => {
     try {
-      await svcTemizle();
+      await temizleSvc();
     } catch (e) {
       console.error("§7-§8 temizlik hatası:", e instanceof Error ? e.message : e);
       fail++;
