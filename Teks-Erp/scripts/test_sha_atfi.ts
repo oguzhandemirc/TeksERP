@@ -64,7 +64,7 @@ const CIPLAK_OLU_TABAN = 0;
  * Kapısız bir sayı aşağı inmez; düzeltmesi tek karakterlik iş ⇒ taban yalnız DÜŞER.
  * (Ölçümün ağacı § SHA atfı bloğunda, `docs/standart/OLCUM-DISIPLINI-YAZIM.md`.)
  */
-const YAZIM_IHLALI_TABAN = 63;
+const YAZIM_IHLALI_TABAN = 0;
 
 /** Beyanlı muafiyet: gerçekten sha OLMAYAN ama kalıba uyan literaller. BOŞ DOĞAR. */
 const MUAF: Record<string, string> = {};
