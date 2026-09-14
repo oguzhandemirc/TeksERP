@@ -9,6 +9,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useMultiWarehouse } from "@/hooks/useWarehouses";
+import { useDevereLotRequired } from "@/hooks/usePricingEnabled";
+import { listYarnLots } from "@/pages/Operations/Yarn/service";
 import { reasonPresetService } from "@/pages/ReasonPresets/service";
 import { warpBeamService, type WindPayload } from "./service";
 import { YarnLinesEditor, type YarnLineDraft } from "./YarnLinesEditor";
@@ -23,7 +25,7 @@ interface Props {
 }
 
 function toLines(lines: YarnLineDraft[], withReason: boolean) {
-  return lines.map((l) => ({ warehouseId: l.warehouseId, qtyKg: Number(l.qtyKg), ...(withReason ? { reasonCode: l.reasonCode } : {}) }));
+  return lines.map((l) => ({ warehouseId: l.warehouseId, qtyKg: Number(l.qtyKg), lotId: l.lotId || null, ...(withReason ? { reasonCode: l.reasonCode } : {}) }));
 }
 
 export function WindDialog({ target, isPending, onClose, onConfirm }: Props) {
@@ -39,9 +41,14 @@ export function WindDialog({ target, isPending, onClose, onConfirm }: Props) {
   const machines = useQuery({ queryKey: ["warp-beams", "devere-machines"], queryFn: () => warpBeamService.devereMachines(), enabled: inHouse });
   const presets = useQuery({ queryKey: ["reason-presets", "WARP_RETURN", "wind"], queryFn: () => reasonPresetService.list(false) });
   const returnReasons = useMemo(() => (presets.data ?? []).filter((p) => p.kind === "WARP_RETURN" && p.isActive), [presets.data]);
+  // Devere Faz 2: çözgü ipliğinin aktif lotları (türetilen bakiyeyle) + lot zorunluluğu ayarı.
+  const lotsQ = useQuery({ queryKey: ["yarn", "lots", target.warpSpec.yarnItem.id, "wind"], queryFn: () => listYarnLots({ itemId: target.warpSpec.yarnItem.id, isActive: true, limit: 200 }), enabled: inHouse });
+  const lotRequired = useDevereLotRequired();
+  const lots = lotsQ.data?.data ?? [];
+  const lotsOk = (ls: YarnLineDraft[]) => !lotRequired || ls.every((l) => l.lotId !== "");
   const nominal = theoreticalKg(target.warpSpec.endsCount, target.warpSpec.yarnItem.linearDensityDen, Number(lengthM));
   const linesOk = (ls: YarnLineDraft[], needReason: boolean) => ls.every((l) => l.warehouseId && Number(l.qtyKg) > 0 && (!needReason || l.reasonCode));
-  const ok = Number(lengthM) > 0 && (!inHouse || (machineId !== "" && issues.length > 0 && linesOk(issues, false) && linesOk(returns, true)));
+  const ok = Number(lengthM) > 0 && (!inHouse || (machineId !== "" && issues.length > 0 && linesOk(issues, false) && linesOk(returns, true) && lotsOk(issues)));
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -68,8 +75,8 @@ export function WindDialog({ target, isPending, onClose, onConfirm }: Props) {
         />
         {inHouse && (
           <>
-            <YarnLinesEditor title="İplik çıkışı — cağlığa yüklenen BRÜT kg (en az 1 satır)" lines={issues} onChange={setIssues} warehouses={warehouses} multiWarehouse={multiWarehouse} />
-            <YarnLinesEditor title="Dönen bobin dipleri (ayrı satır, sebep zorunlu)" lines={returns} onChange={setReturns} warehouses={warehouses} multiWarehouse={multiWarehouse} reasons={returnReasons} />
+            <YarnLinesEditor title={lotRequired ? "İplik çıkışı — cağlığa yüklenen BRÜT kg (en az 1 satır, lot ZORUNLU)" : "İplik çıkışı — cağlığa yüklenen BRÜT kg (en az 1 satır)"} lines={issues} onChange={setIssues} warehouses={warehouses} multiWarehouse={multiWarehouse} lots={lots} lotRequired={lotRequired} />
+            <YarnLinesEditor title="Dönen bobin dipleri (ayrı satır, sebep zorunlu)" lines={returns} onChange={setReturns} warehouses={warehouses} multiWarehouse={multiWarehouse} reasons={returnReasons} lots={lots} />
           </>
         )}
         <DialogFooter>

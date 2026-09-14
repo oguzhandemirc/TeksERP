@@ -43,6 +43,8 @@ export interface WarpBeamPlanPayload {
 export interface YarnLinePayload {
   warehouseId: string;
   qtyKg: number;
+  /** Devere Faz 2: lot etiketi; null = lotsuz (sunucu uyarır / lotRequired açıksa 400). */
+  lotId: string | null;
 }
 
 export interface WindPayload {

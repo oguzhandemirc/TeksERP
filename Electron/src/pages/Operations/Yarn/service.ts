@@ -58,6 +58,55 @@ export interface YarnMovementRow {
   warehouse: { id: string; code: string; name: string };
   user: { id: string; fullName: string | null; username: string } | null;
   goodsReceipt: { id: string; receiptNo: string } | null;
+  /** Devere Faz 2: lot etiketi (lotsuz satırda null) + bobin adedi (bilgi). */
+  lot?: { id: string; lotNo: string } | null;
+  bobbinCount?: number | null;
+}
+
+// ── İPLİK LOTLARI (devere Faz 2) ──────────────────────────────────────────────
+// Lot DURUM kaydı; `balanceKg` hareketlerden TÜRETİLİR (sunucu hesaplar). Silme yok, pasife alma.
+export interface YarnLotRow {
+  id: string;
+  itemId: string;
+  lotNo: string;
+  supplierId: string | null;
+  notes: string | null;
+  isActive: boolean;
+  item: { id: string; code: string; name: string };
+  supplier: { id: string; name: string } | null;
+  balanceKg: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface YarnLotListResponse {
+  success: boolean;
+  data: YarnLotRow[];
+  pagination: { nextCursor: string | null; hasMore: boolean; limit: number };
+}
+
+export async function listYarnLots(params: { limit?: number; cursor?: string; itemId?: string; supplierId?: string; search?: string; isActive?: boolean }): Promise<YarnLotListResponse> {
+  const res = await apiClient.get("/api/yarn/lots", {
+    params: {
+      ...(params.limit ? { limit: params.limit } : {}),
+      ...(params.cursor ? { cursor: params.cursor } : {}),
+      ...(params.itemId ? { itemId: params.itemId } : {}),
+      ...(params.supplierId ? { supplierId: params.supplierId } : {}),
+      ...(params.search ? { search: params.search } : {}),
+      ...(params.isActive !== undefined ? { isActive: params.isActive ? "true" : "false" } : {}),
+    },
+  });
+  return res.data as YarnLotListResponse;
+}
+
+export async function createYarnLot(body: { itemId: string; lotNo: string; supplierId?: string | null; notes?: string | null }): Promise<{ success: boolean; data: YarnLotRow; message?: string }> {
+  const res = await apiClient.post("/api/yarn/lots", body);
+  return res.data as { success: boolean; data: YarnLotRow; message?: string };
+}
+
+export async function updateYarnLot(id: string, body: { notes?: string | null; isActive?: boolean; supplierId?: string | null }): Promise<{ success: boolean; data: YarnLotRow }> {
+  const res = await apiClient.patch(`/api/yarn/lots/${id}`, body);
+  return res.data as { success: boolean; data: YarnLotRow };
 }
 
 // ⚠️ Yanıt tipleri "…ListResponse" adını taşır, "…Page" DEĞİL: bu klasörde
@@ -221,6 +270,7 @@ export async function listYarnMovements(params: {
   warehouseId?: string;
   kind?: YarnMovementKind;
   goodsReceiptId?: string;
+  lotId?: string;
   /** Mutlak an (ISO). Gün sınırı İSTEMCİNİNDİR — bkz. `dayStartIso`/`dayEndIso`. */
   dateFrom?: string;
   dateTo?: string;
@@ -233,6 +283,7 @@ export async function listYarnMovements(params: {
       ...(params.warehouseId ? { warehouseId: params.warehouseId } : {}),
       ...(params.kind ? { kind: params.kind } : {}),
       ...(params.goodsReceiptId ? { goodsReceiptId: params.goodsReceiptId } : {}),
+      ...(params.lotId ? { lotId: params.lotId } : {}),
       ...(params.dateFrom ? { dateFrom: params.dateFrom } : {}),
       ...(params.dateTo ? { dateTo: params.dateTo } : {}),
     },
@@ -267,6 +318,8 @@ export async function createYarnMovement(body: {
   kind: YarnMovementKind;
   qtyKg: string;
   reason?: string | null;
+  /** Devere Faz 2: lot etiketi (opsiyonel). */
+  lotId?: string | null;
 }): Promise<YarnMovementResult> {
   const res = await apiClient.post("/api/yarn/movements", body);
   return res.data as YarnMovementResult;

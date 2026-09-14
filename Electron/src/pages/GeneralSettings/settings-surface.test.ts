@@ -78,6 +78,7 @@ describe("§1 üç yüzeyin dağılımı", () => {
     // Sıra alfabetik; içerik "hangi kategoriler taşındı" sorusunun cevabıdır.
     expect(idsOf("flags")).toEqual([
       "customers",
+      "devere",
       "finance",
       "kartela",
       "orders",

@@ -7,11 +7,17 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Warehouse } from "@/pages/Warehouses/types";
 import type { ReasonPreset } from "@/pages/ReasonPresets/service";
+import type { YarnLotRow } from "@/pages/Operations/Yarn/service";
+
+/** "Lot yok" seçeneği — sessiz lotsuz yazım olmasın, operatör AÇIKÇA seçsin (1e H-A3). */
+export const NO_LOT = "__no_lot__";
 
 export interface YarnLineDraft {
   warehouseId: string;
   qtyKg: string;
   reasonCode: string;
+  /** Devere Faz 2: tedarikçi lotu; "" = lot yok (lotsuz satır — sunucu uyarır, lotRequired açıksa reddeder). */
+  lotId: string;
 }
 
 interface Props {
@@ -22,11 +28,15 @@ interface Props {
   multiWarehouse: boolean;
   /** Dip iadesinde zorunlu; çıkışta çizilmez. */
   reasons?: ReasonPreset[];
+  /** Çözgü ipliğinin aktif lotları (türetilen bakiyeyle); yoksa lot seçici çizilmez. */
+  lots?: YarnLotRow[];
+  /** `devere.lotRequired` açık: "Lot yok" seçeneği çizilmez. */
+  lotRequired?: boolean;
 }
 
-export function YarnLinesEditor({ title, lines, onChange, warehouses, multiWarehouse, reasons }: Props) {
+export function YarnLinesEditor({ title, lines, onChange, warehouses, multiWarehouse, reasons, lots, lotRequired }: Props) {
   const set = (i: number, patch: Partial<YarnLineDraft>) => onChange(lines.map((l, k) => (k === i ? { ...l, ...patch } : l)));
-  const add = () => onChange([...lines, { warehouseId: warehouses[0]?.id ?? "", qtyKg: "", reasonCode: "" }]);
+  const add = () => onChange([...lines, { warehouseId: warehouses[0]?.id ?? "", qtyKg: "", reasonCode: "", lotId: "" }]);
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
@@ -46,6 +56,21 @@ export function YarnLinesEditor({ title, lines, onChange, warehouses, multiWareh
                 {warehouses.map((w) => (
                   <SelectItem key={w.id} value={w.id}>
                     {w.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {lots && (
+            <Select value={l.lotId || NO_LOT} onValueChange={(v) => set(i, { lotId: v === NO_LOT ? "" : v })}>
+              <SelectTrigger className="w-56" aria-label="İplik lotu">
+                <SelectValue placeholder="Lot" />
+              </SelectTrigger>
+              <SelectContent>
+                {!lotRequired && <SelectItem value={NO_LOT}>Lot yok</SelectItem>}
+                {lots.map((lot) => (
+                  <SelectItem key={lot.id} value={lot.id}>
+                    {lot.lotNo} · {lot.balanceKg} kg
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -80,6 +80,8 @@ export interface WarpBeamDto {
   wound: WarpBeamEventDto | null;
   /** Σ işaret × lengthM — Faz 1b'de WOUND − WOUND_CANCEL. */
   remainingM: number;
+  /** Faz 2: bu levente yüklenen iplik lotları (lotNo, tekil, sıralı) — lotsuz sarılan levent boş dizi. */
+  lots: string[];
 }
 
 export function toWarpBeamEventDto(e: WarpBeamEventRow): WarpBeamEventDto {
@@ -136,6 +138,7 @@ export function toWarpBeamDto(r: WarpBeamRow, remainingM?: number): WarpBeamDto 
     wound: wound ? toWarpBeamEventDto(wound) : null,
     // Listede WOUND tek satırdır; iptalde CANCELLED durumu kalanı 0 yapar (WOUND_CANCEL listeye çekilmez).
     remainingM: remainingM ?? (r.status === WarpBeamStatus.READY && wound?.lengthM ? Number(wound.lengthM) : 0),
+    lots: [...new Set(r.yarnMovements.map((m) => m.lot?.lotNo).filter((x): x is string => !!x))].sort((a, b) => a.localeCompare(b, "tr")),
   };
 }
 

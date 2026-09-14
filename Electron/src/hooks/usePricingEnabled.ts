@@ -74,6 +74,12 @@ export function useDevereEnabled(): boolean {
   return q.data?.data?.devereEnabled ?? false;
 }
 
+/** Devere Faz 2: iplik lotu zorunlu mu (`devere.lotRequired`). Yüklenene dek KAPALI = bugünkü davranış (lot isteğe bağlı). */
+export function useDevereLotRequired(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.devereLotRequired ?? false;
+}
+
 export function useDemoModeEnabled(): boolean {
   const q = useFeatureFlags();
   return q.data?.data?.demoModeEnabled ?? false;

@@ -264,6 +264,7 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange, sync }: Props) {
                     <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                       <tr>
                         <th className="p-2 text-left">Kabul Edilen İplik</th>
+                        <th className="p-2 text-left">Lot / Bobin</th>
                         <th className="p-2 text-right">Kg</th>
                         {yarnHasPrice && <th className="p-2 text-right">Birim Fiyat</th>}
                       </tr>
@@ -287,6 +288,11 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange, sync }: Props) {
                                   İptal
                                 </Badge>
                               )}
+                            </td>
+                            {/* Devere Faz 2: lot irsaliye metni olduğu gibi; lotsuz satır açıkça "Lot yok". */}
+                            <td className="p-2 text-xs">
+                              {l.lot ? <span className="font-mono">{l.lot.lotNo}</span> : <span className="text-muted-foreground">Lot yok</span>}
+                              {l.bobbinCount != null ? <span className="ml-1 text-muted-foreground">· {l.bobbinCount} bobin</span> : null}
                             </td>
                             {/* Kg POZİTİF basılır — yönü rozet söyler (backend
                                 sözleşmesi: qtyKg her zaman pozitif). */}

@@ -36,11 +36,12 @@ export function CancelDialog({ target, isPending, onClose, onConfirm }: Props) {
         ) : p ? (
           <ul className="space-y-1 text-sm">
             <li>Sarım: {formatM(p.wound?.lengthM)} · nominal {formatKg(p.wound?.theoreticalKg)}</li>
+            {/* Devere Faz 2: satır anahtarı depo × LOT — aynı depoda iki lot iki satırdır, çakışmaz. */}
             {p.issueReversals.map((r) => (
-              <li key={`i-${r.warehouse.id}`}>↩ {r.warehouse.name}: {formatKg(r.qtyKg)} depoya döner (çıkış tersi)</li>
+              <li key={`i-${r.warehouse.id}-${r.lot?.id ?? ""}`}>↩ {r.warehouse.name}{r.lot ? ` · lot ${r.lot.lotNo}` : ""}: {formatKg(r.qtyKg)} depoya döner (çıkış tersi)</li>
             ))}
             {p.returnReversals.map((r) => (
-              <li key={`r-${r.warehouse.id}-${r.reasonCode}`}>↩ {r.warehouse.name}: {formatKg(r.qtyKg)} dip iadesi düşer ({r.reasonCode})</li>
+              <li key={`r-${r.warehouse.id}-${r.reasonCode}-${r.lot?.id ?? ""}`}>↩ {r.warehouse.name}{r.lot ? ` · lot ${r.lot.lotNo}` : ""}: {formatKg(r.qtyKg)} dip iadesi düşer ({r.reasonCode})</li>
             ))}
             {p.issueReversals.length === 0 && p.returnReversals.length === 0 && <li className="text-muted-foreground">İplik satırı yok (fason/hazır alım kökeni) — yalnız levent iptal olur.</li>}
           </ul>

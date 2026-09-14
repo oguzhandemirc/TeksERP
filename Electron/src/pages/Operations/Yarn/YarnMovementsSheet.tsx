@@ -199,6 +199,7 @@ export function YarnMovementsSheet({ row, onClose, onAddMovement, showWarehouse 
                       <th className="px-3 py-2 text-left">İşlem</th>
                       <th className="px-3 py-2 text-right">Miktar</th>
                       <th className="px-3 py-2 text-left">Kaynak / Sebep</th>
+                      <th className="px-3 py-2 text-left">Lot</th>
                       <th className="px-3 py-2 text-left">Kullanıcı</th>
                     </tr>
                   </thead>
@@ -223,6 +224,11 @@ export function YarnMovementsSheet({ row, onClose, onAddMovement, showWarehouse 
                             {m.reason && (
                               <div className="text-[11px] text-muted-foreground">{m.reason}</div>
                             )}
+                          </td>
+                          {/* Devere Faz 2: lot etiketi; lotsuz satır "—" (defter geçmişi, uyarı değil). */}
+                          <td className="px-3 py-2 font-mono text-xs">
+                            {m.lot ? m.lot.lotNo : <span className="text-muted-foreground">—</span>}
+                            {m.bobbinCount != null ? <span className="ml-1 text-muted-foreground">· {m.bobbinCount} bobin</span> : null}
                           </td>
                           <td className="px-3 py-2 text-muted-foreground">{movementActor(m)}</td>
                         </tr>

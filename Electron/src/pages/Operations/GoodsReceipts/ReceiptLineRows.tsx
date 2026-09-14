@@ -45,6 +45,10 @@ export interface DraftLine {
   propertyIds: string[];
   /** Kaç TOP gelmiş — kaydederken bu sayıda ayrı top doğar. */
   count: number;
+  /** İPLİK satırı: tedarikçi lot numarası (irsaliyedeki metin, olduğu gibi; opsiyonel — devere Faz 2). */
+  lotNo?: string | null;
+  /** İPLİK satırı: bobin adedi (bilgi; opsiyonel). */
+  bobbinCount?: number | null;
 }
 
 export function emptyLine(): DraftLine {
@@ -59,6 +63,8 @@ export function emptyLine(): DraftLine {
     unitPrice: null,
     propertyIds: [],
     count: 1,
+    lotNo: null,
+    bobbinCount: null,
   };
 }
 
@@ -149,8 +155,16 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds }: Props) {
             />
             {/* İPLİK: kumaşa özgü hücreler devre dışı "—" — backend'in 400'le
                 reddettiği alanlar hiç sorulmasın (400'e düşmeden öğret). */}
+            {/* İPLİK: renk yerine LOT — irsaliyedeki lot numarası olduğu gibi (ayrıştırılmaz);
+                boş bırakılabilir, "lot zorunlu" ayarı açıksa sunucu satırı sebebiyle düşürür. */}
             {yarn ? (
-              dash(yarnTitle)
+              <Input
+                placeholder="Lot no (irsaliye)"
+                maxLength={64}
+                aria-label="Lot numarası"
+                value={l.lotNo ?? ""}
+                onChange={(e) => patch(l.key, { lotNo: e.target.value || null })}
+              />
             ) : (
               <ReferenceSelect<Color>
                 value={l.colorId}
@@ -180,7 +194,13 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds }: Props) {
               )}
             </div>
             {yarn ? (
-              dash(yarnTitle)
+              <Input
+                type="number" min={1} step={1} placeholder="Bobin"
+                aria-label="Bobin adedi"
+                title="Bobin adedi (bilgi — bakiye değil)"
+                value={l.bobbinCount ?? ""}
+                onChange={(e) => patch(l.key, { bobbinCount: e.target.value ? Math.max(1, Math.trunc(Number(e.target.value))) : null })}
+              />
             ) : (
               <Input
                 type="number" min={0} placeholder="—"
@@ -318,6 +338,9 @@ export function expandLines(lines: DraftLine[], yarnItemIds?: ReadonlySet<string
               itemId: l.itemId,
               initialQty: l.initialQty, // iplikte KG
               unitPrice: l.unitPrice,
+              // Devere Faz 2: lot + bobin yalnız iplik satırında (Zod bilinmeyeni sessizce atar — iki uçta da beyanlı).
+              lotNo: l.lotNo?.trim() ? l.lotNo.trim() : null,
+              bobbinCount: l.bobbinCount ?? null,
               clientToken: crypto.randomUUID(),
             }
           : {

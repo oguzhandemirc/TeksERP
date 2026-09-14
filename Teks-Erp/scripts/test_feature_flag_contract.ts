@@ -114,9 +114,6 @@ const PANEL_EXEMPT: Record<string, string> = {
   // Dilim 3/4'te yüzeyleri doğduğunda panele girer ve bu iki satır SİLİNİR
   // (muaf listesi iki yönlü denetlenir — panele girip muafta kalırsa kırmızı).
   kumasTeknikEnabled: "yer tutucu — arkasında yüzey YOK; Dilim 3'te panele girer",
-  // Devere Faz 2 A1 (2026-09-14): motor + API yazma yolu var, panel satırı A2 dilimiyle gelir
-  // (devere kategorisi + `HideableModule` genişlemesi). A2 inince bu satır SİLİNİR.
-  devereLotRequired: "A1 motor — panel satırı A2 (devere kategorisi) dilimiyle; o gün bu satır silinir",
   tezgahEnabled: "yer tutucu — arkasında yüzey YOK; Dilim 4'te panele girer",
 };
 
@@ -799,6 +796,8 @@ async function main() {
     },
     ticaretEnabled: { middleware: "requireTicaretEnabled", selfGate: "readTicaretEnabled(" },
     iplikEnabled: { middleware: "requireIplikEnabled", selfGate: "readIplikEnabled(" },
+    // Devere Faz 2 A2: `devere` ayar kategorisi `moduleKey: "devereEnabled"` taşır.
+    devereEnabled: { middleware: "requireDevereEnabled", selfGate: "readDevereEnabled(" },
     depoMultiEnabled: {
       middleware: "requireDepoMultiEnabled",
       selfGate: "readDepoMultiEnabled(",

@@ -51,6 +51,8 @@ import {
 import { YarnStockTable } from "./YarnStockTable";
 import { YarnMovementsSheet } from "./YarnMovementsSheet";
 import { YarnMovementDialog } from "./YarnMovementDialog";
+import { YarnLotsPanel } from "./YarnLotsPanel";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const PAGE_SIZE = 100;
 
@@ -68,6 +70,7 @@ export function YarnStockPage() {
   const [page, setPage] = useState(1);
   const [detailRow, setDetailRow] = useState<YarnStockRow | null>(null);
   const [draft, setDraft] = useState<MovementDraft | null>(null);
+  const [tab, setTab] = useState<"stok" | "lotlar">("stok");
 
   const { search, itemId, warehouseId, onlyNonZero } = filters;
 
@@ -115,6 +118,20 @@ export function YarnStockPage() {
         }
       />
 
+      {/* Devere Faz 2: "Lotlar" sekmesi — lot kaydı bayraksız her kurulumda mümkün (sekme hep çizilir). */}
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "stok" | "lotlar")}>
+        <div className="px-6 pt-3">
+          <TabsList>
+            <TabsTrigger value="stok">Stok</TabsTrigger>
+            <TabsTrigger value="lotlar">Lotlar</TabsTrigger>
+          </TabsList>
+        </div>
+        <TabsContent value="lotlar">
+          <PageBody className="p-6">
+            <YarnLotsPanel />
+          </PageBody>
+        </TabsContent>
+        <TabsContent value="stok">
       <YarnFilterBar value={filters} onChange={applyFilters} />
 
       <PageBody className="p-6">
@@ -193,6 +210,9 @@ export function YarnStockPage() {
           </>
         )}
       </PageBody>
+
+        </TabsContent>
+      </Tabs>
 
       <YarnMovementsSheet
         row={detailRow}

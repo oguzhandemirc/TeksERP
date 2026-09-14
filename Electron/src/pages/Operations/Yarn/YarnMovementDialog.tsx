@@ -37,7 +37,7 @@
 // ise seçilecek bir şey yoktur → seçici çizilmez, depo otomatik seçilir.
 // =============================================================================
 import { useEffect, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { AlertTriangle } from "lucide-react";
 import {
@@ -57,6 +57,7 @@ import {
   YARN_KIND_META,
   backendMessage,
   createYarnMovement,
+  listYarnLots,
   type YarnMovementKind,
 } from "./service";
 import { YARN_ITEM_FILTER } from "./YarnFilterBar";
@@ -88,6 +89,10 @@ export function YarnMovementDialog({
   const [warehouseId, setWarehouseId] = useState<string>(initialWarehouseId ?? "");
   const [qtyRaw, setQtyRaw] = useState("");
   const [reason, setReason] = useState("");
+  // Devere Faz 2: lot etiketi opsiyonel — seçilen ipliğin AKTİF lotları; "" = lot yok (açıkça).
+  const [lotId, setLotId] = useState("");
+  const lotsQ = useQuery({ queryKey: ["yarn", "lots", itemId, "movement-dialog"], queryFn: () => listYarnLots({ itemId: itemId!, isActive: true, limit: 200 }), enabled: !!itemId });
+  const lots = lotsQ.data?.data ?? [];
 
   // Tek depolu kurulumda seçici çizilmez → depo burada otomatik seçilir. Çok
   // depoluda ASLA ön seçim yapılmaz (dosya başlığındaki gerekçe).
@@ -133,6 +138,7 @@ export function YarnMovementDialog({
         kind,
         qtyKg: v.qtyKg,
         reason: reason.trim() || null,
+        lotId: lotId || null,
       }),
     onSuccess: (r) => {
       // Backend'in cümlesi yeni bakiyeyi ve gerekirse EKSİ BAKİYE uyarısını
@@ -205,6 +211,20 @@ export function YarnMovementDialog({
                 {warehouses.map((w) => (
                   <option key={w.id} value={w.id}>
                     {w.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {itemId && lots.length > 0 && (
+            <div>
+              <Label>Lot (isteğe bağlı)</Label>
+              <select className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm" value={lotId} onChange={(e) => setLotId(e.target.value)} aria-label="İplik lotu">
+                <option value="">Lot yok</option>
+                {lots.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.lotNo} · {kg(l.balanceKg)} kg
                   </option>
                 ))}
               </select>

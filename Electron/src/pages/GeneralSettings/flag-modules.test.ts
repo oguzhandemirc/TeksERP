@@ -62,6 +62,7 @@ const HEPSI_ACIK: SettingsModuleState = {
   ticaretEnabled: true,
   iplikEnabled: true,
   depoMultiEnabled: true,
+  devereEnabled: true,
 };
 const HEPSI_KAPALI: SettingsModuleState = {
   productionEnabled: false,
@@ -69,6 +70,7 @@ const HEPSI_KAPALI: SettingsModuleState = {
   ticaretEnabled: false,
   iplikEnabled: false,
   depoMultiEnabled: false,
+  devereEnabled: false,
 };
 /** Fabrika görünümü — satıcı değil (varsayılan oturum). */
 const FABRIKA = false;

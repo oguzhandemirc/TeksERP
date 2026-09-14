@@ -397,7 +397,8 @@ export type SettingsModuleKey =
   | "financeEnabled"
   | "ticaretEnabled"
   | "iplikEnabled"
-  | "depoMultiEnabled";
+  | "depoMultiEnabled"
+  | "devereEnabled";
 
 /** Bölüm = SALT YERLEŞİM (başlık + sıra). Rejim kapısı taşımaz — bkz. yukarıdaki gerekçe. */
 export interface SettingsSection {
@@ -1160,6 +1161,27 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Operatör", "Depocu"],
         desc: "Kapalıyken (varsayılan) kartelalar yalnızca ADET sayılır; kabul ekranında ve kartela listelerinde cm/kg (Boy/En/Uzunluk) alanları gizlenir. Açıkken kabulde ölçü girilebilir ve listelerde görünür. Kartela firmasına gönderilen topun gerçek metresi bu ayardan ETKİLENMEZ.",
+      },
+    ],
+  },
+  {
+    // Devere Faz 2 (2026-09-14): iplik lotu — modül kapalıyken kategori gizli (`moduleKey`).
+    id: "devere",
+    label: "Devere / Levent",
+    icon: Layers,
+    description: "Levent sarımı ve iplik lotu katılık ayarları.",
+    keywords: "devere levent lot iplik lotu bobin çözgü sarım mal kabul",
+    kind: "flags",
+    section: "production",
+    moduleKey: "devereEnabled",
+    flags: [
+      {
+        key: "devereLotRequired",
+        title: "İplik lotu zorunlu olsun",
+        summary: "İçeride levent sarımında iplik çıkış satırı ve mal kabulde iplik satırı lot numarasız kaydedilemez.",
+        defaultOn: false,
+        audience: ["Depocu", "Operatör"],
+        desc: "Kapalıyken (varsayılan) lot numarası isteğe bağlıdır: lotsuz satır yazılır, yalnız uyarı verilir ve o levent lot izlemesine girmez. Açıkken içeride sarımda lotsuz iplik çıkış satırı reddedilir, mal kabulde lotsuz iplik satırı fişe girmez (satır sebebiyle düşer). Fasona sardırılan ya da hazır alınan levent iplik satırı yazmadığı için etkilenmez. ⚠️ Açmadan önce depodaki iplik girişlerine lot yazıldığından emin olun: lotsuz giriş lotlu çıkışı karşılamaz.",
       },
     ],
   },

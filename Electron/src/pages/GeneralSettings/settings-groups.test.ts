@@ -233,6 +233,7 @@ describe("⭐ rejim kapısı — anahtarın kendisi asla kapının arkasında ol
       ticaretEnabled: false,
       iplikEnabled: false,
       depoMultiEnabled: false,
+      devereEnabled: false,
     });
   });
 
@@ -495,5 +496,27 @@ describe("arama — saf fonksiyon", () => {
     const narrow: SettingsCategory[] = SETTINGS_CATEGORIES.filter((c) => c.id === "printer");
     const hits = searchSettings(narrow, "muhasebe");
     expect(hits).toEqual([]);
+  });
+});
+
+// Devere Faz 2 (2026-09-14): lot zorunluluğu ayarı devere modülüne AİT — modül kapalıyken kategori
+// çizilmez, satır dondurulur. ⭐ NEGATİF SONDA: `devere` kategorisinden `moduleKey` düşünce ① ❌;
+// `resolveSettingsModuleState` devereyi üretime zincirleyince ③ ❌.
+describe("devere kategorisi — lot zorunluluğu modülün arkasında", () => {
+  const devere = SETTINGS_CATEGORIES.find((c) => c.id === "devere")!;
+  it("① kategori var, moduleKey devereEnabled, tek satırı devereLotRequired (defaultOn false)", () => {
+    expect(devere).toBeDefined();
+    expect(devere.moduleKey).toBe("devereEnabled");
+    expect(devere.flags?.map((f) => f.key)).toEqual(["devereLotRequired"]);
+    expect(devere.flags?.[0]?.defaultOn).toBe(false);
+  });
+  it("② devere KAPALI → kategori DONUK; AÇIK → değil", () => {
+    const kapali = resolveSettingsModuleState({ devereEnabled: false });
+    const acik = resolveSettingsModuleState({ devereEnabled: true });
+    expect(isCategoryModuleClosed(devere, kapali)).toBe(true);
+    expect(isCategoryModuleClosed(devere, acik)).toBe(false);
+  });
+  it("③ devere HAM bayrak — üretim kapalıyken de açık kalır (K3: bağımlılık yok)", () => {
+    expect(resolveSettingsModuleState({ productionEnabled: false, devereEnabled: true }).devereEnabled).toBe(true);
   });
 });

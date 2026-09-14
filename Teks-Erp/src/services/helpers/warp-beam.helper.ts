@@ -50,6 +50,8 @@ export const WARP_BEAM_SELECT = {
   supplier: { select: { id: true, name: true } },
   // Listede "gerçek metre / kg" WOUND satırından okunur (bir levent bir kez doğar — partial unique).
   events: { where: { kind: "WOUND" }, select: WARP_BEAM_EVENT_SELECT, take: 1 },
+  // Faz 2 (lot): liste satırındaki lot özeti — yalnız lotlu çıkış satırlarının lotNo'su (allowlist: id/lotNo dışı gitmez).
+  yarnMovements: { where: { kind: "WARP_ISSUE", lotId: { not: null } }, select: { lot: { select: { id: true, lotNo: true } } } },
 } satisfies Prisma.WarpBeamSelect;
 
 export type WarpBeamRow = Prisma.WarpBeamGetPayload<{ select: typeof WARP_BEAM_SELECT }>;

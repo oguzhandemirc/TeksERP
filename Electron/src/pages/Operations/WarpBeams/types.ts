@@ -49,14 +49,16 @@ export interface WarpBeam {
   supplier: { id: string; name: string } | null;
   wound: WarpBeamEvent | null;
   remainingM: number;
+  /** Devere Faz 2: levente yüklenen iplik lotları (lotNo, tekil); lotsuz sarım → boş dizi. */
+  lots: string[];
 }
 
 export interface CancelWoundPreview {
   beamNo: string;
   status: WarpBeamStatus;
   wound: WarpBeamEvent | null;
-  issueReversals: Array<{ warehouse: { id: string; name: string }; qtyKg: number }>;
-  returnReversals: Array<{ warehouse: { id: string; name: string }; reasonCode: string; qtyKg: number }>;
+  issueReversals: Array<{ warehouse: { id: string; name: string }; lot: { id: string; lotNo: string } | null; qtyKg: number }>;
+  returnReversals: Array<{ warehouse: { id: string; name: string }; lot: { id: string; lotNo: string } | null; reasonCode: string; qtyKg: number }>;
 }
 
 export const WARP_BEAM_STATUSES: WarpBeamStatus[] = ["PLANNED", "READY", "CANCELLED"];

@@ -76,6 +76,22 @@ describe("expandLines — iplik payload sözleşmesi", () => {
     }
   });
 
+  // Devere Faz 2 (lot). ⭐ NEGATİF SONDA: yarn dalından `lotNo`/`bobbinCount` düşünce ① ❌ · TRIM kaldırılınca ② ❌ ·
+  //    kumaş dalına `lotNo` eklenince ③ ❌.
+  it("① iplik satırı lot + bobin taşır (irsaliye metni), kumaş satırı TAŞIMAZ", () => {
+    const [p] = expandLines([line({ itemId: "yarn-1", initialQty: 50, lotNo: "YAN 1029-K", bobbinCount: 12 })], YARN);
+    expect(p).toMatchObject({ itemId: "yarn-1", lotNo: "YAN 1029-K", bobbinCount: 12 });
+    const [k] = expandLines([line({ itemId: "fabric-1", initialQty: 50, lotNo: "X", bobbinCount: 3 })], YARN);
+    expect(k && "lotNo" in k).toBe(false);
+    expect(k && "bobbinCount" in k).toBe(false);
+  });
+  it("② lot boş/boşluk → null (sunucu da null sayar), çevresi TRIM, içi AYNEN (normalize yok)", () => {
+    const [a] = expandLines([line({ itemId: "yarn-1", initialQty: 1, lotNo: "   " })], YARN);
+    expect(a).toMatchObject({ lotNo: null, bobbinCount: null });
+    const [b] = expandLines([line({ itemId: "yarn-1", initialQty: 1, lotNo: "  yan 1029-k " })], YARN);
+    expect(b).toMatchObject({ lotNo: "yan 1029-k" });
+  });
+
   it("kumaş satırı eski şekliyle açılır ve adet kadar payload doğar", () => {
     const out = expandLines([line({ colorId: "c1", width: 250, count: 3, propertyIds: ["p1"] })], YARN);
     expect(out).toHaveLength(3);

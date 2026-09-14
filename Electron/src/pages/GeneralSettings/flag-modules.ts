@@ -64,7 +64,7 @@ export type PlanlananModulSahibi = "planlanan:fason" | "planlanan:kartela";
  */
 export type HideableModule = Exclude<
   ModuleFlagKey,
-  "kumasTeknikEnabled" | "tezgahEnabled" | "devereEnabled" | "dokumaEnabled"
+  "kumasTeknikEnabled" | "tezgahEnabled" | "dokumaEnabled"
 >;
 
 export type FlagOwner = HideableModule | "cekirdek" | PlanlananModulSahibi;
@@ -95,10 +95,8 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   tezgahEnabled: "cekirdek",
   devereEnabled: "cekirdek",
   dokumaEnabled: "cekirdek",
-  // Devere Faz 2 A1 (2026-09-14): davranış bayrağı, panelde satırı HENÜZ YOK (backend
-  // `test_feature_flag_contract` PANEL_EXEMPT). Gerçek sahibi `devereEnabled`; o anahtar
-  // `HideableModule` dışında olduğu için A2 (devere kategorisi) genişletene dek "cekirdek".
-  devereLotRequired: "cekirdek",
+  // Devere Faz 2 (2026-09-14): lot zorunluluğu devere modülünün davranış bayrağı.
+  devereLotRequired: "devereEnabled",
 
   // --- ÜRETİM (`operations/work-orders` · KK1 · Tambur · Kurşun · Parti) -----
   targetQuantityEnabled: "productionEnabled",

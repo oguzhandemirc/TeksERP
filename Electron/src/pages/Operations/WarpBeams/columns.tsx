@@ -3,6 +3,14 @@ import { Badge } from "@/components/ui/badge";
 import { WARP_BEAM_ORIGIN_LABEL, WARP_BEAM_STATUS_META, WARP_KG_SOURCE_LABEL, formatKg, formatM, type WarpBeam } from "./types";
 
 /** Sıralama başlığı YOK: uç en yeni önce sıralar; süzme sunucuda. */
+/** Liste hücresi: sarılmamış levent "—", lotsuz sarım "Lot yok", tek lot adı, N lot sayı. */
+export function lotSummary(b: Pick<WarpBeam, "lots" | "wound">): string {
+  if (!b.wound) return "—";
+  if (b.lots.length === 0) return "Lot yok";
+  if (b.lots.length === 1) return b.lots[0]!;
+  return `${b.lots.length} lot`;
+}
+
 export const warpBeamColumns: ColumnDef<WarpBeam>[] = [
   { accessorKey: "beamNo", header: "Levent No", cell: ({ row }) => <span className="font-mono text-xs">{row.original.beamNo}</span> },
   {
@@ -53,6 +61,12 @@ export const warpBeamColumns: ColumnDef<WarpBeam>[] = [
         {row.original.physicalBeamNo && <span className="text-muted-foreground font-mono">{row.original.physicalBeamNo}</span>}
       </span>
     ),
+  },
+  {
+    // Devere Faz 2: lot özeti — tek lot adıyla, N lot sayıyla, lotsuz sarım AÇIKÇA "Lot yok" (iz eksik).
+    id: "lots",
+    header: "Lot",
+    cell: ({ row }) => <span className="text-xs font-mono" title={row.original.lots.join(", ")}>{lotSummary(row.original)}</span>,
   },
   {
     accessorKey: "status",

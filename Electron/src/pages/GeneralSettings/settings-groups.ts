@@ -91,6 +91,8 @@ export interface SettingsModuleState {
   ticaretEnabled: boolean;
   iplikEnabled: boolean;
   depoMultiEnabled: boolean;
+  /** Devere HAM bayrak — üretime/ipliğe BAĞLI DEĞİL (K3; `useOperationsVisibility` aynası). */
+  devereEnabled: boolean;
 }
 
 /**
@@ -113,6 +115,7 @@ export function resolveSettingsModuleState(
     // ETKİN değer — bağımlılık burada, TEK yerde çözülür.
     iplikEnabled: ticaretEnabled && (flags?.iplikEnabled ?? false),
     depoMultiEnabled: flags?.depoMultiEnabled ?? false,
+    devereEnabled: flags?.devereEnabled ?? false,
   };
 }
 
