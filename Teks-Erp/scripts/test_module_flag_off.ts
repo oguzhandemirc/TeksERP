@@ -90,6 +90,7 @@ import {
   routerKapiOlcumu,
   yorumlariSok,
 } from "./lib/regime-gate-scan";
+import { atlamaDefteri } from "./lib/atlama";
 import { hedefDbAdi, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { httpBekciKapisi } from "./lib/http-bekci-kapisi";
 
@@ -102,7 +103,10 @@ const MW_YOL = join(SRC, "middlewares", "module.middleware.ts");
 
 let pass = 0;
 let fail = 0;
-let atlanan = 0;
+// Atlama ORTAK defterde sayılır (strict'te kırmızı; koşucu `Sonuç:` ekini okur).
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
 function check(label: string, ok: boolean, detail = ""): void {
   if (ok) {
     pass++;
@@ -112,9 +116,8 @@ function check(label: string, ok: boolean, detail = ""): void {
     console.error(`❌ ${label}${detail ? ` — ${detail}` : ""}`);
   }
 }
-function atla(label: string, sebep: string): void {
-  atlanan++;
-  console.log(`⏭️  ATLANDI ${label} — ${sebep}`);
+function atla(label: string, sebep: string, adet: number | "?" = 1): void {
+  ATLAMA.atla(label, sebep, adet);
 }
 
 type ModulAlani =
@@ -413,7 +416,7 @@ async function main(): Promise<void> {
   if (dbEngeli) {
     console.error(`❌ DURDURULDU: ${dbEngeli}`);
     fail++;
-    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
     return;
   }
 
@@ -630,14 +633,13 @@ async function main(): Promise<void> {
   const kapi = await httpBekciKapisi({ base: BASE, kontrolSayisi: httpKontrolSayisi });
   if (kapi.kirmizi) {
     check("HTTP ayağı ölçülebildi", false, kapi.kirmizi);
-    atlanan += httpKontrolSayisi;
-    console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız, ${atlanan} atlandı ===`);
+    atla("HTTP ayağı (§4/§4b/§5/§6/§7)", "kapı kırmızı verdi — ayak hiç koşmadı", httpKontrolSayisi);
+    console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
     return;
   }
   if (!kapi.token) {
-    console.log(`\n   ⏭️  HTTP ayağı KOŞMADI — ${kapi.atlaSebebi}\n      (§4/§4b/§5/§6/§7)\n`);
-    atlanan += httpKontrolSayisi;
-    console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız, ${atlanan} atlandı ===`);
+    atla("HTTP ayağı (§4/§4b/§5/§6/§7)", kapi.atlaSebebi ?? "ölçüm yapılamadı", httpKontrolSayisi);
+    console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
     return;
   }
 
@@ -671,11 +673,7 @@ async function main(): Promise<void> {
     // da kimlik zinciri kırık. İkisi de "ölçtüm" yalanıdır → KIRMIZI.
     const govde = (await login.json().catch(() => ({}))) as { message?: string };
     if (login.status === 429) {
-      atla(
-        "HTTP ayağı",
-        `giriş kilidi (429) — ${httpKontrolSayisi} kontrol ölçülmedi; ~60 sn sonra tekrar koş`,
-      );
-      atlanan += httpKontrolSayisi - 1; // `atla()` bir tanesini zaten saydı
+      atla("HTTP ayağı", "giriş kilidi (429) — ~60 sn sonra tekrar koş", httpKontrolSayisi);
     } else {
       check(
         "HTTP ayağı ölçülebildi",
@@ -684,9 +682,9 @@ async function main(): Promise<void> {
           `${govde.message ? ` ("${govde.message}")` : ""} — porttaki sunucu BAŞKA veritabanına ` +
           "bakıyor olabilir; kendi sunucunu kendi portunda başlat ve TEST_API_URL ile koş",
       );
-      atlanan += httpKontrolSayisi;
+      atla("HTTP ayağı", `giriş ${login.status} — ayak hiç koşmadı`, httpKontrolSayisi);
     }
-    console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız, ${atlanan} atlandı ===`);
+    console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
     return;
   }
   const token = ((await login.json()) as { data: { token: string } }).data.token;
@@ -711,14 +709,17 @@ async function main(): Promise<void> {
     kod?: string;
     modul?: string;
     mesaj?: string;
+    /** Top-level `body.code` — sözleşme gereği HEP undefined; okuyan istemci sahte yeşil görür. */
+    ustKod?: unknown;
   }
   const sonda = async (yol: string): Promise<SondaSonucu> => {
     const r = await fetch(`${BASE}${yol}`, { headers: auth });
     const g = (await r.json().catch(() => ({}))) as {
       message?: string;
+      code?: unknown;
       details?: { code?: string; modul?: string };
     };
-    return { durum: r.status, kod: g.details?.code, modul: g.details?.modul, mesaj: g.message };
+    return { durum: r.status, kod: g.details?.code, modul: g.details?.modul, mesaj: g.message, ustKod: g.code };
   };
 
   /**
@@ -762,12 +763,15 @@ async function main(): Promise<void> {
           ({ s }) =>
             s.durum !== 403 ||
             s.kod !== "MODULE_DISABLED" ||
+            // Kod `details` ALTINDA var ve top-level'da YOK — `body.code` okuyan
+            // bekçi/istemci undefined görüp sahte yeşile düşer (module.middleware.ts başlığı).
+            s.ustKod !== undefined ||
             s.modul !== beklenenModul ||
             !(s.mesaj ?? "").includes(beklenenEtiket),
         )
-        .map(({ yol, s }) => `${yol}→${s.durum}/${s.kod ?? "kodsuz"}/modul=${s.modul ?? "—"}`);
+        .map(({ yol, s }) => `${yol}→${s.durum}/${s.kod ?? "kodsuz"}/body.code=${String(s.ustKod)}/modul=${s.modul ?? "—"}`);
       check(
-        `§4 ⭐ ${m.alan} KAPALIYKEN 403 + code=MODULE_DISABLED + modul="${beklenenModul}" + mesajda "${beklenenEtiket}"`,
+        `§4 ⭐ ${m.alan} KAPALIYKEN 403 + details.code=MODULE_DISABLED (body.code YOK) + modul="${beklenenModul}" + mesajda "${beklenenEtiket}"`,
         kotu.length === 0,
         kotu.length
           ? `${kotu.join(", ")} — YANLIŞ modül adı operatörü YANLIŞ toggle'a gönderir`
@@ -953,8 +957,7 @@ async function main(): Promise<void> {
     kapsanmayanDb.join(", ") || `${MODULE_SETTING_KEYS.size} anahtar`,
   );
 
-  const toplamBandi = atlanan ? `, ${atlanan} atlandı` : "";
-  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${toplamBandi} ===`);
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
 }
 
 main()

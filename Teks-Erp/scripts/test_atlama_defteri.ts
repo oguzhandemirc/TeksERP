@@ -135,9 +135,12 @@ function tekEv(): void {
  * `"?"` (sayılamayan) sınıfını temsil edemez ve sayıyı elle düzeltmeye zorlar.
  */
 export function yerelKopyaMi(kaynak: string): { beyanEdiyor: boolean; ithalEdiyor: boolean; kopya: boolean } {
-  const ozet = /=== Sonuç:[^\n]*/.exec(kaynak)?.[0] ?? "";
+  // ⚠️ BÜTÜN `Sonuç:` satırları — ilki değil. Erken çıkışın özet satırı çoğu zaman
+  // atlama taşımaz; yalnız ilkine bakan yüklem, atlamayı SONRAKİ satırda beyan eden
+  // yerel kopyayı GÖRMEZ (ölçüldü: test_module_flag_off bir gün böyle saklandı).
+  const ozetler = [...kaynak.matchAll(/=== Sonuç:[^\n]*/g)].map((m) => m[0]);
   // Beyan iki biçimde görünür: şablon içinde `atlandı` metni ya da `ozetEki()` çağrısı.
-  const beyanEdiyor = /atlandı/.test(ozet) || /ozetEki\(\)/.test(ozet);
+  const beyanEdiyor = ozetler.some((ozet) => /atlandı/.test(ozet) || /ozetEki\(\)/.test(ozet));
   const ithalEdiyor = /from "\.\/lib\/atlama"/.test(kaynak);
   return { beyanEdiyor, ithalEdiyor, kopya: beyanEdiyor && !ithalEdiyor };
 }
@@ -191,6 +194,12 @@ function tekAltyapi(): void {
   check(
     "§5f hiç atlama beyan etmeyen bekçi kapsam DIŞI (yanlış pozitif sondası)",
     yerelKopyaMi(ozetli(", ${fail} başarısız ===")).kopya === false,
+  );
+  // İlk `Sonuç:` satırı erken çıkışın (beyansız), ikincisi asıl özet — kopya
+  // İKİNCİDE saklanır. Yalnız ilkine bakan yüklem burada sessizce yeşil olurdu.
+  check(
+    "§5g ⭐ beyan İLK DEĞİL SONRAKİ `Sonuç:` satırındaysa da KOPYA (ilk-satır körlüğü)",
+    yerelKopyaMi(`${ozetli(", ${fail} başarısız ===")}\nreturn;\n${ozetli(", ${atlanan} atlandı ===")}`).kopya,
   );
 }
 

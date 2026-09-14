@@ -424,26 +424,9 @@ async function main(): Promise<void> {
     check("§8d ⭐ çözülemeyen şablon → 400 (yerleşiğe sessizce sapmaz)",
       sablonYok.status === 400, `status=${sablonYok.status} msg=${String(sablonYok.body.message ?? "").slice(0, 48)}`);
 
-    // ③  Kapalı modül → 403 `MODULE_DISABLED`, kod `details.code` ALTINDA.
-    //    `body.code` hep undefined olmalı: bekçi/istemci orayı okursa sessizce
-    //    `undefined` görür ve SAHTE YEŞİL doğar (module.middleware.ts başlığı).
-    const devereKapali = (await prisma.systemSetting.findUnique({ where: { key: "devere.enabled" }, select: { value: true } }))?.value === false;
-    if (!devereKapali) {
-      atla("§8e/f kapalı modül sözleşmesi", "`devere.enabled` bu kurulumda kapalı DEĞİL — bekçi bayrağı DEĞİŞTİRMEZ, rejimi okur");
-    } else {
-      const modul = await call("GET", "/api/warp-specs", { token });
-      check("§8e ⭐ kapalı modül ucu → 403 + details.code=MODULE_DISABLED",
-        modul.status === 403 && ((modul.body.details ?? {}) as { code?: string }).code === "MODULE_DISABLED",
-        `status=${modul.status} details.code=${String(((modul.body.details ?? {}) as { code?: string }).code)}`);
-      // ⚠️ Bu kontrol TEK BAŞINA vakumen geçer: 200 yanıtta da `body.code`
-      // undefined'dır (negatif sonda ölçtü — modül kapısı olmayan bir uca
-      // bakınca §8e kırmızı verdi ama §8f yeşil kaldı). Bu yüzden yüklem İKİ
-      // koşullu: kod `details` altında VAR ve top-level'da YOK.
-      check("§8f ⭐ hata kodu `details.code` altında VAR, `body.code` YOK (sahte yeşil kapısı)",
-        ((modul.body.details ?? {}) as { code?: string }).code === "MODULE_DISABLED"
-          && (modul.body as { code?: unknown }).code === undefined,
-        `details.code=${String(((modul.body.details ?? {}) as { code?: string }).code)} body.code=${String((modul.body as { code?: unknown }).code)}`);
-    }
+    // ③  Kapalı modül → 403 `MODULE_DISABLED` (kod `details.code` altında, `body.code`
+    //    YOK): bayrak ÇEVİREREK her modül için `test_module_flag_off` §4 ölçer; burada
+    //    rejim okunup atlanıyordu — kapsamı olmayan bir beyandı, yüklem oraya taşındı.
     const acikModul = await call("GET", "/api/stations?pageSize=1", { token });
     check("§8g pozitif kontrol: açık modül ucu → 200 (her şey 403 değil)", acikModul.status === 200, `status=${acikModul.status}`);
   } finally {

@@ -20,7 +20,7 @@
 // `<x>.<delegate>.<yazan metod>` çağrısına, iç içe ilişki yazımı şemadaki ilişki tipine
 // bağlanır; çözülemeyen yazım SAYILIR ve kırmızıdır (sessiz yutma yok).
 //
-// NEGATİF SONDA (2026-09-13, üçü de bu dosyada `--sonda` ile koşar, her koşumda DEĞİL):
+// NEGATİF SONDA (2026-09-13; üçü de DB'siz ve geçici dizinde — HER KOŞUMDA koşar):
 //   (i)  şemaya beyansız `/// Olay anındaki foo` alanı eklenir → §1 yüklemi kırmızı
 //   (ii) beyanlı bir adayın şerh imzası silinir → aday listesinden DÜŞER (yüklem duyarlı;
 //        "mutasyon uygulanmadı" sessizliğine karşı)
@@ -30,7 +30,6 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { atlamaDefteri } from "./lib/atlama";
 import {
   SNAPSHOT_KOLONLARI,
   BACKEND_KOK,
@@ -45,13 +44,6 @@ import {
 
 let pass = 0;
 let fail = 0;
-/**
- * ⚠️ ATLAMA DEFTERİ ORTAK ALTYAPIDIR — yerel kopya AÇILMAZ. Kopya `"?"`
- * (sayılamayan atlama) sınıfını temsil EDEMEZ ve sayıyı elle düzeltmeye zorlar.
- */
-const ATLAMA = atlamaDefteri(() => {
-  fail++;
-});
 function check(label: string, ok: boolean, detail = ""): void {
   if (ok) {
     pass++;
@@ -65,7 +57,6 @@ function info(label: string, detail = ""): void {
   console.log(`ℹ  ${label}${detail ? ` — ${detail}` : ""}`);
 }
 
-const SONDA = process.argv.includes("--sonda");
 /** Körlük zemini — "0 aday" ile "şema okunamadı" aynı yeşile inmesin (bugün 23 aday · 504 dosya). */
 const EN_AZ_ADAY = 15;
 const EN_AZ_DOSYA = 300;
@@ -148,8 +139,8 @@ function main(): void {
   }
   check("§5 bekçi ayak atıfları çözülüyor", kirikAtif.length === 0, kirikAtif.length === 0 ? `${beyan.reduce((n, b) => n + (b.bekci?.length ?? 0), 0)} atıf` : kirikAtif.join(" | "));
 
-  // ── §6 sondalar ────────────────────────────────────────────────────────
-  if (SONDA) {
+  // ── §6 sondalar — DB'siz ve geçici dizinde; opt-in bayrağı her koşumda 3 kontrolü ⏭ sayıyordu ──
+  {
     // (i) beyansız yeni snapshot kolonu
     const mutant = semaMetni.replace(/^model Roll \{$/m, "model Roll {\n  /// Olay anındaki foo — sonda\n  sondaFooAnindaki String?");
     const mAdaylar = snapshotAdaylari(mutant);
@@ -175,11 +166,9 @@ function main(): void {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-  } else {
-    ATLAMA.atla("§6 sondalar", "sondalar KAPALI — açmak için: npx tsx scripts/test_snapshot_kolonlari.ts --sonda", 3);
   }
 
-  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   if (fail > 0) {
     console.log(
       "\nDÜŞTÜYSE: (§1) yeni snapshot kolonu → scripts/lib/snapshot-kolonlari.ts beyanına sınıfıyla gir;\n" +
