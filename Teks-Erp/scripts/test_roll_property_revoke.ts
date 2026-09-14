@@ -32,6 +32,7 @@ import { join } from "node:path";
 import { Prisma, RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { ensureTestAdmin } from "./fixture-test-user";
+import { roleGrade } from "./fixture-quality-grade";
 import {
   ACTIVE_ROLL_PROPERTY,
   ACTIVE_TARGET_PROPERTY,
@@ -174,7 +175,8 @@ async function main(): Promise<void> {
     return r.id;
   };
   const cutAndFinalize = async (parentId: string): Promise<string> => {
-    const cut = await tambur.cutWarehouseRoll(parentId, { cutLength: 30, qualityGrade: "1.KALITE" }, undefined);
+    // Kalite kodu ROLDEN çözülür (kod fabrikaya, rol kuruluma aittir — literal yasak).
+    const cut = await tambur.cutWarehouseRoll(parentId, { cutLength: 30, qualityGrade: (await roleGrade("FIRST")).code }, undefined);
     const childId = (cut.data as { childRoll: { id: string } }).childRoll.id;
     rollIds.push(childId);
     await tambur.finalizeWarehouseCut(parentId, { remainingAction: "discard", varianceReasonCode: "OLCUM_HATASI" }, undefined, null);
