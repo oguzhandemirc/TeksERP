@@ -32,10 +32,10 @@ export interface DocNameMode {
    * Ürün listesinde müşteri RENGİ ayrı sütuna çıkar mı
    * (`shipping.docProductColorSplit`).
    *
-   * ⚠️ Bu bir YERLEŞİM kararıdır, "hangi ad" kararı değil — ve yalnız MÜŞTERİYE
-   * GİDEN belgeyi ilgilendirir (ayarın kendi açıklaması böyle diyor). Muhasebe
-   * fişinin Excel'i bunu uygulamaz: orada müşteri adı tek birleşik hücrede
-   * kalır. Ad seçimi ikisinde de AYNIdır; ayrışan yalnız kolon düzenidir.
+   * ⚠️ Yerleşim kararı olsa da muhasebe fişinin Excel'i BUNU DA irsaliyeyle aynı
+   * uygular: fatura fişten kesilir ve ayrık kipte irsaliye renk hücresini boş
+   * bırakırken fişin birleşik dizeye bizim rengimizi yapıştırması, adı iki
+   * belgede yeniden ayrıştırırdı. Excel'de kolon düzeni de ad seçimi de aynıdır.
    */
   productColorSplit: boolean;
 }

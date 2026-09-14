@@ -75,6 +75,13 @@ export interface DispatchReport {
     name: string;
     /** Müşterideki ad — donmuş belgede zaten var; yoksa/boşsa bizimki basılır. */
     customerName?: string | null;
+    /**
+     * Ayrık kip ikizleri (`productColorSplit`): kumaş adı + en / yalnız renk.
+     * İrsaliyedeki hücrelerle AYNI kaynak; eski donmuş belgede yoklar →
+     * birleşik `customerName`e düşülür (irsaliyenin yaptığı gibi).
+     */
+    customerItemOnly?: string | null;
+    customerColorOnly?: string | null;
     rollCount: number;
     totalMeters: number;
   }>;

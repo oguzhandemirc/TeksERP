@@ -204,29 +204,45 @@ const DEFAULT_NAME_MODE = {
  * "kapsam sevk irsaliyesi + MUHASEBE FİŞİDİR" diyor; vaat yerine gelmiyordu.
  *
  * ⚠️ KARAR SUNUCUDA: hangi kolonun çizileceğini `report.docNameMode` söyler, burada
- * yeniden hesaplanmaz. `productColorSplit` BİLEREK uygulanmaz — o bir YERLEŞİM
- * kararıdır ve ayarın kendi metnine göre yalnız MÜŞTERİYE GİDEN belgeyi
- * ilgilendirir; fiş iç dosyadır, müşteri adı tek birleşik hücrede kalır.
+ * yeniden hesaplanmaz. `productColorSplit` de irsaliyeyle AYNI uygulanır: muhasebe
+ * fişten fatura keser, faturadaki ad irsaliyedekiyle HÜCRE HÜCRE aynı olmalı —
+ * ayrık kipte irsaliye "BS-6650 330cm." + boş renk basarken fişin "BS-6650 EKRU
+ * 330cm." basması (bizim rengimiz yapışık) aynı saha şikâyetinin ikinci yüzüydü.
  */
 export function buildDispatchReportSheets(report: DispatchReport): SheetSpec[] {
   const t = report.totals;
   const r = report.docNameMode ?? DEFAULT_NAME_MODE;
+  const colorSplit = r.showCustomerName && r.productColorSplit;
   return [
     {
       name: "Kumaş Listesi",
       columns: [
         ...(r.showOurName ? [{ header: "Stok Adı", key: "name", width: 40 }] : []),
-        ...(r.showCustomerName
-          ? [{ header: "Müşterideki Stok Adı", key: "docCustomerName", width: 40 }]
-          : []),
+        ...(colorSplit
+          ? [
+              { header: "Müşterideki Stok Adı", key: "docCustomerName", width: 40 },
+              { header: "Müşterideki Varyant", key: "docCustomerColor", width: 18 },
+            ]
+          : r.showCustomerName
+            ? [{ header: "Müşterideki Stok Adı", key: "docCustomerName", width: 40 }]
+            : []),
         { header: "Top", key: "rollCount", width: 9, numFmt: INT },
         { header: "Toplam Metre", key: "totalMeters", width: 14, numFmt: NUM1 },
       ],
       // Kolon çizilmiyorsa satıra anahtar da EKLENMEZ — okuyucusu olmayan bir
       // alan, "bu veri de gidiyor mu" sorusunu boş yere açar.
-      rows: r.showCustomerName
-        ? report.products.map((p) => ({ ...p, docCustomerName: customerNameOr(p.customerName, p.name) }))
-        : report.products,
+      // Ayrık kipte renk hücresi FALLBACK'SİZ (irsaliyeyle aynı): karşılığı
+      // olmayan renkte bizim adımızı "Müşterideki Varyant" altında basmak yanlış
+      // etiketlemedir; hücre boş kalır.
+      rows: colorSplit
+        ? report.products.map((p) => ({
+            ...p,
+            docCustomerName: customerNameOr(p.customerItemOnly ?? p.customerName, p.name),
+            docCustomerColor: p.customerColorOnly ?? "",
+          }))
+        : r.showCustomerName
+          ? report.products.map((p) => ({ ...p, docCustomerName: customerNameOr(p.customerName, p.name) }))
+          : report.products,
       // "TOPLAM" hangi ad kolonu ÖNDEYSE oraya yazılır — yalnız müşteri adı
       // çizildiğinde `name` boş kalır ve toplam satırı etiketsiz görünürdü.
       totalRow: {

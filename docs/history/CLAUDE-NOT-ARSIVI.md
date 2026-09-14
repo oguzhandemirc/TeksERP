@@ -9163,3 +9163,21 @@ okumaz, yalnız `applyYarnMovementTx`), negatif sondalar ①② güncellendi; `t
 içinde §4d). Panel: `lib/module-flags` aynası, `useOperationsVisibility` devere ham bayrak (belirsizken false),
 `modulesThatDependOn` beklentileri (ticaret → [iplik]; iplik → []).
 **Not:** `requireIplikEnabled` iki seviyeli zinciri (iplik → ticaret) yerinde; yalnız devere halkası koptu.
+
+## 2026-09-14 — SEVK FİŞİ EXCEL'İ AYRIK KİPİ DE (`docProductColorSplit`) İRSALİYEYLE AYNI UYGULAR [ÇEKİRDEK]
+
+**Şikâyet (kullanıcı, 6e ölçtü):** "müşteriye özel stok adı/renk adı varsa PDF onu basıyor, Excel bizim adı basıyor."
+**Ölçüm:** sahadaki paket `panel-v1.3.1` (2026-09-07 etiketi); ad rejimini fişe taşıyan `b18af0d0` 2026-09-10 tarihli
+⇒ şikâyetin BİRİNCİ yüzü (rejim) origin'de kapalı, sahaya ÇIKMAMIŞ. Origin'de kalan İKİNCİ yüz: `resolveDocNameMode`
+`productColorSplit`i taşıyor, irsaliye HTML'i ayrık kipte "MÜŞTERİ STOK ADI" (kumaş+en) + "MÜŞTERİ VARYANT"
+(yalnız müşterinin rengi, fallback YOK) basıyor; Excel `buildDispatchReportSheets` bayrağı BİLEREK uygulamıyordu
+(helper şerhi: "fiş iç dosyadır") ⇒ müşterinin renk karşılığı yokken irsaliye `BS-6650 330cm.` + boş, fiş
+`BS-6650 EKRU 330cm.` — bizim rengimiz müşteri kumaş adına yapışık. Muhasebe faturayı fişten kestiği için
+"iç dosya" gerekçesi yanlıştı: faturadaki ad irsaliyedekiyle hücre hücre aynı olmalı.
+**Karar:** Excel de `productColorSplit`i uygular — kolon düzeni ve hücre içeriği irsaliyeyle aynı (renk hücresi
+fallback'siz, eski donmuş belgede ikizler yoksa birleşik `customerName`e düşüş = irsaliyenin `?? p.customerName`i).
+Bayrak KAPALIYKEN çıktı bayt bayt eski (varsayılan = bugünkü). Dönem dökümü (`buildAccountingWorkbookSheets`)
+kapsam DIŞI kalır (belge-etiket.md:50 aynen) — çok müşterili iç özet, yalnız bizim adımız.
+**Bekçi:** `Electron accounting-export.name-mode.test.ts` §6/§6b/§6c/§7/§7b (ad rejimi bölümü ayrı dosyaya taşındı — max-lines 300); negatif sonda üç mutasyon (dal kapalı → §6/§6b/§7
+kırmızı · renk fallback → §6b/§7 · ikizsiz düşüş kaldırıldı → §7). Backend değişmedi (`test_shipment_doc_customer_name
+§9/§10` fiş ucunun bayrağı taşıdığını zaten ölçüyor).
