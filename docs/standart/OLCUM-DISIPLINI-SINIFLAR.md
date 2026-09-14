@@ -44,6 +44,16 @@ olduğunu saymak genellikle tek sorgudur.
 öncesi ve sonrası ucu karşılaştırmak**.
 *Vaka: bir bekçi için "zaten kırmızıydı" hükmü, test edilen değişikliğin kendi
 artığını taşıyan DB'de verildi. Temiz ayırt edici koşulunca hüküm değişti.*
+**Üçüncü yüzeyi — ortam "öncesi" bile değil, ARIZANIN HİÇ OLMADIĞI bir ortamdır.**
+Yamayı ölçersin, yeşil görürsün, "düzeldi" dersin; oysa yamanın ÇÖZDÜĞÜ ŞEY o
+ağaçta hiç yoktur. Yeşil, yamanın değil YOKLUĞUN kanıtıdır.
+*(Vaka 2026-09-14: CI'da seed `P2002` veriyordu; yamayı taze bir DB'de ölçtüm ve
+geçti. Ama DB'yi KENDİ dalımda kurmuştum ve kırığı üreten migration o dalda YOKTU —
+`migrate deploy` onu hiç koşmadı, çakışacak satır hiç doğmadı. Migration ağaca
+alınıp ölçüm tekrarlandığında kontrol koşumu kusuru birebir üretti.)*
+**Savunma:** yamayı ölçmeden önce **kusurun o ortamda GERÇEKTEN doğduğunu** ölç —
+kontrol koşumu (yamasız hâl) kırmızı vermiyorsa, yeşil hiçbir şey kanıtlamaz.
+Soru "yama yeşil mi" değil, **"yamasız hâl bu ortamda kırmızı mı"**dır.
 
 ### 6 · Ölçüt doğru ama dar
 Bir davranışı ölçer, değişmezin tamamını değil. Sızıntı **iki koşum arasındaki
