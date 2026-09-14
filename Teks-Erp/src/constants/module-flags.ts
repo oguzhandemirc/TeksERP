@@ -73,15 +73,16 @@ export const MODULE_SETTING_KEYS: ReadonlySet<string> = new Set([
  * 400 verir — tutarsız çift hiç DOĞMAZ) ve okuma yolunda (middleware; elle
  * SQL/eski satır yüzünden tutarsız bir çift zaten varsa kapı yine kapalıdır).
  *
- * ⚠️ ZİNCİR (devere → iplik → ticaret): bu tablo TEK ön koşul taşır, geçişli
- * kapanışı KENDİ ÜRETMEZ. Yazma yolu zinciri dolaylı kapatır (her çift ayrı
- * ölçülür), OKUMA kapısı ise zinciri ELLE ölçmek zorundadır — bkz.
- * `requireDevereEnabled` (ticaret → iplik → devere sırasıyla, eksik OLANI söyler).
+ * ⚠️ ZİNCİR (iplik → ticaret): bu tablo TEK ön koşul taşır, geçişli kapanışı KENDİ
+ * ÜRETMEZ. Yazma yolu zinciri dolaylı kapatır, OKUMA kapısı zinciri ELLE ölçer
+ * (`requireIplikEnabled` iki seviye).
+ * ⚠️ DEVERE BAĞIMSIZDIR (DEVERE-LEVENT §9.7d; 1e K3 hükmü 2026-09-14): hazır/fason levent
+ * iplik tüketmez, "iplik KAPALI + devere AÇIK" kurulumu meşrudur. İplik kapısı AKSİYON
+ * ANINDA: içeride sarım `applyYarnMovementTx` üzerinden iplik kapalıysa 403 alır.
  */
 export const MODULE_DEPENDENCIES: Readonly<Record<string, string>> = {
   iplikEnabled: "ticaretEnabled",
   tezgahEnabled: "productionEnabled",
-  devereEnabled: "iplikEnabled",
   dokumaEnabled: "productionEnabled",
 };
 

@@ -41,11 +41,10 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
   // depo listesi sorgusunun bu ekranda hiç gerekmemesi (hub her açılışta
   // kimsenin okumadığı bir istek atıyordu — 2026-09-01 sondasının aynısı).
   const depoMultiEnabled = flagsQuery.data?.data?.depoMultiEnabled ?? false;
-  // ⚠️ ETKİN DEĞER (üç halka): devere → iplik → ticaret. `iplikEnabled` yukarıda
-  // zaten etkin hâle geldiği için zincir burada tek çarpımla kapanır. Ham değeri
-  // karo yüklemine vermek, ticaret kapalıyken Çözgü Kartları karosunu çizer ve
-  // tıklayan kullanıcı 403 yerdi (backend kapısı zinciri ölçüyor).
-  const devereEnabled = iplikEnabled && (flagsQuery.data?.data?.devereEnabled ?? false);
+  // ⚠️ DEVERE BAĞIMSIZ (2026-09-14, 1e K3 / DEVERE-LEVENT §9.7d): hazır/fason levent iplik
+  // tüketmez; backend kapısı yalnız devere okur, iplik kapısı aksiyon anında (içeride sarım).
+  // Belirsizken FALSE ("sıfır görünür fark").
+  const devereEnabled = flagsQuery.data?.data?.devereEnabled ?? false;
   // ⚠️ ETKİN DEĞER (iki halka): dokuma → production. Belirsizken FALSE — fabrikada
   // karo bir an belirip kaybolmamalı ("sıfır görünür fark"); backend kapısı
   // `requireDokumaEnabled` aynı sırayı ölçer.

@@ -3,8 +3,8 @@
 // =============================================================================
 // Çözgü kartı ana veridir; CRUD `BaseController` üzerinden koşar.
 //
-// ⚠️ ÜÇ KAPI SIRAYLA: `verifyToken` → `requireDevereEnabled` (modül rejimi,
-// ticaret → iplik → devere zincirini ELLE ölçer) → `requirePermission`
+// ⚠️ ÜÇ KAPI SIRAYLA: `verifyToken` → `requireDevereEnabled` (modül rejimi — YALNIZ
+// devere; iplik/ticaret bağımlılığı YOK, §9.7d / 1e K3 2026-09-14) → `requirePermission`
 // (kişi bunu yapabilir mi). Modül kapısı izin kapısının YERİNE GEÇMEZ: bayrak
 // "bu kurulum bu modülü kullanıyor mu", izin "bu kişi bunu yapabilir mi".
 // Jenerik `requireModule("devere")` YASAK — kapı varlığı middleware'in ADIYLA

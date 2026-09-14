@@ -137,14 +137,12 @@ export async function requireIplikEnabled(
 /**
  * Devere / levent modülü: çözgü kartı · levent stoğu · levent olay defteri.
  *
- * ⚠️ ZİNCİR ELLE ÖLÇÜLÜR (ticaret → iplik → devere): `MODULE_DEPENDENCIES` tek
- * ön koşul taşır ve geçişli kapanış ÜRETMEZ. `requireIplikEnabled` iki seviye
- * ölçüyor; devere üç. Zincir ölçülmezse "ticaret kapalı + iplik açık + devere
- * açık" gibi (elle SQL / eski dump / yarım profil kaynaklı) tutarsız bir
- * kurulumda levent doğarken yazılacak `WARP_ISSUE` hareketi kapısız kalırdı.
- *
- * ⚠️ Mesaj EKSİK OLANI söyler ve EN DIŞTAKİNDEN başlar — operatörü "iplik
- * kapalı" diye yanlış anahtara göndermemek için (iplik kapısının dersi).
+ * ⚠️ YALNIZ DEVERE OKUR (1e K3 hükmü 2026-09-14, DEVERE-LEVENT §9.7d): devere modülü iplik/ticarete
+ * BAĞLI DEĞİLDİR — hazır ya da fasona sardırılmış levent iplik tüketmez, "iplik KAPALI + devere
+ * AÇIK" kurulumu meşrudur. İplik kapısı AKSİYON ANINDA koşar: içeride sarım (`WARP_ISSUE` yazan
+ * tek yol) `applyYarnMovementTx`in içindeki `readIplikEnabled` ile 403 MODULE_DISABLED(iplik) alır;
+ * fason/hazır alım sarımı iplik defterine hiç dokunmaz. Ölçen: `test_devere_regime_gate §2/§4`,
+ * `test_warp_beam_lifecycle §10`.
  */
 export async function requireDevereEnabled(
   req: Request,
@@ -152,22 +150,6 @@ export async function requireDevereEnabled(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const ticaret = await readTicaretEnabled();
-    if (!ticaret) {
-      throw AppError.forbidden(
-        "Devere modülü İplik modülüne, o da Ticaret modülüne bağlıdır; Ticaret modülü bu kurulumda kapalı. " +
-          "Sistem → Modüller bölümünden açılabilir.",
-        { code: "MODULE_DISABLED", modul: "ticaret", dependent: "devere" },
-      );
-    }
-    const iplik = await readIplikEnabled();
-    if (!iplik) {
-      throw AppError.forbidden(
-        "Devere modülü İplik modülüne bağlıdır; İplik modülü bu kurulumda kapalı. " +
-          "Sistem → Modüller bölümünden açılabilir.",
-        { code: "MODULE_DISABLED", modul: "iplik", dependent: "devere" },
-      );
-    }
     const enabled = await readDevereEnabled();
     if (!enabled) {
       throw modulKapali("devere", "Devere / levent");

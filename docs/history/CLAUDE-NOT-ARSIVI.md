@@ -9145,3 +9145,21 @@ ortak Türkçe doğru, SHARED_ENUM_VALUES; `IN_HOUSE` WeavingExecutionKind ile p
 istasyonunun aktif makinesi (`GET /warp-beams/devere-machines`). ⓗ Fason/hazır alım kökeninde iplik satırı yazılırsa 400.
 **Ölçülemedi / borç:** tablet devere ekranı (ayrı dilim, `WARP_RETURN` zemini bilerek boş) · raşel takım sarımı formu
 ("N adet") · 1a′ numara sistemi (ayrı dilim) · fason sevk kalemi (levent) ayrı dilim.
+
+## 2026-09-14 — K3: DEVERE → İPLİK BAĞIMLILIĞI KALKTI, iplik kapısı AKSİYON ANINDA (47 ölçtü, 1e hüküm) [ÇEKİRDEK]
+
+**Bulgu (47, c2 doğrulaması):** `MODULE_DEPENDENCIES.devereEnabled = "iplikEnabled"` canlıydı; tasarım §5/§9.7d ve
+arşiv (2026-09-12) "GEÇERSİZ, kaldırılır, yerine hiçbir şey yazılmaz" diyordu — "iplik KAPALI + devere AÇIK" (hazır
+levent alan dokumacı) modül tablosunda yasak kalmıştı; #64 tam paketi `test_iplik_regime_gate §2/§4a`da aynı sınıfı
+kırmızı verdi (warp-beam.routes kapısız · warp-beam-wind.service beyansız yazar). **Hüküm (1e):** bağımlılık kaldırılır;
+IN_HOUSE sarım iplik kapalıysa 403 (aksiyon anında, bayrak değil), PURCHASED/SUBCONTRACT serbest.
+**İniş:** backend `MODULE_DEPENDENCIES` satırı düştü; `requireDevereEnabled` yalnız devere okur (ticaret/iplik dalları
+ve üç seviyeli mesaj gitti); iplik kapısı zaten motorun içindeydi (`applyYarnMovementTx` → `readIplikEnabled` →
+MODULE_DISABLED(iplik)) — ölçüldü: `test_warp_beam_lifecycle §10a` (iplik kapalı + devere açık: içeride sarım 403,
+levent PLANNED kaldı) · §10b (fason sarım READY, iplik satırı yok). Bekçiler: `test_devere_regime_gate §2/§3/§4`
+yeniden yazıldı (kapı iplik/ticaret OKUMAZ; `MODULE_DEPENDENCIES.devereEnabled` YOK; sarım servisi bayrağı kendisi
+okumaz, yalnız `applyYarnMovementTx`), negatif sondalar ①② güncellendi; `test_iplik_regime_gate` muaf
+(`warp-beam.routes` — route kapısı EKLENEMEZ) + `DEFTER_YAZARLARI` beyanı (`warp-beam-wind.service`, kapı motorun
+içinde §4d). Panel: `lib/module-flags` aynası, `useOperationsVisibility` devere ham bayrak (belirsizken false),
+`modulesThatDependOn` beklentileri (ticaret → [iplik]; iplik → []).
+**Not:** `requireIplikEnabled` iki seviyeli zinciri (iplik → ticaret) yerinde; yalnız devere halkası koptu.

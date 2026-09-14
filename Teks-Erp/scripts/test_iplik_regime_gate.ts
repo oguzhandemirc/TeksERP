@@ -97,6 +97,14 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "0 satır döner.",
   },
   {
+    dosya: "routes/warp-beam.routes.ts",
+    neden:
+      "LEVENT (devere 1b). Kendi rejim kapısını taşır (`requireDevereEnabled`; iplik/ticarete BAĞLI DEĞİL — " +
+      "hazır/fason levent iplik tüketmez, 1e K3 2026-09-14). İplik defterine YALNIZ aksiyon anında dokunur: " +
+      "içeride sarım `applyYarnMovementTx` üzerinden yazar ve iplik kapalıysa motorun içindeki kapı 403 " +
+      "MODULE_DISABLED(iplik) verir (§4d); fason/hazır alım sarımı iplik satırı yazmaz. Route kapısı EKLENEMEZ.",
+  },
+  {
     dosya: "routes/finance.routes.ts",
     neden:
       "ÖN MUHASEBE. Kendi rejim kapısını taşır (`requireFinanceEnabled`). İplik dokunuşu " +
@@ -140,6 +148,7 @@ const DEFTER_YAZARLARI: ReadonlyArray<{ dosya: string; neden: string }> = [
   { dosya: "services/stock-count.service.ts", neden: "Sayım farkı → ADJUST_IN/ADJUST_OUT. Ticaret kapılı; iplik kapısı motorun İÇİNDE (§4d)." },
   { dosya: "services/stock-count-reversal.service.ts", neden: "Sayım stornosu → sayımın net iplik farkının ters ADJUST'u. Ticaret kapılı; iplik kapısı motorun İÇİNDE (§4d), önizleme kapalı modülü engel olarak listeler." },
   { dosya: "services/invoice.service.ts", neden: "Satış faturası stok düşümü → `resolveYarnOutOnInvoiceEnabled` KAPILI (K10)." },
+  { dosya: "services/warp-beam-wind.service.ts", neden: "Levent sarımı (IN_HOUSE) → WARP_ISSUE/WARP_RETURN, iptali → tersleri. Devere kapılı; iplik kapısı AKSİYON ANINDA motorun İÇİNDE (§4d) — devere→iplik bağımlılığı yok (K3)." },
 ];
 
 function main(): void {

@@ -94,11 +94,12 @@ describe("kapatırsan gizlenecek ekranlar", () => {
 });
 
 describe("bağımlılık oku", () => {
-  it("⭐ TERS yön + GEÇİŞLİ: Ticaret kapanırsa İplik VE Devere kapanır", () => {
-    expect(modulesThatDependOn("ticaretEnabled")).toEqual(["iplikEnabled", "devereEnabled"]);
+  it("⭐ TERS yön + GEÇİŞLİ: Ticaret kapanırsa İplik kapanır (devere BAĞIMSIZ, 2026-09-14 K3)", () => {
+    expect(modulesThatDependOn("ticaretEnabled")).toEqual(["iplikEnabled"]);
     // 2026-09-13: dokuma işi de üretime bağlı (tezgahın kardeşi) — BFS sırası tablo sırası.
     expect(modulesThatDependOn("productionEnabled")).toEqual(["tezgahEnabled", "dokumaEnabled"]);
-    expect(modulesThatDependOn("iplikEnabled")).toEqual(["devereEnabled"]);
+    // Devere iplikten bağımsız: hazır/fason levent iplik tüketmez (DEVERE-LEVENT §9.7d).
+    expect(modulesThatDependOn("iplikEnabled")).toEqual([]);
   });
 
   it("bağımlısı olmayan modülde liste boş", () => {

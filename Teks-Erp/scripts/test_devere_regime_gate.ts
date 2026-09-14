@@ -27,10 +27,11 @@
 // Koşum: npx tsx scripts/run-all-tests.ts devere_regime
 //
 // NEGATİF SONDALAR (yazılırken koşuldu, dosya sha256 ile geri yüklendi):
-//   ① `requireDevereEnabled` gövdesinden `readTicaretEnabled` dalı silindi
-//      → §2a + §3a kırmızı (zincirin en dış halkası ölçülmüyor).
-//   ② İplik dalı ile ticaret dalının SIRASI değiştirildi
-//      → §2b kırmızı (operatör "iplik kapalı" diye yanlış anahtara gönderilirdi).
+//   ① (2026-09-14, K3) `requireDevereEnabled` gövdesine `readIplikEnabled` dalı geri kondu
+//      → §2b kırmızı (bağımlılık KALKTI: hazır levent alan fabrika iplik stoku tutmaz).
+//   ② (2026-09-14, K3) `MODULE_DEPENDENCIES.devereEnabled = "iplikEnabled"` geri kondu
+//      → §4a kırmızı; `warp-beam-wind.service`ten `applyYarnMovementTx` çağrısı düşürüldü → §4b kırmızı.
+//   (Eski ①/② — ticaret dalı/sırası — GEÇERSİZ: zincir artık ölçülmüyor, kapı yalnız devere okur.)
 //   ③ `MODULE_DEPENDENCIES.devereEnabled` silindi → §4a + §4b kırmızı.
 //   ④ `readDevereEnabled`in `asBoolean` varsayılanı `true`ya çevrildi → §5 kırmızı.
 // =============================================================================
@@ -90,31 +91,16 @@ async function main(): Promise<void> {
   const govde = kapiGovdesi(kod);
   check("§1b Körlük zemini: kapı gövdesi ayrıştırıldı", govde.length > 200, `${govde.length} karakter`);
 
-  // ── §2 ⭐ ZİNCİR ELLE ÖLÇÜLÜYOR ve SIRA DOĞRU ─────────────────────────────
-  const iTicaret = govde.indexOf("readTicaretEnabled");
-  const iIplik = govde.indexOf("readIplikEnabled");
-  const iDevere = govde.indexOf("readDevereEnabled");
+  // ── §2 ⭐ KAPI YALNIZ DEVERE OKUR — bağımlılık KALKTI (DEVERE-LEVENT §9.7d; 1e K3 2026-09-14) ──
+  check("§2a ⭐ Kapı devere anahtarını okuyor", govde.includes("readDevereEnabled"));
   check(
-    "§2a ⭐ Kapı ÜÇ halkayı da okuyor (ticaret · iplik · devere)",
-    iTicaret >= 0 && iIplik >= 0 && iDevere >= 0,
-    `ticaret=${iTicaret} iplik=${iIplik} devere=${iDevere}`,
-  );
-  check(
-    "§2b ⭐ Sıra EN DIŞTAN içe (ticaret → iplik → devere)",
-    iTicaret >= 0 && iIplik > iTicaret && iDevere > iIplik,
-    "ters sıra operatörü yanlış anahtara gönderir: eksik olan TİCARET iken 'iplik kapalı' denirdi",
+    "§2b ⭐ Kapı iplik/ticaret OKUMAZ (hazır/fason levent iplik tüketmez; \"iplik KAPALI + devere AÇIK\" meşru)",
+    !/readIplikEnabled|readTicaretEnabled/.test(govde),
+    "iplik kapısı AKSİYON ANINDA: içeride sarım `applyYarnMovementTx` → iplik kapalıysa 403 (test_warp_beam_lifecycle §10)",
   );
 
-  // ── §3 ⭐ MESAJ EKSİK OLANI SÖYLÜYOR ──────────────────────────────────────
-  check(
-    '§3a ⭐ Ticaret dalı `modul:"ticaret"` + `dependent:"devere"` döndürüyor',
-    /modul:\s*"ticaret"[\s\S]{0,60}dependent:\s*"devere"/.test(govde),
-    "403 gövdesi hangi modülün kapalı olduğunu SÖYLEMELİ (iplik kapısının dersi)",
-  );
-  check(
-    '§3b ⭐ İplik dalı `modul:"iplik"` + `dependent:"devere"` döndürüyor',
-    /modul:\s*"iplik"[\s\S]{0,60}dependent:\s*"devere"/.test(govde),
-  );
+  // ── §3 ⭐ MESAJ ────────────────────────────────────────────────────────────
+  check('§3a ⭐ Gövde `modul:"ticaret"` / `modul:"iplik"` DÖNDÜRMEZ (bağımlı değil)', !/modul:\s*"(ticaret|iplik)"/.test(govde));
   check(
     '§3c Kendi dalı ortak `modulKapali("devere", …)` kullanıyor (403 + MODULE_DISABLED)',
     /modulKapali\(\s*"devere"/.test(govde),
@@ -127,14 +113,14 @@ async function main(): Promise<void> {
 
   // ── §4 ⭐ BAĞIMLILIK TABLOSU ve DÖRT TABLO HİZASI ─────────────────────────
   check(
-    "§4a ⭐ `MODULE_DEPENDENCIES.devereEnabled === iplikEnabled`",
-    MODULE_DEPENDENCIES["devereEnabled"] === "iplikEnabled",
+    "§4a ⭐ `MODULE_DEPENDENCIES.devereEnabled` YOK (PURCHASED/SUBCONTRACT levent iplik tüketmez)",
+    MODULE_DEPENDENCIES["devereEnabled"] === undefined,
     `bugün: ${MODULE_DEPENDENCIES["devereEnabled"] ?? "YOK"}`,
   );
+  const windSrc = yorumlariSok(fs.readFileSync(path.join(SRC, "services/warp-beam-wind.service.ts"), "utf8"));
   check(
-    "§4b ⭐ Zincir ÜÇ halka: iplik de ticarete bağlı",
-    MODULE_DEPENDENCIES["iplikEnabled"] === "ticaretEnabled",
-    `bugün: ${MODULE_DEPENDENCIES["iplikEnabled"] ?? "YOK"}`,
+    "§4b ⭐ İplik kapısı AKSİYON ANINDA: sarım servisi iplik defterine YALNIZ `applyYarnMovementTx` ile yazar (kapı motorun içinde), bayrağı kendisi okumaz",
+    /applyYarnMovementTx\(/.test(windSrc) && !/readIplikEnabled/.test(windSrc),
   );
   check("§4c Anahtar dört tabloda da var (alan)", MODULE_FLAG_KEYS.has("devereEnabled"));
   check("§4d Anahtar dört tabloda da var (DB)", MODULE_SETTING_KEYS.has("devere.enabled"));

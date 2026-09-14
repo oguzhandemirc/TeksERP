@@ -87,8 +87,8 @@ export function screensHiddenByModule(
  * kapatma sırasını TERS söylerdi.
  */
 export function modulesThatDependOn(moduleKey: ModuleFlagKey): ModuleFlagKey[] {
-  // ⚠️ GEÇİŞLİ KAPANIŞ (2026-09-12, devere): zincir üç halkaya çıktı
-  // (devere → iplik → ticaret). Yalnız DOĞRUDAN bağımlıyı döndürmek, "Ticaret'i
+  // ⚠️ GEÇİŞLİ KAPANIŞ (2026-09-12): zincir bir ara üç halkaydı (devere → iplik → ticaret);
+  // devere 2026-09-14'te bağımsızlaştı (K3), BFS yine de kalır — yeni zincirler doğabilir. Yalnız DOĞRUDAN bağımlıyı döndürmek, "Ticaret'i
   // kapatırsan İplik de kapanır" derken Devere'yi SUSARDI — kullanıcı iki adım
   // sonra 400 yerdi. Kapanış BFS ile alınır; tablo çevrimsizdir (ön koşul
   // zinciri), `gorulen` yine de sonsuz döngüye karşı tutulur.

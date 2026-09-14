@@ -44,7 +44,6 @@ export type ModuleFlagKey = (typeof MODULE_FLAG_KEYS)[number];
 export const MODULE_DEPENDENCIES: Readonly<Partial<Record<ModuleFlagKey, ModuleFlagKey>>> = {
   iplikEnabled: "ticaretEnabled",
   tezgahEnabled: "productionEnabled",
-  devereEnabled: "iplikEnabled",
   dokumaEnabled: "productionEnabled",
 };
 

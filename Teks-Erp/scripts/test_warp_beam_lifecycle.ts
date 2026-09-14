@@ -170,6 +170,18 @@ async function main(): Promise<void> {
     const yaris = await Promise.allSettled([1, 2].map(() => windWarpBeam(p4.data.id, { lengthM: 300, kgSource: WarpKgSource.WEIGHED, machineId: mk.id, yarnIssues: [{ warehouseId: wh.id, qtyKg: 30 }] })));
     const gecen = yaris.filter((r) => r.status === "fulfilled").length;
     check("§9 ⭐ iki paralel sarımdan TAM BİRİ geçti; tek WOUND, iplik bir kez düştü (970)", gecen === 1 && (await prisma.warpBeamEvent.count({ where: { beamId: p4.data.id, kind: "WOUND" } })) === 1 && (await bakiye(yarn.id, wh.id)) === 970, `geçen=${gecen}`);
+
+    console.log("\n── §10 İplik kapısı AKSİYON ANINDA (devere→iplik bağımlılığı yok) ──");
+    await prisma.systemSetting.update({ where: { key: SETTING_KEYS.IPLIK_ENABLED }, data: { value: "false" } });
+    const p5 = await createWarpBeam({ warpSpecId: spec.id, plannedLengthM: 100, originKind: WarpBeamOrigin.IN_HOUSE });
+    beamIds.push(p5.data.id);
+    const e10 = await beklenenHata(() => windWarpBeam(p5.data.id, { lengthM: 100, kgSource: WarpKgSource.WEIGHED, machineId: mk.id, yarnIssues: [{ warehouseId: wh.id, qtyKg: 5 }] }));
+    check("§10a ⭐ iplik KAPALI + devere AÇIK: içeride sarım → 403 MODULE_DISABLED(iplik), levent PLANNED kaldı", kod(e10) === "MODULE_DISABLED" && (e10?.details as { modul?: string } | undefined)?.modul === "iplik" && (await prisma.warpBeam.findUnique({ where: { id: p5.data.id }, select: { status: true } }))?.status === WarpBeamStatus.PLANNED, kod(e10));
+    const p6 = await createWarpBeam({ warpSpecId: spec.id, plannedLengthM: 100, originKind: WarpBeamOrigin.SUBCONTRACT, subcontractorId: sub.id });
+    beamIds.push(p6.data.id);
+    const w6 = await windWarpBeam(p6.data.id, { lengthM: 100, kgSource: WarpKgSource.THEORETICAL });
+    check("§10b ⭐ iplik KAPALI: fason levent sarılır (iplik defterine dokunmaz) — hazır levent alan fabrika iplik stoku tutmaz", w6.data.status === WarpBeamStatus.READY);
+    await prisma.systemSetting.update({ where: { key: SETTING_KEYS.IPLIK_ENABLED }, data: { value: "true" } });
   } finally {
     await prisma.yarnMovement.deleteMany({ where: { OR: [{ warpBeamId: { in: beamIds } }, { itemId: yarn.id }] } });
     await prisma.yarnStock.deleteMany({ where: { itemId: yarn.id } });

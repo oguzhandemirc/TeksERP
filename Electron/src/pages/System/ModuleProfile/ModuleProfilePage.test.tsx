@@ -143,21 +143,19 @@ describe("Sistem Profili ekranı", () => {
     // ⭐ Tablet ekranları AYRI ve ANILIR — modül kapanınca tablet DURUR
     // (backend `requireProductionEnabled` 403), satıcı bunu görmeden karar veremez.
     expect(screen.getByText(/ekranlar \(1\): KK1 \(Ham Giriş\)/)).toBeTruthy();
-    // Bağımlılık oku TERS yönde anlatılır — ÜÇ modülde (üretim→[tezgah, dokuma],
-    // ticaret→[iplik, devere], iplik→devere), yani sayı da ölçülüyor.
-    expect(screen.getAllByText(/Kapatılırsa birlikte kapanır:/)).toHaveLength(3);
-    // Düz yön DÖRT modülde (iplik←ticaret, tezgah←üretim, devere←iplik,
-    // dokuma←üretim — 2026-09-13 ekran dilimi).
-    expect(screen.getAllByText(/Açılabilmesi için önce/)).toHaveLength(4);
-    // ⭐ GEÇİŞLİ KAPANIŞ (2026-09-12, devere): Ticaret'in satırı İplik'i VE
-    // Devere'yi birlikte anmalı. Yalnız doğrudan bağımlıyı listeleyen bir
-    // önizleme, kullanıcıya kapatma sırasını EKSİK söylerdi (iki adım sonra
-    // 400 `MODULE_DEPENDENCY` yerdi).
+    // Bağımlılık oku TERS yönde anlatılır — İKİ modülde (üretim→[tezgah, dokuma],
+    // ticaret→[iplik]); devere 2026-09-14'te BAĞIMSIZLAŞTI (K3: hazır/fason levent iplik
+    // tüketmez), yani sayı da ölçülüyor.
+    expect(screen.getAllByText(/Kapatılırsa birlikte kapanır:/)).toHaveLength(2);
+    // Düz yön ÜÇ modülde (iplik←ticaret, tezgah←üretim, dokuma←üretim).
+    expect(screen.getAllByText(/Açılabilmesi için önce/)).toHaveLength(3);
+    // ⭐ Ticaret'in satırı İplik'i anar ama Devere'yi ANMAZ (bağımlılık kalktı) —
+    // geçişli kapanış mekanizması (BFS) yerinde, zincir bugün tek halka.
     const ticaretSatiri = screen
       .getAllByText(/Kapatılırsa birlikte kapanır:/)
       .map((el) => el.textContent ?? "")
       .find((t) => t.includes("İplik"));
-    expect(ticaretSatiri).toMatch(/Devere/);
+    expect(ticaretSatiri).not.toMatch(/Devere/);
   });
 
   it("§2 fabrika yöneticisi: salt-okunur bandı + Uygula PASİF", async () => {

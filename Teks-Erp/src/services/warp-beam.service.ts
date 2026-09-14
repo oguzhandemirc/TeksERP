@@ -158,7 +158,8 @@ export async function listWarpBeams(params: WarpBeamListParams): Promise<CursorP
   if (params.originKind) where.originKind = params.originKind;
   const term = params.search?.trim();
   if (term) {
-    where.OR = buildTextSearch<Prisma.WarpBeamWhereInput>(term, { text: ["warpSpec.name", "physicalBeamNo"], code: ["beamNo", "warpSpec.code"] });
+    // `physicalBeamNo` KOD alanıdır (gövde numarası; `physical_live_uq` de tr_fold ile) → code listesi (foldCodeForCompare), fold gölge kolonu yok.
+    where.OR = buildTextSearch<Prisma.WarpBeamWhereInput>(term, { text: ["warpSpec.name"], code: ["beamNo", "warpSpec.code", "physicalBeamNo"] });
   }
   const cur = decodeDynamicCursor(params.cursor ?? undefined);
   const pageWhere = cur ? { AND: [where, dynamicCursorWhere(cur, "createdAt", "desc")] } : where;
