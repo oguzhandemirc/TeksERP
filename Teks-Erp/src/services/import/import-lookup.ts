@@ -28,19 +28,27 @@ interface LookupSource {
   label: string;
 }
 
+/**
+ * ⚠️ BURAYA BİR ENTITY EKLEMEK, onu ÇAĞIRAN bir adaptör olmadan ANLAMSIZDIR:
+ * çözücü yalnız `resolveReference`/`resolveReferenceList` çağrısıyla çalışır.
+ * Çağrısız beyan, "okunmayan mekanizma" sınıfıdır — çıkışsız kapının veri tarafı.
+ * ⇒ `test_lookup_beyan_aynasi` bu tabloyu çağrılarla karşılaştırır, taban 0 SERT.
+ *
+ * 2026-09-14'te DÖRT ölü beyan silindi (`machine` · `qualityGrade` · `defectType`
+ * · `returnReason`): hiçbir adaptör onlara referans vermiyordu — her biri yalnız
+ * KENDİ adaptöründe `entity:`/`nameGuard.model` olarak geçiyordu. Top içe
+ * aktarımı tasarım gereği yok (18 adaptör, top yok), bu yüzden "içe aktarımda
+ * yetim kalite kodu" senaryosu da OLUŞAMIYORDU (1e hükmü, şık b).
+ */
 export const LOOKUP_SOURCES: Record<string, LookupSource> = {
   item: { model: "item", codeField: "code", nameField: "name", foldField: "nameFold", label: "kumaş" },
   color: { model: "color", codeField: "code", nameField: "name", foldField: "nameFold", label: "renk" },
   station: { model: "station", codeField: "code", nameField: "name", foldField: "nameFold", label: "istasyon" },
-  machine: { model: "machine", codeField: "code", nameField: "name", foldField: "nameFold", label: "makine" },
   fabricProperty: { model: "fabricProperty", codeField: "code", nameField: "name", foldField: "nameFold", label: "özellik" },
   customer: { model: "customer", codeField: "code", nameField: "name", foldField: "nameFold", label: "müşteri" },
   subcontractor: { model: "subcontractor", codeField: "code", nameField: "name", foldField: "nameFold", label: "fason firma" },
   subcontractorCategory: { model: "subcontractorCategory", codeField: "code", nameField: "name", foldField: "nameFold", label: "fason kategorisi" },
-  qualityGrade: { model: "qualityGrade", codeField: "code", nameField: "name", foldField: "nameFold", label: "kalite" },
   route: { model: "route", codeField: "code", nameField: "name", foldField: "nameFold", label: "rota" },
-  defectType: { model: "defectType", codeField: "code", nameField: "name", foldField: "nameFold", label: "hata tipi" },
-  returnReason: { model: "returnReason", codeField: "code", nameField: "name", foldField: "nameFold", label: "iade sebebi" },
 };
 
 /**
