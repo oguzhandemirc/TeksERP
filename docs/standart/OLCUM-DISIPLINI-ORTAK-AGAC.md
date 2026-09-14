@@ -49,6 +49,18 @@ tuzağı varsa, o tuzağın SESLİ olması disiplini kurtarır.*
 (*"adıyla stage'le"*) tam burada yetersiz kalıyor — çünkü o kural **kendi commit'ini**
 dar tutar, **başkasınınkini** değil.
 
+⭐ **Kardeşi — `stash` de paylaşılan durumdur ve indeksten DAHA sinsidir.** `refs/stash`
+worktree'ye özel değildir, **ORTAK** dizinde durur: `git rev-parse --git-dir` sana
+`.git/worktrees/<ad>` derken `git rev-parse --git-common-dir` ortak kökü gösterir ve stash
+oraya yazılır. ⇒ `git stash list` **başka oturumların WIP'ini** listeler, `pop`/`drop`
+onları düşürür — ve düşen şey commit edilmemiş olduğu için hiçbir yerde iz bırakmaz.
+*(Ölçüldü 2026-09-14: kendi worktree'mde hiç `stash` yazmadığım hâlde listede başka bir
+oturumun `WIP on 01-p4b` girdisi duruyordu. Aynı gece bir oturum başkasınınkini düşürdü;
+`git fsck` + `stash store` ile geri kondu — yani kurtarma MÜMKÜN ama BİLGİ gerektiriyor.)*
+📌 Panzehir basit ve ölçülebilir: **worktree'de stash kullanma**; WIP'i `wip:` ön ekli bir
+commit olarak kendi dalında tut. Commit dalına yazılır, dal oturuma aittir, kimse onu
+başka bir ağaçtan `pop`layamaz.
+
 ### Ortak ağaçta "BENİM commit'im" diye bir şey yoktur — "ŞU ANKİ REF" vardır
 Bir commit'i kendi malın sayman, ona sonradan dokunabileceğini varsayar. Ortak ağaçta o
 varsayım üç ayrı biçimde çöker ve **üçü de aynı gün yaşandı (2026-09-13)**:
