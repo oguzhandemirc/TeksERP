@@ -71,6 +71,7 @@ import {
 } from '../../../hooks/useFeatureFlags';
 import DoffLinkPicker, { UNLINKED_DOFFS_KEY } from './DoffLinkPicker';
 import { EMPTY_DOFF_LINK, doffLinkPayload, isDoffLinkVisible, validateDoffLink, type DoffLinkState } from './doffLink';
+import { buildEntryWarningToast } from './entryWarnings';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { NumpadHost, useOptionalNumpadContext } from '../../../components/NumpadProvider';
 import RefreshButton from '../../../components/RefreshButton';
@@ -968,7 +969,8 @@ export default function KK1Screen() {
       // Dakikalar önce kuyruğa girmiş bir kayıt şimdi flush olduysa operatör 5 top
       // ileridedir — o an "Kaydedildi ✓" basmak hangi topun onaylandığı konusunda
       // yanıltırdı (o kayıt kendi toast'ını basış anında zaten aldı).
-      if (vars.clientToken && attemptRef.current.inFlight?.identity.clientToken === vars.clientToken) {
+      const current = !!vars.clientToken && attemptRef.current.inFlight?.identity.clientToken === vars.clientToken;
+      if (current) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setJustSaved(true);
         Toast.show({
@@ -979,6 +981,9 @@ export default function KK1Screen() {
             : undefined,
         });
       }
+      // Devere Faz 4: sunucu uyarıları (levent tüketimi) — kayıt oldu, operatör bilsin; metin sunucudan aynen.
+      const uyari = buildEntryWarningToast(res.warnings, res.data?.barcode, current);
+      if (uyari) Toast.show({ type: 'info', ...uyari, visibilityTime: 10000 });
       if (!res.data) return;
       // "Kaydet ve Etiket Bas" — başarılı kayıttan sonra otomatik etiket basımı.
       // Offline'da pause olduysa burası ancak online dönünce çalışır.

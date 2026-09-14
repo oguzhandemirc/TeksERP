@@ -3,6 +3,7 @@ import { Controller, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { entryWarnings } from "./entry-warnings";
 import { AlertTriangle, Printer } from "lucide-react";
 import { z } from "zod";
 import {
@@ -189,6 +190,8 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
       const roll = res.data;
       setDupWarn(null);
       toast.success(`Top oluşturuldu: ${roll?.barcode ?? "-"}`);
+      // Devere Faz 4: sunucu uyarıları (levent tüketimi: take-up yok · kalan yetmedi · bağlı levent yoktu) — metin aynen.
+      for (const w of entryWarnings(res)) toast.warning(w, { duration: 10000 });
       // Y1 fix: ["rolls:STOCK"] ölü key'di (STOCK sekmesi RAW/FINISHED'a bölündü)
       // — liste hiç tazelenmiyordu. ["rolls"] tüm sekme tablolarını + stats'ı kapsar.
       qc.invalidateQueries({ queryKey: ["rolls"] });
