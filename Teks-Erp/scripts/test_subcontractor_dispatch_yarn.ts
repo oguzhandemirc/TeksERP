@@ -117,7 +117,7 @@ async function main(): Promise<void> {
   if (!patos) throw new Error("Seed fixture eksik (PATOS)");
   const admin = await ensureTestAdmin();
   const whId = await fixtureWarehouseId();
-  const ids = { st: "", sub: "", yarn: "", lot: "", woIds: [] as string[], rollIds: [] as string[], dispatchIds: [] as string[] };
+  const ids = { st: "", sub: "", yarn: "", lot: "", wh2: "", woIds: [] as string[], rollIds: [] as string[], dispatchIds: [] as string[] };
   const sevkKaydet = (r: { data: unknown }): string => { const id = (r.data as { id: string }).id; if (!ids.dispatchIds.includes(id)) ids.dispatchIds.push(id); return id; };
   // Beklenmedik BAŞARI da temizliğe girer: sonda kapıyı düşürürse sevk doğar, kayıtsız kalırsa WO silinemez ve kalıntı büyür (ölçüldü 2026-09-15).
   const sevkHatasi = async (fn: () => Promise<{ data: unknown }>): Promise<AppError | null> => beklenenHata(async () => sevkKaydet(await fn()));
@@ -195,9 +195,7 @@ async function main(): Promise<void> {
     const d2Bak = Number((await prisma.yarnStock.findUnique({ where: { itemId_warehouseId: { itemId: yarn.id, warehouseId: wh2.id } } }))?.balanceKg ?? 0);
     check("§4h H2: dönüş başka depoya (15 kg) — o depoda +15, lot bakiyesi orada", ret2.data.remainingKg === 45 && d2Bak === 15);
     await cancelYarnReturn(d2, { dispatchItemId: yItem.id, movementId: ret2.data.movementId, reason: `${TAG} geri` }, admin.id);
-    await prisma.yarnMovement.deleteMany({ where: { itemId: yarn.id, warehouseId: wh2.id } });
-    await prisma.yarnStock.deleteMany({ where: { itemId: yarn.id, warehouseId: wh2.id } });
-    await prisma.warehouse.delete({ where: { id: wh2.id } });
+    ids.wh2 = wh2.id; // ikinci depo ve defter satırları `temizle`de (teardown), satır içi silme YOK (§10b2)
 
     console.log("\n── §5 Sevk iptali ──");
     await svc.cancel(d2, `${TAG} iptal`, admin.id);
@@ -233,12 +231,13 @@ async function main(): Promise<void> {
   process.exit(fail > 0 ? 1 : 0);
 }
 
-async function temizle(ids: { st: string; sub: string; yarn: string; lot: string; woIds: string[]; rollIds: string[]; dispatchIds: string[] }, foto: { value: Prisma.JsonValue } | null): Promise<void> {
+async function temizle(ids: { st: string; sub: string; yarn: string; lot: string; wh2: string; woIds: string[]; rollIds: string[]; dispatchIds: string[] }, foto: { value: Prisma.JsonValue } | null): Promise<void> {
   await prisma.printedDocument.deleteMany({ where: { sourceId: { in: ids.dispatchIds } } });
   if (ids.yarn) {
     await prisma.yarnMovement.deleteMany({ where: { itemId: ids.yarn } });
     await prisma.yarnStock.deleteMany({ where: { itemId: ids.yarn } });
   }
+  if (ids.wh2) await prisma.warehouse.deleteMany({ where: { id: ids.wh2 } });
   await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: { in: ids.dispatchIds } } });
   await prisma.rollOperation.deleteMany({ where: { rollId: { in: ids.rollIds } } });
   await prisma.rollMovement.deleteMany({ where: { rollId: { in: ids.rollIds } } });
