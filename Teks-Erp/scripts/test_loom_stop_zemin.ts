@@ -10,7 +10,7 @@
 //
 // Bölümler: §1 körlük zemini (iki liste de ≥ 10 satır) · §2 kod kümesi + SIRA
 // eşit · §3 etiket eşit · §4 hook dalı zemini gerçekten okuyor · §5 negatif
-// sonda (bellek içi: eksik kod · sıra bozuk · etiket farklı → ayrıştırıcı kırmızı).
+// sonda (bellek içi: eksik kod · sıra bozuk · etiket farklı · KOMŞU DİZİ TAŞMASI → ayrıştırıcı kırmızı).
 //
 // NEGATİF SONDA (2026-09-14): `loomStopReasons.ts`ten `MOLA` satırı silindi → §2
 // kırmızı; iki satır yer değiştirdi → §2 sıra kırmızı; bir etiket değişti → §3
@@ -39,16 +39,33 @@ interface Satir {
   label: string;
 }
 
-/** `export const <AD>… = [` bloğunu alır; `{ code: "X", label: "Y" … }` satırlarını sırayla döker. */
+const SATIR_RE = /\{\s*code:\s*["']([A-Z0-9_]+)["'],\s*label:\s*["']([^"']+)["']/g;
+
+/**
+ * `export const <AD>… = [ … ]` bloğunu KAPANIŞ KÖŞESİNDE keser (`];` de `] as const;` de).
+ * ⚠️ Eski hâli `indexOf("];")` ile SONU BEYANSIZ okuyordu: `] as const;` ile biten dizi o
+ * imzayı taşımadığından ayrıştırıcı komşu diziye (c1'in `WARP_RETURN_REASONS`ı) taştı ve
+ * MACHINE_STOP kümesine üç yabancı kod girdi — CI f1c09b54 kırmızı (sınırsız eşleşme sınıfı,
+ * 2026-09-14). Sınır artık ilk `]`: satırlarda `]` geçmez.
+ */
 function ayristir(kaynak: string, dizi: string): Satir[] {
+  const m = new RegExp(`export const ${dizi}[^=]*=\\s*\\[([\\s\\S]*?)\\]\\s*(?:as const)?\\s*;`).exec(kaynak);
+  return m ? satirlar(m[1]) : [];
+}
+
+/** Eski, sınırı beyansız ayrıştırıcı — yalnız §5e sondasında, kusurun her koşumda GÖRÜNMESİ için. */
+function ayristirEski(kaynak: string, dizi: string): Satir[] {
   const basla = kaynak.indexOf(`export const ${dizi}`);
   if (basla < 0) return [];
   const bitis = kaynak.indexOf("];", basla);
-  const blok = kaynak.slice(basla, bitis < 0 ? undefined : bitis);
+  return satirlar(kaynak.slice(basla, bitis < 0 ? undefined : bitis));
+}
+
+function satirlar(blok: string): Satir[] {
   const out: Satir[] = [];
-  const re = /\{\s*code:\s*["']([A-Z0-9_]+)["'],\s*label:\s*["']([^"']+)["']/g;
+  SATIR_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(blok)) !== null) out.push({ code: m[1], label: m[2] });
+  while ((m = SATIR_RE.exec(blok)) !== null) out.push({ code: m[1], label: m[2] });
   return out;
 }
 
@@ -95,6 +112,10 @@ function main(): void {
   const etiket = tabletMetin.replace("label: 'Mola'", "label: 'Ara'");
   check("§5c etiket farklı → §3 kırmızı", !karsilastir(sunucu, ayristir(etiket, "LOOM_STOP_REASONS")).etiket);
   check("§5d boş metin → körlük zemini kırmızı", ayristir("", "LOOM_STOP_REASONS").length < EN_AZ);
+  // §5e ⭐ komşu dizi taşması: dizinin ALTINA sahte bir komşu eklenir → eski ayrıştırıcı komşuyu
+  // da sayar (kırmızı), yeni ayrıştırıcı kapanış köşesinde durur (yeşil). CI f1c09b54 vakası.
+  const komsulu = tabletMetin.replace("] as const;", "] as const;\n\nexport const SAHTE_KOMSU = [\n  { code: 'YABANCI', label: 'Yabancı' },\n] as const;");
+  check("§5e ⭐ komşu diziye TAŞMAZ (yeni ✅, eski ayrıştırıcı ❌ verirdi)", komsulu !== tabletMetin && ayristir(komsulu, "LOOM_STOP_REASONS").length === tablet.length && ayristirEski(komsulu, "LOOM_STOP_REASONS").length !== tablet.length);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);
