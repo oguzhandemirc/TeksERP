@@ -96,7 +96,7 @@ const DOKUMA_MODELLERI = ["weavingOrder", "machineRun", "doffEvent", "machineSto
 const DOKUMA_SERVISLERI = ["weaving-order.service", "machine-run.service", "machine-doff.service", "machine-stop.service", "machine-shift-stat.service", "machine-shift-seal.service", "machine-spec.service"];
 
 /** Dokuma uçlarının mount adresleri — istemci kaynağında aranan metinler. */
-const DOKUMA_UC_METINLERI = ["/api/weaving-orders", "/api/machine-runs", "/api/machine-doffs", "/api/machine-stops", "/api/machine-shift-stats", "/api/reports/dokuma", "/api/machine-specs"];
+const DOKUMA_UC_METINLERI = ["/api/weaving-orders", "/api/machine-runs", "/api/machine-doffs", "/api/machine-stops", "/api/machine-shift-stats", "/api/reports/dokuma", "/api/machine-specs", "/api/subcontractor-weaving"];
 
 /**
  * §7 — dokuma uçlarını çağırmasına İZİN VERİLEN istemci dosyaları (repo köküne göre).
@@ -112,6 +112,8 @@ const DOKUMA_UC_METINLERI = ["/api/weaving-orders", "/api/machine-runs", "/api/m
  */
 const IZINLI_ISTEMCI_DOSYALARI: ReadonlyArray<{ dosya: string; ekranKey: string; izinler: readonly string[]; karo: "operations" | "reports" }> = [
   { dosya: "Electron/src/pages/Operations/WeavingOrders/service.ts", ekranKey: "operations/weaving-orders", izinler: ["weavingorder:read"], karo: "operations" },
+  // Fason dokuma (G2p, 2026-09-14): aynı ekranın "Fason" bölümü — dokuma işi detayı, ayrı karo/route yok.
+  { dosya: "Electron/src/pages/Operations/WeavingOrders/fason/service.ts", ekranKey: "operations/weaving-orders", izinler: ["weavingorder:read"], karo: "operations" },
   // Tezgah Duruşları (2026-09-14): iki izinden BİRİ açar — route `requireAnyPermission`, manifesto `requires` ikisini de anar.
   { dosya: "Electron/src/pages/Operations/MachineStops/service.ts", ekranKey: "operations/machine-stops", izinler: ["loom:manual-entry", "loom:classify"], karo: "operations" },
   // Dokuma raporları (Dilim 5, 2026-09-14): Raporlar hub'ı karosu; okuma `report:production` (1e hükmü ③).

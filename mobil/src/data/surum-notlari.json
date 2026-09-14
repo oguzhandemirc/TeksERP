@@ -377,6 +377,11 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
+          "metin": "Dokuma modülü açık kurulumlarda dokumayı fasona veren fabrika artık fasonu sistemden yürütüyor: Dokuma İşleri'nde “fasonda dokunuyor” işin satır menüsünde “Fason” bölümü var — hazır leventler fasoncuya sevk edilir (çıkış defterine yazılır, levent dönene kadar sarılamaz), fasoncudan dönen kumaş “Top kabul et” ile satır satır (metre · en · kg · kalite · renk) top olarak doğar (giriş kaynağı Dokuma, ölçüm ve etiket KK1 akışında; düşen satırlar sarı şeritle söylenir, makbuz düşmez), levent dönüşü sevk satırından girilir, şerit giden/dönen levent ile doğan top metresini ve farkı çözgü metresi bazında gösterir (çekme düşer, fark tek başına fire değildir). Sevk iptali leventleri hazıra döndürür (dönmüş leventi olan sevk iptal edilemez); makbuz iptali önce doğan topların iptalini ister ve engelleyenleri adıyla listeler. Fasoncu kendi ipliğini kullanıyorsa sevk açılmaz, iş yine fasonda dokunur. Bu belgeler yalnız dokuma işi detayından görülür ve yönetilir; fason sevk/kabul listeleri iş emri belgelerini gösterir. Yeni yetki gerekmez (dokuma işi yazma yetkisi yeter); modül kapalı kurulumda hiçbir şey değişmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
           "metin": "Dokuma modülü açık kurulumlarda fabrika kendi tezgah duruş sebebini ekleyebiliyor: Hazır Sebepler'deki “Tezgah Duruşu” sekmesi artık dokuma modülüyle görünür (önceden yalnız tezgah izleme anahtarına bağlıydı ve dokumada gizli kalıyordu), yeni sebep eklerken ve çoğaltırken kayıp sınıfı seçilir (plansız / kurulum / planlı / çalışma dışı — zorunlu; mikro kopuş sebep değildir, seçilemez), listede her sebebin sınıfı rozetle görünür. Sınıf, duruş açılırken sebepten kopyalanıp o duruşa donar: katalogda sonradan değiştirmek geçmiş duruşları ve raporları değiştirmez."
         },
         {

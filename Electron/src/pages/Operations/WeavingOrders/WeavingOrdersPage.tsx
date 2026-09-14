@@ -32,6 +32,7 @@ import { weavingOrderService } from "./service";
 import { WeavingOrderFormDialog } from "./WeavingOrderFormDialog";
 import { WeavingOrderCancelDialog, WeavingOrderCloseDialog } from "./WeavingOrderActionDialogs";
 import { WeavingOrderRowMenu } from "./WeavingOrderRowMenu";
+import { FasonSheet } from "./fason/FasonSheet";
 import { WEAVING_ORDERS_QUERY_KEY, useWeavingOrderMutations } from "./useWeavingOrderMutations";
 import { WEAVING_STATUSES, WEAVING_STATUS_META, type WeavingOrder } from "./types";
 
@@ -55,6 +56,7 @@ export function WeavingOrdersPage() {
   const [formTarget, setFormTarget] = useState<FormTarget>(null);
   const [closing, setClosing] = useState<WeavingOrder | null>(null);
   const [cancelling, setCancelling] = useState<WeavingOrder | null>(null);
+  const [fason, setFason] = useState<WeavingOrder | null>(null);
   const closeAll = () => {
     setFormTarget(null);
     setClosing(null);
@@ -98,7 +100,7 @@ export function WeavingOrdersPage() {
         pagination={pagination}
         emptyText="Dokuma işi yok. Planlamak için “Yeni Dokuma İşi”."
         onRowClick={openForEdit}
-        rowContextMenu={(r) => <WeavingOrderRowMenu row={r} onEdit={setFormTarget} onClose={setClosing} onCancel={setCancelling} />}
+        rowContextMenu={(r) => <WeavingOrderRowMenu row={r} onEdit={setFormTarget} onClose={setClosing} onCancel={setCancelling} onFason={setFason} />}
       />
       {/* Diyaloglar KOŞULLU mount: her açılış taze bileşen ve taze `clientToken`. */}
       {formTarget !== null && (
@@ -118,6 +120,7 @@ export function WeavingOrdersPage() {
         isPending={close.isPending}
         onConfirm={(id) => close.mutateAsync(id).then(swallow, swallow)}
       />
+      <FasonSheet order={fason} onClose={() => setFason(null)} />
       {cancelling && (
         <WeavingOrderCancelDialog
           target={cancelling}

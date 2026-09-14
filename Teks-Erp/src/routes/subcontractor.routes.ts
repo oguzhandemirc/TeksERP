@@ -484,7 +484,8 @@ router.post(
   "/dispatches/:id/beams/:beamId/return",
   verifyToken,
   requireDevereEnabled,
-  requireAnyPermission("workorder:write", "mobile:fason-kabul"),
+  // G2: dokuma işi sevkinin levendi de bu uçtan döner — dokuma işi yazarı da kabul edilir.
+  requireAnyPermission("workorder:write", "weavingorder:write", "mobile:fason-kabul"),
   controller.returnWarpBeam
 );
 
@@ -503,7 +504,7 @@ router.post(
   "/dispatches/:id/beams/:beamId/return-cancel",
   verifyToken,
   requireDevereEnabled,
-  requireAnyPermission("workorder:write", "mobile:fason-kabul"),
+  requireAnyPermission("workorder:write", "weavingorder:write", "mobile:fason-kabul"),
   controller.cancelWarpBeamReturn
 );
 
