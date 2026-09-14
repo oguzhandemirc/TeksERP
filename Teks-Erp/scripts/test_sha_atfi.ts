@@ -91,44 +91,76 @@ export function shaAdaylari(kaynak: string): Array<{ sha: string; satir: number 
  * 2026-09-14: 100 aday → 80; 20 fark tamamen UUID dilimiydi). Aynı gerekçeyle `/`
  * (yol parçası) da sınır değildir.
  */
-export function ciplakAdaylari(kaynak: string): Array<{ sha: string; satir: number; metin: string; sutun: number }> {
-  const out: Array<{ sha: string; satir: number; metin: string; sutun: number }> = [];
-  kaynak.split("\n").forEach((ham, i) => {
-    // Backtick span'i MASKELENİR (uzunluk korunur): orası birinci kolun alanı.
-    const maske = ham.replace(/`[^`]*`/g, (m) => " ".repeat(m.length));
+/**
+ * Backtick aralıklarını BOŞLUKLA maskeler — SATIR BAZLI (uzunluk korunur).
+ *
+ * ⚠️ SATIR BAZLI KALDI, ÖLÇÜLEREK: durumu satırlar arasında taşımak (sarmalanmış
+ * aralığı yakalamak için) DENENDİ ve GERİ ALINDI. `BEKCI-HARITASI.md`nin TEK BAŞINA
+ * 23 satırında tek sayıda backtick var (tablo hücrelerinde kesilen `kod` parçaları);
+ * tek bir dengesiz satır durumu ters çevirip ondan sonraki bütün gerçek `sha`
+ * aralıklarını maskesiz bırakıyor — kapı 22 aday yerine 52 görüyor, 31'i yanlış
+ * pozitif. Global regex eşleştirmesi de aynı sebeple kaydı (çit işaretleri).
+ * ⇒ Sarmalanmış aralık YANLIŞ POZİTİFLE değil, ÜÇÜNCÜ SONUÇLA karşılanır: dengesiz
+ * satırdaki aday ÖLÇÜLEMEDİ sayılır (aşağıda), çünkü o satırda "maske doğru mu"
+ * sorusunun cevabı yoktur.
+ */
+export function backtickMaskele(kaynak: string): string {
+  return kaynak.split("\n").map((l) => l.replace(/`[^`]*`/g, (m) => " ".repeat(m.length))).join("\n");
+}
+
+/** Satırdaki backtick sayısı TEK mi — maskeleme o satırda güvenilmez. */
+export function dengesizSatir(satir: string): boolean {
+  return ((satir.match(/`/g) ?? []).length % 2) === 1;
+}
+
+export function ciplakAdaylari(kaynak: string): Array<{ sha: string; satir: number; metin: string; sutun: number; dengesiz: boolean }> {
+  const out: Array<{ sha: string; satir: number; metin: string; sutun: number; dengesiz: boolean }> = [];
+  const satirlar = kaynak.split("\n");
+  backtickMaskele(kaynak).split("\n").forEach((maske, i) => {
     for (const m of maske.matchAll(/(?<![0-9a-zA-Z_/-])([0-9a-f]{7,12})(?![0-9a-zA-Z_/-])/g)) {
       const sha = m[1]!;
       if (!/[a-f]/.test(sha)) continue;             // `20260914` tarihtir
-      out.push({ sha, satir: i + 1, metin: ham, sutun: m.index! });
+      const metin = satirlar[i] ?? "";
+      out.push({ sha, satir: i + 1, metin, sutun: m.index!, dengesiz: dengesizSatir(metin) });
     }
   });
   return out;
 }
 
 /**
- * ÇIPLAK ADAYIN SINIFI — kova, MUAF LİSTESİ DEĞİL. Üçü de YAPISAL ölçüttür; hiçbiri
+ * ÇIPLAK ADAYIN SINIFI — kova, MUAF LİSTESİ DEĞİL. Ölçütlerin hepsi YAPISAL; hiçbiri
  * elle tutulan bir sha listesine bakmaz (liste bakım borcudur, ölçüt değil).
  *
- *   SAGLAMA — hemen ardında `…`/`...`: sha256/md5 ÖRNEĞİ. Yazım kuralı bunları
- *             backtick'e ALMAZ (alınsaydı birinci kol onları ölü atıf sanardı).
- *   FIKSTUR — kod dosyasında TIRNAK İÇİNDE: sondanın girdisi (`"abc1234"`,
- *             `"dead123"`). Gerçek atıf koda yorumda ya da backtick'le yazılır.
- *   ATIF    — kalanı. Çözülüyorsa YAZIM İHLALİ (gerçek sha, çıplak yazılmış),
- *             çözülmüyorsa ÖLÜ.
+ *   OLCULEMEDI — satırda TEK sayıda backtick: maske o satırda güvenilmez, "çıplak mı"
+ *                sorusunun cevabı YOK. Üçüncü sonuç; ihlal de temiz de sayılmaz.
+ *   SAGLAMA    — hemen ardında `…`/`...`: sha256/md5 ÖRNEĞİ. Yazım kuralı bunları
+ *                backtick'e ALMAZ (alınsaydı birinci kol onları ölü atıf sanardı).
+ *   DIZE_ATIF  — kod dosyasında, ANAHTARLI bir dizenin değeri (`korumaCommit: "…"`):
+ *                gerçek atıftır ve ÖLÜLÜĞÜ ölçülür, ama backtick şartı dize İÇİNDE
+ *                aranmaz ⇒ yazım ihlali DEĞİL.
+ *   FIKSTUR    — kod dosyasında, anahtarsız dize (dizi üyesi / çağrı argümanı):
+ *                sondanın GİRDİSİ (`["dead123"]`), atıf değil.
+ *   ATIF       — kalanı. Çözülüyorsa YAZIM İHLALİ, çözülmüyorsa ÖLÜ.
  *
- * ⚠️ Dördüncü bir kova AÇILMADI: sha olmayan hex-benzeri teknik ad (`Ed25519`)
- * KANONİK BÜYÜK HARFİYLE yazılır ve kalıba hiç uymaz — kovaya değil YAZIM kuralına
- * bağlıdır. Kova açmak, tek üyeli bir muaf listesi açmaktır.
+ * ⚠️ Anahtar VARLIĞI ölçüttür, anahtarın ADI değil: ad tetiği ("commit geçiyorsa") bu
+ * depoda bir kez REDDEDİLDİ ve aynı sebeple burada da açılmaz.
+ * ⚠️ Altıncı kova AÇILMADI: sha olmayan hex-benzeri teknik ad (`Ed25519`) KANONİK BÜYÜK
+ * HARFLE yazılır ve kalıba hiç uymaz — kovaya değil YAZIM kuralına bağlıdır. Tek üyeli
+ * bir kova açmak, tek üyeli bir muaf listesi açmaktır.
  */
-export type CiplakSinif = "SAGLAMA" | "FIKSTUR" | "ATIF";
-export function ciplakSinif(aday: { sha: string; metin: string; sutun: number }, dosya: string): CiplakSinif {
+export type CiplakSinif = "OLCULEMEDI" | "SAGLAMA" | "DIZE_ATIF" | "FIKSTUR" | "ATIF";
+export function ciplakSinif(aday: { sha: string; metin: string; sutun: number; dengesiz: boolean }, dosya: string): CiplakSinif {
+  if (aday.dengesiz) return "OLCULEMEDI";
   const kalan = aday.metin.slice(aday.sutun + aday.sha.length);
   if (/^(…|\.\.\.)/.test(kalan)) return "SAGLAMA";
   if (/\.(ts|mjs)$/.test(dosya)) {
     const onces = aday.metin.slice(0, aday.sutun);
-    // Tırnak İÇİNDE mi: adaydan önce TEK sayıda tırnak açılmışsa evet.
     for (const t of ['"', "'"]) {
-      if ((onces.split(t).length - 1) % 2 === 1) return "FIKSTUR";
+      if ((onces.split(t).length - 1) % 2 !== 1) continue;      // tırnak İÇİNDE değil
+      // Dizeyi AÇAN tırnaktan önce `ad:` duruyorsa bu bir ALAN DEĞERİDİR (atıf),
+      // dizi üyesi ya da çağrı argümanı ise sonda girdisidir (fikstür).
+      const acilis = onces.lastIndexOf(t);
+      return /[A-Za-z_$][\w$]*\s*:\s*$/.test(onces.slice(0, acilis)) ? "DIZE_ATIF" : "FIKSTUR";
     }
   }
   return "ATIF";
@@ -242,21 +274,31 @@ function main(): void {
   // ── §3 İKİNCİ KOL — ÇIPLAK (backtick'siz) atıflar ──────────────────────────
   console.log("\n=== §3 ÇIPLAK ATIFLAR (eski kör nokta) ===");
   const ciplak = new Map<string, { sinif: CiplakSinif; yerler: string[] }>();
+  const ONCELIK: CiplakSinif[] = ["ATIF", "DIZE_ATIF", "OLCULEMEDI", "SAGLAMA", "FIKSTUR"];
   for (const f of dosyalar) {
     for (const a of ciplakAdaylari(readFileSync(join(KOK, f), "utf8"))) {
       const sinif = ciplakSinif(a, f);
-      // Aynı sha iki sınıfta görünürse ATIF KAZANIR: sınıflandırma SUSTURUR ve bir kez
-      // susturulan sha başka yerde ölü olsa da görünmez kalırdı.
       const v = ciplak.get(a.sha);
-      if (v) { if (sinif === "ATIF") v.sinif = "ATIF"; v.yerler.push(`${f}:${a.satir}`); }
+      // Aynı sha iki sınıfta görünürse EN SERT sınıf kazanır: sınıflandırma SUSTURUR ve
+      // bir kez susturulan bir sha başka yerde ölü olsa da görünmez kalırdı.
+      if (v) { if (ONCELIK.indexOf(sinif) < ONCELIK.indexOf(v.sinif)) v.sinif = sinif; v.yerler.push(`${f}:${a.satir}`); }
       else ciplak.set(a.sha, { sinif, yerler: [`${f}:${a.satir}`] });
     }
   }
   const sayim = (k: CiplakSinif): number => [...ciplak.values()].filter((v) => v.sinif === k).length;
-  check("§3a körlük zemini: çıplak kapsam dolu", ciplak.size > 20,
-    `${ciplak.size} benzersiz çıplak aday · ATIF ${sayim("ATIF")} · SAGLAMA ${sayim("SAGLAMA")} · FİKSTÜR ${sayim("FIKSTUR")}`);
+  // KÖRLÜK ZEMİNİ YAPISAL, ölçülen değere ÇAKILI DEĞİL. Eski eşik (`> 20`) bugünün
+  // sayısına sabitlenmişti: yazım ihlalleri 0'a inince ATIF kovası boşaldı ve iki
+  // satırlık bir temizlik kapıyı KENDİ ZEMİNİYLE kırmızıya düşürecekti. Doğru soru
+  // "kaç tane" değil, ***"tarayıcı hâlâ görüyor ve her aday TEK bir kovaya düşüyor mu"***.
+  const toplamKova = sayim("ATIF") + sayim("DIZE_ATIF") + sayim("OLCULEMEDI") + sayim("SAGLAMA") + sayim("FIKSTUR");
+  const dosyaSayisi = new Set([...ciplak.values()].flatMap((v) => v.yerler.map((y) => y.split(":")[0]!))).size;
+  check("§3a körlük zemini: tarayıcı görüyor ve bölümleme eksiksiz",
+    ciplak.size > 0 && toplamKova === ciplak.size && dosyaSayisi > 1,
+    `${ciplak.size} aday · ${dosyaSayisi} dosya · ATIF ${sayim("ATIF")} · DIZE_ATIF ${sayim("DIZE_ATIF")} · SAGLAMA ${sayim("SAGLAMA")} · FİKSTÜR ${sayim("FIKSTUR")} · ÖLÇÜLEMEDİ ${sayim("OLCULEMEDI")}`);
 
-  const atiflar = [...ciplak.entries()].filter(([, v]) => v.sinif === "ATIF");
+  // ÖLÜLÜK hem ATIF hem DIZE_ATIF için sorulur — dize içindeki sha da okuyucunun
+  // izleyeceği bir atıftır; yalnız YAZIM ihlali dizede aranmaz.
+  const atiflar = [...ciplak.entries()].filter(([, v]) => v.sinif === "ATIF" || v.sinif === "DIZE_ATIF");
   if (sigKlon() || !tarih) {
     // ÜÇÜNCÜ SONUÇ: rejim ölçemiyor. "Ölü yok" ile "bakamadım" AYNI ÇIKTIYA İNMEZ.
     ATLAMA.atla("§3b ⭐ çıplak ölü atıf", `SIĞ KLON / ref yok — ${atiflar.length} çıplak atıf ÖLÇÜLEMEDİ`, atiflar.length);
@@ -266,31 +308,33 @@ function main(): void {
       `§3b ⭐ çıplak ölü atıf ARTMADI (paylaşılan tarih: ${tarih.ad})`,
       ciplakOlu.size <= CIPLAK_OLU_TABAN,
       ciplakOlu.size <= CIPLAK_OLU_TABAN
-        ? `${ciplakOlu.size} ≤ ${CIPLAK_OLU_TABAN} · ${atiflar.length} çıplak atıf tarandı`
+        ? `${ciplakOlu.size} ≤ ${CIPLAK_OLU_TABAN} · ${atiflar.length} çıplak atıf tarandı (ATIF + DIZE_ATIF)`
         : `${ciplakOlu.size} > ${CIPLAK_OLU_TABAN} ⇒ YENİ çıplak ölü atıf:\n      ` +
             [...ciplakOlu].map((x) => `${x} ← ${ciplak.get(x)!.yerler.join(" · ")}`).join("\n      "),
     );
     curumeKolu(check, ATLAMA.atla, "§3c ⭐ çıplak ölü atıf tabanı ÇÜRÜMEDİ", ciplakOlu.size, CIPLAK_OLU_TABAN);
     if (ciplakOlu.size > 0) {
-      console.log(`   ⓘ duran borç (${ciplakOlu.size}) — çıplak ölü atıflar:`);
+      console.log(`   \u24d8 duran borç (${ciplakOlu.size}) — çıplak ölü atıflar:`);
       for (const x of ciplakOlu) console.log(`      • ${x} ← ${ciplak.get(x)!.yerler.join(" · ")}`);
     }
-    // YAZIM İHLALİ — gerçek sha, çıplak yazılmış: ölü değil, OKUNAKSIZ. Kendi cırcırı
-    // var çünkü yalnız basılan bir sayı aşağı inmez; düzeltmesi tek karakterlik iş
-    // (backtick'e al) ⇒ taban GERÇEKTEN düşürülebilir ve pozitif sonda tutar.
-    const ihlalliler = atiflar.filter(([sha]) => !ciplakOlu.has(sha));
+    // YAZIM İHLALİ yalnız ATIF kovasında: dize içindeki sha'ya backtick şartı konamaz.
+    const ihlalliler = [...ciplak.entries()].filter(([sha, v]) => v.sinif === "ATIF" && !ciplakOlu.has(sha));
     check("§3d ⭐ çıplak YAZIM İHLALİ ARTMADI", ihlalliler.length <= YAZIM_IHLALI_TABAN,
       ihlalliler.length <= YAZIM_IHLALI_TABAN
         ? `${ihlalliler.length} ≤ ${YAZIM_IHLALI_TABAN} — origin'de ÇÖZÜLEN ama backtick'siz yazılmış sha`
         : `${ihlalliler.length} > ${YAZIM_IHLALI_TABAN} ⇒ YENİ çıplak yazım (sha'yı backtick'e al):\n      ` +
             ihlalliler.slice(0, 12).map(([sha, v]) => `${sha} ← ${v.yerler.join(" · ")}`).join("\n      "));
     curumeKolu(check, ATLAMA.atla, "§3e ⭐ yazım ihlali tabanı ÇÜRÜMEDİ", ihlalliler.length, YAZIM_IHLALI_TABAN);
-    if (ihlalliler.length > 0 && ihlalliler.length <= YAZIM_IHLALI_TABAN) {
-      // YEŞİLKEN DE BORÇ GÖRÜNÜR: taban 0 değilse kapı "temiz" demiyor, "arttırmadın"
-      // diyor. Adres basılmazsa borç bir SAYIYA dönüşür ve kapatılamaz.
-      console.log(`   ⓘ duran borç (${ihlalliler.length}) — çıplak yazılmış CANLI sha (ilk 12):`);
-      for (const [sha, v] of ihlalliler.slice(0, 12)) console.log(`      • ${sha} ← ${v.yerler.join(" · ")}`);
+    if (ihlalliler.length > 0) {
+      console.log(`   \u24d8 duran borç (${ihlalliler.length}) — çıplak yazılmış CANLI sha (ilk 12):`);
+      for (const [sha, v] of ihlalliler.slice(0, 12)) console.log(`      • ${sha} \u2190 ${v.yerler.join(" \u00b7 ")}`);
     }
+  }
+  // ÜÇÜNCÜ SONUÇ GÖRÜNÜR: dengesiz satırdaki adaylar sessizce temiz sayılmaz.
+  if (sayim("OLCULEMEDI") > 0) {
+    const olculemedi = [...ciplak.entries()].filter(([, v]) => v.sinif === "OLCULEMEDI");
+    ATLAMA.atla("§3f dengesiz satır (tek backtick) — maske güvenilmez", `${olculemedi.length} aday ÖLÇÜLEMEDİ`, olculemedi.length);
+    for (const [sha, v] of olculemedi.slice(0, 8)) console.log(`      ⏭ ${sha} ← ${v.yerler.join(" · ")}`);
   }
 
   console.log("\n=== §2 SONDALAR (saf yüklem) ===");
@@ -326,6 +370,24 @@ function main(): void {
       ciplakSinif(fik, "docs/kurallar/defter.md") === "ATIF");
     const atf = A("// geri alma yolu 5527c345 ile indi")[0]!;
     check("§4i ⭐ yorumdaki çıplak sha ATIF (kova değil)", ciplakSinif(atf, "scripts/test_x.ts") === "ATIF");
+    // §4k–§4o — 2026-09-14 kapı düzeltmesi: dize atfı · dengesiz satır · zemin
+    const dizeAday = A('  korumaCommit: "5527c345",')[0]!;
+    check("§4k ⭐ ANAHTARLI dize değeri DIZE_ATIF (fikstür değil — ölülüğü ölçülür)",
+      ciplakSinif(dizeAday, "scripts/fix_x.ts") === "DIZE_ATIF", `gelen: ${ciplakSinif(dizeAday, "scripts/fix_x.ts")}`);
+    const diziAday = A('  cozulemeyenler(d, ["5527c345"]);')[0]!;
+    check("§4l ⭐ ANAHTARSIZ dize (dizi üyesi/argüman) FİKSTÜR — ayrım anahtarın VARLIĞI",
+      ciplakSinif(diziAday, "scripts/test_x.ts") === "FIKSTUR", `gelen: ${ciplakSinif(diziAday, "scripts/test_x.ts")}`);
+    const dengesizAday = A("// sarmalanmış aralık: 5527c345 ve `devamı")[0]!;
+    check("§4m ⭐ TEK backtickli satır → ÖLÇÜLEMEDİ (maske güvenilmez; yanlış pozitif DEĞİL)",
+      dengesizAday.dengesiz && ciplakSinif(dengesizAday, "docs/kurallar/defter.md") === "OLCULEMEDI",
+      `dengesiz=${dengesizAday.dengesiz} sınıf=${ciplakSinif(dengesizAday, "docs/kurallar/defter.md")}`);
+    check("§4n DENGELİ satırda aynı metin ATIF (kural dengeye bağlı, metne değil)",
+      ciplakSinif(A("// sarmalanmış aralık: 5527c345 ve `devamı`")[0]!, "docs/kurallar/defter.md") === "ATIF");
+    // §4o — ZEMİN artık ölçülen sayıya çakılı DEĞİL: bölümleme eksiksizliği sorulur.
+    const zeminKaynak = A('// a 5527c345\n  korumaCommit: "5527c345",');
+    check("§4o ⭐ her aday TEK kovaya düşer (bölümleme eksiksiz)",
+      zeminKaynak.every((a) => ["OLCULEMEDI", "SAGLAMA", "DIZE_ATIF", "FIKSTUR", "ATIF"].includes(ciplakSinif(a, "scripts/x.ts"))));
+
     check("§4j kanonik ad kalıba UYMAZ (`Ed25519` büyük harf — kova değil yazım kuralı)",
       A("dosyada yalnız Ed25519 varken").length === 0);
   }

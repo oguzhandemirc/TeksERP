@@ -245,11 +245,33 @@ Kapı artık çıplak hex'i de tarıyor ve her adayı **yapısal** bir kovaya ko
 
 | kova | ölçüt (yapısal) | sonuç |
 |---|---|---|
+| **ÖLÇÜLEMEDİ** (satır) | satırda TEK sayıda backtick | maske o satırda güvenilmez ⇒ ⏭ sayıyla; ihlal de temiz de sayılmaz |
 | **SAGLAMA** | hemen ardında `…`/`...` | sha256/md5 ÖRNEĞİ — backtick'e ALINMAZ (alınsaydı birinci kol onu ölü atıf sanardı) |
-| **FİKSTÜR** | `.ts`/`.mjs` dosyasında TIRNAK İÇİNDE | sondanın girdisi (`"dead123"`); gerçek atıf koda yorumda ya da backtick'le yazılır |
-| **ATIF → yazım ihlali** | kalan · paylaşılan tarihte ÇÖZÜLÜYOR | gerçek sha, çıplak yazılmış — ölü değil, okunaksız; sayısı görünür basılır |
+| **DIZE_ATIF** | `.ts`/`.mjs`'de ANAHTARLI dizenin değeri (`korumaCommit: "…"`) | gerçek atıf: ÖLÜLÜĞÜ ölçülür, ama backtick şartı dize içinde aranmaz ⇒ yazım ihlali DEĞİL |
+| **FİKSTÜR** | `.ts`/`.mjs`'de ANAHTARSIZ dize (dizi üyesi / çağrı argümanı) | sondanın girdisi (`["dead123"]`) |
+| **ATIF → yazım ihlali** | kalan · paylaşılan tarihte ÇÖZÜLÜYOR | gerçek sha, çıplak yazılmış — ölü değil, okunaksız; cırcır (`YAZIM_IHLALI_TABAN`) |
 | **ATIF → ÖLÜ** | kalan · ÇÖZÜLMÜYOR | cırcır (`CIPLAK_OLU_TABAN`) |
-| **ÖLÇÜLEMEDİ** | sığ klon / `origin` ref yok | rejim ölçemiyor ⇒ ⏭ sayıyla; *"ölü yok" ile "bakamadım" AYNI ÇIKTIYA İNMEZ* |
+| **ÖLÇÜLEMEDİ** (rejim) | sığ klon / `origin` ref yok | *"ölü yok" ile "bakamadım" AYNI ÇIKTIYA İNMEZ* |
+
+⚠️ **Ayrım anahtarın VARLIĞIDIR, ADI değil.** `hataCommit: "…"` gerçek bir atıftır ve eski
+kova ölçütü (yalnız "tırnak içinde mi") onu FİKSTÜR sayıyordu: *doğru cevap, yanlış
+gerekçe* — literaldeki sha bir gün ölseydi kapı susardı (sonda: öyle yapıldı, §3b ❌).
+Ad tetiği ("commit geçiyorsa") bu depoda bir kez reddedildi ve burada da açılmadı.
+
+⚠️ **Maskeleme SATIR BAZLI kaldı, ölçülerek.** Sarmalanmış bir backtick aralığını
+yakalamak için durumu satırlar arasında taşımak DENENDİ ve GERİ ALINDI: `BEKCI-HARITASI.md`
+tek başına 23 satırında tek sayıda backtick taşıyor (tablo hücrelerinde kesilen `kod`
+parçaları) ve tek bir dengesiz satır durumu ters çevirip ondan sonraki bütün gerçek
+aralıkları maskesiz bırakıyor — kapı 22 aday yerine **52** görüyor, 31'i yanlış pozitif.
+Global regex eşleştirmesi de çit işaretleri yüzünden aynı şekilde kayıyor. ⇒ Sarmalanmış
+aralık **yanlış pozitifle değil ÜÇÜNCÜ SONUÇLA** karşılanır: dengesiz satırdaki aday
+ÖLÇÜLEMEDİ'ye düşer, çünkü o satırda *"maske doğru mu"* sorusunun cevabı yoktur.
+
+⚠️ **Körlük zemini ölçülen sayıya ÇAKILI DEĞİL.** Eski eşik `ciplak.size > 20` bugünün
+sayısına sabitlenmişti; yazım ihlalleri 0'a inince ATIF kovası boşaldı ve iki satırlık bir
+temizlik kapıyı KENDİ ZEMİNİYLE kırmızıya düşürecekti. Doğru soru "kaç tane" değil
+***"tarayıcı hâlâ görüyor mu ve her aday TEK bir kovaya düşüyor mu"***: zemin artık
+bölümleme eksiksizliği + en az bir aday + birden çok dosya.
 
 ⚠️ **Sınır `-` ve `/` de içerir:** UUID parçası hex'tir (`3f2504e0-4f89-…`) ve tireyi
 sınır saymayan bir kalıp her fikstür UUID'sinin her dilimini "ölü sha" sanar — ölçüldü
@@ -263,8 +285,10 @@ biçimi backtick içinde ÖRNEK olarak yazmak kapıyı kırmızıya düşürür 
 üye koymak, muaf listesini başka bir adla açmaktır.* (Ölçüm günü ağaçtaki tek örnek
 `docs/ops/YEDEK-VPS-KURULUM.md` satırıydı; kanonik yazıma çevrildi ve kova gerekmedi.)
 
-Ölçüm (ağaç `129c4a0f`): **80 çıplak aday · 63 ATIF · 10 SAGLAMA · 7 FİKSTÜR · ölü 0 ·
-yazım ihlali 63.** Cırcır tabanı `CIPLAK_OLU_TABAN = 0` ve İKİ YÖNLÜ doğrulandı — iki
+Ölçüm (ilk gün, ağaç `129c4a0f`): 80 çıplak aday · 63 ATIF · 10 SAGLAMA · 7 FİKSTÜR ·
+ölü 0 · yazım ihlali 63. Yazım ihlalleri dört dilimde backtick'e alındıktan ve kova
+ölçütleri düzeltildikten sonra: **22 aday · ATIF 0 · DIZE_ATIF 3 · SAGLAMA 9 · FİKSTÜR 9 ·
+ÖLÇÜLEMEDİ 1 · ölü 0.** Cırcır tabanı `CIPLAK_OLU_TABAN = 0` ve İKİ YÖNLÜ doğrulandı — iki
 çıplak ölü atıf eklendi → 2, biri düzeltildi → 1, ikisi de düzeltildi → 0. *Tabanı
 DÜŞÜREMEYEN bir cırcır, hiç kapı olmamasından kötüdür.*
 
