@@ -21,6 +21,38 @@
 
 ---
 
+## 2026-09-14 — Beyanlı bir kör nokta, sıfırlanmış bir tabanı YALANLAR [ÇEKİRDEK]
+
+`test_sha_atfi` "0 ölü sha atfı" diyordu ve aynı ağaçta **10 ölü atıf duruyordu**. Kapı
+yalan söylemiyordu: kapsamı BACKTICK içindeki sha'ydı ve bunu başlığında BEYAN ediyordu.
+Ama beyan, ölçümü kurtarmıyor — okuyucu "taban 0" satırını görüyor, kapsam beyanını
+değil. ⇒ ***Bir cırcır tabanı, AĞACIN değil KAPININ GÖRDÜĞÜNÜN sayısıdır; kapsam beyanı
+bu farkı açıklar, KAPATMAZ.*** Kapının kendi cümlesi de daraltıldı: "0" artık *"backtick'li
+atıflarda ölü yok"* diye okunur.
+
+**İkinci kol (§3) çıplak hex'i tarıyor ve muaf listesi TUTMUYOR.** Her aday yapısal bir
+kovaya düşer: `…` ardılı ⇒ SAGLAMA (sha256/md5 örneği; yazım kuralı bunları backtick'e
+zaten almaz) · kod dosyasında tırnak içi ⇒ FİKSTÜR (sondanın girdisi) · kalanı ATIF, ve
+ATIF paylaşılan tarihte çözülüyorsa YAZIM İHLALİ (ölü değil, okunaksız — görünür borç),
+çözülmüyorsa ÖLÜ (cırcır). Sığ klonda hiçbiri değil: ÖLÇÜLEMEDİ, sayıyla ⏭.
+
+**Tek üyeli bir kova, muaf listesinin başka adıdır.** Ölçüm günü ağaçta kovaya sığmayan
+tek aday SSH anahtar tipi adının küçük harfli yazımıydı — yedi karakterlik geçerli hex.
+Ona kova açmak yerine YAZIM kuralı yazıldı: *sha olmayan hex-benzeri teknik ad kanonik
+büyük harfiyle yazılır* (`Ed25519`, `ECDSA`), ve ağaçtaki tek örnek kanonik yazıma
+çevrildi. Kova sayısı artmadı, muaf listesi doğmadı.
+
+**Sınır `-` ve `/` İÇERİR.** Tireyi sınır saymayan ilk kalıp her fikstür UUID'sinin her
+dilimini ölü sha sandı: 100 aday → 80, farkın TAMAMI UUID dilimiydi.
+
+**Cırcır İKİ YÖNLÜ doğrulandı** (kök `CLAUDE.md` hükmü): iki çıplak ölü atıf eklendi → 2,
+biri düzeltildi → 1 (**taban DÜŞTÜ**), ikisi de düzeltildi → 0. Negatif sonda tek başına
+tabanı düşüremeyen bir cırcırı göremezdi.
+
+Ölçüm (ağaç `129c4a0f`): 80 çıplak aday · 63 ATIF · 10 SAGLAMA · 7 FİKSTÜR · **ölü 0** ·
+yazım ihlali 63. 63 ihlal duran borçtur, her koşumda sayısı basılır ve kural onu ileriye
+doğru 0'a taşır — *ileriye dönük yazım kuralı, geriye dönük borç listesi.*
+
 ## 2026-09-14 — Ters yol tipolojisinin BEŞİNCİ mekanizması: KARŞI KAYIT [ÇEKİRDEK]
 
 Ters yolun dört mekanizması ölçülmüştü (damga · ters bağ · tipli enum çifti · net karşı

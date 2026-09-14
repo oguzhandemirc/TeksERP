@@ -203,10 +203,9 @@ kapandı. *Bu, ölçümün bir işi doğurmak yerine ORTADAN KALDIRDIĞI üçün
 
 > **Backtick'siz yazılmış bir sha atfı ÖLÇÜLMEZ; ölçülmeyen atıf öldüğünde kimse görmez.**
 
-`test_sha_atfi` (`36f1db3a`) yalnız **backtick içindeki** sha'yı aday sayar ve bu kör
-noktayı başlığında BEYAN eder — sözcük tetiği ("commit" geçen satır) denenmiş, bu depoda
-"commit" çoğunlukla TX commit'i olduğu için REDDEDİLMİŞTİ. ⇒ Kör noktayı kapatan şey
-kapı değil **yazım kuralıdır**: sha daima `5980ff06` biçiminde yazılır, çıplak değil.
+`test_sha_atfi` (`36f1db3a`) BAŞLANGIÇTA yalnız **backtick içindeki** sha'yı aday sayıyor
+ve bu kör noktayı başlığında BEYAN ediyordu — sözcük tetiği ("commit" geçen satır)
+denenmiş, bu depoda "commit" çoğunlukla TX commit'i olduğu için REDDEDİLMİŞTİ.
 
 ⚠️ **Ölçüldü 2026-09-14 (ağaç `5527c345`) — kör noktanın boyu:**
 
@@ -237,9 +236,41 @@ YAZARI çözebilir (`test_stock_ledger_production_entry.ts` başlığı). *Bir �
 
 Kapının GÖRDÜĞÜ atıf sayısı böylece **227 → 235**, çıplak **90 → 81** oldu; kesişim
 **23** (aynı sha hem backtick'li hem çıplak yazılmış) ⇒ **58 sha ağaçta YALNIZ çıplak
-biçimde var** ve kapı için hiç yoktur. Kapsama **235/293 ≈ %80**. Kural bu oranı
-zamanla 1'e taşır, geçmişi geri yazmaz — *ileriye dönük yazım kuralı, geriye dönük
-borç listesi.*
+biçimde var** ve kapı için hiç yoktu.
+
+⇒ **Kör nokta 2026-09-14'te KAPANDI: `test_sha_atfi` İKİNCİ KOL (§3).**
+
+Kapı artık çıplak hex'i de tarıyor ve her adayı **yapısal** bir kovaya koyuyor —
+**muaf listesi yok**, çünkü elle tutulan bir sha listesi bakım borcudur, ölçüt değil:
+
+| kova | ölçüt (yapısal) | sonuç |
+|---|---|---|
+| **SAGLAMA** | hemen ardında `…`/`...` | sha256/md5 ÖRNEĞİ — backtick'e ALINMAZ (alınsaydı birinci kol onu ölü atıf sanardı) |
+| **FİKSTÜR** | `.ts`/`.mjs` dosyasında TIRNAK İÇİNDE | sondanın girdisi (`"dead123"`); gerçek atıf koda yorumda ya da backtick'le yazılır |
+| **ATIF → yazım ihlali** | kalan · paylaşılan tarihte ÇÖZÜLÜYOR | gerçek sha, çıplak yazılmış — ölü değil, okunaksız; sayısı görünür basılır |
+| **ATIF → ÖLÜ** | kalan · ÇÖZÜLMÜYOR | cırcır (`CIPLAK_OLU_TABAN`) |
+| **ÖLÇÜLEMEDİ** | sığ klon / `origin` ref yok | rejim ölçemiyor ⇒ ⏭ sayıyla; *"ölü yok" ile "bakamadım" AYNI ÇIKTIYA İNMEZ* |
+
+⚠️ **Sınır `-` ve `/` de içerir:** UUID parçası hex'tir (`3f2504e0-4f89-…`) ve tireyi
+sınır saymayan bir kalıp her fikstür UUID'sinin her dilimini "ölü sha" sanar — ölçüldü
+2026-09-14: 100 aday → 80, farkın TAMAMI UUID dilimiydi.
+
+⚠️ **Üçüncü yazım kuralı — sha OLMAYAN hex-benzeri teknik ad KANONİK BÜYÜK HARFLE
+yazılır** (`Ed25519`, `ECDSA`), çünkü bu adın küçük harfli yazımı yedi karakterlik
+geçerli bir hex'tir ve kalıba uyar. ⚠️ Bu cümlenin kendisi kanıttır: küçük harfli
+biçimi backtick içinde ÖRNEK olarak yazmak kapıyı kırmızıya düşürür (birinci kol onu
+ölü atıf sayar) — kapı kendi belgesini de tarar. Bu kural, tek üyeli bir muaf listesi açmanın yerine geçer: *bir kovaya tek
+üye koymak, muaf listesini başka bir adla açmaktır.* (Ölçüm günü ağaçtaki tek örnek
+`docs/ops/YEDEK-VPS-KURULUM.md` satırıydı; kanonik yazıma çevrildi ve kova gerekmedi.)
+
+Ölçüm (ağaç `129c4a0f`): **80 çıplak aday · 63 ATIF · 10 SAGLAMA · 7 FİKSTÜR · ölü 0 ·
+yazım ihlali 63.** Cırcır tabanı `CIPLAK_OLU_TABAN = 0` ve İKİ YÖNLÜ doğrulandı — iki
+çıplak ölü atıf eklendi → 2, biri düzeltildi → 1, ikisi de düzeltildi → 0. *Tabanı
+DÜŞÜREMEYEN bir cırcır, hiç kapı olmamasından kötüdür.*
+
+63 **yazım ihlali** duran borçtur: kırmızı değil (sha ölü değil, yalnız okunaksız),
+her koşumda sayısı basılır. Kural bu sayıyı ileriye doğru 0'a taşır, geçmişi geri yazmaz
+— *ileriye dönük yazım kuralı, geriye dönük borç listesi.*
 
 📌 Üç uygulama notu:
 - **Commit sha'sı → backtick.** Kapı görsün diye; tek maliyet iki karakter.

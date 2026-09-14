@@ -14,12 +14,13 @@
 //     hex'tir); 40 hanelik sağlama ve 36 karakterlik UUID sınır kuralıyla dışarıda.
 //   · `docs/history/` KAPSAM DIŞI: arşiv donmuş belgedir, tarihî (bugün ölü) sha
 //     taşıması KUSUR DEĞİLDİR (ölçüldü 2026-09-14: arşivde 66 çözülemeyen atıf).
-// ⚠️ KÖR NOKTA, BİLEREK: backtick'siz yazılmış bir sha ÖLÇÜLMEZ. Bu, ölçtüğüm kendi
-//   vakamın YARISIDIR (iki atıfımdan biri backtick'sizdi). Sözcük tetiği ("commit"
-//   geçen satır) denendi ve REDDEDİLDİ: bu depoda "commit" çoğunlukla TX commit'idir
-//   ve ölçüm bir fikstür barkodunu ölü sha sandı. Dar ve doğru, geniş ve yanlıştan
-//   iyidir; kör nokta kapatılacaksa yazım kuralı (sha daima backtick içinde) ayrı
-//   bir kolla ölçülür.
+// ⚠️ ESKİ KÖR NOKTA — 2026-09-14'te İKİNCİ KOLLA KAPANDI (§3). Kapı önce yalnız
+//   backtick içini sayıyordu; 5e aynı ağaçta 80 ÇIPLAK aday ölçtü, 65'i origin'de
+//   çözülüyordu ve 10'u GERÇEK ÖLÜ atıftı ⇒ ***beyanlı bir kör nokta, sıfırlanmış bir
+//   tabanı yalanlar: taban ağacın değil KAPININ GÖRDÜĞÜNÜN sayısıdır.*** Bu yüzden
+//   §1'in cümlesi de daraldı — "ölü atıf yok" değil, "BACKTICK'Lİ atıflarda ölü yok".
+//   Sözcük tetiği ("commit" geçen satır) hâlâ REDDEDİLMİŞTİR (bu depoda "commit"
+//   çoğunlukla TX commit'i); ikinci kol tetik değil SINIFLANDIRMA kullanır (§3).
 //
 // ÜÇ SONUÇ: git yok → ⏭ · SIĞ KLON → ⏭ sayıyla (eski sha'lar orada YOK, sert kol
 // yanlış kırmızı verirdi) · derin klon → SERT.
@@ -43,8 +44,20 @@ const ATLAMA = atlamaDefteri(() => {
   fail++;
 });
 
-/** ⚠️ CIRCIR TABANI — oturum DOKUNMAZ, entegratör trende ölçüp düşürür. */
+/**
+ * ⚠️ CIRCIR TABANI — oturum DOKUNMAZ, entegratör trende ölçüp düşürür.
+ * KAPSAM: yalnız BACKTICK'Lİ atıflar. "0" = *backtick'li atıflarda ölü yok*, ağaçta
+ * ölü atıf yok DEĞİL — çıplak yazılmışların tabanı ayrı (`CIPLAK_OLU_TABAN`).
+ */
 const OLU_TABAN = 0;
+
+/**
+ * ⚠️ İKİNCİ KOL TABANI — ÇIPLAK (backtick'siz) ölü atıf. Oturum DOKUNMAZ.
+ * Ölçüldü 2026-09-14 (ağaç `129c4a0f`): 80 çıplak aday · 65 çözülüyor (yazım ihlali,
+ * ölü değil) · 15'i sınıflandı (10 SAGLAMA · 4 FİKSTÜR · 1 kanonik ad) ⇒ ölü 0.
+ * 5e'nin ölçtüğü 10 gerçek ölü atıf, aynı günün treninde origin karşılığına çevrildi.
+ */
+const CIPLAK_OLU_TABAN = 0;
 
 /** Beyanlı muafiyet: gerçekten sha OLMAYAN ama kalıba uyan literaller. BOŞ DOĞAR. */
 const MUAF: Record<string, string> = {};
@@ -61,6 +74,57 @@ export function shaAdaylari(kaynak: string): Array<{ sha: string; satir: number 
     }
   });
   return out;
+}
+
+/**
+ * ÇIPLAK (backtick'siz) sha adayları — İKİNCİ KOL. SAF.
+ *
+ * ⚠️ SINIR `-` DE İÇERİR: UUID parçası hex'tir (`3f2504e0-4f89-…`) ve tireyi sınır
+ * saymayan bir kalıp fikstür UUID'lerinin her dilimini "ölü sha" sanar (ölçüldü
+ * 2026-09-14: 100 aday → 80; 20 fark tamamen UUID dilimiydi). Aynı gerekçeyle `/`
+ * (yol parçası) da sınır değildir.
+ */
+export function ciplakAdaylari(kaynak: string): Array<{ sha: string; satir: number; metin: string; sutun: number }> {
+  const out: Array<{ sha: string; satir: number; metin: string; sutun: number }> = [];
+  kaynak.split("\n").forEach((ham, i) => {
+    // Backtick span'i MASKELENİR (uzunluk korunur): orası birinci kolun alanı.
+    const maske = ham.replace(/`[^`]*`/g, (m) => " ".repeat(m.length));
+    for (const m of maske.matchAll(/(?<![0-9a-zA-Z_/-])([0-9a-f]{7,12})(?![0-9a-zA-Z_/-])/g)) {
+      const sha = m[1]!;
+      if (!/[a-f]/.test(sha)) continue;             // `20260914` tarihtir
+      out.push({ sha, satir: i + 1, metin: ham, sutun: m.index! });
+    }
+  });
+  return out;
+}
+
+/**
+ * ÇIPLAK ADAYIN SINIFI — kova, MUAF LİSTESİ DEĞİL. Üçü de YAPISAL ölçüttür; hiçbiri
+ * elle tutulan bir sha listesine bakmaz (liste bakım borcudur, ölçüt değil).
+ *
+ *   SAGLAMA — hemen ardında `…`/`...`: sha256/md5 ÖRNEĞİ. Yazım kuralı bunları
+ *             backtick'e ALMAZ (alınsaydı birinci kol onları ölü atıf sanardı).
+ *   FIKSTUR — kod dosyasında TIRNAK İÇİNDE: sondanın girdisi (`"abc1234"`,
+ *             `"dead123"`). Gerçek atıf koda yorumda ya da backtick'le yazılır.
+ *   ATIF    — kalanı. Çözülüyorsa YAZIM İHLALİ (gerçek sha, çıplak yazılmış),
+ *             çözülmüyorsa ÖLÜ.
+ *
+ * ⚠️ Dördüncü bir kova AÇILMADI: sha olmayan hex-benzeri teknik ad (`Ed25519`)
+ * KANONİK BÜYÜK HARFİYLE yazılır ve kalıba hiç uymaz — kovaya değil YAZIM kuralına
+ * bağlıdır. Kova açmak, tek üyeli bir muaf listesi açmaktır.
+ */
+export type CiplakSinif = "SAGLAMA" | "FIKSTUR" | "ATIF";
+export function ciplakSinif(aday: { sha: string; metin: string; sutun: number }, dosya: string): CiplakSinif {
+  const kalan = aday.metin.slice(aday.sutun + aday.sha.length);
+  if (/^(…|\.\.\.)/.test(kalan)) return "SAGLAMA";
+  if (/\.(ts|mjs)$/.test(dosya)) {
+    const onces = aday.metin.slice(0, aday.sutun);
+    // Tırnak İÇİNDE mi: adaydan önce TEK sayıda tırnak açılmışsa evet.
+    for (const t of ['"', "'"]) {
+      if ((onces.split(t).length - 1) % 2 === 1) return "FIKSTUR";
+    }
+  }
+  return "ATIF";
 }
 
 function gitVar(): boolean {
@@ -168,6 +232,48 @@ function main(): void {
   const oluMuaf = Object.keys(MUAF).filter((s) => !yerler.has(s));
   check("§1b muafiyet listesinde ölü satır yok", oluMuaf.length === 0, oluMuaf.join(", "));
 
+  // ── §3 İKİNCİ KOL — ÇIPLAK (backtick'siz) atıflar ──────────────────────────
+  console.log("\n=== §3 ÇIPLAK ATIFLAR (eski kör nokta) ===");
+  const ciplak = new Map<string, { sinif: CiplakSinif; yerler: string[] }>();
+  for (const f of dosyalar) {
+    for (const a of ciplakAdaylari(readFileSync(join(KOK, f), "utf8"))) {
+      const sinif = ciplakSinif(a, f);
+      // Aynı sha iki sınıfta görünürse ATIF KAZANIR: sınıflandırma SUSTURUR ve bir kez
+      // susturulan sha başka yerde ölü olsa da görünmez kalırdı.
+      const v = ciplak.get(a.sha);
+      if (v) { if (sinif === "ATIF") v.sinif = "ATIF"; v.yerler.push(`${f}:${a.satir}`); }
+      else ciplak.set(a.sha, { sinif, yerler: [`${f}:${a.satir}`] });
+    }
+  }
+  const sayim = (k: CiplakSinif): number => [...ciplak.values()].filter((v) => v.sinif === k).length;
+  check("§3a körlük zemini: çıplak kapsam dolu", ciplak.size > 20,
+    `${ciplak.size} benzersiz çıplak aday · ATIF ${sayim("ATIF")} · SAGLAMA ${sayim("SAGLAMA")} · FİKSTÜR ${sayim("FIKSTUR")}`);
+
+  const atiflar = [...ciplak.entries()].filter(([, v]) => v.sinif === "ATIF");
+  if (sigKlon() || !tarih) {
+    // ÜÇÜNCÜ SONUÇ: rejim ölçemiyor. "Ölü yok" ile "bakamadım" AYNI ÇIKTIYA İNMEZ.
+    ATLAMA.atla("§3b ⭐ çıplak ölü atıf", `SIĞ KLON / ref yok — ${atiflar.length} çıplak atıf ÖLÇÜLEMEDİ`, atiflar.length);
+  } else {
+    const ciplakOlu = cozulemeyenler(tarih.shalar, atiflar.map(([sha]) => sha));
+    check(
+      `§3b ⭐ çıplak ölü atıf ARTMADI (paylaşılan tarih: ${tarih.ad})`,
+      ciplakOlu.size <= CIPLAK_OLU_TABAN,
+      ciplakOlu.size <= CIPLAK_OLU_TABAN
+        ? `${ciplakOlu.size} ≤ ${CIPLAK_OLU_TABAN} · ${atiflar.length} çıplak atıf tarandı`
+        : `${ciplakOlu.size} > ${CIPLAK_OLU_TABAN} ⇒ YENİ çıplak ölü atıf:\n      ` +
+            [...ciplakOlu].map((x) => `${x} ← ${ciplak.get(x)!.yerler.join(" · ")}`).join("\n      "),
+    );
+    curumeKolu(check, ATLAMA.atla, "§3c ⭐ çıplak ölü atıf tabanı ÇÜRÜMEDİ", ciplakOlu.size, CIPLAK_OLU_TABAN);
+    if (ciplakOlu.size > 0) {
+      console.log(`   ⓘ duran borç (${ciplakOlu.size}) — çıplak ölü atıflar:`);
+      for (const x of ciplakOlu) console.log(`      • ${x} ← ${ciplak.get(x)!.yerler.join(" · ")}`);
+    }
+    // YAZIM İHLALİ: gerçek sha, çıplak yazılmış. Ölü DEĞİL ⇒ kırmızı değil; sayısı
+    // GÖRÜNÜR kalır — yazım kuralı bu sayıyı ileriye doğru 0'a taşır, geçmişi geri
+    // yazmaz. (Cırcıra çevrilmesi 1e kalemi: taban sabitine oturum dokunmaz.)
+    console.log(`   ⓘ yazım ihlali (${atiflar.length - ciplakOlu.size}) — origin'de ÇÖZÜLEN ama backtick'siz yazılmış sha (ölü değil, okunaksız)`);
+  }
+
   console.log("\n=== §2 SONDALAR (saf yüklem) ===");
   check("§2a ⭐ backtickli sha aday", shaAdaylari("bkz `cb4c8ac8` satırı").length === 1);
   check("§2b ⭐ backtick YOKSA aday DEĞİL (beyan edilmiş kör nokta)", shaAdaylari("bkz cb4c8ac8 satırı").length === 0);
@@ -183,6 +289,26 @@ function main(): void {
     check("§2i ⭐ paylaşılan tarihte OLMAYAN atıf ÖLÜ (dal sha'sı sınıfı)", cozulemeyenler(dizin, ["dead123"]).size === 1);
     check("§2j kısa atıf uzun sha'nın ÖNEKİ olarak eşleşir", cozulemeyenler(dizin, ["abc12340"]).size === 0);
     check("§2k önek TUTMUYORSA ölü (7 hane aynı, sekizinci farklı)", cozulemeyenler(dizin, ["abc1234f"]).size === 1);
+  }
+
+  console.log("\n=== §4 İKİNCİ KOL SONDALARI (saf yüklem) ===");
+  const A = (metin: string) => ciplakAdaylari(metin);
+  check("§4a ⭐ çıplak sha ADAYDIR (birinci kolun görmediği)", A("bkz 5527c345 satırı").length === 1);
+  check("§4b ⭐ backtick içi çıplak kolda SAYILMAZ (maskeleme)", A("bkz `5527c345` satırı").length === 0);
+  check("§4c ⭐ UUID dilimi aday DEĞİL (tire SINIRDIR)", A('id: "3f2504e0-4f89-41d3-9a0c-0305e82c3301"').length === 0);
+  check("§4d yol parçası aday DEĞİL (`/` sınırdır)", A("dump/3f2504e0/x").length === 0);
+  check("§4e saf rakam aday DEĞİL", A("bkz 20260914 tarihi").length === 0);
+  {
+    const sag = A("// ham sha256: 7d6d87f1… ≠ 72228d6c…")[0]!;
+    check("§4f ⭐ `…` ardılı SAGLAMA (sha256 örneği, backtick'e ALINMAZ)", ciplakSinif(sag, "x.ts") === "SAGLAMA");
+    const fik = A('check("§2i ölü", cozulemeyenler(d, ["dead123"]).size === 1);')[0]!;
+    check("§4g ⭐ kodda TIRNAK İÇİ FİKSTÜR (sondanın girdisi)", ciplakSinif(fik, "scripts/test_x.ts") === "FIKSTUR");
+    check("§4h ⭐ aynı literal BELGEDE fikstür değil ATIF (tırnak ölçütü koda özgü)",
+      ciplakSinif(fik, "docs/kurallar/defter.md") === "ATIF");
+    const atf = A("// geri alma yolu 5527c345 ile indi")[0]!;
+    check("§4i ⭐ yorumdaki çıplak sha ATIF (kova değil)", ciplakSinif(atf, "scripts/test_x.ts") === "ATIF");
+    check("§4j kanonik ad kalıba UYMAZ (`Ed25519` büyük harf — kova değil yazım kuralı)",
+      A("dosyada yalnız Ed25519 varken").length === 0);
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);

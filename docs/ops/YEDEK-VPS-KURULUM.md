@@ -72,7 +72,7 @@ Tahmin değil — kurulum sırasında **fiilen ısırdı**:
 | Tuzak | Belirti | Çözüm |
 |---|---|---|
 | **crypt varsayılan son eki** | Dosya sunucuya `…dump.bin` düşer; arşivleme script'inin `*.dump` süzgeci onu **hiç görmez**, yedek sessizce arşivlenmez | `suffix = none` |
-| **`known_hosts` tek anahtar tipi** | `knownhosts: key mismatch` — dosyada yalnız ed25519 varken sunucu ecdsa/rsa sunuyor | `ssh-keyscan` çıktısının **tamamını** al (üç tip) |
+| **`known_hosts` tek anahtar tipi** | `knownhosts: key mismatch` — dosyada yalnız Ed25519 varken sunucu ECDSA/RSA sunuyor | `ssh-keyscan` çıktısının **tamamını** al (üç tip) |
 | **Arşiv `gelen/`den TAŞIRSA** | `rclone copy` dosyayı "eksik" görüp her gece **yeniden yükler**; panelin `missingCount` sayacı kalıcı kırmızıya döner | Arşiv **kopyalar**, taşımaz; `gelen/` yalnız 35 günden eskiyi budar (fabrika onu zaten silmiştir) |
 
 ---
