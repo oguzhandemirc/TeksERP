@@ -44,6 +44,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { yarnMovementSign } from "./helpers/yarn-sign.helper";
 import { assertYarnBalanceCoversTx } from "./helpers/yarn-balance-guard.helper";
+import { assertLotMatchesItemTx, normalizeLotNo, yarnLotBalancesTx } from "./helpers/yarn-lot.helper";
 import { readIplikEnabled } from "./system-setting.service";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import { buildTurkishSearch } from "../utils/query-parser";
@@ -123,6 +124,10 @@ export interface YarnMovementTxInput {
   warpBeamId?: string | null;
   /** WARP_RETURN(_REVERSAL): dip kaderi — `ReasonPresetKind.WARP_RETURN` kodu (sunucuda doğrulanır). */
   reasonCode?: string | null;
+  /** Devere Faz 2: tedarikçi lotu (nullable). Lot kalemi hareket kalemiyle aynı olmalı; lot etiketli çıkış lot bakiyesini aşamaz. */
+  lotId?: string | null;
+  /** Bobin adedi — bilgi, bakiye değil (DB CHECK > 0). */
+  bobbinCount?: number | null;
 }
 
 export interface YarnMovementTxResult {
@@ -185,11 +190,14 @@ export async function applyYarnMovementTx(tx: Tx, input: YarnMovementTxInput): P
   // ve `OUT` dışındaki türlerde tek ek sorgu bile koşmaz (sıra load-bearing —
   // gerekçe helper başlığında). Muafiyet: `ADJUST_OUT` = sayım düzeltmesi +
   // belge stornosu; guard oraya GENİŞLETİLMEZ (test_yarn_stock §10).
+  // Lot beyanı varsa önce KİMLİK: lot bu kalemin mi, aktif mi (çapraz-tablo CHECK yok).
+  if (input.lotId) await assertLotMatchesItemTx(tx, input.lotId, input.itemId);
   await assertYarnBalanceCoversTx(tx, {
     itemId: input.itemId,
     warehouseId: input.warehouseId,
     kind: input.kind,
     qtyKg: qty,
+    lotId: input.lotId ?? null,
   });
 
   const movement = await tx.yarnMovement.create({
@@ -206,6 +214,7 @@ export async function applyYarnMovementTx(tx: Tx, input: YarnMovementTxInput): P
       reason: input.reason?.trim() || null,
       userId: input.userId ?? null,
       warpBeamId: input.warpBeamId ?? null, reasonCode: input.reasonCode ?? null,
+      lotId: input.lotId ?? null, bobbinCount: input.bobbinCount ?? null,
     },
     select: { id: true },
   });
@@ -227,64 +236,6 @@ export async function applyYarnMovementTx(tx: Tx, input: YarnMovementTxInput): P
   return { movementId: movement.id, balanceKg };
 }
 
-/**
- * Bir mal kabul fişinin iplik hareketlerini TERS KAYITLA kapatır.
- *
- * ⚠️ Neden NET üzerinden tek satır: fiş iptali "bu mal HİÇ girmedi" stornosudur
- * ve defterde tek bir düzeltme satırı olarak okunmalı. Net hesaplamak ayrıca
- * işlemi İDEMPOTENT yapar — ikinci çağrıda net 0 çıkar ve hiçbir satır
- * doğmaz. Satır-satır terslemek, kısmi bir hatadan sonra tekrar denendiğinde
- * malı İKİ KEZ düşerdi.
- *
- * ⚠️ Bakiye eksiye düşse bile YAZILIR (yukarıdaki negatif bakiye kuralı): iplik
- * fişten sonra sarf edilmiş olabilir; iptali reddetmek defteri değil yalnız
- * ekranı düzeltirdi.
- *
- * Kumaş-only fişte bu fonksiyon 0 satır okur ve HİÇBİR ŞEY yazmaz — mevcut
- * mal kabul davranışı korunur (indeksli `goodsReceiptId` üzerinden tek sorgu).
- */
-export async function reverseGoodsReceiptYarnTx(
-  tx: Tx,
-  goodsReceiptId: string,
-  reason: string,
-  userId?: string | null,
-): Promise<Array<{ itemId: string; warehouseId: string; qtyKg: Prisma.Decimal; balanceKg: Prisma.Decimal }>> {
-  const rows = await tx.yarnMovement.findMany({
-    where: { goodsReceiptId },
-    select: { itemId: true, warehouseId: true, kind: true, qtyKg: true },
-  });
-  if (rows.length === 0) return [];
-
-  // Kalem × depo bazında net — bir fiş aynı ipliği iki depoya alabilir.
-  const nets = new Map<string, { itemId: string; warehouseId: string; net: Prisma.Decimal }>();
-  for (const r of rows) {
-    const key = `${r.itemId}|${r.warehouseId}`;
-    const cur = nets.get(key) ?? { itemId: r.itemId, warehouseId: r.warehouseId, net: D(0) };
-    cur.net = cur.net.plus(D(r.qtyKg).mul(yarnMovementSign(r.kind)));
-    nets.set(key, cur);
-  }
-
-  const applied: Array<{ itemId: string; warehouseId: string; qtyKg: Prisma.Decimal; balanceKg: Prisma.Decimal }> = [];
-  // ⚠️ SIRALI döngü: `tx.*` ile `Promise.all` YASAK (pg adapter tek bağlantıyı
-  // seri çalıştırır; ESLint de yakalar).
-  for (const n of nets.values()) {
-    if (n.net.isZero()) continue;
-    const res = await applyYarnMovementTx(tx, {
-      itemId: n.itemId,
-      warehouseId: n.warehouseId,
-      // Storno bir DÜZELTMEDİR, bir çıkış değil: mal depodan çıkmadı, hiç
-      // girmemiş sayıldı. `OUT` yazmak "bu iplik tüketildi" raporunu şişirirdi.
-      kind: n.net.gt(0) ? YarnMovementKind.ADJUST_OUT : YarnMovementKind.ADJUST_IN,
-      qtyKg: n.net.abs(),
-      goodsReceiptId,
-      reason,
-      userId: userId ?? null,
-    });
-    applied.push({ itemId: n.itemId, warehouseId: n.warehouseId, qtyKg: n.net.abs(), balanceKg: res.balanceKg });
-  }
-  return applied;
-}
-
 // -----------------------------------------------------------------------------
 // SERVİS
 // -----------------------------------------------------------------------------
@@ -303,6 +254,8 @@ export interface YarnMovementCreateInput {
   kind: YarnMovementKind;
   qtyKg: number | string;
   reason?: string | null;
+  /** Devere Faz 2: elle hareket lot etiketi taşıyabilir (opsiyonel). */
+  lotId?: string | null;
 }
 
 export class YarnService {
@@ -389,6 +342,7 @@ export class YarnService {
     warehouseId?: string;
     kind?: YarnMovementKind;
     goodsReceiptId?: string;
+    lotId?: string;
     dateFrom?: Date;
     dateTo?: Date;
   }): Promise<{ success: true; data: unknown[]; nextCursor: string | null }> {
@@ -399,6 +353,7 @@ export class YarnService {
     if (params.warehouseId) where.warehouseId = params.warehouseId;
     if (params.kind) where.kind = params.kind;
     if (params.goodsReceiptId) where.goodsReceiptId = params.goodsReceiptId;
+    if (params.lotId) where.lotId = params.lotId;
     if (params.dateFrom || params.dateTo) {
       where.createdAt = {
         ...(params.dateFrom ? { gte: params.dateFrom } : {}),
@@ -425,6 +380,8 @@ export class YarnService {
         warehouse: { select: { id: true, code: true, name: true } },
         user: { select: { id: true, fullName: true, username: true } },
         goodsReceipt: { select: { id: true, receiptNo: true } },
+        lot: { select: { id: true, lotNo: true } },
+        bobbinCount: true,
       },
     });
 
@@ -482,6 +439,7 @@ export class YarnService {
         qtyKg: qty,
         reason: input.reason ?? null,
         userId: userId ?? null,
+        lotId: input.lotId ?? null,
       }),
     );
 

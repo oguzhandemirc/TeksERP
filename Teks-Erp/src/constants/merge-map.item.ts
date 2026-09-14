@@ -71,6 +71,19 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
     // —— Ticaret / iplik / fatura bacağı ————————————————————————————————————
     { kind: "MOVE", model: "InvoiceLine", table: "invoice_lines", column: "itemId", label: "Fatura kalemi" },
     { kind: "MOVE", model: "YarnMovement", table: "yarn_movements", column: "itemId", label: "İplik hareketi" },
+    {
+      // Devere Faz 2 — lot kalemin ALTINDAKİ kimliktir (`[itemId, lotNo]` tekil): iki kalemde
+      // aynı lot numarası varsa birleştirme iki lotu tek satıra indiremez (hareketleri ayrı
+      // lotlara bağlı) — sessizce toplamak lot bakiyesini yalanlar. Farklı numaralar taşınır.
+      kind: "CONFLICT",
+      model: "YarnLot",
+      table: "yarn_lots",
+      column: "itemId",
+      label: "İplik lotu",
+      uniqueOn: ["itemId", "lotNo"],
+      policy: "BLOCK",
+      why: "Aynı lot numarası iki kalemde: lotlar hareketlerin kimliğidir, birleştirilemez — önce birini pasife alıp hareketlerini karşı lota düzeltme belgesiyle taşıyın.",
+    },
     { kind: "MOVE", model: "PurchaseOrderLine", table: "purchase_order_lines", column: "itemId", label: "Alış siparişi kalemi" },
     {
       kind: "CONFLICT",

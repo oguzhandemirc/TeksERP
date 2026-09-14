@@ -79,6 +79,7 @@
 import { Prisma, YarnMovementKind } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { readYarnBlockNegativeBalanceEnabled } from "../system-setting.service";
+import { yarnLotBalanceTx } from "./yarn-lot.helper";
 
 export interface YarnOutflowRef {
   itemId: string;
@@ -87,6 +88,8 @@ export interface YarnOutflowRef {
   kind: YarnMovementKind;
   /** POZİTİF kg (yön `kind`ten gelir — `yarn.service` sözleşmesi). */
   qtyKg: Prisma.Decimal;
+  /** Devere Faz 2: lot etiketli çıkış — lot × depo bakiyesi de sorulur (bayraktan BAĞIMSIZ). */
+  lotId?: string | null;
 }
 
 /**
@@ -115,8 +118,15 @@ export async function assertYarnBalanceCoversTx(
   // Kapılanan küme = bakiyeyi DÜŞÜREN ileri yollar: OUT · WARP_ISSUE · WARP_RETURN_REVERSAL (§4.7 — ölçüt
   // "storno mu" değil "bakiyeyi düşürüyor mu"); ADJUST_OUT (sayım) ve artıran türler muaf.
   if (!GATED_KINDS.has(ref.kind)) return;
+  // LOT BOYUTU (Faz 2, 1e L1 hükmü): lot etiketli çıkış, o lotun o depodaki TÜRETİLEN
+  // bakiyesini aşamaz — bayraktan BAĞIMSIZ. Depo bakiyesi bir fabrika tercihi
+  // (eksiye düşebilir); lot etiketi ise bir BEYANDIR ("bu kg lot X'ten çıktı") ve
+  // lotta olmayan kg'nin beyanı yalandır — türetilen bakiye eksiye düşerse liste
+  // yalan söyler. Depo satırı FOR UPDATE ile kilitlenmeden önce lot toplamı
+  // okunursa iki eşzamanlı lot çıkışı aynı kg'yi iki kez düşürebilirdi; bu
+  // yüzden lot okuması depo satırının kilidinden SONRA yapılır (aşağıda).
   const enabled = await readYarnBlockNegativeBalanceEnabled(tx);
-  if (!enabled) return;
+  if (!enabled && !ref.lotId) return;
 
   // FOR UPDATE — gerekçe dosya başlığında. Satır YOKSA bakiye 0 kabul edilir
   // (yine dosya başlığında: yokluk meşrudur ve guard'ın yakalaması gereken
@@ -127,6 +137,18 @@ export async function assertYarnBalanceCoversTx(
     FOR UPDATE
   `;
   const balance = rows[0] ? new Prisma.Decimal(String(rows[0].balanceKg)) : new Prisma.Decimal(0);
+  if (ref.lotId) {
+    const lotBalance = await yarnLotBalanceTx(tx, ref.lotId, ref.warehouseId);
+    if (lotBalance.minus(ref.qtyKg).isNegative()) {
+      const lot = await tx.yarnLot.findUnique({ where: { id: ref.lotId }, select: { lotNo: true } });
+      throw AppError.conflict(
+        `"${lot?.lotNo ?? ref.lotId}" lotunun bu depodaki bakiyesi eksiye düşecek: mevcut ${lotBalance.toFixed(3)} kg, istenen çıkış ${ref.qtyKg.toFixed(3)} kg. ` +
+          `Lot bakiyesi hareketlerden türetilir — bu lota giriş yazılmadıysa mal kabul satırındaki lot numarasını düzeltin ya da lotsuz çıkış yazın.`,
+        { code: "YARN_LOT_BALANCE_EXCEEDED", lotId: ref.lotId, warehouseId: ref.warehouseId, balanceKg: lotBalance.toFixed(3), requestedKg: ref.qtyKg.toFixed(3) },
+      );
+    }
+  }
+  if (!enabled) return;
   if (!balance.minus(ref.qtyKg).isNegative()) return;
 
   // ⚠️ Adlar YALNIZ RED YOLUNDA okunur: mutlu yol (bakiye yeterli) tek ek sorgu

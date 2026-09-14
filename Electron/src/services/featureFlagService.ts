@@ -300,6 +300,8 @@ export interface FeatureFlags {
    *  etkin değer `ticaret && iplik && devere`. Faz 1a'da panel satırı YOK (yüzey
    *  aynı fazın son adımında gelir). */
   devereEnabled: boolean;
+  /** Devere Faz 2: içeride sarım + mal kabul iplik satırında lot zorunlu (varsayılan kapalı). */
+  devereLotRequired: boolean;
   /** Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme).
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI, tezgah izlemenin KARDEŞİ: bu alan HAM
    *  değerdir; etkin değer `production && dokuma` (`useOperationsVisibilityContext`). */

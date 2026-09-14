@@ -46,7 +46,7 @@ const createSchema = z
   .strict();
 const updateSchema = createSchema.omit({ clientToken: true }).partial().strict();
 
-const yarnLine = z.object({ warehouseId: z.string().uuid(), qtyKg: qty }).strict();
+const yarnLine = z.object({ warehouseId: z.string().uuid(), qtyKg: qty, lotId: uuidOrNull }).strict();
 const windSchema = z
   .object({
     lengthM: qty,

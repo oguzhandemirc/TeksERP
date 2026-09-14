@@ -175,6 +175,7 @@ export const TABLE_LABELS: Record<string, string> = {
   WAREHOUSE: "Depo",
   WAREHOUSE_TRANSFER: "Depo Transferi",
   YARN_MOVEMENT: "İplik Hareketi",
+  YARN_LOT: "İplik Lotu",
   WARP_SPEC: "Çözgü Kartı",
   WEAVING_ORDER: "Dokuma İşi",
   WARP_BEAM: "Levent",

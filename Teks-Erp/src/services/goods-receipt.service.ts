@@ -46,11 +46,14 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { InventoryService } from "./inventory.service";
 import { resolveItemPricesFor } from "./item-price.service";
-import { applyYarnMovementTx, reverseGoodsReceiptYarnTx } from "./yarn.service";
+import { applyYarnMovementTx } from "./yarn.service";
+import { reverseGoodsReceiptYarnTx } from "./helpers/yarn-receipt-reversal.helper";
+import { ensureYarnLotTx, normalizeLotNo } from "./helpers/yarn-lot.helper";
 import { yarnMovementSign } from "./helpers/yarn-sign.helper";
 // J1 — iki OPT-IN katılık bayrağı (ikisi de varsayılan KAPALI; kapalıyken tek
 // maliyet ayar okumasıdır ve davranış bayt-bayt bugünküdür).
 import {
+  readDevereLotRequired,
   resolveGoodsReceiptRequirePriceEnabled,
   resolvePurchaseBlockOverReceiptEnabled,
 } from "./system-setting.service";
@@ -99,6 +102,11 @@ export interface GoodsReceiptLineInput {
   unitPrice?: number | null;
   /** Satır başına idempotency — ağ kopmasında yarım fiş mükerrer top doğurmaz. */
   clientToken?: string;
+  /** İPLİK satırı (devere Faz 2): tedarikçi lot numarası — irsaliye metni, TRIM, ayrıştırılmaz.
+   *  `[kalem, lotNo]` üzerinde lot upsert edilir; kumaş satırında 400. */
+  lotNo?: string | null;
+  /** İPLİK satırı: bobin adedi (bilgi). */
+  bobbinCount?: number | null;
 }
 
 export interface GoodsReceiptCreateInput {
@@ -199,6 +207,8 @@ const RECEIPT_YARN_SELECT = {
   unitPrice: true,
   reason: true,
   createdAt: true,
+  bobbinCount: true,
+  lot: { select: { id: true, lotNo: true } },
   item: { select: { id: true, name: true, code: true } },
   warehouse: { select: { id: true, name: true } },
 } as const;
@@ -242,6 +252,8 @@ export interface ReceiptYarnLine {
   unitPrice: Prisma.Decimal | null;
   reason: string | null;
   createdAt: Date;
+  lot: { id: string; lotNo: string } | null;
+  bobbinCount: number | null;
 }
 
 export type ReceiptLine = ReceiptFabricLine | ReceiptYarnLine;
@@ -1147,7 +1159,7 @@ export class GoodsReceiptService {
    * gerektiğinde çözüm `YarnLot`tur, sessiz kabul değil.)
    */
   private async addYarnLine(
-    receipt: { id: string; receiptNo: string; warehouseId: string },
+    receipt: { id: string; receiptNo: string; warehouseId: string; supplierId: string | null },
     line: GoodsReceiptLineInput,
     /** D2 zinciriyle ÇÖZÜLMÜŞ birim fiyat (satır > kart > null) — fişin para biriminde. */
     unitPrice: Prisma.Decimal.Value | null,
@@ -1187,11 +1199,22 @@ export class GoodsReceiptService {
     // Aynı tx şart: satır ile fiyatı ayrı commit'lere bölmek "fiyatlı girildi,
     // fiyatsız kaldı" yarım durumunu doğururdu. Satır tx dışına henüz görünür
     // olmadığı için bu, append-only defterde bir "düzeltme" DEĞİLDİR.
+    // LOT (devere Faz 2): irsaliye metni TRIM'lenir, boş → null. `devere.lotRequired`
+    // AÇIKKEN lotsuz iplik satırı 400 (varsayılan KAPALI = bugünkü davranış: lotsuz yazılır).
+    const lotNo = normalizeLotNo(line.lotNo);
+    if (!lotNo && (await readDevereLotRequired())) {
+      throw AppError.badRequest(`İplik satırında lot numarası zorunlu (ayar: "Devere — lot zorunlu"). İrsaliyedeki lot numarasını olduğu gibi yazın.`, { code: "YARN_LOT_REQUIRED" });
+    }
+    if (line.bobbinCount != null && (!Number.isInteger(line.bobbinCount) || line.bobbinCount <= 0)) {
+      throw AppError.badRequest("Bobin adedi pozitif tam sayı olmalı");
+    }
     const res = await prisma.$transaction(async (tx) => {
       // SINIF 4 (I1): İLK ifade — kumaş yolundaki `txGate`in ikizi. İptal bu
       // satır kilidinde bekler; iptal önce commit'lendiyse count=0 → 409 ve
       // CANCELLED fişe iplik satırı DOĞMAZ.
       await this.claimActiveReceiptTx(tx, receipt.id, receipt.receiptNo);
+      // Lot doğuşu tek kapı: `[kalem, lotNo]` upsert, 8029 kilidi (tedarikçi yalnız ilk doğuşta yazılır).
+      const lot = lotNo ? await ensureYarnLotTx(tx, { itemId: line.itemId, lotNo, supplierId: receipt.supplierId, userId }) : null;
       const applied = await applyYarnMovementTx(tx, {
         itemId: line.itemId,
         warehouseId: receipt.warehouseId,
@@ -1200,6 +1223,8 @@ export class GoodsReceiptService {
         goodsReceiptId: receipt.id,
         reason: `Mal kabul (${receipt.receiptNo})`,
         userId: userId ?? null,
+        lotId: lot?.id ?? null,
+        bobbinCount: line.bobbinCount ?? null,
       });
       if (unitPrice != null) {
         await tx.yarnMovement.update({
@@ -1610,6 +1635,8 @@ export class GoodsReceiptService {
           unitPrice: m.unitPrice,
           reason: m.reason,
           createdAt: m.createdAt,
+          lot: m.lot,
+          bobbinCount: m.bobbinCount,
         }),
       ),
     ];

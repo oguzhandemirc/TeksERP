@@ -497,5 +497,17 @@ FROM yarn_movements m
 WHERE m.kind IN ('WARP_RETURN', 'WARP_RETURN_REVERSAL')
   AND NOT EXISTS (SELECT 1 FROM reason_presets p WHERE p.kind = 'WARP_RETURN' AND p.code = m."reasonCode");
 
+\echo '== 40) İPLİK LOTU — hareketin kalemi ≠ lotun kalemi (beklenen 0) =='
+SELECT m.id::text AS hareket, m."itemId"::text AS hareket_kalem, l."itemId"::text AS lot_kalem, l."lotNo"
+FROM yarn_movements m JOIN yarn_lots l ON l.id = m."lotId"
+WHERE m."itemId" <> l."itemId";
+
+\echo '== 41) İPLİK LOTU — lot × depo türetilen bakiyesi eksi (beklenen 0; giriş türleri yarn-sign.helper ile aynı) =='
+SELECT l."lotNo", m."warehouseId"::text AS depo,
+       SUM(CASE WHEN m.kind IN ('IN','ADJUST_IN','WARP_ISSUE_REVERSAL','WARP_RETURN') THEN m."qtyKg" ELSE -m."qtyKg" END) AS bakiye
+FROM yarn_movements m JOIN yarn_lots l ON l.id = m."lotId"
+GROUP BY l.id, l."lotNo", m."warehouseId"
+HAVING SUM(CASE WHEN m.kind IN ('IN','ADJUST_IN','WARP_ISSUE_REVERSAL','WARP_RETURN') THEN m."qtyKg" ELSE -m."qtyKg" END) < 0;
+
 \echo ''
 \echo '== Tutarlılık kontrolü bitti. §30b BİLGİ (miras sayısı) dışında yukarıda hiç satır YOKSA sistem sağlıklı. =='

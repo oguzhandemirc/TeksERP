@@ -39,6 +39,9 @@ const lineSchema = z.object({
   // SESSİZCE ATAR: bu satır olmadan panel fiyat gönderir, backend düşürür.
   unitPrice: z.number().nonnegative().nullable().optional(),
   clientToken: z.string().uuid().optional(),
+  // İplik satırı (devere Faz 2): lot numarası + bobin adedi — Zod tanımadığını sessizce atar.
+  lotNo: z.string().max(64).nullable().optional(),
+  bobbinCount: z.number().int().positive().nullable().optional(),
 });
 
 const createSchema = z.object({

@@ -2596,6 +2596,7 @@ model Item {
   // Paket D (ticaret) — fabrikada hiçbiri doğmaz.
   yarnStocks         YarnStock[]
   yarnMovements      YarnMovement[]
+  yarnLots           YarnLot[]                @relation("YarnLotItem")
   prices             ItemPrice[]
   purchaseOrderLines PurchaseOrderLine[]
   stockCountLines    StockCountLine[]
@@ -3256,6 +3257,7 @@ model Customer {
   itemPrices       ItemPrice[]
   purchaseOrders   PurchaseOrder[]           @relation("PurchaseOrderSupplier")
   suppliedWarpBeams WarpBeam[]               @relation("WarpBeamSupplier")
+  yarnLots          YarnLot[]                @relation("YarnLotSupplier")
   directShipments  DirectShipment[]
   templateRoutes   CustomerTemplateRoute[]
   standaloneLabels CustomerStandaloneLabel[]
@@ -9148,9 +9150,17 @@ model YarnMovement {
   warpBeamId String? @db.Uuid
   reasonCode String? @db.VarChar(64)
 
+  /// Devere Faz 2 (lot): tedarikçi lotu bağı — nullable, lot izlemesinden önce giren iplik lotsuzdur
+  /// ve çıkabilir. Lot bakiyesi AYRI TABLOYA İNMEZ, Σ `yarnMovementSign` × qtyKg WHERE lotId ile TÜRETİLİR
+  /// (`yarnLotBalanceTx`); lot kalemi hareketin kalemiyle aynı olmalı (servis 400, mutabakat §40).
+  lotId String? @db.Uuid
+  /// Bobin adedi — BİLGİ alanıdır, bakiye değil (CHECK `yarn_movements_bobbin_positive`: null ya da > 0).
+  bobbinCount Int?
+
   item         Item          @relation(fields: [itemId], references: [id], onDelete: Restrict)
   warehouse    Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   warpBeam     WarpBeam?     @relation(fields: [warpBeamId], references: [id], onDelete: Restrict)
+  lot          YarnLot?      @relation(fields: [lotId], references: [id], onDelete: Restrict)
   goodsReceipt GoodsReceipt? @relation(fields: [goodsReceiptId], references: [id])
   invoice      Invoice?      @relation(fields: [invoiceId], references: [id])
   stockCount   StockCount?   @relation(fields: [stockCountId], references: [id], onDelete: Restrict)
@@ -9164,7 +9174,36 @@ model YarnMovement {
   @@index([invoiceId])
   @@index([stockCountId])
   @@index([warpBeamId])
+  @@index([lotId, createdAt])
   @@map("yarn_movements")
+}
+
+/// TEDARİKÇİ LOTU — DURUM (ana veri), devere Faz 2 (DEVERE-LEVENT-TARAMASI §3.5/§4).
+/// Bakiye TÜRETİLİR (Σ YarnMovement WHERE lotId), ayrı bakiye tablosu YOK; `YarnStock` tek yazar kuralı
+/// değişmez. `lotNo` irsaliyedeki metindir — AYRIŞTIRILMAZ, normalize edilmez, yalnız TRIM edilir
+/// ("YAN 1029-K" tedarikçi önekini içerse bile). Mal kabulde `[itemId, lotNo]` üzerinde upsert doğar
+/// (8029 kod-kapsam kilidi `yarnLot`); elle de açılabilir. Tedarikçi NULL olabilir (eski stok).
+/// Silinmez, pasife alınır (`isActive`).
+model YarnLot {
+  id         String  @id @default(uuid()) @db.Uuid
+  itemId     String  @db.Uuid
+  lotNo      String  @db.VarChar(64)
+  supplierId String? @db.Uuid
+  notes      String? @db.VarChar(300)
+  isActive   Boolean @default(true)
+
+  item      Item           @relation("YarnLotItem", fields: [itemId], references: [id], onDelete: Restrict)
+  supplier  Customer?      @relation("YarnLotSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
+  movements YarnMovement[]
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  createdById String?  @db.Uuid
+  updatedById String?  @db.Uuid
+
+  @@unique([itemId, lotNo])
+  @@index([supplierId])
+  @@map("yarn_lots")
 }
 
 /// Fiyatın YÖNÜ — alış mı satış mı.

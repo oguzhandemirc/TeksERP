@@ -264,6 +264,7 @@ export const updateSchema = z.strictObject({
   kumasTeknikEnabled: z.boolean().optional(),
   tezgahEnabled: z.boolean().optional(),
   devereEnabled: z.boolean().optional(),
+  devereLotRequired: z.boolean().optional(),
   dokumaEnabled: z.boolean().optional(),
   targetQuantityEnabled: z.boolean().optional(),
   rawWidthEnabled: z.boolean().optional(),

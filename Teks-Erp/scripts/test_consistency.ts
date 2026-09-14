@@ -881,6 +881,28 @@ WHERE m.kind IN ('WARP_RETURN', 'WARP_RETURN_REVERSAL')
   AND NOT EXISTS (SELECT 1 FROM reason_presets p WHERE p.kind = 'WARP_RETURN' AND p.code = m."reasonCode")`,
     kapsam: { ne: "dip iade satırı", sql: `SELECT COUNT(*)::int AS n FROM yarn_movements WHERE kind IN ('WARP_RETURN','WARP_RETURN_REVERSAL')` },
   },
+  // ── Devere Faz 2 — İPLİK LOTU (§40–§41). Lot bakiyesi TÜRETİLİR; iki hat: kimlik (lot ↔ kalem)
+  // ve türetilen bakiye eksiye düşmesin (lot × depo). Çapraz-tablo CHECK yok → mutabakat ikinci hat.
+  {
+    id: "40",
+    title: "İplik lotu: hareketin kalemi ≠ lotun kalemi (servis `assertLotMatchesItemTx` tek kapı; DB'de çapraz CHECK yok)",
+    sql: `
+SELECT m.id::text AS hareket, m."itemId"::text AS hareket_kalem, l."itemId"::text AS lot_kalem, l."lotNo"
+FROM yarn_movements m JOIN yarn_lots l ON l.id = m."lotId"
+WHERE m."itemId" <> l."itemId"`,
+    kapsam: { ne: "lotlu iplik hareketi", sql: `SELECT COUNT(*)::int AS n FROM yarn_movements WHERE "lotId" IS NOT NULL` },
+  },
+  {
+    id: "41",
+    title: "İplik lotu: lot × depo türetilen bakiyesi eksi (lot etiketli çıkış lot bakiyesini aşmış — guard L1 ikinci hat)",
+    sql: `
+SELECT l."lotNo", m."warehouseId"::text AS depo,
+       SUM(CASE WHEN m.kind IN (${YARN_INBOUND_SQL}) THEN m."qtyKg" ELSE -m."qtyKg" END)::text AS bakiye
+FROM yarn_movements m JOIN yarn_lots l ON l.id = m."lotId"
+GROUP BY l.id, l."lotNo", m."warehouseId"
+HAVING SUM(CASE WHEN m.kind IN (${YARN_INBOUND_SQL}) THEN m."qtyKg" ELSE -m."qtyKg" END) < 0`,
+    kapsam: { ne: "lotlu iplik hareketi", sql: `SELECT COUNT(*)::int AS n FROM yarn_movements WHERE "lotId" IS NOT NULL` },
+  },
   {
     id: "27",
     // `YarnStock.balanceKg`, DB seddi (CHECK/trigger) OLMAYAN denormalize bir

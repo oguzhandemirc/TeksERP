@@ -180,6 +180,8 @@ export interface WarpBeamYarnLineDto {
   kind: YarnMovementKind;
   qtyKg: number;
   warehouse: { id: string; name: string };
+  /** Devere Faz 2: tedarikçi lotu — lotsuz sarılan levent lotsuz kalır (null). */
+  lot: { id: string; lotNo: string } | null;
   reasonCode: string | null;
   createdAt: Date;
 }
@@ -191,14 +193,14 @@ export async function getWarpBeam(id: string): Promise<ApiResponse<WarpBeamDto &
   const yarn = await prisma.yarnMovement.findMany({
     where: { warpBeamId: id },
     orderBy: { createdAt: "asc" },
-    select: { id: true, kind: true, qtyKg: true, reasonCode: true, createdAt: true, warehouse: { select: { id: true, name: true } } },
+    select: { id: true, kind: true, qtyKg: true, reasonCode: true, createdAt: true, warehouse: { select: { id: true, name: true } }, lot: { select: { id: true, lotNo: true } } },
   });
   return {
     success: true,
     data: {
       ...toWarpBeamDto(row, warpBeamRemainingM(events)),
       events: events.map(toWarpBeamEventDto),
-      yarnLines: yarn.map((y) => ({ id: y.id, kind: y.kind, qtyKg: Number(y.qtyKg), warehouse: y.warehouse, reasonCode: y.reasonCode, createdAt: y.createdAt })),
+      yarnLines: yarn.map((y) => ({ id: y.id, kind: y.kind, qtyKg: Number(y.qtyKg), warehouse: y.warehouse, lot: y.lot, reasonCode: y.reasonCode, createdAt: y.createdAt })),
     },
   };
 }

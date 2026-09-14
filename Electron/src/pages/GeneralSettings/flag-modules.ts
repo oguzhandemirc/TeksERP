@@ -95,6 +95,10 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   tezgahEnabled: "cekirdek",
   devereEnabled: "cekirdek",
   dokumaEnabled: "cekirdek",
+  // Devere Faz 2 A1 (2026-09-14): davranış bayrağı, panelde satırı HENÜZ YOK (backend
+  // `test_feature_flag_contract` PANEL_EXEMPT). Gerçek sahibi `devereEnabled`; o anahtar
+  // `HideableModule` dışında olduğu için A2 (devere kategorisi) genişletene dek "cekirdek".
+  devereLotRequired: "cekirdek",
 
   // --- ÜRETİM (`operations/work-orders` · KK1 · Tambur · Kurşun · Parti) -----
   targetQuantityEnabled: "productionEnabled",
