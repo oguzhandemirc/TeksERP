@@ -100,6 +100,9 @@ const etkilenen = etkilenenProjeler(REPO, staged);
 // sebebi söylemez (aynı gece d9 · 82 · d5 ×2). Ucuz (ms), tip'ten ÖNCE, çaresini basar.
 if (etkilenen.some((p) => p.ad === "Teks-Erp")) {
   adimlar.push({ ad: "prisma istemcisi güncel", cwd: ".", cmd: ["node", ["scripts/hooks/lib/prisma-istemci.mjs"]] });
+  // Test DB'si şemanın gerisindeyse bekçiler P2022 ile YANLIŞ kırmızı düşer — kapı DURMAZ, ⏭ ile
+  // söyler (üç sonuç + fabrika yedeği kapısı; ~1 sn, salt okur) — lib/test-db-semasi.mjs.
+  adimlar.push({ ad: "test DB'si şeması", cwd: ".", cmd: ["node", ["scripts/hooks/lib/test-db-semasi.mjs"]] });
 }
 
 for (const proje of etkilenen) {

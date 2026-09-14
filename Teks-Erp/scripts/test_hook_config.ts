@@ -376,6 +376,38 @@ function main(): void {
   const r9 = defterKos({}, `const m = await import(${JSON.stringify(join(KOK, "scripts/hooks/lib/semafor.mjs"))}); process.stdout.write(String(m.KAPASITE));`);
   check("§9 ⭐ KAPASITE = 4 (1e hükmü 2026-09-14; yeniden ölçüm 2026-09-21)", r9.status === 0 && r9.stdout.trim() === "4", `KAPASITE=${r9.stdout.trim() || r9.stderr.slice(0, 60)}`);
 
+  // ── §10 TEST DB'Sİ ŞEMANIN GERİSİNDE Mİ (1e hükmü 2026-09-14): kapı DURMAZ, ⏭ ile söyler ─
+  //    Sınıflandırıcı GERÇEK `migrate status` çıktı örnekleriyle ölçülür (uydurma değil: wt-d5'te
+  //    üç durum koşuldu 2026-09-14); fabrika yedeği adı status'a hiç bağlanmaz.
+  console.log("\n§10 — test DB'si şeması: üç sonuç + fabrika yedeği kapısı, kapı durmaz");
+  const tds = JSON.stringify(join(KOK, "scripts/hooks/lib/test-db-semasi.mjs"));
+  const r10 = defterKos(
+    {},
+    `const m = await import(${tds});\n` +
+      `const g = m.siniflandir("Loaded Prisma config from prisma.config.ts.\\n295 migrations found in prisma/migrations\\nDatabase schema is up to date!");\n` +
+      `const b = m.siniflandir("295 migrations found\\nFollowing migrations have not yet been applied:\\n20260914120300_yarn_movement_kind_warp_return_reversal\\n20260914120400_reason_preset_kind_warp_return\\n\\nTo apply migrations in development run prisma migrate dev.");\n` +
+      `const y = m.siniflandir("Error: P1001: Can't reach database server at \`127.0.0.1:1\`");\n` +
+      `const a = m.siniflandir("something entirely else");\n` +
+      `process.stdout.write(JSON.stringify([g, b, y, a, m.dbAdi("postgresql://u:p@h:5432/" + m.FABRIKA_YEDEGI + "?schema=public"), m.FABRIKA_YEDEGI]));`,
+  );
+  let s10: unknown[] = [];
+  try { s10 = JSON.parse(r10.stdout) as unknown[]; } catch { /* aşağıda kırmızı */ }
+  const [g10, b10, y10, a10, ad10, fab10] = s10 as [{ durum: string }, { durum: string; n: number }, { durum: string }, { durum: string }, string, string];
+  check("§10a ⭐ sınıflandırıcı: güncel → GUNCEL · geride → GERIDE n=2 · P1001 → OLCULEMEDI · başka → ARIZA (gerçek çıktı örnekleri)",
+    g10?.durum === "GUNCEL" && b10?.durum === "GERIDE" && b10?.n === 2 && y10?.durum === "OLCULEMEDI" && a10?.durum === "ARIZA",
+    r10.status === 0 ? JSON.stringify(s10).slice(0, 120) : r10.stderr.slice(0, 120));
+  // Fabrika DB adı BURAYA YAZILMAZ (kimlik sızıntısı mandalı): sabit yalnız modülde yaşar, test onu okur.
+  check("§10b ⭐ fabrika yedeği adı URL'den çözülüyor ve sabit tek yerde (modül)", typeof fab10 === "string" && fab10.length > 0 && ad10 === fab10);
+  // Uçtan uca: fabrika yedeği URL'i → status HİÇ koşmaz (hızlı, ⏭ metni), DB yok → ⏭, ikisi de çıkış 0.
+  const t10 = Date.now();
+  const rFab = spawnSync("node", [join(KOK, "scripts/hooks/lib/test-db-semasi.mjs"), `--url=postgresql://u:p@127.0.0.1:1/${fab10}?schema=public`], { encoding: "utf8", cwd: KOK, timeout: 30_000 });
+  const fabMs = Date.now() - t10;
+  check("§10c ⭐ fabrika yedeği hedefinde status BİLE koşmaz (⏭ FABRİKA YEDEĞİ, <2 sn, çıkış 0)", rFab.status === 0 && /FABRİKA YEDEĞİ/.test(rFab.stdout) && fabMs < 2000, `${fabMs} ms`);
+  const rYok = spawnSync("node", [join(KOK, "scripts/hooks/lib/test-db-semasi.mjs"), "--url=postgresql://m:m@127.0.0.1:1/x"], { encoding: "utf8", cwd: KOK, timeout: 60_000 });
+  check("§10d ⭐ DB yok → ⏭ ÖLÇÜLEMEDİ, çıkış 0 (kapı durmaz)", rYok.status === 0 && /ÖLÇÜLEMEDİ/.test(rYok.stdout), `çıkış=${rYok.status}`);
+  check("§10e pre-commit adımı 'prisma istemcisi güncel'in ardında, ağır değil",
+    /ad: "prisma istemcisi güncel"[\s\S]{0,400}ad: "test DB'si şeması", cwd: "\.", cmd: \["node", \["scripts\/hooks\/lib\/test-db-semasi\.mjs"\]\] \}/.test(preCommit) && !/test DB'si şeması"[^\n]*agir: true/.test(preCommit));
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${skip > 0 ? `, ${skip} atlandı` : ""} ===`);
   process.exit(fail > 0 ? 1 : 0);
 }
