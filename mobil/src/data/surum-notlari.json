@@ -327,7 +327,22 @@
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Tezgah Duruşları ekranından amirin elle girdiği duruş başlangıç/bitiş zamanı izin verilen aralığın dışındaysa (en fazla 7 gün geriye, en fazla 5 dakika ileriye) kayıt artık sessizce sunucu saatine çekilmiyor; reddediliyor ve ekran aralığı söylüyor. Önceden cuma gecesinin duruşu pazartesi girildiğinde defter sessizce pazartesi saatini yazıyor, vardiya bağı ve süre yanlış doğuyordu. Tabletten bildirilen duruşta davranış değişmedi: tabletin saati küçük sapmada eskisi gibi düzeltilir ve uyarı gösterilir. Aralık içindeki elle girişte hiçbir şey değişmez."
+          "metin": "Tezgah Duruşları ekranından amirin elle girdiği duruş başlangıç/bitiş zamanı izin verilen aralığın dışındaysa (en fazla 7 gün geriye, en fazla 5 dakika ileriye) kayıt artık sessizce sunucu saatine çekilmiyor; reddediliyor ve ekran aralığı söylüyor. Önceden cuma gecesinin duruşu pazartesi girildiğinde defter sessizce pazartesi saatini yazıyor, vardiya bağı ve süre yanlış doğuyordu. Tabletten bildirilen duruşta davranış değişmedi: tabletin saati küçük sapmada eskisi gibi düzeltilir ve uyarı gösterilir. Elle giriş diyalogları sınırı baştan söyler (“en fazla 7 gün geriye, 5 dakika ileriye”) ve reddi alanın yanında gösterir. Aralık içindeki elle girişte hiçbir şey değişmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Devere modülü açık kurulumlarda panele “Leventler” ekranı geldi (Operasyon). Levent planlanır, sarılır ve hazır levent listesinde görünür. Sarımda köken seçilir: kendi devere makinesinde sarım (çözgü kartından tel sayısı ve denye kopyalanır; hangi iplikten ne kadar çıktığı satır satır yazılır ve iplik bakiyesinden düşer), fasonda sarılmış ya da hazır satın alınmış levent (iplik çıkışı yazılmaz). Sarım iptalinde önizleme depoya dönecek iplik satırlarını kalem ve depo bazında gösterir; kendi sarımında dip iadesi için sebep zorunludur (Depoya iade · Atkılık aktarım · Telef). Üç yeni yetki: levent görüntüleme, yazma ve iptal — panelden atanır. Devere modülü iplik modülüne bağlı değildir: iplik modülü kapalıyken de açılabilir; yalnız kendi sarımı iplik çıkışı istediği için o hâlde “iplik modülü kapalı” der, fason ve satın alma leventi serbesttir. Tablet devere ekranı henüz yok — sarım panelden girilir. Modül kapalı kurulumda ekran ve yetkiler görünmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "İplik hareketleri listesine dört tür geldi: levent sarımına çıkış, çıkışın geri alınması, levent dip iadesi ve iadenin geri alınması. Bunları yalnız Leventler ekranı yazar; elle iplik hareketi formunda seçilemezler. Eksi bakiye kapısı bakiyeyi düşüren yeni türleri de sayar. Eski panel sürümü tanımadığı türü ham adıyla basar, çökmez. Devere modülü kapalı kurulumda bu türler oluşmaz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sebep kataloğuna “Levent dip iadesi” türü geldi (üç hazır sebep: Depoya iade, Atkılık aktarım, Telef); sekmesi yalnız devere modülü açıkken görünür."
         }
       ]
     },
