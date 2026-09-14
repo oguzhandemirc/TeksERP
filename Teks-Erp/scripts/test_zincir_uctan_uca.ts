@@ -55,7 +55,7 @@ const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 const atla = (label: string, sozlesme: string): void => ATLAMA.atla(label, `inince beklenen: ${sozlesme}`);
 
 /** ⚠️ CIRCIR TABANI — oturum DOKUNMAZ. 6e Faz 3 E1 indi, gerçek 0; taban entegratörde düşer. */
-const ATLANAN_TABAN = 1;
+const ATLANAN_TABAN = 0;
 
 const FLAGS = [SETTING_KEYS.DEVERE_ENABLED, SETTING_KEYS.IPLIK_ENABLED, SETTING_KEYS.TICARET_ENABLED, SETTING_KEYS.DOKUMA_ENABLED, SETTING_KEYS.DEVERE_MOUNT_TRACKING];
 const TAG = `TEST-ZNC-${Date.now().toString(36).toUpperCase()}`;
