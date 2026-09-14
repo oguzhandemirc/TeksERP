@@ -5,13 +5,19 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { SubcontractorService } from "../services/subcontractor.service";
+import { cancelWarpBeamReturn, returnWarpBeam } from "../services/subcontractor-beam.service";
+import { readDevereEnabled } from "../services/system-setting.service";
+import { AppError } from "../utils/app-error";
 import "../types/express-augment";
 
 const dispatchSchema = z.object({
   workOrderId: z.string().uuid(),
   stepId: z.string().uuid(),
   subcontractorId: z.string().uuid(),
-  rollIds: z.array(z.string().uuid()).min(1, "En az bir top seçmelisiniz").max(500, "Tek seferde en fazla 500 top sevk edilebilir"),
+  // F1: `rollIds` tek başına boş olabilir — levent-yalnız sevk; ikisi birden boşsa aşağıdaki refine (eski mesaj).
+  rollIds: z.array(z.string().uuid()).max(500, "Tek seferde en fazla 500 top sevk edilebilir").default([]),
+  /** F1: fasona verilen leventler (kalem `kind=WARP_BEAM`). Devere kapalıysa 403 (gövde kapısı). */
+  warpBeamIds: z.array(z.string().uuid()).max(50, "Tek seferde en fazla 50 levent sevk edilebilir").optional(),
   plateNumber: z.string().max(32).optional(),
   driverName: z.string().max(128).optional(),
   notes: z.string().max(1000).optional(),
@@ -21,7 +27,14 @@ const dispatchSchema = z.object({
   allowItemOverride: z.boolean().optional(),
   /** Operatör rota-atlama uyarısını bilinçli onayladı (ROUTE_SKIP geçişi). */
   allowRouteSkip: z.boolean().optional(),
+}).refine((b) => b.rollIds.length > 0 || (b.warpBeamIds?.length ?? 0) > 0, { message: "En az bir top seçmelisiniz", path: ["rollIds"] });
+
+/** F1 levent dönüşü — `lengthM` dönen metre (≤ giden), `clientToken` replay anahtarı. */
+const beamReturnSchema = z.object({
+  lengthM: z.union([z.number(), z.string()]),
+  clientToken: z.string().uuid().optional(),
 });
+const beamReturnCancelSchema = z.object({ reason: z.string().trim().min(3).max(300) });
 
 /** Masaüstü toplu sevk — top okutmadan adımdaki bekleyen tüm topları sevk eder. */
 const bulkDispatchSchema = z.object({
@@ -196,6 +209,8 @@ export class SubcontractorController {
     this.pendingReturnDetail = this.pendingReturnDetail.bind(this);
     this.listDispatches = this.listDispatches.bind(this);
     this.getDispatch = this.getDispatch.bind(this);
+    this.returnWarpBeam = this.returnWarpBeam.bind(this);
+    this.cancelWarpBeamReturn = this.cancelWarpBeamReturn.bind(this);
     this.getDispatchDyeOverlay = this.getDispatchDyeOverlay.bind(this);
     this.listReceipts = this.listReceipts.bind(this);
     this.getReceiptPrint = this.getReceiptPrint.bind(this);
@@ -212,8 +227,38 @@ export class SubcontractorController {
   async dispatch(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const body = dispatchSchema.parse(req.body);
+      // Kapalı modülün YAZMA yolu yoktur: levent kalemi yalnız devere açıkken kabul edilir
+      // (E1 emsali `initial-entry doffEventId`; kapı `requireDevereEnabled` ile aynı gövde).
+      if ((body.warpBeamIds?.length ?? 0) > 0 && !(await readDevereEnabled())) {
+        throw AppError.forbidden("Devere modülü bu kurulumda kapalı; fason sevkine levent kalemi eklenemez. Sistem → Modüller bölümünden açılabilir.", {
+          code: "MODULE_DISABLED",
+          modul: "devere",
+        });
+      }
       const result = await this.service.dispatch(body, req.user?.userId);
       res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/subcontractor/dispatches/:id/beams/:beamId/return — F1 levent fasondan döndü (RETURNED_IN) */
+  async returnWarpBeam(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = beamReturnSchema.parse(req.body);
+      const result = await returnWarpBeam(req.params.id as string, { warpBeamId: req.params.beamId as string, ...body }, req.user?.userId);
+      res.status(200).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/subcontractor/dispatches/:id/beams/:beamId/return-cancel — dönüş stornosu (RETURNED_IN_CANCEL) */
+  async cancelWarpBeamReturn(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = beamReturnCancelSchema.parse(req.body);
+      const result = await cancelWarpBeamReturn(req.params.id as string, { warpBeamId: req.params.beamId as string, reason: body.reason }, req.user?.userId);
+      res.status(200).json(result);
     } catch (err) {
       next(err);
     }
@@ -431,7 +476,8 @@ export class SubcontractorController {
   /** GET /api/subcontractor/dispatches/:id */
   async getDispatch(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const result = await this.service.getDispatch(req.params.id as string);
+      // F1: levent kalemi OPT-IN (`?includeBeams=1`) — eski istemci `roll` bekler, null bağ görmez.
+      const result = await this.service.getDispatch(req.params.id as string, { includeBeams: req.query.includeBeams === "1" });
       res.status(200).json(result);
     } catch (err) {
       next(err);

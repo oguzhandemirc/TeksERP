@@ -26,7 +26,8 @@ export function useDevereScreen() {
 
   const context = useQuery({ queryKey: CONTEXT_KEY, queryFn: warpBeamService.tabletContext, staleTime: 5 * 60_000 });
   const planned = useQuery({ queryKey: [...BEAMS_KEY, 'PLANNED'], queryFn: () => warpBeamService.list('PLANNED', 100), staleTime: 15_000 });
-  const ready = useQuery({ queryKey: [...BEAMS_KEY, 'READY'], queryFn: () => warpBeamService.list('READY', 50), staleTime: 15_000 });
+  // Sarılmış levent iki durumda yaşar: READY (burada) · SHIPPED_OUT (fasonda, F1) — "bugün sarılan" ikisini de sayar.
+  const ready = useQuery({ queryKey: [...BEAMS_KEY, 'WOUND'], queryFn: () => warpBeamService.list(['READY', 'SHIPPED_OUT'], 50), staleTime: 15_000 });
   const todayWound = useMemo(() => {
     const now = new Date();
     return (ready.data ?? []).filter((b) => b.wound && isSameLocalDay(b.wound.createdAt, now));

@@ -5,6 +5,7 @@ import { Prisma, WarpBeamOrigin } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../../utils/code-format";
 import { lockCodeScopeTx } from "./code-unique.helper";
+import { warpBeamLengthSign, type WarpBeamEventKind } from "../../constants/warp-beam";
 
 export const WARP_BEAM_PREFIX = "LV";
 const WARP_BEAM_CODE_SCOPE = "warpBeam";
@@ -92,4 +93,32 @@ export function resolveOriginParty(p: OriginParty): OriginParty {
       }
       return { originKind: p.originKind, subcontractorId: sub, supplierId: sup };
   }
+}
+
+/** Kalan metre — tek kaynak işaret tablosu (`warpBeamLengthSign`); iptal edilmiş leventte 0, fasondayken 0. */
+export function warpBeamRemainingM(events: Array<{ kind: string; lengthM: Prisma.Decimal | null }>): number {
+  let acc = new Prisma.Decimal(0);
+  for (const e of events) {
+    if (!e.lengthM) continue;
+    acc = acc.plus(new Prisma.Decimal(e.lengthM).mul(warpBeamLengthSign(e.kind as WarpBeamEventKind)));
+  }
+  return Number(acc);
+}
+
+/**
+ * Sayfadaki leventlerin kalan metresi TÜM olaylardan (F1: fasona giden/dönen levent WOUND metresini
+ * taşımaz — `SHIP_OUT` düşer, `RETURNED_IN` ekler). Tek sorgu, sayfa başına.
+ */
+export async function remainingByBeam(client: Prisma.TransactionClient | { warpBeamEvent: Prisma.TransactionClient["warpBeamEvent"] }, ids: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (ids.length === 0) return out;
+  const events = await client.warpBeamEvent.findMany({ where: { beamId: { in: ids } }, select: { beamId: true, kind: true, lengthM: true } });
+  const byBeam = new Map<string, Array<{ kind: string; lengthM: Prisma.Decimal | null }>>();
+  for (const e of events) {
+    const arr = byBeam.get(e.beamId) ?? [];
+    arr.push(e);
+    byBeam.set(e.beamId, arr);
+  }
+  for (const id of ids) out.set(id, warpBeamRemainingM(byBeam.get(id) ?? []));
+  return out;
 }

@@ -1532,12 +1532,14 @@ model WarpSpec {
 // LEVENT (WarpBeam) — devere Faz 1b (2026-09-14). Tasarım: docs/design/DEVERE-LEVENT-TARAMASI.md §4
 // =============================================================================
 
-/// LEVENT DURUMU — Faz 1b yalnız üç değer. MOUNTED/EXHAUSTED/SCRAPPED/SHIPPED_OUT Faz 3'te
-/// kendi `ADD VALUE` dosyalarıyla doğar (yazıcısı olmayan değer şemaya girmez).
+/// LEVENT DURUMU — MOUNTED/EXHAUSTED/SCRAPPED Faz 3'te kendi `ADD VALUE` dosyalarıyla doğar
+/// (yazıcısı olmayan değer şemaya girmez). SHIPPED_OUT = fasona/başka dokumacıya VERİLDİ (F1);
+/// terminal DEĞİL: `RETURNED_IN` ile READY'ye döner, `SHIP_OUT_CANCEL` storno.
 enum WarpBeamStatus {
   PLANNED
   READY
   CANCELLED
+  SHIPPED_OUT
 }
 
 /// LEVENT KÖKENİ — AKSİYON ANINDA seçilir, kurulumda değil: aynı fabrika hem içeride sarar
@@ -1583,6 +1585,8 @@ model WarpBeam {
   supplier      Customer?       @relation("WarpBeamSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
   events        WarpBeamEvent[]
   yarnMovements YarnMovement[]
+  /// Fason sevk kalemleri (F1) — fiziksel çıkış belgesi; olay defteri `SHIP_OUT` bu kaleme bağlanır.
+  dispatchItems SubcontractorDispatchItem[] @relation("DispatchItemWarpBeam")
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
@@ -1598,8 +1602,9 @@ model WarpBeam {
 
 /// LEVENT OLAY DEFTERİ — "ne oldu"nun tek kaynağı. Satır GÜNCELLENMEZ/SİLİNMEZ (`updatedAt` YOK).
 /// Ters kayıt tipli `*_CANCEL` satırıdır; orijinaline `reversesEventId` ile bağlanır, bugüne yazılır.
-/// Faz 1b türleri: WOUND · WOUND_CANCEL (`WARP_BEAM_EVENT_KINDS` ↔ CHECK iki yönlü).
-/// Kalan metre = Σ warpBeamLengthSign(kind) × lengthM (tek kaynak helper).
+/// Türler: WOUND · WOUND_CANCEL (1b) · SHIP_OUT · SHIP_OUT_CANCEL · RETURNED_IN · RETURNED_IN_CANCEL (F1)
+/// (`WARP_BEAM_EVENT_KINDS` ↔ CHECK iki yönlü). Kalan metre = Σ warpBeamLengthSign(kind) × lengthM
+/// (tek kaynak helper) = leventte FABRİKADA olan metre; fasondayken 0.
 model WarpBeamEvent {
   id              String         @id @default(uuid()) @db.Uuid
   beamId          String         @db.Uuid
@@ -1609,6 +1614,9 @@ model WarpBeamEvent {
   reversesEventId String?        @unique @db.Uuid
   fromStatus      WarpBeamStatus
   toStatus        WarpBeamStatus
+  /// Fason türlerinde ZORUNLU, diğerlerinde YASAK (CHECK iki yönlü): aynı levent zamanla birden çok
+  /// sevke girer; "bu sevkin SHIP_OUT'u" bağsız bulunamazdı. Kalem başına TEK SHIP_OUT (partial unique).
+  dispatchItemId  String?        @db.Uuid
 
   /// Çözgü metresi; > 0 (CHECK).
   lengthM   Decimal? @db.Decimal(12, 3)
@@ -1638,10 +1646,12 @@ model WarpBeamEvent {
   reverses WarpBeamEvent? @relation("WarpBeamEventReversal", fields: [reversesEventId], references: [id], onDelete: Restrict)
   reversal WarpBeamEvent? @relation("WarpBeamEventReversal")
   machine  Machine?       @relation("WarpBeamEventMachine", fields: [machineId], references: [id], onDelete: Restrict)
+  dispatchItem SubcontractorDispatchItem? @relation("WarpBeamEventDispatchItem", fields: [dispatchItemId], references: [id], onDelete: Restrict)
 
   @@index([beamId, createdAt])
   @@index([machineId, createdAt])
   @@index([kind, createdAt])
+  @@index([dispatchItemId])
   @@map("warp_beam_events")
 }
 
@@ -5042,10 +5052,23 @@ model SubcontractorDispatch {
   @@map("subcontractor_dispatches")
 }
 
+/// FASON SEVK KALEMİ TÜRÜ — kapalı küme, pg enum (F1: top | levent). `YARN` F3'te kendi
+/// `ADD VALUE` dosyasıyla doğar (geri alınamaz enum, ihtiyaç ölçülmeden açılmaz).
+enum SubcontractorDispatchItemKind {
+  ROLL
+  WARP_BEAM
+}
+
+/// POLİMORFİK KALEM (F1): `kind` hangi bağın dolu olduğunu söyler — ROLL ⇒ `rollId`, WARP_BEAM ⇒ `warpBeamId`
+/// (DB XOR CHECK `subcontractor_dispatch_items_kind_ref_ck`). Levent kaleminde `dispatchedQty` = çıkan metre,
+/// `dispatchedWeight` NULL; kabul makbuzu YAZILMAZ — dönüş levent defterinde `RETURNED_IN`, kalem OUTSTANDING
+/// kümesine GİRMEZ (`OUTSTANDING_ITEM.roll` yüklemi null bağı dışlar; bekçi ölçer).
 model SubcontractorDispatchItem {
   id               String   @id @default(uuid()) @db.Uuid
   dispatchId       String   @db.Uuid
-  rollId           String   @db.Uuid
+  kind             SubcontractorDispatchItemKind @default(ROLL)
+  rollId           String?  @db.Uuid
+  warpBeamId       String?  @db.Uuid
   dispatchedQty    Decimal  @db.Decimal(12, 3)
   dispatchedWeight Decimal? @db.Decimal(12, 3)
 
@@ -5061,7 +5084,10 @@ model SubcontractorDispatchItem {
 
   // Relations
   dispatch     SubcontractorDispatch      @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
-  roll         Roll                       @relation(fields: [rollId], references: [id])
+  /// `onDelete: Restrict` AÇIK: bağ opsiyonel olunca Prisma varsayılanı SetNull'a kayardı (FK drift).
+  roll         Roll?                      @relation(fields: [rollId], references: [id], onDelete: Restrict)
+  warpBeam     WarpBeam?                  @relation("DispatchItemWarpBeam", fields: [warpBeamId], references: [id], onDelete: Restrict)
+  warpBeamEvents WarpBeamEvent[]          @relation("WarpBeamEventDispatchItem")
   receiptItems SubcontractorReceiptItem[] @relation("ReceiptItemSource")
 
   /// Sevk kalemi defteri → `updatedAt` YOK (konvansiyon). Güncellemeler DURUM
@@ -5075,7 +5101,10 @@ model SubcontractorDispatchItem {
   // SubcontractorReceiptItem/KartelaReceiptItem/SackAllocation). Sol-prefix
   // dispatchId'yi kapsar → ayrı @@index([dispatchId]) kaldırıldı (D-6 emsali).
   @@unique([dispatchId, rollId])
+  /// Levent ikizi — düz unique yeter: PG NULL'ları ayrı sayar, top kalemleri çakışmaz.
+  @@unique([dispatchId, warpBeamId])
   @@index([rollId])
+  @@index([warpBeamId])
   @@map("subcontractor_dispatch_items")
 }
 

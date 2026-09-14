@@ -29,6 +29,11 @@ export interface DispatchCancelSignals {
    * bu ise manuel müdahale / iptal-edilmiş-kabul-sonrası-taşıma gibi egzotik halleri.
    */
   movedRollCount: number;
+  /**
+   * F1: bu sevkten DÖNMÜŞ (açık `RETURNED_IN`) levent sayısı — LIFO: dönüş stornosu iptalden önce gelir.
+   * Opsiyonel: top-yalnız yollar (önizleme dahil) 0 sayar.
+   */
+  returnedBeamCount?: number;
 }
 
 /**
@@ -61,6 +66,12 @@ export function resolveDispatchCancelBlockReason(s: DispatchCancelSignals): stri
     return (
       `${s.movedRollCount} top fason sevkten sonra taşınmış veya statüsü değişmiş — ` +
       "sevk iptal edilemez. Önce ilgili işlemleri (mal kabul / hareket) geri al."
+    );
+  }
+  if ((s.returnedBeamCount ?? 0) > 0) {
+    return (
+      `${s.returnedBeamCount} levent bu sevkten dönmüş görünüyor — sevk iptal edilemez. ` +
+      "Önce levent dönüşünü iptal edin."
     );
   }
   return null;

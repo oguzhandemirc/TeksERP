@@ -149,6 +149,7 @@ import { nextPrefixedSequenceTx, SubcontractorService } from "./subcontractor.se
 import { diffFields } from "./helpers/audit-diff.helper";
 import { OPEN_OUTSTANDING, outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.helper";
 import { hata } from "../lib/logger";
+import { hasRoll, isRollItem } from "./helpers/dispatch-item-kind.helper";
 // Prisma.Decimal | number | null | undefined → number | null (karşılaştırma için)
 function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
   if (v === null || v === undefined) return null;
@@ -2277,7 +2278,7 @@ export class WorkOrderService {
           subcontractor: d.subcontractor,
           dispatchedBy: d.dispatchedBy,
           batchNumber: d.batch?.batchNumber ?? null,
-          rolls: d.items.map((it) => ({
+          rolls: d.items.filter(hasRoll).map((it) => ({
             id: it.roll.id,
             barcode: it.roll.barcode,
             dispatchedQty: Number(it.dispatchedQty),
@@ -3079,7 +3080,7 @@ export class WorkOrderService {
         receiptNoByDispatch.set(did, r.receipt.receiptNo);
       }
     }
-    const dispatchRollIds = openDispatchRows.flatMap((d) => d.items.map((i) => i.rollId));
+    const dispatchRollIds = openDispatchRows.flatMap((d) => d.items.filter(isRollItem).map((i) => i.rollId));
     // "Taşınmış" tanımı SEVKE GÖREDİR (`cancel`'ın guard'ıyla aynı): top ya artık
     // AT_SUBCONTRACTOR değildir ya da o sevkin adımında değildir. Tek bir global
     // koşulla süzmek ikinci şartı kaybederdi.
@@ -3092,7 +3093,8 @@ export class WorkOrderService {
     const rollStateById = new Map(dispatchRollRows.map((r) => [r.id, r]));
 
     const openDispatches = openDispatchRows.map((d) => {
-      const movedCount = d.items.filter((i) => {
+      // "Taşınmış" TOP kalemine bakar — levent kalemi (F1) top okumaz, iptal engeli levent dönüşünde ayrı sinyaldir.
+      const movedCount = d.items.filter(isRollItem).filter((i) => {
         const st = rollStateById.get(i.rollId);
         if (!st) return true; // top okunamıyorsa güvenli taraf: "değişmiş" say
         return st.status !== RollStatus.AT_SUBCONTRACTOR || st.currentStepId !== d.stepId;
@@ -3464,7 +3466,7 @@ export class WorkOrderService {
         // kullanıcı kararı) — iptal sebebini taşıyoruz, uydurma bir metin değil.
         const fasonSvc = new SubcontractorService();
         remainderClosed = kalanlar.length > 0;
-        for (const k of kalanlar) {
+        for (const k of kalanlar.filter(isRollItem)) {
           await fasonSvc.closeRemainder(
             {
               stepId: k.dispatch.stepId,

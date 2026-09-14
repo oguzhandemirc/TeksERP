@@ -43,6 +43,7 @@ import {
   PrintedDocType,
   RollEntrySource,
   RollOperationType,
+  SubcontractorDispatchItemKind,
   RollStatus,
   RollForm,
   RollVarianceKind,
@@ -64,6 +65,7 @@ import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-for
 import { renderFasonCekiHtml } from "./document-render/fason-ceki.html";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { resolveDispatchCancelBlockReason } from "./helpers/subcontractor-cancel.helper";
+import { cancelWarpBeamItemsTx, countReturnedBeamItems, dispatchWarpBeamItemsTx } from "./subcontractor-beam.service";
 import { renderFasonDirectShipHtml } from "./document-render/fason-direct-ship.html";
 import { renderFasonReceiptHtml, type FasonReceiptDoc } from "./document-render/fason-receipt.html";
 import { buildPagination, buildTextSearch } from "../utils/query-parser";
@@ -120,6 +122,7 @@ import {
 } from "./helpers/shipment-order-requirement.helper";
 import { p2002Mentions } from "../utils/p2002";
 import { hata, uyari } from "../lib/logger";
+import { hasRoll, isRollItem } from "./helpers/dispatch-item-kind.helper";
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -348,7 +351,7 @@ async function attachOpenDispatchInfo<T extends { id: string }>(
     orderBy: { dispatch: { dispatchedAt: "desc" } },
   });
   const byRoll = new Map<string, { dispatchedQty: number; dispatchedAt: Date }>();
-  for (const it of items) {
+  for (const it of items.filter(isRollItem)) {
     if (!byRoll.has(it.rollId)) {
       byRoll.set(it.rollId, {
         dispatchedQty: Number(it.dispatchedQty),
@@ -492,7 +495,7 @@ async function computeReceiptBatchMismatches(
   });
   const rollBatchById = new Map(rollBatchRows.map((r) => [r.id, r] as const));
   const mismatches: ReceiptBatchMismatchItem[] = [];
-  for (const it of srcDispatchItems) {
+  for (const it of srcDispatchItems.filter(isRollItem)) {
     const roll = rollBatchById.get(it.rollId);
     if (roll && roll.batchId !== it.dispatch.batchId) {
       mismatches.push({
@@ -739,10 +742,16 @@ export class SubcontractorService {
        * bu core metotta işlenmez — bulkDispatchStep parti başına ayrı sevk döngüsü yapar.
        */
       multiBatchStrategy?: "MERGE" | "SEPARATE";
+      /**
+       * F1: fasona verilen LEVENTLER (kalem `kind=WARP_BEAM`, `SHIP_OUT` aynı tx). Top listesinden
+       * bağımsız — levent-yalnız sevk meşrudur (parti boş doğar). Kapı: devere kapalıysa controller 403.
+       */
+      warpBeamIds?: string[];
     },
     userId?: string
   ): Promise<ApiResponse<Record<string, unknown>>> {
-    if (!data.rollIds || data.rollIds.length === 0) {
+    const warpBeamIds = [...new Set(data.warpBeamIds ?? [])];
+    if ((!data.rollIds || data.rollIds.length === 0) && warpBeamIds.length === 0) {
       throw AppError.badRequest("En az bir top seçmelisiniz");
     }
 
@@ -795,6 +804,7 @@ export class SubcontractorService {
     // tekrar gelirse, o açık sevki cached döndür — yeni kayıt açma. Farklı
     // toplar = meşru yeni parti → guard geçer, yeni sevk açılır.
     const incomingRollIds = new Set(data.rollIds);
+    const incomingBeamIds = new Set(warpBeamIds);
     const openDispatches = await prisma.subcontractorDispatch.findMany({
       // Açık+outstanding tanımı TEK KAYNAKTAN (doğrudan-sevk edilmiş sevk "açık" sayılmaz).
       where: { stepId: data.stepId, ...OPEN_OUTSTANDING },
@@ -802,14 +812,17 @@ export class SubcontractorService {
         id: true,
         dispatchNo: true,
         subcontractorId: true,
-        items: { select: { rollId: true } },
+        items: { select: { rollId: true, warpBeamId: true } },
       },
     });
     for (const open of openDispatches) {
-      const existingRollIds = new Set(open.items.map((i) => i.rollId));
+      const existingRollIds = new Set(open.items.map((i) => i.rollId).filter((x): x is string => !!x));
+      const existingBeamIds = new Set(open.items.map((i) => i.warpBeamId).filter((x): x is string => !!x));
       const sameRolls =
         existingRollIds.size === incomingRollIds.size &&
-        [...existingRollIds].every((id) => incomingRollIds.has(id));
+        [...existingRollIds].every((id) => incomingRollIds.has(id)) &&
+        existingBeamIds.size === incomingBeamIds.size &&
+        [...existingBeamIds].every((id) => incomingBeamIds.has(id));
       if (sameRolls && open.subcontractorId === data.subcontractorId) {
         return {
           success: true,
@@ -1332,6 +1345,16 @@ export class SubcontractorService {
         },
       });
 
+      // F1 LEVENT KALEMLERİ — sevk satırından SONRA (kalem `dispatchId` ister), belge donmadan ÖNCE
+      // (irsaliye levent satırını basar). Metre olaylardan kilit altında okunur; `totalQty` snapshot'ı
+      // Σ kalem kuralını korur (consistency §19) — top metresi + levent metresi.
+      const beamLines = warpBeamIds.length > 0
+        ? await dispatchWarpBeamItemsTx(tx, { dispatchId: dispatch.id, warpBeamIds, userId })
+        : null;
+      if (beamLines) {
+        await tx.subcontractorDispatch.update({ where: { id: dispatch.id }, data: { totalQty: totalQty.plus(beamLines.totalM) } });
+      }
+
       // RESMİ BELGE — fason sevk irsaliyesi v1 BURADA donar (PrintedDocument).
       // Builder az önce yaratılan dispatch+item'ları aynı tx içinden okur;
       // kaynak sonradan değişse bile belge sabit kalır. Düzeltme = reissue.
@@ -1477,7 +1500,7 @@ export class SubcontractorService {
         });
       }
 
-      return { dispatch, remainderBatches };
+      return { dispatch, remainderBatches, beamLines };
       })
     );
 
@@ -1496,7 +1519,8 @@ export class SubcontractorService {
         autoAttachedRollCount: autoAttachIds.size,
         routeSkipOverride: !!data.allowRouteSkip,
         itemMismatchOverride: !!data.allowItemOverride,
-        totalQty,
+        totalQty: result.beamLines ? totalQty.plus(result.beamLines.totalM) : totalQty,
+        ...(result.beamLines ? { warpBeamCount: result.beamLines.lines.length, warpBeamNos: result.beamLines.lines.map((l) => l.beamNo) } : {}),
       },
     });
 
@@ -2046,7 +2070,11 @@ export class SubcontractorService {
     });
     if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
 
-    const rollIds = dispatch.items.map((i) => i.rollId);
+    // F1: levent kalemi top listesine girmez (null bağ); iptal yolu leventi ayrıca geri alır.
+    const rollIds = dispatch.items.map((i) => i.rollId).filter((x): x is string => !!x);
+    const hasBeamItems = dispatch.items.some((i) => i.kind === SubcontractorDispatchItemKind.WARP_BEAM);
+    // Dönmüş levent (açık RETURNED_IN) sevk iptalini engeller — LIFO; önizleme ile aynı kaynak.
+    const returnedBeamCount = hasBeamItems ? await countReturnedBeamItems(prisma, dispatchId) : 0;
 
     // Mal kabul edilmiş sevk iptal edilemez (ReceiptItem.sourceDispatchItem
     // üzerinden bağlı). cancelledAt:null filtresi şart — iptal edilmiş receipt
@@ -2094,6 +2122,7 @@ export class SubcontractorService {
       directShipmentNo: directShipment?.shipmentNo ?? null,
       activeReceiptNo: acceptedReceiptItem?.receipt?.receiptNo ?? null,
       movedRollCount: movedRolls.length,
+      returnedBeamCount,
     });
     if (blockReason) {
       throw AppError.conflict(
@@ -2154,6 +2183,12 @@ export class SubcontractorService {
       // Sevk iptal edildi → kartın parti bloğundaki "Sevk" sütunu boşalır (ya da
       // varsa bir önceki sevke düşer). Basılı kâğıt iptal edilmiş sevki gösteriyor.
       await markTravelerCardDirtyTx(tx, dispatch.workOrderId);
+
+      // 1a) F1 LEVENT: SHIP_OUT_CANCEL (SHIPPED_OUT → READY) — dönmüş kalem tx İÇİNDE de 409 (LIFO;
+      //     yukarıdaki sayım tx dışında ve bayat olabilir).
+      if (hasBeamItems) {
+        await cancelWarpBeamItemsTx(tx, { dispatchId, reason: trimmedReason, userId });
+      }
 
       // 1b) RESMİ BELGE — irsaliye VOIDED'e çekilir (baskıda İPTAL filigranı).
       // Belge silinmez; tarihsel kayıt korunur.
@@ -4669,7 +4704,13 @@ export class SubcontractorService {
     };
   }
 
-  async getDispatch(id: string): Promise<ApiResponse<unknown>> {
+  /**
+   * Sevk detayı. F1: levent kalemi OPT-IN (`includeBeams`) — varsayılan yanıt yalnız TOP kalemlerini
+   * döner (eski istemci `item.roll` bekler); açıkken kalem `kind` + `warpBeam{beamNo, status}` taşır,
+   * `beamItemCount` her iki halde de yazılır (yeni istemci gizli kalemi sayıdan görür).
+   */
+  async getDispatch(id: string, opts?: { includeBeams?: boolean }): Promise<ApiResponse<unknown>> {
+    const includeBeams = opts?.includeBeams === true;
     const dispatch = await prisma.subcontractorDispatch.findUnique({
       where: { id },
       include: {
@@ -4697,6 +4738,7 @@ export class SubcontractorService {
         },
         step: { include: { station: true } },
         items: {
+          ...(includeBeams ? {} : { where: { kind: SubcontractorDispatchItemKind.ROLL } }),
           include: {
             roll: {
               include: {
@@ -4704,15 +4746,18 @@ export class SubcontractorService {
                 color: true,
               },
             },
+            ...(includeBeams ? { warpBeam: { select: { id: true, beamNo: true, status: true, physicalBeamNo: true, warpSpec: { select: { id: true, code: true, name: true } } } } } : {}),
           },
         },
         dispatchedBy: { select: { id: true, username: true, fullName: true } },
         cancelledBy: { select: { id: true, username: true, fullName: true } },
+        _count: { select: { items: { where: { kind: SubcontractorDispatchItemKind.WARP_BEAM } } } },
       },
     });
 
     if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
-    return { success: true, data: dispatch };
+    const { _count, ...rest } = dispatch;
+    return { success: true, data: { ...rest, beamItemCount: _count.items } };
   }
 
   async listReceipts(params?: {
@@ -5701,7 +5746,7 @@ export class SubcontractorService {
     if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
 
     const targetStep = dispatch.step; // sonraki fason (ör. boyahane)
-    const bornRolls = dispatch.items.map((it) => it.roll);
+    const bornRolls = dispatch.items.filter(hasRoll).map((it) => it.roll);
 
     const reasons: string[] = [];
     if (dispatch.cancelledAt) reasons.push("Bu sevk zaten iptal edilmiş.");
@@ -5862,7 +5907,7 @@ export class SubcontractorService {
     }
 
     const targetStep = dispatch.step; // boyahane
-    const bornRolls = dispatch.items.map((it) => it.roll);
+    const bornRolls = dispatch.items.filter(hasRoll).map((it) => it.roll);
     const bornRollIds = bornRolls.map((r) => r.id);
     if (bornRollIds.length === 0) throw AppError.badRequest("Bu sevkte top yok");
 
@@ -6291,6 +6336,7 @@ export class SubcontractorService {
 
     // Etkilenecek toplar: bu sevkte HÂLÂ fasonda olanlar.
     const affectedRolls = dispatch.items
+      .filter(hasRoll)
       .filter((it) => it.roll.status === RollStatus.AT_SUBCONTRACTOR && it.roll.currentStepId === step.id)
       .map((it) => ({
         id: it.roll.id,
@@ -6333,7 +6379,7 @@ export class SubcontractorService {
     // Aday sipariş satırları — WO'ya bağlı satırlar + spec-eşleşen açık satırlar.
     // suggestedQty shipping'in saf FIFO'suyla (allocate) projeksiyon.
     const rollSpecs: RollSpec[] = affectedRolls.map((r) => {
-      const src = dispatch.items.find((it) => it.roll.id === r.id)!.roll;
+      const src = dispatch.items.filter(hasRoll).find((it) => it.roll.id === r.id)!.roll;
       return {
         itemId: src.itemId,
         colorId: src.colorId,
@@ -6531,7 +6577,7 @@ export class SubcontractorService {
       );
     }
 
-    const dispatchRollIds = dispatch.items.map((i) => i.rollId);
+    const dispatchRollIds = dispatch.items.filter(isRollItem).map((i) => i.rollId);
     // Sevk edilecek toplar: alt-küme verildiyse doğrula, yoksa tümü.
     let shipRollIds = dispatchRollIds;
     if (data.rollIds && data.rollIds.length > 0) {
@@ -7056,9 +7102,15 @@ function assembleFasonCekiDoc(args: {
     width: number | null;
   }>;
   totalQty: number;
+  /** F1 levent kalemleri — yalnız varsa yazılır (top-yalnız belge bayt bayt aynı kalır); kumaş grid'i basmaz. */
+  beams?: Array<{ id: string; beamNo: string; warpSpecCode: string; lengthM: number }>;
 }): Record<string, unknown> {
   const rolls = args.rolls.map((r, idx) => ({ sequence: idx + 1, ...r }));
   const totalWeight = Number(rolls.reduce((s, r) => s.plus(r.dispatchedWeight ?? 0), new Prisma.Decimal(0)));
+  const beams = (args.beams ?? []).map((b, idx) => ({ sequence: idx + 1, ...b }));
+  const beamPart = beams.length > 0
+    ? { beams, beamTotals: { beamCount: beams.length, totalLengthM: Number(beams.reduce((s, b) => s.plus(b.lengthM), new Prisma.Decimal(0))) } }
+    : {};
   return {
     dispatchNo: args.dispatchNo,
     dispatchedAt: args.dispatchedAt,
@@ -7075,6 +7127,7 @@ function assembleFasonCekiDoc(args: {
     step: args.step,
     rolls,
     totals: { rollCount: rolls.length, totalQty: args.totalQty, totalWeight },
+    ...beamPart,
   };
 }
 
@@ -7122,6 +7175,7 @@ async function buildFasonDispatchDoc(
               color: { select: { code: true, name: true } },
             },
           },
+          warpBeam: { select: { id: true, beamNo: true, warpSpec: { select: { code: true } } } },
         },
         orderBy: { createdAt: "asc" },
       },
@@ -7129,7 +7183,13 @@ async function buildFasonDispatchDoc(
   });
   if (!dispatch) return null;
 
-  const rolls = dispatch.items.map((item, idx) => ({
+  // F1: levent kalemi kumaş grid'ine girmez; ayrı listede donar. Kumaş toplamı top kalemlerinden
+  // (top-yalnız sevkte `dispatch.totalQty` ile aynı — consistency §19; levent varsa Σ top).
+  const beams = dispatch.items
+    .filter((i) => i.warpBeam !== null)
+    .map((i) => ({ id: i.warpBeam!.id, beamNo: i.warpBeam!.beamNo, warpSpecCode: i.warpBeam!.warpSpec.code, lengthM: Number(i.dispatchedQty) }));
+  const rollItems = dispatch.items.filter(hasRoll);
+  const rolls = rollItems.map((item, idx) => ({
     sequence: idx + 1,
     id: item.roll.id,
     barcode: item.roll.barcode,
@@ -7196,7 +7256,10 @@ async function buildFasonDispatchDoc(
         station: { name: dispatch.step.station.name, code: dispatch.step.station.code },
       },
       rolls,
-      totalQty: Number(dispatch.totalQty),
+      totalQty: beams.length > 0
+        ? Number(rollItems.reduce((s, i) => s.plus(i.dispatchedQty), new Prisma.Decimal(0)))
+        : Number(dispatch.totalQty),
+      ...(beams.length > 0 ? { beams } : {}),
     }),
   };
 }

@@ -22,7 +22,7 @@
 //   · (K5) `assertPhysicalBeamFree` çağrısı düşürüldü → §12 kırmızı: kod WARP_BEAM_PHYSICAL_BUSY değil ham P2002 (sed yakaladı)
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Bayraklar (devere · iplik) FOTOĞRAFINA döndürülür.
 // =============================================================================
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { Prisma, StationType, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, YarnMovementKind } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -68,12 +68,17 @@ async function netToplam(beamId: string, kind: YarnMovementKind, ters: YarnMovem
 
 function statik(): void {
   console.log("── §0 Statik ──");
-  const mig = readFileSync(path.join(ROOT, "prisma/migrations/20260914125000_devere_warp_beams/migration.sql"), "utf8");
+  // CHECK'in SON tanımı okunur (F1 171000 kind_ck'yi DROP+ADD ile genişletti); dosya adı sıralı = uygulama sırası.
+  const migDir = path.join(ROOT, "prisma/migrations");
+  const kindCkFiles = readdirSync(migDir).filter((d) => /^\d{14}_/.test(d)).sort()
+    .filter((d) => existsSync(path.join(migDir, d, "migration.sql")) && /"warp_beam_events_kind_ck" CHECK/.test(readFileSync(path.join(migDir, d, "migration.sql"), "utf8")));
+  const mig = kindCkFiles.length ? readFileSync(path.join(migDir, kindCkFiles[kindCkFiles.length - 1], "migration.sql"), "utf8") : "";
   const m = /"warp_beam_events_kind_ck" CHECK \("kind" IN \(([^)]*)\)\)/.exec(mig);
   const checkList = (m?.[1] ?? "").split(",").map((s) => s.trim().replace(/'/g, "")).filter(Boolean).sort();
   check("§0a WARP_BEAM_EVENT_KINDS ↔ kind_ck İKİ YÖNLÜ eşit", JSON.stringify(checkList) === JSON.stringify([...WARP_BEAM_EVENT_KINDS].sort()), `${checkList.join(",")} ↔ ${WARP_BEAM_EVENT_KINDS.join(",")}`);
-  const svc = readFileSync(path.join(ROOT, "src/services/warp-beam.service.ts"), "utf8") + readFileSync(path.join(ROOT, "src/services/warp-beam-wind.service.ts"), "utf8");
-  check("§0b defter satırına update/delete YOK (append-only; iki servis dosyası)", !/warpBeamEvent\.(update|updateMany|delete|deleteMany|upsert)\(/.test(svc));
+  const svc = ["src/services/warp-beam.service.ts", "src/services/warp-beam-wind.service.ts", "src/services/subcontractor-beam.service.ts", "src/services/helpers/warp-beam-event.helper.ts"]
+    .map((f) => readFileSync(path.join(ROOT, f), "utf8")).join("\n");
+  check("§0b defter satırına update/delete YOK (append-only; üç servis + yazıcı helper)", !/warpBeamEvent\.(update|updateMany|delete|deleteMany|upsert)\(/.test(svc));
   const guard = readFileSync(path.join(ROOT, "src/services/helpers/yarn-balance-guard.helper.ts"), "utf8");
   check("§0c eksi-bakiye kümesi WARP_ISSUE ve WARP_RETURN_REVERSAL'ı kapılar", /GATED_KINDS[\s\S]*YarnMovementKind\.WARP_ISSUE[\s\S]*YarnMovementKind\.WARP_RETURN_REVERSAL/.test(guard));
   const routes = readFileSync(path.join(ROOT, "src/routes/yarn.routes.ts"), "utf8");

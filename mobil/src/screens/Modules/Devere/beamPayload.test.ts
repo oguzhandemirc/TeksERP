@@ -1,4 +1,4 @@
-import { buildPlanPayload, buildWindPayload, classifyBeamFailure, initialWindForm, isSameLocalDay, theoreticalKg, validatePlan, validateWind, EMPTY_PLAN, type WindForm } from './beamPayload';
+import { beamActionsEnabled, buildPlanPayload, buildWindPayload, classifyBeamFailure, initialWindForm, isSameLocalDay, theoreticalKg, validatePlan, validateWind, EMPTY_PLAN, STATUS_LABEL, type WindForm } from './beamPayload';
 
 const line = (qtyKg: string, reasonCode: string | null = null, warehouseId: string | null = 'w1', lotId: string | null = null) => ({ key: `k${qtyKg}`, warehouseId, qtyKg, reasonCode, lotId });
 
@@ -124,3 +124,17 @@ describe('isSameLocalDay — "bugün sarılan" sekmesi', () => {
     expect(isSameLocalDay('bozuk', now)).toBe(false);
   });
 });
+
+describe('STATUS_LABEL / beamActionsEnabled — fason F1: SHIPPED_OUT tablette görünür, dokunulmaz', () => {
+  it('dört durumun rozeti var; SHIPPED_OUT "Fasonda"', () => {
+    expect(Object.keys(STATUS_LABEL).sort()).toEqual(['CANCELLED', 'PLANNED', 'READY', 'SHIPPED_OUT']);
+    expect(STATUS_LABEL.SHIPPED_OUT).toBe('Fasonda');
+  });
+  it('⭐ eylemler yalnız PLANNED/READY; fasondaki ve iptal levent kapalı (sunucu 409 WARP_BEAM_STATE verirdi)', () => {
+    expect(beamActionsEnabled('PLANNED')).toBe(true);
+    expect(beamActionsEnabled('READY')).toBe(true);
+    expect(beamActionsEnabled('SHIPPED_OUT')).toBe(false);
+    expect(beamActionsEnabled('CANCELLED')).toBe(false);
+  });
+});
+

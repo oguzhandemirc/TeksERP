@@ -9585,3 +9585,45 @@ söyler. ③ anomali (③), S1/S3/S5/S6, `signals/:id/accept` Faz 2 — bekçi �
 **Ölçüm (üç sonuçlu):** ① kullanım — `weaving_orders` popülasyonu her canlı kurulumda 0: model P1 2026-09-13'te indi (`77b69da9`), `dokuma.enabled` referans fabrikada (`basit` profili) KAPALI, dokuma yapan müşteri yok ⇒ "tekrarlayan sebep sayısı" ÖLÇÜLEMEDİ (test DB'de de 0 satır; fabrika yedeğine sonda koşulmaz). ② yapısal — `kind`ın var olma gerekçeleri iki emsalde okunur: `ORDER_CANCEL` bir RAPOR ANAHTARI (`order-cancellation.report.service.ts` `cancelReasonCode` okur) + panel pick-list; `ROLL_CANCEL` KK1 TABLET listesi (yazmak zor, seçmek kolay) + kod türetimi (`resolveReasonCode`). Dokuma işi iptalinde bugün ikisi de yok: tek yüzey panel (`WeavingOrderActionDialogs.tsx` serbest metin kutusu; tablet `weavingOrder.service.ts`/`useRunMutations.ts`te iptal yok), `cancelReason`ı okuyan rapor servisi 0.
 **Karar:** kind AÇILMAZ (geri alınamaz enum değeri, iki gerekçe de yok, kullanım 0). Borç "açık soru" olarak KAPANIR; yerine ÜÇ TETİK yazıldı (tablet iptal yüzeyi · iptal sebebi raporu · ilk dokuma kurulumunda ≥ 30 iptal + en sık 5 metin ≥ %60). Tetik sorgusu kural satırında — o gün ölçüm yeniden yazılmaz, koşulur.
 **Bu ölçümün sınırı:** ① "ÖLÇÜLEMEDİ" ile "hayır" AYRI sonuçlardır (uc-sonuc); karar "hayır" değil "şimdi değil + tetik"tir. ② Eşik (30 · %60) kural yazarının seçimi, ölçülmüş değil — ilk gerçek ölçümde sayıyla birlikte yeniden bakılır.
+## 2026-09-14 — POLİMORFİK FASON SEVK KALEMİ F1 indi: levent fasona gider ve DÖNER (kapalı çevrim), ROLL yolu bayt bayt aynı [ÇEKİRDEK]
+
+**Hüküm (1e, (a) + bir ekleme):** tanımdaki `SHIPPED_OUT` TERMİNAL kalsaydı fasona giden levent F2'ye kadar sistemde askıda
+kalırdı (yarım defter canlıya çıkar — "beş kalem tek sürüm" gerekçesinin aynısı) ⇒ F1'e MİNİMAL dönüş `RETURNED_IN`
+(SHIPPED_OUT → READY, `lengthM` = dönen ≤ giden; haşıl verisi F2) + tersi `RETURNED_IN_CANCEL`. Çevrim: git → (storno) ·
+git → dön → (storno). Şema penceresi 20260914170000–179999.
+**İnen (01):** `SubcontractorDispatchItemKind {ROLL, WARP_BEAM}` (`@default(ROLL)` = bugünkü davranış; `YARN` F3 — geri alınamaz
+enum, yazıcısı olmadan girmez) · `rollId` NULL olabilir + `warpBeamId` (Restrict) + XOR CHECK `kind_ref_ck` + `@@unique([dispatchId,
+warpBeamId])` (DÜZ unique: PG NULL'ları ayrı sayar; partial yazmak Prisma'da drift doğururdu) · `WarpBeamStatus.SHIPPED_OUT`
+(tek ifadeli 170000) · `WarpBeamEvent.dispatchItemId` + `fason_item_ck` (iki yönlü: fason türü ⇔ kalem bağı) + `ship_out_item_uq`
+(kalem başına TEK SHIP_OUT) · `kind_ck` DROP+ADD ile 6 tür · `physical_live_uq` READY ∪ SHIPPED_OUT (fasondaki çözgü gövdeyi
+işgal eder) · `subcontractor-beam.service.ts` (`dispatchWarpBeamItemsTx` · `cancelWarpBeamItemsTx` · `returnWarpBeam` ·
+`cancelWarpBeamReturn` · `countReturnedBeamItems`) · `applyWarpBeamEventTx` dışa açıldı (TEK yazıcı kalır) · `dispatch()`
+`warpBeamIds?` · `cancel()` SHIP_OUT_CANCEL + `returnedBeamCount` sinyali (`resolveDispatchCancelBlockReason`, önizlemeyle tek
+kaynak) · `getDispatch(id, {includeBeams})` opt-in + `beamItemCount` · iki uç `/dispatches/:id/beams/:beamId/return[-cancel]`
+(`requireDevereEnabled`, `workorder:write | mobile:fason-kabul`) · controller gövde kapısı (`warpBeamIds` ⇒ devere) · belge
+`beams`/`beamTotals` yalnız levent varsa · `test_subcontractor_dispatch_beam` 47/0 (beş negatif sonda kırmızı görüldü).
+**Kararlar:** ① **Olay kaleme BAĞLANIR** (`dispatchItemId`): aynı levent zamanla birden çok sevke girer (git → dön → git);
+"bu sevkin SHIP_OUT'u" bağsız bulunamaz, iptal komşu sevkin satırını hedeflerdi — tanımda yoktu, ölçülünce eklendi. ② **Kalan
+metre = FABRİKADAKİ metre**: SHIP_OUT −1, RETURNED_IN +1 (cancel'lar tersi) ⇒ fasondayken 0, fire `giden − dönen` farkı olarak
+kendiliğinden görünür, ayrı olay istemez; liste DTO'su artık WOUND'dan değil TÜM olaylardan hesaplar (`remainingByBeam`).
+③ **Levent kalemi OUTSTANDING kümesinin DIŞINDADIR** (`OUTSTANDING_ITEM.roll` yüklemi null bağı dışlar — ölçüldü): sevkin
+"açık" sayısı topa bakar, leventin açıklığı `WarpBeam.status`tur; kabul makbuzuna girmez. ④ **Levent-yalnız sevk MEŞRU**, parti
+BOŞ doğar (K10 yapısal; `createBatchTx({rollIds: []})` emsali kabul/tambur yollarında); `totalQty` = Σ kalem (consistency §19
+korunur), belge kumaş toplamı top kalemlerinden. ⑤ **LIFO iki hat**: tx-dışı sinyal (`countReturnedBeamItems`) + tx-içi
+`cancelWarpBeamItemsTx` 409 `WARP_BEAM_RETURNED`; bekçi ikisini AYRI ölçer (biri düşünce diğeri yeşil tutar — ilk sonda bunu
+gösterdi, bekçi bölündü). ⑥ Top-yalnız yollar (kabul · parti cerrahisi · doğrudan sevk · aktarım geri alma · WO iptal
+önizlemesi) `isRollItem`/`hasRoll` daraltmasından geçer (`helpers/dispatch-item-kind.helper.ts`), `rollId!` yazılmaz; WO iptal
+önizlemesinin "taşınmış top" sayacı levent kalemini top sanıp iptali yanlış engellerdi — daraltıldı. ⑦ Belge WO/adım/parti
+bağlı KALDI (tanım böyle); haşıl senaryosunda beam WO'suz gider — belge şeklini saha sorusu #16 belirler, ayrı dilim.
+**Ölçüm:** fason 29/29 · batch 17/17 · subcontract 3/3 · warp 2/2 · devere 1/1 · db_invariants 214/0 · defter_ters_yol 268/0 ·
+snapshot_kolonlari 13/0 · schema_drift 4/0 · audit_labels 22/0 (ROLL ortak beyanı + WARP_BEAM etiketi).
+**Tren #93 düzeltmesi (aynı gün, ikinci sha):** tam paket iki kırmızı verdi — ① `test_iplik_regime_gate §2`:
+`subcontractor.routes` → controller → `subcontractor-beam.service` → `warp-beam-wind.service` (→ `yarn.service`) ve
+`warp-beam.service` (`yarnMovement.findMany`) zinciriyle iplik modeline ULAŞIYORDU; muafiyet yok, zincir kesildi: tek yazıcı
+`applyWarpBeamEventTx` `helpers/warp-beam-event.helper.ts`e taşındı (sarım ve fason servisleri onu çağırır), fason servisi
+`warpBeamRemainingM`i helper'dan alır; bekçi §0d′ ithal yasağını ölçer (negatif sonda: wind servisi yeniden ithal → §0d′ +
+iplik §2 kırmızı). ② `test_mobil_enum_aynasi §1`: `WarpBeamStatus.SHIPPED_OUT` mobil union'a eklendi (TABAN'a gerekçe değil —
+tablet o statüyü görür): "bugün sarılan" sekmesi READY ∪ SHIPPED_OUT listeler (`list` CSV), `STATUS_LABEL` "Fasonda" rozeti,
+`beamActionsEnabled` (yalnız PLANNED/READY; fasondaki levente tabletten dokunulmaz — sunucu 409 verirdi). Ders (kök ②): yeni
+dosya/enum yazınca o dizini tarayan BÜTÜN tarayıcılar koşulur — iplik kapısı ve enum aynası fason paketinde değildi.
+

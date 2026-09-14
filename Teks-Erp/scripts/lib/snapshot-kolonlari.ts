@@ -312,15 +312,17 @@ WHERE rr."prevQualityGradeId" IS NOT NULL AND rr."prevQualityGrade" IS NULL`,
     alan: "dispatchedQty",
     sinif: "DONMUS_ILERI",
     adayDegil: "şerhsiz kolon; defter.md ÜÇÜNCÜ SINIF satırı adıyla anıyor",
-    yazan: [SVC + "subcontractor.service.ts"],
-    neden: "fasona çıkan brüt metraj; sevk iptali (cancelledAt) kalemi silmez, metrajı değiştirmez — kısmi kabul topu tüketmez",
+    yazan: [SVC + "subcontractor-beam.service.ts", SVC + "subcontractor.service.ts"],
+    neden: "fasona çıkan brüt metraj (top: currentQty · levent F1: kalan metre); sevk iptali (cancelledAt) kalemi silmez, metrajı değiştirmez — kısmi kabul topu tüketmez",
     sql: [
       {
         id: "28d",
         baslik: "fason sevk kalemi donmuş metrajı ≤ 0",
         sql: `
-SELECT sdi.id::text AS kayit, r.barcode AS barkod, sdi."dispatchedQty"::text AS sapma
-FROM subcontractor_dispatch_items sdi JOIN rolls r ON r.id = sdi."rollId"
+SELECT sdi.id::text AS kayit, COALESCE(r.barcode, wb."beamNo") AS barkod, sdi."dispatchedQty"::text AS sapma
+FROM subcontractor_dispatch_items sdi
+LEFT JOIN rolls r ON r.id = sdi."rollId"
+LEFT JOIN warp_beams wb ON wb.id = sdi."warpBeamId"
 WHERE sdi."dispatchedQty" <= 0`,
       },
       {

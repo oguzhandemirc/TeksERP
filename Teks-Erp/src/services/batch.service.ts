@@ -47,6 +47,7 @@ import {
   markTravelerCardsDirtyTx,
 } from "./helpers/traveler-card-dirty.helper";
 import { OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
+import { isRollItem } from "./helpers/dispatch-item-kind.helper";
 
 // K18: üyelik değişiminde etiketi bayatlamayan (labelDirty atlanacak) TARİHÇE
 // statüleri — tüketilmiş/iptal top fiziksel etikete çıkmaz, bayraklanmaz.
@@ -750,11 +751,11 @@ export async function mergeBatches(
           where: { dispatchId: loser.id },
           select: { rollId: true, roll: { select: { barcode: true } } },
         });
-        const overlap = loserItems.filter((i) => keeperRollIds.has(i.rollId));
+        const overlap = loserItems.filter(isRollItem).filter((i) => keeperRollIds.has(i.rollId));
         if (overlap.length > 0) {
           throw AppError.conflict(
             `Birleştirme yapılamaz — sevk ${loser.dispatchNo} ile ${keeper.dispatchNo} aynı top(lar)ı içeriyor: ` +
-              `${overlap.map((i) => i.roll.barcode ?? i.rollId).join(", ")}. Sevk kayıtları tutarsız, önce düzeltilmeli.`,
+              `${overlap.map((i) => i.roll?.barcode ?? i.rollId).join(", ")}. Sevk kayıtları tutarsız, önce düzeltilmeli.`,
           );
         }
         await tx.subcontractorDispatchItem.updateMany({

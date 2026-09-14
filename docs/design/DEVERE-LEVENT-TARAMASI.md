@@ -220,7 +220,7 @@ Saha sorusu #20'nin cevapları meşrudur ve **hepsi aynı tabloda yaşar**. ⚠�
 | Hazır satın alındı | `PURCHASED` | **`supplierId` XOR `subcontractorId` — tam biri** | **HİÇ YOK** — levent bir mal kabul kalemidir | 1b |
 | **Müşterinin gönderdiği levent** (fason dokuma) | **`CONSIGNED`** | **`ownerCustomerId`** | HİÇ YOK — mal bizim değil | **Faz N**, `MaterialOwnership` ile |
 
-**Akıbet ekseni (köken DEĞİL):** `SHIPPED_OUT` + ters yolu `SHIP_OUT_CANCEL` — levent başka dokumacıya ya da fasona verildi.
+**Akıbet ekseni (köken DEĞİL):** `SHIPPED_OUT` + ters yolu `SHIP_OUT_CANCEL` — levent başka dokumacıya ya da fasona verildi. **F1 İNDİ 2026-09-14 (hüküm 1e):** olay adı `SHIP_OUT` (durum `SHIPPED_OUT`), **terminal DEĞİL** — minimal dönüş `RETURNED_IN` (SHIPPED_OUT → READY, `lengthM` = dönen ≤ giden; haşıl verisi F2) + tersi `RETURNED_IN_CANCEL`; her fason satırı sevk kalemine bağlı (`dispatchItemId`). Gerekçe: terminal kalsaydı fasona giden levent F2'ye kadar askıda kalır, yarım defter canlıya çıkardı.
 
 #### Taraf kolonunun TİPİ de kökene bağlı bir veri kararıdır
 
@@ -251,7 +251,7 @@ enum WarpBeamStatus {
   MOUNTED     // tezgahta / raşelde (Faz 3)
   EXHAUSTED   // bitti — terminal; artık EXHAUSTED satırında fire (Faz 3)
   SCRAPPED    // gerçek fire — çözgü kullanılamaz; terminal (Faz 3)
-  SHIPPED_OUT // başka dokumacıya/fasona VERİLDİ — terminal; ters yolu SHIP_OUT_CANCEL (Faz 3)
+  SHIPPED_OUT // başka dokumacıya/fasona VERİLDİ — F1 İNDİ 2026-09-14: terminal DEĞİL (RETURNED_IN → READY); ters yolu SHIP_OUT_CANCEL
   CANCELLED   // yanlış giriş — hiç sarılmamış sayılır; iplik ters kayıtla döner
 }
 
@@ -293,7 +293,7 @@ export const WARP_BEAM_EVENT_KINDS = ["WOUND", "WOUND_CANCEL"] as const; // Faz 
 // Yol haritası (koda GİRMEZ, fazında eklenir):
 //   Faz 3: MOUNTED · MOUNT_CANCEL · DISMOUNTED · DISMOUNT_CANCEL · CONSUMED · CONSUMED_CANCEL
 //          ADJUST_IN · ADJUST_OUT · EXHAUSTED · EXHAUST_CANCEL · SCRAPPED · SCRAP_CANCEL
-//          SHIPPED_OUT · SHIP_OUT_CANCEL (levent dışarı verilir — §3.9)
+//   F1 İNDİ (2026-09-14): SHIP_OUT · SHIP_OUT_CANCEL · RETURNED_IN · RETURNED_IN_CANCEL (levent fasona gider/döner — §3.9; kaleme bağlı)
 //   Faz 5: SIZED · SIZE_CANCEL (haşıl)
 ```
 
@@ -568,7 +568,7 @@ Her geçiş: atomik claim + aynı tx'te olay satırı + audit tx DIŞINDA.
 | MOUNTED → READY | `DISMOUNTED` | `updateMany({id, status:MOUNTED, currentMachineId})` | Kalan ölçüm girildiyse fark önce `CONSUMED`/`ADJUST_IN` | O makinede AÇIK dokuma koşumu varsa **409** (koşum sürerken levent sökülmez); koşum leventsiz açılmışsa bu **UYARI**dır, 400 değil — saha kaydı eksik olabilir, iş durdurulmaz |
 | MOUNTED/READY → EXHAUSTED | `EXHAUSTED` | claim | Ölçülen artık ≠ türetilen kalan ise fark önce `CONSUMED`/`ADJUST_IN`, sonra `EXHAUSTED(lengthM = artık)` → kalan 0 | — |
 | READY/MOUNTED → SCRAPPED | `SCRAPPED` | claim | `lengthM` = kalan; `reasonCode` zorunlu (sunucuda) | — |
-| READY → SHIPPED_OUT | `SHIPPED_OUT` | `updateMany({id, status:READY})` | Levent başka dokumacıya/fasona VERİLDİ (§3.9): `lengthM` = çıkan kalan, karşı taraf zorunlu. Terminal; ters yolu `SHIP_OUT_CANCEL`. ⚠️ Malın fiziksel çıkış belgesi bu satır DEĞİLDİR — o, polimorfik fason sevk kalemi dilimine bağlıdır ve o dilime kadar levent çıkışı yalnız levent defterinde görünür | MOUNTED'ken 409 (önce sök) |
+| READY → SHIPPED_OUT | `SHIP_OUT` (**F1 İNDİ 2026-09-14** — ad `SHIP_OUT`, terminal DEĞİL: `RETURNED_IN` READY'ye döndürür; fiziksel çıkış belgesi `SubcontractorDispatch` kalemi `kind=WARP_BEAM`, bekçi `test_subcontractor_dispatch_beam`) | `updateMany({id, status:READY})` | Levent başka dokumacıya/fasona VERİLDİ (§3.9): `lengthM` = çıkan kalan, karşı taraf zorunlu. Terminal; ters yolu `SHIP_OUT_CANCEL`. ⚠️ Malın fiziksel çıkış belgesi bu satır DEĞİLDİR — o, polimorfik fason sevk kalemi dilimine bağlıdır ve o dilime kadar levent çıkışı yalnız levent defterinde görünür | MOUNTED'ken 409 (önce sök) |
 | (durum değişmez) | `ADJUST_IN` / `ADJUST_OUT` | `updateMany({id, status})` — durum aynı kalır, claim yalnız yarışı keser | Ölçüm düzeltmesi: `lengthM` > 0, `reasonCode` ZORUNLU (`ReasonPresetKind.WARP_BEAM_ADJUST`). Yanlış yazılan düzeltme KARŞI ADJUST ile kapanır ve `reversesEventId` ile orijinaline bağlanır | kalan metreyi eksiye düşürüyorsa 409; terminal durumda 409 |
 | `*_CANCEL` | ters | claim: durum, terslenen olayın `fromStatus`una döner | — | **İSTİSNA — `WOUND_CANCEL`:** doğuşun stornosudur, `fromStatus` (PLANNED) kuralına GİRMEZ; durumu **CANCELLED**'a (terminal) taşır. Aksi hâlde levent PLANNED'a dönerdi ama `warp_beam_events_one_wound_uq` yüzünden bir daha sarılamazdı (tekrarlanamaz iş, `defter.md:22` tuzağı) ve §4.9 #5 mutabakatı yalan alarm verirdi |
 
@@ -672,7 +672,7 @@ Yeni mutabakat bölümleri:
 | **3 — Tezgah ve kalan metre** | `MOUNTED`/`DISMOUNTED`/`CONSUMED`(elle)/`ADJUST_*`/`EXHAUSTED`/`SCRAPPED`/**`SHIPPED_OUT`** + tersleri · durum kolonları (`status`/`currentMachineId`/`currentPosition`, olayla AYNI tx) · `Station.consumesWarpBeam` · **`beamRole` küçük kataloğu** (zemin · hav · dolgu) · `beamsMountedDuring` helper + SQL ikizi · iki sebep kataloğu · levent kartı etiketi · tablet ekranı (yeni oturum türü) | Hangi tezgahta ne bağlı, kalan metre, levent dibi firesi, düğüm/tahar/takım süresi, dışarı verilen levent | CHECK genişlemesi · 2 enum değeri · 2 kolon (`Station.consumesWarpBeam` · `WarpBeamEvent.beamRole`) · 3 şema-dışı nesne (`warp_beams_machine_position_uq` · `warp_beams_mounted_ck` · `warp_beam_events_mounted_ck`) | #13, #14, #15, #16 |
 | **4 — Top tezgahtan doğar** (dokuma bayrağıyla) | Rotada Dokuma adımı + tezgah çıkışı motoru (iş emri İÇİNDE doğum) · `RollEntrySource.WEAVING` · top çıkışında `CONSUMED(rollId)` otomatik (çift levent → iki satır) · take-up · atkı sayacı → metre | Top → levent → lot → tedarikçi geri izleme; randıman | enum değeri + tezgah defterleri (`SEKTOR` dokuma bulguları) | #8 · take-up verisi · `kumasTeknik` Dilim 3 |
 | **5 — Gerekirse** | haşıl olayı · ara levent/direkt çözgü birleştirme · levent demirbaş kartı (dara → tartıdan kalan metre) · tezgah teknik kartı ve uyum kontrolü · ayrı lot bakiye tablosu · çok iplikli/renk raporlu çözgü · tahar planı yapılandırması · levent konumu · **bobin TEKİL kimliği** (kon/masura barkodu) | Sektör genişliği | ölçüme göre | #9, #10, #22 |
-| **AYRI DİLİM (bu belgenin dışında)** | **Polimorfik fason sevk kalemi** (top \| levent \| iplik): `SubcontractorDispatchItem.rollId` NOT NULL'dur (`schema.prisma:3887`) ve fasona yalnız TOP gönderilmesine izin verir | Fason devere ve fason haşıl deftere yazar; `SEKTOR-YOL-HARITASI.md:153`'ün bağımsız tespit ettiği borç kapanır | ölçülmedi — 1b'den büyük | yönetici sırasına alındı 2026-09-12 |
+| **AYRI DİLİM — F1 İNDİ 2026-09-14** (levent; iplik `YARN` F3, haşıl verisi F2) | **Polimorfik fason sevk kalemi** (top \| levent \| iplik): ~~`SubcontractorDispatchItem.rollId` NOT NULL'dur ve fasona yalnız TOP gönderilmesine izin verir~~ **GEÇERSİZ → 2026-09-14**: kalem `kind` (ROLL \| WARP_BEAM) + `warpBeamId` + XOR CHECK; levent SHIP_OUT → RETURNED_IN çevrimi; ROLL yolu bayt bayt aynı (bekçi `test_subcontractor_dispatch_beam`) | Fason devere ve fason haşıl deftere yazar; `SEKTOR-YOL-HARITASI.md:153`'ün bağımsız tespit ettiği borç kapanır | 1 enum + 3 kolon + 2 CHECK + 1 partial unique (migration 170000/171000) | İNDİ (01, hüküm 1e) |
 
 **Migration bandı:** `20260912120000` ve üstü (yönetici tahsisi; 6e `110000` bandını kullanıyor).
 

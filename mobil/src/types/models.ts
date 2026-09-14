@@ -121,8 +121,9 @@ export type MachineDataSource =
 
 // Backend `WarpBeamStatus` · `WarpBeamOrigin` · `WarpKgSource` enum'larının BİREBİR aynası
 // (2026-09-14, devere tablet dilimi — DEVERE-LEVENT-TARAMASI §11 F). `test_mobil_enum_aynasi`
-// iki yönlü ölçer. CANCELLED terminaldir (PLANNED'a dönüş yok).
-export type WarpBeamStatus = 'PLANNED' | 'READY' | 'CANCELLED';
+// iki yönlü ölçer. CANCELLED terminaldir (PLANNED'a dönüş yok). SHIPPED_OUT (fason F1) terminal
+// DEĞİL: fasondan dönüşle READY'ye gelir — tablette "Fasonda" rozeti, eylemler kapalı.
+export type WarpBeamStatus = 'PLANNED' | 'READY' | 'SHIPPED_OUT' | 'CANCELLED';
 export type WarpBeamOrigin = 'IN_HOUSE' | 'SUBCONTRACT' | 'PURCHASED';
 export type WarpKgSource = 'WEIGHED' | 'THEORETICAL';
 

@@ -6,7 +6,7 @@
 // ≥1 brüt çıkış satırı ZORUNLU; diğer kökenlerde makine ve iplik satırı HİÇ gönderilmez
 // (sunucu 400 verir; form hiç kurmaz). Nominal kg ön hesabı sunucu formülünün aynasıdır.
 // =============================================================================
-import type { PlanWarpBeamRequest, WarpBeamOrigin, WarpKgSource, WindWarpBeamRequest } from '../../../services/warpBeam.service';
+import type { PlanWarpBeamRequest, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, WindWarpBeamRequest } from '../../../services/warpBeam.service';
 
 export const ORIGIN_LABEL: Record<WarpBeamOrigin, string> = {
   IN_HOUSE: 'İçeride sarılacak',
@@ -14,6 +14,12 @@ export const ORIGIN_LABEL: Record<WarpBeamOrigin, string> = {
   PURCHASED: 'Hazır alındı',
 };
 export const KG_SOURCE_LABEL: Record<WarpKgSource, string> = { WEIGHED: 'Tartıldı', THEORETICAL: 'Nominal (hesap)' };
+/** Durum rozeti — `Record` tam: backend'e değer gelince derleme kırılır (enum aynası). */
+export const STATUS_LABEL: Record<WarpBeamStatus, string> = { PLANNED: 'Planlı', READY: 'Hazır', SHIPPED_OUT: 'Fasonda', CANCELLED: 'İptal' };
+/** Tablet eylemleri (sar · sil · iptal) yalnız bu durumlarda; SHIPPED_OUT levent tabletten dokunulmaz (dönüş fason ekranında). */
+export function beamActionsEnabled(status: WarpBeamStatus): boolean {
+  return status === 'PLANNED' || status === 'READY';
+}
 
 export interface PlanForm {
   warpSpecId: string | null;

@@ -209,10 +209,14 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/yarn.service.ts", sembol: "applyYarnMovementTx" }],
     ["src/services/yarn.service.ts"]),
 
-  D("WarpBeamEvent", "levent olay defteri (devere 1b) — WOUND doğuş gerçekleri değişmez; ters yol tipli WOUND_CANCEL, orijinaline `reversesEventId` (tek ters, çift iptal DB'de imkânsız); durum CANCELLED (terminal), PLANNED'a dönmez",
+  D("WarpBeamEvent", "levent olay defteri (devere 1b + fason F1) — WOUND doğuş gerçekleri değişmez; ters yol tipli çiftler, orijinaline `reversesEventId` (tek ters, çift iptal DB'de imkânsız): WOUND↔WOUND_CANCEL (CANCELLED terminal, PLANNED'a dönmez) · SHIP_OUT↔SHIP_OUT_CANCEL (sevk iptali) · RETURNED_IN↔RETURNED_IN_CANCEL (fason dönüşü stornosu); fason satırları sevk kalemine bağlı (`dispatchItemId`, CHECK iki yönlü)",
     { tur: "TERS_BAG", kolon: "reversesEventId" },
-    [{ dosya: "src/services/warp-beam-wind.service.ts", sembol: "cancelWound" }],
-    ["src/services/warp-beam-wind.service.ts"]),
+    [
+      { dosya: "src/services/warp-beam-wind.service.ts", sembol: "cancelWound" },
+      { dosya: "src/services/subcontractor-beam.service.ts", sembol: "cancelWarpBeamItemsTx" },
+      { dosya: "src/services/subcontractor-beam.service.ts", sembol: "cancelWarpBeamReturn" },
+    ],
+    ["src/services/helpers/warp-beam-event.helper.ts"]),
 
   D("RollMovement", "topun adım içi giriş/çıkışı; açık satır çıkışta kapanır", { tur: "DAMGA", kolon: "revokedAt" },
     [{ dosya: "src/services/helpers/roll-movement.helper.ts", sembol: "revokeRollMovements" }],
@@ -398,7 +402,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   SATIR("MergeOperationSource", "MergeOperation", "birleştirmenin kaynak kaydı"),
   SATIR("MergeOperationRef", "MergeOperation", "taşınan satırın kimlik fotoğrafı"),
   SATIR("InvoiceLine", "Invoice", "fatura satırı; düzenleme sil-yaz ama ATOMİK CLAIM `status: DRAFT` arkasında ⇒ hard-delete sınıf ④ (deftere hiç yazmamış taslak), \"bağımsız sil-yaz\" ile KARIŞTIRILMAZ — fark claim'dir"),
-  SATIR("SubcontractorDispatchItem", "SubcontractorDispatch", "fason sevk kalemi ⚠️ SINIRDA: 5 bağımsız yazım, 0 silme — bağımsız düzenlenebilir tarafa yakın (ölçüldü 2026-09-13)"),
+  SATIR("SubcontractorDispatchItem", "SubcontractorDispatch", "fason sevk kalemi ⚠️ SINIRDA: 5 bağımsız yazım, 0 silme — bağımsız düzenlenebilir tarafa yakın (ölçüldü 2026-09-13); F1: polimorfik (ROLL | WARP_BEAM), levent kaleminin defteri WarpBeamEvent (SHIP_OUT kaleme bağlı), kabul makbuzuna girmez"),
   SATIR("SubcontractorReceiptItem", "SubcontractorReceipt", "fason kabul kalemi"),
   SATIR("SubcontractorDirectShipAllocation", "SubcontractorDispatch", "açık-sevk tahsisi"),
   SATIR("KartelaDispatchItem", "KartelaDispatch", "kartela sevk kalemi"),

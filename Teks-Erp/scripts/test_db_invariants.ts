@@ -428,6 +428,15 @@ const PARTIAL_INDEXES: Array<{
     predicate: `((kind)::text = 'WOUND'::text)`,
     why: "levent başına TEK WOUND — doğuş gerçekleri bir kez yazılır",
   },
+  // F1 (2026-09-14, migration 20260914171000): fason sevk kalemi bir kez çıkar; iptali sevk iptalidir,
+  // kalem yeniden çıkmaz — dönüş (RETURNED_IN) tekrarlanabilir olduğundan yüklem YALNIZ SHIP_OUT'tur.
+  {
+    table: "warp_beam_events",
+    index: "warp_beam_events_ship_out_item_uq",
+    uniq: true,
+    predicate: `((kind)::text = 'SHIP_OUT'::text)`,
+    why: "kalem başına TEK SHIP_OUT — aynı levent aynı sevkten iki kez çıkamaz",
+  },
   {
     table: "machine_stop_events",
     index: "machine_stops_one_open_per_machine_uq",
@@ -494,6 +503,9 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "warp_beam_events", name: "warp_beam_events_length_positive" },
   { table: "warp_beam_events", name: "warp_beam_events_cancel_link_ck" },
   { table: "warp_beam_events", name: "warp_beam_events_wound_facts_ck" },
+  // F1 (2026-09-14, migration 20260914171000): fason türü ⇔ kalem bağı (iki yönlü) · kalem tür ⇔ bağ XOR'u.
+  { table: "warp_beam_events", name: "warp_beam_events_fason_item_ck" },
+  { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_kind_ref_ck" },
   { table: "yarn_movements", name: "yarn_movements_warp_link_ck" },
   { table: "yarn_movements", name: "yarn_movements_warp_return_reason_ck" },
   // Devere Faz 2 (lot): bobin adedi bilgi alanı, null ya da pozitif.
@@ -684,8 +696,8 @@ const EXPRESSION_UNIQUES: Array<{ table: string; index: string; expr: string; pr
     table: "warp_beams",
     index: "warp_beams_physical_live_uq",
     expr: 'tr_fold("physicalBeamNo")',
-    predicate: `((status = 'READY'::"WarpBeamStatus") AND ("physicalBeamNo" IS NOT NULL))`,
-    why: "bir metal gövdede iki CANLI çözgü olmaz (devere 1b; MOUNTED Faz 3'te yükleme eklenir)",
+    predicate: `((status = ANY (ARRAY['READY'::"WarpBeamStatus", 'SHIPPED_OUT'::"WarpBeamStatus"])) AND ("physicalBeamNo" IS NOT NULL))`,
+    why: "bir metal gövdede iki CANLI çözgü olmaz (devere 1b; F1: fasondaki çözgü de gövdeyi işgal eder; MOUNTED Faz 3'te yükleme eklenir)",
   },
   { table: "permission_templates", index: "permission_templates_name_lower_uq", expr: "lower(name)" },
   {

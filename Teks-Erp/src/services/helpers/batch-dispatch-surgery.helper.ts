@@ -45,6 +45,7 @@ import {
   assertNoReturnedItems,
 } from "./batch-dispatch-surgery-guards.helper";
 import { OPEN_OUTSTANDING } from "./fason-open-dispatch.helper";
+import { hasRoll, isRollItem } from "./dispatch-item-kind.helper";
 
 export interface DispatchSurgeryResult {
   /** Bu operasyonda sevk cerrahisi gören kaynak parti id'leri (boşalma → K17 izi kararı için). */
@@ -165,8 +166,9 @@ export async function performDispatchSurgeryTx(
     orderBy: [{ dispatchedAt: "asc" }, { createdAt: "asc" }],
   });
 
+  // Parti cerrahisi TOP kalemi taşır; levent kalemi (F1) sevkinde kalır.
   const affected = sourceOpen
-    .map((d) => ({ d, movedItems: d.items.filter((i) => params.movedRollIds.has(i.rollId)) }))
+    .map((d) => ({ d, movedItems: d.items.filter(isRollItem).filter(hasRoll).filter((i) => params.movedRollIds.has(i.rollId)) }))
     .filter((x) => x.movedItems.length > 0);
   if (affected.length === 0) return result;
 
@@ -203,7 +205,7 @@ export async function performDispatchSurgeryTx(
       id: t.id,
       dispatchNo: t.dispatchNo,
       subcontractorId: t.subcontractorId,
-      rollIds: new Set(t.items.map((i) => i.rollId)),
+      rollIds: new Set(t.items.filter(isRollItem).map((i) => i.rollId)),
     });
   }
 
@@ -250,7 +252,7 @@ export async function performDispatchSurgeryTx(
       if (overlap.length > 0) {
         throw AppError.conflict(
           `Taşınamaz — sevk ${d.dispatchNo} ile ${target.dispatchNo} aynı top(lar)ı içeriyor: ` +
-            `${overlap.map((i) => i.roll.barcode ?? i.rollId).join(", ")}. Sevk kayıtları tutarsız, önce düzeltilmeli.`,
+            `${overlap.map((i) => i.roll?.barcode ?? i.rollId).join(", ")}. Sevk kayıtları tutarsız, önce düzeltilmeli.`,
         );
       }
       // ATOMİK CLAIM: kalem hâlâ kaynak sevkte mi (eşzamanlı cerrahi kaybedeni yakalar).
@@ -318,7 +320,7 @@ export async function performDispatchSurgeryTx(
         id: d.id,
         dispatchNo: d.dispatchNo,
         subcontractorId: d.subcontractorId,
-        rollIds: new Set(d.items.map((i) => i.rollId)),
+        rollIds: new Set(d.items.filter(isRollItem).map((i) => i.rollId)),
       });
       result.retargetedDispatchNos.push(d.dispatchNo);
     } else {

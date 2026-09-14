@@ -23,12 +23,14 @@ import { buildNextDynamicCursor, decodeDynamicCursor, dynamicCursorWhere } from 
 import { AuditService } from "./audit.service";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { assertWarpBeamReplayAlive } from "./helpers/token-replay.helper";
-import { WARP_BEAM_EVENT_KINDS, warpBeamLengthSign, type WarpBeamEventKind } from "../constants/warp-beam";
+import { WARP_BEAM_EVENT_KINDS } from "../constants/warp-beam";
 import {
   WARP_BEAM_EVENT_SELECT,
   WARP_BEAM_SELECT,
   nextBeamNoTx,
+  remainingByBeam,
   resolveOriginParty,
+  warpBeamRemainingM,
   type WarpBeamEventRow,
   type WarpBeamRow,
 } from "./helpers/warp-beam.helper";
@@ -107,15 +109,8 @@ export function toWarpBeamEventDto(e: WarpBeamEventRow): WarpBeamEventDto {
   };
 }
 
-/** Kalan metre — tek kaynak işaret tablosu (`warpBeamLengthSign`); iptal edilmiş leventte 0. */
-export function warpBeamRemainingM(events: Array<{ kind: string; lengthM: Prisma.Decimal | null }>): number {
-  let acc = D(0);
-  for (const e of events) {
-    if (!e.lengthM) continue;
-    acc = acc.plus(D(e.lengthM).mul(warpBeamLengthSign(e.kind as WarpBeamEventKind)));
-  }
-  return Number(acc);
-}
+// Kalan metre helper'da (`warpBeamRemainingM`); burada yeniden dışa açılır (eski çağıranlar için).
+export { warpBeamRemainingM };
 
 export function toWarpBeamDto(r: WarpBeamRow, remainingM?: number): WarpBeamDto {
   const wound = r.events[0] ?? null;
@@ -171,9 +166,10 @@ export async function listWarpBeams(params: WarpBeamListParams): Promise<CursorP
   const hasMore = rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
   const last = page[page.length - 1] as Record<string, unknown> | undefined;
+  const remaining = await remainingByBeam(prisma, page.map((r) => r.id));
   return {
     success: true,
-    data: page.map((r) => toWarpBeamDto(r)),
+    data: page.map((r) => toWarpBeamDto(r, remaining.get(r.id))),
     pagination: { nextCursor: hasMore ? buildNextDynamicCursor(last, "createdAt") : null, hasMore, limit, ...(totalEstimate !== undefined ? { totalEstimate } : {}) },
   };
 }

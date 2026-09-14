@@ -622,6 +622,9 @@ export const ENUM_LABELS: Record<string, string> = {
   // YarnMovementKind — devere 1b (levent): brüt çıkış + ayrı iade + tersleri
   // WarpBeamStatus/WarpBeamOrigin/WarpKgSource (devere 1b) — PLANNED/CANCELLED/IN_HOUSE ortak değerler
   READY: "Hazır",
+  SHIPPED_OUT: "Fasona verildi",
+  // SubcontractorDispatchItemKind (fason F1, 2026-09-14) — ROLL ortak ("Top"), levent kalemi:
+  WARP_BEAM: "Levent",
   SUBCONTRACT: "Fasona sardırıldı",
   PURCHASED: "Hazır alındı",
   THEORETICAL: "Nominal (hesap)",
@@ -842,6 +845,8 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
  * şişmiş bir liste kapının kendisi olur.
  */
 export const SHARED_ENUM_VALUES: Record<string, string> = {
+  // ── Fason F1 polimorfik kalem (2026-09-14)
+  ROLL: "StockCountLineKind(sayım satırı top) ve SubcontractorDispatchItemKind(fason sevk kalemi top) — ikisi de kalemin TOP olduğunu söyler; ortak Türkçe doğru",
   // ── Devere 1b (2026-09-14)
   WEIGHED: "SackWeighingKind(çuval tartıldı) ve WarpKgSource(levent kg tartıyla bilindi) — ikisi de 'Tartıldı'; ortak Türkçe doğru",
   IN_HOUSE:

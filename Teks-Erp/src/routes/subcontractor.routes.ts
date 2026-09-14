@@ -6,6 +6,7 @@ import { Router } from "express";
 import { SubcontractorController } from "../controllers/subcontractor.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { requireDevereEnabled } from "../middlewares/module.middleware";
 
 const MOBILE_FASON_READ = ["mobile:fason-sevk", "mobile:fason-kabul"] as const;
 
@@ -462,6 +463,48 @@ router.post(
   verifyToken,
   requireAnyPermission("workorder:write", "mobile:fason-sevk"),
   controller.cancelDispatch
+);
+
+/**
+ * @openapi
+ * /api/subcontractor/dispatches/{id}/beams/{beamId}/return:
+ *   post:
+ *     tags: [Subcontractor]
+ *     summary: F1 — fasona verilen levent DÖNDÜ (WarpBeamEvent RETURNED_IN, SHIPPED_OUT → READY)
+ *     description: |
+ *       Levent kalemi kabul makbuzuna GİRMEZ; dönüş levent defterine yazılır. `lengthM` dönen metre
+ *       (giden aşılamaz). Devere modülü kapalıysa 403 MODULE_DISABLED (fason router'ı kapısızdır;
+ *       yalnız levent uçları devere kapısı taşır).
+ *     responses:
+ *       200: { description: Dönüş kaydedildi }
+ *       403: { description: Devere kapalı }
+ *       409: { description: Zaten dönmüş / sevk iptal edilmiş / durum uyuşmuyor }
+ */
+router.post(
+  "/dispatches/:id/beams/:beamId/return",
+  verifyToken,
+  requireDevereEnabled,
+  requireAnyPermission("workorder:write", "mobile:fason-kabul"),
+  controller.returnWarpBeam
+);
+
+/**
+ * @openapi
+ * /api/subcontractor/dispatches/{id}/beams/{beamId}/return-cancel:
+ *   post:
+ *     tags: [Subcontractor]
+ *     summary: F1 — levent dönüşü STORNO (RETURNED_IN_CANCEL, READY → SHIPPED_OUT; yeniden sevk edilmişse 409)
+ *     responses:
+ *       200: { description: Dönüş iptal edildi }
+ *       403: { description: Devere kapalı }
+ *       409: { description: Dönüş yok / levent yeniden sevk edilmiş }
+ */
+router.post(
+  "/dispatches/:id/beams/:beamId/return-cancel",
+  verifyToken,
+  requireDevereEnabled,
+  requireAnyPermission("workorder:write", "mobile:fason-kabul"),
+  controller.cancelWarpBeamReturn
 );
 
 /**

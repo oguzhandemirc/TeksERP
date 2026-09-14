@@ -34,6 +34,7 @@ import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helpe
 import { ApiResponse } from "../types/api.types";
 import { OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
 import { postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
+import { hasRoll } from "./helpers/dispatch-item-kind.helper";
 
 /**
  * Taşınabilir statüler — fasondaki/tüketilmiş/iptal/sevkli hariç (çuval/sevk ayrıca guard'lı).
@@ -499,7 +500,7 @@ export class WorkOrderManualMoveService {
             stepId: d.stepId,
             subcontractorId: d.subcontractorId,
             stepName: d.step?.station?.name ?? null,
-            rolls: d.items.map((it) => ({
+            rolls: d.items.filter(hasRoll).map((it) => ({
               id: it.roll.id,
               barcode: it.roll.barcode,
               currentQty: Number(it.roll.currentQty),

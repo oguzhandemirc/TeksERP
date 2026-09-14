@@ -96,8 +96,9 @@ interface CursorPage<T> {
 }
 
 export const warpBeamService = {
-  list: async (status: WarpBeamStatus, limit = 50): Promise<WarpBeam[]> => {
-    const res = await apiClient.get<CursorPage<WarpBeam>>('/warp-beams', { params: { status, limit } });
+  /** `status` tek değer ya da liste — sunucu CSV okur (`readFilterList`). */
+  list: async (status: WarpBeamStatus | readonly WarpBeamStatus[], limit = 50): Promise<WarpBeam[]> => {
+    const res = await apiClient.get<CursorPage<WarpBeam>>('/warp-beams', { params: { status: Array.isArray(status) ? status.join(',') : status, limit } });
     return res.data.data ?? [];
   },
   tabletContext: async (): Promise<TabletContext> => {

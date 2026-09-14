@@ -6,7 +6,7 @@ import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, Button, ActivityIndicator, SegmentedButtons } from 'react-native-paper';
 import { colors, spacing, radius, typography } from '../../../theme';
 import type { WarpBeam } from '../../../services/warpBeam.service';
-import { ORIGIN_LABEL } from './beamPayload';
+import { ORIGIN_LABEL, STATUS_LABEL, beamActionsEnabled } from './beamPayload';
 import type { DevereScreenState } from './useDevereScreen';
 
 type Tab = 'planned' | 'today';
@@ -19,10 +19,14 @@ function fmtTime(iso: string): string {
 function Row({ beam, state }: { beam: WarpBeam; state: DevereScreenState }) {
   const planned = beam.status === 'PLANNED';
   const locked = !state.isOnline || state.busy;
+  const shippedOut = beam.status === 'SHIPPED_OUT';
   return (
     <View style={styles.rowCard}>
       <View style={styles.grow}>
-        <Text style={styles.code}>{beam.beamNo}</Text>
+        <View style={styles.codeRow}>
+          <Text style={styles.code}>{beam.beamNo}</Text>
+          {shippedOut ? <Text style={styles.badge}>{STATUS_LABEL[beam.status]}</Text> : null}
+        </View>
         <Text style={styles.meta}>{`${beam.warpSpec.code} — ${beam.warpSpec.name} · ${beam.warpSpec.endsCount} tel`}</Text>
         <Text style={styles.meta}>
           {planned ? `Plan ${beam.plannedLengthM} m` : `${beam.wound?.lengthM ?? beam.remainingM} m · ${fmtTime(beam.wound?.createdAt ?? beam.createdAt)}`}
@@ -41,7 +45,7 @@ function Row({ beam, state }: { beam: WarpBeam; state: DevereScreenState }) {
           </Button>
         </View>
       ) : (
-        state.canCancel && (
+        state.canCancel && beamActionsEnabled(beam.status) && (
           <Button mode="outlined" compact icon="undo" disabled={locked} onPress={() => state.setModal({ kind: 'cancel', beam })}>
             İptal
           </Button>
@@ -91,7 +95,9 @@ const styles = StyleSheet.create({
   list: { padding: spacing.md, gap: spacing.sm, paddingBottom: spacing.xl },
   rowCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   grow: { flex: 1, gap: 2 },
+  codeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   code: { fontSize: 20, fontWeight: typography.weight.bold, color: colors.text },
+  badge: { fontSize: typography.size.sm, color: colors.warningText, backgroundColor: colors.warningContainer, paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.sm, overflow: 'hidden' },
   meta: { fontSize: typography.size.sm, color: colors.textSecondary },
   actions: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
   tallButton: { height: 48 },

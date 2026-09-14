@@ -120,9 +120,10 @@ async function main() {
       ]
     : [[], []];
 
+  // F1: fason kalemi polimorfik — levent kalemi (rollId null) bu taramanın öznesi değil.
   const classDIds = new Set([
     ...kartelaHits.map((k) => k.rollId),
-    ...fasonHits.map((f) => f.rollId),
+    ...fasonHits.map((f) => f.rollId).filter((x): x is string => x !== null),
   ]);
   const classD = classDIds.size
     ? await prisma.roll.findMany({
