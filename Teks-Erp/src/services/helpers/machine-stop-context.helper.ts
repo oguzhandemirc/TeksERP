@@ -4,8 +4,10 @@
 // Servis dosyası beş yazma yolunu taşır (boyut tavanı); "duruş hangi vardiyaya/koşuma
 // düşer, sebep katalogda var mı, vardiya yazılabilir mi" soruları burada tek yerde.
 // =============================================================================
-import { Prisma, ReasonPresetKind, type MachineStopLossClass } from "@prisma/client";
+import { MachineDataSource, Prisma, ReasonPresetKind, type MachineStopLossClass } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
+import { ENTRY_STAMP_MAX_FUTURE_MS } from "./duplicate-guard.helper";
+import { resolveRunStamp, type StampResolution } from "./machine-run-open.helper";
 
 type Tx = Prisma.TransactionClient;
 
@@ -58,6 +60,38 @@ export function assertBeamSlotValid(machine: { warpBeamSlots: number }, beamSlot
       code: "BEAM_SLOT_OUT_OF_RANGE", beamSlot, warpBeamSlots: machine.warpBeamSlots,
     });
   }
+}
+
+/**
+ * Vardiya amirinin BEYAN ettiği damganın geçmiş sınırı — kaba yazım hatası seddi (yıl/ay
+ * yanlış). Asıl sınır mühür kapısıdır (`assertStopShiftWritableTx`); tablet penceresi
+ * (36 sa, `ENTRY_STAMP_MAX_PAST_MS`) burada geçmez: o RTC toleransıdır, elle giriş
+ * gecikmesi değil (cuma gecesi duruşu pazartesi girilir ≈ 57 sa).
+ */
+export const STOP_DECLARED_MAX_PAST_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * DAMGA ÇÖZÜMÜ iki yolda iki sözleşme: OPERATÖR (tablet) "basılan an"ı gönderir → aralık
+ * dışı sunucu saatine düşer + `warnings` (bozuk RTC üretimi durdurmaz). AMİR (panel)
+ * BİR ZAMAN BEYAN EDER → aralık dışı 400: beyan sessizce değiştirilmez, deftere
+ * uydurulmuş an yazılmaz (panel `warnings` okumaz; sessiz kırpma yanlış vardiya + yanlış süre demekti).
+ */
+export function resolveStopStamp(
+  declared: Date | null | undefined,
+  label: string,
+  source: MachineDataSource,
+): StampResolution {
+  if (source !== MachineDataSource.SUPERVISOR) return resolveRunStamp(declared, label);
+  if (!declared) return { value: new Date(), warning: null };
+  const nowMs = Date.now();
+  const d = declared.getTime();
+  if (Number.isNaN(d) || d < nowMs - STOP_DECLARED_MAX_PAST_MS || d > nowMs + ENTRY_STAMP_MAX_FUTURE_MS) {
+    throw AppError.badRequest(
+      `Beyan edilen ${label} (${declared.toISOString()}) kabul aralığının dışında — en çok ${STOP_DECLARED_MAX_PAST_MS / 86_400_000} gün geriye, ${ENTRY_STAMP_MAX_FUTURE_MS / 60_000} dakika ileriye girilebilir; sunucu saati yerine yazılmaz.`,
+      { code: "STOP_STAMP_OUT_OF_RANGE", declared, maxPastMs: STOP_DECLARED_MAX_PAST_MS, maxFutureMs: ENTRY_STAMP_MAX_FUTURE_MS },
+    );
+  }
+  return { value: declared, warning: null };
 }
 
 /** Katalogdaki AKTİF MACHINE_STOP satırı; kayıp sınıfı zorunlu (CHECK). Yoksa 400. */

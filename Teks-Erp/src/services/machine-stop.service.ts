@@ -29,7 +29,6 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { p2002Mentions } from "../utils/p2002";
-import { resolveRunStamp } from "./helpers/machine-run-open.helper";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { factoryDayKeyUtcMidnight } from "../constants/time";
 import {
@@ -42,6 +41,7 @@ import {
   resolveRunId,
   resolveShiftInstanceId,
   resolveStopPreset,
+  resolveStopStamp,
 } from "./helpers/machine-stop-context.helper";
 import type { ApiResponse } from "../types/api.types";
 
@@ -50,7 +50,7 @@ const TABLE = "MACHINE_STOP_EVENT";
 
 export interface OpenManualStopInput {
   machineId: string;
-  /** İstemci beyanı; yoksa sunucu saati (makul aralık dışı → sunucu saati + uyarı). */
+  /** İstemci damgası; yoksa sunucu saati. Aralık dışı: OPERATÖR → sunucu saati + uyarı, AMİR → 400 (`resolveStopStamp`). */
   startedAt?: Date | null;
   /** Açılışta sebep verilebilir; verilmezse sınıflandırma borcu (`requiresReason`) doğar. */
   reasonCode?: string | null;
@@ -86,7 +86,7 @@ export async function openManualStop(input: OpenManualStopInput, userId?: string
   const source: MachineDataSource = input.source ?? MachineDataSource.SUPERVISOR;
 
   // ① Replay — yaratmadan ÖNCE: aynı anahtar aynı satırı döner; geri alınmış duruş yeniden açılmaz.
-  const started = resolveRunStamp(input.startedAt, "duruş başlangıcı");
+  const started = resolveStopStamp(input.startedAt, "duruş başlangıcı", source);
   const warnings = started.warning ? [started.warning] : [];
 
   const existing = await prisma.machineStopEvent.findFirst({ where: { machineId: input.machineId, stopKey }, select: MACHINE_STOP_SELECT });
@@ -167,8 +167,13 @@ export async function openManualStop(input: OpenManualStopInput, userId?: string
 // ─────────────────────────────────────────────────────────────────────────────
 // KAPA
 // ─────────────────────────────────────────────────────────────────────────────
-export async function closeManualStop(stopId: string, endedAtIn: Date | null | undefined, userId?: string): Promise<ApiResponse<MachineStopDto>> {
-  const ended = resolveRunStamp(endedAtIn, "duruş bitişi");
+export async function closeManualStop(
+  stopId: string,
+  endedAtIn: Date | null | undefined,
+  userId?: string,
+  source: MachineDataSource = MachineDataSource.SUPERVISOR,
+): Promise<ApiResponse<MachineStopDto>> {
+  const ended = resolveStopStamp(endedAtIn, "duruş bitişi", source);
   const warnings = ended.warning ? [ended.warning] : [];
 
   const closed = await prisma.$transaction(async (tx) => {

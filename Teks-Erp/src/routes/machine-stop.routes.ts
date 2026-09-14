@@ -112,7 +112,7 @@ const openSchema = z
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       201: { description: Duruş açıldı }
- *       400: { description: Geçersiz sebep kodu / pasif makine }
+ *       400: { description: Geçersiz sebep kodu / pasif makine / STOP_STAMP_OUT_OF_RANGE (amir beyanı aralık dışı; tablet kırpılır + warnings) }
  *       409: { description: STOP_ALREADY_OPEN · STOP_REVOKED · SHIFT_CANCELLED }
  */
 router.post("/", requireAnyPermission("loom:manual-entry", ...MOBILE_DOKUMA), async (req, res, next) => {
@@ -135,14 +135,14 @@ const closeSchema = z.object({ endedAt: z.coerce.date().nullish() }).strict();
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Kapatıldı }
- *       400: { description: STOP_END_BEFORE_START }
+ *       400: { description: STOP_END_BEFORE_START · STOP_STAMP_OUT_OF_RANGE (amir beyanı aralık dışı; tablet kırpılır + warnings) }
  *       409: { description: STOP_ALREADY_CLOSED · STOP_REVOKED · SHIFT_CANCELLED }
  */
 router.post("/:id/close", requireAnyPermission("loom:manual-entry", ...MOBILE_DOKUMA), async (req, res, next) => {
   try {
     const id = assertValidUuid(req.params.id, "id");
     const b = closeSchema.parse(req.body ?? {});
-    res.json(await closeManualStop(id, b.endedAt, req.user?.userId));
+    res.json(await closeManualStop(id, b.endedAt, req.user?.userId, stopSourceFor(req)));
   } catch (e) {
     next(e);
   }

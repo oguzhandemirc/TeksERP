@@ -18,6 +18,8 @@
 //   §10 defter-beyan çapası: yazan/tersYazan sembolleri gerçek (beyan 82 ile aynı trende)
 //   §11 BEFORE DELETE seddi (migration 20260914091000): insan kararlı duruş DELETE → RAISE; sınıfsız silinir
 //   §12 YUVA (F4, `Machine.warpBeamSlots`): tek yuvada beamSlot 400 · aralık dışı 400 · uygun yazılır · CHECK >= 0
+//   §13 DAMGA iki sözleşme (`resolveStopStamp`): AMİR beyanı aralık dışı (7 gün geri / 5 dk ileri) → 400 STOP_STAMP_OUT_OF_RANGE,
+//      aralık içi ama tablet penceresi (36 sa) dışı → BEYAN yazılır, kırpılmaz, uyarı yok; OPERATÖR (tablet) → sunucu saati + warnings (sözleşme durur); kapanışta aynı
 //
 // NEGATİF SONDALAR (2026-09-14, cp+sha256): reclassify'dan defter satırı kaldırıldı → §5b/§5e ❌ ·
 // classify claim'inden `reasonCode: null` düşürüldü → §4c ❌ (ikinci sınıflandırma yerinde ezdi).
@@ -53,7 +55,7 @@ async function hata(fn: () => Promise<unknown>): Promise<AppError | null> {
 const kod = (e: AppError | null): string => String(e?.details?.code ?? e?.statusCode ?? "yok");
 
 const ek = Date.now().toString(36);
-const ids = { station: "", makine: "", makine2: "", makine3: "", shiftDef: "", shift: "", shiftCancelled: "", preset: "", stops: [] as string[] };
+const ids = { station: "", makine: "", makine2: "", makine3: "", makine4: "", shiftDef: "", shift: "", shiftCancelled: "", preset: "", stops: [] as string[] };
 
 async function main(): Promise<void> {
   console.log("\n=== Tezgah duruşu ELLE GİRİŞ — tek yazıcı, claim'ler, reclass defteri, damga ===\n");
@@ -70,6 +72,8 @@ async function main(): Promise<void> {
   ids.makine2 = makine2.id;
   const makine3 = await prisma.machine.create({ data: { stationId: station.id, name: `TEST-MS-MAK3-${ek}`, code: `TEST-MS-M3-${ek}`.toUpperCase().slice(0, 32), isActive: true } });
   ids.makine3 = makine3.id;
+  const makine4 = await prisma.machine.create({ data: { stationId: station.id, name: `TEST-MS-MAK4-${ek}`, code: `TEST-MS-M4-${ek}`.toUpperCase().slice(0, 32), isActive: true } });
+  ids.makine4 = makine4.id;
   // Vardiya: S0'ı kapsayan bir örnek + iptal edilmiş bir örnek (§8)
   const shiftDef = await prisma.shiftDefinition.create({
     data: { code: `T${ek}`.toUpperCase().slice(0, 8), name: `TEST-MS vardiya ${ek}`, startMinute: 0, durationMinutes: 60 * 8 },
@@ -225,6 +229,31 @@ async function main(): Promise<void> {
   const negatif = await hata(() => prisma.machine.update({ where: { id: makine3.id }, data: { warpBeamSlots: -1 } }));
   check("§12d warpBeamSlots < 0 DB CHECK (machines_warp_beam_slots_nonneg) reddeder", negatif === null && (await prisma.machine.findUnique({ where: { id: makine3.id }, select: { warpBeamSlots: true } }))?.warpBeamSlots === 2);
 
+  // ── §13 DAMGA: amir beyanı 400, operatör kırpılır ─────────────────────────────────
+  const gun = 86_400_000;
+  const eski8 = new Date(Date.now() - 8 * gun);
+  const ileri10 = new Date(Date.now() + 10 * 60_000);
+  const eski3 = new Date(Date.now() - 3 * gun);
+  const sup = MachineDataSource.SUPERVISOR;
+  const opr = MachineDataSource.OPERATOR;
+  const geriBeyan = await hata(() => openManualStop({ machineId: makine4.id, startedAt: eski8, clientToken: crypto.randomUUID(), source: sup }, undefined));
+  check("§13a amir beyanı 8 gün geride → 400 STOP_STAMP_OUT_OF_RANGE (kırpılmaz)", geriBeyan?.statusCode === 400 && kod(geriBeyan) === "STOP_STAMP_OUT_OF_RANGE", kod(geriBeyan));
+  const ileri = await hata(() => openManualStop({ machineId: makine4.id, startedAt: ileri10, clientToken: crypto.randomUUID(), source: sup }, undefined));
+  check("§13b amir beyanı 10 dk ileride → 400 STOP_STAMP_OUT_OF_RANGE", ileri?.statusCode === 400 && kod(ileri) === "STOP_STAMP_OUT_OF_RANGE", kod(ileri));
+  check("§13c red sonrası makinede açık duruş YOK (satır doğmadı)", (await prisma.machineStopEvent.count({ where: { machineId: makine4.id, endedAt: null } })) === 0);
+  const beyan3 = await openManualStop({ machineId: makine4.id, startedAt: eski3, clientToken: crypto.randomUUID(), source: sup }, undefined);
+  ids.stops.push(beyan3.data.id);
+  check("§13d ⭐ amir beyanı 3 gün geride (tablet 36 sa penceresi DIŞI) → BEYAN yazıldı, uyarı yok", beyan3.data.startedAt.getTime() === eski3.getTime() && !beyan3.warnings, `${beyan3.data.startedAt.toISOString()} / ${beyan3.warnings?.[0] ?? "uyarı yok"}`);
+  const kapaGeri = await hata(() => closeManualStop(beyan3.data.id, eski8, undefined, sup));
+  check("§13e amir kapanış beyanı 8 gün geride → 400 STOP_STAMP_OUT_OF_RANGE, duruş açık kalır", kapaGeri?.statusCode === 400 && kod(kapaGeri) === "STOP_STAMP_OUT_OF_RANGE" && (await prisma.machineStopEvent.findUniqueOrThrow({ where: { id: beyan3.data.id }, select: { endedAt: true } })).endedAt === null, kod(kapaGeri));
+  const kapaBeyan = await closeManualStop(beyan3.data.id, new Date(eski3.getTime() + 20 * 60_000), undefined, sup);
+  check("§13f amir kapanış beyanı aralıkta → süre BEYANDAN (20 dk), sunucu saatinden değil", kapaBeyan.data.durationSec === 20 * 60 && !kapaBeyan.warnings, `${kapaBeyan.data.durationSec}`);
+  const tablet = await openManualStop({ machineId: makine4.id, startedAt: eski3, clientToken: crypto.randomUUID(), source: opr }, undefined);
+  ids.stops.push(tablet.data.id);
+  check("§13g operatör (tablet) 3 gün geride → sunucu saatine kırpılır + warnings (tablet sözleşmesi durur)", Date.now() - tablet.data.startedAt.getTime() < 60_000 && /makul aralık dışında/.test(tablet.warnings?.[0] ?? ""), tablet.warnings?.[0] ?? "uyarı yok");
+  const tabletKapa = await closeManualStop(tablet.data.id, eski8, undefined, opr);
+  check("§13h operatör kapanışı 8 gün geride → kırpılır + warnings, kapandı", tabletKapa.data.endedAt !== null && /makul aralık dışında/.test(tabletKapa.warnings?.[0] ?? ""));
+
   // ── §10 beyan çapası (statik) ─────────────────────────────────────────────
   const beyan = readFileSync(join(__dirname, "lib", "defter-beyan.ts"), "utf8");
   const svc = readFileSync(join(__dirname, "..", "src", "services", "machine-stop.service.ts"), "utf8");
@@ -233,7 +262,7 @@ async function main(): Promise<void> {
 
 async function cleanup(): Promise<void> {
   try {
-    const stops = await prisma.machineStopEvent.findMany({ where: { OR: [{ id: { in: ids.stops } }, { machineId: { in: [ids.makine, ids.makine2, ids.makine3].filter(Boolean) } }] }, select: { id: true } });
+    const stops = await prisma.machineStopEvent.findMany({ where: { OR: [{ id: { in: ids.stops } }, { machineId: { in: [ids.makine, ids.makine2, ids.makine3, ids.makine4].filter(Boolean) } }] }, select: { id: true } });
     const sid = stops.map((s) => s.id);
     await prisma.machineStopReclass.deleteMany({ where: { stopEventId: { in: sid } } });
     // BEFORE DELETE seddi insan kararlı satırı korur — fikstür temizliği ÖNCE kararı siler (üretim yolu değil).
@@ -242,7 +271,7 @@ async function cleanup(): Promise<void> {
     if (ids.preset) await prisma.reasonPreset.deleteMany({ where: { id: ids.preset } });
     await prisma.shiftInstance.deleteMany({ where: { id: { in: [ids.shift, ids.shiftCancelled].filter(Boolean) } } });
     if (ids.shiftDef) await prisma.shiftDefinition.deleteMany({ where: { id: ids.shiftDef } });
-    await prisma.machine.deleteMany({ where: { id: { in: [ids.makine, ids.makine2, ids.makine3].filter(Boolean) } } });
+    await prisma.machine.deleteMany({ where: { id: { in: [ids.makine, ids.makine2, ids.makine3, ids.makine4].filter(Boolean) } } });
     if (ids.station) await prisma.station.deleteMany({ where: { id: ids.station } });
   } catch (e) {
     fail++;

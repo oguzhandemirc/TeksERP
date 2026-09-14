@@ -9065,3 +9065,26 @@ defter_ters_yol 199/0 · machine_run 41/0 · doff 32/0 · production_line 12/0 �
 hard_delete_guard_coverage 17/0 · timestamptz 12/0 · snapshot 9/0. Fikstür temizliği: insan kararlı satır
 önce `classifiedById/reasonSource = NULL`, sonra DELETE.
 
+## 2026-09-14 — DURUŞ DAMGASI İKİ SÖZLEŞME: amir beyanı aralık dışında 400, tablet basış anı kırpılmaya devam eder [ÇEKİRDEK]
+
+**Neden (1e ölçüm kalemi, 6e ölçtü):** `openManualStop`/`closeManualStop` damgayı `resolveRunStamp` ile
+çözüyordu — 36 sa geri / 5 dk ileri dışını SUNUCU saatine kırpıp `warnings`e yazıyordu. Bu pencere
+tablet RTC toleransıdır (`ENTRY_STAMP_MAX_PAST_MS`, mobil offline kuyruğunun 24 sa'inden türer) ve
+tablet gerçekten "basılan an"ı gönderir (`useStopMutations.ts` `new Date()`; `warnings[0]` toast'ta) —
+orada kırpma doğrudur. Ama Faz 1b'nin asıl girişi vardiya AMİRİdir ve panel ekranı (`StopEntryDialog`,
+`datetime-local`) bir ZAMAN BEYAN EDER; panel `warnings` hiç okumaz. Cuma gecesi 23:00 duruşu pazartesi
+sabahı (≈57 sa) girildiğinde defter sessizce "pazartesi 08:00"ı yazıyor, vardiya bağı ve süre yanlış
+doğuyordu; kapanışta aynı kırpma 20 dakikalık duruşu 57 saatlik gösterirdi — uydurulmuş değer, beyan
+sessizce değişmiş.
+
+**Karar:** ayrım `source`tan (1e hükmü: `loom:manual-entry` taşıyan = AMİR): `resolveStopStamp`
+(helper, tek yer) OPERATÖR'de `resolveRunStamp`i aynen çağırır (tablet sözleşmesi kırılmadı — tablet
+yeniden gönderme mantığı istemez); AMİR'de aralık dışı **400 `STOP_STAMP_OUT_OF_RANGE`** (aralık
+mesajda ve `details`ta). Amir aralığı 7 gün geri / 5 dk ileri: asıl sınır mühür kapısıdır
+(`assertStopShiftWritableTx`), 7 gün yalnız yıl/ay yazım hatası seddi — sınırsız beyan vardiyasız
+bir ana düşer ve mühür onu hiç göremezdi. `closeManualStop` `source` alır (route `stopSourceFor(req)`).
+**Bedel:** amirin tablet üzerinden `loom:manual-entry` ile bozuk RTC'li girişi artık 400 alır — web izni
+olduğu için gerçek bir yol değil; mühür modeli inince 7 gün sabiti yeniden ölçülür.
+
+**Ölçüm:** `test_machine_stop_manual` 42 → 50/0 (§13a–h); negatif sonda (amir yolu kırpmaya döndürüldü,
+cp+sha256): §13a/§13b/§13c ❌.
