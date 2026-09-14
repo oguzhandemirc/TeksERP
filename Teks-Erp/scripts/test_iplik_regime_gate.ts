@@ -145,6 +145,7 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
 const DEFTER_YAZARLARI: ReadonlyArray<{ dosya: string; neden: string }> = [
   { dosya: "services/yarn.service.ts", neden: "MOTORUN KENDİSİ (tek yazar) — uçları `requireIplikEnabled` kapılı." },
   { dosya: "services/goods-receipt.service.ts", neden: "Mal kabul YARN kalemi → IN. Ticaret kapılı; iplik kapısı motorun İÇİNDE (§4d)." },
+  { dosya: "services/helpers/yarn-receipt-reversal.helper.ts", neden: "Mal kabul iplik kaleminin GERİ SARIMI (ADJUST_OUT, lot kopyalı) — goods-receipt.service'ten taşındı; kapısı çağıranınki: ticaret kapılı, iplik kapısı motorun İÇİNDE (§4d)." },
   { dosya: "services/stock-count.service.ts", neden: "Sayım farkı → ADJUST_IN/ADJUST_OUT. Ticaret kapılı; iplik kapısı motorun İÇİNDE (§4d)." },
   { dosya: "services/stock-count-reversal.service.ts", neden: "Sayım stornosu → sayımın net iplik farkının ters ADJUST'u. Ticaret kapılı; iplik kapısı motorun İÇİNDE (§4d), önizleme kapalı modülü engel olarak listeler." },
   { dosya: "services/invoice.service.ts", neden: "Satış faturası stok düşümü → `resolveYarnOutOnInvoiceEnabled` KAPILI (K10)." },
