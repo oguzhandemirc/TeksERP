@@ -954,6 +954,31 @@ Yöntem: klon DB'de backend bekçileri — `mobile_screen_permissions` 6/0 · `s
 
 **Ölçülemedi:** tablet UI'ın gerçek cihazda sayaç okuması (HAL BT-Classic) ve simülasyon toast'ı — jest + statik; bağımsız okuyucu (Opus) bu dilimde koşulmadı.
 
+#### L · Çelişmeli doğrulama — tablet KOŞUM (`56285e63`) + DURUŞ (`381f6ba5`) dilimleri (2026-09-14, 47)
+
+**Sonuç: iki dilim de AYAKTA — koşum aç/kapat/geri al, duruş bildir/çalıştı/sebep ata/geri al, `source` izinden türetme, yuva NULL, 6e'nin F1/F2 409'ları ekranda ADIYLA ve artık ULAŞILABİLİR (`b54920aa`), kuyruk yok, bayrak kapalıyken 403. Üç küçük not, kalem yok.**
+Yöntem: klon DB'de 15 backend bekçi (`mobile_screen_permissions` 6/0 · `route_auth_coverage` 15/0 · `permission_catalog` 24/0 · `role_template` 21/0 · `swagger_spec` 12/0 · `screen_catalog` 37/0 · `dokuma_regime_gate` 38/0 · `machine_run` 41/0 · `machine_stop_manual` 36/0 · `loom_stop_zemin` 12/0 · `reason_preset_kind_parity` 43/0 · `loom_lists` 12/0 (E6 kapandı) · `identity_ledger` 4/0 · `kural_bekci_atfi` 8/0 · `mobil_enum_aynasi` 35/0) · mobil jest 18 dosya 131/131 + `tsc` 0 + eslint temiz · **HTTP sondası** (`_sonda_47_is7.ts`, scratchpad; izole sunucu `PORT=4147`, klon DB; U1 `mobile:dokuma` · U2 `+mobile:dokuma-geri-al` · U3 `mobile:dokuma + loom:manual-entry`; 14 ölçüm 14 ✅) · statik okuma.
+
+| ne | sonuç | nasıl |
+|---|---|---|
+| koşum: U1 iş emirsiz AÇ 201 (`weavingOrderId` null) · iş emri seçici `GET /weaving-orders` 200 · KAPAT `picksAtClose` boş → null ("ölçülmedi", 0 değil) · GERİ AL U1 403 / U2 200 | ✅ | sonda R1–R3 · `runPayload.test` 7 |
+| duruş: U1 sebepsiz AÇ 201 → `source=OPERATOR`, `requiresReason=true`, `beamSlot=null` · SEBEP ATA 200 `reasonSource=OPERATOR`, `lossClass` katalogdan · YENİDEN sınıfla U1 403 (web-only) · ÇALIŞTI 200 `endSource=OPERATOR` · GERİ AL U1 403 / U2 200 | ✅ | sonda S1–S5 · `stopPayload.test` 6 |
+| `source` izinden türetme: `mobile:dokuma + loom:manual-entry` taşıyan → `SUPERVISOR`, yalnız `mobile:dokuma` → `OPERATOR` (`stopSourceFor`, open + classify) | ✅ | sonda S1/S6 |
+| 6e F1/F2 409'ları ekranda adıyla VE ulaşılabilir: iptal vardiyayı kapsayan `startedAt` ile AÇ → 409 `SHIFT_CANCELLED` (tablet: "Vardiya iptal/mühürlü — duruş bu vardiyaya yazılamaz" toast'ı) · aynı token farklı yük → 409 `CLIENT_TOKEN_COLLISION` (tablet: "yeni duruş olarak aç" modalı) — İŞ 5'te açık olan iki kalem `b54920aa` ile kapandı, sonda teyit etti | ✅ | sonda S1′/S7 · `classifyStopFailure` (`shift-cancelled` / `token-collision` dalları) |
+| yuva NULL: `stopPayload` `beamSlot` hiç göndermez ("atanmamış" kovası; `Machine`de yuva kolonu yok — F4 penceresi) | ✅ | statik + sonda S1 |
+| kuyruk yok: `networkMode:'always'`, `submit` çevrimdışı toast, Koşum Aç/Kapat ve Duruş Bildir/Çalıştı düğmeleri `isOnline` ile kilitli (doff'taki E4 tutarsızlığı burada yok) | ✅ | statik |
+| gömülü zemin: `loomStopReasons.ts` ↔ sunucu `MACHINE_STOP_REASONS` kod · sıra · etiket birebir; `useReasonPresets` MACHINE_STOP dalı zemini okuyor | ✅ | `loom_stop_zemin` 12/0 (bellek içi üç bozma sondası) |
+| bayrak KAPALI: duruş ve koşum uçları 403 `MODULE_DISABLED` | ✅ | sonda K |
+| izin üçlüsü: yeni izin YOK; `mobile:dokuma-geri-al` açıklaması koşum + duruşu kapsar; `loom:run*`/`loom:manual-entry`/`loom:classify` SCREENLESS gerekçeleri güncel | ✅ | `permission_catalog` · `screen_catalog` · `role_template` |
+
+**Notlar (küçük, kalem değil)**
+
+- Tablet `runFingerprint` makine · hat · iş emri · **desen** taşır; backend koşum replay'i (`assertReplayPayloadMatches`) makine · hat · iş emrini karşılaştırır, deseni değil ⇒ tablet backend'den daha DAR: desen değişince yeni token, backend aynı hattı `PRODUCTION_LINE_OCCUPIED` ile reddeder — zararsız, ama iki taraf aynı listeyi taşısa daha okunur.
+- `StopPanel` "Sebep ata" yalnız `requiresReason` iken çizilir; sebeple açılmış duruşun yanlış sebebi tablette DÜZELTİLEMEZ (yeniden sınıflandırma web-only — bilinçli, `loom:classify`). Operatör yolu: geri al + yeniden bildir (geri alma yetenek izni ister). Sözleşmeye tek cümle.
+- `useStopPanel` `stopsQuery` `limit: 5` ile açık duruşları çeker ve `[0]`ı gösterir — tek açık duruş seddi olduğu için doğru; sed kalkarsa (Faz 2 ingest) ekran ilkini gösterir, uyarı yok.
+
+**Ölçülemedi:** gerçek cihazda sayaç/HAL; bağımsız Opus okuyucu koşulmadı (1e: bekçi + sonda yeter).
+
 ### 3.10 · Bu bölümün açık bıraktıkları
 
 - **Dokuma işinin planlama ekranı** (panel tarafı) — bu belgenin kapsamı dışı, `WeavingOrder` CRUD'u standart master-data kalıbı.
