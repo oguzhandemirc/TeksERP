@@ -40,6 +40,7 @@ import stationRoutes, { machineRouter } from "./routes/station.routes";
 import routeRoutes from "./routes/route.routes";
 import productRecipeRoutes from "./routes/product-recipe.routes";
 import warpSpecRoutes from "./routes/warp-spec.routes";
+import warpBeamRoutes from "./routes/warp-beam.routes";
 import weavingOrderRoutes from "./routes/weaving-order.routes";
 import machineRunRoutes from "./routes/machine-run.routes";
 import machineStopRoutes from "./routes/machine-stop.routes";
@@ -829,6 +830,7 @@ app.use("/api/product-recipes", productRecipeRoutes);
 // Çözgü kartları (devere modülü) — router'ın kendi kapısı: verifyToken +
 // requireDevereEnabled (ticaret → iplik → devere zinciri) + requirePermission.
 app.use("/api/warp-specs", warpSpecRoutes);
+app.use("/api/warp-beams", warpBeamRoutes);
 // Dokuma modülü (üç router, tek kapı): verifyToken + requireDokumaEnabled
 // (production → dokuma zinciri kapının içinde) + requirePermission.
 app.use("/api/weaving-orders", weavingOrderRoutes);

@@ -174,6 +174,8 @@ export const TABLE_LABELS: Record<string, string> = {
   YARN_MOVEMENT: "İplik Hareketi",
   WARP_SPEC: "Çözgü Kartı",
   WEAVING_ORDER: "Dokuma İşi",
+  WARP_BEAM: "Levent",
+  WARP_BEAM_EVENT: "Levent Olayı",
 
   // Fabrika tarafında da etiketsiz kalmış olanlar (aynı tarama).
   ROLL_QTY_ADJUST: "Top Metraj Düzeltmesi",
@@ -614,6 +616,11 @@ export const ENUM_LABELS: Record<string, string> = {
   ADJUST_IN: "Düzeltme (giriş)",
   ADJUST_OUT: "Düzeltme (çıkış)",
   // YarnMovementKind — devere 1b (levent): brüt çıkış + ayrı iade + tersleri
+  // WarpBeamStatus/WarpBeamOrigin/WarpKgSource (devere 1b) — PLANNED/CANCELLED/IN_HOUSE ortak değerler
+  READY: "Hazır",
+  SUBCONTRACT: "Fasona sardırıldı",
+  PURCHASED: "Hazır alındı",
+  THEORETICAL: "Nominal (hesap)",
   WARP_ISSUE: "Çözgü çıkışı (levente sarım)",
   WARP_ISSUE_REVERSAL: "Çözgü çıkışı iptali",
   WARP_RETURN: "Levent dibi iadesi",
@@ -783,6 +790,8 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   // uyarısı bu — `MINOR` bir SEBEP sınıfı DEĞİL, bir SÜRE sınıfıdır ve
   // `ReasonPreset.stopLossClass`a asla yazılamaz.
   "MACHINE_STOP_EVENT.lossClass": { MINOR: "Mikro duruş (eşik altı)" },
+  // WarpBeamOrigin.IN_HOUSE "içeride SARILDI" — WeavingExecutionKind'ın "kendi tezgahımızda"sı levent için yanlış (devere 1b)
+  "WARP_BEAM.originKind": { IN_HOUSE: "İçeride sarıldı" },
   // StationKind.WEAVING (dokuma ⓪, 2026-09-14) — istasyon TÜRÜ; global `WEAVING`
   // RollEntrySource dilinde ("Dokumadan İndi", topun kaynağı). Ortak Türkçe YETMEZ.
   "STATION.kind": { WEAVING: "Dokuma Tezgahı" },
@@ -818,6 +827,10 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
  */
 export const SHARED_ENUM_VALUES: Record<string, string> = {
   // ── Devere 1b (2026-09-14)
+  WEIGHED: "SackWeighingKind(çuval tartıldı) ve WarpKgSource(levent kg tartıyla bilindi) — ikisi de 'Tartıldı'; ortak Türkçe doğru",
+  IN_HOUSE:
+    "WeavingExecutionKind(kendi tezgahında dokundu) ve WarpBeamOrigin(içeride sarıldı) — ortak Türkçe YETMEZ: " +
+    "ilki dokuma icrası, ikincisi levent kökeni. WARP_BEAM.originKind override'ı ile ayrıldı (2026-09-14)",
   WARP_RETURN:
     "YarnMovementKind(dip iplik depoya döndü) ve ReasonPresetKind(o iadenin sebep kataloğu) — ikisi de LEVENT DİBİ İADESİdir; ortak Türkçe doğru",
   // ── Ortak Türkçe TÜM paylaşanlar için doğru ────────────────────────────────

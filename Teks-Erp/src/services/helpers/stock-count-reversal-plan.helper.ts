@@ -15,7 +15,7 @@
 import { Prisma, RollStatus, StockCountLineKind, StockCountStatus, WarehouseEventType, YarnMovementKind } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { readIplikEnabled } from "../system-setting.service";
-import { yarnMovementSign } from "../yarn.service";
+import { yarnMovementSign } from "./yarn-sign.helper";
 import { resolveRestoreTargetStatus } from "./roll-cancel-restore.helper";
 import { VARIANCE_SOURCES } from "../../constants/variance-reasons";
 import { ROLL_STATUS_TR } from "../../constants/status-labels";

@@ -18,6 +18,7 @@ import {
 } from "@/pages/Definitions/production-regime";
 import { isWeavingOrdersVisible } from "./WeavingOrders/weaving-regime";
 import { isMachineStopsVisible } from "./MachineStops/stop-regime";
+import { isWarpBeamsVisible } from "./WarpBeams/warp-beam-regime";
 
 /**
  * Karo görünürlüğünün doğruluk tablosu.
@@ -182,6 +183,7 @@ describe("karo bağlantıları", () => {
       "sack-store",
       "stock-counts",
       "warehouse-transfers",
+      "warp-beams",
       "weaving-orders",
       "work-orders",
       "yarn-stock",
@@ -336,5 +338,17 @@ describe("Tezgah Duruşları karosu", () => {
     expect(t?.permissionAny).toEqual(["loom:manual-entry", "loom:classify"]);
     expect(t?.visibleWhen?.(ctx())).toBe(false);
     expect(t?.visibleWhen?.(ctx({ dokumaEnabled: true }))).toBe(true);
+  });
+});
+
+describe("Leventler karosu", () => {
+  const tile = (key: string) => operationsTiles.find((t) => t.key === key);
+  it("⭐ Leventler: karo yalnız DEVERE modülü (etkin) açıkken; izin route ile birebir", () => {
+    const t = tile("warp-beams");
+    expect(t).toBeDefined();
+    expect(t?.visibleWhen).toBe(isWarpBeamsVisible);
+    expect(t?.permission).toBe("warpbeam:read");
+    expect(t?.visibleWhen?.(ctx())).toBe(false);
+    expect(t?.visibleWhen?.(ctx({ devereEnabled: true }))).toBe(true);
   });
 });

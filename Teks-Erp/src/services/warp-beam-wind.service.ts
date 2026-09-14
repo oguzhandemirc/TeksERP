@@ -1,0 +1,226 @@
+// =============================================================================
+// LEVENT SARIM SERVİSİ — devere Faz 1b: sar (WOUND + brüt iplik + dip iadesi) · sarım iptali (WOUND_CANCEL, NET ters)
+// =============================================================================
+// Tasarım: docs/design/DEVERE-LEVENT-TARAMASI.md §4.7. TEK YAZAR `applyWarpBeamEventTx` (ilk ifadesi devere
+// kapısı; claim `updateMany WHERE status=from`) — olay satırı + durum kolonu + (IN_HOUSE) iplik satırları AYNI tx'te.
+// Ters yol tipli `WOUND_CANCEL` + `reversesEventId @unique` (çift iptal DB'de imkânsız); iplik NET geri
+// (§4.9-4: ISSUE ve RETURN toplamları AYRI AYRI sıfırlanır). Durum CANCELLED terminaldir — PLANNED'a DÖNMEZ.
+// =============================================================================
+import { Prisma, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, YarnMovementKind, ReasonPresetKind } from "@prisma/client";
+import prisma from "../lib/prisma";
+import { AppError } from "../utils/app-error";
+import { ApiResponse } from "../types/api.types";
+import { AuditService } from "./audit.service";
+import { readDevereEnabled } from "./system-setting.service";
+import { applyYarnMovementTx } from "./yarn.service";
+import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
+import { resolveDenier, warpTheoreticalKg, type WarpBeamEventKind } from "../constants/warp-beam";
+import { WARP_BEAM_EVENT_SELECT, WARP_BEAM_SELECT, type WarpBeamEventRow } from "./helpers/warp-beam.helper";
+import { toWarpBeamDto, toWarpBeamEventDto, type WarpBeamDto, type WarpBeamEventDto } from "./warp-beam.service";
+
+const WARP_BEAM_EVENT_TABLE = "WARP_BEAM_EVENT";
+const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
+
+// ── SAR (PLANNED → READY, WOUND) ─────────────────────────────────────────────────
+export interface YarnIssueLine {
+  warehouseId: string;
+  qtyKg: number | string;
+}
+export interface YarnReturnLine extends YarnIssueLine {
+  reasonCode: string;
+}
+export interface WindWarpBeamInput {
+  lengthM: number | string;
+  kgSource: WarpKgSource;
+  /** IN_HOUSE kökeninde ZORUNLU (devere makinesi, `Station.producesWarpBeam`); diğer kökenlerde boş. */
+  machineId?: string | null;
+  /** IN_HOUSE: cağlığa yüklenen BRÜT iplik (≥ 1 satır); diğer kökenlerde YAZILMAZ (§3.9). */
+  yarnIssues?: YarnIssueLine[];
+  /** Dönen bobin dipleri — AYRI satır, sebep zorunlu (§3.7). */
+  yarnReturns?: YarnReturnLine[];
+  sectionCount?: number | null;
+  endsPerSection?: number | null;
+  breakCount?: number | null;
+  startedAt?: Date | null;
+  clientToken?: string | null;
+}
+
+async function assertDevereMachineTx(tx: Prisma.TransactionClient, machineId: string): Promise<void> {
+  const m = await tx.machine.findUnique({ where: { id: machineId }, select: { isActive: true, station: { select: { producesWarpBeam: true, name: true } } } });
+  if (!m || !m.isActive) throw AppError.badRequest("Devere makinesi bulunamadı ya da pasif");
+  if (!m.station.producesWarpBeam) throw AppError.badRequest(`"${m.station.name}" istasyonu levent üretmez — makine bir devere istasyonunda olmalı (istasyon kartında "levent üretir").`, { code: "WARP_BEAM_MACHINE_NOT_DEVERE" });
+}
+
+async function assertReturnReasonTx(tx: Prisma.TransactionClient, code: string): Promise<string> {
+  const trimmed = code.trim();
+  const row = await tx.reasonPreset.findFirst({ where: { kind: ReasonPresetKind.WARP_RETURN, code: trimmed, isActive: true }, select: { code: true } });
+  if (!row) throw AppError.badRequest(`Geçersiz dip iade sebebi: ${trimmed}`, { code: "REASON_CODE_INVALID" });
+  return row.code;
+}
+
+function kg(v: number | string, ad: string): Prisma.Decimal {
+  const d = D(v).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP);
+  if (!d.isFinite() || d.lte(0)) throw AppError.badRequest(`${ad} sıfırdan büyük olmalı`);
+  return d;
+}
+
+/**
+ * TEK YAZAR — olay satırı + durum kolonu + (IN_HOUSE) iplik satırları AYNI tx'te.
+ * İlk ifade devere kapısı (`applyYarnMovementTx`in iplik kapısı emsali).
+ */
+async function applyWarpBeamEventTx(
+  tx: Prisma.TransactionClient,
+  input: { beamId: string; kind: WarpBeamEventKind; from: WarpBeamStatus; to: WarpBeamStatus; data: Omit<Prisma.WarpBeamEventUncheckedCreateInput, "beamId" | "kind" | "fromStatus" | "toStatus"> },
+): Promise<WarpBeamEventRow> {
+  if (!(await readDevereEnabled(tx))) {
+    throw AppError.forbidden("Devere modülü bu kurulumda kapalı — levent defterine yazılamaz. Sistem → Modüller bölümünden açılabilir.", { code: "MODULE_DISABLED", modul: "devere" });
+  }
+  const claim = await tx.warpBeam.updateMany({ where: { id: input.beamId, status: input.from }, data: { status: input.to } });
+  if (claim.count === 0) {
+    const fresh = await tx.warpBeam.findUnique({ where: { id: input.beamId }, select: { status: true, beamNo: true } });
+    if (!fresh) throw AppError.notFound("Levent bulunamadı");
+    throw AppError.conflict(`${fresh.beamNo} durumu ${fresh.status} — bu işlem yalnız ${input.from} durumunda yapılır`, { code: "WARP_BEAM_STATE", status: fresh.status });
+  }
+  return tx.warpBeamEvent.create({ data: { beamId: input.beamId, kind: input.kind, fromStatus: input.from, toStatus: input.to, ...input.data }, select: WARP_BEAM_EVENT_SELECT });
+}
+
+export async function windWarpBeam(id: string, input: WindWarpBeamInput, userId?: string): Promise<ApiResponse<WarpBeamDto>> {
+  const beam = await prisma.warpBeam.findUnique({ where: { id }, select: WARP_BEAM_SELECT });
+  if (!beam) throw AppError.notFound("Levent bulunamadı");
+  if (input.clientToken) {
+    const replay = await prisma.warpBeamEvent.findUnique({ where: { clientToken: input.clientToken }, select: { beamId: true, kind: true } });
+    if (replay) {
+      assertReplayPayloadMatches([{ ad: "beamId", mevcut: replay.beamId, gelen: id }, { ad: "kind", mevcut: replay.kind, gelen: "WOUND" }], "Bu istemci anahtarı BAŞKA bir sarımla kullanılmış — formu yenileyip yeniden deneyin.");
+      return { success: true, data: toWarpBeamDto(beam), message: `${beam.beamNo} zaten sarılmış (yeniden gönderim)` };
+    }
+  }
+  const lengthM = kg(input.lengthM, "Sarılan metre");
+  const denier = resolveDenier(beam.warpSpec.yarnItem);
+  if (denier === null) throw AppError.badRequest(`"${beam.warpSpec.yarnItem.name}" kaleminin denye değeri boş — nominal kg hesaplanamaz; kalem kartından denyeyi girin.`, { code: "WARP_DENIER_MISSING" });
+  const inHouse = beam.originKind === WarpBeamOrigin.IN_HOUSE;
+  const issues = input.yarnIssues ?? [];
+  const returns = input.yarnReturns ?? [];
+  if (inHouse) {
+    if (!input.machineId) throw AppError.badRequest("İçeride sarılan levent için devere makinesi zorunludur");
+    if (issues.length === 0) throw AppError.badRequest("İçeride sarılan levent için en az bir iplik çıkış satırı gerekir (cağlığa yüklenen brüt kg)");
+  } else if (input.machineId || issues.length > 0 || returns.length > 0) {
+    throw AppError.badRequest("Fasona sardırılan ya da hazır alınan levente makine ve iplik satırı yazılmaz — iplik tüketimi bizim defterde değil (§3.9)");
+  }
+  const theoreticalKg = warpTheoreticalKg(beam.warpSpec.endsCount, denier, lengthM);
+  const yarnItemId = beam.warpSpec.yarnItem.id;
+
+  const wound = await prisma.$transaction(async (tx) => {
+    if (input.machineId) await assertDevereMachineTx(tx, input.machineId);
+    const ev = await applyWarpBeamEventTx(tx, {
+      beamId: id,
+      kind: "WOUND",
+      from: WarpBeamStatus.PLANNED,
+      to: WarpBeamStatus.READY,
+      data: {
+        clientToken: input.clientToken ?? null,
+        lengthM,
+        machineId: input.machineId ?? null,
+        endsCount: beam.warpSpec.endsCount,
+        denier,
+        theoreticalKg,
+        kgSource: input.kgSource,
+        sectionCount: input.sectionCount ?? null,
+        endsPerSection: input.endsPerSection ?? null,
+        breakCount: input.breakCount ?? null,
+        startedAt: input.startedAt ?? null,
+        createdById: userId ?? null,
+      },
+    });
+    for (const line of issues) {
+      await applyYarnMovementTx(tx, { itemId: yarnItemId, warehouseId: line.warehouseId, kind: YarnMovementKind.WARP_ISSUE, qtyKg: kg(line.qtyKg, "İplik çıkış kg"), warpBeamId: id, userId: userId ?? null });
+    }
+    for (const line of returns) {
+      const reasonCode = await assertReturnReasonTx(tx, line.reasonCode);
+      await applyYarnMovementTx(tx, { itemId: yarnItemId, warehouseId: line.warehouseId, kind: YarnMovementKind.WARP_RETURN, qtyKg: kg(line.qtyKg, "Dip iade kg"), warpBeamId: id, reasonCode, userId: userId ?? null });
+    }
+    return ev;
+  });
+  await AuditService.log({ userId, action: "CREATE", tableName: WARP_BEAM_EVENT_TABLE, recordId: wound.id, newData: { beamId: id, kind: "WOUND", lengthM: Number(lengthM), theoreticalKg: Number(theoreticalKg), kgSource: input.kgSource, issues: issues.length, returns: returns.length } });
+  const fresh = await prisma.warpBeam.findUniqueOrThrow({ where: { id }, select: WARP_BEAM_SELECT });
+  return { success: true, data: toWarpBeamDto(fresh), message: `${fresh.beamNo} sarıldı — ${Number(lengthM)} m, nominal ${Number(theoreticalKg)} kg` };
+}
+
+// ── SARIMI İPTAL ET (READY → CANCELLED, WOUND_CANCEL) ───────────────────────────
+export interface CancelWoundPreviewDto {
+  beamNo: string;
+  status: WarpBeamStatus;
+  wound: WarpBeamEventDto | null;
+  /** Ters kayıtla depoya DÖNECEK çıkışlar (kalem × depo, net) ve DÜŞECEK dip iadeleri (× sebep). */
+  issueReversals: Array<{ warehouse: { id: string; name: string }; qtyKg: number }>;
+  returnReversals: Array<{ warehouse: { id: string; name: string }; reasonCode: string; qtyKg: number }>;
+}
+
+type YarnGroup = Map<string, { warehouseId: string; warehouseName: string; reasonCode: string | null; qty: Prisma.Decimal }>;
+
+async function groupYarnLinesTx(client: Prisma.TransactionClient | typeof prisma, beamId: string): Promise<{ issues: YarnGroup; returns: YarnGroup }> {
+  const rows = await client.yarnMovement.findMany({ where: { warpBeamId: beamId }, select: { kind: true, qtyKg: true, reasonCode: true, warehouse: { select: { id: true, name: true } } } });
+  const issues: YarnGroup = new Map();
+  const returns: YarnGroup = new Map();
+  const add = (g: YarnGroup, key: string, r: (typeof rows)[number], sign: 1 | -1) => {
+    const cur = g.get(key) ?? { warehouseId: r.warehouse.id, warehouseName: r.warehouse.name, reasonCode: r.reasonCode, qty: D(0) };
+    cur.qty = cur.qty.plus(D(r.qtyKg).mul(sign));
+    g.set(key, cur);
+  };
+  for (const r of rows) {
+    // NET: ileri satır + tersi ayrı ayrı toplanır (iki toplam birbirini götürmez — §4.9-4).
+    if (r.kind === YarnMovementKind.WARP_ISSUE) add(issues, r.warehouse.id, r, 1);
+    else if (r.kind === YarnMovementKind.WARP_ISSUE_REVERSAL) add(issues, r.warehouse.id, r, -1);
+    else if (r.kind === YarnMovementKind.WARP_RETURN) add(returns, `${r.warehouse.id}|${r.reasonCode}`, r, 1);
+    else if (r.kind === YarnMovementKind.WARP_RETURN_REVERSAL) add(returns, `${r.warehouse.id}|${r.reasonCode}`, r, -1);
+  }
+  return { issues, returns };
+}
+
+export async function cancelWoundPreview(id: string): Promise<ApiResponse<CancelWoundPreviewDto>> {
+  const beam = await prisma.warpBeam.findUnique({ where: { id }, select: WARP_BEAM_SELECT });
+  if (!beam) throw AppError.notFound("Levent bulunamadı");
+  const { issues, returns } = await groupYarnLinesTx(prisma, id);
+  return {
+    success: true,
+    data: {
+      beamNo: beam.beamNo,
+      status: beam.status,
+      wound: beam.events[0] ? toWarpBeamEventDto(beam.events[0]) : null,
+      issueReversals: [...issues.values()].filter((g) => g.qty.gt(0)).map((g) => ({ warehouse: { id: g.warehouseId, name: g.warehouseName }, qtyKg: Number(g.qty) })),
+      returnReversals: [...returns.values()].filter((g) => g.qty.gt(0)).map((g) => ({ warehouse: { id: g.warehouseId, name: g.warehouseName }, reasonCode: g.reasonCode ?? "", qtyKg: Number(g.qty) })),
+    },
+  };
+}
+
+/**
+ * Doğuşun STORNOSU: WOUND_CANCEL (`reversesEventId` = WOUND, tek ters) + iplik NET geri.
+ * Durum CANCELLED'a (terminal) gider — PLANNED'a dönmez: `one_wound_uq` yüzünden bir daha sarılamazdı.
+ */
+export async function cancelWound(id: string, reason: string, userId?: string): Promise<ApiResponse<WarpBeamDto>> {
+  const beam = await prisma.warpBeam.findUnique({ where: { id }, select: WARP_BEAM_SELECT });
+  if (!beam) throw AppError.notFound("Levent bulunamadı");
+  const wound = beam.events[0];
+  if (!wound) throw AppError.conflict(`${beam.beamNo} hiç sarılmamış — plandaki levent iptal edilmez, silinir`, { code: "WARP_BEAM_NOT_WOUND" });
+  const yarnItemId = beam.warpSpec.yarnItem.id;
+  const cancel = await prisma.$transaction(async (tx) => {
+    const ev = await applyWarpBeamEventTx(tx, {
+      beamId: id,
+      kind: "WOUND_CANCEL",
+      from: WarpBeamStatus.READY,
+      to: WarpBeamStatus.CANCELLED,
+      data: { reversesEventId: wound.id, lengthM: wound.lengthM, machineId: wound.machineId, reason: reason.trim(), createdById: userId ?? null },
+    });
+    const { issues, returns } = await groupYarnLinesTx(tx, id);
+    for (const g of issues.values()) {
+      if (g.qty.gt(0)) await applyYarnMovementTx(tx, { itemId: yarnItemId, warehouseId: g.warehouseId, kind: YarnMovementKind.WARP_ISSUE_REVERSAL, qtyKg: g.qty, warpBeamId: id, reason: reason.trim(), userId: userId ?? null });
+    }
+    for (const g of returns.values()) {
+      if (g.qty.gt(0)) await applyYarnMovementTx(tx, { itemId: yarnItemId, warehouseId: g.warehouseId, kind: YarnMovementKind.WARP_RETURN_REVERSAL, qtyKg: g.qty, warpBeamId: id, reasonCode: g.reasonCode, reason: reason.trim(), userId: userId ?? null });
+    }
+    return ev;
+  });
+  await AuditService.log({ userId, action: "UPDATE", tableName: WARP_BEAM_EVENT_TABLE, recordId: cancel.id, newData: { beamId: id, kind: "WOUND_CANCEL", reversesEventId: wound.id, reason: reason.trim() } });
+  const fresh = await prisma.warpBeam.findUniqueOrThrow({ where: { id }, select: WARP_BEAM_SELECT });
+  return { success: true, data: toWarpBeamDto(fresh, 0), message: `${fresh.beamNo} sarımı iptal edildi — iplik net geri döndü` };
+}
+

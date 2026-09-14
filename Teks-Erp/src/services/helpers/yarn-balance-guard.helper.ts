@@ -106,12 +106,15 @@ export interface YarnOutflowRef {
  * `readTamburOverQuantityEnabled` emsali): panelden kapatılan bayrak bir
  * sonraki işlemde anında etkisizleşmeli (acil kapatma yolu).
  */
+const GATED_KINDS = new Set<YarnMovementKind>([YarnMovementKind.OUT, YarnMovementKind.WARP_ISSUE, YarnMovementKind.WARP_RETURN_REVERSAL]);
+
 export async function assertYarnBalanceCoversTx(
   tx: Prisma.TransactionClient,
   ref: YarnOutflowRef,
 ): Promise<void> {
-  // Kapılanan küme: OUT ve WARP_ISSUE (levente sarım da bir ÇIKIŞTIR); ADJUST_OUT + tersler + girişler muaf.
-  if (ref.kind !== YarnMovementKind.OUT && ref.kind !== YarnMovementKind.WARP_ISSUE) return;
+  // Kapılanan küme = bakiyeyi DÜŞÜREN ileri yollar: OUT · WARP_ISSUE · WARP_RETURN_REVERSAL (§4.7 — ölçüt
+  // "storno mu" değil "bakiyeyi düşürüyor mu"); ADJUST_OUT (sayım) ve artıran türler muaf.
+  if (!GATED_KINDS.has(ref.kind)) return;
   const enabled = await readYarnBlockNegativeBalanceEnabled(tx);
   if (!enabled) return;
 

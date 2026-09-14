@@ -77,6 +77,7 @@ import {
   type Currency,
 } from "@prisma/client";
 import prisma from "../lib/prisma";
+import { yarnMovementSign } from "./helpers/yarn-sign.helper";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -270,7 +271,8 @@ async function computeReceivedByItemTx(
   });
   for (const row of yarnRows) {
     const qty = row._sum.qtyKg ?? ZERO;
-    const inbound = row.kind === YarnMovementKind.IN || row.kind === YarnMovementKind.ADJUST_IN;
+    // İşaret TEK KAYNAKTAN (`yarnMovementSign`) — elle ikili ayrım devere türlerinde kırılırdı (§4.9-2).
+    const inbound = yarnMovementSign(row.kind) > 0;
     add(row.itemId, inbound ? qty : qty.negated());
   }
 

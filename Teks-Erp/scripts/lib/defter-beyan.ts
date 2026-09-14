@@ -155,9 +155,15 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/cash-transaction.service.ts", sembol: "cancel" }],
     ["src/services/cash-transaction.service.ts"], { yari: true }),
 
-  D("YarnMovement", "iplik stok defteri", { tur: "KARSI_OLAY", enumAdi: "YarnMovementKind", ciftler: [["ADJUST_IN", "ADJUST_OUT"], ["IN", "OUT"]] },
+  D("YarnMovement", "iplik stok defteri; devere 1b çiftleri: çözgü çıkışı ↔ tersi · dip iadesi ↔ tersi (brüt çıkış + ayrı iade, §3.7)",
+    { tur: "KARSI_OLAY", enumAdi: "YarnMovementKind", ciftler: [["ADJUST_IN", "ADJUST_OUT"], ["IN", "OUT"], ["WARP_ISSUE", "WARP_ISSUE_REVERSAL"], ["WARP_RETURN", "WARP_RETURN_REVERSAL"]] },
     [{ dosya: "src/services/yarn.service.ts", sembol: "applyYarnMovementTx" }],
     ["src/services/yarn.service.ts"]),
+
+  D("WarpBeamEvent", "levent olay defteri (devere 1b) — WOUND doğuş gerçekleri değişmez; ters yol tipli WOUND_CANCEL, orijinaline `reversesEventId` (tek ters, çift iptal DB'de imkânsız); durum CANCELLED (terminal), PLANNED'a dönmez",
+    { tur: "TERS_BAG", kolon: "reversesEventId" },
+    [{ dosya: "src/services/warp-beam-wind.service.ts", sembol: "cancelWound" }],
+    ["src/services/warp-beam-wind.service.ts"]),
 
   D("RollMovement", "topun adım içi giriş/çıkışı; açık satır çıkışta kapanır", { tur: "DAMGA", kolon: "revokedAt" },
     [{ dosya: "src/services/helpers/roll-movement.helper.ts", sembol: "revokeRollMovements" }],

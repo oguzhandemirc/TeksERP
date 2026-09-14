@@ -80,6 +80,10 @@ export const PERMISSION_CATALOG = [
   // dokuma planlamacısı aynı kişi olmak zorunda değil.
   { code: "warpspec:read", module: "MASTER_DATA", category: "web", description: "Çözgü kartı (tel · iplik · tarak) listesi/detay görüntüleme" },
   { code: "warpspec:write", module: "MASTER_DATA", category: "web", description: "Çözgü kartı oluşturma/düzenleme" },
+  // ── Levent (devere Faz 1b, 2026-09-14): plan/sar yazma, sarım iptali AYRI yetenek (defterden net iplik döner).
+  { code: "warpbeam:read", module: "PRODUCTION", category: "web", description: "Levent listesi/detayı (plan · sarım · kalan metre · iplik satırları)" },
+  { code: "warpbeam:write", module: "PRODUCTION", category: "web", description: "Levent planlama, sarım (WOUND + iplik çıkışı/dip iadesi), taslak silme" },
+  { code: "warpbeam:cancel", module: "PRODUCTION", category: "web", description: "Sarım iptali (WOUND_CANCEL) — iplik NET geri döner; ayrı yetenek" },
   // ── Dokuma / tezgah koşumu (2026-09-13, P2b) ───────────────────────────────
   // Geri alma AYRI kod: koşum randımanın PAYDASINI taşır, geri almak günlük
   // aç/kapa işinden ayrı bir yetkidir (`shipping:undo-dispatch` emsali).

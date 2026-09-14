@@ -22,6 +22,7 @@ export const SUBCONTRACTOR_MERGE_RULES: MoveRule[] = [
       label: "Fason sevk (planlanan firma)",
     },
     { kind: "MOVE", model: "SubcontractorReceipt", table: "subcontractor_receipts", column: "subcontractorId", label: "Fason kabul" },
+    { kind: "MOVE", model: "WarpBeam", table: "warp_beams", column: "subcontractorId", label: "Levent (fason sarım / fason tedarik)" },
     { kind: "MOVE", model: "KartelaDispatch", table: "kartela_dispatches", column: "subcontractorId", label: "Kartela sevk" },
     { kind: "MOVE", model: "KartelaReceipt", table: "kartela_receipts", column: "subcontractorId", label: "Kartela kabul" },
     { kind: "MOVE", model: "RouteStep", table: "route_steps", column: "plannedSubcontractorId", label: "Rota adımı (planlanan firma)" },

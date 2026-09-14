@@ -14,6 +14,7 @@ import type { MoveRule } from "./merge-map";
 
 export const CUSTOMER_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "Order", table: "orders", column: "customerId", label: "Sipariş" },
+    { kind: "MOVE", model: "WarpBeam", table: "warp_beams", column: "supplierId", label: "Levent (hazır alım tedarikçisi)" },
     { kind: "MOVE", model: "Shipment", table: "shipments", column: "customerId", label: "Sevkiyat" },
     { kind: "MOVE", model: "DirectShipment", table: "direct_shipments", column: "customerId", label: "Doğrudan sevkiyat" },
     { kind: "MOVE", model: "RollReturn", table: "roll_returns", column: "customerId", label: "İade" },

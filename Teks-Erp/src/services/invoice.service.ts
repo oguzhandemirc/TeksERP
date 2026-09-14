@@ -51,7 +51,8 @@ import { assertNotFutureDatedTx } from "./helpers/future-date-guard.helper";
 // kuralı). Buradan YALNIZ `applyYarnMovementTx` çağrılır; `yarn_stocks`/
 // `yarn_movements` tablolarına doğrudan yazan tek satır bile eklenmez — bakiye
 // ile hareket satırı ayrışırsa defter sessizce yalan söyler.
-import { applyYarnMovementTx, yarnMovementSign } from "./yarn.service";
+import { applyYarnMovementTx } from "./yarn.service";
+import { yarnMovementSign } from "./helpers/yarn-sign.helper";
 import { getDefaultWarehouseId } from "./helpers/warehouse.helper";
 import { renderInvoiceInternalHtml, type InvoiceDoc } from "./document-render/finance-doc.html";
 import { releaseAllocationsForInvoiceTx } from "./payment-allocation.service";

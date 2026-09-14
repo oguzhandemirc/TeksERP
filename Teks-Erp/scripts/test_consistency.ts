@@ -28,6 +28,9 @@
 // Koşum: npx tsx scripts/test_consistency.ts
 // =============================================================================
 import { Prisma } from "@prisma/client";
+import { yarnInboundKinds } from "../src/services/helpers/yarn-sign.helper";
+/** İplik mutabakatı işareti TEK KAYNAKTAN (`yarnMovementSign`) — elle liste devere 1b'de kırılırdı (§4.9-1). */
+const YARN_INBOUND_SQL = yarnInboundKinds().map((k) => `'${k}'`).join(",");
 import { notFixtureSql, notFixtureItemOfRollSql } from "./lib/fikstur-imzasi";
 import { atlamaDefteri } from "./lib/atlama";
 import prisma from "../src/lib/prisma";
@@ -811,7 +814,7 @@ SELECT s."itemId"::text AS kalem, s."warehouseId"::text AS depo,
 FROM yarn_stocks s
 LEFT JOIN (
   SELECT "itemId", "warehouseId",
-         SUM(CASE WHEN kind IN ('IN','ADJUST_IN') THEN "qtyKg" ELSE -"qtyKg" END) AS toplam
+         SUM(CASE WHEN kind IN (${YARN_INBOUND_SQL}) THEN "qtyKg" ELSE -"qtyKg" END) AS toplam
   FROM yarn_movements GROUP BY "itemId", "warehouseId"
 ) m ON m."itemId" = s."itemId" AND m."warehouseId" = s."warehouseId"
 WHERE s."balanceKg" <> COALESCE(m.toplam, 0)`,

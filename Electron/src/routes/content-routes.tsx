@@ -49,6 +49,7 @@ import { FxDiffPage } from "@/pages/Reports/Finance/FxDiffPage";
 import { YarnStockPage } from "@/pages/Operations/Yarn/YarnStockPage";
 import { WeavingOrdersPage } from "@/pages/Operations/WeavingOrders/WeavingOrdersPage";
 import { MachineStopsPage } from "@/pages/Operations/MachineStops/MachineStopsPage";
+import { WarpBeamsPage } from "@/pages/Operations/WarpBeams/WarpBeamsPage";
 import { PurchaseOrdersPage } from "@/pages/Operations/PurchaseOrders/PurchaseOrdersPage";
 import { ItemPricesPage } from "@/pages/Definitions/ItemPrices/ItemPricesPage";
 import { WarehouseTransfersPage } from "@/pages/Operations/WarehouseTransfers/WarehouseTransfersPage";
@@ -434,6 +435,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requireAnyPermission={["loom:manual-entry", "loom:classify"]}>
         <MachineStopsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Leventler — karo izniyle BİREBİR (`warpbeam:read`); yazma/iptal ekran içinde `PermissionGate`.
+    path: "operations/warp-beams",
+    element: (
+      <ProtectedRoute requirePermission="warpbeam:read">
+        <WarpBeamsPage />
       </ProtectedRoute>
     ),
   },

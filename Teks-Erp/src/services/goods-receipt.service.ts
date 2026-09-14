@@ -46,7 +46,8 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { InventoryService } from "./inventory.service";
 import { resolveItemPricesFor } from "./item-price.service";
-import { applyYarnMovementTx, reverseGoodsReceiptYarnTx, yarnMovementSign } from "./yarn.service";
+import { applyYarnMovementTx, reverseGoodsReceiptYarnTx } from "./yarn.service";
+import { yarnMovementSign } from "./helpers/yarn-sign.helper";
 // J1 — iki OPT-IN katılık bayrağı (ikisi de varsayılan KAPALI; kapalıyken tek
 // maliyet ayar okumasıdır ve davranış bayt-bayt bugünküdür).
 import {

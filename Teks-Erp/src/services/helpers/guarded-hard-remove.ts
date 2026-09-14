@@ -235,6 +235,12 @@ export const routeHardRemove = makeGuardedHardRemove({
 // atamasız "boşa çıkar"). Şema zaten onDelete:SetNull; deleteTx'te açıkça da yapılır.
 const MACHINE_DELETE_GUARDS: DependencyGuard[] = [
   {
+    key: "warpBeamEventCount",
+    // Devere 1b: WOUND.machineId — geri alınmış (WOUND_CANCEL) satırlar DAHİL sayılır (iş yapıldı).
+    count: (id) => prisma.warpBeamEvent.count({ where: { machineId: id } }),
+    message: (n) => `Bu makinede ${n} levent sarım kaydı var — kalıcı silinemez. Pasife alın.`,
+  },
+  {
     key: "rollOperationCount",
     // ⚠️ `revokedAt` SÜZÜLMEZ — yukarıdaki istasyon guard'ıyla aynı gerekçe.
     count: (id) => prisma.rollOperation.count({ where: { machineId: id } }),

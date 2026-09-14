@@ -20,6 +20,7 @@ import {
   Wrench,
   type LucideIcon,
   AlertOctagon,
+  Layers,
 } from "lucide-react";
 import type { OperationGroupKey } from "./groups-config";
 // Paket D — görünürlük kuralları SAF katmanda (bileşen içindeki bir `&&`
@@ -37,6 +38,7 @@ import {
 } from "./production-regime";
 import { isWeavingOrdersVisible } from "./WeavingOrders/weaving-regime";
 import { isMachineStopsVisible } from "./MachineStops/stop-regime";
+import { isWarpBeamsVisible } from "./WarpBeams/warp-beam-regime";
 
 /**
  * Karo görünürlüğünün bağlı olduğu ÇALIŞMA ANI durumu (hub + komut paleti).
@@ -245,6 +247,19 @@ export const operationsTiles: OperationsTile[] = [
     group: "production",
     permissionAny: ["loom:manual-entry", "loom:classify"],
     visibleWhen: isMachineStopsVisible,
+  },
+  {
+    // LEVENTLER (2026-09-14, devere Faz 1b): backend `warp-beam.routes` `requireDevereEnabled`
+    // taşır; karo aynı bayrağa bağlı (ETKİN değer: devere → iplik → ticaret). Referans
+    // profilde KAPALI, karo çizilmez. Yüklem SAF (palet kimlik testi `toBe`).
+    key: "warp-beams",
+    title: "Leventler",
+    description: "Levent planla, sar (iplik brüt çıkar, dip ayrı döner), hazır levent stoğu",
+    icon: Layers,
+    to: "/operations/warp-beams",
+    group: "production",
+    permission: "warpbeam:read",
+    visibleWhen: isWarpBeamsVisible,
   },
   {
     key: "rolls",

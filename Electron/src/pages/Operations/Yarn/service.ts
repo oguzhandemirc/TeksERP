@@ -142,9 +142,15 @@ export const YARN_KINDS: YarnMovementKind[] = ["IN", "OUT", "ADJUST_IN", "ADJUST
 /** Liste süzgecinin tanıdığı TÜM türler (backend liste şemasıyla birebir). */
 export const YARN_FILTER_KINDS: YarnMovementKind[] = [...YARN_KINDS, "WARP_ISSUE", "WARP_ISSUE_REVERSAL", "WARP_RETURN", "WARP_RETURN_REVERSAL"];
 
+/** Bilinmeyen tür (eski panel, yeni backend enum'u) ekranı ÇÖKERTMEZ — ham kod rozetle basılır (47 K2, 2026-09-14). */
+const UNKNOWN_KIND_META: YarnKindMeta = { label: "Bilinmeyen tür", short: "?", sign: 1, adjustment: false, hint: "Panel bu hareket türünü tanımıyor — panel güncellemesi gerekir." };
+export function yarnKindMeta(kind: string): YarnKindMeta {
+  return YARN_KIND_META[kind as YarnMovementKind] ?? { ...UNKNOWN_KIND_META, short: kind };
+}
+
 /** Rozet tonu — sayım düzeltmesi normal giriş/çıkıştan AYRI okunmalı. */
 export function kindBadgeClass(kind: YarnMovementKind): string {
-  const m = YARN_KIND_META[kind];
+  const m = yarnKindMeta(kind);
   if (m.adjustment) return "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200";
   return m.sign > 0
     ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200"

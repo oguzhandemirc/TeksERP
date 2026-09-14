@@ -124,6 +124,12 @@ export function assertMachineRunReplayAlive(existing: {
  * Token'la bulunan top indirmesi hâlâ canlı mı — geri alınmışsa 409 `DOFF_REVOKED`.
  * `assertMachineRunReplayAlive` ikizi: "ölü" hâl statü değil DAMGADIR.
  */
+/** Token'la bulunan levent hâlâ canlı mı — sarımı iptal edilmişse 409 `WARP_BEAM_CANCELLED` (iptal edilen yeniden sarılmaz, yeni levent açılır). */
+export function assertWarpBeamReplayAlive(existing: { id: string; beamNo: string; status: string }): void {
+  if (existing.status !== "CANCELLED") return;
+  throw AppError.conflict(`${existing.beamNo} sarımı iptal edilmiş — yeniden planlamak için formu yeniden açın (aynı gönderim tekrar edilemez).`, { code: "WARP_BEAM_CANCELLED", beamId: existing.id });
+}
+
 export function assertDoffReplayAlive(existing: { id: string; revokedAt: Date | null }): void {
   if (!existing.revokedAt) return;
   throw AppError.conflict(

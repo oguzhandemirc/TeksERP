@@ -164,6 +164,8 @@ const CAP_LABEL: Record<string, string> = {
   "warehouse:write": "Depo tanımı ve sayım düzenleyebilir",
   "yarn:write": "İplik stok hareketi girebilir",
   "weavingorder:write": "Dokuma işi açıp düzenleyebilir, kapatıp iptal edebilir",
+  "warpbeam:write": "Levent planlayıp sarabilir (iplik çıkışı ve dip iadesi yazar)",
+  "warpbeam:cancel": "Sarımı iptal edebilir (iplik net geri döner)",
   "price:write": "Kalem fiyatı tanımlayabilir",
   "finance:write": "Cari/kasa/banka kartı düzenleyebilir",
   "finance:invoice": "Fatura kesip iptal edebilir",
@@ -258,6 +260,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // Dokuma işi planlama (2026-09-13, ekran dilimi). Modül `dokumaEnabled` — üretime
   // bağımlı, tezgah izlemenin kardeşi; referans profilde KAPALI.
   { key: "operations/weaving-orders", app: "desktop", modul: "dokumaEnabled", title: "Dokuma İşleri", requires: ["weavingorder:read"], capabilities: ["weavingorder:write"] },
+  // Leventler (devere Faz 1b, 2026-09-14): plan → sar → hazır levent; sarım iptali ayrı yetenek.
+  { key: "operations/warp-beams", app: "desktop", modul: "devereEnabled", title: "Leventler", requires: ["warpbeam:read"], capabilities: ["warpbeam:write", "warpbeam:cancel"] },
   // Tezgah duruşları (Faz 1b web yüzeyi, 2026-09-14): elle giriş/kapatma/geri alma `loom:manual-entry`,
   // sebep atama/yeniden sınıflandırma `loom:classify` — İKİSİNDEN BİRİ ekranı açar, eylemler ekran içinde izinle.
   { key: "operations/machine-stops", app: "desktop", modul: "dokumaEnabled", title: "Tezgah Duruşları", requires: ["loom:manual-entry", "loom:classify"], capabilities: [] },

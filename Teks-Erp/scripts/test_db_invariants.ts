@@ -419,6 +419,15 @@ const PARTIAL_INDEXES: Array<{
   // geri alınmış duruş yer işgal etmez, yoksa yeni duruş açılamaz ve yeniden
   // gönderim sonsuza dek reddedilirdi. Silme guard'larındaki ters yönle
   // çelişmez — sed "şu an açık mı", guard "iş yapıldı mı" diye sorar.
+  // warp_beam_events — devere 1b (2026-09-14, migration 20260914125000): bir levent bir kez doğar;
+  // yüklem "aktif" TAŞIMAZ — iptal edilen yeniden sarılmaz, YENİ levent açılır.
+  {
+    table: "warp_beam_events",
+    index: "warp_beam_events_one_wound_uq",
+    uniq: true,
+    predicate: `((kind)::text = 'WOUND'::text)`,
+    why: "levent başına TEK WOUND — doğuş gerçekleri bir kez yazılır",
+  },
   {
     table: "machine_stop_events",
     index: "machine_stops_one_open_per_machine_uq",
@@ -478,6 +487,15 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // 2026-09-12 (devere Faz 1a) — migration 20260912120100_devere_warp_spec:
   // tel adedi devere formülünün ilk çarpanıdır (`kg = tel × denye × metre / 9e6`);
   // sıfır/negatif tel sessizce sıfır kg üretirdi.
+  // devere 1b (2026-09-14, migration 20260914125000): levent + olay defteri + iplik bağı.
+  { table: "warp_beams", name: "warp_beams_planned_length_positive" },
+  { table: "warp_beams", name: "warp_beams_origin_party_ck" },
+  { table: "warp_beam_events", name: "warp_beam_events_kind_ck" },
+  { table: "warp_beam_events", name: "warp_beam_events_length_positive" },
+  { table: "warp_beam_events", name: "warp_beam_events_cancel_link_ck" },
+  { table: "warp_beam_events", name: "warp_beam_events_wound_facts_ck" },
+  { table: "yarn_movements", name: "yarn_movements_warp_link_ck" },
+  { table: "yarn_movements", name: "yarn_movements_warp_return_reason_ck" },
   { table: "warp_specs", name: "warp_specs_ends_positive" },
   { table: "warp_specs", name: "warp_specs_selvedge_sane" },
   { table: "warp_specs", name: "warp_specs_reed_positive" },
@@ -653,6 +671,13 @@ const EXT_STATS: Array<{ name: string; table: string }> = [{ name: "sl_day_exact
 // ─────────────────────────────────────────────────────────────────────────────
 const EXPRESSION_UNIQUES: Array<{ table: string; index: string; expr: string; predicate?: string; why?: string }> = [
   { table: "users", index: "users_username_lower_uq", expr: "lower(username)" },
+  {
+    table: "warp_beams",
+    index: "warp_beams_physical_live_uq",
+    expr: 'tr_fold("physicalBeamNo")',
+    predicate: `((status = 'READY'::"WarpBeamStatus") AND ("physicalBeamNo" IS NOT NULL))`,
+    why: "bir metal gövdede iki CANLI çözgü olmaz (devere 1b; MOUNTED Faz 3'te yükleme eklenir)",
+  },
   { table: "permission_templates", index: "permission_templates_name_lower_uq", expr: "lower(name)" },
   {
     table: "colors",

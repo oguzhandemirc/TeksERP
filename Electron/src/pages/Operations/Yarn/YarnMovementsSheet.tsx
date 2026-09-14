@@ -41,6 +41,7 @@ import { cn } from "@/lib/utils";
 import {
   YARN_FILTER_KINDS,
   YARN_KIND_META,
+  yarnKindMeta,
   formatInstant,
   kindBadgeClass,
   listYarnMovements,
@@ -203,7 +204,7 @@ export function YarnMovementsSheet({ row, onClose, onAddMovement, showWarehouse 
                   </thead>
                   <tbody>
                     {rows.map((m) => {
-                      const meta = YARN_KIND_META[m.kind];
+                      const meta = yarnKindMeta(m.kind);
                       return (
                         <tr key={m.id} className="border-t align-top">
                           <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">

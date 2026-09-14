@@ -966,6 +966,7 @@ model Machine {
   rollMovements  RollMovement[]
   workSessions   WorkSession[]
   rollsCreated   Roll[]                   @relation("RollCreatedMachine") // KK1 girişi makine atfı
+  warpBeamEvents WarpBeamEvent[]          @relation("WarpBeamEventMachine") // devere: WOUND.machineId
   /// Kurşun bypass: bu MAKİNEYE atanan işler. Atama makine bazındadır — tek
   /// PROCESS_QC istasyonu altında N fiziksel kurşun makinesi vardır.
   kursunBypasses KursunBypassAssignment[]
@@ -1502,6 +1503,7 @@ model WarpSpec {
   yarnItem    Item   @relation("WarpSpecYarn", fields: [yarnItemId], references: [id], onDelete: Restrict)
   fabricItems Item[] @relation("ItemWarpSpec")
   weavingOrders WeavingOrder[] @relation("WeavingOrderWarpSpec")
+  warpBeams     WarpBeam[]     @relation("WarpBeamSpec")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -1521,6 +1523,124 @@ model WarpSpec {
   @@index([yarnItemId])
   @@map("warp_specs")
 }
+
+// =============================================================================
+// LEVENT (WarpBeam) — devere Faz 1b (2026-09-14). Tasarım: docs/design/DEVERE-LEVENT-TARAMASI.md §4
+// =============================================================================
+
+/// LEVENT DURUMU — Faz 1b yalnız üç değer. MOUNTED/EXHAUSTED/SCRAPPED/SHIPPED_OUT Faz 3'te
+/// kendi `ADD VALUE` dosyalarıyla doğar (yazıcısı olmayan değer şemaya girmez).
+enum WarpBeamStatus {
+  PLANNED
+  READY
+  CANCELLED
+}
+
+/// LEVENT KÖKENİ — AKSİYON ANINDA seçilir, kurulumda değil: aynı fabrika hem içeride sarar
+/// hem hazır levent alır (§3.9). CONSIGNED (müşterinin leventi) Faz N — `supplierId`e BİNDİRİLMEZ.
+enum WarpBeamOrigin {
+  IN_HOUSE
+  SUBCONTRACT
+  PURCHASED
+}
+
+/// "Sarım kg'ı nasıl bilindi" — fire 0 ≠ fire ölçülmedi. Brüt/net sorusu satır SAYISINDAN okunur (§3.7).
+enum WarpKgSource {
+  WEIGHED
+  THEORETICAL
+}
+
+/// LEVENT — "şu an ne". Doğuş gerçekleri BURADA DEĞİL, WOUND olay satırındadır (append-only).
+/// Kalan metre KOLON DEĞİL: WarpBeamEvent'ten türetilir. ⚠️ Faz 3 kolonları (currentMachineId ·
+/// currentPosition) BU DİLİMDE AÇILMADI — yazıcısı olmayan kolon yalan söyler.
+model WarpBeam {
+  id             String         @id @default(uuid()) @db.Uuid
+  /// LV+GGAAYY+NNNN — barkod = kod; 8029 kod-kapsam kilidiyle üretilir (yeni advisory uzayı YOK).
+  beamNo         String         @unique @db.VarChar(32)
+  clientToken    String?        @unique @db.Uuid
+  warpSpecId     String         @db.Uuid
+  status         WarpBeamStatus @default(PLANNED)
+  /// Plan metresi — yalnız PLANNED'da düzenlenir; gerçek metre WOUND satırında.
+  plannedLengthM Decimal        @db.Decimal(12, 3)
+  /// Metal gövde numarası — demirbaş kartı YOK (Faz 5); numarasız fabrika kayıttan düşmez.
+  physicalBeamNo String?        @db.VarChar(32)
+  notes          String?        @db.VarChar(500)
+
+  /// KÖKEN ÜÇLÜSÜ — taraf kolonunun TİPİ kökene bağlı, tek kapı `resolveOriginParty` (CHECK ikinci hat):
+  ///   IN_HOUSE    → ikisi de NULL (WOUND.machineId dolu)
+  ///   SUBCONTRACT → subcontractorId
+  ///   PURCHASED   → supplierId XOR subcontractorId, TAM BİRİ (fason devereci kendi ipliğiyle faturalayabilir)
+  originKind      WarpBeamOrigin @default(IN_HOUSE)
+  subcontractorId String?        @db.Uuid
+  supplierId      String?        @db.Uuid
+
+  warpSpec      WarpSpec        @relation("WarpBeamSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
+  subcontractor Subcontractor?  @relation("WarpBeamSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
+  supplier      Customer?       @relation("WarpBeamSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
+  events        WarpBeamEvent[]
+  yarnMovements YarnMovement[]
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  createdById String?  @db.Uuid
+  updatedById String?  @db.Uuid
+
+  @@index([status, warpSpecId])
+  @@index([warpSpecId])
+  @@index([subcontractorId])
+  @@index([supplierId])
+  @@map("warp_beams")
+}
+
+/// LEVENT OLAY DEFTERİ — "ne oldu"nun tek kaynağı. Satır GÜNCELLENMEZ/SİLİNMEZ (`updatedAt` YOK).
+/// Ters kayıt tipli `*_CANCEL` satırıdır; orijinaline `reversesEventId` ile bağlanır, bugüne yazılır.
+/// Faz 1b türleri: WOUND · WOUND_CANCEL (`WARP_BEAM_EVENT_KINDS` ↔ CHECK iki yönlü).
+/// Kalan metre = Σ warpBeamLengthSign(kind) × lengthM (tek kaynak helper).
+model WarpBeamEvent {
+  id              String         @id @default(uuid()) @db.Uuid
+  beamId          String         @db.Uuid
+  kind            String         @db.VarChar(32)
+  clientToken     String?        @unique @db.Uuid
+  /// Tek ters: çift iptal DB'de imkânsız.
+  reversesEventId String?        @unique @db.Uuid
+  fromStatus      WarpBeamStatus
+  toStatus        WarpBeamStatus
+
+  /// Çözgü metresi; > 0 (CHECK).
+  lengthM   Decimal? @db.Decimal(12, 3)
+  /// WOUND: devere makinesi (yalnız IN_HOUSE kökeninde dolu — CHECK değil, servis + bekçi).
+  machineId String?  @db.Uuid
+
+  // WOUND — doğuş gerçekleri (bir daha değişmez)
+  endsCount      Int?
+  /// İplik kartından KOPYA (`resolveDenier`), bugün `linearDensityDen`.
+  denier         Decimal?      @db.Decimal(10, 4)
+  /// endsCount × denier × lengthM / 9_000_000 (nominal; Decimal 3 hane).
+  theoreticalKg  Decimal?      @db.Decimal(14, 3)
+  kgSource       WarpKgSource?
+  sectionCount   Int?
+  endsPerSection Int?
+  breakCount     Int?
+  /// Kullanıcı girdisi; kronoloji `createdAt`.
+  startedAt      DateTime?     @db.Timestamptz
+
+  reasonCode  String?  @db.VarChar(64)
+  /// Gerekçe kolona yazılır, audit'e değil.
+  reason      String?  @db.VarChar(300)
+  createdById String?  @db.Uuid
+  createdAt   DateTime @default(now()) @db.Timestamptz
+
+  beam     WarpBeam       @relation(fields: [beamId], references: [id], onDelete: Restrict)
+  reverses WarpBeamEvent? @relation("WarpBeamEventReversal", fields: [reversesEventId], references: [id], onDelete: Restrict)
+  reversal WarpBeamEvent? @relation("WarpBeamEventReversal")
+  machine  Machine?       @relation("WarpBeamEventMachine", fields: [machineId], references: [id], onDelete: Restrict)
+
+  @@index([beamId, createdAt])
+  @@index([machineId, createdAt])
+  @@index([kind, createdAt])
+  @@map("warp_beam_events")
+}
+
 
 /// KİM DOKUYOR — `WarpBeamOrigin` kalıbının kardeşi, ikinci bir desen icat edilmez.
 enum WeavingExecutionKind {
@@ -2964,6 +3084,7 @@ model Customer {
   // Paket D (ticaret) — müşteri fiyat istisnaları + tedarikçi olarak alış siparişleri.
   itemPrices       ItemPrice[]
   purchaseOrders   PurchaseOrder[]           @relation("PurchaseOrderSupplier")
+  suppliedWarpBeams WarpBeam[]               @relation("WarpBeamSupplier")
   directShipments  DirectShipment[]
   templateRoutes   CustomerTemplateRoute[]
   standaloneLabels CustomerStandaloneLabel[]
@@ -5091,6 +5212,7 @@ model Subcontractor {
   receipts                 SubcontractorReceipt[]    @relation("ReceiptSubcontractor")
   plannedSteps             WorkOrderStep[]           @relation("StepPlannedSubcontractor")
   weavingOrders            WeavingOrder[]            @relation("WeavingOrderSubcontractor")
+  warpBeams                WarpBeam[]                @relation("WarpBeamSubcontractor")
   plannedRouteSteps        RouteStep[]               @relation("RouteStepPlannedSubcontractor")
   kartelaDispatches        KartelaDispatch[]         @relation("KartelaDispatchSub")
   kartelaReceipts          KartelaReceipt[]          @relation("KartelaReceiptSub")
@@ -8848,8 +8970,13 @@ model YarnMovement {
 
   userId String? @db.Uuid
 
+  /// Devere 1b: WARP_* satırı ⇔ levent bağı (CHECK `yarn_movements_warp_link_ck`); dip iadesinde sebep ZORUNLU.
+  warpBeamId String? @db.Uuid
+  reasonCode String? @db.VarChar(64)
+
   item         Item          @relation(fields: [itemId], references: [id], onDelete: Restrict)
   warehouse    Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  warpBeam     WarpBeam?     @relation(fields: [warpBeamId], references: [id], onDelete: Restrict)
   goodsReceipt GoodsReceipt? @relation(fields: [goodsReceiptId], references: [id])
   invoice      Invoice?      @relation(fields: [invoiceId], references: [id])
   stockCount   StockCount?   @relation(fields: [stockCountId], references: [id], onDelete: Restrict)
@@ -8862,6 +8989,7 @@ model YarnMovement {
   @@index([goodsReceiptId])
   @@index([invoiceId])
   @@index([stockCountId])
+  @@index([warpBeamId])
   @@map("yarn_movements")
 }
 

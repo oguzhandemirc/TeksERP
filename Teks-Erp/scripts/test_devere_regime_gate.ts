@@ -165,14 +165,14 @@ async function main(): Promise<void> {
   check("§6a Körlük zemini: router dizini tarandı", routerlar.length >= 40, `n=${routerlar.length}`);
 
   /** Devere-ÖZEL Prisma model erişimcileri (Faz 1b'de `warpBeam`/`warpBeamEvent` eklenir). */
-  const DEVERE_MODELLERI = ["warpSpec"];
+  const DEVERE_MODELLERI = ["warpSpec", "warpBeam", "warpBeamEvent"];
   const dokunanlar: string[] = [];
   const kapisizlar: string[] = [];
   for (const f of routerlar) {
     const metin = yorumlariSok(fs.readFileSync(path.join(routerDizin, f), "utf8"));
     const dokunuyor =
       DEVERE_MODELLERI.some((m) => new RegExp(`\\b(prisma|tx)\\.${m}\\b`).test(metin)) ||
-      /WarpSpecService|warpSpecService/.test(metin);
+      /WarpSpecService|warpSpecService|warp-beam(-wind)?\.service/.test(metin);
     if (!dokunuyor) continue;
     dokunanlar.push(f);
     if (!metin.includes(KAPI)) kapisizlar.push(f);

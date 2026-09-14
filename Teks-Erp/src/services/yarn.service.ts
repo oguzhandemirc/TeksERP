@@ -42,11 +42,13 @@ import { randomUUID } from "node:crypto";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
+import { yarnMovementSign } from "./helpers/yarn-sign.helper";
 import { assertYarnBalanceCoversTx } from "./helpers/yarn-balance-guard.helper";
 import { readIplikEnabled } from "./system-setting.service";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import { buildTurkishSearch } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";
+
 
 type Tx = Prisma.TransactionClient;
 
@@ -101,24 +103,6 @@ function toKgDecimal(raw: number | string): Prisma.Decimal {
  * birinin `Math.abs()` yazıp eksi sayım farkını artı saymasına açık kapı
  * bırakırdı — ve o hata deftere doğru görünen bir satır olarak yazılırdı.
  */
-export function yarnMovementSign(kind: YarnMovementKind): 1 | -1 {
-  switch (kind) {
-    case YarnMovementKind.IN:
-    case YarnMovementKind.ADJUST_IN:
-      return 1;
-    case YarnMovementKind.OUT:
-    case YarnMovementKind.ADJUST_OUT:
-      return -1;
-    // Devere 1b: çözgü çıkışı düşer, tersi ve dip iadesi döner, iadenin tersi düşer.
-    case YarnMovementKind.WARP_ISSUE:
-    case YarnMovementKind.WARP_RETURN_REVERSAL:
-      return -1;
-    case YarnMovementKind.WARP_ISSUE_REVERSAL:
-    case YarnMovementKind.WARP_RETURN:
-      return 1;
-  }
-}
-
 export interface YarnMovementTxInput {
   itemId: string;
   warehouseId: string;
@@ -135,6 +119,10 @@ export interface YarnMovementTxInput {
   stockCountId?: string | null;
   reason?: string | null;
   userId?: string | null;
+  /** Devere 1b: WARP_* türlerinde ZORUNLU (CHECK), diğerlerinde YAZILMAZ. */
+  warpBeamId?: string | null;
+  /** WARP_RETURN(_REVERSAL): dip kaderi — `ReasonPresetKind.WARP_RETURN` kodu (sunucuda doğrulanır). */
+  reasonCode?: string | null;
 }
 
 export interface YarnMovementTxResult {
@@ -217,6 +205,7 @@ export async function applyYarnMovementTx(tx: Tx, input: YarnMovementTxInput): P
       stockCountId: input.stockCountId ?? null,
       reason: input.reason?.trim() || null,
       userId: input.userId ?? null,
+      warpBeamId: input.warpBeamId ?? null, reasonCode: input.reasonCode ?? null,
     },
     select: { id: true },
   });
