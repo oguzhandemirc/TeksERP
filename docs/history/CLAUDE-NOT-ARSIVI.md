@@ -9099,3 +9099,15 @@ PASİF kod 400 "pasif" (fikstürde pasif kalite yaratıldı — sonda DB'sinde p
 `trimmedQuality || null` + `resolveQualityGradeIdStrict`. **Bekçi:** 11 kontrol; iki sonda diskte kırmızı görüldü
 (pasif kapısı `if (false)` → §4 ❌; `|| null` → `?? null` → §2 iki vaka ❌: kod "" yazıldı, id null — çift AYRIŞTI).
 Kural satırı `kk1.md § Backend`. 1e kararı: kusur yok ama ölçüm kalıcı olsun.
+
+## 2026-09-14 — VARSAYILAN HATA TİPİ GEÇİŞİ: migration GENEL'i YARATIR/AKTİFLEŞTİRİR — karar A §2 "GENEL yoksa damga yok + 400" GEÇERSİZ [ÇEKİRDEK]
+
+**Bağlam:** ea'nın `DefectType.isDefault` dilimi (`f87cb6e5`) migration'da GENEL kodlu tip yoksa yaratıp varsayılan
+yapıyor, pasifse aktifleştiriyor; `CAKILI-VARSAYIM-KARAR.md` A §2 ise "GENEL yoksa hiçbir satır damgalanmaz,
+varsayılansız kurulumda tipsiz giriş 400 + sürüm notu" diyordu (47 çelişmeli doğrulaması, İŞ 11).
+**Hüküm (1e):** migration davranışı KALIR — her kurulumda bir varsayılan olmalı; 400 yalnız SONRADAN varsayılan
+silinir/pasife alınırsa geçerlidir ve o da ea'nın K3 kalemiyle (varsayılanı pasife almak ret/uyarı) bağlanır.
+Karar cümlesi GEÇERSİZ damgalandı; sürüm notu ("GENEL adlı tip oluşturulup varsayılan yapılır") doğru metindir.
+**Bedel (d9, CI):** taze DB'de migration katalog satırı doğurur, `prisma/seed.ts` `createMany` aynı kodu yazınca
+P2002 — seed `upsert`e çevrildi. Ders: migration'ın kendi içinde idempotent olması komşusuyla (seed) çakışmayacağını
+göstermez; canlı-dump provası boş-DB senaryosunu ölçmez, ikisi ayrı ölçülür.
