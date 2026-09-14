@@ -35,7 +35,7 @@
 // =============================================================================
 
 import { Prisma } from "@prisma/client";
-import { ACTIVE_ALLOCATION } from "./sack-allocation.helper";
+import { ACTIVE_SACK_ALLOCATION } from "./sack-allocation.helper";
 import { batchLoadAliases } from "./customer-name.helper";
 
 /** Bir sevkiyat için çözülmüş müşteri-adı sözlüğü. */
@@ -105,7 +105,7 @@ export async function loadShipmentCustomerNames(
   // (a) Bu sevkiyatın çuvallarına yazılmış tahsisler — sevk ANINDA yazılır.
   if (input.sackIds.length) {
     const rows = await db.sackAllocation.findMany({
-      where: { sackId: { in: input.sackIds }, ...ACTIVE_ALLOCATION },
+      where: { sackId: { in: input.sackIds }, ...ACTIVE_SACK_ALLOCATION },
       select: { orderLine: { select: lineSelect } },
     });
     for (const r of rows) candidates.push({ ...r.orderLine, allocated: true });

@@ -11,10 +11,10 @@
 import { Prisma } from "@prisma/client";
 
 /** "ETKİN TAHSİS" YÜKLEMİ — TEK KAYNAK. Damgalı (yeniden hesaplanmış) satır Σ'ya girmez. */
-export const ACTIVE_ALLOCATION = { clearedAt: null } satisfies Prisma.SackAllocationWhereInput;
+export const ACTIVE_SACK_ALLOCATION = { clearedAt: null } satisfies Prisma.SackAllocationWhereInput;
 
 /** Ham SQL ikizi — alias'lı tablo başvurusu için `AND <alias>."clearedAt" IS NULL`. */
-export const ACTIVE_ALLOCATION_SQL = `"clearedAt" IS NULL`;
+export const ACTIVE_SACK_ALLOCATION_SQL = `"clearedAt" IS NULL`;
 
 /**
  * Bir sevkiyatın ETKİN tahsislerini damgalar — üç yazıcının (sipariş kümesi değişimi ·
@@ -28,7 +28,7 @@ export async function clearShipmentAllocationsTx(
   userId: string | null | undefined,
 ): Promise<number> {
   const r = await tx.sackAllocation.updateMany({
-    where: { sack: { shipmentId }, ...ACTIVE_ALLOCATION },
+    where: { sack: { shipmentId }, ...ACTIVE_SACK_ALLOCATION },
     data: { clearedAt: new Date(), clearedShipmentId: shipmentId, clearedById: userId ?? null },
   });
   return r.count;

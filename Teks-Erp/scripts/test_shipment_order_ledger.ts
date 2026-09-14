@@ -42,7 +42,7 @@
 //    "Açık" görünmeye devam eder, mal çıkmış olmasına rağmen.
 //    Geri alındığında yeşil.
 import prisma, { pool } from "../src/lib/prisma";
-import { ACTIVE_ALLOCATION } from "../src/services/helpers/sack-allocation.helper";
+import { ACTIVE_SACK_ALLOCATION } from "../src/services/helpers/sack-allocation.helper";
 import { ShippingService } from "../src/services/shipping.service";
 import { OrderStatus, RollStatus, ShipmentStatus } from "@prisma/client";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
@@ -106,7 +106,7 @@ async function kur(sackId: string, orderIds: string[]): Promise<string> {
 
 async function tahsis(lineId: string): Promise<number> {
   // Damgalı (yeniden hesaplanmış) satır Σ'ya girmez (K2, 2026-09-14) — üretim okuyucularıyla aynı yüklem.
-  const a = await prisma.sackAllocation.aggregate({ where: { orderLineId: lineId, ...ACTIVE_ALLOCATION }, _sum: { qty: true } });
+  const a = await prisma.sackAllocation.aggregate({ where: { orderLineId: lineId, ...ACTIVE_SACK_ALLOCATION }, _sum: { qty: true } });
   return Number(a._sum.qty ?? 0);
 }
 

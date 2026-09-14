@@ -25,7 +25,7 @@
 //    kırmızı — `distributeSacksToLines` çağrısı sabit diziyle değiştirildi.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
-import { ACTIVE_ALLOCATION } from "../src/services/helpers/sack-allocation.helper";
+import { ACTIVE_SACK_ALLOCATION } from "../src/services/helpers/sack-allocation.helper";
 import { Prisma, RollStatus, ShipmentStatus } from "@prisma/client";
 import { shippingService } from "../src/services/shipping.service";
 import { specMatch } from "../src/services/helpers/allocation.helper";
@@ -141,7 +141,7 @@ async function sevkKur(sackId: string, orderId: string): Promise<{ id: string; t
   );
   const id = (res.data as { id: string }).id;
   shipmentIds.push(id);
-  const agg = await prisma.sackAllocation.aggregate({ where: { sack: { shipmentId: id }, ...ACTIVE_ALLOCATION }, _sum: { qty: true } });
+  const agg = await prisma.sackAllocation.aggregate({ where: { sack: { shipmentId: id }, ...ACTIVE_SACK_ALLOCATION }, _sum: { qty: true } });
   return { id, tahsis: Number(agg._sum.qty ?? 0) };
 }
 

@@ -8,7 +8,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
-import { ACTIVE_ALLOCATION } from "./helpers/sack-allocation.helper";
+import { ACTIVE_SACK_ALLOCATION } from "./helpers/sack-allocation.helper";
 import type { ItemUnit } from "@prisma/client";
 import { AuditService } from "./audit.service";
 import { BaseService, BaseServiceConfig, CursorPaginatedResponse } from "./base.service";
@@ -1755,7 +1755,7 @@ export class OrderService extends BaseService {
       where: {
         orderLine: { orderId },
         sack: { shipment: { status: { not: ShipmentStatus.CANCELLED } } },
-        ...ACTIVE_ALLOCATION,
+        ...ACTIVE_SACK_ALLOCATION,
       },
       select: {
         qty: true,

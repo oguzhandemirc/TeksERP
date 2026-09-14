@@ -240,7 +240,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   // setShipmentOrders · cancelPlannedShipmentTx) TEK boğaza indi (`clearShipmentAllocationsTx`), satır
   // `clearedAt` + `clearedShipmentId` + `clearedById` ile DAMGALANIR; tam unique `sack_allocations_active_uq`
   // partial'a döndü (`WHERE "clearedAt" IS NULL`, envanteri test_db_invariants); Σ okuyucuların hepsi
-  // `ACTIVE_ALLOCATION` süzer (AST+tip kapısı `test_sack_allocation_cleared §4`, damga: clearedAt).
+  // `ACTIVE_SACK_ALLOCATION` süzer (AST+tip kapısı `test_sack_allocation_cleared §4`, damga: clearedAt).
   // Geri alma ucu YOK ve olmamalı: yeni tahsis yeni satırdır, damgalı satır tarihtir (versiyon değil damga —
   // hüküm 1e, SackTagAssignment deseni). "Kim değiştirdi" artık audit'te değil satırın kendisinde.
   D("SackAllocation", "sipariş karşılama defteri — MALİ ETKİSİ OLAN tek tahsis defteri; damga clearedAt/clearedById, adres clearedShipmentId",

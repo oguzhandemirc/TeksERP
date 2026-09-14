@@ -130,7 +130,7 @@ import type { CursorPaginatedResponse } from "./base.service";
 import type { Request } from "express";
 import { uyari } from "../lib/logger";
 import { PackingGroupService } from "./packing-group.service";
-import { ACTIVE_ALLOCATION, clearShipmentAllocationsTx } from "./helpers/sack-allocation.helper";
+import { ACTIVE_SACK_ALLOCATION, clearShipmentAllocationsTx } from "./helpers/sack-allocation.helper";
 import {
   parseQueryParams,
   isCursorRequested,
@@ -979,7 +979,7 @@ export class ShippingService {
           select: {
             branchId: true,
             rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, select: { itemId: true, colorId: true, width: true, currentQty: true } },
-            allocations: { where: ACTIVE_ALLOCATION, select: { qty: true } },
+            allocations: { where: ACTIVE_SACK_ALLOCATION, select: { qty: true } },
           },
         },
         orders: {
@@ -1072,7 +1072,7 @@ export class ShippingService {
               where: { status: { notIn: SACK_ABSENT_STATUSES } },
               select: { itemId: true, colorId: true, width: true, currentQty: true },
             },
-            allocations: { where: ACTIVE_ALLOCATION, select: { qty: true } },
+            allocations: { where: ACTIVE_SACK_ALLOCATION, select: { qty: true } },
           },
         },
         orders: {
@@ -1173,7 +1173,7 @@ export class ShippingService {
   /** Sevkiyatın toplam tahsis metrajı — onarım öncesi/sonrası ölçümü için. */
   private async olcTahsis(shipmentId: string): Promise<number> {
     const rows = await prisma.sackAllocation.aggregate({
-      where: { sack: { shipmentId }, ...ACTIVE_ALLOCATION },
+      where: { sack: { shipmentId }, ...ACTIVE_SACK_ALLOCATION },
       _sum: { qty: true },
     });
     return Math.round(Number(rows._sum.qty ?? 0) * 1000) / 1000;
@@ -2021,7 +2021,7 @@ export class ShippingService {
         where: {
           orderLineId: { in: lines.map((l) => l.id) },
           sack: { shipment: { status: ShipmentStatus.PLANNED } },
-          ...ACTIVE_ALLOCATION,
+          ...ACTIVE_SACK_ALLOCATION,
         },
         _sum: { qty: true },
       });
@@ -2071,7 +2071,7 @@ export class ShippingService {
     orderIds: string[],
     branchId: string | null
   ): Promise<AllocationAuditTrail | null> {
-    // Eski tahsis SİLİNMEZ, damgalanır (K2) — okuyucular ACTIVE_ALLOCATION süzer.
+    // Eski tahsis SİLİNMEZ, damgalanır (K2) — okuyucular ACTIVE_SACK_ALLOCATION süzer.
     await clearShipmentAllocationsTx(tx, shipmentId, null);
     if (orderIds.length === 0) return null;
     const sackRows = await tx.sack.findMany({ where: { shipmentId }, select: { id: true } });
@@ -2745,7 +2745,7 @@ export class ShippingService {
       }
       const pendingOther = await prisma.sackAllocation.groupBy({
         by: ["orderLineId"],
-        where: { orderLineId: { in: [...lineNeeds.keys()] }, sack: { shipment: { status: ShipmentStatus.PLANNED } }, ...ACTIVE_ALLOCATION },
+        where: { orderLineId: { in: [...lineNeeds.keys()] }, sack: { shipment: { status: ShipmentStatus.PLANNED } }, ...ACTIVE_SACK_ALLOCATION },
         _sum: { qty: true },
       });
       for (const g of pendingOther) {
@@ -3504,7 +3504,7 @@ export class ShippingService {
         customer: { select: { name: true } },
         branch: { select: { name: true } },
         _count: { select: { sacks: true, rolls: true, swatches: true } },
-        sacks: { select: { allocations: { where: ACTIVE_ALLOCATION, select: { qty: true, orderLine: { select: { order: { select: { orderNumber: true } } } } } } } },
+        sacks: { select: { allocations: { where: ACTIVE_SACK_ALLOCATION, select: { qty: true, orderLine: { select: { order: { select: { orderNumber: true } } } } } } } },
       },
     });
     if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
@@ -4578,7 +4578,7 @@ export class ShippingService {
               select: { id: true, barcode: true, status: true, width: true, currentQty: true, qualityGrade: true, item: { select: { id: true, code: true, name: true } }, color: { select: { id: true, code: true, name: true } } },
             },
             swatches: { select: { id: true, barcode: true, length: true, width: true, item: { select: { code: true, name: true } }, color: { select: { code: true, name: true } } } },
-            allocations: { where: ACTIVE_ALLOCATION, select: { orderLineId: true, qty: true } },
+            allocations: { where: ACTIVE_SACK_ALLOCATION, select: { orderLineId: true, qty: true } },
           },
         },
       },
@@ -5615,7 +5615,7 @@ async function collectShipmentDerived(db: PrintedDocDb, shipmentId: string) {
           // DB'ye hiç gitmeden, sorgu kurulurken atılır → belge her çağrıda patlar.
           // tsc bunu GÖREMEZ: `PrintedDocDb` bir union tipidir ve union üzerinden çağrı
           // fazla-alan (excess property) kontrolünü düşürür.
-          allocations: { where: ACTIVE_ALLOCATION, select: { qty: true, orderLine: { select: { unitPrice: true, customerItemName: true, item: { select: { name: true } }, color: { select: { name: true } }, order: { select: { currency: true } } } } } },
+          allocations: { where: ACTIVE_SACK_ALLOCATION, select: { qty: true, orderLine: { select: { unitPrice: true, customerItemName: true, item: { select: { name: true } }, color: { select: { name: true } }, order: { select: { currency: true } } } } } },
         },
       },
     },

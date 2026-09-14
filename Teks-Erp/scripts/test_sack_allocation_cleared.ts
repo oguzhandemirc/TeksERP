@@ -5,19 +5,19 @@
 // yeniden hesap (sipariş kümesi değişimi · tahsis yenileme · sevkiyat iptali) eski
 // satırı SİLMEZ, `clearedAt` + `clearedShipmentId` + `clearedById` ile damgalar
 // (`SackTagAssignment.clearedAt` deseni). Tablo hem etkin hem damgalı satır taşır ⇒
-// Σ okuyan HER yol `ACTIVE_ALLOCATION` süzer; süzmeyen bir yüzey karşılamayı şişirir.
+// Σ okuyan HER yol `ACTIVE_SACK_ALLOCATION` süzer; süzmeyen bir yüzey karşılamayı şişirir.
 //
 //   §1 sipariş kümesi değişince eski tahsis SİLİNMEZ, damgalanır (clearedShipmentId = sevkiyat);
 //      yeni satır etkin; Σ okuyucular (sipariş defteri shippedQty · sevkiyat tahsis Σ) yalnız etkin
 //   §2 aynı (çuval, satır) damgalı satır DURURKEN yeniden tahsis edilebilir (PARTIAL unique)
 //   §3 sevkiyat iptali tahsisleri damgalar (silmez); sipariş defteri geri düşer
-//   §4 ⭐ AST + tip: `sackAllocation` delegate/ilişki okumalarının HEPSİ `ACTIVE_ALLOCATION` taşır,
+//   §4 ⭐ AST + tip: `sackAllocation` delegate/ilişki okumalarının HEPSİ `ACTIVE_SACK_ALLOCATION` taşır,
 //      `delete/deleteMany` YOK, ham SQL `"clearedAt" IS NULL` — `revoke-ast-tarama` (damga: clearedAt)
 //   §5 SQL ikizi (`consistency-check.sql` + `test_consistency.ts`) her `sack_allocations` başvurusunda
 //      süzgeç taşır (qty ≤ 0 satırı beyanlı istisna)
 //   §6 damgalı satırın ileri kaydı DEĞİŞMEZ: qty/sackId/orderLineId aynı, sadece damga
 //
-// NEGATİF SONDALAR (2026-09-14, cp + sha256): `order-status.helper`ten `...ACTIVE_ALLOCATION`
+// NEGATİF SONDALAR (2026-09-14, cp + sha256): `order-status.helper`ten `...ACTIVE_SACK_ALLOCATION`
 // düşürüldü → §4 ihlal ❌ VE §1 shippedQty şişti (300 → 600) ❌ · `clearShipmentAllocationsTx`
 // deleteMany'e çevrildi → §1/§3 "satır silinmedi" ❌ + §4 silme ❌.
 // =============================================================================
@@ -26,7 +26,7 @@ import { join } from "node:path";
 import { RollStatus, ShipmentStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";
-import { ACTIVE_ALLOCATION } from "../src/services/helpers/sack-allocation.helper";
+import { ACTIVE_SACK_ALLOCATION } from "../src/services/helpers/sack-allocation.helper";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 import { aktifYuklemTara, sqlEksikSuzgec } from "./revoke-ast-tarama";
@@ -90,7 +90,7 @@ async function satirlar(sackId: string): Promise<Satir[]> {
   return rows.map((r) => ({ ...r, qty: Number(r.qty) }));
 }
 async function etkinToplam(lineId: string): Promise<number> {
-  const a = await prisma.sackAllocation.aggregate({ where: { orderLineId: lineId, ...ACTIVE_ALLOCATION }, _sum: { qty: true } });
+  const a = await prisma.sackAllocation.aggregate({ where: { orderLineId: lineId, ...ACTIVE_SACK_ALLOCATION }, _sum: { qty: true } });
   return Number(a._sum.qty ?? 0);
 }
 async function shippedOf(lineId: string): Promise<number> {
@@ -145,7 +145,7 @@ async function main(): Promise<void> {
   check("§2a ⭐ aynı (çuval, A satırı) damgalı dururken YENİDEN tahsis edildi (partial unique)", aSatirlari.length === 2 && aSatirlari.filter((r) => r.clearedAt === null).length === 1, `A satırı ${aSatirlari.length}, etkin ${aSatirlari.filter((r) => r.clearedAt === null).length}`);
   check("§2b B satırı damgalandı", s3.find((r) => r.orderLineId === lineB)?.clearedAt !== null);
   check("§2c toplam satır 3 (hiçbiri silinmedi), etkin 1", s3.length === 3 && s3.filter((r) => r.clearedAt === null).length === 1);
-  const cift = await prisma.sackAllocation.count({ where: { sackId: sackA, orderLineId: lineA, ...ACTIVE_ALLOCATION } });
+  const cift = await prisma.sackAllocation.count({ where: { sackId: sackA, orderLineId: lineA, ...ACTIVE_SACK_ALLOCATION } });
   check("§2d etkin (çuval, satır) çifti TEK (sed: sack_allocations_active_uq)", cift === 1, `${cift}`);
 
   // ── §6 damgalı satırın ileri kaydı değişmedi ─────────────────────────────
@@ -175,14 +175,14 @@ async function main(): Promise<void> {
     {
       delegate: "sackAllocation",
       model: "SackAllocation",
-      sabit: "ACTIVE_ALLOCATION",
+      sabit: "ACTIVE_SACK_ALLOCATION",
       tablo: "sack_allocations",
       helper: join("src", "services", "helpers", "sack-allocation.helper.ts"),
       damga: "clearedAt",
     },
   ]).get("sackAllocation")!;
-  check("§4a ⭐ her delegate okuma/güncelleme ACTIVE_ALLOCATION taşır", r.cagriSayisi >= 6 && r.cagriIhlal.length === 0, `çağrı=${r.cagriSayisi}${r.cagriIhlal.length ? " İHLAL: " + r.cagriIhlal.join(", ") : ""}`);
-  check("§4b ⭐ her ilişki okuması (allocations: {…}) ACTIVE_ALLOCATION taşır", r.iliskiSayisi >= 5 && r.iliskiIhlal.length === 0, `ilişki=${r.iliskiSayisi}${r.iliskiIhlal.length ? " İHLAL: " + r.iliskiIhlal.join(", ") : ""}`);
+  check("§4a ⭐ her delegate okuma/güncelleme ACTIVE_SACK_ALLOCATION taşır", r.cagriSayisi >= 6 && r.cagriIhlal.length === 0, `çağrı=${r.cagriSayisi}${r.cagriIhlal.length ? " İHLAL: " + r.cagriIhlal.join(", ") : ""}`);
+  check("§4b ⭐ her ilişki okuması (allocations: {…}) ACTIVE_SACK_ALLOCATION taşır", r.iliskiSayisi >= 5 && r.iliskiIhlal.length === 0, `ilişki=${r.iliskiSayisi}${r.iliskiIhlal.length ? " İHLAL: " + r.iliskiIhlal.join(", ") : ""}`);
   check("§4c ⭐ delete/deleteMany YOK (sil-yaz bitti)", r.silme.length === 0, r.silme.join(", ") || "0");
   check("§4d ham SQL başvuruları \"clearedAt\" IS NULL taşır", r.sqlIhlal.length === 0, `sql=${r.sqlSayisi}${r.sqlIhlal.length ? " İHLAL: " + r.sqlIhlal.join(", ") : ""}`);
   console.log(`   istisnalar: ${r.istisnalar.length ? r.istisnalar.join(", ") : "yok"}`);

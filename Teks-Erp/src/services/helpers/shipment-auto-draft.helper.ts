@@ -43,7 +43,7 @@
 
 import { Currency, InvoiceStatus, InvoiceType, PriceKind, Prisma, ShipmentStatus } from "@prisma/client";
 import prisma from "../../lib/prisma";
-import { ACTIVE_ALLOCATION } from "./sack-allocation.helper";
+import { ACTIVE_SACK_ALLOCATION } from "./sack-allocation.helper";
 import { AppError } from "../../utils/app-error";
 import { invoiceService } from "./../invoice.service";
 import { resolveItemPricesFor } from "./../item-price.service";
@@ -251,7 +251,7 @@ export async function collectShipmentInvoiceDraftLines(
 /** Bu sevkiyatın tahsis aldığı MT-dışı sipariş satırları → taslak uyarısı (satır başına bir). */
 async function collectUnmeasuredAllocationWarnings(shipmentId: string): Promise<string[]> {
   const allocs = await prisma.sackAllocation.findMany({
-    where: { sack: { shipmentId }, orderLine: { unit: { not: LEDGER_UNIT } }, ...ACTIVE_ALLOCATION },
+    where: { sack: { shipmentId }, orderLine: { unit: { not: LEDGER_UNIT } }, ...ACTIVE_SACK_ALLOCATION },
     select: {
       orderLine: {
         select: { id: true, unit: true, customerItemName: true, item: { select: { name: true } } },
