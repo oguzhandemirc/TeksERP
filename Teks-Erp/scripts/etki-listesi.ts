@@ -21,7 +21,13 @@
 //   npx tsx scripts/etki-listesi.ts <sha1>..<sha2>
 //   npx tsx scripts/etki-listesi.ts --sonda       # kendi yüklemini ölçer
 //
-// ⚠️ SINIRI: bu araç METİN anması ölçer, çağrı GRAFİĞİ değil. Bir bekçi modeli
+// ⚠️ SINIR 1 — TEK SHA İÇİN: aralık verilirse araç KÖRELİR. Ölçüldü 2026-09-14
+//    (1e, tren #57): `origin/main..HEAD` (7 commit, 82'nin Faz 2b/2c 19 modele
+//    dokunuyor) ⇒ **A = 174**; aynı araç tek commit'te (`d05067c3`) ⇒ **A = 1–2**.
+//    Sebep: odak modeller BİRLEŞİYOR ve "yeni sembol" kümesi şişiyor ⇒ ayırt
+//    edicilik kayboluyor. ⇒ **sha başına koş; tren için `npm test`.** Araç bunu
+//    aralık verildiğinde KENDİSİ de uyarır (sessiz körlük olmaz).
+// ⚠️ SINIR 2: bu araç METİN anması ölçer, çağrı GRAFİĞİ değil. Bir bekçi modeli
 //    dolaylı (servis üzerinden) kullanıyorsa ve adını hiç yazmıyorsa listeye
 //    GİRMEZ. ⇒ Liste bir ALT SINIRDIR, "bunlar yeter" demez. Tam kapsam `npm test`.
 // =============================================================================
@@ -234,6 +240,24 @@ function main(): void {
   if (!hedef) {
     console.log("kullanım: npx tsx scripts/etki-listesi.ts <--cached | sha | sha1..sha2 | --sonda>");
     process.exit(2);
+  }
+  // ⚠️ ARALIK UYARISI — sınırı beyan etmek yetmez, KOŞUM ANINDA söylenir.
+  if (hedef.includes("..")) {
+    let n = 0;
+    try {
+      n = execFileSync("git", ["rev-list", "--count", hedef], { cwd: REPO, encoding: "utf8" }).trim().length
+        ? Number(execFileSync("git", ["rev-list", "--count", hedef], { cwd: REPO, encoding: "utf8" }).trim())
+        : 0;
+    } catch {
+      n = 0;
+    }
+    if (n > 2) {
+      console.log(
+        `\n⚠️⚠️ ARALIK ${n} COMMIT — BU ARAÇ KÖRELİR. Ölçüldü 2026-09-14: 7 commit'lik aralıkta A=174,\n` +
+          `     tek commit'te A=1–2. Odak modeller birleşir, "yeni sembol" kümesi şişer, ayırt edicilik gider.\n` +
+          `     ⇒ SHA BAŞINA koş; tren için \`npm test\`. (Yine de aşağıyı basıyorum — ama öncelik listesi SAYMA.)`,
+      );
+    }
   }
   const degisen = degisenDosyalar(hedef);
   if (degisen.length === 0) {
