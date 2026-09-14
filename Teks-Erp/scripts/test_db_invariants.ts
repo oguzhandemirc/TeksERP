@@ -384,6 +384,9 @@ const PARTIAL_INDEXES: Array<{
   // label_templates / variants — şema-DIŞI unique'ler
   { table: "label_templates", index: "label_templates_one_default_per_kind", uniq: true, predicate: `("isDefault" = true)`, why: "kind başına TEK varsayılan şablon" },
   { table: "label_template_variants", index: "label_template_variants_one_primary", uniq: true, predicate: `("isPrimary" = true)`, why: "şablon başına TEK primary varyant" },
+  // defect_types — şema-DIŞI partial unique (migration 20260914096000): kurulumda TEK varsayılan hata tipi;
+  // tipsiz hata girişi ona düşer, düz unique olsaydı `false` satırları çakışırdı (karar A, 2026-09-14).
+  { table: "defect_types", index: "defect_types_one_default", uniq: true, predicate: `("isDefault" = true)`, why: "kurulumda TEK varsayılan hata tipi" },
   // traveler_card_templates — şema-DIŞI unique. PARTIAL olması ZORUNLU: düz unique
   // olsaydı `isDefault=false` de benzersiz sayılır, sistemde toplam iki şablon tutulabilirdi.
   { table: "traveler_card_templates", index: "traveler_card_templates_isDefault_key", uniq: true, predicate: `("isDefault" = true)`, why: "sistemde TEK varsayılan refakat kartı şablonu" },
