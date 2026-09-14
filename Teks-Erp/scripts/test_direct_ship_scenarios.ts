@@ -186,7 +186,7 @@ async function main(): Promise<void> {
     await expectThrow("iptal sipariş satırı → reddedilir", () => sub.executeDirectShip({ dispatchId: dId, reason: "iptal sipariş", customerId: CUSTOMER, orderLineAllocations: [{ orderLineId: cancLine, qty: 50 }] }, ADMIN), "İptal");
     // kısa sebep (reason guard customerId guard'ından da önce → customerId'siz doğru)
     await expectThrow("kısa sebep (<3) → reddedilir", () => sub.executeDirectShip({ dispatchId: dId, reason: "ab" }, ADMIN), "3 karakter");
-    // müşteri-zorunlu guard (07fbbde): customerId olmadan → 400 "müşteri zorunludur"
+    // müşteri-zorunlu guard (`07fbbde`): customerId olmadan → 400 "müşteri zorunludur"
     await expectThrow("customerId YOK → 'müşteri zorunludur'", () => sub.executeDirectShip({ dispatchId: dId, reason: "müşterisiz doğrudan sevk denemesi" }, ADMIN), "müşteri zorunludur");
   }
 

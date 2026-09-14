@@ -97,7 +97,7 @@ const EXEMPT: Record<string, string> = {
   // "sunucu şu panel sürümünü istiyor" — aynı LAN'da zaten `/identity` sürüm
   // basıyor. Değer KODDA sabittir, uçtan yazılamaz. Bekçi: test_client_policy.ts
   "GET /api/client-policy/:istemci": "istemci sürüm politikasını giriş öncesi sorar; salt-okunur, iki sürüm numarası",
-  // Aynı politikanın ÇOĞUL hâli (`GET /api/client-policy/`, ce8681d1): sunucu
+  // Aynı politikanın ÇOĞUL hâli (`GET /api/client-policy/`, `ce8681d1`): sunucu
   // "ben şu sürümüm ve şu istemcilerden şunları bekliyorum" cümlesini tek
   // istekte verir. Tekil uçla AYNI veriyi, aynı gerekçeyle döner — panel bunu
   // giriş ekranından önce sorar; yükü `CLIENT_VERSION_POLICIES` sabitinden

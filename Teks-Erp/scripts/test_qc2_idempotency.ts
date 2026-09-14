@@ -18,7 +18,7 @@
 // eski sürüm `findFirst` ile "herhangi bir PROCESS_QC adımı + herhangi bir top"
 // arıyordu; CI'nın taze `_test` klonunda (migrate deploy sonrası, seed'siz) ikisi de
 // yok ⇒ ⏭ beyanla dönüyor, HİÇBİR ŞEY ölçmüyordu (d9 sessizliği beyana çevirdi,
-// 923addc7; bu sürüm beyanı ölçüme çevirir). Şimdi test kendi Item + Station
+// `923addc7`; bu sürüm beyanı ölçüme çevirir). Şimdi test kendi Item + Station
 // (PROCESS_QC) + WorkOrder + WorkOrderStep + Roll zincirini `TEST-QC2-` damgasıyla
 // kurar ve `finally`de FK sırasıyla söker. Seed'e, istasyon kataloğuna, admin'e
 // ihtiyaç yok — boş DB'de de aynı iki kontrol koşar.

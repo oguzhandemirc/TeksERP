@@ -286,7 +286,7 @@ check(
 // Aynı ailenin bu repoda dördüncü vakası:
 //   check-migrations GATE 1/4 → geçici indeksi okuyordu   → gerçek indeks
 //   check-lint-baseline       → "kurala DEĞDİ Mİ"         → headSayim(): HEAD ↔ ağaç
-//   kimlik tekilliği kapısı   → ağacı okuyordu            → HEAD ↔ ağaç (820ade01)
+//   kimlik tekilliği kapısı   → ağacı okuyordu            → HEAD ↔ ağaç (`820ade01`)
 //   BU KAPI                   → ağacı okuyordu            → ↓
 //
 // İKİ AYRI DARALTMA GEREKİYOR ve biri ötekinin yerine geçmez:

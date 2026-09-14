@@ -45,7 +45,7 @@ const SATIR_RE = /\{\s*code:\s*["']([A-Z0-9_]+)["'],\s*label:\s*["']([^"']+)["']
  * `export const <AD>… = [ … ]` bloğunu KAPANIŞ KÖŞESİNDE keser (`];` de `] as const;` de).
  * ⚠️ Eski hâli `indexOf("];")` ile SONU BEYANSIZ okuyordu: `] as const;` ile biten dizi o
  * imzayı taşımadığından ayrıştırıcı komşu diziye (c1'in `WARP_RETURN_REASONS`ı) taştı ve
- * MACHINE_STOP kümesine üç yabancı kod girdi — CI f1c09b54 kırmızı (sınırsız eşleşme sınıfı,
+ * MACHINE_STOP kümesine üç yabancı kod girdi — CI `f1c09b54` kırmızı (sınırsız eşleşme sınıfı,
  * 2026-09-14). Sınır artık ilk `]`: satırlarda `]` geçmez.
  */
 function ayristir(kaynak: string, dizi: string): Satir[] {
@@ -113,7 +113,7 @@ function main(): void {
   check("§5c etiket farklı → §3 kırmızı", !karsilastir(sunucu, ayristir(etiket, "LOOM_STOP_REASONS")).etiket);
   check("§5d boş metin → körlük zemini kırmızı", ayristir("", "LOOM_STOP_REASONS").length < EN_AZ);
   // §5e ⭐ komşu dizi taşması: dizinin ALTINA sahte bir komşu eklenir → eski ayrıştırıcı komşuyu
-  // da sayar (kırmızı), yeni ayrıştırıcı kapanış köşesinde durur (yeşil). CI f1c09b54 vakası.
+  // da sayar (kırmızı), yeni ayrıştırıcı kapanış köşesinde durur (yeşil). CI `f1c09b54` vakası.
   const komsulu = tabletMetin.replace("] as const;", "] as const;\n\nexport const SAHTE_KOMSU = [\n  { code: 'YABANCI', label: 'Yabancı' },\n] as const;");
   check("§5e ⭐ komşu diziye TAŞMAZ (yeni ✅, eski ayrıştırıcı ❌ verirdi)", komsulu !== tabletMetin && ayristir(komsulu, "LOOM_STOP_REASONS").length === tablet.length && ayristirEski(komsulu, "LOOM_STOP_REASONS").length !== tablet.length);
 

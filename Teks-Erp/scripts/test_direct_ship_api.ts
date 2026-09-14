@@ -123,7 +123,7 @@ async function main(): Promise<void> {
     check("negatif qty → 400 (Zod positive)", badQty.status === 400, String(badQty.status));
     const badUuidInBody = await call("POST", `/api/subcontractor/dispatches/${d1}/direct-ship`, adminTok, { reason: "geçerli sebep", customerId: CUSTOMER, orderLineAllocations: [{ orderLineId: "not-a-uuid", qty: 5 }] });
     check("orderLineId geçersiz uuid → 400 (Zod)", badUuidInBody.status === 400, String(badUuidInBody.status));
-    // Müşteri-zorunlu guard (07fbbde): customerId olmadan çağrı → 400 "müşteri zorunludur".
+    // Müşteri-zorunlu guard (`07fbbde`): customerId olmadan çağrı → 400 "müşteri zorunludur".
     // Guard dispatch lookup'tan ÖNCE çalışır → hiçbir mutasyon olmaz.
     const noCustomer = await call("POST", `/api/subcontractor/dispatches/${d1}/direct-ship`, adminTok, { reason: "müşterisiz doğrudan sevk denemesi" });
     check("customerId YOK → 400 'müşteri zorunludur'", noCustomer.status === 400 && (noCustomer.body.message ?? "").includes("müşteri zorunludur"), `${noCustomer.status} ${noCustomer.body.message ?? ""}`);

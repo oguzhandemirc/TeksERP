@@ -261,7 +261,7 @@ async function main(): Promise<void> {
   check("İptal edilmiş sevk doğrudan sevk edilemedi (hata)", errD !== null, errD ?? "(hata yok!)");
 
   // ===========================================================================
-  // TEST E — Guard: customerId YOK → 400 "müşteri zorunludur" (07fbbde sözleşmesi)
+  // TEST E — Guard: customerId YOK → 400 "müşteri zorunludur" (`07fbbde` sözleşmesi)
   // ===========================================================================
   console.log("\n=== TEST E: Guard — customerId yok → müşteri zorunludur ===");
   const { woId: woE, stepIds: stepsE } = await makeWo([{ stationId: ST_BOYA, seq: 1 }]);

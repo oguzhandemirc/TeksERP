@@ -408,7 +408,7 @@ WHERE rm."exitedAt" IS NOT NULL
   AND rm."qtyOut" IS DISTINCT FROM rm."qtyIn"`,
     noise: {
       // Bu kapanışlar İSTASYON BİTİRMESİ DEĞİLDİR, dolayısıyla "qtyOut = qtyIn"
-      // kuralının (commit 64263fc) konusu da değildir:
+      // kuralının (commit `64263fc`) konusu da değildir:
       //   <ORIGIN>_*      → dispozisyon motoru (WO_CLOSE / WO_CANCEL / BATCH_DROP).
       //                     CANCELLED aksiyonunda qtyOut BİLİNÇLİ 0'dır (storno).
       //                     ⚠️ Desenler `DISPOSITION_NOTE_PREFIXES`'ten TÜRETİLİR —

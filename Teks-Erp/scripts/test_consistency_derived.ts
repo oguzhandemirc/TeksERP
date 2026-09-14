@@ -21,7 +21,7 @@
 //        statik yarısı `test_snapshot_kolonlari`)
 //
 // Ortak nokta: hiçbirinde DB seddi YOKTUR; tek koruma yazan kod yolunun
-// disiplinidir. §21 tam olarak böyle bulundu (2026-08-21, commit 74d92085):
+// disiplinidir. §21 tam olarak böyle bulundu (2026-08-21, commit `74d92085`):
 // "Sipariş Bağla" pivot satırını yazıyordu ama `WorkOrder.type`'a dokunmuyordu →
 // 13 iş emri listede/künyede/kartta "Stok" basarken detay panelinde siparişi
 // gösteriyordu. Hata yok, log yok, yalnız yanlış kâğıt.

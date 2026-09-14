@@ -195,7 +195,7 @@ async function main(): Promise<void> {
   // ═══ Geri taşımada downstream işlem: CUT hard-stop + salt-QC void ═══
   console.log("\n── Geri taşımada işlem: CUT hard-stop + salt-QC void ──");
   {
-    // Yeni davranış (Faz 3 QC reversal, dc7ce1b): salt QC/kurşun/tambur KARARI
+    // Yeni davranış (Faz 3 QC reversal, `dc7ce1b`): salt QC/kurşun/tambur KARARI
     // (çocuk top YOK) geri taşımayı artık ENGELLEMEZ — karar VOID edilir (op
     // silinmez, damgalanır; grade → Belirsiz); yalnız fiziksel KESİM (parentRollId'li çocuk)
     // hard-stop'tur. Testin eski "her işlem engeller" beklentisi buna onarıldı.

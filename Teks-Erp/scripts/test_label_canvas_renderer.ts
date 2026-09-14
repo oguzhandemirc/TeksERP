@@ -89,7 +89,7 @@ async function main() {
   // --- Metin/rotasyon/font ---
   check("PPLB: bold metin çarpan 2", /A240,24,0,3,2,2,N,"PATOS"/.test(pplb));
   // PPLB Türkçe codepage (I8,E,001 + CP1254): asciiFold DEĞİL — Türkçe glif cp1254
-  // baytına eşlenir (ü→ü, ş→þ, Ş→Þ) → yazıcı gerçek Türkçe basar. (commit 40b7c6f)
+  // baytına eşlenir (ü→ü, ş→þ, Ş→Þ) → yazıcı gerçek Türkçe basar. (commit `40b7c6f`)
   check("PPLB: label'lı alan 'Müşteri: ...'", pplb.includes('"Müþteri: Þahin Tekstil"'));
   check("PPLB: rot 90 → rotCode 1", /A240,160,1,2,1,1,N,"SABÝT NOT"/.test(pplb));
   check("PPLA: rot 90 → önek 2", /^22\d\d000\d{4}\d{4}SABIT NOT/m.test(ppla));

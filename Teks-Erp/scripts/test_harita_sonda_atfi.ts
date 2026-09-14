@@ -190,7 +190,7 @@ function main(): void {
     if (sha) console.log(`     ℹ️ ${HARITA}:${s.no} ${s.dosya} ✓B ${BU_COMMIT} → blame ${sha}`);
     else havada.push(s);
   }
-  // ÜÇ SONUÇ (CI c2635fc1, 2026-09-14: sığ klonda blame her satırı sınır (^) verdi, "havada" sanıldı):
+  // ÜÇ SONUÇ (CI `c2635fc1`, 2026-09-14: sığ klonda blame her satırı sınır (^) verdi, "havada" sanıldı):
   // sığ klonda blame ÖLÇÜLEMEZ → ⏭ adıyla, satırın biçimi yine ölçülür (§2); sha'yı tam klon türetir.
   if (sig && olculemedi.length > 0) {
     ATLAMA.atla(`§1b ${BU_COMMIT} blame`, `sığ klon (depth<∞) — ${olculemedi.length} işaretli satırın sha'sı burada türetilemez; tam klon/entegratör türetir (ci.yml fetch-depth: 0)`, olculemedi.length);

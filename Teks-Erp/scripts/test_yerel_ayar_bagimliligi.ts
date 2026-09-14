@@ -134,7 +134,7 @@ const ALET_TABAN = 14;
  * 113 → 0 düşer; 0'da bu cırcır SERT'e çevrilir ve "iki yan aynı mı katlıyor"
  * sorusu YAPISAL olarak kapanır — elle tutulan bir çift listesiyle değil.
  */
-// 113 → 54 (2026-09-14, entegratör 1e): ea backend parçası (upperTr/lowerTr, 7bc091bb) birleşik ağaçta ölçüldü;
+// 113 → 54 (2026-09-14, entegratör 1e): ea backend parçası (upperTr/lowerTr, `7bc091bb`) birleşik ağaçta ölçüldü;
 // kalan 54 = Electron 17 + mobil 20 (parça 2, ea) + 12 test oracle'ı (muaf adayı) + helper içi.
 // 54 → 30 (2026-09-14, ea — kapı zorladı, 1e istisnası; tren sonunda 1e ölçer): Electron 17 + mobil 11 ürün sitesi
 // upperTr/lowerTr'ye; kalan 30 (ölçüldü 2026-09-14, `npx tsx scripts/test_yerel_ayar_bagimliligi.ts` §3 dökümü) = 12 backend +

@@ -96,7 +96,7 @@ const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 const TABAN = 0;
 
 /**
- * KESİK ALAN TABANI — YALNIZ DÜŞER. Ölçüldü 2026-09-13 (HEAD da0d3ced):
+ * KESİK ALAN TABANI — YALNIZ DÜŞER. Ölçüldü 2026-09-13 (HEAD `da0d3ced`):
  * 598 alanın uzunluk dağılımında 79→3 · **80→66** · 81→1 · 82→0. Bu bir
  * yazım alışkanlığı değil, 2026-09-05 üretecinin 80 karakterde KESME İMZASI —
  * alanlar kelime ortasında bitiyor ("…kırmızı gös", "…READ", "…, te").

@@ -3,7 +3,7 @@
 // Çalıştır: npx tsx scripts/test_label_html_format.ts
 // Doğrulananlar: @page size = medya, margin = pay; .label width = medya − 2×pay;
 // default (format yok) = 100×148+3 (içerik 94); landscape = iki-kolon düzen
-// (sayfa MEDYA ölçüsünde — takas YOK; orientation yalnız düzeni seçer, d016105).
+// (sayfa MEDYA ölçüsünde — takas YOK; orientation yalnız düzeni seçer, `d016105`).
 // =============================================================================
 import { buildRollLabelHtml } from "../src/services/helpers/label-html.helper";
 import type { LabelPayload } from "../src/services/label.service";
