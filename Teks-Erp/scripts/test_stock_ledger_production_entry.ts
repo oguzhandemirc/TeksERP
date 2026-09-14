@@ -22,11 +22,14 @@
 //   §5 0 metrajlı takılı top: kurtarılır ama satır YAZILMAZ (taşınacak mal yok — atlama, hata değil)
 //   §6 körlük zemini: fikstür satır üretti
 //   §7 ⭐ finalizeOpenFabric KALANI da aynı girişi alır (6e'nin kör noktası, 2026-09-14) + SINGLE geri alma tersler
+//   §7c ⭐ FULL geri alma (kesim 40 + kesim 30 + kalan 30): üç girişin üçü de bağlı terslenir, ebeveyn 100 m IN_PRODUCTION
+//      (hüküm §11 tablosu: 47'nin P3 sondası ölçmüştü, bekçi ölçmüyordu — 2026-09-14)
 // Negatif sondalar (2026-09-14, cp+sha256 ile geri):
 //   · `cutOpenFabric`ten `postStockMove` çağrısı silinince: §1a/§1b/§2/§3 kırmızı (ilk sürüm §2'de `s1[0]!.id` ile ÇÖKÜYORDU — dili ölen bekçi; `?.` ile düzeltildi)
 //   · `rescueStuckRoll`dan `postStockMove` bloğu silinince: §4/§6 kırmızı
 //   · `finalizeOpenFabric`ten `postOpenFabricChildEntryTx` çağrısı silinince: §7a/§7b kırmızı
 //   · `test_stok_defteri_bag_olcumu §4f` bu commit'le BİLEREK kırmızı (K 2→0, taban 1e'de)
+//   · applyFull'daki `reverseAllRollStockMoves` çağrısı kapatılınca: §7c ❌ (1/40 · 1/30 · 1/30 — girişler açık kaldı) (2026-09-14, 5fb3c821)
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım.
 // =============================================================================
 import { RollEntrySource, RollForm, RollStatus, StepStatus, WarehouseEventType } from "@prisma/client";
@@ -166,6 +169,25 @@ async function main(): Promise<void> {
       const s7b = await satirlar(kalan7);
       check("§7b kalan çocuğun geri alınması girişi TAMBUR_UNDO ile BAĞLI tersler, net 0", s7b.length === 2 && net(s7b) === 0 && s7b.some((r) => r.reasonCode === STOCK_MOVE_REASON.TAMBUR_UNDO && r.reversesMovementId === s7[0]?.id), `satır=${s7b.length} net=${net(s7b)}`);
     }
+
+    // ── §7c FULL geri alma — ÜÇ çocuk (kesim 40 + kesim 30 + finalize kalanı 30) ────────
+    // Hüküm dosyası §11 tablo: 47'nin P3 sondası ölçtü, bekçi FULL'ü ölçmüyordu. Her çocuğun
+    // girişi BAĞLI terslenir (2 satır, net 0), ebeveyn 100 m IN_PRODUCTION'a döner.
+    const e = await uretimdeTop("E", tamburSt.id, 100, { acik: true, warehouseId: warehouse.id, itemId, gradeCode: grade.code });
+    const e1 = (await tambur.cutOpenFabric(e.rollId, { lengthMeters: 40, status: "WAREHOUSE", confirmMismatch: true })).data as { childRoll: { id: string } };
+    const e2 = (await tambur.cutOpenFabric(e.rollId, { lengthMeters: 30, status: "WAREHOUSE", confirmMismatch: true })).data as { childRoll: { id: string } };
+    const finE = await tambur.finalizeOpenFabric(e.rollId, { remainingAction: "keep_1kalite", varianceReasonCode: null, varianceReasonText: "bekçi §7c", confirmMismatch: true });
+    const kalanE = (finE.data as { remainingChildId: string | null }).remainingChildId;
+    const cocuklarE = [e1.childRoll.id, e2.childRoll.id, ...(kalanE ? [kalanE] : [])];
+    rollIds.push(...cocuklarE);
+    const girisler = await Promise.all(cocuklarE.map((id) => satirlar(id)));
+    check("§7c-0 fikstür: üç çocuk, her biri TEK TAMBUR_CUT girişi (40 · 30 · 30), ebeveyn TAMBUR_CONSUMED", cocuklarE.length === 3 && girisler.every((g) => g.length === 1 && g[0]!.reasonCode === STOCK_MOVE_REASON.TAMBUR_CUT) && girisler.map((g) => Number(g[0]!.qty)).join(",") === "40,30,30" && (await prisma.roll.findUnique({ where: { id: e.rollId }, select: { status: true } }))?.status === RollStatus.TAMBUR_CONSUMED, `çocuk=${cocuklarE.length} qty=${girisler.map((g) => String(g[0]?.qty)).join(",")}`);
+    await undo.applyUndo(e1.childRoll.id, undefined, { mode: "FULL", reason: "bekçi §7c FULL geri alma" });
+    const sonraE = await Promise.all(cocuklarE.map((id) => satirlar(id)));
+    const ebE = await prisma.roll.findUnique({ where: { id: e.rollId }, select: { status: true, currentQty: true, initialQty: true } });
+    const durumE = await prisma.roll.findMany({ where: { id: { in: cocuklarE } }, select: { status: true } });
+    check("§7c ⭐ FULL: üç çocuğun girişi de BAĞLI terslendi — her biri 2 satır, net 0, TAMBUR_UNDO", sonraE.every((g, i) => g.length === 2 && net(g) === 0 && g.some((r) => r.reasonCode === STOCK_MOVE_REASON.TAMBUR_UNDO && r.reversesMovementId === girisler[i]![0]!.id)), sonraE.map((g) => `${g.length}/${net(g)}`).join(" · "));
+    check("§7c-2 üç çocuk CANCELLED, ebeveyn 100 m IN_PRODUCTION (initialQty 100, aşım yok)", durumE.every((r) => r.status === RollStatus.CANCELLED) && ebE?.status === RollStatus.IN_PRODUCTION && Number(ebE.currentQty) === 100 && Number(ebE.initialQty) === 100, `durum=${durumE.map((r) => r.status).join(",")} ebeveyn=${ebE?.status}/${String(ebE?.currentQty)}`);
   } finally {
     await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.rollVariance.deleteMany({ where: { OR: [{ rollId: { in: rollIds } }, { sourceRollId: { in: rollIds } }] } });
