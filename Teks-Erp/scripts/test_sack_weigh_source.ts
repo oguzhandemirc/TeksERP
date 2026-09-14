@@ -152,6 +152,22 @@ async function run(): Promise<void> {
   check("eşik aşıldı → warnings DOLU", (bigRes.warnings?.length ?? 0) > 0, JSON.stringify(bigRes.warnings ?? []));
   check("eşik aşıldı ama KAYIT YAZILDI (blok değil)", (await kgOf(sBig)) === 14_500, `${await kgOf(sBig)}`);
   check("eşik altı tartıda warnings YOK", ((await shippingService.weighSack({ sackId: sBig, weightKg: 12.5, source: "MANUAL" }, ADMIN)).warnings?.length ?? 0) === 0);
+  // Yanıttaki uyarı ekranda kaybolur; "bu tartıda uyarı verildi mi"nin kalıcı cevabı audit
+  // yüküdür (`finishWeigh`, tambur elle top emsali). İki tartının izi kg'dan ayrılır — sıraya değil.
+  const weighLogs = await prisma.systemLog.findMany({
+    where: { tableName: "SACK", recordId: sBig, action: "UPDATE" },
+    select: { newData: true },
+  });
+  const weighLogOf = (kg: number): Record<string, unknown> | undefined =>
+    weighLogs.map((l) => l.newData as Record<string, unknown> | null).find((d) => d?.kind === "WEIGH" && d.weightKg === kg) ?? undefined;
+  const bigLog = weighLogOf(14_500);
+  check(
+    "eşik aşan tartının audit yükünde thresholdWarning YANITLA AYNI",
+    bigLog !== undefined && typeof bigLog.thresholdWarning === "string" && bigLog.thresholdWarning === bigRes.warnings?.[0],
+    `${String(bigLog?.thresholdWarning ?? "YOK")}`,
+  );
+  const smallLog = weighLogOf(12.5);
+  check("eşik altı tartının audit yükünde thresholdWarning anahtarı YOK (iki yönlü)", smallLog !== undefined && !("thresholdWarning" in smallLog));
 
   // ────────────── 4) SCALE beyanı + oturum cihazı SİMÜLE → sunucu yakalar (400)
   console.log("\n=== 4) SCALE beyanı ama oturumun kantarı SİMÜLE → sunucu REDDEDER ===");
