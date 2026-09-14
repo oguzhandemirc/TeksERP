@@ -546,6 +546,61 @@ console.log("\n=== §10c SONDALAR — kural sentetik vakalarla ısırıyor mu (k
   const notKaynak = [
     "async function t() { await prisma.rollMovement.deleteMany({ where: { reversesId: { not: null } } }); }",
   ].join("\n");
+  // ── §10c12–§10c16 — ÇÖZÜNÜRLÜK İKİ YÖNLÜ (2026-09-14, §10b3 18 → 0) ──────────
+  // İki kör nokta kapandı: SHORTHAND yaprak (`where: { itemId }`) ve DESTRUCTURE kap
+  // (`const { rollIds } = await fikstür()`). Her ikisinde de kural DAR olmalı — bir
+  // çözünürlük düzeltmesi, ad bazlı yüklemi sessizce KİMLİK'e çevirirse kapı körelir;
+  // bu yüzden her "artık çözülüyor" sondasının yanında bir "hâlâ sınırsız" sondası var.
+  {
+    const kapKaynak = [
+      "async function t() {",
+      "  let itemId: string | null = null;",
+      "  try { } finally { await prisma.rollMovement.deleteMany({ where: { itemId } }); }",
+      "}",
+    ].join("\n");
+    check("§10c12 ⭐ SHORTHAND yaprak artık çözülüyor (kap → KİMLİK)", sonda(kapKaynak)[0]?.bag === "KIMLIK",
+      `gelen: ${sonda(kapKaynak)[0]?.bag}`);
+
+    const adKaynak = [
+      "const barcode = \"TST-X\";",
+      "async function t() {",
+      "  try { } finally { await prisma.rollMovement.deleteMany({ where: { barcode } }); }",
+      "}",
+    ].join("\n");
+    check("§10c13 ⭐ SHORTHAND ad sabiti HÂLÂ SINIRSIZ (kural sızmıyor)", sonda(adKaynak)[0]?.bag === "SINIRSIZ",
+      `gelen: ${sonda(adKaynak)[0]?.bag} · ${sonda(adKaynak)[0]?.not}`);
+
+    const parKaynak = [
+      "async function t(dispatchId: string) {",
+      "  try { } finally { await prisma.rollMovement.deleteMany({ where: { dispatchId } }); }",
+      "}",
+    ].join("\n");
+    check("§10c14 SHORTHAND parametre → KİMLİK", sonda(parKaynak)[0]?.bag === "KIMLIK", `gelen: ${sonda(parKaynak)[0]?.bag}`);
+
+    const destKaynak = [
+      "async function t() {",
+      "  const fx = await kur();",
+      "  const { rollIds } = fx;",
+      "  try { } finally { await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } }); }",
+      "}",
+    ].join("\n");
+    check("§10c15 ⭐ DESTRUCTURE + çalışma anı kaynağı → KİMLİK (bir sıçrama)", sonda(destKaynak)[0]?.bag === "KIMLIK",
+      `gelen: ${sonda(destKaynak)[0]?.bag}`);
+
+    // KURALIN SINIRI: kaynak çalışma anında üretilmiyorsa destructure hiçbir şey
+    // kanıtlamaz — ÖLÇÜLEMEDİ kalır, sessizce KİMLİK sayılmaz.
+    const sabitDestKaynak = [
+      "const SABIT = { rollIds: [\"TST-1\"] };",
+      "async function t() {",
+      "  const { rollIds } = SABIT;",
+      "  try { } finally { await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } }); }",
+      "}",
+    ].join("\n");
+    check("§10c16 ⭐ DESTRUCTURE sabit kaynaktan → ÖLÇÜLEMEDİ (kural sızmıyor)",
+      sabitDestKaynak.length > 0 && sonda(sabitDestKaynak)[0]?.bag !== "KIMLIK",
+      `gelen: ${sonda(sabitDestKaynak)[0]?.bag}`);
+  }
+
   check("§10c11 `not:` bir AD yüklemi DEĞİL (yanlış pozitif sondası)", notKaynak.length > 0 && sonda(notKaynak)[0]?.bag !== "SINIRSIZ",
     `gelen: ${sonda(notKaynak)[0]?.bag}`);
 }

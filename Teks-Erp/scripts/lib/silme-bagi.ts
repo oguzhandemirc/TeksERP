@@ -42,12 +42,50 @@ export interface SilmeYeri {
 
 type YaprakSinifi = "YEREL_KIMLIK" | "YEREL_AD" | "DISARIDAN" | "COZULEMEDI";
 
+/**
+ * Destructure edilen bağın kaynağı ÇALIŞMA ANINDA mı üretiliyor?
+ *
+ * `const { rollIds } = await createFixture()` → evet (doğrudan).
+ * `const fx = await createFixture(); const { rollIds } = fx;` → evet (BİR sıçrama).
+ * `const { rollIds } = SABIT_LISTE;` → HAYIR — ölçülemedi kalır.
+ *
+ * Sıçrama BİR ile sınırlı ve yalnız AYNI dosyada: sınırsız zincir izlemek, kuralı
+ * "her destructure kimliktir"e çevirirdi ve ad bazlı yüklem sızardı.
+ */
+function calismaAniKabiMi(be: ts.BindingElement, sf: ts.SourceFile, checker: ts.TypeChecker): boolean {
+  let n: ts.Node = be;
+  while (n.parent && !ts.isVariableDeclaration(n.parent)) n = n.parent;
+  const vd = n.parent;
+  if (!vd || !ts.isVariableDeclaration(vd)) return false;
+  const init = vd.initializer;
+  if (!init) return false;
+  const uretim = (e: ts.Expression): boolean =>
+    ts.isAwaitExpression(e) || ts.isCallExpression(e) || ts.isNewExpression(e);
+  if (uretim(init)) return true;
+  if (!ts.isIdentifier(init)) return false;
+  // TEK SIÇRAMA: `fx` gibi bir ara değişken, aynı dosyada üretime bağlıysa.
+  const d = checker.getSymbolAtLocation(init)?.declarations?.[0];
+  if (!d || d.getSourceFile().fileName !== sf.fileName || !ts.isVariableDeclaration(d)) return false;
+  return d.initializer !== undefined && uretim(d.initializer);
+}
+
 function yaprakSinifi(id: ts.Identifier, sf: ts.SourceFile, checker: ts.TypeChecker): YaprakSinifi {
-  const bildirim = checker.getSymbolAtLocation(id)?.declarations?.[0];
+  // ⚠️ SHORTHAND (`where: { itemId }`) ayrı bir sembol sorusudur: `getSymbolAtLocation`
+  // burada PROPERTY sembolünü döndürür (bildirimi kısayolun kendisi), değişkeninkini
+  // değil ⇒ her shorthand "çözülemedi"ye düşerdi. Değer sembolü ayrı API ile alınır.
+  const sembol = ts.isShorthandPropertyAssignment(id.parent)
+    ? checker.getShorthandAssignmentValueSymbol(id.parent)
+    : checker.getSymbolAtLocation(id);
+  const bildirim = sembol?.declarations?.[0];
   if (!bildirim) return "COZULEMEDI";
   if (bildirim.getSourceFile().fileName !== sf.fileName) return "DISARIDAN";
   if (ts.isImportSpecifier(bildirim) || ts.isImportClause(bildirim)) return "DISARIDAN";
   if (ts.isParameter(bildirim)) return "YEREL_KIMLIK";
+  // ⚠️ DESTRUCTURE bir KAP'tır, ad değil: `const { rollIds } = await fikstürKur()`.
+  // Kaynağı ÇALIŞMA ANINDA üretiliyorsa (await/çağrı) içindeki değerler bu dosyanın
+  // kendi ürettiği kimliklerdir. Kural DAR: kaynak literal ya da ad sabitiyse yine
+  // ÖLÇÜLEMEDİ — sızmasın diye en fazla BİR sıçrama izlenir.
+  if (ts.isBindingElement(bildirim)) return calismaAniKabiMi(bildirim, sf, checker) ? "YEREL_KIMLIK" : "COZULEMEDI";
   if (!ts.isVariableDeclaration(bildirim)) return "COZULEMEDI";
   // ⚠️ `let woId = ""` bir AD DEĞİLDİR — sonradan gerçek id atanan bir KAPtır.
   // Yalnız `const X = "…"` (boş olmayan literal) ad bazlı yüklemdir.
