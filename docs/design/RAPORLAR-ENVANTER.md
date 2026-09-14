@@ -103,3 +103,49 @@ Dört katman var ve **hiçbiri rapor taneciğinde değil**:
 - **`services/reports/` altındaki 26 dosyanın 5'inin** bir uca bağlı olup olmadığı ölçülmedi (ajan kapsamı dışı bıraktı).
 - **Mobil/tablet** tarafında rapor yüzeyi var mı diye BAKILMADI (faz masaüstü raporları hakkında).
 - **Kullanım verisi yok:** hangi raporun fabrikada fiilen açıldığı ölçülmedi (`EndpointLatencyDaily` telemetrisi bu soruya cevap verebilir, bu turda okunmadı) ⇒ "hangi rapor gereksiz" sorusu bugün ÖLÇÜLEMEZ, kanaatle cevaplanır.
+
+## 6 · Kullanım ölçümü — **ÖLÇÜLEMEDİ** (yöntem hazır, veri bu oturumda yok)
+
+**Sonuç: ÖLÇÜLEMEDİ.** "Hangi rapor fiilen açılıyor" sorusuna bu turda sayı verilmedi: üretim verisi bu oturumda okunmadı (fabrika yedeğinden okuma yöneticide). Aşağıdaki yöntem, sayının **hangi sorguyla, hangi veritabanında ve hangi şerhlerle** okunacağını sabitler — çürütülebilir biçimde.
+
+### 6.1 · Kaynak ve şekli (koddan ölçüldü)
+
+`EndpointLatencyDaily` (`endpoint_latency_daily`): `@@unique([day, routeKey])` · `count` · `errCount` · `maxMs` · `buckets`. Anahtar **`"<METHOD> <yol>"`** biçimindedir (`latency-persist.service.ts:85`), yol `normalizeKeyPath` ile normalize edilir: UUID / salt sayı / uzun-opak segmentler **`:id`**e çöker (`latency.middleware.ts:32-43`). Yani `GET /api/reports/production/batch-trace/<uuid>` → **`GET /api/reports/production/batch-trace/:id`**.
+
+### 6.2 · Sorgu (fabrika yedeği restore edilmiş bir DB'de, SALT OKUNUR)
+
+```sql
+-- 30 ve 90 günlük çağrı sayısı, rapor uçları (+ rapor sayılan iki yabancı uç)
+SELECT "routeKey",
+       SUM("count") FILTER (WHERE day >= CURRENT_DATE - 30) AS gun30,
+       SUM("count") FILTER (WHERE day >= CURRENT_DATE - 90) AS gun90,
+       SUM("errCount")                                       AS hata,
+       MIN(day) AS ilk_gun, MAX(day) AS son_gun
+FROM endpoint_latency_daily
+WHERE "routeKey" LIKE 'GET /api/reports/%'
+   OR "routeKey" = 'GET /api/finance/cheques/due-summary'   -- Çek Vade Takvimi ekranı
+   OR "routeKey" LIKE 'GET /api/machine-shift-stats%'       -- Karne Listesi ve Mühür ekranı
+GROUP BY "routeKey"
+ORDER BY gun30 DESC NULLS LAST;
+
+-- KÖRLÜK ZEMİNİ — bu iki satır okunmadan yukarıdaki tablo YORUMLANMAZ:
+SELECT MIN(day) AS en_eski_gun, MAX(day) AS en_yeni_gun, COUNT(*) AS satir
+FROM endpoint_latency_daily;                                   -- pencere gerçekte kaç gün?
+SELECT "routeKey", SUM("count") FROM endpoint_latency_daily
+WHERE "routeKey" IN ('(diğer)', '(statik/diğer)', '(eşleşmeyen)')
+  AND day >= CURRENT_DATE - 90 GROUP BY "routeKey";            -- taşma kovası dolu mu?
+```
+
+Koşum: `psql "$DATABASE_URL" -f <dosya>` — `psql` PATH'te olmayabilir (`/opt/homebrew/opt/libpq/bin`). **Demo/sonda veritabanında koşmak anlamsızdır** (çağrılar bekçilerin kendisinden gelir); yalnız fabrikanın gerçek verisi cevap verir.
+
+### 6.3 · Sayıyı BOZAN beş şerh (hepsi koddan ölçüldü)
+
+1. **90 gün, retention'ın TAM KENARI:** `RETENTION_DAYS = 90` ve budayıcı günde bir kez `day < bugün-90` satırlarını siler (`latency-persist.service.ts:34,171`). ⇒ `gun90` bir **ALT SINIRDIR**; gerçek 90 gün, budama koştuysa eksiktir. `gun30` güvenlidir. Pencereyi `MIN(day)` ile ÖLÇMEDEN "90 gün" denmez.
+2. **Kardinalite tavanı:** RAM tarafında 500 (`latency-stats.service.ts:28`), kalıcı tarafta 600 anahtar (`latency-persist.service.ts:37`); tavan aşılırsa yeni anahtarlar **`(diğer)`** kovasında birikir. ⇒ Bir raporun **sıfır** görünmesi "hiç açılmadı" DEĞİL, "taşma kovasında" da olabilir. `(diğer)` sayısı okunmadan sıfırlar yorumlanamaz.
+3. **Telemetri ufku ≠ raporun yaşı:** satır yalnız o gün sunucu KOŞTUYSA ve bu özet indiğinden beri yazılır. Dokuma raporları 2026-09-14'te indi ⇒ 90 günlük sayıları doğal olarak küçüktür; **sayı yaşla normalize edilmeden raporlar KIYASLANAMAZ.**
+4. **Çağrı ≠ kullanıcı:** bir ekran açılışı bir istektir; süzgeç değiştirmek yeni istektir. Çok süzgeçli GELİŞMİŞ raporlar, aynı ilgiyle bile BASİT olanlardan yüksek görünür. "Kaç kişi" sorusunun cevabı burada YOK (audit/`Session` ayrı kaynak).
+5. **Paylaşılan uçlar:** `GET /api/machine-shift-stats` yalnız Karne ekranına ait değildir (mühür akışı da çağırır); `finance/statement` hem Cari Ekstre diyaloğundan hem Yaşlandırma satırından açılır. ⇒ Bu iki satır EKRAN kullanımı değil UÇ kullanımı ölçer.
+
+### 6.4 · Bu ölçümün cevaplayamayacağı soru
+
+*"Bu rapor gereksiz mi?"* — düşük sayı, raporun **ayda bir ama kritik** (KDV Dönem Özeti, Kur Farkı) olmasıyla aynı görünür. Kullanım sayısı **kapatma gerekçesi değildir**; yalnız *"önce hangisini iyileştirelim"* sorusunu sıralar. Kapatma kararı fabrikanın beyanıyla alınır — ve zaten fazın kendisi bunu süperadmin anahtarına bağlıyor.
