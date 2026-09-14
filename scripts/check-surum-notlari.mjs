@@ -67,6 +67,15 @@ function check(etiket, ok, detay = "", yesildeDeBas = false) {
 
 const KUNYEDEN = process.argv.includes("--kunyeden");
 
+/**
+ * Liste detayını KIRPARKEN kırptığını SÖYLER. Eskiden `slice(0, N)` sessizdi:
+ * etiket kolu "5 çözülmeyen" deyip dördünü basıyordu (ölçüldü 2026-09-15, 1e) —
+ * okuyucu eksik olanı ARAMAZ, çünkü eksik olduğunu bilmez. Sayı ile listenin
+ * ayrışması, kapının kendi çıktısında "beyansız kör nokta" üretir.
+ */
+const liste = (dizi, tavan = 6) =>
+  dizi.slice(0, tavan).join(" · ") + (dizi.length > tavan ? ` … (ilk ${tavan}/${dizi.length})` : "");
+
 const arg = (ad) => {
   const p = process.argv.find((a) => a.startsWith(`--${ad}=`));
   return p ? p.slice(ad.length + 3) : null;
@@ -136,7 +145,7 @@ check('"sunucu" kapsamı REDDEDİLİYOR',
   !yayinlar.some((y) => (y.maddeler ?? []).some((m) => m.kapsam === "sunucu")));
 
 console.log("\n§3 — Operatör dili");
-check("teknik terim / dosya yolu yok", dilOk, dilIhlalleri.slice(0, 5).join(" · "));
+check("teknik terim / dosya yolu yok", dilOk, liste(dilIhlalleri));
 
 console.log("\n§4 — Sürüm alanları");
 let surumOk = true;
@@ -278,9 +287,9 @@ console.log("\n§8 — \"Sonraki sürümde\" vaadi");
     }
   }
   check("vaat cümlesi yüzeyini ADIYLA söylüyor (panel/tablet)", yuzeysiz.length === 0,
-    `${yuzeysiz.length} yüzeysiz vaat — çelişki ölçülemez, cümleye yüzeyi yaz: ${yuzeysiz.slice(0, 3).join(" · ")}`);
+    `${yuzeysiz.length} yüzeysiz vaat — çelişki ölçülemez, cümleye yüzeyi yaz: ${liste(yuzeysiz)}`);
   check("⭐ vaat AYNI YAYINDA çürütülmemiş", celiskiler.length === 0,
-    celiskiler.slice(0, 3).join(" · ")
+    liste(celiskiler)
       + " — dilim aynı yayına indiyse maddeyi güncelle, gerçekten sonraki yayındaysa MUAF_VAATLER'e sınıfıyla yaz");
   // İKİ YÖNLÜ: beyan edilmiş ama artık eşleşmeyen muafiyet, gerçek bir çelişkiyi
   // sessizce kapsam dışında tutar.
@@ -389,7 +398,7 @@ console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı");
     check("körlük zemini: etiket adayı çıkarıldı", adaylar.size > 0,
       `${adaylar.size} aday · ${MUAF_ETIKETLER.length} beyanlı muaf`, true);
     check("⭐ tırnaklı ad kodda BİREBİR var ya da BEYANLI muaf", cozulmeyen.length === 0,
-      `${cozulmeyen.length} çözülmeyen: ${cozulmeyen.slice(0, 4).join(" · ")}`
+      `${cozulmeyen.length} çözülmeyen: ${liste(cozulmeyen)}`
         + " — ekran adıysa koddan KOPYALA (harf harf), değilse MUAF_ETIKETLER'e sınıfıyla + gerekçesiyle yaz");
     const oluMuaf = MUAF_ETIKETLER.filter((x) => !adaylar.has(x.etiket));
     check("ölü ETİKET muafiyeti yok (beyan ↔ madde iki yönlü)", oluMuaf.length === 0,
