@@ -17,7 +17,6 @@ const dev = (over: Partial<DevicePeripheral>): DevicePeripheral => ({
   identifyPattern: null,
   decimals: 1,
   scale: null,
-  unit: 'm',
   timeoutMs: 2500,
   role: null,
   simulate: true,

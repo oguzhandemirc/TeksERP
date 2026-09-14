@@ -29,7 +29,7 @@ async function upsertMeter(code: string, name: string, machineId: string, role: 
     update: { role, machineId, isActive: true },
     create: {
       code, name, kind: "METER", connectionType: "BLUETOOTH_SPP",
-      address, role, terminator: "\r\n", decimals: 1, unit: "m", timeoutMs: 2500, simulate: true, machineId,
+      address, role, terminator: "\r\n", decimals: 1, timeoutMs: 2500, simulate: true, machineId,
     },
   });
 }
@@ -97,7 +97,7 @@ async function main() {
     update: { machineId: kk1.id, isActive: true },
     create: {
       code: "KK1-KANTAR", name: "KK1 Kantar", kind: "SCALE", connectionType: "BLUETOOTH_SPP",
-      address: "00:23:09:01:1D:17", decimals: 2, unit: "kg", timeoutMs: 2500, simulate: true, machineId: kk1.id,
+      address: "00:23:09:01:1D:17", decimals: 2, timeoutMs: 2500, simulate: true, machineId: kk1.id,
     },
   });
 
@@ -116,7 +116,7 @@ async function main() {
     const sevkData = {
       kind: "SCALE" as const, connectionType: "BLUETOOTH_SPP" as const,
       address: "00:23:09:01:2A:3C", role: "PRIMARY", pollCommand: "P",
-      terminator: "\r\n", decimals: 2, unit: "kg", timeoutMs: 2500, simulate: true, machineId: sevk.id,
+      terminator: "\r\n", decimals: 2, timeoutMs: 2500, simulate: true, machineId: sevk.id,
     };
     await prisma.peripheralDevice.upsert({
       where: { code: "SEVK-KANTAR" },
@@ -149,7 +149,7 @@ async function main() {
     update: { isActive: true, deviceId: null, machineId: null },
     create: {
       code: "TEST-DEV-METRE", name: "TEST Cihaz Metre", kind: "METER", connectionType: "BLUETOOTH_SPP",
-      address: "00:00:00:00:00:99", role: "PRIMARY", terminator: "\r\n", decimals: 1, unit: "m", simulate: true,
+      address: "00:00:00:00:00:99", role: "PRIMARY", terminator: "\r\n", decimals: 1, simulate: true,
     },
     select: { id: true },
   });

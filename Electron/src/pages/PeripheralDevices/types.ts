@@ -34,7 +34,6 @@ export interface PeripheralDevice {
   terminator: string | null;
   decimals: number | null;
   scale: number | string | null;
-  unit: string | null;
   timeoutMs: number | null;
   role: string | null;
   simulate: boolean;

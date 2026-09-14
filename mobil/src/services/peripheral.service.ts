@@ -25,7 +25,6 @@ export interface DevicePeripheral {
   identifyPattern: string | null; // değer ayıklama / geçerli çerçeve regex'i
   decimals: number | null;
   scale: number | null; // backend Decimal'i number'a serialize eder
-  unit: string | null;
   timeoutMs: number | null;
   role: string | null;
   simulate: boolean;
