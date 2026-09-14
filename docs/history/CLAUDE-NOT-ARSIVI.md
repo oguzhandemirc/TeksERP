@@ -10136,3 +10136,28 @@ kapalı kümede") — bugün defter.md'de düzelttiğim hatanın aynısı, kendi
 (alıntı cümleden ayırt edilemez) — bu sınıf ÖLÇÜLMEZ ve çıktı bunu yazmaz; yazarın beyanına
 kalır. Kaynak evreni `Electron/src` · `mobil/src` · `Teks-Erp/src` (.ts/.tsx); `scripts/*.sql`
 BİLEREK dışarıda (tutarlılık kontrolü bölüm başlıkları `RAPOR_BOLUMU` sınıfıyla muaf).
+
+---
+
+## 2026-09-15 — Kapının KENDİ çıktısındaki kör nokta: sayı ile listenin ayrışması [ÇEKİRDEK]
+
+`check-surum-notlari §9` ilk koşumlarından birinde *"5 çözülmeyen"* dedi ve **dördünü bastı**
+(`slice(0, 4)`, 1e ölçtü). Sayı dürüsttü, liste sessizce kırpıktı. Kusur bir satırlıktı ama
+**sınıfı dosyanın dört yerindeydi** (§3 teknik terim · §8 yüzeysiz vaat · §8 çelişki · §9
+çözülmeyen) ⇒ ortak `liste(dizi, tavan = 6)`: tavana kadar basar, aşıyorsa `… (ilk 6/8)` ekler.
+İki sonda: sekiz sahte etiket → *"8 çözülmeyen: … (ilk 6/8)"* ✓ · tam tavanda (6/6) ek metin
+YOK ✓ — kırpma bildirimi yalnız gerçekten kırpıldığında çıkar, aksi hâlde her çıktıda gürültü
+olur ve okunmaz hâle gelirdi.
+
+⇒ **Ders: bir kapı, KENDİ çıktısında da beyansız kör nokta üretebilir.** Okuyucu eksik olanı
+ARAMAZ — çünkü eksik olduğunu bilmez; "5" der, dört tane görür, dördünü düzeltir ve kapıyı
+"hâlâ kırmızı, saçmalıyor" diye suçlar. Bu, bugünün iki dersinin çıktı tarafındaki eşidir:
+*kapsamı yazılmayan bir yeşil, ölçülmemiş olmakla temiz olmayı karıştırır* ve *"ölçülemedi"
+ayrı bir sonuçtur*. Kapının söylediği SAYI ile gösterdiği LİSTE ayrışıyorsa, ayrışmayı çıktının
+kendisi beyan etmelidir.
+
+⚠️ Aynı turda kapının üç kusuru da kendi dışından geldi ve üçü de kapıyı GÜÇLENDİRDİ: doğuş
+sondası kapıyı kör bulmuştu (§9'un harf şartı), 6e'nin maddesi muafiyet-mi-düzeltme-mi sorusunu
+sordurdu (cevap: ölçülebilen şey düzeltilir, muafiyet ölçülemeyen içindir), 1e'nin okuması da
+bu kırpmayı buldu. *Kapı yazmak tek seferlik bir iş değil; kapının ilk kullanıcıları onun
+sondalarıdır.*
