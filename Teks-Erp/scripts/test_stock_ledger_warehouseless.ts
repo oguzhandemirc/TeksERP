@@ -27,7 +27,7 @@
 // burada TEKRARLANMAZ — iki sonda iki yönü ölçer.
 //
 // ⚠️ §4a DÜZELTME SONRASI VAKUMEN YEŞİLDİR — ölçüldü (2026-09-13,
-// `6e-stok-defteri-bag` @ `e6208c18`: 16 geçti / 0 başarısız). Kapı topu
+// `6e-stok-defteri-bag` @ `ac428cd3`: 16 geçti / 0 başarısız). Kapı topu
 // sevkten ÖNCE durdurduğu için o top hiç `SHIPPED` olmuyor ⇒ "SHIPPED olan her
 // topun SHIPMENT satırı vardır" yüklemi bu yoldan ARTIK HİÇ BASILMIYOR ve
 // sonda bunu çıktısında kendisi beyan ediyor ("yüklem vakumen doğru").

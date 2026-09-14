@@ -270,7 +270,7 @@ turu; a maddesi sha'lı — `5ac6e830`)*:
 ölüdür; burada **kapı sağlamdır, SONDA ölüdür** — ve ölü bir sonda kapıyı
 *doğrulanmış* gösterir, yani zararı kapının ölümünden daha uzun yaşar.
 
-⭐ **Ve sondanın İKİ SINIFI vardır; hangisi olduğu YAZILIR** *(d9, `26d6de87`; bekçi
+⭐ **Ve sondanın İKİ SINIFI vardır; hangisi olduğu YAZILIR** *(d9, `9685ebe7`; bekçi
 haritasının "Negatif sonda" sütunu artık ✓ değil **SINIF + SAYI** taşıyor: `✓K<n>` ·
 `✓B<n>` + sha)*:
 **(K) KALICI** — sondanın kendisi dosyada yaşar (`--sonda` kolu, fikstür, sahte girdi) ve

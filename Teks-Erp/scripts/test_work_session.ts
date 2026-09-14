@@ -143,7 +143,7 @@ async function main() {
     // üretiyorsa pencere tanığıdır.*** `machine_runs`ta böyle bir ayırt edici
     // YOK (servis yok, iki INSERT doğrudan sedde çarpıyor) ⇒ orada `p2002 === 1`
     // yalnız SEDİN çalıştığını kanıtlar, ÖRTÜŞMEYİ değil. Ayırt edici yoksa ya
-    // gate-tx kurulur (`e78b8057`) ya pencerenin ölçülmediği BEYAN edilir.
+    // gate-tx kurulur (`68a0b06d`) ya pencerenin ölçülmediği BEYAN edilir.
     // ⇒ Bu bölümü başka bir bekçiye kopyalamadan önce sor: *"örtüşmeyen durumda
     //   BAŞKA bir kod geliyor mu?"* Gelmiyorsa kod tanık DEĞİLDİR.
     //

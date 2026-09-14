@@ -13,7 +13,7 @@ Bu bölüm planı DEĞİŞTİRMEZ, ölçer: hangi satır indi, hangi satır numa
 **İnen (planın kendi maddeleriyle):**
 - **Y2 bitti** — `tambur.service.ts` finalize ebeveyn silmesi kalktı, damga konmadı (plan birebir); bekçi `test_stock_ledger_tambur_undo` §0b/§0c/§5b (K3(a), `3b65daea`).
 - **Y10 / Y11 yarım** — `cancelReceipt` ve `undoTransfer` artık SİLMİYOR (bekçi `test_fason_receive_cancel_rereceive` · `test_fason_undo_transfer`), ama `revokeRollProperties(... FASON_KABUL_IPTAL / FASON_TRANSFER_GERI_AL)` damgası Faz 1 helper'ını bekliyor. Bugünkü hâl: satır aktif kalır (top zaten CANCELLED, okurlar canlı topa bakar). Faz 2e o iki satırı ekler.
-- **Risk #9 kapandı** — `getCancelImpact` `rollWhere` `K18_DEAD_STATUSES` süzer (`585b1274`): TAMBUR_CONSUMED ebeveyn "işlenmiş" sayılmaz. Fabrika kopyası: 67/125 açık WO listede ölü satır taşıyordu, 3'ünün sayısı düşer.
+- **Risk #9 kapandı** — `getCancelImpact` `rollWhere` `K18_DEAD_STATUSES` süzer (`1e7754c6`): TAMBUR_CONSUMED ebeveyn "işlenmiş" sayılmaz. Fabrika kopyası: 67/125 açık WO listede ölü satır taşıyordu, 3'ünün sayısı düşer.
 - **Kapı** — `test_defter_ters_yol` §5/§10 artık `RollProperty`/`WorkOrderTargetProperty`yi `yazan`/`silen` ile tarıyor (`dbc2d930`); `silen` boşaldığı gün "ÖLÜ SİLME BEYANI" kırmızı verir ⇒ Faz 2c/2d'nin bitişi ölçülür. Beyan bu belgeyi `tasarim` olarak atfeder (§6c ölü atıf denetimi).
 
 - **Faz 0 bitti (2026-09-14)** — `inventory.controller.ts:685/:725` `?? []` kalktı, servis imzası `propertyIds?: string[]`; `undefined` iken özellik bloğu, `propsChanged` ve audit `propertyIds` hiç koşmaz. Bekçi `test_roll_relabel` §11 (11a–11d; 11d controller çapası — servis sondası route katmanını göremez). İki negatif sonda: servis `propsTouched=true` → 3 ❌ · controller `?? []` geri → 11d ❌.
@@ -386,7 +386,7 @@ Yöntem: klon DB'de 28 bekçi (`roll_property_revoke` 37/0 · `property_value_se
 | 2e: fason kabul iptali / aktarım geri alma born topun özelliğini kardeş hareketle aynı sebeple damgalar | ✅ | `fason_receive_cancel_rereceive` 16/0 · `fason_undo_transfer` 30/0 |
 | okur turu: AST tarayıcısı (ilişki · çağrı · ham SQL) yeşil; `src/`te `roll_properties`/`work_order_target_properties` ham SQL okuru 0; iki bilinçli süzgeçsiz istisna (`fabric-property.service` tip dönüşümü kilidi) işaretli | ✅ | `roll_property_revoke §13` · grep 0 |
 | Kurşun/KK2 özellik yazımı (`copyStationCapabilitiesToRoll` → `setRollPropertyValueTx`): 50GR→25GR düzeltmesi eski satır damgalı + yeni sürüm; seçimsiz çağrı no-op; ebeveynin damgalı değeri çocuğa geçmez | ✅ | `property_value_selection` 30/0 · `kursun_bypass` 149/0 (G1 bu yolu da kapsar) |
-| plan §11 12 risk: #1 kapandı (`satisfies Prisma.RollWhereInput`) · #2/#3/#5/#8/#12 bilinçli sınır, beyanlı · #6 yeniden yazıldı · #7 canlıda ilk sınav bekliyor · #9 kapandı (`585b1274`) · #10 `workorder-link` echo süzgeçli (`:797` ACTIVE) · #11 pencere kapandı · #4 sürüm enflasyonu: diff no-op ölçülü (§10 "aynı liste ikinci çağrı no-op") | ✅ | statik + bekçi |
+| plan §11 12 risk: #1 kapandı (`satisfies Prisma.RollWhereInput`) · #2/#3/#5/#8/#12 bilinçli sınır, beyanlı · #6 yeniden yazıldı · #7 canlıda ilk sınav bekliyor · #9 kapandı (`1e7754c6`) · #10 `workorder-link` echo süzgeçli (`:797` ACTIVE) · #11 pencere kapandı · #4 sürüm enflasyonu: diff no-op ölçülü (§10 "aynı liste ikinci çağrı no-op") | ✅ | statik + bekçi |
 
 **Çürüdü ❌ — kalemler (82; hüküm 1e)**
 

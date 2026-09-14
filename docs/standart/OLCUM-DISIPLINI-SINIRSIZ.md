@@ -54,7 +54,7 @@ Kardeşleri § NE sorduğun kadar NEREYE sorduğun · § Bir adın geçmesi bir 
 değildir · § Bir yüklem, aradığı şeyin BOZULMUŞ hâlini aramaz (bunun TERSİ).
 
 ### (e) KISA + SAYISAL + KALABALIK KORPUS — çakışma bir ÇARPIMDIR
-*(d9 ölçümü 2026-09-14; düzeltme `9aa4a4d7`.)*
+*(d9 ölçümü 2026-09-14; düzeltme `14729bcc`.)*
 Sır kapısı audit kolonlarını `LIKE '%'||PIN||'%'` ile tarıyordu: yüklem DOĞRU, sınır
 BEYAN EDİLMEMİŞ. Bedeli sırrın BİÇİMİ belirliyor — `quickPin` altı hane ve yalnız rakam
 (`randomInt(0, 1_000_000)` + `padStart(6,"0")`) ⇒ her PIN uzun bir sayının İÇİNDE geçebilir.
@@ -76,7 +76,7 @@ gösterir; gerçek bir SIZINTIYI **dışlamaz**. Ayırt edici yön (kanıt deği
 KOD YOLU olurdu ve PIN her turda yeniden rastgele yazıldığı için 1/59 değil **~59/59**
 beklenirdi.
 ⭐ **Daraltmanın işe yaradığı UÇTAN UCA ölçüldü, ve üçüncü satır olmadan gösterilemezdi**
-*(d9, `9aa4a4d7`)*: yeni yüklem + gerçek sızıntı → **85/1 ❌** · yeni yüklem + rakama
+*(d9, `14729bcc`)*: yeni yüklem + gerçek sızıntı → **85/1 ❌** · yeni yüklem + rakama
 yapışık çakışma → **86/0 ✅** · **eski yüklem + AYNI çakışma → 78/1 ❌ yanlış pozitif.**
 Üçüncüsü kontrol grubudur: onsuz "yeni yüklem yeşil" cümlesi, daraltmanın (B) çakışmayı
 KESTİĞİNİ değil yalnız bugün eşleşme olmadığını gösterirdi.
@@ -94,7 +94,7 @@ bir dizi. Rakam sınırı düzgün çalışır; yanlış olan metnin KENDİSİD�
 
 *(d9, 2026-09-14 — ⚠️ **ÖLÇÜLMEDİ ve ölçülmedi diye yazılıyor:** bu biçim koşulmadı,
 yazım anında yakalandı ve yüklem kolon kolona çevrildi (`newData ~ d OR oldData ~ d OR
-changes ~ d`, `9aa4a4d7`). Kanıt ANALİTİKTİR, istatistiksel değil; buraya bir oran
+changes ~ d`, `14729bcc`). Kanıt ANALİTİKTİR, istatistiksel değil; buraya bir oran
 yazmak sınıfın kendisini çürütürdü.)*
 
 > ***Bir sınır yüklemi, sınırladığı metnin İNŞASINI da kapsamak zorundadır.*** Teşhis

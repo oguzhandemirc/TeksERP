@@ -566,7 +566,7 @@ async function main(): Promise<void> {
       // koşucu `ilkKirmizi`yi ❌ ile başlayan TEK satırdan alıyordu ve 150
       // karaktere kırpıyordu (`run-all-tests.ts:613`) ⇒ `\n` ile başlayan
       // teşhisim CI özetine HİÇ ulaşmadı; güvenlik sınıfı bir kırmızı
-      // SINIFLANDIRILAMADAN bekledi. d5 `622df3e2` ile ↳ bloğunu geçirir hâle
+      // SINIFLANDIRILAMADAN bekledi. d5 `05c6dbbb` ile ↳ bloğunu geçirir hâle
       // getirdi, ama ikisi birbirinin yerine geçmez: SINIF ❌'te, AYRINTI ↳'de.
       // ⇒ *Bir beyan, beyan ettiği durumda TÜKETİCİNİN OKUDUĞU yere konur.*
       const ilk = satirlar[0];

@@ -180,7 +180,7 @@ async function main(): Promise<void> {
     // alan sessizce düşüyordu. Yani sessiz-allowlist sınıfının Zod DEĞİL elle
     // yazılmış hâli (CLAUDE.md ikisini de sayar: "istek gövdesini elle kuran
     // istemci katmanı sessiz bir allowlist'tir; Zod tanımadığı anahtarı sessizce
-    // siler"). Düzeltme allowlist'e `unit` + enum doğrulaması ekliyor (`221d6b55`).
+    // siler"). Düzeltme allowlist'e `unit` + enum doğrulaması ekliyor (`b334a09e`).
     console.log("\n── §1c/§1d Sözleşmenin HTTP ucu ──");
     const ezmeItem = await prisma.item.create({ data: { code: `${PRE}-EZME`, name: `${PRE} Ezme`, itemType: ItemType.FABRIC, unit: ItemUnit.MT }, select: { id: true } });
     yarat.item.push(ezmeItem.id);

@@ -39,7 +39,7 @@ kalıcı olarak tanımsız kalmasıdır.
 
 ## 1. Ölçülen durum — taban beyanı
 
-**Taban:** ağaç `638850b0` · DB fabrikanın dev kopyası (fabrikanın canlı yedeği,
+**Taban:** ağaç `a263fc13` · DB fabrikanın dev kopyası (fabrikanın canlı yedeği,
 `default_transaction_read_only=on`) · ölçüm 2026-09-13.
 
 ⚠️ **EPOCH TANIMI LOAD-BEARING:** "defter başlangıcı" = ilk defter satırının ANI

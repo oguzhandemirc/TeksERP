@@ -355,7 +355,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/helpers/property-revoke.helper.ts", sembol: "revokeRollProperties" },
      { dosya: "src/services/helpers/property-revoke.helper.ts", sembol: "setRollPropertyValueTx" },
      { dosya: "src/services/helpers/property-revoke.helper.ts", sembol: "applyRollFlagSetTx" }],
-    // 8bc31816 (G2): miras yazımı tambur.service'ten helper'a (`inheritRollPropertiesTx`) taşındı.
+    // 3c53deaf (G2): miras yazımı tambur.service'ten helper'a (`inheritRollPropertiesTx`) taşındı.
     ["src/services/helpers/property-revoke.helper.ts", "src/services/inventory.service.ts",
       "src/services/subcontractor.service.ts", "src/services/workorder.service.ts",
       "src/services/tambur-undo.service.ts"]),

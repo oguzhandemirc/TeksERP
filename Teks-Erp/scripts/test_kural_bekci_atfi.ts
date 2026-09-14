@@ -69,7 +69,7 @@ const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
  * 5 → 0: kalan beşi *"GERÇEKTEN belirsiz, tamamlamak KARAR VERMEK olurdu"* diye
  * bırakılmıştı. ⚠️ O cümle **yarısı doğruydu**: tamamlamak karar vermek olurdu —
  * ama *"hangi bekçinin o kuralı GERÇEKTEN ölçtüğü"* bir KARAR değil bir ÖLÇÜMDÜR.
- * Beşi de kuralın cümlesi ↔ adayların YÜKLEMİ okunarak çözüldü (`dc2b6083`):
+ * Beşi de kuralın cümlesi ↔ adayların YÜKLEMİ okunarak çözüldü (`1705ffa1`):
  *   sevkiyat.md:28   → test_dispatch_report_gross   (⚠️ adı DAHA YAKIN olan
  *                      `test_dispatch_report`ta 0 eşleşme — ad yol göstermedi)
  *   superadmin.md:13 → test_db_invariants (§10)

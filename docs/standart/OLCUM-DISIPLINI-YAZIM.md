@@ -52,7 +52,7 @@ sorusuna dört oturum dört sayı verdi (64 · 68 · 70 · 72) ve hiçbiri yanl�
 
 ⚠️ **ÜÇÜNCÜ EKSEN, aynı gün ortaya çıktı — AYRIŞTIRICI SÜRÜMÜ.** Yukarıdaki dört sayının
 dördü de, alanı `` bekçi: `[^`]*` `` ile okuyan ESKİ ayrıştırıcıyla ölçüldü; o ayrıştırıcı
-alanın içindeki backtick'te duruyordu. Düzeltilince (`556b151a`) **aynı yüklem, aynı ağaç,
+alanın içindeki backtick'te duruyordu. Düzeltilince (`15459085`) **aynı yüklem, aynı ağaç,
 farklı sayı** verdi: dört alan "kesik" olmaktan çıktı, 11 bekçi adı da alanın okunmayan
 yarısından ortaya geldi. (Sınıf: `OLCUM-DISIPLINI-ARAC.md` § Kapı, kendi AYRIŞTIRICISININ darlığını SAYIYA çevirebilir.)
 

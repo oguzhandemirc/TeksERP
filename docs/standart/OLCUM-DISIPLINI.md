@@ -28,7 +28,7 @@ sınır çıktının İÇİNDE görünmez; sayı tek başına kendini evrensel g
 YAZAN worktree'leri görür; eski tabanlı bir ağaç satır bırakmaz ⇒ "ısırık sayısı" gözlenen
 ❌'tir, POPÜLASYON değil.* ③ *Bir bekçi koşumu yalnız O VERİTABANINDAKİ veriyi görür.
 Dördüncüsü de aynı gün, bu satırı yazarken çıktı: d5'in bana ilettiği iki sha
-(`b3136ec1`/`55197fc9`) origin'de `1e20acfb`/`75df651b` olarak duruyor — **oturumun
+(`1e20acfb`/`75df651b`) origin'de `1e20acfb`/`75df651b` olarak duruyor — **oturumun
 gördüğü sha, okuyucunun bulacağı sha değil**; atıf da kapsam taşır.)*
 
 ⚠️ **Ve mekanizma tek cümleyle:** bir koşum, **koşulu SAĞLANAN** dalları basar;
@@ -214,7 +214,7 @@ farklıdır** *(kaynak: oturum ölçümü 2026-09-13; ⑤ ve ⑦ sha'lı)*:
 | ④ | **teşhis** | ölçülmeden kurala çevrilen teşhis, yanlışlığıyla kurumsallaşır (§ Teşhis mi, ölçüm mü) |
 | ⑤ | **genelleştirme** | özel bir ölçüm genel kurala çevrilir; sınırı kaybolur — `a1ee02e9` |
 | ⑥ | **kapanmış borç** | kapalı borç açık görünür; bedeli **yapılmış işi tekrar yaptırmak** (`73919ea0`) |
-| ⑦ | ⚠️ **ABARTILMIŞ TEHLİKE** | tehlikeyi BÜYÜTEN bayatlık, ağırlığı yanlış yere verdirir — `994da11d`: *"preset düşerse rol şablonları da yazılmaz"* deniyordu; ölçüldü, sıra **izinler → şablonlar → presetler**, presetler EN SON, düşerse ötekiler ZATEN yazılmış |
+| ⑦ | ⚠️ **ABARTILMIŞ TEHLİKE** | tehlikeyi BÜYÜTEN bayatlık, ağırlığı yanlış yere verdirir — `d4cc3ea0`: *"preset düşerse rol şablonları da yazılmaz"* deniyordu; ölçüldü, sıra **izinler → şablonlar → presetler**, presetler EN SON, düşerse ötekiler ZATEN yazılmış |
 | ⑧ | **beyan METNİ** | sayı beyanı yanlış ama kapı **varlığı** ölçtüğü için görmez (*"dört enumda"* yazıyordu, gerçek BEŞ) |
 
 ⚠️ **⑦ ve ⑧ en sinsileridir, çünkü ikisi de kapıdan geçer:** ⑦ okuyanı yanlış yere

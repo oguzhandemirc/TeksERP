@@ -319,4 +319,4 @@ kadar EKSİK kalıyor. Cümle daraldı: *"kırılır" → "sessiz eksik"*.)*
 mekanizma atfedilir, burada **var olan** bir şeye **yanlış** mekanizma. Ortak imza:
 mekanizma ÖLÇÜLMEDEN, varlıktan ya da yokluktan ÇIKARILIYOR.
 **Savunma:** kısıtı gören cümle, kısıta giden YOLU da okumalı. Emsal çift: abartılı hâl
-`b8a1084f` → ölçülmüş hâl `40e4a26b`; ikisinin yan yana durması sınıfın kanıtıdır.
+`32fda60f` → ölçülmüş hâl `15956002`; ikisinin yan yana durması sınıfın kanıtıdır.
