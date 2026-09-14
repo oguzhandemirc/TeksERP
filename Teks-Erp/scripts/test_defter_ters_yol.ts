@@ -22,7 +22,8 @@
 //   §1 EVREN — her append-only model beyan tablosunda SINIFLANMIŞ mı (iki yönlü);
 //      §1d beyanda model TEKİL mi (mükerrer satır sessiz sınıf değişimidir)
 //   §2 "yarı" beyanı doğru mu (updatedAt gerçekten var/yok — ölü beyan kırmızı)
-//   §3 Mekanizma ŞEMADA gerçek mi (kolon/enum değeri yeniden adlandırılırsa KIRMIZI)
+//   §3 Mekanizma ŞEMADA gerçek mi (kolon/enum değeri yeniden adlandırılırsa KIRMIZI);
+//      §3k KARŞI KAYIT: yön kolonları şemada · ters yazan İLERİ yazan dosyada
 //   §4 Ters yazan sembol var mı ve tanımı DIŞINDA referansı var mı (ölü ters yol);
 //      §4c yazıcısı olan defterin ters yazıcısı da beyanlı mı (boş liste sessiz yeşildir)
 //   §5 ⭐ Satır yaratan İLERİ yol kümesi beyanla BİREBİR mi (yeni yol → kırmızı,
@@ -172,6 +173,21 @@ for (const b of defterler) {
     const eksik = m.ciftler.flat().filter((v) => !degerler.includes(v));
     check(`§3 ${b.model} ${m.enumAdi} çiftleri şemada`, degerler.length > 0 && eksik.length === 0,
       eksik.length ? `eksik değer: ${eksik.join(", ")}` : `${m.ciftler.length} çift`);
+  } else if (m.tur === "KARSI_KAYIT") {
+    // KARŞI KAYIT iki iddia taşır ve İKİSİ DE ölçülür. ① Tersliği taşıyan şey yön
+    // KOLONLARIDIR (enum değil) — kolon yeniden adlandırılırsa kapı susamaz.
+    const eksik = m.ciftler.flat().filter((k) => !alan.has(k));
+    check(`§3k1 ${b.model} yön kolonları şemada`, m.ciftler.length > 0 && eksik.length === 0,
+      eksik.length ? `eksik kolon: ${eksik.join(", ")}` : `${m.ciftler.length} yön çifti`);
+    // ② "Ters yol ileri yolun KENDİSİDİR" — yanlışlanabilir hâli: ters yazan, ileri
+    // yazan dosyalardan birinde yaşar. Ayrı dosyadaysa mekanizma karşı kayıt DEĞİL,
+    // ayrı bir geri alma ucudur (damga/ters bağ) ve SINIF yanlıştır.
+    const tersler = b.tersYazan ?? [];
+    const disarida = tersler.filter((t) => !(b.yazan ?? []).includes(t.dosya));
+    check(`§3k2 ${b.model} karşı kaydı İLERİ yol yazıyor`, tersler.length > 0 && disarida.length === 0,
+      tersler.length === 0 ? "ters yazan beyan edilmemiş — karşı kaydın yazarı ileri yoldur, boş kalamaz"
+        : disarida.length ? `ileri yazan kümesinde YOK: ${disarida.map((t) => `${t.sembol}@${t.dosya}`).join(" · ")}`
+          : `${tersler.map((t) => t.sembol).join(", ")} — ileri yazan dosyada`);
   }
 }
 

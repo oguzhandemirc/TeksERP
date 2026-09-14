@@ -21,6 +21,37 @@
 
 ---
 
+## 2026-09-14 — Ters yol tipolojisinin BEŞİNCİ mekanizması: KARŞI KAYIT [ÇEKİRDEK]
+
+Ters yolun dört mekanizması ölçülmüştü (damga · ters bağ · tipli enum çifti · net karşı
+olay). `MachineStopReclass` beşincisini gerektirdi ve bir yıl sonra değil, yazma yüzeyi
+doğduğu hafta: **karşı kayıt** — ters yol AYNI deftere from↔to takaslanmış ikinci bir
+satırdır ve onu yazan, ileri yolun ta kendisidir (`reclassifyStop`).
+
+**Neden mevcut dördüne sığmadı.** `KARSI_OLAY` bir ENUM ÇİFTİ ister (`DISPATCHED` ↔
+`UNDISPATCHED`); reclass satırında terslik bir enum değerinde değil, `fromReasonCode` /
+`toReasonCode` kolonlarının YÖNÜNDEdir — aynı tip, ters sıra. Damga da değil: kararı
+geri almak onu silmek ya da null'lamak değil, tersini YAZMAKTIR. Beyan 2026-09-13'te
+`{ tur: "YOK" }` + borç olarak girmişti ve borç notunun kendisi çevirme reçetesini
+taşıyordu; bu not o reçetenin uygulanmasıdır. Açık defter borcu 1 → 0.
+
+**Kapı ne ölçüyor (iki iddia, iki ayak).** ① `§3k1` yön kolonları şemada — kolon yeniden
+adlandırılırsa kırmızı. ② `§3k2` ters yazan, İLERİ yazan dosyalardan birinde yaşıyor —
+"ters yol ileri yolun kendisidir" iddiasının yanlışlanabilir hâli; ters yazan ayrı bir
+dosyadaysa mekanizma karşı kayıt DEĞİL, ayrı bir geri alma ucudur ve sınıf yanlıştır.
+Üç negatif sonda ısırdı: yön kolonunu yeniden adlandır → §3k1 ❌ · ters yazanı başka
+dosyaya taşı → §3k2 ❌ · ters yazanı boşalt → §3k2 + §4c ❌.
+
+**Mühür sınırı şerhi — ölçüldü, borç DEĞİL.** Tasarım "geri alma da mühür sınırına
+tabidir" diyor (SEALED vardiyada 409 → unseal → satır → reseal) ve borç notu "ters yazan
+bu kapıyı taşımıyorsa beyan çevrilmez" şartını koymuştu. Ters yazan ile ileri yazan AYNI
+fonksiyon olduğu için kapıyı taşımaması imkânsız: `assertStopShiftWritableTx`
+(`machine-stop.service.ts`, claim'den önceki ilk kapı) reclass yolunun üzerindedir.
+Kapının SEALED ayağı bugün yok — yalnız 409 `SHIFT_CANCELLED` var; mühür modeli
+(`MachineShiftStat.sealState`, 01 Faz 1a) inince AYNI yere iner ve borç ORADA görünür,
+beyan tablosunda değil. ⇒ *Tek fonksiyonlu ters yolda "kapıyı taşıyor mu" sorusu yapısal
+olarak cevaplanır; iki fonksiyonlu ters yolda ÖLÇÜLMEK zorundadır.*
+
 ## 2026-09-13 — Commit kapısı dört kez yanlış kişiyi durdurdu: İKİ mekanizma, iki farklı düzeltme [ÇEKİRDEK]
 
 Bir gecede dört kez commit kapısı, commit'i atan kişinin **kendi işiyle ilgisi olmayan**

@@ -34,6 +34,15 @@ export type TersMekanizma =
   | { tur: "DURUM_IPTAL"; kolon: string }
   | { tur: "KARSI_OLAY"; enumAdi: string; ciftler: [string, string][] }
   | { tur: "ENUM_CIFTI"; enumAdi: string; ciftler: [string, string][] }
+  /**
+   * KARŞI KAYIT — ters yol AYNI DEFTERE from↔to takaslanmış İKİNCİ BİR SATIRDIR ve
+   * onu yazan, ileri yolun ta kendisidir. `KARSI_OLAY`dan farkı: tersliği taşıyan şey
+   * satırın TİPİ (enum değeri) değil, yön KOLONLARININ sırasıdır — enum çifti aranmaz.
+   * `ciftler` o yön kolonlarıdır ([from, to]) ve §3k1 onları şemada arar; §3k2 ters
+   * yazanın ileri yazan dosyada olduğunu ölçer (ayrı dosyadaysa mekanizma karşı kayıt
+   * DEĞİL, ayrı bir geri alma ucudur ve sınıf yanlıştır).
+   */
+  | { tur: "KARSI_KAYIT"; ciftler: [string, string][] }
   /** Ters yolu YOK — yalnız `borc` ile birlikte meşrudur (muafiyet DEĞİL, borç). */
   | { tur: "YOK" };
 
@@ -316,16 +325,16 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     ["src/services/machine-stop.service.ts"], { yari: true }),
 
   D("MachineStopReclass", "sebep DEĞİŞİM defteri — \"ne oldu değişmez\" kuralının NERESİNDE: duruşun olguları değişmez, SINIFLANDIRMASI bir KARARDIR ve karar revize edilir; revizyonun kendisi bu deftere from→to satırı olarak düşer ve o satır bir daha değişmez (append-only, updatedAt YOK). Ters yolu karşı kayıttır (to→from yeni satır), damga değil — bir kararı geri almak onu silmek değil tersini yazmaktır",
-    // Faz 1b (6e, 2026-09-14): yazan DOĞDU — `reclassifyStop` (machine-stop.service), ters yolu
-    // AYNI fonksiyonun to→from çağrısıdır (karşı kayıt). Tipolojide KARSI_KAYIT türü 82'nin
-    // dilimi; o güne dek `YOK` + borç (ters yazan sembolü aşağıda beyanlı: reclassifyStop).
-    { tur: "YOK" }, [{ dosya: "src/services/machine-stop.service.ts", sembol: "reclassifyStop" }], ["src/services/machine-stop.service.ts"],
-    { borc: [{
-      ne: "ters yolu KARŞI KAYIT (to→from, aynı fonksiyon `reclassifyStop`) — YAZICI VAR (Faz 1b, 2026-09-14); tipolojide KARSI_KAYIT türü açılınca `{ tur: \"YOK\" }` düşer (82). Eski metin: yazma yüzeyi de ters yolu da henüz YOK — duruş tablosu FAZ 1b'de vardiya amirinin ELLE girişiyle doğar (tasarım §2.7), reclass ucu onunla gelir; P2b yalnız KOŞUM yüzeyini getirdi (MachineRun), duruş yazan 0 kaldı",
-      kanit: "2026-09-14: machineStopEvent yaratan 1 (machine-stop.service `openManualStop`), machineStopReclass yaratan 1 (`reclassifyStop`); ters yol `reclassifyStop`(to→from) — test_machine_stop_manual §5e karşı kaydı ölçer. Eski ölçüm (2026-09-13, 6a0981c4): ikisi de 0; şemada damga/ters bağ kolonu yok ve olmaması DOĞRU — mekanizma karşı kayıt. Kapanır ÖLÇÜLÜR (sonda 2026-09-13: sahte `tx.machineStopReclass.create` → §5 YENİ YOL ❌): reclass yazan uç doğduğunda o commit `yazan` + karşı-kayıt yolunu beyan eder. ⚠️ ÇEVİRME GÜNÜNÜN REÇETESİ: tipolojide karşı kaydın TÜRÜ YOK — KARSI_OLAY enum çifti ister, reclass'ın karşısı from↔to takasıdır; ya `KARSI_KAYIT` türü açılır (tersYazan aynı fonksiyon, ölçüm: to→from satırı yazan yol) ya da §13d simetrisi bu tabloya uygulanmaz diye beyan edilir. İkinci şerh: karşı kayıt MÜHÜR SINIRINA tabidir (tasarım \"GERİ ALMA DA MÜHÜR SINIRINA TABİDİR\": SEALED vardiyada 409 SHIFT_SEALED → unseal → satır → RESEAL) — ters yazan bu kapıyı taşımıyorsa beyan çevrilmez",
-      tasarim: "docs/design/DOKUMA-TEZGAH-IZLEME-TASARIMI.md",
-      sahibi: "dokuma alanı — Faz 1b elle duruş girişi dilimi (01 ana hat)",
-    }] }),
+    // Faz 1b (6e, 2026-09-14) yazma yüzeyini getirdi; tipolojinin KARSI_KAYIT türü
+    // 2026-09-14'te açıldı (d9) ve `{ tur: "YOK" }` + borç satırı DÜŞTÜ. Ters yol AYNI
+    // FONKSİYONDUR — `reclassifyStop`un to→from çağrısı — bu yüzden mühür kapısını
+    // (`assertStopShiftWritableTx`) ileri yolla BİRLİKTE taşır ve taşımaması imkânsızdır
+    // (ölçüldü 2026-09-14: machine-stop.service.ts:265, claim'den önceki ilk kapı).
+    // Kapının SEALED ayağı henüz yok — bugün yalnız 409 SHIFT_CANCELLED; mühür modeli
+    // (01 Faz 1a) inince AYNI yere iner, borç orada görünür.
+    { tur: "KARSI_KAYIT", ciftler: [["fromReasonCode", "toReasonCode"], ["fromLossClass", "toLossClass"]] },
+    [{ dosya: "src/services/machine-stop.service.ts", sembol: "reclassifyStop" }],
+    ["src/services/machine-stop.service.ts"]),
 
   // ── SATIRLAR — ters yolu EBEVEYNİNDE ──────────────────────────────────────
   SATIR("SwatchStockReductionItem", "SwatchStockReduction", "düşümün iptal kümesi; storno kalemden okur"),
