@@ -389,8 +389,8 @@ WHERE e."defectTypeId" IS NOT NULL AND e."errorType" IS NULL`,
     model: "MachineStopEvent",
     alan: "lossClass",
     sinif: "DONMUS_ILERI",
-    yazan: [],
-    neden: "preset'in kayıp sınıfı duruş satırına KOPYALANIP DONAR; katalog değişse geçmiş rapor değişmez — yazma yüzeyi henüz yok (P2b-1 şema-only), ilk yazıcı beyansız gelirse kırmızı",
+    yazan: [SVC + "machine-stop.service.ts"],
+    neden: "preset'in kayıp sınıfı duruş satırına KOPYALANIP DONAR; katalog değişse geçmiş rapor değişmez — yazıcı Faz 1b elle giriş (açılışta sebepliyse · sınıfla · yeniden sınıfla), tek dosya",
     sql: [
       {
         id: "28h",

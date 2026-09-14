@@ -158,11 +158,13 @@ export async function closeManualStop(stopId: string, endedAtIn: Date | null | u
     if (!cur) throw AppError.notFound("Duruş bulunamadı", { stopId });
     await assertStopShiftWritableTx(tx, cur);
     // Süre startedAt'ten; claim WHERE'i başlangıcı da pinler (bitiş < başlangıç 400'e düşer).
+    // Uygulama saati parametreyle (kök yasak: ham SQL'de çıplak `now()`; sunucu saati tek kaynak `new Date()`).
+    const simdi = new Date();
     const rows = await tx.$queryRaw<Array<{ id: string }>>`
       UPDATE machine_stop_events
          SET "endedAt" = ${ended.value}, "endSource" = 'OPERATOR'::"MachineStopEndSource",
              "durationSec" = GREATEST(0, EXTRACT(EPOCH FROM (${ended.value}::timestamptz - "startedAt")))::int,
-             "updatedAt" = now()
+             "updatedAt" = ${simdi}::timestamptz
        WHERE id = ${stopId}::uuid AND "endedAt" IS NULL AND "revokedAt" IS NULL AND "startedAt" <= ${ended.value}::timestamptz
        RETURNING id`;
     if (rows.length === 0) {
