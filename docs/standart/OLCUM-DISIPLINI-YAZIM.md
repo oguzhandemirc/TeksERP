@@ -224,21 +224,28 @@ yazılmadan önce KOŞULDUĞU için yakalandı (§ Sayı yazma, panzehir ①).</
 kapının hiç saymadığı GERÇEK atıflar; **25'i çözülmüyor** ve bunun 15'i gürültü
 (`…` ile yazılmış sha256/md5 örneği · sonda fikstürü · SSH anahtar tipi adı),
 **10'u GERÇEK ÖLÜ atıf**.
-⇒ Kapı bugün *"0 ölü atıf"* diyor (`OLU_TABAN = 0`, `5527c345`) ve **aynı ağaçta 10 ölü
-atıf duruyor.** *Beyanlı bir kör nokta sıfırlanmış bir tabanı yalanlar: taban, ağacın
+⇒ Kapı o an *"0 ölü atıf"* diyordu (`OLU_TABAN = 0`, `5527c345`) ve **aynı ağaçta 10 ölü
+atıf duruyordu.** *Beyanlı bir kör nokta sıfırlanmış bir tabanı yalanlar: taban, ağacın
 değil KAPININ GÖRDÜĞÜNÜN sayısıdır — ve kapsam beyanı bu farkı açıklar, KAPATMAZ.*
 
-Kapının GÖRDÜĞÜ atıf aynı ağaçta **227** (backtick'li, aynı komutun `` `([0-9a-f]{7,12})` ``
-kollu hâli); çıplakların yalnız **23'ü** başka bir yerde backtick'li de yazılmış
-(`comm -12`) ⇒ **67 sha ağaçta YALNIZ çıplak biçimde var** ve kapı için hiç yoktur.
-Kapsama bugün **227/294 ≈ %77**; kural bu oranı zamanla 1'e taşır, geçmişi geri
-yazmaz — *ileriye dönük yazım kuralı, geriye dönük borç listesi.*
+**Ve borç aynı trende kapandı:** 10'un **9'u** origin karşılığına çevrilip backtick'e
+alındı (emsal `5f6919cd`; eşleme `git log -1 --format=%s <dal-sha>` → aynı konuyu
+`git log origin/main --fixed-strings --grep` ile arayarak). **1'i yerel nesne
+veritabanında da yok** — hiçbir çalışma ağacında duran bir dalın sha'sı; onu ancak
+YAZARI çözebilir (`test_stock_ledger_production_entry.ts` başlığı). *Bir ölü atıf
+"bulunamaz"a düştüğünde geriye tek kaynak kalır: onu yazan oturum.*
+
+Kapının GÖRDÜĞÜ atıf sayısı böylece **227 → 235**, çıplak **90 → 81** oldu; kesişim
+**23** (aynı sha hem backtick'li hem çıplak yazılmış) ⇒ **58 sha ağaçta YALNIZ çıplak
+biçimde var** ve kapı için hiç yoktur. Kapsama **235/293 ≈ %80**. Kural bu oranı
+zamanla 1'e taşır, geçmişi geri yazmaz — *ileriye dönük yazım kuralı, geriye dönük
+borç listesi.*
 
 📌 Üç uygulama notu:
 - **Commit sha'sı → backtick.** Kapı görsün diye; tek maliyet iki karakter.
 - **Sağlama örneği (sha256/md5) → backtick YOK**, `…` ile yazılır. O bir atıf değildir;
   backtick'e alınırsa kapı onu ölü atıf sanar ve haksız kırmızı verir.
-- **Duran 10 borcu belgeye backtick'li LİSTELEME** — listelemek kapıyı aynı anda
+- **Duran borcu belgeye backtick'li LİSTELEME** — listelemek kapıyı aynı anda
   kırmızıya düşürür (taban 0). Liste yukarıdaki komuttan üretilir; düzeltme, atıfı
   origin karşılığına çevirmektir (emsal `5f6919cd`, 29 atıf).
 

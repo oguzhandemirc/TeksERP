@@ -187,7 +187,7 @@ export function siteler(kaynak: string): Site[] {
 // ⚠️ 29 → 22: İÇ İÇE `create` bloğunun dış modele atfedilmesi düzeltildi
 // (ea üç vaka bildirdi, ölçüm YEDİ gösterdi — sınıf bildirilenden genişti).
 // 22 → 1 (2026-09-14, entegratör 1e): ea 9 · d5 12 · 6e 1 · 82 3 site aynı gece düzeltildi; birleşik ağaçta ölçüldü.
-// 1 → 0 (2026-09-14, entegratör 1e): son site (prisma_validation_message §4) d5 8fde08d0 ile damgalandı; borçsuz.
+// 1 → 0 (2026-09-14, entegratör 1e): son site (prisma_validation_message §4) d5 `5c0e488d` ile damgalandı; borçsuz.
 const TABAN = 0;
 
 function main(): void {

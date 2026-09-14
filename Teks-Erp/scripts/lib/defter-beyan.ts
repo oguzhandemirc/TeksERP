@@ -536,10 +536,10 @@ export const STOK_OLAY_BEYANI: Record<string, OlayTersYolu> = {
   //   Bekçi: test_stock_ledger_tambur_undo §12 — durum = defter = 120, canlı OVERAGE n=1 Σ=20,
   //   taşıma satırı aynı rollVarianceId; initialQty şişmez (100 → 100).
   // Tarihçe: ilk yazım tersini iddia etmişti (stok ebeveynde/terslenmez, sapma terslenir), 01'in
-  // çalıştırmasıyla çürüdü (e3d63964 düzeltti); bugün iki defterin AYRI sınıfta olması ölçülmüş ve
+  // çalıştırmasıyla çürüdü (`1745b1d6` düzeltti); bugün iki defterin AYRI sınıfta olması ölçülmüş ve
   // kasıtlı — "iki defter farklı tersliyor" bir kusur değil, keşfin doğası.
   OVERAGE: { tur: "BAGLI_TERS", kod: "TAMBUR_UNDO", tersYazan: [{ dosya: "src/services/tambur-undo.service.ts", sembol: "restoreBumpTx" }] },
-  // MANUAL_ADJUST — BORÇ KAPANDI (6e 5b15a635, hüküm 1e şık a). Eski beyan "YAZARI BİLİNMİYOR ama
+  // MANUAL_ADJUST — BORÇ KAPANDI (6e `fd33f205`, hüküm 1e şık a). Eski beyan "YAZARI BİLİNMİYOR ama
   // SATIRI VAR — sınıfı belirlenemiyor" ÇÜRÜDÜ: main'de yazar yoktu çünkü katalog kodu ÖLÜYDÜ;
   // ea'nın test hedefindeki 24 satır tek seferlik bir koşum iziydi (fabrika kopyasında 0). "Sahibi
   // bulunamadı" da düştü: `roll:manual-adjust` SoD üçlüsü → top-düzeltme alanı (6e).
