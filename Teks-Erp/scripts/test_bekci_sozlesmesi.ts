@@ -37,6 +37,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
+import { git } from "./lib/git";
+import { atlamaDefteri } from "./lib/atlama";
+import { curumeKolu } from "./lib/circir-kolu";
 
 const SCRIPTS_DIR = join(__dirname);
 /** Koşucunun bugünkü dosya süzgeci ile BİREBİR aynı (run-all-tests.ts:219). */
@@ -77,6 +80,7 @@ function check(label: string, ok: boolean, detail = ""): void {
   }
 }
 
+const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 const dosyalar = readdirSync(SCRIPTS_DIR).filter((f) => BEKCI_DESENI.test(f)).sort();
 
 check(
@@ -215,6 +219,56 @@ const KURESEL_YAZIM_TABAN = 3;
     S("async function t() {\n  await prisma.systemSetting.findMany({});\n  try { } finally { }\n}").length === 0);
 }
 
+// ── ÇIPLAK `git` SPAWN'I (2026-09-14) ───────────────────────────────────────
+// NEDEN: `execFileSync`in varsayılan `maxBuffer`ı 1 MB'tır ve aşıldığında komut
+// ENOBUFS ile ÇÖKER — kontrol kırmızı vermez, BEKÇİ ÖLÜR. `CLAUDE-NOT-ARSIVI.md`
+// 1 MB'ı aştığı gün `test_identity_ledger` tam olarak böyle düştü: ihlal yoktu,
+// tampon yetmedi. ⇒ *Bir aracın kapasite sınırı, ölçtüğü şeyin büyümesiyle sessizce
+// ihlale dönüşür* — ve kapı "ölçemedim" bile diyemez, çünkü diyecek kod hiç koşmaz.
+// Tamponu çağrı başına ayarlamak sınıfı KAPATMAZ: sayı her dosyada ayrı yaşar (ölçüldü:
+// aynı gün altı bekçi varsayılanla, biri 32 MB, biri 64 MB, biri 256 MB koşuyordu).
+// ⚠️ TEK MEŞRU SİTE YAPISALDIR, liste değil: `git`i EXPORT EDEN dosyanın kendisi.
+{
+  // ⚠️ DESEN PARÇALARDAN KURULUR: düz yazılırsa bu dosya KENDİ deseniyle eşleşir ve
+  // sayıyı iki artırır (ölçüldü — kapı kendi kaynağını da tarıyor).
+  const GIT_SPAWN = new RegExp(`(execFileSync|execSync)\\(\\s*["\`]${"git"}`);
+  // ⚠️ TABAN SATIR DEĞİL EŞLEŞME sayar: `grep | wc -l` 22 diyordu, gerçek 24 —
+  // bir satırda iki spawn olabiliyor. Sayılan şeyin TANECİĞİ yazılmazsa taban yanlış kurulur.
+  const CIPLAK_GIT_TABAN = 24;
+  const ciplak: string[] = [];
+  const tara = (dizin: string): void => {
+    for (const e of readdirSync(dizin, { withFileTypes: true })) {
+      const tam = join(dizin, e.name);
+      if (e.isDirectory()) { tara(tam); continue; }
+      if (!e.name.endsWith(".ts")) continue;
+      const kaynak = readFileSync(tam, "utf8");
+      if (/export function git\(/.test(kaynak)) continue;      // yardımcının KENDİSİ
+      const n = (kaynak.match(new RegExp(GIT_SPAWN.source, "g")) ?? []).length;
+      if (n > 0) ciplak.push(`${tam.slice(tam.indexOf("scripts/"))}×${n}`);
+    }
+  };
+  tara(SCRIPTS_DIR);
+  const toplam = ciplak.reduce((a, x) => a + Number(x.split("×")[1]), 0);
+  check("⭐ çıplak `git` spawn'ı ARTMADI (tampon tek yerde: `lib/git.ts`)", toplam <= CIPLAK_GIT_TABAN,
+    toplam <= CIPLAK_GIT_TABAN ? `${toplam} ≤ ${CIPLAK_GIT_TABAN} · ${ciplak.length} dosya`
+      : `${toplam} > ${CIPLAK_GIT_TABAN} ⇒ YENİ çıplak spawn:\n      ` + ciplak.join("\n      "));
+  curumeKolu(check, ATLAMA.atla, "⭐ çıplak git tabanı ÇÜRÜMEDİ", toplam, CIPLAK_GIT_TABAN);
+
+  // CANLI ÖLÇÜM — sentetik değil: yardımcı, BUGÜNKÜ en büyük belgeyi okuyabiliyor mu?
+  // (Sonda burada "1 MB'a çekip ENOBUFS göster" değil, DOĞRUDAN gerçek dosyadır:
+  //  arşiv 1 MB'ı zaten aştı, yani varsayılan tamponla bu çağrı ÇÖKERDİ.)
+  let arsivBayt = 0;
+  let arsivHata = "";
+  try {
+    // ⚠️ BAYT ölçülür, KARAKTER değil: `maxBuffer` bayt sayar ve Türkçe metinde ikisi
+    // AYRILIR (bu dosya 966.514 karakter ama 1.050.551 bayt — ilk yazımda eşik karakterle
+    // karşılaştırıldı ve kontrol haksız kırmızı verdi).
+    arsivBayt = Buffer.byteLength(git(["show", "HEAD:docs/history/CLAUDE-NOT-ARSIVI.md"], { cwd: join(SCRIPTS_DIR, "..", "..") }), "utf8");
+  } catch (e) { arsivHata = String((e as Error).message).slice(0, 120); }
+  check("⭐ yardımcı 1 MB'ı AŞAN arşivi okuyabiliyor (varsayılan tamponla ÇÖKERDİ)",
+    arsivBayt > 1_048_576, arsivHata || `${arsivBayt} bayt`);
+}
+
 // Muafiyet listesi iki yönlü: artık özet basan bir dosya listede kalmamalı.
 const bayatMuaf = MUAF.filter((f) => {
   if (!dosyalar.includes(f)) return true;
@@ -226,5 +280,5 @@ check(
   bayatMuaf.join(", ") || `${MUAF.length} muaf`,
 );
 
-console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
 process.exit(fail > 0 ? 1 : 0);

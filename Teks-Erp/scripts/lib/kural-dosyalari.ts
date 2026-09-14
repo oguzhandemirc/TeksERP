@@ -13,6 +13,7 @@
 // "commit'lenecek olan"dır; CI'da HEAD = index = ağaç.
 // =============================================================================
 import { execFileSync } from "child_process";
+import { git } from "./git";
 import { readdirSync, readFileSync } from "fs";
 import { join } from "path";
 
@@ -34,11 +35,10 @@ export function kuralDosyalari(): KuralKaynagi {
     agac.set(`docs/kurallar/${ad}`, readFileSync(join(KURALLAR, ad), "utf8"));
   }
   try {
-    const git = (...args: string[]): string =>
-      execFileSync("git", ["-C", KOK, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    const g = (...args: string[]): string => git(["-C", KOK, ...args], { stdio: "yut" });
     const index = new Map<string, string>();
-    for (const yol of git("ls-files", "-z", "--", "docs/kurallar/*.md").split("\0").filter(Boolean)) {
-      index.set(yol, git("show", `:${yol}`));
+    for (const yol of g("ls-files", "-z", "--", "docs/kurallar/*.md").split("\0").filter(Boolean)) {
+      index.set(yol, g("show", `:${yol}`));
     }
     if (index.size === 0) throw new Error("index boş");
     return { kaynak: "index", index, agac };

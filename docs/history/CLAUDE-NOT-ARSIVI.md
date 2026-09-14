@@ -21,6 +21,31 @@
 
 ---
 
+## 2026-09-14 — Aracın kapasitesi, ölçtüğü şey büyüyünce sessizce ihlale dönüşür [ÇEKİRDEK]
+
+`CLAUDE-NOT-ARSIVI.md` 1 MB'ı aştı ve `test_identity_ledger` **ENOBUFS ile ÇÖKTÜ**.
+İhlal yoktu: `execFileSync`in varsayılan `maxBuffer`ı 1 MB'tır ve aşıldığında komut
+patlar. ⇒ ***Kapı kırmızı vermez, BEKÇİ ÖLÜR;*** üstelik "ölçemedim" bile diyemez, çünkü
+diyecek kod hiç koşmaz. Üçüncü sonuç ancak ÇALIŞAN bir kapıda vardır.
+
+**Tamponu çağrı başına ayarlamak sınıfı kapatmaz.** Ölçüldü: aynı gün altı bekçi
+varsayılanla, biri 32 MB, biri 64 MB, biri 256 MB koşuyordu — sayı her dosyada ayrı
+yaşıyor ve biri güncellenince diğeri kalıyor. Tek yardımcı (`scripts/lib/git.ts`), tek
+sayı; hata mesajı artık KOMUTU ve sınırı taşıyor.
+
+**Kapı yapısal:** tek meşru çıplak spawn, `git`i EXPORT EDEN dosyanın kendisidir — liste
+değil, ölçüt. Sonda iki yönlü: yeni çıplak spawn → taban aşılır ❌ · tampon 1 MB'a çekilir
+→ arşiv okuması ADIYLA başarısız olur (çökmez) ❌.
+
+**Üç ölçüm hatası bu dilimde arka arkaya yakalandı ve üçü de aynı aileden:**
+① **Desen kendi kaynağıyla eşleşti** — kapı kendi regex'ini sayıp tabanı iki artırdı;
+   desen parçalardan kuruldu. (Bugünün dördüncü "kapı kendi kaynağını tarar" vakası.)
+② **Taban yanlış TANECİKTE kuruldu** — `grep | wc -l` SATIR sayar, kapı EŞLEŞME: 22 ↔ 24.
+   *Sayılan şeyin taneciği yazılmazsa taban yanlış kurulur.*
+③ **Bayt ile KARAKTER karıştırıldı** — `maxBuffer` bayt sayar; Türkçe metinde bu dosya
+   966.514 karakter ama 1.050.551 bayttır. Eşik karakterle karşılaştırıldı ve kontrol
+   HAKSIZ kırmızı verdi. *Bir eşiğin birimi, eşiğin kendisi kadar ölçüdür.*
+
 ## 2026-09-14 — Zincir bekçisi: adımların hepsi yeşilken ZİNCİR ölçülmemişti [ÇEKİRDEK]
 
 İplik lotundan fason dönüşüne kadar her adımın kendi bekçisi vardı ve hepsi yeşildi. Ama

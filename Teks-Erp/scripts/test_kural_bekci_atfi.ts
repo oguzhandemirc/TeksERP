@@ -46,6 +46,7 @@
 //   K  aynı 80'lik STAGE'siz                      → index 72 · ℹ️ ağaç 73 ✓
 // =============================================================================
 import { execFileSync } from "child_process";
+import { git } from "./lib/git";
 import { basename } from "path";
 import { type BekciAlani, bekciAlanlari, KOK, kuralDosyalari } from "./lib/kural-dosyalari";
 import { curumeKolu } from "./lib/circir-kolu";
@@ -186,7 +187,7 @@ function adAdaylari(icerik: string): string[] {
 }
 
 function repoDosyaAdlari(): Set<string> {
-  const ham = execFileSync("git", ["ls-files", "*.ts", "*.tsx"], { cwd: KOK, encoding: "utf8" });
+  const ham = git(["ls-files", "*.ts", "*.tsx"], { cwd: KOK });
   return new Set(ham.split("\n").filter(Boolean).map((p) => basename(p)));
 }
 

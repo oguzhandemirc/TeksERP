@@ -17,6 +17,7 @@
 // NİYETİ değil GERÇEĞİ okur.
 // =============================================================================
 import { execFileSync } from "child_process";
+import { git } from "./lib/git";
 import { existsSync } from "fs";
 import { join } from "path";
 
@@ -62,7 +63,7 @@ const SIR_ANAHTARLARI = /^(.*_)?(SECRET|PASSWORD|PASSWD|TOKEN|PRIVATE_KEY|API_KE
 
 function main(): void {
   const kok = join(__dirname, "../..");
-  const cikti = execFileSync("git", ["ls-files"], { cwd: kok, encoding: "utf8", maxBuffer: 32 << 20 });
+  const cikti = git(["ls-files"], { cwd: kok });
   const izlenen = cikti.split("\n").filter(Boolean);
 
   // KÖRLÜK ZEMİNİ: `git ls-files` boş dönerse (yanlış cwd, git yok) aşağıdaki

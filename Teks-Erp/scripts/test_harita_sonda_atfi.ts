@@ -35,6 +35,7 @@
 //    ısırır; §4f sığ-klon taklidi (env) blame'i ⏭ beyanla atlar, 'havada' üretmez.
 // =============================================================================
 import { execFileSync, spawnSync } from "node:child_process";
+import { git } from "./lib/git";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { curumeKolu } from "./lib/circir-kolu";
@@ -85,7 +86,7 @@ export function hucreSinifi(hucre: string): Sinif {
 function sahnelenmisSatirlar(): Set<number> {
   const out = new Set<number>();
   try {
-    const d = execFileSync("git", ["diff", "--cached", "-U0", "--", HARITA], { cwd: KOK, encoding: "utf8", maxBuffer: 64 << 20 });
+    const d = git(["diff", "--cached", "-U0", "--", HARITA], { cwd: KOK });
     for (const m of d.matchAll(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/gm)) {
       const bas = Number(m[1]);
       const adet = m[2] === undefined ? 1 : Number(m[2]);
@@ -100,7 +101,7 @@ function sahnelenmisSatirlar(): Set<number> {
 /** HEAD'de o satırı yazan commit — `(bu commit)` işaretinin türetilmiş sha'sı; çözülmezse null. */
 function blameSha(satirNo: number): string | null {
   try {
-    const b = execFileSync("git", ["blame", "-l", "-s", "-L", `${satirNo},${satirNo}`, "HEAD", "--", HARITA], { cwd: KOK, encoding: "utf8" });
+    const b = git(["blame", "-l", "-s", "-L", `${satirNo},${satirNo}`, "HEAD", "--", HARITA], { cwd: KOK });
     // `^` SINIR işareti sha'nın ilk hanesinin YERİNE basılır (39 hane kalır) — sığ klonda her
     // satır sınırdır ve bu "çözülmedi" demektir; tam klonda yalnız kök commit'te görülür.
     if (b.startsWith("^")) return null;
@@ -118,7 +119,7 @@ function blameSha(satirNo: number): string | null {
 function sigKlonMu(): boolean {
   if (process.env.TEKSERP_SONDA_SIG === "1") return true;
   try {
-    return execFileSync("git", ["rev-parse", "--is-shallow-repository"], { cwd: KOK, encoding: "utf8" }).trim() === "true";
+    return git(["rev-parse", "--is-shallow-repository"], { cwd: KOK }).trim() === "true";
   } catch {
     return false;
   }
@@ -132,7 +133,7 @@ export function biciimliMi(hucre: string): boolean {
 
 function haritayiOku(): { metin: string; kaynak: "INDEX" | "AĞAÇ" } {
   try {
-    return { metin: execFileSync("git", ["show", `:${HARITA}`], { cwd: KOK, encoding: "utf8", maxBuffer: 64 << 20 }), kaynak: "INDEX" };
+    return { metin: git(["show", `:${HARITA}`], { cwd: KOK }), kaynak: "INDEX" };
   } catch {
     return { metin: readFileSync(join(KOK, HARITA), "utf8"), kaynak: "AĞAÇ" };
   }

@@ -35,6 +35,7 @@
 //    olmasa fark edilmezdi.
 // =============================================================================
 import { execFileSync } from "node:child_process";
+import { git } from "./lib/git";
 import { readFileSync, readdirSync, statSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -305,11 +306,7 @@ const KOMIT_KUMESI = process.env.TEKSERP_KOMIT_DOSYALARI
 /** O dosyanın HEAD'deki hâlinde bu ad zaten var mıydı? */
 function headdeVarMi(dosya: string, ad: string): boolean {
   try {
-    const ham = execFileSync("git", ["show", `HEAD:${dosya}`], {
-      cwd: KOK,
-      encoding: "utf8",
-      maxBuffer: 16 * 1024 * 1024,
-    });
+    const ham = git(["show", `HEAD:${dosya}`], { cwd: KOK });
     for (const m of yorumsuz(ham).matchAll(BILDIRIM)) if (m[1] === ad) return true;
     return false;
   } catch {
