@@ -9099,3 +9099,15 @@ PASİF kod 400 "pasif" (fikstürde pasif kalite yaratıldı — sonda DB'sinde p
 `trimmedQuality || null` + `resolveQualityGradeIdStrict`. **Bekçi:** 11 kontrol; iki sonda diskte kırmızı görüldü
 (pasif kapısı `if (false)` → §4 ❌; `|| null` → `?? null` → §2 iki vaka ❌: kod "" yazıldı, id null — çift AYRIŞTI).
 Kural satırı `kk1.md § Backend`. 1e kararı: kusur yok ama ölçüm kalıcı olsun.
+
+## 2026-09-14 — `Machine.warpBeamSlots` VARSAYILAN 1: tasarım belgesi canlı şemaya uyduruldu (§9.7h "varsayılan 0" GEÇERSİZ) [ÇEKİRDEK]
+
+**Ölçüm (1e):** origin `91e24e3b` kolonu `SMALLINT NOT NULL DEFAULT 1` + CHECK `>= 0` ile indirdi;
+`DEVERE-LEVENT-TARAMASI.md` §9.7h ve :513 şema taslağı "varsayılan 0, 1 DEĞİL" diyordu — belge ile şema ayrışmıştı.
+
+**Hüküm (1e):** ŞEMA KALIR, BELGE düzeltilir. Senaryoyu kapatan CHECK'ti ve o `>= 0` (cağlıktan beslenen
+çözgü makinesi 0 yazabilir); tezgahın tek yuvası olağan durumdur, 0 yalnız çözgü makinesinde açıkça
+yazılır. Eski ② gerekçesi ("kurşun/tambur makinesine yuvası var yazar") düşer: yuva kapısı sayı değil
+`Station.consumesWarpBeam`, sayı yalnız üst sınır — o makinelerde sayı hiç okunmaz. Bugünkü davranış
+korunuyor: alan sorulmaz, `beamSlot` yalnız `warpBeamSlots > 1` makinede istenir (`assertBeamSlotValid`).
+Belgede §9.7h satırına "GEÇERSİZ → 2026-09-14", :513 taslağı `@default(1)`, CHECK envanter satırı aynı cümle (6e, docs-only).
