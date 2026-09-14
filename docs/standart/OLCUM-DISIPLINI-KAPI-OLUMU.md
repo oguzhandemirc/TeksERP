@@ -50,6 +50,20 @@ DEĞİL** — sıra iki oturumda çakıştı; bir kapı ölümü ADIYLA anılır
    Panzehir: her basılan sayı ya bir `check`in konusudur ya "bilgi" damgasını
    TAŞIR ve belgede kapı diye anılmaz.)* *(6e/1c)*
 
+11. **Beyan VAR, mekanizma YOK** — kapı *"N atlandı"* basabilecek biçimde yazılmıştır
+   ama sayacı hiç artmaz: beyan **sözdizimsel ayakta, semantik ölü**. Çıktı her koşumda
+   "0 atlandı" der ve bu *"hiçbir şey atlanmadı"* diye okunur; oysa ölçülen hiçbir şey
+   yoktur. *(Vaka 2026-09-14: `test_label_dirty_sources`; d9 buldu ve `lib/atlama`ya
+   bağladı — `1e20acfb`/`75df651b`.)* Panzehir: beyan eden bekçi ortak defteri İTHAL
+   eder (kopya defter yasak, mandal `test_atlama_defteri`); kopya defter, ilk gün doğru
+   yazılsa bile ikinci gün sessizce ölür.
+12. **Beyan VAR, sayı YOK — iki okuyuculu beyan tek okuyucuya görünür** — atlama İNSANA
+   görünür (`(DB bölümü atlandı)` gibi serbest metin) ama MAKİNEYE görünmez (koşucunun
+   `Sonuç:` ayrıştırıcısı sayı ister ve serbest metni **0** sayar). Toplamda kapsam
+   kaybı **sıfır** görünür. *(Vaka 2026-09-14: `test_peripheral_for_device`; d9.)*
+   ⇒ ***İki okuyuculu her beyan İKİ okuyucuya da görünmeli*** — bekçi çıktısı,
+   `ApiResponse.warnings`, harita hücresi, sürüm notu: hepsi aynı sınıf.
+
 İlk üçünde kapı yanlış davranır; *gürültü*de doğru davranır ve yine ölür;
 *doğru davranışı pahalı kılmak*ta **kapı doğru, kurban haklı**. Yedincide kapı hiç
 koşmaz.

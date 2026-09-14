@@ -17,6 +17,36 @@ Buradaki kurallar **mekanik değildir ve mekanikleştirilemez** — tek kullanı
 
 > **Her ölçümü raporlarken NEYİ ölçtüğünü ve NASIL doğruladığını yaz.**
 
+### Kapsam, ölçümün İÇİNE değil YANINA yazılır
+Yukarıdaki cümlenin eksik yarısı: *"nasıl doğruladın"* kadar **NEREDE ölçtüğün** de
+rapora girer. **Bir ölçüm aracının çıktısı, aracın KOŞTUĞU YERLE sınırlıdır** — ve bu
+sınır çıktının İÇİNDE görünmez; sayı tek başına kendini evrensel gösterir.
+
+*(Üç emsal, hepsi 2026-09-14, d9 ölçtü:* ① *CI çıktısı yalnız O KOŞUMDA atlayanı gösterir
+— kopya atlama defterleri CI'da **6** sanıldı, statik tarama **14** buldu
+(`1e20acfb` altı kopya + `75df651b` sekiz kopya daha).* ② *Kapı defteri yalnız deftere
+YAZAN worktree'leri görür; eski tabanlı bir ağaç satır bırakmaz ⇒ "ısırık sayısı" gözlenen
+❌'tir, POPÜLASYON değil.* ③ *Bir bekçi koşumu yalnız O VERİTABANINDAKİ veriyi görür.
+Dördüncüsü de aynı gün, bu satırı yazarken çıktı: d5'in bana ilettiği iki sha
+(`b3136ec1`/`55197fc9`) origin'de `1e20acfb`/`75df651b` olarak duruyor — **oturumun
+gördüğü sha, okuyucunun bulacağı sha değil**; atıf da kapsam taşır.)*
+
+⚠️ **Ve mekanizma tek cümleyle:** bir koşum, **koşulu SAĞLANAN** dalları basar;
+sağlanmayanlar çıktıda **hiç görünmez** ve yokmuş gibi sayılır. Yukarıdaki 6 ↔ 14 farkı
+buydu — sekiz kopya hiç ATLAMAMIŞTI, bu yüzden atlama defterinde hiç görünmediler.
+⇒ ***Bir POPÜLASYON sorusu, koşum çıktısından CEVAPLANAMAZ; statik taranır.*** *(d9'un
+formülasyonu.)*
+
+> **Sayının yanına üç şey yazılır: NE ölçüldü · NEREDE ölçüldü · NE ölçülmedi.**
+> Üçüncüsü olmadan okuyucu, ikincisini evrensel sanar.
+📌 Yazım biçimi de ölçüldü: *"N ısırık"* değil ***"gözlenen N ❌ · kapsam: şu ağaçlar /
+şu koşullar"***. Popülasyona ihtiyacın varsa **aracı değiştir** — koşum değil TARAMA.
+📌 Bu cümlenin iki özel hâli ayrı dosyalarda ve ikisi de bunun altındadır:
+· **Tümleyeni BAS** — kapsamı ölçen kapı, kapsam DIŞINDA kalanı da saysın
+(`OLCUM-DISIPLINI-YUKLEM.md` § Sınırsız eşleşme, (d) satırı).
+· **Koşum YERİ bir ölçüm koşuludur** — bir kontrolün doğru olması, doğru yerde koştuğu
+anlamına gelmez (`OLCUM-DISIPLINI-YAZIM.md` § Sayı yazma, rejim ekseni).
+
 ## Aile — hangi soru hangi dosyada
 
 Ölçüm disiplini **on bir dosyadır** ve hepsi aynı soruyu bölerek cevaplar. Buradan

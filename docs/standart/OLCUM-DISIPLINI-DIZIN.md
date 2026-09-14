@@ -21,7 +21,7 @@ kalamaz). ⇒ **Dizin bayatlayamaz; bayatlatmayı deneyen commit durur.** İlk d
 bir kereye mahsus üretildi (2026-09-13); bundan sonrasını üreteç değil KAPI tutar —
 üretece bağlı bir dizin, üreteç koşulmadığı gün sessizce bayatlardı.
 
-Sayı bir ölçümdür ve bu satır da kapı altındadır: **153 başlık / 11 dosya**
+Sayı bir ölçümdür ve bu satır da kapı altındadır: **154 başlık / 11 dosya**
 (ölçüldü 2026-09-13; kapı her koşumda yeniden sayar ve sayı tutmazsa kırmızı verir).
 
 ⚙️ **MÜKERRER TARAMASI (dizinin ilk kullanımı, 2026-09-14):** 147 başlık çiftlenip
@@ -38,6 +38,7 @@ açan kişi tabloyu yine baştan sona okur.**
 | # | başlık | dosya |
 |---|---|---|
 |  | § Aile — hangi soru hangi dosyada | (`OLCUM-DISIPLINI.md`) |
+|  | § Kapsam, ölçümün İÇİNE değil YANINA yazılır | (`OLCUM-DISIPLINI.md`) |
 |  | § Kurtarıcı kurallar — birbirinin tersi, ikisi de üç saniye | (`OLCUM-DISIPLINI.md`) |
 |  | § Arıza sınıfları → ayrı dosya | (`OLCUM-DISIPLINI.md`) |
 |  | § Teşhis mesajı da bir yüklemdir | (`OLCUM-DISIPLINI.md`) |
@@ -195,7 +196,7 @@ açan kişi tabloyu yine baştan sona okur.**
 
 | dosya | kapsam |
 |---|---|
-| [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | YÖNTEM — ölçüm nasıl yapılır, nasıl OKUNUR (14 başlık) |
+| [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | YÖNTEM — ölçüm nasıl yapılır, nasıl OKUNUR (15 başlık) |
 | [`OLCUM-DISIPLINI-YAZIM.md`](OLCUM-DISIPLINI-YAZIM.md) | ölçümü YAZMA: sayı · çapa · kimlik (3 başlık) |
 | [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) | KATMAN 1a — ölçümün ARACI (18 başlık) |
 | [`OLCUM-DISIPLINI-YUKLEM.md`](OLCUM-DISIPLINI-YUKLEM.md) | KATMAN 1a′ — YÜKLEM (ne sorduğun) (15 başlık) |
