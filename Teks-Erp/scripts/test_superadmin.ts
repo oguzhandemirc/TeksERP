@@ -643,7 +643,7 @@ async function main(): Promise<void> {
       select: { id: true },
     }))?.id ?? null;
     if (!hedef) {
-      atla("getEffectivePermissions ölçümü", "DB'de sistem hesabı yok", 4);
+      check("§G ÖN KOŞULU: fixture sistem hesabı (§I) — yoksa dört ölçüm koşmaz", false, "fixtureId null");
     } else {
       const izinler = await AuthService.getEffectivePermissions(hedef);
       check("süperadmin izinleri tam olarak `[\"*\"]`", izinler.length === 1 && izinler[0] === "*", JSON.stringify(izinler));
@@ -663,7 +663,7 @@ async function main(): Promise<void> {
           `${normal.username}: ${nIzin.length} izin`,
         );
       } else {
-        atla("normal kullanıcı karşı ölçümü", "DB'de normal kullanıcı yok");
+        check("karşı ölçüm ÖN KOŞULU: normal (isSystemAccount=false) aktif kullanıcı (seed admin)", false, "yok");
       }
     }
   }
@@ -726,7 +726,7 @@ async function main(): Promise<void> {
       (await prisma.user.findFirst({ where: { isSystemAccount: true }, select: { id: true } }))?.id ??
       null;
     if (!hedef) {
-      atla("görünürlük davranış ölçümü", "fixture yok", 3);
+      check("görünürlük ÖN KOŞULU: fixture sistem hesabı (§I) — yoksa üç ölçüm koşmaz", false, "fixtureId null");
     } else {
       const kunye = await PermissionManagementService.getUserById(hedef).catch((e: unknown) => e);
       check(

@@ -8,16 +8,9 @@
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { DashboardService } from "../src/services/dashboard.service";
-import { atlamaDefteri } from "./lib/atlama";
 
 let pass = 0;
 let fail = 0;
-// ⚠️ ATLAMA ARTIK SAYILIR VE BEYAN EDİLİR (2026-09-13). Eskiden `check(…, true)`
-// ile GEÇTİ sayılıyordu: kapsam kaybı sıfır değil EKSİ idi — kapsanmayan şey
-// yeşili ARTIRIYORDU. Bu daldan geçen koşum "ölçtüm" değil "bakamadım" der.
-const ATLAMA = atlamaDefteri(() => {
-  fail++;
-});
 
 function check(label: string, ok: boolean, extra = "") {
   if (ok) { pass++; console.log(`✅ ${label}${extra ? " — " + extra : ""}`); }
@@ -43,7 +36,7 @@ async function main() {
       typeof r.id === "string" && typeof r.code === "string" && typeof Number(r.queueCount) === "number",
     );
   } else {
-    ATLAMA.atla("istasyon şekil testi", "istasyon yok");
+    check("istasyon şekil testi ÖN KOŞULU: en az bir istasyon (seed)", false, "istasyon yok — hedef DB seed'siz");
   }
 
   // 3) Açık hata sayacı canlı: TEST rollError yarat → openCount artar
@@ -75,14 +68,14 @@ async function main() {
       const after = await DashboardService.getDefectsSummary();
       check("yeni açık hata openCount'u artırdı", after.openCount === before.openCount + 1, `${before.openCount}→${after.openCount}`);
     } else {
-      ATLAMA.atla("canlı hata sayacı testi", "item/defectType yok");
+      check("canlı hata sayacı ÖN KOŞULU: item + defectType (seed)", false, `item=${item ? "var" : "YOK"} defectType=${defect ? "var" : "YOK"}`);
     }
   } finally {
     if (errorId) await prisma.rollError.delete({ where: { id: errorId } }).catch(() => {});
     if (rollId) await prisma.roll.delete({ where: { id: rollId } }).catch(() => {});
   }
 
-  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
+  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
   process.exit(fail > 0 ? 1 : 0);
 }

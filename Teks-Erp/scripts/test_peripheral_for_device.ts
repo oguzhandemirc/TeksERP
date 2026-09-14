@@ -85,6 +85,9 @@ function unitToleransSondasi(): void {
   );
 }
 
+/** Kapıdan sonraki kontrol adedi — erken dönüşte "kaç kontrol atlandı" bununla beyan edilir. */
+const DB_KONTROL_SAYISI = 12;
+
 async function main() {
   unitToleransSondasi();
   const tambur = await prisma.machine.findFirst({ where: { code: "TAMBUR-M1" }, select: { id: true } });
@@ -93,12 +96,15 @@ async function main() {
   // verse bile bekçi YEŞİL dönüyordu (çıkış kodu ölçümden kopmuştu). DB senaryoları
   // burada atlanıyor, ama atlandığı ÇIKTIDA yazılı ve karar sayaca bağlı.
   if (!tambur || !kk1) {
-    // Erken dönüş: kaç kontrolün düştüğü YAPISAL OLARAK bilinemez ⇒ `"?"`.
-    ATLAMA.atla("DB senaryoları", "TAMBUR-M1/KK1-M1 makineleri yok (seed gerekli)", "?");
+    // Erken dönüş: kapıdan sonraki kontrol sayısı döngüsüz ve sabittir; beyan
+    // aşağıda kendi kendini ölçer (sayı değişince o kontrol kırmızı verir).
+    ATLAMA.atla("DB senaryoları", "TAMBUR-M1/KK1-M1 makineleri yok (seed gerekli)", DB_KONTROL_SAYISI);
     console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
     await prisma.$disconnect();
     process.exit(fail > 0 ? 1 : 0);
   }
+  const dbOncesi = pass + fail;
+  const atlamaOncesi = ATLAMA.sayi;
 
   await upsertMeter("TAMBUR-METRE-2KAT", "Tambur 2 Kat Metre", tambur.id, "2-KAT", "00:23:09:01:05:5E");
   await upsertMeter("TAMBUR-METRE-4KAT", "Tambur 4 Kat Metre", tambur.id, "4-KAT", "00:23:09:01:1E:1B");
@@ -137,7 +143,8 @@ async function main() {
     check("getForDevice(SEVK,SCALE) → ≥1 satır", sevkScales.length >= 1, `${sevkScales.length}`);
     check("SEVK kantarı BT-SPP + kg + komut + simulate", sevkScales.some((s) => s.connectionType === "BLUETOOTH_SPP" && s.unit === "kg" && s.pollCommand === "P" && s.simulate === true));
   } else {
-    console.log("ℹ️ SEVK-M1 yok (reseed gerekli) — sevkiyat kantarı senaryosu atlandı");
+    // Sessiz `console.log` koşucuya ulaşmıyordu; atlama SAYIYLA beyan edilir.
+    ATLAMA.atla("sevkiyat kantarı senaryosu", "SEVK-M1 makinesi yok (seed'de yok, fabrika verisi)", 2);
   }
 
   const none = (await svc.getForDevice({}, "METER")).data as unknown[];
@@ -194,7 +201,14 @@ async function main() {
   };
   await cleanupTestKayitlari();
 
-  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  // Beyan kendi kendini ölçer: koşan + beyanla atlanan = sabit; DB bölümüne kontrol
+  // eklenip sabit güncellenmezse (ya da bir dal sessizce düşerse) burası kırmızı.
+  const dbKosan = pass + fail - dbOncesi;
+  const dbAtlanan = ATLAMA.sayi - atlamaOncesi;
+  check("DB kontrol sayısı beyanı (koşan + atlanan = erken çıkışın beyan ettiği adet)",
+    dbKosan + dbAtlanan === DB_KONTROL_SAYISI, `${dbKosan} koşan + ${dbAtlanan} atlanan ↔ ${DB_KONTROL_SAYISI}`);
+
+  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   await prisma.$disconnect();
   process.exit(fail > 0 ? 1 : 0);
 }

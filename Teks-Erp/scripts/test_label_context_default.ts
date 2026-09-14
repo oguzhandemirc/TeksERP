@@ -13,18 +13,11 @@ import {
 } from "../src/services/helpers/label-routing.resolver";
 import { AppError } from "../src/utils/app-error";
 import type { LabelKind } from "@prisma/client";
-import { atlamaDefteri } from "./lib/atlama";
 
 const KIND = "ROLL_RAW" as LabelKind; // string literal — modül-üstü enum deref TDZ yasağı
 
 let pass = 0;
 let fail = 0;
-// ⚠️ ATLAMA ARTIK SAYILIR VE BEYAN EDİLİR (2026-09-13). Eskiden `check(…, true)`
-// ile GEÇTİ sayılıyordu: kapsam kaybı sıfır değil EKSİ idi — kapsanmayan şey
-// yeşili ARTIRIYORDU. Bu daldan geçen koşum "ölçtüm" değil "bakamadım" der.
-const ATLAMA = atlamaDefteri(() => {
-  fail++;
-});
 
 function check(label: string, ok: boolean, extra = "") {
   if (ok) { pass++; console.log(`✅ ${label}${extra ? " — " + extra : ""}`); }
@@ -103,7 +96,7 @@ async function main() {
   await expectBadRequest("guard: default şablon kalıcı silinemez", () => svc.hardDelete(c.id));
 
   // --- hardDelete: müşteri atamalarını temizler ---
-  const customer = await prisma.customer.findFirst({ where: { isActive: true }, select: { id: true } });
+  const customer = await prisma.customer.findFirst({ where: { code: "MUS-001" }, select: { id: true } });
   if (customer) {
     await prisma.customerTemplateRoute.create({
       data: { customerId: customer.id, kind: KIND, templateId: a.id },
@@ -114,7 +107,7 @@ async function main() {
     check("hardDelete(A): müşteri atamaları temizlendi", routes === 0);
     check("hardDelete(A): deletedAt damgalı + pasif", aDeleted?.deletedAt != null && aDeleted?.isActive === false);
   } else {
-    ATLAMA.atla("hardDelete müşteri-atama temizliği", "müşteri fixture yok");
+    check("hardDelete müşteri-atama ÖN KOŞULU: MUS-001 (seed:fixtures)", false, "Seed fixture eksik: MUS-001");
   }
 
   // --- Geri yükleme: C'yi default'luktan düşür, orijinali geri koy ---
@@ -153,6 +146,6 @@ main()
       console.error("Cleanup hatası:", e);
     }
     await prisma.$disconnect();
-    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     process.exit(fail > 0 ? 1 : 0);
   });
