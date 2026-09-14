@@ -128,7 +128,7 @@ export default function HardwareScanModal({ visible, target, onDismiss, onAssign
           });
           const v = io.codec.decode(raw);
           if (v != null) {
-            Toast.show({ type: 'success', text1: `Test okuma: ${v} ${row.unit ?? ''}`.trim(), text2: 'Cihaz doğru bağlandı.' });
+            Toast.show({ type: 'success', text1: `Test okuma: ${v}`, text2: 'Cihaz doğru bağlandı.' });
           } else {
             Toast.show({
               type: 'info',

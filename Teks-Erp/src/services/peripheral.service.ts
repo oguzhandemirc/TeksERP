@@ -155,10 +155,9 @@ export class PeripheralDeviceService extends BaseService {
 
   async create(data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
     delete data.printerModelId; // eski istemci toleransı — PrinterModel alanı 2026-07'de kaldırıldı
-    // Eski istemci toleransı — `unit` SÜS alandı: hiçbir yer okumuyordu (çarpan
-    // yalnız `scale`), hiçbir yer doğrulamıyordu. Kolon bir sonraki sürümde düşecek;
-    // tolerans ÖNCE sahada olmalı, yoksa kolon düştüğü gün `unit` gönderen eski
-    // panel bilinmeyen argümana çarpar ve cihaz kaydı DÜZENLENEMEZ olur.
+    // Eski istemci toleransı — `unit` SÜS alandı (çarpan yalnız `scale`), kolon
+    // 2026-09-14'te DÜŞTÜ; sahadaki 1.3.1 panel hâlâ gönderir ⇒ tolerans KALIR
+    // (`sanitizeWriteData` de DMMF-dışı anahtarı düşürür — iki kapı, bilerek).
     delete data.unit;
     delete data.deletedAt; // silinme damgası YALNIZ hardDelete'ten yazılır (PATCH ile un-delete kapalı)
     const routes = takeRoutes(data); // data'dan çıkar (Prisma create relation şekli farklı)
@@ -176,7 +175,7 @@ export class PeripheralDeviceService extends BaseService {
 
   async update(id: string, data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
     delete data.printerModelId; // eski istemci toleransı — PrinterModel alanı 2026-07'de kaldırıldı
-    delete data.unit; // eski istemci toleransı — `create` ile aynı gerekçe (süs alan, kolon N+1'de düşüyor)
+    delete data.unit; // eski istemci toleransı — `create` ile aynı gerekçe (kolon düştü, 1.3.1 panel gönderir)
     delete data.deletedAt; // silinme damgası YALNIZ hardDelete'ten yazılır (PATCH ile un-delete kapalı)
     const routes = takeRoutes(data);
     const existing = await prisma.peripheralDevice.findUnique({

@@ -1075,7 +1075,6 @@ model PeripheralDevice {
   terminator  String?            @db.VarChar(8) // Yanıt satır sonu (örn "\r\n"); boş → herhangi CR/LF
   decimals    Int? // Codec yuvarlama hassasiyeti (boş → 1)
   scale       Decimal?           @db.Decimal(10, 4) // Ham → mühendislik çarpanı (cm→m: 0.01); boş → 1
-  unit        String?            @db.VarChar(8) // "m" / "kg"
   timeoutMs   Int? // Okuma zaman aşımı ms (boş → 2500)
   role        String?            @db.VarChar(24) // Makine içi ayraç: "2-KAT" / "4-KAT" / "PRIMARY"
   simulate    Boolean            @default(false) // Per-cihaz simülasyon (gerçek I/O yerine sahte değer)

@@ -206,7 +206,8 @@ export default function SessionHardwareCard() {
       const value = io.codec.decode(raw);
       Toast.show({
         type: 'success',
-        text1: `Okuma başarılı: ${value} ${r.unit ?? ''}`.trim(),
+        // `unit` kolonu düştü (süs alandı; çarpan `scale`): toast yalnız değeri basar.
+        text1: `Okuma başarılı: ${value}`,
         text2: r.name,
       });
     } catch (e) {

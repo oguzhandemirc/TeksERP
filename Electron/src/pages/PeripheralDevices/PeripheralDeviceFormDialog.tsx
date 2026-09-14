@@ -123,7 +123,6 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
         terminator: initial.terminator ?? "",
         decimals: initial.decimals != null ? String(initial.decimals) : "",
         scale: initial.scale != null ? String(initial.scale) : "",
-        unit: initial.unit ?? "",
         timeoutMs: initial.timeoutMs != null ? String(initial.timeoutMs) : "",
         role: initial.role ?? "",
         simulate: initial.simulate ?? false,

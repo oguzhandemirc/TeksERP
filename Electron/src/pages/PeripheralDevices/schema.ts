@@ -15,7 +15,6 @@ export const peripheralFormSchema = z.object({
   terminator: z.string().max(8).optional().default(""),
   decimals: z.string().trim().optional().default(""),
   scale: z.string().trim().optional().default(""),
-  unit: z.string().trim().max(8).optional().default(""),
   timeoutMs: z.string().trim().optional().default(""),
   role: z.string().trim().max(24).optional().default(""),
   simulate: z.boolean().optional().default(false),
@@ -91,9 +90,8 @@ export function buildPeripheralPayload(v: PeripheralFormValues) {
     terminator: v.terminator ? v.terminator : null,
     decimals: v.decimals.trim() ? Number(v.decimals) : null,
     scale: v.scale.trim() ? Number(v.scale) : null,
-    // `unit` GÖNDERİLMEZ: süs alandı (çarpan yalnız `scale`) ve kolon bir sonraki
-    // sürümde düşüyor. Form state'inde kalıyor — "Cihazın ham birimi" seçicisi onu
-    // göstermek için değil ÖLÇEĞİ YAZMAK için kullanıyor.
+    // `unit` YOK: süs alandı, kolon 2026-09-14'te düştü — "Cihazın ham birimi"
+    // seçicisi ÖLÇEĞİ yazar, ölçekten geri çözülür (`resolveRawUnit`).
     timeoutMs: v.timeoutMs.trim() ? Number(v.timeoutMs) : null,
     role: nn(v.role),
     simulate: v.simulate,
@@ -133,7 +131,6 @@ export const peripheralFormDefaults: PeripheralFormValues = {
   terminator: "",
   decimals: "",
   scale: "",
-  unit: "",
   timeoutMs: "",
   role: "",
   simulate: false,
