@@ -7,7 +7,7 @@ import { SCREEN_MODULE } from "../constants/screenModules";
 
 // Bayrak hook'u MOCK: gerçek hook React Query ister; burada ölçülen şey koşul
 // elemesinin bayrağa NASIL bağlandığıdır, sorgunun kendisi değil.
-let mockFlagsData: { productionEnabled?: boolean; dokumaEnabled?: boolean } | undefined;
+let mockFlagsData: { productionEnabled?: boolean; dokumaEnabled?: boolean; devereEnabled?: boolean } | undefined;
 jest.mock("./useFeatureFlags", () => ({
   useFeatureFlags: () => ({ data: mockFlagsData }),
 }));
@@ -21,6 +21,7 @@ const keys = () =>
 const ALL = MOBILE_SCREENS.map((s) => s.key);
 const PRODUCTION = Object.entries(SCREEN_MODULE).filter(([, m]) => m === 'productionEnabled').map(([k]) => k);
 const DOKUMA = Object.entries(SCREEN_MODULE).filter(([, m]) => m === 'dokumaEnabled').map(([k]) => k);
+const DEVERE = Object.entries(SCREEN_MODULE).filter(([, m]) => m === 'devereEnabled').map(([k]) => k);
 
 // =============================================================================
 // 2026-09-14: KOŞULLU EKRAN GERÇEK — tablet modül kapısı.
@@ -35,7 +36,7 @@ const DOKUMA = Object.entries(SCREEN_MODULE).filter(([, m]) => m === 'dokumaEnab
 // =============================================================================
 describe("useVisibleScreens (izin ∖ modülü kapalı ekranlar)", () => {
   beforeEach(() => {
-    mockFlagsData = { productionEnabled: true, dokumaEnabled: true };
+    mockFlagsData = { productionEnabled: true, dokumaEnabled: true, devereEnabled: true };
   });
   afterEach(() => {
     act(() => useAuthStore.setState({ user: null }));
@@ -48,11 +49,13 @@ describe("useVisibleScreens (izin ∖ modülü kapalı ekranlar)", () => {
 
   it("⭐ KAPALI: üretim modülünün beş ekranı elenir, çekirdek ekranlar kalır", () => {
     setPerms(["mobile:*"]);
-    mockFlagsData = { productionEnabled: false, dokumaEnabled: true };
+    mockFlagsData = { productionEnabled: false, dokumaEnabled: true, devereEnabled: true };
     const visible = keys();
     for (const k of PRODUCTION) expect(visible).not.toContain(k);
     // Dokuma üretime BAĞLI: üretim kapalıyken o da elenir (zincir tek yerde).
     expect(visible).toEqual(ALL.filter((k) => !PRODUCTION.includes(k) && !DOKUMA.includes(k)));
+    // Devere üretime BAĞLI DEĞİL: üretim kapalıyken Levent Sarım kalır.
+    expect(visible).toContain("Devere");
     expect(visible).toContain("Depo");
     expect(visible).toContain("Sevkiyat");
   });
@@ -60,15 +63,27 @@ describe("useVisibleScreens (izin ∖ modülü kapalı ekranlar)", () => {
   it("⭐ bayrak OKUNAMADI (data yok): backend satır-yok yönü — üretim AÇIK, dokuma KAPALI (referans fabrika)", () => {
     setPerms(["mobile:*"]);
     mockFlagsData = undefined;
-    expect(keys()).toEqual(ALL.filter((k) => !DOKUMA.includes(k)));
+    expect(keys()).toEqual(ALL.filter((k) => !DOKUMA.includes(k) && !DEVERE.includes(k)));
     expect(keys()).not.toContain("Dokuma");
+    expect(keys()).not.toContain("Devere");
+  });
+
+  it("⭐ Levent Sarım kartı yalnız DEVERE modülü açıkken (fail-closed; referans fabrikada 0 fark)", () => {
+    setPerms(["mobile:devere"]);
+    mockFlagsData = { productionEnabled: true, dokumaEnabled: true, devereEnabled: false };
+    expect(keys()).toEqual([]);
+    mockFlagsData = { productionEnabled: true, dokumaEnabled: true, devereEnabled: true };
+    expect(keys()).toEqual(["Devere"]);
+    // İzin yoksa bayrak açık olsa da kart yok (izin ∖ modül — iki kapı).
+    setPerms(["mobile:dokuma"]);
+    expect(keys()).not.toContain("Devere");
   });
 
   it("⭐ Tezgah kartı yalnız DOKUMA modülü açıkken (fail-closed; referans fabrikada 0 fark)", () => {
     setPerms(["mobile:dokuma"]);
-    mockFlagsData = { productionEnabled: true, dokumaEnabled: false };
+    mockFlagsData = { productionEnabled: true, dokumaEnabled: false, devereEnabled: true };
     expect(keys()).toEqual([]);
-    mockFlagsData = { productionEnabled: true, dokumaEnabled: true };
+    mockFlagsData = { productionEnabled: true, dokumaEnabled: true, devereEnabled: true };
     expect(keys()).toEqual(["Dokuma"]);
   });
 

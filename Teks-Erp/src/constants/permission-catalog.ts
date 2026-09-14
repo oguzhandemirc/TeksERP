@@ -281,5 +281,10 @@ export const PERMISSION_CATALOG = [
   // Geri alma AYRI yetenek (2026-09-14, §3.9 J.3): indirmeyi geri almak defterden satır düşürür
   // (`loom:doff-revoke` tablet eşi; `mobile:tambur-duzelt` · `shipping:undo-dispatch` emsali).
   { code: "mobile:dokuma-geri-al", module: "MOBILE", category: "mobile", description: "Tezgah ekranı — top indirmeyi, koşumu ve duruşu geri alabilir (ayrı yetenek; üçü de defterden satır düşürür)" },
+  // Devere tablet ekranı (2026-09-14, DEVERE-LEVENT-TARAMASI §11): plan · sar · taslak sil.
+  // Oturumsuz ekran — devere bir StationKind değil, `Station.producesWarpBeam` yeteneği.
+  { code: "mobile:devere", module: "MOBILE", category: "mobile", description: "Mobil — Levent Sarım (devere) ekranı: plan · sar · taslak sil" },
+  // Sarım iptali AYRI yetenek (§11 D3): defterden NET iplik döndürür (`warpbeam:cancel` tablet eşi).
+  { code: "mobile:devere-iptal", module: "MOBILE", category: "mobile", description: "Levent Sarım ekranı — sarımı iptal edebilir (ayrı yetenek; iplik defterine ters satır yazar)" },
   { code: "mobile:*", module: "MOBILE", category: "mobile", description: "Tüm mobil ekranlar (wildcard)" },
 ] as const satisfies readonly PermissionCatalogEntry[];

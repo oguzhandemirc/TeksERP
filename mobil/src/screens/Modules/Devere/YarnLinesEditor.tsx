@@ -1,0 +1,87 @@
+// =============================================================================
+// İPLİK SATIRLARI — brüt çıkış (depo + kg) · dip iadesi (+ sebep, `WARP_RETURN` kataloğu)
+// =============================================================================
+// Depo seçici yalnız birden çok aktif depo varsa çizilir; tek depoda satır o depoyla
+// doğar (panel `YarnLinesEditor` `multiWarehouse` deseni). Sebep KODU katalogdan seçilir,
+// uydurulmaz (`ReasonPresetPicker`, kind metin saklamaz).
+// =============================================================================
+import React, { useState } from 'react';
+import { View, StyleSheet } from 'react-native';
+import { Text, Button, IconButton, TouchableRipple } from 'react-native-paper';
+import NumpadInput from '../../../components/NumpadInput';
+import PickerModal from '../../../components/PickerModal';
+import ReasonPresetPicker from '../../../components/reasonPresets/ReasonPresetPicker';
+import { colors, spacing, radius, typography } from '../../../theme';
+import type { YarnLineDraft } from './beamPayload';
+
+interface Props {
+  title: string;
+  lines: YarnLineDraft[];
+  warehouses: { id: string; name: string }[];
+  withReason: boolean;
+  onChange: (lines: YarnLineDraft[]) => void;
+  disabled?: boolean;
+}
+
+let seq = 1;
+const nextKey = (): string => `l${Date.now().toString(36)}-${seq++}`;
+
+export default function YarnLinesEditor({ title, lines, warehouses, withReason, onChange, disabled }: Props) {
+  const [pickerFor, setPickerFor] = useState<string | null>(null);
+  const multi = warehouses.length > 1;
+  const defaultWarehouseId = warehouses[0]?.id ?? null;
+  const update = (key: string, patch: Partial<YarnLineDraft>) => onChange(lines.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  const remove = (key: string) => onChange(lines.filter((l) => l.key !== key));
+  const add = () => onChange([...lines, { key: nextKey(), warehouseId: defaultWarehouseId, qtyKg: '', reasonCode: null }]);
+  const warehouseName = (id: string | null) => warehouses.find((w) => w.id === id)?.name ?? 'Depo seç';
+
+  return (
+    <View style={styles.block}>
+      <View style={styles.head}>
+        <Text style={styles.title}>{title}</Text>
+        <Button compact icon="plus" onPress={add} disabled={disabled}>Satır</Button>
+      </View>
+      {lines.map((l) => (
+        <View key={l.key} style={styles.line}>
+          <View style={styles.row}>
+            {multi ? (
+              <TouchableRipple onPress={() => setPickerFor(l.key)} style={styles.field} accessibilityRole="button" disabled={disabled}>
+                <Text style={l.warehouseId ? styles.fieldText : styles.fieldPlaceholder}>{warehouseName(l.warehouseId)}</Text>
+              </TouchableRipple>
+            ) : null}
+            <NumpadInput value={l.qtyKg} onChangeText={(t) => update(l.key, { qtyKg: t })} allowDecimal numpadMaxLength={8} numpadLabel={`${title} kg`} placeholder="kg" style={styles.kg} editable={!disabled} />
+            <IconButton icon="close" onPress={() => remove(l.key)} disabled={disabled} accessibilityLabel="Satırı kaldır" />
+          </View>
+          {withReason ? (
+            <ReasonPresetPicker kind="WARP_RETURN" value={{ code: l.reasonCode, text: '' }} onChange={(v) => update(l.key, { reasonCode: v.code })} placeholder="Dip iade sebebi" disabled={disabled} />
+          ) : null}
+        </View>
+      ))}
+      {lines.length === 0 ? <Text style={styles.empty}>{withReason ? 'Dip iadesi yok.' : 'Satır ekleyin — cağlığa yüklenen brüt kg.'}</Text> : null}
+      <PickerModal
+        visible={pickerFor !== null}
+        title="Depo seç"
+        options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
+        selectedValue={lines.find((l) => l.key === pickerFor)?.warehouseId ?? ''}
+        onDismiss={() => setPickerFor(null)}
+        onSelect={(v) => {
+          if (pickerFor) update(pickerFor, { warehouseId: v });
+          setPickerFor(null);
+        }}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  block: { marginTop: spacing.sm, gap: spacing.xs },
+  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  title: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: typography.weight.semibold },
+  line: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.sm, gap: spacing.xs, backgroundColor: colors.surfaceMuted },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  field: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.sm, backgroundColor: colors.surface, minHeight: 48, justifyContent: 'center' },
+  fieldText: { color: colors.text },
+  fieldPlaceholder: { color: colors.textMuted },
+  kg: { flex: 1, backgroundColor: colors.surface },
+  empty: { fontSize: typography.size.sm, color: colors.textMuted },
+});

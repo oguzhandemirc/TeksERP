@@ -170,6 +170,10 @@ const MOBILDE_BEKLENEN: Record<string, string> = {
   WorkOrderType: "bugün mobilde aynalı (ölçüldü 2026-09-14)",
   // 2026-09-14: beyanlı eksikti (BEKLENEN_EKSIK), 0c mobil union'ı getirdi; borç kapandı.
   MachineDataSource: "bugün mobilde aynalı (ölçüldü 2026-09-14)",
+  // 2026-09-14 devere tablet dilimi (6e, DEVERE-LEVENT-TARAMASI §11 F): Levent Sarım ekranı üç union'ı aynaladı.
+  WarpBeamStatus: "devere tablet dilimiyle aynalandı (2026-09-14)",
+  WarpBeamOrigin: "devere tablet dilimiyle aynalandı (2026-09-14)",
+  WarpKgSource: "devere tablet dilimiyle aynalandı (2026-09-14)",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

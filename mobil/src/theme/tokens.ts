@@ -174,4 +174,6 @@ export const moduleAccents: Record<MobileScreenKey, { tint: string; bg: string }
   // yüzü olduğu anlaşılsın, istasyon ekranıyla karıştırılmasın.
   KursunDagitim: { tint: '#b45309', bg: '#fde68a' },
   Dokuma: { tint: '#0f766e', bg: '#ccfbf1' },
+  // Devere (levent) — dokuma ailesi ama tezgahtan ayrışsın diye kayısı tonu.
+  Devere: { tint: '#c2410c', bg: '#fed7aa' },
 };

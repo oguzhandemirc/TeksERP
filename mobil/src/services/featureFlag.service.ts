@@ -24,6 +24,10 @@ export interface FeatureFlags {
   /** DOKUMA MODÜLÜ (`dokuma.enabled`) — tablet TEZGAH ekranının kapısı (`screenModules.ts`).
    *  Backend satır yoksa FALSE; ayna da öyle (fail-closed: kart bir an belirip kaybolmaz). */
   dokumaEnabled: boolean;
+  /** Devere (levent sarım) modülü — default FALSE (backend satır-yok değeri). Tablet
+   *  Levent Sarım ekranı bayrak yüklenene dek ÇİZİLMEZ; üretim zincirine BAĞLI DEĞİL
+   *  (panel `useOperationsVisibility` aynası: hazır levent alan fabrika üretimsiz de açar). */
+  devereEnabled: boolean;
   pricingEnabled: boolean;
   targetQuantityEnabled: boolean;
   /** KK1 ham kumaş girişinde "en (cm)" alanı gösterilsin mi (default false). */
@@ -136,6 +140,8 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   productionEnabled: true,
   // Backend satır-yok değeri FALSE (yeni modül) — bayrak yüklenene dek Tezgah kartı ÇİZİLMEZ.
   dokumaEnabled: false,
+  // Backend satır-yok değeri FALSE — bayrak yüklenene dek Levent Sarım kartı ÇİZİLMEZ.
+  devereEnabled: false,
   pricingEnabled: false,
   targetQuantityEnabled: false,
   rawWidthEnabled: false,

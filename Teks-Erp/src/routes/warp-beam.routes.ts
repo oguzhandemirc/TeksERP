@@ -5,21 +5,29 @@
 // Jenerik `requireModule("…")` YASAK (bekçi middleware ADINI arar: `test_devere_regime_gate §6`).
 // İzinler: `warpbeam:read` (liste/detay/önizleme) · `warpbeam:write` (plan · düzenle · sar · taslak sil)
 // · `warpbeam:cancel` (sarım iptali — defterden NET iplik döner, ayrı yetenek).
+// Tablet (§11 G①): `mobile:devere` liste/detay/bağlam/plan/sar/taslak-sil için web izninin
+// alternatifi; iptal + önizleme yalnız `mobile:devere-iptal` yeteneğiyle; PATCH (plan düzenle)
+// tablet izni ALMAZ — tablet yanlış planı siler ve yeniden açar.
 // =============================================================================
 import { Router } from "express";
 import { z } from "zod";
 import { WarpBeamOrigin, WarpBeamStatus, WarpKgSource } from "@prisma/client";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { requireDevereEnabled } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { readFilterList } from "../utils/query-parser";
 import { createWarpBeam, deleteWarpBeamDraft, getWarpBeam, listDevereMachines, listWarpBeams, updateWarpBeam } from "../services/warp-beam.service";
+import { getWarpBeamTabletContext } from "../services/warp-beam-tablet.service";
 import { cancelWound, cancelWoundPreview, windWarpBeam } from "../services/warp-beam-wind.service";
 import "../types/express-augment";
 
 const router = Router();
 router.use(verifyToken, requireDevereEnabled);
+
+// Tablet: plan/sar/taslak-sil ekran izniyle, iptal yetenek izniyle (dokuma emsali).
+const MOBILE_DEVERE = ["mobile:devere"] as const;
+const MOBILE_DEVERE_IPTAL = ["mobile:devere-iptal"] as const;
 
 const uuidOrNull = z.string().uuid().nullable().optional();
 const qty = z.union([z.number(), z.string().min(1)]);
@@ -78,7 +86,7 @@ const listSchema = z
  *       200: { description: Liste }
  *       403: { description: Devere modülü kapalı (MODULE_DISABLED) ya da yetki yok }
  */
-router.get("/", requirePermission("warpbeam:read"), async (req, res, next) => {
+router.get("/", requireAnyPermission("warpbeam:read", ...MOBILE_DEVERE), async (req, res, next) => {
   try {
     const q = listSchema.parse(req.query);
     const status = readFilterList(q.status).filter((s): s is WarpBeamStatus => (Object.values(WarpBeamStatus) as string[]).includes(s));
@@ -98,9 +106,28 @@ router.get("/", requirePermission("warpbeam:read"), async (req, res, next) => {
  *     responses:
  *       200: { description: Makine listesi }
  */
-router.get("/devere-machines", requirePermission("warpbeam:read"), async (_req, res, next) => {
+router.get("/devere-machines", requireAnyPermission("warpbeam:read", ...MOBILE_DEVERE), async (_req, res, next) => {
   try {
     res.json(await listDevereMachines());
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/warp-beams/tablet-context:
+ *   get:
+ *     tags: [WarpBeams]
+ *     summary: Tablet form bağlamı — çözgü kartları · devere makineleri · depolar · fasoncular · tedarikçi adayları (id+ad, opt-in allowlist; tek izin `mobile:devere`)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Bağlam }
+ *       403: { description: Devere modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ */
+router.get("/tablet-context", requireAnyPermission("warpbeam:read", ...MOBILE_DEVERE), async (_req, res, next) => {
+  try {
+    res.json(await getWarpBeamTabletContext());
   } catch (e) {
     next(e);
   }
@@ -117,7 +144,7 @@ router.get("/devere-machines", requirePermission("warpbeam:read"), async (_req, 
  *       200: { description: Detay }
  *       404: { description: Levent yok }
  */
-router.get("/:id", requirePermission("warpbeam:read"), async (req, res, next) => {
+router.get("/:id", requireAnyPermission("warpbeam:read", ...MOBILE_DEVERE), async (req, res, next) => {
   try {
     res.json(await getWarpBeam(assertValidUuid(req.params.id, "id")));
   } catch (e) {
@@ -136,7 +163,7 @@ router.get("/:id", requirePermission("warpbeam:read"), async (req, res, next) =>
  *       201: { description: Planlandı }
  *       400: { description: Köken/taraf XOR (WARP_BEAM_ORIGIN_PARTY) · çözgü kartı pasif }
  */
-router.post("/", requirePermission("warpbeam:write"), async (req, res, next) => {
+router.post("/", requireAnyPermission("warpbeam:write", ...MOBILE_DEVERE), async (req, res, next) => {
   try {
     res.status(201).json(await createWarpBeam(createSchema.parse(req.body ?? {}), req.user?.userId));
   } catch (e) {
@@ -174,7 +201,7 @@ router.patch("/:id", requirePermission("warpbeam:write"), async (req, res, next)
  *       200: { description: Silindi }
  *       409: { description: WARP_BEAM_NOT_PLANNED }
  */
-router.delete("/:id", requirePermission("warpbeam:write"), async (req, res, next) => {
+router.delete("/:id", requireAnyPermission("warpbeam:write", ...MOBILE_DEVERE), async (req, res, next) => {
   try {
     res.json(await deleteWarpBeamDraft(assertValidUuid(req.params.id, "id"), req.user?.userId));
   } catch (e) {
@@ -194,7 +221,7 @@ router.delete("/:id", requirePermission("warpbeam:write"), async (req, res, next
  *       400: { description: Makine devere değil · denye boş · iplik satırı eksik/fazla · REASON_CODE_INVALID }
  *       409: { description: WARP_BEAM_STATE (PLANNED değil) · iplik eksi bakiye }
  */
-router.post("/:id/wind", requirePermission("warpbeam:write"), async (req, res, next) => {
+router.post("/:id/wind", requireAnyPermission("warpbeam:write", ...MOBILE_DEVERE), async (req, res, next) => {
   try {
     res.json(await windWarpBeam(assertValidUuid(req.params.id, "id"), windSchema.parse(req.body ?? {}), req.user?.userId));
   } catch (e) {
@@ -212,7 +239,7 @@ router.post("/:id/wind", requirePermission("warpbeam:write"), async (req, res, n
  *     responses:
  *       200: { description: Önizleme }
  */
-router.get("/:id/cancel-preview", requirePermission("warpbeam:cancel"), async (req, res, next) => {
+router.get("/:id/cancel-preview", requireAnyPermission("warpbeam:cancel", ...MOBILE_DEVERE_IPTAL), async (req, res, next) => {
   try {
     res.json(await cancelWoundPreview(assertValidUuid(req.params.id, "id")));
   } catch (e) {
@@ -231,7 +258,7 @@ router.get("/:id/cancel-preview", requirePermission("warpbeam:cancel"), async (r
  *       200: { description: İptal edildi }
  *       409: { description: WARP_BEAM_STATE · WARP_BEAM_NOT_WOUND · çift iptal (reversesEventId unique) }
  */
-router.post("/:id/cancel", requirePermission("warpbeam:cancel"), async (req, res, next) => {
+router.post("/:id/cancel", requireAnyPermission("warpbeam:cancel", ...MOBILE_DEVERE_IPTAL), async (req, res, next) => {
   try {
     res.json(await cancelWound(assertValidUuid(req.params.id, "id"), cancelSchema.parse(req.body ?? {}).reason, req.user?.userId));
   } catch (e) {

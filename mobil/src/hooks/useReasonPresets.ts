@@ -86,7 +86,8 @@ function builtin(kind: ReasonPresetKind): ReasonPreset[] {
       // istemci gönderir. Sunucusuzken boş dönse sebep zorunlu karar kilitlenirdi (`test_loom_stop_zemin`).
       return LOOM_STOP_REASONS.map((r) => mk(r.code, r.label));
     case 'WARP_RETURN':
-      // Levent dibi iadesi tablette YAPILMIYOR (devere tablet ekranı ayrı dilim) — zemin bilerek BOŞ.
+      // Devere tablet ekranı (2026-09-14) sebep kodunu katalogdan seçer; sunucusuzken sarım
+      // zaten yapılamaz (online-only, kuyruk yok) — gömülü zemin bir karar korumaz, BOŞ kalır.
       return [];
   }
 }

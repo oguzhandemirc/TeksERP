@@ -347,6 +347,9 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // Tezgah oturumu (⓪, 2026-09-14): ekran doğana kadar süpervizör paketinde;
       // tablet dilimiyle operatör paketine iner (loom:run ile aynı vaat).
       "mobile:dokuma",
+      // Devere tablet ekranı + sarım iptali (§11 D3): iptal yalnız süpervizörde.
+      "mobile:devere",
+      "mobile:devere-iptal",
     ],
   },
   {
@@ -589,6 +592,14 @@ const MOBILE_ROLES: readonly RoleTemplateEntry[] = [
     description: "Telefondan sipariş listesi + yeni müşteri siparişi açma (satış/planlama)",
     mode: "list",
     codes: ["mobile:siparis", "customer:read", "item:read", "property:read", "quality:read"],
+  },
+  {
+    // Devere tablet ekranı (2026-09-14): sarım iptali yetenek izni bu şablonda YOK — süpervizör.
+    code: "MOBILE_DEVERE",
+    name: "Mobil — Levent Sarım Operatörü",
+    description: "Levent planla / sar / taslak sil (devere modülü açıkken)",
+    mode: "list",
+    codes: ["mobile:devere"],
   },
   {
     // 2026-08-05'te eklenen ekran — hiçbir şablonda yoktu.

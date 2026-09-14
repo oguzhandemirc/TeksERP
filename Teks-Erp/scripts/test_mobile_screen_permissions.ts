@@ -303,6 +303,16 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
     path: "POST /:p/revoke",
     why: "Top indirmeyi, koşumu VE duruşu geri alma ayrı bir YETENEK yetkisi (`mobile:dokuma-geri-al`, 2026-09-14) — üçü de defterden satır düşürür; izni olmayanda buton çizilmez, uçlar (machine-doffs · machine-runs) onu ister.",
   },
+  {
+    screen: "mobile:devere",
+    path: "GET /:p/cancel-preview",
+    why: "Sarım iptali önizlemesi — iptalle AYNI yetenek yetkisi (`mobile:devere-iptal`, §11 D3); kararı verecek bilgi yetkisiz kişiye açılmaz (Tambur send-to-dye-preview emsali).",
+  },
+  {
+    screen: "mobile:devere",
+    path: "POST /:p/cancel",
+    why: "Sarım iptali ayrı bir YETENEK yetkisi (`mobile:devere-iptal`, 2026-09-14) — iplik defterine ters satır yazar; izni olmayanda buton çizilmez.",
+  },
   // ── Tambur ekranının EK yetenek yetkileri (2026-08-17'de burada belgelendi) ──
   // Ekranın ana yetkisi `mobile:tambur`; aşağıdaki dört aksiyon BİLİNÇLİ olarak
   // ayrı yetki ister. "Ekran açılıyor ama şu tuş çalışmıyor" sorusunun cevabı

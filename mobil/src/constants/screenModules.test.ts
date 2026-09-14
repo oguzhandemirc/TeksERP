@@ -10,9 +10,10 @@ import { MOBILE_SCREENS } from '../types/permissions';
 describe('screenModules — ekran → modül aynası', () => {
   it('üretim modülünün beş ekranı tabloda; çekirdek/planlanan ekranlar tabloda DEĞİL', () => {
     expect(Object.keys(SCREEN_MODULE).sort()).toEqual(
-      ['Dokuma', 'HizliIsEmri', 'KK1', 'KursunDagitim', 'KursunQc', 'Tambur'].sort()
+      ['Devere', 'Dokuma', 'HizliIsEmri', 'KK1', 'KursunDagitim', 'KursunQc', 'Tambur'].sort()
     );
     expect(SCREEN_MODULE.Dokuma).toBe('dokumaEnabled');
+    expect(SCREEN_MODULE.Devere).toBe('devereEnabled');
     for (const k of ['Depo', 'TartiPaket', 'Sevkiyat', 'IadeGirisi', 'Siparis', 'Kumas', 'FasonSevk', 'KartelaSevk']) {
       expect(SCREEN_MODULE[k as keyof typeof SCREEN_MODULE]).toBeUndefined();
     }
@@ -32,7 +33,7 @@ describe('screenModules — ekran → modül aynası', () => {
   });
 
   it('⭐ modül AÇIK → hiçbir ekran false değil (bugünkü liste birebir)', () => {
-    const c = conditionalScreens({ productionEnabled: true, dokumaEnabled: true });
+    const c = conditionalScreens({ productionEnabled: true, dokumaEnabled: true, devereEnabled: true });
     expect(Object.values(c).every((v) => v === true)).toBe(true);
   });
 
@@ -43,6 +44,19 @@ describe('screenModules — ekran → modül aynası', () => {
     // Üretim kapalıyken dokuma açık olsa da ETKİN kapalı — backend requireDokumaEnabled sırası.
     expect(conditionalScreens({ productionEnabled: false, dokumaEnabled: true }).Dokuma).toBe(false);
     expect(resolveMobileModuleState({ productionEnabled: false, dokumaEnabled: true }).dokumaEnabled).toBe(false);
+  });
+
+  it('⭐ devere: satır-yok KAPALI (fail-closed) ve üretime BAĞLI DEĞİL (hazır levent alan fabrika üretimsiz de açar)', () => {
+    expect(DEFAULT_FEATURE_FLAGS.devereEnabled).toBe(false);
+    expect(conditionalScreens(undefined).Devere).toBe(false);
+    expect(conditionalScreens({ productionEnabled: true, devereEnabled: true }).Devere).toBe(true);
+    // Panel `useOperationsVisibility` aynası: devere HAM bayrak, production zincirine girmez (K3 emsali).
+    expect(conditionalScreens({ productionEnabled: false, devereEnabled: true }).Devere).toBe(true);
+    expect(resolveMobileModuleState({ productionEnabled: false, devereEnabled: true }).devereEnabled).toBe(true);
+    // Devere kapalıyken Levent Sarım elenir, diğer modüller etkilenmez.
+    const c = conditionalScreens({ productionEnabled: true, dokumaEnabled: true, devereEnabled: false });
+    expect(c.Devere).toBe(false);
+    expect(c.Dokuma).toBe(true);
   });
 
   it('⭐ bayrak OKUNAMADI → backend satır-yok yönü: üretim AÇIK (fabrikada sıfır fark)', () => {

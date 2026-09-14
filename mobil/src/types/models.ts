@@ -119,6 +119,13 @@ export type MachineDataSource =
   | 'SUPERVISOR'
   | 'SIMULATED';
 
+// Backend `WarpBeamStatus` · `WarpBeamOrigin` · `WarpKgSource` enum'larının BİREBİR aynası
+// (2026-09-14, devere tablet dilimi — DEVERE-LEVENT-TARAMASI §11 F). `test_mobil_enum_aynasi`
+// iki yönlü ölçer. CANCELLED terminaldir (PLANNED'a dönüş yok).
+export type WarpBeamStatus = 'PLANNED' | 'READY' | 'CANCELLED';
+export type WarpBeamOrigin = 'IN_HOUSE' | 'SUBCONTRACT' | 'PURCHASED';
+export type WarpKgSource = 'WEIGHED' | 'THEORETICAL';
+
 // =============================================================================
 // Master data — Color, FabricProperty
 // =============================================================================

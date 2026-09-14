@@ -35,6 +35,9 @@ export type MobilePermission =
   // Dokuma (2026-09-14): TEZGAH ekranı + geri alma yeteneği (ayrı yetki, `mobile:tambur-duzelt` emsali).
   | 'mobile:dokuma'
   | 'mobile:dokuma-geri-al'
+  // Devere (2026-09-14, §11): LEVENT SARIM ekranı + sarım iptali yeteneği (ayrı yetki, iplik defterine ters satır).
+  | 'mobile:devere'
+  | 'mobile:devere-iptal'
   | 'mobile:*';
 
 /**
@@ -75,7 +78,8 @@ export type MobileScreenKey =
   | 'Siparis'
   | 'Kumas'
   | 'KursunDagitim'
-  | 'Dokuma';
+  | 'Dokuma'
+  | 'Devere';
 
 export interface MobileScreenMeta {
   key: MobileScreenKey;
@@ -213,6 +217,15 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     label: 'Tezgah',
     icon: 'package-down',
     description: 'Tezgahtan inen topu kaydet — indirme ve geri alma',
+  },
+  {
+    // Tablet LEVENT SARIM ekranı (2026-09-14, devere dilimi §11): plan · sar · taslak sil;
+    // iptal yetenek izniyle. OTURUMSUZ — devere StationKind değil, makine sarımda seçilir.
+    key: 'Devere',
+    permission: 'mobile:devere',
+    label: 'Levent Sarım',
+    icon: 'rotate-right',
+    description: 'Levent planla, sar (iplik çıkışı + dip iadesi), taslak sil',
   },
 ];
 

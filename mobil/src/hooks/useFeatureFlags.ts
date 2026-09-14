@@ -32,6 +32,11 @@ export function useDokumaEnabled(): boolean {
   return useFeatureFlags().data?.dokumaEnabled ?? DEFAULT_FEATURE_FLAGS.dokumaEnabled;
 }
 
+/** Devere modülü açık mı? Default FALSE — Levent Sarım kartı bayrak yüklenene dek çizilmez. */
+export function useDevereEnabled(): boolean {
+  return useFeatureFlags().data?.devereEnabled ?? DEFAULT_FEATURE_FLAGS.devereEnabled;
+}
+
 /** KK1 ham en girişi açık mı? Yüklenene kadar / hata halinde false (gizli). */
 export function useRawWidthEnabled(): boolean {
   return useFeatureFlags().data?.rawWidthEnabled ?? false;
