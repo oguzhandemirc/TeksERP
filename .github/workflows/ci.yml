@@ -87,6 +87,12 @@ jobs:
       PORT: "4000"
     steps:
       - uses: actions/checkout@v4
+        # TAM KLON (2026-09-14): `test_harita_sonda_atfi §1b` `(bu commit)` satırının sha'sını
+        # `git blame`den türetir; sığ klonda (varsayılan depth 1) blame sınır (^) döner ve satır
+        # 'havada' kalır — CI c2635fc1 bunu 12/1 ile gösterdi. Bekçi sığ klonda ⏭ beyan eder;
+        # burada derinlik verilir ki CI DA ölçsün (koşum yeri ölçüm koşuludur).
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
