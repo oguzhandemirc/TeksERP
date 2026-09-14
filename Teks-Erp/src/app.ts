@@ -44,6 +44,7 @@ import warpBeamRoutes from "./routes/warp-beam.routes";
 import weavingOrderRoutes from "./routes/weaving-order.routes";
 import machineRunRoutes from "./routes/machine-run.routes";
 import machineStopRoutes from "./routes/machine-stop.routes";
+import machineShiftStatRoutes from "./routes/machine-shift-stat.routes";
 import machineDoffRoutes from "./routes/machine-doff.routes";
 import inventoryRoutes from "./routes/inventory.routes";
 import orderRoutes from "./routes/order.routes";
@@ -837,6 +838,7 @@ app.use("/api/weaving-orders", weavingOrderRoutes);
 // Tezgah koşumu (aç/kapa/geri al) — loom:run · loom:run-revoke.
 app.use("/api/machine-runs", machineRunRoutes);
 app.use("/api/machine-stops", machineStopRoutes);
+app.use("/api/machine-shift-stats", machineShiftStatRoutes);
 app.use("/api/machine-doffs", machineDoffRoutes);
 app.use("/api/rolls", inventoryRoutes);
 app.use("/api/orders", orderRoutes);

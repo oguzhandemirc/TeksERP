@@ -137,6 +137,8 @@ model MachineShiftStatSeal {
 
 ## 3 · Terim hesabı — TEK helper `helpers/loom-shift-terms.helper.ts` (`computeShiftTerms(tx, machineId, shiftInstanceId)`)
 
+> **İNDİ 2026-09-14 (Dilim 2, 01):** saf hesap `computeShiftTermsPure` helper'da, DB yükleyici + `computeShiftTerms(tx, …)` `services/machine-shift-stat.service.ts`te (aynı kapı, iki katman). Sabit `MINOR_STOP_THRESHOLD_SEC = 20` (`constants/loom-shift.ts`, tasarım §6.3 `stopEventMinSeconds` varsayılanı). Üç uygulama kararı arşivde (`2026-09-14 — KARNE TERİMLERİ`): MINOR yalnız kaybı kullanılabilirlikte olan duruşta · planlı mola koşumlara pencere payıyla · M1 tezgah kümesi = aktif ∧ WEAVING istasyonu, `monitoringState` SÜZMEZ (§5 "OFF makineye karne yazılmaz" cümlesi Faz 1b elle girişle çelişir — 1e'ye soruldu).
+
 Girdi: `ShiftInstance` penceresi `[startsAt, endsAt)` (iptal → `calendarSec = 0`, terimler 0, `A=P=E=null`) · aktif duruşlar (`revokedAt IS NULL`, **pencereye KIRPILMIŞ** saniye — `clipToWindow(startedAt, endedAt ?? now, window)`; açık duruş `now`a kadar sayılır ve `warnings`) · kapanmış koşumlar (`endedAt` ∈ pencere, `revokedAt IS NULL`) · `MachineSpec`.
 
 ```

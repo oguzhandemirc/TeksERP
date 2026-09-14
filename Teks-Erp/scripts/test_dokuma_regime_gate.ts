@@ -82,14 +82,16 @@ const KAPILI: ReadonlyArray<{ dosya: string; mount: string }> = [
   { dosya: "routes/machine-doff.routes.ts", mount: "/api/machine-doffs" },
   // Faz 1b (6e, 2026-09-14): elle duruş girişi — koşumla aynı kapı (`requireDokumaEnabled`).
   { dosya: "routes/machine-stop.routes.ts", mount: "/api/machine-stops" },
+  // Dokuma raporları Dilim 2 (01, 2026-09-14): vardiya karnesi okuma (M1) — aynı kapı.
+  { dosya: "routes/machine-shift-stat.routes.ts", mount: "/api/machine-shift-stats" },
 ];
 
 /** Dokuma-ÖZEL Prisma model erişimcileri ve servisleri — bunlara dokunan router kapılıdır. */
-const DOKUMA_MODELLERI = ["weavingOrder", "machineRun", "doffEvent", "machineStopEvent"];
-const DOKUMA_SERVISLERI = ["weaving-order.service", "machine-run.service", "machine-doff.service", "machine-stop.service"];
+const DOKUMA_MODELLERI = ["weavingOrder", "machineRun", "doffEvent", "machineStopEvent", "machineShiftStat"];
+const DOKUMA_SERVISLERI = ["weaving-order.service", "machine-run.service", "machine-doff.service", "machine-stop.service", "machine-shift-stat.service"];
 
 /** Dokuma uçlarının mount adresleri — istemci kaynağında aranan metinler. */
-const DOKUMA_UC_METINLERI = ["/api/weaving-orders", "/api/machine-runs", "/api/machine-doffs", "/api/machine-stops"];
+const DOKUMA_UC_METINLERI = ["/api/weaving-orders", "/api/machine-runs", "/api/machine-doffs", "/api/machine-stops", "/api/machine-shift-stats"];
 
 /**
  * §7 — dokuma uçlarını çağırmasına İZİN VERİLEN istemci dosyaları (repo köküne göre).

@@ -9309,3 +9309,23 @@ arasında CI'ı kırmızı tutup susturulurdu; ÜÇ SONUÇLU yapıldı — rapor
 (`test_migration_hygiene` "bekleyen ad en büyükten BÜYÜK"); 130000 bandı alındı.
 **Sonraki dilimler (özet §8):** 2 terim helper + canlı karne · 3 kapanış job'u + mühür/unseal + M6 + `loom:shift-unseal`
 · 4 üç uç + `DOKUMA_UFKU` + çıktı bekçisi.
+## 2026-09-14 — KARNE TERİMLERİ ve ORANLAR indi (dokuma raporları Dilim 2): üç uygulama kararı, bir açık soru [ÇEKİRDEK]
+
+**İnen (01):** `helpers/loom-shift-terms.helper.ts` (saf `computeShiftTermsPure` · `clipToWindow` · `isMinorStop` ·
+`resolveShiftSource`) · `helpers/loom-efficiency.helper.ts` (`computeMachineKpis` · `aggregateMachineKpis`, AST tripwire)
+· `constants/loom-shift.ts` (`MINOR_STOP_THRESHOLD_SEC = 20`, `LOOM_KPI_FORMULA_VERSION = 1`) · `machine-shift-stat.service.ts`
+(yükleyici + M1 `listShiftStats`) · `GET /api/machine-shift-stats` (`requireDokumaEnabled` + `report:production`) ·
+`test_machine_shift_terms` 41/0 (üç negatif sonda) · `test_machine_efficiency_formula` 26/0 (iki negatif sonda).
+**Kararlar (özetin boş bıraktığı üç yer):** ① MINOR yalnız KAPALI, eşik altı ve kaybı KULLANILABİLİRLİKTE olan
+(UNPLANNED/SETUP/sınıfsız) duruştan türer — eşik altı PLANNED/NON_SCHEDULED sınıfını korur (planlı 2 dk mola bir
+mikro duruş değildir; NON_SCHEDULED'ı MINOR yapmak onu paydaya sokardı). ② Planlı mola koşum kapasitesine PENCERE
+PAYIYLA dağıtılır (`plannedBreakSec × |koşum∩pencere| / takvim`): tek tam koşumda birebir ⇒ E ≡ A×P tutar; ölçülmüş
+bir şey değil takvim kuralı, "uydurma değer" sınıfına girmez (atkı orantılanmaz, hüküm ④ korunur). ③ Açık duruş
+MINOR sayılmaz (süresi bilinmiyor, kötümser kova) + uyarı.
+**Açık soru (1e'ye):** özet §5 "Faz 1b'de OFF makineye karne YAZILMAZ — MachineSpec yoksa/OFF ise M2 atlar" cümlesi
+Faz 1b'nin varlık sebebiyle çelişiyor: elle giriş yapılan tezgahın künyesi yok ya da OFF'tur. M1 tezgah kümesi
+**aktif makine ∧ istasyonu WEAVING** olarak indi, `monitoringState` süzmez (kopyalanır, rapor süzgeci opsiyonel);
+M2 (Dilim 3) aynı kümeyi kullanacak. 1e aksini hükmederse tek satır (`listLooms` where).
+**Ölçüm dersi:** §1 sondası ilk yazımda YANLIŞ pencereyi ölçtü (23:50 duruşunu SONRAKİ vardiyaya karşı — 28800 çıktı,
+helper doğruydu). Fikstürün kendi cümlesi ("ilk vardiyaya 600 sn") pencereyi de tarif eder; kırmızı görünce önce
+sondanın kurgusu sorulur (ölçüm disiplini: "sondanın kendisi geçerli mi").

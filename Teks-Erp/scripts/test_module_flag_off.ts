@@ -198,6 +198,8 @@ const MODULLER: ModulTanimi[] = [
       "routes/weaving-order.routes.ts",
       "routes/machine-run.routes.ts",
       "routes/machine-doff.routes.ts",
+      "routes/machine-stop.routes.ts",
+      "routes/machine-shift-stat.routes.ts",
     ],
     sondalar: ["/api/weaving-orders"],
     onKosul: { alan: "productionEnabled", beklenenModulKodu: "production" },
