@@ -162,7 +162,7 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Sevk irsaliyesinde çuval ve çeki listelerinin başına “Sevk Edilen Firma / Sevkiyat Fiş No / tarih” şeridi konabiliyor. Önceden bu bilgiler yalnız ilk sayfanın antetinde vardı; ürün listesinden sonraki sayfalar çıplak tablo olarak çıkıyor ve kâğıda bakan kimin malı olduğunu göremiyordu. Şerit tablonun kendi başlığına girdiği için liste sayfayı taşarsa devam sayfasında da tekrar eder. İlk basılan listeye konmaz — o sayfada zaten tam antet vardır. Ayar KAPALI gelir: Genel Ayarlar → Belge Kişiselleştirme → Sevk İrsaliyesi → “Liste başlarında kimlik şeridi”. Kapalı kaldığı sürece hiçbir belgenin çıktısı değişmez; açmak daha önce oluşturulmuş irsaliyelerin yeniden baskısını da etkiler. Listeler tek sayfada birleştirilerek basıldığında şerit çıkmaz."
+          "metin": "Sevk irsaliyesinde çuval ve çeki listelerinin başına “Sevk Edilen Firma / Sevkiyat Fiş No / tarih” şeridi konabiliyor. Önceden bu bilgiler yalnız ilk sayfanın antetinde vardı; ürün listesinden sonraki sayfalar çıplak tablo olarak çıkıyor ve kâğıda bakan kimin malı olduğunu göremiyordu. Şerit tablonun kendi başlığına girdiği için liste sayfayı taşarsa devam sayfasında da tekrar eder. İlk basılan listeye konmaz — o sayfada zaten tam antet vardır. Ayar KAPALI gelir: Genel Ayarlar → Belge Kişiselleştirme → Sevk İrsaliyesi → “Liste sayfalarında kimlik şeridi (firma · irsaliye no · tarih)”. Kapalı kaldığı sürece hiçbir belgenin çıktısı değişmez; açmak daha önce oluşturulmuş irsaliyelerin yeniden baskısını da etkiler. Listeler tek sayfada birleştirilerek basıldığında şerit çıkmaz."
         },
         {
           "kapsam": "panel",
@@ -227,7 +227,7 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Çuval tartısı ve elle top girişinde gerçek dışı büyük değerler artık uyarı veriyor. 1.000 kilogramın üzerinde bir çuval tartısı ya da 10.000 metrenin üzerinde bir top metresi girildiğinde ekranda “bu değer beklenenden çok büyük, cihaz ölçeği yanlış olabilir” uyarısı çıkar. Uyarı kaydı ENGELLEMEZ: değer yazılır, çünkü gerçekten büyük bir parti olabilir ve tartı üç ayrı yoldan girilebiliyor (kantardan, elle, simülasyonla) — sert bir sınır meşru işi de reddeder ve o gün sınır tamamen kaldırılır. Uyarı ayrıca işlemin denetim kaydına da yazılır, yani sonradan “bu rakam neden böyle” diye bakan kişi uyarının o an görüldüğünü görür."
+          "metin": "Çuval tartısı ve elle top girişinde gerçek dışı büyük değerler artık uyarı veriyor. 1.000 kilogramın üzerinde bir çuval tartısı ya da 10.000 metrenin üzerinde bir top metresi girildiğinde ekranda “bu değer beklenenden çok büyük, cihaz ölçeği yanlış olabilir” uyarısı çıkar. Uyarı kaydı ENGELLEMEZ: değer yazılır, çünkü gerçekten büyük bir parti olabilir ve tartı üç ayrı yoldan girilebiliyor (kantardan, elle, simülasyonla) — sert bir sınır meşru işi de reddeder ve o gün sınır tamamen kaldırılır. Çuval tartısında uyarı işlemin denetim kaydına da yazılır — sonradan “bu rakam neden böyle” diye bakan kişi uyarının o an görüldüğünü görür; elle top girişinde uyarı yalnız ekranda gösterilir, denetim kaydına geçmez."
         },
         {
           "kapsam": "panel",
@@ -257,7 +257,7 @@
         {
           "kapsam": "her-ikisi",
           "tip": "duzeltme",
-          "metin": "Mal kabulden gelen bir topun metresi “Düzelt” ekranından değiştirildiğinde bu düzeltme artık Depo Hareketleri’nde bir düzeltme satırı olarak görünür ve alış faturası taslağı ile sipariş karşılaması bu düzeltilmiş kabul metrajını okur. Önceden düzeltme yalnız topun üstünde kalıyor, defter ve fatura taslağı eski kabul rakamını kullanıyordu. Kabul metrajı düzeltilmiş bir mal kabulünüz varsa fatura taslağındaki ve karşılamadaki rakam bu yüzden değişebilir; düzeltme yapılmamış kabulde hiçbir rakam değişmez."
+          "metin": "Mal kabulden gelen bir topun metresi topun “Düzelt” ekranından (renk · en · kalite · metre) değiştirildiğinde bu düzeltme artık Depo Hareketleri’nde bir düzeltme satırı olarak görünür ve alış faturası taslağı ile sipariş karşılaması bu düzeltilmiş kabul metrajını okur. Önceden düzeltme yalnız topun üstünde kalıyor, defter ve fatura taslağı eski kabul rakamını kullanıyordu. Kabul metrajı düzeltilmiş bir mal kabulünüz varsa fatura taslağındaki ve karşılamadaki rakam bu yüzden değişebilir; düzeltme yapılmamış kabulde hiçbir rakam değişmez. Envanter → Metrajı Düzelt ile yapılan elle metraj düzeltmesi bundan AYRIDIR: o, topun kalan metrajını düzeltir (ve depo hareketi yazar), kabul anındaki ölçüyü ve dolayısıyla fatura taslağı ile karşılamayı DEĞİŞTİRMEZ."
         },
         {
           "kapsam": "tablet",
@@ -317,7 +317,7 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Dokuma modülü açık kurulumlarda tezgah duruşları elle girilip sınıflandırılabiliyor (planlı/plansız/ayar gibi kayıp sınıfı ve sebep); sınıflandırma değiştirildiğinde eski kayıt silinmez, değişiklik defterde durur ve eski not korunur. Aynı duruşun iki kez açılması ve kapanmış vardiyaya duruş yazılması engellenir. Bu sürümde giriş yüzeyi tablettir; panel ekranı sonraki sürümde. Modül kapalı kurulumda hiçbir şey değişmez."
+          "metin": "Dokuma modülü açık kurulumlarda tezgah duruşları elle girilip sınıflandırılabiliyor (planlı/plansız/ayar gibi kayıp sınıfı ve sebep); sınıflandırma değiştirildiğinde eski kayıt silinmez, değişiklik defterde durur ve eski not korunur. Aynı duruşun iki kez açılması ve kapanmış vardiyaya duruş yazılması engellenir. Giriş yüzeyi hem tablet hem paneldir: panelde Operasyon → Tezgah Duruşları ekranı bu sürümde geldi (aşağıdaki maddeye bakın). Modül kapalı kurulumda hiçbir şey değişmez."
         },
         {
           "kapsam": "her-ikisi",

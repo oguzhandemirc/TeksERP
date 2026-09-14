@@ -9777,3 +9777,54 @@ Lot maddesi (#67) doğrulandı: `goods-receipt.service.ts:1206` (mal kabul) ·
 `warp-beam-wind.service.ts:116` (panel + tablet aynı servis) 400 `YARN_LOT_REQUIRED`,
 tablet formu kapıyı sunucudan okuyor (`warp-beam-tablet.service.ts:55`) — "panelde de tabletten
 de" cümlesi kodla birebir.
+
+---
+
+## 2026-09-14 — Sürüm notu turunun İLK 65 MADDESİ kaynağa okutuldu: 4 kusur, biri aynı yayının İKİ maddesi arasında [ÇEKİRDEK]
+
+2026-09-13 turunun 72 maddesinden geriye kalan 65'i (devere yedilisi ve dokuma üçlüsü daha
+önce okutulmuştu) `iddia → dosya:satır` yöntemiyle koda okutuldu. **61 madde TEMİZ**; dördü
+düzeltildi. Yöntem yine iddianın CİNSİNE göre yürüdü: yetki cümlesi · "…-den türetilir" ·
+ayar adı/varsayılanı · sayısal eşik · ekran/menü adı.
+
+**① AYNI YAYININ İKİ MADDESİ ÇELİŞTİ (#58 ↔ #60).** #58 *"Bu sürümde giriş yüzeyi tablettir;
+panel ekranı sonraki sürümde"* diyordu; #60 aynı yayında panel **Tezgah Duruşları** ekranını
+duyuruyor (kod: `e480eb97`, bugün). Madde dilim indikten sonra güncellenmemişti.
+⇒ **Ders: bir sürüm notu maddesi "sonraki sürümde" diye söz verdiğinde, o dilim AYNI yayına
+inerse madde geri güncellenmez — çünkü kimse onu okumaz. Yayın kapanmadan önce, notta geçen
+her "sonraki sürümde" cümlesi yayının KENDİ madde listesine karşı aranmalıdır.**
+
+**② "Uyarı denetim kaydına da yazılır" İKİ YOLDAN BİRİNDE YANLIŞ (#40).** Gerçekçilik eşiği
+(`measurement-threshold.helper.ts`: 1.000 kg · 10.000 m, UYARI blok değil) iki yerde okunuyor:
+çuval tartısında uyarı audit yüküne giriyor (`shipping.service.ts:1591`,
+`...(thresholdWarning ? { thresholdWarning } : {})`), elle top girişinde ise uyarı audit
+çağrısından SONRA hesaplanıyor (`tambur-manual.service.ts:1245` audit ↔ `:1288` uyarı) ve
+yalnız `ApiResponse.warnings`e giriyor. Madde iki yolu tek cümlede anlatıyordu ⇒ yol yol
+ayrıldı. (Kod tarafında bir satırlık simetri düzeltmesi mümkün — 1e'ye iletildi, karar onda.)
+⇒ **Ders: "şu da kaydedilir" cümlesi, o kaydı YAZAN satırın hangi yolda koştuğu ölçülmeden
+yazılamaz; aynı yardımcıyı çağıran iki yol aynı şeyi yaptığını KANITLAMAZ.**
+
+**③ Ayar adı birebir değildi (#27).** Not ayarı *"Liste başlarında kimlik şeridi"* diye
+tırnak içinde adlandırıyordu; paneldeki gerçek etiket *"Liste sayfalarında kimlik şeridi
+(firma · irsaliye no · tarih)"* (`Electron/src/services/documentConfig.ts:668`). Tırnak içinde
+verilen her ad bir ARAMA ANAHTARIDIR. ⇒ **Ders: notta tırnaklanan ekran metni koddan
+kopyalanır, hatırlanmaz.**
+
+**④ İki farklı "düzelt" yolu tek isimle anılıyordu (#14 ↔ #46).** Kabul-anı metrajı
+`RECEIPT_QTY_REASONS = [ENTRY_RECEIPT, ENTRY_CORRECTION]` toplar; topun "Düzelt" ekranı
+(`PATCH /rolls/:id/label` → `applyManualProperties` → `postEntryCorrectionTx`) bu listeye
+girer, **Envanter → Metrajı Düzelt** (`adjustRollQty` → `MANUAL_ADJUST`) GİRMEZ ve zaten
+`initialQty` yazmaz. #46 yalnız "'Düzelt' ekranı" diyordu; muhasebeci ötekini kullanıp fatura
+taslağının değişmemesini kusur sanabilirdi. İki yol maddede adıyla ayrıldı.
+⇒ **Ders: iki ekranın adı birbirine benziyorsa ve SONUÇLARI farklıysa, not ikisini de adıyla
+anmak zorundadır — "düzeltme" kelimesi tek başına adres değildir.**
+
+**Temiz çıkan ve ölçülen başlıca iddialar:** karne 60 dk sonra kendiliğinden (`SHIFT_CLOSE_GRACE_MIN`)
+· mühür açma ayrı yetki + gerekçe ≥3 (`loom:shift-unseal`) · alt kalitede kendi adımız
+(`QualityGrade.skipCustomerName`, migration `role='SECOND'` backfill'li) · katalog 5 dk
+(`staleTime: 5 * 60_000`, dört okuyucuda aynı) · toplu aktarım geri sarma İKİ yetki (servis
+`assertEntityPermission`) · sayım stornosu `roll:manual-adjust` + `yarn:write` · tutarlılık
+bölümleri §29/§30/§30b/§31 (`scripts/consistency-check.sql`) · çevre birimi ölçeği
+(g→0,001 · cm→0,01, eski serbest metin kolon YOK) · fasoncu karnesinde "+N m müşteriye" ve
+"Müşteriye (m)" · `dispatchedAt` geri almada NULL'lanmıyor · adımın defter geçmişi silmeyi
+RESTRICT ile engelliyor · `GENEL` hata tipi migration'la doğuyor.
