@@ -51,10 +51,10 @@ import {
 import { migrationDamgaDegerleri, yorumlariSok } from "./lib/regime-gate-scan";
 import { hedefDbAdi, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { httpBekciKapisi } from "./lib/http-bekci-kapisi";
+import { atlamaDefteri } from "./lib/atlama";
 
 let pass = 0,
-  fail = 0,
-  atlanan = 0;
+  fail = 0;
 function check(label: string, ok: boolean, extra = ""): void {
   if (ok) {
     pass++;
@@ -64,9 +64,16 @@ function check(label: string, ok: boolean, extra = ""): void {
     console.error(`❌ ${label}${extra ? " — " + extra : ""}`);
   }
 }
-function atla(label: string, neden: string): void {
-  atlanan++;
-  console.log(`⏭️  ${label} — ${neden}`);
+/**
+ * ⚠️ ATLAMA DEFTERİ ORTAK ALTYAPIDIR — yerel kopya AÇILMAZ (kopya `"?"` sınıfını
+ * temsil edemez ve sayıyı elle düzeltmeye zorlar).
+ */
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
+
+function atla(label: string, neden: string, adet: number | "?" = 1): void {
+  ATLAMA.atla(label, neden, adet);
 }
 
 const KOK = path.resolve(__dirname, "..");
@@ -381,7 +388,7 @@ async function main(): Promise<void> {
 
   await httpTuru();
 
-  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${atlanan ? `, ${atlanan} atlandı` : ""} ===`);
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
 }
 
 /**
@@ -618,12 +625,11 @@ async function httpTuru(): Promise<void> {
   const kapi = await httpBekciKapisi({ base: BASE, kontrolSayisi: HTTP_KONTROL });
   if (kapi.kirmizi) {
     check("§10 HTTP ayağı ölçülebildi", false, kapi.kirmizi);
-    atlanan += HTTP_KONTROL;
+    atla("§10 HTTP turu", "kapı kırmızı verdi — ayak hiç koşmadı", HTTP_KONTROL);
     return;
   }
   if (!kapi.token) {
-    atla("§10 HTTP turu", kapi.atlaSebebi ?? "ölçüm yapılamadı");
-    atlanan += HTTP_KONTROL - 1; // `atla()` bir tanesini zaten saydı
+    atla("§10 HTTP turu", kapi.atlaSebebi ?? "ölçüm yapılamadı", HTTP_KONTROL);
     return;
   }
   const token = kapi.token;

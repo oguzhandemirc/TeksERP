@@ -133,6 +133,7 @@ import bcrypt from "bcryptjs";
 import { hedefDbAdi, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { httpBekciKapisi } from "./lib/http-bekci-kapisi";
 import { yorumlariSok } from "./lib/regime-gate-scan";
+import { atlamaDefteri } from "./lib/atlama";
 
 const SRC = path.join(__dirname, "..", "src");
 const BASE = process.env.TEST_API_URL ?? "http://localhost:4112";
@@ -147,7 +148,6 @@ const IP_KILIT = `10.77.${process.pid % 200}.12`;
 
 let pass = 0;
 let fail = 0;
-let atlanan = 0;
 function check(label: string, ok: boolean, detail = ""): void {
   if (ok) {
     pass++;
@@ -157,9 +157,16 @@ function check(label: string, ok: boolean, detail = ""): void {
     console.error(`❌ ${label}${detail ? ` — ${detail}` : ""}`);
   }
 }
-function atla(label: string, sebep: string): void {
-  atlanan++;
-  console.log(`⏭️  ATLANDI ${label} — ${sebep}`);
+/**
+ * ⚠️ ATLAMA DEFTERİ ORTAK ALTYAPIDIR — yerel kopya AÇILMAZ (kopya `"?"` sınıfını
+ * temsil edemez ve sayıyı elle düzeltmeye zorlar).
+ */
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
+
+function atla(label: string, sebep: string, adet: number | "?" = 1): void {
+  ATLAMA.atla(label, sebep, adet);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -724,8 +731,7 @@ async function main(): Promise<void> {
     const fSuper = await BAYRAK({ isSystemAccount: true, permissions: ["*"], body: { backupHour: 3 }, ip: IP_KILIT });
     check("kilitli IP'den bile süperadmin GEÇER (kurtarma yolu)", fSuper?.gecti === true, kod(fSuper));
   } else {
-    atla("kilit davranışı", "kilit hiç kurulmadı (auth.pinLockoutEnabled kapalı olabilir) — 4 kontrol ölçülmedi");
-    atlanan += 4;
+    atla("kilit davranışı", "kilit hiç kurulmadı (auth.pinLockoutEnabled kapalı olabilir)", 5);
   }
   // §C/§D'nin ana kovası kilitlenmediğini doğrula (kova ayrımı: farklı IP).
   const fAna = await BAYRAK({ permissions: ADMIN, body: { backupHour: 3 }, headers: basligi(DOGRU_SIFRE) });
@@ -810,10 +816,9 @@ async function main(): Promise<void> {
   const kapi = await httpBekciKapisi({ base: BASE, kontrolSayisi: httpKontrol });
   if (kapi.kirmizi) {
     check("HTTP ayağı ölçülebildi", false, kapi.kirmizi);
-    atlanan += httpKontrol;
+    atla("HTTP turu", "kapı kırmızı verdi — ayak hiç koşmadı", httpKontrol);
   } else if (!kapi.token) {
-    atla("HTTP turu", kapi.atlaSebebi ?? "ölçüm yapılamadı");
-    atlanan += httpKontrol - 1; // `atla()` bir tanesini zaten saydı
+    atla("HTTP turu", kapi.atlaSebebi ?? "ölçüm yapılamadı", httpKontrol);
   } else {
     await httpTuru(hashDegeri, httpKontrol, kapi.token);
   }
@@ -1188,9 +1193,9 @@ async function httpTuru(hashDegeri: string, httpKontrol: number, token: string):
     atla(
       "HTTP turu (kilit)",
       `${nerede} 429 SETTINGS_PASSWORD_LOCKED — ardışık koşum kovayı doldurdu, ` +
-        `~60 sn sonra tekrar koş; ${kalan} kontrol ölçülmedi`,
+        `~60 sn sonra tekrar koş`,
+      kalan,
     );
-    atlanan += kalan;
   };
   const kilitliMi = (status: number, govde: { details?: { code?: string } }): boolean =>
     status === 429 && govde.details?.code === "SETTINGS_PASSWORD_LOCKED";
@@ -1378,7 +1383,7 @@ main()
     } catch (e) {
       console.error("⚠️ temizlik başarısız:", e instanceof Error ? e.message : e);
     }
-    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${atlanan ? `, ${atlanan} atlandı` : ""} ===`);
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
     await prisma.$disconnect();
     await pool.end();
     process.exit(fail > 0 ? 1 : 0);

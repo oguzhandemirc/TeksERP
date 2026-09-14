@@ -10,12 +10,21 @@ import * as path from "node:path";
 import prisma from "../src/lib/prisma";
 import { PeripheralDeviceService } from "../src/services/peripheral.service";
 import { DeviceService } from "../src/services/device.service";
+import { atlamaDefteri } from "./lib/atlama";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = "") {
   if (ok) { pass++; console.log(`✅ ${label}${extra ? " — " + extra : ""}`); }
   else { fail++; console.log(`❌ ${label}${extra ? " — " + extra : ""}`); }
 }
+
+/**
+ * ⚠️ ATLAMA DEFTERİ ORTAK ALTYAPIDIR — yerel kopya AÇILMAZ (kopya `"?"` sınıfını
+ * temsil edemez ve sayıyı elle düzeltmeye zorlar).
+ */
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
 
 const svc = new PeripheralDeviceService({
   modelName: "peripheralDevice", tableName: "PERIPHERAL_DEVICE",
@@ -84,8 +93,9 @@ async function main() {
   // verse bile bekçi YEŞİL dönüyordu (çıkış kodu ölçümden kopmuştu). DB senaryoları
   // burada atlanıyor, ama atlandığı ÇIKTIDA yazılı ve karar sayaca bağlı.
   if (!tambur || !kk1) {
-    console.log("⚠️ TAMBUR-M1/KK1-M1 makineleri yok — DB senaryoları ATLANDI (seed gerekli)");
-    console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız (DB bölümü atlandı) ===`);
+    // Erken dönüş: kaç kontrolün düştüğü YAPISAL OLARAK bilinemez ⇒ `"?"`.
+    ATLAMA.atla("DB senaryoları", "TAMBUR-M1/KK1-M1 makineleri yok (seed gerekli)", "?");
+    console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
     await prisma.$disconnect();
     process.exit(fail > 0 ? 1 : 0);
   }

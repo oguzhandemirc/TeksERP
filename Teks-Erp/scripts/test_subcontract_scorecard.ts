@@ -23,6 +23,7 @@ import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { fixtureWarehouseId } from "./fixture-warehouse";
+import { atlamaDefteri } from "./lib/atlama";
 
 let pass = 0;
 let fail = 0;
@@ -35,10 +36,16 @@ function check(label: string, ok: boolean, extra = ""): void {
  * ÖLÇÜLEMEYEN kontrol — kırmızı DEĞİL, GÖRÜNÜR atlama.
  * (Koşucu özet satırındaki "N atlandı"yı okuyup raporlar.)
  */
-let atlanan = 0;
-function atla(label: string, neden: string): void {
-  atlanan++;
-  console.log(`⏭️  ATLANDI — ${label}\n      ↳ ${neden}`);
+/**
+ * ⚠️ ATLAMA DEFTERİ ORTAK ALTYAPIDIR — yerel kopya AÇILMAZ (kopya `"?"` sınıfını
+ * temsil edemez ve sayıyı elle düzeltmeye zorlar).
+ */
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
+
+function atla(label: string, neden: string, adet: number | "?" = 1): void {
+  ATLAMA.atla(label, neden, adet);
 }
 
 const TAG = `TEST-FSC-${Date.now()}`;
@@ -557,7 +564,7 @@ main()
     if (ids.wos.length) await prisma.workOrder.deleteMany({ where: { id: { in: ids.wos } } });
     if (ids.subs.length) await prisma.subcontractor.deleteMany({ where: { id: { in: ids.subs } } });
     if (ids.stations.length) await prisma.station.deleteMany({ where: { id: { in: ids.stations } } });
-    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${atlanan > 0 ? `, ${atlanan} atlandı` : ""} ===`);
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
     await prisma.$disconnect();
     await pool.end();
     process.exitCode = fail > 0 ? 1 : 0;

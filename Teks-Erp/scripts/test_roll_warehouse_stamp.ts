@@ -27,6 +27,7 @@ import { TamburService } from "../src/services/tambur.service";
 import { ensureDefaultWarehouse, type DefaultWarehouseResult } from "../src/jobs/default-warehouse.job";
 import { WAREHOUSE_STOCK_STATUSES } from "../src/services/helpers/warehouse-stock.helper";
 import { fikstursuzTopWhere } from "./lib/fikstur-imzasi";
+import { atlamaDefteri } from "./lib/atlama";
 
 const inventory = new InventoryService();
 const tambur = new TamburService();
@@ -34,7 +35,13 @@ const tambur = new TamburService();
 let pass = 0;
 let fail = 0;
 /** Beyanlı atlanan kontrol sayısı — özet satırında AYNI satırda basılır. */
-let atlandi = 0;
+/**
+ * ⚠️ ATLAMA DEFTERİ ORTAK ALTYAPIDIR — yerel kopya AÇILMAZ (kopya `"?"` sınıfını
+ * temsil edemez ve sayıyı elle düzeltmeye zorlar).
+ */
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
 function check(label: string, ok: boolean, detail = ""): void {
   if (ok) {
     pass++;
@@ -220,8 +227,7 @@ async function main(): Promise<void> {
   // yok") kesimden BAĞIMSIZDIR ve 6e'nin deposuz-top kararının dayandığı
   // kapıdır. Erken dönüş onları da yutardı — çökmenin yaptığı tam buydu.
   if (!firstGrade) {
-    console.log("⏭️  E1/E2: katalogda FIRST rollü aktif kalite yok — ATLANDI (2 kontrol)");
-    atlandi += 2;
+    ATLAMA.atla("E1/E2", "katalogda FIRST rollü aktif kalite yok", 2);
   } else {
     const cut = await tambur.cutWarehouseRoll(parentId, {
       cutLength: 40,
@@ -322,7 +328,7 @@ main()
     } catch (e) {
       console.warn("Temizlik uyarısı:", (e as Error).message.slice(0, 160));
     }
-    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${atlandi ? `, ${atlandi} atlandı` : ""} ===`);
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
     await prisma.$disconnect();
     await pool.end();
     process.exit(fail > 0 ? 1 : 0);

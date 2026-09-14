@@ -38,7 +38,6 @@ const ship = new ShippingService();
 
 let pass = 0;
 let fail = 0;
-let atlanan = 0;
 /**
  * D2-7'nin ÖN KOŞULU: o dal ancak SACK bağlam varsayılanı YOKKEN ölçülebilir.
  * Seed o satırı KENDİSİ yaratıyor (`prisma/seed.ts`), dolayısıyla eski yazımda
@@ -288,7 +287,7 @@ async function main(): Promise<void> {
 
   // Atlanan sayısı ÖZET SATIRINDA beyan edilir — koşucu kapsam kaybını yalnız
   // oradan okur (`Sonuç:` satırına demirli regex).
-  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız${atlanan ? `, ${atlanan} atlandı` : ""} ===`);
+  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
   process.exit(fail > 0 ? 1 : 0);
 }

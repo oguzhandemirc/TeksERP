@@ -28,17 +28,24 @@ import { WorkOrderService } from "../src/services/workorder.service";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { fixtureWarehouseId } from "./fixture-warehouse";
+import { atlamaDefteri } from "./lib/atlama";
 
 let pass = 0;
 let fail = 0;
-let atlanan = 0;
 function check(label: string, ok: boolean, extra = ""): void {
   if (ok) { pass++; console.log(`✅ ${label}${extra ? " — " + extra : ""}`); }
   else { fail++; console.log(`❌ ${label}${extra ? " — " + extra : ""}`); }
 }
-function atla(label: string, neden: string): void {
-  atlanan++;
-  console.log(`⏭️  ATLANDI — ${label}\n      ↳ ${neden}`);
+/**
+ * ⚠️ ATLAMA DEFTERİ ORTAK ALTYAPIDIR — yerel kopya AÇILMAZ (kopya `"?"` sınıfını
+ * temsil edemez ve sayıyı elle düzeltmeye zorlar).
+ */
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
+
+function atla(label: string, neden: string, adet: number | "?" = 1): void {
+  ATLAMA.atla(label, neden, adet);
 }
 
 const sub = new SubcontractorService();
@@ -311,7 +318,7 @@ main()
   .catch((e) => { console.error("HATA:", e); fail++; })
   .finally(async () => {
     await temizle();
-    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${atlanan > 0 ? `, ${atlanan} atlandı` : ""} ===`);
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
     await prisma.$disconnect();
     await pool.end();
     process.exitCode = fail > 0 ? 1 : 0;
