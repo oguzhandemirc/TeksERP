@@ -49,6 +49,9 @@ export interface WindForm {
   issues: YarnLineDraft[];
   returns: YarnLineDraft[];
   breakCount: string;
+  /** Raşel takımı (#23): adet metni ("1" = tek levent, bugünkü); önek yalnız adet > 1'de anlamlı. */
+  count: string;
+  physicalBeamNoPrefix: string;
 }
 
 export type Validation = { ok: true } | { ok: false; message: string };
@@ -96,7 +99,15 @@ export function initialWindForm(beam: { plannedLengthM: number; originKind: Warp
     issues: inHouse ? [{ key: 'i1', warehouseId: defaultWarehouseId, qtyKg: '', reasonCode: null, lotId: null }] : [],
     returns: [],
     breakCount: '',
+    count: '1',
+    physicalBeamNoPrefix: '',
   };
+}
+
+/** Adet 1..24 tam sayı; boş/geçersiz → null. */
+export function setCount(f: Pick<WindForm, 'count'>): number | null {
+  const n = Number(f.count.trim());
+  return Number.isInteger(n) && n >= 1 && n <= 24 ? n : null;
 }
 
 function validateLines(lines: YarnLineDraft[], label: string, needsReason: boolean): Validation {
@@ -112,6 +123,7 @@ function validateLines(lines: YarnLineDraft[], label: string, needsReason: boole
 export function validateWind(f: WindForm, originKind: WarpBeamOrigin, lotRequired = false): Validation {
   const m = num(f.lengthM);
   if (m == null || m <= 0) return { ok: false, message: 'Sarılan metre 0’dan büyük olmalı.' };
+  if (setCount(f) == null) return { ok: false, message: 'Adet 1..24 arasında tam sayı olmalı.' };
   if (originKind !== 'IN_HOUSE') return { ok: true };
   if (!f.machineId) return { ok: false, message: 'Devere makinesi seçin.' };
   if (f.issues.length === 0) return { ok: false, message: 'En az bir brüt iplik çıkışı satırı gerekir.' };
@@ -139,6 +151,8 @@ export function buildWindPayload(f: WindForm, originKind: WarpBeamOrigin, client
     yarnReturns: inHouse ? f.returns.map((l) => ({ warehouseId: l.warehouseId ?? '', qtyKg: num(l.qtyKg) ?? 0, reasonCode: l.reasonCode ?? '', lotId: l.lotId })) : [],
     breakCount: inHouse && f.breakCount.trim() !== '' ? (num(f.breakCount) ?? null) : null,
     clientToken,
+    // Raşel takımı: adet 1 → alanlar GİDMEZ (istek bugünkü ile birebir).
+    ...((setCount(f) ?? 1) > 1 ? { count: setCount(f) ?? 1, physicalBeamNoPrefix: f.physicalBeamNoPrefix.trim() || null } : {}),
   };
 }
 

@@ -62,6 +62,9 @@ const windSchema = z
     breakCount: z.number().int().min(0).nullable().optional(),
     startedAt: z.coerce.date().nullable().optional(),
     clientToken: z.string().uuid().nullable().optional(),
+    // Raşel takımı (#23): kaç levent birlikte (DEFAULT 1 = bugün); N>1 → kardeşler aynı tx'te, iplik ÷ N.
+    count: z.number().int().min(1).max(24).nullable().optional(),
+    physicalBeamNoPrefix: z.string().trim().max(28).nullable().optional(),
     /** G1c: fasona sardırılan levent → o fasoncuya giden iplik kalemi (opsiyonel; servis 400 kapısı). */
     dispatchItemId: z.string().uuid().nullable().optional(),
   })
@@ -219,7 +222,7 @@ router.delete("/:id", requireAnyPermission("warpbeam:write", ...MOBILE_DEVERE), 
  * /api/warp-beams/{id}/wind:
  *   post:
  *     tags: [WarpBeams]
- *     summary: SAR (PLANNED → READY, WOUND) — IN_HOUSE'da makine + brüt iplik çıkışı (WARP_ISSUE) + dip iadesi (WARP_RETURN, sebep zorunlu) AYNI tx'te
+ *     summary: SAR (PLANNED → READY, WOUND) — IN_HOUSE'da makine + brüt iplik çıkışı (WARP_ISSUE) + dip iadesi (WARP_RETURN, sebep zorunlu) AYNI tx'te; `count` N adet → N−1 kardeş levent aynı tx'te doğar ve sarılır (raşel takımı, iplik ÷ N, `setKey`)
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Sarıldı }

@@ -382,6 +382,11 @@
         {
           "kapsam": "her-ikisi",
           "tip": "yeni",
+          "metin": "Raşel takımı: sarım formuna “Adet” geldi (varsayılan 1 = tek levent, eski davranış). Raşel takımında N yazılınca N ayrı levent tek işlemde doğar ve sarılır; her biri kendi levent numarasını alır, isteğe bağlı gövde numarası öneki (ör. R7 → R7-1, R7-2 …) yazılır. İplik çıkışı ve dip iadesi satırları TOPLAM girilir, levent başına pay N'e bölünür (yuvarlama kuruşu son levente gider, toplam birebir tutar; lot her leventte kopyalanır). Toplam çıkış N × nominalden %25'ten fazla saparsa uyarı verilir. Her levent bağımsızdır: tek tek takılır, tüketilir, iptal edilir; birinin iptali diğerlerini etkilemez. Bir kardeşin gövde numarası doluysa hiçbiri doğmaz. Adet 1 bırakıldığında kayıt eskisiyle birebir aynıdır."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "yeni",
           "metin": "Tezgahtan inen topun çözgüsü leventten kendiliğinden düşer (devere modülü, tezgah bağı defteri ve Genel Ayarlar › Devere / Levent › “Tezgahtan inen top leventten otomatik düşsün” ayarı açık kurulumlar için; varsayılan kapalı). KK1'de indirme bağıyla kaydedilen topun metresi, indirme anında o tezgahta bağlı her levente ayrı bir çözgü tüketimi olarak yazılır: çözgü metre = kumaş metre ÷ (1 − take-up); take-up Çözgü Kartları formundaki yeni “Take-up (%)” alanından, boşsa çözgü = kumaş sayılır ve KK1 kaydında uyarı verilir; çok hatlı tezgahta top metresi hat payı olarak düşer (uyarıda söylenir). Leventte kalan yetmezse kalana kadar yazılır, kayıt engellenmez, açık miktar uyarıda görünür. İndirme anında tezgahta bağlı levent yoksa tüketim YAZILMAZ ve uyarı verilir; o topun çözgüsü elle düşülür. Top iptal edilince tüketim ters kayıtla geri döner, iptal geri alınınca yeniden düşer; fire (hurda) topta geri dönmez. Levent detayında tüketim satırı topun barkodunu gösterir. Uyarılar kaydın hemen ardından görünür — tablette KK1 kaydından sonra, panelde elle top eklemede; kayıt başarılıdır, uyarı yalnız bilgilendirir. Çevrimdışıyken yazılıp sonra gönderilen kayıtta uyarı topun barkoduyla gelir. Ayar kapalıyken KK1 kaydı eskisiyle birebir aynıdır, tüketim yalnız elle yazılır; hiçbir mevcut kayıt değişmez."
         },
         {

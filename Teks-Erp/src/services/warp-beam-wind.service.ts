@@ -16,6 +16,11 @@ import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { resolveDenier, warpTheoreticalKg } from "../constants/warp-beam";
 import { WARP_BEAM_SELECT } from "./helpers/warp-beam.helper";
 import { applyWarpBeamEventTx, logWarpBeamEventAudit } from "./helpers/warp-beam-event.helper";
+import { assertPhysicalBeamFreeTx, lineShares, siblingPhysicalNo } from "./helpers/warp-beam-set.helper";
+import { nextBeamNoTx } from "./helpers/warp-beam.helper";
+import { AuditService } from "./audit.service";
+import { assertReturnReasonTx, kg, lotWarnings, siblingsOf, windResult, writeWoundTx, type WindResultDto } from "./helpers/warp-beam-wind-write.helper";
+export type { WindResultDto };
 import { toWarpBeamDto, toWarpBeamEventDto, type WarpBeamDto, type WarpBeamEventDto } from "./warp-beam.service";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -50,6 +55,10 @@ export interface WindWarpBeamInput {
    * olayı bağı taşır ve fasondaki türetilmiş bakiye leventin nominal kg'sını ayrı kalem olarak düşer.
    */
   dispatchItemId?: string | null;
+  /** RAŞEL TAKIMI (#23): kaç levent birlikte sarıldı (1..24; DEFAULT 1 = bugün). N>1 → N−1 kardeş aynı tx'te doğar, iplik ÷ N. */
+  count?: number | null;
+  /** Takımda gövde numarası öneki → `${önek}-${k}`; ilkinin kendi gövde no'su varsa korunur. */
+  physicalBeamNoPrefix?: string | null;
 }
 
 /** G1c — iplik kalemi bağı kapısı (köken kapısı çağıranda): kalem YARN · sevk iptal edilmemiş · fasoncu leventinki · iplik kartı çözgünün ipliği. */
@@ -89,42 +98,21 @@ async function assertDevereMachineTx(tx: Prisma.TransactionClient, machineId: st
   if (!m.station.producesWarpBeam) throw AppError.badRequest(`"${m.station.name}" istasyonu levent üretmez — makine bir devere istasyonunda olmalı (istasyon kartında "levent üretir").`, { code: "WARP_BEAM_MACHINE_NOT_DEVERE" });
 }
 
-async function assertReturnReasonTx(tx: Prisma.TransactionClient, code: string): Promise<string> {
-  const trimmed = code.trim();
-  const row = await tx.reasonPreset.findFirst({ where: { kind: ReasonPresetKind.WARP_RETURN, code: trimmed, isActive: true }, select: { code: true } });
-  if (!row) throw AppError.badRequest(`Geçersiz dip iade sebebi: ${trimmed}`, { code: "REASON_CODE_INVALID" });
-  return row.code;
-}
 
-/** Aynı gövde numarasında (tr_fold) başka bir CANLI (READY | SHIPPED_OUT — fasondaki çözgü gövdeyi işgal eder) çözgü varsa 409 — kısıt `warp_beams_physical_live_uq` ikinci hattır. */
-async function assertPhysicalBeamFree(beamId: string, physicalBeamNo: string | null, beamNo: string): Promise<void> {
-  if (!physicalBeamNo) return;
-  const rows = await prisma.$queryRaw<Array<{ beamNo: string }>>`
-    SELECT "beamNo" FROM warp_beams
-    WHERE public.tr_fold("physicalBeamNo") = public.tr_fold(${physicalBeamNo}) AND status IN ('READY', 'SHIPPED_OUT') AND id <> ${beamId}::uuid
-    LIMIT 1`;
-  if (rows[0]) {
-    throw AppError.conflict(`"${physicalBeamNo}" gövdesinde canlı bir çözgü var: ${rows[0].beamNo} — ${beamNo} sarılamaz; gövdeyi boşaltın ya da başka gövde yazın.`, { code: "WARP_BEAM_PHYSICAL_BUSY", busyBeamNo: rows[0].beamNo });
-  }
-}
-
-function kg(v: number | string, ad: string): Prisma.Decimal {
-  const d = D(v).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP);
-  if (!d.isFinite() || d.lte(0)) throw AppError.badRequest(`${ad} sıfırdan büyük olmalı`);
-  return d;
-}
-
-
-export async function windWarpBeam(id: string, input: WindWarpBeamInput, userId?: string): Promise<ApiResponse<WarpBeamDto>> {
+export async function windWarpBeam(id: string, input: WindWarpBeamInput, userId?: string): Promise<ApiResponse<WindResultDto>> {
   const beam = await prisma.warpBeam.findUnique({ where: { id }, select: WARP_BEAM_SELECT });
   if (!beam) throw AppError.notFound("Levent bulunamadı");
   if (input.clientToken) {
-    const replay = await prisma.warpBeamEvent.findUnique({ where: { clientToken: input.clientToken }, select: { beamId: true, kind: true } });
+    const replay = await prisma.warpBeamEvent.findUnique({ where: { clientToken: input.clientToken }, select: { beamId: true, kind: true, beam: { select: { setKey: true } } } });
     if (replay) {
       assertReplayPayloadMatches([{ ad: "beamId", mevcut: replay.beamId, gelen: id }, { ad: "kind", mevcut: replay.kind, gelen: "WOUND" }], "Bu istemci anahtarı BAŞKA bir sarımla kullanılmış — formu yenileyip yeniden deneyin.");
-      return { success: true, data: toWarpBeamDto(beam), message: `${beam.beamNo} zaten sarılmış (yeniden gönderim)` };
+      return windResult(id, replay.beam.setKey, `${beam.beamNo} zaten sarılmış (yeniden gönderim)`, []);
     }
   }
+  // RAŞEL TAKIMI (#23): N adet → aynı tx'te N−1 kardeş doğar ve sarılır; iplik payı ÷ N. DEFAULT 1 = bugün.
+  const count = input.count ?? 1;
+  if (!Number.isInteger(count) || count < 1 || count > 24) throw AppError.badRequest("Adet 1..24 olmalı");
+  if (count > 1 && beam.setKey) throw AppError.conflict(`${beam.beamNo} zaten bir takımın parçası — takım yeniden açılamaz`, { code: "WARP_BEAM_SET_EXISTS" });
   const lengthM = kg(input.lengthM, "Sarılan metre");
   const denier = resolveDenier(beam.warpSpec.yarnItem);
   if (denier === null) throw AppError.badRequest(`"${beam.warpSpec.yarnItem.name}" kaleminin denye değeri boş — nominal kg hesaplanamaz; kalem kartından denyeyi girin.`, { code: "WARP_DENIER_MISSING" });
@@ -138,67 +126,50 @@ export async function windWarpBeam(id: string, input: WindWarpBeamInput, userId?
   // ters sırayla kilitlerse FOR UPDATE 40P01'e düşer (`yarn-balance-guard` başlığı: kanonik sıra her yolun işi).
   const issuesSorted = [...issues].sort((a, b) => a.warehouseId.localeCompare(b.warehouseId) || (a.lotId ?? "").localeCompare(b.lotId ?? ""));
   const returnsSorted = [...returns].sort((a, b) => a.warehouseId.localeCompare(b.warehouseId) || a.reasonCode.localeCompare(b.reasonCode) || (a.lotId ?? "").localeCompare(b.lotId ?? ""));
-  // LOT (Faz 2, §3.5): lot ZORUNLU DEĞİL — lotsuz ya da karışık lot REDDEDİLMEZ, uyarı üretir
-  // (levent içi lot karışımı boyuna ÇÖZGÜ YOLU riski). `devere.lotRequired` [PROFİL] açıksa
-  // içeride sarımda lotsuz çıkış satırı 400; varsayılan KAPALI = bugünkü davranış.
-  const warnings: string[] = [];
-  if (inHouse) {
-    const lotsuz = issuesSorted.filter((l) => !l.lotId).length;
-    if (lotsuz > 0 && (await readDevereLotRequired())) {
-      throw AppError.badRequest(`İplik çıkış satırında lot zorunlu (ayar: "Devere — lot zorunlu"): ${lotsuz} satır lotsuz.`, { code: "YARN_LOT_REQUIRED" });
-    }
-    const lotlar = new Set(issuesSorted.map((l) => l.lotId).filter((x): x is string => !!x));
-    if (lotsuz > 0 && lotlar.size > 0) warnings.push(`${lotsuz} iplik çıkış satırı lotsuz — levent lot izi eksik kalır.`);
-    else if (lotsuz > 0) warnings.push("İplik çıkışı lotsuz — bu levent lot izlemesine girmez (lotsuz sarılan levent lotsuz kalır).");
-    if (lotlar.size > 1) warnings.push(`Levente ${lotlar.size} farklı iplik lotu yüklendi — levent içi lot farkı boyuna çözgü yolu üretebilir.`);
-    const iadeDisi = returnsSorted.filter((l) => l.lotId && !lotlar.has(l.lotId)).length;
-    if (iadeDisi > 0) warnings.push(`${iadeDisi} dip iadesi satırı bu leventin çıkış lotlarından olmayan bir lotu taşıyor.`);
-  }
+  const warnings = inHouse ? await lotWarnings(issuesSorted, returnsSorted) : [];
   // K6 — dip iadesi cağlığa yüklenenden FAZLA olamaz (fiziksel imkânsız; net tüketim eksiye düşerdi).
   const issueKg = issuesSorted.reduce((acc, l) => acc.plus(kg(l.qtyKg, "İplik çıkış kg")), D(0));
   const returnKg = returnsSorted.reduce((acc, l) => acc.plus(kg(l.qtyKg, "Dip iade kg")), D(0));
   if (returnKg.gt(issueKg)) {
     throw AppError.badRequest(`Dönen bobin dibi (${returnKg} kg) cağlığa yüklenen brüt çıkışı (${issueKg} kg) aşamaz.`, { code: "WARP_RETURN_EXCEEDS_ISSUE", issueKg: Number(issueKg), returnKg: Number(returnKg) });
   }
+  if (count > 1 && inHouse && issueKg.gt(0)) {
+    // Beyanlı yaklaşıklık uyarısı: takım toplam çıkışı N × nominalden %25'ten fazla sapıyorsa söyle (red değil).
+    const nominalSet = theoreticalKg.mul(count);
+    if (issueKg.minus(nominalSet).abs().gt(nominalSet.mul(0.25))) warnings.push(`Takım çıkışı ${issueKg} kg, ${count} × nominal ${nominalSet} kg'dan %25'ten fazla sapıyor — adet ya da kg'yi kontrol edin.`);
+  }
+  const prefix = input.physicalBeamNoPrefix?.trim() || null;
+  const firstPhysical = siblingPhysicalNo(prefix, 1, beam.physicalBeamNo);
   // K5 — aynı metal gövdede canlı çözgü ön kontrolü (Türkçe 409; `physical_live_uq` ikinci hat, ham P2002 dönmesin).
-  await assertPhysicalBeamFree(beam.id, beam.physicalBeamNo, beam.beamNo);
+  await assertPhysicalBeamFreeTx(prisma, beam.id, firstPhysical, beam.beamNo);
+  const setKey = count > 1 ? crypto.randomUUID() : null;
+  const issueShares = lineShares(issuesSorted, count);
+  const returnShares = lineShares(returnsSorted, count);
+  const ctx = { input, lengthM, denier, theoreticalKg, yarnItemId, userId, clientToken: input.clientToken ?? null };
 
   const wound = await prisma.$transaction(async (tx) => {
     if (input.machineId) await assertDevereMachineTx(tx, input.machineId);
     if (input.dispatchItemId) await assertYarnDispatchItemTx(tx, input.dispatchItemId, { subcontractorId: beam.subcontractorId, yarnItemId });
-    const ev = await applyWarpBeamEventTx(tx, {
-      beamId: id,
-      kind: "WOUND",
-      from: WarpBeamStatus.PLANNED,
-      to: WarpBeamStatus.READY,
-      data: {
-        clientToken: input.clientToken ?? null,
-        dispatchItemId: input.dispatchItemId ?? null,
-        lengthM,
-        machineId: input.machineId ?? null,
-        endsCount: beam.warpSpec.endsCount,
-        denier,
-        theoreticalKg,
-        kgSource: input.kgSource,
-        sectionCount: input.sectionCount ?? null,
-        endsPerSection: input.endsPerSection ?? null,
-        breakCount: input.breakCount ?? null,
-        startedAt: input.startedAt ?? null,
-        createdById: userId ?? null,
-      },
-    });
-    for (const line of issuesSorted) {
-      await applyYarnMovementTx(tx, { itemId: yarnItemId, warehouseId: line.warehouseId, kind: YarnMovementKind.WARP_ISSUE, qtyKg: kg(line.qtyKg, "İplik çıkış kg"), warpBeamId: id, lotId: line.lotId ?? null, userId: userId ?? null });
+    if (setKey || firstPhysical !== beam.physicalBeamNo) await tx.warpBeam.updateMany({ where: { id, status: WarpBeamStatus.PLANNED }, data: { setKey, physicalBeamNo: firstPhysical } });
+    const first = await writeWoundTx(tx, { id, endsCount: beam.warpSpec.endsCount }, ctx, { issues: issueShares[0], returns: returnShares[0] });
+    for (let k = 2; k <= count; k++) {
+      const physicalBeamNo = siblingPhysicalNo(prefix, k, null);
+      await assertPhysicalBeamFreeTx(tx, null, physicalBeamNo, `${beam.beamNo} takımı ${k}. levent`);
+      // k. kardeş AYNI tx'te PLANNED doğar (8029 sıralı LV no; klon: kart/köken/taraf/plan m/not) ve hemen sarılır.
+      const sib = await tx.warpBeam.create({
+        data: { beamNo: await nextBeamNoTx(tx, new Date()), warpSpecId: beam.warpSpecId, status: WarpBeamStatus.PLANNED, plannedLengthM: beam.plannedLengthM, physicalBeamNo, notes: beam.notes, originKind: beam.originKind, subcontractorId: beam.subcontractorId, supplierId: beam.supplierId, setKey, createdById: userId ?? null },
+        select: { id: true, beamNo: true },
+      });
+      await writeWoundTx(tx, { id: sib.id, endsCount: beam.warpSpec.endsCount }, { ...ctx, clientToken: null }, { issues: issueShares[k - 1], returns: returnShares[k - 1] });
     }
-    for (const line of returnsSorted) {
-      const reasonCode = await assertReturnReasonTx(tx, line.reasonCode);
-      await applyYarnMovementTx(tx, { itemId: yarnItemId, warehouseId: line.warehouseId, kind: YarnMovementKind.WARP_RETURN, qtyKg: kg(line.qtyKg, "Dip iade kg"), warpBeamId: id, reasonCode, lotId: line.lotId ?? null, userId: userId ?? null });
-    }
-    return ev;
+    return first;
   });
-  await logWarpBeamEventAudit({ userId, eventId: wound.id, kind: "WOUND", data: { beamId: id, lengthM: Number(lengthM), theoreticalKg: Number(theoreticalKg), kgSource: input.kgSource, issues: issues.length, returns: returns.length } });
-  const fresh = await prisma.warpBeam.findUniqueOrThrow({ where: { id }, select: WARP_BEAM_SELECT });
-  return { success: true, data: toWarpBeamDto(fresh), message: `${fresh.beamNo} sarıldı — ${Number(lengthM)} m, nominal ${Number(theoreticalKg)} kg`, ...(warnings.length ? { warnings } : {}) };
+  await logWarpBeamEventAudit({ userId, eventId: wound.id, kind: "WOUND", data: { beamId: id, lengthM: Number(lengthM), theoreticalKg: Number(theoreticalKg), kgSource: input.kgSource, issues: issues.length, returns: returns.length, count, setKey } });
+  const sibs = await siblingsOf(setKey, id);
+  // Kardeş doğuşları audit'e (best-effort, tx dışında): her biri ayrı WARP_BEAM kaydıdır.
+  for (const s of sibs) await AuditService.log({ userId, action: "CREATE", tableName: "WARP_BEAM", recordId: s.id, newData: { beamNo: s.beamNo, setKey, siblingOf: beam.beamNo, lengthM: Number(lengthM) } }).catch(() => undefined);
+  const adlar = [beam.beamNo, ...sibs.map((s) => s.beamNo)].join(", ");
+  return windResult(id, setKey, count > 1 ? `${adlar} sarıldı (${count} adet) — ${Number(lengthM)} m/levent, nominal ${Number(theoreticalKg)} kg/levent` : `${beam.beamNo} sarıldı — ${Number(lengthM)} m, nominal ${Number(theoreticalKg)} kg`, warnings);
 }
 
 // ── SARIMI İPTAL ET (READY → CANCELLED, WOUND_CANCEL) ───────────────────────────

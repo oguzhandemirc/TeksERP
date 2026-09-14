@@ -122,6 +122,9 @@ export interface WindWarpBeamRequest {
   yarnReturns: (YarnLineRequest & { reasonCode: string })[];
   breakCount: number | null;
   clientToken: string;
+  /** Raşel takımı (#23): N adet → N−1 kardeş aynı işlemde doğar, iplik ÷ N; 1 ise alanlar GÖNDERİLMEZ (bugünkü istek). */
+  count?: number;
+  physicalBeamNoPrefix?: string | null;
 }
 
 export interface CancelWoundPreview {
@@ -150,8 +153,8 @@ export const warpBeamService = {
   },
   plan: async (body: PlanWarpBeamRequest): Promise<ApiResponse<WarpBeam>> => (await apiClient.post<ApiResponse<WarpBeam>>('/warp-beams', body)).data,
   deleteDraft: async (id: string): Promise<ApiResponse<{ id: string }>> => (await apiClient.delete<ApiResponse<{ id: string }>>(`/warp-beams/${id}`)).data,
-  wind: async (id: string, body: WindWarpBeamRequest): Promise<ApiResponse<WarpBeam>> =>
-    (await apiClient.post<ApiResponse<WarpBeam>>(`/warp-beams/${id}/wind`, body)).data,
+  wind: async (id: string, body: WindWarpBeamRequest): Promise<ApiResponse<WarpBeam & { siblings?: { id: string; beamNo: string }[] }>> =>
+    (await apiClient.post<ApiResponse<WarpBeam & { siblings?: { id: string; beamNo: string }[] }>>(`/warp-beams/${id}/wind`, body)).data,
   cancelPreview: async (id: string): Promise<CancelWoundPreview> => {
     const res = await apiClient.get<ApiResponse<CancelWoundPreview>>(`/warp-beams/${id}/cancel-preview`);
     return res.data.data as CancelWoundPreview;

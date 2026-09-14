@@ -30,7 +30,7 @@ describe('validatePlan / buildPlanPayload — createSchema aynası, köken XOR',
 });
 
 describe('validateWind / buildWindPayload — windSchema aynası', () => {
-  const inHouse: WindForm = { lengthM: '1180', kgSource: 'WEIGHED', machineId: 'm1', issues: [line('50')], returns: [], breakCount: '' };
+  const inHouse: WindForm = { lengthM: '1180', kgSource: 'WEIGHED', machineId: 'm1', issues: [line('50')], returns: [], breakCount: '', count: '1', physicalBeamNoPrefix: '' };
   it('1 başlangıç: metre plandan, kg kaynağı kökene göre, IN_HOUSE ilk çıkış satırı varsayılan depoyla', () => {
     const f = initialWindForm({ plannedLengthM: 900, originKind: 'IN_HOUSE' }, 'w1');
     expect(f.lengthM).toBe('900');
@@ -143,3 +143,23 @@ describe('STATUS_LABEL / beamActionsEnabled — fason F1: SHIPPED_OUT tablette g
   });
 });
 
+describe('raşel takımı (#23) — adet', () => {
+  const base: WindForm = { lengthM: '100', kgSource: 'WEIGHED', machineId: 'm1', issues: [{ key: 'i1', warehouseId: 'w1', qtyKg: '30', reasonCode: null, lotId: null }], returns: [], breakCount: '', count: '1', physicalBeamNoPrefix: '' };
+  it('⭐ adet 1 → yükte `count`/`physicalBeamNoPrefix` YOK (bugünkü istek bayt bayt)', () => {
+    const p = buildWindPayload(base, 'IN_HOUSE', 'tok');
+    expect('count' in p).toBe(false);
+    expect('physicalBeamNoPrefix' in p).toBe(false);
+  });
+  it('adet 3 + önek → yükte count 3 ve önek; iplik satırları TOPLAM gider (pay sunucuda ÷ N)', () => {
+    const p = buildWindPayload({ ...base, count: '3', physicalBeamNoPrefix: ' R7 ' }, 'IN_HOUSE', 'tok');
+    expect(p.count).toBe(3);
+    expect(p.physicalBeamNoPrefix).toBe('R7');
+    expect(p.yarnIssues[0].qtyKg).toBe(30);
+  });
+  it('adet 0 / 25 / "a" → doğrulama red; boş önek null gider', () => {
+    expect(validateWind({ ...base, count: '0' }, 'IN_HOUSE').ok).toBe(false);
+    expect(validateWind({ ...base, count: '25' }, 'IN_HOUSE').ok).toBe(false);
+    expect(validateWind({ ...base, count: 'a' }, 'IN_HOUSE').ok).toBe(false);
+    expect(buildWindPayload({ ...base, count: '2' }, 'IN_HOUSE', 'tok').physicalBeamNoPrefix).toBeNull();
+  });
+});

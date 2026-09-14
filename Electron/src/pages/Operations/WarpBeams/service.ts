@@ -55,6 +55,9 @@ export interface WindPayload {
   yarnReturns?: Array<YarnLinePayload & { reasonCode: string }>;
   breakCount?: number | null;
   clientToken: string;
+  /** Raşel takımı (#23): N adet → N−1 kardeş aynı işlemde; 1 ise gönderilmez. */
+  count?: number;
+  physicalBeamNoPrefix?: string | null;
 }
 
 export interface DevereMachine {
@@ -86,7 +89,7 @@ export const warpBeamService = {
   update: (id: string, body: Partial<WarpBeamPlanPayload>) => apiClient.patch<ApiResponse<WarpBeam>>(`${BASE}/${id}`, body).then((r) => r.data),
   /** ④ sınıfı: yalnız PLANNED taslak silinir; sarılmış levent iptal edilir. */
   deleteDraft: (id: string) => apiClient.delete<ApiResponse<{ id: string }>>(`${BASE}/${id}`).then((r) => r.data),
-  wind: (id: string, body: WindPayload) => apiClient.post<ApiResponse<WarpBeam>>(`${BASE}/${id}/wind`, body).then((r) => r.data),
+  wind: (id: string, body: WindPayload) => apiClient.post<ApiResponse<WarpBeam & { siblings: Array<{ id: string; beamNo: string }> }>>(`${BASE}/${id}/wind`, body).then((r) => r.data),
   cancelPreview: (id: string) => apiClient.get<ApiResponse<CancelWoundPreview>>(`${BASE}/${id}/cancel-preview`).then((r) => r.data),
   cancel: (id: string, reason: string) => apiClient.post<ApiResponse<WarpBeam>>(`${BASE}/${id}/cancel`, { reason }).then((r) => r.data),
   // ── Faz 3 tezgah bağı ──

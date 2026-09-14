@@ -15,6 +15,7 @@ import { reasonPresetService } from "@/pages/ReasonPresets/service";
 import { warpBeamService, type WindPayload } from "./service";
 import { YarnLinesEditor, type YarnLineDraft } from "./YarnLinesEditor";
 import { WindFields } from "./WindFields";
+import { SetFields } from "./SetFields";
 import { theoreticalKg, type WarpBeam, type WarpKgSource } from "./types";
 
 interface Props {
@@ -37,6 +38,8 @@ export function WindDialog({ target, isPending, onClose, onConfirm }: Props) {
   const [breakCount, setBreakCount] = useState("");
   const [issues, setIssues] = useState<YarnLineDraft[]>([]);
   const [returns, setReturns] = useState<YarnLineDraft[]>([]);
+  const [count, setCount] = useState("1");
+  const [prefix, setPrefix] = useState("");
   const { multiWarehouse, warehouses } = useMultiWarehouse();
   const machines = useQuery({ queryKey: ["warp-beams", "devere-machines"], queryFn: () => warpBeamService.devereMachines(), enabled: inHouse });
   const presets = useQuery({ queryKey: ["reason-presets", "WARP_RETURN", "wind"], queryFn: () => reasonPresetService.list(false) });
@@ -48,7 +51,8 @@ export function WindDialog({ target, isPending, onClose, onConfirm }: Props) {
   const lotsOk = (ls: YarnLineDraft[]) => !lotRequired || ls.every((l) => l.lotId !== "");
   const nominal = theoreticalKg(target.warpSpec.endsCount, target.warpSpec.yarnItem.linearDensityDen, Number(lengthM));
   const linesOk = (ls: YarnLineDraft[], needReason: boolean) => ls.every((l) => l.warehouseId && Number(l.qtyKg) > 0 && (!needReason || l.reasonCode));
-  const ok = Number(lengthM) > 0 && (!inHouse || (machineId !== "" && issues.length > 0 && linesOk(issues, false) && linesOk(returns, true) && lotsOk(issues)));
+  const countOk = Number.isInteger(Number(count)) && Number(count) >= 1 && Number(count) <= 24;
+  const ok = countOk && Number(lengthM) > 0 && (!inHouse || (machineId !== "" && issues.length > 0 && linesOk(issues, false) && linesOk(returns, true) && lotsOk(issues)));
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -73,6 +77,7 @@ export function WindDialog({ target, isPending, onClose, onConfirm }: Props) {
           breakCount={breakCount}
           setBreakCount={setBreakCount}
         />
+        <SetFields count={count} setCount={setCount} prefix={prefix} setPrefix={setPrefix} issueTotalKg={issues.reduce((a, l) => a + Number(l.qtyKg || 0), 0)} nominalKg={nominal} />
         {inHouse && (
           <>
             <YarnLinesEditor title={lotRequired ? "İplik çıkışı — cağlığa yüklenen BRÜT kg (en az 1 satır, lot ZORUNLU)" : "İplik çıkışı — cağlığa yüklenen BRÜT kg (en az 1 satır)"} lines={issues} onChange={setIssues} warehouses={warehouses} multiWarehouse={multiWarehouse} lots={lots} lotRequired={lotRequired} />
@@ -93,6 +98,8 @@ export function WindDialog({ target, isPending, onClose, onConfirm }: Props) {
                 ...(inHouse ? { yarnIssues: toLines(issues, false), yarnReturns: toLines(returns, true) as WindPayload["yarnReturns"] } : {}),
                 breakCount: breakCount === "" ? null : Number(breakCount),
                 clientToken,
+                // Raşel takımı: adet 1 → alanlar GİDMEZ (bugünkü istek bayt bayt).
+                ...(Number(count) > 1 ? { count: Number(count), physicalBeamNoPrefix: prefix.trim() || null } : {}),
               })
             }
           >

@@ -9,10 +9,11 @@ import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Button, SegmentedButtons } from 'react-native-paper';
 import AppModal from '../../../components/AppModal';
 import NumpadInput from '../../../components/NumpadInput';
+import ModalTextInput from '../../../components/ModalTextInput';
 import PickerModal from '../../../components/PickerModal';
 import { colors, spacing, typography } from '../../../theme';
 import type { WarpKgSource } from '../../../services/warpBeam.service';
-import { KG_SOURCE_LABEL, ORIGIN_LABEL, theoreticalKg } from './beamPayload';
+import { KG_SOURCE_LABEL, ORIGIN_LABEL, setCount, theoreticalKg } from './beamPayload';
 import { Field } from './PlanModal';
 import YarnLinesEditor from './YarnLinesEditor';
 import type { DevereScreenState } from './useDevereScreen';
@@ -45,6 +46,15 @@ export default function WindModal({ state }: { state: DevereScreenState }) {
         ) : (
           <Text style={styles.hint}>{`Nominal ≈ ${nominal ?? '—'} kg`}</Text>
         )}
+        <Text style={styles.label}>Adet (raşel takımı — 1 = tek levent)</Text>
+        <NumpadInput value={f.count} onChangeText={(t) => set({ count: t })} allowDecimal={false} numpadMaxLength={2} numpadLabel="Adet" placeholder="1" style={styles.input} />
+        {(setCount(f) ?? 1) > 1 ? (
+          <>
+            <Text style={styles.hint}>{`${setCount(f)} levent birlikte doğar; iplik satırları TOPLAMDIR, levent başına pay ÷ ${setCount(f)}.`}</Text>
+            <Text style={styles.label}>Gövde no öneki (isteğe bağlı, ör. R7 → R7-1 …)</Text>
+            <ModalTextInput value={f.physicalBeamNoPrefix} onChangeText={(t) => set({ physicalBeamNoPrefix: t })} maxLength={28} placeholder="—" style={styles.input} dense />
+          </>
+        ) : null}
         <Text style={styles.label}>Kg kaynağı</Text>
         <View>
           <SegmentedButtons value={f.kgSource} onValueChange={(v) => set({ kgSource: v as WarpKgSource })} buttons={(['WEIGHED', 'THEORETICAL'] as WarpKgSource[]).map((k) => ({ value: k, label: KG_SOURCE_LABEL[k] }))} />

@@ -1611,6 +1611,9 @@ model WarpBeam {
   /// `warp_beams_machine_position_uq` (bir yuvada tek levent). Olayla AYNI tx'te yazılır (§9.6).
   currentMachineId String? @db.Uuid
   currentPosition  Int?    @db.SmallInt
+  /// RAŞEL TAKIMI (#23): aynı sarımda "N adet" ile birlikte doğan leventler AYNI anahtarı taşır (kardeş bağı
+  /// AÇIK kolon; `beamRole` Faz 5 kataloğuna saklı). Tek levent → NULL. Replay ve "takım" görünümü buradan.
+  setKey         String?        @db.Uuid
   notes          String?        @db.VarChar(500)
 
   /// KÖKEN ÜÇLÜSÜ — taraf kolonunun TİPİ kökene bağlı, tek kapı `resolveOriginParty` (CHECK ikinci hat):
@@ -1640,6 +1643,7 @@ model WarpBeam {
   @@index([subcontractorId])
   @@index([supplierId])
   @@index([currentMachineId])
+  @@index([setKey])
   @@map("warp_beams")
 }
 

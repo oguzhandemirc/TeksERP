@@ -66,6 +66,7 @@ export const WARP_BEAM_SELECT = {
   // Faz 3: "şu an nerede" — yalnız MOUNTED'da dolu.
   currentMachineId: true,
   currentPosition: true,
+  setKey: true,
   currentMachine: { select: { id: true, code: true, name: true } },
   // Listede "gerçek metre / kg" WOUND satırından okunur (bir levent bir kez doğar — partial unique).
   events: { where: { kind: "WOUND" }, select: WARP_BEAM_EVENT_SELECT, take: 1 },
