@@ -8930,3 +8930,15 @@ claim'inden `reasonCode: null` düştü → §4c/§4d/§5a ❌ (ikinci sınıfla
 **Sınır:** `tezgah.stopEventMinSeconds` (mikro-duruş eşiği) Faz 2 kovasının; elle giriş eşik
 uygulamaz. `mobile:tezgah-durus` tablet izni tablet dilimiyle.
 
+
+## 2026-09-14 — KK1 DOKUMA BAĞI İNDİ: "Bu top dokuma mı → hangi indirmeden?" (açık liste seçimi, bayrak kapalıyken sıfır fark) [ÇEKİRDEK]
+
+**Ne indi (0c, §3.9 D + hüküm (a)):** `InitialEntryRequest.doffEventId` mobil tipe (backend şeması strict değil —
+tipte olmasaydı sessizce düşerdi) · `screens/Modules/KK1/doffLink.ts` saf kural (+ test) · `DoffLinkPicker`
+(iki soru; `GET /machine-doffs?unlinked=true` makine VERİLMEDEN — masa KK1 her tezgahın bağlanmamış indirmesini
+görür; tezgah başı eşleşmesini backend denetler) · KK1Screen'e dört dokunuş (state · doğrulama · payload ·
+başarıda seçim sıfırlama + bağsız liste tazeleme) · backend `GET /machine-doffs` guard'ına `mobile:kk1`.
+Bayrak kapalıyken payload'a alan HİÇ girmez (`doffLink.test` ölçer); yarı mamul modunda sorular gizli.
+**Bekçi:** `doffLink.test` (5) · `test_mobile_screen_permissions` 6/0 (KK1 → GET guard) · mobil tsc/lint tavanı temiz.
+Rozet/süzgeç önceki dilimde (`kk1EntrySources`). Sürüm notu: tablet ("KK1'de dokuma sorusu — yalnız dokuma
+modülü açık kurulumda") + backend (liste ucu KK1 iznini kabul eder); referans fabrikada etki 0.

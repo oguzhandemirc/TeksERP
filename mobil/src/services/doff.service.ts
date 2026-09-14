@@ -74,6 +74,12 @@ export const doffService = {
   listToday: (machineId: string): Promise<LoomListResponse<DoffListRow>> =>
     apiClient.get<LoomListResponse<DoffListRow>>('/machine-doffs', { params: { machineId } }).then((r) => r.data),
 
+  /** Bağlanmamış indirmeler (hiç top doğurmamış, geri alınmamış; son 3 gün) — KK1'in
+   *  "hangi indirmeden?" listesi. Makine VERİLMEZ: masa KK1 her tezgahı görür (hüküm (a);
+   *  makine eşleşmesini backend yalnız tezgah başı KK1'de denetler). */
+  listUnlinked: (): Promise<LoomListResponse<DoffListRow>> =>
+    apiClient.get<LoomListResponse<DoffListRow>>('/machine-doffs', { params: { unlinked: 'true' } }).then((r) => r.data),
+
   /** Kaydet: 201 yeni · 201 replay (aynı token → özgün kayıt, `message` "zaten"). */
   open: (body: OpenDoffRequest): Promise<ApiResponse<DoffEvent>> =>
     apiClient.post<ApiResponse<DoffEvent>>('/machine-doffs', body).then((r) => r.data),

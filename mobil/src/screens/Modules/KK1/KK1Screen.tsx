@@ -67,7 +67,10 @@ import {
   useKk1OnlineOnlyEnabled,
   useKk1HistoryAllEntriesEnabled,
   useKk1LabelScanVerifyEnabled,
+  useDokumaEnabled,
 } from '../../../hooks/useFeatureFlags';
+import DoffLinkPicker, { UNLINKED_DOFFS_KEY } from './DoffLinkPicker';
+import { EMPTY_DOFF_LINK, doffLinkPayload, isDoffLinkVisible, validateDoffLink, type DoffLinkState } from './doffLink';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { NumpadHost, useOptionalNumpadContext } from '../../../components/NumpadProvider';
 import RefreshButton from '../../../components/RefreshButton';
@@ -421,6 +424,10 @@ export default function KK1Screen() {
    */
   const [semiMode, setSemiMode] = useState(false);
   const canSemiFinished = has('mobile:kk1-yari-mamul');
+  // DOKUMA BAĞI (2026-09-14): bayrak açıkken iki soru; kapalıyken hiçbiri çizilmez,
+  // payload bugünküyle birebir (`doffLink.ts` saf kural). Mod seçili kalır, seçim sıfırlanır.
+  const dokumaEnabled = useDokumaEnabled();
+  const [doffLink, setDoffLink] = useState<DoffLinkState>(EMPTY_DOFF_LINK);
   /**
    * EN alanı bu modda açık mı? İKİ REJİM AYRI:
    *   · HAM giriş  → `kk1.rawWidthEnabled` bayrağı (varsayılan KAPALI;
@@ -954,6 +961,9 @@ export default function KK1Screen() {
         setAttempt((s) => onAttemptSucceeded(s, token));
       }
       failedVarsRef.current = null;
+      // Bağlanan indirme tüketildi: seçim SIFIRLANIR (mod kalır), bağsız liste tazelenir.
+      setDoffLink((l) => ({ ...l, doffEventId: null }));
+      qc.invalidateQueries({ queryKey: UNLINKED_DOFFS_KEY });
       // YEŞİL BURADA (B4): yalnız operatörün ŞU AN beklediği deneme onaylandıysa.
       // Dakikalar önce kuyruğa girmiş bir kayıt şimdi flush olduysa operatör 5 top
       // ileridedir — o an "Kaydedildi ✓" basmak hangi topun onaylandığı konusunda
@@ -1348,6 +1358,11 @@ export default function KK1Screen() {
       Toast.show({ type: 'error', text1: 'Yarı mamulde renk zorunlu' });
       return;
     }
+    const doffCheck = validateDoffLink(doffLink, dokumaEnabled, semiMode);
+    if (!doffCheck.ok) {
+      Toast.show({ type: 'error', text1: doffCheck.message });
+      return;
+    }
 
     // Metraj (+ağırlık) kaynağı: manuel modda elle, otomatik modda makineden
     // ("Kaydet"e basınca paralel okunur).
@@ -1421,6 +1436,8 @@ export default function KK1Screen() {
       // statü sezgisini bypass eder — bayraksız gönderilse renkli top doğrudan
       // BİTMİŞ DEPO'ya düşerdi.
       ...(semiMode ? { colorId: form.colorId, semiFinished: true } : {}),
+      // Dokuma bağı: bayrak kapalıyken BOŞ (bugünkü payload); dokuma ise seçim ya da null.
+      ...doffLinkPayload(doffLink, dokumaEnabled, semiMode),
       clientToken: identity.clientToken,
       clientEnteredAt: identity.clientEnteredAt,
     });
@@ -1980,6 +1997,12 @@ export default function KK1Screen() {
                   </View>
                 </View>
               ))}
+
+            {/* DOKUMA BAĞI — yalnız dokuma modülü açıkken ve yarı mamul DIŞINDA
+                (§3.5 "çıkarılmaz, sorulur"; §3.7/12 kapalıyken sıfır fark). */}
+            {isDoffLinkVisible(dokumaEnabled, semiMode) && (
+              <DoffLinkPicker value={doffLink} onChange={setDoffLink} onBeforeOpen={blurAll} />
+            )}
 
             {/* EN — iki rejim AYRI bayrakla yönetilir. `kk1.rawWidthEnabled`
                 HAM giriş içindir ve varsayılan KAPALI ("ham kumaşın eni

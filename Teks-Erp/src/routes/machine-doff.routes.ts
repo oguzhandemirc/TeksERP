@@ -30,6 +30,8 @@ router.use(verifyToken, requireDokumaEnabled);
 const MOBILE_DOKUMA = ["mobile:dokuma"] as const;
 /** Geri alma ayrı yetenek izni (`mobile:tambur-duzelt` · `shipping:undo-dispatch` emsali). */
 const MOBILE_DOKUMA_GERI_AL = ["mobile:dokuma-geri-al"] as const;
+/** KK1 operatörü "hangi indirmeden?" listesini (`unlinked=true`) okur — bağ KK1'de açık liste seçimidir (hüküm (a)). */
+const MOBILE_KK1 = ["mobile:kk1"] as const;
 
 const listSchema = z
   .object({
@@ -74,7 +76,7 @@ const listSchema = z
  *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
  *       404: { description: Makine yok }
  */
-router.get("/", requireAnyPermission("loom:run", "loom:doff", ...MOBILE_DOKUMA), async (req, res, next) => {
+router.get("/", requireAnyPermission("loom:run", "loom:doff", ...MOBILE_DOKUMA, ...MOBILE_KK1), async (req, res, next) => {
   try {
     const q = listSchema.parse(req.query);
     if (q.unlinked === "true") {

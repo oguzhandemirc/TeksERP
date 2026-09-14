@@ -155,6 +155,13 @@ export interface InitialEntryRequest {
    * (400 YOK) — yani APK, backend'den önce de sahaya çıkabilir.
    */
   clientEnteredAt?: string;
+  /**
+   * DOKUMA BAĞI (2026-09-14, §3.9 D): verilirse top `entrySource=WEAVING` ile doğar ve
+   * bağ KK1 tx'inde doff satırı kilitlenerek kurulur. Yarı mamulle BİRLİKTE verilemez
+   * (backend 400). ⚠️ Backend şeması strict DEĞİL — bu alan tipte olmasaydı gönderilse
+   * de SESSİZCE düşerdi; iki uçta da sözleşmede (`doffLink.ts` kuralı).
+   */
+  doffEventId?: string | null;
 }
 
 export const rollService = {
