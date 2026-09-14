@@ -2,10 +2,12 @@
 // DURUŞ PARETO — SEBEP × SÜRE SINIFI; MINOR sebep DEĞİL (ayrı kutu); sınıflandırılmamış
 // ve atanmamış (levent ekseni, listeyle KESİŞİR) ayrı kutular
 // =============================================================================
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ChartCard, DetailTable, MetricCard, ReportPageLayout, SimpleBarChart } from "../_components";
+import { ChartCard, DetailTable, MetricCard, ReportExportBar, ReportPageLayout, SimpleBarChart } from "../_components";
 import { fmtInt } from "../_components/formatters";
+import { buildParetoExport } from "./dokumaExport";
 import { HorizonNote, SourceBreakdownStrip, fmtSec, useFactoryRange } from "./DokumaShared";
 import { dokumaReportsApi, type LossClass, type ParetoReasonRow } from "./service";
 
@@ -32,12 +34,15 @@ export function DurusParetoPage() {
   const rapor = data?.data;
   const chartRows = (rapor?.sebepler ?? []).slice(0, 10);
   const chartData = chartRows.map((r) => ({ name: r.reasonLabel ?? r.reasonCode, dk: Math.round(r.stopSec / 60) }));
+  const periodLabel = `${range.from} – ${range.to} (fabrika günü)`;
+  const spec = useMemo(() => () => (rapor ? buildParetoExport({ rapor, periodLabel }) : null), [rapor, periodLabel]);
 
   return (
     <ReportPageLayout
       title="Duruş Pareto"
       description="Sebep sıralama ekseni, süre sınıfı gruplama eksenidir. Mikro duruşlar bir sebep değil bir süre sınıfıdır ve ayrı sayılır."
       defaultDays={7}
+      actions={<ReportExportBar disabled={!rapor} buildSpec={spec} />}
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Toplam duruş" value={rapor ? fmtSec(rapor.toplam.stopSec) : null} hint={rapor ? `${fmtInt(rapor.toplam.stopCount)} olay = sebepler + mikro + sınıflandırılmamış` : undefined} isLoading={isLoading} />

@@ -27,6 +27,11 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
+          "metin": "Dokuma raporlarına “Excel”, “PDF” ve “Yazdır” düğmeleri geldi (Randıman · Duruş Pareto · Vardiya Karnesi · Karne Listesi ve Mühür) — diğer raporlardaki şeridin aynısı, yeni bir çıktı düzeni yok. Çıktı ekranın aynasıdır: her satırın kaynağı (ölçülen / elle / simüle / boş tezgah) ve payda yoksa yazılan “ölçülemedi” beyanı kâğıda ve Excel'e de geçer; ölçülemeyen oran sıfıra çevrilmez, yoksa sıfır randımanla aynı görünürdü. Başlıkta rapor adı ve tarih penceresi yazar (vardiya karnesinde fabrika günü), dosya adı da bundan kurulur; kaynak kırılımı, ölçüm ufku ve mühür sayıları not olarak tablonun altına düşer. Duruş Pareto'da ayrı kovalar (mikro · sınıflandırılmamış · yuvası atanmamış) ikinci bir sayfada, vardiya karnesinde her vardiya kendi sayfasında çıkar. “PDF” düğmesi yalnız masaüstü uygulamasında görünür. Dokuma modülü kapalı kurulumda hiçbir şey değişmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
           "metin": "Raporlar'a “Dokuma” geldi: tezgah randımanı (kullanılabilirlik · performans · etkinlik AYRI sütunlarda; hedef devir bilinmiyorsa “ölçülemedi” yazar, sıfır yazmaz), duruş Pareto'su (sebep × süre sınıfı; mikro duruşlar, sınıflandırılmamış ve levent yuvası atanmamış duruşlar ayrı kutularda) ve vardiya karnesi (her satır kaynağını taşır: ölçülen / elle / simüle / boş tezgah). Karneler vardiya bitiminden bir saat sonra kendiliğinden oluşur; vardiya amiri terimleri düzeltip mühürler, mühür açma ayrı bir yetkidir ve gerekçe ister. Yalnız dokuma modülü açık kurulumda görünür — bu fabrikada hiçbir şey değişmedi."
         },
         {

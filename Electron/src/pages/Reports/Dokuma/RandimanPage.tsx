@@ -1,10 +1,12 @@
 // =============================================================================
 // RANDIMAN — tezgah × vardiya; A · P · E AYRI sütun, ÇARPILMAZ; null → "ölçülemedi"
 // =============================================================================
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { DetailTable, MetricCard, ReportPageLayout } from "../_components";
+import { DetailTable, MetricCard, ReportExportBar, ReportPageLayout } from "../_components";
 import { fmtInt } from "../_components/formatters";
+import { buildRandimanExport } from "./dokumaExport";
 import { HorizonNote, SealBadge, SourceBreakdownStrip, fmtSec, useFactoryRange } from "./DokumaShared";
 import { SOURCE_LABELS, formatPct } from "./dokuma-regime";
 import { dokumaReportsApi, type EfficiencyRow } from "./service";
@@ -35,12 +37,17 @@ export function RandimanPage() {
   const rapor = data?.data;
   const totals = rapor?.toplam;
   const excluded = totals ? `dışlanan A ${totals.olculemedi.A} · P ${totals.olculemedi.P} · E ${totals.olculemedi.E}` : undefined;
+  // Çıktı başlığı SÜZGECİ söyler (fabrika günü penceresi) — dosya tek başına
+  // paylaşıldığında hangi aralığın rakamı olduğu kâğıttan okunsun.
+  const periodLabel = `${range.from} – ${range.to} (fabrika günü)`;
+  const spec = useMemo(() => () => (rapor ? buildRandimanExport({ rapor, periodLabel }) : null), [rapor, periodLabel]);
 
   return (
     <ReportPageLayout
       title="Randıman"
       description="Kullanılabilirlik, performans ve etkinlik AYRI sunulur, çarpılmaz. Payda yoksa oran 'ölçülemedi'dir — sıfır değil."
       defaultDays={7}
+      actions={<ReportExportBar disabled={!rapor} buildSpec={spec} />}
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Kullanılabilirlik (Σ)" value={totals ? formatPct(totals.availabilityPct) : null} hint="Σ çalıştı / Σ planlı" isLoading={isLoading} />

@@ -2,14 +2,15 @@
 // VARDİYA KARNESİ — fabrika gününün vardiyaları; kaynak kırılımı toplamda ERİMEZ
 // ("K'sı ölçüldü, L'si elle, M'si ölçülemedi")
 // =============================================================================
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DetailTable, ReportPageLayout } from "../_components";
+import { DetailTable, ReportExportBar, ReportPageLayout } from "../_components";
 import { fmtInt } from "../_components/formatters";
+import { buildVardiyaKarnesiExport } from "./dokumaExport";
 import { HorizonNote, SealBadge, SourceBreakdownStrip, fmtSec } from "./DokumaShared";
 import { SOURCE_LABELS, formatPct } from "./dokuma-regime";
 import { dokumaReportsApi, toFactoryYmd, type ShiftMachineRow, type ShiftRow } from "./service";
@@ -57,6 +58,8 @@ export function VardiyaKarnesiPage() {
     staleTime: 30_000,
   });
   const rapor = data?.data;
+  // Süzgeç TEK GÜNDÜR (tarih aralığı değil) — başlık da onu söyler.
+  const spec = useMemo(() => () => (rapor ? buildVardiyaKarnesiExport({ rapor, day }) : null), [rapor, day]);
   const filters = (
     <div className="flex items-end gap-3 border-b px-4 py-3">
       <div className="space-y-1">
@@ -66,7 +69,7 @@ export function VardiyaKarnesiPage() {
     </div>
   );
   return (
-    <ReportPageLayout title="Vardiya Karnesi" description="Vardiya başına üretim ve duruş; her satır kaynağını taşır, toplam tek yüzdeye çökertilmez." filters={filters}>
+    <ReportPageLayout title="Vardiya Karnesi" description="Vardiya başına üretim ve duruş; her satır kaynağını taşır, toplam tek yüzdeye çökertilmez." filters={filters} actions={<ReportExportBar disabled={!rapor || rapor.vardiyalar.length === 0} buildSpec={spec} />}>
       {isLoading && <p className="text-sm text-muted-foreground">Yükleniyor…</p>}
       {!isLoading && rapor && rapor.vardiyalar.length === 0 && <p className="text-sm text-muted-foreground">Bu günde vardiya penceresi yok (takvim job'u 30 gün ileri yazar; dokuma modülü açık mı?).</p>}
       {rapor?.vardiyalar.map((v) => <ShiftCard key={v.shiftInstanceId} v={v} />)}

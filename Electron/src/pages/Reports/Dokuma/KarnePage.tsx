@@ -4,8 +4,9 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DetailTable, ReportPageLayout } from "../_components";
+import { DetailTable, ReportExportBar, ReportPageLayout } from "../_components";
 import { WarningsBlock, useFactoryRange } from "./DokumaShared";
+import { buildKarneExport } from "./dokumaExport";
 import { KarneDialogs } from "./KarneDialogHost";
 import { buildKarneColumns } from "./KarneTable";
 import { dokumaReportsApi, type SealLedgerRow, type ShiftStatRow } from "./service";
@@ -62,12 +63,19 @@ export function KarnePage() {
     [],
   );
   const allWarnings = useMemo(() => [...new Set(rows.flatMap((r) => r.warnings))].slice(0, 8), [rows]);
+  const periodLabel = `${range.from} – ${range.to} (fabrika günü)`;
+  const listMeta = data?.meta;
+  const spec = useMemo(
+    () => () => (rows.length ? buildKarneExport({ rows, periodLabel, meta: listMeta }) : null),
+    [rows, periodLabel, listMeta],
+  );
 
   return (
     <ReportPageLayout
       title="Karne Listesi ve Mühür"
       description="Mühürsüz satır anlık hesaplanır; mühürlü satır resmî rakamdır. Vardiya bitiminden 60 dk sonra kapanış işi karneyi yazar; amir düzeltip mühürler."
       defaultDays={7}
+      actions={<ReportExportBar disabled={rows.length === 0} buildSpec={spec} />}
     >
       <WarningsBlock warnings={allWarnings} />
       <DetailTable<ShiftStatRow> title={`Vardiya × tezgah${data ? ` (${data.meta.total}; anlık ${data.meta.live}, mühürlü ${data.meta.sealed})` : ""}`} data={rows} columns={columns} isLoading={isLoading} />

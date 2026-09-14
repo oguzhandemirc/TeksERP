@@ -64,6 +64,7 @@
 
 ### Değişmezler
 
+- **[ÇEKİRDEK]** YAPRAK rapor sayfası ÇIKTI ŞERİDİNİ TAŞIR (`ReportExportBar`: Excel · PDF · Yazdır) — çıktısız rapor SESSİZ eksiktir: ekran çalışır, rakam doğrudur, kâğıda geçmez ve kimse hata görmez (ölçüldü 2026-09-15: dokuma raporlarının DÖRDÜ birden çıktısız doğmuştu). Çıktı EKRANIN AYNASIDIR: kaynak kolonu ("ölçüldü mü elle mi") ve "ölçülemedi" beyanı kâğıda da geçer, sayıya ÇÖKERTİLMEZ — çökertilseydi ölçülemeyen oran sıfır randımanla aynı görünürdü. · bekçi: `Electron reportExportCoverage.test.ts (yaprak route → dosya → "<ReportExportBar"; negatif sonda: bir yapraktan kaldırınca kırmızı) + dokumaExport.test.ts (satır sayısı girdiyle birebir + iki değişmez)` <sub>(arşiv:2026-09-15 R3)</sub>
 - **[ÇEKİRDEK]** Rapor dışa aktarımı TEK SPEC → ÜÇ ÇIKTI: Excel·PDF·Yazdır aynı ReportExportSpec'ten türer; ayrı yazmak 'aynı başlık altında farklı rakam' demektir. Rapor PDF'i document-render/ dünyasına GİRMEZ (orası donmuş/sürümlü resmi belgelerin alanı). · bekçi: `Electron reportExport.test.ts (kolon kümesi eşitliğini mekanik doğrular)` <sub>(CLAUDE.md:69)</sub>
 
 ## Geçersiz kılınan kurallar — bunlara UYMA
