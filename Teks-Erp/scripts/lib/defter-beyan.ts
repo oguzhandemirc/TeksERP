@@ -339,7 +339,9 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   // sil-yaz (replace), üçü ölü topun satırını temizleme (iptal/geri alma/retire).
   { model: "RollProperty", sinif: "PIVOT_TICARI",
     gerekce: "topun özelliği rota kapsamasını belirleyen GERÇEK kısıt, ayar değil (2026-09-11 kararı)",
-    yazan: ["src/services/helpers/station-capability-transfer.helper.ts", "src/services/inventory.service.ts",
+    // 2026-09-14 Faz 1+2a: istasyon yeteneği yazıcısı `station-capability-transfer.helper`ten
+    // `property-revoke.helper` (`setRollPropertyValueTx`) içine taşındı — yazan listesi onu izler.
+    yazan: ["src/services/helpers/property-revoke.helper.ts", "src/services/inventory.service.ts",
       "src/services/subcontractor.service.ts", "src/services/workorder.service.ts", "src/services/tambur.service.ts",
       "src/services/tambur-undo.service.ts"],
     silen: ["src/services/inventory.service.ts", "src/services/workorder.service.ts"],
