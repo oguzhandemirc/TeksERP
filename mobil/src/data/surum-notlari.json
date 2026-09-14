@@ -278,6 +278,16 @@
           "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Panel ana ekranındaki KK1 karnesi (“bugün gelen ham top” sayacı) artık yarı mamulden ve dokuma tezgahından gelen girişleri de sayıyor; tabletteki KK1 listesiyle aynı kapsamı okur. Önceden yalnız mal kabul ve elle giriş sayılıyordu. Yarı mamul ya da tezgah girişi yapan işletmede bu sayı yükselebilir; yalnız mal kabulle çalışan işletmede değişmez."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "yeni",
+          "metin": "Dokuma modülü açık kurulumlarda tablete “Tezgah” ekranı geldi: tezgah istasyonunda oturum açan operatör topu indirir (metre sayaçtan, elle ya da simülasyonla — kaynağı kayda yazılır), günün indirmelerini görür ve henüz topa bağlanmamış bir indirmeyi geri alabilir. Ekran ağ olmadan kayıt kuyruklamaz; kayıt gitmezse anında söyler. Dokuma modülü kapalı kurulumda kart görünmez ve hiçbir şey değişmez."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "yeni",
+          "metin": "Dokuma modülü açık kurulumlarda KK1 girişi iki soru soruyor: “Bu top dokuma mı?” ve evetse “hangi indirmeden?” — bağlanmamış indirmeler açık listeden seçilir; seçilmezse top indirmesiz kaydedilir, yarı mamul girişinde sorular çıkmaz. Dokuma modülü kapalı kurulumda sorular görünmez ve KK1 kaydı eskisiyle birebir aynıdır."
         }
       ]
     },
