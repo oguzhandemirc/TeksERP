@@ -9122,3 +9122,26 @@ Karar cümlesi GEÇERSİZ damgalandı; sürüm notu ("GENEL adlı tip oluşturul
 **Bedel (d9, CI):** taze DB'de migration katalog satırı doğurur, `prisma/seed.ts` `createMany` aynı kodu yazınca
 P2002 — seed `upsert`e çevrildi. Ders: migration'ın kendi içinde idempotent olması komşusuyla (seed) çakışmayacağını
 göstermez; canlı-dump provası boş-DB senaryosunu ölçmez, ikisi ayrı ölçülür.
+## 2026-09-14 — LEVENT FAZ 1b İNDİ (devere): plan → sar (WOUND + brüt iplik + dip iadesi) → sarım iptali (net ters), panel Leventler ekranı, on iki ayna [ÇEKİRDEK]
+
+**Hüküm (1e, 0c'nin hüküm metnine):** en küçük anlamlı dilim = `WarpBeam` + `WarpBeamEvent` (WOUND/WOUND_CANCEL) +
+köken üçlüsü (XOR tek kapı + CHECK ikinci hat) + iplik çifti (WARP_ISSUE/_REVERSAL · WARP_RETURN/_REVERSAL, sebep zorunlu)
++ panel ekranı ve izinleri AYNI sürümde; Faz 3 kolonları AÇILMADI; `Machine.warpBeamSlots` 6e'nin (F4); 1a′ RED —
+denye bağımlılığı `resolveDenier` helper'ıyla kalktı. "Beş kalem" kuralı Faz 3'ün bağlama defterine aittir; 1b kendi
+beşlisiyle tam defter (kural satırı DEVERE-LEVENT §Faz 1a/1b'ye yazıldı). #13 bloklamadı; #23 = N levent N WOUND.
+**Üç commit, tek sürüm:** c1 enum değerleri (5 ADD VALUE dosyası, her biri TEK ifade — 55P04; 12 ayna + ENUM_LABELS +
+işaret + eksi-bakiye kapısı + yarn.routes süzgeci) · c2 tablo/CHECK/servis/önizleme/panel/izin/dört kapı/bekçiler ·
+c3 belge. Migration damgası 1e'nin bandı: 120000–120400 (c1) · 125000 (c2); sonda DB'de 121000 → 125000 yeniden
+adlandırıldı (`_prisma_migrations` satırı, içerik aynı).
+**Kararlar:** ⓐ `WarpBeamStatus` yalnız PLANNED/READY/CANCELLED — Faz 3 değerleri kendi ADD VALUE dosyalarıyla doğar.
+ⓑ `beamNo` LV+GGAAYY+NNNN 8029 kod-kapsam kilidiyle (yeni advisory uzayı yok). ⓒ Eksi-bakiye kapısı kümesi ölçüt
+"bakiyeyi düşürüyor mu": OUT · WARP_ISSUE · WARP_RETURN_REVERSAL (§4.7); ilk yazımda yalnız WARP_ISSUE kapılanmıştı,
+belge düzeltti. ⓓ Mutabakat işareti tek kaynak (`yarnInboundKinds`): `test_consistency §27` ve
+`purchase-order.service` elle `IN/ADJUST_IN` listesini taşıyordu — devere türlerinde WARP_ISSUE_REVERSAL/WARP_RETURN'ü
+EKSİ sayacaktı (§4.9-1/2), düzeltildi. ⓔ `WARP_RETURN` değeri iki enum'da (YarnMovementKind · ReasonPresetKind) —
+ortak Türkçe doğru, SHARED_ENUM_VALUES; `IN_HOUSE` WeavingExecutionKind ile paylaşılıyor ve ortak Türkçe YETMEZ →
+`WARP_BEAM.originKind` override; `WEIGHED` SackWeighingKind ile ortak (ikisi de "Tartıldı"). ⓕ Sarım iptali
+önizlemeli ve ayrı yetenek (`warpbeam:cancel`); taslak silme ④ sınıfı. ⓖ Devere makinesi = `Station.producesWarpBeam`
+istasyonunun aktif makinesi (`GET /warp-beams/devere-machines`). ⓗ Fason/hazır alım kökeninde iplik satırı yazılırsa 400.
+**Ölçülemedi / borç:** tablet devere ekranı (ayrı dilim, `WARP_RETURN` zemini bilerek boş) · raşel takım sarımı formu
+("N adet") · 1a′ numara sistemi (ayrı dilim) · fason sevk kalemi (levent) ayrı dilim.
