@@ -9329,3 +9329,21 @@ M2 (Dilim 3) aynı kümeyi kullanacak. 1e aksini hükmederse tek satır (`listLo
 **Ölçüm dersi:** §1 sondası ilk yazımda YANLIŞ pencereyi ölçtü (23:50 duruşunu SONRAKİ vardiyaya karşı — 28800 çıktı,
 helper doğruydu). Fikstürün kendi cümlesi ("ilk vardiyaya 600 sn") pencereyi de tarif eder; kırmızı görünce önce
 sondanın kurgusu sorulur (ölçüm disiplini: "sondanın kendisi geçerli mi").
+## 2026-09-14 — KARNE MÜHÜR ÇEVRİMİ indi (dokuma raporları Dilim 3): M2–M6, `loom:shift-unseal`; özet §5 "OFF makineye karne yazılmaz" GEÇERSİZ [ÇEKİRDEK]
+
+**Hüküm (1e):** tezgah kümesi M1 = M2 = aktif makine ∧ istasyonu WEAVING; `monitoringState` süzmez, kopyalanır —
+özet §5'in "Faz 1b'de OFF makineye karne YAZILMAZ / MachineSpec yoksa M2 atlar" cümlesi Faz 1b ile çelişiyordu
+(elle giriş yapılan tezgahın künyesi yok ya da OFF), GEÇERSİZ damgalandı.
+**İnen (01):** `machine-shift-seal.service.ts` (M2 `materializeShiftStatTx` · M3 `correctShiftTerms` · M4 `sealShiftStat`
+· M5 `unsealShiftStat` · `listShiftSeals`) · `jobs/machine-shift-close.job.ts` (bayrak kapalı → disabled; 60 dk pay,
+3 gün geriye; her çift kendi tx'inde) · M6 `assertStopShiftWritableTx` sealState okur → 409 `SHIFT_SEALED` (çağıranlar
+değişmedi) · dört uç (`PUT /:id/terms` · `POST /:id/seal` · `POST /:id/unseal` · `GET /:id/seals`) · `loom:shift-unseal`
+(katalog + WEB_PRODUCTION_SUPERVISOR + SCREENLESS gerekçeli) · audit etiketleri `MACHINE_SHIFT_STAT`/`MACHINE_SHIFT_SEAL`
+· defter-beyan Seal `yazan`/`tersYazan` · `test_machine_shift_seal` 36/0 (üç negatif sonda kırmızı görüldü).
+**Kararlar:** ① M2 OPEN ∧ `source ≠ SUPERVISOR` satırı yeniden hesaplar — amirin elle düzelttiği terimler job tarafından
+EZİLMEZ (özet "varsa ve OPEN ise yeniden hesaplar" cümlesi bu daralmayla uygulanır); mühürlüye dokunmaz, mühürlemez.
+② Mühür STORED terimleri mühürler (M3 düzeltmesi dahil); kırılım duruş defterinden yeniden türetilir (kırılım elle
+düzenlenmez). ③ M3 kapasitesi TEK hedeften (`targetPicksPerMin × APT/POT`): koşum kesişimi yeniden kurulmaz, hedef yoksa
+0 → P ölçülemez. ④ RESEAL = ikinci ve sonraki mühürler (gen ≥ 2); UNSEAL kuşak sayacını artırmaz, `sealedAt` kalır.
+⑤ Advisory uzay AÇILMADI: claim + unique yeter (`MachineRun` emsali); yarış §6 ile ölçüldü (1×200 + 1×409).
+**Dilim 4 (sıradaki):** üç rapor ucu + `DOKUMA_UFKU` + `test_dokuma_rapor_cikti` + §4 mandalının kapanışı.

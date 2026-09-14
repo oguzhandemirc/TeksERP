@@ -96,6 +96,9 @@ export const PERMISSION_CATALOG = [
   // (sınıfla/yeniden sınıfla) randımanın kovasını belirler — ayrı kod (tasarım §6.4).
   { code: "loom:manual-entry", module: "PRODUCTION", category: "web", description: "Tezgah duruşu elle girişi — açma/kapatma/geri alma (vardiya amiri)" },
   { code: "loom:classify", module: "PRODUCTION", category: "web", description: "Tezgah duruşuna sebep atama / yeniden sınıflandırma (kayıp sınıfı kararı)" },
+  // Vardiya karnesi (dokuma raporları Dilim 3, 2026-09-14): mühür `loom:manual-entry` (günlük kapanış işi);
+  // MÜHÜR AÇMA geçmiş rakamı değiştirir — ayrı kod (`roll:manual-adjust` ailesi; SoD üçlüsüne GİRMEZ).
+  { code: "loom:shift-unseal", module: "PRODUCTION", category: "web", description: "Vardiya karnesi mührünü açma — mühürlü (resmî) rakamı yeniden hesaba açar (gerekçe zorunlu)" },
   { code: "quality:read", module: "QUALITY", category: "web", description: "Kalite derecesi tanımlarını görüntüleme" },
   { code: "quality:write", module: "QUALITY", category: "web", description: "Kalite derecesi tanımlama/düzenleme" },
   { code: "property:read", module: "QUALITY", category: "web", description: "Özellik (renk/desen vb.) tanımlarını görüntüleme" },

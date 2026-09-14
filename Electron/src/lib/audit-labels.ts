@@ -127,6 +127,8 @@ export const TABLE_LABELS: Record<string, string> = {
   MACHINE_RUN: "Tezgah Koşumu",
   DOFF_EVENT: "Top İndirme",
   MACHINE_STOP_EVENT: "Tezgah Duruşu",
+  MACHINE_SHIFT_STAT: "Vardiya Karnesi",
+  MACHINE_SHIFT_SEAL: "Vardiya Karnesi Mührü",
   KURSUN_BYPASS_ASSIGNMENT: "Kurşun Dağıtım Ataması",
   PERIPHERAL_TEMPLATE_ROUTE: "Cihaz–Şablon Yönlendirmesi",
   // Boot uzlaştırması + panel işleri: tablo adı küçük harfle yazılmış

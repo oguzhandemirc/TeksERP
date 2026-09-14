@@ -428,6 +428,8 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // çağırır; `loom:*` web kodları panelsiz kalır — panel doff yüzeyi yok, kod API/entegrasyon için.
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
+  // Vardiya karnesi (Dilim 3, 2026-09-14): panel karne ekranı AYRI dilim; mühür açma o ekranla dört kapıya bağlanır.
+  { code: "loom:shift-unseal", reason: "Panel karne ekranı henüz yok (ayrı dilim); mühür açma ekranla birlikte dört kapıya girer — kod API için." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

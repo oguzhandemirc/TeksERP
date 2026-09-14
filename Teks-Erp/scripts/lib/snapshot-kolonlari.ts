@@ -409,16 +409,18 @@ WHERE s."reasonCode" IS NOT NULL AND s."lossClass" IS NULL`,
     yazan: [SVC + "machine-run.service.ts"],
     neden: "koşumun ham atkı sıklığı, açılışta donar; kapanış/geri alma dokunmaz",
   },
-  // ── Vardiya karnesi (dokuma raporları Dilim 1, 01, 2026-09-14) — `yazan: []` ÖLÇÜLMÜŞ:
-  //    yazma yüzeyi (kapanış job'u M2 · elle düzeltme M3 · mühür M4) Dilim 3'te doğar; o gün
-  //    §4b "yazan ≠ ölçülen" der ve dosya adıyla beyan ister. Dördü de DONMUŞ İLERİ değer:
+  // ── Vardiya karnesi (dokuma raporları, 01, 2026-09-14) — dördü de DONMUŞ İLERİ değer:
   //    kaynağı sonradan değişse bu satırın rakamı DEĞİŞMEZ (period-guard "resmî rakam" sınıfı).
+  //    Tek yazar `materializeShiftStatTx` (machine-shift-seal.service, Dilim 3). ⚠️ ÖLÇÜM SINIRI:
+  //    `factoryDay` açık alan olarak yazılır ve AST onu görür; öteki üçü `...termColumns(terms)`
+  //    SPREAD'iyle gider — §4b'nin taraması spread'i GÖRMEZ, bu yüzden `yazan: []` ölçülen kümeyle
+  //    eşittir ama "yazıcı yok" demek DEĞİLDİR. Spread'i gören bir tarayıcı gelirse üçü de aynı dosyayı alır.
   {
     model: "MachineShiftStat",
     alan: "factoryDay",
     sinif: "DONMUS_ILERI",
-    yazan: [],
-    neden: "`ShiftInstance.factoryDayKey`ten materyalizasyonda kopyalanır; rapor ekseni, tek yazar M2",
+    yazan: [SVC + "machine-shift-seal.service.ts"],
+    neden: "`ShiftInstance.factoryDayKey`ten materyalizasyonda kopyalanır; rapor ekseni, tek yazar M2 (`materializeShiftStatTx`)",
   },
   {
     model: "MachineShiftStat",

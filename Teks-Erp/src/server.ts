@@ -15,6 +15,7 @@ import { startPermissionCatalogReconciler } from './jobs/permission-catalog.job'
 import { startDefaultWarehouseReconciler } from './jobs/default-warehouse.job';
 import { startExchangeRateScheduler } from './jobs/exchange-rate.job';
 import { startShiftCalendarScheduler } from './jobs/shift-calendar.job';
+import { startShiftCloseScheduler } from './jobs/machine-shift-close.job';
 import { AuditService } from './services/audit.service';
 import { flushLatencyNow } from './services/latency-persist.service';
 import { assertBaseServiceGuards } from './services/base.service';
@@ -209,6 +210,8 @@ const server = app.listen(Number(PORT), HOST, () => {
     // Vardiya takvimi: `dokuma.enabled` KAPALIYKEN tam no-op — referans fabrikada
     // `shift_instances` satırı doğmaz (gerekçe jobs/shift-calendar.job.ts).
     startShiftCalendarScheduler();
+    // Kapanan vardiya × tezgah karnesi (M2) — aynı bayrak, aynı sıfır fark.
+    startShiftCloseScheduler();
 
     void AuditService.logEvent({
         category: "SYSTEM",

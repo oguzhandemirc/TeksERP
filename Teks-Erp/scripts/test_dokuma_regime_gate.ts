@@ -88,7 +88,7 @@ const KAPILI: ReadonlyArray<{ dosya: string; mount: string }> = [
 
 /** Dokuma-ÖZEL Prisma model erişimcileri ve servisleri — bunlara dokunan router kapılıdır. */
 const DOKUMA_MODELLERI = ["weavingOrder", "machineRun", "doffEvent", "machineStopEvent", "machineShiftStat"];
-const DOKUMA_SERVISLERI = ["weaving-order.service", "machine-run.service", "machine-doff.service", "machine-stop.service", "machine-shift-stat.service"];
+const DOKUMA_SERVISLERI = ["weaving-order.service", "machine-run.service", "machine-doff.service", "machine-stop.service", "machine-shift-stat.service", "machine-shift-seal.service"];
 
 /** Dokuma uçlarının mount adresleri — istemci kaynağında aranan metinler. */
 const DOKUMA_UC_METINLERI = ["/api/weaving-orders", "/api/machine-runs", "/api/machine-doffs", "/api/machine-stops", "/api/machine-shift-stats"];

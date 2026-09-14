@@ -182,7 +182,7 @@ Kapı sırası: `verifyToken → requireDokumaEnabled → izin`. Hepsi `report:p
 | `GET /reports/dokuma/vardiya-karnesi?factoryDay&shiftDefinitionId?` | vardiya satırları: üretim (`producedM`, `picksActual`), duruş toplamı, `source` kırılımı sayıları (`olculen · elle · simule · cikarim · olculemedi`) | ③; değişmez ① "tek yüzdeye çökertme yasak" |
 | `GET /machine-shift-stats/:id/seals` | mühür defteri (kuşaklar) | §2.11 mutabakat |
 
-Her cevap `meta: { ufuk: DOKUMA_UFKU, ufukOncesiSatir: N }` taşır — **`constants/dokuma-ufku.ts`** (`ledger-horizon.ts` emsali, AYRI sabit; `DEFTER_UFKU` OKUNMAZ). Gölge süzgeci: varsayılan `monitoringState = LIVE` (DONMUŞ kolon; Faz 1b'de OFF makineye karne YAZILMAZ — `MachineSpec` yoksa/OFF ise M2 atlar ve sayaç `/api/admin/health`e düşer).
+Her cevap `meta: { ufuk: DOKUMA_UFKU, ufukOncesiSatir: N }` taşır — **`constants/dokuma-ufku.ts`** (`ledger-horizon.ts` emsali, AYRI sabit; `DEFTER_UFKU` OKUNMAZ). ~~Gölge süzgeci: varsayılan `monitoringState = LIVE` (DONMUŞ kolon; Faz 1b'de OFF makineye karne YAZILMAZ — `MachineSpec` yoksa/OFF ise M2 atlar ve sayaç `/api/admin/health`e düşer).~~ **GEÇERSİZ → 2026-09-14 (1e hükmü, Dilim 3):** bu cümle Faz 1b ile çelişir — elle giriş yapılan tezgahın künyesi yok ya da OFF'tur. Tezgah kümesi M1 = M2 = **aktif makine ∧ istasyonu WEAVING**; `monitoringState` SÜZMEZ, karneye KOPYALANIR (rapor süzgeci opsiyonel); elle giriş yapılan tezgahın karnesi "ölçüldü mü elle mi" kaynağıyla (`source`) yazılır.
 
 ## 6 · Kapanış ölçütleri — MEKANİZMA adıyla
 

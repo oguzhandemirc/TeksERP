@@ -109,12 +109,10 @@ export async function resolveStopPreset(tx: Tx, code: string): Promise<{ code: s
 }
 
 /**
- * MÜHÜR KAPISI — tek yer; kapa · sınıfla · yeniden sınıfla · geri al hepsi buradan geçer.
- * Bugün: iptal edilmiş vardiya → 409 `SHIFT_CANCELLED`. Karne (`MachineShiftStat`, makine×vardiya,
- * 01'in Faz 1a dilimi) inince AYNI yer: `tx.machineShiftStat.findUnique({ machineId_shiftInstanceId })`
- * → satır yoksa OPEN sayılır, `sealState === "SEALED"` → 409 `SHIFT_SEALED`
- * (yol: `loom:shift-unseal` → satır → RESEAL). İmza şimdiden çifti alır; çağıranlar değişmez.
- * Vardiya iptali ≠ mühür — ikisi ayrı sorudur, ikisi de burada sorulur.
+ * MÜHÜR KAPISI — tek yer; aç · kapa · sınıfla · yeniden sınıfla · geri al hepsi buradan geçer.
+ * İki ayrı soru, ikisi de burada: iptal edilmiş vardiya → 409 `SHIFT_CANCELLED`; MÜHÜRLÜ karne
+ * (`MachineShiftStat.sealState`, makine×vardiya; satır yoksa OPEN sayılır) → 409 `SHIFT_SEALED`
+ * (yol: `loom:shift-unseal` → satır → RESEAL). Karne dilimi indi (2026-09-14, Dilim 3); çağıranlar değişmedi.
  */
 export async function assertStopShiftWritableTx(
   tx: Tx,
@@ -125,6 +123,15 @@ export async function assertStopShiftWritableTx(
   if (shift?.isCancelled) {
     throw AppError.conflict("Bu duruşun vardiyası iptal edilmiş — kayıt değiştirilemez.", {
       code: "SHIFT_CANCELLED", shiftInstanceId: ref.shiftInstanceId, machineId: ref.machineId,
+    });
+  }
+  const stat = await tx.machineShiftStat.findUnique({
+    where: { machineId_shiftInstanceId: { machineId: ref.machineId, shiftInstanceId: ref.shiftInstanceId } },
+    select: { id: true, sealState: true, sealGeneration: true },
+  });
+  if (stat?.sealState === "SEALED") {
+    throw AppError.conflict("Bu vardiyanın karnesi mühürlü — duruş kaydı değiştirilemez; önce mührü açın (loom:shift-unseal).", {
+      code: "SHIFT_SEALED", shiftInstanceId: ref.shiftInstanceId, machineId: ref.machineId, statId: stat.id, sealGeneration: stat.sealGeneration,
     });
   }
 }

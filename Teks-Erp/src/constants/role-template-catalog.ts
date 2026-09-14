@@ -342,6 +342,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // Duruş elle girişi + sebep kararı (Faz 1b): vardiya amiri işi (tasarım §6.4).
       "loom:manual-entry",
       "loom:classify",
+      // Karne mührünü açma (Dilim 3): geçmiş rakamı değiştirir — yalnız süpervizör.
+      "loom:shift-unseal",
       // Tezgah oturumu (⓪, 2026-09-14): ekran doğana kadar süpervizör paketinde;
       // tablet dilimiyle operatör paketine iner (loom:run ile aynı vaat).
       "mobile:dokuma",

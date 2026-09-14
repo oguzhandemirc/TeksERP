@@ -383,11 +383,14 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   // `MachineShiftStat` DURUM'dur (`updatedAt` VAR, güncel gerçek o satır) ve §1c gereği
   // BURAYA GİRMEZ; geçmişi aşağıdaki iki defterde. Mühür çevrimi (OPEN→SEALED→OPEN…)
   // `sealState` + `sealGeneration` ile durumda, her adımı `MachineShiftStatSeal`da.
-  // `yazan: []` ölçülmüş gerçek: mühür/unseal/kapanış job'u Dilim 3'te doğar; o gün §5
-  // "YENİ YOL" der ve `tersYazan` (unseal) beyanı adıyla istenir.
+  // Dilim 1'de `yazan: []` idi (ölçülmüş); Dilim 3 yazıcıyı getirdi ve §5 "YENİ YOL" dedi — beyan güncellendi.
+  // Dilim 3 (2026-09-14): yazan DOĞDU — `sealShiftStat` (SEAL/RESEAL) ve `unsealShiftStat` (UNSEAL, ters yazan)
+  // aynı dosyada (`machine-shift-seal.service.ts`). Kapanış job'u (`machine-shift-close.job`) karne
+  // DURUMUNU yazar, deftere satır yazmaz.
   D("MachineShiftStatSeal", "mühür DEFTERİ — karnenin mühür/açma/yeniden-mühür izi + terim fotoğrafı; append-only, updatedAt YOK; ters yolu TİPLİ ENUM ÇİFTİ: SEAL'in karşısı UNSEAL (kuşak sayacı artar, `sealedAt` null'lanmaz), RESEAL yeni bir ileri kayıttır ve karşısı yine UNSEAL; doğal anahtar (statId, sealGeneration, action) — bir kuşakta her eylemden en çok BİR satır",
     { tur: "ENUM_CIFTI", enumAdi: "MachineSealAction", ciftler: [["SEAL", "UNSEAL"], ["RESEAL", "UNSEAL"]] },
-    [], []),
+    [{ dosya: "src/services/machine-shift-seal.service.ts", sembol: "unsealShiftStat" }],
+    ["src/services/machine-shift-seal.service.ts"]),
 
   // ── SATIRLAR — ters yolu EBEVEYNİNDE ──────────────────────────────────────
   // Kırılım satırı bir MÜHÜR KUŞAĞINA aittir (statId + sealGeneration): yeniden hesapta
