@@ -13,6 +13,10 @@
 //   §3 setDefaultDefectTypeTx tek varsayılan bırakır, pasife vermez; tx geri alınır
 //   §4 statik: kursunFinish yazmadan önce çözümü çağırır; mobil Tambur `defectTypes[0]`
 //      uydurmuyor, `isDefault` arıyor
+//   §5 (47 K2/K3) gövde tutarlılığı: `isDefault:true` + `isActive:false` → 400 ÖNCE (yarım
+//      yazım yok); VARSAYILAN tip pasife alınamaz/silinemez (PATCH isActive:false · DELETE
+//      · kalıcı silme guard'ı) — 400 `DEFAULT_DEFECT_TYPE_DEACTIVATE`; tx geri alınır
+//   §6 (47 K4) mobil KursunQc ilk tuşu `isDefault`la sıralar, `'GENEL'` literali yok
 // Negatif sonda: helper'da `if (!def)` dalını kaldır → §2 kırmızı; mobilde `[0]`
 // geri gelsin → §4 kırmızı.
 
@@ -21,7 +25,10 @@ import { join } from "node:path";
 import prisma from "../src/lib/prisma";
 import { AppError } from "../src/utils/app-error";
 import {
+  DEFAULT_DEFECT_TYPE_DEACTIVATE,
   DEFAULT_DEFECT_TYPE_MISSING,
+  assertDefaultWriteConsistent,
+  assertNotDeactivatingDefault,
   findDefaultDefectType,
   resolveDefaultDefectTypeTx,
   setDefaultDefectTypeTx,
@@ -96,6 +103,40 @@ async function main(): Promise<void> {
   } catch (e) {
     if (!(e instanceof Rollback)) throw e;
   }
+
+  // §5 — K2/K3
+  let k2 = "";
+  try { assertDefaultWriteConsistent({ isDefault: true, isActive: false }); k2 = "geçti"; } catch (e) { k2 = e instanceof AppError ? String(e.statusCode) : "x"; }
+  check("§5 K2: isDefault:true + isActive:false gövdesi YAZMADAN 400", k2 === "400", k2);
+  assertDefaultWriteConsistent({ isDefault: true, isActive: true });
+  assertDefaultWriteConsistent({ isDefault: false, isActive: false });
+  check("§5 K2: tutarlı gövdeler geçer", true);
+  try {
+    await prisma.$transaction(async (tx) => {
+      const cur = await findDefaultDefectType(tx);
+      if (!cur) throw new Rollback();
+      const code = async (fn: () => Promise<void>): Promise<string> => {
+        try { await fn(); return "geçti"; } catch (e) { return e instanceof AppError ? `${e.statusCode}:${(e.details as { code?: string } | undefined)?.code ?? ""}` : "x"; }
+      };
+      check("§5 K3: varsayılanı PATCH isActive:false → 400", (await code(() => assertNotDeactivatingDefault(tx, cur.id, { isActive: false }))) === `400:${DEFAULT_DEFECT_TYPE_DEACTIVATE}`);
+      check("§5 K3: varsayılanı DELETE (softDelete) → 400", (await code(() => assertNotDeactivatingDefault(tx, cur.id))) === `400:${DEFAULT_DEFECT_TYPE_DEACTIVATE}`);
+      check("§5 K3: varsayılanın başka alanı PATCH edilebilir (isActive dokunmuyor)", (await code(() => assertNotDeactivatingDefault(tx, cur.id, { name: "x" }))) === "geçti");
+      const other = await tx.defectType.create({ data: { code: `TEST-DDT-D-${TS}`, name: `TEST DDT D ${TS}` }, select: { id: true } });
+      check("§5 K3: varsayılan OLMAYAN tip pasife alınabilir", (await code(() => assertNotDeactivatingDefault(tx, other.id, { isActive: false }))) === "geçti");
+      throw new Rollback();
+    });
+  } catch (e) {
+    if (!(e instanceof Rollback)) throw e;
+  }
+  const ghr = readFileSync(join(__dirname, "..", "src", "services", "helpers", "guarded-hard-remove.ts"), "utf8");
+  check("§5 K3: kalıcı silme guard'ı isDefault sayıyor", /defectTypeHardRemove[\s\S]*?key: "isDefault"[\s\S]*?isDefault: true/.test(ghr));
+  const routes = readFileSync(join(__dirname, "..", "src", "routes", "defect-type.routes.ts"), "utf8").replace(/\/\/.*$/gm, "");
+  check("§5 route: yazma ÖNCE tutarlılık, update+delete ÖNCE varsayılan kapısı", /assertDefaultWriteConsistent\(body\)/.test(routes) && (routes.match(/assertNotDeactivatingDefaultById\(/g) ?? []).length >= 2);
+
+  // §6 — K4 mobil KursunQc
+  const kq = readFileSync(join(__dirname, "..", "..", "mobil", "src", "screens", "Modules", "KursunQc", "KursunQcScreen.tsx"), "utf8").replace(/\/\/.*$/gm, "");
+  check("§6 KursunQc ilk tuş `isDefault`la sıralanır", /findIndex\(\(d\) => d\.isDefault === true\)/.test(kq));
+  check("§6 KursunQc'de 'GENEL' literali yok", !/['"]GENEL['"]/.test(kq));
 
   // §4 — statik
   const inv = readFileSync(join(__dirname, "..", "src", "services", "inventory.service.ts"), "utf8");

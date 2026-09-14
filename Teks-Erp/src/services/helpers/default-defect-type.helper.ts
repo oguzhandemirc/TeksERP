@@ -59,6 +59,43 @@ export async function setDefaultDefectTypeTx(
   return { previousId: previous?.id ?? null };
 }
 
+export const DEFAULT_DEFECT_TYPE_DEACTIVATE = "DEFAULT_DEFECT_TYPE_DEACTIVATE";
+
+/**
+ * Yazma gövdesi TUTARLI mı: `isDefault:true` ile `isActive:false` birlikte gelemez —
+ * yoksa kayıt yazılır, sonra varsayılan ataması 400 verirdi (iki tx, yarım sonuç; 47 K2).
+ */
+export function assertDefaultWriteConsistent(body: Record<string, unknown>): void {
+  if (body.isDefault === true && body.isActive === false) {
+    throw AppError.badRequest("Pasif hata tipi varsayılan yapılamaz — önce aktifleştirin ya da varsayılan işaretini kaldırın.");
+  }
+}
+
+/**
+ * VARSAYILAN tip pasife alınamaz / silinemez — kurulum sessizce varsayılansız kalır ve
+ * tipsiz giriş 400'e düşerdi (47 K3; emsal: sebep kataloğu "son aktif satır gizlenemez").
+ * Önce başka bir tipi varsayılan yapın. `body` verilirse yalnız `isActive:false` iken bakar.
+ */
+export async function assertNotDeactivatingDefault(
+  db: Db,
+  id: string,
+  body?: Record<string, unknown>,
+): Promise<void> {
+  if (body && body.isActive !== false) return;
+  const row = await db.defectType.findUnique({ where: { id }, select: { isDefault: true } });
+  if (row?.isDefault) {
+    throw AppError.badRequest(
+      "Bu hata tipi VARSAYILAN — pasife alınamaz/silinemez. Önce Kalite → Hata Tipleri'nden başka bir tipi varsayılan yapın.",
+      { code: DEFAULT_DEFECT_TYPE_DEACTIVATE },
+    );
+  }
+}
+
+/** Route çağrısı — DB erişimi burada (route/controller `prisma` import etmez). */
+export function assertNotDeactivatingDefaultById(id: string, body?: Record<string, unknown>): Promise<void> {
+  return assertNotDeactivatingDefault(prisma, id, body);
+}
+
 /** Route'un tek çağrısı — tx sınırı burada (route/controller `prisma` import etmez). */
 export function setDefaultDefectType(id: string): Promise<{ previousId: string | null }> {
   return prisma.$transaction((tx) => setDefaultDefectTypeTx(tx, id));

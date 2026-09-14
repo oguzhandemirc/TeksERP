@@ -243,11 +243,13 @@ export default function KursunQcScreen() {
     queryFn: () => defectTypeService.list({ pageSize: 100 }),
     staleTime: 10 * 60 * 1000, // 10 dk: katalog nadir değişir
   });
-  // Saha #18: "GENEL" hata tipi her zaman İLK tuş — operatör tip belirtmek
-  // istemediğinde varsayılan olarak ona basar (katalog sırası ne olursa olsun).
+  // Saha #18: kataloğun VARSAYILAN hata tipi (isDefault) her zaman İLK tuş — operatör
+  // tip belirtmek istemediğinde ona basar. Literal ('GENEL') YOK: admin başka tipi
+  // varsayılan yapınca sıra onu izler (karar A, 2026-09-14). Eski backend'de alan yoksa
+  // (undefined) sıra katalog sırasıdır.
   const defectTypes = useMemo(() => {
     const list = defectTypesQuery.data?.data ?? [];
-    const idx = list.findIndex((d) => d.code === 'GENEL');
+    const idx = list.findIndex((d) => d.isDefault === true);
     if (idx <= 0) return list;
     return [list[idx]!, ...list.slice(0, idx), ...list.slice(idx + 1)];
   }, [defectTypesQuery.data]);

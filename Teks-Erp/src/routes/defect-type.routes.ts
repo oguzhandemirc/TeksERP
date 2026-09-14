@@ -10,7 +10,11 @@ import { BaseService } from "../services/base.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { defectTypeHardRemove } from "../services/helpers/guarded-hard-remove";
-import { setDefaultDefectType } from "../services/helpers/default-defect-type.helper";
+import {
+  assertDefaultWriteConsistent,
+  assertNotDeactivatingDefaultById,
+  setDefaultDefectType,
+} from "../services/helpers/default-defect-type.helper";
 import { AuditService } from "../services/audit.service";
 import type { NextFunction, Request, Response } from "express";
 
@@ -135,8 +139,10 @@ async function writeWithDefault(
 ): Promise<void> {
   try {
     const body = (req.body ?? {}) as Record<string, unknown>;
+    assertDefaultWriteConsistent(body); // K2: pasif + varsayılan birlikte gelmez (yarım yazım yok)
     const wantDefault = body.isDefault === true;
     if (wantDefault) delete body.isDefault;
+    if (mode === "update") await assertNotDeactivatingDefaultById(String(req.params.id), body); // K3
     const result =
       mode === "create"
         ? await defectTypeService.create(body, req.user?.userId)
@@ -253,7 +259,19 @@ router.post(
   },
 );
 
-router.delete("/:id", verifyToken, requirePermission("quality:write"), controller.remove);
+router.delete(
+  "/:id",
+  verifyToken,
+  requirePermission("quality:write"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      await assertNotDeactivatingDefaultById(String(req.params.id)); // K3: varsayılan pasife alınmaz
+      await controller.remove(req, res, next);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 /**
  * @openapi

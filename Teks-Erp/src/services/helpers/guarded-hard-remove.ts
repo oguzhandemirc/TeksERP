@@ -409,6 +409,9 @@ export const defectTypeHardRemove = makeGuardedHardRemove({
       message: (n) =>
         `Bu hata tipi ${n} hata kaydında kullanılmış — kalıcı silinemez. Pasife alın.`,
     },
+    // K3: VARSAYILAN tip silinemez — kurulum sessizce varsayılansız kalırdı (tipsiz giriş 400).
+    { key: "isDefault", count: (id) => prisma.defectType.count({ where: { id, isDefault: true } }),
+      message: () => "Bu hata tipi VARSAYILAN — silinemez. Önce başka bir tipi varsayılan yapın." },
   ],
   deleteTx: async (tx, id) => {
     await tx.defectType.delete({ where: { id } });
