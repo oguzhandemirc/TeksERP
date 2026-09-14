@@ -21,7 +21,7 @@ kalamaz). ⇒ **Dizin bayatlayamaz; bayatlatmayı deneyen commit durur.** İlk d
 bir kereye mahsus üretildi (2026-09-13); bundan sonrasını üreteç değil KAPI tutar —
 üretece bağlı bir dizin, üreteç koşulmadığı gün sessizce bayatlardı.
 
-Sayı bir ölçümdür ve bu satır da kapı altındadır: **152 başlık / 11 dosya**
+Sayı bir ölçümdür ve bu satır da kapı altındadır: **153 başlık / 11 dosya**
 (ölçüldü 2026-09-13; kapı her koşumda yeniden sayar ve sayı tutmazsa kırmızı verir).
 
 ⚙️ **MÜKERRER TARAMASI (dizinin ilk kullanımı, 2026-09-14):** 147 başlık çiftlenip
@@ -149,6 +149,7 @@ açan kişi tabloyu yine baştan sona okur.**
 |  | § Bir kontrolün gördüğü sayı, arızanın BOYUTU değildir | (`OLCUM-DISIPLINI-CIKARIM.md`) |
 |  | § Sessiz atlama bir DAYANIKLILIK değil, bir GÖRÜNMEZLİK özelliğidir | (`OLCUM-DISIPLINI-CIKARIM.md`) |
 |  | § Bir temizlik eksikliğinin faturası, onu ÜRETEN bekçiye çıkmaz | (`OLCUM-DISIPLINI-CIKARIM.md`) |
+|  | § Yutulan `.catch` yalnız HATAYI değil, temizliğin KAPSAMINI da gizler | (`OLCUM-DISIPLINI-CIKARIM.md`) |
 |  | § "Atlanan" sayısı, koşmayan YÜKLEM sayısı değildir — ve bir ALT SINIRDIR | (`OLCUM-DISIPLINI-CIKARIM.md`) |
 |  | § Muafiyet yazmadan önce sor: muaf olan şey kuralın DIŞINDA mı, yoksa KURAL mı yanlış çizilmiş? | (`OLCUM-DISIPLINI-CIKARIM.md`) |
 |  | § Bir atlama, ölçülebilen KOMŞUSUNU da götürürse kapsam sessizce kaybolur | (`OLCUM-DISIPLINI-CIKARIM.md`) |
@@ -202,7 +203,7 @@ açan kişi tabloyu yine baştan sona okur.**
 | [`OLCUM-DISIPLINI-SUREC.md`](OLCUM-DISIPLINI-SUREC.md) | komutun SÜRECİ ve ORTAMI (5 başlık) |
 | [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | KATMAN 1b — ölçümün KURGUSU (31 başlık) |
 | [`OLCUM-DISIPLINI-ORTAK-AGAC.md`](OLCUM-DISIPLINI-ORTAK-AGAC.md) | KATMAN 1c — PAYLAŞILAN AĞAÇ, ÇOK OTURUM (8 başlık) |
-| [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) | KATMAN 2 — ölçümden sonraki adım (31 başlık) |
+| [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) | KATMAN 2 — ölçümden sonraki adım (32 başlık) |
 | [`OLCUM-DISIPLINI-KAPI.md`](OLCUM-DISIPLINI-KAPI.md) | ölçümü KAPIYA çevirmek (11 başlık) |
 | [`OLCUM-DISIPLINI-KAPI-OLUMU.md`](OLCUM-DISIPLINI-KAPI-OLUMU.md) | kapının ÖLÜMÜ, kırmızının okunması (12 başlık) |
 

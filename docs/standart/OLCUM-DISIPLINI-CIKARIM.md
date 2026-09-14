@@ -124,6 +124,25 @@ stok topu → fatura **§29 kapısına** · bir ölçüm betiğinin düşen temi
 sırası defter bağlarına uyar. Kardeşi bir üstteki § Sessiz atlama: aynı `.catch(() => {})`,
 burada faturası başkasına çıkıyor.
 
+### Yutulan `.catch` yalnız HATAYI değil, temizliğin KAPSAMINI da gizler
+Bir üstteki § faturanın NEREYE çıktığını anlatır; bu § **ne kadarını hiç bilmediğini**.
+Yutulan hata, temizliğin *çalıştığı* izlenimini verdiği için "hangi tablolara dokunuyorum"
+sorusu hiç sorulmaz; `.catch` kalkınca FK'lar teker teker konuşur ve kapsam ilk kez görünür.
+*(Vaka 2026-09-14, `test_wo_color_change_lock`: temizlik hareketleri
+`roll.barcode.startsWith(STAMP)` ile arıyordu, oysa FASON KABULÜNDE doğan toplar
+BARKODSUZ gelir — süzgeç onları görmez, `DELETE FROM rolls` FK'ya çarpar,
+`.catch(() => undefined)` yutar. `.catch` kaldırılınca sırayla DÖRT tablo çıktı:
+`batches`, refakat kartı + taramaları, `work_order_to_order_lines`, hedef özellik.
+Birikmiş kalıntı: 117 iş emri · 194 top · 90 hareket — ve DB'deki 78 AÇIK hareketin
+TAMAMI bu bekçinindi.)*
+⚠️ **Kalıntı yalnız komşu bekçiyi düşürmez, komşunun SONDASINI da körleştirir:**
+aynı yığın yüzünden `test_wip_scorecard`in taze-hareket sondası `LIMIT 25`'e hiç
+giremiyordu (liste 0,6 günde kesiliyordu) ve sonda "geçersiz" değil **görünmez**di;
+kalıntı süpürülünce ilk denemede ısırdı.
+**Savunma:** temizlik **KİMLİKLE** siler (üretilen id kümesi + ilişki yolu), ada/barkoda
+dayanan yüklemle değil — fikstür ADSIZ doğabilir; `.catch` ya kalkar ya `temizlikHatasi`
+olarak BASILIR; ve "temizlik 0 bırakır" bir dilek değil **İDDİA**dır (kalan satır sayılır).
+
 ### "Atlanan" sayısı, koşmayan YÜKLEM sayısı değildir — ve bir ALT SINIRDIR
 Atlanan BÖLÜM sayılır; her bölümün içinde kaç yüklem olduğu bilinmez ve **oran
 bekçiden bekçiye değişir**.
