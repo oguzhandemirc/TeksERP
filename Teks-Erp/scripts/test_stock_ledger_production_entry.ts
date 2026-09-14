@@ -29,7 +29,7 @@
 //   · `rescueStuckRoll`dan `postStockMove` bloğu silinince: §4/§6 kırmızı
 //   · `finalizeOpenFabric`ten `postOpenFabricChildEntryTx` çağrısı silinince: §7a/§7b kırmızı
 //   · `test_stok_defteri_bag_olcumu §4f` bu commit'le BİLEREK kırmızı (K 2→0, taban 1e'de)
-//   · applyFull'daki `reverseAllRollStockMoves` çağrısı kapatılınca: §7c ❌ (1/40 · 1/30 · 1/30 — girişler açık kaldı) (2026-09-14, 5fb3c821)
+//   · applyFull'daki `reverseAllRollStockMoves` çağrısı kapatılınca: §7c ❌ (1/40 · 1/30 · 1/30 — girişler açık kaldı) (2026-09-14, `0e91edd0`)
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım.
 // =============================================================================
 import { RollEntrySource, RollForm, RollStatus, StepStatus, WarehouseEventType } from "@prisma/client";
