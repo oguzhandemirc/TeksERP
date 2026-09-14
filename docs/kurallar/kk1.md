@@ -31,6 +31,8 @@
 - **[ÇEKİRDEK]** SystemLog arşivi OTOMATİK (`jobs/archive-scheduler.ts`): start +60 sn, 24 saatte bir kontrol, 30 günde bir 6 aydan eskiyi taşır. Manuel `POST /api/admin/system-logs/archive {monthsToKeep:6}` yalnız acil disk baskısında (idempotent). <sub>(CLAUDE.md:282)</sub>
 - **[ÇEKİRDEK]** Rol (yetki şablonu) kataloğu üç parçalıdır: tek kaynak `constants/role-template-catalog.ts` + boot uzlaştırması (izin uzlaştırmasından SONRA, FK sırası) + mekanik bekçi. Rol SAYISINI koda/nota sabitleme — kanonik sayı dosyadadır. · bekçi: `Teks-Erp/scripts/test_role_template_catalog.ts` <sub>(CLAUDE.md:225)</sub>
 
+- **[ÇEKİRDEK]** İlk girişte kalite ÇİFT kolondur ve birlikte dolar/boşalır: verilen kod `qualityGrade` + `qualityGradeId` (katalog id'si, `resolveQualityGradeIdStrict`) olarak KOPYALANIR; alan yok · "" · whitespace üçü de NULL/NULL kalır ("Belirsiz" — sabit "1.KALITE" varsayılanı yazılmaz); bilinmeyen ve PASİF kod 400 ve top DOĞMAZ. Panel "Manuel Top Ekle" boş seçimi payload'dan düşürür (`"" → undefined`). · bekçi: `test_initial_entry_quality` (§1–§4, iki sonda) <sub>(d9 C2 bulgusu, 0c ölçtü 2026-09-14: kusur yok)</sub>
+
 ### Tuzaklar
 
 - **[ÇEKİRDEK]** Script çıkışında `$disconnect()` TEK BAŞINA YETMEZ: havuzun `idleTimeoutMillis: 600_000`'i event loop'u 10 dk açık tutar, script 'bitti ama çıkmadı'da kalır (koşucu 180 sn'de SIGTERM → ZAMAN AŞIMI). İki geçerli kapanış: `process.exit(fail>0?1:0)` ya da `$disconnect()` + `pool.end()`. <sub>(CLAUDE.md:382)</sub>
@@ -102,7 +104,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_barcode_reservation`, `test_kk1_entry_sources`, `test_depo_roll_cancel_permission`⚠️, `test_duplicate_rolls`, `test_e2e_full_flow`, `test_item_quick_create`, `test_kk1_duplicate_guard`, `test_kk1_weight_flag`, `test_master_data_merge_race`, `test_p1b_barcode_collision`⚠️, `test_roll_barcode`, `test_roll_entry_station`, `test_semi_finished_entry`, `test_tambur_manual_produce`, `test_token_replay_cancelled`, `test_work_session_stamping`
+Backend: `test_barcode_reservation`, `test_initial_entry_quality`, `test_kk1_entry_sources`, `test_depo_roll_cancel_permission`⚠️, `test_duplicate_rolls`, `test_e2e_full_flow`, `test_item_quick_create`, `test_kk1_duplicate_guard`, `test_kk1_weight_flag`, `test_master_data_merge_race`, `test_p1b_barcode_collision`⚠️, `test_roll_barcode`, `test_roll_entry_station`, `test_semi_finished_entry`, `test_tambur_manual_produce`, `test_token_replay_cancelled`, `test_work_session_stamping`
 
 İstemci: `fason-receive-attempt.test.ts`, `BarcodeScannerView.test.tsx`, `PickerModal.test.tsx`, `SyncStatusChip.test.tsx`, `rollHistoryFilter.test.ts`, `duplicateEntryChoice.test.ts`, `useReasonPresets.test.tsx`, `announceFailure.test.ts`, `announceWire.test.ts`, `backoff.test.ts`, `barcode.test.ts`, `deadline.test.ts`, `entryAttempt.test.ts`, `flushThenLogout.test.ts`, `mutations.test.ts`, `persistPolicy.test.ts`, `printQueue.test.ts`, `serverReachability.test.ts`, `sessionSwitch.test.ts`, `receiveAttempt.test.ts`, `EntryConflictModal.test.tsx`, `appUpdate.service.test.ts`, `sessionEntriesStore.test.ts`, `queryState.test.ts`
 

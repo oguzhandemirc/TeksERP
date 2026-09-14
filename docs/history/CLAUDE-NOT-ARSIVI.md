@@ -9088,3 +9088,14 @@ olduğu için gerçek bir yol değil; mühür modeli inince 7 gün sabiti yenide
 
 **Ölçüm:** `test_machine_stop_manual` 42 → 50/0 (§13a–h); negatif sonda (amir yolu kırpmaya döndürüldü,
 cp+sha256): §13a/§13b/§13c ❌.
+
+## 2026-09-14 — C2 ÖLÇÜLDÜ, KUSUR YOK: ilk girişte kalite çifti (kod + id) yazılıyor, boş "Belirsiz" (NULL/NULL) kalıyor — bekçi `test_initial_entry_quality` [ÇEKİRDEK]
+
+**Bulgu (d9):** panel Manuel Top Ekle'de kalite opsiyonel; seçilen değerin topa yazıldığı ve boş bırakınca topta ne
+olduğu ölçülmemişti. **Ölçüm (0c, tekserp_0c_test, `InventoryService.createInitialEntry`):** kod → `qualityGrade` = kod,
+`qualityGradeId` = katalog id (ref aynı satır); alan yok · "" · "   " → NULL/NULL; bilinmeyen kod 400 "bulunamadı";
+PASİF kod 400 "pasif" (fikstürde pasif kalite yaratıldı — sonda DB'sinde pasif satır yoktu). Zincir: diyalog
+`QUALITY_NONE → "" → undefined` (JSON'da anahtar yok) → controller `z.string().trim().optional()` → servis
+`trimmedQuality || null` + `resolveQualityGradeIdStrict`. **Bekçi:** 11 kontrol; iki sonda diskte kırmızı görüldü
+(pasif kapısı `if (false)` → §4 ❌; `|| null` → `?? null` → §2 iki vaka ❌: kod "" yazıldı, id null — çift AYRIŞTI).
+Kural satırı `kk1.md § Backend`. 1e kararı: kusur yok ama ölçüm kalıcı olsun.
