@@ -20,6 +20,9 @@
 //      özelliksiz ebeveyn → çocuk depoda sonradan bayrak kazanır → FULL geri alma →
 //      ebeveyn ÖZELLİKSİZ dirilir (donör = çocuğun doğum-anı satırları) ve
 //      `propsDonorMissing` yanıtta/audit'te görünür (sessiz sıfır yok)
+//   §10 ⭐ updateTargetProperties yalnız DELTA'yı damgalar: iş emri hedefinden çıkan
+//      bayrak hem hedefte hem bağlı topta damgalanır, giren yazılır, hedefte OLMAYAN
+//      (istasyonda kazanılmış) bayrak topta DURUR; değişmeyen satır aynı id
 //   §13 AST + tip denetleyicisi: her okuma çağrısı, ilişki süzgeci/iç içe okuma
 //      ve ham SQL aktif yüklemi taşır ya da gerekçeli istisnadır; Faz 2c/2d'nin
 //      kapatacağı SİLME siteleri ADIYLA beyanlıdır ve kapanınca beyanın düşmesi
@@ -60,6 +63,7 @@ const PROP_FLAG = "TEST-RPR-FLAG";
 const PROP_CHOICE = "TEST-RPR-CHOICE";
 const rollIds: string[] = [];
 const woIds: string[] = [];
+const stationIds: string[] = [];
 let itemId = "";
 let propIds: string[] = [];
 
@@ -222,6 +226,51 @@ async function main(): Promise<void> {
   const flagRows = await prisma.rollProperty.findMany({ where: { rollId: p9, propertyId: flag.id }, select: { id: true, revokedAt: true } });
   check("§9 yeniden ekleme YENİ satır açtı, damgalı eski satır durdu (un-revoke yok)", flagRows.length === 2 && flagRows.filter((r) => r.revokedAt === null).length === 1 && flagRows.some((r) => r.id === row9.id && r.revokedAt !== null));
 
+  // ── §10 ───────────────────────────────────────────────────────────────────
+  console.log("── §10 updateTargetProperties yalnız DELTA ──");
+  const flag3 = await prisma.fabricProperty.upsert({
+    where: { code: "TEST-RPR-FLAG3" },
+    create: { code: "TEST-RPR-FLAG3", name: "TEST RPR bayrak 3 (istasyon)", valueType: "FLAG" },
+    update: {}, select: { id: true },
+  });
+  propIds.push(flag3.id);
+  const st10 = await prisma.station.create({
+    data: { code: `${TAG}-ST`, name: `${TAG} istasyon`, type: "INTERNAL", kind: "OTHER", appliesProperty: true },
+    select: { id: true },
+  });
+  stationIds.push(st10.id);
+  await prisma.stationProperty.createMany({ data: [flag.id, flag2.id, flag3.id].map((pid) => ({ stationId: st10.id, propertyId: pid, mode: "OPTIONAL" as const })) });
+  const wo10 = await prisma.workOrder.create({
+    data: { workOrderNumber: `${TAG}-WO10`, type: "STOCK_PRODUCTION", status: "IN_PROGRESS", targetQuantity: 100, targetItemId: itemId,
+      targetProperties: { create: [{ propertyId: flag.id }] },
+      steps: { create: [{ stationId: st10.id, stepSequence: 1, status: "PENDING" }] } },
+    include: { steps: { select: { id: true } } },
+  });
+  woIds.push(wo10.id);
+  const r10 = await prisma.roll.create({
+    data: { barcode: `${TAG}-R10`, itemId, status: RollStatus.WAREHOUSE, initialQty: 100, currentQty: 100, entrySource: "TAMBUR_MANUAL", producedInStepId: wo10.steps[0]!.id,
+      properties: { create: [{ propertyId: flag.id }, { propertyId: flag3.id }] } },
+    select: { id: true },
+  });
+  rollIds.push(r10.id);
+  const t10Before = await prisma.workOrderTargetProperty.findFirstOrThrow({ where: { workOrderId: wo10.id, propertyId: flag.id }, select: { id: true } });
+  const r10flag3Before = await prisma.rollProperty.findFirstOrThrow({ where: { rollId: r10.id, propertyId: flag3.id }, select: { id: true } });
+  await wos.updateTargetProperties(wo10.id, [flag2.id], admin.id);
+  const t10After = await prisma.workOrderTargetProperty.findMany({ where: { workOrderId: wo10.id }, select: { id: true, propertyId: true, revokedAt: true, revokeReason: true } });
+  check("§10 hedef: flag DAMGALI (WO_TARGET_UPDATE), flag2 yeni, toplam 2 satır",
+    t10After.length === 2 && t10After.some((t) => t.id === t10Before.id && t.revokedAt !== null && t.revokeReason === "WO_TARGET_UPDATE") && t10After.some((t) => t.propertyId === flag2.id && t.revokedAt === null),
+    JSON.stringify(t10After.map((t) => `${t.propertyId === flag.id ? "flag" : "flag2"}:${t.revokedAt ? "damgalı" : "aktif"}`)));
+  const r10After = await prisma.rollProperty.findMany({ where: { rollId: r10.id }, select: { id: true, propertyId: true, revokedAt: true } });
+  const r10Active = r10After.filter((p) => p.revokedAt === null).map((p) => p.propertyId).sort();
+  check("§10 ⭐ topta yalnız DELTA: flag damgalı · flag2 eklendi · hedefte olmayan flag3 DURDU (aynı id)",
+    r10After.length === 3 && r10Active.length === 2 && r10Active.includes(flag2.id) && r10Active.includes(flag3.id) &&
+      r10After.some((p) => p.id === r10flag3Before.id && p.revokedAt === null) && r10After.some((p) => p.propertyId === flag.id && p.revokedAt !== null),
+    JSON.stringify(r10After.map((p) => `${p.propertyId === flag.id ? "flag" : p.propertyId === flag2.id ? "flag2" : "flag3"}:${p.revokedAt ? "damgalı" : "aktif"}`)));
+  // aynı listeyle ikinci çağrı → no-op: satır sayıları değişmez
+  await wos.updateTargetProperties(wo10.id, [flag2.id], admin.id);
+  check("§10 aynı liste ikinci çağrı NO-OP (hedef 2 · top 3 satır sabit)",
+    (await prisma.workOrderTargetProperty.count({ where: { workOrderId: wo10.id } })) === 2 && (await prisma.rollProperty.count({ where: { rollId: r10.id } })) === 3);
+
   astKontrolleri();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
@@ -237,9 +286,8 @@ async function main(): Promise<void> {
  * commit'te kapandı: partial unique altında `upsert` 42P10 ile ÖLÜR — ölçüldü.)
  */
 const BEKLENEN_YAZAR_CAGRI_IHLALI = new Set<string>([]);
-const BEKLENEN_SILME_DOSYALARI = new Set<string>([
-  "src/services/workorder.service.ts", // Y7/Y8/Y9 → Faz 2d (Y5 inventory 2c'de kapandı)
-]);
+/** Faz 2c/2d ile BOŞALDI — src/'de iki modele silme YOK; yeni site "beklenmeyen" olarak kırmızı. */
+const BEKLENEN_SILME_DOSYALARI = new Set<string>([]);
 /** "Bu özellik HİÇ kullanıldı mı" sorusunu soran yüzeyler — tarihsel satır da kanıttır. */
 const BEKLENEN_ISTISNA_DOSYALARI = new Set<string>([
   "src/services/fabric-property.service.ts", // tip dönüşümü kilidi (O24 · T15)
@@ -312,7 +360,13 @@ async function cleanup(): Promise<void> {
     }
     if (woIds.length) {
       await prisma.workOrderTargetProperty.deleteMany({ where: { workOrderId: { in: woIds } } });
+      await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: woIds } } });
+      await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } });
       await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
+    }
+    if (stationIds.length) {
+      await prisma.stationProperty.deleteMany({ where: { stationId: { in: stationIds } } });
+      await prisma.station.deleteMany({ where: { id: { in: stationIds } } });
     }
     if (itemId) await prisma.item.deleteMany({ where: { id: itemId } });
     if (propIds.length) {

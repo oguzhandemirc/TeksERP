@@ -11,7 +11,12 @@
 
 import { ACTIVE_OPERATION, OWN_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
-import { ACTIVE_ROLL_PROPERTY, ACTIVE_TARGET_PROPERTY } from "./helpers/property-revoke.helper";
+import {
+  ACTIVE_ROLL_PROPERTY,
+  ACTIVE_TARGET_PROPERTY,
+  revokeRollProperties,
+  revokeTargetProperties,
+} from "./helpers/property-revoke.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { postStockMove, qtyYazilabilir } from "./helpers/warehouse-ledger.helper";
 import { postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
@@ -5610,22 +5615,37 @@ export class WorkOrderService {
       ) {
         throw AppError.conflict(freshLocks.reasons.foldType ?? "Kat tipi kilitli.");
       }
+      // ── Hedef özellik kapısı — tx İÇİNDE TAZE aktif küme (plan §3.2, 2026-09-14) ──
+      // ① KİLİTLİ mevcut hedef çözülmüş listeye DAİMA BİRLEŞTİRİLİR: istemci alanı
+      //    göndermese (`undefined` → STOCK'ta boş / ORDER'da sipariş satırından türer)
+      //    bile kilitli hedef sessizce DÜŞMEZ (eski sessiz silme yolu) ve türetilmiş
+      //    listede kilit kapısı hiç ateşlenemez (kalıcı 409 üretmez).
+      // ② Kapsama (applicable) kapısı yalnız DELTA'ya: zaten yazılı satır için 409 yok.
+      // ③ Fark bazlı + damgalı yazım (Y7): çıkan `WO_REPLACE` ile damgalanır, giren
+      //    yazılır, değişmeyen satıra dokunulmaz.
+      const freshTargets = await tx.workOrderTargetProperty.findMany({
+        where: { workOrderId: id, ...ACTIVE_TARGET_PROPERTY },
+        select: { propertyId: true },
+      });
+      const freshTargetIds = new Set(freshTargets.map((p) => p.propertyId));
+      const lockedKept = freshLocks.lockedPropertyIds.filter((pid) => freshTargetIds.has(pid));
       if (data.targetPropertyIds) {
-        const existingPropIds = new Set(
-          existing.targetProperties.map((p) => p.propertyId),
-        );
         const incomingSet = new Set(data.targetPropertyIds);
-        for (const lockedId of freshLocks.lockedPropertyIds) {
-          if (existingPropIds.has(lockedId) && !incomingSet.has(lockedId)) {
+        for (const lockedId of lockedKept) {
+          if (!incomingSet.has(lockedId)) {
             throw AppError.conflict(
               freshLocks.reasons.properties?.[lockedId] ??
                 "Bu özellik artık kaldırılamaz.",
             );
           }
         }
+      }
+      const resolvedTargetIds = new Set([...targetPropertyIds, ...lockedKept]);
+      const enteringTargetIds = [...resolvedTargetIds].filter((pid) => !freshTargetIds.has(pid));
+      const leavingTargetIds = [...freshTargetIds].filter((pid) => !resolvedTargetIds.has(pid));
+      {
         const applicableSet = new Set(freshLocks.applicablePropertyIds);
-        for (const newId of data.targetPropertyIds) {
-          if (existingPropIds.has(newId)) continue;
+        for (const newId of enteringTargetIds) {
           if (!applicableSet.has(newId)) {
             throw AppError.conflict(
               "Eklenen özelliği uygulayabilecek istasyon bu rotada yok veya adımı tamamlanmış.",
@@ -5817,10 +5837,23 @@ export class WorkOrderService {
         }
       }
 
-      // ── orderLinks ve targetProperties drop-and-recreate ────────────────
-      // Bunlar başka tablolardan FK ile referanslanmaz — güvenli.
+      // ── orderLinks drop-and-recreate (WOTOL damgası ayrı plan: WOTOL-BAG-DAMGA-PLAN) ──
       await tx.workOrderToOrderLine.deleteMany({ where: { workOrderId: id } });
-      await tx.workOrderTargetProperty.deleteMany({ where: { workOrderId: id } });
+      // ── targetProperties FARK bazlı + damgalı (③a, Y7): silme YOK ──
+      if (leavingTargetIds.length > 0) {
+        await revokeTargetProperties(tx, {
+          workOrderId: id,
+          propertyIds: leavingTargetIds,
+          reason: "WO_REPLACE",
+          userId: userId ?? null,
+        });
+      }
+      if (enteringTargetIds.length > 0) {
+        await tx.workOrderTargetProperty.createMany({
+          data: enteringTargetIds.map((propertyId) => ({ workOrderId: id, propertyId })),
+          skipDuplicates: true,
+        });
+      }
 
       const planDates = await resolvePlanDates(
         data.plannedStartDate,
@@ -5849,13 +5882,6 @@ export class WorkOrderService {
                     orderLineId: a.orderLineId,
                     allocatedQty: a.allocatedQty,
                   })),
-                },
-              }
-            : {}),
-          ...(targetPropertyIds.length > 0
-            ? {
-                targetProperties: {
-                  create: targetPropertyIds.map((propertyId) => ({ propertyId })),
                 },
               }
             : {}),
@@ -5990,11 +6016,47 @@ export class WorkOrderService {
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      // 1) WO targetProperties replace
-      await tx.workOrderTargetProperty.deleteMany({ where: { workOrderId: id } });
-      if (dedupedIds.length > 0) {
+      // 0) WO satır kilidi tx'in İLK ifadesi (Y8, F58 deseni): eskiden bu uç kilitsizdi,
+      //    kilit/kapsama yalnız tx DIŞINDA hesaplanıyordu. Kilit altında TAZE aktif hedef
+      //    kümesi ve taze kilitler okunur; kapı §3.2 ile aynı üç parça (kilitli mevcut
+      //    hedef listeye birleştirilir · kapsama yalnız DELTA'ya · fark bazlı damga).
+      await touchWorkOrderTx(tx, id);
+      const freshLocks = await computeWorkOrderLocks(tx, id);
+      const freshTargets = await tx.workOrderTargetProperty.findMany({
+        where: { workOrderId: id, ...ACTIVE_TARGET_PROPERTY },
+        select: { propertyId: true },
+      });
+      const freshTargetIds = new Set(freshTargets.map((p) => p.propertyId));
+      const lockedKept = freshLocks.lockedPropertyIds.filter((pid) => freshTargetIds.has(pid));
+      for (const lockedId of lockedKept) {
+        if (!incomingSet.has(lockedId)) {
+          throw AppError.conflict(
+            freshLocks.reasons.properties?.[lockedId] ?? "Bu özellik artık kaldırılamaz.",
+          );
+        }
+      }
+      const resolvedIds = new Set([...dedupedIds, ...lockedKept]);
+      const enteringIds = [...resolvedIds].filter((pid) => !freshTargetIds.has(pid));
+      const leavingIds = [...freshTargetIds].filter((pid) => !resolvedIds.has(pid));
+      {
+        const freshApplicable = new Set(freshLocks.applicablePropertyIds);
+        for (const newId of enteringIds) {
+          if (!freshApplicable.has(newId)) {
+            throw AppError.conflict(
+              "Eklenen özelliği uygulayabilecek istasyon bu rotada yok veya adımı tamamlanmış.",
+            );
+          }
+        }
+      }
+
+      // 1) WO targetProperties FARK bazlı + damgalı (③a, Y8): silme YOK
+      if (leavingIds.length > 0) {
+        await revokeTargetProperties(tx, { workOrderId: id, propertyIds: leavingIds, reason: "WO_TARGET_UPDATE", userId: userId ?? null });
+      }
+      if (enteringIds.length > 0) {
         await tx.workOrderTargetProperty.createMany({
-          data: dedupedIds.map((propertyId) => ({ workOrderId: id, propertyId })),
+          data: enteringIds.map((propertyId) => ({ workOrderId: id, propertyId })),
+          skipDuplicates: true,
         });
       }
 
@@ -6011,31 +6073,35 @@ export class WorkOrderService {
       });
       const rollIds = affectedRolls.map((r) => r.id);
 
-      // 3) Roll.properties replace — YALNIZ BAYRAK (FLAG) EVRENİ (2026-08-11,
-      //    denetim F4). "Roll.properties = WO hedeflerinin kopyası" varsayımı
-      //    istasyon-seçimli değer modeliyle bozuldu: SEÇİM satırlarını (GRAMAJ=
-      //    50GR) İSTASYON OPERATÖRÜ yazar, hedef listesi değil. Koşulsuz replace,
-      //    planlamacı WO hedeflerine her dokunduğunda o seçimi sessizce silerdi.
+      // 3) Bağlı topların özelliği — YALNIZ BAYRAK EVRENİ ve YALNIZ DELTA (Y9, 2026-09-14):
+      //    damgalanan küme `(eski hedef − yeni hedef)`, topun tüm FLAG evreni DEĞİL — aynı
+      //    fonksiyon SEÇİM satırlarına tam bu sebeple dokunmuyor ("SEÇİM satırlarını
+      //    İSTASYON OPERATÖRÜ yazar, hedef listesi değil", denetim F4). Bilinen sınır (plan
+      //    §8.4): kaynak kolonu olmadığından hem hedef hem istasyon-AUTO olan özellik
+      //    (KURSUN) hedeften çıkarılınca topta yine damgalanır. Girenler damgasız yazılır,
+      //    değişmeyen satıra dokunulmaz. Sıralı döngü: `tx.*` + `Promise.all` YASAK.
       if (rollIds.length > 0) {
-        await tx.rollProperty.deleteMany({
-          where: { rollId: { in: rollIds }, property: { valueType: "FLAG" } },
-        });
-        if (dedupedIds.length > 0) {
-          const data = rollIds.flatMap((rollId) =>
-            dedupedIds.map((propertyId) => ({ rollId, propertyId })),
-          );
-          // skipDuplicates: CHOICE satırları artık hayatta kaldığı için
-          // @@unique([rollId, propertyId]) çakışması TEORİK olarak yalnız
-          // hedef listesi CHOICE içerseydi olurdu (yukarıda 400) — yine de
-          // idempotent yazım replace yarışlarına karşı daha dayanıklı.
-          await tx.rollProperty.createMany({ data, skipDuplicates: true });
+        if (leavingIds.length > 0) {
+          await revokeRollProperties(tx, {
+            rollIds,
+            propertyIds: leavingIds,
+            valueType: "FLAG",
+            reason: "WO_TARGET_UPDATE",
+            userId: userId ?? null,
+          });
+        }
+        if (enteringIds.length > 0) {
+          await tx.rollProperty.createMany({
+            data: rollIds.flatMap((rollId) => enteringIds.map((propertyId) => ({ rollId, propertyId }))),
+            skipDuplicates: true,
+          });
         }
       }
 
       // Hedef özellikler kartın "İSTENEN ÖZELLİKLER" bloğunda basılı.
       await markTravelerCardDirtyTx(tx, id);
 
-      return { affectedRollCount: rollIds.length };
+      return { affectedRollCount: rollIds.length, leavingIds, enteringIds };
     });
 
     await AuditService.log({
@@ -6045,6 +6111,8 @@ export class WorkOrderService {
       recordId: id,
       newData: {
         targetPropertyIds: dedupedIds,
+        revokedPropertyIds: result.leavingIds,
+        addedPropertyIds: result.enteringIds,
         affectedRollCount: result.affectedRollCount,
       },
     });
