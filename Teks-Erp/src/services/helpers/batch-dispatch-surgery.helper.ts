@@ -46,6 +46,7 @@ import {
 } from "./batch-dispatch-surgery-guards.helper";
 import { OPEN_OUTSTANDING } from "./fason-open-dispatch.helper";
 import { hasRoll, isRollItem } from "./dispatch-item-kind.helper";
+import { workOrderBoundOnly } from "./dispatch-header.helper";
 
 export interface DispatchSurgeryResult {
   /** Bu operasyonda sevk cerrahisi gören kaynak parti id'leri (boşalma → K17 izi kararı için). */
@@ -135,7 +136,8 @@ export async function performDispatchSurgeryTx(
   if (params.sourceBatchIds.length === 0) return result;
 
   // Kaynak partilerin açık+outstanding sevkleri + kalemleri (dönmüşlük bilgisiyle).
-  const sourceOpen = await tx.subcontractorDispatch.findMany({
+  // Parti kapsamlı iki sorgu: dokuma sevkinin partisi yok — daraltma tip içindir, SQL aynı.
+  const sourceOpen = workOrderBoundOnly(await tx.subcontractorDispatch.findMany({
     where: { batchId: { in: params.sourceBatchIds }, ...OPEN_OUTSTANDING },
     select: {
       id: true,
@@ -164,7 +166,7 @@ export async function performDispatchSurgeryTx(
       },
     },
     orderBy: [{ dispatchedAt: "asc" }, { createdAt: "asc" }],
-  });
+  }));
 
   // Parti cerrahisi TOP kalemi taşır; levent kalemi (F1) sevkinde kalır.
   const affected = sourceOpen
@@ -185,17 +187,18 @@ export async function performDispatchSurgeryTx(
   // splitBatch'te hedef yeni doğduğundan boş gelir; moveRolls'ta kalem birleştirme
   // hedefi budur. Retarget/yeni-doğan sevkler döngü içinde haritaya eklenir ki
   // aynı adımdaki SONRAKİ kaynaklar ona birleşsin (≤1 açık sevk değişmezi).
-  const targetOpen = await tx.subcontractorDispatch.findMany({
+  const targetOpen = workOrderBoundOnly(await tx.subcontractorDispatch.findMany({
     where: { batchId: params.targetBatchId, ...OPEN_OUTSTANDING },
     select: {
       id: true,
       dispatchNo: true,
+      workOrderId: true,
       stepId: true,
       subcontractorId: true,
       subcontractor: { select: { name: true } },
       items: { select: { rollId: true, roll: { select: { barcode: true } } } },
     },
-  });
+  }));
   const targetByStep = new Map<
     string,
     { id: string; dispatchNo: string; subcontractorId: string; rollIds: Set<string> }

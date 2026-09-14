@@ -77,6 +77,7 @@ async function renderable(d: DocRow): Promise<boolean> {
 async function testCoverage(): Promise<string | null> {
   console.log("\n── 1) Kapsam (fason sevkli iş emri) ──");
   const d = await prisma.subcontractorDispatch.findFirst({
+    where: { workOrderId: { not: null } }, // G2: dokuma sevkinin WO'su yok
     orderBy: { dispatchedAt: "desc" },
     select: { workOrderId: true },
   });
@@ -86,7 +87,7 @@ async function testCoverage(): Promise<string | null> {
     console.log("  ⚠ dev DB'de fason sevk yok — kapsam bölümü atlandı");
     return null;
   }
-  const docs = await listDocs(d.workOrderId);
+  const docs = await listDocs(d.workOrderId!);
   check("liste boş değil", docs.length > 0);
   check(
     "refakat kartı listede",
@@ -124,6 +125,7 @@ async function testPrintable(workOrderId: string | null): Promise<void> {
 async function testReceiptReachable(): Promise<void> {
   console.log("\n── 3) Fason kabul makbuzu ulaşılabilir mi (eski kör nokta) ──");
   const r = await prisma.subcontractorReceipt.findFirst({
+    where: { workOrderId: { not: null } }, // G2: dokuma makbuzunun WO'su yok
     orderBy: { receivedAt: "desc" },
     select: { workOrderId: true, receiptNo: true },
   });
@@ -131,7 +133,7 @@ async function testReceiptReachable(): Promise<void> {
     console.log("  ⚠ dev DB'de fason kabul yok — atlandı");
     return;
   }
-  const docs = await listDocs(r.workOrderId);
+  const docs = await listDocs(r.workOrderId!);
   const hit = docs.find((x) => x.docType === "SUBCONTRACTOR_RECEIPT" && x.documentNo === r.receiptNo);
   check("kabul makbuzu listede", Boolean(hit), r.receiptNo);
   if (hit) check("kabul makbuzu basılabiliyor", await renderable(hit));
@@ -160,7 +162,7 @@ function testPermissionAlignment(): void {
 async function testCancelledKept(): Promise<void> {
   console.log("\n── 5) İptal edilmiş belge listede kalır ──");
   const cancelled = await prisma.subcontractorDispatch.findFirst({
-    where: { cancelledAt: { not: null } },
+    where: { cancelledAt: { not: null }, workOrderId: { not: null } },
     orderBy: { dispatchedAt: "desc" },
     select: { workOrderId: true, dispatchNo: true },
   });
@@ -168,7 +170,7 @@ async function testCancelledKept(): Promise<void> {
     console.log("  ⚠ dev DB'de iptal edilmiş sevk yok — atlandı");
     return;
   }
-  const docs = await listDocs(cancelled.workOrderId);
+  const docs = await listDocs(cancelled.workOrderId!);
   const hit = docs.find((x) => x.documentNo === cancelled.dispatchNo);
   check("iptal edilen sevkin belgesi listede DURUYOR", Boolean(hit), "donmuş belge silinmez");
   check("cancelled bayrağı işaretli", hit?.cancelled === true, "istemci İPTAL rozetiyle ayırır");

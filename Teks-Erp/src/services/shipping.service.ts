@@ -144,6 +144,7 @@ import {
   dynamicCursorWhere,
   buildNextDynamicCursor,
 } from "../utils/cursor";
+import { assertWorkOrderBound } from "./helpers/dispatch-header.helper";
 
 // Re-export saf primitifler (geriye uyum — eskiden bu dosyada tanımlıydı).
 export {
@@ -4458,6 +4459,7 @@ export class ShippingService {
           select: {
             id: true,
             dispatchNo: true,
+            workOrderId: true,
             subcontractor: { select: { id: true, name: true, code: true } },
             workOrder: { select: { id: true, workOrderNumber: true } },
             step: { select: { stepSequence: true, station: { select: { name: true, code: true } } } },
@@ -4490,6 +4492,8 @@ export class ShippingService {
       },
     });
     if (!ds) throw AppError.notFound("Fasondan sevk kaydı bulunamadı");
+    // DSK yalnız iş emri sevkinden doğar (top sevki); daraltma tip içindir.
+    assertWorkOrderBound(ds.dispatch, "Doğrudan sevkin fason sevki");
 
     return {
       success: true,

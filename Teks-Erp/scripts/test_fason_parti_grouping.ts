@@ -125,7 +125,7 @@ async function main(): Promise<void> {
   const d1id = (d1.data as Any).id as string;
   // Parti lane = sevkin partisi (SubcontractorDispatch.batchId → Batch). Eski
   // batchSplitId=dispatch.id yerine artık dispatch bir Batch'e bağlı ve rollara batchId yazar.
-  const lane1 = (await prisma.subcontractorDispatch.findUnique({ where: { id: d1id }, select: { batchId: true } }))!.batchId;
+  const lane1 = (await prisma.subcontractorDispatch.findUnique({ where: { id: d1id }, select: { batchId: true } }))!.batchId!;
   console.log(`Parti-1 sevk: ${(d1.data as Any).dispatchNo} (2 top, parti=${lane1.slice(0, 8)})`);
 
   // ── PARTİ 2: 3 top → AYNI Boyahane adımı (çoklu sevk) ──
@@ -137,7 +137,7 @@ async function main(): Promise<void> {
     ADMIN,
   );
   const d2id = (d2.data as Any).id as string;
-  const lane2 = (await prisma.subcontractorDispatch.findUnique({ where: { id: d2id }, select: { batchId: true } }))!.batchId;
+  const lane2 = (await prisma.subcontractorDispatch.findUnique({ where: { id: d2id }, select: { batchId: true } }))!.batchId!;
   console.log(`Parti-2 sevk: ${(d2.data as Any).dispatchNo} (3 top, parti=${lane2.slice(0, 8)})\n`);
 
   check("İki sevk farklı parti (batchId) üretti", lane1 !== lane2);

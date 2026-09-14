@@ -116,6 +116,7 @@ import {
   validateVarianceReason,
 } from "../constants/variance-reasons";
 import { OPEN_OUTSTANDING, outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.helper";
+import { assertWorkOrderBound, workOrderBoundOnly } from "./helpers/dispatch-header.helper";
 import {
   assertOrderLinkAllowed,
   resolveOrderRequirement,
@@ -2069,6 +2070,7 @@ export class SubcontractorService {
       },
     });
     if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
+    assertWorkOrderBound(dispatch); // iş emri yolu iptali; dokuma sevki kendi servisinden iptal edilir
 
     // F1: levent kalemi top listesine girmez (null bağ); iptal yolu leventi ayrıca geri alır.
     const rollIds = dispatch.items.map((i) => i.rollId).filter((x): x is string => !!x);
@@ -2404,10 +2406,10 @@ export class SubcontractorService {
     // atlandı" sorusunu id ile değil belge numarasıyla sorar. Bilinmeyen id de
     // `failed` satırıdır: tek yanlış id yüzünden 404 ile tüm çağrıyı düşürmek,
     // geri kalan 20 sevki sebepsiz yere fasonda bırakırdı.
-    const known = await prisma.subcontractorDispatch.findMany({
+    const known = workOrderBoundOnly(await prisma.subcontractorDispatch.findMany({
       where: { id: { in: ids } },
       select: { id: true, dispatchNo: true, workOrderId: true, dispatchedAt: true },
-    });
+    })); // dokuma sevki bilinmeyen sayılır → `cancel()` 409'u satır bazında raporlar
     const byId = new Map(known.map((d) => [d.id, d]));
 
     // ⚠️ DETERMİNİSTİK SIRA — deadlock önlemi, süs değil. Bir toplu seçim çoğunlukla
@@ -3739,12 +3741,14 @@ export class SubcontractorService {
         { code: "REMAINDER_NOT_CLOSED_AT_STEP" },
       );
     }
+    const closedDispatch = closedItem.dispatch;
+    assertWorkOrderBound(closedDispatch, "Kalan kapaması sevki"); // const bağ: daraltma tx kapanışına taşınır
 
     // İŞ EMRİ TERMİNALSE FAIL-CLOSED: iptal/superseded WO'nun adımına canlı top
     // geri konarsa çıkış yolu kalmaz (kart diriltilmez, iz yazılmaz, ikinci sevk
     // ve kabul iptali 409). DSK kilidi operatörü "WO iptal + kalan kapaması"
     // yoluna ittiği için bu şekle kolayca düşülüyordu.
-    const woStatus = closedItem.dispatch.workOrder.status;
+    const woStatus = closedDispatch.workOrder.status;
     if (woStatus === WorkOrderStatus.CANCELLED || woStatus === WorkOrderStatus.SUPERSEDED) {
       throw AppError.conflict(
         `İş emri ${woStatus === WorkOrderStatus.CANCELLED ? "iptal edilmiş" : "yenisiyle değiştirilmiş"} — kalan kapaması geri alınamaz; top yeni bir iş emrine alınmalı.`,
@@ -3754,7 +3758,7 @@ export class SubcontractorService {
 
     await prisma.$transaction(async (tx) => {
       // Kilit closeRemainder ile AYNI (fason completion yarışı) ve tx'in İLK ifadesi.
-      await touchWorkOrderTx(tx, closedItem.dispatch.workOrderId);
+      await touchWorkOrderTx(tx, closedDispatch.workOrderId);
 
       // Damganın kaldırılması atomik claim'dir: iki eşzamanlı geri almadan yalnız
       // biri kazanır (eski kod `updateMany` sayısını okumuyordu, ikisi de "başarılı").
@@ -3812,15 +3816,15 @@ export class SubcontractorService {
       // adımı açmak "mal fasonda ama iş emri kapalı" durumu bırakır (ikinci sevk ve
       // kabul iptali 409 verir, kart okutulamaz).
       await recomputeStepStatus(tx, data.stepId);
-      await ensureWorkOrderInProgress(tx, closedItem.dispatch.workOrderId);
+      await ensureWorkOrderInProgress(tx, closedDispatch.workOrderId);
       const reopen = await tx.workOrder.updateMany({
-        where: { id: closedItem.dispatch.workOrderId, status: WorkOrderStatus.COMPLETED },
+        where: { id: closedDispatch.workOrderId, status: WorkOrderStatus.COMPLETED },
         data: { status: WorkOrderStatus.IN_PROGRESS },
       });
       if (reopen.count > 0) {
         await setWorkOrderCardStatusesTx(
           tx,
-          closedItem.dispatch.workOrderId,
+          closedDispatch.workOrderId,
           TravelerCardStatus.COMPLETED,
           TravelerCardStatus.ACTIVE,
         );
@@ -3829,8 +3833,8 @@ export class SubcontractorService {
       // Refakat kartı izi — geri alma kartta görünmüyordu (denetim DÜŞÜK bulgusu).
       await logTravelerScan(
         tx,
-        closedItem.dispatch.workOrderId,
-        closedItem.dispatch.step.stationId,
+        closedDispatch.workOrderId,
+        closedDispatch.step.stationId,
         data.stepId,
         ScanType.INFO,
         userId,
@@ -4247,19 +4251,20 @@ export class SubcontractorService {
         },
       });
 
-      const dispatches = await prisma.subcontractorDispatch.findMany({
+      // Adım kapsamlı: daraltma tip içindir, SQL aynı.
+      const dispatches = workOrderBoundOnly(await prisma.subcontractorDispatch.findMany({
         // Doğrudan-sevk edilmiş sevk "son açık sevk" gösteriminde yer almaz.
         // outstanding-scope ŞART (K15 retarget dönmüş sevkleri aynı adıma taşıyabilir):
         // buildPendingParties batchId→dispatch Map'i last-wins — dönmüş sevk açık
         // sevki ezip mobil kabul gruplamasında yanlış firma/sevk gösterirdi.
         where: { stepId: { in: stepIds }, ...OPEN_OUTSTANDING },
         select: {
-          id: true, batchId: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
+          id: true, workOrderId: true, batchId: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
           driverName: true, stepId: true, subcontractorId: true,
           subcontractor: { select: { id: true, code: true, name: true } },
         },
         orderBy: { dispatchedAt: "desc" },
-      });
+      }));
 
       const byStep = new Map<string, typeof dispatches>();
       for (const d of dispatches) {
@@ -4393,19 +4398,20 @@ export class SubcontractorService {
       },
     });
 
-    const dispatches = await prisma.subcontractorDispatch.findMany({
+    // Adım kapsamlı: daraltma tip içindir, SQL aynı.
+    const dispatches = workOrderBoundOnly(await prisma.subcontractorDispatch.findMany({
       // Doğrudan-sevk edilmiş sevk "son açık sevk" gösteriminde yer almaz.
       // outstanding-scope ŞART (WO'ya-özel kardeş sorguyla aynı — K15 retarget
       // dönmüş sevkleri aynı adıma taşıyabilir): lastDispatch en güncel AÇIK sevk
       // olmalı; dönmüş tarihçe sevki listede yanlış firma/sevk gösterirdi.
       where: { stepId: { in: stepIds }, ...OPEN_OUTSTANDING },
       select: {
-        id: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
+        id: true, workOrderId: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
         driverName: true, stepId: true, subcontractorId: true,
         subcontractor: { select: { id: true, code: true, name: true } },
       },
       orderBy: { dispatchedAt: "desc" },
-    });
+    }));
 
     const byStep = new Map<string, typeof dispatches>();
     for (const d of dispatches) {
@@ -4508,15 +4514,16 @@ export class SubcontractorService {
     // outstanding-scope ŞART (K15 retarget dönmüş sevkleri aynı adıma taşıyabilir):
     // buildPendingParties batchId→dispatch Map'i last-wins — dönmüş sevk açık
     // sevki ezip mobil kabul gruplamasında yanlış firma/sevk gösterirdi.
-    const dispatches = await prisma.subcontractorDispatch.findMany({
+    // Adım kapsamlı: dokuma sevkinin adımı yok — daraltma tip içindir, SQL aynı.
+    const dispatches = workOrderBoundOnly(await prisma.subcontractorDispatch.findMany({
       where: { stepId, ...OPEN_OUTSTANDING },
       select: {
-        id: true, batchId: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
+        id: true, workOrderId: true, batchId: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
         driverName: true, stepId: true, subcontractorId: true,
         subcontractor: { select: { id: true, code: true, name: true } },
       },
       orderBy: { dispatchedAt: "desc" },
-    });
+    }));
     const lastDispatch = dispatches[0] ?? null;
 
     // "Sevk bekliyor": fason adımında DURAN ama fasona ÇIKMAMIŞ toplar (manuel
@@ -4991,6 +4998,7 @@ export class SubcontractorService {
       where: { id },
       select: {
         cancelledAt: true,
+        workOrderId: true,
         instruction: true,
         step: { select: { notes: true } },
         workOrder: {
@@ -5001,6 +5009,7 @@ export class SubcontractorService {
       },
     });
     if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
+    assertWorkOrderBound(dispatch); // boya kaplaması iş emri sevkinin alanı
 
     // P4: Fason talimatı düzenleme kilidi — iptal edilmiş ya da (kabul edilmiş =
     // mal döndü) sevkin talimatı artık değiştirilemez. Frontend editörü buna göre
@@ -5052,9 +5061,10 @@ export class SubcontractorService {
     const { updated, oldInstruction } = await prisma.$transaction(async (tx) => {
       const dispatch = await tx.subcontractorDispatch.findUnique({
         where: { id },
-        select: { id: true, instruction: true },
+        select: { id: true, workOrderId: true, instruction: true },
       });
       if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
+      assertWorkOrderBound(dispatch); // fason talimatı iş emri sevkinin alanı
 
       const claimed = await tx.subcontractorDispatch.updateMany({
         where: {
@@ -5190,6 +5200,7 @@ export class SubcontractorService {
       where: { id: receiptId },
       select: {
         id: true,
+        workOrderId: true,
         receiptNo: true,
         receivedAt: true,
         cancelledAt: true,
@@ -5221,6 +5232,7 @@ export class SubcontractorService {
       },
     });
     if (!receipt) throw AppError.notFound("Mal kabul belgesi bulunamadı");
+    assertWorkOrderBound(receipt, "Mal kabul belgesi");
     if (receipt.cancelledAt) {
       throw AppError.conflict("Bu mal kabul zaten iptal edilmiş");
     }
@@ -5345,6 +5357,7 @@ export class SubcontractorService {
       },
     });
     if (!receipt) throw AppError.notFound("Mal kabul belgesi bulunamadı");
+    assertWorkOrderBound(receipt, "Mal kabul belgesi"); // makbuz iptali iş emri yolunda (dokuma makbuzu G2 servisinde)
     if (receipt.cancelledAt) {
       throw AppError.conflict("Bu mal kabul zaten iptal edilmiş");
     }
@@ -5744,6 +5757,7 @@ export class SubcontractorService {
       },
     });
     if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
+    assertWorkOrderBound(dispatch); // transfer geri alma önizlemesi iş emri yolunda
 
     const targetStep = dispatch.step; // sonraki fason (ör. boyahane)
     const bornRolls = dispatch.items.filter(hasRoll).map((it) => it.roll);
@@ -5901,6 +5915,7 @@ export class SubcontractorService {
       },
     });
     if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
+    assertWorkOrderBound(dispatch); // transfer geri alma iş emri yolunda
     if (dispatch.cancelledAt) throw AppError.conflict("Bu sevk zaten iptal edilmiş");
     if (dispatch.directShippedAt) {
       throw AppError.conflict("Fasondan sevk edilmiş sevk geri alınamaz");
@@ -6054,6 +6069,7 @@ export class SubcontractorService {
           where: { id: receiptId },
           select: {
             id: true,
+            workOrderId: true,
             receiptNo: true,
             stepId: true,
             cancelledAt: true,
@@ -6062,6 +6078,7 @@ export class SubcontractorService {
           },
         });
         if (!receipt) throw AppError.conflict("Kaynak kabul belgesi bulunamadı.");
+        assertWorkOrderBound(receipt, "Kaynak kabul belgesi");
         if (receipt.cancelledAt) {
           throw AppError.conflict(`Kaynak kabul ${receipt.receiptNo} zaten iptal edilmiş.`);
         }
@@ -6192,6 +6209,7 @@ export class SubcontractorService {
     });
 
     if (!receipt) throw AppError.notFound("Kabul belgesi bulunamadı");
+    assertWorkOrderBound(receipt, "Kabul belgesi");
 
     const rolls = receipt.items.map((item, idx) => ({
       sequence: idx + 1,
@@ -6330,6 +6348,7 @@ export class SubcontractorService {
       },
     });
     if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
+    assertWorkOrderBound(dispatch); // DSK önizlemesi yalnız iş emri sevki
 
     const step = dispatch.step;
     const wo = step.workOrder;
@@ -6553,6 +6572,7 @@ export class SubcontractorService {
       },
     });
     if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
+    assertWorkOrderBound(dispatch); // DSK yalnız iş emri sevkinden (top sevki)
     if (dispatch.cancelledAt) throw AppError.conflict("İptal edilmiş sevk fasondan sevk edilemez");
     if (dispatch.directShippedAt) {
       // Idempotency: zaten doğrudan sevk edilmiş → cached başarı.
@@ -7182,6 +7202,7 @@ async function buildFasonDispatchDoc(
     },
   });
   if (!dispatch) return null;
+  assertWorkOrderBound(dispatch, "Sevk belgesi"); // belge yalnız iş emri sevki için (dokuma sevki G2p)
 
   // F1: levent kalemi kumaş grid'ine girmez; ayrı listede donar. Kumaş toplamı top kalemlerinden
   // (top-yalnız sevkte `dispatch.totalQty` ile aynı — consistency §19; levent varsa Σ top).
@@ -7297,6 +7318,7 @@ async function buildFasonDirectShipDoc(
       shippedBy: { select: { fullName: true, username: true } },
       dispatch: {
         select: {
+          workOrderId: true,
           dispatchNo: true,
           dispatchedAt: true,
           driverName: true,
@@ -7339,6 +7361,7 @@ async function buildFasonDirectShipDoc(
     },
   });
   if (!ds) return null;
+  assertWorkOrderBound(ds.dispatch, "Doğrudan sevkin fason sevki"); // DSK yalnız iş emri sevkinden
 
   // Doğrudan sevk edilen toplar = DirectShipment'a bağlı (bölünmüşse çocuk) toplar;
   // dispatchedQty = topun sevk anındaki currentQty'si (kısmi split'te sevk edilen kısım).
@@ -7469,6 +7492,7 @@ async function buildFasonReceiptDoc(
     },
   });
   if (!receipt) return null;
+  assertWorkOrderBound(receipt, "Kabul belgesi"); // belge yalnız iş emri makbuzu için (dokuma makbuzu G2p)
 
   const rolls = receipt.items.map((it, idx) => ({
     sequence: idx + 1,

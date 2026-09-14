@@ -24,6 +24,7 @@ import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { SubcontractorService } from "./subcontractor.service";
 import { OPEN_OUTSTANDING, OUTSTANDING_ITEM } from "./helpers/fason-open-dispatch.helper";
+import { workOrderBoundOnly } from "./helpers/dispatch-header.helper";
 
 /** Kabul edilecek bir sevk grubu — adım + firma + o sevkteki toplar. */
 export interface FasonQuickGroup {
@@ -92,11 +93,13 @@ export class WorkOrderFasonQuickService {
     // `directShippedAt`/`receipt.cancelledAt` taşımıyordu → tamamen doğrudan-sevk
     // edilmiş sevk hayalet grup olarak listeleniyor, kabul iptali (LIFO) sonrası
     // yeniden açılan sevkin grubu ise hiç gösterilmiyordu.
-    const dispatches = await prisma.subcontractorDispatch.findMany({
+    // İş emri kapsamlı: daraltma tip içindir, SQL aynı.
+    const dispatches = workOrderBoundOnly(await prisma.subcontractorDispatch.findMany({
       where: { workOrderId, ...OPEN_OUTSTANDING },
       select: {
         id: true,
         dispatchNo: true,
+        workOrderId: true,
         stepId: true,
         subcontractorId: true,
         subcontractor: { select: { name: true } },
@@ -109,7 +112,7 @@ export class WorkOrderFasonQuickService {
         },
       },
       orderBy: { createdAt: "asc" },
-    });
+    }));
 
     const seen = new Set<string>();
     const groups: FasonQuickGroup[] = dispatches.map((d) => {

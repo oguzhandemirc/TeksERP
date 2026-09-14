@@ -64,6 +64,7 @@ import {
 import { OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
 import { ACTIVE_TARGET_PROPERTY } from "./helpers/property-revoke.helper";
 import { ACTIVE_ORDER_LINK } from "./helpers/order-link.helper";
+import { workOrderBoundOnly } from "./helpers/dispatch-header.helper";
 
 // Refakat kartı listesinde sıralanabilir kolonlar. createdAt BİLEREK yok →
 // varsayılan/createdAt isteği printedAt'e düşer (yeni basılan kart ilk gelsin).
@@ -882,11 +883,12 @@ export class TravelerCardService {
     );
 
     // En yeni önce → ilk görülen partinin "canlı" sevki, sonrakiler sayılır.
-    const dispatches = await prisma.subcontractorDispatch.findMany({
+    // Parti kapsamlı: dokuma sevkinin partisi yok — daraltma tip içindir, SQL aynı.
+    const dispatches = workOrderBoundOnly(await prisma.subcontractorDispatch.findMany({
       where: { batchId: { in: ids }, cancelledAt: null },
       orderBy: { dispatchedAt: "desc" },
-      select: { batchId: true, dispatchNo: true, subcontractor: { select: { name: true } } },
-    });
+      select: { workOrderId: true, batchId: true, dispatchNo: true, subcontractor: { select: { name: true } } },
+    }));
     const dispByBatch = new Map<string, TravelerBatchLine["dispatch"]>();
     for (const d of dispatches) {
       const seen = dispByBatch.get(d.batchId);

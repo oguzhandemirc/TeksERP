@@ -48,6 +48,7 @@ import {
 } from "./helpers/traveler-card-dirty.helper";
 import { OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
 import { isRollItem } from "./helpers/dispatch-item-kind.helper";
+import { workOrderBoundOnly } from "./helpers/dispatch-header.helper";
 
 // K18: üyelik değişiminde etiketi bayatlamayan (labelDirty atlanacak) TARİHÇE
 // statüleri — tüketilmiş/iptal top fiziksel etikete çıkmaz, bayraklanmaz.
@@ -630,11 +631,13 @@ export async function mergeBatches(
     // iptal-olmamış makbuzla dönmemiş) sevkleri adım bazında gruplanır; bir adımda
     // 2+ FARKLI firma varsa 409 — fiziksel gerçek: mal iki ayrı firmada, firma
     // çözümü (F74) bozulur. Farklı adımlardaki sevkler serbest (çözüm stepId-scope'lu).
-    const openOutstanding = await tx.subcontractorDispatch.findMany({
+    // Parti kapsamlı sorgu: dokuma sevkinin partisi yok, satır zaten WO'ya bağlı — daraltma tip içindir.
+    const openOutstanding = workOrderBoundOnly(await tx.subcontractorDispatch.findMany({
       where: { batchId: { in: allBatchIds }, ...OPEN_OUTSTANDING },
       select: {
         id: true,
         dispatchNo: true,
+        workOrderId: true,
         batchId: true,
         stepId: true,
         subcontractorId: true,
@@ -643,7 +646,7 @@ export async function mergeBatches(
         step: { select: { station: { select: { name: true } } } },
       },
       orderBy: [{ dispatchedAt: "asc" }, { createdAt: "asc" }],
-    });
+    }));
     const byStep = new Map<string, typeof openOutstanding>();
     for (const d of openOutstanding) {
       const arr = byStep.get(d.stepId) ?? [];

@@ -80,6 +80,7 @@ const KAPILI: ReadonlyArray<{ dosya: string; mount: string }> = [
   { dosya: "routes/weaving-order.routes.ts", mount: "/api/weaving-orders" },
   { dosya: "routes/machine-run.routes.ts", mount: "/api/machine-runs" },
   { dosya: "routes/machine-doff.routes.ts", mount: "/api/machine-doffs" },
+  { dosya: "routes/subcontractor-weaving.routes.ts", mount: "/api/subcontractor-weaving" }, // G2 fason dokuma
   // Faz 1b (6e, 2026-09-14): elle duruş girişi — koşumla aynı kapı (`requireDokumaEnabled`).
   { dosya: "routes/machine-stop.routes.ts", mount: "/api/machine-stops" },
   // Dokuma raporları Dilim 2 (01, 2026-09-14): vardiya karnesi okuma (M1) — aynı kapı.

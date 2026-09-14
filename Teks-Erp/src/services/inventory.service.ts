@@ -186,6 +186,7 @@ import { generateRollBarcodeTx, type RollBarcodeType } from "./helpers/roll-barc
 import { finalizeRollsAtLastStep, finalBarcodeType, loadProducedBuckets } from "./helpers/roll-finalize.helper";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.helper";
+import { assertWorkOrderBound } from "./helpers/dispatch-header.helper";
 import { uyari } from "../lib/logger";
 import { upperTr } from "../utils/tr-case";
 
@@ -801,6 +802,12 @@ export class InventoryService {
       /** Topu doğuran mal kabul fişi (yalnız `GoodsReceipt` yolu doldurur). */
       goodsReceiptId?: string | null;
       /**
+       * Topu doğuran FASON DOKUMA makbuzu (G2, 2026-09-14) — yalnız
+       * `forcedEntrySource: WEAVING` ile ve yalnız `subcontractor-weaving.service`
+       * doldurur; top↔dokuma işi bağı buradan türer (`weavingOrderOfRoll`).
+       */
+      parentReceiptId?: string | null;
+      /**
        * Topun KARŞILADIĞI alış siparişi kalemi (J2, 2026-08-15) — yalnız
        * `GoodsReceipt` yolu doldurur, orada da yalnız fiş bir siparişe bağlıysa.
        *
@@ -1174,6 +1181,7 @@ export class InventoryService {
             createdById: userId ?? null,
             createdMachineId: machineId ?? null,
             doffEventId: opts?.doffEventId ?? null,
+            parentReceiptId: opts?.parentReceiptId ?? null,
             // GİRİŞ İSTASYONU — çağıranın AÇIKÇA verdiği değer, burada
             // TÜRETİLMEZ (`machineId` elde olsa bile; bkz. opts dokümanı).
             entryStationId: opts?.entryStationId ?? null,
@@ -4969,6 +4977,8 @@ export class InventoryService {
       },
     });
     if (!receipt) throw AppError.notFound("Mal kabul belgesi bulunamadı");
+    // Açık kumaş yalnız iş emri makbuzundan açılır (dokuma makbuzu topu KK1 girişiyle doğurur).
+    assertWorkOrderBound(receipt, "Mal kabul belgesi");
     if (receipt.cancelledAt) {
       throw AppError.badRequest("İptal edilmiş mal kabul üzerinden yeni kumaş açılamaz");
     }
@@ -5016,10 +5026,12 @@ export class InventoryService {
         where: { id: data.receiptId },
         select: {
           cancelledAt: true,
+          workOrderId: true,
           workOrder: { select: { status: true, targetItemId: true } },
         },
       });
       if (!fr) throw AppError.notFound("Mal kabul belgesi bulunamadı");
+      assertWorkOrderBound(fr, "Mal kabul belgesi");
       if (fr.cancelledAt) {
         throw AppError.conflict("Mal kabul bu sırada iptal edildi — açık kumaş açılamaz");
       }

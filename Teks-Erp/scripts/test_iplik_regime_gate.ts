@@ -124,6 +124,14 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "(K10'un fatura için kapattığı sızıntının ikizi). §4d o kapıyı ADIYLA izliyor.",
   },
   {
+    dosya: "routes/subcontractor-weaving.routes.ts",
+    neden:
+      "FASON DOKUMA (G2, 2026-09-14). Kendi rejim kapısını taşır (`requireDokumaEnabled`); iplik dokunuşu " +
+      "GEÇİŞLİ ve YANILTICIDIR: `createInitialEntry` (inventory zinciri) ve `nextPrefixedSequenceTx` " +
+      "(subcontractor.service) üzerinden. Bu yüzey kg defterine YAZMAZ; levent kalemi F1 defterine yazar, iplik kalemi G1'de " +
+      "kendi kapısıyla gelir. Route kapısı KONULAMAZ: dokuma fasonu iplik/ticaret modülü olmadan meşrudur.",
+  },
+  {
     dosya: "routes/stock-count.routes.ts",
     neden:
       "STOK SAYIMI — mal kabulle AYNI SINIF. Router `requireTicaretEnabled` taşır; " +

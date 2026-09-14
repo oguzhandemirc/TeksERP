@@ -243,7 +243,8 @@ export async function computeWoInput(
       where: { id: { in: receiptIds } },
       select: { id: true, workOrderId: true },
     });
-    for (const rec of recs) receiptWo.set(rec.id, rec.workOrderId);
+    // Dokuma işi makbuzunun WO'su yok — o toplar W-içi fason-dönüş ayrımına girmez.
+    for (const rec of recs) if (rec.workOrderId) receiptWo.set(rec.id, rec.workOrderId);
   }
 
   const isMember = (r: (typeof rolls)[number], wo: string): boolean => {

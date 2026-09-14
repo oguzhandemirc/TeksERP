@@ -1734,6 +1734,9 @@ model WeavingOrder {
   /// Bu işi hangi tezgah koşumları icra etti. `SUBCONTRACTED` işte BOŞ kalır —
   /// fasona verilen dokumanın koşumu bizde tutulmaz.
   machineRuns    MachineRun[]   @relation("MachineRunWeavingOrder")
+  /// Fason dokuma (G2): levent/iplik bu iş adına fasona gider, TOP makbuzla döner.
+  subcontractorDispatches SubcontractorDispatch[] @relation("DispatchWeavingOrder")
+  subcontractorReceipts   SubcontractorReceipt[]  @relation("ReceiptWeavingOrder")
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt      @db.Timestamptz
@@ -4987,10 +4990,16 @@ model RollMovement {
 model SubcontractorDispatch {
   id                     String   @id @default(uuid()) @db.Uuid
   dispatchNo             String   @unique @db.VarChar(64) // SD-YYMM-NNNNNN
-  workOrderId            String   @db.Uuid
+  /// BAŞLIK POLİMORFİK (G2, 2026-09-14): sevk YA iş emri adımına (`workOrderId`+`stepId`+`batchId`,
+  /// üçü birden) YA dokuma işine (`weavingOrderId`) bağlıdır — tam biri; CHECK
+  /// `subcontractor_dispatches_header_ck` ikinci hat, birincil kapı serviste. Fason dokumada
+  /// levent/iplik gider TOP gelir; dokuma işi `WorkOrder` DEĞİLDİR, rotası/partisi yoktur.
+  workOrderId            String?  @db.Uuid
   // Bir sevk = bir parti (K10). Fason dönüşünde born roll'ların partisi buradan kalıtılır.
-  batchId                String   @db.Uuid
-  stepId                 String   @db.Uuid
+  batchId                String?  @db.Uuid
+  stepId                 String?  @db.Uuid
+  /// Fason dokuma sevki — `WeavingOrder.executionKind = SUBCONTRACTED` işin fasoncusuna.
+  weavingOrderId         String?  @db.Uuid
   subcontractorId        String   @db.Uuid // Gerçekleşen fason firma
   // Sevk anında "plan ne diyordu" snapshot'ı — rapor için.
   // step.plannedSubcontractorId değişebilir; bu alan o anki değeri dondurur.
@@ -5021,9 +5030,10 @@ model SubcontractorDispatch {
   directShipReason  String?
 
   // Relations
-  workOrder             WorkOrder                           @relation(fields: [workOrderId], references: [id])
-  batch                 Batch                               @relation(fields: [batchId], references: [id])
-  step                  WorkOrderStep                       @relation(fields: [stepId], references: [id])
+  workOrder             WorkOrder?                          @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  batch                 Batch?                              @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  step                  WorkOrderStep?                      @relation(fields: [stepId], references: [id], onDelete: Restrict)
+  weavingOrder          WeavingOrder?                       @relation("DispatchWeavingOrder", fields: [weavingOrderId], references: [id], onDelete: Restrict)
   subcontractor         Subcontractor                       @relation("DispatchSubcontractor", fields: [subcontractorId], references: [id])
   plannedSubcontractor  Subcontractor?                      @relation("DispatchPlannedSubcontractor", fields: [plannedSubcontractorId], references: [id])
   dispatchedBy          User?                               @relation("DispatchCreatedBy", fields: [dispatchedById], references: [id])
@@ -5042,6 +5052,7 @@ model SubcontractorDispatch {
   @@index([dispatchedAt])
   // Composite: WO-filtreli + tarih sıralı liste (workorder detay panelinde kullanılır)
   @@index([workOrderId, dispatchedAt])
+  @@index([weavingOrderId, dispatchedAt])
   // Parti-filtreli sevkler (getBatches lane hesabı + born kalıtım kaynağı)
   @@index([batchId])
   // Composite: Fason firma-filtreli + tarih sıralı liste (firma raporları için)
@@ -5213,8 +5224,12 @@ model SubcontractorReceipt {
   /// tam-tüketimli (isPartial=false) makbuzlar için devrede kalır.
   clientToken     String?  @unique @db.Uuid
   manifestNo      String?  @db.VarChar(64) // İrsaliye no (fason firma tarafından verilir, opsiyonel)
-  workOrderId     String   @db.Uuid
-  stepId          String   @db.Uuid
+  /// BAŞLIK POLİMORFİK (G2): iş emri adımı (`workOrderId`+`stepId`) XOR dokuma işi
+  /// (`weavingOrderId`) — CHECK `subcontractor_receipts_header_ck`. Fason dokuma kabulünde
+  /// makbuz KALEMİ yoktur, TOP doğar (`bornRolls`, `entrySource=WEAVING`).
+  workOrderId     String?  @db.Uuid
+  stepId          String?  @db.Uuid
+  weavingOrderId  String?  @db.Uuid
   subcontractorId String   @db.Uuid
   receivedAt      DateTime @default(now()) @db.Timestamptz
   receivedById    String?  @db.Uuid
@@ -5254,8 +5269,9 @@ model SubcontractorReceipt {
   cancelReason  String?
 
   // Relations
-  workOrder         WorkOrder                      @relation(fields: [workOrderId], references: [id])
-  step              WorkOrderStep                  @relation(fields: [stepId], references: [id])
+  workOrder         WorkOrder?                     @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+  step              WorkOrderStep?                 @relation(fields: [stepId], references: [id], onDelete: Restrict)
+  weavingOrder      WeavingOrder?                  @relation("ReceiptWeavingOrder", fields: [weavingOrderId], references: [id], onDelete: Restrict)
   subcontractor     Subcontractor                  @relation("ReceiptSubcontractor", fields: [subcontractorId], references: [id])
   receivedBy        User?                          @relation("ReceiptCreatedBy", fields: [receivedById], references: [id])
   cancelledBy       User?                          @relation("ReceiptCancelledBy", fields: [cancelledById], references: [id])
@@ -5276,6 +5292,7 @@ model SubcontractorReceipt {
   @@index([receivedAt])
   // Composite: WO-filtreli + tarih sıralı liste (WO detayında "kabuller" sekmesi)
   @@index([workOrderId, receivedAt])
+  @@index([weavingOrderId, receivedAt])
   // Composite: Fason firma-filtreli + tarih sıralı liste
   @@index([subcontractorId, receivedAt])
   @@map("subcontractor_receipts")

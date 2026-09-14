@@ -506,6 +506,9 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // F1 (2026-09-14, migration 20260914171000): fason türü ⇔ kalem bağı (iki yönlü) · kalem tür ⇔ bağ XOR'u.
   { table: "warp_beam_events", name: "warp_beam_events_fason_item_ck" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_kind_ref_ck" },
+  // G2 fason dokuma (2026-09-14): başlık iş emri adımı XOR dokuma işi — birincil kapı serviste
+  { table: "subcontractor_dispatches", name: "subcontractor_dispatches_header_ck" },
+  { table: "subcontractor_receipts", name: "subcontractor_receipts_header_ck" },
   { table: "yarn_movements", name: "yarn_movements_warp_link_ck" },
   { table: "yarn_movements", name: "yarn_movements_warp_return_reason_ck" },
   // Devere Faz 2 (lot): bobin adedi bilgi alanı, null ya da pozitif.

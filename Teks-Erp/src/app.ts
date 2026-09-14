@@ -47,6 +47,7 @@ import machineStopRoutes from "./routes/machine-stop.routes";
 import machineShiftStatRoutes from "./routes/machine-shift-stat.routes";
 import machineSpecRoutes from "./routes/machine-spec.routes";
 import machineDoffRoutes from "./routes/machine-doff.routes";
+import subcontractorWeavingRoutes from "./routes/subcontractor-weaving.routes";
 import inventoryRoutes from "./routes/inventory.routes";
 import orderRoutes from "./routes/order.routes";
 import recordInfoRoutes from "./routes/record-info.routes";
@@ -842,6 +843,7 @@ app.use("/api/machine-stops", machineStopRoutes);
 app.use("/api/machine-shift-stats", machineShiftStatRoutes);
 app.use("/api/machine-specs", machineSpecRoutes);
 app.use("/api/machine-doffs", machineDoffRoutes);
+app.use("/api/subcontractor-weaving", subcontractorWeavingRoutes);
 app.use("/api/rolls", inventoryRoutes);
 app.use("/api/orders", orderRoutes);
 // ⚠️ MOUNT — "yazıldı ama mount edilmedi" sınıfı hata için bkz. reboot-kurtarma notu.

@@ -148,6 +148,7 @@ import { nextPrefixedSequenceTx, SubcontractorService } from "./subcontractor.se
 
 import { diffFields } from "./helpers/audit-diff.helper";
 import { OPEN_OUTSTANDING, outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.helper";
+import { workOrderBoundOnly, workOrderStepIdOf } from "./helpers/dispatch-header.helper";
 import { hata } from "../lib/logger";
 import { hasRoll, isRollItem } from "./helpers/dispatch-item-kind.helper";
 // Prisma.Decimal | number | null | undefined → number | null (karşılaştırma için)
@@ -1893,7 +1894,8 @@ export class WorkOrderService {
     // WO'nundur; sayfa dışı bir adıma işaret eden anomali sevk varsa YALNIZ o
     // adımlar için tek ek tur atılır → `current` işareti eski davranışla aynı.
     const firmsByWo = new Map<string, Map<string, boolean>>();
-    const dispatchRows = await prisma.subcontractorDispatch.findMany({
+    // İş emri kapsamlı: daraltma tip içindir, SQL aynı.
+    const dispatchRows = workOrderBoundOnly(await prisma.subcontractorDispatch.findMany({
       where: { workOrderId: { in: woIds }, cancelledAt: null },
       select: {
         workOrderId: true,
@@ -1901,7 +1903,7 @@ export class WorkOrderService {
         subcontractor: { select: { name: true } },
       },
       orderBy: { createdAt: "asc" },
-    });
+    }));
     const unknownStepIds = [
       ...new Set(dispatchRows.map((d) => d.stepId).filter((id) => !stepStationById.has(id))),
     ];
@@ -2230,10 +2232,12 @@ export class WorkOrderService {
         stepRolls.set(key, list);
       }
 
-      const dispatches = await prisma.subcontractorDispatch.findMany({
+      // Adım kapsamlı: dokuma sevkinin adımı yok — daraltma tip içindir, SQL aynı.
+      const dispatches = workOrderBoundOnly(await prisma.subcontractorDispatch.findMany({
         where: { stepId: { in: stepIds }, cancelledAt: null },
         select: {
           id: true,
+          workOrderId: true,
           stepId: true,
           dispatchNo: true,
           dispatchedAt: true,
@@ -2261,7 +2265,7 @@ export class WorkOrderService {
           },
         },
         orderBy: { dispatchedAt: "desc" },
-      });
+      }));
       for (const d of dispatches) {
         const list = stepDispatches.get(d.stepId) ?? [];
         list.push({
@@ -3435,7 +3439,7 @@ export class WorkOrderService {
           select: {
             id: true,
             rollId: true,
-            dispatch: { select: { dispatchNo: true, stepId: true } },
+            dispatch: { select: { dispatchNo: true, workOrderId: true, stepId: true } },
             roll: { select: { barcode: true, currentQty: true } },
           },
         });
@@ -3469,7 +3473,7 @@ export class WorkOrderService {
         for (const k of kalanlar.filter(isRollItem)) {
           await fasonSvc.closeRemainder(
             {
-              stepId: k.dispatch.stepId,
+              stepId: workOrderStepIdOf(k.dispatch),
               rollId: k.rollId,
               reasonCode: input.fasonRemainderReasonCode ?? SHRINK_REASON_CODE,
               reasonText: `İş emri iptali: ${reason}`,

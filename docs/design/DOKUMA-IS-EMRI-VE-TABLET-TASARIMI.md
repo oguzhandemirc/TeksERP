@@ -112,12 +112,12 @@ Sistem dokuma çıktısını baştan beri bekliyormuş.
 | firma | model | bugünkü durum |
 |---|---|---|
 | **kendi tezgahında dokur** | dokuma işi + `MachineRun` | yeni (§2) |
-| **dokumayı fasona verir** | aynı dokuma işi, `executionKind = SUBCONTRACTED`, `MachineRun` yok | ⚠️ **bağımsız engel** (aşağıda) |
+| **dokumayı fasona verir** | aynı dokuma işi, `executionKind = SUBCONTRACTED`, `MachineRun` yok | ~~⚠️ bağımsız engel~~ **G2 İNDİ 2026-09-14** (başlık polimorfik, `subcontractor-weaving.service`; panel/tablet yüzeyi G2p) |
 | **hazır kumaş alır** (bugünkü `adnansahin`) | `GoodsReceipt` → `PURCHASE_RECEIPT` | **bugün çalışıyor, dokunulmuyor** |
 
 Eksen, devere tasarımının `WarpBeamOrigin` için zaten seçtiği kalıbın aynısıdır (`IN_HOUSE` / dış taraf + XOR'lu taraf kolonu) — ikinci bir kalıp icat edilmiyor.
 
-📌 **Fason dokuma ayrı dilimdir ve Faz 1'i bloklamaz:** `SubcontractorDispatchItem.rollId` **NOT NULL** (`schema.prisma:3887`) — fasona yapısal olarak yalnız TOP gidebilir, iplik ya da levent gidemez. Bu bir **fason sözleşmesi** sorusudur, dokuma sorusu değil; polimorfik sevk kalemi kendi diliminde çözülür.
+📌 ~~**Fason dokuma ayrı dilimdir ve Faz 1'i bloklamaz:** `SubcontractorDispatchItem.rollId` **NOT NULL** — fasona yapısal olarak yalnız TOP gidebilir.~~ **GEÇERSİZ → 2026-09-14:** F1 kalemi (levent), G2 başlığı (dokuma işine bağlı sevk/makbuz) polimorfik yaptı; fason dokuma `subcontractor-weaving.service` ile çalışır (`docs/kurallar/fason.md` G2 kuralı).
 
 📌 **Sipariş bağı Faz 1'de AÇILMAZ.** Kök kural: *"top↔sipariş satırı bağı YOKTUR, karşılama `SackAllocation` ile sevk anında."* Dokuma işi karşılama için sipariş bağına ihtiyaç duymuyor; `WorkOrderToOrderLine`'ın ikinci bir kopyası tam olarak *"aynı soruyu cevaplayan iki yol"* sınıfıdır.
 

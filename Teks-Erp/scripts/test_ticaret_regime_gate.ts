@@ -102,6 +102,14 @@ const ADLA_BEKLENEN_KAPILI: ReadonlyArray<{ dosya: string; neden: string }> = [
 // Geçişli dokunuş (InventoryService) orada da burada da AYNI olgudur.
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
+    dosya: "routes/subcontractor-weaving.routes.ts",
+    neden:
+      "FASON DOKUMA (G2, 2026-09-14). Kendi rejim kapısını taşır (`requireDokumaEnabled`); ticaret dokunuşu " +
+      "GEÇİŞLİ ve YANILTICIDIR: `createInitialEntry` (inventory zinciri) ve `nextPrefixedSequenceTx` " +
+      "(subcontractor.service) üzerinden. Bu yüzey alış siparişine/faturaya YAZMAZ; levent kalemi F1 defterine yazar, iplik kalemi G1'de " +
+      "kendi kapısıyla gelir. Route kapısı KONULAMAZ: dokuma fasonu iplik/ticaret modülü olmadan meşrudur.",
+  },
+  {
     dosya: "routes/demo.routes.ts",
     neden:
       "DEMO senaryo üreticileri (2026-09-01). Ticaret modeline dokunuş GEÇİŞLİDİR ve " +

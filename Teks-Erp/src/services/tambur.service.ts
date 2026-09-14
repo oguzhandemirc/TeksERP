@@ -86,6 +86,7 @@ import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { buildIntentSnapshot } from "./label.service";
 import { resolveLabelIntent, labelCustomerIdOf } from "./helpers/label-intent.helper";
 import { generateRollBarcodeTx, reserveRollBarcodesInOrderTx } from "./helpers/roll-barcode.helper";
+import { workOrderBoundOnly } from "./helpers/dispatch-header.helper";
 import { uyari } from "../lib/logger";
 // ⚠️ TEK YÖNLÜ BAĞIMLILIK: tambur.service → kursun-bypass.service.
 // `kursun-bypass.service` bu dosyayı (ya da onu import eden bir modülü) ASLA
@@ -338,11 +339,13 @@ export class TamburService {
         orderBy: { createdAt: "asc" },
         select: { id: true, batchNumber: true },
       }),
-      prisma.subcontractorDispatch.findMany({
-        where: { batchId: { in: [...present] }, cancelledAt: null },
-        orderBy: { dispatchedAt: "desc" },
-        select: { batchId: true, dispatchNo: true },
-      }),
+      prisma.subcontractorDispatch
+        .findMany({
+          where: { batchId: { in: [...present] }, cancelledAt: null },
+          orderBy: { dispatchedAt: "desc" },
+          select: { workOrderId: true, batchId: true, dispatchNo: true },
+        })
+        .then(workOrderBoundOnly), // parti kapsamlı: tip daraltması, SQL aynı
     ]);
     // dispatchedAt DESC → parti başına ilk görülen kayıt en güncel sevki.
     const latestDispatchNo = new Map<string, string>();

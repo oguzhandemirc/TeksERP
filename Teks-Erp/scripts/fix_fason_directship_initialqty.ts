@@ -245,7 +245,7 @@ export async function teshis(kapsam?: { dispatchIds: string[] }): Promise<Teshis
       rollId: p.id,
       barkod: p.barcode,
       durum: p.status,
-      isEmriNo: (kalem?.dispatch ?? ilkSevk).workOrder.workOrderNumber,
+      isEmriNo: (kalem?.dispatch ?? ilkSevk).workOrder?.workOrderNumber ?? "—",
       fasonSevkNo: (kalem?.dispatch ?? ilkSevk).dispatchNo,
       fasonFirma: kalem?.dispatch.subcontractor.name ?? "—",
       initialQty: p.initialQty,
