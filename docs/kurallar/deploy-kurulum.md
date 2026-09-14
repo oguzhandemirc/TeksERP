@@ -106,7 +106,7 @@
 
 ## Açık sorular
 
-- Backend sürüm ekseni (`backend-v*`, scripts/backend-surum.mjs, commit 61d3651d 2026-09-04) kök 'Sürüm Yayınlama' bölümünde ve `scripts/test_surum.mjs` kapsamında yok — bekçi backend'i ölçüyor mu BELİRSİZ (surum.mjs:60 yalnız panel/tablet kalıbı).
+- Backend sürüm ekseni (`backend-v*`, scripts/backend-surum.mjs, commit `61d3651d` 2026-09-04) kök 'Sürüm Yayınlama' bölümünde ve `scripts/test_surum.mjs` kapsamında yok — bekçi backend'i ölçüyor mu BELİRSİZ (surum.mjs:60 yalnız panel/tablet kalıbı).
 - Pull-sonrası notu (Teks-Erp/CLAUDE.md:103) 'migrate dev atlanırsa … P2022' derken aynı not 'deploy uygular, dev DEĞİL' der — aynı not içinde terim tutarsızlığı; ezilme değil, metin düzeltmesi.
 - Teks-Erp/CLAUDE.md:147 middlewares listesi bayat (15 dosyanın 8'i listede yok) — deploy kuralı değil, Architecture özeti; bu kümeden karar verilmedi.
 

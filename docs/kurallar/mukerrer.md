@@ -50,7 +50,7 @@
 ## Açık sorular
 
 - `find_fold_duplicates.ts` TABLES/`enforce` haritası 2026-08-31 ve 2026-09-01 sedlerini TANIMIYOR: 8 yeni sedli tablo (defect_types, routes, machines…) `enforce` etiketi almamış, `warehouses`/`cash_boxes`/`bank_accounts` ise hiç taranmıyor (find_fold_duplicates.ts:62-72). 'Sed eklemeden önce bu script'i koştur' reçetesi bu tablolarda enforce durumunu yanlış (temiz) gösterir — bilinçli kapsam kararı mı bayatlık mı BELİRSİZ, notlarda kaydı yok.
-- 2026-08-22 notu paneli 'DuplicatesPage (gerekçeli gruplar, çift başına Ertele/Mükerrer değil/Geri aç, CSV)' diye tarif ediyor; aynı gün c6563fb4 'panel v3 — ana ekran TAM LİSTE, yan yana karşılaştırma, listeden birleştirme' geldi (MergeDialog.tsx +212, DuplicatesPage.tsx 700 satır değişti). Kural değişmedi ama notun ekran tarifi bayat; hangi tarifin kalıcı olduğu notlardan çözülemiyor.
+- 2026-08-22 notu paneli 'DuplicatesPage (gerekçeli gruplar, çift başına Ertele/Mükerrer değil/Geri aç, CSV)' diye tarif ediyor; aynı gün `c6563fb4` 'panel v3 — ana ekran TAM LİSTE, yan yana karşılaştırma, listeden birleştirme' geldi (MergeDialog.tsx +212, DuplicatesPage.tsx 700 satır değişti). Kural değişmedi ama notun ekran tarifi bayat; hangi tarifin kalıcı olduğu notlardan çözülemiyor.
 
 ## Doğrulama turu ekleri (eski CLAUDE.md ↔ yeni yapı karşılaştırması, 2026-09-05)
 
