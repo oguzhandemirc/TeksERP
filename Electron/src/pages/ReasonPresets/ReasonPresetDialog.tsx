@@ -19,7 +19,9 @@ import {
   reasonPresetService,
   type ReasonPreset,
   type ReasonPresetKind,
+  type StopLossClass,
 } from "./service";
+import { StopLossClassField } from "./StopLossClassField";
 
 export type ReasonPresetDialogMode = "edit" | "duplicate" | "create";
 
@@ -45,17 +47,22 @@ export function ReasonPresetDialog({
 }) {
   const qc = useQueryClient();
   const storesText = KIND_STORES_TEXT[kind];
+  // Kayıp sınıfı yalnız tezgah duruşunda sorulur; sunucu da başka kind'de reddeder.
+  const asksClass = kind === "MACHINE_STOP";
   const [label, setLabel] = useState("");
   const [fullText, setFullText] = useState("");
+  const [lossClass, setLossClass] = useState<StopLossClass | "">("");
 
   useEffect(() => {
     if (!open) return;
     if (mode === "create") {
       setLabel("");
       setFullText("");
+      setLossClass("");
     } else if (preset) {
       setLabel(mode === "duplicate" ? `${preset.label} (kopya)` : preset.label);
       setFullText(preset.fullText ?? "");
+      setLossClass(preset.stopLossClass ?? "");
     }
   }, [open, mode, preset]);
 
@@ -63,16 +70,20 @@ export function ReasonPresetDialog({
     mutationFn: async () => {
       const name = label.trim();
       const text = storesText ? fullText.trim() || name : undefined;
+      const stopLossClass = asksClass && lossClass ? lossClass : undefined;
       if (mode === "edit" && preset) {
-        return reasonPresetService.update(preset.id, { label: name, fullText: text ?? null });
+        return reasonPresetService.update(preset.id, { label: name, fullText: text ?? null, stopLossClass });
       }
       if (mode === "duplicate" && preset) {
+        // Kopya sınıfı kaynaktan taşır; kullanıcı diyalogda değiştirdiyse ikinci çağrıyla düzeltilir.
         const row = await reasonPresetService.duplicate(preset.id, name);
-        return text && text !== row.fullText
-          ? reasonPresetService.update(row.id, { fullText: text })
-          : row;
+        const patch = {
+          ...(text && text !== row.fullText ? { fullText: text } : {}),
+          ...(stopLossClass && stopLossClass !== row.stopLossClass ? { stopLossClass } : {}),
+        };
+        return Object.keys(patch).length > 0 ? reasonPresetService.update(row.id, patch) : row;
       }
-      return reasonPresetService.create({ kind, label: name, fullText: text ?? null });
+      return reasonPresetService.create({ kind, label: name, fullText: text ?? null, stopLossClass });
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["reason-presets"] });
@@ -125,6 +136,8 @@ export function ReasonPresetDialog({
             </div>
           )}
 
+          {asksClass && <StopLossClassField value={lossClass} onChange={setLossClass} />}
+
           {mode !== "create" && preset && (
             <p className="text-xs text-muted-foreground">
               Kod: <span className="font-mono font-semibold">{preset.code}</span>
@@ -139,7 +152,10 @@ export function ReasonPresetDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={save.isPending}>
             Vazgeç
           </Button>
-          <Button onClick={() => save.mutate()} disabled={label.trim().length < 2 || save.isPending}>
+          <Button
+            onClick={() => save.mutate()}
+            disabled={label.trim().length < 2 || (asksClass && !lossClass) || save.isPending}
+          >
             Kaydet
           </Button>
         </DialogFooter>

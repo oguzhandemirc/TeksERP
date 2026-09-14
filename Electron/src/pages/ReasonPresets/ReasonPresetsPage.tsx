@@ -7,7 +7,6 @@ import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Callout } from "@/components/ui/callout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
@@ -18,6 +17,7 @@ import {
   type ReasonPreset,
   type ReasonPresetKind,
 } from "./service";
+import { PresetRowSummary } from "./PresetRowSummary";
 import { ReasonPresetDialog, type ReasonPresetDialogMode } from "./ReasonPresetDialog";
 
 // =============================================================================
@@ -168,24 +168,7 @@ export function ReasonPresetsPage() {
                         </Button>
                       </div>
 
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={
-                              row.isActive ? "font-medium" : "font-medium text-muted-foreground line-through"
-                            }
-                          >
-                            {row.label}
-                          </span>
-                          {!row.isActive && <Badge variant="outline">Gizli</Badge>}
-                          {row.requiresText && <Badge variant="secondary">Açıklama ister</Badge>}
-                          {row.isSystem && <Badge variant="outline">Sistem</Badge>}
-                        </div>
-                        <div className="truncate text-xs text-muted-foreground">
-                          <span className="font-mono">{row.code}</span>
-                          {row.fullText && row.fullText !== row.label ? ` · ${row.fullText}` : ""}
-                        </div>
-                      </div>
+                      <PresetRowSummary row={row} />
 
                       {canEdit && (
                         <div className="flex shrink-0 items-center gap-1">

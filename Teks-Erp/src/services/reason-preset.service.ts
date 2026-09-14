@@ -27,7 +27,7 @@
 // gerekçe). Gizleme bir GÖRÜNÜRLÜK kararıdır, geçerlilik kararı değil.
 // =============================================================================
 
-import { Prisma, ReasonPresetKind, RollVarianceKind } from "@prisma/client";
+import { MachineStopLossClass, Prisma, ReasonPresetKind, RollVarianceKind } from "@prisma/client";
 import { TAMBUR_UNDO_CANCEL_CODE, TAMBUR_UNDO_CANCEL_TEXT } from "../constants/reason-presets";
 
 import prisma from "../lib/prisma";
@@ -54,6 +54,8 @@ export type ReasonPresetDto = {
   isSystem: boolean;
   /** Eski adlar (salt-okunur; `update()` yazar) — çözücünün ikinci sözlüğü. */
   legacyTexts: string[];
+  /** Yalnız `MACHINE_STOP`ta dolu (zorunlu, `MINOR` olamaz); diğer kind'lerde NULL. */
+  stopLossClass: MachineStopLossClass | null;
 };
 
 const SELECT = {
@@ -67,6 +69,7 @@ const SELECT = {
   isActive: true,
   isSystem: true,
   legacyTexts: true,
+  stopLossClass: true,
 } satisfies Prisma.ReasonPresetSelect;
 
 /** Eski-ad listesinin üst sınırı — en eskisi düşer (sınırsız dizi = sınırsız satır). */
@@ -365,11 +368,18 @@ export const ReasonPresetService = {
   },
 
   async create(
-    input: { kind: ReasonPresetKind; label: string; fullText?: string | null; requiresText?: boolean },
+    input: {
+      kind: ReasonPresetKind;
+      label: string;
+      fullText?: string | null;
+      requiresText?: boolean;
+      stopLossClass?: MachineStopLossClass | null;
+    },
     userId?: string,
   ): Promise<ReasonPresetDto> {
     const label = input.label.trim();
     if (!label) throw new AppError("Etiket boş olamaz", 400);
+    const stopLossClass = resolveStopLossClass(input.kind, input.stopLossClass);
 
     const code = await nextFreeCode(input.kind, slugifyReasonCode(label));
     const sortOrder = await nextSortOrder(input.kind);
@@ -382,6 +392,7 @@ export const ReasonPresetService = {
         // (operatör ayrıca uzun cümle yazmadıysa). Kod saklayan listelerde NULL.
         fullText: resolveFullText(input.kind, input.fullText, label),
         requiresText: input.requiresText ?? false,
+        stopLossClass,
         sortOrder,
         isSystem: false,
         createdById: userId ?? null,
@@ -407,13 +418,22 @@ export const ReasonPresetService = {
    */
   async update(
     id: string,
-    input: { label?: string; fullText?: string | null; requiresText?: boolean; isActive?: boolean },
+    input: {
+      label?: string;
+      fullText?: string | null;
+      requiresText?: boolean;
+      isActive?: boolean;
+      stopLossClass?: MachineStopLossClass | null;
+    },
     userId?: string,
   ): Promise<ReasonPresetDto> {
     const current = await prisma.reasonPreset.findUnique({ where: { id }, select: SELECT });
     if (!current) throw new AppError("Hazır sebep bulunamadı", 404);
 
     if (input.isActive === false) await assertNotLastActive(current.kind, id);
+    // Sınıf katalogda düzeltilebilir; açılmış duruşlardaki kopya DONUK kalır (şema notu).
+    const stopLossClass =
+      input.stopLossClass !== undefined ? resolveStopLossClass(current.kind, input.stopLossClass) : undefined;
 
     const label = input.label?.trim();
     if (input.label !== undefined && !label) throw new AppError("Etiket boş olamaz", 400);
@@ -438,6 +458,7 @@ export const ReasonPresetService = {
         ...(textChanged ? { legacyTexts } : {}),
         ...(input.requiresText !== undefined ? { requiresText: input.requiresText } : {}),
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+        ...(stopLossClass !== undefined ? { stopLossClass } : {}),
         updatedById: userId ?? null,
       },
       select: SELECT,
@@ -480,6 +501,8 @@ export const ReasonPresetService = {
           label: newLabel,
           fullText: resolveFullText(src.kind, undefined, newLabel),
           requiresText: src.requiresText,
+          // Sınıf kaynaktan kopyalanır — kopyalanmazsa MACHINE_STOP kopyası DB CHECK'e düşerdi.
+          stopLossClass: src.stopLossClass,
           sortOrder: src.sortOrder + 1,
           isSystem: false,
           createdById: userId ?? null,
@@ -545,6 +568,37 @@ function resolveFullText(
   if (!KIND_STORES_TEXT[kind]) return null;
   const text = given?.trim();
   return text || label;
+}
+
+/**
+ * Kayıp sınıfı yalnız `MACHINE_STOP`un alanıdır: orada ZORUNLU ve `MINOR` olamaz
+ * (MINOR süre sınıfıdır, sebep sınıfı değil); başka kind'de verilmesi REDDEDİLİR.
+ * Birincil doğrulama burada (Türkçe mesaj), `reason_presets_machine_class_chk` ikinci hat.
+ */
+function resolveStopLossClass(
+  kind: ReasonPresetKind,
+  given: MachineStopLossClass | null | undefined,
+): MachineStopLossClass | null {
+  if (kind !== ReasonPresetKind.MACHINE_STOP) {
+    if (given) {
+      throw AppError.badRequest("Kayıp sınıfı yalnız tezgah duruşu sebeplerinde girilir", {
+        code: "STOP_LOSS_CLASS_NOT_APPLICABLE",
+        kind,
+      });
+    }
+    return null;
+  }
+  if (!given) {
+    throw AppError.badRequest("Tezgah duruşu sebebi için kayıp sınıfı zorunlu", {
+      code: "STOP_LOSS_CLASS_REQUIRED",
+    });
+  }
+  if (given === MachineStopLossClass.MINOR) {
+    throw AppError.badRequest("Mikro (MINOR) bir süre sınıfıdır, sebebe verilemez", {
+      code: "STOP_LOSS_CLASS_MINOR",
+    });
+  }
+  return given;
 }
 
 /** `kind` içinde boş bir kod bulur (çakışırsa `_2`, `_3` … ekler). */

@@ -376,6 +376,11 @@
         },
         {
           "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Dokuma modülü açık kurulumlarda fabrika kendi tezgah duruş sebebini ekleyebiliyor: Hazır Sebepler'deki “Tezgah Duruşu” sekmesi artık dokuma modülüyle görünür (önceden yalnız tezgah izleme anahtarına bağlıydı ve dokumada gizli kalıyordu), yeni sebep eklerken ve çoğaltırken kayıp sınıfı seçilir (plansız / kurulum / planlı / çalışma dışı — zorunlu; mikro kopuş sebep değildir, seçilemez), listede her sebebin sınıfı rozetle görünür. Sınıf, duruş açılırken sebepten kopyalanıp o duruşa donar: katalogda sonradan değiştirmek geçmiş duruşları ve raporları değiştirmez."
+        },
+        {
+          "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Devere modülü açık kurulumlarda aynı metal gövde numarasıyla canlı (hazır ya da planlı) bir levent varken ikinci bir levent sarılamıyor; ekran meşgul leventi adıyla söyler. Büyük/küçük harf farkı ayrı gövde sayılmaz. Sarımı iptal edilmiş leventin gövde numarası yeniden kullanılabilir."
         },

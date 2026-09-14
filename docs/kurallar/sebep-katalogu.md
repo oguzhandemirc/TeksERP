@@ -16,6 +16,7 @@
 
 ### Yasaklar
 
+- **[ÇEKİRDEK]** `MACHINE_STOP` sebebi panelden eklenir/çoğaltılır ve KAYIP SINIFI (`stopLossClass`) onun zorunlu alanıdır: `MACHINE_STOP`ta boş → 400 `STOP_LOSS_CLASS_REQUIRED`, `MINOR` → 400 (süre sınıfıdır, sebep sınıfı değil), başka kind'de dolu → 400 `STOP_LOSS_CLASS_NOT_APPLICABLE`; birincil kapı servis (`resolveStopLossClass`), `reason_presets_machine_class_chk` ikinci hat; kopya sınıfı taşır; sınıf duruşa kopyalanıp DONAR, katalogda düzeltme geçmişi değiştirmez. Sekme `dokumaEnabled` okur (duruşlar o bayrak altında yazılır; `tezgahEnabled` telemetrinindir). · bekçi: `test_reason_presets §7` <sub>(2026-09-14, elle giriş kapsaması ③)</sub>
 - **[ÇEKİRDEK]** Sebep satırı SİLİNMEZ, yalnız gizlenir (`isActive=false`); son aktif satırın gizlenmesi 400 ile reddedilir — fire/düzeltme kararında sebep zorunlu olduğu için boş katalog operatörü kilitler. · bekçi: `test_reason_presets` <sub>(CLAUDE.md:73)</sub>
 
 ### Kararlar

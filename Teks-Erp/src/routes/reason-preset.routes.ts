@@ -21,7 +21,7 @@
 
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
-import { ReasonPresetKind } from "@prisma/client";
+import { MachineStopLossClass, ReasonPresetKind } from "@prisma/client";
 
 import { ReasonPresetService } from "../services/reason-preset.service";
 import { verifyToken } from "../middlewares/auth.middleware";
@@ -34,11 +34,15 @@ const canEdit = requireAnyPermission("roll:manual-adjust", "mobile:tambur-duzelt
 
 const kindSchema = z.nativeEnum(ReasonPresetKind);
 
+/** Kind'e bağlı zorunluluk (MACHINE_STOP'ta şart, diğerlerinde yasak) serviste — Zod yalnız değeri tanır. */
+const stopLossClassSchema = z.nativeEnum(MachineStopLossClass).optional().nullable();
+
 const createSchema = z.object({
   kind: kindSchema,
   label: z.string().trim().min(2).max(120),
   fullText: z.string().trim().max(500).optional().nullable(),
   requiresText: z.boolean().optional(),
+  stopLossClass: stopLossClassSchema,
 });
 
 const updateSchema = z.object({
@@ -46,6 +50,7 @@ const updateSchema = z.object({
   fullText: z.string().trim().max(500).optional().nullable(),
   requiresText: z.boolean().optional(),
   isActive: z.boolean().optional(),
+  stopLossClass: stopLossClassSchema,
 });
 
 const duplicateSchema = z.object({

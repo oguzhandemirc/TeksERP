@@ -24,11 +24,15 @@
 //      eski ada karşı önceliklidir; iki satırda aynı eski ad → belirsiz → null;
 //      sınır 20; metin dışı düzenleme listeye dokunmaz; eski ada geri dönüş
 //      listeyi temizler. Sistem satırı için çevrimdışı zemin (seed metni) senaryosu.
+//   §7 KAYIP SINIFI (2026-09-14, MACHINE_STOP): sınıf zorunlu (400), MINOR yasak
+//      (400), başka kind'de yasak (400), kopya sınıfı taşır, katalogda düzeltilir;
+//      birincil kapı servis, DB CHECK ikinci hat. Negatif sondalar: zorunluluk
+//      kaldırılınca · MINOR kapısı kaldırılınca · kopya sınıfı kopyalamayınca → ❌.
 // =============================================================================
 
 import { readFileSync } from "fs";
 import { join } from "path";
-import { ReasonPresetKind, RollVarianceKind } from "@prisma/client";
+import { MachineStopLossClass, ReasonPresetKind, RollVarianceKind } from "@prisma/client";
 
 import prisma, { pool } from "../src/lib/prisma";
 import { reconcileReasonPresets } from "../src/jobs/reason-preset-catalog.job";
@@ -530,6 +534,69 @@ async function main(): Promise<void> {
     await prisma.reasonPreset.update({ where: { id: ym.id }, data: { legacyTexts: ym.legacyTexts } });
     await refreshReasonPresetCache();
   }
+
+  await bolum7StopLossClass();
+}
+
+/**
+ * §7 Tezgah duruşu sebebi — KAYIP SINIFI sözleşmesi (2026-09-14): fabrika kendi
+ * duruş sebebini panelden ekler; sınıf `MACHINE_STOP`ta ZORUNLU, `MINOR` olamaz,
+ * başka kind'de verilemez, kopya sınıfı taşır, düzeltme yazılır. Birincil kapı
+ * serviste 400 (Türkçe mesaj) — DB CHECK'e düşmek (23514) bir sed ihlalidir.
+ */
+async function bolum7StopLossClass(): Promise<void> {
+  console.log("\n── §7 Tezgah duruşu sebebi — kayıp sınıfı sözleşmesi ──");
+  const STOP = ReasonPresetKind.MACHINE_STOP;
+  const expect400 = async (label: string, code: string, fn: () => Promise<unknown>): Promise<void> => {
+    let err: unknown = null;
+    try {
+      await fn();
+    } catch (e) {
+      err = e;
+    }
+    check(
+      label,
+      err instanceof AppError && err.statusCode === 400 && err.details?.code === code,
+      err instanceof AppError ? `status=${err.statusCode} code=${String(err.details?.code)}` : String(err ?? "hata fırlatmadı"),
+    );
+  };
+
+  await expect400("MACHINE_STOP sınıfsız → 400 STOP_LOSS_CLASS_REQUIRED (DB CHECK'e düşmez)", "STOP_LOSS_CLASS_REQUIRED", () =>
+    ReasonPresetService.create({ kind: STOP, label: TEST_LABEL + " SINIFSIZ" }),
+  );
+  await expect400("MACHINE_STOP + MINOR → 400 STOP_LOSS_CLASS_MINOR (süre sınıfı sebebe verilemez)", "STOP_LOSS_CLASS_MINOR", () =>
+    ReasonPresetService.create({ kind: STOP, label: TEST_LABEL + " MINOR", stopLossClass: MachineStopLossClass.MINOR }),
+  );
+  await expect400("başka kind + sınıf → 400 STOP_LOSS_CLASS_NOT_APPLICABLE", "STOP_LOSS_CLASS_NOT_APPLICABLE", () =>
+    ReasonPresetService.create({ kind: ReasonPresetKind.ROLL_SCRAP, label: TEST_LABEL + " YANLIS KIND", stopLossClass: MachineStopLossClass.PLANNED }),
+  );
+
+  const stop = await ReasonPresetService.create({ kind: STOP, label: TEST_LABEL + " KALIP DEGISIMI", stopLossClass: MachineStopLossClass.SETUP });
+  created.push(stop.id);
+  check("MACHINE_STOP + sınıf → yaratıldı, DTO sınıfı taşır", stop.stopLossClass === "SETUP" && stop.isSystem === false, `stopLossClass=${stop.stopLossClass}`);
+  // Kopya çağrısı try içinde: sınıf kopyalanmazsa DB CHECK fırlatır ve bekçi
+  // "dili ölmeden" (❌ satırı basarak) kırmızı vermeli.
+  let copy: Awaited<ReturnType<typeof ReasonPresetService.duplicate>> | null = null;
+  try {
+    copy = await ReasonPresetService.duplicate(stop.id, TEST_LABEL + " KALIP KOPYA");
+    created.push(copy.id);
+  } catch (e) {
+    check("kopya kaynağın sınıfını taşır (önceden DB CHECK'e düşüyordu)", false, `fırlattı: ${String(e).slice(0, 80)}`);
+  }
+  if (copy) {
+    check("kopya kaynağın sınıfını taşır (önceden DB CHECK'e düşüyordu)", copy.stopLossClass === "SETUP" && copy.code !== stop.code, `kopya=${copy.stopLossClass}`);
+  }
+  const fixed = await ReasonPresetService.update(stop.id, { stopLossClass: MachineStopLossClass.PLANNED });
+  check("sınıf katalogda düzeltilir (kod aynı kalır)", fixed.stopLossClass === "PLANNED" && fixed.code === stop.code);
+  await expect400("düzeltmede null → 400 STOP_LOSS_CLASS_REQUIRED", "STOP_LOSS_CLASS_REQUIRED", () =>
+    ReasonPresetService.update(stop.id, { stopLossClass: null }),
+  );
+  const scrap = await ReasonPresetService.create({ kind: ReasonPresetKind.ROLL_SCRAP, label: TEST_LABEL + " FIRE" });
+  created.push(scrap.id);
+  await expect400("başka kind'in satırına sınıf yazılamaz → 400", "STOP_LOSS_CLASS_NOT_APPLICABLE", () =>
+    ReasonPresetService.update(scrap.id, { stopLossClass: MachineStopLossClass.PLANNED }),
+  );
+  check("başka kind'de DTO sınıfı NULL", scrap.stopLossClass === null);
 }
 
 main()

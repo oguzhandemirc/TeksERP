@@ -30,7 +30,18 @@ export interface ReasonPreset {
   isSystem: boolean;
   /** Eski adlar (salt-okunur, 2026-08-21) — etiket düzenlenince sunucu eski metni de koda çözsün diye tutulur. */
   legacyTexts?: string[];
+  /** Yalnız `MACHINE_STOP`ta dolu (zorunlu; MINOR süre sınıfıdır, seçilemez). Duruşa kopyalanıp donar. */
+  stopLossClass?: StopLossClass | null;
 }
+
+/** Sebebe verilebilen kayıp sınıfları — `MINOR` bilinçli dışarıda (süre sınıfı, sebep değil). */
+export type StopLossClass = "UNPLANNED" | "SETUP" | "PLANNED" | "NON_SCHEDULED";
+export const STOP_LOSS_CLASS_OPTIONS: { value: StopLossClass; label: string; hint: string }[] = [
+  { value: "UNPLANNED", label: "Plansız", hint: "Arıza, kopuş, malzeme yok — kullanılabilirliği düşürür" },
+  { value: "SETUP", label: "Kurulum", hint: "Levent/tahar değişimi, ayar — kurulum süresine yazılır" },
+  { value: "PLANNED", label: "Planlı", hint: "Planlı bakım, mola dışı planlı duruş" },
+  { value: "NON_SCHEDULED", label: "Çalışma dışı", hint: "Sipariş yok, vardiya dışı — POT'a hiç girmez" },
+];
 
 /**
  * true olan listelerde kayda METİN de yazılır (`Roll.entryReason` / `Roll.cancelReason`
@@ -58,13 +69,15 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
 };
 
 /**
- * ⚠️ `modul` alanı: sekme yalnız o modül AÇIKKEN çizilir. Tezgahı KAPALI
+ * ⚠️ `modul` alanı: sekme yalnız o modül AÇIKKEN çizilir. Dokuması KAPALI
  * fabrikada (referans profil) `MACHINE_STOP` satırları DB'ye düşer (boot job'ı
  * bayrağa bakmaz — izin kataloğu denklemi) ama bu sekme ÇİZİLMEZ: koşulsuz
  * eklenmesi beşinci bir sekme doğurur ve K3'ü (sıfır fark) ihlal ederdi.
+ * Duruşlar `dokumaEnabled` altında yazılır (Tezgah Duruşları ekranı, tablet
+ * Dokuma ekranı) — sekme aynı bayrağı okur; `tezgahEnabled` telemetrinindir.
  * Parite bekçisi sekmenin VARLIĞINI ister, GÖRÜNÜRLÜĞÜNÜ değil — ikisi ayrı.
  */
-export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; modul?: "tezgahEnabled" | "devereEnabled" }[] = [
+export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; modul?: "dokumaEnabled" | "devereEnabled" }[] = [
   {
     kind: "ROLL_SCRAP",
     title: "Fire",
@@ -99,7 +112,7 @@ export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; m
     kind: "MACHINE_STOP",
     title: "Tezgah Duruşu",
     hint: "Tezgah neden durdu. Her sebep bir KAYIP SINIFI taşır (plansız / kurulum / planlı / çalışma dışı) ve randıman raporu o sınıfa göre gruplar; sınıf sebepten kopyalanıp duruşa donar. Kısa kopuşlar buraya girmez — onlar süre sınıfıdır, sebep değil.",
-    modul: "tezgahEnabled",
+    modul: "dokumaEnabled",
   },
   {
     kind: "WARP_RETURN",
@@ -119,12 +132,13 @@ export const reasonPresetService = {
     kind: ReasonPresetKind;
     label: string;
     fullText?: string | null;
+    stopLossClass?: StopLossClass | null;
   }): Promise<ReasonPreset> =>
     apiClient.post<ReasonPreset>("/api/reason-presets", input).then((r) => r.data),
 
   update: (
     id: string,
-    input: { label?: string; fullText?: string | null; isActive?: boolean },
+    input: { label?: string; fullText?: string | null; isActive?: boolean; stopLossClass?: StopLossClass | null },
   ): Promise<ReasonPreset> =>
     apiClient.patch<ReasonPreset>(`/api/reason-presets/${id}`, input).then((r) => r.data),
 
