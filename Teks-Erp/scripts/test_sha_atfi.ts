@@ -59,6 +59,13 @@ const OLU_TABAN = 0;
  */
 const CIPLAK_OLU_TABAN = 0;
 
+/**
+ * ⚠️ YAZIM İHLALİ TABANI — çözülen ama backtick'siz yazılmış sha: ölü değil, OKUNAKSIZ.
+ * Kapısız bir sayı aşağı inmez; düzeltmesi tek karakterlik iş ⇒ taban yalnız DÜŞER.
+ * (Ölçümün ağacı § SHA atfı bloğunda, `docs/standart/OLCUM-DISIPLINI-YAZIM.md`.)
+ */
+const YAZIM_IHLALI_TABAN = 63;
+
 /** Beyanlı muafiyet: gerçekten sha OLMAYAN ama kalıba uyan literaller. BOŞ DOĞAR. */
 const MUAF: Record<string, string> = {};
 
@@ -268,10 +275,22 @@ function main(): void {
       console.log(`   ⓘ duran borç (${ciplakOlu.size}) — çıplak ölü atıflar:`);
       for (const x of ciplakOlu) console.log(`      • ${x} ← ${ciplak.get(x)!.yerler.join(" · ")}`);
     }
-    // YAZIM İHLALİ: gerçek sha, çıplak yazılmış. Ölü DEĞİL ⇒ kırmızı değil; sayısı
-    // GÖRÜNÜR kalır — yazım kuralı bu sayıyı ileriye doğru 0'a taşır, geçmişi geri
-    // yazmaz. (Cırcıra çevrilmesi 1e kalemi: taban sabitine oturum dokunmaz.)
-    console.log(`   ⓘ yazım ihlali (${atiflar.length - ciplakOlu.size}) — origin'de ÇÖZÜLEN ama backtick'siz yazılmış sha (ölü değil, okunaksız)`);
+    // YAZIM İHLALİ — gerçek sha, çıplak yazılmış: ölü değil, OKUNAKSIZ. Kendi cırcırı
+    // var çünkü yalnız basılan bir sayı aşağı inmez; düzeltmesi tek karakterlik iş
+    // (backtick'e al) ⇒ taban GERÇEKTEN düşürülebilir ve pozitif sonda tutar.
+    const ihlalliler = atiflar.filter(([sha]) => !ciplakOlu.has(sha));
+    check("§3d ⭐ çıplak YAZIM İHLALİ ARTMADI", ihlalliler.length <= YAZIM_IHLALI_TABAN,
+      ihlalliler.length <= YAZIM_IHLALI_TABAN
+        ? `${ihlalliler.length} ≤ ${YAZIM_IHLALI_TABAN} — origin'de ÇÖZÜLEN ama backtick'siz yazılmış sha`
+        : `${ihlalliler.length} > ${YAZIM_IHLALI_TABAN} ⇒ YENİ çıplak yazım (sha'yı backtick'e al):\n      ` +
+            ihlalliler.slice(0, 12).map(([sha, v]) => `${sha} ← ${v.yerler.join(" · ")}`).join("\n      "));
+    curumeKolu(check, ATLAMA.atla, "§3e ⭐ yazım ihlali tabanı ÇÜRÜMEDİ", ihlalliler.length, YAZIM_IHLALI_TABAN);
+    if (ihlalliler.length > 0 && ihlalliler.length <= YAZIM_IHLALI_TABAN) {
+      // YEŞİLKEN DE BORÇ GÖRÜNÜR: taban 0 değilse kapı "temiz" demiyor, "arttırmadın"
+      // diyor. Adres basılmazsa borç bir SAYIYA dönüşür ve kapatılamaz.
+      console.log(`   ⓘ duran borç (${ihlalliler.length}) — çıplak yazılmış CANLI sha (ilk 12):`);
+      for (const [sha, v] of ihlalliler.slice(0, 12)) console.log(`      • ${sha} ← ${v.yerler.join(" · ")}`);
+    }
   }
 
   console.log("\n=== §2 SONDALAR (saf yüklem) ===");

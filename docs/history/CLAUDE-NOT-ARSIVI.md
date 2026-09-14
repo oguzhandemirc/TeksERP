@@ -50,8 +50,20 @@ biri düzeltildi → 1 (**taban DÜŞTÜ**), ikisi de düzeltildi → 0. Negatif
 tabanı düşüremeyen bir cırcırı göremezdi.
 
 Ölçüm (ağaç `129c4a0f`): 80 çıplak aday · 63 ATIF · 10 SAGLAMA · 7 FİKSTÜR · **ölü 0** ·
-yazım ihlali 63. 63 ihlal duran borçtur, her koşumda sayısı basılır ve kural onu ileriye
-doğru 0'a taşır — *ileriye dönük yazım kuralı, geriye dönük borç listesi.*
+yazım ihlali 63.
+
+**Ve "her koşumda basılan sayı" kapı sayılmadı.** İlk hâlde 63 yazım ihlali yalnız
+bastırılıyordu: görünür ama hiçbir şey onu aşağı zorlamıyor, yenisini de durdurmuyordu —
+sessiz yeşile komşu bir hâl. Kendi cırcırına bağlandı ve İKİ SONDA koşuldu: çıplak canlı
+bir sha eklendi → 64 ❌ (negatif) · duran ihlallerden biri backtick'e alındı → 62 ve
+çürüme kolu "tabanı düşür" diye ❌ verdi (pozitif). ⇒ ***Bu kolda pozitif sonda gerçekten
+tutar, çünkü ihlali düzeltmek tek karakterlik bir iştir*** — tabanı düşüremeyen bir cırcır
+hiç kapı olmamasından kötü olurdu.
+
+İki kadro kuralı bu dilimde netleşti (1e): **yeni bir cırcırın İLK sabitini kolun SAHİBİ
+yazar** (sonraki dokunuşlar entegratörün birleşik index ölçümüdür), ve **sabitin ağacı
+KODA değil belgeye yazılır** — kod yorumu 1–3 satır NEDEN söyler, ölçüm anlatısı taşımaz;
+"63 hangi ağaçta" cümlesi § SHA atfı bloğunda durur (kolsuz ağaçta aynı komut 80 verir).
 
 ## 2026-09-14 — Ters yol tipolojisinin BEŞİNCİ mekanizması: KARŞI KAYIT [ÇEKİRDEK]
 

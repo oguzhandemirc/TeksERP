@@ -268,9 +268,17 @@ yazım ihlali 63.** Cırcır tabanı `CIPLAK_OLU_TABAN = 0` ve İKİ YÖNLÜ do�
 çıplak ölü atıf eklendi → 2, biri düzeltildi → 1, ikisi de düzeltildi → 0. *Tabanı
 DÜŞÜREMEYEN bir cırcır, hiç kapı olmamasından kötüdür.*
 
-63 **yazım ihlali** duran borçtur: kırmızı değil (sha ölü değil, yalnız okunaksız),
-her koşumda sayısı basılır. Kural bu sayıyı ileriye doğru 0'a taşır, geçmişi geri yazmaz
-— *ileriye dönük yazım kuralı, geriye dönük borç listesi.*
+63 **yazım ihlali** kendi cırcırına bağlandı (`YAZIM_IHLALI_TABAN`, §3d/§3e): sha ölü
+değil — okuyucu `git show` ile bulur — ama kapısız bırakılan bir sayı hiç inmez, *her
+koşumda basılan bir sayı bir kapı değildir.* Bu kolda pozitif sonda GERÇEKTEN tutar,
+çünkü ihlali düzeltmek tek karakterlik bir iştir (sha'yı backtick'e al) ⇒ taban
+düşürülebilir. Kural sayıyı ileriye doğru 0'a taşır, geçmişi geri yazmaz — *ileriye
+dönük yazım kuralı, geriye dönük borç listesi.*
+
+⚠️ **SAYININ AĞACI** (sabitin gerekçesi kodda DEĞİL burada durur — kod yorumu NEDEN
+söyler, ölçüm anlatısı taşımaz): ikinci kolun indiği ağaçta **63**; aynı komut KOLSUZ
+bir ağaçta **80** verir. Sabit bayatlamaz, bu cümle bayatlar — "63 neydi" sorusu yanlış
+ağaçta ölçülürse yanlış cevaplanır.
 
 📌 Üç uygulama notu:
 - **Commit sha'sı → backtick.** Kapı görsün diye; tek maliyet iki karakter.
