@@ -37,6 +37,7 @@ export function StopEntryDialog({ presets, isPending, onClose, onConfirm }: Prop
           <DialogTitle>Elle duruş girişi</DialogTitle>
           <DialogDescription>
             Makinede tek açık duruş olabilir (ikincisi 409). Sebep şimdi verilmezse duruş yine açılır; sınıflandırma borcu doğar ve kuyrukta görünür.
+            Başlangıç en fazla 36 saat geriye / 5 dakika ileriye yazılabilir; dışı sunucu saatine kırpılır ve uyarıyla söylenir.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">

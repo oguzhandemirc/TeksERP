@@ -24,7 +24,9 @@ export function StopCloseDialog({ target, isPending, onClose, onConfirm }: Close
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Duruşu kapat — {target.machine.name}</DialogTitle>
-          <DialogDescription>Başlangıç {formatDateTime(target.startedAt)}. Süre başlangıçtan hesaplanır; bitiş başlangıçtan önce olamaz (400).</DialogDescription>
+          <DialogDescription>
+            Başlangıç {formatDateTime(target.startedAt)}. Süre başlangıçtan hesaplanır; bitiş başlangıçtan önce olamaz (400). Bitiş en fazla 36 saat geriye / 5 dakika ileriye yazılabilir; dışı sunucu saatine kırpılır ve uyarıyla söylenir.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-1">
           <Label htmlFor="stop-ended">Bitiş</Label>
