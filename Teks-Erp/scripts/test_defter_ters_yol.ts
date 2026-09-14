@@ -49,6 +49,9 @@ import { join, relative } from "node:path";
 import { DEFTER_BEYANI, STOK_OLAY_BEYANI, type DefterBeyani } from "./lib/defter-beyan";
 import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
 import { SILEN, defterYazimlariniTara, sembolReferanslari, tipliProgram } from "./lib/defter-yazim-tarama";
+import { TEARDOWN_ADLARI, silmeleriTara, sondaSinifla } from "./lib/silme-bagi";
+import { atlamaDefteri } from "./lib/atlama";
+import { curumeKolu } from "./lib/circir-kolu";
 import { semaAlanlari } from "./revoke-ast-tarama";
 import { walkTs } from "./lib/ts-tarama";
 
@@ -59,6 +62,8 @@ function check(label: string, ok: boolean, detail = ""): void {
   if (ok) { pass++; console.log(`✅ ${label}${detail ? ` — ${detail}` : ""}`); }
   else { fail++; console.error(`❌ ${label}${detail ? ` — ${detail}` : ""}`); }
 }
+
+const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 
 /**
  * Fikstür muafiyeti KEŞİFLE kurulur: `run-all-tests.ts` `scripts/` KÖKÜNDEKİ
@@ -333,6 +338,124 @@ for (const b of DEFTER_BEYANI.filter((x) => x.yazan)) {
 check("§10z silme taraması bir şey gördü (kör değil)", silmeTarama.bulgular.length > 0,
   `${silmeTarama.bulgular.length} silme çağrısı (defter modellerinde)`);
 
+console.log("\n=== §10b scripts/ SİLME BAĞI — muafiyet DOSYAYA değil YÜKLEME bakar ===");
+// NEDEN: §10 yalnız `src/`e bakıyordu; `scripts/` altındaki teardown defter satırı
+// siler ve bu MEŞRUDUR. Ama muafiyeti DOSYA düzeyinde vermek evreni yutar — kapı
+// "scripts/i yürüdüm" der, hiçbir şey ölçmez. Ölçüt YÜKLEMDİR: silme dosyanın KENDİ
+// ürettiği kimliklere bağlıysa muaf, ada/öneke dayanıyorsa değil.
+// KAPSAM: audit/telemetri sınıfı DIŞARIDA — doktrin onları "ne oldu asla değişmez"in
+// KAPSAMI dışında sayar, teardown'da test audit satırı silmek meşrudur.
+const SILME_KAPSAM_DISI = new Set(["TELEMETRI"]);
+const silmeDelegeleri = new Map(
+  DEFTER_BEYANI.filter((b) => !SILME_KAPSAM_DISI.has(b.sinif)).map((b) => [
+    b.model.charAt(0).toLowerCase() + b.model.slice(1),
+    b.model,
+  ]),
+);
+const scriptSilme = silmeleriTara(PROGRAM.program, PROGRAM.checker, KOK, (rel) => rel.startsWith("scripts/"), silmeDelegeleri);
+const bagsiz = scriptSilme.filter((x) => x.bag === "SINIRSIZ" || x.bag === "BOS");
+const bagOlculemedi = scriptSilme.filter((x) => x.bag === "OLCULEMEDI");
+const teardownDisi = scriptSilme.filter((x) => x.teardown === null);
+// ⚠️ CIRCIR TABANLARI — oturum DOKUNMAZ, entegratör trende ölçüp düşürür.
+const SINIRSIZ_TABAN = 18;
+const TEARDOWN_DISI_TABAN = 58;
+
+check("§10b0 körlük zemini: kapsam dolu", scriptSilme.length > 0,
+  `${scriptSilme.length} silme çağrısı · ${silmeDelegeleri.size} model (audit/telemetri hariç)`);
+check("§10b1 ⭐ ADA/ÖNEKE dayanan silme ARTMADI", bagsiz.length <= SINIRSIZ_TABAN,
+  bagsiz.length <= SINIRSIZ_TABAN
+    ? `${bagsiz.length} ≤ ${SINIRSIZ_TABAN}`
+    : `${bagsiz.length} > ${SINIRSIZ_TABAN} ⇒ YENİ sınırsız silme yüklemi:\n      ` +
+        bagsiz.map((x) => `${x.dosya}:${x.satir} ${x.model}.${x.metod} → ${x.not}`).join("\n      "));
+curumeKolu(check, ATLAMA.atla, "§10b1b ⭐ sınırsız silme tabanı ÇÜRÜMEDİ", bagsiz.length, SINIRSIZ_TABAN);
+if (bagsiz.length > 0 && bagsiz.length <= SINIRSIZ_TABAN) {
+  // YEŞİLKEN DE BORÇ GÖRÜNÜR: taban sıfır değilse kapı "temiz" demiyor, "arttırmadın"
+  // diyor. Üyeler basılmazsa borç bir SAYIYA dönüşür ve adresi kaybolur.
+  console.log(`   ⓘ duran borç (${bagsiz.length}) — ada/öneke dayanan silme:`);
+  for (const x of bagsiz) console.log(`      • ${x.dosya}:${x.satir} ${x.model}.${x.metod} → ${x.not}`);
+}
+check("§10b2 teardown DIŞINDA defter silme ARTMADI", teardownDisi.length <= TEARDOWN_DISI_TABAN,
+  `${teardownDisi.length} ≤ ${TEARDOWN_DISI_TABAN}`);
+curumeKolu(check, ATLAMA.atla, "§10b2b teardown-dışı tabanı ÇÜRÜMEDİ", teardownDisi.length, TEARDOWN_DISI_TABAN);
+// ÜÇÜNCÜ SONUÇ: çözülemeyen yüklem SESSİZCE MUAF SAYILMAZ — sayılır ve adlanır.
+if (bagOlculemedi.length > 0) {
+  ATLAMA.atla("§10b3 silme yüklemi AST'den çözülemedi", `${bagOlculemedi.length} çağrı — sessiz muaf DEĞİL`, bagOlculemedi.length);
+  for (const x of bagOlculemedi.slice(0, 8)) console.log(`      ⏭ ${x.dosya}:${x.satir} ${x.model}.${x.metod} — ${x.not}`);
+}
+// Teardown ad listesi BEYANDIR: ölü ad, kapıyı sessizce gevşetir.
+{
+  const kullanilan = new Set(scriptSilme.map((x) => x.teardown).filter((t): t is string => t !== null && !t.startsWith(".") && t !== "finally"));
+  const olu = TEARDOWN_ADLARI.filter((ad) => ![...kullanilan].some((k) => k.toLowerCase().startsWith(ad)));
+  check("§10b4 teardown ad beyanında ölü satır yok", olu.length === 0,
+    olu.length ? `hiçbir silmeyi muaf kılmayan ad(lar): ${olu.join(", ")} — ya yeniden adlandırıldı ya hiç kullanılmadı` : `${kullanilan.size} adlandırılmış teardown`);
+}
+
+console.log("\n=== §10c SONDALAR — kural sentetik vakalarla ısırıyor mu (kontrol grubu) ===");
+{
+  const sonda = (kaynak: string) => sondaSinifla(kaynak);
+  const kimlikKaynak = [
+    "const ids: string[] = [];",
+    "async function t() {",
+    "  try { } finally { await prisma.rollMovement.deleteMany({ where: { id: { in: ids } } }); }",
+    "}",
+  ].join("\n");
+  const r1 = sonda(kimlikKaynak);
+  check("§10c1 ⭐ yerel kimliğe bağlı silme → KİMLİK (muaf)", r1[0]?.bag === "KIMLIK", `gelen: ${r1[0]?.bag}`);
+  check("§10c2 `finally` teardown olarak tanınıyor", r1[0]?.teardown === "finally", `gelen: ${r1[0]?.teardown}`);
+
+  const onekKaynak = [
+    "const STAMP = \"TST-X\";",
+    "async function t() {",
+    "  try { } finally { await prisma.rollMovement.deleteMany({ where: { roll: { barcode: { startsWith: STAMP } } } }); }",
+    "}",
+  ].join("\n");
+  const r2 = sonda(onekKaynak);
+  check("§10c3 ⭐ ÖNEK yüklemi → SINIRSIZ (aa5ed65a'nın kusuru)", r2[0]?.bag === "SINIRSIZ", `gelen: ${r2[0]?.bag} · ${r2[0]?.not}`);
+
+  const zincirKaynak = [
+    "const woIds: string[] = [];",
+    "async function t() {",
+    "  try { } finally { await prisma.rollMovement.deleteMany({ where: { step: { workOrderId: { in: woIds } } } }); }",
+    "}",
+  ].join("\n");
+  check("§10c4 ⭐ İLİŞKİ ZİNCİRİ yerel kimliğe bağlıysa → KİMLİK", sonda(zincirKaynak)[0]?.bag === "KIMLIK");
+
+  const kapKaynak = [
+    "let woId = \"\";",
+    "async function t() {",
+    "  try { } finally { await prisma.rollMovement.deleteMany({ where: { workOrderId: woId } }); }",
+    "}",
+  ].join("\n");
+  check("§10c5 `let x = \"\"` bir AD DEĞİL, id KABIdır → KİMLİK", sonda(kapKaynak)[0]?.bag === "KIMLIK",
+    "aksi hâlde her fikstür yanlışlıkla sınırsız sayılırdı");
+
+  const literalKaynak = "async function t() { await prisma.rollMovement.deleteMany({ where: { note: \"TEST\" } }); }";
+  check("§10c6 ⭐ çıplak LİTERAL yüklem → SINIRSIZ", sonda(literalKaynak)[0]?.bag === "SINIRSIZ");
+  check("§10c7 ⭐ teardown DIŞINDAKİ silme tanınıyor", sonda(literalKaynak)[0]?.teardown === null);
+
+  const bosKaynak = "async function t() { await prisma.rollMovement.deleteMany({}); }";
+  check("§10c8 ⭐ boş `deleteMany({})` → BOŞ (tüm tabloyu hedefler)", sonda(bosKaynak)[0]?.bag === "BOS");
+
+  const degiskenKaynak = [
+    "declare const w: object;",
+    "async function t() { await prisma.rollMovement.deleteMany({ where: w }); }",
+  ].join("\n");
+  check("§10c9 ⭐ çözülemeyen `where` → ÖLÇÜLEMEDİ (sessiz muaf DEĞİL)", sonda(degiskenKaynak)[0]?.bag === "OLCULEMEDI",
+    `gelen: ${sonda(degiskenKaynak)[0]?.bag}`);
+
+  const adliKaynak = [
+    "const ids: string[] = [];",
+    "async function temizlikYap() { await prisma.rollMovement.deleteMany({ where: { id: { in: ids } } }); }",
+  ].join("\n");
+  check("§10c10 adlandırılmış teardown tanınıyor", sonda(adliKaynak)[0]?.teardown === "temizlikYap", `gelen: ${sonda(adliKaynak)[0]?.teardown}`);
+
+  const notKaynak = [
+    "async function t() { await prisma.rollMovement.deleteMany({ where: { reversesId: { not: null } } }); }",
+  ].join("\n");
+  check("§10c11 `not:` bir AD yüklemi DEĞİL (yanlış pozitif sondası)", notKaynak.length > 0 && sonda(notKaynak)[0]?.bag !== "SINIRSIZ",
+    `gelen: ${sonda(notKaynak)[0]?.bag}`);
+}
+
 console.log("\n=== §9 Körlük zemini ===");
 check("§9a src kapsamı dolu", tarama.taranan.length > 0, `${tarama.taranan.length} dosya tarandı`);
 check("§9b scripts kapsamı dolu", scriptTarama.taranan.length > 0, `${scriptTarama.taranan.length} dosya tarandı`);
@@ -449,5 +572,5 @@ for (const x of acikBorclar) {
   console.log(`  • ${x.model} [${durum}]: ${x.ne}\n      kanıt: ${x.kanit}\n      sahibi: ${x.sahibi}`);
 }
 
-console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
 process.exit(fail > 0 ? 1 : 0);
