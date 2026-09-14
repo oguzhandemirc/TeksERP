@@ -199,6 +199,49 @@ hiç aday sembol yok**: orada `dosya:satır` gerçekten tek seçenek.
 ⇒ Eklenecek çapa **sıfır**. Ön kayıtlı bant *"≤4 → kalem değil, kapat"* idi; kalem
 kapandı. *Bu, ölçümün bir işi doğurmak yerine ORTADAN KALDIRDIĞI üçüncü vaka.*
 
+### SHA atfı — DAİMA backtick içinde
+
+> **Backtick'siz yazılmış bir sha atfı ÖLÇÜLMEZ; ölçülmeyen atıf öldüğünde kimse görmez.**
+
+`test_sha_atfi` (`36f1db3a`) yalnız **backtick içindeki** sha'yı aday sayar ve bu kör
+noktayı başlığında BEYAN eder — sözcük tetiği ("commit" geçen satır) denenmiş, bu depoda
+"commit" çoğunlukla TX commit'i olduğu için REDDEDİLMİŞTİ. ⇒ Kör noktayı kapatan şey
+kapı değil **yazım kuralıdır**: sha daima `5980ff06` biçiminde yazılır, çıplak değil.
+
+⚠️ **Ölçüldü 2026-09-14 (ağaç `5527c345`) — kör noktanın boyu:**
+
+```
+git ls-files Teks-Erp/scripts Teks-Erp/docs docs | grep -E '\.(ts|md|mjs)$' \
+  | grep -v '^docs/history/' \
+  | xargs perl -ne 's/`[^`]*`/ /g; while (/(?<![0-9a-zA-Z_\/-])([0-9a-f]{7,12})(?![0-9a-zA-Z_-])/g) { my $s=$1; print "$s\n" if $s=~/[a-f]/ }' \
+  | sort -u | while read s; do git merge-base --is-ancestor "$s" origin/main 2>/dev/null || echo "ÖLÜ $s"; done
+```
+<sub>⚠️ `my $s=$1` zorunlu: `print "$1\n" if $1 =~ /[a-f]/` sessizce BOŞ döner — gruplu
+olmayan ikinci eşleşme `$1`i siler. İlk yazımda öyleydi ve komut 0 sonuç verdi; sayı
+yazılmadan önce KOŞULDUĞU için yakalandı (§ Sayı yazma, panzehir ①).</sub>
+
+**90** benzersiz çıplak hex adayı çıktı: **65'i `origin/main`de çözülüyor** — bunlar
+kapının hiç saymadığı GERÇEK atıflar; **25'i çözülmüyor** ve bunun 15'i gürültü
+(`…` ile yazılmış sha256/md5 örneği · sonda fikstürü · SSH anahtar tipi adı),
+**10'u GERÇEK ÖLÜ atıf**.
+⇒ Kapı bugün *"0 ölü atıf"* diyor (`OLU_TABAN = 0`, `5527c345`) ve **aynı ağaçta 10 ölü
+atıf duruyor.** *Beyanlı bir kör nokta sıfırlanmış bir tabanı yalanlar: taban, ağacın
+değil KAPININ GÖRDÜĞÜNÜN sayısıdır — ve kapsam beyanı bu farkı açıklar, KAPATMAZ.*
+
+Kapının GÖRDÜĞÜ atıf aynı ağaçta **227** (backtick'li, aynı komutun `` `([0-9a-f]{7,12})` ``
+kollu hâli); çıplakların yalnız **23'ü** başka bir yerde backtick'li de yazılmış
+(`comm -12`) ⇒ **67 sha ağaçta YALNIZ çıplak biçimde var** ve kapı için hiç yoktur.
+Kapsama bugün **227/294 ≈ %77**; kural bu oranı zamanla 1'e taşır, geçmişi geri
+yazmaz — *ileriye dönük yazım kuralı, geriye dönük borç listesi.*
+
+📌 Üç uygulama notu:
+- **Commit sha'sı → backtick.** Kapı görsün diye; tek maliyet iki karakter.
+- **Sağlama örneği (sha256/md5) → backtick YOK**, `…` ile yazılır. O bir atıf değildir;
+  backtick'e alınırsa kapı onu ölü atıf sanar ve haksız kırmızı verir.
+- **Duran 10 borcu belgeye backtick'li LİSTELEME** — listelemek kapıyı aynı anda
+  kırmızıya düşürür (taban 0). Liste yukarıdaki komuttan üretilir; düzeltme, atıfı
+  origin karşılığına çevirmektir (emsal `5f6919cd`, 29 atıf).
+
 ## Kimlik yazma — repo PUBLIC
 
 Ölçüldü 2026-09-13: depo **herkese açık** (`gh repo view` → `visibility: PUBLIC`).

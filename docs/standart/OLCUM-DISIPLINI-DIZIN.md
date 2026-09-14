@@ -21,8 +21,8 @@ kalamaz). ⇒ **Dizin bayatlayamaz; bayatlatmayı deneyen commit durur.** İlk d
 bir kereye mahsus üretildi (2026-09-13); bundan sonrasını üreteç değil KAPI tutar —
 üretece bağlı bir dizin, üreteç koşulmadığı gün sessizce bayatlardı.
 
-Sayı bir ölçümdür ve bu satır da kapı altındadır: **154 başlık / 11 dosya**
-(ölçüldü 2026-09-13; kapı her koşumda yeniden sayar ve sayı tutmazsa kırmızı verir).
+Sayı bir ölçümdür ve bu satır da kapı altındadır: **155 başlık / 11 dosya**
+(ölçüldü 2026-09-14; kapı her koşumda yeniden sayar ve sayı tutmazsa kırmızı verir).
 
 ⚙️ **MÜKERRER TARAMASI (dizinin ilk kullanımı, 2026-09-14):** 147 başlık çiftlenip
 sözcük örtüşmesi (Jaccard ≥ 0,28) ölçüldü → **9 aday, mükerrer YOK**; dokuzun altısı
@@ -50,6 +50,7 @@ açan kişi tabloyu yine baştan sona okur.**
 |  | § Ölçümü YAZMA — sayı · çapa · kimlik → ayrı dosya | (`OLCUM-DISIPLINI.md`) |
 |  | § Sayı yazma | (`OLCUM-DISIPLINI-YAZIM.md`) |
 |  | § Çapa yazma | (`OLCUM-DISIPLINI-YAZIM.md`) |
+|  | § SHA atfı — DAİMA backtick içinde | (`OLCUM-DISIPLINI-YAZIM.md`) |
 |  | § Kimlik yazma — repo PUBLIC | (`OLCUM-DISIPLINI-YAZIM.md`) |
 |  | § Teşhis mi, ölçüm mü — kurala çevirmeden önce | (`OLCUM-DISIPLINI.md`) |
 |  | § Hangi hipotez ölçülür | (`OLCUM-DISIPLINI.md`) |
@@ -197,7 +198,7 @@ açan kişi tabloyu yine baştan sona okur.**
 | dosya | kapsam |
 |---|---|
 | [`OLCUM-DISIPLINI.md`](OLCUM-DISIPLINI.md) | YÖNTEM — ölçüm nasıl yapılır, nasıl OKUNUR (15 başlık) |
-| [`OLCUM-DISIPLINI-YAZIM.md`](OLCUM-DISIPLINI-YAZIM.md) | ölçümü YAZMA: sayı · çapa · kimlik (3 başlık) |
+| [`OLCUM-DISIPLINI-YAZIM.md`](OLCUM-DISIPLINI-YAZIM.md) | ölçümü YAZMA: sayı · çapa · kimlik (4 başlık) |
 | [`OLCUM-DISIPLINI-ARAC.md`](OLCUM-DISIPLINI-ARAC.md) | KATMAN 1a — ölçümün ARACI (18 başlık) |
 | [`OLCUM-DISIPLINI-YUKLEM.md`](OLCUM-DISIPLINI-YUKLEM.md) | KATMAN 1a′ — YÜKLEM (ne sorduğun) (15 başlık) |
 | [`OLCUM-DISIPLINI-SINIRSIZ.md`](OLCUM-DISIPLINI-SINIRSIZ.md) | YÜKLEM'in § Sınırsız eşleşme VAKA envanteri (4 başlık) |

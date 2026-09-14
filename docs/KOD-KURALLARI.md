@@ -141,6 +141,7 @@
 - Tarih, ölçüm anlatısı, 'bekçi §3 kırmızı verdi' hikâyesi yoruma GİRMEZ; gerekirse tek satırlık arşiv çapası: `// bkz. arşiv 2026-08-05 kilit sırası`.
 - Politika ileriye dönüktür: dokunulan dosyada eski hikâye yorumu çapaya indirilir; toplu temizlik yapılmaz (ölçüm: backend src %31 yorum satırı, 1.143 tarihli yorum — 2026-09-05).
 - `NEDEN:` etiketi tek satırlık gerekçe için serbesttir; `ÖLÇÜLDÜ:` ve tarihli paragraf arşive gider.
+- Yorumdaki (ve her belgedeki) **sha atfı DAİMA backtick içinde**: `5980ff06`, çıplak değil — `test_sha_atfi` yalnız backtick'li atıfı ölçer (başlığında beyanlı kör nokta), çıplak yazılan atıf öldüğünde kapı SUSAR. Ölçüm, komut ve duran borç: `docs/standart/OLCUM-DISIPLINI-YAZIM.md` § SHA atfı.
 
 ## Yasaklar — normalize liste
 
