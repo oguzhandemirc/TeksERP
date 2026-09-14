@@ -30,6 +30,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { atlamaDefteri } from "./lib/atlama";
 import {
   SNAPSHOT_KOLONLARI,
   BACKEND_KOK,
@@ -44,7 +45,13 @@ import {
 
 let pass = 0;
 let fail = 0;
-let atlanan = 0;
+/**
+ * ⚠️ ATLAMA DEFTERİ ORTAK ALTYAPIDIR — yerel kopya AÇILMAZ. Kopya `"?"`
+ * (sayılamayan atlama) sınıfını temsil EDEMEZ ve sayıyı elle düzeltmeye zorlar.
+ */
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
 function check(label: string, ok: boolean, detail = ""): void {
   if (ok) {
     pass++;
@@ -169,11 +176,10 @@ function main(): void {
       rmSync(dir, { recursive: true, force: true });
     }
   } else {
-    atlanan += 3;
-    info("§6 sondalar KAPALI", "npx tsx scripts/test_snapshot_kolonlari.ts --sonda");
+    ATLAMA.atla("§6 sondalar", "sondalar KAPALI — açmak için: npx tsx scripts/test_snapshot_kolonlari.ts --sonda", 3);
   }
 
-  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${atlanan ? `, ${atlanan} atlandı` : ""} ===`);
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   if (fail > 0) {
     console.log(
       "\nDÜŞTÜYSE: (§1) yeni snapshot kolonu → scripts/lib/snapshot-kolonlari.ts beyanına sınıfıyla gir;\n" +

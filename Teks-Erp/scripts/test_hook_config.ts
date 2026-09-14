@@ -38,13 +38,20 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, isAbsolute } from "node:path";
 import { tmpdir } from "node:os";
+import { atlamaDefteri } from "./lib/atlama";
 
 const KOK = join(__dirname, "..", "..");
 const AYAR_YOLU = join(KOK, ".claude", "settings.json");
 
 let pass = 0;
 let fail = 0;
-let skip = 0; // ⏭ beyanla atlanan kontrol — özet satırında sayılır (bekçi sözleşmesi)
+/**
+ * ⚠️ ATLAMA DEFTERİ ORTAK ALTYAPIDIR — yerel kopya AÇILMAZ. Kopya `"?"`
+ * (sayılamayan atlama) sınıfını temsil EDEMEZ ve sayıyı elle düzeltmeye zorlar.
+ */
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
 function check(label: string, ok: boolean, detay = ""): void {
   if (ok) {
     pass++;
@@ -288,8 +295,10 @@ function main(): void {
     existsSync(join(KOK, "Electron/node_modules/vitest")) &&
     existsSync(join(KOK, "Electron/node_modules/@vitejs/plugin-react"));
   if (!electronBagimlilik) {
-    skip++;
-    console.log("   ⏭ §6a/§6b yükleme ÖLÇÜLEMEDİ — Electron/node_modules (vitest · @vitejs/plugin-react) kurulu değil; metin ölçümü (§6d) ayakta, yükleme sondası Electron job'ında");
+    ATLAMA.atla(
+      "§6a/§6b yükleme",
+      "Electron/node_modules (vitest · @vitejs/plugin-react) kurulu değil; metin ölçümü (§6d) ayakta, yükleme sondası Electron job'ında",
+    );
   } else {
     const configOku = (env: Record<string, string | undefined>) => {
       const ortam = { ...process.env, ...env };
@@ -408,7 +417,7 @@ function main(): void {
   check("§10e pre-commit adımı 'prisma istemcisi güncel'in ardında, ağır değil",
     /ad: "prisma istemcisi güncel"[\s\S]{0,400}ad: "test DB'si şeması", cwd: "\.", cmd: \["node", \["scripts\/hooks\/lib\/test-db-semasi\.mjs"\]\] \}/.test(preCommit) && !/test DB'si şeması"[^\n]*agir: true/.test(preCommit));
 
-  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${skip > 0 ? `, ${skip} atlandı` : ""} ===`);
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   process.exit(fail > 0 ? 1 : 0);
 }
 

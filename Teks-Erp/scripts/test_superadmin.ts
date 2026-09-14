@@ -146,13 +146,13 @@ import { AppError } from "../src/utils/app-error";
 import { hedefDbAdi, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { httpBekciKapisi } from "./lib/http-bekci-kapisi";
 import { yorumlariSok } from "./lib/regime-gate-scan";
+import { atlamaDefteri } from "./lib/atlama";
 
 const BASE = process.env.TEST_API_URL ?? "http://localhost:4104";
 const SRC = path.join(__dirname, "..", "src");
 
 let pass = 0;
 let fail = 0;
-let atlanan = 0;
 function check(label: string, ok: boolean, detail = ""): void {
   if (ok) {
     pass++;
@@ -162,9 +162,16 @@ function check(label: string, ok: boolean, detail = ""): void {
     console.error(`❌ ${label}${detail ? ` — ${detail}` : ""}`);
   }
 }
-function atla(label: string, sebep: string): void {
-  atlanan++;
-  console.log(`⏭️  ATLANDI ${label} — ${sebep}`);
+/**
+ * ⚠️ ATLAMA DEFTERİ ORTAK ALTYAPIDIR — yerel kopya AÇILMAZ. Kopya `"?"`
+ * (sayılamayan atlama) sınıfını temsil EDEMEZ ve sayıyı elle düzeltmeye zorlar.
+ */
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
+
+function atla(label: string, sebep: string, adet: number | "?" = 1): void {
+  ATLAMA.atla(label, sebep, adet);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -319,7 +326,7 @@ async function main(): Promise<void> {
   const zeminSonuc = await izin(SADECE_ADMIN, { backupHour: 3 });
   check("PATCH /api/feature-flags zinciri okundu", zeminSonuc !== null);
   if (zeminSonuc === null) {
-    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız, ${atlanan} atlandı ===`);
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
     return;
   }
   check(
@@ -509,8 +516,8 @@ async function main(): Promise<void> {
       atla(
         "tembel doğrulama (boot'tan SONRA doğan hesap)",
         "bu DB'de sistem hesabı yok — ölçüm ancak hesap VARKEN kurulabilir",
+        3,
       );
-      atlanan += 2; // `atla` 1'i sayar; o dalda 3 kontrol var
     } else {
       // ── TEMBEL DOĞRULAMA (A3 / D1 bulgusu) ────────────────────────────────
       // Defter yalnız boot'ta yazılıyordu: süreç hesapsız açılır, hesap SONRADAN
@@ -534,8 +541,8 @@ async function main(): Promise<void> {
       atla(
         "supap DAVRANIŞ ölçümü (hesapsız kurulum)",
         `bu DB'de ${dbdeSistemHesabi} sistem hesabı var — supap yolu ölçülemez`,
+        3,
       );
-      atlanan += 2;
     }
 
     setSystemAccountExists(true);
@@ -616,8 +623,7 @@ async function main(): Promise<void> {
       select: { id: true },
     }))?.id ?? null;
     if (!hedef) {
-      atla("getEffectivePermissions ölçümü", "DB'de sistem hesabı yok");
-      atlanan += 3;
+      atla("getEffectivePermissions ölçümü", "DB'de sistem hesabı yok", 4);
     } else {
       const izinler = await AuthService.getEffectivePermissions(hedef);
       check("süperadmin izinleri tam olarak `[\"*\"]`", izinler.length === 1 && izinler[0] === "*", JSON.stringify(izinler));
@@ -700,8 +706,7 @@ async function main(): Promise<void> {
       (await prisma.user.findFirst({ where: { isSystemAccount: true }, select: { id: true } }))?.id ??
       null;
     if (!hedef) {
-      atla("görünürlük davranış ölçümü", "fixture yok");
-      atlanan += 2;
+      atla("görünürlük davranış ölçümü", "fixture yok", 3);
     } else {
       const kunye = await PermissionManagementService.getUserById(hedef).catch((e: unknown) => e);
       check(
@@ -866,13 +871,11 @@ async function main(): Promise<void> {
   const kapi = await httpBekciKapisi({ base: BASE, kontrolSayisi: HTTP_KONTROL });
   if (kapi.kirmizi) {
     check("HTTP ayağı ölçülebildi", false, kapi.kirmizi);
-    atlanan += HTTP_KONTROL;
+    atla("HTTP turu", "kapı kırmızı verdi — ayak hiç koşmadı", HTTP_KONTROL);
   } else if (!kapi.token) {
-    atla("HTTP turu", kapi.atlaSebebi ?? "ölçüm yapılamadı");
-    atlanan += HTTP_KONTROL - 1; // `atla()` bir tanesini zaten saydı
+    atla("HTTP turu", kapi.atlaSebebi ?? "ölçüm yapılamadı", HTTP_KONTROL);
   } else if (!fixtureId) {
-    atla("HTTP turu", "fixture süperadmin hesabı yaratılamadı (DB'de zaten bir hesap vardı)");
-    atlanan += HTTP_KONTROL;
+    atla("HTTP turu", "fixture süperadmin hesabı yaratılamadı (DB'de zaten bir hesap vardı)", HTTP_KONTROL);
   } else {
     await httpTuru();
   }
@@ -901,8 +904,7 @@ async function main(): Promise<void> {
     if (!token) {
       // `fail++` YOK — bu bir sözleşme ihlali değil, ÖLÇÜM YAPILAMAMASIDIR
       // (giriş kilidi IP başına ve bellek içi; art arda koşumda devreye girer).
-      atla("HTTP turu", "fixture süperadmin giriş yapamadı (giriş kilidi olabilir)");
-      atlanan += HTTP_KONTROL;
+      atla("HTTP turu", "fixture süperadmin giriş yapamadı (giriş kilidi olabilir)", HTTP_KONTROL);
       return;
     }
     const auth = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
@@ -1026,7 +1028,6 @@ async function main(): Promise<void> {
     const detayId = authSatirlari[0]?.id ?? satirlar2[0]?.id ?? null;
     if (!detayId) {
       atla("audit DETAY maskesi", "listede satır yok");
-      atlanan += 1;
     } else {
       const detayGovde = await (
         await fetch(`${BASE}/api/admin/system-logs/${detayId}`, { headers: auth })
@@ -1156,7 +1157,7 @@ main()
       console.error("⚠️ temizlik başarısız:", e instanceof Error ? e.message : e);
     }
     __resetSystemAccountRegistryForTests();
-    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${atlanan ? `, ${atlanan} atlandı` : ""} ===`);
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
     await prisma.$disconnect();
     await pool.end();
     process.exit(fail > 0 ? 1 : 0);

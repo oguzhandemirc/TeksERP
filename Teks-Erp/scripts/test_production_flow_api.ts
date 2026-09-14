@@ -47,6 +47,7 @@ import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { strictMi } from "./lib/http-bekci-kapisi";
 import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
 import { reconcilePermissionCatalog } from "../src/jobs/permission-catalog.job";
+import { atlamaDefteri } from "./lib/atlama";
 
 const STAMP = `${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`.toUpperCase();
 const PRE = `TST-AKIS-${STAMP}`;
@@ -54,16 +55,20 @@ const SHIPMENT_CONFIRM_KEY = "shipping.confirmationEnabled";
 
 let pass = 0;
 let fail = 0;
-let atlanan = 0;
 function check(label: string, ok: boolean, extra = ""): void {
   if (ok) { pass++; console.log(`  ✓ ${label}${extra ? ` — ${extra}` : ""}`); }
   else { fail++; console.log(`  ✗ FAIL: ${label}${extra ? ` — ${extra}` : ""}`); }
 }
-function atla(label: string, sebep: string): void {
-  // Sessiz atlama YOK: sebep basılır, sayaç özet satırında beyan edilir ve
-  // TEKSERP_STRICT=1 altında atlama KIRMIZIDIR (paket kararı burada verilir).
-  if (strictMi()) { fail++; console.log(`  ✗ FAIL: ${label} — ${sebep} (TEKSERP_STRICT=1 — atlama kırmızıdır.)`); return; }
-  atlanan++; console.log(`  ⏭️  ${label} — ${sebep}`);
+/**
+ * ⚠️ ATLAMA DEFTERİ ORTAK ALTYAPIDIR — yerel kopya AÇILMAZ. Kopya `"?"`
+ * (sayılamayan atlama) sınıfını temsil EDEMEZ ve sayıyı elle düzeltmeye zorlar.
+ */
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
+
+function atla(label: string, sebep: string, adet: number | "?" = 1): void {
+  ATLAMA.atla(label, sebep, adet);
 }
 
 // ── Temizlik defteri (FK sırasına göre boşaltılır) ───────────────────────────
@@ -536,7 +541,7 @@ main()
   .catch((e) => { console.error("HATA:", e instanceof Error ? e.stack : e); fail++; })
   .finally(async () => {
     await temizlik().catch((e) => console.error("temizlik hatası:", e instanceof Error ? e.message : e));
-    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${atlanan ? `, ${atlanan} atlandı` : ""} ===`);
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
     await prisma.$disconnect();
     await pool.end().catch(() => {});
     process.exit(fail > 0 ? 1 : 0);

@@ -29,6 +29,7 @@ import {
 import { qualityGradeService } from "../src/routes/quality-grade.routes";
 import { LabelService } from "../src/services/label.service";
 import { LabelKind, Prisma } from "@prisma/client";
+import { atlamaDefteri } from "./lib/atlama";
 
 let pass = 0;
 let fail = 0;
@@ -51,10 +52,16 @@ function check(label: string, ok: boolean, detail?: string): void {
  * yalanını üretir. Koşucu `run-all-tests.ts` özet satırındaki "N atlandı"yı
  * okuyup raporlar (2026-09-05).
  */
-let atlanan = 0;
-function atla(label: string, neden: string): void {
-  atlanan++;
-  console.log(`⏭️  ATLANDI — ${label}\n      ↳ ${neden}`);
+/**
+ * ⚠️ ATLAMA DEFTERİ ORTAK ALTYAPIDIR — yerel kopya AÇILMAZ. Kopya `"?"`
+ * (sayılamayan atlama) sınıfını temsil EDEMEZ ve sayıyı elle düzeltmeye zorlar.
+ */
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
+
+function atla(label: string, neden: string, adet: number | "?" = 1): void {
+  ATLAMA.atla(label, neden, adet);
 }
 
 async function main(): Promise<void> {
@@ -369,7 +376,7 @@ async function main(): Promise<void> {
   await prisma.item.deleteMany({ where: { id: sgItem.id } }).catch(() => {});
 
 
-  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${atlanan > 0 ? `, ${atlanan} atlandı` : ""} ===`);
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
 }
 
 main()
