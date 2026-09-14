@@ -288,6 +288,21 @@
           "kapsam": "tablet",
           "tip": "yeni",
           "metin": "Dokuma modülü açık kurulumlarda KK1 girişi iki soru soruyor: “Bu top dokuma mı?” ve evetse “hangi indirmeden?” — bağlanmamış indirmeler açık listeden seçilir; seçilmezse top indirmesiz kaydedilir, yarı mamul girişinde sorular çıkmaz. Dokuma modülü kapalı kurulumda sorular görünmez ve KK1 kaydı eskisiyle birebir aynıdır."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "yeni",
+          "metin": "Dokuma modülü açık kurulumlarda Tezgah ekranına koşum açma/kapatma geldi: operatör hattaki koşumu bir dokuma işine bağlayarak ya da işsiz açar (desen ve renk işten ön-dolar, değiştirilebilir; hedef devir boş bırakılabilir), kapatırken kapanış devrini yazar (boş = ölçülmedi) ve yanlış açılan koşumu geri alır. Kayıt ağ olmadan kuyruklanmaz, gitmezse anında söyler. Yeni yetki gerekmez; dokuma tabletçisi yetkisi yeter. Modül kapalı kurulumda hiçbir şey değişmez."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "yeni",
+          "metin": "Dokuma modülü açık kurulumlarda Tezgah ekranından duruş bildirilebiliyor: “Duruş Bildir” makineyi duruşa alır, “Çalıştı” kapatır, sebep açılışta isteğe bağlı sonradan “Sebep ata” ile zorunlu seçilir (sebep listesi kataloğun dokuma duruş sebepleridir), yanlış duruş geri alınır. Kapanmış ya da mühürlenmiş vardiyaya duruş yazılamaz; ekran engeli adıyla söyler. Yeni yetki gerekmez. Modül kapalı kurulumda hiçbir şey değişmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Dokuma modülü açık kurulumlarda tezgah duruşları elle girilip sınıflandırılabiliyor (planlı/plansız/ayar gibi kayıp sınıfı ve sebep); sınıflandırma değiştirildiğinde eski kayıt silinmez, değişiklik defterde durur ve eski not korunur. Aynı duruşun iki kez açılması ve kapanmış vardiyaya duruş yazılması engellenir. Bu sürümde giriş yüzeyi tablettir; panel ekranı sonraki sürümde. Modül kapalı kurulumda hiçbir şey değişmez."
         }
       ]
     },
