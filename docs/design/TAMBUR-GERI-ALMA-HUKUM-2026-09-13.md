@@ -253,3 +253,20 @@ Ebeveyne `len` döner (çocuğun metrajı, ebeveynin kaybettiği devir değil) �
 | §10.6 kabul-anı okuyucuları | AYRI KALEM: alış faturası taslağı + sipariş karşılama `initialQty − Σ canlı TAMBUR OVERAGE` okur (kolon açmadan) | sızıntı bugün var, ② seçiminden bağımsız | **9b** (finans), ekran diliminden sonra |
 
 **Sıra (§10.7 aynen):** ⑤ statik (82) → ① (6e) → `§11` çevrimi + `sourceRollId` (6e, şema penceresi) → ②+④ (6e) → ③ (1c) → §10.6 (9b). Her § iki sondayla; tek fikstür yasak; sürüm notu yalnız ①(b3-dar).
+
+## §12 · Doğrulama — §11 ③ giriş kalemi (`TAMBUR_CUT` · `RESCUE` · finalize kalanı) (2026-09-14, 47)
+
+**Sonuç: giriş ikilisi + finalize kalanı DOĞRU bağlandı; K = 0 ölçüldü; FULL geri alma da tersliyor.** Kod: `7b6ee345` (giriş ikilisi) · `f4fdb2b1` (kapı fonksiyonları helper'a — K tarayıcısı sınıf metodunu görmüyordu) · `d33e019b` (finalize kalanı) · `c45ef626` (K_TABAN 2 → 0).
+
+| ne | sonuç | nasıl |
+|---|---|---|
+| `cutOpenFabric` çocuğu TEK `PRODUCTION`/`TAMBUR_CUT` girişi, depo/WAREHOUSE, adım damgalı, ebeveyn satırsız | ✅ | `test_stock_ledger_production_entry` §1 (10/0) |
+| SINGLE geri alma (adım-restore · kaynak-arşivde) `TAMBUR_UNDO` bağlı ters, net 0 | ✅ | §2/§3 |
+| `rescueStuckRoll` `RESCUE` girişi claim'den SONRA taze; 0 metrajda satır yok | ✅ | §4/§5 |
+| finalize KALANI aynı giriş; SINGLE tersler | ✅ | §7a/§7b |
+| **FULL geri alma**: ebeveyn 100 → kesim 40 + 30 + kalan 30; üç çocuğun girişi bağlı terslendi, her çocuk 2 satır net 0, ebeveyn 100 IN_PRODUCTION | ✅ | sonda P3 (`_sonda_47_is3.ts`; bekçi FULL'ü ölçmüyordu — §7c olarak eklenmeli) |
+| K tarayıcısı: `YENI_KAPI_HELPERLARI` + iki fonksiyon adı; §4e K=0, §4f taban 0 | ✅ | `test_stok_defteri_bag_olcumu` 33/0 |
+| beyan: `TAMBUR_CUT` BAGLI_TERS → `TAMBUR_UNDO`; `RESCUE` KARSI_OLAY → `PRODUCTION_ISSUE`; `PRODUCTION_ISSUE.kod` üçlü; `TAMBUR_UNDO.ileri` altılı | ✅ | `test_defter_ters_yol` 185/0 |
+| komşular | ✅ | `stock_ledger_tambur_undo` 65/0 · `stock_ledger_transform` 28/0 · `tambur_undo` 58/0 · `rescue_stuck` 10/0 · `raw_tambur_cut` 15/0 · `consistency_derived` 25/0 · `stock_ledger_manual_move` 16/0 |
+
+Bağımsız defter okuyucusu ÖLÇÜLEMEDİ (oturum limiti); bu bölüm 47'nin bekçi koşumu + sondası + statik okumasıdır. Statik okumada açık kalan: `finalizeOpenFabric` yolu K tarayıcısının yol listesinde görünmüyor (tipli `rollData`) — çağrı silinirse yalnız `production_entry §7` kırmızı verir; FULL modu bekçiye §7c olarak eklenmeli (sonda P3 deseni).
