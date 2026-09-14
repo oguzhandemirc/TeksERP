@@ -17,6 +17,15 @@
 // KÖRLÜK ZEMİNİ: taranan dosya sayısı bir tabanın altına düşerse bekçi kırmızı
 // verir — "0 ihlal" ile "hiç bakmadım" aynı yeşile çıkamaz.
 //
+// ÜÇÜNCÜ ÖLÇÜ (2026-09-14) — KÜRESEL AYAR YAZIMI `try` İÇİNDE OLMALI. Bir bekçi
+// `systemSetting`/bayrak satırını `try`dan ÖNCE yazarsa, fikstür eksikliği ya da erken
+// bir hata `finally`yi HİÇ koşturmaz ve bayrak SIZAR — sızan bayrak kendi dosyasını
+// değil KOMŞU bekçileri kırar. Ölçüldü: taze bir sonda DB'sinde tam paketin ilk koşumu
+// 136 dosya "Seed fixture eksik" ile çöktü, `devere.enabled=true` sızdı ve ikinci
+// koşumda `module_flag_off` kırmızı verdi; üç oturum bunu "şablon farkı" sandı.
+// ⚠️ Kural DAR: yalnız KÜRESEL ayar (fikstür satırı değil) ve yalnız AYNI kapsamda
+// `try`dan önce duran yazım. Fonksiyon gövdesindeki yazım ÇAĞRILDIĞINDA koşar, sayılmaz.
+//
 // ÖLÇÜLDÜ VE YAZILMADI: "kontrol atlayan bekçi sayıyı özet satırında beyan
 // etmeli" kuralı METİNDEN ölçülemiyor. Aday yüklem ("atlandı" kelimesi geçiyor
 // ama özet satırında sayaç yok) 458 dosyanın 52'sini işaretledi ve tek tek
@@ -27,6 +36,7 @@
 // =============================================================================
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import ts from "typescript";
 
 const SCRIPTS_DIR = join(__dirname);
 /** Koşucunun bugünkü dosya süzgeci ile BİREBİR aynı (run-all-tests.ts:219). */
@@ -112,6 +122,94 @@ check(
   ingilizce.length === 0,
   ingilizce.join(", ") || "temiz",
 );
+
+// ── KÜRESEL AYAR YAZIMI `try` İÇİNDE Mİ (2026-09-14) ────────────────────────
+// Ön süzgeç METİNDİR (yalnız `systemSetting`/`moduleFlag` geçen dosya parse edilir):
+// 458 dosyanın 72'si parse ediliyor, ek maliyet ~0,3 sn — mandal hızlı kalıyor.
+const KURESEL_DELEGE = /^(systemSetting|moduleFlag)$/;
+const YAZ_METOT = /^(create|createMany|update|updateMany|upsert|delete|deleteMany)$/;
+
+/** İfadeyi kapsayan en yakın FONKSİYON (ya da dosya) — çağrıldığında koşan gövdeyi ayırır. */
+function kapsam(n: ts.Node): ts.Node | undefined {
+  for (let p: ts.Node | undefined = n.parent; p; p = p.parent) {
+    if (ts.isFunctionDeclaration(p) || ts.isFunctionExpression(p) || ts.isArrowFunction(p)
+      || ts.isMethodDeclaration(p) || ts.isSourceFile(p)) return p;
+  }
+  return undefined;
+}
+
+/** Bir dosyadaki "try'dan ÖNCE küresel ayar yazımı" yerleri. SAF — girdi kaynak metni. */
+export function korumasizKureselYazim(ad: string, kaynak: string): string[] {
+  const sf = ts.createSourceFile(ad, kaynak, ts.ScriptTarget.Latest, true);
+  const tryler: ts.TryStatement[] = [];
+  const topla = (n: ts.Node): void => { if (ts.isTryStatement(n) && n.finallyBlock) tryler.push(n); n.forEachChild(topla); };
+  topla(sf);
+  const tryIcinde = (n: ts.Node): boolean => {
+    for (let p: ts.Node | undefined = n; p; p = p.parent) {
+      const u: ts.Node | undefined = p.parent;
+      if (u && ts.isTryStatement(u) && (u.tryBlock === p || u.finallyBlock === p)) return true;
+    }
+    return false;
+  };
+  const out: string[] = [];
+  const gez = (n: ts.Node): void => {
+    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && YAZ_METOT.test(n.expression.name.text)) {
+      const ic = n.expression.expression;
+      if (ts.isPropertyAccessExpression(ic) && KURESEL_DELEGE.test(ic.name.text) && !tryIcinde(n)) {
+        const k = kapsam(n);
+        // AYNI kapsamda, BU yazımdan SONRA gelen bir try/finally var mı?
+        if (tryler.some((t) => kapsam(t) === k && t.getStart(sf) > n.getStart(sf))) {
+          out.push(`${ad}:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1} ${ic.name.text}.${n.expression.name.text}`);
+        }
+      }
+    }
+    n.forEachChild(gez);
+  };
+  gez(sf);
+  return out;
+}
+
+// ⚠️ CIRCIR TABANI — oturum DOKUNMAZ (ilk sabit hariç). Bugün 2: ikisi de
+// `test_p2_auth.ts`te ve ŞEKLİ FARKLI — bayrak `try`dan ÖNCEKİ düz akışta TÜKETİLİYOR
+// (kilitlenme denemeleri), yani yazımı içeri almak testin önkoşulunu bozar. Onarımı
+// try'ı yukarı taşımak; ölçülmeden yapılmadı ve borç GÖRÜNÜR bırakıldı.
+const KURESEL_YAZIM_TABAN = 2;
+{
+  const korumasiz: string[] = [];
+  let parseEdilen = 0;
+  for (const f of dosyalar) {
+    const kaynak = readFileSync(join(SCRIPTS_DIR, f), "utf8");
+    if (!/\.(systemSetting|moduleFlag)\./.test(kaynak)) continue;   // ön süzgeç
+    parseEdilen++;
+    korumasiz.push(...korumasizKureselYazim(f, kaynak));
+  }
+  check("körlük zemini: küresel ayar yazan bekçi parse edildi", parseEdilen > 20, `${parseEdilen} dosya`);
+  check(
+    "⭐ küresel ayar yazımı `try` İÇİNDE (sızan bayrak KOMŞU bekçiyi kırar)",
+    korumasiz.length <= KURESEL_YAZIM_TABAN,
+    korumasiz.length <= KURESEL_YAZIM_TABAN
+      ? `${korumasiz.length} ≤ ${KURESEL_YAZIM_TABAN}`
+      : `${korumasiz.length} > ${KURESEL_YAZIM_TABAN} ⇒ YENİ korumasız yazım:\n      ` + korumasiz.join("\n      "),
+  );
+  if (korumasiz.length > 0) {
+    console.log(`   ⓘ duran borç (${korumasiz.length}) — try'dan önce küresel ayar yazımı:`);
+    for (const x of korumasiz) console.log(`      • ${x}`);
+  }
+  // SONDALAR — saf yüklem, sentetik kaynak.
+  const S = (k: string) => korumasizKureselYazim("sonda.ts", k);
+  check("§s1 ⭐ try'dan ÖNCE yazım YAKALANIR",
+    S("async function t() {\n  await prisma.systemSetting.upsert({ where: {}, create: {}, update: {} });\n  try { } finally { }\n}").length === 1);
+  check("§s2 ⭐ try İÇİNDE yazım temiz",
+    S("async function t() {\n  try { await prisma.systemSetting.upsert({ where: {} }); } finally { }\n}").length === 0);
+  check("§s3 ⭐ FONKSİYON gövdesindeki yazım sayılmaz (çağrıldığında koşar)",
+    S("const set = async () => { await prisma.systemSetting.upsert({ where: {} }); };\nasync function t() {\n  try { await set(); } finally { }\n}").length === 0);
+  check("§s4 ⭐ fikstür yazımı KÜRESEL DEĞİL (kural dar)",
+    S("async function t() {\n  await prisma.customer.create({ data: {} });\n  try { } finally { }\n}").length === 0);
+  check("§s5 `finally` YOKSA sayılmaz (geri alma sözü verilmemiş)",
+    S("async function t() {\n  await prisma.systemSetting.upsert({ where: {} });\n  try { } catch { }\n}").length === 0);
+  check("§s6 OKUMA yazım değildir (foto `try` dışında kalabilir)",
+    S("async function t() {\n  await prisma.systemSetting.findMany({});\n  try { } finally { }\n}").length === 0);
+}
 
 // Muafiyet listesi iki yönlü: artık özet basan bir dosya listede kalmamalı.
 const bayatMuaf = MUAF.filter((f) => {

@@ -461,20 +461,20 @@ async function canliOlcum(beklenen: string[]): Promise<void> {
   const ESLIK = beklenen.find((k) => k !== HEDEF);
   if (!ESLIK) throw new Error(`MODULE_SETTING_KEYS tek anahtar taşıyor (${beklenen.join(",")})`);
   const bekciKurdu: string[] = [];
-  for (const key of [HEDEF, ESLIK]) {
-    if (oncekiHarita.has(key)) continue;
-    await prisma.systemSetting.create({
-      data: { key, value: false, description: "TEST- bekçi ön koşulu (finally kaldırır)" },
-    });
-    bekciKurdu.push(key);
-  }
-  check(
-    "§7a3 ⭐ Ön koşul KURULDU: HEDEF + en az bir diğer modül satırı ayakta",
-    (await prisma.systemSetting.count({ where: { key: { in: [HEDEF, ESLIK] } } })) === 2,
-    bekciKurdu.length ? `bekçi yazdı: ${bekciKurdu.join(", ")}` : "ortamda zaten vardı",
-  );
   const damgaOnce = oncekiHarita.get(PROFILE_STAMP_SETTING_KEY) ?? null;
   try {
+    for (const key of [HEDEF, ESLIK]) {
+      if (oncekiHarita.has(key)) continue;
+      await prisma.systemSetting.create({
+        data: { key, value: false, description: "TEST- bekçi ön koşulu (finally kaldırır)" },
+      });
+      bekciKurdu.push(key);
+    }
+    check(
+      "§7a3 ⭐ Ön koşul KURULDU: HEDEF + en az bir diğer modül satırı ayakta",
+      (await prisma.systemSetting.count({ where: { key: { in: [HEDEF, ESLIK] } } })) === 2,
+      bekciKurdu.length ? `bekçi yazdı: ${bekciKurdu.join(", ")}` : "ortamda zaten vardı",
+    );
     // (1) SATIRLAR TAM → job DOKUNMAMALI.
     const oncekiDegerler = new Map(
       (

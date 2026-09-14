@@ -21,6 +21,38 @@
 
 ---
 
+## 2026-09-14 — Sızan bayrak: bir bekçinin hatası KOMŞU bekçiyi kırar [ÇEKİRDEK]
+
+Taze bir sonda veritabanında tam paketin İLK koşumu 136 dosyada *"Seed fixture eksik"*le
+çöktü. İkinci koşumda `module_flag_off` kırmızı verdi ve **üç ayrı oturum bunu "DB şablonu
+farkı" sandı.** Gerçek sebep: bir bekçi `devere.enabled = true` satırını `try`dan ÖNCE
+yazıyordu; fikstür eksikliği `finally`yi hiç koşturmadı ve bayrak SIZDI.
+
+⇒ ***Bir bekçinin yapısal hatası kendi dosyasını değil KOMŞU dosyaları kırar, ve komşu
+kırmızısı "ortam" diye okunur.*** Bu yüzden teşhis üç oturum sürdü: kırmızı veren dosya
+suçlu değildi.
+
+**Ölçüm önce geniş, sonra DAR kuruldu.** İlk yüklem ("DB yazan bekçide ilk yazım `try`
+içinde olmalı") 253 dosyanın **164**'ünü işaretledi — çoğu kendi fikstürünü try'dan önce
+kuran normal bekçi; sızsa bile yalnız kendi satırını sızdırır. Asıl zarar KÜRESEL AYARDA:
+yüklem `systemSetting`/bayrak yazımına daraltılınca 92, "aynı kapsamda try'dan önce"ye
+daraltılınca **11** oldu — ve 11'in içinde 1e'nin bildirdiği üç dosya da vardı.
+*Bir sınıfı yakalayan en geniş yüklem, o sınıfı ölçen yüklem değildir.*
+
+**Onarım ölçülerek yapıldı ve bir kez YANLIŞTAN döndü.** İlk mekanik dönüşüm "try'dan
+önceki her şeyi içeri al" idi; `finally`de okunan değişkenlerin bildirimi de içeri girdi
+ve derleme kırıldı (`Cannot find name 'beamIds'`). ⇒ Taşınan şey BLOK değil, yalnız
+KÜRESEL YAZIM İFADESİ olmalı. Sekiz dosya onarıldı (11 → 2) ve sekizinin hepsi gerçek
+DB'de koşuldu.
+
+**Kalan 2 borç GÖRÜNÜR bırakıldı, gizlenmedi:** ikisi de `test_p2_auth.ts`te ve ŞEKLİ
+FARKLI — bayrak `try`dan önceki düz akışta TÜKETİLİYOR (kilitlenme denemeleri), yazımı
+içeri almak testin önkoşulunu bozar. Onarımı try'ı yukarı taşımaktır; ölçülmeden
+yapılmadı. *Aynı sınıfın içinde bile her üye aynı onarımı kabul etmez.*
+
+Kapı `test_bekci_sozlesmesi`ye kondu (mandal): ön süzgeç METİN olduğu için 458 dosyanın
+yalnız 73'ü parse ediliyor, mandal 0,29 → 0,57 sn. Altı saf sonda + bir uçtan uca.
+
 ## 2026-09-14 — "Tek istisna UserPreference" ölçüldü ve YANLIŞ çıktı [ÇEKİRDEK]
 
 Kök kural *"her CUD → `AuditService.log()`, tek istisna `UserPreference`"* diyordu. Kuralın

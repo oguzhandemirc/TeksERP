@@ -96,7 +96,6 @@ async function main(): Promise<void> {
   statik();
 
   const foto = await prisma.systemSetting.findMany({ where: { key: { in: FLAGS } }, select: { key: true, value: true } });
-  for (const key of FLAGS) await prisma.systemSetting.upsert({ where: { key }, create: { key, value: "true" }, update: { value: "true" } });
   const st = await prisma.station.create({ data: { name: `${TAG}-DEVERE`, code: `${TAG}-DV`.slice(0, 32), type: StationType.INTERNAL, producesWarpBeam: true }, select: { id: true } });
   const stDiger = await prisma.station.create({ data: { name: `${TAG}-TAMBUR`, code: `${TAG}-TB`.slice(0, 32), type: StationType.INTERNAL }, select: { id: true } });
   const mk = await prisma.machine.create({ data: { stationId: st.id, name: `${TAG}-M1`, code: `${TAG}-M1`.slice(0, 32) }, select: { id: true } });
@@ -113,6 +112,7 @@ async function main(): Promise<void> {
   await prisma.yarnStock.create({ data: { itemId: yarn.id, warehouseId: wh2.id, balanceKg: 500 } });
   const beamIds: string[] = [];
   try {
+    for (const key of FLAGS) await prisma.systemSetting.upsert({ where: { key }, create: { key, value: "true" }, update: { value: "true" } });
     console.log("\n── §1 Körlük zemini ──");
     check("§1 fikstür doğdu (devere istasyonu + makine · iplik 300 den · çözgü 3500 tel · depo 1000 kg)", !!mk.id && (await bakiye(yarn.id, wh.id)) === 1000);
 

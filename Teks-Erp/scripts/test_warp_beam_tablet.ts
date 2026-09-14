@@ -108,8 +108,8 @@ async function main(): Promise<void> {
   const yarnKartsiz = await prisma.item.create({ data: { code: `${TAG}-IPK`, name: `${TAG} kartsız`, itemType: "YARN", unit: "KG" }, select: { id: true } });
   const lotYabanci = await prisma.yarnLot.create({ data: { itemId: yarnKartsiz.id, lotNo: `${TAG}-LOTY` }, select: { id: true } });
   const lotRequiredFoto = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_LOT_REQUIRED }, select: { value: true } });
-  await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.DEVERE_LOT_REQUIRED } });
   try {
+    await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.DEVERE_LOT_REQUIRED } });
     const ctx = (await getWarpBeamTabletContext()).data;
     for (const [liste, alanlar] of Object.entries(ALLOW) as [keyof typeof ALLOW, readonly string[]][]) {
       const rows = ctx[liste] as Record<string, unknown>[];

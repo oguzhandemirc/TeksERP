@@ -49,13 +49,13 @@ async function main() {
     where: { key: SETTING_KEYS.DEVICE_PAIRING_REQUIRED },
     select: { value: true, description: true },
   });
-  await prisma.systemSetting.upsert({
-    where: { key: SETTING_KEYS.DEVICE_PAIRING_REQUIRED },
-    create: { key: SETTING_KEYS.DEVICE_PAIRING_REQUIRED, value: true, description: "TEST" },
-    update: { value: true },
-  });
 
   try {
+    await prisma.systemSetting.upsert({
+      where: { key: SETTING_KEYS.DEVICE_PAIRING_REQUIRED },
+      create: { key: SETTING_KEYS.DEVICE_PAIRING_REQUIRED, value: true, description: "TEST" },
+      update: { value: true },
+    });
     // 1) announce → PENDING
     const a = await DeviceService.announce({ deviceId: deviceLocalId, name: "TEST Tablet" });
     check("announce → PENDING", a.status === "PENDING");

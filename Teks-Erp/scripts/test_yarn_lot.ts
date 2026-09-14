@@ -91,8 +91,6 @@ async function main(): Promise<void> {
   statik();
 
   const foto = await prisma.systemSetting.findMany({ where: { key: { in: FLAGS } }, select: { key: true, value: true } });
-  for (const key of FLAGS.slice(0, 3)) await prisma.systemSetting.upsert({ where: { key }, create: { key, value: "true" }, update: { value: "true" } });
-  await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.DEVERE_LOT_REQUIRED } });
   const setLotRequired = async (v: boolean | null) => {
     if (v === null) await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.DEVERE_LOT_REQUIRED } });
     else await prisma.systemSetting.upsert({ where: { key: SETTING_KEYS.DEVERE_LOT_REQUIRED }, create: { key: SETTING_KEYS.DEVERE_LOT_REQUIRED, value: String(v) }, update: { value: String(v) } });
@@ -108,6 +106,8 @@ async function main(): Promise<void> {
   const beamIds: string[] = [];
   const lotIds: string[] = [];
   try {
+    for (const key of FLAGS.slice(0, 3)) await prisma.systemSetting.upsert({ where: { key }, create: { key, value: "true" }, update: { value: "true" } });
+    await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.DEVERE_LOT_REQUIRED } });
     console.log("\n── §1 Lot doğuşu mal kabulde ──");
     const r1 = fis(await goodsReceiptService.create({ warehouseId: wh.id, supplierId: supplier.id, deliveryNoteNo: `${TAG}-IRS1`, lines: [{ itemId: yarn.id, initialQty: 100, lotNo: "  YAN 1029-K ", bobbinCount: 12 }] }));
     receiptIds.push(r1.id);

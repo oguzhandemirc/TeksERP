@@ -189,12 +189,12 @@ async function main(): Promise<void> {
     const prev = await prisma.systemSetting.findUnique({
       where: { key: "return.gradingEnabled" }, select: { value: true },
     });
-    await prisma.systemSetting.upsert({
-      where: { key: "return.gradingEnabled" },
-      update: { value: true },
-      create: { key: "return.gradingEnabled", value: true, description: `${TAG} geçici` },
-    });
     try {
+      await prisma.systemSetting.upsert({
+        where: { key: "return.gradingEnabled" },
+        update: { value: true },
+        create: { key: "return.gradingEnabled", value: true, description: `${TAG} geçici` },
+      });
       const r2 = await mkShipped("B");
       const ret2 = await returnService.createReturn(
         { rollId: r2, reasonText: `${TAG} fire`, qualityGradeId: gFire.id }, admin.id,

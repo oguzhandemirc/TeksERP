@@ -130,7 +130,6 @@ async function main(): Promise<void> {
   statik();
 
   const foto = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_ENABLED }, select: { value: true } });
-  await prisma.systemSetting.upsert({ where: { key: SETTING_KEYS.DEVERE_ENABLED }, create: { key: SETTING_KEYS.DEVERE_ENABLED, value: "true" }, update: { value: "true" } });
   const item = await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } });
   const admin = await ensureTestAdmin();
   if (!item) throw new Error("Seed fixture eksik (PATOS)");
@@ -173,6 +172,7 @@ async function main(): Promise<void> {
   };
 
   try {
+    await prisma.systemSetting.upsert({ where: { key: SETTING_KEYS.DEVERE_ENABLED }, create: { key: SETTING_KEYS.DEVERE_ENABLED, value: "true" }, update: { value: "true" } });
     console.log("\n── §1 Fikstür ──");
     const b1 = await hazirLevent("1", 1000, `${TAG}-G1`);
     const b2 = await hazirLevent("2", 800);
