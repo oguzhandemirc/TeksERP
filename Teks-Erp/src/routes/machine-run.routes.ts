@@ -8,13 +8,15 @@
 //
 // Geri alma AYRI izindir (`loom:run-revoke`): randımanın paydasını değiştirir,
 // günlük aç/kapa işinden ayrı bir yetkidir (`shipping:undo-dispatch` emsali).
-// Tablet dilimi indiğinde uçlar `requireAnyPermission("loom:run", ...MOBILE)`
-// biçimine geçer; mobil izin kodu o dilimle doğar.
+// Tablet koşum dilimi (2026-09-14): aç/kapa `requireAnyPermission("loom:run", ...MOBILE_DOKUMA)`,
+// geri alma `requireAnyPermission("loom:run-revoke", ...MOBILE_DOKUMA_GERI_AL)` — geri alma
+// yeteneği doff ile ORTAK (`mobile:dokuma-geri-al`: indirme ve koşum, ikisi de defterden
+// satır düşürür). Bekçi `test_mobile_screen_permissions`.
 // =============================================================================
 import { Router } from "express";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
+import { requireAnyPermission } from "../middlewares/rbac.middleware";
 import { requireDokumaEnabled } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { closeMachineRun, openMachineRun, revokeMachineRun } from "../services/machine-run.service";
@@ -26,6 +28,8 @@ router.use(verifyToken, requireDokumaEnabled);
 
 // OKUMA ucu: tezgah ekranı (tablet `mobile:dokuma`) + yazma izni olanlar; ayrı `loom:read` YOK.
 const MOBILE_DOKUMA = ["mobile:dokuma"] as const;
+/** Geri alma ayrı yetenek izni — doff ile ortak kod (`machine-doff.routes` emsali). */
+const MOBILE_DOKUMA_GERI_AL = ["mobile:dokuma-geri-al"] as const;
 
 const openListSchema = z
   .object({
@@ -116,7 +120,7 @@ const revokeSchema = z
  *       403: { description: Dokuma işi modülü kapalı (MODULE_DISABLED) ya da yetki yok }
  *       409: { description: PRODUCTION_LINE_OCCUPIED · PRODUCTION_LINE_OVERLAP · MACHINE_RUN_RACE · WEAVING_ORDER_NOT_OPEN · CLIENT_TOKEN_COLLISION · RUN_REVOKED }
  */
-router.post("/", requirePermission("loom:run"), async (req, res, next) => {
+router.post("/", requireAnyPermission("loom:run", ...MOBILE_DOKUMA), async (req, res, next) => {
   try {
     const b = openSchema.parse(req.body ?? {});
     res.status(201).json(await openMachineRun(b, req.user?.userId));
@@ -142,7 +146,7 @@ router.post("/", requirePermission("loom:run"), async (req, res, next) => {
  *       404: { description: Koşum yok }
  *       409: { description: RUN_ALREADY_CLOSED · RUN_REVOKED · MACHINE_RUN_RACE }
  */
-router.post("/:id/close", requirePermission("loom:run"), async (req, res, next) => {
+router.post("/:id/close", requireAnyPermission("loom:run", ...MOBILE_DOKUMA), async (req, res, next) => {
   try {
     const id = assertValidUuid(req.params.id, "id");
     const b = closeSchema.parse(req.body ?? {});
@@ -168,7 +172,7 @@ router.post("/:id/close", requirePermission("loom:run"), async (req, res, next) 
  *       404: { description: Koşum yok }
  *       409: { description: RUN_ALREADY_REVOKED }
  */
-router.post("/:id/revoke", requirePermission("loom:run-revoke"), async (req, res, next) => {
+router.post("/:id/revoke", requireAnyPermission("loom:run-revoke", ...MOBILE_DOKUMA_GERI_AL), async (req, res, next) => {
   try {
     const id = assertValidUuid(req.params.id, "id");
     const b = revokeSchema.parse(req.body ?? {});

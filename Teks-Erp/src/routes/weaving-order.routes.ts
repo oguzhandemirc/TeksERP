@@ -11,7 +11,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { WeavingExecutionKind, WeavingOrderStatus } from "@prisma/client";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { requireDokumaEnabled } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { readFilterList, readIdCondition } from "../utils/query-parser";
@@ -28,6 +28,9 @@ import "../types/express-augment";
 
 const router = Router();
 router.use(verifyToken, requireDokumaEnabled);
+
+/** Tablet TEZGAH ekranı koşum açarken iş emri SEÇER — yalnız okuma uçları (2026-09-14). */
+const MOBILE_DOKUMA = ["mobile:dokuma"] as const;
 
 const uuidOrNull = z.string().uuid().nullable().optional();
 const dateOrNull = z.string().datetime({ offset: true }).nullable().optional();
@@ -93,7 +96,7 @@ function parseStatuses(raw: string | undefined): WeavingOrderStatus[] {
  */
 router.get(
   "/",
-  requirePermission("weavingorder:read"),
+  requireAnyPermission("weavingorder:read", ...MOBILE_DOKUMA),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const q = listWeavingOrdersSchema.parse(req.query);
@@ -127,7 +130,7 @@ router.get(
  */
 router.get(
   "/:id",
-  requirePermission("weavingorder:read"),
+  requireAnyPermission("weavingorder:read", ...MOBILE_DOKUMA),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       res.status(200).json(await getWeavingOrder(assertValidUuid(req.params.id)));

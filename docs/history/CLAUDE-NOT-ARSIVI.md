@@ -8942,3 +8942,30 @@ Bayrak kapalıyken payload'a alan HİÇ girmez (`doffLink.test` ölçer); yarı 
 **Bekçi:** `doffLink.test` (5) · `test_mobile_screen_permissions` 6/0 (KK1 → GET guard) · mobil tsc/lint tavanı temiz.
 Rozet/süzgeç önceki dilimde (`kk1EntrySources`). Sürüm notu: tablet ("KK1'de dokuma sorusu — yalnız dokuma
 modülü açık kurulumda") + backend (liste ucu KK1 iznini kabul eder); referans fabrikada etki 0.
+
+## 2026-09-14 — TABLET KOŞUM DİLİMİ İNDİ: Tezgah ekranında koşum aç/kapat/geri al, iş emri opsiyonel, kuyruksuz [ÇEKİRDEK]
+
+**Kapsam (1e; §3.9 (1) + §2.3):** Tezgah ekranının sol bölmesine `RunPanel` — bu hattaki açık koşum (başlangıç saati,
+iş bağı var/yok), **Koşum Aç** modalı (dokuma işi seçici → desen/renk ön-dolu ama kilitsiz, ayrı desen/renk seçiciler
+`itemService.getAll` FABRIC + `colorService.listPublicForPicker`, hedef devir numpad), **Kapat** modalı (yalnız atkı
+sayacı, boş = ölçülmedi), **Geri al** (yalnız `mobile:dokuma-geri-al`, sebep zorunlu). Duruş ve levent ayrı dilim.
+**Karar — iş listesi istemcide süzülür:** `GET /weaving-orders?status=PLANNED,IN_PROGRESS&limit=100` fasonu da
+döner; backend `executionKind` filtresi yok, tablet `IN_HOUSE` dışını düşürür (fason işe koşum backend'de zaten
+`WEAVING_ORDER_SUBCONTRACTED` 409; istemci süzgeci yalnız görünürlük). Sunucu süzmesi bir sonraki dilimde
+`weaving-order.routes` listesine `executionKind` parametresi olarak eklenebilir — bugün 100 sınırında yeterli.
+**Karar — izin kodu açılmadı:** koşum uçları `requireAnyPermission("loom:run", "mobile:dokuma")`, revoke
+`mobile:dokuma-geri-al` (katalog açıklaması "top indirmeyi ve koşumu geri alabilir" — J.3'ün doff için verdiği
+karar koşuma genişletildi, ayrı `mobile:dokuma-kosum-geri-al` AÇILMADI: ikisi de defterden satır düşürür, aynı
+vardiya amiri). İş emri GET'leri (`/weaving-orders`, `/:id`) ve desen/renk GET listeleri `mobile:dokuma` ile okunur
+(`item.routes` · `color.routes` · `weaving-order.routes` guard'larına eklendi). `SCREENLESS_PERMISSIONS`
+`loom:run`/`loom:run-revoke` gerekçeleri "tablet `mobile:dokuma` ile" diye güncellendi.
+**Karar — kuyruk yok (koşum da):** `useRunMutations` üç mutasyonu `networkMode:'always'`; çevrimdışıyken Koşum Aç ve
+Kapat kilitli. `dokuma.md`'ye "Geçersiz kılınan kurallar" bölümü açıldı (§3.6 "dördü de kuyruğa girer" tek damgalı
+satır; duruş/levent kapsam dışı). Token `doffAttempt` yardımcılarıyla (jenerik), parmak izi `runFingerprint`
+(makine · hat · iş · desen).
+**Ölçüm:** `runPayload.test.ts` 7 vaka (openSchema birebir · ön-dolu · hedef devir 0/ondalık/10001 red · kapanış
+boş → null · 409 sınıfları); mobil tsc 0 · eslint 0 (`useRunPanel` 112 satır → `useRunMutations` ayrıldı, tavan
+80) · jest Dokuma 27/27; backend tsc 0; `mobile_screen_permissions` · `route_auth_coverage` · `permission_catalog` ·
+`role_template_catalog` · `swagger_spec` · `screen_catalog` · `dokuma_regime_gate` · `machine_run` yeşil.
+**Ölçülemedi:** gerçek tezgah üstünde koşum (sahada). Sürüm notu: tablet (yeni panel) + backend (guard genişlemesi;
+sözleşme kırmaz — eski istemci için ek izin yalnız GENİŞLEME).

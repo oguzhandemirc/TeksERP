@@ -2,8 +2,8 @@
 // TEZGAH EKRANI (kabuk) — bir TEZGAH, bir liste değil (DOKUMA-IS-EMRI §3.2)
 // =============================================================================
 // Oturum WEAVING istasyonu + makine (`SessionGate` sarar; `stationScreens.ts`).
-// Bu dilim yalnız (4) TOP İNDİR ve geri almasını getirir; koşum aç/kapa, duruş,
-// levent ayrı dilim. Kuyruk YOK (online-only); çevrimdışıyken buton kilitli.
+// (1) KOŞUM aç/kapa (`RunPanel`) + (4) TOP İNDİR ve geri almaları; duruş ve levent
+// ayrı dilim. Kuyruk YOK (online-only); çevrimdışıyken buton kilitli.
 // Kalıp: ince kabuk + görünüm bileşenleri + ekran-hook + saf mantık (MOBIL.md).
 // =============================================================================
 import React from 'react';
@@ -18,6 +18,7 @@ import { useDoffEntry } from './useDoffEntry';
 import DoffEntryView from './DoffEntryView';
 import DoffTodayList from './DoffTodayList';
 import DoffFailureModal from './DoffFailureModal';
+import RunPanel from './RunPanel';
 
 export default function DokumaScreen() {
   const compact = useDeviceType() === 'phone';
@@ -29,6 +30,7 @@ export default function DokumaScreen() {
     <ScreenChrome title="Tezgah" subtitle={entry.machine ? `${entry.machine.name} · hat ${entry.lineNo}` : undefined}>
       <View style={[styles.root, compact && styles.rootColumn]}>
         <View style={styles.pane}>
+          <RunPanel entry={entry} />
           <DoffEntryView entry={entry} />
           {entry.result && (
             <View style={styles.resultBox}>

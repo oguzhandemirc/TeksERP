@@ -301,7 +301,7 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
   {
     screen: "mobile:dokuma",
     path: "POST /:p/revoke",
-    why: "Top indirmeyi geri alma ayrı bir YETENEK yetkisi (`mobile:dokuma-geri-al`, 2026-09-14) — defterden satır düşürür; izni olmayanda buton çizilmez, uç da onu ister.",
+    why: "Top indirmeyi VE koşumu geri alma ayrı bir YETENEK yetkisi (`mobile:dokuma-geri-al`, 2026-09-14) — ikisi de defterden satır düşürür; izni olmayanda buton çizilmez, uçlar (machine-doffs · machine-runs) onu ister.",
   },
   // ── Tambur ekranının EK yetenek yetkileri (2026-08-17'de burada belgelendi) ──
   // Ekranın ana yetkisi `mobile:tambur`; aşağıdaki dört aksiyon BİLİNÇLİ olarak

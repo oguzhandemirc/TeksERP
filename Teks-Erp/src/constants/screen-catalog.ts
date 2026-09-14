@@ -335,7 +335,7 @@ const mobile: ScreenEntry[] = [
   { key: "Kumas", app: "mobile", modul: "cekirdek:ana-veri", title: "Kumaş Ekle", requires: ["mobile:kumas"], capabilities: [] },
   { key: "KursunDagitim", app: "mobile", modul: "productionEnabled", title: "Kurşun Dağıtım", requires: ["mobile:kursun-dagitim"], capabilities: [] },
   // Tablet TEZGAH ekranı (2026-09-14, dokuma dilimi): top indirme + geri alma; koşum/duruş sonraki dilim.
-  { key: "Dokuma", app: "mobile", modul: "dokumaEnabled", title: "Tezgah", requires: ["mobile:dokuma"], capabilities: [{ code: "mobile:dokuma-geri-al", label: "Top indirmeyi geri alabilir" }] },
+  { key: "Dokuma", app: "mobile", modul: "dokumaEnabled", title: "Tezgah", requires: ["mobile:dokuma"], capabilities: [{ code: "mobile:dokuma-geri-al", label: "Top indirmeyi ve koşumu geri alabilir" }] },
 ];
 
 /** Tüm ekranlar — masaüstü yetenek kodları etiketlenmiş hâlde. */
@@ -411,8 +411,10 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // Dokuma P2b (2026-09-13): koşum yazma yüzeyi backend'de doğdu, ekranı tablet
   // TEZGAH ekranıdır (DOKUMA-IS-EMRI §3.2) ve henüz yok. Ekran doğduğu gün bu iki
   // satır ölü muaf olur ve bekçi kırmızı verir — silinmesi o dilimin işidir.
-  { code: "loom:run", reason: "Koşum aç/kapa — tablet tezgah ekranı (dokuma dilimi) henüz doğmadı; backend-only." },
-  { code: "loom:run-revoke", reason: "Koşum geri alma — panel/tablet yüzeyi dokuma dilimiyle doğacak; backend-only." },
+  // Koşumun tablet yüzeyi DOĞDU (2026-09-14): tablet `mobile:dokuma` / `mobile:dokuma-geri-al` ile
+  // çağırır; `loom:*` web kodları panelsiz kalır (panel koşum yüzeyi yok, kod API/entegrasyon için).
+  { code: "loom:run", reason: "Panel koşum yüzeyi yok; tablet `mobile:dokuma` ile açar/kapatır — web kodu API/entegrasyon için." },
+  { code: "loom:run-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
   // Dokuma P3b (2026-09-13): doff yazma yüzeyi backend'de doğdu; ekranı tablet tezgah
   // ekranının "İndir" eylemi (DOKUMA-IS-EMRI §3.4) ve henüz yok — ekranla ölü muaf olur.
   // Doff'un tablet yüzeyi DOĞDU (2026-09-14): tablet `mobile:dokuma` / `mobile:dokuma-geri-al` ile
