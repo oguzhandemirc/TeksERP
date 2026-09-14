@@ -28,6 +28,7 @@
 // DB GEREKTİRMEZ.
 // =============================================================================
 import { execFileSync } from "node:child_process";
+import { git } from "./lib/git";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { atlamaDefteri } from "./lib/atlama";
@@ -167,12 +168,12 @@ export function ciplakSinif(aday: { sha: string; metin: string; sutun: number; d
 }
 
 function gitVar(): boolean {
-  try { execFileSync("git", ["rev-parse", "--git-dir"], { cwd: KOK, stdio: "ignore" }); return true; }
+  try { git(["rev-parse", "--git-dir"], { cwd: KOK, stdio: "yut" }); return true; }
   catch { return false; }
 }
 function sigKlon(): boolean {
   try {
-    return execFileSync("git", ["rev-parse", "--is-shallow-repository"], { cwd: KOK, encoding: "utf8" }).trim() === "true";
+    return git(["rev-parse", "--is-shallow-repository"], { cwd: KOK }).trim() === "true";
   } catch { return true; }
 }
 
@@ -189,8 +190,8 @@ function sigKlon(): boolean {
 function paylasilanTarih(): { ad: string; shalar: Map<string, string[]> } | null {
   for (const ref of ["origin/main", "main", "HEAD"]) {
     try {
-      execFileSync("git", ["rev-parse", "--verify", `${ref}^{commit}`], { cwd: KOK, stdio: "ignore" });
-      const cikti = execFileSync("git", ["rev-list", ref], { cwd: KOK, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+      git(["rev-parse", "--verify", `${ref}^{commit}`], { cwd: KOK, stdio: "yut" });
+      const cikti = git(["rev-list", ref], { cwd: KOK });
       // Kısa atıfı bulmak için ilk 7 haneye göre dizinle (240 × 30k karşılaştırma yerine).
       const dizin = new Map<string, string[]>();
       for (const tam of cikti.split("\n")) {
@@ -228,9 +229,7 @@ function main(): void {
   // ⚠️ `--cached --others --exclude-standard`: HENÜZ TAKİP EDİLMEYEN yeni belge de
   // taranır. Düz `ls-files` yalnız indeksi görür ve yeni yazılmış bir dosyadaki ölü
   // atıf, o dosya sahnelenene kadar GÖRÜNMEZ olurdu (sonda bunu bir kez yaşadı).
-  const dosyalar = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "Teks-Erp/scripts", "Teks-Erp/docs", "docs"], {
-    cwd: KOK, encoding: "utf8",
-  })
+  const dosyalar = git(["ls-files", "--cached", "--others", "--exclude-standard", "Teks-Erp/scripts", "Teks-Erp/docs", "docs"], { cwd: KOK })
     .trim().split("\n")
     .filter((f) => /\.(ts|md|mjs)$/.test(f) && !f.startsWith("docs/history/"));
 

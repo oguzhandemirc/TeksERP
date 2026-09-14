@@ -22,6 +22,7 @@
 //   §8 silen temizlik yolları da aynı kapıdan geçiyor (`--apply` olmadan bile)
 // =============================================================================
 import { readFileSync } from "fs";
+import { git } from "./lib/git";
 import { join, relative } from "path";
 import { execFileSync, spawnSync } from "child_process";
 import { walkTs } from "./lib/ts-tarama";
@@ -176,7 +177,7 @@ function main(): void {
   const izlenen = (() => {
     try {
       return new Set(
-        execFileSync("git", ["ls-files", "-z", "--", "."], { cwd: dizin, encoding: "utf8" })
+        git(["ls-files", "-z", "--", "."], { cwd: dizin })
           .split("\0")
           .filter(Boolean),
       );

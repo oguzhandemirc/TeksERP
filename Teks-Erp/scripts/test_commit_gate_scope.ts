@@ -28,6 +28,7 @@
 //    yeşil kalır ama korumaz (kapının dördüncü ölüm biçimi, 2026-09-12).
 // =============================================================================
 import { execFileSync, spawnSync } from "node:child_process";
+import { git } from "./lib/git";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -68,7 +69,7 @@ const GIT_ENV: NodeJS.ProcessEnv = {
   HOME: havuz,
 };
 try {
-  const g = (args: string[]) => execFileSync("git", args, { cwd: havuz, encoding: "utf8", env: GIT_ENV });
+  const g = (args: string[]) => git(args, { cwd: havuz, env: GIT_ENV });
   mkdirSync(join(havuz, "scripts"), { recursive: true });
   mkdirSync(join(havuz, "Teks-Erp/prisma/migrations/20260101_taban"), { recursive: true });
   mkdirSync(join(havuz, "Teks-Erp/scripts"), { recursive: true });

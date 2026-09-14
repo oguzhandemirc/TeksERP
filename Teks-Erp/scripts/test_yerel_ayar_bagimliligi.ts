@@ -29,6 +29,7 @@
 // Koşum: npx tsx scripts/test_yerel_ayar_bagimliligi.ts   (DB GEREKMEZ)
 // =============================================================================
 import { execFileSync } from "node:child_process";
+import { git } from "./lib/git";
 import { atlamaDefteri } from "./lib/atlama";
 import { commitKapisiMi, curumeKolu } from "./lib/circir-kolu";
 import { readFileSync } from "node:fs";
@@ -84,10 +85,7 @@ export function taranacakDosyalar(repo: string): string[] {
   // sınıf iki kez ısırdı (2026-09-14: 5e'nin `test_belge_capa_atfi`si yeni bir
   // `.md`yi hiç görmedi; benim gün-anahtarı kapım kendi sondamı görmedi).
   // ⛔ Ve körlük zemini bunu GÖREMEZ: kapsam boş değil, yalnız EKSİK.
-  return execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", ...KAPSAM], {
-    cwd: repo,
-    encoding: "utf8",
-  })
+  return git(["ls-files", "--cached", "--others", "--exclude-standard", ...KAPSAM], { cwd: repo })
     .trim()
     .split("\n")
     .filter((f) => /\.(ts|tsx)$/.test(f))

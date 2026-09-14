@@ -14,6 +14,7 @@
 // ⚠️ BU BEKÇİ DB'YE DOKUNMAZ — saf aletin sözleşmesini ölçer.
 // =============================================================================
 import { execFileSync } from "node:child_process";
+import { git } from "./lib/git";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { BILINMEYEN_BEYAN, atlamaDefteri, strictMi } from "./lib/atlama";
@@ -150,10 +151,7 @@ const KOPYA_MUAF: Record<string, string> = {};
 
 function tekAltyapi(): void {
   const KOK = join(__dirname, "..");
-  const dosyalar = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "scripts"], {
-    cwd: KOK,
-    encoding: "utf8",
-  })
+  const dosyalar = git(["ls-files", "--cached", "--others", "--exclude-standard", "scripts"], { cwd: KOK })
     .trim()
     .split("\n")
     .filter((f) => /^scripts\/test_[a-z0-9_]+\.ts$/.test(f));

@@ -96,6 +96,7 @@
 // sakladı (2026-09-13) — o yüzden yutulan hata BASILIR.
 // =============================================================================
 import { execFileSync } from "node:child_process";
+import { git } from "./git";
 import { appendFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
@@ -162,7 +163,7 @@ export function rejimAdi(env: NodeJS.ProcessEnv = process.env): "yerel" | "ci" {
  */
 export function agacAdi(cwd: string = process.cwd()): string {
   try {
-    const gitDir = execFileSync("git", ["rev-parse", "--git-dir"], { cwd, encoding: "utf8" }).trim();
+    const gitDir = git(["rev-parse", "--git-dir"], {}).trim();
     return gitDir.includes("/worktrees/") ? basename(gitDir) : "ortak";
   } catch {
     return "?";

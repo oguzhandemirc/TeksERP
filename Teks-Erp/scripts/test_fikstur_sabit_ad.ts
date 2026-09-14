@@ -29,7 +29,7 @@
 //
 // Koşum: npx tsx scripts/test_fikstur_sabit_ad.ts   (DB GEREKMEZ)
 // =============================================================================
-import { execFileSync } from "node:child_process";
+import { git } from "./lib/git";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { atlamaDefteri } from "./lib/atlama";
@@ -205,11 +205,7 @@ function main(): void {
   }
   const sqlTuple = sqlTekilTuplelar(sqlMetinleri);
 
-  const dosyalar = execFileSync(
-    "git",
-    ["ls-files", "--cached", "--others", "--exclude-standard", "Teks-Erp/scripts"],
-    { cwd: REPO, encoding: "utf8" },
-  )
+  const dosyalar = git(["ls-files", "--cached", "--others", "--exclude-standard", "Teks-Erp/scripts"], { cwd: REPO })
     .trim()
     .split("\n")
     .filter((f) => /\/test_[a-z0-9_]+\.ts$/.test(f))

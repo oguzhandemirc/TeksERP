@@ -69,6 +69,7 @@
 //   Geri alma `cp` + `sha256` ile doğrulandı (her sondadan sonra, birebir).
 // =============================================================================
 import { execFileSync } from "node:child_process";
+import { git } from "./lib/git";
 import { readFileSync } from "node:fs";
 import { basename, dirname, join, normalize } from "node:path";
 
@@ -92,7 +93,7 @@ const DIZIN = "docs/standart/OLCUM-DISIPLINI-DIZIN.md";
 const OLCUM_DOSYA = /^docs\/standart\/OLCUM-DISIPLINI[A-Z-]*\.md$/;
 /** Hedef: repodaki HER `.md` (kök `CLAUDE.md`, alt proje `CLAUDE.md`'leri dâhil). */
 function mdDosyalari(): string[] {
-  return execFileSync("git", ["ls-files", "*.md"], { cwd: KOK, encoding: "utf8" })
+  return git(["ls-files", "*.md"], { cwd: KOK })
     .split("\n")
     .filter(Boolean);
 }

@@ -31,7 +31,6 @@
 //    dolaylı (servis üzerinden) kullanıyorsa ve adını hiç yazmıyorsa listeye
 //    GİRMEZ. ⇒ Liste bir ALT SINIRDIR, "bunlar yeter" demez. Tam kapsam `npm test`.
 // =============================================================================
-import { execFileSync } from "node:child_process";
 import { git } from "./lib/git";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -162,11 +161,7 @@ function degisenDosyalar(hedef: string): string[] {
 
 function bekciKaynaklari(): Map<string, string> {
   const out = new Map<string, string>();
-  const dosyalar = execFileSync(
-    "git",
-    ["ls-files", "--cached", "--others", "--exclude-standard", "Teks-Erp/scripts"],
-    { cwd: REPO, encoding: "utf8" },
-  )
+  const dosyalar = git(["ls-files", "--cached", "--others", "--exclude-standard", "Teks-Erp/scripts"], { cwd: REPO })
     .trim()
     .split("\n")
     .filter((f) => /\/test_[a-z0-9_]+\.ts$/.test(f));

@@ -22,6 +22,7 @@
 // Koşum: npx tsx scripts/test_lookup_beyan_aynasi.ts   (DB GEREKMEZ)
 // =============================================================================
 import { execFileSync } from "node:child_process";
+import { git } from "./lib/git";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -121,10 +122,7 @@ function main(): void {
   console.log("\n=== LOOKUP beyanı ↔ çağrı aynası ===\n");
   const lookupKaynak = readFileSync(path.join(REPO, LOOKUP), "utf8");
   const beyan = beyanAnahtarlari(lookupKaynak);
-  const dosyalar = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "Teks-Erp/src"], {
-    cwd: REPO,
-    encoding: "utf8",
-  })
+  const dosyalar = git(["ls-files", "--cached", "--others", "--exclude-standard", "Teks-Erp/src"], { cwd: REPO })
     .trim()
     .split("\n")
     .filter((f) => f.endsWith(".ts") && f !== LOOKUP);

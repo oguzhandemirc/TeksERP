@@ -21,6 +21,28 @@
 
 ---
 
+## 2026-09-14 — Tabanı DÜŞÜREN commit ile tabanı HAK EDEN commit aynı trende ölçülür [ÇEKİRDEK]
+
+Bir cırcırın tabanı 24 → 18'e indirildi, ama tabanı hak eden migrasyon commit'i **trene
+hiç girmedi** (senkron komutunda bir `;` zinciri kırdı; `git reset --mixed` yanlış ağaçta
+koştu ve commit düştü). Sonuç: **origin/main, kimsenin ihlal etmediği bir kuralla KIRMIZI
+oldu** — ağaçta 24, tabanda 18.
+
+⇒ ***Bir cırcır tabanını düşüren commit ile o tabanı hak eden commit AYRI sha'lardaysa,
+ikisinin AYNI trende olduğu ÖLÇÜLMELİDİR.*** Taban tek başına inerse kapı, düzelten
+değişikliği bekleyen bir kırmızıya döner ve o kırmızı, yazarının işi bozuk sanılır.
+(`circir-sabiti-dokunma` kuralının kardeşi: *sabiti yalnız entegratör yazar* kuralı,
+*sabit ile gerekçesi birlikte iner* kuralını GEREKTİRİR.)
+
+⚠️ **İkinci ders, ölçümün kendisinde:** iniş ölçümü "16/0" diyordu ve YANILIYORDU — ölçüm,
+commit düştüğü için **unstaged kalan dosyalarla** koşmuştu. Çalışma ağacı temiz değilken
+alınan yeşil, o commit'in yeşili değildir. *Bir ölçümün hangi AĞAÇTA koştuğu, sonucu kadar
+ölçüdür* (aynı günün "sayının ağacı" dersiyle aynı aile).
+
+**Teşhis nasıl kuruldu:** `git merge-base --is-ancestor <sha> origin/main` → HAYIR, ve
+`git show origin/main:<dosya> | grep -c <yeni imza>` → 0. *Bir commit'in indiğini sha
+eşlemesi değil İÇERİK söyler* — bu repoda üçüncü kez aynı araç işe yaradı.
+
 ## 2026-09-14 — Aracın kapasitesi, ölçtüğü şey büyüyünce sessizce ihlale dönüşür [ÇEKİRDEK]
 
 `CLAUDE-NOT-ARSIVI.md` 1 MB'ı aştı ve `test_identity_ledger` **ENOBUFS ile ÇÖKTÜ**.

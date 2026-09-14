@@ -78,6 +78,7 @@
 // Çalıştır: npx tsx scripts/test_identity_ledger.ts
 // =============================================================================
 import { execFileSync } from "child_process";
+import { git } from "./lib/git";
 import { readFileSync, existsSync, readdirSync } from "fs";
 import path from "path";
 import { editRatio, tokenize } from "../src/utils/string-similarity";
@@ -96,7 +97,7 @@ const no = (m: string) => { fail++; console.log(`  ❌ ${m}`); };
 const ok2 = (m: string, k: boolean) => (k ? ok(m) : no(m));
 
 const oku = (rel: string) => (existsSync(path.join(REPO, rel)) ? readFileSync(path.join(REPO, rel), "utf8") : "");
-const git = (...a: string[]) => execFileSync("git", a, { cwd: REPO, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+const g = (...a: string[]) => git(a, { cwd: REPO });
 
 /** Kimlik = başlık eksi SAYAÇ. Parantezli sayı kimlik değil TÜRETİLMİŞ veridir. */
 const normBaslik = (h: string) => foldSearchText(h.replace(/\(\s*\d+[^)]*\)/g, "")).trim();
@@ -124,7 +125,7 @@ function yonA(taban: string) {
 
   // ① Arşiv SALT-EKLEMEDİR: başlık kümesi KÜÇÜLEMEZ, gerekçe kabul edilmez.
   //    Geçersiz not bile silinmez, altına `> ⚠️ GEÇERSİZ/KISMEN (tarih)` konur.
-  const eski = basliklar(git("show", `${taban}:${ARSIV}`));
+  const eski = basliklar(g("show", `${taban}:${ARSIV}`));
   const yeni = basliklar(oku(ARSIV));
   const dusenArsiv = eski.filter((h) => !yeni.includes(h));
   if (dusenArsiv.length === 0) ok(`arşiv salt-ekleme korundu (${yeni.length} başlık)`);
@@ -139,7 +140,7 @@ function yonA(taban: string) {
   let ihlal = 0;
   for (const rel of duzyaziDosyalar) {
     let oncekiMetin = "";
-    try { oncekiMetin = git("show", `${taban}:${rel}`); } catch { continue; } // yeni doğan dosya
+    try { oncekiMetin = g("show", `${taban}:${rel}`); } catch { continue; } // yeni doğan dosya
     const yeniB = basliklar(oku(rel));
     for (const d of basliklar(oncekiMetin)) {
       if (yeniB.includes(d)) continue;
@@ -358,8 +359,8 @@ function main() {
   let tabanKaynak = "";
   // ① özellik dalı: merge-base gerçek bir ATA (HEAD'den farklı)
   try {
-    const mb = git("merge-base", "HEAD", "origin/main").trim();
-    const head = git("rev-parse", "HEAD").trim();
+    const mb = g("merge-base", "HEAD", "origin/main").trim();
+    const head = g("rev-parse", "HEAD").trim();
     if (mb && mb !== head) { taban = mb; tabanKaynak = "merge-base HEAD origin/main (özellik dalı)"; }
   } catch { /* origin/main yok — ②'ye düş */ }
   // ② CI: push'tan ÖNCEKİ uç. Ölçüldü 2026-09-13: bir push 1–2 commit taşıyor,
@@ -370,7 +371,7 @@ function main() {
     // ULAŞILAMAZ olabilir. İkisi de `git show`u patlatır ⇒ ÇÖKEN SONDA olurdu.
     // Bu yüzden hem sıfır-sha elenir hem VARLIĞI `cat-file -e` ile ÖLÇÜLÜR.
     if (before && !/^0+$/.test(before)) {
-      try { git("cat-file", "-e", `${before}^{commit}`); taban = before; tabanKaynak = "CI_BEFORE_SHA (push aralığı)"; }
+      try { g("cat-file", "-e", `${before}^{commit}`); taban = before; tabanKaynak = "CI_BEFORE_SHA (push aralığı)"; }
       catch { /* çözülemedi — ③'e düş */ }
     }
   }

@@ -39,6 +39,7 @@
 // Koşum: npx tsx scripts/test_gun_anahtari_kaynagi.ts   (DB GEREKMEZ)
 // =============================================================================
 import { execFileSync } from "node:child_process";
+import { git } from "./lib/git";
 import { atlamaDefteri } from "./lib/atlama";
 import { curumeKolu } from "./lib/circir-kolu";
 import { readFileSync } from "node:fs";
@@ -100,10 +101,7 @@ export function taranacakDosyalar(kok: string): string[] {
   // dosyanın ihlali GÖRÜNMEZ, ve bir kapının en çok görmesi gereken an yeni
   // dosyanın yazıldığı andır. (Bunu kendi negatif sondamı kurarken ölçtüm:
   // sonda dosyası untracked olduğu için kapı onu HİÇ görmedi.)
-  return execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "src", "scripts"], {
-    cwd: kok,
-    encoding: "utf8",
-  })
+  return git(["ls-files", "--cached", "--others", "--exclude-standard", "src", "scripts"], { cwd: kok })
     .trim()
     .split("\n")
     .filter((f) => f.endsWith(".ts"))

@@ -41,6 +41,7 @@
 //    Damga olmadan sonraki okuyan farkı "yeni ihlal" sanar.
 // =============================================================================
 import { execFileSync } from "node:child_process";
+import { git } from "./lib/git";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { KAPSAM_SERHI, kendiniSina, olcum } from "./lib/keyfi-arama-taramasi";
@@ -63,7 +64,7 @@ function check(label: string, ok: boolean, detay = ""): void {
 
 function agacDamgasi(): string {
   try {
-    return execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: SCRIPTS, encoding: "utf8" }).trim();
+    return git(["rev-parse", "--short", "HEAD"], { cwd: SCRIPTS }).trim();
   } catch {
     return "?";
   }

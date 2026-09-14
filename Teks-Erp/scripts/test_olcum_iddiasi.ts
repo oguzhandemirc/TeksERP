@@ -39,6 +39,7 @@
 //    Bu, `dosya::model` taneciğiyle aynı sınıf bedeldir ve burada beyan edilir.
 // =============================================================================
 import { execFileSync } from "node:child_process";
+import { git } from "./lib/git";
 import { readFileSync, readdirSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -77,7 +78,7 @@ const KOMUT = /`[^`]*(grep|find|git |npx|node |SELECT|psql|wc )[^`]*`/;
  */
 function agacDamgasi(): string {
   try {
-    return execFileSync("git", ["rev-parse", "--short", "HEAD"], { cwd: SCRIPTS, encoding: "utf8" }).trim();
+    return git(["rev-parse", "--short", "HEAD"], { cwd: SCRIPTS }).trim();
   } catch {
     return "?";
   }
