@@ -307,5 +307,5 @@ shouldTouchClient(ID_BEYAN, t1);
 touchClient({ instanceId: ID_BEYAN, kind: "electron", version: "1.3.2" }, t1);
 check("başlıkla gelen kayıt varsayılan olarak BEYAN", listClients(t1)[0]?.declared === true);
 
-console.log(`\n${fail === 0 ? "✅ TÜMÜ GEÇTİ" : "❌ BAŞARISIZ"} — ${pass} geçti, ${fail} kaldı\n`);
+console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail === 0 ? 0 : 1);

@@ -176,7 +176,7 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log(`\n${pass} geçti, ${fail} kaldı`);
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
   process.exit(fail > 0 ? 1 : 0);
 }

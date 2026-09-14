@@ -94,5 +94,5 @@ for (const [ad, p] of Object.entries(CLIENT_VERSION_POLICIES)) {
     `${p.minVersion} vs ${p.currentVersion}`);
 }
 
-console.log(`\n${fail === 0 ? "✅ TÜMÜ GEÇTİ" : "❌ BAŞARISIZ"} — ${pass} geçti, ${fail} kaldı\n`);
+console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail === 0 ? 0 : 1);

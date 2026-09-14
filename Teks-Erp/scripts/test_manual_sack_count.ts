@@ -93,7 +93,7 @@ function main(): void {
   check("EN başlık 'Package Count'", en.includes("Package Count"), en.includes("Çuval Adedi") ? "TR sızdı" : "");
   check("EN alt metin 'in system'", en.includes("(2 in system)"));
 
-  console.log(`\n${fail === 0 ? "✅ TÜMÜ GEÇTİ" : "❌ BAŞARISIZ"} — ${pass} geçti, ${fail} kaldı\n`);
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail === 0 ? 0 : 1);
 }
 

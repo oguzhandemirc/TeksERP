@@ -281,7 +281,7 @@ async function main(): Promise<void> {
     if (color) await prisma.color.deleteMany({ where: { id: color.id } });
     if (item) await prisma.item.deleteMany({ where: { id: item.id } });
     if (customer) await prisma.customer.deleteMany({ where: { id: customer.id } });
-    console.log(`\n=== ${pass}/${pass + fail} geçti ===`);
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();
     await pool.end(); // havuz kapanmazsa süreç 30s idle bekler
   }

@@ -220,7 +220,7 @@ async function main() {
   // Temizlik (test artefaktı — cascade alias'ları siler)
   await prisma.color.delete({ where: { id: colorId } });
 
-  console.log(`\n${pass}/${pass + fail} geçti.`);
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   if (fail > 0) process.exitCode = 1;
 }
 

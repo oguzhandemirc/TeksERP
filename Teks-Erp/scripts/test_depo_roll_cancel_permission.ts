@@ -151,5 +151,5 @@ check(
 
 // Koşucu yalnız "başarısız"/"kaldı" kelimesini tanır ("düştü" tanınmıyordu ve
 // dosya özet tablosunda "geçti (exit 0)" görünüyordu — 12 kontrol gizliydi).
-console.log(`\n${fail === 0 ? "✅" : "❌"} ${pass} geçti, ${fail} başarısız`);
+console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail === 0 ? 0 : 1);

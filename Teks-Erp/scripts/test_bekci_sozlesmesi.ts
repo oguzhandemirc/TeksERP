@@ -77,6 +77,11 @@ check(
 
 const ozetsiz: string[] = [];
 const ingilizce: string[] = [];
+// STANDART biçim `Sonuç:`/`SONUÇ:` ÇAPALIDIR (2026-09-14, 1e hükmü — 6e'nin sorusu): koşucu
+// ②/③'ü de tanır ama ", N atlandı" ve BİLİNMEYEN beyanını yalnız çapalı satırdan okur; çapasız
+// özet atlamayı GÖRÜNMEZ kılar. Ölçüldü 2026-09-14: 552 dosyanın 7'si çapasızdı (5 çıplak · 2 `N/T geçti`),
+// hepsi standarda çekildi ⇒ taban 0, SERT.
+const capasiz: string[] = [];
 
 for (const f of dosyalar) {
   if (f === "test_bekci_sozlesmesi.ts") continue;
@@ -86,6 +91,7 @@ for (const f of dosyalar) {
 
   const taniniyor = TANINAN_OZET.some((r) => r.test(kaynak));
   if (!taniniyor && !MUAF.includes(f)) ozetsiz.push(f);
+  if (taniniyor && !TANINAN_OZET[0].test(kaynak)) capasiz.push(f);
 
 }
 
@@ -93,6 +99,12 @@ check(
   "⭐ her bekçi koşucunun TANIDIĞI özet formatını basıyor",
   ozetsiz.length === 0,
   ozetsiz.length ? ozetsiz.join(", ") : `${dosyalar.length - 1} dosya uyuyor`,
+);
+
+check(
+  "⭐ özet satırı `Sonuç:` ÇAPALI (standart biçim; ②/③ tanınır ama atlama beyanını taşıyamaz)",
+  capasiz.length === 0,
+  capasiz.length ? capasiz.join(", ") : "hepsi çapalı",
 );
 
 check(
