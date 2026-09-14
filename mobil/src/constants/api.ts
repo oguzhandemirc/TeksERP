@@ -25,17 +25,3 @@ export const API_URL = devHost
  *  SWR cache'i + arka plan tazeleme zaten devrede (SAHA-AG-DAYANIKLILIK.md §S2). */
 export const BOOTSTRAP_TIMEOUT_MS = 5_000;
 
-export const ENDPOINTS = {
-  auth: {
-    login: '/auth/login',
-    me: '/auth/me',
-  },
-  workOrders: '/work-orders',
-  rolls: '/rolls',
-  stations: '/stations',
-  travelerCards: '/traveler-cards',
-  production: '/production',
-  subcontractor: '/subcontractor',
-  shipping: '/shipping',
-  tambur: '/tambur',
-};
