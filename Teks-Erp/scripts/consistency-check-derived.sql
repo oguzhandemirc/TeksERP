@@ -64,7 +64,7 @@ SELECT wo.id AS work_order_id,
        wo."workOrderNumber",
        wo.type::text   AS tip,
        wo.status::text AS durum,
-       (SELECT COUNT(*) FROM work_order_to_order_lines l WHERE l."workOrderId" = wo.id) AS bag_sayisi,
+       (SELECT COUNT(*) FROM work_order_to_order_lines l WHERE l."workOrderId" = wo.id AND l."unlinkedAt" IS NULL) AS bag_sayisi,
        CASE WHEN wo.type = 'STOCK_PRODUCTION'
             THEN 'STOK ama sipariş bağı VAR'
             ELSE 'SİPARİŞE ÖZEL ama bağ YOK' END AS sapma,
@@ -73,7 +73,7 @@ FROM work_orders wo
 WHERE wo.status NOT IN ('CANCELLED', 'SUPERSEDED')
   AND (wo.type = 'ORDER_PRODUCTION')
       IS DISTINCT FROM
-      EXISTS (SELECT 1 FROM work_order_to_order_lines l WHERE l."workOrderId" = wo.id)
+      EXISTS (SELECT 1 FROM work_order_to_order_lines l WHERE l."workOrderId" = wo.id AND l."unlinkedAt" IS NULL)
 ORDER BY wo."createdAt";
 
 \echo ''

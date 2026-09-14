@@ -126,10 +126,10 @@ interface Section {
 const SECTIONS: Section[] = [
   {
     // İKİ YÖNLÜ ve öyle kalmalı. `linkOrderLines` ilk bağda STOK→SİPARİŞE ÖZEL,
-    // `unlinkOrderLine` son bağda tersini yapar — ama pivot'un TEK yazıcısı onlar
-    // değil: `work_order_to_order_lines.orderLineId` FK'sı `onDelete: Cascade`
-    // taşır, yani sipariş satırı silinince bağ SESSİZCE düşer ve o yolda tipe
-    // dokunan kimse yoktur. Tek yönü ölçmek bu açığı görmezdi.
+    // `unlinkOrderLine` son bağda tersini yapar. (Eski gerekçe bayattı: FK K5'ten
+    // beri `Restrict`, Cascade yok.) Bağ 2026-09-14'ten beri SİLİNMEZ, `unlinkedAt`
+    // damgalanır — "bağ var mı" sorusu yalnız AÇIK satıra bakar (47 bulgusu K1:
+    // süzgeçsiz sayım koparılıp STOK'a dönmüş iş emrini sapma sayıyordu).
     id: "21",
     title: "WorkOrder.type ↔ sipariş bağının varlığı (tip bağın AYNASIDIR)",
     sql: `
@@ -137,7 +137,7 @@ SELECT wo.id AS work_order_id,
        wo."workOrderNumber",
        wo.type::text   AS tip,
        wo.status::text AS durum,
-       (SELECT COUNT(*) FROM work_order_to_order_lines l WHERE l."workOrderId" = wo.id) AS bag_sayisi,
+       (SELECT COUNT(*) FROM work_order_to_order_lines l WHERE l."workOrderId" = wo.id AND l."unlinkedAt" IS NULL) AS bag_sayisi,
        CASE WHEN wo.type = 'STOCK_PRODUCTION'
             THEN 'STOK ama sipariş bağı VAR'
             ELSE 'SİPARİŞE ÖZEL ama bağ YOK' END AS sapma,
@@ -146,7 +146,7 @@ FROM work_orders wo
 WHERE wo.status NOT IN ('CANCELLED', 'SUPERSEDED')
   AND (wo.type = 'ORDER_PRODUCTION')
       IS DISTINCT FROM
-      EXISTS (SELECT 1 FROM work_order_to_order_lines l WHERE l."workOrderId" = wo.id)`,
+      EXISTS (SELECT 1 FROM work_order_to_order_lines l WHERE l."workOrderId" = wo.id AND l."unlinkedAt" IS NULL)`,
   },
   {
     id: "22",

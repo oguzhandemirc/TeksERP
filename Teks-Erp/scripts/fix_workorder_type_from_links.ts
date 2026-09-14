@@ -38,6 +38,7 @@
 // =============================================================================
 
 import prisma, { pool } from "../src/lib/prisma";
+import { ACTIVE_ORDER_LINK } from "../src/services/helpers/order-link.helper";
 import { WorkOrderStatus, WorkOrderType } from "@prisma/client";
 import { AuditService } from "../src/services/audit.service";
 import { FACTORY_TIMEZONE } from "../src/constants/time";
@@ -59,7 +60,9 @@ async function main(): Promise<void> {
     where: {
       type: WorkOrderType.STOCK_PRODUCTION,
       status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] },
-      orderLinks: { some: {} },
+      // Yalnız AÇIK bağ (47 bulgusu K1): koparılmış bağlı STOK iş emri aday DEĞİL —
+      // `--apply` doğru olan STOK'u SİPARİŞE ÖZEL'e çevirirdi.
+      orderLinks: { some: ACTIVE_ORDER_LINK },
     },
     select: {
       id: true,
@@ -67,6 +70,7 @@ async function main(): Promise<void> {
       status: true,
       createdAt: true,
       orderLinks: {
+        where: ACTIVE_ORDER_LINK,
         select: {
           createdAt: true,
           orderLine: { select: { order: { select: { orderNumber: true } } } },

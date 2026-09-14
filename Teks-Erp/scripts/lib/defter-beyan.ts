@@ -359,7 +359,8 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   // `test_order_link_unlink` §13 src'de silme ve süzgeçsiz okuru kırmızı yapar.
   D("WorkOrderToOrderLine", "iş emri ↔ sipariş kalemi bağı + `allocatedQty`: `WorkOrder.type` AÇIK bağ sayısının aynası, sipariş karşılaması ve refakat kartı sipariş bloğu açık bağdan okunur; koparma damgası MANUAL_UNLINK · WO_REPLACE · ORDER_LINE_CANCEL · ORDER_DELETE · ORDER_CANCEL",
     { tur: "DAMGA", kolon: "unlinkedAt" },
-    [{ dosya: "src/services/workorder-link.service.ts", sembol: "linkOrderLines" }],
+    // Ters yazan = DAMGAYI yazan helper (RollProperty emsali); yeniden bağlama ileri satırdır (47 K3).
+    [{ dosya: "src/services/helpers/order-link.helper.ts", sembol: "unlinkOrderLinesTx" }],
     ["src/services/workorder-link.service.ts", "src/services/helpers/workorder-clone.helper.ts", "src/services/workorder.service.ts"],
     { yari: true }),
   D("WorkOrderTargetProperty", "iş emrinin hedef özelliği — topun özelliğiyle aynı sınıf (2026-09-11 kararı); replace/updateTargetProperties FARK bazlı, çıkan damgalanır (WO_REPLACE · WO_TARGET_UPDATE)",
