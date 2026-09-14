@@ -179,7 +179,10 @@ if (staged.some((f) => /^(Teks-Erp|Electron|mobil)\/src\/.*\.tsx?$/.test(f))) {
 // Küme, gerekçe ve ölçüm `scripts/hooks/hizli-mandallar.mjs` başlığında.
 // Dördüncü tetik `Teks-Erp/docs/` (2026-09-14): harita satırı ve "Negatif sonda" hücresi orada;
 // identity_ledger ve harita_sonda_atfi onu okur — yalnız haritaya dokunan commit de mandal görsün.
-if (staged.some((f) => /^(Teks-Erp\/scripts\/|Teks-Erp\/docs\/|docs\/standart\/|docs\/kurallar\/)/.test(f))) {
+// Beşinci tetik `Teks-Erp/src/services/import/` (1e hükmü 2026-09-14): lookup_beyan_aynasi'nın
+// GİRDİ yüzeyi — kural: MANDAL TETİĞİ BEKÇİNİN OKUDUĞU DİZİNDEN GENİŞ OLAMAZ; bekçi src'nin
+// tamamını tarar ama çağıranların 12/12'si import/ altında (ölçüldü); dışına yazılan çağrıyı CI yakalar.
+if (staged.some((f) => /^(Teks-Erp\/scripts\/|Teks-Erp\/docs\/|Teks-Erp\/src\/services\/import\/|docs\/standart\/|docs\/kurallar\/)/.test(f))) {
   adimlar.push({ ad: "hızlı mandallar", cwd: ".", cmd: ["node", ["scripts/hooks/hizli-mandallar.mjs"]] });
 }
 
