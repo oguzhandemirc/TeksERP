@@ -16,6 +16,7 @@
 // Temizlik: finally bloğunda, yalnız kendi ürettiklerini siler.
 // =============================================================================
 import prisma from "../src/lib/prisma";
+import { ACTIVE_ORDER_LINK } from "../src/services/helpers/order-link.helper";
 import { workOrderLinkService } from "../src/services/workorder-link.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { OrderService } from "../src/services/order.service";
@@ -266,8 +267,12 @@ async function main(): Promise<void> {
     // ── 5) Bağ kaldırma ─────────────────────────────────────────────────────
     await workOrderLinkService.unlinkOrderLine(wo.id, lineWidthDiff.id);
     check(
-      "bağ kaldırıldı",
-      (await prisma.workOrderToOrderLine.count({ where: { workOrderId: wo.id } })) === 1,
+      "bağ kaldırıldı (1 AÇIK bağ kaldı)",
+      (await prisma.workOrderToOrderLine.count({ where: { workOrderId: wo.id, ...ACTIVE_ORDER_LINK } })) === 1,
+    );
+    check(
+      "koparılan bağ SİLİNMEDİ — damgalı duruyor (③a, MANUAL_UNLINK)",
+      (await prisma.workOrderToOrderLine.count({ where: { workOrderId: wo.id, orderLineId: lineWidthDiff.id, unlinkedAt: { not: null }, unlinkReason: "MANUAL_UNLINK" } })) === 1,
     );
 
     // ── 5b) SİMETRİ (2026-08-21): son bağ kalkınca STOK'a döner (red DEĞİL) ──
@@ -278,9 +283,9 @@ async function main(): Promise<void> {
     const lastUnlink = await workOrderLinkService.unlinkOrderLine(wo.id, lineOk.id);
     const afterLastUnlink = await prisma.workOrder.findUnique({
       where: { id: wo.id },
-      select: { type: true, _count: { select: { orderLinks: true } } },
+      select: { type: true, _count: { select: { orderLinks: { where: ACTIVE_ORDER_LINK } } } },
     });
-    check("son bağ KALDIRILDI (red yok)", lastUnlink.data.removed === true && afterLastUnlink?._count.orderLinks === 0);
+    check("son bağ KALDIRILDI (red yok) — açık bağ 0", lastUnlink.data.removed === true && afterLastUnlink?._count.orderLinks === 0);
     check("son bağ kalkınca tip SİPARİŞE ÖZEL → STOK", afterLastUnlink?.type === "STOCK_PRODUCTION", String(afterLastUnlink?.type));
     check("unlink yanıtı typeChanged=true + mesaj", lastUnlink.data.typeChanged === true && (lastUnlink.message ?? "").includes("Stok"));
     const unlinkAudit = await prisma.systemLog.findFirst({
@@ -302,8 +307,8 @@ async function main(): Promise<void> {
     const noItemErr = await expectError(() => workOrderLinkService.unlinkOrderLine(wo.id, lineOk.id));
     check("hedef kumaşsız siparişe özel WO'da son bağ kalkmaz (STOK olamaz)", noItemErr !== null && noItemErr.includes("hedef kumaş"), noItemErr ?? "");
     check(
-      "red edilen unlink bağı SİLMEDİ",
-      (await prisma.workOrderToOrderLine.count({ where: { workOrderId: wo.id } })) === 1,
+      "red edilen unlink bağı KOPARMADI (açık bağ 1)",
+      (await prisma.workOrderToOrderLine.count({ where: { workOrderId: wo.id, ...ACTIVE_ORDER_LINK } })) === 1,
     );
     await prisma.workOrder.update({ where: { id: wo.id }, data: { targetItemId: itemA.id } });
     // Gidiş-dönüş: bağ yeniden kurulunca tip yine ORDER (sonraki bölümler bağlı sipariş bekler).
@@ -453,7 +458,10 @@ async function main(): Promise<void> {
     const keptProps = await prisma.rollProperty.count({
       where: { rollId: editableRoll.id, propertyId: flagProp.id },
     });
-    check("topun BAYRAK özelliği korundu (silinmedi)", keptProps === 1);
+    const keptActive = await prisma.rollProperty.count({
+      where: { rollId: editableRoll.id, propertyId: flagProp.id, revokedAt: null },
+    });
+    check("topun BAYRAK özelliği korundu — aktif 1 VE toplam 1 (fark bazlı yazar: silinip yeniden yazılmadı)", keptProps === 1 && keptActive === 1);
 
     // Başka iş emrinin topu buradan değiştirilemez (kapsam sızıntısı).
     const foreignRoll = await prisma.roll.create({
@@ -522,9 +530,11 @@ async function main(): Promise<void> {
     await orderService.cancelWithActions(order2.id, [{ workOrderId: wo2.id, action: "UNLINK_ONLY" }]);
     const wo2After = await prisma.workOrder.findUnique({
       where: { id: wo2.id },
-      select: { type: true, status: true, _count: { select: { orderLinks: true } } },
+      select: { type: true, status: true, _count: { select: { orderLinks: { where: ACTIVE_ORDER_LINK } } } },
     });
-    check("iptal sonrası WO2 bağı 0, iş emri ayakta (PLANNED)", wo2After?._count.orderLinks === 0 && wo2After.status === "PLANNED");
+    check("iptal sonrası WO2 AÇIK bağı 0, iş emri ayakta (PLANNED)", wo2After?._count.orderLinks === 0 && wo2After.status === "PLANNED");
+    check("iptalle koparılan bağ damgalı DURUYOR (ORDER_CANCEL)",
+      (await prisma.workOrderToOrderLine.count({ where: { workOrderId: wo2.id, unlinkedAt: { not: null }, unlinkReason: "ORDER_CANCEL" } })) >= 1);
     check("iptal sonrası WO2 tipi SİPARİŞE ÖZEL → STOK (UNLINK_ONLY, tek sipariş)", wo2After?.type === "STOCK_PRODUCTION", String(wo2After?.type));
   } finally {
     // Temizlik — bağımlılık sırasına göre.

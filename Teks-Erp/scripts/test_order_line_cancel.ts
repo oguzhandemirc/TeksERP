@@ -20,6 +20,7 @@
 // =============================================================================
 
 import prisma from "../src/lib/prisma";
+import { ACTIVE_ORDER_LINK } from "../src/services/helpers/order-link.helper";
 import { orderService } from "../src/routes/order.routes";
 import { ProductionBalanceService } from "../src/services/production-balance.service";
 
@@ -114,8 +115,10 @@ async function main(): Promise<void> {
     check("sevk yoksa sipariş İPTAL olacağı önizlemede yazılı", prev.resultingOrderStatus === "CANCELLED", `${prev.resultingOrderStatus}`);
 
     await orderService.cancelOrderLine(o2.id, line2);
-    const links = await prisma.workOrderToOrderLine.count({ where: { workOrderId: wo.id } });
-    check("bağ koparıldı", links === 0, `${links}`);
+    const links = await prisma.workOrderToOrderLine.count({ where: { workOrderId: wo.id, ...ACTIVE_ORDER_LINK } });
+    check("bağ koparıldı (açık bağ 0)", links === 0, `${links}`);
+    check("koparılan bağ SİLİNMEDİ — ORDER_LINE_CANCEL damgalı (③a)",
+      (await prisma.workOrderToOrderLine.count({ where: { workOrderId: wo.id, unlinkedAt: { not: null }, unlinkReason: "ORDER_LINE_CANCEL" } })) === 1);
     const woAfter = await prisma.workOrder.findUniqueOrThrow({ where: { id: wo.id }, select: { type: true } });
     check("iş emri STOK üretimine döndü", woAfter.type === "STOCK_PRODUCTION", woAfter.type);
 

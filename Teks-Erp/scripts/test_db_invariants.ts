@@ -123,6 +123,14 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("clearedAt" IS NULL)`,
     why: "damgalı eski tahsis dururken aynı (çuval, sipariş satırı) yeniden tahsis edilebilsin",
   },
+  // ③a iş emri ↔ sipariş kalemi bağı — damga (migration 20260914031000, WOTOL-BAG-DAMGA-PLAN)
+  {
+    table: "work_order_to_order_lines",
+    index: "work_order_to_order_lines_active_pair_uq",
+    uniq: true,
+    predicate: `("unlinkedAt" IS NULL)`,
+    why: "koparılmış bağ dururken aynı (iş emri, sipariş satırı) yeniden bağlanabilsin; AÇIK çift tekil",
+  },
   // ③a özellik pivotu — sürümleme (migration 20260914030000, OZELLIK-PIVOT-SURUMLEME-PLAN)
   {
     table: "roll_properties",

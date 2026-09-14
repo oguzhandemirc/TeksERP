@@ -15,6 +15,7 @@
 
 import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
 import { ACTIVE_ROLL_PROPERTY, ACTIVE_TARGET_PROPERTY, inheritRollPropertiesTx, revokeRollProperties } from "./helpers/property-revoke.helper";
+import { ACTIVE_ORDER_LINK } from "./helpers/order-link.helper";
 import { ACTIVE_MOVEMENT, revokeRollMovements } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
@@ -4681,6 +4682,7 @@ export class SubcontractorService {
             targetColor: true,
             targetProperties: { where: ACTIVE_TARGET_PROPERTY, include: { property: true } },
             orderLinks: {
+              where: ACTIVE_ORDER_LINK,
               include: {
                 orderLine: {
                   include: {
@@ -6228,6 +6230,7 @@ export class SubcontractorService {
                   orderBy: { stepSequence: "asc" },
                 },
                 orderLinks: {
+                  where: ACTIVE_ORDER_LINK,
                   select: {
                     orderLine: {
                       select: {

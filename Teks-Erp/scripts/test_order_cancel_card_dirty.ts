@@ -24,6 +24,7 @@
 
 import { TravelerCardStatus, WorkOrderStatus, WorkOrderType } from "@prisma/client";
 import prisma from "../src/lib/prisma";
+import { ACTIVE_ORDER_LINK } from "../src/services/helpers/order-link.helper";
 import { OrderService } from "../src/services/order.service";
 import { AppError } from "../src/utils/app-error";
 
@@ -50,8 +51,10 @@ const cardOf = (workOrderId: string) =>
   });
 const woOf = (id: string) =>
   prisma.workOrder.findUnique({ where: { id }, select: { type: true, status: true } });
+// Bağ artık koparılınca SİLİNMEZ, damgalanır (③a, 2026-09-14) — "koparıldı" = AÇIK bağ 0;
+// D-5 "dokunulmadı" da açık bağ 1 (koparılmış satır tarihçedir, sayılmaz).
 const linkCount = (workOrderId: string) =>
-  prisma.workOrderToOrderLine.count({ where: { workOrderId } });
+  prisma.workOrderToOrderLine.count({ where: { workOrderId, ...ACTIVE_ORDER_LINK } });
 
 async function main(): Promise<void> {
   const ts = Date.now();

@@ -20,6 +20,7 @@ import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../../utils/code-
 import { AppError } from "../../utils/app-error";
 import { TravelerCardService } from "../traveler-card.service";
 import { ACTIVE_TARGET_PROPERTY } from "./property-revoke.helper";
+import { ACTIVE_ORDER_LINK } from "./order-link.helper";
 
 const travelerCardService = new TravelerCardService();
 
@@ -106,7 +107,9 @@ export async function cloneWorkOrderTx(
       // Aktif süzgeç: damgalı hedef klonlanırsa nested create aynı propertyId'yi iki kez
       // yazar → partial unique P2002 → devir/parti ayırma tx'i düşer.
       targetProperties: { where: ACTIVE_TARGET_PROPERTY, select: { propertyId: true } },
-      orderLinks: { select: { orderLineId: true, allocatedQty: true } },
+      // Aktif bağ: koparılmış bağ klonlanırsa nested create partial unique'e çarpmaz ama
+      // ölü bağı yeni iş emrine taşırdı.
+      orderLinks: { where: ACTIVE_ORDER_LINK, select: { orderLineId: true, allocatedQty: true } },
     },
   });
   if (!src) throw AppError.notFound("Kaynak iş emri bulunamadı");

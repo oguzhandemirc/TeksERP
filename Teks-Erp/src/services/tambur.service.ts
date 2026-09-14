@@ -16,6 +16,7 @@
 
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_ROLL_PROPERTY, inheritRollPropertiesTx } from "./helpers/property-revoke.helper";
+import { ACTIVE_ORDER_LINK } from "./helpers/order-link.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { postStockMove, qtyYazilabilir } from "./helpers/warehouse-ledger.helper";
 import { postOpenFabricChildEntryTx } from "./helpers/production-entry-ledger.helper";
@@ -3991,7 +3992,7 @@ export class TamburService {
 
     // WO'ya bağlı OrderLine'lar
     const links = await prisma.workOrderToOrderLine.findMany({
-      where: { workOrderId: card.workOrderId },
+      where: { workOrderId: card.workOrderId, ...ACTIVE_ORDER_LINK },
       select: {
         orderLine: {
           select: {

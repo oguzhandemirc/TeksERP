@@ -12,7 +12,7 @@ import { ACTIVE_SACK_ALLOCATION } from "./helpers/sack-allocation.helper";
 import type { ItemUnit } from "@prisma/client";
 import { AuditService } from "./audit.service";
 import { BaseService, BaseServiceConfig, CursorPaginatedResponse } from "./base.service";
-import { ApiResponse, PaginatedResponse } from "../types/api.types";
+import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
 import {
   decodeDynamicCursor,
   dynamicCursorWhere,
@@ -91,6 +91,7 @@ import {
 import { Request } from "express";
 import { hata } from "../lib/logger";
 import { warehouseStampManyTx } from "./helpers/warehouse.helper";
+import { ACTIVE_ORDER_LINK, activeOrderLinkCount, unlinkOrderLinesTx, withActiveOrderLinks } from "./helpers/order-link.helper";
 
 // ─── Cancel Akışı Karar Matrisi ─────────────────────────────────────────────
 //
@@ -201,9 +202,9 @@ const WO_ROLLUP_ACTIVE: WorkOrderStatus[] = [
 function hasWoLink(statuses: WorkOrderStatus[]): Record<string, unknown> {
   return {
     lines: {
-      some: { workOrderLinks: { some: { workOrder: { status: { in: statuses } } } } },
+      some: { workOrderLinks: { some: { ...ACTIVE_ORDER_LINK, workOrder: { status: { in: statuses } } } } },
     },
-  };
+  } satisfies Prisma.OrderWhereInput;
 }
 
 const WO_STATE_WHERE: Record<string, Record<string, unknown>> = {
@@ -323,6 +324,14 @@ export class OrderService extends BaseService {
    * kolonu olduğu için sonuç boş liste değil P2007 → HTTP 400 *"Geçersiz veri
    * formatı"* olurdu (arıza modları: query-parser `readIdCondition` notu).
    */
+  /**
+   * Liste where'i: `codeSearchFields`teki `lines.some.workOrderLinks.some.…` yolu koparılmış
+   * bağdan eşleşmesin — yürüyücü aktif yüklemi ekler (AST kapısı string yolu göremez).
+   */
+  protected override buildListWhere(params: QueryParams, req: Request): Record<string, unknown> {
+    return withActiveOrderLinks(super.buildListWhere(params, req));
+  }
+
   protected extraWhere(req: Request): Record<string, unknown> | undefined {
     const { filters } = parseQueryParams(req);
     const conds: Record<string, unknown>[] = [];
@@ -376,6 +385,7 @@ export class OrderService extends BaseService {
         color: { select: { name: true } },
         order: { select: { id: true, orderNumber: true, status: true } },
         workOrderLinks: {
+          where: ACTIVE_ORDER_LINK,
           select: {
             workOrder: {
               select: {
@@ -384,7 +394,7 @@ export class OrderService extends BaseService {
                 status: true,
                 type: true,
                 targetItemId: true,
-                _count: { select: { orderLinks: true } },
+                _count: { select: { orderLinks: { where: ACTIVE_ORDER_LINK } } },
               },
             },
           },
@@ -527,12 +537,11 @@ export class OrderService extends BaseService {
 
       // Bağları kopar + gerekiyorsa WO'yu stok üretimine çevir.
       for (const woId of affectedWoIds) {
-        await tx.workOrderToOrderLine.deleteMany({
-          where: { workOrderId: woId, orderLineId: lineId },
-        });
-        // Taze sayım: yarışta araya yeni bağ girdiyse tip ORDER kalmalı
+        // Bağ SİLİNMEZ, damgalanır (③a, 2026-09-14) — kalem iptali izi satırda durur.
+        await unlinkOrderLinesTx(tx, { workOrderId: woId, orderLineId: lineId, reason: "ORDER_LINE_CANCEL", userId: userId ?? null });
+        // Taze AÇIK sayım: yarışta araya yeni bağ girdiyse tip ORDER kalmalı
         // (`unlinkOrderLine` ile aynı atomik desen).
-        const remaining = await tx.workOrderToOrderLine.count({ where: { workOrderId: woId } });
+        const remaining = await activeOrderLinkCount(tx, woId);
         if (remaining === 0) {
           await tx.workOrder.updateMany({
             where: { id: woId, type: WorkOrderType.ORDER_PRODUCTION },
@@ -1298,6 +1307,7 @@ export class OrderService extends BaseService {
       if (page.length > 0) {
         const links = await prisma.workOrderToOrderLine.findMany({
           where: {
+            ...ACTIVE_ORDER_LINK,
             orderLineId: { in: page.map((l) => l.id) },
             workOrder: {
               status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] },
@@ -2340,6 +2350,7 @@ export class OrderService extends BaseService {
             cancelledAt: true,
             requiredProperties: { select: { propertyId: true } },
             workOrderLinks: {
+              where: ACTIVE_ORDER_LINK,
               select: {
                 workOrder: { select: { status: true } },
               },
@@ -2500,6 +2511,7 @@ export class OrderService extends BaseService {
         // girip CASCADE ile linki sessizce silebilir; statement commit'li linkleri görür.
         const activeLink = await tx.workOrderToOrderLine.findFirst({
           where: {
+            ...ACTIVE_ORDER_LINK,
             orderLine: { orderId: id },
             workOrder: { status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] } },
           },
@@ -2552,7 +2564,7 @@ export class OrderService extends BaseService {
           // kontrol kalkarsa kullanıcı ham FK hatası görürdü — mesajı veren yer
           // burası, koruma ise DB'de.
           const linkedToDeleted = await tx.workOrderToOrderLine.findFirst({
-            where: { orderLineId: { in: toDelete } },
+            where: { orderLineId: { in: toDelete }, ...ACTIVE_ORDER_LINK },
             select: { workOrderId: true, workOrder: { select: { status: true, workOrderNumber: true } } },
           });
           if (linkedToDeleted) {
@@ -2862,6 +2874,7 @@ export class OrderService extends BaseService {
         lines: {
           include: {
             workOrderLinks: {
+              where: ACTIVE_ORDER_LINK,
               include: { workOrder: true },
             },
           },
@@ -2911,7 +2924,7 @@ export class OrderService extends BaseService {
       // başka sipariş bağları korunur). Linkli WO satırlarını sıralı kilitle
       // (workorder softDelete deseniyle simetrik) → eşzamanlı WO status geçişi serileşir.
       const myLinks = await tx.workOrderToOrderLine.findMany({
-        where: { orderLine: { orderId: id } },
+        where: { orderLine: { orderId: id }, ...ACTIVE_ORDER_LINK },
         select: { workOrderId: true, orderLineId: true },
       });
       const woIds = [...new Set(myLinks.map((l) => l.workOrderId))].sort();
@@ -2943,21 +2956,16 @@ export class OrderService extends BaseService {
       });
       const typeChangedWorkOrderIds: string[] = [];
       if (livePairs.length > 0) {
-        await tx.workOrderToOrderLine.deleteMany({
-          where: {
-            OR: livePairs.map((k) => ({
-              workOrderId: k.workOrderId,
-              orderLineId: k.orderLineId,
-            })),
-          },
-        });
+        // Bağ SİLİNMEZ, damgalanır (③a, 2026-09-14): sipariş silinse de "bu iş emri o
+        // sipariş için açılmıştı" izi durur (K5 şerhinin uygulama katmanı yarısı).
+        await unlinkOrderLinesTx(tx, { pairs: livePairs, reason: "ORDER_DELETE", userId: userId ?? null });
         // Bağı kopan HER iş emri için (döngü — Promise.all(tx.*) YASAK):
         //   ① refakat kartı bayat — kartta sipariş bloğu + tip basılı,
         //   ② son bağı kalktıysa tip STOK'a döner (TİP = BAĞIN AYNASI;
         //      `cancelWithActions` UNLINK_ONLY dalı + `unlinkOrderLine` emsali).
         for (const wid of [...new Set(livePairs.map((l) => l.workOrderId))].sort()) {
           await markTravelerCardDirtyTx(tx, wid);
-          const remaining = await tx.workOrderToOrderLine.count({ where: { workOrderId: wid } });
+          const remaining = await activeOrderLinkCount(tx, wid);
           if (remaining > 0) continue;
           // Atomik: `updateMany WHERE type=ORDER_PRODUCTION` — zaten STOK'sa dokunmaz,
           // iptal/devredilmiş atlanır. `targetItemId: { not: null }` STOK'un değişmezi:
@@ -3035,6 +3043,7 @@ export class OrderService extends BaseService {
           select: {
             id: true,
             workOrderLinks: {
+              where: ACTIVE_ORDER_LINK,
               select: {
                 workOrder: {
                   select: {
@@ -3104,14 +3113,14 @@ export class OrderService extends BaseService {
             where: {
               id: { not: orderId },
               lines: {
-                some: { workOrderLinks: { some: { workOrderId: { in: woIds } } } },
+                some: { workOrderLinks: { some: { ...ACTIVE_ORDER_LINK, workOrderId: { in: woIds } } } },
               },
             },
             select: {
               orderNumber: true,
               lines: {
-                where: { workOrderLinks: { some: { workOrderId: { in: woIds } } } },
-                select: { workOrderLinks: { select: { workOrderId: true } } },
+                where: { workOrderLinks: { some: { ...ACTIVE_ORDER_LINK, workOrderId: { in: woIds } } } },
+                select: { workOrderLinks: { where: ACTIVE_ORDER_LINK, select: { workOrderId: true } } },
               },
             },
           });
@@ -3320,7 +3329,7 @@ export class OrderService extends BaseService {
       });
       const freshStatus = new Map(freshRows.map((r) => [r.id, r.status]));
       const otherLinks = await tx.workOrderToOrderLine.findMany({
-        where: { workOrderId: { in: affectedWoIds }, orderLine: { orderId: { not: orderId } } },
+        where: { workOrderId: { in: affectedWoIds }, orderLine: { orderId: { not: orderId } }, ...ACTIVE_ORDER_LINK },
         select: { workOrderId: true },
       });
       const hasOther = new Set(otherLinks.map((l) => l.workOrderId));
@@ -3339,7 +3348,7 @@ export class OrderService extends BaseService {
       }
       // Önizleme sonrası bu siparişe DOĞAN yeni WO bağı → onaysız kopmayı engelle.
       const currentLinks = await tx.workOrderToOrderLine.findMany({
-        where: { orderLine: { orderId }, workOrder: { status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] } } },
+        where: { ...ACTIVE_ORDER_LINK, orderLine: { orderId }, workOrder: { status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] } } },
         select: { workOrderId: true },
       });
       if (currentLinks.some((l) => !affectedWoIds.includes(l.workOrderId))) {
@@ -3359,13 +3368,8 @@ export class OrderService extends BaseService {
             throw AppError.conflict("İş emri bu sırada iptal edildi, stoğa çevrilemedi. Sayfayı yenileyin.");
           }
         }
-        // UNLINK_ONLY / CONVERT_TO_STOCK / CANCEL_WO hepsi join'i temizler.
-        await tx.workOrderToOrderLine.deleteMany({
-          where: {
-            workOrderId: wo.id,
-            orderLine: { orderId },
-          },
-        });
+        // UNLINK_ONLY / CONVERT_TO_STOCK / CANCEL_WO hepsi bağı KOPARIR — silmez, damgalar (③a).
+        await unlinkOrderLinesTx(tx, { workOrderId: wo.id, orderId, reason: "ORDER_CANCEL", userId: userId ?? null });
         // REFAKAT KARTI BAYAT (2026-08-21): kartta SİPARİŞ bloğu + iş emri TİPİ
         // basılıdır (`buildPlan` → orderLinks). Sipariş iptali o bloğu değiştirir →
         // sahadaki kâğıt artık olmayan bir siparişi gösterir. Emsal + simetri:
@@ -3381,7 +3385,7 @@ export class OrderService extends BaseService {
         // kilit altında; `updateMany WHERE type=ORDER` — zaten STOK'sa dokunmaz,
         // iptal/devredilmiş iş emri de (assertPlanEditable aynası) atlanır.
         if (action === "UNLINK_ONLY") {
-          const remaining = await tx.workOrderToOrderLine.count({ where: { workOrderId: wo.id } });
+          const remaining = await activeOrderLinkCount(tx, wo.id);
           if (remaining === 0) {
             await tx.workOrder.updateMany({
               where: {

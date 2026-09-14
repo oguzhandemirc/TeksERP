@@ -8,6 +8,7 @@
 
 import { ACTIVE_OPERATION } from "./helpers/roll-operation.helper";
 import { ACTIVE_ROLL_PROPERTY, applyRollFlagSetTx } from "./helpers/property-revoke.helper";
+import { ACTIVE_ORDER_LINK } from "./helpers/order-link.helper";
 import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import prisma from "../lib/prisma";
 import { claimDoffForRollTx } from "./helpers/machine-doff-link.helper";
@@ -2831,6 +2832,7 @@ export class InventoryService {
             workOrder: {
               select: {
                 orderLinks: {
+                  where: ACTIVE_ORDER_LINK,
                   // Aday müşteri temsilcisi deterministik olsun: aynı müşterinin
                   // bu WO'da birden çok satırı varsa (farklı override'larla) hep aynı
                   // orderLineId seçilsin — yoksa "first seen" Prisma'da rastgele.

@@ -3627,10 +3627,21 @@ model KursunBypassAssignment {
 
 /// Join table: WorkOrder ↔ OrderLine (N:N)
 /// 3.2 — `allocatedQty`: bu WO'nun bu sipariş satırından tahsis ettiği metraj
+/// ③a TİCARİ PİVOT (2026-09-14, WOTOL-BAG-DAMGA-PLAN): bağ SİLİNMEZ, `unlinkedAt`
+/// damgalanır; yeniden bağlama YENİ satırdır (un-unlink yok). Bileşik anahtar damgayla
+/// yaşayamadığı için vekil `id` + DB'de PARTIAL unique `(workOrderId, orderLineId)
+/// WHERE "unlinkedAt" IS NULL`. `WorkOrder.type` aynası AÇIK bağ sayısından türer.
 model WorkOrderToOrderLine {
+  id           String  @id @default(uuid()) @db.Uuid
   workOrderId  String  @db.Uuid
   orderLineId  String  @db.Uuid
   allocatedQty Decimal @default(0) @db.Decimal(12, 3) // Metraj/kg cinsinden tahsis (sipariş birimiyle aynı)
+
+  /// KOPARMA DAMGASI — `revokedAt` deseni; `unlinkedById` düz UUID, ilişki DEĞİL.
+  /// `unlinkReason`: MANUAL_UNLINK · WO_REPLACE · ORDER_LINE_CANCEL · ORDER_DELETE · ORDER_CANCEL.
+  unlinkedAt   DateTime? @db.Timestamptz
+  unlinkedById String?   @db.Uuid
+  unlinkReason String?   @db.VarChar(64)
 
   workOrder WorkOrder @relation(fields: [workOrderId], references: [id])
   /// K5 (2026-08-29): `Cascade` → `Restrict`. Sipariş kalemi silinince bu bağ
@@ -3642,8 +3653,11 @@ model WorkOrderToOrderLine {
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
-  @@id([workOrderId, orderLineId])
+  // DB'de PARTIAL'dır (`WHERE "unlinkedAt" IS NULL`, migration 20260914031000): koparılmış
+  // bağ dururken aynı çift yeniden bağlanabilir; AÇIK çift tekildir.
+  @@unique([workOrderId, orderLineId], map: "work_order_to_order_lines_active_pair_uq")
   @@index([orderLineId])
+  @@index([workOrderId, unlinkedAt])
   @@map("work_order_to_order_lines")
 }
 

@@ -63,6 +63,7 @@ import {
 } from "@prisma/client";
 import { OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
 import { ACTIVE_TARGET_PROPERTY } from "./helpers/property-revoke.helper";
+import { ACTIVE_ORDER_LINK } from "./helpers/order-link.helper";
 
 // Refakat kartı listesinde sıralanabilir kolonlar. createdAt BİLEREK yok →
 // varsayılan/createdAt isteği printedAt'e düşer (yeni basılan kart ilk gelsin).
@@ -1181,6 +1182,7 @@ export class TravelerCardService {
           },
         },
         orderLinks: {
+          where: ACTIVE_ORDER_LINK,
           orderBy: { orderLineId: "asc" },
           select: {
             orderLineId: true,

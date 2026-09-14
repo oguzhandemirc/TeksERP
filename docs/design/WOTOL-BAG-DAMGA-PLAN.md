@@ -1,6 +1,6 @@
 # İş emri ↔ sipariş kalemi bağı (`WorkOrderToOrderLine`) — DAMGA planı
 
-> **Durum: OKUYUCU ENVANTERİ (2026-09-14, 82, taban `3b65daea`). Kod YOK.** Şema penceresi sırası (1e): 01 WEAVING → 6e K2 `SackAllocation` → K3(b) Faz 1 → **bu plan**. Faz 1 ile aynı pencere sırasında AYRI commit. Beyan: `scripts/lib/defter-beyan.ts` `WorkOrderToOrderLine` (PIVOT_TICARI, yarı, 5 silme sitesi borç). Kardeş plan: `OZELLIK-PIVOT-SURUMLEME-PLAN.md` (aynı mekanizma, aynı fazlama disiplini — burada tekrar edilmez).
+> **Durum: UYGULANDI (2026-09-14, 82, tek commit; migration `20260914031000`).** Envanter aşağıda ölçüldüğü gibi kaldı; sapmalar §7'de. Şema penceresi sırası (1e): 01 WEAVING → 6e K2 `SackAllocation` → K3(b) Faz 1 → **bu plan**. Faz 1 ile aynı pencere sırasında AYRI commit. Beyan: `scripts/lib/defter-beyan.ts` `WorkOrderToOrderLine` (PIVOT_TICARI, yarı, 5 silme sitesi borç). Kardeş plan: `OZELLIK-PIVOT-SURUMLEME-PLAN.md` (aynı mekanizma, aynı fazlama disiplini — burada tekrar edilmez).
 
 ## 1. Karar (1e hükmü) ve şema
 
@@ -58,3 +58,11 @@ Mevcut bekçiler yeniden ölçülür: `test_workorder_order_link.ts` · `test_sh
 1. **Birleştirme (master-data merge):** `orderLineId` birleştirme haritasında; damgalı satır da taşınır (partial unique yalnız açık satırda ⇒ çakışma yok). `merge_fk_coverage` kendisi ölçer.
 2. **`replace`in fark hesabı `replaceClaim` sonrası tx içinde** (Y7 dersi) — tx dışı okuma TOCTOU.
 3. **Sürüm notu:** rakam değişmez; "Bağlı iş emirleri" listesi koparılmış bağı zaten göstermiyordu (silinmişti). Not gerekmez, ea'ya bilgi.
+
+## 7. Uygulama notları (2026-09-14)
+
+- Migration: vekil `id` `gen_random_uuid()` varsayılanıyla backfill, sonra `DROP DEFAULT` (Prisma `@default(uuid())` uygulama tarafı — diğer PK'larla aynı, `migrate diff` gürültüsüz). Bileşik PK koşullu `DO $$` bloğuyla düşer (yeniden koşulabilir).
+- S2 `replace()`: kalan bağın `allocatedQty`si YERİNDE güncellenir (bağın kimliği/`createdAt`i korunur; `updatedAt` bu yüzden kalır — "yarı"); çıkan `WO_REPLACE`, giren yeni satır. §7 bekçisi ölçer.
+- Y1–Y4 `createMany skipDuplicates` KORUNDU (plan "partial unique çakışması 409" demişti): servis açık çifti `existing` ile zaten eler, koparılmış çift yeni satır alır; doğrudan ikinci açık INSERT DB'de P2002 (§3). 409'a çevirmek yeni bir yarış kapısı açmazdı, no-op idempotency'yi bozardı.
+- Serbest metin arama yolları (`orderLinks.some.…` · `lines.some.workOrderLinks.some.…`) AST'nin göremediği string yollar: `withActiveOrderLinks` yürüyücüsü `buildWhereClause` çıktısına aktif yüklemi ekler (iş emri listesi + `OrderService.buildListWhere` override).
+- Bekçi `test_order_link_unlink` §1–§7 + §13 (21 kontrol); üç negatif sonda: S1 delete'e geri → 7 ❌ · partial→tam unique (DB) → §2/§3 ❌ · `order.routes` `where` düşürüldü → §13c ❌. `test_workorder_order_link` sözleşmeye (63/0). Beyan DEFTER {DAMGA unlinkedAt}, ters yazan `linkOrderLines`.

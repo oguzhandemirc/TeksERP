@@ -41,6 +41,7 @@ import { InventoryService } from "./inventory.service";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { whereRollsOfWorkOrder } from "./helpers/workorder-rolls.helper";
 import { ACTIVE_ROLL_PROPERTY } from "./helpers/property-revoke.helper";
+import { ACTIVE_ORDER_LINK, activeOrderLinkCount, unlinkOrderLinesTx } from "./helpers/order-link.helper";
 import {
   PLAN_CHANGE_FROZEN_STATUSES,
   assertPlanChangeAllowed,
@@ -199,7 +200,7 @@ export class WorkOrderLinkService {
     const wo = await loadWo(workOrderId);
 
     const alreadyLinked = await prisma.workOrderToOrderLine.findMany({
-      where: { workOrderId },
+      where: { workOrderId, ...ACTIVE_ORDER_LINK },
       select: { orderLineId: true },
     });
     const linkedIds = alreadyLinked.map((l) => l.orderLineId);
@@ -368,7 +369,7 @@ export class WorkOrderLinkService {
     }
 
     const existing = await prisma.workOrderToOrderLine.findMany({
-      where: { workOrderId, orderLineId: { in: ids } },
+      where: { workOrderId, orderLineId: { in: ids }, ...ACTIVE_ORDER_LINK },
       select: { orderLineId: true },
     });
     const existingSet = new Set(existing.map((e) => e.orderLineId));
@@ -449,7 +450,7 @@ export class WorkOrderLinkService {
     assertPlanEditable(wo);
 
     const links = await prisma.workOrderToOrderLine.findMany({
-      where: { workOrderId },
+      where: { workOrderId, ...ACTIVE_ORDER_LINK },
       select: { orderLineId: true },
     });
     if (!links.some((l) => l.orderLineId === orderLineId)) {
@@ -465,14 +466,17 @@ export class WorkOrderLinkService {
 
     let typeChanged = false;
     await prisma.$transaction(async (tx) => {
-      await tx.workOrderToOrderLine.delete({
-        where: { workOrderId_orderLineId: { workOrderId, orderLineId } },
-      });
+      // Bağ SİLİNMEZ, damgalanır (③a, 2026-09-14): "hangi sipariş için açıldı" izi durur.
+      // Damga 0 satır bulursa bağ bu arada koparılmış demektir → 409 (findUnique→if→update yok).
+      const unlinked = await unlinkOrderLinesTx(tx, { workOrderId, orderLineId, reason: "MANUAL_UNLINK", userId: userId ?? null });
+      if (unlinked === 0) {
+        throw AppError.conflict("Bu sipariş bağı bu sırada koparıldı. Sayfayı yenileyin.");
+      }
       if (lastLinkOfOrderWo) {
         // Atomik: yarışta bu arada yeni bağ eklendiyse tip ORDER kalmalı →
-        // taze bağ sayımıyla karar; `updateMany WHERE type=ORDER` çiftini
+        // taze AÇIK bağ sayımıyla karar; `updateMany WHERE type=ORDER` çiftini
         // tek yazmaya indirir.
-        const remaining = await tx.workOrderToOrderLine.count({ where: { workOrderId } });
+        const remaining = await activeOrderLinkCount(tx, workOrderId);
         if (remaining === 0) {
           const flipped = await tx.workOrder.updateMany({
             where: { id: workOrderId, type: WorkOrderType.ORDER_PRODUCTION },
@@ -596,7 +600,7 @@ export class WorkOrderLinkService {
     }
 
     const links = await prisma.workOrderToOrderLine.findMany({
-      where: { workOrderId },
+      where: { workOrderId, ...ACTIVE_ORDER_LINK },
       select: {
         orderLine: {
           select: {

@@ -10,6 +10,7 @@ import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import "../types/express-augment";
+import { ACTIVE_ORDER_LINK } from "../services/helpers/order-link.helper";
 
 // F157: /available query şeması — ham parse yerine Zod (geçersiz uuid/width net 400).
 const emptyToUndef = (v: unknown) => (v === "" || v == null ? undefined : v);
@@ -62,6 +63,7 @@ export const orderService = new OrderService({
         // Ayrıca sipariş listesi "İş Emri" rollup rozeti + detay panelindeki
         // "Bağlı İş Emirleri" listesi bu bağdan türer → id + workOrderNumber lazım.
         workOrderLinks: {
+          where: ACTIVE_ORDER_LINK,
           select: {
             workOrderId: true,
             workOrder: { select: { id: true, workOrderNumber: true, status: true } },

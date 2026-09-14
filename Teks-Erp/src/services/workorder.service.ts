@@ -17,6 +17,7 @@ import {
   revokeRollProperties,
   revokeTargetProperties,
 } from "./helpers/property-revoke.helper";
+import { ACTIVE_ORDER_LINK, unlinkOrderLinesTx, withActiveOrderLinks } from "./helpers/order-link.helper";
 import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { postStockMove, qtyYazilabilir } from "./helpers/warehouse-ledger.helper";
 import { postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
@@ -1097,6 +1098,7 @@ export class WorkOrderService {
         include: {
           steps:      { include: { station: true }, orderBy: { stepSequence: "asc" } },
           orderLinks: {
+            where: ACTIVE_ORDER_LINK,
             include: {
               orderLine: {
                 include: {
@@ -1194,6 +1196,7 @@ export class WorkOrderService {
       include: {
         steps:      { include: { station: true }, orderBy: { stepSequence: "asc" } },
         orderLinks: {
+          where: ACTIVE_ORDER_LINK,
           include: {
             orderLine: {
               include: {
@@ -1276,7 +1279,7 @@ export class WorkOrderService {
         where: { clientToken: woInput.clientToken },
         include: {
           steps:      { include: { station: true }, orderBy: { stepSequence: "asc" } },
-          orderLinks: { include: { orderLine: { include: { order: { include: { customer: true } }, item: true, color: true } } } },
+          orderLinks: { where: ACTIVE_ORDER_LINK, include: { orderLine: { include: { order: { include: { customer: true } }, item: true, color: true } } } },
           routeTemplate: true,
         },
       });
@@ -1538,7 +1541,9 @@ export class WorkOrderService {
     // sipariş bağı üzerinden müşteri adı VE sipariş no (nested some → EXISTS
     // subquery). Sipariş no ile de aranabilmesi siparişten üretim emrine
     // erişimi tamamlar (sipariş listesindeki rollup rozetinin tersi yönü).
-    const where = buildWhereClause(
+    // `withActiveOrderLinks`: aramanın `orderLinks.some` yolu koparılmış bağdan eşleşmesin
+    // (AST kapısı string yolu göremez; yürüyücü tek kaynak).
+    const where = withActiveOrderLinks(buildWhereClause(
       params.filters,
       ["targetItem.name", "targetColor.name", "orderLinks.some.orderLine.order.customer.name"],
       params.search,
@@ -1547,7 +1552,7 @@ export class WorkOrderService {
         "batches.some.batchNumber",
         "orderLinks.some.orderLine.order.orderNumber",
       ]
-    );
+    ));
     applyDateRange(where, params, WORKORDER_DATE_FIELDS);
     if (hideCancelledWhere) Object.assign(where, hideCancelledWhere);
     // Arşivli (isActive=false) WO'lar default'ta gizli — ?withArchived=true override
@@ -1624,6 +1629,7 @@ export class WorkOrderService {
       ...(withOrderDetail
         ? {
             orderLinks: {
+              where: ACTIVE_ORDER_LINK,
               select: {
                 orderLineId: true,
                 orderLine: {
@@ -1638,7 +1644,7 @@ export class WorkOrderService {
             },
           }
         : {
-            orderLinks: { select: { orderLineId: true } },
+            orderLinks: { where: ACTIVE_ORDER_LINK, select: { orderLineId: true } },
           }),
     } satisfies Prisma.WorkOrderSelect;
 
@@ -1810,7 +1816,7 @@ export class WorkOrderService {
             (w.orderLinks ?? []).map((l) => ({ workOrderId: w.id, orderLineId: l.orderLineId }))
           )
         : await prisma.workOrderToOrderLine.findMany({
-            where: { workOrderId: { in: woIds } },
+            where: { workOrderId: { in: woIds }, ...ACTIVE_ORDER_LINK },
             select: { workOrderId: true, orderLineId: true },
           });
       const lineIds = [...new Set(links.map((l) => l.orderLineId))];
@@ -2002,6 +2008,7 @@ export class WorkOrderService {
           orderBy: { stepSequence: "asc" },
         },
         orderLinks: {
+          where: ACTIVE_ORDER_LINK,
           include: {
             orderLine: {
               include: {
@@ -3519,7 +3526,7 @@ export class WorkOrderService {
       where: { id },
       include: {
         steps: true,
-        orderLinks: { include: { orderLine: true } },
+        orderLinks: { where: ACTIVE_ORDER_LINK, include: { orderLine: true } },
       },
     });
 
@@ -5674,7 +5681,7 @@ export class WorkOrderService {
           const previousLinkIds = new Set(
             (
               await tx.workOrderToOrderLine.findMany({
-                where: { workOrderId: id },
+                where: { workOrderId: id, ...ACTIVE_ORDER_LINK },
                 select: { orderLineId: true },
               })
             ).map((l) => l.orderLineId),
@@ -5837,8 +5844,36 @@ export class WorkOrderService {
         }
       }
 
-      // ── orderLinks drop-and-recreate (WOTOL damgası ayrı plan: WOTOL-BAG-DAMGA-PLAN) ──
-      await tx.workOrderToOrderLine.deleteMany({ where: { workOrderId: id } });
+      // ── orderLinks FARK bazlı + damgalı (③a, WOTOL-BAG-DAMGA-PLAN S2): bağ SİLİNMEZ ──
+      //    Çıkan bağ `WO_REPLACE` ile damgalanır, giren yeni satır, kalanın `allocatedQty`si
+      //    yerinde güncellenir (bağın kimliği ve `createdAt`i = "ne zaman bağlandı" korunur).
+      const freshLinks = await tx.workOrderToOrderLine.findMany({
+        where: { workOrderId: id, ...ACTIVE_ORDER_LINK },
+        select: { id: true, orderLineId: true },
+      });
+      const wantedAlloc = new Map(allocations.map((a) => [a.orderLineId, a.allocatedQty]));
+      const leavingLinks = freshLinks.filter((l) => !wantedAlloc.has(l.orderLineId));
+      const keptLinks = freshLinks.filter((l) => wantedAlloc.has(l.orderLineId));
+      const enteringAlloc = allocations.filter((a) => !freshLinks.some((l) => l.orderLineId === a.orderLineId));
+      if (leavingLinks.length > 0) {
+        await unlinkOrderLinesTx(tx, {
+          pairs: leavingLinks.map((l) => ({ workOrderId: id, orderLineId: l.orderLineId })),
+          reason: "WO_REPLACE",
+          userId: userId ?? null,
+        });
+      }
+      for (const l of keptLinks) {
+        await tx.workOrderToOrderLine.updateMany({
+          where: { id: l.id, ...ACTIVE_ORDER_LINK },
+          data: { allocatedQty: wantedAlloc.get(l.orderLineId) ?? 0 },
+        });
+      }
+      if (enteringAlloc.length > 0) {
+        await tx.workOrderToOrderLine.createMany({
+          data: enteringAlloc.map((a) => ({ workOrderId: id, orderLineId: a.orderLineId, allocatedQty: a.allocatedQty })),
+          skipDuplicates: true,
+        });
+      }
       // ── targetProperties FARK bazlı + damgalı (③a, Y7): silme YOK ──
       if (leavingTargetIds.length > 0) {
         await revokeTargetProperties(tx, {
@@ -5875,20 +5910,11 @@ export class WorkOrderService {
           targetItemId: resolvedTargetItemId,
           targetColorId: resolvedTargetColorId,
           foldType: data.foldType ?? null,
-          ...(allocations.length > 0
-            ? {
-                orderLinks: {
-                  create: allocations.map((a) => ({
-                    orderLineId: a.orderLineId,
-                    allocatedQty: a.allocatedQty,
-                  })),
-                },
-              }
-            : {}),
         },
         include: {
           steps: { include: { station: true }, orderBy: { stepSequence: "asc" } },
           orderLinks: {
+            where: ACTIVE_ORDER_LINK,
             include: {
               orderLine: {
                 include: {
@@ -6769,6 +6795,7 @@ export class WorkOrderService {
           orderBy: { stepSequence: "asc" },
         },
         orderLinks: {
+          where: ACTIVE_ORDER_LINK,
           include: {
             orderLine: {
               include: {
