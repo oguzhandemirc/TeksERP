@@ -475,7 +475,7 @@ async function main(): Promise<void> {
       const impactItemRow = await prisma.item.create({
         data: {
           code: `TST-BKP-${Date.now().toString().slice(-9)}`,
-          name: "TEST — yedek etki sondası kalemi",
+          name: `TEST — yedek etki sondası kalemi ${Date.now()}`,
           itemType: "FABRIC",
         },
         select: { id: true },

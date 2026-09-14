@@ -63,7 +63,7 @@ async function main(): Promise<void> {
     // B3: legacy dev-sayılı STK- kaydı (servis dışı, doğrudan DB'ye girmiş say)
     // sayacı kilitlemez — 12+ hane scan regex'ine takılır, max hesabına girmez.
     const legacy = await prisma.item.create({
-      data: { code: "STK-9999999999999999", name: `TEST STKAUTO LEGACY ${ts}`, itemType: "FABRIC", unit: "MT" },
+      data: { code: `STK-99999${ts}`, name: `TEST STKAUTO LEGACY ${ts}`, itemType: "FABRIC", unit: "MT" }, // 18 hane: 12+ hane regex'ine takılır, koşum başına benzersiz
       select: { id: true },
     });
     createdIds.push(legacy.id);

@@ -512,7 +512,7 @@ interface Probe {
 /** Ortak master-data — her sonda kendi tx'inde yaratır, ROLLBACK ile yok olur. */
 async function seedItem(tx: Db): Promise<string> {
   const item = await tx.item.create({
-    data: { code: tag("ITEM"), name: "Sonda Kumaş", itemType: "FABRIC" },
+    data: { code: tag("ITEM"), name: `Sonda Kumaş ${SUF}`, itemType: "FABRIC" },
   });
   return item.id;
 }
@@ -535,8 +535,8 @@ async function seedSubsetDirectShip(tx: Db, shippedStatus: "AT_SUBCONTRACTOR" | 
     data: { workOrderId: woId, stationId, stepSequence: 1, status: "ACTIVE" },
   });
   const batch = await tx.batch.create({ data: { batchNumber: tag("P"), workOrderId: woId } });
-  const sub = await tx.subcontractor.create({ data: { code: tag("FSN"), name: "Sonda Fason altküme" } });
-  const customer = await tx.customer.create({ data: { code: tag("MUS").slice(0, 32), name: "Sonda Müşteri altküme" } });
+  const sub = await tx.subcontractor.create({ data: { code: tag("FSN"), name: `Sonda Fason altküme ${SUF}` } });
+  const customer = await tx.customer.create({ data: { code: tag("MUS").slice(0, 32), name: `Sonda Müşteri altküme ${SUF}` } });
   const shipped = await tx.roll.create({
     data: {
       barcode: tag("T"), itemId, initialQty: 60, currentQty: 60,
@@ -591,7 +591,7 @@ const PROBES: Probe[] = [
     build: async (tx) => {
       const itemId = await seedItem(tx);
       const woId = await seedWo(tx, itemId, { status: "IN_PROGRESS" });
-      const customer = await tx.customer.create({ data: { code: tag("CUS"), name: "Sonda Müşteri" } });
+      const customer = await tx.customer.create({ data: { code: tag("CUS"), name: `Sonda Müşteri ${SUF}` } });
       const order = await tx.order.create({
         data: { orderNumber: tag("ORD"), customerId: customer.id },
       });
@@ -641,10 +641,10 @@ const PROBES: Probe[] = [
         data: { workOrderId: woId, stationId, stepSequence: 1, status: "COMPLETED", completedAt: new Date() },
       });
       const machine = await tx.machine.create({
-        data: { stationId, code: tag("MK"), name: "Sonda Kurşun" },
+        data: { stationId, code: tag("MK"), name: `Sonda Kurşun ${SUF}` },
       });
       const user = await tx.user.create({
-        data: { username: tag("USR"), passwordHash: "x", fullName: "Sonda Kullanıcı" },
+        data: { username: tag("USR"), passwordHash: "x", fullName: `Sonda Kullanıcı ${SUF}` },
       });
       await tx.kursunBypassAssignment.create({
         data: {
@@ -669,7 +669,7 @@ const PROBES: Probe[] = [
         data: { workOrderId: woId, stationId, stepSequence: 1, status: "ACTIVE" },
       });
       const batch = await tx.batch.create({ data: { batchNumber: tag("P"), workOrderId: woId } });
-      const sub = await tx.subcontractor.create({ data: { code: tag("FSN"), name: "Sonda Fason" } });
+      const sub = await tx.subcontractor.create({ data: { code: tag("FSN"), name: `Sonda Fason ${SUF}` } });
       const roll = await tx.roll.create({
         data: {
           barcode: tag("T"),
@@ -725,7 +725,7 @@ const PROBES: Probe[] = [
         data: { workOrderId: woId, stationId, stepSequence: 1, status: "ACTIVE" },
       });
       const batch = await tx.batch.create({ data: { batchNumber: tag("P"), workOrderId: woId } });
-      const sub = await tx.subcontractor.create({ data: { code: tag("FSN"), name: "Sonda Fason" } });
+      const sub = await tx.subcontractor.create({ data: { code: tag("FSN"), name: `Sonda Fason ${SUF}` } });
       const roll = await tx.roll.create({
         data: {
           barcode: tag("T"),
@@ -764,7 +764,7 @@ const PROBES: Probe[] = [
         data: { workOrderId: woId, stationId, stepSequence: 1, status: "ACTIVE" },
       });
       const batch = await tx.batch.create({ data: { batchNumber: tag("P"), workOrderId: woId } });
-      const sub = await tx.subcontractor.create({ data: { code: tag("FSN"), name: "Sonda Fason 24c" } });
+      const sub = await tx.subcontractor.create({ data: { code: tag("FSN"), name: `Sonda Fason 24c ${SUF}` } });
       const roll = await tx.roll.create({
         data: {
           barcode: tag("T"),
@@ -804,7 +804,7 @@ const PROBES: Probe[] = [
         data: { workOrderId: woId, stationId, stepSequence: 1, status: "ACTIVE" },
       });
       const batch = await tx.batch.create({ data: { batchNumber: tag("P"), workOrderId: woId } });
-      const sub = await tx.subcontractor.create({ data: { code: tag("FSN"), name: "Sonda Fason 24d" } });
+      const sub = await tx.subcontractor.create({ data: { code: tag("FSN"), name: `Sonda Fason 24d ${SUF}` } });
       const roll = await tx.roll.create({
         data: { barcode: tag("T"), itemId, initialQty: 60, currentQty: 60, status: "SUBCONTRACTOR_CONSUMED" },
       });
@@ -936,7 +936,7 @@ const PROBES: Probe[] = [
     expect: ["28a"],
     build: async (tx) => {
       const itemId = await seedItem(tx);
-      const qg = await tx.qualityGrade.create({ data: { code: tag("QG"), name: "Sonda kalite" } });
+      const qg = await tx.qualityGrade.create({ data: { code: tag("QG"), name: `Sonda kalite ${SUF}` } });
       await tx.roll.create({
         data: { barcode: tag("T"), itemId, initialQty: 50, currentQty: 50, status: "WAREHOUSE", qualityGradeId: qg.id, qualityGrade: null },
       });
@@ -948,8 +948,8 @@ const PROBES: Probe[] = [
 async function buildPlanDeviationRoll(tx: Db, finalizedAt: Date): Promise<void> {
   const itemId = await seedItem(tx);
   const stationId = await seedStation(tx, "TAMBUR");
-  const planColor = await tx.color.create({ data: { code: tag("CP"), name: "Sonda Plan Rengi" } });
-  const realColor = await tx.color.create({ data: { code: tag("CR"), name: "Sonda Gerçek Renk" } });
+  const planColor = await tx.color.create({ data: { code: tag("CP"), name: `Sonda Plan Rengi ${SUF}` } });
+  const realColor = await tx.color.create({ data: { code: tag("CR"), name: `Sonda Gerçek Renk ${SUF}` } });
   const woId = await seedWo(tx, itemId, { status: "IN_PROGRESS", targetColorId: planColor.id });
   const step = await tx.workOrderStep.create({
     data: { workOrderId: woId, stationId, stepSequence: 1, status: "ACTIVE" },

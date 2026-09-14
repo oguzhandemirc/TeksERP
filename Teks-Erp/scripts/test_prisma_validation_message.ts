@@ -20,7 +20,10 @@
 // bölüm canlı Prisma client'ından GERÇEK hata alır.
 //
 // Not: hiçbir bölüm veritabanına YAZMAZ — Prisma doğrulaması sorgu kurulurken,
-// SQL'e çıkmadan patlar. Bu yüzden temizlik gerekmez.
+// SQL'e çıkmadan patlar. Yine de kodlar koşum başına BENZERSİZ (`TEST-…-${TS}`) ve
+// `finally` emniyet temizliği var (2026-09-14, sabit adlı fikstür sınıfı — d9 ölçtü):
+// Prisma bir gün bu doğrulamalardan birini gevşetirse yazım SQL'e ulaşır; sabit kod
+// bir sonraki koşumda P2002 ile asıl hatayı maskelerdi.
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { extractPrismaValidationField } from "../src/middlewares/error.middleware";
@@ -38,6 +41,9 @@ function check(label: string, ok: boolean, ek = ""): void {
 }
 
 /** Verilen çağrıyı koşar, ATTIĞI hatayı döndürür (atmazsa null). */
+const TS = Date.now();
+const KOD = (n: number): string => `TEST-GUARD-PROBE-${n}-${TS}`;
+
 async function hataAl(fn: () => Promise<unknown>): Promise<unknown> {
   try {
     await fn();
@@ -53,7 +59,7 @@ async function main(): Promise<void> {
   // ── §1 GEÇERSİZ ENUM DEĞERİ (ölçülen asıl vaka) ──────────────────────────
   const e1 = await hataAl(() =>
     // @ts-expect-error — bilerek geçersiz enum: bekçinin ölçtüğü şey bu.
-    prisma.item.create({ data: { code: "GUARD-PROBE-1", name: "Guard Probe", itemType: "FABRIC", unit: "m" } }),
+    prisma.item.create({ data: { code: KOD(1), name: `Guard Probe ${TS}`, itemType: "FABRIC", unit: "m" } }),
   );
   check("§1a geçersiz enum GERÇEKTEN hata attı", e1 !== null);
   const a1 = extractPrismaValidationField(e1);
@@ -65,7 +71,7 @@ async function main(): Promise<void> {
   // için object-literal fazlalık kontrolü tetiklenmiyor) — hatayı runtime'da
   // Prisma üretir. `@ts-expect-error` koymak "kullanılmayan direktif" hatası verir.
   const e2 = await hataAl(() =>
-    prisma.item.create({ data: { code: "GUARD-PROBE-2", name: "Guard Probe 2", itemType: "FABRIC", bulunmayanAlan: 1 } }),
+    prisma.item.create({ data: { code: KOD(2), name: `Guard Probe 2 ${TS}`, itemType: "FABRIC", bulunmayanAlan: 1 } }),
   );
   const a2 = extractPrismaValidationField(e2);
   check("§2 bilinmeyen alan adıyla bildirildi", a2?.field === "bulunmayanAlan", `alan=${a2?.field ?? "YOK"}`);
@@ -73,7 +79,7 @@ async function main(): Promise<void> {
   // ── §3 EKSİK ZORUNLU ALAN ─────────────────────────────────────────────────
   const e3 = await hataAl(() =>
     // @ts-expect-error — `name` zorunlu, bilerek gönderilmiyor.
-    prisma.item.create({ data: { code: "GUARD-PROBE-3", itemType: "FABRIC" } }),
+    prisma.item.create({ data: { code: KOD(3), itemType: "FABRIC" } }),
   );
   const a3 = extractPrismaValidationField(e3);
   check("§3 eksik zorunlu alan adıyla bildirildi", a3?.field === "name", `alan=${a3?.field ?? "YOK"}`);
@@ -84,7 +90,7 @@ async function main(): Promise<void> {
   const e4 = await hataAl(() =>
     prisma.item.create({
       // @ts-expect-error — geçersiz enum + gövdede "gizli" bir değer.
-      data: { code: "GUARD-PROBE-4", name: "COK-GIZLI-DEGER-4711", itemType: "FABRIC", unit: "m" },
+      data: { code: KOD(4), name: "COK-GIZLI-DEGER-4711", itemType: "FABRIC", unit: "m" },
     }),
   );
   const a4 = extractPrismaValidationField(e4);
@@ -107,7 +113,13 @@ async function main(): Promise<void> {
   process.exit(kaldi > 0 ? 1 : 0);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    // Emniyet: doğrulama bir gün gevşer ve yazım SQL'e ulaşırsa artık kalmasın.
+    await prisma.item.deleteMany({ where: { code: { in: [1, 2, 3, 4].map(KOD) } } }).catch(() => {});
+    await prisma.$disconnect().catch(() => {});
+  });
