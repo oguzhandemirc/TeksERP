@@ -799,6 +799,8 @@ export interface DefectType {
   description: string | null;
   severity: DefectSeverity | null;
   isActive: boolean;
+  /** Tipsiz hata girişi bu tipe düşer; kurulumda en fazla bir (eski backend'de alan yok → undefined). */
+  isDefault?: boolean;
 }
 
 // =============================================================================

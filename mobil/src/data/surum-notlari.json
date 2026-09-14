@@ -288,6 +288,11 @@
           "kapsam": "tablet",
           "tip": "yeni",
           "metin": "Dokuma modülü açık kurulumlarda KK1 girişi iki soru soruyor: “Bu top dokuma mı?” ve evetse “hangi indirmeden?” — bağlanmamış indirmeler açık listeden seçilir; seçilmezse top indirmesiz kaydedilir, yarı mamul girişinde sorular çıkmaz. Dokuma modülü kapalı kurulumda sorular görünmez ve KK1 kaydı eskisiyle birebir aynıdır."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "duzeltme",
+          "metin": "Tablette Tambur’da hata tipi seçilmeden girilen hata artık listedeki ilk tipe yazılmıyor; kataloğda “varsayılan” işaretli hata tipine yazılır. Kalite → Hata Tipleri’nde bir tipi varsayılan yapabilirsiniz (kurulumda tek varsayılan olur, yenisini işaretlemek eskisini kaldırır). Güncellemeyle, varsayılan tanımlı değilse “GENEL” adlı bir hata tipi oluşturulup varsayılan yapılır; hiç varsayılan yoksa tipsiz hata girişi reddedilir ve ekran tip seçilmesini ister. Geçmiş hata kayıtları değişmez."
         }
       ]
     },

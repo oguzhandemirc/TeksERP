@@ -44,4 +44,9 @@ export const defectTypeColumns: ColumnDef<DefectType>[] = [
     header: () => <SortableHeader field="isActive" label="Durum" />,
     cell: ({ row }) => (row.original.isActive ? <Badge>Aktif</Badge> : <Badge variant="muted">Pasif</Badge>),
   },
+  {
+    accessorKey: "isDefault",
+    header: "Varsayılan",
+    cell: ({ row }) => (row.original.isDefault ? <Badge variant="secondary">Varsayılan</Badge> : null),
+  },
 ];

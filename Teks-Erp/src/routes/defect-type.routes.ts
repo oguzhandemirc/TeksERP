@@ -10,6 +10,9 @@ import { BaseService } from "../services/base.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { defectTypeHardRemove } from "../services/helpers/guarded-hard-remove";
+import { setDefaultDefectType } from "../services/helpers/default-defect-type.helper";
+import { AuditService } from "../services/audit.service";
+import type { NextFunction, Request, Response } from "express";
 
 const MOBILE_DEFECT_READ = ["mobile:kk2-kursun", "mobile:tambur"] as const;
 
@@ -118,7 +121,46 @@ router.get("/:id", verifyToken, requireAnyPermission("quality:read", ...MOBILE_D
  *       409:
  *         description: Kod zaten mevcut
  */
-router.post("/", verifyToken, requirePermission("quality:write"), controller.create);
+/**
+ * `isDefault: true` DÜZ yazılmaz: partial unique (`defect_types_one_default`) ikinci
+ * varsayılanı P2002 ile reddederdi. Gövdeden çıkarılır, kayıt yazılır, sonra tek tx'te
+ * eski varsayılan düşürülüp bu kayıt yükseltilir (`setDefaultDefectType`). `false`
+ * düz geçer (varsayılansız katalog admin kararıdır; tipsiz giriş o zaman 400).
+ */
+async function writeWithDefault(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+  mode: "create" | "update",
+): Promise<void> {
+  try {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const wantDefault = body.isDefault === true;
+    if (wantDefault) delete body.isDefault;
+    const result =
+      mode === "create"
+        ? await defectTypeService.create(body, req.user?.userId)
+        : await defectTypeService.update(String(req.params.id), body, req.user?.userId);
+    const id = (result.data as { id?: string } | undefined)?.id ?? String(req.params.id);
+    if (wantDefault) {
+      const r = await setDefaultDefectType(id);
+      await AuditService.log({
+        userId: req.user?.userId,
+        action: "UPDATE",
+        tableName: "DEFECT_TYPE",
+        recordId: id,
+        oldData: { defaultDefectTypeId: r.previousId },
+        newData: { defaultDefectTypeId: id },
+      });
+      (result.data as Record<string, unknown>).isDefault = true;
+    }
+    res.status(mode === "create" ? 201 : 200).json(result);
+  } catch (error) {
+    next(error);
+  }
+}
+
+router.post("/", verifyToken, requirePermission("quality:write"), (req, res, next) => writeWithDefault(req, res, next, "create"));
 
 /**
  * @openapi
@@ -147,7 +189,7 @@ router.post("/", verifyToken, requirePermission("quality:write"), controller.cre
  *       200:
  *         description: Güncellendi
  */
-router.patch("/:id", verifyToken, requirePermission("quality:write"), controller.update);
+router.patch("/:id", verifyToken, requirePermission("quality:write"), (req, res, next) => writeWithDefault(req, res, next, "update"));
 
 /**
  * @openapi
@@ -167,6 +209,50 @@ router.patch("/:id", verifyToken, requirePermission("quality:write"), controller
  *       200:
  *         description: Pasife alındı
  */
+/**
+ * @openapi
+ * /api/defect-types/{id}/set-default:
+ *   post:
+ *     tags: [DefectTypes]
+ *     summary: Hata tipini VARSAYILAN yap (kurulumda en fazla bir)
+ *     description: |
+ *       Tipsiz hata girişi (tablet Tambur "hata tipi seçilmedi") bu tipe düşer; varsayılan yoksa giriş 400.
+ *       Eski varsayılan aynı tx'te düşer. Pasif tip varsayılan yapılamaz.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ id, previousId }" }
+ *       400: { description: "Pasif tip" }
+ *       404: { description: "Bulunamadı" }
+ */
+router.post(
+  "/:id/set-default",
+  verifyToken,
+  requirePermission("quality:write"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = String(req.params.id);
+      const result = await setDefaultDefectType(id);
+      await AuditService.log({
+        userId: req.user?.userId,
+        action: "UPDATE",
+        tableName: "DEFECT_TYPE",
+        recordId: id,
+        oldData: { defaultDefectTypeId: result.previousId },
+        newData: { defaultDefectTypeId: id },
+      });
+      res.status(200).json({ success: true, data: { id, previousId: result.previousId } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
 router.delete("/:id", verifyToken, requirePermission("quality:write"), controller.remove);
 
 /**

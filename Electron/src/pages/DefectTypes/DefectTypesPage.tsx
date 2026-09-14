@@ -15,6 +15,8 @@ const buildPayload = (
   description: v.description || null,
   severity: (v.severity || null) as DefectType["severity"],
   isActive: v.isActive,
+  // `true` backend'de tek-varsayılan tx'inden geçer (eskisi düşer); `false` düz yazılır.
+  isDefault: v.isDefault,
 });
 
 export function DefectTypesPage() {

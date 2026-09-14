@@ -7,6 +7,8 @@ export interface DefectType {
   description: string | null;
   severity: DefectSeverity | null;
   isActive: boolean;
+  /** Tipsiz hata girişi bu tipe düşer; kurulumda en fazla bir. */
+  isDefault: boolean;
   createdAt: string;
   updatedAt: string;
 }
