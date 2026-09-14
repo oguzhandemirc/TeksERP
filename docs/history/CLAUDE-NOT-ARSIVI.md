@@ -21,6 +21,42 @@
 
 ---
 
+## 2026-09-14 — "Dosyanın tamamı temizliktir" bir SINIFTIR, muafiyet değil [ÇEKİRDEK]
+
+`test_defter_ters_yol §10b2` teardown DIŞINDA defter silen 61 çağrı sayıyordu. Sayıyı
+düşürmenin üç yolu vardı ve **ikisi kapıyı köreltirdi**: ölçütü gevşetmek, ya da dosyaları
+merkezî bir muaf listesine yazmak. Üçü de denenmedi; borç ÜÇ SINIFA ayrıldı ve her sınıf
+kendi yoluyla kapandı.
+
+**① Ad kalıbı (14 → 0).** `svcTemizle` ve `clean` GERÇEK teardown'du; kapının önek kalıbı
+(`^temizle|temizlik|cleanup|teardown`) tutmuyordu. Alternatif "iki adı listeye ekle"
+idi — liste büyür, ölçüt körelir, bir sonraki uyumsuz ad da girer. Bunun yerine
+FONKSİYONLAR yeniden adlandırıldı: `temizleSvc`, `cleanup`. ⇒ *Kuralı listeye uydurmak
+yerine kodu kurala uydur; liste büyümedi.*
+
+**② Çözünürlük boşluğu (18 ÖLÇÜLEMEDİ → 0).** Bunlar borç bile değildi: yüklem gerçekten
+kimliğe bağlıydı, ARAÇ okuyamıyordu. İki ayak, ikisi de `isVariableDeclaration` dalında:
+SHORTHAND yaprak (`where: { itemId }` — doğru API `getShorthandAssignmentValueSymbol`) ve
+DESTRUCTURE kap (`const { rollIds } = fx` bir `BindingElement`). Destructure kuralı DAR
+tutuldu: kaynak aynı dosyada `await`/çağrı/`new`e çözülüyorsa KİMLİK, **en fazla bir
+sıçrama**; sabit nesneden destructure ÖLÇÜLEMEDİ kalır. ⚠️ Bir çözünürlük düzeltmesinin
+asıl riski borcu kapatmaması değil, **ad bazlı yüklemi sessizce KİMLİK'e çevirip kapıyı
+köreltmesidir** — bu yüzden her "artık çözülüyor" sondasının yanına bir "hâlâ SINIRSIZ"
+sondası kondu (§10c12–§10c16). Ağaçtaki 18'in hiçbiri SINIRSIZ'a düşmedi.
+
+**③ Dosya düzeyi temizlik BEYANI (19 → sınıfa taşındı).** Bazı script'lerin tamamı
+temizliktir: artık süpürücü, ve önceki kesilmiş koşumunun kendi damgasını silip senaryoyu
+kuran denetim repro'ları — silme orada testin SONUNDA değil BAŞINDA durur, `finally`
+kalıbı yanlış oturur. Çözüm merkezî liste değil **dosyanın kendi başındaki işaret**
+(`@temizlik-scripti: <gerekçe>`, ilk 30 satırda — *aşağıya gömülmüş bir beyan, okuyanın
+görmediği bir beyandır*). Beyanın üç sınırı var: (a) yalnız "teardown bağlamı mı"
+sorusunu cevaplar — **yüklem sorusu (§10b1) beyanla DEĞİŞMEZ**, işaretli dosyada sınırsız
+yüklem yine kırmızıdır; (b) sayısı kapıda adresleriyle basılır ve kendi cırcırını taşır;
+(c) işaret taşıyıp defter silmeyen dosya ÖLÜ BEYANDIR ve kırmızı verir. ⇒ *Bir muafiyeti
+sınıfa çevirmenin bedeli görünürlüktür; görünmeyen sınıf muafiyettir.*
+
+Ölçüm: 61 → 47 → 28 · ÖLÇÜLEMEDİ 18 → 0 · SINIRSIZ 0'da kaldı (hiçbir ihlal örtülmedi).
+
 ## 2026-09-14 — Beyanlı bir kör nokta, sıfırlanmış bir tabanı YALANLAR [ÇEKİRDEK]
 
 `test_sha_atfi` "0 ölü sha atfı" diyordu ve aynı ağaçta **10 ölü atıf duruyordu**. Kapı

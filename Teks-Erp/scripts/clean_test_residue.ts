@@ -19,6 +19,7 @@
 // Silinemeyen satır SESSİZCE ATLANMAZ, raporlanır: bir fixture'ın neden
 // silinemediği ("şu top hâlâ o rengi kullanıyor") testin temizlik sırasındaki
 // gerçek bir hatasına işaret edebilir.
+// @temizlik-scripti: dosyanın TAMAMI temizliktir — çökmüş koşumların artığını süpüren araç; silme testin sonunda değil, işin KENDİSİ
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { assertGelistirmeVeritabani } from "./db-guard";

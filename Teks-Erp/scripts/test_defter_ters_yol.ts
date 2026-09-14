@@ -52,7 +52,7 @@ import { join, relative } from "node:path";
 import { CIFT_DISI_DEGERLER, DEFTER_BEYANI, STOK_OLAY_BEYANI, type CiftDisiDeger, type DefterBeyani } from "./lib/defter-beyan";
 import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
 import { SILEN, defterYazimlariniTara, sembolReferanslari, tipliProgram } from "./lib/defter-yazim-tarama";
-import { TEARDOWN_ADLARI, silmeleriTara, sondaSinifla } from "./lib/silme-bagi";
+import { TEARDOWN_ADLARI, TEMIZLIK_SCRIPTI_ISARETI, silmeleriTara, sondaSinifla, temizlikScriptiMi } from "./lib/silme-bagi";
 import { atlamaDefteri } from "./lib/atlama";
 import { curumeKolu } from "./lib/circir-kolu";
 import { semaAlanlari } from "./revoke-ast-tarama";
@@ -476,6 +476,33 @@ if (bagOlculemedi.length > 0) {
   ATLAMA.atla("§10b3 silme yüklemi AST'den çözülemedi", `${bagOlculemedi.length} çağrı — sessiz muaf DEĞİL`, bagOlculemedi.length);
   for (const x of bagOlculemedi.slice(0, 8)) console.log(`      ⏭ ${x.dosya}:${x.satir} ${x.model}.${x.metod} — ${x.not}`);
 }
+// §10b5 — DOSYA DÜZEYİ TEMİZLİK BEYANI: görünür, sayılı, İKİ YÖNLÜ.
+// Beyan yalnız "teardown bağlamı mı" sorusunu cevaplar; §10b1 (yüklem) beyanla
+// DEĞİŞMEZ — işaretli dosyada sınırsız yüklem yine kırmızıdır. Beyanın bedeli
+// GÖRÜNÜRLÜKTÜR: sayı basılır ve kendi cırcırını taşır.
+{
+  const TEMIZLIK_SCRIPTI_TABAN = 6;
+  const beyanliSilme = [...new Set(scriptSilme.filter((x) => x.teardown === TEMIZLIK_SCRIPTI_ISARETI).map((x) => x.dosya))].sort();
+  // ÖLÜ BEYAN: işaret taşıyıp hiç defter silmeyen dosya — okuyucuya var olmayan bir
+  // gerekçe gösterir ve bir sonraki eklemeyi bedava yapar.
+  const isaretli = [...walkTs(join(KOK, "scripts"))]
+    .map((f) => relative(KOK, f))
+    .filter((rel) => fiksturMu(rel) || rel.startsWith("scripts/"))
+    .filter((rel) => temizlikScriptiMi(readFileSync(join(KOK, rel), "utf8")));
+  const oluBeyanDosya = isaretli.filter((rel) => !beyanliSilme.includes(rel));
+  check("§10b5a ⭐ temizlik beyanı olan dosya gerçekten defter siliyor", oluBeyanDosya.length === 0,
+    oluBeyanDosya.length ? `ÖLÜ BEYAN: ${oluBeyanDosya.join(" · ")}` : `${isaretli.length} beyanlı dosya`);
+  check("§10b5b ⭐ temizlik BEYANI sayısı ARTMADI", beyanliSilme.length <= TEMIZLIK_SCRIPTI_TABAN,
+    beyanliSilme.length <= TEMIZLIK_SCRIPTI_TABAN
+      ? `${beyanliSilme.length} ≤ ${TEMIZLIK_SCRIPTI_TABAN} dosya`
+      : `${beyanliSilme.length} > ${TEMIZLIK_SCRIPTI_TABAN} ⇒ YENİ temizlik beyanı:\n      ` + beyanliSilme.join("\n      "));
+  curumeKolu(check, ATLAMA.atla, "§10b5c ⭐ temizlik beyanı tabanı ÇÜRÜMEDİ", beyanliSilme.length, TEMIZLIK_SCRIPTI_TABAN);
+  if (beyanliSilme.length > 0) {
+    console.log(`   ⓘ dosya düzeyi temizlik beyanı (${beyanliSilme.length}) — silmeleri teardown SAYILIR, yüklemleri SAYILMAZ:`);
+    for (const f of beyanliSilme) console.log(`      • ${f}`);
+  }
+}
+
 // Teardown ad listesi BEYANDIR: ölü ad, kapıyı sessizce gevşetir.
 {
   const kullanilan = new Set(scriptSilme.map((x) => x.teardown).filter((t): t is string => t !== null && !t.startsWith(".") && t !== "finally"));
@@ -600,6 +627,13 @@ console.log("\n=== §10c SONDALAR — kural sentetik vakalarla ısırıyor mu (k
       sabitDestKaynak.length > 0 && sonda(sabitDestKaynak)[0]?.bag !== "KIMLIK",
       `gelen: ${sonda(sabitDestKaynak)[0]?.bag}`);
   }
+
+  // §10c17–§10c19 — TEMİZLİK BEYANI işareti (saf yüklem, dosya metni)
+  check("§10c17 ⭐ başta işaret → temizlik script'i", temizlikScriptiMi("// @temizlik-scripti: gerekçe\nconst x = 1;"));
+  check("§10c18 ⭐ işaret YOKSA temizlik script'i DEĞİL (kural işarete bağlı)",
+    !temizlikScriptiMi("// sıradan bir script\nconst x = 1;"));
+  check("§10c19 ⭐ 30. satırdan SONRAKİ işaret SAYILMAZ (gömülü beyan, beyan değildir)",
+    !temizlikScriptiMi("x\n".repeat(40) + "// @temizlik-scripti: geç kalmış"));
 
   check("§10c11 `not:` bir AD yüklemi DEĞİL (yanlış pozitif sondası)", notKaynak.length > 0 && sonda(notKaynak)[0]?.bag !== "SINIRSIZ",
     `gelen: ${sonda(notKaynak)[0]?.bag}`);

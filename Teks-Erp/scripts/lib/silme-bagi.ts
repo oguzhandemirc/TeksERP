@@ -145,6 +145,30 @@ export function bagSinifi(
   return { bag: "OLCULEMEDI", not: "yaprak sınıflanamadı" };
 }
 
+/**
+ * DOSYA DÜZEYİ TEMİZLİK BEYANI — işaretin kendisi, merkezî bir liste DEĞİL.
+ *
+ * Bazı script'lerin TAMAMI temizliktir: artık süpürücü (`clean_test_residue`), ve
+ * önceki kesilmiş koşumunun kendi damgasını silip senaryoyu yeniden kuran denetim
+ * repro'ları. Bunlarda silme "testin sonunda" değil BAŞINDA ya da turlar arasında
+ * durur; `finally`/`cleanup` kalıbı bu dosyalara YANLIŞ oturur.
+ *
+ * ⚠️ BEYAN MUAFİYET DEĞİLDİR ve kapsamı DAR: yalnız "teardown bağlamı mı" sorusunu
+ * cevaplar. Yüklem sorusu (§10b1 — ada/öneke dayanan silme) beyanla DEĞİŞMEZ; işaretli
+ * bir dosyada sınırsız yüklem yine kırmızıdır. Beyan sayısı kapıda GÖRÜNÜR basılır ve
+ * kendi cırcırını taşır, yani "işaret koyup sus" sessizce ucuzlamaz.
+ *
+ * İşaret dosyanın İLK 30 satırında olmalı: aşağıya gömülmüş bir beyan, okuyanın
+ * görmediği bir beyandır.
+ */
+export const TEMIZLIK_SCRIPTI_ISARETI = "@temizlik-scripti";
+const TEMIZLIK_ISARET_SATIR_SINIRI = 30;
+
+/** Dosya başında temizlik beyanı var mı? SAF — girdi kaynak metni. */
+export function temizlikScriptiMi(kaynak: string): boolean {
+  return kaynak.split("\n", TEMIZLIK_ISARET_SATIR_SINIRI).some((l) => l.includes(TEMIZLIK_SCRIPTI_ISARETI));
+}
+
 /** Silme bir teardown bağlamında mı? Bağlamın ADINI verir, yoksa `null`. */
 export function teardownBaglami(n: ts.Node): string | null {
   const kalip = new RegExp(`^(${TEARDOWN_ADLARI.join("|")})`, "i");
@@ -179,6 +203,7 @@ export function silmeleriTara(
     if (sf.isDeclarationFile) continue;
     const rel = relative(kok, sf.fileName);
     if (!dosyaSuzgeci(rel)) continue;
+    const dosyaTemizlik = temizlikScriptiMi(sf.getFullText());
     const gez = (n: ts.Node): void => {
       if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && SILEN_METOD.has(n.expression.name.text)) {
         const ic = n.expression.expression;
@@ -195,7 +220,7 @@ export function silmeleriTara(
             out.push({
               model, dosya: rel, metod: n.expression.name.text,
               satir: sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1,
-              bag, not, teardown: teardownBaglami(n),
+              bag, not, teardown: teardownBaglami(n) ?? (dosyaTemizlik ? TEMIZLIK_SCRIPTI_ISARETI : null),
             });
           }
         }

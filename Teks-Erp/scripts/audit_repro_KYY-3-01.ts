@@ -7,6 +7,7 @@
 //   (+ tolerans) kalmalı.
 // Gözlenen: aşağıdaki log (audit/repro/KYY-3-01.log)
 // Çalıştır: cd Teks-Erp && npx tsx scripts/audit_repro_KYY-3-01.ts
+// @temizlik-scripti: denetim repro'su: silme, önceki kesilmiş koşumun KENDİ damgasını süpürer ve turlar arasında senaryoyu sıfırlar — sonda değil ÖN KOŞUL
 // =============================================================================
 import "dotenv/config";
 function devDbGuard(): void {

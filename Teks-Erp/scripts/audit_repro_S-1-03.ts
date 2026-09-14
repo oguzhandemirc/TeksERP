@@ -16,6 +16,7 @@
 //
 // NOT: feature-flag / SystemSetting DEĞİŞTİRİLMEZ. Mükerrer tuzağı bu senaryoda
 // devrede değil (opts.duplicateGuard verilmiyor → F221 deseni).
+// @temizlik-scripti: denetim repro'su: silme, önceki kesilmiş koşumun KENDİ damgasını süpürer ve turlar arasında senaryoyu sıfırlar — sonda değil ÖN KOŞUL
 // =============================================================================
 import "dotenv/config";
 function devDbGuard(): void {

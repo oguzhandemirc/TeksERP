@@ -8,6 +8,7 @@
 // Ortam: SADECE dev DB. Beklenen (sağlıklı sistem): 0 deadlock, 0 beklenmeyen 5xx.
 // Gözlenen: audit/repro/KYY-3-03.log
 // Çalıştır: cd Teks-Erp && npx tsx scripts/audit_repro_KYY-3-03.ts
+// @temizlik-scripti: denetim repro'su: silme, önceki kesilmiş koşumun KENDİ damgasını süpürer ve turlar arasında senaryoyu sıfırlar — sonda değil ÖN KOŞUL
 // =============================================================================
 import "dotenv/config";
 function devDbGuard(): void {
