@@ -369,6 +369,13 @@ function main(): void {
     /ad: "prisma istemcisi güncel", cwd: "\.", cmd: \["node", \["scripts\/hooks\/lib\/prisma-istemci\.mjs"\]\] \}/.test(preCommit) && !/prisma istemcisi güncel"[^\n]*agir: true/.test(preCommit),
   );
 
+  // ── §9 SEMAFOR KAPASİTESİ (1e hükmü 2026-09-14): 4 — defterden ölçüldü (108 alım/26 bekleme/
+  //    max 268 sn); sabit tek yerde yaşar ve BURADA sondalanır ki sessizce oynamasın.
+  //    Yeniden ölçüm 2026-09-21; hüküm değişirse bu sayı ve semafor.mjs başlığı birlikte değişir.
+  console.log("\n§9 — semafor kapasitesi hükümle aynı mı");
+  const r9 = defterKos({}, `const m = await import(${JSON.stringify(join(KOK, "scripts/hooks/lib/semafor.mjs"))}); process.stdout.write(String(m.KAPASITE));`);
+  check("§9 ⭐ KAPASITE = 4 (1e hükmü 2026-09-14; yeniden ölçüm 2026-09-21)", r9.status === 0 && r9.stdout.trim() === "4", `KAPASITE=${r9.stdout.trim() || r9.stderr.slice(0, 60)}`);
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${skip > 0 ? `, ${skip} atlandı` : ""} ===`);
   process.exit(fail > 0 ? 1 : 0);
 }

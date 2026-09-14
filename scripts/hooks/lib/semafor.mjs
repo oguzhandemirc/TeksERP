@@ -8,6 +8,12 @@
 //    Semafor 3: altı kapı 74/74/74/148/148/148 (en kötü 148 ↔ 332); tam
 //    serileştirme N=2'de kötü (86 ↔ 52). "İniş penceresi tek sahipli" kuralı
 //    kapı KOŞUMUNA "üç sahipli" olarak iner — ölçüm bunu söylüyor.
+//    ⚠️ 3 → 4 (1e hükmü 2026-09-14 03:30, saha defteri): sarmalayıcı (`agir-is.mjs`)
+//    benimsenip KAPI-DIŞI tsc/eslint/test de bu havuzdan geçince kuyruk BAĞLAYICI
+//    oldu — 03:00–03:27: 108 alım, 26 bekleme, toplam 2.226 sn, max 268 sn; load
+//    ort 16,8 (CPU değil kuyruk). 4. slot load'u ~20→27'ye taşır (tsc ≈ +%30) ama
+//    268 sn'lik beklemeleri keser. YENİDEN ÖLÇÜM 2026-09-21: defterden bekleme
+//    toplamı ↔ adım süresi toplamı; hangisi büyürse kapasite o yöne oynar.
 //
 // MEKANİZMA: os.tmpdir()/tekserp-kapi-semafor/slot-{0..N-1} — slot bir DİZİNDİR
 //    (`mkdir` atomik: iki hook aynı slotu alamaz), içinde `pid` dosyası.
@@ -20,7 +26,7 @@ import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-export const KAPASITE = 3;
+export const KAPASITE = 4; // 3 → 4, 2026-09-14 (yeniden ölçüm 2026-09-21) — gerekçe başlıkta
 /** Tek kapının boşta ölçülmüş süresi — bekleme tahmini için. */
 const TEK_KAPI_SN = 46;
 // Sonda kendi kökünü verir (gerçek kapıların semaforuna dokunmasın); üretimde env YOK.
