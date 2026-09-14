@@ -9111,3 +9111,14 @@ yazılır. Eski ② gerekçesi ("kurşun/tambur makinesine yuvası var yazar") d
 `Station.consumesWarpBeam`, sayı yalnız üst sınır — o makinelerde sayı hiç okunmaz. Bugünkü davranış
 korunuyor: alan sorulmaz, `beamSlot` yalnız `warpBeamSlots > 1` makinede istenir (`assertBeamSlotValid`).
 Belgede §9.7h satırına "GEÇERSİZ → 2026-09-14", :513 taslağı `@default(1)`, CHECK envanter satırı aynı cümle (6e, docs-only).
+## 2026-09-14 — VARSAYILAN HATA TİPİ GEÇİŞİ: migration GENEL'i YARATIR/AKTİFLEŞTİRİR — karar A §2 "GENEL yoksa damga yok + 400" GEÇERSİZ [ÇEKİRDEK]
+
+**Bağlam:** ea'nın `DefectType.isDefault` dilimi (`f87cb6e5`) migration'da GENEL kodlu tip yoksa yaratıp varsayılan
+yapıyor, pasifse aktifleştiriyor; `CAKILI-VARSAYIM-KARAR.md` A §2 ise "GENEL yoksa hiçbir satır damgalanmaz,
+varsayılansız kurulumda tipsiz giriş 400 + sürüm notu" diyordu (47 çelişmeli doğrulaması, İŞ 11).
+**Hüküm (1e):** migration davranışı KALIR — her kurulumda bir varsayılan olmalı; 400 yalnız SONRADAN varsayılan
+silinir/pasife alınırsa geçerlidir ve o da ea'nın K3 kalemiyle (varsayılanı pasife almak ret/uyarı) bağlanır.
+Karar cümlesi GEÇERSİZ damgalandı; sürüm notu ("GENEL adlı tip oluşturulup varsayılan yapılır") doğru metindir.
+**Bedel (d9, CI):** taze DB'de migration katalog satırı doğurur, `prisma/seed.ts` `createMany` aynı kodu yazınca
+P2002 — seed `upsert`e çevrildi. Ders: migration'ın kendi içinde idempotent olması komşusuyla (seed) çakışmayacağını
+göstermez; canlı-dump provası boş-DB senaryosunu ölçmez, ikisi ayrı ölçülür.
