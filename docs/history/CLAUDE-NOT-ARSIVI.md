@@ -21,6 +21,29 @@
 
 ---
 
+## 2026-09-14 — "0 bulundu" ancak aracın kalıbı YAZIM VARYANTINI kapsıyorsa ölçümdür [ÇEKİRDEK]
+
+Çıplak `git` spawn'ı migrasyonu "bitti" sanıldı: `grep -rn 'execFileSync("git"'` **0**
+diyordu. Kapı koşulunca **2** kaldığı görüldü. Fark tek bir yazım varyantıydı:
+
+    execFileSync(
+      "git",            ← ad ile argüman arasında SATIR SONU
+
+`grep`in kalıbı `execFileSync("git"` bitişikliğini varsayıyordu; kapının deseni
+`(execFileSync|execSync)\(\s*["\`]git` — yani boşluk/satır sonu TOLERANSLI. ⇒ ***Bir
+aramanın "0 bulundu"su, aracın kalıbı aradığın şeyin bütün YAZIM VARYANTLARINI
+kapsamıyorsa bir ölçüm değil, kalıbın kendisi hakkında bir cümledir.***
+
+⚠️ Bu, aynı günün *"bir sınıfı yakalayan EN GENİŞ yüklem, o sınıfı ÖLÇEN yüklem değildir"*
+dersinin TERSİDİR ve ikisi birlikte sınırı çizer: yüklem **fazla geniş** olursa alakasız
+şeyleri sayar (164/253 yanlış pozitif), **fazla dar** olursa gerçek üyeleri kaçırır
+(2 site). *Doğru genişlik, ölçülen sınıfın tanımından türetilir — aletin kolaylığından
+değil.*
+
+⚠️ İkinci ders, sıraya aittir: **kapı burada tarama aletinden SIKIYDI ve haklı çıktı.**
+Migrasyonu grep'le bitirip kapıyı "doğrulama" diye koşturmak doğru sıraydı; tersi
+(kapıyı kendi grep'ime göre gevşetmek) sınıfı sessizce kapatırdı.
+
 ## 2026-09-14 — Tabanı DÜŞÜREN commit ile tabanı HAK EDEN commit aynı trende ölçülür [ÇEKİRDEK]
 
 Bir cırcırın tabanı 24 → 18'e indirildi, ama tabanı hak eden migrasyon commit'i **trene
