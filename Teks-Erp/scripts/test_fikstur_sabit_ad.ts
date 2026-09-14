@@ -155,8 +155,16 @@ export function siteler(kaynak: string): Site[] {
       }
     }
     const pencere = temiz.slice(m.index, son + 1);
-    for (const k of pencere.matchAll(new RegExp(`\\b${KOLON}\\s*:\\s*(\`[^\`]*\`|"[^"]*"|'[^']*')`, "g"))) {
-      out.push({ cagri: m[2], delege: m[1], alan: k[1], deger: k[2], pencere });
+    // ⚠️ İÇ İÇE `create` BLOĞU DIŞ MODELE ATFEDİLMEZ (ea ölçtü 2026-09-14):
+    // `labelTemplate.create({ data: { name: `…${ts}`, variants: { create: [{ name: "100x70" }] } } })`
+    // — dıştaki ad damgalıdır, içteki varyant adının tekilliği BAŞKA bir modelin
+    // bileşik kısıtıdır. Pencere tabanlı atıf üçünü de `labelTemplate.name`
+    // sanıyordu. ⇒ İlk gömülü ilişki-create'inden SONRASI KESİLİR: tanınmayan
+    // model için iddia edilmez (§2h ilkesi).
+    const gomulu = /\b(create|createMany|connectOrCreate)\s*:/.exec(pencere.slice(m[0].length));
+    const kapsam = gomulu ? pencere.slice(0, m[0].length + gomulu.index) : pencere;
+    for (const k of kapsam.matchAll(new RegExp(`\\b${KOLON}\\s*:\\s*(\`[^\`]*\`|"[^"]*"|'[^']*')`, "g"))) {
+      out.push({ cagri: m[2], delege: m[1], alan: k[1], deger: k[2], pencere: kapsam });
     }
   }
   return out;
@@ -169,7 +177,9 @@ export function siteler(kaynak: string): Site[] {
  * çöküşten sonra yeniden koşulamaz olması demek. Antidot `lib/fikstur-imzasi.ts`
  * ya da değere koşum damgası; `upsert` kalıbı da meşru bir çıkış.
  */
-const TABAN = 29;
+// ⚠️ 29 → 22: İÇ İÇE `create` bloğunun dış modele atfedilmesi düzeltildi
+// (ea üç vaka bildirdi, ölçüm YEDİ gösterdi — sınıf bildirilenden genişti).
+const TABAN = 22;
 
 function main(): void {
   console.log("\n=== Sabit adlı fikstür (çöküşten sonra yeniden koşulabilirlik) ===\n");
@@ -278,6 +288,21 @@ function main(): void {
   check(
     "§2j ② yazma çağrısı İÇİNDEKİ literal sayılır",
     siteler('await prisma.renk.create({ data: { name: "X" } });').length === 1,
+  );
+  check(
+    "§2l ⭐ İÇ İÇE create dış modele ATFEDİLMEZ (varyant adı ≠ şablon adı)",
+    (() => {
+      const s2 = siteler(
+        'await prisma.labelTemplate.create({ data: { name: `T-${ts}`, variants: { create: [{ name: "100x70" }] } } });',
+      );
+      // Dıştaki (damgalı) ad GELİR, içteki varyant adı GELMEZ.
+      return s2.length === 1 && s2[0]!.deger.includes("${ts}") && !s2.some((x) => x.deger.includes("100x70"));
+    })(),
+    "pencere tabanlı atıf üç vakayı yanlış sınıflamıştı; ölçüm YEDİ gösterdi",
+  );
+  check(
+    "§2m iç içe create YOKSA dıştaki literal sayılır (kesme fazla kesmiyor)",
+    siteler('await prisma.renk.create({ data: { name: "MAVİ", kod: 1 } });').length === 1,
   );
   check("§2k ① satır yorumu sayılmaz", siteler('// await prisma.renk.create({ data: { name: "X" } })').length === 0);
   console.log("");
