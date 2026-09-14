@@ -21,6 +21,32 @@
 
 ---
 
+## 2026-09-14 — "Tek istisna UserPreference" ölçüldü ve YANLIŞ çıktı [ÇEKİRDEK]
+
+Kök kural *"her CUD → `AuditService.log()`, tek istisna `UserPreference`"* diyordu. Kuralın
+kapısı vardı (`test_audit_depth`, kapsam kısmi) ama **istisnası hiç ölçülmemişti**. Ölçüm:
+CUD yapan **136** modelin **127**'si audit yazıyor, **DOKUZU** sessiz. Sekizi meşru — ama
+**beyansız**. ⇒ ***Beyansız bir sessizlik, UNUTULMUŞ bir audit'ten ayırt edilemez;*** kural
+cümlesi "tek" derken sekiz sessizliği görünmez kılıyordu.
+
+**Sınıf kümesi ölçümden doğdu, tahminden değil.** Önce üç sınıf tahmin edilmişti; ölçüm
+beşe çıkardı ve dördüncüsü en kalabalığı oldu: `EBEVEYN_EYLEMDE` — satırı bir YARDIMCI
+yazar, audit ÇAĞIRAN eylemdedir (`ShipmentEvent` · `WarehouseMovement` · `CariBalance` ·
+`ImportRunLine` · `FabricPropertyValue`). Bu sınıf bir GEREKÇE değil bir **İDDİADIR** ve
+ölçülür: yazan yardımcının çağıranlarından en az biri audit taşımalı. *Ölçülmeyen bir
+gerekçe, gerekçe değil temennidir.*
+
+**Gevşek iddia bir sondayla yakalandı ve dar bir kolla tamamlandı.** Model düzeyi ölçüt
+("bu modelin yazma yolunda audit var mı") bir sondada SUSTU: bir servisin audit'i
+susturulunca kapı yeşil kaldı, çünkü aynı modeli yazan başka bir yol hâlâ denetliyordu. ⇒
+Model düzeyi kol *"hiçbir yerde audit yok"*u yakalar, *"bu YOL audit'ini kaybetti"*yi
+değil. Boşluk kovalanmadan bırakılmadı: aynı soru DOSYA düzeyinde bir cırcırla soruldu
+(audit taşımayan yazıcı dosya sayısı ARTAMAZ; bugün 29, hepsi `helpers/`+`jobs/`). ⇒
+***Gevşek bir iddia dar bir iddiayla tamamlanır; tek başına bırakılırsa sessiz yeşildir.***
+
+**Beyan tablosu yine AYRI tutuldu** (bir önceki notun dersi): `AUDIT_EXEMPT_MODELS`
+`DEFTER_BEYANI`ye eklenmedi — o tablonun evreni append-only defter modelleridir.
+
 ## 2026-09-14 — Telemetri ≠ defter: iki doğru kapının ARASINDAKİ boşluk [ÇEKİRDEK]
 
 `defter.md` telemetri için altı kural taşıyordu ve **kapısı yoktu**. Kapı yazılınca ilk
