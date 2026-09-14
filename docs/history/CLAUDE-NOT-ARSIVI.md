@@ -21,6 +21,36 @@
 
 ---
 
+## 2026-09-14 — Zincir bekçisi: adımların hepsi yeşilken ZİNCİR ölçülmemişti [ÇEKİRDEK]
+
+İplik lotundan fason dönüşüne kadar her adımın kendi bekçisi vardı ve hepsi yeşildi. Ama
+**zincirin kendisi hiç koşulmamıştı**, çünkü adım bekçileri komşusunun bıraktığı durumu
+FİKSTÜRLE taklit eder: gerçek geçişte bir bağ boş kalırsa (koşum bağı · doff bağı · lot
+bağı) hiçbiri görmez. ⇒ ***Her adımı ayrı ayrı ölçmek, adımlar arasını ölçmez.***
+
+Bekçi adımları taklit etmez, ZİNCİRLER: her adımın çıktısı bir sonrakinin girdisidir ve
+her adımda İKİ şey ölçülür — ① defter satırı yazıldı ② beyan edilen TERS YOL gerçekten
+çalışıyor (uygula → geri al → satır tersine döndü, SİLİNMEDİ). Yedi adım koşuyor; sekizinci
+(tezgaha bağlama) ⏭.
+
+**⏭ bir muafiyet değil SÖZLEŞMEDİR.** İnmemiş adım ne beklediğini adıyla yazar (servis ·
+durum · sed), böylece indiği gün beklenen sonuç tartışılmaz. **Ve ⏭ SAYISI CIRCIRDIR:**
+artarsa bir adım sessizce kapanmış demektir — *zincirin kısalması, zincir bekçisinin
+göremeyeceği tek şeydir.*
+
+**Üç sonda zinciri yanlışladı:** doff→koşum bağını kopar → ❌ · top→doff bağını kopar → ❌
+(ve ikinci bir kontrol de düştü: topsuz doff artık geri alınabiliyordu) · fazladan bir ⏭
+ekle → cırcır 2 > 1 ❌.
+
+**Teardown iki kez ders verdi.** ① İlk yazımda `catch {}` ile yutulmuştu ve **1 spec +
+2 kalem + 1 iş emri sessizce kalıyordu**; hata görünür yapılınca sebep çıktı: `Batch` ve
+`YarnMovement.warpBeamId` FK'ları. ② Bekçi artık kendi KALINTISINI sayıyor — *yutulan
+temizlik hatası, "temizlik başarılı" ile aynı çıktıya iner.*
+
+⚠️ Ayrıca bir VAKUM YEŞİL yakalandı ve sınıfı yazıldı: `a?.x === b?.y` iki uç da
+`undefined` iken GEÇER. Bağ ölçümü önce iki ucun VAR olduğunu istemelidir; ilk yazımda
+lot bağı kontrolü tam bu yüzden yeşil verdi — lot hiç doğmamışken.
+
 ## 2026-09-14 — Sızan bayrak: bir bekçinin hatası KOMŞU bekçiyi kırar [ÇEKİRDEK]
 
 Taze bir sonda veritabanında tam paketin İLK koşumu 136 dosyada *"Seed fixture eksik"*le
