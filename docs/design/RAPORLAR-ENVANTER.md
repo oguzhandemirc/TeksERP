@@ -16,7 +16,7 @@
 - **Kapı dağılımı asimetrik:** 29 ucun yalnız **8'i** modül kapılı (finance 5 · dokuma 3, ikisi de `router.use`), **21'i kapısız** — yalnız izinle korunur. Panelde ise `ROUTE_MODULE` yolun ilk iki segmentinden çözüldüğü için **16 yaprak** modül kapısına tabi (production 4 · quality 3 · finance 5 · dokuma 4) ⇒ **panel ile backend'in kapı kümesi AYRIŞIK** (panelde kapılı olan 16, backend'de kapılı olan 8).
 - **Kök `reports` hub'ı izinsiz:** tek `ProtectedRoute`'suz rapor route'u; karo süzgeci `isAdmin || !t.permission || hasPermission(...)` ile kısa devre yapar. Yaprakların izni karoda değil ROUTE'tadır (29/29).
 - **Tarih ekseni DÖRT ayrı ad taşıyor:** `dateFrom`/`dateTo` (19 uç) · `from`/`to` (2, dokuma) · `factoryDay` (1) · `asOf` (1 kesit). 6 uçta tarih hiç yok. Tek tip "tarih süzgeci" isteniyorsa önce bu sözleşme birleştirilmeli.
-- **"Sunucu süzgeci" bugün YOK.** Ölçüldü: hiçbir rapor ucu kurulum/sunucu/şube eksenli bir süzgeç taşımıyor (çok-kurulum ekseni `installationId` yalnız keşif/cihaz tarafında yaşıyor). Bu istek sıfırdan tasarım ister ve muhtemelen fazın en büyük parçasıdır.
+- ~~**"Sunucu süzgeci" bugün YOK**~~ **DÜŞTÜ (K10, 2026-09-15):** kullanıcının sözü *"tarih ve çeşitli filtreler"*ti; **tek DB = tek kurulum** olduğu için `installationId` bir süzgeç ekseni DEĞİLDİR (o eksen keşif/cihaz tarafının işi). Benim ilk okumam isteği fazla okumuştu. Doğru soru "hangi doğal eksenler eksik" — ölçümü **§7**.
 
 ## 1 · Sayılar (hepsi ölçüldü)
 
@@ -195,3 +195,46 @@ Koşum: `psql "$DATABASE_URL" -f <dosya>` — `psql` PATH'te olmayabilir (`/opt/
 - **En çok kullanılan iki rapor DENETİM raporları** (18 ve 12) — iş raporlarının hepsi tekli hanelerde. Bu bir kullanım sıralaması değil, bir KULLANICI sıralamasıdır: denetim raporlarını yönetici/geliştirici açar, iş raporlarını fabrika açar. ⇒ *"Rapor ekranını fabrika neredeyse hiç kullanmıyor"* okuması bu veriyle uyumludur ve fazın gerekçesidir.
 - **Faz "kullanılmayanı kapat" değildir.** Sıfırların 8'i ölçülemez (modül kapalı), 7'si açık-ama-çağrılmamış ve hepsinin ortak özelliği ÇIKTI/SÜZGEÇ eksikliği değil — beşi sipariş ailesinden, hepsinin Excel+PDF'i VAR. ⇒ Kullanılmama sebebi çıktı değil; **ekranın bulunabilirliği ve anlaşılırlığı** (§4'ün "kolay anlaşılır ekran" isteği) ya da raporun fabrikanın sorusuna cevap vermemesi. Bu ayrım ölçülmedi — kullanıcıya SORULUR, telemetriden çıkarılmaz.
 - **Düşük sayı kapatma gerekçesi değildir** (§6.4 hükmü ayakta): KDV Dönem Özeti ve Kur Farkı bu pencerede hiç açılmadı ama ikisi de modül kapalı olduğu için ölçülemedi — açık olsalar ayda bir açılırlardı ve yine "düşük" görünürlerdi.
+
+## 7 · Süzgeç ekseni envanteri (ölçüm **2026-09-15**, R5a)
+
+**Yöntem:** backend Zod şemaları (uç başına kabul edilen parametreler) + panel sayfalarının fiilen GÖNDERDİĞİ parametreler + istemci tarafında süzme/sıralama izi (`\.filter\(` · `toLowerCase` · `lowerTr`). "Eksik doğal eksen" kolonu bir İSTEK değil ADAYDIR: raporun kendi satırında zaten var olan bir kırılımı süzgeç yapmak mümkün mü diye sorar.
+
+### 7.1 · Bugünkü eksenler
+
+| Rapor ailesi | Bugünkü eksen(ler) | Nerede süzülüyor | Tanınmayan anahtar 400 mü | Eksik doğal eksen (aday) |
+|---|---|---|---|---|
+| **Dokuma** (randıman · pareto) | tarih aralığı (fabrika günü) | sunucu | ✅ `.strict()` | **makine** (⚠️ yarı kurulu — aşağı bak) · vardiya tanımı · kayıp sınıfı (pareto) · kaynak (ölçülen/elle/simüle) · **levent/lot** (⑤) |
+| **Dokuma** (vardiya karnesi) | tek gün | sunucu | ✅ `.strict()` | **vardiya tanımı** (⚠️ yarı kurulu) · makine |
+| **Dokuma** (karne listesi) | tarih aralığı | sunucu | ✅ `.strict()` (liste ucu) | makine · vardiya · mühür durumu (anlık/mühürlü) · **levent/lot** (⑤) |
+| **Kalite** (kalite · fire · plan-sapma) | tarih aralığı + dönem karşılaştırma | sunucu | ✅ `compareRangeSchema.strict()` | istasyon/makine · kalite sınıfı · ürün/renk · operatör · **levent/lot** (⑤) |
+| **Üretim** (WIP · operatör) | tarih aralığı | sunucu | ✅ `dateRangeSchema.strict()` · ⚠️ `limit` ayrı `.catch(50)` — hatalı değer 400 değil SESSİZ varsayılan | istasyon · iş emri tipi · operatör (karnenin kendi ekseni, süzgeç değil) |
+| **Üretim** (parti izleme · top izleme) | arama kutusu (parti no / barkod) | sunucu (arama ucu) | ❌ parti arama Zod'suz (`typeof q === "string"`), `:batchId` doğrulanmıyor; top izleme `traceSchema` **strict DEĞİL** | — (kesit raporu, tarih eksenli değil) |
+| **Sipariş & Sevkiyat** (7 rapor) | tarih aralığı (+ 5'inde karşılaştırma) | sunucu | ✅ `compareRangeSchema`/`dateRangeSchema` `.strict()` · açık sipariş karşılanmada şema YOK | **müşteri/cari** · ürün · şube · sevk hedefi (yurtiçi/yurtdışı) · birim (metre/kg/adet) |
+| **Stok & Depo** (stok karnesi) | yok (kesit) | — | ❌ şema YOK (`_req`) — anahtar sessizce yok sayılır | **depo** · ürün/renk · kalite sınıfı · yaş kovası |
+| **Fason** (fason karnesi) | tarih aralığı + karşılaştırma | sunucu | ✅ `.strict()` | **fasoncu** (satır ekseni, süzgeç değil) · işlem türü |
+| **Müşteri** (karne) | tarih aralığı + karşılaştırma + **sıralama ekseni** | sunucu (veri) · **istemci (sıralama)** | ✅ `.strict()` | müşteri grubu/şube · ürün |
+| **Müşteri** (sipariş profili) | yok (tüm zamanlar) | — | ❌ şema YOK (`_req`) | tarih · müşteri |
+| **Ön Muhasebe** (yaşlandırma) | kesit tarihi + cari tipi + para birimi + **arama** | sunucu (üçü) · **istemci (arama)** | ✅ `.strict()` (`dateFrom/dateTo` BİLEREK reddedilir — kesit raporu) | şube · vade kovası · sorumlu |
+| **Ön Muhasebe** (kasa defteri) | tarih aralığı + hesap türü + hesap + pasifler | sunucu | ✅ `.strict()` | para birimi (ekranda gruplama olarak var) |
+| **Ön Muhasebe** (çek vade) | ileri tarih aralığı (+7/+30/+90) | sunucu | ⚠️ rapor ucu değil (`finance/cheques/due-summary`) — bu turda ölçülmedi | banka · cari · durum |
+| **Ön Muhasebe** (KDV · kur farkı) | tarih aralığı (+ kur farkında cari · para birimi) | sunucu | ✅ `.strict()` | KDV oranı (kovaları var, süzgeç yok) |
+| **Denetim** (2 rapor) | tarih aralığı | sunucu | ✅ `dateRangeSchema.strict()` | kullanıcı · tablo/işlem türü |
+
+### 7.2 · Üç ölçülmüş bulgu
+
+**① YARI KURULU EKSEN — backend ve panel TİPİNDE var, hiçbir ekran göndermiyor.** `machineId` üç dokuma ucunun ikisinde Zod şemasında kabul ediliyor ve panel servis tipinde de duruyor (`Dokuma/service.ts` `RangeParams.machineId?`); `shiftDefinitionId` aynı şekilde vardiya karnesinde (`shiftScorecard(p: { factoryDay; shiftDefinitionId? })`). **Hiçbir sayfa bu alanları doldurmuyor** — yani eksen sunucuda hazır, istemcide tipiyle duruyor, kullanıcıya hiç görünmüyor. ⇒ Bu üç eksen fazın EN UCUZ kalemidir: backend dokunuşu sıfır, panelde bir seçici.
+
+**② İSTEMCİ TARAFI SÜZME YALNIZ İKİ YERDE, ikisi de beyanlı.** Yaşlandırmada cari adı/kodu araması ekranda süzülüyor (`rows.filter(matches)`) ve sayfa bunu kâğıda da yazıyor (*"Ekranda … araması uygulanıyor"*); müşteri karnesinde sıralama ekseni istemcide (sunucu `totalQty` sırasıyla gönderiyor). Kasa defterindeki para birimi ayrımı süzgeç değil SUNUM gruplamasıdır. Kalan her şey sunucuda süzülüyor — `filtre-liste.md`'nin "cursor'lu listede süzme SUNUCUDA" kuralıyla çelişen bir yer ÇIKMADI.
+⚠️ Şerh: istemci araması ancak EKRANA GELEN satırı süzer. Yaşlandırma bugün tümünü çekiyor; uç kırpmaya başlarsa (`detail` kipi büyürse) arama sessizce yarım sonuç verir — bu, süzgeç fazında karar gerektiren tek risk.
+
+**③ TARİH EKSENİ DÖRT AD TAŞIYOR** (§1'de sayıldı: `dateFrom/dateTo` 19 · `from/to` 2 · `factoryDay` 1 · `asOf` 1) ve ikisi TEK GÜN, biri KESİT, biri ARALIK semantiğinde. Ortak bir süzgeç bileşeni gelecekse önce bu dört adın SÖZLEŞMESİ birleşmeli; aksi hâlde ortak bileşen dört ayrı özel durum taşır ve her yeni rapor beşinciyi ekler.
+
+**④ FAIL-CLOSED ZEMİNİ ASİMETRİK** (dördüncü kolonun özeti): 29 ucun **23'ü** tanınmayan süzgeç anahtarını 400 ile reddediyor (`dateRangeSchema` · `compareRangeSchema` · dokuma üçlüsü · finans beşlisi, hepsi `.strict()`). **Altısı reddetmiyor** ve iki ayrı sebeple: ① şema HİÇ yok — `inventory/scorecard` · `customer/order-profile` · `sales/open-order-coverage` (`_req`, parametre okunmaz) · `production/batch-search` (elle `typeof`) ve `batch-trace/:batchId` (doğrulama yok) · ② şema var ama gevşek — `traveler-trace` `traceSchema` `.strict()` DEĞİL. Ayrıca `production/operator-performance`in `limit` parametresi `.catch(50)` taşıyor: hatalı değer 400 değil SESSİZ VARSAYILAN üretir.
+⇒ **R5b'nin kuralı bu zemine oturur:** yeni bir eksen eklenirken uç `.strict()` değilse, yanlış yazılmış süzgeç adı sessizce YOK SAYILIR ve kullanıcı "süzgeç çalışmıyor" diye değil "rapor yanlış" diye şikâyet eder. Eksen eklenen her uç ÖNCE strict'e çekilir.
+
+**⑤ YENİ DOĞAL EKSEN — LEVENT / LOT (1e hükmü, 6e önerisi; R5b'de 6e yazacak).** Faz 4 ile top → levent bağı deftere girdi (`WarpBeamEvent.CONSUMED.rollId`), levent → lot bağı Faz 2'de vardı (`YarnMovement.lotId`) ⇒ **top → levent → lot → tedarikçi zinciri DEFTERDEN türetilebilir**. Bu, dokuma ve kalite raporları için bugün var olmayan bir eksen açar: *"şu leventten çıkan topların fire oranı"* · *"şu iplik lotunun randımanı"* · *"şu tedarikçinin lotlarında kopuş sıklığı"*. Süzgeç anahtarı `warpBeamId` / `lotNo`, süzme SUNUCUDA (`readIdCondition`/`readFilterList` — CSV de string'dir), uç `.strict()` olmalı (④). Bu satır §7.1'in "eksik doğal eksen" kolonuna dokuma ve kalite ailelerinde EKLENİR ve R5b'nin kapsamıdır.
+
+### 7.3 · Bu envanterin söylemediği
+
+Hangi eksenin **istendiği** ölçülmedi — tablo yalnız *mümkün* olanı sayar. "Eksik doğal eksen" sütunu raporun kendi satırındaki kırılımdan türetildi (satırda makine varsa makine süzgeci mümkündür), fabrikanın sorusundan değil. Sıralama kullanıcıya SORULUR; kullanım verisi (§6.5) burada yol göstermez çünkü bir eksenin yokluğu kullanımı düşürür ama telemetriye "eksik eksen" diye yansımaz.
