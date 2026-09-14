@@ -68,9 +68,9 @@ describe('classifyDoffFailure — 409 kodları ekran eylemine', () => {
 
 describe('doffResultFeedback — kod büyük, replay ayrı cümle', () => {
   it('yeni kayıt', () => {
-    expect(doffResultFeedback('DF1409260001', 'İndirme kaydedildi (DF1409260001)')).toEqual({ title: 'DF1409260001', subtitle: 'İndirme kaydedildi' });
+    expect(doffResultFeedback('DF1409260001', false)).toEqual({ title: 'DF1409260001', subtitle: 'İndirme kaydedildi' });
   });
-  it('⭐ replay cümlesi "zaten" içerir', () => {
-    expect(doffResultFeedback('DF1', 'İndirme zaten kayıtlı').subtitle).toMatch(/zaten/);
+  it('⭐ replay BAYRAKTAN — mesaj metni değişse de ayrım kalır', () => {
+    expect(doffResultFeedback('DF1', true).subtitle).toMatch(/zaten/);
   });
 });

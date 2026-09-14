@@ -67,7 +67,7 @@ export default function DoffTodayList({ entry }: { entry: DoffEntry }) {
         <FlatList
           data={entry.todayRows}
           keyExtractor={(r) => r.id}
-          renderItem={({ item }) => <Row row={item} canRevoke={entry.canRevoke} onRevoke={setTarget} />}
+          renderItem={({ item }) => <Row row={item} canRevoke={entry.canRevoke && entry.isOnline} onRevoke={setTarget} />}
           ListEmptyComponent={<Text style={styles.empty}>Bugün bu tezgahta indirme yok.</Text>}
           contentContainerStyle={styles.list}
         />

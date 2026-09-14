@@ -16,6 +16,8 @@ import type { MachineDataSource } from '../types/models';
 export interface DoffEvent {
   id: string;
   machineId: string;
+  /** Tezgah kodu/adı — masa KK1 listesi tezgahı satırda söyler. Eski sunucu göndermez. */
+  machine?: { code: string; name: string } | null;
   productionLineNo: number;
   machineRunId: string | null;
   doffedAt: string;
@@ -81,8 +83,9 @@ export const doffService = {
     apiClient.get<LoomListResponse<DoffListRow>>('/machine-doffs', { params: { unlinked: 'true' } }).then((r) => r.data),
 
   /** Kaydet: 201 yeni · 201 replay (aynı token → özgün kayıt, `message` "zaten"). */
-  open: (body: OpenDoffRequest): Promise<ApiResponse<DoffEvent>> =>
-    apiClient.post<ApiResponse<DoffEvent>>('/machine-doffs', body).then((r) => r.data),
+  /** `idempotent: true` = yeniden gönderim, yeni indirme doğmadı (metne BAKILMAZ). */
+  open: (body: OpenDoffRequest): Promise<ApiResponse<DoffEvent> & { idempotent?: true }> =>
+    apiClient.post<ApiResponse<DoffEvent> & { idempotent?: true }>('/machine-doffs', body).then((r) => r.data),
 
   /** Geri al: damga; top doğmuşsa 409 `DOFF_HAS_ROLLS` (barkodlar `details.barcodes`). */
   revoke: (id: string, reason: string): Promise<ApiResponse<DoffEvent>> =>

@@ -39,10 +39,10 @@ export function doffLinkPayload(state: DoffLinkState, dokumaEnabled: boolean, se
   return { doffEventId: state.doffEventId };
 }
 
-/** Listede okunan satır: kod · saat · parça · makine. */
-export function doffRowLabel(row: Pick<DoffListRow, 'code' | 'doffedAt' | 'pieceCount' | 'productionLineNo'>, machineName?: string | null): string {
+/** Listede okunan satır: kod · saat · parça · hat · TEZGAH (masa KK1 tüm tezgahları görür; eski sunucu makineyi göndermez → satır makinesiz). */
+export function doffRowLabel(row: Pick<DoffListRow, 'code' | 'doffedAt' | 'pieceCount' | 'productionLineNo' | 'machine'>): string {
   const d = new Date(row.doffedAt);
   const saat = Number.isNaN(d.getTime()) ? '—' : d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-  const makine = machineName ? ` · ${machineName}` : '';
+  const makine = row.machine ? ` · ${row.machine.code}` : '';
   return `${row.code} · ${saat} · ${row.pieceCount} parça · hat ${row.productionLineNo}${makine}`;
 }

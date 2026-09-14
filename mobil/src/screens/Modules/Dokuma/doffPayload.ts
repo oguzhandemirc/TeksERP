@@ -98,9 +98,8 @@ export function classifyDoffFailure(error: unknown, fallback: string): DoffFailu
   return { kind: 'plain', message };
 }
 
-/** Sonuç toast'ı: koda BÜYÜK yer (etiket koddan basılır); replay'de "zaten kayıtlı". */
-export function doffResultFeedback(code: string, message: string | undefined): { title: string; subtitle: string } {
-  const replay = /zaten/i.test(message ?? '');
+/** Sonuç toast'ı: koda BÜYÜK yer (etiket koddan basılır); replay BAYRAKTAN (`idempotent`), metinden değil. */
+export function doffResultFeedback(code: string, replay: boolean): { title: string; subtitle: string } {
   return {
     title: code,
     subtitle: replay ? 'İndirme zaten kayıtlı (yeniden gönderim)' : 'İndirme kaydedildi',

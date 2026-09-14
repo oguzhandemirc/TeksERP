@@ -12,6 +12,7 @@ import { DuplicateRollsService } from "../services/duplicate-rolls.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { foldTypeSchema } from "../services/helpers/fold-type";
 import { matchesPermission } from "../middlewares/rbac.middleware";
+import { readDokumaEnabled } from "../services/system-setting.service";
 import { AppError } from "../utils/app-error";
 import { RollEntrySource, RollStatus } from "@prisma/client";
 import "../types/express-augment";
@@ -294,6 +295,14 @@ export class InventoryController {
   async createInitialEntry(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { confirmDuplicate, semiFinished, doffEventId, ...body } = initialEntrySchema.parse(req.body);
+      // Kapalı modülün YAZMA yolu yoktur, tarihsel bağ dahil: `doffEventId` yalnız dokuma
+      // açıkken kabul edilir (1e E1 hükmü 2026-09-14; kapı `requireDokumaEnabled` ile aynı gövde).
+      if (doffEventId && !(await readDokumaEnabled())) {
+        throw AppError.forbidden("Dokuma modülü bu kurulumda kapalı; indirme bağı verilemez. Sistem → Modüller bölümünden açılabilir.", {
+          code: "MODULE_DISABLED",
+          modul: "dokuma",
+        });
+      }
       // Yarı mamul kabulü AYRI bir yetenek yetkisi ister (2026-08-17 kullanıcı
       // kararı): yetkisi olmayan operatörde ekran bugünkü gibi kalır ve renk
       // seçemez. Kapı BURADA — istemcinin kutuyu gizlemesine güvenilmez.

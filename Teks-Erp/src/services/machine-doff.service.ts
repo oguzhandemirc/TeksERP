@@ -60,6 +60,8 @@ export const DOFF_SELECT = {
   revokeReason: true,
   createdAt: true,
   createdById: true,
+  // Masa KK1 tüm tezgahların indirmelerini görür — satır tezgahı ADIYLA söyler (E2).
+  machine: { select: { code: true, name: true } },
 } satisfies Prisma.DoffEventSelect;
 
 export type DoffEventDto = Prisma.DoffEventGetPayload<{ select: typeof DOFF_SELECT }>;
@@ -86,7 +88,10 @@ async function findByToken(clientToken: string): Promise<DoffEventDto | null> {
  * `counterAtDoff`/`doffedAt` kimlik DEĞİL (aynı form, düzeltilmiş sayaç
  * yeniden gönderilebilir).
  */
-async function resolveReplay(existing: DoffEventDto, input: OpenDoffInput): Promise<ApiResponse<DoffEventDto>> {
+/** `idempotent: true` = bu çağrıda YENİ indirme doğmadı (`InitialEntryResult` emsali; istemci METNE bakmaz). */
+export type OpenDoffResult = ApiResponse<DoffEventDto> & { idempotent?: true };
+
+async function resolveReplay(existing: DoffEventDto, input: OpenDoffInput): Promise<OpenDoffResult> {
   assertDoffReplayAlive(existing);
   assertReplayPayloadMatches(
     [
@@ -98,7 +103,7 @@ async function resolveReplay(existing: DoffEventDto, input: OpenDoffInput): Prom
     { doffEventId: existing.id },
   );
   const warnings = await deriveRunWarnings(existing.machineRunId);
-  return { success: true, data: existing, message: REPLAY_MESSAGE, ...(warnings.length ? { warnings } : {}) };
+  return { success: true, data: existing, message: REPLAY_MESSAGE, idempotent: true, ...(warnings.length ? { warnings } : {}) };
 }
 
 /** Makine aktif · hat aralıkta · koşum (verildiyse) aynı makinede ve canlı. */
@@ -135,7 +140,7 @@ async function resolveDoffContext(input: OpenDoffInput): Promise<{ machineCode: 
   return { machineCode: machine.code, warnings: run.weavingOrderId ? [] : [WARN_RUN_WITHOUT_ORDER] };
 }
 
-export async function openDoff(input: OpenDoffInput, userId?: string): Promise<ApiResponse<DoffEventDto>> {
+export async function openDoff(input: OpenDoffInput, userId?: string): Promise<OpenDoffResult> {
   // ① Replay — yaratmadan ÖNCE.
   if (input.clientToken) {
     const existing = await findByToken(input.clientToken);

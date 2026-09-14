@@ -48,10 +48,9 @@ export function useDoffSave(deps: SaveDeps) {
       ),
     onSuccess: (res) => {
       attemptRef.current = onDoffSucceeded();
-      const fb = doffResultFeedback(res.data.code, res.message);
-      // Replay dönüşü `warnings` taşımıyor (§3.8c A.3) — koşumsuzluk ekranın kendi bilgisinden.
-      const warnings = res.warnings ?? (deps.form.machineRunId ? [] : ['Koşum seçilmedi — bu indirme iş emri metresine GİRMİYOR.']);
-      setResult({ code: fb.title, subtitle: fb.subtitle, warnings });
+      const fb = doffResultFeedback(res.data.code, res.idempotent === true);
+      // Uyarılar (koşumsuz · işsiz koşum) SUNUCUDAN gelir, replay dahil (`deriveRunWarnings`); ekran uydurmaz.
+      setResult({ code: fb.title, subtitle: fb.subtitle, warnings: res.warnings ?? [] });
       Toast.show({ type: 'success', text1: fb.title, text2: fb.subtitle, visibilityTime: 6000 });
       deps.onSaved();
       invalidate();

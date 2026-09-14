@@ -306,6 +306,21 @@ async function main(): Promise<void> {
     );
   }
 
+  // ── §8 ⭐ KAPALI MODÜLÜN YAZMA YOLU YOKTUR — tarihsel bağ dahil (E1, 2026-09-14) ──
+  // `POST /rolls/initial-entry` `doffEventId` taşıyorsa dokuma bayrağı OKUNUR ve kapalıyken
+  // 403 MODULE_DISABLED (modul "dokuma"); KK1 rotası `requireDokumaEnabled` taşımaz (bayrak
+  // kapalı fabrikada KK1 bugünküyle birebir), kapı bu yüzden gövdededir.
+  const ctrl = fs.readFileSync(path.resolve(__dirname, "../src/controllers/inventory.controller.ts"), "utf8");
+  const e1Ok = (t: string): boolean => {
+    const i = t.indexOf("async createInitialEntry(");
+    const govde = i < 0 ? "" : t.slice(i, i + 3000);
+    const kapi = /if \(doffEventId && !\(await readDokumaEnabled\(\)\)\)[\s\S]{0,400}?code: "MODULE_DISABLED",\s*modul: "dokuma"/.exec(govde);
+    const cagri = govde.indexOf("createInitialEntry(", govde.indexOf("initialEntrySchema.parse"));
+    return !!kapi && cagri > 0 && kapi.index < cagri;
+  };
+  check("§8a ⭐ initial-entry: `doffEventId` verildiyse dokuma bayrağı okunur, kapalı → 403 MODULE_DISABLED (modul dokuma), servis çağrısından ÖNCE", e1Ok(ctrl));
+  check("§8b ⭐ sonda bellek içi: kapı düşürülünce §8a kırmızı", !e1Ok(ctrl.replace(/if \(doffEventId && !\(await readDokumaEnabled\(\)\)\)/, "if (false)")));
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);
 }

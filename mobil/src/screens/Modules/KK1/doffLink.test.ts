@@ -24,8 +24,9 @@ describe('doffLink — KK1 dokuma bağı (saf)', () => {
   });
 
   it('satır etiketi kod · saat · parça · hat (· makine)', () => {
-    const l = doffRowLabel({ code: 'DF1409260001', doffedAt: '2026-09-14T09:05:00.000Z', pieceCount: 2, productionLineNo: 1 }, 'Tezgah 3');
-    expect(l).toMatch(/^DF1409260001 · \d{2}:\d{2} · 2 parça · hat 1 · Tezgah 3$/);
+    const l = doffRowLabel({ code: 'DF1409260001', doffedAt: '2026-09-14T09:05:00.000Z', pieceCount: 2, productionLineNo: 1, machine: { code: 'T3', name: 'Tezgah 3' } });
+    expect(l).toMatch(/^DF1409260001 · \d{2}:\d{2} · 2 parça · hat 1 · T3$/);
     expect(doffRowLabel({ code: 'X', doffedAt: 'bozuk', pieceCount: 1, productionLineNo: 2 })).toBe('X · — · 1 parça · hat 2');
+    expect(doffRowLabel({ code: 'X', doffedAt: 'bozuk', pieceCount: 1, productionLineNo: 2, machine: null })).toBe('X · — · 1 parça · hat 2');
   });
 });

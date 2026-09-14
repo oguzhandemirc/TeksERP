@@ -8969,3 +8969,19 @@ boş → null · 409 sınıfları); mobil tsc 0 · eslint 0 (`useRunPanel` 112 s
 `role_template_catalog` · `swagger_spec` · `screen_catalog` · `dokuma_regime_gate` · `machine_run` yeşil.
 **Ölçülemedi:** gerçek tezgah üstünde koşum (sahada). Sürüm notu: tablet (yeni panel) + backend (guard genişlemesi;
 sözleşme kırmaz — eski istemci için ek izin yalnız GENİŞLEME).
+
+## 2026-09-14 — 47 İŞ 4 KALEMLERİ E1–E5 İNDİ: kapalı modülün yazma yolu yok (tarihsel bağ dahil), liste tezgahı söyler, replay bayraktan [ÇEKİRDEK]
+
+**E1 (1e hükmü):** `POST /rolls/initial-entry` `doffEventId` taşıyorsa `readDokumaEnabled` gövdede okunur; kapalı →
+403 `MODULE_DISABLED` (modul `dokuma`). Gerekçe: kapalı modülün yazma yolu yoktur — "bağ tarihsel, zararsız"
+değil; KK1 rotası kapı taşımadığı için (bayrak kapalı fabrikada KK1 birebir) kapı gövdede. Bekçi
+`test_dokuma_regime_gate §8a` (metin yüklemi: kapı servis çağrısından ÖNCE) + §8b bellek içi sonda.
+**E2:** `DOFF_SELECT`e `machine {code,name}` — masa KK1 bağlanmamış indirme listesinde tezgahı satırda görür
+(`doffRowLabel` artık satırın kendi `machine.code`unu basar; eski sunucu göndermezse makinesiz satır).
+**E3:** `useDoffMutations`teki bayat yorum ("replay warnings taşımıyor") ve uydurma yedek uyarı (ölü dal) kalktı —
+`deriveRunWarnings` koşumsuz/işsiz uyarısını replay dahil HER dönüşte veriyor, ekran uydurmaz.
+**E4:** Tezgah ekranı geri alma düğmesi de çevrimdışı kilitli (İNDİR ile tutarlı; mutation online-only).
+**E5:** replay tespiti `/zaten/` metin regex'i yerine `idempotent: true` bayrağı (`InitialEntryResult` emsali —
+"metni ilk düzenleyen kişi replay'i sessizce yeni kayıt saydırır"); backend `OpenDoffResult`, mobil `open` tipi.
+**Ölçüm:** backend tsc 0 · dokuma_regime_gate 38/0 · machine_doff_source 32/0 · loom_lists 12/0 · swagger 12/0;
+mobil tsc 0 · eslint 0 · jest Dokuma+KK1 36/36.
