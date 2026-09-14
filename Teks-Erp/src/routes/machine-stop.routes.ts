@@ -4,13 +4,14 @@
 // ⚠️ ÜÇ KAPI SIRAYLA (machine-run emsali): `verifyToken` → `requireDokumaEnabled`
 // → izin. İki izin ailesi: `loom:manual-entry` (aç · kapa · geri al — vardiya amiri
 // elle girişi) ve `loom:classify` (sınıfla · yeniden sınıfla — sebep KARARI).
-// Tablet dilimi indiğinde uçlar `requireAnyPermission(<web>, "mobile:tezgah-durus")`.
+// Tablet dilimi (2026-09-14): aç/kapa/sebep `requireAnyPermission(<web>, ...MOBILE_DOKUMA)`, geri alma
+// `mobile:dokuma-geri-al`; YENİDEN sınıflandırma web-only. `source` izinden türetilir (`stopSourceFor`).
 // Panel/tablet YÜZEYİ ayrı dilimdir; izinler SCREENLESS gerekçeli.
 // =============================================================================
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
+import { matchesPermission, requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { requireDokumaEnabled } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { classifyStop, closeManualStop, openManualStop, reclassifyStop, revokeStop } from "../services/machine-stop.service";
@@ -18,6 +19,15 @@ import { listMachineStops } from "../services/loom-list.service";
 
 const router = Router();
 router.use(verifyToken, requireDokumaEnabled);
+
+// Tablet: aç/kapa/sebep ekran izniyle (ayrı kod açılmadı — doff/koşum emsali), geri alma yetenek izniyle.
+const MOBILE_DOKUMA = ["mobile:dokuma"] as const;
+const MOBILE_DOKUMA_GERI_AL = ["mobile:dokuma-geri-al"] as const;
+
+/** Kim giriyor: web `loom:manual-entry` taşıyan VARDİYA AMİRİ, değilse tablet OPERATÖRÜ (1e hükmü 2026-09-14). */
+function stopSourceFor(req: Request): "OPERATOR" | "SUPERVISOR" {
+  return matchesPermission(req.user?.permissions ?? [], "loom:manual-entry") ? "SUPERVISOR" : "OPERATOR";
+}
 
 const listSchema = z
   .object({
@@ -39,7 +49,7 @@ const listSchema = z
  *       200: { description: Duruş listesi (geri alınmışlar hariç) }
  *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
  */
-router.get("/", requireAnyPermission("loom:manual-entry", "loom:classify"), async (req, res, next) => {
+router.get("/", requireAnyPermission("loom:manual-entry", "loom:classify", ...MOBILE_DOKUMA), async (req, res, next) => {
   try {
     const q = listSchema.parse(req.query);
     res.json(await listMachineStops({ machineId: q.machineId, openOnly: q.open === "true", queueOnly: q.queue === "true", limit: q.limit }));
@@ -75,10 +85,10 @@ const openSchema = z
  *       400: { description: Geçersiz sebep kodu / pasif makine }
  *       409: { description: STOP_ALREADY_OPEN · STOP_REVOKED · SHIFT_CANCELLED }
  */
-router.post("/", requirePermission("loom:manual-entry"), async (req, res, next) => {
+router.post("/", requireAnyPermission("loom:manual-entry", ...MOBILE_DOKUMA), async (req, res, next) => {
   try {
     const b = openSchema.parse(req.body ?? {});
-    res.status(201).json(await openManualStop({ ...b, source: "SUPERVISOR" }, req.user?.userId));
+    res.status(201).json(await openManualStop({ ...b, source: stopSourceFor(req) }, req.user?.userId));
   } catch (e) {
     next(e);
   }
@@ -98,7 +108,7 @@ const closeSchema = z.object({ endedAt: z.coerce.date().nullish() }).strict();
  *       400: { description: STOP_END_BEFORE_START }
  *       409: { description: STOP_ALREADY_CLOSED · STOP_REVOKED · SHIFT_CANCELLED }
  */
-router.post("/:id/close", requirePermission("loom:manual-entry"), async (req, res, next) => {
+router.post("/:id/close", requireAnyPermission("loom:manual-entry", ...MOBILE_DOKUMA), async (req, res, next) => {
   try {
     const id = assertValidUuid(req.params.id, "id");
     const b = closeSchema.parse(req.body ?? {});
@@ -128,11 +138,11 @@ const classifySchema = z
  *       400: { description: REASON_CODE_INVALID }
  *       409: { description: STOP_ALREADY_CLASSIFIED (yeniden sınıfla yolunu kullan) · STOP_REVOKED }
  */
-router.post("/:id/classify", requirePermission("loom:classify"), async (req, res, next) => {
+router.post("/:id/classify", requireAnyPermission("loom:classify", ...MOBILE_DOKUMA), async (req, res, next) => {
   try {
     const id = assertValidUuid(req.params.id, "id");
     const b = classifySchema.parse(req.body ?? {});
-    res.json(await classifyStop(id, b, req.user?.userId));
+    res.json(await classifyStop(id, b, req.user?.userId, stopSourceFor(req)));
   } catch (e) {
     next(e);
   }
@@ -183,7 +193,7 @@ const revokeSchema = z.object({ reason: z.string().trim().min(3, "Geri alma gere
  *       200: { description: Geri alındı }
  *       409: { description: STOP_ALREADY_REVOKED · SHIFT_CANCELLED }
  */
-router.post("/:id/revoke", requirePermission("loom:manual-entry"), async (req, res, next) => {
+router.post("/:id/revoke", requireAnyPermission("loom:manual-entry", ...MOBILE_DOKUMA_GERI_AL), async (req, res, next) => {
   try {
     const id = assertValidUuid(req.params.id, "id");
     const b = revokeSchema.parse(req.body ?? {});

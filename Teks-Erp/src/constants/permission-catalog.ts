@@ -273,6 +273,6 @@ export const PERMISSION_CATALOG = [
   { code: "mobile:dokuma", module: "MOBILE", category: "mobile", description: "Mobil — Tezgah (dokuma) ekranı: koşum · duruş · indirme; WEAVING istasyonunda oturum" },
   // Geri alma AYRI yetenek (2026-09-14, §3.9 J.3): indirmeyi geri almak defterden satır düşürür
   // (`loom:doff-revoke` tablet eşi; `mobile:tambur-duzelt` · `shipping:undo-dispatch` emsali).
-  { code: "mobile:dokuma-geri-al", module: "MOBILE", category: "mobile", description: "Tezgah ekranı — top indirmeyi ve koşumu geri alabilir (ayrı yetenek; ikisi de defterden satır düşürür)" },
+  { code: "mobile:dokuma-geri-al", module: "MOBILE", category: "mobile", description: "Tezgah ekranı — top indirmeyi, koşumu ve duruşu geri alabilir (ayrı yetenek; üçü de defterden satır düşürür)" },
   { code: "mobile:*", module: "MOBILE", category: "mobile", description: "Tüm mobil ekranlar (wildcard)" },
 ] as const satisfies readonly PermissionCatalogEntry[];

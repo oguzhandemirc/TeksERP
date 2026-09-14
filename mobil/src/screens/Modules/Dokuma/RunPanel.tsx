@@ -5,31 +5,16 @@ import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import AppModal from '../../../components/AppModal';
-import ModalTextInput from '../../../components/ModalTextInput';
 import { colors, spacing, radius, typography } from '../../../theme';
 import type { DoffEntry } from './useDoffEntry';
 import { useRunPanel } from './useRunPanel';
 import RunOpenModal from './RunOpenModal';
 import RunCloseModal from './RunCloseModal';
+import RevokeReasonModal from './RevokeReasonModal';
 
 function fmtTime(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? '—' : d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-}
-
-function RevokeModal({ runId, onClose, onConfirm, busy }: { runId: string | null; onClose: () => void; onConfirm: (reason: string) => void; busy: boolean }) {
-  const [reason, setReason] = useState('');
-  return (
-    <AppModal visible={runId !== null} onDismiss={onClose} position="center">
-      <Text style={styles.title}>Koşum geri alınsın mı?</Text>
-      <Text style={styles.meta}>Damga; randımanın paydasını değiştirir. Sebep zorunlu.</Text>
-      <ModalTextInput label="Sebep" value={reason} onChangeText={setReason} maxLength={300} autoFocus mode="outlined" />
-      <View style={styles.actions}>
-        <Button onPress={onClose} disabled={busy}>Vazgeç</Button>
-        <Button mode="contained" disabled={reason.trim().length === 0 || busy} loading={busy} onPress={() => onConfirm(reason.trim())}>Geri Al</Button>
-      </View>
-    </AppModal>
-  );
 }
 
 export default function RunPanel({ entry }: { entry: DoffEntry }) {
@@ -54,8 +39,10 @@ export default function RunPanel({ entry }: { entry: DoffEntry }) {
       </View>
       <RunOpenModal state={state} />
       <RunCloseModal state={state} />
-      <RevokeModal
-        runId={revokeId}
+      <RevokeReasonModal
+        visible={revokeId !== null}
+        title="Koşum geri alınsın mı?"
+        hint="Damga; randımanın paydasını değiştirir. Sebep zorunlu (en az 3 karakter)."
         busy={state.revoking}
         onClose={() => setRevokeId(null)}
         onConfirm={(reason) => {

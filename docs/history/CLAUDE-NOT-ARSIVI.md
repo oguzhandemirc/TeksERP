@@ -8985,3 +8985,30 @@ değil; KK1 rotası kapı taşımadığı için (bayrak kapalı fabrikada KK1 bi
 "metni ilk düzenleyen kişi replay'i sessizce yeni kayıt saydırır"); backend `OpenDoffResult`, mobil `open` tipi.
 **Ölçüm:** backend tsc 0 · dokuma_regime_gate 38/0 · machine_doff_source 32/0 · loom_lists 12/0 · swagger 12/0;
 mobil tsc 0 · eslint 0 · jest Dokuma+KK1 36/36.
+
+## 2026-09-14 — TABLET DURUŞ DİLİMİ İNDİ: Tezgah ekranında duruş bildir/çalıştı/sebep ata/geri al, gömülü zemin + zemin bekçisi [ÇEKİRDEK]
+
+**Kapsam (1e; §3.9 (2), 6e'nin Faz 1b uçları üstüne):** sağ bölmenin üstüne `StopPanel` — bu MAKİNEDEKİ açık duruş
+(geçen süre 30 sn'de bir tazelenir, sebep etiketi zeminden), **Duruş bildir** (`StopReasonModal`: `ReasonPresetPicker`
+MACHINE_STOP, sebep isteğe bağlı → `requiresReason` borcu ve "sebep ata" düğmesi), **Çalıştı** (kapat), **Geri al**
+(`RevokeReasonModal` — koşumla paylaşılan tek modal, sebep ≥ 3). Levent ayrı dilim.
+**Karar — izin kodu açılmadı:** 6e'nin `mobile:tezgah-durus` taslağı doğmadı; aç/kapa/sebep `mobile:dokuma` (katalog
+metni zaten "koşum · duruş · indirme"), geri alma `mobile:dokuma-geri-al` (üçü de defterden satır düşürür), yeniden
+sınıflandırma web-only `loom:classify`. `SCREENLESS` gerekçeleri tablet'i anar.
+**Karar — `source` izinden (1e):** route `stopSourceFor(req)` — `loom:manual-entry` taşıyan SUPERVISOR, değilse
+OPERATOR; `clientType`e bakılmaz (güvenlik sınırı değil, ama izin daha doğru kaynak). `classifyStop` de aynı kaynağı alır.
+**Karar — yuva sorulmaz:** `Machine.warpBeamSlots` kolonu ŞEMADA YOK (ölçüldü); `beamSlot` gönderilmez, NULL =
+"atanmamış" kovası (tasarım kuralı tahminle yazmayı yasaklıyor). F4 şema penceresinde alan doğar.
+**Gömülü zemin borcu kapandı:** `useReasonPresets` MACHINE_STOP dalı `return []` idi ("ekranı açan dilimde onunla gelir"
+notuyla) → `constants/loomStopReasons.ts` (23 satır, sunucu `MACHINE_STOP_REASONS` ile birebir kod/etiket/sıra).
+Yeni DB'siz bekçi `test_loom_stop_zemin` (§1 körlük · §2 küme+sıra · §3 etiket · §4 hook dalı · §5 bellek içi üç bozma).
+`dokuma.md`deki `ReasonPresetKind.LOOM_STOP` adı YANLIŞTI (enum `MACHINE_STOP`) — düzeltildi.
+**409 adıyla (1e notu):** `SHIFT_CANCELLED`/`SHIFT_SEALED` → "vardiya iptal/mühürlü" başlığı; `CLIENT_TOKEN_COLLISION`
+→ modal "yeni duruş olarak aç" (token sıfırlanır). Kuyruk yok (doff/koşumla aynı karar).
+**Ölçüm:** `stopPayload.test.ts` 6 vaka; mobil tsc 0 · eslint 0 · jest Dokuma 36/36 · tavan altında; backend tsc 0;
+`test_loom_stop_zemin` 12/0 (diskte sonda: MOLA silindi → §2a/§2b/§3 ❌, geri yüklendi sha eşit) · machine_stop_manual 33/0
+(sonda DB'sine sebep kataloğu uzlaştırması gerekti — `reconcileReasonPresets`) · route_auth_coverage 15/0 ·
+mobile_screen_permissions 6/0 · permission_catalog 24/0 · role_template 21/0 · swagger 12/0 · screen_catalog 37/0 ·
+dokuma_regime_gate 38/0 · reason_preset_kind_parity 43/0 · production_regime_gate 40/0 · audit_labels 22/0 · 12 mandal
+yeşil (identity_ledger ilk koşumda harita satırını modul-bayrak bölümüne koyduğumu yakaladı → dokuma bölümüne taşındı).
+**Ölçülemedi:** gerçek tezgahta duruş (sahada); mühürlü vardiya (`SHIFT_SEALED` henüz şemada yok — kod adıyla hazır).
