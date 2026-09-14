@@ -198,7 +198,7 @@ export function korumasizKureselYazim(ad: string, kaynak: string): string[] {
 // taşındı, ama o try §5'in mock try'ıydı — bayrak §1–§4'ü geçti ve CI'da §4 kırmızı
 // verdi. ⇒ *"try'dan önce" bir KONUM ölçüsüdür; hangi try'ın o yazımı KORUDUĞU ayrı bir
 // sorudur ve otomatik taşıma onu bilemez.*
-const KURESEL_YAZIM_TABAN = 3;
+const KURESEL_YAZIM_TABAN = 0;
 {
   const korumasiz: string[] = [];
   let parseEdilen = 0;
