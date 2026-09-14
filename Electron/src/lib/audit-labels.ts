@@ -662,6 +662,7 @@ export const ENUM_LABELS: Record<string, string> = {
   BOUNCE_CANCEL: "Karşılıksız stornosu",
   RETURN_CANCEL: "İade stornosu",
   PAY_CANCEL: "Ödeme stornosu",
+  DEPOSIT_CANCEL: "Bankaya verme stornosu",
   // ── Çek/senet türü (ChequeDocType)
   CHEQUE: "Çek",
   PROMISSORY_NOTE: "Senet",

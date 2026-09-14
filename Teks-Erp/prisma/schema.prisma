@@ -8855,6 +8855,9 @@ enum ChequeEventType {
   RETURN_CANCEL
   /// Ödeme stornosu: PAY'in düştüğü para AYNI hesaba geri girer (+), cari oynamaz.
   PAY_CANCEL
+  /// Bankaya verme stornosu: yanlış bankaya verilen çek tahsil edilmeden portföye döner
+  /// (AT_BANK → DEPOSIT'in `fromStatus`u); para OYNAMAZ, başlık bankası düşer.
+  DEPOSIT_CANCEL
 }
 
 /// Çekin durum defteri — APPEND-ONLY (`CariTransaction` emsali: `updatedAt` YOK).

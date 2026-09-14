@@ -49,6 +49,15 @@ describe("reversalSummary", () => {
     expect(text).toContain('"Verildi"');
   });
 
+  it("bankaya verme stornosu bankayı ADIYLA söyler, para oynamayacağını ve portföye dönüşü yazar", () => {
+    const text = reversalSummary("DEPOSIT", ev({ type: "DEPOSIT", fromStatus: "PORTFOLIO", toStatus: "AT_BANK", bankAccount: { id: "b", name: "Ziraat" } }), row);
+    expect(text).toContain('"Ziraat" banka hesabından');
+    expect(text).toContain("para ve cari defter oynamayacak");
+    expect(text).toContain('"Elimizde"');
+    // Banka okunamasa da cümle üretilir — para stornolarından farklı (orada null).
+    expect(reversalSummary("DEPOSIT", ev({ type: "DEPOSIT", fromStatus: "PORTFOLIO", toStatus: "AT_BANK" }), row)).toContain("Elimizde");
+  });
+
   it("hesabı okunamayan para stornosu null → ekran sunucuya bırakır", () => {
     expect(reversalSummary("PAY", ev({}), row)).toBeNull();
     expect(reversalSummary("COLLECT", ev({ type: "COLLECT", fromStatus: "AT_BANK" }), row)).toBeNull();

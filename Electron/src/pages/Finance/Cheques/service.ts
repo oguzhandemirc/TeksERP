@@ -51,7 +51,9 @@ export type ChequeEventType =
   | "ENDORSE_CANCEL"
   | "BOUNCE_CANCEL"
   | "RETURN_CANCEL"
-  | "PAY_CANCEL";
+  | "PAY_CANCEL"
+  // 2026-09-14: bankaya verme stornosu (AT_BANK → PORTFOLIO, para oynamaz).
+  | "DEPOSIT_CANCEL";
 
 /** Decimal kolonun JSON karşılığı — number DA string DE gelebilir (dosya başlığı). */
 export type DecimalLike = number | string;
@@ -252,7 +254,8 @@ export type ChequeReversalPath =
   | "endorse-cancel"
   | "bounce-cancel"
   | "return-cancel"
-  | "pay-cancel";
+  | "pay-cancel"
+  | "deposit-cancel";
 
 export async function chequeReverse(id: string, path: ChequeReversalPath, reason: string): Promise<MutationResult> {
   const res = await apiClient.post(`/api/finance/cheques/${id}/${path}`, { reason });

@@ -166,6 +166,7 @@ export function ChequeActionDialog({ row, def, open, onOpenChange, onDone }: Pro
         case "bounce-cancel":
         case "return-cancel":
         case "pay-cancel":
+        case "deposit-cancel":
           // ⚠️ Yalnız `reason` (zorunlu) — hesap/cari/tarih GÖNDERİLMEZ, backend
           // terslenen ileri olaydan çözer; ters satır BUGÜNE düşer.
           return chequeReverse(row.id, def.action, reason.trim());

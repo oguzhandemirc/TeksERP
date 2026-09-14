@@ -39,6 +39,7 @@ export type ChequeAction =
   | "return-cancel"
   | "pay"
   | "pay-cancel"
+  | "deposit-cancel"
   | "cancel";
 
 export interface ChequeActionDef {
@@ -184,6 +185,20 @@ export const CHEQUE_ACTIONS: readonly ChequeActionDef[] = [
     needs: "account",
     blockedByAllocation: false,
     destructive: false,
+  },
+  {
+    // Yanlış bankaya verilen çek tahsil edilmeden portföye döner (2026-09-14).
+    // Para OYNAMAZ (bankaya verme de oynatmamıştı); hangi bankadan geri alındığı olay
+    // defterinde kalır, başlıktaki banka düşer. Tahsil edilmişse önce tahsil stornosu.
+    action: "deposit-cancel",
+    label: "Bankaya Vermeyi Geri Al",
+    effect: `BANKAYA VERME STORNOSU — çek "portföyde" durumuna döner, başlıktaki banka kalkar; para ve cari defter OYNAMAZ. ${REVERSAL_TAIL}`,
+    kind: "RECEIVED",
+    from: ["AT_BANK"],
+    needs: "reason",
+    blockedByAllocation: false,
+    destructive: true,
+    reverses: "DEPOSIT",
   },
   {
     action: "pay-cancel",

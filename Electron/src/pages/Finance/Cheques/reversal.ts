@@ -65,6 +65,11 @@ export function reversalSummary(
     }
     case "RETURN":
       return `İadenin ${amount} tutarlı cari satırı ters kayıtla kapanacak; ${back}`;
+    case "DEPOSIT": {
+      // Para oynamaz — cümle tutar değil BANKA söyler; banka okunamıyorsa yine anlamlı.
+      const bank = event.bankAccount ? `"${event.bankAccount.name}" banka hesabından geri alınacak, ` : "";
+      return `Çek ${bank}başlıktaki banka kalkacak; para ve cari defter oynamayacak; ${back}`;
+    }
     default:
       return null;
   }

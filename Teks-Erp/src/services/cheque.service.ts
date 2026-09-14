@@ -36,6 +36,8 @@
 //   BOUNCE_CANCEL  → BOUNCE'un bir ya da iki satırının tersi (CHEQUE_BOUNCE_CANCEL)
 //   RETURN_CANCEL  → RETURN'ün satırının tersi (CHEQUE_RETURN_CANCEL)
 //   PAY_CANCEL     → YALNIZ banka/kasa +amount; PAY cari yazmamıştı, tersi de yazmaz
+//   DEPOSIT_CANCEL → hiçbir defter oynamaz (DEPOSIT de oynatmamıştı); durum PORTFOLIO,
+//                    başlık bankası düşer — dönem kapısı/8028 kilidi ÇAĞRILMAZ
 //
 // ⚠️ KASA/BANKA BAKİYESİNİN ÜÇÜNCÜ YAZARI BURASIDIR (Payment · CashTransaction ·
 // ChequeEvent). `scripts/test_consistency.ts` §23/§24 formülü bu üçünü BİRLİKTE
@@ -150,6 +152,7 @@ const REVERSAL_HINT: Partial<Record<ChequeStatus, string>> = {
   BOUNCED: '"Karşılıksızı Geri Al" (karşılıksız stornosu)',
   RETURNED: '"İadeyi Geri Al" (iade stornosu)',
   PAID: '"Ödemeyi Geri Al" (ödeme stornosu)',
+  AT_BANK: '"Bankaya Vermeyi Geri Al" (bankaya verme stornosu)',
 };
 
 /** Belge türü etiketi — hata mesajı "çek" mi "senet" mi demeli. */
@@ -1763,6 +1766,52 @@ export class ChequeService {
       success: true,
       data: { id: result.id, docNo: result.docNo },
       message: `${result.docNo} ödeme stornosu yapıldı — para hesaba geri girdi, çek ${CHEQUE_STATUS_LABEL[result.backTo]} durumuna döndü.`,
+    };
+  }
+
+  /**
+   * BANKAYA VERME STORNOSU — yanlış bankaya verilen çek tahsil edilmeden portföye döner.
+   *
+   * Beş kardeşiyle aynı kalıp (tipli olay, ileri satır silinmez, ters kayıt bugüne, durum
+   * DEPOSIT'in `fromStatus`una, atomik claim ikinci stornoyu keser). Farkı: DEPOSIT para
+   * oynatmamıştı ⇒ bakiye DEĞİŞMEZ, `assertCashPeriodOpenTx`/8028 kilidi ÇAĞRILMAZ. Başlık
+   * bankası DEPOSIT'te doğmuştu, düşer. Tahsil edilmiş çekte 409 bu metottan değil
+   * claim'den doğar (COLLECT → COLLECTED); COLLECT_CANCEL ile AT_BANK'a dönen çek için
+   * en yeni DEPOSIT olayı okunur ve storno MEŞRUDUR.
+   */
+  async cancelDeposit(id: string, reason: string, userId?: string): Promise<ApiResponse<{ id: string; docNo: string }>> {
+    const why = requireReversalReason(reason, "Bankaya verme stornosu");
+    const now = new Date();
+    const label = "bankaya verme stornosu";
+    const result = await prisma.$transaction(async (tx) => {
+      const row = await this.loadForTransition(tx, id, [ChequeStatus.AT_BANK], ChequeKind.RECEIVED, label);
+      const event = await loadForwardEventTx(tx, row, ChequeEventType.DEPOSIT, label);
+      await this.claimTx(tx, row, event.fromStatus, { bankAccountId: null });
+      await writeEventTx(tx, {
+        chequeId: row.id,
+        type: ChequeEventType.DEPOSIT_CANCEL,
+        fromStatus: ChequeStatus.AT_BANK,
+        toStatus: event.fromStatus,
+        eventDate: now,
+        // Hangi bankadan geri alındığı defterde kalsın — başlıktan silindi.
+        bankAccountId: event.bankAccountId,
+        notes: why,
+        userId,
+      });
+      return { id: row.id, docNo: row.docNo, backTo: event.fromStatus };
+    });
+
+    void AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "CHEQUE",
+      recordId: id,
+      newData: { event: "DEPOSIT_CANCEL", docNo: result.docNo, reason: why },
+    });
+    return {
+      success: true,
+      data: { id: result.id, docNo: result.docNo },
+      message: `${result.docNo} bankaya verme stornosu yapıldı — para oynamadı, çek ${CHEQUE_STATUS_LABEL[result.backTo]} durumuna döndü.`,
     };
   }
 

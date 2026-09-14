@@ -110,4 +110,28 @@ router.post("/:id/pay-cancel", requirePermission("finance:cheque"), async (req, 
   }
 });
 
+/**
+ * @openapi
+ * /api/finance/cheques/{id}/deposit-cancel:
+ *   post:
+ *     tags: [Finance]
+ *     summary: Bankaya verme stornosu (yanlış bankaya verilen çek tahsil edilmeden portföye döner)
+ *     description: >
+ *       Para OYNAMAZ (DEPOSIT de oynatmamıştı); DEPOSIT_CANCEL olayı hangi bankadan geri
+ *       alındığını taşır, başlık bankası düşer, durum PORTFOLIO'ya döner. Sebep ZORUNLU.
+ *       Tahsil edilmiş çekte 409 (önce tahsil stornosu).
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Storno yapıldı }
+ *       409: { description: Çek AT_BANK değil / yarış }
+ */
+router.post("/:id/deposit-cancel", requirePermission("finance:cheque"), async (req, res, next) => {
+  try {
+    const b = reversalBody.parse(req.body ?? {});
+    res.json(await chequeService.cancelDeposit(req.params.id as string, b.reason, req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
 export default router;

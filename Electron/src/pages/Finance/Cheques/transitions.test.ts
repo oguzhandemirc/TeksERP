@@ -40,6 +40,8 @@ const REVERSALS: ReadonlyArray<{ action: string; from: ChequeStatus; kind: "RECE
   { action: "bounce-cancel", from: "BOUNCED", kind: "RECEIVED", reverses: "BOUNCE" },
   { action: "return-cancel", from: "RETURNED", kind: null, reverses: "RETURN" },
   { action: "pay-cancel", from: "PAID", kind: "ISSUED", reverses: "PAY" },
+  // AT_BANK terminal değil: tek çıkış değil, tahsil/ciro/karşılıksızın YANINDA durur.
+  { action: "deposit-cancel", from: "AT_BANK", kind: "RECEIVED", reverses: "DEPOSIT" },
 ];
 
 describe("çek durum makinesi aynası (transitions.ts)", () => {
@@ -111,6 +113,17 @@ describe("çek durum makinesi aynası (transitions.ts)", () => {
         }
       }
     }
+  });
+
+  it("bankadaki (alınan) çekte 'Bankaya Vermeyi Geri Al' var; portföyde/ciroda/verilende YOK (kesin 409 sızmaz)", () => {
+    expect(availableActions({ kind: "RECEIVED", status: "AT_BANK" }).map((a) => a.action)).toContain("deposit-cancel");
+    for (const status of ["PORTFOLIO", "ENDORSED", "COLLECTED"] as const) {
+      expect(availableActions({ kind: "RECEIVED", status }).map((a) => a.action)).not.toContain("deposit-cancel");
+    }
+    expect(availableActions({ kind: "ISSUED", status: "AT_BANK" }).map((a) => a.action)).not.toContain("deposit-cancel");
+    const def = CHEQUE_ACTIONS.find((a) => a.action === "deposit-cancel")!;
+    expect(def.needs).toBe("reason");
+    expect(def.blockedByAllocation).toBe(false);
   });
 
   it("kapama engeli STORNOYA uygulanmaz, iptale uygulanır (backend paritesi)", () => {

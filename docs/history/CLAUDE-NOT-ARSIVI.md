@@ -153,7 +153,8 @@ geri yön) · `BORC` (ne doğuş ne terminal: ileri yol var, geri yol YOK — mu
 `DEPOSIT_CANCEL`i yok.** Diğer BEŞ eylem değerinin (COLLECT · ENDORSE · BOUNCE · RETURN ·
 PAY) hepsinin `*_CANCEL` çifti var; AT_BANK'tan PORTFOLIO'ya dönüş yalnız `COLLECT_CANCEL`
 üzerinden oluyor (`backTo = collectEvent.fromStatus`) ⇒ yanlış bankaya verilen çek tahsil
-edilmeden geri alınamıyor. Borç görünür yazıldı, sahibi finans alanı.
+edilmeden geri alınamıyor. Borç görünür yazıldı, sahibi finans alanı. **GEÇERSİZ → 2026-09-14:
+`DEPOSIT_CANCEL` indi (aşağıdaki not), BORC satırı silindi, çift kuruldu.**
 
 **Sondalar (beş sentetik + üç uçtan uca).** Sentetikler saf ölçüm fonksiyonunu
 yanlışlar; uçtan uca olanlar gerçek şemayı: `SackWeighingKind`e beyansız değer ekle →
@@ -9429,3 +9430,11 @@ biçim eklendi ve yeni biçimin negatif sondası aynı commit'te görüldü.
 **Sapmalar §11 tanımından:** "bugün sarılan" sekmesi READY listesinin cihaz gününe süzülmüş hâli (sunucuda tarih süzgeci yok, 50 satır) · `startedAt`/`sectionCount`/`endsPerSection` tablet formunda yok (sunucu varsayılanı) · raşel "N adet" sayacı yok (panelde de yok).
 **[PROFİL]** Referans fabrikada `devere.enabled` KAPALI ⇒ kart yok, uç 403; süpervizör şablonu `mobile:devere` + `mobile:devere-iptal` taşır, operatör paketi `MOBILE_DEVERE` yalnız `mobile:devere`.
 **Bekçi:** `test_warp_beam_tablet` (29; üç sonda) · mobil `beamPayload.test`/`devereAttempt.test` (25; altı sonda: token taze/yapışkan · iade>çıkış · fason satır · `SCREEN_MODULE` silme · DEFAULT true) · `screenModules.test`/`useVisibleScreens.test` Devere kolu · `test_mobil_enum_aynasi` beyanı +3 · `test_mobile_screen_permissions` +2 muaf.
+
+## 2026-09-14 — ÇEK BANKAYA VERME STORNOSU (`DEPOSIT_CANCEL`): ChequeEventType'ın son çiftsiz eylemi kapandı (6e; hüküm 1e) [ÇEKİRDEK]
+
+**Bulgu (d9 §3e, 2026-09-14):** DEPOSIT tek çiftsiz eylemdi; AT_BANK → PORTFOLIO yalnız `COLLECT_CANCEL` üzerinden ⇒ yanlış bankaya verilen çek tahsil edilmeden geri alınamıyordu. Kullanıcı: "şimdi yap".
+**Hükümler (1e):** H1 sebep gövdesi beş stornoyla ORTAK (`reversalBody` min(1)) — "≥3" genel şablondu, tek sözleşme daha değerli · H2 izin **`finance:cheque`** ("ileri geçişi yapan tersini de yapar"); para oynamadığı için SoD gerekmez, yeni kod açılmadı · ek ① banka bakiyesi DEĞİŞMEZ iddiası bakiye OKUNARAK ölçülür (yalnız `sign:0` sabitine güvenilmez) · ek ② "eski istemci ne yapar" commit mesajında.
+**Tasarım:** `cancelDeposit` = en yeni storno kalıbı (`cancelPay`): `requireReversalReason` → `loadForTransition([AT_BANK], RECEIVED)` → `loadForwardEventTx(DEPOSIT)` fail-closed → `claimTx(row, event.fromStatus, { bankAccountId: null })` (başlık bankası DEPOSIT'te doğdu, düşer) → `DEPOSIT_CANCEL` olayı bugüne, `bankAccountId` = hangi bankadan geri alındığı. **Para hareketi YOK ⇒ `assertCashPeriodOpenTx`/8028 kilidi ÇAĞRILMAZ** (DEPOSIT de çağırmıyordu); `CHEQUE_EVENT_CASH_EFFECT.DEPOSIT_CANCEL = {sign:0, reversal:true}`. Tahsil edilmiş çekte 409 metottan değil claim'den doğar (COLLECTED); `COLLECT_CANCEL` ile AT_BANK'a dönen çekte en yeni DEPOSIT okunur, storno MEŞRU (ölçüldü §11n). `REVERSAL_HINT.AT_BANK` eklendi. Route `cheque-reversal.routes.ts` `POST /:id/deposit-cancel`. Migration `20260914140000` tek ifade `ADD VALUE IF NOT EXISTS`. Panel: `deposit-cancel` eylemi (AT_BANK, alınan çek; önizleme "X banka hesabından geri alınacak … para ve cari defter oynamayacak"), etiketler, audit etiketi. Mobil dokunuş 0 (ChequeEventType tablette aynalı değil).
+**Eski istemci (panel 1.3.1):** yeni olay türünü `EVENT_LABEL[type]` sözlüğünde bulamaz, etiket boş basar, TypeError yok; referans fabrikada finans KAPALI; backend+panel 1.3.2 aynı pencerede ⇒ minVersion HAYIR.
+**Bekçi:** `test_cheque_reversal §11` (a–p: PORTFOLIO'ya dönüş · başlık bankası null · bakiye okunarak sabit · olay bankayla ve sebep notta · ileri satır aynen · cari satır yok · bugüne · sebep zorunlu · ikinci storno 409 · yeniden verilebilir · tahsilden sonra 409 yol gösterir · COLLECT_CANCEL sonrası meşru · yön kapısı) + §10e DEPOSIT; dört negatif sonda ⑪–⑭ dosya başlığında; `test_defter_ters_yol` §3e borç 1 → 0 (çift beyanı geri alınınca ❌ ölçüldü). Panel `transitions.test`/`reversal.test` +2.

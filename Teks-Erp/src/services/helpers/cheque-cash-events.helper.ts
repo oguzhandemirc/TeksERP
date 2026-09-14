@@ -29,6 +29,7 @@ export const CHEQUE_EVENT_CASH_EFFECT = {
   BOUNCE_CANCEL: { sign: 0, reversal: true },
   RETURN_CANCEL: { sign: 0, reversal: true },
   PAY_CANCEL: { sign: 1, reversal: true },
+  DEPOSIT_CANCEL: { sign: 0, reversal: true },
 } as const satisfies Record<ChequeEventType, CashEffect>;
 
 const ALL_TYPES = Object.keys(CHEQUE_EVENT_CASH_EFFECT) as ChequeEventType[];

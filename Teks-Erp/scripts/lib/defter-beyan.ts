@@ -138,9 +138,6 @@ export const CIFT_DISI_DEGERLER: CiftDisiDeger[] = [
     gerekce: "verilen çekin deftere GİRİŞİ — `fromStatus: null`, `RECEIVE` ile aynı satırın diğer dalı" },
   { enumAdi: "ChequeEventType", deger: "CANCEL", sinif: "TERMINAL",
     gerekce: "`toStatus: CANCELLED` — değerin KENDİSİ geri yön; iptalin iptali yok (terminal durum)" },
-  { enumAdi: "ChequeEventType", deger: "DEPOSIT", sinif: "BORC",
-    gerekce: "PORTFOLIO → AT_BANK ileri geçişi; `DEPOSIT_CANCEL` YOK — ölçüldü 2026-09-14: ChequeEventType'ın diğer BEŞ eylem değerinin (COLLECT · ENDORSE · BOUNCE · RETURN · PAY) hepsinin `*_CANCEL` çifti var, DEPOSIT tek istisna. AT_BANK'tan PORTFOLIO'ya dönüş yalnız `COLLECT_CANCEL` üzerinden (cheque.service, `backTo = collectEvent.fromStatus`) ⇒ yanlış bankaya verilen çek tahsil edilmeden geri alınamıyor",
-    sahibi: "9b — finans alanı (`docs/kurallar/finans.md`)" },
   { enumAdi: "ShipmentEventType", deger: "PLANNED", sinif: "DOGUS",
     gerekce: "sevkiyatın DOĞUŞ olayı — `fromStatus: null` (shipping.service, kaynak şerhi \"DOĞUŞ OLAYI\"); tersi `CANCELLED`, karşı olay değil terminal" },
   { enumAdi: "ShipmentEventType", deger: "CANCELLED", sinif: "TERMINAL",
@@ -198,7 +195,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   D("ChequeEvent", "çek durum defteri; her terminalden tek çıkış",
     { tur: "ENUM_CIFTI", enumAdi: "ChequeEventType", ciftler: [
       ["COLLECT", "COLLECT_CANCEL"], ["ENDORSE", "ENDORSE_CANCEL"], ["BOUNCE", "BOUNCE_CANCEL"],
-      ["RETURN", "RETURN_CANCEL"], ["PAY", "PAY_CANCEL"],
+      ["RETURN", "RETURN_CANCEL"], ["PAY", "PAY_CANCEL"], ["DEPOSIT", "DEPOSIT_CANCEL"],
     ] },
     [{ dosya: "src/services/cheque.service.ts", sembol: "writeEventTx" }],
     ["src/services/cheque.service.ts"]),

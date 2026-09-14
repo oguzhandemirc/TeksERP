@@ -73,6 +73,7 @@ export const EVENT_LABEL: Record<ChequeEventType, string> = {
   BOUNCE_CANCEL: "Karşılıksız stornosu — cari satırları terslendi",
   RETURN_CANCEL: "İade stornosu — cari satırı terslendi",
   PAY_CANCEL: "Ödeme stornosu — para hesaba geri girdi",
+  DEPOSIT_CANCEL: "Bankaya verme stornosu — çek portföye döndü, para oynamadı",
 };
 
 /** Olay noktasının rengi — zaman çizelgesinde göz taraması için. */
@@ -92,6 +93,7 @@ export const EVENT_DOT: Record<ChequeEventType, string> = {
   BOUNCE_CANCEL: "bg-muted-foreground",
   RETURN_CANCEL: "bg-muted-foreground",
   PAY_CANCEL: "bg-muted-foreground",
+  DEPOSIT_CANCEL: "bg-muted-foreground",
 };
 
 /** Cari tarafın görünen adı — `../service.partyName`'in null-güvenli ikizi. */

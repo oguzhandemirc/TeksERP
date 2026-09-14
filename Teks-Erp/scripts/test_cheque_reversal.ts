@@ -26,6 +26,10 @@
 //      stornosu GEÇER (kapalı dönem fotoğrafı değişmez)
 //   §9 Kapılar: sebep zorunlu · yön kapısı · canlı durumda 409 · yol gösteren mesaj
 //   §10 ⭐ TEK KAYNAK TRIPWIRE: çek-olayı para kümesi yalnız helper'da; enum ↔ tablo
+//   §11 ⭐ BANKAYA VERME STORNOSU (2026-09-14): PORTFOLIO'ya döner · başlık bankası düşer ·
+//       banka BAKİYESİ okunarak DEĞİŞMEDİ · DEPOSIT satırı durur, DEPOSIT_CANCEL bankayla ·
+//       ters kayıt bugüne · sebep zorunlu · ikinci storno 409 · tahsilden sonra 409 ·
+//       COLLECT_CANCEL → AT_BANK → storno MEŞRU · yeniden bankaya verilebilir
 //
 // NEGATİF SONDA (2026-09-11, son dosyayla; her biri md5 ile birebir geri alındı):
 //   ① writeChequeReversalTx aynı tarafı yazdı (borç↔alacak çevrilmedi) → 15 ❌
@@ -40,6 +44,10 @@
 //   ⑨ cancelPay başlık bankasını geri kaldırmadı → 1 ❌ (§5i; ilk turda YEŞİL
 //      kalmıştı, kontrol bu sonda üzerine eklendi)
 //   ⑩ ters satır reversesTxnId'siz yazıldı → 5 ❌ + ÇÖKTÜ
+//   NEGATİF SONDA §11 (2026-09-14, ölçüldü): ⑪ cancelDeposit `requireReversalReason`
+//      yerine ham `reason` → §11g ❌ · ⑫ claim'den `bankAccountId: null` düşürüldü →
+//      §11b+§11n ❌ · ⑬ defter-beyan çifti geri alındı → test_defter_ters_yol §3e ❌ (beyansız
+//      DEPOSIT_CANCEL) · ⑭ olaya `bankAccountId` yazılmadı → §11d+§11n ❌
 // =============================================================================
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -441,7 +449,7 @@ async function main(): Promise<void> {
     "§10d helper tablosu ChequeEventType ile birebir",
     JSON.stringify(Object.keys(CHEQUE_EVENT_CASH_EFFECT).sort()) === JSON.stringify(enumValues),
   );
-  const forwardWithReversal = ["COLLECT", "ENDORSE", "BOUNCE", "RETURN", "PAY"];
+  const forwardWithReversal = ["COLLECT", "ENDORSE", "BOUNCE", "RETURN", "PAY", "DEPOSIT"];
   check(
     "§10e her ileri olayın *_CANCEL tersi enum'da",
     forwardWithReversal.every((t) => enumValues.includes(`${t}_CANCEL` as ChequeEventType)),
@@ -451,6 +459,49 @@ async function main(): Promise<void> {
     "§10f çekin cari yazan ileri kaynaklarının tipli tersi enum'da",
     ["CHEQUE_ENDORSE", "CHEQUE_BOUNCE", "CHEQUE_RETURN"].every((s) => sources.includes(`${s}_CANCEL`)),
   );
+
+  // ── §11 BANKAYA VERME STORNOSU ──────────────────────────────────────────
+  const c11 = await newCheque({ kind: "RECEIVED", cariId: musteri, amount: 700, dueDate: due });
+  const bank11 = await prisma.bankAccount.create({ data: { code: `${TAG}-BN2`, name: `${TAG} Banka 2`, currency: "TRY" }, select: { id: true } });
+  bankIds.push(bank11.id);
+  await chequeService.deposit(c11, { bankAccountId: bank.id });
+  const bankBefore11 = await bankBalance(bank.id);
+  const txnsBefore11 = await txnCount(c11);
+  const depositBefore11 = await prisma.chequeEvent.findFirst({ where: { chequeId: c11, type: ChequeEventType.DEPOSIT }, select: { id: true, bankAccountId: true, toStatus: true } });
+  check("§11a zemin: bankaya verildi, başlıkta banka", (await header(c11)).status === "AT_BANK" && (await header(c11)).bankAccountId === bank.id);
+  const r11 = await chequeService.cancelDeposit(c11, "yanlış bankaya verildi");
+  {
+    const h = await header(c11);
+    const ev = await latestEvent(c11, ChequeEventType.DEPOSIT_CANCEL);
+    check("§11b ⭐ durum PORTFOLIO, başlık bankası DÜŞTÜ", h.status === "PORTFOLIO" && h.bankAccountId === null, `${h.status}/${h.bankAccountId}`);
+    check("§11c ⭐ banka bakiyesi OKUNARAK değişmedi (sign:0 sabitine güvenilmedi)", (await bankBalance(bank.id)).equals(bankBefore11), `${bankBefore11} → ${await bankBalance(bank.id)}`);
+    check("§11d olay AT_BANK → PORTFOLIO, hangi bankadan geri alındığını taşıyor, sebep notta", ev?.fromStatus === "AT_BANK" && ev?.toStatus === "PORTFOLIO" && ev?.bankAccountId === bank.id && ev?.notes === "yanlış bankaya verildi");
+    const depositAfter = await prisma.chequeEvent.findUnique({ where: { id: depositBefore11!.id }, select: { bankAccountId: true, toStatus: true } });
+    check("§11e ileri DEPOSIT satırı NE SİLİNDİ NE DEĞİŞTİ", depositAfter?.bankAccountId === depositBefore11?.bankAccountId && depositAfter?.toStatus === depositBefore11?.toStatus);
+    check("§11f cari deftere satır yazılmadı (DEPOSIT de yazmamıştı)", (await txnCount(c11)) === txnsBefore11);
+    const evDate = await prisma.chequeEvent.findFirst({ where: { chequeId: c11, type: ChequeEventType.DEPOSIT_CANCEL }, select: { eventDate: true } });
+    check("§11h ters kayıt BUGÜNE", evDate != null && evDate.eventDate.getTime() >= startedAt.getTime() - 1000);
+    check("§11i mesaj durumu adıyla söylüyor", /portföyde/i.test(r11.message ?? "") && /para oynamadı/i.test(r11.message ?? ""));
+  }
+  check("§11g sebep zorunlu", /sebep zorunlu/i.test(await expectError(() => chequeService.cancelDeposit(c11, "  "))));
+  check("§11j ikinci storno 409 (çek artık portföyde)", /portföyde/i.test(await expectError(() => chequeService.cancelDeposit(c11, "x"))));
+  await chequeService.deposit(c11, { bankAccountId: bank11.id });
+  check("§11k yeniden bankaya verilebilir (başka bankaya)", (await header(c11)).status === "AT_BANK" && (await header(c11)).bankAccountId === bank11.id);
+  await chequeService.collect(c11, { bankAccountId: bank11.id });
+  check("§11l ⭐ tahsil edilmiş çekte storno 409 — yol tahsil stornosu", /Tahsilatı Geri Al/.test(await expectError(() => chequeService.cancelDeposit(c11, "x"))));
+  await chequeService.cancelCollect(c11, "tahsil yanlış");
+  check("§11m COLLECT_CANCEL çeki AT_BANK'a döndürdü (bank11)", (await header(c11)).status === "AT_BANK" && (await header(c11)).bankAccountId === bank11.id);
+  await chequeService.cancelDeposit(c11, "bankaya verme de yanlıştı");
+  {
+    const h = await header(c11);
+    const ev = await latestEvent(c11, ChequeEventType.DEPOSIT_CANCEL);
+    check("§11n ⭐ COLLECT_CANCEL sonrası storno MEŞRU: en yeni DEPOSIT (bank11) geri alındı, portföyde", h.status === "PORTFOLIO" && h.bankAccountId === null && ev?.bankAccountId === bank11.id);
+    check("§11o iki bankanın bakiyesi de sıfır (tahsil + stornosu net 0, deposit'ler oynatmadı)", (await bankBalance(bank11.id)).isZero() && (await bankBalance(bank.id)).equals(bankBefore11));
+  }
+  check("§11p yön kapısı: verilen çekte bankaya verme stornosu reddedilir", /VERDİĞİMİZ/.test(await expectError(async () => {
+    const i = await newCheque({ kind: "ISSUED", cariId: tedarikci, amount: 10, dueDate: due });
+    await chequeService.cancelDeposit(i, "x");
+  })));
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
