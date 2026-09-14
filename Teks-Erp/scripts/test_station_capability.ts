@@ -114,7 +114,7 @@ async function main() {
     select: { id: true },
   });
   const inactiveColor = await prisma.color.create({
-    data: { code: `TEST-COL-${ts}`, name: "TEST Pasif Renk", isActive: false },
+    data: { code: `TEST-COL-${ts}`, name: `TEST Pasif Renk ${ts}`, isActive: false },
     select: { id: true },
   });
   const inactiveProp = await prisma.fabricProperty.create({

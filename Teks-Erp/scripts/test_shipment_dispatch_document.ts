@@ -192,7 +192,7 @@ async function part2Db() {
     select: { id: true },
   });
   const color = await prisma.color.create({
-    data: { code: `TST-SDD-C-${ts}`, name: "LACİVERT" },
+    data: { code: `TST-SDD-C-${ts}`, name: `LACİVERT ${ts}` },
     select: { id: true },
   });
   const shipment = await prisma.shipment.create({

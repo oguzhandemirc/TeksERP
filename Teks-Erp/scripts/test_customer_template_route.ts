@@ -51,7 +51,7 @@ async function main() {
     select: { id: true },
   });
   const color = await prisma.color.create({
-    data: { code: `TST-CTR-C-${ts}`, name: "TEST ŞABLON RENK", hex: "#336699" },
+    data: { code: `TST-CTR-C-${ts}`, name: `TEST ŞABLON RENK ${ts}`, hex: "#336699" },
     select: { id: true },
   });
   const roll = await prisma.roll.create({

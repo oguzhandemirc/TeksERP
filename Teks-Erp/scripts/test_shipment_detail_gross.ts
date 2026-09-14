@@ -98,7 +98,7 @@ async function main() {
     select: { id: true },
   });
   const color = await prisma.color.create({
-    data: { code: `TST-SDG-C-${ts}`, name: "SDG EKRU" },
+    data: { code: `TST-SDG-C-${ts}`, name: `SDG EKRU ${ts}` },
     select: { id: true },
   });
 

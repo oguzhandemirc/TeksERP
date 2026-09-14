@@ -92,7 +92,7 @@ async function main() {
     select: { id: true },
   });
   const color = await prisma.color.create({
-    data: { code: `TST-BRT-C-${ts}`, name: "TOPLU İADE EKRU" },
+    data: { code: `TST-BRT-C-${ts}`, name: `TOPLU İADE EKRU ${ts}` },
     select: { id: true },
   });
 

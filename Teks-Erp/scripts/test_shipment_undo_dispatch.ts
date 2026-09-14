@@ -102,7 +102,7 @@ async function main() {
     select: { id: true },
   });
   const color = await prisma.color.create({
-    data: { code: `TST-UND-C-${ts}`, name: "STORNO EKRU" },
+    data: { code: `TST-UND-C-${ts}`, name: `STORNO EKRU ${ts}` },
     select: { id: true },
   });
 

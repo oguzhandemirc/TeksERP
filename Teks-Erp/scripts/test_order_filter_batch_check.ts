@@ -97,8 +97,8 @@ async function main(): Promise<void> {
     prisma.item.create({ data: { code: `TST-ITMB-${tsB}`, name: `Test Ürün B ${tsB}`, itemType: "FABRIC", unit: "MT" }, select: { id: true } }),
   ]);
   const colors = await Promise.all([
-    prisma.color.create({ data: { code: `TST-CLRA-${tsB}`, name: "Test Renk A" }, select: { id: true } }),
-    prisma.color.create({ data: { code: `TST-CLRB-${tsB}`, name: "Test Renk B" }, select: { id: true } }),
+    prisma.color.create({ data: { code: `TST-CLRA-${tsB}`, name: `Test Renk A ${tsB}` }, select: { id: true } }),
+    prisma.color.create({ data: { code: `TST-CLRB-${tsB}`, name: `Test Renk B ${tsB}` }, select: { id: true } }),
   ]);
 
   if (items.length < 2 || colors.length < 2 || !customer) {
