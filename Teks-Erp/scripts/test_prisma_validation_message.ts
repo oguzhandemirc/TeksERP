@@ -43,6 +43,8 @@ function check(label: string, ok: boolean, ek = ""): void {
 /** Verilen çağrıyı koşar, ATTIĞI hatayı döndürür (atmazsa null). */
 const TS = Date.now();
 const KOD = (n: number): string => `TEST-GUARD-PROBE-${n}-${TS}`;
+// §4 "gizli" değer koşum başına benzersiz (nameFold tekil): damga iddiayı bozmaz — iddia "bu metin sızmıyor".
+const GIZLI = `COK-GIZLI-DEGER-4711-${TS}`;
 
 async function hataAl(fn: () => Promise<unknown>): Promise<unknown> {
   try {
@@ -90,12 +92,12 @@ async function main(): Promise<void> {
   const e4 = await hataAl(() =>
     prisma.item.create({
       // @ts-expect-error — geçersiz enum + gövdede "gizli" bir değer.
-      data: { code: KOD(4), name: "COK-GIZLI-DEGER-4711", itemType: "FABRIC", unit: "m" },
+      data: { code: KOD(4), name: GIZLI, itemType: "FABRIC", unit: "m" },
     }),
   );
   const a4 = extractPrismaValidationField(e4);
   const sizinti = `${a4?.field ?? ""} ${a4?.reasonTr ?? ""}`;
-  check("§4 gövde değeri dışarı sızmıyor", !/COK-GIZLI-DEGER-4711/.test(sizinti), sizinti.slice(0, 60));
+  check("§4 gövde değeri dışarı sızmıyor", !sizinti.includes(GIZLI), sizinti.slice(0, 60));
 
   // ── §5 KÖRLÜK ZEMİNİ ──────────────────────────────────────────────────────
   // Ayrıştırıcı HER ŞEYE `null` dönerek de "sızıntı yok" diyebilirdi. En az üç
