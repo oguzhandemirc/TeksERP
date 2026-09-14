@@ -21,6 +21,10 @@
 //     birebir) — ölçülmüş bir şey değil, takvim kuralı.
 //   • BOŞ TEZGAH: koşum ∧ duruş ∧ doff yok ⇒ nonScheduledSec = takvim, source INFERRED.
 //   • `source` önceliği (`resolveShiftSource`): SIMULATED > SUPERVISOR > OPERATOR > INFERRED.
+//   • HAT KIRILIMI (`lines`): yalnız `productionLineCount > 1` iken; koşum ekseninden
+//     (`productionLineNo`) ÜRETİM terimleri hat başına, süre terimleri makinede kalır.
+//     Hat kümesi 1..count ∪ koşumların hatları ⇒ Σhat.unitsActual = unitsActual (bekçi ölçer).
+//     Tek hatlıda `lines: []` — çıktının geri kalanı bayt bayt bugünkü.
 // =============================================================================
 import type { MachineDataSource, MachineMonitoringState, MachineStopLossClass } from "@prisma/client";
 
@@ -45,6 +49,8 @@ export interface ShiftRunInput {
   producedM: number | null;
   targetUnitsPerMin: number | null;
   unitsPerCm: number | null;
+  /** `MachineRun.productionLineNo` — hat kırılımının ekseni (tek hatlıda hep 1). */
+  productionLineNo: number;
 }
 export interface ShiftTermsInput {
   window: ShiftWindow & { isCancelled: boolean; plannedBreakMinutes: number };
@@ -52,10 +58,24 @@ export interface ShiftTermsInput {
   runs: ShiftRunInput[];
   doffSources: MachineDataSource[];
   spec: { nominalUnitsPerMin: number | null; monitoringState: MachineMonitoringState } | null;
+  /** `Machine.productionLineCount` — `> 1` ise `lines` doğar, değilse boş kalır. */
+  productionLineCount: number;
   now: Date;
   stopThresholdSec: number;
   /** M3 (Dilim 3): amir terime elle dokunduysa kaynak SUPERVISOR olur. */
   supervisorTouched?: boolean;
+}
+
+/** Bir HATTIN üretim terimleri — `MachineShiftLineStat` kolonlarıyla birebir. */
+export interface ShiftLineTerms {
+  productionLineNo: number;
+  runCount: number;
+  unitsActual: number;
+  targetUnitCapacityApt: number;
+  targetUnitCapacityPot: number;
+  targetUnitsPerMin: number | null;
+  unitsPerCmAtClose: number | null;
+  producedM: number | null;
 }
 
 export interface ShiftBreakdownRow {
@@ -81,6 +101,8 @@ export interface ShiftTerms {
   /** Pencerede koşum ∧ duruş ∧ doff yok — rapor AYRI satırda beyan eder. */
   emptyLoom: boolean;
   runCount: number;
+  /** Hat kırılımı — yalnız `productionLineCount > 1`; tek hatlıda `[]`. */
+  lines: ShiftLineTerms[];
 }
 
 /** İki aralığın kesişimi (sn, ≥ 0, tam sayı). `[s0,s1) ∩ [w0,w1)`. */
@@ -132,8 +154,82 @@ function emptyTerms(input: ShiftTermsInput, calendarSec: number, warnings: strin
     targetUnitCapacityApt: 0, targetUnitCapacityPot: 0, targetUnitsPerMin: null,
     stopThresholdSec: input.stopThresholdSec, unitsPerCmAtClose: null, producedM: null,
     source: "INFERRED", monitoringState: input.spec?.monitoringState ?? "OFF",
-    breakdown: [], warnings, emptyLoom: true, runCount: 0,
+    breakdown: [], warnings, emptyLoom: true, runCount: 0, lines: lineTerms([], input.productionLineCount),
   };
+}
+
+/** Bir koşumun pencereye düşen üretim payı — makine toplamı ve hat kırılımı AYNI paydan toplanır. */
+interface RunProduction {
+  run: ShiftRunInput;
+  /** Kapanışı bu pencerede ve sayaç okunmuşsa atkı; değilse null (0 DEĞİL). */
+  picks: number | null;
+  producedM: number | null;
+  /** Hedef devir (koşum ?? künye); null = kapasiteye girmedi. */
+  target: number | null;
+  capApt: number;
+  capPot: number;
+}
+
+interface RunContext { input: ShiftTermsInput; stops: ClippedStop[]; calendarSec: number; plannedBreakSec: number; warnings: string[] }
+
+function runProduction(r: ShiftRunInput, ctx: RunContext): RunProduction {
+  const { input, stops, calendarSec, plannedBreakSec, warnings } = ctx;
+  const { window: w, now } = input;
+  const closedHere = r.endedAt !== null && r.endedAt.getTime() >= w.startsAt.getTime() && r.endedAt.getTime() < w.endsAt.getTime();
+  let picks: number | null = null;
+  let producedM: number | null = null;
+  if (closedHere) {
+    if (r.picksAtClose === null) warnings.push("Kapanan koşumda atkı sayacı okunmadı — atkı 0 değil ÖLÇÜLMEDİ; performans eksik.");
+    else picks = r.picksAtClose;
+    producedM = r.producedM;
+  } else if (r.endedAt === null) warnings.push("Açık koşum: atkısı kapandığı vardiyaya yazılır, kapasitesi şu ana kadar sayıldı.");
+  const target = r.targetUnitsPerMin ?? input.spec?.nominalUnitsPerMin ?? null;
+  if (target === null) {
+    warnings.push("Koşumun hedef deviri yok (koşum ve künye NULL) — kapasiteye girmedi, P ölçülemez.");
+    return { run: r, picks, producedM, target, capApt: 0, capPot: 0 };
+  }
+  const from = new Date(Math.max(r.startedAt.getTime(), w.startsAt.getTime()));
+  const to = new Date(Math.min((r.endedAt ?? now).getTime(), w.endsAt.getTime()));
+  const len = overlapSec(from, to, w.startsAt, w.endsAt);
+  const inRun = (c: ClippedStop) => overlapSec(c.from, c.to, from, to);
+  const runNonSched = stops.filter((c) => !c.minor && c.cls === "NON_SCHEDULED").reduce((a, c) => a + inRun(c), 0);
+  const runDown = stops.filter((c) => !c.minor && c.cls !== "NON_SCHEDULED").reduce((a, c) => a + inRun(c), 0);
+  const runBreak = calendarSec > 0 ? (plannedBreakSec * len) / calendarSec : 0;
+  const runPot = Math.max(0, len - runNonSched - runBreak);
+  const runApt = Math.max(0, runPot - runDown);
+  return { run: r, picks, producedM, target, capApt: (target * runApt) / 60, capPot: (target * runPot) / 60 };
+}
+
+/** Koşum paylarının toplamı — makine düzeyi ve hat düzeyi aynı fonksiyondan (tek toplayıcı). */
+function sumProduction(parts: RunProduction[]): Pick<ShiftLineTerms, "unitsActual" | "targetUnitCapacityApt" | "targetUnitCapacityPot" | "targetUnitsPerMin" | "unitsPerCmAtClose" | "producedM"> {
+  const acc = { picks: 0, m: 0, mSeen: false, capApt: 0, capPot: 0, targets: [] as number[] };
+  for (const p of parts) {
+    if (p.picks !== null) acc.picks += p.picks;
+    if (p.producedM !== null) { acc.m += p.producedM; acc.mSeen = true; }
+    if (p.target !== null) acc.targets.push(p.target);
+    acc.capApt += p.capApt;
+    acc.capPot += p.capPot;
+  }
+  const single = parts.length === 1 ? parts[0]!.run : null;
+  return {
+    unitsActual: acc.picks,
+    targetUnitCapacityApt: Math.round(acc.capApt), targetUnitCapacityPot: Math.round(acc.capPot),
+    targetUnitsPerMin: acc.targets.length === 1 && single ? acc.targets[0]! : null,
+    unitsPerCmAtClose: single?.unitsPerCm ?? null,
+    producedM: acc.mSeen ? Math.round(acc.m * 1000) / 1000 : null,
+  };
+}
+
+/** Hat kümesi 1..count ∪ koşumların hatları — hattı olmayan koşum kaybolmaz (Σhat = makine). */
+function lineTerms(parts: RunProduction[], productionLineCount: number): ShiftLineTerms[] {
+  if (productionLineCount <= 1) return [];
+  const lineNos = new Set<number>();
+  for (let i = 1; i <= productionLineCount; i++) lineNos.add(i);
+  for (const p of parts) lineNos.add(p.run.productionLineNo);
+  return [...lineNos].sort((a, b) => a - b).map((productionLineNo) => {
+    const own = parts.filter((p) => p.run.productionLineNo === productionLineNo);
+    return { productionLineNo, runCount: own.length, ...sumProduction(own) };
+  });
 }
 
 export function computeShiftTermsPure(input: ShiftTermsInput): ShiftTerms {
@@ -174,42 +270,15 @@ export function computeShiftTermsPure(input: ShiftTermsInput): ShiftTerms {
   if (aptRaw < 0) warnings.push("Duruş toplamı planlı süreyi aşıyor (örtüşen duruş kayıtları?) — APT 0'a kırpıldı.");
   const aptSec = Math.max(0, aptRaw);
 
-  const prod = { picks: 0, m: 0, mSeen: false, capApt: 0, capPot: 0, targets: [] as number[] };
-  for (const r of runs) {
-    const closedHere = r.endedAt !== null && r.endedAt.getTime() >= w.startsAt.getTime() && r.endedAt.getTime() < w.endsAt.getTime();
-    if (closedHere) {
-      if (r.picksAtClose === null) warnings.push("Kapanan koşumda atkı sayacı okunmadı — atkı 0 değil ÖLÇÜLMEDİ; performans eksik.");
-      else prod.picks += r.picksAtClose;
-      if (r.producedM !== null) { prod.m += r.producedM; prod.mSeen = true; }
-    } else if (r.endedAt === null) warnings.push("Açık koşum: atkısı kapandığı vardiyaya yazılır, kapasitesi şu ana kadar sayıldı.");
-    const target = r.targetUnitsPerMin ?? input.spec?.nominalUnitsPerMin ?? null;
-    if (target === null) { warnings.push("Koşumun hedef deviri yok (koşum ve künye NULL) — kapasiteye girmedi, P ölçülemez."); continue; }
-    prod.targets.push(target);
-    const from = new Date(Math.max(r.startedAt.getTime(), w.startsAt.getTime()));
-    const to = new Date(Math.min((r.endedAt ?? now).getTime(), w.endsAt.getTime()));
-    const len = overlapSec(from, to, w.startsAt, w.endsAt);
-    const inRun = (c: ClippedStop) => overlapSec(c.from, c.to, from, to);
-    const runNonSched = stops.filter((c) => !c.minor && c.cls === "NON_SCHEDULED").reduce((a, c) => a + inRun(c), 0);
-    const runDown = stops.filter((c) => !c.minor && c.cls !== "NON_SCHEDULED").reduce((a, c) => a + inRun(c), 0);
-    const runBreak = calendarSec > 0 ? (plannedBreakSec * len) / calendarSec : 0;
-    const runPot = Math.max(0, len - runNonSched - runBreak);
-    const runApt = Math.max(0, runPot - runDown);
-    prod.capPot += (target * runPot) / 60;
-    prod.capApt += (target * runApt) / 60;
-  }
-  const single = runs.length === 1 ? runs[0]! : null;
+  const parts = runs.map((r) => runProduction(r, { input, stops, calendarSec, plannedBreakSec, warnings }));
 
   return {
     calendarSec, unobservedSec: 0, nonScheduledSec: acc.nonScheduled, plannedBreakSec, potSec, aptSec,
     setupSec: acc.setup, plannedDownSec: acc.planned, unplannedDownSec: acc.unplanned,
     minorStopSec: acc.minorSec, minorStopCount: acc.minorCount, stopCount: stops.length,
     warpStopCount: null, weftStopCount: null, unclassifiedSec: acc.unclassified,
-    unitsActual: prod.picks, gapUnits: 0, watchdogSec: 0,
-    targetUnitCapacityApt: Math.round(prod.capApt), targetUnitCapacityPot: Math.round(prod.capPot),
-    targetUnitsPerMin: prod.targets.length === 1 && single ? prod.targets[0]! : null,
+    ...sumProduction(parts), gapUnits: 0, watchdogSec: 0,
     stopThresholdSec: input.stopThresholdSec,
-    unitsPerCmAtClose: single?.unitsPerCm ?? null,
-    producedM: prod.mSeen ? Math.round(prod.m * 1000) / 1000 : null,
     source: resolveShiftSource({
       anySimulated: input.stops.some((s) => s.source === "SIMULATED") || input.doffSources.includes("SIMULATED"),
       supervisorTouched: input.supervisorTouched === true,
@@ -218,5 +287,6 @@ export function computeShiftTermsPure(input: ShiftTermsInput): ShiftTerms {
     monitoringState: input.spec?.monitoringState ?? "OFF",
     breakdown: [...rows.values()].sort((a, b) => b.stopSec - a.stopSec),
     warnings, emptyLoom: false, runCount: runs.length,
+    lines: lineTerms(parts, input.productionLineCount),
   };
 }

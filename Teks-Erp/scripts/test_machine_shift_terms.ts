@@ -45,7 +45,7 @@ const W1 = T("2026-04-05T08:00:00.000Z");
 const NOW = T("2026-04-05T09:00:00.000Z");
 const base = (): ShiftTermsInput => ({
   window: { startsAt: W0, endsAt: W1, isCancelled: false, plannedBreakMinutes: 0 },
-  stops: [], runs: [], doffSources: [], spec: null, now: NOW, stopThresholdSec: MINOR_STOP_THRESHOLD_SEC,
+  stops: [], runs: [], doffSources: [], spec: null, productionLineCount: 1, now: NOW, stopThresholdSec: MINOR_STOP_THRESHOLD_SEC,
 });
 type Stop = ShiftTermsInput["stops"][number];
 type Run = ShiftTermsInput["runs"][number];
@@ -55,7 +55,7 @@ const stop = (s: Partial<Stop> & { startedAt: Date; endedAt: Date | null }): Sto
   reasonCode: "X", reasonLabel: "x", lossClass: "UNPLANNED", beamSlot: 1, source: "OPERATOR", ...s,
 });
 const run = (r: Partial<Run> & { startedAt: Date; endedAt: Date | null }): Run =>
-  ({ id: `r${++seq}`, picksAtClose: null, producedM: null, targetUnitsPerMin: 600, unitsPerCm: null, ...r });
+  ({ id: `r${++seq}`, picksAtClose: null, producedM: null, targetUnitsPerMin: 600, unitsPerCm: null, productionLineNo: 1, ...r });
 const fullRun = (picks: number, target = 600): Run => run({ startedAt: W0, endedAt: T("2026-04-05T07:59:59.000Z"), picksAtClose: picks, targetUnitsPerMin: target });
 
 const ek = Date.now().toString(36);

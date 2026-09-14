@@ -445,6 +445,15 @@ WHERE s."reasonCode" IS NOT NULL AND s."lossClass" IS NULL`,
     yazan: [],
     neden: "`MachineSpec.monitoringState`ten kopya; gölge karne tezgah sonradan LIVE'a geçse de gölge kalır (geçmiş geriye dönük yayınlanmaz)",
   },
+  // Hat kırılımı (2026-09-15, 01): ebeveynin `targetUnitCapacityApt` kuralı hat başına — tek yazar
+  // `upsertLineStatsTx` (machine-shift-seal.service), kolonlar `...cols` SPREAD'iyle gider (§4b görmez).
+  {
+    model: "MachineShiftLineStat",
+    alan: "targetUnitCapacityApt",
+    sinif: "DONMUS_ILERI",
+    yazan: [],
+    neden: "Σ(target_i × APT dk) bu hattın koşumları için; ebeveynle aynı kural — koşum hedefi sonradan düzeltilse hattın paydası değişmez (kardeşi `targetUnitCapacityPot`)",
+  },
   {
     model: "RollPlanDeviation",
     alan: "rollValue",

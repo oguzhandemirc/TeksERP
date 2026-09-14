@@ -534,6 +534,9 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "machine_shift_stats", name: "machine_shift_stats_threshold_pos" },
   { table: "machine_shift_stats", name: "machine_shift_stats_seal_ck" },
   { table: "machine_shift_stop_breakdowns", name: "machine_shift_stop_breakdowns_nonneg" },
+  // Hat kırılımı (2026-09-15, migration 20260915010000): hat no ≥ 1 (MachineRun emsali) · sayaçlar negatif olamaz.
+  { table: "machine_shift_line_stats", name: "machine_shift_line_stats_line_pos" },
+  { table: "machine_shift_line_stats", name: "machine_shift_line_stats_nonneg" },
   { table: "warp_specs", name: "warp_specs_ends_positive" },
   { table: "warp_specs", name: "warp_specs_selvedge_sane" },
   { table: "warp_specs", name: "warp_specs_reed_positive" },

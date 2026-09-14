@@ -11,6 +11,9 @@
 //   terimler (M3) job tarafından ezilmez; mühürlü satıra dokunmaz. Job MÜHÜRLEMEZ (Faz 2 kararı).
 // • Mühür STORED terimleri mühürler (M3 düzeltmesi dahil); kırılım duruş defterinden
 //   yeniden türetilir (kırılım elle düzenlenmez), etiket KOPYA (katalog değişse rapor değişmez).
+// • HAT KIRILIMI (`MachineShiftLineStat`, çocuk DURUM): M2 ebeveynle aynı tx'te upsert eder
+//   (yalnız `productionLineCount > 1` makinede satır doğar — helper `lines: []` verirse yazım yok);
+//   M3 dokunmaz; mühür ebeveynle atomiktir, fotoğrafı Seal `terms.lines`e girer; silme YOK.
 // • Audit best-effort, tx DIŞINDA (`MACHINE_SHIFT_STAT` / `MACHINE_SHIFT_SEAL`).
 // =============================================================================
 import { MachineSealAction, Prisma } from "@prisma/client";
@@ -20,17 +23,28 @@ import { AuditService } from "./audit.service";
 import type { ApiResponse } from "../types/api.types";
 import { computeShiftTerms } from "./machine-shift-stat.service";
 import { computeMachineKpis, type LoomKpis } from "./helpers/loom-efficiency.helper";
-import type { ShiftBreakdownRow, ShiftTerms } from "./helpers/loom-shift-terms.helper";
+import type { ShiftBreakdownRow, ShiftLineTerms, ShiftTerms } from "./helpers/loom-shift-terms.helper";
 
 type Tx = Prisma.TransactionClient;
 const TABLE = "MACHINE_SHIFT_STAT";
 const SEAL_TABLE = "MACHINE_SHIFT_SEAL";
 
-/** Terimlerin DB'ye yazılan kısmı (kırılım/uyarı/bayrak hariç). */
-type TermColumns = Omit<ShiftTerms, "breakdown" | "warnings" | "emptyLoom" | "runCount">;
+/** Terimlerin DB'ye yazılan kısmı (kırılım/uyarı/bayrak/hat hariç — hat çocuk tabloya). */
+type TermColumns = Omit<ShiftTerms, "breakdown" | "warnings" | "emptyLoom" | "runCount" | "lines">;
 function termColumns(t: ShiftTerms): TermColumns {
-  const { breakdown: _b, warnings: _w, emptyLoom: _e, runCount: _r, ...cols } = t;
+  const { breakdown: _b, warnings: _w, emptyLoom: _e, runCount: _r, lines: _l, ...cols } = t;
   return cols;
+}
+
+/** Hat satırları upsert — (statId, productionLineNo) anahtarıyla; kümede olmayan eski satır SİLİNMEZ (sıfır kalır). */
+async function upsertLineStatsTx(tx: Tx, statId: string, lines: ShiftLineTerms[]): Promise<void> {
+  for (const { productionLineNo, ...cols } of lines) {
+    await tx.machineShiftLineStat.upsert({
+      where: { statId_productionLineNo: { statId, productionLineNo } },
+      create: { statId, productionLineNo, ...cols },
+      update: cols,
+    });
+  }
 }
 type StoredStat = Prisma.MachineShiftStatGetPayload<Record<string, never>>;
 const kpiInput = (s: StoredStat) => ({
@@ -54,12 +68,15 @@ export async function materializeShiftStatTx(tx: Tx, machineId: string, shiftIns
   if (existing?.source === "SUPERVISOR") return "skipped-supervisor";
   const terms = await computeShiftTerms(tx, machineId, shiftInstanceId, { now });
   if (existing) {
-    // Claim: satır bu arada mühürlendiyse (yarış) yazma.
+    // Claim: satır bu arada mühürlendiyse (yarış) yazma — hat satırları da claim'in ARKASINDA.
     const r = await tx.machineShiftStat.updateMany({ where: { id: existing.id, sealState: "OPEN" }, data: termColumns(terms) });
-    return r.count === 0 ? "skipped-sealed" : "recomputed";
+    if (r.count === 0) return "skipped-sealed";
+    await upsertLineStatsTx(tx, existing.id, terms.lines);
+    return "recomputed";
   }
   const shift = await tx.shiftInstance.findUniqueOrThrow({ where: { id: shiftInstanceId }, select: { factoryDayKey: true } });
-  await tx.machineShiftStat.create({ data: { machineId, shiftInstanceId, factoryDay: shift.factoryDayKey, ...termColumns(terms) } });
+  const created = await tx.machineShiftStat.create({ data: { machineId, shiftInstanceId, factoryDay: shift.factoryDayKey, ...termColumns(terms) }, select: { id: true } });
+  await upsertLineStatsTx(tx, created.id, terms.lines);
   return "created";
 }
 
@@ -131,10 +148,15 @@ export async function sealShiftStat(statId: string, userId?: string, now = new D
       await tx.machineShiftStopBreakdown.createMany({ data: rows.map((b) => ({ statId, sealGeneration: gen, ...b })) });
     }
     const { id: _i, createdAt: _c, updatedAt: _u, ...termsSnapshot } = cur;
+    // Hat satırları fotoğrafa girer ("aynen yeniden bas"): çocuk DURUM'dur, mühür anındaki hâli burada donar.
+    const lines = await tx.machineShiftLineStat.findMany({
+      where: { statId }, orderBy: { productionLineNo: "asc" },
+      select: { productionLineNo: true, runCount: true, unitsActual: true, targetUnitCapacityApt: true, targetUnitCapacityPot: true, targetUnitsPerMin: true, unitsPerCmAtClose: true, producedM: true },
+    });
     await tx.machineShiftStatSeal.create({
       data: {
         statId, action, sealGeneration: gen, actedById: userId ?? null,
-        terms: JSON.parse(JSON.stringify({ ...termsSnapshot, kpis })) as Prisma.InputJsonValue,
+        terms: JSON.parse(JSON.stringify({ ...termsSnapshot, kpis, lines })) as Prisma.InputJsonValue,
         potSec: cur.potSec, aptSec: cur.aptSec, unitsActual: cur.unitsActual, targetUnitCapacityPot: cur.targetUnitCapacityPot,
         effectivenessPct: kpis.effectivenessPct, formulaVersion: kpis.formulaVersion,
       },

@@ -14,7 +14,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
 import { MINOR_STOP_THRESHOLD_SEC } from "../constants/loom-shift";
-import { computeShiftTermsPure, type ShiftBreakdownRow, type ShiftTerms, type ShiftTermsInput } from "./helpers/loom-shift-terms.helper";
+import { computeShiftTermsPure, type ShiftBreakdownRow, type ShiftLineTerms, type ShiftTerms, type ShiftTermsInput } from "./helpers/loom-shift-terms.helper";
 import { computeMachineKpis, type LoomKpis } from "./helpers/loom-efficiency.helper";
 
 type Tx = Prisma.TransactionClient | typeof prisma;
@@ -39,7 +39,7 @@ export async function loadShiftTermsInput(tx: Tx, machineId: string, shiftInstan
   if (!shift) throw AppError.notFound("Vardiya bulunamadı", { shiftInstanceId });
   const w = { startsAt: shift.startsAt, endsAt: shift.endsAt };
   const intersects = { startedAt: { lt: w.endsAt }, OR: [{ endedAt: null }, { endedAt: { gt: w.startsAt } }] };
-  const [stops, runs, doffs, spec] = [
+  const [stops, runs, doffs, spec, machine] = [
     await tx.machineStopEvent.findMany({
       where: { machineId, revokedAt: null, ...intersects },
       select: { id: true, startedAt: true, endedAt: true, durationSec: true, reasonCode: true, lossClass: true, beamSlot: true, source: true },
@@ -47,7 +47,7 @@ export async function loadShiftTermsInput(tx: Tx, machineId: string, shiftInstan
     }),
     await tx.machineRun.findMany({
       where: { machineId, revokedAt: null, ...intersects },
-      select: { id: true, startedAt: true, endedAt: true, picksAtClose: true, producedM: true, targetUnitsPerMin: true, unitsPerCm: true },
+      select: { id: true, startedAt: true, endedAt: true, picksAtClose: true, producedM: true, targetUnitsPerMin: true, unitsPerCm: true, productionLineNo: true },
       orderBy: { startedAt: "asc" },
     }),
     await tx.doffEvent.findMany({
@@ -55,6 +55,8 @@ export async function loadShiftTermsInput(tx: Tx, machineId: string, shiftInstan
       select: { counterSource: true },
     }),
     await tx.machineSpec.findUnique({ where: { machineId }, select: { nominalUnitsPerMin: true, monitoringState: true } }),
+    // Hat kırılımının tetiği VERİDİR: `productionLineCount > 1` değilse `lines` boş doğar (bayrak yok).
+    await tx.machine.findUniqueOrThrow({ where: { id: machineId }, select: { productionLineCount: true } }),
   ];
   // Sebep etiketi katalogdan KOPYALANIR (breakdown `reasonLabel` DONAR — katalog değişse rapor değişmez).
   const codes = [...new Set(stops.map((s) => s.reasonCode).filter((c): c is string => c !== null))];
@@ -68,6 +70,7 @@ export async function loadShiftTermsInput(tx: Tx, machineId: string, shiftInstan
     runs: runs.map((r) => ({ ...r, producedM: dec(r.producedM), unitsPerCm: dec(r.unitsPerCm) })),
     doffSources: doffs.map((d) => d.counterSource),
     spec,
+    productionLineCount: machine.productionLineCount,
     now,
     stopThresholdSec: MINOR_STOP_THRESHOLD_SEC,
   };
@@ -89,7 +92,7 @@ export interface ShiftStatRow {
   sealState: "OPEN" | "SEALED";
   sealGeneration: number;
   sealedAt: Date | null;
-  terms: Omit<ShiftTerms, "breakdown" | "warnings" | "emptyLoom" | "runCount">;
+  terms: Omit<ShiftTerms, "breakdown" | "warnings" | "emptyLoom" | "runCount" | "lines">;
   kpis: LoomKpis;
   emptyLoom: boolean;
   warnings: string[];
@@ -132,15 +135,53 @@ function storedTerms(s: Prisma.MachineShiftStatGetPayload<{ select: typeof STAT_
 }
 
 
-/** Rapor okuyucuları için ek alanlar (`includeBreakdown`): kırılım mühürlüde SON kuşak, açıkta canlı. */
+/** Bir hattın satırı — P/E hattın, A ebeveynin (süre terimleri makine düzeyi, `LoomKpiTerms` pot/apt ebeveynden). */
+export interface ShiftLineRow extends ShiftLineTerms {
+  kpis: LoomKpis;
+}
+
+/**
+ * Rapor okuyucuları için ek alanlar (`includeBreakdown`): kırılım mühürlüde SON kuşak, açıkta canlı.
+ * `lines` yalnız `byLine` opt-in'inde DOLDURULUR (mühürlüde çocuk tablo, açıkta anlık); opt-in yoksa
+ * alan hiç konmaz — eski istemci bayt bayt aynı gövdeyi görür. Tek hatlı makinede `[]`.
+ */
 export interface ShiftStatRowExtra {
   statId: string | null;
   breakdown: ShiftBreakdownRow[];
+  lines?: ShiftLineRow[];
 }
 
 export interface ShiftStatCollectOptions {
   now?: Date;
   includeBreakdown?: boolean;
+  /** Hat kırılımı opt-in (`?byLine=1`). */
+  byLine?: boolean;
+}
+
+const LINE_SELECT = {
+  productionLineNo: true, runCount: true, unitsActual: true, targetUnitCapacityApt: true, targetUnitCapacityPot: true,
+  targetUnitsPerMin: true, unitsPerCmAtClose: true, producedM: true,
+} satisfies Prisma.MachineShiftLineStatSelect;
+
+/** Hat satırlarına oran: pay hattın, süre paydası ebeveynin (A aynı çıkar — makine duruşu hattı da durdurur). */
+function lineRows(lines: ShiftLineTerms[], parent: Pick<ShiftTerms, "potSec" | "aptSec">): ShiftLineRow[] {
+  return lines.map((l) => ({
+    ...l,
+    kpis: computeMachineKpis({ potSec: parent.potSec, aptSec: parent.aptSec, unitsActual: l.unitsActual, gapUnits: 0, targetUnitCapacityApt: l.targetUnitCapacityApt, targetUnitCapacityPot: l.targetUnitCapacityPot }),
+  }));
+}
+
+/** Mühürlü karnenin hat satırları çocuk tablodan (DURUM; mühürle birlikte donmuş). */
+async function storedLineRows(statId: string, parent: Pick<ShiftTerms, "potSec" | "aptSec">): Promise<ShiftLineRow[]> {
+  const rows = await prisma.machineShiftLineStat.findMany({ where: { statId }, select: LINE_SELECT, orderBy: { productionLineNo: "asc" } });
+  return lineRows(rows.map((r) => ({ ...r, unitsPerCmAtClose: dec(r.unitsPerCmAtClose), producedM: dec(r.producedM) })), parent);
+}
+
+/** M3 ebeveyne yazar, hatlara dokunmaz: Σhat ≠ karne olunca UYARI (sessiz sapma yok). */
+function lineSumWarning(lines: ShiftLineRow[], parent: Pick<ShiftTerms, "unitsActual" | "source">): string[] {
+  if (lines.length === 0) return [];
+  const sum = lines.reduce((a, l) => a + l.unitsActual, 0);
+  return sum === parent.unitsActual ? [] : [`Hat kırılımı koşumdan hesaplanır; karne ${parent.source === "SUPERVISOR" ? "elle düzeltildi" : "farklı"} — Σhat atkı ${sum} ≠ karne ${parent.unitsActual}.`];
 }
 
 /**
@@ -181,19 +222,22 @@ export async function collectShiftStatRows(p: ShiftStatListParams, opts: ShiftSt
       const breakdown = opts.includeBreakdown
         ? await prisma.machineShiftStopBreakdown.findMany({ where: { statId: s.id, sealGeneration: s.sealGeneration }, select: { reasonCode: true, reasonLabel: true, lossClass: true, beamSlotNull: true, stopCount: true, stopSec: true } })
         : [];
-      rows.push({ ...base, live: false, sealState: "SEALED", sealGeneration: s.sealGeneration, sealedAt: s.sealedAt, terms, kpis: computeMachineKpis(terms), emptyLoom: false, warnings: [], breakdown });
+      const lines = opts.byLine ? await storedLineRows(s.id, terms) : undefined;
+      rows.push({ ...base, live: false, sealState: "SEALED", sealGeneration: s.sealGeneration, sealedAt: s.sealedAt, terms, kpis: computeMachineKpis(terms), emptyLoom: false, warnings: lines ? lineSumWarning(lines, terms) : [], breakdown, ...(lines ? { lines } : {}) });
       continue;
     }
     if (p.sealState === "SEALED") continue;
     live += 1;
-    const { breakdown, warnings, emptyLoom, runCount: _r, ...terms } = await computeShiftTerms(prisma, loom.id, shift.id, { now });
-    rows.push({ ...base, live: true, sealState: "OPEN", sealGeneration: s?.sealGeneration ?? 0, sealedAt: s?.sealedAt ?? null, terms, kpis: computeMachineKpis(terms), emptyLoom, warnings, breakdown: opts.includeBreakdown ? breakdown : [] });
+    const { breakdown, warnings, emptyLoom, runCount: _r, lines: liveLines, ...terms } = await computeShiftTerms(prisma, loom.id, shift.id, { now });
+    const lines = opts.byLine ? lineRows(liveLines, terms) : undefined;
+    rows.push({ ...base, live: true, sealState: "OPEN", sealGeneration: s?.sealGeneration ?? 0, sealedAt: s?.sealedAt ?? null, terms, kpis: computeMachineKpis(terms), emptyLoom, warnings, breakdown: opts.includeBreakdown ? breakdown : [], ...(lines ? { lines } : {}) });
   }
   return { rows, meta: { total, truncated: total > SHIFT_STAT_LIST_TAKE, live, sealed } };
 }
 
-/** M1 — karne listesi ucu (kırılımsız; `statId` DÖNER — panel mühür eylemleri onunla, `null` = satır henüz yazılmadı). */
-export async function listShiftStats(p: ShiftStatListParams, now = new Date()): Promise<ApiResponse<Array<ShiftStatRow & Pick<ShiftStatRowExtra, "statId">>> & { meta: { total: number; truncated: boolean; live: number; sealed: number } }> {
-  const { rows, meta } = await collectShiftStatRows(p, { now });
+/** M1 — karne listesi ucu (kırılımsız; `statId` DÖNER — panel mühür eylemleri onunla, `null` = satır henüz yazılmadı; `byLine` hat satırlarını ekler). */
+export async function listShiftStats(p: ShiftStatListParams & { byLine?: boolean }, now = new Date()): Promise<ApiResponse<Array<ShiftStatRow & Pick<ShiftStatRowExtra, "statId" | "lines">>> & { meta: { total: number; truncated: boolean; live: number; sealed: number } }> {
+  const { byLine, ...params } = p;
+  const { rows, meta } = await collectShiftStatRows(params, { now, byLine });
   return { success: true, data: rows.map(({ breakdown: _b, ...row }) => row), meta };
 }

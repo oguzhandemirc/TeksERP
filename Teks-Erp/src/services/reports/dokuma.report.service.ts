@@ -19,7 +19,14 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { LOOM_HORIZON_DAY, loomHorizonStart } from "../../constants/dokuma-ufku";
 import { aggregateMachineKpis, type LoomKpiAggregate } from "../helpers/loom-efficiency.helper";
-import { collectShiftStatRows, factoryDayKeyFromYmd, type ShiftStatRow, type ShiftStatRowExtra } from "../machine-shift-stat.service";
+import { collectShiftStatRows, factoryDayKeyFromYmd, type ShiftLineRow, type ShiftStatRow, type ShiftStatRowExtra } from "../machine-shift-stat.service";
+
+/**
+ * Hat kırılımı opt-in (`?byLine=1`): satıra `hatlar` eklenir — mühürlüde çocuk tablo, açıkta anlık;
+ * tek hatlı makinede `[]`. Opt-in yoksa alan HİÇ KONMAZ (eski istemci bayt bayt aynı gövde).
+ */
+export interface LineOptIn { byLine?: boolean }
+const hatlar = (r: ShiftStatRowExtra): { hatlar?: ShiftLineRow[] } => (r.lines ? { hatlar: r.lines } : {});
 
 export const DATA_SOURCES: readonly MachineDataSource[] = ["MACHINE", "OPERATOR", "SUPERVISOR", "SIMULATED", "INFERRED"];
 
@@ -66,6 +73,8 @@ export interface EfficiencyRow {
   availabilityPct: number | null; performancePct: number | null; effectivenessPct: number | null;
   olculemedi: { A?: string; P?: string; E?: string };
   warnings: string[];
+  /** Yalnız `byLine` opt-in'inde; tek hatlı makinede `[]`. */
+  hatlar?: ShiftLineRow[];
 }
 export interface EfficiencyReport {
   satirlar: EfficiencyRow[];
@@ -74,8 +83,9 @@ export interface EfficiencyReport {
   meta: LoomReportMeta;
 }
 
-export async function efficiencyReport(p: { from: string; to: string; machineId?: string }): Promise<EfficiencyReport> {
-  const { rows, meta: m } = await collectShiftStatRows(p);
+export async function efficiencyReport(p: { from: string; to: string; machineId?: string } & LineOptIn): Promise<EfficiencyReport> {
+  const { byLine, ...params } = p;
+  const { rows, meta: m } = await collectShiftStatRows(params, { byLine });
   const efficiencyRows: EfficiencyRow[] = rows.map((r) => ({
     machineId: r.machineId, machine: r.machine, shiftInstanceId: r.shiftInstanceId, factoryDayKey: r.shiftInstance.factoryDayKey,
     shift: r.shiftInstance.shiftDefinition, live: r.live, sealState: r.sealState, source: r.terms.source, emptyLoom: r.emptyLoom,
@@ -83,6 +93,7 @@ export async function efficiencyReport(p: { from: string; to: string; machineId?
     targetUnitCapacityApt: r.terms.targetUnitCapacityApt, targetUnitCapacityPot: r.terms.targetUnitCapacityPot, targetUnitsPerMin: r.terms.targetUnitsPerMin,
     availabilityPct: r.kpis.availabilityPct, performancePct: r.kpis.performancePct, effectivenessPct: r.kpis.effectivenessPct,
     olculemedi: r.kpis.olculemedi, warnings: [...r.warnings, ...r.kpis.warnings],
+    ...hatlar(r),
   }));
   return { satirlar: efficiencyRows, toplam: aggregateMachineKpis(rows.map((r) => r.terms)), kaynakKirilimi: sumBreakdown(rows), meta: buildMeta(rows, m) };
 }
@@ -137,6 +148,8 @@ export interface ShiftMachineRow {
   machineId: string; machine: { code: string; name: string }; source: MachineDataSource; live: boolean; sealState: "OPEN" | "SEALED";
   unitsActual: number; producedM: number | null; durusSec: number; emptyLoom: boolean;
   availabilityPct: number | null; performancePct: number | null; effectivenessPct: number | null; olculemedi: { A?: string; P?: string; E?: string };
+  /** Yalnız `byLine` opt-in'inde; tek hatlı makinede `[]`. */
+  hatlar?: ShiftLineRow[];
 }
 export interface ShiftRow {
   shiftInstanceId: string; shift: { code: string; name: string }; startsAt: Date; endsAt: Date; isCancelled: boolean;
@@ -152,7 +165,7 @@ export interface ShiftScorecardReport { vardiyalar: ShiftRow[]; meta: LoomReport
 
 const downSec = (t: ShiftStatRow["terms"]): number => t.setupSec + t.plannedDownSec + t.unplannedDownSec + t.minorStopSec;
 
-export async function shiftScorecardReport(p: { factoryDay: string; shiftDefinitionId?: string }): Promise<ShiftScorecardReport> {
+export async function shiftScorecardReport(p: { factoryDay: string; shiftDefinitionId?: string } & LineOptIn): Promise<ShiftScorecardReport> {
   if (p.shiftDefinitionId) {
     const def = await prisma.shiftDefinition.findUnique({ where: { id: p.shiftDefinitionId }, select: { id: true } });
     if (!def) throw AppError.notFound("Vardiya tanımı bulunamadı", { shiftDefinitionId: p.shiftDefinitionId });
@@ -161,7 +174,7 @@ export async function shiftScorecardReport(p: { factoryDay: string; shiftDefinit
   const defIds = p.shiftDefinitionId
     ? new Set((await prisma.shiftInstance.findMany({ where: { factoryDayKey: dayKey, shiftDefinitionId: p.shiftDefinitionId }, select: { id: true } })).map((s) => s.id))
     : null;
-  const { rows, meta: m } = await collectShiftStatRows({ from: p.factoryDay, to: p.factoryDay });
+  const { rows, meta: m } = await collectShiftStatRows({ from: p.factoryDay, to: p.factoryDay }, { byLine: p.byLine });
   const selected = defIds ? rows.filter((r) => defIds.has(r.shiftInstanceId)) : rows;
   const byShift = new Map<string, Array<ShiftStatRow & ShiftStatRowExtra>>();
   for (const r of selected) byShift.set(r.shiftInstanceId, [...(byShift.get(r.shiftInstanceId) ?? []), r]);
@@ -182,6 +195,7 @@ export async function shiftScorecardReport(p: { factoryDay: string; shiftDefinit
         machineId: r.machineId, machine: r.machine, source: r.terms.source, live: r.live, sealState: r.sealState,
         unitsActual: r.terms.unitsActual, producedM: r.terms.producedM, durusSec: downSec(r.terms), emptyLoom: r.emptyLoom,
         availabilityPct: r.kpis.availabilityPct, performancePct: r.kpis.performancePct, effectivenessPct: r.kpis.effectivenessPct, olculemedi: r.kpis.olculemedi,
+        ...hatlar(r),
       })),
     };
   });

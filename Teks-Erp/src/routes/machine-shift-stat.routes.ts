@@ -26,6 +26,8 @@ const listSchema = z
     to: YMD,
     machineId: z.string().uuid("Geçersiz makine").optional(),
     sealState: z.enum(["OPEN", "SEALED"]).optional(),
+    /** Hat kırılımı opt-in (çift enli tezgah): yalnız `1` açar; yokluk = eski gövde bayt bayt. */
+    byLine: z.enum(["1", "0"], { message: "byLine yalnız 1 ya da 0 olabilir" }).optional(),
   })
   .strict();
 
@@ -34,21 +36,22 @@ const listSchema = z
  * /api/machine-shift-stats:
  *   get:
  *     tags: [MachineShiftStats]
- *     summary: Vardiya karnesi listesi — vardiya × tezgah; mühürsüz satır ANLIK hesaplanır (`live`), mühürlü satır olduğu gibi
+ *     summary: Vardiya karnesi listesi — vardiya × tezgah; mühürsüz satır ANLIK hesaplanır (`live`), mühürlü satır olduğu gibi; `byLine=1` satıra `lines` ekler
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: query, name: from, required: true, schema: { type: string, format: date } }
  *       - { in: query, name: to, required: true, schema: { type: string, format: date } }
  *       - { in: query, name: machineId, schema: { type: string, format: uuid } }
  *       - { in: query, name: sealState, schema: { type: string, enum: [OPEN, SEALED] } }
+ *       - { in: query, name: byLine, schema: { type: string, enum: ["1", "0"] }, description: Hat kırılımı opt-in }
  *     responses:
  *       200: { description: Karne satırları (terimler + oranlar + source + sealState + warnings) }
  *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
  */
 router.get("/", requirePermission("report:production"), async (req, res, next) => {
   try {
-    const q = listSchema.parse(req.query);
-    res.json(await listShiftStats(q));
+    const { byLine, ...q } = listSchema.parse(req.query);
+    res.json(await listShiftStats({ ...q, ...(byLine === "1" ? { byLine: true } : {}) }));
   } catch (e) {
     next(e);
   }
