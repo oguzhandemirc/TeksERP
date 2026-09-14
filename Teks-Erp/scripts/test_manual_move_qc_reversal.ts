@@ -21,7 +21,9 @@ const ok = (c: boolean, m: string) => { console.log(`${c ? "  ✓" : "  ✗ FAIL
 
   try {
     // --- SETUP: hepsi Tambur'da IN_PRODUCTION, grade A1, Tambur'da TAMBUR_PROCESSED op (KESİM YOK) ---
+    // @silme-baglami: FIKSTUR_KURULUMU — SETUP: Tambur'da IN_PRODUCTION durumu kurulmadan önce fikstürün hareketleri sıfırlanıyor
     await p.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
+    // @silme-baglami: FIKSTUR_KURULUMU — SETUP: TAMBUR_PROCESSED op'u kurulmadan önce fikstürün operasyonları sıfırlanıyor
     await p.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
     await p.roll.updateMany({ where: { id: { in: rollIds } }, data: { status: "IN_PRODUCTION", currentStepId: tambur.id, qualityGrade: "A1", parentRollId: null } });
     for (const rid of rollIds) {

@@ -178,8 +178,10 @@ async function seedDefinitions(): Promise<void> {
       create: { code: d.code, name: d.name, itemType: ItemType.FABRIC, unit: ItemUnit.MT },
     });
     // izinli renk/özellik — idempotent (sil + yeniden yaz)
+    // @silme-baglami: PIVOT_REPLACE — saf yapılandırma pivotu (③b) — idempotent seed: sil + yeniden yaz
     await prisma.itemAllowedColor.deleteMany({ where: { itemId: item.id } });
     await prisma.itemAllowedColor.createMany({ data: d.colors.map((colorId) => ({ itemId: item.id, colorId })) });
+    // @silme-baglami: PIVOT_REPLACE — saf yapılandırma pivotu (③b) — idempotent seed: sil + yeniden yaz
     await prisma.itemAllowedProperty.deleteMany({ where: { itemId: item.id } });
     await prisma.itemAllowedProperty.createMany({ data: d.props.map((propertyId) => ({ itemId: item.id, propertyId })) });
   }

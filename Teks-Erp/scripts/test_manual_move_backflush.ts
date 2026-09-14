@@ -27,6 +27,7 @@ const ok = (c: boolean, m: string) => { console.log(`${c ? "  ✓" : "  ✗ FAIL
     console.log(`WO ${WO.slice(0, 8)} | batch ${BATCH.slice(0, 8)} (${rollIds.length} top) | jump seq1→seq4`);
 
     // --- SETUP: renksiz, IN_PRODUCTION @ Zımpara, seq1 movement (kapalı); ara adımlar PENDING ---
+    // @silme-baglami: FIKSTUR_KURULUMU — SETUP: seq1 kapalı hareketi kurmadan önce fikstürün kendi hareketleri sıfırlanıyor
     await p.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
     await p.roll.updateMany({ where: { id: { in: rollIds } }, data: { status: "IN_PRODUCTION", currentStepId: first.id, colorId: null, qualityGrade: null } });
     for (const rid of rollIds) await p.rollMovement.create({ data: { rollId: rid, workOrderStepId: first.id, qtyIn: 100, exitedAt: new Date() } });

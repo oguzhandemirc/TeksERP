@@ -21,6 +21,46 @@
 
 ---
 
+## 2026-09-14 — Teardown-dışı defter silmesi 61 → 0: sayıyı düşürmenin ÜÇ meşru yolu [ÇEKİRDEK]
+
+`test_defter_ters_yol §10b2` teardown DIŞINDA defter silen **61** çağrı sayıyordu. Sayıyı
+sıfıra indirmenin iki kolay yolu vardı ve **ikisi de kapıyı köreltirdi**: ölçütü gevşetmek
+ya da dosyaları merkezî bir muaf listesine yazmak. Hiçbiri kullanılmadı; borç DÖRT sınıfa
+ayrıldı ve her sınıf kendi yoluyla kapandı — 61 → 47 → 28 → 15 → **0**.
+
+**① Kodu kurala uydur (14 + 13).** Fonksiyon gerçek teardown'du, adı kapının önek kalıbına
+uymuyordu (`svcTemizle` · `clean` · `fiksturSok`, sonra birleşik ağaçta `fixtureTemizle`).
+Alternatif "adı listeye ekle" idi: liste büyür, ölçüt körelir, sonraki uyumsuz ad da girer.
+Fonksiyonlar yeniden adlandırıldı, ayrıca 13 temizlik bloğu adlı bir bloğa alındı.
+`TEARDOWN_ADLARI` **hiç büyümedi**.
+
+**② Aracın körlüğünü onar (18).** §10b3'ün "ÖLÇÜLEMEDİ"leri borç bile değildi: yüklem
+kimliğe bağlıydı, tarayıcı okuyamıyordu (shorthand yaprak · destructure kap). Kural dar
+tutuldu ve her "artık çözülüyor" sondasının yanına bir "hâlâ SINIRSIZ" sondası kondu —
+*bir çözünürlük düzeltmesinin asıl riski borcu kapatmaması değil, ad bazlı yüklemi
+sessizce KİMLİK'e çevirip kapıyı köreltmesidir.*
+
+**③ Dosya düzeyi beyan (19).** Bazı script'lerin tamamı temizliktir (artık süpürücü,
+denetim repro'ları): silme sonda değil ÖN KOŞULDUR. Merkezî liste yerine dosyanın kendi
+başındaki işaret.
+
+**④ Satır düzeyi beyan (15).** Kalan 15 teardown'a TAŞINAMIYORDU, çünkü taşımak testi
+bozardı — ve bunu ölçmeden görmek mümkün değildi: `FIKSTUR_KURULUMU` (silme testin
+BAŞINDA, hemen ardından `create`) · `SINANAN_SILME` (**silmenin kendisi testin konusu** —
+biri BEFORE DELETE sed'ini ölçüyor) · `PIVOT_REPLACE` (③b saf yapılandırma pivotunda
+sil-yaz). ⇒ ***Bir sayıyı düşürmek için doğru kodu bozmak, ölçümü bozmaktır.*** Sınıf
+kümesi KAPALI ve fail-closed (tanınmayan değer kırmızı), her sınıf ayrı sayılır ve
+adresiyle basılır, işaret taşıyıp silmeyen satır ÖLÜ BEYANDIR.
+
+**Dört sınıfın ortak sınırı:** beyan yalnız *"hangi BAĞLAM"* sorusunu cevaplar; *"yüklem
+kimliğe mi bağlı"* sorusu (§10b1) beyanla DEĞİŞMEZ ve o kol 0'da sabit kaldı — yani 61
+satırın hiçbiri örtülmedi, sınıflandı. Beyanın bedeli GÖRÜNÜRLÜKTÜR: görünmeyen sınıf
+muafiyettir.
+
+⚠️ Kapı bu turda kendi belgesini ÜÇ KEZ ısırdı (işaret metnini örnek olarak yazmak, ölü
+sha'yı şerhe koymak, kanonik adı backtick'e almak). Üçü de doğru davranıştı: *kendi
+kaynağını taramayan bir kapı, kendi kuralını uygulamıyor demektir.*
+
 ## 2026-09-14 — "Dosyanın tamamı temizliktir" bir SINIFTIR, muafiyet değil [ÇEKİRDEK]
 
 `test_defter_ters_yol §10b2` teardown DIŞINDA defter silen 61 çağrı sayıyordu. Sayıyı

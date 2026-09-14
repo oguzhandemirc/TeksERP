@@ -211,9 +211,11 @@ async function main(): Promise<void> {
   const trg2 = await prisma.machineStopEvent.create({ data: { machineId: makine3.id, stopKey: crypto.randomUUID(), startedAt: S1, endedAt: S1, factoryDay: gunBasi, source: MachineDataSource.SUPERVISOR, requiresReason: true } });
   ids.stops.push(trg1.id, trg2.id);
   let silHata: string | null = null;
+  // @silme-baglami: SINANAN_SILME — BEFORE DELETE sed'i ölçülüyor: silme REDDEDİLMELİ — silmenin kendisi testin konusu
   try { await prisma.machineStopEvent.delete({ where: { id: trg1.id } }); } catch (e) { silHata = (e as Error).message; }
   check("§11a ⭐ insan kararlı duruş DELETE → DB RAISE (trigger), satır durur", silHata !== null && /silinemez|restrict/i.test(silHata) && (await prisma.machineStopEvent.count({ where: { id: trg1.id } })) === 1, silHata?.slice(0, 80) ?? "hata yok");
   let silOk = true;
+  // @silme-baglami: SINANAN_SILME — sed'in sınırı ölçülüyor: sınıfsız duruş silinebilmeli — silmenin kendisi testin konusu
   try { await prisma.machineStopEvent.delete({ where: { id: trg2.id } }); } catch { silOk = false; }
   check("§11b sınıfsız (makine/insan kararı yok) duruş silinebilir — sed yalnız insan kararına", silOk && (await prisma.machineStopEvent.count({ where: { id: trg2.id } })) === 0);
 

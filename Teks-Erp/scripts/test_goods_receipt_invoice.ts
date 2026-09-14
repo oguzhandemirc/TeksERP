@@ -643,6 +643,7 @@ async function main(): Promise<void> {
       async (tx) => {
         // updateDraft'ın gövdesi UÇUŞTA: claim + satır yeniden yazımı, commit yok.
         await tx.invoice.updateMany({ where: { id: dB.data.id, status: "DRAFT" }, data: { status: "DRAFT" } });
+        // @silme-baglami: SINANAN_SILME — updateDraft'ın UÇUŞTAKİ gövdesi taklit ediliyor (claim + satır yeniden yazımı); silme senaryonun kendisi
         await tx.invoiceLine.deleteMany({ where: { invoiceId: dB.data.id } });
         await tx.invoiceLine.create({
           data: {

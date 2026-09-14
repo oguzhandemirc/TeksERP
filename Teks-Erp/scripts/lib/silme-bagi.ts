@@ -169,6 +169,39 @@ export function temizlikScriptiMi(kaynak: string): boolean {
   return kaynak.split("\n", TEMIZLIK_ISARET_SATIR_SINIRI).some((l) => l.includes(TEMIZLIK_SCRIPTI_ISARETI));
 }
 
+/**
+ * SATIR DÜZEYİ SİLME BAĞLAMI — `// @silme-baglami: SINIF — <gerekçe>`.
+ *
+ * Dosya düzeyi beyan (`@temizlik-scripti`) "bu dosyanın tamamı temizliktir" der; bazı
+ * silmeler ise TEK SATIRDIR ve teardown'a TAŞINAMAZ, çünkü taşımak testi bozar:
+ *   FIKSTUR_KURULUMU — silme testin BAŞINDA, fikstürü bilinen duruma çekmek için
+ *                      (`deleteMany` → hemen ardından `create`). `finally`ye taşımak
+ *                      kurulumu yok eder.
+ *   SINANAN_SILME    — SİLMENİN KENDİSİ testin konusudur (BEFORE DELETE sed'ini ölçmek,
+ *                      bir servis gövdesini taklit etmek, senaryo koşulu kurmak).
+ *   PIVOT_REPLACE    — saf yapılandırma pivotunda sil-yaz; doktrinin ③b sınıfı, fiziksel
+ *                      silme zaten meşru (`ItemAllowedColor` gibi).
+ *
+ * ⚠️ SINIF KÜMESİ KAPALIDIR: tanınmayan değer kırmızıdır (fail-closed). Beyan yalnız
+ * "bağlam" sorusunu cevaplar — YÜKLEM sorusu (ada/öneke dayanan silme) değişmez. Her
+ * sınıf ayrı sayılır ve adresiyle basılır; işaret taşıyıp defter silmeyen satır ÖLÜ
+ * BEYANDIR ve kırmızı verir.
+ */
+export const SILME_BAGLAMI_ISARETI = "@silme-baglami:";
+export const SILME_BAGLAMI_SINIFLARI = ["FIKSTUR_KURULUMU", "SINANAN_SILME", "PIVOT_REPLACE"] as const;
+export type SilmeBaglamiSinifi = (typeof SILME_BAGLAMI_SINIFLARI)[number];
+
+/** Satırdaki (ya da bir ÜSTÜNDEKİ) işaretin sınıfı. SAF — girdi iki satır metni. */
+export function satirBaglami(satir: string, ustSatir: string): { sinif: string; tanimli: boolean } | null {
+  for (const l of [satir, ustSatir]) {
+    const i = l.indexOf(SILME_BAGLAMI_ISARETI);
+    if (i < 0) continue;
+    const sinif = l.slice(i + SILME_BAGLAMI_ISARETI.length).trim().split(/[\s—-]/)[0] ?? "";
+    return { sinif, tanimli: (SILME_BAGLAMI_SINIFLARI as readonly string[]).includes(sinif) };
+  }
+  return null;
+}
+
 /** Silme bir teardown bağlamında mı? Bağlamın ADINI verir, yoksa `null`. */
 export function teardownBaglami(n: ts.Node): string | null {
   const kalip = new RegExp(`^(${TEARDOWN_ADLARI.join("|")})`, "i");
@@ -204,6 +237,7 @@ export function silmeleriTara(
     const rel = relative(kok, sf.fileName);
     if (!dosyaSuzgeci(rel)) continue;
     const dosyaTemizlik = temizlikScriptiMi(sf.getFullText());
+    const dosyaSatirlari = sf.getFullText().split("\n");
     const gez = (n: ts.Node): void => {
       if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && SILEN_METOD.has(n.expression.name.text)) {
         const ic = n.expression.expression;
@@ -217,10 +251,15 @@ export function silmeleriTara(
               if (w && ts.isPropertyAssignment(w)) where = w.initializer;
             }
             const { bag, not } = bagSinifi(where, sf, checker);
+            const satirNo = sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1;
+            const sb = satirBaglami(dosyaSatirlari[satirNo - 1] ?? "", dosyaSatirlari[satirNo - 2] ?? "");
             out.push({
               model, dosya: rel, metod: n.expression.name.text,
-              satir: sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1,
-              bag, not, teardown: teardownBaglami(n) ?? (dosyaTemizlik ? TEMIZLIK_SCRIPTI_ISARETI : null),
+              satir: satirNo,
+              bag, not,
+              teardown: teardownBaglami(n)
+                ?? (dosyaTemizlik ? TEMIZLIK_SCRIPTI_ISARETI : null)
+                ?? (sb ? `${SILME_BAGLAMI_ISARETI}${sb.sinif}` : null),
             });
           }
         }

@@ -256,6 +256,7 @@ async function main(): Promise<void> {
   const childBirth = await prisma.roll.findUniqueOrThrow({ where: { id: cC }, select: { createdAt: true } });
   const inherited = await prisma.rollProperty.findFirstOrThrow({ where: { rollId: cC, propertyId: flag.id }, select: { createdAt: true } });
   check("§8c ⭐ miras satırı çocuğun DOĞUM-ANI damgasını taşıyor (createdAt eşit)", inherited.createdAt.getTime() === childBirth.createdAt.getTime(), `fark=${inherited.createdAt.getTime() - childBirth.createdAt.getTime()} ms`);
+  // @silme-baglami: SINANAN_SILME — legacy simülasyonu: donör satırı YOKKEN geri almanın davranışı sınanıyor
   await prisma.rollProperty.deleteMany({ where: { rollId: pC } }); // legacy simülasyonu (fikstür, ürün yolu değil)
   const fullC = (await undo.applyUndo(pC, undefined, { mode: "FULL", reason: "bekçi §8c", permissions: [UNDO_FULL_PERMISSION] })).data as { propsRestored: number; propsDonorMissing?: boolean };
   check("§8c ⭐ legacy ebeveyn donörden GERİ KURULDU (restored=1, aktif 1)", fullC.propsRestored === 1 && !fullC.propsDonorMissing && (await prisma.rollProperty.count({ where: { rollId: pC, propertyId: flag.id, ...ACTIVE_ROLL_PROPERTY } })) === 1, `restored=${fullC.propsRestored}`);

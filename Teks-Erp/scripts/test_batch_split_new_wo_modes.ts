@@ -179,6 +179,7 @@ async function main(): Promise<void> {
     const { batchId: p1, rollIds } = await mkAttachedParty(c, wo.id, 3);
     // Fasona gönderilmiş simülasyonu: AT_SUBCONTRACTOR @ boyaStep + açık movement + dispatch.
     await prisma.roll.updateMany({ where: { batchId: p1 }, data: { status: RollStatus.AT_SUBCONTRACTOR, currentStepId: boyaStep } });
+    // @silme-baglami: FIKSTUR_KURULUMU — fasona gönderilmiş simülasyonu kuruluyor: açık hareket silinip yerine boya adımında yenisi yazılıyor
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds }, exitedAt: null } });
     for (const rid of rollIds) await prisma.rollMovement.create({ data: { rollId: rid, workOrderStepId: boyaStep, qtyIn: 100 } });
     const disp = await prisma.subcontractorDispatch.create({

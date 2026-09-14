@@ -52,7 +52,7 @@ import { join, relative } from "node:path";
 import { CIFT_DISI_DEGERLER, DEFTER_BEYANI, STOK_OLAY_BEYANI, type CiftDisiDeger, type DefterBeyani } from "./lib/defter-beyan";
 import { STOCK_MOVE_REASON } from "../src/constants/stock-move-reasons";
 import { SILEN, defterYazimlariniTara, sembolReferanslari, tipliProgram } from "./lib/defter-yazim-tarama";
-import { TEARDOWN_ADLARI, TEMIZLIK_SCRIPTI_ISARETI, silmeleriTara, sondaSinifla, temizlikScriptiMi } from "./lib/silme-bagi";
+import { SILME_BAGLAMI_ISARETI, SILME_BAGLAMI_SINIFLARI, TEARDOWN_ADLARI, TEMIZLIK_SCRIPTI_ISARETI, satirBaglami, silmeleriTara, sondaSinifla, temizlikScriptiMi } from "./lib/silme-bagi";
 import { atlamaDefteri } from "./lib/atlama";
 import { curumeKolu } from "./lib/circir-kolu";
 import { semaAlanlari } from "./revoke-ast-tarama";
@@ -503,6 +503,43 @@ if (bagOlculemedi.length > 0) {
   }
 }
 
+// §10b6 — SATIR DÜZEYİ SİLME BAĞLAMI: kapalı sınıf kümesi, sınıf başına sayı, ölü işaret.
+// Taşınamayan silmeler (kurulum · sınanan silme · pivot replace) KAYBOLMAZ: sınıflanır ve
+// her sınıf kendi cırcırını taşır. Beyan yine yalnız "bağlam" sorusunu cevaplar.
+{
+  const TABAN: Record<string, number> = { FIKSTUR_KURULUMU: 5, SINANAN_SILME: 8, PIVOT_REPLACE: 2 };
+  const baglamli = scriptSilme.filter((x) => x.teardown?.startsWith(SILME_BAGLAMI_ISARETI));
+  const sinifi = (x: { teardown: string | null }): string => x.teardown!.slice(SILME_BAGLAMI_ISARETI.length);
+  // FAIL-CLOSED: tanınmayan sınıf değeri kırmızıdır — kapalı küme ancak reddedebiliyorsa kapalıdır.
+  const taninmayan = baglamli.filter((x) => !(SILME_BAGLAMI_SINIFLARI as readonly string[]).includes(sinifi(x)));
+  check("§10b6a ⭐ silme bağlamı sınıfı KAPALI kümeden", taninmayan.length === 0,
+    taninmayan.length ? taninmayan.map((x) => `${x.dosya}:${x.satir} → "${sinifi(x)}"`).join(" · ") : `${SILME_BAGLAMI_SINIFLARI.length} sınıf tanımlı`);
+  // ÖLÜ İŞARET: beyan var, o satırda (ya da altında) defter silmesi YOK.
+  const isaretliSatirlar: string[] = [];
+  for (const f of [...walkTs(join(KOK, "scripts"))].map((x) => relative(KOK, x))) {
+    const satirlar = readFileSync(join(KOK, f), "utf8").split("\n");
+    // ⚠️ KANONİK BİÇİM: işaret KENDİ yorum satırındadır (işaret + sınıf + gerekçe). Bu
+    // ölçüt aynı zamanda kapının KENDİ kaynağını eler — mekanizmayı TANIMLAYAN sabit ve
+    // onu SONDALAYAN dizeler de metinde geçer ama satır başında `//` yoktur. (Silme
+    // satırının SONUNA yazılan işaret okunur ama burada aranmaz: o zaten silmenin
+    // üstünde değil ÜSTÜNDEDİR, yani ölü olamaz.)
+    satirlar.forEach((l, i) => { if (l.trimStart().startsWith("//") && l.includes(SILME_BAGLAMI_ISARETI)) isaretliSatirlar.push(`${f}:${i + 1}`); });
+  }
+  const canli = new Set(baglamli.flatMap((x) => [`${x.dosya}:${x.satir}`, `${x.dosya}:${x.satir - 1}`]));
+  const oluIsaret = isaretliSatirlar.filter((y) => !canli.has(y));
+  check("§10b6b ⭐ silme bağlamı işareti ÖLÜ değil (altında defter silmesi var)", oluIsaret.length === 0,
+    oluIsaret.length ? `ÖLÜ İŞARET: ${oluIsaret.join(" · ")}` : `${isaretliSatirlar.length} işaret`);
+  for (const k of SILME_BAGLAMI_SINIFLARI) {
+    const n = baglamli.filter((x) => sinifi(x) === k).length;
+    check(`§10b6c ${k} ARTMADI`, n <= TABAN[k]!, `${n} ≤ ${TABAN[k]}`);
+    curumeKolu(check, ATLAMA.atla, `§10b6d ${k} tabanı ÇÜRÜMEDİ`, n, TABAN[k]!);
+  }
+  if (baglamli.length > 0) {
+    console.log(`   ⓘ satır düzeyi silme bağlamı (${baglamli.length}) — taşınamaz, SINIFLANDI:`);
+    for (const x of baglamli) console.log(`      • [${sinifi(x)}] ${x.dosya}:${x.satir} ${x.model}.${x.metod}`);
+  }
+}
+
 // Teardown ad listesi BEYANDIR: ölü ad, kapıyı sessizce gevşetir.
 {
   const kullanilan = new Set(scriptSilme.map((x) => x.teardown).filter((t): t is string => t !== null && !t.startsWith(".") && t !== "finally"));
@@ -627,6 +664,16 @@ console.log("\n=== §10c SONDALAR — kural sentetik vakalarla ısırıyor mu (k
       sabitDestKaynak.length > 0 && sonda(sabitDestKaynak)[0]?.bag !== "KIMLIK",
       `gelen: ${sonda(sabitDestKaynak)[0]?.bag}`);
   }
+
+  // §10c20–§10c23 — SATIR DÜZEYİ SİLME BAĞLAMI (saf yüklem, iki satır metni)
+  check("§10c20 ⭐ aynı satırdaki işaret okunur ve sınıfı TANIMLI",
+    satirBaglami("await p.x.deleteMany({}); // @silme-baglami: SINANAN_SILME — gerekçe", "")?.tanimli === true);
+  check("§10c21 ⭐ ÜST satırdaki işaret de okunur (kullanılan biçim)",
+    satirBaglami("await p.x.deleteMany({});", "// @silme-baglami: FIKSTUR_KURULUMU — gerekçe")?.tanimli === true);
+  check("§10c22 ⭐ KÜME DIŞI sınıf tanımsız (fail-closed — kapalı küme reddedebilmeli)",
+    satirBaglami("x", "// @silme-baglami: KEYFI_SINIF — gerekçe")?.tanimli === false,
+    `sınıf: ${satirBaglami("x", "// @silme-baglami: KEYFI_SINIF — gerekçe")?.sinif}`);
+  check("§10c23 işaret yoksa bağlam YOK (kural işarete bağlı)", satirBaglami("await p.x.deleteMany({});", "// sıradan yorum") === null);
 
   // §10c17–§10c19 — TEMİZLİK BEYANI işareti (saf yüklem, dosya metni)
   check("§10c17 ⭐ başta işaret → temizlik script'i", temizlikScriptiMi("// @temizlik-scripti: gerekçe\nconst x = 1;"));

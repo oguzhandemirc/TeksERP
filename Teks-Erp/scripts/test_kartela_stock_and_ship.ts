@@ -360,6 +360,7 @@ async function run(): Promise<void> {
   const mres = await kartelaService.dispatch({ subcontractorId: FIRM, rollIds: [mRoll] }, ADMIN);
   const mId = (mres.data as { id?: string })?.id as string;
   if (mId) dispatchIds.push(mId);
+  // @silme-baglami: SINANAN_SILME — MİRAS sevk koşulu kuruluyor: defter satırı olmayan eski sevkin iptali sınanıyor
   await prisma.warehouseMovement.deleteMany({ where: { rollId: mRoll } });
   await kartelaService.cancelDispatch(mId, "bekçi: miras sevkin iptali", ADMIN);
   const mSatir = await prisma.warehouseMovement.count({ where: { rollId: mRoll } });

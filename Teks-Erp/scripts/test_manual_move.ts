@@ -64,6 +64,7 @@ async function mkParty(c: Ctx, woId: string, stepId: string, n: number): Promise
   const rollIds = (await prisma.roll.findMany({ where: { batchId }, select: { id: true } })).map((r) => r.id);
   // Toplu olarak istenen adıma yerleştir + açık movement.
   await prisma.roll.updateMany({ where: { batchId }, data: { currentStepId: stepId, status: RollStatus.IN_PRODUCTION } });
+  // @silme-baglami: FIKSTUR_KURULUMU — toplar istenen adıma yerleştiriliyor: açık hareket silinip yerine o adımın hareketi yazılıyor
   await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds }, exitedAt: null } });
   for (const rid of rollIds) await prisma.rollMovement.create({ data: { rollId: rid, workOrderStepId: stepId, qtyIn: 100 } });
   return { batchId, rollIds };

@@ -120,6 +120,7 @@ async function main(): Promise<void> {
     const yabanciRun = await prisma.machineRun.create({ data: { machineId: makine2.id, productionLineNo: 1, startedAt: new Date(Date.now() - 3600_000) }, select: { id: true } });
     const b2 = await bekle(openDoff({ ...taban, machineRunId: yabanciRun.id }));
     check("§2b başka makinenin koşumu → 409 DOFF_RUN_MISMATCH", !b2.ok && kod(b2.e) === "DOFF_RUN_MISMATCH", b2.ok ? "geçti" : kod(b2.e));
+    // @silme-baglami: SINANAN_SILME — yabancı koşum senaryosu kapatılıyor: bir sonraki kontrol için koşum ORTADAN KALKMALI
     await prisma.machineRun.delete({ where: { id: yabanciRun.id } });
     const issizRun = await prisma.machineRun.create({ data: { machineId: makine.id, productionLineNo: 1, startedAt: new Date(Date.now() - 3600_000) }, select: { id: true } });
     const b3tok = uuid();

@@ -110,6 +110,7 @@ async function okuyucular(f: Fis): Promise<{ taslak: number; taslakUyari: string
   });
   const taslak = inv.lines.reduce((a, l) => a + Number(l.qty), 0);
   // Taslak deftere yazmamıştır (④ sınıfı); bir sonraki durum için yol açılır.
+  // @silme-baglami: SINANAN_SILME — ④ sınıfı taslak (deftere hiç yazmamış) siliniyor — bir sonraki durum için yol açılıyor
   await prisma.invoiceLine.deleteMany({ where: { invoiceId: d.data.id } });
   await prisma.invoice.delete({ where: { id: d.data.id } });
 
@@ -216,6 +217,7 @@ async function main(): Promise<void> {
   const g = await fisKur(wh.id);
   // Bilerek silinen satır KİMLİĞİYLE silinir: önce bul, sonra id ile sil (ad/kod yüklemi §10b'de sınırsız sayılır).
   const fisSatiri = await prisma.warehouseMovement.findFirst({ where: { rollId: g.parent, reasonCode: "ENTRY_RECEIPT" }, select: { id: true } });
+  // @silme-baglami: SINANAN_SILME — ufuk öncesi satırsız fiş senaryosu kuruluyor: okuyucunun defter satırı YOKKEN davranışı sınanıyor
   if (fisSatiri) await prisma.warehouseMovement.delete({ where: { id: fisSatiri.id } });
   const ufukOncesi = new Date(ledgerHorizonStart().getTime() - 24 * 3600 * 1000);
   await prisma.roll.update({ where: { id: g.parent }, data: { createdAt: ufukOncesi } });
