@@ -93,7 +93,16 @@ const AGIR_ADIM_ENV = {
 const RAPOR_DIZINI = mkdtempSync(join(tmpdir(), "tekserp-kapi-"));
 process.on("exit", () => rmSync(RAPOR_DIZINI, { recursive: true, force: true }));
 
-for (const proje of etkilenenProjeler(REPO, staged)) {
+const etkilenen = etkilenenProjeler(REPO, staged);
+
+// PRISMA İSTEMCİSİ GÜNCEL Mİ (1e hükmü 2026-09-14): izole ağaçta rebase şemayı taşır,
+// üretileni taşımaz; tip kapısı 30–90 sn sonra "Property 'X' does not exist" der ve
+// sebebi söylemez (aynı gece d9 · 82 · d5 ×2). Ucuz (ms), tip'ten ÖNCE, çaresini basar.
+if (etkilenen.some((p) => p.ad === "Teks-Erp")) {
+  adimlar.push({ ad: "prisma istemcisi güncel", cwd: ".", cmd: ["node", ["scripts/hooks/lib/prisma-istemci.mjs"]] });
+}
+
+for (const proje of etkilenen) {
   const genis = genisTip(proje.ad);
   adimlar.push({
     ad: `${proje.ad} · tip${genis ? " (+scripts)" : ""}`,

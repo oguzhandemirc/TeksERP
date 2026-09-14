@@ -35,7 +35,7 @@
 //    söyler.
 // =============================================================================
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, isAbsolute } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -338,6 +338,35 @@ function main(): void {
   check(
     "§7c semafor slotu İLK AĞIR ADIMDAN önce alınıyor (ucuz adımlar slot tutmaz, kayıt ısırığında slot alınmaz)",
     /if \(adim\.agir && !slotBirak\) slotAlVeYaz\(\);/.test(preCommit) && !/const slotBirak = agirVar/.test(preCommit),
+  );
+
+  // ── §8 PRISMA İSTEMCİSİ GÜNCEL Mİ (1e hükmü 2026-09-14) ─────────────────────
+  // Rebase şemayı taşır, üretileni taşımaz; tip kapısı sebebi söylemeden kırmızı verir.
+  // Üç sonuç: GÜNCEL 0 · BAYAT/İSTEMCİ YOK 1 (çare basılır) · ŞEMA OKUNAMADI 2 (ARIZA).
+  // Sonda sahte hedefte: geçici şema + kopya; gerçek istemciye dokunulmaz.
+  console.log("\n§8 — prisma istemcisi şemayla güncel mi (tip kapısından ÖNCE, çaresiyle)");
+  const pi = join(KOK, "scripts/hooks/lib/prisma-istemci.mjs");
+  const piDizin = mkdtempSync(join(tmpdir(), "tekserp-prisma-istemci-"));
+  const sema = join(piDizin, "schema.prisma");
+  const kopya = join(piDizin, "kopya.prisma");
+  const govde = 'enum StationKind {\n  RAW_QC\n  TAMBUR\n}\nmodel Roll {\n  id String @id\n  @@unique([id])\n}\n';
+  // Prisma kopyayı yeniden biçimler ve blok özniteliklerini sıralar — kopya farklı hizalı/sıralı ama AYNI küme.
+  writeFileSync(sema, govde);
+  writeFileSync(kopya, '// üretildi\nenum StationKind {\n    RAW_QC\n    TAMBUR\n}\nmodel Roll {\n  @@unique([id])\n  id    String   @id\n}\n');
+  const piKos = (args: string[]) => spawnSync("node", [pi, ...args], { encoding: "utf8", cwd: KOK });
+  const r8a = piKos([`--sema=${sema}`, `--istemci=${kopya}`]);
+  check("§8a ⭐ biçim/sıra farkı BAYAT DEĞİL (Prisma kopyayı yeniden biçimler) → çıkış 0", r8a.status === 0, `çıkış=${r8a.status} ${r8a.stderr.trim().slice(0, 80)}`);
+  writeFileSync(sema, govde.replace("  TAMBUR\n", "  TAMBUR\n  WEAVING\n"));
+  const r8b = piKos([`--sema=${sema}`, `--istemci=${kopya}`]);
+  check("§8b ⭐ şemaya enum değeri eklendi, generate koşmadı → çıkış 1 + çare 'prisma generate'", r8b.status === 1 && /prisma generate/.test(r8b.stderr), `çıkış=${r8b.status}`);
+  const r8c = piKos([`--sema=${sema}`, `--istemci=${join(piDizin, "yok.prisma")}`]);
+  check("§8c istemci hiç üretilmemiş → çıkış 1 + çare", r8c.status === 1 && /prisma generate/.test(r8c.stderr), `çıkış=${r8c.status}`);
+  const r8d = piKos([`--sema=${join(piDizin, "yok-sema.prisma")}`, `--istemci=${kopya}`]);
+  check("§8d şema okunamadı → ARIZA çıkış 2 (ihlal değil)", r8d.status === 2 && /ARIZA/.test(r8d.stderr), `çıkış=${r8d.status}`);
+  rmSync(piDizin, { recursive: true, force: true });
+  check(
+    "§8e pre-commit adımı Teks-Erp etkilenince ekliyor ve ağır işaretli DEĞİL (tip'ten önce koşar)",
+    /ad: "prisma istemcisi güncel", cwd: "\.", cmd: \["node", \["scripts\/hooks\/lib\/prisma-istemci\.mjs"\]\] \}/.test(preCommit) && !/prisma istemcisi güncel"[^\n]*agir: true/.test(preCommit),
   );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${skip > 0 ? `, ${skip} atlandı` : ""} ===`);
