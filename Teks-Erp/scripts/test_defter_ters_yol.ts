@@ -137,7 +137,14 @@ const oluBeyan = DEFTER_BEYANI.filter((b) => !modelAlanlari.has(b.model)).map((b
 check("§1b beyandaki her model şemada var (ölü beyan yok)", oluBeyan.length === 0,
   oluBeyan.length ? `ŞEMADA YOK: ${oluBeyan.join(", ")}` : `${DEFTER_BEYANI.length} beyan satırı`);
 
-const fazlaBeyan = DEFTER_BEYANI.filter((b) => modelAlanlari.has(b.model) && !evren.has(b.model)).map((b) => b.model);
+// ⚠️ TELEMETRİ EVRENİN DIŞINDADIR ve bu bir istisna değil TANIMDIR: "telemetri ≠ defter"
+// bölümünün ① kuralı telemetriyi `updatedAt` TAŞIYAN, yeniden yazılan, tavanlı ve budanan
+// satır olarak tanımlar. `yari` demek yanlış olurdu — `yari` "defter + durum aynı tabloda"
+// demektir; telemetri hiç defter değildir. Evren yine iki yönlü: TELEMETRİ beyanı yapılan
+// model ŞEMADA VAR olmalı (§1b bunu ölçer) ve karar ufkunu beyan etmeli (§7).
+const fazlaBeyan = DEFTER_BEYANI
+  .filter((b) => b.sinif !== "TELEMETRI" && modelAlanlari.has(b.model) && !evren.has(b.model))
+  .map((b) => b.model);
 check("§1c beyanda evren dışı model yok", fazlaBeyan.length === 0,
   fazlaBeyan.length ? `append-only DEĞİL ve "yarı" da denmemiş: ${fazlaBeyan.join(", ")}` : "");
 
@@ -159,6 +166,15 @@ for (const b of DEFTER_BEYANI) {
   const alan = modelAlanlari.get(b.model);
   if (!alan) continue;
   const updatedAtVar = alan.has("updatedAt");
+  if (b.sinif === "TELEMETRI") {
+    // ⚠️ TELEMETRİ İKİ BİÇİMDE OLUR ve ölçüldü (2026-09-14): `EndpointLatencyDaily`
+    // yeniden yazılır (`updatedAt`), `TravelerCardScan`/`SystemLog` append-only birikir.
+    // "Telemetri ≠ defter" bölümünün ① kuralı bu özellikleri SAYAR, ŞART KOŞMAZ — ikisini
+    // birden zorunlu kılan bir kontrol, betimlemeyi yanlış bir değişmeze çevirir (kural
+    // cümlesi hatası). Biçim GÖRÜNÜR basılır, kapı değildir; sınıfın ölçütü budanabilirlik.
+    console.log(`   ⓘ TELEMETRİ ${b.model} — ${updatedAtVar ? "yeniden yazılır (updatedAt)" : "append-only birikir"}`);
+    continue;
+  }
   if (b.yari) check(`§2 ${b.model} "yarı" beyanı doğru`, updatedAtVar, updatedAtVar ? "updatedAt var" : "updatedAt YOK — beyan BAYAT, `yari` kaldırılmalı");
   else if (updatedAtVar) check(`§2 ${b.model} "yarı" beyanı eksik`, false, "updatedAt VAR ama beyanda `yari` yok");
 }

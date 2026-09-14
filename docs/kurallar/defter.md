@@ -63,6 +63,7 @@ Durum tabloları **"şu an ne"**yi tutar; defterler **"ne oldu"**yu tutar ve "ne
 
 **Bu bölüm bir hard-delete sınıfı AÇMAZ.** Yukarıdaki iki sınıf kanonik kalır. Budanabilirlik bir *silme izni* değil, **satırın yaşam süresidir** — ve yaşam süresi, model sınıfından (`KATALOG` · `DEFTER` · `PİVOT`) **bağımsız bir eksendir**. Dördüncü bir *sınıf* açmak iki ekseni tek listeye bindirir ve *"append-only bir katalog budanabilir mi"* gibi cevapsız sorular doğurur.
 
+- **[ÇEKİRDEK]** **Yaşa göre budanan bir tablo, SINIFI BEYAN EDİLMEDEN budanamaz** — ve telemetri bir hard-delete sınıfı değil, defter-OLMAYAN satırın yaşam döngüsüdür (§ *Telemetri ≠ defter*, altı kural). Budama yüklemi YAŞA bağlıdır (tarih eşiği), ada ya da kimliğe değil; budayan yol TEK dosyadadır ve beyanla birebir eşleşir (ölü beyan da kırmızı). ⚠️ Ölçüldü 2026-09-14: bugün budanan iki tablodan `EndpointLatencyDaily` beyan tablosunda HİÇ YOKTU ve `Session` hiçbir evrende sınıflanmamıştı — iki kapı da doğru çalışıyordu, boşluk ARALARINDAYDI. · bekçi: `test_telemetri_defter_degil.ts` (§2 sınıf beyanı · §3 budayan küme birebir · §4 tek dosya · §5 defter budanmaz; altı saf sonda) <sub>(tasarım: `docs/design/DOKUMA-TEZGAH-IZLEME-TASARIMI.md` §4; arşiv:2026-09-14)</sub>
 - **[ÇEKİRDEK]** Bir satırın telemetri olup olmadığı YARGIYLA değil YANLIŞLANABİLİR BİR SONDAYLA belirlenir: **ham örnek silindiğinde raporlanan hiçbir sayı değişmiyorsa o satır telemetridir — ama bir KARARI besliyorsa saklama süresi o kararın UFKUYLA sınırlıdır.** *"İş kararına girmez"* bir yargıdır ve ölçüt olarak kullanılmaz. Kuralın "sayı" kelimesi 2026-09-13'te dar bulundu: `TravelerCardScan` hiçbir rapora girmiyor ama istasyon KALICI SİLME guard'ı okutma sayar (`guarded-hard-remove.ts` `scanCount` → 409) — budama o kararı sessizce serbest bırakır ve silinemeyen bir istasyon silinebilir hâle gelir. Budamadan önce ya guard'a kalıcı ikinci tanık verilir (`machineHistoryCount` zaten orada) ya budama o ufku aşmaz. (⚠️ Kök `CLAUDE.md` hâlâ dar hâli taşıyor.) · bekçi: `YOK (sonda yarısı; karar-ufku yarısı test_defter_ters_yol §7'de ölçülüyor — TELEMETRİ beyanı kararUfku taşımazsa kırmızı)` · Kapanır: `budanan bir tabloda "ham satır sil → raporlanan hiçbir sayı değişmez" sondası BEKÇİ olarak yeşil verir (tasarım §4 sed ①, dört ayak). Ölçüldü 2026-09-13: bugün budanan tek tablo EndpointLatencyDaily ve test_latency_persist yalnız retention'ın KOŞTUĞUNU ölçüyor, güvenliğini değil; tezgah telemetrisi tabloları şemada yok` · Çapa: `test_machine_prune_safety` · Öncül: ölçüldü <sub>(arşiv:2026-09-12 devere · tasarım: `docs/design/DOKUMA-TEZGAH-IZLEME-TASARIMI.md` §4 "Saklama, budama ve iki sınıfın tek tablodaki bedeli")</sub>
 - **[ÇEKİRDEK]** İş kararına giren her sayı **budamadan ÖNCE kalıcı kolona DONAR**; budayıcı açık koşumun penceresine, açık vardiyaya ve MÜHÜRSÜZ pencereye DOKUNMAZ. Geçmiş bir özet yeniden hesaplandığında değişiyorsa, budama değil o özetin kalıcılığı kusurludur. · bekçi: `YOK` · Kapanır: `budayıcı indiğinde test_machine_prune_safety dört ayağı yeşil (açık koşum · açık vardiya · mühürsüz pencere DOKUNULMAZ · donmuş terim değişmez) ve yüklemden mühür koşulu düşürülünce kırmızı; donma yarısı 2026-09-13'te closeMachineRunTx ile indi (test_machine_run §9a picks/producedM/observedSec donuyor), budayıcı ve tezgah kovası şemada yok — bugün budanan tek tablo EndpointLatencyDaily` · Çapa: `test_machine_prune_safety` · Öncül: ölçüldü <sub>(arşiv:2026-09-12 devere)</sub>
 - **[ÇEKİRDEK]** Aynı ölçüt **audit'i de kapsar**: kalıcı sayaç/rapor `SystemLog`tan değil kalıcı kolondan okunduğu için audit satırı silindiğinde raporlanan hiçbir sayı değişmez ⇒ audit telemetri yaşam süresindedir ve **6 aylık arşivlenmesi bir istisna değil bu kuralın örneğidir.** `DEFTER` "iş defteri / kanıt defteri" diye BÖLÜNMEZ. <sub>(arşiv:2026-09-12 devere)</sub>
@@ -145,6 +146,42 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 | `DoffEvent` | doff (top alma) olayı — topu DOĞURAN kayıt (`Roll.doffEventId`, `Restrict`: doff silinemez, top ona bağlı); `counterAtDoff` sayaç fotoğrafı; `clientToken` idempotent | ✅ (`updatedAt` yok) | ✅ `revokedAt` + `revokedById` damgası (şema `44b34d23`, P3); yazma yüzeyi HENÜZ YOK (`yazan: []` ölçüldü) — beyansız ilk yazıcı `test_defter_ters_yol` §5'te kırmızı (sonda ile doğrulandı 2026-09-13) |
 | `MachineStopReclass` | sebep DEĞİŞİM defteri (`from→to`); "ne oldu değişmez"in doğru yeri: karar revize edilir, revizyonun kendisi değişmez | ✅ | ✅ **KARSI_KAYIT** (2026-09-14, borç KAPANDI) — ters yol aynı deftere `to→from` ikinci satır; yazanı ileri yolun KENDİSİ (`reclassifyStop`, `machine-stop.service`), bu yüzden mühür kapısını (`assertStopShiftWritableTx`) taşımaması yapısal olarak imkânsız. Kapı: §3k1 yön kolonları şemada · §3k2 ters yazan İLERİ yazan dosyada. Kapının SEALED ayağı 01 Faz 1a ile iner (bugün yalnız 409 `SHIFT_CANCELLED`) |
 | `SackTagAssignment` | çuval izi (etiket) ataması | ✅ | ✅ `clearedAt`+`clearedById` damgası (2026-09-14; sevk temizliği `clearedShipmentId` adresi yazar, elle kaldırma NULL bırakır — storno yalnız adresliyi diriltir, yeniden bırakma ikisini de) |
+
+## Telemetri ≠ defter
+
+> **Telemetri bir hard-delete SINIFI DEĞİLDİR.** Hard-delete sınıfları (③b saf yapılandırma
+> pivotu · ④ deftere hiç yazmamış taslak) *"bir DEFTER satırını hangi koşulda fiziksel
+> silebilirsin"* sorusunun cevabıdır; telemetri satırı defter satırı değildir, o listeye
+> girmesi kategori hatasıdır. Üçüncü bir sınıf açmak listeyi "silinebilir şeyler" listesine
+> çevirir ve bir sonraki tasarımcı kendi tablosunu oraya yazmak için gerekçe arar —
+> doktrinin aşınma yolu tam olarak budur. (Yönetici kararı 2026-09-12; ⑤ sınıfı önerisi REDDEDİLDİ.)
+
+**Altı çekirdek kural:**
+
+1. **Telemetri, defter-olmayan satırın YAŞAM DÖNGÜSÜDÜR** — yeniden yazılabilir, tavanlıdır,
+   budanır. ⚠️ Bu özellikler SAYILIR, ŞART KOŞULMAZ: telemetri hem yeniden yazılan
+   (`EndpointLatencyDaily`, `updatedAt`) hem append-only biriken (`TravelerCardScan` ·
+   `SystemLog`) biçimde olur; ikisini birden zorunlu kılan bir kontrol betimlemeyi yanlış bir
+   değişmeze çevirir (ölçüldü 2026-09-14). Sınıfın ölçütü **budanabilirliktir**.
+2. **Deftere ya da bir İŞ KARARINA giren her sayı, budamadan ÖNCE kalıcı kolona DONAR**
+   (karne terimleri · `MachineShiftStopBreakdown` · koşumun kapanış terimleri).
+3. **Budama izni manifest bekçisiyle ÖLÇÜLEREK verilir** — bekçi yeşil değilken retention job
+   sürüme çıkmaz.
+4. **Telemetri okuyan yol TEK DOSYADA yaşar** ve AST tripwire ile sabitlenir.
+5. **Aynı tabloda defter + telemetri varsa yüklem TEK helper'dadır** ve DB seddiyle ikizdir.
+6. **Retention açık koşuma, açık vardiyaya ve MÜHÜRSÜZ pencereye DOKUNMAZ.**
+
+⚠️ **Bugün ölçülen ile ölçülemeyen AYRILIR** (`test_telemetri_defter_degil`): ①'in sınıf
+beyanı · ④'ün tek-dosya kuralı · "tavanlı" olmanın yapısal karşılığı (budama yüklemi YAŞA
+bağlı, ada değil) bugün ölçülür; ② donan sayı · ③ manifest · ⑤ helper-sed ikizi · ⑥ açık
+pencere Faz 2'de `test_machine_prune_safety` ile gelir. *Kapsamı yazılmayan bir bekçi,
+kapsamadığı kuralı da kapsıyor sanılır.*
+
+⚠️ **Beyan tablosunun EVRENİ o tablonun sözleşmesidir.** `DEFTER_BEYANI`nin evreni append-only
+modellerdir; yaşa göre budanan ama defter evreninde olmayan tablo (`Session`) oraya yazılamaz —
+denendi (2026-09-14) ve bir beyan yüzünden başka bir kapının borcu arttı (test script'lerindeki
+oturum temizlikleri §10b2'ye girdi). Böyle tablolar bekçinin kendi `BUDANAN_DEFTER_DISI`
+listesinde durur.
 
 ## Geçersiz kılınan kurallar
 

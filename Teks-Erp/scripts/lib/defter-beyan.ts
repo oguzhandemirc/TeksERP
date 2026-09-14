@@ -444,6 +444,14 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   { model: "TravelerCardScan", sinif: "TELEMETRI",
     gerekce: "hiçbir rapor/panel/tablet yüzeyi okutma SAYISI basmıyor (ölçüldü 2026-09-13: rapor servisleri · dashboard · panel · mobil = sıfır)",
     kararUfku: "istasyon/makine KALICI SİLME guard'ı okutma sayar (guarded-hard-remove.ts:126 scanCount → 409). Budama o kararı SESSİZCE serbest bırakır: budanan ufuktan eski okutmalar silinirse kalıcı silinemeyen bir istasyon silinebilir hâle gelir. Budamadan önce ya guard'a kalıcı ikinci tanık verilir (machineHistoryCount zaten orada) ya budama bu ufku aşmaz. İkinci tüketici 10 sn'lik mükerrer okutma penceresidir (geçici, budamadan etkilenmez)." },
+  // ⚠️ BUGÜN BUDANAN TEK CANLI TABLO — ve 2026-09-14'e kadar BEYANSIZDI: §1 evreni
+  // "append-only model" (updatedAt YOK) olduğu için bu tabloyu hiç sormuyordu. Budanan
+  // bir tablonun beyansız kalması, telemetri sınıfının kendi kör noktasıydı.
+  { model: "EndpointLatencyDaily", sinif: "TELEMETRI",
+    gerekce: "uç gecikme özeti (gün × route); TEK okuyucusu kendi servisidir (ölçüldü 2026-09-14: `endpointLatencyDaily` delegate'i src'de yalnız latency-persist.service.ts'te geçer) ⇒ satır silindiğinde raporlanan hiçbir sayı değişmez",
+    kararUfku: "performans gözlemi — gün bazlı özet `RETENTION_DAYS` penceresinde tutulur ve budama YAŞA bağlıdır (`day < cutoff`); hiçbir iş kararı, guard ya da karne bu tablodan okumaz, dolayısıyla ufuk gözlem penceresinin kendisidir",
+    silen: ["src/services/latency-persist.service.ts"] },
+
   { model: "SystemLog", sinif: "TELEMETRI",
     gerekce: "kalıcı sayaç/rapor SystemLog'tan değil KALICI KOLONDAN okunur ⇒ audit satırı silindiğinde raporlanan hiçbir sayı değişmez",
     kararUfku: "6 ayda arşivlenir; iş kaynağı olarak okunmaz. ⚠️ ÇÜRÜTMENİN ZAYIF HALKASI ÖLÇÜLDÜ (2026-09-13): audit satırı BİR sayaçta okunuyor — backup-impact.service.ts:331 `systemLog.count`. Ama o satır \"İş kaybı DEĞİL — iz kaydı\" etiketiyle `system` grubunda duruyor (iş sayısı değil) ve kod arşivleme ufkunu ZATEN biliyor: :404 `_min(createdAt)` ile kapsamı ölçüp en eski log cutoff'tan sonraysa rollup'ı alt sınır saymıyor, \"ölçülemedi\" diyor — 0 demiyor. Panzehir yerinde olduğu için sınıf TELEMETRİ kalır. Audit'e uzanma ihtiyacı bir DEFTER EKSİKLİĞİNİN işaretidir (bkz. SackAllocation borcu)." },

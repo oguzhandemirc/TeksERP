@@ -21,6 +21,42 @@
 
 ---
 
+## 2026-09-14 — Telemetri ≠ defter: iki doğru kapının ARASINDAKİ boşluk [ÇEKİRDEK]
+
+`defter.md` telemetri için altı kural taşıyordu ve **kapısı yoktu**. Kapı yazılınca ilk
+koşumda iki bulgu çıktı, ikisi de aynı sınıftan: **bugün yaşa göre budanan İKİ tablonun
+hiçbiri sınıflanmamıştı.** `EndpointLatencyDaily` — kökün telemetri örneği olarak ADIYLA
+andığı tablo — beyan tablosunda hiç yoktu; `Session` de hiçbir evrende.
+
+**İki kapı da doğru çalışıyordu; boşluk ARALARINDAYDI.** `test_defter_ters_yol §1`in evreni
+"append-only model"dir (`updatedAt` yok) ⇒ yeniden yazılan bir telemetri tablosunu hiç
+sormaz. `§10`un silme taraması ise TELEMETRİ sınıfını bilerek kapsam dışında tutar ⇒
+telemetri silmesini hiç ölçmez. ⇒ ***Bir nesne iki kapının da kapsamı dışında kalabilir ve
+iki kapı da yeşil kalır; kapsamların BİRLEŞİMİ kimse tarafından ölçülmüyorsa boşluk
+görünmez.*** Yeni kapının sorusu bu yüzden sınıf değil DAVRANIŞ üzerinden kuruldu: *yaşa
+göre budanan her tablo* — sınıfı ne olursa olsun — beyan edilmiş olmalı.
+
+**Budama YAPISAL olarak tanındı:** yüklemde tarih eşiği (`lt`/`lte`). Ad ya da kimlik
+yüklemi budama değil TEMİZLİKTİR ve başka kapının konusudur (§10b). Böylece iki kapı aynı
+`deleteMany` çağrısına iki farklı soru sorar ve kapsamları örtüşmez.
+
+**Kural cümlesi bir kez yanlıştan döndü.** Altı kuralın ①'i telemetriyi *"updatedAt taşır,
+yeniden yazılır, tavanlıdır, budanır"* diye betimliyor. Bunu kontrol yapınca
+`TravelerCardScan` ve `SystemLog` kırmızı verdi — ikisi de append-only biriken meşru
+telemetri. ⇒ ***Betimleme SAYAR, şart KOŞMAZ:*** özellik listesini konjonksiyona çevirmek,
+doğru sınıflanmış satırları cezalandıran yanlış bir değişmez üretir. Biçim artık görünür
+basılır, kapı değildir; sınıfın ölçütü budanabilirliktir.
+
+**Beyan tablosunun EVRENİ onun sözleşmesidir.** `Session` önce `DEFTER_BEYANI`ye yazıldı ve
+üç kırmızı doğdu; biri gerçek bir yan etkiydi: test script'lerindeki oturum temizlikleri
+§10b2'nin borcuna girdi — yani **bir BEYAN yüzünden başka bir kapının sayısı arttı**. Satır
+geri alındı ve bekçinin kendi `BUDANAN_DEFTER_DISI` listesine kondu. *Başka bir evrenin
+satırını bir beyan tablosuna koymak, ölçümü kirletir.*
+
+Kapsam AYRICA beyan edildi: altı kuralın ①④ ve "tavanlı"nın yapısal karşılığı bugün
+ölçülür; ②③⑤⑥ Faz 2'de `test_machine_prune_safety`ye kalır — *kapsamı yazılmayan bir bekçi,
+kapsamadığı kuralı da kapsıyor sanılır.*
+
 ## 2026-09-14 — Teardown-dışı defter silmesi 61 → 0: sayıyı düşürmenin ÜÇ meşru yolu [ÇEKİRDEK]
 
 `test_defter_ters_yol §10b2` teardown DIŞINDA defter silen **61** çağrı sayıyordu. Sayıyı
