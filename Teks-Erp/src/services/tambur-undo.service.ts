@@ -244,6 +244,38 @@ export const UNDO_FULL_PERMISSION = "roll:manual-adjust";
 /** FULL sebebinin alt sınırı — `manualReasons.MANUAL_MIN_REASON` ile aynı. */
 const UNDO_FULL_MIN_REASON = 3;
 
+/**
+ * Çocukların DOĞUM-ANI özellik satırları — geri kurulumda donör kümesi (plan §3.1).
+ * Postgres'te `now()` tx başlangıcıdır: kesimde kopyalanan miras satırı çocukla aynı
+ * damgayı taşır, depoda sonradan eklenen satır kesinlikle daha büyüktür. Sıra
+ * deterministik: en erken doğan çocuk önce, sonra `propertyId` — `donor[0]` rastgele
+ * olmasın. Kurulum başına tarih sabiti YOK, kapı veri-güdümlü.
+ */
+async function birthPropertiesOf(
+  tx: Prisma.TransactionClient,
+  childIds: string[],
+): Promise<{ rollId: string; propertyId: string; valueId: string | null }[]> {
+  if (childIds.length === 0) return [];
+  const births = await tx.roll.findMany({
+    where: { id: { in: childIds } },
+    select: { id: true, createdAt: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const out: { rollId: string; propertyId: string; valueId: string | null }[] = [];
+  for (const b of births) {
+    // ⚠️ `revokedAt` SÜZÜLMEZ (bilinçli): doğum-anı satırı çocukta SONRADAN sürümlenmiş
+    // (damgalı) olsa bile ebeveynin kesim anındaki değeri O satırdır; aktif olanı
+    // almak çocuğun sonraki düzeltmesini ebeveyne uydururdu (§3.1'in ikinci yüzü).
+    const rows = await tx.rollProperty.findMany({
+      where: { rollId: b.id, createdAt: { lte: b.createdAt } },
+      select: { rollId: true, propertyId: true, valueId: true },
+      orderBy: { propertyId: "asc" },
+    });
+    out.push(...rows);
+  }
+  return out;
+}
+
 export class TamburUndoService {
   /**
    * Geri alma önizlemesi — HİÇBİR ŞEY YAZMAZ.
@@ -1726,14 +1758,13 @@ export class TamburUndoService {
         userId,
       });
 
-      // 5) finalize kaynağın property'lerini silmişti — iptal edilen çocuğun
-      //    kopyasından geri kur (FULL 6 ile aynı, donör = bu çocuk).
+      // 5) Ebeveynin özelliği yoksa (legacy: eski finalize silmişti; ya da HİÇ yoktu)
+      //    iptal edilen çocuğun DOĞUM-ANI kopyasından geri kur (FULL 6 ile aynı).
+      //    Donör = çocukla aynı tx'te yazılmış satırlar (`createdAt <= çocuk.createdAt`):
+      //    çocuğun depoda SONRADAN kazandığı özellik ebeveyne UYDURULMAZ (plan §3.1).
       const parentPropCount = await tx.rollProperty.count({ where: { rollId: parentId, ...ACTIVE_ROLL_PROPERTY } });
       if (parentPropCount === 0) {
-        const donor = await tx.rollProperty.findMany({
-          where: { rollId: childId, ...ACTIVE_ROLL_PROPERTY },
-          select: { propertyId: true, valueId: true },
-        });
+        const donor = await birthPropertiesOf(tx, [childId]);
         if (donor.length > 0) {
           await tx.rollProperty.createMany({
             data: donor.map((d) => ({ rollId: parentId, propertyId: d.propertyId, valueId: d.valueId ?? null })),
@@ -2076,16 +2107,25 @@ export class TamburUndoService {
       const deadChildIds = [...new Set(deadChildVariances.map((v) => v.rollId))];
       await this.reverseDeadChildGroupsTx(tx, deadChildIds, userId);
 
-      // 6) finalize parent'ın property'lerini SİLMİŞTİ — çocuk kopyasından geri kur.
+      // 6) Ebeveynin özelliği yoksa çocuğun DOĞUM-ANI kopyasından geri kur (plan §3.1):
+      //    donör yalnız çocukla aynı tx'te yazılmış satırlar (`createdAt <= çocuk.createdAt`);
+      //    (a) donör çocuk DETERMİNİSTİK (en erken doğan); (b) canlı çocuk kalmadıysa
+      //    (F0402: hepsi tek tek iptal edilmiş) iptal edilmiş çocuklar da donör olabilir —
+      //    doğum-anı satırı ölü çocukta da durur; (c) `propsRestored === 0` sessiz geçmez
+      //    (audit + yanıt), "ebeveyn hiç özellik taşımıyordu" ile "donör bulunamadı" ayrışsın.
       const parentPropCount = await tx.rollProperty.count({ where: { rollId: parentId, ...ACTIVE_ROLL_PROPERTY } });
       let propsRestored = 0;
+      let propsDonorMissing = false;
       if (parentPropCount === 0) {
-        const donor = await tx.rollProperty.findMany({
-          where: { rollId: { in: ids }, ...ACTIVE_ROLL_PROPERTY },
-          // valueId: geri kurulum DEĞER-FARKINDA (denetim F6) — çocuk kesimde
-          // GRAMAJ=50GR'ı miras aldıysa geri dönen ebeveyn de onu taşımalı.
-          select: { rollId: true, propertyId: true, valueId: true },
-        });
+        let donorIds = ids;
+        if (donorIds.length === 0) {
+          const deadChildren = await tx.roll.findMany({
+            where: { parentRollId: parentId },
+            select: { id: true },
+          });
+          donorIds = deadChildren.map((c) => c.id);
+        }
+        const donor = await birthPropertiesOf(tx, donorIds);
         if (donor.length > 0) {
           const donorId = donor[0].rollId;
           const donorRows = new Map(
@@ -2100,6 +2140,8 @@ export class TamburUndoService {
             skipDuplicates: true,
           });
           propsRestored = donorRows.size;
+        } else {
+          propsDonorMissing = true;
         }
       }
 
@@ -2128,6 +2170,7 @@ export class TamburUndoService {
         reopenedErrors: reopened.count,
         woRevived: woRevivedCount > 0,
         propsRestored,
+        propsDonorMissing,
         reversedVariances: reversedVariances.count + reversedChildVariances.count,
         warehouseClosure: stepId === null,
       };
@@ -2143,6 +2186,9 @@ export class TamburUndoService {
         workOrderId: result.workOrderId,
         woRevived: result.woRevived,
         propsRestored: result.propsRestored,
+        // Donörsüz sıfır: ebeveyn özelliksiz KALDI — "hiç yoktu" ile "geri gelmedi" ayrımı
+        // burada; sessiz geçseydi kayıp kayıtsız kalırdı (plan Y4-c).
+        propsDonorMissing: result.propsDonorMissing,
         reversedVariances: result.reversedVariances,
         warehouseClosure: result.warehouseClosure,
         // SEBEP audit'e yazılır: bu, iş emrinin geçmişini yeniden yazan bir
@@ -2159,6 +2205,10 @@ export class TamburUndoService {
         reopenedErrors: result.reopenedErrors,
         woRevived: result.woRevived,
         reversedVariances: result.reversedVariances,
+        // Özellik geri kurulumu: kaç satır donörden geldi; donörsüz sıfır AYRICA
+        // bayraklı (ebeveyn özelliksiz kaldı — sessiz geçmez, plan Y4-c). Eklemeli alan.
+        propsRestored: result.propsRestored,
+        propsDonorMissing: result.propsDonorMissing,
       },
       message:
         `İşlem geri alındı — ` +

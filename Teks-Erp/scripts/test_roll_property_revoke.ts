@@ -15,6 +15,11 @@
 //   §3 ⭐ İKİ AKTİF satır yazılamaz — sed görevde (P2002)
 //   §4 Aktif okuma damgalıyı GÖRMEZ: top detayı · düzeltme bağlamı (echo yolu) ·
 //      liste `properties` · iş emri detayı · iş emri kilit yardımcısı
+//   §8 ⭐ UNDO DONÖRÜ: özelliği olan ebeveyn kesim+finalize+FULL geri alma sonrası
+//      KENDİ satırını taşır (donör dalı girmez, çoğalmaz); §8b UYDURMA YOK —
+//      özelliksiz ebeveyn → çocuk depoda sonradan bayrak kazanır → FULL geri alma →
+//      ebeveyn ÖZELLİKSİZ dirilir (donör = çocuğun doğum-anı satırları) ve
+//      `propsDonorMissing` yanıtta/audit'te görünür (sessiz sıfır yok)
 //   §13 AST + tip denetleyicisi: her okuma çağrısı, ilişki süzgeci/iç içe okuma
 //      ve ham SQL aktif yüklemi taşır ya da gerekçeli istisnadır; Faz 2c/2d'nin
 //      kapatacağı SİLME siteleri ADIYLA beyanlıdır ve kapanınca beyanın düşmesi
@@ -31,6 +36,8 @@ import {
   revokeTargetProperties,
 } from "../src/services/helpers/property-revoke.helper";
 import { InventoryService } from "../src/services/inventory.service";
+import { TamburService } from "../src/services/tambur.service";
+import { TamburUndoService, UNDO_FULL_PERMISSION } from "../src/services/tambur-undo.service";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { computeWorkOrderLocks } from "../src/services/helpers/workorder-locks.helper";
 import { aktifYuklemTara } from "./revoke-ast-tarama";
@@ -150,6 +157,45 @@ async function main(): Promise<void> {
   try { await prisma.workOrderTargetProperty.create({ data: { workOrderId: wo.id, propertyId: choice.id } }); } catch (e) { errT = e; }
   check("§4f hedefte de damgalı dururken aynı çift yeniden yazıldı (partial unique)", errT === null, errT instanceof Error ? errT.message.split("\n")[0] : "");
 
+  // ── §8 / §8b ──────────────────────────────────────────────────────────────
+  console.log("── §8 Geri alma donörü: kendi satırı korunur, uydurma yok ──");
+  const tambur = new TamburService();
+  const undo = new TamburUndoService();
+  const mkWarehouseRoll = async (tag: string): Promise<string> => {
+    const r = await prisma.roll.create({
+      data: { barcode: `${TAG}-${tag}`, itemId, status: RollStatus.WAREHOUSE, initialQty: 100, currentQty: 100, entrySource: "MANUAL_ENTRY" },
+      select: { id: true },
+    });
+    rollIds.push(r.id);
+    return r.id;
+  };
+  const cutAndFinalize = async (parentId: string): Promise<string> => {
+    const cut = await tambur.cutWarehouseRoll(parentId, { cutLength: 30, qualityGrade: "1.KALITE" }, undefined);
+    const childId = (cut.data as { childRoll: { id: string } }).childRoll.id;
+    rollIds.push(childId);
+    await tambur.finalizeWarehouseCut(parentId, { remainingAction: "discard", varianceReasonCode: "OLCUM_HATASI" }, undefined, null);
+    return childId;
+  };
+  // §8 — özellikli ebeveyn
+  const pA = await mkWarehouseRoll("P8A");
+  await prisma.rollProperty.create({ data: { rollId: pA, propertyId: flag.id } });
+  const cA = await cutAndFinalize(pA);
+  check("§8 ön koşul — çocuk bayrağı doğum anında devraldı", (await prisma.rollProperty.count({ where: { rollId: cA, propertyId: flag.id, ...ACTIVE_ROLL_PROPERTY } })) === 1);
+  const fullA = (await undo.applyUndo(pA, undefined, { mode: "FULL", reason: "bekçi §8", permissions: [UNDO_FULL_PERMISSION] })).data as { propsRestored: number; propsDonorMissing?: boolean };
+  const pAProps = await prisma.rollProperty.findMany({ where: { rollId: pA }, select: { propertyId: true, revokedAt: true } });
+  check("§8 ⭐ FULL geri alma: ebeveyn KENDİ bayrağını taşıyor (1 satır, aktif), donör dalı girmedi",
+    pAProps.length === 1 && pAProps[0]!.revokedAt === null && fullA.propsRestored === 0 && !fullA.propsDonorMissing,
+    `satır=${pAProps.length} restored=${fullA.propsRestored}`);
+  // §8b — özelliksiz ebeveyn, çocuk depoda SONRADAN bayrak kazanır
+  const pB = await mkWarehouseRoll("P8B");
+  const cB = await cutAndFinalize(pB);
+  await prisma.rollProperty.create({ data: { rollId: cB, propertyId: flag.id } }); // depoda kazanılan (doğumdan SONRA)
+  const fullB = (await undo.applyUndo(pB, undefined, { mode: "FULL", reason: "bekçi §8b", permissions: [UNDO_FULL_PERMISSION] })).data as { propsRestored: number; propsDonorMissing?: boolean };
+  check("§8b ⭐ UYDURMA YOK: çocuğun sonradan kazandığı bayrak ebeveyne GEÇMEDİ (0 satır)",
+    (await prisma.rollProperty.count({ where: { rollId: pB } })) === 0 && fullB.propsRestored === 0,
+    `restored=${fullB.propsRestored}`);
+  check("§8b sıfır SESSİZ değil — `propsDonorMissing` yanıtta", fullB.propsDonorMissing === true, JSON.stringify(fullB.propsDonorMissing));
+
   astKontrolleri();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
@@ -172,6 +218,7 @@ const BEKLENEN_SILME_DOSYALARI = new Set<string>([
 /** "Bu özellik HİÇ kullanıldı mı" sorusunu soran yüzeyler — tarihsel satır da kanıttır. */
 const BEKLENEN_ISTISNA_DOSYALARI = new Set<string>([
   "src/services/fabric-property.service.ts", // tip dönüşümü kilidi (O24 · T15)
+  "src/services/tambur-undo.service.ts", // geri kurulum donörü: doğum-anı satırı, sonradan damgalanmış olsa da (§3.1)
 ]);
 
 function astKontrolleri(): void {
@@ -183,7 +230,8 @@ function astKontrolleri(): void {
   ]);
   // Zeminler BU tablolar için ölçüldü (2026-09-14): rollProperty çağrı 8 · ilişki 20;
   // workOrderTargetProperty çağrı 1 · ilişki 14; ham SQL iki tabloda da 0 (=== 0, >= değil).
-  const zemin = { rollProperty: { cagri: 7, iliski: 18 }, workOrderTargetProperty: { cagri: 1, iliski: 12 } } as const;
+  // 2b sonrası rollProperty çağrı 6 (iki donör okuması tek helper'da).
+  const zemin = { rollProperty: { cagri: 6, iliski: 18 }, workOrderTargetProperty: { cagri: 1, iliski: 12 } } as const;
   const tumIstisna: string[] = [];
   const tumSilme: string[] = [];
   const tumYazarIhlal: string[] = [];
@@ -221,8 +269,8 @@ function astKontrolleri(): void {
   const istisnaDosyalari = new Set(tumIstisna.map((y) => y.split(":")[0]));
   const beklenmeyen = [...istisnaDosyalari].filter((d) => !BEKLENEN_ISTISNA_DOSYALARI.has(d));
   const olu = [...BEKLENEN_ISTISNA_DOSYALARI].filter((d) => !istisnaDosyalari.has(d));
-  check("§13f istisna kümesi iki yönlü: sessiz yeni muaf yok, ölü muaf yok; iki istisna da o dosyada (O24 + T15)",
-    beklenmeyen.length === 0 && olu.length === 0 && tumIstisna.length === 2,
+  check("§13f istisna kümesi iki yönlü: sessiz yeni muaf yok, ölü muaf yok; üç istisna (O24 + T15 + donör)",
+    beklenmeyen.length === 0 && olu.length === 0 && tumIstisna.length === 3,
     `beklenmeyen=[${beklenmeyen.join(", ")}] ölü=[${olu.join(", ")}] n=${tumIstisna.length}`);
 }
 
@@ -230,6 +278,11 @@ async function cleanup(): Promise<void> {
   try {
     if (rollIds.length) {
       await prisma.rollProperty.deleteMany({ where: { rollId: { in: rollIds } } });
+      await prisma.rollVariance.deleteMany({ where: { rollId: { in: rollIds } } });
+      await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
+      await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
+      await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: rollIds }, reversesMovementId: { not: null } } });
+      await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: rollIds } } });
       await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
     }
     if (woIds.length) {
