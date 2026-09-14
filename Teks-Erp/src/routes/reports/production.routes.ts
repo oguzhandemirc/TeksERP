@@ -8,9 +8,11 @@ import { verifyToken } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/rbac.middleware";
 import {
   dateRangeSchema,
+  emptyQuerySchema,
   reportEnvelope,
   resolveDateRange,
 } from "../../services/reports/_shared";
+import { assertValidUuid } from "../../middlewares/uuid-param.middleware";
 import {
   getOperatorPerformance,
   getTravelerTrace,
@@ -28,9 +30,14 @@ const guard = [verifyToken, requirePermission("report:production")];
  * DEĞİLDİR (kök CLAUDE.md). Tek sonuç varsaymak, aynı numarayı taşıyan başka
  * bir partinin müşterilerini göstermek olurdu.
  */
+/** Sorgu şemaları DIŞA AÇIK — bekçi bilinmeyen anahtarı doğrudan şemada ölçer (HTTP'siz). */
+export const batchSearchQuerySchema = z.object({ q: z.string().max(100).optional() }).strict();
+export const operatorPerformanceQuerySchema = dateRangeSchema.extend({ limit: z.coerce.number().int().min(1).max(200).optional() }).strict();
+export const travelerTraceQuerySchema = z.object({ rollId: z.string().uuid("Geçersiz rulo id") }).strict();
+
 router.get("/batch-search", ...guard, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const q = typeof req.query.q === "string" ? req.query.q : "";
+    const q = batchSearchQuerySchema.parse(req.query).q ?? "";
     res.status(200).json({ success: true, data: await searchBatches(q) });
   } catch (e) {
     next(e);
@@ -40,7 +47,8 @@ router.get("/batch-search", ...guard, async (req: Request, res: Response, next: 
 /** PARTİ İZLEME — bu partiden kime ne gitti (geri izleme). */
 router.get("/batch-trace/:batchId", ...guard, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = await getBatchTrace(req.params.batchId as string);
+    emptyQuerySchema.parse(req.query);
+    const data = await getBatchTrace(assertValidUuid(req.params.batchId, "batchId"));
     if (!data) {
       res.status(404).json({ success: false, message: "Parti bulunamadı" });
       return;
@@ -75,18 +83,14 @@ router.get("/wip", ...guard, async (req: Request, res: Response, next: NextFunct
  */
 router.get("/operator-performance", ...guard, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const range = resolveDateRange(dateRangeSchema.parse(req.query));
-    // F247: limit sürücü uca bağlandı — servis 50 default'unu artık sabitleyip yok saymıyor.
-    const limit = z.coerce.number().int().min(1).max(200).catch(50).parse(req.query.limit);
-    const data = await getOperatorPerformance(range, limit);
+    const { limit, ...rangeInput } = operatorPerformanceQuerySchema.parse(req.query);
+    const range = resolveDateRange(rangeInput);
+    // F247: limit sürücü uca bağlandı; hatalı değer sessiz 50'ye DÜŞMEZ, 400 verir (R5a ④). Verilmezse 50.
+    const data = await getOperatorPerformance(range, limit ?? 50);
     res.status(200).json(reportEnvelope(data, range));
   } catch (e) {
     next(e);
   }
-});
-
-const traceSchema = z.object({
-  rollId: z.string().uuid("Geçersiz rulo id"),
 });
 
 /**
@@ -104,7 +108,7 @@ const traceSchema = z.object({
  */
 router.get("/traveler-trace", ...guard, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { rollId } = traceSchema.parse(req.query);
+    const { rollId } = travelerTraceQuerySchema.parse(req.query);
     const data = await getTravelerTrace(rollId);
     if (!data) throw AppError.notFound("Rulo bulunamadı");
     res.status(200).json({ success: true, data });

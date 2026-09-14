@@ -28,6 +28,9 @@ export const dateRangeSchema = z
 
 export type DateRangeInput = z.infer<typeof dateRangeSchema>;
 
+/** Parametresiz rapor uçları: tanınmayan sorgu anahtarı 400 (fail-closed; yanlış adlı süzgeç sessizce yutulmaz). */
+export const emptyQuerySchema = z.object({}).strict();
+
 export interface DateRange {
   from: Date;
   to: Date;

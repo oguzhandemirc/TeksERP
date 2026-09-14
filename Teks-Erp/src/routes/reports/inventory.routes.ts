@@ -7,6 +7,7 @@ import { verifyToken } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/rbac.middleware";
 import {
   dateRangeSchema,
+  emptyQuerySchema,
   reportEnvelope,
   resolveDateRange,
 } from "../../services/reports/_shared";
@@ -21,8 +22,9 @@ const guard = [verifyToken, requirePermission("report:inventory")];
  * filtresiyle işi yoktur; zarf yine de `resolveDateRange` ile doldurulur ki
  * istemci sözleşmesi tek tip kalsın.
  */
-router.get("/scorecard", ...guard, async (_req: Request, res: Response, next: NextFunction) => {
+router.get("/scorecard", ...guard, async (req: Request, res: Response, next: NextFunction) => {
   try {
+    emptyQuerySchema.parse(req.query);
     const data = await getStockScorecard();
     res.status(200).json(reportEnvelope(data, resolveDateRange({})));
   } catch (e) {

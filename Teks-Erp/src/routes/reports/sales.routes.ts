@@ -8,6 +8,7 @@ import { requirePermission } from "../../middlewares/rbac.middleware";
 import {
   compareRangeSchema,
   dateRangeSchema,
+  emptyQuerySchema,
   reportEnvelope,
   resolveCompareRange,
   resolveDateRange,
@@ -75,8 +76,9 @@ router.get("/return-scorecard", ...guard, async (req: Request, res: Response, ne
  *       200:
  *         description: Karşılanma özeti + müşteri/kumaş kırılımı + kalem listesi
  */
-router.get("/open-order-coverage", ...guard, async (_req: Request, res: Response, next: NextFunction) => {
+router.get("/open-order-coverage", ...guard, async (req: Request, res: Response, next: NextFunction) => {
   try {
+    emptyQuerySchema.parse(req.query);
     const data = await getOpenOrderCoverage();
     res.status(200).json(reportEnvelope(data, resolveDateRange({})));
   } catch (e) {

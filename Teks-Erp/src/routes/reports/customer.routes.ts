@@ -11,6 +11,7 @@ import {
 import { getCustomerScorecard } from "../../services/reports/customer-scorecard.report.service";
 import {
   compareRangeSchema,
+  emptyQuerySchema,
   reportEnvelope,
   resolveCompareRange,
   resolveDateRange,
@@ -19,8 +20,9 @@ import {
 const router = Router();
 const guard = [verifyToken, requirePermission("report:customer")];
 
-router.get("/order-profile", ...guard, async (_req: Request, res: Response, next: NextFunction) => {
+router.get("/order-profile", ...guard, async (req: Request, res: Response, next: NextFunction) => {
   try {
+    emptyQuerySchema.parse(req.query);
     const data = await getCustomerOrderProfiles();
     res.status(200).json({ success: true, data });
   } catch (e) {

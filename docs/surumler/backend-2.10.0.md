@@ -132,6 +132,12 @@ anahtarı (`devere.enabled`, KAPALI doğar).
   birlik, 7 etiket (`595208b7`) · `kur.ps1` ve `paketle.ps1` sürüm belgesi kapısı
   (`7910da55` `df1cf64d`) · üretim kodunda tanımlayıcılar İngilizce (`5c668a9e`,
   davranış değişmedi).
+- **Rapor uçları strict sorgu** (2026-09-15, raporlar fazı zemini): 29 rapor ucunun
+  tamamı tanınmayan sorgu anahtarını 400 ile reddeder (altı uç sessizce yutuyordu:
+  `inventory/scorecard` · `customer/order-profile` · `sales/open-order-coverage` ·
+  `production/batch-search` · `batch-trace/:batchId` · `traveler-trace`);
+  `production/operator-performance` hatalı `limit` artık sessiz 50 değil 400.
+  Eski panel bu uçlara fazladan anahtar göndermiyor (ölçüldü) — görünür fark yok.
 
 **`dist-web` DEĞİŞTİ.** Panel kaynağı bu turda geniş çapta değişti (1.3.1 → 1.3.2);
 web arayüzü paketi yeniden derlenir. Patron modülünü kullanan kurulumlarda arayüz
@@ -154,7 +160,9 @@ güncellenir.
     etiketiyle gösterir, rakam doğrudur. Fatura satırında `unit` artık ZORUNLU
     (`min(1)`); 1.3.1 panel varsayılan `"m"` gönderir, yalnız kutu elle boşaltılırsa
     400 "Satır birimi gerekli." alır — mesaj ekranda görünür, kilitlenmez.
-  - *Zorunlu parametre:* yukarıdaki `unit` dışında YOK.
+  - *Zorunlu parametre:* yukarıdaki `unit` dışında YOK. Rapor uçlarında
+    TANINMAYAN anahtar artık 400 (altı uç); 1.3.1 panel yaprakları yalnız
+    sözleşmedeki adları gönderir (ölçüldü) ⇒ kırılma yok.
   - *Enum:* `WarehouseEventType` +6 (panel: yukarıdaki kırılma) · `RollEntrySource.
     WEAVING` (yazan istemci 0 — Electron/mobil'de doff çağrısı yok ⇒ sahada
     WEAVING'li top doğmaz; eski tablet zaten `PURCHASE_RECEIPT`/`SEMI_FINISHED`i
