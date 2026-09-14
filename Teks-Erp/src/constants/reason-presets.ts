@@ -72,6 +72,8 @@ export const KIND_STORES_TEXT = {
   // FK'sız — `Roll.cancelReasonCode` emsali); metin yoktur. Kayıp sınıfı
   // preset'ten KOPYALANIP DONAR (`lossClass`), katalog değişse geçmiş değişmez.
   MACHINE_STOP: false,
+  // Levent dibi iadesinde satıra YALNIZ KOD yazılır (`YarnMovement.reasonCode`); metin yok.
+  WARP_RETURN: false,
   // `as const satisfies` — değerler LİTERAL kalsın (true/false), ama eksik kind
   // yine derlemede düşsün. `Record<..., boolean>` yazılsaydı literaller boolean'a
   // genişler ve `TextReasonKind` bu tablodan TÜRETİLEMEZDİ (aşağıdaki nota bak).
@@ -86,6 +88,7 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   WORK_ORDER_REWORK: "Yeniden üretim sebepleri",
   ORDER_CANCEL: "Sipariş iptal sebepleri",
   MACHINE_STOP: "Tezgah duruş sebepleri",
+  WARP_RETURN: "Levent dibi iade sebepleri",
 };
 
 /**
@@ -250,6 +253,17 @@ export const MACHINE_STOP_REASONS: readonly ReasonPresetSeed[] = [
   { code: "TEZGAH_KAPALI", label: "Tezgah kapalı", stopLossClass: "NON_SCHEDULED" },
 ] as const;
 
+/**
+ * LEVENT DİBİ İADESİ — sarım bitince bobinde kalan iplik NEREYE GİTTİ (devere 1b, §3.7/§9.7b).
+ * Aksiyon anında seçilir; aynı fabrika bir gün depoya iade eder, ertesi gün atkıya aktarır.
+ * `WARP_RETURN` satırında kod ZORUNLUDUR (CHECK `yarn_movements_warp_return_reason_ck`, c2).
+ */
+export const WARP_RETURN_REASONS: readonly ReasonPresetSeed[] = [
+  { code: "DEPOYA_IADE", label: "Depoya iade (bobin tartılıp geri kondu)" },
+  { code: "ATKILIK_AKTARIM", label: "Atkılığa aktarım (dip atkı olarak kullanılacak)" },
+  { code: "TELEF", label: "Telef (dip kullanılamaz, fire)" },
+] as const;
+
 /** Kind → sistem satırları. Sıra ANLAMLIDIR (dizideki sıra `sortOrder` olur). */
 export const REASON_PRESET_CATALOG: Record<ReasonPresetKind, readonly ReasonPresetSeed[]> = {
   ROLL_SCRAP: SCRAP_REASONS,
@@ -259,6 +273,7 @@ export const REASON_PRESET_CATALOG: Record<ReasonPresetKind, readonly ReasonPres
   WORK_ORDER_REWORK: REWORK_REASONS,
   ORDER_CANCEL: ORDER_CANCEL_REASONS,
   MACHINE_STOP: MACHINE_STOP_REASONS,
+  WARP_RETURN: WARP_RETURN_REASONS,
 };
 
 export const REASON_PRESET_KINDS = Object.keys(REASON_PRESET_CATALOG) as ReasonPresetKind[];

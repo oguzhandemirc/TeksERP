@@ -109,6 +109,13 @@ export function yarnMovementSign(kind: YarnMovementKind): 1 | -1 {
     case YarnMovementKind.OUT:
     case YarnMovementKind.ADJUST_OUT:
       return -1;
+    // Devere 1b: çözgü çıkışı düşer, tersi ve dip iadesi döner, iadenin tersi düşer.
+    case YarnMovementKind.WARP_ISSUE:
+    case YarnMovementKind.WARP_RETURN_REVERSAL:
+      return -1;
+    case YarnMovementKind.WARP_ISSUE_REVERSAL:
+    case YarnMovementKind.WARP_RETURN:
+      return 1;
   }
 }
 

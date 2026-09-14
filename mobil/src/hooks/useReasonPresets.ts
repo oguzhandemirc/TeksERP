@@ -85,6 +85,9 @@ function builtin(kind: ReasonPresetKind): ReasonPreset[] {
       // Zemin GERÇEK katalog kodlarıyla (`WORK_ORDER_REWORK` kalıbı): kind metin saklamaz, kodu
       // istemci gönderir. Sunucusuzken boş dönse sebep zorunlu karar kilitlenirdi (`test_loom_stop_zemin`).
       return LOOM_STOP_REASONS.map((r) => mk(r.code, r.label));
+    case 'WARP_RETURN':
+      // Levent dibi iadesi tablette YAPILMIYOR (devere tablet ekranı ayrı dilim) — zemin bilerek BOŞ.
+      return [];
   }
 }
 
@@ -96,6 +99,7 @@ const BUILTIN: Record<ReasonPresetKind, ReasonPreset[]> = {
   WORK_ORDER_REWORK: builtin('WORK_ORDER_REWORK'),
   ORDER_CANCEL: builtin('ORDER_CANCEL'),
   MACHINE_STOP: builtin('MACHINE_STOP'),
+  WARP_RETURN: builtin('WARP_RETURN'),
 };
 
 /** Gömülü satır düzenlenemez — henüz sunucudan okunmamış bir zemindir. */

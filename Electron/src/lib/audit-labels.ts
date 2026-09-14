@@ -613,6 +613,11 @@ export const ENUM_LABELS: Record<string, string> = {
   // YarnMovementKind (düzeltme kayıtları)
   ADJUST_IN: "Düzeltme (giriş)",
   ADJUST_OUT: "Düzeltme (çıkış)",
+  // YarnMovementKind — devere 1b (levent): brüt çıkış + ayrı iade + tersleri
+  WARP_ISSUE: "Çözgü çıkışı (levente sarım)",
+  WARP_ISSUE_REVERSAL: "Çözgü çıkışı iptali",
+  WARP_RETURN: "Levent dibi iadesi",
+  WARP_RETURN_REVERSAL: "Levent dibi iadesi iptali",
   // ───────────────────────────────────────────────────────────────────────
   // TİCARET PAKETİ ENUM DEĞERLERİ (merge, 2026-09-01)
   // Bekçi `test_audit_labels` §4 her Prisma enum değerinin Türkçesini ister;
@@ -812,6 +817,9 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
  * şişmiş bir liste kapının kendisi olur.
  */
 export const SHARED_ENUM_VALUES: Record<string, string> = {
+  // ── Devere 1b (2026-09-14)
+  WARP_RETURN:
+    "YarnMovementKind(dip iplik depoya döndü) ve ReasonPresetKind(o iadenin sebep kataloğu) — ikisi de LEVENT DİBİ İADESİdir; ortak Türkçe doğru",
   // ── Ortak Türkçe TÜM paylaşanlar için doğru ────────────────────────────────
   // ── Tezgah duruş defteri (dokuma P2b-1, 2026-09-13)
   OPERATOR:

@@ -110,7 +110,8 @@ export async function assertYarnBalanceCoversTx(
   tx: Prisma.TransactionClient,
   ref: YarnOutflowRef,
 ): Promise<void> {
-  if (ref.kind !== YarnMovementKind.OUT) return; // ADJUST_OUT + giriş türleri muaf
+  // Kapılanan küme: OUT ve WARP_ISSUE (levente sarım da bir ÇIKIŞTIR); ADJUST_OUT + tersler + girişler muaf.
+  if (ref.kind !== YarnMovementKind.OUT && ref.kind !== YarnMovementKind.WARP_ISSUE) return;
   const enabled = await readYarnBlockNegativeBalanceEnabled(tx);
   if (!enabled) return;
 

@@ -31,7 +31,7 @@
 import apiClient from "@/services/apiClient";
 
 /** Backend `YarnMovementKind` enum'unun aynası (Electron backend'i import edemez). */
-export type YarnMovementKind = "IN" | "OUT" | "ADJUST_IN" | "ADJUST_OUT";
+export type YarnMovementKind = "IN" | "OUT" | "ADJUST_IN" | "ADJUST_OUT" | "WARP_ISSUE" | "WARP_ISSUE_REVERSAL" | "WARP_RETURN" | "WARP_RETURN_REVERSAL";
 
 /** Decimal kolonun JSON karşılığı — number DA string DE gelebilir (dosya başlığı). */
 export type DecimalLike = number | string;
@@ -130,9 +130,17 @@ export const YARN_KIND_META: Record<YarnMovementKind, YarnKindMeta> = {
     adjustment: true,
     hint: "Sayımda kayıttan AZ çıktı ya da yanlış yazılmış bir giriş ters kayıtla kapatılıyor.",
   },
+  // Devere 1b — yalnız LEVENT yazıcısından doğar; bu ekrandan yazılmaz (YARN_KINDS dışında).
+  WARP_ISSUE: { label: "Çözgü çıkışı (−)", short: "Çözgü (−)", sign: -1, adjustment: false, hint: "Levente sarılan iplik (brüt). Leventler ekranından yazılır." },
+  WARP_ISSUE_REVERSAL: { label: "Çözgü çıkışı iptali (+)", short: "Çözgü iptal (+)", sign: 1, adjustment: false, hint: "Sarımın stornosu — iplik depoya döner." },
+  WARP_RETURN: { label: "Levent dibi iadesi (+)", short: "Dip (+)", sign: 1, adjustment: false, hint: "Sarım bitince kalan bobin depoya döndü; sebep kodu zorunlu." },
+  WARP_RETURN_REVERSAL: { label: "Dip iadesi iptali (−)", short: "Dip iptal (−)", sign: -1, adjustment: false, hint: "Dip iadesinin tersi." },
 };
 
+/** Bu ekrandan YAZILABİLEN türler — WARP_* yalnız levent yazıcısından doğar. */
 export const YARN_KINDS: YarnMovementKind[] = ["IN", "OUT", "ADJUST_IN", "ADJUST_OUT"];
+/** Liste süzgecinin tanıdığı TÜM türler (backend liste şemasıyla birebir). */
+export const YARN_FILTER_KINDS: YarnMovementKind[] = [...YARN_KINDS, "WARP_ISSUE", "WARP_ISSUE_REVERSAL", "WARP_RETURN", "WARP_RETURN_REVERSAL"];
 
 /** Rozet tonu — sayım düzeltmesi normal giriş/çıkıştan AYRI okunmalı. */
 export function kindBadgeClass(kind: YarnMovementKind): string {

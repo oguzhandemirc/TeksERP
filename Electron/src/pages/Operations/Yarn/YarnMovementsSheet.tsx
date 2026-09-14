@@ -39,7 +39,7 @@ import { Input } from "@/components/ui/input";
 import { PermissionGate } from "@/components/PermissionGate";
 import { cn } from "@/lib/utils";
 import {
-  YARN_KINDS,
+  YARN_FILTER_KINDS,
   YARN_KIND_META,
   formatInstant,
   kindBadgeClass,
@@ -143,7 +143,7 @@ export function YarnMovementsSheet({ row, onClose, onAddMovement, showWarehouse 
                 onChange={(e) => setKind(e.target.value as YarnMovementKind | "")}
               >
                 <option value="">Tüm hareketler</option>
-                {YARN_KINDS.map((k) => (
+                {YARN_FILTER_KINDS.map((k) => (
                   <option key={k} value={k}>
                     {YARN_KIND_META[k].label}
                   </option>

@@ -30,7 +30,8 @@ export type ReasonPresetKind =
    * ekranı Faz 2), ama liste ucu bu kind'ı da döndürür: union'da olmaması
    * `ORDER_CANCEL`daki aynı tip yalanı olurdu.
    */
-  | 'MACHINE_STOP';
+  | 'MACHINE_STOP'
+  | 'WARP_RETURN';
 
 export interface ReasonPreset {
   id: string;
@@ -65,6 +66,7 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
   // Tezgah duruşunda satıra yalnız KOD yazılır; kayıp sınıfı sunucuda preset'ten
   // kopyalanıp donar. Sunucudaki tabloyla birebir.
   MACHINE_STOP: false,
+  WARP_RETURN: false,
 };
 
 export const KIND_LABELS: Record<ReasonPresetKind, string> = {
@@ -75,6 +77,7 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   WORK_ORDER_REWORK: 'Yeniden üretim sebepleri',
   ORDER_CANCEL: 'Sipariş iptal sebepleri',
   MACHINE_STOP: 'Tezgah duruş sebepleri',
+  WARP_RETURN: 'Levent dibi iade sebepleri',
 };
 
 export const reasonPresetService = {

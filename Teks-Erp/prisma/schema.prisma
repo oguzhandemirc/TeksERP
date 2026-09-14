@@ -160,6 +160,10 @@ enum ReasonPresetKind {
   /// `parameters.rework` alanına yazılır, metin ayrıca 1. adımın notuna geçip
   /// fason çekisine talimat olarak basılır.
   WORK_ORDER_REWORK
+  /// Levent DİBİ iadesi — sarım bitince bobinde kalan iplik nereye gitti (devere 1b).
+  /// ⚠️ METİN SAKLAMAZ: `YarnMovement.reasonCode` yalnız kod (`WARP_RETURN` satırında ZORUNLU, CHECK).
+  /// Aksiyon anında seçilir (DEPOYA_IADE · ATKILIK_AKTARIM · TELEF), fabrika sabiti DEĞİL (§9.7b).
+  WARP_RETURN
 }
 
 /// Çuval brüt tartısının kaynağı (`Sack.weightSource`). İÇ izdir — belgeye basılmaz.
@@ -8761,6 +8765,15 @@ enum YarnMovementKind {
   OUT
   ADJUST_IN
   ADJUST_OUT
+  /// Çözgü ÇIKIŞI — levente sarılan iplik BRÜT düşer (devere 1b; `warpBeamId` zorunlu, CHECK).
+  WARP_ISSUE
+  /// Çözgü çıkışının tersi — `WOUND_CANCEL` stornosu (net iplik depoya döner).
+  WARP_ISSUE_REVERSAL
+  /// Levent DİBİ iadesi — sarım bitince kalan bobin AYRI satırla döner; sebep kodu ZORUNLU
+  /// (brüt çıkış + ayrı iade: net tek satır iki ölçülen sayıdan birini kaybederdi, §3.7).
+  WARP_RETURN
+  /// Dip iadesinin tersi.
+  WARP_RETURN_REVERSAL
 }
 
 /// İplik stoğunun (kalem × depo) DENORMALİZE kg bakiyesi.

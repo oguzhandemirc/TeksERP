@@ -68,6 +68,12 @@ export function useDokumaEnabled(): boolean {
   return (d?.productionEnabled ?? false) && (d?.dokumaEnabled ?? false);
 }
 
+/** Devere modülü açık mı (`devere.enabled`). Yüklenene dek KAPALI — fail-closed. */
+export function useDevereEnabled(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.devereEnabled ?? false;
+}
+
 export function useDemoModeEnabled(): boolean {
   const q = useFeatureFlags();
   return q.data?.data?.demoModeEnabled ?? false;

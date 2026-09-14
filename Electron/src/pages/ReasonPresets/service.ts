@@ -15,7 +15,8 @@ export type ReasonPresetKind =
   | "ROLL_CANCEL"
   | "WORK_ORDER_REWORK"
   | "ORDER_CANCEL"
-  | "MACHINE_STOP";
+  | "MACHINE_STOP"
+  | "WARP_RETURN";
 
 export interface ReasonPreset {
   id: string;
@@ -53,6 +54,7 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
   // Tezgah duruşunda satıra yalnız KOD yazılır (`MachineStopEvent.reasonCode`);
   // kayıp sınıfı preset'ten kopyalanıp donar. Sunucu tablosuyla birebir.
   MACHINE_STOP: false,
+  WARP_RETURN: false,
 };
 
 /**
@@ -62,7 +64,7 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
  * eklenmesi beşinci bir sekme doğurur ve K3'ü (sıfır fark) ihlal ederdi.
  * Parite bekçisi sekmenin VARLIĞINI ister, GÖRÜNÜRLÜĞÜNÜ değil — ikisi ayrı.
  */
-export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; modul?: "tezgahEnabled" }[] = [
+export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; modul?: "tezgahEnabled" | "devereEnabled" }[] = [
   {
     kind: "ROLL_SCRAP",
     title: "Fire",
@@ -98,6 +100,12 @@ export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; m
     title: "Tezgah Duruşu",
     hint: "Tezgah neden durdu. Her sebep bir KAYIP SINIFI taşır (plansız / kurulum / planlı / çalışma dışı) ve randıman raporu o sınıfa göre gruplar; sınıf sebepten kopyalanıp duruşa donar. Kısa kopuşlar buraya girmez — onlar süre sınıfıdır, sebep değil.",
     modul: "tezgahEnabled",
+  },
+  {
+    kind: "WARP_RETURN",
+    title: "Levent Dibi İadesi",
+    hint: "Sarım bitince bobinde kalan iplik nereye gitti: depoya iade, atkılığa aktarım, telef. Her iade satırında sebep ZORUNLUDUR (brüt çıkış + ayrı iade).",
+    modul: "devereEnabled",
   },
 ];
 

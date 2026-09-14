@@ -133,7 +133,7 @@ router.get("/stocks", requirePermission("warehouse:read"), async (req, res, next
  *         schema: { type: string, format: uuid }
  *       - in: query
  *         name: kind
- *         schema: { type: string, enum: [IN, OUT, ADJUST_IN, ADJUST_OUT] }
+ *         schema: { type: string, enum: [IN, OUT, ADJUST_IN, ADJUST_OUT, WARP_ISSUE, WARP_ISSUE_REVERSAL, WARP_RETURN, WARP_RETURN_REVERSAL] }
  *       - in: query
  *         name: goodsReceiptId
  *         schema: { type: string, format: uuid }
@@ -157,7 +157,8 @@ router.get("/movements", requirePermission("warehouse:read"), async (req, res, n
         limit: z.coerce.number().int().min(1).max(200).optional(),
         itemId: z.string().uuid().optional(),
         warehouseId: z.string().uuid().optional(),
-        kind: z.enum(["IN", "OUT", "ADJUST_IN", "ADJUST_OUT"]).optional(),
+        // Liste süzgeci TÜM türleri tanır; WARP_* satırları yalnız levent yazıcısından doğar (create şeması onları KABUL ETMEZ).
+        kind: z.enum(["IN", "OUT", "ADJUST_IN", "ADJUST_OUT", "WARP_ISSUE", "WARP_ISSUE_REVERSAL", "WARP_RETURN", "WARP_RETURN_REVERSAL"]).optional(),
         goodsReceiptId: z.string().uuid().optional(),
         dateFrom: isoDate.optional(),
         dateTo: isoDate.optional(),
