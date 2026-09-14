@@ -313,6 +313,21 @@
           "kapsam": "panel",
           "tip": "yeni",
           "metin": "Dokuma modülü açık kurulumlarda panele “Tezgah Duruşları” ekranı geldi (Operasyon menüsü). Tabletten bildirilen sebepsiz duruşlar sınıflandırma kuyruğunda bekler; sebep atanır, gerekirse yeniden sınıflandırılır ve her değişiklik “kim, ne zaman, neden” ile değişiklik defterinde görünür — eski kayıt silinmez. Tabletten girilmemiş bir duruş elle girilir, kapatılır ya da geri alınır. Liste tezgah, gün ve vardiyaya göre süzülür; “kuyruk” ve “açık duruşlar” kapsamı ayrı seçilir. Ekran için duruş sınıflandırma ya da elle giriş yetkilerinden biri yeter. Modül kapalı kurulumda menüde görünmez ve hiçbir şey değişmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "İş emrinin sipariş kalemi bağı artık silinmiyor, koparılıyor: iş emri iptal edildiğinde, sipariş kalemi iptal/silindiğinde ya da bağ değiştirildiğinde eski bağ “koparıldı” damgasıyla (ne zaman, hangi sebeple) kayıtta kalır; iş emri detayında “hangi sipariş için açıldı” izi görünmeye devam eder. Sipariş karşılaması, açık miktarlar ve iş emri tipi yalnız açık bağları sayar — koparılmış bağ hiçbir rakama girmez. Tutarlılık kontrolündeki “stok iş emri ama bağı var” bölümü ve iş emri tipi onarım aracı da yalnız açık bağa bakar; önceden koparılmış bağlı bir stok iş emrini yanlışlıkla “siparişe özel”e çevirebiliyorlardı. Hiçbir rakam değişmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Dokuma modülü açık kurulumlarda tezgah kartına “levent yuvası sayısı” geldi (varsayılan 1; cağlıktan beslenen çözgü makinesinde 0 olabilir). Yuva sayısı ikiden azsa duruşta yuva sorulmaz ve hiçbir şey değişmez; iki ve üstünde duruş bir yuvaya bağlanabilir, yuva numarası aralık dışıysa kayıt reddedilir. Ayrıca sebebi bir insan tarafından atanmış (sınıflandırılmış) duruş artık silinemez; yanlışsa yeniden sınıflandırılır ve değişiklik defterde kalır. Sınıflandırılmamış makine kaydı eskisi gibi silinebilir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Tezgah Duruşları ekranından amirin elle girdiği duruş başlangıç/bitiş zamanı izin verilen aralığın dışındaysa (en fazla 7 gün geriye, en fazla 5 dakika ileriye) kayıt artık sessizce sunucu saatine çekilmiyor; reddediliyor ve ekran aralığı söylüyor. Önceden cuma gecesinin duruşu pazartesi girildiğinde defter sessizce pazartesi saatini yazıyor, vardiya bağı ve süre yanlış doğuyordu. Tabletten bildirilen duruşta davranış değişmedi: tabletin saati küçük sapmada eskisi gibi düzeltilir ve uyarı gösterilir. Aralık içindeki elle girişte hiçbir şey değişmez."
         }
       ]
     },
