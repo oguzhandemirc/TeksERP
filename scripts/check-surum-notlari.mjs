@@ -178,6 +178,112 @@ console.log("\n§7 — Modal tavanı tek kaynak");
     Object.entries(degerler).map(([k, v]) => `${k}=${v}`).join(" · "), true);
 }
 
+console.log("\n§8 — \"Sonraki sürümde\" vaadi");
+// Bir madde "panel ekranı sonraki sürümde" diye söz verdiğinde ve o dilim AYNI
+// yayına inerse, madde geri güncellenmez — çünkü kimse onu okumaz (ölçüldü
+// 2026-09-14: 2026-09-13 turunda #58 "panel ekranı sonraki sürümde" derken #60
+// aynı yayında panel Tezgah Duruşları ekranını duyuruyordu). Bu bölüm o çifti
+// arar: vaat cümlesi yüzeyini ADIYLA söylemek zorundadır (söylemezse çelişki
+// ölçülemez) ve aynı yayında o yüzeye ait, konu kökleri örtüşen bir madde
+// bulunursa kırmızıdır. Örtüşme KÖK bazlıdır (Türkçe ekleri kırpar).
+{
+  const VAAT_RE = /sonraki sürüm/i;
+  const YUZEYLER = ["panel", "tablet"];
+  const KOK_UZUNLUK = 5;
+  const MIN_ORTAK_KOK = 4;
+  /** Her dokuma/devere maddesinde geçen kalıp sözler konu SAYILMAZ. */
+  const KALIP_KOK = new Set([
+    "dokum", "modül", "kurul", "değiş", "sürüm", "ekran", "görün", "hiçbi",
+    "artık", "önced", "yalnı", "şimdi", "sonra", "gerek", "olara", "yüzey",
+    "panel", "table", "açıks", "sayfa", "liste", "kayde", "kayıt", "yazıl",
+  ]);
+  /** Kapalı küme: muafiyet ancak bu sınıflardan biriyle yazılır. */
+  const MUAF_SINIFLARI = new Set(["AYRI_YAYIN", "BASKA_KONU"]);
+  /**
+   * Beyanlı muafiyet — BOŞ DOĞAR. Her satır: hangi yayının hangi maddesi
+   * (metnin ilk 40 karakteriyle çapalı), sınıfı ve gerekçesi.
+   */
+  const MUAF_VAATLER = [];
+
+  const koklestir = (metin) => {
+    const set = new Set();
+    for (const ham of String(metin).toLowerCase().split(/[^a-zçğıöşü]+/)) {
+      if (ham.length < KOK_UZUNLUK) continue;
+      const kok = ham.slice(0, KOK_UZUNLUK);
+      if (KALIP_KOK.has(kok)) continue;
+      set.add(kok);
+    }
+    return set;
+  };
+  const vaatCumlesi = (metin) =>
+    String(metin).split(/(?<=[.;])\s+/).find((c) => VAAT_RE.test(c)) ?? "";
+
+  const vaatler = [];
+  for (const y of yayinlar) {
+    (y.maddeler ?? []).forEach((m, i) => {
+      if (VAAT_RE.test(String(m.metin ?? ""))) vaatler.push({ y, m, i });
+    });
+  }
+  // ÜÇ SONUÇ: kapsam 0 bir ölçüm DEĞİLDİR, beyan edilir.
+  check("körlük zemini: vaat taraması koştu", true,
+    `${yayinlar.length} yayın · ${toplamMadde} madde tarandı · ${vaatler.length} vaat maddesi`
+      + (vaatler.length === 0 ? " (kapsam 0 — bugün vaat eden madde YOK, kapı ölçmedi)" : ""), true);
+
+  const yuzeysiz = [];
+  const celiskiler = [];
+  for (const { y, m, i } of vaatler) {
+    const cumle = vaatCumlesi(m.metin).toLowerCase();
+    const yuzeyler = YUZEYLER.filter((s) => cumle.includes(s));
+    if (yuzeyler.length === 0) {
+      yuzeysiz.push(`${y.id}#${i}: "${vaatCumlesi(m.metin).trim().slice(0, 60)}"`);
+      continue;
+    }
+    const konu = koklestir(m.metin);
+    const muaf = MUAF_VAATLER.find(
+      (x) => x.yayin === y.id && String(m.metin).startsWith(x.metinBasi),
+    );
+    for (const yuzey of yuzeyler) {
+      // Aday SIRALANIR, ilk eşleşen değil EN ÇOK örtüşen bildirilir: eşik tek
+      // başına "hangi madde" sorusunu cevaplamaz ve yanlış maddeyi gösteren bir
+      // kırmızı, okuyucuyu kapıyı susturmaya iter (ölçüldü: eşik 2'de aynı
+      // yayının 25 panel maddesi eşleşti, ilki konuyla ilgisizdi).
+      const adaylar = (y.maddeler ?? [])
+        .map((o, j) => {
+          if (j === i) return null;
+          if (o.kapsam !== yuzey && o.kapsam !== "her-ikisi") return null;
+          let ortak = 0;
+          for (const k of koklestir(o.metin)) if (konu.has(k)) ortak++;
+          return ortak >= MIN_ORTAK_KOK ? { j, o, ortak } : null;
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.ortak - a.ortak);
+      if (adaylar.length > 0 && !muaf) {
+        const en = adaylar[0];
+        celiskiler.push(
+          `${y.id}#${i} "${yuzey} … sonraki sürümde" diyor ama aynı yayında `
+            + `#${en.j} (${yuzey}) aynı konuyu duyuruyor [${en.ortak} ortak kök]: `
+            + `"${String(en.o.metin).slice(0, 70)}…"`
+            + (adaylar.length > 1 ? ` (+${adaylar.length - 1} aday daha)` : ""),
+        );
+      }
+    }
+  }
+  check("vaat cümlesi yüzeyini ADIYLA söylüyor (panel/tablet)", yuzeysiz.length === 0,
+    `${yuzeysiz.length} yüzeysiz vaat — çelişki ölçülemez, cümleye yüzeyi yaz: ${yuzeysiz.slice(0, 3).join(" · ")}`);
+  check("⭐ vaat AYNI YAYINDA çürütülmemiş", celiskiler.length === 0,
+    celiskiler.slice(0, 3).join(" · ")
+      + " — dilim aynı yayına indiyse maddeyi güncelle, gerçekten sonraki yayındaysa MUAF_VAATLER'e sınıfıyla yaz");
+  // İKİ YÖNLÜ: beyan edilmiş ama artık eşleşmeyen muafiyet, gerçek bir çelişkiyi
+  // sessizce kapsam dışında tutar.
+  const oluMuaf = MUAF_VAATLER.filter(
+    (x) => !vaatler.some(({ y, m }) => y.id === x.yayin && String(m.metin).startsWith(x.metinBasi)),
+  );
+  check("ölü muafiyet yok (beyan ↔ madde iki yönlü)", oluMuaf.length === 0,
+    oluMuaf.map((x) => `${x.yayin} "${x.metinBasi.slice(0, 40)}…"`).join(" · "));
+  check("muafiyet sınıfları kapalı kümede", MUAF_VAATLER.every((x) => MUAF_SINIFLARI.has(x.sinif)),
+    MUAF_VAATLER.filter((x) => !MUAF_SINIFLARI.has(x.sinif)).map((x) => String(x.sinif)).join(" · "));
+}
+
 // --- Yayın kapısı (argümanla) -------------------------------------------
 const panelSurum = arg("panel");
 const tabletSurum = arg("tablet");

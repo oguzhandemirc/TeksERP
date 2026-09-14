@@ -9828,3 +9828,39 @@ bölümleri §29/§30/§30b/§31 (`scripts/consistency-check.sql`) · çevre bir
 (g→0,001 · cm→0,01, eski serbest metin kolon YOK) · fasoncu karnesinde "+N m müşteriye" ve
 "Müşteriye (m)" · `dispatchedAt` geri almada NULL'lanmıyor · adımın defter geçmişi silmeyi
 RESTRICT ile engelliyor · `GENEL` hata tipi migration'la doğuyor.
+
+---
+
+## 2026-09-14 — "Sonraki sürümde" kapısı indi (`check-surum-notlari §8`): vaat, AYNI YAYININ kendi madde listesine karşı ölçülür [ÇEKİRDEK]
+
+Kural satırının `Kapanır:` cümlesi aynı gün kapandı. Kapı, bugünkü kusurun sınıfını ölçer:
+*bir madde "panel ekranı sonraki sürümde" diye söz verir, dilim AYNI yayına iner ve madde
+geri güncellenmez* — çünkü yayın kapanırken kimse eski maddeye dönüp bakmaz (#58 ↔ #60).
+
+**Yüklem üç parçalıdır ve her parçası ayrı bir körlüğü kapatır:**
+1. **Vaat cümlesi yüzeyini ADIYLA söyler** (panel/tablet). Söylemezse çelişki ÖLÇÜLEMEZ ⇒
+   kırmızı. Kapının ölçemediği bir cümleyi "temiz" saymak, kapıyı süs yapardı.
+2. **Aday, aynı yayında o yüzeye ait ve konu KÖKLERİ örtüşen maddedir.** Örtüşme Türkçe
+   eklerden bağımsız olsun diye 5 harflik kök kullanılır (`duruşları`/`duruşlar` → `duruş`),
+   her dokuma maddesinde geçen kalıp sözler (`dokum` · `kurul` · `modül` · `sürüm` …) konu
+   SAYILMAZ.
+3. **Muafiyet BEYANLIDIR, sınıfı KAPALI kümededir (`AYRI_YAYIN` · `BASKA_KONU`) ve iki
+   yönlüdür** — beyan edilmiş ama artık eşleşmeyen satır da kırmızıdır (ölü muafiyet gerçek
+   bir çelişkiyi sessizce kapsam dışında tutardı).
+
+⚠️ **Eşik ölçümle seçildi, tahminle değil.** İlk sürümde `MIN_ORTAK_KOK = 2` idi: sonda
+kırmızı verdi ama *"aynı yayında **25** panel maddesi aynı konuyu duyuruyor"* dedi ve ilk
+gösterdiği madde konuyla ilgisizdi (#00 Raporlar). Kırmızının DOĞRU olması yetmez — **yanlış
+maddeyi gösteren bir kırmızı, okuyucuyu kapıyı susturmaya iter.** Eşik 4'e çıkarıldı ve aday
+listesi örtüşme sayısına göre SIRALANDI: kapı artık `#60 (panel) … [10 ortak kök]` diyor.
+(`sınırsız eşleşme` sınıfının bir örneği: sınırını beyan etmeyen yüklem alakasızla eşleşir.)
+
+**BEŞ SONDA** (kapı doğduğu gün kapsam 0 olduğu için tek kanıt sondadır):
+① #58'in eski cümlesi geri yazıldı → ❌ ve #60'ı adıyla gösterdi · ② vaatten yüzey adı
+silindi → "yüzeyini ADIYLA söylüyor" ❌ · ③ muafiyet beyan edildi → çelişki ✅ (yol çalışıyor)
+· ④ madde düzeltilip beyan kaldı → "ölü muafiyet" ❌ · ⑤ sınıf kapalı küme dışına çıkarıldı →
+❌. Sondalar `cp` + `sha256` ile geri alındı, kaynak dosyanın sha'sı sonda öncesiyle AYNI.
+
+⚠️ Bugün kapsam **0** (tek vaat maddesi bu sabah düzeltildi) ve bu çıktıda BEYAN edilir:
+*"0 vaat maddesi (kapsam 0 — bugün vaat eden madde YOK, kapı ölçmedi)"*. Kapsamı yazılmayan
+bir yeşil, ölçülmemiş olmakla temiz olmayı karıştırır.
