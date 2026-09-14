@@ -36,6 +36,8 @@ export const SCREEN_MODULE: Partial<Record<MobileScreenKey, MobileModuleFlag>> =
   Dokuma: 'dokumaEnabled',
   // Tablet LEVENT SARIM ekranı (2026-09-14, §11) — devere modülü; üretim zincirine BAĞLI DEĞİL.
   Devere: 'devereEnabled',
+  // Tablet FASON DOKUMA KABUL ekranı (G2t, 2026-09-14) — dokuma modülü; oturumsuz.
+  FasonDokuma: 'dokumaEnabled',
 };
 
 export type MobileModuleState = Record<MobileModuleFlag, boolean>;

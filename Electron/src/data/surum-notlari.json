@@ -307,6 +307,11 @@
         {
           "kapsam": "tablet",
           "tip": "yeni",
+          "metin": "Dokuma modülü açık kurulumlarda tablete “Fason Dokuma Kabul” ekranı geldi: fasonda dokunan açık iş seçilir, fasoncudan dönen levent sevk kaydından “Levent döndü” ile dönen metresiyle hazıra alınır, dönen kumaş “Top kabul et” ile satır satır (metre · en · kg · kalite; renk işin rengi) top olarak kaydedilir — toplar KK1 akışında ölçülüp etiketlenir. Sunucunun kabul etmediği satırlar formda kalır ve sebebiyle listelenir; kabul edilen satırların topları doğmuş olur (kısmi kabul). Kayıt ağ olmadan kuyruklanmaz, gitmezse anında söyler. Sevk açma ve iptaller panelden (Dokuma İşleri › Fason). Fason mal kabul yetkisi yeter; modül kapalı kurulumda ekran çizilmez."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "yeni",
           "metin": "Dokuma modülü açık kurulumlarda Tezgah ekranına koşum açma/kapatma geldi: operatör hattaki koşumu bir dokuma işine bağlayarak ya da işsiz açar (desen ve renk işten ön-dolar, değiştirilebilir; hedef devir ve ham atkı sıklığı boş bırakılabilir — hedef devir girilmezse (tezgah künyesinde de yoksa) performans “ölçülemedi” basılır, sıklık ise koşuma kaydedilir ve vardiya karnesinde görünür; metre türetimi bu sürümde YOK, karnede metre yalnız ölçülmüş değerden gelir), kapatırken kapanış devrini yazar (boş = ölçülmedi) ve yanlış açılan koşumu geri alır. Kayıt ağ olmadan kuyruklanmaz, gitmezse anında söyler. Koşum açıp kapatmak için yeni yetki gerekmez; dokuma tabletçisi yetkisi yeter. Tezgah ekranında geri alma AYRI bir yetenektir ve varsayılan tabletçi paketinde YOKTUR: panelde kişiye “Top indirmeyi, koşumu ve duruşu geri alabilir” yeteneği verilmedikçe geri al düğmesi çıkmaz (indirme, koşum ve duruş için tek yetenek). Modül kapalı kurulumda hiçbir şey değişmez."
         },
         {

@@ -10,10 +10,12 @@ import { MOBILE_SCREENS } from '../types/permissions';
 describe('screenModules — ekran → modül aynası', () => {
   it('üretim modülünün beş ekranı tabloda; çekirdek/planlanan ekranlar tabloda DEĞİL', () => {
     expect(Object.keys(SCREEN_MODULE).sort()).toEqual(
-      ['Devere', 'Dokuma', 'HizliIsEmri', 'KK1', 'KursunDagitim', 'KursunQc', 'Tambur'].sort()
+      ['Devere', 'Dokuma', 'FasonDokuma', 'HizliIsEmri', 'KK1', 'KursunDagitim', 'KursunQc', 'Tambur'].sort()
     );
     expect(SCREEN_MODULE.Dokuma).toBe('dokumaEnabled');
     expect(SCREEN_MODULE.Devere).toBe('devereEnabled');
+    // G2t: fason dokuma kabulü dokuma modülüne bağlı — üretim kapalıyken ETKİN kapalı (Dokuma ile aynı zincir).
+    expect(SCREEN_MODULE.FasonDokuma).toBe('dokumaEnabled');
     for (const k of ['Depo', 'TartiPaket', 'Sevkiyat', 'IadeGirisi', 'Siparis', 'Kumas', 'FasonSevk', 'KartelaSevk']) {
       expect(SCREEN_MODULE[k as keyof typeof SCREEN_MODULE]).toBeUndefined();
     }

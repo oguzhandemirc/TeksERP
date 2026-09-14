@@ -20,6 +20,7 @@ import {
   getWeavingSubcontractSummary,
   previewCancelWeavingReceipt,
 } from "../services/subcontractor-weaving-receipt.service";
+import { getWeavingTabletContext } from "../services/subcontractor-weaving-tablet.service";
 
 const router = Router();
 
@@ -172,6 +173,27 @@ router.post("/receipts/:id/cancel", requireAnyPermission("weavingorder:write", .
     const id = assertValidUuid(req.params.id, "Makbuz");
     const b = reasonSchema.parse(req.body ?? {});
     res.json(await cancelWeavingReceipt(id, b.reason, req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/subcontractor-weaving/tablet-context:
+ *   get:
+ *     tags: [SubcontractorWeaving]
+ *     summary: Tablet fason dokuma kabulü bağlamı — açık fason işler + dönmemiş leventli sevkler (opt-in allowlist)
+ *     description: >
+ *       Operatöre cari/depo/fiyat İNMEZ; `map` allowlist. Kapalı modülde servis düzeyinde de 403 MODULE_DISABLED.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "weavingOrders[] (openDispatches[].beams[])" }
+ *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ */
+router.get("/tablet-context", requireAnyPermission("weavingorder:read", ...MOBILE_FASON_KABUL), async (_req, res, next) => {
+  try {
+    res.json(await getWeavingTabletContext());
   } catch (e) {
     next(e);
   }

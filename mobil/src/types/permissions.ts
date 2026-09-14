@@ -79,7 +79,8 @@ export type MobileScreenKey =
   | 'Kumas'
   | 'KursunDagitim'
   | 'Dokuma'
-  | 'Devere';
+  | 'Devere'
+  | 'FasonDokuma';
 
 export interface MobileScreenMeta {
   key: MobileScreenKey;
@@ -226,6 +227,16 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     label: 'Levent Sarım',
     icon: 'rotate-right',
     description: 'Levent planla, sar (iplik çıkışı + dip iadesi), taslak sil',
+  },
+  {
+    // Tablet FASON DOKUMA KABUL ekranı (G2t, 2026-09-14): fasonda dokunan işin levent
+    // dönüşü + top kabulü; aynı izin (`mobile:fason-kabul`) ikinci ekranda. OTURUMSUZ.
+    // Sevk açma ve iptaller panelden (dokuma işi detayı).
+    key: 'FasonDokuma',
+    permission: 'mobile:fason-kabul',
+    label: 'Fason Dokuma Kabul',
+    icon: 'truck-check-outline',
+    description: 'Fasonda dokunan iş: levent dönüşü ve dönen topların kabulü',
   },
 ];
 

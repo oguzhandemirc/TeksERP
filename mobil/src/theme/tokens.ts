@@ -176,4 +176,5 @@ export const moduleAccents: Record<MobileScreenKey, { tint: string; bg: string }
   Dokuma: { tint: '#0f766e', bg: '#ccfbf1' },
   // Devere (levent) — dokuma ailesi ama tezgahtan ayrışsın diye kayısı tonu.
   Devere: { tint: '#c2410c', bg: '#fed7aa' },
+  FasonDokuma: { tint: '#db2777', bg: '#fce7f3' }, // fason kabulün kardeşi — aynı renk ailesi
 };

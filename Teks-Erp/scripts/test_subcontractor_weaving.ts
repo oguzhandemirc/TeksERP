@@ -16,6 +16,8 @@
 //   §6 Ters yollar: makbuz iptali canlı topla 409 BORN_ROLLS_ALIVE, toplar iptal
 //      edilince OK; sevk iptali dönmüş leventle 409, sonra SHIP_OUT_CANCEL + READY.
 //   §7 DB sedleri: başlık her iki kolu dolu / boş → 23514 (sevk + makbuz).
+//   §8 TABLET bağlamı (G2t): opt-in allowlist — cari/depo/fiyat/iş emri anahtarı yok,
+//      yalnız dönmemiş leventli sevkler; dokuma kapalıyken servis düzeyinde 403 MODULE_DISABLED.
 //
 //   Negatif sondalar (kırmızı görülerek): cancel()'dan `assertWorkOrderBound` düşürülünce
 //   §3a ❌ · claim'den `executionKind: SUBCONTRACTED` düşürülünce §2d ❌ ·
@@ -35,6 +37,7 @@ import { InventoryService } from "../src/services/inventory.service";
 import { cancelWeavingDispatch, dispatchForWeaving, receiveForWeaving } from "../src/services/subcontractor-weaving.service";
 import { cancelWeavingReceipt, getWeavingSubcontractSummary, previewCancelWeavingReceipt } from "../src/services/subcontractor-weaving-receipt.service";
 import { weavingOrderOfRoll } from "../src/services/helpers/weaving-order-of-roll.helper";
+import { getWeavingTabletContext } from "../src/services/subcontractor-weaving-tablet.service";
 import { AppError } from "../src/utils/app-error";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { fixtureWarehouseId } from "./fixture-warehouse";
@@ -223,6 +226,30 @@ async function main(): Promise<void> {
     const ipt = await cancelWeavingDispatch(d2Id, `${TAG} sevk iptal`, admin.id);
     check("§6e sevk iptali: levent READY, SHIP_OUT_CANCEL yazıldı, ikinci iptal 409", ipt.success && (await durum(b2)) === WarpBeamStatus.READY && (await olay(b2)).at(-1)?.kind === "SHIP_OUT_CANCEL" && kod(await beklenenHata(() => cancelWeavingDispatch(d2Id, "tekrar", admin.id))) === "DISPATCH_CANCELLED");
     check("§6f iş emri sevki dokuma iptal yoluna girince 409 DISPATCH_NOT_WEAVING_BOUND", kod(await beklenenHata(() => cancelWeavingDispatch(dWoId, "yanlış yol", admin.id))) === "DISPATCH_NOT_WEAVING_BOUND");
+
+    console.log("\n── §8 Tablet bağlamı (G2t) ──");
+    const fotoDokuma = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEYS.DOKUMA_ENABLED }, select: { value: true } });
+    const fotoProd = await prisma.systemSetting.findUnique({ where: { key: SETTING_KEYS.PRODUCTION_ENABLED }, select: { value: true } });
+    try {
+      await prisma.systemSetting.upsert({ where: { key: SETTING_KEYS.DOKUMA_ENABLED }, create: { key: SETTING_KEYS.DOKUMA_ENABLED, value: "true" }, update: { value: "true" } });
+      await prisma.systemSetting.upsert({ where: { key: SETTING_KEYS.PRODUCTION_ENABLED }, create: { key: SETTING_KEYS.PRODUCTION_ENABLED, value: "true" }, update: { value: "true" } });
+      const ctx = (await getWeavingTabletContext()).data;
+      const me = ctx.weavingOrders.find((w) => w.id === fasonIs);
+      const IZINLI = ["id", "weavingOrderNumber", "status", "item", "color", "subcontractor", "openDispatches"].sort().join(",");
+      check("§8a bağlam açık fason işi taşır, in-house/kapalı işi taşımaz", !!me && !ctx.weavingOrders.some((w) => w.id === kendiIs || w.id === kapaliIs));
+      check("§8a′ ⭐ allowlist: iş anahtarları TAM küme, sevk/levent anahtarları dar (cari/depo/fiyat yok)",
+        !!me && Object.keys(me).sort().join(",") === IZINLI && me.subcontractor !== null && !("id" in (me.subcontractor as object)) &&
+        me.openDispatches.every((d) => Object.keys(d).sort().join(",") === "beams,dispatchId,dispatchNo,dispatchedAt" && d.beams.every((b) => Object.keys(b).sort().join(",") === "beamNo,id,sentM")),
+        me ? Object.keys(me).join(",") : "iş yok");
+      check("§8b yalnız DÖNMEMİŞ leventler: b1 (fasonda) listede, b2 (döndü) yok; d2 iptal → yok", !!me && me.openDispatches.length === 1 && me.openDispatches[0]!.dispatchId === d1Id && me.openDispatches[0]!.beams.map((b) => b.id).join(",") === b1);
+      await prisma.systemSetting.update({ where: { key: SETTING_KEYS.DOKUMA_ENABLED }, data: { value: "false" } });
+      check("§8c ⭐ dokuma kapalıyken servis düzeyinde 403 MODULE_DISABLED (modul dokuma)", kod(await beklenenHata(() => getWeavingTabletContext())) === "MODULE_DISABLED");
+    } finally {
+      if (fotoDokuma) await prisma.systemSetting.update({ where: { key: SETTING_KEYS.DOKUMA_ENABLED }, data: { value: fotoDokuma.value as Prisma.InputJsonValue } });
+      else await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.DOKUMA_ENABLED } });
+      if (fotoProd) await prisma.systemSetting.update({ where: { key: SETTING_KEYS.PRODUCTION_ENABLED }, data: { value: fotoProd.value as Prisma.InputJsonValue } });
+      else await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.PRODUCTION_ENABLED } });
+    }
 
     console.log("\n── §7 DB sedleri ──");
     check("§7a sevk başlığı iki kol dolu → 23514", (await pgHata(() => prisma.$executeRaw`INSERT INTO subcontractor_dispatches (id, "dispatchNo", "workOrderId", "stepId", "batchId", "weavingOrderId", "subcontractorId", "totalQty", "updatedAt") VALUES (gen_random_uuid(), ${`${TAG}-X1`}, ${wo.id}::uuid, ${wo.steps[0].id}::uuid, ${dWoRow.batchId}::uuid, ${fasonIs}::uuid, ${sub.id}::uuid, 0, now())`)) === "23514");

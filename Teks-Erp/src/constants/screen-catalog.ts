@@ -349,6 +349,8 @@ const mobile: ScreenEntry[] = [
   { key: "Dokuma", app: "mobile", modul: "dokumaEnabled", title: "Tezgah", requires: ["mobile:dokuma"], capabilities: [{ code: "mobile:dokuma-geri-al", label: "Top indirmeyi, koşumu ve duruşu geri alabilir" }] },
   // Tablet LEVENT SARIM ekranı (2026-09-14, DEVERE-LEVENT-TARAMASI §11): plan · sar · taslak sil; iptal yetenek.
   { key: "Devere", app: "mobile", modul: "devereEnabled", title: "Levent Sarım", requires: ["mobile:devere"], capabilities: [{ code: "mobile:devere-iptal", label: "Sarımı iptal edebilir (iplik defterine ters satır)" }] },
+  // G2t (2026-09-14): fason dokuma kabulü — aynı izin ikinci ekranda (levent dönüşü + top kabulü; sevk/iptal panelden).
+  { key: "FasonDokuma", app: "mobile", modul: "dokumaEnabled", title: "Fason Dokuma Kabul", requires: ["mobile:fason-kabul"], capabilities: [] },
 ];
 
 /** Tüm ekranlar — masaüstü yetenek kodları etiketlenmiş hâlde. */
