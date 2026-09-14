@@ -2,11 +2,12 @@
 // include'u, liste filtresi) F85 açık-kalem tanımını PAYLAŞTIĞINI ve sayıların
 // birbirinden SAPMADIĞINI doğrular.
 //
-// SALT-OKUR: fixture yaratmaz/mutasyon yapmaz — paylaşılan dev DB'sindeki mevcut
-// AT_SUBCONTRACTOR toplarına karşı invariant kontrolü yapar (dispatch/receive
-// akışı test_consecutive_fason.ts + test_fason_*.ts'te ayrıca kapsanır; buradaki
-// değişiklikler yalnız OKUMA yollarına dokunduğu için invariant testi yeterli ve
-// kırılgan değil). AT_SUBCONTRACTOR topu yoksa şekil-kontrolüyle geçer.
+// FİXTURE: kendi fason sevkini yaratır — gerçek firmalı, kategorili (adımın
+// `requiredCategoryId`si) ve fire kalitede bir topu olan açık kalem. Ortamdaki
+// AT_SUBCONTRACTOR toplarına bağlanmaz: veri yokken "firmalı top yok" diye
+// 7 kontrol her temiz DB'de atlanıyordu. Invariant'lar hâlâ DB'nin TAMAMI
+// üzerinde ölçülür (fixture yalnız kümenin boş kalmamasını sağlar); silme
+// `finally`de ve yalnız kendi ürettiği kimliklere bağlı.
 //
 // Çalıştır: npx tsx scripts/test_fason_visibility.ts
 import prisma from "../src/lib/prisma";
@@ -14,6 +15,87 @@ import { roleGrade } from "./fixture-quality-grade";
 import { atlamaDefteri } from "./lib/atlama";
 import { InventoryService } from "../src/services/inventory.service";
 import { Request } from "express";
+
+const TAG = `TEST-FV-${Date.now()}`;
+const ids = {
+  category: null as string | null,
+  sub: null as string | null,
+  station: null as string | null,
+  wo: null as string | null,
+  step: null as string | null,
+  batch: null as string | null,
+  dispatch: null as string | null,
+  dispatchItems: [] as string[],
+  rolls: [] as string[],
+};
+
+/** Açık fason kalemi: firma (tek kategorili) → adım (requiredCategory) → sevk → 2 top (biri fire). */
+async function fixtureKur(scrapCode: string, scrapGradeId: string): Promise<void> {
+  const item = await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } });
+  if (!item) throw new Error("Seed fixture eksik: PATOS (npm run seed:fixtures)");
+  const kategori = await prisma.subcontractorCategory.create({
+    data: { code: `${TAG}-K`, name: `Fason görünürlük ${TAG}` },
+    select: { id: true },
+  });
+  ids.category = kategori.id;
+  const sub = await prisma.subcontractor.create({
+    data: { code: `${TAG}-F`, name: `Fason firma ${TAG}`, categories: { create: [{ categoryId: kategori.id }] } },
+    select: { id: true },
+  });
+  ids.sub = sub.id;
+  const station = await prisma.station.create({
+    data: { code: `${TAG}-STN`, name: `Fason istasyonu ${TAG}`, type: "EXTERNAL" },
+    select: { id: true },
+  });
+  ids.station = station.id;
+  const wo = await prisma.workOrder.create({
+    data: { workOrderNumber: `${TAG}-WO`, status: "IN_PROGRESS" },
+    select: { id: true },
+  });
+  ids.wo = wo.id;
+  const step = await prisma.workOrderStep.create({
+    data: { workOrderId: wo.id, stationId: station.id, stepSequence: 1, requiredCategoryId: kategori.id },
+    select: { id: true },
+  });
+  ids.step = step.id;
+  const batch = await prisma.batch.create({ data: { batchNumber: `${TAG}-B`, workOrderId: wo.id }, select: { id: true } });
+  ids.batch = batch.id;
+  const dispatch = await prisma.subcontractorDispatch.create({
+    data: { dispatchNo: `${TAG}-SD`, workOrderId: wo.id, batchId: batch.id, stepId: step.id, subcontractorId: sub.id },
+    select: { id: true },
+  });
+  ids.dispatch = dispatch.id;
+  const toplar: Array<{ qty: number; fire: boolean }> = [{ qty: 120, fire: false }, { qty: 35, fire: true }];
+  for (const [i, t] of toplar.entries()) {
+    const r = await prisma.roll.create({
+      data: {
+        itemId: item.id, initialQty: t.qty, currentQty: t.qty, status: "AT_SUBCONTRACTOR",
+        entrySource: "SUPPLIER_RECEIPT", barcode: `${TAG}-R${i}`,
+        ...(t.fire ? { qualityGrade: scrapCode, qualityGradeId: scrapGradeId } : {}),
+      },
+      select: { id: true },
+    });
+    ids.rolls.push(r.id);
+    const di = await prisma.subcontractorDispatchItem.create({
+      data: { dispatchId: dispatch.id, rollId: r.id, dispatchedQty: t.qty },
+      select: { id: true },
+    });
+    ids.dispatchItems.push(di.id);
+  }
+}
+
+/** Teardown — yalnız kendi ürettiği kimlikler, FK sırasıyla. */
+async function fixtureTemizle(): Promise<void> {
+  if (ids.dispatchItems.length) await prisma.subcontractorDispatchItem.deleteMany({ where: { id: { in: ids.dispatchItems } } });
+  if (ids.dispatch) await prisma.subcontractorDispatch.deleteMany({ where: { id: ids.dispatch } });
+  if (ids.rolls.length) await prisma.roll.deleteMany({ where: { id: { in: ids.rolls } } });
+  if (ids.batch) await prisma.batch.deleteMany({ where: { id: ids.batch } });
+  if (ids.step) await prisma.workOrderStep.deleteMany({ where: { id: ids.step } });
+  if (ids.wo) await prisma.workOrder.deleteMany({ where: { id: ids.wo } });
+  if (ids.station) await prisma.station.deleteMany({ where: { id: ids.station } });
+  if (ids.sub) await prisma.subcontractor.deleteMany({ where: { id: ids.sub } });
+  if (ids.category) await prisma.subcontractorCategory.deleteMany({ where: { id: ids.category } });
+}
 
 const svc = new InventoryService();
 // pageSize 500 = MAX_PAGE_SIZE; AT_SUBCONTRACTOR kümesi dev DB'de bunun altında.
@@ -39,6 +121,9 @@ function check(label: string, cond: boolean, extra = ""): void {
 async function main(): Promise<void> {
   console.log("\n=== Fason görünürlüğü (Envanter → Fasonda) ===\n");
 
+  const scrap = await roleGrade("SCRAP");
+  await fixtureKur(scrap.code, scrap.id);
+
   // --- 1) Özet ucu: SQL çalışır + şekil doğru ---
   const summary = (await svc.getRollSubcontractorSummary()).data;
   check("özet ucu SQL'i hatasız çalışır ve şekli döndürür",
@@ -54,7 +139,7 @@ async function main(): Promise<void> {
   // ⚠️ Referans sayım KODU DEĞİL ROLÜ sorar. Kod yazılsaydı, kataloğu farklı olan
   // bir kurulumda `not: "FIRE"` HİÇBİR satırı elemez: servis fireyi doğru dışlar,
   // bu sayım dışlamaz ve kontrol ya sahte kırmızı ya sahte yeşil verir.
-  const scrapCode = (await roleGrade("SCRAP")).code;
+  const scrapCode = scrap.code;
   const dbCount = await prisma.roll.count({
     where: {
       status: "AT_SUBCONTRACTOR",
@@ -81,17 +166,12 @@ async function main(): Promise<void> {
     `haric=${summary.total.rollCount}/${dbCount} tüm=${withFire.total.rollCount}/${dbAll}`);
   check("includeFire=true sayısı >= includeFire=false (FIRE toplar eklenir, çıkmaz)",
     withFire.total.rollCount >= summary.total.rollCount);
-  // ⚠️ Yukarıdaki iki fire kontrolü, fasonda fire top YOKKEN her iki tarafı da aynı
-  // sayıya indirir ve VAKUMEN geçer — yeşilleri "dışlama çalışıyor" demez.
-  // Bu bir ARIZA değil VERİ durumudur (ölçüldü: fabrika kopyasında da 0) ⇒ kırmızı
-  // değil, BEYAN.
-  if (dbScrapAtSub === 0) {
-    ATLAMA.atla(
-      "fire-dışlama kapsaması",
-      `fasonda '${scrapCode}' rolünde top yok — iki fire kontrolü vakumen geçti`,
-      2,
-    );
-  }
+  // Yukarıdaki iki fire kontrolü, fasonda fire top YOKKEN iki tarafı aynı sayıya
+  // indirir ve VAKUMEN geçer. Fixture bir fire topu yarattı: sayım 0 ise dışlama
+  // değil FİXTURE bozuktur → kırmızı (körlük zemini).
+  check("körlük zemini: fasonda fire top VAR (fixture)", dbScrapAtSub > 0, `${dbScrapAtSub} top`);
+  check("fire topu includeFire=false evreninde SAYILMIYOR", withFire.total.rollCount - summary.total.rollCount === dbScrapAtSub,
+    `fark=${withFire.total.rollCount - summary.total.rollCount} fire=${dbScrapAtSub}`);
 
   // --- 3) Grup alanları iyi biçimli ---
   check("her firma grubu: rollCount>0 & totalQty sonlu & (id yoksa name='Bilinmiyor')",
@@ -125,8 +205,10 @@ async function main(): Promise<void> {
       return d.dispatchNo && d.subcontractor.id && d.subcontractor.name;
     }));
 
-  // --- 5) Filtre + stats paritesi (gerçek firmalı top varsa) ---
-  const realFirm = summary.bySubcontractor.find((f) => f.subcontractorId !== null);
+  // --- 5) Filtre + stats paritesi — fixture firması özete DÜŞMÜŞ olmalı ---
+  const realFirm = summary.bySubcontractor.find((f) => f.subcontractorId === ids.sub);
+  check("fixture firması özette (gerçek firmalı grup)", realFirm !== undefined,
+    realFirm ? `${realFirm.rollCount} top` : `firma özete düşmedi — açık kalem tanımı (F85) fixture'ı görmüyor`);
   if (realFirm) {
     const filtered: any = await svc.findAllRolls(
       reqOf({ "filter[status]": "AT_SUBCONTRACTOR", "filter[subcontractorId]": realFirm.subcontractorId! }),
@@ -152,12 +234,12 @@ async function main(): Promise<void> {
       }),
     );
     check("var olmayan firma filtresi boş küme döndürür", empty.data.length === 0);
-  } else {
-    ATLAMA.atla("filtre/stats paritesi", "gerçek firmalı AT_SUBCONTRACTOR topu yok", 4);
   }
 
-  // --- 6) Kategori filtresi paritesi (gerçek kategorili top varsa) ---
-  const realCat = summary.byCategory.find((c) => c.categoryId !== null);
+  // --- 6) Kategori filtresi paritesi — adımın requiredCategory'si özete DÜŞMÜŞ olmalı ---
+  const realCat = summary.byCategory.find((c) => c.categoryId === ids.category);
+  check("fixture kategorisi özette (adımın requiredCategory'si)", realCat !== undefined,
+    realCat ? `${realCat.rollCount} top` : "kategori özete düşmedi — COALESCE(requiredCategoryId, tek kategori) fixture'ı görmüyor");
   if (realCat) {
     const catFiltered: any = await svc.findAllRolls(
       reqOf({ "filter[status]": "AT_SUBCONTRACTOR", "filter[subcontractorCategoryId]": realCat.categoryId! }),
@@ -165,12 +247,7 @@ async function main(): Promise<void> {
     check("filtre[subcontractorCategoryId]: liste sayısı == özet kategori sayısı",
       catFiltered.data.length === realCat.rollCount,
       `liste=${catFiltered.data.length} özet=${realCat.rollCount}`);
-  } else {
-    ATLAMA.atla("kategori filtresi paritesi", "gerçek kategorili AT_SUBCONTRACTOR topu yok", 1);
   }
-
-  // Koşucu `Sonuç:` ekini okur — atlama beyanı ancak bu satırda görünür.
-  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===\n`);
 }
 
 main()
@@ -179,6 +256,14 @@ main()
     fail++;
   })
   .finally(async () => {
+    try {
+      await fixtureTemizle();
+    } catch (e) {
+      console.error("temizlik hatası:", e instanceof Error ? e.message : e);
+      fail++;
+    }
+    // Koşucu `Sonuç:` ekini okur — atlama beyanı ancak bu satırda görünür.
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===\n`);
     await prisma.$disconnect();
     process.exit(fail > 0 ? 1 : 0);
   });

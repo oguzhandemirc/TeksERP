@@ -296,8 +296,56 @@ const YILDIZ = ["*"];
 const FIXTURE_USERNAME = `bekci.superadmin.${process.pid}`;
 const FIXTURE_PAROLA = "bekci-superadmin-2026";
 let fixtureId: string | null = null;
+/** Fixture'ın doğuştaki tam adı — §I bunu takma adla karşılaştırır. */
+let fixtureTamAdi: string | null = null;
 /** §L'nin sentetik arşiv satırı — `finally`de silinir (arşiv kolu maskesi ölçümü). */
 let arsivSondaId: string | null = null;
+
+/**
+ * Fixture sistem hesabı — DOĞUM YOLU burada ölçülmez (bkz. §I başlığı); hesap
+ * doğrudan yaratılır, `finally`de silinir. §F'nin hesapsız dalı da çağırır: supap
+ * ölçüldükten SONRA hesap doğar ki tembel doğrulama AYNI koşumda ölçülsün.
+ */
+async function fixtureYarat(): Promise<void> {
+  const gecerliHash = await AuthService.hashPassword(FIXTURE_PAROLA);
+  const dogrudan = await prisma.user.create({
+    data: {
+      username: FIXTURE_USERNAME,
+      // Takma ad DOĞUŞTA yazılır — gerçek ad hiçbir zaman DB'ye girmez.
+      fullName: SYSTEM_ACCOUNT_FULLNAME,
+      passwordHash: gecerliHash,
+      isSystemAccount: true,
+      isActive: true,
+    },
+    select: { id: true, fullName: true },
+  });
+  fixtureId = dogrudan.id;
+  fixtureTamAdi = dogrudan.fullName;
+}
+
+/**
+ * TEMBEL DOĞRULAMA (A3 / D1 bulgusu): defter yalnız boot'ta yazılıyordu; süreç
+ * hesapsız açılır, hesap SONRADAN gelir (elle SQL · içe aktarım · geri yükleme) ve
+ * supap bir sonraki restart'a kadar AÇIK kalırdı. Burada tam o durum kurulur:
+ * defter "yok" der, DB'de hesap VARDIR → guard kendi kendini düzeltip KİLİTLEMELİ.
+ */
+async function tembelDogrulamaOlc(): Promise<void> {
+  setSystemAccountExists(false);
+  const tembel = await izin(SADECE_ADMIN, { ticaretEnabled: true }, false);
+  check(
+    "defter 'yok' derken DB'de hesap VAR → guard KİLİTLER (tembel doğrulama)",
+    tembel?.gecti === false && hataKodu(tembel) === "MODULE_FLAG_SUPERADMIN_ONLY",
+    hataKodu(tembel),
+  );
+  check(
+    "tembel doğrulama defteri KALICI olarak düzeltti (sonraki istek sorgusuz kilitli)",
+    systemAccountLockActive() === true && systemAccountExistsKnown() === true,
+  );
+  check(
+    "aynı durumda SÜPERADMİN geçer (kilit kimliğe bakar, körlemesine reddetmez)",
+    (await izin(YILDIZ, { ticaretEnabled: true }, true))?.gecti === true,
+  );
+}
 
 async function main(): Promise<void> {
   // ── Hedef DB kapısı ────────────────────────────────────────────────────────
@@ -480,10 +528,10 @@ async function main(): Promise<void> {
     setSystemAccountExists(false);
     check("registry 'hesap yok' → kilit DEVRE DIŞI", systemAccountLockActive() === false);
 
-    // ⚠️ SUPAP DAVRANIŞI ile TEMBEL DOĞRULAMA aynı DB'de ÖLÇÜLEMEZ — ve bu bir
-    // eksiklik değil, kuralın kendisidir: supap "DB'de sistem hesabı YOK" demek,
-    // tembel doğrulama ise "defter yalan söylüyor, DB'de VAR" demektir. Hangi
-    // ölçümün koşacağını DB belirler; ikisi de yazılı, hiçbiri sessizce atlanmaz.
+    // ⚠️ SUPAP DAVRANIŞI "DB'de sistem hesabı YOK" ister, TEMBEL DOĞRULAMA "defter
+    // yalan söylüyor, DB'de VAR" ister. Hesapsız DB'de İKİSİ DE ölçülür: önce supap,
+    // sonra fixture hesabı doğar ve tembel doğrulama onun üstünde kurulur. Hesaplı
+    // DB'de (fabrika) supap ölçülemez — gerçek hesap silinmez — ve bu BEYAN edilir.
     const dbdeSistemHesabi = await prisma.user.count({ where: { isSystemAccount: true } });
 
     if (dbdeSistemHesabi === 0) {
@@ -513,31 +561,13 @@ async function main(): Promise<void> {
         sonrakiIz > oncekiIz,
         `${oncekiIz} → ${sonrakiIz}`,
       );
-      atla(
-        "tembel doğrulama (boot'tan SONRA doğan hesap)",
-        "bu DB'de sistem hesabı yok — ölçüm ancak hesap VARKEN kurulabilir",
-        3,
-      );
+      // Hesap SONRADAN doğar (boot'tan sonra gelen hesap senaryosunun kendisi) ve
+      // tembel doğrulama aynı koşumda, onun üstünde ölçülür.
+      await fixtureYarat();
+      check("fixture sistem hesabı supaptan SONRA doğdu", fixtureId !== null, FIXTURE_USERNAME);
+      await tembelDogrulamaOlc();
     } else {
-      // ── TEMBEL DOĞRULAMA (A3 / D1 bulgusu) ────────────────────────────────
-      // Defter yalnız boot'ta yazılıyordu: süreç hesapsız açılır, hesap SONRADAN
-      // DB'ye gelir (elle SQL · içe aktarım · yedekten geri yükleme) ve supap bir
-      // sonraki restart'a kadar AÇIK kalırdı. Burada tam o durum kurulur: defter
-      // "yok" der, DB'de hesap VARDIR → guard kendi kendini düzeltip KİLİTLEMELİ.
-      const tembel = await izin(SADECE_ADMIN, { ticaretEnabled: true }, false);
-      check(
-        "defter 'yok' derken DB'de hesap VAR → guard KİLİTLER (tembel doğrulama)",
-        tembel?.gecti === false && hataKodu(tembel) === "MODULE_FLAG_SUPERADMIN_ONLY",
-        hataKodu(tembel),
-      );
-      check(
-        "tembel doğrulama defteri KALICI olarak düzeltti (sonraki istek sorgusuz kilitli)",
-        systemAccountLockActive() === true && systemAccountExistsKnown() === true,
-      );
-      check(
-        "aynı durumda SÜPERADMİN geçer (kilit kimliğe bakar, körlemesine reddetmez)",
-        (await izin(YILDIZ, { ticaretEnabled: true }, true))?.gecti === true,
-      );
+      await tembelDogrulamaOlc();
       atla(
         "supap DAVRANIŞ ölçümü (hesapsız kurulum)",
         `bu DB'de ${dbdeSistemHesabi} sistem hesabı var — supap yolu ölçülemez`,
@@ -578,25 +608,15 @@ async function main(): Promise<void> {
   // · GİZLİLİK davranışını ölçer ve onun için bir sistem hesabına ihtiyaç duyar;
   // o hesabı DOĞRUDAN yaratır (doğum yolundan bağımsız), `finally`de siler.
   {
-    const gecerliHash = await AuthService.hashPassword(FIXTURE_PAROLA);
-    const dogrudan = await prisma.user.create({
-      data: {
-        username: FIXTURE_USERNAME,
-        // Takma ad DOĞUŞTA yazılır — gerçek ad hiçbir zaman DB'ye girmez.
-        fullName: SYSTEM_ACCOUNT_FULLNAME,
-        passwordHash: gecerliHash,
-        isSystemAccount: true,
-        isActive: true,
-      },
-      select: { id: true, fullName: true },
-    });
-    fixtureId = dogrudan.id;
+    // §F'nin hesapsız dalı fixture'ı zaten doğurmuş olabilir; ikinci hesap
+    // `username` tekilliğine takılır ve §G/§J'nin hedefi belirsizleşirdi.
+    if (!fixtureId) await fixtureYarat();
     check("fixture sistem hesabı yaratıldı", fixtureId !== null, FIXTURE_USERNAME);
     check(
       `fixture'ın tam adı takma ad ("${SYSTEM_ACCOUNT_FULLNAME}")`,
-      dogrudan.fullName === SYSTEM_ACCOUNT_FULLNAME,
+      fixtureTamAdi === SYSTEM_ACCOUNT_FULLNAME,
     );
-    const grantSayisi = await prisma.userPermission.count({ where: { userId: fixtureId } });
+    const grantSayisi = await prisma.userPermission.count({ where: { userId: fixtureId ?? undefined } });
     check(
       "sistem hesabının GRANT satırı YOK (yetki koddan gelir)",
       grantSayisi === 0,
