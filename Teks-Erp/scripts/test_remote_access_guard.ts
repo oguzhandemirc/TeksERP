@@ -27,6 +27,7 @@ import { join } from "path";
 import { createServer } from "net";
 import type { AddressInfo } from "net";
 import type { Express, Request } from "express";
+import { atlamaDefteri } from "./lib/atlama";
 import {
   isRemoteDeniedPath,
   isRemoteRequest,
@@ -49,6 +50,13 @@ function check(label: string, ok: boolean, extra = ""): void {
     console.log(`❌ ${label}${extra ? " — " + extra : ""}`);
   }
 }
+
+/**
+ * ⚠️ ATLAMA DEFTERİ ORTAK ALTYAPIDIR — yerel kopya AÇILMAZ.
+ */
+const ATLAMA = atlamaDefteri(() => {
+  fail++;
+});
 
 const silent = (): void => {};
 /** Sahte istek — yalnız bu bekçinin okuduğu alanlar doldurulur.
@@ -330,6 +338,13 @@ function spawnApp(env: Record<string, string>): Promise<Spawned> {
     });
     child.on("exit", (code) => {
       clearTimeout(timer);
+      const bind = /BIND_ERROR (\S+) (\S+) (\d+)/.exec(errBuf);
+      if (bind) {
+        const e = new Error(`port bağlanamadı (${bind[1]} · ${bind[2]} · port ${bind[3]})`);
+        (e as Error & { bindHatasi?: boolean }).bindHatasi = true;
+        reject(e);
+        return;
+      }
       reject(new Error(`çocuk süreç ${code} ile çıktı. stderr: ${errBuf.slice(-500)}`));
     });
     child.on("error", reject);
@@ -356,17 +371,34 @@ async function probe(
 async function sectionEndToEnd(): Promise<void> {
   console.log("\n[5] Uçtan uca — aynı süreç, iki dinleyici");
 
+  // ⚠️ TOCTOU: `freePort()` portu 0 ile alır, OKUR ve KAPATIR; dönen numara o andan
+  // itibaren serbesttir ve yüklü bir makinede (CI) araya başka bir süreç girebilir
+  // ⇒ `EADDRINUSE`. Port bizim için KEYFÎ olduğundan doğru cevap yeniden denemektir;
+  // üç deneme de bağlanamazsa bu bir ÜRÜN kusuru değil ORTAM kısıtıdır ⇒ ⏭ sayıyla.
+  const DENEME = 3;
   let s: Spawned | null = null;
-  try {
-    const remotePort = await freePort();
-    s = await spawnApp({
-      NODE_ENV: "development",
-      REMOTE_PORT: String(remotePort),
-      CF_ACCESS_TEAM_DOMAIN: "sonda.cloudflareaccess.com",
-      CF_ACCESS_AUD: "sonda-aud",
-    });
-  } catch (err) {
-    check("sunucu ayağa kalktı", false, err instanceof Error ? err.message : String(err));
+  let sonHata = "";
+  for (let i = 1; i <= DENEME && !s; i++) {
+    try {
+      const remotePort = await freePort();
+      s = await spawnApp({
+        NODE_ENV: "development",
+        REMOTE_PORT: String(remotePort),
+        CF_ACCESS_TEAM_DOMAIN: "sonda.cloudflareaccess.com",
+        CF_ACCESS_AUD: "sonda-aud",
+      });
+    } catch (err) {
+      sonHata = err instanceof Error ? err.message : String(err);
+      if (!(err as { bindHatasi?: boolean }).bindHatasi) {
+        // Bağlanma DIŞI hata ürün/kurulum kusurudur — yeniden denemek onu gizlerdi.
+        check("sunucu ayağa kalktı", false, sonHata);
+        return;
+      }
+      console.log(`   ⏳ ${i}/${DENEME} port bağlanamadı, yeni portla tekrar: ${sonHata}`);
+    }
+  }
+  if (!s) {
+    ATLAMA.atla("[5] uçtan uca bölümü", `${DENEME} denemede port bağlanamadı (${sonHata})`, 22);
     return;
   }
   const { child, lan, remote } = s;
@@ -524,7 +556,7 @@ async function main(): Promise<void> {
   sectionDenylist();
   sectionClientIp();
   await sectionEndToEnd();
-  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
   process.exit(fail > 0 ? 1 : 0);
 }
 
@@ -536,13 +568,39 @@ if (process.argv.includes("--serve")) {
   // Uzak dinleyici, env'deki REMOTE_PORT'un TA KENDİSİ olmak zorunda — `markRemote`
   // soket portunu o değerle karşılaştırıyor. LAN dinleyicisi serbest port alır.
   const remotePort = Number(process.env.REMOTE_PORT);
+  // ⚠️ BAĞLANMA HATASI `address()`i NULL bırakır. Eskiden hata dalında da
+  // `address()!.port` okunuyordu ⇒ `TypeError: ... reading 'port'` ve ebeveyne
+  // yalnız "çocuk süreç 1 ile çıktı" dönüyordu: ARIZANIN ADI KAYBOLUYORDU.
+  // Artık hata MAKİNE OKUNUR tek satır olarak bildirilir (ebeveyn sınıflandırır).
+  const baglanmaHatasi = (nerede: string) => (e: NodeJS.ErrnoException) => {
+    process.stderr.write(`BIND_ERROR ${nerede} ${e.code ?? "UNKNOWN"} ${remotePort}\n`);
+    process.exit(3);
+  };
+  // SONDA YÜZEYİ: bağlanma hatası dalını ebeveynde ölçmek için (gerçek yarışı
+  // deterministik üretmek mümkün değil). Ürün yolunu değiştirmez, yalnız bu bekçi.
+  if (process.env.TEKSERP_SONDA_BIND_HATASI === "1") {
+    process.stderr.write(`BIND_ERROR sonda EADDRINUSE ${remotePort}\n`);
+    process.exit(3);
+  }
+  // `=2`: bağlanma DIŞI çökme — kontrol grubu. Yeniden deneme OLMAMALI, ❌ olmalı.
+  if (process.env.TEKSERP_SONDA_BIND_HATASI === "2") {
+    process.stderr.write("sonda: bağlanma dışı çökme\n");
+    process.exit(1);
+  }
   const lanSrv = app.listen(0, "127.0.0.1", () => {
     const remoteSrv = app.listen(remotePort, "127.0.0.1", () => {
-      process.stdout.write(
-        `READY ${(lanSrv.address() as AddressInfo).port} ${(remoteSrv.address() as AddressInfo).port}\n`,
-      );
+      const lanAdres = lanSrv.address() as AddressInfo | null;
+      const remoteAdres = remoteSrv.address() as AddressInfo | null;
+      if (!lanAdres || !remoteAdres) {
+        process.stderr.write(`BIND_ERROR adres-null ${lanAdres ? "remote" : "lan"} ${remotePort}\n`);
+        process.exit(3);
+        return;
+      }
+      process.stdout.write(`READY ${lanAdres.port} ${remoteAdres.port}\n`);
     });
+    remoteSrv.on("error", baglanmaHatasi("remote"));
   });
+  lanSrv.on("error", baglanmaHatasi("lan"));
 } else {
   void main();
 }
