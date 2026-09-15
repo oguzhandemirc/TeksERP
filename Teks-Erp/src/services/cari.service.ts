@@ -612,6 +612,16 @@ export class CariService {
     currency: Currency;
     from: Date;
     to: Date;
+    /**
+     * Belge tipi süzgeci — YALNIZ `rows` dökümünü daraltır.
+     *
+     * @suzgec-ozet-degismez — özet/bakiye süzgeçten ETKİLENMEZ.
+     * ⚠️ `opening`/`closing`/`totalDebit`/`totalCredit` ve `running` SÜZGEÇSİZ kalır
+     * ve bu bir eksiklik değil, ekstrenin tanımıdır: yürüyen bakiye bütün
+     * hareketlerden doğar. Süzgeç sorguya inseydi kolon "doğru görünen ama yanlış"
+     * bir bakiye basardı — süzülen hareketler bakiyeyi yine değiştirmiş olurdu.
+     */
+    belgeTipi?: CariTxnSource;
   }): Promise<
     ApiResponse<{
       opening: Prisma.Decimal;
@@ -620,6 +630,8 @@ export class CariService {
       totalCredit: Prisma.Decimal;
       /** Devrin dayandığı dönem kapanışı — mühürsüz kurulumda `null`. */
       carriedFrom: { periodEnd: Date; closingBalance: Prisma.Decimal } | null;
+      /** YALNIZ süzgeçliyken dolar; süzgeçsiz gövde bayt bayt eski. */
+      suzgec?: { belgeTipi: CariTxnSource; dusenSatir: number };
       rows: Array<{
         id: string;
         txnDate: Date;
@@ -690,11 +702,16 @@ export class CariService {
     let running = opening;
     let totalDebit = D0();
     let totalCredit = D0();
-    const rows = txns.map((t) => {
+    let droppedRows = 0;
+    // ⚠️ SIRA LOAD-BEARING: `running` ve toplamlar ÖNCE bütün hareketlerden
+    // yürütülür, süzgeç SONRA uygulanır. Ters sırada ekstre süzgece göre değişen
+    // bir bakiye basardı. Süzgeçli listede `running` ATLAYARAK ilerler — doğrudur.
+    const rows = txns.flatMap((t) => {
       running = running.plus(D(t.debit)).minus(D(t.credit));
       totalDebit = totalDebit.plus(D(t.debit));
       totalCredit = totalCredit.plus(D(t.credit));
-      return {
+      if (params.belgeTipi !== undefined && t.sourceType !== params.belgeTipi) { droppedRows++; return []; }
+      return [{
         id: t.id,
         txnDate: t.txnDate,
         description: t.description,
@@ -711,7 +728,7 @@ export class CariService {
         reversesTxnId: t.reversesTxnId,
         reversedByTxnId: t.reversedBy?.id ?? null,
         running,
-      };
+      }];
     });
 
     return {
@@ -725,6 +742,9 @@ export class CariService {
           ? { periodEnd: resolved.carriedFrom.periodEnd, closingBalance: resolved.carriedFrom.closingBalance }
           : null,
         rows,
+        ...(params.belgeTipi !== undefined
+          ? { suzgec: { belgeTipi: params.belgeTipi, dusenSatir: droppedRows } }
+          : {}),
       },
     };
   }

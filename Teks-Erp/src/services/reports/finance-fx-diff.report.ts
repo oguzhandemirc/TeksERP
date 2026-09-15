@@ -44,7 +44,7 @@
 // Aralık `resolveDateRange` sözleşmesiyle mutlak an'dır.
 // =============================================================================
 
-import { Prisma, ChequeKind, PaymentDirection } from "@prisma/client";
+import { Prisma, CariKind, ChequeKind, PaymentDirection } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { invoiceLedgerSide } from "../helpers/finance.helper";
 import { ACTIVE_ALLOCATION } from "../payment-allocation.service";
@@ -82,6 +82,12 @@ export interface FxDiffSummary {
 export interface FxDiffReport {
   rows: FxDiffRow[];
   summary: FxDiffSummary;
+  /**
+   * YALNIZ süzgeçliyken dolar; süzgeçsiz gövde bayt bayt eski.
+   * `summary` BURADA süzgeçle birlikte daralır (cash-book'un aksine) çünkü aynı
+   * satır kümesinden türer — kur farkı bir BAKİYE değil, o kümenin toplamıdır.
+   */
+  suzgec?: { kind: CariKind | null; dusenSatir: number };
 }
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -95,22 +101,34 @@ export async function getFxDiffReport(opts: {
   range: DateRange;
   cariId?: string;
   currency?: string;
+  /** Cari türü — `aging` bu ekseni taşıyordu, kardeşi taşımıyordu (asimetri kapandı). */
+  kind?: CariKind;
 }): Promise<FxDiffReport> {
-  const rows = await prisma.paymentAllocation.findMany({
-    where: {
-      // ÇÖZÜLMÜŞ kapama kur farkı üretmez — damga 2026-09-11'de geldi, bu süzme
-      // olmadan geri alınmış bir kapama raporda yaşamaya devam ederdi.
-      ...ACTIVE_ALLOCATION,
-      createdAt: { gte: opts.range.from, lte: opts.range.to },
-      invoice: {
-        // TRY faturada kur farkı tanım gereği yok (iki damga da 1) — evrenin
-        // dışında. Dövizli faturayı TRY kaynakla kapamak zaten 400 (para birimi
-        // eşitliği guard'ı), yani kaynak da otomatik dövizlidir.
-        currency: { not: "TRY" },
-        ...(opts.currency ? { currency: opts.currency as never } : {}),
-        ...(opts.cariId ? { cariId: opts.cariId } : {}),
-      },
+  // Süzgeç WHERE'e iner; DÜŞEN SATIR ölçülür (süzgeçli sorgu eleneni görmez).
+  // Ek sayım yalnız süzgeçliyken koşar.
+  const where: Prisma.PaymentAllocationWhereInput = {
+    // ÇÖZÜLMÜŞ kapama kur farkı üretmez — damga 2026-09-11'de geldi, bu süzme
+    // olmadan geri alınmış bir kapama raporda yaşamaya devam ederdi.
+    ...ACTIVE_ALLOCATION,
+    createdAt: { gte: opts.range.from, lte: opts.range.to },
+    invoice: {
+      // TRY faturada kur farkı tanım gereği yok (iki damga da 1) — evrenin
+      // dışında. Dövizli faturayı TRY kaynakla kapamak zaten 400 (para birimi
+      // eşitliği guard'ı), yani kaynak da otomatik dövizlidir.
+      currency: { not: "TRY" },
+      ...(opts.currency ? { currency: opts.currency as never } : {}),
+      ...(opts.cariId ? { cariId: opts.cariId } : {}),
+      ...(opts.kind ? { cari: { kind: opts.kind } } : {}),
     },
+  };
+  const droppedRows = opts.kind
+    ? (await prisma.paymentAllocation.count({
+        where: { ...where, invoice: { ...(where.invoice as Prisma.InvoiceWhereInput), cari: undefined } },
+      })) - (await prisma.paymentAllocation.count({ where }))
+    : 0;
+
+  const rows = await prisma.paymentAllocation.findMany({
+    where,
     select: {
       id: true,
       amount: true,
@@ -207,5 +225,6 @@ export async function getFxDiffReport(opts: {
         netTry: v.gain.minus(v.loss).toString(),
       })),
     },
+    ...(opts.kind ? { suzgec: { kind: opts.kind, dusenSatir: droppedRows } } : {}),
   };
 }

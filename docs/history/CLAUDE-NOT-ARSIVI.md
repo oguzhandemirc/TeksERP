@@ -21,6 +21,61 @@
 
 ---
 
+## 2026-09-15 — Finans rapor eksenleri: süzgeç bir GÖRÜNÜM mü, yoksa yeni bir GERÇEK mi? [ÇEKİRDEK]
+
+Raporlar fazının R5b-d dilimi (cari-dışı eksenler). Beş finans raporunun bugünkü ekseni
+ölçüldü: `aging` altı eksen · `cash-book` dört · `statement` üç (ikisi zorunlu) · `fx-diff`
+üç · `vat-summary` **yalnız tarih**. Eklenenler: `vat-summary` `yon`+`oran`, `cash-book`
+`kategori`+`yon`, `fx-diff` `kind`, `statement` `belgeTipi`.
+
+**`aging`e eksen EKLENMEDİ ve bu beyan edildi.** Altı ekseni zaten vardı; "her rapora bir
+eksen" diye oraya bir şey eklemek ölçüme değil SİMETRİYE uymak olurdu. Bekçinin bir kolu
+bu kararı yazılı tutar — `aging` bir gün eksen alırsa o satır da güncellenmek zorunda.
+
+**ASIL BULGU — SÜZGECİN İKİ AYRI ANLAMI VAR ve tek kurala bağlanamaz.**
+`vat-summary`/`fx-diff`te özet, gösterilen satırların TOPLAMIDIR: süzgeç WHERE'e iner ve
+özet onunla birlikte daralır, doğrusu budur. Ama `cash-book`/`statement`te özet bir
+BAKİYEDİR — ve *kasadaki para, kullanıcının ekranda neyi seçtiğine göre değişmez.* Orada
+süzgeç yalnız satır dökümünü daraltır; devir, toplam ve yürüyen bakiye bütün hareketlerden
+yürür. ⇒ ***Bir süzgeç, gösterilen kümeyi mi daraltıyor yoksa raporlanan GERÇEĞİ mi
+değiştiriyor — bu soru cevaplanmadan eksen eklenemez.***
+
+Bunun teknik sonucu bir SIRA kuralıdır ve load-bearing'dir: `running` ÖNCE bütün
+hareketlerden yürütülür, süzgeç SONRA uygulanır. Ters sırada kolon "doğru görünen ama
+yanlış" bir bakiye basar — ve hiçbir yüzey onu yanlışlayamaz, çünkü her satır kendi içinde
+tutarlı görünür. Süzgeçli listede `running` ATLAYARAK ilerler; bu DOĞRUDUR ve rapor notuna
+yazılır, yoksa muhasebeci ekranı bozuk sanır.
+
+**`oran` süzgeci İKİ YERDE uygulanır ve ikisi de gerekli:** `lines.some` BELGEYİ seçer,
+satır döngüsündeki atlama ise seçilen belgenin ÖBÜR oranlarını dışarıda tutar. Yalnız
+`lines.some` yazılsaydı "20 KDV'li faturaları getir" demek olurdu ve aynı faturanın 10'luk
+satırları da toplama girerdi. Gerçek fikstürle ölçüldü (`test_finance_vat §9e/§9f`:
+`oran=1.00` süzgeci karışık oranlı belgeyi seçti ve onun %3 satırını eledi, `dusenSatir=1`).
+
+**DÜŞEN SATIR SAYILIR.** Süzgeç boş sonuç verdiğinde "veri yok" ile "süzgeç kesti" ekranda
+AYNI boş ekrandır; sayaç olmadan kullanıcı olmayan bir boşluğa bakar. Elenen sayı ölçülür,
+tahmin edilmez: WHERE'e inen süzgeçte iki `count` farkıyla (elenen zaten sorguya girmez),
+döngüde süzende sayaçla.
+
+**BEKÇİNİN KENDİ İKİ KUSURU SONDAYLA ÇIKTI** ve ikisi de tanıdık sınıflar:
+① `dusenSatir` kolunun alternasyonu `dusenSatir =` kalıbını da kabul ediyordu ve
+`let dusenSatir = 0;` BİLDİRİMİNİN KENDİSİ o kalıba uyuyordu — sayaç hiç artmasa da yeşil
+(*sınırsız eşleşme*). ② `.strict()` kolu TOPLAM SAYIYA bakıyordu (`>= 5`); bir ucun
+`.strict()`i düşünce sayı 6→5 oldu ve eşiği HÂLÂ geçti — gerçek bir ihlalin yeşil geçtiği
+bir eşik. ⇒ ***Toplam sayıya bakan kapı, kaybı yalnız o sayı eşiğin altına inerse görür;
+"her biri" sorusunun cevabı bir toplam değildir.*** İkisi de onarıldı ve sondalar yeniden
+koşuldu.
+
+**Söz dağarcığı ayrımı:** API alanı `dusenSatir` (6e'nin R5b-b zarfıyla ORTAK — panel tek
+bileşen okuyacak), yerel değişken `droppedRows` (üretim kodu tanımlayıcı kuralı). İkisini
+birbirinin yerine koymak ya zarfı ayrıştırır ya tanımlayıcı cırcırını yükseltir.
+
+**Bir de TR harf tuzağı:** beyanı serbest metinle aramak işe yaramaz — "SÜZGEÇSİZ" JS'te
+`i` bayrağıyla bile "süzgeçsiz"e katlanmaz (`İ` noktalı `i`ye düşer, `toLocaleUpperCase("tr")`
+yasağının aynı kökü). Beyan kanonik bir İŞARETLE taşınır: `@suzgec-ozet-degismez`.
+
+---
+
 ## 2026-09-15 — Rapor kapısı: kümeyi genişletmek, kümeyi KİRLETMEK değildir [ÇEKİRDEK]
 
 Raporlar fazının R1 dilimi: `reports.closedKeys` + 29 uçta `requireReportOpen`.

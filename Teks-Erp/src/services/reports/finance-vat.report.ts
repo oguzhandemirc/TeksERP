@@ -164,10 +164,33 @@ export interface VatSummaryReport {
   sales: VatBlock;
   purchase: VatBlock;
   notes: string[];
+  /**
+   * YALNIZ süzgeçliyken dolar — süzgeçsiz gövde bayt bayt eskisiyle aynı kalır.
+   * `dusenBelge`/`dusenSatir` şart: süzgeç boş sonuç verdiğinde ekranda "veri yok"
+   * ile "süzgeç kesti" ayrılmalı, yoksa kullanıcı olmayan bir boşluğa bakar.
+   */
+  meta?: { suzgec: VatSuzgecMeta };
 }
+
+export interface VatSuzgecMeta {
+  yon: VatYon | null;
+  oran: string | null;
+  /** Yön süzgecinin ELEDİĞİ belge sayısı (aralıktaki toplam − süzgeçli toplam). */
+  dusenBelge: number;
+  /** Oran süzgecinin yüklenen belgelerde ELEDİĞİ satır sayısı. */
+  dusenSatir: number;
+}
+
+/** Fatura yönü — `InvoiceType`un aynası; iade yönleri AYRI değer (blokta ayrı satır). */
+export const VAT_YONLERI = ["SALES", "PURCHASE", "SALES_RETURN", "PURCHASE_RETURN"] as const;
+export type VatYon = (typeof VAT_YONLERI)[number];
 
 export interface VatSummaryParams {
   range: DateRange;
+  /** Fatura yönü — `where.type`a iner (sunucuda süzme). */
+  yon?: VatYon;
+  /** KDV oranı, sabit 2 hane ("20.00") — `where.lines.some.vatRate` + satır döngüsü. */
+  oran?: string;
 }
 
 // -----------------------------------------------------------------------------
@@ -220,11 +243,32 @@ function currencyOrder(a: string, b: string): number {
 // -----------------------------------------------------------------------------
 
 export async function getVatSummaryReport(params: VatSummaryParams): Promise<VatSummaryReport> {
-  const { range } = params;
+  const { range, yon, oran } = params;
+  const suzgecVar = yon !== undefined || oran !== undefined;
+
+  // Süzgeç WHERE'e iner (bellek-içi süzme YASAK: cursor'lu listede süzme sunucuda).
+  // ⚠️ `oran` İKİ YERDE uygulanır ve ikisi de gerekli: `lines.some` belgeyi seçer,
+  // satır döngüsündeki atlama ise SEÇİLEN belgenin öbür oranlarını dışarıda tutar.
+  // Yalnız `lines.some` yazılsaydı "20 KDV'li faturaları getir" demek olurdu ve
+  // aynı faturanın 10'luk satırları da toplama girerdi.
+  const temelWhere: Prisma.InvoiceWhereInput = {
+    status: "CONFIRMED",
+    issueDate: { gte: range.from, lte: range.to },
+  };
+  const where: Prisma.InvoiceWhereInput = {
+    ...temelWhere,
+    ...(yon ? { type: yon } : {}),
+    ...(oran ? { lines: { some: { vatRate: new Prisma.Decimal(oran) } } } : {}),
+  };
+  // DÜŞEN BELGE ölçülür, TAHMİN EDİLMEZ: süzgeçli sorgu eleneni zaten görmez.
+  // Ek sayım yalnız süzgeçliyken koşar — süzgeçsiz yol bayt bayt eski.
+  const droppedDocs = suzgecVar
+    ? (await prisma.invoice.count({ where: temelWhere })) - (await prisma.invoice.count({ where }))
+    : 0;
+  let droppedRows = 0;
 
   const invoices = await prisma.invoice.findMany({
-    // YALNIZ CONFIRMED (başlıktaki kapsam kuralı). Çıpa `issueDate` — tahakkuk.
-    where: { status: "CONFIRMED", issueDate: { gte: range.from, lte: range.to } },
+    where,
     select: {
       id: true,
       type: true,
@@ -255,6 +299,7 @@ export async function getVatSummaryReport(params: VatSummaryParams): Promise<Vat
     const groups = new Map<string, { base: Prisma.Decimal; vat: Prisma.Decimal; wh: Prisma.Decimal }>();
     for (const line of inv.lines) {
       const key = D(line.vatRate).toFixed(2);
+      if (oran !== undefined && key !== oran) { droppedRows++; continue; }
       let g = groups.get(key);
       if (!g) {
         g = { base: D0(), vat: D0(), wh: D0() };
@@ -330,7 +375,13 @@ export async function getVatSummaryReport(params: VatSummaryParams): Promise<Vat
       "İade faturaları kendi bloklarında AYRI satırdır; blok toplamına negatif (net) girer.",
       "Kırılım satır oranlarından toplanır — karışık oranlı fatura her oranda kendi payıyla görünür; tevkifat KDV üzerinden satır oranıyla türetilir.",
       "TL kolonları her belgenin KENDİ kur damgasıyla çevrilir (bugünkü kurla yeniden çevrim yapılmaz); kuruş kalıntısı en büyük matrah satırına yazılır ve TL toplamı belge TL toplamına birebir eşittir.",
+      ...(suzgecVar
+        ? ["SÜZGEÇ AÇIK: aşağıdaki rakamlar dönemin TAMAMI değil, süzgeçten geçen belgelerdir — `meta.suzgec` neyin elendiğini sayar."]
+        : []),
     ],
+    ...(suzgecVar
+      ? { meta: { suzgec: { yon: yon ?? null, oran: oran ?? null, dusenBelge: droppedDocs, dusenSatir: droppedRows } } }
+      : {}),
   };
 }
 

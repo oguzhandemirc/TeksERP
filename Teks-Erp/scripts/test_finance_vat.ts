@@ -335,6 +335,37 @@ async function main(): Promise<void> {
     `grand=${pTr?.net.grand}`,
   );
 
+  // ── §9 ⭐ SÜZGEÇ EKSENLERİ (R5b-d) — GERÇEK VERİYLE ───────────────────────
+  // Statik bekçi (`test_finans_rapor_eksenleri`) sözleşmeyi ölçer: eksen uca bağlı
+  // mı, kap koşullu mu, düşen satır sayılıyor mu. SAYILARIN DOĞRU DARALDIĞINI
+  // yalnız burası görebilir — fikstür zaten elimizde.
+  const toplamBelge = rep.sales.docCount + rep.purchase.docCount;
+  check("§9z körlük zemini: süzgeçsiz raporda belge var", toplamBelge > 0, `${toplamBelge} belge`);
+  check("§9a SÜZGEÇSİZ gövdede `meta` anahtarı HİÇ YOK (panel varlığına bakarak şerit çizer)",
+    !("meta" in rep), `meta=${JSON.stringify((rep as { meta?: unknown }).meta)}`);
+
+  const yalnizSatis = await getVatSummaryReport({ range: { from: FROM, to: TO }, yon: "SALES" });
+  check("§9b `yon=SALES` yalnız ileri satışı bırakır (iade AYRI değer, gelmez)",
+    yalnizSatis.purchase.docCount === 0 && yalnizSatis.sales.docCount === rep.sales.docCount - 1,
+    `satış=${yalnizSatis.sales.docCount} alış=${yalnizSatis.purchase.docCount}`);
+  check("§9c düşen BELGE sayılıyor (aralıktaki toplam − süzgeçli toplam)",
+    yalnizSatis.meta?.suzgec.dusenBelge === toplamBelge - yalnizSatis.sales.docCount,
+    `dusenBelge=${yalnizSatis.meta?.suzgec.dusenBelge} (toplam ${toplamBelge})`);
+
+  const yalnizIade = await getVatSummaryReport({ range: { from: FROM, to: TO }, yon: "SALES_RETURN" });
+  check("§9d `yon=SALES_RETURN` YALNIZ iadeyi getirir — dört değerli eksenin gerekçesi budur",
+    yalnizIade.sales.docCount === 1 && yalnizIade.sales.currencies.every((c) => c.forward.docCount === 0),
+    `iade=${yalnizIade.sales.docCount}`);
+
+  // Oran süzgeci İKİ YERDE uygulanır; bunu ancak KARIŞIK oranlı belge gösterir:
+  // `%1` süzgeci S2'yi seçer (lines.some) ama onun `%3` satırını ELER (döngü).
+  const yalnizBir = await getVatSummaryReport({ range: { from: FROM, to: TO }, oran: "1.00" });
+  const birOranlar = yalnizBir.sales.currencies.flatMap((c) => c.rows.map((r) => r.vatRate));
+  check("§9e `oran=1.00` yalnız o oranın satırlarını bırakır (karışık belgenin öbür oranı ELENİR)",
+    birOranlar.length > 0 && birOranlar.every((r) => r === "1.00"), `oranlar=[${birOranlar.join(", ")}]`);
+  check("§9f elenen SATIR sayılıyor (karışık belgede en az bir satır düştü)",
+    (yalnizBir.meta?.suzgec.dusenSatir ?? 0) >= 1, `dusenSatir=${yalnizBir.meta?.suzgec.dusenSatir}`);
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
 

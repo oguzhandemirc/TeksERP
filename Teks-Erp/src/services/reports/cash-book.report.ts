@@ -121,6 +121,13 @@ export type CashAccountKind = "CASH" | "BANK";
 
 export interface CashBookParams {
   range: DateRange;
+  /**
+   * Kova süzgeci — YALNIZ `rows` dökümünü daraltır (özet ve kategoriler dönem
+   * gerçeğidir). Gerekçe aşağıda `suzgec` alanında.
+   */
+  kategori?: CashCategoryGroup;
+  /** Yön süzgeci — aynı sözleşme: yalnız `rows`. */
+  yon?: "IN" | "OUT";
   /** Tek hesap seçiliyse satır dökümü de döner; yoksa yalnız hesap özetleri. */
   accountId?: string;
   accountKind?: CashAccountKind;
@@ -207,6 +214,18 @@ export interface CashBookReport {
   storedComparable: boolean;
   totals: { opening: string; totalIn: string; totalOut: string; closing: string } | null;
   notes: string[];
+  /**
+   * YALNIZ süzgeçliyken dolar; süzgeçsiz gövde bayt bayt eski.
+   *
+   * ⚠️ SÜZGEÇ YALNIZ `rows`a UYGULANIR ve bu bir eksiklik değil, defterin
+   * tanımıdır: `running` "o satırdan SONRAKİ bakiye"dir ve BÜTÜN hareketlerden
+   * doğar. Süzgeç SQL'e inseydi kolon "doğru görünen ama yanlış" bir bakiye
+   * basardı — süzülen hareketler bakiyeyi yine değiştirmiş olurdu. Aynı sebeple
+   * @suzgec-ozet-degismez — özet/bakiye süzgeçten ETKİLENMEZ.
+   * `accounts`/`categories`/`totals` DÖNEM GERÇEĞİ olarak süzgeçsiz kalır:
+   * kasadaki para, kullanıcının ekranda neyi seçtiğine göre değişmez.
+   */
+  suzgec?: { kategori: CashCategoryGroup | null; yon: "IN" | "OUT" | null; dusenSatir: number };
 }
 
 interface AccountRow {
@@ -368,6 +387,7 @@ function bucketOf(m: MovementRow): { key: string; label: string; group: CashCate
 
 export async function getCashBookReport(params: CashBookParams): Promise<CashBookReport> {
   const { from, to } = params.range;
+  const suzgecVar = params.kategori !== undefined || params.yon !== undefined;
 
   const fAccount = params.accountId ? Prisma.sql`AND a.id::text = ${params.accountId}` : Prisma.empty;
   const fKind = params.accountKind ? Prisma.sql`AND a."accountKind" = ${params.accountKind}` : Prisma.empty;
@@ -551,14 +571,23 @@ export async function getCashBookReport(params: CashBookParams): Promise<CashBoo
   // sütunda toplanırsa çıkan sayı hiçbir hesabın bakiyesi olmaz (üstelik para
   // birimleri farklı olabilir).
   let rows: CashBookRow[] | null = null;
+  let droppedRows = 0;
   if (params.accountId) {
     const opening = openingByAccount.get(params.accountId) ?? D0();
     let running = opening;
-    rows = (movementsByAccount.get(params.accountId) ?? []).map((m) => {
+    // ⚠️ SIRA LOAD-BEARING: `running` ÖNCE bütün hareketlerden yürütülür, süzgeç
+    // SONRA uygulanır. Ters sırada (önce süzüp sonra yürütmek) kolon süzgece göre
+    // değişen bir "bakiye" basardı ve o bakiye hiçbir hesabın bakiyesi olmazdı.
+    // Süzgeçli listede `running` ATLAYARAK ilerler — bu DOĞRUDUR ve nota yazılır.
+    rows = (movementsByAccount.get(params.accountId) ?? []).flatMap((m) => {
       const amt = D(m.amount);
       const signed = m.direction === "IN" ? amt : amt.negated();
       running = running.plus(signed);
-      return {
+      if (suzgecVar && !(
+        (params.kategori === undefined || bucketOf(m).group === params.kategori)
+        && (params.yon === undefined || m.direction === params.yon)
+      )) { droppedRows++; return []; }
+      return [{
         id: m.id,
         source: m.source as CashBookRow["source"],
         docNo: m.docNo,
@@ -572,7 +601,7 @@ export async function getCashBookReport(params: CashBookParams): Promise<CashBoo
         description: m.description,
         reference: m.reference,
         cancelled: m.cancelled,
-      };
+      }];
     });
   }
 
@@ -629,5 +658,17 @@ export async function getCashBookReport(params: CashBookParams): Promise<CashBoo
     );
   }
 
-  return { accounts, categories, rows, rowsTruncated, storedComparable, totals, notes };
+  if (suzgecVar) {
+    notes.push(
+      "SÜZGEÇ AÇIK: aşağıdaki DÖKÜM daraltıldı, ÖZET ve KATEGORİ kırılımı dönemin TAMAMIDIR — " +
+        "kasadaki para ekranda neyi seçtiğinize göre değişmez. Yürüyen bakiye bütün hareketlerden " +
+        "yürütülür, bu yüzden süzgeçli listede ATLAYARAK ilerler (doğrudur).",
+    );
+  }
+  return {
+    accounts, categories, rows, rowsTruncated, storedComparable, totals, notes,
+    ...(suzgecVar
+      ? { suzgec: { kategori: params.kategori ?? null, yon: params.yon ?? null, dusenSatir: droppedRows } }
+      : {}),
+  };
 }
