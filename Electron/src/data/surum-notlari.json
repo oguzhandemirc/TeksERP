@@ -32,6 +32,11 @@
         {
           "kapsam": "panel",
           "tip": "duzeltme",
+          "metin": "Operasyon → Mal Kabul → Yeni Mal Kabul: satırlarda iplik kalemi varken sütun başlıkları iplik hücreleriyle uyuşmuyordu (“Renk” altında lot numarası, “Metre” altında kg, “En” altında bobin görünüyordu). Artık tabloda iplik satırı varsa başlıklar iki türü de anlatır: “Kumaş / İplik”, “Renk / Lot”, “Miktar (m / kg)”, “En (cm) / Bobin”; iplikte kullanılmayan hücreler (Kg, Kat, Özellik) tire ile ve nedeni imleçte gösterilir. Yalnız kumaş satırı olan tabloda başlıklar eskisi gibidir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
           "metin": "Tanımlar → Üretim İstasyonları: “Dokuma Tezgahı” ve “Sevkiyat / Tartı” görev türüyle kaydedilen istasyon sayfada görünmüyordu ve Excel/PDF dışa aktarımına girmiyordu (istasyon kaydediliyor, kart çizilmiyor, tezgah eklenemiyordu). Artık formda seçilebilen her görev türü listelenir ve dışa aktarılır; dokuma tezgahı yalnız dokuma modülü kapalıyken gizlenir (kayıt korunur). Yeni İstasyon formunda “Görev Türü” listesinde “Diğer” en alta alındı; görev türü seçilince Yetenekler kutuları o türün önerilen düzeniyle ön-işaretli gelir (Kurşun + KK2 kalite kontrol, fason renk + özellik, dokuma tezgahı levent tüketir) — öneri değiştirilebilir; mevcut istasyon düzenlenirken yetenekler kendiliğinden değişmez."
         },
         {

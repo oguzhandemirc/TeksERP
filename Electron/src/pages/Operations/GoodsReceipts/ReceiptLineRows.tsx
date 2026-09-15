@@ -29,6 +29,7 @@ import { useFoldValues } from "@/hooks/useFoldValues";
 import type { Item } from "@/pages/Items/types";
 import type { Color } from "@/pages/Colors/types";
 import { LinePropertiesButton } from "./LinePropertiesButton";
+import { cellLabel, receiptLineHeaders } from "./receiptLineColumns";
 
 export interface DraftLine {
   key: string;
@@ -112,10 +113,13 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds }: Props) {
   const patch = (key: string, p: Partial<DraftLine>) =>
     onChange(lines.map((l) => (l.key === key ? { ...l, ...p } : l)));
 
-  /** Devre dışı hücre — iplik satırında kumaşa özgü alanın yerine çizilir. */
-  const dash = (title: string) => (
+  /** Devre dışı hücre — iplik satırında kumaşa özgü alanın yerine çizilir; etiketi başlığın
+   *  anlamını taşır ("Kg — iplikte miktar zaten kg"), başlıkla hücre çelişmez. */
+  const dash = (label: string) => (
     <span
-      title={title}
+      title={label}
+      aria-label={label}
+      role="note"
       className="flex h-9 select-none items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground"
     >
       —
@@ -123,35 +127,32 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds }: Props) {
   );
 
   const cols = "grid-cols-[minmax(0,1fr)_128px_80px_66px_66px_96px_84px_58px_60px_76px]";
+  // Başlık: tabloda iplik satırı varsa iki türü de anlatır ("Renk / Lot", "Miktar (m / kg)"…);
+  // yoksa eski başlık bayt bayt (`receiptLineColumns.ts` — başlık ↔ hücre tek tablo).
+  const headers = receiptLineHeaders(lines.some((l) => isYarn(l.itemId)));
 
   return (
     <div className="rounded-md border">
-      <div className={`grid ${cols} gap-2 border-b bg-muted/50 px-3 py-2 text-[11px] font-medium uppercase text-muted-foreground`}>
-        <span>Kumaş</span>
-        <span>Renk</span>
-        <span>Metre</span>
-        <span>En (cm)</span>
-        <span>Kg</span>
-        <span>Kat</span>
-        <span>Birim Fiyat</span>
-        <span className="text-center">Özellik</span>
-        <span className="text-center">Adet</span>
+      <div className={`grid ${cols} gap-2 border-b bg-muted/50 px-3 py-2 text-[11px] font-medium uppercase text-muted-foreground`} data-testid="receipt-line-headers">
+        {headers.map((h, i) => (
+          <span key={h} className={i >= 7 ? "text-center" : undefined}>{h}</span>
+        ))}
         <span />
       </div>
 
       <div className="max-h-[38vh] space-y-2 overflow-auto p-3">
         {lines.map((l) => {
           const yarn = isYarn(l.itemId);
-          const yarnTitle = "İplik satırı bu alanı taşımaz — iplik, kalem × depo bazında kg olarak izlenir";
           return (
-          <div key={l.key} className={`grid ${cols} items-center gap-2`}>
+          <div key={l.key} className={`grid ${cols} items-center gap-2`} data-testid={yarn ? "receipt-line-yarn" : "receipt-line-fabric"}>
             <ReferenceSelect<Item>
               value={l.itemId || null}
               onChange={(v) => patch(l.key, { itemId: v ?? "" })}
               service={itemService}
               queryKey="items"
               getLabel={(it) => `${it.code} — ${it.name}`}
-              placeholder="Kumaş ara..."
+              placeholder="Kumaş / iplik ara..."
+              aria-label={cellLabel(0, yarn)}
             />
             {/* İPLİK: kumaşa özgü hücreler devre dışı "—" — backend'in 400'le
                 reddettiği alanlar hiç sorulmasın (400'e düşmeden öğret). */}
@@ -161,7 +162,7 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds }: Props) {
               <Input
                 placeholder="Lot no (irsaliye)"
                 maxLength={64}
-                aria-label="Lot numarası"
+                aria-label={cellLabel(1, true)}
                 value={l.lotNo ?? ""}
                 onChange={(e) => patch(l.key, { lotNo: e.target.value || null })}
               />
@@ -173,13 +174,15 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds }: Props) {
                 queryKey="colors"
                 getLabel={(c) => c.name}
                 placeholder="Renk..."
+                aria-label={cellLabel(1, false)}
               />
             )}
-            {/* Miktar: iplikte KG'dir — kutunun içine "kg" rozeti girer
-                (başlık "Metre" kumaş çoğunluğu için doğru kalır). */}
+            {/* Miktar: iplikte KG'dir — kutunun içine "kg" rozeti girer; başlık iplik varken
+                "Miktar (m / kg)" olur (kumaş-only tabloda "Metre"). */}
             <div className="relative">
               <Input
                 type="number" min={0} step="0.01" placeholder="0"
+                aria-label={cellLabel(2, yarn)}
                 className={yarn ? "pr-7" : undefined}
                 value={l.initialQty || ""}
                 onChange={(e) => patch(l.key, { initialQty: Number(e.target.value) })}
@@ -195,8 +198,8 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds }: Props) {
             </div>
             {yarn ? (
               <Input
-                type="number" min={1} step={1} placeholder="Bobin"
-                aria-label="Bobin adedi"
+                type="number" min={1} step={1} placeholder="—"
+                aria-label={cellLabel(3, true)}
                 title="Bobin adedi (bilgi — bakiye değil)"
                 value={l.bobbinCount ?? ""}
                 onChange={(e) => patch(l.key, { bobbinCount: e.target.value ? Math.max(1, Math.trunc(Number(e.target.value))) : null })}
@@ -204,6 +207,7 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds }: Props) {
             ) : (
               <Input
                 type="number" min={0} placeholder="—"
+                aria-label={cellLabel(3, false)}
                 value={l.width ?? ""}
                 onChange={(e) => patch(l.key, { width: e.target.value ? Number(e.target.value) : null })}
               />
@@ -211,10 +215,11 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds }: Props) {
             {/* İplikte AYRI kg alanı yok — miktar zaten kg (backend, çelişen
                 weightKg'yi 400 ile reddeder; hücre hiç sorulmaz). */}
             {yarn ? (
-              dash("İplikte miktar zaten kg — ayrı ağırlık girilmez")
+              dash(cellLabel(4, true))
             ) : (
               <Input
                 type="number" min={0} step="0.01" placeholder="—"
+                aria-label={cellLabel(4, false)}
                 value={l.weightKg ?? ""}
                 onChange={(e) => patch(l.key, { weightKg: e.target.value ? Number(e.target.value) : null })}
               />
@@ -222,10 +227,11 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds }: Props) {
             {/* KAT opsiyonel ve KATALOGDAN gelir — sabit liste, panelden eklenen
                 6-KAT'ı görünmez yapardı; boş katalogda seçici hiç çizilmez. */}
             {yarn ? (
-              dash(yarnTitle)
+              dash(cellLabel(5, true))
             ) : foldValues.length > 0 ? (
               <select
                 className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                aria-label={cellLabel(5, false)}
                 value={l.foldType ?? ""}
                 onChange={(e) => patch(l.key, { foldType: e.target.value || null })}
               >
@@ -235,28 +241,34 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds }: Props) {
                 ))}
               </select>
             ) : (
-              <span className="text-center text-xs text-muted-foreground">—</span>
+              <span className="text-center text-xs text-muted-foreground" aria-label={cellLabel(5, false)} title="Kat kataloğu boş">—</span>
             )}
             {/* Alış fiyatı OPSİYONEL ve İPLİKTE DE SERBEST (yarn_movements.unitPrice,
                 Sınıf 5): girilirse satıra yazılır ve alış faturası fiyatı ondan
                 türer; boşsa fatura fiyatsız taslak doğar (onay fiyatsızı reddediyor). */}
             <Input
               type="number" min={0} step="0.0001" placeholder="—"
+              aria-label={cellLabel(6, yarn)}
               value={l.unitPrice ?? ""}
               onChange={(e) => patch(l.key, { unitPrice: e.target.value ? Number(e.target.value) : null })}
             />
             {yarn ? (
-              dash(yarnTitle)
+              dash(cellLabel(7, true))
             ) : (
               <LinePropertiesButton
+                aria-label={cellLabel(7, false)}
                 itemId={l.itemId}
                 value={l.propertyIds}
                 onChange={(v) => patch(l.key, { propertyIds: v })}
               />
             )}
+            {/* ADET iplikte de anlamlı: N ayrı defter satırı (kg × adet) — dosya başlığındaki Sınıf 5
+                kuralı; title başlıkla aynı anlamı taşır. */}
             <Input
               type="number" min={1} step="1"
               className="text-center font-medium"
+              aria-label={cellLabel(8, yarn)}
+              title={yarn ? "Kaç ayrı iplik defter satırı doğsun (her biri bu kg'de)" : "Kaç top doğsun (her biri bu metrede)"}
               value={l.count}
               onChange={(e) => patch(l.key, { count: Math.max(1, Math.floor(Number(e.target.value) || 1)) })}
             />

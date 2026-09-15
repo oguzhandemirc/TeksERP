@@ -15,9 +15,10 @@ interface Props {
   itemId: string;
   value: string[];
   onChange: (next: string[]) => void;
+  "aria-label"?: string;
 }
 
-export function LinePropertiesButton({ itemId, value, onChange }: Props) {
+export function LinePropertiesButton({ itemId, value, onChange, "aria-label": ariaLabel }: Props) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -25,6 +26,7 @@ export function LinePropertiesButton({ itemId, value, onChange }: Props) {
       <PopoverTrigger asChild>
         <Button
           type="button"
+          aria-label={ariaLabel}
           variant={value.length > 0 ? "secondary" : "ghost"}
           size="sm"
           className="h-9 w-full justify-center gap-1 px-1"

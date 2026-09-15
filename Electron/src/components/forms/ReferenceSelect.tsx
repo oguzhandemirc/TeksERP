@@ -46,6 +46,8 @@ interface Props<T extends { id: string }> {
    * "(pasif)" işareti taşır (rozet `isActive === false` ile çözülür).
    */
   includeInactive?: boolean;
+  /** Tetik düğmesinin erişilebilir adı (tablo hücresi ↔ başlık eşleşmesi için). */
+  "aria-label"?: string;
 }
 
 export function ReferenceSelect<T extends { id: string }>({
@@ -60,6 +62,7 @@ export function ReferenceSelect<T extends { id: string }>({
   extraFilters,
   disabled,
   includeInactive,
+  "aria-label": ariaLabel,
 }: Props<T>) {
   const [open, setOpen] = useState(false);
   const [searchInput, setSearchInput] = useState("");
@@ -175,6 +178,7 @@ export function ReferenceSelect<T extends { id: string }>({
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          aria-label={ariaLabel}
           disabled={disabled}
           className={cn(
             "w-full justify-between font-normal",
