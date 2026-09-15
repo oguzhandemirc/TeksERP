@@ -141,7 +141,7 @@ export class ProductionBalanceService {
    *   where'i birden sessizce boşaltırdı (query-parser `readIdCondition` notu).
    */
   async getBalance(
-    opts: { itemId?: string } = {}
+    opts: { itemId?: string | string[] } = {}
   ): Promise<ApiResponse<BalanceGroup[]>> {
     const itemId = readIdCondition(opts.itemId);
     const map = new Map<string, SpecAcc>();

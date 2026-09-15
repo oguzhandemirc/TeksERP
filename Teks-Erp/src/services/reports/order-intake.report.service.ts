@@ -29,6 +29,7 @@ import type { DateRange } from "./_shared";
 import { attachPrev, buildBreakdown, pctOf, round1, type BreakdownDim, type BreakdownRow } from "./_breakdown";
 import { factoryDaySql } from "../../constants/time";
 import { ACTIVE_LINE } from "../helpers/order-line-scope.helper";
+import { lineScopeSql, lineScopeWhere, orderScopeSql, orderScopeWhere, type ReportFilterInput } from "./_filters";
 
 export interface OrderIntakeSummary {
   /** Dönemde açılan sipariş adedi — sonradan iptal edilenler DAHİL. */
@@ -108,9 +109,10 @@ interface Collected {
  * türetir. İki ayrı sorgu (biri müşteri, biri kumaş için) çalıştırmak, iki
  * kırılımın toplamlarını birbirinden ayırırdı — `_breakdown` başlığındaki kural.
  */
-async function collect(range: DateRange): Promise<Collected> {
+async function collect(range: DateRange, f: ReportFilterInput): Promise<Collected> {
+  // R5b-c: sipariş süzgeci (müşteri/hedef/kalem) + kalem süzgeci seçilen `lines`ı da budar — sayı ve kırılım aynı evrenden.
   const orders = await prisma.order.findMany({
-    where: { orderDate: { gte: range.from, lte: range.to } },
+    where: { orderDate: { gte: range.from, lte: range.to }, ...orderScopeWhere(f) },
     select: {
       id: true,
       status: true,
@@ -120,7 +122,7 @@ async function collect(range: DateRange): Promise<Collected> {
       // İptal edilmiş KALEM alınan işe sayılmaz (sipariş iptaliyle aynı kural,
       // bir kademe aşağıda) — tek kaynak `ACTIVE_LINE`.
       lines: {
-        where: ACTIVE_LINE,
+        where: { ...ACTIVE_LINE, ...lineScopeWhere(f) },
         select: { quantity: true, itemId: true, item: { select: { name: true } } },
       },
     },
@@ -169,7 +171,7 @@ async function collect(range: DateRange): Promise<Collected> {
 }
 
 /** Günlük seri — gün sınırı FABRİKA takvimine göre kesilir (`factoryDaySql`). */
-async function collectDaily(range: DateRange): Promise<Array<{ day: string; orderCount: number; qty: number }>> {
+async function collectDaily(range: DateRange, f: ReportFilterInput): Promise<Array<{ day: string; orderCount: number; qty: number }>> {
   const rows = await prisma.$queryRaw<Array<{ day: Date; orderCount: bigint; qty: number | null }>>(Prisma.sql`
     SELECT ${factoryDaySql('o."orderDate"')} AS day,
            COUNT(DISTINCT o.id)             AS "orderCount",
@@ -177,9 +179,9 @@ async function collectDaily(range: DateRange): Promise<Array<{ day: string; orde
     FROM orders o
     -- aktif-kalem: iptal edilmiş kalem alınan işe sayılmaz (ACTIVE_LINE'ın ham
     -- SQL karşılığı; tek kaynak helpers/order-line-scope.helper.ts).
-    LEFT JOIN order_lines ol ON ol."orderId" = o.id AND ol."cancelledAt" IS NULL
+    LEFT JOIN order_lines ol ON ol."orderId" = o.id AND ol."cancelledAt" IS NULL ${lineScopeSql(f)}
     WHERE o."orderDate" >= ${range.from} AND o."orderDate" <= ${range.to}
-      AND o.status <> 'CANCELLED'
+      AND o.status <> 'CANCELLED' ${orderScopeSql(f)}
     GROUP BY 1
     ORDER BY 1
   `);
@@ -193,11 +195,12 @@ async function collectDaily(range: DateRange): Promise<Array<{ day: string; orde
 export async function getOrderIntake(
   range: DateRange,
   compareRange: DateRange | null = null,
+  filters: ReportFilterInput = {},
 ): Promise<OrderIntakeReport> {
   const [cur, daily, prev] = await Promise.all([
-    collect(range),
-    collectDaily(range),
-    compareRange ? collect(compareRange) : Promise.resolve(null),
+    collect(range, filters),
+    collectDaily(range, filters),
+    compareRange ? collect(compareRange, filters) : Promise.resolve(null),
   ]);
 
   const byCustomer = buildBreakdown(cur.orderCells, dims.customer);

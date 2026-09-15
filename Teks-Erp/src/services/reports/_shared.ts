@@ -10,6 +10,7 @@
 import { z } from "zod";
 import { AppError } from "../../utils/app-error";
 import { factoryDayStart, factoryYmd } from "../../constants/time";
+import type { SuzgecEcho } from "./_filters";
 
 const DAY_MS = 86_400_000;
 const DEFAULT_RANGE_DAYS = 30;
@@ -155,12 +156,15 @@ export interface ReportResponse<T> {
   range: { from: string; to: string };
   /** Yalnız karşılaştırma istendiyse dolar — istemci varlığına bakarak Δ çizer. */
   compareRange?: { from: string; to: string };
+  /** R5b: süzgeç uygulandıysa beyanı (yalnız verilen anahtarlar, `_filters.filterEcho`); yoksa anahtar YOK. */
+  suzgec?: SuzgecEcho;
 }
 
 export function reportEnvelope<T>(
   data: T,
   range: DateRange,
   compareRange?: DateRange | null,
+  suzgec?: SuzgecEcho,
 ): ReportResponse<T> {
   return {
     success: true,
@@ -169,6 +173,7 @@ export function reportEnvelope<T>(
     ...(compareRange
       ? { compareRange: { from: compareRange.from.toISOString(), to: compareRange.to.toISOString() } }
       : {}),
+    ...(suzgec ? { suzgec } : {}),
   };
 }
 

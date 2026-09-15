@@ -73,3 +73,15 @@ export function shiftHasBeam(windows: MountWindows, machineId: string, startsAt:
   const rows = windows.get(machineId) ?? [];
   return rows.some((w) => w.mountedAt < endsAt && (w.dismountedAt == null || w.dismountedAt > startsAt));
 }
+
+export interface BeamOption { id: string; leventNo: string }
+export const BEAM_OPTIONS_MAX = 200;
+
+/** R5b-b2: pencerede verilen tezgahlara bağlı geçen leventler (panel seçicisi kaynağı; süzgeçten BAĞIMSIZ). En çok 200, levent no sıralı. */
+export async function beamsMountedOnMachinesDuring(client: { $queryRawUnsafe: Client["$queryRawUnsafe"] }, machineIds: string[], from: Date, to: Date): Promise<BeamOption[]> {
+  const seen = new Map<string, string>();
+  for (const machineId of machineIds) {
+    for (const r of await beamsMountedDuring(client, machineId, from, to)) seen.set(r.beamId, r.beamNo);
+  }
+  return [...seen.entries()].map(([id, leventNo]) => ({ id, leventNo })).sort((a, b) => a.leventNo.localeCompare(b.leventNo, "tr")).slice(0, BEAM_OPTIONS_MAX);
+}

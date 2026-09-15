@@ -145,7 +145,18 @@ anahtarı (`devere.enabled`, KAPALI doğar).
   ← iplik lotu, tezgah ← bağ penceresi ∩ vardiya penceresi). Süzgeç verilmezse
   cevap bayt bayt eski; verilirse dokuma cevabında `meta.suzgec` beyanı, bilinmeyen
   levent 404, leventsiz lot boş rapor. Vardiya karnesi satırına `shiftDefinitionId`
-  eklendi (panel vardiya seçicisi için). Eski panel süzgeci göndermez — fark yok.
+  eklendi (panel vardiya seçicisi için); dokuma cevabına `meta.leventler` (pencerede
+  tezgaha bağlı geçen leventler, ≤200, süzgeçsiz de döner — panel levent seçicisi
+  kaynağı) eklendi. Eski panel süzgeci göndermez — fark yok.
+- **Raporlarda satış / müşteri / fason eksenleri** (2026-09-15, R5b-c): sipariş
+  karnesi · talep analizi · teslim süresi · iptal karnesi · açık sipariş karşılanma ·
+  müşteri karnesi · müşteri sipariş profili · fason karnesi isteğe bağlı süzgeç alır
+  (`customerId` · `destination` = müşterinin VARSAYILAN hedefi · `itemId` · `colorId` ·
+  `reasonCode` · `subcontractorId`; kimlikler CSV listesi). Süzgeç verilmezse cevap
+  bayt bayt eski; verilirse cevap kökünde `suzgec` beyanı (yalnız verilen anahtarlar;
+  kalite/fire karnesinin levent süzgeci de aynı yere yazar). Tanınmayan kimlik boş
+  sonuç döner (404 değil). Açık karşılanmada müşteri süzgeci ve fason karnesinde işlem
+  türü BİLEREK yok. Eski panel süzgeç göndermez — fark yok.
 
 **`dist-web` DEĞİŞTİ.** Panel kaynağı bu turda geniş çapta değişti (1.3.1 → 1.3.2);
 web arayüzü paketi yeniden derlenir. Patron modülünü kullanan kurulumlarda arayüz
@@ -172,6 +183,8 @@ güncellenir.
     TANINMAYAN anahtar artık 400 (altı uç); 1.3.1 panel yaprakları yalnız
     sözleşmedeki adları gönderir (ölçüldü) ⇒ kırılma yok. `warpBeamId`/`lotNo`
     (dokuma + kalite raporları) İSTEĞE BAĞLI, `ShiftRow.shiftDefinitionId` EKLEME.
+    R5b-c süzgeç anahtarları da isteğe bağlı; zarfa `suzgec` alanı EKLEME (yalnız
+    süzgeçliyken) — eski panel göndermediği için görmez.
   - *Enum:* `WarehouseEventType` +6 (panel: yukarıdaki kırılma) · `RollEntrySource.
     WEAVING` (yazan istemci 0 — Electron/mobil'de doff çağrısı yok ⇒ sahada
     WEAVING'li top doğmaz; eski tablet zaten `PURCHASE_RECEIPT`/`SEMI_FINISHED`i

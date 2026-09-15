@@ -18,6 +18,7 @@ import {
 import { getQualityScorecard } from "../../services/reports/quality-scorecard.report.service";
 import { getScrapScorecard } from "../../services/reports/scrap-scorecard.report.service";
 import { getPlanDeviationScorecard } from "../../services/reports/plan-deviation-scorecard.report.service";
+import { filterEcho } from "../../services/reports/_filters";
 
 const router = Router();
 /**
@@ -28,6 +29,7 @@ const router = Router();
 const reportGate = (key: ReportKey) => [verifyToken, requireReportOpen(key), requirePermission("report:quality")];
 
 /** Kalite/fire karnesi sorgusu: karşılaştırma aralığı + LEVENT/LOT ekseni (R5b-b; top → CONSUMED.rollId, defterden). İkizler aynı şemayı paylaşır. */
+const LEVENT_ANAHTARLARI = ["warpBeamId", "lotNo"] as const;
 export const qualityQuerySchema = compareRangeSchema
   .extend({ warpBeamId: z.string().uuid("Geçersiz levent").optional(), lotNo: z.string().trim().min(1).max(64).optional() })
   .strict();
@@ -46,7 +48,7 @@ router.get("/scorecard", ...reportGate("quality/scorecard"), async (req: Request
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const compareRange = resolveCompareRange(input, range);
     const data = await getQualityScorecard(range, compareRange, { warpBeamId: input.warpBeamId, lotNo: input.lotNo });
-    res.status(200).json(reportEnvelope(data, range, compareRange));
+    res.status(200).json(reportEnvelope(data, range, compareRange, filterEcho(input, LEVENT_ANAHTARLARI)));
   } catch (e) {
     next(e);
   }
@@ -62,7 +64,7 @@ router.get("/scrap-scorecard", ...reportGate("quality/scrap-scorecard"), async (
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const compareRange = resolveCompareRange(input, range);
     const data = await getScrapScorecard(range, compareRange, { warpBeamId: input.warpBeamId, lotNo: input.lotNo });
-    res.status(200).json(reportEnvelope(data, range, compareRange));
+    res.status(200).json(reportEnvelope(data, range, compareRange, filterEcho(input, LEVENT_ANAHTARLARI)));
   } catch (e) {
     next(e);
   }

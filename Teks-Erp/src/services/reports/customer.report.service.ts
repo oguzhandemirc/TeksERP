@@ -6,6 +6,7 @@
 
 import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
+import { customerRowSql, type ReportFilterInput } from "./_filters";
 
 // ---------- 1) Order Profile Summary -----------------------------------------
 
@@ -21,7 +22,7 @@ export interface CustomerOrderProfileRow {
   lastOrderDate: Date | null;
 }
 
-export async function getCustomerOrderProfiles(): Promise<CustomerOrderProfileRow[]> {
+export async function getCustomerOrderProfiles(filters: ReportFilterInput = {}): Promise<CustomerOrderProfileRow[]> {
   // Müşteri başına agg + her birinin "en sık" ürün/renk/eni
   // Subquery + DISTINCT ON kombinasyonu Postgres'e özel — tek round-trip.
   const rows = await prisma.$queryRaw<
@@ -49,7 +50,7 @@ export async function getCustomerOrderProfiles(): Promise<CustomerOrderProfileRo
       LEFT JOIN orders o      ON o."customerId" = c.id
       -- aktif-kalem: iptal edilmiş kalem müşteri profiline girmez.
       LEFT JOIN order_lines ol ON ol."orderId"  = o.id AND ol."cancelledAt" IS NULL
-      WHERE c."isActive" = true
+      WHERE c."isActive" = true ${customerRowSql(filters)}
       GROUP BY c.id, c.name, c.code
     ),
     item_rank AS (

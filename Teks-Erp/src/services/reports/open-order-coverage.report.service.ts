@@ -29,6 +29,7 @@
 import { Prisma } from "@prisma/client";
 import { ProductionBalanceService, type BalanceLine } from "../production-balance.service";
 import { round1 } from "./_breakdown";
+import type { ReportFilterInput } from "./_filters";
 
 /** Detay tablosu tavanı — `DetailTable` sanallaştırma yapmaz. Aşım GİZLENMEZ. */
 const MAX_DETAIL_LINES = 500;
@@ -147,10 +148,12 @@ function bucketRows(map: Map<string, { label: string; acc: Acc }>): CoverageBuck
     .sort((a, b) => b.uncoveredQty - a.uncoveredQty || a.label.localeCompare(b.label, "tr"));
 }
 
-export async function getOpenOrderCoverage(): Promise<OpenOrderCoverageReport> {
+export async function getOpenOrderCoverage(filters: Pick<ReportFilterInput, "itemId"> = {}): Promise<OpenOrderCoverageReport> {
   // Servis singleton export etmiyor (route'ta da `new` ile kuruluyor) —
   // durumsuz olduğu için örnek başına maliyet yok.
-  const groups = (await new ProductionBalanceService().getBalance()).data ?? [];
+  // R5b-c: yalnız `itemId` — FIFO havuzu spec başına olduğundan kumaş süzgeci kapsamayı bozmaz; müşteri süzgeci
+  // havuzu diğer müşterilerin aciliyetinden koparıp yüzdeyi yalanlar → KAPSAM DIŞI (1e H1).
+  const groups = (await new ProductionBalanceService().getBalance({ itemId: filters.itemId?.length ? filters.itemId : undefined })).data ?? [];
 
   const byCustomer = new Map<string, { label: string; acc: Acc }>();
   const byItem = new Map<string, { label: string; acc: Acc }>();

@@ -20,7 +20,7 @@ import { AppError } from "../../utils/app-error";
 import { LOOM_HORIZON_DAY, loomHorizonStart } from "../../constants/dokuma-ufku";
 import { aggregateMachineKpis, type LoomKpiAggregate } from "../helpers/loom-efficiency.helper";
 import { collectShiftStatRows, factoryDayKeyFromYmd, type ShiftLineRow, type ShiftStatRow, type ShiftStatRowExtra } from "../machine-shift-stat.service";
-import { mountWindowsForBeams, resolveBeamLotFilter, shiftHasBeam, type BeamLotFilter, type BeamLotFilterInput } from "../helpers/warp-beam-roll-filter.helper";
+import { beamsMountedOnMachinesDuring, mountWindowsForBeams, resolveBeamLotFilter, shiftHasBeam, type BeamLotFilter, type BeamLotFilterInput, type BeamOption } from "../helpers/warp-beam-roll-filter.helper";
 
 /**
  * Hat kırılımı opt-in (`?byLine=1`): satıra `hatlar` eklenir — mühürlüde çocuk tablo, açıkta anlık;
@@ -41,19 +41,37 @@ export interface LoomReportMeta {
   truncated: boolean;
   live: number;
   sealed: number;
-  /** Levent/lot ekseni (R5b-b): süzgeç uygulandıysa beyanı — kaç levent eşleşti, kaç satır süzgeçle düştü. Yoksa alan YOK. */
-  suzgec?: { warpBeamId: string | null; lotNo: string | null; levent: number; dusenSatir: number };
+  /** Levent/lot ekseni (R5b-b): süzgeç uygulandıysa beyanı — verilen anahtarlar (R5b-c `_filters.filterEcho` biçimi) + kaç levent eşleşti, kaç satır düştü. Yoksa alan YOK. */
+  suzgec?: { warpBeamId?: string; lotNo?: string; levent: number; dusenSatir: number };
+  /** R5b-b2: pencerede satırların tezgahlarına bağlı geçen leventler — panel seçicisi kaynağı; süzgeçsiz yanıtta da döner, ≤200. */
+  leventler: BeamOption[];
+}
+
+/** Satırların [min startsAt, max endsAt) penceresi + tezgah kümesi. */
+function rowsWindow<R extends { machineId: string; shiftInstance: { startsAt: Date; endsAt: Date } }>(rows: R[]): { machineIds: string[]; from: Date; to: Date } {
+  return {
+    machineIds: [...new Set(rows.map((r) => r.machineId))],
+    from: new Date(Math.min(...rows.map((r) => r.shiftInstance.startsAt.getTime()))),
+    to: new Date(Math.max(...rows.map((r) => r.shiftInstance.endsAt.getTime()))),
+  };
+}
+
+/** Seçici listesi süzgeç UYGULANMADAN önceki satırlardan türer (süzgeçliyken de tam liste — seçenek daralmasın). */
+async function beamOptions(rows: Array<{ machineId: string; shiftInstance: { startsAt: Date; endsAt: Date } }>): Promise<BeamOption[]> {
+  if (rows.length === 0) return [];
+  const w = rowsWindow(rows);
+  return beamsMountedOnMachinesDuring(prisma, w.machineIds, w.from, w.to);
 }
 
 /** Tezgah raporu satırlarını levent/lot süzgecinden geçirir: vardiya penceresinde o levent tezgahta bağlı mıydı (defterden). */
 async function applyBeamFilter<R extends { machineId: string; shiftInstance: { startsAt: Date; endsAt: Date } }>(rows: R[], f: BeamLotFilter | null): Promise<{ rows: R[]; suzgec?: LoomReportMeta["suzgec"] }> {
   if (!f) return { rows };
-  if (rows.length === 0 || f.beamIds.length === 0) return { rows: [], suzgec: { warpBeamId: f.warpBeamId, lotNo: f.lotNo, levent: f.beamIds.length, dusenSatir: rows.length } };
-  const from = new Date(Math.min(...rows.map((r) => r.shiftInstance.startsAt.getTime())));
-  const to = new Date(Math.max(...rows.map((r) => r.shiftInstance.endsAt.getTime())));
-  const windows = await mountWindowsForBeams(prisma, f, [...new Set(rows.map((r) => r.machineId))], { from, to });
+  const beyan = { ...(f.warpBeamId ? { warpBeamId: f.warpBeamId } : {}), ...(f.lotNo ? { lotNo: f.lotNo } : {}), levent: f.beamIds.length };
+  if (rows.length === 0 || f.beamIds.length === 0) return { rows: [], suzgec: { ...beyan, dusenSatir: rows.length } };
+  const w = rowsWindow(rows);
+  const windows = await mountWindowsForBeams(prisma, f, w.machineIds, { from: w.from, to: w.to });
   const kept = rows.filter((r) => shiftHasBeam(windows, r.machineId, r.shiftInstance.startsAt, r.shiftInstance.endsAt));
-  return { rows: kept, suzgec: { warpBeamId: f.warpBeamId, lotNo: f.lotNo, levent: f.beamIds.length, dusenSatir: rows.length - kept.length } };
+  return { rows: kept, suzgec: { ...beyan, dusenSatir: rows.length - kept.length } };
 }
 
 function emptyBreakdown(): SourceBreakdownTable {
@@ -71,8 +89,8 @@ function rowsBeforeHorizon(rows: Array<{ shiftInstance: { startsAt: Date } }>): 
   return rows.filter((r) => r.shiftInstance.startsAt.getTime() < u).length;
 }
 
-function buildMeta(rows: Array<{ shiftInstance: { startsAt: Date } }>, m: { total: number; truncated: boolean; live: number; sealed: number }, suzgec?: LoomReportMeta["suzgec"]): LoomReportMeta {
-  return { ufuk: LOOM_HORIZON_DAY, ufukOncesiSatir: rowsBeforeHorizon(rows), ...m, ...(suzgec ? { suzgec } : {}) };
+function buildMeta(rows: Array<{ shiftInstance: { startsAt: Date } }>, m: { total: number; truncated: boolean; live: number; sealed: number }, ek: { suzgec?: LoomReportMeta["suzgec"]; leventler: BeamOption[] }): LoomReportMeta {
+  return { ufuk: LOOM_HORIZON_DAY, ufukOncesiSatir: rowsBeforeHorizon(rows), ...m, ...(ek.suzgec ? { suzgec: ek.suzgec } : {}), leventler: ek.leventler };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -102,6 +120,7 @@ export async function efficiencyReport(p: { from: string; to: string; machineId?
   const filter = await resolveBeamLotFilter(prisma, { warpBeamId, lotNo });
   const collected = await collectShiftStatRows(params, { byLine });
   const { rows, suzgec } = await applyBeamFilter(collected.rows, filter);
+  const leventler = await beamOptions(collected.rows);
   const m = collected.meta;
   const efficiencyRows: EfficiencyRow[] = rows.map((r) => ({
     machineId: r.machineId, machine: r.machine, shiftInstanceId: r.shiftInstanceId, factoryDayKey: r.shiftInstance.factoryDayKey,
@@ -112,7 +131,7 @@ export async function efficiencyReport(p: { from: string; to: string; machineId?
     olculemedi: r.kpis.olculemedi, warnings: [...r.warnings, ...r.kpis.warnings],
     ...hatlar(r),
   }));
-  return { satirlar: efficiencyRows, toplam: aggregateMachineKpis(rows.map((r) => r.terms)), kaynakKirilimi: sumBreakdown(rows), meta: buildMeta(rows, m, suzgec) };
+  return { satirlar: efficiencyRows, toplam: aggregateMachineKpis(rows.map((r) => r.terms)), kaynakKirilimi: sumBreakdown(rows), meta: buildMeta(rows, m, { suzgec, leventler }) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -140,6 +159,7 @@ export async function durusParetoReport(p: { from: string; to: string; machineId
   const filter = await resolveBeamLotFilter(prisma, { warpBeamId, lotNo });
   const collected = await collectShiftStatRows(params, { includeBreakdown: true });
   const { rows, suzgec } = await applyBeamFilter(collected.rows, filter);
+  const leventler = await beamOptions(collected.rows);
   const m = collected.meta;
   const reasons = new Map<string, ParetoReasonRow>();
   const minor: ParetoBucket = { stopCount: 0, stopSec: 0 };
@@ -158,7 +178,7 @@ export async function durusParetoReport(p: { from: string; to: string; machineId
   return {
     sebepler: [...reasons.values()].sort((a, b) => b.stopSec - a.stopSec),
     mikroDuruslar: minor, siniflandirilmamis: unclassified, atanmamis: unassigned, toplam: total,
-    kaynakKirilimi: sumBreakdown(rows), meta: buildMeta(rows, m, suzgec),
+    kaynakKirilimi: sumBreakdown(rows), meta: buildMeta(rows, m, { suzgec, leventler }),
   };
 }
 
@@ -203,6 +223,8 @@ export async function shiftScorecardReport(p: { factoryDay: string; shiftDefinit
   const { rows, suzgec } = await applyBeamFilter(collected.rows, filter);
   const m = collected.meta;
   const selected = defIds ? rows.filter((r) => defIds.has(r.shiftInstanceId)) : rows;
+  // Seçici listesi vardiya tanımı süzgecine de bakar (o vardiyaların penceresi), levent süzgecine bakmaz.
+  const leventler = await beamOptions(defIds ? collected.rows.filter((r) => defIds.has(r.shiftInstanceId)) : collected.rows);
   const byShift = new Map<string, Array<ShiftStatRow & ShiftStatRowExtra>>();
   for (const r of selected) byShift.set(r.shiftInstanceId, [...(byShift.get(r.shiftInstanceId) ?? []), r]);
   const shiftRows: ShiftRow[] = [...byShift.values()].map((group) => {
@@ -226,5 +248,5 @@ export async function shiftScorecardReport(p: { factoryDay: string; shiftDefinit
       })),
     };
   });
-  return { vardiyalar: shiftRows, meta: buildMeta(selected, { ...m, total: selected.length }, suzgec) };
+  return { vardiyalar: shiftRows, meta: buildMeta(selected, { ...m, total: selected.length }, { suzgec, leventler }) };
 }

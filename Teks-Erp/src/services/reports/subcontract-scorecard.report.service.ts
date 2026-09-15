@@ -38,6 +38,7 @@
 
 import type { DateRange } from "./_shared";
 import { pctOf, round1 } from "./_breakdown";
+import type { ReportFilterInput } from "./_filters";
 import { queryOldestOpenDispatches, queryScorecardItems } from "../helpers/subcontract-scorecard-query.helper";
 import { avgTurnaround, fireOf, groupBySubcontractor, sumCells, type SubCell } from "../helpers/subcontract-scorecard-calc.helper";
 
@@ -123,11 +124,12 @@ function toRow(c: SubCell): SubcontractScorecardRow {
 export async function getSubcontractScorecard(
   range: DateRange,
   compareRange: DateRange | null = null,
+  filters: ReportFilterInput = {},
 ): Promise<SubcontractScorecard> {
   const [itemRows, prevItemRows, openRows] = await Promise.all([
-    queryScorecardItems(range),
-    compareRange ? queryScorecardItems(compareRange) : Promise.resolve([]),
-    queryOldestOpenDispatches(),
+    queryScorecardItems(range, filters),
+    compareRange ? queryScorecardItems(compareRange, filters) : Promise.resolve([]),
+    queryOldestOpenDispatches(filters),
   ]);
   const cells = groupBySubcontractor(itemRows);
   const prevCells = groupBySubcontractor(prevItemRows);

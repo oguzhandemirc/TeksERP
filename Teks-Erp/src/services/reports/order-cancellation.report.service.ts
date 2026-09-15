@@ -48,6 +48,7 @@ import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
 import { pctOf, round1 } from "./_breakdown";
 import { factoryDaySql } from "../../constants/time";
+import { idWhere, inSql, orderScopeSql, orderScopeWhere, type ReportFilterInput } from "./_filters";
 
 /** Sebebi girilmemiş iptallerin kovası — gizlenmez, adlandırılır. */
 export const NO_REASON_KEY = "__NO_REASON__";
@@ -125,7 +126,14 @@ interface RawCancel {
 
 export async function getOrderCancellationScorecard(
   range: DateRange,
+  filters: ReportFilterInput = {},
 ): Promise<OrderCancellationReport> {
+  // R5b-c: müşteri/hedef süzgeci PAY ve PAYDANIN hepsine (beş sorgu); `reasonCode` yalnız iptal satırlarına —
+  // açılan sipariş sebep taşımaz, oran "bu sebeple iptal ÷ açılan" olur.
+  const scope = orderScopeWhere(filters);
+  const scopeSql = orderScopeSql(filters);
+  const reasonSql = inSql('o."cancelReasonCode"', filters.reasonCode, "text");
+  const reason = idWhere(filters.reasonCode);
   const [rows, openedInPeriod, undated, presets, daily] = await Promise.all([
     prisma.$queryRaw<RawCancel[]>(Prisma.sql`
       SELECT o.id AS "orderId", o."orderNumber", c.id AS "customerId", c.name AS "customerName",
@@ -141,10 +149,10 @@ export async function getOrderCancellationScorecard(
         WHERE ol."orderId" = o.id AND ol."cancelledAt" IS NULL
       ) l ON true
       WHERE o.status = 'CANCELLED'
-        AND o."cancelledAt" >= ${range.from} AND o."cancelledAt" <= ${range.to}
+        AND o."cancelledAt" >= ${range.from} AND o."cancelledAt" <= ${range.to} ${scopeSql} ${reasonSql}
     `),
-    prisma.order.count({ where: { orderDate: { gte: range.from, lte: range.to } } }),
-    prisma.order.count({ where: { status: "CANCELLED", cancelledAt: null } }),
+    prisma.order.count({ where: { orderDate: { gte: range.from, lte: range.to }, ...scope } }),
+    prisma.order.count({ where: { status: "CANCELLED", cancelledAt: null, ...scope, ...(reason !== undefined ? { cancelReasonCode: reason } : {}) } }),
     prisma.reasonPreset.findMany({
       where: { kind: "ORDER_CANCEL" },
       select: { code: true, label: true },
@@ -160,7 +168,7 @@ export async function getOrderCancellationScorecard(
         WHERE ol."orderId" = o.id AND ol."cancelledAt" IS NULL
       ) l ON true
       WHERE o.status = 'CANCELLED'
-        AND o."cancelledAt" >= ${range.from} AND o."cancelledAt" <= ${range.to}
+        AND o."cancelledAt" >= ${range.from} AND o."cancelledAt" <= ${range.to} ${scopeSql} ${reasonSql}
       GROUP BY 1 ORDER BY 1
     `),
   ]);
@@ -235,7 +243,7 @@ export async function getOrderCancellationScorecard(
 
   // Müşteri başına dönemde açılan sipariş — oranın paydası.
   const openedByCustomer = await prisma.order.groupBy({
-    where: { orderDate: { gte: range.from, lte: range.to } },
+    where: { orderDate: { gte: range.from, lte: range.to }, ...scope },
     by: ["customerId"],
     _count: { _all: true },
   });

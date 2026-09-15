@@ -30,6 +30,7 @@ import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
 import { round1 } from "./_breakdown";
+import { orderScopeSql, type ReportFilterInput } from "./_filters";
 
 /** Altında istatistiğin anlamsız sayıldığı örnek sayısı. */
 export const MIN_SAMPLE = 5;
@@ -131,7 +132,7 @@ interface RawRow {
  * Tek kaynağa bakmak, fasondan doğrudan çıkan siparişleri "hiç sevk edilmemiş"
  * gösterirdi (`getOrderShipments` de aynı iki kaynağı birleştirir).
  */
-async function collect(range: DateRange): Promise<RawRow[]> {
+async function collect(range: DateRange, f: ReportFilterInput): Promise<RawRow[]> {
   return prisma.$queryRaw<RawRow[]>(Prisma.sql`
     SELECT o.id                AS "orderId",
            o."orderNumber"     AS "orderNumber",
@@ -173,15 +174,15 @@ async function collect(range: DateRange): Promise<RawRow[]> {
       WHERE ol."orderId" = o.id AND ol."cancelledAt" IS NULL
     ) items ON true
     WHERE o."orderDate" >= ${range.from} AND o."orderDate" <= ${range.to}
-      AND o.status <> 'CANCELLED'
+      AND o.status <> 'CANCELLED' ${orderScopeSql(f)}
   `);
 }
 
 /** İki an arası TAM gün. tz-ok: mutlak pencere, takvim günü sorusu değil. */
 const days = (from: Date, to: Date) => Math.max(0, (to.getTime() - from.getTime()) / 86_400_000);
 
-export async function getOrderLeadTime(range: DateRange): Promise<OrderLeadTimeReport> {
-  const rows = await collect(range);
+export async function getOrderLeadTime(range: DateRange, filters: ReportFilterInput = {}): Promise<OrderLeadTimeReport> {
+  const rows = await collect(range, filters);
   const now = Date.now();
 
   const firstShipAll: number[] = [];

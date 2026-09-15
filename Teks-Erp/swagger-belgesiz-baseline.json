@@ -1,6 +1,6 @@
 {
   "_not": "BELGESİZ uç TAVANI — yalnız DÜŞER. Yeni uç belgesiz olamaz. Ölçüm: npx tsx scripts/test_swagger_spec.ts --yaz",
-  "_olcum": "2026-09-05 · 726 uç / 609 belgeli işlem",
+  "_olcum": "2026-09-15 · 826 uç / 711 belgeli işlem",
   "uclar": [
     "DELETE /api/admin/permission-templates/{id}",
     "DELETE /api/finance/invoices/{id}",
@@ -37,7 +37,6 @@
     "GET /api/quality-grades/similar-names",
     "GET /api/reports/audit/system-log-summary",
     "GET /api/reports/audit/user-activity",
-    "GET /api/reports/customer/order-profile",
     "GET /api/reports/inventory/scorecard",
     "GET /api/reports/production/batch-search",
     "GET /api/reports/production/batch-trace/{batchId}",
@@ -47,7 +46,6 @@
     "GET /api/reports/quality/scrap-scorecard",
     "GET /api/reports/sales/return-scorecard",
     "GET /api/reports/sales/shipment-scorecard",
-    "GET /api/reports/subcontract/scorecard",
     "GET /api/return-reasons/similar-names",
     "GET /api/rolls/barcode",
     "GET /api/routes/similar-names",

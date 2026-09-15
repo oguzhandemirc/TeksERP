@@ -6,9 +6,11 @@
 // (Faz 2), tezgah ← `beamsMountedDuring` penceresi ∩ vardiya penceresi. Süzgeç yoksa sorgu BAYT BAYT eski
 // (`meta.suzgec` anahtarı bile yok); levent bilinmiyorsa 404; lot leventsizse rapor BOŞ (hata değil).
 // §0 statik · §1 randıman · §2 duruş pareto · §3 vardiya karnesi (+`shiftDefinitionId` DTO) · §4 kalite karnesi ·
-// §5 fire karnesi · §6 Zod (bilinmeyen anahtar / bozuk uuid 400).
+// §5 fire karnesi · §6 Zod (bilinmeyen anahtar / bozuk uuid 400) · §7 R5b-b2 `meta.leventler` (seçici kaynağı: pencereden türer,
+//   süzgeçten bağımsız, pencere dışı levent yok).
 // NEGATİF SONDALAR (2026-09-15, ölçüldü): `shiftHasBeam` sabit true → §1b/§1c/§1d/§2b/§2c/§3c/§3d ❌ (7) ·
-//   `rollsOfBeamsSql` `Prisma.empty` döner → §4b/§4c/§4d/§5b ❌ (4) · `applyBeamFilter` `suzgec`i basmaz → §1b/§1c/§1d/§2a/§3b/§3d ❌ (6).
+//   `rollsOfBeamsSql` `Prisma.empty` döner → §4b/§4c/§4d/§5b ❌ (4) · `applyBeamFilter` `suzgec`i basmaz → §1b/§1c/§1d/§2a/§3b/§3d ❌ (6) ·
+//   `beamsMountedOnMachinesDuring` pencereyi yok sayar (from=0, to=∞) → §7a/§7b/§7c ❌ (3).
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Bayraklar FOTOĞRAFINA döner. Sentetik gün 1993-06-06 (ufuktan ÖNCE,
 //   canlı veriyle çakışmaz); kalite penceresi 2098-06 (kalite/fire bekçileri 2099-03 kullanır).
 // =============================================================================
@@ -62,7 +64,7 @@ function statik(): void {
   const rotalar = readFileSync(path.join(ROOT, "src/routes/reports/dokuma.report.routes.ts"), "utf8") + readFileSync(path.join(ROOT, "src/routes/reports/quality.routes.ts"), "utf8");
   check("§0c rotalar prisma import ETMEZ (süzgeç çözümü serviste)", !/from "\.\.\/\.\.\/lib\/prisma"/.test(rotalar));
   const dokuma = readFileSync(path.join(ROOT, "src/services/reports/dokuma.report.service.ts"), "utf8");
-  check("§0d üç dokuma raporu da `applyBeamFilter`dan geçer ve `suzgec`i meta'ya basar", (dokuma.match(/applyBeamFilter\(collected\.rows, filter\)/g) ?? []).length === 3 && (dokuma.match(/buildMeta\([^)]*suzgec\)/g) ?? []).length === 3);
+  check("§0d üç dokuma raporu da `applyBeamFilter`dan geçer ve `suzgec`i meta'ya basar", (dokuma.match(/applyBeamFilter\(collected\.rows, filter\)/g) ?? []).length === 3 && (dokuma.match(/buildMeta\([^)]*\{ suzgec, leventler \}\)/g) ?? []).length === 3);
 }
 
 async function main(): Promise<void> {
@@ -196,6 +198,11 @@ async function main(): Promise<void> {
 
     console.log("\n── §6 Zod: rota şeması ──");
     const red = (v: unknown) => !qualityQuerySchema.safeParse(v).success;
+    console.log("\n── §7 R5b-b2: `meta.leventler` seçici kaynağı ──");
+    const lv = (r: { meta: { leventler: Array<{ id: string; leventNo: string }> } }) => r.meta.leventler.filter((x) => x.id === b1 || x.id === b2).map((x) => x.id);
+    check("§7a ⭐ süzgeçsiz randımanda b1 listede, vardiyadan SONRA bağlanan b2 YOK (pencereden türer, durumdan değil); leventNo dolu", JSON.stringify(lv(r0)) === JSON.stringify([b1]) && r0.meta.leventler.every((x) => x.leventNo.length > 0), JSON.stringify(lv(r0)));
+    check("§7b süzgeçliyken de tam liste (lotNo süzgeci listeyi daraltmaz; bilinmeyen lot → satır 0 ama liste yine b1)", JSON.stringify(lv(r3)) === JSON.stringify([b1]) && JSON.stringify(lv(r4)) === JSON.stringify([b1]));
+    check("§7c pareto + vardiya karnesinde aynı liste; vardiya tanımı süzgeci pencereyi belirler", JSON.stringify(lv(p0)) === JSON.stringify([b1]) && JSON.stringify(lv(v0)) === JSON.stringify([b1]) && JSON.stringify(lv(v1)) === JSON.stringify([b1]));
     check("§6a kalite şeması: warpBeamId uuid değil → 400; lotNo boş → 400; bilinmeyen anahtar → 400; geçerli geçer", red({ warpBeamId: "x" }) && red({ lotNo: " " }) && red({ levent: b1 }) && !red({ warpBeamId: b1, lotNo: " A " }) && qualityQuerySchema.parse({ lotNo: " A " }).lotNo === "A");
   } finally {
     await prisma.warpBeamEvent.deleteMany({ where: { rollId: { in: rollIds } } });

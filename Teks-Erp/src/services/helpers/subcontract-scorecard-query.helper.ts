@@ -6,6 +6,7 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import type { DateRange } from "../reports/_shared";
+import { subcontractScopeSql, type ReportFilterInput } from "../reports/_filters";
 
 /** Dönemde sevk edilmiş, iptal edilmemiş her sevk kalemi — tek satır. */
 export interface ScorecardItemRow {
@@ -45,7 +46,7 @@ export interface OldestOpenRow {
  * ise TÜM satırların toplamıdır. İkisi ayrı sorulardır ve tek agregasyonda
  * karıştırılırsa ya süre ya metraj yanlış çıkar.
  */
-export function queryScorecardItems(range: DateRange): Promise<ScorecardItemRow[]> {
+export function queryScorecardItems(range: DateRange, f: ReportFilterInput = {}): Promise<ScorecardItemRow[]> {
   return prisma.$queryRaw<ScorecardItemRow[]>(Prisma.sql`
     SELECT
       sub.id   AS "subId",
@@ -139,7 +140,7 @@ export function queryScorecardItems(range: DateRange): Promise<ScorecardItemRow[
     ) adj ON true
     WHERE sd."dispatchedAt" >= ${range.from}
       AND sd."dispatchedAt" <= ${range.to}
-      AND sd."cancelledAt" IS NULL
+      AND sd."cancelledAt" IS NULL ${subcontractScopeSql(f)}
   `);
 }
 
@@ -147,7 +148,7 @@ export function queryScorecardItems(range: DateRange): Promise<ScorecardItemRow[
  * AÇIK sevkler + yaş (en eski 25). Yaş MUTLAK penceredir (iki an arası fark),
  * takvim günü DEĞİL → saat diliminden bağımsızdır ve çıplak now() doğrudur.
  */
-export function queryOldestOpenDispatches(): Promise<OldestOpenRow[]> {
+export function queryOldestOpenDispatches(f: ReportFilterInput = {}): Promise<OldestOpenRow[]> {
   return prisma.$queryRaw<OldestOpenRow[]>(Prisma.sql`
     SELECT
       sd.id            AS "dispatchId",
@@ -178,7 +179,7 @@ export function queryOldestOpenDispatches(): Promise<OldestOpenRow[]> {
       JOIN direct_shipments ds ON ds.id = c."directShipmentId"
       WHERE c."parentRollId" = sdi."rollId" AND ds."dispatchId" = sd.id
     ) dlv ON true
-    WHERE sd."cancelledAt" IS NULL
+    WHERE sd."cancelledAt" IS NULL ${subcontractScopeSql(f)}
       AND sd."directShippedAt" IS NULL
       -- Kalan-kapama kalemi kapatır (fire deftere yazıldı, artık açık değil).
       AND sdi."remainderClosedAt" IS NULL

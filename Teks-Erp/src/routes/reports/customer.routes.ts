@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { Router, Request, Response, NextFunction } from "express";
+import { z } from "zod";
 import { verifyToken } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/rbac.middleware";
 import { requireReportOpen } from "../../middlewares/report.middleware";
@@ -13,11 +14,11 @@ import {
 import { getCustomerScorecard } from "../../services/reports/customer-scorecard.report.service";
 import {
   compareRangeSchema,
-  emptyQuerySchema,
   reportEnvelope,
   resolveCompareRange,
   resolveDateRange,
 } from "../../services/reports/_shared";
+import { filterEcho, kalemEkseni, musteriEkseni } from "../../services/reports/_filters";
 
 const router = Router();
 /**
@@ -27,11 +28,30 @@ const router = Router();
  */
 const reportGate = (key: ReportKey) => [verifyToken, requireReportOpen(key), requirePermission("report:customer")];
 
+// R5b-c süzgeç eksenleri — şemalar bekçi için DIŞA AÇIK; `.strict()`.
+export const customerScorecardQuerySchema = compareRangeSchema.extend({ ...musteriEkseni, itemId: kalemEkseni.itemId }).strict();
+export const orderProfileQuerySchema = z.object({ ...musteriEkseni }).strict();
+const MUSTERI_ANAHTARLARI = ["customerId", "destination", "itemId"] as const;
+
+/**
+ * @openapi
+ * /api/reports/customer/order-profile:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Müşteri sipariş profili — müşteri başına sipariş/kalem sayısı, en sık kumaş/renk/en, son sipariş (tüm zamanlar, en çok 200 satır)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
+ *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Müşterinin VARSAYILAN hedefi (Customer.defaultDestination) — sevkin fiili hedefi değil" }
+ *     responses:
+ *       200: { description: "Profil satırları (süzgeçliyse kökte suzgec)" }
+ */
 router.get("/order-profile", ...reportGate("customer/order-profile"), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    emptyQuerySchema.parse(req.query);
-    const data = await getCustomerOrderProfiles();
-    res.status(200).json({ success: true, data });
+    const input = orderProfileQuerySchema.parse(req.query);
+    const data = await getCustomerOrderProfiles(input);
+    const suzgec = filterEcho(input, MUSTERI_ANAHTARLARI);
+    res.status(200).json({ success: true, data, ...(suzgec ? { suzgec } : {}) });
   } catch (e) {
     next(e);
   }
@@ -76,17 +96,20 @@ router.get("/order-profile", ...reportGate("customer/order-profile"), async (req
  *       - in: query
  *         name: compare
  *         schema: { type: string, enum: [none, prev, prevYear, custom] }
+ *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50) — ABC sınıfı süzülmüş evrende hesaplanır" }
+ *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Müşterinin VARSAYILAN hedefi (Customer.defaultDestination) — sevkin fiili hedefi değil" }
+ *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV) — dönem, ömür boyu ve sevk metrajı aynı koşulla" }
  *     responses:
  *       200:
- *         description: Müşteri karnesi
+ *         description: Müşteri karnesi (süzgeçliyse zarfta `suzgec`)
  */
 router.get("/scorecard", ...reportGate("customer/scorecard"), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = compareRangeSchema.parse(req.query);
+    const input = customerScorecardQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const compareRange = resolveCompareRange(input, range);
-    const data = await getCustomerScorecard(range, compareRange);
-    res.status(200).json(reportEnvelope(data, range, compareRange));
+    const data = await getCustomerScorecard(range, compareRange, input);
+    res.status(200).json(reportEnvelope(data, range, compareRange, filterEcho(input, MUSTERI_ANAHTARLARI)));
   } catch (e) {
     next(e);
   }

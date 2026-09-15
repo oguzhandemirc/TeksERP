@@ -46,7 +46,7 @@ const paretoSchema = z.object({ from: YMD, to: YMD, machineId: z.string().uuid("
  *       - { in: query, name: warpBeamId, schema: { type: string, format: uuid }, description: "Levent ekseni (R5b-b) — o vardiyada tezgahta bağlı olan leventin satırları (defterden)" }
  *       - { in: query, name: lotNo, schema: { type: string }, description: "İplik lotu ekseni — bu lotla sarılmış leventlerin satırları" }
  *     responses:
- *       200: { description: Randıman raporu (satırlar · toplam · kaynakKirilimi · meta.ufuk) }
+ *       200: { description: "Randıman raporu (satırlar · toplam · kaynakKirilimi · meta.ufuk · meta.leventler seçici kaynağı · süzgeçliyse meta.suzgec)" }
  *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
  */
 router.get("/randiman", requireReportOpen("dokuma/randiman"), guard, async (req, res, next) => {
@@ -72,7 +72,7 @@ router.get("/randiman", requireReportOpen("dokuma/randiman"), guard, async (req,
  *       - { in: query, name: warpBeamId, schema: { type: string, format: uuid }, description: "Levent ekseni (R5b-b) — o vardiyada tezgahta bağlı olan leventin satırları (defterden)" }
  *       - { in: query, name: lotNo, schema: { type: string }, description: "İplik lotu ekseni — bu lotla sarılmış leventlerin satırları" }
  *     responses:
- *       200: { description: Pareto raporu }
+ *       200: { description: "Pareto raporu (meta.leventler seçici kaynağı · süzgeçliyse meta.suzgec)" }
  */
 router.get("/durus-pareto", requireReportOpen("dokuma/durus-pareto"), guard, async (req, res, next) => {
   try {
@@ -96,7 +96,7 @@ router.get("/durus-pareto", requireReportOpen("dokuma/durus-pareto"), guard, asy
  *       - { in: query, name: lotNo, schema: { type: string }, description: "İplik lotu ekseni — bu lotla sarılmış leventlerin satırları" }
  *       - { in: query, name: byLine, schema: { type: string, enum: ["1", "0"] }, description: Hat kırılımı opt-in (çift enli tezgah) }
  *     responses:
- *       200: { description: Vardiya karnesi }
+ *       200: { description: "Vardiya karnesi (vardiyalar[].shiftDefinitionId · meta.leventler · süzgeçliyse meta.suzgec)" }
  */
 router.get("/vardiya-karnesi", requireReportOpen("dokuma/vardiya-karnesi"), guard, async (req, res, next) => {
   try {

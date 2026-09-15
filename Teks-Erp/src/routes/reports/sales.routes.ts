@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { Router, Request, Response, NextFunction } from "express";
+import { z } from "zod";
 import { verifyToken } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/rbac.middleware";
 import { requireReportOpen } from "../../middlewares/report.middleware";
@@ -10,7 +11,6 @@ import type { ReportKey } from "../../constants/report-catalog";
 import {
   compareRangeSchema,
   dateRangeSchema,
-  emptyQuerySchema,
   reportEnvelope,
   resolveCompareRange,
   resolveDateRange,
@@ -22,6 +22,7 @@ import { getOrderIntake } from "../../services/reports/order-intake.report.servi
 import { getDemandAnalysis } from "../../services/reports/demand-analysis.report.service";
 import { getOrderLeadTime } from "../../services/reports/order-leadtime.report.service";
 import { getOrderCancellationScorecard } from "../../services/reports/order-cancellation.report.service";
+import { filterEcho, iptalEkseni, kalemEkseni, musteriEkseni } from "../../services/reports/_filters";
 
 const router = Router();
 /**
@@ -30,6 +31,14 @@ const router = Router();
  * ÖNCE koşar ki kapalı bir rapor "yetkin yok" değil "kapalı" desin.
  */
 const reportGate = (key: ReportKey) => [verifyToken, requireReportOpen(key), requirePermission("report:sales")];
+
+// R5b-c süzgeç eksenleri — şemalar bekçi için DIŞA AÇIK; her biri `.strict()` (tanınmayan anahtar 400).
+export const orderIntakeQuerySchema = compareRangeSchema.extend({ ...musteriEkseni, itemId: kalemEkseni.itemId }).strict();
+export const demandAnalysisQuerySchema = compareRangeSchema.extend({ ...musteriEkseni, ...kalemEkseni }).strict();
+export const orderLeadTimeQuerySchema = dateRangeSchema.extend({ ...musteriEkseni, itemId: kalemEkseni.itemId }).strict();
+export const orderCancellationQuerySchema = dateRangeSchema.extend({ ...musteriEkseni, ...iptalEkseni }).strict();
+export const openOrderCoverageQuerySchema = z.object({ itemId: kalemEkseni.itemId }).strict();
+const SIPARIS_ANAHTARLARI = ["customerId", "destination", "itemId", "colorId", "reasonCode"] as const;
 
 /**
  * İADE KARNESİ — dönem karşılaştırmalı.
@@ -79,15 +88,17 @@ router.get("/return-scorecard", ...reportGate("sales/return-scorecard"), async (
  *       Hesap motoru Üretim Dengesi ekranıyla AYNIDIR
  *       (`production-balance.service`) — iki yüzey aynı rakamı söyler.
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV ya da tekrarlı anahtar). Müşteri süzgeci BİLEREK yok — FIFO havuzu bozulurdu." }
  *     responses:
  *       200:
- *         description: Karşılanma özeti + müşteri/kumaş kırılımı + kalem listesi
+ *         description: Karşılanma özeti + müşteri/kumaş kırılımı + kalem listesi (süzgeçliyse zarfta `suzgec`)
  */
 router.get("/open-order-coverage", ...reportGate("sales/open-order-coverage"), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    emptyQuerySchema.parse(req.query);
-    const data = await getOpenOrderCoverage();
-    res.status(200).json(reportEnvelope(data, resolveDateRange({})));
+    const input = openOrderCoverageQuerySchema.parse(req.query);
+    const data = await getOpenOrderCoverage(input);
+    res.status(200).json(reportEnvelope(data, resolveDateRange({}), null, filterEcho(input, SIPARIS_ANAHTARLARI)));
   } catch (e) {
     next(e);
   }
@@ -119,17 +130,20 @@ router.get("/open-order-coverage", ...reportGate("sales/open-order-coverage"), a
  *       - in: query
  *         name: compare
  *         schema: { type: string, enum: [none, prev, prevYear, custom] }
+ *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
+ *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Müşterinin VARSAYILAN hedefi (Customer.defaultDestination) — sevkin fiili hedefi değil" }
+ *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
  *     responses:
  *       200:
- *         description: Sipariş giriş karnesi
+ *         description: Sipariş giriş karnesi (süzgeçliyse zarfta `suzgec`)
  */
 router.get("/order-intake", ...reportGate("sales/order-intake"), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = compareRangeSchema.parse(req.query);
+    const input = orderIntakeQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const compareRange = resolveCompareRange(input, range);
-    const data = await getOrderIntake(range, compareRange);
-    res.status(200).json(reportEnvelope(data, range, compareRange));
+    const data = await getOrderIntake(range, compareRange, input);
+    res.status(200).json(reportEnvelope(data, range, compareRange, filterEcho(input, SIPARIS_ANAHTARLARI)));
   } catch (e) {
     next(e);
   }
@@ -163,17 +177,21 @@ router.get("/order-intake", ...reportGate("sales/order-intake"), async (req: Req
  *       - in: query
  *         name: compare
  *         schema: { type: string, enum: [none, prev, prevYear, custom] }
+ *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
+ *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Müşterinin VARSAYILAN hedefi (Customer.defaultDestination) — sevkin fiili hedefi değil" }
+ *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
+ *       - { in: query, name: colorId, schema: { type: string }, description: "Renk süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
  *     responses:
  *       200:
- *         description: Talep analizi
+ *         description: Talep analizi (süzgeçliyse zarfta `suzgec`)
  */
 router.get("/demand-analysis", ...reportGate("sales/demand-analysis"), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = compareRangeSchema.parse(req.query);
+    const input = demandAnalysisQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const compareRange = resolveCompareRange(input, range);
-    const data = await getDemandAnalysis(range, compareRange);
-    res.status(200).json(reportEnvelope(data, range, compareRange));
+    const data = await getDemandAnalysis(range, compareRange, input);
+    res.status(200).json(reportEnvelope(data, range, compareRange, filterEcho(input, SIPARIS_ANAHTARLARI)));
   } catch (e) {
     next(e);
   }
@@ -207,16 +225,19 @@ router.get("/demand-analysis", ...reportGate("sales/demand-analysis"), async (re
  *       - in: query
  *         name: dateTo
  *         schema: { type: string, format: date-time }
+ *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
+ *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Müşterinin VARSAYILAN hedefi (Customer.defaultDestination) — sevkin fiili hedefi değil" }
+ *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
  *     responses:
  *       200:
- *         description: Teslim süresi istatistikleri
+ *         description: Teslim süresi istatistikleri (süzgeçliyse zarfta `suzgec`)
  */
 router.get("/order-leadtime", ...reportGate("sales/order-leadtime"), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = dateRangeSchema.parse(req.query);
+    const input = orderLeadTimeQuerySchema.parse(req.query);
     const range = resolveDateRange(input);
-    const data = await getOrderLeadTime(range);
-    res.status(200).json(reportEnvelope(data, range));
+    const data = await getOrderLeadTime(range, input);
+    res.status(200).json(reportEnvelope(data, range, null, filterEcho(input, SIPARIS_ANAHTARLARI)));
   } catch (e) {
     next(e);
   }
@@ -246,16 +267,19 @@ router.get("/order-leadtime", ...reportGate("sales/order-leadtime"), async (req:
  *       - in: query
  *         name: dateTo
  *         schema: { type: string, format: date-time }
+ *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
+ *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Müşterinin VARSAYILAN hedefi (Customer.defaultDestination) — sevkin fiili hedefi değil" }
+ *       - { in: query, name: reasonCode, schema: { type: string }, description: "İptal sebep kodu (ORDER_CANCEL kataloğu; CSV) — yalnız iptal satırlarına, payda süzülmez" }
  *     responses:
  *       200:
- *         description: İptal karnesi
+ *         description: İptal karnesi (süzgeçliyse zarfta `suzgec`)
  */
 router.get("/order-cancellation", ...reportGate("sales/order-cancellation"), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = dateRangeSchema.parse(req.query);
+    const input = orderCancellationQuerySchema.parse(req.query);
     const range = resolveDateRange(input);
-    const data = await getOrderCancellationScorecard(range);
-    res.status(200).json(reportEnvelope(data, range));
+    const data = await getOrderCancellationScorecard(range, input);
+    res.status(200).json(reportEnvelope(data, range, null, filterEcho(input, SIPARIS_ANAHTARLARI)));
   } catch (e) {
     next(e);
   }

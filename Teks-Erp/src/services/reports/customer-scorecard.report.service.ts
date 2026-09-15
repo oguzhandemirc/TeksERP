@@ -51,7 +51,8 @@ import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
 import { pctOf, round1 } from "./_breakdown";
 import { isActiveLine } from "../helpers/order-line-scope.helper";
-import { collectShipped } from "./_shipped";
+import { collectShipped, type ShippedCell } from "./_shipped";
+import { hasAny, lineScopeSql, lineScopeWhere, orderScopeSql, orderScopeWhere, type ReportFilterInput } from "./_filters";
 import { factoryYmd } from "../../constants/time";
 
 /** Kümülatif pay eşikleri — klasik ABC (Pareto) sınıflandırması. */
@@ -206,19 +207,23 @@ const emptyAgg = (): PeriodAgg => ({
  * taşınmamış tek bir sipariş, aynı müşteriyi listede İKİ KEZ gösterirdi ve
  * ikincisinin adı `collectLifetime` tombstone'u dışladığı için "—" olurdu.
  */
-async function collectPeriod(range: DateRange): Promise<Map<string, PeriodAgg>> {
+async function collectPeriod(range: DateRange, f: ReportFilterInput): Promise<Map<string, PeriodAgg>> {
+  const scope = orderScopeWhere(f);
   const orders = await prisma.order.findMany({
     where: {
       orderDate: { gte: range.from, lte: range.to },
       // İptal siparişler de gelir: iptal ORANININ payı onlardan doğar. Aktif
       // metrajdan ayrılmaları aşağıda, `status` üzerinden yapılır.
-      customer: { mergedIntoId: null },
+      ...scope,
+      customer: { ...(scope.customer as Prisma.CustomerWhereInput | undefined), mergedIntoId: null },
     },
     select: {
       customerId: true,
       status: true,
       orderDate: true,
       lines: {
+        // R5b-c: kalem süzgeci seçilen kalemleri de budar (iptal edilmişler kalır, statü aşağıda ayrışır).
+        where: lineScopeWhere(f),
         select: {
           quantity: true,
           cancelledAt: true,
@@ -291,7 +296,7 @@ interface LifetimeAgg {
  * iptal edilen sipariş "temas" sayılır ama "iş" sayılmaz ve ikisini karıştırmak
  * risk listesini sessizce boşaltırdı.
  */
-async function collectLifetime(): Promise<LifetimeAgg[]> {
+async function collectLifetime(f: ReportFilterInput): Promise<LifetimeAgg[]> {
   return prisma.$queryRaw<
     Array<{
       customerId: string;
@@ -311,9 +316,9 @@ async function collectLifetime(): Promise<LifetimeAgg[]> {
            MIN(o."orderDate")                     AS "firstOrder",
            MAX(o."orderDate")                     AS "lastOrder"
     FROM customers c
-    JOIN orders o        ON o."customerId" = c.id AND o.status <> 'CANCELLED'
+    JOIN orders o        ON o."customerId" = c.id AND o.status <> 'CANCELLED' ${orderScopeSql(f)}
     -- aktif-kalem: ömür boyu metraj da iptal edilmiş kalemi saymaz.
-    LEFT JOIN order_lines ol ON ol."orderId" = o.id AND ol."cancelledAt" IS NULL
+    LEFT JOIN order_lines ol ON ol."orderId" = o.id AND ol."cancelledAt" IS NULL ${lineScopeSql(f)}
     WHERE c."mergedIntoId" IS NULL
     GROUP BY c.id, c.name, c.code
   `).then((rows) =>
@@ -329,25 +334,31 @@ async function collectLifetime(): Promise<LifetimeAgg[]> {
   );
 }
 
+const cellMatches = (f: ReportFilterInput, c: ShippedCell): boolean =>
+  (!hasAny(f.itemId) || (c.itemId != null && f.itemId.includes(c.itemId))) && (!hasAny(f.colorId) || (c.colorId != null && f.colorId.includes(c.colorId)));
+
 export async function getCustomerScorecard(
   range: DateRange,
   compareRange: DateRange | null = null,
+  filters: ReportFilterInput = {},
 ): Promise<CustomerScorecard> {
   const [period, lifetime, prevPeriod, shippedCells] = await Promise.all([
-    collectPeriod(range),
-    collectLifetime(),
-    compareRange ? collectPeriod(compareRange) : Promise.resolve(null),
+    collectPeriod(range, filters),
+    collectLifetime(filters),
+    compareRange ? collectPeriod(compareRange, filters) : Promise.resolve(null),
     // "Dönemde sevk edilen metraj" TEK TANIM (`_shipped.ts`) — brüt, doğrudan
     // sevkler dahil, iade geri-eklemeli. İkinci bir tanım üretmiyoruz.
     collectShipped(range),
   ]);
 
+  const byId = new Map(lifetime.map((l) => [l.customerId, l]));
+  // R5b-c: sevk hücreleri ortak tanımdan (`_shipped`) gelir, süzgeç burada — müşteri/hedef için "ömür boyu
+  // listede var mı" (o liste süzgeçli), kalem/renk için hücrenin kendisi.
   const shippedByCustomer = new Map<string, number>();
   for (const c of shippedCells) {
+    if (!byId.has(c.customerId) || !cellMatches(filters, c)) continue;
     shippedByCustomer.set(c.customerId, (shippedByCustomer.get(c.customerId) ?? 0) + c.qty);
   }
-
-  const byId = new Map(lifetime.map((l) => [l.customerId, l]));
   // tz-ok: "kaç gündür sessiz" iki AN arasındaki farktır, takvim günü değil.
   const now = Date.now();
   const daysBetween = (a: Date, b: number) => Math.floor((b - a.getTime()) / 86_400_000);

@@ -23,6 +23,7 @@ import type { DateRange } from "./_shared";
 import { attachPrev, buildBreakdown, pctOf, round1, type BreakdownDim, type BreakdownRow } from "./_breakdown";
 import { factoryMonthSql } from "../../constants/time";
 import { ACTIVE_LINE } from "../helpers/order-line-scope.helper";
+import { customerScopeSql, customerScopeWhere, lineScopeSql, lineScopeWhere, type ReportFilterInput } from "./_filters";
 
 /** Mevsimsellik penceresi (ay). Dönemden bağımsız — başlıktaki gerekçe. */
 const SEASONALITY_MONTHS = 24;
@@ -100,15 +101,17 @@ const dims = {
 const specKey = (c: LineCell) =>
   `${c.itemId}|${c.colorId ?? "-"}|${c.width == null ? "-" : c.width.toString()}`;
 
-async function collect(range: DateRange): Promise<LineCell[]> {
+async function collect(range: DateRange, f: ReportFilterInput): Promise<LineCell[]> {
   const lines = await prisma.orderLine.findMany({
     where: {
       order: {
         orderDate: { gte: range.from, lte: range.to },
         status: { not: "CANCELLED" },
+        ...customerScopeWhere(f),
       },
       // İptal edilmiş kalem talep DEĞİLDİR — stoğa üretim kararı ona dayanamaz.
       ...ACTIVE_LINE,
+      ...lineScopeWhere(f),
     },
     select: {
       quantity: true,
@@ -136,7 +139,7 @@ async function collect(range: DateRange): Promise<LineCell[]> {
  * Aylık seri. Gruplama `factoryMonthSql` ile — saat dilimi literali çağıran
  * tarafa kopyalanmaz (tek kaynak `constants/time.ts`; bekçi o kopyayı yakalar).
  */
-async function collectMonthly(): Promise<Array<{ month: string; qty: number; lineCount: number }>> {
+async function collectMonthly(f: ReportFilterInput): Promise<Array<{ month: string; qty: number; lineCount: number }>> {
   const rows = await prisma.$queryRaw<Array<{ month: Date; qty: number | null; lineCount: bigint }>>(Prisma.sql`
     SELECT ${factoryMonthSql('o."orderDate"')} AS month,
            COALESCE(SUM(ol.quantity), 0)::float8  AS qty,
@@ -145,8 +148,8 @@ async function collectMonthly(): Promise<Array<{ month: string; qty: number; lin
     -- aktif-kalem: iptal edilmiş kalem talep değildir (Prisma tarafındaki
     -- ACTIVE_LINE'ın ham SQL karşılığı — aylık seri de aynı kümeyi saymalı,
     -- aksi halde spec listesiyle grafik ayrışır).
-    JOIN order_lines ol ON ol."orderId" = o.id AND ol."cancelledAt" IS NULL
-    WHERE o.status <> 'CANCELLED'
+    JOIN order_lines ol ON ol."orderId" = o.id AND ol."cancelledAt" IS NULL ${lineScopeSql(f)}
+    WHERE o.status <> 'CANCELLED' ${customerScopeSql(f)}
       -- tz-ok: "son N ay" MUTLAK bir penceredir (iki an arası fark), takvim
       -- günü sorusu değil; gruplama ayrıca factoryMonthSql ile yapılıyor.
       AND o."orderDate" >= (now() - (${SEASONALITY_MONTHS} || ' months')::interval)
@@ -163,11 +166,12 @@ async function collectMonthly(): Promise<Array<{ month: string; qty: number; lin
 export async function getDemandAnalysis(
   range: DateRange,
   compareRange: DateRange | null = null,
+  filters: ReportFilterInput = {},
 ): Promise<DemandAnalysisReport> {
   const [cells, monthly, prevCells] = await Promise.all([
-    collect(range),
-    collectMonthly(),
-    compareRange ? collect(compareRange) : Promise.resolve(null),
+    collect(range, filters),
+    collectMonthly(filters),
+    compareRange ? collect(compareRange, filters) : Promise.resolve(null),
   ]);
 
   const totalQty = round1(cells.reduce((s, c) => s + c.qty, 0));
