@@ -43,14 +43,14 @@ const EKSENLER: Array<{
   uc: string;
   servis: string;
   eksen: string[];
-  /** Gövdedeki süzgeç kabı: `suzgec` ya da `meta.suzgec`. */
-  kap: "suzgec" | "meta";
+  /** Süzgeç beyanının SERVİS dönüşündeki adı — rota onu cevabın KÖKÜNE kaldırır. */
+  kap: "suzgec";
   /** Bakiye/yürüyen sütunu var mı — §4 yalnız bunlarda koşar. */
   bakiyeli: boolean;
   /** `dusenSatir` nasıl ölçülüyor: döngüde atlanarak mı, iki `count` farkıyla mı. */
   olcum: "dongu" | "sayim";
 }> = [
-  { uc: "/vat-summary", servis: "src/services/reports/finance-vat.report.ts", eksen: ["yon", "oran"], kap: "meta", bakiyeli: false, olcum: "sayim" },
+  { uc: "/vat-summary", servis: "src/services/reports/finance-vat.report.ts", eksen: ["yon", "oran"], kap: "suzgec", bakiyeli: false, olcum: "sayim" },
   { uc: "/cash-book", servis: "src/services/reports/cash-book.report.ts", eksen: ["kategori", "yon"], kap: "suzgec", bakiyeli: true, olcum: "dongu" },
   { uc: "/fx-diff", servis: "src/services/reports/finance-fx-diff.report.ts", eksen: ["kind"], kap: "suzgec", bakiyeli: false, olcum: "sayim" },
   { uc: "/statement", servis: "src/services/cari.service.ts", eksen: ["belgeTipi"], kap: "suzgec", bakiyeli: true, olcum: "dongu" },
@@ -95,19 +95,34 @@ function main(): void {
   check("§1b HER uç şeması `.strict()` (tanınmayan eksen 400, sessizce yok sayılmaz)",
     stricsiz.length === 0, stricsiz.join(", ") || `${UCLAR.length} uç`);
 
-  // ── §2 SÜZGEÇSİZ GÖVDE BAYT BAYT ESKİ ────────────────────────────────────
+  // ── §2 SÜZGEÇSİZ GÖVDE BAYT BAYT ESKİ + BEYAN TEK ADRESTE ────────────────
   const sapan2: string[] = [];
   for (const e of EKSENLER) {
     const src = readFileSync(join(KOK, e.servis), "utf8");
     // Koşullu yayma şart: `...(x ? { suzgec: … } : {})`. Koşulsuz bir `suzgec:`
     // alanı, süzgeçsiz gövdeye yeni bir anahtar sokar ve "eski gövde" sözü düşer.
-    const kosullu = new RegExp(`\\.\\.\\.\\([\\s\\S]{0,120}?\\?\\s*\\{\\s*(suzgec|meta):`).test(src);
-    if (!kosullu) sapan2.push(`${e.uc}: \`${e.kap}\` KOŞULSUZ yayılıyor (süzgeçsiz gövde değişir)`);
-    // Tip tarafında da opsiyonel olmalı.
-    if (!new RegExp(`\\n\\s*(suzgec|meta)\\?:`).test(src)) sapan2.push(`${e.uc}: \`${e.kap}\` tipte opsiyonel DEĞİL`);
+    if (!/\.\.\.\([\s\S]{0,120}?\?\s*\{\s*suzgec:/.test(src)) {
+      sapan2.push(`${e.uc}: \`suzgec\` KOŞULSUZ yayılıyor (süzgeçsiz gövde değişir)`);
+    }
+    // Tip `SuzgecEcho` OLMALI: rapor başına özel bir şekil, dokuma/satış ile
+    // AYRIŞIR ve panel tek bileşen yazamaz (R5b-c2 "tek adres" hükmü).
+    if (!/\n\s*suzgec\?: SuzgecEcho;/.test(src)) {
+      sapan2.push(`${e.uc}: \`suzgec\` tipi \`SuzgecEcho\` DEĞİL (ya opsiyonel değil ya rapora özel şekil)`);
+    }
   }
-  check("§2 ⭐ süzgeç kabı yalnız süzgeçliyken gövdede (anahtar bile yok aksi halde)",
+  check("§2 ⭐ süzgeç kabı yalnız süzgeçliyken ve ORTAK tiple (`SuzgecEcho`)",
     sapan2.length === 0, sapan2.join(" · ") || `${EKSENLER.length} rapor`);
+
+  // §2b ⭐ BEYAN CEVABIN KÖKÜNDE — `data`nın içinde DEĞİL. İki adres, panelin
+  // süzgeç şeridini rapor başına yazdırırdı; 1e hükmü R5b-c2 tek adres.
+  const kokSapan: string[] = [];
+  for (const e of EKSENLER) {
+    const govde = ucGovdesi(rota, e.uc);
+    if (!/const \{ suzgec, \.\.\.\w+ \} =/.test(govde)) { kokSapan.push(`${e.uc}: servis dönüşünden \`suzgec\` AYRILMIYOR`); continue; }
+    if (!/reportEnvelope\(\w+, range, null, suzgec\)/.test(govde)) kokSapan.push(`${e.uc}: \`suzgec\` zarfa VERİLMİYOR (cevabın kökünde değil)`);
+  }
+  check("§2b ⭐ süzgeç beyanı cevabın KÖKÜNDE (tek adres — dokuma/satış ile aynı yer)",
+    kokSapan.length === 0, kokSapan.join(" · ") || `${EKSENLER.length} uç`);
 
   // ── §3 DÜŞEN SATIR SAYILIYOR ─────────────────────────────────────────────
   const sapan3: string[] = [];

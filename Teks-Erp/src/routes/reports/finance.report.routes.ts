@@ -165,7 +165,8 @@ router.get("/cash-book", requireReportOpen("finance/cash-book"), guard, async (r
       kategori: q.kategori,
       yon: q.yon,
     });
-    res.status(200).json(reportEnvelope(data, range));
+    const { suzgec, ...govde } = data;
+    res.status(200).json(reportEnvelope(govde, range, null, suzgec));
   } catch (e) {
     next(e);
   }
@@ -215,7 +216,8 @@ router.get("/statement", requireReportOpen("finance/statement"), guard, async (r
       to: range.to,
       belgeTipi: q.belgeTipi,
     });
-    res.status(200).json(reportEnvelope(result.data, range));
+    const { suzgec, ...govde } = result.data;
+    res.status(200).json(reportEnvelope(govde, range, null, suzgec));
   } catch (e) {
     next(e);
   }
@@ -265,8 +267,10 @@ router.get("/vat-summary", requireReportOpen("finance/vat-summary"), guard, asyn
     // Ortak katman: varsayılan son 30 gün + 366 gün tavanı + saat dilimi
     // sözleşmesi (gün sınırını İSTEMCİ çizer).
     const range = resolveDateRange(dateRangeSchema.parse({ dateFrom: q.dateFrom, dateTo: q.dateTo }));
-    const data = await getVatSummaryReport({ range, yon: q.yon, oran: q.oran });
-    res.status(200).json(reportEnvelope(data, range));
+    // ⚠️ `suzgec` CEVABIN KÖKÜNE gider, `data`nın içine DEĞİL (R5b-c2 tek adres):
+    // panel tek bileşen okuyacak; iki adres, süzgeç şeridini rapor başına yazdırırdı.
+    const { suzgec, ...data } = await getVatSummaryReport({ range, yon: q.yon, oran: q.oran });
+    res.status(200).json(reportEnvelope(data, range, null, suzgec));
   } catch (e) {
     next(e);
   }
@@ -310,8 +314,8 @@ router.get("/fx-diff", requireReportOpen("finance/fx-diff"), guard, async (req: 
       .parse(req.query);
 
     const range = resolveDateRange(dateRangeSchema.parse({ dateFrom: q.dateFrom, dateTo: q.dateTo }));
-    const data = await getFxDiffReport({ range, cariId: q.cariId, currency: q.currency, kind: q.kind });
-    res.status(200).json(reportEnvelope(data, range));
+    const { suzgec, ...govde } = await getFxDiffReport({ range, cariId: q.cariId, currency: q.currency, kind: q.kind });
+    res.status(200).json(reportEnvelope(govde, range, null, suzgec));
   } catch (e) {
     next(e);
   }

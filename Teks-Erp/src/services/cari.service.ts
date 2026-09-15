@@ -6,6 +6,7 @@
 // deftere YAZAN yalnız fatura ve tahsilat servisleridir.
 // =============================================================================
 import { Prisma, CariKind, Currency, CariTxnSource } from "@prisma/client";
+import type { SuzgecEcho } from "./reports/_filters";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -631,7 +632,7 @@ export class CariService {
       /** Devrin dayandığı dönem kapanışı — mühürsüz kurulumda `null`. */
       carriedFrom: { periodEnd: Date; closingBalance: Prisma.Decimal } | null;
       /** YALNIZ süzgeçliyken dolar; süzgeçsiz gövde bayt bayt eski. */
-      suzgec?: { belgeTipi: CariTxnSource; dusenSatir: number };
+      suzgec?: SuzgecEcho;
       rows: Array<{
         id: string;
         txnDate: Date;

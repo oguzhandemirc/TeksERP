@@ -66,6 +66,17 @@ bir eşik. ⇒ ***Toplam sayıya bakan kapı, kaybı yalnız o sayı eşiğin al
 "her biri" sorusunun cevabı bir toplam değildir.*** İkisi de onarıldı ve sondalar yeniden
 koşuldu.
 
+**ADRES AYRIŞMASI ve DÜZELTİLMESİ (aynı gün).** R5b-d-a, o an geçerli olan R5b-b biçimini
+uyguladı: beyan raporun `data`sının içinde. Ama R5b-c2 tam o sırada adresi TAŞIDI — beyan
+artık cevabın KÖKÜNDE (`reportEnvelope`in 4. argümanı, tip `SuzgecEcho`). İki sha aynı trene
+girseydi origin'de **aynı şey için iki adres** olurdu (finans `data.suzgec`, dokuma/satış
+kökte) ve panel tek bileşen yazamazdı. Düzeltme aynı dalda ikinci sha olarak indi; ayrışma
+origin'e hiç ulaşmadı. ⇒ ***Paralel dilimlerde tehlike çakışan DOSYA değil, çakışan
+SÖZLEŞMEdir: aynı dosyaya dokunmayan iki dilim de aynı alanın adresini ayrı yerlere koyabilir.***
+Bu arada `null` yer tutucular da düştü: echo sözleşmesi "yalnız VERİLEN anahtarlar"dır
+(`filterEcho` boş olanı hiç yazmaz); `kategori: null` göndermek panelde "süzgeç var ama boş"
+diye okunabilirdi.
+
 **Söz dağarcığı ayrımı:** API alanı `dusenSatir` (6e'nin R5b-b zarfıyla ORTAK — panel tek
 bileşen okuyacak), yerel değişken `droppedRows` (üretim kodu tanımlayıcı kuralı). İkisini
 birbirinin yerine koymak ya zarfı ayrıştırır ya tanımlayıcı cırcırını yükseltir.

@@ -82,6 +82,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { D, D0 } from "../helpers/finance.helper";
 import type { DateRange } from "./_shared";
+import type { SuzgecEcho } from "./_filters";
 
 const R2 = (d: Prisma.Decimal): Prisma.Decimal =>
   d.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
@@ -168,17 +169,12 @@ export interface VatSummaryReport {
    * YALNIZ süzgeçliyken dolar — süzgeçsiz gövde bayt bayt eskisiyle aynı kalır.
    * `dusenBelge`/`dusenSatir` şart: süzgeç boş sonuç verdiğinde ekranda "veri yok"
    * ile "süzgeç kesti" ayrılmalı, yoksa kullanıcı olmayan bir boşluğa bakar.
+   *
+   * ⚠️ ROTA BUNU CEVABIN KÖKÜNE KALDIRIR (`reportEnvelope`in 4. argümanı) — beyan
+   * TEK ADRESTEDİR (1e hükmü, R5b-c2). Servis onu kendi dönüşünde taşır çünkü
+   * sayılar (düşen belge/satır) ancak burada ölçülebilir; adres kararı rotanın.
    */
-  meta?: { suzgec: VatSuzgecMeta };
-}
-
-export interface VatSuzgecMeta {
-  yon: VatYon | null;
-  oran: string | null;
-  /** Yön süzgecinin ELEDİĞİ belge sayısı (aralıktaki toplam − süzgeçli toplam). */
-  dusenBelge: number;
-  /** Oran süzgecinin yüklenen belgelerde ELEDİĞİ satır sayısı. */
-  dusenSatir: number;
+  suzgec?: SuzgecEcho;
 }
 
 /** Fatura yönü — `InvoiceType`un aynası; iade yönleri AYRI değer (blokta ayrı satır). */
@@ -380,7 +376,7 @@ export async function getVatSummaryReport(params: VatSummaryParams): Promise<Vat
         : []),
     ],
     ...(suzgecVar
-      ? { meta: { suzgec: { yon: yon ?? null, oran: oran ?? null, dusenBelge: droppedDocs, dusenSatir: droppedRows } } }
+      ? { suzgec: { ...(yon ? { yon } : {}), ...(oran ? { oran } : {}), dusenBelge: droppedDocs, dusenSatir: droppedRows } }
       : {}),
   };
 }

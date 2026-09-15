@@ -49,6 +49,7 @@ import prisma from "../../lib/prisma";
 import { invoiceLedgerSide } from "../helpers/finance.helper";
 import { ACTIVE_ALLOCATION } from "../payment-allocation.service";
 import type { DateRange } from "./_shared";
+import type { SuzgecEcho } from "./_filters";
 
 const D = (v: Prisma.Decimal.Value): Prisma.Decimal => new Prisma.Decimal(v);
 const D0 = () => new Prisma.Decimal(0);
@@ -87,7 +88,7 @@ export interface FxDiffReport {
    * `summary` BURADA süzgeçle birlikte daralır (cash-book'un aksine) çünkü aynı
    * satır kümesinden türer — kur farkı bir BAKİYE değil, o kümenin toplamıdır.
    */
-  suzgec?: { kind: CariKind | null; dusenSatir: number };
+  suzgec?: SuzgecEcho;
 }
 
 const SOURCE_LABEL: Record<string, string> = {

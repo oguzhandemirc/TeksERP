@@ -341,16 +341,16 @@ async function main(): Promise<void> {
   // yalnız burası görebilir — fikstür zaten elimizde.
   const toplamBelge = rep.sales.docCount + rep.purchase.docCount;
   check("§9z körlük zemini: süzgeçsiz raporda belge var", toplamBelge > 0, `${toplamBelge} belge`);
-  check("§9a SÜZGEÇSİZ gövdede `meta` anahtarı HİÇ YOK (panel varlığına bakarak şerit çizer)",
-    !("meta" in rep), `meta=${JSON.stringify((rep as { meta?: unknown }).meta)}`);
+  check("§9a SÜZGEÇSİZ dönüşte `suzgec` anahtarı HİÇ YOK (panel varlığına bakarak şerit çizer)",
+    !("suzgec" in rep), `suzgec=${JSON.stringify((rep as { suzgec?: unknown }).suzgec)}`);
 
   const yalnizSatis = await getVatSummaryReport({ range: { from: FROM, to: TO }, yon: "SALES" });
   check("§9b `yon=SALES` yalnız ileri satışı bırakır (iade AYRI değer, gelmez)",
     yalnizSatis.purchase.docCount === 0 && yalnizSatis.sales.docCount === rep.sales.docCount - 1,
     `satış=${yalnizSatis.sales.docCount} alış=${yalnizSatis.purchase.docCount}`);
   check("§9c düşen BELGE sayılıyor (aralıktaki toplam − süzgeçli toplam)",
-    yalnizSatis.meta?.suzgec.dusenBelge === toplamBelge - yalnizSatis.sales.docCount,
-    `dusenBelge=${yalnizSatis.meta?.suzgec.dusenBelge} (toplam ${toplamBelge})`);
+    yalnizSatis.suzgec?.dusenBelge === toplamBelge - yalnizSatis.sales.docCount,
+    `dusenBelge=${yalnizSatis.suzgec?.dusenBelge} (toplam ${toplamBelge})`);
 
   const yalnizIade = await getVatSummaryReport({ range: { from: FROM, to: TO }, yon: "SALES_RETURN" });
   check("§9d `yon=SALES_RETURN` YALNIZ iadeyi getirir — dört değerli eksenin gerekçesi budur",
@@ -364,7 +364,7 @@ async function main(): Promise<void> {
   check("§9e `oran=1.00` yalnız o oranın satırlarını bırakır (karışık belgenin öbür oranı ELENİR)",
     birOranlar.length > 0 && birOranlar.every((r) => r === "1.00"), `oranlar=[${birOranlar.join(", ")}]`);
   check("§9f elenen SATIR sayılıyor (karışık belgede en az bir satır düştü)",
-    (yalnizBir.meta?.suzgec.dusenSatir ?? 0) >= 1, `dusenSatir=${yalnizBir.meta?.suzgec.dusenSatir}`);
+    (Number(yalnizBir.suzgec?.dusenSatir) || 0) >= 1, `dusenSatir=${yalnizBir.suzgec?.dusenSatir}`);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }

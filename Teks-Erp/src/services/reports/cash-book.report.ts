@@ -113,6 +113,7 @@ import {
   chequeCashReversalSql,
 } from "../helpers/cheque-cash-events.helper";
 import type { DateRange } from "./_shared";
+import type { SuzgecEcho } from "./_filters";
 
 /** Tek sayfada basılabilir satır tavanı — aşılırsa kırpılır ve SÖYLENİR. */
 const MAX_ROWS = 5000;
@@ -225,7 +226,7 @@ export interface CashBookReport {
    * `accounts`/`categories`/`totals` DÖNEM GERÇEĞİ olarak süzgeçsiz kalır:
    * kasadaki para, kullanıcının ekranda neyi seçtiğine göre değişmez.
    */
-  suzgec?: { kategori: CashCategoryGroup | null; yon: "IN" | "OUT" | null; dusenSatir: number };
+  suzgec?: SuzgecEcho;
 }
 
 interface AccountRow {
@@ -668,7 +669,7 @@ export async function getCashBookReport(params: CashBookParams): Promise<CashBoo
   return {
     accounts, categories, rows, rowsTruncated, storedComparable, totals, notes,
     ...(suzgecVar
-      ? { suzgec: { kategori: params.kategori ?? null, yon: params.yon ?? null, dusenSatir: droppedRows } }
+      ? { suzgec: { ...(params.kategori ? { kategori: params.kategori } : {}), ...(params.yon ? { yon: params.yon } : {}), dusenSatir: droppedRows } }
       : {}),
   };
 }
