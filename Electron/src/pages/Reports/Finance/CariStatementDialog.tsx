@@ -83,20 +83,33 @@ export function CariStatementDialog({ target, open, onOpenChange }: Props) {
   // devreye girer ve o zaman bile yanlış para birimi göstermez.
   const activeCurrency = target ? currency : "TRY";
 
+  // BELGE TİPİ (R5b-d): seçenekler dönemde GEÇEN tiplerden gelir
+  // (`meta.secenekler.belgeTipi`, `ad` HAM ENUM — Türkçe etiketin tek kaynağı
+  // panelde: `CARI_TXN_SOURCE_LABEL`). Cari TEKİL kalır: ekstre tek cari içindir.
+  const [belgeTipi, setBelgeTipi] = useState("");
   const q = useQuery({
-    queryKey: ["reports", "finance", "statement", target?.cariId, activeCurrency, from, to],
+    queryKey: ["reports", "finance", "statement", target?.cariId, activeCurrency, from, to, belgeTipi],
     queryFn: () =>
       getStatementReport({
         cariId: target!.cariId,
         currency: activeCurrency,
         dateFrom: dayStartIso(from),
         dateTo: dayEndIso(to),
+        belgeTipi: belgeTipi || undefined,
       }),
     enabled: open && Boolean(target) && Boolean(from) && Boolean(to),
     staleTime: 30_000,
   });
 
   const data = q.data?.data;
+  const belgeSecenekleri = q.data?.meta?.secenekler?.belgeTipi ?? [];
+  const docTypeNote = useMemo(
+    () =>
+      belgeTipi
+        ? [`SÜZGEÇ — Belge tipi: ${CARI_TXN_SOURCE_LABEL[belgeTipi] ?? belgeTipi}. Yalnız hareket dökümünü daraltır: devir, bakiye ve toplamlar dönemin tamamıdır.`]
+        : [],
+    [belgeTipi],
+  );
 
   // Dışa aktarım spec'i TIKLANDIĞINDA kurulur (bkz. `ReportExportBar` gerekçesi).
   // ⚠️ Veri EKRANDAKİ sorgudan okunur — yeni istek atılmaz: dosyanın rakamı
@@ -116,9 +129,10 @@ export function CariStatementDialog({ target, open, onOpenChange }: Props) {
             totalCredit: data.totalCredit,
             carriedFrom: data.carriedFrom ?? null,
             rows: data.rows,
+            filterNotes: docTypeNote,
           })
         : null,
-    [target, data, activeCurrency, from, to],
+    [target, data, activeCurrency, from, to, docTypeNote],
   );
 
   return (
@@ -151,6 +165,22 @@ export function CariStatementDialog({ target, open, onOpenChange }: Props) {
               seçicide o kombinasyonu hiç sunmamak kullanıcıyı geri alması gereken bir hataya
               sokmamaktır (elle yazımı engellemez, hata dalı ayrıca duruyor). */}
           <ReportDateFilter reportKey="finance/statement" value={range} onChange={setRange} bare />
+          <div>
+            <Label className="text-xs">Belge tipi</Label>
+            <select
+              className="mt-1 h-9 rounded-md border bg-background px-2 text-sm disabled:opacity-50"
+              value={belgeTipi}
+              disabled={belgeSecenekleri.length === 0}
+              onChange={(e) => setBelgeTipi(e.target.value)}
+            >
+              <option value="">{belgeSecenekleri.length === 0 ? "Dönemde hareket yok" : "Tüm belgeler"}</option>
+              {belgeSecenekleri.map((o) => (
+                <option key={o.code} value={o.code!}>
+                  {CARI_TXN_SOURCE_LABEL[o.code!] ?? o.ad}
+                </option>
+              ))}
+            </select>
+          </div>
           {/* ⚠️ `disabled={!data}` — veri yokken (yükleniyor / hata / boş yanıt)
               düğmeler iş yapmaz. Boş bir Excel indirmek hiç indirmemekten
               KÖTÜDÜR: kullanıcı onu "bu carinin hareketi yok" diye okur. */}
@@ -158,6 +188,10 @@ export function CariStatementDialog({ target, open, onOpenChange }: Props) {
             <ReportExportBar disabled={!data} buildSpec={spec} />
           </div>
         </div>
+
+        {docTypeNote.length > 0 ? (
+          <p className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">{docTypeNote[0]}</p>
+        ) : null}
 
         {/* ⚠️ Sebep SOMUT yazılır. Eski "Kayıt getirilemedi, aralığı daraltın"
             metni TEK bir tahmindi ve çoğu durumda YANLIŞTI: backend burada üç

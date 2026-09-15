@@ -16,7 +16,10 @@
 // Negatif sondalar (bir kezlik, cp+sha256 ile geri alındı): bir yapraktan
 // `<ReportAxisBar` kaldırıldı → ⭐① ❌ · beyandaki `colorId` şeritten düşürüldü → ⭐② ❌ ·
 // Randıman'dan `<LotInput` kaldırıldı → ⭐③ ❌ · Kalite Karnesi'ne KAYNAKSIZ levent
-// seçicisi eklendi → ⭐④ ❌.
+// seçicisi eklendi → ⭐④ ❌ · ekstre diyalogundan belge tipi seçicisi silindi → ⭐⑤ ❌
+// (İLK yazımda TUTMADI: işaret `setBelgeTipi` idi ve durum bildiriminde kalıyordu ⇒
+// işaret SEÇİCİNİN KENDİSİ olmalı) · KDV özetine cari seçicisi sızdırıldı → ⭐⑥ ❌ ·
+// taşıyıcı şerit (`AgingFilterBar`) seçiciyi bıraktı → zemin ❌ (beyan tek başına yeşil bırakmaz).
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -50,6 +53,24 @@ const BEAM_LOT_BY_REPORT: Record<string, "levent+lot" | "lot"> = {
   "dokuma/vardiya-karnesi": "levent+lot",
   "quality/scorecard": "lot",
   "quality/scrap-scorecard": "lot",
+};
+
+/**
+ * Finans eksenleri (R5b-d). ⚠️ `finance/statement` bir DİYALOGDUR (route'u yok)
+ * ⇒ dosyası ADIYLA verilir; route zinciri onu bulamaz ve "ölçülemedi" sayılması
+ * gerekirdi. Değerler: o yaprakta GÖRÜNMESİ gereken seçici işaretleri.
+ */
+const FINANCE_AXES: Record<string, { dosya?: string; tasiyici?: string; isaretler: readonly string[] }> = {
+  // Seçici şeridin kendi dosyasında yaşıyor ⇒ TAŞIYICI beyan edilir ve taşıdığı
+  // ayrıca ÖLÇÜLÜR (aşağıdaki zemin testi); beyan tek başına yeşil bırakmaz.
+  "finance/aging": { tasiyici: "pages/Reports/Finance/AgingFilterBar.tsx", isaretler: ["<AgingCariSelect", "<ReportMultiSelect", "AXIS_LABELS.cariId"] },
+  "finance/cash-book": { isaretler: ["<ReportMultiSelect", "onChangeKategori={", "onChangeYon={"] },
+  "finance/fx-diff": { isaretler: ["<ReportMultiSelect", "onChangeKind={"] },
+  // KDV özetinde cari ekseni YOKTUR: backend şeması `cariId` kabul etmiyor (400).
+  "finance/vat-summary": { isaretler: ['patch("yon"', 'patch("oran"'] },
+  // ⚠️ İşaret SEÇİCİNİN KENDİSİNİ göstermeli: `setBelgeTipi` durum bildiriminde
+  // de geçer ve seçici silinse bile YEŞİL kalırdı (ölçüldü, sonda tutmadı).
+  "finance/statement": { dosya: "pages/Reports/Finance/CariStatementDialog.tsx", isaretler: ["value={belgeTipi}", "belgeSecenekleri.map("] },
 };
 
 const LEAF_RE = /path:\s*"reports\/([a-z0-9-]+\/[a-z0-9-]+)"[\s\S]{0,400}?<([A-Z][A-Za-z0-9]*)\s*\/>/g;
@@ -116,5 +137,38 @@ describe("levent/lot ekseni kapsamı — beyan ↔ ekran", () => {
       if (kip === "lot" && secici) sapma.push(`${anahtar}: kaynağı olmayan levent seçicisi çizilmiş`);
     }
     expect(sapma).toEqual([]);
+  });
+});
+
+describe("finans eksenleri kapsamı (R5b-d) — beyan ↔ ekran", () => {
+  const oku = (anahtar: string): string => {
+    const { dosya, tasiyici } = FINANCE_AXES[anahtar]!;
+    const govde = dosya ? readFileSync(resolve(SRC, dosya), "utf8") : kaynak(anahtar);
+    return tasiyici ? `${govde}\n${readFileSync(resolve(SRC, tasiyici), "utf8")}` : govde;
+  };
+
+  it("zemin: route'suz yaprağın dosyası ADIYLA verildi ve okunabiliyor", () => {
+    const diyalog = Object.entries(FINANCE_AXES).filter(([, v]) => v.dosya);
+    expect(diyalog.length).toBeGreaterThan(0);
+    for (const [k] of diyalog) expect(oku(k).length).toBeGreaterThan(100);
+  });
+
+  it("zemin: beyan edilen TAŞIYICI şerit seçiciyi gerçekten çiziyor", () => {
+    const tasiyicilar = Object.values(FINANCE_AXES).map((v) => v.tasiyici).filter(Boolean) as string[];
+    expect(tasiyicilar.length).toBeGreaterThan(0);
+    for (const t of tasiyicilar) expect(readFileSync(resolve(SRC, t), "utf8")).toContain("<ReportMultiSelect");
+  });
+
+  it("⭐⑤ beyan edilen her finans yaprağı seçicilerini çizer", () => {
+    const eksik: string[] = [];
+    for (const [anahtar, { isaretler }] of Object.entries(FINANCE_AXES)) {
+      const src = oku(anahtar);
+      for (const i of isaretler) if (!src.includes(i)) eksik.push(`${anahtar}: ${i}`);
+    }
+    expect(eksik).toEqual([]);
+  });
+
+  it("⭐⑥ KDV özetinde cari seçicisi YOK (backend şeması `cariId` kabul etmiyor)", () => {
+    expect(oku("finance/vat-summary")).not.toContain("AXIS_LABELS.cariId");
   });
 });

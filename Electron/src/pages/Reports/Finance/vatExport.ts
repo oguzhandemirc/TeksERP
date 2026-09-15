@@ -43,12 +43,14 @@ const COLUMNS: ReportColumn[] = [
 export function buildVatSummaryExport(opts: {
   report: VatSummaryReport;
   periodLabel: string;
+  /** Süzgeç satırları (K10) — ekrandakiyle AYNI dizi. */
+  filterNotes?: string[];
 }): ReportExportSpec {
-  const { report, periodLabel } = opts;
+  const { report, periodLabel, filterNotes = [] } = opts;
   return {
     title: "KDV Dönem Özeti",
     subtitle: periodLabel,
-    meta: [`Dönem: ${periodLabel}`, ...report.notes],
+    meta: [...filterNotes, `Dönem: ${periodLabel}`, ...report.notes],
     orientation: "landscape",
     tables: [blockTable("Satış KDV", report.sales), blockTable("Alış KDV", report.purchase)],
   };

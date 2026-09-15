@@ -10,7 +10,7 @@
 // kalıbının istemci ikizi. Ayrıştırma tek yerde yaşar ki "a, b" (boşluklu) ile
 // "a,b" iki farklı süzgeç sanılmasın.
 // =============================================================================
-export type AxisKey = "customerId" | "itemId" | "colorId" | "subcontractorId" | "reasonCode";
+export type AxisKey = "customerId" | "itemId" | "colorId" | "subcontractorId" | "reasonCode" | "cariId";
 export type Destination = "DOMESTIC" | "EXPORT";
 
 /** URL değeri → id listesi. Boş/whitespace düşer, sıra korunur, tekrar elenir. */
@@ -83,6 +83,7 @@ export function droppedNote(dusenSatir: number | undefined): string | null {
 // "aynı süzgeç, iki farklı cümle" demektir — ve şerh EKSENİN kendisine aittir,
 // onu gösteren ekrana değil.
 export const AXIS_LABELS: Record<AxisKey, string> = {
+  cariId: "Cari",
   customerId: "Müşteri",
   itemId: "Kumaş",
   colorId: "Renk",
@@ -91,6 +92,7 @@ export const AXIS_LABELS: Record<AxisKey, string> = {
 };
 
 export const AXIS_EMPTY_HINTS: Record<AxisKey, string> = {
+  cariId: "Pencerede cari yok",
   customerId: "Pencerede müşteri yok",
   itemId: "Pencerede kumaş yok",
   colorId: "Pencerede renk yok",

@@ -32,6 +32,7 @@ import {
   type InvoiceType,
 } from "@/pages/Finance/service";
 import type { ReportResponse } from "../_services/types";
+import type { CariKind } from "./service";
 
 // -----------------------------------------------------------------------------
 // SÖZLEŞME
@@ -78,7 +79,10 @@ export interface FxDiffReport {
 export interface FxDiffApiParams {
   dateFrom?: string;
   dateTo?: string;
-  cariId?: string;
+  /** Cari süzgeci LİSTE (CSV) — R5b-d. */
+  cariId?: string[];
+  /** Cari türü — kardeş rapor (yaşlandırma) bu ekseni taşıyordu, asimetri kapandı. */
+  kind?: CariKind;
   /** TRY GÖNDERİLEMEZ — backend `.strict()` şeması onu enum'dan çıkarmıştır. */
   currency?: Currency;
 }
@@ -92,7 +96,8 @@ export async function getFxDiffReport(
   const params: Record<string, string> = {};
   if (p.dateFrom) params.dateFrom = p.dateFrom;
   if (p.dateTo) params.dateTo = p.dateTo;
-  if (p.cariId) params.cariId = p.cariId;
+  if (p.cariId?.length) params.cariId = p.cariId.join(",");
+  if (p.kind) params.kind = p.kind;
   if (p.currency) params.currency = p.currency;
   const res = await apiClient.get<ReportResponse<FxDiffReport>>(
     "/api/reports/finance/fx-diff",
@@ -203,17 +208,6 @@ export const FX_CURRENCIES: Currency[] = (Object.keys(CURRENCY_SYMBOL) as Curren
  * başlıklarındaki aynı gerekçe). Rapor sayfalı olmadığı için gelen satır kümesi
  * TAMDIR; dönemdeki carilerin listesi de onun içindedir.
  */
-export function cariOptionsFromRows(
-  ...sources: Array<FxDiffRow[] | undefined>
-): Array<{ id: string; name: string }> {
-  const map = new Map<string, string>();
-  for (const rows of sources) {
-    for (const r of rows ?? []) if (!map.has(r.cari.id)) map.set(r.cari.id, r.cari.name);
-  }
-  return [...map.entries()]
-    .map(([id, name]) => ({ id, name }))
-    .sort((a, b) => a.name.localeCompare(b.name, "tr"));
-}
 
 /**
  * Raporun "nasıl okunur" notları.

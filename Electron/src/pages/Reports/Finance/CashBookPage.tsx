@@ -38,6 +38,19 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { CashAccountsTable } from "./CashAccountsTable";
 import { CashBookFilterBar } from "./CashBookFilterBar";
+import { ReportFilterNotes, ReportMultiSelect } from "../_components";
+import { useAxisNotes, useReportAxes } from "../_hooks/useReportAxes";
+import { AXIS_EMPTY_HINTS, AXIS_LABELS } from "../_hooks/reportAxisFilters";
+
+const CASH_AXES = ["cariId"] as const;
+const KATEGORI_ETIKET: Record<CashBookCategory, string> = {
+  CASH_TXN: "Kasa hareketi",
+  TRANSFER: "Virman",
+  PAYMENT: "Tahsilat / ödeme",
+  CHEQUE: "Çek",
+};
+/** Bu şerh süzgeç açıkken HER yerde yazılır: sayılar "süzülmüş toplam" sanılmasın. */
+const DOKUM_SERHI = "Bu süzgeçler YALNIZ hareket dökümünü daraltır: özet kartları, devir ve kapanış dönemin tamamını gösterir.";
 import { CashLedgerTable } from "./CashLedgerTable";
 import { ReportErrorCard } from "./ReportErrorCard";
 import { ReportNotesCard } from "./ReportNotesCard";
@@ -49,6 +62,7 @@ import {
   type CashAccountKind,
   type CashBookAccountSummary,
   type CashBookReport,
+  type CashBookCategory,
 } from "./cashBookService";
 import { moneyStr } from "./service";
 
@@ -204,6 +218,9 @@ export function CashBookPage() {
   const accountKind = (sp.get("accountKind") as CashAccountKind | null) ?? "";
   const includeInactive = sp.get("inactive") === "1";
   const accountId = sp.get("accountId") ?? "";
+  const kategori = (sp.get("kategori") as CashBookCategory | null) ?? "";
+  const yon = (sp.get("yon") as "IN" | "OUT" | null) ?? "";
+  const axes = useReportAxes();
 
   const patch = (key: string, value: string) => {
     const next = new URLSearchParams(sp);
@@ -220,13 +237,24 @@ export function CashBookPage() {
     staleTime: 30_000,
   });
 
+  // ⚠️ DÖKÜM EKSENLERİ YALNIZ DEFTER SORGUSUNA gider: özet sorgusu dönemin
+  // gerçeğidir ve süzgeçten etkilenmemelidir (backend sözleşmesi de böyle).
   const ledgerQ = useQuery({
-    queryKey: ["reports", "finance", "cash-book-ledger", params, accountId],
-    queryFn: () => getCashBookReport({ ...params, accountId }),
+    queryKey: ["reports", "finance", "cash-book-ledger", params, accountId, axes.sel.cariId, kategori, yon],
+    queryFn: () => getCashBookReport({ ...params, accountId, cariId: axes.sel.cariId, kategori: kategori || undefined, yon: yon || undefined }),
     enabled: Boolean(params.dateFrom && params.dateTo && accountId),
     staleTime: 30_000,
   });
 
+  // Seçenek kaynağı ÖZET yanıtıdır: defter sorgusu yalnız hesap seçiliyken
+  // koşar, seçenekler ise hesap seçilmeden de dolu olmalı.
+  const { secenekler, notes: axisNotlari } = useAxisNotes(summaryQ.data, axes.sel, CASH_AXES, {
+    ek: [
+      ...(kategori ? [`SÜZGEÇ — Hareket türü: ${KATEGORI_ETIKET[kategori]}.`] : []),
+      ...(yon ? [`SÜZGEÇ — Yön: ${yon === "IN" ? "Yalnız giriş" : "Yalnız çıkış"}.`] : []),
+      DOKUM_SERHI,
+    ],
+  });
   const summary = summaryQ.data?.data;
   const ledger = ledgerQ.data?.data;
   // ⚠️ SIRA: önce DEFTER yanıtının kendi özeti, sonra genel özet listesi, en son
@@ -262,9 +290,10 @@ export function CashBookPage() {
             summary,
             ledger: account && ledger?.rows ? { account, report: ledger } : null,
             periodLabel,
+            filterNotes: axisNotlari,
           })
         : null,
-    [summary, ledger, account, periodLabel],
+    [summary, ledger, account, periodLabel, axisNotlari],
   );
 
   return (
@@ -287,6 +316,20 @@ export function CashBookPage() {
           <ReportDateFilter reportKey="finance/cash-book" />
           <CashBookFilterBar
             accountKind={accountKind}
+            cariSelect={
+              <ReportMultiSelect
+                id="kasa-cari"
+                label={AXIS_LABELS.cariId}
+                options={secenekler?.cariId}
+                value={axes.sel.cariId}
+                onChange={(v) => axes.set("cariId", v)}
+                emptyHint={AXIS_EMPTY_HINTS.cariId}
+              />
+            }
+            kategori={kategori}
+            yon={yon}
+            onChangeKategori={(v) => patch("kategori", v)}
+            onChangeYon={(v) => patch("yon", v)}
             includeInactive={includeInactive}
             hasSelection={Boolean(accountId)}
             onChangeKind={(v) => patch("accountKind", v)}
@@ -299,6 +342,7 @@ export function CashBookPage() {
         </>
       }
     >
+      <ReportFilterNotes notes={axisNotlari} />
       {/* ⚠️ HATA DALI EN ÜSTTE. Aksi halde 403/500'de ekran "hareketi olan
           kasa/banka hesabı yok" der — kasa raporunda bu, boş ekrandan çok daha
           kötüdür (kullanıcı "para hiç hareket etmemiş" diye okur). Fabrika

@@ -21,15 +21,15 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarClock, Info, ShieldCheck, TimerOff, Users } from "lucide-react";
+import { CalendarClock, ShieldCheck, TimerOff, Users } from "lucide-react";
 import { MetricCard, ReportDateFilter, ReportExportBar, ReportPageLayout } from "../_components";
 import { useAsOfDay } from "../_hooks/useReportDay";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import { fmtDate, fmtInt } from "../_components/formatters";
 import { AgingBlockTable } from "./AgingBlockTable";
 import { AgingDetailDialog } from "./AgingDetailDialog";
-import { AgingFilterBar, type AgingFilterState } from "./AgingFilterBar";
-import { AgingReconBanner } from "./AgingReconBanner";
+import { AgingCariSelect, AgingFilterBar, type AgingFilterState } from "./AgingFilterBar";
+import { AgingReconBanner, AgingScopeNote } from "./AgingReconBanner";
 import { CariStatementDialog, type StatementTarget } from "./CariStatementDialog";
 import { ReportErrorCard } from "./ReportErrorCard";
 import { ReportNotesCard } from "./ReportNotesCard";
@@ -42,6 +42,10 @@ import {
   type Currency,
 } from "./service";
 import { lowerTr } from "../../../lib/tr-case";
+import { ReportFilterNotes } from "../_components";
+import { useAxisNotes, useReportAxes } from "../_hooks/useReportAxes";
+
+const AGING_AXES = ["cariId"] as const;
 
 export function AgingReportPage() {
   const [sp, setSp] = useSearchParams();
@@ -72,11 +76,16 @@ export function AgingReportPage() {
   // tanım gereği fark üretir (kasa defterindeki `storedComparable` ile aynı kural).
   const storedComparable = new Date(asOfIso).getTime() >= Date.now() - 60_000;
 
+  // CARİ EKSENİ (R5b-d): sunucu süzer, seçenek listesi `meta.secenekler`ten
+  // gelir. ⚠️ Ekrandaki ARAMA kutusuyla karıştırılmamalı: seçici RAPORU süzer
+  // (toplamlar ve mutabakat yeniden hesaplanır), arama yalnız EKRANI daraltır.
+  const axes = useReportAxes();
   const query = useQuery({
-    queryKey: ["reports", "finance", "aging", asOfIso, filters.kind, filters.currency, filters.onlyOverdue],
+    queryKey: ["reports", "finance", "aging", asOfIso, filters.kind, filters.currency, filters.onlyOverdue, axes.sel.cariId],
     queryFn: () =>
       getAgingReport({
         ...asOfParam,
+        cariId: axes.sel.cariId,
         kind: filters.kind || undefined,
         currency: filters.currency || undefined,
         onlyOverdue: filters.onlyOverdue,
@@ -84,7 +93,8 @@ export function AgingReportPage() {
     staleTime: 30_000,
   });
 
-  const report = query.data;
+  const envelope = query.data;
+  const report = envelope?.data;
   const [detailRow, setDetailRow] = useState<AgingCariRow | null>(null);
   const [statementTarget, setStatementTarget] = useState<StatementTarget | null>(null);
   // Ekstre bir DİYALOG raporudur (`finance/statement`); kapalıysa düğmesi belirmez ve diyalog
@@ -123,11 +133,12 @@ export function AgingReportPage() {
   const openCari = distinctCari(() => true);
   const overdueCari = distinctCari((r) => !isZeroAmount(r.overdueTotal as never));
   const mismatched = report?.reconciliation.mismatchedRows ?? 0;
+  const { secenekler, notes: axisNotlari } = useAxisNotes(envelope, axes.sel, AGING_AXES);
   const filterNote = needle ? `Ekranda “${filters.search.trim()}” araması uygulanıyor` : null;
 
   const spec = useMemo(
-    () => () => (report ? buildAgingExport({ report, visibleRowIds: visibleIds, asOfLabel, filterNote }) : null),
-    [report, visibleIds, asOfLabel, filterNote],
+    () => () => (report ? buildAgingExport({ report, visibleRowIds: visibleIds, asOfLabel, filterNote, filterNotes: axisNotlari }) : null),
+    [report, visibleIds, asOfLabel, filterNote, axisNotlari],
   );
 
   return (
@@ -135,17 +146,18 @@ export function AgingReportPage() {
       reportKey="finance/aging"
       title="Cari Yaşlandırma"
       description="Açık bakiyenin yaşı — kimden ne kadar alacağımız var ve ne kadar gecikmiş."
-      filters={<AgingFilterBar value={filters} onChange={patch} dateFilter={<ReportDateFilter reportKey="finance/aging" bare />} />}
+      filters={
+        <AgingFilterBar
+          value={filters}
+          onChange={patch}
+          dateFilter={<ReportDateFilter reportKey="finance/aging" bare />}
+          cariSelect={<AgingCariSelect options={secenekler?.cariId} value={axes.sel.cariId} onChange={(v) => axes.set("cariId", v)} />}
+        />
+      }
       actions={<ReportExportBar disabled={!report} buildSpec={spec} />}
     >
-      <div className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-        <Info className="mt-0.5 h-4 w-4 shrink-0" />
-        <span>
-          Bu rapor bir <strong>kesittir</strong>: seçilen günün sonu itibarıyla birikmiş açık bakiyeyi
-          gösterir, tarih aralığı almaz. Tutarlar cari bakiyesiyle aynı işaret sözleşmesini taşır:{" "}
-          <strong>pozitif = cari bize borçlu</strong>, negatif = biz ona borçluyuz.
-        </span>
-      </div>
+      <ReportFilterNotes notes={axisNotlari} />
+      <AgingScopeNote />
 
       <AgingReconBanner recon={report?.reconciliation} />
 

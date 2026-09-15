@@ -52,6 +52,8 @@ export interface StatementExportRow {
 }
 
 export interface StatementExportInput {
+  /** Süzgeç satırları (K10) — ekrandakiyle AYNI dizi. */
+  filterNotes?: string[];
   cariName: string;
   /**
    * Cari kodu — varsa başlık satırında parantez içinde basılır, YOKSA hiç
@@ -115,10 +117,11 @@ const COLUMNS: ReportColumn[] = [
 ];
 
 export function buildStatementExport(input: StatementExportInput): ReportExportSpec {
-  const { cariName, cariCode, currency, fromYmd, toYmd, rows } = input;
+  const { cariName, cariCode, currency, fromYmd, toYmd, rows, filterNotes = [] } = input;
   const periodLabel = `${fmtYmd(fromYmd)} – ${fmtYmd(toYmd)}`;
 
   const meta = [
+    ...filterNotes,
     `Cari: ${cariName}${cariCode ? ` (${cariCode})` : ""}`,
     `Para birimi: ${currency} — ekstre TEK para biriminde tutulur; carinin başka para birimindeki hareketleri bu dosyada YOKTUR.`,
     "Bakiye pozitifse cari size borçludur, negatifse siz ona borçlusunuz.",

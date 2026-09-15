@@ -16,7 +16,7 @@
 // farklı bir iştir.
 // =============================================================================
 
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Info } from "lucide-react";
 import { fmtInt } from "../_components/formatters";
 import type { AgingReport } from "./service";
 
@@ -52,6 +52,23 @@ export function AgingReconBanner({ recon }: Props) {
           </p>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Kapsam bandı: yaşlandırmanın KESİT olduğunu ve işaret sözleşmesini söyler.
+ * Sayfadan ayrı bileşen — metin uzun, sayfa gövdesi okunurluk sınırındaydı.
+ */
+export function AgingScopeNote() {
+  return (
+    <div className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+      <Info className="mt-0.5 h-4 w-4 shrink-0" />
+      <span>
+        Bu rapor bir <strong>kesittir</strong>: seçilen günün sonu itibarıyla birikmiş açık bakiyeyi
+        gösterir, tarih aralığı almaz. Tutarlar cari bakiyesiyle aynı işaret sözleşmesini taşır:{" "}
+        <strong>pozitif = cari bize borçlu</strong>, negatif = biz ona borçluyuz.
+      </span>
     </div>
   );
 }

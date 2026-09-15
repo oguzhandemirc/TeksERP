@@ -22,6 +22,14 @@ export interface ReportAxisOption {
  * raporun KENDİ yanıtından gelir (rapor kitlesinde 403 riski yok).
  */
 export interface ReportSecenekler {
+  /** Finans ekseni (R5b-d): cari kimliği — müşteri ve fasoncu aynı listede. */
+  cariId?: ReportAxisOption[];
+  /** Kasa/banka hesabı (kasa defteri) — kod + ad. */
+  accountId?: ReportAxisOption[];
+  /** KDV oranı: `code` sorgu biçimi ("20.00"), `ad` gösterim ("%20"). */
+  oran?: ReportAxisOption[];
+  /** Cari ekstre belge tipi: `code` HAM ENUM, Türkçe etiket panelde. */
+  belgeTipi?: ReportAxisOption[];
   customerId?: ReportAxisOption[];
   itemId?: ReportAxisOption[];
   colorId?: ReportAxisOption[];
@@ -31,6 +39,12 @@ export interface ReportSecenekler {
 
 /** Süzgeç yankısı: sunucunun UYGULADIĞI süzgeç + kaç satırın elendiği. */
 export interface ReportSuzgec {
+  cariId?: string[];
+  accountId?: string;
+  oran?: string;
+  belgeTipi?: string;
+  kategori?: string;
+  yon?: string;
   customerId?: string[];
   itemId?: string[];
   colorId?: string[];

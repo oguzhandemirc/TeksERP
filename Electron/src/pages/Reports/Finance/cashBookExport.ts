@@ -47,10 +47,12 @@ export function buildCashBookExport(opts: {
   /** Tek hesap seçiliyse o hesabın defteri — yoksa `null`. */
   ledger: { account: CashBookAccountSummary; report: CashBookReport } | null;
   periodLabel: string;
+  /** Döküm süzgeci satırları (K10) — ekrandakiyle AYNI dizi. */
+  filterNotes?: string[];
 }): ReportExportSpec {
-  const { summary, ledger, periodLabel } = opts;
+  const { summary, ledger, periodLabel, filterNotes = [] } = opts;
 
-  const meta = [`Dönem: ${periodLabel}`, ...summary.notes];
+  const meta = [...filterNotes, `Dönem: ${periodLabel}`, ...summary.notes];
   // Defter sorgusunun kendi notları (satır kırpma gibi) özet notlarında YOKTUR;
   // atlanırsa "5000 satırda kesildi" uyarısı tam da eksik satırların olduğu
   // dosyada görünmez olurdu.

@@ -27,7 +27,10 @@ import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { MetricCard, ReportExportBar, ReportPageLayout } from "../_components";
 import { fmtDate } from "../_components/formatters";
+import { useSearchParams } from "react-router-dom";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
+import { ReportDateFilter, ReportFilterNotes } from "../_components";
+import { filterNotes } from "../_hooks/reportAxisFilters";
 import { ReportErrorCard } from "./ReportErrorCard";
 import { ReportNotesCard } from "./ReportNotesCard";
 import { moneyStr, type Currency } from "./service";
@@ -36,20 +39,39 @@ import {
   getVatSummaryReport,
   vatRateLabel,
   vatRowKindLabel,
+  VAT_YONLERI,
+  VAT_YON_ETIKET,
   type VatBlock,
+  type VatYon,
 } from "./vatService";
 
 export function VatSummaryPage() {
   const { params, dateFrom, dateTo } = useReportDateRange("finance/vat-summary");
+  // ⚠️ CARİ EKSENİ YOK: backend şeması `.strict()` ve `cariId` KABUL ETMİYOR —
+  // göndermek 400 verirdi. KDV özeti belge bazlıdır, cari bazlı değil.
+  const [sp, setSp] = useSearchParams();
+  const yon = (sp.get("yon") as VatYon | null) ?? "";
+  const oran = sp.get("oran") ?? "";
+  const patch = (key: string, value: string) => {
+    const next = new URLSearchParams(sp);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    setSp(next, { replace: true });
+  };
 
   const q = useQuery({
-    queryKey: ["reports", "finance", "vat-summary", params],
-    queryFn: () => getVatSummaryReport(params),
+    queryKey: ["reports", "finance", "vat-summary", params, yon, oran],
+    queryFn: () => getVatSummaryReport({ ...params, yon: yon || undefined, oran: oran || undefined }),
     enabled: Boolean(params.dateFrom && params.dateTo),
     staleTime: 30_000,
   });
 
   const report = q.data?.data;
+  const oranSecenekleri = q.data?.meta?.secenekler?.oran ?? [];
+  const suzgecNotlari = filterNotes([
+    { eksen: "Yön", degerler: yon ? [VAT_YON_ETIKET[yon]] : [] },
+    { eksen: "KDV oranı", degerler: oran ? [oranSecenekleri.find((o) => o.code === oran)?.ad ?? oran] : [] },
+  ]);
   const periodLabel = `${fmtDate(dateFrom)} – ${fmtDate(dateTo)}`;
   const empty = report && report.sales.docCount === 0 && report.purchase.docCount === 0;
   const reconBroken =
@@ -57,8 +79,8 @@ export function VatSummaryPage() {
     (report.sales.totalsTry.reconDiff !== "0.00" || report.purchase.totalsTry.reconDiff !== "0.00");
 
   const spec = useMemo(
-    () => () => (report ? buildVatSummaryExport({ report, periodLabel }) : null),
-    [report, periodLabel],
+    () => () => (report ? buildVatSummaryExport({ report, periodLabel, filterNotes: suzgecNotlari }) : null),
+    [report, periodLabel, suzgecNotlari],
   );
 
   return (
@@ -67,7 +89,34 @@ export function VatSummaryPage() {
       title="KDV Dönem Özeti"
       description="Satış ve alış faturalarının oran kırılımlı matrah + KDV + tevkifat özeti — beyanname değildir, muhasebeciye giden dönem özetidir."
       actions={<ReportExportBar disabled={!report} buildSpec={spec} />}
+      filters={
+        <div className="flex flex-wrap items-center gap-1 border-b px-3 py-2 text-xs">
+          <ReportDateFilter reportKey="finance/vat-summary" bare />
+          <span className="ml-2 mr-1 text-muted-foreground">Yön</span>
+          <select value={yon} onChange={(e) => patch("yon", e.target.value)} className="h-7 rounded-md border bg-background px-2 text-xs">
+            <option value="">Tüm yönler</option>
+            {VAT_YONLERI.map((y) => (
+              <option key={y} value={y}>{VAT_YON_ETIKET[y]}</option>
+            ))}
+          </select>
+          {/* Oran AÇIK küme: seçenekler dönemde GEÇEN oranlardan gelir (sunucu),
+              sabit bir liste yazmak kaldırılmış bir oranı sonsuza dek çizerdi. */}
+          <span className="ml-2 mr-1 text-muted-foreground">KDV oranı</span>
+          <select
+            value={oran}
+            onChange={(e) => patch("oran", e.target.value)}
+            disabled={oranSecenekleri.length === 0}
+            className="h-7 rounded-md border bg-background px-2 text-xs disabled:opacity-50"
+          >
+            <option value="">{oranSecenekleri.length === 0 ? "Dönemde oran yok" : "Tüm oranlar"}</option>
+            {oranSecenekleri.map((o) => (
+              <option key={o.code} value={o.code!}>{o.ad}</option>
+            ))}
+          </select>
+        </div>
+      }
     >
+      <ReportFilterNotes notes={suzgecNotlari} />
       {/* Hata dalı EN ÜSTTE — 403/500'de "fatura yok" demek, boş ekrandan
           kötüdür (fabrika kurulumunda en sık sebep `finance.enabled` kapalı). */}
       {q.isError ? <ReportErrorCard error={q.error} onRetry={() => void q.refetch()} /> : null}

@@ -6,15 +6,20 @@
 // katalogdaki `kesit` sözleşmesiyle ortak `ReportDateFilter` çizer (`asOf` = günün
 // SONU); bu şerit yalnız EK eksenleri (tür · para birimi · vadesi geçen · arama) taşır.
 //
-// ⚠️ Cari SEÇİCİ yok, cari ARAMA var. Seçici `/api/finance/cari` ucunu
-// gerektirirdi ve o uç `finance:read` ister — yalnız `report:finance` taşıyan
-// yönetim kullanıcısı 403 alır, filtre sessizce ölürdü. Arama, gelen satırlar
-// üzerinde çalışır (rapor sayfalı değildir, yani liste tamdır).
+// ⚠️ CARİ SEÇİCİ ve CARİ ARAMA İKİSİ DE VAR ve FARKLI ŞEYLER yaparlar:
+// seçici RAPORU süzer (istek sunucuya gider, toplamlar ve mutabakat yeniden
+// hesaplanır), arama yalnız EKRANDAKİ satırları daraltır (toplamlar değişmez,
+// çıktı bunu şerhiyle söyler). Eski gerekçe ("cari ucu `finance:read` ister,
+// seçici 403 alır") ARTIK GEÇERSİZ: liste raporun kendi yanıtından gelir
+// (`meta.secenekler.cariId`, R5b-d) — ayrı uç, ayrı izin yok.
 // =============================================================================
 
 import { Search, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { ReportMultiSelect } from "../_components";
+import { AXIS_EMPTY_HINTS, AXIS_LABELS } from "../_hooks/reportAxisFilters";
+import type { ReportAxisOption } from "../_services/types";
 import { Input } from "@/components/ui/input";
 import type { CariKind, Currency } from "./service";
 
@@ -32,9 +37,11 @@ interface Props {
   onChange: (patch: Partial<AgingFilterState>) => void;
   /** Kesit girdisi — düzen değil şerit çizer ki tarih ile ek eksenler AYNI satırda dursun. */
   dateFilter: ReactNode;
+  /** Sunucu tarafı cari süzgeci (R5b-d) — aramanın yanında, onunla karışmasın diye ayrı etiketli. */
+  cariSelect?: ReactNode;
 }
 
-export function AgingFilterBar({ value, onChange, dateFilter }: Props) {
+export function AgingFilterBar({ value, onChange, dateFilter, cariSelect }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-1 border-b px-3 py-2 text-xs">
       {dateFilter}
@@ -72,12 +79,14 @@ export function AgingFilterBar({ value, onChange, dateFilter }: Props) {
         Yalnız vadesi geçenler
       </Button>
 
+      {cariSelect ? <div className="ml-2">{cariSelect}</div> : null}
+
       <div className="relative ml-2">
         <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
           value={value.search}
           onChange={(e) => onChange({ search: e.target.value })}
-          placeholder="Cari adı / kodu ara…"
+          placeholder="Ekranda ara (toplamı değiştirmez)…"
           className="h-7 w-56 pl-7 text-xs"
         />
       </div>
@@ -94,5 +103,19 @@ export function AgingFilterBar({ value, onChange, dateFilter }: Props) {
         </Button>
       ) : null}
     </div>
+  );
+}
+
+/** Cari çoklu seçicisi — şeridin içinde yaşar ki sayfa gövdesi şişmesin. */
+export function AgingCariSelect({ options, value, onChange }: { options: ReportAxisOption[] | undefined; value: string[]; onChange: (v: string[]) => void }) {
+  return (
+    <ReportMultiSelect
+      id="aging-cari"
+      label={AXIS_LABELS.cariId}
+      options={options}
+      value={value}
+      onChange={onChange}
+      emptyHint={AXIS_EMPTY_HINTS.cariId}
+    />
   );
 }

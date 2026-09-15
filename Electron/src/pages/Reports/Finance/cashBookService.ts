@@ -156,7 +156,17 @@ export interface CashBookApiParams {
   accountId?: string;
   accountKind?: CashAccountKind;
   includeInactive?: boolean;
+  /**
+   * ⚠️ Üçü de YALNIZ HAREKET DÖKÜMÜNÜ daraltır (R5b-d): özet, devir ve kapanış
+   * dönem gerçeğidir ve bu süzgeçlerden ETKİLENMEZ — backend sözleşmesi böyle.
+   */
+  cariId?: string[];
+  kategori?: CashBookCategory;
+  yon?: "IN" | "OUT";
 }
+
+/** Hareket dökümü kategorisi — backend enum'unun aynası. */
+export type CashBookCategory = "CASH_TXN" | "TRANSFER" | "PAYMENT" | "CHEQUE";
 
 export async function getCashBookReport(p: CashBookApiParams): Promise<ReportResponse<CashBookReport>> {
   // Boş değer GÖNDERİLMEZ: backend şeması `.strict()` ve boş string tarih
@@ -167,6 +177,9 @@ export async function getCashBookReport(p: CashBookApiParams): Promise<ReportRes
   if (p.accountId) params.accountId = p.accountId;
   if (p.accountKind) params.accountKind = p.accountKind;
   if (p.includeInactive) params.includeInactive = "true";
+  if (p.cariId?.length) params.cariId = p.cariId.join(",");
+  if (p.kategori) params.kategori = p.kategori;
+  if (p.yon) params.yon = p.yon;
   const res = await apiClient.get<ReportResponse<CashBookReport>>(
     "/api/reports/finance/cash-book",
     { params },

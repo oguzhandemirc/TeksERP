@@ -63,7 +63,7 @@ export function AgingDetailDialog({ row, asOf, open, onOpenChange }: Props) {
     queryFn: () =>
       getAgingReport({
         asOf,
-        cariId: row!.cariId,
+        cariId: [row!.cariId],
         currency: row!.currency,
         detail: true,
       }),
@@ -72,7 +72,7 @@ export function AgingDetailDialog({ row, asOf, open, onOpenChange }: Props) {
   });
 
   const currency = row?.currency ?? "TRY";
-  const items = q.data?.blocks.find((b) => b.currency === currency)?.rows[0]?.items ?? [];
+  const items = q.data?.data.blocks.find((b) => b.currency === currency)?.rows[0]?.items ?? [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

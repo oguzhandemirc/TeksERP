@@ -28,7 +28,7 @@
 import axios from "axios";
 import apiClient from "@/services/apiClient";
 import { money, type Currency } from "@/pages/Finance/service";
-import type { ReportResponse } from "../_services/types";
+import type { ReportResponse, ReportSecenekler, ReportSuzgec } from "../_services/types";
 
 export type { Currency };
 
@@ -218,7 +218,11 @@ export interface AgingReport {
 export interface AgingApiParams {
   /** KESİT anı (ISO). Tarih ARALIĞI değil — backend `dateFrom/dateTo`'yu 400'ler. */
   asOf?: string;
-  cariId?: string;
+  /**
+   * Cari süzgeci — LİSTE (CSV). ⚠️ TEK öge bugünkü tekil davranışa düşer ve
+   * `detail` fatura dökümünü korur; iki ve fazlasında backend döküm üretmez.
+   */
+  cariId?: string[];
   kind?: CariKind;
   currency?: Currency;
   onlyOverdue?: boolean;
@@ -226,23 +230,29 @@ export interface AgingApiParams {
   detail?: boolean;
 }
 
-export async function getAgingReport(p: AgingApiParams): Promise<AgingReport> {
+/** Yaşlandırma zarfı: gövde + seçici kaynağı + süzgeç yankısı (R5b-d). */
+export interface AgingEnvelope {
+  success: true;
+  data: AgingReport;
+  meta?: { secenekler?: ReportSecenekler };
+  suzgec?: ReportSuzgec;
+}
+
+export async function getAgingReport(p: AgingApiParams): Promise<AgingEnvelope> {
   // ⚠️ Boş değer GÖNDERİLMEZ: şema `.strict()` ve `asOf: ""` "Geçersiz tarih"
   // 400'ü üretir — kullanıcı hiçbir filtre seçmemişken rapor patlardı.
   const params: Record<string, string> = {};
   if (p.asOf) params.asOf = p.asOf;
-  if (p.cariId) params.cariId = p.cariId;
+  if (p.cariId?.length) params.cariId = p.cariId.join(",");
   if (p.kind) params.kind = p.kind;
   if (p.currency) params.currency = p.currency;
   if (p.onlyOverdue) params.onlyOverdue = "true";
   if (p.detail) params.detail = "true";
-  const res = await apiClient.get<{ success: true; data: AgingReport }>(
-    "/api/reports/finance/aging",
-    { params },
-  );
+  const res = await apiClient.get<AgingEnvelope>("/api/reports/finance/aging", { params });
   // ⚠️ Bu uç `reportEnvelope` KULLANMAZ (kesit raporunun `range`'i yoktur) —
-  // yanıtta `range` aramak `undefined` okumak olurdu.
-  return res.data.data;
+  // yanıtta `range` aramak `undefined` okumak olurdu; `meta.secenekler` ve
+  // `suzgec` yine zarfın kökündedir (R5b-d).
+  return res.data;
 }
 
 // -----------------------------------------------------------------------------
@@ -304,14 +314,25 @@ export const CARI_TXN_SOURCE_LABEL: Record<string, string> = {
 };
 
 export async function getStatementReport(p: {
+  /** ⚠️ TEKİL kalır (liste DEĞİL): ekstre TEK cari içindir, yürüyen bakiye iki cariyle TANIMSIZDIR. */
   cariId: string;
   currency: Currency;
   dateFrom: string;
   dateTo: string;
+  /** Belge tipi — YALNIZ satır dökümünü daraltır; devir/bakiye/toplamlar dönem gerçeğidir. */
+  belgeTipi?: string;
 }): Promise<ReportResponse<StatementReport>> {
   const res = await apiClient.get<ReportResponse<StatementReport>>(
     "/api/reports/finance/statement",
-    { params: { cariId: p.cariId, currency: p.currency, dateFrom: p.dateFrom, dateTo: p.dateTo } },
+    {
+      params: {
+        cariId: p.cariId,
+        currency: p.currency,
+        dateFrom: p.dateFrom,
+        dateTo: p.dateTo,
+        ...(p.belgeTipi ? { belgeTipi: p.belgeTipi } : {}),
+      },
+    },
   );
   return res.data;
 }

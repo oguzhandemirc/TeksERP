@@ -65,7 +65,7 @@ describe("axisNotes — sayfanın süzgeç satırları (ekran = çıktı)", () =
     reasonCode: [{ code: "STOK_YOK", ad: "Stok yok" }],
   };
   const bos: Record<AxisKey, string[]> & { destination: Destination | "" } = {
-    customerId: [], itemId: [], colorId: [], subcontractorId: [], reasonCode: [], destination: "",
+    customerId: [], itemId: [], colorId: [], subcontractorId: [], reasonCode: [], cariId: [], destination: "",
   };
 
   it("süzgeç yokken HİÇ satır yok — ek şerh de kesti cümlesi de yazılmaz", () => {

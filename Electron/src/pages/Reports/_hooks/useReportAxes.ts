@@ -17,7 +17,7 @@ export interface ReportAxesState {
   any: boolean;
 }
 
-const AXES: AxisKey[] = ["customerId", "itemId", "colorId", "subcontractorId", "reasonCode"];
+const AXES: AxisKey[] = ["customerId", "itemId", "colorId", "subcontractorId", "reasonCode", "cariId"];
 
 /** Eksen durumu URL'de yaşar: paylaşılan bağlantı aynı süzgeci açar. */
 export function useReportAxes(): ReportAxesState {

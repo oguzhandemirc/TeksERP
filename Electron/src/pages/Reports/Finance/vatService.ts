@@ -88,7 +88,21 @@ export interface VatSummaryReport {
 export interface VatSummaryApiParams {
   dateFrom?: string;
   dateTo?: string;
+  /** Yön — KAPALI enum (panel statik çizer). İade yönleri AYRI değerlerdir. */
+  yon?: VatYon;
+  /** Oran GRUPLAMA ANAHTARIYLA aynı biçimde: "20.00" (iki hane şart). */
+  oran?: string;
 }
+
+/** Backend `VAT_YONLERI` aynası — iade yönleri ayrı değer. */
+export const VAT_YONLERI = ["SALES", "SALES_RETURN", "PURCHASE", "PURCHASE_RETURN"] as const;
+export type VatYon = (typeof VAT_YONLERI)[number];
+export const VAT_YON_ETIKET: Record<VatYon, string> = {
+  SALES: "Satış",
+  SALES_RETURN: "Satış iadesi",
+  PURCHASE: "Alış",
+  PURCHASE_RETURN: "Alış iadesi",
+};
 
 export async function getVatSummaryReport(
   p: VatSummaryApiParams,
@@ -98,6 +112,8 @@ export async function getVatSummaryReport(
   const params: Record<string, string> = {};
   if (p.dateFrom) params.dateFrom = p.dateFrom;
   if (p.dateTo) params.dateTo = p.dateTo;
+  if (p.yon) params.yon = p.yon;
+  if (p.oran) params.oran = p.oran;
   const res = await apiClient.get<ReportResponse<VatSummaryReport>>(
     "/api/reports/finance/vat-summary",
     { params },

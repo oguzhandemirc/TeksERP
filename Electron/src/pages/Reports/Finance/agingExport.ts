@@ -30,10 +30,15 @@ export function buildAgingExport(opts: {
   asOfLabel: string;
   /** Ekrandaki arama/süzgeç metni; doluysa toplamın kapsamı dipnotla söylenir. */
   filterNote: string | null;
+  /** Sunucu süzgeci satırları (K10) — ekrandakiyle AYNI dizi. */
+  filterNotes?: string[];
 }): ReportExportSpec {
-  const { report, visibleRowIds, asOfLabel, filterNote } = opts;
+  const { report, visibleRowIds, asOfLabel, filterNote, filterNotes = [] } = opts;
 
   const meta = [
+    // SUNUCU süzgeci en üstte: bu satırlar raporun KAPSAMINI değiştirir, ekran
+    // araması ise yalnız görünen satırları — ikisi ayrı cümlelerle yazılır.
+    ...filterNotes,
     `Kesit: ${asOfLabel} itibarıyla açık bakiye (tarih aralığı değil — yaşlandırma birikmiş açığı sorar).`,
     ...report.notes,
   ];

@@ -37,16 +37,20 @@ import { MetricCard, ReportDateFilter, ReportExportBar, ReportPageLayout } from 
 import { fmtDate, fmtDateTime, fmtInt } from "../_components/formatters";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
 import { FxDiffFilterBar } from "./FxDiffFilterBar";
+import { ReportFilterNotes, ReportMultiSelect } from "../_components";
+import { useAxisNotes, useReportAxes } from "../_hooks/useReportAxes";
+import { AXIS_EMPTY_HINTS, AXIS_LABELS } from "../_hooks/reportAxisFilters";
+
+const FX_AXES = ["cariId"] as const;
 import { ReportErrorCard } from "./ReportErrorCard";
 import { ReportNotesCard } from "./ReportNotesCard";
 import { buildFxDiffExport } from "./fxDiffExport";
-import { moneyStr, type Currency } from "./service";
+import { moneyStr, type CariKind, type Currency } from "./service";
 import {
   FX_DIFF_NOTES,
   FX_TONE_CLASS,
   FX_TONE_LABEL,
   FX_TONE_METRIC,
-  cariOptionsFromRows,
   fxRate,
   fxTone,
   getFxDiffReport,
@@ -59,38 +63,30 @@ export function FxDiffPage() {
 
   // Filtre URL'de yaşar: paylaşılan link filtresiyle birlikte gider (rapor
   // sayfalarının ortak sözleşmesi — `useReportDateRange` de böyle çalışır).
-  const cariId = sp.get("cariId") ?? "";
+  // Cari ekseni ortak katmanda (`?cariId=a,b`); para birimi ve tür bu rapora özgü.
+  const axes = useReportAxes();
   const currency = (sp.get("currency") as Currency | null) ?? "";
-  const patch = (p: { cariId?: string; currency?: string }) => {
+  const kind = (sp.get("kind") as CariKind | null) ?? "";
+  const patch = (p: { currency?: string; kind?: string }) => {
     const next = new URLSearchParams(sp);
     const set = (k: string, v: string) => (v ? next.set(k, v) : next.delete(k));
-    if (p.cariId !== undefined) set("cariId", p.cariId);
     if (p.currency !== undefined) set("currency", p.currency);
+    if (p.kind !== undefined) set("kind", p.kind);
     setSp(next, { replace: true });
   };
 
   const ready = Boolean(params.dateFrom && params.dateTo);
 
   const q = useQuery({
-    queryKey: ["reports", "finance", "fx-diff", params, cariId, currency],
+    queryKey: ["reports", "finance", "fx-diff", params, axes.sel.cariId, currency, kind],
     queryFn: () =>
       getFxDiffReport({
         ...params,
-        cariId: cariId || undefined,
+        cariId: axes.sel.cariId,
         currency: currency || undefined,
+        kind: kind || undefined,
       }),
     enabled: ready,
-    staleTime: 30_000,
-  });
-
-  // ⚠️ ANAHTAR, cari seçilmeden önceki ana sorgunun anahtarıyla BİREBİR aynı
-  // olmak zorunda (`cariId` yerinde boş string) — ayrışırsa her cari seçiminde
-  // aynı veri ikinci kez çekilir. `enabled` sayesinde cari seçili değilken bu
-  // sorgu hiç koşmaz; seçenekler zaten ana yanıtın satırlarından türer.
-  const catalogQ = useQuery({
-    queryKey: ["reports", "finance", "fx-diff", params, "", currency],
-    queryFn: () => getFxDiffReport({ ...params, currency: currency || undefined }),
-    enabled: ready && Boolean(cariId),
     staleTime: 30_000,
   });
 
@@ -98,18 +94,17 @@ export function FxDiffPage() {
   const summary = report?.summary;
   const periodLabel = `${fmtDate(dateFrom)} – ${fmtDate(dateTo)}`;
 
-  const cariOptions = useMemo(
-    () => cariOptionsFromRows(catalogQ.data?.data.rows, report?.rows),
-    [catalogQ.data, report],
-  );
-  const cariName = cariOptions.find((c) => c.id === cariId)?.name ?? null;
-
-  const scopeLines = useMemo(() => {
-    const lines: string[] = [];
-    if (cariId) lines.push(`Cari süzgeci: ${cariName ?? "(seçili cari)"}`);
-    if (currency) lines.push(`Para birimi süzgeci: ${currency}`);
-    return lines;
-  }, [cariId, cariName, currency]);
+  // ⚠️ SEÇENEK KAYNAĞI ARTIK SUNUCU (`meta.secenekler.cariId`, R5b-d): eskiden
+  // seçenekler satırlardan türetiliyor ve süzgeçliyken liste daralmasın diye
+  // İKİNCİ bir sorgu koşuluyordu. Sunucu listeyi süzgeçten bağımsız döndürdüğü
+  // için o sorgu KALKTI — bir istek, tek kaynak.
+  const { secenekler, notes: axisNotlari } = useAxisNotes(q.data, axes.sel, FX_AXES, {
+    ek: [
+      ...(currency ? [`SÜZGEÇ — Para birimi: ${currency}.`] : []),
+      ...(kind ? [`SÜZGEÇ — Cari türü: ${kind === "CUSTOMER" ? "Müşteri" : "Fason"}.`] : []),
+    ],
+  });
+  const scopeLines = axisNotlari;
 
   const spec = useMemo(
     () => () => (report ? buildFxDiffExport({ report, periodLabel, scopeLines }) : null),
@@ -133,13 +128,21 @@ export function FxDiffPage() {
         <>
           <ReportDateFilter reportKey="finance/fx-diff" />
           <FxDiffFilterBar
-            cariId={cariId}
-            cariOptions={cariOptions}
+            cariSelect={
+              <ReportMultiSelect
+                id="fx-cari"
+                label={AXIS_LABELS.cariId}
+                options={secenekler?.cariId}
+                value={axes.sel.cariId}
+                onChange={(v) => axes.set("cariId", v)}
+                emptyHint={AXIS_EMPTY_HINTS.cariId}
+              />
+            }
             currency={currency}
-            optionsLoading={q.isLoading && cariOptions.length === 0}
-            onChangeCari={(v) => patch({ cariId: v })}
+            kind={kind}
+            onChangeKind={(v) => patch({ kind: v })}
             onChangeCurrency={(v) => patch({ currency: v })}
-            onClear={() => patch({ cariId: "", currency: "" })}
+            onClear={() => { patch({ currency: "", kind: "" }); axes.set("cariId", []); }}
           />
         </>
       }
@@ -148,6 +151,7 @@ export function FxDiffPage() {
           DEMEZ. Bu olumlu bir iddiadır ve yanlıştır — fabrika kurulumunda en sık
           sebep `finance.enabled` kapalı olmasıdır ve o cümle yalnız hata
           gövdesinde yaşar (`ReportErrorCard` başlığı). */}
+      <ReportFilterNotes notes={axisNotlari} />
       {q.isError ? <ReportErrorCard error={q.error} onRetry={() => void q.refetch()} /> : null}
 
       <div className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
@@ -245,7 +249,7 @@ export function FxDiffPage() {
           <strong>kapamanın tarihidir</strong> — faturanın değil.
           {/* Kapalı bir süzgeci sebep gibi göstermek kullanıcıyı olmayan bir
               düğmeyi aramaya gönderir — ipucu yalnız süzgeç AÇIKKEN basılır. */}
-          {cariId || currency ? " Cari/para birimi süzgecini gevşetip tekrar bakın." : ""}
+          {axes.any || currency || kind ? " Cari / tür / para birimi süzgecini gevşetip tekrar bakın." : ""}
         </div>
       ) : report ? (
         <Card className="overflow-hidden">

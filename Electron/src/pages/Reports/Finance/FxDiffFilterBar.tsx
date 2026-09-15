@@ -7,69 +7,46 @@
 // emsali). Yalnız bu şeridi göndermek, raporun en temel filtresini (dönem)
 // ekrandan silerdi.
 //
-// ⚠️ CARİ SEÇENEKLERİ VERİDEN GELİR, CARİ KATALOĞUNDAN DEĞİL. `/api/finance/cari`
-// ucu `finance:read` ister; yalnız `report:finance` taşıyan yönetim kullanıcısı
-// orada 403 alır ve filtre sessizce ölürdü (`AgingFilterBar` başlığındaki aynı
-// gerekçe). Seçenekleri dönemin satırlarından türetmek ayrıca "hiç kur farkı
-// doğurmamış cariyi seçtirme" faydasını da verir.
-//
-// ⚠️ SEÇİLİ CARİ LİSTEDE YOKSA SENTETİK SATIR BASILIR. Derin bağlantıyla
-// (`?cariId=…`) gelen ya da dönemi değiştirdikten sonra artık satırı kalmayan
-// cari, aksi hâlde BOŞ bir seçici + boş tablo üretirdi — kullanıcı bunu "filtre
-// bozuk" diye okur. "Temizle" düğmesi de bu yüzden yalnız filtre AÇIKKEN çıkar.
+// ⚠️ CARİ SEÇİCİSİ ARTIK RAPORUN KENDİ YANITINDAN beslenir (`meta.secenekler.cariId`,
+// R5b-d) ve bileşen olarak DIŞARIDAN gelir (`cariSelect`): kaynak sunucuda, çizim
+// ortak `ReportMultiSelect`te. Eski iki mekanizma (satırlardan türetme + süzgeçsiz
+// ikinci sorgu) KALKTI — liste süzgeçten bağımsız döndüğü için daralma yok.
+// `/api/finance/cari` ucu hâlâ kullanılmaz (o uç `finance:read` ister, rapor
+// kitlesinde 403 riski).
 // =============================================================================
 
 import { Button } from "@/components/ui/button";
-import type { Currency } from "./service";
+import type { ReactNode } from "react";
+import type { CariKind, Currency } from "./service";
 import { FX_CURRENCIES } from "./fxDiffService";
 
-export interface CariOption {
-  id: string;
-  name: string;
-}
-
 interface Props {
-  cariId: string;
-  cariOptions: CariOption[];
+  /** Cari çoklu seçicisi — sayfa çizer, şerit yerleştirir. */
+  cariSelect: ReactNode;
   currency: Currency | "";
-  /** Seçenekler henüz yüklenmediyse seçici pasif — boş liste "cari yok" der. */
-  optionsLoading?: boolean;
-  onChangeCari: (v: string) => void;
+  /** Cari türü — yaşlandırmadaki eksenin kardeşi. */
+  kind: CariKind | "";
+  onChangeKind: (v: string) => void;
   onChangeCurrency: (v: string) => void;
   onClear: () => void;
 }
 
-export function FxDiffFilterBar({
-  cariId,
-  cariOptions,
-  currency,
-  optionsLoading,
-  onChangeCari,
-  onChangeCurrency,
-  onClear,
-}: Props) {
-  const hasFilter = Boolean(cariId || currency);
-  const selectedMissing = Boolean(cariId) && !cariOptions.some((c) => c.id === cariId);
+export function FxDiffFilterBar({ cariSelect, currency, kind, onChangeKind, onChangeCurrency, onClear }: Props) {
+  const hasFilter = Boolean(currency || kind);
 
   return (
-    <div className="flex flex-wrap items-center gap-1 border-b px-3 py-2 text-xs">
-      <span className="mr-1 text-muted-foreground">Cari</span>
+    <div className="flex flex-wrap items-end gap-1 border-b px-3 py-2 text-xs">
+      {cariSelect}
+
+      <span className="ml-2 mr-1 text-muted-foreground">Cari türü</span>
       <select
-        value={cariId}
-        onChange={(e) => onChangeCari(e.target.value)}
-        disabled={optionsLoading}
-        className="h-7 max-w-[260px] rounded-md border bg-background px-2 text-xs disabled:opacity-50"
-        title="Seçenekler dönemin kur farkı satırlarından gelir"
+        value={kind}
+        onChange={(e) => onChangeKind(e.target.value)}
+        className="h-7 rounded-md border bg-background px-2 text-xs"
       >
         <option value="">Tüm cariler</option>
-        {selectedMissing ? (
-          <option value={cariId}>Seçili cari (bu dönemde satırı yok)</option>
-        ) : null}
-        {cariOptions.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
+        <option value="CUSTOMER">Müşteri</option>
+        <option value="SUBCONTRACTOR">Fason</option>
       </select>
 
       <span className="ml-2 mr-1 text-muted-foreground">Para birimi</span>

@@ -29,7 +29,8 @@ vi.mock("@/hooks/useFavorites", () => ({
 }));
 vi.mock("./service", async (importOriginal) => {
   const mod = await importOriginal<typeof import("./service")>();
-  return { ...mod, getAgingReport: () => Promise.resolve(REPORT) };
+  // R5b-d: uç artık ZARF döner (`data` + `meta.secenekler` + `suzgec`).
+  return { ...mod, getAgingReport: () => Promise.resolve({ success: true as const, data: REPORT, meta: { secenekler: { cariId: [{ id: "c1", ad: "Deneme Cari", kod: "C-1" }] } } }) };
 });
 
 const B = { current: "0", d1_30: "0", d31_60: "0", d61_90: "0", d90p: "0" } as unknown as AgingReport["blocks"][number]["totals"]["gross"];
