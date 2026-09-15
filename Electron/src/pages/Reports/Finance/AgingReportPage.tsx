@@ -24,6 +24,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CalendarClock, Info, ShieldCheck, TimerOff, Users } from "lucide-react";
 import { MetricCard, ReportDateFilter, ReportExportBar, ReportPageLayout } from "../_components";
 import { useAsOfDay } from "../_hooks/useReportDay";
+import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import { fmtDate, fmtInt } from "../_components/formatters";
 import { AgingBlockTable } from "./AgingBlockTable";
 import { AgingDetailDialog } from "./AgingDetailDialog";
@@ -86,6 +87,9 @@ export function AgingReportPage() {
   const report = query.data;
   const [detailRow, setDetailRow] = useState<AgingCariRow | null>(null);
   const [statementTarget, setStatementTarget] = useState<StatementTarget | null>(null);
+  // Ekstre bir DİYALOG raporudur (`finance/statement`); kapalıysa düğmesi belirmez ve diyalog
+  // mount edilmez — karo/route/palet kuralı diyalog için de geçerli (K5), backend de 403 verir.
+  const statementOpen = useOperationsVisibilityContext().isReportOpen("finance/statement");
 
   const needle = lowerTr(filters.search.trim());
   const matches = (r: AgingCariRow) =>
@@ -212,9 +216,11 @@ export function AgingReportPage() {
             rows={b.rows.filter(matches)}
             storedComparable={storedComparable}
             onOpenDetail={setDetailRow}
-            onOpenStatement={(r) =>
-              // `code`: ekstre dosyasının kapağında cari kodu da yazsın (H3 dikişi).
-              setStatementTarget({ cariId: r.cariId, name: r.name, code: r.code, currency: r.currency })
+            onOpenStatement={
+              statementOpen
+                ? // `code`: ekstre dosyasının kapağında cari kodu da yazsın (H3 dikişi).
+                  (r) => setStatementTarget({ cariId: r.cariId, name: r.name, code: r.code, currency: r.currency })
+                : undefined
             }
           />
         ))
@@ -232,7 +238,7 @@ export function AgingReportPage() {
           onOpenChange={(o) => !o && setDetailRow(null)}
         />
       ) : null}
-      {statementTarget ? (
+      {statementTarget && statementOpen ? (
         <CariStatementDialog
           target={statementTarget}
           open={Boolean(statementTarget)}

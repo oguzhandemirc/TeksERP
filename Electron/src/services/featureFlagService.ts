@@ -595,16 +595,12 @@ export const featureFlagService = {
    * numara farklı olur. Yüzey bunu "sıradaki" der, "ayrılmış" demez.
    */
   getBatchNumberState: (): Promise<ApiResponse<BatchNumberState>> =>
-    apiClient
-      .get<ApiResponse<BatchNumberState>>("/api/batches/number-state")
-      .then((r) => r.data),
+    apiClient.get<ApiResponse<BatchNumberState>>("/api/batches/number-state").then((r) => r.data),
 
   /** Güncel belge logosu (data-url; yoksa null). FeatureFlags'ten ayrı uç —
    *  base64 app-start yükünü şişirmesin diye yalnız ihtiyaç anında çekilir. */
   getDocumentsLogo: (): Promise<ApiResponse<{ dataUrl: string | null }>> =>
-    apiClient
-      .get<ApiResponse<{ dataUrl: string | null }>>("/api/feature-flags/documents-logo")
-      .then((r) => r.data),
+    apiClient.get<ApiResponse<{ dataUrl: string | null }>>("/api/feature-flags/documents-logo").then((r) => r.data),
 
   /** Belge logosunu güncelle (dataUrl=null → kaldır). PNG/JPEG/SVG, ~100KB sınırı. */
   /** ⚠️ Ayar şifresi kapısından geçer (firma kimliği — belge muafiyeti YOK). */

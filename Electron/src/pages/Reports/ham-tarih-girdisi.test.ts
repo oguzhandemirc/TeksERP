@@ -6,7 +6,8 @@
 //   §2 tarih hook'ları SAYI/sabit değil KATALOG ANAHTARI alır (çift yazım imkânsız);
 //      yaprak `defaultDays=` / `showDateRange=` yazmaz — kaldırılan prop geri gelmez
 //   §3 yaprak ↔ anahtar: route'taki her yaprak `reportKey="<kendi anahtarı>"` taşır ve
-//      dosyada BAŞKA bir katalog anahtarı geçmez; tarihli sözleşmede `filters=` veren
+//      dosyada BAŞKA bir YAPRAK anahtarı geçmez (diyalog raporunun anahtarı — `yuzey: "diyalog"`,
+//      ör. Aging'in ekstre kapısı `finance/statement` — ev sahibi yaprakta MEŞRUDUR); tarihli sözleşmede `filters=` veren
 //      yaprak bileşeni kendisi gömer (yoksa tarih girdisi sessizce kaybolur — 5e'nin
 //      Randıman/Pareto süzgeç şeridinde tam bu oldu)
 //   §4 düzen `defaultDays` fallback'i taşımaz (katalog dışı bir "30" yaşamasın)
@@ -102,7 +103,9 @@ describe("Reports: tarih girdisi tek bileşenden, sözleşme katalogdan", () => 
       measured++;
       const keysInFile = new Set(KEYS.filter((k) => src.includes(`"${k}"`)));
       if (!keysInFile.has(r.key)) offenders.push(`${r.key}: yaprak kendi anahtarını taşımıyor`);
-      if (keysInFile.size > 1) offenders.push(`${r.key}: yaprakta başka anahtar da var (${[...keysInFile].join(", ")})`);
+      // Diyalog raporunun anahtarı ev sahibi yaprakta geçebilir (kapısını yaprak sorar); yaprak anahtarı geçemez.
+      const foreignLeafKeys = [...keysInFile].filter((k) => k !== r.key && REPORT_CATALOG.find((e) => e.key === k)?.yuzey !== "diyalog");
+      if (foreignLeafKeys.length > 0) offenders.push(`${r.key}: yaprakta başka yaprak anahtarı da var (${foreignLeafKeys.join(", ")})`);
       if (!/reportKey=\{?"[a-z/-]+"/.test(src)) offenders.push(`${r.key}: düzene reportKey verilmemiş`);
       if (r.tarih !== "yok" && /\bfilters=/.test(src) && !src.includes("<ReportDateFilter")) {
         offenders.push(`${r.key}: filters= veriyor ama ReportDateFilter gömmüyor — tarih girdisi kaybolur`);

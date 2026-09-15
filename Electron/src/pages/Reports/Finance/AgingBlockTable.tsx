@@ -29,7 +29,8 @@ interface Props {
   /** Kesit "şu an"ı kapsıyor mu — kayıtlı bakiye karşılaştırması ancak o zaman anlamlı. */
   storedComparable: boolean;
   onOpenDetail: (row: AgingCariRow) => void;
-  onOpenStatement: (row: AgingCariRow) => void;
+  /** Yoksa "Cari ekstresi" düğmesi ÇİZİLMEZ — `finance/statement` raporu kapalıyken sayfa vermez (K5: kapalı yüzey belirmez). */
+  onOpenStatement?: (row: AgingCariRow) => void;
 }
 
 export function AgingBlockTable({ block, buckets, rows, storedComparable, onOpenDetail, onOpenStatement }: Props) {
@@ -131,14 +132,16 @@ export function AgingBlockTable({ block, buckets, rows, storedComparable, onOpen
                       >
                         <ListTree className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        title="Cari ekstresi"
-                        onClick={() => onOpenStatement(r)}
-                      >
-                        <FileText className="h-4 w-4" />
-                      </Button>
+                      {onOpenStatement ? (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          title="Cari ekstresi"
+                          onClick={() => onOpenStatement(r)}
+                        >
+                          <FileText className="h-4 w-4" />
+                        </Button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>

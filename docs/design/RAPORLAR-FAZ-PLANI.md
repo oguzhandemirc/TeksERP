@@ -57,6 +57,7 @@ Her dilim tek sha (kod + bekçi + belge + sürüm maddesi), taban 1e'nin bildird
 - Tablet rapor yüzeyi — masaüstü fazı.
 - Backend'de Excel/PDF üretimi — açılmaz (K8).
 - Web paneli PDF — beyanlı kör nokta, iş yok.
+- **Açık kalem (kod yok, R2 ölçtü 2026-09-15):** `ProtectedRoute` bayrak sorgusu bitmeden karar veriyor — modül ve rapor kapısı yüklenmemiş bayrağı KAPALI okur ve `/forbidden`a yönlendirir (bugünkü modül kapısı kabulü; soğuk açılışta derin bağlantı zıplayabilir). İyileştirme: sorgu `pending`ken yönlendirmek yerine beklemek (`null` çizmek) — modül kapısıyla BİRLİKTE, tek kalem; rapor kapısına özel çözüm yazılmaz.
 
 ## 4 · Kullanıcı dönünce onaylanacak varsayımlar
 
