@@ -27,6 +27,7 @@
 import { readdirSync, readFileSync, statSync } from "fs";
 import { join, resolve, relative } from "path";
 import prisma, { pool } from "../src/lib/prisma";
+import { atlamaDefteri } from "./lib/atlama";
 import {
   MAX_ROLL_SEQ,
   ROLL_BARCODE_RE,
@@ -340,23 +341,66 @@ async function productionFlow(workMs: number): Promise<void> {
   );
 }
 
-const T1_LIMIT_MS = 100;
+/**
+ * BOZUK desen — sayaç uzun tx'in İÇİNDE alınır. Sondanın KONTROL GRUBU budur ve
+ * her koşumda YENİDEN ölçülür: "1345 ms" bir kez ölçülüp yoruma yazılmış tarihsel
+ * bir sayıydı, oysa kapının iddiası bir KARŞILAŞTIRMAdır.
+ */
+async function bozukFlow(workMs: number): Promise<void> {
+  await prisma.$transaction(
+    async (tx) => {
+      await reserveRollBarcodesTx(tx, "H", 3, TEST_DATE);
+      await new Promise((r) => setTimeout(r, workMs));
+    },
+    { timeout: 30_000, maxWait: 20_000 },
+  );
+}
+
+/** Bir uzun iş koşarken paralel rezervasyonun beklediği süre (ms). */
+async function paralelBekleme(uzunIs: Promise<unknown>): Promise<number> {
+  await new Promise((r) => setTimeout(r, 200)); // tx'in açılmasını bekle
+  const t0 = Date.now();
+  await reserveRollBarcodesTx(prisma, "H", 1, TEST_DATE);
+  const bekleme = Date.now() - t0;
+  await uzunIs;
+  return bekleme;
+}
+
+/**
+ * ⚠️ MUTLAK EŞİK DEĞİL ORAN (2026-09-15): eski kol `waited < 100 ms` diyordu ve
+ * CI'da paylaşılan yük altında 277 ms ölçülüp KIRMIZI verdi — ürün doğruydu,
+ * eşik yanlıştı. Duvar saati makine yüküne bağlıdır, İKİ KOLUN ORANI değildir.
+ * 5 kat, dosyanın kendi bulduğu 34 katın epey altında bir güvenlik payıdır.
+ */
+const AYIRMA_ORANI = 5;
+const IS_SURESI_MS = 1500;
 const T2_CONCURRENCY = 30;
+const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 
 async function measure(): Promise<void> {
   console.log("\n--- §6 T1: uzun tx koşarken paralel rezervasyonun beklemesi ---");
   await setCounter("H", 0);
-  const busy = productionFlow(1500);
-  await new Promise((r) => setTimeout(r, 200)); // tx'in açılmasını bekle
-  const t0 = Date.now();
-  await reserveRollBarcodesTx(prisma, "H", 1, TEST_DATE);
-  const waited = Date.now() - t0;
-  await busy;
-  check(
-    `T1: paralel rezervasyon < ${T1_LIMIT_MS} ms bekledi`,
-    waited < T1_LIMIT_MS,
-    `${waited} ms (sayaç tx içindeyken ölçülen: 1345 ms)`,
-  );
+  const iyi = await paralelBekleme(productionFlow(IS_SURESI_MS));
+  await setCounter("H", 0);
+  const bozuk = await paralelBekleme(bozukFlow(IS_SURESI_MS));
+
+  // ÜÇ SONUÇ. "Bozuk kol bloklamadı" bir BAŞARI değil, ölçüm zemininin
+  // ÇÖKMESİDİR: kontrol grubu beklendiği gibi davranmıyorsa iyi kolun düşük
+  // çıkması hiçbir şey kanıtlamaz (sonda, ölçtüğünü sandığı şeyi ölçmüyordur).
+  if (bozuk < IS_SURESI_MS / 2) {
+    ATLAMA.atla(
+      "T1: kilit-tutma ayrışması",
+      `kontrol grubu bloklamadı (bozuk kol ${bozuk} ms < iş süresinin yarısı ${IS_SURESI_MS / 2} ms) — ` +
+        "ölçüm zemini yok; makine ya da PG kilit davranışı beklenenden farklı",
+      1,
+    );
+  } else {
+    check(
+      `T1: sayaç tx DIŞINDA alınınca paralel rezervasyon en az ${AYIRMA_ORANI} kat daha az bekliyor`,
+      iyi * AYIRMA_ORANI <= bozuk,
+      `iyi ${iyi} ms ↔ bozuk ${bozuk} ms (${(bozuk / Math.max(iyi, 1)).toFixed(1)}×, eşik ${AYIRMA_ORANI}×)`,
+    );
+  }
 
   console.log("\n--- §7 T2: havuz sağlığı (T1'i tek başına kabul etme) ---");
   await setCounter("H", 0);
@@ -386,7 +430,7 @@ async function main(): Promise<void> {
     await prisma
       .$executeRaw`DELETE FROM "roll_barcode_counters" WHERE "day" = ${TEST_DAY}`
       .catch(() => undefined);
-    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
     await prisma.$disconnect();
     await pool.end();
   }

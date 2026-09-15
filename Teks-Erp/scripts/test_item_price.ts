@@ -36,6 +36,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import prisma, { pool } from "../src/lib/prisma";
+import { atlamaDefteri } from "./lib/atlama";
 import {
   itemPriceService,
   resolveItemPrice,
@@ -107,6 +108,29 @@ async function rawInsert(
                 ${kind}::text::"PriceKind", ${currency}::text::"Currency", ${price}::numeric, now(), now())`;
     }
   });
+}
+
+/** Best-effort audit yazmasına TAVANLI bekleme — sonsuz beklemek de bir arızadır. */
+const AUDIT_BEKLEME_MS = 3000;
+const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
+
+async function auditSatirlariniBekle(
+  recordId: string,
+  beklenen: number,
+): Promise<Array<{ action: string }>> {
+  const bitis = Date.now() + AUDIT_BEKLEME_MS;
+  let rows: Array<{ action: string }> = [];
+  for (;;) {
+    rows = await prisma.systemLog.findMany({
+      where: { tableName: "ITEM_PRICE", recordId },
+      select: { action: true },
+      // ⚠️ İkincil anahtar `id`: `createdAt` eşitliğinde PG sırayı GARANTİ ETMEZ
+      // ve "ilk/ikinci" iddiası tam olarak sıraya dayanıyor.
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    if (rows.length >= beklenen || Date.now() >= bitis) return rows;
+    await new Promise((r) => setTimeout(r, 100));
+  }
 }
 
 async function main(): Promise<void> {
@@ -242,16 +266,30 @@ async function main(): Promise<void> {
   check("§2f Güncellenen fiyat okunuyor", afterUpdate?.price.equals(11) === true, `${afterUpdate?.price}`);
 
   // Audit: güncelleme CREATE olarak yazılmamalı (xmax kararı doğru mu).
-  const auditRows = await prisma.systemLog.findMany({
-    where: { tableName: "ITEM_PRICE", recordId: afterUpdate?.id ?? "" },
-    select: { action: true },
-    orderBy: { createdAt: "asc" },
-  });
-  check(
-    "§2g Audit: ilk yazım CREATE, ikincisi UPDATE",
-    auditRows.length >= 2 && auditRows[0]?.action === "CREATE" && auditRows[auditRows.length - 1]?.action === "UPDATE",
-    auditRows.map((a) => a.action).join(","),
-  );
+  //
+  // ⚠️ AUDIT BEST-EFFORT ve TX DIŞINDADIR (`item-price.service.ts`: `void
+  // AuditService.log(…)` — bilerek beklenmiyor). Bu satırları ANINDA okumak,
+  // ürünün sözleşmesini değil sondanın ŞANSINI ölçer: yerelde iki satır da
+  // yetişir, CI yükünde ikincisi yetişmez ve kapı "UPDATE yazılmadı" diye
+  // YANLIŞ bir hikâye anlatır (ölçüldü 2026-09-15, CI `512158c1`: detay satırı
+  // tek kelime "CREATE" — sıra değil SAYI eksikti).
+  // ⇒ TAVANLI bekleme + gelmezse ÜÇÜNCÜ SONUÇ: "yazılmadı" ile "henüz yazılmadı"
+  //   aynı kırmızıya düşemez.
+  const auditRows = await auditSatirlariniBekle(afterUpdate?.id ?? "", 2);
+  if (auditRows.length < 2) {
+    ATLAMA.atla(
+      "§2g Audit: ilk yazım CREATE, ikincisi UPDATE",
+      `best-effort audit ${AUDIT_BEKLEME_MS} ms içinde ${auditRows.length}/2 satır yazdı ` +
+        `(gelenler: ${auditRows.map((a) => a.action).join(",") || "—"}) — yazma YOK değil, GECİKMİŞ olabilir`,
+      1,
+    );
+  } else {
+    check(
+      "§2g Audit: ilk yazım CREATE, ikincisi UPDATE",
+      auditRows[0]?.action === "CREATE" && auditRows[auditRows.length - 1]?.action === "UPDATE",
+      auditRows.map((a) => a.action).join(","),
+    );
+  }
 
   // ── §3 NEGATİF / SIFIR FİYAT ─────────────────────────────────────────────
   const negErr = await expectError(() =>
@@ -568,7 +606,7 @@ async function main(): Promise<void> {
     `total=${listKind.total}/${listAll.total}`,
   );
 
-  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
 }
 
 main()
