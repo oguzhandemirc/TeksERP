@@ -119,7 +119,10 @@ function main(): void {
   for (const e of EKSENLER) {
     const govde = ucGovdesi(rota, e.uc);
     if (!/const \{ suzgec, \.\.\.\w+ \} =/.test(govde)) { kokSapan.push(`${e.uc}: servis dönüşünden \`suzgec\` AYRILMIYOR`); continue; }
-    if (!/reportEnvelope\(\w+, range, null, suzgec\)/.test(govde)) kokSapan.push(`${e.uc}: \`suzgec\` zarfa VERİLMİYOR (cevabın kökünde değil)`);
+    // Zarfın dördüncü parametresi `EnvelopeEk` NESNESİDİR (`{ suzgec, secenekler? }`) — R5b-c3'ten beri. Çıplak `suzgec`
+    // geçmek tsc'de kırmızı vermez ama beyanı SESSİZCE düşürür (ek.suzgec boş kalır); o biçim burada ihlaldir.
+    if (/reportEnvelope\(\w+, range, null, suzgec\)/.test(govde)) kokSapan.push(`${e.uc}: \`suzgec\` zarfa ÇIPLAK geçiyor — \`{ suzgec }\` nesnesi olmalı (beyan sessizce düşer)`);
+    else if (!/reportEnvelope\(\w+, range, null, \{ suzgec(?:, secenekler)? \}\)/.test(govde)) kokSapan.push(`${e.uc}: \`suzgec\` zarfa VERİLMİYOR (cevabın kökünde değil)`);
   }
   check("§2b ⭐ süzgeç beyanı cevabın KÖKÜNDE (tek adres — dokuma/satış ile aynı yer)",
     kokSapan.length === 0, kokSapan.join(" · ") || `${EKSENLER.length} uç`);

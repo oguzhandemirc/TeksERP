@@ -166,7 +166,7 @@ router.get("/cash-book", requireReportOpen("finance/cash-book"), guard, async (r
       yon: q.yon,
     });
     const { suzgec, ...govde } = data;
-    res.status(200).json(reportEnvelope(govde, range, null, suzgec));
+    res.status(200).json(reportEnvelope(govde, range, null, { suzgec }));
   } catch (e) {
     next(e);
   }
@@ -217,7 +217,7 @@ router.get("/statement", requireReportOpen("finance/statement"), guard, async (r
       belgeTipi: q.belgeTipi,
     });
     const { suzgec, ...govde } = result.data;
-    res.status(200).json(reportEnvelope(govde, range, null, suzgec));
+    res.status(200).json(reportEnvelope(govde, range, null, { suzgec }));
   } catch (e) {
     next(e);
   }
@@ -270,7 +270,7 @@ router.get("/vat-summary", requireReportOpen("finance/vat-summary"), guard, asyn
     // ⚠️ `suzgec` CEVABIN KÖKÜNE gider, `data`nın içine DEĞİL (R5b-c2 tek adres):
     // panel tek bileşen okuyacak; iki adres, süzgeç şeridini rapor başına yazdırırdı.
     const { suzgec, ...data } = await getVatSummaryReport({ range, yon: q.yon, oran: q.oran });
-    res.status(200).json(reportEnvelope(data, range, null, suzgec));
+    res.status(200).json(reportEnvelope(data, range, null, { suzgec }));
   } catch (e) {
     next(e);
   }
@@ -315,7 +315,7 @@ router.get("/fx-diff", requireReportOpen("finance/fx-diff"), guard, async (req: 
 
     const range = resolveDateRange(dateRangeSchema.parse({ dateFrom: q.dateFrom, dateTo: q.dateTo }));
     const { suzgec, ...govde } = await getFxDiffReport({ range, cariId: q.cariId, currency: q.currency, kind: q.kind });
-    res.status(200).json(reportEnvelope(govde, range, null, suzgec));
+    res.status(200).json(reportEnvelope(govde, range, null, { suzgec }));
   } catch (e) {
     next(e);
   }
