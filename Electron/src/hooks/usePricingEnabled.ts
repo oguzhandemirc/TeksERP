@@ -74,6 +74,13 @@ export function useDevereEnabled(): boolean {
   return q.data?.data?.devereEnabled ?? false;
 }
 
+/** G3 Emanet / konsinye mülkiyet modülü açık mı (`emanet.enabled`). Yüklenene dek KAPALI — fail-closed:
+ *  sahip müşteri alanı yalnız bununla çizilir; bağımsız modül. */
+export function useEmanetEnabled(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.emanetEnabled ?? false;
+}
+
 /** Devere Faz 2: iplik lotu zorunlu mu (`devere.lotRequired`). Yüklenene dek KAPALI = bugünkü davranış (lot isteğe bağlı). */
 export function useDevereLotRequired(): boolean {
   const q = useFeatureFlags();

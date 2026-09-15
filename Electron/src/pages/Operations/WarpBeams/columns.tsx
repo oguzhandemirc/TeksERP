@@ -46,6 +46,7 @@ export const warpBeamColumns: ColumnDef<WarpBeam>[] = [
         <span className="flex flex-col text-xs">
           <span>{WARP_BEAM_ORIGIN_LABEL[r.originKind]}</span>
           {party && <span className="text-muted-foreground">{party}</span>}
+          {r.ownerCustomer && <span className="text-amber-700">Emanet: {r.ownerCustomer.name}</span>}
         </span>
       );
     },

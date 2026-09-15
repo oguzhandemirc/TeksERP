@@ -1580,11 +1580,15 @@ enum WarpLengthSource {
 }
 
 /// LEVENT KÖKENİ — AKSİYON ANINDA seçilir, kurulumda değil: aynı fabrika hem içeride sarar
-/// hem hazır levent alır (§3.9). CONSIGNED (müşterinin leventi) Faz N — `supplierId`e BİNDİRİLMEZ.
+/// hem hazır levent alır (§3.9). CONSIGNED (müşterinin gönderdiği levent, G3 emanet) — taraf
+/// kolonu `ownerCustomerId`, `supplierId`e BİNDİRİLMEZ (aynı kolon iki anlam taşıyamaz).
 enum WarpBeamOrigin {
   IN_HOUSE
   SUBCONTRACT
   PURCHASED
+  /// G3 (migration 20260915050000): müşterinin EMANET leventi — mal bizim değil; `ownerCustomerId` ZORUNLU,
+  /// iplik tüketimi YOK; `emanet.enabled` kapalıyken yazılamaz.
+  CONSIGNED
 }
 
 /// "Sarım kg'ı nasıl bilindi" — fire 0 ≠ fire ölçülmedi. Brüt/net sorusu satır SAYISINDAN okunur (§3.7).
@@ -1623,10 +1627,16 @@ model WarpBeam {
   originKind      WarpBeamOrigin @default(IN_HOUSE)
   subcontractorId String?        @db.Uuid
   supplierId      String?        @db.Uuid
+  /// G3 EMANET — MÜLKİYET ekseni (köken ekseninden BAĞIMSIZ, ikinci kolon): dolu ise levent o müşterinin
+  /// malıdır; CONSIGNED'da ZORUNLU (CHECK `warp_beams_origin_party_ck`), öteki kökenlerde serbest (fasona
+  /// sardırılan levent müşteri ipliğiyle sarılabilir — `resolveOwnerFromLotsTx` kalıtımı). DOĞUM niteliği:
+  /// yalnız create/kalıtım yazar, PATCH gövdesinden yazılamaz (E2b); sahiplik değişimi = yeni doğum. Ayrı defter YOK.
+  ownerCustomerId String?        @db.Uuid
 
   warpSpec      WarpSpec        @relation("WarpBeamSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
   subcontractor Subcontractor?  @relation("WarpBeamSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
   supplier      Customer?       @relation("WarpBeamSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
+  ownerCustomer Customer?       @relation("WarpBeamOwner", fields: [ownerCustomerId], references: [id], onDelete: Restrict)
   events        WarpBeamEvent[]
   yarnMovements YarnMovement[]
   /// Fason sevk kalemleri (F1) — fiziksel çıkış belgesi; olay defteri `SHIP_OUT` bu kaleme bağlanır.
@@ -1642,6 +1652,7 @@ model WarpBeam {
   @@index([warpSpecId])
   @@index([subcontractorId])
   @@index([supplierId])
+  @@index([ownerCustomerId])
   @@index([currentMachineId])
   @@index([setKey])
   @@map("warp_beams")
@@ -3094,6 +3105,8 @@ model Roll {
   /// basılmış top. İkisi ayırt edilmez ve edilmemeli: ikisinde de "bu topun
   /// etiketinde müşteri yazmıyor" doğrudur.
   labelCustomerId String? @db.Uuid
+  /// G3 EMANET — bkz. `ownerCustomer` ilişkisi. Doğum niteliği; PATCH'ten yazılamaz.
+  ownerCustomerId String? @db.Uuid
 
   /// ── TAMBUR KAPANIŞINDAN ÖNCEKİ HÂL (2026-08-09) ──────────────────────────
   /// `preShipStatus` / `preCancelStatus` ile AYNI aile, AYNI gerekçe: bir kapanış
@@ -3220,6 +3233,10 @@ model Roll {
   purchaseOrderLine    PurchaseOrderLine?          @relation(fields: [purchaseOrderLineId], references: [id], onDelete: SetNull)
   warehouseMovements   WarehouseMovement[]
   labelCustomer        Customer?                   @relation("RollLabelCustomer", fields: [labelCustomerId], references: [id])
+  /// G3 EMANET — topun sahibi (müşterinin işlenmek üzere bıraktığı kumaş); `labelCustomerId` (etiket adı) DEĞİL.
+  /// Doğum niteliği: KK1 elle giriş seçicisi ya da fason dokuma makbuzunda leventlerden kalıtım; PATCH'ten yazılamaz.
+  /// Sevk kapısı: dolu ise yalnız o müşteriye çıkar (`assertOwnerMatchesTx`, 409 OWNER_MISMATCH).
+  ownerCustomer        Customer?                   @relation("RollOwner", fields: [ownerCustomerId], references: [id], onDelete: Restrict)
   properties           RollProperty[]
   shipment             Shipment?                   @relation(fields: [shipmentId], references: [id])
   sack                 Sack?                       @relation(fields: [sackId], references: [id])
@@ -3302,6 +3319,7 @@ model Roll {
   // aranmıyor. Drift-free desen: şemada düz @@index, migration'da predicate —
   // Prisma 7 predicate farkını drift SAYMAZ (index↔unique farkını sayar).
   @@index([labelCustomerId])
+  @@index([ownerCustomerId])
   // Kalite/fire/fason karnelerinin dönem taraması (`finalizedAt BETWEEN a AND b`).
   // PARTIAL (WHERE "finalizedAt" IS NOT NULL) — migration 20260809090000. Yalnız
   // üretimi bitmiş toplar damgalanır (ham stok + üretimdekiler NULL), yani index
@@ -3369,6 +3387,10 @@ model Customer {
   defaultRoutes    Route[]                   @relation("CustomerDefaultRoutes")
   /// Etiketinde bu müşteri yazan toplar — SAHİPLİK DEĞİL (bkz. `Roll.labelCustomerId`).
   labelledRolls    Roll[]                    @relation("RollLabelCustomer")
+  /// G3 emanet: bu müşterinin malı olan toplar / leventler / iplik lotları.
+  ownedRolls       Roll[]                    @relation("RollOwner")
+  ownedWarpBeams   WarpBeam[]                @relation("WarpBeamOwner")
+  ownedYarnLots    YarnLot[]                 @relation("YarnLotOwner")
   branches         CustomerBranch[]
   itemAliases      CustomerItemAlias[]
   colorAliases     CustomerColorAlias[]
@@ -9383,9 +9405,13 @@ model YarnLot {
   supplierId String? @db.Uuid
   notes      String? @db.VarChar(300)
   isActive   Boolean @default(true)
+  /// G3 EMANET — bu lot müşterinin ipliği (mal bizim değil); doğum niteliği (lot create), PATCH'ten yazılamaz.
+  /// Bu lottan sarılan levent owner'ı kalıtır (`resolveOwnerFromLotsTx`).
+  ownerCustomerId String? @db.Uuid
 
-  item      Item           @relation("YarnLotItem", fields: [itemId], references: [id], onDelete: Restrict)
-  supplier  Customer?      @relation("YarnLotSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
+  item          Item           @relation("YarnLotItem", fields: [itemId], references: [id], onDelete: Restrict)
+  supplier      Customer?      @relation("YarnLotSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
+  ownerCustomer Customer?      @relation("YarnLotOwner", fields: [ownerCustomerId], references: [id], onDelete: Restrict)
   movements YarnMovement[]
   /// G1: bu lottan fasona giden iplik kalemleri.
   subcontractorDispatchYarnItems SubcontractorDispatchItem[] @relation("DispatchItemYarnLot")
@@ -9397,6 +9423,7 @@ model YarnLot {
 
   @@unique([itemId, lotNo])
   @@index([supplierId])
+  @@index([ownerCustomerId])
   @@map("yarn_lots")
 }
 

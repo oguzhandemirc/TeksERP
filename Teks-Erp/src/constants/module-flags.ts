@@ -44,6 +44,7 @@ export const MODULE_FLAG_KEYS: ReadonlySet<string> = new Set([
   "tezgahEnabled",
   "devereEnabled",
   "dokumaEnabled",
+  "emanetEnabled",
 ]);
 
 /**
@@ -73,6 +74,7 @@ export const MODULE_SETTING_KEYS: ReadonlySet<string> = new Set([
   "tezgah.enabled",
   "devere.enabled",
   "dokuma.enabled",
+  "emanet.enabled",
 ]);
 
 /**
@@ -127,4 +129,5 @@ export const MODULE_LABELS: Readonly<Record<string, string>> = {
   tezgahEnabled: "Tezgah izleme",
   devereEnabled: "Devere / levent",
   dokumaEnabled: "Dokuma işi",
+  emanetEnabled: "Emanet / konsinye mülkiyet",
 };

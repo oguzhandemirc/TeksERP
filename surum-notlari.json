@@ -448,6 +448,11 @@
           "kapsam": "panel",
           "tip": "yeni",
           "metin": "İplik modülü açık kurulumlarda fasona dokutan fabrika ipliğini de sistemden gönderiyor: Dokuma İşleri'nde işin “Fason” bölümündeki sevk formuna iplik satırları geldi (iplik kartı · depo · lot ya da “Lot yok” · kg) — levent olmadan yalnız iplik de sevk edilebilir. İplik çıkışı depodan brüt düşer, fasoncudaki iplik ayrı bir depo değildir: bölümdeki şerit giden / dönen / leventlere sarılan / fasonda kalan kilosunu ve fasoncunun tüm işlerdeki iplik bakiyesini kalem ve lot bazında gösterir; sarılan kilo leventin nominal hesabıdır ve kaynağı (hesap mı tartı mı) satırda yazar, gizlenmez. Sevk satırından “İplik döndü” ile kısmi dönüş girilir (sebep zorunlu: kalan iplik · kalite · iş iptali; başka depoya dönüş seçilebilir), önizleme hangi depoya kaç kilo döneceğini ve fasonda ne kalacağını söyler; yanlış dönüş “Dönüşü geri al” ile karşı satırla kapanır, silinmez. İpliği dönmüş sevk iptal edilemez; sevk iptali ipliği depoya geri yazar. Bu satırlar yalnız dokuma işi fason bölümünde vardır; iş emri fason sevk formuna iplik satırı bu sürümde girmedi. İplik modülü kapalı kurulumda hiçbir şey değişmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Emanet (konsinye mülkiyet) modülü geldi — Genel Ayarlar → Modüller'den açılır, varsayılan kapalıdır ve kapalı kurulumda hiçbir şey değişmez. Açıkken müşterinin işlenmek üzere bıraktığı kumaş KK1 elle girişte “sahibi” seçilerek girilir, müşterinin gönderdiği levent “Müşterinin emanet leventi” köken seçeneğiyle planlanır, müşterinin ipliği lot açılırken sahibiyle kaydedilir; o iplikten sarılan levent ve fasona dokutulan işten doğan top sahibini kendiliğinden alır (iki müşterinin ipliği aynı levente sarılamaz). Emanet mal fabrikanın malı sayılmaz: başka müşteriye sevk edilemez — sevkiyat ve fasondan doğrudan sevk engellenir ve etkilenen toplar barkoduyla listelenir; sevkiyattan üretilen fatura taslağı emanet topu uyarır (satır yine yazılır, işçilik faturası elle düzeltilir). Sahiplik doğumda yazılır, sonradan düzenlenmez; levent ve lot listelerinde sahibi müşterinin adıyla görünür. Tablet KK1'de emanet seçimi bu sürümde yok — emanet kumaş panelden elle girişle kaydedilir."
         }
       ]
     },

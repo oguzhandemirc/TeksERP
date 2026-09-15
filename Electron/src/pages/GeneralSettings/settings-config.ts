@@ -627,6 +627,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Depocu", "Yönetim"],
         desc: "Kapalıyken (tek depolu kurulumun varsayılanı) depo seçicileri ve depo kolonu çizilmez, Depo Transferi karosu görünmez ve transfer uçları 403 verir — tek depoda taşınacak ikinci bir yer yoktur. Depo TANIMI ve depo defteri bu anahtardan BAĞIMSIZDIR: kapalıyken de depo kartı açılabilir, hareketler yazılmaya devam eder. ⚠️ Bu karar 2026-09-02'ye kadar depo SAYISINDAN türetiliyordu; artık açık bir anahtar — ikinci depoyu açmak yüzeyleri kendiliğinden getirmez, bu satır da açılmalıdır.",
       },
+      {
+        key: "emanetEnabled",
+        title: "Emanet / konsinye mülkiyet modülünü aç",
+        summary:
+          "Top, levent ve iplik lotunda “sahibi olan müşteri” alanı açılır; emanet mal yalnız sahibine sevk edilir.",
+        defaultOn: false,
+        audience: ["Depocu", "Planlamacı", "Yönetim"],
+        desc: "Kapalıyken (varsayılan) sahip müşteri alanı hiçbir formda çizilmez ve yazılamaz (uç 403 verir); her mal fabrikanın malı sayılır — bugünkü davranış. Açıkken KK1 elle girişte, levent planlarken (köken “Müşterinin emanet leventi”) ve iplik lotu açarken sahip seçilir; müşterinin ipliğinden sarılan levent ve fason dokumadan doğan top sahibi kendiliğinden alır. Sahibi olan mal BAŞKA müşteriye sevk edilemez (sevkiyat ve fasondan doğrudan sevk 409 verir, etkilenen toplar listelenir); fatura taslağı emanet topu uyarır. Sahiplik doğumda yazılır, sonradan düzenlenmez. Bağımsız modül — başka anahtara bağlı değildir.",
+      },
       // ⚠️ `kumasTeknikEnabled` ve `tezgahEnabled` BİLEREK BURADA YOK: arkalarında
       // henüz hiçbir yüzey/kapı yok, satırları yalnız "açtım ama hiçbir şey
       // olmadı" üretirdi. Backend sözleşme bekçisinde gerekçeli muaf listesinde

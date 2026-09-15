@@ -268,6 +268,7 @@ const ALAN_DB_ANAHTARI: Record<string, string> = {
   tezgahEnabled: "tezgah.enabled",
   devereEnabled: "devere.enabled",
   dokumaEnabled: "dokuma.enabled",
+  emanetEnabled: "emanet.enabled",
 };
 
 /** HTTP sondalarının 200 alabilmesi için gereken izinler. */
@@ -928,6 +929,10 @@ async function main(): Promise<void> {
     // yok. Yüzeyi doğduğu gün kapı da doğar ve §8b onu tabloya girmeye zorlar;
     // bu satır o gün ölü muaf olarak §8e'den kırmızı alır.
     kumasTeknikEnabled: "yüzeysiz modül — adlandırılmış kapısı ve route'u YOK",
+    // 2026-09-15 (G3): emanet EKRANSIZ modüldür — kapısı owner YAZAN uçların GÖVDESİNDE (`assertEmanetWritableTx`
+    // 403 MODULE_DISABLED; KK1 · levent create · lot create), adlandırılmış middleware'i ve kendi route'u YOK;
+    // sevk sahiplik kapısı bayraktan bağımsız (veri varsa). `test_emanet §1` kapalıyı ölçer.
+    emanetEnabled: "yüzeysiz modül — gövde kapısı `assertEmanetWritableTx` (403), adlandırılmış middleware'i YOK; `test_emanet §1`",
   };
   const yonetilenKume = new Set(YONETILEN);
   const kapsanmayan = [...MODULE_FLAG_KEYS].filter(

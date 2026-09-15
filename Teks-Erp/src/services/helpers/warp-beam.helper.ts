@@ -58,6 +58,8 @@ export const WARP_BEAM_SELECT = {
   originKind: true,
   subcontractorId: true,
   supplierId: true,
+  ownerCustomerId: true,
+  ownerCustomer: { select: { id: true, name: true } },
   createdAt: true,
   updatedAt: true,
   warpSpec: { select: { id: true, code: true, name: true, endsCount: true, yarnItem: { select: { id: true, code: true, name: true, linearDensityDen: true } } } },
@@ -89,28 +91,37 @@ export interface OriginParty {
   originKind: WarpBeamOrigin;
   subcontractorId: string | null;
   supplierId: string | null;
+  /** G3 emanet: MÜLKİYET ekseni — CONSIGNED'da ZORUNLU, öteki kökenlerde serbest (kalıtımla da dolabilir). */
+  ownerCustomerId?: string | null;
 }
 
 /**
  * KÖKEN XOR'u — TEK KAPI (Türkçe mesaj burada; DB CHECK `warp_beams_origin_party_ck` ikinci hat):
- *   IN_HOUSE → taraf yok · SUBCONTRACT → yalnız fasoncu · PURCHASED → tedarikçi XOR fasoncu, TAM BİRİ.
+ *   IN_HOUSE → taraf yok · SUBCONTRACT → yalnız fasoncu · PURCHASED → tedarikçi XOR fasoncu, TAM BİRİ ·
+ *   CONSIGNED (G3) → yalnız `ownerCustomerId` (müşterinin emanet leventi; mal bizim değil, alış değil).
+ *   Mülkiyet köken ekseninden bağımsızdır: öteki kökenlerde `ownerCustomerId` AYNEN geçer (dolu ya da boş).
  */
-export function resolveOriginParty(p: OriginParty): OriginParty {
+export function resolveOriginParty(p: OriginParty): Required<OriginParty> {
   const sub = p.subcontractorId || null;
   const sup = p.supplierId || null;
+  const owner = p.ownerCustomerId || null;
   switch (p.originKind) {
+    case WarpBeamOrigin.CONSIGNED:
+      if (!owner) throw AppError.badRequest("Emanet (müşterinin) leventi için sahibi olan müşteri zorunludur.", { code: "WARP_BEAM_ORIGIN_PARTY" });
+      if (sub || sup) throw AppError.badRequest("Emanet levente fasoncu/tedarikçi yazılmaz — taraf malın sahibi olan müşteridir.", { code: "WARP_BEAM_ORIGIN_PARTY" });
+      return { originKind: p.originKind, subcontractorId: null, supplierId: null, ownerCustomerId: owner };
     case WarpBeamOrigin.IN_HOUSE:
       if (sub || sup) throw AppError.badRequest("İçeride sarılan levente karşı taraf yazılmaz (fasoncu/tedarikçi boş kalır).", { code: "WARP_BEAM_ORIGIN_PARTY" });
-      return { originKind: p.originKind, subcontractorId: null, supplierId: null };
+      return { originKind: p.originKind, subcontractorId: null, supplierId: null, ownerCustomerId: owner };
     case WarpBeamOrigin.SUBCONTRACT:
       if (!sub) throw AppError.badRequest("Fasona sardırılan levent için fasoncu zorunludur.", { code: "WARP_BEAM_ORIGIN_PARTY" });
       if (sup) throw AppError.badRequest("Fasona sardırılan levente tedarikçi yazılmaz — taraf fasoncudur.", { code: "WARP_BEAM_ORIGIN_PARTY" });
-      return { originKind: p.originKind, subcontractorId: sub, supplierId: null };
+      return { originKind: p.originKind, subcontractorId: sub, supplierId: null, ownerCustomerId: owner };
     case WarpBeamOrigin.PURCHASED:
       if ((sub === null) === (sup === null)) {
         throw AppError.badRequest("Hazır alınan levent için TAM BİR taraf seçilir: tedarikçi (cari) YA DA fasoncu (kendi ipliğiyle saran devereci).", { code: "WARP_BEAM_ORIGIN_PARTY" });
       }
-      return { originKind: p.originKind, subcontractorId: sub, supplierId: sup };
+      return { originKind: p.originKind, subcontractorId: sub, supplierId: sup, ownerCustomerId: owner };
   }
 }
 

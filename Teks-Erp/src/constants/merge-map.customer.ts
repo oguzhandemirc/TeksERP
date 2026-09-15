@@ -26,6 +26,10 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
     // ölmüş bir cariye bakar kalırdı.
     { kind: "MOVE", model: "PackingGroup", table: "packing_groups", column: "customerId", label: "Paketleme grubu" },
     { kind: "MOVE", model: "Roll", table: "rolls", column: "labelCustomerId", label: "Top (etiket müşterisi)" },
+    // 2026-09-15 (G3 emanet) — mülkiyet bağı üç modelde: referans bağ, tekillik yok; birleştirme kimliği değiştirir, sahipliği değil.
+    { kind: "MOVE", model: "Roll", table: "rolls", column: "ownerCustomerId", label: "Top (emanet sahibi)" },
+    { kind: "MOVE", model: "WarpBeam", table: "warp_beams", column: "ownerCustomerId", label: "Levent (emanet sahibi)" },
+    { kind: "MOVE", model: "YarnLot", table: "yarn_lots", column: "ownerCustomerId", label: "İplik lotu (emanet sahibi)" },
     { kind: "MOVE", model: "Route", table: "routes", column: "customerId", label: "Rota şablonu" },
     {
       kind: "CONFLICT",

@@ -18,6 +18,7 @@ import { customerService } from "@/pages/Customers/service";
 import type { Customer } from "@/pages/Customers/types";
 import { warpBeamPlanDefaults, warpBeamPlanSchema, type WarpBeamPlanValues } from "./schema";
 import { WARP_BEAM_ORIGIN_LABEL, type WarpBeam, type WarpBeamOrigin } from "./types";
+import { useEmanetEnabled } from "@/hooks/usePricingEnabled";
 
 type Form = UseFormReturn<WarpBeamPlanValues>;
 
@@ -29,14 +30,18 @@ function buildDefaults(initial?: WarpBeam | null): WarpBeamPlanValues {
     originKind: initial.originKind,
     subcontractorId: initial.subcontractorId ?? "",
     supplierId: initial.supplierId ?? "",
+    ownerCustomerId: initial.ownerCustomerId ?? "",
     physicalBeamNo: initial.physicalBeamNo ?? "",
     notes: initial.notes ?? "",
   };
 }
 
-function OriginFields({ form }: { form: Form }) {
+function OriginFields({ form, editing }: { form: Form; editing: boolean }) {
   const err = form.formState.errors;
   const origin = form.watch("originKind");
+  // G3 emanet: CONSIGNED yalnız modül açıkken seçilebilir (kapalıda seçenek hiç çizilmez — bayt bayt eski form).
+  const emanet = useEmanetEnabled();
+  const origins = (Object.keys(WARP_BEAM_ORIGIN_LABEL) as WarpBeamOrigin[]).filter((k) => k !== "CONSIGNED" || emanet || origin === "CONSIGNED");
   return (
     <>
       <FormField label="Köken" error={err.originKind} required hint="Her leventte seçilir: aynı fabrika hem içeride sarar hem hazır levent alır.">
@@ -49,7 +54,7 @@ function OriginFields({ form }: { form: Form }) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {(Object.keys(WARP_BEAM_ORIGIN_LABEL) as WarpBeamOrigin[]).map((k) => (
+                {origins.map((k) => (
                   <SelectItem key={k} value={k}>
                     {WARP_BEAM_ORIGIN_LABEL[k]}
                   </SelectItem>
@@ -59,7 +64,18 @@ function OriginFields({ form }: { form: Form }) {
           )}
         />
       </FormField>
-      {origin !== "IN_HOUSE" && (
+      {origin === "CONSIGNED" && (
+        <FormField label="Sahibi (müşteri)" error={err.ownerCustomerId} required hint={editing ? "Sahiplik doğumda yazılır; düzenlemede değiştirilmez." : "Mal müşterinindir: alış değil, yalnız sahibine sevk edilir."}>
+          <Controller
+            control={form.control}
+            name="ownerCustomerId"
+            render={({ field }) => (
+              <EntityPickerModal<Customer> value={field.value || null} onChange={(id) => field.onChange(id ?? "")} service={customerService} queryKey="customers-warp-beam-owner" getLabel={(c) => c.name} icon={Building2} title="Sahip müşteri seç" placeholder="Sahip müşteri seç" nullable disabled={editing} />
+            )}
+          />
+        </FormField>
+      )}
+      {origin !== "IN_HOUSE" && origin !== "CONSIGNED" && (
         <FormField label="Fasoncu" error={err.subcontractorId} hint={origin === "PURCHASED" ? "Kendi ipliğiyle sarıp faturalayan devereci — YA tedarikçi YA fasoncu." : undefined}>
           <Controller
             control={form.control}
@@ -120,7 +136,7 @@ export function WarpBeamFormDialog({ open, onOpenChange, initial, onSubmit, isSu
           <FormField label="Plan metresi" error={form.formState.errors.plannedLengthM} required>
             <Input type="number" min={1} step="0.001" {...form.register("plannedLengthM")} />
           </FormField>
-          <OriginFields form={form} />
+          <OriginFields form={form} editing={Boolean(initial)} />
           <FormField label="Metal gövde no" error={form.formState.errors.physicalBeamNo} hint="Numarasız fabrikada boş kalır; aynı gövdede iki canlı çözgü olmaz.">
             <Input {...form.register("physicalBeamNo")} />
           </FormField>

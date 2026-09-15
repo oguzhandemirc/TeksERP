@@ -69,6 +69,7 @@ export const MODULE_FIELD_BY_SETTING_KEY: Readonly<Record<string, string>> = {
   "tezgah.enabled": "tezgahEnabled",
   "devere.enabled": "devereEnabled",
   "dokuma.enabled": "dokumaEnabled",
+  "emanet.enabled": "emanetEnabled",
 };
 
 /**
@@ -93,6 +94,7 @@ export const MODULE_DESCRIPTIONS: Readonly<Record<string, string>> = {
   "tezgah.enabled": "Dokuma tezgah izleme modülü",
   "devere.enabled": "Devere / levent modülü (çözgü kartı · levent stoğu · levent defteri)",
   "dokuma.enabled": "Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme)",
+  "emanet.enabled": "Emanet / konsinye mülkiyet modülü (müşterinin malı: top · levent · iplik lotu; sevk sahiplik kapısı)",
 };
 
 /** Yedi anahtarı `false` doğuran taban — profil satırları yalnız AÇTIKLARINI yazar. */

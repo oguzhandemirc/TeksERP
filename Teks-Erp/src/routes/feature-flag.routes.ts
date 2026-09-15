@@ -270,6 +270,7 @@ export const updateSchema = z.strictObject({
   kumasTeknikEnabled: z.boolean().optional(),
   tezgahEnabled: z.boolean().optional(),
   devereEnabled: z.boolean().optional(),
+  emanetEnabled: z.boolean().optional(),
   devereLotRequired: z.boolean().optional(),
   devereMountTracking: z.boolean().optional(),
   devereMountTrackingRequired: z.boolean().optional(),

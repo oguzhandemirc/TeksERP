@@ -145,6 +145,7 @@ import {
   buildNextDynamicCursor,
 } from "../utils/cursor";
 import { assertWorkOrderBound } from "./helpers/dispatch-header.helper";
+import { assertOwnerMatchesTx } from "./helpers/emanet-owner.helper";
 
 // Re-export saf primitifler (geriye uyum — eskiden bu dosyada tanımlıydı).
 export {
@@ -3311,6 +3312,12 @@ export class ShippingService {
     assertRollsHaveWarehouse(warehouseless, "Sevk edilemez");
 
     await tx.shipmentOrder.updateMany({ where: { shipmentId }, data: { isActive: false } });
+
+    // EMANET SAHİPLİK KAPISI (G3) — üç sevk yolunun ORTAK boğazı: başka müşterinin emanet topu bu
+    // sevkle çıkamaz (409 OWNER_MISMATCH, etkilenen toplar barkoduyla). Bayraktan bağımsız: veri varsa çalışır.
+    const shipmentHeader = await tx.shipment.findUniqueOrThrow({ where: { id: shipmentId }, select: { customerId: true, shipmentNo: true } });
+    const shipmentRollIds = (await tx.roll.findMany({ where: { shipmentId }, select: { id: true } })).map((r) => r.id);
+    await assertOwnerMatchesTx(tx, { rollIds: shipmentRollIds, customerId: shipmentHeader.customerId, belge: `sevkiyat ${shipmentHeader.shipmentNo}` });
 
     // ÇUVAL İZLERİ (ETİKET) TEMİZLENİR — sevk ANINDA, SOFT damgayla (2026-09-04).
     // İz depodaki işi anlatır ("kontrol et", "eksik"); mal çıktıktan sonra artık

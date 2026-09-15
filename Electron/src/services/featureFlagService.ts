@@ -300,6 +300,8 @@ export interface FeatureFlags {
    *  etkin değer `ticaret && iplik && devere`. Faz 1a'da panel satırı YOK (yüzey
    *  aynı fazın son adımında gelir). */
   devereEnabled: boolean;
+  /** G3 emanet / konsinye mülkiyet modülü (varsayılan kapalı): top · levent · iplik lotunda sahip müşteri alanı + sevk sahiplik kapısı. */
+  emanetEnabled: boolean;
   /** Devere Faz 2: içeride sarım + mal kabul iplik satırında lot zorunlu (varsayılan kapalı). */
   devereLotRequired: boolean;
   /** Devere Faz 3: levent tezgah bağı defteri (tak · sök · tüket · bitir · hurda) — varsayılan kapalı. */

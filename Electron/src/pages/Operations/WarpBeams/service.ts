@@ -36,6 +36,8 @@ export interface WarpBeamPlanPayload {
   originKind: WarpBeamOrigin;
   subcontractorId: string | null;
   supplierId: string | null;
+  /** G3 emanet: yalnız CREATE gövdesinde (PATCH şeması strict — alan ÇIKARILIR, `toPlanPayload(v, { forUpdate })`). */
+  ownerCustomerId?: string | null;
   physicalBeamNo: string | null;
   notes: string | null;
 }

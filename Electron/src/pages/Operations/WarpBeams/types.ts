@@ -8,7 +8,7 @@
 // =============================================================================
 
 export type WarpBeamStatus = "PLANNED" | "READY" | "SHIPPED_OUT" | "MOUNTED" | "EXHAUSTED" | "SCRAPPED" | "CANCELLED";
-export type WarpBeamOrigin = "IN_HOUSE" | "SUBCONTRACT" | "PURCHASED";
+export type WarpBeamOrigin = "IN_HOUSE" | "SUBCONTRACT" | "PURCHASED" | "CONSIGNED";
 export type WarpKgSource = "WEIGHED" | "THEORETICAL";
 export type WarpBeamMountMethod = "TYING_IN" | "DRAWING_IN" | "HARNESS_CHANGE";
 export type WarpLengthSource = "LOOM_COUNTER" | "DIAMETER" | "WEIGHED" | "ESTIMATED";
@@ -58,6 +58,9 @@ export interface WarpBeam {
   originKind: WarpBeamOrigin;
   subcontractorId: string | null;
   supplierId: string | null;
+  /** G3 emanet: malın sahibi (müşteri); null = bizim mal. Eski backend göndermez → opsiyonel okunur. */
+  ownerCustomerId?: string | null;
+  ownerCustomer?: { id: string; name: string } | null;
   createdAt: string;
   updatedAt: string;
   warpSpec: { id: string; code: string; name: string; endsCount: number; yarnItem: { id: string; code: string; name: string; linearDensityDen: number | null } };
@@ -102,6 +105,8 @@ export const WARP_BEAM_ORIGIN_LABEL: Record<WarpBeamOrigin, string> = {
   IN_HOUSE: "İçeride sarıldı",
   SUBCONTRACT: "Fasona sardırıldı",
   PURCHASED: "Hazır alındı",
+  // G3 emanet: yalnız `emanetEnabled` açıkken seçilebilir (form süzer); etiket liste/rozet için her zaman.
+  CONSIGNED: "Müşterinin emanet leventi",
 };
 
 export const WARP_KG_SOURCE_LABEL: Record<WarpKgSource, string> = {

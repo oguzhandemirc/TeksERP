@@ -144,8 +144,8 @@ async function main(): Promise<void> {
     MODULE_PROFILE_IDS.length >= 2,
     `${MODULE_PROFILE_IDS.length} profil → ${MODULE_PROFILE_IDS.join(", ")}`,
   );
-  // 2026-09-13: dokuz anahtar (dokuma.enabled ekran dilimiyle doğdu).
-  check("§1b Körlük zemini: MODULE_SETTING_KEYS dolu", beklenen.length === 9, `n=${beklenen.length}`);
+  // 2026-09-15: on anahtar (emanet.enabled G3 ile doğdu; öncesi dokuz — dokuma 2026-09-13).
+  check("§1b Körlük zemini: MODULE_SETTING_KEYS dolu", beklenen.length === 10, `n=${beklenen.length}`);
   check(
     "§1c Körlük zemini: açıklama sabiti dokuz anahtarı da taşıyor",
     beklenen.every((k) => (MODULE_DESCRIPTIONS[k] ?? "").length > 5),

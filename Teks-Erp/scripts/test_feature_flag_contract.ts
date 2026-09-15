@@ -60,6 +60,7 @@ import {
   readDepoMultiEnabled,
   readDevereEnabled,
   readDokumaEnabled,
+  readEmanetEnabled,
   readKumasTeknikEnabled,
   readTezgahEnabled,
   // §16 — ENUM ayağı (2026-09-03, Dilim 2). Aynı derleme bağı gerekçesi: okuyucu
@@ -1170,6 +1171,7 @@ async function main() {
     "tezgahEnabled",
     "devereEnabled",
     "dokumaEnabled",
+    "emanetEnabled",
   ] as const;
 
   const moduleGaps = MODULE_FLAGS.flatMap((k) => {
@@ -1219,6 +1221,7 @@ async function main() {
     kumasTeknikEnabled: await readKumasTeknikEnabled(emptyClient3),
     tezgahEnabled: await readTezgahEnabled(emptyClient3),
     devereEnabled: await readDevereEnabled(emptyClient3),
+    emanetEnabled: await readEmanetEnabled(emptyClient3),
     dokumaEnabled: await readDokumaEnabled(emptyClient3),
   };
   // ⚠️ `productionEnabled` TEK İSTİSNA ve bu kalıcı bir karardır: damgası
@@ -1234,6 +1237,7 @@ async function main() {
     tezgahEnabled: false,
     devereEnabled: false,
     dokumaEnabled: false,
+    emanetEnabled: false,
   };
   const varsayilanSapma = MODULE_FLAGS.filter(
     (k) => moduleDefaults[k] !== beklenenVarsayilan[k],

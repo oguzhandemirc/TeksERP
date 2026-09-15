@@ -90,6 +90,7 @@ const MIG_DIZINLERI: string[] = [
   "20260902230000_modul_anahtarlari_grandfathering",
   "20260912120000_devere_modul_anahtari",
   "20260913260000_dokuma_modul_anahtari",
+  "20260915051000_emanet_modul_anahtari",
 ];
 const MIGLER: string[] = MIG_DIZINLERI.map((d) =>
   path.join(KOK, "prisma/migrations", d, "migration.sql"),
@@ -131,6 +132,8 @@ const BEKLENEN: Array<{
   // 2026-09-13 — dokuma işi, ekran dilimiyle doğdu (20260913260000). Dünkü davranış
   // ÖLÇÜLDÜ (hiçbir istemci dokuma uçlarını çağırmıyordu) → sabit `false` meşru.
   { key: "dokuma.enabled", deger: false, sqlIcerir: ["'false'::jsonb"], sqlIcermez: ["'true'"] },
+  // 2026-09-15 — G3 emanet (konsinye mülkiyet): sahiplik alanı hiç yoktu → dünkü davranış KAPALI, sabit `false`.
+  { key: "emanet.enabled", deger: false, sqlIcerir: ["'false'::jsonb"], sqlIcermez: ["'true'"] },
   {
     key: "depo.multiEnabled",
     deger: "veriden",

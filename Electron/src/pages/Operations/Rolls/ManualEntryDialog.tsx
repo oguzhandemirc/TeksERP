@@ -32,7 +32,7 @@ import { itemService } from "@/pages/Items/service";
 import { qualityGradeService } from "@/pages/QualityGrades/service";
 import { customerService } from "@/pages/Customers/service";
 import { loadAllForPicker } from "@/lib/picker-loader";
-import { useKk1WeightEntryEnabled } from "@/hooks/usePricingEnabled";
+import { useEmanetEnabled, useKk1WeightEntryEnabled } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import type { Item } from "@/pages/Items/types";
 import type { Customer } from "@/pages/Customers/types";
@@ -75,6 +75,8 @@ const schema = z.object({
   // Yalnız "Ekle ve Etiket Bas" akışında etiketin müşterisi. Topun kendisine
   // BAĞLANMAZ (gevşek model: top→müşteri bağı yok); create payload'ına gitmez.
   customerId: z.string().uuid().nullable(),
+  /** G3 emanet: sahip müşteri — yalnız modül açıkken sorulur; etiket müşterisi DEĞİL, topa bağlanır. */
+  ownerCustomerId: z.string().uuid().nullable(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -88,6 +90,7 @@ const defaults: FormValues = {
   qualityGrade: "",
   propertyIds: [],
   customerId: null,
+  ownerCustomerId: null,
 };
 
 interface Props {
@@ -138,6 +141,7 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
   // alan gizlenir ve payload'a weightKg konmaz — aksi halde backend guard'ı
   // (createInitialEntry) ağırlıklı girişi 400 ile reddeder.
   const weightEntryEnabled = useKk1WeightEntryEnabled();
+  const emanetEnabled = useEmanetEnabled();
 
   const gradesQ = useQuery({
     queryKey: ["quality-grades", "picker"],
@@ -234,6 +238,8 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
           qualityGrade: v.qualityGrade || undefined,
           propertyIds: v.propertyIds,
           ...(isSemiFinished ? { semiFinished: true } : {}),
+          // G3 emanet: yalnız modül açıkken gövdeye girer (kapalıda alan yok — bayt bayt eski gövde).
+          ...(emanetEnabled && v.ownerCustomerId ? { ownerCustomerId: v.ownerCustomerId } : {}),
           clientToken,
           ...(confirmDuplicate ? { confirmDuplicate: true } : {}),
         },
@@ -428,6 +434,28 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
               )}
             />
           </FormField>
+
+          {emanetEnabled && (
+            <FormField
+              label="Sahibi (emanet mal ise müşteri)"
+              hint="Müşterinin işlenmek üzere bıraktığı kumaş: top o müşterinin malı olur, yalnız ona sevk edilir. Boş = bizim mal."
+            >
+              <Controller
+                control={form.control}
+                name="ownerCustomerId"
+                render={({ field }) => (
+                  <EntityPickerModal<Customer>
+                    value={field.value}
+                    onChange={field.onChange}
+                    service={customerService}
+                    queryKey="customers"
+                    getLabel={(c) => `${c.code} — ${c.name}`}
+                    nullable
+                  />
+                )}
+              />
+            </FormField>
+          )}
 
           {canPrint && (
             <FormField

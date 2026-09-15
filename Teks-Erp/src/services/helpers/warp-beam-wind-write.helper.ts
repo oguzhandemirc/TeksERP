@@ -69,6 +69,7 @@ export async function writeWoundTx(tx: Prisma.TransactionClient, target: { id: s
   for (const line of issues) {
     await applyYarnMovementTx(tx, { itemId: ctx.yarnItemId, warehouseId: line.warehouseId, kind: YarnMovementKind.WARP_ISSUE, qtyKg: kg(line.qtyKg, "İplik çıkış kg"), warpBeamId: target.id, lotId: line.lotId ?? null, userId: ctx.userId ?? null });
   }
+
   for (const line of returns) {
     const reasonCode = await assertReturnReasonTx(tx, line.reasonCode);
     await applyYarnMovementTx(tx, { itemId: ctx.yarnItemId, warehouseId: line.warehouseId, kind: YarnMovementKind.WARP_RETURN, qtyKg: kg(line.qtyKg, "Dip iade kg"), warpBeamId: target.id, reasonCode, lotId: line.lotId ?? null, userId: ctx.userId ?? null });

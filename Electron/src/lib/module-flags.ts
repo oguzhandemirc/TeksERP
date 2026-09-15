@@ -30,6 +30,7 @@ export const MODULE_FLAG_KEYS = [
   "tezgahEnabled",
   "devereEnabled",
   "dokumaEnabled",
+  "emanetEnabled",
 ] as const;
 
 export type ModuleFlagKey = (typeof MODULE_FLAG_KEYS)[number];
@@ -58,6 +59,7 @@ export const MODULE_LABELS: Readonly<Record<ModuleFlagKey, string>> = {
   tezgahEnabled: "Tezgah izleme",
   devereEnabled: "Devere / levent",
   dokumaEnabled: "Dokuma işi",
+  emanetEnabled: "Emanet / konsinye mülkiyet",
 };
 
 /**
@@ -80,6 +82,7 @@ export const MODULE_FIELD_BY_SETTING_KEY: Readonly<Record<string, ModuleFlagKey>
   "tezgah.enabled": "tezgahEnabled",
   "devere.enabled": "devereEnabled",
   "dokuma.enabled": "dokumaEnabled",
+  "emanet.enabled": "emanetEnabled",
 };
 
 /**

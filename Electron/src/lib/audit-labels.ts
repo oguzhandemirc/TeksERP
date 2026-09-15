@@ -627,6 +627,8 @@ export const ENUM_LABELS: Record<string, string> = {
   WARP_BEAM: "Levent",
   SUBCONTRACT: "Fasona sardırıldı",
   PURCHASED: "Hazır alındı",
+  // G3 emanet (2026-09-15): müşterinin emanet leventi (mal bizim değil; taraf `ownerCustomerId`).
+  CONSIGNED: "Müşterinin emanet leventi",
   THEORETICAL: "Nominal (hesap)",
   WARP_ISSUE: "Çözgü çıkışı (levente sarım)",
   WARP_ISSUE_REVERSAL: "Çözgü çıkışı iptali",

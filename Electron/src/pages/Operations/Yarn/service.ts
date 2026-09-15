@@ -74,6 +74,9 @@ export interface YarnLotRow {
   isActive: boolean;
   item: { id: string; code: string; name: string };
   supplier: { id: string; name: string } | null;
+  /** G3 emanet: lotun sahibi (müşteri); eski backend göndermez → opsiyonel. */
+  ownerCustomerId?: string | null;
+  ownerCustomer?: { id: string; name: string } | null;
   balanceKg: number;
   createdAt: string;
   updatedAt: string;
@@ -99,7 +102,7 @@ export async function listYarnLots(params: { limit?: number; cursor?: string; it
   return res.data as YarnLotListResponse;
 }
 
-export async function createYarnLot(body: { itemId: string; lotNo: string; supplierId?: string | null; notes?: string | null }): Promise<{ success: boolean; data: YarnLotRow; message?: string }> {
+export async function createYarnLot(body: { itemId: string; lotNo: string; supplierId?: string | null; notes?: string | null; ownerCustomerId?: string | null }): Promise<{ success: boolean; data: YarnLotRow; message?: string }> {
   const res = await apiClient.post("/api/yarn/lots", body);
   return res.data as { success: boolean; data: YarnLotRow; message?: string };
 }

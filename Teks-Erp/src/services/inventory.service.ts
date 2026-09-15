@@ -190,6 +190,7 @@ import { outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.hel
 import { assertWorkOrderBound } from "./helpers/dispatch-header.helper";
 import { uyari } from "../lib/logger";
 import { upperTr } from "../utils/tr-case";
+import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";
 
 export interface RollStats {
   totalCount: number;
@@ -809,6 +810,11 @@ export class InventoryService {
        */
       parentReceiptId?: string | null;
       /**
+       * G3 EMANET — topun SAHİBİ olan müşteri (doğum niteliği; PATCH yolu yok). KK1 seçicisi ya da fason dokuma
+       * makbuzunda leventlerden kalıtım (`resolveOwnerFromBeamsTx`) verir; `emanet.enabled` kapalıyken 403.
+       */
+      ownerCustomerId?: string | null;
+      /**
        * Topun KARŞILADIĞI alış siparişi kalemi (J2, 2026-08-15) — yalnız
        * `GoodsReceipt` yolu doldurur, orada da yalnız fiş bir siparişe bağlıysa.
        *
@@ -1162,6 +1168,8 @@ export class InventoryService {
         // DEPO: çağıran açıkça verdiyse o (var+aktif doğrulanır), yoksa varsayılan.
         // Fabrika yolları parametre vermez → varsayılan depo → davranış aynı.
         const targetWarehouseId = await resolveTargetWarehouseId(tx, opts?.warehouseId ?? null);
+        // G3 emanet: sahip verildiyse modül açık olmalı (403) — gövde kapısı tek yazıcıda, çağıran bazlı değil.
+        await assertEmanetWritableTx(tx, opts?.ownerCustomerId ?? null, "top");
         const created = await tx.roll.create({
           data: {
             barcode,
@@ -1185,6 +1193,7 @@ export class InventoryService {
             createdMachineId: machineId ?? null,
             doffEventId: opts?.doffEventId ?? null,
             parentReceiptId: opts?.parentReceiptId ?? null,
+            ownerCustomerId: opts?.ownerCustomerId ?? null,
             // GİRİŞ İSTASYONU — çağıranın AÇIKÇA verdiği değer, burada
             // TÜRETİLMEZ (`machineId` elde olsa bile; bkz. opts dokümanı).
             entryStationId: opts?.entryStationId ?? null,

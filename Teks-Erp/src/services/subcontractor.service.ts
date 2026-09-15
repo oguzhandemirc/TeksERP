@@ -67,6 +67,7 @@ import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { resolveDispatchCancelBlockReason } from "./helpers/subcontractor-cancel.helper";
 import { cancelWarpBeamItemsTx, countReturnedBeamItems, dispatchWarpBeamItemsTx } from "./subcontractor-beam.service";
 import { cancelYarnItemsTx, countReturnedYarnItems, dispatchYarnItemsTx, listYarnItems, type YarnDispatchLineInput } from "./subcontractor-yarn.service";
+import { assertOwnerMatchesTx } from "./helpers/emanet-owner.helper";
 import { renderFasonDirectShipHtml } from "./document-render/fason-direct-ship.html";
 import { renderFasonReceiptHtml, type FasonReceiptDoc } from "./document-render/fason-receipt.html";
 import { buildPagination, buildTextSearch } from "../utils/query-parser";
@@ -6804,6 +6805,10 @@ export class SubcontractorService {
           AND rm."revokedAt" IS NULL
           AND rm."rollId" = ANY(${effectiveShipRollIds}::uuid[])
       `;
+
+      // 2b) EMANET SAHİPLİK KAPISI (G3): fasondan müşteriye çıkış da "malın çıktığı yol"dur — başka
+      //     müşterinin emanet topu bu müşteriye gidemez (409 OWNER_MISMATCH, barkodlarıyla).
+      await assertOwnerMatchesTx(tx, { rollIds: effectiveShipRollIds, customerId: data.customerId!, belge: "fason doğrudan sevki" });
 
       // 3) Sevk edilen toplar TERMINAL: SUBCONTRACTOR_CONSUMED (gerçek sevk;
       //    batchId KORUNUR — receive deseni). Atomik claim. Seçilmeyen toplar

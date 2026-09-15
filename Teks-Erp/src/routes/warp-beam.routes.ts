@@ -42,12 +42,14 @@ const createSchema = z
     originKind: z.nativeEnum(WarpBeamOrigin),
     subcontractorId: uuidOrNull,
     supplierId: uuidOrNull,
+    /** G3 emanet: sahibi olan müşteri (CONSIGNED'da zorunlu). Yalnız CREATE — PATCH şeması bu alanı ÇIKARIR (E2b). */
+    ownerCustomerId: uuidOrNull,
     physicalBeamNo: z.string().max(32).nullable().optional(),
     notes: z.string().max(500).nullable().optional(),
     clientToken: z.string().uuid().nullable().optional(),
   })
   .strict();
-const updateSchema = createSchema.omit({ clientToken: true }).partial().strict();
+const updateSchema = createSchema.omit({ clientToken: true, ownerCustomerId: true }).partial().strict();
 
 const yarnLine = z.object({ warehouseId: z.string().uuid(), qtyKg: qty, lotId: uuidOrNull }).strict();
 const windSchema = z

@@ -138,10 +138,15 @@ export async function collectShipmentInvoiceDraftLines(
       width: true,
       item: { select: { name: true } },
       color: { select: { name: true } },
+      ownerCustomerId: true,
+      barcode: true,
     },
   });
   if (rolls.length === 0) return { lines: [], orderPriced: 0, orderConflicts: 0, warnings: [] };
   const warnings = await collectUnmeasuredAllocationWarnings(shipmentId);
+  // G3 emanet (E4b): müşterinin kendi malı satılmaz — satır YİNE yazılır (fatura muhasebe kararı), uyarı basılır.
+  const emanet = rolls.filter((r) => r.ownerCustomerId !== null);
+  if (emanet.length > 0) warnings.push(`${emanet.length} top müşterinin EMANET malı (${emanet.map((r) => r.barcode).join(", ")}) — mal satışı değil işçilik faturalanır; taslak satırlarını elle düzeltin.`);
 
   // Gruplama anahtarı `itemId` + görünen ad. Ad TEK BAŞINA anahtar olamaz:
   // fiyat kalem KARTINDAN çözülüyor ve aynı ada sahip iki farklı kart tek

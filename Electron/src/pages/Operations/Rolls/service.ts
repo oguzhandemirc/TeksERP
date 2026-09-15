@@ -79,6 +79,9 @@ export interface InitialEntryPayload {
    *  yazar VE statü sezgisini bypass edip topu Ham Stok'a düşürür (renkli olduğu
    *  için aksi halde Bitmiş Depo'ya giderdi). */
   semiFinished?: boolean;
+  /** G3 emanet: topun SAHİBİ olan müşteri (müşterinin işlenmek üzere bıraktığı kumaş). Yalnız emanet modülü
+   *  açıkken gönderilir; etiket müşterisinden (`customerId` → printCtx) AYRI alan. Doğum niteliği. */
+  ownerCustomerId?: string | null;
 }
 
 export interface RollStats {

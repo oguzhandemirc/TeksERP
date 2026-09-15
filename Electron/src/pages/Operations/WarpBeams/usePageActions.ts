@@ -6,14 +6,15 @@ import type { WarpBeam } from "./types";
 export type BeamActionKind = "mount" | "dismount" | "consume" | "adjust" | "exhaust" | "scrap" | "undo";
 export type PageDialog = { kind: "new" } | { kind: "edit" | "delete" | "wind" | "cancel" | BeamActionKind; target: WarpBeam } | null;
 
-/** Form METİN taşır; uç sayı/null bekler ("" → null). */
-export function toPlanPayload(v: WarpBeamPlanValues): WarpBeamPlanPayload {
+/** Form METİN taşır; uç sayı/null bekler ("" → null). Sahip (G3) DOĞUM niteliği: düzenlemede gövdeye GİRMEZ (PATCH strict 400 verirdi). */
+export function toPlanPayload(v: WarpBeamPlanValues, opts: { forUpdate?: boolean } = {}): WarpBeamPlanPayload {
   return {
     warpSpecId: v.warpSpecId,
     plannedLengthM: Number(v.plannedLengthM),
     originKind: v.originKind,
     subcontractorId: v.subcontractorId || null,
     supplierId: v.supplierId || null,
+    ...(opts.forUpdate ? {} : { ownerCustomerId: v.ownerCustomerId || null }),
     physicalBeamNo: v.physicalBeamNo?.trim() || null,
     notes: v.notes?.trim() || null,
   };

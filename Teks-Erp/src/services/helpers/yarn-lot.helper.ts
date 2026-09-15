@@ -28,7 +28,7 @@ export function normalizeLotNo(raw: string | null | undefined): string | null {
  */
 export async function ensureYarnLotTx(
   tx: Prisma.TransactionClient,
-  input: { itemId: string; lotNo: string; supplierId?: string | null; userId?: string | null },
+  input: { itemId: string; lotNo: string; supplierId?: string | null; ownerCustomerId?: string | null; userId?: string | null },
 ): Promise<{ id: string; lotNo: string; created: boolean }> {
   await lockCodeScopeTx(tx, "yarnLot", `${input.itemId}|${input.lotNo}`);
   const existing = await tx.yarnLot.findUnique({
@@ -40,7 +40,7 @@ export async function ensureYarnLotTx(
     return { id: existing.id, lotNo: existing.lotNo, created: false };
   }
   const created = await tx.yarnLot.create({
-    data: { itemId: input.itemId, lotNo: input.lotNo, supplierId: input.supplierId ?? null, createdById: input.userId ?? null, updatedById: input.userId ?? null },
+    data: { itemId: input.itemId, lotNo: input.lotNo, supplierId: input.supplierId ?? null, ownerCustomerId: input.ownerCustomerId ?? null, createdById: input.userId ?? null, updatedById: input.userId ?? null },
     select: { id: true, lotNo: true },
   });
   return { ...created, created: true };

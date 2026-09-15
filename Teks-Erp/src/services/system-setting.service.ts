@@ -209,6 +209,10 @@ export const SETTING_KEYS = {
    *  iplik kg defterine çıkış yazılır (`WARP_ISSUE`). Zincir OKUMA kapısında
    *  ELLE ölçülür (`requireDevereEnabled`), tablo geçişli kapanış üretmez. */
   DEVERE_ENABLED: "devere.enabled",
+  /** G3 EMANET (konsinye mülkiyet): `ownerCustomerId` yazılabilir mi (top · levent · iplik lotu). Bağımlılık YOK
+   *  (Customer çekirdek). Ekransız modül: kapı owner YAZAN uçların gövdesinde (403); sevk sahiplik kapısı veri varsa
+   *  bayraktan bağımsız çalışır. Varsayılan KAPALI = dünkü davranış (sahiplik alanı yoktu). */
+  EMANET_ENABLED: "emanet.enabled",
   /** [PROFİL] Devere Faz 2: içeride sarımda iplik çıkış satırı ve mal kabul iplik satırı LOT
    *  ZORUNLU mu. DEFAULT false = bugünkü davranış (lot kaydı bayraksız her kurulumda mümkün,
    *  lotsuz satır yalnız UYARI). Davranış bayrağı — profile/modül tablosuna GİRMEZ. */
@@ -1421,6 +1425,8 @@ export interface FeatureFlags {
    *  değerdir (panel toggle'ı kendi yazdığını geri okusun diye); etkin değer
    *  `ticaret && iplik && devere` ve kapının içinde çözülür. */
   devereEnabled: boolean;
+  /** G3 emanet / konsinye mülkiyet modülü. Varsayılan KAPALI. */
+  emanetEnabled: boolean;
   /** Devere Faz 2: lot zorunluluğu (içeride sarım iplik çıkışı + mal kabul iplik satırı). Varsayılan KAPALI =
    *  bugünkü davranış: lotsuz satır yazılır, yalnız uyarı üretir. */
   devereLotRequired: boolean;
@@ -1847,6 +1853,7 @@ export class SystemSettingService {
       kumasTeknikEnabled: await readKumasTeknikEnabled(cacheClient),
       tezgahEnabled: await readTezgahEnabled(cacheClient),
       devereEnabled: await readDevereEnabled(cacheClient),
+      emanetEnabled: await readEmanetEnabled(cacheClient),
       devereLotRequired: await readDevereLotRequired(cacheClient),
       devereMountTracking: await readDevereMountTracking(cacheClient),
       devereMountTrackingRequired: await readDevereMountTrackingRequired(cacheClient),
@@ -1972,6 +1979,8 @@ export class SystemSettingService {
         return readDevereEnabled();
       case "dokumaEnabled":
         return readDokumaEnabled();
+      case "emanetEnabled":
+        return readEmanetEnabled();
       case "depoMultiEnabled":
         return readDepoMultiEnabled();
       case "kumasTeknikEnabled":
@@ -2315,6 +2324,17 @@ export class SystemSettingService {
         SETTING_KEYS.DEVERE_ENABLED,
         input.devereEnabled,
         "Devere / levent modülü (çözgü kartı · levent stoğu · levent defteri)",
+        userId
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "emanetEnabled")) {
+      if (typeof input.emanetEnabled !== "boolean") {
+        throw AppError.badRequest("emanetEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.EMANET_ENABLED,
+        input.emanetEnabled,
+        "Emanet / konsinye mülkiyet modülü (müşterinin malı: top · levent · iplik lotu; sevk sahiplik kapısı)",
         userId
       );
     }
@@ -3773,6 +3793,19 @@ export async function readDevereEnabled(
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.DEVERE_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** G3 Emanet / konsinye mülkiyet modülü açık mı? Default FALSE (satır yoksa kapalı — dünkü davranış:
+ *  sahiplik alanı yoktu). Bağımlılık yok; owner yazan uçların gövde kapısı bunu okur. */
+export async function readEmanetEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.EMANET_ENABLED },
     select: { value: true },
   });
   return asBoolean(setting?.value);

@@ -22,6 +22,7 @@ import { AuditService } from "./audit.service";
 import { assertReturnReasonTx, kg, lotWarnings, siblingsOf, windResult, writeWoundTx, type WindResultDto } from "./helpers/warp-beam-wind-write.helper";
 export type { WindResultDto };
 import { toWarpBeamDto, toWarpBeamEventDto, type WarpBeamDto, type WarpBeamEventDto } from "./warp-beam.service";
+import { resolveOwnerFromLotsTx } from "./helpers/emanet-owner.helper";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 
@@ -147,24 +148,33 @@ export async function windWarpBeam(id: string, input: WindWarpBeamInput, userId?
   const returnShares = lineShares(returnsSorted, count);
   const ctx = { input, lengthM, denier, theoreticalKg, yarnItemId, userId, clientToken: input.clientToken ?? null };
 
+  // G3 EMANET KALITIMI: çıkış lotlarının sahibi tek ise levent (ve takım kardeşleri) onu alır — doğum yolu, PATCH değil;
+  // leventin kendi sahibiyle çelişirse 409. Ownersız lotlar sahibi düşürmez; bayrak kapalıyken owner'lı lot zaten doğamaz.
+  const lotOwner = await resolveOwnerFromLotsTx(prisma, issuesSorted.map((l) => l.lotId).filter((x): x is string => !!x));
+  if (lotOwner && beam.ownerCustomerId && beam.ownerCustomerId !== lotOwner) {
+    throw AppError.conflict(`${beam.beamNo} başka bir müşterinin emanet leventi — bu lotların sahibiyle uyuşmuyor`, { code: "OWNER_MISMATCH" });
+  }
+  const ownerCustomerId = beam.ownerCustomerId ?? lotOwner;
   const wound = await prisma.$transaction(async (tx) => {
     if (input.machineId) await assertDevereMachineTx(tx, input.machineId);
     if (input.dispatchItemId) await assertYarnDispatchItemTx(tx, input.dispatchItemId, { subcontractorId: beam.subcontractorId, yarnItemId });
-    if (setKey || firstPhysical !== beam.physicalBeamNo) await tx.warpBeam.updateMany({ where: { id, status: WarpBeamStatus.PLANNED }, data: { setKey, physicalBeamNo: firstPhysical } });
+    if (setKey || firstPhysical !== beam.physicalBeamNo || ownerCustomerId !== beam.ownerCustomerId) {
+      await tx.warpBeam.updateMany({ where: { id, status: WarpBeamStatus.PLANNED }, data: { setKey, physicalBeamNo: firstPhysical, ownerCustomerId } });
+    }
     const first = await writeWoundTx(tx, { id, endsCount: beam.warpSpec.endsCount }, ctx, { issues: issueShares[0], returns: returnShares[0] });
     for (let k = 2; k <= count; k++) {
       const physicalBeamNo = siblingPhysicalNo(prefix, k, null);
       await assertPhysicalBeamFreeTx(tx, null, physicalBeamNo, `${beam.beamNo} takımı ${k}. levent`);
       // k. kardeş AYNI tx'te PLANNED doğar (8029 sıralı LV no; klon: kart/köken/taraf/plan m/not) ve hemen sarılır.
       const sib = await tx.warpBeam.create({
-        data: { beamNo: await nextBeamNoTx(tx, new Date()), warpSpecId: beam.warpSpecId, status: WarpBeamStatus.PLANNED, plannedLengthM: beam.plannedLengthM, physicalBeamNo, notes: beam.notes, originKind: beam.originKind, subcontractorId: beam.subcontractorId, supplierId: beam.supplierId, setKey, createdById: userId ?? null },
+        data: { beamNo: await nextBeamNoTx(tx, new Date()), warpSpecId: beam.warpSpecId, status: WarpBeamStatus.PLANNED, plannedLengthM: beam.plannedLengthM, physicalBeamNo, notes: beam.notes, originKind: beam.originKind, subcontractorId: beam.subcontractorId, supplierId: beam.supplierId, ownerCustomerId, setKey, createdById: userId ?? null },
         select: { id: true, beamNo: true },
       });
       await writeWoundTx(tx, { id: sib.id, endsCount: beam.warpSpec.endsCount }, { ...ctx, clientToken: null }, { issues: issueShares[k - 1], returns: returnShares[k - 1] });
     }
     return first;
   });
-  await logWarpBeamEventAudit({ userId, eventId: wound.id, kind: "WOUND", data: { beamId: id, lengthM: Number(lengthM), theoreticalKg: Number(theoreticalKg), kgSource: input.kgSource, issues: issues.length, returns: returns.length, count, setKey } });
+  await logWarpBeamEventAudit({ userId, eventId: wound.id, kind: "WOUND", data: { beamId: id, lengthM: Number(lengthM), theoreticalKg: Number(theoreticalKg), kgSource: input.kgSource, issues: issues.length, returns: returns.length, count, setKey, ...(lotOwner ? { ownerCustomerId: lotOwner, ownerInherited: true } : {}) } });
   const sibs = await siblingsOf(setKey, id);
   // Kardeş doğuşları audit'e (best-effort, tx dışında): her biri ayrı WARP_BEAM kaydıdır.
   for (const s of sibs) await AuditService.log({ userId, action: "CREATE", tableName: "WARP_BEAM", recordId: s.id, newData: { beamNo: s.beamNo, setKey, siblingOf: beam.beamNo, lengthM: Number(lengthM) } }).catch(() => undefined);

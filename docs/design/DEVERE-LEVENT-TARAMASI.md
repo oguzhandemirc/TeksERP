@@ -218,7 +218,7 @@ Saha sorusu #20'nin cevapları meşrudur ve **hepsi aynı tabloda yaşar**. ⚠�
 | İçeride sarıldı | `IN_HOUSE` | yok — `WOUND.machineId` dolu, taraf kolonlarının ÜÇÜ de NULL | `WARP_ISSUE` kendi stoğumuzdan | 1b |
 | Fasona sardırıldı | `SUBCONTRACT` | `subcontractorId` | İplik fasona çıkar, levent geri gelir (⚠️ sevk kalemi borcu aşağıda) | 1b |
 | Hazır satın alındı | `PURCHASED` | **`supplierId` XOR `subcontractorId` — tam biri** | **HİÇ YOK** — levent bir mal kabul kalemidir | 1b |
-| **Müşterinin gönderdiği levent** (fason dokuma) | **`CONSIGNED`** | **`ownerCustomerId`** | HİÇ YOK — mal bizim değil | **Faz N**, `MaterialOwnership` ile |
+| **Müşterinin gönderdiği levent** (fason dokuma) | **`CONSIGNED`** | **`ownerCustomerId`** | HİÇ YOK — mal bizim değil | **G3 İNDİ 2026-09-15** (migration 20260915050000–052000; ayrı `MaterialOwnership` defteri AÇILMADI — sahiplik doğum niteliği, `sevkiyat.md` EMANET satırı) |
 
 **Akıbet ekseni (köken DEĞİL):** `SHIPPED_OUT` + ters yolu `SHIP_OUT_CANCEL` — levent başka dokumacıya ya da fasona verildi. **F1 İNDİ 2026-09-14 (hüküm 1e):** olay adı `SHIP_OUT` (durum `SHIPPED_OUT`), **terminal DEĞİL** — minimal dönüş `RETURNED_IN` (SHIPPED_OUT → READY, `lengthM` = dönen ≤ giden; haşıl verisi F2) + tersi `RETURNED_IN_CANCEL`; her fason satırı sevk kalemine bağlı (`dispatchItemId`). Gerekçe: terminal kalsaydı fasona giden levent F2'ye kadar askıda kalır, yarım defter canlıya çıkardı.
 

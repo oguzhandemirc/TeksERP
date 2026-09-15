@@ -125,7 +125,7 @@ export type MachineDataSource =
 // DEĞİL: fasondan dönüşle READY'ye gelir — tablette "Fasonda" rozeti, eylemler kapalı.
 // Faz 3 (tezgah bağı): MOUNTED tezgahta (sök/tüket/bitir), EXHAUSTED · SCRAPPED terminal.
 export type WarpBeamStatus = 'PLANNED' | 'READY' | 'SHIPPED_OUT' | 'MOUNTED' | 'EXHAUSTED' | 'SCRAPPED' | 'CANCELLED';
-export type WarpBeamOrigin = 'IN_HOUSE' | 'SUBCONTRACT' | 'PURCHASED';
+export type WarpBeamOrigin = 'IN_HOUSE' | 'SUBCONTRACT' | 'PURCHASED' | 'CONSIGNED';
 export type WarpKgSource = 'WEIGHED' | 'THEORETICAL';
 // Backend `WarpBeamMountMethod` · `WarpLengthSource` aynası (devere Faz 3, DEVERE-LEVENT-TARAMASI §4.1).
 export type WarpBeamMountMethod = 'TYING_IN' | 'DRAWING_IN' | 'HARNESS_CHANGE';

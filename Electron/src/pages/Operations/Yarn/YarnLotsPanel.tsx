@@ -16,6 +16,9 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
+import { customerService } from "@/pages/Customers/service";
+import type { Customer } from "@/pages/Customers/types";
+import { useEmanetEnabled } from "@/hooks/usePricingEnabled";
 import { YARN_ITEM_FILTER } from "./YarnFilterBar";
 import { createYarnLot, listYarnLots, updateYarnLot, type YarnLotRow } from "./service";
 import { kg } from "./qty";
@@ -100,7 +103,10 @@ function LotTable({ rows, onToggle, busy }: { rows: YarnLotRow[]; onToggle: (r: 
               <td className="p-2">
                 {r.item.name} <span className="font-mono text-xs text-muted-foreground">{r.item.code}</span>
               </td>
-              <td className="p-2">{r.supplier?.name ?? <span className="text-muted-foreground">—</span>}</td>
+              <td className="p-2">
+                {r.supplier?.name ?? <span className="text-muted-foreground">—</span>}
+                {r.ownerCustomer && <div className="text-xs text-amber-700">Emanet: {r.ownerCustomer.name}</div>}
+              </td>
               {/* Türetilen bakiye — sunucu Σ hareket; eksi görünüyorsa mutabakat §41 kırmızıdır. */}
               <td className="p-2 text-right tabular-nums">{kg(r.balanceKg)}</td>
               <td className="p-2">{r.isActive ? <Badge variant="outline">Aktif</Badge> : <Badge variant="secondary">Pasif</Badge>}</td>
@@ -123,9 +129,12 @@ function CreateLotDialog({ defaultItemId, onClose, onDone }: { defaultItemId: st
   const [itemId, setItemId] = useState<string | null>(defaultItemId);
   const [lotNo, setLotNo] = useState("");
   const [notes, setNotes] = useState("");
+  // G3 emanet: sahip yalnız modül açıkken sorulur; kapalıyken alan gövdeye GİRMEZ (bayt bayt eski).
+  const emanet = useEmanetEnabled();
+  const [ownerCustomerId, setOwnerCustomerId] = useState<string | null>(null);
   const m = useMutation({
     // `lotNo` irsaliye metni olduğu gibi — TRIM sunucuda da yapılır, normalize edilmez.
-    mutationFn: () => createYarnLot({ itemId: itemId!, lotNo: lotNo.trim(), notes: notes.trim() || null }),
+    mutationFn: () => createYarnLot({ itemId: itemId!, lotNo: lotNo.trim(), notes: notes.trim() || null, ...(emanet && ownerCustomerId ? { ownerCustomerId } : {}) }),
     onSuccess: (res) => {
       toast.success(res.message ?? "Lot açıldı");
       onDone();
@@ -144,6 +153,9 @@ function CreateLotDialog({ defaultItemId, onClose, onDone }: { defaultItemId: st
           <ReferenceSelect<Item> value={itemId} onChange={setItemId} service={itemService} queryKey="items-yarn-lot-create" getLabel={(it) => `${it.code} — ${it.name}`} placeholder="İplik seç" extraFilters={YARN_ITEM_FILTER} />
           <Input placeholder="Lot no (ör. YAN 1029-K)" maxLength={64} value={lotNo} onChange={(e) => setLotNo(e.target.value)} aria-label="Lot numarası" />
           <Input placeholder="Not (isteğe bağlı)" maxLength={300} value={notes} onChange={(e) => setNotes(e.target.value)} />
+          {emanet && (
+            <ReferenceSelect<Customer> value={ownerCustomerId} onChange={setOwnerCustomerId} service={customerService} queryKey="customers-yarn-lot-owner" getLabel={(c) => c.name} placeholder="Sahibi (emanet iplikse müşteri) — boş: bizim iplik" nullable noneLabel="Bizim iplik" />
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={m.isPending}>

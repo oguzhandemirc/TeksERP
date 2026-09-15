@@ -51,6 +51,9 @@ export interface WarpBeamDto {
   originKind: WarpBeamOrigin;
   subcontractorId: string | null;
   supplierId: string | null;
+  /** G3 emanet: malın sahibi (müşteri); null = bizim mal. */
+  ownerCustomerId: string | null;
+  ownerCustomer: { id: string; name: string } | null;
   createdAt: Date;
   updatedAt: Date;
   warpSpec: { id: string; code: string; name: string; endsCount: number; yarnItem: { id: string; code: string; name: string; linearDensityDen: number | null } };
@@ -117,6 +120,8 @@ export function toWarpBeamDto(r: WarpBeamRow, remainingM?: number): WarpBeamDto 
     originKind: r.originKind,
     subcontractorId: r.subcontractorId,
     supplierId: r.supplierId,
+    ownerCustomerId: r.ownerCustomerId,
+    ownerCustomer: r.ownerCustomer,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
     warpSpec: { ...r.warpSpec, yarnItem: { ...r.warpSpec.yarnItem, linearDensityDen: num(r.warpSpec.yarnItem.linearDensityDen) } },

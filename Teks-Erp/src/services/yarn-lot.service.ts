@@ -14,6 +14,7 @@ import type { CursorPaginatedResponse } from "./base.service";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import { buildTurkishSearch } from "../utils/query-parser";
 import { ensureYarnLotTx, normalizeLotNo, yarnLotBalancesTx } from "./helpers/yarn-lot.helper";
+import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";
 
 export interface YarnLotDto {
   id: string;
@@ -24,6 +25,9 @@ export interface YarnLotDto {
   isActive: boolean;
   item: { id: string; code: string; name: string };
   supplier: { id: string; name: string } | null;
+  /** G3 emanet: lotun sahibi (müşteri); null = bizim iplik. */
+  ownerCustomerId: string | null;
+  ownerCustomer: { id: string; name: string } | null;
   /** Σ işaretli kg (tüm depolar) — hareketlerden türetilir, kolon değil. */
   balanceKg: number;
   createdAt: Date;
@@ -31,9 +35,10 @@ export interface YarnLotDto {
 }
 
 const LOT_SELECT = {
-  id: true, itemId: true, lotNo: true, supplierId: true, notes: true, isActive: true, createdAt: true, updatedAt: true,
+  id: true, itemId: true, lotNo: true, supplierId: true, notes: true, isActive: true, createdAt: true, updatedAt: true, ownerCustomerId: true,
   item: { select: { id: true, code: true, name: true } },
   supplier: { select: { id: true, name: true } },
+  ownerCustomer: { select: { id: true, name: true } },
 } satisfies Prisma.YarnLotSelect;
 
 export class YarnLotService {
@@ -65,14 +70,16 @@ export class YarnLotService {
   }
 
   /** Elle lot açma — mal kabul upsert'iyle AYNI tek kapı (`ensureYarnLotTx`, 8029 kilidi). */
-  async create(input: { itemId: string; lotNo: string; supplierId?: string | null; notes?: string | null }, userId?: string): Promise<ApiResponse<YarnLotDto>> {
+  async create(input: { itemId: string; lotNo: string; supplierId?: string | null; notes?: string | null; ownerCustomerId?: string | null }, userId?: string): Promise<ApiResponse<YarnLotDto>> {
     const lotNo = normalizeLotNo(input.lotNo);
     if (!lotNo) throw AppError.badRequest("Lot numarası boş olamaz", { code: "YARN_LOT_NO_REQUIRED" });
     const item = await prisma.item.findUnique({ where: { id: input.itemId }, select: { itemType: true, isActive: true, name: true } });
     if (!item || item.itemType !== "YARN") throw AppError.badRequest("Lot yalnız iplik kalemine açılır", { code: "YARN_LOT_ITEM_NOT_YARN" });
     if (!item.isActive) throw AppError.badRequest(`"${item.name}" kalemi pasif — lot açılamaz`);
     const created = await prisma.$transaction(async (tx) => {
-      const lot = await ensureYarnLotTx(tx, { itemId: input.itemId, lotNo, supplierId: input.supplierId ?? null, userId });
+      // G3 emanet: sahip verildiyse modül açık olmalı (403); sahip doğum niteliğidir — `update` yolu almaz (E2b).
+      await assertEmanetWritableTx(tx, input.ownerCustomerId ?? null, "iplik lotu");
+      const lot = await ensureYarnLotTx(tx, { itemId: input.itemId, lotNo, supplierId: input.supplierId ?? null, ownerCustomerId: input.ownerCustomerId ?? null, userId });
       if (!lot.created) throw AppError.conflict(`"${lotNo}" lotu bu kalemde zaten var`, { code: "YARN_LOT_EXISTS", lotId: lot.id });
       if (input.notes?.trim()) await tx.yarnLot.update({ where: { id: lot.id }, data: { notes: input.notes.trim().slice(0, 300) } });
       return tx.yarnLot.findUniqueOrThrow({ where: { id: lot.id }, select: LOT_SELECT });

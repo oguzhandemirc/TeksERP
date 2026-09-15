@@ -58,6 +58,8 @@ export const initialEntrySchema = z.object({
    * olmayan alan sessizce düşer ve bağ kurulmadan 201 döner (ölçüldü §3.8c A.5).
    */
   doffEventId: z.string().uuid("Geçersiz indirme ID").optional().nullable(),
+  /** G3 emanet: topun sahibi olan müşteri (müşterinin işlenmek üzere bıraktığı kumaş). Emanet kapalıyken 403 (serviste). */
+  ownerCustomerId: z.string().uuid("Geçersiz sahip müşteri").optional().nullable(),
 }).superRefine((v, ctx) => {
   if (v.semiFinished && v.doffEventId) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["doffEventId"], message: "Yarı mamul girişine indirme bağı verilemez — top ya dışarıdan gelir ya tezgahtan iner." });
@@ -294,7 +296,7 @@ export class InventoryController {
    */
   async createInitialEntry(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { confirmDuplicate, semiFinished, doffEventId, ...body } = initialEntrySchema.parse(req.body);
+      const { confirmDuplicate, semiFinished, doffEventId, ownerCustomerId, ...body } = initialEntrySchema.parse(req.body);
       // Kapalı modülün YAZMA yolu yoktur, tarihsel bağ dahil: `doffEventId` yalnız dokuma
       // açıkken kabul edilir (1e E1 hükmü 2026-09-14; kapı `requireDokumaEnabled` ile aynı gövde).
       if (doffEventId && !(await readDokumaEnabled())) {
@@ -343,6 +345,8 @@ export class InventoryController {
           // Ekle") koşar; dahili çağıranlar (tambur-manual, mal kabul, depo
           // transferi) `opts.gradeRequired` göndermediği için etkilenmez.
           gradeRequired: true,
+          // G3 emanet: doğum niteliği — yalnız bu HTTP yolu (KK1 tableti + Electron "Manuel Top Ekle") ve kalıtım verir.
+          ownerCustomerId: ownerCustomerId ?? null,
           // GİRİŞ İSTASYONU — oturumdan. Bu yolda ADIM YOKTUR (top henüz hiçbir
           // iş emrine bağlı değil), dolayısıyla tek doğru kaynak oturumdur.
           //

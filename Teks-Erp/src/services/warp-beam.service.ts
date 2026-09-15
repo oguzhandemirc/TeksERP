@@ -33,6 +33,7 @@ import {
   warpBeamRemainingM,
 } from "./helpers/warp-beam.helper";
 import { toWarpBeamDto, toWarpBeamEventDto, type WarpBeamDto, type WarpBeamEventDto } from "./helpers/warp-beam-dto.helper";
+import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";
 
 const WARP_BEAM_TABLE = "WARP_BEAM";
 const WARP_BEAM_EVENT_TABLE = "WARP_BEAM_EVENT";
@@ -135,6 +136,8 @@ export interface WarpBeamCreateInput {
   originKind: WarpBeamOrigin;
   subcontractorId?: string | null;
   supplierId?: string | null;
+  /** G3 emanet: sahibi olan müşteri — CONSIGNED'da zorunlu, öteki kökenlerde serbest; yalnız CREATE'te (E2b). */
+  ownerCustomerId?: string | null;
   physicalBeamNo?: string | null;
   notes?: string | null;
   clientToken?: string | null;
@@ -157,7 +160,7 @@ function normalizePlanned(v: number | string): Prisma.Decimal {
 }
 
 export async function createWarpBeam(input: WarpBeamCreateInput, userId?: string): Promise<ApiResponse<WarpBeamDto>> {
-  const party = resolveOriginParty({ originKind: input.originKind, subcontractorId: input.subcontractorId ?? null, supplierId: input.supplierId ?? null });
+  const party = resolveOriginParty({ originKind: input.originKind, subcontractorId: input.subcontractorId ?? null, supplierId: input.supplierId ?? null, ownerCustomerId: input.ownerCustomerId ?? null });
   const plannedLengthM = normalizePlanned(input.plannedLengthM);
   if (input.clientToken) {
     const replay = await prisma.warpBeam.findUnique({ where: { clientToken: input.clientToken }, select: WARP_BEAM_SELECT });
@@ -179,6 +182,8 @@ export async function createWarpBeam(input: WarpBeamCreateInput, userId?: string
   const created = await withBarcodeRetry(
     () =>
       prisma.$transaction(async (tx) => {
+        // G3: owner verildiyse emanet modülü açık olmalı (gövde kapısı, 403) — köken CONSIGNED de owner ister.
+        await assertEmanetWritableTx(tx, party.ownerCustomerId, "levent");
         const beamNo = await nextBeamNoTx(tx, new Date());
         return tx.warpBeam.create({
           data: {
@@ -203,7 +208,8 @@ export async function createWarpBeam(input: WarpBeamCreateInput, userId?: string
   return { success: true, data: toWarpBeamDto(created), message: `${created.beamNo} planlandı` };
 }
 
-export type WarpBeamUpdateInput = Partial<Omit<WarpBeamCreateInput, "clientToken">>;
+/** E2b: `ownerCustomerId` DOĞUM niteliğidir — PATCH gövdesinden yazılamaz (route şeması strict, burada da tip dışı). */
+export type WarpBeamUpdateInput = Partial<Omit<WarpBeamCreateInput, "clientToken" | "ownerCustomerId">>;
 
 async function throwNotPlannedTx(tx: Prisma.TransactionClient, id: string, eylem: string): Promise<never> {
   const fresh = await tx.warpBeam.findUnique({ where: { id }, select: { status: true, beamNo: true } });
@@ -219,6 +225,8 @@ export async function updateWarpBeam(id: string, input: WarpBeamUpdateInput, use
     originKind: input.originKind ?? current.originKind,
     subcontractorId: input.subcontractorId === undefined ? current.subcontractorId : input.subcontractorId,
     supplierId: input.supplierId === undefined ? current.supplierId : input.supplierId,
+    // Sahip DEĞİŞMEZ (doğum niteliği); köken CONSIGNED'a çevrilirken sahipsizse resolveOriginParty 400 verir.
+    ownerCustomerId: current.ownerCustomerId,
   });
   if (input.warpSpecId) await assertSpecActive(input.warpSpecId);
   await assertParties(party);

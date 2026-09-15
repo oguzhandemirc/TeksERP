@@ -278,6 +278,8 @@ router.post("/lots", requirePermission("yarn:write"), async (req, res, next) => 
         lotNo: z.string().max(64),
         supplierId: z.string().uuid().nullable().optional(),
         notes: z.string().max(300).nullable().optional(),
+        /** G3 emanet: lotun sahibi (müşteri); yalnız açılışta — PATCH almaz (E2b). Emanet kapalıyken 403. */
+        ownerCustomerId: z.string().uuid().nullable().optional(),
       })
       .strict()
       .parse(req.body ?? {});

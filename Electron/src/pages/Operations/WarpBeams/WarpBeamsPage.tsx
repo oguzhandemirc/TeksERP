@@ -95,7 +95,7 @@ export function WarpBeamsPage() {
               .mutateAsync({
                 id: formTarget?.id ?? null,
                 clientToken,
-                body: toPlanPayload(v),
+                body: toPlanPayload(v, { forUpdate: Boolean(formTarget) }),
               })
               .then(swallow, swallow)
           }

@@ -32,6 +32,7 @@ import { cancelYarnItemsTx, countReturnedYarnItems, dispatchYarnItemsTx, type Ya
 import { WEAVING_ORDER_OPEN_STATUSES } from "./weaving-order.service";
 import { markWeavingOrderInProgressTx } from "./helpers/weaving-order.helper";
 import { assertWeavingBound } from "./helpers/dispatch-header.helper";
+import { resolveOwnerFromBeamsTx } from "./helpers/emanet-owner.helper";
 
 const inventory = new InventoryService();
 type Tx = Prisma.TransactionClient;
@@ -248,6 +249,8 @@ export async function receiveForWeaving(input: WeavingReceiptInput, userId?: str
   // makbuzu düşürmez, `failed[]`e düşer — operatör satırı düzeltip yeniden gönderir.
   const rolls: { id: string; barcode: string | null; initialQty: number }[] = [];
   const failed: { index: number; message: string }[] = [];
+  // G3 emanet kalıtımı: sevkteki leventlerin sahibi tek ise doğan top onu alır (karışık → 409, makbuz açılmaz).
+  const ownerCustomerId = await resolveOwnerFromBeamsTx(prisma, input.weavingOrderId);
   for (const [index, line] of input.rolls.entries()) {
     try {
       const res = await inventory.createInitialEntry(
@@ -269,6 +272,7 @@ export async function receiveForWeaving(input: WeavingReceiptInput, userId?: str
           parentReceiptId: header.receipt.id,
           entryStationId: null,
           skipKk1WeightPolicy: true,
+          ownerCustomerId,
         },
       );
       rolls.push({ id: res.data.id, barcode: res.data.barcode, initialQty: Number(res.data.initialQty) });
