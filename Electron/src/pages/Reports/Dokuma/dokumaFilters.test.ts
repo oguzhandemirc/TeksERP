@@ -7,7 +7,7 @@
 // Kapı bu yüzden listenin KAYNAĞINI ölçer, ekranı değil.
 // =============================================================================
 import { describe, expect, it } from "vitest";
-import { buildRandimanExport } from "./dokumaExport";
+import { buildParetoExport, buildRandimanExport } from "./dokumaExport";
 import { machineOptionsFrom, optionLabel, pickReportData, shiftOptionsFrom } from "./dokumaFilters";
 import type { EfficiencyReport } from "./service";
 
@@ -52,6 +52,20 @@ describe("dokuma rapor süzgeci — saf yarı", () => {
     expect(suzgecli.meta?.[0]).toContain("SÜZGEÇ — Tezgah: T-01");
     const suzgecsiz = buildRandimanExport({ rapor, periodLabel: "x", filterLabel: null });
     expect(suzgecsiz.meta?.join(" ")).not.toContain("SÜZGEÇ");
+  });
+
+  it("⭐ Pareto süzgeci ÇIKTIYA da geçer — kaynağı BAŞKA rapor olsa da", () => {
+    // Pareto satırı makine taşımaz; liste Randıman penceresinden gelir. Süzgecin
+    // kâğıda geçmesi bu yüzden AYRI ölçülür: "liste başka yerden geliyor" kusuru,
+    // çıktıda sessizce kaybolmakla aynı şey olurdu.
+    const rapor = {
+      sebepler: [], mikroDuruslar: { stopCount: 0, stopSec: 0 }, siniflandirilmamis: { stopCount: 0, stopSec: 0 },
+      atanmamis: { stopCount: 0, stopSec: 0 }, toplam: { stopCount: 0, stopSec: 0 },
+      kaynakKirilimi: { MACHINE: { satir: 0, potSec: 0 }, OPERATOR: { satir: 0, potSec: 0 }, SUPERVISOR: { satir: 0, potSec: 0 }, SIMULATED: { satir: 0, potSec: 0 }, INFERRED: { satir: 0, potSec: 0 } },
+      meta: { ufuk: "2026-09-14", ufukOncesiSatir: 0, total: 0, truncated: false, live: 0, sealed: 0 },
+    };
+    const spec = buildParetoExport({ rapor, periodLabel: "x", filterLabel: "T-02 · Tezgah T-02" });
+    expect(spec.meta?.[0]).toContain("SÜZGEÇ — Tezgah: T-02");
   });
 
   it("etiket çözümü: bilinmeyen id ham basılır, boş seçim etiketsizdir", () => {
