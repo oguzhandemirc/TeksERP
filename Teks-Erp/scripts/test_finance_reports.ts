@@ -684,6 +684,15 @@ async function main(): Promise<void> {
     suzgecli.suzgec !== undefined && !("yon" in suzgecli.suzgec) && suzgecli.suzgec.kategori === "CASH_TXN",
     JSON.stringify(suzgecli.suzgec));
   check("§9s6 SÜZGEÇSİZ çağrıda `suzgec` anahtarı HİÇ YOK", !("suzgec" in book), JSON.stringify(book.suzgec));
+  // ⭐ SEÇENEKLER SÜZGEÇTEN BAĞIMSIZ — kuralın tek yanlışlanabilir biçimi. Liste
+  // süzgeçle daralsaydı seçici KENDİ KENDİNİ KİLİTLERDİ: kullanıcı seçimini
+  // genişletmek isteyince genişleteceği değer listede olmazdı.
+  check("§9s7 ⭐ `secenekler` süzgeçten BAĞIMSIZ (cari listesi daralmadı)",
+    JSON.stringify(suzgecli.secenekler.cariId) === JSON.stringify(book.secenekler.cariId),
+    `${suzgecli.secenekler.cariId?.length} ↔ ${book.secenekler.cariId?.length}`);
+  check("§9s8 hesap seçenekleri hesap kataloğundan (iki tablo tek liste)",
+    (book.secenekler.accountId?.length ?? 0) === book.accounts.length,
+    `${book.secenekler.accountId?.length} seçenek ↔ ${book.accounts.length} hesap`);
 
   const bankBook = await getCashBookReport({
     range: { from: ago(30), to: new Date() },

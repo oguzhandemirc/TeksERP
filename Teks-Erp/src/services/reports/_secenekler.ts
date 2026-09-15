@@ -13,6 +13,16 @@
 export interface Secenek { id: string; ad: string; kod?: string }
 export interface SebepSecenek { code: string; ad: string }
 export interface Secenekler {
+  /** FİNANS: pencerede geçen cari hesaplar (`CariAccount`, müşteri + fasoncu). */
+  cariId?: Secenek[];
+  /** FİNANS: kasa/banka hesapları (kaynak İKİ tablo, tek listede birleşir). */
+  accountId?: Secenek[];
+  /**
+   * FİNANS: ekstrede geçen belge tipleri. `Secenek` DEĞİL `SebepSecenek`:
+   * anahtar bir kimlik değil ENUM değeridir ve `reasonCode` ile aynı şekli taşır
+   * (kod + görünen ad) — panel ikisini tek bileşenle çizebilsin.
+   */
+  belgeTipi?: SebepSecenek[];
   customerId?: Secenek[];
   itemId?: Secenek[];
   colorId?: Secenek[];

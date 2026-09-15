@@ -26,6 +26,7 @@
 // Koşum: npx tsx scripts/test_finans_rapor_eksenleri.ts
 // =============================================================================
 import { readFileSync } from "node:fs";
+import { reportEnvelope } from "../src/services/reports/_shared";
 import { join } from "node:path";
 
 const KOK = join(__dirname, "..");
@@ -113,18 +114,41 @@ function main(): void {
   check("§2 ⭐ süzgeç kabı yalnız süzgeçliyken ve ORTAK tiple (`SuzgecEcho`)",
     sapan2.length === 0, sapan2.join(" · ") || `${EKSENLER.length} rapor`);
 
-  // §2b ⭐ BEYAN CEVABIN KÖKÜNDE — `data`nın içinde DEĞİL. İki adres, panelin
-  // süzgeç şeridini rapor başına yazdırırdı; 1e hükmü R5b-c2 tek adres.
+  // §2b ⭐ BEYAN CEVABIN KÖKÜNDE — ve ölçüm DAVRANIŞA bağlı, çağrının METNİNE değil.
+  //
+  // ⚠️ BU KOL BİR KEZ YANLIŞ ŞEYİ ONAYLADI (2026-09-15, 1e ölçtü): ilk yazımı
+  // `reportEnvelope(x, range, null, suzgec)` metnini arıyordu. İmza dördüncü
+  // argümanı KONUMSAL DEĞERDEN seçenek nesnesine çevirince tam o biçim bozuldu —
+  // beyan sessizce düştü, tsc sustu (`SuzgecEcho` nesnesi `EnvelopeEk`e yapısal
+  // olarak atanabiliyor) ve kol ihlali "uygun" diye ölçtü.
+  // ⇒ *Bir kolu çağrının metnine bağlarsan, imza değiştiğinde kol susmaz —
+  //   YANLIŞ ŞEYİ ONAYLAR; bu sessiz kalmaktan kötüdür.*
+  // Çare: önce YARDIMCININ DAVRANIŞINI ölç (gerçek çağrı, gerçek gövde), sonra
+  // rotanın o yardımcıya beyanı GEÇİRDİĞİNİ — biçimden bağımsız.
+  {
+    const ornekAralik = { from: new Date("2026-01-01T00:00:00.000Z"), to: new Date("2026-01-02T00:00:00.000Z") };
+    const dolu = reportEnvelope({ x: 1 }, ornekAralik, null, { suzgec: { kind: "CUSTOMER", dusenSatir: 3 } });
+    const bos = reportEnvelope({ x: 1 }, ornekAralik, null, {});
+    check("§2b1 ⭐ `reportEnvelope` beyanı KÖKE koyar ve `data`ya DOKUNMAZ (gerçek çağrı)",
+      dolu.suzgec?.kind === "CUSTOMER" && Number(dolu.suzgec?.dusenSatir) === 3
+        && !("suzgec" in (dolu.data as object)),
+      JSON.stringify({ kok: dolu.suzgec, data: dolu.data }));
+    check("§2b2 ⭐ beyan verilmeyince `suzgec` anahtarı HİÇ YOK (panel varlığına bakar)",
+      !("suzgec" in bos), JSON.stringify(bos));
+  }
+
+  // §2c rota beyanı zarfa GEÇİRİYOR — biçime değil İKİ OLGUYA bakar: servis
+  // dönüşünden ayrılıyor ∧ `reportEnvelope` çağrısının SEÇENEK NESNESİNDE yer
+  // alıyor. Fazladan anahtar (`secenekler`) kolu kırmaz.
   const kokSapan: string[] = [];
   for (const e of EKSENLER) {
     const govde = ucGovdesi(rota, e.uc);
-    if (!/const \{ suzgec, \.\.\.\w+ \} =/.test(govde)) { kokSapan.push(`${e.uc}: servis dönüşünden \`suzgec\` AYRILMIYOR`); continue; }
-    // Zarfın dördüncü parametresi `EnvelopeEk` NESNESİDİR (`{ suzgec, secenekler? }`) — R5b-c3'ten beri. Çıplak `suzgec`
-    // geçmek tsc'de kırmızı vermez ama beyanı SESSİZCE düşürür (ek.suzgec boş kalır); o biçim burada ihlaldir.
-    if (/reportEnvelope\(\w+, range, null, suzgec\)/.test(govde)) kokSapan.push(`${e.uc}: \`suzgec\` zarfa ÇIPLAK geçiyor — \`{ suzgec }\` nesnesi olmalı (beyan sessizce düşer)`);
-    else if (!/reportEnvelope\(\w+, range, null, \{ suzgec(?:, secenekler)? \}\)/.test(govde)) kokSapan.push(`${e.uc}: \`suzgec\` zarfa VERİLMİYOR (cevabın kökünde değil)`);
+    if (!/const \{[^}]*\bsuzgec\b[^}]*\}\s*=/.test(govde)) { kokSapan.push(`${e.uc}: servis dönüşünden \`suzgec\` AYRILMIYOR`); continue; }
+    const cagri = govde.match(/reportEnvelope\([\s\S]{0,200}?\)\)/);
+    if (!cagri) { kokSapan.push(`${e.uc}: ÖLÇÜLEMEDİ — \`reportEnvelope\` çağrısı bulunamadı`); continue; }
+    if (!/\{[^}]*\bsuzgec\b[^}]*\}\s*\)/.test(cagri[0])) kokSapan.push(`${e.uc}: \`suzgec\` zarfın SEÇENEK NESNESİNDE değil (konumsal argüman sessizce düşer)`);
   }
-  check("§2b ⭐ süzgeç beyanı cevabın KÖKÜNDE (tek adres — dokuma/satış ile aynı yer)",
+  check("§2c ⭐ her uç beyanı zarfa GEÇİRİYOR (seçenek nesnesinde, konumsal değil)",
     kokSapan.length === 0, kokSapan.join(" · ") || `${EKSENLER.length} uç`);
 
   // ── §3 DÜŞEN SATIR SAYILIYOR ─────────────────────────────────────────────

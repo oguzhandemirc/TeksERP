@@ -21,6 +21,53 @@
 
 ---
 
+## 2026-09-15 — Seçici, süzgeçten bağımsız olmazsa kendi kendini kilitler [ÇEKİRDEK]
+
+Raporlar fazının R5b-d-b dilimi: finans raporlarına cari ekseni + `meta.secenekler`.
+
+**Seçici kaynağı SÜZGEÇTEN BAĞIMSIZ olmak zorunda.** Liste süzgeçle daralsaydı kullanıcı
+seçimini GENİŞLETEMEZDİ: "A carisini seçtim, şimdi B'yi de ekleyeyim" dediğinde B listede
+olmazdı, çünkü liste A'ya süzülmüş veriden doğardı. ⇒ ***Bir seçicinin kaynağı, seçimin
+kendisinden etkileniyorsa seçici tek yönlüdür: daraltır, genişletemez.***
+
+Bunun bedeli rapora göre DEĞİŞİR ve bu ayrım ölçüldü:
+  • Süzgeç WHERE'e iniyorsa (`aging`, `fx-diff`) toplayıcı bir kez DAHA, o süzgeç olmadan
+    koşar. Bedel yalnız süzgeçli istekte ödenir.
+  • Süzgeç yalnız DÖKÜME uygulanıyorsa (`cash-book`, `statement`) ikinci koşum GEREKMEZ:
+    kaynak sorgusu zaten süzgeçsizdir, seçenekler doğuştan bağımsızdır.
+İkisini tek kurala bağlamak ya gereksiz sorgu ekler ya da kilitli bir seçici üretir.
+
+**Cari ekseni LİSTE, ama `statement` TEKİL kalır ve bu beyan edilir:** ekstre tek cari
+içindir ve yürüyen bakiye iki cariyle TANIMSIZdır. `aging`de tek ögeli liste bugünkü tekil
+davranışa düşürülür — `includeDetail` "tek cari seçili mi" sorusuna bakıyor ve listeye
+çevirmek onu sessizce kapatırdı.
+
+**Etiketin tek kaynağı nerede ise orada kalır.** `belgeTipi` seçenekleri HAM ENUM kodu
+taşır; Türkçe etiketler panelde (`audit-labels`, `test_audit_labels §4` her enum değerinin
+karşılığını orada istiyor). Backend'e ikinci bir etiket tablosu koymak "aynı soruyu
+cevaplayan koşul tek yerde yaşar" kuralının doğrudan ihlali olurdu.
+
+**VE BEKÇİNİN KENDİ DERSİ — bir kol yanlış şeyi ONAYLADI.** §2b'nin ilk yazımı
+`reportEnvelope(x, range, null, suzgec)` METNİNİ arıyordu. 6e imzanın dördüncü argümanını
+konumsal değerden seçenek nesnesine çevirince tam o biçim BOZULDU: beyan sessizce düştü,
+tsc sustu (`SuzgecEcho` nesnesi `EnvelopeEk`e yapısal olarak atanabiliyor, `ek.suzgec` boş
+kalıyor) ve kol ihlalin kendisini "sözleşmeye uygun" diye ölçtü. 1e yakaladı.
+⇒ ***Bir kolu çağrının METNİNE bağlarsan, imza değiştiğinde kol susmaz — YANLIŞ ŞEYİ
+ONAYLAR; ve bu sessiz kalmaktan kötüdür.*** Kol davranışa bağlandı: gerçek bir
+`reportEnvelope` çağrısı yapılır ve beyanın KÖKE gittiği, `data`ya dokunmadığı, verilmeyince
+anahtarın HİÇ OLMADIĞI ölçülür. Aynı bozulma sondayla tekrar edildi (⑭) ve yeni kol ısırdı.
+
+**Yan ders, aynı aileden:** `test_fx_diff_report`in kendi yardımcısı `cariId?: string`
+tipliydi ve servisin imzası listeye dönünce tsc SUSTU — yardımcının yerel tipi servisin
+tipini gölgeliyordu; hata çalışma anında `Argument 'in': Expected String[]` olarak çıktı.
+⇒ ***Bir test yardımcısının kendi imzası, ölçtüğü şeyin imzasını gölgeleyebilir.***
+
+**Ve dosyanın kendi uyarısı beni yakaladı:** `cash-book.report.ts` SQL şablonunda "BACKTICK
+kullanma — template literal'ı ortadan böler" yazıyor. İki satır altına backtick'li bir yorum
+yazdım, dosya derlenmedi. Uyarı işe yaradı; derleyici de ikinci hat olarak durdu.
+
+---
+
 ## 2026-09-15 — Kırmızının sebebi ölçtüğün şey değil ÖN KOŞULUN olabilir [ÇEKİRDEK]
 
 `test_zincir_uctan_uca` yerelde şöyle kırmızı verdi: `①a mal kabulü LOT açtı … lot=undefined

@@ -32,6 +32,7 @@ import { requirePermission } from "../../middlewares/rbac.middleware";
 import { requireReportOpen } from "../../middlewares/report.middleware";
 import { requireFinanceEnabled } from "../../middlewares/finance.middleware";
 import { dateRangeSchema, reportEnvelope, resolveDateRange } from "../../services/reports/_shared";
+import { cariEkseni, filterEcho } from "../../services/reports/_filters";
 import { getAgingReport } from "../../services/reports/finance-aging.report";
 import { getCashBookReport } from "../../services/reports/cash-book.report";
 import { getVatSummaryReport, VAT_YONLERI } from "../../services/reports/finance-vat.report";
@@ -70,6 +71,7 @@ const boolish = z
  *       Kapamaya bağlanmamış tahsilat/çek rapor anında FIFO ile SANAL mahsup
  *       edilir — deftere hiçbir şey yazılmaz. Her satır `reconDiff` taşır:
  *       Σ(kovalar) − kapanmamış kredi − cari bakiyesi; SIFIR olmak zorundadır.
+ *       SÜZGEÇ: `cariId` LİSTE (CSV ya da tekrarlı anahtar, ≤50; tek öge bugünkü tekil davranışa düşer ve `detail` kırılımını korur). `meta.secenekler.cariId` seçici kaynağıdır — süzgeçten BAĞIMSIZ: cari süzgeçli istek toplayıcıyı bir kez daha cari süzgeci olmadan koşar.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Para birimi bazında yaşlandırma blokları }
@@ -83,7 +85,7 @@ router.get("/aging", requireReportOpen("finance/aging"), guard, async (req: Requ
         // yaşlandırmaya aralık göndermek anlamsızdır ve sessizce yok saymak,
         // kullanıcıya filtrelediğini sandırırdı.
         asOf: z.string().datetime({ offset: true }).optional(),
-        cariId: z.string().uuid().optional(),
+        ...cariEkseni,
         kind: z.enum(["CUSTOMER", "SUBCONTRACTOR"]).optional(),
         currency: z.enum(CURRENCIES).optional(),
         onlyOverdue: boolish,
@@ -95,18 +97,31 @@ router.get("/aging", requireReportOpen("finance/aging"), guard, async (req: Requ
     const asOf = q.asOf ? new Date(q.asOf) : new Date();
     if (Number.isNaN(asOf.getTime())) throw AppError.badRequest("Geçersiz asOf tarihi");
 
-    const data = await getAgingReport({
+    // ⚠️ TEK ÖGELİ LİSTE `cariId`ye DÜŞER (`idWhere` semantiği): bugünkü davranış
+    // bayt bayt korunur — `includeDetail` "tek cari seçili mi" sorusuna bakıyor ve
+    // listeye çevirmek onu sessizce kapatırdı.
+    const tekCari = q.cariId.length === 1 ? q.cariId[0] : undefined;
+    const { secenekler, ...data } = await getAgingReport({
       asOf,
-      cariId: q.cariId,
+      cariId: tekCari,
+      cariIds: q.cariId.length > 1 ? q.cariId : undefined,
       kind: q.kind,
       currency: q.currency,
       onlyOverdue: q.onlyOverdue,
       // Fatura kırılımı yalnız TEK cari seçiliyken üretilir: tüm cariler için
       // satır dökümü, ekranın hiç kullanmayacağı on binlerce satırlık bir yanıt
       // olurdu (perf kuralı 7 — yalnız gereken alan).
-      includeDetail: q.detail && Boolean(q.cariId),
+      includeDetail: q.detail && Boolean(tekCari),
     });
-    res.status(200).json({ success: true, data });
+    // ⚠️ `aging` bir KESİT: `reportEnvelope` tarih aralığı ister, yaşlandırmanın
+    // aralığı YOKTUR. Zarfın yalnız `suzgec`/`secenekler` ayağı kullanılır ve
+    // gövde bugünkü `{ success, data }` biçimini KORUR (istemci kırılmaz).
+    res.status(200).json({
+      success: true,
+      data,
+      ...(filterEcho(q, ["cariId"]) ? { suzgec: filterEcho(q, ["cariId"]) } : {}),
+      meta: { secenekler },
+    });
   } catch (e) {
     next(e);
   }
@@ -133,6 +148,7 @@ router.get("/aging", requireReportOpen("finance/aging"), guard, async (req: Requ
  *       tahsilat/ödeme · çek · virman kendi sabit kovalarında; kırılım hesap
  *       özetiyle AYNI hareket kümesinden türetilir (mutabakat bekçili).
  *       SÜZGEÇ: `kategori` (CASH_TXN·TRANSFER·PAYMENT·CHEQUE) ve `yon` (IN/OUT) YALNIZ satır dökümünü daraltır — özet, kategori kırılımı ve yürüyen bakiye dönemin TAMAMINDAN doğar; `suzgec.dusenSatir` elenen satırı sayar.
+ *       SÜZGEÇ: `cariId` LİSTE de eklendi ve o da YALNIZ satır dökümünü daraltır. `meta.secenekler`: `cariId` (pencerede geçen cariler) + `accountId` (kasa/banka kataloğu) — ikinci sorgu YOK, çünkü süzgeç zaten dökümde uygulanıyor.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Hesap özetleri (+ tek hesapta satır dökümü) }
@@ -150,6 +166,7 @@ router.get("/cash-book", requireReportOpen("finance/cash-book"), guard, async (r
         // gerekçe `cash-book.report.ts` `suzgec` alanında.
         kategori: z.enum(["CASH_TXN", "TRANSFER", "PAYMENT", "CHEQUE"]).optional(),
         yon: z.enum(["IN", "OUT"]).optional(),
+        ...cariEkseni,
       })
       .strict()
       .parse(req.query);
@@ -164,9 +181,10 @@ router.get("/cash-book", requireReportOpen("finance/cash-book"), guard, async (r
       includeInactive: q.includeInactive,
       kategori: q.kategori,
       yon: q.yon,
+      cariId: q.cariId,
     });
-    const { suzgec, ...govde } = data;
-    res.status(200).json(reportEnvelope(govde, range, null, { suzgec }));
+    const { suzgec, secenekler, ...govde } = data;
+    res.status(200).json(reportEnvelope(govde, range, null, { suzgec, secenekler }));
   } catch (e) {
     next(e);
   }
@@ -189,6 +207,7 @@ router.get("/cash-book", requireReportOpen("finance/cash-book"), guard, async (r
  *       aynı cari için iki farklı devir/yürüyen bakiye üreten iki ekran doğardı
  *       (ve dönem kapanışı devri yalnız birine eklenirdi).
  *       SÜZGEÇ: `belgeTipi` (`CariTxnSource`) YALNIZ satır dökümünü daraltır — devir, bakiye ve toplamlar dönem gerçeğidir; `suzgec.dusenSatir` elenen satırı sayar.
+ *       ⚠️ `cariId` BİLEREK TEKİL kalır (liste DEĞİL): ekstre TEK cari içindir, yürüyen bakiye iki cariyle TANIMSIZdır. `meta.secenekler.belgeTipi` pencerede geçen tipleri taşır; `ad` HAM ENUM değeridir — Türkçe etiketin tek kaynağı panelde (`audit-labels`), backend ikinci bir etiket tablosu tutmaz.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Devir + hareketler + yürüyen bakiye }
@@ -216,8 +235,8 @@ router.get("/statement", requireReportOpen("finance/statement"), guard, async (r
       to: range.to,
       belgeTipi: q.belgeTipi,
     });
-    const { suzgec, ...govde } = result.data;
-    res.status(200).json(reportEnvelope(govde, range, null, { suzgec }));
+    const { suzgec, secenekler, ...govde } = result.data;
+    res.status(200).json(reportEnvelope(govde, range, null, { suzgec, secenekler }));
   } catch (e) {
     next(e);
   }
@@ -242,6 +261,7 @@ router.get("/statement", requireReportOpen("finance/statement"), guard, async (r
  *       her belgenin KENDİ kur damgasıyla çevrilir; kuruş kalıntısı en büyük
  *       matrah satırına yazılır, `totalsTry.reconDiff` "0.00" olmak zorundadır.
  *       SÜZGEÇ: `yon` (4 `InvoiceType` değeri, iadeler AYRI) ve `oran` (sabit 2 hane, örn. `20.00`) WHERE'e iner; `meta.suzgec` düşen belge ve satırı sayar.
+ *       ⚠️ BEYANLI BOŞLUK: bu uç `meta.secenekler` DÖNMEZ. `yon` kapalı bir enum (panel statik çizer) ama `oran` AÇIK bir kümedir ve panel pencerede hangi oranların geçtiğini bilemez — R5b-d-c kalemi.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Satış + alış blokları (oran kırılımı, para birimi grupları, TL toplamlar) }
@@ -294,6 +314,7 @@ router.get("/vat-summary", requireReportOpen("finance/vat-summary"), guard, asyn
  *       bazında kuruşa yuvarlanır, özet toplam satır toplamına birebir eşittir.
  *       DEFTERE YAZMAZ — dekont bacağı ayrı bir üründür (yol haritası J).
  *       SÜZGEÇ: `kind` (CUSTOMER/SUBCONTRACTOR) WHERE'e iner ve `summary` onunla birlikte daralır (kur farkı bakiye değil, kümenin toplamıdır); `suzgec.dusenSatir` elenen satırı sayar.
+ *       SÜZGEÇ: `cariId` LİSTE. `meta.secenekler.cariId` süzgeçten BAĞIMSIZ (süzgeçli istek ikinci bir hafif sorgu koşar).
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Kapama bazında kur farkı satırları + lehte/aleyhte özet }
@@ -305,7 +326,7 @@ router.get("/fx-diff", requireReportOpen("finance/fx-diff"), guard, async (req: 
       .object({
         dateFrom: z.string().datetime({ offset: true }).optional(),
         dateTo: z.string().datetime({ offset: true }).optional(),
-        cariId: z.string().uuid().optional(),
+        ...cariEkseni,
         currency: z.enum(CURRENCIES.filter((c) => c !== "TRY") as [string, ...string[]]).optional(),
         // `aging` bu ekseni taşıyordu, kardeşi taşımıyordu — asimetri kapandı.
         kind: z.nativeEnum(CariKind).optional(),
@@ -314,8 +335,8 @@ router.get("/fx-diff", requireReportOpen("finance/fx-diff"), guard, async (req: 
       .parse(req.query);
 
     const range = resolveDateRange(dateRangeSchema.parse({ dateFrom: q.dateFrom, dateTo: q.dateTo }));
-    const { suzgec, ...govde } = await getFxDiffReport({ range, cariId: q.cariId, currency: q.currency, kind: q.kind });
-    res.status(200).json(reportEnvelope(govde, range, null, { suzgec }));
+    const { suzgec, secenekler, ...govde } = await getFxDiffReport({ range, cariId: q.cariId, currency: q.currency, kind: q.kind });
+    res.status(200).json(reportEnvelope(govde, range, null, { suzgec, secenekler }));
   } catch (e) {
     next(e);
   }

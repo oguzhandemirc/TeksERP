@@ -28,10 +28,21 @@ export const musteriEkseni = { customerId: idList, destination: z.nativeEnum(Shi
 /** Kalem ekseni: kumaş (item) + renk. */
 export const kalemEkseni = { itemId: idList, colorId: idList };
 export const fasonEkseni = { subcontractorId: idList };
+/**
+ * FİNANS ekseni: cari hesap kimliği. ⚠️ `musteriEkseni` DEĞİL — o `Customer`ı
+ * sorar, bu `CariAccount`u (ayrı varlık: fasoncunun da carisi vardır, müşterinin
+ * carisi olmayabilir). İkisini tek eksene indirmek "hangi müşteri" ile "hangi
+ * cari" sorularını karıştırırdı.
+ *
+ * ⚠️ LİSTE (çoklu seçim) — ama `finance/statement` bilinçli olarak TEKİL kalır:
+ * ekstre TEK cari içindir ve yürüyen bakiye iki cariyle TANIMSIZdır.
+ */
+export const cariEkseni = { cariId: idList };
 /** Sipariş iptal sebebi (`ORDER_CANCEL` katalog kodu, `Order.cancelReasonCode`). */
 export const iptalEkseni = { reasonCode: codeList };
 
 export interface ReportFilterInput {
+  cariId?: string[];
   customerId?: string[];
   destination?: ShipmentDestination;
   itemId?: string[];

@@ -52,7 +52,10 @@ const chequeIds: string[] = [];
 const cashBoxIds: string[] = [];
 
 /** Raporu tüm evren için koşar (geniş pencere) — satırlar TAG'li belgelerle süzülür. */
-async function report(opts?: { from?: Date; to?: Date; cariId?: string; kind?: CariKind }): Promise<Awaited<ReturnType<typeof getFxDiffReport>>> {
+// ⚠️ `cariId` LİSTE (R5b-d-b `cariEkseni`). Burada `string` bırakılsaydı tsc
+// SUSARDI — yardımcının kendi imzası, servisin imzasını gölgeliyor ve çağrı
+// çalışma anında `Argument \`in\`: Expected String[]` ile düşerdi (ölçüldü).
+async function report(opts?: { from?: Date; to?: Date; cariId?: string[]; kind?: CariKind }): Promise<Awaited<ReturnType<typeof getFxDiffReport>>> {
   return getFxDiffReport({
     range: {
       from: opts?.from ?? new Date(Date.now() - 3_600_000),
@@ -269,8 +272,8 @@ async function main(): Promise<void> {
   // ── §8 SÜZGEÇLER ─────────────────────────────────────────────────────────
   const past = await report({ from: new Date(Date.now() - 7_200_000), to: new Date(Date.now() - 3_600_000) });
   check("§8a Tarih penceresi: geçmiş pencerede bu testin satırı yok", mine(past).length === 0);
-  const byCari = await report({ cariId: cariRow.id });
-  check("§8b cariId süzgeci: yalnız müşterinin satırları (tedarikçi PURCHASE dışarıda)", mine(byCari).every((x) => x.invoice.type !== "PURCHASE") && mine(byCari).length === 3, `satır=${mine(byCari).length}`);
+  const byCari = await report({ cariId: [cariRow.id] });
+  check("§8b cariId süzgeci (LİSTE): yalnız müşterinin satırları (tedarikçi PURCHASE dışarıda)", mine(byCari).every((x) => x.invoice.type !== "PURCHASE") && mine(byCari).length === 3, `satır=${mine(byCari).length}`);
 
   // §8c–§8f ⭐ `kind` EKSENİ (R5b-d): `aging` bu ekseni taşıyordu, kardeşi taşımıyordu.
   // Burada ÖZET süzgeçle BİRLİKTE daralır (kasa defterinin aksine) — kur farkı bir
@@ -290,6 +293,12 @@ async function main(): Promise<void> {
       && Number(musteri.suzgec?.dusenSatir) === hepsi.summary.count - musteri.summary.count
       && !("suzgec" in hepsi),
     JSON.stringify(musteri.suzgec));
+
+  check("§8g ⭐ `secenekler` süzgeçten BAĞIMSIZ (süzgeçli istek toplayıcıyı süzgeçsiz bir kez daha koşar)",
+    JSON.stringify(musteri.secenekler.cariId) === JSON.stringify(hepsi.secenekler.cariId),
+    `${musteri.secenekler.cariId?.length} ↔ ${hepsi.secenekler.cariId?.length}`);
+  check("§8h KÖRLÜK ZEMİNİ: seçenek listesi BOŞ DEĞİL (vakumen yeşil değil)",
+    (hepsi.secenekler.cariId?.length ?? 0) > 0, `${hepsi.secenekler.cariId?.length} cari`);
 
   // ── KÖRLÜK ZEMİNİ ────────────────────────────────────────────────────────
   check("Körlük zemini: en az 4 dövizli kapama üretildi", invoiceDocNos.size >= 5);

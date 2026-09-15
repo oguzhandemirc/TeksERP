@@ -376,6 +376,13 @@ async function main(): Promise<void> {
       `dusenSatir=${yalnizDevir.data.suzgec?.dusenSatir} (beklenen ${hRows.length - yRows.length})`);
     check("§10y5 SÜZGEÇSİZ çağrıda `suzgec` anahtarı HİÇ YOK",
       !("suzgec" in hepsi.data), JSON.stringify(hepsi.data.suzgec));
+    check("§10y6 ⭐ `secenekler.belgeTipi` süzgeçten BAĞIMSIZ (seçici kendini kilitlemez)",
+      JSON.stringify(yalnizDevir.data.secenekler.belgeTipi) === JSON.stringify(hepsi.data.secenekler.belgeTipi)
+        && hepsi.data.secenekler.belgeTipi.length > 1,
+      `${yalnizDevir.data.secenekler.belgeTipi.length} ↔ ${hepsi.data.secenekler.belgeTipi.length}`);
+    check("§10y7 belge tipi seçeneği HAM ENUM taşır (etiketin tek kaynağı panelde)",
+      hepsi.data.secenekler.belgeTipi.every((o) => o.ad === o.code),
+      JSON.stringify(hepsi.data.secenekler.belgeTipi.slice(0, 3)));
   }
 
   // Storno sonrası aging: DEVİR neti sıfır → cari hiç listelenmez (ne satır

@@ -49,6 +49,8 @@ import prisma from "../../lib/prisma";
 import { invoiceLedgerSide } from "../helpers/finance.helper";
 import { ACTIVE_ALLOCATION } from "../payment-allocation.service";
 import type { DateRange } from "./_shared";
+import { optionList, type WithSecenekler } from "./_secenekler";
+import { hasAny, idWhere } from "./_filters";
 import type { SuzgecEcho } from "./_filters";
 
 const D = (v: Prisma.Decimal.Value): Prisma.Decimal => new Prisma.Decimal(v);
@@ -80,7 +82,7 @@ export interface FxDiffSummary {
   byCurrency: Array<{ currency: string; count: number; gainTry: string; lossTry: string; netTry: string }>;
 }
 
-export interface FxDiffReport {
+export interface FxDiffReport extends WithSecenekler {
   rows: FxDiffRow[];
   summary: FxDiffSummary;
   /**
@@ -100,7 +102,8 @@ const SOURCE_LABEL: Record<string, string> = {
 
 export async function getFxDiffReport(opts: {
   range: DateRange;
-  cariId?: string;
+  /** Cari LİSTESİ ekseni (`cariEkseni`) — tek öge `equals`, N öge `in` (`idWhere`). */
+  cariId?: string[];
   currency?: string;
   /** Cari türü — `aging` bu ekseni taşıyordu, kardeşi taşımıyordu (asimetri kapandı). */
   kind?: CariKind;
@@ -118,10 +121,11 @@ export async function getFxDiffReport(opts: {
       // eşitliği guard'ı), yani kaynak da otomatik dövizlidir.
       currency: { not: "TRY" },
       ...(opts.currency ? { currency: opts.currency as never } : {}),
-      ...(opts.cariId ? { cariId: opts.cariId } : {}),
+      ...(idWhere(opts.cariId) !== undefined ? { cariId: idWhere(opts.cariId) } : {}),
       ...(opts.kind ? { cari: { kind: opts.kind } } : {}),
     },
   };
+  const cariSuzgecliMi = hasAny(opts.cariId);
   const droppedRows = opts.kind
     ? (await prisma.paymentAllocation.count({
         where: { ...where, invoice: { ...(where.invoice as Prisma.InvoiceWhereInput), cari: undefined } },
@@ -154,6 +158,18 @@ export async function getFxDiffReport(opts: {
     },
     orderBy: { createdAt: "desc" },
   });
+
+  // SEÇİCİ KAYNAĞI — SÜZGEÇTEN BAĞIMSIZ: cari ya da tür süzgeci verildiyse aynı
+  // pencere cari/tür süzgeci OLMADAN bir kez daha okunur (yalnız kimlik+ad).
+  // Süzgeçsiz istekte ikinci sorgu YOK — kaynak zaten `rows`tadır.
+  const cariHucresi = (r: { invoice: { cari: { id: string; customer: { name: string } | null; subcontractor: { name: string } | null } } }) =>
+    ({ id: r.invoice.cari.id, ad: r.invoice.cari.customer?.name ?? r.invoice.cari.subcontractor?.name ?? "" });
+  const secenekKaynagi = opts.kind || cariSuzgecliMi
+    ? (await prisma.paymentAllocation.findMany({
+        where: { ...where, invoice: { ...(where.invoice as Prisma.InvoiceWhereInput), cariId: undefined, cari: undefined } },
+        select: { invoice: { select: { cari: { select: { id: true, customer: { select: { name: true } }, subcontractor: { select: { name: true } } } } } } },
+      })).map(cariHucresi)
+    : rows.map(cariHucresi);
 
   const out: FxDiffRow[] = [];
   let gain = D0();
@@ -226,6 +242,10 @@ export async function getFxDiffReport(opts: {
         netTry: v.gain.minus(v.loss).toString(),
       })),
     },
-    ...(opts.kind ? { suzgec: { kind: opts.kind, dusenSatir: droppedRows } } : {}),
+    // Beyan YALNIZ verilen anahtarları taşır + elenen satırı sayar.
+    ...(opts.kind || cariSuzgecliMi
+      ? { suzgec: { ...(opts.kind ? { kind: opts.kind } : {}), ...(cariSuzgecliMi ? { cariId: opts.cariId! } : {}), dusenSatir: droppedRows } }
+      : {}),
+    secenekler: { cariId: optionList(secenekKaynagi) },
   };
 }

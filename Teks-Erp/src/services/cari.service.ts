@@ -7,6 +7,7 @@
 // =============================================================================
 import { Prisma, CariKind, Currency, CariTxnSource } from "@prisma/client";
 import type { SuzgecEcho } from "./reports/_filters";
+import { reasonOptions, type SebepSecenek } from "./reports/_secenekler";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -633,6 +634,18 @@ export class CariService {
       carriedFrom: { periodEnd: Date; closingBalance: Prisma.Decimal } | null;
       /** YALNIZ süzgeçliyken dolar; süzgeçsiz gövde bayt bayt eski. */
       suzgec?: SuzgecEcho;
+      /**
+       * Seçici kaynağı — pencerede GEÇEN belge tipleri. İkinci sorgu YOK ve bu
+       * yapısaldır: süzgeç yalnız `rows` dökümüne uygulanıyor, `txns` süzgeçsiz
+       * okunuyor ⇒ liste doğuştan süzgeçten bağımsız.
+       *
+       * ⚠️ `ad` HAM ENUM DEĞERİDİR ve bu bilinçli: Türkçe etiketlerin TEK KAYNAĞI
+       * panelde (`Electron/src/lib/audit-labels.ts`, `test_audit_labels §4` her
+       * enum değerinin karşılığını orada istiyor). Backend'e ikinci bir etiket
+       * tablosu koymak "aynı soruyu cevaplayan koşul tek yerde yaşar" kuralının
+       * doğrudan ihlali olurdu; panel kodu alır, etiketi kendi kataloğundan yazar.
+       */
+      secenekler: { belgeTipi: SebepSecenek[] };
       rows: Array<{
         id: string;
         txnDate: Date;
@@ -746,6 +759,7 @@ export class CariService {
         ...(params.belgeTipi !== undefined
           ? { suzgec: { belgeTipi: params.belgeTipi, dusenSatir: droppedRows } }
           : {}),
+        secenekler: { belgeTipi: reasonOptions(txns.map((t) => t.sourceType), () => undefined) },
       },
     };
   }

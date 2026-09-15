@@ -113,6 +113,7 @@ import {
   chequeCashReversalSql,
 } from "../helpers/cheque-cash-events.helper";
 import type { DateRange } from "./_shared";
+import { optionList, type WithSecenekler } from "./_secenekler";
 import type { SuzgecEcho } from "./_filters";
 
 /** Tek sayfada basılabilir satır tavanı — aşılırsa kırpılır ve SÖYLENİR. */
@@ -129,6 +130,8 @@ export interface CashBookParams {
   kategori?: CashCategoryGroup;
   /** Yön süzgeci — aynı sözleşme: yalnız `rows`. */
   yon?: "IN" | "OUT";
+  /** Cari LİSTESİ ekseni — aynı sözleşme: yalnız `rows` (bakiye dönem gerçeği). */
+  cariId?: string[];
   /** Tek hesap seçiliyse satır dökümü de döner; yoksa yalnız hesap özetleri. */
   accountId?: string;
   accountKind?: CashAccountKind;
@@ -200,7 +203,7 @@ export interface CashBookCategoryRow {
   movementCount: number;
 }
 
-export interface CashBookReport {
+export interface CashBookReport extends WithSecenekler {
   accounts: CashBookAccountSummary[];
   /**
    * Dönem hareketlerinin KAYNAK kırılımı (para birimi bazında). Hesap
@@ -254,6 +257,8 @@ interface MovementRow {
   cancelled: boolean;
   /** Yalnız `CashTransaction` kaynaklı satırlarda dolu (ters satırda ASLININ). */
   category: string | null;
+  /** Carili kaynaklarda (tahsilat/ödeme · çek) dolu; kasa hareketinde NULL. */
+  cariId: string | null;
 }
 
 interface OpeningRow {
@@ -263,6 +268,11 @@ interface OpeningRow {
 
 /**
  * Kasa/banka hareketlerinin BİRLEŞİK kaynağı.
+ *
+ * ⚠️ SON KOLON `cariId` BEŞ DALDA DA VAR (R5b-d-b): süzgeç ekseni ve seçici
+ * kaynağı ondan doğar. Carisiz dallarda (kasa hareketi) NULL — "cari yok" ile
+ * "bilinmiyor" ayrımını `source` kolonu zaten taşıyor. UNION kolon sırası
+ * load-bearing: yeni kolon HER dala aynı yere eklenir.
  *
  * ⚠️ TEK TANIM: devir sorgusu ile satır sorgusu AYNI fragment'ı kullanır. İkisi
  * ayrı yazılsaydı biri iptal ters kayıtlarını ya da çek olaylarını unutur ve
@@ -290,7 +300,8 @@ function movementsCte(): Prisma.Sql {
              -- demektir; kırılım bu satırları Kategorisiz'e değil kendi
              -- kovasına koyar. (SQL şablonunda BACKTICK kullanma — template
              -- literal'ı ortadan böler, dosya derlenmez.)
-             NULL::text                                        AS category
+             NULL::text                                        AS category,
+             ca.id::text                                       AS "cariId"
         FROM payments p
         JOIN cari_accounts ca ON ca.id = p."cariId"
         LEFT JOIN customers cu ON cu.id = ca."customerId"
@@ -303,7 +314,7 @@ function movementsCte(): Prisma.Sql {
              COALESCE(p."cashBoxId", p."bankAccountId")::text,
              CASE WHEN p.direction = 'IN' THEN 'OUT' ELSE 'IN' END,
              p.amount, p.method::text, COALESCE(cu.name, sc.name),
-             COALESCE(p."cancelReason", 'İptal'), p.reference, TRUE, NULL::text
+             COALESCE(p."cancelReason", 'İptal'), p.reference, TRUE, NULL::text, ca.id::text
         FROM payments p
         JOIN cari_accounts ca ON ca.id = p."cariId"
         LEFT JOIN customers cu ON cu.id = ca."customerId"
@@ -317,7 +328,7 @@ function movementsCte(): Prisma.Sql {
              COALESCE(ct."cashBoxId", ct."bankAccountId")::text,
              ct.direction::text, ct.amount, ct.kind::text, NULL,
              COALESCE(ct.description, ct.category), ct.reference,
-             (ct.status = 'CANCELLED'), ct.category
+             (ct.status = 'CANCELLED'), ct.category, NULL::text
         FROM cash_transactions ct
        WHERE COALESCE(ct."cashBoxId", ct."bankAccountId") IS NOT NULL
 
@@ -330,28 +341,39 @@ function movementsCte(): Prisma.Sql {
              COALESCE(ct."cancelReason", 'İptal'), ct.reference, TRUE,
              -- ⚠️ ASLININ kategorisi (cancelReason DEĞİL) — iptal çiftinin
              -- kırılımda netleşmesi tam olarak buna dayanır (dosya başlığı).
-             ct.category
+             ct.category, NULL::text
         FROM cash_transactions ct
        WHERE ct.status = 'CANCELLED' AND ct."cancelledAt" IS NOT NULL
          AND COALESCE(ct."cashBoxId", ct."bankAccountId") IS NOT NULL
 
       UNION ALL
-      -- 3) ÇEK OLAYI — yalnız PARA HAREKETİ olanlar; küme, yön ve storno işareti
-      -- CHEQUE_EVENT_CASH_EFFECT'ten (measureTx/§23-§24 ile AYNI evren). Storno
-      -- satırı cancelled işareti taşır — Payment/CashTransaction iptaliyle aynı.
+      ${cekDali()}
+    )`;
+}
+
+/**
+ * ÇEK OLAYI dalı — yalnız PARA HAREKETİ olanlar; küme, yön ve storno işareti
+ * `CHEQUE_EVENT_CASH_EFFECT`ten (measureTx/§23-§24 ile AYNI evren). Storno satırı
+ * `cancelled` işareti taşır — Payment/CashTransaction iptaliyle aynı.
+ *
+ * ⚠️ AYRI FONKSİYON OLMASININ SEBEBİ BİÇİMSEL: `movementsCte` uzunluk tavanındaydı
+ * ve `cariId` kolonu beş dala birden eklenince aştı. Dal buraya ALINDI, kolon
+ * SIRASI değişmedi — UNION'da sıra load-bearing'dir.
+ */
+function cekDali(): Prisma.Sql {
+  return Prisma.sql`
       SELECT e.id::text, 'CHEQUE', ch."docNo", e."eventDate",
              COALESCE(e."cashBoxId", e."bankAccountId")::text,
              CASE WHEN ${Prisma.raw(chequeCashInflowSql("e"))} THEN 'IN' ELSE 'OUT' END,
              ch.amount, e.type::text, COALESCE(cu2.name, sc2.name),
-             e.notes, ch."serialNo", (${Prisma.raw(chequeCashReversalSql("e"))}), NULL::text
+             e.notes, ch."serialNo", (${Prisma.raw(chequeCashReversalSql("e"))}), NULL::text, ca2.id::text
         FROM cheque_events e
         JOIN cheques ch ON ch.id = e."chequeId"
         JOIN cari_accounts ca2 ON ca2.id = ch."cariId"
         LEFT JOIN customers cu2 ON cu2.id = ca2."customerId"
         LEFT JOIN subcontractors sc2 ON sc2.id = ca2."subcontractorId"
        WHERE e.type IN (${Prisma.raw(chequeCashEventTypesSql())})
-         AND COALESCE(e."cashBoxId", e."bankAccountId") IS NOT NULL
-    )`;
+         AND COALESCE(e."cashBoxId", e."bankAccountId") IS NOT NULL`;
 }
 
 const UNCATEGORIZED_LABEL = "Kategorisiz";
@@ -388,7 +410,8 @@ function bucketOf(m: MovementRow): { key: string; label: string; group: CashCate
 
 export async function getCashBookReport(params: CashBookParams): Promise<CashBookReport> {
   const { from, to } = params.range;
-  const suzgecVar = params.kategori !== undefined || params.yon !== undefined;
+  const cariSet = new Set(params.cariId ?? []);
+  const suzgecVar = params.kategori !== undefined || params.yon !== undefined || cariSet.size > 0;
 
   const fAccount = params.accountId ? Prisma.sql`AND a.id::text = ${params.accountId}` : Prisma.empty;
   const fKind = params.accountKind ? Prisma.sql`AND a."accountKind" = ${params.accountKind}` : Prisma.empty;
@@ -425,7 +448,7 @@ export async function getCashBookReport(params: CashBookParams): Promise<CashBoo
       WITH ${accountsCte}, ${movementsCte()}
       SELECT mv.id, mv.source, mv."docNo" AS "docNo", mv.dt, mv."accountId" AS "accountId",
              mv.direction, mv.amount::text AS amount, mv.kind, mv.counterparty,
-             mv.description, mv.reference, mv.cancelled, mv.category
+             mv.description, mv.reference, mv.cancelled, mv.category, mv."cariId" AS "cariId"
         FROM mv JOIN acc a ON a.id = mv."accountId"
        WHERE mv.dt >= ${from} AND mv.dt <= ${to} ${fAccount} ${fKind}
        -- İkincil anahtar id: aynı ana düşen iki hareketin sırası yoksa yürüyen
@@ -587,6 +610,7 @@ export async function getCashBookReport(params: CashBookParams): Promise<CashBoo
       if (suzgecVar && !(
         (params.kategori === undefined || bucketOf(m).group === params.kategori)
         && (params.yon === undefined || m.direction === params.yon)
+        && (cariSet.size === 0 || (m.cariId !== null && cariSet.has(m.cariId)))
       )) { droppedRows++; return []; }
       return [{
         id: m.id,
@@ -666,10 +690,26 @@ export async function getCashBookReport(params: CashBookParams): Promise<CashBoo
         "yürütülür, bu yüzden süzgeçli listede ATLAYARAK ilerler (doğrudur).",
     );
   }
+  // SEÇİCİ KAYNAĞI — İKİNCİ SORGU GEREKMİYOR ve bu yapısaldır: süzgeç zaten
+  // yalnız `rows` dökümüne uygulanıyor, SQL süzgeçsiz okunuyor. `movements`
+  // penceredeki BÜTÜN hareketleri taşır ⇒ seçenekler doğuştan süzgeçten bağımsız.
+  // (`aging`/`fx-diff`te ikinci koşum şart, çünkü orada süzgeç WHERE'e iniyor.)
+  const cariAdi = new Map<string, string>();
+  for (const m of movements) if (m.cariId && !cariAdi.has(m.cariId)) cariAdi.set(m.cariId, m.counterparty ?? "");
+
   return {
     accounts, categories, rows, rowsTruncated, storedComparable, totals, notes,
+    secenekler: {
+      cariId: optionList([...cariAdi].map(([id, ad]) => ({ id, ad }))),
+      accountId: optionList(accounts.map((a) => ({ id: a.accountId, ad: a.name, kod: a.code }))),
+    },
     ...(suzgecVar
-      ? { suzgec: { ...(params.kategori ? { kategori: params.kategori } : {}), ...(params.yon ? { yon: params.yon } : {}), dusenSatir: droppedRows } }
+      ? { suzgec: {
+            ...(params.kategori ? { kategori: params.kategori } : {}),
+            ...(params.yon ? { yon: params.yon } : {}),
+            ...(cariSet.size > 0 ? { cariId: params.cariId! } : {}),
+            dusenSatir: droppedRows,
+          } }
       : {}),
   };
 }

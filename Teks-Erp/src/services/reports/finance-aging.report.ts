@@ -88,6 +88,7 @@
 
 import { Prisma, CariKind, Currency, InvoiceType } from "@prisma/client";
 import prisma from "../../lib/prisma";
+import { optionList, type WithSecenekler } from "./_secenekler";
 import { D, D0, invoiceLedgerSide } from "../helpers/finance.helper";
 import { factoryDayKeyUtcMidnight } from "../../constants/time";
 
@@ -149,6 +150,7 @@ export interface AgingParams {
   /** KESİT anı (aralık değil). */
   asOf: Date;
   cariId?: string;
+  /** Cari LİSTESİ ekseni (R5b-d-b). Tek ögeli liste rotada `cariId`ye düşer. */
   kind?: CariKind;
   currency?: Currency;
   /** Yalnız vadesi geçmiş bakiyesi olan cariler. */
@@ -225,7 +227,7 @@ export interface AgingCurrencyBlock {
   totalsTry: { openTotal: string; unappliedCredit: string; overdueTotal: string } | null;
 }
 
-export interface AgingReport {
+export interface AgingReport extends WithSecenekler {
   asOf: string;
   /** Kova etiketleri TEK KAYNAKTAN — istemci kendi listesini kurmasın. */
   buckets: Array<{ key: AgingBucketKey; label: string }>;
@@ -710,7 +712,7 @@ export async function collectAgingRows(params: AgingRowsParams): Promise<AgingCa
   return rows;
 }
 
-export async function getAgingReport(params: AgingParams): Promise<AgingReport> {
+export async function getAgingReport(params: AgingRowsParams): Promise<AgingReport> {
   const asOf = params.asOf;
 
   // Satırlar TEK çekirdekten (yukarı bak) — burada yalnız zarf kurulur:
@@ -839,11 +841,22 @@ export async function getAgingReport(params: AgingParams): Promise<AgingReport> 
     );
   }
 
+  // SEÇİCİ KAYNAĞI — SÜZGEÇTEN BAĞIMSIZ (6e'nin R5b-c3 sözleşmesi): süzgeçli
+  // istekte toplayıcı BİR KEZ DAHA, cari süzgeci OLMADAN koşar. Yoksa liste
+  // kullanıcının o an seçtiğine daralır ve seçimi GENİŞLETEMEZ — seçici kendi
+  // kendini kilitler. Bedel yalnız süzgeçli istekte ödenir (ölçüldü: süzgeçsiz
+  // istekte ikinci koşum YOK, satırlar zaten elde).
+  const cariSuzgecliMi = Boolean(params.cariId) || (params.cariIds?.length ?? 0) > 0;
+  const secenekKaynagi = cariSuzgecliMi
+    ? await collectAgingRows({ ...params, cariId: undefined, cariIds: undefined })
+    : rows;
+
   return {
     asOf: asOf.toISOString(),
     buckets: AGING_BUCKETS.map((k) => ({ key: k, label: AGING_BUCKET_LABELS[k] })),
     blocks,
     notes,
+    secenekler: { cariId: optionList(secenekKaynagi.map((r) => ({ id: r.cariId, ad: r.name, kod: r.code }))) },
     reconciliation: {
       rowsChecked: rows.length,
       mismatchedRows: mismatched.length,
