@@ -43,7 +43,7 @@
 | **R6 Anlaşılırlık** | K9 ①②③ — hub iki bölüm · `soru` başlığı · özet şeridi eksik yapraklara | Electron: hub testi · "her yaprak `soru` basar" taraması | R0, R2 | **01** (R2 sonrası) |
 | **R7 Kullanılmayan 7 rapor** | Sipariş ailesi 5 + izleme 2 (57 günde 0 çağrı): kapatma DEĞİL, kullanıcıya SORU listesi (hangi soru cevapsız?) | — | kullanıcı | 1e (dönünce) |
 
-**Kapanış ölçümü:** `RAPORLAR-ENVANTER.md` §9 — §0/§1'deki her sayı aynı komutla "önce → sonra" (ölçüm `3bba3840`, 6e); faz bitince ikinci geçiş aynı tabloya.
+**Kapanış ölçümü:** `RAPORLAR-ENVANTER.md` §9 — §0/§1'deki her sayı aynı komutla "önce → sonra" (üç koşum: `792b364b` → `3bba3840` → `69ae8b88`, 6e); kalan tek açık kalem finans yapraklarında `meta.secenekler` seçicisi (§9 sonu).
 
 **Sıra:** R0 → R1 → R2 → R6 ana hat; R3 ve R5a bağımsız (şimdi); R4 R0'ın hemen ardından; R5b R5a'dan sonra alan alan. Şema migration'ı YOK; migration penceresi kullanılmaz.
 
