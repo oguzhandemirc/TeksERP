@@ -286,31 +286,51 @@ function collectUsages(screens: Screen[]): { usages: Usage[]; unresolved: number
 /**
  * Bilinçli muaflar. Her satır GEREKÇELİ olmalı; muaf olan uç, ekranın yetkisiyle
  * açılmıyor ama bu KASITLI (ör. ayrı bir yetki gerçekten isteniyor).
+ *
+ * ⚠️ `path` MOUNT KÖKÜNÜ TAŞIR (`GET /colors`, `POST /tambur/manual/roll`) — router
+ * İÇİNDEKİ yol DEĞİL. Eski biçim (`GET /`) kökü düşürüyordu ve `/api/colors` ile
+ * `/api/customers` AYNI anahtara çöküyordu: KK1 ekranına yeni bir uç eklense muaf
+ * onu sessizce kapsar, bekçi YEŞİL kalırdı (01 ölçtü 2026-09-15). Bir muaf, adını
+ * taşımadığı bir ucu asla kapsamamalı.
  */
 const EXEMPT: { screen: string; path: string; why: string }[] = [
   {
     screen: "mobile:kk1",
-    path: "GET /",
+    path: "GET /colors",
     why: "Renk listesi YALNIZ yarı mamul modunda çağrılır; o mod ayrı bir yetenek yetkisine bağlı (`mobile:kk1-yari-mamul`). Yetkisiz operatörde renk seçici hiç çizilmez, uç de çağrılmaz.",
   },
   {
     screen: "mobile:kk1",
-    path: "POST /quick-create",
+    path: "POST /items/quick-create",
     why: "Saha içi desen oluşturma ayrı bir YETENEK yetkisi (`mobile:kk1-desen`) — her KK1 operatörü ürün kartı açamasın.",
+  },
+  // ⚠️ TEK SATIRDI, ÜÇE BÖLÜNDÜ (2026-09-15): eski anahtar `POST /:p/revoke` mount
+  // kökü taşımadığı için ÜÇ ayrı ucu birden kapsıyordu — gerekçesi "üçü de" diyerek
+  // bunu yazıyordu bile. Kök eklenince her uç KENDİ satırını ister; dördüncü bir
+  // `revoke` ucu doğarsa muaf onu SESSİZCE kapsamaz.
+  {
+    screen: "mobile:dokuma",
+    path: "POST /machine-doffs/:p/revoke",
+    why: "Top indirmeyi geri alma ayrı bir YETENEK yetkisi (`mobile:dokuma-geri-al`, 2026-09-14) — defterden satır düşürür; izni olmayanda buton çizilmez.",
   },
   {
     screen: "mobile:dokuma",
-    path: "POST /:p/revoke",
-    why: "Top indirmeyi, koşumu VE duruşu geri alma ayrı bir YETENEK yetkisi (`mobile:dokuma-geri-al`, 2026-09-14) — üçü de defterden satır düşürür; izni olmayanda buton çizilmez, uçlar (machine-doffs · machine-runs) onu ister.",
+    path: "POST /machine-runs/:p/revoke",
+    why: "Tezgah koşumunu geri alma ayrı bir YETENEK yetkisi (`mobile:dokuma-geri-al`) — defterden satır düşürür; izni olmayanda buton çizilmez.",
+  },
+  {
+    screen: "mobile:dokuma",
+    path: "POST /machine-stops/:p/revoke",
+    why: "Duruş kaydını geri alma ayrı bir YETENEK yetkisi (`mobile:dokuma-geri-al`) — defterden satır düşürür; izni olmayanda buton çizilmez.",
   },
   {
     screen: "mobile:devere",
-    path: "GET /:p/cancel-preview",
+    path: "GET /warp-beams/:p/cancel-preview",
     why: "Sarım iptali önizlemesi — iptalle AYNI yetenek yetkisi (`mobile:devere-iptal`, §11 D3); kararı verecek bilgi yetkisiz kişiye açılmaz (Tambur send-to-dye-preview emsali).",
   },
   {
     screen: "mobile:devere",
-    path: "POST /:p/cancel",
+    path: "POST /warp-beams/:p/cancel",
     why: "Sarım iptali ayrı bir YETENEK yetkisi (`mobile:devere-iptal`, 2026-09-14) — iplik defterine ters satır yazar; izni olmayanda buton çizilmez.",
   },
   // ── Tambur ekranının EK yetenek yetkileri (2026-08-17'de burada belgelendi) ──
@@ -319,27 +339,27 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
   // burasıdır — katalogda ayrı ayrı aranmak yerine tek yerde duruyor.
   {
     screen: "mobile:tambur",
-    path: "POST /manual/bring",
+    path: "POST /tambur/manual/bring",
     why: "Manuel top getirme — `mobile:tambur-duzelt` (stok/iş emri düzeltmesi sayılır).",
   },
   {
     screen: "mobile:tambur",
-    path: "POST /manual/bring-preview",
+    path: "POST /tambur/manual/bring-preview",
     why: "Manuel top getirme önizlemesi — `mobile:tambur-duzelt`.",
   },
   {
     screen: "mobile:tambur",
-    path: "POST /manual/produce",
+    path: "POST /tambur/manual/produce",
     why: "Refakat kartsız bitmiş top üretme — `mobile:tambur-duzelt`.",
   },
   {
     screen: "mobile:tambur",
-    path: "POST /manual/roll",
+    path: "POST /tambur/manual/roll",
     why: "Manuel top ekleme — `mobile:tambur-duzelt`.",
   },
   {
     screen: "mobile:tambur",
-    path: "PATCH /order-lines/:p",
+    path: "PATCH /labels/order-lines/:p",
     why: "Etikette müşteri ürün adı düzenleme — `label:edit` (etiket içeriği değiştiriyor, üretim kararı değil).",
   },
   // ── "Sipariş Bağla" ailesi (2026-08-19) — Tambur üst şeridi ─────────────────
@@ -353,37 +373,37 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
   // koşulsuz çizilirse muaf yalanlaşır ve saha 403 görür.
   {
     screen: "mobile:tambur",
-    path: "GET /:p",
+    path: "GET /work-orders/:p",
     why: "İş emri detayı — Sipariş Bağla sayfası açılırken okunur; düğme workorder:write arkasında.",
   },
   {
     screen: "mobile:tambur",
-    path: "GET /:p/linkable-order-lines",
+    path: "GET /work-orders/:p/linkable-order-lines",
     why: "Bağlanabilir sipariş kalemleri — yalnız Sipariş Bağla sheet'i çağırır (workorder:write).",
   },
   {
     screen: "mobile:tambur",
-    path: "POST /:p/order-links",
+    path: "POST /work-orders/:p/order-links",
     why: "Sipariş bağlama — planlama kararı, workorder:write. Arayüzde aynı kapı.",
   },
   {
     screen: "mobile:tambur",
-    path: "DELETE /:p/order-links/:p",
+    path: "DELETE /work-orders/:p/order-links/:p",
     why: "Bağ sökme — bağlamanın tersi, aynı yetki (workorder:write).",
   },
   {
     screen: "mobile:tambur",
-    path: "POST /:p/order-links/override",
+    path: "POST /work-orders/:p/order-links/override",
     why: "Uyumsuz bağlama onayı — SÜPERVİZÖR yetkisi; sheet içinde ayrıca roll:manual-adjust aranır (TamburOrderLinkSheet.tsx:72).",
   },
   {
     screen: "mobile:tambur",
-    path: "POST /manual/send-to-dye",
+    path: "POST /tambur/manual/send-to-dye",
     why: "Topu boyaya geri gönderme — stok/iş emri düzeltmesi sayılır (`mobile:tambur-duzelt` ∨ `roll:manual-adjust`), `POST /manual/bring` ile aynı gerekçe.",
   },
   {
     screen: "mobile:tambur",
-    path: "POST /manual/send-to-dye-preview",
+    path: "POST /tambur/manual/send-to-dye-preview",
     why: "Yukarıdakinin YAN ETKİSİZ önizlemesi — aynı ekranda, aynı düğmenin arkasında, aynı yetkiyle çağrılır. Önizlemeyi ayrı (daha gevşek) bir kapıya koymak, kararı verecek bilgiyi yetkisiz kişiye açardı.",
   },
 ];
@@ -419,7 +439,8 @@ function main(): void {
     }
     // Kök segment de kanonikleştirilmeli: `/items${buildQueryString(params)}`
     // ham hâliyle mount tablosunda BULUNMAZ ve çağrı sessizce atlanırdı.
-    const routeFile = mounts.get(normalizeSegment(segs[0]));
+    const mountKok = normalizeSegment(segs[0]);
+    const routeFile = mounts.get(mountKok);
     if (!routeFile) {
       skipped++;
       continue;
@@ -438,7 +459,13 @@ function main(): void {
       verified++;
       continue; // izin guard'ı yok → herkes açar
     }
-    const label = `${u.call.method.toUpperCase()} ${wanted}`;
+    // ⚠️ ANAHTARDA MOUNT KÖKÜ VAR (01 ölçtü 2026-09-15): `wanted` router İÇİNDEKİ
+    // yoldur, yani `/api/colors` ve `/api/customers` İKİSİ DE `GET /`e düşüyordu.
+    // KK1'in renk muafiyeti (`mobile:kk1`, `GET /`) bu yüzden `/customers`
+    // çağrısını da kapsardı: ekrana yeni bir uç eklense bekçi SESSİZ YEŞİL
+    // kalırdı — sınırsız eşleşmenin mount-kökü-düşmüş biçimi. Kök eklenince
+    // `GET /colors` ↔ `GET /customers` ayrılır.
+    const label = `${u.call.method.toUpperCase()} /${mountKok}${wanted === "/" ? "" : wanted}`;
     if (match.permissions.includes(u.screen.permission)) {
       verified++;
       continue;

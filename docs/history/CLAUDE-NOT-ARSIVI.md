@@ -21,6 +21,31 @@
 
 ---
 
+## 2026-09-15 — Muafiyetin anahtarı, kapsadığı ucun ADINI taşımalı [ÇEKİRDEK]
+
+`test_mobile_screen_permissions` muafiyetlerini `(izin, "VERB yol")` çiftiyle anahtarlıyordu
+ama `yol`, router İÇİNDEKİ yoldu — mount kökü düşmüştü. Sonuç: `/api/colors` ile
+`/api/customers` İKİSİ DE `GET /`e çöküyordu ve KK1'in renk muafiyeti (`mobile:kk1`,
+`GET /`) `/customers` çağrısını da kapsıyordu. Yani KK1 ekranına müşteri listesi çağrısı
+eklense bekçi hiçbir şey demezdi.
+
+**Kapı körlüğü İDDİAYLA DEĞİL ÖLÇÜMLE gösterildi.** KK1 ekranına sahte bir `GET /customers`
+çağrısı eklendi ve bekçi ESKİ hâliyle koşuldu: **6/0, sessiz yeşil.** Aynı sonda yeni
+anahtarla kırmızı verdi ve ihlali adıyla bastı. Kontrol grubu olmasaydı "düzelttim" demek
+bir iddia olarak kalırdı.
+
+Taşıma sırasında ikinci bir şey ortaya çıktı: `mobile:dokuma → POST /:p/revoke` TEK muaf
+satırıyken ÜÇ ayrı ucu (machine-doffs · machine-runs · machine-stops) birden kapsıyordu — ve
+gerekçe metni bunu zaten yazıyordu ("üçü de"). Kök eklenince üçe bölündü; artık dördüncü bir
+`revoke` ucu doğarsa muaf onu sessizce kapsamaz.
+
+⇒ ***Bir muafiyetin anahtarı, kapsadığı şeyi TEKİL olarak adlandırmalı: adında olmayan bir
+şeyi kapsayan muaf, muaf değil sessiz bir kapıdır.*** Bu, "sınırsız eşleşme" ailesinin
+üçüncü biçimidir — kelime sınırı ve bağlam eksikliğinin yanına **kapsam kökünün
+düşürülmesi** eklenir.
+
+---
+
 ## 2026-09-15 — Finans rapor eksenleri: süzgeç bir GÖRÜNÜM mü, yoksa yeni bir GERÇEK mi? [ÇEKİRDEK]
 
 Raporlar fazının R5b-d dilimi (cari-dışı eksenler). Beş finans raporunun bugünkü ekseni
