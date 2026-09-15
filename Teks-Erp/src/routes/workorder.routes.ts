@@ -49,9 +49,13 @@ router.use("/:id/traveler-cards", workOrderTravelerRouter);
  *       - in: query
  *         name: filter[type]
  *         schema: { type: string, enum: [ORDER_PRODUCTION, STOCK_PRODUCTION] }
+ *       - in: query
+ *         name: filter[customerId]
+ *         schema: { type: string }
+ *         description: 'Bağlı siparişin müşterisi (uuid; CSV ile çoklu) — bağsız (stok) iş emri eşleşmez'
  *     responses:
  *       200:
- *         description: Sayfalanmış iş emri listesi
+ *         description: 'Sayfalanmış iş emri listesi; her satırda `customers` (bağlı siparişlerin DISTINCT müşterileri, id+ad, ad sırası, en çok 5) ve `customerCount`'
  */
 router.get("/", verifyToken, requireAnyPermission("workorder:read", "mobile:fason-sevk", "mobile:hizli-is-emri"), controller.findAll);
 

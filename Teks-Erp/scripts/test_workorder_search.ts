@@ -9,10 +9,16 @@
 //   3. İE no araması regresyonsuz (bağsız WO kendi numarasıyla bulunur)
 //   4. Eşleşmeyen terim → 0
 //   5. Müşteri adı araması regresyonsuz (bağ üzerinden bağlı WO döner)
+//   6–9. MÜŞTERİ KOLONU (2026-09-15): satır `customers` DISTINCT + ad sıralı (A < B) + `customerCount`;
+//        KOPARILMIŞ bağın (unlinkedAt) müşterisi sayılmaz; bağsız WO `[]`/0; `filter[customerId]` (tek · CSV)
+//        bağ üzerinden süzer, koparılmış bağ eşleşmez; rollup >5 müşteride önizleme 5 + toplam (saf).
+//   NEGATİF SONDA (2026-09-15, kırmızı görüldü): select'teki `where: ACTIVE_ORDER_LINK` düşürülünce 6b ❌;
+//        `readIdCondition(customerId)` satırı düşürülünce 8a "Unknown argument" 500 ❌.
 // =============================================================================
 import { Request } from "express";
 import prisma from "../src/lib/prisma";
 import { WorkOrderService } from "../src/services/workorder.service";
+import { WO_CUSTOMER_PREVIEW, rollupWorkOrderCustomers } from "../src/services/helpers/work-order-customers.helper";
 
 let pass = 0;
 let fail = 0;
@@ -32,7 +38,7 @@ function makeReq(query: Record<string, string>): Request {
 }
 
 interface WoResult {
-  data: Array<{ id: string; workOrderNumber: string }>;
+  data: Array<{ id: string; workOrderNumber: string; customers: Array<{ id: string; name: string }>; customerCount: number }>;
   pagination: { total: number };
 }
 
@@ -73,9 +79,26 @@ async function main(): Promise<void> {
   await prisma.workOrderToOrderLine.create({
     data: { workOrderId: woLinked.id, orderLineId },
   });
+  // Müşteri kolonu fikstürü: B (ad sırasında A'dan SONRA; iki kalemi de bağlı → distinct) ve
+  // C (bağı KOPARILMIŞ → listeye girmemeli). Adlar "TEST WOSRCH MUSTERI" < "TEST WOSRCH ZB" < "TEST WOSRCH ZC".
+  const custB = await prisma.customer.create({ data: { code: `TEST-WOSRCH-CB-${ts}`, name: `TEST WOSRCH ZB ${ts}` }, select: { id: true } });
+  const custC = await prisma.customer.create({ data: { code: `TEST-WOSRCH-CC-${ts}`, name: `TEST WOSRCH ZC ${ts}` }, select: { id: true } });
+  const orderB = await prisma.order.create({
+    data: { orderNumber: `TEST-WOSRCH-ORB-${ts}`, customerId: custB.id, lines: { create: [{ itemId: item.id, quantity: 10 }, { itemId: item.id, quantity: 20 }] } },
+    select: { id: true, lines: { select: { id: true } } },
+  });
+  const orderC = await prisma.order.create({
+    data: { orderNumber: `TEST-WOSRCH-ORC-${ts}`, customerId: custC.id, lines: { create: [{ itemId: item.id, quantity: 5 }] } },
+    select: { id: true, lines: { select: { id: true } } },
+  });
+  const extraLineIds = [...orderB.lines.map((l) => l.id), ...orderC.lines.map((l) => l.id)];
+  for (const l of orderB.lines) await prisma.workOrderToOrderLine.create({ data: { workOrderId: woLinked.id, orderLineId: l.id } });
+  await prisma.workOrderToOrderLine.create({ data: { workOrderId: woLinked.id, orderLineId: orderC.lines[0].id, unlinkedAt: new Date(), unlinkReason: "sonda" } });
 
   const search = async (term: string): Promise<WoResult> =>
     (await svc.findAll(makeReq({ search: term, pageSize: "200" }))) as WoResult;
+  const byFilter = async (customerId: string): Promise<WoResult> =>
+    (await svc.findAll(makeReq({ search: `WOSRCH-IE`, "filter[customerId]": customerId, pageSize: "200" }))) as WoResult;
   const numsOf = (r: WoResult): Set<string> => new Set(r.data.map((w) => w.workOrderNumber));
 
   try {
@@ -100,12 +123,36 @@ async function main(): Promise<void> {
     // 5) Müşteri adı araması regresyonsuz — bağ üzerinden bağlı WO döner
     const byCust = await search(customerName);
     check("5. Müşteri adı araması regresyonsuz (bağlı WO döner)", numsOf(byCust).has(woLinkedNo));
+
+    // 6) Müşteri kolonu — DISTINCT + ad sıralı + toplam; koparılmış bağ sayılmaz
+    const rows = (await search(`WOSRCH-IE`)).data;
+    const linkedRow = rows.find((w) => w.workOrderNumber === woLinkedNo);
+    const unlinkedRow = rows.find((w) => w.workOrderNumber === woUnlinkedNo);
+    const names = (linkedRow?.customers ?? []).map((c) => c.name);
+    check("6a ⭐ bağlı WO `customers` DISTINCT (B'nin iki kalemi tek satır) ve ad sıralı [A, B]; customerCount 2",
+      names.length === 2 && names[0] === customerName && names[1] === `TEST WOSRCH ZB ${ts}` && linkedRow?.customerCount === 2, names.join(" | "));
+    check("6b ⭐ KOPARILMIŞ bağın müşterisi (C) listede YOK", !!linkedRow && !linkedRow.customers.some((c) => c.id === custC.id));
+    check("6c satır yalnız id+ad taşır (sipariş no/adres sızmaz)", !!linkedRow && linkedRow.customers.every((c) => Object.keys(c).sort().join(",") === "id,name"));
+    // 7) Bağsız WO
+    check("7. bağsız WO `customers: []`, customerCount 0", !!unlinkedRow && unlinkedRow.customers.length === 0 && unlinkedRow.customerCount === 0);
+    // 8) filter[customerId] bağ üzerinden; koparılmış eşleşmez; CSV
+    const fA = numsOf(await byFilter(customer.id));
+    check("8a ⭐ filter[customerId]=A → bağlı WO var, bağsız YOK", fA.has(woLinkedNo) && !fA.has(woUnlinkedNo));
+    const fC = numsOf(await byFilter(custC.id));
+    check("8b filter[customerId]=C (koparılmış) → bağlı WO eşleşmez", !fC.has(woLinkedNo));
+    const fCsv = numsOf(await byFilter(`${custC.id},${custB.id}`));
+    check("8c CSV `C,B` → B üzerinden bağlı WO döner", fCsv.has(woLinkedNo));
+    // 9) Rollup saf: >5 distinct → önizleme 5 + toplam; boş/null bağ → 0
+    const many = Array.from({ length: 7 }, (_, i) => ({ orderLine: { order: { customer: { id: `c${i}`, name: `M${6 - i}` } } } }));
+    const r9 = rollupWorkOrderCustomers([...many, ...many]);
+    check(`9. rollup: 14 bağ / 7 distinct → önizleme ${WO_CUSTOMER_PREVIEW} (M0..M4 sıralı) + customerCount 7; null bağ → 0`,
+      r9.customers.length === WO_CUSTOMER_PREVIEW && r9.customerCount === 7 && r9.customers[0].name === "M0" && rollupWorkOrderCustomers(undefined).customerCount === 0);
   } finally {
-    await prisma.workOrderToOrderLine.deleteMany({ where: { orderLineId } });
+    await prisma.workOrderToOrderLine.deleteMany({ where: { orderLineId: { in: [orderLineId, ...extraLineIds] } } });
     await prisma.workOrder.deleteMany({ where: { id: { in: [woLinked.id, woUnlinked.id] } } });
-    await prisma.order.delete({ where: { id: order.id } }).catch(() => {}); // cascade → lines
+    await prisma.order.deleteMany({ where: { id: { in: [order.id, orderB.id, orderC.id] } } }).catch(() => {}); // cascade → lines
     await prisma.item.delete({ where: { id: item.id } }).catch(() => {});
-    await prisma.customer.delete({ where: { id: customer.id } }).catch(() => {});
+    await prisma.customer.deleteMany({ where: { id: { in: [customer.id, custB.id, custC.id] } } }).catch(() => {});
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

@@ -6,6 +6,7 @@ import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { workOrderStatusLabels, workOrderTypeLabels } from "@/types/enums";
 import { safeFormat } from "@/lib/format";
 import type { WorkOrder } from "./types";
+import { customerCellView } from "./customer-cell";
 
 // İlerleme = üretimden ÇIKAN ÷ üretime GİREN (detay sağlık şeridiyle birebir aynı).
 // Hedef metraj %99 girilmediğinden hedef-bazlı oran kullanılmaz. Tamamlanan-adım
@@ -86,6 +87,31 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
               />
               {wo.targetColor.name}
             </span>
+          )}
+        </div>
+      );
+    },
+  },
+  {
+    // MÜŞTERİ (kullanıcı isteği 2026-09-15): bağlı siparişlerin distinct müşterileri — 0 "—",
+    // 1 ad, 2+ ilk ad + "+N" (tooltip hepsi). Bağsız (stok) iş emri boş. Tıklama satır detayına gider.
+    id: "customer",
+    header: "Müşteri",
+    meta: { label: "Müşteri", exportValue: (wo: WorkOrder) => customerCellView(wo).all },
+    cell: ({ row }) => {
+      const v = customerCellView(row.original);
+      if (v.first === null) return <span className="text-muted-foreground">—</span>;
+      return (
+        <div className="flex items-center gap-1" title={v.all}>
+          <span className="max-w-[10rem] truncate text-xs font-medium">{v.first}</span>
+          {v.extra > 0 && (
+            // Parti kolonuyla aynı sayaç tonu: "+2" bir müşteri adı değil, sayaçtır.
+            <Badge
+              variant="muted"
+              className="border-amber-500/40 bg-amber-500/10 px-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300"
+            >
+              +{v.extra}
+            </Badge>
           )}
         </div>
       );

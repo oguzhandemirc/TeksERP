@@ -27,6 +27,11 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
+          "metin": "İş emri listesine “Müşteri” sütunu geldi: iş emrinin bağlı olduğu siparişin müşterisi satırda görünür. Birden çok müşterinin siparişine bağlı iş emrinde ilk müşteri adı ve yanında kalan sayısı (örneğin +2) gösterilir; imleç üzerine gelince hepsi okunur. Stok için açılmış (siparişe bağlı olmayan) iş emrinde sütun boştur. Sütun listeyi Excel’e aktarınca da gelir; filtre şeridine de Müşteri süzgeci eklendi — seçilen müşterinin siparişine bağlı iş emirleri listelenir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
           "metin": "Hangi raporların fabrikaya açık olacağı artık sistem yöneticisi (yazılım firması hesabı) tarafından belirlenir — dokuma ve devere modüllerinde olduğu gibi. Sistem → “Modüller” ekranına “Raporlar” bölümü geldi: her rapor kendi kategorisi altında bir satır (adı, cevapladığı soru ve “Basit” / “Gelişmiş” rozeti); satırı kapatınca o rapor Raporlar sayfasındaki karodan, sağdaki kategori şeridinden, komut paletinden ve adres çubuğundan kaybolur, sunucu da veriyi vermez. Modülü kapalı raporun satırı kilitlidir (zaten çizilmiyor). Fabrika yöneticisi bu bölümü görür ama değiştiremez. Bugünkü kurulumlarda hiçbir şey değişmez: liste boş doğar, bütün raporlar açık kalır; yeni eklenen raporlar da açık doğar. Rapor listesi sunucudan okunamazsa panel hiçbir raporu çizmez ve bunu Modüller ekranında yazar (“Rapor listesi okunamadı”); sistem yöneticisi tek düğmeyle listeyi sıfırlayabilir."
         },
         {

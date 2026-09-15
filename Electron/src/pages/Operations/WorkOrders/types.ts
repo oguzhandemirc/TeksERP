@@ -143,6 +143,11 @@ export interface WorkOrder {
   batches?: { id: string; batchNumber: string }[];
   /** Liste response'unda — canlı parti TOPLAMI (önizlemedeki 3'ten fazlası için). */
   _count?: { batches: number };
+  /** Liste response'unda — bağlı siparişlerin DISTINCT müşterileri (ad sırası, en çok 5);
+   *  bağsız (stok) iş emrinde boş. Kolon `+N` rozetini `customerCount` ile kurar. */
+  customers?: { id: string; name: string }[];
+  /** Liste response'unda — DISTINCT müşteri TOPLAMI. */
+  customerCount?: number;
   plannedStartDate: string | null;
   plannedEndDate: string | null;
   routeTemplateId: string | null;

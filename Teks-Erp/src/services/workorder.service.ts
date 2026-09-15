@@ -37,7 +37,9 @@ import {
   isCursorRequested,
   applyDateRange,
   resolveSortBy,
+  readIdCondition,
 } from "../utils/query-parser";
+import { rollupWorkOrderCustomers } from "./helpers/work-order-customers.helper";
 
 // WO listesinde sıralanabilir kolonlar (UI SortableHeader'larıyla eşleşir) + güvenli
 // ekler. Whitelist dışı sortBy → createdAt (bilinmeyen kolon 500'ünü + indekssiz sortu engeller).
@@ -64,6 +66,8 @@ const WORKORDER_DATE_FIELDS = [
  * fazla var" bilgisini taşır.
  */
 const BATCH_PREVIEW_LIMIT = 3;
+/** Liste select'i: bağdaki siparişin müşterisi yalnız id+ad (opt-in; sipariş no/adres/vergi no listeye girmez). */
+const WO_LIST_ORDER_CUSTOMER = { customer: { select: { id: true, name: true } } } as const;
 import {
   decodeDynamicCursor,
   dynamicCursorWhere,
@@ -1539,6 +1543,11 @@ export class WorkOrderService {
     });
     delete params.filters[HIDE_CANCELLED_FILTER];
     delete params.filters[HIDE_COMPLETED_FILTER];
+    // Müşteri süzgeci (liste kolonu, 2026-09-15): WO'da customerId YOK — bağ üzerinden
+    // (`orderLinks.some.orderLine.order.customerId`). Filtre kümesinden ÇIKARILIR: bu
+    // serviste allowlist yok, `filter[customerId]` where'e sızıp 500 verirdi. CSV `in`.
+    const customerCond = readIdCondition(params.filters.customerId);
+    delete params.filters.customerId;
     // Arama kapsamı liste kolonlarıyla hizalı: İE no + parti no + kumaş/renk +
     // sipariş bağı üzerinden müşteri adı VE sipariş no (nested some → EXISTS
     // subquery). Sipariş no ile de aranabilmesi siparişten üretim emrine
@@ -1557,6 +1566,13 @@ export class WorkOrderService {
     ));
     applyDateRange(where, params, WORKORDER_DATE_FIELDS);
     if (hideCancelledWhere) Object.assign(where, hideCancelledWhere);
+    if (customerCond) {
+      // AND ile: aramanın `orderLinks.some` yolu OR içinde; üstteki `orderLinks` ezilmesin.
+      // Prisma tipli sabit: revoke AST kapısı (§13c) ilişki süzgecini tipten çözüp aktif yüklemi arar.
+      const byCustomer: Prisma.WorkOrderWhereInput = { orderLinks: { some: { ...ACTIVE_ORDER_LINK, orderLine: { order: { customerId: customerCond } } } } };
+      const w = where as { AND?: Prisma.WorkOrderWhereInput[] };
+      w.AND = [...(w.AND ?? []), byCustomer];
+    }
     // Arşivli (isActive=false) WO'lar default'ta gizli — ?withArchived=true override
     if (req.query.withArchived !== "true") {
       (where as Record<string, unknown>).isActive = true;
@@ -1639,14 +1655,16 @@ export class WorkOrderService {
                     id: true,
                     item: { select: { id: true, name: true } },
                     color: { select: { id: true, name: true } },
-                    order: { select: { id: true, deadline: true } },
+                    order: { select: { id: true, deadline: true, ...WO_LIST_ORDER_CUSTOMER } },
                   },
                 },
               },
             },
           }
         : {
-            orderLinks: { where: ACTIVE_ORDER_LINK, select: { orderLineId: true } },
+            // Müşteri kolonu: bağdaki müşteri AYNI sorguda (yalnız id+ad; koparılmış bağ
+            // `ACTIVE_ORDER_LINK` ile dışarıda). Rollup `rollupWorkOrderCustomers`.
+            orderLinks: { where: ACTIVE_ORDER_LINK, select: { orderLineId: true, orderLine: { select: { order: { select: WO_LIST_ORDER_CUSTOMER } } } } },
           }),
     } satisfies Prisma.WorkOrderSelect;
 
@@ -1778,7 +1796,7 @@ export class WorkOrderService {
       // aşağıdaki rollup geçişleri onları BELLEKTEN okur (aynı satırı ikinci kez
       // sorgulamamak için). Gelmezlerse geçişler DB turuna düşer — davranış aynı.
       steps: { id: string; stepSequence: number; station?: { name: string } | null }[];
-      orderLinks?: { orderLineId: string }[];
+      orderLinks?: { orderLineId: string; orderLine?: { order?: { customer?: { id: string; name: string } | null } | null } | null }[];
     },
   >(
     wos: T[]
@@ -1787,6 +1805,9 @@ export class WorkOrderService {
       producedMeters: number;
       inputMeters: number;
       orderedMeters: number;
+      /** Bağlı siparişlerin DISTINCT müşterileri (ad sırası, ≤5) + toplam — liste "Müşteri" kolonu. */
+      customers: { id: string; name: string }[];
+      customerCount: number;
       /** Şu an mal tutulan fason istasyon adları (genelde tek) — liste rozeti. */
       currentFasonStations: string[];
       /**
@@ -1846,6 +1867,7 @@ export class WorkOrderService {
         orderedMeters: orderedByWo.get(w.id) ?? 0,
         currentFasonStations: [],
         fasonFirms: [],
+        ...rollupWorkOrderCustomers(w.orderLinks),
       }));
     }
 
@@ -1987,6 +2009,7 @@ export class WorkOrderService {
       orderedMeters: orderedByWo.get(w.id) ?? 0,
       currentFasonStations: [...(fasonStationsByWo.get(w.id) ?? [])],
       fasonFirms: [...(firmsByWo.get(w.id) ?? new Map())].map(([name, current]) => ({ name, current })),
+      ...rollupWorkOrderCustomers(w.orderLinks),
     }));
   }
 

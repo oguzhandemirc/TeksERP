@@ -15,6 +15,7 @@ import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
+import { customerService } from "@/pages/Customers/service";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import { useTabsStore } from "@/store/tabs";
 import { workOrderColumns } from "./columns";
@@ -57,6 +58,9 @@ const FILTERS: FilterDef[] = [
   // CSV zaten `in`'e çevriliyor (ek backend işi gerekmedi).
   { kind: "multi-lookup", key: "targetItemId", label: "Kumaş", service: itemService, queryKey: "items" },
   { kind: "multi-lookup", key: "targetColorId", label: "Renk", service: colorService, queryKey: "colors" },
+  // Müşteri: WO'da customerId yok — backend süzgeci sipariş BAĞI üzerinden (`findAll` customerId
+  // özel okur; koparılmış bağ eşleşmez). Bağsız (stok) iş emri hiçbir müşteriye eşleşmez.
+  { kind: "multi-lookup", key: "customerId", label: "Müşteri", service: customerService, queryKey: "customers" },
   {
     kind: "dateRange",
     label: "Tarih",
