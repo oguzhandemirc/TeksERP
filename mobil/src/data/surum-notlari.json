@@ -26,6 +26,11 @@
       "maddeler": [
         {
           "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Üretim İstasyonları sayfasına liste görünümü geldi ve varsayılan oldu: her satır bir makine (İstasyon · Görev Türü · Tip · Departman · Yetenekler · Makine · Durum · Cihazlar · İşlemler), makinesi olmayan istasyon tek satır; satırdaki düzenle / QR / pasife al / sil işlemleri kart görünümündekiyle aynı, istasyon adına tıklayınca istasyon düzenlenir. Sayfa başlığındaki ikon çiftiyle kart görünümüne geçilir; son seçim bu bilgisayarda hatırlanır. Arama, filtreler, “Pasifleri göster” ve Excel/PDF dışa aktarımı iki görünümde ortaktır."
+        },
+        {
+          "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Tanımlar → Üretim İstasyonları: “Dokuma Tezgahı” ve “Sevkiyat / Tartı” görev türüyle kaydedilen istasyon sayfada görünmüyordu ve Excel/PDF dışa aktarımına girmiyordu (istasyon kaydediliyor, kart çizilmiyor, tezgah eklenemiyordu). Artık formda seçilebilen her görev türü listelenir ve dışa aktarılır; dokuma tezgahı yalnız dokuma modülü kapalıyken gizlenir (kayıt korunur). Yeni İstasyon formunda “Görev Türü” listesinde “Diğer” en alta alındı; görev türü seçilince Yetenekler kutuları o türün önerilen düzeniyle ön-işaretli gelir (Kurşun + KK2 kalite kontrol, fason renk + özellik, dokuma tezgahı levent tüketir) — öneri değiştirilebilir; mevcut istasyon düzenlenirken yetenekler kendiliğinden değişmez."
         },

@@ -1,5 +1,5 @@
 import { Fragment, useState } from "react";
-import { Plus, Pencil, QrCode, PowerOff, Power, Trash2, HardDrive, ChevronRight, Cpu } from "lucide-react";
+import { Plus, HardDrive, ChevronRight, Cpu } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import type { Machine } from "@/pages/Machines/types";
 import type { PeripheralDevice } from "@/pages/PeripheralDevices/types";
 import { MachinePeripheralsCell } from "@/pages/Stations/MachinePeripheralsCell";
+import { MachineRowActions } from "@/pages/Stations/MachineRowActions";
 
 interface Props {
   machines: Machine[];
@@ -20,34 +21,6 @@ interface Props {
   onDeactivate: (m: Machine) => void;
   onReactivate: (m: Machine) => void;
   onDelete: (m: Machine) => void;
-}
-
-// İstasyon kartı içindeki makine tablosunun "İşlemler" sütununda kullanılan
-// küçük ikon-buton. Tıklama alanı 28px — chip'lerdeki minik ikonlardan büyük.
-function IconAction({
-  title,
-  onClick,
-  className,
-  children,
-}: {
-  title: string;
-  onClick: () => void;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      onClick={onClick}
-      className={cn(
-        "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
-        className,
-      )}
-    >
-      {children}
-    </button>
-  );
 }
 
 /**
@@ -157,45 +130,7 @@ export function StationMachineTable({
                     )}
                   </TableCell>
                   <TableCell className="py-1.5">
-                    <div className="flex items-center justify-end gap-0.5">
-                      {canWrite && (
-                        <IconAction title="Düzenle" onClick={() => onEdit(m)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </IconAction>
-                      )}
-                      {active && (
-                        <IconAction title="Makine QR etiketi (oturum açma)" onClick={() => onQr(m)}>
-                          <QrCode className="h-3.5 w-3.5" />
-                        </IconAction>
-                      )}
-                      {canWrite && active && (
-                        <IconAction
-                          title="Pasife al (geri alınabilir)"
-                          className="hover:bg-amber-500/10 hover:text-amber-600"
-                          onClick={() => onDeactivate(m)}
-                        >
-                          <PowerOff className="h-3.5 w-3.5" />
-                        </IconAction>
-                      )}
-                      {canWrite && !active && (
-                        <IconAction
-                          title="Aktifleştir"
-                          className="text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700"
-                          onClick={() => onReactivate(m)}
-                        >
-                          <Power className="h-3.5 w-3.5" />
-                        </IconAction>
-                      )}
-                      {canWrite && (
-                        <IconAction
-                          title="Kalıcı sil"
-                          className="hover:bg-destructive/10 hover:text-destructive"
-                          onClick={() => onDelete(m)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </IconAction>
-                      )}
-                    </div>
+                    <MachineRowActions m={m} canWrite={canWrite} h={{ onEdit, onQr, onDeactivate, onReactivate, onDelete }} />
                   </TableCell>
                 </TableRow>
                 {showDevices && isOpen && (

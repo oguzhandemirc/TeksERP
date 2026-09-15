@@ -37,27 +37,18 @@ import { peripheralService } from "@/pages/PeripheralDevices/service";
 import { peripheralKindLabels, type PeripheralDevice } from "@/pages/PeripheralDevices/types";
 import { foldSearchText } from "@/lib/search-fold";
 import { isVisibleStationKind } from "./visibleStationKinds";
+import { buildStationMachineRows, type StationMachineRow } from "./stationMachineRows";
+import { useStationsViewMode } from "./stationsViewMode";
+import { StationsViewToggle } from "./StationsViewToggle";
+import { StationListView } from "./StationListView";
 
 // Perf: makinesiz kartlar için sabit boş dizi referansı (her render'da yeni `[]`
 // StationCard'ın React.memo'sunu bozardı).
 const EMPTY_MACHINES: Machine[] = [];
 
-/**
- * Dışa aktarım satırı — ekran KART, dosya DÜZ LİSTE. Bir satır = bir MAKİNE,
- * istasyon sütunları tekrarlanır (klasik "denormalize" dışa aktarım; Excel'de
- * filtrelenebilir/pivotlanabilir tek tablo).
- *
- * ⚠️ `machine: null` satırı bilinçlidir: makinesi olmayan istasyon aksi halde
- * dosyadan SESSİZCE düşerdi ve "istasyon listesi" eksik çıkardı.
- */
-interface StationMachineExportRow {
-  station: Station;
-  machine: Machine | null;
-  /** Bu makineye bağlı AKTİF cihazlar (metre/yazıcı/tartı). */
-  devices: PeripheralDevice[];
-  /** İstasyonun özellik yeteneği sayısı (istasyon düzeyi — satır başına TEKRARLANIR). */
-  propertyCount: number | null;
-}
+// Dışa aktarım ve LİSTE görünümü aynı düz satırlardan (`stationMachineRows.ts`): bir satır = bir MAKİNE,
+// makinesiz istasyon `machine: null` ile tek satır.
+type StationMachineExportRow = StationMachineRow;
 
 // İstasyon düzeyindeki sayılar (özellik yeteneği) satır başına tekrarlandığı için
 // `summable` DEĞİL — çok makineli istasyonda TOPLAM satırı onları kaç kez sayardı.
@@ -216,24 +207,14 @@ export function ProductionStationsPage() {
     });
   }, [allStations, stationId, machinePresence, debouncedSearch, machinesByStation]);
 
-  // Dışa aktarım satırları — EKRANDA GÖRÜNEN istasyon kümesinden (filtre sonrası)
-  // düzleştirilir. Makinesiz istasyon tek satırla temsil edilir; aksi halde dosyadan
-  // sessizce düşerdi.
+  // Düz satırlar — EKRANDA GÖRÜNEN istasyon kümesinden (filtre sonrası); liste görünümü VE dışa
+  // aktarım bu tek kümeden çizilir (görünümden bağımsız dosya). Makinesiz istasyon tek satır.
   const exportRows = useMemo<StationMachineExportRow[]>(
-    () =>
-      stations.flatMap((s): StationMachineExportRow[] => {
-        const propertyCount = capByStation.get(s.id)?.propertyCount ?? null;
-        const sm = machinesByStation.get(s.id) ?? EMPTY_MACHINES;
-        if (sm.length === 0) return [{ station: s, machine: null, devices: [], propertyCount }];
-        return sm.map((m) => ({
-          station: s,
-          machine: m,
-          devices: peripheralsByMachine.get(m.id) ?? [],
-          propertyCount,
-        }));
-      }),
+    () => buildStationMachineRows(stations, machinesByStation, peripheralsByMachine, capByStation),
     [stations, machinesByStation, peripheralsByMachine, capByStation],
   );
+  // Görünüm tercihi (kart ⇄ liste) — varsayılan liste, cihaza kayıtlı (`stationsViewMode.ts`).
+  const [viewMode, setViewMode] = useStationsViewMode();
 
   const anyFilterActive =
     debouncedSearch.trim() !== "" || stationId !== "__all__" || machinePresence !== "all";
@@ -295,6 +276,7 @@ export function ProductionStationsPage() {
         title="Üretim İstasyonları"
         actions={
           <div className="flex gap-2">
+            <StationsViewToggle mode={viewMode} onChange={setViewMode} />
             <ListExportMenu
               name="Üretim İstasyonları"
               rows={exportRows}
@@ -307,7 +289,7 @@ export function ProductionStationsPage() {
                 showInactive
                   ? "Pasif makineler de listede."
                   : "Yalnız AKTİF makineler — pasifler listede gizli (\"Pasifleri göster\" ile açılır).",
-                "Yalnız AKTİF üretim istasyonları: Ham Kalite Kontrol (KK1) · Kurşun + Kalite Kontrol 2 · Tambur · Fason / Dış İşlem.",
+                "Formda seçilebilen her görev türü listede (dokuma tezgahı yalnız dokuma modülü açıkken); liste ve kart görünümü aynı kümeyi verir.",
                 "\"İstasyon Özellik Sayısı\" istasyon düzeyindedir (her makine satırında tekrarlanır) — TOPLAM satırına girmez.",
                 "Cihaz sütunları yalnız AKTİF donanım kayıtlarını sayar.",
               ]}
@@ -346,7 +328,16 @@ export function ProductionStationsPage() {
         {!loading && allStations.length > 0 && stations.length === 0 && (
           <div className="text-sm text-muted-foreground">Filtreye uyan istasyon yok.</div>
         )}
-        {stations.length > 0 && (
+        {stations.length > 0 && viewMode === "list" && (
+          <StationListView
+            rows={exportRows}
+            canWrite={canWrite}
+            onEditStation={onEditStation}
+            onAddMachine={onAddMachine}
+            machine={{ onEdit: onEditMachine, onQr: setQrMachine, onDeactivate: setDeactivateMachine, onReactivate: onReactivateMachine, onDelete: setDeleteMachine }}
+          />
+        )}
+        {stations.length > 0 && viewMode === "cards" && (
           // Responsive kart grid'i — sütun sayısı mevcut genişliğe göre otomatik
           // (auto-fill, kart başına min 28rem/448px → makine tablosu rahat sığar).
           // items-start: kısa kartlar aynı satırdaki uzun karta göre uzamaz.
