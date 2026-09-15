@@ -154,7 +154,11 @@ async function main(): Promise<void> {
   check("§4a `reportsClosedKeys` süperadmin kümesinde",
     SUPERADMIN_ONLY_FLAG_KEYS.has("reportsClosedKeys"));
   check("§4b ⭐ modül kümesi KİRLENMEDİ (rapor listesi modül anahtarı DEĞİL)",
-    !MODULE_FLAG_KEYS.has("reportsClosedKeys") && MODULE_FLAG_KEYS.size === 9,
+    // Modül sayısı sabit DEĞİL (G3 `emanetEnabled` ekledi) — ölçülen şey kümenin İLİŞKİSİ: rapor listesi modül
+    // anahtarı değildir ve süperadmin kümesi = modül kümesi + yalnız o anahtar.
+    !MODULE_FLAG_KEYS.has("reportsClosedKeys")
+      && SUPERADMIN_ONLY_FLAG_KEYS.size === MODULE_FLAG_KEYS.size + 1
+      && [...MODULE_FLAG_KEYS].every((k) => SUPERADMIN_ONLY_FLAG_KEYS.has(k)),
     `MODULE_FLAG_KEYS ${MODULE_FLAG_KEYS.size} · SUPERADMIN_ONLY ${SUPERADMIN_ONLY_FLAG_KEYS.size}`);
   check("§4c ham ayar anahtarı da rezerve (`reports.closedKeys`)",
     SUPERADMIN_ONLY_SETTING_KEYS.has("reports.closedKeys"));
