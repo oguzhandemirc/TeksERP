@@ -68,9 +68,12 @@ import {
   useKk1HistoryAllEntriesEnabled,
   useKk1LabelScanVerifyEnabled,
   useDokumaEnabled,
+  useEmanetEnabled,
 } from '../../../hooks/useFeatureFlags';
 import DoffLinkPicker, { UNLINKED_DOFFS_KEY } from './DoffLinkPicker';
 import { EMPTY_DOFF_LINK, doffLinkPayload, isDoffLinkVisible, validateDoffLink, type DoffLinkState } from './doffLink';
+import OwnerPicker from './OwnerPicker';
+import { EMPTY_OWNER_LINK, isOwnerPickerVisible, ownerLinkPayload, type OwnerLinkState } from './ownerLink';
 import { buildEntryWarningToast } from './entryWarnings';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { NumpadHost, useOptionalNumpadContext } from '../../../components/NumpadProvider';
@@ -429,6 +432,10 @@ export default function KK1Screen() {
   // payload bugünküyle birebir (`doffLink.ts` saf kural). Mod seçili kalır, seçim sıfırlanır.
   const dokumaEnabled = useDokumaEnabled();
   const [doffLink, setDoffLink] = useState<DoffLinkState>(EMPTY_DOFF_LINK);
+  // EMANET SAHİBİ (G3t): bayrak açıkken "Sahibi" seçicisi; kapalıyken çizilmez, payload
+  // bugünküyle birebir (`ownerLink.ts` saf kural). Seçim kayıttan sonra KALIR (yarı mamul kalıbı).
+  const emanetEnabled = useEmanetEnabled();
+  const [ownerLink, setOwnerLink] = useState<OwnerLinkState>(EMPTY_OWNER_LINK);
   /**
    * EN alanı bu modda açık mı? İKİ REJİM AYRI:
    *   · HAM giriş  → `kk1.rawWidthEnabled` bayrağı (varsayılan KAPALI;
@@ -1420,6 +1427,7 @@ export default function KK1Screen() {
       initialQty: qty,
       width: width ?? null,
       colorId: semiMode ? form.colorId : null,
+      ownerCustomerId: ownerLinkPayload(ownerLink, emanetEnabled).ownerCustomerId ?? null,
     });
     const action = decideSubmit(attempt, fingerprint);
     const fresh = freshEntryIdentity();
@@ -1443,6 +1451,8 @@ export default function KK1Screen() {
       ...(semiMode ? { colorId: form.colorId, semiFinished: true } : {}),
       // Dokuma bağı: bayrak kapalıyken BOŞ (bugünkü payload); dokuma ise seçim ya da null.
       ...doffLinkPayload(doffLink, dokumaEnabled, semiMode),
+      // Emanet sahibi: bayrak kapalıyken ya da seçim yoksa BOŞ; seçimse id (sevkte 409 kapısı).
+      ...ownerLinkPayload(ownerLink, emanetEnabled),
       clientToken: identity.clientToken,
       clientEnteredAt: identity.clientEnteredAt,
     });
@@ -2007,6 +2017,11 @@ export default function KK1Screen() {
                 (§3.5 "çıkarılmaz, sorulur"; §3.7/12 kapalıyken sıfır fark). */}
             {isDoffLinkVisible(dokumaEnabled, semiMode) && (
               <DoffLinkPicker value={doffLink} onChange={setDoffLink} onBeforeOpen={blurAll} />
+            )}
+
+            {/* EMANET SAHİBİ — yalnız emanet modülü açıkken (G3t); iki modda da sorulur. */}
+            {isOwnerPickerVisible(emanetEnabled) && (
+              <OwnerPicker value={ownerLink} onChange={setOwnerLink} onBeforeOpen={blurAll} />
             )}
 
             {/* EN — iki rejim AYRI bayrakla yönetilir. `kk1.rawWidthEnabled`

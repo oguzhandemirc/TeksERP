@@ -6,6 +6,7 @@ import { Router } from "express";
 import { InventoryController } from "../controllers/inventory.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { getRollTabletContext } from "../services/roll-tablet.service";
 
 // Mobil ekran yetkileri web yetkilerine alternatif olarak kabul edilir:
 // `mobile:depo` operatörü `roll:read` web yetkisi olmadan da depo ekranını
@@ -332,6 +333,26 @@ router.get("/entry-stations", verifyToken, requireAnyPermission("roll:read", ...
  *       - bearerAuth: []
  */
 router.post("/stats-batch", verifyToken, requireAnyPermission("roll:read", ...MOBILE_ROLL_READ), controller.getRollStatsBatch);
+
+/**
+ * @openapi
+ * /api/rolls/tablet-context:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: 'KK1 tablet form bağlamı — emanet sahip adayları (aktif cariler, yalnız id+ad; emanet kapalıyken boş liste; tek izin mobile:kk1)'
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Bağlam
+ */
+router.get("/tablet-context", verifyToken, requireAnyPermission("roll:write", ...MOBILE_ROLL_WRITE_KK1), async (_req, res, next) => {
+  try {
+    res.json(await getRollTabletContext());
+  } catch (e) {
+    next(e);
+  }
+});
 
 /**
  * @openapi

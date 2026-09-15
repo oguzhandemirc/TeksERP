@@ -12,7 +12,7 @@ export const ORIGIN_LABEL: Record<WarpBeamOrigin, string> = {
   IN_HOUSE: 'İçeride sarılacak',
   SUBCONTRACT: 'Fasona sardırıldı',
   PURCHASED: 'Hazır alındı',
-  // G3 emanet: tablette PLANLANAMAZ (PlanModal butonları üç köken; sahip müşteri seçici G3t) — etiket rozet/liste için.
+  // G3 emanet: levent tablette PLANLANAMAZ (PlanModal butonları üç köken; sahip seçici yalnız KK1'de) — etiket rozet/liste için.
   CONSIGNED: 'Müşterinin emanet leventi',
 };
 export const KG_SOURCE_LABEL: Record<WarpKgSource, string> = { WEIGHED: 'Tartıldı', THEORETICAL: 'Nominal (hesap)' };

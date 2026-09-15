@@ -162,11 +162,26 @@ export interface InitialEntryRequest {
    * de SESSİZCE düşerdi; iki uçta da sözleşmede (`doffLink.ts` kuralı).
    */
   doffEventId?: string | null;
+  /**
+   * EMANET SAHİBİ (G3t): topun mülkiyeti müşteride (konsinye) — sevkte yalnız o müşteriye çıkar
+   * (backend 409 OWNER_MISMATCH). Yalnız `emanet.enabled` açıkken gönderilir (`ownerLink.ts`);
+   * kapalı sunucu 403 MODULE_DISABLED verir, eski sunucu alanı SESSİZCE düşürür (şema strict değil).
+   */
+  ownerCustomerId?: string;
+}
+
+/** `GET /rolls/tablet-context` — emanet sahip adayları (yalnız id+ad; emanet kapalıyken boş). */
+export interface RollTabletContext {
+  customers: { id: string; name: string }[];
 }
 
 export const rollService = {
   createInitialEntry: (data: InitialEntryRequest): Promise<ApiResponse<Roll>> =>
     apiClient.post<ApiResponse<Roll>>('/rolls/initial-entry', data).then((r) => r.data),
+
+  /** KK1 form bağlamı — tek uç, tek izin (`mobile:kk1`); `customer:read` istemez. */
+  tabletContext: (): Promise<ApiResponse<RollTabletContext>> =>
+    apiClient.get<ApiResponse<RollTabletContext>>('/rolls/tablet-context').then((r) => r.data),
 
   getByBarcode: (barcode: string): Promise<ApiResponse<Roll>> =>
     apiClient.get<ApiResponse<Roll>>(`/rolls/barcode/${barcode}`).then((r) => r.data),

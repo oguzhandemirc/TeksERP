@@ -43,6 +43,12 @@ export function useDevereMountTracking(): boolean {
   return (f?.devereEnabled ?? DEFAULT_FEATURE_FLAGS.devereEnabled) && (f?.devereMountTracking ?? DEFAULT_FEATURE_FLAGS.devereMountTracking);
 }
 
+/** Emanet (konsinye mülkiyet) modülü açık mı? Default FALSE — KK1 "Sahibi" seçicisi bayrak
+ *  yüklenene dek çizilmez (fail-closed: kapalı kurulumda ekran bugünküyle birebir). */
+export function useEmanetEnabled(): boolean {
+  return useFeatureFlags().data?.emanetEnabled ?? DEFAULT_FEATURE_FLAGS.emanetEnabled;
+}
+
 /** KK1 ham en girişi açık mı? Yüklenene kadar / hata halinde false (gizli). */
 export function useRawWidthEnabled(): boolean {
   return useFeatureFlags().data?.rawWidthEnabled ?? false;

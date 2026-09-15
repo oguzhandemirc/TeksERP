@@ -228,6 +228,13 @@ describe('entryAttempt', () => {
       expect(entryFingerprint({ itemId: 'x', initialQty: 140, width: 150 })).not.toBe(
         entryFingerprint({ itemId: 'x', initialQty: 141, width: 150 }),
       );
+      // Emanet sahibi (G3t): yalnız sahipte ayrılan iki giriş AYRI toptur; sahipsiz eski parmak iziyle aynı kalır.
+      expect(entryFingerprint({ itemId: 'x', initialQty: 140, width: 150, ownerCustomerId: 'c1' })).not.toBe(
+        entryFingerprint({ itemId: 'x', initialQty: 140, width: 150, ownerCustomerId: 'c2' }),
+      );
+      expect(entryFingerprint({ itemId: 'x', initialQty: 140, width: 150, ownerCustomerId: null })).toBe(
+        entryFingerprint({ itemId: 'x', initialQty: 140, width: 150 }),
+      );
       // ve "en yok" ile "en 0" karışmaz.
       expect(entryFingerprint({ itemId: 'x', initialQty: 140, width: null })).not.toBe(
         entryFingerprint({ itemId: 'x', initialQty: 140, width: 0 }),

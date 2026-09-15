@@ -115,10 +115,12 @@ export function entryFingerprint(p: {
   colorId?: string | null;
   initialQty: number;
   width?: number | null;
+  /** Emanet sahibi (G3t) — iki giriş yalnız sahipte ayrılıyorsa ikincisi yutulmasın (renk emsali). */
+  ownerCustomerId?: string | null;
 }): string {
   const dec = (v: number | null | undefined) =>
     v == null || Number.isNaN(v) ? '-' : v.toFixed(3);
-  return [p.itemId, p.colorId ?? '-', dec(p.initialQty), dec(p.width)].join('|');
+  return [p.itemId, p.colorId ?? '-', dec(p.initialQty), dec(p.width), p.ownerCustomerId ?? '-'].join('|');
 }
 
 /** Yeni bir fiziksel top girişi için taze kimlik (token + damga BİRLİKTE). */

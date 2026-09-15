@@ -18,11 +18,14 @@
 //      müşteri A → geçer; hepsi ownersız → geçer (bugünkü davranış)
 //   §4 DB sedleri — CONSIGNED ownersız 23514 · CONSIGNED + supplier 23514 · IN_HOUSE + owner OK (mülkiyet ≠ köken)
 //   §5 E2b — `updateWarpBeam` gövdesine owner sızdırılsa bile owner DEĞİŞMEZ; lot update owner almaz
+//   §6 G3t — `GET /rolls/tablet-context` (`roll:write` ∨ `mobile:kk1`, `/:id`den ÖNCE): emanet KAPALI ⇒
+//      `customers: []`; AÇIK ⇒ aktif cariler yalnız `{id, name}` (vergi no / adres SIZMAZ), pasif cari yok
 //
 // NEGATİF SONDALAR (kırmızı görülerek, 2026-09-15):
 //   · `assertOwnerMatchesTx` `NOT: { ownerCustomerId }` yüklemi düşürülünce §3a/§3b ❌
 //   · `assertEmanetWritableTx` bayrak kontrolü düşürülünce §1a/§1b/§1c ❌
 //   · `singleOwner` çoklu-owner 409'u düşürülünce §2d ❌
+//   · `roll-tablet.service` `select`e `taxNumber` eklenip map'e geçirilince §6c ❌ · bayrak kontrolü düşürülünce §6b ❌
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Bayraklar FOTOĞRAFINA döndürülür; temizlik yalnız `temizle`de.
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -36,6 +39,7 @@ import { windWarpBeam } from "../src/services/warp-beam-wind.service";
 import { YarnLotService } from "../src/services/yarn-lot.service";
 import { InventoryService } from "../src/services/inventory.service";
 import { assertOwnerMatchesTx, resolveOwnerFromBeamsTx } from "../src/services/helpers/emanet-owner.helper";
+import { getRollTabletContext } from "../src/services/roll-tablet.service";
 import { AppError } from "../src/utils/app-error";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 import { ensureTestAdmin } from "./fixture-test-user";
@@ -108,6 +112,10 @@ function statik(): void {
   check("§0g E4b: fatura taslağı emanet topu `warnings`e yazar (409 değil)", /ownerCustomerId !== null/.test(draft) && /warnings\.push\(`\$\{emanet\.length\} top müşterinin EMANET/.test(draft));
   const merge = readFileSync(path.join(ROOT, "src/constants/merge-map.customer.ts"), "utf8");
   check("§0h MERGE_MAP: üç modelde `ownerCustomerId` MOVE satırı", (merge.match(/column: "ownerCustomerId"/g) ?? []).length === 3);
+  const invRoute = readFileSync(path.join(ROOT, "src/routes/inventory.routes.ts"), "utf8");
+  const ctxAt = invRoute.indexOf('router.get("/tablet-context"');
+  check("§6a G3t: `/rolls/tablet-context` `roll:write` ∨ `mobile:kk1` guard'ıyla ve `/:id`den ÖNCE kayıtlı (yoksa 'tablet-context' bir id sanılır)",
+    ctxAt > 0 && ctxAt < invRoute.indexOf('router.get("/:id"') && /router\.get\("\/tablet-context", verifyToken, requireAnyPermission\("roll:write", \.\.\.MOBILE_ROLL_WRITE_KK1\)/.test(invRoute));
 }
 
 async function main(): Promise<void> {
@@ -121,7 +129,7 @@ async function main(): Promise<void> {
   const patos = await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } });
   if (!patos) throw new Error("Seed fixture eksik (PATOS)");
   const whId = await fixtureWarehouseId();
-  const ids = { st: "", mk: "", custA: "", custB: "", yarn: "", spec: "", lots: [] as string[], beams: [] as string[], rolls: [] as string[], wo: "", sub: "", dispatch: "" };
+  const ids = { st: "", mk: "", custA: "", custB: "", custP: "", yarn: "", spec: "", lots: [] as string[], beams: [] as string[], rolls: [] as string[], wo: "", sub: "", dispatch: "" };
   const setFlag = (key: string, v: boolean) => prisma.systemSetting.upsert({ where: { key }, create: { key, value: String(v) }, update: { value: String(v) } });
 
   try {
@@ -131,8 +139,10 @@ async function main(): Promise<void> {
     const mk = await prisma.machine.create({ data: { stationId: st.id, name: `${TAG}-M1`, code: `${TAG}-M1`.slice(0, 32) }, select: { id: true } });
     ids.mk = mk.id;
     const custA = await prisma.customer.create({ data: { code: `${TAG}-A`, name: `${TAG} Müşteri A` }, select: { id: true } });
-    const custB = await prisma.customer.create({ data: { code: `${TAG}-B`, name: `${TAG} Müşteri B` }, select: { id: true } });
-    ids.custA = custA.id; ids.custB = custB.id;
+    // B BİLEREK zengin (vergi no + adres): §6 tablet bağlamına SIZMAMALI. P pasif: listede olmamalı.
+    const custB = await prisma.customer.create({ data: { code: `${TAG}-B`, name: `${TAG} Müşteri B`, taxNumber: "9990001113", address: `${TAG} gizli adres` }, select: { id: true } });
+    const custP = await prisma.customer.create({ data: { code: `${TAG}-P`, name: `${TAG} Pasif`, isActive: false }, select: { id: true } });
+    ids.custA = custA.id; ids.custB = custB.id; ids.custP = custP.id;
     const yarn = await prisma.item.create({ data: { code: `${TAG}-IP`, name: `${TAG} iplik`, itemType: "YARN", unit: "KG", linearDensityDen: 300 }, select: { id: true } });
     ids.yarn = yarn.id;
     const spec = await prisma.warpSpec.create({ data: { code: `${TAG}-CK`, name: `${TAG} çözgü`, yarnItemId: yarn.id, endsCount: 3000 }, select: { id: true } });
@@ -205,6 +215,16 @@ async function main(): Promise<void> {
     check("§5a `updateWarpBeam` gövdesine sızdırılan owner YAZILMAZ (doğum niteliği)", (await prisma.warpBeam.findUniqueOrThrow({ where: { id: bP.data.id }, select: { ownerCustomerId: true } })).ownerCustomerId === null);
     await lots.update(lotN.data.id, { notes: "sonda", ...({ ownerCustomerId: custB.id } as object) }, admin.id);
     check("§5b lot `update` owner almaz — null kaldı", (await prisma.yarnLot.findUniqueOrThrow({ where: { id: lotN.data.id }, select: { ownerCustomerId: true } })).ownerCustomerId === null);
+
+    console.log("\n── §6 G3t — KK1 tablet bağlamı (opt-in allowlist) ──");
+    await setFlag(SETTING_KEYS.EMANET_ENABLED, false);
+    check("§6b ⭐ emanet KAPALI → `customers: []` (kapalı kurulumda cari adı bu uçtan sızmaz)", (await getRollTabletContext()).data.customers.length === 0);
+    await setFlag(SETTING_KEYS.EMANET_ENABLED, true);
+    const ctx = (await getRollTabletContext()).data;
+    const rowB = ctx.customers.find((c) => c.id === custB.id) as Record<string, unknown> | undefined;
+    check("§6c ⭐ AÇIK: aktif cari listede, satır anahtar kümesi TAM OLARAK {id, name}; vergi no / adres cevapta YOK",
+      !!rowB && Object.keys(rowB).sort().join(",") === "id,name" && ctx.customers.every((c) => Object.keys(c).sort().join(",") === "id,name") && !JSON.stringify(ctx).includes("9990001113") && !JSON.stringify(ctx).includes("gizli adres"), rowB ? Object.keys(rowB).join(",") : "satır yok");
+    check("§6d pasif cari listede DEĞİL · ad sırası", !ctx.customers.some((c) => c.id === custP.id) && ctx.customers.findIndex((c) => c.id === custA.id) < ctx.customers.findIndex((c) => c.id === custB.id));
   } finally {
     await temizle(ids, foto);
   }
@@ -213,7 +233,7 @@ async function main(): Promise<void> {
   process.exit(fail > 0 ? 1 : 0);
 }
 
-async function temizle(ids: { st: string; mk: string; custA: string; custB: string; yarn: string; spec: string; lots: string[]; beams: string[]; rolls: string[]; wo: string; sub: string; dispatch: string }, foto: Array<{ key: string; value: Prisma.JsonValue }>): Promise<void> {
+async function temizle(ids: { st: string; mk: string; custA: string; custB: string; custP: string; yarn: string; spec: string; lots: string[]; beams: string[]; rolls: string[]; wo: string; sub: string; dispatch: string }, foto: Array<{ key: string; value: Prisma.JsonValue }>): Promise<void> {
   if (ids.dispatch) { await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: ids.dispatch } }); await prisma.subcontractorDispatch.deleteMany({ where: { id: ids.dispatch } }); }
   if (ids.wo) await prisma.weavingOrder.deleteMany({ where: { id: ids.wo } });
   if (ids.sub) await prisma.subcontractor.deleteMany({ where: { id: ids.sub } });
@@ -229,7 +249,7 @@ async function temizle(ids: { st: string; mk: string; custA: string; custB: stri
   await prisma.roll.deleteMany({ where: { id: { in: ids.rolls } } });
   if (ids.mk) await prisma.machine.deleteMany({ where: { id: ids.mk } });
   if (ids.st) await prisma.station.deleteMany({ where: { id: ids.st } });
-  await prisma.customer.deleteMany({ where: { id: { in: [ids.custA, ids.custB].filter(Boolean) } } });
+  await prisma.customer.deleteMany({ where: { id: { in: [ids.custA, ids.custB, ids.custP].filter(Boolean) } } });
   await prisma.systemLog.deleteMany({ where: { recordId: { in: [...ids.beams, ...ids.rolls, ...ids.lots] } } });
   for (const key of FLAGS) {
     const f = foto.find((x) => x.key === key);

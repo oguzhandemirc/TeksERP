@@ -457,7 +457,12 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Emanet (konsinye mülkiyet) modülü geldi — Genel Ayarlar → Modüller'den açılır, varsayılan kapalıdır ve kapalı kurulumda hiçbir şey değişmez. Açıkken müşterinin işlenmek üzere bıraktığı kumaş KK1 elle girişte “sahibi” seçilerek girilir, müşterinin gönderdiği levent “Müşterinin emanet leventi” köken seçeneğiyle planlanır, müşterinin ipliği lot açılırken sahibiyle kaydedilir; o iplikten sarılan levent ve fasona dokutulan işten doğan top sahibini kendiliğinden alır (iki müşterinin ipliği aynı levente sarılamaz). Emanet mal fabrikanın malı sayılmaz: başka müşteriye sevk edilemez — sevkiyat ve fasondan doğrudan sevk engellenir ve etkilenen toplar barkoduyla listelenir; sevkiyattan üretilen fatura taslağı emanet topu uyarır (satır yine yazılır, işçilik faturası elle düzeltilir). Sahiplik doğumda yazılır, sonradan düzenlenmez; levent ve lot listelerinde sahibi müşterinin adıyla görünür. Tablet KK1'de emanet seçimi bu sürümde yok — emanet kumaş panelden elle girişle kaydedilir."
+          "metin": "Emanet (konsinye mülkiyet) modülü geldi — Genel Ayarlar → Modüller'den açılır, varsayılan kapalıdır ve kapalı kurulumda hiçbir şey değişmez. Açıkken müşterinin işlenmek üzere bıraktığı kumaş KK1 elle girişte “sahibi” seçilerek girilir, müşterinin gönderdiği levent “Müşterinin emanet leventi” köken seçeneğiyle planlanır, müşterinin ipliği lot açılırken sahibiyle kaydedilir; o iplikten sarılan levent ve fasona dokutulan işten doğan top sahibini kendiliğinden alır (iki müşterinin ipliği aynı levente sarılamaz). Emanet mal fabrikanın malı sayılmaz: başka müşteriye sevk edilemez — sevkiyat ve fasondan doğrudan sevk engellenir ve etkilenen toplar barkoduyla listelenir; sevkiyattan üretilen fatura taslağı emanet topu uyarır (satır yine yazılır, işçilik faturası elle düzeltilir). Sahiplik doğumda yazılır, sonradan düzenlenmez; levent ve lot listelerinde sahibi müşterinin adıyla görünür."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "yeni",
+          "metin": "Ham Giriş (KK1) ekranına “Sahibi (emanet mal ise müşteri)” satırı geldi — yalnız emanet modülü açık fabrikada görünür, kapalıysa ekran değişmez. Müşterinin işlenmek üzere bıraktığı kumaş girilirken “Müşteri seç” ile sahibi seçilir; seçim sonraki toplarda kalır, “Emanet değil” ile temizlenir. Sahipli top başka müşteriye sevk edilemez (sevkiyat engeli panelle aynı). Operatöre ayrıca müşteri yetkisi verilmesi gerekmez — liste ham giriş yetkisiyle gelir ve yalnız müşteri adını taşır."
         }
       ]
     },
