@@ -27,6 +27,8 @@ vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
     depoMultiEnabled: false,
     devereEnabled: false,
     dokumaEnabled: false,
+    reportsClosedKeys: [],
+    isReportOpen: () => true,
     financeEnabled: false,
     productionEnabled: true,
     ticaretEnabled: false,

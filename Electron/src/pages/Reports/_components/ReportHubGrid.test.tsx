@@ -16,6 +16,11 @@ import { FileBarChart } from "lucide-react";
 import { renderWithProviders } from "@/test/render";
 import { ReportHubGrid } from "./ReportHubGrid";
 
+// Karo süzmesi (K5) gerçek bir katalog anahtarı ister; iskelet testi kapıyı AÇIK sabitler —
+// süzmenin kendisi `ReportsHub.gate.test.tsx`te ölçülür.
+vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
+  useOperationsVisibilityContext: () => ({ reportsClosedKeys: [], isReportOpen: () => true }),
+}));
 vi.mock("@/hooks/useFavorites", () => ({
   useFavorites: () => ({
     favorites: [],
@@ -31,7 +36,7 @@ const TILES = [
     title: "Stok Raporu",
     description: "Depodaki toplar",
     icon: FileBarChart,
-    to: "/reports/inventory/stock",
+    to: "/reports/inventory/scorecard",
   },
 ];
 

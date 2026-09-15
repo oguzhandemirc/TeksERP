@@ -37,6 +37,8 @@ vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
     iplikEnabled: false,
     devereEnabled: false,
     dokumaEnabled: false,
+    reportsClosedKeys: [],
+    isReportOpen: () => true,
     ...regime,
   }),
 }));

@@ -13,7 +13,7 @@ import { SOURCE_LABELS, formatPct } from "./dokuma-regime";
 
 const dokumaKaro = reportTiles.find((t) => t.key === "dokuma");
 const ctx = (over: Partial<OperationsVisibilityContext>): OperationsVisibilityContext =>
-  ({ dokumaEnabled: false, productionEnabled: true, financeEnabled: false, ticaretEnabled: false, iplikEnabled: false, depoMultiEnabled: false, devereEnabled: false, tezgahEnabled: false, ...over }) as OperationsVisibilityContext;
+  ({ dokumaEnabled: false, reportsClosedKeys: [], isReportOpen: () => true, productionEnabled: true, financeEnabled: false, ticaretEnabled: false, iplikEnabled: false, depoMultiEnabled: false, devereEnabled: false, tezgahEnabled: false, ...over }) as OperationsVisibilityContext;
 
 describe("rejim (Raporlar hub'ı karosu)", () => {
   it("⭐ karo `dokumaEnabled` bayrağına bağlı ve izni `report:production` (route ile ayna)", () => {

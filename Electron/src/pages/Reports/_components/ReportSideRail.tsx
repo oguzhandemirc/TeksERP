@@ -1,5 +1,7 @@
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { reportKeyOfPath } from "@/lib/report-gate";
+import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import { reportCategoryTiles, reportCategoryTitle } from "../tile-config";
 
 /**
@@ -12,12 +14,17 @@ import { reportCategoryTiles, reportCategoryTitle } from "../tile-config";
  */
 export function ReportSideRail() {
   const location = useLocation();
+  const { isReportOpen } = useOperationsVisibilityContext();
   const parts = location.pathname.split("/").filter(Boolean);
   // beklenen: ["reports", "<category>", "<report?>"]
   if (parts[0] !== "reports" || parts.length < 3) return null;
 
   const category = parts[1] ?? "";
-  const tiles = reportCategoryTiles[category];
+  // Kapalı rapor şeritte de yoktur — hub karosuyla aynı yüklem (K5).
+  const tiles = reportCategoryTiles[category]?.filter((t) => {
+    const key = reportKeyOfPath(t.to);
+    return key !== null && isReportOpen(key);
+  });
   if (!tiles || tiles.length === 0) return null;
 
   const title = reportCategoryTitle[category] ?? "Bu Kategori";

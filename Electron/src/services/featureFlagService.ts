@@ -314,6 +314,9 @@ export interface FeatureFlags {
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI, tezgah izlemenin KARDEŞİ: bu alan HAM
    *  değerdir; etkin değer `production && dokuma` (`useOperationsVisibilityContext`). */
   dokumaEnabled: boolean;
+  /** KAPALI rapor anahtarları (katalog `key`leri). `null` = liste OKUNAMADI — "hiçbiri kapalı
+   *  değil" DEĞİL; panel fail-closed okur ve rapor çizmez (R2/K5). Yazmada `null` gönderilmez. */
+  reportsClosedKeys: string[] | null;
   targetQuantityEnabled: boolean;
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı — default false; backend ENFORCE eder. */

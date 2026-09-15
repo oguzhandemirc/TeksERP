@@ -25,6 +25,9 @@ vi.mock("@/hooks/useRoleAccess", () => ({
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
   useOperationsVisibilityContext: () => ({
     shipmentConfirmationEnabled: false,
+    // Rapor kapısı (K5) ctx'ten okur; bu test arama davranışını ölçer, kapıyı açık sabitler.
+    reportsClosedKeys: [],
+    isReportOpen: () => true,
   }),
 }));
 vi.mock("@/hooks/useFavorites", () => ({

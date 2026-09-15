@@ -26,6 +26,11 @@
       "maddeler": [
         {
           "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Hangi raporların fabrikaya açık olacağı artık sistem yöneticisi (yazılım firması hesabı) tarafından belirlenir — dokuma ve devere modüllerinde olduğu gibi. Sistem → “Modüller” ekranına “Raporlar” bölümü geldi: her rapor kendi kategorisi altında bir satır (adı, cevapladığı soru ve “Basit” / “Gelişmiş” rozeti); satırı kapatınca o rapor Raporlar sayfasındaki karodan, sağdaki kategori şeridinden, komut paletinden ve adres çubuğundan kaybolur, sunucu da veriyi vermez. Modülü kapalı raporun satırı kilitlidir (zaten çizilmiyor). Fabrika yöneticisi bu bölümü görür ama değiştiremez. Bugünkü kurulumlarda hiçbir şey değişmez: liste boş doğar, bütün raporlar açık kalır; yeni eklenen raporlar da açık doğar. Rapor listesi sunucudan okunamazsa panel hiçbir raporu çizmez ve bunu Modüller ekranında yazar (“Rapor listesi okunamadı”); sistem yöneticisi tek düğmeyle listeyi sıfırlayabilir."
+        },
+        {
+          "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Rapor ekranları kolay okunur hâle geldi: her raporun başlığının altında artık o raporun HANGİ SORUYU cevapladığı tek cümleyle yazıyor (metin tek kaynaktan gelir, ekranla katalog ayrışmaz) ve sayfanın en üstünde özet kartları duruyor — önce cevap, sonra tablo. Özet kartı olmayan dört rapor (Top İzleme · Vardiya Karnesi · Karne Listesi · Çek Vade Takvimi) da bu sürümde kartlarına kavuştu; sayılar raporun kendi verisinden gelir, yeni bir hesap yapılmaz. Çek vade takviminde kart ADET gösterir, tutar toplamı göstermez: farklı para birimleri toplanamaz. Ayrıca rapor listelerinde raporlar iki bölüme ayrıldı — “Hızlı bakış” ve “Derin analiz”; bölümleme yalnız SIRALAR, hiçbir rapor gizlenmez ve tek tür rapor içeren listelerde başlık çıkmaz."
         },

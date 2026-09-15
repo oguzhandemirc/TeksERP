@@ -1,6 +1,8 @@
 import type { CommandEntry, CommandSection } from "./command-entries.types";
 import { reportTiles, reportCategoryTiles } from "@/pages/Reports/tile-config";
 import { regimePredicate } from "@/lib/regime-predicate";
+import { categoryHasOpenReport, reportKeyOfPath } from "@/lib/report-gate";
+import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 
 /**
  * Raporlar bölümleri — kategori hub'ı + o kategorinin TÜM alt raporları.
@@ -31,7 +33,9 @@ export const reportCommandSections: CommandSection[] = reportTiles.map((cat) => 
     icon: cat.icon,
     to: cat.to,
     permission: cat.permission,
-    visibleWhen: cat.featureFlag ? regimePredicate(cat.featureFlag) : undefined,
+    // Modül VE en az bir açık rapor — karo ile aynı yüklem (K5; palet üçüncü yol).
+    visibleWhen: (ctx: OperationsVisibilityContext) =>
+      (cat.featureFlag ? regimePredicate(cat.featureFlag)(ctx) : true) && categoryHasOpenReport(ctx.reportsClosedKeys, cat.key),
     keywords: "rapor raporlar analiz",
   };
 
@@ -42,7 +46,10 @@ export const reportCommandSections: CommandSection[] = reportTiles.map((cat) => 
     icon: tile.icon,
     to: tile.to,
     permission: cat.permission,
-    visibleWhen: cat.featureFlag ? regimePredicate(cat.featureFlag) : undefined,
+    visibleWhen: (ctx: OperationsVisibilityContext) => {
+      const key = reportKeyOfPath(tile.to);
+      return (cat.featureFlag ? regimePredicate(cat.featureFlag)(ctx) : true) && key !== null && ctx.isReportOpen(key);
+    },
     keywords: `rapor ${cat.title}`,
   }));
 

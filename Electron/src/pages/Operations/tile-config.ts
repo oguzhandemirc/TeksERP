@@ -142,6 +142,14 @@ export interface OperationsVisibilityContext {
    * karosu belirir (backend yine 403 verir → tıklanan boş ekran).
    */
   iplikEnabled: boolean;
+  /**
+   * KAPALI rapor anahtarları — `reports.closedKeys` tek listesi (Raporlar K2/K5).
+   * `null` = liste okunamadı ya da bayraklar henüz yüklenmedi ⇒ FAIL-CLOSED, hiçbir rapor
+   * açık değil. Karo · route · palet üçü de `isReportOpen`den okur, listeyi kendisi süzmez.
+   */
+  reportsClosedKeys: readonly string[] | null;
+  /** Rapor açık mı — katalogda olmayan anahtar KAPALI, liste okunamadıysa KAPALI. */
+  isReportOpen: (key: string) => boolean;
 }
 
 export interface OperationsTile {

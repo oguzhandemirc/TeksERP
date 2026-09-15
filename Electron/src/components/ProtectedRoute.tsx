@@ -4,6 +4,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { canEnterApp } from "@/types/auth";
 import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
 import { isRouteModuleOpen } from "@/lib/route-modules";
+import { reportKeyOfPath } from "@/lib/report-gate";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 
 interface Props {
@@ -63,6 +64,13 @@ export function ProtectedRoute({
   // (çekirdek · planlanan · hub) dokunulmaz; bayrak yüklenene dek yön alan başına
   // backend'le aynı (üretim AÇIK) — bugünkü route tablosu birebir kalır.
   if (!isRouteModuleOpen(location.pathname, moduleCtx)) {
+    return <Navigate to="/forbidden" replace />;
+  }
+  // Rapor kapısı (Raporlar K5): modül kapısından SONRA, izin kapısından SONRA — süperadminin
+  // kapattığı rapor izni olan kullanıcıya da çizilmez (backend 403 REPORT_DISABLED ile aynı).
+  // Kategori hub'ı (iki segment) rapor değildir; bilinmeyen anahtar KAPALIDIR.
+  const reportKey = reportKeyOfPath(location.pathname);
+  if (reportKey !== null && !moduleCtx.isReportOpen(reportKey)) {
     return <Navigate to="/forbidden" replace />;
   }
 

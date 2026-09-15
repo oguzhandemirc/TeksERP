@@ -18,6 +18,8 @@ function ctx(over: Partial<OperationsVisibilityContext> = {}): OperationsVisibil
     depoMultiEnabled: true,
     devereEnabled: true,
     dokumaEnabled: true,
+    reportsClosedKeys: [],
+    isReportOpen: () => true,
     financeEnabled: true,
     productionEnabled: true,
     ticaretEnabled: true,

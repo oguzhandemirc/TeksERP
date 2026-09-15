@@ -33,6 +33,8 @@ vi.mock("@/providers/PreferencesProvider", () => ({
 vi.mock("@/hooks/usePricingEnabled", () => ({
   FEATURE_FLAGS_QUERY_KEY: ["feature-flags"],
   useFeatureFlags: () => ({ isLoading: false, data: { data: { productionEnabled: true } } }),
+  // Raporlar bölümü gerçek görünürlük ctx'ini çağırır; o da bunu okur.
+  useShipmentConfirmationEnabled: () => false,
   // PIN kapalı → tutarsızlık bandı ayrıca ölçülüyor.
   useEnabledLoginMethods: () => ["list"],
 }));

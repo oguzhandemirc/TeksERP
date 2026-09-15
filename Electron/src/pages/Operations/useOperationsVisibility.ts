@@ -1,4 +1,6 @@
+import { useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { isReportOpenWith } from "@/lib/report-gate";
 import { useShipmentConfirmationEnabled } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
@@ -49,6 +51,10 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
   // karo bir an belirip kaybolmamalı ("sıfır görünür fark"); backend kapısı
   // `requireDokumaEnabled` aynı sırayı ölçer.
   const dokumaEnabled = productionEnabled && (flagsQuery.data?.data?.dokumaEnabled ?? false);
+  // Rapor listesi: alan yoksa/yüklenmediyse de `null` — "boş liste = hepsi açık" yalnız
+  // backend'in gerçekten boş dizi söylediği durumdur (fail-closed, K5).
+  const reportsClosedKeys: readonly string[] | null = flagsQuery.data?.data?.reportsClosedKeys ?? null;
+  const isReportOpen = useCallback((key: string) => isReportOpenWith(reportsClosedKeys, key), [reportsClosedKeys]);
 
   // ⚠️ ÇIKIŞ BEKLEYEN SEVKİYAT SONDASI KALDIRILDI (2026-09-01, birleştirme).
   // 2026-08-22 kararı Sevk Kapısı karosunu SAF BAYRAĞA bağladı ve `sack-store/
@@ -65,5 +71,7 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
     depoMultiEnabled,
     devereEnabled,
     dokumaEnabled,
+    reportsClosedKeys,
+    isReportOpen,
   };
 }

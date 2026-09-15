@@ -54,6 +54,8 @@ function ctx(
     devereEnabled: false,
     // Dokuma işi de ETKİN değer (production && dokuma); fabrikada KAPALI.
     dokumaEnabled: false,
+    reportsClosedKeys: [],
+    isReportOpen: () => true,
     ...over,
   };
 }

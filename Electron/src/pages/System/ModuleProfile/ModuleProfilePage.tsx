@@ -34,6 +34,7 @@ import { screenCatalogService } from "@/services/screenCatalogService";
 import { SETTINGS_CATEGORIES } from "@/pages/GeneralSettings/settings-config";
 import { FeatureFlagSection } from "@/pages/GeneralSettings/FeatureFlagSection";
 import { SettingsPasswordCard } from "@/pages/GeneralSettings/SettingsPasswordCard";
+import { ReportVisibilitySection } from "./ReportVisibilitySection";
 import {
   describeDiffRow,
   diffToFlagPatch,
@@ -236,6 +237,13 @@ export function ModuleProfilePage() {
           </div>
         </Section>
 
+        {/* ── ①b RAPOR GÖRÜNÜRLÜĞÜ (Raporlar K6) — tek liste, modül anahtarı değil ── */}
+        <Section
+          title="Raporlar"
+          description="Hangi raporlar bu fabrikada açık — kapalı rapor karoda, menüde ve adres çubuğunda çizilmez; sunucu da vermez. Yeni doğan rapor açık doğar."
+        >
+          <ReportVisibilitySection canWrite={canWrite} />
+        </Section>
         {/* ── ② BAĞIMLILIK + KAPATMA ETKİSİ ─────────────────────────────── */}
         <Section
           title="Bağımlılıklar ve kapatma etkisi"

@@ -3,6 +3,8 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { REPORT_BY_KEY } from "@/lib/report-catalog";
+import { reportKeyOfPath } from "@/lib/report-gate";
+import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 
 export interface HubTile {
   key: string;
@@ -52,10 +54,16 @@ export function groupBySinif(tiles: HubTile[]): {
 
 /** Domain alt-rapor hub'ı — tile grid layout, izin filtresi parent'ta yapılır. */
 export function ReportHubGrid({ title, description, tiles }: Props) {
+  // Karo süzmesi (Raporlar K5): karonun adresi anahtarıdır; kapalı ya da bilinmeyen rapor çizilmez (fail-closed).
+  const { isReportOpen } = useOperationsVisibilityContext();
+  const open = tiles.filter((t) => {
+    const key = reportKeyOfPath(t.to);
+    return key !== null && isReportOpen(key);
+  });
   // ⚠️ BÖLÜMLEME KAROYU GİZLEMEZ, SIRALAR: sınıfı katalogda olmayan karo (kategori
   // karoları, `/reports/<kategori>` iki segmentli) "Diğer"e düşmez — bölümsüz
   // listede kalır. Bir karoyu bölüm uğruna kaybetmek, kapatmaktan farksız olurdu.
-  const { sections, unclassified, showSections } = groupBySinif(tiles);
+  const { sections, unclassified, showSections } = groupBySinif(open);
   if (!showSections) {
     // Kategoride tek sınıf varsa iki başlık göstermek gürültüdür: rapor sayısı
     // değişmediği hâlde ekran "iki grup" diye okunur.
@@ -64,7 +72,7 @@ export function ReportHubGrid({ title, description, tiles }: Props) {
         <PageHeader title={title} description={description} />
         <PageBody className="p-6">
           <HubGrid>
-            {tiles.map((tile, i) => (
+            {open.map((tile, i) => (
               <HubCard key={tile.key} to={tile.to} title={tile.title} description={tile.description} icon={tile.icon} index={i} />
             ))}
           </HubGrid>

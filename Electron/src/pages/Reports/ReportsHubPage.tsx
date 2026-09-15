@@ -2,6 +2,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
+import { categoryHasOpenReport } from "@/lib/report-gate";
 import { reportTiles } from "./tile-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
 
@@ -21,7 +22,9 @@ export function ReportsHubPage() {
   const tiles = reportTiles.filter(
     (t) =>
       (isAdmin || !t.permission || hasPermission(t.permission)) &&
-      (!t.featureFlag || ctx[t.featureFlag]),
+      (!t.featureFlag || ctx[t.featureFlag]) &&
+      // Bütün raporları kapatılmış kategori karosu boş bir hub'a götürürdü (K5).
+      categoryHasOpenReport(ctx.reportsClosedKeys, t.key),
   );
 
   return (
