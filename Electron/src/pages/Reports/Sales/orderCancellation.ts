@@ -61,26 +61,34 @@ export const orderCancellationApi = {
     reportsClient.get<OrderCancellation>("sales/order-cancellation", params),
 };
 
+/** Çıktı başlığındaki şerhler — süzgeç satırları EN ÜSTTE (K10). */
+function cancellationMeta(oc: OrderCancellation, filterNotes: string[]): string[] {
+  return [
+    ...filterNotes,
+    "ÇIPA: iptalin OLDUĞU an (cancelledAt). Sipariş Karnesi'ndeki iptal oranı farklı bir soruyu cevaplar ('bu ay ALINAN siparişlerin kaçı sonradan iptal oldu') — iki rakam birbirini tutmak zorunda değildir.",
+    "SEBEP KODU rapor anahtarıdır ve asla değişmez; etiketi fabrika panelden düzenleyebilir.",
+    "Sebebi girilmemiş ve serbest metinle girilmiş iptaller AYRI kovalarda görünür — gizlenmezler.",
+    `SEBEP DOLULUĞU %${oc.summary.reasonFillPct}: bu oran düşükken dağılım gerçeği temsil etmez.`,
+    "GEÇ İPTAL PAHALIDIR: 'gün' sütunu sipariş alındıktan iptale kadar geçen süredir; sevk başladıktan sonraki iptaller ayrıca sayılır.",
+    "BİLİNEN SINIR: 'iptal anında iş emri açılmış mıydı' ölçülemiyor — iptal akışı iş emri bağlarını koparır, karar anındaki bağ sonradan okunamaz.",
+    "KAPSAM DIŞI: 'sipariş sonrası ne değişti' bölümü bilinçli olarak YOK — sipariş güncelleme kayıtlarında alan bazlı değişiklik tutulmuyor (audit `changes` boş), plan sapmalarının ise ayrı karnesi var. Eksik değil, ölçülüp vazgeçilmiş bir karardır.",
+    oc.summary.undatedCancelCount > 0
+      ? `⚠️ ${oc.summary.undatedCancelCount} eski iptalde tarih damgası YOK (alan 2026-08-26'da eklendi) — dönem raporuna girmezler. Geriye dönük damga uydurulmadı.`
+      : "Tüm iptaller tarih damgalı.",
+  ];
+}
+
 export function buildCancellationExport(opts: {
   oc: OrderCancellation;
   periodLabel: string;
+  /** Süzgeç satırları (K10) — EN ÜSTTE; `reasonCode`un yalnız PAYI süzdüğü de burada yazılı. */
+  filterNotes?: string[];
 }): ReportExportSpec {
-  const { oc, periodLabel } = opts;
+  const { oc, periodLabel, filterNotes = [] } = opts;
   return {
     title: "Sipariş İptal Karnesi",
     subtitle: periodLabel,
-    meta: [
-      "ÇIPA: iptalin OLDUĞU an (cancelledAt). Sipariş Karnesi'ndeki iptal oranı farklı bir soruyu cevaplar ('bu ay ALINAN siparişlerin kaçı sonradan iptal oldu') — iki rakam birbirini tutmak zorunda değildir.",
-      "SEBEP KODU rapor anahtarıdır ve asla değişmez; etiketi fabrika panelden düzenleyebilir.",
-      "Sebebi girilmemiş ve serbest metinle girilmiş iptaller AYRI kovalarda görünür — gizlenmezler.",
-      `SEBEP DOLULUĞU %${oc.summary.reasonFillPct}: bu oran düşükken dağılım gerçeği temsil etmez.`,
-      "GEÇ İPTAL PAHALIDIR: 'gün' sütunu sipariş alındıktan iptale kadar geçen süredir; sevk başladıktan sonraki iptaller ayrıca sayılır.",
-      "BİLİNEN SINIR: 'iptal anında iş emri açılmış mıydı' ölçülemiyor — iptal akışı iş emri bağlarını koparır, karar anındaki bağ sonradan okunamaz.",
-      "KAPSAM DIŞI: 'sipariş sonrası ne değişti' bölümü bilinçli olarak YOK — sipariş güncelleme kayıtlarında alan bazlı değişiklik tutulmuyor (audit `changes` boş), plan sapmalarının ise ayrı karnesi var. Eksik değil, ölçülüp vazgeçilmiş bir karardır.",
-      oc.summary.undatedCancelCount > 0
-        ? `⚠️ ${oc.summary.undatedCancelCount} eski iptalde tarih damgası YOK (alan 2026-08-26'da eklendi) — dönem raporuna girmezler. Geriye dönük damga uydurulmadı.`
-        : "Tüm iptaller tarih damgalı.",
-    ],
+    meta: cancellationMeta(oc, filterNotes),
     tables: [
       {
         name: "Sebep",

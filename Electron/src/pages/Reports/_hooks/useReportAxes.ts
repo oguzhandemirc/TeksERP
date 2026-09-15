@@ -1,0 +1,53 @@
+// =============================================================================
+// EKSEN SÜZGEÇLERİ — URL durumu (React yarısı; saf yarı `reportAxisFilters.ts`)
+// =============================================================================
+import { useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
+import { axisParams, parseCsv, toCsv, type AxisKey, type Destination } from "./reportAxisFilters";
+
+export interface ReportAxesState {
+  /** Seçili değerler; boş dizi = "Tümü". */
+  sel: Record<AxisKey, string[]> & { destination: Destination | "" };
+  /** İsteğe eklenecek parametreler — boş eksen HİÇ gitmez. */
+  params: Record<string, string>;
+  set: (key: AxisKey, ids: string[]) => void;
+  setDestination: (d: Destination | "") => void;
+  /** Herhangi bir eksen seçili mi (ekranda "süzgeç açık" rozetine bağlanır). */
+  any: boolean;
+}
+
+const AXES: AxisKey[] = ["customerId", "itemId", "colorId", "subcontractorId", "reasonCode"];
+
+/** Eksen durumu URL'de yaşar: paylaşılan bağlantı aynı süzgeci açar. */
+export function useReportAxes(): ReportAxesState {
+  const [sp, setSp] = useSearchParams();
+  const sel = useMemo(() => {
+    const out = {} as Record<AxisKey, string[]> & { destination: Destination | "" };
+    for (const a of AXES) out[a] = parseCsv(sp.get(a));
+    const d = sp.get("destination");
+    out.destination = d === "DOMESTIC" || d === "EXPORT" ? d : "";
+    return out;
+  }, [sp]);
+
+  const yaz = useCallback(
+    (key: string, value: string | null) =>
+      setSp(
+        (prev) => {
+          const n = new URLSearchParams(prev);
+          if (value) n.set(key, value);
+          else n.delete(key);
+          return n;
+        },
+        { replace: true },
+      ),
+    [setSp],
+  );
+
+  return {
+    sel,
+    params: axisParams(sel),
+    set: useCallback((key: AxisKey, ids: string[]) => yaz(key, toCsv(ids)), [yaz]),
+    setDestination: useCallback((d: Destination | "") => yaz("destination", d || null), [yaz]),
+    any: AXES.some((a) => sel[a].length > 0) || sel.destination !== "",
+  };
+}

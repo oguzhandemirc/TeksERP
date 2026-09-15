@@ -10,3 +10,5 @@ export { SimplePieChart } from "./SimplePieChart";
 export { DetailTable } from "./DetailTable";
 export { BreakdownTable, DeltaBadge, type BreakdownRow } from "./BreakdownTable";
 export { ReportExportBar } from "./ReportExportBar";
+export { ReportMultiSelect } from "./ReportMultiSelect";
+export { DestinationSelect } from "./DestinationSelect";

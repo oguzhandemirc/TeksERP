@@ -80,13 +80,16 @@ export function buildOrderIntakeExport(opts: {
   oi: OrderIntake;
   periodLabel: string;
   compareLabel: string | null;
+  /** Süzgeç satırları (K10) — EN ÜSTTE: tablo neden eksik olabilir, kâğıtta yazsın. */
+  filterNotes?: string[];
 }): ReportExportSpec {
-  const { oi, periodLabel, compareLabel } = opts;
+  const { oi, periodLabel, compareLabel, filterNotes = [] } = opts;
   const hasCompare = Boolean(compareLabel);
   return {
     title: "Sipariş Karnesi",
     subtitle: periodLabel,
     meta: [
+      ...filterNotes,
       // Tanımlar rakamla aynı dosyada dursun — dosya bağlamından koparak dolaşır.
       "ÇIPA: siparişin ALINDIĞI tarih (orderDate) — kaydın sisteme yazıldığı an değil.",
       `ADET dönemde açılan TÜM siparişleri sayar (sonradan iptal edilen ${oi.summary.cancelledCount} sipariş DAHİL).`,

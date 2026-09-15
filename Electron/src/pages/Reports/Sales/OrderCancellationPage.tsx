@@ -2,9 +2,11 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle, Ban, CalendarX, Truck } from "lucide-react";
-import { ChartCard, DetailTable, MetricCard, ReportExportBar, ReportPageLayout, SimpleBarChart } from "../_components";
+import { ChartCard, DestinationSelect, DetailTable, MetricCard, ReportDateFilter, ReportExportBar, ReportMultiSelect, ReportPageLayout, SimpleBarChart } from "../_components";
 import { fmtDate, fmtInt, fmtNum, fmtPercent } from "../_components/formatters";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
+import { useReportAxes } from "../_hooks/useReportAxes";
+import { filterNotes, droppedNote, labelsOf } from "../_hooks/reportAxisFilters";
 import {
   buildCancellationExport,
   orderCancellationApi,
@@ -130,18 +132,49 @@ const orderColumns: ColumnDef<CancellationDetailRow, unknown>[] = [
 export function OrderCancellationPage() {
   const { params, dateFrom, dateTo } = useReportDateRange("sales/order-cancellation");
 
+  const axes = useReportAxes();
   const query = useQuery({
-    queryKey: ["reports", "sales", "order-cancellation", params],
-    queryFn: () => orderCancellationApi.get(params),
+    queryKey: ["reports", "sales", "order-cancellation", params, axes.params],
+    queryFn: () => orderCancellationApi.get({ ...params, ...axes.params }),
     enabled: Boolean(params.dateFrom && params.dateTo),
     staleTime: 30_000,
   });
 
   const oc = query.data?.data;
   const periodLabel = `${fmtDate(dateFrom)} – ${fmtDate(dateTo)}`;
+  const secenekler = query.data?.meta?.secenekler;
+  const suzgec = query.data?.suzgec;
+  // ⚠️ `reasonCode` YALNIZ PAYI süzer: payda (dönemde AÇILAN siparişler)
+  // süzülmez ⇒ oran "bu sebeple iptal ÷ açılan"dır. Cümle hem ekranda hem
+  // ÇIKTIDA durur; olmazsa okuyucu oranı yanlış hesaplanmış sanır.
+  const suzgecNotlari = useMemo(() => {
+    const n = filterNotes([
+      { eksen: "Müşteri", degerler: labelsOf(secenekler?.customerId, axes.sel.customerId) },
+      {
+        eksen: "İptal sebebi",
+        degerler: labelsOf(secenekler?.reasonCode, axes.sel.reasonCode),
+        serh: "Yalnız PAYI süzer: payda (dönemde açılan siparişler) süzülmez ⇒ oran 'bu sebeple iptal ÷ açılan'.",
+      },
+      {
+        eksen: "Sevk hedefi",
+        degerler: axes.sel.destination ? [axes.sel.destination === "EXPORT" ? "İhracat" : "Yurtiçi"] : [],
+        serh: "Müşteri kartındaki VARSAYILAN hedef — sevkin fiili hedefi değil. Payı da paydayı da süzer.",
+      },
+    ]);
+    const d = droppedNote(suzgec?.dusenSatir);
+    return d ? [...n, d] : n;
+  }, [secenekler, axes.sel, suzgec]);
   const spec = useMemo(
-    () => () => (oc ? buildCancellationExport({ oc, periodLabel }) : null),
-    [oc, periodLabel],
+    () => () => (oc ? buildCancellationExport({ oc, periodLabel, filterNotes: suzgecNotlari }) : null),
+    [oc, periodLabel, suzgecNotlari],
+  );
+  const filters = (
+    <div className="flex flex-wrap items-end gap-3 border-b px-4 py-3">
+      <ReportDateFilter reportKey="sales/order-cancellation" bare />
+      <ReportMultiSelect id="oc-musteri" label="Müşteri" options={secenekler?.customerId} value={axes.sel.customerId} onChange={(v) => axes.set("customerId", v)} emptyHint="Pencerede müşteri yok" />
+      <ReportMultiSelect id="oc-sebep" label="İptal sebebi" options={secenekler?.reasonCode} value={axes.sel.reasonCode} onChange={(v) => axes.set("reasonCode", v)} emptyHint="Pencerede sebep yok" />
+      <DestinationSelect id="oc-hedef" value={axes.sel.destination} onChange={axes.setDestination} />
+    </div>
   );
 
   return (
@@ -149,8 +182,16 @@ export function OrderCancellationPage() {
       reportKey="sales/order-cancellation"
       title="Sipariş İptal Karnesi"
       description="Müşteriler neden vazgeçiyor, ne kadar geç vazgeçiyor ve bu kime ne kadara mal oluyor."
+      filters={filters}
       actions={<ReportExportBar disabled={!oc} buildSpec={spec} />}
     >
+      {suzgecNotlari.length > 0 ? (
+        <ul className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          {suzgecNotlari.map((n, idx) => (
+            <li key={idx}>{n}</li>
+          ))}
+        </ul>
+      ) : null}
       <p className="text-xs text-muted-foreground">
         Çıpa <strong>iptalin olduğu tarihtir</strong>. Sipariş Karnesi'ndeki iptal oranı başka bir
         soruyu cevaplar ("bu dönemde <em>alınan</em> siparişlerin kaçı sonradan iptal oldu") — iki
