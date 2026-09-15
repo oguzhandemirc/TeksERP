@@ -238,3 +238,23 @@ Koşum: `psql "$DATABASE_URL" -f <dosya>` — `psql` PATH'te olmayabilir (`/opt/
 ### 7.3 · Bu envanterin söylemediği
 
 Hangi eksenin **istendiği** ölçülmedi — tablo yalnız *mümkün* olanı sayar. "Eksik doğal eksen" sütunu raporun kendi satırındaki kırılımdan türetildi (satırda makine varsa makine süzgeci mümkündür), fabrikanın sorusundan değil. Sıralama kullanıcıya SORULUR; kullanım verisi (§6.5) burada yol göstermez çünkü bir eksenin yokluğu kullanımı düşürür ama telemetriye "eksik eksen" diye yansımaz.
+
+## 8 · Ekran anlaşılırlığı — özet şeridi · soru cümlesi · katalog ayniyeti (ölçüm **2026-09-15**, R6)
+
+**Yöntem:** yaprak rapor route'u → sayfa dosyası; üç ölçüm — ① özet şeridi (`<MetricCard`) tablodan ÖNCE mi ② sayfa bir açıklama cümlesi (`description=`) taşıyor mu ③ hub karosunun başlığı `REPORT_CATALOG.baslik` ile birebir mi (kategori başına okunur). Katalog `Teks-Erp/src/constants/report-catalog.ts` + panel aynası `lib/report-catalog.ts` (d9, R0).
+
+| Ölçüm | Sonuç |
+|---|---|
+| Yaprak sayfa | **29** (katalog girdisi 30 — fazlası `finance/statement` diyaloğu, yaprak değil) |
+| Özet şeridi tablodan ÖNCE | **25** |
+| Özet şeridi TABLODAN SONRA | **0** — sıra kusuru yok |
+| Özet şeridi HİÇ YOK | **4** (adları aşağıda) |
+| Açıklama cümlesi (`description=`) | **29 / 29** |
+| Karo başlığı ↔ katalog `baslik` | **29 / 29 birebir** |
+| Katalogda karşılığı olmayan yaprak | **0** |
+
+**Özet şeridi olmayan dört yaprak:** `production/traveler-trace` · `dokuma/vardiya-karnesi` · `dokuma/karne` · `finance/cheque-due`. Dördü de "önce rakam, sonra tablo" kalıbının dışında: ilki tek topun izini (özetlenecek toplam yok), ikisi vardiya kartlarıyla açılıyor, sonuncusu takvim kovalarıyla. ⇒ **"Eksik" sayılırlar ama ekleme işi bu ölçümün DEĞİL R6 uygulamasının (01) kalemidir** — hangisine hangi özetin konacağı rapor rapor karardır, tek kalıp dayatmak yanlış sayı üretir.
+
+⚠️ **`soru` ile karo açıklaması BİREBİR DEĞİL ve olması da beklenmez** (29/29 farklı): katalog `soru` alanı *"bu rapor NEYİ cevaplar"* tek cümlesidir (ör. `production/wip` → *"Yarı mamul şu an hangi adımda bekliyor ve ne kadar süredir orada?"*), karo açıklaması ise raporun İÇERİĞİNİ tarif eder (*"Metraj ağırlıklı 1./2. kalite oranı — kumaş, renk, fason kırılımıyla"*). İkisi farklı işler yapar. **Bu kolonda ölçülen tek şey ayniyet değil ÇELİŞKİ olurdu — ve çelişki mekanik ölçülemez** (iki Türkçe cümlenin aynı şeyi söyleyip söylemediği); bu yüzden §8 ayniyeti RAPORLAR, uyumu iddia ETMEZ. Kapanır: soru cümleleri ekranın başlığında da gösterilirse (R6 uygulaması) ayniyet ölçülebilir hâle gelir.
+
+⚠️ **Ölçüm aracının kendi kusuru ve düzeltmesi** (kayda değer, çünkü sayı ÜRETMİŞTİ): ilk koşumda üç rapor *"karo başlığı FARKLI"* çıktı ve üçü de "Müşteri Karnesi" diyordu. Sebep: dört kategoride de `key: "scorecard"` var; tile-config dosyalarını TEK METNE toplayınca ilk eşleşme kazanıyordu. Kategori başına okunca fark **0**'a indi. *Sınırsız eşleşme sınıfı: sınırını beyan etmeyen yüklem alakasızla eşleşir — ve bu kez ölçümün kendisinde oldu.*

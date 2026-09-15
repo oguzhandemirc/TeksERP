@@ -63,3 +63,31 @@ Her dilim tek sha (kod + bekçi + belge + sürüm maddesi), taban 1e'nin bildird
 3. Tarih parametre adları değişmedi; birleşme panel bileşeninde (K7).
 4. "Çeşitli filtreler" = rapor başına ikinci eksen; "sunucu süzgeci" yorumu düştü (K10).
 5. Kullanılmayan 7 rapor kapatılmadı; soru listesi bekliyor (R7).
+
+## 5 · Kullanıcıya soru listesi — 57 günde hiç açılmayan yedi rapor (R7)
+
+> **Neden soruyoruz:** telemetri (envanter §6.5) bu yedi raporun 57 günlük pencerede **hiç
+> açılmadığını** söylüyor. Bu tek başına "gereksiz" demek DEĞİLDİR — düşük kullanım ile
+> "ayda bir ama kritik" aynı görünür ve eksik bir süzgeç de kullanımı düşürür. Kapatma ya da
+> iyileştirme kararı ölçümle değil **sizin cevabınızla** alınır. Her rapor için üç soru var;
+> "bilmiyorum" da geçerli bir cevaptır ve o raporu bekleme listesine alır.
+
+| # | Rapor | Bu rapor şu soruyu cevaplar | Size sorular |
+|---|---|---|---|
+| 1 | **Sipariş İptal Karnesi** | Hangi siparişler, ne zaman ve hangi sebeple iptal edildi? | ① Bu soru sizde kimde doğuyor (satış · üretim planlama · patron)? ② Bugün nereden bakıyorsunuz? ③ Sebep kırılımı mı yoksa müşteri kırılımı mı lazım? |
+| 2 | **Sipariş → Teslim Süresi** | Sipariş girişinden sevke kaç gün geçiyor? | ① Müşteriye söz verilen süre nerede tutuluyor? ② Gecikmeyi bugün kim fark ediyor? ③ Ölçü "ilk sevk"e mi "tam kapanış"a mı göre olmalı? |
+| 3 | **Talep Analizi** | Hangi ürün/renk ne kadar isteniyor (dönem karşılaştırmalı)? | ① Bu bilgiyi üretim planı için mi satın alma için mi kullanırsınız? ② Bugün yerine ne bakıyorsunuz? ③ Ürün mü renk mi yoksa müşteri mi ana eksen olmalı? |
+| 4 | **Sipariş Karnesi** | Bu dönemde ne kadar sipariş girdi, önceki döneme göre nasıl? | ① Aylık bir toplantıda mı bakılır, günlük mü? ② Adet mi metraj mı tutar mı? ③ Hangi dönem kıyası anlamlı (geçen ay · geçen yıl aynı ay)? |
+| 5 | **Açık Sipariş Karşılanma** | Açık siparişlerin ne kadarı bugünkü stok ve üretimle karşılanıyor? | ① "Karşılanma" sizce neyi sayar (depodaki top · üretimdeki iş emri · ikisi)? ② Bu soruyu sevkiyattan önce kim soruyor? ③ Eksik kalan için uyarı mı liste mi istersiniz? |
+| 6 | **Parti İzleme (detay)** | Bu parti nereden geldi, hangi adımlardan geçti, nereye gitti? | ① Arama yapılmış ama detaya girilmemiş — aradığınız şey listede zaten görünüyor mu? ② Parti numarasıyla mı barkotla mı arıyorsunuz? ③ Müşteri şikâyetinde hangi bilgi ilk lazım? |
+| 7 | **Top İzleme** | Bu top hangi istasyonlardan, hangi sırayla geçti? | ① Bu soru şikâyet anında mı doğuyor, kalite incelemesinde mi? ② Bugün refakat kartından mı bakıyorsunuz? ③ Topun geçmişini kim görmeli (operatör · amir · yönetim)? |
+
+**Cevaplar üç KUTUYA ayrılır** (kutu, öneri değil: her cevap bir kutuya düşer ve kutunun sahibi bellidir):
+
+| Kutu | Cevap şu anlama gelirse | Ne olur | Kararın sahibi |
+|---|---|---|---|
+| **(a)** | Soru gerçek, rapor doğru yerde | Süzgeç / erişim iyileştirmesi (faz kalemi) | Geliştirme |
+| **(b)** | Soru gerçek ama rapor yanlış yerde ya da yanlış eksende | Yeniden tasarım (yeni kalem) | Geliştirme |
+| **(c)** | Bu soru bu fabrikada doğmuyor | Rapor görünürlük anahtarının arkasına alınır — **kapatma değil gizleme**, kayıt ve uç yerinde kalır | **Süperadmin (siz)** — biz kapatma listesi ÜRETMEYİZ |
+
+⚠️ (c) kutusunun kararı bize ait değildir: bir raporu "gereksiz" ilan etmek fabrikanın işidir, ölçümün değil. Telemetri sıralar, kutuyu siz seçersiniz.
