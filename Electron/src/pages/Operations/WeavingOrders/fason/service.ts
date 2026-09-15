@@ -7,16 +7,31 @@
 // =============================================================================
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
-import type { FasonCancelPreview, FasonReceiptResult, FasonSummary } from "./types";
+import type { FasonCancelPreview, FasonReceiptResult, FasonSummary, FasonYarnBalanceRow } from "./types";
 
 const BASE = "/api/subcontractor-weaving";
 
+/** G1: iplik satırı — backend `yarnLineSchema` ile birebir (`.strict()`; lot nullish; kg sayı). */
+export interface FasonYarnLine {
+  itemId: string;
+  warehouseId: string;
+  lotId: string | null;
+  qtyKg: number;
+}
 export interface FasonDispatchBody {
   weavingOrderId: string;
   warpBeamIds: string[];
+  /** G1: levent-yalnız, iplik-yalnız ya da ikisi; iplik modülü kapalıyken GÖNDERİLMEZ (alan yok). */
+  yarnLines?: FasonYarnLine[];
   plateNumber: string | null;
   driverName: string | null;
   notes: string | null;
+}
+export interface FasonYarnReturnBody {
+  qtyKg: number;
+  reasonCode: string;
+  warehouseId?: string | null;
+  lotId?: string | null;
 }
 
 export interface FasonReceiptBody {
@@ -47,4 +62,11 @@ export const fasonWeavingService = {
   /** Levent dönüşü F1'in ucudur (sevk başlığına bakmaz); dokuma sevkinde de aynen çalışır. */
   returnBeam: (dispatchId: string, warpBeamId: string, body: { lengthM: number; clientToken: string }): Promise<ApiResponse<unknown>> =>
     apiClient.post<ApiResponse<unknown>>(`/api/subcontractor/dispatches/${dispatchId}/beams/${warpBeamId}/return`, body).then((r) => r.data),
+  /** G1 iplik dönüşü / stornosu ve fasoncu bakiyesi — F1 gibi `/api/subcontractor` uçları (iplik kapılı). */
+  returnYarn: (dispatchId: string, dispatchItemId: string, body: FasonYarnReturnBody): Promise<ApiResponse<{ remainingKg: number }>> =>
+    apiClient.post<ApiResponse<{ remainingKg: number }>>(`/api/subcontractor/dispatches/${dispatchId}/yarn-items/${dispatchItemId}/return`, body).then((r) => r.data),
+  cancelYarnReturn: (dispatchId: string, dispatchItemId: string, body: { movementId: string; reason: string }): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>(`/api/subcontractor/dispatches/${dispatchId}/yarn-items/${dispatchItemId}/return-cancel`, body).then((r) => r.data),
+  yarnBalance: (subcontractorId: string): Promise<ApiResponse<FasonYarnBalanceRow[]>> =>
+    apiClient.get<ApiResponse<FasonYarnBalanceRow[]>>(`/api/subcontractor/${subcontractorId}/yarn-balance`).then((r) => r.data),
 };

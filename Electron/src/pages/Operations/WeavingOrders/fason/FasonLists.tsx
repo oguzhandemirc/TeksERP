@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { formatM } from "@/pages/Operations/WarpBeams/types";
 import { dispatchMeters } from "./fason-summary";
-import type { FasonDispatch, FasonReceipt } from "./types";
+import { FasonYarnRows } from "./FasonYarnRows";
+import type { FasonDispatch, FasonReceipt, FasonYarnItem } from "./types";
 
 const day = (iso: string) => new Date(iso).toLocaleDateString("tr-TR");
 
@@ -30,31 +31,46 @@ function CancelButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-export function DispatchList({ rows, onCancel, onReturn }: { rows: FasonDispatch[]; onCancel: (d: FasonDispatch) => void; onReturn: (d: FasonDispatch) => void }) {
+interface DispatchListProps {
+  rows: FasonDispatch[];
+  onCancel: (d: FasonDispatch) => void;
+  onReturn: (d: FasonDispatch) => void;
+  /** G1: iplik dönüşü / dönüş stornosu (yalnız iplik kalemi olan sevkte çizilir). */
+  onReturnYarn: (d: FasonDispatch) => void;
+  onCancelYarnReturn: (d: FasonDispatch, item: FasonYarnItem) => void;
+}
+
+export function DispatchList({ rows, onCancel, onReturn, onReturnYarn, onCancelYarnReturn }: DispatchListProps) {
   return (
     <section className="space-y-2">
       <h3 className="text-sm font-semibold">Sevkler ({rows.length})</h3>
       {rows.length === 0 && <p className="text-sm text-muted-foreground">Sevk yok — fasoncu kendi ipliğini kullanıyorsa bu normaldir.</p>}
       {rows.map((d) => {
         const mt = dispatchMeters(d);
+        const beams = d.items.filter((it) => it.warpBeam);
         return (
-          <div key={d.id} className="flex items-center gap-2 rounded border px-3 py-2 text-sm">
-            <span className="font-mono">{d.dispatchNo}</span>
-            <span className="text-muted-foreground">{day(d.dispatchedAt)}</span>
-            <span>{d.items.map((it) => it.warpBeam?.beamNo ?? "?").join(", ")}</span>
-            <span className="ml-auto tabular-nums">
-              {formatM(mt.sentM)} gitti · {formatM(mt.returnedM)} döndü
-            </span>
-            {d.cancelledAt ? (
-              <Badge variant="outline">İptal</Badge>
-            ) : (
-              <PermissionGate permission="weavingorder:write">
-                <Button size="sm" variant="ghost" onClick={() => onReturn(d)}>
-                  Levent döndü
-                </Button>
-                <CancelButton onClick={() => onCancel(d)} />
-              </PermissionGate>
-            )}
+          <div key={d.id} className="rounded border px-3 py-2 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="font-mono">{d.dispatchNo}</span>
+              <span className="text-muted-foreground">{day(d.dispatchedAt)}</span>
+              <span>{beams.length ? beams.map((it) => it.warpBeam!.beamNo).join(", ") : "levent yok"}</span>
+              <span className="ml-auto tabular-nums">
+                {formatM(mt.sentM)} gitti · {formatM(mt.returnedM)} döndü
+              </span>
+              {d.cancelledAt ? (
+                <Badge variant="outline">İptal</Badge>
+              ) : (
+                <PermissionGate permission="weavingorder:write">
+                  {beams.length > 0 && (
+                    <Button size="sm" variant="ghost" onClick={() => onReturn(d)}>
+                      Levent döndü
+                    </Button>
+                  )}
+                  <CancelButton onClick={() => onCancel(d)} />
+                </PermissionGate>
+              )}
+            </div>
+            <FasonYarnRows d={d} onReturn={onReturnYarn} onCancelReturn={onCancelYarnReturn} />
           </div>
         );
       })}

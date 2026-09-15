@@ -6,8 +6,9 @@ import { FasonDispatchDialog } from "./FasonDispatchDialog";
 import { FasonReceiptDialog } from "./FasonReceiptDialog";
 import { FasonDispatchCancelDialog, FasonReceiptCancelDialog } from "./FasonCancelDialogs";
 import { FasonBeamReturnDialog } from "./FasonBeamReturnDialog";
+import { FasonYarnReturnCancelDialog, FasonYarnReturnDialog } from "./FasonYarnReturnDialog";
 import type { useFasonMutations } from "./useFasonMutations";
-import type { FasonDispatch, FasonReceipt } from "./types";
+import type { FasonDispatch, FasonReceipt, FasonYarnItem } from "./types";
 
 export type FasonModal =
   | null
@@ -15,6 +16,8 @@ export type FasonModal =
   | { kind: "receive" }
   | { kind: "cancel-dispatch"; target: FasonDispatch }
   | { kind: "return-beam"; target: FasonDispatch }
+  | { kind: "return-yarn"; target: FasonDispatch }
+  | { kind: "cancel-yarn-return"; target: FasonDispatch; item: FasonYarnItem }
   | { kind: "cancel-receipt"; target: FasonReceipt };
 
 const swallow = () => undefined;
@@ -46,6 +49,12 @@ export function FasonModals({ order, modal, m, failed, onFailed, onClose }: Prop
   }
   if (modal.kind === "return-beam") {
     return <FasonBeamReturnDialog target={modal.target} isPending={m.returnBeam.isPending} onClose={onClose} onConfirm={(b) => m.returnBeam.mutateAsync(b).then(swallow, swallow)} />;
+  }
+  if (modal.kind === "return-yarn") {
+    return <FasonYarnReturnDialog target={modal.target} isPending={m.returnYarn.isPending} onClose={onClose} onConfirm={(b) => m.returnYarn.mutateAsync(b).then(swallow, swallow)} />;
+  }
+  if (modal.kind === "cancel-yarn-return") {
+    return <FasonYarnReturnCancelDialog target={modal.target} item={modal.item} isPending={m.cancelYarnReturn.isPending} onClose={onClose} onConfirm={(b) => m.cancelYarnReturn.mutateAsync(b).then(swallow, swallow)} />;
   }
   if (modal.kind === "cancel-dispatch") {
     return (

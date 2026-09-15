@@ -18,6 +18,8 @@ import { fasonWeavingService } from "./service";
 import { FASON_QUERY_KEY, useFasonMutations } from "./useFasonMutations";
 import { DispatchList, ReceiptList, Stat } from "./FasonLists";
 import { FasonModals, type FasonModal } from "./FasonModals";
+import { FasonYarnStrip } from "./FasonYarnStrip";
+import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 
 export function FasonSheet({ order, onClose }: { order: WeavingOrder | null; onClose: () => void }) {
   const [modal, setModal] = useState<FasonModal>(null);
@@ -27,6 +29,8 @@ export function FasonSheet({ order, onClose }: { order: WeavingOrder | null; onC
   const m = useFasonMutations(id, () => setModal(null));
   const s = summary.data?.data;
   const open = order ? WEAVING_STATUS_META[order.status].open : false;
+  // G1: iplik şeridi/bakiyesi yalnız iplik modülü ETKİN iken (ticaret ∧ iplik); kapalı kurulumda bölüm bayt bayt G2p.
+  const { iplikEnabled } = useOperationsVisibilityContext();
   return (
     <Sheet open={Boolean(order)} onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="w-[720px] overflow-y-auto sm:max-w-[720px]">
@@ -49,17 +53,24 @@ export function FasonSheet({ order, onClose }: { order: WeavingOrder | null; onC
                   <Stat label="Doğan top" value={formatM(s.totals.bornM)} />
                   <Stat label="Fark (çözgü m)" value={formatM(s.totals.differenceM)} hint="çekme/take-up düşer; tek başına fire değildir" />
                 </div>
+                {iplikEnabled && <FasonYarnStrip totals={s.totals.yarn} subcontractorId={order.subcontractorId ?? null} />}
                 <PermissionGate permission="weavingorder:write">
                   <div className="flex gap-2">
                     <Button size="sm" disabled={!open} onClick={() => setModal({ kind: "dispatch" })}>
-                      Levent sevk et
+                      {iplikEnabled ? "Sevk et (levent / iplik)" : "Levent sevk et"}
                     </Button>
                     <Button size="sm" variant="secondary" disabled={!open} onClick={() => { setFailed([]); setModal({ kind: "receive" }); }}>
                       Top kabul et
                     </Button>
                   </div>
                 </PermissionGate>
-                <DispatchList rows={s.dispatches} onCancel={(target) => setModal({ kind: "cancel-dispatch", target })} onReturn={(target) => setModal({ kind: "return-beam", target })} />
+                <DispatchList
+                  rows={s.dispatches}
+                  onCancel={(target) => setModal({ kind: "cancel-dispatch", target })}
+                  onReturn={(target) => setModal({ kind: "return-beam", target })}
+                  onReturnYarn={(target) => setModal({ kind: "return-yarn", target })}
+                  onCancelYarnReturn={(target, item) => setModal({ kind: "cancel-yarn-return", target, item })}
+                />
                 <ReceiptList rows={s.receipts} onCancel={(target) => setModal({ kind: "cancel-receipt", target })} />
               </div>
             ) : (

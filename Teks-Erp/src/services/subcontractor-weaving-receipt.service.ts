@@ -6,11 +6,12 @@
 // `ROLL_CANCEL` kendi önizlemeli kapısından geçer, burada ikinci stok sebebi
 // açılmaz; başlık geçişi tek claim (`cancelledAt` üçlüsü).
 // =============================================================================
-import { Prisma, RollStatus } from "@prisma/client";
+import { Prisma, RollStatus, SubcontractorDispatchItemKind } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
 import { AuditService } from "./audit.service";
+import { listYarnItems } from "./subcontractor-yarn.service";
 import { assertWeavingBound } from "./helpers/dispatch-header.helper";
 
 const WO_SELECT = {
@@ -88,6 +89,8 @@ export async function getWeavingSubcontractSummary(weavingOrderId: string): Prom
       select: {
         id: true, dispatchNo: true, dispatchedAt: true, cancelledAt: true, plateNumber: true, driverName: true,
         items: {
+          // G1: iplik kalemi (kind=YARN) levent listesine GİRMEZ — `warpBeam: null` ile "?" çizilirdi; `yarnItems` ayrı alan.
+          where: { kind: { not: SubcontractorDispatchItemKind.YARN } },
           select: {
             warpBeam: { select: { id: true, beamNo: true, status: true } },
             warpBeamEvents: { where: { reversal: { is: null } }, select: { kind: true, lengthM: true } },
@@ -118,13 +121,22 @@ export async function getWeavingSubcontractSummary(weavingOrderId: string): Prom
     .flatMap((r) => r.bornRolls)
     .filter((x) => x.status !== RollStatus.CANCELLED)
     .reduce((s, x) => s + Number(x.initialQty), 0);
+  // G1/G1c: iplik kalemleri sevk başına (birim KG açık, `sarilan[]` beyanlı); toplamlar iptal edilmemiş sevklerden.
+  const yarnByDispatch = new Map<string, Awaited<ReturnType<typeof listYarnItems>>["items"]>();
+  const yarn = { sentKg: 0, returnedKg: 0, woundKg: 0, remainingKg: 0 };
+  for (const d of dispatches) {
+    const { items } = await listYarnItems(prisma, d.id);
+    yarnByDispatch.set(d.id, items);
+    if (d.cancelledAt) continue;
+    for (const it of items) { yarn.sentKg += it.dispatchedKg; yarn.returnedKg += it.returnedKg; yarn.woundKg += it.sarilanKg; yarn.remainingKg += it.remainingKg; }
+  }
   return {
     success: true,
     data: {
       weavingOrder: wo,
-      dispatches: dispatches.map((d) => ({ ...d, items: d.items.map((it) => ({ warpBeam: it.warpBeam, events: it.warpBeamEvents.map((e) => ({ kind: e.kind, lengthM: e.lengthM == null ? null : Number(e.lengthM) })) })) })),
+      dispatches: dispatches.map((d) => ({ ...d, items: d.items.map((it) => ({ warpBeam: it.warpBeam, events: it.warpBeamEvents.map((e) => ({ kind: e.kind, lengthM: e.lengthM == null ? null : Number(e.lengthM) })) })), yarnItems: yarnByDispatch.get(d.id) ?? [] })),
       receipts: receipts.map((r) => ({ ...r, bornRolls: r.bornRolls.map((x) => ({ ...x, initialQty: Number(x.initialQty) })) })),
-      totals: { sentM, returnedM, bornM, differenceM: sentM - returnedM - bornM },
+      totals: { sentM, returnedM, bornM, differenceM: sentM - returnedM - bornM, yarn },
     },
     warnings: ["Mutabakat ÇÖZGÜ metresi bazındadır: çekme/take-up kumaş metresini düşürür, fark tek başına fire değildir."],
   };

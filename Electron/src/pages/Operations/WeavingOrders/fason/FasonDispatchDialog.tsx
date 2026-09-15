@@ -1,5 +1,8 @@
 // =============================================================================
-// FASON DOKUMA — "Levent sevk et": HAZIR leventlerden seç, plaka/şoför/not
+// FASON DOKUMA — "Sevk et": HAZIR leventlerden seç (+ G1 iplik satırları), plaka/şoför/not
+// =============================================================================
+// İplik satırları yalnız iplik modülü ETKİN iken çizilir ve gövdeye girer; levent-yalnız,
+// iplik-yalnız ya da ikisi birden meşru (backend `WEAVING_DISPATCH_EMPTY` ikisi de boşken).
 // =============================================================================
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -11,8 +14,11 @@ import { Label } from "@/components/ui/label";
 import { Callout } from "@/components/ui/callout";
 import { listWarpBeams } from "@/pages/Operations/WarpBeams/service";
 import { formatM, type WarpBeam } from "@/pages/Operations/WarpBeams/types";
+import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import type { WeavingOrder } from "../types";
 import type { FasonDispatchBody } from "./service";
+import { yarnLineToPayload, type YarnLineDraft } from "./fason-summary";
+import { FasonYarnLines } from "./FasonYarnLines";
 
 interface Props {
   order: WeavingOrder;
@@ -52,6 +58,13 @@ function BeamPicker({ order, selected, onToggle }: { order: WeavingOrder; select
 export function FasonDispatchDialog({ order, isPending, onClose, onConfirm }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [f, setF] = useState({ plate: "", driver: "", notes: "" });
+  const { iplikEnabled } = useOperationsVisibilityContext();
+  const [yarnLines, setYarnLines] = useState<YarnLineDraft[]>([]);
+  // Geçersiz satır (kalem/depo/kg eksik) gövdeye GİRMEZ ve butonu kilitler — sessiz düşme yok.
+  const yarnPayload = yarnLines.map(yarnLineToPayload);
+  const yarnOk = yarnLines.length === 0 || yarnPayload.every((l) => l !== null);
+  const yarnCount = yarnPayload.filter((l) => l !== null).length;
+  const canConfirm = (selected.size > 0 || yarnCount > 0) && yarnOk && !isPending;
   const toggle = (id: string) =>
     setSelected((s) => {
       const n = new Set(s);
@@ -69,12 +82,14 @@ export function FasonDispatchDialog({ order, isPending, onClose, onConfirm }: Pr
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{order.weavingOrderNumber} — leventi fasona sevk et</DialogTitle>
+          <DialogTitle>{order.weavingOrderNumber} — fasona sevk et</DialogTitle>
           <DialogDescription>
-            Fasoncu: <b>{order.subcontractor?.name ?? "—"}</b>. Seçilen leventler çıkış defterine yazılır (SHIP_OUT) ve fasondan dönene kadar sarılamaz. Fasoncu kendi ipliğini kullanıyorsa sevk açmanız gerekmez.
+            Fasoncu: <b>{order.subcontractor?.name ?? "—"}</b>. Seçilen leventler çıkış defterine yazılır (SHIP_OUT) ve fasondan dönene kadar sarılamaz.
+            {iplikEnabled ? " İplik satırları iplik defterine brüt çıkış yazar; fasoncudaki bakiye türetilir, dönüş ayrı satırla kapanır." : " Fasoncu kendi ipliğini kullanıyorsa sevk açmanız gerekmez."}
           </DialogDescription>
         </DialogHeader>
         <BeamPicker order={order} selected={selected} onToggle={toggle} />
+        {iplikEnabled && <FasonYarnLines lines={yarnLines} onChange={setYarnLines} />}
         <div className="grid grid-cols-2 gap-3">
           {field("plate", "Plaka", 32)}
           {field("driver", "Şoför", 120)}
@@ -83,10 +98,19 @@ export function FasonDispatchDialog({ order, isPending, onClose, onConfirm }: Pr
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isPending}>Vazgeç</Button>
           <Button
-            disabled={selected.size === 0 || isPending}
-            onClick={() => onConfirm({ weavingOrderId: order.id, warpBeamIds: [...selected], plateNumber: f.plate.trim() || null, driverName: f.driver.trim() || null, notes: f.notes.trim() || null })}
+            disabled={!canConfirm}
+            onClick={() =>
+              onConfirm({
+                weavingOrderId: order.id,
+                warpBeamIds: [...selected],
+                ...(iplikEnabled && yarnCount > 0 ? { yarnLines: yarnPayload.filter((l) => l !== null) } : {}),
+                plateNumber: f.plate.trim() || null,
+                driverName: f.driver.trim() || null,
+                notes: f.notes.trim() || null,
+              })
+            }
           >
-            {selected.size} leventi sevk et
+            Sevk et ({selected.size} levent{yarnCount > 0 ? ` · ${yarnCount} iplik satırı` : ""})
           </Button>
         </DialogFooter>
       </DialogContent>

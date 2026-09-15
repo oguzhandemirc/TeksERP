@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { EMPTY_ROW, dispatchMeters, isFasonSectionVisible, rowToPayload, validateReceiptRow } from "./fason-summary";
-import type { FasonDispatch } from "./types";
+import { EMPTY_ROW, dispatchMeters, isFasonSectionVisible, kgSourceLabel, openYarnItems, openYarnReturns, rowToPayload, validateReceiptRow, yarnLineToPayload } from "./fason-summary";
+import type { FasonDispatch, FasonYarnItem } from "./types";
 
 const d: FasonDispatch = {
   id: "d1",
@@ -40,5 +40,44 @@ describe("fason-summary (G2p)", () => {
       colorId: null,
     });
     expect(rowToPayload({ ...EMPTY_ROW, initialQty: "1", colorId: "c1" }).colorId).toBe("c1");
+  });
+});
+
+const yarnItem = (over: Partial<FasonYarnItem> = {}): FasonYarnItem => ({
+  dispatchItemId: "y1", unit: "KG", item: { id: "i1", code: "IP-1", name: "iplik" }, warehouseId: "w1", lotId: null,
+  dispatchedKg: 60, returnedKg: 0, sarilanKg: 0, sarilan: [], remainingKg: 60, returns: [], ...over,
+});
+
+describe("fason iplik (G1p)", () => {
+  it("⭐ yarnLineToPayload — geçersiz satır null (sessiz düşme yok): kalem/depo/kg eksik ya da kg ≤ 0", () => {
+    expect(yarnLineToPayload({ itemId: null, warehouseId: "w1", lotId: "", qtyKg: "5" })).toBeNull();
+    expect(yarnLineToPayload({ itemId: "i1", warehouseId: "", lotId: "", qtyKg: "5" })).toBeNull();
+    expect(yarnLineToPayload({ itemId: "i1", warehouseId: "w1", lotId: "", qtyKg: "0" })).toBeNull();
+    expect(yarnLineToPayload({ itemId: "i1", warehouseId: "w1", lotId: "", qtyKg: "abc" })).toBeNull();
+  });
+  it("yarnLineToPayload — Zod ile birebir: lot boş → null, kg sayı", () => {
+    expect(yarnLineToPayload({ itemId: "i1", warehouseId: "w1", lotId: "", qtyKg: "12.5" })).toEqual({ itemId: "i1", warehouseId: "w1", lotId: null, qtyKg: 12.5 });
+    expect(yarnLineToPayload({ itemId: "i1", warehouseId: "w1", lotId: "l1", qtyKg: "3" })).toEqual({ itemId: "i1", warehouseId: "w1", lotId: "l1", qtyKg: 3 });
+  });
+  it("openYarnItems — yalnız fasonda kalanı olan kalemler; eski backend (yarnItems yok) boş", () => {
+    const withYarn: FasonDispatch = { ...d, yarnItems: [yarnItem(), yarnItem({ dispatchItemId: "y2", remainingKg: 0 })] };
+    expect(openYarnItems(withYarn).map((x) => x.dispatchItemId)).toEqual(["y1"]);
+    expect(openYarnItems(d)).toEqual([]);
+  });
+  it("⭐ openYarnReturns — storno edilmiş dönüş listelenmez (grup net'i), açık olan listelenir", () => {
+    const it = yarnItem({
+      returns: [
+        { movementId: "r1", kind: "SUBCONTRACT_RETURN", qtyKg: 20, warehouseId: "w1", lotId: null, reasonCode: "KALAN_IPLIK" },
+        { movementId: "c1", kind: "SUBCONTRACT_RETURN_CANCEL", qtyKg: 20, warehouseId: "w1", lotId: null, reasonCode: "KALAN_IPLIK" },
+        { movementId: "r2", kind: "SUBCONTRACT_RETURN", qtyKg: 15, warehouseId: "w2", lotId: null, reasonCode: "KALITE" },
+      ],
+    });
+    expect(openYarnReturns(it).map((r) => r.movementId)).toEqual(["r2"]);
+  });
+  it("kgSourceLabel — kaynak beyanı gizlenmez", () => {
+    expect(kgSourceLabel("THEORETICAL")).toBe("nominal (hesap)");
+    expect(kgSourceLabel("WEIGHED")).toBe("tartıldı");
+    expect(kgSourceLabel("KARMA")).toBe("karma (hesap + tartı)");
+    expect(kgSourceLabel(null)).toBe("—");
   });
 });

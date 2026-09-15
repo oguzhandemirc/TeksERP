@@ -6,6 +6,30 @@ export interface FasonBeamEvent {
   lengthM: number | null;
 }
 
+/** G1: iplik kalemi (backend `YarnItemDto`) — BİRİM AÇIK (`unit`), `sarilan[]` kaynak beyanlı. */
+export interface FasonYarnReturnRow {
+  movementId: string;
+  kind: "SUBCONTRACT_OUT_CANCEL" | "SUBCONTRACT_RETURN" | "SUBCONTRACT_RETURN_CANCEL";
+  qtyKg: number;
+  warehouseId: string;
+  lotId: string | null;
+  reasonCode: string | null;
+}
+export type YarnKgSource = "THEORETICAL" | "WEIGHED";
+export interface FasonYarnItem {
+  dispatchItemId: string;
+  unit: "KG";
+  item: { id: string; code: string; name: string };
+  warehouseId: string;
+  lotId: string | null;
+  dispatchedKg: number;
+  returnedKg: number;
+  sarilanKg: number;
+  sarilan: { beamNo: string; kg: number; kaynak: YarnKgSource | null }[];
+  remainingKg: number;
+  returns: FasonYarnReturnRow[];
+}
+
 export interface FasonDispatch {
   id: string;
   dispatchNo: string;
@@ -14,6 +38,8 @@ export interface FasonDispatch {
   plateNumber: string | null;
   driverName: string | null;
   items: { warpBeam: { id: string; beamNo: string; status: string } | null; events: FasonBeamEvent[] }[];
+  /** G1: eski backend göndermez → `?? []` ile okunur. */
+  yarnItems?: FasonYarnItem[];
 }
 
 export interface FasonBornRoll {
@@ -32,11 +58,33 @@ export interface FasonReceipt {
   bornRolls: FasonBornRoll[];
 }
 
+export interface FasonYarnTotals {
+  sentKg: number;
+  returnedKg: number;
+  woundKg: number;
+  remainingKg: number;
+}
 export interface FasonTotals {
   sentM: number;
   returnedM: number;
   bornM: number;
   differenceM: number;
+  /** G1: eski backend göndermez. */
+  yarn?: FasonYarnTotals;
+}
+
+/** K1(b): fasoncudaki iplik — TÜRETİLMİŞ (kalem × lot), `sarilanKaynak` beyanlı. */
+export interface FasonYarnBalanceRow {
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  lotId: string | null;
+  lotNo: string | null;
+  outKg: number;
+  returnedKg: number;
+  sarilanKg: number;
+  sarilanKaynak: YarnKgSource | "KARMA" | null;
+  remainingKg: number;
 }
 
 export interface FasonSummary {
