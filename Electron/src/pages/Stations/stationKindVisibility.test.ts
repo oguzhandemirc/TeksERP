@@ -18,6 +18,15 @@ describe("visibleStationKindLabels — WEAVING yalnız dokuma açıkken", () => 
     expect(v).toEqual(stationKindLabels);
     expect(v.WEAVING).toBe("Dokuma Tezgahı");
   });
+  it("⭐ seçenek sırası: öteki türler ayna sırasıyla, \"Diğer\" (OTHER) EN SONDA — bayrak açık ve kapalı", () => {
+    for (const dokumaEnabled of [true, false]) {
+      const keys = Object.keys(visibleStationKindLabels({ dokumaEnabled }, null));
+      expect(keys[keys.length - 1]).toBe(StationKind.OTHER);
+      expect(Object.values(visibleStationKindLabels({ dokumaEnabled }, null)).at(-1)).toBe("Diğer");
+      const aynaSirasi = Object.keys(stationKindLabels).filter((k) => k !== StationKind.OTHER && (dokumaEnabled || k !== StationKind.WEAVING));
+      expect(keys.slice(0, -1)).toEqual(aynaSirasi);
+    }
+  });
   it("bayrak KAPALI ama düzenlenen istasyon WEAVING: mevcut değer korunur (OTHER'a düşmez)", () => {
     const v = visibleStationKindLabels({ dokumaEnabled: false }, StationKind.WEAVING);
     expect(v.WEAVING).toBe("Dokuma Tezgahı");

@@ -26,6 +26,11 @@
       "maddeler": [
         {
           "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Tanımlar → Üretim İstasyonları: “Dokuma Tezgahı” ve “Sevkiyat / Tartı” görev türüyle kaydedilen istasyon sayfada görünmüyordu ve Excel/PDF dışa aktarımına girmiyordu (istasyon kaydediliyor, kart çizilmiyor, tezgah eklenemiyordu). Artık formda seçilebilen her görev türü listelenir ve dışa aktarılır; dokuma tezgahı yalnız dokuma modülü kapalıyken gizlenir (kayıt korunur). Yeni İstasyon formunda “Görev Türü” listesinde “Diğer” en alta alındı; görev türü seçilince Yetenekler kutuları o türün önerilen düzeniyle ön-işaretli gelir (Kurşun + KK2 kalite kontrol, fason renk + özellik, dokuma tezgahı levent tüketir) — öneri değiştirilebilir; mevcut istasyon düzenlenirken yetenekler kendiliğinden değişmez."
+        },
+        {
+          "kapsam": "panel",
           "tip": "yeni",
           "metin": "İş emri listesine “Müşteri” sütunu geldi: iş emrinin bağlı olduğu siparişin müşterisi satırda görünür. Birden çok müşterinin siparişine bağlı iş emrinde ilk müşteri adı ve yanında kalan sayısı (örneğin +2) gösterilir; imleç üzerine gelince hepsi okunur. Stok için açılmış (siparişe bağlı olmayan) iş emrinde sütun boştur. Sütun listeyi Excel’e aktarınca da gelir; filtre şeridine de Müşteri süzgeci eklendi — seçilen müşterinin siparişine bağlı iş emirleri listelenir."
         },

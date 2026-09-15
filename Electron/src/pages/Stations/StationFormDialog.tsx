@@ -4,12 +4,15 @@ import { FormField } from "@/components/forms/FormField";
 import { EnumSelect } from "@/components/forms/EnumSelect";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { Input } from "@/components/ui/input";
-import { stationKindLabels, stationTypeLabels, StationType, type StationKind } from "@/types/enums";
+import { stationTypeLabels, StationType, type StationKind } from "@/types/enums";
 import { subcontractorCategoryService } from "@/pages/SubcontractorCategories/service";
 import type { SubcontractorCategory } from "@/pages/SubcontractorCategories/types";
 import { useDevereEnabled, useDokumaEnabled } from "@/hooks/usePricingEnabled";
 import { stationFormDefaults, stationFormSchema, type StationFormValues } from "./schema";
 import { visibleStationKindLabels } from "./stationKindVisibility";
+import { suggestedCapabilities, valuesAfterKindChange } from "./stationKindDefaults";
+
+const CAPABILITY_FIELDS = ["appliesColor", "appliesProperty", "appliesQuality", "producesWarpBeam", "consumesWarpBeam"] as const;
 import type { Station } from "./types";
 
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
@@ -40,7 +43,8 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
         consumesWarpBeam: initial.consumesWarpBeam ?? false,
         defaultCategoryId: initial.defaultCategoryId ?? null,
       }
-    : stationFormDefaults;
+    : // Yeni kayıt: yetenek kutuları ön-seçili türün ÖNERİSİYLE açılır (`stationKindDefaults.ts`).
+      { ...stationFormDefaults, ...suggestedCapabilities(stationFormDefaults.kind) };
 
   return (
     <EntityFormDialog<StationFormValues>
@@ -89,7 +93,13 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
                 render={({ field }) => (
                   <EnumSelect<StationKind>
                     value={field.value}
-                    onChange={field.onChange}
+                    onChange={(kind) => {
+                      // Tür değişince yetenek kutuları o türün ÖNERİSİNE gelir — yalnız YENİ kayıtta;
+                      // düzenlemede mevcut istasyonun yetenekleri sessizce ezilmez (öneri, kilit değil).
+                      field.onChange(kind);
+                      const next = valuesAfterKindChange(form.getValues(), kind, !!initial);
+                      for (const k of CAPABILITY_FIELDS) form.setValue(k, next[k], { shouldDirty: true });
+                    }}
                     labels={visibleStationKindLabels({ dokumaEnabled }, field.value) as Record<StationKind, string>}
                   />
                 )}

@@ -10,10 +10,11 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useCrudMutations } from "@/hooks/useCrudMutations";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useDokumaEnabled } from "@/hooks/usePricingEnabled";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { ListExportMenu } from "@/components/data-table/ListExportMenu";
 import type { ExportColumn } from "@/lib/list-export";
-import { stationKindLabels, stationTypeLabels, type StationKind } from "@/types/enums";
+import { stationKindLabels, stationTypeLabels } from "@/types/enums";
 
 import { stationService } from "@/pages/Stations/service";
 import type { Station } from "@/pages/Stations/types";
@@ -35,9 +36,7 @@ import { CapabilitiesEditSheet } from "@/pages/StationCapabilities/CapabilitiesE
 import { peripheralService } from "@/pages/PeripheralDevices/service";
 import { peripheralKindLabels, type PeripheralDevice } from "@/pages/PeripheralDevices/types";
 import { foldSearchText } from "@/lib/search-fold";
-
-// Üretim akışındaki istasyon türleri — sevkiyat/diğer (OTHER) bu ekranda yok.
-const PRODUCTION_KINDS: StationKind[] = ["RAW_QC", "PROCESS_QC", "TAMBUR", "SUBCONTRACTOR"] as StationKind[];
+import { isVisibleStationKind } from "./visibleStationKinds";
 
 // Perf: makinesiz kartlar için sabit boş dizi referansı (her render'da yeni `[]`
 // StationCard'ın React.memo'sunu bozardı).
@@ -164,9 +163,12 @@ export function ProductionStationsPage() {
   const onEditMachine = useCallback((m: Machine) => setMachineDlg({ open: true, initial: m }), []);
   const onReactivateMachine = useCallback((m: Machine) => restoreMachine(m.id), [restoreMachine]);
 
+  // Tür kümesi formun şemasından TÜRETİLİR (`visibleStationKinds.ts`): sabit liste WEAVING'i
+  // (ve sevkiyatı) düşürüyordu — kullanıcı istasyonu kaydediyor, kart çizilmiyordu (2026-09-16).
+  const dokumaEnabled = useDokumaEnabled();
   const allStations = useMemo(
-    () => (stationsQ.data?.data ?? []).filter((s) => PRODUCTION_KINDS.includes(s.kind)),
-    [stationsQ.data],
+    () => (stationsQ.data?.data ?? []).filter((s) => isVisibleStationKind(s.kind, { dokumaEnabled })),
+    [stationsQ.data, dokumaEnabled],
   );
   const capByStation = useMemo(
     () => new Map((capsQ.data?.data ?? []).map((c) => [c.stationId, c])),
