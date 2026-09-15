@@ -48,7 +48,8 @@ export type ModulKey =
   | "kumasTeknikEnabled"
   | "tezgahEnabled"
   | "devereEnabled"
-  | "dokumaEnabled";
+  | "dokumaEnabled"
+  | "emanetEnabled";
 
 /**
  * Kapatılamaz çekirdek bloklar (MODUL-BAYRAK-TASARIM §2).
@@ -89,6 +90,7 @@ export const EKRAN_MODUL_DEGERLERI: ReadonlySet<string> = new Set<EkranModul>([
   "tezgahEnabled",
   "devereEnabled",
   "dokumaEnabled",
+  "emanetEnabled",
   "cekirdek:ana-veri",
   "cekirdek:stok-giris",
   "cekirdek:siparis-musteri",
@@ -416,6 +418,12 @@ export const EKRANSIZ_MODULLER: ReadonlyArray<{ modul: ModulKey; reason: string 
     reason:
       "Dokuma tezgah izleme yer tutucu bir anahtar — arkasında henüz hiçbir " +
       "yüzey (ne route ne karo) yok. Dilim 4.",
+  },
+  {
+    modul: "emanetEnabled",
+    reason:
+      "Emanet (konsinye mülkiyet) ekransız modül: yazma kapısı + veri niteliği — " +
+      "sahip alanı KK1/levent/lot formlarının İÇİNDE yaşar, ayrı ekranı/karosu yok (G3).",
   },
 ];
 
