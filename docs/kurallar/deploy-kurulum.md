@@ -32,6 +32,7 @@
 ### Reçeteler
 
 - **[ÇEKİRDEK]** Şema/migration işinde ölçüt en eski canlı kurulumun verisidir; prova o kurulumun dump'ı üstünde: dump restore → migrate deploy → bekçiler → profil boot. <sub>(CLAUDE.md:119)</sub>
+- **[ÇEKİRDEK]** Kurulum VERİSİNİ düzelten yayın günü adımları migration DEĞİLDİR ve `migrate deploy` ile gelmez: elle, dry-run → teşhis çıktısı saklanır → `--apply` sırasıyla ve KULLANICI tarafından koşulur. Bugünkü liste: `scripts/remove_sack_note_element.ts` KOŞULUR (çuval etiketinden iç not elemanı; ayrıntı ve kapsam `surum-yayin.md`) · `scripts/fix_tambur_undo_full_asim.ts` KOŞULMAZ (kullanıcı "dokunma" dedi; kısıt `NOT VALID` kalır, `test_db_invariants` o satırda beklenen kırmızıyı verir). Bir script'i bu listeden çıkarmak da eklemek de KULLANICI KARARIDIR; oturum kendiliğinden koşmaz. <sub>(kullanıcı kararı 2026-09-15)</sub>
 
 ## Backend
 

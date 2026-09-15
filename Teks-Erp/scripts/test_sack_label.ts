@@ -161,6 +161,13 @@ async function main(): Promise<void> {
     // iç notu fiziksel etikete VARSAYILAN basmamalı. Kanvas varyantı flow
     // alanlarını EZER (label-renderer.registry.ts:105) → tek koruma elemanın
     // yokluğu. Bir kurulum bunu bilerek eklerse test kırılır ve gerekçe sorulur.
+    //
+    // ⚠️ SORU SORULDU ve CEVAPLANDI (kullanıcı kararı 2026-09-15, prova bulgusu):
+    // fabrikanın şablonundaki `sackNote` elemanı KALDIRILACAK — yayın günü
+    // `scripts/remove_sack_note_element.ts` (dry-run → `--apply`, kullanıcı koşar;
+    // reçete `docs/kurallar/surum-yayin.md`). BEKÇİ DEĞİŞMEZ: kaldırma sonrası bu
+    // kontrol yeşile döner ve aynı sızıntının tekrar açılmasına karşı durmaya
+    // devam eder — kararı taşıyan yer bekçi değil, kurulum verisidir.
     const ctxDef = await prisma.labelContextDefault.findUnique({
       where: { kind: LabelKind.SACK },
       include: { template: { include: { variants: true } } },
