@@ -159,6 +159,52 @@ const openColumns: ColumnDef<SubcontractScorecard["oldestOpen"][number], unknown
   },
 ];
 
+/** Özet kartları — sayfa gövdesini sınırda tutmak için ayrı bileşen (R3 emsali). */
+function SubcontractSummaryStrip({ sc, isLoading }: { sc: SubcontractScorecard | undefined; isLoading: boolean }) {
+  return (
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <MetricCard
+        label="Fason firesi"
+        value={fmtPercent(sc?.summary.firePct)}
+        hint={
+          sc
+            ? `${fmtNum(sc.summary.fireQty)} m · kapanmış ${fmtNum(sc.summary.closedDispatchedQty)} m üzerinden`
+            : undefined
+        }
+        icon={Scissors}
+        tone={sc === undefined ? "neutral" : sc.summary.firePct <= 2 ? "ok" : sc.summary.firePct <= 5 ? "warn" : "bad"}
+        isLoading={isLoading}
+      />
+      <MetricCard
+        label="Gönderilen"
+        value={`${fmtNum(sc?.summary.dispatchedQty)} m`}
+        hint={
+          sc?.summary.prevDispatchedQty !== undefined
+            ? `Önceki dönem ${fmtNum(sc.summary.prevDispatchedQty)} m`
+            : undefined
+        }
+        icon={Truck}
+        isLoading={isLoading}
+      />
+      <MetricCard
+        label="Açık bakiye"
+        value={`${fmtNum(sc?.summary.openQty)} m`}
+        hint={sc ? `${fmtInt(sc.summary.openItems)} kalem hâlâ fasonda` : undefined}
+        icon={AlarmClock}
+        tone={sc && sc.summary.openQty > 0 ? "warn" : "neutral"}
+        isLoading={isLoading}
+      />
+      <MetricCard
+        label="Ortalama dönüş"
+        value={sc?.summary.avgTurnaroundDays === null ? "—" : `${fmtNum(sc?.summary.avgTurnaroundDays)} gün`}
+        hint="Yalnız dönüşü gelmiş kalemler"
+        icon={Clock}
+        isLoading={isLoading}
+      />
+    </div>
+  );
+}
+
 const AXIS_KEYS = ["subcontractorId", "itemId", "colorId"] as const;
 
 export function SubcontractScorecardPage() {
@@ -197,46 +243,7 @@ export function SubcontractScorecardPage() {
       actions={<ReportExportBar disabled={!sc} buildSpec={spec} />}
     >
       <ReportFilterNotes notes={suzgecNotlari} />
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          label="Fason firesi"
-          value={fmtPercent(sc?.summary.firePct)}
-          hint={
-            sc
-              ? `${fmtNum(sc.summary.fireQty)} m · kapanmış ${fmtNum(sc.summary.closedDispatchedQty)} m üzerinden`
-              : undefined
-          }
-          icon={Scissors}
-          tone={sc === undefined ? "neutral" : sc.summary.firePct <= 2 ? "ok" : sc.summary.firePct <= 5 ? "warn" : "bad"}
-          isLoading={query.isLoading}
-        />
-        <MetricCard
-          label="Gönderilen"
-          value={`${fmtNum(sc?.summary.dispatchedQty)} m`}
-          hint={
-            sc?.summary.prevDispatchedQty !== undefined
-              ? `Önceki dönem ${fmtNum(sc.summary.prevDispatchedQty)} m`
-              : undefined
-          }
-          icon={Truck}
-          isLoading={query.isLoading}
-        />
-        <MetricCard
-          label="Açık bakiye"
-          value={`${fmtNum(sc?.summary.openQty)} m`}
-          hint={sc ? `${fmtInt(sc.summary.openItems)} kalem hâlâ fasonda` : undefined}
-          icon={AlarmClock}
-          tone={sc && sc.summary.openQty > 0 ? "warn" : "neutral"}
-          isLoading={query.isLoading}
-        />
-        <MetricCard
-          label="Ortalama dönüş"
-          value={sc?.summary.avgTurnaroundDays === null ? "—" : `${fmtNum(sc?.summary.avgTurnaroundDays)} gün`}
-          hint="Yalnız dönüşü gelmiş kalemler"
-          icon={Clock}
-          isLoading={query.isLoading}
-        />
-      </div>
+      <SubcontractSummaryStrip sc={sc} isLoading={query.isLoading} />
 
       <DetailTable
         title="Firma Bazında"
