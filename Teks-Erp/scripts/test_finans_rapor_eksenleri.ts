@@ -151,6 +151,18 @@ function main(): void {
   check("§2c ⭐ her uç beyanı zarfa GEÇİRİYOR (seçenek nesnesinde, konumsal değil)",
     kokSapan.length === 0, kokSapan.join(" · ") || `${EKSENLER.length} uç`);
 
+  // §2d ⭐ HER UÇ SEÇİCİ KAYNAĞI VERİYOR — açık kümeli ekseni olan uç, panelin o
+  // kümeyi bilemeyeceği bir seçici bırakamaz. (`vat-summary` bir tren boyunca
+  // BEYANLI BOŞLUKTU: `oran` açık küme ama seçenek yoktu — kol o boşluğun
+  // kapandığını kilitler, "sonra ekleriz" bir daha sessizce uzamasın.)
+  const secenekSapan = EKSENLER.map((e) => e.uc).filter((uc) => {
+    const govde = ucGovdesi(rota, uc);
+    return !/const \{[^}]*\bsecenekler\b[^}]*\}\s*=/.test(govde)
+      || !/\{[^}]*\bsecenekler\b[^}]*\}\s*\)/.test(govde.match(/reportEnvelope\([\s\S]{0,200}?\)\)/)?.[0] ?? "");
+  });
+  check("§2d ⭐ her uç `meta.secenekler` kaynağını zarfa geçiriyor (açık küme eksende seçici şart)",
+    secenekSapan.length === 0, secenekSapan.join(", ") || `${EKSENLER.length} uç`);
+
   // ── §3 DÜŞEN SATIR SAYILIYOR ─────────────────────────────────────────────
   const sapan3: string[] = [];
   for (const e of EKSENLER) {

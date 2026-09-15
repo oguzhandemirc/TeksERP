@@ -261,7 +261,7 @@ router.get("/statement", requireReportOpen("finance/statement"), guard, async (r
  *       her belgenin KENDİ kur damgasıyla çevrilir; kuruş kalıntısı en büyük
  *       matrah satırına yazılır, `totalsTry.reconDiff` "0.00" olmak zorundadır.
  *       SÜZGEÇ: `yon` (4 `InvoiceType` değeri, iadeler AYRI) ve `oran` (sabit 2 hane, örn. `20.00`) WHERE'e iner; `meta.suzgec` düşen belge ve satırı sayar.
- *       ⚠️ BEYANLI BOŞLUK: bu uç `meta.secenekler` DÖNMEZ. `yon` kapalı bir enum (panel statik çizer) ama `oran` AÇIK bir kümedir ve panel pencerede hangi oranların geçtiğini bilemez — R5b-d-c kalemi.
+ *       SÜZGEÇ SEÇİCİSİ: `yon` kapalı bir enum (panel statik çizer), `oran` AÇIK küme ⇒ `meta.secenekler.oran` pencerede geçen oranları taşır (`code` sorgu biçiminde `"18.00"`, `ad` gösterim `"%18"`), süzgeçten BAĞIMSIZ.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Satış + alış blokları (oran kırılımı, para birimi grupları, TL toplamlar) }
@@ -289,8 +289,8 @@ router.get("/vat-summary", requireReportOpen("finance/vat-summary"), guard, asyn
     const range = resolveDateRange(dateRangeSchema.parse({ dateFrom: q.dateFrom, dateTo: q.dateTo }));
     // ⚠️ `suzgec` CEVABIN KÖKÜNE gider, `data`nın içine DEĞİL (R5b-c2 tek adres):
     // panel tek bileşen okuyacak; iki adres, süzgeç şeridini rapor başına yazdırırdı.
-    const { suzgec, ...data } = await getVatSummaryReport({ range, yon: q.yon, oran: q.oran });
-    res.status(200).json(reportEnvelope(data, range, null, { suzgec }));
+    const { suzgec, secenekler, ...data } = await getVatSummaryReport({ range, yon: q.yon, oran: q.oran });
+    res.status(200).json(reportEnvelope(data, range, null, { suzgec, secenekler }));
   } catch (e) {
     next(e);
   }

@@ -11,12 +11,27 @@
 // =============================================================================
 
 export interface Secenek { id: string; ad: string; kod?: string }
+/**
+ * KOD TABANLI eksen seçeneği (sebep · belge tipi · KDV oranı). `code` SORGU
+ * PARAMETRESİNİN BİREBİR BİÇİMİDİR — panel seçtiğini olduğu gibi geri gönderir;
+ * `ad` yalnız gösterimdir. Ad `Sebep…` olarak doğdu, kapsamı sonra genişledi
+ * (6e ile mutabık); yeniden adlandırma ayrı bir iştir.
+ */
 export interface SebepSecenek { code: string; ad: string }
 export interface Secenekler {
   /** FİNANS: pencerede geçen cari hesaplar (`CariAccount`, müşteri + fasoncu). */
   cariId?: Secenek[];
   /** FİNANS: kasa/banka hesapları (kaynak İKİ tablo, tek listede birleşir). */
   accountId?: Secenek[];
+  /**
+   * FİNANS: pencerede geçen KDV oranları — ÜÇÜNCÜ ŞEKİL AÇILMADI (6e itirazı,
+   * kabul). `code` sorgu parametresinin birebir biçimidir (`"18.00"`, şema
+   * `/^\d{1,3}\.\d{2}$/`): panel seçtiğini OLDUĞU GİBİ geri gönderir. Sayıya
+   * çevirip geri biçimlendirmek, aynı değeri iki yerde biçimlendirmek olurdu.
+   * `ad` yalnız gösterim (`"%18"`) — çeviri değil SAYI BİÇİMİ, o yüzden
+   * backend'de üretilmesi etiket tek-kaynağını çiğnemez.
+   */
+  oran?: SebepSecenek[];
   /**
    * FİNANS: ekstrede geçen belge tipleri. `Secenek` DEĞİL `SebepSecenek`:
    * anahtar bir kimlik değil ENUM değeridir ve `reasonCode` ile aynı şekli taşır
@@ -32,6 +47,16 @@ export interface Secenekler {
 /** Rapor nesnesi seçici kaynağını taşır; rota `meta.secenekler`e kaldırır. */
 export interface WithSecenekler { secenekler: Secenekler }
 
+/**
+ * ⚠️ İKİNCİ KOŞUM HER RAPORDA GEREKMEZ ve ölçüt SÜZGECİN NEREYE İNDİĞİdir
+ * (d9 ölçtü 2026-09-15, R5b-d-b):
+ *   • Süzgeç WHERE'e iniyorsa (satış eksenleri · `aging` · `fx-diff`) kaynak
+ *     sorgusu da süzülür ⇒ toplayıcı bir kez DAHA, o süzgeç olmadan koşar.
+ *   • Süzgeç yalnız satır DÖKÜMÜNE uygulanıyorsa (`cash-book` · `statement` —
+ *     orada özet bir BAKİYEdir ve süzgeçten etkilenmemelidir) kaynak sorgusu
+ *     ZATEN süzgeçsizdir ⇒ ikinci koşum gereksiz bir maliyettir.
+ * İkisini tek kurala bağlamak ya boşuna sorgu ekler ya kilitli seçici üretir.
+ */
 export const SECENEK_MAX = 200;
 const tr = (a: string, b: string) => a.localeCompare(b, "tr");
 
@@ -53,6 +78,25 @@ export function reasonOptions(codes: Iterable<string | null | undefined>, labelO
     seen.set(c, { code: c, ad: labelOf(c) ?? c });
   }
   return [...seen.values()].sort((a, b) => tr(a.ad, b.ad) || tr(a.code, b.code)).slice(0, SECENEK_MAX);
+}
+
+/**
+ * ORAN ekseni: `code` sorgu biçiminde (sabit 2 hane), `ad` gösterim (`"%18"`).
+ *
+ * ⚠️ SIRALAMA SAYISAL, metin DEĞİL: `"10.00" < "3.00"` metin sıralamasında
+ * DOĞRUdur ve listeyi ters gösterirdi. `tr` karşılaştırıcısı da burada yanlış
+ * araçtır — sıralanan şey bir ad değil bir BÜYÜKLÜK.
+ */
+export function rateOptions(values: Iterable<number | string | null | undefined>): SebepSecenek[] {
+  const seen = new Map<string, { code: string; ad: string; n: number }>();
+  for (const v of values) {
+    const n = typeof v === "string" ? Number(v) : v;
+    if (n === null || n === undefined || !Number.isFinite(n)) continue;
+    const code = n.toFixed(2);
+    if (seen.has(code)) continue;
+    seen.set(code, { code, ad: `%${n.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}`, n });
+  }
+  return [...seen.values()].sort((a, b) => a.n - b.n).slice(0, SECENEK_MAX).map(({ code, ad }) => ({ code, ad }));
 }
 
 /** Süzgeç verilmiş mi (seçenek için toplayıcı yeniden koşacak mı)? */

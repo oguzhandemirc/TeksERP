@@ -83,6 +83,7 @@ import prisma from "../../lib/prisma";
 import { D, D0 } from "../helpers/finance.helper";
 import type { DateRange } from "./_shared";
 import type { SuzgecEcho } from "./_filters";
+import { rateOptions, type WithSecenekler } from "./_secenekler";
 
 const R2 = (d: Prisma.Decimal): Prisma.Decimal =>
   d.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
@@ -161,7 +162,7 @@ export interface VatBlock {
   totalsTry: VatBlockTotalsTry;
 }
 
-export interface VatSummaryReport {
+export interface VatSummaryReport extends WithSecenekler {
   sales: VatBlock;
   purchase: VatBlock;
   notes: string[];
@@ -277,6 +278,14 @@ export async function getVatSummaryReport(params: VatSummaryParams): Promise<Vat
     },
   });
 
+  // SEÇİCİ KAYNAĞI — SÜZGEÇTEN BAĞIMSIZ. Süzgeç WHERE'e indiği için (hem `type`
+  // hem `lines.some.vatRate`) kaynak sorgusu da süzülür ⇒ süzgeçli istekte
+  // oranlar BİR KEZ DAHA, süzgeçsiz okunur. Yalnız `vatRate` çekilir: ikinci
+  // sorgu satır gövdesi taşımaz.
+  const oranKaynagi = suzgecVar
+    ? (await prisma.invoiceLine.findMany({ where: { invoice: temelWhere }, select: { vatRate: true } })).map((l) => String(l.vatRate))
+    : invoices.flatMap((i) => i.lines.map((l) => String(l.vatRate)));
+
   const acc: Record<VatBlockKind, BlockAcc> = { SALES: new Map(), PURCHASE: new Map() };
 
   for (const inv of invoices) {
@@ -378,6 +387,7 @@ export async function getVatSummaryReport(params: VatSummaryParams): Promise<Vat
     ...(suzgecVar
       ? { suzgec: { ...(yon ? { yon } : {}), ...(oran ? { oran } : {}), dusenBelge: droppedDocs, dusenSatir: droppedRows } }
       : {}),
+    secenekler: { oran: rateOptions(oranKaynagi) },
   };
 }
 

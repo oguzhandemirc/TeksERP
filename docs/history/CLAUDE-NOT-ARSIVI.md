@@ -21,6 +21,33 @@
 
 ---
 
+## 2026-09-15 — Seçeneğin `code`u, sorgu parametresinin BİREBİR biçimidir [ÇEKİRDEK]
+
+R5b-d-c: `vat-summary`nin `oran` ekseni bir tren boyunca BEYANLI BOŞLUKTU — `yon` kapalı bir
+enum (panel statik çizer) ama `oran` AÇIK bir kümedir ve panel pencerede hangi oranların
+geçtiğini bilemez.
+
+**Üçüncü bir seçenek ŞEKLİ açmaya kalktım, 6e itiraz etti ve HAKLIYDI.** `{ value: number,
+ad: string }` yazmıştım: "anahtar bir sayı, `Secenek` uuid sorar, `SebepSecenek` enum kodu".
+6e'nin ölçütü daha iyi: **sorgu parametresi zaten STRING** (`/^\d{1,3}\.\d{2}$/`), yani
+seçeneğin değeri de o string'in AYNISI olmalı ki panel seçtiğini OLDUĞU GİBİ geri
+gönderebilsin. Sayıya çevirip geri biçimlendirmek, aynı değeri iki yerde biçimlendirmek
+olurdu — ve iki biçimlendirme er ya da geç ayrışır. ⇒ ***Bir seçeneğin anahtarı, onu geri
+gönderecek olan PARAMETRENİN biçiminde olmalı; şekli belirleyen şey değerin TÜRÜ değil
+KULLANIMIdır.*** `SebepSecenek` böylece üç ekseni birden taşıyor (sebep · belge tipi · oran)
+ve panel üçünü tek bileşenle çiziyor.
+
+**Sayısal eksen SAYISAL sıralanır.** `"10.00" < "3.00"` metin karşılaştırmasında DOĞRUdur ve
+listeyi ters gösterirdi; `tr` karşılaştırıcısı da burada yanlış araçtır, çünkü sıralanan şey
+bir ad değil bir BÜYÜKLÜKtür. Sonda bunu somut gösterdi: `%1 · %20 · %3`.
+
+**Ve "sonra ekleriz" bir kapıya bağlandı.** Boşluk bir tren boyunca swagger'da yazılıydı —
+görünür ama ölçülmez. Yeni kol (§2d) artık AÇIK KÜMELİ ekseni olan her ucun seçici kaynağı
+geçirdiğini kilitliyor. ⇒ ***Beyan edilmiş bir boşluk, kapanana kadar iyidir; kapandıktan
+sonra onu kapalı TUTAN şey beyan değil kapıdır.***
+
+---
+
 ## 2026-09-15 — Seçici, süzgeçten bağımsız olmazsa kendi kendini kilitler [ÇEKİRDEK]
 
 Raporlar fazının R5b-d-b dilimi: finans raporlarına cari ekseni + `meta.secenekler`.

@@ -363,6 +363,20 @@ async function main(): Promise<void> {
   const birOranlar = yalnizBir.sales.currencies.flatMap((c) => c.rows.map((r) => r.vatRate));
   check("§9e `oran=1.00` yalnız o oranın satırlarını bırakır (karışık belgenin öbür oranı ELENİR)",
     birOranlar.length > 0 && birOranlar.every((r) => r === "1.00"), `oranlar=[${birOranlar.join(", ")}]`);
+  // ⭐ SEÇENEKLER SÜZGEÇTEN BAĞIMSIZ — burada süzgeç WHERE'e indiği için ikinci
+  // koşum ŞART: `oran=1.00` sorgusu kaynak satırları da süzer ve liste tek orana
+  // düşerdi; o hâlde kullanıcı %20'yi seçemezdi (seçici kendini kilitler).
+  const oranlarHepsi = rep.secenekler.oran ?? [];
+  const oranlarSuzgecli = yalnizBir.secenekler.oran ?? [];
+  check("§9g KÖRLÜK ZEMİNİ: fikstür BİRDEN ÇOK oran taşıyor (vakumen yeşil değil)",
+    oranlarHepsi.length >= 3, oranlarHepsi.map((o) => o.ad).join(" · "));
+  check("§9h ⭐ `secenekler.oran` süzgeçten BAĞIMSIZ (süzgeçli istek ikinci kez süzgeçsiz okur)",
+    JSON.stringify(oranlarSuzgecli) === JSON.stringify(oranlarHepsi),
+    `${oranlarSuzgecli.length} ↔ ${oranlarHepsi.length}`);
+  check("§9i oran SAYISAL sıralı ve `code` SORGU BİÇİMİNDE (panel seçtiğini aynen geri gönderir)",
+    oranlarHepsi.every((o, i) => i === 0 || Number(oranlarHepsi[i - 1]!.code) < Number(o.code))
+      && oranlarHepsi.every((o) => /^\d{1,3}\.\d{2}$/.test(o.code)),
+    oranlarHepsi.map((o) => `${o.code}→${o.ad}`).join(" · "));
   check("§9f elenen SATIR sayılıyor (karışık belgede en az bir satır düştü)",
     (Number(yalnizBir.suzgec?.dusenSatir) || 0) >= 1, `dusenSatir=${yalnizBir.suzgec?.dusenSatir}`);
 
