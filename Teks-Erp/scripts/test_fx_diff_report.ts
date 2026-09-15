@@ -21,7 +21,7 @@
 //     (3 kontrol): TRY kapaması 0,00 farkla listeye sızdı (evren kuralı kanıtı).
 // =============================================================================
 
-import { Prisma, ChequeKind, ChequeStatus } from "@prisma/client";
+import { Prisma, CariKind, ChequeKind, ChequeStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { invoiceService } from "../src/services/invoice.service";
 import { paymentService } from "../src/services/payment.service";
@@ -52,13 +52,14 @@ const chequeIds: string[] = [];
 const cashBoxIds: string[] = [];
 
 /** Raporu tüm evren için koşar (geniş pencere) — satırlar TAG'li belgelerle süzülür. */
-async function report(opts?: { from?: Date; to?: Date; cariId?: string }): Promise<Awaited<ReturnType<typeof getFxDiffReport>>> {
+async function report(opts?: { from?: Date; to?: Date; cariId?: string; kind?: CariKind }): Promise<Awaited<ReturnType<typeof getFxDiffReport>>> {
   return getFxDiffReport({
     range: {
       from: opts?.from ?? new Date(Date.now() - 3_600_000),
       to: opts?.to ?? new Date(Date.now() + 3_600_000),
     },
     cariId: opts?.cariId,
+    kind: opts?.kind,
   });
 }
 
@@ -270,6 +271,25 @@ async function main(): Promise<void> {
   check("§8a Tarih penceresi: geçmiş pencerede bu testin satırı yok", mine(past).length === 0);
   const byCari = await report({ cariId: cariRow.id });
   check("§8b cariId süzgeci: yalnız müşterinin satırları (tedarikçi PURCHASE dışarıda)", mine(byCari).every((x) => x.invoice.type !== "PURCHASE") && mine(byCari).length === 3, `satır=${mine(byCari).length}`);
+
+  // §8c–§8f ⭐ `kind` EKSENİ (R5b-d): `aging` bu ekseni taşıyordu, kardeşi taşımıyordu.
+  // Burada ÖZET süzgeçle BİRLİKTE daralır (kasa defterinin aksine) — kur farkı bir
+  // BAKİYE değil, gösterilen kümenin TOPLAMIdır; iki sözleşmenin ayrımı budur.
+  const hepsi = await report();
+  const musteri = await report({ kind: CariKind.CUSTOMER });
+  check("§8c KÖRLÜK ZEMİNİ: `kind` süzgeci daralttı (hepsi kalmadı, hiçbiri de gitmedi)",
+    mine(musteri).length > 0 && mine(musteri).length < mine(hepsi).length,
+    `${mine(musteri).length}/${mine(hepsi).length} satır`);
+  check("§8d `kind=CUSTOMER` alış faturası bırakmaz (tedarikçi kapamaları dışarıda)",
+    mine(musteri).every((x) => x.invoice.type !== "PURCHASE"));
+  check("§8e ⭐ ÖZET süzgeçle BİRLİKTE daraldı (toplam, gösterilen kümenin toplamıdır)",
+    musteri.summary.count === musteri.rows.length && musteri.summary.count < hepsi.summary.count,
+    `${musteri.summary.count} ↔ ${hepsi.summary.count}`);
+  check("§8f beyan kökte, yalnız verilen anahtar + elenen satır",
+    musteri.suzgec?.kind === CariKind.CUSTOMER
+      && Number(musteri.suzgec?.dusenSatir) === hepsi.summary.count - musteri.summary.count
+      && !("suzgec" in hepsi),
+    JSON.stringify(musteri.suzgec));
 
   // ── KÖRLÜK ZEMİNİ ────────────────────────────────────────────────────────
   check("Körlük zemini: en az 4 dövizli kapama üretildi", invoiceDocNos.size >= 5);

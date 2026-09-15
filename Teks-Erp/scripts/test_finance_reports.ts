@@ -653,6 +653,38 @@ async function main(): Promise<void> {
   );
   check("§9k Carisiz kasa hareketi (gider) defterde", bookRows.some((r) => r.source === "CASH_TXN" && r.kind === "EXPENSE"));
 
+  // ── §9s ⭐ SÜZGEÇ: DÖKÜM DARALIR, BAKİYE DEĞİŞMEZ (R5b-d) ──────────────────
+  // Statik bekçi (`test_finans_rapor_eksenleri §4`) SIRAYI ölçer: `running` önce
+  // yürütülür, süzgeç sonra uygulanır. SONUCU ancak burası görebilir — süzgeçli
+  // listede kalan satırların `running`i, süzgeçsizdekiyle BİREBİR aynı olmalı.
+  // Bu, kuralın tek yanlışlanabilir biçimi: sayı değişirse bakiye süzgece
+  // bağlanmış demektir ve hiçbir metin taraması bunu gösteremez.
+  const suzgecli = await getCashBookReport({
+    range: { from: ago(30), to: new Date() },
+    accountId: cashBoxId,
+    kategori: "CASH_TXN",
+  });
+  const sRows = suzgecli.rows ?? [];
+  check("§9s1 KÖRLÜK ZEMİNİ: süzgeç gerçekten daralttı (hepsi kalmadı, hiçbiri de gitmedi)",
+    sRows.length > 0 && sRows.length < bookRows.length, `${sRows.length}/${bookRows.length} satır`);
+  check("§9s2 ⭐ kalan satırların `running`i SÜZGEÇSİZDEKİYLE BİREBİR (bakiye süzgece bağlanmadı)",
+    sRows.every((r) => bookRows.find((b) => b.id === r.id)?.running === r.running),
+    sRows.map((r) => r.running).join(" · "));
+  check("§9s3 ⭐ ÖZET dönem gerçeği kaldı (devir · giriş · çıkış · kapanış değişmedi)",
+    (() => {
+      const k = suzgecli.accounts.find((a) => a.accountId === cashBoxId);
+      return k?.opening === kasa.opening && k?.totalIn === kasa.totalIn
+        && k?.totalOut === kasa.totalOut && k?.closing === kasa.closing;
+    })(),
+    `${suzgecli.accounts.find((a) => a.accountId === cashBoxId)?.closing} ↔ ${kasa.closing}`);
+  check("§9s4 elenen satır DOĞRU sayıldı",
+    Number(suzgecli.suzgec?.dusenSatir) === bookRows.length - sRows.length,
+    `dusenSatir=${suzgecli.suzgec?.dusenSatir} (beklenen ${bookRows.length - sRows.length})`);
+  check("§9s5 beyan yalnız VERİLEN anahtarı taşır (`yon` gönderilmedi ⇒ anahtar YOK)",
+    suzgecli.suzgec !== undefined && !("yon" in suzgecli.suzgec) && suzgecli.suzgec.kategori === "CASH_TXN",
+    JSON.stringify(suzgecli.suzgec));
+  check("§9s6 SÜZGEÇSİZ çağrıda `suzgec` anahtarı HİÇ YOK", !("suzgec" in book), JSON.stringify(book.suzgec));
+
   const bankBook = await getCashBookReport({
     range: { from: ago(30), to: new Date() },
     accountId: bankAccountId,

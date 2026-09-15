@@ -342,6 +342,42 @@ async function main(): Promise<void> {
     );
   }
 
+  // ── §10y ⭐ EKSTRE SÜZGECİ: DÖKÜM DARALIR, BAKİYE DEĞİŞMEZ (R5b-d) ────────
+  // Kasa defterindeki kuralın ekstre ikizi ve tek yanlışlanabilir biçimi: süzgeçli
+  // listede kalan satırların `running`i, süzgeçsizdekiyle BİREBİR aynı olmalı.
+  // `opening`/`closing`/`totalDebit`/`totalCredit` dönem gerçeğidir — süzgece göre
+  // değişirlerse ekstre, kullanıcının ekranda ne seçtiğine göre farklı bir bakiye
+  // gösteriyor demektir; hiçbir metin taraması bunu gösteremez.
+  {
+    const genis = { cariId: cari2.id, currency: "TRY" as const,
+      from: new Date(Date.now() - 400 * 24 * 3600 * 1000), to: new Date(Date.now() + 24 * 3600 * 1000) };
+    const hepsi = await cariService.statement(genis);
+    // ⚠️ SÜZGEÇ BİLEREK **İKİNCİ** SATIRI SEÇER (`ADJUSTMENT_CANCEL`, devrin ters
+    // kaydı). İlk satırı seçen bir süzgeçle §10y2 ÖLÇMEZ: ilk satırın `running`i
+    // kendisinden önce hiçbir şey olmadığı için sıra ters çevrilse de AYNI çıkar
+    // (sonda sessiz kalır, kapı kör görünmez). Ölçüldü 2026-09-15: `ADJUSTMENT`
+    // ile koşulan sonda sırayı ters çevirdiğimde §10y2 YEŞİL kaldı.
+    const yalnizDevir = await cariService.statement({ ...genis, belgeTipi: "ADJUSTMENT_CANCEL" });
+    const hRows = hepsi.data.rows;
+    const yRows = yalnizDevir.data.rows;
+    check("§10y1 KÖRLÜK ZEMİNİ: süzgeç gerçekten daralttı",
+      yRows.length > 0 && yRows.length < hRows.length, `${yRows.length}/${hRows.length} satır`);
+    check("§10y2 ⭐ kalan satırların `running`i SÜZGEÇSİZDEKİYLE BİREBİR (bakiye süzgece bağlanmadı)",
+      yRows.every((r) => hRows.find((h) => h.id === r.id)?.running.equals(r.running)),
+      yRows.map((r) => r.running.toString()).join(" · "));
+    check("§10y3 ⭐ devir ve TOPLAMLAR dönem gerçeği kaldı",
+      yalnizDevir.data.opening.equals(hepsi.data.opening)
+        && yalnizDevir.data.closing.equals(hepsi.data.closing)
+        && yalnizDevir.data.totalDebit.equals(hepsi.data.totalDebit)
+        && yalnizDevir.data.totalCredit.equals(hepsi.data.totalCredit),
+      `kapanış ${yalnizDevir.data.closing} ↔ ${hepsi.data.closing}`);
+    check("§10y4 elenen satır DOĞRU sayıldı",
+      Number(yalnizDevir.data.suzgec?.dusenSatir) === hRows.length - yRows.length,
+      `dusenSatir=${yalnizDevir.data.suzgec?.dusenSatir} (beklenen ${hRows.length - yRows.length})`);
+    check("§10y5 SÜZGEÇSİZ çağrıda `suzgec` anahtarı HİÇ YOK",
+      !("suzgec" in hepsi.data), JSON.stringify(hepsi.data.suzgec));
+  }
+
   // Storno sonrası aging: DEVİR neti sıfır → cari hiç listelenmez (ne satır
   // ne sahte "defter uyuşmuyor" bandı). Negatif sonda: FILTER'dan
   // ADJUSTMENT_CANCEL düşürülünce adjNet=8000 kalır ve satır geri gelir.

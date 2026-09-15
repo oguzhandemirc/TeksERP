@@ -66,6 +66,21 @@ bir eşik. ⇒ ***Toplam sayıya bakan kapı, kaybı yalnız o sayı eşiğin al
 "her biri" sorusunun cevabı bir toplam değildir.*** İkisi de onarıldı ve sondalar yeniden
 koşuldu.
 
+**KURALIN TEK YANLIŞLANABİLİR BİÇİMİ.** "Bakiye süzgeçten etkilenmez" cümlesini metin
+taraması ölçemez — ölçebileceği tek şey ifadelerin SIRASIdır. Gerçek yanlışlama şu: süzgeçli
+listede kalan satırların `running` değeri, süzgeçsiz listedekiyle BİREBİR aynı olmalı. Sıra
+ters çevrildiğinde kasa defterinde `-100.00` yerine `-300.00`, ekstrede `0` yerine `-8000`
+çıktı — yani kolon "doğru görünen ama yanlış" bir bakiye bastı. ⇒ ***Bir kuralın bekçisini
+yazarken sor: bu cümle hangi GÖZLEMLE yanlışlanır? Cevap "kaynak kodun şekli" ise, ölçtüğün
+kural değil yazım biçimidir.***
+
+**SONDA, FİKSTÜR YÜZÜNDEN SESSİZ KALABİLİR.** Ekstre kolunun ilk yazımı süzgeci `ADJUSTMENT`a
+kuruyordu ve o satır dökümün İLKİYDİ: ilk satırın `running`i kendisinden önce hiçbir şey
+olmadığı için sıra ters çevrilse de AYNI çıkar. Sonda yeşil kaldı — kapı kör olduğu için
+değil, fikstür ayrımı TAŞIMADIĞI için. Süzgeç ikinci satıra (`ADJUSTMENT_CANCEL`) çevrildi ve
+kol ısırdı. ⇒ ***Tutmayan bir sonda üç şeyin işareti olabilir: kurgu, kör kapı, ya da AYRIM
+TAŞIMAYAN fikstür.***
+
 **ADRES AYRIŞMASI ve DÜZELTİLMESİ (aynı gün).** R5b-d-a, o an geçerli olan R5b-b biçimini
 uyguladı: beyan raporun `data`sının içinde. Ama R5b-c2 tam o sırada adresi TAŞIDI — beyan
 artık cevabın KÖKÜNDE (`reportEnvelope`in 4. argümanı, tip `SuzgecEcho`). İki sha aynı trene
