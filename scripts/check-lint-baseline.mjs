@@ -195,6 +195,7 @@ function headSayim(proje, repoRel) {
   try {
     head = execFileSync("git", ["show", `HEAD:${repoRel}`], {
       cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "ignore"], // yeni dosyada "fatal: path … HEAD" gürültüsü raporu kirletmesin
     });
   } catch {
     return null; // dosya HEAD'de YOK (yeni dosya) → katkısının tamamı bu commit'in
@@ -217,6 +218,69 @@ function headSayim(proje, repoRel) {
     if (kural !== null) out[kural] = (out[kural] ?? 0) + 1;
   }
   return out;
+}
+
+/**
+ * AŞIMI KİM GETİRDİ — dosya başına fark (2026-09-15, 1e kalemi).
+ *
+ * Tavan kural başına SAYI saklar, dosya listesi saklamaz (biçim değişmez). "Hangi dosyada
+ * arttı" sorusunun referansı GİT'tir: commit kipinde staged küme, dışında çalışma ağacının
+ * değişen + takipsiz dosyaları; her aday için HEAD'deki ihlal sayısıyla fark alınır.
+ * Değişen dosyada artış YOKSA aşım ağaçtan MİRASTIR (iki trenin aynı dosyaya birer satır
+ * eklemesi — featureFlagService R2+G3, movementsCte finans: ikisi de kapıdan yeşil geçti,
+ * birleşik tip aştı); o zaman ihlalli dosyalar SON COMMIT tarihine göre sıralanıp basılır —
+ * kesişimi yapan dosya en üstte çıkar. Bugüne dek kapı bu bilgiyi üretiyor ama basmıyordu;
+ * iki vaka 10'ar dakika elle teşhis istedi.
+ */
+function degisenDosyalar() {
+  if (STAGED) return STAGED;
+  const git = (args) => {
+    try {
+      return execFileSync("git", args, { cwd: REPO_ROOT, encoding: "utf8" }).split("\n").filter(Boolean);
+    } catch {
+      return [];
+    }
+  };
+  return new Set([...git(["diff", "--name-only", "HEAD"]), ...git(["ls-files", "--others", "--exclude-standard"])]);
+}
+
+/** Dosyanın son commit'i: [epoch, "sha konu"]; ölçülemezse [0, "(git yok)"]. */
+function sonCommit(repoRel) {
+  try {
+    const out = execFileSync("git", ["log", "-1", "--format=%ct\t%h %s", "--", repoRel], { cwd: REPO_ROOT, encoding: "utf8" }).trim();
+    const [ct, ...rest] = out.split("\t");
+    return [Number(ct) || 0, rest.join("\t").slice(0, 72)];
+  } catch {
+    return [0, "(git yok)"];
+  }
+}
+
+/** Aşan kuralın dosya başına farkını ve miras sıralamasını basar (raporlama, verdikt değil). */
+function asimRaporu(yaz, proje, a, degisen, kuralDosyalari, kuralDosyaSayim, kuralDosyaSatir, headCache) {
+  const dosyalar = [...(kuralDosyalari[a.kural] ?? [])];
+  const artan = [];
+  for (const f of dosyalar) {
+    if (!degisen.has(f)) continue;
+    if (!headCache.has(f)) headCache.set(f, headSayim(proje, f));
+    const h = headCache.get(f);
+    const simdi = kuralDosyaSayim[a.kural]?.[f] ?? 0;
+    const once = h === null ? 0 : (h[a.kural] ?? 0);
+    if (simdi > once) artan.push({ f, simdi, once, yeni: h === null });
+  }
+  const satir = (f) => {
+    const l = kuralDosyaSatir[a.kural]?.[f] ?? [];
+    return l.length ? `:${l.slice(0, 5).join(",")}` : "";
+  };
+  if (artan.length > 0) {
+    yaz(`     ↑ değişen dosyada ARTIŞ (aşımı getiren):`);
+    for (const x of artan.slice(0, 8)) yaz(`       · ${x.f}${satir(x.f)}  (+${x.simdi - x.once} → ${x.simdi}${x.yeni ? ", HEAD'de yok" : ""})`);
+    return;
+  }
+  // Miras: değişen dosyada artış yok — ağacın kendisi aşıyor. Son dokunulan ihlalli dosyalar.
+  const sirali = dosyalar.map((f) => ({ f, sc: sonCommit(f) })).sort((x, y) => y.sc[0] - x.sc[0]).slice(0, 5);
+  yaz(`     = değişen dosyada artış yok ⇒ aşım ağaçtan MİRAS (tren kesişimi olabilir); son dokunulan ihlalli dosyalar:`);
+  for (const { f, sc } of sirali) yaz(`       · ${f}${satir(f)}  (${kuralDosyaSayim[a.kural]?.[f] ?? 0} ihlal · ${sc[1]})`);
+  if (dosyalar.length > sirali.length) yaz(`       · … +${dosyalar.length - sirali.length} dosya daha (toplam ${dosyalar.length})`);
 }
 
 let kirmizi = false;
@@ -296,17 +360,13 @@ for (const proje of SECILEN) {
       `${benim.length > 0 ? "❌" : "⚠️ "} ${proje}: ${asan.length} kural TAVANI AŞTI ` +
         `(${dosyaSayisi} dosya, ${hata} error)`,
     );
+    const degisen = degisenDosyalar();
     for (const a of asan) {
-      const dosyalar = [...(kuralDosyalari[a.kural] ?? [])];
-      const bende = dosyalar.filter((f) => !STAGED || STAGED.has(f));
       // Etiket YALNIZ commit kipinde anlamlıdır: bayraksız koşumda "commit" diye
       // bir küme yoktur ve "BU COMMIT'TE" yazmak uydurma bir iddia olurdu.
       const etiket = STAGED ? `  [${benim.includes(a) ? "BU COMMIT'TE" : "commit dışı"}]` : "";
       yaz(`   ${a.kural}: ${a.adet} > ${a.tavan}${etiket}`);
-      for (const f of (bende.length ? bende : dosyalar).slice(0, 5)) {
-        const satirlar = kuralDosyaSatir[a.kural]?.[f] ?? [];
-        yaz(`     · ${f}${satirlar.length ? `:${satirlar.slice(0, 5).join(",")}` : ""}`);
-      }
+      asimRaporu(yaz, proje, a, degisen, kuralDosyalari, kuralDosyaSayim, kuralDosyaSatir, headCache);
     }
     if (benim.length > 0) {
       console.error(

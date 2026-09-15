@@ -304,6 +304,56 @@ const s6 = degerlendirmeyiKos(["Teks-Erp/src/benim.ts"], [{ filePath: benimDosya
 check("lint kapısı etiketi: fatal → parse", s6.kod === 1 && s6.satirlar.some((x) => /\bparse\b/.test(x)));
 
 // =============================================================================
+// §2c — AŞIMI KİM GETİRDİ: tavan raporu dosya BAŞINA fark basar (2026-09-15, 1e kalemi)
+// =============================================================================
+// Tavan yalnız kural sayısı saklar; "108 > 107" tek başına iki kez 10 dk elle teşhis istedi
+// (featureFlagService R2+G3 · movementsCte finans — iki tren aynı dosyaya birer satır ekledi,
+// kapı ikisini de geçirdi, birleşik tip aştı). Rapor artık iki daldan birini basar:
+//   ↑ değişen dosyada ARTIŞ (aşımı getiren)  — staged/çalışma ağacı dosyası, HEAD'e göre +n
+//   = MİRAS — değişen dosyada artış yok; ihlalli dosyalar son commit tarihine göre, sha'sıyla
+// Baseline biçimi DEĞİŞMEZ (dosya listesi baseline'a girmez).
+// Negatif sonda (2026-09-15, bir kezlik): `asimRaporu` çağrısı kaldırıldı → §2c1/§2c2 ❌.
+console.log("\n§2c — tavan raporu aşımı dosya adıyla basıyor mu");
+
+// ①: commit kipi, HEAD'de olmayan staged dosya → ARTIŞ dalı, dosya:satır ve +1
+const u1 = tavaniKos({ ruleId: "sonda/asim-kurali", message: "x", line: 7, column: 1, severity: 1 });
+const u1Cikti = `${u1.stdout}\n${u1.stderr}`;
+check(
+  "⭐ §2c1 staged yeni dosya → \"değişen dosyada ARTIŞ\" + dosya:satır (+1 → 1, HEAD'de yok)",
+  u1.status === 1 && u1Cikti.includes("değişen dosyada ARTIŞ") && u1Cikti.includes(`${sondaDosya}:7`) && u1Cikti.includes("(+1 → 1, HEAD'de yok)"),
+  u1Cikti.split("\n").filter((l) => /ARTIŞ|zz_sonda/.test(l)).join(" | "),
+);
+
+// ②: bayraksız kip (CI/elle), izlenen ve DEĞİŞMEMİŞ dosyada sentetik ihlal → MİRAS dalı, dosya adı + son commit sha
+{
+  const mirasDosya = "Teks-Erp/src/server.ts";
+  const temiz = spawnSync("git", ["status", "--porcelain", "--", mirasDosya], { cwd: KOK, encoding: "utf8" }).stdout.trim() === "";
+  const dizin = mkdtempSync(join(tmpdir(), "tekserp-tavan-miras-"));
+  const raporYolu = join(dizin, "eslint.json");
+  writeFileSync(raporYolu, JSON.stringify([...dolgu, { filePath: join(KOK, mirasDosya), messages: [{ ruleId: "sonda/miras-kurali", message: "x", line: 12, column: 1, severity: 1 }] }]));
+  let u2;
+  try {
+    u2 = spawnSync("node", ["scripts/check-lint-baseline.mjs", "--proje=backend", `--rapor=${raporYolu}`], { cwd: KOK, encoding: "utf8", timeout: 60_000 });
+  } finally {
+    rmSync(dizin, { recursive: true, force: true });
+  }
+  const u2Cikti = `${u2.stdout}\n${u2.stderr}`;
+  check(
+    "⭐ §2c2 bayraksız kip: aşan dosya ADIYLA ve satırıyla basılır (hangi dalda olsun)",
+    u2.status === 1 && u2Cikti.includes(`${mirasDosya}:12`),
+    u2Cikti.split("\n").filter((l) => /server\.ts/.test(l)).join(" | "),
+  );
+  if (temiz) {
+    check(
+      "   ↳ dosya ağaçta değişmemiş ⇒ MİRAS dalı + son commit sha'sı",
+      u2Cikti.includes("MİRAS") && /server\.ts:12\s+\(1 ihlal · [0-9a-f]{7,}\s/.test(u2Cikti),
+    );
+  } else {
+    console.log("   ⏭ server.ts çalışma ağacında değişmiş — MİRAS dalı bu ağaçta ölçülemez (ARTIŞ dalı basıldı)");
+  }
+}
+
+// =============================================================================
 // §3 — kablolama tripwire'ları (her biri BOZULMUŞ KOPYAYA karşı da ölçülür)
 // =============================================================================
 console.log("\n§3 — kablolama yerinde mi (ve tripwire gerçekten ısırıyor mu)");
