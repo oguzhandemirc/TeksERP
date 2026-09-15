@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
-import type { ReportKey } from "@/lib/report-catalog";
+import { REPORT_BY_KEY, type ReportKey } from "@/lib/report-catalog";
 import { ReportDateFilter } from "./ReportDateFilter";
 import { ReportSideRail } from "./ReportSideRail";
 
@@ -28,9 +28,21 @@ interface Props {
  * görünür (URL `/reports/<category>/<report>` paternindeyse).
  */
 export function ReportPageLayout({ title, description, actions, reportKey, showCompare = false, filters, children }: Props) {
+  // ⚠️ SORU CÜMLESİ TEK YERDEN ve KATALOGTAN: her rapor "neyi cevapladığını"
+  // başlığının altında söyler. Metni sayfa yazsaydı katalogla ekran ayrışır ve
+  // hangisinin doğru olduğu ölçülemezdi (kapı: sayfa kendi cümlesini yazarsa
+  // kırmızı). Anahtar `reportKey` propundan gelir — adresten TAHMİN edilmez.
+  // `description` raporun İÇERİĞİNİ tarif eder, `soru` NE SORUYA cevap verdiğini;
+  // ikisi farklı iş yapar, ikisi de kalır.
+  const soru = reportKey ? (REPORT_BY_KEY.get(reportKey)?.soru ?? null) : null;
   return (
     <PageShell className="overflow-hidden">
       <PageHeader title={title} description={description} actions={actions} />
+      {soru ? (
+        <p className="border-b bg-muted/20 px-4 py-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Bu rapor şunu cevaplar:</span> {soru}
+        </p>
+      ) : null}
       {filters ? filters : reportKey ? <ReportDateFilter reportKey={reportKey} showCompare={showCompare} /> : null}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <PageBody className="p-4">

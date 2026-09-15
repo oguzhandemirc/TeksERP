@@ -6,7 +6,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Card } from "@/components/ui/card";
-import { DetailTable, ReportExportBar, ReportPageLayout } from "../_components";
+import { DetailTable, MetricCard, ReportExportBar, ReportPageLayout } from "../_components";
 import { fmtInt } from "../_components/formatters";
 import { buildVardiyaKarnesiExport } from "./dokumaExport";
 import { HorizonNote, SealBadge, SourceBreakdownStrip, fmtSec } from "./DokumaShared";
@@ -59,8 +59,29 @@ export function VardiyaKarnesiPage() {
   const rapor = data?.data;
   // Süzgeç TEK GÜNDÜR (tarih aralığı değil) — başlık da onu söyler.
   const spec = useMemo(() => () => (rapor ? buildVardiyaKarnesiExport({ rapor, day }) : null), [rapor, day]);
+  // ÖZET ŞERİDİ: sayılar RAPORUN KENDİ yanıtından toplanır, yeni uç yok.
+  // "Ölçülemedi" ayrı kart DEĞİL, duruş kartının ipucu: sayı ile beyanı ayırmak
+  // okuyucuya "kaç satır güvenilir" sorusunu iki yerde sordururdu.
+  const summary = useMemo(() => {
+    const v = rapor?.vardiyalar ?? [];
+    const metreVar = v.some((x) => x.uretim.producedM !== null);
+    return {
+      vardiya: v.length,
+      atki: v.reduce((a, x) => a + x.uretim.unitsActual, 0),
+      metre: metreVar ? v.reduce((a, x) => a + (x.uretim.producedM ?? 0), 0) : null,
+      durus: v.reduce((a, x) => a + x.durusSec, 0),
+      olculemedi: v.reduce((a, x) => a + x.ozet.olculemedi, 0),
+      satir: v.reduce((a, x) => a + x.ozet.toplamSatir, 0),
+    };
+  }, [rapor]);
   return (
     <ReportPageLayout reportKey="dokuma/vardiya-karnesi" title="Vardiya Karnesi" description="Vardiya başına üretim ve duruş; her satır kaynağını taşır, toplam tek yüzdeye çökertilmez." actions={<ReportExportBar disabled={!rapor || rapor.vardiyalar.length === 0} buildSpec={spec} />}>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard label="Vardiya" value={rapor ? fmtInt(summary.vardiya) : null} hint={rapor ? `${fmtInt(summary.satir)} tezgah satırı` : undefined} isLoading={isLoading} />
+        <MetricCard label="Atkı (Σ)" value={rapor ? fmtInt(summary.atki) : null} isLoading={isLoading} />
+        <MetricCard label="Metre (Σ)" value={rapor ? (summary.metre === null ? "ölçülmedi" : summary.metre.toLocaleString("tr-TR")) : null} hint="Metre yalnız ölçülmüş koşumlardan" isLoading={isLoading} />
+        <MetricCard label="Duruş (Σ)" value={rapor ? fmtSec(summary.durus) : null} hint={rapor && summary.olculemedi > 0 ? `${fmtInt(summary.olculemedi)} satırda oran ölçülemedi` : undefined} tone={rapor && summary.olculemedi > 0 ? "warn" : "neutral"} isLoading={isLoading} />
+      </div>
       {isLoading && <p className="text-sm text-muted-foreground">Yükleniyor…</p>}
       {!isLoading && rapor && rapor.vardiyalar.length === 0 && <p className="text-sm text-muted-foreground">Bu günde vardiya penceresi yok (takvim job'u 30 gün ileri yazar; dokuma modülü açık mı?).</p>}
       {rapor?.vardiyalar.map((v) => <ShiftCard key={v.shiftInstanceId} v={v} />)}

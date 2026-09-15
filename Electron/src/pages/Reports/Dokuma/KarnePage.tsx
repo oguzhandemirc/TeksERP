@@ -4,7 +4,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DetailTable, ReportExportBar, ReportPageLayout } from "../_components";
+import { DetailTable, MetricCard, ReportExportBar, ReportPageLayout } from "../_components";
 import { WarningsBlock, useFactoryRange } from "./DokumaShared";
 import { buildKarneExport } from "./dokumaExport";
 import { KarneDialogs } from "./KarneDialogHost";
@@ -70,6 +70,9 @@ export function KarnePage() {
     [rows, periodLabel, listMeta],
   );
 
+  // Özet: listenin KENDİ meta'sı + satırlardan sayılan uyarı. Mühür durumu bu
+  // raporun ASIL sorusu ("hangi rakam resmî") olduğu için şeridin merkezinde.
+  const warnedRows = useMemo(() => rows.filter((r) => r.warnings.length > 0).length, [rows]);
   return (
     <ReportPageLayout
       reportKey="dokuma/karne"
@@ -77,6 +80,12 @@ export function KarnePage() {
       description="Mühürsüz satır anlık hesaplanır; mühürlü satır resmî rakamdır. Vardiya bitiminden 60 dk sonra kapanış işi karneyi yazar; amir düzeltip mühürler."
       actions={<ReportExportBar disabled={rows.length === 0} buildSpec={spec} />}
     >
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard label="Satır" value={listMeta ? listMeta.total : null} hint="Vardiya × tezgah" isLoading={isLoading} />
+        <MetricCard label="Mühürlü" value={listMeta ? listMeta.sealed : null} hint="Resmî rakam" isLoading={isLoading} />
+        <MetricCard label="Anlık" value={listMeta ? listMeta.live : null} hint="Mühürsüz — anlık hesaplanıyor" isLoading={isLoading} />
+        <MetricCard label="Uyarılı satır" value={rows.length ? warnedRows : null} tone={warnedRows > 0 ? "warn" : "neutral"} isLoading={isLoading} />
+      </div>
       <WarningsBlock warnings={allWarnings} />
       <DetailTable<ShiftStatRow> title={`Vardiya × tezgah${data ? ` (${data.meta.total}; anlık ${data.meta.live}, mühürlü ${data.meta.sealed})` : ""}`} data={rows} columns={columns} isLoading={isLoading} />
       {dialog?.kind === "ledger" && <LedgerDialog target={dialog.target} onClose={() => setDialog(null)} />}

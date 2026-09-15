@@ -5,9 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowDown, ArrowUp, ScanBarcode, Search, Wrench } from "lucide-react";
-import { productionReportsApi, type TravelerEvent } from "./service";
+import { productionReportsApi, type TravelerEvent, type TravelerTraceResult } from "./service";
 import apiClient from "@/services/apiClient";
-import { ReportPageLayout } from "../_components";
+import { MetricCard, ReportPageLayout } from "../_components";
 import { ReportExportBar } from "../_components/ReportExportBar";
 import { fmtDateTime, fmtMeters } from "../_components/formatters";
 // Etiket sözlükleri dışa aktarım spec'iyle ORTAK: ekranda "Kurşun Geçildi" yazıp
@@ -37,6 +37,19 @@ async function resolveRoll(query: string): Promise<RollLookupItem | null> {
     // ignore, fall through
   }
   return null;
+}
+
+/** Özet şeridi ayrı bileşen (lint: sayfa fonksiyonu satır tavanında). */
+function TraceSummaryStrip({ trace }: { trace: TravelerTraceResult }) {
+  // Tek topun raporunda "toplam" yoktur; özetlenecek şey TOPUN KENDİSİDİR.
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <MetricCard label="Adım" value={trace.events.length} hint="Okutulan istasyon olayı" />
+      <MetricCard label="Giriş metrajı" value={fmtMeters(trace.roll.initialQty)} hint="Üretim anı snapshot'ı" />
+      <MetricCard label="Kalan metraj" value={fmtMeters(trace.roll.currentQty)} hint={trace.roll.currentQty < trace.roll.initialQty ? "Kesim/sevk sonrası" : undefined} />
+      <MetricCard label="Kalite" value={trace.roll.qualityGrade} hint={trace.roll.status} />
+    </div>
+  );
 }
 
 export function TravelerTracePage() {
@@ -109,7 +122,10 @@ export function TravelerTracePage() {
       ) : !data ? (
         <Card className="p-8 text-center text-sm text-muted-foreground">Rulo bulunamadı.</Card>
       ) : (
-        <TraceContent trace={data.data} />
+        <>
+          <TraceSummaryStrip trace={data.data} />
+          <TraceContent trace={data.data} />
+        </>
       )}
     </ReportPageLayout>
   );

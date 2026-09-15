@@ -33,7 +33,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { ReportDateFilter, ReportExportBar, ReportPageLayout } from "../_components";
+import { MetricCard, ReportDateFilter, ReportExportBar, ReportPageLayout } from "../_components";
 import { useForwardWindow } from "../_hooks/useForwardWindow";
 import { fmtInt } from "../_components/formatters";
 import { ReportErrorCard } from "./ReportErrorCard";
@@ -58,6 +58,21 @@ import {
 
 /** Kart olarak çizilen kovalar — SIRA anlamlı (geçmiş → uzak). */
 const CARD_BUCKETS: ChequeDueBucket[] = ["OVERDUE", "SOON", "MONTH", "LATER"];
+
+/** Özet şeridi ayrı bileşen: sayfa fonksiyonu satır tavanına dayanıyordu (lint). */
+function DueSummaryStrip({ data, isLoading }: { data: ChequeDueSummary | undefined; isLoading: boolean }) {
+  // Kova adedi: aynı kovadaki tüm kalem satırlarının adedi (para birimi ve tür
+  // fark etmeksizin) — ADET birimsizdir, tutarın aksine toplanabilir.
+  const bucketCount = (bucket: ChequeDueBucket) => (data?.buckets ?? []).filter((b) => b.bucket === bucket).reduce((n, b) => n + b.count, 0);
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <MetricCard label="Vadesi geçmiş" value={data ? bucketCount("OVERDUE") : null} hint="Tahsil/ödeme bekliyor" tone={data && bucketCount("OVERDUE") > 0 ? "bad" : "neutral"} isLoading={isLoading} />
+      <MetricCard label="Yaklaşan" value={data ? bucketCount("SOON") : null} hint={data ? `${data.soonDays} gün içinde` : undefined} tone={data && bucketCount("SOON") > 0 ? "warn" : "neutral"} isLoading={isLoading} />
+      <MetricCard label="Bu ay" value={data ? bucketCount("MONTH") : null} isLoading={isLoading} />
+      <MetricCard label="İleride" value={data ? bucketCount("LATER") : null} hint="Pencere sonuna kadar" isLoading={isLoading} />
+    </div>
+  );
+}
 
 export function ChequeDuePage() {
   // Pencere URL'de (`dueFrom`/`dueTo`), parametreyi `ileri-pencere` sözleşmesi üretir:
@@ -91,6 +106,7 @@ export function ChequeDuePage() {
         <ReportDateFilter reportKey="finance/cheque-due" anchorToday={data?.today ?? null} windowFallback={data?.window ?? null} />
       }
     >
+      <DueSummaryStrip data={data} isLoading={q.isLoading} />
       {q.isError ? <ReportErrorCard error={q.error} onRetry={() => void q.refetch()} /> : null}
 
       {q.isError ? null : (
