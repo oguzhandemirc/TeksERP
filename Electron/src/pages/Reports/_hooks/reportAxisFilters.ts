@@ -68,9 +68,9 @@ export function filterNotes(parts: Array<{ eksen: string; degerler: string[]; se
 
 /**
  * "Süzgeç kesti" cümlesi: boş tablo ile süzülmüş tablo aynı şey değildir.
- * ⚠️ Bugün YALNIZ dokuma (R5b-b) yanıtı `dusenSatir` taşır; satış/müşteri/fason
- * ailesinin `suzgec` yankısı yalnız VERİLEN anahtarları basar ⇒ orada bu satır
- * hiç doğmaz (ölçüldü: `_filters.filterEcho`).
+ * ⚠️ Alan OPSİYONELDİR ve yokluğu "kesilmedi" DEĞİL "bilinmiyor"dur: anahtar
+ * yoksa satır hiç yazılmaz. Dokuma (R5b-b) baştan taşıyordu; satış/müşteri/fason
+ * ailesine 6e `c52c2bc4` ile geldi (aynı yayın).
  */
 export function droppedNote(dusenSatir: number | undefined): string | null {
   return dusenSatir && dusenSatir > 0 ? `Süzgeç ${dusenSatir} satırı kapsam dışında bıraktı.` : null;
@@ -136,4 +136,44 @@ export function axisNotes({ eksenler, destination, secenekler, sel, dusenSatir, 
   if (notes.length === 0) return notes;
   const dropped = droppedNote(dusenSatir);
   return [...notes, ...ek, ...(dropped ? [dropped] : [])];
+}
+
+// -----------------------------------------------------------------------------
+// LEVENT / LOT ŞERHLERİ (R5b-b2) — sunucunun YANKISI ekrana ve kâğıda geçer
+// -----------------------------------------------------------------------------
+/** Sunucunun süzgeç beyanı: verilen anahtarlar + kaç levent eşleşti, kaç satır düştü. */
+export interface BeamSuzgec {
+  warpBeamId?: string;
+  lotNo?: string;
+  levent: number;
+  dusenSatir: number;
+}
+
+/**
+ * Levent/lot süzgecinin satırları. İki şey EKRANDA da KÂĞITTA da yazılı olmalı:
+ * ① lot ekseni LEVENT üzerinden süzer (lotla sarılmış leventlerin satırları) —
+ * "bu lotun topları" değil ② eşleşen levent SIFIRSA rapor boştur ve bu bir HATA
+ * DEĞİL sonuçtur (bilinmeyen levent/lot 404 dönmez, boş döner).
+ */
+export function beamLotNotes(opts: { beamLabel?: string | null; lotNo?: string; suzgec?: BeamSuzgec }): string[] {
+  const { beamLabel, lotNo, suzgec } = opts;
+  const notes = filterNotes([
+    { eksen: "Levent", degerler: beamLabel ? [beamLabel] : [] },
+    {
+      eksen: "İplik lotu",
+      degerler: lotNo ? [lotNo] : [],
+      serh: "Lot ekseni LEVENT üzerinden süzer: bu lotla sarılmış leventlerin satırları.",
+    },
+  ]);
+  if (notes.length === 0) return notes;
+  if (suzgec) {
+    notes.push(
+      suzgec.levent === 0
+        ? "Eşleşen levent YOK — tablo bu yüzden boş; bu bir hata değil, süzgecin sonucudur."
+        : `Süzgeç ${suzgec.levent} leventle eşleşti.`,
+    );
+    const dropped = droppedNote(suzgec.dusenSatir);
+    if (dropped) notes.push(dropped);
+  }
+  return notes;
 }

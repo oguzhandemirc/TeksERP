@@ -45,11 +45,14 @@ export function buildScrapExport(opts: {
   sc: ScrapScorecard;
   periodLabel: string;
   compareLabel: string | null;
+  /** Süzgeç satırları (K10) — ekrandakiyle AYNI dizi. */
+  filterNotes?: string[];
 }): ReportExportSpec {
-  const { sc, periodLabel, compareLabel } = opts;
+  const { sc, periodLabel, compareLabel, filterNotes = [] } = opts;
   const hasCompare = compareLabel !== null;
 
   const meta = [
+    ...filterNotes,
     "HURDA metrajı, topun üretimi bitirip hurdaya ayrıldığı ana göre alınır.",
     // Bu cümle olmadan iki tablo toplanabilir sanılır ve hiçbir uyarı çıkmaz.
     "TESPİT tabloları AYRI bir zaman çıpası kullanır (hatanın görüldüğü an) ve ADET taşır — hurda metrajıyla toplanmaz.",

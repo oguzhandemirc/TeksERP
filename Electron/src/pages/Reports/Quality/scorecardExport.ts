@@ -89,11 +89,14 @@ export function buildScorecardExport(opts: {
   sc: QualityScorecard;
   periodLabel: string;
   compareLabel: string | null;
+  /** Süzgeç satırları (K10) — ekrandakiyle AYNI dizi. */
+  filterNotes?: string[];
 }): ReportExportSpec {
-  const { sc, periodLabel, compareLabel } = opts;
+  const { sc, periodLabel, compareLabel, filterNotes = [] } = opts;
   const hasCompare = compareLabel !== null;
 
   const meta: string[] = [
+    ...filterNotes,
     // Ölçünün TANIMI rakamla aynı dosyada durmalı: Excel elden ele dolaşırken
     // "bu yüzde neyin yüzdesi" sorusunun cevabı kaybolmasın.
     "Oranlar METRAJ ağırlıklıdır (top adedi değil). Dönem, topun üretimi bitirip rafına girdiği ana göre alınır.",

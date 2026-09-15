@@ -6,6 +6,7 @@
 // anahtar 400). Rapor sözleşmesi: oranlar `null` = ÖLÇÜLEMEDİ (0 değil); kaynak
 // kırılımı her cevapta; `meta.ufuk` her cevapta.
 // =============================================================================
+import type { BeamSuzgec } from "../_hooks/reportAxisFilters";
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
 import type { DataSource } from "./dokuma-regime";
@@ -23,7 +24,13 @@ export interface LoomKpis {
 }
 export interface SourceBreakdown { satir: number; potSec: number }
 export type SourceBreakdownTable = Record<DataSource, SourceBreakdown>;
-export interface LoomReportMeta { ufuk: string; ufukOncesiSatir: number; total: number; truncated: boolean; live: number; sealed: number }
+export interface LoomReportMeta {
+  ufuk: string; ufukOncesiSatir: number; total: number; truncated: boolean; live: number; sealed: number;
+  /** R5b-b2 levent seçicisinin kaynağı; ESKİ sunucu göndermez ⇒ alan opsiyonel, seçici o zaman pasif çizilir. */
+  leventler?: BeamOption[];
+}
+
+export interface BeamOption { id: string; leventNo: string }
 
 export interface EfficiencyRow {
   machineId: string; machine: { code: string; name: string };
@@ -102,7 +109,10 @@ export interface SealLedgerRow {
   actedById: string | null; createdAt: string; potSec: number; aptSec: number; unitsActual: number; effectivenessPct: string | number | null;
 }
 
-export interface RangeParams { from: string; to: string; machineId?: string }
+/** Süzgeç beyanı cevabın KÖKÜNDE (tek adres — 1e hükmü); süzgeç yoksa alan YOK. */
+export type WithSuzgec = { suzgec?: BeamSuzgec };
+
+export interface RangeParams { from: string; to: string; machineId?: string; warpBeamId?: string; lotNo?: string }
 
 function qs(p: object): string {
   const s = new URLSearchParams();
@@ -113,11 +123,11 @@ function qs(p: object): string {
 
 export const dokumaReportsApi = {
   efficiency: async (p: RangeParams) =>
-    (await apiClient.get<ApiResponse<EfficiencyReport>>(`/api/reports/dokuma/randiman${qs(p)}`)).data,
+    (await apiClient.get<ApiResponse<EfficiencyReport> & WithSuzgec>(`/api/reports/dokuma/randiman${qs(p)}`)).data,
   pareto: async (p: RangeParams) =>
-    (await apiClient.get<ApiResponse<ParetoReport>>(`/api/reports/dokuma/durus-pareto${qs(p)}`)).data,
-  shiftScorecard: async (p: { factoryDay: string; shiftDefinitionId?: string }) =>
-    (await apiClient.get<ApiResponse<ShiftScorecardReport>>(`/api/reports/dokuma/vardiya-karnesi${qs(p)}`)).data,
+    (await apiClient.get<ApiResponse<ParetoReport> & WithSuzgec>(`/api/reports/dokuma/durus-pareto${qs(p)}`)).data,
+  shiftScorecard: async (p: { factoryDay: string; shiftDefinitionId?: string; warpBeamId?: string; lotNo?: string }) =>
+    (await apiClient.get<ApiResponse<ShiftScorecardReport> & WithSuzgec>(`/api/reports/dokuma/vardiya-karnesi${qs(p)}`)).data,
   shiftStats: async (p: RangeParams & { sealState?: SealState }) =>
     (await apiClient.get<ApiResponse<ShiftStatRow[]> & { meta: ShiftStatListMeta }>(`/api/machine-shift-stats${qs(p)}`)).data,
   seals: async (statId: string) =>

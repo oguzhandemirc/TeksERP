@@ -11,7 +11,7 @@
 // =============================================================================
 import { describe, expect, it } from "vitest";
 import type { AxisKey, Destination } from "./reportAxisFilters";
-import { axisNotes, axisParams, droppedNote, filterNotes, labelsOf, parseCsv, toCsv } from "./reportAxisFilters";
+import { beamLotNotes, axisNotes, axisParams, droppedNote, filterNotes, labelsOf, parseCsv, toCsv } from "./reportAxisFilters";
 
 describe("eksen süzgeci — saf yarı", () => {
   it("CSV ayrıştırma: boşluk kırpılır, tekrar elenir, sıra korunur", () => {
@@ -98,5 +98,31 @@ describe("axisNotes — sayfanın süzgeç satırları (ekran = çıktı)", () =
       ek: ["ABC süzülmüş evrende"],
     });
     expect(n).toEqual(["SÜZGEÇ — Müşteri: Acme.", "ABC süzülmüş evrende", "Süzgeç 3 satırı kapsam dışında bıraktı."]);
+  });
+});
+
+describe("beamLotNotes — levent/lot şerhleri", () => {
+  it("süzgeç yokken satır YOK", () => {
+    expect(beamLotNotes({})).toEqual([]);
+    expect(beamLotNotes({ beamLabel: null, lotNo: "" })).toEqual([]);
+  });
+
+  it("⭐ lot ekseninin LEVENT üzerinden süzdüğü yazılı ('bu lotun topları' değil)", () => {
+    const n = beamLotNotes({ lotNo: "LOT-9" });
+    expect(n[0]).toContain("İplik lotu: LOT-9");
+    expect(n[0]).toContain("LEVENT üzerinden süzer");
+  });
+
+  it("⭐ eşleşen levent SIFIRSA boşluğun sebebi yazılır (hata değil, sonuç)", () => {
+    const n = beamLotNotes({ lotNo: "YOK", suzgec: { lotNo: "YOK", levent: 0, dusenSatir: 12 } });
+    expect(n.some((x) => x.includes("Eşleşen levent YOK"))).toBe(true);
+    expect(n.some((x) => x.includes("12 satırı kapsam dışında"))).toBe(true);
+  });
+
+  it("levent sayısı ve düşen satır sunucunun YANKISINDAN gelir, sayfadan değil", () => {
+    const n = beamLotNotes({ beamLabel: "L-77", suzgec: { warpBeamId: "b1", levent: 3, dusenSatir: 0 } });
+    expect(n[0]).toBe("SÜZGEÇ — Levent: L-77.");
+    expect(n[1]).toBe("Süzgeç 3 leventle eşleşti.");
+    expect(n).toHaveLength(2);
   });
 });

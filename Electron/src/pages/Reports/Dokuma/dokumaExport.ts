@@ -64,8 +64,8 @@ const sourceCell = (r: { emptyLoom: boolean; source: DataSource }): string =>
 
 // ---------- ① Randıman -------------------------------------------------------
 
-export function buildRandimanExport(opts: { rapor: EfficiencyReport; periodLabel: string; filterLabel?: string | null }): ReportExportSpec {
-  const { rapor, periodLabel, filterLabel } = opts;
+export function buildRandimanExport(opts: { rapor: EfficiencyReport; periodLabel: string; filterLabel?: string | null; extraNotes?: string[] }): ReportExportSpec {
+  const { rapor, periodLabel, filterLabel, extraNotes = [] } = opts;
   const t = rapor.toplam;
   return {
     title: "Randıman",
@@ -73,6 +73,7 @@ export function buildRandimanExport(opts: { rapor: EfficiencyReport; periodLabel
     orientation: "landscape",
     meta: [
       ...filterNote("Tezgah", filterLabel),
+      ...extraNotes,
       "Kullanılabilirlik · performans · etkinlik AYRI sunulur, ÇARPILMAZ.",
       UNMEASURED_NOTE,
       SOURCE_COLUMN_NOTE,
@@ -122,8 +123,8 @@ const LOSS_LABELS: Record<string, string> = {
   UNPLANNED: "Plansız", SETUP: "Kurulum", PLANNED: "Planlı", NON_SCHEDULED: "Çalışma dışı", MINOR: "Mikro",
 };
 
-export function buildParetoExport(opts: { rapor: ParetoReport; periodLabel: string; filterLabel?: string | null }): ReportExportSpec {
-  const { rapor, periodLabel, filterLabel } = opts;
+export function buildParetoExport(opts: { rapor: ParetoReport; periodLabel: string; filterLabel?: string | null; extraNotes?: string[] }): ReportExportSpec {
+  const { rapor, periodLabel, filterLabel, extraNotes = [] } = opts;
   const bucketRow = (ad: string, b: { stopCount: number; stopSec: number }, aciklama: string) => ({
     kova: ad, olay: b.stopCount, sure: fmtSec(b.stopSec), aciklama,
   });
@@ -132,6 +133,7 @@ export function buildParetoExport(opts: { rapor: ParetoReport; periodLabel: stri
     subtitle: periodLabel,
     meta: [
       ...filterNote("Tezgah", filterLabel),
+      ...extraNotes,
       "Sebep sıralama ekseni, süre sınıfı gruplama eksenidir; mikro duruş bir sebep DEĞİL bir süre sınıfıdır.",
       SOURCE_COLUMN_NOTE,
       ...sourceBreakdownNote(rapor.kaynakKirilimi, "karne"),
@@ -177,14 +179,15 @@ export function buildParetoExport(opts: { rapor: ParetoReport; periodLabel: stri
 
 // ---------- ③ Vardiya Karnesi ------------------------------------------------
 
-export function buildVardiyaKarnesiExport(opts: { rapor: ShiftScorecardReport; day: string; filterLabel?: string | null }): ReportExportSpec {
-  const { rapor, day, filterLabel } = opts;
+export function buildVardiyaKarnesiExport(opts: { rapor: ShiftScorecardReport; day: string; filterLabel?: string | null; extraNotes?: string[] }): ReportExportSpec {
+  const { rapor, day, filterLabel, extraNotes = [] } = opts;
   return {
     title: "Vardiya Karnesi",
     subtitle: `Fabrika günü ${day}`,
     orientation: "landscape",
     meta: [
       ...filterNote("Vardiya", filterLabel),
+      ...extraNotes,
       "Her satır kaynağını taşır; toplam tek yüzdeye çökertilmez.",
       UNMEASURED_NOTE,
       SOURCE_COLUMN_NOTE,

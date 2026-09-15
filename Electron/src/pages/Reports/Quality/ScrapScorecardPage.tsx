@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
 import { AlertOctagon, Bug, Percent, Trash2 } from "lucide-react";
 import {
   BreakdownTable,
@@ -14,8 +13,13 @@ import {
 import { fmtDate, fmtInt, fmtNum, fmtPercent } from "../_components/formatters";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
 import { useReportCompare } from "../_hooks/useReportCompare";
-import { qualityReportsApi, type DefectDetectionRow } from "./service";
+import { useBeamLot } from "../_hooks/useBeamLot";
+import { beamLotNotes } from "../_hooks/reportAxisFilters";
+import { LotInput } from "../_components/LotInput";
+import { ReportDateFilter, ReportFilterNotes } from "../_components";
+import { qualityReportsApi } from "./service";
 import { buildScrapExport } from "./scrapExport";
+import { detectionColumns } from "./scrapColumns";
 
 function hint(now: number | undefined, prev: number | undefined, unit: string): string | undefined {
   if (prev === undefined || now === undefined) return undefined;
@@ -24,45 +28,24 @@ function hint(now: number | undefined, prev: number | undefined, unit: string): 
   return `Önceki dönem ${fmtNum(prev)}${unit} · ${arrow} ${fmtNum(Math.abs(d))}${unit}`;
 }
 
-const detectionColumns: ColumnDef<DefectDetectionRow, unknown>[] = [
-  { accessorKey: "label", header: "Hata / İstasyon" },
-  {
-    accessorKey: "count",
-    header: () => <div className="text-right">Tespit</div>,
-    cell: ({ getValue }) => <div className="text-right font-medium tabular-nums">{fmtInt(getValue() as number)}</div>,
-  },
-  {
-    accessorKey: "cutCount",
-    header: () => <div className="text-right">Kesildi</div>,
-    cell: ({ getValue }) => <div className="text-right tabular-nums text-muted-foreground">{fmtInt(getValue() as number)}</div>,
-  },
-  {
-    accessorKey: "noCutCount",
-    header: () => <div className="text-right">Tutuldu</div>,
-    cell: ({ getValue }) => <div className="text-right tabular-nums text-muted-foreground">{fmtInt(getValue() as number)}</div>,
-  },
-  {
-    accessorKey: "openCount",
-    header: () => <div className="text-right">Açık</div>,
-    cell: ({ getValue }) => {
-      const v = getValue() as number;
-      return <div className={`text-right tabular-nums ${v > 0 ? "text-warning" : "text-muted-foreground"}`}>{fmtInt(v)}</div>;
-    },
-  },
-];
 
 export function ScrapScorecardPage() {
   const { params, dateFrom, dateTo } = useReportDateRange("quality/scrap-scorecard");
   const compare = useReportCompare();
 
+  // ⚠️ LEVENT SEÇİCİSİ YOK, LOT KUTUSU VAR: kalite/fire yanıtı `meta.leventler`
+  // taşımaz (kaynak yok) — seçenek listesi olmayan bir seçici çizmek, olmayan
+  // bir veriyi vaat etmektir. Lot serbest metindir, kaynak istemez.
+  const beamLot = useBeamLot();
   const query = useQuery({
-    queryKey: ["reports", "quality", "scrap-scorecard", params, compare.params],
-    queryFn: () => qualityReportsApi.scrapScorecard({ ...params, ...compare.params }),
+    queryKey: ["reports", "quality", "scrap-scorecard", params, compare.params, beamLot.params],
+    queryFn: () => qualityReportsApi.scrapScorecard({ ...params, ...compare.params, ...beamLot.params }),
     enabled: Boolean(params.dateFrom && params.dateTo),
     staleTime: 30_000,
   });
 
   const sc = query.data?.data;
+  const suzgecNotlari = beamLotNotes({ lotNo: beamLot.lotNo });
   const cmpRange = query.data?.compareRange;
   const hasCompare = Boolean(cmpRange);
   const periodLabel = `${fmtDate(dateFrom)} – ${fmtDate(dateTo)}`;
@@ -70,8 +53,8 @@ export function ScrapScorecardPage() {
   const scrapQty = sc?.summary.scrapQty ?? 0;
 
   const spec = useMemo(
-    () => () => (sc ? buildScrapExport({ sc, periodLabel, compareLabel }) : null),
-    [sc, periodLabel, compareLabel],
+    () => () => (sc ? buildScrapExport({ sc, periodLabel, compareLabel, filterNotes: suzgecNotlari }) : null),
+    [sc, periodLabel, compareLabel, suzgecNotlari],
   );
 
   return (
@@ -80,8 +63,15 @@ export function ScrapScorecardPage() {
       title="Fire Karnesi"
       description="Hurdaya ayrılan metraj ve nedenleri — Kalite Karnesi ile aynı üretim evreni üzerinden."
       showCompare
+      filters={
+        <div className="flex flex-wrap items-end gap-3 border-b px-4 py-3">
+          <ReportDateFilter reportKey="quality/scrap-scorecard" showCompare bare />
+          <LotInput id="fire-lot" value={beamLot.lotNo} onChange={beamLot.setLot} />
+        </div>
+      }
       actions={<ReportExportBar disabled={!sc} buildSpec={spec} />}
     >
+      <ReportFilterNotes notes={suzgecNotlari} />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           label="Fire oranı"

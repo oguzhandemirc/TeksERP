@@ -63,3 +63,13 @@ export function optionLabel(options: FilterOption[], id: string): string | null 
 export function pickReportData<T>(opts: { windowData: T | undefined; filteredData: T | undefined; filterId: string }): T | undefined {
   return opts.filterId ? opts.filteredData : opts.windowData;
 }
+
+/**
+ * Levent seçeneği kaynağı: raporun KENDİ `meta.leventler`i (R5b-b2). Makine
+ * listesinin aksine bu liste sunucudan gelir ve SÜZGEÇTEN BAĞIMSIZDIR — ayrı
+ * bir levent ucundan çekilseydi `warpbeam:read` izni gerekirdi ve rapor
+ * kitlesinde 403 riski vardı (gerekçe dosya başlığındaki aynı sınıf).
+ */
+export function beamOptionsFrom(leventler: ReadonlyArray<{ id: string; leventNo: string }> | undefined): FilterOption[] {
+  return uniqueSorted((leventler ?? []).map((b) => ({ id: b.id, label: b.leventNo })));
+}

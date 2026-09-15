@@ -14,7 +14,9 @@
 // sözleşmesiyle hizası sürüm notu geri-okumasında denetlenir.
 //
 // Negatif sondalar (bir kezlik, cp+sha256 ile geri alındı): bir yapraktan
-// `<ReportAxisBar` kaldırıldı → ⭐① ❌ · beyandaki `colorId` şeritten düşürüldü → ⭐② ❌.
+// `<ReportAxisBar` kaldırıldı → ⭐① ❌ · beyandaki `colorId` şeritten düşürüldü → ⭐② ❌ ·
+// Randıman'dan `<LotInput` kaldırıldı → ⭐③ ❌ · Kalite Karnesi'ne KAYNAKSIZ levent
+// seçicisi eklendi → ⭐④ ❌.
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -35,6 +37,19 @@ const AXES_BY_REPORT: Record<string, readonly string[]> = {
   "customer/order-profile": ["customerId", "destination"],
   // Fasonda hedef ekseni yok: sevk müşteriye değil firmaya gider.
   "subcontract/scorecard": ["subcontractorId", "itemId", "colorId"],
+};
+
+/**
+ * Levent/lot ekseni (R5b-b2): dokuma üçlüsünde LEVENT SEÇİCİSİ + lot kutusu,
+ * kalite/fire ikizinde YALNIZ lot kutusu — o yanıt `meta.leventler` taşımadığı
+ * için seçici çizilemez (kaynağı olmayan seçici, olmayan veriyi vaat eder).
+ */
+const BEAM_LOT_BY_REPORT: Record<string, "levent+lot" | "lot"> = {
+  "dokuma/randiman": "levent+lot",
+  "dokuma/durus-pareto": "levent+lot",
+  "dokuma/vardiya-karnesi": "levent+lot",
+  "quality/scorecard": "lot",
+  "quality/scrap-scorecard": "lot",
 };
 
 const LEAF_RE = /path:\s*"reports\/([a-z0-9-]+\/[a-z0-9-]+)"[\s\S]{0,400}?<([A-Z][A-Za-z0-9]*)\s*\/>/g;
@@ -77,6 +92,28 @@ describe("eksen süzgeci kapsamı — beyan ↔ ekran", () => {
       const b = [...beklenen].sort().join(",");
       const g = [...gercek].sort().join(",");
       if (b !== g) sapma.push(`${anahtar}: beyan [${b}] ≠ ekran [${g}]`);
+    }
+    expect(sapma).toEqual([]);
+  });
+});
+
+describe("levent/lot ekseni kapsamı — beyan ↔ ekran", () => {
+  it("zemin: beyan edilen beş yaprağın hepsi route'ta var", () => {
+    expect(Object.keys(BEAM_LOT_BY_REPORT).filter((k) => !yapraklar.has(k))).toEqual([]);
+  });
+
+  it("⭐③ lot ekseni beyan eden her yaprak <LotInput çizer", () => {
+    const eksik = Object.keys(BEAM_LOT_BY_REPORT).filter((k) => !kaynak(k).includes("<LotInput"));
+    expect(eksik).toEqual([]);
+  });
+
+  it("⭐④ levent seçicisi YALNIZ kaynağı olan yapraklarda (`meta.leventler`) — fazlası da eksiği de kırmızı", () => {
+    const sapma: string[] = [];
+    for (const [anahtar, kip] of Object.entries(BEAM_LOT_BY_REPORT)) {
+      const src = kaynak(anahtar);
+      const secici = /label="Levent"/.test(src) && src.includes("beamOptionsFrom");
+      if (kip === "levent+lot" && !secici) sapma.push(`${anahtar}: levent seçicisi beyan edildi ama çizilmiyor`);
+      if (kip === "lot" && secici) sapma.push(`${anahtar}: kaynağı olmayan levent seçicisi çizilmiş`);
     }
     expect(sapma).toEqual([]);
   });

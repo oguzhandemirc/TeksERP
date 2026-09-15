@@ -125,9 +125,12 @@ export interface PlanDeviationScorecard {
   detail: PlanDeviationDetailRow[];
 }
 
+/** Levent/lot ekseni (R5b-b): kalite ve fire karnesi ikizdir, aynı anahtarları alır. */
+export type QualityParams = ReportCompareParams & { warpBeamId?: string; lotNo?: string };
+
 export const qualityReportsApi = {
-  scorecard: (p: ReportCompareParams) => reportsClient.get<QualityScorecard>("quality/scorecard", p),
-  scrapScorecard: (p: ReportCompareParams) =>
+  scorecard: (p: QualityParams) => reportsClient.get<QualityScorecard>("quality/scorecard", p),
+  scrapScorecard: (p: QualityParams) =>
     reportsClient.get<ScrapScorecard>("quality/scrap-scorecard", p),
   planDeviationScorecard: (p: ReportCompareParams) =>
     reportsClient.get<PlanDeviationScorecard>("quality/plan-deviation-scorecard", p),

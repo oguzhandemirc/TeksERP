@@ -6,11 +6,14 @@ import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ChartCard, DetailTable, MetricCard, ReportExportBar, ReportDateFilter, ReportPageLayout, SimpleBarChart } from "../_components";
+import { ChartCard, DetailTable, MetricCard, ReportExportBar, ReportDateFilter, ReportFilterNotes, ReportPageLayout, SimpleBarChart } from "../_components";
 import { fmtInt } from "../_components/formatters";
 import { buildParetoExport } from "./dokumaExport";
 import { DokumaFilterBar } from "./DokumaFilterBar";
-import { machineOptionsFrom, optionLabel, pickReportData } from "./dokumaFilters";
+import { LotInput } from "../_components/LotInput";
+import { useBeamLot } from "../_hooks/useBeamLot";
+import { beamLotNotes } from "../_hooks/reportAxisFilters";
+import { beamOptionsFrom, machineOptionsFrom, optionLabel, pickReportData } from "./dokumaFilters";
 import { HorizonNote, SourceBreakdownStrip, fmtSec, useFactoryRange } from "./DokumaShared";
 import { dokumaReportsApi, type LossClass, type ParetoReasonRow } from "./service";
 
@@ -31,6 +34,7 @@ export function DurusParetoPage() {
   const [sp, setSp] = useSearchParams();
   const machineId = sp.get("machine") ?? "";
   // PENCERE sorgusu (süzgeçsiz): süzgeç yokken tablo buradan gelir.
+  const beamLot = useBeamLot();
   const pencere = useQuery({
     queryKey: ["reports", "dokuma", "durus-pareto", range.from, range.to],
     queryFn: () => dokumaReportsApi.pareto({ from: range.from, to: range.to }),
@@ -38,9 +42,9 @@ export function DurusParetoPage() {
     staleTime: 30_000,
   });
   const suzgecli = useQuery({
-    queryKey: ["reports", "dokuma", "durus-pareto", range.from, range.to, machineId],
-    queryFn: () => dokumaReportsApi.pareto({ from: range.from, to: range.to, machineId }),
-    enabled: range.ready && machineId !== "",
+    queryKey: ["reports", "dokuma", "durus-pareto", range.from, range.to, machineId, beamLot.params],
+    queryFn: () => dokumaReportsApi.pareto({ from: range.from, to: range.to, machineId, ...beamLot.params }),
+    enabled: range.ready && (machineId !== "" || beamLot.any),
     staleTime: 30_000,
   });
   // ⚠️ SEÇENEK LİSTESİ BU RAPORDAN DOĞAMAZ: Pareto satırı SEBEP eksenlidir,
@@ -54,17 +58,25 @@ export function DurusParetoPage() {
     enabled: range.ready,
     staleTime: 30_000,
   });
-  const isLoading = pencere.isLoading || (machineId !== "" && suzgecli.isLoading);
-  const data = pickReportData({ windowData: pencere.data, filteredData: suzgecli.data, filterId: machineId });
+  const suzgecVar = machineId !== "" || beamLot.any;
+  const isLoading = pencere.isLoading || (suzgecVar && suzgecli.isLoading);
+  const data = pickReportData({ windowData: pencere.data, filteredData: suzgecli.data, filterId: suzgecVar ? "1" : "" });
   const rapor = data?.data;
   const machineOptions = useMemo(() => machineOptionsFrom(makineKaynagi.data?.data.satirlar), [makineKaynagi.data]);
   const machineLabel = optionLabel(machineOptions, machineId);
+  // Levent listesi PARETO'nun kendi yanıtından: Pareto satırları sebep eksenli
+  // ama `meta.leventler` pencerenin tezgahlarından türer, sebepten değil.
+  const beamOptions = useMemo(() => beamOptionsFrom(pencere.data?.data.meta.leventler), [pencere.data]);
+  const suzgecNotlari = useMemo(
+    () => beamLotNotes({ beamLabel: optionLabel(beamOptions, beamLot.beamId), lotNo: beamLot.lotNo, suzgec: data?.suzgec }),
+    [beamOptions, beamLot.beamId, beamLot.lotNo, data],
+  );
   const chartRows = (rapor?.sebepler ?? []).slice(0, 10);
   const chartData = chartRows.map((r) => ({ name: r.reasonLabel ?? r.reasonCode, dk: Math.round(r.stopSec / 60) }));
   const periodLabel = `${range.from} – ${range.to} (fabrika günü)`;
   const spec = useMemo(
-    () => () => (rapor ? buildParetoExport({ rapor, periodLabel, filterLabel: machineLabel }) : null),
-    [rapor, periodLabel, machineLabel],
+    () => () => (rapor ? buildParetoExport({ rapor, periodLabel, filterLabel: machineLabel, extraNotes: suzgecNotlari }) : null),
+    [rapor, periodLabel, machineLabel, suzgecNotlari],
   );
   const filters = (
     <div className="flex flex-wrap items-end gap-3 border-b px-4 py-3">
@@ -76,6 +88,8 @@ export function DurusParetoPage() {
         options={machineOptions}
         onChange={(id) => setSp((prev) => { const n = new URLSearchParams(prev); if (id) n.set("machine", id); else n.delete("machine"); return n; }, { replace: true })}
       />
+      <DokumaFilterBar id="pareto-levent" label="Levent" value={beamLot.beamId} options={beamOptions} onChange={beamLot.setBeam} />
+      <LotInput id="pareto-lot" value={beamLot.lotNo} onChange={beamLot.setLot} />
     </div>
   );
 
@@ -87,6 +101,7 @@ export function DurusParetoPage() {
       filters={filters}
       actions={<ReportExportBar disabled={!rapor} buildSpec={spec} />}
     >
+      <ReportFilterNotes notes={suzgecNotlari} />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Toplam duruş" value={rapor ? fmtSec(rapor.toplam.stopSec) : null} hint={rapor ? `${fmtInt(rapor.toplam.stopCount)} olay = sebepler + mikro + sınıflandırılmamış` : undefined} isLoading={isLoading} />
         <MetricCard label="Mikro duruşlar (eşik altı)" value={rapor ? fmtSec(rapor.mikroDuruslar.stopSec) : null} hint={rapor ? `${fmtInt(rapor.mikroDuruslar.stopCount)} olay — sebep listesinde değil` : undefined} isLoading={isLoading} />

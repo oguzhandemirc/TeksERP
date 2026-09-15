@@ -5,6 +5,10 @@ import { ReportExportBar } from "../_components/ReportExportBar";
 import { fmtDate, fmtInt, fmtNum, fmtPercent } from "../_components/formatters";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
 import { useReportCompare } from "../_hooks/useReportCompare";
+import { useBeamLot } from "../_hooks/useBeamLot";
+import { beamLotNotes } from "../_hooks/reportAxisFilters";
+import { LotInput } from "../_components/LotInput";
+import { ReportDateFilter, ReportFilterNotes } from "../_components";
 import { qualityReportsApi } from "./service";
 import { ScorecardBreakdown } from "./ScorecardBreakdown";
 import { buildScorecardExport } from "./scorecardExport";
@@ -21,14 +25,18 @@ export function QualityScorecardPage() {
   const { params, dateFrom, dateTo } = useReportDateRange("quality/scorecard");
   const compare = useReportCompare();
 
+  // Levent seçicisi YOK (yanıt `meta.leventler` taşımaz), lot kutusu VAR —
+  // gerekçe ikizinde (`ScrapScorecardPage`) yazılı.
+  const beamLot = useBeamLot();
   const query = useQuery({
-    queryKey: ["reports", "quality", "scorecard", params, compare.params],
-    queryFn: () => qualityReportsApi.scorecard({ ...params, ...compare.params }),
+    queryKey: ["reports", "quality", "scorecard", params, compare.params, beamLot.params],
+    queryFn: () => qualityReportsApi.scorecard({ ...params, ...compare.params, ...beamLot.params }),
     enabled: Boolean(params.dateFrom && params.dateTo),
     staleTime: 30_000,
   });
 
   const sc = query.data?.data;
+  const suzgecNotlari = beamLotNotes({ lotNo: beamLot.lotNo });
   const cmpRange = query.data?.compareRange;
   const hasCompare = Boolean(cmpRange);
   const periodLabel = `${fmtDate(dateFrom)} – ${fmtDate(dateTo)}`;
@@ -42,15 +50,22 @@ export function QualityScorecardPage() {
       title="Kalite Karnesi"
       description="Üretimi biten kumaşın metraj ağırlıklı kalite dağılımı — kumaş, renk ve fason kırılımıyla."
       showCompare
+      filters={
+        <div className="flex flex-wrap items-end gap-3 border-b px-4 py-3">
+          <ReportDateFilter reportKey="quality/scorecard" showCompare bare />
+          <LotInput id="kalite-lot" value={beamLot.lotNo} onChange={beamLot.setLot} />
+        </div>
+      }
       actions={
         <ReportExportBar
           disabled={!sc}
           buildSpec={() =>
-            sc ? buildScorecardExport({ sc, periodLabel, compareLabel }) : null
+            sc ? buildScorecardExport({ sc, periodLabel, compareLabel, filterNotes: suzgecNotlari }) : null
           }
         />
       }
     >
+      <ReportFilterNotes notes={suzgecNotlari} />
       {/* Kapsam bandı: karneye güvenilip güvenilmeyeceğini bu sayı belirler.
           Gizlenirse rapor "eksiksiz" gibi okunur — sessiz eksik en kötüsüdür. */}
       {sc && sc.unanchoredRollCount > 0 ? (

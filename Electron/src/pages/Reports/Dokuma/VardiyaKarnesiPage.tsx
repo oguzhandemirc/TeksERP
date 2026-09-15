@@ -7,11 +7,14 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Card } from "@/components/ui/card";
-import { DetailTable, MetricCard, ReportDateFilter, ReportExportBar, ReportPageLayout } from "../_components";
+import { DetailTable, MetricCard, ReportDateFilter, ReportExportBar, ReportFilterNotes, ReportPageLayout } from "../_components";
 import { fmtInt } from "../_components/formatters";
 import { buildVardiyaKarnesiExport } from "./dokumaExport";
 import { DokumaFilterBar } from "./DokumaFilterBar";
-import { optionLabel, pickReportData, shiftOptionsFrom } from "./dokumaFilters";
+import { LotInput } from "../_components/LotInput";
+import { useBeamLot } from "../_hooks/useBeamLot";
+import { beamLotNotes } from "../_hooks/reportAxisFilters";
+import { beamOptionsFrom, optionLabel, pickReportData, shiftOptionsFrom } from "./dokumaFilters";
 import { HorizonNote, SealBadge, SourceBreakdownStrip, fmtSec } from "./DokumaShared";
 import { SOURCE_LABELS, formatPct } from "./dokuma-regime";
 import { useFactoryDay } from "../_hooks/useReportDay";
@@ -59,26 +62,33 @@ export function VardiyaKarnesiPage() {
   // GÜN sorgusu SÜZGEÇSİZDİR: vardiya seçenekleri buradan doğar. Süzgeçli
   // yanıttan doğsaydı seçimden sonra liste tek vardiyaya daralır ve kullanıcı
   // kendi seçimine kilitlenirdi (Randıman'daki aynı tuzak).
+  const beamLot = useBeamLot();
   const gun = useQuery({
     queryKey: ["reports", "dokuma", "vardiya-karnesi", day],
     queryFn: () => dokumaReportsApi.shiftScorecard(params),
     staleTime: 30_000,
   });
   const suzgecli = useQuery({
-    queryKey: ["reports", "dokuma", "vardiya-karnesi", day, shiftId],
-    queryFn: () => dokumaReportsApi.shiftScorecard({ ...params, shiftDefinitionId: shiftId }),
-    enabled: shiftId !== "",
+    queryKey: ["reports", "dokuma", "vardiya-karnesi", day, shiftId, beamLot.params],
+    queryFn: () => dokumaReportsApi.shiftScorecard({ ...params, shiftDefinitionId: shiftId, ...beamLot.params }),
+    enabled: shiftId !== "" || beamLot.any,
     staleTime: 30_000,
   });
-  const isLoading = gun.isLoading || (shiftId !== "" && suzgecli.isLoading);
-  const data = pickReportData({ windowData: gun.data, filteredData: suzgecli.data, filterId: shiftId });
+  const suzgecVar = shiftId !== "" || beamLot.any;
+  const isLoading = gun.isLoading || (suzgecVar && suzgecli.isLoading);
+  const data = pickReportData({ windowData: gun.data, filteredData: suzgecli.data, filterId: suzgecVar ? "1" : "" });
   const rapor = data?.data;
   const shiftOptions = useMemo(() => shiftOptionsFrom(gun.data?.data.vardiyalar), [gun.data]);
   const shiftLabel = optionLabel(shiftOptions, shiftId);
+  const beamOptions = useMemo(() => beamOptionsFrom(gun.data?.data.meta.leventler), [gun.data]);
+  const suzgecNotlari = useMemo(
+    () => beamLotNotes({ beamLabel: optionLabel(beamOptions, beamLot.beamId), lotNo: beamLot.lotNo, suzgec: data?.suzgec }),
+    [beamOptions, beamLot.beamId, beamLot.lotNo, data],
+  );
   // Süzgeç TEK GÜNDÜR (tarih aralığı değil) — başlık da onu söyler.
   const spec = useMemo(
-    () => () => (rapor ? buildVardiyaKarnesiExport({ rapor, day, filterLabel: shiftLabel }) : null),
-    [rapor, day, shiftLabel],
+    () => () => (rapor ? buildVardiyaKarnesiExport({ rapor, day, filterLabel: shiftLabel, extraNotes: suzgecNotlari }) : null),
+    [rapor, day, shiftLabel, suzgecNotlari],
   );
   // ÖZET ŞERİDİ: sayılar RAPORUN KENDİ yanıtından toplanır, yeni uç yok.
   // "Ölçülemedi" ayrı kart DEĞİL, duruş kartının ipucu: sayı ile beyanı ayırmak
@@ -105,10 +115,13 @@ export function VardiyaKarnesiPage() {
         options={shiftOptions}
         onChange={(id) => setSp((prev) => { const n = new URLSearchParams(prev); if (id) n.set("shift", id); else n.delete("shift"); return n; }, { replace: true })}
       />
+      <DokumaFilterBar id="karne-levent" label="Levent" value={beamLot.beamId} options={beamOptions} onChange={beamLot.setBeam} />
+      <LotInput id="karne-lot" value={beamLot.lotNo} onChange={beamLot.setLot} />
     </div>
   );
   return (
     <ReportPageLayout reportKey="dokuma/vardiya-karnesi" title="Vardiya Karnesi" description="Vardiya başına üretim ve duruş; her satır kaynağını taşır, toplam tek yüzdeye çökertilmez." filters={filters} actions={<ReportExportBar disabled={!rapor || rapor.vardiyalar.length === 0} buildSpec={spec} />}>
+      <ReportFilterNotes notes={suzgecNotlari} />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Vardiya" value={rapor ? fmtInt(summary.vardiya) : null} hint={rapor ? `${fmtInt(summary.satir)} tezgah satırı` : undefined} isLoading={isLoading} />
         <MetricCard label="Atkı (Σ)" value={rapor ? fmtInt(summary.atki) : null} isLoading={isLoading} />
