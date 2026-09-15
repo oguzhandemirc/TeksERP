@@ -369,8 +369,23 @@ async function main(): Promise<void> {
 
     // ═══ §6 — ATOMİK CLAIM YARIŞI (HTTP üzerinden) ══════════════════════════
     // `updateMany WHERE {id, beklenen-durum}` + `count===0 → 409` kalıbı bugüne
-    // kadar yalnız servis katmanından sınandı. İki EŞZAMANLI HTTP isteğinden tam
-    // biri geçmeli; ikisi de geçerse claim kalıbı kırılmış demektir.
+    // kadar yalnız servis katmanından sınandı; burası HTTP ayağı.
+    //
+    // ⚠️ "TAM BİRİ 200, DİĞERİ 409" İDDİASI YANLIŞTI (ölçüldü 2026-09-16, CI
+    // `b70c9ffe` kırmızısı): `prepareRawForSale` başında BİLİNÇLİ bir İDEMPOTENT
+    // dal var — top ZATEN `WAREHOUSE` ise erken dönüp 200 verir ("Top zaten sevke
+    // hazır"). Yani kaybedenin cevabı OKUMA ANINA bağlıdır ve İKİSİ DE DOĞRUDUR:
+    //   • kazanan COMMIT etmeden okuduysa → ön kontrolleri geçer, kendi
+    //     `updateMany`si 0 satır eşler → 409
+    //   • kazanan COMMIT ettikten sonra okuduysa → idempotent dal → 200
+    // Yerelde (hızlı) hep birincisi, CI'da (yüklü) ikincisi çıktı. Eski iddia
+    // makinenin hızını ölçüyordu, kalıbı değil.
+    //
+    // ⇒ *Bir yarış sondasının iddiası, yarışın SONUCUNA değil DEĞİŞMEZİNE
+    //   bağlanır: "kim kaybetti" zamanlamadır, "geçiş bir kez uygulandı" kuraldır.*
+    //
+    // Ölçülen değişmez: GEÇİŞ TAM BİR KEZ uygulandı (audit satırı = 1). 200/200
+    // ölçümünde de 1 çıktı — yani idempotent dal defterde İKİNCİ satır yazmıyor.
     console.log("\n── §6 atomik claim (eşzamanlı iki istek) ──");
     const yr = await call("POST", "/api/rolls/initial-entry", { token, body: { clientToken: randomUUID(), itemId: item.id, initialQty: 30, width: 180, qualityGrade: grade.code } });
     const yrId = String((veri(yr) as { id?: string }).id ?? "");
@@ -380,10 +395,36 @@ async function main(): Promise<void> {
       call("POST", `/api/rolls/${yrId}/prepare-for-sale`, { token }),
     ]);
     const statuler = [y1.status, y2.status].sort((a, b) => a - b);
-    check("§6 ⭐ aynı topa eşzamanlı iki geçiş → tam biri 200, diğeri 409",
-      statuler[0] === 200 && statuler[1] === 409, `statüler=${statuler.join("/")}`);
-    check("§6 top tek kez terfi etti (WAREHOUSE)",
+    const bicim = statuler.join("/");
+    check("§6a iki istek de MEŞRU sonuç döndü (200/409 ya da 200/200 — 5xx ya da çift 409 DEĞİL)",
+      bicim === "200/409" || bicim === "200/200", `statüler=${bicim}`);
+    // ⭐ ASIL DEĞİŞMEZ: kaç KEZ uygulandı. Audit satırı yalnız claim başarılı
+    // olunca yazılır; ikinci bir satır "geçiş iki kez uygulandı" demektir ve
+    // atomik claim kuralının ihlalidir.
+    const terfiSatiri = await prisma.systemLog.count({
+      where: { tableName: "ROLL", recordId: yrId, action: "UPDATE" },
+    });
+    check("§6 ⭐ geçiş TAM BİR KEZ uygulandı (audit satırı = 1)",
+      terfiSatiri === 1, `${terfiSatiri} satır · statüler=${bicim}`);
+    check("§6b top tek kez terfi etti (WAREHOUSE)",
       (await prisma.roll.findUniqueOrThrow({ where: { id: yrId }, select: { status: true } })).status === RollStatus.WAREHOUSE);
+    // Hangi serpişme çıktı — BEYAN, iddia değil. 409 kolu düşmediyse görünür
+    // kalsın: "409 hiç ölçülmedi" ile "409 ölçüldü ve geçti" aynı şey değil.
+    if (bicim === "200/409") {
+      const kaybeden = y1.status === 409 ? y1 : y2;
+      // ⚠️ `details.code` ARANMIYOR ve bu ÖLÇÜLDÜ (2026-09-16): `AppError.conflict`
+      // çağrılarının 509/671'i kod TAŞIMIYOR — kodsuz 409 bu kod tabanında NORM.
+      // Burada kod şart koşmak, bu tek çağrıyı diğer 508'den ayıran bir kural
+      // uydurmak olurdu. ⇒ *Bir sondanın iddiası, kod tabanının GERÇEK
+      // sözleşmesinden geniş olamaz; geniş olursa ölçtüğü şey kural değil dilektir.*
+      const mesaj = String((kaybeden.body as { message?: string }).message ?? "");
+      check("§6c 409 kolu ÖLÇÜLDÜ: kaybeden isteğe GEREKÇE döndü (sessiz 409 değil)",
+        mesaj.length > 0, mesaj.slice(0, 80));
+    } else {
+      ATLAMA.atla("§6c 409 kolu",
+        "bu koşumda kaybeden istek kazananın COMMIT'inden SONRA okudu ⇒ idempotent 200; "
+        + "409 yolu servis katmanı bekçisinde ölçülüyor", 1);
+    }
 
     // ═══ §7 — SEVK STORNOSU: brütü DÜŞÜRÜR (iadeden farkı) ══════════════════
     // HOP13 iadenin brütü DEĞİŞTİRMEDİĞİNİ ölçtü. Storno ters yönde çalışır ve

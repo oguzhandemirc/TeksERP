@@ -21,6 +21,52 @@
 
 ---
 
+## 2026-09-16 — Yarış sondasının iddiası SONUCA değil DEĞİŞMEZE bağlanır [ÇEKİRDEK]
+
+CI `b70c9ffe` Backend kırmızısı: `test_production_flow_api §6` — "aynı topa eşzamanlı iki
+geçiş → tam biri 200, diğeri 409" kolu `statüler=200/200` dedi. Commit yalnız panele
+dokunuyordu, backend dokunuşu sıfırdı.
+
+**ÜRÜN HATASI DEĞİLDİ ve bu ölçüldü, tahmin edilmedi.** `prepareRawForSale`ın BAŞINDA
+bilinçli bir idempotent dal var: top zaten `WAREHOUSE` ise erken dönüp 200 verir ("Top zaten
+sevke hazır"). Yani kaybeden isteğin cevabı OKUMA ANINA bağlıdır ve İKİSİ DE DOĞRUDUR:
+  • kazanan COMMIT etmeden okuduysa → ön kontrolleri geçer, kendi `updateMany`si 0 satır
+    eşler → **409**
+  • kazanan COMMIT ettikten sonra okuduysa → idempotent dal → **200**
+Yerelde beş koşumun beşi 200/409 (hızlı makine), CI'da 200/200 (yüklü). ⇒ ***Eski kol
+kalıbı değil MAKİNENİN HIZINI ölçüyordu.***
+
+Doğrulama sıralı çağrıyla yapıldı: `y2` gövdesi "Top zaten sevke hazır" mesajını taşıdı ve
+**audit satırı 1** çıktı — yani idempotent dal deftere ikinci satır YAZMIYOR, geçiş tam bir
+kez uygulanmış.
+
+⇒ ***Bir yarış sondasının iddiası, yarışın SONUCUNA değil DEĞİŞMEZİNE bağlanır: "kim
+kaybetti" zamanlamadır, "geçiş bir kez uygulandı" kuraldır.*** Kol yeniden yazıldı: meşru
+sonuç kümesi (200/409 ∨ 200/200; 5xx ya da çift 409 kırmızı) + **geçiş tam bir kez uygulandı
+(audit satırı = 1)** + son durum + hangi serpişmenin çıktığının BEYANI (409 kolu düşerse ⏭,
+çünkü "409 hiç ölçülmedi" ile "409 ölçüldü ve geçti" aynı şey değil).
+
+**VE ESKİ KOL ASIL ARIZAYA KÖRDÜ.** Atomik claim kasten kırılıp geçiş İKİ KEZ uygulandığında
+(idempotent dal + `status: STOCK` koşulu kaldırıldı) audit 2 satır oldu ve yeni ⭐ kol
+kırmızı verdi — ama `§6b` (son durum `WAREHOUSE`) YEŞİL kaldı. Yani eski sondanın iki
+kontrolü de gerçek ürün hatasını göremezdi: biri zamanlamayı ölçüyordu, öteki son durumu — ve
+son durum çift uygulamada da doğrudur. ⇒ ***Bir sonda hem gürültülü hem kör olabilir; kırmızı
+vermesi doğru şeyi ölçtüğü anlamına gelmez.***
+
+**Yan ölçüm — iddia kod tabanından geniş olamaz.** Kolun ilk yazımı 409 gövdesinde
+`details.code` arıyordu ve kırmızı verdi. Ölçtüm: `AppError.conflict` çağrılarının **509/671**'i
+kod TAŞIMIYOR — kodsuz 409 bu kod tabanında NORM. Bu tek çağrıya kod şart koşmak, onu diğer
+508'den ayıran bir kural uydurmak olurdu; iddia "kaybedene GEREKÇE döndü"ye daraltıldı.
+⇒ ***Bir sondanın iddiası kod tabanının gerçek sözleşmesinden geniş olamaz; geniş olursa
+ölçtüğü şey kural değil dilektir.***
+
+**Bir de sonda geçerliliği dersi tekrarlandı:** ilk mutasyon denemem kabuk tırnaklaması
+yüzünden HİÇ UYGULANMADI ve koşum yeşil geldi — "sonda tutmadı" diye okunabilirdi. İkinci
+denemede mutasyon `assert` ile doğrulandı ve sonda ısırdı. ⇒ *Mutasyonun uygulandığını
+ölçmeyen bir sonda, sonucu ne olursa olsun bir şey söylemez.*
+
+---
+
 ## 2026-09-15 — Kaçış anahtarının kapsamı, onu ALAN süreçtir [ÇEKİRDEK]
 
 1e fabrika yedeğinin bir kopyasında prova koştu (`BEKCI_HEDEF_ONAY=1` ile) ve iki bekçi
