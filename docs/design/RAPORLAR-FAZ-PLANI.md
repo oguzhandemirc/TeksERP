@@ -18,6 +18,17 @@
 | K10 | **"Çeşitli filtreler" = rapor başına ikinci eksen, SUNUCUDA:** önce envanter (her rapor: bugünkü eksenler, doğal eksik eksen — makine · vardiya · operatör · müşteri/cari · depo · kalite sınıfı · fasoncu), sonra alan alan uygulama. Envanterdeki "sunucu/kurulum süzgeci" yorumu DÜŞTÜ: tek DB = tek kurulum, `installationId` yetki/süzgeç ekseni değil (ajan ölçümü 2026-09-15). | Kullanıcının sözü "tarih ve çeşitli filtreler"; "sunucu" okuması yanlış çözümlemeydi. |
 | K11 | Migration YOK (ayar satırı; satır-yok sigortası). Profil sabitine girmez (profil yalnız modül anahtarı taşır). Sürüm notu: backend + panel 1.3.2 aynı pencerede; tablet dokunuşu yok. | |
 
+## 0b · Ek hükümler (oturum notlarından, 2026-09-15 03:00)
+
+| # | Karar | Kaynak |
+|---|---|---|
+| K4a | `requireReportOpen(key)` okuyucusu modül kapılarının okuyucu kalıbıdır (tek satır okuyucu; önbellek varsa TTL tazeliktir; DB okuması başarısızsa FAIL-CLOSED 403). Hangi okuyucunun kullanıldığı R1'in kural satırında yazılır. | 6e ① |
+| K4b | Katalogdaki her satır `kapiTasiyici: { dosya, yol } \| null` beyanı taşır; bekçi taşıyıcının gerçekten `requireReportOpen("<key>")` çağırdığını ölçer. `null` YALNIZ iki yabancı-uç yaprağı için (`reports/dokuma/karne` → `/api/machine-shift-stats`, `reports/finance/cheque-due` → `/api/finance/cheques/due-summary`: rapor-dışı paylaşılan uçlar, backend rapor kapısı yok, panel karosu R2'de süzer); `null` sayısı bekçide 2'ye sabit. | 6e ① |
+| K2a | `reports.closedKeys` içinde katalogda olmayan anahtar: YAZMADA 400 `REPORT_KEY_UNKNOWN`, OKUMADA yok sayılır + boot'ta tek uyarı logu (backend önce yükselir; eski panel eski anahtarla yazmış olabilir). | 6e ② |
+| K7a | `tarih` sözleşmesi ALTI değer: `aralik-iso` (18) · `aralik-gun` (3) · `tek-gun` (1) · `kesit` (1) · `ileri-pencere` (1, Çek Vade: bugünden ileri, +7/+30/+90) · `yok` (5); katalog `varsayilanGun: number \| null` taşır (hook + layout çift yazımı kalkar). Tarama kapsamı `pages/Reports/**` bütünü (diyaloglar dahil). | d5 ölçümü |
+| K10a | R5a envanteri (`RAPORLAR-ENVANTER.md` §7): dokuma/kalite raporlarında **levent/lot ekseni** yeni doğal eksendir (Faz 4 `CONSUMED.rollId` ile top → levent → lot → tedarikçi defterden türetilir; `warpBeamId`/`lotNo`, sunucuda `readIdCondition`). Eksen eklenen her uç ÖNCE `.strict()`e çekilir (6 uç strict değildi — R5b-öncesi kalem). Tanınmayan süzgeç anahtarı 400. | 6e ③④ · 5e ④ |
+| K10b | R5b-a (makine/vardiya seçicileri, dokuma 3 rapor): backend şemada olan ama ekranın göndermediği eksen; seçici raporun KENDİ satırlarından kurulur (makine listesi ucu `station:read` ister, rapor kitlesinde olmayabilir — çıkışsız kapı sınıfı), tek seçim, süzgeç aktifken seçenek listesi daralmaz (pencerenin süzgeçsiz yanıtı hatırlanır), "tümü" = bugünkü davranış. İzin-hafif liste uçları (R5b-c) gerekirse sonra. | 5e ①③ |
+
 ## 1 · Dilimler
 
 | Dilim | İçerik | Bekçi / kapı | Bağımlılık | Oturum |
@@ -28,7 +39,7 @@
 | **R3 Dokuma çıktı** | 4 dokuma yaprağına `ReportExportBar` (ölçülen/elle kolonu çıktıya da girer) + K8 tarama bekçisi + kural satırı + sürüm maddesi | Electron vitest tarama (negatif sonda: bir yapraktan kaldırınca kırmızı) | — | **5e** (başladı 02:38) |
 | **R4 Tarih bileşeni** | `ReportDateFilter` (katalog `tarih`den çizer) · 29 yaprak ona geçer · URL durumu korunur · dokuma `useFactoryRange` ile birleşir | Electron: bileşen testi (4 sözleşme × parametre adı) + "hiçbir yaprak elle tarih girdisi çizmez" taraması | R0 (aynadaki `tarih` alanı) | **d5** (R0 inince; öncesinde yaprakların tarih girdisi envanteri) |
 | **R5a Filtre envanteri** | 29 rapor × (bugünkü eksenler · eksik doğal eksen · sunucu tarafı var mı) — `RAPORLAR-ENVANTER.md` §7 | belge | — | **5e** (R3 sonrası) |
-| **R5b Filtre uygulaması** | alan alan: üretim/kalite/dokuma (6e) · satış/müşteri/fason (01) · finans (d9) — her rapor: Zod + servis where + panel `filters` + çıktı başlığında süzgeç | ilgili rapor bekçileri + sunucu süzmesi kuralı (`filtre-liste.md`) | R5a | 6e / 01 / d9 |
+| **R5b Filtre uygulaması** | R5b-öncesi strict (6e, indi `725d7038`) · R5b-a makine/vardiya seçicileri panel (5e) · R5b-b levent/lot + `shiftDefinitionId` (6e) · sonra alan alan: satış/müşteri/fason (01) · finans (d9) — her rapor: Zod + servis where + panel `filters` + çıktı başlığında süzgeç | ilgili rapor bekçileri + sunucu süzmesi kuralı (`filtre-liste.md`) | R5a | 6e / 01 / d9 |
 | **R6 Anlaşılırlık** | K9 ①②③ — hub iki bölüm · `soru` başlığı · özet şeridi eksik yapraklara | Electron: hub testi · "her yaprak `soru` basar" taraması | R0, R2 | **01** (R2 sonrası) |
 | **R7 Kullanılmayan 7 rapor** | Sipariş ailesi 5 + izleme 2 (57 günde 0 çağrı): kapatma DEĞİL, kullanıcıya SORU listesi (hangi soru cevapsız?) | — | kullanıcı | 1e (dönünce) |
 
