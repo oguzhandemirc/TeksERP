@@ -30,6 +30,7 @@ import { attachPrev, buildBreakdown, pctOf, round1, type BreakdownDim, type Brea
 import { factoryDaySql } from "../../constants/time";
 import { ACTIVE_LINE } from "../helpers/order-line-scope.helper";
 import { lineScopeSql, lineScopeWhere, orderScopeSql, orderScopeWhere, type ReportFilterInput } from "./_filters";
+import { optionList, hasFilters, type Secenekler, type WithSecenekler } from "./_secenekler";
 
 export interface OrderIntakeSummary {
   /** Dönemde açılan sipariş adedi — sonradan iptal edilenler DAHİL. */
@@ -56,7 +57,7 @@ export interface OrderIntakeSummary {
   prevAvgOrderQty?: number;
 }
 
-export interface OrderIntakeReport {
+export interface OrderIntakeReport extends WithSecenekler {
   summary: OrderIntakeSummary;
   byCustomer: BreakdownRow[];
   byItem: BreakdownRow[];
@@ -75,6 +76,7 @@ interface OrderCell {
 interface LineCell {
   itemId: string;
   itemName: string;
+  itemCode: string;
   qty: number;
 }
 
@@ -120,10 +122,10 @@ async function collect(range: DateRange, f: ReportFilterInput): Promise<Collecte
       customerId: true,
       customer: { select: { name: true } },
       // İptal edilmiş KALEM alınan işe sayılmaz (sipariş iptaliyle aynı kural,
-      // bir kademe aşağıda) — tek kaynak `ACTIVE_LINE`.
+      // bir kademe aşağıda) — tek source `ACTIVE_LINE`.
       lines: {
         where: { ...ACTIVE_LINE, ...lineScopeWhere(f) },
-        select: { quantity: true, itemId: true, item: { select: { name: true } } },
+        select: { quantity: true, itemId: true, item: { select: { name: true, code: true } } },
       },
     },
   });
@@ -154,6 +156,7 @@ async function collect(range: DateRange, f: ReportFilterInput): Promise<Collecte
       out.lineCells.push({
         itemId: l.itemId,
         itemName: l.item.name,
+        itemCode: l.item.code,
         qty: Number(l.quantity),
       });
     }
@@ -178,7 +181,7 @@ async function collectDaily(range: DateRange, f: ReportFilterInput): Promise<Arr
            COALESCE(SUM(ol.quantity), 0)::float8 AS qty
     FROM orders o
     -- aktif-kalem: iptal edilmiş kalem alınan işe sayılmaz (ACTIVE_LINE'ın ham
-    -- SQL karşılığı; tek kaynak helpers/order-line-scope.helper.ts).
+    -- SQL karşılığı; tek source helpers/order-line-scope.helper.ts).
     LEFT JOIN order_lines ol ON ol."orderId" = o.id AND ol."cancelledAt" IS NULL ${lineScopeSql(f)}
     WHERE o."orderDate" >= ${range.from} AND o."orderDate" <= ${range.to}
       AND o.status <> 'CANCELLED' ${orderScopeSql(f)}
@@ -197,11 +200,18 @@ export async function getOrderIntake(
   compareRange: DateRange | null = null,
   filters: ReportFilterInput = {},
 ): Promise<OrderIntakeReport> {
-  const [cur, daily, prev] = await Promise.all([
+  const [cur, daily, prev, unfiltered] = await Promise.all([
     collect(range, filters),
     collectDaily(range, filters),
     compareRange ? collect(compareRange, filters) : Promise.resolve(null),
+    // R5b-c3: seçici kaynağı süzgeçten bağımsız — süzgeçli istek toplayıcıyı bir kez daha süzgeçsiz koşar (beyanlı ×2).
+    hasFilters(filters) ? collect(range, {}) : Promise.resolve(null),
   ]);
+  const source = unfiltered ?? cur;
+  const secenekler: Secenekler = {
+    customerId: optionList(source.orderCells.map((c) => ({ id: c.customerId, ad: c.customerName }))),
+    itemId: optionList(source.lineCells.map((c) => ({ id: c.itemId, ad: c.itemName, kod: c.itemCode }))),
+  };
 
   const byCustomer = buildBreakdown(cur.orderCells, dims.customer);
   const byItem = buildBreakdown(cur.lineCells, dims.item);
@@ -236,5 +246,6 @@ export async function getOrderIntake(
     byCustomer,
     byItem,
     daily,
+    secenekler,
   };
 }

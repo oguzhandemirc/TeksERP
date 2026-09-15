@@ -49,6 +49,7 @@ import type { DateRange } from "./_shared";
 import { pctOf, round1 } from "./_breakdown";
 import { factoryDaySql } from "../../constants/time";
 import { idWhere, inSql, orderScopeSql, orderScopeWhere, type ReportFilterInput } from "./_filters";
+import { reasonOptions, optionList, hasFilters, type Secenekler, type WithSecenekler } from "./_secenekler";
 
 /** Sebebi girilmemiş iptallerin kovası — gizlenmez, adlandırılır. */
 export const NO_REASON_KEY = "__NO_REASON__";
@@ -103,7 +104,7 @@ export interface OrderCancellationSummary {
   undatedCancelCount: number;
 }
 
-export interface OrderCancellationReport {
+export interface OrderCancellationReport extends WithSecenekler {
   summary: OrderCancellationSummary;
   byReason: CancellationReasonRow[];
   byCustomer: CancellationCustomerRow[];
@@ -134,8 +135,29 @@ export async function getOrderCancellationScorecard(
   const scopeSql = orderScopeSql(filters);
   const reasonSql = inSql('o."cancelReasonCode"', filters.reasonCode, "text");
   const reason = idWhere(filters.reasonCode);
-  const [rows, openedInPeriod, undated, presets, daily] = await Promise.all([
-    prisma.$queryRaw<RawCancel[]>(Prisma.sql`
+  const [rows, openedInPeriod, undated, presets, daily, unfiltered] = await Promise.all([
+    collectCancelled(range, scopeSql, reasonSql),
+    prisma.order.count({ where: { orderDate: { gte: range.from, lte: range.to }, ...scope } }),
+    prisma.order.count({ where: { status: "CANCELLED", cancelledAt: null, ...scope, ...(reason !== undefined ? { cancelReasonCode: reason } : {}) } }),
+    prisma.reasonPreset.findMany({
+      where: { kind: "ORDER_CANCEL" },
+      select: { code: true, label: true },
+    }),
+    collectDaily(range, scopeSql, reasonSql),
+    // R5b-c3: seçici kaynağı süzgeçten bağımsız — süzgeçli istek iptal satırlarını bir kez daha süzgeçsiz toplar (beyanlı ×2).
+    hasFilters(filters) ? collectCancelled(range, Prisma.empty, Prisma.empty) : Promise.resolve(null),
+  ]);
+  const source = unfiltered ?? rows;
+  const secenekler: Secenekler = {
+    customerId: optionList(source.map((r) => ({ id: r.customerId, ad: r.customerName }))),
+    reasonCode: reasonOptions(source.map((r) => r.cancelReasonCode), (code) => presets.find((p) => p.code === code)?.label),
+  };
+  return buildReport({ range, rows, openedInPeriod, undated, presets, daily, scope, secenekler });
+}
+
+/** Dönemde iptal edilen siparişler (çıpa `cancelledAt`); süzgeç parçaları R5b-c. */
+function collectCancelled(range: DateRange, scopeSql: Prisma.Sql, reasonSql: Prisma.Sql): Promise<RawCancel[]> {
+  return prisma.$queryRaw<RawCancel[]>(Prisma.sql`
       SELECT o.id AS "orderId", o."orderNumber", c.id AS "customerId", c.name AS "customerName",
              o."orderDate", o."cancelledAt", o."cancelReason", o."cancelReasonCode",
              COALESCE(l.qty, 0)::float8 AS qty,
@@ -150,14 +172,11 @@ export async function getOrderCancellationScorecard(
       ) l ON true
       WHERE o.status = 'CANCELLED'
         AND o."cancelledAt" >= ${range.from} AND o."cancelledAt" <= ${range.to} ${scopeSql} ${reasonSql}
-    `),
-    prisma.order.count({ where: { orderDate: { gte: range.from, lte: range.to }, ...scope } }),
-    prisma.order.count({ where: { status: "CANCELLED", cancelledAt: null, ...scope, ...(reason !== undefined ? { cancelReasonCode: reason } : {}) } }),
-    prisma.reasonPreset.findMany({
-      where: { kind: "ORDER_CANCEL" },
-      select: { code: true, label: true },
-    }),
-    prisma.$queryRaw<Array<{ day: Date; count: bigint; qty: number | null }>>(Prisma.sql`
+    `);
+}
+
+function collectDaily(range: DateRange, scopeSql: Prisma.Sql, reasonSql: Prisma.Sql): Promise<Array<{ day: Date; count: bigint; qty: number | null }>> {
+  return prisma.$queryRaw<Array<{ day: Date; count: bigint; qty: number | null }>>(Prisma.sql`
       SELECT ${factoryDaySql('o."cancelledAt"')} AS day,
              COUNT(*)                             AS count,
              COALESCE(SUM(l.qty), 0)::float8      AS qty
@@ -170,9 +189,15 @@ export async function getOrderCancellationScorecard(
       WHERE o.status = 'CANCELLED'
         AND o."cancelledAt" >= ${range.from} AND o."cancelledAt" <= ${range.to} ${scopeSql} ${reasonSql}
       GROUP BY 1 ORDER BY 1
-    `),
-  ]);
+    `);
+}
 
+interface BuildInput {
+  range: DateRange; rows: RawCancel[]; openedInPeriod: number; undated: number; presets: Array<{ code: string; label: string }>;
+  daily: Array<{ day: Date; count: bigint; qty: number | null }>; scope: Prisma.OrderWhereInput; secenekler: Secenekler;
+}
+
+async function buildReport({ range, rows, openedInPeriod, undated, presets, daily, scope, secenekler }: BuildInput): Promise<OrderCancellationReport> {
   // Etiket katalogdan okunur (fabrika düzenlemiş olabilir); kod bilinmiyorsa
   // kodun kendisi basılır — satır KAYBOLMAZ.
   const labelOf = new Map(presets.map((p) => [p.code, p.label]));
@@ -300,5 +325,6 @@ export async function getOrderCancellationScorecard(
     orders: orders.sort(
       (a, b) => b.daysToCancel - a.daysToCancel || b.qty - a.qty || a.orderNumber.localeCompare(b.orderNumber, "tr"),
     ),
+    secenekler,
   };
 }

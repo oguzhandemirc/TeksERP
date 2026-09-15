@@ -129,7 +129,7 @@ async function main() {
     // -----------------------------------------------------------------------
     // 3) CUSTOMER — getCustomerOrderProfiles: müşteri agg + favori ürün/renk
     // -----------------------------------------------------------------------
-    const profiles = await getCustomerOrderProfiles();
+    const profiles = (await getCustomerOrderProfiles()).rows; // R5b-c3: satırlar + meta.secenekler
     const myProfile = profiles.find((p) => p.customerId === customerId);
     // 2 sipariş (fulfillment + late), 3 satır (2 + 1)
     check(

@@ -31,6 +31,7 @@ import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
 import { round1 } from "./_breakdown";
 import { orderScopeSql, type ReportFilterInput } from "./_filters";
+import { optionList, hasFilters, type Secenekler, type WithSecenekler } from "./_secenekler";
 
 /** Altında istatistiğin anlamsız sayıldığı örnek sayısı. */
 export const MIN_SAMPLE = 5;
@@ -66,7 +67,7 @@ export interface LeadTimeOrderRow {
   openDays: number | null;
 }
 
-export interface OrderLeadTimeReport {
+export interface OrderLeadTimeReport extends WithSecenekler {
   firstShip: LeadTimeStats;
   fullClose: LeadTimeStats;
   byCustomer: LeadTimeBucketRow[];
@@ -121,6 +122,8 @@ interface RawRow {
   firstShipAt: Date | null;
   itemIds: string[] | null;
   itemNames: string[] | null;
+  /** R5b-c3 seçici kaynağı: kalem kimlik+kod+ad çiftleri (ids/names dizileri DISTINCT ile hizasız olabilir, bu yüzden ayrı). */
+  itemOpts: Array<{ id: string; kod: string; ad: string }> | null;
 }
 
 /**
@@ -142,7 +145,8 @@ async function collect(range: DateRange, f: ReportFilterInput): Promise<RawRow[]
            o."completedAt"     AS "completedAt",
            LEAST(sack.first_at, direct.first_at) AS "firstShipAt",
            items.ids           AS "itemIds",
-           items.names         AS "itemNames"
+           items.names         AS "itemNames",
+           items.opts          AS "itemOpts"
     FROM orders o
     JOIN customers c ON c.id = o."customerId"
     LEFT JOIN LATERAL (
@@ -167,7 +171,8 @@ async function collect(range: DateRange, f: ReportFilterInput): Promise<RawRow[]
     ) direct ON true
     LEFT JOIN LATERAL (
       SELECT array_agg(DISTINCT ol."itemId"::text) AS ids,
-             array_agg(DISTINCT i.name)            AS names
+             array_agg(DISTINCT i.name)            AS names,
+             json_agg(DISTINCT jsonb_build_object('id', ol."itemId", 'kod', i.code, 'ad', i.name)) AS opts
       FROM order_lines ol
       JOIN items i ON i.id = ol."itemId"
       -- aktif-kalem: iptal edilmiş kalemin kumaşı teslim süresi kırılımına girmez.
@@ -183,6 +188,12 @@ const days = (from: Date, to: Date) => Math.max(0, (to.getTime() - from.getTime(
 
 export async function getOrderLeadTime(range: DateRange, filters: ReportFilterInput = {}): Promise<OrderLeadTimeReport> {
   const rows = await collect(range, filters);
+  // R5b-c3: seçici kaynağı süzgeçten bağımsız — süzgeçli istek toplayıcıyı bir kez daha süzgeçsiz koşar (beyanlı ×2).
+  const source = hasFilters(filters) ? await collect(range, {}) : rows;
+  const secenekler: Secenekler = {
+    customerId: optionList(source.map((r) => ({ id: r.customerId, ad: r.customerName }))),
+    itemId: optionList(source.flatMap((r) => r.itemOpts ?? [])),
+  };
   const now = Date.now();
 
   const firstShipAll: number[] = [];
@@ -257,5 +268,6 @@ export async function getOrderLeadTime(range: DateRange, filters: ReportFilterIn
     orders,
     neverShippedCount: neverShipped,
     minSample: MIN_SAMPLE,
+    secenekler,
   };
 }

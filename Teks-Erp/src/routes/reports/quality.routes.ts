@@ -48,7 +48,7 @@ router.get("/scorecard", ...reportGate("quality/scorecard"), async (req: Request
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const compareRange = resolveCompareRange(input, range);
     const data = await getQualityScorecard(range, compareRange, { warpBeamId: input.warpBeamId, lotNo: input.lotNo });
-    res.status(200).json(reportEnvelope(data, range, compareRange, filterEcho(input, LEVENT_ANAHTARLARI)));
+    res.status(200).json(reportEnvelope(data, range, compareRange, { suzgec: filterEcho(input, LEVENT_ANAHTARLARI) }));
   } catch (e) {
     next(e);
   }
@@ -64,7 +64,7 @@ router.get("/scrap-scorecard", ...reportGate("quality/scrap-scorecard"), async (
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const compareRange = resolveCompareRange(input, range);
     const data = await getScrapScorecard(range, compareRange, { warpBeamId: input.warpBeamId, lotNo: input.lotNo });
-    res.status(200).json(reportEnvelope(data, range, compareRange, filterEcho(input, LEVENT_ANAHTARLARI)));
+    res.status(200).json(reportEnvelope(data, range, compareRange, { suzgec: filterEcho(input, LEVENT_ANAHTARLARI) }));
   } catch (e) {
     next(e);
   }

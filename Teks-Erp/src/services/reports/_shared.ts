@@ -11,6 +11,7 @@ import { z } from "zod";
 import { AppError } from "../../utils/app-error";
 import { factoryDayStart, factoryYmd } from "../../constants/time";
 import type { SuzgecEcho } from "./_filters";
+import type { Secenekler } from "./_secenekler";
 
 const DAY_MS = 86_400_000;
 const DEFAULT_RANGE_DAYS = 30;
@@ -158,13 +159,17 @@ export interface ReportResponse<T> {
   compareRange?: { from: string; to: string };
   /** R5b: süzgeç uygulandıysa beyanı (yalnız verilen anahtarlar, `_filters.filterEcho`); yoksa anahtar YOK. */
   suzgec?: SuzgecEcho;
+  /** R5b-c3: seçici kaynakları (`_secenekler`) — raporun eksenleri, pencerede geçen değerler, süzgeçten bağımsız. */
+  meta?: { secenekler: Secenekler };
 }
+
+export interface EnvelopeEk { suzgec?: SuzgecEcho; secenekler?: Secenekler }
 
 export function reportEnvelope<T>(
   data: T,
   range: DateRange,
   compareRange?: DateRange | null,
-  suzgec?: SuzgecEcho,
+  ek: EnvelopeEk = {},
 ): ReportResponse<T> {
   return {
     success: true,
@@ -173,8 +178,15 @@ export function reportEnvelope<T>(
     ...(compareRange
       ? { compareRange: { from: compareRange.from.toISOString(), to: compareRange.to.toISOString() } }
       : {}),
-    ...(suzgec ? { suzgec } : {}),
+    ...(ek.suzgec ? { suzgec: ek.suzgec } : {}),
+    ...(ek.secenekler ? { meta: { secenekler: ek.secenekler } } : {}),
   };
+}
+
+/** Rapor nesnesinden `secenekler`i ayırır: `data` temiz kalır, liste `meta.secenekler`e gider. */
+export function splitOptions<T extends { secenekler: Secenekler }>(rapor: T): { data: Omit<T, "secenekler">; secenekler: Secenekler } {
+  const { secenekler, ...data } = rapor;
+  return { data, secenekler };
 }
 
 /**

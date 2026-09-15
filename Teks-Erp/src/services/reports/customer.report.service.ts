@@ -7,6 +7,7 @@
 import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import { customerRowSql, type ReportFilterInput } from "./_filters";
+import { optionList, hasFilters, type WithSecenekler } from "./_secenekler";
 
 // ---------- 1) Order Profile Summary -----------------------------------------
 
@@ -22,7 +23,17 @@ export interface CustomerOrderProfileRow {
   lastOrderDate: Date | null;
 }
 
-export async function getCustomerOrderProfiles(filters: ReportFilterInput = {}): Promise<CustomerOrderProfileRow[]> {
+/** Profil satırları + R5b-c3 seçici kaynağı (müşteri listesi = süzgeçsiz koşunun kendi satırları, ≤200). */
+export interface CustomerOrderProfileReport extends WithSecenekler { rows: CustomerOrderProfileRow[] }
+
+export async function getCustomerOrderProfiles(filters: ReportFilterInput = {}): Promise<CustomerOrderProfileReport> {
+  const rows = await profileRows(filters);
+  // Süzgeçli istek seçenek listesi için bir kez daha süzgeçsiz toplar (beyanlı ×2).
+  const source = hasFilters(filters) ? await profileRows({}) : rows;
+  return { rows, secenekler: { customerId: optionList(source.map((r) => ({ id: r.customerId, ad: r.customerName, kod: r.customerCode }))) } };
+}
+
+async function profileRows(filters: ReportFilterInput): Promise<CustomerOrderProfileRow[]> {
   // Müşteri başına agg + her birinin "en sık" ürün/renk/eni
   // Subquery + DISTINCT ON kombinasyonu Postgres'e özel — tek round-trip.
   const rows = await prisma.$queryRaw<

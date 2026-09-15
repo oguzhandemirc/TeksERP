@@ -7,10 +7,12 @@
 // cevap KÖKÜNDE `suzgec` (tek adres, dokuma dahil) yalnız verilen anahtarlar (yoksa anahtar YOK) + tanınmayan kimlik BOŞ sonuç (404 değil, her eksende).
 // §0 Zod/echo (DB'siz) · §1 sipariş karnesi · §2 talep analizi · §3 teslim süresi · §4 iptal karnesi (pay+payda) ·
 // §5 açık sipariş karşılanma (yalnız itemId) · §6 müşteri karnesi · §7 sipariş profili · §8 fason karnesi ·
-// §9 R5b-b hizası (dokuma kökte `suzgec`, verilmeyen anahtarı basmaz — TEK ADRES).
+// §9 R5b-b hizası (dokuma kökte `suzgec`, verilmeyen anahtarı basmaz — TEK ADRES) · §10 R5b-c3 `meta.secenekler` seçici
+//   kaynağı: pencerede geçen değerler (pencere DIŞI sipariş yok — sonda), süzgeçli yanıtta TAM liste, yalnız o raporun eksenleri, kod dolu.
 // NEGATİF SONDALAR (2026-09-15, ölçüldü): `orderScopeSql` boş parça döner → §1b/§3b/§4b/§4d ❌ (4) ·
 //   `lineScopeWhere` `itemId`yi düşürür → §1c/§2b/§6d ❌ (3) · `filterEcho` her zaman `undefined` → §0d ❌ (1) ·
-//   iptal paydası (`openedInPeriod`) `scope`suz → §4b/§4d ❌ (2).
+//   iptal paydası (`openedInPeriod`) `scope`suz → §4b/§4d ❌ (2) · R5b-c3 (ölçüldü): seçenek süzgeçli satırlardan türer
+//   (`kaynak = cur`) → §10b ❌ · toplayıcı pencereyi yok sayar (`orderDate` where'den düşer) → §1a/§10a ❌ (OUT tarihli O5 fikstürü).
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Pencere 2097-06 (diğer rapor bekçileri 2095/2099 kullanır).
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
@@ -41,6 +43,7 @@ const TAG = `TEST-RSE-${process.pid}`;
 const YOK = "00000000-0000-4000-8000-000000000000";
 const RANGE = { from: new Date("2097-06-01T00:00:00.000Z"), to: new Date("2097-06-30T23:59:59.999Z") };
 const IN = new Date("2097-06-10T09:00:00.000Z");
+const OUT = new Date("2097-07-10T09:00:00.000Z");
 const REASON = `TEST_RSE_${process.pid}`;
 
 function statik(): void {
@@ -64,6 +67,7 @@ async function main(): Promise<void> {
   const ids = { orders: [] as string[], rolls: [] as string[], dispatchItems: [] as string[], dispatches: [] as string[] };
   const c1 = await prisma.customer.create({ data: { code: `${TAG}-C1`, name: `${TAG} YURTİÇİ`, defaultDestination: "DOMESTIC" }, select: { id: true } });
   const c2 = await prisma.customer.create({ data: { code: `${TAG}-C2`, name: `${TAG} İHRACAT`, defaultDestination: "EXPORT" }, select: { id: true } });
+  const c3 = await prisma.customer.create({ data: { code: `${TAG}-C3`, name: `${TAG} PENCERE DIŞI` }, select: { id: true } });
   const i1 = await prisma.item.create({ data: { code: `${TAG}-I1`, name: `${TAG} KUMAŞ1`, itemType: "FABRIC" }, select: { id: true } });
   const i2 = await prisma.item.create({ data: { code: `${TAG}-I2`, name: `${TAG} KUMAŞ2`, itemType: "FABRIC" }, select: { id: true } });
   const station = await prisma.station.create({ data: { code: `${TAG}-STN`, name: `${TAG} fason`, type: "EXTERNAL" }, select: { id: true } });
@@ -72,9 +76,9 @@ async function main(): Promise<void> {
   const batch = await prisma.batch.create({ data: { batchNumber: `${TAG}-B`, workOrderId: wo.id }, select: { id: true } });
   const f1 = await prisma.subcontractor.create({ data: { code: `${TAG}-F1`, name: `${TAG} fasoncu 1` }, select: { id: true } });
   const f2 = await prisma.subcontractor.create({ data: { code: `${TAG}-F2`, name: `${TAG} fasoncu 2` }, select: { id: true } });
-  const mkOrder = async (no: string, customerId: string, lines: Array<{ itemId: string; quantity: number }>, cancel?: string) => {
+  const mkOrder = async (no: string, customerId: string, lines: Array<{ itemId: string; quantity: number }>, cancel?: string, at: Date = IN) => {
     const o = await prisma.order.create({
-      data: { orderNumber: `${TAG}-${no}`, customerId, orderDate: IN, status: cancel ? "CANCELLED" : "APPROVED", ...(cancel ? { cancelledAt: IN, cancelReasonCode: cancel } : {}), lines: { create: lines } },
+      data: { orderNumber: `${TAG}-${no}`, customerId, orderDate: at, status: cancel ? "CANCELLED" : "APPROVED", ...(cancel ? { cancelledAt: at, cancelReasonCode: cancel } : {}), lines: { create: lines } },
       select: { id: true },
     });
     ids.orders.push(o.id);
@@ -95,6 +99,8 @@ async function main(): Promise<void> {
     const o2 = await mkOrder("O2", c2.id, [{ itemId: i1.id, quantity: 30 }]);
     await mkOrder("O3", c1.id, [{ itemId: i2.id, quantity: 20 }], REASON);
     await mkOrder("O4", c2.id, [{ itemId: i1.id, quantity: 10 }], `${REASON}_B`);
+    await mkOrder("O5", c3.id, [{ itemId: i1.id, quantity: 5 }], undefined, OUT); // pencere DIŞI — seçenek listesine GİRMEZ
+    await prisma.order.updateMany({ where: { id: ids.orders[4] }, data: { status: "COMPLETED" } }); // açık karşılanma (tüm zamanlar) evrenine de girmesin
     await mkDispatch(f1.id, i1.id, 200);
     await mkDispatch(f2.id, i2.id, 80);
 
@@ -159,9 +165,9 @@ async function main(): Promise<void> {
     check("§6d ⭐ itemId=I2 → C1 50 m (I1 kalemi düştü), C2 sıralamada YOK (I2 siparişi yok)", rank(m3, c1.id)?.totalQty === 50 && !rank(m3, c2.id), String(rank(m3, c1.id)?.totalQty));
 
     console.log("\n── §7 Sipariş profili (order-profile) ──");
-    const p0 = await getCustomerOrderProfiles();
-    const p1 = await getCustomerOrderProfiles({ customerId: [c1.id] });
-    const p2 = await getCustomerOrderProfiles({ destination: "EXPORT" });
+    const p0 = (await getCustomerOrderProfiles()).rows;
+    const p1 = (await getCustomerOrderProfiles({ customerId: [c1.id] })).rows;
+    const p2 = (await getCustomerOrderProfiles({ destination: "EXPORT" })).rows;
     const prof = (r: typeof p0, id: string) => r.find((x) => x.customerId === id);
     check("§7a süzgeçsiz ikisi de listede (limit 200 içinde olmayabilir → en az biri) ; C1 → tek satır C1; EXPORT → C2 var C1 yok", (!!prof(p0, c1.id) || !!prof(p0, c2.id)) && p1.length === 1 && p1[0]!.customerId === c1.id && !!prof(p2, c2.id) && !prof(p2, c1.id));
 
@@ -174,6 +180,21 @@ async function main(): Promise<void> {
     check("§8a süzgeçsiz: F1 200 m, F2 80 m; açık listede ikisi de", sub(f0, f1.id)?.dispatchedQty === 200 && sub(f0, f2.id)?.dispatchedQty === 80 && f0.oldestOpen.some((o) => o.subcontractorName.includes("fasoncu 1")) && f0.oldestOpen.some((o) => o.subcontractorName.includes("fasoncu 2")));
     check("§8b ⭐ subcontractorId=F1 → yalnız F1 (200 m), toplam 200, açık listede F2 YOK", fa.bySubcontractor.length === 1 && fa.summary.dispatchedQty === 200 && !fa.oldestOpen.some((o) => o.subcontractorName.includes("fasoncu 2")), `${fa.summary.dispatchedQty}`);
     check("§8c itemId=I2 → yalnız F2 (topun kumaşı); F1 ∩ I2 → boş", fb.bySubcontractor.length === 1 && fb.bySubcontractor[0]!.key === f2.id && fc.bySubcontractor.length === 0 && fc.summary.dispatchedQty === 0);
+
+    console.log("\n── §10 R5b-c3 `meta.secenekler` seçici kaynağı ──");
+    const idsOf = (l: Array<{ id: string }> | undefined) => (l ?? []).map((x) => x.id);
+    const has = (l: Array<{ id: string }> | undefined, id: string) => idsOf(l).includes(id);
+    const sc0 = s0.secenekler;
+    check("§10a ⭐ sipariş karnesi süzgeçsiz: müşteri C1+C2 (adlı), kumaş I1+I2 (kodlu); pencere DIŞI C3 YOK; yalnız kendi eksenleri (colorId/subcontractorId/reasonCode anahtarı yok)", has(sc0.customerId, c1.id) && has(sc0.customerId, c2.id) && !has(sc0.customerId, c3.id) && sc0.customerId!.every((x) => x.ad.length > 0) && has(sc0.itemId, i1.id) && has(sc0.itemId, i2.id) && sc0.itemId!.every((x) => !!x.kod) && !("colorId" in sc0) && !("subcontractorId" in sc0) && !("reasonCode" in sc0), JSON.stringify(Object.keys(sc0)));
+    check("§10b ⭐ süzgeçli yanıtta TAM liste (customerId=C1 → seçenekte C2 de var; itemId=I2 → seçenekte I1 de var)", has(s1.secenekler.customerId, c2.id) && has(s2.secenekler.itemId, i1.id) && has(s3.secenekler.customerId, c1.id));
+    check("§10c talep analizi: customerId/itemId/colorId eksenleri; renk fikstürde yok → colorId []", has(d0.secenekler.customerId, c1.id) && has(d0.secenekler.itemId, i2.id) && Array.isArray(d0.secenekler.colorId) && d0.secenekler.colorId!.length === 0 && has(d1.secenekler.customerId, c2.id));
+    check("§10d teslim süresi: müşteri C1+C2, kumaş kodlu; süzgeçli tam liste", has(l0.secenekler.customerId, c2.id) && has(l0.secenekler.itemId, i2.id) && l0.secenekler.itemId!.every((x) => !!x.kod) && has(l1.secenekler.customerId, c2.id));
+    check("§10e iptal karnesi: müşteri C1+C2 (iptal satırlarından), reasonCode iki kod (etiket katalogda yok → kodun kendisi); süzgeçli tam liste", has(k0.secenekler.customerId, c1.id) && has(k0.secenekler.customerId, c2.id) && (k0.secenekler.reasonCode ?? []).some((r) => r.code === REASON && r.ad === REASON) && (k0.secenekler.reasonCode ?? []).length >= 2 && (k2.secenekler.reasonCode ?? []).some((r) => r.code === `${REASON}_B`) && !("itemId" in k0.secenekler));
+    check("§10f açık karşılanma: yalnız itemId ekseni (I1+I2 kodlu), customerId anahtarı YOK; süzgeçli de tam", has(v0.secenekler.itemId, i1.id) && has(v0.secenekler.itemId, i2.id) && !("customerId" in v0.secenekler) && has(v1.secenekler.itemId, i2.id));
+    check("§10g müşteri karnesi: müşteri C1+C2, kumaş kodlu; destination=EXPORT süzgeçli yanıtta C1 de listede", has(m0.secenekler.customerId, c1.id) && has(m0.secenekler.itemId, i2.id) && m0.secenekler.itemId!.every((x) => !!x.kod) && has(m2.secenekler.customerId, c1.id));
+    const pr = await getCustomerOrderProfiles({ customerId: [c1.id] });
+    check("§10h sipariş profili: seçenek = süzgeçsiz koşunun satırları (C1 kodlu; süzgeçli istekte C2 de listede)", pr.rows.length === 1 && has(pr.secenekler.customerId, c2.id) && pr.secenekler.customerId!.find((x) => x.id === c1.id)?.kod === `${TAG}-C1`);
+    check("§10i fason karnesi: fasoncu F1+F2, kumaş I1+I2 kodlu, colorId []; süzgeçli (F1) yanıtta F2 de listede", has(f0.secenekler.subcontractorId, f2.id) && has(f0.secenekler.itemId, i2.id) && f0.secenekler.itemId!.every((x) => !!x.kod) && Array.isArray(f0.secenekler.colorId) && has(fa.secenekler.subcontractorId, f2.id));
 
     console.log("\n── §9 R5b-b hizası: dokuma kökte `suzgec` (tek adres), verilmeyen anahtarı basmaz ──");
     const ymd = factoryYmd(new Date(Date.UTC(1993, 5, 6, 12)));
@@ -192,7 +213,7 @@ async function main(): Promise<void> {
     await prisma.orderLine.deleteMany({ where: { orderId: { in: ids.orders } } });
     await prisma.order.deleteMany({ where: { id: { in: ids.orders } } });
     await prisma.item.deleteMany({ where: { id: { in: [i1.id, i2.id] } } });
-    await prisma.customer.deleteMany({ where: { id: { in: [c1.id, c2.id] } } });
+    await prisma.customer.deleteMany({ where: { id: { in: [c1.id, c2.id, c3.id] } } });
   }
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await pool.end();

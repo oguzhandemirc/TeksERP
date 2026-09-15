@@ -26,6 +26,12 @@ export interface ScorecardItemRow {
   legacyStampDelivered: boolean;
   splitDeliveredQty: number | null;
   dispatchedAt: Date;
+  /** R5b-c3 seçici kaynağı: topun kumaşı/rengi (fason karnesi satırında basılmaz; ürün kataloğu, sızıntı değil). */
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  colorId: string | null;
+  colorName: string | null;
 }
 
 /** Dönemden bağımsız AÇIK sevk + yaş satırı. */
@@ -78,11 +84,18 @@ export function queryScorecardItems(range: DateRange, f: ReportFilterInput = {})
         AND ret.qty IS NULL
         AND r."directShipmentId" IS NULL) AS "legacyStampDelivered",
       dlv.qty                    AS "splitDeliveredQty",
-      sd."dispatchedAt"          AS "dispatchedAt"
+      sd."dispatchedAt"          AS "dispatchedAt",
+      r."itemId"                 AS "itemId",
+      i.code                     AS "itemCode",
+      i.name                     AS "itemName",
+      r."colorId"                AS "colorId",
+      col.name                   AS "colorName"
     FROM subcontractor_dispatch_items sdi
     JOIN subcontractor_dispatches sd ON sd.id = sdi."dispatchId"
     JOIN subcontractors sub          ON sub.id = sd."subcontractorId"
     JOIN rolls r                     ON r.id = sdi."rollId"
+    JOIN items i                     ON i.id = r."itemId"
+    LEFT JOIN colors col             ON col.id = r."colorId"
     LEFT JOIN LATERAL (
       -- Kısmi doğrudan sevkin bölünme çocukları: sevk kalemi DEĞİLLER, kalem topunun
       -- çocuğu olarak doğarlar. initialQty = kesilen sevk metresi (değişmez snapshot).

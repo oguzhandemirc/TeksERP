@@ -26,10 +26,23 @@
 // çalıştırılınca aynı dosya çıkar (`_breakdown` sıralama kuralının aynısı).
 // =============================================================================
 
-import { Prisma } from "@prisma/client";
+import { OrderStatus, Prisma } from "@prisma/client";
+import prisma from "../../lib/prisma";
 import { ProductionBalanceService, type BalanceLine } from "../production-balance.service";
+import { ACTIVE_LINE, MEASURED_LINE } from "../helpers/order-line-scope.helper";
 import { round1 } from "./_breakdown";
 import type { ReportFilterInput } from "./_filters";
+import { optionList, type Secenekler, type WithSecenekler } from "./_secenekler";
+
+/** R5b-c3 seçici kaynağı — FIFO motoru pahalı olduğundan HAFİF ayrı sorgu: açık kalemlerin kumaşları (motorla aynı küme koşulu). */
+async function itemOptions(): Promise<Secenekler> {
+  const lines = await prisma.orderLine.findMany({
+    where: { order: { status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] } }, ...ACTIVE_LINE, ...MEASURED_LINE },
+    select: { itemId: true, item: { select: { code: true, name: true } } },
+    distinct: ["itemId"],
+  });
+  return { itemId: optionList(lines.map((l) => ({ id: l.itemId, ad: l.item.name, kod: l.item.code }))) };
+}
 
 /** Detay tablosu tavanı — `DetailTable` sanallaştırma yapmaz. Aşım GİZLENMEZ. */
 const MAX_DETAIL_LINES = 500;
@@ -88,7 +101,7 @@ export interface CoverageLineRow {
   state: CoverageState;
 }
 
-export interface OpenOrderCoverageReport {
+export interface OpenOrderCoverageReport extends WithSecenekler {
   summary: OpenOrderCoverageSummary;
   byCustomer: CoverageBucketRow[];
   byItem: CoverageBucketRow[];
@@ -153,7 +166,8 @@ export async function getOpenOrderCoverage(filters: Pick<ReportFilterInput, "ite
   // durumsuz olduğu için örnek başına maliyet yok.
   // R5b-c: yalnız `itemId` — FIFO havuzu spec başına olduğundan kumaş süzgeci kapsamayı bozmaz; müşteri süzgeci
   // havuzu diğer müşterilerin aciliyetinden koparıp yüzdeyi yalanlar → KAPSAM DIŞI (1e H1).
-  const groups = (await new ProductionBalanceService().getBalance({ itemId: filters.itemId?.length ? filters.itemId : undefined })).data ?? [];
+  const [balance, secenekler] = await Promise.all([new ProductionBalanceService().getBalance({ itemId: filters.itemId?.length ? filters.itemId : undefined }), itemOptions()]);
+  const groups = balance.data ?? [];
 
   const byCustomer = new Map<string, { label: string; acc: Acc }>();
   const byItem = new Map<string, { label: string; acc: Acc }>();
@@ -282,5 +296,6 @@ export async function getOpenOrderCoverage(filters: Pick<ReportFilterInput, "ite
     byItem: bucketRows(byItem),
     lines: rows.slice(0, MAX_DETAIL_LINES),
     linesOmitted: Math.max(0, rows.length - MAX_DETAIL_LINES),
+    secenekler,
   };
 }

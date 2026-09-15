@@ -39,6 +39,7 @@
 import type { DateRange } from "./_shared";
 import { pctOf, round1 } from "./_breakdown";
 import type { ReportFilterInput } from "./_filters";
+import { optionList, hasFilters, type Secenekler, type WithSecenekler } from "./_secenekler";
 import { queryOldestOpenDispatches, queryScorecardItems } from "../helpers/subcontract-scorecard-query.helper";
 import { avgTurnaround, fireOf, groupBySubcontractor, sumCells, type SubCell } from "../helpers/subcontract-scorecard-calc.helper";
 
@@ -70,7 +71,7 @@ export interface SubcontractScorecardRow {
   prevDispatchedQty?: number;
 }
 
-export interface SubcontractScorecard {
+export interface SubcontractScorecard extends WithSecenekler {
   summary: {
     dispatchedQty: number;
     closedDispatchedQty: number;
@@ -126,11 +127,19 @@ export async function getSubcontractScorecard(
   compareRange: DateRange | null = null,
   filters: ReportFilterInput = {},
 ): Promise<SubcontractScorecard> {
-  const [itemRows, prevItemRows, openRows] = await Promise.all([
+  const [itemRows, prevItemRows, openRows, unfiltered] = await Promise.all([
     queryScorecardItems(range, filters),
     compareRange ? queryScorecardItems(compareRange, filters) : Promise.resolve([]),
     queryOldestOpenDispatches(filters),
+    // R5b-c3: seçici kaynağı süzgeçten bağımsız — süzgeçli istek kalem sorgusunu bir kez daha süzgeçsiz koşar (beyanlı ×2).
+    hasFilters(filters) ? queryScorecardItems(range, {}) : Promise.resolve(null),
   ]);
+  const source = unfiltered ?? itemRows;
+  const secenekler: Secenekler = {
+    subcontractorId: optionList(source.map((r) => ({ id: r.subId, ad: r.subName }))),
+    itemId: optionList(source.map((r) => ({ id: r.itemId, ad: r.itemName, kod: r.itemCode }))),
+    colorId: optionList(source.map((r) => ({ id: r.colorId, ad: r.colorName }))),
+  };
   const cells = groupBySubcontractor(itemRows);
   const prevCells = groupBySubcontractor(prevItemRows);
 
@@ -178,5 +187,6 @@ export async function getSubcontractScorecard(
       openItems: Number(r.openItems),
       openQty: round1(Number(r.openQty ?? 0)),
     })),
+    secenekler,
   };
 }

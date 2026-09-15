@@ -53,6 +53,7 @@ import { pctOf, round1 } from "./_breakdown";
 import { isActiveLine } from "../helpers/order-line-scope.helper";
 import { collectShipped, type ShippedCell } from "./_shipped";
 import { hasAny, lineScopeSql, lineScopeWhere, orderScopeSql, orderScopeWhere, type ReportFilterInput } from "./_filters";
+import { optionList, hasFilters, type Secenekler, type WithSecenekler } from "./_secenekler";
 import { factoryYmd } from "../../constants/time";
 
 /** Kümülatif pay eşikleri — klasik ABC (Pareto) sınıflandırması. */
@@ -161,7 +162,7 @@ export interface CustomerScorecardSummary {
   prevTotalQty?: number;
 }
 
-export interface CustomerScorecard {
+export interface CustomerScorecard extends WithSecenekler {
   summary: CustomerScorecardSummary;
   /** Metraja göre sıralı — Pareto eğrisi bu sırayla okunur. */
   ranking: CustomerRankRow[];
@@ -169,6 +170,8 @@ export interface CustomerScorecard {
 }
 
 interface PeriodAgg {
+  /** R5b-c3 seçici kaynağı için (ad ömür boyu tablosundan da gelir; dönem toplayıcısı süzgeçsiz koşunca buradan). */
+  customerName: string;
   orderCount: number;
   lineCount: number;
   qty: number;
@@ -176,12 +179,13 @@ interface PeriodAgg {
   orderDays: Set<string>;
   cancelledOrderCount: number;
   cancelledQty: number;
-  itemQty: Map<string, { name: string; qty: number }>;
+  itemQty: Map<string, { name: string; code: string; qty: number }>;
   colorQty: Map<string, { name: string; qty: number }>;
 }
 
 /** Boş toplayıcı — tek yerde, alan eklenince tüm yollar birlikte güncellenir. */
-const emptyAgg = (): PeriodAgg => ({
+const emptyAgg = (customerName: string): PeriodAgg => ({
+  customerName,
   orderCount: 0,
   lineCount: 0,
   qty: 0,
@@ -219,6 +223,7 @@ async function collectPeriod(range: DateRange, f: ReportFilterInput): Promise<Ma
     },
     select: {
       customerId: true,
+      customer: { select: { name: true } },
       status: true,
       orderDate: true,
       lines: {
@@ -228,7 +233,7 @@ async function collectPeriod(range: DateRange, f: ReportFilterInput): Promise<Ma
           quantity: true,
           cancelledAt: true,
           itemId: true,
-          item: { select: { name: true } },
+          item: { select: { name: true, code: true } },
           colorId: true,
           color: { select: { name: true } },
         },
@@ -239,7 +244,7 @@ async function collectPeriod(range: DateRange, f: ReportFilterInput): Promise<Ma
   for (const o of orders) {
     let a = map.get(o.customerId);
     if (!a) {
-      a = emptyAgg();
+      a = emptyAgg(o.customer.name);
       map.set(o.customerId, a);
     }
 
@@ -267,7 +272,7 @@ async function collectPeriod(range: DateRange, f: ReportFilterInput): Promise<Ma
       }
       a.lineCount++;
       a.qty += q;
-      const it = a.itemQty.get(l.itemId) ?? { name: l.item.name, qty: 0 };
+      const it = a.itemQty.get(l.itemId) ?? { name: l.item.name, code: l.item.code, qty: 0 };
       it.qty += q;
       a.itemQty.set(l.itemId, it);
       if (l.colorId && l.color) {
@@ -342,14 +347,21 @@ export async function getCustomerScorecard(
   compareRange: DateRange | null = null,
   filters: ReportFilterInput = {},
 ): Promise<CustomerScorecard> {
-  const [period, lifetime, prevPeriod, shippedCells] = await Promise.all([
+  const [period, lifetime, prevPeriod, shippedCells, unfiltered] = await Promise.all([
     collectPeriod(range, filters),
     collectLifetime(filters),
     compareRange ? collectPeriod(compareRange, filters) : Promise.resolve(null),
     // "Dönemde sevk edilen metraj" TEK TANIM (`_shipped.ts`) — brüt, doğrudan
     // sevkler dahil, iade geri-eklemeli. İkinci bir tanım üretmiyoruz.
     collectShipped(range),
+    // R5b-c3: seçici kaynağı süzgeçten bağımsız — süzgeçli istek dönem toplayıcısını bir kez daha süzgeçsiz koşar (beyanlı ×2).
+    hasFilters(filters) ? collectPeriod(range, {}) : Promise.resolve(null),
   ]);
+  const source = unfiltered ?? period;
+  const secenekler: Secenekler = {
+    customerId: optionList([...source.entries()].map(([id, a]) => ({ id, ad: a.customerName }))),
+    itemId: optionList([...source.values()].flatMap((a) => [...a.itemQty.entries()].map(([id, it]) => ({ id, ad: it.name, kod: it.code })))),
+  };
 
   const byId = new Map(lifetime.map((l) => [l.customerId, l]));
   // R5b-c: sevk hücreleri ortak tanımdan (`_shipped`) gelir, süzgeç burada — müşteri/hedef için "ömür boyu
@@ -396,7 +408,7 @@ export async function getCustomerScorecard(
       // Deterministik "favori": metraj DESC, eşitlikte ada göre. Sıralama
       // anahtarı tek olsaydı eşit metrajlı iki kumaşta sonuç koşumdan koşuma
       // değişir ve rapor kendini tekrar etmezdi.
-      const top = (m: PeriodAgg["itemQty"]) =>
+      const top = (m: Map<string, { name: string; qty: number }>) =>
         [...m.values()].sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name, "tr"))[0] ??
         null;
       const topItem = top(agg.itemQty);
@@ -519,5 +531,6 @@ export async function getCustomerScorecard(
     },
     ranking: rows,
     atRisk,
+    secenekler,
   };
 }

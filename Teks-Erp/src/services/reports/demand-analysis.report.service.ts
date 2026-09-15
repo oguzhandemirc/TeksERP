@@ -24,6 +24,7 @@ import { attachPrev, buildBreakdown, pctOf, round1, type BreakdownDim, type Brea
 import { factoryMonthSql } from "../../constants/time";
 import { ACTIVE_LINE } from "../helpers/order-line-scope.helper";
 import { customerScopeSql, customerScopeWhere, lineScopeSql, lineScopeWhere, type ReportFilterInput } from "./_filters";
+import { optionList, hasFilters, type Secenekler, type WithSecenekler } from "./_secenekler";
 
 /** Mevsimsellik penceresi (ay). Dönemden bağımsız — başlıktaki gerekçe. */
 const SEASONALITY_MONTHS = 24;
@@ -62,7 +63,7 @@ export interface DemandAnalysisSummary {
   specsOmitted: number;
 }
 
-export interface DemandAnalysisReport {
+export interface DemandAnalysisReport extends WithSecenekler {
   summary: DemandAnalysisSummary;
   specs: DemandSpecRow[];
   byItem: BreakdownRow[];
@@ -79,6 +80,8 @@ interface LineCell {
   colorHex: string | null;
   width: Prisma.Decimal | null;
   customerId: string;
+  customerName: string;
+  itemCode: string;
   qty: number;
 }
 
@@ -117,10 +120,10 @@ async function collect(range: DateRange, f: ReportFilterInput): Promise<LineCell
       quantity: true,
       width: true,
       itemId: true,
-      item: { select: { name: true } },
+      item: { select: { name: true, code: true } },
       colorId: true,
       color: { select: { name: true, hex: true } },
-      order: { select: { customerId: true } },
+      order: { select: { customerId: true, customer: { select: { name: true } } } },
     },
   });
   return lines.map((l) => ({
@@ -131,13 +134,15 @@ async function collect(range: DateRange, f: ReportFilterInput): Promise<LineCell
     colorHex: l.color?.hex ?? null,
     width: l.width,
     customerId: l.order.customerId,
+    customerName: l.order.customer.name,
+    itemCode: l.item.code,
     qty: Number(l.quantity),
   }));
 }
 
 /**
  * Aylık seri. Gruplama `factoryMonthSql` ile — saat dilimi literali çağıran
- * tarafa kopyalanmaz (tek kaynak `constants/time.ts`; bekçi o kopyayı yakalar).
+ * tarafa kopyalanmaz (tek source `constants/time.ts`; bekçi o kopyayı yakalar).
  */
 async function collectMonthly(f: ReportFilterInput): Promise<Array<{ month: string; qty: number; lineCount: number }>> {
   const rows = await prisma.$queryRaw<Array<{ month: Date; qty: number | null; lineCount: bigint }>>(Prisma.sql`
@@ -168,11 +173,19 @@ export async function getDemandAnalysis(
   compareRange: DateRange | null = null,
   filters: ReportFilterInput = {},
 ): Promise<DemandAnalysisReport> {
-  const [cells, monthly, prevCells] = await Promise.all([
+  const [cells, monthly, prevCells, unfiltered] = await Promise.all([
     collect(range, filters),
     collectMonthly(filters),
     compareRange ? collect(compareRange, filters) : Promise.resolve(null),
+    // R5b-c3: seçici kaynağı süzgeçten bağımsız — süzgeçli istek toplayıcıyı bir kez daha süzgeçsiz koşar (beyanlı ×2).
+    hasFilters(filters) ? collect(range, {}) : Promise.resolve(null),
   ]);
+  const source = unfiltered ?? cells;
+  const secenekler: Secenekler = {
+    customerId: optionList(source.map((c) => ({ id: c.customerId, ad: c.customerName }))),
+    itemId: optionList(source.map((c) => ({ id: c.itemId, ad: c.itemName, kod: c.itemCode }))),
+    colorId: optionList(source.map((c) => ({ id: c.colorId, ad: c.colorName }))),
+  };
 
   const totalQty = round1(cells.reduce((s, c) => s + c.qty, 0));
 
@@ -271,5 +284,6 @@ export async function getDemandAnalysis(
     byItem,
     byColor,
     monthly,
+    secenekler,
   };
 }

@@ -156,7 +156,10 @@ anahtarı (`devere.enabled`, KAPALI doğar).
   bayt bayt eski; verilirse cevap kökünde `suzgec` beyanı (yalnız verilen anahtarlar;
   dokuma ve kalite/fire levent süzgeci de aynı yere yazar — tek adres). Tanınmayan kimlik boş
   sonuç döner (404 değil). Açık karşılanmada müşteri süzgeci ve fason karnesinde işlem
-  türü BİLEREK yok. Eski panel süzgeç göndermez — fark yok.
+  türü BİLEREK yok. Aynı 8 ucun cevabına `meta.secenekler` (seçici kaynağı: o raporun
+  eksenleri için pencerede geçen müşteri/kumaş/renk/fasoncu/sebep listesi, ≤200/eksen,
+  süzgeçten bağımsız; süzgeçli istek listeyi çıkarmak için toplayıcıyı bir kez daha
+  süzgeçsiz koşar) eklendi. Eski panel süzgeç göndermez — fark yok.
 
 **`dist-web` DEĞİŞTİ.** Panel kaynağı bu turda geniş çapta değişti (1.3.1 → 1.3.2);
 web arayüzü paketi yeniden derlenir. Patron modülünü kullanan kurulumlarda arayüz
