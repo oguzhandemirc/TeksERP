@@ -27,6 +27,11 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
+          "metin": "Yeni Alış Siparişi ve Yeni Mal Kabul formlarında tedarikçi kutusunun yanına “Listeden seç” düğmesi geldi: cari kartlar ve fason firmalar tek tabloda (Kod · Ünvan · Rol · Vergi No · Telefon), rol süzgeci (Tedarikçi · Alıcı + Satıcı · Fason) ve kod/ünvan/vergi no araması; satıra tıklayınca seçilir. Yalnız müşteri kartları alışta listelenmez. Küçük açılır kutu da yerinde durur; alış siparişleri listesindeki tedarikçi süzgeci değişmedi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
           "metin": "Üretim İstasyonları sayfasına liste görünümü geldi ve varsayılan oldu: her satır bir makine (İstasyon · Görev Türü · Tip · Departman · Yetenekler · Makine · Durum · Cihazlar · İşlemler), makinesi olmayan istasyon tek satır; satırdaki düzenle / QR / pasife al / sil işlemleri kart görünümündekiyle aynı, istasyon adına tıklayınca istasyon düzenlenir. Sayfa başlığındaki ikon çiftiyle kart görünümüne geçilir; son seçim bu bilgisayarda hatırlanır. Arama, filtreler, “Pasifleri göster” ve Excel/PDF dışa aktarımı iki görünümde ortaktır."
         },
         {

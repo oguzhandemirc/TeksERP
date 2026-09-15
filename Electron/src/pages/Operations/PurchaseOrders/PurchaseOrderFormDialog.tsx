@@ -233,6 +233,7 @@ export function PurchaseOrderFormDialog({ open, orderId, onOpenChange, onSaved }
                   onChange={setSupplier}
                   selectedLabel={detailLabel}
                   disabled={editBlocked}
+                  modalPicker
                 />
               </div>
               <div>

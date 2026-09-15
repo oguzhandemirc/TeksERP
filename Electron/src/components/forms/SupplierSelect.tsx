@@ -27,7 +27,7 @@
 // =============================================================================
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, ListFilter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -56,6 +56,7 @@ import {
   type SupplierOption,
   type SupplierParty,
 } from "./supplierParty";
+import { SupplierPickerModal } from "./SupplierPickerModal";
 
 const PAGE_SIZE = 25;
 const DEBOUNCE_MS = 200;
@@ -83,6 +84,12 @@ interface Props {
   includeInactive?: boolean;
   disabled?: boolean;
   className?: string;
+  /**
+   * Kutunun yanında "listeden seç" düğmesi (istek #5): filtrelenebilir tablo modalı (rol · arama ·
+   * Kod · Ünvan · Rol · Vergi No · Telefon). FORM kullanımlarında açılır (alış siparişi · mal kabul);
+   * satır içi/filtre şeridi kullanımında kapalı — küçük kutu orada bayt bayt.
+   */
+  modalPicker?: boolean;
 }
 
 export function SupplierSelect({
@@ -95,8 +102,10 @@ export function SupplierSelect({
   includeInactive = false,
   disabled,
   className,
+  modalPicker = false,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
 
@@ -207,15 +216,16 @@ export function SupplierSelect({
 
   return (
     <div className={className}>
+      <div className="flex items-start gap-1">
       <Popover open={open} onOpenChange={disabled ? undefined : setOpen}>
-        <PopoverTrigger asChild>
+        <PopoverTrigger asChild className="min-w-0 flex-1">
           <Button
             type="button"
             variant="outline"
             role="combobox"
             aria-expanded={open}
             disabled={disabled}
-            className={cn("w-full justify-between font-normal", !resolvedLabel && "text-muted-foreground")}
+            className={cn("w-full min-w-0 justify-between font-normal", !resolvedLabel && "text-muted-foreground")}
           >
             <span className="truncate">
               {triggerText}
@@ -263,6 +273,24 @@ export function SupplierSelect({
           </Command>
         </PopoverContent>
       </Popover>
+      {modalPicker && (
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="shrink-0"
+          disabled={disabled}
+          aria-label="Listeden seç (filtreli)"
+          title="Listeden seç — rol süzgeci, arama, Kod · Ünvan · Rol · Vergi No · Telefon"
+          onClick={() => setModalOpen(true)}
+        >
+          <ListFilter className="h-4 w-4" />
+        </Button>
+      )}
+      </div>
+      {modalPicker && (
+        <SupplierPickerModal open={modalOpen} onOpenChange={setModalOpen} onPick={onChange} includeInactive={includeInactive} />
+      )}
 
       {notice && (
         <p

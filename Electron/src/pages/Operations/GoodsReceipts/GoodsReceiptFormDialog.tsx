@@ -196,6 +196,7 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
                 nullable
                 noneLabel="— (tedarikçisiz)"
                 disabled={createM.isPending}
+                modalPicker
               />
             </div>
             <div>

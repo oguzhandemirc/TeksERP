@@ -10644,3 +10644,11 @@ Ders: **"tren kesişimi"** — iki oturumun aynı dosyaya birer satır eklemesi 
 
 **Vitest** `receiptLineColumns.test.tsx` 4/4: kumaş-only başlık bayt bayt · karma başlık · iplik ve kumaş satırının HER hücresi aynı dizindeki başlığın etiketini taşır · bobin placeholder + adet title; negatif sonda: "Renk / Lot" → "Renk" ① ❌, Lot hücresine yanlış dizin etiketi ② ❌ görüldü. GoodsReceipts vitest 74/74.
 
+## 2026-09-16 — Kullanıcı isteği #5: alış siparişinde tedarikçi seçimi filtrelenebilir LİSTE MODALI [PROFİL yüzey]
+
+**Ölçüm:** `SupplierSelect` üç yerde — `PurchaseOrderFormDialog` (form) · `GoodsReceiptFormDialog` (form, "Tedarikçi (opsiyonel)") · `PurchaseOrderFilterBar` (filtre şeridi, satır içi). **Karar (1e):** bileşene `modalPicker` prop'u — iki FORM'da açık (kutunun yanında "Listeden seç (filtreli)" ikon düğmesi), filtre şeridinde kapalı (küçük kutu bayt bayt).
+
+**Modal:** `SupplierPickerModal` — Cariler sayfasının tablo bileşeni `DataTable` (TanStack tablo örneği yerelde kurulur; `SortableHeader` bağlamı olmadığı için başlıklar düz metin) ile Kod · Ünvan · Rol · Vergi No · Telefon; arama SUNUCUDA (iki uç da `search`; istemcide süzmek ilk sayfayı süzerdi — `SupplierSelect` başlığı), rol süzgeci istemcide (sayfa 100). Saf katman `supplierPicker.ts`: iki bacak → tek satır (`Customer.type` SUPPLIER/BOTH + `Subcontractor` = Fason), **müşteri-only (CUSTOMER) kart BİLEREK listelenmez** (küçük kutuda kalmaya devam eder — orada davranış değişmedi), boş rol kümesi = boş liste (sessizce "hepsi" olmaz). Boş listede "Tedarikçi kartı yok — Tanımlar → İş Ortakları → Cariler'den açın". `DataTable` satır tıklaması çift-tık ayrımı için gecikmelidir (`ROW_OPEN_DELAY_MS`) — test `waitFor` ile bekler.
+
+**Vitest** `supplierPicker.test` 2 + `SupplierPickerModal.test` 5 (düğmeden açılır · kolonlar · müşteri-only yok · Fason satırı Rol Fason · rol süzgeci · satır tıklama → `{kind, id}` forma + kapanış · boş liste metni · `modalPicker`sız kutuda düğme yok); negatif sonda: müşteri-only eklenince + süzgeç düşürülünce 4 ❌ görüldü. Formlar vitest 122/122.
+
