@@ -7,7 +7,7 @@
 import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import { customerRowSql, type ReportFilterInput } from "./_filters";
-import { optionList, hasFilters, type WithSecenekler } from "./_secenekler";
+import { droppedRows, optionList, hasFilters, type WithSecenekler } from "./_secenekler";
 
 // ---------- 1) Order Profile Summary -----------------------------------------
 
@@ -29,8 +29,9 @@ export interface CustomerOrderProfileReport extends WithSecenekler { rows: Custo
 export async function getCustomerOrderProfiles(filters: ReportFilterInput = {}): Promise<CustomerOrderProfileReport> {
   const rows = await profileRows(filters);
   // Süzgeçli istek seçenek listesi için bir kez daha süzgeçsiz toplar (beyanlı ×2).
-  const source = hasFilters(filters) ? await profileRows({}) : rows;
-  return { rows, secenekler: { customerId: optionList(source.map((r) => ({ id: r.customerId, ad: r.customerName, kod: r.customerCode }))) } };
+  const unfiltered = hasFilters(filters) ? await profileRows({}) : null;
+  const source = unfiltered ?? rows;
+  return { rows, secenekler: { customerId: optionList(source.map((r) => ({ id: r.customerId, ad: r.customerName, kod: r.customerCode }))) }, dusenSatir: droppedRows(unfiltered?.length ?? null, rows.length) };
 }
 
 async function profileRows(filters: ReportFilterInput): Promise<CustomerOrderProfileRow[]> {

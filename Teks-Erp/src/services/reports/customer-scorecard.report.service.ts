@@ -53,7 +53,7 @@ import { pctOf, round1 } from "./_breakdown";
 import { isActiveLine } from "../helpers/order-line-scope.helper";
 import { collectShipped, type ShippedCell } from "./_shipped";
 import { hasAny, lineScopeSql, lineScopeWhere, orderScopeSql, orderScopeWhere, type ReportFilterInput } from "./_filters";
-import { optionList, hasFilters, type Secenekler, type WithSecenekler } from "./_secenekler";
+import { droppedRows, optionList, hasFilters, type Secenekler, type WithSecenekler } from "./_secenekler";
 import { factoryYmd } from "../../constants/time";
 
 /** Kümülatif pay eşikleri — klasik ABC (Pareto) sınıflandırması. */
@@ -532,5 +532,6 @@ export async function getCustomerScorecard(
     ranking: rows,
     atRisk,
     secenekler,
+    dusenSatir: droppedRows(unfiltered?.size ?? null, period.size),
   };
 }

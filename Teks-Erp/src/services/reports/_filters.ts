@@ -55,13 +55,15 @@ export interface ReportFilterInput {
 export type SuzgecEcho = Record<string, string | string[] | number>;
 
 /** Verilen süzgeç anahtarlarını (boş liste = verilmedi) düz nesneye çevirir; hiçbiri yoksa `undefined` → cevapta anahtar YOK. */
-export function filterEcho(input: Record<string, unknown>, keys: readonly string[]): SuzgecEcho | undefined {
+export function filterEcho(input: Record<string, unknown>, keys: readonly string[], dusenSatir?: number): SuzgecEcho | undefined {
   const out: SuzgecEcho = {};
   for (const k of keys) {
     const v = input[k];
     if (Array.isArray(v) ? v.length > 0 : typeof v === "string" && v.length > 0) out[k] = v as string | string[];
   }
-  return Object.keys(out).length ? out : undefined;
+  if (!Object.keys(out).length) return undefined;
+  // R5b-c4: süzgeç kesti mi — dokuma/finans ile aynı anahtar; süzgeçsizde yankı yok, sayı da yok.
+  return dusenSatir === undefined ? out : { ...out, dusenSatir };
 }
 
 export const hasAny = (l: string[] | undefined): l is string[] => !!l && l.length > 0;

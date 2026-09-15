@@ -30,7 +30,7 @@ import { attachPrev, buildBreakdown, pctOf, round1, type BreakdownDim, type Brea
 import { factoryDaySql } from "../../constants/time";
 import { ACTIVE_LINE } from "../helpers/order-line-scope.helper";
 import { lineScopeSql, lineScopeWhere, orderScopeSql, orderScopeWhere, type ReportFilterInput } from "./_filters";
-import { optionList, hasFilters, type Secenekler, type WithSecenekler } from "./_secenekler";
+import { droppedRows, optionList, hasFilters, type Secenekler, type WithSecenekler } from "./_secenekler";
 
 export interface OrderIntakeSummary {
   /** Dönemde açılan sipariş adedi — sonradan iptal edilenler DAHİL. */
@@ -247,5 +247,6 @@ export async function getOrderIntake(
     byItem,
     daily,
     secenekler,
+    dusenSatir: droppedRows(unfiltered?.orderCount ?? null, cur.orderCount),
   };
 }

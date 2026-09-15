@@ -44,15 +44,15 @@ const FASON_ANAHTARLARI = ["subcontractorId", "itemId", "colorId"] as const;
  *       - { in: query, name: itemId, schema: { type: string }, description: "Topun kumaşı (uuid; CSV)" }
  *       - { in: query, name: colorId, schema: { type: string }, description: "Topun rengi (uuid; CSV)" }
  *     responses:
- *       200: { description: "Fason karnesi (süzgeçliyse zarfta suzgec; meta.secenekler fasoncu/kumaş/renk seçici kaynağı ≤200, süzgeçten bağımsız — süzgeçli istek kalem sorgusunu bir kez daha süzgeçsiz koşar)" }
+ *       200: { description: "Fason karnesi (süzgeçliyse zarfta suzgec (+dusenSatir); meta.secenekler fasoncu/kumaş/renk seçici kaynağı ≤200, süzgeçten bağımsız — süzgeçli istek kalem sorgusunu bir kez daha süzgeçsiz koşar)" }
  */
 router.get("/scorecard", ...reportGate("subcontract/scorecard"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = subcontractScorecardQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const compareRange = resolveCompareRange(input, range);
-    const { data, secenekler } = splitOptions(await getSubcontractScorecard(range, compareRange, input));
-    res.status(200).json(reportEnvelope(data, range, compareRange, { suzgec: filterEcho(input, FASON_ANAHTARLARI), secenekler }));
+    const { data, secenekler, dusenSatir } = splitOptions(await getSubcontractScorecard(range, compareRange, input));
+    res.status(200).json(reportEnvelope(data, range, compareRange, { suzgec: filterEcho(input, FASON_ANAHTARLARI, dusenSatir), secenekler }));
   } catch (e) {
     next(e);
   }

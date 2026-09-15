@@ -31,7 +31,7 @@ import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
 import { round1 } from "./_breakdown";
 import { orderScopeSql, type ReportFilterInput } from "./_filters";
-import { optionList, hasFilters, type Secenekler, type WithSecenekler } from "./_secenekler";
+import { droppedRows, optionList, hasFilters, type Secenekler, type WithSecenekler } from "./_secenekler";
 
 /** Altında istatistiğin anlamsız sayıldığı örnek sayısı. */
 export const MIN_SAMPLE = 5;
@@ -189,7 +189,8 @@ const days = (from: Date, to: Date) => Math.max(0, (to.getTime() - from.getTime(
 export async function getOrderLeadTime(range: DateRange, filters: ReportFilterInput = {}): Promise<OrderLeadTimeReport> {
   const rows = await collect(range, filters);
   // R5b-c3: seçici kaynağı süzgeçten bağımsız — süzgeçli istek toplayıcıyı bir kez daha süzgeçsiz koşar (beyanlı ×2).
-  const source = hasFilters(filters) ? await collect(range, {}) : rows;
+  const unfiltered = hasFilters(filters) ? await collect(range, {}) : null;
+  const source = unfiltered ?? rows;
   const secenekler: Secenekler = {
     customerId: optionList(source.map((r) => ({ id: r.customerId, ad: r.customerName }))),
     itemId: optionList(source.flatMap((r) => r.itemOpts ?? [])),
@@ -269,5 +270,6 @@ export async function getOrderLeadTime(range: DateRange, filters: ReportFilterIn
     neverShippedCount: neverShipped,
     minSample: MIN_SAMPLE,
     secenekler,
+    dusenSatir: droppedRows(unfiltered?.length ?? null, rows.length),
   };
 }

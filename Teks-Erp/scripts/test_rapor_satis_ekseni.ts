@@ -8,11 +8,14 @@
 // §0 Zod/echo (DB'siz) · §1 sipariş karnesi · §2 talep analizi · §3 teslim süresi · §4 iptal karnesi (pay+payda) ·
 // §5 açık sipariş karşılanma (yalnız itemId) · §6 müşteri karnesi · §7 sipariş profili · §8 fason karnesi ·
 // §9 R5b-b hizası (dokuma kökte `suzgec`, verilmeyen anahtarı basmaz — TEK ADRES) · §10 R5b-c3 `meta.secenekler` seçici
-//   kaynağı: pencerede geçen değerler (pencere DIŞI sipariş yok — sonda), süzgeçli yanıtta TAM liste, yalnız o raporun eksenleri, kod dolu.
+//   kaynağı: pencerede geçen değerler (pencere DIŞI sipariş yok — sonda), süzgeçli yanıtta TAM liste, yalnız o raporun eksenleri, kod dolu ·
+// §11 R5b-c4 `dusenSatir`: süzgeçsiz − süzgeçli satır, yalnız süzgeçliyken (süzgeçsiz raporda anahtar YOK), 8 uçta; echo'ya
+//   `filterEcho(input, keys, dusenSatir)` ile girer — dokuma/finans ile aynı anahtar ("veri yok" ↔ "süzgeç kesti").
 // NEGATİF SONDALAR (2026-09-15, ölçüldü): `orderScopeSql` boş parça döner → §1b/§3b/§4b/§4d ❌ (4) ·
 //   `lineScopeWhere` `itemId`yi düşürür → §1c/§2b/§6d ❌ (3) · `filterEcho` her zaman `undefined` → §0d ❌ (1) ·
 //   iptal paydası (`openedInPeriod`) `scope`suz → §4b/§4d ❌ (2) · R5b-c3 (ölçüldü): seçenek süzgeçli satırlardan türer
-//   (`kaynak = cur`) → §10b ❌ · toplayıcı pencereyi yok sayar (`orderDate` where'den düşer) → §1a/§10a ❌ (OUT tarihli O5 fikstürü).
+//   (`kaynak = cur`) → §10b ❌ · toplayıcı pencereyi yok sayar (`orderDate` where'den düşer) → §1a/§10a ❌ (OUT tarihli O5 fikstürü) ·
+//   R5b-c4 (ölçüldü): `droppedRows` hep `undefined` → §11b/§11d ❌ · `filterEcho` `dusenSatir`ı düşürür → §11c ❌.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Pencere 2097-06 (diğer rapor bekçileri 2095/2099 kullanır).
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
@@ -195,6 +198,12 @@ async function main(): Promise<void> {
     const pr = await getCustomerOrderProfiles({ customerId: [c1.id] });
     check("§10h sipariş profili: seçenek = süzgeçsiz koşunun satırları (C1 kodlu; süzgeçli istekte C2 de listede)", pr.rows.length === 1 && has(pr.secenekler.customerId, c2.id) && pr.secenekler.customerId!.find((x) => x.id === c1.id)?.kod === `${TAG}-C1`);
     check("§10i fason karnesi: fasoncu F1+F2, kumaş I1+I2 kodlu, colorId []; süzgeçli (F1) yanıtta F2 de listede", has(f0.secenekler.subcontractorId, f2.id) && has(f0.secenekler.itemId, i2.id) && f0.secenekler.itemId!.every((x) => !!x.kod) && Array.isArray(f0.secenekler.colorId) && has(fa.secenekler.subcontractorId, f2.id));
+
+    console.log("\n── §11 R5b-c4 `dusenSatir` — süzgeç kesti mi ──");
+    check("§11a ⭐ süzgeçsiz raporda `dusenSatir` anahtarı YOK (8 uç)", [s0, d0, l0, k0, v0, m0, f0].every((r) => !("dusenSatir" in r) || r.dusenSatir === undefined) && (await getCustomerOrderProfiles()).dusenSatir === undefined);
+    check("§11b ⭐ süzgeçli: intake C1 → 4−2=2 · demand I1 → 3−2=1 · leadtime EXPORT → 2−1=1 · iptal C1 → 2−1=1 · karne EXPORT → 2−1=1 · fason F1 → 2−1=1 · karşılanma I1 → açık kalem 3−2=1 · profil C1 → n−1", s1.dusenSatir === 2 && d2.dusenSatir === 1 && l3.dusenSatir === 1 && k1.dusenSatir === 1 && m2.dusenSatir === 1 && fa.dusenSatir === 1 && v1.dusenSatir === 1 && pr.dusenSatir !== undefined && pr.dusenSatir >= 1, JSON.stringify([s1.dusenSatir, d2.dusenSatir, l3.dusenSatir, k1.dusenSatir, m2.dusenSatir, fa.dusenSatir, v1.dusenSatir, pr.dusenSatir]));
+    check("§11c echo: `filterEcho(input, keys, 2)` → `{…, dusenSatir: 2}`; süzgeç yokken sayı verilse de yankı YOK; süzgeçli ama sayı undefined → anahtar yok", JSON.stringify(filterEcho(orderIntakeQuerySchema.parse({ customerId: YOK }), ["customerId"], 2)) === JSON.stringify({ customerId: [YOK], dusenSatir: 2 }) && filterEcho(orderIntakeQuerySchema.parse({}), ["customerId"], 2) === undefined && !("dusenSatir" in (filterEcho(orderIntakeQuerySchema.parse({ customerId: YOK }), ["customerId"]) ?? {})));
+    check("§11d bilinmeyen müşteri → dusenSatir = tüm satırlar (4), rapor boş", s4.dusenSatir === 4 && s4.summary.orderCount === 0);
 
     console.log("\n── §9 R5b-b hizası: dokuma kökte `suzgec` (tek adres), verilmeyen anahtarı basmaz ──");
     const ymd = factoryYmd(new Date(Date.UTC(1993, 5, 6, 12)));

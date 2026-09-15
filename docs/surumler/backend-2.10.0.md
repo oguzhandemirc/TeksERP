@@ -159,7 +159,8 @@ anahtarı (`devere.enabled`, KAPALI doğar).
   türü BİLEREK yok. Aynı 8 ucun cevabına `meta.secenekler` (seçici kaynağı: o raporun
   eksenleri için pencerede geçen müşteri/kumaş/renk/fasoncu/sebep listesi, ≤200/eksen,
   süzgeçten bağımsız; süzgeçli istek listeyi çıkarmak için toplayıcıyı bir kez daha
-  süzgeçsiz koşar) eklendi. Eski panel süzgeç göndermez — fark yok.
+  süzgeçsiz koşar) eklendi; süzgeçli cevapta `suzgec.dusenSatir` (süzgecin kaç satır
+  kestiği — dokuma/finans ile aynı anahtar). Eski panel süzgeç göndermez — fark yok.
 
 **`dist-web` DEĞİŞTİ.** Panel kaynağı bu turda geniş çapta değişti (1.3.1 → 1.3.2);
 web arayüzü paketi yeniden derlenir. Patron modülünü kullanan kurulumlarda arayüz

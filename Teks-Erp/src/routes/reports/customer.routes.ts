@@ -45,13 +45,13 @@ const MUSTERI_ANAHTARLARI = ["customerId", "destination", "itemId"] as const;
  *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
  *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Müşterinin VARSAYILAN hedefi (Customer.defaultDestination) — sevkin fiili hedefi değil" }
  *     responses:
- *       200: { description: "Profil satırları (süzgeçliyse kökte suzgec; meta.secenekler müşteri seçici kaynağı ≤200, süzgeçten bağımsız — süzgeçli istek bir kez daha süzgeçsiz toplar)" }
+ *       200: { description: "Profil satırları (süzgeçliyse kökte suzgec (+dusenSatir); meta.secenekler müşteri seçici kaynağı ≤200, süzgeçten bağımsız — süzgeçli istek bir kez daha süzgeçsiz toplar)" }
  */
 router.get("/order-profile", ...reportGate("customer/order-profile"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = orderProfileQuerySchema.parse(req.query);
-    const { rows, secenekler } = await getCustomerOrderProfiles(input);
-    const suzgec = filterEcho(input, MUSTERI_ANAHTARLARI);
+    const { rows, secenekler, dusenSatir } = await getCustomerOrderProfiles(input);
+    const suzgec = filterEcho(input, MUSTERI_ANAHTARLARI, dusenSatir);
     res.status(200).json({ success: true, data: rows, ...(suzgec ? { suzgec } : {}), meta: { secenekler } });
   } catch (e) {
     next(e);
@@ -102,15 +102,15 @@ router.get("/order-profile", ...reportGate("customer/order-profile"), async (req
  *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV) — dönem, ömür boyu ve sevk metrajı aynı koşulla" }
  *     responses:
  *       200:
- *         description: Müşteri karnesi (süzgeçliyse zarfta `suzgec`; `meta.secenekler` müşteri/kumaş seçici kaynağı, süzgeçten bağımsız — süzgeçli istek dönem toplayıcısını bir kez daha süzgeçsiz koşar)
+ *         description: "Müşteri karnesi (süzgeçliyse zarfta `suzgec` (+`dusenSatir`: süzgeçsiz − süzgeçli satır); `meta.secenekler` müşteri/kumaş seçici kaynağı, süzgeçten bağımsız — süzgeçli istek dönem toplayıcısını bir kez daha süzgeçsiz koşar)"
  */
 router.get("/scorecard", ...reportGate("customer/scorecard"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = customerScorecardQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const compareRange = resolveCompareRange(input, range);
-    const { data, secenekler } = splitOptions(await getCustomerScorecard(range, compareRange, input));
-    res.status(200).json(reportEnvelope(data, range, compareRange, { suzgec: filterEcho(input, MUSTERI_ANAHTARLARI), secenekler }));
+    const { data, secenekler, dusenSatir } = splitOptions(await getCustomerScorecard(range, compareRange, input));
+    res.status(200).json(reportEnvelope(data, range, compareRange, { suzgec: filterEcho(input, MUSTERI_ANAHTARLARI, dusenSatir), secenekler }));
   } catch (e) {
     next(e);
   }

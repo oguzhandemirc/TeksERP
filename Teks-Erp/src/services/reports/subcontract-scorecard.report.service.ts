@@ -39,7 +39,7 @@
 import type { DateRange } from "./_shared";
 import { pctOf, round1 } from "./_breakdown";
 import type { ReportFilterInput } from "./_filters";
-import { optionList, hasFilters, type Secenekler, type WithSecenekler } from "./_secenekler";
+import { droppedRows, optionList, hasFilters, type Secenekler, type WithSecenekler } from "./_secenekler";
 import { queryOldestOpenDispatches, queryScorecardItems } from "../helpers/subcontract-scorecard-query.helper";
 import { avgTurnaround, fireOf, groupBySubcontractor, sumCells, type SubCell } from "../helpers/subcontract-scorecard-calc.helper";
 
@@ -188,5 +188,6 @@ export async function getSubcontractScorecard(
       openQty: round1(Number(r.openQty ?? 0)),
     })),
     secenekler,
+    dusenSatir: droppedRows(unfiltered?.length ?? null, itemRows.length),
   };
 }

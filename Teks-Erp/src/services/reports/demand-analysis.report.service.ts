@@ -24,7 +24,7 @@ import { attachPrev, buildBreakdown, pctOf, round1, type BreakdownDim, type Brea
 import { factoryMonthSql } from "../../constants/time";
 import { ACTIVE_LINE } from "../helpers/order-line-scope.helper";
 import { customerScopeSql, customerScopeWhere, lineScopeSql, lineScopeWhere, type ReportFilterInput } from "./_filters";
-import { optionList, hasFilters, type Secenekler, type WithSecenekler } from "./_secenekler";
+import { droppedRows, optionList, hasFilters, type Secenekler, type WithSecenekler } from "./_secenekler";
 
 /** Mevsimsellik penceresi (ay). Dönemden bağımsız — başlıktaki gerekçe. */
 const SEASONALITY_MONTHS = 24;
@@ -285,5 +285,6 @@ export async function getDemandAnalysis(
     byColor,
     monthly,
     secenekler,
+    dusenSatir: droppedRows(unfiltered?.length ?? null, cells.length),
   };
 }

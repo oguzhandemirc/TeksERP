@@ -44,8 +44,14 @@ export interface Secenekler {
   subcontractorId?: Secenek[];
   reasonCode?: SebepSecenek[];
 }
-/** Rapor nesnesi seçici kaynağını taşır; rota `meta.secenekler`e kaldırır. */
-export interface WithSecenekler { secenekler: Secenekler }
+/** Rapor nesnesi seçici kaynağını taşır; rota `meta.secenekler`e kaldırır. `dusenSatir` (R5b-c4) yalnız süzgeçliyken:
+ * süzgeçsiz satır − süzgeçli satır (toplayıcı zaten ×2 koştuğu için bedava) — ekranda "veri yok" ile "süzgeç kesti" ayrılsın. */
+export interface WithSecenekler { secenekler: Secenekler; dusenSatir?: number }
+
+/** Süzgeçli koşumda düşen satır sayısı; süzgeçsizde `undefined` (anahtar YOK). */
+export function droppedRows(unfilteredCount: number | null, filteredCount: number): number | undefined {
+  return unfilteredCount == null ? undefined : Math.max(0, unfilteredCount - filteredCount);
+}
 
 /**
  * ⚠️ İKİNCİ KOŞUM HER RAPORDA GEREKMEZ ve ölçüt SÜZGECİN NEREYE İNDİĞİdir

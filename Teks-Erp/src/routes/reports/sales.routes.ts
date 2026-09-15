@@ -93,13 +93,13 @@ router.get("/return-scorecard", ...reportGate("sales/return-scorecard"), async (
  *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV ya da tekrarlı anahtar). Müşteri süzgeci BİLEREK yok — FIFO havuzu bozulurdu." }
  *     responses:
  *       200:
- *         description: "Karşılanma özeti + müşteri/kumaş kırılımı + kalem listesi (süzgeçliyse zarfta `suzgec`; `meta.secenekler` seçici kaynağı — pencerede geçen değerler, ≤200/eksen, süzgeçten bağımsız: süzgeçli istek toplayıcıyı bir kez daha süzgeçsiz koşar)"
+ *         description: "Karşılanma özeti + müşteri/kumaş kırılımı + kalem listesi (süzgeçliyse zarfta `suzgec` (+`dusenSatir`: süzgeçsiz − süzgeçli satır); `meta.secenekler` seçici kaynağı — pencerede geçen değerler, ≤200/eksen, süzgeçten bağımsız: süzgeçli istek toplayıcıyı bir kez daha süzgeçsiz koşar)"
  */
 router.get("/open-order-coverage", ...reportGate("sales/open-order-coverage"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = openOrderCoverageQuerySchema.parse(req.query);
-    const { data, secenekler } = splitOptions(await getOpenOrderCoverage(input));
-    res.status(200).json(reportEnvelope(data, resolveDateRange({}), null, { suzgec: filterEcho(input, SIPARIS_ANAHTARLARI), secenekler }));
+    const { data, secenekler, dusenSatir } = splitOptions(await getOpenOrderCoverage(input));
+    res.status(200).json(reportEnvelope(data, resolveDateRange({}), null, { suzgec: filterEcho(input, SIPARIS_ANAHTARLARI, dusenSatir), secenekler }));
   } catch (e) {
     next(e);
   }
@@ -136,15 +136,15 @@ router.get("/open-order-coverage", ...reportGate("sales/open-order-coverage"), a
  *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
  *     responses:
  *       200:
- *         description: "Sipariş giriş karnesi (süzgeçliyse zarfta `suzgec`; `meta.secenekler` seçici kaynağı — pencerede geçen değerler, ≤200/eksen, süzgeçten bağımsız: süzgeçli istek toplayıcıyı bir kez daha süzgeçsiz koşar)"
+ *         description: "Sipariş giriş karnesi (süzgeçliyse zarfta `suzgec` (+`dusenSatir`: süzgeçsiz − süzgeçli satır); `meta.secenekler` seçici kaynağı — pencerede geçen değerler, ≤200/eksen, süzgeçten bağımsız: süzgeçli istek toplayıcıyı bir kez daha süzgeçsiz koşar)"
  */
 router.get("/order-intake", ...reportGate("sales/order-intake"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = orderIntakeQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const compareRange = resolveCompareRange(input, range);
-    const { data, secenekler } = splitOptions(await getOrderIntake(range, compareRange, input));
-    res.status(200).json(reportEnvelope(data, range, compareRange, { suzgec: filterEcho(input, SIPARIS_ANAHTARLARI), secenekler }));
+    const { data, secenekler, dusenSatir } = splitOptions(await getOrderIntake(range, compareRange, input));
+    res.status(200).json(reportEnvelope(data, range, compareRange, { suzgec: filterEcho(input, SIPARIS_ANAHTARLARI, dusenSatir), secenekler }));
   } catch (e) {
     next(e);
   }
@@ -184,15 +184,15 @@ router.get("/order-intake", ...reportGate("sales/order-intake"), async (req: Req
  *       - { in: query, name: colorId, schema: { type: string }, description: "Renk süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
  *     responses:
  *       200:
- *         description: "Talep analizi (süzgeçliyse zarfta `suzgec`; `meta.secenekler` seçici kaynağı — pencerede geçen değerler, ≤200/eksen, süzgeçten bağımsız: süzgeçli istek toplayıcıyı bir kez daha süzgeçsiz koşar)"
+ *         description: "Talep analizi (süzgeçliyse zarfta `suzgec` (+`dusenSatir`: süzgeçsiz − süzgeçli satır); `meta.secenekler` seçici kaynağı — pencerede geçen değerler, ≤200/eksen, süzgeçten bağımsız: süzgeçli istek toplayıcıyı bir kez daha süzgeçsiz koşar)"
  */
 router.get("/demand-analysis", ...reportGate("sales/demand-analysis"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = demandAnalysisQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const compareRange = resolveCompareRange(input, range);
-    const { data, secenekler } = splitOptions(await getDemandAnalysis(range, compareRange, input));
-    res.status(200).json(reportEnvelope(data, range, compareRange, { suzgec: filterEcho(input, SIPARIS_ANAHTARLARI), secenekler }));
+    const { data, secenekler, dusenSatir } = splitOptions(await getDemandAnalysis(range, compareRange, input));
+    res.status(200).json(reportEnvelope(data, range, compareRange, { suzgec: filterEcho(input, SIPARIS_ANAHTARLARI, dusenSatir), secenekler }));
   } catch (e) {
     next(e);
   }
@@ -231,14 +231,14 @@ router.get("/demand-analysis", ...reportGate("sales/demand-analysis"), async (re
  *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
  *     responses:
  *       200:
- *         description: "Teslim süresi istatistikleri (süzgeçliyse zarfta `suzgec`; `meta.secenekler` seçici kaynağı — pencerede geçen değerler, ≤200/eksen, süzgeçten bağımsız: süzgeçli istek toplayıcıyı bir kez daha süzgeçsiz koşar)"
+ *         description: "Teslim süresi istatistikleri (süzgeçliyse zarfta `suzgec` (+`dusenSatir`: süzgeçsiz − süzgeçli satır); `meta.secenekler` seçici kaynağı — pencerede geçen değerler, ≤200/eksen, süzgeçten bağımsız: süzgeçli istek toplayıcıyı bir kez daha süzgeçsiz koşar)"
  */
 router.get("/order-leadtime", ...reportGate("sales/order-leadtime"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = orderLeadTimeQuerySchema.parse(req.query);
     const range = resolveDateRange(input);
-    const { data, secenekler } = splitOptions(await getOrderLeadTime(range, input));
-    res.status(200).json(reportEnvelope(data, range, null, { suzgec: filterEcho(input, SIPARIS_ANAHTARLARI), secenekler }));
+    const { data, secenekler, dusenSatir } = splitOptions(await getOrderLeadTime(range, input));
+    res.status(200).json(reportEnvelope(data, range, null, { suzgec: filterEcho(input, SIPARIS_ANAHTARLARI, dusenSatir), secenekler }));
   } catch (e) {
     next(e);
   }
@@ -273,14 +273,14 @@ router.get("/order-leadtime", ...reportGate("sales/order-leadtime"), async (req:
  *       - { in: query, name: reasonCode, schema: { type: string }, description: "İptal sebep kodu (ORDER_CANCEL kataloğu; CSV) — yalnız iptal satırlarına, payda süzülmez" }
  *     responses:
  *       200:
- *         description: "İptal karnesi (süzgeçliyse zarfta `suzgec`; `meta.secenekler` seçici kaynağı — pencerede geçen değerler, ≤200/eksen, süzgeçten bağımsız: süzgeçli istek toplayıcıyı bir kez daha süzgeçsiz koşar)"
+ *         description: "İptal karnesi (süzgeçliyse zarfta `suzgec` (+`dusenSatir`: süzgeçsiz − süzgeçli satır); `meta.secenekler` seçici kaynağı — pencerede geçen değerler, ≤200/eksen, süzgeçten bağımsız: süzgeçli istek toplayıcıyı bir kez daha süzgeçsiz koşar)"
  */
 router.get("/order-cancellation", ...reportGate("sales/order-cancellation"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = orderCancellationQuerySchema.parse(req.query);
     const range = resolveDateRange(input);
-    const { data, secenekler } = splitOptions(await getOrderCancellationScorecard(range, input));
-    res.status(200).json(reportEnvelope(data, range, null, { suzgec: filterEcho(input, SIPARIS_ANAHTARLARI), secenekler }));
+    const { data, secenekler, dusenSatir } = splitOptions(await getOrderCancellationScorecard(range, input));
+    res.status(200).json(reportEnvelope(data, range, null, { suzgec: filterEcho(input, SIPARIS_ANAHTARLARI, dusenSatir), secenekler }));
   } catch (e) {
     next(e);
   }

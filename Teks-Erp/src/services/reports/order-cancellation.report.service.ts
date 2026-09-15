@@ -49,7 +49,7 @@ import type { DateRange } from "./_shared";
 import { pctOf, round1 } from "./_breakdown";
 import { factoryDaySql } from "../../constants/time";
 import { idWhere, inSql, orderScopeSql, orderScopeWhere, type ReportFilterInput } from "./_filters";
-import { reasonOptions, optionList, hasFilters, type Secenekler, type WithSecenekler } from "./_secenekler";
+import { droppedRows, reasonOptions, optionList, hasFilters, type Secenekler, type WithSecenekler } from "./_secenekler";
 
 /** Sebebi girilmemiş iptallerin kovası — gizlenmez, adlandırılır. */
 export const NO_REASON_KEY = "__NO_REASON__";
@@ -152,7 +152,7 @@ export async function getOrderCancellationScorecard(
     customerId: optionList(source.map((r) => ({ id: r.customerId, ad: r.customerName }))),
     reasonCode: reasonOptions(source.map((r) => r.cancelReasonCode), (code) => presets.find((p) => p.code === code)?.label),
   };
-  return buildReport({ range, rows, openedInPeriod, undated, presets, daily, scope, secenekler });
+  return buildReport({ range, rows, openedInPeriod, undated, presets, daily, scope, secenekler, dusenSatir: droppedRows(unfiltered?.length ?? null, rows.length) });
 }
 
 /** Dönemde iptal edilen siparişler (çıpa `cancelledAt`); süzgeç parçaları R5b-c. */
@@ -194,10 +194,10 @@ function collectDaily(range: DateRange, scopeSql: Prisma.Sql, reasonSql: Prisma.
 
 interface BuildInput {
   range: DateRange; rows: RawCancel[]; openedInPeriod: number; undated: number; presets: Array<{ code: string; label: string }>;
-  daily: Array<{ day: Date; count: bigint; qty: number | null }>; scope: Prisma.OrderWhereInput; secenekler: Secenekler;
+  daily: Array<{ day: Date; count: bigint; qty: number | null }>; scope: Prisma.OrderWhereInput; secenekler: Secenekler; dusenSatir?: number;
 }
 
-async function buildReport({ range, rows, openedInPeriod, undated, presets, daily, scope, secenekler }: BuildInput): Promise<OrderCancellationReport> {
+async function buildReport({ range, rows, openedInPeriod, undated, presets, daily, scope, secenekler, dusenSatir }: BuildInput): Promise<OrderCancellationReport> {
   // Etiket katalogdan okunur (fabrika düzenlemiş olabilir); kod bilinmiyorsa
   // kodun kendisi basılır — satır KAYBOLMAZ.
   const labelOf = new Map(presets.map((p) => [p.code, p.label]));
@@ -326,5 +326,6 @@ async function buildReport({ range, rows, openedInPeriod, undated, presets, dail
       (a, b) => b.daysToCancel - a.daysToCancel || b.qty - a.qty || a.orderNumber.localeCompare(b.orderNumber, "tr"),
     ),
     secenekler,
+    dusenSatir,
   };
 }

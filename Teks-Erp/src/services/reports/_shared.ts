@@ -184,9 +184,9 @@ export function reportEnvelope<T>(
 }
 
 /** Rapor nesnesinden `secenekler`i ayırır: `data` temiz kalır, liste `meta.secenekler`e gider. */
-export function splitOptions<T extends { secenekler: Secenekler }>(rapor: T): { data: Omit<T, "secenekler">; secenekler: Secenekler } {
-  const { secenekler, ...data } = rapor;
-  return { data, secenekler };
+export function splitOptions<T extends { secenekler: Secenekler; dusenSatir?: number }>(rapor: T): { data: Omit<T, "secenekler" | "dusenSatir">; secenekler: Secenekler; dusenSatir?: number } {
+  const { secenekler, dusenSatir, ...data } = rapor;
+  return { data, secenekler, ...(dusenSatir === undefined ? {} : { dusenSatir }) };
 }
 
 /**

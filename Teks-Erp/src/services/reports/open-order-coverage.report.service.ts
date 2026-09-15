@@ -32,9 +32,14 @@ import { ProductionBalanceService, type BalanceLine } from "../production-balanc
 import { ACTIVE_LINE, MEASURED_LINE } from "../helpers/order-line-scope.helper";
 import { round1 } from "./_breakdown";
 import type { ReportFilterInput } from "./_filters";
-import { optionList, type Secenekler, type WithSecenekler } from "./_secenekler";
+import { droppedRows, optionList, type Secenekler, type WithSecenekler } from "./_secenekler";
 
 /** R5b-c3 seçici kaynağı — FIFO motoru pahalı olduğundan HAFİF ayrı sorgu: açık kalemlerin kumaşları (motorla aynı küme koşulu). */
+/** R5b-c4: süzgeçli koşumda açık kalem sayısı (FIFO motoru koşmadan; motorla aynı küme koşulu) — `dusenSatir` paydası. */
+function openLineCount(): Promise<number> {
+  return prisma.orderLine.count({ where: { order: { status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] } }, ...ACTIVE_LINE, ...MEASURED_LINE } });
+}
+
 async function itemOptions(): Promise<Secenekler> {
   const lines = await prisma.orderLine.findMany({
     where: { order: { status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] } }, ...ACTIVE_LINE, ...MEASURED_LINE },
@@ -166,7 +171,8 @@ export async function getOpenOrderCoverage(filters: Pick<ReportFilterInput, "ite
   // durumsuz olduğu için örnek başına maliyet yok.
   // R5b-c: yalnız `itemId` — FIFO havuzu spec başına olduğundan kumaş süzgeci kapsamayı bozmaz; müşteri süzgeci
   // havuzu diğer müşterilerin aciliyetinden koparıp yüzdeyi yalanlar → KAPSAM DIŞI (1e H1).
-  const [balance, secenekler] = await Promise.all([new ProductionBalanceService().getBalance({ itemId: filters.itemId?.length ? filters.itemId : undefined }), itemOptions()]);
+  const filtered = !!filters.itemId?.length;
+  const [balance, secenekler, unfilteredCount] = await Promise.all([new ProductionBalanceService().getBalance({ itemId: filtered ? filters.itemId : undefined }), itemOptions(), filtered ? openLineCount() : Promise.resolve(null)]);
   const groups = balance.data ?? [];
 
   const byCustomer = new Map<string, { label: string; acc: Acc }>();
@@ -297,5 +303,6 @@ export async function getOpenOrderCoverage(filters: Pick<ReportFilterInput, "ite
     lines: rows.slice(0, MAX_DETAIL_LINES),
     linesOmitted: Math.max(0, rows.length - MAX_DETAIL_LINES),
     secenekler,
+    dusenSatir: droppedRows(unfilteredCount, rows.length),
   };
 }
