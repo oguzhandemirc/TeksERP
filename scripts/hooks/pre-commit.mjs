@@ -190,7 +190,11 @@ if (staged.some((f) => /^(Teks-Erp|Electron|mobil)\/src\/.*\.tsx?$/.test(f))) {
 // eşitlik kuralı sağlanır, bedel docs-only commit'e +~6 sn (kayıt adımları önde).
 // `Teks-Erp/src/` BÜTÜNÜ (1e hükmü 2026-09-14, audit_muafiyeti ile): bekçi services + routes + helpers +
 // jobs okur — tetik okunandan dar kalamaz; `services/import/` bunun içinde kaldı. Bedel src commit'ine +~1 sn.
-if (staged.some((f) => /^(Teks-Erp\/scripts\/|Teks-Erp\/docs\/|Teks-Erp\/src\/|docs\/)/.test(f))) {
+// `Electron/src/` (1e hükmü 2026-09-15, rapor_katalogu ile): bekçi rapor kimliğini DÖRT yüzeyde
+// birebirler ve ikisi panelde (`routes/content-routes.tsx` · `pages/Reports/**` · `lib/report-catalog.ts`
+// aynası). Katalog satırı backend'de, karo/route panelde doğar ⇒ yalnız panele dokunan commit de
+// mandal görmezse ayna kapıda değil CI'da ısırırdı. Bedel panel commit'ine +~7 sn.
+if (staged.some((f) => /^(Teks-Erp\/scripts\/|Teks-Erp\/docs\/|Teks-Erp\/src\/|Electron\/src\/|docs\/)/.test(f))) {
   adimlar.push({ ad: "hızlı mandallar", cwd: ".", cmd: ["node", ["scripts/hooks/hizli-mandallar.mjs"]] });
 }
 

@@ -137,6 +137,12 @@ const MUAFLAR = new Map<string, string>([
   ["cekiShowCustomerName", "belge kolonu — `ceki` yerleşik domain terimi"],
   ["cekiRaw", "yerel — `ceki` yerleşik domain terimi"],
   ["cekiMode", "yerel — `ceki` yerleşik domain terimi"],
+  // Rapor kataloğu SÖZ DAĞARCIĞI: alan adları (`sinif` · `yuzey` · `tarih` · `varsayilanGun`)
+  // bilinçli olarak TR ve dört yüzeyde ORTAK okunur; `sinif`/`yuzey` kökleri sözlükte var,
+  // `tarih` yok. Tipi tek başına İngilizceye çevirmek aileyi karışık dilli yapar
+  // (`ReportSinif` · `ReportYuzey` · `ReportDateContract`) — muafiyet ADLA, kök eklemeden.
+  ["ReportTarih", "rapor kataloğu sözleşme ailesi — `tarih` ALANININ tipi (kardeşleri ReportSinif/ReportYuzey)"],
+  ["GUNSUZ_TARIH_SOZLESMELERI", "aynı ailenin KAPALI kümesi — `ReportTarih` değerlerinden hangileri `varsayilanGun` almaz"],
 ]);
 
 /** `src/` altındaki tüm .ts/.tsx dosyaları. */

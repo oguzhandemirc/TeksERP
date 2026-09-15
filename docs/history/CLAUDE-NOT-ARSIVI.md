@@ -21,6 +21,61 @@
 
 ---
 
+## 2026-09-15 — Rapor kataloğu: kimliği YÜZEYDEN alıp ADRESE koymak [ÇEKİRDEK]
+
+Raporlar fazının R0 dilimi. Bugüne kadar "rapor" kümesinin sınırı **yüzeyde** çiziliydi:
+hangi yaprağın rapor sayıldığı karo dosyalarından okunuyordu ve backend'de rapor başına bir
+anahtar YOKTU. Ölçüm ayrışmayı gösterdi — **backend 8 kapı, panel 16 kapı, kümeler ayrışık.**
+Anahtar · kapı · karo · route · sürüm notu aynı kimliğe bağlanmadıkça her yüzey kendi listesini
+tutar; iki liste bir süre aynı görünür, sonra sessizce ayrışır.
+
+`REPORT_CATALOG` (30 satır) rapor kimliğinin tek kaynağı oldu ve anahtar **adres kalıbıyla aynı**
+(`"<kategori>/<rapor>"`), böylece panel yolu ve backend ucu anahtardan TÜRETİLİR, eşleme tablosu
+gerekmez. Electron backend'i import edemez (ayrı derleme birimi) ⇒ `lib/module-flags.ts` kalıbıyla
+bir **ayna** kondu ve ayna mekanik olarak birebirlenir — gövde KARAKTER KARAKTER.
+
+**Üç yüzey türü BEYAN EDİLDİ, gizlenmedi.** Ölçüm sırasında 29 yaprağın hepsinin kendi
+`/api/reports/**` ucu OLMADIĞI görüldü: `dokuma/karne` ve `finance/cheque-due` başka alanların
+uçlarından besleniyor (`/api/machine-shift-stats`, `/api/finance/cheques/due-summary`) ve
+`finance/statement` bir yaprak değil DİYALOG. Üçünü de "rapor değil" sayıp katalogdan atmak
+kolaydı — ama o zaman R1'in kapısı onları görmez ve **kapısız rapor** doğardı. Onun yerine
+`yuzey` alanı (`yaprak` · `yaprak-yabanci-uc` · `diyalog`) beyan edildi: kapı koymamanın gerekçesi
+katalogda yazılı, kapının kapsamı ölçülebilir. ⇒ ***Ölçüme uymayan satırı kümeden atmak, ölçümü
+değil kapıyı küçültür.***
+
+**`kesit` ile "tarih YOK" ayrıldı.** `sales/open-order-coverage` ve `inventory/scorecard` kavramsal
+olarak kesittir ama HİÇBİR tarih parametresi kabul etmiyor (`resolveDateRange({})`) ⇒ sözleşmeleri
+`yok`; `kesit` yalnız `asOf` taşıyan `finance/aging`de. Panel bileşeninin var olmayan bir parametreyi
+üretmemesi için ayrım şart.
+
+**`ileri-pencere` altıncı değer oldu.** Çek Vade Takvimi uçta `dateFrom`/`dateTo` kullanıyor, yani
+`aralik-iso` ile aynı parametre adları — ama **ters yöne** bakıyor (bugünden sonrası). Aynı ad + ters
+yön ayrı bir sözleşmedir: geriye bakan bir varsayılan buraya uygulansa ekran "vade yok" derdi. Sayfa
+bunu zaten biliyordu ve URL anahtarlarını bilerek ayırmıştı (`dueFrom`/`dueTo`); katalog bu ayrımı
+adlandırdı. ⇒ ***Parametre adı sözleşme değildir; sözleşme adın ARDINDAKİ sorudur.***
+
+**`varsayilanGun` çift yazımı kapattı.** d5'in envanteri açılış penceresinin gün sayısının hem
+yaprakta hem (yeni) katalogda duracağını gösterdi. İki yazımın maliyeti sessizdir: biri değişir,
+öbürü kalır, hiçbir kapı ötmez. §7d kolu ikisini birebirler ve yaprakta prop yoksa `ReportPageLayout`
+FALLBACK'ini OKUR — sabit "30" yazmaz; R2 yaprak kopyalarını kaldırınca kol ölçmeye devam eder.
+
+**Tek muafiyet ölçülerek verildi.** `finance/statement` diyaloğu 3 AY geriye bakıyor (`setMonth(-3)`),
+gün sayısı değil — buraya 90 yazmak ölçülmemiş bir sayı uydurmak olurdu (3 ay 28–31 gün). Muafiyet
+bir LİSTE değil bir ÖLÇÜM olarak kondu: kanıt dosyası ve desen beyan edilir, bekçi deseni arar,
+bulamazsa muafiyet DÜŞER ve kapı kırmızı olur. ⇒ ***"Bir zamanlar öyleydi" bir gerekçe değildir;
+muafiyetin de bir bekçisi olur.***
+
+Bekçi mandal #21 oldu ve tetik `Electron/src/`e genişletildi — bekçi dört yüzeyin ikisini panelde
+okuyor, tetik okunandan dar kalamaz. Yedi negatif sonda (katalog satırı silme · sahte route ucu ·
+aynada tek karakter · küme dışı gün · günsüz satıra sayı · yaprakta gün kayması · muafiyet kanıtının
+düşmesi) kırmızı verdi ve geri alındı; 20/0.
+
+**Yan bulgu:** taban commit'te `RAPORLAR-FAZ-PLANI.md` henüz yazılmamış bir `RAPORLAR-ENVANTER.md §7`
+bölümüne çapa atıyordu ve çapa bekçisi kırmızıydı — ileriye dönük atıf, bayat atıftan ayırt edilemez.
+Plan hücresi çapa biçiminden çıkarıldı.
+
+---
+
 ## 2026-09-15 — ⏭'nin bedelini ödediği gün: sözleşme yazılıydı, tartışma olmadı [ÇEKİRDEK]
 
 Zincir bekçisinin ⑧. adımı (levent tezgaha bağlama) bir gün önce ⏭ BEYANLI kapanmıştı ve
