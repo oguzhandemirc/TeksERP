@@ -2,18 +2,17 @@
 // VARDİYA KARNESİ — fabrika gününün vardiyaları; kaynak kırılımı toplamda ERİMEZ
 // ("K'sı ölçüldü, L'si elle, M'si ölçülemedi")
 // =============================================================================
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { DetailTable, ReportExportBar, ReportPageLayout } from "../_components";
 import { fmtInt } from "../_components/formatters";
 import { buildVardiyaKarnesiExport } from "./dokumaExport";
 import { HorizonNote, SealBadge, SourceBreakdownStrip, fmtSec } from "./DokumaShared";
 import { SOURCE_LABELS, formatPct } from "./dokuma-regime";
-import { dokumaReportsApi, toFactoryYmd, type ShiftMachineRow, type ShiftRow } from "./service";
+import { useFactoryDay } from "../_hooks/useReportDay";
+import { dokumaReportsApi, type ShiftMachineRow, type ShiftRow } from "./service";
 
 const columns: ColumnDef<ShiftMachineRow>[] = [
   { accessorKey: "machine.code", header: "Tezgah", cell: ({ row }) => `${row.original.machine.code} · ${row.original.machine.name}` },
@@ -50,26 +49,18 @@ function ShiftCard({ v }: { v: ShiftRow }) {
 }
 
 export function VardiyaKarnesiPage() {
-  const [day, setDay] = useState(toFactoryYmd(undefined));
+  // Gün URL'de yaşar (`factoryDay`; bugün yazılmaz) — yenilemede ve paylaşılan linkte kaybolmaz.
+  const { ymd: day, params } = useFactoryDay("dokuma/vardiya-karnesi");
   const { data, isLoading } = useQuery({
     queryKey: ["reports", "dokuma", "vardiya-karnesi", day],
-    queryFn: () => dokumaReportsApi.shiftScorecard({ factoryDay: day }),
-    enabled: /^\d{4}-\d{2}-\d{2}$/.test(day),
+    queryFn: () => dokumaReportsApi.shiftScorecard(params),
     staleTime: 30_000,
   });
   const rapor = data?.data;
   // Süzgeç TEK GÜNDÜR (tarih aralığı değil) — başlık da onu söyler.
   const spec = useMemo(() => () => (rapor ? buildVardiyaKarnesiExport({ rapor, day }) : null), [rapor, day]);
-  const filters = (
-    <div className="flex items-end gap-3 border-b px-4 py-3">
-      <div className="space-y-1">
-        <Label htmlFor="karne-gun">Fabrika günü</Label>
-        <Input id="karne-gun" type="date" value={day} onChange={(e) => setDay(e.target.value)} className="w-44" />
-      </div>
-    </div>
-  );
   return (
-    <ReportPageLayout title="Vardiya Karnesi" description="Vardiya başına üretim ve duruş; her satır kaynağını taşır, toplam tek yüzdeye çökertilmez." filters={filters} actions={<ReportExportBar disabled={!rapor || rapor.vardiyalar.length === 0} buildSpec={spec} />}>
+    <ReportPageLayout reportKey="dokuma/vardiya-karnesi" title="Vardiya Karnesi" description="Vardiya başına üretim ve duruş; her satır kaynağını taşır, toplam tek yüzdeye çökertilmez." actions={<ReportExportBar disabled={!rapor || rapor.vardiyalar.length === 0} buildSpec={spec} />}>
       {isLoading && <p className="text-sm text-muted-foreground">Yükleniyor…</p>}
       {!isLoading && rapor && rapor.vardiyalar.length === 0 && <p className="text-sm text-muted-foreground">Bu günde vardiya penceresi yok (takvim job'u 30 gün ileri yazar; dokuma modülü açık mı?).</p>}
       {rapor?.vardiyalar.map((v) => <ShiftCard key={v.shiftInstanceId} v={v} />)}

@@ -91,11 +91,11 @@ export function StockScorecardPage() {
 
   return (
     <ReportPageLayout
+      reportKey="inventory/scorecard"
       title="Stok & Ölü Stok"
       description="Rafta ne var, kaç gündür duruyor ve siparişi var mı — nakit sıkışmasının kaynağı."
       // Anlık durum raporu: tarih aralığı YOK. "Şu an rafta ne var" sorusunu
       // filtrelemek anlamsızdır.
-      showDateRange={false}
       actions={<ReportExportBar disabled={!sc} buildSpec={spec} />}
     >
       {sc && sc.summary.unagedCount > 0 ? (

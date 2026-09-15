@@ -8,9 +8,11 @@
 // =============================================================================
 import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
+import type { ReportKey } from "@/lib/report-catalog";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
+import { rangeDayParams } from "../_lib/report-date";
 import { SOURCE_LABELS, type DataSource } from "./dokuma-regime";
-import { toFactoryYmd, type LoomReportMeta, type SourceBreakdownTable } from "./service";
+import type { LoomReportMeta, SourceBreakdownTable } from "./service";
 
 const SOURCE_ORDER: DataSource[] = ["MACHINE", "OPERATOR", "SUPERVISOR", "SIMULATED", "INFERRED"];
 
@@ -57,11 +59,11 @@ export function WarningsBlock({ warnings }: { warnings: string[] }) {
   );
 }
 
-/** URL'deki tarih aralığını FABRİKA GÜNÜ `YYYY-MM-DD` çiftine çevirir (backend sözleşmesi). */
-export function useFactoryRange(defaultDays = 7): { from: string; to: string; ready: boolean } {
-  const { params } = useReportDateRange(defaultDays);
+/** URL'deki tarih aralığını FABRİKA GÜNÜ `YYYY-MM-DD` çiftine çevirir (`aralik-gun` sözleşmesi; varsayılan gün katalogdan). */
+export function useFactoryRange(reportKey: ReportKey): { from: string; to: string; ready: boolean } {
+  const { params } = useReportDateRange(reportKey);
   return useMemo(
-    () => ({ from: toFactoryYmd(params.dateFrom), to: toFactoryYmd(params.dateTo), ready: Boolean(params.dateFrom && params.dateTo) }),
+    () => ({ ...rangeDayParams(params.dateFrom, params.dateTo), ready: Boolean(params.dateFrom && params.dateTo) }),
     [params.dateFrom, params.dateTo],
   );
 }

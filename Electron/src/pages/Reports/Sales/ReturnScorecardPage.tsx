@@ -22,7 +22,7 @@ function hint(now: number | undefined, prev: number | undefined, unit: string): 
 }
 
 export function ReturnScorecardPage() {
-  const { params, dateFrom, dateTo } = useReportDateRange(30);
+  const { params, dateFrom, dateTo } = useReportDateRange("sales/return-scorecard");
   const compare = useReportCompare();
 
   const query = useQuery({
@@ -48,6 +48,7 @@ export function ReturnScorecardPage() {
 
   return (
     <ReportPageLayout
+      reportKey="sales/return-scorecard"
       title="İade Karnesi"
       description="Müşteriden geri gelen mal — oran, neden ve müşteri kırılımı."
       showCompare

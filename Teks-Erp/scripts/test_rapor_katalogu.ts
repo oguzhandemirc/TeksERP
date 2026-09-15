@@ -15,7 +15,7 @@
 //   §3 katalog ⇄ karo `to` (`Reports/<Kategori>/tile-config.ts`)
 //   §4 katalog `modul` ⇄ SCREEN_CATALOG `reports/<kategori>` satırının `modul`u
 //   §5 Electron aynası ⇄ backend sabiti (gövde KARAKTER KARAKTER)
-//   §7 tarih sözleşmesi ⇄ `varsayilanGun` ⇄ panel yaprağındaki `defaultDays` (ÇİFT YAZIM)
+//   §7 tarih sözleşmesi ⇄ `varsayilanGun`; yaprak SAYI yazmaz, hook'a KENDİ anahtarını verir (çift yazım imkânsız, R4)
 // "İki taraflı" şu demek: katalogda olup yüzeyde olmayan KIRMIZI, yüzeyde olup
 // katalogda olmayan da KIRMIZI. Tek yön ölçen bir kapı, eksik satırı görür ama
 // FAZLA satırı göremez — ve fazlalık tam olarak "kimsenin kapatamadığı rapor"dur.
@@ -169,8 +169,12 @@ function main(): void {
     kacak.map((r) => `${r.key}=${r.varsayilanGun}`).join(", ")
     || GUN_KUMESI.map((g) => `${g}g ${REPORT_CATALOG.filter((r) => r.varsayilanGun === g).length}`).join(" · "));
 
-  // §7d ⭐ ÇİFT YAZIM: panel yaprağı ⇄ katalog. Yaprak dosyası route dosyasındaki
-  // bileşen adından, bileşen adı da import satırından ÇÖZÜLÜR (elle eşleme yok).
+  // §7d ⭐ ÇİFT YAZIM İMKÂNSIZ (R4 sonrası): yaprak sayı YAZMAZ — tarih hook'u kataloğun
+  // ANAHTARINI alır (`useReportDateRange("<key>")`), varsayılan gün `varsayilanGun`dan okunur,
+  // düzen fallback taşımaz. Kol üç şeyi ölçer: (a) yaprakta `defaultDays=` prop'u ve sayı
+  // argümanlı tarih hook'u YOK, (b) yaprak KENDİ anahtarını hook'a veriyor (yaprak→bileşen→
+  // dosya zinciri route'tan çözülür, elle eşleme yok), (c) düzende `defaultDays` yok.
+  // Pencereli yaprağın anahtarı doğruysa sayı katalogdan gelir — ayrışacak ikinci yazım yok.
   const bilesenYolu = new Map<string, string>();
   for (const m of icerik.matchAll(/import\s+\{?\s*(\w+)\s*\}?\s+from\s+"(@\/pages\/Reports\/[^"]+)"/g)) bilesenYolu.set(m[1]!, m[2]!);
   for (const m of icerik.matchAll(/const (\w+) = lazy\(\(\) => import\("(@\/pages\/Reports\/[^"]+)"\)/g)) bilesenYolu.set(m[1]!, m[2]!);
@@ -180,12 +184,11 @@ function main(): void {
     if (ic) yolBilesen.set(m[1]!, ic[1]!);
   }
   const duzen = readFileSync(join(ELECTRON, "src/pages/Reports/_components/ReportPageLayout.tsx"), "utf8");
-  const fallbackEs = duzen.match(/defaultDays\s*=\s*(\d+)\s*,/);
-  const fallback = fallbackEs ? Number(fallbackEs[1]) : null;
-  check("§7dz körlük zemini: yaprak→bileşen→dosya zinciri ve düzen fallback'i çözüldü",
-    yolBilesen.size > 20 && bilesenYolu.size > 20 && fallback !== null,
-    `${yolBilesen.size} yaprak · ${bilesenYolu.size} bileşen · fallback ${fallback ?? "ÖLÇÜLEMEDİ"}`);
+  check("§7dz körlük zemini: yaprak→bileşen→dosya zinciri çözüldü ve düzen katalog dışı gün taşımıyor",
+    yolBilesen.size > 20 && bilesenYolu.size > 20 && !/defaultDays/.test(duzen) && duzen.includes("<ReportDateFilter"),
+    `${yolBilesen.size} yaprak · ${bilesenYolu.size} bileşen · düzen: ${/defaultDays/.test(duzen) ? "defaultDays VAR" : "fallback yok"}`);
   const ciftSapan: string[] = [];
+  const ARALIK_HOOKLARI = /\b(useReportDateRange|useFactoryRange)\(([^)]*)\)/g;
   for (const r of REPORT_CATALOG) {
     if (r.varsayilanGun === null || r.panelYolu === "") continue;   // diyalog ve günsüzler §7a/§7b'de
     const bilesen = yolBilesen.get(r.panelYolu);
@@ -195,20 +198,17 @@ function main(): void {
     let kaynak: string;
     try { kaynak = readFileSync(join(ELECTRON, "src", `${yol.slice(2)}.tsx`), "utf8"); }
     catch { ciftSapan.push(`${r.key}: ÖLÇÜLEMEDİ — yaprak dosyası okunamadı (${yol})`); continue; }
-    const es = kaynak.match(/defaultDays=\{(\w+)\}/);
-    if (!es) {                                                      // prop yok ⇒ düzenin fallback'i geçerli
-      if (r.varsayilanGun !== fallback) ciftSapan.push(`${r.key}: katalog ${r.varsayilanGun} ≠ düzen fallback ${fallback}`);
-      continue;
+    if (/defaultDays=\{/.test(kaynak)) { ciftSapan.push(`${r.key}: yaprakta \`defaultDays=\` prop'u var (ikinci yazım)`); continue; }
+    const cagrilar = [...kaynak.matchAll(ARALIK_HOOKLARI)];
+    if (cagrilar.length === 0) { ciftSapan.push(`${r.key}: pencereli sözleşme ama yaprak aralık hook'u çağırmıyor`); continue; }
+    for (const c of cagrilar) {
+      const arg = c[2]!.trim();
+      if (arg !== `"${r.key}"`) ciftSapan.push(`${r.key}: ${c[1]}(${arg}) — anahtar kendi anahtarı değil`);
     }
-    const ham = es[1]!;
-    const sayi = /^\d+$/.test(ham) ? Number(ham)
-      : Number(kaynak.match(new RegExp(`const ${ham}\\s*=\\s*(\\d+)`))?.[1] ?? NaN);
-    if (!Number.isFinite(sayi)) { ciftSapan.push(`${r.key}: ÖLÇÜLEMEDİ — \`defaultDays={${ham}}\` sayıya çözülmedi`); continue; }
-    if (sayi !== r.varsayilanGun) ciftSapan.push(`${r.key}: yaprak ${sayi} ≠ katalog ${r.varsayilanGun}`);
   }
-  check("§7d ⭐ panel yaprağındaki `defaultDays` ⇄ katalog `varsayilanGun` (çift yazım ayrışmasın)",
+  check("§7d ⭐ pencereli yaprak SAYI yazmaz, KENDİ anahtarını hook'a verir (çift yazım imkânsız; sayı yalnız katalogda)",
     ciftSapan.length === 0, ciftSapan.join(" · ")
-    || `${REPORT_CATALOG.filter((r) => r.varsayilanGun !== null).length} satır eşleşti (fallback ${fallback})`);
+    || `${REPORT_CATALOG.filter((r) => r.varsayilanGun !== null && r.panelYolu !== "").length} yaprak ölçüldü`);
 
   // ── §6 BEYANLI YÜZEY TÜRLERİ görünür kalsın ───────────────────────────────
   const yabanci = REPORT_CATALOG.filter((r) => r.yuzey === "yaprak-yabanci-uc");

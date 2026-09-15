@@ -257,7 +257,7 @@ const riskColumns: ColumnDef<AtRiskCustomerRow, unknown>[] = [
 ];
 
 export function CustomerScorecardPage() {
-  const { params, dateFrom, dateTo } = useReportDateRange(90);
+  const { params, dateFrom, dateTo } = useReportDateRange("customer/scorecard");
   const compare = useReportCompare();
   const [axis, setAxis] = useState<SortAxis>("totalQty");
 
@@ -299,10 +299,10 @@ export function CustomerScorecardPage() {
 
   return (
     <ReportPageLayout
+      reportKey="customer/scorecard"
       title="Müşteri Karnesi"
       description="En çok veren, en sık veren ve kaybolmakta olan müşteri — tek ekranda."
       // Varsayılan 90 gün: 30 günlük pencere sıklık/ABC için fazla dar kalıyor.
-      defaultDays={90}
       showCompare
       actions={<ReportExportBar disabled={!sc} buildSpec={spec} />}
     >

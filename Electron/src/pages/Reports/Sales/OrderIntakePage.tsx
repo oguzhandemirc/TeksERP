@@ -23,7 +23,7 @@ function hint(now?: number, prev?: number, unit = ""): string | undefined {
 }
 
 export function OrderIntakePage() {
-  const { params, dateFrom, dateTo } = useReportDateRange(30);
+  const { params, dateFrom, dateTo } = useReportDateRange("sales/order-intake");
   const compare = useReportCompare();
 
   const query = useQuery({
@@ -46,6 +46,7 @@ export function OrderIntakePage() {
 
   return (
     <ReportPageLayout
+      reportKey="sales/order-intake"
       title="Sipariş Karnesi"
       description="Dönemde ne kadar iş geldi — adet, metraj, ortalama sipariş büyüklüğü ve iptal oranı."
       showCompare

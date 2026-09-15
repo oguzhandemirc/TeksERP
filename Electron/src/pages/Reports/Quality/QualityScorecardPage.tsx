@@ -18,7 +18,7 @@ function compareHint(now: number | undefined, prev: number | undefined, unit: st
 }
 
 export function QualityScorecardPage() {
-  const { params, dateFrom, dateTo } = useReportDateRange(30);
+  const { params, dateFrom, dateTo } = useReportDateRange("quality/scorecard");
   const compare = useReportCompare();
 
   const query = useQuery({
@@ -38,6 +38,7 @@ export function QualityScorecardPage() {
 
   return (
     <ReportPageLayout
+      reportKey="quality/scorecard"
       title="Kalite Karnesi"
       description="Üretimi biten kumaşın metraj ağırlıklı kalite dağılımı — kumaş, renk ve fason kırılımıyla."
       showCompare

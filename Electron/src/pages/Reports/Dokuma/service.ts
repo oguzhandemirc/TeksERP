@@ -127,11 +127,8 @@ export const dokumaReportsApi = {
     (await apiClient.post<ApiResponse<{ id: string; sealGeneration: number }>>(`/api/machine-shift-stats/${statId}/unseal`, { reason })).data,
 };
 
-/** ISO an → fabrika günü `YYYY-MM-DD` (panel fabrika saat dilimindedir; `useReportDateRange` yerel gün başı/sonu verir). */
-export function toFactoryYmd(iso: string | undefined): string {
-  const d = iso ? new Date(iso) : new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
+/** Tek kaynak `_lib/report-date` — dokuma çağıranları için yeniden dışa açılır. */
+export { toFactoryYmd } from "../_lib/report-date";
 
 /** Karne listesindeki mühür eylemleri — backend uçlarının GERÇEK izinleriyle birebir (1e şartı ①). */
 export const SHIFT_STAT_ACTION_PERMISSIONS = {

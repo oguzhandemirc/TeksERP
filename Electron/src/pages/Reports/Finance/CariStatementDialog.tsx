@@ -26,9 +26,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ReportExportBar } from "../_components";
+import { ReportDateFilter, ReportExportBar } from "../_components";
 import { fmtDate } from "../_components/formatters";
 import { formatDayKey } from "../../Finance/PeriodClose/service";
 import { ReportErrorCard } from "./ReportErrorCard";
@@ -74,8 +73,9 @@ export function CariStatementDialog({ target, open, onOpenChange }: Props) {
   }, []);
 
   const [currency, setCurrency] = useState<Currency>(target?.currency ?? "TRY");
-  const [from, setFrom] = useState(defaults.from);
-  const [to, setTo] = useState(defaults.to);
+  // Diyalog URL taşımaz (üstteki yaşlandırma sayfasının `asOf`u ile çakışırdı) → kontrollü kip.
+  const [range, setRange] = useState(defaults);
+  const { from, to } = range;
 
   // ⚠️ Hedef değiştiğinde para birimi yeni carinin bloğuna çekilir. Diyalog
   // çağıran tarafta KOŞULLU mount edilir (`{target ? <Dialog .../> : null}`),
@@ -147,32 +147,10 @@ export function CariStatementDialog({ target, open, onOpenChange }: Props) {
               ))}
             </select>
           </div>
-          {/* ⚠️ `max`/`min` çapraz bağlanır: backend `from > to` isteğini 400 ile
-              reddediyor ("Başlangıç tarihi bitiş tarihinden büyük olamaz").
-              Tarayıcı seçicisinde bu kombinasyonu hiç sunmamak, kullanıcıyı
-              geri alması gereken bir hataya sokmamaktır. Elle yazımı
-              engellemez — o yüzden hata dalı ayrıca duruyor, bu onun YERİNE
-              geçmez. */}
-          <div>
-            <Label className="text-xs">Başlangıç</Label>
-            <Input
-              type="date"
-              className="mt-1"
-              value={from}
-              max={to || undefined}
-              onChange={(e) => setFrom(e.target.value)}
-            />
-          </div>
-          <div>
-            <Label className="text-xs">Bitiş</Label>
-            <Input
-              type="date"
-              className="mt-1"
-              value={to}
-              min={from || undefined}
-              onChange={(e) => setTo(e.target.value)}
-            />
-          </div>
+          {/* Kontrollü kip: `max`/`min` çapraz bağı bileşende — backend `from > to`yu 400'ler,
+              seçicide o kombinasyonu hiç sunmamak kullanıcıyı geri alması gereken bir hataya
+              sokmamaktır (elle yazımı engellemez, hata dalı ayrıca duruyor). */}
+          <ReportDateFilter reportKey="finance/statement" value={range} onChange={setRange} bare />
           {/* ⚠️ `disabled={!data}` — veri yokken (yükleniyor / hata / boş yanıt)
               düğmeler iş yapmaz. Boş bir Excel indirmek hiç indirmemekten
               KÖTÜDÜR: kullanıcı onu "bu carinin hareketi yok" diye okur. */}

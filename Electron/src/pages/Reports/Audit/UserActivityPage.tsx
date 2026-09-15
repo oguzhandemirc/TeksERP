@@ -33,7 +33,7 @@ const columns: ColumnDef<UserActivityRow>[] = [
 ];
 
 export function UserActivityPage() {
-  const { params, dateFrom, dateTo } = useReportDateRange(7);
+  const { params, dateFrom, dateTo } = useReportDateRange("audit/user-activity");
   const { data, isLoading } = useQuery({
     queryKey: ["reports", "audit", "user-activity", params],
     queryFn: () => auditReportsApi.userActivity(params),
@@ -48,9 +48,9 @@ export function UserActivityPage() {
 
   return (
     <ReportPageLayout
+      reportKey="audit/user-activity"
       title="Kullanıcı Aktivitesi"
       description="Aralıkta her kullanıcının yaptığı CUD işlem sayısı ve son işlem zamanı."
-      defaultDays={7}
       actions={
         <ReportExportBar
           disabled={!data}

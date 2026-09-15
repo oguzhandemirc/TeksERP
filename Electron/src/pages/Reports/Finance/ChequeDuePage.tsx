@@ -29,19 +29,17 @@
 // =============================================================================
 
 import { useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CalendarClock } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { AlertTriangle } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { ReportExportBar, ReportPageLayout } from "../_components";
+import { ReportDateFilter, ReportExportBar, ReportPageLayout } from "../_components";
+import { useForwardWindow } from "../_hooks/useForwardWindow";
 import { fmtInt } from "../_components/formatters";
 import { ReportErrorCard } from "./ReportErrorCard";
 import { ReportNotesCard } from "./ReportNotesCard";
 import { buildChequeDueExport } from "./chequeDueExport";
-import { dayEndIso, dayStartIso, moneyStr } from "./service";
+import { moneyStr } from "./service";
 import {
   DUE_BUCKET_LABEL,
   DUE_BUCKET_TONE,
@@ -52,7 +50,6 @@ import {
   fmtWeekRange,
   foldCalendar,
   getChequeDueSummary,
-  shiftDayKey,
   type ChequeDueBucket,
   type ChequeDueCalendarRow,
   type ChequeDueSummary,
@@ -63,43 +60,17 @@ import {
 const CARD_BUCKETS: ChequeDueBucket[] = ["OVERDUE", "SOON", "MONTH", "LATER"];
 
 export function ChequeDuePage() {
-  const [sp, setSp] = useSearchParams();
-  const urlFrom = sp.get("dueFrom") ?? "";
-  const urlTo = sp.get("dueTo") ?? "";
-  const hasWindow = Boolean(urlFrom && urlTo);
+  // Pencere URL'de (`dueFrom`/`dueTo`), parametreyi `ileri-pencere` sözleşmesi üretir:
+  // URL boşken HİÇ tarih gitmez, backend varsayılanı uygular.
+  const { from: urlFrom, to: urlTo, hasWindow, params } = useForwardWindow("finance/cheque-due");
 
   const q = useQuery({
     queryKey: ["reports", "finance", "cheque-due", urlFrom, urlTo],
-    queryFn: () =>
-      getChequeDueSummary(
-        hasWindow ? { dateFrom: dayStartIso(urlFrom), dateTo: dayEndIso(urlTo) } : undefined,
-      ),
+    queryFn: () => getChequeDueSummary(hasWindow ? params : undefined),
     staleTime: 30_000,
   });
 
   const data = q.data;
-  // Girdi değerleri: kullanıcı seçtiyse URL, seçmediyse backend'in uyguladığı
-  // pencere. Boş bırakmak, ekrandaki takvimin hangi aralığı gösterdiğini
-  // görünmez yapardı.
-  const fromValue = urlFrom || data?.window.from || "";
-  const toValue = urlTo || data?.window.to || "";
-
-  const patch = (from: string, to: string) => {
-    const next = new URLSearchParams(sp);
-    if (from) next.set("dueFrom", from);
-    else next.delete("dueFrom");
-    if (to) next.set("dueTo", to);
-    else next.delete("dueTo");
-    setSp(next, { replace: true });
-  };
-
-  // Kısa yolların çıpası BACKEND'İN "bugün"üdür (fabrika takvim günü) —
-  // istemcide `new Date()` ile gün kesmek, sunucunun kestiği günden kayabilir
-  // ve "7 gün" penceresi kovalarla ayrışırdı. Veri gelmeden kısa yol çizilmez.
-  const preset = (days: number) => {
-    if (!data) return;
-    patch(data.today, shiftDayKey(data.today, days));
-  };
 
   const weeks = useMemo(() => foldCalendar(data?.weeks ?? []), [data]);
   const months = useMemo(() => foldCalendar(data?.months ?? []), [data]);
@@ -109,40 +80,15 @@ export function ChequeDuePage() {
 
   return (
     <ReportPageLayout
+      reportKey="finance/cheque-due"
       title="Çek / Senet Vade Takvimi"
       description="Hangi hafta ne kadar tahsilat girecek, ne kadar ödeme çıkacak — eksen VADE tarihidir."
       actions={<ReportExportBar disabled={!data} buildSpec={spec} />}
       filters={
-        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-3">
-          <CalendarClock className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">Takvim penceresi</span>
-          <Input
-            type="date"
-            className="w-36"
-            title="Pencere başlangıcı"
-            value={fromValue}
-            onChange={(e) => patch(e.target.value, toValue)}
-          />
-          <Input
-            type="date"
-            className="w-36"
-            title="Pencere bitişi"
-            value={toValue}
-            onChange={(e) => patch(fromValue, e.target.value)}
-          />
-          {/* İLERİ bakan kısa yollar — geriye bakan bir "son 30 gün" düğmesi
-              bu ekranda anlamsız olurdu (dosya başlığı). */}
-          {[7, 30, 90].map((d) => (
-            <Button key={d} type="button" variant="outline" size="sm" disabled={!data} onClick={() => preset(d)}>
-              +{d} gün
-            </Button>
-          ))}
-          {hasWindow ? (
-            <Button type="button" variant="ghost" size="sm" onClick={() => patch("", "")}>
-              Varsayılan pencere
-            </Button>
-          ) : null}
-        </div>
+        // Girdi değerleri: kullanıcı seçtiyse URL, seçmediyse backend'in uyguladığı pencere
+        // (`windowFallback`); ön ayarların çıpası backend'in "bugün"ü (`anchorToday`) —
+        // veri gelmeden ön ayar çizilmez (dosya başlığı).
+        <ReportDateFilter reportKey="finance/cheque-due" anchorToday={data?.today ?? null} windowFallback={data?.window ?? null} />
       }
     >
       {q.isError ? <ReportErrorCard error={q.error} onRetry={() => void q.refetch()} /> : null}

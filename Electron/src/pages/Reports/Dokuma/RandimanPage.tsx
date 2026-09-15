@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { DetailTable, MetricCard, ReportExportBar, ReportPageLayout } from "../_components";
+import { DetailTable, MetricCard, ReportExportBar, ReportDateFilter, ReportPageLayout } from "../_components";
 import { fmtInt } from "../_components/formatters";
 import { buildRandimanExport } from "./dokumaExport";
 import { DokumaFilterBar } from "./DokumaFilterBar";
@@ -30,7 +30,7 @@ const columns: ColumnDef<EfficiencyRow>[] = [
 ];
 
 export function RandimanPage() {
-  const range = useFactoryRange(7);
+  const range = useFactoryRange("dokuma/randiman");
   const [sp, setSp] = useSearchParams();
   const machineId = sp.get("machine") ?? "";
   // PENCERE sorgusu: süzgeçsiz. Seçenek listesi HER ZAMAN buradan doğar —
@@ -62,7 +62,8 @@ export function RandimanPage() {
     [rapor, periodLabel, machineLabel],
   );
   const filters = (
-    <div className="flex items-end gap-3 border-b px-4 py-3">
+    <div className="flex flex-wrap items-end gap-3 border-b px-4 py-3">
+      <ReportDateFilter reportKey="dokuma/randiman" bare />
       <DokumaFilterBar
         id="randiman-makine"
         label="Tezgah"
@@ -75,9 +76,9 @@ export function RandimanPage() {
 
   return (
     <ReportPageLayout
+      reportKey="dokuma/randiman"
       title="Randıman"
       description="Kullanılabilirlik, performans ve etkinlik AYRI sunulur, çarpılmaz. Payda yoksa oran 'ölçülemedi'dir — sıfır değil."
-      defaultDays={7}
       filters={filters}
       actions={<ReportExportBar disabled={!rapor} buildSpec={spec} />}
     >

@@ -77,7 +77,7 @@ const specColumns: ColumnDef<DemandSpecRow, unknown>[] = [
 ];
 
 export function DemandAnalysisPage() {
-  const { params } = useReportDateRange(90);
+  const { params } = useReportDateRange("sales/demand-analysis");
   const compare = useReportCompare();
 
   const query = useQuery({
@@ -100,9 +100,9 @@ export function DemandAnalysisPage() {
 
   return (
     <ReportPageLayout
+      reportKey="sales/demand-analysis"
       title="Talep Analizi"
       description="Hangi kumaş-renk-en isteniyor — stoğa ne üretileceğinin cevabı."
-      defaultDays={90}
       showCompare
       actions={<ReportExportBar disabled={!da} buildSpec={spec} />}
     >

@@ -6,7 +6,7 @@ import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ChartCard, DetailTable, MetricCard, ReportExportBar, ReportPageLayout, SimpleBarChart } from "../_components";
+import { ChartCard, DetailTable, MetricCard, ReportExportBar, ReportDateFilter, ReportPageLayout, SimpleBarChart } from "../_components";
 import { fmtInt } from "../_components/formatters";
 import { buildParetoExport } from "./dokumaExport";
 import { DokumaFilterBar } from "./DokumaFilterBar";
@@ -27,7 +27,7 @@ const columns: ColumnDef<ParetoReasonRow>[] = [
 ];
 
 export function DurusParetoPage() {
-  const range = useFactoryRange(7);
+  const range = useFactoryRange("dokuma/durus-pareto");
   const [sp, setSp] = useSearchParams();
   const machineId = sp.get("machine") ?? "";
   // PENCERE sorgusu (süzgeçsiz): süzgeç yokken tablo buradan gelir.
@@ -67,7 +67,8 @@ export function DurusParetoPage() {
     [rapor, periodLabel, machineLabel],
   );
   const filters = (
-    <div className="flex items-end gap-3 border-b px-4 py-3">
+    <div className="flex flex-wrap items-end gap-3 border-b px-4 py-3">
+      <ReportDateFilter reportKey="dokuma/durus-pareto" bare />
       <DokumaFilterBar
         id="pareto-makine"
         label="Tezgah"
@@ -80,9 +81,9 @@ export function DurusParetoPage() {
 
   return (
     <ReportPageLayout
+      reportKey="dokuma/durus-pareto"
       title="Duruş Pareto"
       description="Sebep sıralama ekseni, süre sınıfı gruplama eksenidir. Mikro duruşlar bir sebep değil bir süre sınıfıdır ve ayrı sayılır."
-      defaultDays={7}
       filters={filters}
       actions={<ReportExportBar disabled={!rapor} buildSpec={spec} />}
     >

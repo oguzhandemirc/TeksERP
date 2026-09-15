@@ -52,7 +52,7 @@ const detectionColumns: ColumnDef<DefectDetectionRow, unknown>[] = [
 ];
 
 export function ScrapScorecardPage() {
-  const { params, dateFrom, dateTo } = useReportDateRange(30);
+  const { params, dateFrom, dateTo } = useReportDateRange("quality/scrap-scorecard");
   const compare = useReportCompare();
 
   const query = useQuery({
@@ -76,6 +76,7 @@ export function ScrapScorecardPage() {
 
   return (
     <ReportPageLayout
+      reportKey="quality/scrap-scorecard"
       title="Fire Karnesi"
       description="Hurdaya ayrılan metraj ve nedenleri — Kalite Karnesi ile aynı üretim evreni üzerinden."
       showCompare

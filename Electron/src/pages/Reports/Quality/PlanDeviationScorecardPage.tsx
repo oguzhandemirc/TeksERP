@@ -116,7 +116,7 @@ const detailColumns: ColumnDef<PlanDeviationDetailRow, unknown>[] = [
 ];
 
 export function PlanDeviationScorecardPage() {
-  const { params, dateFrom, dateTo } = useReportDateRange(30);
+  const { params, dateFrom, dateTo } = useReportDateRange("quality/plan-deviation-scorecard");
   const compare = useReportCompare();
 
   const query = useQuery({
@@ -140,6 +140,7 @@ export function PlanDeviationScorecardPage() {
 
   return (
     <ReportPageLayout
+      reportKey="quality/plan-deviation-scorecard"
       title="Plan-Sapma Karnesi"
       description="Tamburda rengi/eni iş emri hedefinden farklı olduğu hâlde operatör onayıyla depoya inen mal. Sayı büyüyorsa sorun çoğu zaman tamburda değil, iş emrinin açılışındadır."
       showCompare

@@ -89,6 +89,7 @@ export function TravelerTracePage() {
 
   return (
     <ReportPageLayout
+      reportKey="production/traveler-trace"
       title="Refakat Kartı İzleme"
       description="Tek rulonun istasyon adımları, operatör ve süre geçmişi."
       filters={searchFilter}

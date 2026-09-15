@@ -60,7 +60,7 @@ export interface StatementExportInput {
    */
   cariCode?: string | null;
   currency: Currency;
-  /** Ekrandaki `<input type="date">` değerleri (YYYY-MM-DD) — ne yazıyorsa o. */
+  /** Ekrandaki tarih girdisi değerleri (YYYY-MM-DD) — ne yazıyorsa o. */
   fromYmd: string;
   toYmd: string;
   opening: string | number;

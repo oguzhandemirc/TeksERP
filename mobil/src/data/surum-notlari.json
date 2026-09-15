@@ -26,6 +26,11 @@
       "maddeler": [
         {
           "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Rapor sayfalarındaki tarih seçimi tek biçime geldi: her rapor kendi sorusuna uyan tarih kutusunu gösterir — dönem raporlarında başlangıç/bitiş ve “Son 7g” · “Son 30g” · “Son 90g” kısa yolları; Vardiya Karnesi’nde tek “Fabrika günü” kutusu ve “Bugün” düğmesi; Cari Yaşlandırma’da tek “Kesit” günü (ileri tarih seçilemez); Çek / Senet Vade Takvimi’nde ileri bakan “Takvim penceresi” ve bugünden 7, 30 ve 90 gün ileri kısa yolları; tarih almayan raporlarda kutu hiç çıkmaz. Seçilen gün artık Vardiya Karnesi’nde de adres çubuğunda durur: sayfa yenilenince ya da bağlantı paylaşılınca aynı gün açılır. Randıman ve Duruş Pareto’da tezgah seçiciyle birlikte gizlenmiş olan tarih kutuları geri geldi (aynı şeritte, tezgah seçicinin yanında). Açılıştaki varsayılan pencere (7 · 30 · 90 · 180 gün) rapor başına aynı kaldı; sunucuya giden tarih alanları değişmedi, kayıtlı bağlantılar eskisi gibi çalışır."
+        },
+        {
+          "kapsam": "panel",
           "tip": "yeni",
           "metin": "Randıman ve Duruş Pareto raporlarına tezgah süzgeci geldi: listenin üstündeki seçiciden bir tezgah seçilince rapor yalnız o tezgahın satırlarını gösterir, “Tümü” seçiliyken rapor eskisiyle birebir aynıdır. Seçim adres çubuğunda durur (bağlantıyı paylaşınca aynı süzgeçle açılır) ve Excel/PDF çıktısının başına süzgeci adıyla söyleyen bir “SÜZGEÇ” satırı düşer (hangi eksende, hangi tezgah); süzgeç yokken o satır hiç yazılmaz. Seçenek listesi seçilen tarih penceresindeki tezgahlardan kurulur: bir tezgah seçtikten sonra liste daralmaz, başka tezgaha doğrudan geçilir. Aynı süzgeç Duruş Pareto'da da var; oradaki tezgah listesi Randıman penceresinden kurulur, çünkü Pareto satırları sebep eksenlidir ve tezgah taşımaz. Vardiya Karnesi'nde vardiya süzgeci YOKTUR: o raporun satırları vardiya tanımı numarasını taşımıyor."
         },

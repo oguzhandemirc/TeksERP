@@ -39,10 +39,8 @@ import {
   type VatBlock,
 } from "./vatService";
 
-const DEFAULT_DAYS = 30;
-
 export function VatSummaryPage() {
-  const { params, dateFrom, dateTo } = useReportDateRange(DEFAULT_DAYS);
+  const { params, dateFrom, dateTo } = useReportDateRange("finance/vat-summary");
 
   const q = useQuery({
     queryKey: ["reports", "finance", "vat-summary", params],
@@ -65,10 +63,10 @@ export function VatSummaryPage() {
 
   return (
     <ReportPageLayout
+      reportKey="finance/vat-summary"
       title="KDV Dönem Özeti"
       description="Satış ve alış faturalarının oran kırılımlı matrah + KDV + tevkifat özeti — beyanname değildir, muhasebeciye giden dönem özetidir."
       actions={<ReportExportBar disabled={!report} buildSpec={spec} />}
-      defaultDays={DEFAULT_DAYS}
     >
       {/* Hata dalı EN ÜSTTE — 403/500'de "fatura yok" demek, boş ekrandan
           kötüdür (fabrika kurulumunda en sık sebep `finance.enabled` kapalı). */}

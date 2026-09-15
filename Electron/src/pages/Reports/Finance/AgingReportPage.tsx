@@ -2,9 +2,10 @@
 // CARİ YAŞLANDIRMA — "kimden ne kadar alacağım var ve NE KADAR ESKİ"
 // =============================================================================
 // ⚠️ BU BİR KESİT RAPORUDUR: tek bir `asOf` anı vardır, tarih ARALIĞI YOKTUR
-// (bkz. `AgingFilterBar` başlığı). Ortak `ReportDateRange` bu yüzden gizlenir —
-// aralık seçtiren bir ekran kavramı yanlış öğretir ve backend de `dateFrom`/
-// `dateTo`'yu `.strict()` ile 400'ler.
+// (bkz. `AgingFilterBar` başlığı). Katalog sözleşmesi `kesit`: ortak `ReportDateFilter`
+// tek gün girdisi çizer, `useAsOfDay` `asOf`u günün SONU olarak üretir; aralık
+// seçtiren bir ekran kavramı yanlış öğretirdi ve backend de `dateFrom`/`dateTo`'yu
+// `.strict()` ile 400'ler.
 //
 // ⚠️ PARA BİRİMLERİ TOPLANMAZ — ne tabloda ne özet kartlarda. Üstteki kartlar bu
 // yüzden ADET sayar (cari sayısı · vadesi geçen cari · mutabakat); para
@@ -21,7 +22,8 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarClock, Info, ShieldCheck, TimerOff, Users } from "lucide-react";
-import { MetricCard, ReportExportBar, ReportPageLayout } from "../_components";
+import { MetricCard, ReportDateFilter, ReportExportBar, ReportPageLayout } from "../_components";
+import { useAsOfDay } from "../_hooks/useReportDay";
 import { fmtDate, fmtInt } from "../_components/formatters";
 import { AgingBlockTable } from "./AgingBlockTable";
 import { AgingDetailDialog } from "./AgingDetailDialog";
@@ -32,10 +34,8 @@ import { ReportErrorCard } from "./ReportErrorCard";
 import { ReportNotesCard } from "./ReportNotesCard";
 import { buildAgingExport } from "./agingExport";
 import {
-  dayEndIso,
   getAgingReport,
   isZeroAmount,
-  toYmd,
   type AgingCariRow,
   type CariKind,
   type Currency,
@@ -44,12 +44,10 @@ import { lowerTr } from "../../../lib/tr-case";
 
 export function AgingReportPage() {
   const [sp, setSp] = useSearchParams();
-  const todayYmd = useMemo(() => toYmd(new Date()), []);
 
   // Filtre URL'de yaşar: paylaşılan link filtresiyle birlikte gider (rapor
   // sayfalarının ortak sözleşmesi — `useReportDateRange` de böyle çalışır).
   const filters: AgingFilterState = {
-    asOfYmd: sp.get("asOf") || todayYmd,
     kind: (sp.get("kind") as CariKind | null) ?? "",
     currency: (sp.get("currency") as Currency | null) ?? "",
     onlyOverdue: sp.get("overdue") === "1",
@@ -58,7 +56,6 @@ export function AgingReportPage() {
   const patch = (p: Partial<AgingFilterState>) => {
     const next = new URLSearchParams(sp);
     const set = (k: string, v: string) => (v ? next.set(k, v) : next.delete(k));
-    if (p.asOfYmd !== undefined) set("asOf", p.asOfYmd === todayYmd ? "" : p.asOfYmd);
     if (p.kind !== undefined) set("kind", p.kind);
     if (p.currency !== undefined) set("currency", p.currency);
     if (p.onlyOverdue !== undefined) set("overdue", p.onlyOverdue ? "1" : "");
@@ -66,10 +63,10 @@ export function AgingReportPage() {
     setSp(next, { replace: true });
   };
 
-  // ⚠️ Kesit YEREL GÜN SONU: "31 Temmuz itibarıyla" o günün SONU demektir.
-  // Gün başına çekilseydi o gün kesilen faturalar rapora hiç girmezdi.
-  const asOfIso = dayEndIso(filters.asOfYmd);
-  const asOfLabel = fmtDate(filters.asOfYmd);
+  // Kesit URL `asOf` (YMD) → backend `asOf` = o günün SONU (hook üretir).
+  const { ymd: asOfYmd, params: asOfParam } = useAsOfDay("finance/aging");
+  const asOfIso = asOfParam.asOf;
+  const asOfLabel = fmtDate(asOfYmd);
   // Kayıtlı cari bakiyesi her zaman "şu an"dır; geçmiş kesitte karşılaştırma
   // tanım gereği fark üretir (kasa defterindeki `storedComparable` ile aynı kural).
   const storedComparable = new Date(asOfIso).getTime() >= Date.now() - 60_000;
@@ -78,7 +75,7 @@ export function AgingReportPage() {
     queryKey: ["reports", "finance", "aging", asOfIso, filters.kind, filters.currency, filters.onlyOverdue],
     queryFn: () =>
       getAgingReport({
-        asOf: asOfIso,
+        ...asOfParam,
         kind: filters.kind || undefined,
         currency: filters.currency || undefined,
         onlyOverdue: filters.onlyOverdue,
@@ -131,10 +128,10 @@ export function AgingReportPage() {
 
   return (
     <ReportPageLayout
+      reportKey="finance/aging"
       title="Cari Yaşlandırma"
       description="Açık bakiyenin yaşı — kimden ne kadar alacağımız var ve ne kadar gecikmiş."
-      showDateRange={false}
-      filters={<AgingFilterBar value={filters} onChange={patch} todayYmd={todayYmd} />}
+      filters={<AgingFilterBar value={filters} onChange={patch} dateFilter={<ReportDateFilter reportKey="finance/aging" bare />} />}
       actions={<ReportExportBar disabled={!report} buildSpec={spec} />}
     >
       <div className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">

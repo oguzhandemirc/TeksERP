@@ -118,7 +118,7 @@ const woColumns: ColumnDef<WipScorecard["neverStarted"][number], unknown>[] = [
 ];
 
 export function WipScorecardPage() {
-  const { params, dateFrom, dateTo } = useReportDateRange(30);
+  const { params, dateFrom, dateTo } = useReportDateRange("production/wip");
 
   const query = useQuery({
     queryKey: ["reports", "production", "wip", params],
@@ -133,6 +133,7 @@ export function WipScorecardPage() {
 
   return (
     <ReportPageLayout
+      reportKey="production/wip"
       title="Nerede Takıldı (WIP)"
       description="İstasyonlarda bekleyen mal, en uzun bekleyen işler ve hiç başlamamış iş emirleri."
       actions={<ReportExportBar disabled={!sc} buildSpec={spec} />}

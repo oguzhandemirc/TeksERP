@@ -114,11 +114,11 @@ export function OpenOrderCoveragePage() {
 
   return (
     <ReportPageLayout
+      reportKey="sales/open-order-coverage"
       title="Açık Sipariş Karşılanma"
       description="Açık siparişin ne kadarını bugün sevk edebilirim, ne kadarı için üretim gerekiyor."
       // Anlık fotoğraf: "bugün neyi sevk edebilirim" sorusunun dönemle işi yok
       // (Stok Karnesi ile aynı gerekçe).
-      showDateRange={false}
       actions={<ReportExportBar disabled={!c} buildSpec={spec} />}
     >
       {c && c.linesOmitted > 0 ? (

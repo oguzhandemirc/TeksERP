@@ -128,7 +128,7 @@ const orderColumns: ColumnDef<CancellationDetailRow, unknown>[] = [
 ];
 
 export function OrderCancellationPage() {
-  const { params, dateFrom, dateTo } = useReportDateRange(90);
+  const { params, dateFrom, dateTo } = useReportDateRange("sales/order-cancellation");
 
   const query = useQuery({
     queryKey: ["reports", "sales", "order-cancellation", params],
@@ -146,9 +146,9 @@ export function OrderCancellationPage() {
 
   return (
     <ReportPageLayout
+      reportKey="sales/order-cancellation"
       title="Sipariş İptal Karnesi"
       description="Müşteriler neden vazgeçiyor, ne kadar geç vazgeçiyor ve bu kime ne kadara mal oluyor."
-      defaultDays={90}
       actions={<ReportExportBar disabled={!oc} buildSpec={spec} />}
     >
       <p className="text-xs text-muted-foreground">

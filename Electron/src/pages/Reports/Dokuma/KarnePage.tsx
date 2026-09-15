@@ -44,7 +44,7 @@ function LedgerDialog({ target, onClose }: { target: ShiftStatRow; onClose: () =
 }
 
 export function KarnePage() {
-  const range = useFactoryRange(7);
+  const range = useFactoryRange("dokuma/karne");
   const [dialog, setDialog] = useState<KarneDialogState>(null);
   const { data, isLoading } = useQuery({
     queryKey: ["reports", "dokuma", "karne", range.from, range.to],
@@ -72,9 +72,9 @@ export function KarnePage() {
 
   return (
     <ReportPageLayout
+      reportKey="dokuma/karne"
       title="Karne Listesi ve Mühür"
       description="Mühürsüz satır anlık hesaplanır; mühürlü satır resmî rakamdır. Vardiya bitiminden 60 dk sonra kapanış işi karneyi yazar; amir düzeltip mühürler."
-      defaultDays={7}
       actions={<ReportExportBar disabled={rows.length === 0} buildSpec={spec} />}
     >
       <WarningsBlock warnings={allWarnings} />

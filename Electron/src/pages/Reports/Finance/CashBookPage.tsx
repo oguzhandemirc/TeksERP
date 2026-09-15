@@ -28,7 +28,7 @@ import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowUpRight, Info, Landmark, PieChart, Wallet } from "lucide-react";
-import { MetricCard, ReportDateRange, ReportExportBar, ReportPageLayout } from "../_components";
+import { MetricCard, ReportDateFilter, ReportExportBar, ReportPageLayout } from "../_components";
 import { fmtDate } from "../_components/formatters";
 import { formatDayKey } from "../../Finance/PeriodClose/service";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
@@ -51,8 +51,6 @@ import {
   type CashBookReport,
 } from "./cashBookService";
 import { moneyStr } from "./service";
-
-const DEFAULT_DAYS = 30;
 
 /**
  * KATEGORİ KIRILIMI BLOĞU — dönem hareketlerinin KAYNAK dökümü.
@@ -198,7 +196,7 @@ function CashCategoryBlock({
 }
 
 export function CashBookPage() {
-  const { params, dateFrom, dateTo } = useReportDateRange(DEFAULT_DAYS);
+  const { params, dateFrom, dateTo } = useReportDateRange("finance/cash-book");
   const navigate = useNavigate();
   const [sp, setSp] = useSearchParams();
   const [picked, setPicked] = useState<CashBookAccountSummary | null>(null);
@@ -271,6 +269,7 @@ export function CashBookPage() {
 
   return (
     <ReportPageLayout
+      reportKey="finance/cash-book"
       title="Kasa & Banka Defteri"
       description="Devir, dönem hareketleri ve yürüyen bakiye — tahsilat, kasa hareketi ve çek tahsili birlikte."
       actions={
@@ -285,7 +284,7 @@ export function CashBookPage() {
       }
       filters={
         <>
-          <ReportDateRange defaultDays={DEFAULT_DAYS} />
+          <ReportDateFilter reportKey="finance/cash-book" />
           <CashBookFilterBar
             accountKind={accountKind}
             includeInactive={includeInactive}

@@ -18,7 +18,7 @@ const columns: ColumnDef<OperatorPerformanceRow>[] = [
 ];
 
 export function OperatorPerformancePage() {
-  const { params, dateFrom, dateTo } = useReportDateRange(30);
+  const { params, dateFrom, dateTo } = useReportDateRange("production/operator-performance");
   const { data, isLoading } = useQuery({
     queryKey: ["reports", "production", "operator-performance", params],
     queryFn: () => productionReportsApi.operatorPerformance(params),
@@ -42,6 +42,7 @@ export function OperatorPerformancePage() {
 
   return (
     <ReportPageLayout
+      reportKey="production/operator-performance"
       title="Operatör Performansı"
       description="Operatör başına toplam ve op-türü kırılımında işlem sayısı."
       actions={

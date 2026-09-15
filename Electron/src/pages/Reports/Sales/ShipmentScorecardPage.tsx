@@ -53,7 +53,7 @@ function hint(now: number | undefined, prev: number | undefined, unit: string): 
 }
 
 export function ShipmentScorecardPage() {
-  const { params, dateFrom, dateTo } = useReportDateRange(30);
+  const { params, dateFrom, dateTo } = useReportDateRange("sales/shipment-scorecard");
   const compare = useReportCompare();
 
   const query = useQuery({
@@ -76,6 +76,7 @@ export function ShipmentScorecardPage() {
 
   return (
     <ReportPageLayout
+      reportKey="sales/shipment-scorecard"
       title="Sevk & Termin Karnesi"
       description="Dönemsel sevk hacmi ve zamanında teslim oranı — müşteri ve kumaş kırılımıyla."
       showCompare

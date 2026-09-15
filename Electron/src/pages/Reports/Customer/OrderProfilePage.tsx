@@ -40,9 +40,9 @@ export function OrderProfilePage() {
 
   return (
     <ReportPageLayout
+      reportKey="customer/order-profile"
       title="Müşteri Sipariş Profili"
       description="Aktif müşterilerin sipariş özeti — favori kumaş, renk, en."
-      showDateRange={false}
       actions={
         <ReportExportBar
           disabled={!data}

@@ -33,7 +33,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Coins, Info, Scale, TrendingDown, TrendingUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { MetricCard, ReportDateRange, ReportExportBar, ReportPageLayout } from "../_components";
+import { MetricCard, ReportDateFilter, ReportExportBar, ReportPageLayout } from "../_components";
 import { fmtDate, fmtDateTime, fmtInt } from "../_components/formatters";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
 import { FxDiffFilterBar } from "./FxDiffFilterBar";
@@ -53,10 +53,8 @@ import {
   invoiceTypeLabel,
 } from "./fxDiffService";
 
-const DEFAULT_DAYS = 30;
-
 export function FxDiffPage() {
-  const { params, dateFrom, dateTo } = useReportDateRange(DEFAULT_DAYS);
+  const { params, dateFrom, dateTo } = useReportDateRange("finance/fx-diff");
   const [sp, setSp] = useSearchParams();
 
   // Filtre URL'de yaşar: paylaşılan link filtresiyle birlikte gider (rapor
@@ -127,12 +125,13 @@ export function FxDiffPage() {
 
   return (
     <ReportPageLayout
+      reportKey="finance/fx-diff"
       title="Kur Farkı Raporu"
       description="Dövizli faturaları kapatan tahsilat/çeklerde gerçekleşen TL kur farkı — lehte ve aleyhte ayrı."
       actions={<ReportExportBar disabled={!report} buildSpec={spec} />}
       filters={
         <>
-          <ReportDateRange defaultDays={DEFAULT_DAYS} />
+          <ReportDateFilter reportKey="finance/fx-diff" />
           <FxDiffFilterBar
             cariId={cariId}
             cariOptions={cariOptions}

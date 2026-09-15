@@ -35,7 +35,7 @@ function StatCell({ s, minSample }: { s: LeadTimeStats; minSample: number }) {
 }
 
 export function OrderLeadTimePage() {
-  const { params, dateFrom, dateTo } = useReportDateRange(180);
+  const { params, dateFrom, dateTo } = useReportDateRange("sales/order-leadtime");
 
   const query = useQuery({
     queryKey: ["reports", "sales", "order-leadtime", params],
@@ -137,11 +137,11 @@ export function OrderLeadTimePage() {
 
   return (
     <ReportPageLayout
+      reportKey="sales/order-leadtime"
       title="Sipariş → Teslim Süresi"
       description="Sipariş alındıktan kaç gün sonra mal çıkıyor — termin sözünün dayanağı."
       // Varsayılan 180 gün: teslim süresi ölçmek için 30 günlük pencere fazla dar
       // (siparişin kapanması bir aydan uzun sürebilir, örneklem hiç dolmaz).
-      defaultDays={180}
       actions={<ReportExportBar disabled={!lt} buildSpec={spec} />}
     >
       {thin ? (

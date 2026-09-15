@@ -114,9 +114,9 @@ export function BatchTracePage() {
 
   return (
     <ReportPageLayout
+      reportKey="production/batch-trace"
       title="Parti İzleme"
       description="Bu partiden hangi müşteriye ne gitti — şikâyet geldiğinde etki kümesini bulma aracı."
-      showDateRange={false}
       actions={<ReportExportBar disabled={!t} buildSpec={spec} />}
     >
       <Card className="p-3">

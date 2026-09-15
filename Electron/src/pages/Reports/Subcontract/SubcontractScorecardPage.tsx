@@ -159,7 +159,7 @@ const openColumns: ColumnDef<SubcontractScorecard["oldestOpen"][number], unknown
 ];
 
 export function SubcontractScorecardPage() {
-  const { params, dateFrom, dateTo } = useReportDateRange(90);
+  const { params, dateFrom, dateTo } = useReportDateRange("subcontract/scorecard");
   const compare = useReportCompare();
 
   const query = useQuery({
@@ -183,10 +183,10 @@ export function SubcontractScorecardPage() {
 
   return (
     <ReportPageLayout
+      reportKey="subcontract/scorecard"
       title="Fason Karnesi"
       description="Giden ↔ dönen ↔ müşteriye teslim metrajı (fason firesi), dönüş süresi ve açık bakiye — firma bazında."
       showCompare
-      defaultDays={90}
       actions={<ReportExportBar disabled={!sc} buildSpec={spec} />}
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

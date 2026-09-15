@@ -26,7 +26,7 @@ const tableColumns: ColumnDef<TableRow>[] = [
 ];
 
 export function SystemLogSummaryPage() {
-  const { params, dateFrom, dateTo } = useReportDateRange(7);
+  const { params, dateFrom, dateTo } = useReportDateRange("audit/system-log-summary");
   const { data, isLoading } = useQuery({
     queryKey: ["reports", "audit", "system-log-summary", params],
     queryFn: () => auditReportsApi.systemLogSummary(params),
@@ -43,9 +43,9 @@ export function SystemLogSummaryPage() {
 
   return (
     <ReportPageLayout
+      reportKey="audit/system-log-summary"
       title="Denetim Kaydı Özeti"
       description="SystemLog tablosunda aralık içinde oluşan kayıtların kırılımı."
-      defaultDays={7}
       actions={
         <ReportExportBar
           disabled={!s}
