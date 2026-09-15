@@ -110,6 +110,9 @@ const DOKUMA_UC_METINLERI = ["/api/weaving-orders", "/api/machine-runs", "/api/m
  * Raporlar hub'ının bayrak biçimi; palet girişi `regimePredicate(featureFlag)` ile türer).
  * İki biçim de aynı soruyu sorar: karo YALNIZ `dokumaEnabled` ile çizilir.
  */
+// Uç yolunu ÇAĞIRMADAN, VERİ olarak taşıyan sabitler (R0 rapor kataloğu aynası): §7b onları çağıran saymaz,
+// §7b3 her satırın gerçekten uç metni taşıdığını ölçer (ölü muaf kırmızı).
+const UC_METNI_TASIYAN_SABITLER: readonly string[] = ["Electron/src/lib/report-catalog.ts"];
 const IZINLI_ISTEMCI_DOSYALARI: ReadonlyArray<{ dosya: string; ekranKey: string; izinler: readonly string[]; karo: "operations" | "reports" }> = [
   { dosya: "Electron/src/pages/Operations/WeavingOrders/service.ts", ekranKey: "operations/weaving-orders", izinler: ["weavingorder:read"], karo: "operations" },
   // Fason dokuma (G2p, 2026-09-14): aynı ekranın "Fason" bölümü — dokuma işi detayı, ayrı karo/route yok.
@@ -285,8 +288,10 @@ async function main(): Promise<void> {
     })
     .map((f) => path.relative(KOK, f).split(path.sep).join("/"));
   const izinli = new Set(IZINLI_ISTEMCI_DOSYALARI.map((x) => x.dosya));
-  const izinsiz = cagiranlar.filter((f) => !izinli.has(f));
+  const sabitler = new Set(UC_METNI_TASIYAN_SABITLER);
+  const izinsiz = cagiranlar.filter((f) => !izinli.has(f) && !sabitler.has(f));
   const oluIzin = [...izinli].filter((f) => !cagiranlar.includes(f));
+  const oluSabit = [...sabitler].filter((f) => !cagiranlar.includes(f));
   check(
     "§7b ⭐ Dokuma uçlarını çağıran her istemci dosyası allowlist'te (çağıran dosya = dokuma karosunun arkasındaki service)",
     izinsiz.length === 0,
@@ -296,6 +301,11 @@ async function main(): Promise<void> {
     "§7b2 Allowlist bayat değil (her satır GERÇEKTEN çağırıyor — ölü muaf kırmızı)",
     oluIzin.length === 0,
     oluIzin.join(", "),
+  );
+  check(
+    "§7b3 Veri-taşıyan sabit muafı bayat değil (dosya gerçekten uç metni taşıyor — ölü muaf kırmızı)",
+    oluSabit.length === 0,
+    oluSabit.length ? oluSabit.join(", ") : `${sabitler.size} sabit`,
   );
 
   // Allowlist'teki ekranın ÜÇ kapısı: manifesto · karo · route.
