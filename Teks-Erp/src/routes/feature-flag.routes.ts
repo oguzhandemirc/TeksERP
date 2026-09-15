@@ -17,7 +17,7 @@ import {
   DOCUMENT_DESIGN_FLAG_KEYS,
   DOCUMENT_DESIGN_WRITE,
 } from "../constants/document-design";
-import { MODULE_FLAG_KEYS } from "../constants/module-flags";
+import { MODULE_FLAG_KEYS, SUPERADMIN_ONLY_FLAG_KEYS } from "../constants/module-flags";
 import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
 import { isSettingsPasswordConfigured } from "../services/settings-password.service";
 import {
@@ -39,7 +39,9 @@ const router = Router();
  * vermek olurdu; kapalı bırakmak ise dar iznin hiçbir işe yaramaması demekti.
  *
  * ÜÇ DAL (2026-09-03'te modül dalı eklendi — ayrıntı gövdedeki yorumlarda):
- *   ① gövde EN AZ BİR modül anahtarı taşıyorsa → sistem hesabı (süperadmin) şartı
+ *   ① gövde EN AZ BİR süperadmin anahtarı taşıyorsa → sistem hesabı (süperadmin) şartı
+ *      (küme = dokuz modül anahtarı + `reportsClosedKeys`; Raporlar K3 — rapor görünürlüğü
+ *      de kurulumun satın aldığı ürünün sınırıdır, fabrika yöneticisinin ayarı değil)
  *      (sistem hesabı HİÇ YOKSA supap: defter TAZELENİR, hâlâ yoksa ② + ③'e düşer)
  *   ② gövde YALNIZ belge tasarım anahtarları taşıyorsa → dar izin
  *   ③ gerisi → `admin:settings`
@@ -54,9 +56,13 @@ const router = Router();
 const flagWriteGuard = (req: Request, res: Response, next: NextFunction): void => {
   const keys = Object.keys((req.body ?? {}) as Record<string, unknown>);
 
-  // ── ① MODÜL DALI — EN ÖNDE ve `.some` ile ────────────────────────────────
+  // ── ① SÜPERADMİN DALI — EN ÖNDE ve `.some` ile ───────────────────────────
   // Modül anahtarları (`ticaretEnabled`, `productionEnabled`, …) kurulumun
   // HANGİ ÜRÜNÜ satın aldığını söyler; fabrika yöneticisinin ayarı değildir.
+  // `reportsClosedKeys` de aynı dalda (Raporlar K3): rapor kapatmak bir kurulum
+  // kararıdır. ⚠️ Küme `MODULE_FLAG_KEYS` DEĞİL `SUPERADMIN_ONLY_FLAG_KEYS` —
+  // ikisini tek küme yapmak `MODULE_DEPENDENCIES`/profil makinesini rapor
+  // listesiyle karıştırırdı (bkz. `constants/module-flags.ts` başlığı).
   //
   // ⚠️ `.some` — belge dalının `.every`'sinin TERSİ ve bu bilinçlidir. Belge dalı
   //   "yalnız bu anahtarlar varsa DAR izin yeter" der (izin GENİŞLETİR);
@@ -70,7 +76,7 @@ const flagWriteGuard = (req: Request, res: Response, next: NextFunction): void =
   // ⚠️ SENKRON: `req.isSystemAccount` `verifyToken`in doldurduğu istek-taze bir
   //   alandır (JWT claim'i DEĞİL) — bu yüzden burada DB'ye gidilmez ve guard
   //   `next`i aynı tick'te çağırır.
-  if (keys.some((k) => MODULE_FLAG_KEYS.has(k))) {
+  if (keys.some((k) => SUPERADMIN_ONLY_FLAG_KEYS.has(k))) {
     // EMNİYET SUPABI: sistem hesabı YOKSA (kurulum script'i hiç koşulmamış) kural
     // devre dışıdır — aksi halde modül anahtarını HİÇ KİMSE değiştiremezdi
     // (`constants/document-design.ts`teki "admin:settings dört ekranı da açmaya
@@ -103,7 +109,7 @@ const flagWriteGuard = (req: Request, res: Response, next: NextFunction): void =
           action: "SUPERADMIN_ABSENT_MODULE_WRITE",
           userId: req.user?.userId ?? null,
           tableName: "system_settings",
-          payload: { keys: keys.filter((k) => MODULE_FLAG_KEYS.has(k)) },
+          payload: { keys: keys.filter((k) => SUPERADMIN_ONLY_FLAG_KEYS.has(k)) },
         });
         belgeVeAdminDallari(keys, req, res, next);
       })
@@ -270,6 +276,11 @@ export const updateSchema = z.strictObject({
   // devere.autoConsume — tezgahtan doğan top leventten otomatik tüketim (default false = elle). Backend ENFORCE.
   devereAutoConsume: z.boolean().optional(),
   dokumaEnabled: z.boolean().optional(),
+  // reports.closedKeys — KAPALI raporların anahtar listesi (`REPORT_CATALOG` anahtarları).
+  // ⚠️ Anahtar doğrulaması BURADA DEĞİL serviste: tanınmayan anahtar 400 `REPORT_KEY_UNKNOWN`
+  // ile ADIYLA reddedilir; Zod'un `z.enum(29 anahtar)` hâli yalnız "geçersiz değer" derdi ve
+  // panelde hangi anahtarın yanlış olduğu görünmezdi. Şemanın işi TİP, servisin işi KÜME.
+  reportsClosedKeys: z.array(z.string()).optional(),
   targetQuantityEnabled: z.boolean().optional(),
   rawWidthEnabled: z.boolean().optional(),
   kk1WeightEntryEnabled: z.boolean().optional(),

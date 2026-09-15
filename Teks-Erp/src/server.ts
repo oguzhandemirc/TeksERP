@@ -6,6 +6,7 @@ import { getLanAddresses } from './lib/lan-addresses';
 import { startInstallationIdentity } from './jobs/installation-identity.job';
 import { startSuperadminAccount } from './jobs/superadmin.job';
 import { startModuleProfileJob } from './jobs/module-profile.job';
+import { warnStaleReportKeys } from './jobs/report-catalog.job';
 import { refreshDiscoveryCache } from './services/discovery.service';
 import { startMdnsAdvertiser, stopMdnsAdvertiser } from './jobs/mdns-advertiser.job';
 import { startArchiveScheduler } from './jobs/archive-scheduler';
@@ -192,6 +193,9 @@ const server = app.listen(Number(PORT), HOST, () => {
     // HİÇBİR ŞEY yazılmaz (yanlış profili kalıcı
     // damgalamamak için — bir kez yazıldı mı ikinci koşum dokunmaz).
     startModuleProfileJob();
+    // Kapalı rapor listesindeki BAYAT anahtarlar (katalogdan çıkmış rapor) ve bozuk
+    // satır boot'ta TEK SEFER duyurulur; job yazmaz — liste temizliği süperadmin kararı.
+    void warnStaleReportKeys();
     // Keşif ucunun bellek kopyası (firma adı + port). İstek yolunda DB'ye
     // gidilmediği için burada bir kez doldurulur; firma adı sonradan değişirse
     // bir sonraki restart'ta tazelenir (keşif için yeterli hassasiyet).

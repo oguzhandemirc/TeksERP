@@ -21,6 +21,54 @@
 
 ---
 
+## 2026-09-15 — Rapor kapısı: kümeyi genişletmek, kümeyi KİRLETMEK değildir [ÇEKİRDEK]
+
+Raporlar fazının R1 dilimi: `reports.closedKeys` + 29 uçta `requireReportOpen`.
+
+**Görünürlük TEK liste oldu, rapor başına modül anahtarı DEĞİL.** 29 yeni modül anahtarı
+`MODULE_FLAG_KEYS`/profil/grandfathering makinesini şişirirdi. Liste KAPALI olanları sayar ve
+yön bilinçli: satırı olmayan kurulumda boş liste ⇒ hepsi açık = bugünkü davranış. "Açık olanlar"
+listesi yazılsaydı her yükseltmede 29 rapor birden kaybolurdu.
+
+**Yazma kapısının kümesi genişledi ama MODÜL kümesi büyümedi.** `reportsClosedKeys` bir modül
+anahtarı değil: bağımlılık tablosuna girmez, profil sabitinde yaşamaz, `MODULE_SETTING_KEYS` ile
+birebirliği ölçülen dokuzluğun parçası değildir. Ortak olan tek şey YAZMA KAPISIdır ⇒ üstüne
+`SUPERADMIN_ONLY_FLAG_KEYS` (+ ham ayar ikizi) kuruldu. ⇒ ***İki şeyin bir sorusu ortaksa, ortak
+olan SORU adlandırılır — kümelerden biri diğerini yutmaz.***
+
+**Kapı ÜÇ SONUÇLU.** Liste okunamadığında (bozuk satır) uç 403 verir ama AYRI kodla
+(`REPORT_GATE_UNAVAILABLE`). "Ölçemedim"i "kapalı" diye basmak destek ekibini yanlış anahtara
+gönderir; "açık" diye basmak kapıyı fail-open yapar. `readReportsClosedKeys` bu yüzden düz bir
+dizi değil ayrık birleşim döndürür.
+
+**Bilinmeyen anahtar YAZMADA 400, OKUMADA yok sayılır** (1e hükmü). Asimetri bilinçli: yazan kişi
+bir tipo'yu anında görmelidir; ama silinmiş bir rapor yüzünden listede kalan bayat bir anahtar tüm
+rapor kapısını 500'e düşürmemelidir. Bayat anahtarı duyuran yer boot uyarısıdır ve uyarı YAZMAZ —
+listeyi temizlemek süperadmin kararıdır (`module-profile.job`ın "satır varsa dokunma" kuralının
+aynısı).
+
+**İKİ BEKÇİ, benim yüzümden, KIRMIZI VERMEDEN KÖR KALDI.** `test_module_flags §5a` ve
+`test_superadmin`in iki kolu korumayı TEK TERİMLE ölçüyordu (`MODULE_SETTING_KEYS.has(key)`,
+`MODULE_FLAG_KEYS.has(k)`). Kümeyi genişletince koruma yerinde kaldı, ölçüm kalmadı — ve bekçiler
+kırmızı vermedi, çünkü ölçtükleri metin yok olmuştu, ihlal değil. "Sessiz kapı ölümü"nün
+terim-yeniden-adlandırma biçimi. Üç kol da korumanın ANLAMINI yakalayacak şekilde genişletildi
+(iki ad da kabul + `MODULE_KEY_RESERVED` kodu şart). ⇒ ***Bir sabiti yeniden adlandırmak, onu
+ölçen her bekçiyi köreltme riskidir; yeniden adlandırdıktan sonra o sabiti okuyan BÜTÜN bekçiler
+koşulur.***
+
+**Canlı ayak, çalışma ağacını değil AYAKTAKİ SÜRECİ ölçer.** `olculemedi` dallarından biri boş
+listeye çevrildiğinde §1c (kapı dosyasına bakar), §5d (tip beyanına bakar) ve §7c (CANLI sunucuya
+bakar) ÜÇÜ DE YEŞİL kaldı — üçüncüsü çünkü koşan sunucu mutasyondan ÖNCE başlamıştı. Sonda
+geçerliliğinin dördüncü ölüm biçimi bu turda somutlaştı. §5f kolu (iki dalı ayrı ayrı sayar) tam
+o boşluktan doğdu. ⇒ ***Canlı bir sondanın geçerliliği, süreci yeniden başlatmaya bağlıdır.***
+
+**Canlı tur bir de kendi iddiasını düzeltti:** sistem hesabı OLMAYAN bir veritabanında yönetici
+PATCH'i 200 döndü ve sonda "kapı bozuk" diye yanlış bir hikâye anlatacaktı. `flagWriteGuard`ın
+emniyet supabı kuralı gereği bu DOĞRU davranıştır. Kol önce supabın durumunu ÖLÇER, iddiayı ondan
+sonra kurar: hesap varsa 403 şartı, yoksa "süperadmin dalına girildi" (denetim izinden) + beyanlı ⏭.
+
+---
+
 ## 2026-09-15 — Rapor kataloğu: kimliği YÜZEYDEN alıp ADRESE koymak [ÇEKİRDEK]
 
 Raporlar fazının R0 dilimi. Bugüne kadar "rapor" kümesinin sınırı **yüzeyde** çiziliydi:

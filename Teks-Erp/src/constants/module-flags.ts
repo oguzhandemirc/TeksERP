@@ -21,6 +21,10 @@
 // ham ayar ucunun reddi (K7) · `feature-flag.routes.ts` `flagWriteGuard`ının
 // SÜPERADMİN dalı (modül anahtarını yalnız sistem hesabı yazar) · bekçi
 // `scripts/test_module_flags.ts`.
+//
+// ⚠️ SON İKİ KÜME MODÜL KÜMESİ DEĞİL: `SUPERADMIN_ONLY_*` yazma kapısının kümesidir ve
+// rapor görünürlük listesini de kapsar (Raporlar K3). Modül sorusu soran hiçbir yol
+// onları okumaz — ayrım adla taşınır.
 // =============================================================================
 
 /**
@@ -42,6 +46,22 @@ export const MODULE_FLAG_KEYS: ReadonlySet<string> = new Set([
   "dokumaEnabled",
 ]);
 
+/**
+ * `PATCH /api/feature-flags` gövdesinde SÜPERADMİN şartı doğuran anahtarların TAMAMI:
+ * dokuz modül anahtarı + rapor görünürlük listesi.
+ *
+ * ⚠️ NEDEN `MODULE_FLAG_KEYS`i GENİŞLETMEDİK, ÜSTÜNE KÜME KURDUK: `reportsClosedKeys`
+ * bir modül anahtarı DEĞİL — bağımlılık tablosuna girmez, profil sabitinde yaşamaz,
+ * `MODULE_SETTING_KEYS` ile birebirliği ölçülen dokuzluğun parçası değildir. Onu o kümeye
+ * atmak `test_module_flags`in "dokuz ↔ dokuz" ölçümünü bozar ve `MODULE_DEPENDENCIES`
+ * okuyan her yolu yanlış soruya sokardı. Ortak olan tek şey YAZMA KAPISIdır; kümeyi de
+ * tam olarak o soruya göre adlandırdık.
+ */
+export const SUPERADMIN_ONLY_FLAG_KEYS: ReadonlySet<string> = new Set([
+  ...MODULE_FLAG_KEYS,
+  "reportsClosedKeys",
+]);
+
 /** Aynı dokuz modülün DB anahtarı (`system_settings.key`). */
 export const MODULE_SETTING_KEYS: ReadonlySet<string> = new Set([
   "production.enabled",
@@ -53,6 +73,16 @@ export const MODULE_SETTING_KEYS: ReadonlySet<string> = new Set([
   "tezgah.enabled",
   "devere.enabled",
   "dokuma.enabled",
+]);
+
+/**
+ * Ham ayar ucundan (`PUT /api/admin/settings/:key`) YAZILAMAYAN DB anahtarları:
+ * dokuz modül anahtarı + `reports.closedKeys`. K7 kalıbı — ikinci bir yazma yüzeyi
+ * açılmaz, yoksa süperadmin kapısı (`flagWriteGuard`) etrafından dolaşılırdı.
+ */
+export const SUPERADMIN_ONLY_SETTING_KEYS: ReadonlySet<string> = new Set([
+  ...MODULE_SETTING_KEYS,
+  "reports.closedKeys",
 ]);
 
 /**

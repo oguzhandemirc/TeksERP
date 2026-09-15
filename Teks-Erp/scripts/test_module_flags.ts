@@ -243,9 +243,16 @@ function main(): void {
 
   // ── §5 ⭐ HAM AYAR UCU MODÜL ANAHTARINI REDDEDİYOR (K7) ───────────────────
   const adminKod = yorumlariSok(fs.readFileSync(ADMIN_ROUTES, "utf8"));
+  // ⚠️ DESEN İKİ ADI DA KABUL EDER ve bu bilinçli (ölçüldü 2026-09-15): küme
+  // `MODULE_SETTING_KEYS`ten `SUPERADMIN_ONLY_SETTING_KEYS`e GENİŞLETİLDİĞİNDE
+  // (Raporlar K3: rapor görünürlük listesi de ham uçtan yazılamaz) tek terime
+  // bağlı desen KIRMIZI VERMEDEN kör kaldı — koruma yerindeydi, bekçi göremiyordu.
+  // Bu, "sessiz kapı ölümü"nün terim-yeniden-adlandırma biçimidir; çare dar bir
+  // desen değil, korumanın ANLAMINI yakalayan bir desendir.
   check(
     "§5a ⭐ `PUT /api/admin/settings/:key` modül anahtarını reddediyor",
-    /MODULE_SETTING_KEYS\.has\(\s*key\s*\)/.test(adminKod),
+    /(MODULE_SETTING_KEYS|SUPERADMIN_ONLY_SETTING_KEYS)\.has\(\s*key\s*\)/.test(adminKod)
+      && /code: "MODULE_KEY_RESERVED"/.test(adminKod),
     "reddedilmezse modül şalteri düz string (`\"true\"`) olarak yazılabilir ve bağımlılık " +
       "doğrulaması KOMPLE atlanır",
   );

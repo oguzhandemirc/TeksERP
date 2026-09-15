@@ -11,7 +11,7 @@ import { AuthService } from "../services/auth.service";
 import { PermissionManagementService } from "../services/permission-management.service";
 import { TotpAccountService } from "../services/totp-account.service";
 import { systemSettingService, SETTING_KEYS } from "../services/system-setting.service";
-import { MODULE_SETTING_KEYS } from "../constants/module-flags";
+import { MODULE_SETTING_KEYS, SUPERADMIN_ONLY_SETTING_KEYS } from "../constants/module-flags";
 import {
   MODULE_PROFILES,
   MODULE_PROFILE_IDS,
@@ -1499,9 +1499,12 @@ router.put(
           { code: "SETTING_KEY_RESERVED", key },
         );
       }
-      if (MODULE_SETTING_KEYS.has(key)) {
+      // ⚠️ KÜME `SUPERADMIN_ONLY_SETTING_KEYS` (dokuz modül + `reports.closedKeys`):
+      // ham ayar ucu ikinci bir yazma yüzeyi açamaz, yoksa `flagWriteGuard`ın süperadmin
+      // dalı buradan dolanılırdı (Raporlar K3/K7).
+      if (SUPERADMIN_ONLY_SETTING_KEYS.has(key)) {
         throw AppError.badRequest(
-          "Modül anahtarları yalnız Genel Ayarlar → Modüller (PATCH /api/feature-flags) üzerinden değiştirilir",
+          "Modül anahtarları ve rapor görünürlük listesi yalnız Genel Ayarlar → Modüller (PATCH /api/feature-flags) üzerinden değiştirilir",
           { code: "MODULE_KEY_RESERVED", key },
         );
       }

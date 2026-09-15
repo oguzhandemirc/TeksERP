@@ -28,6 +28,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { verifyToken } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/rbac.middleware";
+import { requireReportOpen } from "../../middlewares/report.middleware";
 import { requireFinanceEnabled } from "../../middlewares/finance.middleware";
 import { dateRangeSchema, reportEnvelope, resolveDateRange } from "../../services/reports/_shared";
 import { getAgingReport } from "../../services/reports/finance-aging.report";
@@ -73,7 +74,7 @@ const boolish = z
  *       200: { description: Para birimi bazında yaşlandırma blokları }
  *       403: { description: Ön muhasebe modülü kapalı ya da yetki yok }
  */
-router.get("/aging", guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/aging", requireReportOpen("finance/aging"), guard, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const q = z
       .object({
@@ -134,7 +135,7 @@ router.get("/aging", guard, async (req: Request, res: Response, next: NextFuncti
  *     responses:
  *       200: { description: Hesap özetleri (+ tek hesapta satır dökümü) }
  */
-router.get("/cash-book", guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/cash-book", requireReportOpen("finance/cash-book"), guard, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const q = z
       .object({
@@ -182,7 +183,7 @@ router.get("/cash-book", guard, async (req: Request, res: Response, next: NextFu
  *     responses:
  *       200: { description: Devir + hareketler + yürüyen bakiye }
  */
-router.get("/statement", guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/statement", requireReportOpen("finance/statement"), guard, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const q = z
       .object({
@@ -230,7 +231,7 @@ router.get("/statement", guard, async (req: Request, res: Response, next: NextFu
  *       200: { description: Satış + alış blokları (oran kırılımı, para birimi grupları, TL toplamlar) }
  *       403: { description: Ön muhasebe modülü kapalı ya da yetki yok }
  */
-router.get("/vat-summary", guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/vat-summary", requireReportOpen("finance/vat-summary"), guard, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const q = z
       .object({
@@ -272,7 +273,7 @@ router.get("/vat-summary", guard, async (req: Request, res: Response, next: Next
  *       200: { description: Kapama bazında kur farkı satırları + lehte/aleyhte özet }
  *       403: { description: Ön muhasebe modülü kapalı ya da yetki yok }
  */
-router.get("/fx-diff", guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/fx-diff", requireReportOpen("finance/fx-diff"), guard, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const q = z
       .object({

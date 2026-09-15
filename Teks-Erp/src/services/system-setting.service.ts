@@ -29,6 +29,7 @@ import {
   type DocFieldStyle,
   type DocStyleConfig,
 } from "./document-render/doc-style";
+import { REPORT_BY_KEY } from "../constants/report-catalog";
 import { SECURITY_SETTING_PREFIX } from "../constants/reserved-settings";
 import { resolveConfigPageSize } from "./document-render/traveler-card.density";
 import {
@@ -226,6 +227,15 @@ export const SETTING_KEYS = {
    *  ÜRETİME BAĞIMLI (`MODULE_DEPENDENCIES`), tezgah izlemenin KARDEŞİ — fasona
    *  dokutan firmada dokuma işi var tezgah yok (DOKUMA-IS-EMRI §2.5). */
   DOKUMA_ENABLED: "dokuma.enabled",
+  /**
+   * KAPALI raporların anahtar listesi (JSON `string[]`, `REPORT_CATALOG` anahtarları).
+   *
+   * ⚠️ MODÜL ANAHTARI DEĞİL, GÖRÜNÜRLÜK listesi — ve yönü TERS kurulmuştur: liste
+   * KAPALI olanları sayar. SATIR YOK ⇒ boş liste ⇒ HEPSİ AÇIK = bugünkü davranış
+   * (ölçüldü: rapor başına kapı yok). "Açık olanlar" listesi yazılsaydı satırı olmayan
+   * her kurulumda 29 rapor birden kaybolurdu ve yeni doğan rapor da kapalı doğardı.
+   */
+  REPORTS_CLOSED_KEYS: "reports.closedKeys",
   /** İş emrinde "hedef metraj" alanı gösterilsin mi. Default false (proses-only fabrika). */
   WORKORDER_TARGET_QUANTITY_ENABLED: "workorder.targetQuantityEnabled",
   /** KK1 ham kumaş girişinde "en" alanı gösterilsin mi. Default false (ham en önemsiz). */
@@ -1423,6 +1433,11 @@ export interface FeatureFlags {
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI: bu alan HAM değerdir; etkin değer
    *  `production && dokuma` ve kapının içinde çözülür. */
   dokumaEnabled: boolean;
+  /**
+   * KAPALI rapor anahtarları. `null` = LİSTE OKUNAMADI (bozuk satır) — "hiçbiri kapalı
+   * değil" ile aynı şey DEĞİL; panel bunu fail-closed okur (R2/K5) ve rapor çizmez.
+   */
+  reportsClosedKeys: string[] | null;
   targetQuantityEnabled: boolean;
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı gösterilsin mi. Default false;
@@ -1801,6 +1816,7 @@ export class SystemSettingService {
 
     // Oturum ömrü tek kaynaktan (dakika); saat alanı geriye-uyum için aynı değerden türetilir.
     const sessionMinutes = await readSessionDurationMinutes(cacheClient);
+    const reportsClosedRead = await readReportsClosedKeys(cacheClient);
     const flags: FeatureFlags = {
       companyName: await readCompanyName(cacheClient),
       pricingEnabled: await readPricingEnabled(cacheClient),
@@ -1836,6 +1852,12 @@ export class SystemSettingService {
       devereMountTrackingRequired: await readDevereMountTrackingRequired(cacheClient),
       devereAutoConsume: await readDevereAutoConsume(cacheClient),
       dokumaEnabled: await readDokumaEnabled(cacheClient),
+      // ⚠️ ÜÇ SONUÇLU okumanın panele TAŞINAN hâli: ölçülemedi ⇒ `null`. Boş diziye
+      // düşürmek, bozuk bir satırda paneli "hepsi açık" diye çizdirirdi.
+      reportsClosedKeys: ((): string[] | null => {
+        const o = reportsClosedRead;
+        return o.durum === "okundu" ? o.kapali : null;
+      })(),
       targetQuantityEnabled: await readTargetQuantityEnabled(cacheClient),
       rawWidthEnabled: await readRawWidthEnabled(cacheClient),
       kk1WeightEntryEnabled: await readKk1WeightEntryEnabled(cacheClient),
@@ -2358,6 +2380,35 @@ export class SystemSettingService {
         SETTING_KEYS.KK1_RAW_WIDTH_ENABLED,
         input.rawWidthEnabled,
         "KK1 ham kumaş girişinde en (cm) alanını göster",
+        userId
+      );
+    }
+
+    // ── RAPOR GÖRÜNÜRLÜĞÜ ────────────────────────────────────────────────────
+    // ⚠️ BİLİNMEYEN ANAHTAR YAZMADA 400 (`REPORT_KEY_UNKNOWN`), OKUMADA YOK SAYILIR
+    // (1e hükmü). Asimetri bilinçli: yazan kişi bir TIPO'yu anında görmelidir, ama
+    // silinmiş bir rapor yüzünden listede kalan bayat bir anahtar tüm rapor kapısını
+    // 500'e düşürmemelidir. Bayat anahtar boot'ta TEK SEFER uyarı basar.
+    // ⚠️ `null` YAZILAMAZ: `null` okuma tarafında "liste ÖLÇÜLEMEDİ" demektir, bir değer
+    // değil. Yazma yüzeyinden kabul edilseydi bozuk satır meşru bir yazma hâline gelirdi.
+    if (Object.prototype.hasOwnProperty.call(input, "reportsClosedKeys")) {
+      const incoming = input.reportsClosedKeys;
+      if (!Array.isArray(incoming) || !incoming.every((k): k is string => typeof k === "string")) {
+        throw AppError.badRequest("reportsClosedKeys string dizisi olmalı");
+      }
+      const bilinmeyen = incoming.filter((k) => !REPORT_BY_KEY.has(k));
+      if (bilinmeyen.length > 0) {
+        throw AppError.badRequest(
+          `Tanınmayan rapor anahtarı: ${bilinmeyen.join(", ")}`,
+          { code: "REPORT_KEY_UNKNOWN", keys: bilinmeyen },
+        );
+      }
+      // KÜME olarak saklanır (tekil + sıralı): sıra anlam taşımaz ve iki yazma arasında
+      // yalnız sıralaması değişen bir gövde sahte bir "değişti" audit satırı üretirdi.
+      await this.set(
+        SETTING_KEYS.REPORTS_CLOSED_KEYS,
+        [...new Set(incoming)].sort(),
+        "Kapalı raporların anahtar listesi (boş/satır yok = hepsi açık)",
         userId
       );
     }
@@ -3765,6 +3816,42 @@ export async function readDevereAutoConsume(tx?: Pick<typeof prisma, "systemSett
 /** Dokuma işi modülü açık mı? Default FALSE (satır yoksa kapalı — dünkü davranış:
  *  fabrika dokumuyor, kumaş hazır geliyor). HAM değer döner; ön koşulu (production)
  *  `requireDokumaEnabled` ölçer. */
+/**
+ * Rapor görünürlük listesinin ÜÇ SONUÇLU okuması.
+ *
+ * ⚠️ İKİ SONUÇ YETMEZ (`uc-sonuc-iki-degil`): "liste boş" ile "listeyi OKUYAMADIM" aynı
+ * şey değildir. İkisini de boş diziye çevirmek, bozuk/elle düzenlenmiş bir satırda
+ * KAPALI raporları sessizce AÇARDI — kapının çözdüğünden büyük bir arıza.
+ *
+ * ⚠️ SATIR YOK ⇒ `okundu` + boş liste (ölçüm var, sonuç "hiçbiri kapalı değil").
+ *    DEĞER dizi-of-string DEĞİL ⇒ `olculemedi` (kapı fail-closed 403 verir).
+ * ⚠️ Okuma CACHE'SİZ, modül kapılarının kalıbı: görünürlük acil kapatma anahtarıdır ve
+ *    kapatmanın etkisi BİR SONRAKİ istekte görünmelidir. `getFeatureFlags`in 30 sn'lik
+ *    önbelleği yalnız panel yanıtına aittir, buraya hiç dokunmaz.
+ */
+export type ReportsClosedKeysRead =
+  | { durum: "okundu"; kapali: string[] }
+  | { durum: "olculemedi"; neden: string };
+
+export async function readReportsClosedKeys(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<ReportsClosedKeysRead> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.REPORTS_CLOSED_KEYS },
+    select: { value: true },
+  });
+  if (!setting) return { durum: "okundu", kapali: [] };
+  const ham = setting.value;
+  if (!Array.isArray(ham)) {
+    return { durum: "olculemedi", neden: `beklenen JSON dizi, gelen ${typeof ham}` };
+  }
+  if (!ham.every((x): x is string => typeof x === "string")) {
+    return { durum: "olculemedi", neden: "dizinin her ögesi string olmalı" };
+  }
+  return { durum: "okundu", kapali: ham };
+}
+
 export async function readDokumaEnabled(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {

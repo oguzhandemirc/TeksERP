@@ -479,8 +479,11 @@ async function main(): Promise<void> {
     /const\s+flagWriteGuard\s*=\s*\(/.test(mwSrc) && !/const\s+flagWriteGuard\s*=\s*async/.test(mwSrc),
   );
   check(
-    "modül dalı `.some` ile yazılmış (metin ikizi — yön kaymasının ikinci hattı)",
-    /keys\.some\(\s*\(k\)\s*=>\s*MODULE_FLAG_KEYS\.has\(k\)\s*\)/.test(mwSrc),
+    "süperadmin dalı `.some` ile yazılmış (metin ikizi — yön kaymasının ikinci hattı)",
+    // ⚠️ İKİ AD DA KABUL (2026-09-15): küme `SUPERADMIN_ONLY_FLAG_KEYS`e genişledi
+    // (modül anahtarları + `reportsClosedKeys`). Tek terime bağlı desen, genişlemede
+    // KIRMIZI VERMEDEN kör kaldı — koruma duruyordu, ölçüm durmuyordu.
+    /keys\.some\(\s*\(k\)\s*=>\s*(MODULE_FLAG_KEYS|SUPERADMIN_ONLY_FLAG_KEYS)\.has\(k\)\s*\)/.test(mwSrc),
     "`.every` = karma gövde sessizce geçer",
   );
   // ⚠️ DAL SIRASI — bugün DAVRANIŞSAL bir fark üretmez (belge dalı `.every` ile
@@ -489,10 +492,10 @@ async function main(): Promise<void> {
   // eklenecek dördüncü bir `.some` dalı öne geçerse karma gövdeyi o yutar ve
   // modül kilidi sessizce devre dışı kalır. Sözleşmeyi yazılı tutan tek şey
   // bu kontroldür — davranışa dayanan bir ölçüm burada YANLIŞ YEŞİL verir.
-  const modulIdx = mwSrc.indexOf("MODULE_FLAG_KEYS.has(k)");
+  const modulIdx = Math.max(mwSrc.indexOf("SUPERADMIN_ONLY_FLAG_KEYS.has(k)"), mwSrc.indexOf("MODULE_FLAG_KEYS.has(k)"));
   const belgeIdx = mwSrc.indexOf("DOCUMENT_DESIGN_FLAG_KEYS.has(k)");
   check(
-    "modül dalı belge dalından ÖNCE (kaynak sırası sözleşmesi)",
+    "süperadmin dalı belge dalından ÖNCE (kaynak sırası sözleşmesi)",
     modulIdx > 0 && belgeIdx > 0 && modulIdx < belgeIdx,
     `modül@${modulIdx} < belge@${belgeIdx}`,
   );

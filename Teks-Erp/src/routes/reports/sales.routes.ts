@@ -5,6 +5,8 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { verifyToken } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/rbac.middleware";
+import { requireReportOpen } from "../../middlewares/report.middleware";
+import type { ReportKey } from "../../constants/report-catalog";
 import {
   compareRangeSchema,
   dateRangeSchema,
@@ -22,7 +24,12 @@ import { getOrderLeadTime } from "../../services/reports/order-leadtime.report.s
 import { getOrderCancellationScorecard } from "../../services/reports/order-cancellation.report.service";
 
 const router = Router();
-const guard = [verifyToken, requirePermission("report:sales")];
+/**
+ * Kimlik → RAPOR KAPISI → izin. Sıra load-bearing (K4): kimliksiz istek 401 almalı
+ * (kapalı raporun varlığı anonim çağırana sızmaz), rapor kapısı ise izin reddinden
+ * ÖNCE koşar ki kapalı bir rapor "yetkin yok" değil "kapalı" desin.
+ */
+const reportGate = (key: ReportKey) => [verifyToken, requireReportOpen(key), requirePermission("report:sales")];
 
 /**
  * İADE KARNESİ — dönem karşılaştırmalı.
@@ -30,7 +37,7 @@ const guard = [verifyToken, requirePermission("report:sales")];
  * geri-beslemesidir ama raporu okuyan kişi sevkiyat/müşteri tarafındadır.
  */
 /** SEVK & TERMİN KARNESİ (OTIF) — sevk hacmi + zamanında teslim oranı. */
-router.get("/shipment-scorecard", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/shipment-scorecard", ...reportGate("sales/shipment-scorecard"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = compareRangeSchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
@@ -42,7 +49,7 @@ router.get("/shipment-scorecard", ...guard, async (req: Request, res: Response, 
   }
 });
 
-router.get("/return-scorecard", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/return-scorecard", ...reportGate("sales/return-scorecard"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = compareRangeSchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
@@ -76,7 +83,7 @@ router.get("/return-scorecard", ...guard, async (req: Request, res: Response, ne
  *       200:
  *         description: Karşılanma özeti + müşteri/kumaş kırılımı + kalem listesi
  */
-router.get("/open-order-coverage", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/open-order-coverage", ...reportGate("sales/open-order-coverage"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     emptyQuerySchema.parse(req.query);
     const data = await getOpenOrderCoverage();
@@ -116,7 +123,7 @@ router.get("/open-order-coverage", ...guard, async (req: Request, res: Response,
  *       200:
  *         description: Sipariş giriş karnesi
  */
-router.get("/order-intake", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/order-intake", ...reportGate("sales/order-intake"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = compareRangeSchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
@@ -160,7 +167,7 @@ router.get("/order-intake", ...guard, async (req: Request, res: Response, next: 
  *       200:
  *         description: Talep analizi
  */
-router.get("/demand-analysis", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/demand-analysis", ...reportGate("sales/demand-analysis"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = compareRangeSchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
@@ -204,7 +211,7 @@ router.get("/demand-analysis", ...guard, async (req: Request, res: Response, nex
  *       200:
  *         description: Teslim süresi istatistikleri
  */
-router.get("/order-leadtime", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/order-leadtime", ...reportGate("sales/order-leadtime"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = dateRangeSchema.parse(req.query);
     const range = resolveDateRange(input);
@@ -243,7 +250,7 @@ router.get("/order-leadtime", ...guard, async (req: Request, res: Response, next
  *       200:
  *         description: İptal karnesi
  */
-router.get("/order-cancellation", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/order-cancellation", ...reportGate("sales/order-cancellation"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = dateRangeSchema.parse(req.query);
     const range = resolveDateRange(input);

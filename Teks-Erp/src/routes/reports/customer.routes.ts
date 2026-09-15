@@ -5,6 +5,8 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { verifyToken } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/rbac.middleware";
+import { requireReportOpen } from "../../middlewares/report.middleware";
+import type { ReportKey } from "../../constants/report-catalog";
 import {
   getCustomerOrderProfiles,
 } from "../../services/reports/customer.report.service";
@@ -18,9 +20,14 @@ import {
 } from "../../services/reports/_shared";
 
 const router = Router();
-const guard = [verifyToken, requirePermission("report:customer")];
+/**
+ * Kimlik → RAPOR KAPISI → izin. Sıra load-bearing (K4): kimliksiz istek 401 almalı
+ * (kapalı raporun varlığı anonim çağırana sızmaz), rapor kapısı ise izin reddinden
+ * ÖNCE koşar ki kapalı bir rapor "yetkin yok" değil "kapalı" desin.
+ */
+const reportGate = (key: ReportKey) => [verifyToken, requireReportOpen(key), requirePermission("report:customer")];
 
-router.get("/order-profile", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/order-profile", ...reportGate("customer/order-profile"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     emptyQuerySchema.parse(req.query);
     const data = await getCustomerOrderProfiles();
@@ -73,7 +80,7 @@ router.get("/order-profile", ...guard, async (req: Request, res: Response, next:
  *       200:
  *         description: Müşteri karnesi
  */
-router.get("/scorecard", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/scorecard", ...reportGate("customer/scorecard"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = compareRangeSchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });

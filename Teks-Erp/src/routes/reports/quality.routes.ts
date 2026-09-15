@@ -6,6 +6,8 @@ import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { verifyToken } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/rbac.middleware";
+import { requireReportOpen } from "../../middlewares/report.middleware";
+import type { ReportKey } from "../../constants/report-catalog";
 import {
   compareRangeSchema,
   dateRangeSchema,
@@ -18,7 +20,12 @@ import { getScrapScorecard } from "../../services/reports/scrap-scorecard.report
 import { getPlanDeviationScorecard } from "../../services/reports/plan-deviation-scorecard.report.service";
 
 const router = Router();
-const guard = [verifyToken, requirePermission("report:quality")];
+/**
+ * Kimlik → RAPOR KAPISI → izin. Sıra load-bearing (K4): kimliksiz istek 401 almalı
+ * (kapalı raporun varlığı anonim çağırana sızmaz), rapor kapısı ise izin reddinden
+ * ÖNCE koşar ki kapalı bir rapor "yetkin yok" değil "kapalı" desin.
+ */
+const reportGate = (key: ReportKey) => [verifyToken, requireReportOpen(key), requirePermission("report:quality")];
 
 /** Kalite/fire karnesi sorgusu: karşılaştırma aralığı + LEVENT/LOT ekseni (R5b-b; top → CONSUMED.rollId, defterden). İkizler aynı şemayı paylaşır. */
 export const qualityQuerySchema = compareRangeSchema
@@ -33,7 +40,7 @@ export const qualityQuerySchema = compareRangeSchema
  * `.strict()` olduğu için yanlış yazılmış bir parametre sessizce yok sayılmaz,
  * 400 döner — sessiz "karşılaştırma çalışmıyor" şikâyetinin önü kapalı.
  */
-router.get("/scorecard", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/scorecard", ...reportGate("quality/scorecard"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = qualityQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
@@ -49,7 +56,7 @@ router.get("/scorecard", ...guard, async (req: Request, res: Response, next: Nex
  * FİRE KARNESİ — Kalite Karnesi'nin ikizi, aynı evren ve aynı çıpa.
  * İkisinin `producedQty`'si birebir aynı olmak zorunda (bekçi: test_scrap_scorecard).
  */
-router.get("/scrap-scorecard", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/scrap-scorecard", ...reportGate("quality/scrap-scorecard"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = qualityQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
@@ -71,7 +78,7 @@ router.get("/scrap-scorecard", ...guard, async (req: Request, res: Response, nex
  */
 router.get(
   "/plan-deviation-scorecard",
-  ...guard,
+  ...reportGate("quality/plan-deviation-scorecard"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = compareRangeSchema.parse(req.query);

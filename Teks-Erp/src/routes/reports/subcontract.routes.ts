@@ -5,6 +5,8 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { verifyToken } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/rbac.middleware";
+import { requireReportOpen } from "../../middlewares/report.middleware";
+import type { ReportKey } from "../../constants/report-catalog";
 import {
   compareRangeSchema,
   dateRangeSchema,
@@ -15,10 +17,15 @@ import {
 import { getSubcontractScorecard } from "../../services/reports/subcontract-scorecard.report.service";
 
 const router = Router();
-const guard = [verifyToken, requirePermission("report:subcontract")];
+/**
+ * Kimlik → RAPOR KAPISI → izin. Sıra load-bearing (K4): kimliksiz istek 401 almalı
+ * (kapalı raporun varlığı anonim çağırana sızmaz), rapor kapısı ise izin reddinden
+ * ÖNCE koşar ki kapalı bir rapor "yetkin yok" değil "kapalı" desin.
+ */
+const reportGate = (key: ReportKey) => [verifyToken, requireReportOpen(key), requirePermission("report:subcontract")];
 
 /** FASON KARNESİ — fire (giden ↔ dönen metraj), süre, açık bakiye. */
-router.get("/scorecard", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/scorecard", ...reportGate("subcontract/scorecard"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const input = compareRangeSchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });

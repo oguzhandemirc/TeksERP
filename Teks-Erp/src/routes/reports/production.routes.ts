@@ -6,6 +6,8 @@ import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { verifyToken } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/rbac.middleware";
+import { requireReportOpen } from "../../middlewares/report.middleware";
+import type { ReportKey } from "../../constants/report-catalog";
 import {
   dateRangeSchema,
   emptyQuerySchema,
@@ -22,7 +24,12 @@ import { getBatchTrace, searchBatches } from "../../services/reports/batch-trace
 import { AppError } from "../../utils/app-error";
 
 const router = Router();
-const guard = [verifyToken, requirePermission("report:production")];
+/**
+ * Kimlik → RAPOR KAPISI → izin. Sıra load-bearing (K4): kimliksiz istek 401 almalı
+ * (kapalı raporun varlığı anonim çağırana sızmaz), rapor kapısı ise izin reddinden
+ * ÖNCE koşar ki kapalı bir rapor "yetkin yok" değil "kapalı" desin.
+ */
+const reportGate = (key: ReportKey) => [verifyToken, requireReportOpen(key), requirePermission("report:production")];
 
 /**
  * PARTİ ARAMA — parti no ya da top barkodu ile ADAY listesi.
@@ -35,7 +42,7 @@ export const batchSearchQuerySchema = z.object({ q: z.string().max(100).optional
 export const operatorPerformanceQuerySchema = dateRangeSchema.extend({ limit: z.coerce.number().int().min(1).max(200).optional() }).strict();
 export const travelerTraceQuerySchema = z.object({ rollId: z.string().uuid("Geçersiz rulo id") }).strict();
 
-router.get("/batch-search", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/batch-search", ...reportGate("production/batch-trace"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const q = batchSearchQuerySchema.parse(req.query).q ?? "";
     res.status(200).json({ success: true, data: await searchBatches(q) });
@@ -45,7 +52,7 @@ router.get("/batch-search", ...guard, async (req: Request, res: Response, next: 
 });
 
 /** PARTİ İZLEME — bu partiden kime ne gitti (geri izleme). */
-router.get("/batch-trace/:batchId", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/batch-trace/:batchId", ...reportGate("production/batch-trace"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     emptyQuerySchema.parse(req.query);
     const data = await getBatchTrace(assertValidUuid(req.params.batchId, "batchId"));
@@ -63,7 +70,7 @@ router.get("/batch-trace/:batchId", ...guard, async (req: Request, res: Response
  * NEREDE TAKILDI (WIP) — anlık bekleyen + dönemsel geçen.
  * Tarih aralığı YALNIZ "geçen" bölümünü etkiler; bekleyen kısım snapshot'tır.
  */
-router.get("/wip", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/wip", ...reportGate("production/wip"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const range = resolveDateRange(dateRangeSchema.parse(req.query));
     const data = await getWipScorecard(range);
@@ -81,7 +88,7 @@ router.get("/wip", ...guard, async (req: Request, res: Response, next: NextFunct
  *     summary: Operatör performans listesi (op türü kırılımıyla)
  *     security: [{ bearerAuth: [] }]
  */
-router.get("/operator-performance", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/operator-performance", ...reportGate("production/operator-performance"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { limit, ...rangeInput } = operatorPerformanceQuerySchema.parse(req.query);
     const range = resolveDateRange(rangeInput);
@@ -106,7 +113,7 @@ router.get("/operator-performance", ...guard, async (req: Request, res: Response
  *         required: true
  *         schema: { type: string, format: uuid }
  */
-router.get("/traveler-trace", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+router.get("/traveler-trace", ...reportGate("production/traveler-trace"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { rollId } = travelerTraceQuerySchema.parse(req.query);
     const data = await getTravelerTrace(rollId);

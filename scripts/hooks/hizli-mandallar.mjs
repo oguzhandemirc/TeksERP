@@ -12,7 +12,7 @@
 //
 // KÜME (ölçüldü 2026-09-13, d5): 534 bekçinin 105'i DB'siz geçiyor, 95'i ≤5 sn;
 //    bunların `Teks-Erp/scripts/` | `docs/standart/` | `docs/kurallar/`ı KONU
-//    edinen 12'si burada (+13. `belge_capa_atfi` · 14. `gun_anahtari_kaynagi` · 15. `yerel_ayar_bagimliligi` · 16. `harita_sonda_atfi` · 17. `fikstur_sabit_ad` · 18. `lookup_beyan_aynasi` · 19. `sha_atfi` · 20. `audit_muafiyeti`, 2026-09-14 · 21. `rapor_katalogu`, 2026-09-15). Küme ELLE listelenir — "scripts/ altında DB'siz olan
+//    edinen 12'si burada (+13. `belge_capa_atfi` · 14. `gun_anahtari_kaynagi` · 15. `yerel_ayar_bagimliligi` · 16. `harita_sonda_atfi` · 17. `fikstur_sabit_ad` · 18. `lookup_beyan_aynasi` · 19. `sha_atfi` · 20. `audit_muafiyeti`, 2026-09-14 · 21. `rapor_katalogu` · 22. `rapor_kapisi`, 2026-09-15). Küme ELLE listelenir — "scripts/ altında DB'siz olan
 //    her şey" gibi türetilmiş bir kapsam, DB'siz görünen ama vakumen yeşil kalan
 //    bekçiyi de (0/0, çıkış 0 — iki emsal var) kapıya sokardı.
 //
@@ -61,6 +61,7 @@ const MANDALLAR = [
   "test_sha_atfi", // belgelerde backtick'li ÖLÜ sha atfı (git cat-file) · Teks-Erp/scripts + docs + Teks-Erp/docs · 0,4–0,7 sn · taban 0 sert; sığ klonda ⏭ sayıyla (19., d9 yazdı, 2026-09-14)
   "test_audit_muafiyeti", // "her CUD → audit" istisnaları BEYANLI (AUDIT_EXEMPT_MODELS kapalı küme) · src/services + routes + helpers/jobs · ağaç · 0,7 sn · §2 sert + §7 dosya cırcırı (20., d9 yazdı, 2026-09-14)
   "test_rapor_katalogu", // REPORT_CATALOG ⇄ backend route · panel route · karo · SCREEN_CATALOG · Electron aynası (+ `varsayilanGun` çift yazımı) · src/constants + src/routes + Electron/src · ağaç · ~1,5 sn · taban 0 sert (21., d9 yazdı, 2026-09-15)
+  "test_rapor_kapisi", // rapor kapısı: 29 uçta `requireReportOpen` · sıra · İKİ YÖNLÜ kapsama · süperadmin yazma kümesi · üç sonuç · src/middlewares + src/routes + src/services + src/jobs · ağaç · ~0,4 sn · statik kol DB'siz (canlı §7 sunucu yoksa ⏭ beyanla) (22., d9 yazdı, 2026-09-15)
 ];
 
 function izoleAgacMi() {

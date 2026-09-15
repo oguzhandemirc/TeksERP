@@ -13,6 +13,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { verifyToken } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/rbac.middleware";
+import { requireReportOpen } from "../../middlewares/report.middleware";
 import { requireDokumaEnabled } from "../../middlewares/module.middleware";
 import { durusParetoReport, efficiencyReport, shiftScorecardReport } from "../../services/reports/dokuma.report.service";
 
@@ -48,7 +49,7 @@ const paretoSchema = z.object({ from: YMD, to: YMD, machineId: z.string().uuid("
  *       200: { description: Randıman raporu (satırlar · toplam · kaynakKirilimi · meta.ufuk) }
  *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
  */
-router.get("/randiman", guard, async (req, res, next) => {
+router.get("/randiman", requireReportOpen("dokuma/randiman"), guard, async (req, res, next) => {
   try {
     const { byLine, ...q } = aralikSchema.parse(req.query);
     res.json({ success: true, data: await efficiencyReport({ ...q, ...byLineOf({ byLine }) }) });
@@ -73,7 +74,7 @@ router.get("/randiman", guard, async (req, res, next) => {
  *     responses:
  *       200: { description: Pareto raporu }
  */
-router.get("/durus-pareto", guard, async (req, res, next) => {
+router.get("/durus-pareto", requireReportOpen("dokuma/durus-pareto"), guard, async (req, res, next) => {
   try {
     res.json({ success: true, data: await durusParetoReport(paretoSchema.parse(req.query)) });
   } catch (e) {
@@ -97,7 +98,7 @@ router.get("/durus-pareto", guard, async (req, res, next) => {
  *     responses:
  *       200: { description: Vardiya karnesi }
  */
-router.get("/vardiya-karnesi", guard, async (req, res, next) => {
+router.get("/vardiya-karnesi", requireReportOpen("dokuma/vardiya-karnesi"), guard, async (req, res, next) => {
   try {
     const { byLine, ...q } = gunSchema.parse(req.query);
     res.json({ success: true, data: await shiftScorecardReport({ ...q, ...byLineOf({ byLine }) }) });
