@@ -64,11 +64,14 @@ export function buildSubcontractExport(opts: {
   sc: SubcontractScorecard;
   periodLabel: string;
   compareLabel: string | null;
+  /** Süzgeç satırları (K10) — ekrandakiyle AYNI dizi. */
+  filterNotes?: string[];
 }): ReportExportSpec {
-  const { sc, periodLabel, compareLabel } = opts;
+  const { sc, periodLabel, compareLabel, filterNotes = [] } = opts;
   const hasCompare = compareLabel !== null;
 
   const meta = [
+    ...filterNotes,
     // Fire oranının tanımı — bu cümle olmadan rakam "giden−dönen / giden" sanılır
     // ve henüz dönmemiş mal yüzünden abartılı okunur.
     "FİRE = (kapanmış kalemlerin giden metrajı − dönen metraj − müşteriye giden metraj) / kapanmış kalemlerin giden metrajı.",

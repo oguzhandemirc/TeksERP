@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { DetailTable, MetricCard, ReportPageLayout } from "../_components";
+import { DetailTable, MetricCard, ReportAxisBar, ReportFilterNotes, ReportPageLayout } from "../_components";
+import { useAxisNotes, useReportAxes } from "../_hooks/useReportAxes";
 import { ReportExportBar } from "../_components/ReportExportBar";
 import { fmtDate, fmtInt } from "../_components/formatters";
 import { buildOrderProfileExport } from "./orderProfileExport";
@@ -24,10 +25,13 @@ const columns: ColumnDef<CustomerOrderProfileRow>[] = [
   { accessorKey: "lastOrderDate", header: "Son Sipariş", cell: ({ getValue }) => fmtDate(getValue() as string | null) },
 ];
 
+const AXIS_KEYS = ["customerId"] as const;
+
 export function OrderProfilePage() {
+  const axes = useReportAxes();
   const { data, isLoading } = useQuery({
-    queryKey: ["reports", "customer", "order-profile"],
-    queryFn: () => customerReportsApi.orderProfile(),
+    queryKey: ["reports", "customer", "order-profile", axes.params],
+    queryFn: () => customerReportsApi.orderProfile(axes.params),
     staleTime: 60_000,
   });
 
@@ -37,19 +41,22 @@ export function OrderProfilePage() {
   // Snapshot rapor: dönem yok, "ne zaman alındı" var. Dosya elden ele dolaşırken
   // rakamın hangi ana ait olduğu tek okunur bilgi budur.
   const asOfLabel = `Tüm zamanlar · ${fmtDate(new Date())} itibarıyla`;
+  const { secenekler, notes: suzgecNotlari } = useAxisNotes(data, axes.sel, AXIS_KEYS, { destination: true });
 
   return (
     <ReportPageLayout
       reportKey="customer/order-profile"
       title="Müşteri Sipariş Profili"
       description="Aktif müşterilerin sipariş özeti — favori kumaş, renk, en."
+      filters={<ReportAxisBar reportKey="customer/order-profile" axes={axes} secenekler={secenekler} eksenler={AXIS_KEYS} destination />}
       actions={
         <ReportExportBar
           disabled={!data}
-          buildSpec={() => (data ? buildOrderProfileExport({ rows, asOfLabel }) : null)}
+          buildSpec={() => (data ? buildOrderProfileExport({ rows, asOfLabel, filterNotes: suzgecNotlari }) : null)}
         />
       }
     >
+      <ReportFilterNotes notes={suzgecNotlari} />
       <div className="grid gap-3 sm:grid-cols-3">
         <MetricCard label="Sipariş Vermiş Müşteri" value={fmtInt(rows.length)} isLoading={isLoading} />
         <MetricCard label="Toplam Sipariş" value={fmtInt(totalOrders)} isLoading={isLoading} />

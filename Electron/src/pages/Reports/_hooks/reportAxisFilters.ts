@@ -66,7 +66,74 @@ export function filterNotes(parts: Array<{ eksen: string; degerler: string[]; se
     .map((p) => `SÜZGEÇ — ${p.eksen}: ${p.degerler.join(" · ")}.${p.serh ? ` ${p.serh}` : ""}`);
 }
 
-/** "Süzgeç kesti" cümlesi: boş tablo ile süzülmüş tablo aynı şey değildir. */
+/**
+ * "Süzgeç kesti" cümlesi: boş tablo ile süzülmüş tablo aynı şey değildir.
+ * ⚠️ Bugün YALNIZ dokuma (R5b-b) yanıtı `dusenSatir` taşır; satış/müşteri/fason
+ * ailesinin `suzgec` yankısı yalnız VERİLEN anahtarları basar ⇒ orada bu satır
+ * hiç doğmaz (ölçüldü: `_filters.filterEcho`).
+ */
 export function droppedNote(dusenSatir: number | undefined): string | null {
   return dusenSatir && dusenSatir > 0 ? `Süzgeç ${dusenSatir} satırı kapsam dışında bıraktı.` : null;
+}
+
+// -----------------------------------------------------------------------------
+// EKSEN SÖZLÜĞÜ — etiket · boş ipucu · ŞERH tek yerde
+// -----------------------------------------------------------------------------
+// Aynı eksen sekiz raporda çıkar; etiketi ve şerhi her sayfada yeniden yazmak
+// "aynı süzgeç, iki farklı cümle" demektir — ve şerh EKSENİN kendisine aittir,
+// onu gösteren ekrana değil.
+export const AXIS_LABELS: Record<AxisKey, string> = {
+  customerId: "Müşteri",
+  itemId: "Kumaş",
+  colorId: "Renk",
+  subcontractorId: "Fasoncu",
+  reasonCode: "İptal sebebi",
+};
+
+export const AXIS_EMPTY_HINTS: Record<AxisKey, string> = {
+  customerId: "Pencerede müşteri yok",
+  itemId: "Pencerede kumaş yok",
+  colorId: "Pencerede renk yok",
+  subcontractorId: "Pencerede fasoncu yok",
+  reasonCode: "Pencerede sebep yok",
+};
+
+/** Eksenin KENDİ niteleyicisi — ekranda da çıktıda da aynı cümle. */
+export const AXIS_CAVEATS: Partial<Record<AxisKey, string>> = {
+  reasonCode: "Yalnız PAYI süzer: payda (dönemde açılan siparişler) süzülmez ⇒ oran 'bu sebeple iptal ÷ açılan'.",
+};
+
+export const DESTINATION_LABEL = "Sevk hedefi";
+export const DESTINATION_CAVEAT = "Müşteri kartındaki VARSAYILAN hedef — sevkin fiili hedefi değil.";
+
+interface AxisNoteInput {
+  eksenler: readonly AxisKey[];
+  destination?: boolean;
+  secenekler: Partial<Record<AxisKey, Array<{ id?: string; code?: string; ad: string }>>> | undefined;
+  sel: Record<AxisKey, string[]> & { destination: Destination | "" };
+  dusenSatir?: number;
+  /** Rapora özgü ek şerh — yalnız SÜZGEÇ AÇIKKEN anlamlı olanlar (örn. ABC evreni). */
+  ek?: string[];
+}
+
+/** Sayfanın süzgeç satırları: ekrana basılan liste ile çıktı meta'sı AYNI dizidir. */
+export function axisNotes({ eksenler, destination, secenekler, sel, dusenSatir, ek = [] }: AxisNoteInput): string[] {
+  const parts = eksenler.map((a) => ({
+    eksen: AXIS_LABELS[a],
+    degerler: labelsOf(secenekler?.[a], sel[a]),
+    serh: AXIS_CAVEATS[a],
+  }));
+  if (destination) {
+    parts.push({
+      eksen: DESTINATION_LABEL,
+      degerler: sel.destination ? [sel.destination === "EXPORT" ? "İhracat" : "Yurtiçi"] : [],
+      serh: DESTINATION_CAVEAT,
+    });
+  }
+  const notes = filterNotes(parts);
+  // Ek şerh ve "kesti" cümlesi yalnız süzgeç AÇIKKEN yazılır: süzgeçsiz raporun
+  // çıktısı bayt bayt eski kalmalı.
+  if (notes.length === 0) return notes;
+  const dropped = droppedNote(dusenSatir);
+  return [...notes, ...ek, ...(dropped ? [dropped] : [])];
 }

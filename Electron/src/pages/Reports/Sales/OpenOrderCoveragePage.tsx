@@ -1,116 +1,30 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle, CheckCircle2, Factory, PackageSearch, Warehouse } from "lucide-react";
-import { DetailTable, MetricCard, ReportExportBar, ReportPageLayout } from "../_components";
+import { DetailTable, MetricCard, ReportAxisBar, ReportExportBar, ReportFilterNotes, ReportPageLayout } from "../_components";
+import { useAxisNotes, useReportAxes } from "../_hooks/useReportAxes";
 import { fmtInt, fmtNum, fmtPercent } from "../_components/formatters";
-import {
-  buildCoverageExport,
-  openOrderCoverageApi,
-  COVERAGE_STATE_LABEL,
-  type CoverageBucketRow,
-  type CoverageLineRow,
-  type CoverageState,
-} from "./openOrderCoverage";
+import { bucketColumns, lineColumns } from "./openOrderCoverageColumns";
+import { buildCoverageExport, openOrderCoverageApi, type CoverageBucketRow, type CoverageLineRow } from "./openOrderCoverage";
 
-const STATE_TONE: Record<CoverageState, string> = {
-  HAZIR: "text-emerald-600 dark:text-emerald-400",
-  KISMI: "text-amber-600 dark:text-amber-400",
-  URETIM_GEREKLI: "text-destructive",
-};
 
-/** Sağa yaslı metraj kolonu — iki tabloda da aynı biçim. */
-function qtyCol<T>(key: string, header: string, strong = false): ColumnDef<T, unknown> {
-  return {
-    accessorKey: key,
-    header: () => <div className="text-right">{header}</div>,
-    cell: ({ getValue }) => (
-      <div className={`text-right tabular-nums ${strong ? "font-medium" : ""}`}>
-        {fmtNum(getValue() as number)} m
-      </div>
-    ),
-  };
-}
-
-const bucketColumns = (labelHeader: string): ColumnDef<CoverageBucketRow, unknown>[] => [
-    { accessorKey: "label", header: labelHeader },
-    {
-      accessorKey: "lineCount",
-      header: () => <div className="text-right">Kalem</div>,
-      cell: ({ getValue }) => (
-        <div className="text-right tabular-nums">{fmtInt(getValue() as number)}</div>
-      ),
-    },
-    qtyCol<CoverageBucketRow>("openQty", "Açık"),
-    qtyCol<CoverageBucketRow>("fromWarehouseQty", "Depodan"),
-    qtyCol<CoverageBucketRow>("fromProductionQty", "Üretimde"),
-    qtyCol<CoverageBucketRow>("uncoveredQty", "Karşılanamayan", true),
-    {
-      accessorKey: "coveragePct",
-      header: () => <div className="text-right">Karşılanma</div>,
-      cell: ({ getValue }) => {
-        const p = getValue() as number;
-        return (
-          <div
-            className={`text-right font-medium tabular-nums ${
-              p >= 100 ? "text-emerald-600 dark:text-emerald-400" : p > 0 ? "text-amber-600 dark:text-amber-400" : "text-destructive"
-            }`}
-          >
-            {fmtPercent(p)}
-          </div>
-        );
-      },
-    },
-  ];
-
-const lineColumns: ColumnDef<CoverageLineRow, unknown>[] = [
-  { accessorKey: "orderNumber", header: "Sipariş" },
-  { accessorKey: "customerName", header: "Müşteri" },
-  { accessorKey: "itemName", header: "Kumaş" },
-  {
-    accessorKey: "colorName",
-    header: "Renk",
-    cell: ({ getValue }) => <span>{(getValue() as string | null) ?? "—"}</span>,
-  },
-  {
-    accessorKey: "deadline",
-    header: "Termin",
-    cell: ({ row }) => {
-      const l = row.original;
-      if (!l.deadline) return <span className="text-muted-foreground">—</span>;
-      const d = new Date(l.deadline).toLocaleDateString("tr-TR");
-      return l.daysLate != null ? (
-        <span className="font-medium text-destructive">
-          {d} <span className="text-[10px]">({fmtInt(l.daysLate)} gün geçti)</span>
-        </span>
-      ) : (
-        <span>{d}</span>
-      );
-    },
-  },
-  qtyCol<CoverageLineRow>("openQty", "Açık"),
-  qtyCol<CoverageLineRow>("fromWarehouseQty", "Depodan"),
-  qtyCol<CoverageLineRow>("fromProductionQty", "Üretimde"),
-  qtyCol<CoverageLineRow>("uncoveredQty", "Karşılanamayan", true),
-  {
-    accessorKey: "state",
-    header: "Durum",
-    cell: ({ getValue }) => {
-      const s = getValue() as CoverageState;
-      return <span className={`font-medium ${STATE_TONE[s]}`}>{COVERAGE_STATE_LABEL[s]}</span>;
-    },
-  },
-];
+// ⚠️ YALNIZ KUMAŞ: müşteri ekseni BİLEREK yok — karşılama havuzu FIFO'dur ve
+// spec başına paylaştırılır; müşteriye süzülen bir kapsama yüzdesi yalan söyler
+// (6e ölçtü, raporlar.md:94 kapsam dışı beyanı).
+const AXIS_KEYS = ["itemId"] as const;
 
 export function OpenOrderCoveragePage() {
+  const axes = useReportAxes();
+
   const query = useQuery({
-    queryKey: ["reports", "sales", "open-order-coverage"],
-    queryFn: () => openOrderCoverageApi.get(),
+    queryKey: ["reports", "sales", "open-order-coverage", axes.params],
+    queryFn: () => openOrderCoverageApi.get(axes.params),
     staleTime: 30_000,
   });
 
   const c = query.data?.data;
-  const spec = useMemo(() => () => (c ? buildCoverageExport(c) : null), [c]);
+  const { secenekler, notes: suzgecNotlari } = useAxisNotes(query.data, axes.sel, AXIS_KEYS);
+  const spec = useMemo(() => () => (c ? buildCoverageExport(c, suzgecNotlari) : null), [c, suzgecNotlari]);
 
   return (
     <ReportPageLayout
@@ -119,8 +33,10 @@ export function OpenOrderCoveragePage() {
       description="Açık siparişin ne kadarını bugün sevk edebilirim, ne kadarı için üretim gerekiyor."
       // Anlık fotoğraf: "bugün neyi sevk edebilirim" sorusunun dönemle işi yok
       // (Stok Karnesi ile aynı gerekçe).
+      filters={<ReportAxisBar reportKey="sales/open-order-coverage" axes={axes} secenekler={secenekler} eksenler={AXIS_KEYS} />}
       actions={<ReportExportBar disabled={!c} buildSpec={spec} />}
     >
+      <ReportFilterNotes notes={suzgecNotlari} />
       {c && c.linesOmitted > 0 ? (
         <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />

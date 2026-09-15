@@ -2,11 +2,10 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle, Ban, CalendarX, Truck } from "lucide-react";
-import { ChartCard, DestinationSelect, DetailTable, MetricCard, ReportDateFilter, ReportExportBar, ReportMultiSelect, ReportPageLayout, SimpleBarChart } from "../_components";
+import { ChartCard, DetailTable, MetricCard, ReportAxisBar, ReportExportBar, ReportFilterNotes, ReportPageLayout, SimpleBarChart } from "../_components";
 import { fmtDate, fmtInt, fmtNum, fmtPercent } from "../_components/formatters";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
-import { useReportAxes } from "../_hooks/useReportAxes";
-import { filterNotes, droppedNote, labelsOf } from "../_hooks/reportAxisFilters";
+import { useAxisNotes, useReportAxes } from "../_hooks/useReportAxes";
 import {
   buildCancellationExport,
   orderCancellationApi,
@@ -129,6 +128,8 @@ const orderColumns: ColumnDef<CancellationDetailRow, unknown>[] = [
   },
 ];
 
+const AXIS_KEYS = ["customerId", "reasonCode"] as const;
+
 export function OrderCancellationPage() {
   const { params, dateFrom, dateTo } = useReportDateRange("sales/order-cancellation");
 
@@ -142,39 +143,13 @@ export function OrderCancellationPage() {
 
   const oc = query.data?.data;
   const periodLabel = `${fmtDate(dateFrom)} – ${fmtDate(dateTo)}`;
-  const secenekler = query.data?.meta?.secenekler;
-  const suzgec = query.data?.suzgec;
-  // ⚠️ `reasonCode` YALNIZ PAYI süzer: payda (dönemde AÇILAN siparişler)
-  // süzülmez ⇒ oran "bu sebeple iptal ÷ açılan"dır. Cümle hem ekranda hem
-  // ÇIKTIDA durur; olmazsa okuyucu oranı yanlış hesaplanmış sanır.
-  const suzgecNotlari = useMemo(() => {
-    const n = filterNotes([
-      { eksen: "Müşteri", degerler: labelsOf(secenekler?.customerId, axes.sel.customerId) },
-      {
-        eksen: "İptal sebebi",
-        degerler: labelsOf(secenekler?.reasonCode, axes.sel.reasonCode),
-        serh: "Yalnız PAYI süzer: payda (dönemde açılan siparişler) süzülmez ⇒ oran 'bu sebeple iptal ÷ açılan'.",
-      },
-      {
-        eksen: "Sevk hedefi",
-        degerler: axes.sel.destination ? [axes.sel.destination === "EXPORT" ? "İhracat" : "Yurtiçi"] : [],
-        serh: "Müşteri kartındaki VARSAYILAN hedef — sevkin fiili hedefi değil. Payı da paydayı da süzer.",
-      },
-    ]);
-    const d = droppedNote(suzgec?.dusenSatir);
-    return d ? [...n, d] : n;
-  }, [secenekler, axes.sel, suzgec]);
+  const { secenekler, notes: suzgecNotlari } = useAxisNotes(query.data, axes.sel, AXIS_KEYS, { destination: true });
   const spec = useMemo(
     () => () => (oc ? buildCancellationExport({ oc, periodLabel, filterNotes: suzgecNotlari }) : null),
     [oc, periodLabel, suzgecNotlari],
   );
   const filters = (
-    <div className="flex flex-wrap items-end gap-3 border-b px-4 py-3">
-      <ReportDateFilter reportKey="sales/order-cancellation" bare />
-      <ReportMultiSelect id="oc-musteri" label="Müşteri" options={secenekler?.customerId} value={axes.sel.customerId} onChange={(v) => axes.set("customerId", v)} emptyHint="Pencerede müşteri yok" />
-      <ReportMultiSelect id="oc-sebep" label="İptal sebebi" options={secenekler?.reasonCode} value={axes.sel.reasonCode} onChange={(v) => axes.set("reasonCode", v)} emptyHint="Pencerede sebep yok" />
-      <DestinationSelect id="oc-hedef" value={axes.sel.destination} onChange={axes.setDestination} />
-    </div>
+    <ReportAxisBar reportKey="sales/order-cancellation" axes={axes} secenekler={secenekler} eksenler={AXIS_KEYS} destination />
   );
 
   return (
@@ -185,13 +160,7 @@ export function OrderCancellationPage() {
       filters={filters}
       actions={<ReportExportBar disabled={!oc} buildSpec={spec} />}
     >
-      {suzgecNotlari.length > 0 ? (
-        <ul className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-          {suzgecNotlari.map((n, idx) => (
-            <li key={idx}>{n}</li>
-          ))}
-        </ul>
-      ) : null}
+      <ReportFilterNotes notes={suzgecNotlari} />
       <p className="text-xs text-muted-foreground">
         Çıpa <strong>iptalin olduğu tarihtir</strong>. Sipariş Karnesi'ndeki iptal oranı başka bir
         soruyu cevaplar ("bu dönemde <em>alınan</em> siparişlerin kaçı sonradan iptal oldu") — iki

@@ -13,8 +13,10 @@ export function buildOrderProfileExport(opts: {
   rows: CustomerOrderProfileRow[];
   /** Ekrandaki "dönem" karşılığı — bu rapor bir SNAPSHOT'tır, aralığı yoktur. */
   asOfLabel: string;
+  /** Süzgeç satırları (K10) — ekrandakiyle AYNI dizi. */
+  filterNotes?: string[];
 }): ReportExportSpec {
-  const { rows, asOfLabel } = opts;
+  const { rows, asOfLabel, filterNotes = [] } = opts;
 
   return {
     title: "Müşteri Sipariş Profili",
@@ -23,6 +25,7 @@ export function buildOrderProfileExport(opts: {
     // "neden bizim müşteri listede yok" / "bu sayı hangi aralığa ait" sorularının
     // cevabı ekranda kalırsa dosya yanlış okunur.
     meta: [
+      ...filterNotes,
       "Bu rapor bir SNAPSHOT'tır — tarih aralığı filtresi yoktur, tüm zamanların siparişleri sayılır.",
       "Yalnız AKTİF müşteriler ve en az bir sipariş vermiş olanlar listelenir.",
       "En çok sipariş veren 200 müşteri ile sınırlıdır.",

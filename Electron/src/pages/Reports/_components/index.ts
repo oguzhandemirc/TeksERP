@@ -12,3 +12,5 @@ export { BreakdownTable, DeltaBadge, type BreakdownRow } from "./BreakdownTable"
 export { ReportExportBar } from "./ReportExportBar";
 export { ReportMultiSelect } from "./ReportMultiSelect";
 export { DestinationSelect } from "./DestinationSelect";
+export { ReportAxisBar } from "./ReportAxisBar";
+export { ReportFilterNotes } from "./ReportFilterNotes";

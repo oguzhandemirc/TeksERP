@@ -2,9 +2,10 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { AlarmClock, Clock, Scissors, Truck } from "lucide-react";
-import { DeltaBadge, DetailTable, MetricCard, ReportExportBar, ReportPageLayout } from "../_components";
+import { DeltaBadge, DetailTable, MetricCard, ReportAxisBar, ReportExportBar, ReportFilterNotes, ReportPageLayout } from "../_components";
 import { fmtInt, fmtNum, fmtPercent, fmtDate } from "../_components/formatters";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
+import { useAxisNotes, useReportAxes } from "../_hooks/useReportAxes";
 import { useReportCompare } from "../_hooks/useReportCompare";
 import {
   buildSubcontractExport,
@@ -158,13 +159,17 @@ const openColumns: ColumnDef<SubcontractScorecard["oldestOpen"][number], unknown
   },
 ];
 
+const AXIS_KEYS = ["subcontractorId", "itemId", "colorId"] as const;
+
 export function SubcontractScorecardPage() {
   const { params, dateFrom, dateTo } = useReportDateRange("subcontract/scorecard");
   const compare = useReportCompare();
 
+  const axes = useReportAxes();
+
   const query = useQuery({
-    queryKey: ["reports", "subcontract", "scorecard", params, compare.params],
-    queryFn: () => subcontractScorecardApi.get({ ...params, ...compare.params }),
+    queryKey: ["reports", "subcontract", "scorecard", params, compare.params, axes.params],
+    queryFn: () => subcontractScorecardApi.get({ ...params, ...compare.params, ...axes.params }),
     enabled: Boolean(params.dateFrom && params.dateTo),
     staleTime: 30_000,
   });
@@ -175,9 +180,10 @@ export function SubcontractScorecardPage() {
   const periodLabel = `${fmtDate(dateFrom)} – ${fmtDate(dateTo)}`;
   const compareLabel = cmpRange ? `${fmtDate(cmpRange.from)} – ${fmtDate(cmpRange.to)}` : null;
 
+  const { secenekler, notes: suzgecNotlari } = useAxisNotes(query.data, axes.sel, AXIS_KEYS);
   const spec = useMemo(
-    () => () => (sc ? buildSubcontractExport({ sc, periodLabel, compareLabel }) : null),
-    [sc, periodLabel, compareLabel],
+    () => () => (sc ? buildSubcontractExport({ sc, periodLabel, compareLabel, filterNotes: suzgecNotlari }) : null),
+    [sc, periodLabel, compareLabel, suzgecNotlari],
   );
   const cols = useMemo(() => firmColumns(hasCompare), [hasCompare]);
 
@@ -187,8 +193,10 @@ export function SubcontractScorecardPage() {
       title="Fason Karnesi"
       description="Giden ↔ dönen ↔ müşteriye teslim metrajı (fason firesi), dönüş süresi ve açık bakiye — firma bazında."
       showCompare
+      filters={<ReportAxisBar reportKey="subcontract/scorecard" showCompare axes={axes} secenekler={secenekler} eksenler={AXIS_KEYS} />}
       actions={<ReportExportBar disabled={!sc} buildSpec={spec} />}
     >
+      <ReportFilterNotes notes={suzgecNotlari} />
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           label="Fason firesi"

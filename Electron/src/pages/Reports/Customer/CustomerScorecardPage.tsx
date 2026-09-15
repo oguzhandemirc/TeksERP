@@ -3,9 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle, Crown, Layers, Repeat, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DetailTable, MetricCard, ReportExportBar, ReportPageLayout } from "../_components";
+import { DetailTable, MetricCard, ReportAxisBar, ReportExportBar, ReportFilterNotes, ReportPageLayout } from "../_components";
 import { fmtDate, fmtInt, fmtNum, fmtPercent } from "../_components/formatters";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
+import { useAxisNotes, useReportAxes } from "../_hooks/useReportAxes";
 import { useReportCompare } from "../_hooks/useReportCompare";
 import {
   buildCustomerScorecardExport,
@@ -256,14 +257,22 @@ const riskColumns: ColumnDef<AtRiskCustomerRow, unknown>[] = [
   },
 ];
 
+const AXIS_KEYS = ["customerId", "itemId"] as const;
+
+// ⚠️ ABC SÜZÜLMÜŞ EVRENDE hesaplanır: süzgeç açıkken "A müşteri" cümlesi
+// fabrikanın tamamını değil, seçilen kesiti anlatır. Bu şerh süzgeç açıkken
+// hem ekrana hem kâğıda girer — dosya tek başına dolaşır.
+const ABC_EK = ["ABC sınıfı ve kümülatif pay SÜZÜLMÜŞ EVRENDE hesaplanır: 'A müşteri' bu süzgecin içindeki ilk %80'dir, fabrikanın tamamındaki değil."];
+
 export function CustomerScorecardPage() {
   const { params, dateFrom, dateTo } = useReportDateRange("customer/scorecard");
   const compare = useReportCompare();
   const [axis, setAxis] = useState<SortAxis>("totalQty");
+  const axes = useReportAxes();
 
   const query = useQuery({
-    queryKey: ["reports", "customer", "scorecard", params, compare.params],
-    queryFn: () => customerScorecardApi.get({ ...params, ...compare.params }),
+    queryKey: ["reports", "customer", "scorecard", params, compare.params, axes.params],
+    queryFn: () => customerScorecardApi.get({ ...params, ...compare.params, ...axes.params }),
     enabled: Boolean(params.dateFrom && params.dateTo),
     staleTime: 30_000,
   });
@@ -273,9 +282,10 @@ export function CustomerScorecardPage() {
   const periodLabel = `${fmtDate(dateFrom)} – ${fmtDate(dateTo)}`;
   const compareLabel = cmpRange ? `${fmtDate(cmpRange.from)} – ${fmtDate(cmpRange.to)}` : null;
 
+  const { secenekler, notes: suzgecNotlari } = useAxisNotes(query.data, axes.sel, AXIS_KEYS, { destination: true, ek: ABC_EK });
   const spec = useMemo(
-    () => () => (sc ? buildCustomerScorecardExport({ sc, periodLabel, compareLabel }) : null),
-    [sc, periodLabel, compareLabel],
+    () => () => (sc ? buildCustomerScorecardExport({ sc, periodLabel, compareLabel, filterNotes: suzgecNotlari }) : null),
+    [sc, periodLabel, compareLabel, suzgecNotlari],
   );
 
   /**
@@ -304,8 +314,10 @@ export function CustomerScorecardPage() {
       description="En çok veren, en sık veren ve kaybolmakta olan müşteri — tek ekranda."
       // Varsayılan 90 gün: 30 günlük pencere sıklık/ABC için fazla dar kalıyor.
       showCompare
+      filters={<ReportAxisBar reportKey="customer/scorecard" showCompare axes={axes} secenekler={secenekler} eksenler={AXIS_KEYS} destination />}
       actions={<ReportExportBar disabled={!sc} buildSpec={spec} />}
     >
+      <ReportFilterNotes notes={suzgecNotlari} />
       {/* İki zaman kapsamının farkı EKRANDA yazılı — aksi halde aynı satırdaki
           iki sütunun farklı dönemi anlattığı görünmez. */}
       <p className="text-xs text-muted-foreground">

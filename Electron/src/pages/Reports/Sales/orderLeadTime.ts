@@ -59,8 +59,10 @@ export const statText = (s: LeadTimeStats, minSample: number): string =>
 export function buildLeadTimeExport(opts: {
   lt: OrderLeadTime;
   periodLabel: string;
+  /** Süzgeç satırları (K10) — ekrandakiyle AYNI dizi. */
+  filterNotes?: string[];
 }): ReportExportSpec {
-  const { lt, periodLabel } = opts;
+  const { lt, periodLabel, filterNotes = [] } = opts;
   const bucketCols = (labelHeader: string) => [
     { header: labelHeader, key: "label", width: 28 },
     { header: "İlk sevk örneklemi", key: "fsN", width: 16, numFmt: "#,##0" },
@@ -83,6 +85,7 @@ export function buildLeadTimeExport(opts: {
     title: "Sipariş → Teslim Süresi",
     subtitle: periodLabel,
     meta: [
+      ...filterNotes,
       "ÇIPA: siparişin ALINDIĞI tarih (orderDate).",
       "İKİ AYRI SÜRE: 'ilk sevk' = mal ne zaman çıkmaya başladı · 'tam kapanış' = sipariş ne zaman bitti. Kısmi sevkli siparişte ikisi çok farklıdır.",
       "ANA RAKAM MEDYANDIR — ortalama tek bir felaket siparişle yukarı çekilir. P90 taahhüt için: her 10 siparişten 9'u bu sürede çıktı.",

@@ -10,7 +10,8 @@
 // boş-eksen koşulu kaldırıldı → ⭐① ❌ · `filterNotes`ten şerh eki düşürüldü → ⭐③ ❌.
 // =============================================================================
 import { describe, expect, it } from "vitest";
-import { axisParams, droppedNote, filterNotes, labelsOf, parseCsv, toCsv } from "./reportAxisFilters";
+import type { AxisKey, Destination } from "./reportAxisFilters";
+import { axisNotes, axisParams, droppedNote, filterNotes, labelsOf, parseCsv, toCsv } from "./reportAxisFilters";
 
 describe("eksen süzgeci — saf yarı", () => {
   it("CSV ayrıştırma: boşluk kırpılır, tekrar elenir, sıra korunur", () => {
@@ -54,5 +55,48 @@ describe("eksen süzgeci — saf yarı", () => {
     expect(droppedNote(0)).toBeNull();
     expect(droppedNote(undefined)).toBeNull();
     expect(droppedNote(12)).toBe("Süzgeç 12 satırı kapsam dışında bıraktı.");
+  });
+});
+
+describe("axisNotes — sayfanın süzgeç satırları (ekran = çıktı)", () => {
+  const secenekler = {
+    customerId: [{ id: "c1", ad: "Acme" }],
+    itemId: [{ id: "i1", ad: "Poplin" }],
+    reasonCode: [{ code: "STOK_YOK", ad: "Stok yok" }],
+  };
+  const bos: Record<AxisKey, string[]> & { destination: Destination | "" } = {
+    customerId: [], itemId: [], colorId: [], subcontractorId: [], reasonCode: [], destination: "",
+  };
+
+  it("süzgeç yokken HİÇ satır yok — ek şerh de kesti cümlesi de yazılmaz", () => {
+    expect(axisNotes({ eksenler: ["customerId"], destination: true, secenekler, sel: { ...bos }, dusenSatir: 5, ek: ["ABC şerhi"] })).toEqual([]);
+  });
+
+  it("etiket SÖZLÜKTEN gelir; her sayfa kendi adını uydurmaz", () => {
+    const n = axisNotes({ eksenler: ["itemId"], secenekler, sel: { ...bos, itemId: ["i1"] } });
+    expect(n).toEqual(["SÜZGEÇ — Kumaş: Poplin."]);
+  });
+
+  it("⭐ eksenin KENDİ şerhi taşınır: reasonCode 'yalnız PAY' · destination 'müşteri varsayılanı'", () => {
+    const n = axisNotes({
+      eksenler: ["reasonCode"],
+      destination: true,
+      secenekler,
+      sel: { ...bos, reasonCode: ["STOK_YOK"], destination: "EXPORT" },
+    });
+    expect(n[0]).toContain("Yalnız PAYI süzer");
+    expect(n[1]).toContain("İhracat");
+    expect(n[1]).toContain("VARSAYILAN hedef");
+  });
+
+  it("⭐ ek şerh (ABC evreni) ve kesti cümlesi süzgeç AÇIKKEN ve SIRAYLA eklenir", () => {
+    const n = axisNotes({
+      eksenler: ["customerId"],
+      secenekler,
+      sel: { ...bos, customerId: ["c1"] },
+      dusenSatir: 3,
+      ek: ["ABC süzülmüş evrende"],
+    });
+    expect(n).toEqual(["SÜZGEÇ — Müşteri: Acme.", "ABC süzülmüş evrende", "Süzgeç 3 satırı kapsam dışında bıraktı."]);
   });
 });

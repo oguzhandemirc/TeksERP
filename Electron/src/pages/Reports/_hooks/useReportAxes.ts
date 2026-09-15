@@ -3,7 +3,8 @@
 // =============================================================================
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
-import { axisParams, parseCsv, toCsv, type AxisKey, type Destination } from "./reportAxisFilters";
+import { axisNotes, axisParams, parseCsv, toCsv, type AxisKey, type Destination } from "./reportAxisFilters";
+import type { ReportSecenekler, ReportSuzgec } from "../_services/types";
 
 export interface ReportAxesState {
   /** Seçili değerler; boş dizi = "Tümü". */
@@ -50,4 +51,25 @@ export function useReportAxes(): ReportAxesState {
     setDestination: useCallback((d: Destination | "") => yaz("destination", d || null), [yaz]),
     any: AXES.some((a) => sel[a].length > 0) || sel.destination !== "",
   };
+}
+
+/**
+ * Yanıttan seçici kaynağı + süzgeç şerhleri. Sayfa bunu TEK satırda alır ki
+ * "şerhi yazmayı unutan sayfa" diye bir şey olmasın: seçenek listesi ile ekrana
+ * ve kâğıda giden cümle aynı yerden doğar.
+ */
+export function useAxisNotes(
+  data: { meta?: { secenekler?: ReportSecenekler }; suzgec?: ReportSuzgec } | undefined,
+  sel: ReportAxesState["sel"],
+  eksenler: readonly AxisKey[],
+  opts: { destination?: boolean; ek?: string[] } = {},
+): { secenekler: ReportSecenekler | undefined; notes: string[] } {
+  const secenekler = data?.meta?.secenekler;
+  const suzgec = data?.suzgec;
+  const { destination, ek } = opts;
+  const notes = useMemo(
+    () => axisNotes({ eksenler, destination, secenekler, sel, dusenSatir: suzgec?.dusenSatir, ek }),
+    [eksenler, destination, secenekler, sel, suzgec, ek],
+  );
+  return { secenekler, notes };
 }

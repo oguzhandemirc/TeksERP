@@ -1,88 +1,36 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle, Layers, Palette, Ruler, Target } from "lucide-react";
 import {
   BreakdownTable,
   ChartCard,
   DetailTable,
   MetricCard,
+  ReportAxisBar,
   ReportExportBar,
+  ReportFilterNotes,
   ReportPageLayout,
   SimpleBarChart,
 } from "../_components";
-import { fmtInt, fmtNum, fmtPercent } from "../_components/formatters";
+import { fmtInt, fmtNum } from "../_components/formatters";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
 import { useReportCompare } from "../_hooks/useReportCompare";
-import { buildDemandExport, demandAnalysisApi, type DemandSpecRow } from "./demandAnalysis";
+import { useAxisNotes, useReportAxes } from "../_hooks/useReportAxes";
+import { buildDemandExport, demandAnalysisApi } from "./demandAnalysis";
+import { specColumns } from "./demandAnalysisColumns";
+import type { DemandSpecRow } from "./demandAnalysis";
 
-const specColumns: ColumnDef<DemandSpecRow, unknown>[] = [
-  { accessorKey: "itemName", header: "Kumaş" },
-  {
-    accessorKey: "colorName",
-    header: "Renk",
-    cell: ({ row }) => {
-      const s = row.original;
-      if (!s.colorName) return <span className="text-muted-foreground">Renk belirtilmemiş</span>;
-      return (
-        <span className="flex items-center gap-1.5">
-          {s.colorHex ? (
-            <span
-              className="h-2.5 w-2.5 shrink-0 rounded-full border border-border"
-              style={{ backgroundColor: s.colorHex }}
-              aria-hidden
-            />
-          ) : null}
-          {s.colorName}
-        </span>
-      );
-    },
-  },
-  {
-    accessorKey: "width",
-    header: () => <div className="text-right">En</div>,
-    cell: ({ getValue }) => {
-      const w = getValue() as number | null;
-      return <div className="text-right tabular-nums">{w == null ? "—" : fmtNum(w)}</div>;
-    },
-  },
-  {
-    accessorKey: "qty",
-    header: () => <div className="text-right">Talep</div>,
-    cell: ({ row }) => (
-      <div className="text-right font-medium tabular-nums">
-        {fmtNum(row.original.qty)} m
-        <span className="ml-1 text-[10px] text-muted-foreground">
-          ({fmtPercent(row.original.sharePct)})
-        </span>
-      </div>
-    ),
-  },
-  {
-    accessorKey: "customerCount",
-    header: () => <div className="text-right">Müşteri</div>,
-    // Tek müşteriden gelen talep, stoğa üretim için ZAYIF sinyaldir — bu yüzden
-    // ayrı sütun ve tekil olan soluk basılır.
-    cell: ({ row }) => (
-      <div
-        className={`text-right tabular-nums ${row.original.customerCount === 1 ? "text-muted-foreground" : ""}`}
-      >
-        {fmtInt(row.original.customerCount)}
-        <span className="ml-1 text-[10px] text-muted-foreground">
-          / {fmtInt(row.original.lineCount)} kalem
-        </span>
-      </div>
-    ),
-  },
-];
+
+const AXIS_KEYS = ["customerId", "itemId", "colorId"] as const;
 
 export function DemandAnalysisPage() {
   const { params } = useReportDateRange("sales/demand-analysis");
   const compare = useReportCompare();
+  const axes = useReportAxes();
 
   const query = useQuery({
-    queryKey: ["reports", "sales", "demand-analysis", params, compare.params],
-    queryFn: () => demandAnalysisApi.get({ ...params, ...compare.params }),
+    queryKey: ["reports", "sales", "demand-analysis", params, compare.params, axes.params],
+    queryFn: () => demandAnalysisApi.get({ ...params, ...compare.params, ...axes.params }),
     enabled: Boolean(params.dateFrom && params.dateTo),
     staleTime: 30_000,
   });
@@ -93,9 +41,10 @@ export function DemandAnalysisPage() {
   const periodLabel = params.dateFrom && params.dateTo ? `${params.dateFrom.slice(0, 10)} – ${params.dateTo.slice(0, 10)}` : "";
   const compareLabel = cmpRange ? `${cmpRange.from.slice(0, 10)} – ${cmpRange.to.slice(0, 10)}` : null;
 
+  const { secenekler, notes: suzgecNotlari } = useAxisNotes(query.data, axes.sel, AXIS_KEYS, { destination: true });
   const spec = useMemo(
-    () => () => (da ? buildDemandExport({ da, periodLabel, compareLabel }) : null),
-    [da, periodLabel, compareLabel],
+    () => () => (da ? buildDemandExport({ da, periodLabel, compareLabel, filterNotes: suzgecNotlari }) : null),
+    [da, periodLabel, compareLabel, suzgecNotlari],
   );
 
   return (
@@ -104,8 +53,10 @@ export function DemandAnalysisPage() {
       title="Talep Analizi"
       description="Hangi kumaş-renk-en isteniyor — stoğa ne üretileceğinin cevabı."
       showCompare
+      filters={<ReportAxisBar reportKey="sales/demand-analysis" showCompare axes={axes} secenekler={secenekler} eksenler={AXIS_KEYS} destination />}
       actions={<ReportExportBar disabled={!da} buildSpec={spec} />}
     >
+      <ReportFilterNotes notes={suzgecNotlari} />
       <p className="text-xs text-muted-foreground">
         Talep <strong>kumaş + renk + en</strong> üçlüsünde sayılır: depodaki mal ancak birebir
         aynı üçlüyü karşılar. Aylık seri ise seçili aralıktan <strong>bağımsızdır</strong> — son

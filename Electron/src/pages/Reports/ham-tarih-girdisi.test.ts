@@ -10,11 +10,21 @@
 //      ör. Aging'in ekstre kapısı `finance/statement` — ev sahibi yaprakta MEŞRUDUR); tarihli sözleşmede `filters=` veren
 //      yaprak bileşeni kendisi gömer (yoksa tarih girdisi sessizce kaybolur — 5e'nin
 //      Randıman/Pareto süzgeç şeridinde tam bu oldu)
+//      dosyada BAŞKA bir katalog anahtarı geçmez; tarihli sözleşmede `filters=` veren
+//      yaprak bileşeni kendisi gömer YA DA gömen bir ŞERİT bileşeni çizer (yoksa tarih
+//      girdisi sessizce kaybolur — 5e'nin Randıman/Pareto süzgeç şeridinde tam bu oldu).
+//      ⚠️ Şerit bileşeni ADI ELLE YAZILMAZ, ÖLÇÜLÜR: `_components` altında `<ReportDateFilter`
+//      gömen her dosya taşıyıcıdır. Adı sabitlemek, şerit bileşeni tarihi düşürdüğü gün
+//      kapıyı yeşil bırakırdı (muafiyet gerekçesi biter, muafiyet kalır).
+//      ⚠️ Arama YALNIZ `filters=` ifadesinin İÇİNDE yapılır: dosyanın herhangi bir yerine
+//      bakmak kapıyı ÖLDÜRÜR — her yaprak `<ReportPageLayout` çizer ve o da bir taşıyıcıdır
+//      (ölçüldü: dosya düzeyinde arayan ilk yazım, şeritten tarihi silince YEŞİL kaldı)
 //   §4 düzen `defaultDays` fallback'i taşımaz (katalog dışı bir "30" yaşamasın)
 //
 // Negatif sondalar (bir kezlik, geri alındı — sha commit mesajında): OrderIntakePage'e ham
 // `<input type="date" />` + `useReportDateRange(30)` → §1 ❌ ve §2 ❌ · anahtarı başka rapora çevrildi
-// → §3 "başka anahtar da var" ❌ · Randıman'dan gömülü bileşen silindi → §3 "gömmüyor" ❌.
+// → §3 "başka anahtar da var" ❌ · Randıman'dan gömülü bileşen silindi → §3 "gömmüyor" ❌ ·
+// taşıyıcı şeritten `<ReportDateFilter` silindi → §3 iki yaprakta ❌ · yapraktan şerit silindi → §3 ❌.
 // =============================================================================
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -33,6 +43,26 @@ function walk(dir: string, out: string[] = []): string[] {
     else if (/\.(tsx|ts)$/.test(name) && !/\.test\.tsx?$/.test(name)) out.push(p);
   }
   return out;
+}
+
+/**
+ * `filters=` ifadesinin JSX'i. `filters={filters}` gibi bir tanımlayıcıysa o `const`un
+ * gövdesi okunur; çözülemezse `null` döner (ÖLÇÜLEMEDİ — yeşil DEĞİL).
+ */
+function filtersJsx(src: string): string | null {
+  const at = src.indexOf("filters={");
+  if (at < 0) return null;
+  // Süslü parantez SAYARAK oku: `filters={filters}` de `filters={<X a={1} />}` de aynı yoldan.
+  let depth = 0;
+  let i = at + "filters=".length;
+  for (; i < src.length; i++) {
+    if (src[i] === "{") depth++;
+    else if (src[i] === "}" && --depth === 0) break;
+  }
+  const v = src.slice(at + "filters={".length, i).trim();
+  if (!/^[A-Za-z_$][\w$]*$/.test(v)) return v;
+  const decl = src.match(new RegExp(`const ${v} = \\(([\\s\\S]*?)\\n {2}\\);`));
+  return decl ? decl[1]! : null;
 }
 
 /** Yorumları ayıklar — yorumdaki `type="date"` bir girdi değildir (statementExport emsali). */
@@ -92,6 +122,14 @@ describe("Reports: tarih girdisi tek bileşenden, sözleşme katalogdan", () => 
       if (el) routeComponent.set(m[1]!, el[1]!);
     }
     expect(routeComponent.size, "route→bileşen zinciri çözülmedi").toBeGreaterThan(20);
+    // Taşıyıcı şeritler: `_components` altında `<ReportDateFilter` GÖMEN dosyalar.
+    // Tanımın kendisi (ReportDateFilter.tsx) taşıyıcı değildir.
+    const carriers = new Set<string>();
+    for (const f of walk(join(REPORTS, "_components"))) {
+      const name = f.split("/").pop()!.replace(/\.tsx?$/, "");
+      if (name !== "ReportDateFilter" && stripComments(readFileSync(f, "utf8")).includes("<ReportDateFilter")) carriers.add(name);
+    }
+    expect(carriers.size, "körlük zemini: hiç taşıyıcı şerit bulunamadı ⇒ gevşetme ölçülmemiş demektir").toBeGreaterThan(0);
     const offenders: string[] = [];
     let measured = 0;
     for (const r of REPORT_CATALOG) {
@@ -107,8 +145,12 @@ describe("Reports: tarih girdisi tek bileşenden, sözleşme katalogdan", () => 
       const foreignLeafKeys = [...keysInFile].filter((k) => k !== r.key && REPORT_CATALOG.find((e) => e.key === k)?.yuzey !== "diyalog");
       if (foreignLeafKeys.length > 0) offenders.push(`${r.key}: yaprakta başka yaprak anahtarı da var (${foreignLeafKeys.join(", ")})`);
       if (!/reportKey=\{?"[a-z/-]+"/.test(src)) offenders.push(`${r.key}: düzene reportKey verilmemiş`);
-      if (r.tarih !== "yok" && /\bfilters=/.test(src) && !src.includes("<ReportDateFilter")) {
-        offenders.push(`${r.key}: filters= veriyor ama ReportDateFilter gömmüyor — tarih girdisi kaybolur`);
+      if (r.tarih !== "yok" && /\bfilters=/.test(src)) {
+        const bar = filtersJsx(src);
+        if (bar === null) offenders.push(`${r.key}: ÖLÇÜLEMEDİ — filters= ifadesi çözülemedi`);
+        else if (!bar.includes("<ReportDateFilter") && ![...carriers].some((c) => bar.includes(`<${c}`))) {
+          offenders.push(`${r.key}: filters= veriyor ama tarih girdisini ne kendi gömüyor ne taşıyıcı şerit çiziyor`);
+        }
       }
     }
     expect(measured).toBe(REPORT_CATALOG.filter((r) => r.panelYolu !== "").length);

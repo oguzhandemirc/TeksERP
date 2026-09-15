@@ -48,13 +48,16 @@ export function buildDemandExport(opts: {
   da: DemandAnalysis;
   periodLabel: string;
   compareLabel: string | null;
+  /** Süzgeç satırları (K10) — EN ÜSTTE; ekrandakiyle AYNI dizi. */
+  filterNotes?: string[];
 }): ReportExportSpec {
-  const { da, periodLabel, compareLabel } = opts;
+  const { da, periodLabel, compareLabel, filterNotes = [] } = opts;
   const hasCompare = Boolean(compareLabel);
   return {
     title: "Talep Analizi",
     subtitle: periodLabel,
     meta: [
+      ...filterNotes,
       "TALEP kumaş + renk + EN üçlüsünde sayılır. Depodaki mal ancak birebir aynı üçlüyü karşılar; kumaş düzeyinde sıralamak yanlış renk/en üretmeye yol açar.",
       "MÜŞTERİ sütunu FARKLI müşteri sayısıdır — tek müşterinin üç kalemi 'üç müşteri istiyor' diye okunmasın.",
       `ÇEKİRDEK: ${da.summary.coreSpecCount} spec dönem metrajının %80'ini taşıyor (toplam ${da.summary.specCount} spec).`,

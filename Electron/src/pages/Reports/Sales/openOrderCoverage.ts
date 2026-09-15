@@ -63,9 +63,10 @@ export interface OpenOrderCoverage {
 }
 
 export const openOrderCoverageApi = {
-  get: async (): Promise<ReportResponse<OpenOrderCoverage>> => {
+  get: async (params: Record<string, string> = {}): Promise<ReportResponse<OpenOrderCoverage>> => {
     const res = await apiClient.get<ReportResponse<OpenOrderCoverage>>(
       "/api/reports/sales/open-order-coverage",
+      { params },
     );
     return res.data;
   },
@@ -93,11 +94,12 @@ const bucketTable = (name: string, labelHeader: string, rows: CoverageBucketRow[
   },
 });
 
-export function buildCoverageExport(c: OpenOrderCoverage): ReportExportSpec {
+export function buildCoverageExport(c: OpenOrderCoverage, filterNotes: string[] = []): ReportExportSpec {
   return {
     title: "Açık Sipariş Karşılanma",
     subtitle: "Anlık durum",
     meta: [
+      ...filterNotes,
       // Tanımlar rakamla AYNI dosyada dursun — dışa aktarılan tablo bağlamından
       // koparak dolaşır ve "karşılanıyor" herkesin kafasında farklı bir şeydir.
       "AÇIK = istenen − sevk edilen. Rezerv/çuvallanmış düşülmez; düşüş yalnız sevkte olur.",

@@ -2,9 +2,10 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle, Clock, Hourglass, Timer } from "lucide-react";
-import { DetailTable, MetricCard, ReportExportBar, ReportPageLayout } from "../_components";
+import { DetailTable, MetricCard, ReportAxisBar, ReportExportBar, ReportFilterNotes, ReportPageLayout } from "../_components";
 import { fmtDate, fmtInt, fmtNum } from "../_components/formatters";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
+import { useAxisNotes, useReportAxes } from "../_hooks/useReportAxes";
 import {
   buildLeadTimeExport,
   orderLeadTimeApi,
@@ -34,12 +35,16 @@ function StatCell({ s, minSample }: { s: LeadTimeStats; minSample: number }) {
   );
 }
 
+const AXIS_KEYS = ["customerId", "itemId"] as const;
+
 export function OrderLeadTimePage() {
   const { params, dateFrom, dateTo } = useReportDateRange("sales/order-leadtime");
 
+  const axes = useReportAxes();
+
   const query = useQuery({
-    queryKey: ["reports", "sales", "order-leadtime", params],
-    queryFn: () => orderLeadTimeApi.get(params),
+    queryKey: ["reports", "sales", "order-leadtime", params, axes.params],
+    queryFn: () => orderLeadTimeApi.get({ ...params, ...axes.params }),
     enabled: Boolean(params.dateFrom && params.dateTo),
     staleTime: 30_000,
   });
@@ -47,9 +52,10 @@ export function OrderLeadTimePage() {
   const lt = query.data?.data;
   const minSample = lt?.minSample ?? 5;
   const periodLabel = `${fmtDate(dateFrom)} – ${fmtDate(dateTo)}`;
+  const { secenekler, notes: suzgecNotlari } = useAxisNotes(query.data, axes.sel, AXIS_KEYS, { destination: true });
   const spec = useMemo(
-    () => () => (lt ? buildLeadTimeExport({ lt, periodLabel }) : null),
-    [lt, periodLabel],
+    () => () => (lt ? buildLeadTimeExport({ lt, periodLabel, filterNotes: suzgecNotlari }) : null),
+    [lt, periodLabel, suzgecNotlari],
   );
 
   const bucketColumns = (labelHeader: string): ColumnDef<LeadTimeBucketRow, unknown>[] => [
@@ -142,8 +148,10 @@ export function OrderLeadTimePage() {
       description="Sipariş alındıktan kaç gün sonra mal çıkıyor — termin sözünün dayanağı."
       // Varsayılan 180 gün: teslim süresi ölçmek için 30 günlük pencere fazla dar
       // (siparişin kapanması bir aydan uzun sürebilir, örneklem hiç dolmaz).
+      filters={<ReportAxisBar reportKey="sales/order-leadtime" axes={axes} secenekler={secenekler} eksenler={AXIS_KEYS} destination />}
       actions={<ReportExportBar disabled={!lt} buildSpec={spec} />}
     >
+      <ReportFilterNotes notes={suzgecNotlari} />
       {thin ? (
         <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />

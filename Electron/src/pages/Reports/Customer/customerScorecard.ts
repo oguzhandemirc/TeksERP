@@ -81,39 +81,46 @@ export const customerScorecardApi = {
 
 const dt = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("tr-TR") : "—");
 
+/** Çıktı başlığındaki şerhler — süzgeç satırları EN ÜSTTE (K10). */
+function scorecardMeta(sc: CustomerScorecard, filterNotes: string[], compareLabel: string | null): string[] {
+  return [
+    ...filterNotes,
+    // İki zaman kapsamı dosyada da yazılı olmalı — dışa aktarılan tablo
+    // bağlamından koparak dolaşır ve iki sütun farklı dönemi anlatır.
+    "ABC sıralaması ve dönem metrikleri SEÇİLİ TARİH ARALIĞINA aittir.",
+    "'Kaç gündür sessiz' ve 'ortalama sipariş aralığı' TÜM GEÇMİŞTEN hesaplanır — dönem içine hapsedilse herkes sessiz görünürdü.",
+    "ABC: kümülatif payın %80'ine kadar A, %95'e kadar B, gerisi C.",
+    // Kullanıcının işaret ettiği gerçek problem dosyanın İÇİNDE de yazılı olmalı:
+    // Excel tablo bağlamından koparak dolaşır ve "Sipariş" sütunu tek başına
+    // okunduğunda giriş alışkanlığını müşteri davranışı sanmak çok kolaydır.
+    "⚠️ 'Sipariş' sütunu BELGE sayısıdır ve giriş alışkanlığına duyarlıdır: aynı işi 10 kaleme tek siparişte yazan müşteri 1, 10 ayrı siparişe yazan 10 görünür.",
+    "Bu yüzden sıklık ÜÇ sütunla okunur: 'Sipariş' (belge) · 'Kalem' (kaç ayrı mal) · 'Sipariş günü' (kaç ayrı gün — aynı gün girilen 5 sipariş 1 sayılır).",
+    "'Kalem/sipariş' bir sıralama ölçütü DEĞİL, okuma anahtarıdır: ~1 ise müşteri tek tek giriyor, yüksekse kalem kalem. Fabrika ortalaması " +
+      `${sc.summary.avgLinesPerOrder}.`,
+    "Metraj alışkanlıktan BAĞIMSIZDIR — ABC sıralaması bu yüzden metraja dayanır, sipariş adedine değil.",
+    `İptal: dönemde verilen siparişlerin %${sc.summary.cancelRatePct}'i (metraj) iptal edildi; ${sc.summary.cancelledOrderCount} sipariş belgesi tümüyle iptal.`,
+    "'Sevk (brüt)' dönemde müşteriye ÇIKAN maldır ve aynı siparişlere ait DEĞİLDİR (bugün sevk edilen mal eski siparişten gelmiş olabilir); iade ayrı belgeyle kapanır, rakam brüttür.",
+    `Dönemde sevk edilen toplam brüt metraj ${sc.summary.shippedQty} m — bu toplam, dönemde sipariş vermeyip yalnız mal alan müşterileri de kapsar, yani satır toplamından büyük olabilir.`,
+    "RİSK ölçüsü mutlak gün değil ORANDIR: geçen süre / müşterinin kendi ortalama sipariş aralığı. Eşik 2×.",
+    `Ritim en az 3 sipariş ister; ${sc.summary.insufficientHistoryCount} müşterinin geçmişi yetersiz olduğu için risk listesine GİRMEDİ (yok sayılmadı).`,
+    `Dönemde ${sc.summary.aClassCount} A-sınıfı müşteri metrajın %${sc.summary.aClassQtyPct}'ini taşıdı.`,
+    `${sc.summary.dormantCount} müşteri geçmişte sipariş verdi ama bu dönemde vermedi.`,
+    ...(compareLabel ? [`Karşılaştırma dönemi: ${compareLabel}`] : []),
+  ];
+}
+
 export function buildCustomerScorecardExport(opts: {
   sc: CustomerScorecard;
   periodLabel: string;
   compareLabel: string | null;
+  /** Süzgeç satırları (K10) — ABC'nin süzülmüş evren şerhi de bunun içinde. */
+  filterNotes?: string[];
 }): ReportExportSpec {
-  const { sc, periodLabel, compareLabel } = opts;
-  const hasCompare = Boolean(compareLabel);
+  const { sc, periodLabel, compareLabel, filterNotes = [] } = opts;
+  const hasCompare = compareLabel !== null;
   return {
-    title: "Müşteri Karnesi",
-    subtitle: periodLabel,
-    meta: [
-      // İki zaman kapsamı dosyada da yazılı olmalı — dışa aktarılan tablo
-      // bağlamından koparak dolaşır ve iki sütun farklı dönemi anlatır.
-      "ABC sıralaması ve dönem metrikleri SEÇİLİ TARİH ARALIĞINA aittir.",
-      "'Kaç gündür sessiz' ve 'ortalama sipariş aralığı' TÜM GEÇMİŞTEN hesaplanır — dönem içine hapsedilse herkes sessiz görünürdü.",
-      "ABC: kümülatif payın %80'ine kadar A, %95'e kadar B, gerisi C.",
-      // Kullanıcının işaret ettiği gerçek problem dosyanın İÇİNDE de yazılı olmalı:
-      // Excel tablo bağlamından koparak dolaşır ve "Sipariş" sütunu tek başına
-      // okunduğunda giriş alışkanlığını müşteri davranışı sanmak çok kolaydır.
-      "⚠️ 'Sipariş' sütunu BELGE sayısıdır ve giriş alışkanlığına duyarlıdır: aynı işi 10 kaleme tek siparişte yazan müşteri 1, 10 ayrı siparişe yazan 10 görünür.",
-      "Bu yüzden sıklık ÜÇ sütunla okunur: 'Sipariş' (belge) · 'Kalem' (kaç ayrı mal) · 'Sipariş günü' (kaç ayrı gün — aynı gün girilen 5 sipariş 1 sayılır).",
-      "'Kalem/sipariş' bir sıralama ölçütü DEĞİL, okuma anahtarıdır: ~1 ise müşteri tek tek giriyor, yüksekse kalem kalem. Fabrika ortalaması " +
-        `${sc.summary.avgLinesPerOrder}.`,
-      "Metraj alışkanlıktan BAĞIMSIZDIR — ABC sıralaması bu yüzden metraja dayanır, sipariş adedine değil.",
-      `İptal: dönemde verilen siparişlerin %${sc.summary.cancelRatePct}'i (metraj) iptal edildi; ${sc.summary.cancelledOrderCount} sipariş belgesi tümüyle iptal.`,
-      "'Sevk (brüt)' dönemde müşteriye ÇIKAN maldır ve aynı siparişlere ait DEĞİLDİR (bugün sevk edilen mal eski siparişten gelmiş olabilir); iade ayrı belgeyle kapanır, rakam brüttür.",
-      `Dönemde sevk edilen toplam brüt metraj ${sc.summary.shippedQty} m — bu toplam, dönemde sipariş vermeyip yalnız mal alan müşterileri de kapsar, yani satır toplamından büyük olabilir.`,
-      "RİSK ölçüsü mutlak gün değil ORANDIR: geçen süre / müşterinin kendi ortalama sipariş aralığı. Eşik 2×.",
-      `Ritim en az 3 sipariş ister; ${sc.summary.insufficientHistoryCount} müşterinin geçmişi yetersiz olduğu için risk listesine GİRMEDİ (yok sayılmadı).`,
-      `Dönemde ${sc.summary.aClassCount} A-sınıfı müşteri metrajın %${sc.summary.aClassQtyPct}'ini taşıdı.`,
-      `${sc.summary.dormantCount} müşteri geçmişte sipariş verdi ama bu dönemde vermedi.`,
-      ...(compareLabel ? [`Karşılaştırma dönemi: ${compareLabel}`] : []),
-    ],
+    title: "Müşteri Karnesi", subtitle: periodLabel,
+    meta: scorecardMeta(sc, filterNotes, compareLabel),
     tables: [
       {
         name: "Sıralama (ABC)",
