@@ -302,7 +302,7 @@ console.log("\n§8 — \"Sonraki sürümde\" vaadi");
     MUAF_VAATLER.filter((x) => !MUAF_SINIFLARI.has(x.sinif)).map((x) => String(x.sinif)).join(" · "));
 }
 
-console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı");
+console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı (§9a kısa ad · §9b uzun alıntı)");
 // Notta tırnaklanan bir ekran/ayar/sekme adı ARAMA ANAHTARIDIR: operatör onu
 // ekranda arar. Hatırlanarak yazıldığında sessizce kayar — ölçüldü 2026-09-15:
 // 65 etiket adayının 6'sı koddaki yazımından farklıydı ("levent yuvası sayısı"
@@ -400,6 +400,71 @@ console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı");
     check("⭐ tırnaklı ad kodda BİREBİR var ya da BEYANLI muaf", cozulmeyen.length === 0,
       `${cozulmeyen.length} çözülmeyen: ${liste(cozulmeyen)}`
         + " — ekran adıysa koddan KOPYALA (harf harf), değilse MUAF_ETIKETLER'e sınıfıyla + gerekçesiyle yaz");
+    // ── §9b UZUN ALINTI KOLU (2026-09-15) ───────────────────────────────────
+    // ⚠️ NEDEN VAR: §9 yalnız ≤5 KELİMELİK tırnakları ölçüyordu. Yayın öncesi
+    // geri-okuma turunda bulunan BEŞ kusurun BEŞİ DE daha uzun tırnaklarda
+    // yaşıyordu (ölçüldü 2026-09-15) — yani kapı o turun bütün bulgularını
+    // YAPISAL OLARAK göremezdi. En ağırı uydurma bir uyarı metniydi: nota
+    // yazılan cümle kodda YOKTU ve uydurma hâli, kullanıcıya NE YAPACAĞINI
+    // söyleyen yarıyı düşürüyordu.
+    //
+    // ⚠️ YÜKLEM NEDEN "BİREBİR" DEĞİL: uzun cümle kodda satır sarması, şablon
+    // parçası ve farklı noktalama ile yaşar (`Saat buradan değişmez;` ↔ nota
+    // yazılan virgül). Birebir arasaydık kapı doğduğu gün onlarca yanlış
+    // pozitifle susturulurdu. Ölçüt NORMALİZE İÇERİLME: küçük harf (tr),
+    // noktalama/kesme/boşluk sadeleştirilmiş gövdede geçiyor mu.
+    // ⚠️ Yine de PARAFRAZ meşrudur (madde bilerek özetler) — ama BEYANLA ve
+    // gerekçesiyle; beyan ↔ madde iki yönlü ölçülür.
+    //
+    // Negatif sondalar (bir kezlik, cp+sha256 ile geri alındı): nota uydurma bir
+    // uzun alıntı eklendi → ⭐ ❌ · PARAFRAZ beyanı bayatlatıldı → ölü muafiyet ❌.
+    // İlk taban ÖLÇÜLDÜ: 13 uzun alıntının 9'u kodda normalize İÇERİLİYOR, 4'ü
+    // beyanlı parafraz ⇒ taban 0 ile doğdu (borç yok).
+    const PARAFRAZ_MUAFLARI = [
+      { alinti: "birinci kalite / ikinci kalite / fire", gerekce: "Rol adlarının konuşulan özeti; kodda üç ayrı sabit (`FIRST`/`SECOND`/`SCRAP` rolleri)." },
+      { alinti: "bu topa kurşun uygulandı mı, KK2'den geçti mi, fasona gitti mi", gerekce: "Refakat kartının cevapladığı soruların anlatımı, ekran metni değil." },
+      { alinti: "kapsam sevk irsaliyesi ve muhasebe fişidir", gerekce: "Belge kapsamının anlatımı; ekranda bu cümle yazmaz." },
+      { alinti: "kapanışın fire kalanıdır, kapanışı tümden geri alın", gerekce: "Reddin GEREKÇESİNİN özeti; sunucu mesajı farklı kurulur (parça/kapanış adlarıyla)." },
+    ];
+    // ⚠️ ÖNCE ETİKETLER: ekran metni JSX/HTML içinde `<b>…</b>` ile bölünür ve
+    // operatör o etiketleri GÖRMEZ. Sadeleştirmeden atılmazsa kapı, doğru
+    // kopyalanmış bir cümleyi bile "kodda yok" sayar (ölçüldü: yedek saati
+    // cümlesi `<b>` yüzünden kırmızı verdi).
+    const sadeles = (t) => t
+      .replace(/<[^>]*>/g, " ")
+      .toLocaleLowerCase("tr")
+      .replace(/[’'`´]/g, "'")
+      .replace(/[“”"]/g, "")
+      .replace(/[.,;:!?()[\]{}<>/\\|—–-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const govdeSade = sadeles(govde);
+    const uzunAdaylar = new Map();
+    for (const y of yayinlar) {
+      (y.maddeler ?? []).forEach((m, i) => {
+        for (const e of String(m.metin ?? "").matchAll(/“([^”]{3,200})”/g)) {
+          const t = e[1];
+          if (t.split(/\s+/).length <= 5) continue;
+          uzunAdaylar.set(t, (uzunAdaylar.get(t) ?? []).concat(`${y.id}#${i}`));
+        }
+      });
+    }
+    const parafrazAdlar = new Set(PARAFRAZ_MUAFLARI.map((x) => x.alinti));
+    const uzunCozulmeyen = [];
+    for (const [t, yerler] of uzunAdaylar) {
+      if (parafrazAdlar.has(t)) continue;
+      if (govdeSade.includes(sadeles(t))) continue;
+      uzunCozulmeyen.push(`[UZUN ALINTI] ${JSON.stringify(t)} (${yerler.join(", ")})`);
+    }
+    check("körlük zemini: uzun alıntı adayı çıkarıldı", uzunAdaylar.size > 0,
+      `${uzunAdaylar.size} uzun alıntı · ${PARAFRAZ_MUAFLARI.length} beyanlı parafraz`, true);
+    check("⭐ uzun tırnaklı metin kodda İÇERİLİYOR ya da BEYANLI parafraz", uzunCozulmeyen.length === 0,
+      `${uzunCozulmeyen.length} çözülmeyen: ${liste(uzunCozulmeyen)}`
+        + " — ekran/sunucu metniyse koddan KOPYALA, bilerek özetliyorsan PARAFRAZ_MUAFLARI'na gerekçesiyle yaz");
+    const oluParafraz = PARAFRAZ_MUAFLARI.filter((x) => !uzunAdaylar.has(x.alinti));
+    check("ölü PARAFRAZ muafiyeti yok (beyan ↔ madde iki yönlü)", oluParafraz.length === 0,
+      oluParafraz.map((x) => JSON.stringify(x.alinti)).join(" · "));
+
     const oluMuaf = MUAF_ETIKETLER.filter((x) => !adaylar.has(x.etiket));
     check("ölü ETİKET muafiyeti yok (beyan ↔ madde iki yönlü)", oluMuaf.length === 0,
       oluMuaf.map((x) => JSON.stringify(x.etiket)).join(" · "));
