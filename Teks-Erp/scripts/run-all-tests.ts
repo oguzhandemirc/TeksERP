@@ -25,6 +25,7 @@ import {
   fixtureHedefEngeli,
   hacimHedefEngeli,
   hedefDbAdi,
+  semaHizasi,
 } from "./lib/hedef-db-kapisi";
 // STRICT anahtarı TEK KAYNAKTIR ([TD-10c]): ikinci bir bayrak ya da ikinci bir
 // `process.env` okuması açılmaz — iki koşum iki farklı şey iddia ederdi.
@@ -348,6 +349,37 @@ function istemciHizasiBeyani(): void {
   );
 }
 
+/**
+ * ŞEMA HİZASI BEYANI — `istemciHizasiBeyani`nin DB ayağı.
+ *
+ * Üç hizadan üçüncüsü: AĞAÇ ↔ ÜRETİLMİŞ İSTEMCİ zaten ölçülüyordu, AĞAÇ ↔ DB
+ * yalnız filtresiz tam pakette (`migrationGate`, ~3 sn'lik ayrı süreç). Bu beyan
+ * UCUZDUR (bir `readdir` + bir sorgu) ve FİLTRELİ koşumda da basılır — kapının
+ * bilinçli yokluğunu SESSİZLİK yerine tek satıra çevirir.
+ *
+ * ⚠️ ÜÇ SONUÇ: hizalı · geride · ÖLÇÜLEMEDİ. Hizalı hâli de BASILIR — satırın
+ * yokluğu, `istemciHizasiBeyani`nin dersiyle aynı sebeple fark edilebilir olmalı.
+ */
+async function semaHizasiBeyani(): Promise<void> {
+  const h = await semaHizasi();
+  if (h.durum === "hizali") {
+    console.log(`→ Şema hizası: ✅ DB ağaçla hizalı (${h.agacta} migration)`);
+    return;
+  }
+  if (h.durum === "olculemedi") {
+    console.log(`⚠️  ŞEMA HİZASI ÖLÇÜLEMEDİ — ${h.neden} (hüküm YOK)`);
+    return;
+  }
+  const liste = h.eksik.slice(0, 5).join(", ") + (h.eksik.length > 5 ? ` … (+${h.eksik.length - 5})` : "");
+  console.log(
+    `⚠️  DB AĞACIN ${h.eksik.length} MİGRATION GERİSİNDE (ağaçta ${h.agacta}) — eksik: ${liste}\n` +
+      "      Eksik şemayla koşan bekçi, ORTAM arızasını MANTIK hatası gibi gösterir\n" +
+      "      (ölçüldü: `test_zincir_uctan_uca` → `lot=undefined kg=0`).\n" +
+      "      ⇒ Çözüm TEK KOMUT: npm run prisma:migrate\n" +
+      "      (Bu bir İHLAL değil HİZA KAYMASIDIR; çıkış kodu etkilenmez.)",
+  );
+}
+
 async function main() {
   // Opsiyonel filtre: `npx tsx scripts/run-all-tests.ts <substring>` → yalnız
   // adı eşleşen test'leri koşar (tek test/alt-küme doğrulaması için).
@@ -402,6 +434,7 @@ async function main() {
   // düzeltmesi TEK KOMUT. *Bir kaymanın kaynağı başkasının meşru eylemiyse,
   // yaptırım o kaymayı YAŞAYANA verilmez.* Çıkış kodu ETKİLENMEZ (ölçüldü: 14 ms).
   istemciHizasiBeyani();
+  await semaHizasiBeyani();
 
   // ⚠️ ATLANAN GEÇİT BEYAN EDİLİR (2026-09-13, 6e'nin ölçümü — ve bugün bir hata
   // geçirdi). Bu iki geçit filtreli koşumda BİLEREK atlanıyor (iterasyon hızlı

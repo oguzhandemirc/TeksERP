@@ -21,6 +21,45 @@
 
 ---
 
+## 2026-09-15 — Kırmızının sebebi ölçtüğün şey değil ÖN KOŞULUN olabilir [ÇEKİRDEK]
+
+`test_zincir_uctan_uca` yerelde şöyle kırmızı verdi: `①a mal kabulü LOT açtı … lot=undefined
+kg=0`. MANTIK hatası gibi okunuyor. Gerçek sebep: test veritabanında ÜÇ migration bekliyordu.
+`migrate deploy` sonrası aynı bekçi 23/0, sıfır atlama.
+
+Aynı gün aynı aileden İKİ vaka daha geçti: ① bayat Prisma client (`SUBCONTRACT_OUT` yok
+sanıldı, `generate` çözdü) · ② mutasyondan ÖNCE başlamış sunucu (canlı sonda kaynak
+değişikliğini görmedi). ⇒ ***Bir bekçinin kırmızısı, ölçtüğü şeyin değil ÖN KOŞULUNUN
+bozukluğundan geliyorsa o kırmızı yanlış hikâye anlatır — ve yanlış hikâye, hiç hikâye
+olmamasından pahalıdır: insanı yanlış yöne saatlerce koşturur.***
+
+**Kapı zaten VARDI ama benim yolumda değildi.** `run-all-tests.ts` `migrationGate()` taşıyor
+ve tam bu vakayı biliyor (2026-09-05: iki eksik migration 453 bekçinin 134'ünü kırmızı
+yapmıştı). Ama çağrısı `if (!filter && …)` ile sarılı: FİLTRELİ koşumda bilerek atlanıyor
+(`npx prisma migrate status` ~3 sn'lik ayrı bir süreç, geliştirme döngüsü iki katına
+çıkardı). Tek bekçiyi doğrudan koşturan yol ise koşucuya hiç uğramıyor.
+
+Yani kapı ölü değildi, KAPSAMI DARDI — ve darlık bilinçliydi. Çare kapıyı genişletmek değil
+(bedeli gerçek), o darlığı SESSİZLİK olmaktan çıkarmak oldu: `semaHizasiBeyani()` bir
+`readdir` + bir sorguyla ölçer, filtreli koşumda da basar, ÜÇ SONUÇ döndürür (hizalı ·
+geride · ÖLÇÜLEMEDİ) ve çıkış kodunu ETKİLEMEZ — `istemciHizasiBeyani`nin gerekçesiyle
+birebir: kayma başkasının meşru eyleminden doğar, düzeltmesi tek komuttur, yaptırım kaymayı
+YAŞAYANA verilmez.
+
+Karşılaştırma AD KÜMESİ üzerinden yapılır, SAYI üzerinden değil: "kaç migration var" ölçütü,
+biri silinip biri eklendiğinde hizalı görünürdü. Uygulanmış sayılmak için `finished_at IS NOT
+NULL` şart — yarım kalmış bir kayıt uygulanmış sayılsaydı kayma tam da bozuk kurulumda
+gizlenirdi.
+
+**Ve beyanın kendisi bekçiye bağlandı.** `istemciHizasiBeyani`nin yorumunda şu yazıyordu:
+"çağrı bir gün refactor'da düşerse SATIRIN YOKLUĞU fark edilir" — yani tek koruma İNSANIN
+FARK ETMESİYDİ. Oysa tanımlı ama çağrılmayan bir beyan, hiç yazılmamış olandan AYIRT
+EDİLEMEZ: çıktıda ikisi de yok. `test_bekci_sozlesmesi §b` artık iki beyanın da TANIMLI ∧
+ÇAĞRILI olduğunu ölçer. ⇒ ***Kendine uygulanmayan kural için tek çare kapıdır; "satırın
+yokluğu fark edilir" bir kapı değildir.***
+
+---
+
 ## 2026-09-15 — Muafiyetin anahtarı, kapsadığı ucun ADINI taşımalı [ÇEKİRDEK]
 
 `test_mobile_screen_permissions` muafiyetlerini `(izin, "VERB yol")` çiftiyle anahtarlıyordu

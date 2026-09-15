@@ -290,6 +290,28 @@ const KURESEL_YAZIM_TABAN = 0;
     arsivBayt > 1_048_576, arsivHata || `${arsivBayt} bayt`);
 }
 
+// ── §b KOŞUCUNUN HİZA BEYANLARI TANIMLI *VE* ÇAĞRILI ────────────────────────
+// NEDEN: `istemciHizasiBeyani`nin kendi yorumu "çağrı bir gün refactor'da düşerse
+// SATIRIN YOKLUĞU fark edilir" diyordu — yani tek koruma İNSANIN FARK ETMESİYDİ.
+// Tanımlı ama çağrılmayan bir beyan, hiç yazılmamış bir beyandan AYIRT EDİLEMEZ:
+// çıktıda ikisi de yok. ⇒ *Kendine uygulanmayan kural için tek çare kapıdır.*
+//
+// ⚠️ İKİ AYAK: tanım VAR ∧ ÇAĞRI var. Yalnız tanımı aramak, kopmuş bir çağrıyı
+// yeşil geçirirdi (bu kolun doğuş sebebi tam olarak o sınıf: `migrationGate`
+// filtreli koşumda BİLEREK atlanır ve o yokluk beyanla duyuruluyor).
+{
+  const kosucu = readFileSync(join(SCRIPTS_DIR, "run-all-tests.ts"), "utf8");
+  const BEYANLAR = ["istemciHizasiBeyani", "semaHizasiBeyani"];
+  const kopuk = BEYANLAR.filter((ad) => {
+    const tanim = new RegExp(`function ${ad}\\(`).test(kosucu);
+    // Çağrı: tanım satırı DIŞINDA en az bir `<ad>(` geçişi.
+    const gecis = (kosucu.match(new RegExp(`\\b${ad}\\(`, "g")) ?? []).length;
+    return !tanim || gecis < 2;
+  });
+  check("§b koşucunun hiza beyanları TANIMLI ve ÇAĞRILI (tanımlı-ama-çağrısız = hiç yok)",
+    kopuk.length === 0, kopuk.join(", ") || BEYANLAR.join(" · "));
+}
+
 // Muafiyet listesi iki yönlü: artık özet basan bir dosya listede kalmamalı.
 const bayatMuaf = MUAF.filter((f) => {
   if (!dosyalar.includes(f)) return true;

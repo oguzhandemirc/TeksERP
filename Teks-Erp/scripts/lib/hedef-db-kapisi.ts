@@ -10,6 +10,8 @@
 //
 // TÜKETİCİLER: test_module_flag_off (bant + fail) · fixture-module-flags (throw).
 // =============================================================================
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
 import { Pool } from "pg";
 import { PG_SESSION_OPTIONS } from "../../src/lib/pg-session";
 import { BILINEN_GUVENLI_DB_ADLARI } from "./bilinen-guvenli-db";
@@ -175,6 +177,70 @@ export async function hacimHedefEngeli(): Promise<HacimOlcumu> {
           topSayisi: null,
           olcumNotu: null,
         };
+  } finally {
+    await pool.end().catch(() => undefined);
+  }
+}
+
+/**
+ * ŞEMA HİZASI — DB, ağacın `prisma/migrations/` dizinini taşıyor mu?
+ *
+ * NEDEN AYRI BİR ÖLÇÜM (2026-09-15, d9'un vakası): `migrationGate()` bu soruyu
+ * zaten soruyor ama YALNIZ filtresiz tam pakette (`npx prisma migrate status`
+ * bir süreç açar, ~3 sn — geliştirme döngüsünde bilerek atlanıyor). Tek bekçiyi
+ * doğrudan koşturan yol ise kapıya HİÇ uğramaz: `test_zincir_uctan_uca` üç
+ * migration geride bir DB'de `lot=undefined kg=0` diye kırmızı verdi — MANTIK
+ * hatası gibi okunan bir ORTAM arızası. ⇒ Bir bekçinin kırmızısı, ölçtüğü şeyin
+ * değil ÖN KOŞULUNUN bozukluğundan geliyorsa o kırmızı YANLIŞ HİKÂYE anlatır.
+ *
+ * ⚠️ KAPI DEĞİL BEYAN — `istemciHizasiBeyani`nin gerekçesiyle birebir aynı:
+ * kayma başkasının meşru eyleminden doğar (migration indi) ve düzeltmesi TEK
+ * KOMUTTUR; yaptırım kaymayı YAŞAYANA verilmez. Çıkış kodu etkilenmez.
+ *
+ * ⚠️ AD KÜMESİ, SAYI DEĞİL: "kaç migration var" karşılaştırması, biri silinip
+ * biri eklendiğinde hizalı görünürdü. Eksik olanlar ADIYLA basılır.
+ */
+export interface SemaHizasi {
+  durum: "hizali" | "geride" | "olculemedi";
+  eksik: string[];
+  /** `olculemedi` hâlinde sebep; diğerlerinde null. */
+  neden: string | null;
+  /** Ağaçtaki migration klasörü sayısı (körlük zemini). */
+  agacta: number;
+}
+
+export async function semaHizasi(): Promise<SemaHizasi> {
+  const url = process.env.DATABASE_URL;
+  if (!url) return { durum: "olculemedi", eksik: [], neden: "DATABASE_URL tanımsız", agacta: 0 };
+  let agac: string[];
+  try {
+    agac = readdirSync(join(__dirname, "..", "..", "prisma", "migrations"), { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name)
+      .sort();
+  } catch (e) {
+    return { durum: "olculemedi", eksik: [], neden: `migrations dizini okunamadı (${(e as Error).message.slice(0, 60)})`, agacta: 0 };
+  }
+  // Körlük zemini: dizin boşsa ölçüm yok — "hepsi uygulanmış" demek YANLIŞ olur.
+  if (agac.length === 0) return { durum: "olculemedi", eksik: [], neden: "ağaçta migration klasörü yok", agacta: 0 };
+
+  const pool = new Pool({ connectionString: url, connectionTimeoutMillis: 15_000, options: PG_SESSION_OPTIONS });
+  try {
+    // Tablo YOKSA ölçüm yapılamaz (taze DB) — "geride" demek de doğru olurdu ama
+    // `hacimHedefEngeli`nin `rolls` dalıyla aynı gerekçe: migration hiç koşmamış
+    // bir hedef, kaymış bir hedef DEĞİLDİR ve `migrationGate` zaten arkada durur.
+    const t = await pool.query<{ v: string | null }>("SELECT to_regclass('public._prisma_migrations')::text AS v");
+    if (!t.rows[0]?.v) return { durum: "olculemedi", eksik: [], neden: "_prisma_migrations tablosu yok (migration hiç koşmamış)", agacta: agac.length };
+    // ⚠️ `finished_at IS NOT NULL`: yarım kalmış (rolled back / hata almış) bir
+    // kayıt UYGULANMIŞ sayılmaz — sayılsaydı kayma tam da bozuk kurulumda gizlenirdi.
+    const r = await pool.query<{ migration_name: string }>(
+      "SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL",
+    );
+    const uygulanan = new Set(r.rows.map((x) => x.migration_name));
+    const eksik = agac.filter((m) => !uygulanan.has(m));
+    return { durum: eksik.length === 0 ? "hizali" : "geride", eksik, neden: null, agacta: agac.length };
+  } catch (e) {
+    return { durum: "olculemedi", eksik: [], neden: (e as Error).message.slice(0, 100), agacta: agac.length };
   } finally {
     await pool.end().catch(() => undefined);
   }
