@@ -27,7 +27,7 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Yeni Alış Siparişi ve Yeni Mal Kabul formlarında tedarikçi kutusunun yanına “Listeden seç” düğmesi geldi: cari kartlar ve fason firmalar tek tabloda (Kod · Ünvan · Rol · Vergi No · Telefon), rol süzgeci (Tedarikçi · Alıcı + Satıcı · Fason) ve kod/ünvan/vergi no araması; satıra tıklayınca seçilir. Yalnız müşteri kartları alışta listelenmez. Küçük açılır kutu da yerinde durur; alış siparişleri listesindeki tedarikçi süzgeci değişmedi."
+          "metin": "Yeni Alış Siparişi ve Yeni Mal Kabul formlarında tedarikçi kutusuna tıklayınca artık küçük açılır liste değil, tam liste penceresi açılır: bütün cari kartlar ve fason firmalar tek tabloda (Kod · Ünvan · Rol · Vergi No · Telefon), kaydırdıkça yüklenir; üstte kod/ünvan/vergi no araması ve tek seçimli rol süzgeci (Tümü · Müşteri · Tedarikçi · Alıcı + Satıcı · Fason). Satıra tıklayınca seçilir; mal kabulde seçim yanındaki × ile temizlenir. Alış siparişleri listesindeki tedarikçi süzgeci değişmedi."
         },
         {
           "kapsam": "panel",

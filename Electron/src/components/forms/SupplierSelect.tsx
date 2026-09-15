@@ -27,7 +27,7 @@
 // =============================================================================
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronsUpDown, ListFilter } from "lucide-react";
+import { Check, ChevronsUpDown, ListFilter, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -85,9 +85,10 @@ interface Props {
   disabled?: boolean;
   className?: string;
   /**
-   * Kutunun yanında "listeden seç" düğmesi (istek #5): filtrelenebilir tablo modalı (rol · arama ·
-   * Kod · Ünvan · Rol · Vergi No · Telefon). FORM kullanımlarında açılır (alış siparişi · mal kabul);
-   * satır içi/filtre şeridi kullanımında kapalı — küçük kutu orada bayt bayt.
+   * KUTUYA TIKLAYINCA DOĞRUDAN MODAL (istek #5 rev.): küçük açılır liste FORM'da hiç açılmaz; kutu salt
+   * seçim göstergesi + tıkla → tam liste modalı (rol · arama · Kod · Ünvan · Rol · Vergi No · Telefon,
+   * sunucudan sayfa sayfa). `nullable` ise yanında temizle (×). Filtre şeridi (satır içi) kullanımı
+   * bu prop'u vermez — küçük kutu orada bayt bayt.
    */
   modalPicker?: boolean;
 }
@@ -214,18 +215,52 @@ export function SupplierSelect({
       </CommandGroup>
     );
 
+  if (modalPicker) {
+    return (
+      <div className={className}>
+        <div className="flex items-start gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled}
+            aria-label="Tedarikçi seç (liste)"
+            aria-haspopup="dialog"
+            title="Tıkla: bütün cariler ve fason firmalar listede — rol süzgeci, arama"
+            className={cn("w-full min-w-0 justify-between font-normal", !resolvedLabel && "text-muted-foreground")}
+            onClick={() => setModalOpen(true)}
+          >
+            <span className="truncate">
+              {triggerText}
+              {value?.kind === "SUBCONTRACTOR" && resolvedLabel && (
+                <span className="ml-2 rounded bg-muted px-1 py-0.5 text-[10px] uppercase text-muted-foreground">
+                  {SUPPLIER_KIND_TAG.SUBCONTRACTOR}
+                </span>
+              )}
+            </span>
+            <ListFilter className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+          {nullable && value && (
+            <Button type="button" variant="outline" size="icon" className="shrink-0" disabled={disabled} aria-label="Tedarikçiyi temizle" title={noneLabel} onClick={() => onChange(null)}>
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+        <SupplierPickerModal open={modalOpen} onOpenChange={setModalOpen} onPick={onChange} includeInactive={includeInactive} />
+      </div>
+    );
+  }
+
   return (
     <div className={className}>
-      <div className="flex items-start gap-1">
       <Popover open={open} onOpenChange={disabled ? undefined : setOpen}>
-        <PopoverTrigger asChild className="min-w-0 flex-1">
+        <PopoverTrigger asChild>
           <Button
             type="button"
             variant="outline"
             role="combobox"
             aria-expanded={open}
             disabled={disabled}
-            className={cn("w-full min-w-0 justify-between font-normal", !resolvedLabel && "text-muted-foreground")}
+            className={cn("w-full justify-between font-normal", !resolvedLabel && "text-muted-foreground")}
           >
             <span className="truncate">
               {triggerText}
@@ -273,24 +308,6 @@ export function SupplierSelect({
           </Command>
         </PopoverContent>
       </Popover>
-      {modalPicker && (
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          className="shrink-0"
-          disabled={disabled}
-          aria-label="Listeden seç (filtreli)"
-          title="Listeden seç — rol süzgeci, arama, Kod · Ünvan · Rol · Vergi No · Telefon"
-          onClick={() => setModalOpen(true)}
-        >
-          <ListFilter className="h-4 w-4" />
-        </Button>
-      )}
-      </div>
-      {modalPicker && (
-        <SupplierPickerModal open={modalOpen} onOpenChange={setModalOpen} onPick={onChange} includeInactive={includeInactive} />
-      )}
 
       {notice && (
         <p
