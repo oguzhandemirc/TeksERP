@@ -138,6 +138,14 @@ anahtarı (`devere.enabled`, KAPALI doğar).
   `production/batch-search` · `batch-trace/:batchId` · `traveler-trace`);
   `production/operator-performance` hatalı `limit` artık sessiz 50 değil 400.
   Eski panel bu uçlara fazladan anahtar göndermiyor (ölçüldü) — görünür fark yok.
+- **Raporlarda levent / lot ekseni** (2026-09-15, R5b-b): dokuma raporları
+  (`dokuma/randiman` · `dokuma/durus-pareto` · `dokuma/vardiya-karnesi`) ve
+  `quality/scorecard` · `quality/scrap-scorecard` isteğe bağlı `warpBeamId` /
+  `lotNo` süzgeci alır; bağ defterden çözülür (top ← levent tüketim satırı, levent
+  ← iplik lotu, tezgah ← bağ penceresi ∩ vardiya penceresi). Süzgeç verilmezse
+  cevap bayt bayt eski; verilirse dokuma cevabında `meta.suzgec` beyanı, bilinmeyen
+  levent 404, leventsiz lot boş rapor. Vardiya karnesi satırına `shiftDefinitionId`
+  eklendi (panel vardiya seçicisi için). Eski panel süzgeci göndermez — fark yok.
 
 **`dist-web` DEĞİŞTİ.** Panel kaynağı bu turda geniş çapta değişti (1.3.1 → 1.3.2);
 web arayüzü paketi yeniden derlenir. Patron modülünü kullanan kurulumlarda arayüz
@@ -162,7 +170,8 @@ güncellenir.
     400 "Satır birimi gerekli." alır — mesaj ekranda görünür, kilitlenmez.
   - *Zorunlu parametre:* yukarıdaki `unit` dışında YOK. Rapor uçlarında
     TANINMAYAN anahtar artık 400 (altı uç); 1.3.1 panel yaprakları yalnız
-    sözleşmedeki adları gönderir (ölçüldü) ⇒ kırılma yok.
+    sözleşmedeki adları gönderir (ölçüldü) ⇒ kırılma yok. `warpBeamId`/`lotNo`
+    (dokuma + kalite raporları) İSTEĞE BAĞLI, `ShiftRow.shiftDefinitionId` EKLEME.
   - *Enum:* `WarehouseEventType` +6 (panel: yukarıdaki kırılma) · `RollEntrySource.
     WEAVING` (yazan istemci 0 — Electron/mobil'de doff çağrısı yok ⇒ sahada
     WEAVING'li top doğmaz; eski tablet zaten `PURCHASE_RECEIPT`/`SEMI_FINISHED`i

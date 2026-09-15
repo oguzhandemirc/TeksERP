@@ -24,9 +24,11 @@ const YMD = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Geçersiz gün (YYYY-MM-DD)
 /** Hat kırılımı opt-in — yalnız `1` açar; tanınmayan değer 400 (fail-closed), yokluk = eski gövde. */
 const byLineSchema = z.enum(["1", "0"], { message: "byLine yalnız 1 ya da 0 olabilir" }).optional();
 const byLineOf = (q: { byLine?: "1" | "0" }): { byLine?: boolean } => (q.byLine === "1" ? { byLine: true } : {});
-const aralikSchema = z.object({ from: YMD, to: YMD, machineId: z.string().uuid("Geçersiz makine").optional(), byLine: byLineSchema }).strict();
-const gunSchema = z.object({ factoryDay: YMD, shiftDefinitionId: z.string().uuid("Geçersiz vardiya tanımı").optional(), byLine: byLineSchema }).strict();
-const paretoSchema = z.object({ from: YMD, to: YMD, machineId: z.string().uuid("Geçersiz makine").optional() }).strict();
+/** LEVENT/LOT ekseni (R5b-b): "o vardiyada bu levent tezgahta bağlı mıydı" — defterden (`beamsMountedDuring`), süzgeç yoksa sorgu eski. */
+const leventEkseni = { warpBeamId: z.string().uuid("Geçersiz levent").optional(), lotNo: z.string().trim().min(1).max(64).optional() };
+const aralikSchema = z.object({ from: YMD, to: YMD, machineId: z.string().uuid("Geçersiz makine").optional(), byLine: byLineSchema, ...leventEkseni }).strict();
+const gunSchema = z.object({ factoryDay: YMD, shiftDefinitionId: z.string().uuid("Geçersiz vardiya tanımı").optional(), byLine: byLineSchema, ...leventEkseni }).strict();
+const paretoSchema = z.object({ from: YMD, to: YMD, machineId: z.string().uuid("Geçersiz makine").optional(), ...leventEkseni }).strict();
 
 /**
  * @openapi
@@ -40,6 +42,8 @@ const paretoSchema = z.object({ from: YMD, to: YMD, machineId: z.string().uuid("
  *       - { in: query, name: to, required: true, schema: { type: string, format: date } }
  *       - { in: query, name: machineId, schema: { type: string, format: uuid } }
  *       - { in: query, name: byLine, schema: { type: string, enum: ["1", "0"] }, description: Hat kırılımı opt-in (çift enli tezgah) }
+ *       - { in: query, name: warpBeamId, schema: { type: string, format: uuid }, description: "Levent ekseni (R5b-b) — o vardiyada tezgahta bağlı olan leventin satırları (defterden)" }
+ *       - { in: query, name: lotNo, schema: { type: string }, description: "İplik lotu ekseni — bu lotla sarılmış leventlerin satırları" }
  *     responses:
  *       200: { description: Randıman raporu (satırlar · toplam · kaynakKirilimi · meta.ufuk) }
  *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
@@ -64,6 +68,8 @@ router.get("/randiman", guard, async (req, res, next) => {
  *       - { in: query, name: from, required: true, schema: { type: string, format: date } }
  *       - { in: query, name: to, required: true, schema: { type: string, format: date } }
  *       - { in: query, name: machineId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: warpBeamId, schema: { type: string, format: uuid }, description: "Levent ekseni (R5b-b) — o vardiyada tezgahta bağlı olan leventin satırları (defterden)" }
+ *       - { in: query, name: lotNo, schema: { type: string }, description: "İplik lotu ekseni — bu lotla sarılmış leventlerin satırları" }
  *     responses:
  *       200: { description: Pareto raporu }
  */
@@ -85,6 +91,8 @@ router.get("/durus-pareto", guard, async (req, res, next) => {
  *     parameters:
  *       - { in: query, name: factoryDay, required: true, schema: { type: string, format: date } }
  *       - { in: query, name: shiftDefinitionId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: warpBeamId, schema: { type: string, format: uuid }, description: "Levent ekseni (R5b-b) — o vardiyada tezgahta bağlı olan leventin satırları (defterden)" }
+ *       - { in: query, name: lotNo, schema: { type: string }, description: "İplik lotu ekseni — bu lotla sarılmış leventlerin satırları" }
  *       - { in: query, name: byLine, schema: { type: string, enum: ["1", "0"] }, description: Hat kırılımı opt-in (çift enli tezgah) }
  *     responses:
  *       200: { description: Vardiya karnesi }

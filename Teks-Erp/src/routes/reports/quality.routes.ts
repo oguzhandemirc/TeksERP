@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { Router, Request, Response, NextFunction } from "express";
+import { z } from "zod";
 import { verifyToken } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/rbac.middleware";
 import {
@@ -19,6 +20,11 @@ import { getPlanDeviationScorecard } from "../../services/reports/plan-deviation
 const router = Router();
 const guard = [verifyToken, requirePermission("report:quality")];
 
+/** Kalite/fire karnesi sorgusu: karşılaştırma aralığı + LEVENT/LOT ekseni (R5b-b; top → CONSUMED.rollId, defterden). İkizler aynı şemayı paylaşır. */
+export const qualityQuerySchema = compareRangeSchema
+  .extend({ warpBeamId: z.string().uuid("Geçersiz levent").optional(), lotNo: z.string().trim().min(1).max(64).optional() })
+  .strict();
+
 /**
  * KALİTE KARNESİ — dönem karşılaştırmalı.
  *
@@ -29,10 +35,10 @@ const guard = [verifyToken, requirePermission("report:quality")];
  */
 router.get("/scorecard", ...guard, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = compareRangeSchema.parse(req.query);
+    const input = qualityQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const compareRange = resolveCompareRange(input, range);
-    const data = await getQualityScorecard(range, compareRange);
+    const data = await getQualityScorecard(range, compareRange, { warpBeamId: input.warpBeamId, lotNo: input.lotNo });
     res.status(200).json(reportEnvelope(data, range, compareRange));
   } catch (e) {
     next(e);
@@ -45,10 +51,10 @@ router.get("/scorecard", ...guard, async (req: Request, res: Response, next: Nex
  */
 router.get("/scrap-scorecard", ...guard, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const input = compareRangeSchema.parse(req.query);
+    const input = qualityQuerySchema.parse(req.query);
     const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
     const compareRange = resolveCompareRange(input, range);
-    const data = await getScrapScorecard(range, compareRange);
+    const data = await getScrapScorecard(range, compareRange, { warpBeamId: input.warpBeamId, lotNo: input.lotNo });
     res.status(200).json(reportEnvelope(data, range, compareRange));
   } catch (e) {
     next(e);

@@ -112,6 +112,20 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "yarnMovements'tan okur; tak/sök/tüket/bitir/hurda iplik defterine YAZMAZ (kg zaten sarımda düştü).",
   },
   {
+    dosya: "routes/reports/dokuma.report.routes.ts",
+    neden:
+      "DOKUMA RAPORLARI (R5b-b levent/lot ekseni). Router `requireDokumaEnabled` taşır; iplik dokunuşu SALT-OKUMADIR " +
+      "ve yalnız `lotNo` süzgeci verildiğinde: `resolveBeamLotFilter` lotun leventlerini `yarnMovement.WARP_ISSUE`tan " +
+      "okur (servis içinde, route prisma import etmez). Yazma yok; iplik kapalı kurulumda lot süzgeci 0 levent → boş rapor.",
+  },
+  {
+    dosya: "routes/reports/quality.routes.ts",
+    neden:
+      "KALİTE/FİRE KARNESİ (R5b-b levent/lot ekseni). Rapor kapısı KONULAMAZ: karne iplik/dokuma kullanmayan fabrikada " +
+      "da çalışır. İplik dokunuşu SALT-OKUMADIR ve yalnız `lotNo` verildiğinde (`resolveBeamLotFilter` → " +
+      "`yarnMovement.WARP_ISSUE` lot → levent); süzgeç yoksa sorgu bayt bayt eski. Yazma yok.",
+  },
+  {
     dosya: "routes/finance.routes.ts",
     neden:
       "ÖN MUHASEBE. Kendi rejim kapısını taşır (`requireFinanceEnabled`). İplik dokunuşu " +

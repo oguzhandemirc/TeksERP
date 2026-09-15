@@ -51,6 +51,7 @@
 import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
+import { resolveBeamLotFilter, rollsOfBeamsSql, type BeamLotFilterInput } from "../helpers/warp-beam-roll-filter.helper";
 import { attachPrev, buildBreakdown, pctOf, round1, type BreakdownDim, type BreakdownRow } from "./_breakdown";
 import { factoryDaySql } from "../../constants/time";
 import { K18_DEAD_STATUSES } from "../batch.service";
@@ -130,7 +131,7 @@ const NO_DEFECT_LABEL = "Hata kaydı yok";
  * aittir, hatasına değil; bu yüzden atıf tek hataya sabitlenir ve seçim
  * deterministiktir (en erken tespit — hurdaya götüren ilk sebep).
  */
-async function collectScrap(range: DateRange): Promise<ScrapCell[]> {
+async function collectScrap(range: DateRange, beamSql: Prisma.Sql = Prisma.empty): Promise<ScrapCell[]> {
   const rows = await prisma.$queryRaw<
     Array<{
       itemId: string;
@@ -186,6 +187,7 @@ async function collectScrap(range: DateRange): Promise<ScrapCell[]> {
     WHERE r.status = 'SCRAP'
       AND r."finalizedAt" >= ${range.from}
       AND r."finalizedAt" <= ${range.to}
+      ${beamSql}
     GROUP BY r."itemId", i.name, r."colorId", c.name, sr."subcontractorId", sub.name,
              (r."entrySource" = 'SUBCONTRACTOR_RETURN'), e."defectId", e."defectName"
   `);
@@ -206,13 +208,14 @@ async function collectScrap(range: DateRange): Promise<ScrapCell[]> {
 }
 
 /** Dönemde üretimi biten TOPLAM metraj — Kalite Karnesi ile aynı evren/kural. */
-async function producedTotal(range: DateRange): Promise<number> {
+async function producedTotal(range: DateRange, beamSql: Prisma.Sql = Prisma.empty): Promise<number> {
   const rows = await prisma.$queryRaw<Array<{ qty: number | null }>>(Prisma.sql`
     SELECT SUM(r."currentQty")::float AS qty
     FROM rolls r
     WHERE r."finalizedAt" >= ${range.from}
       AND r."finalizedAt" <= ${range.to}
       AND r.status::text NOT IN (${Prisma.join(K18_DEAD_STATUSES.map((s) => s as string))})
+      ${beamSql}
   `);
   return Number(rows[0]?.qty ?? 0);
 }
@@ -229,6 +232,7 @@ interface DetectionCell {
 /** Dönemde TESPİT edilen hatalar — tür ve istasyon kırılımı, tek sorgu. */
 async function collectDetections(
   range: DateRange,
+  errBeamSql: Prisma.Sql = Prisma.empty,
 ): Promise<{ byDefect: DetectionCell[]; byStation: DetectionCell[]; total: number; open: number }> {
   const rows = await prisma.$queryRaw<
     Array<{
@@ -256,6 +260,7 @@ async function collectDetections(
     LEFT JOIN work_order_steps wos ON wos.id = re."detectedAtStepId"
     LEFT JOIN stations s           ON s.id = wos."stationId"
     WHERE re."detectedAt" >= ${range.from} AND re."detectedAt" <= ${range.to}
+      ${errBeamSql}
     GROUP BY re."defectTypeId", COALESCE(dt.name, re."errorType"), s.id, s.name
   `);
 
@@ -327,12 +332,17 @@ const dims = {
 export async function getScrapScorecard(
   range: DateRange,
   compareRange: DateRange | null = null,
+  beamInput: BeamLotFilterInput = {},
 ): Promise<ScrapScorecard> {
+  // Levent/lot ekseni (R5b-b) — Kalite Karnesi'yle AYNI süzgeç (ikizler aynı evreni görür; test_scrap_scorecard).
+  const beamFilter = await resolveBeamLotFilter(prisma, beamInput);
+  const beamSql = rollsOfBeamsSql(beamFilter);
+  const errBeamSql = rollsOfBeamsSql(beamFilter, 're."rollId"');
   const [cells, produced, detections, dailyRows, prevCells, prevProduced, prevDetections] =
     await Promise.all([
-      collectScrap(range),
-      producedTotal(range),
-      collectDetections(range),
+      collectScrap(range, beamSql),
+      producedTotal(range, beamSql),
+      collectDetections(range, errBeamSql),
       prisma.$queryRaw<Array<{ day: Date; qty: number | null; cnt: bigint }>>(Prisma.sql`
         SELECT ${factoryDaySql('r."finalizedAt"')} AS day,
                SUM(r."currentQty")::float          AS qty,
@@ -340,12 +350,13 @@ export async function getScrapScorecard(
         FROM rolls r
         WHERE r.status = 'SCRAP'
           AND r."finalizedAt" >= ${range.from} AND r."finalizedAt" <= ${range.to}
+          ${beamSql}
         GROUP BY 1 ORDER BY 1
       `),
-      compareRange ? collectScrap(compareRange) : Promise.resolve<ScrapCell[]>([]),
-      compareRange ? producedTotal(compareRange) : Promise.resolve(0),
+      compareRange ? collectScrap(compareRange, beamSql) : Promise.resolve<ScrapCell[]>([]),
+      compareRange ? producedTotal(compareRange, beamSql) : Promise.resolve(0),
       compareRange
-        ? collectDetections(compareRange)
+        ? collectDetections(compareRange, errBeamSql)
         : Promise.resolve({ byDefect: [], byStation: [], total: 0, open: 0 }),
     ]);
 

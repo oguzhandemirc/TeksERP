@@ -86,7 +86,7 @@ export interface ShiftStatRow {
   machineId: string;
   machine: { code: string; name: string };
   shiftInstanceId: string;
-  shiftInstance: { factoryDayKey: Date; startsAt: Date; endsAt: Date; isCancelled: boolean; shiftDefinition: { code: string; name: string } };
+  shiftInstance: { factoryDayKey: Date; startsAt: Date; endsAt: Date; isCancelled: boolean; shiftDefinitionId: string; shiftDefinition: { code: string; name: string } };
   /** `true` = anlık hesap (satır yok ya da OPEN); `false` = mühürlü satır olduğu gibi. */
   live: boolean;
   sealState: "OPEN" | "SEALED";
@@ -107,7 +107,7 @@ export interface ShiftStatListParams {
 }
 
 const SHIFT_SELECT = {
-  id: true, factoryDayKey: true, startsAt: true, endsAt: true, isCancelled: true,
+  id: true, factoryDayKey: true, startsAt: true, endsAt: true, isCancelled: true, shiftDefinitionId: true,
   shiftDefinition: { select: { code: true, name: true } },
 } satisfies Prisma.ShiftInstanceSelect;
 

@@ -59,6 +59,7 @@ import prisma from "../../lib/prisma";
 import { Prisma, QualityGradeRole } from "@prisma/client";
 import { loadQualityRoles } from "../helpers/quality-role.helper";
 import type { DateRange } from "./_shared";
+import { resolveBeamLotFilter, rollsOfBeamsSql, type BeamLotFilterInput } from "../helpers/warp-beam-roll-filter.helper";
 import { factoryDaySql } from "../../constants/time";
 import { K18_DEAD_STATUSES } from "../batch.service";
 
@@ -154,7 +155,7 @@ const UNGRADED_LABEL = "Belirsiz";
  * kaynaktan türetmek bu sınıf tutarsızlığı yapısal olarak imkânsız kılar.
  * Kardinalite sınırlı: dönemde GÖRÜLEN (kalite × kumaş × renk × fason) bileşimi.
  */
-async function collectPeriod(range: DateRange): Promise<RawCell[]> {
+async function collectPeriod(range: DateRange, beamSql: Prisma.Sql = Prisma.empty): Promise<RawCell[]> {
   const rows = await prisma.$queryRaw<
     Array<{
       gradeId: string | null;
@@ -203,6 +204,7 @@ async function collectPeriod(range: DateRange): Promise<RawCell[]> {
     WHERE r."finalizedAt" >= ${range.from}
       AND r."finalizedAt" <= ${range.to}
       AND r.status::text NOT IN (${Prisma.join(K18_DEAD_STATUSES.map((s) => s as string))})
+      ${beamSql}
     GROUP BY r."qualityGradeId", qg.code, qg.name, qg."sortOrder",
              r."itemId", i.name, r."colorId", c.name, sr."subcontractorId", sub.name,
              (r."entrySource" = 'SUBCONTRACTOR_RETURN')
@@ -304,7 +306,11 @@ function attachPrevBreakdown(
 export async function getQualityScorecard(
   range: DateRange,
   compareRange: DateRange | null = null,
+  beamInput: BeamLotFilterInput = {},
 ): Promise<QualityScorecard> {
+  // Levent/lot ekseni (R5b-b): top → CONSUMED.rollId; süzgeç yoksa parça boş, sorgular bayt bayt eski.
+  const beamFilter = await resolveBeamLotFilter(prisma, beamInput);
+  const beamSql = rollsOfBeamsSql(beamFilter);
   // Katalog GÖSTERİM sırası veriden gelir (kırılım satırları bu sırayla çizilir).
   const catalog = await prisma.qualityGrade.findMany({
     orderBy: { sortOrder: "asc" },
@@ -319,8 +325,8 @@ export async function getQualityScorecard(
   const topCode = topGrade?.code ?? null;
 
   const [cells, prevCells, dailyRows, unanchored] = await Promise.all([
-    collectPeriod(range),
-    compareRange ? collectPeriod(compareRange) : Promise.resolve<RawCell[]>([]),
+    collectPeriod(range, beamSql),
+    compareRange ? collectPeriod(compareRange, beamSql) : Promise.resolve<RawCell[]>([]),
     // Günlük seri: gün FABRİKA takvim gününde kesilir (gece vardiyası bir önceki
     // güne düşmesin — `constants/time.ts`).
     prisma.$queryRaw<Array<{ day: Date; totalQty: number | null; topQty: number | null }>>(Prisma.sql`
@@ -333,6 +339,7 @@ export async function getQualityScorecard(
       WHERE r."finalizedAt" >= ${range.from}
         AND r."finalizedAt" <= ${range.to}
         AND r.status::text NOT IN (${Prisma.join(K18_DEAD_STATUSES.map((s) => s as string))})
+        ${beamSql}
       GROUP BY 1
       ORDER BY 1
     `),

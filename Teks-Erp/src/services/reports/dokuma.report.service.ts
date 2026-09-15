@@ -20,6 +20,7 @@ import { AppError } from "../../utils/app-error";
 import { LOOM_HORIZON_DAY, loomHorizonStart } from "../../constants/dokuma-ufku";
 import { aggregateMachineKpis, type LoomKpiAggregate } from "../helpers/loom-efficiency.helper";
 import { collectShiftStatRows, factoryDayKeyFromYmd, type ShiftLineRow, type ShiftStatRow, type ShiftStatRowExtra } from "../machine-shift-stat.service";
+import { mountWindowsForBeams, resolveBeamLotFilter, shiftHasBeam, type BeamLotFilter, type BeamLotFilterInput } from "../helpers/warp-beam-roll-filter.helper";
 
 /**
  * Hat kırılımı opt-in (`?byLine=1`): satıra `hatlar` eklenir — mühürlüde çocuk tablo, açıkta anlık;
@@ -40,6 +41,19 @@ export interface LoomReportMeta {
   truncated: boolean;
   live: number;
   sealed: number;
+  /** Levent/lot ekseni (R5b-b): süzgeç uygulandıysa beyanı — kaç levent eşleşti, kaç satır süzgeçle düştü. Yoksa alan YOK. */
+  suzgec?: { warpBeamId: string | null; lotNo: string | null; levent: number; dusenSatir: number };
+}
+
+/** Tezgah raporu satırlarını levent/lot süzgecinden geçirir: vardiya penceresinde o levent tezgahta bağlı mıydı (defterden). */
+async function applyBeamFilter<R extends { machineId: string; shiftInstance: { startsAt: Date; endsAt: Date } }>(rows: R[], f: BeamLotFilter | null): Promise<{ rows: R[]; suzgec?: LoomReportMeta["suzgec"] }> {
+  if (!f) return { rows };
+  if (rows.length === 0 || f.beamIds.length === 0) return { rows: [], suzgec: { warpBeamId: f.warpBeamId, lotNo: f.lotNo, levent: f.beamIds.length, dusenSatir: rows.length } };
+  const from = new Date(Math.min(...rows.map((r) => r.shiftInstance.startsAt.getTime())));
+  const to = new Date(Math.max(...rows.map((r) => r.shiftInstance.endsAt.getTime())));
+  const windows = await mountWindowsForBeams(prisma, f, [...new Set(rows.map((r) => r.machineId))], { from, to });
+  const kept = rows.filter((r) => shiftHasBeam(windows, r.machineId, r.shiftInstance.startsAt, r.shiftInstance.endsAt));
+  return { rows: kept, suzgec: { warpBeamId: f.warpBeamId, lotNo: f.lotNo, levent: f.beamIds.length, dusenSatir: rows.length - kept.length } };
 }
 
 function emptyBreakdown(): SourceBreakdownTable {
@@ -57,8 +71,8 @@ function rowsBeforeHorizon(rows: Array<{ shiftInstance: { startsAt: Date } }>): 
   return rows.filter((r) => r.shiftInstance.startsAt.getTime() < u).length;
 }
 
-function buildMeta(rows: Array<{ shiftInstance: { startsAt: Date } }>, m: { total: number; truncated: boolean; live: number; sealed: number }): LoomReportMeta {
-  return { ufuk: LOOM_HORIZON_DAY, ufukOncesiSatir: rowsBeforeHorizon(rows), ...m };
+function buildMeta(rows: Array<{ shiftInstance: { startsAt: Date } }>, m: { total: number; truncated: boolean; live: number; sealed: number }, suzgec?: LoomReportMeta["suzgec"]): LoomReportMeta {
+  return { ufuk: LOOM_HORIZON_DAY, ufukOncesiSatir: rowsBeforeHorizon(rows), ...m, ...(suzgec ? { suzgec } : {}) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -83,9 +97,12 @@ export interface EfficiencyReport {
   meta: LoomReportMeta;
 }
 
-export async function efficiencyReport(p: { from: string; to: string; machineId?: string } & LineOptIn): Promise<EfficiencyReport> {
-  const { byLine, ...params } = p;
-  const { rows, meta: m } = await collectShiftStatRows(params, { byLine });
+export async function efficiencyReport(p: { from: string; to: string; machineId?: string } & LineOptIn & BeamLotFilterInput): Promise<EfficiencyReport> {
+  const { byLine, warpBeamId, lotNo, ...params } = p;
+  const filter = await resolveBeamLotFilter(prisma, { warpBeamId, lotNo });
+  const collected = await collectShiftStatRows(params, { byLine });
+  const { rows, suzgec } = await applyBeamFilter(collected.rows, filter);
+  const m = collected.meta;
   const efficiencyRows: EfficiencyRow[] = rows.map((r) => ({
     machineId: r.machineId, machine: r.machine, shiftInstanceId: r.shiftInstanceId, factoryDayKey: r.shiftInstance.factoryDayKey,
     shift: r.shiftInstance.shiftDefinition, live: r.live, sealState: r.sealState, source: r.terms.source, emptyLoom: r.emptyLoom,
@@ -95,7 +112,7 @@ export async function efficiencyReport(p: { from: string; to: string; machineId?
     olculemedi: r.kpis.olculemedi, warnings: [...r.warnings, ...r.kpis.warnings],
     ...hatlar(r),
   }));
-  return { satirlar: efficiencyRows, toplam: aggregateMachineKpis(rows.map((r) => r.terms)), kaynakKirilimi: sumBreakdown(rows), meta: buildMeta(rows, m) };
+  return { satirlar: efficiencyRows, toplam: aggregateMachineKpis(rows.map((r) => r.terms)), kaynakKirilimi: sumBreakdown(rows), meta: buildMeta(rows, m, suzgec) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -118,8 +135,12 @@ export interface ParetoReport {
   meta: LoomReportMeta;
 }
 
-export async function durusParetoReport(p: { from: string; to: string; machineId?: string }): Promise<ParetoReport> {
-  const { rows, meta: m } = await collectShiftStatRows(p, { includeBreakdown: true });
+export async function durusParetoReport(p: { from: string; to: string; machineId?: string } & BeamLotFilterInput): Promise<ParetoReport> {
+  const { warpBeamId, lotNo, ...params } = p;
+  const filter = await resolveBeamLotFilter(prisma, { warpBeamId, lotNo });
+  const collected = await collectShiftStatRows(params, { includeBreakdown: true });
+  const { rows, suzgec } = await applyBeamFilter(collected.rows, filter);
+  const m = collected.meta;
   const reasons = new Map<string, ParetoReasonRow>();
   const minor: ParetoBucket = { stopCount: 0, stopSec: 0 };
   const unclassified: ParetoBucket = { stopCount: 0, stopSec: 0 };
@@ -137,7 +158,7 @@ export async function durusParetoReport(p: { from: string; to: string; machineId
   return {
     sebepler: [...reasons.values()].sort((a, b) => b.stopSec - a.stopSec),
     mikroDuruslar: minor, siniflandirilmamis: unclassified, atanmamis: unassigned, toplam: total,
-    kaynakKirilimi: sumBreakdown(rows), meta: buildMeta(rows, m),
+    kaynakKirilimi: sumBreakdown(rows), meta: buildMeta(rows, m, suzgec),
   };
 }
 
@@ -152,7 +173,10 @@ export interface ShiftMachineRow {
   hatlar?: ShiftLineRow[];
 }
 export interface ShiftRow {
-  shiftInstanceId: string; shift: { code: string; name: string }; startsAt: Date; endsAt: Date; isCancelled: boolean;
+  shiftInstanceId: string;
+  /** R5b-b (5e bulgusu): panel vardiya seçicisi id üretebilsin — `shiftDefinitionId` süzgecinin karşılığı. */
+  shiftDefinitionId: string;
+  shift: { code: string; name: string }; startsAt: Date; endsAt: Date; isCancelled: boolean;
   uretim: { unitsActual: number; producedM: number | null };
   durusSec: number;
   /** Değişmez ①: satır sayısı = Σ kaynak kırılımı; `SIMULATED` `OPERATOR`a katılmaz. */
@@ -165,7 +189,7 @@ export interface ShiftScorecardReport { vardiyalar: ShiftRow[]; meta: LoomReport
 
 const downSec = (t: ShiftStatRow["terms"]): number => t.setupSec + t.plannedDownSec + t.unplannedDownSec + t.minorStopSec;
 
-export async function shiftScorecardReport(p: { factoryDay: string; shiftDefinitionId?: string } & LineOptIn): Promise<ShiftScorecardReport> {
+export async function shiftScorecardReport(p: { factoryDay: string; shiftDefinitionId?: string } & LineOptIn & BeamLotFilterInput): Promise<ShiftScorecardReport> {
   if (p.shiftDefinitionId) {
     const def = await prisma.shiftDefinition.findUnique({ where: { id: p.shiftDefinitionId }, select: { id: true } });
     if (!def) throw AppError.notFound("Vardiya tanımı bulunamadı", { shiftDefinitionId: p.shiftDefinitionId });
@@ -174,7 +198,10 @@ export async function shiftScorecardReport(p: { factoryDay: string; shiftDefinit
   const defIds = p.shiftDefinitionId
     ? new Set((await prisma.shiftInstance.findMany({ where: { factoryDayKey: dayKey, shiftDefinitionId: p.shiftDefinitionId }, select: { id: true } })).map((s) => s.id))
     : null;
-  const { rows, meta: m } = await collectShiftStatRows({ from: p.factoryDay, to: p.factoryDay }, { byLine: p.byLine });
+  const filter = await resolveBeamLotFilter(prisma, { warpBeamId: p.warpBeamId, lotNo: p.lotNo });
+  const collected = await collectShiftStatRows({ from: p.factoryDay, to: p.factoryDay }, { byLine: p.byLine });
+  const { rows, suzgec } = await applyBeamFilter(collected.rows, filter);
+  const m = collected.meta;
   const selected = defIds ? rows.filter((r) => defIds.has(r.shiftInstanceId)) : rows;
   const byShift = new Map<string, Array<ShiftStatRow & ShiftStatRowExtra>>();
   for (const r of selected) byShift.set(r.shiftInstanceId, [...(byShift.get(r.shiftInstanceId) ?? []), r]);
@@ -183,7 +210,7 @@ export async function shiftScorecardReport(p: { factoryDay: string; shiftDefinit
     const k = sumBreakdown(group);
     const mSeen = group.some((r) => r.terms.producedM !== null);
     return {
-      shiftInstanceId: group[0]!.shiftInstanceId, shift: s.shiftDefinition, startsAt: s.startsAt, endsAt: s.endsAt, isCancelled: s.isCancelled,
+      shiftInstanceId: group[0]!.shiftInstanceId, shiftDefinitionId: s.shiftDefinitionId, shift: s.shiftDefinition, startsAt: s.startsAt, endsAt: s.endsAt, isCancelled: s.isCancelled,
       uretim: { unitsActual: group.reduce((a, r) => a + r.terms.unitsActual, 0), producedM: mSeen ? Math.round(group.reduce((a, r) => a + (r.terms.producedM ?? 0), 0) * 1000) / 1000 : null },
       durusSec: group.reduce((a, r) => a + downSec(r.terms), 0),
       kaynakKirilimi: k,
@@ -199,5 +226,5 @@ export async function shiftScorecardReport(p: { factoryDay: string; shiftDefinit
       })),
     };
   });
-  return { vardiyalar: shiftRows, meta: buildMeta(selected, { ...m, total: selected.length }) };
+  return { vardiyalar: shiftRows, meta: buildMeta(selected, { ...m, total: selected.length }, suzgec) };
 }
