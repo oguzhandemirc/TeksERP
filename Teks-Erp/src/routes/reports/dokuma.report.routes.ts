@@ -9,13 +9,13 @@
 // `?byLine=1` OPT-IN: randıman + vardiya karnesi satırlarına `hatlar` (çift enli tezgah);
 // Pareto duruş ekseninde, hat bilmez. Opt-in yoksa gövde bayt bayt eski.
 // =============================================================================
-import { Router } from "express";
+import { Router, type Response } from "express";
 import { z } from "zod";
 import { verifyToken } from "../../middlewares/auth.middleware";
 import { requirePermission } from "../../middlewares/rbac.middleware";
 import { requireReportOpen } from "../../middlewares/report.middleware";
 import { requireDokumaEnabled } from "../../middlewares/module.middleware";
-import { durusParetoReport, efficiencyReport, shiftScorecardReport } from "../../services/reports/dokuma.report.service";
+import { durusParetoReport, efficiencyReport, shiftScorecardReport, type WithSuzgec } from "../../services/reports/dokuma.report.service";
 
 const router = Router();
 router.use(verifyToken, requireDokumaEnabled);
@@ -26,6 +26,11 @@ const YMD = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Geçersiz gün (YYYY-MM-DD)
 const byLineSchema = z.enum(["1", "0"], { message: "byLine yalnız 1 ya da 0 olabilir" }).optional();
 const byLineOf = (q: { byLine?: "1" | "0" }): { byLine?: boolean } => (q.byLine === "1" ? { byLine: true } : {});
 /** LEVENT/LOT ekseni (R5b-b): "o vardiyada bu levent tezgahta bağlı mıydı" — defterden (`beamsMountedDuring`), süzgeç yoksa sorgu eski. */
+/** `suzgec` TEK ADRES = cevap kökü (diğer rapor aileleriyle aynı: `reportEnvelope`); süzgeç yoksa anahtar YOK. */
+function yanit(res: Response, rapor: WithSuzgec): void {
+  const { suzgec, ...data } = rapor;
+  res.json({ success: true, data, ...(suzgec ? { suzgec } : {}) });
+}
 const leventEkseni = { warpBeamId: z.string().uuid("Geçersiz levent").optional(), lotNo: z.string().trim().min(1).max(64).optional() };
 const aralikSchema = z.object({ from: YMD, to: YMD, machineId: z.string().uuid("Geçersiz makine").optional(), byLine: byLineSchema, ...leventEkseni }).strict();
 const gunSchema = z.object({ factoryDay: YMD, shiftDefinitionId: z.string().uuid("Geçersiz vardiya tanımı").optional(), byLine: byLineSchema, ...leventEkseni }).strict();
@@ -46,13 +51,13 @@ const paretoSchema = z.object({ from: YMD, to: YMD, machineId: z.string().uuid("
  *       - { in: query, name: warpBeamId, schema: { type: string, format: uuid }, description: "Levent ekseni (R5b-b) — o vardiyada tezgahta bağlı olan leventin satırları (defterden)" }
  *       - { in: query, name: lotNo, schema: { type: string }, description: "İplik lotu ekseni — bu lotla sarılmış leventlerin satırları" }
  *     responses:
- *       200: { description: "Randıman raporu (satırlar · toplam · kaynakKirilimi · meta.ufuk · meta.leventler seçici kaynağı · süzgeçliyse meta.suzgec)" }
+ *       200: { description: "Randıman raporu (satırlar · toplam · kaynakKirilimi · meta.ufuk · meta.leventler seçici kaynağı · süzgeçliyse kökte suzgec)" }
  *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
  */
 router.get("/randiman", requireReportOpen("dokuma/randiman"), guard, async (req, res, next) => {
   try {
     const { byLine, ...q } = aralikSchema.parse(req.query);
-    res.json({ success: true, data: await efficiencyReport({ ...q, ...byLineOf({ byLine }) }) });
+    yanit(res, await efficiencyReport({ ...q, ...byLineOf({ byLine }) }));
   } catch (e) {
     next(e);
   }
@@ -72,11 +77,11 @@ router.get("/randiman", requireReportOpen("dokuma/randiman"), guard, async (req,
  *       - { in: query, name: warpBeamId, schema: { type: string, format: uuid }, description: "Levent ekseni (R5b-b) — o vardiyada tezgahta bağlı olan leventin satırları (defterden)" }
  *       - { in: query, name: lotNo, schema: { type: string }, description: "İplik lotu ekseni — bu lotla sarılmış leventlerin satırları" }
  *     responses:
- *       200: { description: "Pareto raporu (meta.leventler seçici kaynağı · süzgeçliyse meta.suzgec)" }
+ *       200: { description: "Pareto raporu (meta.leventler seçici kaynağı · süzgeçliyse kökte suzgec)" }
  */
 router.get("/durus-pareto", requireReportOpen("dokuma/durus-pareto"), guard, async (req, res, next) => {
   try {
-    res.json({ success: true, data: await durusParetoReport(paretoSchema.parse(req.query)) });
+    yanit(res, await durusParetoReport(paretoSchema.parse(req.query)));
   } catch (e) {
     next(e);
   }
@@ -96,12 +101,12 @@ router.get("/durus-pareto", requireReportOpen("dokuma/durus-pareto"), guard, asy
  *       - { in: query, name: lotNo, schema: { type: string }, description: "İplik lotu ekseni — bu lotla sarılmış leventlerin satırları" }
  *       - { in: query, name: byLine, schema: { type: string, enum: ["1", "0"] }, description: Hat kırılımı opt-in (çift enli tezgah) }
  *     responses:
- *       200: { description: "Vardiya karnesi (vardiyalar[].shiftDefinitionId · meta.leventler · süzgeçliyse meta.suzgec)" }
+ *       200: { description: "Vardiya karnesi (vardiyalar[].shiftDefinitionId · meta.leventler · süzgeçliyse kökte suzgec)" }
  */
 router.get("/vardiya-karnesi", requireReportOpen("dokuma/vardiya-karnesi"), guard, async (req, res, next) => {
   try {
     const { byLine, ...q } = gunSchema.parse(req.query);
-    res.json({ success: true, data: await shiftScorecardReport({ ...q, ...byLineOf({ byLine }) }) });
+    yanit(res, await shiftScorecardReport({ ...q, ...byLineOf({ byLine }) }));
   } catch (e) {
     next(e);
   }

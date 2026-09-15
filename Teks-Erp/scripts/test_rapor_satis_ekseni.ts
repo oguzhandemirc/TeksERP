@@ -4,10 +4,10 @@
 // NEDEN: sipariş ailesi (5) + müşteri (2) + fason karnesi `customerId` · `destination` · `itemId` · `colorId` ·
 // `reasonCode` · `subcontractorId` süzgeci alır (RAPORLAR-ENVANTER §7 "eksik doğal eksen"); tek sözleşme
 // `reports/_filters.ts`. Kural: strict Zod + SUNUCU süzmesi + karşılaştırma aralığı ve her payda/seri aynı koşul +
-// cevapta `suzgec` yalnız verilen anahtarlar (yoksa anahtar YOK) + tanınmayan kimlik BOŞ sonuç (404 değil).
+// cevap KÖKÜNDE `suzgec` (tek adres, dokuma dahil) yalnız verilen anahtarlar (yoksa anahtar YOK) + tanınmayan kimlik BOŞ sonuç (404 değil, her eksende).
 // §0 Zod/echo (DB'siz) · §1 sipariş karnesi · §2 talep analizi · §3 teslim süresi · §4 iptal karnesi (pay+payda) ·
 // §5 açık sipariş karşılanma (yalnız itemId) · §6 müşteri karnesi · §7 sipariş profili · §8 fason karnesi ·
-// §9 R5b-b hizası (dokuma `meta.suzgec` verilmeyen anahtarı basmaz).
+// §9 R5b-b hizası (dokuma kökte `suzgec`, verilmeyen anahtarı basmaz — TEK ADRES).
 // NEGATİF SONDALAR (2026-09-15, ölçüldü): `orderScopeSql` boş parça döner → §1b/§3b/§4b/§4d ❌ (4) ·
 //   `lineScopeWhere` `itemId`yi düşürür → §1c/§2b/§6d ❌ (3) · `filterEcho` her zaman `undefined` → §0d ❌ (1) ·
 //   iptal paydası (`openedInPeriod`) `scope`suz → §4b/§4d ❌ (2).
@@ -175,10 +175,10 @@ async function main(): Promise<void> {
     check("§8b ⭐ subcontractorId=F1 → yalnız F1 (200 m), toplam 200, açık listede F2 YOK", fa.bySubcontractor.length === 1 && fa.summary.dispatchedQty === 200 && !fa.oldestOpen.some((o) => o.subcontractorName.includes("fasoncu 2")), `${fa.summary.dispatchedQty}`);
     check("§8c itemId=I2 → yalnız F2 (topun kumaşı); F1 ∩ I2 → boş", fb.bySubcontractor.length === 1 && fb.bySubcontractor[0]!.key === f2.id && fc.bySubcontractor.length === 0 && fc.summary.dispatchedQty === 0);
 
-    console.log("\n── §9 R5b-b hizası: dokuma `meta.suzgec` verilmeyen anahtarı basmaz ──");
+    console.log("\n── §9 R5b-b hizası: dokuma kökte `suzgec` (tek adres), verilmeyen anahtarı basmaz ──");
     const ymd = factoryYmd(new Date(Date.UTC(1993, 5, 6, 12)));
     const dk = await efficiencyReport({ from: ymd, to: ymd, lotNo: `${TAG}-YOK` });
-    check("§9a lotNo ile süzülen dokuma raporunda suzgec = {lotNo, levent, dusenSatir}; `warpBeamId` anahtarı YOK (null bile değil)", !!dk.meta.suzgec && dk.meta.suzgec.lotNo === `${TAG}-YOK` && !("warpBeamId" in dk.meta.suzgec) && dk.meta.suzgec.levent === 0, JSON.stringify(dk.meta.suzgec));
+    check("§9a lotNo ile süzülen dokuma raporunda kökte suzgec = {lotNo, levent, dusenSatir}; `warpBeamId` anahtarı YOK (null bile değil); meta'da suzgec YOK", !!dk.suzgec && dk.suzgec.lotNo === `${TAG}-YOK` && !("warpBeamId" in dk.suzgec) && dk.suzgec.levent === 0 && !("suzgec" in dk.meta), JSON.stringify(dk.suzgec));
   } finally {
     await prisma.subcontractorDispatchItem.deleteMany({ where: { id: { in: ids.dispatchItems } } });
     await prisma.subcontractorDispatch.deleteMany({ where: { id: { in: ids.dispatches } } });

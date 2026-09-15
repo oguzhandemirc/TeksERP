@@ -4,13 +4,15 @@
 // NEDEN: "bu levent/lot hangi vardiyada, hangi topta" sorusu yeni doğal eksendir (RAPORLAR-FAZ-PLANI §0b).
 // Bağ DEFTERDEN okunur: top ← `WarpBeamEvent.CONSUMED.rollId` (Faz 4), levent ← lot `YarnMovement.WARP_ISSUE.lotId`
 // (Faz 2), tezgah ← `beamsMountedDuring` penceresi ∩ vardiya penceresi. Süzgeç yoksa sorgu BAYT BAYT eski
-// (`meta.suzgec` anahtarı bile yok); levent bilinmiyorsa 404; lot leventsizse rapor BOŞ (hata değil).
+// (cevap kökündeki `suzgec` anahtarı bile yok — TEK ADRES, diğer rapor aileleriyle aynı, 1e hükmü); bilinmeyen levent/lot
+// → rapor BOŞ, 404 DEĞİL (liste semantiği her eksende aynı; bayat bağlantıda müşteri ve levent aynı cevabı alır).
 // §0 statik · §1 randıman · §2 duruş pareto · §3 vardiya karnesi (+`shiftDefinitionId` DTO) · §4 kalite karnesi ·
 // §5 fire karnesi · §6 Zod (bilinmeyen anahtar / bozuk uuid 400) · §7 R5b-b2 `meta.leventler` (seçici kaynağı: pencereden türer,
 //   süzgeçten bağımsız, pencere dışı levent yok).
 // NEGATİF SONDALAR (2026-09-15, ölçüldü): `shiftHasBeam` sabit true → §1b/§1c/§1d/§2b/§2c/§3c/§3d ❌ (7) ·
 //   `rollsOfBeamsSql` `Prisma.empty` döner → §4b/§4c/§4d/§5b ❌ (4) · `applyBeamFilter` `suzgec`i basmaz → §1b/§1c/§1d/§2a/§3b/§3d ❌ (6) ·
-//   `beamsMountedOnMachinesDuring` pencereyi yok sayar (from=0, to=∞) → §7a/§7b/§7c ❌ (3).
+//   `beamsMountedOnMachinesDuring` pencereyi yok sayar (from=0, to=∞) → §7a/§7b/§7c ❌ (3) · R5b-c2: bilinmeyen levent yine
+//   fırlatır → koşum §1g'de HATA ile düşer (çıkış 1) · rota `suzgec`i `data` içinde bırakır → §0d ❌.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Bayraklar FOTOĞRAFINA döner. Sentetik gün 1993-06-06 (ufuktan ÖNCE,
 //   canlı veriyle çakışmaz); kalite penceresi 2098-06 (kalite/fire bekçileri 2099-03 kullanır).
 // =============================================================================
@@ -31,7 +33,6 @@ import { getQualityScorecard } from "../src/services/reports/quality-scorecard.r
 import { getScrapScorecard } from "../src/services/reports/scrap-scorecard.report.service";
 import { qualityQuerySchema } from "../src/routes/reports/quality.routes";
 import { factoryDayKeyUtcMidnight, factoryYmd } from "../src/constants/time";
-import { AppError } from "../src/utils/app-error";
 
 let pass = 0;
 let fail = 0;
@@ -47,15 +48,6 @@ const setFlag = (key: string, v: boolean) => prisma.systemSetting.upsert({ where
 const YOK_UUID = "00000000-0000-4000-8000-000000000000";
 const RANGE = { from: new Date("2098-06-01T00:00:00.000Z"), to: new Date("2098-06-30T23:59:59.999Z") };
 const IN_WINDOW = new Date("2098-06-15T10:00:00.000Z");
-async function hata(fn: () => Promise<unknown>): Promise<{ status: number; code?: string } | null> {
-  try {
-    await fn();
-    return null;
-  } catch (e) {
-    return e instanceof AppError ? { status: e.statusCode, code: (e.details as { code?: string } | undefined)?.code } : { status: -1 };
-  }
-}
-
 function statik(): void {
   console.log("── §0 Statik ──");
   const helper = readFileSync(path.join(ROOT, "src/services/helpers/warp-beam-roll-filter.helper.ts"), "utf8");
@@ -64,7 +56,7 @@ function statik(): void {
   const rotalar = readFileSync(path.join(ROOT, "src/routes/reports/dokuma.report.routes.ts"), "utf8") + readFileSync(path.join(ROOT, "src/routes/reports/quality.routes.ts"), "utf8");
   check("§0c rotalar prisma import ETMEZ (süzgeç çözümü serviste)", !/from "\.\.\/\.\.\/lib\/prisma"/.test(rotalar));
   const dokuma = readFileSync(path.join(ROOT, "src/services/reports/dokuma.report.service.ts"), "utf8");
-  check("§0d üç dokuma raporu da `applyBeamFilter`dan geçer ve `suzgec`i meta'ya basar", (dokuma.match(/applyBeamFilter\(collected\.rows, filter\)/g) ?? []).length === 3 && (dokuma.match(/buildMeta\([^)]*\{ suzgec, leventler \}\)/g) ?? []).length === 3);
+  check("§0d üç dokuma raporu da `applyBeamFilter`dan geçer ve `suzgec`i rapor köküne basar (rota kökte `suzgec`); meta'da suzgec YOK", (dokuma.match(/applyBeamFilter\(collected\.rows, filter\)/g) ?? []).length === 3 && (dokuma.match(/\.\.\.\(suzgec \? \{ suzgec \} : \{\}\)/g) ?? []).length === 3 && !/buildMeta\([^)]*suzgec/.test(dokuma) && !/interface LoomReportMeta \{[^}]*suzgec/.test(dokuma) && /const \{ suzgec, \.\.\.data \} = rapor;/.test(readFileSync(path.join(ROOT, "src/routes/reports/dokuma.report.routes.ts"), "utf8")));
 }
 
 async function main(): Promise<void> {
@@ -142,24 +134,24 @@ async function main(): Promise<void> {
 
     console.log("\n── §1 Randıman: vardiya penceresi ∩ bağ penceresi ──");
     const r0 = await efficiencyReport({ from: ymd, to: ymd });
-    check("§1a süzgeçsiz: iki tezgah satırı, `meta.suzgec` anahtarı YOK (bayt bayt eski)", benim(r0.satirlar).length === 2 && !("suzgec" in r0.meta), JSON.stringify(Object.keys(r0.meta)));
+    check("§1a süzgeçsiz: iki tezgah satırı, `suzgec` anahtarı YOK (bayt bayt eski)", benim(r0.satirlar).length === 2 && !("suzgec" in r0) && !("suzgec" in r0.meta), JSON.stringify(Object.keys(r0)));
     const r1 = await efficiencyReport({ from: ymd, to: ymd, warpBeamId: b1 });
-    check("§1b ⭐ warpBeamId=b1 → yalnız T1 satırı; meta.suzgec {levent 1, dusenSatir ≥ 1}", benim(r1.satirlar).length === 1 && benim(r1.satirlar)[0]!.machineId === t1 && r1.meta.suzgec?.warpBeamId === b1 && r1.meta.suzgec.levent === 1 && r1.meta.suzgec.dusenSatir >= 1, JSON.stringify(r1.meta.suzgec));
+    check("§1b ⭐ warpBeamId=b1 → yalnız T1 satırı; kökte suzgec {levent 1, dusenSatir ≥ 1}", benim(r1.satirlar).length === 1 && benim(r1.satirlar)[0]!.machineId === t1 && r1.suzgec?.warpBeamId === b1 && r1.suzgec.levent === 1 && r1.suzgec.dusenSatir >= 1, JSON.stringify(r1.suzgec));
     const r2 = await efficiencyReport({ from: ymd, to: ymd, warpBeamId: b2 });
-    check("§1c ⭐ b2 vardiyadan SONRA bağlandı → T2 satırı DÜŞER (şu an bağlı olması yetmez, pencere defterden)", benim(r2.satirlar).length === 0 && r2.meta.suzgec?.levent === 1);
+    check("§1c ⭐ b2 vardiyadan SONRA bağlandı → T2 satırı DÜŞER (şu an bağlı olması yetmez, pencere defterden)", benim(r2.satirlar).length === 0 && r2.suzgec?.levent === 1);
     const r3 = await efficiencyReport({ from: ymd, to: ymd, lotNo: ` ${LOT} ` });
-    check("§1d ⭐ lotNo (TRIM) → lotun leventi b1 → yalnız T1", benim(r3.satirlar).length === 1 && benim(r3.satirlar)[0]!.machineId === t1 && r3.meta.suzgec?.lotNo === LOT);
+    check("§1d ⭐ lotNo (TRIM) → lotun leventi b1 → yalnız T1", benim(r3.satirlar).length === 1 && benim(r3.satirlar)[0]!.machineId === t1 && r3.suzgec?.lotNo === LOT);
     const r4 = await efficiencyReport({ from: ymd, to: ymd, lotNo: `${TAG}-YOK` });
-    check("§1e bilinmeyen lot → BOŞ rapor (hata değil), suzgec.levent 0", r4.satirlar.length === 0 && r4.meta.suzgec?.levent === 0 && r4.toplam.rowCount === 0);
+    check("§1e bilinmeyen lot → BOŞ rapor (hata değil), suzgec.levent 0", r4.satirlar.length === 0 && r4.suzgec?.levent === 0 && r4.toplam.rowCount === 0);
     const r5 = await efficiencyReport({ from: ymd, to: ymd, warpBeamId: b2, lotNo: LOT });
-    check("§1f levent ∩ lot: b2 lotta yok → kesişim boş, levent 0", r5.satirlar.length === 0 && r5.meta.suzgec?.levent === 0);
-    const e404 = await hata(() => efficiencyReport({ from: ymd, to: ymd, warpBeamId: YOK_UUID }));
-    check("§1g bilinmeyen levent → 404 WARP_BEAM_NOT_FOUND", e404?.status === 404 && e404.code === "WARP_BEAM_NOT_FOUND", JSON.stringify(e404));
+    check("§1f levent ∩ lot: b2 lotta yok → kesişim boş, levent 0", r5.satirlar.length === 0 && r5.suzgec?.levent === 0);
+    const r6 = await efficiencyReport({ from: ymd, to: ymd, warpBeamId: YOK_UUID });
+    check("§1g ⭐ bilinmeyen levent → 404 DEĞİL, BOŞ rapor; suzgec {warpBeamId, levent 0, dusenSatir ≥ 2} (liste semantiği, müşteriyle aynı)", r6.satirlar.length === 0 && r6.suzgec?.warpBeamId === YOK_UUID && r6.suzgec.levent === 0 && r6.suzgec.dusenSatir >= 2, JSON.stringify(r6.suzgec));
 
     console.log("\n── §2 Duruş Pareto ──");
     const p0 = await durusParetoReport({ from: ymd, to: ymd });
     const p1 = await durusParetoReport({ from: ymd, to: ymd, warpBeamId: b1 });
-    check("§2a süzgeçsiz ≥ 500 sn (T1 300 + T2 200), suzgec YOK; süzgeçli meta.suzgec VAR", p0.toplam.stopSec >= 500 && !("suzgec" in p0.meta) && p1.meta.suzgec?.warpBeamId === b1, `${p0.toplam.stopSec}`);
+    check("§2a süzgeçsiz ≥ 500 sn (T1 300 + T2 200), suzgec YOK; süzgeçli kökte suzgec VAR", p0.toplam.stopSec >= 500 && !("suzgec" in p0) && p1.suzgec?.warpBeamId === b1, `${p0.toplam.stopSec}`);
     check("§2b ⭐ b1 → yalnız T1'in duruşu: 300 sn", p1.toplam.stopSec === 300 && p1.toplam.stopCount === 1, `${p1.toplam.stopSec}`);
     const p2 = await durusParetoReport({ from: ymd, to: ymd, machineId: t2, warpBeamId: b2 });
     check("§2c machineId=T2 + b2 → 0 (bağ penceresi vardiya dışında)", p2.toplam.stopSec === 0 && p2.toplam.stopCount === 0);
@@ -167,13 +159,13 @@ async function main(): Promise<void> {
     console.log("\n── §3 Vardiya Karnesi + `shiftDefinitionId` DTO ──");
     const v0 = await shiftScorecardReport({ factoryDay: ymd });
     const s0 = v0.vardiyalar.find((v) => v.shiftInstanceId === sh.id);
-    check("§3a ⭐ ShiftRow.shiftDefinitionId = vardiya tanımı (panel seçicisi için); iki tezgah; suzgec YOK", s0?.shiftDefinitionId === def.id && benim(s0?.makineler ?? []).length === 2 && !("suzgec" in v0.meta), s0?.shiftDefinitionId);
+    check("§3a ⭐ ShiftRow.shiftDefinitionId = vardiya tanımı (panel seçicisi için); iki tezgah; suzgec YOK", s0?.shiftDefinitionId === def.id && benim(s0?.makineler ?? []).length === 2 && !("suzgec" in v0), s0?.shiftDefinitionId);
     const v1 = await shiftScorecardReport({ factoryDay: ymd, shiftDefinitionId: def.id, warpBeamId: b1 });
     const s1 = v1.vardiyalar.find((v) => v.shiftInstanceId === sh.id);
-    check("§3b b1 + shiftDefinitionId → vardiya satırı kaldı, meta.suzgec basıldı", !!s1 && v1.meta.suzgec?.warpBeamId === b1 && v1.vardiyalar.every((v) => v.shiftDefinitionId === def.id));
+    check("§3b b1 + shiftDefinitionId → vardiya satırı kaldı, kökte suzgec basıldı", !!s1 && v1.suzgec?.warpBeamId === b1 && v1.vardiyalar.every((v) => v.shiftDefinitionId === def.id));
     check("§3c ⭐ vardiyanın makineleri yalnız T1 (T2 düştü), toplamSatir 1", benim(s1?.makineler ?? []).length === 1 && s1?.makineler[0]?.machineId === t1 && s1.ozet.toplamSatir === 1, JSON.stringify(s1?.ozet));
     const v2 = await shiftScorecardReport({ factoryDay: ymd, warpBeamId: b2 });
-    check("§3d b2 → vardiya satırı YOK (tüm makineleri düştü), meta.total 0", !v2.vardiyalar.some((v) => v.shiftInstanceId === sh.id) && v2.meta.suzgec?.dusenSatir !== undefined);
+    check("§3d b2 → vardiya satırı YOK (tüm makineleri düştü), meta.total 0", !v2.vardiyalar.some((v) => v.shiftInstanceId === sh.id) && v2.suzgec?.dusenSatir !== undefined);
 
     console.log("\n── §4 Kalite Karnesi: top ← CONSUMED.rollId ──");
     const q0 = await getQualityScorecard(RANGE, null);
@@ -185,8 +177,8 @@ async function main(): Promise<void> {
     check("§4c ⭐ b2 → 2 top / 100 m (60 + 40); süzgeçli < süzgeçsiz", q3.summary.rollCount === 2 && q3.summary.totalQty === 100 && q3.summary.rollCount < q0.summary.rollCount, `${q3.summary.rollCount}/${q3.summary.totalQty}`);
     const q4 = await getQualityScorecard(RANGE, null, { lotNo: `${TAG}-YOK` });
     check("§4d bilinmeyen lot → 0 top (hata değil)", q4.summary.rollCount === 0 && q4.summary.totalQty === 0);
-    const q404 = await hata(() => getQualityScorecard(RANGE, null, { warpBeamId: YOK_UUID }));
-    check("§4e bilinmeyen levent → 404", q404?.status === 404 && q404.code === "WARP_BEAM_NOT_FOUND");
+    const q5 = await getQualityScorecard(RANGE, null, { warpBeamId: YOK_UUID });
+    check("§4e bilinmeyen levent → 0 top (404 değil)", q5.summary.rollCount === 0 && q5.summary.totalQty === 0);
 
     console.log("\n── §5 Fire Karnesi ──");
     const f0 = await getScrapScorecard(RANGE, null);

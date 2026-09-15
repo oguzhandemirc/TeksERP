@@ -41,8 +41,6 @@ export interface LoomReportMeta {
   truncated: boolean;
   live: number;
   sealed: number;
-  /** Levent/lot ekseni (R5b-b): süzgeç uygulandıysa beyanı — verilen anahtarlar (R5b-c `_filters.filterEcho` biçimi) + kaç levent eşleşti, kaç satır düştü. Yoksa alan YOK. */
-  suzgec?: { warpBeamId?: string; lotNo?: string; levent: number; dusenSatir: number };
   /** R5b-b2: pencerede satırların tezgahlarına bağlı geçen leventler — panel seçicisi kaynağı; süzgeçsiz yanıtta da döner, ≤200. */
   leventler: BeamOption[];
 }
@@ -64,7 +62,7 @@ async function beamOptions(rows: Array<{ machineId: string; shiftInstance: { sta
 }
 
 /** Tezgah raporu satırlarını levent/lot süzgecinden geçirir: vardiya penceresinde o levent tezgahta bağlı mıydı (defterden). */
-async function applyBeamFilter<R extends { machineId: string; shiftInstance: { startsAt: Date; endsAt: Date } }>(rows: R[], f: BeamLotFilter | null): Promise<{ rows: R[]; suzgec?: LoomReportMeta["suzgec"] }> {
+async function applyBeamFilter<R extends { machineId: string; shiftInstance: { startsAt: Date; endsAt: Date } }>(rows: R[], f: BeamLotFilter | null): Promise<{ rows: R[]; suzgec?: BeamSuzgec }> {
   if (!f) return { rows };
   const beyan = { ...(f.warpBeamId ? { warpBeamId: f.warpBeamId } : {}), ...(f.lotNo ? { lotNo: f.lotNo } : {}), levent: f.beamIds.length };
   if (rows.length === 0 || f.beamIds.length === 0) return { rows: [], suzgec: { ...beyan, dusenSatir: rows.length } };
@@ -89,9 +87,14 @@ function rowsBeforeHorizon(rows: Array<{ shiftInstance: { startsAt: Date } }>): 
   return rows.filter((r) => r.shiftInstance.startsAt.getTime() < u).length;
 }
 
-function buildMeta(rows: Array<{ shiftInstance: { startsAt: Date } }>, m: { total: number; truncated: boolean; live: number; sealed: number }, ek: { suzgec?: LoomReportMeta["suzgec"]; leventler: BeamOption[] }): LoomReportMeta {
-  return { ufuk: LOOM_HORIZON_DAY, ufukOncesiSatir: rowsBeforeHorizon(rows), ...m, ...(ek.suzgec ? { suzgec: ek.suzgec } : {}), leventler: ek.leventler };
+function buildMeta(rows: Array<{ shiftInstance: { startsAt: Date } }>, m: { total: number; truncated: boolean; live: number; sealed: number }, leventler: BeamOption[]): LoomReportMeta {
+  return { ufuk: LOOM_HORIZON_DAY, ufukOncesiSatir: rowsBeforeHorizon(rows), ...m, leventler };
 }
+
+/** Levent/lot süzgeci beyanı (R5b-b): verilen anahtarlar + kaç levent eşleşti, kaç satır düştü. Cevap KÖKÜNE gider (`suzgec` tek adres — 1e hükmü), süzgeç yoksa alan YOK. */
+export type BeamSuzgec = { warpBeamId?: string; lotNo?: string; levent: number; dusenSatir: number };
+/** Rota bunu cevap köküne kaldırır (`{ success, data, suzgec? }`). */
+export interface WithSuzgec { suzgec?: BeamSuzgec }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ① RANDIMAN
@@ -108,7 +111,7 @@ export interface EfficiencyRow {
   /** Yalnız `byLine` opt-in'inde; tek hatlı makinede `[]`. */
   hatlar?: ShiftLineRow[];
 }
-export interface EfficiencyReport {
+export interface EfficiencyReport extends WithSuzgec {
   satirlar: EfficiencyRow[];
   toplam: LoomKpiAggregate;
   kaynakKirilimi: SourceBreakdownTable;
@@ -131,7 +134,7 @@ export async function efficiencyReport(p: { from: string; to: string; machineId?
     olculemedi: r.kpis.olculemedi, warnings: [...r.warnings, ...r.kpis.warnings],
     ...hatlar(r),
   }));
-  return { satirlar: efficiencyRows, toplam: aggregateMachineKpis(rows.map((r) => r.terms)), kaynakKirilimi: sumBreakdown(rows), meta: buildMeta(rows, m, { suzgec, leventler }) };
+  return { satirlar: efficiencyRows, toplam: aggregateMachineKpis(rows.map((r) => r.terms)), kaynakKirilimi: sumBreakdown(rows), meta: buildMeta(rows, m, leventler), ...(suzgec ? { suzgec } : {}) };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -139,7 +142,7 @@ export async function efficiencyReport(p: { from: string; to: string; machineId?
 // ─────────────────────────────────────────────────────────────────────────────
 export interface ParetoReasonRow { reasonCode: string; reasonLabel: string | null; lossClass: MachineStopLossClass | null; stopCount: number; stopSec: number }
 export interface ParetoBucket { stopCount: number; stopSec: number }
-export interface ParetoReport {
+export interface ParetoReport extends WithSuzgec {
   /** SEBEP × SÜRE SINIFI — süreye göre sıralı; MINOR ve sınıflandırılmamış BURADA DEĞİL. */
   sebepler: ParetoReasonRow[];
   /** MINOR: SÜRE sınıfı, sebep değil — ayrı blok. */
@@ -178,7 +181,7 @@ export async function durusParetoReport(p: { from: string; to: string; machineId
   return {
     sebepler: [...reasons.values()].sort((a, b) => b.stopSec - a.stopSec),
     mikroDuruslar: minor, siniflandirilmamis: unclassified, atanmamis: unassigned, toplam: total,
-    kaynakKirilimi: sumBreakdown(rows), meta: buildMeta(rows, m, { suzgec, leventler }),
+    kaynakKirilimi: sumBreakdown(rows), meta: buildMeta(rows, m, leventler), ...(suzgec ? { suzgec } : {}),
   };
 }
 
@@ -205,7 +208,7 @@ export interface ShiftRow {
   ozet: { olculen: number; elle: number; simule: number; cikarim: number; olculemedi: number; toplamSatir: number };
   makineler: ShiftMachineRow[];
 }
-export interface ShiftScorecardReport { vardiyalar: ShiftRow[]; meta: LoomReportMeta }
+export interface ShiftScorecardReport extends WithSuzgec { vardiyalar: ShiftRow[]; meta: LoomReportMeta }
 
 const downSec = (t: ShiftStatRow["terms"]): number => t.setupSec + t.plannedDownSec + t.unplannedDownSec + t.minorStopSec;
 
@@ -248,5 +251,5 @@ export async function shiftScorecardReport(p: { factoryDay: string; shiftDefinit
       })),
     };
   });
-  return { vardiyalar: shiftRows, meta: buildMeta(selected, { ...m, total: selected.length }, { suzgec, leventler }) };
+  return { vardiyalar: shiftRows, meta: buildMeta(selected, { ...m, total: selected.length }, leventler), ...(suzgec ? { suzgec } : {}) };
 }

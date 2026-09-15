@@ -6,10 +6,10 @@
 //   • TOP raporları (kalite/fire karnesi): "bu top hangi leventten?" → `r.id IN (…)` SQL parçası.
 //   • TEZGAH raporları (randıman/pareto/vardiya, satır = makine × vardiya): "o vardiyada o levent tezgahta
 //     bağlı mıydı?" → `beamsMountedDuring` penceresi ∩ vardiya penceresi (durum kolonu DEĞİL, defter).
-// Süzgeç yoksa parça boş (`Prisma.empty`) — sorgu bayt bayt eski. Levent/lot bulunamazsa sonuç BOŞ, hata değil.
+// Süzgeç yoksa parça boş (`Prisma.empty`) — sorgu bayt bayt eski. Levent/lot bulunamazsa sonuç BOŞ, hata değil
+// (liste semantiği her eksende aynı — 1e hükmü 2026-09-15; bayat bağlantıdaki müşteri ve levent aynı cevabı alır).
 // =============================================================================
 import { Prisma } from "@prisma/client";
-import { AppError } from "../../utils/app-error";
 import { beamsMountedDuring, type BeamMountedDuringRow } from "./warp-beam-mount.helper";
 
 type Client = Prisma.TransactionClient;
@@ -26,7 +26,7 @@ export interface BeamLotFilter {
   lotNo: string | null;
 }
 
-/** Girdi yoksa null (süzgeç yok); leventi bilinmeyen id 404; lot metni TRIM, birebir eşleşir (normalize yok — Faz 2 kuralı). */
+/** Girdi yoksa null (süzgeç yok); bilinmeyen levent → boş küme (`levent: 0`); lot metni TRIM, birebir eşleşir (normalize yok — Faz 2 kuralı). */
 export async function resolveBeamLotFilter(client: Pick<Client, "warpBeam" | "yarnMovement">, input: BeamLotFilterInput): Promise<BeamLotFilter | null> {
   const warpBeamId = input.warpBeamId ?? null;
   const lotNo = input.lotNo?.trim() || null;
@@ -34,8 +34,7 @@ export async function resolveBeamLotFilter(client: Pick<Client, "warpBeam" | "ya
   let beamIds: string[] | null = null;
   if (warpBeamId) {
     const b = await client.warpBeam.findUnique({ where: { id: warpBeamId }, select: { id: true } });
-    if (!b) throw AppError.notFound("Levent bulunamadı", { code: "WARP_BEAM_NOT_FOUND", warpBeamId });
-    beamIds = [b.id];
+    beamIds = b ? [b.id] : [];
   }
   if (lotNo) {
     const rows = await client.yarnMovement.findMany({ where: { kind: "WARP_ISSUE", warpBeamId: { not: null }, lot: { lotNo } }, select: { warpBeamId: true }, distinct: ["warpBeamId"] });

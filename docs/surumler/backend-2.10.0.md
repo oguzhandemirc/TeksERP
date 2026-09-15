@@ -143,8 +143,8 @@ anahtarı (`devere.enabled`, KAPALI doğar).
   `quality/scorecard` · `quality/scrap-scorecard` isteğe bağlı `warpBeamId` /
   `lotNo` süzgeci alır; bağ defterden çözülür (top ← levent tüketim satırı, levent
   ← iplik lotu, tezgah ← bağ penceresi ∩ vardiya penceresi). Süzgeç verilmezse
-  cevap bayt bayt eski; verilirse dokuma cevabında `meta.suzgec` beyanı, bilinmeyen
-  levent 404, leventsiz lot boş rapor. Vardiya karnesi satırına `shiftDefinitionId`
+  cevap bayt bayt eski; verilirse cevap kökünde `suzgec` beyanı (tüm rapor ailelerinde
+  aynı adres), bilinmeyen levent/lot boş rapor (404 değil). Vardiya karnesi satırına `shiftDefinitionId`
   eklendi (panel vardiya seçicisi için); dokuma cevabına `meta.leventler` (pencerede
   tezgaha bağlı geçen leventler, ≤200, süzgeçsiz de döner — panel levent seçicisi
   kaynağı) eklendi. Eski panel süzgeci göndermez — fark yok.
@@ -154,7 +154,7 @@ anahtarı (`devere.enabled`, KAPALI doğar).
   (`customerId` · `destination` = müşterinin VARSAYILAN hedefi · `itemId` · `colorId` ·
   `reasonCode` · `subcontractorId`; kimlikler CSV listesi). Süzgeç verilmezse cevap
   bayt bayt eski; verilirse cevap kökünde `suzgec` beyanı (yalnız verilen anahtarlar;
-  kalite/fire karnesinin levent süzgeci de aynı yere yazar). Tanınmayan kimlik boş
+  dokuma ve kalite/fire levent süzgeci de aynı yere yazar — tek adres). Tanınmayan kimlik boş
   sonuç döner (404 değil). Açık karşılanmada müşteri süzgeci ve fason karnesinde işlem
   türü BİLEREK yok. Eski panel süzgeç göndermez — fark yok.
 

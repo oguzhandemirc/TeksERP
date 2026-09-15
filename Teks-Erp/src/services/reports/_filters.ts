@@ -3,9 +3,9 @@
 // =============================================================================
 // Tek sözleşme, üç katman: ① Zod parçaları (`.strict()` şemaya yayılır; kimlik listesi CSV ya da tekrarlı
 // anahtar → `readFilterList`; uuid biçimi 400) · ② Prisma / ham SQL koşul üreticileri (süzgeç yoksa parça
-// BOŞ — sorgu bayt bayt eski) · ③ `filterEcho` — cevaba yalnız VERİLEN anahtarlar yazılır (R5b-b `meta.suzgec`
-// ile aynı biçim: düz nesne, anahtar = sorgu parametresi adı). Tanınmayan kimlik 404 DEĞİL boş sonuçtur
-// (liste semantiği; R5b-b'nin tekil levent 404'ünden farkı belgede). `destination` müşterinin VARSAYILAN
+// BOŞ — sorgu bayt bayt eski) · ③ `filterEcho` — cevaba yalnız VERİLEN anahtarlar yazılır (R5b-b `suzgec`
+// ile aynı biçim ve AYNI ADRES: cevap kökü, düz nesne, anahtar = sorgu parametresi adı). Tanınmayan kimlik 404 DEĞİL
+// boş sonuçtur (liste semantiği, her eksende — levent dahil). `destination` müşterinin VARSAYILAN
 // hedefidir (`Customer.defaultDestination`), sevkin fiili hedefi değil.
 // =============================================================================
 import { Prisma, ShipmentDestination } from "@prisma/client";
@@ -40,7 +40,7 @@ export interface ReportFilterInput {
   reasonCode?: string[];
 }
 
-/** Cevaba yazılan beyan — düz nesne, yalnız verilen anahtarlar (R5b-b `meta.suzgec` biçimi). */
+/** Cevaba yazılan beyan — düz nesne, yalnız verilen anahtarlar (R5b-b `suzgec` biçimi). */
 export type SuzgecEcho = Record<string, string | string[] | number>;
 
 /** Verilen süzgeç anahtarlarını (boş liste = verilmedi) düz nesneye çevirir; hiçbiri yoksa `undefined` → cevapta anahtar YOK. */
