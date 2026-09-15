@@ -84,7 +84,7 @@ describe("dokuma çıktı spec'leri", () => {
     const rapor: ShiftScorecardReport = {
       vardiyalar: [
         {
-          shiftInstanceId: "s1", shift: { code: "V1", name: "Sabah" }, startsAt: "2026-09-15T05:00:00Z", endsAt: "2026-09-15T13:00:00Z",
+          shiftInstanceId: "s1", shiftDefinitionId: "d1", shift: { code: "V1", name: "Sabah" }, startsAt: "2026-09-15T05:00:00Z", endsAt: "2026-09-15T13:00:00Z",
           isCancelled: false, uretim: { unitsActual: 5000, producedM: 300 }, durusSec: 1200, kaynakKirilimi: KIRILIM,
           ozet: { olculen: 1, elle: 1, simule: 0, cikarim: 0, olculemedi: 1, toplamSatir: 2 },
           makineler: [

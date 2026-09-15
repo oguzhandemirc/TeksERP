@@ -3,12 +3,15 @@
 // ("K'sı ölçüldü, L'si elle, M'si ölçülemedi")
 // =============================================================================
 import { useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Card } from "@/components/ui/card";
-import { DetailTable, MetricCard, ReportExportBar, ReportPageLayout } from "../_components";
+import { DetailTable, MetricCard, ReportDateFilter, ReportExportBar, ReportPageLayout } from "../_components";
 import { fmtInt } from "../_components/formatters";
 import { buildVardiyaKarnesiExport } from "./dokumaExport";
+import { DokumaFilterBar } from "./DokumaFilterBar";
+import { optionLabel, pickReportData, shiftOptionsFrom } from "./dokumaFilters";
 import { HorizonNote, SealBadge, SourceBreakdownStrip, fmtSec } from "./DokumaShared";
 import { SOURCE_LABELS, formatPct } from "./dokuma-regime";
 import { useFactoryDay } from "../_hooks/useReportDay";
@@ -51,14 +54,32 @@ function ShiftCard({ v }: { v: ShiftRow }) {
 export function VardiyaKarnesiPage() {
   // Gün URL'de yaşar (`factoryDay`; bugün yazılmaz) — yenilemede ve paylaşılan linkte kaybolmaz.
   const { ymd: day, params } = useFactoryDay("dokuma/vardiya-karnesi");
-  const { data, isLoading } = useQuery({
+  const [sp, setSp] = useSearchParams();
+  const shiftId = sp.get("shift") ?? "";
+  // GÜN sorgusu SÜZGEÇSİZDİR: vardiya seçenekleri buradan doğar. Süzgeçli
+  // yanıttan doğsaydı seçimden sonra liste tek vardiyaya daralır ve kullanıcı
+  // kendi seçimine kilitlenirdi (Randıman'daki aynı tuzak).
+  const gun = useQuery({
     queryKey: ["reports", "dokuma", "vardiya-karnesi", day],
     queryFn: () => dokumaReportsApi.shiftScorecard(params),
     staleTime: 30_000,
   });
+  const suzgecli = useQuery({
+    queryKey: ["reports", "dokuma", "vardiya-karnesi", day, shiftId],
+    queryFn: () => dokumaReportsApi.shiftScorecard({ ...params, shiftDefinitionId: shiftId }),
+    enabled: shiftId !== "",
+    staleTime: 30_000,
+  });
+  const isLoading = gun.isLoading || (shiftId !== "" && suzgecli.isLoading);
+  const data = pickReportData({ windowData: gun.data, filteredData: suzgecli.data, filterId: shiftId });
   const rapor = data?.data;
+  const shiftOptions = useMemo(() => shiftOptionsFrom(gun.data?.data.vardiyalar), [gun.data]);
+  const shiftLabel = optionLabel(shiftOptions, shiftId);
   // Süzgeç TEK GÜNDÜR (tarih aralığı değil) — başlık da onu söyler.
-  const spec = useMemo(() => () => (rapor ? buildVardiyaKarnesiExport({ rapor, day }) : null), [rapor, day]);
+  const spec = useMemo(
+    () => () => (rapor ? buildVardiyaKarnesiExport({ rapor, day, filterLabel: shiftLabel }) : null),
+    [rapor, day, shiftLabel],
+  );
   // ÖZET ŞERİDİ: sayılar RAPORUN KENDİ yanıtından toplanır, yeni uç yok.
   // "Ölçülemedi" ayrı kart DEĞİL, duruş kartının ipucu: sayı ile beyanı ayırmak
   // okuyucuya "kaç satır güvenilir" sorusunu iki yerde sordururdu.
@@ -74,8 +95,20 @@ export function VardiyaKarnesiPage() {
       satir: v.reduce((a, x) => a + x.ozet.toplamSatir, 0),
     };
   }, [rapor]);
+  const filters = (
+    <div className="flex flex-wrap items-end gap-3 border-b px-4 py-3">
+      <ReportDateFilter reportKey="dokuma/vardiya-karnesi" bare />
+      <DokumaFilterBar
+        id="karne-vardiya"
+        label="Vardiya"
+        value={shiftId}
+        options={shiftOptions}
+        onChange={(id) => setSp((prev) => { const n = new URLSearchParams(prev); if (id) n.set("shift", id); else n.delete("shift"); return n; }, { replace: true })}
+      />
+    </div>
+  );
   return (
-    <ReportPageLayout reportKey="dokuma/vardiya-karnesi" title="Vardiya Karnesi" description="Vardiya başına üretim ve duruş; her satır kaynağını taşır, toplam tek yüzdeye çökertilmez." actions={<ReportExportBar disabled={!rapor || rapor.vardiyalar.length === 0} buildSpec={spec} />}>
+    <ReportPageLayout reportKey="dokuma/vardiya-karnesi" title="Vardiya Karnesi" description="Vardiya başına üretim ve duruş; her satır kaynağını taşır, toplam tek yüzdeye çökertilmez." filters={filters} actions={<ReportExportBar disabled={!rapor || rapor.vardiyalar.length === 0} buildSpec={spec} />}>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Vardiya" value={rapor ? fmtInt(summary.vardiya) : null} hint={rapor ? `${fmtInt(summary.satir)} tezgah satırı` : undefined} isLoading={isLoading} />
         <MetricCard label="Atkı (Σ)" value={rapor ? fmtInt(summary.atki) : null} isLoading={isLoading} />

@@ -75,3 +75,18 @@ describe("dokuma rapor süzgeci — saf yarı", () => {
     expect(optionLabel(opts, "")).toBeNull();
   });
 });
+
+// R5b-a3 — vardiya ekseni: seçenek kaynağı artık GERÇEK (backend `shiftDefinitionId`).
+describe("vardiya seçicisi", () => {
+  it("⭐ seçenekler gün yanıtından doğar ve tanım id'si olmayan satır listeye GİRMEZ", () => {
+    const vardiyalar = [
+      { shift: { code: "V1", name: "Sabah" }, shiftDefinitionId: "d1" },
+      { shift: { code: "V2", name: "Akşam" }, shiftDefinitionId: "d2" },
+      { shift: { code: "V1", name: "Sabah" }, shiftDefinitionId: "d1" }, // aynı tanımın ikinci örneği
+    ];
+    const opts = shiftOptionsFrom(vardiyalar);
+    // Etikete göre Türkçe sıralı: "V1 · Sabah" < "V2 · Akşam".
+    expect(opts.map((o) => o.id)).toEqual(["d1", "d2"]);
+    expect(opts).toHaveLength(2); // VARDİYA ÖRNEĞİ değil VARDİYA TANIMI sayılır
+  });
+});

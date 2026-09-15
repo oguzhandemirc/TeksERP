@@ -60,7 +60,10 @@ export interface ShiftMachineRow {
   availabilityPct: number | null; performancePct: number | null; effectivenessPct: number | null; olculemedi: { A?: string; P?: string; E?: string };
 }
 export interface ShiftRow {
-  shiftInstanceId: string; shift: { code: string; name: string }; startsAt: string; endsAt: string; isCancelled: boolean;
+  shiftInstanceId: string;
+  /** R5b-b: vardiya SEÇİCİSİ bununla süzgeç üretir (`shiftDefinitionId` sorgu anahtarı). */
+  shiftDefinitionId: string;
+  shift: { code: string; name: string }; startsAt: string; endsAt: string; isCancelled: boolean;
   uretim: { unitsActual: number; producedM: number | null };
   durusSec: number;
   kaynakKirilimi: SourceBreakdownTable;
