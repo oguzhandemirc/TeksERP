@@ -27,6 +27,11 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
+          "metin": "Randıman raporuna tezgah süzgeci geldi: listenin üstündeki seçiciden bir tezgah seçilince rapor yalnız o tezgahın satırlarını gösterir, “Tümü” seçiliyken rapor eskisiyle birebir aynıdır. Seçim adres çubuğunda durur (bağlantıyı paylaşınca aynı süzgeçle açılır) ve Excel/PDF çıktısının başına süzgeci adıyla söyleyen bir “SÜZGEÇ” satırı düşer (hangi eksende, hangi tezgah); süzgeç yokken o satır hiç yazılmaz. Seçenek listesi seçilen tarih penceresindeki tezgahlardan kurulur: bir tezgah seçtikten sonra liste daralmaz, başka tezgaha doğrudan geçilir. Duruş Pareto ve Vardiya Karnesi'nde süzgeç YOKTUR: o iki raporun satırları seçici listesini dolduracak bilgiyi taşımıyor (Pareto sebep eksenli, vardiya satırı tanım numarası taşımıyor)."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
           "metin": "Dokuma raporlarına “Excel”, “PDF” ve “Yazdır” düğmeleri geldi (Randıman · Duruş Pareto · Vardiya Karnesi · Karne Listesi ve Mühür) — diğer raporlardaki şeridin aynısı, yeni bir çıktı düzeni yok. Çıktı ekranın aynasıdır: her satırın kaynağı (ölçülen / elle / simüle / boş tezgah) ve payda yoksa yazılan “ölçülemedi” beyanı kâğıda ve Excel'e de geçer; ölçülemeyen oran sıfıra çevrilmez, yoksa sıfır randımanla aynı görünürdü. Başlıkta rapor adı ve tarih penceresi yazar (vardiya karnesinde fabrika günü), dosya adı da bundan kurulur; kaynak kırılımı, ölçüm ufku ve mühür sayıları not olarak tablonun altına düşer. Duruş Pareto'da ayrı kovalar (mikro · sınıflandırılmamış · yuvası atanmamış) ikinci bir sayfada, vardiya karnesinde her vardiya kendi sayfasında çıkar. “PDF” düğmesi yalnız masaüstü uygulamasında görünür. Dokuma modülü kapalı kurulumda hiçbir şey değişmez."
         },
         {

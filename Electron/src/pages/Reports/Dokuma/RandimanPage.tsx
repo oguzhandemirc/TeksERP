@@ -2,11 +2,14 @@
 // RANDIMAN — tezgah × vardiya; A · P · E AYRI sütun, ÇARPILMAZ; null → "ölçülemedi"
 // =============================================================================
 import { useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DetailTable, MetricCard, ReportExportBar, ReportPageLayout } from "../_components";
 import { fmtInt } from "../_components/formatters";
 import { buildRandimanExport } from "./dokumaExport";
+import { DokumaFilterBar } from "./DokumaFilterBar";
+import { machineOptionsFrom, optionLabel, pickReportData } from "./dokumaFilters";
 import { HorizonNote, SealBadge, SourceBreakdownStrip, fmtSec, useFactoryRange } from "./DokumaShared";
 import { SOURCE_LABELS, formatPct } from "./dokuma-regime";
 import { dokumaReportsApi, type EfficiencyRow } from "./service";
@@ -28,25 +31,54 @@ const columns: ColumnDef<EfficiencyRow>[] = [
 
 export function RandimanPage() {
   const range = useFactoryRange(7);
-  const { data, isLoading } = useQuery({
+  const [sp, setSp] = useSearchParams();
+  const machineId = sp.get("machine") ?? "";
+  // PENCERE sorgusu: süzgeçsiz. Seçenek listesi HER ZAMAN buradan doğar —
+  // süzgeçli yanıttan doğsaydı seçim sonrası liste tek öğeye daralırdı.
+  const pencere = useQuery({
     queryKey: ["reports", "dokuma", "randiman", range.from, range.to],
     queryFn: () => dokumaReportsApi.efficiency({ from: range.from, to: range.to }),
     enabled: range.ready,
     staleTime: 30_000,
   });
+  const suzgecli = useQuery({
+    queryKey: ["reports", "dokuma", "randiman", range.from, range.to, machineId],
+    queryFn: () => dokumaReportsApi.efficiency({ from: range.from, to: range.to, machineId }),
+    enabled: range.ready && machineId !== "",
+    staleTime: 30_000,
+  });
+  const isLoading = pencere.isLoading || (machineId !== "" && suzgecli.isLoading);
+  const data = pickReportData({ windowData: pencere.data, filteredData: suzgecli.data, filterId: machineId });
   const rapor = data?.data;
+  const machineOptions = useMemo(() => machineOptionsFrom(pencere.data?.data.satirlar), [pencere.data]);
+  const machineLabel = optionLabel(machineOptions, machineId);
   const totals = rapor?.toplam;
   const excluded = totals ? `dışlanan A ${totals.olculemedi.A} · P ${totals.olculemedi.P} · E ${totals.olculemedi.E}` : undefined;
   // Çıktı başlığı SÜZGECİ söyler (fabrika günü penceresi) — dosya tek başına
   // paylaşıldığında hangi aralığın rakamı olduğu kâğıttan okunsun.
   const periodLabel = `${range.from} – ${range.to} (fabrika günü)`;
-  const spec = useMemo(() => () => (rapor ? buildRandimanExport({ rapor, periodLabel }) : null), [rapor, periodLabel]);
+  const spec = useMemo(
+    () => () => (rapor ? buildRandimanExport({ rapor, periodLabel, filterLabel: machineLabel }) : null),
+    [rapor, periodLabel, machineLabel],
+  );
+  const filters = (
+    <div className="flex items-end gap-3 border-b px-4 py-3">
+      <DokumaFilterBar
+        id="randiman-makine"
+        label="Tezgah"
+        value={machineId}
+        options={machineOptions}
+        onChange={(id) => setSp((prev) => { const n = new URLSearchParams(prev); if (id) n.set("machine", id); else n.delete("machine"); return n; }, { replace: true })}
+      />
+    </div>
+  );
 
   return (
     <ReportPageLayout
       title="Randıman"
       description="Kullanılabilirlik, performans ve etkinlik AYRI sunulur, çarpılmaz. Payda yoksa oran 'ölçülemedi'dir — sıfır değil."
       defaultDays={7}
+      filters={filters}
       actions={<ReportExportBar disabled={!rapor} buildSpec={spec} />}
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
