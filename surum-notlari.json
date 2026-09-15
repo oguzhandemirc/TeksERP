@@ -87,7 +87,7 @@
         {
           "kapsam": "panel",
           "tip": "iyilestirme",
-          "metin": "Sevkiyattan üretilen fatura taslağı, kilo ya da adet birimli bir sipariş kalemine mal yazılmışsa bunu söylüyor: taslağın notunda ve önizleme uyarısında “satır kg birimli — taslak miktarı metre defterinden, elle düzeltin” yazar. Taslak satırı yine metre gösterir; çünkü sevk defteri metre tutar, kiloya çevirip basmak yanlış rakam olurdu. Fatura formunda satır birimi artık boş bırakılamaz."
+          "metin": "Sevkiyattan üretilen fatura taslağı, kilo ya da adet birimli bir sipariş kalemine mal yazılmışsa bunu söylüyor: taslağın notunda ve önizleme uyarısında sipariş satırının birimini adıyla söyleyen bir uyarı yazar: satır kilogram (ya da adet) birimlidir, taslak miktarı metre defterinden gelmiştir ve fatura satırının hem miktarı hem birimi elle düzeltilmelidir. Taslak satırı yine metre gösterir; çünkü sevk defteri metre tutar, kiloya çevirip basmak yanlış rakam olurdu. Fatura formunda satır birimi artık boş bırakılamaz."
         },
         {
           "kapsam": "panel",
@@ -212,7 +212,7 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Sevk irsaliyesinde çuval ve çeki listelerinin başına “Sevk Edilen Firma / Sevkiyat Fiş No / tarih” şeridi konabiliyor. Önceden bu bilgiler yalnız ilk sayfanın antetinde vardı; ürün listesinden sonraki sayfalar çıplak tablo olarak çıkıyor ve kâğıda bakan kimin malı olduğunu göremiyordu. Şerit tablonun kendi başlığına girdiği için liste sayfayı taşarsa devam sayfasında da tekrar eder. İlk basılan listeye konmaz — o sayfada zaten tam antet vardır. Ayar KAPALI gelir: Genel Ayarlar → Belge Kişiselleştirme → Sevk İrsaliyesi → “Liste sayfalarında kimlik şeridi (firma · irsaliye no · tarih)”. Kapalı kaldığı sürece hiçbir belgenin çıktısı değişmez; açmak daha önce oluşturulmuş irsaliyelerin yeniden baskısını da etkiler. Listeler tek sayfada birleştirilerek basıldığında şerit çıkmaz."
+          "metin": "Sevk irsaliyesinde çuval ve çeki listelerinin başına “Sevk Edilen Firma” · “İrsaliye No” ve tarihten oluşan bir kimlik şeridi konabiliyor. Önceden bu bilgiler yalnız ilk sayfanın antetinde vardı; ürün listesinden sonraki sayfalar çıplak tablo olarak çıkıyor ve kâğıda bakan kimin malı olduğunu göremiyordu. Şerit tablonun kendi başlığına girdiği için liste sayfayı taşarsa devam sayfasında da tekrar eder. İlk basılan listeye konmaz — o sayfada zaten tam antet vardır. Ayar KAPALI gelir: Genel Ayarlar → Belge Kişiselleştirme → Sevk İrsaliyesi → “Liste sayfalarında kimlik şeridi (firma · irsaliye no · tarih)”. Kapalı kaldığı sürece hiçbir belgenin çıktısı değişmez; açmak daha önce oluşturulmuş irsaliyelerin yeniden baskısını da etkiler. Listeler tek sayfada birleştirilerek basıldığında şerit çıkmaz."
         },
         {
           "kapsam": "panel",
@@ -277,12 +277,12 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Çuval tartısı ve elle top girişinde gerçek dışı büyük değerler artık uyarı veriyor. 1.000 kilogramın üzerinde bir çuval tartısı ya da 10.000 metrenin üzerinde bir top metresi girildiğinde ekranda “bu değer beklenenden çok büyük, cihaz ölçeği yanlış olabilir” uyarısı çıkar. Uyarı kaydı ENGELLEMEZ: değer yazılır, çünkü gerçekten büyük bir parti olabilir ve tartı üç ayrı yoldan girilebiliyor (kantardan, elle, simülasyonla) — sert bir sınır meşru işi de reddeder ve o gün sınır tamamen kaldırılır. Uyarı ayrıca işlemin denetim kaydına da yazılır — hem çuval tartısında hem elle top girişinde — yani sonradan “bu rakam neden böyle” diye bakan kişi uyarının o an görüldüğünü görür."
+          "metin": "Çuval tartısı ve elle top girişinde gerçek dışı büyük değerler artık uyarı veriyor. 1.000 kilogramın üzerinde bir çuval tartısı ya da 10.000 metrenin üzerinde bir top metresi girildiğinde ekranda “gerçekçi görünmüyor” uyarısı çıkar ve uyarı ne yapılacağını da söyler: kantar gram ölçüyorsa Cihaz Kaydı'ndaki Ölçek 0,001, cihazın ham birimi santimetreyse 0,01 olmalıdır. Uyarı kaydı ENGELLEMEZ: değer yazılır, çünkü gerçekten büyük bir parti olabilir ve tartı üç ayrı yoldan girilebiliyor (kantardan, elle, simülasyonla) — sert bir sınır meşru işi de reddeder ve o gün sınır tamamen kaldırılır. Uyarı ayrıca işlemin denetim kaydına da yazılır — hem çuval tartısında hem elle top girişinde — yani sonradan “bu rakam neden böyle” diye bakan kişi uyarının o an görüldüğünü görür."
         },
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Sistem → Yedekler ekranındaki “Otomatik yedek saati” artık gerçeği söylüyor. Gece yedeğini sunucudaki ayrı bir zamanlanmış görev alan kurulumlarda (program kapalıyken de yedek alınsın diye böyle kurulan sunucularda) saat kutusu kilitleniyor ve “saat buradan değişmez, sunucudaki görevden ayarlanır” yazıyor. Eskiden kutu açıktı, saati değiştirebiliyordunuz ve hiçbir şey olmuyordu — ekran bir saat gösteriyor, sistem başka saatte yedek alıyordu."
+          "metin": "Sistem → Yedekler ekranındaki “Otomatik yedek saati” artık gerçeği söylüyor. Gece yedeğini sunucudaki ayrı bir zamanlanmış görev alan kurulumlarda (program kapalıyken de yedek alınsın diye böyle kurulan sunucularda) saat kutusu kilitleniyor ve “Saat buradan değişmez; gerçek saat sunucudaki görevden ayarlanır” yazıyor. Eskiden kutu açıktı, saati değiştirebiliyordunuz ve hiçbir şey olmuyordu — ekran bir saat gösteriyor, sistem başka saatte yedek alıyordu."
         },
         {
           "kapsam": "panel",
@@ -387,7 +387,7 @@
         {
           "kapsam": "panel",
           "tip": "iyilestirme",
-          "metin": "İş emrinin sipariş kalemi bağı artık silinmiyor, koparılıyor: iş emri iptal edildiğinde, sipariş kalemi iptal/silindiğinde ya da bağ değiştirildiğinde eski bağ “koparıldı” damgasıyla (ne zaman, hangi sebeple) kayıtta kalır; iş emri detayında “hangi sipariş için açıldı” izi görünmeye devam eder. Sipariş karşılaması, açık miktarlar ve iş emri tipi yalnız açık bağları sayar — koparılmış bağ hiçbir rakama girmez. Tutarlılık kontrolündeki “stok iş emri ama bağı var” bölümü ve iş emri tipi onarım aracı da yalnız açık bağa bakar; önceden koparılmış bağlı bir stok iş emrini yanlışlıkla “siparişe özel”e çevirebiliyorlardı. Hiçbir rakam değişmez."
+          "metin": "İş emrinin sipariş kalemi bağı artık silinmiyor, koparılıyor: iş emri iptal edildiğinde, sipariş kalemi iptal/silindiğinde ya da bağ değiştirildiğinde eski bağ “koparıldı” damgasıyla (ne zaman, hangi sebeple) kayıtta kalır; iş emri detayında “hangi sipariş için açıldı” izi görünmeye devam eder. Sipariş karşılaması, açık miktarlar ve iş emri tipi yalnız açık bağları sayar — koparılmış bağ hiçbir rakama girmez. Tutarlılık kontrolünde iş emri tipini sipariş bağıyla karşılaştıran bölüm ve iş emri tipi onarım aracı da yalnız açık bağa bakar; önceden koparılmış bağlı bir stok iş emrini yanlışlıkla “siparişe özel”e çevirebiliyorlardı. Hiçbir rakam değişmez."
         },
         {
           "kapsam": "panel",
