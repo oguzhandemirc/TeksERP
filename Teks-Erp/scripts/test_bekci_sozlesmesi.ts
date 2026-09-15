@@ -38,6 +38,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
 import { git } from "./lib/git";
+import { cocukOrtami } from "./lib/hedef-db-kapisi";
 import { atlamaDefteri } from "./lib/atlama";
 import { curumeKolu } from "./lib/circir-kolu";
 
@@ -288,6 +289,77 @@ const KURESEL_YAZIM_TABAN = 0;
   } catch (e) { arsivHata = String((e as Error).message).slice(0, 120); }
   check("⭐ yardımcı 1 MB'ı AŞAN arşivi okuyabiliyor (varsayılan tamponla ÇÖKERDİ)",
     arsivBayt > 1_048_576, arsivHata || `${arsivBayt} bayt`);
+}
+
+// ── §k KAÇIŞ ANAHTARI ÇOCUĞA MİRAS KALMAZ ───────────────────────────────────
+// NEDEN (1e ölçtü 2026-09-15, fabrika yedeği kopyasında prova): `test_script_guards`
+// kendi sondası için `clean_test_residue.ts`i doğuruyor ve `{...process.env}` ile
+// `BEKCI_HEDEF_ONAY`ı MİRAS bırakıyordu; çocukta hedef-adı kapısı `null` döndü —
+// yani yıkıcı betiğin TEK koruması sessizce açıldı. Yazma olmadı çünkü sonda
+// dry-run'da kaldı; bu bir TESADÜFTÜ, koruma değil.
+// ⇒ *Bir kaçış anahtarının kapsamı, onu alan SÜREÇTİR. Torunlarına geçerse kapsamı
+//   ölçülemez olur ve kapı, kimsenin açtığını bilmediği bir yerde açık kalır.*
+//
+// ⚠️ KAPI KENDİ BAŞINA GÖREMEZ (ölçüldü): çocuk süreç anahtarın KENDİSİNE mi
+// ebeveynine mi verildiğini ayırt edemez — `process.env` ikisinde de aynıdır.
+// Çare çağırandadır; "her çağıran hatırlasın" bir kapı olmadığı için burası ölçer.
+//
+// ⚠️ YÜKLEM DAR: yalnız HEDEF KAPISINA VARAN çocuklar. Her `...process.env`
+// yayılımını kırmızı saymak, DB'ye hiç dokunmayan sondaları (hook config · bash
+// guard kapsamı · uzak erişim) gürültüye boğardı — ve gürültüye boğulan kapı
+// susturulur.
+{
+  // ⚠️ YÜKLEM ÇAĞRI DÜZEYİNDE, DOSYA DÜZEYİNDE DEĞİL (ilk yazımı öyleydi ve
+  // 16 dosyayı "kapsamda" saydı — çoğu adı yalnız YORUMDA anıyordu; üç sahte
+  // kırmızı verdi: `node -e`, kendini yeniden doğurma, hook betiği). Ölçüt:
+  // AYNI `spawn*` çağrısı hem hedef kapısına varan bir betiği doğuruyor hem de
+  // ham `...process.env` yayıyor. ⇒ *Bir dosyanın bir adı ANMASI, o adı
+  // ÇAĞIRDIĞI anlamına gelmez.*
+  const HEDEF_KAPISINA_VARAN = ["run-all-tests", "clean_test_residue", "reset-operational"];
+  const mirasSapan: string[] = [];
+  const kapsamdaki: string[] = [];
+  for (const ad of dosyalar) {
+    // ⚠️ TARAYICI KENDİ KAYNAĞINI SAYMAZ: bu dosya yüklemin METNİNİ taşıyor
+    // (`spawnSync|spawn|…` deseni) ve kendi desenine eşleşiyordu — popülasyona
+    // sahte bir üye ekliyordu. Kapının kendi kendini ısırması ayrı bir sınıf.
+    if (ad === "test_bekci_sozlesmesi.ts") continue;
+    const kaynak = readFileSync(join(SCRIPTS_DIR, ad), "utf8");
+    // ⚠️ BİR HOP ÇÖZÜMLEME: çocuk çoğu kez DEĞİŞKENLE adlandırılır
+    // (`const kosucu = join(dizin, "run-all-tests.ts")` → `spawnSync("npx", [..., kosucu])`).
+    // Yalnız literal arayan yüklem bu çağrıları GÖREMEZ ve sessizce kapsam dışı
+    // bırakır — ölçüldü: dört çağrının ikisi kaçtı.
+    const takmaAdlar = [...kaynak.matchAll(/const (\w+)\s*=\s*join\([^)]*"([\w.-]+)"\s*\)/g)]
+      .filter((b) => HEDEF_KAPISINA_VARAN.some((h) => b[2]!.includes(h)))
+      .map((b) => b[1]!);
+    // ⚠️ PENCERE SABİT, "çağrının sonu"nu ARAMIYORUZ: ilk yazımı `\n\s*})` ile
+    // bitiriyordu ve dört çağrının İKİSİNİ kaçırdı (iç nesne kapanışına takıldı).
+    // Sabit pencere fazladan bağlam alabilir — ama BİR ÇAĞRIYI KAÇIRMAK, fazladan
+    // bağlam almaktan pahalıdır: kaçırılan çağrı sessizce kapsam dışıdır.
+    for (const m of kaynak.matchAll(/(spawnSync|spawn|execFileSync|execFile)\s*\(/g)) {
+      const cagri = kaynak.slice(m.index, m.index! + 700);
+      const hedefe = HEDEF_KAPISINA_VARAN.some((b) => cagri.includes(b))
+        || takmaAdlar.some((t) => new RegExp(`\\b${t}\\b`).test(cagri));
+      if (!hedefe) continue;
+      const satir = kaynak.slice(0, m.index).split("\n").length;
+      kapsamdaki.push(`${ad}:${satir}`);
+      if (/env:\s*\{[\s\S]{0,200}?\.\.\.process\.env/.test(cagri)) mirasSapan.push(`${ad}:${satir}`);
+    }
+  }
+  check("§k ⭐ hedef kapısına varan çocuk sürece kaçış anahtarı MİRAS KALMIYOR (`cocukOrtami`)",
+    mirasSapan.length === 0,
+    mirasSapan.join(" · ") || `${kapsamdaki.length} çağrı temiz`);
+  check("§kz körlük zemini: kapsamda ÇAĞRI var (yüklem boş kümeyi ölçmüyor)",
+    kapsamdaki.length > 0, kapsamdaki.join(", ") || "HİÇ ÇAĞRI YOK — yüklem bozuk olabilir");
+  // Ve yardımcının KENDİSİ gerçekten siliyor mu — davranış ölçümü, metin değil.
+  const oncekiDeger = process.env.BEKCI_HEDEF_ONAY;
+  process.env.BEKCI_HEDEF_ONAY = "1";
+  const mirasli = cocukOrtami({ DATABASE_URL: "x" });
+  const kararli = cocukOrtami({ BEKCI_HEDEF_ONAY: "1" });
+  if (oncekiDeger === undefined) delete process.env.BEKCI_HEDEF_ONAY;
+  else process.env.BEKCI_HEDEF_ONAY = oncekiDeger;
+  check("§k2 ⭐ `cocukOrtami` MİRASI siler ama `ek`teki KARARI korur (gerçek çağrı)",
+    mirasli.BEKCI_HEDEF_ONAY === undefined && kararli.BEKCI_HEDEF_ONAY === "1",
+    `miras=${mirasli.BEKCI_HEDEF_ONAY} · karar=${kararli.BEKCI_HEDEF_ONAY}`);
 }
 
 // ── §b KOŞUCUNUN HİZA BEYANLARI TANIMLI *VE* ÇAĞRILI ────────────────────────

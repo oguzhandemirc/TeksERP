@@ -21,6 +21,45 @@
 
 ---
 
+## 2026-09-15 — Kaçış anahtarının kapsamı, onu ALAN süreçtir [ÇEKİRDEK]
+
+1e fabrika yedeğinin bir kopyasında prova koştu (`BEKCI_HEDEF_ONAY=1` ile) ve iki bekçi
+kusuru çıktı.
+
+**① KAÇIŞ ÇOCUĞA MİRAS KALIYORDU.** `test_script_guards` kendi sondası için
+`clean_test_residue.ts` ve `reset-operational.ts`i doğuruyor ve `{...process.env}` ile
+kaçışı devrediyordu. Çocukta hedef-adı kapısı (`fixtureHedefEngeli`) `null` döndü — yani
+yıkıcı betiğin TEK koruması sessizce açıldı. Yazma olmadı çünkü sonda dry-run'da kaldı; bu
+bir TESADÜFTÜ, koruma değil. ⇒ ***Bir kaçış anahtarının kapsamı, onu ALAN süreçtir;
+torunlarına geçerse kapsamı ölçülemez olur ve kapı, kimsenin açtığını bilmediği bir yerde
+açık kalır.***
+
+Kapı bunu KENDİ BAŞINA göremez ve bu ölçüldü: çocuk süreç, anahtarın kendisine mi ebeveynine
+mi verildiğini AYIRT EDEMEZ — `process.env` ikisinde de aynıdır. Yani çare kapıda değil
+ÇAĞIRANDADIR; ve "her çağıran hatırlasın" bir kapı olmadığı için `test_bekci_sozlesmesi §k`
+bunu ölçüyor. Tek kaynak `cocukOrtami()`: mirası siler, `ek`te BİLEREK verilen kararı korur
+(sıra load-bearing — ters sırada kaçışın KENDİSİNİ ölçen sonda da susturulurdu).
+⇒ ***Silinen şey MİRAS, verilen şey KARAR: aynı anahtar olsalar da farklı şeylerdir.***
+
+Kapının gerçekten açıldığı KONTROL GRUBUYLA gösterildi: eski bekçi + kaçış → **40/4**, yeni
+hâli → **44/0**. Ve 1e üç çağrı saymıştı; dördüncüsü `reset-operational --apply` sondasıydı
+— yani en yıkıcı olanı. ⇒ ***Bir sızıntının sayısı, onu ilk gören kişinin saydığı kadar
+değildir.***
+
+Yüklem iki kez daraltılıp bir kez genişletildi ve üçü de ölçümle: ① dosya düzeyinde
+başladı, adı yalnız YORUMDA anan 16 dosyayı kapsama aldı ve üç sahte kırmızı verdi ⇒ çağrı
+düzeyine indi · ② çağrının SONUNU arayan desen dört çağrının ikisini kaçırdı (iç nesne
+kapanışına takıldı) ⇒ sabit pencere · ③ çocuk çoğu kez DEĞİŞKENLE adlandırılıyor
+(`const kosucu = join(dizin, "run-all-tests.ts")`) ⇒ bir hop çözümleme. Ve tarayıcı kendi
+desen metnine eşleşiyordu ⇒ kendi kaynağını saymıyor.
+
+**② SESSİZ YEŞİL.** `test_field_address` fikstür yokken `process.exit(0)` çağırıyor ve ÖZET
+SATIRINI HİÇ BASMIYORDU — koşucu için "0 başarısız", yani "ölçtüm ve geçti"den ayırt
+edilemez. `atla()` beyanına çevrildi. ⇒ ***Çıkış kodu bir ölçüm sonucu değil, yalnız bir
+çıkış kodudur; ölçümün YAPILMADIĞINI söyleyen tek şey beyandır.***
+
+---
+
 ## 2026-09-15 — Seçeneğin `code`u, sorgu parametresinin BİREBİR biçimidir [ÇEKİRDEK]
 
 R5b-d-c: `vat-summary`nin `oran` ekseni bir tren boyunca BEYANLI BOŞLUKTU — `yon` kapalı bir

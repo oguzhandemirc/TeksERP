@@ -245,3 +245,38 @@ export async function semaHizasi(): Promise<SemaHizasi> {
     await pool.end().catch(() => undefined);
   }
 }
+
+/**
+ * KAÇIŞ ANAHTARLARI — hedef kapısını bilinçli olarak devre dışı bırakırlar.
+ * Tek kaynak: aşağıdaki `cocukOrtami` ve kapı ayakları aynı listeyi okur.
+ */
+export const KACIS_ANAHTARLARI = ["BEKCI_HEDEF_ONAY", "BEKCI_PROD_ONAY"] as const;
+
+/**
+ * Bir bekçinin DOĞURACAĞI süreç için ortam — kaçış anahtarları SİLİNMİŞ hâlde.
+ *
+ * ⚠️ NEDEN VAR (1e ölçtü 2026-09-15, fabrika yedeği kopyasında prova): kaçış
+ * anahtarı bir KARARdır ve karar, onu VEREN sürece aittir. `test_script_guards`
+ * kendi sondası için `clean_test_residue.ts`i doğuruyordu ve `{...process.env}`
+ * ile kaçışı MİRAS bırakıyordu; çocukta ad kapısı `null` döndü, yani yıkıcı
+ * betiğin tek koruması sessizce açıldı. Sonda dry-run'da kaldığı için yazma
+ * olmadı — ama bu bir TESADÜFTÜ, koruma değil.
+ *
+ * ⇒ *Bir kaçış anahtarının kapsamı, onu alan SÜREÇTİR; torunlarına geçerse
+ *   kapsamı ölçülemez hâle gelir ve kapı, kimsenin açtığını bilmediği bir yerde
+ *   açık kalır.*
+ *
+ * ⚠️ KAPININ KENDİSİ BUNU GÖREMEZ (ölçüldü): çocuk süreç, anahtarın kendisine mi
+ * yoksa ebeveynine mi verildiğini AYIRT EDEMEZ — `process.env` ikisinde de aynı
+ * görünür. Yani çare kapıda değil ÇAĞIRANDA; ve "her çağıran hatırlasın" bir kapı
+ * olmadığı için `test_bekci_sozlesmesi §k` bunu ölçer.
+ */
+export function cocukOrtami(ek?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  // ⚠️ SIRA LOAD-BEARING: önce MİRASTAN sil, sonra `ek`i uygula. Ters sırada,
+  // kaçışı BİLEREK veren sonda (`test_script_guards §6` kaçışın kendisini ölçer)
+  // da silinirdi — ve o sonda kaçışsız koşunca ölçtüğünü sandığı şeyi ölçmez.
+  // ⇒ *Silinen şey MİRAS, verilen şey KARAR: ikisi aynı anahtar olsa da farklı.*
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const anahtar of KACIS_ANAHTARLARI) delete env[anahtar];
+  return { ...env, ...ek };
+}

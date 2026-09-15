@@ -26,7 +26,7 @@ import { git } from "./lib/git";
 import { join, relative } from "path";
 import { execFileSync, spawnSync } from "child_process";
 import { walkTs } from "./lib/ts-tarama";
-import { FABRIKA_HACIM_ESIGI, hacimEngeliMetni } from "./lib/hedef-db-kapisi";
+import { FABRIKA_HACIM_ESIGI, hacimEngeliMetni, cocukOrtami } from "./lib/hedef-db-kapisi";
 
 let pass = 0;
 let fail = 0;
@@ -297,7 +297,9 @@ function main(): void {
   // dokunmadan ÖNCE düşmeli. (Hedef makine yok — bağlantı bile kurulmamalı.)
   const r = spawnSync("npx", ["tsx", join(dizin, "reset-operational.ts"), "--apply"], {
     encoding: "utf8",
-    env: { ...process.env, DATABASE_URL: "postgresql://u:p@10.255.255.1:5432/tekserp" },
+    // ⚠️ EN YIKICI SONDA (`reset-operational --apply`) — kaçış anahtarı BURADA
+    // hiç bulunmamalı. 1e üç çağrı saymıştı, bu DÖRDÜNCÜSÜ.
+    env: cocukOrtami({ DATABASE_URL: "postgresql://u:p@10.255.255.1:5432/tekserp" }),
     timeout: 60_000,
   });
   const cikti = `${r.stdout ?? ""}${r.stderr ?? ""}`;
@@ -327,7 +329,9 @@ function main(): void {
   const kos = (db: string, url?: string) =>
     spawnSync("npx", ["tsx", kosucu, "__eslesmeyen_ad__"], {
       encoding: "utf8",
-      env: { ...process.env, DATABASE_URL: url ?? `postgresql://u:p@localhost:55433/${db}` },
+      // ⚠️ `cocukOrtami`: kaçış anahtarları SİLİNİR. Miras bırakılsaydı sonda,
+      // ölçmek istediği kapıyı KENDİ ELİYLE açardı (1e ölçtü 2026-09-15).
+      env: cocukOrtami({ DATABASE_URL: url ?? `postgresql://u:p@localhost:55433/${db}` }),
       timeout: 120_000,
     });
   const fabrika = kos("tekserp_fabrika_dev");
@@ -351,11 +355,10 @@ function main(): void {
   // içine yazılırsa bu anahtar onu sessizce atlatırdı (ölçüldü, düzeltildi).
   const uzakKacis = spawnSync("npx", ["tsx", kosucu, "__eslesmeyen_ad__"], {
     encoding: "utf8",
-    env: {
-      ...process.env,
+    env: cocukOrtami({
       DATABASE_URL: "postgresql://u:p@192.168.1.250:5432/tekserp",
       ALLOW_NONLOCAL_TEST_DB: "1",
-    },
+    }),
     timeout: 120_000,
   });
   const uzakKacisCikti = `${uzakKacis.stdout ?? ""}${uzakKacis.stderr ?? ""}`;
@@ -443,11 +446,12 @@ function main(): void {
   );
   const olcumOnay = spawnSync("npx", ["tsx", kosucu, "__eslesmeyen_ad__"], {
     encoding: "utf8",
-    env: {
-      ...process.env,
+    // ⚠️ BURADA KAÇIŞ BİLEREK VERİLİYOR (sonda kaçışın KENDİSİNİ ölçüyor) ve
+    // `cocukOrtami` onu korur: mirası siler, `ek`teki KARARI geçirir.
+    env: cocukOrtami({
       DATABASE_URL: "postgresql://u:p@127.0.0.1:1/tekserp_kapi_sondasi_test",
       BEKCI_HEDEF_ONAY: "1",
-    },
+    }),
     timeout: 120_000,
   });
   const olcumOnayCikti = `${olcumOnay.stdout ?? ""}${olcumOnay.stderr ?? ""}`;
@@ -463,7 +467,7 @@ function main(): void {
   const temizlik = (db: string) =>
     spawnSync("npx", ["tsx", join(dizin, "clean_test_residue.ts")], {
       encoding: "utf8",
-      env: { ...process.env, DATABASE_URL: `postgresql://u:p@localhost:55433/${db}` },
+      env: cocukOrtami({ DATABASE_URL: `postgresql://u:p@localhost:55433/${db}` }),
       timeout: 120_000,
     });
   const tFabrika = temizlik("tekserp_fabrika_dev");

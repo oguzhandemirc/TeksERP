@@ -12,12 +12,14 @@ import prisma from "../src/lib/prisma";
 import { PeripheralDeviceService } from "../src/services/peripheral.service";
 import { getStampContext } from "../src/services/helpers/work-session.helper";
 import { AppError } from "../src/utils/app-error";
+import { atlamaDefteri } from "./lib/atlama";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = "") {
   if (ok) { pass++; console.log(`✅ ${label}${extra ? " — " + extra : ""}`); }
   else { fail++; console.log(`❌ ${label}${extra ? " — " + extra : ""}`); }
 }
+const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 async function expectStatus(status: number, fn: () => Promise<unknown>): Promise<boolean> {
   try { await fn(); return false; }
   catch (e) { return e instanceof AppError && e.statusCode === status; }
@@ -34,7 +36,16 @@ async function main() {
   const machineA = await prisma.machine.findFirst({ where: { code: "TAMBUR-M1" }, select: { id: true, stationId: true } });
   const machineB = await prisma.machine.findFirst({ where: { code: "KK1-M1" }, select: { id: true } });
   const admin = await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } });
-  if (!machineA || !machineB) { console.log("⚠️ TAMBUR-M1/KK1-M1 makineleri yok — önce seed gerekli"); process.exit(0); }
+  // ⚠️ SESSİZ YEŞİLDİ (1e ölçtü 2026-09-15, fabrika yedeği kopyasında): fikstür
+  // yokken `process.exit(0)` çağrılıyor ve ÖZET SATIRI HİÇ BASILMIYORDU — koşucu
+  // için "0 başarısız", yani "ölçtüm ve geçti"den AYIRT EDİLEMEZ.
+  // ⇒ *Çıkış kodu bir ÖLÇÜM SONUCU değil, yalnız bir çıkış kodudur; ölçümün
+  //   yapılmadığını söyleyen tek şey BEYANdır.*
+  if (!machineA || !machineB) {
+    ATLAMA.atla("saha donanım-eşleme turu", "TAMBUR-M1/KK1-M1 makineleri YOK (fikstür seed'i gerekli)", "?");
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${ATLAMA.ozetEki()} ===`);
+    process.exit(fail > 0 ? 1 : 0);
+  }
 
   // Makinesiz istasyon (SHIPPING) — istasyon-kapsam senaryosu için (varsa).
   const shipStation = await prisma.station.findFirst({
