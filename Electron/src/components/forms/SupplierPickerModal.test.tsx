@@ -1,10 +1,12 @@
 // =============================================================================
-// BEKÇİ — Tedarikçi liste modalı (istek #5 rev.): kutuya tıkla → modal · TAM liste (müşteri-only dahil) sayfalı ·
-// rol seçimi SUNUCU parametresi (filter[type] / yalnız fason) · arama sunucuya · satıra tıkla → forma
+// BEKÇİ — Tedarikçi seçici modalı v3 (kabul A): kutu → modal · rol FARE ve KLAVYE ile · tek bacak 500 ·
+// ALL'da bacak geçişi · arama · satır → forma · kaynak taraması (yerleşik <select> / DataTable YOK)
 // =============================================================================
-// Negatif sonda (kırmızı görüldü): `supplierRoleQuery` Fason'da cari sorgusunu KAPATMAYINCA "yalnız Fason" ❌;
-// `useSupplierPickerData` `filters.type`ı göndermeyince "rol sunucuya" ❌.
+// Negatif sonda (kırmızı görüldü): modal ağacına `<select>` eklenince (7) ❌; `legsFor` Fason'da cari bacağını
+// kapatmayınca "yalnız fason" ❌.
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
@@ -22,10 +24,8 @@ const CUSTOMERS = [
   { id: "c3", code: "MUS1", name: "Yalnız Müşteri", type: "CUSTOMER", taxNumber: null, contactPhone: null, isActive: true },
 ];
 const SUBS = [{ id: "s1", code: "FAS1", name: "Boyahane Ltd", taxNumber: "2220003334", phone: "0532 222", isActive: true }];
-
-const cursorPage = (data: unknown[], nextCursor: string | null = null) =>
-  Promise.resolve({ success: true, data, pagination: { nextCursor, hasMore: nextCursor !== null, limit: 50, totalEstimate: 3 } });
-const offsetPage = (data: unknown[]) => Promise.resolve({ success: true, data, pagination: { page: 1, pageSize: 50, total: data.length, totalPages: 1 } });
+const cursorPage = (data: unknown[], nextCursor: string | null = null) => Promise.resolve({ success: true, data, pagination: { nextCursor, hasMore: nextCursor !== null, limit: 50 } });
+const offsetPage = (data: unknown[], page = 1, totalPages = 1) => Promise.resolve({ success: true, data, pagination: { page, pageSize: 50, total: data.length, totalPages } });
 
 beforeEach(() => {
   listCursor.mockReset();
@@ -42,91 +42,124 @@ beforeEach(() => {
 async function openModal(onChange: (v: unknown) => void = () => {}) {
   renderWithProviders(<SupplierSelect value={null} onChange={onChange} modalPicker />);
   expect(screen.queryByRole("dialog")).toBeNull();
-  // Formda küçük açılır liste (combobox tetiği) HİÇ çizilmez — kutu düğmedir.
-  expect(screen.queryByRole("combobox")).toBeNull();
+  expect(screen.queryByRole("combobox")).toBeNull(); // formda küçük açılır liste HİÇ çizilmez
   await userEvent.click(screen.getByRole("button", { name: "Tedarikçi seç (liste)" }));
   const dialog = await screen.findByRole("dialog");
   await within(dialog).findByText("Boyahane Ltd");
   return dialog;
 }
+const roleTrigger = (dialog: HTMLElement) => within(dialog).getByRole("combobox", { name: "Rol" });
 
-describe("SupplierSelect (form) + SupplierPickerModal", () => {
-  it("⭐ kutuya tıklayınca DOĞRUDAN modal (combobox yok); TAM liste: müşteri-only dahil, Rol kolonu ayırt eder; kolonlar", async () => {
+describe("SupplierPickerModal v3", () => {
+  it("(1) ⭐ kutuya tıkla → dialog; TAM liste (müşteri-only dahil, Rol ayırt eder); kolonlar; sayfa 50, ilk açılışta filtre yok", async () => {
     const dialog = await openModal();
     for (const h of ["Kod", "Ünvan", "Rol", "Vergi No", "Telefon"]) expect(within(dialog).getByText(h)).toBeInTheDocument();
     for (const n of ["İplik A.Ş.", "Hem Alır Hem Satar", "Yalnız Müşteri", "Boyahane Ltd"]) expect(within(dialog).getByText(n)).toBeInTheDocument();
-    const musteriRow = within(dialog).getByText("Yalnız Müşteri").closest("tr") as HTMLElement;
-    expect(within(musteriRow).getByText("Müşteri")).toBeInTheDocument();
-    const fasonRow = within(dialog).getByText("Boyahane Ltd").closest("tr") as HTMLElement;
-    expect(within(fasonRow).getByText("Fason")).toBeInTheDocument();
-    expect(within(fasonRow).getByText("2220003334")).toBeInTheDocument();
-    // ilk açılışta filtre YOK: cari sorgusu type'sız, fason sorgusu da atıldı; sayfa boyu 50
+    expect(within(within(dialog).getByText("Yalnız Müşteri").closest("tr") as HTMLElement).getByText("Müşteri")).toBeInTheDocument();
+    expect(within(within(dialog).getByText("Boyahane Ltd").closest("tr") as HTMLElement).getByText("Fason")).toBeInTheDocument();
     expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ limit: 50, filters: { isActive: "true" } }));
     expect(subsGetAll).toHaveBeenCalledWith(expect.objectContaining({ pageSize: 50 }));
-    expect(within(dialog).getByText(/Yüklü 4/)).toBeInTheDocument();
+    expect(within(dialog).getByText("Yüklü 4 kayıt")).toBeInTheDocument();
+    expect(within(dialog).getByText("Tüm kayıtlar yüklendi")).toBeInTheDocument();
   });
 
-  it("⭐ rol seçimi SUNUCUYA gider: Tedarikçi → filter[type]=SUPPLIER ve fason sorgusu YOK; Fason → yalnız fason", async () => {
+  it("(2a) ⭐ rol FARE ile: tetik → seçenek 'Tedarikçi' → sunucuya filter[type]=SUPPLIER, fason sorulmaz; 'Fason' → yalnız fason", async () => {
     const dialog = await openModal();
     listCursor.mockClear();
     subsGetAll.mockClear();
-    await userEvent.selectOptions(within(dialog).getByRole("combobox", { name: "Rol" }), "SUPPLIER");
+    await userEvent.click(roleTrigger(dialog));
+    await userEvent.click(await screen.findByRole("option", { name: "Tedarikçi" }));
     await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", type: "SUPPLIER" } })));
     await waitFor(() => expect(within(dialog).queryByText("Boyahane Ltd")).toBeNull());
     expect(within(dialog).getByText("İplik A.Ş.")).toBeInTheDocument();
     expect(within(dialog).queryByText("Yalnız Müşteri")).toBeNull();
     expect(subsGetAll).not.toHaveBeenCalled();
     listCursor.mockClear();
-    await userEvent.selectOptions(within(dialog).getByRole("combobox", { name: "Rol" }), "SUBCONTRACTOR");
+    await userEvent.click(roleTrigger(dialog));
+    await userEvent.click(await screen.findByRole("option", { name: "Fason" }));
     await within(dialog).findByText("Boyahane Ltd");
-    expect(within(dialog).queryByText("İplik A.Ş.")).toBeNull();
+    await waitFor(() => expect(within(dialog).queryByText("İplik A.Ş.")).toBeNull());
     expect(listCursor).not.toHaveBeenCalled();
+    expect(roleTrigger(dialog)).toHaveTextContent("Fason");
   });
 
-  it("arama sunucuya gider (iki bacak)", async () => {
+  it("(2b) ⭐ rol KLAVYE ile: tetik odak → ↓ (açılır) → ↓ → Enter = 'Müşteri' → filter[type]=CUSTOMER", async () => {
+    const dialog = await openModal();
+    listCursor.mockClear();
+    roleTrigger(dialog).focus();
+    await userEvent.keyboard("{ArrowDown}");
+    await screen.findByRole("listbox");
+    await userEvent.keyboard("{ArrowDown}{Enter}");
+    await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", type: "CUSTOMER" } })));
+    await within(dialog).findByText("Yalnız Müşteri");
+    await waitFor(() => expect(within(dialog).queryByText("İplik A.Ş.")).toBeNull());
+    expect(roleTrigger(dialog)).toHaveTextContent("Müşteri");
+  });
+
+  it("(3) arama sunucuya (iki bacak)", async () => {
     const dialog = await openModal();
     await userEvent.type(within(dialog).getByRole("textbox", { name: "Tedarikçi ara" }), "Boya");
-    await waitFor(() => expect(subsGetAll).toHaveBeenCalledWith(expect.objectContaining({ search: "Boya" })));
     await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ search: "Boya" })));
+    await waitFor(() => expect(subsGetAll).toHaveBeenCalledWith(expect.objectContaining({ search: "Boya" })));
     await waitFor(() => expect(within(dialog).queryByText("İplik A.Ş.")).toBeNull());
     expect(within(dialog).getByText("Boyahane Ltd")).toBeInTheDocument();
   });
 
-  it("⭐ satıra tıklayınca seçim forma yazılır (kind + id) ve modal kapanır", async () => {
+  it("(4) ⭐ satıra tıkla → onChange({kind,id}) ve kapanır", async () => {
     const onChange = vi.fn();
     const dialog = await openModal(onChange);
     await userEvent.click(within(dialog).getByText("Boyahane Ltd"));
-    await waitFor(() => expect(onChange).toHaveBeenCalledWith({ kind: "SUBCONTRACTOR", id: "s1" }));
+    expect(onChange).toHaveBeenCalledWith({ kind: "SUBCONTRACTOR", id: "s1" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
-  it("sayfalı: ilk sayfada nextCursor varsa 'Yüklü … / toplam' sayacı ve devam; seçili kayıt kutuda etiketle, nullable'da temizle (×)", async () => {
-    listCursor.mockImplementation((p: { cursor?: string | null }) => (p.cursor ? cursorPage([CUSTOMERS[2]]) : cursorPage(CUSTOMERS.slice(0, 2), "c2")));
-    renderWithProviders(<SupplierSelect value={{ kind: "SUBCONTRACTOR", id: "s1" }} selectedLabel="FAS1 — Boyahane Ltd" onChange={() => {}} nullable modalPicker />);
-    expect(screen.getByRole("button", { name: "Tedarikçi seç (liste)" })).toHaveTextContent("FAS1 — Boyahane Ltd");
-    expect(screen.getByRole("button", { name: "Tedarikçiyi temizle" })).toBeInTheDocument();
+  it("(5) ⭐ ALL'da TEK sorgu, sıralı bacak: cari sayfaları cursor ile biter, sonra fason sayfası 1 → 2", async () => {
+    // Sayfalar AĞ GİBİ gecikmeli döner: jsdom'da IO tetiklenmez, kısa-liste koruması `isFetchingNext`in
+    // true→false geçişiyle bir tur daha yükler; anında çözülen mock o ara durumu atlar (gerçek ağda olmaz).
+    const gec = <T,>(v: Promise<T>) => new Promise<T>((res) => setTimeout(() => res(v), 5));
+    listCursor.mockImplementation((p: { cursor?: string | null }) => gec(p.cursor === "c2" ? cursorPage([CUSTOMERS[2]]) : cursorPage(CUSTOMERS.slice(0, 2), "c2")));
+    subsGetAll.mockImplementation((p: { page: number }) => gec(p.page === 1 ? offsetPage(SUBS, 1, 2) : offsetPage([{ ...SUBS[0], id: "s2", code: "FAS2", name: "İkinci Fason" }], 2, 2)));
+    renderWithProviders(<SupplierSelect value={null} onChange={() => {}} modalPicker />);
     await userEvent.click(screen.getByRole("button", { name: "Tedarikçi seç (liste)" }));
     const dialog = await screen.findByRole("dialog");
-    await within(dialog).findByText("İplik A.Ş.");
-    // Sayfalı: ilk sayfa nextCursor "c2" → sonraki sayfa cursor ile istenir ("Daha fazla yükle" düğmesi YOK;
-    // kısa liste koruması / sentinel otomatik yükler) ve üçüncü cari gelir; sayaç toplamı 3 + 1 = 4.
-    await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ cursor: "c2" })));
-    await within(dialog).findByText("Yalnız Müşteri");
-    expect(within(dialog).getByText(/Yüklü 4 \/ 4 kayıt/)).toBeInTheDocument();
-    expect(within(dialog).queryByRole("button", { name: /Daha fazla/i })).toBeNull();
+    // kısa liste koruması / sentinel: jsdom'da IO tetiklenmez ama ilk sayfa akışı token'ı takip eder
+    await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ cursor: "c2" })), { timeout: 4000 });
+    await waitFor(() => expect(subsGetAll).toHaveBeenCalledWith(expect.objectContaining({ page: 1 })), { timeout: 4000 });
+    await waitFor(() => expect(subsGetAll).toHaveBeenCalledWith(expect.objectContaining({ page: 2 })), { timeout: 4000 });
+    await within(dialog).findByText("İkinci Fason", {}, { timeout: 4000 });
+    expect(within(dialog).getByText("Yüklü 5 kayıt")).toBeInTheDocument();
+    const names = within(dialog).getAllByRole("row").slice(1).map((r) => r.querySelectorAll("td")[1]?.textContent);
+    expect(names).toEqual(["İplik A.Ş.", "Hem Alır Hem Satar", "Yalnız Müşteri", "Boyahane Ltd", "İkinci Fason"]);
   });
 
-  it("boş listede yönlendirme: Tanımlar → İş Ortakları → Cariler", async () => {
+  it("(6) ⭐ tek bacak 500 → uyarı + öbür bacak listelenir", async () => {
+    listCursor.mockImplementation(() => Promise.reject(new Error("500")));
+    renderWithProviders(<SupplierSelect value={null} onChange={() => {}} modalPicker />);
+    await userEvent.click(screen.getByRole("button", { name: "Tedarikçi seç (liste)" }));
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByText("Boyahane Ltd");
+    expect(within(dialog).getByText(/Cari kartlar listelenemedi — yalnız fason firmalar görünüyor/)).toBeInTheDocument();
+    expect(within(dialog).queryByText("İplik A.Ş.")).toBeNull();
+  });
+
+  it("(7) ⭐ kaynak taraması: modal ağacında yerleşik <select>/<option> yok; DataTable/useReactTable/pagination cast yok; iki sorgu yok", () => {
+    const dir = path.resolve(__dirname);
+    // Yorumlar ÖNCE soyulur — başlık yorumu "yerleşik <select> yok" der, o bir ihlal değildir.
+    const soy = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
+    const modal = soy(readFileSync(path.join(dir, "SupplierPickerModal.tsx"), "utf8"));
+    const hook = soy(readFileSync(path.join(dir, "useSupplierPickerData.ts"), "utf8"));
+    expect(modal).not.toMatch(/<select\b|<option\b/);
+    expect(modal + hook).not.toMatch(/DataTable|useReactTable|DataTablePagination|as unknown as/);
+    expect((hook.match(/useInfiniteQuery\(/g) ?? []).length).toBe(1);
+    expect(modal).toMatch(/from "@\/components\/ui\/select"/);
+    expect(modal).toMatch(/useInfiniteScroll\(/);
+  });
+
+  it("boş liste yönlendirme; modalPicker'sız kutu bayt bayt (combobox)", async () => {
     listCursor.mockImplementation(() => cursorPage([]));
     subsGetAll.mockImplementation(() => offsetPage([]));
     renderWithProviders(<SupplierSelect value={null} onChange={() => {}} modalPicker />);
     await userEvent.click(screen.getByRole("button", { name: "Tedarikçi seç (liste)" }));
     await within(await screen.findByRole("dialog")).findByText(SUPPLIER_PICKER_EMPTY);
-  });
-
-  it("modalPicker verilmeyen kutu (filtre şeridi): küçük açılır liste bayt bayt, modal düğmesi YOK", () => {
-    renderWithProviders(<SupplierSelect value={null} onChange={() => {}} />);
-    expect(screen.getByRole("combobox")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Tedarikçi seç (liste)" })).toBeNull();
   });
 });

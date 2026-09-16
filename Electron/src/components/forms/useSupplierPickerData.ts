@@ -1,10 +1,11 @@
 // =============================================================================
-// TEDARİKÇİ LİSTE MODALI VERİSİ — iki bacak, sunucudan sayfa sayfa, rol SUNUCUDA (istek #5 rev.)
+// TEDARİKÇİ SEÇİCİ MODALI VERİSİ — TEK sonsuz sorgu, bacak ayrımlı sayfa token'ı (v3)
 // =============================================================================
-// Cari bacağı cursor'lu (`listCursor`, `useEntityPickerData` emsali); fason bacağı yalnız offset verir
-// (`subcontractor-management.service.findAll`) → sayfa numarasıyla `useInfiniteQuery`. "Tümü"de iki bacak
-// birlikte: önce cariler tükenir, sonra fason sayfaları — sıralama SUNUCUNUN, istemcide yeniden sıralanmaz
-// (sayfa sınırı korunur). Rol seçimi `supplierRoleQuery` ile parametreye çevrilir; kapalı bacak sorulmaz.
+// Cari bacağı `listCursor` (cursor, 50), fason bacağı `getAll` (sayfa numarası, 50). `getNextPageParam`
+// saf `nextPageToken` ile karar verir: aynı bacakta devam → (ALL'da) fason 1. sayfa → bitti. Bir bacak
+// düşerse (500) o sayfa `error:true` + boş satır olarak döner ve sorgu ÖBÜR bacağa geçer — liste yarım
+// değil "uyarılı" olur (`supplierLoadNotice`). `open=false` iken sorgu kapalı; kapanınca arama/rol
+// SIFIRLANMAZ (kullanıcı bulduğu yerde açar).
 // =============================================================================
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { customerService } from "@/pages/Customers/service";
@@ -12,9 +13,17 @@ import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { Customer } from "@/pages/Customers/types";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 import { supplierListFilters } from "./supplierParty";
-import { supplierRoleQuery, toSupplierPickerRows, type SupplierPickerRow, type SupplierRoleFilter } from "./supplierPicker";
-
-export const SUPPLIER_PICKER_PAGE = 50;
+import {
+  SUPPLIER_PICKER_PAGE,
+  customerRow,
+  firstPageToken,
+  legsFor,
+  nextPageToken,
+  subcontractorRow,
+  type PageToken,
+  type PickerPage,
+  type SupplierRoleFilter,
+} from "./supplierPicker";
 
 interface Args {
   open: boolean;
@@ -23,56 +32,51 @@ interface Args {
   includeInactive: boolean;
 }
 
-export function useSupplierPickerData({ open, search, role, includeInactive }: Args) {
-  const q = supplierRoleQuery(role);
-  const base = supplierListFilters(includeInactive);
-  const customersQ = useInfiniteQuery({
-    queryKey: ["supplier-picker", "customers", search, role, includeInactive],
-    queryFn: ({ pageParam }) =>
-      customerService.listCursor({
-        cursor: pageParam,
+async function fetchPage(token: PageToken, args: Args): Promise<PickerPage> {
+  const base = supplierListFilters(args.includeInactive);
+  const search = args.search ? { search: args.search } : {};
+  try {
+    if (token.leg === "customers") {
+      const { customerType } = legsFor(args.role);
+      const res = await customerService.listCursor({
+        cursor: token.cursor,
         limit: SUPPLIER_PICKER_PAGE,
         sortBy: "name",
         sortOrder: "asc",
-        filters: { ...base, ...(q.customerType ? { type: q.customerType } : {}) },
-        ...(search ? { search } : {}),
-        ...(pageParam === null ? { withTotal: true } : {}),
-      }),
-    initialPageParam: null as string | null,
-    getNextPageParam: (last) => last.pagination.nextCursor ?? undefined,
-    enabled: open && q.customers,
+        filters: { ...base, ...(customerType ? { type: customerType } : {}) },
+        ...search,
+      });
+      const next = res.pagination.nextCursor;
+      return { token, rows: (res.data as Customer[]).map(customerRow), next: next ? { leg: "customers", cursor: next } : null, error: false };
+    }
+    const res = await subcontractorService.getAll({ page: token.page, pageSize: SUPPLIER_PICKER_PAGE, sortBy: "name", sortOrder: "asc", filters: base, ...search });
+    const { page, totalPages } = res.pagination;
+    return { token, rows: (res.data as Subcontractor[]).map(subcontractorRow), next: page < totalPages ? { leg: "subs", page: page + 1 } : null, error: false };
+  } catch {
+    return { token, rows: [], next: null, error: true };
+  }
+}
+
+export function useSupplierPickerData(args: Args) {
+  const { open, search, role, includeInactive } = args;
+  const q = useInfiniteQuery({
+    queryKey: ["supplier-picker", search, role, includeInactive],
+    queryFn: ({ pageParam }) => fetchPage(pageParam, args),
+    initialPageParam: firstPageToken(role),
+    getNextPageParam: (last) => nextPageToken(last, role),
+    enabled: open,
     staleTime: 30_000,
   });
-  const subsQ = useInfiniteQuery({
-    queryKey: ["supplier-picker", "subcontractors", search, role, includeInactive],
-    queryFn: ({ pageParam }) =>
-      subcontractorService.getAll({ page: pageParam, pageSize: SUPPLIER_PICKER_PAGE, sortBy: "name", sortOrder: "asc", filters: base, ...(search ? { search } : {}) }),
-    initialPageParam: 1,
-    getNextPageParam: (last) => (last.pagination.page < last.pagination.totalPages ? last.pagination.page + 1 : undefined),
-    enabled: open && q.subcontractors,
-    staleTime: 30_000,
-  });
-
-  const customers = q.customers ? (customersQ.data?.pages ?? []).flatMap((p) => p.data as Customer[]) : [];
-  const subs = q.subcontractors ? (subsQ.data?.pages ?? []).flatMap((p) => p.data as Subcontractor[]) : [];
-  const rows: SupplierPickerRow[] = toSupplierPickerRows(customers, subs);
-  const customersMore = q.customers && Boolean(customersQ.hasNextPage);
-  const subsMore = q.subcontractors && Boolean(subsQ.hasNextPage);
-  const totalCustomers = q.customers ? customersQ.data?.pages[0]?.pagination.totalEstimate : 0;
-  const totalSubs = q.subcontractors ? subsQ.data?.pages[0]?.pagination.total : 0;
-
+  const pages = q.data?.pages ?? [];
   return {
-    rows,
-    isLoading: (q.customers && customersQ.isLoading) || (q.subcontractors && subsQ.isLoading),
-    customersError: q.customers && customersQ.isError,
-    subcontractorsError: q.subcontractors && subsQ.isError,
-    hasMore: customersMore || subsMore,
-    isFetchingMore: customersQ.isFetchingNextPage || subsQ.isFetchingNextPage,
-    total: totalCustomers != null && totalSubs != null ? totalCustomers + totalSubs : undefined,
-    /** Önce cariler tükenir, sonra fason sayfaları. */
-    loadMore: () => {
-      if (customersMore) void customersQ.fetchNextPage();
-      else if (subsMore) void subsQ.fetchNextPage();
+    rows: pages.flatMap((p) => p.rows),
+    isLoading: q.isLoading,
+    customersError: pages.some((p) => p.error && p.token.leg === "customers"),
+    subcontractorsError: pages.some((p) => p.error && p.token.leg === "subs"),
+    hasMore: Boolean(q.hasNextPage),
+    isFetchingNext: q.isFetchingNextPage,
+    fetchNext: () => {
+      void q.fetchNextPage();
     },
   };
 }

@@ -1,32 +1,29 @@
 // =============================================================================
-// TEDARİKÇİ LİSTE MODALI — TAM liste, sunucudan sayfa sayfa, rol tek açılır seçim (istek #5 rev.)
+// TEDARİKÇİ SEÇİCİ MODALI (v3, sıfırdan) — Radix Select rol · düz `ui/table` · `useInfiniteScroll` doğrudan
 // =============================================================================
-// Cariler sayfasının tablo bileşeni (`DataTable`, sonsuz kaydırma sentinel'i içinde) ile Kod · Ünvan · Rol ·
-// Vergi No · Telefon. Arama ve rol SUNUCUDA (`useSupplierPickerData`). İlk açılışta filtre yok: bütün cariler
-// (müşteri-only dahil — Rol kolonu ayırt eder) + fason firmalar. Seçim satıra tıklayınca.
+// Kullanıcı kararı (2026-09-16 03:55): önceki yazım Electron dev oturumunda rol kutusu değişince
+// renderer'ı senkron döngüye sokuyordu (kök neden kovalanmadı); yeniden yazım şüpheli üç parçayı
+// YAPISAL olarak dışarıda bırakır — yerleşik <select> yok (Radix `ui/select`, Dialog içinde emsal
+// `CustomerFormDialog`), `DataTable`/`useReactTable`/pagination cast'i yok, iki bağımsız sorgu yok
+// (`useSupplierPickerData` tek sonsuz sorgu). Kaydırma kabı TEK, sentinel dipte; arama + rol SUNUCUDA.
 // =============================================================================
 import { useState } from "react";
-import { getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
-import { Search } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { DataTable } from "@/components/data-table/DataTable";
-import type { DataTablePagination } from "@/hooks/useDataTable";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
+import { cn } from "@/lib/utils";
 import { supplierLoadNotice, type SupplierParty } from "./supplierParty";
 import { SUPPLIER_ROLE_FILTER_OPTIONS, SUPPLIER_ROLE_LABEL, type SupplierPickerRow, type SupplierRoleFilter } from "./supplierPicker";
-import { SUPPLIER_PICKER_PAGE, useSupplierPickerData } from "./useSupplierPickerData";
-
-export const SUPPLIER_PICKER_COLUMNS: ColumnDef<SupplierPickerRow>[] = [
-  { accessorKey: "code", header: "Kod", cell: ({ row }) => <span className="font-mono text-xs">{row.original.code ?? "—"}</span> },
-  { accessorKey: "name", header: "Ünvan", cell: ({ row }) => <span className="font-medium">{row.original.name}{!row.original.isActive && <span className="ml-1 text-xs text-muted-foreground">(pasif)</span>}</span> },
-  { accessorKey: "role", header: "Rol", cell: ({ row }) => <Badge variant={row.original.role === "SUBCONTRACTOR" ? "secondary" : row.original.role === "CUSTOMER" ? "muted" : "default"}>{SUPPLIER_ROLE_LABEL[row.original.role]}</Badge> },
-  { accessorKey: "taxNumber", header: "Vergi No", cell: ({ row }) => row.original.taxNumber ?? <span className="text-muted-foreground">—</span> },
-  { accessorKey: "phone", header: "Telefon", cell: ({ row }) => row.original.phone ?? <span className="text-muted-foreground">—</span> },
-];
+import { useSupplierPickerData } from "./useSupplierPickerData";
 
 export const SUPPLIER_PICKER_EMPTY = "Tedarikçi kartı yok — Tanımlar → İş Ortakları → Cariler'den açın.";
+export const SUPPLIER_PICKER_FILTERED_EMPTY = "Süzgece uyan kayıt yok.";
+const HEADERS = ["Kod", "Ünvan", "Rol", "Vergi No", "Telefon"] as const;
 
 interface Props {
   open: boolean;
@@ -35,17 +32,60 @@ interface Props {
   includeInactive?: boolean;
 }
 
+function roleBadgeVariant(role: SupplierPickerRow["role"]): "secondary" | "muted" | "default" {
+  if (role === "SUBCONTRACTOR") return "secondary";
+  if (role === "CUSTOMER") return "muted";
+  return "default";
+}
+
+function PickerRow({ r, onPick }: { r: SupplierPickerRow; onPick: (p: SupplierParty) => void }) {
+  return (
+    <TableRow className={cn("cursor-pointer", !r.isActive && "opacity-60")} onClick={() => onPick({ kind: r.kind, id: r.id })}>
+      <TableCell className="py-1.5 font-mono text-xs">{r.code ?? "—"}</TableCell>
+      <TableCell className="py-1.5 font-medium">
+        {r.name}
+        {!r.isActive && <span className="ml-1 text-xs text-muted-foreground">(pasif)</span>}
+      </TableCell>
+      <TableCell className="py-1.5">
+        <Badge variant={roleBadgeVariant(r.role)}>{SUPPLIER_ROLE_LABEL[r.role]}</Badge>
+      </TableCell>
+      <TableCell className="py-1.5 text-xs">{r.taxNumber ?? <span className="text-muted-foreground">—</span>}</TableCell>
+      <TableCell className="py-1.5 text-xs">{r.phone ?? <span className="text-muted-foreground">—</span>}</TableCell>
+    </TableRow>
+  );
+}
+
+function StatusLine({ count, hasMore, isFetchingNext }: { count: number; hasMore: boolean; isFetchingNext: boolean }) {
+  return (
+    <div className="flex items-center justify-between border-t px-3 py-2 text-xs text-muted-foreground">
+      <span>Yüklü {count} kayıt</span>
+      {isFetchingNext ? (
+        <span className="flex items-center gap-1.5">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Yükleniyor…
+        </span>
+      ) : hasMore ? null : (
+        <span>Tüm kayıtlar yüklendi</span>
+      )}
+    </div>
+  );
+}
+
 export function SupplierPickerModal({ open, onOpenChange, onPick, includeInactive = false }: Props) {
   const [searchInput, setSearchInput] = useState("");
-  const search = useDebouncedValue(searchInput.trim(), 200);
+  const search = useDebouncedValue(searchInput.trim(), 250);
   const [role, setRole] = useState<SupplierRoleFilter>("ALL");
   const data = useSupplierPickerData({ open, search, role, includeInactive });
-  const table = useReactTable({ data: data.rows, columns: SUPPLIER_PICKER_COLUMNS, getRowId: (r) => r.key, getCoreRowModel: getCoreRowModel() });
+  const { rootRef, sentinelRef } = useInfiniteScroll({ hasMore: data.hasMore, isLoading: data.isFetchingNext, onLoadMore: data.fetchNext, enabled: open });
   const notice = supplierLoadNotice({ customersError: data.customersError, subcontractorsError: data.subcontractorsError, loading: data.isLoading });
+  const pick = (p: SupplierParty) => {
+    onPick(p);
+    onOpenChange(false);
+  };
+  const emptyText = search || role !== "ALL" ? SUPPLIER_PICKER_FILTERED_EMPTY : SUPPLIER_PICKER_EMPTY;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col">
+      <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col gap-3">
         <DialogHeader>
           <DialogTitle>Tedarikçi seç</DialogTitle>
           <DialogDescription>Bütün cari kartlar ve fason firmalar tek listede; kaydırdıkça yüklenir, satıra tıklayınca seçilir.</DialogDescription>
@@ -55,32 +95,45 @@ export function SupplierPickerModal({ open, onOpenChange, onPick, includeInactiv
             <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input aria-label="Tedarikçi ara" placeholder="Kod, ünvan, vergi no…" className="pl-8" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} autoFocus />
           </div>
-          <select
-            aria-label="Rol"
-            className="h-9 rounded-md border bg-background px-2 text-sm"
-            value={role}
-            onChange={(e) => setRole(e.target.value as SupplierRoleFilter)}
-          >
-            {SUPPLIER_ROLE_FILTER_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
+          <Select value={role} onValueChange={(v) => setRole(v as SupplierRoleFilter)}>
+            <SelectTrigger aria-label="Rol" className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SUPPLIER_ROLE_FILTER_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        {notice && <p className={notice.tone === "error" ? "text-xs text-destructive" : "text-xs text-amber-700 dark:text-amber-500"}>{notice.message}</p>}
-        <div className="flex min-h-0 flex-1 flex-col">
-          <DataTable
-            table={table}
-            isLoading={data.isLoading}
-            emptyText={search || role !== "ALL" ? "Süzgece uyan kayıt yok." : SUPPLIER_PICKER_EMPTY}
-            // `DataTablePagination` tipi `useDataTable`ın dönüşünden türer (loadMore: react-query sonucu döner);
-            // burada iki bacaklı yükleyici — DataTable yalnız çağırır, dönüşü okumaz. Sayfa boyu sabit.
-            pagination={{ loaded: data.rows.length, total: data.total, hasMore: data.hasMore, isFetchingMore: data.isFetchingMore, pageSize: SUPPLIER_PICKER_PAGE, loadMore: data.loadMore, setPageSize: () => {} } as unknown as DataTablePagination}
-            onRowClick={(r) => {
-              onPick({ kind: r.kind, id: r.id });
-              onOpenChange(false);
-            }}
-          />
+        {notice && <p className={cn("text-xs", notice.tone === "error" ? "text-destructive" : "text-amber-700 dark:text-amber-500")}>{notice.message}</p>}
+        <div ref={rootRef} className="min-h-0 flex-1 overflow-auto rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                {HEADERS.map((h) => (
+                  <TableHead key={h}>{h}</TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.rows.map((r) => (
+                <PickerRow key={r.key} r={r} onPick={pick} />
+              ))}
+              {!data.isLoading && data.rows.length === 0 && (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={HEADERS.length} className="py-6 text-center text-sm text-muted-foreground">
+                    {emptyText}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+          <div ref={sentinelRef} aria-hidden className="h-px w-full" />
         </div>
+        <StatusLine count={data.rows.length} hasMore={data.hasMore} isFetchingNext={data.isFetchingNext || data.isLoading} />
       </DialogContent>
     </Dialog>
   );

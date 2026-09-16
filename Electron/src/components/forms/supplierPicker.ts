@@ -1,21 +1,17 @@
 // =============================================================================
-// TEDARİKÇİ LİSTE MODALI — saf katman: iki bacak → tek tablo satırı, rol → SUNUCU parametresi (istek #5 rev.)
+// TEDARİKÇİ SEÇİCİ MODALI — saf katman (v3, sıfırdan): rol → bacak/parametre, sayfa token'ı, satır
 // =============================================================================
-// Kullanıcı testi (revizyon): ① kutuya tıklayınca doğrudan modal; ② TAM liste — bütün cariler (müşteri-only
-// dahil; Rol kolonu ayırt eder), sunucudan sayfa sayfa; ③ rol TEK açılır seçim (Tümü · Müşteri · Tedarikçi ·
-// Alıcı + Satıcı · Fason), çip yok; ④ ilk yazımdaki çipler "düzgün çalışmıyordu" — ÖLÇÜLDÜ: rol süzgeci
-// İSTEMCİDEYDİ ve 100'lük sunucu sayfasının üstünde koşuyordu: ada göre sıralı ilk sayfada bir rolden 3-5
-// kayıt varsa çip o 3-5'i gösteriyor, gerisi "yok" görünüyordu (istemcide süzmek ilk sayfayı süzer —
-// `SupplierSelect` başlığındaki kural bu bileşende ihlal edilmişti). Çare: rol SUNUCUYA — cari bacağı
-// `filter[type]`, fason bacağı ayrı uç (rol Fason ⇒ yalnız o sorgu; Tümü ⇒ iki sorgu, cariler önce).
+// İki kaynak (cari kartlar `Customer` + fason firmalar `Subcontractor`) TEK sonsuz sorguyla okunur;
+// sayfa token'ı bacağı ayırt eder: cari bacağı cursor'lu, fason bacağı sayfa numaralı (uç yalnız
+// offset verir). "Tümü"de önce cariler tükenir, sonra fason sayfaları. Rol ve arama SUNUCUDA.
 // =============================================================================
 import type { Customer } from "@/pages/Customers/types";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 import type { SupplierParty, SupplierPartyKind } from "./supplierParty";
 
-/** Satırın rolü — cari tipi ya da fason. */
+export const SUPPLIER_PICKER_PAGE = 50;
+
 export type SupplierRole = "CUSTOMER" | "SUPPLIER" | "BOTH" | "SUBCONTRACTOR";
-/** Açılır seçim değeri — "ALL" = Tümü. */
 export type SupplierRoleFilter = "ALL" | SupplierRole;
 
 export const SUPPLIER_ROLE_LABEL: Record<SupplierRole, string> = {
@@ -32,8 +28,37 @@ export const SUPPLIER_ROLE_FILTER_OPTIONS: readonly { value: SupplierRoleFilter;
   { value: "SUBCONTRACTOR", label: SUPPLIER_ROLE_LABEL.SUBCONTRACTOR },
 ];
 
+/** Sayfa token'ı — bacağı ve o bacaktaki konumu taşır. */
+export type PageToken = { leg: "customers"; cursor: string | null } | { leg: "subs"; page: number };
+
+/** Rolün sorduğu bacaklar; cari bacağına giden `filter[type]` (ALL'da yok). */
+export function legsFor(role: SupplierRoleFilter): { customers: boolean; subs: boolean; customerType?: SupplierRole } {
+  if (role === "ALL") return { customers: true, subs: true };
+  if (role === "SUBCONTRACTOR") return { customers: false, subs: true };
+  return { customers: true, subs: false, customerType: role };
+}
+
+export function firstPageToken(role: SupplierRoleFilter): PageToken {
+  return legsFor(role).customers ? { leg: "customers", cursor: null } : { leg: "subs", page: 1 };
+}
+
+/** Bir sayfanın sonucu — bacaktan bağımsız normalize (hata da bir sayfadır: öbür bacak listelenmeye devam eder). */
+export interface PickerPage {
+  token: PageToken;
+  rows: SupplierPickerRow[];
+  /** Cari: sonraki cursor; fason: `page < totalPages`. */
+  next: PageToken | null;
+  error: boolean;
+}
+
+/** Sonraki token: aynı bacakta devam; cari bitince (ALL) fason 1. sayfa; fason bitince yok. */
+export function nextPageToken(page: PickerPage, role: SupplierRoleFilter): PageToken | undefined {
+  if (page.next) return page.next;
+  if (page.token.leg === "customers" && legsFor(role).subs) return { leg: "subs", page: 1 };
+  return undefined;
+}
+
 export interface SupplierPickerRow extends SupplierParty {
-  /** `kind:id` — tablo satır anahtarı (iki tabloda aynı id çakışmasın). */
   key: string;
   code: string | null;
   name: string;
@@ -43,28 +68,8 @@ export interface SupplierPickerRow extends SupplierParty {
   isActive: boolean;
 }
 
-/** Rol seçiminin SUNUCU tarafı: hangi bacak sorulur, cari bacağına hangi `filter[type]` gider. */
-export interface SupplierRoleQuery {
-  customers: boolean;
-  subcontractors: boolean;
-  /** `filter[type]` — ALL'da yok (bütün tipler), Fason'da cari sorgusu zaten kapalı. */
-  customerType?: "CUSTOMER" | "SUPPLIER" | "BOTH";
-}
-
-export function supplierRoleQuery(role: SupplierRoleFilter): SupplierRoleQuery {
-  if (role === "ALL") return { customers: true, subcontractors: true };
-  if (role === "SUBCONTRACTOR") return { customers: false, subcontractors: true };
-  return { customers: true, subcontractors: false, customerType: role };
-}
-
 function row(kind: SupplierPartyKind, r: { id: string; code?: string | null; name: string; taxNumber?: string | null; isActive?: boolean }, role: SupplierRole, phone: string | null): SupplierPickerRow {
   return { kind, id: r.id, key: `${kind}:${r.id}`, code: r.code ?? null, name: r.name, role, taxNumber: r.taxNumber ?? null, phone, isActive: r.isActive !== false };
 }
-
-/** İki bacağı tek listeye açar — SIRALAMA SUNUCUNUN (sayfa sınırı korunur): cariler önce, fason sonra. */
-export function toSupplierPickerRows(customers: readonly Customer[] | undefined, subcontractors: readonly Subcontractor[] | undefined): SupplierPickerRow[] {
-  return [
-    ...(customers ?? []).map((c) => row("CUSTOMER", c, c.type, c.contactPhone ?? null)),
-    ...(subcontractors ?? []).map((s) => row("SUBCONTRACTOR", s, "SUBCONTRACTOR", s.phone ?? null)),
-  ];
-}
+export const customerRow = (c: Customer): SupplierPickerRow => row("CUSTOMER", c, c.type, c.contactPhone ?? null);
+export const subcontractorRow = (s: Subcontractor): SupplierPickerRow => row("SUBCONTRACTOR", s, "SUBCONTRACTOR", s.phone ?? null);
