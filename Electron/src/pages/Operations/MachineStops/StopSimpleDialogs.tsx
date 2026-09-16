@@ -4,10 +4,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatDateTime, localInputToIso, nowLocalInput, type MachineStop } from "./types";
+import { DateTimeInput } from "@/components/forms/DateTimeInput";
 
 interface CloseProps {
   target: MachineStop;
@@ -31,7 +31,7 @@ export function StopCloseDialog({ target, isPending, onClose, onConfirm, stampEr
         </DialogHeader>
         <div className="space-y-1">
           <Label htmlFor="stop-ended">Bitiş</Label>
-          <Input id="stop-ended" type="datetime-local" value={endedAt} onChange={(e) => setEndedAt(e.target.value)} aria-invalid={!!stampError} />
+          <DateTimeInput id="stop-ended" aria-label="Bitiş" value={endedAt} onChange={setEndedAt} />
           {stampError && <p className="text-destructive text-xs">{stampError}</p>}
         </div>
         <DialogFooter>

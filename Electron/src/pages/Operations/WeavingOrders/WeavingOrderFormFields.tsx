@@ -21,6 +21,7 @@ import { warpSpecService } from "@/pages/WarpSpecs/service";
 import type { WarpSpec } from "@/pages/WarpSpecs/types";
 import type { WeavingOrderFormValues } from "./schema";
 import { WEAVING_KIND_LABEL } from "./types";
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
 
 type Form = UseFormReturn<WeavingOrderFormValues>;
 
@@ -161,10 +162,10 @@ export function PlanFields({ form }: { form: Form }) {
       </FormField>
       <div className="grid grid-cols-2 gap-3">
         <FormField label="Planlanan başlangıç" htmlFor="plannedStartDate" error={err.plannedStartDate}>
-          <Input id="plannedStartDate" type="date" {...form.register("plannedStartDate")} />
+          <Controller control={form.control} name="plannedStartDate" render={({ field }) => <DatePickerInput id="plannedStartDate" value={field.value ?? ""} onChange={field.onChange} />} />
         </FormField>
         <FormField label="Planlanan bitiş" htmlFor="plannedEndDate" error={err.plannedEndDate}>
-          <Input id="plannedEndDate" type="date" {...form.register("plannedEndDate")} />
+          <Controller control={form.control} name="plannedEndDate" render={({ field }) => <DatePickerInput id="plannedEndDate" value={field.value ?? ""} onChange={field.onChange} />} />
         </FormField>
       </div>
       <FormField label="Not" htmlFor="notes" error={err.notes}>

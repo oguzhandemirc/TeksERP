@@ -5,7 +5,6 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,6 +13,7 @@ import { machineService } from "@/pages/Machines/service";
 import type { ReasonPreset } from "@/pages/ReasonPresets/service";
 import type { OpenStopPayload } from "./service";
 import { localInputToIso, nowLocalInput } from "./types";
+import { DateTimeInput } from "@/components/forms/DateTimeInput";
 
 interface Props {
   presets: ReasonPreset[];
@@ -60,7 +60,7 @@ export function StopEntryDialog({ presets, isPending, onClose, onConfirm, stampE
           </div>
           <div className="space-y-1">
             <Label htmlFor="stop-started">Başlangıç</Label>
-            <Input id="stop-started" type="datetime-local" value={startedAt} onChange={(e) => setStartedAt(e.target.value)} aria-invalid={!!stampError} />
+            <DateTimeInput id="stop-started" aria-label="Başlangıç" value={startedAt} onChange={setStartedAt} />
             {stampError && <p className="text-destructive text-xs">{stampError}</p>}
           </div>
           <div className="space-y-1">

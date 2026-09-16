@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { accountingDispatchService } from "./service";
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
 
 /**
  * Dialog'un ihtiyaç duyduğu MİNİMUM satır şekli — `DispatchListItem` değil.
@@ -102,12 +103,7 @@ export function InvoiceDialog({ row, onClose, queryKey }: Props): React.ReactEle
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="invoicedAt">Fatura Tarihi</Label>
-            <Input
-              id="invoicedAt"
-              type="date"
-              value={invoicedAt}
-              onChange={(e) => setInvoicedAt(e.target.value)}
-            />
+            <DatePickerInput id="invoicedAt" value={invoicedAt} onChange={setInvoicedAt} />
           </div>
         </div>
 

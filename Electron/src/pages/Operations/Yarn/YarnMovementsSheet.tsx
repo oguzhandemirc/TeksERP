@@ -35,7 +35,6 @@ import { AlertTriangle, Plus } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { PermissionGate } from "@/components/PermissionGate";
 import { cn } from "@/lib/utils";
 import {
@@ -52,6 +51,7 @@ import {
 } from "./service";
 import { useYarnBalance } from "./useYarnBalance";
 import { dayEndIso, dayStartIso, isNegative, kg } from "./qty";
+import { DateRangeInput } from "@/components/forms/DateRangeInput";
 
 const PAGE_SIZE = 50;
 
@@ -150,20 +150,7 @@ export function YarnMovementsSheet({ row, onClose, onAddMovement, showWarehouse 
                   </option>
                 ))}
               </select>
-              <Input
-                type="date"
-                className="w-36"
-                title="Başlangıç tarihi"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-              />
-              <Input
-                type="date"
-                className="w-36"
-                title="Bitiş tarihi"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-              />
+              <DateRangeInput from={dateFrom} to={dateTo} onFrom={setDateFrom} onTo={setDateTo} inputClassName="w-36" />
             </div>
 
             <div className="mt-3 min-h-0 flex-1 overflow-auto rounded-md border">

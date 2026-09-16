@@ -33,6 +33,7 @@ import { useMultiWarehouse } from "@/hooks/useWarehouses";
 import { listStockCounts } from "./service";
 import { NewStockCountDialog } from "./NewStockCountDialog";
 import { stockCountPath } from "./stockCount-regime";
+import { DateRangeInput } from "@/components/forms/DateRangeInput";
 import {
   EMPTY_STOCK_COUNT_FILTERS,
   STATUS_BADGE,
@@ -129,21 +130,7 @@ export function StockCountsPage() {
         </select>
 
         <div className="flex items-center gap-1 text-sm text-muted-foreground">
-          <Input
-            type="date"
-            aria-label="Başlangıç tarihi"
-            className="h-9 w-[9.5rem]"
-            value={filters.from}
-            onChange={(e) => set("from", e.target.value)}
-          />
-          <span>–</span>
-          <Input
-            type="date"
-            aria-label="Bitiş tarihi"
-            className="h-9 w-[9.5rem]"
-            value={filters.to}
-            onChange={(e) => set("to", e.target.value)}
-          />
+          <DateRangeInput from={filters.from} to={filters.to} onFrom={(v) => set("from", v)} onTo={(v) => set("to", v)} inputClassName="h-9 w-[9.5rem]" />
         </div>
 
         {isStockCountFilterDirty(filters) && (

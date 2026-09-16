@@ -9,7 +9,7 @@ import path from "node:path";
 import { nativeDateInputHits, yorumlariSoy, NATIVE_DATE_INPUT_RE } from "../date-input-kaynak";
 
 /** TABAN — parti parti düşer: 59 (ilk ölçüm 2026-09-17, yorumsuz; ham grep 76 idi) → … → 0. Sayı düşünce buraya YAZ (cırcır iki yönlü). */
-export const TABAN = 48;
+export const TABAN = 36;
 
 const SRC = path.resolve(__dirname, "../..");
 

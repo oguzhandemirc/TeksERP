@@ -7,13 +7,13 @@
 // =============================================================================
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useDevereMountTrackingRequired } from "@/hooks/usePricingEnabled";
 import { warpBeamService, type LoomMachine, type MountPayload } from "../service";
 import { WARP_MOUNT_METHOD_LABEL, formatM, type WarpBeam, type WarpBeamMountMethod } from "../types";
 import { BeamDialogShell, NumField, num } from "./BeamDialogShell";
+import { DateTimeInput } from "@/components/forms/DateTimeInput";
 
 interface Props {
   target: WarpBeam;
@@ -103,7 +103,7 @@ export function MountDialog({ target, isPending, onClose, onConfirm }: Props) {
         </div>
         <div className="space-y-1">
           <Label htmlFor="wb-mount-start">Kurulum başlangıcı{required ? " *" : ""}</Label>
-          <Input id="wb-mount-start" type="datetime-local" value={setupStartedAt} onChange={(e) => setSetupStartedAt(e.target.value)} />
+          <DateTimeInput id="wb-mount-start" aria-label="Kurulum başlangıcı" value={setupStartedAt} onChange={setSetupStartedAt} />
         </div>
         <NumField id="wb-mount-min" label="Kurulum süresi (dk, beyan)" value={setupMinutes} onChange={setSetupMinutes} step="1" />
         <NumField id="wb-mount-counter" label="Tezgah sayacı (m)" value={counter} onChange={setCounter} hint="Bağlama anındaki çözgü sayacı — sökümde farkı okumak için." />

@@ -15,7 +15,6 @@ import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionGate } from "@/components/PermissionGate";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -30,6 +29,7 @@ import { MACHINE_STOPS_QUERY_KEY, useMachineStopMutations } from "./useMachineSt
 import { useStopReasonPresets } from "./useStopReasonPresets";
 import { useMinuteTick, useStopActions, useStopFilters, useStopListParams, type DialogState } from "./useStopsPageState";
 import { todayKey } from "./types";
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
 
 export function MachineStopsPage() {
   const [day, setDay] = useState(todayKey());
@@ -67,7 +67,7 @@ export function MachineStopsPage() {
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
           <Label htmlFor="stops-day">Fabrika günü</Label>
-          <Input id="stops-day" type="date" value={day} onChange={(e) => setDay(e.target.value)} disabled={queueScope} className="w-44" />
+          <DatePickerInput id="stops-day" value={day} onChange={setDay} disabled={queueScope} className="w-44" />
         </div>
         <FilterBar filters={filters} />
       </div>

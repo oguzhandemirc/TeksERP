@@ -22,6 +22,7 @@ import type { Customer } from "@/pages/Customers/types";
 import { orderService } from "@/pages/Operations/Orders/service";
 import type { Order } from "@/pages/Operations/Orders/types";
 import { workOrderService } from "./service";
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
 
 interface Props {
   open: boolean;
@@ -250,11 +251,7 @@ export function LinkOrderDialog({
                 onChange={(e) => setQuickQty(e.target.value)}
                 placeholder="Metraj"
               />
-              <Input
-                type="date"
-                value={quickDeadline}
-                onChange={(e) => setQuickDeadline(e.target.value)}
-              />
+              <DatePickerInput aria-label="Termin" placeholder="Termin" value={quickDeadline} onChange={setQuickDeadline} />
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" size="sm" onClick={() => setQuickOpen(false)}>
