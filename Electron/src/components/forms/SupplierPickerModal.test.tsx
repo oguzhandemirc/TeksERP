@@ -16,7 +16,20 @@ import { subcontractorService } from "@/pages/Subcontractors/service";
 
 const listCursor = vi.fn();
 const subsGetAll = vi.fn();
-vi.mock("@/pages/Customers/service", () => ({ customerService: { listCursor: (...a: unknown[]) => listCursor(...a), getAll: vi.fn(), getById: vi.fn() } }));
+const createCustomer = vi.fn();
+vi.mock("@/pages/Customers/service", () => ({ customerService: { listCursor: (...a: unknown[]) => listCursor(...a), getAll: vi.fn(), getById: vi.fn(), create: (...a: unknown[]) => createCustomer(...a) } }));
+// Cari formu ağır (paneller, belge profili, benzer ad uyarısı) ve kendi bekçileri var — burada stub: açıkken
+// "Kaydet" tıklanınca formun vereceği değerlerle onSubmit çağrılır; `defaultType`/`showBranchDraft` prop'ları ölçülür.
+vi.mock("@/pages/Customers/CustomerFormDialog", () => ({
+  CustomerFormDialog: (p: { open: boolean; defaultType?: string; showBranchDraft?: boolean; onSubmit: (v: Record<string, unknown>) => void }) =>
+    p.open ? (
+      <div data-testid="cari-form" data-default-type={p.defaultType ?? ""} data-branch-draft={String(p.showBranchDraft)}>
+        <button type="button" onClick={() => p.onSubmit({ name: "Yeni Cari A.Ş.", taxNumber: "", type: p.defaultType ?? "CUSTOMER", isActive: true })}>Kaydet</button>
+      </div>
+    ) : null,
+}));
+vi.mock("@/pages/Customers/schema", () => ({ customerCardPayload: () => ({}) }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/pages/Subcontractors/service", () => ({ subcontractorService: { getAll: (...a: unknown[]) => subsGetAll(...a), getById: vi.fn() } }));
 
 const CUSTOMERS = [
@@ -161,6 +174,38 @@ describe("SupplierPickerModal v3", () => {
     expect((hook.match(/useInfiniteQuery\(/g) ?? []).length).toBe(1);
     expect(modal).toMatch(/from "@\/components\/ui\/select"/);
     expect(modal).toMatch(/useInfiniteScroll\(/);
+  });
+
+  it("⭐ (8) 'Yeni cari' → form (tip varsayılanı SUPPLIER, şube taslağı yok) → Kaydet → oluşturma gövdesi type SUPPLIER → onChange({kind:'CUSTOMER', id}) + modal kapanır", async () => {
+    createCustomer.mockResolvedValue({ success: true, data: { id: "c-yeni", code: "MUS1709260001", name: "Yeni Cari A.Ş.", type: "SUPPLIER" } });
+    const onChange = vi.fn();
+    const dialog = await openModal(onChange);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Yeni cari ekle" }));
+    const form = await screen.findByTestId("cari-form");
+    expect(form).toHaveAttribute("data-default-type", "SUPPLIER");
+    expect(form).toHaveAttribute("data-branch-draft", "false");
+    await userEvent.click(within(form).getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(createCustomer).toHaveBeenCalledWith(expect.objectContaining({ name: "Yeni Cari A.Ş.", type: "SUPPLIER", isActive: true })));
+    expect(createCustomer.mock.calls[0]![0]).not.toHaveProperty("code");
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith({ kind: "CUSTOMER", id: "c-yeni" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("(9) boş listede de 'Yeni cari' düğmesi var ve boş metin ona yönlendirir; modal yüksekliği SABİT (h-[85vh], max-h yok)", async () => {
+    listCursor.mockImplementation(() => cursorPage([]));
+    subsGetAll.mockImplementation(() => offsetPage([]));
+    renderWithProviders(<SupplierSelect value={null} onChange={() => {}} modalPicker />);
+    await userEvent.click(screen.getByRole("button", { name: "Tedarikçi seç (liste)" }));
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByText(SUPPLIER_PICKER_EMPTY);
+    expect(SUPPLIER_PICKER_EMPTY).toMatch(/Yeni cari/);
+    expect(within(dialog).getByRole("button", { name: "Yeni cari ekle" })).toBeInTheDocument();
+    // DOM: sabit yükseklik var; ESKİ `max-h-[85vh]` yok (ui/dialog tabanının kendi `max-h-[90vh]`i kütüphanenindir).
+    expect(dialog.className).toMatch(/\bh-\[85vh\]/);
+    expect(dialog.className).not.toMatch(/max-h-\[85vh\]/);
+    const src = readFileSync(path.join(path.resolve(__dirname), "SupplierPickerModal.tsx"), "utf8");
+    expect(src).toMatch(/DialogContent className="[^"]*\bh-\[85vh\]/);
+    expect(src).not.toMatch(/DialogContent className="[^"]*max-h-/);
   });
 
   it("boş liste yönlendirme; modalPicker'sız kutu bayt bayt (combobox)", async () => {

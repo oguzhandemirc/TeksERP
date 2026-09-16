@@ -40,6 +40,9 @@ interface Props {
    * içi "hızlı müşteri ekle" gibi dar akışlar false geçip formu sade tutar —
    * o çağıranların onSubmit'i şubeleri iletmez, gösterilmeleri veri kaybı olurdu. */
   showBranchDraft?: boolean;
+  /** Yeni kartta tip varsayılanı — tedarikçi seçicisinden açılınca SUPPLIER (alan görünür kalır,
+   *  kullanıcı değiştirebilir). Verilmezse katalog varsayılanı (CUSTOMER). */
+  defaultType?: CustomerFormValues["type"];
 }
 
 export function CustomerFormDialog({
@@ -49,6 +52,7 @@ export function CustomerFormDialog({
   onSubmit,
   isSubmitting,
   showBranchDraft = true,
+  defaultType,
 }: Props) {
   const isEdit = Boolean(initial);
   // customers.branchesEnabled kapalıyken şube yüzeyleri (sekme + taslak) gizlenir;
@@ -73,7 +77,7 @@ export function CustomerFormDialog({
         isActive: initial.isActive,
         branches: [],
       }
-    : customerFormDefaults;
+    : { ...customerFormDefaults, ...(defaultType ? { type: defaultType } : {}) };
 
   const form = useForm<CustomerFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -32,7 +32,7 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Yeni Alış Siparişi ve Yeni Mal Kabul formlarında tedarikçi kutusuna tıklayınca artık küçük açılır liste değil, tam liste penceresi açılır: bütün cari kartlar ve fason firmalar tek tabloda (Kod · Ünvan · Rol · Vergi No · Telefon), kaydırdıkça yüklenir; üstte kod/ünvan/vergi no araması ve tek seçimli rol süzgeci (Tümü · Müşteri · Tedarikçi · Alıcı + Satıcı · Fason). Satıra tıklayınca seçilir; mal kabulde seçim yanındaki × ile temizlenir. Seçili tedarikçi kutuda önce adıyla, sonra koduyla yazılır (dar kutuda kod adı gizlemez). Alış siparişleri listesindeki tedarikçi süzgeci değişmedi."
+          "metin": "Yeni Alış Siparişi ve Yeni Mal Kabul formlarında tedarikçi kutusuna tıklayınca artık küçük açılır liste değil, tam liste penceresi açılır: bütün cari kartlar ve fason firmalar tek tabloda (Kod · Ünvan · Rol · Vergi No · Telefon), kaydırdıkça yüklenir; üstte kod/ünvan/vergi no araması ve tek seçimli rol süzgeci (Tümü · Müşteri · Tedarikçi · Alıcı + Satıcı · Fason). Satıra tıklayınca seçilir; mal kabulde seçim yanındaki × ile temizlenir. Seçili tedarikçi kutuda önce adıyla, sonra koduyla yazılır (dar kutuda kod adı gizlemez). Aradığınız cari listede yoksa pencerenin üstündeki “Yeni cari” düğmesiyle kart açılır (tip varsayılanı Tedarikçi, değiştirilebilir) ve kaydedince kendiliğinden seçilir — Tanımlar’a gitmek gerekmez. Pencerenin yüksekliği süzgeç sonucu azalsa da sabit kalır. Alış siparişleri listesindeki tedarikçi süzgeci değişmedi."
         },
         {
           "kapsam": "panel",

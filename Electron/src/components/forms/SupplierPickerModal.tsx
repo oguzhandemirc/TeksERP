@@ -20,8 +20,9 @@ import { cn } from "@/lib/utils";
 import { supplierLoadNotice, type SupplierParty } from "./supplierParty";
 import { SUPPLIER_ROLE_FILTER_OPTIONS, SUPPLIER_ROLE_LABEL, type SupplierPickerRow, type SupplierRoleFilter } from "./supplierPicker";
 import { useSupplierPickerData } from "./useSupplierPickerData";
+import { SupplierQuickCreate } from "./SupplierQuickCreate";
 
-export const SUPPLIER_PICKER_EMPTY = "Tedarikçi kartı yok — Tanımlar → İş Ortakları → Cariler'den açın.";
+export const SUPPLIER_PICKER_EMPTY = "Tedarikçi kartı yok — Tanımlar → İş Ortakları → Cariler'den ya da buradaki Yeni cari düğmesiyle açın.";
 export const SUPPLIER_PICKER_FILTERED_EMPTY = "Süzgece uyan kayıt yok.";
 const HEADERS = ["Kod", "Ünvan", "Rol", "Vergi No", "Telefon"] as const;
 
@@ -85,7 +86,9 @@ export function SupplierPickerModal({ open, onOpenChange, onPick, includeInactiv
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col gap-3">
+      {/* Yükseklik SABİT (h-[85vh]): süzgeç/arama sonucu azalınca modal kısalmasın (kullanıcı isteği);
+          liste kabı `min-h-0 flex-1` boşlukta da yerini korur. */}
+      <DialogContent className="flex h-[85vh] max-w-4xl flex-col gap-3">
         <DialogHeader>
           <DialogTitle>Tedarikçi seç</DialogTitle>
           <DialogDescription>Bütün cari kartlar ve fason firmalar tek listede; kaydırdıkça yüklenir, satıra tıklayınca seçilir.</DialogDescription>
@@ -107,6 +110,7 @@ export function SupplierPickerModal({ open, onOpenChange, onPick, includeInactiv
               ))}
             </SelectContent>
           </Select>
+          <SupplierQuickCreate onCreated={pick} />
         </div>
         {notice && <p className={cn("text-xs", notice.tone === "error" ? "text-destructive" : "text-amber-700 dark:text-amber-500")}>{notice.message}</p>}
         <div ref={rootRef} className="min-h-0 flex-1 overflow-auto rounded-md border">
