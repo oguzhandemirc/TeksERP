@@ -23,15 +23,17 @@ export const unitForItemType: Record<ItemType, string> = {
 export const CompanyType = {
   CUSTOMER: "CUSTOMER",
   SUPPLIER: "SUPPLIER",
-  // Alıcı + Satıcı — tip bir ETİKET, akışları kısıtlamaz (backend zorlamıyor).
+  // Müşteri + Tedarikçi — tip bir ETİKET, akışları kısıtlamaz (backend zorlamıyor).
   BOTH: "BOTH",
 } as const;
 export type CompanyType = (typeof CompanyType)[keyof typeof CompanyType];
 
+/** Cari tipi etiketinin TEK kaynağı — rol dili (Müşteri · Tedarikçi · Müşteri + Tedarikçi); eski yön dili etiketi YOK.
+ *  `SUPPLIER_ROLE_LABEL` ve Cariler süzgeci buradan türer; kopya literal `enums.test.ts` taramasında kırmızıdır. */
 export const companyTypeLabels: Record<CompanyType, string> = {
   CUSTOMER: "Müşteri",
   SUPPLIER: "Tedarikçi",
-  BOTH: "Alıcı + Satıcı",
+  BOTH: "Müşteri + Tedarikçi",
 };
 
 export const StationType = {

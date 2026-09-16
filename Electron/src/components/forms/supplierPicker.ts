@@ -8,19 +8,19 @@
 import type { Customer } from "@/pages/Customers/types";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 import type { SupplierParty, SupplierPartyKind } from "./supplierParty";
+import { companyTypeLabels, type CompanyType } from "@/types/enums";
 
 export const SUPPLIER_PICKER_PAGE = 50;
 
 /** Seçici kipi: tedarikçi (alış: cari + fason) · müşteri (satış: yalnız cari, CUSTOMER sonra BOTH). */
 export type PickerMode = "supplier" | "customer";
 
-export type SupplierRole = "CUSTOMER" | "SUPPLIER" | "BOTH" | "SUBCONTRACTOR";
+export type SupplierRole = CompanyType | "SUBCONTRACTOR";
 export type SupplierRoleFilter = "ALL" | SupplierRole;
 
+/** Rol etiketi — cari tipleri `companyTypeLabels`tan (tek kaynak), fason yalnız burada. */
 export const SUPPLIER_ROLE_LABEL: Record<SupplierRole, string> = {
-  CUSTOMER: "Müşteri",
-  SUPPLIER: "Tedarikçi",
-  BOTH: "Alıcı + Satıcı",
+  ...companyTypeLabels,
   SUBCONTRACTOR: "Fason",
 };
 export const SUPPLIER_ROLE_FILTER_OPTIONS: readonly { value: SupplierRoleFilter; label: string }[] = [
@@ -30,7 +30,7 @@ export const SUPPLIER_ROLE_FILTER_OPTIONS: readonly { value: SupplierRoleFilter;
   { value: "BOTH", label: SUPPLIER_ROLE_LABEL.BOTH },
   { value: "SUBCONTRACTOR", label: SUPPLIER_ROLE_LABEL.SUBCONTRACTOR },
 ];
-/** Müşteri kipinde rol: Tümü · Müşteri · Alıcı + Satıcı (tedarikçi-only ve fason satışta anlamsız). */
+/** Müşteri kipinde rol: Tümü · Müşteri · Müşteri + Tedarikçi (tedarikçi-only ve fason satışta anlamsız). */
 export const CUSTOMER_ROLE_FILTER_OPTIONS: readonly { value: SupplierRoleFilter; label: string }[] = SUPPLIER_ROLE_FILTER_OPTIONS.filter((o) => o.value === "ALL" || o.value === "CUSTOMER" || o.value === "BOTH");
 export const roleFilterOptions = (mode: PickerMode) => (mode === "customer" ? CUSTOMER_ROLE_FILTER_OPTIONS : SUPPLIER_ROLE_FILTER_OPTIONS);
 

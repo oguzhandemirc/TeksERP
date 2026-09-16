@@ -17,15 +17,18 @@
 // ada göre sıralanır. Bunun tek maliyeti sıralamanın SAYFA İÇİ olmasıdır;
 // karşılığında hiçbir kart kaybolmaz (her kayıt tam olarak bir sayfada çıkar).
 // =============================================================================
+import { SUPPLIER_ROLE_LABEL, type SupplierRole } from "@/components/forms/supplierPicker";
+import type { CompanyType } from "@/types/enums";
 
-export type CariRoleFilter = "" | "Müşteri" | "Tedarikçi" | "Alıcı + Satıcı" | "Fason";
+/** Rol süzgecinin DEĞERİ enum anahtarıdır (etiket değil); "" = tüm roller. Etiket haritadan çizilir. */
+export type CariRoleFilter = "" | SupplierRole;
 
-/** Rol etiketi → `Customer.type` kodu (backend süzgeci). */
-const ROLE_TO_COMPANY_TYPE: Record<string, string> = {
-  Müşteri: "CUSTOMER",
-  Tedarikçi: "SUPPLIER",
-  "Alıcı + Satıcı": "BOTH",
-};
+const CARI_ROLES: readonly SupplierRole[] = ["CUSTOMER", "SUPPLIER", "BOTH", "SUBCONTRACTOR"];
+/** Süzgeç seçenekleri — etiketler `SUPPLIER_ROLE_LABEL`tan (tek kaynak `companyTypeLabels`). */
+export const CARI_ROLE_FILTER_OPTIONS: readonly { value: CariRoleFilter; label: string }[] = [
+  { value: "", label: "Tüm roller" },
+  ...CARI_ROLES.map((value) => ({ value, label: SUPPLIER_ROLE_LABEL[value] })),
+];
 
 /**
  * Rol süzgecinden SORGU PLANI.
@@ -34,18 +37,17 @@ const ROLE_TO_COMPANY_TYPE: Record<string, string> = {
  * süzer ve kullanıcı "Fason" seçtiğinde ilk sayfada fason yoksa "kayıt yok"
  * sanır — oysa kayıt bir sonraki sayfadadır (`RollFilterBar` dersi).
  *
- * "Fason" seçiliyken müşteri ucu HİÇ çağrılmaz (ve tersi): boş dönecek bir
+ * Fason (SUBCONTRACTOR) seçiliyken müşteri ucu HİÇ çağrılmaz (ve tersi): boş dönecek bir
  * isteği atmak, sayfa başına gereksiz bir yuvarlak yol demektir.
  */
 export function cariQueryPlan(role: CariRoleFilter): {
   customers: boolean;
   subcontractors: boolean;
   /** `filter[type]` — yalnız müşteri tarafında anlamlı. */
-  companyType?: string;
+  companyType?: CompanyType;
 } {
-  if (role === "Fason") return { customers: false, subcontractors: true };
-  const type = ROLE_TO_COMPANY_TYPE[role];
-  if (type) return { customers: true, subcontractors: false, companyType: type };
+  if (role === "SUBCONTRACTOR") return { customers: false, subcontractors: true };
+  if (role) return { customers: true, subcontractors: false, companyType: role };
   return { customers: true, subcontractors: true };
 }
 

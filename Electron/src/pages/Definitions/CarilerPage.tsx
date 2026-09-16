@@ -37,8 +37,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PermissionGate } from "@/components/PermissionGate";
 import { apiErrorText } from "@/lib/api-error";
-import { companyTypeLabels } from "@/types/enums";
-import { cariPageInfo, cariQueryPlan, mergeCariRows, type CariRoleFilter } from "./carilerPaging";
+import { SUPPLIER_ROLE_LABEL, type SupplierRole } from "@/components/forms/supplierPicker";
+import { CARI_ROLE_FILTER_OPTIONS, cariPageInfo, cariQueryPlan, mergeCariRows, type CariRoleFilter } from "./carilerPaging";
 import { customerService } from "@/pages/Customers/service";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import { CustomerFormDialog } from "@/pages/Customers/CustomerFormDialog";
@@ -49,14 +49,15 @@ import type { Customer } from "@/pages/Customers/types";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 
 type Row =
-  | { kind: "CUSTOMER"; id: string; code: string; name: string; taxNumber: string | null; phone: string | null; isActive: boolean; role: string; record: Customer }
-  | { kind: "SUBCONTRACTOR"; id: string; code: string; name: string; taxNumber: string | null; phone: string | null; isActive: boolean; role: string; record: Subcontractor };
+  | { kind: "CUSTOMER"; id: string; code: string; name: string; taxNumber: string | null; phone: string | null; isActive: boolean; role: SupplierRole; record: Customer }
+  | { kind: "SUBCONTRACTOR"; id: string; code: string; name: string; taxNumber: string | null; phone: string | null; isActive: boolean; role: SupplierRole; record: Subcontractor };
 
-const ROLE_BADGE: Record<string, string> = {
-  Müşteri: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200",
-  Tedarikçi: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
-  "Alıcı + Satıcı": "bg-violet-100 text-violet-900 dark:bg-violet-950 dark:text-violet-200",
-  Fason: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200",
+/** Rozet rengi ENUM anahtarıyla — etiket `SUPPLIER_ROLE_LABEL`tan çizilir, burada metin yok. */
+const ROLE_BADGE: Record<SupplierRole, string> = {
+  CUSTOMER: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200",
+  SUPPLIER: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
+  BOTH: "bg-violet-100 text-violet-900 dark:bg-violet-950 dark:text-violet-200",
+  SUBCONTRACTOR: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200",
 };
 
 /** Sayfa başına kart — iki kaynak da AYNI sayfayı çeker (bkz. `carilerPaging`). */
@@ -127,7 +128,7 @@ export function CarilerPage() {
             taxNumber: c.taxNumber ?? null,
             phone: (c as { phone?: string | null }).phone ?? null,
             isActive: c.isActive,
-            role: companyTypeLabels[c.type] ?? c.type,
+            role: c.type,
             record: c,
           }),
         )
@@ -142,7 +143,7 @@ export function CarilerPage() {
             taxNumber: (s as { taxNumber?: string | null }).taxNumber ?? null,
             phone: (s as { phone?: string | null }).phone ?? null,
             isActive: s.isActive,
-            role: "Fason",
+            role: "SUBCONTRACTOR",
             record: s,
           }),
         )
@@ -237,11 +238,11 @@ export function CarilerPage() {
           value={role}
           onChange={(e) => setRole(e.target.value as CariRoleFilter)}
         >
-          <option value="">Tüm roller</option>
-          <option value="Müşteri">Müşteri</option>
-          <option value="Tedarikçi">Tedarikçi</option>
-          <option value="Alıcı + Satıcı">Alıcı + Satıcı</option>
-          <option value="Fason">Fason</option>
+          {CARI_ROLE_FILTER_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
         </select>
         {/* Sayaç TOPLAMI söyler, ekrandaki satır sayısını değil: "12 kart"
             yazan bir ekranda 812 kart olması, kullanıcıya listenin tamamına
@@ -313,7 +314,7 @@ export function CarilerPage() {
                       {!r.isActive && <span className="ml-2 text-xs text-muted-foreground">(pasif)</span>}
                     </td>
                     <td className="px-3 py-2">
-                      <Badge className={ROLE_BADGE[r.role] ?? ""}>{r.role}</Badge>
+                      <Badge className={ROLE_BADGE[r.role] ?? ""}>{SUPPLIER_ROLE_LABEL[r.role] ?? r.role}</Badge>
                     </td>
                     <td className="px-3 py-2 font-mono text-xs">{r.taxNumber ?? "—"}</td>
                     <td className="px-3 py-2 text-muted-foreground">{r.phone ?? "—"}</td>

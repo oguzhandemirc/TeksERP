@@ -1,8 +1,9 @@
 // BEKÇİ — tedarikçi seçici saf katmanı (v3): rol → bacak/parametre · sayfa token geçişleri · satır eşlemesi
 import { describe, it, expect } from "vitest";
-import { SUPPLIER_ROLE_FILTER_OPTIONS, customerRow, firstPageToken, legsFor, nextPageToken, subcontractorRow, type PickerPage } from "./supplierPicker";
+import { SUPPLIER_ROLE_FILTER_OPTIONS, SUPPLIER_ROLE_LABEL, customerRow, firstPageToken, legsFor, nextPageToken, subcontractorRow, type PickerPage } from "./supplierPicker";
 import type { Customer } from "@/pages/Customers/types";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
+import { companyTypeLabels } from "@/types/enums";
 
 const page = (token: PickerPage["token"], next: PickerPage["next"] = null, error = false): PickerPage => ({ token, rows: [], next, error });
 
@@ -13,7 +14,14 @@ describe("supplierPicker (saf)", () => {
     expect(legsFor("SUPPLIER")).toEqual({ customers: true, subs: false, customerType: "SUPPLIER" });
     expect(firstPageToken("ALL")).toEqual({ leg: "customers", cursor: null });
     expect(firstPageToken("SUBCONTRACTOR")).toEqual({ leg: "subs", page: 1 });
-    expect(SUPPLIER_ROLE_FILTER_OPTIONS.map((o) => o.label)).toEqual(["Tümü", "Müşteri", "Tedarikçi", "Alıcı + Satıcı", "Fason"]);
+    expect(SUPPLIER_ROLE_FILTER_OPTIONS.map((o) => o.label)).toEqual(["Tümü", "Müşteri", "Tedarikçi", "Müşteri + Tedarikçi", "Fason"]);
+  });
+
+  it("⭐ cari tipi etiketleri TEK kaynaktan (`companyTypeLabels`) — kopyaya yazılan literal sapamaz", () => {
+    expect(SUPPLIER_ROLE_LABEL.CUSTOMER).toBe(companyTypeLabels.CUSTOMER);
+    expect(SUPPLIER_ROLE_LABEL.SUPPLIER).toBe(companyTypeLabels.SUPPLIER);
+    expect(SUPPLIER_ROLE_LABEL.BOTH).toBe(companyTypeLabels.BOTH);
+    expect(SUPPLIER_ROLE_LABEL.SUBCONTRACTOR).toBe("Fason");
   });
 
   it("⭐ token geçişi: aynı bacakta devam → ALL'da cariler bitince fason 1 → fason bitince yok; tek bacak rolde bacak geçişi YOK", () => {

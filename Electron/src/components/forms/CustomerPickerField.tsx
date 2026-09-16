@@ -2,7 +2,7 @@
 // MÜŞTERİ SEÇİCİ ALANI — tedarikçi modalı v3'ün MÜŞTERİ KİPİ (sipariş formu ①, 2026-09-17)
 // =============================================================================
 // Tetik kutusu "Ad — KOD" (`supplierOptionLabel`), tıkla → `SupplierPickerModal mode="customer"` (yalnız cari:
-// CUSTOMER sonra BOTH, rol Tümü · Müşteri · Alıcı + Satıcı, Şehir kolonu, "Yeni müşteri" hızlı ekleme). Seçili
+// CUSTOMER sonra BOTH, rol Tümü · Müşteri · Müşteri + Tedarikçi, Şehir kolonu, "Yeni müşteri" hızlı ekleme). Seçili
 // kaydın etiketi id'den çözülür (`customerService.getById`) — kutu boş görünüp state'in dolu olması yalan sınıfı.
 // =============================================================================
 import { useState } from "react";

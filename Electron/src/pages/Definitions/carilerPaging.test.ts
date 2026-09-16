@@ -9,7 +9,9 @@
 // ⭐ `hasNext` VEYA'dır: biri bitip diğeri devam ederse sayfa hâlâ var.
 // =============================================================================
 import { describe, it, expect } from "vitest";
-import { cariPageInfo, cariQueryPlan, mergeCariRows, type CariMergeRow } from "./carilerPaging";
+import { CARI_ROLE_FILTER_OPTIONS, cariPageInfo, cariQueryPlan, mergeCariRows, type CariMergeRow } from "./carilerPaging";
+import { SUPPLIER_ROLE_LABEL } from "@/components/forms/supplierPicker";
+import { companyTypeLabels } from "@/types/enums";
 
 describe("cariQueryPlan", () => {
   it("rol seçilmemişse iki kaynak da çekilir, tür süzgeci yok", () => {
@@ -17,21 +19,31 @@ describe("cariQueryPlan", () => {
   });
 
   it("⭐ Fason seçiliyken müşteri ucu HİÇ çağrılmaz", () => {
-    expect(cariQueryPlan("Fason")).toEqual({ customers: false, subcontractors: true });
+    expect(cariQueryPlan("SUBCONTRACTOR")).toEqual({ customers: false, subcontractors: true });
   });
 
   it("⭐ müşteri rolleri `filter[type]` ile SUNUCUDA süzülür", () => {
-    expect(cariQueryPlan("Tedarikçi")).toEqual({
+    expect(cariQueryPlan("SUPPLIER")).toEqual({
       customers: true,
       subcontractors: false,
       companyType: "SUPPLIER",
     });
-    expect(cariQueryPlan("Müşteri").companyType).toBe("CUSTOMER");
-    expect(cariQueryPlan("Alıcı + Satıcı").companyType).toBe("BOTH");
+    expect(cariQueryPlan("CUSTOMER").companyType).toBe("CUSTOMER");
+    expect(cariQueryPlan("BOTH").companyType).toBe("BOTH");
   });
 
   it("müşteri rolü seçiliyken fason ucu çağrılmaz (boş dönecek istek atılmaz)", () => {
-    expect(cariQueryPlan("Müşteri").subcontractors).toBe(false);
+    expect(cariQueryPlan("CUSTOMER").subcontractors).toBe(false);
+  });
+
+  it("⭐ süzgeç DEĞERİ enum anahtarı, ETİKET tek kaynaktan (`companyTypeLabels` → `SUPPLIER_ROLE_LABEL`)", () => {
+    expect(CARI_ROLE_FILTER_OPTIONS.map((o) => o.value)).toEqual(["", "CUSTOMER", "SUPPLIER", "BOTH", "SUBCONTRACTOR"]);
+    const label = (v: string) => CARI_ROLE_FILTER_OPTIONS.find((o) => o.value === v)?.label;
+    expect(label("")).toBe("Tüm roller");
+    expect(label("BOTH")).toBe(companyTypeLabels.BOTH);
+    expect(label("CUSTOMER")).toBe(companyTypeLabels.CUSTOMER);
+    expect(label("SUPPLIER")).toBe(companyTypeLabels.SUPPLIER);
+    expect(label("SUBCONTRACTOR")).toBe(SUPPLIER_ROLE_LABEL.SUBCONTRACTOR);
   });
 });
 

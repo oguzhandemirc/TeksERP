@@ -64,7 +64,7 @@ describe("OrderFormDialog — müşteri modalı (①)", () => {
     const roleTrigger = within(dialog).getByRole("combobox", { name: "Rol" });
     await userEvent.click(roleTrigger);
     const options = (await screen.findAllByRole("option")).map((o) => o.textContent);
-    expect(options).toEqual(["Tümü", "Müşteri", "Alıcı + Satıcı"]);
+    expect(options).toEqual(["Tümü", "Müşteri", "Müşteri + Tedarikçi"]);
     await userEvent.keyboard("{Escape}");
     await userEvent.click(within(dialog).getByText("Alfa Tekstil"));
     await waitFor(() => expect(screen.getByRole("button", { name: "Müşteri seç (liste)" })).toHaveTextContent("Alfa Tekstil — MUS1"));
