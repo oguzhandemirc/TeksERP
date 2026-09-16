@@ -17,13 +17,18 @@ import { customerCardPayload, type CustomerFormValues } from "@/pages/Customers/
 import { customerService } from "@/pages/Customers/service";
 import type { Customer } from "@/pages/Customers/types";
 import type { SupplierParty } from "./supplierParty";
+import type { PickerMode } from "./supplierPicker";
 
 interface Props {
   onCreated: (party: SupplierParty) => void;
   disabled?: boolean;
+  /** Müşteri kipi: "Yeni müşteri", tip varsayılanı CUSTOMER (sipariş formu ①). */
+  mode?: PickerMode;
 }
 
-export function SupplierQuickCreate({ onCreated, disabled }: Props) {
+export function SupplierQuickCreate({ onCreated, disabled, mode = "supplier" }: Props) {
+  const label = mode === "customer" ? "Yeni müşteri" : "Yeni cari";
+  const defaultType = mode === "customer" ? "CUSTOMER" : "SUPPLIER";
   const [open, setOpen] = useState(false);
   const qc = useQueryClient();
   const createMut = useMutation({
@@ -35,22 +40,22 @@ export function SupplierQuickCreate({ onCreated, disabled }: Props) {
       const created = res.data;
       setOpen(false);
       if (created?.id) {
-        toast.success(`Cari oluşturuldu: ${created.name}`);
+        toast.success(`${mode === "customer" ? "Müşteri" : "Cari"} oluşturuldu: ${created.name}`);
         onCreated({ kind: "CUSTOMER", id: created.id });
       }
     },
   });
   return (
     <>
-      <Button type="button" variant="outline" size="sm" aria-label="Yeni cari ekle" title="Aradığınız cari listede yoksa burada açın" disabled={disabled} onClick={() => setOpen(true)}>
-        <Plus className="mr-1 h-4 w-4" /> Yeni cari
+      <Button type="button" variant="outline" size="sm" aria-label={`${label} ekle`} title="Aradığınız kart listede yoksa burada açın" disabled={disabled} onClick={() => setOpen(true)}>
+        <Plus className="mr-1 h-4 w-4" /> {label}
       </Button>
       <CustomerFormDialog
         open={open}
         onOpenChange={setOpen}
         isSubmitting={createMut.isPending}
         showBranchDraft={false}
-        defaultType="SUPPLIER"
+        defaultType={defaultType}
         onSubmit={(v: CustomerFormValues) => {
           createMut.mutate({
             // Kod backend'de üretilir (MUS+GGAAYY+NNNN) — istemciden gönderilmez.

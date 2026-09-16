@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -23,6 +24,8 @@ interface Props {
   onChange: (next: string[]) => void;
   /** "Özellik isteği ekle" butonunun yanına (aynı satıra) eklenen opsiyonel aksiyon — örn. "Not ekle". */
   extraAction?: React.ReactNode;
+  /** Kumaşsız satırda "Özellik isteği ekle" tıklandı — çağıran kumaş alanını gösterir (geçici uyarı). */
+  onMissingItem?: () => void;
 }
 
 /**
@@ -31,7 +34,7 @@ interface Props {
  */
 const kursunRank = (name: string): number => (/kurşun/i.test(name) ? 0 : 1);
 
-export function LineRequiredPropertiesEditor({ itemId, value, onChange, extraAction }: Props) {
+export function LineRequiredPropertiesEditor({ itemId, value, onChange, extraAction, onMissingItem }: Props) {
   const [open, setOpen] = useState(false);
 
   // Perf: OrderLineColorPicker ile ortak kumaş cache'i (satır başına tek GET).
@@ -100,11 +103,13 @@ export function LineRequiredPropertiesEditor({ itemId, value, onChange, extraAct
       ))}
       <Button
         type="button"
-        variant="default"
+        variant={itemId ? "default" : "outline"}
         size="sm"
-        disabled={!itemId}
-        onClick={() => setOpen(true)}
-        className="h-7 gap-1.5 text-xs shadow-sm hover:shadow-primary/40 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0 transition-all duration-150"
+        aria-disabled={!itemId}
+        title={itemId ? undefined : "Önce kumaş seçin"}
+        // ③ Kumaşsız satırda düğme kapalı DEĞİL: tıklama kumaş alanını gösteren geçici uyarıyı tetikler.
+        onClick={() => (itemId ? setOpen(true) : onMissingItem?.())}
+        className={cn("h-7 gap-1.5 text-xs transition-all duration-150", itemId ? "shadow-sm hover:shadow-primary/40 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0" : "text-muted-foreground")}
       >
         <Plus className="h-3.5 w-3.5" />
         {selectedById.length === 0 ? "Özellik isteği ekle" : "Düzenle"}

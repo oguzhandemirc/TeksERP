@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -12,20 +12,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/FormField";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
-import { UserRound, X } from "lucide-react";
-import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
-import { customerService } from "@/pages/Customers/service";
+import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
 import { BranchSelect } from "@/pages/Customers/BranchSelect";
-import { CustomerFormDialog } from "@/pages/Customers/CustomerFormDialog";
-import type { Customer } from "@/pages/Customers/types";
-import { customerCardPayload, type CustomerFormValues } from "@/pages/Customers/schema";
 import { usePricingEnabled, useCustomerBranchesEnabled } from "@/hooks/usePricingEnabled";
 import { usePulseSync } from "@/hooks/usePulseSync";
 import { currencyService } from "@/services/featureFlagService";
 import { OrderLinesEditor, type OrderLineErrors } from "./OrderLinesEditor";
+import { OrderNumberField, apiErrorMessage, orderNumberConflictMessage } from "./OrderNumberField";
 import type { Order } from "./types";
 import {
   newLineClientId,
@@ -68,25 +63,9 @@ function orderToFormValues(order: Order): OrderFormValues {
 }
 
 export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitting }: Props) {
-  const qc = useQueryClient();
-  const [customerFormOpen, setCustomerFormOpen] = useState(false);
   // Müşteri seçici, kalem alanları ve "Kalem Ekle" butonu aynı paylaşılan saatten
   // beslenir ([[usePulseSync]]) — hepsi aynı hız + aynı fazda yanıp söner.
   const dim = usePulseSync();
-
-  const createCustomerMut = useMutation({
-    mutationFn: (payload: Partial<Customer>) => customerService.create(payload),
-    onSuccess: (res) => {
-      void qc.invalidateQueries({ queryKey: ["customers"] });
-      const created = res.data;
-      if (created?.id) {
-        form.setValue("customerId", created.id);
-        form.setValue("branchId", null);
-        toast.success(`Müşteri oluşturuldu: ${created.name}`);
-      }
-      setCustomerFormOpen(false);
-    },
-  });
 
   const isEdit = Boolean(order);
   const partialShipped = order?.status === "PARTIAL_SHIPPED";
@@ -135,11 +114,10 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
   }, [order]);
 
   return (
-    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className={`flex max-h-[85vh] flex-col ${pricingEnabled ? "max-w-5xl" : "max-w-3xl"}`}
-      >
+      {/* ⑤ Boyut SABİT (h-[88vh], max-w-6xl): başlık + üst alanlar sabit, kalem listesi kendi kaydırıcısında,
+          alt düğmeler sabit — kalem sayısı değişince modal büyüyüp küçülmez. */}
+      <DialogContent className="flex h-[88vh] max-w-6xl flex-col">
         <DialogHeader className="shrink-0">
           <DialogTitle>{isEdit ? "Sipariş Düzenle" : "Yeni Sipariş"}</DialogTitle>
           <DialogDescription>
@@ -155,11 +133,23 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
 
         <form
           onSubmit={form.handleSubmit(async (v) => {
-            await onSubmit(v);
+            try {
+              await onSubmit(v);
+            } catch (err) {
+              // ② Sipariş no çakışması ALAN hatasıdır (toast değil). Elle numarada servis genel toast'ı
+              // bastırdığı için öteki hataları burada toast'larız; otomatik numarada genel toast zaten çıktı.
+              const msg = orderNumberConflictMessage(err);
+              if (msg) {
+                form.setError("orderNumber", { type: "manual", message: msg });
+                return;
+              }
+              if (v.orderNumber?.trim()) toast.error(apiErrorMessage(err));
+              throw err;
+            }
           })}
           className="flex min-h-0 flex-1 flex-col gap-3"
         >
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-2 py-1">
+          <div className="shrink-0 space-y-3 px-2 py-1">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <FormField
               label="Müşteri"
@@ -170,26 +160,15 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
                 control={form.control}
                 name="customerId"
                 render={({ field }) => (
-                  <EntityPickerModal<Customer>
+                  // ① Tedarikçi modalının müşteri kipi: tam liste (CUSTOMER sonra BOTH), rol, Şehir, "Yeni müşteri".
+                  <CustomerPickerField
                     value={field.value || null}
-                    onChange={(v) => {
-                      field.onChange(v ?? "");
+                    onChange={(id) => {
+                      field.onChange(id);
                       form.setValue("branchId", null);
                     }}
-                    service={customerService}
-                    queryKey="order-customer"
-                    getLabel={(c) => c.name}
-                    getSubLabel={(c) => (c.taxNumber ? `${c.code} · VKN ${c.taxNumber}` : c.code)}
-                    icon={UserRound}
-                    iconClassName="text-primary"
-                    title="Müşteri Seç"
-                    description="Müşteri seç veya aramayla daralt — tüm liste sunucuda aranır (ad, kod, vergi no)."
-                    placeholder="Müşteri seç..."
                     disabled={headerLocked}
                     triggerClassName={!field.value ? `h-9 border-primary shadow-lg shadow-primary/50 ring-2 ring-primary/30 transition-all duration-700 ${dim ? "opacity-50" : "opacity-100"}` : "h-9"}
-                    quickAddLabel="Yeni Müşteri Ekle"
-                    onQuickAdd={() => setCustomerFormOpen(true)}
-                    countLabel="müşteri"
                   />
                 )}
               />
@@ -212,34 +191,10 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
             )}
           </div>
 
-          {/* Saha #16: sipariş no görünür + override edilebilir (boş = otomatik).
-              Termin ile aynı satırı yarı yarıya paylaşır. */}
+          {/* Saha #16 + ②: sipariş no "Parti kodu" kalıbı — otomatik/kilitli, tıklayınca yazılır, boş bırakınca
+              otomatiğe döner. Termin ile aynı satırı yarı yarıya paylaşır. */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <FormField label="Sipariş No" error={form.formState.errors.orderNumber}>
-              <div className="relative">
-                <Input
-                  {...form.register("orderNumber")}
-                  placeholder="Boş = otomatik"
-                  disabled={!!order}
-                  className="pr-8"
-                />
-                {!order && !!form.watch("orderNumber") && (
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    onClick={() => form.setValue("orderNumber", "", { shouldValidate: true })}
-                    className="absolute inset-y-0 right-0 flex items-center px-2 text-muted-foreground transition-colors hover:text-foreground"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </div>
-              {!!order && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Mevcut siparişin numarası değiştirilemez (muhasebe/irsaliye izi).
-                </p>
-              )}
-            </FormField>
+            <OrderNumberField form={form} isEdit={isEdit} />
             <FormField label="Termin" error={form.formState.errors.deadline}>
               <Controller
                 control={form.control}
@@ -284,8 +239,10 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
             </FormField>
           )}
 
+          </div>
+
           {linesEditable ? (
-            <div className="border-t pt-3">
+            <div className="min-h-0 flex-1 overflow-y-auto border-t px-2 pt-3">
               <Controller
                 control={form.control}
                 name="lines"
@@ -306,12 +263,11 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
               />
             </div>
           ) : (
-            <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+            <div className="mx-2 rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">Kalemler kilitli</span> · {lineSummary}.
               İş emri açılmış kalemleri değiştirmek için önce iş emrini iptal et.
             </div>
           )}
-          </div>
 
           <DialogFooter className="shrink-0 border-t pt-3">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive">
@@ -330,27 +286,5 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
         </form>
       </DialogContent>
     </Dialog>
-
-    <CustomerFormDialog
-      open={customerFormOpen}
-      onOpenChange={setCustomerFormOpen}
-      isSubmitting={createCustomerMut.isPending}
-      // Sipariş içi hızlı ekleme: yalnız müşteriyi oluşturup seç. Şube editörü
-      // gizli — bu onSubmit şubeleri iletmediğinden gösterilse veri kaybı olurdu.
-      // Şube gerekiyorsa Müşteriler sayfasından tam akışla eklenir.
-      showBranchDraft={false}
-      onSubmit={(v: CustomerFormValues) => {
-        createCustomerMut.mutate({
-          // Kod backend'de üretilir (MUS+GGAAYY+NNNN) — istemciden gönderilmez.
-          name: v.name,
-          taxNumber: v.taxNumber || null,
-          // Kart alanları da iletilir — formda görünen hiçbir girdi düşmesin.
-          ...customerCardPayload(v),
-          type: v.type,
-          isActive: true,
-        } as Partial<Customer>);
-      }}
-    />
-    </>
   );
 }

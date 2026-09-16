@@ -21,6 +21,7 @@ import {
   nextPageToken,
   subcontractorRow,
   type PageToken,
+  type PickerMode,
   type PickerPage,
   type SupplierRoleFilter,
 } from "./supplierPicker";
@@ -30,6 +31,8 @@ interface Args {
   search: string;
   role: SupplierRoleFilter;
   includeInactive: boolean;
+  /** Tedarikçi (cari + fason) ya da müşteri (yalnız cari; ALL = CUSTOMER sonra BOTH bacağı). */
+  mode?: PickerMode;
 }
 
 async function fetchPage(token: PageToken, args: Args): Promise<PickerPage> {
@@ -37,7 +40,8 @@ async function fetchPage(token: PageToken, args: Args): Promise<PickerPage> {
   const search = args.search ? { search: args.search } : {};
   try {
     if (token.leg === "customers") {
-      const { customerType } = legsFor(args.role);
+      // Bacağın tipi token'da (müşteri kipi ALL: CUSTOMER → BOTH); token'sız tedarikçi kipi rolden.
+      const customerType = token.type ?? legsFor(args.role, args.mode).customerType;
       const res = await customerService.listCursor({
         cursor: token.cursor,
         limit: SUPPLIER_PICKER_PAGE,
@@ -47,7 +51,7 @@ async function fetchPage(token: PageToken, args: Args): Promise<PickerPage> {
         ...search,
       });
       const next = res.pagination.nextCursor;
-      return { token, rows: (res.data as Customer[]).map(customerRow), next: next ? { leg: "customers", cursor: next } : null, error: false };
+      return { token, rows: (res.data as Customer[]).map(customerRow), next: next ? { ...token, cursor: next } : null, error: false };
     }
     const res = await subcontractorService.getAll({ page: token.page, pageSize: SUPPLIER_PICKER_PAGE, sortBy: "name", sortOrder: "asc", filters: base, ...search });
     const { page, totalPages } = res.pagination;
@@ -58,12 +62,12 @@ async function fetchPage(token: PageToken, args: Args): Promise<PickerPage> {
 }
 
 export function useSupplierPickerData(args: Args) {
-  const { open, search, role, includeInactive } = args;
+  const { open, search, role, includeInactive, mode = "supplier" } = args;
   const q = useInfiniteQuery({
-    queryKey: ["supplier-picker", search, role, includeInactive],
+    queryKey: ["supplier-picker", mode, search, role, includeInactive],
     queryFn: ({ pageParam }) => fetchPage(pageParam, args),
-    initialPageParam: firstPageToken(role),
-    getNextPageParam: (last) => nextPageToken(last, role),
+    initialPageParam: firstPageToken(role, mode),
+    getNextPageParam: (last) => nextPageToken(last, role, mode),
     enabled: open,
     staleTime: 30_000,
   });

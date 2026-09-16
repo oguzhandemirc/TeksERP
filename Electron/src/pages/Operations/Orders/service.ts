@@ -120,6 +120,13 @@ export interface OrderLineCancelPreview {
 export const orderService = {
   ...base,
   /**
+   * Oluşturma: elle sipariş no verildiyse genel hata toast'ı BASTIRILIR — 409 "'X' numaralı sipariş zaten var"
+   * formda ALAN hatası olarak çizilir (`OrderFormDialog` ②); öteki hataları form kendisi toast'lar.
+   * Otomatik numarada bugünkü düzen (genel toast) aynen.
+   */
+  create: (data: Partial<Order>): Promise<ApiResponse<Order>> =>
+    apiClient.post<ApiResponse<Order>>("/api/orders", data, { suppressErrorToast: Boolean((data as { orderNumber?: string }).orderNumber) }).then((r) => r.data),
+  /**
    * Özet şeridi sayıları — listeyle AYNI query parametrelerini alır.
    * Backend where'i `buildListWhere` ile kurar, yani liste ile sapamaz.
    */

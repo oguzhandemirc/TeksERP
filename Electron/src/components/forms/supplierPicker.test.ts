@@ -33,3 +33,20 @@ describe("supplierPicker (saf)", () => {
     expect(s).toMatchObject({ key: "SUBCONTRACTOR:s1", kind: "SUBCONTRACTOR", role: "SUBCONTRACTOR", phone: "0532", taxNumber: null });
   });
 });
+
+// Sipariş formu ①: müşteri kipi — yalnız cari, ALL = CUSTOMER bacağı bitince BOTH bacağı; fason yok.
+describe("supplierPicker — müşteri kipi", () => {
+  it("⭐ ALL: ilk token CUSTOMER tipli cari; cari bitince BOTH; BOTH bitince yok (fason hiç sorulmaz)", () => {
+    expect(legsFor("ALL", "customer")).toEqual({ customers: true, subs: false, customerTypes: ["CUSTOMER", "BOTH"] });
+    expect(firstPageToken("ALL", "customer")).toEqual({ leg: "customers", cursor: null, type: "CUSTOMER" });
+    expect(nextPageToken(page({ leg: "customers", cursor: null, type: "CUSTOMER" }), "ALL", "customer")).toEqual({ leg: "customers", cursor: null, type: "BOTH" });
+    expect(nextPageToken(page({ leg: "customers", cursor: "x", type: "BOTH" }), "ALL", "customer")).toBeUndefined();
+    expect(firstPageToken("BOTH", "customer")).toEqual({ leg: "customers", cursor: null, type: "BOTH" });
+    expect(SUPPLIER_ROLE_FILTER_OPTIONS.length).toBe(5);
+  });
+  it("satır `city` taşır (müşteri kipi Şehir kolonu); fasonda null", () => {
+    expect(customerRow({ id: "c1", code: "M", name: "X", type: "CUSTOMER", city: "Bursa" } as Customer).city).toBe("Bursa");
+    expect(subcontractorRow({ id: "s1", code: "F", name: "Y" } as Subcontractor).city).toBeNull();
+  });
+});
+

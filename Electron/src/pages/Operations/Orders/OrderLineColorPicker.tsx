@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useItemDetail } from "@/pages/Items/useItemDetail";
+import { cn } from "@/lib/utils";
 import { Palette } from "lucide-react";
 import { ColorPickerModal } from "@/components/forms/color-picker/ColorPickerModal";
 
@@ -11,9 +12,11 @@ interface Props {
   customerId?: string | null;
   disabled?: boolean;
   triggerClassName?: string;
+  /** Kumaşsız satırda renk kutusuna tıklandı — çağıran kumaş alanını gösterir (geçici uyarı). */
+  onMissingItem?: () => void;
 }
 
-export function OrderLineColorPicker({ itemId, value, onChange, customerId, disabled, triggerClassName }: Props) {
+export function OrderLineColorPicker({ itemId, value, onChange, customerId, disabled, triggerClassName, onMissingItem }: Props) {
   // Perf: LineRequiredPropertiesEditor ile aynı kumaşı paylaşan tek cache girdisi
   // (satır başına çift GET yerine tek istek).
   const itemQ = useItemDetail(itemId);
@@ -24,12 +27,21 @@ export function OrderLineColorPicker({ itemId, value, onChange, customerId, disa
     [itemQ.data?.data?.allowedColors],
   );
 
+  // ③ Kalıcı "Önce kumaş seçin" rozeti KALKTI: kumaşsız satırda seçici devre dışı GÖRÜNÜMLÜ ama tıklanabilir
+  // bir kutu — tıklama çağırana bildirilir (`onMissingItem`), kumaş alanı geçici uyarıyla gösterilir.
   if (!itemId) {
     return (
-      <div className="flex h-9 items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 text-xs text-amber-700 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+      <button
+        type="button"
+        aria-disabled="true"
+        aria-label="Renk seç"
+        title="Önce kumaş seçin"
+        onClick={onMissingItem}
+        className={cn("flex h-9 w-full items-center gap-2 rounded-md border border-dashed bg-muted/40 px-3 text-sm text-muted-foreground", triggerClassName)}
+      >
         <Palette className="h-4 w-4 shrink-0" />
-        <span>Önce kumaş seçin</span>
-      </div>
+        <span>Renk</span>
+      </button>
     );
   }
 
