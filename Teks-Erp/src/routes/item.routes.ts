@@ -81,6 +81,14 @@ const quickCreateBody = z
  *       - in: query
  *         name: filter[isActive]
  *         schema: { type: string, enum: [true, false] }
+ *       - in: query
+ *         name: filter[allowedColorId]
+ *         schema: { type: string }
+ *         description: "Bu rengi alabilecek ürünler (uuid; CSV) — izinli renk listesi BOŞ olan ürün her rengi alır"
+ *       - in: query
+ *         name: filter[allowedPropertyId]
+ *         schema: { type: string }
+ *         description: "Bu özelliği alabilecek ürünler (uuid; CSV) — izinli özellik listesi BOŞ olan ürün her özelliği alır"
  *     responses:
  *       200:
  *         description: Sayfalanmış ürün listesi

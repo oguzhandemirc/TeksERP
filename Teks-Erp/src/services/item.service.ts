@@ -11,6 +11,8 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { Request } from "express";
+import { parseQueryParams, readIdCondition } from "../utils/query-parser";
 import { ItemUnit } from "@prisma/client";
 import { AuditService } from "./audit.service";
 import { BaseService } from "./base.service";
@@ -124,6 +126,24 @@ async function nextItemCode(): Promise<string> {
 }
 
 export class ItemService extends BaseService {
+  /**
+   * İLİŞKİ SÜZGECİ (ürün seçici modalı, 2026-09-17): `filter[allowedColorId]` = "bu rengi ALABİLECEĞİM
+   * ürünler" — izinli listesi BOŞ olan ürün her rengi alır (`none`), doluysa listede olmalı (`some`).
+   * `filter[allowedPropertyId]` aynı kalıp. `safeFilters` bu anahtarları skaler süzgeçte düşürür (kolon
+   * değil), o yüzden ham `filters`tan `readIdCondition` ile okunur (CSV de string'dir). Boş/yok = süzgeç yok.
+   * `buildListWhere` tek nokta: offset · cursor · özet aynı where'i görür.
+   */
+  protected extraWhere(req: Request): Record<string, unknown> | undefined {
+    const { filters } = parseQueryParams(req);
+    const conds: Record<string, unknown>[] = [];
+    const colorCond = readIdCondition(filters.allowedColorId);
+    if (colorCond) conds.push({ OR: [{ allowedColors: { none: {} } }, { allowedColors: { some: { colorId: colorCond } } }] });
+    const propCond = readIdCondition(filters.allowedPropertyId);
+    if (propCond) conds.push({ OR: [{ allowedProperties: { none: {} } }, { allowedProperties: { some: { propertyId: propCond } } }] });
+    if (conds.length === 0) return undefined;
+    return conds.length === 1 ? conds[0] : { AND: conds };
+  }
+
   /**
    * Item create — sade CRUD. allowedColors/allowedProperties M:N replace.
    *

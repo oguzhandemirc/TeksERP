@@ -11,6 +11,7 @@
 ### Değişmezler
 
 - **[ÇEKİRDEK]** CSV de bir string'dir: filtreyi ELLE okuyan her servis id filtresini `readIdCondition`/`readFilterList`'ten geçirir (`typeof v==='string'` ham geçirir). Üç arıza modu: uuid kolon→P2007/400 · uuid olmayan string→sessiz 0 satır (foldType: yazımda normalizeFoldType) · ön-süzgeçli (currentStationId regex)→filtre SESSİZCE düşer, YANLIŞ liste. · bekçi: `Teks-Erp/scripts/test_filter_multi_select.ts (38) §2b createdById/entryStationId generic yolu + §3 currentStationId — SESSİZ DÜŞME dalı, üçünün en tehlikelisi` <sub>(CLAUDE.md:67, CLAUDE.md:55, CLAUDE.md:49)</sub>
+- **[ÇEKİRDEK]** İLİŞKİ SÜZGECİ `extraWhere`den: skaler olmayan süzgeç anahtarı (`filter[allowedColorId]` · `filter[allowedPropertyId]` — ürün seçici modalı, 2026-09-17) `safeFilters`ten düşer, servis `extraWhere(req)` override'ında ham `filters`tan `readIdCondition` ile okur ve `buildListWhere` tek nokta olduğu için offset · cursor · özet aynı where'i görür. "Bu rengi alabileceğim ürünler" = `allowedColors none OR some{colorId}` — izinli listesi BOŞ olan ürün her rengi alır; yalnız `some` yazmak listesiz çoğunluğu kaybettirir. · bekçi: `test_item_allowed_filter` (§1–§6, iki sonda) <sub>(6e, 1e dilimi 2026-09-17)</sub>
 - **[ÇEKİRDEK]** Cursor'lu (sonsuz kaydırmalı) listede süzme SUNUCUDA yapılır — istemci süzmesi yalnız o anki sayfayı süzer ve operatöre yanlış 'kayıt yok' gösterir (kayıt sonraki sayfadadır). Taşınabilir çekirdek; ekran çifti profil. · bekçi: `Teks-Erp/scripts/test_tambur_recent_output_filter.ts (12; kumaş filtresi körleştirilince 2 kırmızı — negatif sonda kayıtlı)` <sub>(CLAUDE.md:56, CLAUDE.md:55)</sub>
 - **[ÇEKİRDEK]** Liste + cursor + özet şeridi TEK where'den doğar: `BaseService.buildListWhere` (safeFilters İÇERİDE; envanter `buildRollWhere` emsali) — stats ucu ayrı where kurarsa üst satırdaki sayı tabloyla çelişir. Sipariş şeridinde ADET listenin aynası, METRAJ iptalleri HER ZAMAN dışlar (bilinçli iki kapsam). · bekçi: `test_order_stats.ts (33; şerit ↔ withTotal her filtre kombinasyonunda)` <sub>(arşiv:1521)</sub>
 - **[ÇEKİRDEK]** Açık talep ('hangi kalem hâlâ talep') süzgeci TEK KAYNAK `helpers/order-line-scope.helper.ts` (ACTIVE_LINE ↔ isActiveLine boğaz-ikiz); elle `cancelledAt: null` kopyası AST bekçili YASAK; ham SQL muafiyeti `-- aktif-kalem-muaf:`. GELECEK sorusu süzer, GEÇMİŞ (defter/tarihçe) sorusu süzmez. · bekçi: `test_order_line_scope_single_source.ts (AST + ham SQL taraması)` <sub>(arşiv:1521)</sub>
@@ -116,7 +117,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: —
+Backend: `test_item_allowed_filter`, `test_filter_multi_select`
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
