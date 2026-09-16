@@ -26,7 +26,9 @@ function sampleKey(tarih: ReportTarih): ReportKey {
   return r.key;
 }
 
-const DATE_INPUT = "input[type=date]";
+// Takvim girdisi `DatePickerInput` (maskeli metin + takvim; yerleşik type=date YOK — 2026-09-17 taraması);
+// kutular `data-date-input` ile bulunur, sınırlar `data-min`/`data-max`.
+const DATE_INPUT = "input[data-date-input]";
 
 function mount(ui: React.ReactNode, url = "/reports/x/y") {
   return render(<MemoryRouter initialEntries={[url]}>{ui}</MemoryRouter>);
@@ -152,7 +154,7 @@ describe("ReportDateFilter — sözleşme katalogdan, parametre adı K7 tablosun
     );
     const inputs = container.querySelectorAll<HTMLInputElement>(DATE_INPUT);
     expect(inputs).toHaveLength(1);
-    expect(inputs[0]!.max).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(inputs[0]!.dataset.max).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(screen.getByText("Kesit")).toBeInTheDocument();
     const p = readParams();
     expect(Object.keys(p)).toEqual([...REPORT_DATE_PARAM_KEYS.kesit]);
@@ -202,8 +204,8 @@ describe("ReportDateFilter — sözleşme katalogdan, parametre adı K7 tablosun
     );
     const inputs = container.querySelectorAll<HTMLInputElement>(DATE_INPUT);
     expect(inputs).toHaveLength(2);
-    expect(inputs[0]!.max).toBe("2026-01-31");
-    expect(inputs[1]!.min).toBe("2026-01-01");
+    // Tutarlılık takasla/klampla değil uyarıyla: geçerli aralıkta uyarı yok (DateRangeInput sözleşmesi).
+    expect(container.querySelector('[role="status"]')).toBeNull();
     expect(readUrlSafe()).toBe("");
     expect(() => render(<MemoryRouter><ReportDateFilter reportKey={sampleKey("kesit")} value={{ from: "", to: "" }} onChange={() => {}} /></MemoryRouter>)).toThrow(/kontrollü kip/);
   });

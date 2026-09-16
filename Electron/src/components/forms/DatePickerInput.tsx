@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { format, parseISO, isValid } from "date-fns";
-import { tr } from "date-fns/locale";
 import { CalendarDays, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -12,6 +11,17 @@ interface Props {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  /** Metin kutusunun `id`i (FormField `htmlFor` için) ve erişilebilir adı. */
+  id?: string;
+  "aria-label"?: string;
+  name?: string;
+  /** Tutarsızlık işareti (ör. bitiş < başlangıç) — amber çerçeve; değer yine geçer, engel değil. */
+  invalid?: boolean;
+  /** Metin kutusunun `title`ı (ipucu). */
+  title?: string;
+  /** Sınırlar "YYYY-MM-DD" — takvimde dışı kapalı, elle girişte dışı reddedilir (eski değer korunur). */
+  min?: string;
+  max?: string;
 }
 
 /** Ham rakamları "DD.MM.YYYY" maskesine dönüştürür. */
@@ -40,6 +50,13 @@ export function DatePickerInput({
   placeholder = "GG.AA.YYYY",
   disabled,
   className,
+  id,
+  "aria-label": ariaLabel,
+  name,
+  invalid,
+  title,
+  min,
+  max,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -58,10 +75,11 @@ export function DatePickerInput({
     setRaw(displayValue);
   };
 
+  const inRange = (iso: string) => (!min || iso >= min) && (!max || iso <= max);
   const handleBlur = () => {
     setFocused(false);
     const iso = maskToIso(raw);
-    if (iso) onChange(iso);
+    if (iso && inRange(iso)) onChange(iso);
     else if (raw.replace(/\D/g, "").length === 0) onChange("");
     // geçersiz giriş → sessizce eski değeri koru
   };
@@ -74,7 +92,7 @@ export function DatePickerInput({
   };
 
   return (
-    <div className={cn("relative flex h-9 w-full items-center rounded-md border bg-background text-sm transition-colors focus-within:ring-1 focus-within:ring-ring", className)}>
+    <div className={cn("relative flex h-9 w-full items-center rounded-md border bg-background text-sm transition-colors focus-within:ring-1 focus-within:ring-ring", invalid && "border-amber-500 focus-within:ring-amber-500", className)}>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
@@ -93,11 +111,20 @@ export function DatePickerInput({
             onSelect={handleSelect}
             autoFocus
             defaultMonth={selected}
+            disabled={min || max ? [...(min ? [{ before: parseISO(min) }] : []), ...(max ? [{ after: parseISO(max) }] : [])] : undefined}
           />
         </PopoverContent>
       </Popover>
 
       <input
+        id={id}
+        name={name}
+        aria-label={ariaLabel}
+        aria-invalid={invalid || undefined}
+        title={title}
+        data-date-input=""
+        data-min={min}
+        data-max={max}
         type="text"
         inputMode="numeric"
         disabled={disabled}

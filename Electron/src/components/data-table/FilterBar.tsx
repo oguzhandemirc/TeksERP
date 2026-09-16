@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import type { CrudService } from "@/services/crudService";
 import { foldSearchText } from "@/lib/search-fold";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { DateRangeInput } from "@/components/forms/DateRangeInput";
 import { useTruncationWarning } from "@/hooks/useTruncationWarning";
 
 /**
@@ -627,23 +628,8 @@ function DateRangeFilter({ def, sp, update, h }: SubProps<Extract<FilterDef, { k
         </Select>
       ) : null}
 
-      <Input
-        type="date"
-        value={fromInput}
-        onChange={(e) => setFrom(e.target.value)}
-        className={cn(h, "w-[130px] px-2 text-xs")}
-        placeholder="Başlangıç"
-        title="Başlangıç tarihi"
-      />
-      <span className="text-muted-foreground">–</span>
-      <Input
-        type="date"
-        value={toInput}
-        onChange={(e) => setTo(e.target.value)}
-        className={cn(h, "w-[130px] px-2 text-xs")}
-        placeholder="Bitiş"
-        title="Bitiş tarihi (gün sonu dahil)"
-      />
+      {/* Takvim girdisi tek tip (kullanıcı 2026-09-17): yerleşik type="date" yerine DateRangeInput. */}
+      <DateRangeInput from={fromInput} to={toInput} onFrom={setFrom} onTo={setTo} inputClassName={cn(h, "w-[140px] text-xs")} idPrefix={`${def.defaultField}-tarih`} />
 
       {DATE_PRESETS.map((p) => (
         <Button

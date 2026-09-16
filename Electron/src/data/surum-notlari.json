@@ -27,6 +27,11 @@
         {
           "kapsam": "panel",
           "tip": "iyilestirme",
+          "metin": "Panelde tarih girilen her yerde artık aynı takvim kutusu kullanılır (gün.ay.yıl yazılabilir, takvimden seçilebilir): liste süzgeçlerindeki tarih aralıkları, raporlardaki tarih şeridi ve formlardaki tarih alanları — tarayıcının eski tarih kutusu kalmadı; saat gereken yerlerde tarih takvimden, saat yanındaki kutudan girilir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
           "metin": "Yeni Sipariş formu yeniden düzenlendi: müşteri kutusuna tıklayınca alış siparişindeki gibi tam liste penceresi açılır (müşteri ve alıcı + satıcı kartlar, Kod · Ünvan · Şehir · Vergi No · Telefon, rol süzgeci, arama, “Yeni müşteri” ile hemen kart açıp seçme); Sipariş No kutusu iş emrindeki parti kodu gibi çalışır (otomatik ve kilitli görünür, kendiniz girmek için tıklarsınız, boş bırakırsanız otomatiğe döner; aynı numara varsa hata kutunun altında çıkar); kalıcı “Önce kumaş seçin” uyarıları kalktı — kumaş seçilmeden renk ya da özellik isteğine tıklanınca kumaş kutusu birkaç saniye vurgulanır; Miktar ile birim (m / kg / adet) tek kutuda yan yana; pencere daha geniş ve sabit yükseklikte, kalemler tablo gibi hizalı ve kendi içinde kayar, alt düğmeler sabit."
         },
         {

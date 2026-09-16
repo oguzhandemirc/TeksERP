@@ -1,8 +1,9 @@
 // =============================================================================
 // RAPOR TARİH FİLTRESİ — katalogdaki `tarih` sözleşmesinden ÇİZER (K7 / R4)
 // =============================================================================
-// `pages/Reports/**` altında ham `<Input type="date">` çizen TEK dosya budur; bekçi
-// (`ham-tarih-girdisi.test.ts`) bunu ölçer. Yaprak hangi girdiyi göstereceğini
+// `pages/Reports/**` altında tarih girdisi çizen TEK dosya budur (artık `DatePickerInput`/`DateRangeInput`,
+// yerleşik `type="date"` yok — panel geneli takvim taraması 2026-09-17); bekçi (`ham-tarih-girdisi.test.ts`)
+// ham girdiyi başka dosyada yasaklar, `date-input-kaynak` cırcırı bütün paneli sayar. Yaprak hangi girdiyi göstereceğini
 // bilmez: anahtarını verir, sözleşme (aralık ISO · aralık fabrika günü · tek gün ·
 // kesit · ileri pencere · yok) ve varsayılan gün sayısı katalogdan gelir, backend
 // parametre adı `_lib/report-date`den. URL durumu `useReportDateRange` kalıbı.
@@ -12,7 +13,8 @@
 // =============================================================================
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
+import { DateRangeInput } from "@/components/forms/DateRangeInput";
 import { REPORT_BY_KEY, type ReportKey } from "@/lib/report-catalog";
 import { COMPARE_LABELS, useReportCompare, type CompareMode } from "../_hooks/useReportCompare";
 import { useForwardWindow } from "../_hooks/useForwardWindow";
@@ -57,18 +59,13 @@ function RangeFilter({ reportKey, showCompare, bare }: { reportKey: ReportKey; s
   return (
     <Wrap bare={bare}>
       <span className="mr-1 text-muted-foreground">Tarih</span>
-      <Input
-        type="date"
-        value={toYmd(dateFrom)}
-        onChange={(e) => setRange(e.target.value ? startOfDayIso(e.target.value) : "", dateTo)}
-        className={INPUT}
-      />
-      <span className="text-muted-foreground">–</span>
-      <Input
-        type="date"
-        value={toYmd(dateTo)}
-        onChange={(e) => setRange(dateFrom, e.target.value ? endOfDayIso(e.target.value) : "")}
-        className={INPUT}
+      <DateRangeInput
+        from={toYmd(dateFrom)}
+        to={toYmd(dateTo)}
+        onFrom={(v) => setRange(v ? startOfDayIso(v) : "", dateTo)}
+        onTo={(v) => setRange(dateFrom, v ? endOfDayIso(v) : "")}
+        inputClassName={INPUT}
+        idPrefix="rapor-tarih"
       />
       {BACK_PRESETS.map((p) => (
         <Button key={p.days} type="button" size="sm" variant="outline" className={BTN} onClick={() => applyPreset(p.days)}>
@@ -96,18 +93,14 @@ function RangeFilter({ reportKey, showCompare, bare }: { reportKey: ReportKey; s
           </select>
           {compare.mode === "custom" ? (
             <>
-              <Input
-                type="date"
-                value={toYmd(compare.compareFrom)}
-                onChange={(e) => compare.setCustom(e.target.value ? startOfDayIso(e.target.value) : "", compare.compareTo)}
-                className={INPUT}
-              />
-              <span className="text-muted-foreground">–</span>
-              <Input
-                type="date"
-                value={toYmd(compare.compareTo)}
-                onChange={(e) => compare.setCustom(compare.compareFrom, e.target.value ? endOfDayIso(e.target.value) : "")}
-                className={INPUT}
+              <DateRangeInput
+                from={toYmd(compare.compareFrom)}
+                to={toYmd(compare.compareTo)}
+                onFrom={(v) => compare.setCustom(v ? startOfDayIso(v) : "", compare.compareTo)}
+                onTo={(v) => compare.setCustom(compare.compareFrom, v ? endOfDayIso(v) : "")}
+                inputClassName={INPUT}
+                fromLabel="Karşılaştırma başlangıcı"
+                toLabel="Karşılaştırma bitişi"
               />
             </>
           ) : null}
@@ -124,12 +117,12 @@ function DayFilter({ reportKey, bare }: { reportKey: ReportKey; bare?: boolean }
   return (
     <Wrap bare={bare}>
       <span className="mr-1 text-muted-foreground">{isSnapshot ? "Kesit" : "Fabrika günü"}</span>
-      <Input
-        type="date"
+      <DatePickerInput
         value={ymd}
         max={isSnapshot ? todayYmd : undefined}
-        onChange={(e) => setYmd(e.target.value || todayYmd)}
+        onChange={(v) => setYmd(v || todayYmd)}
         className={INPUT}
+        aria-label={isSnapshot ? "Kesit tarihi" : "Fabrika günü"}
         title={isSnapshot ? "Bu tarihin SONU itibarıyla" : "Fabrika günü (vardiya takvimi)"}
       />
       <Button type="button" size="sm" variant="outline" className={BTN} disabled={isToday} onClick={() => setYmd(todayYmd)}>
@@ -147,9 +140,7 @@ function ForwardFilter({ reportKey, bare, anchorToday, windowFallback }: { repor
   return (
     <Wrap bare={bare}>
       <span className="mr-1 text-muted-foreground">Takvim penceresi</span>
-      <Input type="date" value={fromValue} title="Pencere başlangıcı" onChange={(e) => setWindow(e.target.value, toValue)} className={INPUT} />
-      <span className="text-muted-foreground">–</span>
-      <Input type="date" value={toValue} title="Pencere bitişi" onChange={(e) => setWindow(fromValue, e.target.value)} className={INPUT} />
+      <DateRangeInput from={fromValue} to={toValue} onFrom={(v) => setWindow(v, toValue)} onTo={(v) => setWindow(fromValue, v)} inputClassName={INPUT} fromLabel="Pencere başlangıcı" toLabel="Pencere bitişi" />
       {FORWARD_PRESETS.map((d) => (
         <Button key={d} type="button" size="sm" variant="outline" className={BTN} disabled={!anchorToday} onClick={() => applyPreset(anchorToday, d)}>
           +{d} gün
@@ -173,9 +164,7 @@ function ControlledRange({ value, onChange, bare }: { value: DateWindowValue; on
   return (
     <Wrap bare={bare}>
       <span className="mr-1 text-muted-foreground">Tarih</span>
-      <Input type="date" value={value.from} max={value.to || undefined} title="Başlangıç" onChange={(e) => onChange({ from: e.target.value, to: value.to })} className={INPUT} />
-      <span className="text-muted-foreground">–</span>
-      <Input type="date" value={value.to} min={value.from || undefined} title="Bitiş" onChange={(e) => onChange({ from: value.from, to: e.target.value })} className={INPUT} />
+      <DateRangeInput from={value.from} to={value.to} onFrom={(v) => onChange({ from: v, to: value.to })} onTo={(v) => onChange({ from: value.from, to: v })} inputClassName={INPUT} fromLabel="Başlangıç" toLabel="Bitiş" />
     </Wrap>
   );
 }
