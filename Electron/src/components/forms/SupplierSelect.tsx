@@ -239,8 +239,8 @@ export function SupplierSelect({
             </span>
             <ListFilter className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
-          {nullable && value && (
-            <Button type="button" variant="outline" size="icon" className="shrink-0" disabled={disabled} aria-label="Tedarikçiyi temizle" title={noneLabel} onClick={() => onChange(null)}>
+          {nullable && value && !disabled && (
+            <Button type="button" variant="outline" size="icon" className="shrink-0" aria-label="Tedarikçiyi temizle" title={noneLabel} onClick={() => onChange(null)}>
               <X className="h-4 w-4" />
             </Button>
           )}

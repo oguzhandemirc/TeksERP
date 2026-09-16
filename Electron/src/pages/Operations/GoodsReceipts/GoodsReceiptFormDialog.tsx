@@ -186,16 +186,19 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
               </div>
             )}
             <div>
-              <Label>Tedarikçi (opsiyonel)</Label>
+              {/* Sipariş seçiliyken tedarikçi SİPARİŞTEN gelir ve KİLİTLİDİR (kullanıcı testi C2, 2026-09-17):
+                  bölüm "farklı olamaz" derken altta tıklanabilir + temizlenebilir bir kutu kalıyordu.
+                  Sipariş kaldırılınca alan serbest kalır, değer korunur. */}
+              <Label>{purchaseOrderId ? "Tedarikçi (siparişten)" : "Tedarikçi (opsiyonel)"}</Label>
               {/* C4 — cari kartlar VE fason firmalar tek kutuda aranır.
                   Kullanıcı firmanın adını bilir, hangi tabloda durduğunu değil. */}
               <SupplierSelect
                 className="mt-1"
                 value={supplier}
                 onChange={setSupplier}
-                nullable
+                nullable={!purchaseOrderId}
                 noneLabel="— (tedarikçisiz)"
-                disabled={createM.isPending}
+                disabled={createM.isPending || purchaseOrderId !== null}
                 modalPicker
               />
             </div>

@@ -26,6 +26,11 @@
       "maddeler": [
         {
           "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Yeni Mal Kabul: alış siparişi seçiliyken tedarikçi kutusu artık kilitlidir ve etiketi “Tedarikçi (siparişten)” olur — tedarikçi siparişten alınır, kutu tıklanamaz, temizle düğmesi çizilmez (eskiden “farklı olamaz” uyarısının altında kutu değiştirilebilir görünüyordu). Sipariş kaldırılınca kutu serbest kalır, seçili tedarikçi korunur."
+        },
+        {
+          "kapsam": "panel",
           "tip": "yeni",
           "metin": "Yeni Alış Siparişi ve Yeni Mal Kabul formlarında tedarikçi kutusuna tıklayınca artık küçük açılır liste değil, tam liste penceresi açılır: bütün cari kartlar ve fason firmalar tek tabloda (Kod · Ünvan · Rol · Vergi No · Telefon), kaydırdıkça yüklenir; üstte kod/ünvan/vergi no araması ve tek seçimli rol süzgeci (Tümü · Müşteri · Tedarikçi · Alıcı + Satıcı · Fason). Satıra tıklayınca seçilir; mal kabulde seçim yanındaki × ile temizlenir. Alış siparişleri listesindeki tedarikçi süzgeci değişmedi."
         },
