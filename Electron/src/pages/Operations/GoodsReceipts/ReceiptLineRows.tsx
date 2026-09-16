@@ -23,10 +23,9 @@ import { Copy, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
-import { itemService } from "@/pages/Items/service";
+import { ItemSelect } from "@/components/forms/ItemSelect";
 import { colorService } from "@/pages/Colors/service";
 import { useFoldValues } from "@/hooks/useFoldValues";
-import type { Item } from "@/pages/Items/types";
 import type { Color } from "@/pages/Colors/types";
 import { LinePropertiesButton } from "./LinePropertiesButton";
 import { cellLabel, receiptLineGridCols, receiptLineHeaders, receiptLineMode, visibleColumnIndexes } from "./receiptLineColumns";
@@ -139,12 +138,11 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds }: Props) {
           const yarn = isYarn(l.itemId);
           return (
           <div key={l.key} className={`grid ${cols} items-center gap-2`} data-testid={yarn ? "receipt-line-yarn" : "receipt-line-fabric"}>
-            <ReferenceSelect<Item>
+            {/* Ürün seçici MODAL (2026-09-17): tam liste + tür/renk/özellik süzgeci; satıra yalnız itemId yazılır,
+                iplik→lot / kumaş→renk davranışı `isYarn` üzerinden aynen. */}
+            <ItemSelect
               value={l.itemId || null}
               onChange={(v) => patch(l.key, { itemId: v ?? "" })}
-              service={itemService}
-              queryKey="items"
-              getLabel={(it) => `${it.code} — ${it.name}`}
               placeholder="Kumaş / iplik ara..."
               aria-label={cellLabel(0, yarn)}
             />

@@ -327,6 +327,7 @@ Kalan atlamalar üç biçimde ve strict hiçbirini görmez:
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Electron/src/components/forms/ItemPickerModal.test.tsx` | Ürün seçici modalı (v3 kalıbı): kutu → dialog (formda combobox yok) · TAM liste + kolonlar + sayfa 50 + `isActive` · Tür FARE ve KLAVYE → `filter[itemType]` · Renk → `filter[allowedColorId]` (listesi boş ürünler de gelir; başlık ipucu) · Özellik → `filter[allowedPropertyId]` Tür'le birlikte · arama sunucuya · satır → `onChange(id,row)` + kapanır · dışarıdan değer → `getById` etiketi "Ad — KOD" · katalog sığmazsa Renk süzgeci gizli · kaynak taraması (`<select>`/DataTable/cast yok, TEK `useInfiniteQuery`, `h-[85vh]` sabit) | vitest | ✓B10 (bu commit) — `itemPickerFilters` `allowedColorId`yi düşürür → (3) ❌ · `h-[85vh]` → `max-h-[85vh]` → (8) ❌ |  |
 | `Electron/src/components/AuditDataBlock.test.tsx` | Audit ham veri bloğu: üst düzey + İÇ İÇE alan adı/enum Türkçeleşir, skaler dizi tek satır, boş dizi '(boş)', çok derin yükte HAM JSON'a düşer (adli iz |  |  | ⚠️ yok |
 | `Electron/src/components/admin/PermissionGrid.scope.test.ts` | Yetki sekmesi saf kuralları: mobile→mobil, web/admin→masaüstü, bilinmeyen kategori masaüstüne düşer (yetki kaybolmaz); sekme başına sayaç/arama isabet |  |  | ⚠️ yok |
 | `Electron/src/components/data-table/DataTable.error.test.tsx` | 'Hata' ≠ 'kayıt yok': hata dalı boş dalın ÖNÜNDE, sunucu cümlesi basılır, Tekrar dene yalnız onRetry ile; bayat satır varken liste gizlenmez + bant; h |  |  | ⚠️ yok |

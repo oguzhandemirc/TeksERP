@@ -14,6 +14,10 @@ vi.mock("@/hooks/useFoldValues", () => ({ useFoldValues: () => ({ values: [{ cod
 vi.mock("@/components/forms/ReferenceSelect", () => ({
   ReferenceSelect: (p: { "aria-label"?: string; placeholder?: string }) => <button type="button" aria-label={p["aria-label"]}>{p.placeholder}</button>,
 }));
+// Ürün hücresi artık modal seçici (`ItemSelect`, 2026-09-17) — etiket sözleşmesi aynı (`cellLabel(0, yarn)`).
+vi.mock("@/components/forms/ItemSelect", () => ({
+  ItemSelect: (p: { "aria-label"?: string; placeholder?: string }) => <button type="button" aria-label={p["aria-label"]}>{p.placeholder}</button>,
+}));
 vi.mock("./LinePropertiesButton", () => ({
   LinePropertiesButton: (p: { "aria-label"?: string }) => <button type="button" aria-label={p["aria-label"]}>Özellik</button>,
 }));

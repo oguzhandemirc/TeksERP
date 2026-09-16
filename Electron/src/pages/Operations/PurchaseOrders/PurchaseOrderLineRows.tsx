@@ -23,11 +23,9 @@ import { useRef } from "react";
 import { Copy, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
+import { ItemSelect } from "@/components/forms/ItemSelect";
 import { useItemPriceSuggestion, describeSuggestion } from "@/hooks/useItemPriceSuggestion";
 import type { SupplierParty } from "@/components/forms/supplierParty";
-import { itemService } from "@/pages/Items/service";
-import type { Item } from "@/pages/Items/types";
 
 export interface PoDraftLine {
   key: string;
@@ -188,12 +186,11 @@ export function PurchaseOrderLineRows({ lines, onChange, disabled, supplier, cur
         {lines.map((l, idx) => (
           <div key={l.key} className={`grid ${cols} items-center gap-2`}>
             <div className="min-w-0">
-              <ReferenceSelect<Item>
+              {/* Ürün seçici MODAL (2026-09-17): kutuya tıkla → tam liste + tür/renk/özellik süzgeci; satıra
+                  yazılan alan değişmedi (yalnız itemId). */}
+              <ItemSelect
                 value={l.itemId || null}
                 onChange={(v) => patch(l.key, { itemId: v ?? "" })}
-                service={itemService}
-                queryKey="items"
-                getLabel={(it) => `${it.code} — ${it.name}`}
                 placeholder="Ürün ara..."
                 disabled={disabled}
               />

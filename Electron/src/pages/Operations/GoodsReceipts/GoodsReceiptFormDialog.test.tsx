@@ -65,6 +65,7 @@ vi.mock("sonner", () => ({
 // Formun ağır çocukları — bu testin konusu değil (kendi bekçileri var).
 vi.mock("./ReceiptImportButton", () => ({ ReceiptImportButton: () => null }));
 vi.mock("@/components/forms/ReferenceSelect", () => ({ ReferenceSelect: () => null }));
+vi.mock("@/components/forms/ItemSelect", () => ({ ItemSelect: () => null }));
 // Tedarikçi seçicisinin KENDİ bekçisi var (`supplierParty.test.ts`); burada
 // yalnız formun geri kalanı ölçülüyor.
 vi.mock("@/components/forms/SupplierSelect", () => ({ SupplierSelect: () => null }));
