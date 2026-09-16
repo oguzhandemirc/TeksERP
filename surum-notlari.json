@@ -52,7 +52,7 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
-          "metin": "Yeni Alış Siparişi ve Yeni Mal Kabul formlarında ürün kutusuna tıklayınca da tam liste açılıyor: bütün ürünler kaydırılarak görülür, üstte arama ile Tür (İplik / Kumaş / Sarf), Renk ve Özellik süzgeçleri var; süzme sunucuda yapılır, pencere boyu süzünce değişmez. Renk ve Özellik süzgeci o rengi ya da özelliği alabilecek ürünleri gösterir; izinli listesi boş bırakılmış ürün her seçenekte görünür. Satıra tıklayınca ürün seçilir, kutuda “Ad — KOD” ve tür rozeti görünür. Mal kabulde Tür süzgeci yalnız İplik ve Kumaş sunar (fiş sarf malzeme almaz) ve ilk sütun başlığı artık her durumda “Kumaş / İplik”. Eski açılır arama kutusu kalktı; satıra yazılan bilgi değişmedi."
+          "metin": "Yeni Alış Siparişi ve Yeni Mal Kabul formlarında ürün kutusuna tıklayınca da tam liste açılıyor: bütün ürünler kaydırılarak görülür, üstte arama ile Tür (İplik / Kumaş / Sarf), Renk ve Özellik süzgeçleri var; süzme sunucuda yapılır, pencere boyu süzünce değişmez. Renk ve Özellik süzgeci o rengi ya da özelliği alabilecek ürünleri gösterir; izinli listesi boş bırakılmış ürün her seçenekte görünür. Satıra tıklayınca ürün seçilir, kutuda “Ad — KOD” ve tür rozeti görünür. Mal kabulde Tür süzgeci yalnız İplik ve Kumaş sunar (fiş sarf malzeme almaz) ve ilk sütun başlığı artık her durumda “Kumaş / İplik”. Eski açılır arama kutusu kalktı; satıra yazılan bilgi değişmedi. Yeni Sipariş formundaki kumaş seçici de aynı pencereyi kullanır: yalnız kumaşlar listelenir (tür seçici yok), renk ve özellik süzgeci vardır."
         },
         {
           "kapsam": "panel",

@@ -33,6 +33,11 @@ export const ITEM_PICKER_ANY = "__ANY__";
 export type AllowedItemTypes = readonly ItemType[];
 const ALL_TYPES: AllowedItemTypes = ["YARN", "FABRIC", "CONSUMABLE"];
 export const normalizeAllowedTypes = (t?: AllowedItemTypes): AllowedItemTypes => (t && t.length ? t : ALL_TYPES);
+/** Tek türe kilitli kapsam (ör. satış siparişi yalnız kumaş): Tür seçicisi çizilmez, başlık türü söyler. */
+export const lockedItemType = (allowed?: AllowedItemTypes): ItemType | null => {
+  const t = normalizeAllowedTypes(allowed);
+  return t.length === 1 ? t[0]! : null;
+};
 export const itemTypeFilterOptions = (allowed?: AllowedItemTypes) => {
   const set = new Set(normalizeAllowedTypes(allowed));
   return ITEM_TYPE_FILTER_OPTIONS.filter((o) => o.value === "ALL" || set.has(o.value));

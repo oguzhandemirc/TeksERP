@@ -190,6 +190,18 @@ describe("ItemPickerModal — seçim, katalog, kaynak", () => {
     await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", itemType: "FABRIC" } })));
   });
 
+  it("(10) allowedTypes=[FABRIC] (satış siparişi): Tür seçicisi ÇİZİLMEZ, başlık 'Kumaş seç', sunucuya itemType=FABRIC; Renk süzgeci kalır", async () => {
+    renderWithProviders(<ItemSelect value={null} onChange={() => {}} allowedTypes={["FABRIC"]} aria-label="Kumaş seç" />);
+    await userEvent.click(screen.getByRole("button", { name: "Kumaş seç" }));
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByText("Poplin");
+    expect(within(dialog).getByText("Kumaş seç")).toBeInTheDocument();
+    expect(within(dialog).queryByRole("combobox", { name: "Tür" })).toBeNull();
+    await waitFor(() => expect(trigger(dialog, "Renk")).toBeInTheDocument());
+    expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", itemType: "FABRIC" } }));
+    expect(names(dialog)).toEqual(["Poplin", "Saten"]);
+  });
+
   it("boş liste yönlendirme", async () => {
     listCursor.mockImplementation(() => cursorPage([]));
     renderWithProviders(<ItemSelect value={null} onChange={() => {}} />);

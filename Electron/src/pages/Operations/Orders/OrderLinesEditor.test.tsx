@@ -16,9 +16,10 @@ import type { OrderLineFormValues } from "./schema";
 
 vi.mock("@/hooks/usePricingEnabled", () => ({ usePricingEnabled: () => false, useCustomerBranchesEnabled: () => false }));
 vi.mock("@/hooks/usePulseSync", () => ({ usePulseSync: () => false }));
-vi.mock("@/components/forms/entity-picker/EntityPickerModal", () => ({
-  EntityPickerModal: (p: { value: string | null; placeholder?: string; triggerClassName?: string }) => (
-    <button type="button" aria-label="Kumaş seç" className={p.triggerClassName} data-value={p.value ?? ""}>{p.value ?? p.placeholder}</button>
+// Kumaş seçici artık ürün MODALI (`ItemSelect`, 2026-09-17 EK 1) — kapsam FABRIC kilitli; test halkayı `triggerClassName` ile ölçer.
+vi.mock("@/components/forms/ItemSelect", () => ({
+  ItemSelect: (p: { value: string | null; placeholder?: string; triggerClassName?: string; allowedTypes?: string[]; "aria-label"?: string }) => (
+    <button type="button" aria-label={p["aria-label"] ?? "Kumaş seç"} className={p.triggerClassName} data-value={p.value ?? ""} data-allowed={(p.allowedTypes ?? []).join(",")}>{p.value ?? p.placeholder}</button>
   ),
 }));
 vi.mock("@/pages/Items/ItemFormDialog", () => ({ ItemFormDialog: () => null }));
@@ -50,6 +51,7 @@ describe("OrderLinesEditor — geçici kumaş uyarısı (③)", () => {
     const status = screen.getByRole("status");
     expect(status).toHaveTextContent(ITEM_WARNING_TEXT);
     expect(screen.getByRole("button", { name: "Kumaş seç" }).className).toMatch(/ring-amber-500/);
+    expect(screen.getByRole("button", { name: "Kumaş seç" })).toHaveAttribute("data-allowed", "FABRIC"); // EK 1: kapsam yalnız kumaş
     act(() => { vi.advanceTimersByTime(3100); });
     expect(screen.getByRole("status")).toHaveTextContent("");
     expect(screen.getByRole("button", { name: "Kumaş seç" }).className).not.toMatch(/ring-amber-500/);

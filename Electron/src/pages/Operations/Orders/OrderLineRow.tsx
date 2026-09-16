@@ -7,9 +7,8 @@ import { Trash2, PackagePlus, Package, StickyNote, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
-import { itemService } from "@/pages/Items/service";
-import type { Item } from "@/pages/Items/types";
+import { ItemSelect } from "@/components/forms/ItemSelect";
+import type { AllowedItemTypes } from "@/components/forms/itemPicker";
 import { cn } from "@/lib/utils";
 import { LineRequiredPropertiesEditor } from "./LineRequiredPropertiesEditor";
 import { OrderLineColorPicker } from "./OrderLineColorPicker";
@@ -20,6 +19,8 @@ import { OrderLineQuantityField } from "./OrderLineQuantityField";
 import type { OrderLineFormValues } from "./schema";
 
 export const ITEM_WARNING_TEXT = "Önce kumaş seçin";
+/** Satış siparişi kalemi yalnız KUMAŞ alır (Tür seçicisi kilitli ve gizli). */
+const ORDER_LINE_ITEM_TYPES: AllowedItemTypes = ["FABRIC"];
 
 /** Grid şablonu — başlık satırı ve her kalem satırı AYNI şablonu okur; ≤ lg iki sütuna sarar. */
 export function lineGridCols(pricing: boolean): string {
@@ -59,17 +60,13 @@ export function OrderLineRow(p: OrderLineRowProps) {
           {index + 1}
         </Badge>
         <div className="min-w-0 space-y-1">
-          <EntityPickerModal<Item>
+          {/* Ürün seçici MODALI (v3 kalıbı, 2026-09-17 EK 1): kapsam yalnız KUMAŞ (Tür seçicisi çizilmez), Renk/Özellik süzgeci
+              kalır; kumaş değişince renk/özellik/birim sıfırlama davranışı aynen. */}
+          <ItemSelect
             value={line.itemId || null}
             onChange={(v) => onPatch({ itemId: v ?? "", colorId: null, requiredPropertyIds: [], unit: undefined })}
-            service={itemService}
-            queryKey="order-line-item"
-            getLabel={(i) => i.name}
-            getSubLabel={(i) => i.code}
-            icon={Package}
-            iconClassName="text-primary"
-            title="Kumaş Seç"
-            description="Kumaş seç veya aramayla daralt — tüm katalog sunucuda aranır."
+            allowedTypes={ORDER_LINE_ITEM_TYPES}
+            aria-label="Kumaş seç"
             placeholder="Kumaş seç..."
             triggerClassName={cn("h-9", itemError && "border-destructive", itemWarning ? "ring-2 ring-amber-500 ring-offset-1" : pulseClass(!line.itemId))}
           />

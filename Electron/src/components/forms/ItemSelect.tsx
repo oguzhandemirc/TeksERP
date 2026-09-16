@@ -25,11 +25,14 @@ interface Props {
   disabled?: boolean;
   className?: string;
   "aria-label"?: string;
-  /** Kapsam: mal kabul `["YARN","FABRIC"]` (fiş sarf almaz — sarf hiç listelenmez, 400 yerine), alış siparişi üçü (varsayılan). */
+  /** Kapsam: mal kabul `["YARN","FABRIC"]` (fiş sarf almaz — sarf hiç listelenmez, 400 yerine), alış siparişi üçü (varsayılan),
+   *  satış siparişi `["FABRIC"]` (tek tür: Tür seçicisi çizilmez, başlık "Kumaş seç"). */
   allowedTypes?: AllowedItemTypes;
+  /** Tetik düğmesine ek sınıf (satış siparişi: amber halka / nabız — çağıranın geçici uyarısı). */
+  triggerClassName?: string;
 }
 
-export function ItemSelect({ value, onChange, selected, placeholder = "Ürün seç…", disabled, className, "aria-label": ariaLabel, allowedTypes }: Props) {
+export function ItemSelect({ value, onChange, selected, placeholder = "Ürün seç…", disabled, className, "aria-label": ariaLabel, allowedTypes, triggerClassName }: Props) {
   const [modalOpen, setModalOpen] = useState(false);
   const [picked, setPicked] = useState<ItemPickerRow | null>(null);
   const known = picked?.id === value ? picked : selected?.id === value ? selected : null;
@@ -51,7 +54,7 @@ export function ItemSelect({ value, onChange, selected, placeholder = "Ürün se
         aria-label={ariaLabel ?? "Ürün seç (liste)"}
         aria-haspopup="dialog"
         title="Tıkla: bütün ürünler listede — tür, renk, özellik süzgeci ve arama"
-        className={cn("w-full min-w-0 justify-between font-normal", !row && "text-muted-foreground")}
+        className={cn("w-full min-w-0 justify-between font-normal", !row && "text-muted-foreground", triggerClassName)}
         onClick={() => setModalOpen(true)}
       >
         <span className="flex min-w-0 items-center gap-2">

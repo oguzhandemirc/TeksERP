@@ -24,6 +24,7 @@ import {
   ITEM_TYPE_LABEL,
   hasItemPickerFilter,
   itemTypeFilterOptions,
+  lockedItemType,
   type AllowedItemTypes,
   type ItemPickerFilterState,
   type ItemPickerRow,
@@ -125,6 +126,8 @@ export function ItemPickerModal({ open, onOpenChange, onPick, allowedTypes }: Pr
   const [filter, setFilter] = useState<ItemPickerFilterState>(ITEM_PICKER_INITIAL);
   const data = useItemPickerData({ open, search, filter, allowedTypes });
   const typeOptions = itemTypeFilterOptions(allowedTypes);
+  const locked = lockedItemType(allowedTypes);
+  const title = locked ? `${ITEM_TYPE_LABEL[locked]} seç` : "Ürün seç";
   const catalogs = useItemPickerCatalogs(open);
   const { rootRef, sentinelRef } = useInfiniteScroll({ hasMore: data.hasMore, isLoading: data.isFetchingNext, onLoadMore: data.fetchNext, enabled: open });
   const pick = (row: ItemPickerRow) => {
@@ -137,26 +140,28 @@ export function ItemPickerModal({ open, onOpenChange, onPick, allowedTypes }: Pr
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[85vh] max-w-5xl flex-col gap-3">
         <DialogHeader>
-          <DialogTitle>Ürün seç</DialogTitle>
-          <DialogDescription>Bütün ürün kartları tek listede; kaydırdıkça yüklenir, satıra tıklayınca seçilir. Renk/özellik süzgeci "bu rengi alabilecek ürünler"i gösterir.</DialogDescription>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{locked ? `Bütün ${ITEM_TYPE_LABEL[locked]} kartları` : "Bütün ürün kartları"} tek listede; kaydırdıkça yüklenir, satıra tıklayınca seçilir. Renk/özellik süzgeci "bu rengi alabilecek ürünler"i gösterir.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[16rem] flex-1">
             <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input aria-label="Ürün ara" placeholder="Kod, ad…" className="pl-8" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} autoFocus />
           </div>
-          <Select value={filter.type} onValueChange={(v) => setFilter((f) => ({ ...f, type: v as ItemTypeFilter }))}>
-            <SelectTrigger aria-label="Tür" className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {typeOptions.map((o) => (
-                <SelectItem key={o.value} value={o.value}>
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {!locked && (
+            <Select value={filter.type} onValueChange={(v) => setFilter((f) => ({ ...f, type: v as ItemTypeFilter }))}>
+              <SelectTrigger aria-label="Tür" className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {typeOptions.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <CatalogSelect label="Renk" value={filter.colorId} options={catalogs.colors} onChange={(v) => setFilter((f) => ({ ...f, colorId: v }))} />
           <CatalogSelect label="Özellik" value={filter.propertyId} options={catalogs.properties} onChange={(v) => setFilter((f) => ({ ...f, propertyId: v }))} />
         </div>
