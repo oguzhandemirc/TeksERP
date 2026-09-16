@@ -24,11 +24,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { ItemSelect } from "@/components/forms/ItemSelect";
+import type { AllowedItemTypes } from "@/components/forms/itemPicker";
 import { colorService } from "@/pages/Colors/service";
 import { useFoldValues } from "@/hooks/useFoldValues";
 import type { Color } from "@/pages/Colors/types";
 import { LinePropertiesButton } from "./LinePropertiesButton";
 import { cellLabel, receiptLineGridCols, receiptLineHeaders, receiptLineMode, visibleColumnIndexes } from "./receiptLineColumns";
+
+/** Fiş SARF almaz (`goods-receipt.service` kind ayracı YARN|FABRIC): sarf seçilirse 400 yerine hiç listelenmesin. */
+const RECEIPT_ITEM_TYPES: AllowedItemTypes = ["YARN", "FABRIC"];
 
 export interface DraftLine {
   key: string;
@@ -145,6 +149,7 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds }: Props) {
               onChange={(v) => patch(l.key, { itemId: v ?? "" })}
               placeholder="Kumaş / iplik ara..."
               aria-label={cellLabel(0, yarn)}
+              allowedTypes={RECEIPT_ITEM_TYPES}
             />
             {/* İPLİK: kumaşa özgü hücreler devre dışı "—" — backend'in 400'le
                 reddettiği alanlar hiç sorulmasın (400'e düşmeden öğret). */}

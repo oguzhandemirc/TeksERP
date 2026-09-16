@@ -11,7 +11,8 @@
 export type ReceiptLineMode = "fabric" | "yarn" | "mixed";
 
 export interface ReceiptLineColumn {
-  /** Yalnız kumaş satırları varken başlık (eski başlık, bayt bayt). */
+  /** Yalnız kumaş satırları varken başlık (eski başlık, bayt bayt — ilk sütun hariç: kutu iplik de kabul
+   *  ettiğinden başlık HER modda "Kumaş / İplik", kullanıcı bulgusu 2026-09-17). */
   fabric: string;
   /** Kumaş + iplik karma tabloda başlık. */
   mixed: string;
@@ -25,7 +26,7 @@ export interface ReceiptLineColumn {
 }
 
 export const RECEIPT_LINE_COLUMNS: readonly ReceiptLineColumn[] = [
-  { fabric: "Kumaş", mixed: "Kumaş / İplik", yarnOnly: "İplik", fabricLabel: "Kumaş", yarnLabel: "İplik kalemi" },
+  { fabric: "Kumaş / İplik", mixed: "Kumaş / İplik", yarnOnly: "Kumaş / İplik", fabricLabel: "Kumaş", yarnLabel: "İplik kalemi" },
   { fabric: "Renk", mixed: "Renk / Lot", yarnOnly: "Lot", fabricLabel: "Renk", yarnLabel: "Lot numarası" },
   { fabric: "Metre", mixed: "Miktar (m / kg)", yarnOnly: "Miktar (kg)", fabricLabel: "Metre", yarnLabel: "Miktar (kg)" },
   { fabric: "En (cm)", mixed: "En (cm) / Bobin", yarnOnly: "Bobin", fabricLabel: "En (cm)", yarnLabel: "Bobin adedi" },

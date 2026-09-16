@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { itemService } from "@/pages/Items/service";
-import { ITEM_TYPE_LABEL, itemPickerRow, itemTriggerLabel, type ItemPickerRow } from "./itemPicker";
+import { ITEM_TYPE_LABEL, itemPickerRow, itemTriggerLabel, type AllowedItemTypes, type ItemPickerRow } from "./itemPicker";
 import { ItemPickerModal } from "./ItemPickerModal";
 
 interface Props {
@@ -25,9 +25,11 @@ interface Props {
   disabled?: boolean;
   className?: string;
   "aria-label"?: string;
+  /** Kapsam: mal kabul `["YARN","FABRIC"]` (fiş sarf almaz — sarf hiç listelenmez, 400 yerine), alış siparişi üçü (varsayılan). */
+  allowedTypes?: AllowedItemTypes;
 }
 
-export function ItemSelect({ value, onChange, selected, placeholder = "Ürün seç…", disabled, className, "aria-label": ariaLabel }: Props) {
+export function ItemSelect({ value, onChange, selected, placeholder = "Ürün seç…", disabled, className, "aria-label": ariaLabel, allowedTypes }: Props) {
   const [modalOpen, setModalOpen] = useState(false);
   const [picked, setPicked] = useState<ItemPickerRow | null>(null);
   const known = picked?.id === value ? picked : selected?.id === value ? selected : null;
@@ -65,6 +67,7 @@ export function ItemSelect({ value, onChange, selected, placeholder = "Ürün se
       <ItemPickerModal
         open={modalOpen}
         onOpenChange={setModalOpen}
+        allowedTypes={allowedTypes}
         onPick={(r) => {
           setPicked(r);
           onChange(r.id, r);

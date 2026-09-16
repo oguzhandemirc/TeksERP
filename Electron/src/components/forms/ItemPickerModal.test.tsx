@@ -43,7 +43,7 @@ beforeEach(() => {
   listCursor.mockImplementation((p: { filters?: Record<string, string>; search?: string }) => {
     let rows = ITEMS;
     const f = p.filters ?? {};
-    if (f.itemType) rows = rows.filter((i) => i.itemType === f.itemType);
+    if (f.itemType) rows = rows.filter((i) => f.itemType!.split(",").includes(i.itemType));
     if (f.allowedColorId) rows = rows.filter((i) => i.allowedColors.length === 0 || i.allowedColors.some((c) => c.colorId === f.allowedColorId));
     if (f.allowedPropertyId) rows = rows.filter((i) => i.allowedProperties.length === 0 || i.allowedProperties.some((c) => c.propertyId === f.allowedPropertyId));
     if (p.search) rows = rows.filter((i) => i.name.includes(p.search!) || i.code.includes(p.search!));
@@ -175,6 +175,19 @@ describe("ItemPickerModal — seçim, katalog, kaynak", () => {
     expect(modal).toMatch(/useInfiniteScroll\(/);
     expect(modal).toMatch(/className="[^"]*\bh-\[85vh\]/);
     expect(modal).not.toMatch(/max-h-\[85vh\]/);
+  });
+
+  it("(9) ⭐ allowedTypes=[YARN,FABRIC] (mal kabul): Tür seçicisinde Sarf YOK; 'Tümü' sunucuya itemType=YARN,FABRIC (CSV → in); sarf hiç listelenmez", async () => {
+    renderWithProviders(<ItemSelect value={null} onChange={() => {}} allowedTypes={["YARN", "FABRIC"]} />);
+    await userEvent.click(screen.getByRole("button", { name: "Ürün seç (liste)" }));
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByText("Poplin");
+    expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", itemType: "YARN,FABRIC" } }));
+    await userEvent.click(trigger(dialog, "Tür"));
+    const opts = (await screen.findAllByRole("option")).map((o) => o.textContent);
+    expect(opts).toEqual(["Tümü", "İplik", "Kumaş"]);
+    await userEvent.click(screen.getByRole("option", { name: "Kumaş" }));
+    await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", itemType: "FABRIC" } })));
   });
 
   it("boş liste yönlendirme", async () => {

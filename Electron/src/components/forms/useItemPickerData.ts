@@ -11,16 +11,17 @@ import { colorService } from "@/pages/Colors/service";
 import { fabricPropertyService } from "@/pages/FabricProperties/service";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
-import { ITEM_PICKER_PAGE, itemPickerFilters, itemPickerRow, type ItemPickerFilterState } from "./itemPicker";
+import { ITEM_PICKER_PAGE, itemPickerFilters, itemPickerRow, type AllowedItemTypes, type ItemPickerFilterState } from "./itemPicker";
 
 interface Args {
   open: boolean;
   search: string;
   filter: ItemPickerFilterState;
+  allowedTypes?: AllowedItemTypes;
 }
 
-export function useItemPickerData({ open, search, filter }: Args) {
-  const filters = itemPickerFilters(filter);
+export function useItemPickerData({ open, search, filter, allowedTypes }: Args) {
+  const filters = itemPickerFilters(filter, allowedTypes);
   const q = useInfiniteQuery({
     queryKey: ["item-picker", search, filters],
     queryFn: async ({ pageParam }) => {

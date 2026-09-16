@@ -48,17 +48,17 @@ describe("Mal kabul satır editörü — üç mod", () => {
   });
 
   it("KUMAŞ-ONLY: eski başlık bayt bayt", () => {
-    expect(receiptLineHeaders("fabric")).toEqual(["Kumaş", "Renk", "Metre", "En (cm)", "Kg", "Kat", "Birim Fiyat", "Özellik", "Adet"]);
+    expect(receiptLineHeaders("fabric")).toEqual(["Kumaş / İplik", "Renk", "Metre", "En (cm)", "Kg", "Kat", "Birim Fiyat", "Özellik", "Adet"]);
     renderWithProviders(<ReceiptLineRows lines={[fabricLine()]} onChange={() => {}} yarnItemIds={YARN} />);
     expect(headerTexts()).toEqual(receiptLineHeaders("fabric"));
     expect(screen.getByTestId("receipt-line-headers")).toHaveAttribute("data-mode", "fabric");
   });
 
   it("⭐ İPLİK-ONLY (C1): başlıklar iplik diliyle, 'Kg' başlığı YOK, Kg/Kat/Özellik hücresi YOK; her hücre kendi başlığının altında", () => {
-    expect(receiptLineHeaders("yarn")).toEqual(["İplik", "Lot", "Miktar (kg)", "Bobin", "Birim Fiyat", "Adet"]);
+    expect(receiptLineHeaders("yarn")).toEqual(["Kumaş / İplik", "Lot", "Miktar (kg)", "Bobin", "Birim Fiyat", "Adet"]);
     renderWithProviders(<ReceiptLineRows lines={[yarnLine()]} onChange={() => {}} yarnItemIds={YARN} />);
     const heads = headerTexts();
-    expect(heads).toEqual(["İplik", "Lot", "Miktar (kg)", "Bobin", "Birim Fiyat", "Adet"]);
+    expect(heads).toEqual(["Kumaş / İplik", "Lot", "Miktar (kg)", "Bobin", "Birim Fiyat", "Adet"]); // ilk sütun HER modda (bulgu 2026-09-17)
     expect(heads).not.toContain("Kg");
     expect(screen.getByTestId("receipt-line-headers")).toHaveAttribute("data-mode", "yarn");
     const row = screen.getByTestId("receipt-line-yarn");

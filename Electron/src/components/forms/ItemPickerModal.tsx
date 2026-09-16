@@ -21,9 +21,10 @@ import {
   ITEM_PICKER_EMPTY,
   ITEM_PICKER_FILTERED_EMPTY,
   ITEM_PICKER_INITIAL,
-  ITEM_TYPE_FILTER_OPTIONS,
   ITEM_TYPE_LABEL,
   hasItemPickerFilter,
+  itemTypeFilterOptions,
+  type AllowedItemTypes,
   type ItemPickerFilterState,
   type ItemPickerRow,
   type ItemTypeFilter,
@@ -37,6 +38,8 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPick: (row: ItemPickerRow) => void;
+  /** Çağıranın kapsamı: listelenen ve Tür seçicisinde sunulan türler (mal kabul iplik + kumaş; alış siparişi üçü). */
+  allowedTypes?: AllowedItemTypes;
 }
 
 function typeBadgeVariant(t: ItemPickerRow["itemType"]): "default" | "secondary" | "muted" {
@@ -116,11 +119,12 @@ function StatusLine({ count, hasMore, isFetchingNext, isError }: { count: number
   );
 }
 
-export function ItemPickerModal({ open, onOpenChange, onPick }: Props) {
+export function ItemPickerModal({ open, onOpenChange, onPick, allowedTypes }: Props) {
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput.trim(), 250);
   const [filter, setFilter] = useState<ItemPickerFilterState>(ITEM_PICKER_INITIAL);
-  const data = useItemPickerData({ open, search, filter });
+  const data = useItemPickerData({ open, search, filter, allowedTypes });
+  const typeOptions = itemTypeFilterOptions(allowedTypes);
   const catalogs = useItemPickerCatalogs(open);
   const { rootRef, sentinelRef } = useInfiniteScroll({ hasMore: data.hasMore, isLoading: data.isFetchingNext, onLoadMore: data.fetchNext, enabled: open });
   const pick = (row: ItemPickerRow) => {
@@ -146,7 +150,7 @@ export function ItemPickerModal({ open, onOpenChange, onPick }: Props) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {ITEM_TYPE_FILTER_OPTIONS.map((o) => (
+              {typeOptions.map((o) => (
                 <SelectItem key={o.value} value={o.value}>
                   {o.label}
                 </SelectItem>

@@ -29,11 +29,23 @@ export const ITEM_TYPE_FILTER_OPTIONS: readonly { value: ItemTypeFilter; label: 
 /** Radix Select boş string değeri kabul etmez — "Tümü" seçeneği bu sabitle taşınır. */
 export const ITEM_PICKER_ANY = "__ANY__";
 
-/** Sunucu süzgeci: `isActive:"true"` taban; diğerleri YALNIZ seçiliyse (seçilmeyen anahtar gönderilmez — istek bayt bayt eski). */
-export function itemPickerFilters(f: ItemPickerFilterState): Record<string, string> {
+/** Çağıranın izin verdiği türler (mal kabul: iplik + kumaş — fiş sarf almaz; alış siparişi: üçü). Boş/verilmemiş = üçü. */
+export type AllowedItemTypes = readonly ItemType[];
+const ALL_TYPES: AllowedItemTypes = ["YARN", "FABRIC", "CONSUMABLE"];
+export const normalizeAllowedTypes = (t?: AllowedItemTypes): AllowedItemTypes => (t && t.length ? t : ALL_TYPES);
+export const itemTypeFilterOptions = (allowed?: AllowedItemTypes) => {
+  const set = new Set(normalizeAllowedTypes(allowed));
+  return ITEM_TYPE_FILTER_OPTIONS.filter((o) => o.value === "ALL" || set.has(o.value));
+};
+
+/** Sunucu süzgeci: `isActive:"true"` taban; diğerleri YALNIZ seçiliyse (seçilmeyen anahtar gönderilmez — istek bayt bayt
+ *  eski). Kapsam daralmışsa "Tümü" = izinli türlerin CSV'si (`filter[itemType]=YARN,FABRIC` → sunucuda `in`). */
+export function itemPickerFilters(f: ItemPickerFilterState, allowed?: AllowedItemTypes): Record<string, string> {
+  const types = normalizeAllowedTypes(allowed);
+  const all: Record<string, string> = types.length === ALL_TYPES.length ? {} : { itemType: types.join(",") };
   return {
     isActive: "true",
-    ...(f.type !== "ALL" ? { itemType: f.type } : {}),
+    ...(f.type !== "ALL" ? { itemType: f.type } : all),
     ...(f.colorId ? { allowedColorId: f.colorId } : {}),
     ...(f.propertyId ? { allowedPropertyId: f.propertyId } : {}),
   };
