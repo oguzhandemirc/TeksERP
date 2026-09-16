@@ -115,3 +115,17 @@ describe("expandLines — iplik payload sözleşmesi", () => {
     expect(out).toHaveLength(0);
   });
 });
+
+// Bulgu C1 (2026-09-17): tablo modu satır türlerinden türer — üç mod, saf.
+describe("receiptLineMode — üç mod", () => {
+  it("kumaş-only / iplik-only / karma; boş tablo kumaş (eski görünüm)", async () => {
+    const { receiptLineMode, receiptLineHeaders } = await import("./receiptLineColumns");
+    expect(receiptLineMode(true, false)).toBe("fabric");
+    expect(receiptLineMode(false, true)).toBe("yarn");
+    expect(receiptLineMode(true, true)).toBe("mixed");
+    expect(receiptLineMode(false, false)).toBe("fabric");
+    expect(receiptLineHeaders("yarn")).not.toContain("Kg");
+    expect(receiptLineHeaders("mixed")).toContain("Kg");
+  });
+});
+

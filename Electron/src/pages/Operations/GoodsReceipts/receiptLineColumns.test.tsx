@@ -1,13 +1,13 @@
 // =============================================================================
-// BEKÇİ — Mal kabul satır editörü: başlık ↔ hücre eşleşmesi (kullanıcı testi bulgusu #4, 2026-09-16)
+// BEKÇİ — Mal kabul satır editörü: ÜÇ MOD (kumaş-only / iplik-only / karma) — başlık ↔ hücre eşleşmesi
+// (bulgu #4) + iplik-only'de Kg/Kat/Özellik sütunu HİÇ YOK, karma'da iplik satırında "—" YOK (bulgu C1)
 // =============================================================================
-// İplik satırı varken başlık iki türü de anlatır; iplik satırının her hücresinin erişilebilir adı
-// AYNI sütun dizinindeki başlıkla aynı tablodan gelir (`receiptLineColumns.ts`). Negatif sonda:
-// tabloda "Renk / Lot" satırı "Renk" yapılınca ① ❌; iplik satırında Lot hücresi 3. sütuna kaydırılınca ② ❌.
+// Negatif sonda: tabloda "Renk / Lot" → "Renk" yapılınca (karma) ❌; iplik satırında Lot hücresi başka dizine
+// kaydırılınca ❌; Kg sütununun `yarnOnly`si null'dan "Kg"ye çevrilince "iplik-only'de Kg başlığı YOK" ❌.
 import { describe, it, expect, vi } from "vitest";
 import { screen, within } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
-import { RECEIPT_LINE_COLUMNS, cellLabel, receiptLineHeaders } from "./receiptLineColumns";
+import { RECEIPT_LINE_COLUMNS, cellLabel, receiptLineGridCols, receiptLineHeaders, receiptLineMode, visibleColumnIndexes } from "./receiptLineColumns";
 import { ReceiptLineRows, emptyLine } from "./ReceiptLineRows";
 
 vi.mock("@/hooks/useFoldValues", () => ({ useFoldValues: () => ({ values: [{ code: "2-KAT", name: "2 Kat" }] }) }));
@@ -19,7 +19,9 @@ vi.mock("./LinePropertiesButton", () => ({
 }));
 
 const YARN = new Set(["yarn-1"]);
-const lines = () => [{ ...emptyLine(), itemId: "fab-1" }, { ...emptyLine(), itemId: "yarn-1" }];
+const fabricLine = () => ({ ...emptyLine(), itemId: "fab-1" });
+const yarnLine = () => ({ ...emptyLine(), itemId: "yarn-1" });
+const headerTexts = () => Array.from(screen.getByTestId("receipt-line-headers").querySelectorAll("span")).map((s) => s.textContent).filter((t) => t);
 
 /** Satırın i. grid hücresi — hücre bir sarmalayıcı div ise içindeki etiketli elemanı bul. */
 function cellLabelAt(row: HTMLElement, i: number): string | null {
@@ -28,39 +30,61 @@ function cellLabelAt(row: HTMLElement, i: number): string | null {
   return labelled?.getAttribute("aria-label") ?? null;
 }
 
-describe("Mal kabul satır editörü — başlık ↔ hücre", () => {
-  it("yalnız kumaş satırı: eski başlık bayt bayt", () => {
-    expect(receiptLineHeaders(false)).toEqual(["Kumaş", "Renk", "Metre", "En (cm)", "Kg", "Kat", "Birim Fiyat", "Özellik", "Adet"]);
-    renderWithProviders(<ReceiptLineRows lines={[{ ...emptyLine(), itemId: "fab-1" }]} onChange={() => {}} yarnItemIds={YARN} />);
-    expect(within(screen.getByTestId("receipt-line-headers")).getByText("Renk")).toBeInTheDocument();
-    expect(screen.queryByText("Renk / Lot")).toBeNull();
+describe("Mal kabul satır editörü — üç mod", () => {
+  it("mod türetimi: boş/kumaş → fabric · yalnız iplik → yarn · ikisi → mixed; iplik-only'de Kg/Kat/Özellik dizinleri (4,5,7) çizilmez", () => {
+    expect(receiptLineMode(false, false)).toBe("fabric");
+    expect(receiptLineMode(true, false)).toBe("fabric");
+    expect(receiptLineMode(false, true)).toBe("yarn");
+    expect(receiptLineMode(true, true)).toBe("mixed");
+    expect(visibleColumnIndexes("fabric")).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(visibleColumnIndexes("mixed")).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(visibleColumnIndexes("yarn")).toEqual([0, 1, 2, 3, 6, 8]);
+    expect(receiptLineGridCols("yarn")).not.toBe(receiptLineGridCols("mixed"));
+    expect(receiptLineGridCols("fabric")).toBe(receiptLineGridCols("mixed"));
   });
 
-  it("⭐ ① iplik satırı varken başlık iki türü anlatır: Kumaş / İplik · Renk / Lot · Miktar (m / kg) · En (cm) / Bobin", () => {
-    renderWithProviders(<ReceiptLineRows lines={lines()} onChange={() => {}} yarnItemIds={YARN} />);
-    const heads = Array.from(screen.getByTestId("receipt-line-headers").querySelectorAll("span")).map((s) => s.textContent);
-    expect(heads.slice(0, 9)).toEqual(receiptLineHeaders(true));
-    expect(heads.slice(0, 4)).toEqual(["Kumaş / İplik", "Renk / Lot", "Miktar (m / kg)", "En (cm) / Bobin"]);
+  it("KUMAŞ-ONLY: eski başlık bayt bayt", () => {
+    expect(receiptLineHeaders("fabric")).toEqual(["Kumaş", "Renk", "Metre", "En (cm)", "Kg", "Kat", "Birim Fiyat", "Özellik", "Adet"]);
+    renderWithProviders(<ReceiptLineRows lines={[fabricLine()]} onChange={() => {}} yarnItemIds={YARN} />);
+    expect(headerTexts()).toEqual(receiptLineHeaders("fabric"));
+    expect(screen.getByTestId("receipt-line-headers")).toHaveAttribute("data-mode", "fabric");
   });
 
-  it("⭐ ② iplik satırının her hücresi AYNI dizindeki başlığın etiketini taşır (Lot 'Renk / Lot' altında, kg 'Miktar' altında, bobin 'En / Bobin' altında, Kg hücresi '—' + nedeni)", () => {
-    renderWithProviders(<ReceiptLineRows lines={lines()} onChange={() => {}} yarnItemIds={YARN} />);
+  it("⭐ İPLİK-ONLY (C1): başlıklar iplik diliyle, 'Kg' başlığı YOK, Kg/Kat/Özellik hücresi YOK; her hücre kendi başlığının altında", () => {
+    expect(receiptLineHeaders("yarn")).toEqual(["İplik", "Lot", "Miktar (kg)", "Bobin", "Birim Fiyat", "Adet"]);
+    renderWithProviders(<ReceiptLineRows lines={[yarnLine()]} onChange={() => {}} yarnItemIds={YARN} />);
+    const heads = headerTexts();
+    expect(heads).toEqual(["İplik", "Lot", "Miktar (kg)", "Bobin", "Birim Fiyat", "Adet"]);
+    expect(heads).not.toContain("Kg");
+    expect(screen.getByTestId("receipt-line-headers")).toHaveAttribute("data-mode", "yarn");
+    const row = screen.getByTestId("receipt-line-yarn");
+    expect(row.children).toHaveLength(7); // 6 sütun + işlemler
+    expect(screen.queryByRole("note")).toBeNull(); // boş/tire hücresi hiç yok
+    visibleColumnIndexes("yarn").forEach((colIdx, pos) => {
+      expect(cellLabelAt(row, pos), `iplik-only sütun ${pos} (${heads[pos]})`).toBe(RECEIPT_LINE_COLUMNS[colIdx]!.yarnLabel);
+    });
+    expect(screen.queryByLabelText(/^Kg — /)).toBeNull();
+  });
+
+  it("⭐ KARMA: başlık iki türü anlatır; iplik satırının Kg/Kat/Özellik hücresi BOŞ (tire YOK) ama etiket/ipucu var; her hücre aynı dizindeki başlığın etiketini taşır", () => {
+    renderWithProviders(<ReceiptLineRows lines={[fabricLine(), yarnLine()]} onChange={() => {}} yarnItemIds={YARN} />);
+    expect(headerTexts()).toEqual(receiptLineHeaders("mixed"));
+    expect(headerTexts().slice(0, 4)).toEqual(["Kumaş / İplik", "Renk / Lot", "Miktar (m / kg)", "En (cm) / Bobin"]);
     const yarnRow = screen.getByTestId("receipt-line-yarn");
     const fabricRow = screen.getByTestId("receipt-line-fabric");
     RECEIPT_LINE_COLUMNS.forEach((c, i) => {
       expect(cellLabelAt(yarnRow, i), `iplik sütun ${i} (${c.mixed})`).toBe(c.yarnLabel);
       expect(cellLabelAt(fabricRow, i), `kumaş sütun ${i} (${c.fabric})`).toBe(c.fabricLabel);
     });
+    const kgCell = within(yarnRow).getByRole("note", { name: /^Kg — iplikte miktar zaten kg/ });
+    expect(kgCell).toHaveTextContent("");
+    expect(within(yarnRow).queryByText("—")).toBeNull();
     expect(cellLabel(1, true)).toBe("Lot numarası");
-    expect(cellLabel(2, true)).toBe("Miktar (kg)");
-    expect(cellLabel(4, true)).toMatch(/^Kg — iplikte miktar zaten kg/);
-    expect(within(yarnRow).getByRole("note", { name: /Kg — iplikte/ })).toHaveTextContent("—");
   });
 
-  it("bobin hücresinin placeholder'ı 66px'e sığar ('—'); adet iplikte de açık, title defter satırını anlatır", () => {
-    renderWithProviders(<ReceiptLineRows lines={lines()} onChange={() => {}} yarnItemIds={YARN} />);
-    const bobin = screen.getByLabelText("Bobin adedi");
-    expect(bobin).toHaveAttribute("placeholder", "—");
+  it("bobin placeholder '—' (66px); adet iplikte açık, title defter satırını anlatır", () => {
+    renderWithProviders(<ReceiptLineRows lines={[yarnLine()]} onChange={() => {}} yarnItemIds={YARN} />);
+    expect(screen.getByLabelText("Bobin adedi")).toHaveAttribute("placeholder", "—");
     const adet = screen.getByLabelText("Adet (doğacak iplik defter satırı sayısı)");
     expect(adet).not.toBeDisabled();
     expect(adet.getAttribute("title")).toMatch(/defter satırı/);

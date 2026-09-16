@@ -29,7 +29,7 @@ import { useFoldValues } from "@/hooks/useFoldValues";
 import type { Item } from "@/pages/Items/types";
 import type { Color } from "@/pages/Colors/types";
 import { LinePropertiesButton } from "./LinePropertiesButton";
-import { cellLabel, receiptLineHeaders } from "./receiptLineColumns";
+import { cellLabel, receiptLineGridCols, receiptLineHeaders, receiptLineMode, visibleColumnIndexes } from "./receiptLineColumns";
 
 export interface DraftLine {
   key: string;
@@ -113,29 +113,23 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds }: Props) {
   const patch = (key: string, p: Partial<DraftLine>) =>
     onChange(lines.map((l) => (l.key === key ? { ...l, ...p } : l)));
 
-  /** Devre dışı hücre — iplik satırında kumaşa özgü alanın yerine çizilir; etiketi başlığın
-   *  anlamını taşır ("Kg — iplikte miktar zaten kg"), başlıkla hücre çelişmez. */
-  const dash = (label: string) => (
-    <span
-      title={label}
-      aria-label={label}
-      role="note"
-      className="flex h-9 select-none items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground"
-    >
-      —
-    </span>
-  );
+  /** Karma tabloda iplik satırının kumaşa özgü hücresi — BOŞ (tire yok; kullanıcı C1: "iki kilo alanı");
+   *  etiket/ipucu başlığın anlamını taşır ("Kg — iplikte miktar zaten kg"). Yalnız-iplik tabloda bu
+   *  sütunlar HİÇ çizilmez. */
+  const blank = (label: string) => <span title={label} aria-label={label} role="note" className="h-9" />;
 
-  const cols = "grid-cols-[minmax(0,1fr)_128px_80px_66px_66px_96px_84px_58px_60px_76px]";
-  // Başlık: tabloda iplik satırı varsa iki türü de anlatır ("Renk / Lot", "Miktar (m / kg)"…);
-  // yoksa eski başlık bayt bayt (`receiptLineColumns.ts` — başlık ↔ hücre tek tablo).
-  const headers = receiptLineHeaders(lines.some((l) => isYarn(l.itemId)));
+  // Üç mod (`receiptLineColumns.ts`, başlık ↔ hücre tek tablo): yalnız kumaş → eski başlık bayt bayt;
+  // yalnız iplik → iplik dili, Kg/Kat/Özellik sütunları yok; karma → iki türü anlatan başlık.
+  const mode = receiptLineMode(lines.some((l) => l.itemId && !isYarn(l.itemId)), lines.some((l) => isYarn(l.itemId)));
+  const cols = receiptLineGridCols(mode);
+  const headers = receiptLineHeaders(mode);
+  const show = new Set(visibleColumnIndexes(mode));
 
   return (
     <div className="rounded-md border">
-      <div className={`grid ${cols} gap-2 border-b bg-muted/50 px-3 py-2 text-[11px] font-medium uppercase text-muted-foreground`} data-testid="receipt-line-headers">
-        {headers.map((h, i) => (
-          <span key={h} className={i >= 7 ? "text-center" : undefined}>{h}</span>
+      <div className={`grid ${cols} gap-2 border-b bg-muted/50 px-3 py-2 text-[11px] font-medium uppercase text-muted-foreground`} data-testid="receipt-line-headers" data-mode={mode}>
+        {headers.map((h) => (
+          <span key={h} className={h === "Özellik" || h === "Adet" ? "text-center" : undefined}>{h}</span>
         ))}
         <span />
       </div>
@@ -214,8 +208,8 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds }: Props) {
             )}
             {/* İplikte AYRI kg alanı yok — miktar zaten kg (backend, çelişen
                 weightKg'yi 400 ile reddeder; hücre hiç sorulmaz). */}
-            {yarn ? (
-              dash(cellLabel(4, true))
+            {!show.has(4) ? null : yarn ? (
+              blank(cellLabel(4, true))
             ) : (
               <Input
                 type="number" min={0} step="0.01" placeholder="—"
@@ -226,8 +220,8 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds }: Props) {
             )}
             {/* KAT opsiyonel ve KATALOGDAN gelir — sabit liste, panelden eklenen
                 6-KAT'ı görünmez yapardı; boş katalogda seçici hiç çizilmez. */}
-            {yarn ? (
-              dash(cellLabel(5, true))
+            {!show.has(5) ? null : yarn ? (
+              blank(cellLabel(5, true))
             ) : foldValues.length > 0 ? (
               <select
                 className="h-9 w-full rounded-md border bg-background px-2 text-sm"
@@ -252,8 +246,8 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds }: Props) {
               value={l.unitPrice ?? ""}
               onChange={(e) => patch(l.key, { unitPrice: e.target.value ? Number(e.target.value) : null })}
             />
-            {yarn ? (
-              dash(cellLabel(7, true))
+            {!show.has(7) ? null : yarn ? (
+              blank(cellLabel(7, true))
             ) : (
               <LinePropertiesButton
                 aria-label={cellLabel(7, false)}

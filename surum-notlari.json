@@ -37,7 +37,7 @@
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Operasyon → Mal Kabul → Yeni Mal Kabul: satırlarda iplik kalemi varken sütun başlıkları iplik hücreleriyle uyuşmuyordu (“Renk” altında lot numarası, “Metre” altında kg, “En” altında bobin görünüyordu). Artık tabloda iplik satırı varsa başlıklar iki türü de anlatır: “Kumaş / İplik”, “Renk / Lot”, “Miktar (m / kg)”, “En (cm) / Bobin”; iplikte kullanılmayan hücreler (Kg, Kat, Özellik) tire ile ve nedeni imleçte gösterilir. Yalnız kumaş satırı olan tabloda başlıklar eskisi gibidir."
+          "metin": "Operasyon → Mal Kabul → Yeni Mal Kabul: satırlarda iplik kalemi varken sütun başlıkları iplik hücreleriyle uyuşmuyordu (“Renk” altında lot numarası, “Metre” altında kg, “En” altında bobin görünüyordu). Artık tabloda iplik satırı varsa başlıklar iki türü de anlatır: “Kumaş / İplik”, “Renk / Lot”, “Miktar (m / kg)”, “En (cm) / Bobin”; iplikte kullanılmayan hücreler (Kg, Kat, Özellik) boş bırakılır, nedeni imleçte gösterilir. Tabloda yalnız iplik satırı varsa bu üç sütun hiç çizilmez ve başlıklar iplik diliyle yazılır (İplik · Lot · Miktar (kg) · Bobin · Birim Fiyat · Adet) — böylece iplik satırında ikinci bir kilo alanı görünmez. Yalnız kumaş satırı olan tabloda başlıklar eskisi gibidir."
         },
         {
           "kapsam": "panel",

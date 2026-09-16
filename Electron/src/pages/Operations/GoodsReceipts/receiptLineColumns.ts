@@ -8,11 +8,16 @@
 // bayt bayt. Başlık ve her iki türün hücre etiketi (aria-label) AYNI satırdan okunur ki yeni bir
 // sütun eklendiğinde biri unutulamasın; vitest sıra eşleşmesini ölçer.
 // =============================================================================
+export type ReceiptLineMode = "fabric" | "yarn" | "mixed";
+
 export interface ReceiptLineColumn {
   /** Yalnız kumaş satırları varken başlık (eski başlık, bayt bayt). */
   fabric: string;
-  /** Tabloda en az bir iplik satırı varken başlık. */
+  /** Kumaş + iplik karma tabloda başlık. */
   mixed: string;
+  /** YALNIZ iplik satırları varken başlık; `null` = sütun bu modda HİÇ ÇİZİLMEZ (Kg · Kat · Özellik —
+   *  kullanıcı testi C1: iplik satırında "iki kilo alanı" görünüyordu). */
+  yarnOnly: string | null;
   /** Kumaş satırındaki hücrenin erişilebilir etiketi. */
   fabricLabel: string;
   /** İplik satırındaki hücrenin erişilebilir etiketi (devre dışı hücre "—" ise nedeni). */
@@ -20,20 +25,42 @@ export interface ReceiptLineColumn {
 }
 
 export const RECEIPT_LINE_COLUMNS: readonly ReceiptLineColumn[] = [
-  { fabric: "Kumaş", mixed: "Kumaş / İplik", fabricLabel: "Kumaş", yarnLabel: "İplik kalemi" },
-  { fabric: "Renk", mixed: "Renk / Lot", fabricLabel: "Renk", yarnLabel: "Lot numarası" },
-  { fabric: "Metre", mixed: "Miktar (m / kg)", fabricLabel: "Metre", yarnLabel: "Miktar (kg)" },
-  { fabric: "En (cm)", mixed: "En (cm) / Bobin", fabricLabel: "En (cm)", yarnLabel: "Bobin adedi" },
-  { fabric: "Kg", mixed: "Kg", fabricLabel: "Kg", yarnLabel: "Kg — iplikte miktar zaten kg, ayrı ağırlık girilmez" },
-  { fabric: "Kat", mixed: "Kat", fabricLabel: "Kat", yarnLabel: "Kat — iplik satırı taşımaz" },
-  { fabric: "Birim Fiyat", mixed: "Birim Fiyat", fabricLabel: "Birim fiyat", yarnLabel: "Birim fiyat (iplik)" },
-  { fabric: "Özellik", mixed: "Özellik", fabricLabel: "Özellik", yarnLabel: "Özellik — iplik satırı taşımaz" },
-  { fabric: "Adet", mixed: "Adet", fabricLabel: "Adet (doğacak top sayısı)", yarnLabel: "Adet (doğacak iplik defter satırı sayısı)" },
+  { fabric: "Kumaş", mixed: "Kumaş / İplik", yarnOnly: "İplik", fabricLabel: "Kumaş", yarnLabel: "İplik kalemi" },
+  { fabric: "Renk", mixed: "Renk / Lot", yarnOnly: "Lot", fabricLabel: "Renk", yarnLabel: "Lot numarası" },
+  { fabric: "Metre", mixed: "Miktar (m / kg)", yarnOnly: "Miktar (kg)", fabricLabel: "Metre", yarnLabel: "Miktar (kg)" },
+  { fabric: "En (cm)", mixed: "En (cm) / Bobin", yarnOnly: "Bobin", fabricLabel: "En (cm)", yarnLabel: "Bobin adedi" },
+  { fabric: "Kg", mixed: "Kg", yarnOnly: null, fabricLabel: "Kg", yarnLabel: "Kg — iplikte miktar zaten kg, ayrı ağırlık girilmez" },
+  { fabric: "Kat", mixed: "Kat", yarnOnly: null, fabricLabel: "Kat", yarnLabel: "Kat — iplik satırı taşımaz" },
+  { fabric: "Birim Fiyat", mixed: "Birim Fiyat", yarnOnly: "Birim Fiyat", fabricLabel: "Birim fiyat", yarnLabel: "Birim fiyat (iplik)" },
+  { fabric: "Özellik", mixed: "Özellik", yarnOnly: null, fabricLabel: "Özellik", yarnLabel: "Özellik — iplik satırı taşımaz" },
+  { fabric: "Adet", mixed: "Adet", yarnOnly: "Adet", fabricLabel: "Adet (doğacak top sayısı)", yarnLabel: "Adet (doğacak iplik defter satırı sayısı)" },
 ];
 
-/** Başlık metinleri — tabloda iplik satırı varsa karma başlık. */
-export function receiptLineHeaders(hasYarn: boolean): string[] {
-  return RECEIPT_LINE_COLUMNS.map((c) => (hasYarn ? c.mixed : c.fabric));
+/** Tablo modu: satır türlerinden — yalnız kumaş / yalnız iplik / karma (boş tablo kumaş sayılır: eski görünüm). */
+export function receiptLineMode(hasFabric: boolean, hasYarn: boolean): ReceiptLineMode {
+  if (hasYarn && !hasFabric) return "yarn";
+  if (hasYarn && hasFabric) return "mixed";
+  return "fabric";
+}
+
+/** Bu modda çizilen sütun dizinleri (`RECEIPT_LINE_COLUMNS` sırası). */
+export function visibleColumnIndexes(mode: ReceiptLineMode): number[] {
+  return RECEIPT_LINE_COLUMNS.map((c, i) => (mode === "yarn" && c.yarnOnly === null ? -1 : i)).filter((i) => i >= 0);
+}
+
+/** Başlık metinleri — yalnız çizilen sütunlar, mod diliyle. */
+export function receiptLineHeaders(mode: ReceiptLineMode): string[] {
+  return visibleColumnIndexes(mode).map((i) => {
+    const c = RECEIPT_LINE_COLUMNS[i]!;
+    return mode === "yarn" ? (c.yarnOnly as string) : mode === "mixed" ? c.mixed : c.fabric;
+  });
+}
+
+/** Grid şablonu — satır ve başlık aynı şablonu okur; son sütun işlemler. */
+export function receiptLineGridCols(mode: ReceiptLineMode): string {
+  return mode === "yarn"
+    ? "grid-cols-[minmax(0,1fr)_160px_96px_80px_96px_60px_76px]"
+    : "grid-cols-[minmax(0,1fr)_128px_80px_66px_66px_96px_84px_58px_60px_76px]";
 }
 
 /** Sütun etiketi (aria-label) — satır türüne göre. Dizin `RECEIPT_LINE_COLUMNS` sırasıdır. */
