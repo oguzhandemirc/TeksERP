@@ -137,9 +137,9 @@ describe("okuma — dolu bacak basılır", () => {
 });
 
 describe("seçenek listesi", () => {
-  it("kod varsa 'KOD — Ad', yoksa yalnız ad", () => {
+  it("⭐ kod varsa 'Ad — KOD' (ad ÖNCE; C3: dar kutuda kod adı yiyordu), yoksa yalnız ad", () => {
     const opts = toSupplierOptions("CUSTOMER", [CARI, { id: "c2", name: "KODSUZ" }]);
-    expect(opts[0]?.label).toBe("M001 — ARZU TEKSTİL");
+    expect(opts[0]?.label).toBe("ARZU TEKSTİL — M001");
     expect(opts[1]?.label).toBe("KODSUZ");
     expect(opts.every((o) => o.kind === "CUSTOMER")).toBe(true);
   });
@@ -196,16 +196,16 @@ describe("supplierListFilters — YAZMA ile FİLTRE aynı kapsamı PAYLAŞMAZ", 
 });
 
 describe("supplierOptionLabel — pasif kayıt LİSTELENİR ama İŞARETLENİR", () => {
-  it("aktif kayıt bugünkü etiketiyle çizilir (mevcut görünüm bayt-bayt korunur)", () => {
-    expect(supplierOptionLabel({ ...CARI, isActive: true })).toBe("M001 — ARZU TEKSTİL");
-    // Alan hiç gelmezse de eski davranış: `supplier` bacağı `isActive` taşımaz.
-    expect(supplierOptionLabel(CARI)).toBe("M001 — ARZU TEKSTİL");
+  it("aktif kayıt 'Ad — KOD' etiketiyle çizilir (C3: ad önce); `isActive` gelmezse de aynı", () => {
+    expect(supplierOptionLabel({ ...CARI, isActive: true })).toBe("ARZU TEKSTİL — M001");
+    // Alan hiç gelmezse de aynı: `supplier` bacağı `isActive` taşımaz.
+    expect(supplierOptionLabel(CARI)).toBe("ARZU TEKSTİL — M001");
   });
 
   it("⭐ pasif kayıt '(pasif)' ile ayrılır — sessizce seçilebilir görünmesin", () => {
     // Listelemek ile 'normal göstermek' aynı şey değil: işaretsiz bir pasif
     // satır YAZMA bağlamında seçilebilir sanılır ve red KAYDET'e kadar görünmez.
-    expect(supplierOptionLabel({ ...FASON, isActive: false })).toBe("F001 — BOYER BOYA (pasif)");
+    expect(supplierOptionLabel({ ...FASON, isActive: false })).toBe("BOYER BOYA — F001 (pasif)");
     const opts = toSupplierOptions("SUBCONTRACTOR", [{ ...FASON, isActive: false }]);
     expect(opts[0]?.label).toMatch(/\(pasif\)$/);
     // ⚠️ İşaret yalnız ETİKETTE — kimlik alanları kirletilmez (seçim geri

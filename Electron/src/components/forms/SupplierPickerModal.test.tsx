@@ -12,6 +12,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import { SupplierSelect } from "./SupplierSelect";
 import { SUPPLIER_PICKER_EMPTY } from "./SupplierPickerModal";
+import { subcontractorService } from "@/pages/Subcontractors/service";
 
 const listCursor = vi.fn();
 const subsGetAll = vi.fn();
@@ -103,6 +104,13 @@ describe("SupplierPickerModal v3", () => {
     await waitFor(() => expect(subsGetAll).toHaveBeenCalledWith(expect.objectContaining({ search: "Boya" })));
     await waitFor(() => expect(within(dialog).queryByText("İplik A.Ş.")).toBeNull());
     expect(within(dialog).getByText("Boyahane Ltd")).toBeInTheDocument();
+  });
+
+  it("(4b) ⭐ seçili kayıt id'den çözülür ve tetik 'Ad — KOD' basar (C3: ad önce, dar kutuda kod adı yemez)", async () => {
+    vi.mocked(subcontractorService.getById).mockResolvedValue({ success: true, data: { id: "s1", code: "FAS1", name: "Boyahane Ltd" } } as never);
+    renderWithProviders(<SupplierSelect value={{ kind: "SUBCONTRACTOR", id: "s1" }} onChange={() => {}} modalPicker />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Tedarikçi seç (liste)" })).toHaveTextContent("Boyahane Ltd — FAS1"));
+    expect(screen.getByRole("button", { name: "Tedarikçi seç (liste)" }).textContent).not.toMatch(/^FAS1/);
   });
 
   it("(4) ⭐ satıra tıkla → onChange({kind,id}) ve kapanır", async () => {

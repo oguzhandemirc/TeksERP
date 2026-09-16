@@ -186,8 +186,14 @@ export function supplierDisplayName(
 // SEÇENEK LİSTESİ
 // -----------------------------------------------------------------------------
 
+/**
+ * Etiket "Ad — KOD" (kullanıcı testi C3, 2026-09-17): dar kutuda kod adı yiyordu ("MUS1609260002 — T…") ve
+ * kullanıcı üstteki bölümdeki adla aynı kart olduğunu göremiyordu. Ad önce, kod sonra; kesme adın sonundan
+ * değil satırın sonundan (kod kaybolur, ad kalır). Modal tablosunda Kod/Ünvan ayrı kolon — burası yalnız
+ * tek satırlık yüzeyler (tetik kutusu, küçük liste, sipariş başlığı).
+ */
 export function supplierOptionLabel(row: SupplierRefLike): string {
-  const base = row.code ? `${row.code} — ${row.name}` : row.name;
+  const base = row.code ? `${row.name} — ${row.code}` : row.name;
   // ⚠️ Pasif kayıt SESSİZCE normal görünmemeli: filtre bağlamında listeleniyor
   // (aşağıdaki `supplierListFilters` kararı) ve işaretsiz bırakılırsa kullanıcı
   // onu YAZMA bağlamında da seçilebilir sanır — oysa backend `resolveSupplierParty`
