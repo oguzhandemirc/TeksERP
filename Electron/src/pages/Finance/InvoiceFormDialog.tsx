@@ -9,10 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
+import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
 import { customerService } from "@/pages/Customers/service";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import { itemService } from "@/pages/Items/service";
-import type { Customer } from "@/pages/Customers/types";
 import type { Item } from "@/pages/Items/types";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
@@ -186,6 +186,8 @@ function usePartyTermDays(party: PartyKind, partyId: string | null) {
     : undefined;
 
   return {
+    /** Tarafın görünen adı — eski fason hesabı salt-okunur çizilirken. */
+    partyName: partyQ.data ? `${partyQ.data.name}${partyQ.data.code ? ` — ${partyQ.data.code}` : ""}` : null,
     termDays: row?.paymentTermDays ?? null,
     /**
      * Carinin varsayılan para birimi — `CariAccount.defaultCurrency`.
@@ -424,11 +426,12 @@ function InvoiceFormBody({
   const isEdit = Boolean(edit);
 
   const [type, setType] = useState<InvoiceType>(initial?.type ?? prefill?.type ?? "SALES");
-  const [party, setParty] = useState<PartyKind>(initial?.party ?? "CUSTOMER");
   const [customerId, setCustomerId] = useState<string | null>(
     initial?.customerId ?? prefill?.customerId ?? null,
   );
-  const [subcontractorId, setSubcontractorId] = useState<string | null>(initial?.subcontractorId ?? null);
+  // Rol modeli (dilim F): taraf yalnız KART. Eski fason kind'lı hesaba kesilmiş TASLAK düzenlenirken bacak
+  // salt-okunur taşınır (PATCH tarafı göndermez); yeni faturada panel `subcontractorId` hiç göndermez.
+  const legacySubcontractorId = initial?.party === "SUBCONTRACTOR" ? (initial.subcontractorId ?? null) : null;
   const [currency, setCurrency] = useState<Currency>(
     initial?.currency ?? prefill?.currency ?? DEFAULT_INVOICE_CURRENCY,
   );
@@ -466,12 +469,11 @@ function InvoiceFormBody({
       : [emptyLine(defaultVatRate)];
   });
 
-  // Taraf iki AYRI karttan gelir: Müşteri/Tedarikçi (Customer — tedarikçi de
-  // bu karttadır, `isSupplierRole`) ve Fason (Subcontractor). Alış faturası
-  // her ikisine de kesilebilir: tedarikçiden mal, fasondan hizmet alınır.
+  // Taraf KARTTIR (rol modeli): fason firma da kartıyla seçilir, hesap karta çözülür (backend faz 2 A).
+  // Yalnız eski fason kind'lı hesaba kesilmiş taslak düzenlenirken bacak salt-okunur taşınır.
   // Cari defterin YÖNÜ türden gelir (invoiceLedgerSide), taraftan değil.
-  const isCustomerParty = party === "CUSTOMER";
-  const partyId = isCustomerParty ? customerId : subcontractorId;
+  const isCustomerParty = !legacySubcontractorId;
+  const partyId = isCustomerParty ? customerId : legacySubcontractorId;
 
   // ── VADE ÖNERİSİ ──────────────────────────────────────────────────────────
   // Cari seçilince, alan BOŞKEN issueDate + `paymentTermDays`'ten türetilir
@@ -550,14 +552,13 @@ function InvoiceFormBody({
   }, [lines]);
 
   // Kaydedilebilirlik saf katmanda (yeni ve düzenleme yolu AYNI kural).
-  const valid = canSubmitInvoiceForm({ party, customerId, subcontractorId, lines });
+  const valid = canSubmitInvoiceForm({ customerId, subcontractorId: legacySubcontractorId, lines });
 
   const createM = useMutation({
     mutationFn: () =>
       createInvoice({
         type,
-        customerId: isCustomerParty ? customerId : null,
-        subcontractorId: isCustomerParty ? null : subcontractorId,
+        customerId,
         currency,
         externalNo: externalNo || null,
         dueDate: dueDate || null,
@@ -666,45 +667,17 @@ function InvoiceFormBody({
               ))}
             </select>
           </div>
-          <div>
-            <Label>Cari türü</Label>
-            <select
-              className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm disabled:opacity-60"
-              value={party}
-              disabled={isEdit}
-              onChange={(e) => setParty(e.target.value as PartyKind)}
-            >
-              <option value="CUSTOMER">Müşteri / Tedarikçi</option>
-              <option value="SUBCONTRACTOR">Fason firma</option>
-            </select>
-          </div>
-          <div>
-            <Label>{isCustomerParty ? "Müşteri / Tedarikçi" : "Fason firma"}</Label>
-            {/* Pasif kart da seçilebilir — gerekçe `PaymentFormDialog`'daki
-                notla aynı (uç `CariAccount.isActive`'e bakar, karta değil). */}
+          <div className="col-span-2">
+            <Label>Cari</Label>
             <div className="mt-1">
               {isCustomerParty ? (
-                <ReferenceSelect<Customer>
-                  value={customerId}
-                  onChange={setCustomerId}
-                  service={customerService}
-                  queryKey="customers"
-                  getLabel={(c) => `${c.code} — ${c.name}`}
-                  placeholder="Kart ara..."
-                  includeInactive
-                  disabled={isEdit}
-                />
+                <CustomerPickerField variant="cari" value={customerId} onChange={setCustomerId} disabled={isEdit} />
               ) : (
-                <ReferenceSelect
-                  value={subcontractorId}
-                  onChange={setSubcontractorId}
-                  service={subcontractorService}
-                  queryKey="subcontractors"
-                  getLabel={(s: { code: string; name: string }) => `${s.code} — ${s.name}`}
-                  placeholder="Fason firma ara..."
-                  includeInactive
-                  disabled={isEdit}
-                />
+                // Eski fason kind'lı hesap (kaldırma fazı §7) — düzenlemede salt-okunur, yeni faturada bu dal hiç açılmaz.
+                <div className="flex h-9 items-center gap-2 rounded-md border bg-muted/40 px-3 text-sm" data-testid="invoice-legacy-party">
+                  <span className="truncate">{terms.partyName ?? "Yükleniyor…"}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">Eski fason hesabı</span>
+                </div>
               )}
             </div>
           </div>
@@ -788,7 +761,7 @@ function InvoiceFormBody({
                 canDelete={lines.length > 1}
                 currency={currency}
                 priceKind={priceKindForInvoiceType(type)}
-                priceCustomerId={isCustomerParty ? customerId : null}
+                priceCustomerId={customerId}
                 onPatch={(p) => patch(l.key, p)}
                 onRemove={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}
               />

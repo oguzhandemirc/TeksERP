@@ -7,25 +7,28 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PermissionGate } from "@/components/PermissionGate";
-import { listCari, money, type CariRow } from "./service";
+import { LabeledSelect } from "@/components/forms/LabeledSelect";
+import { DIRECTION_OPTIONS, ROLE_FILTER_DEFAULTS, SUBCONTRACTOR_OPTIONS, directionFilters, isRoleFilterDirty, subcontractorFilters, type DirectionFilter, type RoleFilterPair, type SubcontractorFilter } from "@/lib/partnerRoles";
+import { cariRoleLabel, listCari, money, type CariRow } from "./service";
 import { StatementDialog } from "./StatementDialog";
 import { CariEditDialog } from "./CariEditDialog";
 
 export function CariPage() {
   const [search, setSearch] = useState("");
-  const [kind, setKind] = useState<string>("");
+  // Rol modeli (dilim F): süzgeç Cariler şeridinin çifti (Yön × Fason) — hesap, KARTIN bayrağıyla süzülür.
+  const [filters, setFilters] = useState<RoleFilterPair>(ROLE_FILTER_DEFAULTS);
   const [onlyWithBalance, setOnlyWithBalance] = useState(false);
   const [statementFor, setStatementFor] = useState<CariRow | null>(null);
   const [editFor, setEditFor] = useState<CariRow | null>(null);
 
   const q = useQuery({
-    queryKey: ["finance", "cari", search, kind, onlyWithBalance],
+    queryKey: ["finance", "cari", search, filters.direction, filters.subcontractor, onlyWithBalance],
     queryFn: () =>
       listCari({
         page: 1,
         pageSize: 100,
         search: search || undefined,
-        kind: kind || undefined,
+        filters: { ...directionFilters(filters.direction), ...subcontractorFilters(filters.subcontractor) },
         onlyWithBalance,
         // "Gecikmiş" kolonu bu sayfanın parçası → daima istenir. Backend bunu
         // yaşlandırma ÇEKİRDEĞİNDEN üretir (tek kaynak); eski backend bayrağı
@@ -49,20 +52,18 @@ export function CariPage() {
           <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-8"
-            placeholder="Müşteri / fason ara…"
+            placeholder="Cari ara…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <select
-          className="h-9 rounded-md border bg-background px-2 text-sm"
-          value={kind}
-          onChange={(e) => setKind(e.target.value)}
-        >
-          <option value="">Tümü</option>
-          <option value="CUSTOMER">Müşteriler</option>
-          <option value="SUBCONTRACTOR">Fason firmalar</option>
-        </select>
+        <LabeledSelect label="Yön" value={filters.direction} options={DIRECTION_OPTIONS} onChange={(v) => setFilters((f) => ({ ...f, direction: v as DirectionFilter }))} title="Ticari yön: müşteri rolü / tedarikçi rolü / ikisi de" />
+        <LabeledSelect label="Fason" value={filters.subcontractor} options={SUBCONTRACTOR_OPTIONS} onChange={(v) => setFilters((f) => ({ ...f, subcontractor: v as SubcontractorFilter }))} title="Fason iş yapan kartların hesapları" />
+        {isRoleFilterDirty(filters) && (
+          <Button variant="ghost" size="sm" onClick={() => setFilters(ROLE_FILTER_DEFAULTS)}>
+            Süzgeci temizle
+          </Button>
+        )}
         <Button
           variant={onlyWithBalance ? "default" : "outline"}
           size="sm"
@@ -138,9 +139,7 @@ export function CariPage() {
                       )}
                     </td>
                     <td className="px-3 py-2">
-                      <Badge variant="outline">
-                        {c.kind === "CUSTOMER" ? "Müşteri" : "Fason"}
-                      </Badge>
+                      <Badge variant="outline">{cariRoleLabel(c)}</Badge>
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
                       {/* `0` = peşin; `|| "—"` yazmak onu "vadesiz" gibi gösterirdi. */}

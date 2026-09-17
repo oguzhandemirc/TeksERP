@@ -3,6 +3,7 @@
 // İÇERMEZ. Öneksiz yol 404 alır ve çağıran hatayı yutarsa ekran "boş liste"
 // gösterir (2026-08-12'de FilterBar lookup'larında tam bu yaşandı).
 import apiClient from "@/services/apiClient";
+import { partnerRoleText } from "@/lib/partnerRoles";
 // H1 (2026-08-14): gecikme yüklemi + kuruş aritmetiği TEK kaynaktan — kapama
 // ekranının saf katmanı. Buraya kopyalamak, "aynı fatura kapama ekranında
 // gecikmiş, listede değil" tutarsızlığının kapısını açardı.
@@ -30,9 +31,12 @@ export const INVOICE_TYPE_LABEL: Record<InvoiceType, string> = {
 
 export interface CariRow {
   id: string;
+  /** Hesabın bacağı — SUBCONTRACTOR yalnız ESKİ (kartsız) fason hesaplarında kalır (kaldırma fazı §7). */
   kind: "CUSTOMER" | "SUBCONTRACTOR";
   code: string;
   name: string;
+  /** Kartın rolleri (rol modeli) — kartsız eski fason hesabında null; eski backend alanı hiç göndermez (undefined). */
+  roles?: { isCustomerRole: boolean; isSupplierRole: boolean; isSubcontractorRole: boolean } | null;
   taxNumber: string | null;
   taxOffice: string | null;
   defaultCurrency: Currency;
@@ -135,6 +139,13 @@ export interface StatementRow {
 }
 
 /** Cari tarafın görünen adı — hangi tarafa bağlıysa oradan. */
+/** Cari hesap satırının rol rozeti: kartın bayraklarından (Cariler sayfasıyla aynı dil); kartsız ESKİ fason hesabı ayrıca adlandırılır
+ *  (kaldırma fazı §7); eski backend `roles` göndermezse kind'a düşer. */
+export function cariRoleLabel(c: Pick<CariRow, "kind" | "roles">): string {
+  if (c.kind === "SUBCONTRACTOR") return "Eski fason hesabı";
+  return c.roles ? partnerRoleText(c.roles) : "Müşteri";
+}
+
 export function partyName(c: { customer: { name: string } | null; subcontractor: { name: string } | null }): string {
   return c.customer?.name ?? c.subcontractor?.name ?? "—";
 }
@@ -313,12 +324,17 @@ export async function listCari(params: {
   pageSize: number;
   search?: string;
   kind?: string;
+  /** Kartın rol süzgeci (`filter[role]` CSV · `filter[isSubcontractorRole]` …) — eski backend parametreyi yok sayar → tüm hesaplar. */
+  filters?: Record<string, string>;
   onlyWithBalance?: boolean;
   /** Vadesi geçmiş açık tutarları da iste (H2) — backend bayraksız istekte
    *  ek sorgu koşmaz, yanıtta `overdue` alanı hiç olmaz. */
   withOverdue?: boolean;
 }): Promise<Paged<CariRow>> {
-  const res = await apiClient.get("/api/finance/cari", { params });
+  const { filters, ...rest } = params;
+  const query: Record<string, unknown> = { ...rest };
+  for (const [k, v] of Object.entries(filters ?? {})) query[`filter[${k}]`] = v;
+  const res = await apiClient.get("/api/finance/cari", { params: query });
   return res.data;
 }
 

@@ -25,7 +25,7 @@ interface Props {
 }
 
 export function SupplierPickerToolbar({ mode, converting, searchInput, onSearchInput, filters, onFilters, onCreated }: Props) {
-  const searchLabel = converting ? "Müşteri kartı ara" : mode === "customer" ? "Müşteri ara" : "Tedarikçi ara";
+  const searchLabel = converting ? "Müşteri kartı ara" : mode === "customer" ? "Müşteri ara" : mode === "cari" ? "Cari ara" : "Tedarikçi ara";
   return (
     <div className="flex flex-wrap items-center gap-2">
       <div className="relative min-w-[16rem] flex-1">
@@ -36,7 +36,7 @@ export function SupplierPickerToolbar({ mode, converting, searchInput, onSearchI
         <>
           <LabeledSelect label="Yön" value={filters.direction} options={pickerDirectionOptions(mode)} onChange={(v) => onFilters({ ...filters, direction: v as DirectionFilter })} title="Ticari yön: kipin rolü taban; Müşteri + Tedarikçi = iki rolü de taşıyan" />
           <LabeledSelect label="Fason" value={filters.subcontractor} options={SUBCONTRACTOR_OPTIONS} onChange={(v) => onFilters({ ...filters, subcontractor: v as SubcontractorFilter })} title="Fason iş yapan kartlar (aktif fason profili); bağsız fason firmaları yalnız Yön: Tümü'de" />
-          <SupplierQuickCreate onCreated={onCreated} mode={mode} />
+          {mode !== "cari" && <SupplierQuickCreate onCreated={onCreated} mode={mode} />}
         </>
       )}
     </div>

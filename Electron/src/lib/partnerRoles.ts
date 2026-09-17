@@ -102,6 +102,7 @@ export const isRoleFilterDirty = (f: RoleFilterPair): boolean => f.direction !==
  */
 export const unlinkedSubcontractorLegWanted = (f: RoleFilterPair): boolean => f.direction === "ALL" && f.subcontractor !== "NO";
 
-/** Seçicinin YÖN seçenekleri — kipin kendi rolü olmayan seçenek çizilmez (tedarikçi kipinde "Müşteri" yok). */
-export const pickerDirectionOptions = (mode: "supplier" | "customer"): readonly { value: DirectionFilter; label: string }[] =>
-  DIRECTION_OPTIONS.filter((o) => o.value !== (mode === "supplier" ? "CUSTOMER" : "SUPPLIER"));
+/** Seçicinin YÖN seçenekleri — kipin kendi rolü olmayan seçenek çizilmez (tedarikçi kipinde "Müşteri" yok);
+ *  cari kipi (muhasebe formları: her rol) Cariler şeridinin tam listesini taşır. */
+export const pickerDirectionOptions = (mode: "supplier" | "customer" | "cari"): readonly { value: DirectionFilter; label: string }[] =>
+  mode === "cari" ? DIRECTION_OPTIONS : DIRECTION_OPTIONS.filter((o) => o.value !== (mode === "supplier" ? "CUSTOMER" : "SUPPLIER"));

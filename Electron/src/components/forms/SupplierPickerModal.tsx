@@ -25,6 +25,7 @@ import { ConvertBackLink, ConvertCustomerConfirm, ConvertCustomerLink, useCanCon
 export const SUPPLIER_PICKER_EMPTY = "Tedarikçi kartı yok — Tanımlar → İş Ortakları → Cariler'den ya da buradaki Yeni cari düğmesiyle açın.";
 export const CUSTOMER_PICKER_EMPTY = "Müşteri kartı yok — Tanımlar → İş Ortakları → Cariler'den ya da buradaki Yeni müşteri düğmesiyle açın.";
 export const CUSTOMER_ONLY_EMPTY = "Yalnız müşteri tipli kart yok — bütün cari kartlar zaten tedarikçi listesinde.";
+export const CARI_PICKER_EMPTY = "Cari kartı yok — Tanımlar → İş Ortakları → Cariler'den açın.";
 export const SUPPLIER_PICKER_FILTERED_EMPTY = "Süzgece uyan kayıt yok.";
 /** Kolonlar listeye göre: tedarikçi Rol taşır (cari/fason karışık), müşteri listeleri Şehir taşır (yalnız cari). */
 const HEADERS: Record<PickerList, readonly string[]> = {
@@ -32,14 +33,16 @@ const HEADERS: Record<PickerList, readonly string[]> = {
   "supplier-cari": ["Kod", "Ünvan", "Rol", "Vergi No", "Telefon"],
   customer: ["Kod", "Ünvan", "Şehir", "Vergi No", "Telefon"],
   "customer-only": ["Kod", "Ünvan", "Şehir", "Vergi No", "Telefon"],
+  cari: ["Kod", "Ünvan", "Rol", "Vergi No", "Telefon"],
 };
 const TITLE: Record<PickerList, { title: string; description: string }> = {
   supplier: { title: "Tedarikçi seç", description: "Tedarikçi ve alıcı + satıcı cari kartlar ile fason firmalar tek listede; kaydırdıkça yüklenir, satıra tıklayınca seçilir." },
   "supplier-cari": { title: "Bağlanacak cari kartı seç", description: "Tedarikçi ve alıcı + satıcı cari kartlar; fason firmalar bu listede yok. Satıra tıklayınca fason profili o karta bağlanır." },
   customer: { title: "Müşteri seç", description: "Müşteri ve alıcı + satıcı kartlar tek listede; kaydırdıkça yüklenir, satıra tıklayınca seçilir." },
   "customer-only": { title: "Müşteri kartını tedarikçi de yap", description: "Yalnız müşteri tipli kartlar; satıra tıklayınca onay sorulur, kart Müşteri + Tedarikçi olur ve seçilir." },
+  cari: { title: "Cari seç", description: "Müşteri, tedarikçi ve fason rollü bütün cari kartlar tek listede; kaydırdıkça yüklenir, satıra tıklayınca seçilir." },
 };
-const EMPTY: Record<PickerList, string> = { supplier: SUPPLIER_PICKER_EMPTY, "supplier-cari": SUPPLIER_PICKER_EMPTY, customer: CUSTOMER_PICKER_EMPTY, "customer-only": CUSTOMER_ONLY_EMPTY };
+const EMPTY: Record<PickerList, string> = { supplier: SUPPLIER_PICKER_EMPTY, "supplier-cari": SUPPLIER_PICKER_EMPTY, customer: CUSTOMER_PICKER_EMPTY, "customer-only": CUSTOMER_ONLY_EMPTY, cari: CARI_PICKER_EMPTY };
 
 interface Props {
   open: boolean;
@@ -66,7 +69,7 @@ function PickerRow({ r, list, onPick }: { r: SupplierPickerRow; list: PickerList
         {r.name}
         {!r.isActive && <span className="ml-1 text-xs text-muted-foreground">(pasif)</span>}
       </TableCell>
-      {list === "supplier" || list === "supplier-cari" ? (
+      {list === "supplier" || list === "supplier-cari" || list === "cari" ? (
         <TableCell className="py-1.5">
           <Badge variant={roleBadgeVariant(r)}>{r.roleLabel}</Badge>
         </TableCell>

@@ -50,7 +50,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { updateCari, type CariRow, type CariUpdateInput, type Currency } from "./service";
+import { cariRoleLabel, updateCari, type CariRow, type CariUpdateInput, type Currency } from "./service";
 
 export const CURRENCIES: Currency[] = ["TRY", "USD", "EUR", "GBP", "RUB"];
 
@@ -217,15 +217,15 @@ export function CariEditDialog({ cari, open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>Cari Kartı Düzenle</DialogTitle>
           <DialogDescription>
-            Muhasebe alanları burada tutulur — müşteri/fason kartına dokunulmaz. Ünvan ve kod ilgili
-            tanım ekranından değişir.
+            Muhasebe alanları burada tutulur — cari kartına dokunulmaz. Ünvan ve kod Cariler
+            ekranından değişir.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-1 rounded-md border bg-muted/30 p-3 text-sm">
           <div className="font-medium">{cari.name}</div>
           <div className="font-mono text-xs text-muted-foreground">
-            {cari.code} · {cari.kind === "CUSTOMER" ? "Müşteri" : "Fason firma"}
+            {cari.code} · {cariRoleLabel(cari)}
           </div>
         </div>
 

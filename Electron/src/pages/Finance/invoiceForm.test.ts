@@ -213,20 +213,22 @@ describe("buildUpdateBody — PATCH gövdesi", () => {
 
 describe("canSubmitInvoiceForm", () => {
   it("cari seçilmeden kaydedilemez", () => {
-    expect(
-      canSubmitInvoiceForm({ party: "CUSTOMER", customerId: null, subcontractorId: "s", lines: [line()] }),
-    ).toBe(false);
+    expect(canSubmitInvoiceForm({ customerId: null, subcontractorId: null, lines: [line()] })).toBe(false);
+  });
+
+  it("düzenlemede eski fason hesabı (yalnız subcontractorId) geçerli kalır — eski taslak düzenlenebilir", () => {
+    expect(canSubmitInvoiceForm({ customerId: null, subcontractorId: "s", lines: [line()] })).toBe(true);
   });
 
   it("gönderilecek satır kalmayınca kaydedilemez", () => {
     expect(
-      canSubmitInvoiceForm({ party: "CUSTOMER", customerId: "c", subcontractorId: null, lines: [line({ qty: 0 })] }),
+      canSubmitInvoiceForm({ customerId: "c", subcontractorId: null, lines: [line({ qty: 0 })] }),
     ).toBe(false);
   });
 
   it("⭐ 0 fiyatlı tek satırla kaydedilebilir (taslak ara durumu meşru)", () => {
     expect(
-      canSubmitInvoiceForm({ party: "CUSTOMER", customerId: "c", subcontractorId: null, lines: [line()] }),
+      canSubmitInvoiceForm({ customerId: "c", subcontractorId: null, lines: [line()] }),
     ).toBe(true);
   });
 });

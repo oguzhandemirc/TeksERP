@@ -7,10 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
-import { customerService } from "@/pages/Customers/service";
-import { subcontractorService } from "@/pages/Subcontractors/service";
-import type { Customer } from "@/pages/Customers/types";
+import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
 import { createPayment, listCashBoxes, listBankAccounts, money, type Currency } from "./service";
 
 interface Props {
@@ -21,9 +18,9 @@ interface Props {
 }
 
 export function PaymentFormDialog({ open, direction, onOpenChange, onCreated }: Props) {
-  const [party, setParty] = useState<"CUSTOMER" | "SUBCONTRACTOR">("CUSTOMER");
+  // Rol modeli (dilim F): taraf yalnız KART (`customerId`) — fason firma da kartıyla seçilir, hesap karta yazılır;
+  // panel fason bacağını göndermez (eski istemci yolu backend'de kalır).
   const [customerId, setCustomerId] = useState<string | null>(null);
-  const [subcontractorId, setSubcontractorId] = useState<string | null>(null);
   const [accountId, setAccountId] = useState<string>("");
   const [amount, setAmount] = useState(0);
   const [method, setMethod] = useState("CASH");
@@ -61,18 +58,14 @@ export function PaymentFormDialog({ open, direction, onOpenChange, onCreated }: 
     }
   }, [open]);
 
-  const valid =
-    Boolean(selected) &&
-    amount > 0 &&
-    (party === "CUSTOMER" ? Boolean(customerId) : Boolean(subcontractorId));
+  const valid = Boolean(selected) && amount > 0 && Boolean(customerId);
 
   const createM = useMutation({
     mutationFn: () =>
       createPayment({
         direction,
         method,
-        customerId: party === "CUSTOMER" ? customerId : null,
-        subcontractorId: party === "SUBCONTRACTOR" ? subcontractorId : null,
+        customerId,
         currency,
         amount,
         cashBoxId: selected?.kind === "CASH" ? selected.id : null,
@@ -96,53 +89,17 @@ export function PaymentFormDialog({ open, direction, onOpenChange, onCreated }: 
           <DialogTitle>Yeni {title}</DialogTitle>
           <DialogDescription>
             {direction === "IN"
-              ? "Müşteriden/fasondan alınan para. Carinin size olan borcunu azaltır."
-              : "Fasona/müşteriye ödenen para. Sizin borcunuzu azaltır."}
+              ? "Cariden alınan para. Carinin size olan borcunu azaltır."
+              : "Cariye ödenen para. Sizin cariye borcunuzu azaltır."}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label>Cari türü</Label>
-            <select
-              className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
-              value={party}
-              onChange={(e) => setParty(e.target.value as "CUSTOMER" | "SUBCONTRACTOR")}
-            >
-              <option value="CUSTOMER">Müşteri</option>
-              <option value="SUBCONTRACTOR">Fason firma</option>
-            </select>
-          </div>
-          <div>
-            <Label>{party === "CUSTOMER" ? "Müşteri" : "Fason firma"}</Label>
-            {/* ⚠️ PASİF KART DA SEÇİLEBİLİR (`includeInactive`): uç kartın
-                değil `CariAccount`ın aktifliğine bakıyor — pasifleştirilmiş bir
-                firmanın AÇIK BAKİYESİNE tahsilat girmek meşrudur ve mahsup
-                ekranı bu kararı zaten yazılı vermiş. Süzgeç açıkken aynı firma
-                Mahsup'ta bulunuyor, burada "yok" görünüyordu. Seçilen kayıt
-                pasifse alan bunu rozetle ve altındaki uyarıyla söyler. */}
+          <div className="col-span-2">
+            <Label>Cari</Label>
+            {/* Yalnız AKTİF kartlar (1e hükmü, dilim F): pasif kartın açık bakiyesi Mahsup ekranından kapatılır. */}
             <div className="mt-1">
-              {party === "CUSTOMER" ? (
-                <ReferenceSelect<Customer>
-                  value={customerId}
-                  onChange={setCustomerId}
-                  service={customerService}
-                  queryKey="customers"
-                  getLabel={(c) => `${c.code} — ${c.name}`}
-                  placeholder="Müşteri ara..."
-                  includeInactive
-                />
-              ) : (
-                <ReferenceSelect
-                  value={subcontractorId}
-                  onChange={setSubcontractorId}
-                  service={subcontractorService}
-                  queryKey="subcontractors"
-                  getLabel={(s: { code: string; name: string }) => `${s.code} — ${s.name}`}
-                  placeholder="Fason firma ara..."
-                  includeInactive
-                />
-              )}
+              <CustomerPickerField variant="cari" value={customerId} onChange={setCustomerId} />
             </div>
           </div>
 

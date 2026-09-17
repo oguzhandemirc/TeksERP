@@ -43,10 +43,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
-import { customerService } from "@/pages/Customers/service";
-import { subcontractorService } from "@/pages/Subcontractors/service";
-import type { Customer } from "@/pages/Customers/types";
+import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
 import { listBankAccounts, listCashBoxes, money } from "../service";
 import type { Currency } from "../service";
 import {
@@ -71,9 +68,8 @@ export function ChequeActionDialog({ row, def, open, onOpenChange, onDone }: Pro
   const [eventDate, setEventDate] = useState(() => ymd(new Date()));
   const [notes, setNotes] = useState("");
   const [reason, setReason] = useState("");
-  const [party, setParty] = useState<"CUSTOMER" | "SUBCONTRACTOR">("SUBCONTRACTOR");
+  // Rol modeli (dilim F): ciro edilen taraf yalnız KART (`toCustomerId`); panel fason bacağını göndermez.
   const [customerId, setCustomerId] = useState<string | null>(null);
-  const [subcontractorId, setSubcontractorId] = useState<string | null>(null);
 
   const needsAccount = def.needs === "bank" || def.needs === "account";
   const isReversal = def.reverses !== undefined;
@@ -132,7 +128,7 @@ export function ChequeActionDialog({ row, def, open, onOpenChange, onDone }: Pro
     !blockReason &&
     (!needsEventDate || Boolean(eventIso)) &&
     (!needsAccount || Boolean(selected)) &&
-    (def.needs !== "cari" || (party === "CUSTOMER" ? Boolean(customerId) : Boolean(subcontractorId))) &&
+    (def.needs !== "cari" || Boolean(customerId)) &&
     (def.needs !== "reason" || reason.trim().length > 0);
 
   const m = useMutation({
@@ -150,11 +146,7 @@ export function ChequeActionDialog({ row, def, open, onOpenChange, onDone }: Pro
         case "pay":
           return chequePay(row.id, { ...acc, ...base });
         case "endorse":
-          return chequeEndorse(row.id, {
-            toCustomerId: party === "CUSTOMER" ? customerId : null,
-            toSubcontractorId: party === "SUBCONTRACTOR" ? subcontractorId : null,
-            ...base,
-          });
+          return chequeEndorse(row.id, { toCustomerId: customerId, ...base });
         case "bounce":
           return chequeBounce(row.id, base);
         case "return":
@@ -242,39 +234,10 @@ export function ChequeActionDialog({ row, def, open, onOpenChange, onDone }: Pro
 
         {def.needs === "cari" && (
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>Ciro edilen taraf</Label>
-              <select
-                className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
-                value={party}
-                onChange={(e) => setParty(e.target.value as "CUSTOMER" | "SUBCONTRACTOR")}
-              >
-                <option value="SUBCONTRACTOR">Fason firma</option>
-                <option value="CUSTOMER">Müşteri</option>
-              </select>
-            </div>
-            <div>
-              <Label>{party === "CUSTOMER" ? "Müşteri" : "Fason firma"}</Label>
+            <div className="col-span-2">
+              <Label>Ciro edilen cari</Label>
               <div className="mt-1">
-                {party === "CUSTOMER" ? (
-                  <ReferenceSelect<Customer>
-                    value={customerId}
-                    onChange={setCustomerId}
-                    service={customerService}
-                    queryKey="customers"
-                    getLabel={(c) => `${c.code} — ${c.name}`}
-                    placeholder="Müşteri ara..."
-                  />
-                ) : (
-                  <ReferenceSelect
-                    value={subcontractorId}
-                    onChange={setSubcontractorId}
-                    service={subcontractorService}
-                    queryKey="subcontractors"
-                    getLabel={(s: { code: string; name: string }) => `${s.code} — ${s.name}`}
-                    placeholder="Fason firma ara..."
-                  />
-                )}
+                <CustomerPickerField variant="cari" value={customerId} onChange={setCustomerId} />
               </div>
             </div>
             <p className="col-span-2 text-xs text-muted-foreground">

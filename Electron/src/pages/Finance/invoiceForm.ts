@@ -22,6 +22,7 @@
 import type { Currency, InvoiceDetail, InvoiceLineInput, InvoiceType } from "./service";
 import { shouldApplySuggestion } from "@/hooks/useItemPriceSuggestion";
 
+/** Hesabın bacağı — yalnız DÜZENLEMEDE anlamlı (eski fason kind'lı hesap salt-okunur çizilir); yeni fatura hep karta kesilir. */
 export type PartyKind = "CUSTOMER" | "SUBCONTRACTOR";
 
 /** Formdaki tek satır — `key` React kimliği (DB satırında satırın kendi id'si). */
@@ -169,12 +170,12 @@ export function buildUpdateBody(state: {
 
 /** Form kaydedilebilir mi — yeni ve düzenleme yolunda AYNI kural. */
 export function canSubmitInvoiceForm(state: {
-  party: PartyKind;
   customerId: string | null;
+  /** Yalnız düzenlemede dolu olabilir (eski fason hesabı); yeni faturada panel bu alanı hiç göndermez. */
   subcontractorId: string | null;
   lines: InvoiceFormLine[];
 }): boolean {
-  const partyOk = state.party === "CUSTOMER" ? Boolean(state.customerId) : Boolean(state.subcontractorId);
+  const partyOk = Boolean(state.customerId) || Boolean(state.subcontractorId);
   return partyOk && payloadLines(state.lines).length > 0;
 }
 

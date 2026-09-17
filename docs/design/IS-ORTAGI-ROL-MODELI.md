@@ -186,7 +186,7 @@ tombstone) sayılmaz:
 
 | Model | Çift bağ | Kapı türü | Saha | Kaldırma koşulu |
 |---|---|---|---|---|
-| `CariAccount` | `customerId` XOR `subcontractorId` | İKİ DB CHECK | 1 hesap (göçle karta taşındı) | §7.1 ①②; yazım kapısı İNDİ (`resolveAccountPartyTx`) |
+| `CariAccount` | `customerId` XOR `subcontractorId` | İKİ DB CHECK | 1 hesap (göçle karta taşındı) | §7.1 ①②; yazım kapısı İNDİ (`resolvePartyToCardTx`, `helpers/party-card.helper.ts` — dilim E'de tek helper'a taşındı) · **panel finans formları (tahsilat/ödeme · fatura · çek girişi · ciro) 1.3.2'den itibaren `subcontractorId` GÖNDERMEZ, taraf yalnız kart** (dilim F; bekçi `Electron/src/pages/Finance/rolModeliFormlari.test.ts`) |
 | `WarpBeam` (PURCHASED) | `supplierId` XOR `subcontractorId` | yalnız şema yorumu (`///`) — DB CHECK YOK | levent 0 (devere kapalı) | bağsız profil 0 + eski istemci 0; yazım kapısı İNDİ: `resolvePurchasedPartyToCard` · bekçi `test_supplier_party_tek_adres §4` (SUBCONTRACT kökeni DOKUNULMAZ) |
 | `PurchaseOrder` | `supplierId` XOR `subcontractorId` | yalnız SERVİS (`helpers/supplier-party.helper`) | alış siparişi 0 | aynı; yazım kapısı İNDİ: `resolveSupplierParty` · bekçi `test_supplier_party_tek_adres §1/§3` |
 | `GoodsReceipt` | `supplierId` XOR `subcontractorId` | yalnız SERVİS (aynı helper) | mal kabul 0 | aynı; yazım kapısı İNDİ: `resolveSupplierParty` · bekçi `test_supplier_party_tek_adres §2/§3` |
@@ -217,6 +217,7 @@ dump'ının TAZE kopyasında prova edilir (restore → deploy → bekçiler → 
 | # | Adım | Eski istemci ne yapar |
 |---|---|---|
 | 1 | `cari_accounts`: önce `customerId NOT NULL`, sonra iki CHECK (`cari_accounts_party_xor`, `cari_accounts_kind_matches_party`) kaldırılır ve `subcontractorId` kolonu DROP | Hesabı `cariId` ile okuyan her istemci etkilenmez; yalnız `subcontractorId` alanını GÖNDEREN bir yazıcı kalmışsa 400 alır — koşul ②, böyle bir yazıcının sahada olmadığını ölçer |
+| 1b | *(kaldırma değil, 1.3.2 sözleşmesi)* Cari Hesaplar listesi kartın rol süzgeciyle (`filter[role]` CSV · skaler bayraklar; `GET /api/finance/cari`) | **Eski panel (< 1.3.2) rol süzgeci göndermez → tüm hesapları görür** (`kind` parametresi eski istemci için kalır); yeni panel eski backend'e karşı süzgeç gönderir, backend yok sayar → "Tümü" döner, hata yok |
 | 2 | `Customer.type` kolonu DROP + `CompanyType` enum DROP | ⚠️ EN RİSKLİ ADIM: `type` okuyan eski panel/tablet alanı `undefined` görür ve rozet/etiket boş kalır. Bu yüzden ÖN KOŞUL yalnız ④ değil, **panel ve mobilin `type` okumayı BIRAKTIĞININ ölçülmesidir** (faz 2 dilim C) |
 | 3 | `Subcontractor.customerId NOT NULL` | Bağsız profil yaratmaya çalışan eski istemci 400 alır; koşul ①, sahada bağsız profil kalmadığını ölçer |
 | 4 | `WarpBeam` · `PurchaseOrder` · `GoodsReceipt`: `subcontractorId` kolonları DROP (§7.1b) — her biri AYRI migration, sırası kendi içinde serbest | Bu alanları GÖNDEREN eski istemci 400 alır; okuma yolları zaten kartı çözdüğü için listeler ve belgeler etkilenmez. Ön koşul: dilim E'nin yazım kapısı sahada en az bir sürüm boyunca koşmuş olmalı |

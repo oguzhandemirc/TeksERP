@@ -12,6 +12,9 @@
 // ⭐ NOT KORUNUR: otomatik taslağın "kontrol edin" notu, kullanıcı yalnız fiyat
 //    düzelttiğinde sessizce silinemez.
 // ⭐ PARA BİRİMİ cari kartından ön-dolar ama KAYNAK BELGEYİ ezmez.
+// ⭐ ROL MODELİ (dilim F): "Cari türü" alanı YOK; taraf cari seçici modalı (`CustomerPickerField` cari kipi);
+//    yeni fatura gövdesi yalnız `customerId` taşır — `subcontractorId` anahtarı HİÇ gitmez (gövde sözleşmesi).
+//    Eski fason kind'lı hesaba kesilmiş taslak düzenlenirken bacak salt-okunur "Eski fason hesabı" olarak çizilir.
 // =============================================================================
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, fireEvent, waitFor } from "@testing-library/react";
@@ -52,8 +55,9 @@ const getCustomerById = vi.fn();
 vi.mock("@/pages/Customers/service", () => ({
   customerService: { getById: (...a: unknown[]) => getCustomerById(...a) },
 }));
+const getSubcontractorById = vi.fn();
 vi.mock("@/pages/Subcontractors/service", () => ({
-  subcontractorService: { getById: vi.fn() },
+  subcontractorService: { getById: (...a: unknown[]) => getSubcontractorById(...a) },
 }));
 vi.mock("@/pages/Items/service", () => ({
   itemService: { getById: vi.fn() },
@@ -64,7 +68,8 @@ import { InvoiceFormDialog } from "./InvoiceFormDialog";
 /** ⚠️ Diyalog PORTAL'a çizilir: `render` sonucundaki `container` onu KAPSAMAZ
  *  ve boş küme sorgulayan bir test sessizce yeşil kalır. */
 const selectsInDialog = () => Array.from(document.querySelectorAll("select"));
-const currencySelect = () => selectsInDialog()[2] as HTMLSelectElement;
+// tür · para birimi ("Cari türü" seçimi kalktı — rol modeli)
+const currencySelect = () => selectsInDialog()[1] as HTMLSelectElement;
 
 /** Sevkten otomatik doğan 0 fiyatlı taslak (saha vakası). */
 const DRAFT: InvoiceDetail = {
@@ -183,7 +188,8 @@ describe("düzenleme modu", () => {
     expect(body.notes).toBe(DRAFT.notes);
   });
 
-  it("⭐ tür / cari türü / para birimi KİLİTLİ çizilir", async () => {
+  it("⭐ tür / cari / para birimi KİLİTLİ çizilir; \"Cari türü\" seçimi YOK", async () => {
+    getCustomerById.mockResolvedValue({ data: { id: "cus-1", code: "MUS-1", name: "ARZU" } });
     renderWithProviders(
       <InvoiceFormDialog open editInvoiceId="inv-1" onOpenChange={() => {}} onCreated={() => {}} />,
     );
@@ -191,15 +197,30 @@ describe("düzenleme modu", () => {
     // ⚠️ Diyalog PORTAL'a çizilir — `container` onu KAPSAMAZ; sorgular
     // `document` üzerinden yapılır (yoksa test boş küme görüp sessizce geçer).
     const selects = selectsInDialog();
-    // tür · cari türü · para birimi
-    expect(selects.length).toBe(3);
+    // tür · para birimi (cari türü seçimi kalktı: fason bir tür değil roldür)
+    expect(selects.length).toBe(2);
     selects.forEach((s) => expect((s as HTMLSelectElement).disabled).toBe(true));
-    // Satır "Kalem" seçicileri de aynı bileşendir; CARİ seçicisi taşıdığı
-    // değerle ayrılır (satır seçicileri boş).
-    const partyPicker = screen
-      .getAllByTestId("ref-select")
-      .find((el) => el.getAttribute("data-value") === "cus-1");
-    expect(partyPicker?.getAttribute("data-disabled")).toBe("1");
+    expect(screen.queryByText("Cari türü")).toBeNull();
+    const partyPicker = screen.getByRole("button", { name: "Cari seç (liste)" });
+    expect((partyPicker as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() => expect(partyPicker.textContent).toContain("ARZU"));
+  });
+
+  it("⭐ ESKİ fason kind'lı hesaba kesilmiş taslak: taraf salt-okunur \"Eski fason hesabı\", seçici yok, kaydedilebilir", async () => {
+    flags.mockReturnValue({ data: { data: { financeEnabled: true, financeDefaultVatRate: 20 } } });
+    getSubcontractorById.mockResolvedValue({ data: { id: "sub-1", code: "FSN-1", name: "BOYAHANE" } });
+    getInvoice.mockResolvedValue({
+      ...DRAFT,
+      cari: { id: "cari-2", kind: "SUBCONTRACTOR", taxOffice: null, customer: null, subcontractor: { id: "sub-1", code: "FSN-1", name: "BOYAHANE", taxNumber: null } },
+    });
+    renderWithProviders(
+      <InvoiceFormDialog open editInvoiceId="inv-1" onOpenChange={() => {}} onCreated={() => {}} />,
+    );
+    await waitFor(() => expect(screen.getByDisplayValue("PATOS · SİYAH")).toBeTruthy());
+    expect(screen.getByTestId("invoice-legacy-party").textContent).toContain("Eski fason hesabı");
+    await waitFor(() => expect(screen.getByTestId("invoice-legacy-party").textContent).toContain("BOYAHANE"));
+    expect(screen.queryByRole("button", { name: "Cari seç (liste)" })).toBeNull();
+    expect((screen.getByText("Değişiklikleri Kaydet") as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("⭐ ONAYLI fatura düzenlenemez — form HİÇ açılmaz", async () => {
@@ -217,6 +238,34 @@ describe("düzenleme modu", () => {
       <InvoiceFormDialog open editInvoiceId="inv-1" onOpenChange={() => {}} onCreated={() => {}} />,
     );
     await waitFor(() => expect(screen.getByText(/silindiği anlamına gelmez/)).toBeTruthy());
+  });
+});
+
+describe("yeni fatura — taraf yalnız kart", () => {
+  beforeEach(() => {
+    flags.mockReturnValue({ data: { data: { financeEnabled: true, financeDefaultVatRate: 20 } } });
+    getCustomerById.mockResolvedValue({ data: { id: "cus-9", code: "FSN-9", name: "BOYAHANE KART", isSubcontractorRole: true } });
+    listCari.mockResolvedValue({ data: [], pagination: { total: 0, totalPages: 1 } });
+    createInvoice.mockResolvedValue({ data: { id: "inv-new" }, message: "ok" });
+  });
+
+  it("⭐ gövde `customerId` taşır, `subcontractorId` anahtarı HİÇ gitmez (fason rollü kart → hesap karta, backend çözer)", async () => {
+    renderWithProviders(
+      <InvoiceFormDialog
+        open
+        onOpenChange={() => {}}
+        onCreated={() => {}}
+        prefill={{ type: "PURCHASE", customerId: "cus-9", lines: [{ description: "Boya işçiliği", qty: 10, unit: "m", unitPrice: 5 }] }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "Cari seç (liste)" }).textContent).toContain("BOYAHANE KART"));
+    expect(screen.queryByText("Cari türü")).toBeNull();
+    fireEvent.click(screen.getByText("Taslağı Oluştur"));
+    await waitFor(() => expect(createInvoice).toHaveBeenCalledTimes(1));
+    const body = createInvoice.mock.calls[0]![0] as Record<string, unknown>;
+    expect(body.customerId).toBe("cus-9");
+    expect(body).not.toHaveProperty("subcontractorId");
+    expect(body.type).toBe("PURCHASE");
   });
 });
 

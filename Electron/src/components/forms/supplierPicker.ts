@@ -13,12 +13,13 @@
 import type { Customer } from "@/pages/Customers/types";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 import type { SupplierParty, SupplierPartyKind } from "./supplierParty";
-import { ROLE_FILTER_DEFAULTS, partnerRoleLabels, partnerRoleText, pickerCustomerFilters, subcontractorFilters, unlinkedSubcontractorLegWanted, type DirectionFilter, type RoleFilterPair, type RoleServerFilters } from "@/lib/partnerRoles";
+import { ROLE_FILTER_DEFAULTS, directionFilters, partnerRoleLabels, partnerRoleText, pickerCustomerFilters, subcontractorFilters, unlinkedSubcontractorLegWanted, type DirectionFilter, type RoleFilterPair, type RoleServerFilters } from "@/lib/partnerRoles";
 
 export const SUPPLIER_PICKER_PAGE = 50;
 
-/** Seçici kipi: tedarikçi (alış: tedarikçi rolü olan cari + fason) · müşteri (satış: müşteri rolü olan cari). */
-export type PickerMode = "supplier" | "customer";
+/** Seçici kipi: tedarikçi (alış: tedarikçi rolü olan cari + fason) · müşteri (satış: müşteri rolü olan cari) ·
+ *  cari (muhasebe formları: HER rol, Cariler şeridinin süzgeci; fason bacağı yok — taraf yalnız kart, `customerId`). */
+export type PickerMode = "supplier" | "customer" | "cari";
 /** Listelenen küme: kip · dönüştürme görünümü (yalnız müşteri rolü, tedarikçi rolü YOK; fason yok) · yalnız cari
  *  tedarikçiler (`supplier-cari`: fason bacağı yok — fason profilinin "Bağlı cari" alanı). */
 export type PickerList = PickerMode | "customer-only" | "supplier-cari";
@@ -44,7 +45,9 @@ export interface PickerLegs {
  */
 export function legsFor(f: PickerRoleFilter, list: PickerList = "supplier"): PickerLegs {
   if (list === "customer-only") return { customers: true, subs: false, customerFilters: pickerCustomerFilters("customer", "CUSTOMER") };
-  const mode: PickerMode = list === "customer" ? "customer" : "supplier";
+  // Cari kipi: taban rol yok (her kart), süzgeç Cariler şeridinin aynısı (`directionFilters` — Müşteri = müşteri rolü olan, …).
+  if (list === "cari") return { customers: true, subs: false, customerFilters: { ...directionFilters(f.direction), ...subcontractorFilters(f.subcontractor) } };
+  const mode: "supplier" | "customer" = list === "customer" ? "customer" : "supplier";
   const own = mode === "customer" ? "CUSTOMER" : "SUPPLIER";
   const direction: DirectionFilter = f.direction === own || f.direction === "BOTH" ? f.direction : "ALL";
   const norm: PickerRoleFilter = { direction, subcontractor: f.subcontractor };

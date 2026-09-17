@@ -47,10 +47,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
-import { customerService } from "@/pages/Customers/service";
-import { subcontractorService } from "@/pages/Subcontractors/service";
-import type { Customer } from "@/pages/Customers/types";
+import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
 import { money } from "../service";
 import type { Currency } from "../service";
 import { createCheque, type ChequeDocType, type ChequeKind } from "./service";
@@ -73,11 +70,8 @@ export function ChequeFormDialog({ open, initialKind, onOpenChange, onCreated }:
   // kullanıcının değiştirdiği yönü geri alırdı.
   const [kind, setKind] = useState<ChequeKind>(initialKind);
   const [docType, setDocType] = useState<ChequeDocType>("CHEQUE");
-  const [party, setParty] = useState<"CUSTOMER" | "SUBCONTRACTOR">(
-    initialKind === "RECEIVED" ? "CUSTOMER" : "SUBCONTRACTOR",
-  );
+  // Rol modeli (dilim F): taraf yalnız KART (`customerId`); fason firma kartıyla seçilir, panel fason bacağını göndermez.
   const [customerId, setCustomerId] = useState<string | null>(null);
-  const [subcontractorId, setSubcontractorId] = useState<string | null>(null);
   const [currency, setCurrency] = useState<Currency>("TRY");
   const [amount, setAmount] = useState(0);
   const [rate, setRate] = useState(0);
@@ -102,10 +96,7 @@ export function ChequeFormDialog({ open, initialKind, onOpenChange, onCreated }:
   const postingIso = dayStartIso(postingDate);
   const dueIso = dayStartIso(dueDate);
 
-  const valid =
-    amount > 0 &&
-    Boolean(dueIso) &&
-    (party === "CUSTOMER" ? Boolean(customerId) : Boolean(subcontractorId));
+  const valid = amount > 0 && Boolean(dueIso) && Boolean(customerId);
 
   const createM = useMutation({
     // Vade `mutate()` argümanı olarak geçer: `valid` onu zaten kapıyor ama tipi
@@ -114,8 +105,7 @@ export function ChequeFormDialog({ open, initialKind, onOpenChange, onCreated }:
       createCheque({
         kind,
         docType,
-        customerId: party === "CUSTOMER" ? customerId : null,
-        subcontractorId: party === "SUBCONTRACTOR" ? subcontractorId : null,
+        customerId,
         currency,
         // Kur boş bırakılırsa backend kur tablosundan çözer; bulamazsa
         // "Kurlar ekranından girin veya elle belirtin" diye yol gösterir.
@@ -150,8 +140,8 @@ export function ChequeFormDialog({ open, initialKind, onOpenChange, onCreated }:
           <DialogTitle>{received ? "Çek / Senet Girişi" : "Çek / Senet Çıkışı"}</DialogTitle>
           <DialogDescription>
             {received
-              ? "Müşteriden alınan çek/senet. Kaydedildiği AN carinin size olan borcunu azaltır — tahsil edilmesi beklenmez."
-              : "Karşı tarafa verdiğimiz kendi çekimiz/senedimiz. Kaydedildiği AN sizin borcunuzu azaltır; ödeme banka/kasadan sonra işlenir."}
+              ? "Cariden alınan çek/senet. Kaydedildiği AN carinin size olan borcunu azaltır — tahsil edilmesi beklenmez."
+              : "Cariye verdiğimiz kendi çekimiz/senedimiz. Kaydedildiği AN sizin cariye borcunuzu azaltır; ödeme banka/kasadan sonra işlenir."}
           </DialogDescription>
         </DialogHeader>
 
@@ -179,43 +169,10 @@ export function ChequeFormDialog({ open, initialKind, onOpenChange, onCreated }:
             </select>
           </div>
 
-          <div>
-            <Label>Cari türü</Label>
-            <select
-              className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
-              value={party}
-              onChange={(e) => setParty(e.target.value as "CUSTOMER" | "SUBCONTRACTOR")}
-            >
-              <option value="CUSTOMER">Müşteri</option>
-              <option value="SUBCONTRACTOR">Fason firma</option>
-            </select>
-          </div>
-          <div>
-            <Label>{party === "CUSTOMER" ? "Müşteri" : "Fason firma"}</Label>
-            {/* Pasif kart da seçilebilir — gerekçe `PaymentFormDialog`'daki
-                notla aynı (uç `CariAccount.isActive`'e bakar, karta değil). */}
+          <div className="col-span-2">
+            <Label>Cari</Label>
             <div className="mt-1">
-              {party === "CUSTOMER" ? (
-                <ReferenceSelect<Customer>
-                  value={customerId}
-                  onChange={setCustomerId}
-                  service={customerService}
-                  queryKey="customers"
-                  getLabel={(c) => `${c.code} — ${c.name}`}
-                  placeholder="Müşteri ara..."
-                  includeInactive
-                />
-              ) : (
-                <ReferenceSelect
-                  value={subcontractorId}
-                  onChange={setSubcontractorId}
-                  service={subcontractorService}
-                  queryKey="subcontractors"
-                  getLabel={(s: { code: string; name: string }) => `${s.code} — ${s.name}`}
-                  placeholder="Fason firma ara..."
-                  includeInactive
-                />
-              )}
+              <CustomerPickerField variant="cari" value={customerId} onChange={setCustomerId} />
             </div>
           </div>
 
