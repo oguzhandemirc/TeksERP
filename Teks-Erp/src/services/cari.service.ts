@@ -11,7 +11,8 @@ import { reasonOptions, type SebepSecenek } from "./reports/_secenekler";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
-import { D0, D, applyCariBalanceTx, resolveAccountPartyTx } from "./helpers/finance.helper";
+import { D0, D, applyCariBalanceTx } from "./helpers/finance.helper";
+import { resolvePartyToCardTx } from "./helpers/party-card.helper";
 import { assertPeriodOpenTx, lockCariPeriodScopeTx } from "./helpers/period-guard.helper";
 import { periodCloseService } from "./period-close.service";
 // H2 (2026-08-14): "Gecikmiş" kolonunun TEK kaynağı yaşlandırma çekirdeği —
@@ -230,7 +231,7 @@ export class CariService {
       if (!s.isActive) throw AppError.badRequest("Fason firma pasif durumda.");
     }
     // Hesabın tek adresi kart: bağlı fason profili kartına çözülür (lazy yolla aynı çözücü).
-    const { customerId, subcontractorId } = await resolveAccountPartyTx(prisma, input);
+    const { customerId, subcontractorId } = await resolvePartyToCardTx(prisma, input);
 
     const dup = await prisma.cariAccount.findFirst({
       where: customerId ? { customerId } : { subcontractorId: subcontractorId as string },

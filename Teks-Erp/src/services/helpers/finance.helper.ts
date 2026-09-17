@@ -7,6 +7,7 @@
 // =============================================================================
 import { Prisma, CariKind, Currency, InvoiceType } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
+import { resolvePartyToCardTx } from "./party-card.helper";
 import { dailyCodePrefix, nextDailySeq } from "../../utils/code-format";
 
 /** Sıfır Decimal — float aritmetiği YASAK (perf/doğruluk kuralı). */
@@ -240,23 +241,7 @@ export async function resolveExchangeRateTx(
  */
 export type CariAccountParty = { customerId?: string | null; subcontractorId?: string | null };
 
-/**
- * Cari hesabın TEK ADRESİ karttır: fason bacağı (`subcontractorId`) profilin bağlı kartına ÇÖZÜLÜR.
- * Bağsız profil (göç koşulmamış kurulum) eskisi gibi fason hesabına gider — varsayılan = bugünkü davranış.
- * Çözülmeseydi göçten sonra bağlı fasona kesilen fatura/ödeme/çek ikinci bir hesap doğururdu (1e ölçtü).
- */
-export async function resolveAccountPartyTx(
-  tx: Prisma.TransactionClient,
-  party: CariAccountParty,
-): Promise<{ customerId: string | null; subcontractorId: string | null }> {
-  const customerId = party.customerId ?? null;
-  const subcontractorId = party.subcontractorId ?? null;
-  if (customerId || !subcontractorId) return { customerId, subcontractorId };
-  const profile = await tx.subcontractor.findUnique({ where: { id: subcontractorId }, select: { customerId: true } });
-  if (profile?.customerId) return { customerId: profile.customerId, subcontractorId: null };
-  return { customerId, subcontractorId };
-}
-
+/** Cari hesabın TEK ADRESİ karttır: fason bacağı `resolvePartyToCardTx` ile bağlı kartına çözülür (kopya yok). */
 export async function ensureCariAccountTx(
   tx: Prisma.TransactionClient,
   party: CariAccountParty,
@@ -264,7 +249,7 @@ export async function ensureCariAccountTx(
   if ((party.customerId == null) === (party.subcontractorId == null)) {
     throw AppError.badRequest("Cari hesap için müşteri VEYA fason firma verilmeli (ikisi birden değil).");
   }
-  const { customerId, subcontractorId } = await resolveAccountPartyTx(tx, party);
+  const { customerId, subcontractorId } = await resolvePartyToCardTx(tx, party);
 
   const where = customerId ? { customerId } : { subcontractorId: subcontractorId as string };
   const existing = await tx.cariAccount.findFirst({

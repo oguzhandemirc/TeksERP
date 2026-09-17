@@ -92,7 +92,6 @@ import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
 // §K — fason firma TEST tarafından üretilir; seed'in `BOYER`i pasif olabilir
 // ve `findFirst` onu yine bulur (2026-08-02 saha bulgusu, fixture dosyası başlığı).
-import { ensureTestDyeHouse } from "./fixture-subcontractor";
 
 import { ensureIplikModuluAcik } from "./fixture-module-flags";
 
@@ -139,6 +138,7 @@ const jCustomerIds: string[] = [];
 const kItemIds: string[] = [];
 const kOrderIds: string[] = [];
 const kCustomerIds: string[] = [];
+const kSubcontractorIds: string[] = [];
 const kInvoiceIds: string[] = [];
 
 const OVER_KEY = SETTING_KEYS.PURCHASE_BLOCK_OVER_RECEIPT_ENABLED;
@@ -941,7 +941,10 @@ async function main(): Promise<void> {
     await setFlag(OVER_KEY, false);
     await setFlag(PRICE_KEY, false);
 
-    const dye = await ensureTestDyeHouse();
+    // Rol modeli faz 2 (E): BAĞLI profil alış tarafında KARTA çözülür (`test_supplier_party_tek_adres`); C4 fason
+    // bacağı BAĞSIZ profilindir → bu bölüm fixture'ın bağ durumundan bağımsız, kendi bağsız profiliyle ölçer.
+    const dye = await prisma.subcontractor.create({ data: { code: `${TAG}-FSN`, name: `${TAG} Fason Bağsız` }, select: { id: true, name: true } });
+    kSubcontractorIds.push(dye.id);
     const kSupplier = await prisma.customer.create({
       data: { code: `${TAG}-KTED`, name: `${TAG} K Tedarikçi`, type: "SUPPLIER" },
       select: { id: true },
@@ -1351,6 +1354,16 @@ main()
         await prisma.item.deleteMany({ where: { id: { in: kItemIds } } });
       }
       if (kCustomerIds.length) await prisma.customer.deleteMany({ where: { id: { in: kCustomerIds } } });
+      if (kSubcontractorIds.length) {
+        // Bölümün KENDİ bağsız profili (fixture değil): lazy açılan hesabı ve profili birlikte kaldır.
+        const kSubCari = (await prisma.cariAccount.findMany({ where: { subcontractorId: { in: kSubcontractorIds } }, select: { id: true } })).map((c) => c.id);
+        if (kSubCari.length) {
+          await prisma.cariTransaction.deleteMany({ where: { cariId: { in: kSubCari } } });
+          await prisma.cariBalance.deleteMany({ where: { cariId: { in: kSubCari } } });
+          await prisma.cariAccount.deleteMany({ where: { id: { in: kSubCari } } });
+        }
+        await prisma.subcontractor.deleteMany({ where: { id: { in: kSubcontractorIds } } });
+      }
       // ⚠️ FASON FİRMANIN `CariAccount`u SİLİNMEZ ve bu bilinçli: fixture firma
       // KALICIDIR (29 test paylaşıyor) ve hesap lazy açılır — bakiyesiz, defter
       // satırsız boş bir kayıttır, mutabakat bekçilerinde nötrdür. Silmek,

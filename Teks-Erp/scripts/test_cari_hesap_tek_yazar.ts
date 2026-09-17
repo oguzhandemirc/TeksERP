@@ -3,7 +3,7 @@
 // =============================================================================
 // Delik: `ensureCariAccountTx` fason bacağını (`subcontractorId`) olduğu gibi kabul ediyordu; göçten sonra BAĞLI
 // bir fasona kesilen fatura/ödeme/çek kartın hesabı dururken İKİNCİ bir hesap doğuruyordu ("tek cari hesap" bozuk).
-// Kural: fason bacağı `resolveAccountPartyTx` ile profilin kartına ÇÖZÜLÜR; bağsız profil (göç koşulmamış kurulum)
+// Kural: fason bacağı `resolvePartyToCardTx` ile profilin kartına ÇÖZÜLÜR; bağsız profil (göç koşulmamış kurulum)
 // eskisi gibi fason hesabına gider (varsayılan = bugünkü davranış). Şema/CHECK dokunulmaz.
 // §0 zemin: bağlı profil + kart, hesap 0 (sayım vakum değil: §1'de 1 olur)
 // §1 bağlı fason → ALIŞ faturası → hesap KARTTA (`customerId` = kart, `subcontractorId` null, kind CUSTOMER), sayı 1
@@ -11,8 +11,8 @@
 // §3 kartın hesabı ZATEN varken (açık `cariService.create`) bağlı fasona fatura → aynı hesaba; `cariService.create`
 //    `{subcontractorId}` ile bağlı profile → 409 "zaten açık" (ikinci hesap DOĞMAZ)
 // §4 bağsız fason → eski yol (hesap `subcontractorId`de, kind SUBCONTRACTOR)
-// §5 `resolveAccountPartyTx` saf sözleşmesi: müşteri verilirse dokunmaz; ikisi birden verilirse dokunmaz (XOR çağıranda)
-// Negatif sonda (kırmızı görüldü): `ensureCariAccountTx`te `resolveAccountPartyTx` çağrısı kaldırılınca §1 "hesap kartta"
+// §5 `resolvePartyToCardTx` saf sözleşmesi: müşteri verilirse dokunmaz; ikisi birden verilirse dokunmaz (XOR çağıranda)
+// Negatif sonda (kırmızı görüldü): `ensureCariAccountTx`te `resolvePartyToCardTx` çağrısı kaldırılınca §1 "hesap kartta"
 // ❌ ve §3 "aynı hesap" ❌ (iki hesap doğdu).
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; temizlik yalnız `temizle`de.
 // Koşum: npx tsx scripts/test_cari_hesap_tek_yazar.ts
@@ -23,7 +23,7 @@ import { invoiceService } from "../src/services/invoice.service";
 import { paymentService } from "../src/services/payment.service";
 import { chequeService } from "../src/services/cheque.service";
 import { cariService } from "../src/services/cari.service";
-import { resolveAccountPartyTx } from "../src/services/helpers/finance.helper";
+import { resolvePartyToCardTx } from "../src/services/helpers/party-card.helper";
 import { AppError } from "../src/utils/app-error";
 
 let pass = 0;
@@ -124,13 +124,13 @@ async function main(): Promise<void> {
     check("bağsız profilin hesabı fason bacağında (kind SUBCONTRACTOR, customerId null) — varsayılan bugünkü davranış", h4.length === 1 && h4[0]?.kind === "SUBCONTRACTOR" && h4[0]?.customerId === null && inv4.cariId === h4[0]?.id, JSON.stringify(h4[0]));
 
     console.log("\n§5 çözücü sözleşmesi");
-    const r1 = await resolveAccountPartyTx(prisma, { subcontractorId: a.subcontractorId });
+    const r1 = await resolvePartyToCardTx(prisma, { subcontractorId: a.subcontractorId });
     check("bağlı → {customerId: kart, subcontractorId: null}", r1.customerId === a.customerId && r1.subcontractorId === null);
-    const r2 = await resolveAccountPartyTx(prisma, { subcontractorId: bagsiz.id });
+    const r2 = await resolvePartyToCardTx(prisma, { subcontractorId: bagsiz.id });
     check("bağsız → olduğu gibi", r2.customerId === null && r2.subcontractorId === bagsiz.id);
-    const r3 = await resolveAccountPartyTx(prisma, { customerId: a.customerId });
+    const r3 = await resolvePartyToCardTx(prisma, { customerId: a.customerId });
     check("müşteri verilirse dokunmaz", r3.customerId === a.customerId && r3.subcontractorId === null);
-    const r4 = await resolveAccountPartyTx(prisma, { customerId: b.customerId, subcontractorId: a.subcontractorId });
+    const r4 = await resolvePartyToCardTx(prisma, { customerId: b.customerId, subcontractorId: a.subcontractorId });
     check("ikisi birden → dokunmaz (XOR kararı çağıranda: 400)", r4.customerId === b.customerId && r4.subcontractorId === a.subcontractorId);
     const e5 = await hata(() => invoiceService.createDraft({ type: "PURCHASE", customerId: b.customerId, subcontractorId: a.subcontractorId, currency: "TRY", lines: LINES }));
     check("ikisi birden verilen fatura → 400", status(e5) === 400, msg(e5));

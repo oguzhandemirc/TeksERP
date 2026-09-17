@@ -52,7 +52,6 @@ import { InventoryService } from "../src/services/inventory.service";
 import { purchaseOrderService, syncPurchaseOrder } from "../src/services/purchase-order.service";
 // §U — fason firma TEST tarafından üretilir (seed'in `BOYER`i pasif olabilir ve
 // `findFirst` onu yine bulur; fixture dosyası başlığındaki 2026-08-02 bulgusu).
-import { ensureTestDyeHouse } from "./fixture-subcontractor";
 
 import { ensureIplikModuluAcik } from "./fixture-module-flags";
 
@@ -76,6 +75,7 @@ const receiptIds: string[] = [];
 const itemIds: string[] = [];
 const warehouseIds: string[] = [];
 const customerIds: string[] = [];
+const subcontractorIds: string[] = [];
 
 /** Detay yanıtındaki kalem şekli (servis Decimal döner). */
 interface DetailLine {
@@ -766,7 +766,10 @@ async function main(): Promise<void> {
   // kime verildiği belirsiz bir taahhüt yoktur (şemada `supplierId` bu yüzden
   // NOT NULL'dı; C4 ile nullable oldu ve kısıt kolondan SERVİSE TAŞINDI).
   {
-    const dye = await ensureTestDyeHouse();
+    // Rol modeli faz 2 (E): BAĞLI profil alış tarafında KARTA çözülür (`test_supplier_party_tek_adres`); C4 fason
+    // bacağı BAĞSIZ profilindir → bu bölüm fixture'ın bağ durumundan bağımsız, kendi bağsız profiliyle ölçer.
+    const dye = await prisma.subcontractor.create({ data: { code: `${TAG}-FSN`, name: `${TAG} Fason Bağsız` }, select: { id: true, name: true } });
+    subcontractorIds.push(dye.id);
 
     // U1 — XOR ihlali + boş taraf: ikisi de 400 ve sipariş DOĞMAZ.
     const poBefore = await prisma.purchaseOrder.count();
@@ -952,6 +955,7 @@ main()
       }
       if (itemIds.length) await prisma.item.deleteMany({ where: { id: { in: itemIds } } });
       if (customerIds.length) await prisma.customer.deleteMany({ where: { id: { in: customerIds } } });
+      if (subcontractorIds.length) await prisma.subcontractor.deleteMany({ where: { id: { in: subcontractorIds } } });
     } catch (e) {
       console.warn("Temizlik uyarısı:", (e as Error).message.slice(0, 300));
     }

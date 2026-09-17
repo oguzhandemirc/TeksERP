@@ -69,6 +69,7 @@ import {
 // XOR + varlık + aktiflik TEK kapıdan sorulur (alış siparişiyle ORTAK).
 import {
   isPartyEmpty,
+  resolveStoredSupplierParty,
   resolveSupplierParty,
   samePartyAs,
   type ResolvedSupplierParty,
@@ -723,10 +724,12 @@ export class GoodsReceiptService {
           // `supplierId` eşitliğine bakan eski satır, fişi fason firmaya /
           // siparişi müşteri-tipli cariye bağlı iken "iki taraf da null" diye
           // EŞİT sayardı ve fiş sessizce YANLIŞ cariye yazılırdı.
-          const poParty: ResolvedSupplierParty = {
-            supplierId: po.supplierId,
-            subcontractorId: po.subcontractorId,
-          };
+          // Siparişin tarafı da KARTA çözülür (eski sipariş bağlı fasonu `subcontractorId` ile taşıyabilir;
+          // fişin tarafı zaten çözülmüş geldi — aynı adres aynı adresle kıyaslanır, miras da çözülmüş iner).
+          const poParty: ResolvedSupplierParty = await resolveStoredSupplierParty(
+            { supplierId: po.supplierId, subcontractorId: po.subcontractorId },
+            tx,
+          );
           if (!isPartyEmpty(party) && !samePartyAs(party, poParty)) {
             throw AppError.badRequest(
               `Fişteki tedarikçi ${po.orderNo} siparişinin tedarikçisiyle aynı değil — birini düzeltin.`,

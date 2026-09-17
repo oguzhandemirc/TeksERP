@@ -27,10 +27,17 @@
 // geçerli): şema notu tipin "bir ETİKET, duvar DEĞİL" olduğunu söylüyor ve
 // kardeş akış `GoodsReceipt` de tipe bakmıyordu. Tek tarafta zorlamak, siparişi
 // reddedip aynı firmadan mal kabulünü kabul eden tutarsız bir çift üretirdi.
+//
+// ⚠️ TEDARİKÇİ KİMLİĞİNİN TEK ADRESİ KART (rol modeli faz 2, E): fason bacağı
+// YAZIMDA profilin bağlı kartına çözülür (`resolvePartyToCardTx`, cari hesapla
+// aynı helper) — bağlı fasona alış/mal kabul `supplierId = kart` yazar, ikinci
+// adres doğmaz; bağsız profil eskisi gibi (`subcontractorId`). Okuma iki bacağı
+// da kabul eder (eski kayıtlar).
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
+import { resolvePartyToCardTx } from "./party-card.helper";
 
 export interface SupplierPartyInput {
   /** Müşteri-tipli cari (`Customer`). */
@@ -76,9 +83,19 @@ export function assertSupplierPartyXor(
   return { supplierId, subcontractorId };
 }
 
+/** Kayıtlı tarafı (sipariş/fiş satırı) karta çözer — mal kabul siparişten devralırken aynı adresi görsün. */
+export async function resolveStoredSupplierParty(
+  party: ResolvedSupplierParty,
+  db: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<ResolvedSupplierParty> {
+  const card = await resolvePartyToCardTx(db, { customerId: party.supplierId, subcontractorId: party.subcontractorId });
+  return { supplierId: card.customerId, subcontractorId: card.subcontractorId };
+}
+
 /**
- * XOR + varlık + aktiflik. Seçilen bacak hangisiyse YALNIZ o sorgulanır (boş
- * bacakta tek sorgu bile koşmaz → tedarikçisiz mal kabul yolu bayt-bayt aynı).
+ * XOR + varlık + aktiflik + KARTA ÇÖZÜM. Seçilen bacak hangisiyse YALNIZ o sorgulanır (boş
+ * bacakta tek sorgu bile koşmaz → tedarikçisiz mal kabul yolu bayt-bayt aynı); bağlı fason
+ * profili karta çözülür ve kartın aktifliği de ölçülür (kart artık kimliktir).
  *
  * ⚠️ Mesajlar C4 ÖNCESİYLE BİREBİR ("Tedarikçi bulunamadı." / `"X" pasif
  * durumda.`): mevcut yolun kullanıcı-görünür davranışı bu köprü yüzünden
@@ -91,7 +108,18 @@ export async function resolveSupplierParty(
   opts: { required: boolean },
   db: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<ResolvedSupplierParty> {
-  const party = assertSupplierPartyXor(input, opts);
+  const declared = assertSupplierPartyXor(input, opts);
+
+  if (declared.subcontractorId) {
+    const sub = await db.subcontractor.findUnique({
+      where: { id: declared.subcontractorId },
+      select: { id: true, name: true, isActive: true },
+    });
+    if (!sub) throw AppError.badRequest("Fason firma bulunamadı.");
+    if (!sub.isActive) throw AppError.badRequest(`"${sub.name}" pasif durumda.`);
+  }
+
+  const party = await resolveStoredSupplierParty(declared, db);
 
   if (party.supplierId) {
     const sup = await db.customer.findUnique({
@@ -100,15 +128,6 @@ export async function resolveSupplierParty(
     });
     if (!sup) throw AppError.badRequest("Tedarikçi bulunamadı.");
     if (!sup.isActive) throw AppError.badRequest(`"${sup.name}" pasif durumda.`);
-  }
-
-  if (party.subcontractorId) {
-    const sub = await db.subcontractor.findUnique({
-      where: { id: party.subcontractorId },
-      select: { id: true, name: true, isActive: true },
-    });
-    if (!sub) throw AppError.badRequest("Fason firma bulunamadı.");
-    if (!sub.isActive) throw AppError.badRequest(`"${sub.name}" pasif durumda.`);
   }
 
   return party;

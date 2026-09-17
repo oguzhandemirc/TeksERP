@@ -34,6 +34,7 @@ import {
 } from "./helpers/warp-beam.helper";
 import { toWarpBeamDto, toWarpBeamEventDto, type WarpBeamDto, type WarpBeamEventDto } from "./helpers/warp-beam-dto.helper";
 import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";
+import { resolvePartyToCardTx } from "./helpers/party-card.helper";
 
 const WARP_BEAM_TABLE = "WARP_BEAM";
 const WARP_BEAM_EVENT_TABLE = "WARP_BEAM_EVENT";
@@ -148,6 +149,13 @@ async function assertSpecActive(warpSpecId: string): Promise<void> {
   if (n === 0) throw AppError.badRequest("Çözgü kartı bulunamadı ya da pasif");
 }
 
+/** PURCHASED: fasoncu bağlı bir profilse tedarikçi kimliği KARTTIR (`supplierId` = kart) — cari/alış ile aynı çözücü. */
+async function resolvePurchasedPartyToCard<T extends { originKind: WarpBeamOrigin; subcontractorId: string | null; supplierId: string | null }>(p: T): Promise<T> {
+  if (p.originKind !== WarpBeamOrigin.PURCHASED || !p.subcontractorId) return p;
+  const card = await resolvePartyToCardTx(prisma, { subcontractorId: p.subcontractorId });
+  return { ...p, supplierId: card.customerId, subcontractorId: card.subcontractorId };
+}
+
 async function assertParties(p: { subcontractorId: string | null; supplierId: string | null }): Promise<void> {
   if (p.subcontractorId && (await prisma.subcontractor.count({ where: { id: p.subcontractorId, isActive: true } })) === 0) throw AppError.badRequest("Fasoncu bulunamadı ya da pasif");
   if (p.supplierId && (await prisma.customer.count({ where: { id: p.supplierId, isActive: true } })) === 0) throw AppError.badRequest("Tedarikçi (cari) bulunamadı ya da pasif");
@@ -160,7 +168,9 @@ function normalizePlanned(v: number | string): Prisma.Decimal {
 }
 
 export async function createWarpBeam(input: WarpBeamCreateInput, userId?: string): Promise<ApiResponse<WarpBeamDto>> {
-  const party = resolveOriginParty({ originKind: input.originKind, subcontractorId: input.subcontractorId ?? null, supplierId: input.supplierId ?? null, ownerCustomerId: input.ownerCustomerId ?? null });
+  const party = await resolvePurchasedPartyToCard(
+    resolveOriginParty({ originKind: input.originKind, subcontractorId: input.subcontractorId ?? null, supplierId: input.supplierId ?? null, ownerCustomerId: input.ownerCustomerId ?? null }),
+  );
   const plannedLengthM = normalizePlanned(input.plannedLengthM);
   if (input.clientToken) {
     const replay = await prisma.warpBeam.findUnique({ where: { clientToken: input.clientToken }, select: WARP_BEAM_SELECT });
@@ -221,13 +231,15 @@ async function throwNotPlannedTx(tx: Prisma.TransactionClient, id: string, eylem
 export async function updateWarpBeam(id: string, input: WarpBeamUpdateInput, userId?: string): Promise<ApiResponse<WarpBeamDto>> {
   const current = await prisma.warpBeam.findUnique({ where: { id }, select: WARP_BEAM_SELECT });
   if (!current) throw AppError.notFound("Levent bulunamadı");
-  const party = resolveOriginParty({
-    originKind: input.originKind ?? current.originKind,
-    subcontractorId: input.subcontractorId === undefined ? current.subcontractorId : input.subcontractorId,
-    supplierId: input.supplierId === undefined ? current.supplierId : input.supplierId,
-    // Sahip DEĞİŞMEZ (doğum niteliği); köken CONSIGNED'a çevrilirken sahipsizse resolveOriginParty 400 verir.
-    ownerCustomerId: current.ownerCustomerId,
-  });
+  const party = await resolvePurchasedPartyToCard(
+    resolveOriginParty({
+      originKind: input.originKind ?? current.originKind,
+      subcontractorId: input.subcontractorId === undefined ? current.subcontractorId : input.subcontractorId,
+      supplierId: input.supplierId === undefined ? current.supplierId : input.supplierId,
+      // Sahip DEĞİŞMEZ (doğum niteliği); köken CONSIGNED'a çevrilirken sahipsizse resolveOriginParty 400 verir.
+      ownerCustomerId: current.ownerCustomerId,
+    }),
+  );
   if (input.warpSpecId) await assertSpecActive(input.warpSpecId);
   await assertParties(party);
   const data: Prisma.WarpBeamUpdateManyMutationInput = {

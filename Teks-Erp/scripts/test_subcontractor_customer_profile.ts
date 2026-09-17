@@ -7,7 +7,8 @@
 // §3 aynı cariye ikinci profil → 409 (servis) + DB tekil index (doğrudan yazım P2002)
 // §4 bağı kaldır (null) / başka cariye taşı / aynı cariye yeniden yazmak no-op
 // §5 BAĞSIZ fasonun eski davranışı bayt-bayt: mal kabul XOR kapısı (`resolveSupplierParty`) aynen;
-//    bağlı fason da `subcontractorId` ile hâlâ çözülür (uç imzası değişmedi)
+//    bağlı fason `subcontractorId` ile hâlâ KABUL edilir (uç imzası değişmedi) ama KARTA çözülür
+//    (rol modeli faz 2 E: tedarikçi kimliğinin tek adresi kart — `test_supplier_party_tek_adres`)
 // §6 liste süzgeci `filter[customerId]=null` → yalnız bağsız; `=<id>` → yalnız o bağ
 // §7 global arama: bağlı fason satırının alt satırı "Cari: AD (KOD)", bağsızda null
 // §8 cari BİRLEŞTİRME (8030): tek taraflı profil survivor'a TAŞINIR; iki kartın da profili varsa önizleme
@@ -140,7 +141,7 @@ async function main(): Promise<void> {
     const p1 = await resolveSupplierParty({ subcontractorId: ids.subBagsiz }, { required: false });
     check("bağsız fason `subcontractorId` ile çözülür", p1.subcontractorId === ids.subBagsiz && p1.supplierId === null);
     const p2 = await resolveSupplierParty({ subcontractorId: ids.subBagli }, { required: false });
-    check("bağlı fason da `subcontractorId` ile çözülür (uç imzası değişmedi)", p2.subcontractorId === ids.subBagli);
+    check("bağlı fason `subcontractorId` ile kabul edilir (uç imzası değişmedi) ve KARTA çözülür (supplierId = bağlı kart)", p2.supplierId === ids.cariBoth && p2.subcontractorId === null, JSON.stringify(p2));
     const eXor = await hata(() => resolveSupplierParty({ subcontractorId: ids.subBagsiz, supplierId: ids.cariSup }, { required: false }));
     check("XOR aynen: ikisi birden → 400", status(eXor) === 400, msg(eXor));
 
