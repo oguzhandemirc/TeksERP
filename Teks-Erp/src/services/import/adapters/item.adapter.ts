@@ -80,7 +80,7 @@ const COLUMNS: ImportColumn[] = [
 
 export const itemImportAdapter: ImportAdapter = {
   entity: "item",
-  label: "Kumaşlar",
+  label: "Ürünler",
   tableName: "ITEM",
   writePermission: "item:write",
   readPermission: "item:read",

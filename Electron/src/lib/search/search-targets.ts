@@ -59,7 +59,7 @@ export const SEARCH_TARGETS: Record<string, SearchTarget> = {
     listTo: (t) => `/definitions/customers?search=${q(t)}`,
   },
   item: {
-    label: "Kumaşlar",
+    label: "Ürünler",
     icon: Package,
     permissions: ["item:read"],
     to: (r) => ({ to: `/definitions/items?search=${q(r.code ?? r.title)}` }),

@@ -180,7 +180,7 @@ async function main(): Promise<void> {
     console.log("\n── 5) İzin süzgeci ──");
     const onlyItem = await searchService.search(`${TAG}`, { permissions: ["item:read"] });
     check(
-      "yalnız item:read → yalnız Kumaşlar kovası",
+      "yalnız item:read → yalnız Ürünler kovası",
       onlyItem.groups.every((g) => g.entity === "item"),
       onlyItem.groups.map((g) => g.entity).join(",") || "(boş)",
     );

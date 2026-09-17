@@ -32,6 +32,26 @@ describe("buildItemPayload", () => {
     expect(p.unit).toBe("KG");
   });
 
+  // İzinli renk/özellik yalnız kumaşta (2026-09-17).
+  it("⭐ kumaş: izinli renk/özellik listeleri aynen gider (create + edit)", () => {
+    const v = values({ itemType: ItemType.FABRIC, allowedColorIds: ["c1"], allowedPropertyIds: ["p1"] });
+    expect(buildItemPayload(v, false)).toMatchObject({ allowedColorIds: ["c1"], allowedPropertyIds: ["p1"] });
+    expect(buildItemPayload(v, true)).toMatchObject({ allowedColorIds: ["c1"], allowedPropertyIds: ["p1"] });
+  });
+
+  it("⭐ iplik/sarf create: allowedColorIds / allowedPropertyIds anahtarı HİÇ gitmez", () => {
+    for (const itemType of [ItemType.YARN, ItemType.CONSUMABLE]) {
+      const p = buildItemPayload(values({ itemType, allowedColorIds: ["c1"], allowedPropertyIds: ["p1"] }), false);
+      expect("allowedColorIds" in p).toBe(false);
+      expect("allowedPropertyIds" in p).toBe(false);
+    }
+  });
+
+  it("⭐ iplik/sarf edit: eski kartta kalmış liste `[]` ile KALDIRILIR (backend undefined = dokunma, [] = temizle)", () => {
+    const p = buildItemPayload(values({ itemType: ItemType.YARN, allowedColorIds: ["c1"], allowedPropertyIds: ["p1"] }), true);
+    expect(p).toMatchObject({ allowedColorIds: [], allowedPropertyIds: [] });
+  });
+
   it("edit: code ve itemType payload'a girmez (backend FORBIDDEN)", () => {
     const p = buildItemPayload(values({ code: "PATOS" }), true);
     expect("code" in p).toBe(false);

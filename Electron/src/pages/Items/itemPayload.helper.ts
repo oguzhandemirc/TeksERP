@@ -1,4 +1,4 @@
-import { unitForItemType } from "@/types/enums";
+import { ItemType, unitForItemType } from "@/types/enums";
 import type { ItemCreatePayload } from "./types";
 import type { ItemFormValues } from "./schema";
 
@@ -10,7 +10,12 @@ import type { ItemFormValues } from "./schema";
  * - Create: kod boşsa payload'a GİRMEZ — backend STK-NNNNNN otomatik üretir;
  *   doluysa manuel kod olarak gönderilir. Admin create'i asla pendingReview
  *   göndermez → backend default false.
+ * - İzinli renk/özellik YALNIZ KUMAŞ taşır (kullanıcı kararı 2026-09-17): iplik/sarf
+ *   create'inde anahtar HİÇ gitmez; edit'inde `[]` gider — eski iplik kartında kalmış
+ *   liste kaydedince KALDIRILIR (backend `undefined` = dokunma, `[]` = temizle).
  */
+export const itemCarriesAllowedLists = (itemType: ItemType): boolean => itemType === ItemType.FABRIC;
+
 export function buildItemPayload(
   v: ItemFormValues,
   isEdit: boolean,
@@ -23,10 +28,13 @@ export function buildItemPayload(
     // temizlemenin tek yolu budur (alan yalnız YARN'da çizilir, diğer
     // tiplerde zaten boş kalır).
     linearDensityDen: v.linearDensityDen.trim() === "" ? null : v.linearDensityDen.trim(),
-    allowedColorIds: v.allowedColorIds,
-    allowedPropertyIds: v.allowedPropertyIds,
   };
-  if (isEdit) return { ...base, pendingReview: false } as unknown as ItemCreatePayload;
+  const lists = itemCarriesAllowedLists(v.itemType)
+    ? { allowedColorIds: v.allowedColorIds, allowedPropertyIds: v.allowedPropertyIds }
+    : isEdit
+      ? { allowedColorIds: [], allowedPropertyIds: [] }
+      : {};
+  if (isEdit) return { ...base, ...lists, pendingReview: false } as unknown as ItemCreatePayload;
   const code = v.code.trim();
-  return { ...base, itemType: v.itemType, ...(code ? { code } : {}) };
+  return { ...base, ...lists, itemType: v.itemType, ...(code ? { code } : {}) };
 }

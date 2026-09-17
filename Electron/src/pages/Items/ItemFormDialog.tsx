@@ -28,7 +28,7 @@ import {
   makeItemFormSchema,
   type ItemFormValues,
 } from "./schema";
-import { buildItemPayload } from "./itemPayload.helper";
+import { buildItemPayload, itemCarriesAllowedLists } from "./itemPayload.helper";
 import { AllowedColorsDialog } from "./AllowedColorsDialog";
 import { AllowedPropertiesDialog } from "./AllowedPropertiesDialog";
 
@@ -94,6 +94,17 @@ export function ItemFormDialog({
   const allowedColorIds = form.watch("allowedColorIds");
   const allowedPropertyIds = form.watch("allowedPropertyIds");
 
+  // İzinli renk/özellik YALNIZ kumaşta: tür iplik/sarfa çevrilince (create) değerler boşalır;
+  // düzenlemede tür kilitli, eski iplik kartında kalmış liste NOTLA gösterilir, kaydedince payload `[]` ile kaldırır.
+  const carriesLists = itemCarriesAllowedLists(itemType);
+  useEffect(() => {
+    if (carriesLists) return;
+    if (form.getValues("allowedColorIds").length) form.setValue("allowedColorIds", [], { shouldDirty: true });
+    if (form.getValues("allowedPropertyIds").length) form.setValue("allowedPropertyIds", [], { shouldDirty: true });
+  }, [carriesLists, form]);
+  const staleLists =
+    isEdit && !carriesLists && ((initial?.allowedColors?.length ?? 0) > 0 || (initial?.allowedProperties?.length ?? 0) > 0);
+
   // Trigger önizlemesi için seçili kayıtların isim/swatch'ini getir.
   const colorsQ = useQuery({
     queryKey: ["colors", "all-active"],
@@ -142,7 +153,7 @@ export function ItemFormDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <div className="flex items-center gap-1.5">
-            <DialogTitle>{isEdit ? "Kumaşı Düzenle" : "Yeni Kumaş"}</DialogTitle>
+            <DialogTitle>{isEdit ? "Ürünü Düzenle" : "Yeni Ürün"}</DialogTitle>
             {/* ⓘ — kim oluşturdu / en son kim değiştirdi (2026-08-19).
                 Kaynak: kaydın KENDİ künye kolonları (Plan A). Audit'ten
                 okunmuyor — audit 6 ayda arşivlenir, künye kaybolmamalı. */}
@@ -156,7 +167,7 @@ export function ItemFormDialog({
             )}
             </div>
           <DialogDescription>
-            Kumaş tanımı. Birim, seçilen tipe göre otomatik atanır.
+            Ürün tanımı (kumaş · iplik · sarf). Birim, seçilen tipe göre otomatik atanır.
           </DialogDescription>
         </DialogHeader>
 
@@ -237,6 +248,7 @@ export function ItemFormDialog({
             </FormField>
           )}
 
+          {carriesLists && (
           <FormField label="İzinli Renkler (opsiyonel)">
             <PickerTrigger
               icon={<Palette className="h-4 w-4 text-muted-foreground" />}
@@ -251,7 +263,9 @@ export function ItemFormDialog({
               onClick={() => setColorsOpen(true)}
             />
           </FormField>
+          )}
 
+          {carriesLists && (
           <FormField label="İzinli Özellikler (opsiyonel)">
             <PickerTrigger
               icon={<Sparkles className="h-4 w-4 text-muted-foreground" />}
@@ -266,6 +280,13 @@ export function ItemFormDialog({
               onClick={() => setPropsOpen(true)}
             />
           </FormField>
+          )}
+
+          {staleLists && (
+            <p role="note" className="text-xs text-amber-700 dark:text-amber-300">
+              {itemTypeLabels[itemType]} kartında renk/özellik listesi tutulmaz, kaydedince kaldırılır.
+            </p>
+          )}
 
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" {...form.register("isActive")} /> Aktif

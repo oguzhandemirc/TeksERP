@@ -39,6 +39,10 @@ interface Props<T extends { id: string }> {
   extraFilters?: Record<string, string>;
   /** Toolbar yanında render edilecek ek UI (filtre dropdown'ları vb.). */
   filterBar?: ReactNode;
+  /** false → "Pasifleri göster" anahtarı çizilmez ve `isActive` ZORLANMAZ: durumu sayfa kendi
+   *  süzgeciyle (`extraFilters`) yönetir; aynı soruya iki kontrol olmasın. Varsayılan true =
+   *  bugünkü davranış (pasifler gizli). */
+  inactiveToggle?: boolean;
   /** Sayfa başlığındaki aksiyonların SOLUNA (Yenile'den önce) eklenecek ek buton(lar) —
    * başka sayfaya götüren bağlantılar gibi tablo-dışı eylemler için. */
   /**
@@ -89,6 +93,7 @@ export function CrudPage<T extends { id: string }>({
   writePermission,
   extraFilters,
   filterBar,
+  inactiveToggle = true,
   mergeEntity,
   headerExtra,
   glowWhenEmpty,
@@ -107,10 +112,10 @@ export function CrudPage<T extends { id: string }>({
 
   const forceFilters = useMemo<Record<string, string>>(
     () => ({
-      ...(showInactive ? {} : { isActive: "true" }),
+      ...(inactiveToggle && !showInactive ? { isActive: "true" } : {}),
       ...extraFilters,
     }),
-    [showInactive, extraFilters],
+    [inactiveToggle, showInactive, extraFilters],
   );
 
   const { createMutation, updateMutation, removeMutation, restoreMutation, hardRemoveMutation } = useCrudMutations<T>({
@@ -302,12 +307,14 @@ export function CrudPage<T extends { id: string }>({
           <>
             {hideHeader && !actionsPortal && headerActions}
             {filterBar}
-            <ToolbarToggle
-              checked={showInactive}
-              onCheckedChange={setShowInactive}
-              label="Pasifleri göster"
-              title="Pasife alınmış kayıtlar varsayılan olarak gizlidir."
-            />
+            {inactiveToggle && (
+              <ToolbarToggle
+                checked={showInactive}
+                onCheckedChange={setShowInactive}
+                label="Pasifleri göster"
+                title="Pasife alınmış kayıtlar varsayılan olarak gizlidir."
+              />
+            )}
           </>
         }
       />

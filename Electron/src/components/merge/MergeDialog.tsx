@@ -24,7 +24,7 @@ import {
  * BİRLEŞTİRME DİYALOĞU — TEK KAYNAK (2026-08-22).
  *
  * İki yerden açılır: Sistem → Mükerrer Kayıtlar paneli ve Tanımlar listeleri
- * (Müşteriler, Kumaşlar…) — kullanıcı kararı: *"cari listesinde çalışırken iki
+ * (Müşteriler, Ürünler…) — kullanıcı kararı: *"cari listesinde çalışırken iki
  * satırı işaretleyip oradan birleştireyim, ayrı ekrana gitmeyeyim"*.
  *
  * ⚠️ İKİNCİ BİR KOPYA YAZILMAZ. Onay kapısı (yazarak onay + gerekçe + çakışma

@@ -63,8 +63,8 @@ export interface DefinitionTile {
 export const definitionTiles: DefinitionTile[] = [
   {
     key: "items",
-    title: "Kumaşlar",
-    description: "Stok kalemleri ve varyantlar",
+    title: "Ürünler",
+    description: "Kumaş, iplik ve sarf tanımları",
     icon: Package,
     to: "/definitions/items",
     group: "catalog",

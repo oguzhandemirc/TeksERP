@@ -31,6 +31,16 @@
         },
         {
           "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Ürün kartında “İzinli Renkler” ve “İzinli Özellikler” alanları yalnız tür Kumaş iken görünür; iplik ve sarf kartı renk/özellik listesi tutmaz — eski bir iplik kartında liste kalmışsa formda tek satır not gösterilir ve kaydedince kaldırılır; Ürünler listesinde iplik/sarf satırının renk ve özellik hücresi boş kalır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Tanımlar’daki “Kumaşlar” sayfasının adı “Ürünler” oldu — aynı listede kumaş, iplik ve sarf tanımları birlikte duruyordu; karo, grup başlığı (“Ürün Kataloğu”), arama, içe aktarma ve form başlıkları aynı adı taşır — ve üstüne süzgeç şeridi geldi: Tür (İplik · Kumaş · Sarf), Durum (Aktif · Pasif · Onay bekleyen · Tümü; eski onay-bekleyen kutusu ile “Pasifleri göster” anahtarının yerine) ve Birim (m · kg · adet); süzgeçler sunucuda çalışır, adres çubuğuyla paylaşılabilir."
+        },
+        {
+          "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Panelde tarih girilen her yerde artık aynı takvim kutusu kullanılır (gün.ay.yıl yazılabilir, takvimden seçilebilir): liste süzgeçlerindeki tarih aralıkları, raporlardaki tarih şeridi ve formlardaki tarih alanları — tarayıcının eski tarih kutusu kalmadı; saat gereken yerlerde tarih takvimden, saat yanındaki kutudan girilir."
         },

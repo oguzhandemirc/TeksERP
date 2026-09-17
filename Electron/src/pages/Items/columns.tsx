@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { itemTypeLabels } from "@/types/enums";
+import { itemCarriesAllowedLists } from "./itemPayload.helper";
+
+/** İplik/sarf satırında renk/özellik hücresi BOŞ — "Tümü" yazmak iplikte anlamsız (yalnız kumaş liste taşır). */
+const NOT_APPLICABLE = <span className="text-xs text-muted-foreground">—</span>;
 import { itemService } from "./service";
 import type { Item } from "./types";
 
@@ -77,6 +81,7 @@ export const itemColumns: ColumnDef<Item>[] = [
     id: "allowedColors",
     header: "İzinli Renkler",
     cell: ({ row }) => {
+      if (!itemCarriesAllowedLists(row.original.itemType)) return NOT_APPLICABLE;
       const colors = row.original.allowedColors ?? [];
       if (colors.length === 0) {
         return <span className="text-xs text-muted-foreground italic">Tümü</span>;
@@ -107,6 +112,7 @@ export const itemColumns: ColumnDef<Item>[] = [
     id: "allowedProperties",
     header: "İzinli Özellikler",
     cell: ({ row }) => {
+      if (!itemCarriesAllowedLists(row.original.itemType)) return NOT_APPLICABLE;
       const props = row.original.allowedProperties ?? [];
       if (props.length === 0) {
         return <span className="text-xs text-muted-foreground italic">Tümü</span>;

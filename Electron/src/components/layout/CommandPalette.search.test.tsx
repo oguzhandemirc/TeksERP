@@ -123,7 +123,7 @@ describe("komut paleti — global arama", () => {
         groups: [
           {
             entity: "item",
-            label: "Kumaşlar",
+            label: "Ürünler",
             rows: [{ id: "i1", title: "18152", subtitle: null, code: "18152" }],
             hasMore: false,
           },

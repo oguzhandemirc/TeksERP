@@ -78,7 +78,7 @@ const settingsFlagEntries: CommandEntry[] = SETTINGS_CATEGORIES.flatMap((cat) =>
 );
 
 /**
- * Hub bölüm başlıkları — hub'ın kendisine götürür. "Kumaş Kataloğu" ya da
+ * Hub bölüm başlıkları — hub'ın kendisine götürür. "Ürün Kataloğu" ya da
  * "Depo & Paketleme" gibi bir başlığı hatırlayan kullanıcı, altındaki ekranın
  * adını hatırlamadan da doğru hub'a ulaşır.
  */

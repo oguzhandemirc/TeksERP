@@ -70,7 +70,7 @@ export const SEARCH_ENTITIES: readonly SearchEntity[] = [
   },
   {
     key: "item",
-    label: "Kumaşlar",
+    label: "Ürünler",
     modelName: "item",
     // Müşteri alias'ı da aranır: müşteri "BELLE" der, bizim adımız "18152".
     permissions: ["item:read"],
