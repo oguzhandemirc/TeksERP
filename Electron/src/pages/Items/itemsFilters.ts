@@ -9,6 +9,7 @@
 // (`itemPicker.ts`, "ALL" = Tümü). Bekçi: `ItemsPage.test.tsx`.
 // =============================================================================
 import { ITEM_TYPE_FILTER_OPTIONS } from "@/components/forms/itemPicker";
+import type { CatalogOption } from "@/components/forms/useItemPickerData";
 import { ITEM_UNIT_CODES, ITEM_UNIT_LABEL } from "@/lib/item-unit";
 
 export type ItemStatusFilter = "active" | "inactive" | "pending" | "all";
@@ -45,9 +46,11 @@ export function itemStatusFilters(s: ItemStatusFilter): Record<string, string> {
 /** "Tümü" değeri — Radix boş string kabul etmez; ürün seçicinin `ItemTypeFilter` "ALL"ı ile aynı. */
 export const ITEM_FILTER_ALL = "ALL";
 
+export type ItemUrlFilterKey = "itemType" | "unit" | "allowedColorId" | "allowedPropertyId";
+
 export interface ItemUrlFilterDef {
-  /** Backend kolon adı = URL `filter[<key>]`. */
-  key: "itemType" | "unit";
+  /** Backend süzgeç adı = URL `filter[<key>]` (itemType/unit skaler kolon; allowed* ilişki süzgeci, item.service `extraWhere`). */
+  key: ItemUrlFilterKey;
   label: string;
   options: readonly { value: string; label: string }[];
 }
@@ -57,4 +60,23 @@ export const ITEM_URL_FILTERS: readonly ItemUrlFilterDef[] = [
   { key: "unit", label: "Birim", options: [{ value: ITEM_FILTER_ALL, label: "Tümü" }, ...ITEM_UNIT_CODES.map((u) => ({ value: u, label: ITEM_UNIT_LABEL[u] }))] },
 ];
 
-export const itemUrlFilterParam = (key: ItemUrlFilterDef["key"]) => `filter[${key}]`;
+export const itemUrlFilterParam = (key: ItemUrlFilterKey) => `filter[${key}]`;
+
+/** Modaldaki ipucuyla aynı cümle (`ItemPickerModal` CATALOG_HINT, dışa açık değil — 6e'nin dosyasına dokunulmadı). */
+export const ITEM_CATALOG_HINT = "Listesi boş ürünler her seçenekte görünür";
+
+export interface ItemCatalogFilterDef extends Omit<ItemUrlFilterDef, "options"> {
+  /** `null` = katalog sığmadı (`loadAllForPicker` fırlattı) → seçici hiç çizilmez, liste çalışır (modalla aynı karar). */
+  options: readonly { value: string; label: string }[] | null;
+}
+
+/** Renk/Özellik süzgeçleri — kaynak ürün seçici modalıyla ORTAK (`useItemPickerCatalogs`), kopya yükleyici yok.
+ *  `filter[allowedColorId]` sunucuda "bu rengi alabilecek ürünler" (none OR some) diye çözülür. */
+export function itemCatalogFilterDefs(c: { colors: CatalogOption[] | null; properties: CatalogOption[] | null }): ItemCatalogFilterDef[] {
+  const withAll = (list: CatalogOption[] | null) =>
+    list === null ? null : [{ value: ITEM_FILTER_ALL, label: "Tümü" }, ...list.map((o) => ({ value: o.id, label: o.label }))];
+  return [
+    { key: "allowedColorId", label: "Renk", options: withAll(c.colors) },
+    { key: "allowedPropertyId", label: "Özellik", options: withAll(c.properties) },
+  ];
+}

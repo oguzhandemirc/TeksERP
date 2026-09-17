@@ -18,7 +18,7 @@ import { MemoryRouter } from "react-router-dom";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { ItemsPage } from "./ItemsPage";
-import { ITEM_URL_FILTERS, itemStatusFilters, parseItemStatus } from "./itemsFilters";
+import { ITEM_URL_FILTERS, itemCatalogFilterDefs, itemStatusFilters, parseItemStatus } from "./itemsFilters";
 import { labeledSelectText } from "@/components/forms/LabeledSelect";
 
 const listCursor = vi.fn();
@@ -28,6 +28,8 @@ vi.mock("@/components/import/ImportDialog", () => ({ ImportDialog: () => null })
 vi.mock("@/components/merge/MergeDialog", () => ({ MergeDialog: () => null }));
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: () => true, hasAnyPermission: () => true, hasAllPermissions: () => true }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+const catalogs = vi.fn();
+vi.mock("@/components/forms/useItemPickerData", () => ({ useItemPickerCatalogs: () => catalogs() }));
 vi.mock("@/providers/PreferencesProvider", () => ({ usePreferences: () => ({ prefs: { density: "comfortable" }, setPreference: vi.fn() }) }));
 
 const page = () => Promise.resolve({ success: true, data: [], pagination: { nextCursor: null, hasMore: false, limit: 50 } });
@@ -49,6 +51,8 @@ const lastFilters = () => (listCursor.mock.calls.at(-1)?.[0] as { filters?: Reco
 beforeEach(() => {
   listCursor.mockReset();
   listCursor.mockImplementation(page);
+  catalogs.mockReset();
+  catalogs.mockReturnValue({ colors: [{ id: "c1", label: "Krem" }], properties: [{ id: "p1", label: "Fitilli" }] });
 });
 
 describe("itemsFilters (saf)", () => {
@@ -71,6 +75,13 @@ describe("itemsFilters (saf)", () => {
     expect(byKey("unit").options.map((o) => o.value)).toEqual(["ALL", "MT", "KG", "ADET"]);
   });
 
+  it("⭐ Renk/Özellik süzgeci katalogdan: ALL başta, anahtar backend ilişki süzgeci; katalog sığmadıysa (null) seçici YOK", () => {
+    const defs = itemCatalogFilterDefs({ colors: [{ id: "c1", label: "Krem" }], properties: null });
+    expect(defs.map((d) => d.key)).toEqual(["allowedColorId", "allowedPropertyId"]);
+    expect(defs[0]!.options!.map((o) => o.value)).toEqual(["ALL", "c1"]);
+    expect(defs[1]!.options).toBeNull();
+  });
+
   it("⭐ §4 tetik metni 'Ad: Değer' — ad öneki sabit, seçimsizde Tümü", () => {
     const tur = byKeyOptions("itemType");
     expect(labeledSelectText("Tür", "ALL", tur)).toBe("Tür: Tümü");
@@ -87,6 +98,32 @@ describe("ItemsPage — ad + süzgeç şeridi", () => {
     expect(screen.getByRole("combobox", { name: "Durum" })).toHaveTextContent("Durum: Aktif");
     expect(screen.getByRole("combobox", { name: "Tür" })).toHaveTextContent("Tür: Tümü");
     expect(screen.getByRole("combobox", { name: "Birim" })).toHaveTextContent("Birim: Tümü");
+    expect(screen.getByRole("combobox", { name: "Renk" })).toHaveTextContent("Renk: Tümü");
+    expect(screen.getByRole("combobox", { name: "Özellik" })).toHaveTextContent("Özellik: Tümü");
+  });
+
+  it("⭐ §2 Renk/Özellik seçimi → filter[allowedColorId] / filter[allowedPropertyId] SUNUCUYA; tetik 'Renk: Krem'; URL'den gelen ilk istekte", async () => {
+    const user = userEvent.setup();
+    renderPage("/definitions/items?filter[allowedColorId]=c1");
+    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", allowedColorId: "c1" }));
+    const renk = screen.getByRole("combobox", { name: "Renk" });
+    expect(renk).toHaveTextContent("Renk: Krem");
+    await user.click(screen.getByRole("combobox", { name: "Özellik" }));
+    await user.click(await screen.findByRole("option", { name: "Fitilli" }));
+    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", allowedColorId: "c1", allowedPropertyId: "p1" }));
+    await user.click(renk);
+    await user.click(await screen.findByRole("option", { name: "Tümü" }));
+    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", allowedPropertyId: "p1" }));
+    expect(renk).toHaveTextContent("Renk: Tümü");
+  });
+
+  it("katalog sığmadıysa Renk/Özellik seçicisi çizilmez, liste yine ister (modalla aynı karar)", async () => {
+    catalogs.mockReturnValue({ colors: null, properties: null });
+    renderPage();
+    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true" }));
+    expect(screen.queryByRole("combobox", { name: "Renk" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Özellik" })).toBeNull();
+    expect(screen.getByRole("combobox", { name: "Tür" })).toBeInTheDocument();
   });
 
   it("⭐ §2 Durum seçimi sunucuya gider: Pasif → isActive=false · Onay bekleyen → pendingReview=true · Tümü → süzgeçsiz", async () => {

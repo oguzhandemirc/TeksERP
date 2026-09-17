@@ -15,6 +15,8 @@ interface Props {
   options: readonly { value: string; label: string }[];
   onChange: (value: string) => void;
   className?: string;
+  /** Tetik üstü ipucu (ör. katalog süzgecinin anlamı). */
+  title?: string;
 }
 
 /** Tetik metni — bileşenden bağımsız da ölçülsün diye ayrı. */
@@ -22,10 +24,10 @@ export function labeledSelectText(label: string, value: string, options: readonl
   return `${label}: ${options.find((o) => o.value === value)?.label ?? value}`;
 }
 
-export function LabeledSelect({ label, value, options, onChange, className }: Props) {
+export function LabeledSelect({ label, value, options, onChange, className, title }: Props) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger aria-label={label} className={cn("h-9 w-auto min-w-[140px] gap-1 text-xs", className)}>
+      <SelectTrigger aria-label={label} title={title} className={cn("h-9 w-auto min-w-[140px] gap-1 text-xs", className)}>
         <span className="truncate">{labeledSelectText(label, value, options)}</span>
       </SelectTrigger>
       <SelectContent>

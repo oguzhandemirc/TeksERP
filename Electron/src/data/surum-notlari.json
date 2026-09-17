@@ -26,6 +26,11 @@
       "maddeler": [
         {
           "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Ürünler listesine Renk ve Özellik süzgeci geldi: seçilen rengi ya da özelliği alabilecek ürünler listelenir (izinli listesi boş ürünler her seçenekte görünür); seçenekler ürün seçme penceresiyle aynı katalogdan gelir ve seçim adres çubuğuyla paylaşılabilir."
+        },
+        {
+          "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Mal Kabul ve Alış Siparişleri gibi modül ekranları sayfa yenilendiğinde ya da ilk girişte ara sıra “Erişim engellendi” gösteriyor, menüden tekrar girince açılıyordu — panel modül anahtarlarını sunucudan almadan karar veriyordu; artık anahtarlar gelene kadar bekler, kapalı modülün ekranı yine engellenir. Operasyon, Tanımlar ve Raporlar ana sayfaları da anahtarlar gelene kadar gri yer tutucu kutular gösterir — kutular sonradan belirip kaybolmaz."
         },
