@@ -18,7 +18,7 @@ import { MemoryRouter } from "react-router-dom";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { ItemsPage } from "./ItemsPage";
-import { ITEM_URL_FILTERS, itemCatalogFilterDefs, itemStatusFilters, parseItemStatus } from "./itemsFilters";
+import { ITEM_URL_FILTERS, itemCatalogFilterDefs, itemStatusFilters, itemTypeChangeParams, parseItemStatus } from "./itemsFilters";
 import { labeledSelectText } from "@/components/forms/LabeledSelect";
 import { ITEM_CATALOG_HINT } from "@/components/forms/itemPicker";
 
@@ -83,6 +83,15 @@ describe("itemsFilters (saf)", () => {
     expect(defs[1]!.options).toBeNull();
   });
 
+  it("⭐ Tür kumaş dışına çıkınca Renk/Özellik URL anahtarları SIFIRLANIR (modal `withItemType` ile aynı karar); Kumaş/Tümü korur", () => {
+    const sp = new URLSearchParams("filter[allowedColorId]=c1&filter[allowedPropertyId]=p1");
+    expect(itemTypeChangeParams(sp, "YARN").toString()).toBe("filter%5BitemType%5D=YARN");
+    expect(itemTypeChangeParams(sp, "CONSUMABLE").has("filter[allowedColorId]")).toBe(false);
+    expect(itemTypeChangeParams(sp, "FABRIC").get("filter[allowedColorId]")).toBe("c1");
+    expect(itemTypeChangeParams(sp, "ALL").has("filter[itemType]")).toBe(false);
+    expect(itemTypeChangeParams(sp, "ALL").get("filter[allowedPropertyId]")).toBe("p1");
+  });
+
   it("⭐ §4 tetik metni 'Ad: Değer' — ad öneki sabit, seçimsizde Tümü", () => {
     const tur = byKeyOptions("itemType");
     expect(labeledSelectText("Tür", "ALL", tur)).toBe("Tür: Tümü");
@@ -117,6 +126,28 @@ describe("ItemsPage — ad + süzgeç şeridi", () => {
     await user.click(await screen.findByRole("option", { name: "Tümü" }));
     await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", allowedPropertyId: "p1" }));
     expect(renk).toHaveTextContent("Renk: Tümü");
+  });
+
+  it("⭐ Tür = İplik → Renk/Özellik seçicileri ÇİZİLMEZ ve seçili renk sunucuya GİTMEZ; Kumaş'a dönünce geri gelir (Tümü)", async () => {
+    const user = userEvent.setup();
+    renderPage("/definitions/items?filter[allowedColorId]=c1");
+    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", allowedColorId: "c1" }));
+    const tur = screen.getByRole("combobox", { name: "Tür" });
+    await user.click(tur);
+    await user.click(await screen.findByRole("option", { name: "İplik" }));
+    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: "YARN" }));
+    expect(screen.queryByRole("combobox", { name: "Renk" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Özellik" })).toBeNull();
+    await user.click(tur);
+    await user.click(await screen.findByRole("option", { name: "Kumaş" }));
+    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: "FABRIC" }));
+    expect(screen.getByRole("combobox", { name: "Renk" })).toHaveTextContent("Renk: Tümü");
+  });
+
+  it("⭐ paylaşılan bağlantı iplik + renk taşıyorsa renk anahtarı URL'den düşer, gizli süzgeç sunucuya gitmez", async () => {
+    renderPage("/definitions/items?filter[itemType]=YARN&filter[allowedColorId]=c1");
+    await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: "YARN" }));
+    expect(screen.queryByRole("combobox", { name: "Renk" })).toBeNull();
   });
 
   it("katalog sığmadıysa Renk/Özellik seçicisi çizilmez, liste yine ister (modalla aynı karar)", async () => {

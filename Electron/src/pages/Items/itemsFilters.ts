@@ -8,7 +8,7 @@
 // useDataTable o öneki sunucuya aynen geçirirdi. Tür seçenekleri ürün seçici modalıyla ORTAK
 // (`itemPicker.ts`, "ALL" = Tümü). Bekçi: `ItemsPage.test.tsx`.
 // =============================================================================
-import { ITEM_TYPE_FILTER_OPTIONS } from "@/components/forms/itemPicker";
+import { ITEM_TYPE_FILTER_OPTIONS, colorAxisApplies, type ItemTypeFilter } from "@/components/forms/itemPicker";
 import type { CatalogOption } from "@/components/forms/useItemPickerData";
 import { ITEM_UNIT_CODES, ITEM_UNIT_LABEL } from "@/lib/item-unit";
 
@@ -61,6 +61,25 @@ export const ITEM_URL_FILTERS: readonly ItemUrlFilterDef[] = [
 ];
 
 export const itemUrlFilterParam = (key: ItemUrlFilterKey) => `filter[${key}]`;
+
+/** Renk/Özellik ekseninin URL anahtarları — Tür kumaş dışına çıkınca ikisi de silinir. */
+export const ITEM_CATALOG_KEYS: readonly ItemUrlFilterKey[] = ["allowedColorId", "allowedPropertyId"];
+
+/** URL'deki Tür süzgeci (yok = "ALL"). Bilinmeyen değer kumaş sayılmaz → renk ekseni kapanır (fail-closed). */
+export const itemTypeFilterFromParams = (sp: URLSearchParams): ItemTypeFilter => (sp.get(itemUrlFilterParam("itemType")) ?? ITEM_FILTER_ALL) as ItemTypeFilter;
+
+/** Renk/Özellik seçicileri çizilir mi — modalın yüklemi (`colorAxisApplies`, kopya yok): yalnız Kumaş ve "Tümü". */
+export const itemCatalogAxisApplies = (sp: URLSearchParams): boolean => colorAxisApplies(itemTypeFilterFromParams(sp));
+
+/** Tür değişince URL: anahtar yazılır/silinir; kumaş dışına çıkınca Renk/Özellik anahtarları da SIFIRLANIR
+ *  (modaldaki `withItemType` ile aynı karar — seçici çizilmezken sunucuya gizli süzgeç gitmesin). */
+export function itemTypeChangeParams(sp: URLSearchParams, type: string): URLSearchParams {
+  const next = new URLSearchParams(sp);
+  if (type === ITEM_FILTER_ALL) next.delete(itemUrlFilterParam("itemType"));
+  else next.set(itemUrlFilterParam("itemType"), type);
+  if (!colorAxisApplies(type as ItemTypeFilter)) for (const k of ITEM_CATALOG_KEYS) next.delete(itemUrlFilterParam(k));
+  return next;
+}
 
 export interface ItemCatalogFilterDef extends Omit<ItemUrlFilterDef, "options"> {
   /** `null` = katalog sığmadı (`loadAllForPicker` fırlattı) → seçici hiç çizilmez, liste çalışır (modalla aynı karar). */

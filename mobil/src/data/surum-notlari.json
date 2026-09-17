@@ -26,6 +26,11 @@
       "maddeler": [
         {
           "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Ürünler listesinde Tür olarak İplik ya da Sarf seçilince Renk ve Özellik süzgeçleri gizlenir ve seçimleri temizlenir (iplik ve sarf renk/özellik listesi taşımaz; ürün seçme penceresiyle aynı kural)."
+        },
+        {
+          "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Operasyon → Depo & Paketleme’de “Envanter” karosu “Kumaş Stoğu”, “İplik Kg-Stok” karosu “İplik Stoğu” oldu (stok ekranı malzeme sınıfına göre adlanır; Kumaş Stoğu yalnız topları kapsar) ve iki stok karosu yan yana başa alındı; sayfa başlıkları, komut paleti girişleri, tarayıcı kısayolu, “Kumaş Stoğu Özeti” indirmesi ve mal kabul bildirimleri aynı adı kullanır."
         },

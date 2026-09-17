@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CrudPage } from "@/components/layout/CrudPage";
 import { LabeledSelect } from "@/components/forms/LabeledSelect";
@@ -13,7 +13,10 @@ import {
   ITEM_STATUS_OPTIONS,
   ITEM_STATUS_PARAM,
   ITEM_URL_FILTERS,
+  ITEM_CATALOG_KEYS,
+  itemCatalogAxisApplies,
   itemCatalogFilterDefs,
+  itemTypeChangeParams,
   itemStatusFilters,
   itemUrlFilterParam,
   parseItemStatus,
@@ -30,6 +33,15 @@ export function ItemsPage() {
   const extraFilters = useMemo(() => itemStatusFilters(status), [status]);
   // Renk/Özellik kataloğu ürün seçici modalıyla aynı sorgu anahtarından (tek yükleyici).
   const catalogFilters = itemCatalogFilterDefs(useItemPickerCatalogs(true));
+  // Renk ekseni yalnız Kumaş/Tümü (modalla aynı yüklem). Paylaşılan bağlantı iplik + renk taşıyorsa
+  // renk anahtarı sessizce sunucuya gitmesin: eksen kapalıyken URL'den düşürülür.
+  const colorAxis = itemCatalogAxisApplies(searchParams);
+  useEffect(() => {
+    if (colorAxis || !ITEM_CATALOG_KEYS.some((k) => searchParams.has(itemUrlFilterParam(k)))) return;
+    const next = new URLSearchParams(searchParams);
+    for (const k of ITEM_CATALOG_KEYS) next.delete(itemUrlFilterParam(k));
+    setSearchParams(next, { replace: true });
+  }, [colorAxis, searchParams, setSearchParams]);
   const setParam = (name: string, value: string | null) => {
     const next = new URLSearchParams(searchParams);
     if (value === null) next.delete(name);
@@ -44,7 +56,11 @@ export function ItemsPage() {
       title={title}
       options={f.options}
       value={searchParams.get(itemUrlFilterParam(f.key)) ?? ITEM_FILTER_ALL}
-      onChange={(v) => setParam(itemUrlFilterParam(f.key), v === ITEM_FILTER_ALL ? null : v)}
+      onChange={(v) =>
+        f.key === "itemType"
+          ? setSearchParams(itemTypeChangeParams(searchParams, v), { replace: true })
+          : setParam(itemUrlFilterParam(f.key), v === ITEM_FILTER_ALL ? null : v)
+      }
     />
   );
   return (
@@ -72,7 +88,7 @@ export function ItemsPage() {
             onChange={(v) => setParam(ITEM_STATUS_PARAM, v === ITEM_STATUS_DEFAULT ? null : (v as ItemStatusFilter))}
           />
           {urlSelect(ITEM_URL_FILTERS[1]!)}
-          {catalogFilters.map((f) => (f.options === null ? null : urlSelect({ ...f, options: f.options }, ITEM_CATALOG_HINT)))}
+          {colorAxis && catalogFilters.map((f) => (f.options === null ? null : urlSelect({ ...f, options: f.options }, ITEM_CATALOG_HINT)))}
         </>
       }
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
