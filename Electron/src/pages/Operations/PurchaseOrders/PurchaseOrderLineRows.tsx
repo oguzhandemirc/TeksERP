@@ -20,10 +20,14 @@
 // sipariş DETAYINDA birimle birlikte basılır (backend `item.unit` döner).
 // =============================================================================
 import { useRef } from "react";
+import { useQueries } from "@tanstack/react-query";
 import { Copy, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ItemSelect } from "@/components/forms/ItemSelect";
+import { itemService } from "@/pages/Items/service";
+import { cn } from "@/lib/utils";
 import { useItemPriceSuggestion, describeSuggestion } from "@/hooks/useItemPriceSuggestion";
 import type { SupplierParty } from "@/components/forms/supplierParty";
 
@@ -105,6 +109,32 @@ interface Props {
    */
   supplier?: SupplierParty | null;
   currency?: string;
+  /** ④ Bu satırın "önce ürün seçin" uyarısı yanıyor mu (formun geçici bayrağı, 3 s). */
+  warnLineKey?: string | null;
+  /** Ürünsüz satırda fiyat/miktar alanına odak → formu uyar. */
+  onWarnLine?: (key: string) => void;
+}
+
+export const PO_ITEM_WARNING_TEXT = "Önce ürün seçin";
+
+/** Grid şablonu — başlık satırı ve her kalem satırı AYNI şablonu okur; ≤ lg iki sütuna sarar (01'in `lineGridCols` deseni). */
+export const PO_LINE_GRID = "grid grid-cols-2 gap-2 lg:grid-cols-[2rem_minmax(0,2fr)_10rem_8.5rem_minmax(0,1.4fr)_4.5rem]";
+export const PO_LINE_HEADERS = ["#", "Ürün", "Miktar", "Birim Fiyat", "Not", ""] as const;
+
+/** Miktarın birimi — ÜRÜN KARTINDAN (`Item.unit`), salt gösterge: PO satırı birim TAŞIMAZ (kullanıcı kanaati: birim fişte
+ *  değiştirilmez). Önbellek anahtarı `ItemSelect`/`ReferenceSelect`/`useItemTypes` ile aynı — aynı ürün ikinci kez sorulmaz. */
+function useItemUnits(itemIds: Array<string | null | undefined>): Map<string, string> {
+  const ids = [...new Set(itemIds.filter((x): x is string => Boolean(x)))].sort();
+  const queries = useQueries({
+    queries: ids.map((id) => ({ queryKey: ["items", "ref-select-by-id", id], queryFn: () => itemService.getById(id), staleTime: 5 * 60_000 })),
+  });
+  const map = new Map<string, string>();
+  queries.forEach((q, i) => {
+    const u = q.data?.data?.unit;
+    const id = ids[i];
+    if (u && id) map.set(id, u);
+  });
+  return map;
 }
 
 /**
@@ -161,30 +191,35 @@ function PoLinePriceField({
   );
 }
 
-export function PurchaseOrderLineRows({ lines, onChange, disabled, supplier, currency }: Props) {
+export function PurchaseOrderLineRows({ lines, onChange, disabled, supplier, currency, warnLineKey = null, onWarnLine }: Props) {
   // Fason tarafta müşteri istisnası HİÇ sorulmaz → kart varsayılanı önerilir.
   const priceCustomerId = supplier?.kind === "CUSTOMER" ? supplier.id : null;
   const patch = (key: string, p: Partial<PoDraftLine>) =>
     onChange(lines.map((l) => (l.key === key ? { ...l, ...p } : l)));
-
-  const cols = "grid-cols-[minmax(0,1fr)_110px_120px_minmax(0,220px)_76px]";
+  const units = useItemUnits(lines.map((l) => l.itemId));
   const dupes = new Set(duplicateItemIds(lines));
+  // ④ Ürünsüz satırda miktar/fiyat alanına odak → geçici uyarı (kalıcı metin yok).
+  const guard = (l: PoDraftLine) => {
+    if (!l.itemId) onWarnLine?.(l.key);
+  };
 
   return (
-    <div className="rounded-md border">
-      <div
-        className={`grid ${cols} gap-2 border-b bg-muted/50 px-3 py-2 text-[11px] font-medium uppercase text-muted-foreground`}
-      >
-        <span>Ürün</span>
-        <span>Miktar</span>
-        <span>Birim Fiyat</span>
-        <span>Not</span>
-        <span />
+    <div className="flex min-h-0 flex-1 flex-col rounded-md border" data-testid="po-lines">
+      <div className={cn(PO_LINE_GRID, "border-b bg-muted/50 px-3 py-2 text-[11px] font-medium uppercase text-muted-foreground")} data-testid="po-line-headers">
+        {PO_LINE_HEADERS.map((h, i) => (
+          <span key={i} className={i === 0 ? "hidden lg:block" : undefined}>{h}</span>
+        ))}
       </div>
 
-      <div className="max-h-[38vh] space-y-2 overflow-auto p-3">
-        {lines.map((l, idx) => (
-          <div key={l.key} className={`grid ${cols} items-center gap-2`}>
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+        {lines.map((l, idx) => {
+          const warn = warnLineKey === l.key;
+          const unit = l.itemId ? units.get(l.itemId) : undefined;
+          return (
+          <div key={l.key} className={cn(PO_LINE_GRID, "items-center")} data-testid="po-line">
+            <Badge variant="muted" className="hidden h-6 w-6 justify-center font-mono lg:flex">
+              {idx + 1}
+            </Badge>
             <div className="min-w-0">
               {/* Ürün seçici MODAL (2026-09-17): kutuya tıkla → tam liste + tür/renk/özellik süzgeci; satıra
                   yazılan alan değişmedi (yalnız itemId). */}
@@ -193,7 +228,12 @@ export function PurchaseOrderLineRows({ lines, onChange, disabled, supplier, cur
                 onChange={(v) => patch(l.key, { itemId: v ?? "" })}
                 placeholder="Ürün ara..."
                 disabled={disabled}
+                triggerClassName={warn ? "ring-2 ring-amber-500 ring-offset-1" : undefined}
               />
+              {/* ④ Geçici uyarı: yanınca görünür, 3 s sonra söner (01'in sipariş formu ③ deseni). */}
+              <p role="status" aria-live="polite" className={cn("text-xs text-amber-700 transition-opacity duration-300 dark:text-amber-400", warn ? "mt-1 opacity-100" : "sr-only opacity-0")}>
+                {warn ? PO_ITEM_WARNING_TEXT : ""}
+              </p>
               {/* Sessiz kabul YOK: aynı ürün ikinci kez eklenince eşlemenin
                   varsayıma dönüştüğü SÖYLENİR — engellenmez, çünkü iki termin
                   meşru bir ticari kayıttır. */}
@@ -203,24 +243,33 @@ export function PurchaseOrderLineRows({ lines, onChange, disabled, supplier, cur
                 </p>
               )}
             </div>
-            <Input
-              type="number"
-              min={0}
-              step="0.01"
-              placeholder="0"
-              disabled={disabled}
-              value={l.qty || ""}
-              onChange={(e) => patch(l.key, { qty: Number(e.target.value) })}
-            />
-            <PoLinePriceField
-              line={l}
-              priceCustomerId={priceCustomerId}
-              currency={currency ?? null}
-              disabled={disabled}
-              onPatch={(p) => patch(l.key, p)}
-            />
+            <div className="flex items-center gap-1">
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="0"
+                aria-label="Miktar"
+                disabled={disabled}
+                value={l.qty || ""}
+                onFocus={() => guard(l)}
+                onChange={(e) => patch(l.key, { qty: Number(e.target.value) })}
+              />
+              {/* Birim ürün kartından, SALT GÖSTERGE — PO satırı birim taşımaz. */}
+              {unit && <Badge variant="outline" className="shrink-0 font-mono text-[10px]" title="Birim ürün kartından gelir; siparişte değiştirilmez">{unit}</Badge>}
+            </div>
+            <div onFocusCapture={() => guard(l)}>
+              <PoLinePriceField
+                line={l}
+                priceCustomerId={priceCustomerId}
+                currency={currency ?? null}
+                disabled={disabled}
+                onPatch={(p) => patch(l.key, p)}
+              />
+            </div>
             <Input
               maxLength={300}
+              aria-label="Not"
               placeholder={idx === 0 ? "Örn. 2. termin, 15 Eylül" : "—"}
               disabled={disabled}
               value={l.notes}
@@ -250,7 +299,8 @@ export function PurchaseOrderLineRows({ lines, onChange, disabled, supplier, cur
               </Button>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

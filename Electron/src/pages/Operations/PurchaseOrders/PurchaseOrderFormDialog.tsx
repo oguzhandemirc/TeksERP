@@ -37,10 +37,11 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { SupplierSelect } from "@/components/forms/SupplierSelect";
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
+import { useTransientFlag } from "@/hooks/useTransientFlag";
 import {
   sameSupplierParty, supplierOptionLabel, supplierPartyOf, supplierPartyPayload, supplierRefOf,
   type SupplierParty,
@@ -145,6 +146,22 @@ export function PurchaseOrderFormDialog({ open, orderId, onOpenChange, onSaved }
   // ⚠️ TEDARİKÇİ ZORUNLU (backend: "Tedarikçi zorunlu — müşteri-tipli cari ya da
   // fason firma seçin."): sipariş bir TAAHHÜTTÜR, kime verildiği belirsiz olamaz.
   const valid = Boolean(supplier) && totals.lineCount > 0 && Boolean(orderIso) && !editBlocked;
+  // ④ Ürünsüz satırda kaydet / fiyat-miktar alanına odak → o satırın ürün seçicisine amber halka + "Önce ürün seçin", 3 s.
+  const [warnOn, fireWarn] = useTransientFlag(3000);
+  const [warnLineKey, setWarnLineKey] = useState<string | null>(null);
+  const warnLine = (key: string) => {
+    setWarnLineKey(key);
+    fireWarn();
+  };
+  const canTrySave = Boolean(supplier) && Boolean(orderIso) && !editBlocked;
+  const trySave = () => {
+    const missing = lines.find((l) => !l.itemId);
+    if (missing || !valid) {
+      warnLine((missing ?? lines[0])?.key ?? "");
+      return;
+    }
+    saveM.mutate();
+  };
 
   const saveM = useMutation({
     mutationFn: async () => {
@@ -185,7 +202,8 @@ export function PurchaseOrderFormDialog({ open, orderId, onOpenChange, onSaved }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl">
+      {/* ① Boy SABİT (h-[88vh] max-w-6xl — 01'in sipariş formu deseni): üst alanlar ve düğmeler sabit, kalem listesi kaydırır. */}
+      <DialogContent className="flex h-[88vh] max-w-6xl flex-col">
         <DialogHeader>
           <DialogTitle>{editing ? "Alış Siparişini Düzenle" : "Yeni Alış Siparişi"}</DialogTitle>
           <DialogDescription>
@@ -208,7 +226,7 @@ export function PurchaseOrderFormDialog({ open, orderId, onOpenChange, onSaved }
             </Button>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
             {editBlocked && (
               <p className="flex items-start gap-2 rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -253,24 +271,13 @@ export function PurchaseOrderFormDialog({ open, orderId, onOpenChange, onSaved }
               </div>
               <div>
                 <Label>Sipariş tarihi</Label>
-                <Input
-                  type="date"
-                  className="mt-1"
-                  value={orderDate}
-                  disabled={editBlocked}
-                  onChange={(e) => setOrderDate(e.target.value)}
-                />
+                {/* ③ Takvim bileşeni (`DatePickerInput`, "YYYY-MM-DD"|""); `ymd`/`dayStartIso` çevrimi aynen. */}
+                <DatePickerInput className="mt-1" value={orderDate} disabled={editBlocked} onChange={setOrderDate} />
               </div>
 
               <div>
                 <Label>Beklenen tarih (opsiyonel)</Label>
-                <Input
-                  type="date"
-                  className="mt-1"
-                  value={expectedDate}
-                  disabled={editBlocked}
-                  onChange={(e) => setExpectedDate(e.target.value)}
-                />
+                <DatePickerInput className="mt-1" value={expectedDate} disabled={editBlocked} onChange={setExpectedDate} />
                 <p className="mt-1 text-[11px] text-muted-foreground">
                   Boş bırakılırsa sipariş “gecikmiş” sayılmaz.
                 </p>
@@ -298,6 +305,8 @@ export function PurchaseOrderFormDialog({ open, orderId, onOpenChange, onSaved }
               disabled={editBlocked}
               supplier={supplier}
               currency={currency}
+              warnLineKey={warnOn ? warnLineKey : null}
+              onWarnLine={warnLine}
             />
 
             <div className="flex items-center justify-between">
@@ -340,7 +349,7 @@ export function PurchaseOrderFormDialog({ open, orderId, onOpenChange, onSaved }
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Vazgeç
           </Button>
-          <Button disabled={!valid || saveM.isPending} onClick={() => saveM.mutate()}>
+          <Button disabled={!canTrySave || saveM.isPending} onClick={trySave}>
             {saveM.isPending
               ? "Kaydediliyor…"
               : editing
