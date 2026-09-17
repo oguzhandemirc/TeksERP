@@ -73,6 +73,18 @@ yaşıyor. Sonuç:
 ⇒ **Veri göçü küçük, risk KOD ve EKRAN tarafında.** Script yine de genel yazılır: başka kurulumda
 bağsız profil ve hareketli hesap bulunabilir.
 
+### 4.1 PROVA SONUCU — 2026-09-17, İKİ KOPYADA YEŞİL (1e koştu)
+
+| Koşum | Sonuç |
+|---|---|
+| Temiz saha kopyası | **5 kart üretildi**, **3 tombstone profil ATLANDI**; ikinci koşum **0 değişiklik** |
+| Fikstürlü kopya (hesaplı/çakışmalı senaryolar) | **8 kart**, **1 cari hesap kartın tarafına çevrildi** |
+| Tip ↔ bayrak tutarsızlığı (her iki kopyada) | **0** |
+
+⚠️ **Şerh (prova çıktısından):** üretilen kartın ADI servis kanoniğinde, yani BÜYÜK HARFLE yazılır —
+profildeki yazım birebir taşınmaz. Bu bir kusur değil, kart adı kuralının fason profiline de
+uygulanmasıdır; ama listeyi okuyan "ad değişmiş" diye okumasın diye burada yazılı.
+
 ## 5. Dilimler
 
 | Dilim | Sahip | Kapsam |
@@ -99,6 +111,11 @@ Sıra bağlayıcıdır; her adım bir ÖNCEKİNİN çıktısına bakar.
 7. **Profil boot** — fabrikanın profiliyle backend açılır; açılış kapıları yeşil.
 
 Herhangi bir adım kırmızıysa faz durur; paket çıkmaz.
+
+**Durum: PROVA GEÇTİ** (2026-09-17, iki kopya — sayılar §4.1). Yayın günü aynı sıra CANLIDA
+tekrarlanır: `migrate deploy` → dry-run (çıktı saklanır) → kullanıcı onayı → `--apply` → ikinci koşum
+0 değişiklik → panel/tablet paketi. Koşan KULLANICIDIR; reçete `docs/kurallar/surum-yayin.md`,
+runbook `docs/ops/IS-ORTAGI-ROL-GOCU.md`.
 
 ## 7. Sonraki faz (bu fazın DIŞI)
 
