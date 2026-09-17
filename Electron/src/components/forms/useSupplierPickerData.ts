@@ -21,7 +21,7 @@ import {
   nextPageToken,
   subcontractorRow,
   type PageToken,
-  type PickerMode,
+  type PickerList,
   type PickerPage,
   type SupplierRoleFilter,
 } from "./supplierPicker";
@@ -31,8 +31,9 @@ interface Args {
   search: string;
   role: SupplierRoleFilter;
   includeInactive: boolean;
-  /** Tedarikçi (cari + fason) ya da müşteri (yalnız cari; ALL = CUSTOMER sonra BOTH bacağı). */
-  mode?: PickerMode;
+  /** Tedarikçi (SUPPLIER/BOTH cari + fason) · müşteri (yalnız cari; ALL = CUSTOMER sonra BOTH) ·
+   *  müşteri-only (dönüştürme görünümü: yalnız type=CUSTOMER). */
+  list?: PickerList;
 }
 
 async function fetchPage(token: PageToken, args: Args): Promise<PickerPage> {
@@ -40,8 +41,8 @@ async function fetchPage(token: PageToken, args: Args): Promise<PickerPage> {
   const search = args.search ? { search: args.search } : {};
   try {
     if (token.leg === "customers") {
-      // Bacağın tipi token'da (müşteri kipi ALL: CUSTOMER → BOTH); token'sız tedarikçi kipi rolden.
-      const customerType = token.type ?? legsFor(args.role, args.mode).customerType;
+      // Bacağın tipi token'da (müşteri kipi ALL: CUSTOMER → BOTH); token'sız hâl listeden.
+      const customerType = token.type ?? legsFor(args.role, args.list).customerType;
       const res = await customerService.listCursor({
         cursor: token.cursor,
         limit: SUPPLIER_PICKER_PAGE,
@@ -62,12 +63,12 @@ async function fetchPage(token: PageToken, args: Args): Promise<PickerPage> {
 }
 
 export function useSupplierPickerData(args: Args) {
-  const { open, search, role, includeInactive, mode = "supplier" } = args;
+  const { open, search, role, includeInactive, list = "supplier" } = args;
   const q = useInfiniteQuery({
-    queryKey: ["supplier-picker", mode, search, role, includeInactive],
+    queryKey: ["supplier-picker", list, search, role, includeInactive],
     queryFn: ({ pageParam }) => fetchPage(pageParam, args),
-    initialPageParam: firstPageToken(role, mode),
-    getNextPageParam: (last) => nextPageToken(last, role, mode),
+    initialPageParam: firstPageToken(role, list),
+    getNextPageParam: (last) => nextPageToken(last, role, list),
     enabled: open,
     staleTime: 30_000,
   });

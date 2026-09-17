@@ -1,6 +1,6 @@
 // BEKÇİ — tedarikçi seçici saf katmanı (v3): rol → bacak/parametre · sayfa token geçişleri · satır eşlemesi
 import { describe, it, expect } from "vitest";
-import { SUPPLIER_ROLE_FILTER_OPTIONS, SUPPLIER_ROLE_LABEL, customerRow, firstPageToken, legsFor, nextPageToken, subcontractorRow, type PickerPage } from "./supplierPicker";
+import { CUSTOMER_ROLE_FILTER_OPTIONS, SUPPLIER_ALL_CUSTOMER_TYPES, SUPPLIER_ROLE_FILTER_OPTIONS, SUPPLIER_ROLE_LABEL, customerRow, firstPageToken, legsFor, nextPageToken, roleTriggerText, subcontractorRow, type PickerPage } from "./supplierPicker";
 import type { Customer } from "@/pages/Customers/types";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 import { companyTypeLabels } from "@/types/enums";
@@ -8,13 +8,37 @@ import { companyTypeLabels } from "@/types/enums";
 const page = (token: PickerPage["token"], next: PickerPage["next"] = null, error = false): PickerPage => ({ token, rows: [], next, error });
 
 describe("supplierPicker (saf)", () => {
-  it("⭐ rol → bacak: ALL iki bacak filtresiz · Fason yalnız fason · cari rolleri yalnız cari + filter[type]", () => {
-    expect(legsFor("ALL")).toEqual({ customers: true, subs: true });
+  it("⭐ rol → bacak: ALL = cari bacağı CSV `SUPPLIER,BOTH` + fason · Fason yalnız fason · cari rolleri yalnız cari + filter[type]", () => {
+    expect(SUPPLIER_ALL_CUSTOMER_TYPES).toBe("SUPPLIER,BOTH");
+    expect(legsFor("ALL")).toEqual({ customers: true, subs: true, customerType: "SUPPLIER,BOTH" });
     expect(legsFor("SUBCONTRACTOR")).toEqual({ customers: false, subs: true });
     expect(legsFor("SUPPLIER")).toEqual({ customers: true, subs: false, customerType: "SUPPLIER" });
-    expect(firstPageToken("ALL")).toEqual({ leg: "customers", cursor: null });
+    expect(legsFor("BOTH")).toEqual({ customers: true, subs: false, customerType: "BOTH" });
+    expect(firstPageToken("ALL")).toEqual({ leg: "customers", cursor: null, type: "SUPPLIER,BOTH" });
     expect(firstPageToken("SUBCONTRACTOR")).toEqual({ leg: "subs", page: 1 });
-    expect(SUPPLIER_ROLE_FILTER_OPTIONS.map((o) => o.label)).toEqual(["Tümü", "Müşteri", "Tedarikçi", "Müşteri + Tedarikçi", "Fason"]);
+    expect(SUPPLIER_ROLE_FILTER_OPTIONS.map((o) => o.label)).toEqual(["Tümü", "Tedarikçi", "Müşteri + Tedarikçi", "Fason"]);
+  });
+
+  it("⭐ tedarikçi kipi CUSTOMER tipini HİÇBİR yoldan sormaz: seçeneklerde yok; rol olarak gelirse 'Tümü' gibi (fail-closed)", () => {
+    expect(SUPPLIER_ROLE_FILTER_OPTIONS.some((o) => o.value === "CUSTOMER")).toBe(false);
+    expect(legsFor("CUSTOMER")).toEqual(legsFor("ALL"));
+    for (const role of ["ALL", "CUSTOMER", "SUPPLIER", "BOTH", "SUBCONTRACTOR"] as const) {
+      const t = firstPageToken(role);
+      expect(t.leg === "customers" ? t.type : "-").not.toBe("CUSTOMER");
+    }
+  });
+
+  it("dönüştürme görünümü (`customer-only`): yalnız cari bacağı, type=CUSTOMER, fason yok, bacak geçişi yok", () => {
+    expect(legsFor("ALL", "customer-only")).toEqual({ customers: true, subs: false, customerType: "CUSTOMER" });
+    expect(firstPageToken("ALL", "customer-only")).toEqual({ leg: "customers", cursor: null, type: "CUSTOMER" });
+    expect(nextPageToken(page({ leg: "customers", cursor: null, type: "CUSTOMER" }), "ALL", "customer-only")).toBeUndefined();
+  });
+
+  it("süzgeç tetiği kapalıyken adını taşır: 'Rol: Tümü' / 'Rol: Tedarikçi' (seçenek metni 'Tümü' kalır)", () => {
+    expect(roleTriggerText("supplier", "ALL")).toBe("Rol: Tümü");
+    expect(roleTriggerText("supplier", "SUPPLIER")).toBe("Rol: Tedarikçi");
+    expect(roleTriggerText("customer", "BOTH")).toBe("Rol: Müşteri + Tedarikçi");
+    expect(SUPPLIER_ROLE_FILTER_OPTIONS[0]!.label).toBe("Tümü");
   });
 
   it("⭐ cari tipi etiketleri TEK kaynaktan (`companyTypeLabels`) — kopyaya yazılan literal sapamaz", () => {
@@ -25,16 +49,16 @@ describe("supplierPicker (saf)", () => {
   });
 
   it("⭐ token geçişi: aynı bacakta devam → ALL'da cariler bitince fason 1 → fason bitince yok; tek bacak rolde bacak geçişi YOK", () => {
-    expect(nextPageToken(page({ leg: "customers", cursor: null }, { leg: "customers", cursor: "c2" }), "ALL")).toEqual({ leg: "customers", cursor: "c2" });
-    expect(nextPageToken(page({ leg: "customers", cursor: "c2" }), "ALL")).toEqual({ leg: "subs", page: 1 });
+    expect(nextPageToken(page({ leg: "customers", cursor: null, type: "SUPPLIER,BOTH" }, { leg: "customers", cursor: "c2", type: "SUPPLIER,BOTH" }), "ALL")).toEqual({ leg: "customers", cursor: "c2", type: "SUPPLIER,BOTH" });
+    expect(nextPageToken(page({ leg: "customers", cursor: "c2", type: "SUPPLIER,BOTH" }), "ALL")).toEqual({ leg: "subs", page: 1 });
     expect(nextPageToken(page({ leg: "subs", page: 1 }, { leg: "subs", page: 2 }), "ALL")).toEqual({ leg: "subs", page: 2 });
     expect(nextPageToken(page({ leg: "subs", page: 2 }), "ALL")).toBeUndefined();
     expect(nextPageToken(page({ leg: "customers", cursor: null }), "SUPPLIER")).toBeUndefined();
     // hatalı sayfa da geçer: cari bacağı 500 verdiyse ALL'da fason yine istenir
-    expect(nextPageToken(page({ leg: "customers", cursor: null }, null, true), "ALL")).toEqual({ leg: "subs", page: 1 });
+    expect(nextPageToken(page({ leg: "customers", cursor: null, type: "SUPPLIER,BOTH" }, null, true), "ALL")).toEqual({ leg: "subs", page: 1 });
   });
 
-  it("satır eşlemesi: cari rolü tipten (müşteri-only dahil), fason 'SUBCONTRACTOR'; telefon/vergi no/pasif", () => {
+  it("satır eşlemesi: cari rolü tipten, fason 'SUBCONTRACTOR'; telefon/vergi no/pasif", () => {
     const c = customerRow({ id: "c1", code: "MUS1", name: "Yalnız Müşteri", type: "CUSTOMER", taxNumber: "111", contactPhone: "0212", isActive: false } as Customer);
     expect(c).toMatchObject({ key: "CUSTOMER:c1", kind: "CUSTOMER", role: "CUSTOMER", taxNumber: "111", phone: "0212", isActive: false });
     const s = subcontractorRow({ id: "s1", code: "FAS1", name: "Boyahane", taxNumber: null, phone: "0532", isActive: true } as Subcontractor);
@@ -50,7 +74,7 @@ describe("supplierPicker — müşteri kipi", () => {
     expect(nextPageToken(page({ leg: "customers", cursor: null, type: "CUSTOMER" }), "ALL", "customer")).toEqual({ leg: "customers", cursor: null, type: "BOTH" });
     expect(nextPageToken(page({ leg: "customers", cursor: "x", type: "BOTH" }), "ALL", "customer")).toBeUndefined();
     expect(firstPageToken("BOTH", "customer")).toEqual({ leg: "customers", cursor: null, type: "BOTH" });
-    expect(SUPPLIER_ROLE_FILTER_OPTIONS.length).toBe(5);
+    expect(CUSTOMER_ROLE_FILTER_OPTIONS.map((o) => o.label)).toEqual(["Tümü", "Müşteri", "Müşteri + Tedarikçi"]);
   });
   it("satır `city` taşır (müşteri kipi Şehir kolonu); fasonda null", () => {
     expect(customerRow({ id: "c1", code: "M", name: "X", type: "CUSTOMER", city: "Bursa" } as Customer).city).toBe("Bursa");

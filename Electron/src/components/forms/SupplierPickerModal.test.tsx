@@ -1,9 +1,12 @@
 // =============================================================================
 // BEKÇİ — Tedarikçi seçici modalı v3 (kabul A): kutu → modal · rol FARE ve KLAVYE ile · tek bacak 500 ·
-// ALL'da bacak geçişi · arama · satır → forma · kaynak taraması (yerleşik <select> / DataTable YOK)
+// ALL'da bacak geçişi · arama · satır → forma · kaynak taraması (yerleşik <select> / DataTable YOK) ·
+// MÜŞTERİ-ONLY kart listelenmez (kullanıcı 2026-09-17 03:25) · dönüştürme kapısı (bağlantı → müşteri
+// listesi → onay → type BOTH → seçim) · izin yoksa bağlantı yok · tetik "Rol: …"
 // =============================================================================
 // Negatif sonda (kırmızı görüldü): modal ağacına `<select>` eklenince (7) ❌; `legsFor` Fason'da cari bacağını
-// kapatmayınca "yalnız fason" ❌.
+// kapatmayınca "yalnız fason" ❌; `legsFor("ALL")` cari bacağını filtresiz sorunca (1) "Yalnız Müşteri" ❌;
+// `useCanConvertCustomer` kapısı kaldırılınca (11) bağlantı görünür ❌.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -17,13 +20,19 @@ import { subcontractorService } from "@/pages/Subcontractors/service";
 const listCursor = vi.fn();
 const subsGetAll = vi.fn();
 const createCustomer = vi.fn();
-vi.mock("@/pages/Customers/service", () => ({ customerService: { listCursor: (...a: unknown[]) => listCursor(...a), getAll: vi.fn(), getById: vi.fn(), create: (...a: unknown[]) => createCustomer(...a) } }));
+const updateCustomer = vi.fn();
+vi.mock("@/pages/Customers/service", () => ({
+  customerService: { listCursor: (...a: unknown[]) => listCursor(...a), getAll: vi.fn(), getById: vi.fn(), create: (...a: unknown[]) => createCustomer(...a), update: (...a: unknown[]) => updateCustomer(...a) },
+}));
+// İzin: dönüştürme kapısı `customer:write` ister — test başına değişir.
+let perms: string[] = [];
+vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: (p: string) => perms.includes(p) }) }));
 // Cari formu ağır (paneller, belge profili, benzer ad uyarısı) ve kendi bekçileri var — burada stub: açıkken
 // "Kaydet" tıklanınca formun vereceği değerlerle onSubmit çağrılır; `defaultType`/`showBranchDraft` prop'ları ölçülür.
 vi.mock("@/pages/Customers/CustomerFormDialog", () => ({
-  CustomerFormDialog: (p: { open: boolean; defaultType?: string; showBranchDraft?: boolean; onSubmit: (v: Record<string, unknown>) => void }) =>
+  CustomerFormDialog: (p: { open: boolean; defaultType?: string; showBranchDraft?: boolean; typeOptions?: readonly string[]; onSubmit: (v: Record<string, unknown>) => void }) =>
     p.open ? (
-      <div data-testid="cari-form" data-default-type={p.defaultType ?? ""} data-branch-draft={String(p.showBranchDraft)}>
+      <div data-testid="cari-form" data-default-type={p.defaultType ?? ""} data-branch-draft={String(p.showBranchDraft)} data-type-options={p.typeOptions?.join(",") ?? "*"}>
         <button type="button" onClick={() => p.onSubmit({ name: "Yeni Cari A.Ş.", taxNumber: "", type: p.defaultType ?? "CUSTOMER", isActive: true })}>Kaydet</button>
       </div>
     ) : null,
@@ -44,9 +53,12 @@ const offsetPage = (data: unknown[], page = 1, totalPages = 1) => Promise.resolv
 beforeEach(() => {
   listCursor.mockReset();
   subsGetAll.mockReset();
+  updateCustomer.mockReset();
+  perms = ["customer:write"];
   listCursor.mockImplementation((p: { filters?: Record<string, string>; search?: string }) => {
     let rows = CUSTOMERS;
-    if (p.filters?.type) rows = rows.filter((c) => c.type === p.filters!.type);
+    // Uç CSV'yi `in`e çevirir (`buildWhereClause`) — mock aynı sözleşmeyi taklit eder.
+    if (p.filters?.type) rows = rows.filter((c) => p.filters!.type!.split(",").includes(c.type));
     if (p.search) rows = rows.filter((c) => c.name.includes(p.search!));
     return cursorPage(rows);
   });
@@ -65,49 +77,56 @@ async function openModal(onChange: (v: unknown) => void = () => {}) {
 const roleTrigger = (dialog: HTMLElement) => within(dialog).getByRole("combobox", { name: "Rol" });
 
 describe("SupplierPickerModal v3", () => {
-  it("(1) ⭐ kutuya tıkla → dialog; TAM liste (müşteri-only dahil, Rol ayırt eder); kolonlar; sayfa 50, ilk açılışta filtre yok", async () => {
+  it("(1) ⭐ kutuya tıkla → dialog; liste = tedarikçi + her ikisi + fason, MÜŞTERİ-ONLY YOK; 'Tümü' isteği filter[type]=SUPPLIER,BOTH; kolonlar; sayfa 50", async () => {
     const dialog = await openModal();
     for (const h of ["Kod", "Ünvan", "Rol", "Vergi No", "Telefon"]) expect(within(dialog).getByText(h)).toBeInTheDocument();
-    for (const n of ["İplik A.Ş.", "Hem Alır Hem Satar", "Yalnız Müşteri", "Boyahane Ltd"]) expect(within(dialog).getByText(n)).toBeInTheDocument();
-    expect(within(within(dialog).getByText("Yalnız Müşteri").closest("tr") as HTMLElement).getByText("Müşteri")).toBeInTheDocument();
+    for (const n of ["İplik A.Ş.", "Hem Alır Hem Satar", "Boyahane Ltd"]) expect(within(dialog).getByText(n)).toBeInTheDocument();
+    expect(within(dialog).queryByText("Yalnız Müşteri")).toBeNull();
     expect(within(within(dialog).getByText("Boyahane Ltd").closest("tr") as HTMLElement).getByText("Fason")).toBeInTheDocument();
-    expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ limit: 50, filters: { isActive: "true" } }));
+    expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ limit: 50, filters: { isActive: "true", type: "SUPPLIER,BOTH" } }));
+    // CUSTOMER tipi hiçbir istekte tek başına sorulmaz.
+    for (const call of listCursor.mock.calls) expect((call[0] as { filters: { type?: string } }).filters.type).not.toBe("CUSTOMER");
     expect(subsGetAll).toHaveBeenCalledWith(expect.objectContaining({ pageSize: 50 }));
-    expect(within(dialog).getByText("Yüklü 4 kayıt")).toBeInTheDocument();
+    expect(within(dialog).getByText("Yüklü 3 kayıt")).toBeInTheDocument();
     expect(within(dialog).getByText("Tüm kayıtlar yüklendi")).toBeInTheDocument();
+    // Tetik kapalıyken süzgecin adını taşır.
+    expect(roleTrigger(dialog)).toHaveTextContent("Rol: Tümü");
   });
 
-  it("(2a) ⭐ rol FARE ile: tetik → seçenek 'Tedarikçi' → sunucuya filter[type]=SUPPLIER, fason sorulmaz; 'Fason' → yalnız fason", async () => {
+  it("(2a) ⭐ rol FARE ile: 4 seçenek (Müşteri YOK); 'Tedarikçi' → filter[type]=SUPPLIER, fason sorulmaz, tetik 'Rol: Tedarikçi'; 'Fason' → yalnız fason", async () => {
     const dialog = await openModal();
     listCursor.mockClear();
     subsGetAll.mockClear();
     await userEvent.click(roleTrigger(dialog));
-    await userEvent.click(await screen.findByRole("option", { name: "Tedarikçi" }));
+    expect((await screen.findAllByRole("option")).map((o) => o.textContent)).toEqual(["Tümü", "Tedarikçi", "Müşteri + Tedarikçi", "Fason"]);
+    await userEvent.click(screen.getByRole("option", { name: "Tedarikçi" }));
     await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", type: "SUPPLIER" } })));
     await waitFor(() => expect(within(dialog).queryByText("Boyahane Ltd")).toBeNull());
     expect(within(dialog).getByText("İplik A.Ş.")).toBeInTheDocument();
     expect(within(dialog).queryByText("Yalnız Müşteri")).toBeNull();
     expect(subsGetAll).not.toHaveBeenCalled();
+    expect(roleTrigger(dialog)).toHaveTextContent("Rol: Tedarikçi");
     listCursor.mockClear();
     await userEvent.click(roleTrigger(dialog));
     await userEvent.click(await screen.findByRole("option", { name: "Fason" }));
     await within(dialog).findByText("Boyahane Ltd");
     await waitFor(() => expect(within(dialog).queryByText("İplik A.Ş.")).toBeNull());
     expect(listCursor).not.toHaveBeenCalled();
-    expect(roleTrigger(dialog)).toHaveTextContent("Fason");
+    expect(roleTrigger(dialog)).toHaveTextContent("Rol: Fason");
   });
 
-  it("(2b) ⭐ rol KLAVYE ile: tetik odak → ↓ (açılır) → ↓ → Enter = 'Müşteri' → filter[type]=CUSTOMER", async () => {
+  it("(2b) ⭐ rol KLAVYE ile: tetik odak → ↓ (açılır) → ↓ ↓ → Enter = 'Müşteri + Tedarikçi' → filter[type]=BOTH", async () => {
     const dialog = await openModal();
     listCursor.mockClear();
     roleTrigger(dialog).focus();
     await userEvent.keyboard("{ArrowDown}");
     await screen.findByRole("listbox");
-    await userEvent.keyboard("{ArrowDown}{Enter}");
-    await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", type: "CUSTOMER" } })));
-    await within(dialog).findByText("Yalnız Müşteri");
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+    await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", type: "BOTH" } })));
+    await within(dialog).findByText("Hem Alır Hem Satar");
     await waitFor(() => expect(within(dialog).queryByText("İplik A.Ş.")).toBeNull());
-    expect(roleTrigger(dialog)).toHaveTextContent("Müşteri");
+    expect(within(dialog).queryByText("Yalnız Müşteri")).toBeNull();
+    expect(roleTrigger(dialog)).toHaveTextContent("Rol: Müşteri + Tedarikçi");
   });
 
   it("(3) arama sunucuya (iki bacak)", async () => {
@@ -138,7 +157,7 @@ describe("SupplierPickerModal v3", () => {
     // Sayfalar AĞ GİBİ gecikmeli döner: jsdom'da IO tetiklenmez, kısa-liste koruması `isFetchingNext`in
     // true→false geçişiyle bir tur daha yükler; anında çözülen mock o ara durumu atlar (gerçek ağda olmaz).
     const gec = <T,>(v: Promise<T>) => new Promise<T>((res) => setTimeout(() => res(v), 5));
-    listCursor.mockImplementation((p: { cursor?: string | null }) => gec(p.cursor === "c2" ? cursorPage([CUSTOMERS[2]]) : cursorPage(CUSTOMERS.slice(0, 2), "c2")));
+    listCursor.mockImplementation((p: { cursor?: string | null }) => gec(p.cursor === "c2" ? cursorPage([CUSTOMERS[1]]) : cursorPage([CUSTOMERS[0]], "c2")));
     subsGetAll.mockImplementation((p: { page: number }) => gec(p.page === 1 ? offsetPage(SUBS, 1, 2) : offsetPage([{ ...SUBS[0], id: "s2", code: "FAS2", name: "İkinci Fason" }], 2, 2)));
     renderWithProviders(<SupplierSelect value={null} onChange={() => {}} modalPicker />);
     await userEvent.click(screen.getByRole("button", { name: "Tedarikçi seç (liste)" }));
@@ -148,9 +167,9 @@ describe("SupplierPickerModal v3", () => {
     await waitFor(() => expect(subsGetAll).toHaveBeenCalledWith(expect.objectContaining({ page: 1 })), { timeout: 4000 });
     await waitFor(() => expect(subsGetAll).toHaveBeenCalledWith(expect.objectContaining({ page: 2 })), { timeout: 4000 });
     await within(dialog).findByText("İkinci Fason", {}, { timeout: 4000 });
-    expect(within(dialog).getByText("Yüklü 5 kayıt")).toBeInTheDocument();
+    expect(within(dialog).getByText("Yüklü 4 kayıt")).toBeInTheDocument();
     const names = within(dialog).getAllByRole("row").slice(1).map((r) => r.querySelectorAll("td")[1]?.textContent);
-    expect(names).toEqual(["İplik A.Ş.", "Hem Alır Hem Satar", "Yalnız Müşteri", "Boyahane Ltd", "İkinci Fason"]);
+    expect(names).toEqual(["İplik A.Ş.", "Hem Alır Hem Satar", "Boyahane Ltd", "İkinci Fason"]);
   });
 
   it("(6) ⭐ tek bacak 500 → uyarı + öbür bacak listelenir", async () => {
@@ -167,7 +186,7 @@ describe("SupplierPickerModal v3", () => {
     const dir = path.resolve(__dirname);
     // Yorumlar ÖNCE soyulur — başlık yorumu "yerleşik <select> yok" der, o bir ihlal değildir.
     const soy = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
-    const modal = soy(readFileSync(path.join(dir, "SupplierPickerModal.tsx"), "utf8"));
+    const modal = soy(readFileSync(path.join(dir, "SupplierPickerModal.tsx"), "utf8")) + soy(readFileSync(path.join(dir, "SupplierPickerToolbar.tsx"), "utf8")) + soy(readFileSync(path.join(dir, "SupplierConvertCustomer.tsx"), "utf8"));
     const hook = soy(readFileSync(path.join(dir, "useSupplierPickerData.ts"), "utf8"));
     expect(modal).not.toMatch(/<select\b|<option\b/);
     expect(modal + hook).not.toMatch(/DataTable|useReactTable|DataTablePagination|as unknown as/);
@@ -176,13 +195,14 @@ describe("SupplierPickerModal v3", () => {
     expect(modal).toMatch(/useInfiniteScroll\(/);
   });
 
-  it("⭐ (8) 'Yeni cari' → form (tip varsayılanı SUPPLIER, şube taslağı yok) → Kaydet → oluşturma gövdesi type SUPPLIER → onChange({kind:'CUSTOMER', id}) + modal kapanır", async () => {
+  it("⭐ (8) 'Yeni cari' → form (tip varsayılanı SUPPLIER, seçenekler yalnız SUPPLIER·BOTH, şube taslağı yok) → Kaydet → gövde type SUPPLIER → onChange + modal kapanır", async () => {
     createCustomer.mockResolvedValue({ success: true, data: { id: "c-yeni", code: "MUS1709260001", name: "Yeni Cari A.Ş.", type: "SUPPLIER" } });
     const onChange = vi.fn();
     const dialog = await openModal(onChange);
     await userEvent.click(within(dialog).getByRole("button", { name: "Yeni cari ekle" }));
     const form = await screen.findByTestId("cari-form");
     expect(form).toHaveAttribute("data-default-type", "SUPPLIER");
+    expect(form).toHaveAttribute("data-type-options", "SUPPLIER,BOTH");
     expect(form).toHaveAttribute("data-branch-draft", "false");
     await userEvent.click(within(form).getByRole("button", { name: "Kaydet" }));
     await waitFor(() => expect(createCustomer).toHaveBeenCalledWith(expect.objectContaining({ name: "Yeni Cari A.Ş.", type: "SUPPLIER", isActive: true })));
@@ -214,5 +234,82 @@ describe("SupplierPickerModal v3", () => {
     renderWithProviders(<SupplierSelect value={null} onChange={() => {}} modalPicker />);
     await userEvent.click(screen.getByRole("button", { name: "Tedarikçi seç (liste)" }));
     await within(await screen.findByRole("dialog")).findByText(SUPPLIER_PICKER_EMPTY);
+  });
+
+  // ── Dönüştürme kapısı: "bu müşteriden İLK KEZ alacağım" ──────────────────────────────────────────
+  it("⭐ (10) bağlantı → yalnız müşteri-only liste (type=CUSTOMER, fason yok, rol kutusu yok) → satır → onay metni → update(id,{type:'BOTH'}) → onChange({kind:'CUSTOMER',id}) + kapanır", async () => {
+    updateCustomer.mockResolvedValue({ success: true, data: { id: "c3", name: "Yalnız Müşteri", type: "BOTH" } });
+    const onChange = vi.fn();
+    const dialog = await openModal(onChange);
+    listCursor.mockClear();
+    subsGetAll.mockClear();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Müşteri kartını tedarikçi de yap…" }));
+    await within(dialog).findByText("Yalnız Müşteri");
+    expect(within(dialog).getByText("Müşteri kartını tedarikçi de yap")).toBeInTheDocument();
+    expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", type: "CUSTOMER" } }));
+    expect(subsGetAll).not.toHaveBeenCalled();
+    expect(within(dialog).queryByText("İplik A.Ş.")).toBeNull();
+    expect(within(dialog).queryByText("Boyahane Ltd")).toBeNull();
+    expect(within(dialog).queryByRole("combobox", { name: "Rol" })).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: "Yeni cari ekle" })).toBeNull();
+    // Satır → onay (seçim HENÜZ yazılmadı)
+    await userEvent.click(within(dialog).getByText("Yalnız Müşteri"));
+    const confirm = await screen.findByRole("dialog", { name: "Kart tipi değişecek" });
+    expect(within(confirm).getByText("Yalnız Müşteri kartının tipi Müşteri + Tedarikçi olacak.")).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(updateCustomer).not.toHaveBeenCalled();
+    await userEvent.click(within(confirm).getByRole("button", { name: "Dönüştür ve seç" }));
+    await waitFor(() => expect(updateCustomer).toHaveBeenCalledWith("c3", { type: "BOTH" }));
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith({ kind: "CUSTOMER", id: "c3" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    // Yeniden açılış: dönüştürme görünümü SIFIRLANDI — tedarikçi listesi ve rol kutusu geri (gerçek Electron'da ölçüldü)
+    await userEvent.click(screen.getByRole("button", { name: "Tedarikçi seç (liste)" }));
+    const again = await screen.findByRole("dialog");
+    await within(again).findByText("Boyahane Ltd");
+    expect(within(again).getByText("Tedarikçi seç")).toBeInTheDocument();
+    expect(within(again).getByRole("combobox", { name: "Rol" })).toBeInTheDocument();
+  });
+
+  it("(10b) dönüştürme görünümünden 'Tedarikçi listesine dön' → tedarikçi listesi geri gelir", async () => {
+    const dialog = await openModal();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Müşteri kartını tedarikçi de yap…" }));
+    await within(dialog).findByText("Yalnız Müşteri");
+    await userEvent.click(within(dialog).getByRole("button", { name: /Tedarikçi listesine dön/ }));
+    await within(dialog).findByText("Boyahane Ltd");
+    expect(within(dialog).queryByText("Yalnız Müşteri")).toBeNull();
+    expect(within(dialog).getByRole("combobox", { name: "Rol" })).toBeInTheDocument();
+  });
+
+  it("⭐ (11) customer:write YOKSA bağlantı hiç çizilmez (kart tipi değiştirmek cari yazma yetkisidir)", async () => {
+    perms = [];
+    const dialog = await openModal();
+    expect(within(dialog).queryByRole("button", { name: "Müşteri kartını tedarikçi de yap…" })).toBeNull();
+    expect(within(dialog).queryByText(/ilk kez mi alacaksınız/)).toBeNull();
+  });
+
+  it("(12) dönüştürme HATA verirse seçim yazılmaz, modal açık kalır (toast apiClient'ın; burada ikinci toast yok)", async () => {
+    updateCustomer.mockRejectedValue(new Error("403"));
+    const onChange = vi.fn();
+    const dialog = await openModal(onChange);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Müşteri kartını tedarikçi de yap…" }));
+    await userEvent.click(await within(dialog).findByText("Yalnız Müşteri"));
+    const confirm = await screen.findByRole("dialog", { name: "Kart tipi değişecek" });
+    await userEvent.click(within(confirm).getByRole("button", { name: "Dönüştür ve seç" }));
+    await waitFor(() => expect(updateCustomer).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Kart tipi değişecek" })).toBeNull());
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBe(dialog);
+  });
+
+  it("(13) müşteri kipi DEĞİŞMEDİ: bağlantı yok (kural yalnız tedarikçi kipi), rol seçenekleri Tümü · Müşteri · Müşteri + Tedarikçi", async () => {
+    const { CustomerPickerField } = await import("./CustomerPickerField");
+    renderWithProviders(<CustomerPickerField value={null} onChange={() => {}} />);
+    await userEvent.click(screen.getByRole("button", { name: "Müşteri seç (liste)" }));
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByText("Yalnız Müşteri");
+    expect(within(dialog).queryByRole("button", { name: "Müşteri kartını tedarikçi de yap…" })).toBeNull();
+    expect(roleTrigger(dialog)).toHaveTextContent("Rol: Tümü");
+    await userEvent.click(roleTrigger(dialog));
+    expect((await screen.findAllByRole("option")).map((o) => o.textContent)).toEqual(["Tümü", "Müşteri", "Müşteri + Tedarikçi"]);
   });
 });

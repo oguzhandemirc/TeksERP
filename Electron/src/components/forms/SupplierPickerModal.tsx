@@ -8,32 +8,35 @@
 // (`useSupplierPickerData` tek sonsuz sorgu). Kaydırma kabı TEK, sentinel dipte; arama + rol SUNUCUDA.
 // =============================================================================
 import { useState } from "react";
-import { Loader2, Search } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { cn } from "@/lib/utils";
 import { supplierLoadNotice, type SupplierParty } from "./supplierParty";
-import { SUPPLIER_ROLE_LABEL, roleFilterOptions, type PickerMode, type SupplierPickerRow, type SupplierRoleFilter } from "./supplierPicker";
+import { SUPPLIER_ROLE_LABEL, type PickerList, type PickerMode, type SupplierPickerRow, type SupplierRoleFilter } from "./supplierPicker";
 import { useSupplierPickerData } from "./useSupplierPickerData";
-import { SupplierQuickCreate } from "./SupplierQuickCreate";
+import { SupplierPickerToolbar } from "./SupplierPickerToolbar";
+import { ConvertBackLink, ConvertCustomerConfirm, ConvertCustomerLink, useCanConvertCustomer } from "./SupplierConvertCustomer";
 
 export const SUPPLIER_PICKER_EMPTY = "Tedarikçi kartı yok — Tanımlar → İş Ortakları → Cariler'den ya da buradaki Yeni cari düğmesiyle açın.";
 export const CUSTOMER_PICKER_EMPTY = "Müşteri kartı yok — Tanımlar → İş Ortakları → Cariler'den ya da buradaki Yeni müşteri düğmesiyle açın.";
+export const CUSTOMER_ONLY_EMPTY = "Yalnız müşteri tipli kart yok — bütün cari kartlar zaten tedarikçi listesinde.";
 export const SUPPLIER_PICKER_FILTERED_EMPTY = "Süzgece uyan kayıt yok.";
-/** Kolonlar kipe göre: tedarikçi Rol taşır (cari/fason karışık), müşteri Şehir taşır (yalnız cari). */
-const HEADERS: Record<PickerMode, readonly string[]> = {
+/** Kolonlar listeye göre: tedarikçi Rol taşır (cari/fason karışık), müşteri listeleri Şehir taşır (yalnız cari). */
+const HEADERS: Record<PickerList, readonly string[]> = {
   supplier: ["Kod", "Ünvan", "Rol", "Vergi No", "Telefon"],
   customer: ["Kod", "Ünvan", "Şehir", "Vergi No", "Telefon"],
+  "customer-only": ["Kod", "Ünvan", "Şehir", "Vergi No", "Telefon"],
 };
-const TITLE: Record<PickerMode, { title: string; description: string }> = {
-  supplier: { title: "Tedarikçi seç", description: "Bütün cari kartlar ve fason firmalar tek listede; kaydırdıkça yüklenir, satıra tıklayınca seçilir." },
+const TITLE: Record<PickerList, { title: string; description: string }> = {
+  supplier: { title: "Tedarikçi seç", description: "Tedarikçi ve alıcı + satıcı cari kartlar ile fason firmalar tek listede; kaydırdıkça yüklenir, satıra tıklayınca seçilir." },
   customer: { title: "Müşteri seç", description: "Müşteri ve alıcı + satıcı kartlar tek listede; kaydırdıkça yüklenir, satıra tıklayınca seçilir." },
+  "customer-only": { title: "Müşteri kartını tedarikçi de yap", description: "Yalnız müşteri tipli kartlar; satıra tıklayınca onay sorulur, kart Müşteri + Tedarikçi olur ve seçilir." },
 };
+const EMPTY: Record<PickerList, string> = { supplier: SUPPLIER_PICKER_EMPTY, customer: CUSTOMER_PICKER_EMPTY, "customer-only": CUSTOMER_ONLY_EMPTY };
 
 interface Props {
   open: boolean;
@@ -50,15 +53,15 @@ function roleBadgeVariant(role: SupplierPickerRow["role"]): "secondary" | "muted
   return "default";
 }
 
-function PickerRow({ r, mode, onPick }: { r: SupplierPickerRow; mode: PickerMode; onPick: (p: SupplierParty) => void }) {
+function PickerRow({ r, list, onPick }: { r: SupplierPickerRow; list: PickerList; onPick: (r: SupplierPickerRow) => void }) {
   return (
-    <TableRow className={cn("cursor-pointer", !r.isActive && "opacity-60")} onClick={() => onPick({ kind: r.kind, id: r.id })}>
+    <TableRow className={cn("cursor-pointer", !r.isActive && "opacity-60")} onClick={() => onPick(r)}>
       <TableCell className="py-1.5 font-mono text-xs">{r.code ?? "—"}</TableCell>
       <TableCell className="py-1.5 font-medium">
         {r.name}
         {!r.isActive && <span className="ml-1 text-xs text-muted-foreground">(pasif)</span>}
       </TableCell>
-      {mode === "customer" ? (
+      {list !== "supplier" ? (
         <TableCell className="py-1.5 text-xs">{r.city ?? <span className="text-muted-foreground">—</span>}</TableCell>
       ) : (
         <TableCell className="py-1.5">
@@ -90,44 +93,38 @@ export function SupplierPickerModal({ open, onOpenChange, onPick, includeInactiv
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput.trim(), 250);
   const [role, setRole] = useState<SupplierRoleFilter>("ALL");
-  const data = useSupplierPickerData({ open, search, role, includeInactive, mode });
-  const headers = HEADERS[mode];
+  // Dönüştürme görünümü (yalnız tedarikçi kipi + customer:write): liste müşteri-only, satır → onay → BOTH.
+  const canConvert = useCanConvertCustomer() && mode === "supplier";
+  const [converting, setConverting] = useState(false);
+  const [convertRow, setConvertRow] = useState<SupplierPickerRow | null>(null);
+  const list: PickerList = converting ? "customer-only" : mode;
+  const data = useSupplierPickerData({ open, search, role, includeInactive, list });
+  const headers = HEADERS[list];
   const { rootRef, sentinelRef } = useInfiniteScroll({ hasMore: data.hasMore, isLoading: data.isFetchingNext, onLoadMore: data.fetchNext, enabled: open });
   const notice = supplierLoadNotice({ customersError: data.customersError, subcontractorsError: data.subcontractorsError, loading: data.isLoading });
+  // Kapanış dönüştürme görünümünü SIFIRLAR (arama/rol kalır): yeniden açılış hep tedarikçi listesidir.
+  const setOpen = (o: boolean) => {
+    if (!o) setConverting(false);
+    onOpenChange(o);
+  };
   const pick = (p: SupplierParty) => {
     onPick(p);
-    onOpenChange(false);
+    setOpen(false);
   };
-  const emptyText = search || role !== "ALL" ? SUPPLIER_PICKER_FILTERED_EMPTY : mode === "customer" ? CUSTOMER_PICKER_EMPTY : SUPPLIER_PICKER_EMPTY;
+  const onRow = (r: SupplierPickerRow) => (converting ? setConvertRow(r) : pick({ kind: r.kind, id: r.id }));
+  const emptyText = search || (role !== "ALL" && !converting) ? SUPPLIER_PICKER_FILTERED_EMPTY : EMPTY[list];
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={setOpen}>
       {/* Yükseklik SABİT (h-[85vh]): süzgeç/arama sonucu azalınca modal kısalmasın (kullanıcı isteği);
           liste kabı `min-h-0 flex-1` boşlukta da yerini korur. */}
       <DialogContent className="flex h-[85vh] max-w-4xl flex-col gap-3">
         <DialogHeader>
-          <DialogTitle>{TITLE[mode].title}</DialogTitle>
-          <DialogDescription>{TITLE[mode].description}</DialogDescription>
+          <DialogTitle>{TITLE[list].title}</DialogTitle>
+          <DialogDescription>{TITLE[list].description}</DialogDescription>
         </DialogHeader>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[16rem] flex-1">
-            <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input aria-label={mode === "customer" ? "Müşteri ara" : "Tedarikçi ara"} placeholder="Kod, ünvan, vergi no…" className="pl-8" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} autoFocus />
-          </div>
-          <Select value={role} onValueChange={(v) => setRole(v as SupplierRoleFilter)}>
-            <SelectTrigger aria-label="Rol" className="w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {roleFilterOptions(mode).map((o) => (
-                <SelectItem key={o.value} value={o.value}>
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <SupplierQuickCreate onCreated={pick} mode={mode} />
-        </div>
+        <SupplierPickerToolbar mode={mode} converting={converting} searchInput={searchInput} onSearchInput={setSearchInput} role={role} onRole={setRole} onCreated={pick} />
+        {canConvert && (converting ? <ConvertBackLink onClick={() => setConverting(false)} /> : <ConvertCustomerLink onClick={() => setConverting(true)} />)}
         {notice && <p className={cn("text-xs", notice.tone === "error" ? "text-destructive" : "text-amber-700 dark:text-amber-500")}>{notice.message}</p>}
         <div ref={rootRef} className="min-h-0 flex-1 overflow-auto rounded-md border">
           <Table>
@@ -140,7 +137,7 @@ export function SupplierPickerModal({ open, onOpenChange, onPick, includeInactiv
             </TableHeader>
             <TableBody>
               {data.rows.map((r) => (
-                <PickerRow key={r.key} r={r} mode={mode} onPick={pick} />
+                <PickerRow key={r.key} r={r} list={list} onPick={onRow} />
               ))}
               {!data.isLoading && data.rows.length === 0 && (
                 <TableRow className="hover:bg-transparent">
@@ -154,6 +151,7 @@ export function SupplierPickerModal({ open, onOpenChange, onPick, includeInactiv
           <div ref={sentinelRef} aria-hidden className="h-px w-full" />
         </div>
         <StatusLine count={data.rows.length} hasMore={data.hasMore} isFetchingNext={data.isFetchingNext || data.isLoading} />
+        {canConvert && <ConvertCustomerConfirm row={convertRow} onCancel={() => setConvertRow(null)} onConverted={pick} />}
       </DialogContent>
     </Dialog>
   );

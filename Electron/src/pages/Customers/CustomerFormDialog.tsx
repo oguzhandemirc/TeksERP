@@ -43,6 +43,9 @@ interface Props {
   /** Yeni kartta tip varsayılanı — tedarikçi seçicisinden açılınca SUPPLIER (alan görünür kalır,
    *  kullanıcı değiştirebilir). Verilmezse katalog varsayılanı (CUSTOMER). */
   defaultType?: CustomerFormValues["type"];
+  /** Tip seçenekleri daraltması — tedarikçi seçicisinden açılınca yalnız SUPPLIER · BOTH (müşteri-only kart
+   *  tedarikçi listesine girmez; kullanıcı kararı 2026-09-17). Verilmezse üç tip. */
+  typeOptions?: readonly CompanyType[];
 }
 
 export function CustomerFormDialog({
@@ -53,6 +56,7 @@ export function CustomerFormDialog({
   isSubmitting,
   showBranchDraft = true,
   defaultType,
+  typeOptions,
 }: Props) {
   const isEdit = Boolean(initial);
   // customers.branchesEnabled kapalıyken şube yüzeyleri (sekme + taslak) gizlenir;
@@ -140,7 +144,7 @@ export function CustomerFormDialog({
               <EnumSelect<CompanyType>
                 value={field.value}
                 onChange={field.onChange}
-                labels={companyTypeLabels}
+                labels={pickTypeLabels(typeOptions)}
               />
             )}
           />
@@ -375,4 +379,12 @@ export function CustomerFormDialog({
       />
     </>
   );
+}
+
+/** Tip etiketleri — `typeOptions` verilmişse o alt küme (sıra katalog sırası), yoksa hepsi. */
+function pickTypeLabels(typeOptions?: readonly CompanyType[]): Record<CompanyType, string> {
+  if (!typeOptions) return companyTypeLabels;
+  const out: Partial<Record<CompanyType, string>> = {};
+  for (const k of Object.keys(companyTypeLabels) as CompanyType[]) if (typeOptions.includes(k)) out[k] = companyTypeLabels[k];
+  return out as Record<CompanyType, string>;
 }
