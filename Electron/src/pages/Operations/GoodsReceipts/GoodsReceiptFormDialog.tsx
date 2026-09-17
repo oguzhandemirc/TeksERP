@@ -12,7 +12,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { SupplierSelect } from "@/components/forms/SupplierSelect";
 import { supplierPartyPayload, type SupplierParty } from "@/components/forms/supplierParty";
 import { useMultiWarehouse, useDefaultWarehouse, WAREHOUSES_QUERY_KEY } from "@/hooks/useWarehouses";
-import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { useDevereLotRequired, useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { expandLineKeys, localLineIssues, receiptLinesInvalidFrom, serverLineIssues } from "./receiptLineIssues";
 import { createGoodsReceipt } from "./service";
 import { receiptSuccessText } from "./receiptFeedback";
 import {
@@ -80,6 +81,15 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
   const totals = receiptTotals(lines, yarnIds);
   // İplik-only fiş MEŞRU — "top yok" diye kilitlemek 500 kg ipliği girilemez yapardı.
   const valid = Boolean(effectiveWarehouseId) && (totals.rolls > 0 || totals.yarnLines > 0);
+  // C8: doğrulama sınıfı hata SATIRDA — yerel (bayrak biliniyorsa sunucuya gitmeden) + sunucu 400 `details.lines` (aynı alan).
+  const lotRequired = useDevereLotRequired();
+  const [serverIssues, setServerIssues] = useState<ReadonlyMap<string, string>>(new Map());
+  const localIssues = localLineIssues(lines, yarnIds, lotRequired);
+  const lineIssues = new Map([...serverIssues, ...localIssues]);
+  const setLinesAndClear = (next: DraftLine[] | ((prev: DraftLine[]) => DraftLine[])) => {
+    setServerIssues(new Map());
+    setLines(next);
+  };
   const submitSummary =
     [
       totals.rolls > 0 ? `${totals.rolls} top` : null,
@@ -105,8 +115,13 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
         purchaseOrderId,
         lines: expandLines(lines, yarnIds),
       }),
+    onError: (error) => {
+      // C8: sunucu ön-uçuşu → satıra bağla, modal AÇIK kalır, toast yok. Başka hata → mevcut yol (interceptor toast'ı).
+      const issues = receiptLinesInvalidFrom(error);
+      if (issues) setServerIssues(serverLineIssues(issues, expandLineKeys(lines)));
+    },
     onSuccess: (res) => {
-      // Atlanan satır varsa SESSİZ GEÇME — sebebiyle söyle.
+      // Atlanan satır varsa SESSİZ GEÇME — sebebiyle söyle (yalnız KOŞU ANI hataları: yarış/409).
       const failed = res.data.failed ?? [];
       if (failed.length > 0) {
         toast.warning(`${failed.length} satır atlandı: ${failed.map((f) => f.reason).slice(0, 2).join(" · ")}`);
@@ -263,7 +278,7 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
               kalemleri kumaş sayar: iplik satırı renk/en/kat sorar, backend
               400 verir ve "kg" rozeti hiç çizilmez (sözleşme ReceiptLineRows
               Props yorumunda). */}
-          <ReceiptLineRows lines={lines} onChange={setLines} yarnItemIds={yarnIds} />
+          <ReceiptLineRows lines={lines} onChange={setLinesAndClear} yarnItemIds={yarnIds} lineIssues={lineIssues} />
 
           <div className="flex items-center justify-between">
             <Button variant="ghost" size="sm" onClick={() => setLines((ls) => [...ls, emptyLine()])}>
@@ -300,7 +315,11 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
           <Button variant="outline" onClick={() => onOpenChange(false)}>İptal</Button>
           {/* Düğme İÇERİĞİ söyler — yalnız-iplik fişte "0 top" yazmak operatöre
               "kaydedilecek bir şey yok" derdi (submitSummary iplik dalını taşır). */}
-          <Button disabled={!valid || createM.isPending} onClick={() => createM.mutate()}>
+          <Button
+            disabled={!valid || createM.isPending || localIssues.size > 0}
+            title={localIssues.size > 0 ? `${localIssues.size} satırda lot eksik — Devere ayarı lot zorunlu` : undefined}
+            onClick={() => createM.mutate()}
+          >
             {createM.isPending ? "Kaydediliyor…" : `Fişi Oluştur (${submitSummary})`}
           </Button>
         </DialogFooter>

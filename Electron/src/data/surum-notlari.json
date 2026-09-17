@@ -81,6 +81,11 @@
         },
         {
           "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Mal kabulde “Devere — lot zorunlu” ayarı açıkken lot yazılmamış iplik satırı sunucuda düşüyor, fiş yine de açılıyor ve pencere “1 satır atlandı” diyerek kapanıyordu — içi boş fiş kalıyordu. Artık lot, bobin adedi, pasif ya da yanlış türde ürün gibi doğrulama hataları hiçbir satır yazılmadan reddedilir: eksik alan satırda kırmızı işaretlenir, “Fişi Oluştur” düzelene kadar kapalı kalır ve pencere açık kalır; sunucudan dönen aynı sınıf hata da ilgili satıra yazılır."
+        },
+        {
+          "kapsam": "panel",
           "tip": "yeni",
           "metin": "Üretim İstasyonları sayfasına liste görünümü geldi ve varsayılan oldu: her satır bir makine (İstasyon · Görev Türü · Tip · Departman · Yetenekler · Makine · Durum · Cihazlar · İşlemler), makinesi olmayan istasyon tek satır; satırdaki düzenle / QR / pasife al / sil işlemleri kart görünümündekiyle aynı, istasyon adına tıklayınca istasyon düzenlenir. Sayfa başlığındaki ikon çiftiyle kart görünümüne geçilir; son seçim bu bilgisayarda hatırlanır. Arama, filtreler, “Pasifleri göster” ve Excel/PDF dışa aktarımı iki görünümde ortaktır."
         },

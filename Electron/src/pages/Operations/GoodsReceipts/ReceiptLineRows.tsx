@@ -83,6 +83,8 @@ interface Props {
   /** İPLİK kalem id'leri (`useItemTypes` + `yarnIdsFrom`) — verilmezse tüm
    *  satırlar kumaş sayılır (eski davranış bayt-bayt korunur). */
   yarnItemIds?: ReadonlySet<string>;
+  /** C8: satır anahtarı → hata metni (yerel lot doğrulaması ya da sunucu 400 `details.lines`); lot kutusu kırmızı + role="alert". */
+  lineIssues?: ReadonlyMap<string, string>;
 }
 
 /** İplik satırının TAŞIYAMAYACAĞI alanlar dolu mu? (backend 400 kümesinin aynası) */
@@ -95,7 +97,7 @@ function clearYarnStrays(l: DraftLine): DraftLine {
   return { ...l, colorId: null, width: null, weightKg: null, foldType: null, propertyIds: [] };
 }
 
-export function ReceiptLineRows({ lines, onChange, yarnItemIds }: Props) {
+export function ReceiptLineRows({ lines, onChange, yarnItemIds, lineIssues }: Props) {
   const { values: foldValues } = useFoldValues();
   const isYarn = (itemId: string) => Boolean(itemId && yarnItemIds?.has(itemId));
 
@@ -156,13 +158,21 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds }: Props) {
             {/* İPLİK: renk yerine LOT — irsaliyedeki lot numarası olduğu gibi (ayrıştırılmaz);
                 boş bırakılabilir, "lot zorunlu" ayarı açıksa sunucu satırı sebebiyle düşürür. */}
             {yarn ? (
-              <Input
-                placeholder="Lot no (irsaliye)"
-                maxLength={64}
-                aria-label={cellLabel(1, true)}
-                value={l.lotNo ?? ""}
-                onChange={(e) => patch(l.key, { lotNo: e.target.value || null })}
-              />
+              <div className="min-w-0">
+                <Input
+                  placeholder="Lot no (irsaliye)"
+                  maxLength={64}
+                  aria-label={cellLabel(1, true)}
+                  aria-invalid={lineIssues?.has(l.key) || undefined}
+                  className={lineIssues?.has(l.key) ? "border-destructive" : undefined}
+                  value={l.lotNo ?? ""}
+                  onChange={(e) => patch(l.key, { lotNo: e.target.value || null })}
+                />
+                {/* C8: doğrulama hatası SATIRDA ve ANINDA — modal kapanmaz, fiş doğmaz. */}
+                {lineIssues?.has(l.key) && (
+                  <p role="alert" className="mt-1 text-[11px] text-destructive">{lineIssues.get(l.key)}</p>
+                )}
+              </div>
             ) : (
               <ReferenceSelect<Color>
                 value={l.colorId}

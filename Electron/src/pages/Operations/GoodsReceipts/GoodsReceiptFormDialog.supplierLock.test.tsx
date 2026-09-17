@@ -21,6 +21,8 @@ let canReadPurchaseOrders = true;
 
 vi.mock("@/hooks/usePricingEnabled", () => ({
   useFeatureFlags: () => ({ data: { data: { financeEnabled } } }),
+  // C8: lot zorunluluğu bu testlerin konusu değil — KAPALI (bugünkü davranış); ayrı bekçi `GoodsReceiptFormDialog.lotRequired.test`.
+  useDevereLotRequired: () => false,
 }));
 vi.mock("@/hooks/useRoleAccess", () => ({
   useRoleAccess: () => ({
