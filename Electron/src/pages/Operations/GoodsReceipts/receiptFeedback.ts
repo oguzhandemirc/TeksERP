@@ -1,7 +1,7 @@
 // =============================================================================
 // MAL KABUL SONRASI GERİ BİLDİRİM (B5) — "toplar NEREYE düştü"
 // =============================================================================
-// SAHA NOTU: depocu fişi kaydediyor, topları Envanter'de aramaya gidiyor ve
+// SAHA NOTU: depocu fişi kaydediyor, topları Kumaş Stoğu'nda aramaya gidiyor ve
 // bulamıyor sanıyordu. Davranış doğruydu (toplar Bitmiş Depo sekmesinde,
 // `updatedAt desc` ile en üstte); eksik olan tek şey CÜMLEYDİ.
 //
@@ -14,13 +14,13 @@
 // eklendi" der, envanterde 3 top vardır — sessiz ve tam ters bir sonuç.
 //
 // ⚠️ HEDEF C2'YE BAĞLIDIR: `rawStockEntry` fişi ham stok girişi yapar ve toplar
-// `STOCK` doğar → Envanter'de ham stok sekmesine düşerler. Tek bir sekme adı
+// `STOCK` doğar → Kumaş Stoğu'nda ham stok sekmesine düşerler. Tek bir sekme adı
 // yazmak, kullanıcıyı doğru sekmede boş listeye bakarken bırakırdı.
 //
 // ⚠️⚠️ SEKME ADI SABİT YAZILMAZ, `rollTabLabel`DEN ÇÖZÜLÜR. İlk yazımda burada
 // `"Ham Stok" / "Bitmiş Depo"` sabitleri vardı ve BU EKRANDA TANIM GEREĞİ
 // YANLIŞTI: Mal Kabul yalnız ticaret kurulumunda çıkıyor, orada
-// `finance.enabled` AÇIK ve Envanter şeridi o sekmeleri "Yeni Giren" / "Depo"
+// `finance.enabled` AÇIK ve Kumaş Stoğu şeridi o sekmeleri "Yeni Giren" / "Depo"
 // diye çiziyor (`tabs-regime.TRADE_LABELS`). Yani cümle kullanıcıyı ekranda
 // OLMAYAN bir sekmeye gönderiyordu — bu dosyanın var oluş sebebi olan şikâyeti
 // ("malı bulamıyorum") aynen yeniden üreterek. Bir yüzey sekme adını ikinci kez
@@ -53,7 +53,7 @@ export interface ReceiptOutcome {
 }
 
 /**
- * Envanter sekmesinin adı — topların gerçekten düştüğü yer, EKRANDA YAZDIĞI
+ * Kumaş Stoğu sekmesinin adı — topların gerçekten düştüğü yer, EKRANDA YAZDIĞI
  * ADLA. Kaynak `tabs-regime` (şerit · komut paleti · özet indirmesi de onu
  * okur); burada ikinci bir sözlük tutulmaz.
  */
@@ -75,8 +75,8 @@ export function receiptSuccessText(o: ReceiptOutcome): string {
   if (o.rollCount > 0) {
     parts.push(
       o.rawStockEntry
-        ? `${o.rollCount} top Envanter → ${shelf} sekmesinde (işlenecek mal olarak alındı).`
-        : `${o.rollCount} top Envanter → ${shelf} sekmesinde.`,
+        ? `${o.rollCount} top Kumaş Stoğu → ${shelf} sekmesinde (işlenecek mal olarak alındı).`
+        : `${o.rollCount} top Kumaş Stoğu → ${shelf} sekmesinde.`,
     );
   }
   if (o.yarnLineCount > 0) {

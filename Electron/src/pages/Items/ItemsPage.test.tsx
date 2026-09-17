@@ -20,6 +20,7 @@ import { join, relative, resolve } from "node:path";
 import { ItemsPage } from "./ItemsPage";
 import { ITEM_URL_FILTERS, itemCatalogFilterDefs, itemStatusFilters, parseItemStatus } from "./itemsFilters";
 import { labeledSelectText } from "@/components/forms/LabeledSelect";
+import { ITEM_CATALOG_HINT } from "@/components/forms/itemPicker";
 
 const listCursor = vi.fn();
 vi.mock("./service", () => ({ itemService: { listCursor: (...a: unknown[]) => listCursor(...a), getAll: vi.fn(), getById: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), hardRemove: vi.fn(), restore: vi.fn() } }));
@@ -108,6 +109,7 @@ describe("ItemsPage — ad + süzgeç şeridi", () => {
     await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", allowedColorId: "c1" }));
     const renk = screen.getByRole("combobox", { name: "Renk" });
     expect(renk).toHaveTextContent("Renk: Krem");
+    expect(renk).toHaveAttribute("title", ITEM_CATALOG_HINT); // ipucu modalla TEK kaynak
     await user.click(screen.getByRole("combobox", { name: "Özellik" }));
     await user.click(await screen.findByRole("option", { name: "Fitilli" }));
     await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", allowedColorId: "c1", allowedPropertyId: "p1" }));

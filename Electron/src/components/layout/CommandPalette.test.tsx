@@ -93,10 +93,10 @@ describe("CommandPalette", () => {
 
   it("alt başlık (sekme) boş palette YOK, aranınca VAR", async () => {
     open();
-    expect(screen.queryByText("Envanter · Ham Stok")).not.toBeInTheDocument();
+    expect(screen.queryByText("Kumaş Stoğu · Ham Stok")).not.toBeInTheDocument();
 
     type("ham stok");
-    expect(await screen.findByText("Envanter · Ham Stok")).toBeInTheDocument();
+    expect(await screen.findByText("Kumaş Stoğu · Ham Stok")).toBeInTheDocument();
   });
 
   it("tek tek ayar satırı adıyla bulunur ve kendi sekmesini açar", async () => {

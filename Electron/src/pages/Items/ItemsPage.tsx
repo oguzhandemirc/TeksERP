@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CrudPage } from "@/components/layout/CrudPage";
 import { LabeledSelect } from "@/components/forms/LabeledSelect";
+import { ITEM_CATALOG_HINT } from "@/components/forms/itemPicker";
 import { useItemPickerCatalogs } from "@/components/forms/useItemPickerData";
 import { itemColumns } from "./columns";
 import { itemService } from "./service";
@@ -12,7 +13,6 @@ import {
   ITEM_STATUS_OPTIONS,
   ITEM_STATUS_PARAM,
   ITEM_URL_FILTERS,
-  ITEM_CATALOG_HINT,
   itemCatalogFilterDefs,
   itemStatusFilters,
   itemUrlFilterParam,

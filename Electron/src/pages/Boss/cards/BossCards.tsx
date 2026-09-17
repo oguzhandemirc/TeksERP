@@ -23,7 +23,7 @@ export function StokCard({ data }: { data: BossStock }) {
       title="Stok"
       icon={Boxes}
       onDrill={() => nav("/operations/rolls")}
-      drillLabel="Envanter"
+      drillLabel="Kumaş Stoğu"
     >
       <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <BossStat label="Ham stok" value={m(data.rawQty)} />

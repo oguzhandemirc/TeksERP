@@ -65,7 +65,7 @@ export function RollsPage() {
   // "Tümünü İndir" ilerlemesi (sağ alt) — 30k'da "N / ~T" göstergesi için.
   const [dlProgress, setDlProgress] = useState<{ loaded: number; total?: number } | null>(null);
   // TİCARET REJİMİ: üretim sekmeleri süzülür, depo etiketleri değişir.
-  // ⚠️ Şerit, "Envanter Özeti" indirmesi ve sekme sırası AYNI listeyi okur —
+  // ⚠️ Şerit, "Kumaş Stoğu Özeti" indirmesi ve sekme sırası AYNI listeyi okur —
   // biri ham `ROLL_TABS`e dönerse ticaret kullanıcısına gizlenen sekme geri
   // gelir (ya da özet Excel'i tanım gereği boş sayfalar üretir).
   const flags = useFeatureFlags().data?.data;
@@ -82,7 +82,7 @@ export function RollsPage() {
   // Depo kolonu + filtresi yalnız ÇOK DEPOLU kurulumda çizilir (tek kaynak hook).
   const { multiWarehouse } = useMultiWarehouse();
 
-  // "Envanter Özeti" — her kategori için backend sayımı (top + metre) tek Excel'e.
+  // "Kumaş Stoğu Özeti" — her kategori için backend sayımı (top + metre) tek Excel'e.
   // Tablo-dışı KANBAN hariç tüm sekmeler; ekrandaki 100 değil GERÇEK toplamlar.
   const handleSummary = async () => {
     if (summaryBusy) return;
@@ -93,10 +93,10 @@ export function RollsPage() {
         label: t.label,
       }));
       if (await downloadInventorySummary(summaryTabs)) {
-        toast.success("Envanter özeti indirildi.");
+        toast.success("Kumaş stoğu özeti indirildi.");
       }
     } catch {
-      toast.error("Envanter özeti oluşturulamadı.");
+      toast.error("Kumaş stoğu özeti oluşturulamadı.");
     } finally {
       setSummaryBusy(false);
     }
@@ -207,7 +207,7 @@ export function RollsPage() {
   const exportAll = useTableExportAll({
     table: dataTable.table,
     fetchAll: dataTable.fetchAll,
-    name: "Envanter",
+    name: "Kumaş Stoğu",
   });
 
   // "Fire kaliteyi de göster" — URL filter[includeFire]; tablo + özet ikisi de okur.
@@ -268,7 +268,7 @@ export function RollsPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Envanter"
+        title="Kumaş Stoğu"
         actions={
           <>
             {/* Y2 fix: tablo key'leri artık ["rolls", tab] array formunda —
@@ -362,7 +362,7 @@ export function RollsPage() {
           table={dataTable.table}
           isLoading={dataTable.query.isLoading}
           pagination={dataTable.pagination}
-          exportName="Envanter"
+          exportName="Kumaş Stoğu"
           paginationActions={
             <>
               <ExportMenu
@@ -385,7 +385,7 @@ export function RollsPage() {
                 ) : (
                   <ClipboardList className="h-3.5 w-3.5" />
                 )}
-                Envanter Özeti
+                Kumaş Stoğu Özeti
               </Button>
             </>
           }

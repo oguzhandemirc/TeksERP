@@ -6,7 +6,7 @@
 // top başına barkod okutma olarak dayatıyordu.
 //
 // ÜÇ GİRİŞ YOLU, tek diyalog:
-//   ① Listeden seçim (Envanter'de satır işaretle → bu diyalog seçimle açılır)
+//   ① Listeden seçim (Kumaş Stoğu'nda satır işaretle → bu diyalog seçimle açılır)
 //   ② MİKTAR MODU — "3 top patos" de, sistem FIFO ile en eskileri önerir
 //   ③ Barkod okutma — opsiyonel, isteyene (bu diyalogda ayrı bir yol değil;
 //      Paketleme/Çuvallar ekranı fiziksel okutma akışını taşımaya devam eder)
@@ -39,7 +39,7 @@ import { quickShip, findRollsForQuickShip, type QuickShipRoll } from "./quickShi
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Envanter'den işaretlenerek gelen toplar (① listeden seçim yolu). */
+  /** Kumaş Stoğu'ndan işaretlenerek gelen toplar (① listeden seçim yolu). */
   initialRolls?: QuickShipRoll[];
   /** Sevk sonrası irsaliyeyi açmak için — sevkiyat id'si döner. */
   onShipped?: (shipmentId: string) => void;
@@ -194,7 +194,7 @@ export function QuickShipDialog({ open, onOpenChange, initialRolls = [], onShipp
           <div className="max-h-[34vh] overflow-auto rounded-md border">
             {rolls.length === 0 ? (
               <p className="p-6 text-center text-sm text-muted-foreground">
-                Henüz top eklenmedi — yukarıdan miktarla ekleyin ya da Envanter'den seçip gelin.
+                Henüz top eklenmedi — yukarıdan miktarla ekleyin ya da Kumaş Stoğu'ndan seçip gelin.
               </p>
             ) : (
               <table className="w-full text-sm">

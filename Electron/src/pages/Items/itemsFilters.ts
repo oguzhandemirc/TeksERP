@@ -62,9 +62,6 @@ export const ITEM_URL_FILTERS: readonly ItemUrlFilterDef[] = [
 
 export const itemUrlFilterParam = (key: ItemUrlFilterKey) => `filter[${key}]`;
 
-/** Modaldaki ipucuyla aynı cümle (`ItemPickerModal` CATALOG_HINT, dışa açık değil — 6e'nin dosyasına dokunulmadı). */
-export const ITEM_CATALOG_HINT = "Listesi boş ürünler her seçenekte görünür";
-
 export interface ItemCatalogFilterDef extends Omit<ItemUrlFilterDef, "options"> {
   /** `null` = katalog sığmadı (`loadAllForPicker` fırlattı) → seçici hiç çizilmez, liste çalışır (modalla aynı karar). */
   options: readonly { value: string; label: string }[] | null;

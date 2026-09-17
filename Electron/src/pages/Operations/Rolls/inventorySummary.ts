@@ -8,7 +8,7 @@ export interface SummaryTab {
 }
 
 /**
- * "Envanter Özeti" — her kategori (Ham Stok, Bitmiş Depo, Çuvalda, Fasonda…) için
+ * "Kumaş Stoğu Özeti" — her kategori (Ham Stok, Bitmiş Depo, Çuvalda, Fasonda…) için
  * backend SAYIM sorgusu (top sayısı + toplam metre) çekip TEK Excel sayfasına dizer.
  * Tüm satırları indirmez, yalnız hafif COUNT/SUM. TEK istek: `stats-batch` uç noktası
  * tüm kategorileri tek çağrıda (backend Promise.all) sayar — 8 ayrı HTTP değil.
@@ -27,7 +27,7 @@ export async function downloadInventorySummary(tabs: SummaryTab[]): Promise<bool
   });
   const blob = await buildWorkbook([
     {
-      name: "Envanter Özeti",
+      name: "Kumaş Stoğu Özeti",
       columns: [
         { header: "Kategori", key: "label", width: 24 },
         { header: "Top Sayısı", key: "count", width: 14, numFmt: "#,##0" },
@@ -36,5 +36,5 @@ export async function downloadInventorySummary(tabs: SummaryTab[]): Promise<bool
       rows,
     },
   ]);
-  return saveWorkbook(blob, exportListName("Envanter Özeti"));
+  return saveWorkbook(blob, exportListName("Kumaş Stoğu Özeti"));
 }

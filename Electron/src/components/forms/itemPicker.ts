@@ -28,6 +28,8 @@ export const ITEM_TYPE_FILTER_OPTIONS: readonly { value: ItemTypeFilter; label: 
 ];
 /** Radix Select boş string değeri kabul etmez — "Tümü" seçeneği bu sabitle taşınır. */
 export const ITEM_PICKER_ANY = "__ANY__";
+/** Renk/Özellik süzgecinin anlamı — modal ve Ürünler listesi AYNI cümleyi taşır (tek kaynak). */
+export const ITEM_CATALOG_HINT = "Listesi boş ürünler her seçenekte görünür";
 
 /** Çağıranın izin verdiği türler (mal kabul: iplik + kumaş — fiş sarf almaz; alış siparişi: üçü). Boş/verilmemiş = üçü. */
 export type AllowedItemTypes = readonly ItemType[];

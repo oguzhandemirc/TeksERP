@@ -559,10 +559,10 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         key: "productionEnabled",
         title: "Üretim modülünü aç",
         summary:
-          "Envanterdeki üretim sekmeleri ve siparişlerdeki iş emri yüzeyleri çizilir.",
+          "Kumaş Stoğu'ndaki üretim sekmeleri ve siparişlerdeki iş emri yüzeyleri çizilir.",
         defaultOn: true,
         audience: ["Planlamacı", "Yönetim"],
-        desc: "AÇIK (varsayılan) olduğunda Envanter'de üretim sekmeleri (Üretimde · Üretim Akışı · Fasonda · Kurşun/Tambur Bekleyen) ve Siparişler'de iş emri kolonu/filtresi/toplu aksiyonu görünür. ⚠️ Ön muhasebeden BAĞIMSIZDIR: ikisi aynı anda açık olabilir — muhasebe tutan bir fabrika üretim ekranlarını kaybetmemeli. Kapatmak yalnız bu yüzeyleri gizler; iş emri verisi ve akışı yerinde kalır. Ayarlar ekranında da 'Üretim & Kalite' bölümü bu anahtara bağlıdır.",
+        desc: "AÇIK (varsayılan) olduğunda Kumaş Stoğu'nda üretim sekmeleri (Üretimde · Üretim Akışı · Fasonda · Kurşun/Tambur Bekleyen) ve Siparişler'de iş emri kolonu/filtresi/toplu aksiyonu görünür. ⚠️ Ön muhasebeden BAĞIMSIZDIR: ikisi aynı anda açık olabilir — muhasebe tutan bir fabrika üretim ekranlarını kaybetmemeli. Kapatmak yalnız bu yüzeyleri gizler; iş emri verisi ve akışı yerinde kalır. Ayarlar ekranında da 'Üretim & Kalite' bölümü bu anahtara bağlıdır.",
       },
       {
         key: "financeEnabled",

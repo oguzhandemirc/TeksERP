@@ -106,7 +106,7 @@ export function YarnStockPage() {
   return (
     <PageShell>
       <PageHeader
-        title="İplik Kg-Stok"
+        title="İplik Stoğu"
         description="İplik kg ile izlenir (top/barkod yok). Defter satırları silinmez — yanlış giriş ters kayıtla (sayım düzeltmesi) kapatılır."
         actions={
           <PermissionGate permission="yarn:write">

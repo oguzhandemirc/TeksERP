@@ -30,12 +30,11 @@ import {
   type AllowedItemTypes,
   type ItemPickerFilterState,
   type ItemPickerRow,
-  type ItemTypeFilter,
+  type ItemTypeFilter, ITEM_CATALOG_HINT,
 } from "./itemPicker";
 import { useItemPickerCatalogs, useItemPickerData, type CatalogOption } from "./useItemPickerData";
 
 const HEADERS = ["Kod", "Ad", "Tür", "Birim", "Renkler", "Özellikler"] as const;
-const CATALOG_HINT = "Listesi boş ürünler her seçenekte görünür";
 
 interface Props {
   open: boolean;
@@ -94,7 +93,7 @@ function CatalogSelect({ label, value, options, onChange }: { label: string; val
   if (options === null) return null;
   return (
     <Select value={value ?? ITEM_PICKER_ANY} onValueChange={(v) => onChange(v === ITEM_PICKER_ANY ? null : v)}>
-      <SelectTrigger aria-label={label} title={CATALOG_HINT} className="w-48">
+      <SelectTrigger aria-label={label} title={ITEM_CATALOG_HINT} className="w-48">
         <SelectValue>{triggerText(label, options.find((o) => o.id === value)?.label)}</SelectValue>
       </SelectTrigger>
       <SelectContent>

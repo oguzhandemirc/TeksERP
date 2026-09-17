@@ -279,12 +279,27 @@ export const operationsTiles: OperationsTile[] = [
   },
   {
     key: "rolls",
-    title: "Envanter",
-    description: "Ham/bitmiş stok ve top yaşam döngüsü",
+    // "Kumaş Stoğu" (2026-09-17): sektör kalıbı — stok ekranı malzeme sınıfına göre adlanır; eski genel ad her şeyi
+    // kapsıyormuş gibi okunuyordu, oysa yalnız TOPLAR. Route/izin/key değişmedi.
+    title: "Kumaş Stoğu",
+    description: "Toplar — depo, statü, metraj",
     icon: Package,
     to: "/operations/rolls",
     group: "warehouse",
     permission: "roll:read",
+  },
+  {
+    // Kumaş Stoğu'nun hemen yanında (kullanıcı: iki stok karosu YAN YANA, Mal Kabul üçüncü). Paket D
+    // (2026-08-14) ticaret paketi: `visibleWhen` REJİM bayrağına bağlı, fabrikada HİÇ çizilmez; yüklem SAF
+    // modülden DOĞRUDAN (sarmalayan ok fonksiyonu YAZILMAZ — palet bekçisi `toBe` ile aynı nesneyi ölçer).
+    key: "yarn-stock",
+    title: "İplik Stoğu",
+    description: "Lotlar — kg bakiyesi",
+    icon: Boxes,
+    to: "/operations/yarn-stock",
+    group: "warehouse",
+    permission: "warehouse:read",
+    visibleWhen: isYarnStockVisible,
   },
   {
     key: "goods-receipts",
@@ -304,22 +319,11 @@ export const operationsTiles: OperationsTile[] = [
     permission: "goods-receipt:read",
     visibleWhen: isGoodsReceiptVisible,
   },
-  // ── Paket D (2026-08-14) — ticaret paketi ─────────────────────────────────
-  // İkisi de `visibleWhen` ile REJİM bayrağına bağlı: fabrikada
-  // `finance.enabled` KAPALI ve bu karolar orada HİÇ çizilmez. Yüklem SAF bir
-  // modülden DOĞRUDAN geçirilir (sarmalayan ok fonksiyonu YAZILMAZ) — komut
-  // paleti bekçisi karo ile palet girişinin AYNI fonksiyon nesnesini taşıdığını
-  // `toBe` ile doğruluyor.
-  {
-    key: "yarn-stock",
-    title: "İplik Kg-Stok",
-    description: "İplik kg bakiyeleri + hareket dökümü (top/barkod yok)",
-    icon: Boxes,
-    to: "/operations/yarn-stock",
-    group: "warehouse",
-    permission: "warehouse:read",
-    visibleWhen: isYarnStockVisible,
-  },
+  // ── Paket D (2026-08-14) — ticaret paketi (İplik Stoğu yukarıda, aynı kural) ─────
+  // `visibleWhen` ile REJİM bayrağına bağlı: fabrikada `finance.enabled` KAPALI ve
+  // karo orada HİÇ çizilmez. Yüklem SAF bir modülden DOĞRUDAN geçirilir (sarmalayan
+  // ok fonksiyonu YAZILMAZ) — komut paleti bekçisi karo ile palet girişinin AYNI
+  // fonksiyon nesnesini taşıdığını `toBe` ile doğruluyor.
   {
     key: "purchase-orders",
     title: "Alış Siparişleri",

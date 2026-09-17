@@ -27,7 +27,7 @@ import { KartelaDetailSheet, type KartelaSelection } from "./KartelaDetailSheet"
 import { DispatchesTab, ReceiptsTab } from "./KartelaTabs";
 
 // Tek kokpit: belge akışı (Sevkler/Kabuller) + envanter (Kartelada Toplar =
-// AT_KARTELA rulolar, Üretilen Kartelalar = swatch'lar). Envanter görünümleri
+// AT_KARTELA rulolar, Üretilen Kartelalar = swatch'lar). Kumaş Stoğu görünümleri
 // Toplar sayfasından buraya taşındı — kartela tek yerden yönetilir.
 type Tab = "dispatches" | "receipts" | "rolls" | "swatches";
 
@@ -167,7 +167,7 @@ export function KartelaPage() {
         trailing={
           tab === "rolls" ? (
             <>
-              <DataTableTools table={rollsTable.table} exportName="Envanter" fetchAll={rollsTable.fetchAll} />
+              <DataTableTools table={rollsTable.table} exportName="Kumaş Stoğu" fetchAll={rollsTable.fetchAll} />
               <SavedViewsMenu />
               <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
                 <Checkbox

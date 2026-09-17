@@ -27,7 +27,7 @@ export const operationGroups: OperationGroup[] = [
   {
     key: "warehouse",
     title: "Depo & Paketleme",
-    description: "Envanter, çuval içeriği/paketleme ve etiket düzeltme",
+    description: "Kumaş ve iplik stoğu, çuval içeriği/paketleme ve etiket düzeltme",
     icon: Warehouse,
   },
   {

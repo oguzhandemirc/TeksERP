@@ -26,11 +26,11 @@ import { systemTileSections } from "@/pages/System/tile-config";
  * palet girişi de kendiliğinden kaybolur.
  */
 
-/** Envanter sekmeleri — `/operations/rolls?tab=<key>`. */
+/** Kumaş Stoğu sekmeleri — `/operations/rolls?tab=<key>`. */
 const rollTabEntries: CommandEntry[] = ROLL_TABS.map((t) => ({
   key: `rolls-tab:${t.key}`,
-  label: `Envanter · ${t.label}`,
-  description: "Envanter sekmesi",
+  label: `Kumaş Stoğu · ${t.label}`,
+  description: "Kumaş Stoğu sekmesi",
   icon: t.Icon,
   to: `/operations/rolls?tab=${t.key}`,
   permission: "roll:read",
@@ -156,7 +156,7 @@ const orphanPageEntries: CommandEntry[] = [
 ];
 
 export const deepCommandSections: CommandSection[] = [
-  { heading: "Sayfa İçi · Envanter", entries: rollTabEntries },
+  { heading: "Sayfa İçi · Kumaş Stoğu", entries: rollTabEntries },
   { heading: "Sayfa İçi · Etiketler", entries: labelTabEntries },
   { heading: "Ayar Satırları", entries: settingsFlagEntries },
   { heading: "Hub Bölümleri", entries: hubGroupEntries },
