@@ -40,6 +40,19 @@ export const subcontractorColumns: ColumnDef<Subcontractor>[] = [
     ),
   },
   {
+    id: "customer",
+    header: "Bağlı cari",
+    // Fason = carinin rolü: bağlı kart "Ad — KOD"; bağsız fason "—" (bugünkü davranış).
+    cell: ({ row }) =>
+      row.original.customer ? (
+        <span className="text-xs">
+          {row.original.customer.name} <span className="font-mono text-muted-foreground">— {row.original.customer.code}</span>
+        </span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  {
     accessorKey: "phone",
     header: () => <SortableHeader field="phone" label="Telefon" />,
     cell: ({ row }) =>

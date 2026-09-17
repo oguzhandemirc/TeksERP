@@ -15,11 +15,14 @@ import { companyTypeLabels } from "@/types/enums";
 
 describe("cariQueryPlan", () => {
   it("rol seçilmemişse iki kaynak da çekilir, tür süzgeci yok", () => {
-    expect(cariQueryPlan("")).toEqual({ customers: true, subcontractors: true });
+    // Fason = carinin rolü (2026-09-17): "Tüm roller"de fason bacağı yalnız BAĞSIZ fasonları ister — bağlı fason
+    // cari satırında "· Fason" rozetiyle tek kez görünür.
+    expect(cariQueryPlan("")).toEqual({ customers: true, subcontractors: true, unlinkedSubcontractorsOnly: true });
   });
 
   it("⭐ Fason seçiliyken müşteri ucu HİÇ çağrılmaz", () => {
-    expect(cariQueryPlan("SUBCONTRACTOR")).toEqual({ customers: false, subcontractors: true });
+    // "Fason" süzgeci fason LİSTESİDİR: bağlı olanlar da fason satırı olarak gelir (bağsız kısıtı yok).
+    expect(cariQueryPlan("SUBCONTRACTOR")).toEqual({ customers: false, subcontractors: true, unlinkedSubcontractorsOnly: false });
   });
 
   it("⭐ müşteri rolleri `filter[type]` ile SUNUCUDA süzülür", () => {

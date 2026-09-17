@@ -45,10 +45,13 @@ export function cariQueryPlan(role: CariRoleFilter): {
   subcontractors: boolean;
   /** `filter[type]` — yalnız müşteri tarafında anlamlı. */
   companyType?: CompanyType;
+  /** Fason = carinin rolü: "Tüm roller"de bağlı fason CARİ satırında (rozet "· Fason") görünür, fason bacağı
+   *  yalnız BAĞSIZ fasonları ister (`filter[customerId]=null`); "Fason" süzgecinde fason bacağı hepsini getirir. */
+  unlinkedSubcontractorsOnly?: boolean;
 } {
-  if (role === "SUBCONTRACTOR") return { customers: false, subcontractors: true };
+  if (role === "SUBCONTRACTOR") return { customers: false, subcontractors: true, unlinkedSubcontractorsOnly: false };
   if (role) return { customers: true, subcontractors: false, companyType: role };
-  return { customers: true, subcontractors: true };
+  return { customers: true, subcontractors: true, unlinkedSubcontractorsOnly: true };
 }
 
 export interface CariMergeRow {

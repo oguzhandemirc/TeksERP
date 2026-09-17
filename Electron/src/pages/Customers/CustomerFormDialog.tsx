@@ -30,6 +30,7 @@ import type { Customer } from "./types";
 
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
+import { CustomerSubcontractorRole } from "./CustomerSubcontractorRole";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -261,6 +262,8 @@ export function CustomerFormDialog({
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" {...form.register("isActive")} /> Aktif
       </label>
+      {/* Fason = carinin rolü — kart kaydedildikten sonra (id var) anında yazan kutu; yeni kartta kaydettikten sonra. */}
+      {isEdit && initial && <CustomerSubcontractorRole customer={initial} />}
     </>
   );
 

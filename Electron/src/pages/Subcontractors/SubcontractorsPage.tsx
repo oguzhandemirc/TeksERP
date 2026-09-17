@@ -16,6 +16,7 @@ interface BackendPayload {
   isFavorite: boolean;
   documentProfileId: string | null;
   categoryIds: string[];
+  customerId: string | null;
 }
 
 export const buildSubcontractorPayload = (
@@ -31,6 +32,7 @@ export const buildSubcontractorPayload = (
   isFavorite: v.isFavorite,
   documentProfileId: v.documentProfileId ?? null,
   categoryIds: v.categoryIds,
+  customerId: v.customerId ?? null,
 });
 
 export function SubcontractorsPage() {

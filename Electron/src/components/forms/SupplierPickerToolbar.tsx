@@ -9,11 +9,13 @@ import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { SupplierParty } from "./supplierParty";
-import { roleFilterOptions, roleTriggerText, type PickerMode, type SupplierRoleFilter } from "./supplierPicker";
+import { roleFilterOptions, roleTriggerText, type PickerList, type PickerMode, type SupplierRoleFilter } from "./supplierPicker";
 import { SupplierQuickCreate } from "./SupplierQuickCreate";
 
 interface Props {
   mode: PickerMode;
+  /** Rol seçeneklerinin okunduğu liste (kip ya da `supplier-cari`). */
+  list: PickerList;
   converting: boolean;
   searchInput: string;
   onSearchInput: (v: string) => void;
@@ -22,7 +24,7 @@ interface Props {
   onCreated: (party: SupplierParty) => void;
 }
 
-export function SupplierPickerToolbar({ mode, converting, searchInput, onSearchInput, role, onRole, onCreated }: Props) {
+export function SupplierPickerToolbar({ mode, list, converting, searchInput, onSearchInput, role, onRole, onCreated }: Props) {
   const searchLabel = converting ? "Müşteri kartı ara" : mode === "customer" ? "Müşteri ara" : "Tedarikçi ara";
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -34,10 +36,10 @@ export function SupplierPickerToolbar({ mode, converting, searchInput, onSearchI
         <>
           <Select value={role} onValueChange={(v) => onRole(v as SupplierRoleFilter)}>
             <SelectTrigger aria-label="Rol" className="w-52">
-              <SelectValue>{roleTriggerText(mode, role)}</SelectValue>
+              <SelectValue>{roleTriggerText(list, role)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {roleFilterOptions(mode).map((o) => (
+              {roleFilterOptions(list).map((o) => (
                 <SelectItem key={o.value} value={o.value}>
                   {o.label}
                 </SelectItem>

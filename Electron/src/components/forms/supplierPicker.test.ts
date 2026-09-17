@@ -1,6 +1,6 @@
 // BEKÇİ — tedarikçi seçici saf katmanı (v3): rol → bacak/parametre · sayfa token geçişleri · satır eşlemesi
 import { describe, it, expect } from "vitest";
-import { CUSTOMER_ROLE_FILTER_OPTIONS, SUPPLIER_ALL_CUSTOMER_TYPES, SUPPLIER_ROLE_FILTER_OPTIONS, SUPPLIER_ROLE_LABEL, customerRow, firstPageToken, legsFor, nextPageToken, roleTriggerText, subcontractorRow, type PickerPage } from "./supplierPicker";
+import { CUSTOMER_ROLE_FILTER_OPTIONS, SUPPLIER_ALL_CUSTOMER_TYPES, SUPPLIER_ROLE_FILTER_OPTIONS, SUPPLIER_ROLE_LABEL, UNLINKED_SUBCONTRACTOR_FILTER, customerRow, firstPageToken, legsFor, nextPageToken, roleFilterOptions, roleTriggerText, rowRoleLabel, subcontractorRow, type PickerPage } from "./supplierPicker";
 import type { Customer } from "@/pages/Customers/types";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 import { companyTypeLabels } from "@/types/enums";
@@ -82,3 +82,27 @@ describe("supplierPicker — müşteri kipi", () => {
   });
 });
 
+// Fason = carinin rolü (2026-09-17): bağlı fason cari satırında TEK kez; fason bacağı yalnız bağsız; yalnız-cari liste.
+describe("supplierPicker — fason = carinin rolü", () => {
+  it("⭐ cari satırı AKTİF fason profiliyle 'Tedarikçi · Fason' rozeti taşır; pasif profil rol değildir; fason satırı düz 'Fason'", () => {
+    const bagli = customerRow({ id: "c1", code: "T", name: "X", type: "SUPPLIER", subcontractor: { id: "s1", isActive: true } } as Customer);
+    expect(bagli.hasSubcontractorProfile).toBe(true);
+    expect(rowRoleLabel(bagli)).toBe("Tedarikçi · Fason");
+    expect(bagli.kind).toBe("CUSTOMER");
+    const pasif = customerRow({ id: "c2", code: "T", name: "Y", type: "BOTH", subcontractor: { id: "s2", isActive: false } } as Customer);
+    expect(rowRoleLabel(pasif)).toBe("Müşteri + Tedarikçi");
+    expect(rowRoleLabel(customerRow({ id: "c3", code: "T", name: "Z", type: "SUPPLIER" } as Customer))).toBe("Tedarikçi");
+    expect(rowRoleLabel(subcontractorRow({ id: "s9", code: "F", name: "B" } as Subcontractor))).toBe("Fason");
+  });
+  it("⭐ fason bacağı süzgeci `filter[customerId]=null` — bağlı fason ikinci kez listelenmez", () => {
+    expect(UNLINKED_SUBCONTRACTOR_FILTER).toEqual({ customerId: "null" });
+  });
+  it("yalnız-cari liste (`supplier-cari`): fason bacağı yok, ALL = SUPPLIER,BOTH, rol seçeneklerinde Fason yok", () => {
+    expect(legsFor("ALL", "supplier-cari")).toEqual({ customers: true, subs: false, customerType: "SUPPLIER,BOTH" });
+    expect(legsFor("BOTH", "supplier-cari")).toEqual({ customers: true, subs: false, customerType: "BOTH" });
+    expect(legsFor("SUBCONTRACTOR", "supplier-cari")).toEqual({ customers: true, subs: false, customerType: "SUPPLIER,BOTH" });
+    expect(nextPageToken(page({ leg: "customers", cursor: null, type: "SUPPLIER,BOTH" }), "ALL", "supplier-cari")).toBeUndefined();
+    expect(roleFilterOptions("supplier-cari").map((o) => o.label)).toEqual(["Tümü", "Tedarikçi", "Müşteri + Tedarikçi"]);
+    expect(roleTriggerText("supplier-cari", "ALL")).toBe("Rol: Tümü");
+  });
+});

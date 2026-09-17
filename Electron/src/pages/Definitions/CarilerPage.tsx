@@ -37,7 +37,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PermissionGate } from "@/components/PermissionGate";
 import { apiErrorText } from "@/lib/api-error";
-import { SUPPLIER_ROLE_LABEL, type SupplierRole } from "@/components/forms/supplierPicker";
+import { SUPPLIER_ROLE_LABEL, UNLINKED_SUBCONTRACTOR_FILTER, type SupplierRole } from "@/components/forms/supplierPicker";
 import { CARI_ROLE_FILTER_OPTIONS, cariPageInfo, cariQueryPlan, mergeCariRows, type CariRoleFilter } from "./carilerPaging";
 import { customerService } from "@/pages/Customers/service";
 import { subcontractorService } from "@/pages/Subcontractors/service";
@@ -49,7 +49,7 @@ import type { Customer } from "@/pages/Customers/types";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 
 type Row =
-  | { kind: "CUSTOMER"; id: string; code: string; name: string; taxNumber: string | null; phone: string | null; isActive: boolean; role: SupplierRole; record: Customer }
+  | { kind: "CUSTOMER"; id: string; code: string; name: string; taxNumber: string | null; phone: string | null; isActive: boolean; role: SupplierRole; hasSubcontractorProfile: boolean; record: Customer }
   | { kind: "SUBCONTRACTOR"; id: string; code: string; name: string; taxNumber: string | null; phone: string | null; isActive: boolean; role: SupplierRole; record: Subcontractor };
 
 /** Rozet rengi ENUM anahtarıyla — etiket `SUPPLIER_ROLE_LABEL`tan çizilir, burada metin yok. */
@@ -104,7 +104,7 @@ export function CarilerPage() {
     enabled: plan.customers,
   });
   const subsQ = useQuery({
-    queryKey: ["subcontractors", "cariler", page, debouncedSearch],
+    queryKey: ["subcontractors", "cariler", page, debouncedSearch, plan.unlinkedSubcontractorsOnly ? "bagsiz" : "hepsi"],
     queryFn: () =>
       subcontractorService.getAll({
         page,
@@ -112,7 +112,8 @@ export function CarilerPage() {
         sortBy: "name",
         sortOrder: "asc",
         search: debouncedSearch || undefined,
-        filters: {},
+        // Fason = carinin rolü: bağlı fason cari satırında görünür, bu bacak "Tüm roller"de yalnız bağsızları ister.
+        filters: plan.unlinkedSubcontractorsOnly ? { ...UNLINKED_SUBCONTRACTOR_FILTER } : {},
       }),
     enabled: plan.subcontractors,
   });
@@ -129,6 +130,7 @@ export function CarilerPage() {
             phone: (c as { phone?: string | null }).phone ?? null,
             isActive: c.isActive,
             role: c.type,
+            hasSubcontractorProfile: c.subcontractor?.isActive === true,
             record: c,
           }),
         )
@@ -314,7 +316,14 @@ export function CarilerPage() {
                       {!r.isActive && <span className="ml-2 text-xs text-muted-foreground">(pasif)</span>}
                     </td>
                     <td className="px-3 py-2">
-                      <Badge className={ROLE_BADGE[r.role] ?? ""}>{SUPPLIER_ROLE_LABEL[r.role] ?? r.role}</Badge>
+                      <span className="flex flex-wrap items-center gap-1">
+                        <Badge className={ROLE_BADGE[r.role] ?? ""}>{SUPPLIER_ROLE_LABEL[r.role] ?? r.role}</Badge>
+                        {r.kind === "CUSTOMER" && r.hasSubcontractorProfile && (
+                          <Badge className={ROLE_BADGE.SUBCONTRACTOR} title="Bu carinin fason profili var (fason = carinin rolü)">
+                            {SUPPLIER_ROLE_LABEL.SUBCONTRACTOR}
+                          </Badge>
+                        )}
+                      </span>
                     </td>
                     <td className="px-3 py-2 font-mono text-xs">{r.taxNumber ?? "—"}</td>
                     <td className="px-3 py-2 text-muted-foreground">{r.phone ?? "—"}</td>

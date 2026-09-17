@@ -15,6 +15,9 @@ export interface Subcontractor {
   isFavorite: boolean;
   /** Belge şablon profili — null = genel Belge Şablonları ayarı. */
   documentProfileId?: string | null;
+  /** Fason = carinin rolü: bağlı cari kartı (null = bağsız fason, bugünkü davranış). */
+  customerId?: string | null;
+  customer?: { id: string; code: string; name: string; type: "CUSTOMER" | "SUPPLIER" | "BOTH" } | null;
   categories: SubcontractorCategoryLink[];
   createdAt: string;
   updatedAt: string;

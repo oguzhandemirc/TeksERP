@@ -14,6 +14,7 @@ import {
 } from "./schema";
 import type { Subcontractor } from "./types";
 import { loadAllForPicker } from "@/lib/picker-loader";
+import { SubcontractorCustomerLink } from "./SubcontractorCustomerLink";
 
 interface Props {
   open: boolean;
@@ -40,6 +41,7 @@ export function SubcontractorFormDialog({
         isFavorite: initial.isFavorite,
         documentProfileId: initial.documentProfileId ?? null,
         categoryIds: initial.categories.map((c) => c.categoryId),
+        customerId: initial.customerId ?? null,
       }
     : subcontractorFormDefaults;
 
@@ -146,6 +148,20 @@ export function SubcontractorFormDialog({
               )}
             </div>
           </FormField>
+
+          {/* Fason = carinin rolü — bağlı cari kartı; × bağı kaldırır, bağsızda tek tık cari oluştur. */}
+          <Controller
+            control={form.control}
+            name="customerId"
+            render={({ field }) => (
+              <SubcontractorCustomerLink
+                value={field.value ?? null}
+                onChange={field.onChange}
+                source={{ name: form.watch("name") ?? "", taxNumber: form.watch("taxNumber") ?? "", phone: form.watch("phone") ?? "", address: form.watch("address") ?? "" }}
+                disabled={isSubmitting}
+              />
+            )}
+          />
 
           <FormField
             label="Belge Şablon Profili"

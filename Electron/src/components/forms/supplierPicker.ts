@@ -17,8 +17,9 @@ export const SUPPLIER_PICKER_PAGE = 50;
 
 /** Seçici kipi: tedarikçi (alış: SUPPLIER/BOTH cari + fason) · müşteri (satış: yalnız cari, CUSTOMER sonra BOTH). */
 export type PickerMode = "supplier" | "customer";
-/** Listelenen küme: kip ya da dönüştürme görünümü (yalnız type=CUSTOMER kartlar; fason yok). */
-export type PickerList = PickerMode | "customer-only";
+/** Listelenen küme: kip · dönüştürme görünümü (yalnız type=CUSTOMER; fason yok) · yalnız cari tedarikçiler
+ *  (`supplier-cari`: SUPPLIER/BOTH, fason bacağı yok — fason profilinin "Bağlı cari" alanı). */
+export type PickerList = PickerMode | "customer-only" | "supplier-cari";
 
 export type SupplierRole = CompanyType | "SUBCONTRACTOR";
 export type SupplierRoleFilter = "ALL" | SupplierRole;
@@ -46,9 +47,12 @@ export const CUSTOMER_ROLE_FILTER_OPTIONS: readonly RoleOption[] = [
   { value: "CUSTOMER", label: SUPPLIER_ROLE_LABEL.CUSTOMER },
   { value: "BOTH", label: SUPPLIER_ROLE_LABEL.BOTH },
 ];
-export const roleFilterOptions = (mode: PickerMode) => (mode === "customer" ? CUSTOMER_ROLE_FILTER_OPTIONS : SUPPLIER_ROLE_FILTER_OPTIONS);
+/** Yalnız cari tedarikçiler (fason profilinin "Bağlı cari" alanı): Fason seçeneği yok. */
+export const SUPPLIER_CARI_ROLE_FILTER_OPTIONS: readonly RoleOption[] = SUPPLIER_ROLE_FILTER_OPTIONS.filter((o) => o.value !== "SUBCONTRACTOR");
+export const roleFilterOptions = (list: PickerList) =>
+  list === "customer" || list === "customer-only" ? CUSTOMER_ROLE_FILTER_OPTIONS : list === "supplier-cari" ? SUPPLIER_CARI_ROLE_FILTER_OPTIONS : SUPPLIER_ROLE_FILTER_OPTIONS;
 /** Süzgeç tetiği kapalıyken de ADINI taşır: "Rol: Tümü" / "Rol: Tedarikçi" (kullanıcı 03:27; açılır listede "Tümü" kalır). */
-export const roleTriggerText = (mode: PickerMode, role: SupplierRoleFilter) => `Rol: ${roleFilterOptions(mode).find((o) => o.value === role)?.label ?? "Tümü"}`;
+export const roleTriggerText = (list: PickerList, role: SupplierRoleFilter) => `Rol: ${roleFilterOptions(list).find((o) => o.value === role)?.label ?? "Tümü"}`;
 
 /** Sayfa token'ı — bacağı ve o bacaktaki konumu taşır; cari bacağında `type` = o bacağın `filter[type]`i
  *  (müşteri kipinde "Tümü" = CUSTOMER bacağı bitince BOTH bacağı; tedarikçi kipinde "Tümü" = tek CSV bacağı). */
@@ -65,6 +69,10 @@ export interface PickerLegs {
  *  yoldan sorulmaz — "Müşteri" rolü seçenek değildir; yine de gelirse "Tümü" gibi davranır (fail-closed). */
 export function legsFor(role: SupplierRoleFilter, list: PickerList = "supplier"): PickerLegs {
   if (list === "customer-only") return { customers: true, subs: false, customerType: "CUSTOMER" };
+  if (list === "supplier-cari") {
+    if (role === "SUPPLIER" || role === "BOTH") return { customers: true, subs: false, customerType: role };
+    return { customers: true, subs: false, customerType: SUPPLIER_ALL_CUSTOMER_TYPES };
+  }
   if (list === "customer") {
     if (role === "ALL") return { customers: true, subs: false, customerTypes: ["CUSTOMER", "BOTH"] };
     return { customers: true, subs: false, customerType: role === "BOTH" ? "BOTH" : "CUSTOMER" };
@@ -110,6 +118,8 @@ export interface SupplierPickerRow extends SupplierParty {
   code: string | null;
   name: string;
   role: SupplierRole;
+  /** Cari satırı AKTİF fason profili taşıyor (fason = carinin rolü) → rozet "… · Fason"; seçim yine `kind:"CUSTOMER"`. */
+  hasSubcontractorProfile: boolean;
   taxNumber: string | null;
   phone: string | null;
   /** Yalnız cari kartta (müşteri kipi "Şehir" kolonu); fasonda null. */
@@ -118,8 +128,13 @@ export interface SupplierPickerRow extends SupplierParty {
 }
 
 type RowSource = { id: string; code?: string | null; name: string; taxNumber?: string | null; isActive?: boolean };
-function row(kind: SupplierPartyKind, r: RowSource, extra: { role: SupplierRole; phone: string | null; city: string | null }): SupplierPickerRow {
+function row(kind: SupplierPartyKind, r: RowSource, extra: { role: SupplierRole; phone: string | null; city: string | null; hasSubcontractorProfile: boolean }): SupplierPickerRow {
   return { kind, id: r.id, key: `${kind}:${r.id}`, code: r.code ?? null, name: r.name, taxNumber: r.taxNumber ?? null, isActive: r.isActive !== false, ...extra };
 }
-export const customerRow = (c: Customer): SupplierPickerRow => row("CUSTOMER", c, { role: c.type, phone: c.contactPhone ?? null, city: c.city ?? null });
-export const subcontractorRow = (s: Subcontractor): SupplierPickerRow => row("SUBCONTRACTOR", s, { role: "SUBCONTRACTOR", phone: s.phone ?? null, city: null });
+export const customerRow = (c: Customer): SupplierPickerRow =>
+  row("CUSTOMER", c, { role: c.type, phone: c.contactPhone ?? null, city: c.city ?? null, hasSubcontractorProfile: c.subcontractor?.isActive === true });
+export const subcontractorRow = (s: Subcontractor): SupplierPickerRow => row("SUBCONTRACTOR", s, { role: "SUBCONTRACTOR", phone: s.phone ?? null, city: null, hasSubcontractorProfile: false });
+/** Satırın rol etiketi: bağlı fason profili olan cari "Tedarikçi · Fason" / "Müşteri + Tedarikçi · Fason". */
+export const rowRoleLabel = (r: SupplierPickerRow): string => `${SUPPLIER_ROLE_LABEL[r.role]}${r.hasSubcontractorProfile ? ` · ${SUPPLIER_ROLE_LABEL.SUBCONTRACTOR}` : ""}`;
+/** Fason bacağının süzgeci: bağlı fason cari satırı olarak listelenir, bacak yalnız BAĞSIZ fasonları getirir. */
+export const UNLINKED_SUBCONTRACTOR_FILTER = { customerId: "null" } as const;

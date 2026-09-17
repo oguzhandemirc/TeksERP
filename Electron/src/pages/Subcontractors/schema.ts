@@ -30,6 +30,8 @@ export const subcontractorFormSchema = z.object({
   categoryIds: z
     .array(z.string())
     .min(1, "En az bir fason kategorisi seçilmeli"),
+  // Fason = carinin rolü: bağlı cari kartı (null = bağsız fason). Tip/tekillik kuralı sunucuda.
+  customerId: z.string().uuid().nullable(),
 });
 
 export type SubcontractorFormValues = z.infer<typeof subcontractorFormSchema>;
@@ -43,4 +45,5 @@ export const subcontractorFormDefaults: SubcontractorFormValues = {
   isFavorite: false,
   documentProfileId: null,
   categoryIds: [],
+  customerId: null,
 };

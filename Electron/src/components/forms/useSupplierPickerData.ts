@@ -15,6 +15,7 @@ import type { Subcontractor } from "@/pages/Subcontractors/types";
 import { supplierListFilters } from "./supplierParty";
 import {
   SUPPLIER_PICKER_PAGE,
+  UNLINKED_SUBCONTRACTOR_FILTER,
   customerRow,
   firstPageToken,
   legsFor,
@@ -54,7 +55,8 @@ async function fetchPage(token: PageToken, args: Args): Promise<PickerPage> {
       const next = res.pagination.nextCursor;
       return { token, rows: (res.data as Customer[]).map(customerRow), next: next ? { ...token, cursor: next } : null, error: false };
     }
-    const res = await subcontractorService.getAll({ page: token.page, pageSize: SUPPLIER_PICKER_PAGE, sortBy: "name", sortOrder: "asc", filters: base, ...search });
+    // Bağlı fason (fason = carinin rolü) cari satırında TEK kez görünür — bu bacak yalnız bağsızları ister.
+    const res = await subcontractorService.getAll({ page: token.page, pageSize: SUPPLIER_PICKER_PAGE, sortBy: "name", sortOrder: "asc", filters: { ...base, ...UNLINKED_SUBCONTRACTOR_FILTER }, ...search });
     const { page, totalPages } = res.pagination;
     return { token, rows: (res.data as Subcontractor[]).map(subcontractorRow), next: page < totalPages ? { leg: "subs", page: page + 1 } : null, error: false };
   } catch {

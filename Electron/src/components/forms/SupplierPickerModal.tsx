@@ -16,7 +16,7 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { cn } from "@/lib/utils";
 import { supplierLoadNotice, type SupplierParty } from "./supplierParty";
-import { SUPPLIER_ROLE_LABEL, type PickerList, type PickerMode, type SupplierPickerRow, type SupplierRoleFilter } from "./supplierPicker";
+import { rowRoleLabel, type PickerList, type PickerMode, type SupplierPickerRow, type SupplierRoleFilter } from "./supplierPicker";
 import { useSupplierPickerData } from "./useSupplierPickerData";
 import { SupplierPickerToolbar } from "./SupplierPickerToolbar";
 import { ConvertBackLink, ConvertCustomerConfirm, ConvertCustomerLink, useCanConvertCustomer } from "./SupplierConvertCustomer";
@@ -28,15 +28,17 @@ export const SUPPLIER_PICKER_FILTERED_EMPTY = "Süzgece uyan kayıt yok.";
 /** Kolonlar listeye göre: tedarikçi Rol taşır (cari/fason karışık), müşteri listeleri Şehir taşır (yalnız cari). */
 const HEADERS: Record<PickerList, readonly string[]> = {
   supplier: ["Kod", "Ünvan", "Rol", "Vergi No", "Telefon"],
+  "supplier-cari": ["Kod", "Ünvan", "Rol", "Vergi No", "Telefon"],
   customer: ["Kod", "Ünvan", "Şehir", "Vergi No", "Telefon"],
   "customer-only": ["Kod", "Ünvan", "Şehir", "Vergi No", "Telefon"],
 };
 const TITLE: Record<PickerList, { title: string; description: string }> = {
   supplier: { title: "Tedarikçi seç", description: "Tedarikçi ve alıcı + satıcı cari kartlar ile fason firmalar tek listede; kaydırdıkça yüklenir, satıra tıklayınca seçilir." },
+  "supplier-cari": { title: "Bağlanacak cari kartı seç", description: "Tedarikçi ve alıcı + satıcı cari kartlar; fason firmalar bu listede yok. Satıra tıklayınca fason profili o karta bağlanır." },
   customer: { title: "Müşteri seç", description: "Müşteri ve alıcı + satıcı kartlar tek listede; kaydırdıkça yüklenir, satıra tıklayınca seçilir." },
   "customer-only": { title: "Müşteri kartını tedarikçi de yap", description: "Yalnız müşteri tipli kartlar; satıra tıklayınca onay sorulur, kart Müşteri + Tedarikçi olur ve seçilir." },
 };
-const EMPTY: Record<PickerList, string> = { supplier: SUPPLIER_PICKER_EMPTY, customer: CUSTOMER_PICKER_EMPTY, "customer-only": CUSTOMER_ONLY_EMPTY };
+const EMPTY: Record<PickerList, string> = { supplier: SUPPLIER_PICKER_EMPTY, "supplier-cari": SUPPLIER_PICKER_EMPTY, customer: CUSTOMER_PICKER_EMPTY, "customer-only": CUSTOMER_ONLY_EMPTY };
 
 interface Props {
   open: boolean;
@@ -45,6 +47,8 @@ interface Props {
   includeInactive?: boolean;
   /** Varsayılan tedarikçi (alış). Müşteri kipi: satış siparişi (sipariş formu ①). */
   mode?: PickerMode;
+  /** Yalnız cari tedarikçiler (SUPPLIER/BOTH; fason bacağı ve dönüştürme kapısı yok) — fason profilinin "Bağlı cari" alanı. */
+  cariOnly?: boolean;
 }
 
 function roleBadgeVariant(role: SupplierPickerRow["role"]): "secondary" | "muted" | "default" {
@@ -61,12 +65,12 @@ function PickerRow({ r, list, onPick }: { r: SupplierPickerRow; list: PickerList
         {r.name}
         {!r.isActive && <span className="ml-1 text-xs text-muted-foreground">(pasif)</span>}
       </TableCell>
-      {list !== "supplier" ? (
-        <TableCell className="py-1.5 text-xs">{r.city ?? <span className="text-muted-foreground">—</span>}</TableCell>
-      ) : (
+      {list === "supplier" || list === "supplier-cari" ? (
         <TableCell className="py-1.5">
-          <Badge variant={roleBadgeVariant(r.role)}>{SUPPLIER_ROLE_LABEL[r.role]}</Badge>
+          <Badge variant={roleBadgeVariant(r.role)}>{rowRoleLabel(r)}</Badge>
         </TableCell>
+      ) : (
+        <TableCell className="py-1.5 text-xs">{r.city ?? <span className="text-muted-foreground">—</span>}</TableCell>
       )}
       <TableCell className="py-1.5 text-xs">{r.taxNumber ?? <span className="text-muted-foreground">—</span>}</TableCell>
       <TableCell className="py-1.5 text-xs">{r.phone ?? <span className="text-muted-foreground">—</span>}</TableCell>
@@ -89,15 +93,15 @@ function StatusLine({ count, hasMore, isFetchingNext }: { count: number; hasMore
   );
 }
 
-export function SupplierPickerModal({ open, onOpenChange, onPick, includeInactive = false, mode = "supplier" }: Props) {
+export function SupplierPickerModal({ open, onOpenChange, onPick, includeInactive = false, mode = "supplier", cariOnly = false }: Props) {
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput.trim(), 250);
   const [role, setRole] = useState<SupplierRoleFilter>("ALL");
   // Dönüştürme görünümü (yalnız tedarikçi kipi + customer:write): liste müşteri-only, satır → onay → BOTH.
-  const canConvert = useCanConvertCustomer() && mode === "supplier";
+  const canConvert = useCanConvertCustomer() && mode === "supplier" && !cariOnly;
   const [converting, setConverting] = useState(false);
   const [convertRow, setConvertRow] = useState<SupplierPickerRow | null>(null);
-  const list: PickerList = converting ? "customer-only" : mode;
+  const list: PickerList = converting ? "customer-only" : cariOnly && mode === "supplier" ? "supplier-cari" : mode;
   const data = useSupplierPickerData({ open, search, role, includeInactive, list });
   const headers = HEADERS[list];
   const { rootRef, sentinelRef } = useInfiniteScroll({ hasMore: data.hasMore, isLoading: data.isFetchingNext, onLoadMore: data.fetchNext, enabled: open });
@@ -123,7 +127,7 @@ export function SupplierPickerModal({ open, onOpenChange, onPick, includeInactiv
           <DialogTitle>{TITLE[list].title}</DialogTitle>
           <DialogDescription>{TITLE[list].description}</DialogDescription>
         </DialogHeader>
-        <SupplierPickerToolbar mode={mode} converting={converting} searchInput={searchInput} onSearchInput={setSearchInput} role={role} onRole={setRole} onCreated={pick} />
+        <SupplierPickerToolbar mode={mode} list={list} converting={converting} searchInput={searchInput} onSearchInput={setSearchInput} role={role} onRole={setRole} onCreated={pick} />
         {canConvert && (converting ? <ConvertBackLink onClick={() => setConverting(false)} /> : <ConvertCustomerLink onClick={() => setConverting(true)} />)}
         {notice && <p className={cn("text-xs", notice.tone === "error" ? "text-destructive" : "text-amber-700 dark:text-amber-500")}>{notice.message}</p>}
         <div ref={rootRef} className="min-h-0 flex-1 overflow-auto rounded-md border">

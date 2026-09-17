@@ -21,6 +21,8 @@ export interface Customer {
   notes: string | null;
   /** Belge şablon profili — null = genel Belge Şablonları ayarı. */
   documentProfileId?: string | null;
+  /** Fason = carinin rolü (2026-09-17): bağlı fason PROFİLİ (hafif); pasif profil rol değildir. */
+  subcontractor?: { id: string; isActive: boolean } | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
