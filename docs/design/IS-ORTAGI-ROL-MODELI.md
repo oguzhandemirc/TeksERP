@@ -151,9 +151,23 @@ koşar ve dördünü birden ölçer:
 2. **`cari_accounts.subcontractorId IS NOT NULL` = 0** — fason tarafına bağlı hesap kalmamış.
 3. **`Customer.type ≠ resolveCompanyType(roller)` = 0** — türetme ile saklanan değer ayrışmamış.
 4. **Sahada eski istemci = 0** — son 30 günde panel < 1.3.2 ya da tablet < 1.0.7 görülmemiş.
-   ⚠️ Oturum/cihaz kaydında SÜRÜM ALANI yoksa bu kol **ÖLÇÜLEMEDİ**dir: kırmızı değil, ⏭ beyanlı —
-   ve o hâlde **kaldırma fazı AÇILMAZ**, çünkü "görülmedi" ile "yok" aynı şey değildir. Alanı
-   eklemek kaldırmanın ÖN KOŞULUDUR.
+   **AÇILDI 2026-09-17:** `Session.clientVersion` (migration `20260917090000_session_client_version`)
+   giriş anında istemcinin künye başlığından yazılır; kol artık üç sonucu da üretebilir. Eşikler
+   bekçide beyanlıdır (ELECTRON/WEB ≥ 1.3.2 · MOBILE ≥ 1.0.7) ve `minVersion` POLİTİKASI DEĞİLDİR —
+   sahayı kilitlemez, yalnız "kaldırma açılabilir mi" sorusunu cevaplar.
+   ⚠️ **Ölçüm penceresi alanın EKLENDİĞİ ANDA başlar** ve başlangıç migration'ın KLASÖR ADINDAN
+   okunur (elle sabit tarih yazılmaz). O damgadan önceki her oturum NULL'dur; 30 gün dolmadan
+   hiçbir hüküm verilemez ve kol ⏭ *"alan N gün önce eklendi, pencere henüz dolmadı"* der.
+   ⚠️ ÖLÇÜLEMEDİ üç sebepten doğar: ① pencere dolmadı · ② pencerede hiç oturum yok (körlük zemini:
+   "kimse girmemiş" ≠ "eski istemci yok") · ③ oturumların bir kısmı sürümsüz ya da sürüm etiketi
+   çözülemiyor. Üçünde de **kaldırma fazı AÇILMAZ**: "görülmedi" ile "yok" aynı şey değildir.
+   ⚠️ Yazım login ANIYLA SINIRLI DEĞİL: panel sürümünü main process'ten asenkron okuduğu için ilk
+   istek (login) sürümsüz gidebiliyor; `lastSeenAt` dokunuş yolunda satır YALNIZ NULL'dan doluya
+   tamamlanır (`revokedAt IS NULL` koşullu). Dolu satır ikinci bir sürümle DEĞİŞMEZ — bir oturum tek
+   istemciye aittir ve değişebilseydi uydurulabilir bir başlık kapının gördüğü değeri çevirirdi.
+   ⚠️ Künye başlığı UYDURULABİLİR ve bu bilinçli olarak kabul edilmiştir: değer hiçbir yetki/kapı
+   kararına girmez, yalnız bir İNSAN kararını besler — ve *eksiklik güvenli yöndedir*, çünkü
+   başlığı göndermeyen eski istemci NULL bırakır ve kol "temiz" DEMEZ.
 
 Dördü yeşil değilse faz açılmaz; üç yeşil + bir ölçülemedi de AÇMAZ.
 

@@ -19,9 +19,12 @@ import { ClientType } from "@prisma/client";
 import type { Request, Response } from "express";
 import { SessionRegistryService } from "../src/services/session-registry.service";
 import { WorkSessionService } from "../src/services/work-session.service";
-import { verifyToken } from "../src/middlewares/auth.middleware";
+import { resetSessionTouchCacheForTest, verifyToken } from "../src/middlewares/auth.middleware";
 import { AppError } from "../src/utils/app-error";
 import { randomUUID } from "crypto";
+import { CLIENT_INFO_HEADERS } from "../src/constants/client-info";
+import fs from "fs";
+import path from "path";
 
 let pass = 0,
   fail = 0;
@@ -40,7 +43,7 @@ async function openSession(
   userId: string,
   deviceType: ClientType,
   policy: "kick" | "notify" | "off",
-  opts: { confirmKick?: boolean; deviceId?: string | null } = {},
+  opts: { confirmKick?: boolean; deviceId?: string | null; clientVersion?: string | null } = {},
 ): Promise<string> {
   const jti = randomUUID();
   await SessionRegistryService.openLoginSession({
@@ -51,15 +54,19 @@ async function openSession(
     expiresAt: FUTURE(),
     policy,
     confirmKick: opts.confirmKick,
+    clientVersion: opts.clientVersion,
   });
   return jti;
 }
 
 /** auth.middleware'i sahte req/res/next ile koştur → { err, userSet }. */
-async function runMiddleware(token: string): Promise<{ err: unknown; userSet: boolean }> {
+async function runMiddleware(
+  token: string,
+  ekBaslik: Record<string, string> = {},
+): Promise<{ err: unknown; userSet: boolean }> {
   let err: unknown = null;
   let userSet = false;
-  const req = { headers: { authorization: `Bearer ${token}` } } as unknown as Request;
+  const req = { headers: { authorization: `Bearer ${token}`, ...ekBaslik } } as unknown as Request;
   const res = {} as Response;
   await verifyToken(req, res, ((e?: unknown) => {
     if (e) err = e;
@@ -205,6 +212,94 @@ async function main() {
     check("8b cihaz B açılınca cihaz A oturumu KAPANIR", afterA.endedAt !== null);
     check("8c kapanış nedeni NEW_LOGIN", afterA.endReason === "NEW_LOGIN");
     check("8d cihaz B oturumu açık kalır", afterB.endedAt === null);
+    // --- 9) İSTEMCİ SÜRÜMÜ (`Session.clientVersion`) — GÖZLEM, KAPI DEĞİL ---
+    // ⚠️ Bu alanın tek amacı "sahada hangi sürümler görülüyor" sorusunu
+    // cevaplamaktır (`test_rol_modeli_kalinti` ④). Sessizce DÜŞMESİ, kaldırma
+    // fazı kapısına ölçülmemiş bir zemini "temiz" gösterirdi.
+    const uSurum = await mkUser("surum");
+    const sV = await openSession(uSurum.id, ClientType.ELECTRON, "off", { clientVersion: "1.3.2" });
+    const rowV = need(await prisma.session.findUnique({ where: { jti: sV }, select: { clientVersion: true } }), "sV");
+    check("9a clientVersion oturum satırına YAZILDI", rowV.clientVersion === "1.3.2", String(rowV.clientVersion));
+    const sN = await openSession(uSurum.id, ClientType.MOBILE, "off");
+    const rowN = need(await prisma.session.findUnique({ where: { jti: sN }, select: { clientVersion: true } }), "sN");
+    check("9b sürüm verilmeyince NULL (uydurulmuyor)", rowN.clientVersion === null, String(rowN.clientVersion));
+    // Politika kararına GİRMEDİĞİ: sürümü farklı iki 'kick' oturumu, sürümden
+    // bağımsız olarak birbirini düşürür (sürüm bir ayrım ekseni DEĞİL).
+    const sK1 = await openSession(uSurum.id, ClientType.WEB, "kick", { clientVersion: "1.0.0" });
+    const sK2 = await openSession(uSurum.id, ClientType.WEB, "kick", { clientVersion: "9.9.9" });
+    check("9c sürüm politikaya girmiyor: eski sürümlü oturum yine de düştü",
+      !(await SessionRegistryService.isSessionValid(sK1)) && (await SessionRegistryService.isSessionValid(sK2)));
+
+    // 9d STATİK — "dört kapı" sınıfı: login uçlarından biri alanı unutursa o
+    // istemci sahada GÖRÜNMEZ olur ve kimse kırmızı görmez. Her `LoginContext`
+    // nesnesi sürümü taşımak ZORUNDA.
+    const ctrl = fs.readFileSync(path.resolve(__dirname, "../src/controllers/auth.controller.ts"), "utf-8");
+    const ctxSayisi = (ctrl.match(/const ctx: LoginContext = \{/g) ?? []).length;
+    const surumSayisi = (ctrl.match(/clientVersion: resolveClientVersion\(req\),/g) ?? []).length;
+    check("9d HER login ucu (LoginContext) istemci sürümünü taşıyor",
+      ctxSayisi > 0 && ctxSayisi === surumSayisi, `${ctxSayisi} ctx / ${surumSayisi} sürüm`);
+
+    // 9e SONRAKİ İSTEKLERDE DOLMA — login'e bağlı kalamaz.
+    // ⚠️ SAHA ÖLÇÜMÜ (01, 2026-09-17): panel künye sürümünü main process'ten
+    // ASENKRON okuyor; İLK istek (login) çoğu kez sürümsüz gidiyor. Yazım yalnız
+    // login'de olsaydı panel oturumlarının büyük kısmı kalıcı NULL kalır ve
+    // kaldırma fazı kapısı sonsuza kadar "ÖLÇÜLEMEDİ" görürdü.
+    const uGec = await mkUser("gecikmeli");
+    const jGec = await openSession(uGec.id, ClientType.ELECTRON, "off"); // sürümsüz login
+    const tokGec = jwt.sign(
+      { userId: uGec.id, username: uGec.username, permissions: [], tokenVersion: uGec.tokenVersion },
+      secret, { jwtid: jGec, expiresIn: "1h" },
+    );
+    const oku = async (): Promise<string | null> =>
+      (await prisma.session.findUnique({ where: { jti: jGec }, select: { clientVersion: true } }))
+        ?.clientVersion ?? null;
+    check("9e login sürümsüzse satır NULL başlar", (await oku()) === null);
+    // ⚠️ ÖNCE SÜRÜMSÜZ BİR İSTEK: `lastSeenAt` kısıtlaması (60 sn) böyle kurulur.
+    // Sürüm yazımı o kısıtlamaya TABİ OLSAYDI, panelin sürümü çözdüğü ikinci
+    // istek bir dakika boyunca satırı dolduramazdı. Bu sıra olmadan sonda
+    // kısıtlamayı HİÇ ölçmüyordu (ölçüldü 2026-09-17: sonda tutmadı).
+    const mwSurumsuz = await runMiddleware(tokGec);
+    check("9e körlük zemini: middleware isteği KABUL etti (dokunuş yolu koştu)",
+      mwSurumsuz.err === null && mwSurumsuz.userSet === true,
+      String((mwSurumsuz.err as Error)?.message ?? ""));
+    await new Promise((r) => setTimeout(r, 250));
+    check("9e sürümsüz istek satırı doldurmaz", (await oku()) === null, String(await oku()));
+    await runMiddleware(tokGec, { [CLIENT_INFO_HEADERS.version]: "1.3.4" });
+    await new Promise((r) => setTimeout(r, 250));
+    check("9e ARDINDAN gelen sürümlü istek satırı DOLDURUR (kısıtlamaya takılmaz)",
+      (await oku()) === "1.3.4", String(await oku()));
+    // ⚠️ Dolu satır DEĞİŞMEZ: bir oturum TEK istemciye aittir. İKİ sed var —
+    // bellek-içi `versionWrites` ve `updateMany`nin `clientVersion: null`
+    // koşulu — ve önbellek TEMİZLENMEDEN ikincisi ölçülemez.
+    resetSessionTouchCacheForTest();
+    await runMiddleware(tokGec, { [CLIENT_INFO_HEADERS.version]: "0.0.1" });
+    await new Promise((r) => setTimeout(r, 250));
+    check("9e dolu satır İKİNCİ (farklı) sürümle DEĞİŞMEZ — önbellek sıfırlanmışken de",
+      (await oku()) === "1.3.4", String(await oku()));
+
+    // Sonlanmış oturuma yazılmaz.
+    const jRev = await openSession(uGec.id, ClientType.WEB, "off");
+    const tokRev = jwt.sign(
+      { userId: uGec.id, username: uGec.username, permissions: [], tokenVersion: uGec.tokenVersion },
+      secret, { jwtid: jRev, expiresIn: "1h" },
+    );
+    await SessionRegistryService.revokeSession(jRev, "LOGOUT");
+    const mwRev = await runMiddleware(tokRev, { [CLIENT_INFO_HEADERS.version]: "1.3.4" });
+    await new Promise((r) => setTimeout(r, 250));
+    const rowRev = await prisma.session.findUnique({ where: { jti: jRev }, select: { clientVersion: true } });
+    // ⚠️ BU KOL DAVRANIŞSAL OLARAK YALNIZ ①'İ ÖLÇEBİLİR: middleware iptal edilmiş
+    // oturumu 401 ile keser ve dokunuş yoluna HİÇ girilmez. `updateMany`nin
+    // `revokedAt: null` koşulu (②) bu yoldan ERİŞİLEMEZ — ölçüldü 2026-09-17:
+    // koşul kaldırıldığında sonda kırmızı VERMEDİ. İkisi aynı şey değildir ve
+    // beyan edilmezse yarın middleware gevşediğinde kol ②'yi ölçtüğünü sanır.
+    check("9e sonlanmış oturuma sürüm YAZILMAZ (middleware 401 keser)",
+      rowRev?.clientVersion === null && mwRev.err !== null, String(rowRev?.clientVersion));
+    // ⇒ ② ayrıca STATİK ölçülür: ikinci sed kodda DURUYOR mu. Davranışsal sonda
+    //   göremediği için, koşulu silen bir düzenleme başka türlü sessiz geçerdi.
+    const mwKaynak = fs.readFileSync(path.resolve(__dirname, "../src/middlewares/auth.middleware.ts"), "utf-8");
+    check("9e ikinci sed KODDA: sürüm yazımı `revokedAt: null` + `clientVersion: null` koşullu",
+      /where:\s*\{\s*jti,\s*clientVersion:\s*null,\s*revokedAt:\s*null\s*\}/.test(mwKaynak));
+
   } finally {
     // Cleanup — FK Restrict sırası: workSessions → sessions → devices → users.
     if (createdUserIds.length) {

@@ -21,6 +21,84 @@
 
 ---
 
+## 2026-09-17 — Oturum sürümü: künye ilk kez KALICI bir satıra yazıldı [ÇEKİRDEK]
+
+Rol modeli kaldırma fazının dördüncü kolu ("sahada eski istemci var mı") ölçülemiyordu, çünkü
+istemcinin bildirdiği sürüm HİÇBİR YERDE saklanmıyordu — süreç-içi defter (`lib/client-registry`)
+restart'ta sıfırlanıyor, `client-policy` ucu politikayı KODDAN okuyup istemcinin söylediğini
+atıyordu. `Session.clientVersion` (migration `20260917090000_session_client_version`, yalnız ekler,
+nullable, backfill YOK) bu boşluğu kapattı. Dört şey ölçüldü.
+
+**① KÜNYE BAŞLIĞI BİR KAPIYA DEĞİL, BİR GÖZLEME BAĞLANDI — ve fark yazıldı.** `X-Client-*`
+başlıkları için kuralın tamamı "hiçbir yetki/kapı kararına girmez"di (`CLIENT_IP_HEADER` dersi,
+2026-09-01). Kalıcı bir kolona yazmak bu kuralı DELMİYOR, ama sınırı da bulanıklaştırabilirdi.
+Ayrım şu cümleyle donduruldu: *uydurulmuş bir sürüm kimseye yetki kazandırmaz ve eksiklik GÜVENLİ
+YÖNDEDİR* — başlığı hiç göndermeyen eski istemci NULL bırakır, kol da "temiz" değil "ÖLÇÜLEMEDİ"
+der. Yani yalan söyleyen bir istemci ancak kendi aleyhine değil, kapının HÜKMÜNÜ geciktirecek
+yönde etki edebilir; "AÇILABİLİR" hükmü için herkesin doğruyu söylemesi gerekir.
+
+**② METİN EŞLEYEN BEKÇİNİN SABİT-IMPORT DELİĞİ.** `test_client_registry §1` başlık ADINI arıyordu.
+`CLIENT_INFO_HEADERS.version`i IMPORT eden bir dosya o kolu HİÇ kırmıyordu — yani bugün de biri
+sabiti import edip bir kapıya bağlayabilir ve bekçi kırmızı vermezdi. Bu, bu depoda adı konmuş bir
+ölüm biçimidir (*sessiz kapı ölümü*: bekçi kırmızı vermeden korumayı bırakır). Kol üçe çıktı:
+§1 başlık adı · §1b sabitin kendisi · §1c değeri dışarı taşıyan TEK fonksiyonun (`readClientVersionHeader`)
+beyanlı okuyucuları. §1c iki yönlüdür (ölü beyan da kırmızı — yoksa allowlist zamanla "ne olduğu
+bilinmeyen dosyalar listesi"ne döner) ve okuyucu dosyada değerin bir koşula/atmaya girmediğini de
+ölçer. ⇒ *Başlık adını dışarı çıkarmak yerine FONKSİYONU dışarı çıkar: ad tek dosyada kalır,
+bekçinin metin kolu sağlam durur.*
+
+**③ PENCERE BAŞLANGICI ELLE YAZILMAZ, MIGRATION KLASÖR ADINDAN OKUNUR.** Kol "son 30 gün"e bakıyor,
+ama alanın eklenmesinden ÖNCEKİ her oturum NULL. Elle bir tarih sabiti yazsaydık ve migration
+ertelenip başka bir damgayla inseydi, kol sessizce YANLIŞ bir pencereyi ölçerdi. Klasör adı
+(`YYYYMMDDHHMMSS_`) tek kaynaktır. Bunun doğrudan sonucu: **alan indikten sonra 30 gün geçmeden
+hiçbir "temiz" hükmü verilemez** ve kol bunu açıkça beyan eder (⏭ "alan N gün önce eklendi,
+pencere HENÜZ DOLMADI"). Ölçüm penceresi dolmadan yeşil görmek, kaldırma fazını ölçülmemiş bir
+zeminde açmaktı.
+
+**④ ÇÖZÜLEMEYEN SÜRÜM ETİKETİ 0 DEĞİL `null` DÖNER.** Kıyaslayıcı "1.3.2-rc1" gibi bir değeri
+sessizce "eşiğe eşit" saysaydı, kol gerçek bir ihlali GÖRMEDEN yeşil verirdi. Üçüncü sonuç
+(ÖLÇÜLEMEDİ) burada da aynı işi yapar. Kolun ÖLÇÜLEMEDİ'si üç ayrı sebepten doğar ve üçü de
+kaldırmayı AÇMAZ: pencere dolmadı · pencerede hiç oturum yok (körlük zemini: "kimse girmemiş" ≠
+"eski istemci yok") · sürümsüz/çözülemeyen etiket.
+
+**Sondalar (hepsi kırmızı görüldü, hepsi geri alındı):** §1b sabiti import eden yeni dosya · §1c
+beyansız okuyucu · §1c beyan var okuyucu yok (ölü beyan) · §1c değeri `if`e sokma · `session.create`
+veri nesnesinden alanın düşürülmesi · bir login ucunun alanı unutması ("dört kapı" sınıfı; §9d
+statik kolu `LoginContext` sayısı ile sürüm sayısını karşılaştırır) · ④ için altı dal: pencere
+dolmadı ⏭ · hepsi eşikte ✅ AÇILABİLİR · tek 1.3.1 ❌ KAPALI · `1.3.2-rc1` ⏭ · 233 sürümsüz ⏭ ·
+0 oturum ⏭.
+
+**⑤ LOGIN ANI YETMEDİ — YAZIM SONRAKİ İSTEKLERE DE AÇILDI.** 01 ölçtü: panel künye sürümünü main
+process'ten ASENKRON okuyor, yani İLK istek (login) çoğu kez sürümsüz gidiyor. Yazım yalnız login'de
+kalsaydı panel oturumlarının büyük kısmı kalıcı NULL kalır ve kol sonsuza kadar "ÖLÇÜLEMEDİ"
+görürdü — kapı, ölçemediği için değil ÖLÇMEYİ HİÇ BAŞARAMADIĞI için kapalı kalırdı. `lastSeenAt`
+dokunuş yolunda tek `updateMany WHERE clientVersion IS NULL AND revokedAt IS NULL` eklendi: yalnız
+NULL'dan doluya, sürüm DÜŞÜRME yok, sonlanmış oturuma yazma yok. Bir oturum TEK istemciye aittir;
+dolu satır ikinci (farklı) bir sürümle değişmez — değişebilseydi uydurulabilir bir başlık, kapının
+gördüğü değeri istediği an çevirebilirdi.
+
+**⑥ ÜÇ SONDA TUTMADI VE ÜÇÜ DE AYNI ŞEYİ ÖĞRETTİ: SONDA, ÖLÇTÜĞÜNÜ SANDIĞI SEDDE ERİŞEMEYEBİLİR.**
+· *Kısıtlama:* sürüm yazımının `lastSeenAt` kısıtlamasından muaf olduğunu ölçmek için sondanın ÖNCE
+sürümsüz bir istek atması gerekiyordu — kısıtlama ancak ikinci istekte devreye girer. İlk hâlinde
+sonda tek istek atıyordu ve kısıtlamayı HİÇ ölçmüyordu. · *DB koşulu:* dolu satırın değişmezliğini
+İKİ sed koruyor (bellek-içi `versionWrites` + `clientVersion: null`); ikincisi kaldırıldığında sonda
+kırmızı VERMEDİ, çünkü birincisi zaten kesiyordu. Çare `resetSessionTouchCacheForTest()` oldu —
+*iki sed varsa, birini kaldırınca kırmızı veremeyen bir bekçi ikisini de ölçmüyordur.* ·
+*`revokedAt: null`:* bu koşula DAVRANIŞSAL olarak erişilemiyor, çünkü middleware iptal edilmiş
+oturumu 401 ile kesiyor ve dokunuş yoluna hiç girilmiyor. Erişilemezlik BEYAN edildi ve sed ayrıca
+STATİK ölçülüyor. ⇒ *Bir kolun yeşil olması, ölçmek istediğin şeyin ölçüldüğü anlamına gelmez;
+"hangi sed tuttu" sorusu sondanın kendisine sorulur.*
+
+⚠️ Ayrıca bu turda bir sonda kurgusu SESSİZCE ÇÖKTÜ: düzenleme sırasında sondanın kurulum satırları
+(kullanıcı/token/jti) silinmişti, script `ReferenceError` ile düştü ve çıktının SONU okunmadığı için
+"tüm kollar yeşil" görünüyordu. `=== Sonuç:` satırı basılmamıştı. ⇒ *Bir koşumun yeşilliği son
+satırdan okunur; filtrelenmiş çıktıda o satır yoksa koşum bitmemiş demektir.*
+
+**Kapsam notu:** bu dilim BACKEND alanı + yazım + bekçi kolunu getirir. Panel/tablet zaten
+`X-Client-Version` gönderiyor (ölçüldü: `Electron/src/services/apiClient.ts` ve
+`mobil/src/services/api.ts` istek interceptor'ları, login isteği dahil), o yüzden gövdeye ikinci
+bir `appVersion` ekseni AÇILMADI — kullanılmayan ikinci bir sözleşme yüzeyi olurdu.
+
 ## 2026-09-17 — Göç betiğinin ilişki listesi ELLE yazılmaz [ÇEKİRDEK]
 
 İş ortağı rol modelinin D2 dilimi: fason profillerini cari kartına bağlayan göç betiği. Beş

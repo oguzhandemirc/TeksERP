@@ -73,3 +73,30 @@ const VERSION_RE = /^[0-9A-Za-z.+-]{1,32}$/;
 export function isPlausibleVersion(v: string): boolean {
   return VERSION_RE.test(v);
 }
+
+/**
+ * Oturum kaydına (`Session.clientVersion`) yazılacak istemci sürümünü çöz.
+ *
+ * ⚠️ NEDEN BURADA, ÇAĞIRANIN İÇİNDE DEĞİL: başlık ADI bu dosyanın dışına
+ * çıkmaz (`test_client_registry` §1). Çağıran tarafa `readHeader(req,
+ * "x-client-version")` yazmak, adı bir KARAR dosyasına taşımak olurdu — ve
+ * bekçi ilk gün kırmızı verirdi. Fonksiyon dışarı çıkar, ad çıkmaz.
+ *
+ * ⚠️ BU DEĞER HÂLÂ KAPI DEĞİLDİR. Yazıldığı yer bir GÖZLEMDİR: "son 30 günde
+ * sahada hangi sürümler görüldü". Tek okuyucusu kaldırma fazı kapısıdır
+ * (`test_rol_modeli_kalinti` ④) ve oradaki hüküm bir İNSAN kararını besler,
+ * bir isteği kabul/red etmez. Uydurulmuş bir sürüm kimseye yetki kazandırmaz;
+ * ⇒ *eksiklik güvenli yöndedir*: başlığı hiç göndermeyen eski istemci NULL
+ * bırakır ve kol "ÖLÇÜLEMEDİ" der — "temiz" DEMEZ.
+ *
+ * Kabul kalıbına uymayan değer NULL sayılır (uydurulmaz, kırpılmaz).
+ */
+export function readClientVersionHeader(
+  headers: Record<string, string | string[] | undefined>,
+): string | null {
+  const raw = headers[CLIENT_INFO_HEADERS.version];
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof v !== "string") return null;
+  const trimmed = v.trim();
+  return trimmed && isPlausibleVersion(trimmed) ? trimmed : null;
+}

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { AuthService } from "../services/auth.service";
 import { resolveSystemAccountLock } from "../services/helpers/system-account.registry";
 import { isSettingsPasswordConfigured } from "../services/settings-password.service";
+import { readClientVersionHeader } from "../constants/client-info";
 import type { LoginContext } from "../services/auth.service";
 import { AuditService } from "../services/audit.service";
 import { TotpAccountService } from "../services/totp-account.service";
@@ -55,6 +56,15 @@ const loginQuickPinSchema = z.object({
   clientType: clientTypeSchema,
   confirmKick: z.boolean().optional(),
 });
+
+/** Login isteğinden İSTEMCİ SÜRÜMÜNÜ çöz — `Session.clientVersion`e yazılır.
+ *
+ *  ⚠️ Başlığın ADI bu dosyada GEÇMEZ ve geçmemeli (`test_client_registry` §1):
+ *  okuma `constants/client-info.ts`teki tek kaynaktan gelir. Değer bir GÖZLEMdir,
+ *  kapı değil — aşağıda yalnız `ctx` nesnesine konur, hiçbir koşulda dallanmaz. */
+function resolveClientVersion(req: Request): string | null {
+  return readClientVersionHeader(req.headers);
+}
 
 /** Login isteğinden cihaz kimliğini çöz: eşleşmiş cihazın deviceId'si öncelikli,
  *  yoksa ham x-device-id header'ı (kayıtsız client de oturum açabilir). Yoksa null. */
@@ -167,6 +177,7 @@ export class AuthController {
       // faktörü tamamen atlardı.
       isRemote: req.isRemote === true,
       totpCode: body.totpCode,
+      clientVersion: resolveClientVersion(req),
     };
 
     try {
@@ -259,6 +270,7 @@ export class AuthController {
       deviceId: resolveLoginDeviceId(req),
       confirmKick: body.confirmKick,
       isRemote: req.isRemote === true,
+      clientVersion: resolveClientVersion(req),
     };
     try {
       const result = await AuthService.loginWithCard(body.cardCode, ctx);
@@ -342,6 +354,7 @@ export class AuthController {
       deviceId: resolveLoginDeviceId(req),
       confirmKick: body.confirmKick,
       isRemote: req.isRemote === true,
+      clientVersion: resolveClientVersion(req),
     };
     try {
       const result = await AuthService.loginWithQuickPin(body.pin, ctx);

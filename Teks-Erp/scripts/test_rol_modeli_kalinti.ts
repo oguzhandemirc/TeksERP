@@ -9,13 +9,22 @@
 // kaldırma SAHADA VERİ KAYBI ya da kırık istemci demektir.
 //
 // ⚠️ ÜÇ SONUÇ, İKİ DEĞİL: uyumlu · ihlal · ÖLÇÜLEMEDİ. Dördüncü kol (sahadaki
-// eski istemci) bugün ÖLÇÜLEMEZ ve bu bir ihlal DEĞİLDİR — ama "ölçemedim" ile
-// "temiz" aynı satıra düşerse kaldırma fazı ölçülmemiş bir zeminde açılır.
+// eski istemci) 2026-09-17'ye kadar HİÇ ölçülemiyordu; `Session.clientVersion`
+// inince ölçülebilir oldu — ama hâlâ üç sonuçludur ve ÖLÇÜLEMEDİ'si üç ayrı
+// sebepten doğar: ① pencere henüz dolmadı (alan N gün önce eklendi, oysa ondan
+// önceki her oturum NULL) · ② pencerede hiç oturum yok (körlük zemini: "kimse
+// girmemiş" ≠ "eski istemci yok") · ③ oturumların bir kısmı sürümsüz. "Ölçemedim"
+// ile "temiz" aynı satıra düşerse kaldırma fazı ölçülmemiş bir zeminde açılır.
 //
 // ⚠️ KURULUM KOPYASINDA KOŞULUR (fabrika dump'ının kopyası). Fixture DB'de ①②③
 // zaten 0'dır — orada yeşil olması "saha temiz" DEMEK DEĞİLDİR ve rapor bunu
 // açıkça söyler: hedefin ADI her koşumda basılır.
 // =============================================================================
+import fs from "fs";
+import path from "path";
+
+import { ClientType } from "@prisma/client";
+
 import prisma, { pool } from "../src/lib/prisma";
 import { resolveCompanyType } from "../src/services/helpers/partner-roles.helper";
 import { atlamaDefteri } from "./lib/atlama";
@@ -29,6 +38,50 @@ function check(label: string, ok: boolean, extra = ""): void {
 const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 /** Kol adı → sonucu; rapor sonundaki hüküm bundan doğar. */
 const kollar = new Map<string, "uyumlu" | "ihlal" | "olculemedi">();
+
+/** ④ kolunun ölçüm penceresini BAŞLATAN migration — alanın doğduğu an. */
+const SURUM_ALANI_MIGRATION = "20260917090000_session_client_version";
+
+/**
+ * Kaldırma fazının istemci eşikleri (`docs/design/IS-ORTAGI-ROL-MODELI.md` §153):
+ * rol modelini konuşan İLK sürümler. Eşik bir POLİTİKA değildir — `minVersion`
+ * sahayı kilitler, bu tablo yalnız "kaldırma açılabilir mi" sorusunu cevaplar.
+ * WEB panel Electron ile aynı kaynaktan doğar, eşiği de aynıdır.
+ */
+const ESIK: Record<ClientType, string> = {
+  [ClientType.ELECTRON]: "1.3.2",
+  [ClientType.WEB]: "1.3.2",
+  [ClientType.MOBILE]: "1.0.7",
+};
+
+/** Migration klasör adındaki damgayı (YYYYMMDDHHMMSS) tarihe çevir; klasör yoksa null. */
+function migrationDamgasi(ad: string): Date | null {
+  const dizin = path.resolve(__dirname, "../prisma/migrations", ad);
+  if (!fs.existsSync(dizin)) return null;
+  const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})_/.exec(ad);
+  if (!m) return null;
+  const [, y, ay, g, s, d, sn] = m;
+  return new Date(Date.UTC(+y, +ay - 1, +g, +s, +d, +sn));
+}
+
+/**
+ * Sürüm kıyası (a<b → negatif). ⚠️ ÇÖZÜLEMEYEN ETİKET `null` DÖNER, 0 DEĞİL:
+ * "1.3.2-rc1" gibi bir değeri sessizce "eşiğe eşit" saymak, kolun ihlali
+ * GÖRMEDEN yeşil vermesi demekti (bu depoda tam bu sınıf birçok kez ısırdı).
+ */
+function surumKiyasla(a: string, b: string): number | null {
+  const ayir = (v: string): number[] | null => {
+    if (!/^\d+(\.\d+)*$/.test(v)) return null;
+    return v.split(".").map(Number);
+  };
+  const pa = ayir(a), pb = ayir(b);
+  if (!pa || !pb) return null;
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const fark = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (fark !== 0) return fark;
+  }
+  return 0;
+}
 
 async function main(): Promise<void> {
   console.log("=== İŞ ORTAĞI ROL MODELİ — KALINTI ÖLÇÜMÜ ===\n");
@@ -92,19 +145,72 @@ async function main(): Promise<void> {
   check("③z körlük zemini: ölçülecek kart VAR", kartlar.length > 0, `${kartlar.length} kart`);
 
   // ── ④ SAHADA ESKİ İSTEMCİ ────────────────────────────────────────────────
-  // ⚠️ BUGÜN ÖLÇÜLEMEZ ve bu ÖLÇÜLDÜ (2026-09-17): `Session` (`deviceType`,
-  // `deviceId`, `lastSeenAt`) ve `Device` istemci SÜRÜMÜNÜ tutmuyor; şemada
-  // `*version*` taşıyan altı alanın hiçbiri istemciye ait değil (`tokenVersion`
-  // · `agentVersion` (toplayıcı) · `formulaVersion` ×2 · `TravelerCard.version`
-  // · `PrintedDocument.version`). `client-policy` ucu da politikayı KODDAN
-  // okur, istemcinin bildirdiği sürümü KAYDETMEZ.
-  // ⇒ *Bir kapının koşulu "sahada X yok" ise, X'in sahada GÖRÜLDÜĞÜNÜ kaydeden
-  //   bir yer olmalı; yoksa kapı ölçülemez ve ölçülemezlik BEYAN edilir.*
-  kollar.set("④", "olculemedi");
-  ATLAMA.atla("④ sahada 1.3.2 öncesi istemci",
-    "ÖLÇÜLEMEDİ: istemci sürümü HİÇBİR YERDE kaydedilmiyor (`Session`/`Device` sürüm alanı yok, " +
-    "`client-policy` istemcinin bildirdiğini saklamıyor) — kol açılması için oturum kaydına " +
-    "`clientVersion` eklenmeli (ayrı dilim)", 1);
+  // Artık ÖLÇÜLEBİLİR: `Session.clientVersion` (migration 20260917090000) giriş
+  // anında istemcinin künye başlığından yazılır. Kol üç sonucu da üretebilir.
+  //
+  // ⚠️ PENCERE BAŞLANGICI ELLE YAZILMAZ — alanın eklendiği migration'ın KLASÖR
+  // ADINDAN okunur. Elle sabit bir tarih yazsaydık, migration ertelenip başka
+  // bir damgayla inince kol sessizce YANLIŞ bir pencereyi ölçerdi.
+  //
+  // ⚠️ ALAN EKLENMEDEN ÖNCEKİ HER OTURUM NULL'DUR. Bu yüzden damganın üstünden
+  // 30 gün geçmeden hiçbir hüküm verilemez: pencere dolmamışken "kirli oturum
+  // yok" demek, ölçülmemiş bir zemini temiz ilan etmektir.
+  const pencereGun = 30;
+  const alanDamgasi = migrationDamgasi(SURUM_ALANI_MIGRATION);
+  const simdi = new Date();
+  const pencereBasi = new Date(simdi.getTime() - pencereGun * 24 * 60 * 60 * 1000);
+
+  if (alanDamgasi === null) {
+    kollar.set("④", "olculemedi");
+    ATLAMA.atla("④ sahada eski istemci",
+      `ÖLÇÜLEMEDİ: \`${SURUM_ALANI_MIGRATION}\` migration klasörü YOK — pencere başlangıcı ` +
+      "okunamıyor (alan bu kurulumda hiç inmemiş olabilir)", 1);
+  } else if (alanDamgasi.getTime() > pencereBasi.getTime()) {
+    const gun = Math.floor((simdi.getTime() - alanDamgasi.getTime()) / 86_400_000);
+    kollar.set("④", "olculemedi");
+    ATLAMA.atla("④ sahada eski istemci",
+      `ÖLÇÜLEMEDİ: sürüm alanı ${gun} gün önce eklendi, ${pencereGun} günlük ölçüm penceresi ` +
+      "HENÜZ DOLMADI — bu tarihten önceki tüm oturumlar NULL'dur, 'temiz' hükmü verilemez", 1);
+  } else {
+    // Penceredeki oturumlar: SON GÖRÜLME'ye göre (yoksa açılışa göre) — "sahada
+    // hâlâ var mı" sorusu canlılığı sorar, ne zaman açıldığını değil.
+    const oturumlar = await prisma.session.findMany({
+      where: { OR: [{ lastSeenAt: { gte: pencereBasi } }, { lastSeenAt: null, createdAt: { gte: pencereBasi } }] },
+      select: { deviceType: true, clientVersion: true, lastSeenAt: true, createdAt: true },
+    });
+    const surumsuz = oturumlar.filter((o) => o.clientVersion === null);
+    const eski: string[] = [];
+    const cozulemeyen: string[] = [];
+    for (const o of oturumlar) {
+      if (o.clientVersion === null) continue;
+      const esik = ESIK[o.deviceType];
+      const kiyas = surumKiyasla(o.clientVersion, esik);
+      if (kiyas === null) cozulemeyen.push(`${o.deviceType}:${o.clientVersion}`);
+      else if (kiyas < 0) eski.push(`${o.deviceType}:${o.clientVersion}<${esik}`);
+    }
+    const esikBeyani = Object.entries(ESIK).map(([k, v]) => `${k}≥${v}`).join(" · ");
+    if (oturumlar.length === 0) {
+      // ⚠️ KÖRLÜK ZEMİNİ: sıfır oturum "sahada eski istemci yok" DEĞİLDİR —
+      // "kimse girmemiş"tir. Fixture DB'de tam olarak bu olur.
+      kollar.set("④", "olculemedi");
+      ATLAMA.atla("④ sahada eski istemci",
+        `ÖLÇÜLEMEDİ: ${pencereGun} günlük pencerede HİÇ oturum yok — ölçülecek popülasyon boş`, 1);
+    } else if (eski.length > 0) {
+      kollar.set("④", "ihlal");
+      check(`④ sahada eşiğin ALTINDA istemci YOK (${esikBeyani})`, false,
+        `${eski.length} oturum: ${[...new Set(eski)].slice(0, 5).join(", ")}`);
+    } else if (surumsuz.length > 0 || cozulemeyen.length > 0) {
+      kollar.set("④", "olculemedi");
+      ATLAMA.atla("④ sahada eski istemci",
+        `ÖLÇÜLEMEDİ: ${surumsuz.length} oturum SÜRÜMSÜZ (künye başlığı göndermeyen istemci ya da ` +
+        `alan inmeden önce açılmış oturum)` +
+        (cozulemeyen.length > 0 ? ` · ${cozulemeyen.length} sürüm etiketi çözülemedi: ${[...new Set(cozulemeyen)].slice(0, 3).join(", ")}` : ""), 1);
+    } else {
+      kollar.set("④", "uyumlu");
+      check(`④ sahada eşiğin ALTINDA istemci YOK (${esikBeyani})`, true,
+        `${oturumlar.length} oturum, ${pencereGun} gün, 0 sürümsüz`);
+    }
+  }
 
   // ── HÜKÜM ───────────────────────────────────────────────────────────────
   const ihlal = [...kollar].filter(([, v]) => v === "ihlal").map(([k]) => k);

@@ -643,6 +643,13 @@ model Session {
   revokedAt    DateTime?  @db.Timestamptz
   revokeReason String?    @db.VarChar(32)
   lastSeenAt   DateTime?  @db.Timestamptz
+  /// İstemcinin GİRİŞ ANINDA bildirdiği kendi sürümü ("1.3.2"). Yalnız GÖZLEM:
+  /// hiçbir kapı okumaz, yetki/limit kararına girmez (`constants/client-info.ts`).
+  /// NULL = başlığı göndermeyen ya da alan eklenmeden ÖNCE açılmış oturum ⇒
+  /// "eski istemci" DEĞİL, "ÖLÇÜLEMEDİ" demektir (kaldırma fazı kapısı bu ayrımı
+  /// yapar). Login'de yazılır, oturum boyunca DEĞİŞMEZ — panel güncellenirse
+  /// yeni oturumda yeni değer görünür.
+  clientVersion String?    @db.VarChar(32)
 
   // Ayak izi korunur — kullanıcı silinirken (soft-delete kalıbı) oturum geçmişi kaybolmaz.
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)

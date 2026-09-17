@@ -35,6 +35,13 @@ export interface LoginContext {
   isRemote?: boolean;
   /** Uzak girişte TOTP kodu ya da kurtarma kodu. */
   totpCode?: string;
+  /**
+   * İstemcinin künye başlığında bildirdiği kendi sürümü — `Session.clientVersion`e
+   * yazılır. ⚠️ `isRemote`in TERSİ bir sınıftır: bu değer İSTEMCİDEN gelir ve
+   * uydurulabilir, o yüzden hiçbir kapıya/politikaya girmez. Yalnız "sahada
+   * hangi sürümler görülüyor" sorusunu cevaplayan bir GÖZLEMdir.
+   */
+  clientVersion?: string | null;
 }
 
 /** Gövdeden gelen istemci türü. `undefined` = mobil (tarihsel varsayılan). */
@@ -455,6 +462,7 @@ export class AuthService {
       expiresAt,
       policy,
       confirmKick: ctx?.confirmKick,
+      clientVersion: ctx?.clientVersion ?? null,
     });
 
     // jti token'a jwt.sign jwtid ile eklenir — sign payload'ında jti TUTMUYORUZ

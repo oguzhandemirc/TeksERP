@@ -43,6 +43,10 @@ export interface OpenLoginSessionInput {
   policy: SameTypeSessionPolicy;
   /** 'notify' politikasında kullanıcı "ikisi de açık kalsın" onayı verdiyse true. */
   confirmKick?: boolean;
+  /** İstemcinin bildirdiği kendi sürümü — GÖZLEM, kapı DEĞİL. Politikaya,
+   *  kick/notify kararına ya da herhangi bir yetkiye GİRMEZ; yalnız satıra
+   *  yazılır. Başlığı göndermeyen istemcide null (uydurulmaz). */
+  clientVersion?: string | null;
 }
 
 /** Mevcut oturum özeti — 409 SESSION_EXISTS payload'ında client'a döner. */
@@ -61,6 +65,9 @@ export class SessionRegistryService {
     input: OpenLoginSessionInput,
   ): Promise<{ id: string }> {
     const { userId, deviceType, deviceId, jti, expiresAt, policy, confirmKick } = input;
+    // ⚠️ Politika dallarının HİÇBİRİ bunu okumaz — bilerek tek kullanımı `create`
+    // veri nesnesidir (bkz. `constants/client-info.ts`: künye kapı değildir).
+    const clientVersion = input.clientVersion ?? null;
 
     // F50: notify ön-kontrolü + kick, tek tx İÇİNDE ve (userId,deviceType) başına
     // pg advisory xact-lock ile serileştirilir. Eskiden notify findFirst tx DIŞINDA
@@ -112,7 +119,7 @@ export class SessionRegistryService {
         });
       }
       return tx.session.create({
-        data: { userId, deviceType, jti, deviceId, expiresAt },
+        data: { userId, deviceType, jti, deviceId, expiresAt, clientVersion },
         select: { id: true },
       });
     });

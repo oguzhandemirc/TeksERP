@@ -18,7 +18,11 @@ import fs from "fs";
 import path from "path";
 
 import { CLIENT_VERSION_POLICIES } from "../src/config/client-version-policy";
-import { CLIENT_INFO_HEADERS, CLIENT_KINDS } from "../src/constants/client-info";
+import {
+  CLIENT_INFO_HEADERS,
+  CLIENT_KINDS,
+  readClientVersionHeader,
+} from "../src/constants/client-info";
 import {
   CLIENT_ACTIVE_WINDOW_MS,
   CLIENT_RETENTION_MS,
@@ -58,6 +62,10 @@ console.log("\n§1 — KÜNYE BAŞLIĞI HİÇBİR KAPIYA BAĞLI DEĞİL (EN KRİ
 // İzinli üç dosya: adları tanımlayan sabit, onları OKUYAN middleware ve
 // doğrulayan defter. Başka bir dosyada geçmesi, bir karar noktasının bu
 // uydurulabilir değere bakmaya başladığının ilk sinyalidir.
+//
+// ⚠️ Bu liste ÜÇ KOLLU ölçülür (§1 metin · §1b sabit importu · §1c değeri dışarı
+// taşıyan tek fonksiyonun beyanlı okuyucuları) — tek kollu hâli, sabiti import
+// eden bir dosyayı GÖRMÜYORDU.
 const ALLOWED = new Set(
   [
     "constants/client-info.ts",
@@ -84,6 +92,78 @@ check(
   ihlaller.length === 0,
   ihlaller.join(" · ") || "temiz",
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §1b — SABİTİ İÇERİ ALMA YOLU DA KAPALI (import kaçağı)
+// ─────────────────────────────────────────────────────────────────────────────
+// ⚠️ Yukarıdaki kontrol METİN eşler: başlık adını yazmadan, `CLIENT_INFO_HEADERS`i
+// IMPORT ederek aynı değere ulaşmak onu HİÇ kırmıyordu. Bu, bu depoda adı konmuş
+// bir ölüm biçimidir ("sessiz kapı ölümü": bekçi kırmızı vermeden korumayı bırakır).
+// ⇒ Sabitin kendisi de aynı üç dosyayla sınırlı.
+const sabitIhlalleri: string[] = [];
+for (const file of walk(SRC)) {
+  if (ALLOWED.has(file)) continue;
+  if (/\bCLIENT_INFO_HEADERS\b/.test(fs.readFileSync(file, "utf-8"))) {
+    sabitIhlalleri.push(path.relative(SRC, file));
+  }
+}
+check("§1b `CLIENT_INFO_HEADERS` sabiti izinli üç dosya DIŞINDA geçmiyor",
+  sabitIhlalleri.length === 0, sabitIhlalleri.join(" · ") || "temiz");
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §1c — KÜNYE DEĞERİNİ DIŞARI TAŞIYAN TEK KAPI: `readClientVersionHeader`
+// ─────────────────────────────────────────────────────────────────────────────
+// Sürüm, 2026-09-17'den beri `Session.clientVersion`e YAZILIYOR — yani künye
+// değeri ilk kez üç dosyanın dışına çıkıyor. Çıkışın kendisi meşrudur (kalıcı
+// bir GÖZLEM; kaldırma fazı kapısı onu okur), ama çıkış YOLU tekil ve beyanlı
+// olmalı: her yeni okuyucu buraya bir satır yazmak zorunda.
+//
+// ⚠️ Beyan yetmez — değerin KAPIYA dönüşmediği de ölçülür: okuyucu dosyada
+// dönen değer yalnız bir nesne alanına konabilir, bir koşula/atmaya giremez.
+const SURUM_OKUYUCULARI = new Map<string, string>([
+  ["controllers/auth.controller.ts",
+   "login/kart/PIN uçlarında `Session.clientVersion` yazımı — yalnız `ctx` nesnesine konur"],
+  ["middlewares/auth.middleware.ts",
+   "`lastSeenAt` dokunuşunda NULL kalmış satırı doldurur (panel sürümü ASENKRON okuduğu için ilk istek sürümsüz gidebiliyor) — `updateMany`ye argüman"],
+]);
+const okuyucular: string[] = [];
+for (const file of walk(SRC)) {
+  if (ALLOWED.has(file)) continue;
+  if (/\breadClientVersionHeader\b/.test(fs.readFileSync(file, "utf-8"))) {
+    okuyucular.push(path.relative(SRC, file));
+  }
+}
+const beyansiz = okuyucular.filter((f) => !SURUM_OKUYUCULARI.has(f));
+const oluBeyan = [...SURUM_OKUYUCULARI.keys()].filter((f) => !okuyucular.includes(f));
+check("§1c künye sürümünü okuyan her dosya BEYANLI", beyansiz.length === 0,
+  beyansiz.join(" · ") || `${okuyucular.length} okuyucu, hepsi beyanlı`);
+// İKİ YÖNLÜ: beyan edilmiş ama artık okumayan satır da kırmızıdır — yoksa
+// allowlist zamanla "ne olduğu bilinmeyen dosyalar listesi"ne dönüşür.
+check("§1c ÖLÜ beyan yok (listede olup okumayan dosya)", oluBeyan.length === 0,
+  oluBeyan.join(" · ") || "temiz");
+
+for (const okuyucu of okuyucular) {
+  const metin = fs.readFileSync(path.join(SRC, okuyucu), "utf-8");
+  // Değer yalnız ① sarmalayıcı fonksiyonun `return`ünde ② bir nesne alanında
+  // görünebilir. `if (`, `?`, `&&`, `throw`, `===` gibi bir bağlamda geçmesi,
+  // künyenin bir KARARA girdiğinin ilk sinyalidir.
+  const kararSatirlari = metin
+    .split("\n")
+    .filter((l) => /\b(resolveClientVersion|readClientVersionHeader)\b/.test(l))
+    .filter((l) => /\bif\s*\(|\?|&&|\|\||throw |===|!==|return next|res\./.test(l));
+  check(`§1c \`${okuyucu}\` künye sürümünü bir KARARA sokmuyor`,
+    kararSatirlari.length === 0, kararSatirlari.map((l) => l.trim()).join(" | ") || "temiz");
+
+  // ⚠️ GİRİŞ NOKTASI YETMEZ: değer bir değişkene alınıp AŞAĞIDA bir isteği
+  // reddetmek için kullanılabilirdi. Bu kol, taşıyıcı adın (`clientVersion`)
+  // istek AKIŞINI değiştiren hiçbir ifadeyle aynı satırda geçmediğini ölçer.
+  const akisSatirlari = metin
+    .split("\n")
+    .filter((l) => /\bclientVersion\b/.test(l))
+    .filter((l) => /AppError|throw |res\.status|res\.json|res\.send|return next\(/.test(l));
+  check(`§1c \`${okuyucu}\` künye sürümü isteğin AKIŞINI değiştirmiyor`,
+    akisSatirlari.length === 0, akisSatirlari.map((l) => l.trim()).join(" | ") || "temiz");
+}
 
 // Middleware gerçekten fail-open mı: reddetme/yanıt yazma yüzeyi taşımamalı.
 const mwPath = path.join(SRC, "middlewares/client-info.middleware.ts");
@@ -237,6 +317,22 @@ shouldTouchClient(ID2, t1);
 touchClient({ instanceId: ID2, kind: "electron" }, t1);
 check("retention dolunca satır listeden düşüyor",
   listClients(t1 + CLIENT_RETENTION_MS + 1).length === 0);
+
+// §4b — OTURUM SATIRINA YAZILACAK SÜRÜMÜ ÇÖZEN TEK KAPI
+// `Session.clientVersion` bu fonksiyonun döndürdüğü değerdir; buradaki
+// "uydurmama" kuralı deftere DEĞİL, KALICI bir satıra yazıldığı için daha da
+// bağlayıcıdır: çöp bir etiket, kaldırma fazı kapısının hükmüne girer.
+const H = CLIENT_INFO_HEADERS.version;
+check("§4b geçerli sürüm okunuyor", readClientVersionHeader({ [H]: "1.3.2" }) === "1.3.2");
+check("§4b boşluklar kırpılıyor", readClientVersionHeader({ [H]: "  1.3.2  " }) === "1.3.2");
+check("§4b dizi gelirse ilki", readClientVersionHeader({ [H]: ["1.3.2", "9.9.9"] }) === "1.3.2");
+check("§4b başlık YOK → null", readClientVersionHeader({}) === null);
+check("§4b boş dize → null (uydurulmuyor)", readClientVersionHeader({ [H]: "   " }) === null);
+check("§4b kalıba UYMAYAN değer → null (KIRPILMIYOR)",
+  readClientVersionHeader({ [H]: "1.3.2; DROP TABLE" }) === null);
+check("§4b 32 karakterden uzun → null (kolon sınırı VarChar(32))",
+  readClientVersionHeader({ [H]: "1".repeat(33) }) === null);
+check("§4b tam 32 karakter kabul", readClientVersionHeader({ [H]: "1".repeat(32) }) === "1".repeat(32));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // §5 KÜNYESİZ İSTEMCİ — sürüm User-Agent'tan okunuyor mu (2026-09-10)
