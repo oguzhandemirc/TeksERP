@@ -66,10 +66,12 @@ hesap" vaadi sessizce bozulur. Göç bunu ONARAMAZ: göç geçmişi toplar, gele
 bugünkü davranış. XOR CHECK'lere dokunulmaz; ekstre, yaşlandırma ve raporlar `cariId` ile
 çalıştığı için değişmez.
 
-**İNDİ** (`1f3b9995`): çözücü `resolveAccountPartyTx` (`helpers/finance.helper.ts`), bekçi
-`scripts/test_cari_hesap_tek_yazar.ts` — bağlı fasona fatura + ödeme + çek kesilir, hesap KARTTA
-doğar, `subcontractorId` null ve ikinci hesap DOĞMAZ; negatif sonda: çözücü çağrısı kaldırılınca
-kırmızı.
+**İNDİ** (`1f3b9995`; çözücü `7db7716d` ile ortak helper'a taşındı): `ensureCariAccountTx` tarafı
+`helpers/party-card.helper.ts` `resolvePartyToCardTx` ile çözer — bekçi
+`scripts/test_cari_hesap_tek_yazar.ts` (adı değişmedi): bağlı fasona fatura + ödeme + çek kesilir,
+hesap KARTTA doğar, `subcontractorId` null ve ikinci hesap DOĞMAZ; negatif sonda: çözücü çağrısı
+kaldırılınca kırmızı. ⚠️ Çözücü TEK: alış, mal kabul, levent ve cari hesap aynı helper'ı okur
+(kopya çözücü, aynı soruya iki cevap demektir — §7.1b).
 
 ## 3. Saha güvencesi — bu fazın değişmezleri
 
@@ -185,16 +187,22 @@ tombstone) sayılmaz:
 | Model | Çift bağ | Kapı türü | Saha | Kaldırma koşulu |
 |---|---|---|---|---|
 | `CariAccount` | `customerId` XOR `subcontractorId` | İKİ DB CHECK | 1 hesap (göçle karta taşındı) | §7.1 ①②; yazım kapısı İNDİ (`resolveAccountPartyTx`) |
-| `WarpBeam` (PURCHASED) | `supplierId` XOR `subcontractorId` | yalnız şema yorumu (`///`) — DB CHECK YOK | levent 0 (devere kapalı) | bağsız profil 0 + eski istemci 0; yazım kapısı: 01 dilim E |
-| `PurchaseOrder` | `supplierId` XOR `subcontractorId` | yalnız SERVİS (`helpers/supplier-party.helper`) | alış siparişi 0 | aynı; yazım kapısı: 01 dilim E |
-| `GoodsReceipt` | `supplierId` XOR `subcontractorId` | yalnız SERVİS (aynı helper) | mal kabul 0 | aynı; yazım kapısı: 01 dilim E |
+| `WarpBeam` (PURCHASED) | `supplierId` XOR `subcontractorId` | yalnız şema yorumu (`///`) — DB CHECK YOK | levent 0 (devere kapalı) | bağsız profil 0 + eski istemci 0; yazım kapısı İNDİ: `resolvePurchasedPartyToCard` · bekçi `test_supplier_party_tek_adres §4` (SUBCONTRACT kökeni DOKUNULMAZ) |
+| `PurchaseOrder` | `supplierId` XOR `subcontractorId` | yalnız SERVİS (`helpers/supplier-party.helper`) | alış siparişi 0 | aynı; yazım kapısı İNDİ: `resolveSupplierParty` · bekçi `test_supplier_party_tek_adres §1/§3` |
+| `GoodsReceipt` | `supplierId` XOR `subcontractorId` | yalnız SERVİS (aynı helper) | mal kabul 0 | aynı; yazım kapısı İNDİ: `resolveSupplierParty` · bekçi `test_supplier_party_tek_adres §2/§3` |
 
 Son üçü bir tasarım hatası DEĞİL, 2026-08-15 "alış her cariden yapılabilir" kararının (C4) sonucudur
 ve o karar hâlâ geçerli — değişen şey, artık firmanın TEK KARTI olması: bağlı bir fasona kesilen alış
 siparişi/mal kabulü ya da planlanan satın alma leventi `subcontractorId` yazarsa, kartı dururken
 **ikinci adres** doğar. `ensureCariAccountTx` ile birebir aynı sınıf ⇒ aynı çare: **yazımda taraf
 önce ÇÖZÜLÜR** (bağlı profil → kartın `supplierId`si), **okuma her ikisini de kabul eder**
-(geriye dönük). Bu yazım kapısı **01 dilim E**'nin işidir (1.3.2); sha inince bekçi adı buraya yazılır.
+(geriye dönük). Bu yazım kapısı **İNDİ** (`7db7716d`, dilim E): çözücü tek helper'da — `helpers/party-card.helper.ts`
+`resolvePartyToCardTx`; alış siparişi ve mal kabul `resolveSupplierParty` ile (siparişin KAYITLI
+tarafı da çözülür — göç öncesi sipariş ile yeni fiş uyumlu kalsın), levent yalnız PURCHASED kökeninde
+(`resolvePurchasedPartyToCard`; SUBCONTRACT kökeninde fasoncu DOKUNULMAZ — orada fason bir rol değil
+işin ta kendisidir). Bekçi `scripts/test_supplier_party_tek_adres.ts` §1–§5; §5 üç servisin de AYNI
+helper'dan okuduğunu kaynak taramasıyla ölçer (kopya çözücü yasak). Dilim A'nın çözücüsü de buraya
+taşındı — `test_cari_hesap_tek_yazar` adı değişmedi, artık aynı helper'ı okuyor.
 
 ⚠️ `WarpBeam.ownerCustomerId ↔ subcontractorId` çifti bu listeye GİRMEZ: "malın sahibi" ile "işi
 yapan" İKİ AYRI EKSENDİR ve aynı anda dolu olmaları meşrudur (şema yorumu: kolon `supplierId`e
