@@ -39,6 +39,38 @@ function need<T>(v: T | null | undefined, what: string): T {
 
 const FUTURE = () => new Date(Date.now() + 60 * 60 * 1000);
 
+/* ---------------------------------------------------------------------- *
+ * FIRE-AND-FORGET YAZIMI NASIL BEKLENİR
+ * ---------------------------------------------------------------------- *
+ * ⚠️ SABİT UYKU İLE ÖLÇMEK, MAKİNENİN HIZINI ÖLÇMEKTİR. `await sleep(250)`
+ * yazan bir sonda "yazım 250 ms'de biter" diye BİLİNMEYEN bir şey iddia eder;
+ * yavaş bir runner'da aralıklı kırmızı verir ve kimse sondanın mı ürünün mü
+ * bozuk olduğunu bilemez. İki yön AYRI ele alınır:
+ *   · BEKLENEN yazım → YOKLA (kısa aralık, beyanlı ÜST SINIR). Erken biterse
+ *     hemen döner; sınır dolarsa ❌ ve mesaj ne kadar beklendiğini SÖYLER.
+ *   · BEKLENMEYEN yazım → ÜST SINIRIN TAMAMINI bekle, sonra bak. Bu yönde
+ *     yavaş makine sondayı GEVŞETMEZ, SIKAR: istenmeyen yazıma daha çok süre
+ *     tanınmış olur.
+ */
+const YAZIM_UST_SINIRI_MS = 500;
+const YOKLAMA_ARALIGI_MS = 50;
+
+/** Beklenen değere ulaşana kadar yokla; ulaşamazsa son okunan değeri döndür. */
+async function yoklaBekle<T>(oku: () => Promise<T>, hedef: (v: T) => boolean): Promise<T> {
+  const bitis = Date.now() + YAZIM_UST_SINIRI_MS;
+  let son = await oku();
+  while (!hedef(son) && Date.now() < bitis) {
+    await new Promise((r) => setTimeout(r, YOKLAMA_ARALIGI_MS));
+    son = await oku();
+  }
+  return son;
+}
+
+/** "Olmaması gereken" yazım için: bütçenin TAMAMINI bekle, sonra oku. */
+async function butceyiTuket(): Promise<void> {
+  await new Promise((r) => setTimeout(r, YAZIM_UST_SINIRI_MS));
+}
+
 async function openSession(
   userId: string,
   deviceType: ClientType,
@@ -262,18 +294,19 @@ async function main() {
     check("9e körlük zemini: middleware isteği KABUL etti (dokunuş yolu koştu)",
       mwSurumsuz.err === null && mwSurumsuz.userSet === true,
       String((mwSurumsuz.err as Error)?.message ?? ""));
-    await new Promise((r) => setTimeout(r, 250));
+    await butceyiTuket(); // BEKLENMEYEN yazım — bütçenin tamamı beklenir
     check("9e sürümsüz istek satırı doldurmaz", (await oku()) === null, String(await oku()));
     await runMiddleware(tokGec, { [CLIENT_INFO_HEADERS.version]: "1.3.4" });
-    await new Promise((r) => setTimeout(r, 250));
-    check("9e ARDINDAN gelen sürümlü istek satırı DOLDURUR (kısıtlamaya takılmaz)",
-      (await oku()) === "1.3.4", String(await oku()));
+    const dolan = await yoklaBekle(oku, (v) => v !== null);
+    check(`9e ARDINDAN gelen sürümlü istek satırı DOLDURUR (kısıtlamaya takılmaz, ≤${YAZIM_UST_SINIRI_MS} ms)`,
+      dolan === "1.3.4",
+      dolan === null ? `sürüm doldurma ${YAZIM_UST_SINIRI_MS} ms'de GERÇEKLEŞMEDİ (satır hâlâ NULL)` : String(dolan));
     // ⚠️ Dolu satır DEĞİŞMEZ: bir oturum TEK istemciye aittir. İKİ sed var —
     // bellek-içi `versionWrites` ve `updateMany`nin `clientVersion: null`
     // koşulu — ve önbellek TEMİZLENMEDEN ikincisi ölçülemez.
     resetSessionTouchCacheForTest();
     await runMiddleware(tokGec, { [CLIENT_INFO_HEADERS.version]: "0.0.1" });
-    await new Promise((r) => setTimeout(r, 250));
+    await butceyiTuket(); // BEKLENMEYEN yazım — bütçenin tamamı beklenir
     check("9e dolu satır İKİNCİ (farklı) sürümle DEĞİŞMEZ — önbellek sıfırlanmışken de",
       (await oku()) === "1.3.4", String(await oku()));
 
@@ -285,7 +318,7 @@ async function main() {
     );
     await SessionRegistryService.revokeSession(jRev, "LOGOUT");
     const mwRev = await runMiddleware(tokRev, { [CLIENT_INFO_HEADERS.version]: "1.3.4" });
-    await new Promise((r) => setTimeout(r, 250));
+    await butceyiTuket(); // BEKLENMEYEN yazım — bütçenin tamamı beklenir
     const rowRev = await prisma.session.findUnique({ where: { jti: jRev }, select: { clientVersion: true } });
     // ⚠️ BU KOL DAVRANIŞSAL OLARAK YALNIZ ①'İ ÖLÇEBİLİR: middleware iptal edilmiş
     // oturumu 401 ile keser ve dokunuş yoluna HİÇ girilmez. `updateMany`nin

@@ -141,6 +141,17 @@ STATİK ölçülüyor. ⇒ *Bir kolun yeşil olması, ölçmek istediğin şeyin
 "tüm kollar yeşil" görünüyordu. `=== Sonuç:` satırı basılmamıştı. ⇒ *Bir koşumun yeşilliği son
 satırdan okunur; filtrelenmiş çıktıda o satır yoksa koşum bitmemiş demektir.*
 
+**⑦ SABİT UYKU İLE ÖLÇMEK, MAKİNENİN HIZINI ÖLÇMEKTİR (ölçüm disiplini 6. biçim).** §9e ilk hâli
+fire-and-forget yazımı `await sleep(250)` ile bekliyordu — yani "yazım 250 ms'de biter" diye
+BİLİNMEYEN bir şey iddia ediyordu; yavaş bir runner'da aralıklı kırmızı verir ve kimse sondanın mı
+ürünün mü bozuk olduğunu anlayamazdı. İki yön AYRI ele alındı ve ayrım kuralın kendisidir:
+· BEKLENEN yazım → YOKLANIR (50 ms aralık, beyanlı 500 ms üst sınır). Erken biterse hemen döner;
+  sınır dolarsa ❌ ve mesaj ne kadar beklendiğini SÖYLER ("sürüm doldurma 500 ms'de GERÇEKLEŞMEDİ").
+· BEKLENMEYEN yazım → bütçenin TAMAMI beklenir, sonra bakılır. Bu yönde yavaş makine sondayı
+  GEVŞETMEZ, SIKAR: istenmeyen yazıma daha çok süre tanınmış olur.
+⇒ *Bir beklemenin doğru süresi, ölçümün YÖNÜNE bakılarak seçilir; tek bir `sleep` iki yönü birden
+doğru bekleyemez.*
+
 **Kapsam notu:** bu dilim BACKEND alanı + yazım + bekçi kolunu getirir. Panel/tablet zaten
 `X-Client-Version` gönderiyor (ölçüldü: `Electron/src/services/apiClient.ts` ve
 `mobil/src/services/api.ts` istek interceptor'ları, login isteği dahil), o yüzden gövdeye ikinci
