@@ -95,8 +95,6 @@ export function GoodsReceiptOrderSection({
     if (!sameSupplierParty(supplier, poParty)) onSupplierChange(poParty);
   }, [po, poParty, supplier, onSupplierChange]);
 
-  if (!visible) return null;
-
   // Kalanı 0'ın üstünde olan kalemler — doldurmanın da referans tablosunun da
   // kaynağı. Kalan hesabı ortak fonksiyondan gelir (backend'in `remainingQty`
   // alanı 0'a kırpılmıştır ve fazlalığı göstermez).
@@ -117,6 +115,20 @@ export function GoodsReceiptOrderSection({
     if (result.lines.length === 0) toast.info(describeFill(result));
     else toast.success(describeFill(result));
   };
+  // OTOMATİK DOLDURMA (kullanıcı isteği 2026-09-17): sipariş SEÇİLDİĞİ anda bekleyen kalemler fiş satırı olur —
+  // tedarikçi devralmayla aynı an, sipariş başına BİR KEZ (kullanıcı satırları sonra silerse yeniden dayatılmaz;
+  // `mergeFilledLines` elle girileni silmez). "Siparişsiz"e dönüş satırları SİLMEZ. Düğme kalır, ikincil: yeniden ekler.
+  const autoFilledFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!po || disabled) return;
+    if (autoFilledFor.current === po.id) return;
+    autoFilledFor.current = po.id;
+    if (pending.length > 0) handleFill();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- yalnız sipariş DEĞİŞİNCE bir kez; pending o anki kalanlardır
+  }, [po?.id, disabled]);
+
+  if (!visible) return null;
+
 
   return (
     <div className="rounded-md border bg-muted/20 p-3">
@@ -138,17 +150,18 @@ export function GoodsReceiptOrderSection({
         {po && (
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
+            size="sm"
             disabled={disabled || pending.length === 0}
             onClick={handleFill}
             title={
               pending.length === 0
                 ? "Bu siparişte bekleyen kalem kalmamış"
-                : "Bekleyen kalemleri fiş satırı olarak ekle"
+                : "Bekleyen kalemleri yeniden ekler; girdiğin satırlar korunur"
             }
           >
             <Download className="mr-1 h-4 w-4" />
-            Kalemleri siparişten doldur
+            Siparişten yeniden doldur
           </Button>
         )}
       </div>

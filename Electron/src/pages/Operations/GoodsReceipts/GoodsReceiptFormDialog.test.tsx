@@ -278,7 +278,7 @@ describe("GoodsReceiptFormDialog — alış siparişi bölümü", () => {
     );
   });
 
-  it("⭐ 'Kalemleri siparişten doldur' satırları EKLER — elle girileni SİLMEZ", async () => {
+  it("⭐ sipariş SEÇİLİNCE kalemler OTOMATİK dolar (EK 4); 'Siparişten yeniden doldur' ikincil düğme EKLER — elle girileni SİLMEZ, mükerrer yazmaz", async () => {
     getPurchaseOrder.mockResolvedValue({
       id: "po-1",
       orderNo: "AS1408260001",
@@ -323,13 +323,19 @@ describe("GoodsReceiptFormDialog — alış siparişi bölümü", () => {
     ) as HTMLSelectElement;
     await user.selectOptions(picker, "po-1");
 
-    // Önce ELLE bir satır gir (doldurma bunu silmemeli).
+    // ⭐ EK 4: sipariş seçildiği anda bekleyen 2 kalem satır oldu (düğmeye basılmadan). Sonda: otomatik çağrı
+    // düşünce burada "0" kalır.
+    await vi.waitFor(() => expect(screen.getByTestId("satir-sayisi")).toHaveTextContent("2"));
+    expect(screen.queryByText("Kalemleri siparişten doldur")).toBeNull();
+    const again = await screen.findByText("Siparişten yeniden doldur");
+    expect(again.closest("button")).toHaveAttribute("title", expect.stringContaining("girdiğin satırlar korunur"));
+
+    // Kullanıcı satırları silip ELLE bir satır girdi (stub listeyi 1 satırla DEĞİŞTİRİR) — otomatik doldurma
+    // yeniden DAYATMAZ (yalnız seçim anında); ikincil düğme ekler, elle girileni silmez.
     await user.click(screen.getByText("stub-satır-gir"));
     expect(screen.getByTestId("satir-sayisi")).toHaveTextContent("1");
-
-    await user.click(await screen.findByText("Kalemleri siparişten doldur"));
-
-    // 1 elle + 2 siparişten = 3. Doldurma "üstüne yazsaydı" 2 olurdu.
+    await user.click(again);
+    // 1 elle + 2 siparişten = 3 (merge: üstüne yazma yok).
     await vi.waitFor(() => expect(screen.getByTestId("satir-sayisi")).toHaveTextContent("3"));
   });
 
