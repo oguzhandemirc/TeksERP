@@ -317,18 +317,27 @@ async function main(): Promise<void> {
   const tokenRolls = await prisma.roll.count({ where: { goodsReceiptId: firstId } });
   check("C2) Satırlar da tekrarlanmadı", tokenRolls === 1, `top=${tokenRolls}`);
 
-  // ── D) Parçalı sonuç ────────────────────────────────────────────────────
-  const partial = await goodsReceiptService.create({
-    warehouseId: wh.id,
-    lines: [
-      { itemId: item.id, initialQty: 30 },
-      { itemId: "00000000-0000-4000-8000-000000000000", initialQty: 20 }, // var olmayan ürün
-    ],
-  });
-  const partialData = partial.data as { id: string; rolls: unknown[]; failed: Array<{ index: number; reason: string }> };
-  receiptIds.push(partialData.id);
-  check("D1) Sağlam satır KALDI", partialData.rolls.length === 1, `top=${partialData.rolls.length}`);
-  check("D2) ⭐ Hatalı satır SEBEBİYLE döndü (yutulmadı)", partialData.failed?.length === 1 && Boolean(partialData.failed[0]?.reason), partialData.failed?.[0]?.reason?.slice(0, 60));
+  // ── D) Doğrulama sınıfı hata: HEPSİ YA DA HİÇBİRİ (C8, 2026-09-17) ─────────
+  // Eski D: "hatalı satır failed[]'e düşer, sağlam satır kalır" — bu, DOĞRULAMA sınıfı (var olmayan ürün, lot
+  // zorunlu, bobin…) için içi boş/yarım fiş doğuruyordu (kullanıcı bulgusu C8). Artık ön-uçuş: fiş BAŞLIĞI
+  // açılmadan 400 `RECEIPT_LINES_INVALID`, sağlam satır da YAZILMAZ. `failed[]` sözleşmesi KOŞU ANI hataları
+  // (yarış/409 — bkz. §F/§G iptal yarışı) için aynen kalır. Ayrıntı: test_goods_receipt_preflight.
+  const n0 = await prisma.goodsReceipt.count({ where: { warehouseId: wh.id } });
+  type PreflightErr = { code?: string; lines?: Array<{ lineNo: number; code: string }> };
+  let partialErr = null as PreflightErr | null;
+  try {
+    await goodsReceiptService.create({
+      warehouseId: wh.id,
+      lines: [
+        { itemId: item.id, initialQty: 30 },
+        { itemId: "00000000-0000-4000-8000-000000000000", initialQty: 20 }, // var olmayan ürün
+      ],
+    });
+  } catch (e) {
+    partialErr = (e as { details?: PreflightErr }).details ?? null;
+  }
+  check("D1) ⭐ var olmayan ürün → 400 RECEIPT_LINES_INVALID, hatalı satır SEBEBİYLE (lineNo 2, ITEM_NOT_FOUND)", partialErr?.code === "RECEIPT_LINES_INVALID" && partialErr.lines?.[0]?.lineNo === 2 && partialErr.lines[0]!.code === "ITEM_NOT_FOUND", JSON.stringify(partialErr?.lines));
+  check("D2) ⭐ sağlam satır da yazılmadı, fiş başlığı doğmadı (hepsi ya da hiçbiri)", (await prisma.goodsReceipt.count({ where: { warehouseId: wh.id } })) === n0);
 
   // ── E) Pasif depo reddedilir ────────────────────────────────────────────
   const passive = await prisma.warehouse.create({ data: { code: `${TAG}-P`, name: `${TAG} Pasif`, isActive: false }, select: { id: true } });

@@ -49,6 +49,7 @@ import { resolveItemPricesFor } from "./item-price.service";
 import { applyYarnMovementTx } from "./yarn.service";
 import { reverseGoodsReceiptYarnTx } from "./helpers/yarn-receipt-reversal.helper";
 import { ensureYarnLotTx, normalizeLotNo } from "./helpers/yarn-lot.helper";
+import { assertReceiptLinesValid, YARN_LOT_REQUIRED_MESSAGE } from "./helpers/goods-receipt-preflight.helper";
 import { yarnMovementSign } from "./helpers/yarn-sign.helper";
 // J1 — iki OPT-IN katılık bayrağı (ikisi de varsayılan KAPALI; kapalıyken tek
 // maliyet ayar okumasıdır ve davranış bayt-bayt bugünküdür).
@@ -619,6 +620,9 @@ export class GoodsReceiptService {
    * sormaz; sözleşme yine de açıktır).
    */
   async create(input: GoodsReceiptCreateInput, userId?: string): Promise<ApiResponse<unknown>> {
+    // ÖN-UÇUŞ (C8, 2026-09-17): doğrulama sınıfı satır hataları fiş BAŞLIĞI açılmadan 400 — içi boş fiş doğmaz.
+    // `failed[]` yalnız koşu anı (yarış/kilit) hataları için kalır.
+    if (input.lines?.length) await assertReceiptLinesValid(input.lines);
     const warehouse = await prisma.warehouse.findUnique({
       where: { id: input.warehouseId },
       select: { id: true, name: true, isActive: true },
@@ -1202,8 +1206,9 @@ export class GoodsReceiptService {
     // LOT (devere Faz 2): irsaliye metni TRIM'lenir, boş → null. `devere.lotRequired`
     // AÇIKKEN lotsuz iplik satırı 400 (varsayılan KAPALI = bugünkü davranış: lotsuz yazılır).
     const lotNo = normalizeLotNo(line.lotNo);
+    // Ön-uçuş bunu zaten yakalar (create + POST /:id/lines); burada satır düzeyi koruma bayt bayt kalır.
     if (!lotNo && (await readDevereLotRequired())) {
-      throw AppError.badRequest(`İplik satırında lot numarası zorunlu (ayar: "Devere — lot zorunlu"). İrsaliyedeki lot numarasını olduğu gibi yazın.`, { code: "YARN_LOT_REQUIRED" });
+      throw AppError.badRequest(YARN_LOT_REQUIRED_MESSAGE, { code: "YARN_LOT_REQUIRED" });
     }
     if (line.bobbinCount != null && (!Number.isInteger(line.bobbinCount) || line.bobbinCount <= 0)) {
       throw AppError.badRequest("Bobin adedi pozitif tam sayı olmalı");

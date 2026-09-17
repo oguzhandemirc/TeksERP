@@ -127,8 +127,9 @@ async function main(): Promise<void> {
     if (lotB) lotIds.push(lotB.id);
     check("§1f ikinci lot + lotsuz satır aynı fişte: depo 250, lot A 150, lot B 60, lotsuz 40", (await stok(yarn.id, wh.id)) === 250 && (await lotBal(lotB!.id)) === 60);
     check("§1g fiş dökümü lot ve bobini taşıyor", r1.yarnMovements.some((y) => y.lot?.lotNo === "YAN 1029-K" && y.bobbinCount === 12));
-    const bozuk = await dusen(() => goodsReceiptService.create({ warehouseId: wh.id, deliveryNoteNo: `${TAG}-IRSX`, lines: [{ itemId: yarn.id, initialQty: 1, lotNo: "X", bobbinCount: 0 }] }));
-    check("§1h bobin adedi 0 → satır düşer (failed[]), lot X AÇILMAZ", /Bobin adedi/.test(bozuk) && (await prisma.yarnLot.count({ where: { itemId: yarn.id, lotNo: "X" } })) === 0, bozuk);
+    // C8 (2026-09-17): bobin adedi DOĞRULAMA sınıfı → ön-uçuşta 400, fiş başlığı bile doğmaz (test_goods_receipt_preflight).
+    const bozuk = await beklenenHata(() => goodsReceiptService.create({ warehouseId: wh.id, deliveryNoteNo: `${TAG}-IRSX`, lines: [{ itemId: yarn.id, initialQty: 1, lotNo: "X", bobbinCount: 0 }] }));
+    check("§1h bobin adedi 0 → 400 RECEIPT_LINES_INVALID (BOBBIN_INVALID), lot X AÇILMAZ, fiş yok", kod(bozuk) === "RECEIPT_LINES_INVALID" && (await prisma.yarnLot.count({ where: { itemId: yarn.id, lotNo: "X" } })) === 0 && (await prisma.goodsReceipt.count({ where: { deliveryNoteNo: `${TAG}-IRSX` } })) === 0, kod(bozuk));
 
     console.log("\n── §2 Kimlik ──");
     const yabanci = await prisma.yarnLot.create({ data: { itemId: yarn2.id, lotNo: `${TAG}-Y` }, select: { id: true } });
@@ -173,8 +174,9 @@ async function main(): Promise<void> {
     beamIds.push(p4.data.id);
     const e5 = await beklenenHata(() => windWarpBeam(p4.data.id, { lengthM: 10, kgSource: WarpKgSource.WEIGHED, machineId: mk.id, yarnIssues: [{ warehouseId: wh.id, qtyKg: 2 }] }));
     check("§5b lotRequired AÇIK: lotsuz çıkış 400 YARN_LOT_REQUIRED", kod(e5) === "YARN_LOT_REQUIRED");
-    const e5b = await dusen(() => goodsReceiptService.create({ warehouseId: wh.id, deliveryNoteNo: `${TAG}-IRS5`, lines: [{ itemId: yarn.id, initialQty: 1 }] }));
-    check("§5c lotRequired AÇIK: mal kabul iplik satırı lotsuz düşer ('lot numarası zorunlu')", /lot numarası zorunlu/.test(e5b), e5b);
+    // C8 (2026-09-17): doğrulama sınıfı hata artık fiş BAŞLIĞI açılmadan 400 — `failed[]`e düşmez (test_goods_receipt_preflight).
+    const e5b = await beklenenHata(() => goodsReceiptService.create({ warehouseId: wh.id, deliveryNoteNo: `${TAG}-IRS5`, lines: [{ itemId: yarn.id, initialQty: 1 }] }));
+    check("§5c lotRequired AÇIK: mal kabul lotsuz iplik satırı → 400 RECEIPT_LINES_INVALID (fiş doğmaz), satır kodu YARN_LOT_REQUIRED", kod(e5b) === "RECEIPT_LINES_INVALID" && ((e5b as { details?: { lines?: Array<{ code: string }> } }).details?.lines?.[0]?.code === "YARN_LOT_REQUIRED"), kod(e5b));
     const w4 = await windWarpBeam(p4.data.id, { lengthM: 10, kgSource: WarpKgSource.WEIGHED, machineId: mk.id, yarnIssues: [{ warehouseId: wh.id, qtyKg: 2, lotId: lotA!.id }] });
     check("§5d lotRequired AÇIK: lotlu çıkış geçer, lot uyarısı yok", w4.data.status === "READY" && !(w4.warnings ?? []).some((x) => /lotsuz/.test(x)));
     const pF = await createWarpBeam({ warpSpecId: spec.id, plannedLengthM: 10, originKind: WarpBeamOrigin.PURCHASED, supplierId: supplier.id });
