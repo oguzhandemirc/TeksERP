@@ -21,6 +21,7 @@
 ### Yasaklar
 
 - **[ÇEKİRDEK]** `rollScope=RAW_STOCK` ham + yarı mamulün BİRLEŞİMİDİR ve DARALTILMAZ: mobil Hızlı İş Emri top seçicisinin tek kaynağıdır, tablette üçüncü sekme yoktur — daraltmak o topların üretime alınmasının sahadaki tek yolunu kapatır. · bekçi: `Teks-Erp/scripts/test_semi_finished_entry.ts §5 (birleşim = dar kapsamların toplamı: RAW_STOCK = RAW_STOCK_PURE ∪ SEMI_FINISHED, ikisi ayrık)` <sub>(CLAUDE.md:92, CLAUDE.md:91)</sub>
+- **[ÇEKİRDEK]** MAL KABULDE TOP SINIFI SATIR BAZLIDIR (EK 5, 2026-09-17): fiş kutusu `rawStockEntry` KALIR ama anlamı "yeni kumaş satırlarının VARSAYILANI"; satır gövdesi `rawStock?: boolean` (Zod opsiyonel) o satırın toplarını `STOCK` (ham) / `WAREHOUSE` (bitmiş) doğurur, alan yoksa fişinki (eski istemci = bugünkü davranış), iplik satırında yok sayılır (kg defteri raf taşımaz). "Yarı mamul" seçeneği YOK: dışarıdan gelen işlenecek mal HAM'dır, yarı mamul iç üretimdir. `rollScope`/giriş sekmesi topun statüsünden okur ⇒ satır bazlı davranış kendiliğinden. · bekçi: `test_goods_receipt` §L5 (sonda: `lineStatus` yerine fiş statüsü) <sub>(6e, 1e EK 5; kullanıcı onayı 03:05)</sub>
 
 ### Kararlar
 
@@ -78,7 +79,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_production_flow_columns`, `test_semi_finished_entry`, `test_semi_finished_surfaces`
+Backend: `test_goods_receipt`, `test_production_flow_columns`, `test_semi_finished_entry`, `test_semi_finished_surfaces`
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 

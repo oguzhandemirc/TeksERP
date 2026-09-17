@@ -43,6 +43,8 @@ const lineSchema = z.object({
   // İplik satırı (devere Faz 2): lot numarası + bobin adedi — Zod tanımadığını sessizce atar.
   lotNo: z.string().max(64).nullable().optional(),
   bobbinCount: z.number().int().positive().nullable().optional(),
+  // EK 5 — kumaş satırı TOP SINIFI: true ham (STOCK) · false bitmiş (WAREHOUSE) · yok = fişin `rawStockEntry`i.
+  rawStock: z.boolean().nullable().optional(),
 });
 
 const createSchema = z.object({
@@ -180,6 +182,8 @@ router.get(
  *       (fason firma) — ikisi birden dolu olamaz; ikisi de boş bırakılabilir
  *       (zorunluluk fatura kapısındadır). Fiş bir alış siparişine bağlıysa taraf
  *       siparişinkiyle AYNI olmalıdır, boşsa siparişten miras alınır.
+ *       SATIR BAŞINA TOP SINIFI (EK 5): satırda `rawStock: true|false` fişin kararını o satır için ezer;
+ *       alan yoksa fişin `rawStockEntry`i (eski istemci aynı davranış). İplik satırında yok sayılır.
  *       RAF (C2): `rawStockEntry: true` → toplar `STOCK` (işlenmek üzere alınan
  *       ham mal), aksi hâlde `WAREHOUSE` (satılabilir). İPLİK satırları bundan
  *       ETKİLENMEZ (kg defteri raf ayrımı taşımaz).

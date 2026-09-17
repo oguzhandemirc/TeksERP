@@ -1204,6 +1204,36 @@ async function main(): Promise<void> {
       where: { goodsReceiptId: lRawId, itemId: lYarn.id },
       select: { kind: true, qtyKg: true, warehouseId: true },
     });
+    // L5 — SATIR BAŞINA TOP SINIFI (EK 5, 2026-09-17): fiş kutusu VARSAYILAN, satır `rawStock` ezer; alan yoksa fişinki
+    // (eski istemci bayt bayt); iplik satırında yok sayılır. Sonda: `lineStatus` yerine `targetStatus` → L5a/L5b ❌.
+    const lMix = await goodsReceiptService.create({
+      warehouseId: wh.id,
+      rawStockEntry: false,
+      lines: [
+        { itemId: lItem.id, initialQty: 10, rawStock: true },
+        { itemId: lItem.id, initialQty: 11 },
+        { itemId: lItem.id, initialQty: 12, rawStock: false },
+      ],
+    });
+    const lMixId = (lMix.data as { id: string }).id;
+    receiptIds.push(lMixId);
+    const lMixRolls = await prisma.roll.findMany({ where: { goodsReceiptId: lMixId }, orderBy: { initialQty: "asc" }, select: { status: true, initialQty: true } });
+    check(
+      "L5a) ⭐ bitmiş fişte satır rawStock:true → STOCK, alan yok → fişin varsayılanı WAREHOUSE, false → WAREHOUSE",
+      lMixRolls.length === 3 && lMixRolls[0]?.status === RollStatus.STOCK && lMixRolls[1]?.status === RollStatus.WAREHOUSE && lMixRolls[2]?.status === RollStatus.WAREHOUSE,
+      lMixRolls.map((r) => `${r.initialQty}:${r.status}`).join(","),
+    );
+    const lRaw2 = await goodsReceiptService.create({ warehouseId: wh.id, rawStockEntry: true, lines: [{ itemId: lItem.id, initialQty: 7, rawStock: false }] });
+    const lRaw2Id = (lRaw2.data as { id: string }).id;
+    receiptIds.push(lRaw2Id);
+    const lMix2 = await goodsReceiptService.addLines(lRaw2Id, [{ itemId: lYarn.id, initialQty: 3, rawStock: true }]);
+    const lMix2Roll = await prisma.roll.findFirst({ where: { goodsReceiptId: lRaw2Id, initialQty: 7 }, select: { status: true } });
+    check(
+      "L5b) ⭐ ham fişte satır rawStock:false → WAREHOUSE (satır fişi ezer); iplik satırında rawStock yok sayılır (IN yazıldı)",
+      lMix2Roll?.status === RollStatus.WAREHOUSE && lMix2.createdYarn.length === 1 && lMix2.failed.length === 0,
+      `${lMix2Roll?.status} yarn=${lMix2.createdYarn.length}`,
+    );
+
     check(
       "L3) ⭐ Ham stok fişinde İPLİK satırı normal IN yazdı (raf ayrımı taşımaz)",
       lYarnOut.createdYarn.length === 1 &&

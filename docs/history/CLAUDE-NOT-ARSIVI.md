@@ -10690,6 +10690,11 @@ Ders: **"tren kesişimi"** — iki oturumun aynı dosyaya birer satır eklemesi 
 
 **Vitest** `receiptLineColumns.test.tsx` 4/4: kumaş-only başlık bayt bayt · karma başlık · iplik ve kumaş satırının HER hücresi aynı dizindeki başlığın etiketini taşır · bobin placeholder + adet title; negatif sonda: "Renk / Lot" → "Renk" ① ❌, Lot hücresine yanlış dizin etiketi ② ❌ görüldü. GoodsReceipts vitest 74/74.
 
+## 2026-09-17 — Mal kabulde TOP SINIFI (Ham/Bitmiş) satır bazlı; fiş kutusu varsayılan (kullanıcı onayı 03:05, 1e EK 5) [ÇEKİRDEK]
+
+**Karar:** fiş düzeyi `rawStockEntry` (C2) korunur, anlamı daralır: yeni kumaş satırlarının varsayılanı. Satır gövdesi `rawStock?: boolean` — `true` ham (`STOCK`), `false` bitmiş (`WAREHOUSE`), alan yoksa fişinki (eski istemci aynı davranış, sözleşme kırılmaz). İplik satırında yok sayılır (kg defteri raf taşımaz — C2 L3 gerekçesi). "Yarı mamul" seçeneği açılmadı: dışarıdan gelen işlenecek mal HAM'dır, yarı mamul iç üretimdir. Kullanıcı kanaati kayda: birim fişte değiştirilmez (ürün kartı); örme/KG kumaş ayrı karar.
+**Ölçüldü:** `test_goods_receipt §L5` — bitmiş fişte satır `rawStock:true` → STOCK, alansız → WAREHOUSE, `false` → WAREHOUSE; ham fişte satır `false` → WAREHOUSE; iplik satırı `rawStock:true` → IN (yok sayılır). Sonda: `lineStatus` yerine `targetStatus` → L5a/L5b ❌.
+
 ## 2026-09-17 — Kullanıcı bulgusu C8: lot zorunluyken lotsuz iplik satırı İÇİ BOŞ FİŞ doğuruyordu — doğrulama sınıfı hata satır yazılmadan reddedilir [ÇEKİRDEK]
 
 **Bulgu:** `devere.lotRequired` açıkken "Fişi Oluştur" → fiş başlığı doğdu, iplik satırı sunucuda `YARN_LOT_REQUIRED` ile `failed[]`e düştü, panel "1 satır atlandı" toast'ı basıp modalı kapattı. Kullanıcı: "kaydetmemeli, modal kapanmamalı, orada anında uyarmalı".

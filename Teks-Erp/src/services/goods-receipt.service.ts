@@ -108,6 +108,9 @@ export interface GoodsReceiptLineInput {
   lotNo?: string | null;
   /** İPLİK satırı: bobin adedi (bilgi). */
   bobbinCount?: number | null;
+  /** KUMAŞ satırı TOP SINIFI (EK 5, 2026-09-17): `true` ham (`STOCK`), `false` bitmiş (`WAREHOUSE`); yoksa fişin
+   *  `rawStockEntry` varsayılanı (eski istemci = bugünkü davranış). İplik satırında yok sayılır (kg defteri raf taşımaz). */
+  rawStock?: boolean | null;
 }
 
 export interface GoodsReceiptCreateInput {
@@ -972,6 +975,9 @@ export class GoodsReceiptService {
     // ⚠️ `false` ve alanı hiç taşımayan eski fiş AYNI dala düşer (kolon
     // `@default(false)`) → mevcut davranış bayt-bayt.
     const targetStatus = receipt.rawStockEntry ? RollStatus.STOCK : RollStatus.WAREHOUSE;
+    // EK 5: fiş kutusu VARSAYILANDIR, satır kendi sınıfını taşıyabilir (`rawStock`); yoksa fişinki (eski istemci bayt bayt).
+    const lineStatus = (line: GoodsReceiptLineInput): RollStatus =>
+      line.rawStock == null ? targetStatus : line.rawStock ? RollStatus.STOCK : RollStatus.WAREHOUSE;
 
     const created: string[] = [];
     const createdYarn: string[] = [];
@@ -1080,7 +1086,7 @@ export class GoodsReceiptService {
             // ÜZERE alınmıştır (fasona gidecek) → `STOCK`. Barkod tipi de
             // statüden türer (`finalBarcodeType`): ham girişte "H", satılabilir
             // girişte "F" — yani etiket de doğru şeyi söyler.
-            forcedStatus: targetStatus,
+            forcedStatus: lineStatus(line),
             forcedEntrySource: RollEntrySource.PURCHASE_RECEIPT,
             warehouseId: receipt.warehouseId,
             goodsReceiptId: receipt.id,
