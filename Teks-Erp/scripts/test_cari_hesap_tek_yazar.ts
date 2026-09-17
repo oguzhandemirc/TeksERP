@@ -12,6 +12,9 @@
 //    `{subcontractorId}` ile bağlı profile → 409 "zaten açık" (ikinci hesap DOĞMAZ)
 // §4 bağsız fason → eski yol (hesap `subcontractorId`de, kind SUBCONTRACTOR)
 // §5 `resolvePartyToCardTx` saf sözleşmesi: müşteri verilirse dokunmaz; ikisi birden verilirse dokunmaz (XOR çağıranda)
+// §6 cari HESAP listesi kartın rol süzgeciyle (`partnerRoleAccountWhere`, Cariler şeridiyle aynı çift): `filter[role]`
+//    CSV OR · skaler bayrak AND · süzgeç varken kartsız (eski fason) hesap dışarıda, yokken içeride · satır `roles`
+//    taşır (kartsızda null) · tanınmayan 400
 // Negatif sonda (kırmızı görüldü): `ensureCariAccountTx`te `resolvePartyToCardTx` çağrısı kaldırılınca §1 "hesap kartta"
 // ❌ ve §3 "aynı hesap" ❌ (iki hesap doğdu).
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; temizlik yalnız `temizle`de.
@@ -24,6 +27,7 @@ import { paymentService } from "../src/services/payment.service";
 import { chequeService } from "../src/services/cheque.service";
 import { cariService } from "../src/services/cari.service";
 import { resolvePartyToCardTx } from "../src/services/helpers/party-card.helper";
+import { partnerRoleAccountWhere } from "../src/services/helpers/partner-roles.helper";
 import { AppError } from "../src/utils/app-error";
 
 let pass = 0;
@@ -134,6 +138,32 @@ async function main(): Promise<void> {
     check("ikisi birden → dokunmaz (XOR kararı çağıranda: 400)", r4.customerId === b.customerId && r4.subcontractorId === a.subcontractorId);
     const e5 = await hata(() => invoiceService.createDraft({ type: "PURCHASE", customerId: b.customerId, subcontractorId: a.subcontractorId, currency: "TRY", lines: LINES }));
     check("ikisi birden verilen fatura → 400", status(e5) === 400, msg(e5));
+
+    console.log("\n§6 cari hesap listesi — kartın rol süzgeci");
+    const listele = async (filters: Record<string, string>) =>
+      (await cariService.list({ pageSize: 200, search: T, roleWhere: partnerRoleAccountWhere(filters) as never })).data.map((r) => r.id);
+    const hepsi = await listele({});
+    const kartHesap = h1[0]?.id ?? "";
+    const fasonHesap = h4[0]?.id ?? "";
+    check("süzgeçsiz: kart hesabı DA eski fason hesabı DA listede (vakum değil)", hepsi.includes(kartHesap) && hepsi.includes(fasonHesap), `${hepsi.length}`);
+    const tedarikci = await listele({ role: "supplier" });
+    check("⭐ filter[role]=supplier → kartın hesabı var, kartsız (eski fason) hesap YOK", tedarikci.includes(kartHesap) && !tedarikci.includes(fasonHesap));
+    const musteri = await listele({ role: "customer" });
+    check("filter[role]=customer → tedarikçi-only kart hesabı yok", !musteri.includes(kartHesap));
+    const csv = await listele({ role: "customer,supplier" });
+    check("CSV = OR: customer,supplier → kart hesabı var", csv.includes(kartHesap));
+    const fasonYapan = await listele({ isSubcontractorRole: "true" });
+    const yapmayan = await listele({ isSubcontractorRole: "false" });
+    check("skaler isSubcontractorRole=true → fason rollü kart var; =false → yok", fasonYapan.includes(kartHesap) && !yapmayan.includes(kartHesap));
+    const and = await listele({ role: "supplier", isSubcontractorRole: "false" });
+    check("role + skaler AND: supplier ∧ fason yapmayan → fason rollü tedarikçi kartı yok", !and.includes(kartHesap));
+    const satirlar = (await cariService.list({ pageSize: 200, search: T })).data;
+    const kartSatir = satirlar.find((r) => r.id === kartHesap);
+    const fasonSatir = satirlar.find((r) => r.id === fasonHesap);
+    check("satır kartın rollerini taşır (rozet kaynağı); kartsız eski fason hesabında roles null", kartSatir?.roles?.isSupplierRole === true && kartSatir?.roles?.isSubcontractorRole === true && fasonSatir?.roles === null, JSON.stringify(kartSatir?.roles));
+    const e6 = await hata(async () => partnerRoleAccountWhere({ role: "bogus" }));
+    const e6b = await hata(async () => partnerRoleAccountWhere({ isSupplierRole: "evet" }));
+    check("tanınmayan rol / bayrak değeri → 400 (fail-closed)", status(e6) === 400 && status(e6b) === 400, `${msg(e6)} | ${msg(e6b)}`);
   } catch (e) {
     fail++;
     console.log(`  ✗ FAIL: beklenmeyen hata — ${msg(e).slice(0, 300)}`);

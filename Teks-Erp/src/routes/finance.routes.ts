@@ -18,6 +18,9 @@ import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireFinanceEnabled } from "../middlewares/finance.middleware";
 import { buildShipmentInvoiceDraftPreview } from "../services/helpers/shipment-auto-draft.helper";
 import { cariService } from "../services/cari.service";
+import { partnerRoleAccountWhere } from "../services/helpers/partner-roles.helper";
+import { parseQueryParams } from "../utils/query-parser";
+import type { Prisma } from "@prisma/client";
 import { invoiceService } from "../services/invoice.service";
 import { paymentService } from "../services/payment.service";
 import { cashTransactionService } from "../services/cash-transaction.service";
@@ -61,6 +64,28 @@ const cariCreateSchema = z
   })
   .strict();
 
+/**
+ * @openapi
+ * /api/finance/cari:
+ *   get:
+ *     tags: [Finance]
+ *     summary: Cari hesap listesi
+ *     description: >
+ *       Kartın rol süzgeci Cariler şeridiyle aynı çifttir: `filter[role]` CSV (customer · supplier ·
+ *       subcontractor, OR) ve skaler `filter[isCustomerRole|isSupplierRole|isSubcontractorRole]=true|false`
+ *       (AND). Süzgeç geldiğinde hesap KARTIN bayrağıyla süzülür (kartsız eski fason hesapları dışarıda kalır);
+ *       eski panel süzgeç göndermez ve tüm hesapları görür. `kind` eski istemci için kalır.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: "filter[role]", schema: { type: string }, description: "CSV: customer,supplier,subcontractor (OR)" }
+ *       - { in: query, name: "filter[isSupplierRole]", schema: { type: string, enum: ["true", "false"] } }
+ *       - { in: query, name: "filter[isCustomerRole]", schema: { type: string, enum: ["true", "false"] } }
+ *       - { in: query, name: "filter[isSubcontractorRole]", schema: { type: string, enum: ["true", "false"] } }
+ *       - { in: query, name: kind, schema: { type: string, enum: [CUSTOMER, SUBCONTRACTOR] }, description: "Eski istemci" }
+ *     responses:
+ *       200: { description: Liste }
+ *       400: { description: Tanınmayan rol süzgeci }
+ */
 router.get("/cari", requirePermission("finance:read"), async (req, res, next) => {
   try {
     const q = req.query as Record<string, string | undefined>;
@@ -69,6 +94,7 @@ router.get("/cari", requirePermission("finance:read"), async (req, res, next) =>
       pageSize: q.pageSize ? Number(q.pageSize) : undefined,
       search: q.search,
       kind: q.kind === "CUSTOMER" || q.kind === "SUBCONTRACTOR" ? q.kind : undefined,
+      roleWhere: partnerRoleAccountWhere(parseQueryParams(req).filters) as Prisma.CustomerWhereInput | undefined,
       isActive: q.isActive === undefined ? undefined : q.isActive === "true",
       onlyWithBalance: q.onlyWithBalance === "true",
       // H2 (2026-08-14): "Gecikmiş" kolonu — bayrak verilmeyince servis ek

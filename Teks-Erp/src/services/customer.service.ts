@@ -15,7 +15,7 @@ import { OrderStatus, ShipmentDestination } from "@prisma/client";
 import { dailyCodePrefix, nextDailySeq, foldCodeForCompare } from "../utils/code-format";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { parseQueryParams, readFilterList } from "../utils/query-parser";
-import { applyPartnerRoles, ROLE_FILTER_TO_FLAG, type PartnerRoles } from "./helpers/partner-roles.helper";
+import { applyPartnerRoles, roleListWhere, type PartnerRoles } from "./helpers/partner-roles.helper";
 import { createProfileForCustomerTx, PROFILE_CUSTOMER_TYPE_MESSAGE } from "./subcontractor-management.service";
 import { AuditService } from "./audit.service";
 import { validateAndShapeBranches } from "./helpers/customer-inline-branches.helper";
@@ -83,14 +83,7 @@ export class CustomerService extends BaseService {
    */
   protected extraWhere(req: Request): Record<string, unknown> | undefined {
     const { filters } = parseQueryParams(req);
-    const roles = readFilterList(filters.role);
-    if (roles.length === 0) return undefined;
-    const or = roles.map((r) => {
-      const flag = ROLE_FILTER_TO_FLAG[r.trim().toLowerCase()];
-      if (!flag) throw AppError.badRequest(`Geçersiz rol süzgeci: ${r} (customer, supplier, subcontractor).`);
-      return { [flag]: true };
-    });
-    return or.length === 1 ? or[0] : { OR: or };
+    return roleListWhere(readFilterList(filters.role));
   }
 
   /** Kartın mevcut rolleri (update'te gövdedeki eksik bayrak buradan tamamlanır). */

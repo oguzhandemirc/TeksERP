@@ -37,6 +37,8 @@ export interface CariListRow {
    *  notu kullanıcı görmeden ezerdi — yazma-tek-yönlü alan yüzey almaz. */
   notes: string | null;
   isActive: boolean;
+  /** Kartın rolleri (rol modeli) — kartsız eski fason hesabında null; panel rozeti buradan yazar. */
+  roles: { isCustomerRole: boolean; isSupplierRole: boolean; isSubcontractorRole: boolean } | null;
   balances: Array<{ currency: Currency; balance: Prisma.Decimal }>;
   /** YALNIZ `withOverdue: true` istendiğinde döner — para birimi bazında vadesi
    *  geçmiş AÇIK tutar. Değer yaşlandırma raporunun `overdueTotal`'ıyla TEK
@@ -47,9 +49,15 @@ export interface CariListRow {
 }
 
 const PARTY_SELECT = {
-  customer: { select: { id: true, code: true, name: true, taxNumber: true } },
+  customer: { select: { id: true, code: true, name: true, taxNumber: true, isCustomerRole: true, isSupplierRole: true, isSubcontractorRole: true } },
   subcontractor: { select: { id: true, code: true, name: true, taxNumber: true } },
 } as const;
+
+/** Kartın rol bayrakları — kartsız (eski fason kind'lı) hesapta null. */
+function rolesOf(row: { customer: { isCustomerRole: boolean; isSupplierRole: boolean; isSubcontractorRole: boolean } | null }): CariListRow["roles"] {
+  const c = row.customer;
+  return c ? { isCustomerRole: c.isCustomerRole, isSupplierRole: c.isSupplierRole, isSubcontractorRole: c.isSubcontractorRole } : null;
+}
 
 /** Cari kartının görünen adı/kodu — hangi tarafa bağlıysa oradan. */
 function partyOf(row: {
@@ -77,6 +85,8 @@ export class CariService {
     search?: string;
     kind?: CariKind;
     isActive?: boolean;
+    /** Kartın rol süzgeci (`partnerRoleAccountWhere`): hesap KARTIN bayrağıyla süzülür; eski panel göndermez → hepsi. */
+    roleWhere?: Prisma.CustomerWhereInput;
     /** Yalnız bakiyesi SIFIR OLMAYANLAR — "kimden alacağım var" sorusu. */
     onlyWithBalance?: boolean;
     /** Vadesi geçmiş açık tutarları da getir (H2). Bayrak verilmezse ek sorgu
@@ -89,6 +99,7 @@ export class CariService {
     const where: Prisma.CariAccountWhereInput = {};
     if (params.kind) where.kind = params.kind;
     if (params.isActive !== undefined) where.isActive = params.isActive;
+    if (params.roleWhere) where.customer = params.roleWhere;
     if (params.search?.trim()) {
       // ⚠️ TÜRKÇE-DUYARLI (kural + gerekçe: `utils/query-parser`).
       // ⚠️ CARİ ADI **NORMALİZE EDİLMEZ** — `Item.name`in aksine BÜYÜĞE
@@ -155,6 +166,7 @@ export class CariService {
           code: p.code,
           name: p.name,
           taxNumber: p.taxNumber,
+          roles: rolesOf(r),
           taxOffice: r.taxOffice,
           defaultCurrency: r.defaultCurrency,
           paymentTermDays: r.paymentTermDays,
@@ -184,6 +196,7 @@ export class CariService {
         id: row.id,
         kind: row.kind,
         code: p.code,
+        roles: rolesOf(row),
         name: p.name,
         taxNumber: p.taxNumber,
         taxOffice: row.taxOffice,

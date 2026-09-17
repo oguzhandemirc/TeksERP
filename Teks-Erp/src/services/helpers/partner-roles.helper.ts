@@ -10,6 +10,7 @@
 // =============================================================================
 import type { CompanyType } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
+import { readFilterList } from "../../utils/query-parser";
 
 export interface PartnerRoles {
   isCustomerRole: boolean;
@@ -28,6 +29,32 @@ export const ROLE_FILTER_TO_FLAG: Record<string, PartnerRoleKey> = {
 };
 
 export const NO_ROLE_MESSAGE = "Kartın en az bir rolü olmalı: Müşteri, Tedarikçi ya da Fason.";
+
+/** `filter[role]` CSV (customer · supplier · subcontractor) → bayrak koşulu, OR; tanınmayan değer 400 (fail-closed). */
+export function roleListWhere(roles: string[]): Record<string, unknown> | undefined {
+  if (roles.length === 0) return undefined;
+  const or = roles.map((r) => {
+    const flag = ROLE_FILTER_TO_FLAG[r.trim().toLowerCase()];
+    if (!flag) throw AppError.badRequest(`Geçersiz rol süzgeci: ${r} (customer, supplier, subcontractor).`);
+    return { [flag]: true };
+  });
+  return or.length === 1 ? or[0] : { OR: or };
+}
+
+/**
+ * Cari HESAP listesi için kart rol süzgeci (Cariler şeridiyle aynı çift): `filter[role]` CSV (OR) +
+ * skaler `filter[isCustomerRole|isSupplierRole|isSubcontractorRole]=true|false` (AND). Süzgeç geldiğinde hesap
+ * KARTIN bayrağıyla süzülür — kartsız (eski fason kind'lı) hesaplar süzgeç dışında kalır; süzgeç yoksa hepsi.
+ */
+export function partnerRoleAccountWhere(filters: Record<string, string | string[] | undefined>): Record<string, unknown> | undefined {
+  const where: Record<string, unknown> = { ...(roleListWhere(readFilterList(filters.role)) ?? {}) };
+  for (const key of PARTNER_ROLE_KEYS) {
+    const raw = filters[key];
+    if (raw === "true" || raw === "false") where[key] = raw === "true";
+    else if (raw !== undefined) throw AppError.badRequest(`Geçersiz rol süzgeci: ${key}=${String(raw)} (true ya da false).`);
+  }
+  return Object.keys(where).length === 0 ? undefined : where;
+}
 
 /** Rol bayraklarından türetilmiş ticari tip. Ticari yön yok + fason → SUPPLIER; hiç rol yok → CUSTOMER (şema varsayılanı). */
 export function resolveCompanyType(roles: PartnerRoles): CompanyType {
