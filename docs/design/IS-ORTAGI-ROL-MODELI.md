@@ -64,7 +64,12 @@ hesap" vaadi sessizce bozulur. Göç bunu ONARAMAZ: göç geçmişi toplar, gele
 `subcontractorId` profilin kartına (`customerId`) çevrilir ve hesap KARTA açılır/bulunur
 (`kind: CUSTOMER`). Profil bağsızsa (göç koşmamış kurulum) eski yol aynen çalışır: varsayılan =
 bugünkü davranış. XOR CHECK'lere dokunulmaz; ekstre, yaşlandırma ve raporlar `cariId` ile
-çalıştığı için değişmez. Bekçi adı dilim inince buraya yazılır.
+çalıştığı için değişmez.
+
+**İNDİ** (`1f3b9995`): çözücü `resolveAccountPartyTx` (`helpers/finance.helper.ts`), bekçi
+`scripts/test_cari_hesap_tek_yazar.ts` — bağlı fasona fatura + ödeme + çek kesilir, hesap KARTTA
+doğar, `subcontractorId` null ve ikinci hesap DOĞMAZ; negatif sonda: çözücü çağrısı kaldırılınca
+kırmızı.
 
 ## 3. Saha güvencesi — bu fazın değişmezleri
 
@@ -171,6 +176,30 @@ koşar ve dördünü birden ölçer:
 
 Dördü yeşil değilse faz açılmaz; üç yeşil + bir ölçülemedi de AÇMAZ.
 
+### 7.1b AYNI SINIFTAKİ ÜÇ BORÇ DAHA — "bir firma, iki adres" (MV-02)
+
+`CariAccount` bu kalıbın tek örneği DEĞİL. Şemada `Customer` ve `Subcontractor`a AYNI ANDA bağlanan
+dört model var (tarandı 2026-09-17); `Customer`/`Subcontractor`ın kendi satırları (profil bağı ve
+tombstone) sayılmaz:
+
+| Model | Çift bağ | Kapı türü | Saha | Kaldırma koşulu |
+|---|---|---|---|---|
+| `CariAccount` | `customerId` XOR `subcontractorId` | İKİ DB CHECK | 1 hesap (göçle karta taşındı) | §7.1 ①②; yazım kapısı İNDİ (`resolveAccountPartyTx`) |
+| `WarpBeam` (PURCHASED) | `supplierId` XOR `subcontractorId` | yalnız şema yorumu (`///`) — DB CHECK YOK | levent 0 (devere kapalı) | bağsız profil 0 + eski istemci 0; yazım kapısı: 01 dilim E |
+| `PurchaseOrder` | `supplierId` XOR `subcontractorId` | yalnız SERVİS (`helpers/supplier-party.helper`) | alış siparişi 0 | aynı; yazım kapısı: 01 dilim E |
+| `GoodsReceipt` | `supplierId` XOR `subcontractorId` | yalnız SERVİS (aynı helper) | mal kabul 0 | aynı; yazım kapısı: 01 dilim E |
+
+Son üçü bir tasarım hatası DEĞİL, 2026-08-15 "alış her cariden yapılabilir" kararının (C4) sonucudur
+ve o karar hâlâ geçerli — değişen şey, artık firmanın TEK KARTI olması: bağlı bir fasona kesilen alış
+siparişi/mal kabulü ya da planlanan satın alma leventi `subcontractorId` yazarsa, kartı dururken
+**ikinci adres** doğar. `ensureCariAccountTx` ile birebir aynı sınıf ⇒ aynı çare: **yazımda taraf
+önce ÇÖZÜLÜR** (bağlı profil → kartın `supplierId`si), **okuma her ikisini de kabul eder**
+(geriye dönük). Bu yazım kapısı **01 dilim E**'nin işidir (1.3.2); sha inince bekçi adı buraya yazılır.
+
+⚠️ `WarpBeam.ownerCustomerId ↔ subcontractorId` çifti bu listeye GİRMEZ: "malın sahibi" ile "işi
+yapan" İKİ AYRI EKSENDİR ve aynı anda dolu olmaları meşrudur (şema yorumu: kolon `supplierId`e
+bindirilmez). MV-02 "aynı ROLÜN iki adresi"ni yasaklar, iki farklı rolü değil.
+
 ### 7.2 Migration sırası — üç AYRI migration, her biri kopyada prova
 
 Sıra bağlayıcıdır; her adım bir öncekinin bıraktığı durumu varsayar. Her migration
@@ -182,6 +211,7 @@ dump'ının TAZE kopyasında prova edilir (restore → deploy → bekçiler → 
 | 1 | `cari_accounts`: önce `customerId NOT NULL`, sonra iki CHECK (`cari_accounts_party_xor`, `cari_accounts_kind_matches_party`) kaldırılır ve `subcontractorId` kolonu DROP | Hesabı `cariId` ile okuyan her istemci etkilenmez; yalnız `subcontractorId` alanını GÖNDEREN bir yazıcı kalmışsa 400 alır — koşul ②, böyle bir yazıcının sahada olmadığını ölçer |
 | 2 | `Customer.type` kolonu DROP + `CompanyType` enum DROP | ⚠️ EN RİSKLİ ADIM: `type` okuyan eski panel/tablet alanı `undefined` görür ve rozet/etiket boş kalır. Bu yüzden ÖN KOŞUL yalnız ④ değil, **panel ve mobilin `type` okumayı BIRAKTIĞININ ölçülmesidir** (faz 2 dilim C) |
 | 3 | `Subcontractor.customerId NOT NULL` | Bağsız profil yaratmaya çalışan eski istemci 400 alır; koşul ①, sahada bağsız profil kalmadığını ölçer |
+| 4 | `WarpBeam` · `PurchaseOrder` · `GoodsReceipt`: `subcontractorId` kolonları DROP (§7.1b) — her biri AYRI migration, sırası kendi içinde serbest | Bu alanları GÖNDEREN eski istemci 400 alır; okuma yolları zaten kartı çözdüğü için listeler ve belgeler etkilenmez. Ön koşul: dilim E'nin yazım kapısı sahada en az bir sürüm boyunca koşmuş olmalı |
 
 ### 7.3 Kaldırılmayacak olan
 
