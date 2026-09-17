@@ -56,8 +56,25 @@ function kodSatirlari(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
 }
 
-/** Kapı çağrısının imzası. */
+/** Geliştirme-hedefi kapısının imzası (`db-guard`). */
 const KAPI = "assertGelistirmeVeritabani(";
+
+/**
+ * KAPI SAYILAN ÇAĞRILARIN TAMAMI — TEK KAYNAK.
+ *
+ * ⚠️ NEDEN TEK KAYNAK (ölçüldü 2026-09-17, D2 göç betiğinin ilk CI koşumu kırmızı verdi): §10b bu
+ * kümeyi tanıyordu, §6b ise yalnız `assertGelistirmeVeritabani`yi. FABRİKADA
+ * koşması gereken bir betik (`migrate_partner_roles`) geliştirme kapısını
+ * KULLANAMAZ — meşru kapısı `fixtureHedefEngeli` + `YAZILMASI_YASAK_DB`dir; §6b
+ * onu "kapısız" sayıp tavanı 43'e çıkardı. Kapı VARDI, ÖLÇÜM kördü.
+ * ⇒ *Aynı soruyu iki yerde ayrı ayrı tanımlayan bekçi, ikisinden biri
+ *   genişlediğinde kendi kendisiyle çelişir — ve çelişkiyi yanlış tarafa yazar.*
+ *
+ * ⚠️ §5 BU KÜMEYİ KULLANMAZ ve bilinçli: orası "şu testler GELİŞTİRME kapısı
+ * taşısın" diyen ADLI bir listedir; hedefini fabrikada kuran bir betik değildir.
+ */
+const KAPILAR = [KAPI, "hedefDbEngeli(", "fixtureHedefEngeli(", "hacimHedefEngeli("];
+const kapiliMi = (kod: string): boolean => KAPILAR.some((k) => kod.includes(k));
 
 /** `$executeRaw` / `$executeRawUnsafe` çağrısı — argümanı TEK düz literal ise yakalar. */
 const RAW_TEK_LITERAL =
@@ -212,7 +229,7 @@ function main(): void {
     if (bulunan.length === 0) continue;
     yikicilar.push(f);
     if (f in MUAFLAR) continue;
-    if (!kod.includes(KAPI)) kapisizlar.push(`${f} (${bulunan.map((b) => b.ne).join("+")})`);
+    if (!kapiliMi(kod)) kapisizlar.push(`${f} (${bulunan.map((b) => b.ne).join("+")})`);
   }
 
   check("§0: yıkıcı iz taşıyan dosya bulundu (körlük zemini)", yikicilar.length >= 3, yikicilar.join(", "));
@@ -258,7 +275,7 @@ function main(): void {
     const kod = kodSatirlari(readFileSync(join(dizin, f), "utf8"));
     if (!prismaYikiciMi(kod)) continue;
     prismaYikicilar.push(f);
-    if (!kod.includes(KAPI)) prismaKapisizlar.push(f);
+    if (!kapiliMi(kod)) prismaKapisizlar.push(f);
   }
   check(
     "§6a körlük zemini: Prisma ile silen betik bulundu",
@@ -531,7 +548,6 @@ function main(): void {
   // koşucunun kapısını da atlar: `npx tsx scripts/x.ts` doğrudan koşulduğunda
   // hiçbir ayak çalışmaz. Bu bölüm o sınıfı adıyla arar.
   const HEDEF_KURAN = ["new Pool(", "new PrismaClient(", "process.env.DATABASE_URL ="];
-  const KAPILAR = [KAPI, "hedefDbEngeli(", "fixtureHedefEngeli(", "hacimHedefEngeli("];
   const HEDEF_KURAN_MUAF: Record<string, string> = {
     "lib/hedef-db-kapisi.ts": "kapının KENDİSİ — hedefi ölçmek için havuz kurar",
     "test_script_guards.ts": "bu dosyanın kendisi — aradığı izleri sabit olarak taşır",
@@ -545,7 +561,7 @@ function main(): void {
     if (!HEDEF_KURAN.some((iz) => kod.includes(iz))) continue;
     hedefKuranlar.push(f);
     if (f in HEDEF_KURAN_MUAF) continue;
-    if (!KAPILAR.some((k) => kod.includes(k))) hedefKuranKapisiz.push(f);
+    if (!kapiliMi(kod)) hedefKuranKapisiz.push(f);
   }
   check(
     "§10a körlük zemini: kendi hedefini kuran betik bulundu",
