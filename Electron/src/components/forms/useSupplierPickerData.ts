@@ -34,7 +34,7 @@ interface Args {
   filters: PickerRoleFilter;
   includeInactive: boolean;
   /** Tedarikçi (SUPPLIER/BOTH cari + fason) · müşteri (yalnız cari; ALL = CUSTOMER sonra BOTH) ·
-   *  müşteri-only (dönüştürme görünümü: yalnız type=CUSTOMER). */
+   *  müşteri-only (dönüştürme görünümü: müşteri rolü var, tedarikçi rolü yok). */
   list?: PickerList;
 }
 

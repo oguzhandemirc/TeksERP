@@ -467,7 +467,7 @@ function InvoiceFormBody({
   });
 
   // Taraf iki AYRI karttan gelir: Müşteri/Tedarikçi (Customer — tedarikçi de
-  // bu karttadır, CompanyType.SUPPLIER) ve Fason (Subcontractor). Alış faturası
+  // bu karttadır, `isSupplierRole`) ve Fason (Subcontractor). Alış faturası
   // her ikisine de kesilebilir: tedarikçiden mal, fasondan hizmet alınır.
   // Cari defterin YÖNÜ türden gelir (invoiceLedgerSide), taraftan değil.
   const isCustomerParty = party === "CUSTOMER";

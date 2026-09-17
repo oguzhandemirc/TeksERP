@@ -5,8 +5,8 @@ export interface Customer {
   code: string;
   name: string;
   taxNumber: string | null;
-  /** TÜRETİLMİŞ (rol modeli 2026-09-17): yalnız eski okuyucular için; panel YAZMAZ, yeni yüzey bayrakları okur. */
-  type: CompanyType;
+  /** TÜRETİLMİŞ (rol modeli): geriye dönük — yanıtta gelir, panel okumaz da yazmaz; roller tek kaynak. */
+  type?: CompanyType;
   /** İş ortağı rolleri — kartın tek kaynağı. Fason rolü profil bağından türetilir (panel yazmaz). */
   isCustomerRole: boolean;
   isSupplierRole: boolean;

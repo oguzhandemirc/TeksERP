@@ -159,8 +159,8 @@ export interface Customer {
   id: string;
   code: string;
   name: string;
-  /** TÜRETİLMİŞ (roller tek kaynak): CUSTOMER/SUPPLIER/BOTH = isCustomerRole/isSupplierRole; sıralama + geri uyum. */
-  type: CompanyType;
+  /** TÜRETİLMİŞ (roller tek kaynak), geriye dönük — yanıtta gelir, tablet okumaz. */
+  type?: CompanyType;
   /** İş Ortağı Rol Modeli (D1, 2026-09-17) — kart tek, roller üç bayrak; etiket `partnerRoleLabel` ile. */
   isCustomerRole: boolean;
   isSupplierRole: boolean;

@@ -13,7 +13,7 @@ export interface PartnerRoleFlags {
   isSubcontractorRole: boolean;
 }
 
-/** Bayrak etiketleri — yeni yüzeylerin tek kaynağı (eski `companyTypeLabels` türetilmiş `type` gösterimi için kalır). */
+/** Bayrak etiketleri — her yüzeyin tek kaynağı (eski tip-etiketi sözlüğü silindi; `Customer.type` panelde okunmaz). */
 export const partnerRoleLabels = { customer: "Müşteri", supplier: "Tedarikçi", subcontractor: "Fason" } as const;
 export type PartnerRoleKey = keyof typeof partnerRoleLabels;
 

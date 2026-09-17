@@ -110,7 +110,7 @@ function ColorCustomersField({ form }: { form: UseFormReturn<ColorFormValues> })
     queryKey: ["customers", "picker", "color-assign"],
     queryFn: () =>
       loadAllForPicker(customerService, {
-        filters: { isActive: "true", type: "CUSTOMER" },
+        filters: { isActive: "true", role: "customer" },
       }),
     staleTime: 60_000,
   });

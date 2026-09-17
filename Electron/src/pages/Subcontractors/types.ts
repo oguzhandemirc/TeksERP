@@ -17,7 +17,7 @@ export interface Subcontractor {
   documentProfileId?: string | null;
   /** Fason = carinin rolü: bağlı cari kartı (null = bağsız fason, bugünkü davranış). */
   customerId?: string | null;
-  customer?: { id: string; code: string; name: string; type: "CUSTOMER" | "SUPPLIER" | "BOTH" } | null;
+  customer?: { id: string; code: string; name: string } | null;
   categories: SubcontractorCategoryLink[];
   createdAt: string;
   updatedAt: string;
