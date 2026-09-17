@@ -32,7 +32,10 @@ export type StationKind =
   | 'OTHER'
   // 2026-09-14 (dokuma ⓪ → tablet dilimi): tezgah — rotada ADIM DEĞİL, oturum
   // istasyonu; `SessionStationKind` + `stationScreens.ts` iki haritası `Dokuma`ya açar.
-  | 'WEAVING';
+  | 'WEAVING'
+  // 2026-09-18 (devere): levent sarım istasyonu — rotada ADIM DEĞİL, oturum istasyonu da
+  // DEĞİL (Devere ekranı gezici); yalnız istasyon kartı türü, tablet ekran açmaz.
+  | 'WARPING';
 // ⚠️ BACKEND `StepStatus` İLE ELLE SENKRON (schema.prisma → `enum StepStatus`).
 // NEDEN 'CANCELLED' ÇIKARILDI (2026-07-31 denetimi): backend enum'unda yalnız
 // PENDING/ACTIVE/COMPLETED/SKIPPED var — 'CANCELLED' hayalet bir ayna değeriydi ve

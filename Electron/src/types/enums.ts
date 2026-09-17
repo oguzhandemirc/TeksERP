@@ -48,6 +48,10 @@ export const StationKind = {
   // Dokuma ⓪ (2026-09-14): tezgah — rotada ADIM DEĞİL, yalnız oturum istasyonu.
   // Formda `dokumaEnabled` kapalıyken GİZLENİR (stationKindVisibility.ts).
   WEAVING: "WEAVING",
+  // Devere (2026-09-18, kullanıcı bulgusu): levent sarım — rotada ADIM DEĞİL, oturum istasyonu da
+  // DEĞİL; tür keşfedilebilirlik + önerilen yetenek (`producesWarpBeam`), motor yeteneği okur.
+  // Formda `devereEnabled` kapalıyken GİZLENİR (stationKindVisibility.ts).
+  WARPING: "WARPING",
 } as const;
 export type StationKind = (typeof StationKind)[keyof typeof StationKind];
 
@@ -59,7 +63,13 @@ export const stationKindLabels: Record<StationKind, string> = {
   SHIPPING: "Sevkiyat / Tartı",
   OTHER: "Diğer",
   WEAVING: "Dokuma Tezgahı",
+  WARPING: "Devere (Levent Sarım)",
 };
+
+/** Tür etiketi — eski panel bilinmeyen (yeni) türü ham adıyla basar, `undefined` çizmez (fail-soft). */
+export function stationKindLabel(kind: string): string {
+  return (stationKindLabels as Record<string, string | undefined>)[kind] ?? kind;
+}
 
 export const DefectSeverity = {
   MINOR: "MINOR",

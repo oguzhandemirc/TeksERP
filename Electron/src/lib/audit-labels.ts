@@ -830,7 +830,7 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   "WARP_BEAM.originKind": { IN_HOUSE: "İçeride sarıldı" },
   // StationKind.WEAVING (dokuma ⓪, 2026-09-14) — istasyon TÜRÜ; global `WEAVING`
   // RollEntrySource dilinde ("Dokumadan İndi", topun kaynağı). Ortak Türkçe YETMEZ.
-  "STATION.kind": { WEAVING: "Dokuma Tezgahı" },
+  "STATION.kind": { WEAVING: "Dokuma Tezgahı", WARPING: "Devere (Levent Sarım)" },
   // MachineSealState.OPEN (2026-09-14) — karne MÜHÜRSÜZ; global `OPEN` alış siparişi
   // dilinde ("Açık (mal bekleniyor)"). Ortak Türkçe YETMEZ.
   "MACHINE_SHIFT_STAT.sealState": { OPEN: "Açık (mühürsüz)" },

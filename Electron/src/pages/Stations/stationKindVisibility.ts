@@ -1,19 +1,22 @@
 // İstasyon türü seçeneklerinin GÖRÜNÜRLÜĞÜ — enum aynası üzerinde süzgeç.
-// `WEAVING` yalnız `dokuma.enabled` açıkken çizilir ("kapalı modülün bayrağı
-// çizilmez"in istasyon-türü ayağı, 1e 2026-09-14). Ayna DOKUNULMAZ: tip ve etiket
+// `WEAVING` yalnız `dokuma.enabled`, `WARPING` yalnız `devere.enabled` açıkken çizilir
+// ("kapalı modülün bayrağı çizilmez"in istasyon-türü ayağı, 1e 2026-09-14). Ayna DOKUNULMAZ: tip ve etiket
 // tam kalır (denetim ekranı, liste, kart okur); yalnız FORM seçeneği süzülür.
 // ⚠️ Mevcut değer korunur: bayrak kapalıyken WEAVING bir istasyon düzenleniyorsa
 // seçeneği gizlemek formu sessizce OTHER'a düşürürdü (SHIPPING vakası, 2026-09-03).
 import { StationKind, stationKindLabels } from "@/types/enums";
 
+export type StationKindFlags = { dokumaEnabled: boolean; devereEnabled: boolean };
+
 /** Bayrağa bağlı istasyon türleri — türün adı → onu çizen bayrak. */
-export const FLAG_GATED_STATION_KINDS: Partial<Record<StationKind, "dokumaEnabled">> = {
+export const FLAG_GATED_STATION_KINDS: Partial<Record<StationKind, keyof StationKindFlags>> = {
   [StationKind.WEAVING]: "dokumaEnabled",
+  [StationKind.WARPING]: "devereEnabled",
 };
 
 /** Form seçeneği sırası: ayna sırası, yalnız "Diğer" (OTHER) EN SONA (kullanıcı isteği 2026-09-16) — tek yer. */
 export function visibleStationKindLabels(
-  flags: { dokumaEnabled: boolean },
+  flags: StationKindFlags,
   current: StationKind | null | undefined,
   labels: Record<StationKind, string> = stationKindLabels,
 ): Partial<Record<StationKind, string>> {

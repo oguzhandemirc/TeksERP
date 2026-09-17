@@ -32,6 +32,8 @@ const TABLE = "WORK_SESSION";
  * WEAVING→Tezgah). ⚠️ WEAVING tabletin `SessionStationKind` union'ında HENÜZ YOK
  * (ekran 0c'nin tablet dilimiyle doğar) — backend önce iner, tablet o güne kadar
  * tezgahta oturum açamaz (fail-closed, çökme yok).
+ * ⚠️ WARPING (devere) BİLEREK YOK: tabletin Devere ekranı gezicidir (`SESSION_SCREEN_KEYS`
+ * dışında), arkasında ekran olmayan türe oturum açtırmak fail-open olurdu.
  */
 export const SESSIONABLE_STATION_KINDS = ["RAW_QC", "PROCESS_QC", "TAMBUR", "SHIPPING", "WEAVING"] as const;
 

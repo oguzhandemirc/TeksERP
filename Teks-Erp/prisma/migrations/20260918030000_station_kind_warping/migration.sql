@@ -1,0 +1,20 @@
+-- =============================================================================
+-- DEVERE — `StationKind.WARPING` (2026-09-18) — GERİ ALINAMAZ enum değeri
+-- =============================================================================
+-- Kullanıcı bulgusu: "devere makinesini nereden ekleyeceğim göremedim — istasyon
+-- ekleyip içine makine ekliyorduk, devere istasyonu yok." Devere makinesi bugün de
+-- `Station.producesWarpBeam` istasyonunun makinesidir; tür yalnız KEŞFEDİLEBİLİRLİK
+-- ve önerilen yetenektir (form WARPING seçilince `producesWarpBeam` önerir). MOTOR
+-- GERÇEĞİ KAPASİTE KALIR: `listDevereMachines` ve sarım kapısı türe değil
+-- `producesWarpBeam`e bakar (kalite = istasyon yeteneği kalıbı).
+-- WEAVING'in ikizi: rotada ADIM DEĞİL (`NON_ROUTABLE_STATION_KINDS`, 400
+-- STATION_NOT_ROUTABLE). OTURUM istasyonu DEĞİL (ölçüldü: tabletin Devere ekranı
+-- gezici — `SESSION_SCREEN_KEYS` dışında; arkasında ekran olmayan tür oturum açamaz).
+-- TEK İFADE, AYRI DOSYA: PG yeni enum değerini onu yaratan tx'te KULLANDIRMAZ
+-- (55P04). `IF NOT EXISTS`: defter dışı açılmış bir değer sonraki deploy'u düşürmesin.
+-- ⚠️ minVersion HAYIR: eski panel etiketi ham adla basar (`stationKindLabel` fail-soft),
+--   eski tablet türü oturum listesinde görmez (zaten oturum türü değil).
+-- Aynalar: station-routable helper · station adapter · swagger · Electron
+--   enums/audit-labels/station-colors/Stations şeması+görünürlük+öneri · mobil models.ts — aynı commit.
+-- =============================================================================
+ALTER TYPE "StationKind" ADD VALUE IF NOT EXISTS 'WARPING';

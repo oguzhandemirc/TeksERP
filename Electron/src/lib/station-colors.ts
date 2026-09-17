@@ -30,6 +30,9 @@ export function stationToneForKind(kind: string): StationToneKey {
     // çizildiğinde process tonu (ham→işlem) doğru komşuluktur.
     case "WEAVING":
       return "process";
+    // Devere de üretim hattı (levent = tezgahın girdisi) — aynı ton.
+    case "WARPING":
+      return "process";
     default:
       return "process";
   }

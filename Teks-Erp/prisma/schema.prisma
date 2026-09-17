@@ -35,6 +35,7 @@ enum StationKind {
   SHIPPING // Sevkiyat/tartı — üretim dışı, MAKİNESİZ istasyon (istasyona-bağlı donanım + istasyon-oturumu)
   OTHER // Diğer / özel istasyon
   WEAVING // Dokuma tezgahı — rotada ADIM DEĞİL, yalnız OTURUM istasyonu (tezgah = makine; rota şablonuna giremez)
+  WARPING // Devere (levent sarım) — rotada ADIM DEĞİL, oturum istasyonu da DEĞİL (tablet Devere ekranı gezici); motor gerçeği `producesWarpBeam`
 }
 
 /// `FabricProperty` veri tipi — gerekçe ve tuzaklar için o modelin notuna bak.

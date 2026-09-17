@@ -31,6 +31,8 @@ export const STATION_KIND_CAPABILITY_DEFAULTS: Record<StationKind, StationCapabi
   [StationKind.SUBCONTRACTOR]: { ...NONE, appliesColor: true, appliesProperty: true },
   [StationKind.SHIPPING]: NONE,
   [StationKind.WEAVING]: { ...NONE, consumesWarpBeam: true },
+  // Devere: levent ÜRETİR — öneri; motor yine yeteneği okur (tür yetenek yerine geçmez).
+  [StationKind.WARPING]: { ...NONE, producesWarpBeam: true },
   [StationKind.OTHER]: NONE,
 };
 

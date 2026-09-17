@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { toneFor } from "@/lib/station-colors";
-import { stationKindLabels, stationTypeLabels } from "@/types/enums";
+import { stationKindLabel, stationTypeLabels } from "@/types/enums";
 import { peripheralKindLabels } from "@/pages/PeripheralDevices/types";
 import type { Station } from "./types";
 import type { StationMachineRow } from "./stationMachineRows";
@@ -43,7 +43,7 @@ function StationCells({ s, canWrite, onEditStation }: { s: Station; canWrite: bo
         </div>
       </TableCell>
       <TableCell className="py-1.5">
-        <Badge className={cn("border-transparent font-medium", tone.bgSoft, tone.text)}>{stationKindLabels[s.kind]}</Badge>
+        <Badge className={cn("border-transparent font-medium", tone.bgSoft, tone.text)}>{stationKindLabel(s.kind)}</Badge>
       </TableCell>
       <TableCell className="py-1.5 text-xs">{stationTypeLabels[s.type]}</TableCell>
       <TableCell className="py-1.5 text-xs">{s.department ?? "—"}</TableCell>

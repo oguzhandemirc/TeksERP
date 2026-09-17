@@ -588,6 +588,11 @@
           "kapsam": "tablet",
           "tip": "yeni",
           "metin": "Ham Giriş (KK1) ekranına “Sahibi (emanet mal ise müşteri)” satırı geldi — yalnız emanet modülü açık fabrikada görünür, kapalıysa ekran değişmez. Müşterinin işlenmek üzere bıraktığı kumaş girilirken “Müşteri seç” ile sahibi seçilir; seçim sonraki toplarda kalır, “Emanet değil” ile temizlenir. Sahipli top başka müşteriye sevk edilemez (sevkiyat engeli panelle aynı). Operatöre ayrıca müşteri yetkisi verilmesi gerekmez — liste ham giriş yetkisiyle gelir ve yalnız müşteri adını taşır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "İstasyon kartında Görev Türü listesine “Devere (Levent Sarım)” eklendi (Devere modülü açıkken görünür): devere makinesi artık bu türde bir istasyon açıp içine makine ekleyerek tanımlanır; tür seçilince “Levent sarar” yeteneği kendiliğinden işaretlenir. Levent sarım ekranı makineyi yine bu yeteneğe göre listeler — “Diğer” türünde “Levent sarar” işaretli mevcut istasyonlar aynen çalışmaya devam eder. Devere istasyonu rota şablonuna ve iş emri rotasına eklenemez (levent, topun rotasında bir adım değildir) ve tablette oturum açmaz."
         }
       ]
     },

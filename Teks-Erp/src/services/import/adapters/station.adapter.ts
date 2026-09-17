@@ -50,6 +50,7 @@ const COLUMNS: ImportColumn[] = [
       { value: "SUBCONTRACTOR", label: "Fason" },
       { value: "SHIPPING", label: "Sevkiyat / Tartı" },
       { value: "WEAVING", label: "Dokuma Tezgahı" },
+      { value: "WARPING", label: "Devere (Levent Sarım)" },
       { value: "OTHER", label: "Diğer" },
     ],
     help: "İstasyonun domain rolü — mobil ekranların davranışı buna bağlıdır. Boş bırakılırsa Diğer.",

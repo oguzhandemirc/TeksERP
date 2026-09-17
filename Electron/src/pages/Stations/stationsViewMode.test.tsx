@@ -67,7 +67,7 @@ describe("Liste görünümü — kart ve dosya ile aynı küme", () => {
     const s1 = station({ id: "s1", name: "KK1", kind: StationKind.RAW_QC });
     const s2 = station({ id: "s2", name: "Tezgah", kind: StationKind.WEAVING, consumesWarpBeam: true });
     const s3 = station({ id: "s3", name: "Sevk", kind: StationKind.SHIPPING });
-    const stations = [s1, s2, s3].filter((s) => visibleStationKinds({ dokumaEnabled: true }).includes(s.kind));
+    const stations = [s1, s2, s3].filter((s) => visibleStationKinds({ dokumaEnabled: true, devereEnabled: true }).includes(s.kind));
     expect(stations).toHaveLength(3);
     const rows = buildStationMachineRows(stations, new Map([["s2", [machine("m1", "s2"), machine("m2", "s2")]]]), new Map(), new Map());
     expect(rows.map((r) => `${r.station.id}:${r.machine?.id ?? "-"}`)).toEqual(["s1:-", "s2:m1", "s2:m2", "s3:-"]);

@@ -11,12 +11,12 @@
 // =============================================================================
 import type { StationKind } from "@/types/enums";
 import { stationFormSchema } from "./schema";
-import { FLAG_GATED_STATION_KINDS } from "./stationKindVisibility";
+import { FLAG_GATED_STATION_KINDS, type StationKindFlags } from "./stationKindVisibility";
 
 /** Formun kaydettirebildiği türler — `schema.ts` zod enum'undan TÜRETİLİR (iki yerde yazılmaz). */
 export const STATION_FORM_KINDS: readonly StationKind[] = stationFormSchema.shape.kind.options;
 
-export type StationKindFlags = { dokumaEnabled: boolean };
+export type { StationKindFlags };
 
 /** Tür bu sayfada çizilir mi: formda var ∧ (bayrağa bağlı değil ∨ bayrağı açık). */
 export function isVisibleStationKind(kind: StationKind, flags: StationKindFlags): boolean {

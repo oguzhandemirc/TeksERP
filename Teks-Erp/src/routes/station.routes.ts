@@ -77,7 +77,7 @@ const router = Router();
  *         schema: { type: string, enum: [INTERNAL, EXTERNAL] }
  *       - in: query
  *         name: filter[kind]
- *         schema: { type: string, enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, SHIPPING, OTHER, WEAVING] }
+ *         schema: { type: string, enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, SHIPPING, OTHER, WEAVING, WARPING] }
  *       - in: query
  *         name: filter[department]
  *         schema: { type: string }
@@ -160,7 +160,7 @@ router.get("/:id", verifyToken, requirePermission("station:read"), stationContro
  *               type: { type: string, enum: [INTERNAL, EXTERNAL] }
  *               kind:
  *                 type: string
- *                 enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, SHIPPING, OTHER, WEAVING]
+ *                 enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, SHIPPING, OTHER, WEAVING, WARPING]
  *                 description: Domain rolü — API davranış dispatch'i için kullanılır (ör. PROCESS_QC → Kurşun+QC2 akışı, TAMBUR → kesim/karar akışı). Varsayılan OTHER.
  *                 example: OTHER
  *               department: { type: string, example: "TERBIYE" }
@@ -212,7 +212,7 @@ router.post("/", verifyToken, requirePermission("station:write"), validateStatio
  *               type: { type: string, enum: [INTERNAL, EXTERNAL] }
  *               kind:
  *                 type: string
- *                 enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, SHIPPING, OTHER, WEAVING]
+ *                 enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, SHIPPING, OTHER, WEAVING, WARPING]
  *               department: { type: string }
  *               allowAsWorkOrderStep: { type: boolean }
  *               appliesColor: { type: boolean }

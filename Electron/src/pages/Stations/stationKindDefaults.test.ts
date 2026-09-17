@@ -11,6 +11,8 @@ describe("İstasyon formu — türe göre önerilen yetenekler", () => {
     expect(suggestedCapabilities(StationKind.PROCESS_QC)).toMatchObject({ appliesQuality: true, appliesColor: false, appliesProperty: false });
     expect(suggestedCapabilities(StationKind.SUBCONTRACTOR)).toMatchObject({ appliesColor: true, appliesProperty: true, appliesQuality: false });
     expect(suggestedCapabilities(StationKind.WEAVING)).toMatchObject({ consumesWarpBeam: true, producesWarpBeam: false, appliesProperty: false });
+    // Devere: levent ÜRETİR (tüketmez) — tezgahın aynası.
+    expect(suggestedCapabilities(StationKind.WARPING)).toMatchObject({ producesWarpBeam: true, consumesWarpBeam: false, appliesQuality: false });
     expect(suggestedCapabilities(StationKind.TAMBUR)).toMatchObject({ appliesProperty: true, appliesColor: false });
     for (const k of [StationKind.RAW_QC, StationKind.SHIPPING, StationKind.OTHER]) {
       expect(Object.values(suggestedCapabilities(k)).some(Boolean)).toBe(false);

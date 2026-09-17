@@ -22,6 +22,7 @@ export const stationFormSchema = z.object({
       StationKind.SHIPPING,
       StationKind.OTHER,
       StationKind.WEAVING,
+      StationKind.WARPING,
     ],
     { message: "İstasyon türü seçilmeli" },
   ),

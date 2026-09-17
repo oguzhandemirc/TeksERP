@@ -100,7 +100,7 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
                       const next = valuesAfterKindChange(form.getValues(), kind, !!initial);
                       for (const k of CAPABILITY_FIELDS) form.setValue(k, next[k], { shouldDirty: true });
                     }}
-                    labels={visibleStationKindLabels({ dokumaEnabled }, field.value) as Record<StationKind, string>}
+                    labels={visibleStationKindLabels({ dokumaEnabled, devereEnabled }, field.value) as Record<StationKind, string>}
                   />
                 )}
               />

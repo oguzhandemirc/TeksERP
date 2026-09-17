@@ -10,11 +10,11 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useCrudMutations } from "@/hooks/useCrudMutations";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { useDokumaEnabled } from "@/hooks/usePricingEnabled";
+import { useDevereEnabled, useDokumaEnabled } from "@/hooks/usePricingEnabled";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { ListExportMenu } from "@/components/data-table/ListExportMenu";
 import type { ExportColumn } from "@/lib/list-export";
-import { stationKindLabels, stationTypeLabels } from "@/types/enums";
+import { stationKindLabel, stationTypeLabels } from "@/types/enums";
 
 import { stationService } from "@/pages/Stations/service";
 import type { Station } from "@/pages/Stations/types";
@@ -56,7 +56,7 @@ type StationMachineExportRow = StationMachineRow;
 const STATION_EXPORT_COLUMNS: ExportColumn<StationMachineExportRow>[] = [
   { label: "İstasyon Kodu", value: (r) => r.station.code },
   { label: "İstasyon", value: (r) => r.station.name },
-  { label: "Görev Türü", value: (r) => stationKindLabels[r.station.kind] },
+  { label: "Görev Türü", value: (r) => stationKindLabel(r.station.kind) },
   { label: "Tip", value: (r) => stationTypeLabels[r.station.type] },
   { label: "Departman", value: (r) => r.station.department ?? "" },
   { label: "İstasyon Durumu", value: (r) => (r.station.isActive ? "Aktif" : "Pasif") },
@@ -157,9 +157,10 @@ export function ProductionStationsPage() {
   // Tür kümesi formun şemasından TÜRETİLİR (`visibleStationKinds.ts`): sabit liste WEAVING'i
   // (ve sevkiyatı) düşürüyordu — kullanıcı istasyonu kaydediyor, kart çizilmiyordu (2026-09-16).
   const dokumaEnabled = useDokumaEnabled();
+  const devereEnabled = useDevereEnabled();
   const allStations = useMemo(
-    () => (stationsQ.data?.data ?? []).filter((s) => isVisibleStationKind(s.kind, { dokumaEnabled })),
-    [stationsQ.data, dokumaEnabled],
+    () => (stationsQ.data?.data ?? []).filter((s) => isVisibleStationKind(s.kind, { dokumaEnabled, devereEnabled })),
+    [stationsQ.data, dokumaEnabled, devereEnabled],
   );
   const capByStation = useMemo(
     () => new Map((capsQ.data?.data ?? []).map((c) => [c.stationId, c])),

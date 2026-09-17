@@ -19,8 +19,9 @@ import { AppError } from "../../utils/app-error";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
-/** Rota şablonuna / iş emri rotasına GİREMEYEN istasyon türleri. */
-export const NON_ROUTABLE_STATION_KINDS: readonly StationKind[] = [StationKind.WEAVING];
+/** Rota şablonuna / iş emri rotasına GİREMEYEN istasyon türleri. WARPING (devere) tezgahın ikizi:
+ *  levent kendi varlığı (`WarpBeam`), sarım topun rotasında adım değil. */
+export const NON_ROUTABLE_STATION_KINDS: readonly StationKind[] = [StationKind.WEAVING, StationKind.WARPING];
 
 /**
  * Verilen istasyonlardan biri rotaya giremeyen türdeyse 400 `STATION_NOT_ROUTABLE`
@@ -36,7 +37,7 @@ export async function assertStationsRoutable(db: Db, stationIds: readonly string
   if (blocked.length === 0) return;
   throw AppError.badRequest(
     `Rotaya giremeyen istasyon türü: ${blocked.map((s) => `${s.name} (${s.kind})`).join(", ")} — ` +
-      "tezgah topun rotasında bir adım değildir; dokuma iş emri ve koşum ayrı yaşar.",
+      "tezgah ve devere topun rotasında bir adım değildir; dokuma işi, koşum ve levent ayrı yaşar.",
     { code: "STATION_NOT_ROUTABLE", stationIds: blocked.map((s) => s.id), kinds: blocked.map((s) => s.kind) },
   );
 }
