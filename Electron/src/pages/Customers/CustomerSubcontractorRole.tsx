@@ -4,7 +4,7 @@
 // Kart kaydedildikten sonra (düzenleme) görünür: kutu işaretlenince profil yoksa `Subcontractor`
 // yaratılır (ad/kod/vergi no/telefon/adres cariden, `customerId` bağ), pasif profil varsa aktife
 // döner; kaldırılınca profil `isActive:false` (SİLİNMEZ — sevk/kabul tarihçesi ona bağlı).
-// Yalnız-müşteri (CUSTOMER) kartta kutu pasif: önce tip "Müşteri + Tedarikçi" (backend 400 ile aynı kural).
+// Tedarikçi ROLÜ olmayan kartta kutu pasif: önce Tedarikçi rolü (backend 400 ile aynı kural, rol modeli).
 // Anında sunucuya yazar (alias panelleri emsali); hata apiClient tek toast.
 // =============================================================================
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -12,11 +12,11 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
-import { companyTypeLabels } from "@/types/enums";
+import { partnerRoleLabels } from "@/lib/partnerRoles";
 import type { Customer } from "./types";
 
 export const SUBCONTRACTOR_ROLE_LABEL = "Fason iş yapar";
-export const SUBCONTRACTOR_ROLE_TYPE_HINT = `Fason profili için kartın tipi ${companyTypeLabels.SUPPLIER} ya da ${companyTypeLabels.BOTH} olmalı.`;
+export const SUBCONTRACTOR_ROLE_TYPE_HINT = `Fason profili için kartın ${partnerRoleLabels.supplier} rolü olmalı (önce Tedarikçi kutusunu işaretleyip kaydedin).`;
 export const SUBCONTRACTORS_PATH = "/definitions/subcontractors";
 
 /** Bu carinin fason profili (aktif ya da pasif) — bağ `customerId` üzerinden, liste süzgeciyle. */
@@ -34,7 +34,7 @@ export function useSubcontractorProfile(customerId: string) {
 export function CustomerSubcontractorRole({ customer }: { customer: Customer }) {
   const qc = useQueryClient();
   const profile = useSubcontractorProfile(customer.id);
-  const typeOk = customer.type !== "CUSTOMER";
+  const typeOk = customer.isSupplierRole === true;
   const checked = profile.data?.isActive === true;
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ["subcontractor-profile", customer.id] });

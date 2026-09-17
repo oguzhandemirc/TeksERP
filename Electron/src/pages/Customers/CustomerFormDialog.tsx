@@ -14,8 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormField } from "@/components/forms/FormField";
-import { EnumSelect } from "@/components/forms/EnumSelect";
-import { companyTypeLabels, type CompanyType } from "@/types/enums";
+import { partnerRoleLabels } from "@/lib/partnerRoles";
 import { useCustomerBranchesEnabled } from "@/hooks/usePricingEnabled";
 import { customerFormDefaults, customerFormSchema, type CustomerFormValues } from "./schema";
 import { CustomerBranchesDraftField } from "./CustomerBranchesDraftField";
@@ -30,7 +29,7 @@ import type { Customer } from "./types";
 
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
-import { CustomerSubcontractorRole } from "./CustomerSubcontractorRole";
+import { CustomerSubcontractorRole, SUBCONTRACTOR_ROLE_LABEL } from "./CustomerSubcontractorRole";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -41,12 +40,9 @@ interface Props {
    * içi "hızlı müşteri ekle" gibi dar akışlar false geçip formu sade tutar —
    * o çağıranların onSubmit'i şubeleri iletmez, gösterilmeleri veri kaybı olurdu. */
   showBranchDraft?: boolean;
-  /** Yeni kartta tip varsayılanı — tedarikçi seçicisinden açılınca SUPPLIER (alan görünür kalır,
-   *  kullanıcı değiştirebilir). Verilmezse katalog varsayılanı (CUSTOMER). */
-  defaultType?: CustomerFormValues["type"];
-  /** Tip seçenekleri daraltması — tedarikçi seçicisinden açılınca yalnız SUPPLIER · BOTH (müşteri-only kart
-   *  tedarikçi listesine girmez; kullanıcı kararı 2026-09-17). Verilmezse üç tip. */
-  typeOptions?: readonly CompanyType[];
+  /** Yeni kartta işaretli gelen ve KİLİTLİ rol — hızlı ekleme yolları (tedarikçi kipi: Tedarikçi, müşteri kipi:
+   *  Müşteri): kart o listeye girsin diye kutu işaretli ve değiştirilemez; diğer kutu serbest. */
+  requiredRole?: "isCustomerRole" | "isSupplierRole";
 }
 
 export function CustomerFormDialog({
@@ -56,8 +52,7 @@ export function CustomerFormDialog({
   onSubmit,
   isSubmitting,
   showBranchDraft = true,
-  defaultType,
-  typeOptions,
+  requiredRole,
 }: Props) {
   const isEdit = Boolean(initial);
   // customers.branchesEnabled kapalıyken şube yüzeyleri (sekme + taslak) gizlenir;
@@ -78,11 +73,17 @@ export function CustomerFormDialog({
         email: initial.email ?? "",
         notes: initial.notes ?? "",
         documentProfileId: initial.documentProfileId ?? null,
-        type: initial.type,
+        isCustomerRole: initial.isCustomerRole,
+        isSupplierRole: initial.isSupplierRole,
+        isSubcontractorRole: initial.isSubcontractorRole,
         isActive: initial.isActive,
         branches: [],
       }
-    : { ...customerFormDefaults, ...(defaultType ? { type: defaultType } : {}) };
+    : {
+        ...customerFormDefaults,
+        // Hızlı ekleme: yalnız istenen rol işaretli gelir (varsayılan "yalnız Müşteri" değil).
+        ...(requiredRole ? { isCustomerRole: requiredRole === "isCustomerRole", isSupplierRole: requiredRole === "isSupplierRole" } : {}),
+      };
 
   const form = useForm<CustomerFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -137,18 +138,16 @@ export function CustomerFormDialog({
             excludeId={initial?.id}
           />
         </FormField>
-        <FormField label="Tip" error={form.formState.errors.type} required>
-          <Controller
-            control={form.control}
-            name="type"
-            render={({ field }) => (
-              <EnumSelect<CompanyType>
-                value={field.value}
-                onChange={field.onChange}
-                labels={pickTypeLabels(typeOptions)}
-              />
-            )}
-          />
+        {/* Rol modeli: tip seçimi yerine üç kutu; üçüncüsü (Fason iş yapar) profil bağıyla yazılır, burada ayna. */}
+        <FormField label="Roller" error={form.formState.errors.isCustomerRole} required hint={isEdit ? undefined : `${SUBCONTRACTOR_ROLE_LABEL} kaydettikten sonra işaretlenir`}>
+          <div className="flex flex-wrap items-center gap-4 pt-1.5 text-sm">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" disabled={requiredRole === "isCustomerRole"} {...form.register("isCustomerRole")} /> {partnerRoleLabels.customer}
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" disabled={requiredRole === "isSupplierRole"} {...form.register("isSupplierRole")} /> {partnerRoleLabels.supplier}
+            </label>
+          </div>
         </FormField>
       </div>
       <div className="grid grid-cols-2 gap-3">
@@ -262,8 +261,9 @@ export function CustomerFormDialog({
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" {...form.register("isActive")} /> Aktif
       </label>
-      {/* Fason = carinin rolü — kart kaydedildikten sonra (id var) anında yazan kutu; yeni kartta kaydettikten sonra. */}
-      {isEdit && initial && <CustomerSubcontractorRole customer={initial} />}
+      {/* Üçüncü rol — kart kaydedildikten sonra (id var) anında yazan kutu (profil bağı); Tedarikçi kutusunun O ANKİ
+          değeriyle açılır/kapanır (kayıt öncesi de: kural sunucudakiyle aynı). */}
+      {isEdit && initial && <CustomerSubcontractorRole customer={{ ...initial, isSupplierRole: form.watch("isSupplierRole") }} />}
     </>
   );
 
@@ -284,7 +284,7 @@ export function CustomerFormDialog({
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <div className="flex items-center gap-1.5">
-            <DialogTitle>{isEdit ? "Müşteriyi Düzenle" : "Yeni Müşteri"}</DialogTitle>
+            <DialogTitle>{isEdit ? "Cari Kartını Düzenle" : "Yeni Cari"}</DialogTitle>
             {/* ⓘ — kim oluşturdu / en son kim değiştirdi (2026-08-19).
                 Kaynak: kaydın KENDİ künye kolonları (Plan A). Audit'ten
                 okunmuyor — audit 6 ayda arşivlenir, künye kaybolmamalı. */}
@@ -384,10 +384,3 @@ export function CustomerFormDialog({
   );
 }
 
-/** Tip etiketleri — `typeOptions` verilmişse o alt küme (sıra katalog sırası), yoksa hepsi. */
-function pickTypeLabels(typeOptions?: readonly CompanyType[]): Record<CompanyType, string> {
-  if (!typeOptions) return companyTypeLabels;
-  const out: Partial<Record<CompanyType, string>> = {};
-  for (const k of Object.keys(companyTypeLabels) as CompanyType[]) if (typeOptions.includes(k)) out[k] = companyTypeLabels[k];
-  return out as Record<CompanyType, string>;
-}

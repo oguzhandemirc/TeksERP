@@ -17,12 +17,8 @@ import { CustomerFormDialog } from "@/pages/Customers/CustomerFormDialog";
 import { customerCardPayload, type CustomerFormValues } from "@/pages/Customers/schema";
 import { customerService } from "@/pages/Customers/service";
 import type { Customer } from "@/pages/Customers/types";
-import type { CompanyType } from "@/types/enums";
 import type { SupplierParty } from "./supplierParty";
 import type { PickerMode } from "./supplierPicker";
-
-/** Tedarikçi kipinde açılabilecek kart tipleri — "Müşteri" seçilemez. */
-export const SUPPLIER_CREATE_TYPES: readonly CompanyType[] = ["SUPPLIER", "BOTH"];
 
 interface Props {
   onCreated: (party: SupplierParty) => void;
@@ -33,8 +29,8 @@ interface Props {
 
 export function SupplierQuickCreate({ onCreated, disabled, mode = "supplier" }: Props) {
   const label = mode === "customer" ? "Yeni müşteri" : "Yeni cari";
-  const defaultType = mode === "customer" ? "CUSTOMER" : "SUPPLIER";
-  const typeOptions = mode === "customer" ? undefined : SUPPLIER_CREATE_TYPES;
+  // Rol modeli: kipin rolü işaretli ve kilitli gelir (kart açıldığı listeye girsin); öbür rol serbest.
+  const requiredRole = mode === "customer" ? "isCustomerRole" : "isSupplierRole";
   const [open, setOpen] = useState(false);
   const qc = useQueryClient();
   const createMut = useMutation({
@@ -61,15 +57,15 @@ export function SupplierQuickCreate({ onCreated, disabled, mode = "supplier" }: 
         onOpenChange={setOpen}
         isSubmitting={createMut.isPending}
         showBranchDraft={false}
-        defaultType={defaultType}
-        typeOptions={typeOptions}
+        requiredRole={requiredRole}
         onSubmit={(v: CustomerFormValues) => {
           createMut.mutate({
             // Kod backend'de üretilir (MUS+GGAAYY+NNNN) — istemciden gönderilmez.
             name: v.name,
             taxNumber: v.taxNumber || null,
             ...customerCardPayload(v),
-            type: v.type,
+            isCustomerRole: v.isCustomerRole,
+            isSupplierRole: v.isSupplierRole,
             isActive: true,
           } as Partial<Customer>);
         }}

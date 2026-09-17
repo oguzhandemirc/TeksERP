@@ -37,8 +37,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PermissionGate } from "@/components/PermissionGate";
 import { apiErrorText } from "@/lib/api-error";
-import { SUPPLIER_ROLE_LABEL, UNLINKED_SUBCONTRACTOR_FILTER, type SupplierRole } from "@/components/forms/supplierPicker";
-import { CARI_ROLE_FILTER_OPTIONS, cariPageInfo, cariQueryPlan, mergeCariRows, type CariRoleFilter } from "./carilerPaging";
+import { UNLINKED_SUBCONTRACTOR_FILTER } from "@/components/forms/supplierPicker";
+import { LabeledSelect } from "@/components/forms/LabeledSelect";
+import { DIRECTION_OPTIONS, SUBCONTRACTOR_OPTIONS, partnerRoleLabels, type DirectionFilter, type PartnerRoleFlags, type PartnerRoleKey, type SubcontractorFilter } from "@/lib/partnerRoles";
+import { CARI_FILTER_DEFAULTS, cariPageInfo, cariQueryPlan, isCariFilterDirty, mergeCariRows, type CariFilters } from "./carilerPaging";
 import { customerService } from "@/pages/Customers/service";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import { CustomerFormDialog } from "@/pages/Customers/CustomerFormDialog";
@@ -49,16 +51,17 @@ import type { Customer } from "@/pages/Customers/types";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 
 type Row =
-  | { kind: "CUSTOMER"; id: string; code: string; name: string; taxNumber: string | null; phone: string | null; isActive: boolean; role: SupplierRole; hasSubcontractorProfile: boolean; record: Customer }
-  | { kind: "SUBCONTRACTOR"; id: string; code: string; name: string; taxNumber: string | null; phone: string | null; isActive: boolean; role: SupplierRole; record: Subcontractor };
+  | { kind: "CUSTOMER"; id: string; code: string; name: string; taxNumber: string | null; phone: string | null; isActive: boolean; roles: PartnerRoleFlags; record: Customer }
+  | { kind: "SUBCONTRACTOR"; id: string; code: string; name: string; taxNumber: string | null; phone: string | null; isActive: boolean; roles: PartnerRoleFlags; record: Subcontractor };
 
-/** Rozet rengi ENUM anahtarıyla — etiket `SUPPLIER_ROLE_LABEL`tan çizilir, burada metin yok. */
-const ROLE_BADGE: Record<SupplierRole, string> = {
-  CUSTOMER: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200",
-  SUPPLIER: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
-  BOTH: "bg-violet-100 text-violet-900 dark:bg-violet-950 dark:text-violet-200",
-  SUBCONTRACTOR: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200",
+/** Rozet rengi ROL anahtarıyla — etiket `partnerRoleLabels`tan çizilir, burada metin yok; rol başına bir rozet. */
+const ROLE_BADGE: Record<PartnerRoleKey, string> = {
+  customer: "bg-sky-100 text-sky-900 dark:bg-sky-950 dark:text-sky-200",
+  supplier: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
+  subcontractor: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200",
 };
+const ROLE_KEYS: readonly PartnerRoleKey[] = ["customer", "supplier", "subcontractor"];
+const roleOn = (r: PartnerRoleFlags, k: PartnerRoleKey) => (k === "customer" ? r.isCustomerRole : k === "supplier" ? r.isSupplierRole : r.isSubcontractorRole);
 
 /** Sayfa başına kart — iki kaynak da AYNI sayfayı çeker (bkz. `carilerPaging`). */
 const PAGE_SIZE = 50;
@@ -69,7 +72,7 @@ export function CarilerPage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [role, setRole] = useState<CariRoleFilter>("");
+  const [filters, setFilters] = useState<CariFilters>(CARI_FILTER_DEFAULTS);
   const [page, setPage] = useState(1);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
   const [editSub, setEditSub] = useState<Subcontractor | null>(null);
@@ -84,14 +87,14 @@ export function CarilerPage() {
   // 3 sonuçlu bir kümenin 7. sayfasında boş ekran görürdü ("kayıt yok" sanır).
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, role]);
+  }, [debouncedSearch, filters]);
 
-  const plan = cariQueryPlan(role);
+  const plan = cariQueryPlan(filters);
 
   // filters: {} → pasifler DAHİL tüm kartlar (varsayılan isActive süzgeci
   // bilinçle ezilir: yönetim görünümü pasif kartı da bulabilmeli).
   const customersQ = useQuery({
-    queryKey: ["customers", "cariler", page, debouncedSearch, plan.companyType ?? ""],
+    queryKey: ["customers", "cariler", page, debouncedSearch, plan.customerFilters],
     queryFn: () =>
       customerService.getAll({
         page,
@@ -99,12 +102,13 @@ export function CarilerPage() {
         sortBy: "name",
         sortOrder: "asc",
         search: debouncedSearch || undefined,
-        filters: plan.companyType ? { type: plan.companyType } : {},
+        // Rol modeli: Yön × Fason süzgeçleri bayrak/`filter[role]` olarak SUNUCUYA gider (tek kaynak partnerRoles).
+        filters: { ...plan.customerFilters },
       }),
     enabled: plan.customers,
   });
   const subsQ = useQuery({
-    queryKey: ["subcontractors", "cariler", page, debouncedSearch, plan.unlinkedSubcontractorsOnly ? "bagsiz" : "hepsi"],
+    queryKey: ["subcontractors", "cariler", page, debouncedSearch],
     queryFn: () =>
       subcontractorService.getAll({
         page,
@@ -112,8 +116,8 @@ export function CarilerPage() {
         sortBy: "name",
         sortOrder: "asc",
         search: debouncedSearch || undefined,
-        // Fason = carinin rolü: bağlı fason cari satırında görünür, bu bacak "Tüm roller"de yalnız bağsızları ister.
-        filters: plan.unlinkedSubcontractorsOnly ? { ...UNLINKED_SUBCONTRACTOR_FILTER } : {},
+        // Fason = carinin rolü: bağlı fason cari satırında görünür, bu bacak yalnız BAĞSIZ profilleri ister.
+        filters: { ...UNLINKED_SUBCONTRACTOR_FILTER },
       }),
     enabled: plan.subcontractors,
   });
@@ -129,8 +133,7 @@ export function CarilerPage() {
             taxNumber: c.taxNumber ?? null,
             phone: (c as { phone?: string | null }).phone ?? null,
             isActive: c.isActive,
-            role: c.type,
-            hasSubcontractorProfile: c.subcontractor?.isActive === true,
+            roles: { isCustomerRole: c.isCustomerRole, isSupplierRole: c.isSupplierRole, isSubcontractorRole: c.isSubcontractorRole },
             record: c,
           }),
         )
@@ -145,7 +148,7 @@ export function CarilerPage() {
             taxNumber: (s as { taxNumber?: string | null }).taxNumber ?? null,
             phone: (s as { phone?: string | null }).phone ?? null,
             isActive: s.isActive,
-            role: "SUBCONTRACTOR",
+            roles: { isCustomerRole: false, isSupplierRole: false, isSubcontractorRole: true },
             record: s,
           }),
         )
@@ -212,7 +215,7 @@ export function CarilerPage() {
             <PermissionGate permission="customer:write">
               <Button size="sm" onClick={() => setCreateKind("CUSTOMER")}>
                 <Plus className="mr-1 h-4 w-4" />
-                Yeni Müşteri / Tedarikçi
+                Yeni Cari
               </Button>
             </PermissionGate>
             <PermissionGate permission="subcontractor:write">
@@ -235,17 +238,14 @@ export function CarilerPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <select
-          className="h-9 rounded-md border bg-background px-2 text-sm"
-          value={role}
-          onChange={(e) => setRole(e.target.value as CariRoleFilter)}
-        >
-          {CARI_ROLE_FILTER_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+        {/* Rol modeli: iki süzgeç, tetik metni adını taşır ("Yön: Tümü" · "Fason: Tümü"); süzme sunucuda. */}
+        <LabeledSelect label="Yön" value={filters.direction} options={DIRECTION_OPTIONS} onChange={(v) => setFilters((f) => ({ ...f, direction: v as DirectionFilter }))} title="Ticari yön: müşteri rolü / tedarikçi rolü / ikisi de" />
+        <LabeledSelect label="Fason" value={filters.subcontractor} options={SUBCONTRACTOR_OPTIONS} onChange={(v) => setFilters((f) => ({ ...f, subcontractor: v as SubcontractorFilter }))} title="Fason iş yapan kartlar (aktif fason profili)" />
+        {isCariFilterDirty(filters) && (
+          <Button variant="ghost" size="sm" onClick={() => setFilters(CARI_FILTER_DEFAULTS)}>
+            Süzgeci temizle
+          </Button>
+        )}
         {/* Sayaç TOPLAMI söyler, ekrandaki satır sayısını değil: "12 kart"
             yazan bir ekranda 812 kart olması, kullanıcıya listenin tamamına
             baktığını düşündürürdü. */}
@@ -290,7 +290,7 @@ export function CarilerPage() {
           </div>
         ) : rows.length === 0 ? (
           <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-            {debouncedSearch || role
+            {debouncedSearch || isCariFilterDirty(filters)
               ? "Bu filtreyle kart yok. Aramayı ya da rol filtresini değiştirin."
               : "Henüz cari kartı yok. Sağ üstten müşteri/tedarikçi ya da fason kartı ekleyebilirsiniz."}
           </div>
@@ -317,12 +317,11 @@ export function CarilerPage() {
                     </td>
                     <td className="px-3 py-2">
                       <span className="flex flex-wrap items-center gap-1">
-                        <Badge className={ROLE_BADGE[r.role] ?? ""}>{SUPPLIER_ROLE_LABEL[r.role] ?? r.role}</Badge>
-                        {r.kind === "CUSTOMER" && r.hasSubcontractorProfile && (
-                          <Badge className={ROLE_BADGE.SUBCONTRACTOR} title="Bu carinin fason profili var (fason = carinin rolü)">
-                            {SUPPLIER_ROLE_LABEL.SUBCONTRACTOR}
+                        {ROLE_KEYS.filter((k) => roleOn(r.roles, k)).map((k) => (
+                          <Badge key={k} className={ROLE_BADGE[k]}>
+                            {partnerRoleLabels[k]}
                           </Badge>
-                        )}
+                        ))}
                       </span>
                     </td>
                     <td className="px-3 py-2 font-mono text-xs">{r.taxNumber ?? "—"}</td>

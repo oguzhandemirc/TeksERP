@@ -3,7 +3,8 @@
 // =============================================================================
 // Seçici yalnız SUPPLIER/BOTH cari kartları listeler (`CustomerPickerField variant="supplier-cari"`, fason bacağı
 // yok); × bağı kaldırır (kayıt silinmez, fason bağsız kalır). Bağsız fasonda "Cari kart oluştur ve bağla": tek tık
-// `type:"SUPPLIER"` cari (ad / vergi no / telefon / adres fasondan) → forma yazılır, Kaydet ile bağ sunucuya gider.
+// Tedarikçi rollü cari (ad / vergi no / telefon / adres fasondan; rol modeli — `type` yazılmaz) → forma yazılır,
+// Kaydet ile bağ sunucuya gider.
 // Aynı adlı cari zaten varsa sunucu 409 der (apiClient toast) — o kartı seçiciden bağlayın.
 // =============================================================================
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -34,7 +35,8 @@ export function SubcontractorCustomerLink({ value, onChange, source, disabled }:
         taxNumber: source.taxNumber.trim() || null,
         contactPhone: source.phone.trim() || null,
         address: source.address.trim() || null,
-        type: "SUPPLIER",
+        isCustomerRole: false,
+        isSupplierRole: true,
         isActive: true,
       } as Partial<Customer>),
     onSuccess: (res) => {

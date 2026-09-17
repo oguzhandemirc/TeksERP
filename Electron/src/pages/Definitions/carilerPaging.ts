@@ -1,58 +1,41 @@
 // =============================================================================
-// CARİLER — İKİ KAYNAKTAN TEK LİSTE (saf katman)
+// CARİLER EKRANI — iki-kaynaklı sayfalama + İKİ SÜZGEÇ (Yön × Fason) → sorgu planı
 // =============================================================================
-// Bekçi: `carilerPaging.test.ts`.
+// Rol modeli (2026-09-17): "Rol" tek seçicisi yerine iki `LabeledSelect` — Yön (Tümü · Müşteri · Tedarikçi ·
+// Müşteri + Tedarikçi) ve Fason (Tümü · Fason yapan · Yapmayan). "Seçim → sunucu süzgeci" sorusu TEK kaynaktan
+// (`lib/partnerRoles.ts`) — tedarikçi seçicisiyle aynı helper; kopya yasak (9b notu).
 //
-// NEDEN DEĞİŞTİ: ekran iki kaynağı da `loadAllForPicker` ile çekiyordu ve o
-// yardımcı toplam > 500 olunca **throw** eder. Sayfa `isError`'ı hiç okumadığı
-// için sonuç "Kart bulunamadı." oluyordu — yani 500+ carisi olan alım-satım
-// müşterisinde ekran, TÜM cari kartları silinmiş gibi görünüyordu. Üstelik
-// ticaret rejiminde Müşteriler/Fason karoları gizli olduğu için başka giriş
-// kapısı da yok. Arama da istemci tarafındaydı: sunucuya hiç gitmiyordu.
-//
-// ⚠️ İKİ KAYNAK, İKİ BAĞIMSIZ SAYFA — ve bu bilinçli. Kartlar iki AYRI tabloda
-// yaşıyor (`Customer` + `Subcontractor`); tek bir global alfabetik sayfa ancak
-// ikisini de tam çekip birleştirmekle olurdu, yani düzeltilmek istenen 500
-// duvarının aynısı. Her kaynak KENDİ sayfasını verir, sayfa içinde birleşip
-// ada göre sıralanır. Bunun tek maliyeti sıralamanın SAYFA İÇİ olmasıdır;
-// karşılığında hiçbir kart kaybolmaz (her kayıt tam olarak bir sayfada çıkar).
+// ⚠️ Süzme SUNUCUDA: liste sayfalı, istemcide süzmek yalnız O ANKİ SAYFAYI süzer ve kullanıcı "Fason"
+// seçtiğinde ilk sayfada fason yoksa "kayıt yok" sanır — oysa kayıt bir sonraki sayfadadır (`RollFilterBar` dersi).
+// Fason bacağı (BAĞSIZ profiller — D2 göçünden sonra 0): yalnız Yön = Tümü ve Fason ≠ Yapmayan iken sorulur;
+// bağlı fason CARİ satırında "Fason" rozetiyle tek kez görünür.
 // =============================================================================
-import { SUPPLIER_ROLE_LABEL, type SupplierRole } from "@/components/forms/supplierPicker";
-import type { CompanyType } from "@/types/enums";
+import { directionFilters, subcontractorFilters, type DirectionFilter, type RoleServerFilters, type SubcontractorFilter } from "@/lib/partnerRoles";
 
-/** Rol süzgecinin DEĞERİ enum anahtarıdır (etiket değil); "" = tüm roller. Etiket haritadan çizilir. */
-export type CariRoleFilter = "" | SupplierRole;
+export interface CariFilters {
+  direction: DirectionFilter;
+  subcontractor: SubcontractorFilter;
+}
+export const CARI_FILTER_DEFAULTS: CariFilters = { direction: "ALL", subcontractor: "ALL" };
 
-const CARI_ROLES: readonly SupplierRole[] = ["CUSTOMER", "SUPPLIER", "BOTH", "SUBCONTRACTOR"];
-/** Süzgeç seçenekleri — etiketler `SUPPLIER_ROLE_LABEL`tan (tek kaynak `companyTypeLabels`). */
-export const CARI_ROLE_FILTER_OPTIONS: readonly { value: CariRoleFilter; label: string }[] = [
-  { value: "", label: "Tüm roller" },
-  ...CARI_ROLES.map((value) => ({ value, label: SUPPLIER_ROLE_LABEL[value] })),
-];
-
-/**
- * Rol süzgecinden SORGU PLANI.
- *
- * ⚠️ Süzme SUNUCUDA: liste sayfalı, istemcide süzmek yalnız O ANKİ SAYFAYI
- * süzer ve kullanıcı "Fason" seçtiğinde ilk sayfada fason yoksa "kayıt yok"
- * sanır — oysa kayıt bir sonraki sayfadadır (`RollFilterBar` dersi).
- *
- * Fason (SUBCONTRACTOR) seçiliyken müşteri ucu HİÇ çağrılmaz (ve tersi): boş dönecek bir
- * isteği atmak, sayfa başına gereksiz bir yuvarlak yol demektir.
- */
-export function cariQueryPlan(role: CariRoleFilter): {
+export interface CariQueryPlan {
   customers: boolean;
   subcontractors: boolean;
-  /** `filter[type]` — yalnız müşteri tarafında anlamlı. */
-  companyType?: CompanyType;
-  /** Fason = carinin rolü: "Tüm roller"de bağlı fason CARİ satırında (rozet "· Fason") görünür, fason bacağı
-   *  yalnız BAĞSIZ fasonları ister (`filter[customerId]=null`); "Fason" süzgecinde fason bacağı hepsini getirir. */
-  unlinkedSubcontractorsOnly?: boolean;
-} {
-  if (role === "SUBCONTRACTOR") return { customers: false, subcontractors: true, unlinkedSubcontractorsOnly: false };
-  if (role) return { customers: true, subcontractors: false, companyType: role };
-  return { customers: true, subcontractors: true, unlinkedSubcontractorsOnly: true };
+  /** Cari bacağının `filter[...]` çiftleri (rol bayrakları). */
+  customerFilters: RoleServerFilters;
 }
+
+/** İki süzgeçten SORGU PLANI — cari bacağı hep süzülür; fason bacağı yalnız Yön=Tümü ve Fason≠Yapmayan. */
+export function cariQueryPlan(f: CariFilters): CariQueryPlan {
+  return {
+    customers: true,
+    subcontractors: f.direction === "ALL" && f.subcontractor !== "NO",
+    customerFilters: { ...directionFilters(f.direction), ...subcontractorFilters(f.subcontractor) },
+  };
+}
+
+/** Şerit "süzgeç var mı" — temizle düğmesi ve boş metin bunu okur. */
+export const isCariFilterDirty = (f: CariFilters): boolean => f.direction !== "ALL" || f.subcontractor !== "ALL";
 
 export interface CariMergeRow {
   kind: "CUSTOMER" | "SUBCONTRACTOR";

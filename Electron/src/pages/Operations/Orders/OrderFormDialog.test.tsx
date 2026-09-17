@@ -32,15 +32,16 @@ vi.mock("@/pages/Customers/CustomerFormDialog", () => ({ CustomerFormDialog: () 
 vi.mock("@/pages/Customers/schema", () => ({ customerCardPayload: () => ({}) }));
 
 const CUSTOMERS = [
-  { id: "c1", code: "MUS1", name: "Alfa Tekstil", type: "CUSTOMER", taxNumber: "111", contactPhone: "0212", city: "Bursa", isActive: true },
-  { id: "c2", code: "MUS2", name: "Beta Hem Alır", type: "BOTH", taxNumber: null, contactPhone: null, city: null, isActive: true },
+  { id: "c1", code: "MUS1", name: "Alfa Tekstil", isCustomerRole: true, isSupplierRole: false, isSubcontractorRole: false, taxNumber: "111", contactPhone: "0212", city: "Bursa", isActive: true },
+  { id: "c2", code: "MUS2", name: "Beta Hem Alır", isCustomerRole: true, isSupplierRole: true, isSubcontractorRole: false, taxNumber: null, contactPhone: null, city: null, isActive: true },
 ];
 const page = (data: unknown[]) => Promise.resolve({ success: true, data, pagination: { nextCursor: null, hasMore: false, limit: 50 } });
 
 beforeEach(() => {
   listCursor.mockReset();
   getById.mockReset();
-  listCursor.mockImplementation((p: { filters?: Record<string, string> }) => page(p.filters?.type ? CUSTOMERS.filter((c) => c.type === p.filters!.type) : CUSTOMERS));
+  // Rol modeli: müşteri kipi TEK bacak `isCustomerRole=true` (eski CUSTOMER→BOTH iki bacak kalktı); mock bayrakla süzer.
+  listCursor.mockImplementation((p: { filters?: Record<string, string> }) => page(p.filters?.isCustomerRole === "true" ? CUSTOMERS.filter((c) => c.isCustomerRole) : CUSTOMERS));
   getById.mockImplementation((id: string) => Promise.resolve({ success: true, data: CUSTOMERS.find((c) => c.id === id) }));
 });
 
@@ -59,8 +60,8 @@ describe("OrderFormDialog — müşteri modalı (①)", () => {
     expect(within(dialog).getByText("Bursa")).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Yeni müşteri ekle" })).toBeInTheDocument();
     // sunucuya iki bacak: önce CUSTOMER, sonra BOTH; fason sorgusu YOK
-    await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", type: "CUSTOMER" } })));
-    await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", type: "BOTH" } })));
+    await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", isCustomerRole: "true" } })));
+    for (const call of listCursor.mock.calls) expect((call[0] as { filters: Record<string, string> }).filters).not.toHaveProperty("type");
     const roleTrigger = within(dialog).getByRole("combobox", { name: "Rol" });
     await userEvent.click(roleTrigger);
     const options = (await screen.findAllByRole("option")).map((o) => o.textContent);

@@ -42,14 +42,13 @@ async function fetchPage(token: PageToken, args: Args): Promise<PickerPage> {
   const search = args.search ? { search: args.search } : {};
   try {
     if (token.leg === "customers") {
-      // Bacağın tipi token'da (müşteri kipi ALL: CUSTOMER → BOTH); token'sız hâl listeden.
-      const customerType = token.type ?? legsFor(args.role, args.list).customerType;
+      // Rol modeli: cari bacağı bayrak süzgeçleriyle (`legsFor` → `pickerCustomerFilters`), `type` sorulmaz.
       const res = await customerService.listCursor({
         cursor: token.cursor,
         limit: SUPPLIER_PICKER_PAGE,
         sortBy: "name",
         sortOrder: "asc",
-        filters: { ...base, ...(customerType ? { type: customerType } : {}) },
+        filters: { ...base, ...legsFor(args.role, args.list).customerFilters },
         ...search,
       });
       const next = res.pagination.nextCursor;

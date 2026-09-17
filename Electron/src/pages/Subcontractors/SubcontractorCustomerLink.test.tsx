@@ -2,10 +2,10 @@
 // BEKÇİ — Fason formu "Bağlı cari" + "Cari kart oluştur ve bağla" (fason = carinin rolü, 2026-09-17)
 // =============================================================================
 // ① bağsız: seçici boş ("Bağlı cari yok — bağsız fason"), düğme var; tıkla → customerService.create
-//    ({type:"SUPPLIER", ad/vergi no/telefon/adres fasondan}) → onChange(yeni id)
+//    ({isSupplierRole:true, ad/vergi no/telefon/adres fasondan; `type` YOK — rol modeli}) → onChange(yeni id)
 // ② bağlı (value var): düğme çizilmez; × → onChange(null)
 // ③ ad boşsa düğme pasif
-// Negatif sonda (kırmızı görüldü): create gövdesinden `type:"SUPPLIER"` kaldırılınca ① ❌.
+// Negatif sonda (kırmızı görüldü): create gövdesinden `isSupplierRole:true` kaldırılınca ① ❌.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -29,12 +29,12 @@ beforeEach(() => {
 });
 
 describe("SubcontractorCustomerLink", () => {
-  it("⭐ ① bağsız: boş seçici + düğme; tıkla → create(type SUPPLIER, alanlar fasondan) → onChange(id)", async () => {
+  it("⭐ ① bağsız: boş seçici + düğme; tıkla → create(isSupplierRole:true, alanlar fasondan, type YOK) → onChange(id)", async () => {
     const onChange = vi.fn();
     renderWithProviders(<SubcontractorCustomerLink value={null} onChange={onChange} source={source} />);
     expect(screen.getByRole("button", { name: "Bağlı cari seç (liste)" })).toHaveTextContent("Bağlı cari yok — bağsız fason");
     await userEvent.click(screen.getByRole("button", { name: new RegExp(CREATE_AND_LINK_LABEL) }));
-    await waitFor(() => expect(create).toHaveBeenCalledWith({ name: "Boyahane Ltd", taxNumber: "1234567890", contactPhone: "0532 222", address: "Bursa OSB", type: "SUPPLIER", isActive: true }));
+    await waitFor(() => expect(create).toHaveBeenCalledWith({ name: "Boyahane Ltd", taxNumber: "1234567890", contactPhone: "0532 222", address: "Bursa OSB", isCustomerRole: false, isSupplierRole: true, isActive: true }));
     await waitFor(() => expect(onChange).toHaveBeenCalledWith("c-new"));
   });
 

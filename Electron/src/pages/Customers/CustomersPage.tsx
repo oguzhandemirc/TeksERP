@@ -31,7 +31,9 @@ export const buildCustomerPayload = (v: CustomerFormValues, initial: Customer | 
     name: v.name,
     taxNumber: v.taxNumber || null,
     ...customerCardPayload(v),
-    type: v.type,
+    // Rol modeli: `type` gönderilmez (sunucu türetir); fason rolü profil bağından — gövdede yok.
+    isCustomerRole: v.isCustomerRole,
+    isSupplierRole: v.isSupplierRole,
     isActive: v.isActive,
     ...(branchRows.length > 0
       ? {
@@ -55,7 +57,7 @@ export function CustomersPage() {
     <CrudPage<Customer>
       title="Müşteriler"
       description="Müşteri ve tedarikçi firmalar."
-      entityName="Müşteri"
+      entityName="Cari"
       mergeEntity="customer"
       importEntity="customer"
       queryKey="customers"

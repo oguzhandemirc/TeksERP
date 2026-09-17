@@ -4,10 +4,10 @@
 // ① profil yok → kutu boş; işaretle → `subcontractorService.create({customerId, code/name/... cariden})`
 // ② aktif profil → kutu dolu + kod + fason sayfası bağlantısı; kaldır → `update(id,{isActive:false})` (silme yok)
 // ③ pasif profil → kutu boş; işaretle → `update(id,{isActive:true})` (ikinci profil DOĞMAZ)
-// ④ CUSTOMER tipli kart → kutu pasif + "önce Müşteri + Tedarikçi" ipucu (backend 400 ile aynı kural)
-// ⑤ Rol kolonu: aktif profil → "Fason" rozeti; pasif profil / profilsiz → yok
-// Negatif sonda (kırmızı görüldü): rozet `isActive` koşulu kaldırılınca ⑤ pasif profil ❌;
-// `CustomerSubcontractorRole` tip kapısı kaldırılınca ④ ❌.
+// ④ Tedarikçi ROLÜ olmayan kart → kutu pasif + "önce Tedarikçi rolü" ipucu (backend 400 ile aynı kural; rol modeli)
+// ⑤ Rol kolonu: bayrak başına rozet — fason rolü (isSubcontractorRole) → "Fason"; yoksa yok
+// Negatif sonda (kırmızı görüldü): rozet bayrak yerine `subcontractor.isActive` okuyunca ⑤ ❌;
+// `CustomerSubcontractorRole` rol kapısı kaldırılınca ④ ❌.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -25,7 +25,7 @@ vi.mock("@/pages/Subcontractors/service", () => ({
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const cari = (over: Partial<Customer> = {}): Customer =>
-  ({ id: "c1", code: "MUS-1", name: "Boya A.Ş.", taxNumber: "1234567890", type: "SUPPLIER", contactPhone: "0212", address: "Bursa", isActive: true, createdAt: "", updatedAt: "", ...over }) as Customer;
+  ({ id: "c1", code: "MUS-1", name: "Boya A.Ş.", taxNumber: "1234567890", type: "SUPPLIER", isCustomerRole: false, isSupplierRole: true, isSubcontractorRole: false, contactPhone: "0212", address: "Bursa", isActive: true, createdAt: "", updatedAt: "", ...over }) as Customer;
 const page = (rows: unknown[]) => Promise.resolve({ success: true, data: rows, pagination: { page: 1, pageSize: 1, total: rows.length, totalPages: 1 } });
 
 beforeEach(() => {
@@ -63,7 +63,7 @@ describe("CustomerSubcontractorRole", () => {
 
   it("③ pasif profil → kutu boş '(pasif)'; işaretle → update(id,{isActive:true}) — ikinci profil doğmaz", async () => {
     getAll.mockImplementation(() => page([{ id: "s1", code: "FSN-1", isActive: false }]));
-    renderWithProviders(<CustomerSubcontractorRole customer={cari({ type: "BOTH" })} />);
+    renderWithProviders(<CustomerSubcontractorRole customer={cari({ isCustomerRole: true, isSupplierRole: true })} />);
     const box = await screen.findByRole("checkbox", { name: SUBCONTRACTOR_ROLE_LABEL });
     await waitFor(() => expect(box).not.toBeDisabled());
     expect(box).not.toBeChecked();
@@ -73,14 +73,14 @@ describe("CustomerSubcontractorRole", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  it("⭐ ④ CUSTOMER tipli kart → kutu pasif + tip ipucu; tıklama hiçbir şey yazmaz", async () => {
+  it("⭐ ④ Tedarikçi rolü olmayan kart → kutu pasif + rol ipucu; tıklama hiçbir şey yazmaz", async () => {
     getAll.mockImplementation(() => page([]));
-    renderWithProviders(<CustomerSubcontractorRole customer={cari({ type: "CUSTOMER" })} />);
+    renderWithProviders(<CustomerSubcontractorRole customer={cari({ isCustomerRole: true, isSupplierRole: false })} />);
     const box = await screen.findByRole("checkbox", { name: SUBCONTRACTOR_ROLE_LABEL });
     await waitFor(() => expect(getAll).toHaveBeenCalled());
     expect(box).toBeDisabled();
     expect(screen.getByText(SUBCONTRACTOR_ROLE_TYPE_HINT)).toBeInTheDocument();
-    expect(SUBCONTRACTOR_ROLE_TYPE_HINT).toContain("Müşteri + Tedarikçi");
+    expect(SUBCONTRACTOR_ROLE_TYPE_HINT).toContain("Tedarikçi rolü");
     await userEvent.click(box);
     expect(create).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
@@ -94,18 +94,17 @@ describe("Cariler listesi Rol kolonu", () => {
     return Cell({ row: { original: c } });
   };
   const { render } = { render: (node: React.ReactNode) => renderWithProviders(<>{node}</>) };
-  it("⭐ ⑤ aktif profil → tip rozetinin yanında 'Fason'; pasif profil ve profilsiz → yok", () => {
-    render(rolCell(cari({ type: "BOTH", subcontractor: { id: "s1", isActive: true } })));
-    expect(screen.getByText("Müşteri + Tedarikçi")).toBeInTheDocument();
+  it("⭐ ⑤ üç rol → üç rozet (Müşteri · Tedarikçi · Fason), bayraklardan; 'Müşteri + Tedarikçi' birleşik rozeti YOK", () => {
+    render(rolCell(cari({ isCustomerRole: true, isSupplierRole: true, isSubcontractorRole: true })));
+    expect(screen.getByText("Müşteri")).toBeInTheDocument();
+    expect(screen.getByText("Tedarikçi")).toBeInTheDocument();
     expect(screen.getByText("Fason")).toBeInTheDocument();
+    expect(screen.queryByText("Müşteri + Tedarikçi")).toBeNull();
   });
-  it("pasif profil → 'Fason' rozeti YOK (rol değil)", () => {
-    render(rolCell(cari({ type: "SUPPLIER", subcontractor: { id: "s1", isActive: false } })));
+  it("fason rolü false → 'Fason' rozeti YOK (profil pasifse sunucu bayrağı düşürür — bayrak tek kaynak)", () => {
+    render(rolCell(cari({ isSupplierRole: true, isSubcontractorRole: false, subcontractor: { id: "s1", isActive: true } })));
     expect(screen.getByText("Tedarikçi")).toBeInTheDocument();
     expect(screen.queryByText("Fason")).toBeNull();
-  });
-  it("profilsiz → 'Fason' rozeti YOK", () => {
-    render(rolCell(cari({ type: "SUPPLIER", subcontractor: null })));
-    expect(screen.queryByText("Fason")).toBeNull();
+    expect(screen.queryByText("Müşteri")).toBeNull();
   });
 });

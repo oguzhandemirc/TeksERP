@@ -16,7 +16,7 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { cn } from "@/lib/utils";
 import { supplierLoadNotice, type SupplierParty } from "./supplierParty";
-import { rowRoleLabel, type PickerList, type PickerMode, type SupplierPickerRow, type SupplierRoleFilter } from "./supplierPicker";
+import { type PickerList, type PickerMode, type SupplierPickerRow, type SupplierRoleFilter } from "./supplierPicker";
 import { useSupplierPickerData } from "./useSupplierPickerData";
 import { SupplierPickerToolbar } from "./SupplierPickerToolbar";
 import { ConvertBackLink, ConvertCustomerConfirm, ConvertCustomerLink, useCanConvertCustomer } from "./SupplierConvertCustomer";
@@ -51,10 +51,10 @@ interface Props {
   cariOnly?: boolean;
 }
 
-function roleBadgeVariant(role: SupplierPickerRow["role"]): "secondary" | "muted" | "default" {
-  if (role === "SUBCONTRACTOR") return "secondary";
-  if (role === "CUSTOMER") return "muted";
-  return "default";
+/** Rozet tonu: fason firması ikincil; cari satırı tedarikçi rolüyle birincil, yalnız-müşteri (dönüştürme görünümü) soluk. */
+function roleBadgeVariant(r: SupplierPickerRow): "secondary" | "muted" | "default" {
+  if (r.kind === "SUBCONTRACTOR") return "secondary";
+  return r.roleLabel.includes("Tedarikçi") ? "default" : "muted";
 }
 
 function PickerRow({ r, list, onPick }: { r: SupplierPickerRow; list: PickerList; onPick: (r: SupplierPickerRow) => void }) {
@@ -67,7 +67,7 @@ function PickerRow({ r, list, onPick }: { r: SupplierPickerRow; list: PickerList
       </TableCell>
       {list === "supplier" || list === "supplier-cari" ? (
         <TableCell className="py-1.5">
-          <Badge variant={roleBadgeVariant(r.role)}>{rowRoleLabel(r)}</Badge>
+          <Badge variant={roleBadgeVariant(r)}>{r.roleLabel}</Badge>
         </TableCell>
       ) : (
         <TableCell className="py-1.5 text-xs">{r.city ?? <span className="text-muted-foreground">—</span>}</TableCell>

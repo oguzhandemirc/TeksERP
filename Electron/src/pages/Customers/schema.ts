@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { CompanyType } from "@/types/enums";
 
 /**
  * Tek-adım müşteri oluşturmada satır-içi şube taslağı. Kompakt alanlar (Ad zorunlu +
@@ -55,6 +54,9 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** Vergi no: 10-15 hane — backend (customer.service TAX_NUMBER_REGEX) ile aynı. */
 const TAX_NUMBER_REGEX = /^\d{10,15}$/;
 
+/** Sunucu kuralıyla aynı cümle sınıfı: kart rolsüz olamaz. */
+export const NO_ROLE_MESSAGE = "En az bir rol seçin: Müşteri, Tedarikçi ya da Fason iş yapar.";
+
 export const customerFormSchema = z.object({
   // Sınır DB kolonuyla birebir (Customer.name @db.VarChar(100)) — 101-200
   // karakterlik ad panelden geçip DB'de sessiz P2000 alıyordu.
@@ -92,9 +94,11 @@ export const customerFormSchema = z.object({
   notes: z.string().max(500, "En fazla 500 karakter").optional().or(z.literal("")),
   // Belge şablon profili — boş = genel Belge Şablonları ayarı.
   documentProfileId: z.string().uuid().nullable().optional(),
-  type: z.enum([CompanyType.CUSTOMER, CompanyType.SUPPLIER, CompanyType.BOTH], {
-    message: "Müşteri, tedarikçi veya her ikisi seçilmeli",
-  }),
+  // Rol modeli (2026-09-17): `type` GÖNDERİLMEZ (sunucu türetir). İki ticari kutu gövdeye gider; fason rolü
+  // salt-okunur AYNA (profil bağı yazar) — "en az bir rol" kuralı üçünü birden okur.
+  isCustomerRole: z.boolean(),
+  isSupplierRole: z.boolean(),
+  isSubcontractorRole: z.boolean(),
   isActive: z.boolean(),
   // Yalnız oluşturma formunda dolar; düzenlemede boş kalır (şubeler sekmeden yönetilir).
   // superRefine: bir satırda İÇERİK varsa (herhangi bir alan dolu) ad zorunlu olur;
@@ -113,6 +117,9 @@ export const customerFormSchema = z.object({
       });
     })
     .default([]),
+}).refine((v) => v.isCustomerRole || v.isSupplierRole || v.isSubcontractorRole, {
+  message: NO_ROLE_MESSAGE,
+  path: ["isCustomerRole"],
 });
 
 export type CustomerFormValues = z.infer<typeof customerFormSchema>;
@@ -131,7 +138,9 @@ export const customerFormDefaults: CustomerFormValues = {
   email: "",
   notes: "",
   documentProfileId: null,
-  type: CompanyType.CUSTOMER,
+  isCustomerRole: true,
+  isSupplierRole: false,
+  isSubcontractorRole: false,
   isActive: true,
   branches: [],
 };
