@@ -35,7 +35,7 @@
 //    olmasa fark edilmezdi.
 // =============================================================================
 import { execFileSync } from "node:child_process";
-import { git } from "./lib/git";
+import { BILDIRIM, headdeVarMi as headdeVarMiLib, yorumsuz } from "./lib/head-ad";
 import { readFileSync, readdirSync, statSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -159,12 +159,6 @@ function tsDosyalari(kok: string): string[] {
   return out;
 }
 
-/** Bildirilen tanımlayıcılar — yorum ve dize İÇERİĞİ sayılmaz. */
-const BILDIRIM = /\b(?:const|let|var|function|class|interface|type|enum)\s+([A-Za-z_$][A-Za-z0-9_$]*)/g;
-
-function yorumsuz(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-}
 
 interface Bulgu { dosya: string; ad: string; kok: string }
 
@@ -309,18 +303,8 @@ const KOMIT_KUMESI = process.env.TEKSERP_KOMIT_DOSYALARI
   ? new Set(process.env.TEKSERP_KOMIT_DOSYALARI.split("\n").map((s) => s.trim()).filter(Boolean))
   : null;
 
-/** O dosyanın HEAD'deki hâlinde bu ad zaten var mıydı? */
-function headdeVarMi(dosya: string, ad: string): boolean {
-  try {
-    const ham = git(["show", `HEAD:${dosya}`], { cwd: KOK });
-    for (const m of yorumsuz(ham).matchAll(BILDIRIM)) if (m[1] === ad) return true;
-    return false;
-  } catch {
-    // Dosya HEAD'de yok (yeni dosya) ⇒ ad da yok. Sessiz yutmuyoruz: yeni dosya
-    // zaten bu commit'in eseridir ve ihlali ona yazmak DOĞRUDUR.
-    return false;
-  }
-}
+/** O dosyanın HEAD'deki hâlinde bu ad zaten var mıydı? (okuyucu `lib/head-ad` — yeni dosyada gürültüsüz "yok") */
+const headdeVarMi = (dosya: string, ad: string): boolean => headdeVarMiLib(dosya, ad, KOK);
 
 console.log("\n§2 — ratchet: küme yalnız KÜÇÜLÜR");
 console.log(`   bugün ${bugun.length} · devralınan ${taban.adlar.length}`);

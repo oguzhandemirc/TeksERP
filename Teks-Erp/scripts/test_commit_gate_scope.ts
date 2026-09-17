@@ -354,6 +354,29 @@ check(
 }
 
 // =============================================================================
+// §2d — "HEAD'de var mıydı" okuyucusu YENİ dosyada gürültüsüz (2026-09-17, 9b ölçtü)
+// =============================================================================
+// Mandal (`test_identifier_language`) ihlali dokunana değil ÜRETENE yazmak için HEAD'deki
+// kopyayı okur; sahnelenmiş YENİ dosyada `git show HEAD:…` düşer ve cevap "yok"tur — ama
+// git'in `fatal: path … not in HEAD` stderr'i kapı çıktısına sızıyordu. Hüküm doğru, çıktı
+// kirli. Okuyucu `scripts/lib/head-ad.ts`te (stderr yutulur); burada ÇOCUK SÜREÇTE ölçülür,
+// çünkü sızıntı sürecin stderr'indedir, dönüş değerinde değil.
+// Negatif sonda (2026-09-17, bir kezlik): `head-ad.ts`te `stdio: "yut"` düşürüldü → §2d1 ❌ (fatal sızdı).
+console.log("\n§2d — HEAD okuyucusu yeni dosyada gürültüsüz mü");
+{
+  const kos = (dosya: string, ad: string) =>
+    spawnSync("npx", ["tsx", "-e", `import { headdeVarMi } from "./Teks-Erp/scripts/lib/head-ad"; process.stdout.write(String(headdeVarMi(${JSON.stringify(dosya)}, ${JSON.stringify(ad)}, process.cwd())));`], {
+      cwd: KOK, encoding: "utf8", timeout: 60_000,
+    });
+  const yeni = kos("Teks-Erp/src/__yok_boyle_dosya__.ts", "x");
+  check("⭐ §2d1 HEAD'de olmayan dosya → false ve stderr'de \"fatal\" YOK", yeni.stdout.trim() === "false" && !/fatal/.test(yeni.stderr), `stdout=${yeni.stdout.trim()} stderr=${yeni.stderr.trim().slice(0, 80)}`);
+  const var_ = kos("Teks-Erp/src/server.ts", "PORT");
+  check("§2d2 kontrol grubu: HEAD'deki dosyada bildirilen ad → true", var_.stdout.trim() === "true", `stdout=${var_.stdout.trim()}`);
+  const yok = kos("Teks-Erp/src/server.ts", "boyleBirAdYok");
+  check("§2d3 HEAD'deki dosyada olmayan ad → false (hata değil)", yok.stdout.trim() === "false" && !/fatal/.test(yok.stderr));
+}
+
+// =============================================================================
 // §3 — kablolama tripwire'ları (her biri BOZULMUŞ KOPYAYA karşı da ölçülür)
 // =============================================================================
 console.log("\n§3 — kablolama yerinde mi (ve tripwire gerçekten ısırıyor mu)");
