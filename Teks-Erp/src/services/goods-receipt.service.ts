@@ -109,9 +109,32 @@ export interface GoodsReceiptLineInput {
   lotNo?: string | null;
   /** İPLİK satırı: bobin adedi (bilgi). */
   bobbinCount?: number | null;
-  /** KUMAŞ satırı TOP SINIFI (EK 5, 2026-09-17): `true` ham (`STOCK`), `false` bitmiş (`WAREHOUSE`); yoksa fişin
-   *  `rawStockEntry` varsayılanı (eski istemci = bugünkü davranış). İplik satırında yok sayılır (kg defteri raf taşımaz). */
+  /** KUMAŞ satırı TOP SINIFI (EK 7, kullanıcı kararı 2026-09-18): `RAW` ham (`STOCK`) · `SEMI_FINISHED` yarı mamul
+   *  (`STOCK` + `entrySource=SEMI_FINISHED`, elle yarı mamul girişiyle aynı doğuş) · `FINISHED` bitmiş (`WAREHOUSE`);
+   *  yoksa `rawStock`, o da yoksa fişin `rawStockEntry` varsayılanı. İplik satırında yok sayılır (kg defteri raf taşımaz). */
+  lineClass?: ReceiptLineClass | null;
+  /** GERİYE DÖNÜK (EK 5 istemcisi): `true` → RAW, `false` → FINISHED. `lineClass` varsa o kazanır. */
   rawStock?: boolean | null;
+}
+
+export const RECEIPT_LINE_CLASSES = ["RAW", "SEMI_FINISHED", "FINISHED"] as const;
+export type ReceiptLineClass = (typeof RECEIPT_LINE_CLASSES)[number];
+
+/** Satırın sınıfı — `lineClass` > eski `rawStock` > fişin varsayılanı. */
+export function resolveReceiptLineClass(
+  line: Pick<GoodsReceiptLineInput, "lineClass" | "rawStock">,
+  receiptDefault: ReceiptLineClass,
+): ReceiptLineClass {
+  if (line.lineClass) return line.lineClass;
+  if (line.rawStock != null) return line.rawStock ? "RAW" : "FINISHED";
+  return receiptDefault;
+}
+
+/** Sınıf → topun doğacağı raf ve doğum kaynağı. Yarı mamul, elle yarı mamul girişinin (`inventory.controller`) ikizi. */
+export function receiptLineBirth(cls: ReceiptLineClass): { status: RollStatus; entrySource: RollEntrySource } {
+  return cls === "FINISHED"
+    ? { status: RollStatus.WAREHOUSE, entrySource: RollEntrySource.PURCHASE_RECEIPT }
+    : { status: RollStatus.STOCK, entrySource: cls === "SEMI_FINISHED" ? RollEntrySource.SEMI_FINISHED : RollEntrySource.PURCHASE_RECEIPT };
 }
 
 export interface GoodsReceiptCreateInput {
@@ -977,10 +1000,10 @@ export class GoodsReceiptService {
     // düşebilirdi ("fiş bir kaptır" okumasının ihlali).
     // ⚠️ `false` ve alanı hiç taşımayan eski fiş AYNI dala düşer (kolon
     // `@default(false)`) → mevcut davranış bayt-bayt.
-    const targetStatus = receipt.rawStockEntry ? RollStatus.STOCK : RollStatus.WAREHOUSE;
-    // EK 5: fiş kutusu VARSAYILANDIR, satır kendi sınıfını taşıyabilir (`rawStock`); yoksa fişinki (eski istemci bayt bayt).
-    const lineStatus = (line: GoodsReceiptLineInput): RollStatus =>
-      line.rawStock == null ? targetStatus : line.rawStock ? RollStatus.STOCK : RollStatus.WAREHOUSE;
+    // EK 5/EK 7: fiş kolonu VARSAYILANDIR, satır kendi sınıfını taşır (`lineClass`; eski istemci `rawStock`); alan yoksa
+    // fişinki (eski istemci bayt bayt). Yarı mamul satırı STOCK + `entrySource=SEMI_FINISHED` doğar (elle girişle aynı).
+    const receiptDefault: ReceiptLineClass = receipt.rawStockEntry ? "RAW" : "FINISHED";
+    const lineBirth = (line: GoodsReceiptLineInput) => receiptLineBirth(resolveReceiptLineClass(line, receiptDefault));
 
     const created: string[] = [];
     const createdYarn: string[] = [];
@@ -1089,8 +1112,8 @@ export class GoodsReceiptService {
             // ÜZERE alınmıştır (fasona gidecek) → `STOCK`. Barkod tipi de
             // statüden türer (`finalBarcodeType`): ham girişte "H", satılabilir
             // girişte "F" — yani etiket de doğru şeyi söyler.
-            forcedStatus: lineStatus(line),
-            forcedEntrySource: RollEntrySource.PURCHASE_RECEIPT,
+            forcedStatus: lineBirth(line).status,
+            forcedEntrySource: lineBirth(line).entrySource,
             warehouseId: receipt.warehouseId,
             goodsReceiptId: receipt.id,
             // J2 — "hangi sipariş KALEMİNİ karşılıyor" izi (kural: `claimStampLine`).

@@ -7,7 +7,7 @@
 // =============================================================================
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { z } from "zod";
-import { describeOverReceipt, goodsReceiptService } from "../services/goods-receipt.service";
+import { RECEIPT_LINE_CLASSES, describeOverReceipt, goodsReceiptService } from "../services/goods-receipt.service";
 import { describeContractPricing } from "../services/helpers/contract-price.helper";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
@@ -43,7 +43,9 @@ const lineSchema = z.object({
   // İplik satırı (devere Faz 2): lot numarası + bobin adedi — Zod tanımadığını sessizce atar.
   lotNo: z.string().max(64).nullable().optional(),
   bobbinCount: z.number().int().positive().nullable().optional(),
-  // EK 5 — kumaş satırı TOP SINIFI: true ham (STOCK) · false bitmiş (WAREHOUSE) · yok = fişin `rawStockEntry`i.
+  // EK 7 — kumaş satırı TOP SINIFI: RAW ham (STOCK) · SEMI_FINISHED yarı mamul (STOCK + entrySource) · FINISHED bitmiş
+  // (WAREHOUSE) · yok = eski `rawStock` (true ham / false bitmiş), o da yoksa fişin `rawStockEntry`i.
+  lineClass: z.enum(RECEIPT_LINE_CLASSES).nullable().optional(),
   rawStock: z.boolean().nullable().optional(),
 });
 
@@ -182,7 +184,8 @@ router.get(
  *       (fason firma) — ikisi birden dolu olamaz; ikisi de boş bırakılabilir
  *       (zorunluluk fatura kapısındadır). Fiş bir alış siparişine bağlıysa taraf
  *       siparişinkiyle AYNI olmalıdır, boşsa siparişten miras alınır.
- *       SATIR BAŞINA TOP SINIFI (EK 5): satırda `rawStock: true|false` fişin kararını o satır için ezer;
+ *       SATIR BAŞINA TOP SINIFI (EK 7): satırda `lineClass: RAW|SEMI_FINISHED|FINISHED` fişin kararını o satır için
+ *       ezer (yarı mamul STOCK + entrySource SEMI_FINISHED doğar); eski `rawStock: true|false` hâlâ kabul (RAW/FINISHED);
  *       alan yoksa fişin `rawStockEntry`i (eski istemci aynı davranış). İplik satırında yok sayılır.
  *       RAF (C2): `rawStockEntry: true` → toplar `STOCK` (işlenmek üzere alınan
  *       ham mal), aksi hâlde `WAREHOUSE` (satılabilir). İPLİK satırları bundan

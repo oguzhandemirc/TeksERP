@@ -8095,8 +8095,9 @@ enum GoodsReceiptStatus {
 
 /// MAL KABUL FİŞİ — satın alınan malın depoya girişi (üretimsiz stok girişi).
 ///
-/// Topları `InventoryService.createInitialEntry` ÜRETİR (`forcedStatus: WAREHOUSE`,
-/// `forcedEntrySource: PURCHASE_RECEIPT`) — ikinci bir giriş motoru YAZILMAZ;
+/// Topları `InventoryService.createInitialEntry` ÜRETİR (satır sınıfına göre `forcedStatus`
+/// WAREHOUSE/STOCK, `forcedEntrySource` PURCHASE_RECEIPT; yarı mamul satırı SEMI_FINISHED —
+/// `receiptLineBirth`) — ikinci bir giriş motoru YAZILMAZ;
 /// mükerrer tuzağı, barkod rezervasyonu, izinli renk/özellik doğrulaması ve
 /// idempotency o yoldan bedava gelir. Emsal: `tambur-manual.produceFinishedRoll`.
 ///

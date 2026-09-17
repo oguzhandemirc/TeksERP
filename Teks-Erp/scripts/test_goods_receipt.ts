@@ -85,6 +85,7 @@ import {
 import { randomUUID } from "node:crypto";
 import prisma, { pool } from "../src/lib/prisma";
 import { goodsReceiptService } from "../src/services/goods-receipt.service";
+import { InventoryService } from "../src/services/inventory.service";
 import { invoiceService } from "../src/services/invoice.service";
 import { printedDocumentService } from "../src/services/printed-document.service";
 import { purchaseOrderService } from "../src/services/purchase-order.service";
@@ -1210,34 +1211,76 @@ async function main(): Promise<void> {
       where: { goodsReceiptId: lRawId, itemId: lYarn.id },
       select: { kind: true, qtyKg: true, warehouseId: true },
     });
-    // L5 — SATIR BAŞINA TOP SINIFI (EK 5, 2026-09-17): fiş kutusu VARSAYILAN, satır `rawStock` ezer; alan yoksa fişinki
-    // (eski istemci bayt bayt); iplik satırında yok sayılır. Sonda: `lineStatus` yerine `targetStatus` → L5a/L5b ❌.
+    // L5 — SATIR BAŞINA TOP SINIFI ÜÇLÜ (EK 7, kullanıcı kararı 2026-09-18): `lineClass` RAW / SEMI_FINISHED / FINISHED;
+    // eski `rawStock` (EK 5 istemcisi) GERİYE DÖNÜK kabul; alan yoksa fişinki (eski istemci bayt bayt); iplikte yok sayılır.
+    // Yarı mamul satırı elle yarı mamul girişiyle AYNI doğar (STOCK + entrySource=SEMI_FINISHED) ve Envanter'in
+    // "Yarı Mamul" sekmesine (`rollScope=SEMI_FINISHED`) düşer, RAW_STOCK birleşimine girer, RAW_STOCK_PURE'a girmez.
+    // Sondalar: `receiptLineBirth` SEMI'de PURCHASE_RECEIPT dönerse L5a/L5c ❌; `resolveReceiptLineClass` rawStock'u
+    // yok sayarsa L5b ❌; FINISHED'ı STOCK'a çevirirse L5a ❌.
     const lMix = await goodsReceiptService.create({
       warehouseId: wh.id,
       rawStockEntry: false,
       lines: [
-        { itemId: lItem.id, initialQty: 10, rawStock: true },
+        { itemId: lItem.id, initialQty: 10, lineClass: "RAW" },
         { itemId: lItem.id, initialQty: 11 },
-        { itemId: lItem.id, initialQty: 12, rawStock: false },
+        { itemId: lItem.id, initialQty: 12, lineClass: "FINISHED" },
+        { itemId: lItem.id, initialQty: 13, lineClass: "SEMI_FINISHED" },
       ],
     });
     const lMixId = (lMix.data as { id: string }).id;
     receiptIds.push(lMixId);
-    const lMixRolls = await prisma.roll.findMany({ where: { goodsReceiptId: lMixId }, orderBy: { initialQty: "asc" }, select: { status: true, initialQty: true } });
+    const lMixRolls = await prisma.roll.findMany({
+      where: { goodsReceiptId: lMixId },
+      orderBy: { initialQty: "asc" },
+      select: { id: true, status: true, initialQty: true, entrySource: true },
+    });
+    const lBirth = (r: (typeof lMixRolls)[number]) => `${r.status}/${r.entrySource}`;
     check(
-      "L5a) ⭐ bitmiş fişte satır rawStock:true → STOCK, alan yok → fişin varsayılanı WAREHOUSE, false → WAREHOUSE",
-      lMixRolls.length === 3 && lMixRolls[0]?.status === RollStatus.STOCK && lMixRolls[1]?.status === RollStatus.WAREHOUSE && lMixRolls[2]?.status === RollStatus.WAREHOUSE,
-      lMixRolls.map((r) => `${r.initialQty}:${r.status}`).join(","),
+      "L5a) ⭐ bitmiş fişte RAW → STOCK/PURCHASE_RECEIPT · alan yok → WAREHOUSE (fiş) · FINISHED → WAREHOUSE · SEMI_FINISHED → STOCK/SEMI_FINISHED",
+      lMixRolls.length === 4 &&
+        lBirth(lMixRolls[0]!) === `${RollStatus.STOCK}/${RollEntrySource.PURCHASE_RECEIPT}` &&
+        lBirth(lMixRolls[1]!) === `${RollStatus.WAREHOUSE}/${RollEntrySource.PURCHASE_RECEIPT}` &&
+        lBirth(lMixRolls[2]!) === `${RollStatus.WAREHOUSE}/${RollEntrySource.PURCHASE_RECEIPT}` &&
+        lBirth(lMixRolls[3]!) === `${RollStatus.STOCK}/${RollEntrySource.SEMI_FINISHED}`,
+      lMixRolls.map((r) => `${r.initialQty}:${lBirth(r)}`).join(","),
     );
-    const lRaw2 = await goodsReceiptService.create({ warehouseId: wh.id, rawStockEntry: true, lines: [{ itemId: lItem.id, initialQty: 7, rawStock: false }] });
+    // L5b — eski istemci `rawStock` (EK 5 sözleşmesi) hâlâ okunur; `lineClass` varsa o kazanır; ham fişte satır fişi ezer;
+    // iplik satırında ikisi de yok sayılır (IN yazıldı).
+    const lRaw2 = await goodsReceiptService.create({
+      warehouseId: wh.id,
+      rawStockEntry: true,
+      lines: [
+        { itemId: lItem.id, initialQty: 7, rawStock: false },
+        { itemId: lItem.id, initialQty: 8, rawStock: true, lineClass: "FINISHED" },
+      ],
+    });
     const lRaw2Id = (lRaw2.data as { id: string }).id;
     receiptIds.push(lRaw2Id);
-    const lMix2 = await goodsReceiptService.addLines(lRaw2Id, [{ itemId: lYarn.id, initialQty: 3, rawStock: true }]);
-    const lMix2Roll = await prisma.roll.findFirst({ where: { goodsReceiptId: lRaw2Id, initialQty: 7 }, select: { status: true } });
+    const lMix2 = await goodsReceiptService.addLines(lRaw2Id, [{ itemId: lYarn.id, initialQty: 3, rawStock: true, lineClass: "SEMI_FINISHED" }]);
+    const lRaw2Rolls = await prisma.roll.findMany({ where: { goodsReceiptId: lRaw2Id }, orderBy: { initialQty: "asc" }, select: { status: true } });
     check(
-      "L5b) ⭐ ham fişte satır rawStock:false → WAREHOUSE (satır fişi ezer); iplik satırında rawStock yok sayılır (IN yazıldı)",
-      lMix2Roll?.status === RollStatus.WAREHOUSE && lMix2.createdYarn.length === 1 && lMix2.failed.length === 0,
-      `${lMix2Roll?.status} yarn=${lMix2.createdYarn.length}`,
+      "L5b) ⭐ eski `rawStock:false` ham fişi ezer → WAREHOUSE; `lineClass` `rawStock`u ezer (FINISHED → WAREHOUSE); iplikte yok sayılır",
+      lRaw2Rolls.length === 2 && lRaw2Rolls.every((r) => r.status === RollStatus.WAREHOUSE) && lMix2.createdYarn.length === 1 && lMix2.failed.length === 0,
+      `${lRaw2Rolls.map((r) => r.status).join(",")} yarn=${lMix2.createdYarn.length}`,
+    );
+    // L5c — Envanter sekmesi sınıflaması: yarı mamul top SEMI_FINISHED kapsamında, RAW_STOCK_PURE'da DEĞİL, RAW_STOCK
+    // birleşiminde VAR; ham top tersi (test_semi_finished_entry §5 birleşim kuralının mal kabul ayağı).
+    const lInv = new InventoryService();
+    const lScopeIds = async (scope: string): Promise<string[]> => {
+      const where = (lInv as unknown as { buildRollWhere: (p: { filters: Record<string, string> }, f: readonly string[]) => Record<string, unknown> }).buildRollWhere(
+        { filters: { rollScope: scope, status: "ALL" } },
+        [],
+      );
+      const rows = await prisma.roll.findMany({ where: { AND: [where as never, { goodsReceiptId: lMixId }] }, select: { id: true } });
+      return rows.map((r) => r.id);
+    };
+    const lRawRollId = lMixRolls[0]!.id;
+    const lSemiRollId = lMixRolls[3]!.id;
+    const [lPure, lSemi, lUnion] = await Promise.all([lScopeIds("RAW_STOCK_PURE"), lScopeIds("SEMI_FINISHED"), lScopeIds("RAW_STOCK")]);
+    check(
+      "L5c) ⭐ yarı mamul satırın topu Yarı Mamul sekmesinde (SEMI_FINISHED), Ham Stok'ta (RAW_STOCK_PURE) DEĞİL, RAW_STOCK birleşiminde VAR; ham satırın topu tersi",
+      lSemi.includes(lSemiRollId) && !lSemi.includes(lRawRollId) && lPure.includes(lRawRollId) && !lPure.includes(lSemiRollId) && lUnion.includes(lSemiRollId) && lUnion.includes(lRawRollId),
+      `semi=${lSemi.length} pure=${lPure.length} union=${lUnion.length}`,
     );
 
     check(
