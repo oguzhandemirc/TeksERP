@@ -58,6 +58,18 @@ export function itemPickerFilters(f: ItemPickerFilterState, allowed?: AllowedIte
 
 export const hasItemPickerFilter = (f: ItemPickerFilterState): boolean => f.type !== "ALL" || f.colorId !== null || f.propertyId !== null;
 
+/** Renk/Özellik süzgeci yalnız KUMAŞ (ve "Tümü") için anlamlıdır: iplik rengi iplik varyantının özelliğidir, kumaş renk
+ *  kartından ayrıdır (ihtiyaç doğunca ayrı karar); sarf renk/özellik taşımaz. İplik/Sarf'ta seçiciler çizilmez, değer sıfırlanır. */
+export const colorAxisApplies = (type: ItemTypeFilter, allowed?: AllowedItemTypes): boolean => {
+  const t = type === "ALL" ? lockedItemType(allowed) : type;
+  return t === null || t === "FABRIC";
+};
+
+/** Tür değişince süzgeç durumu: kumaş dışına çıkınca renk/özellik sıfır. */
+export function withItemType(f: ItemPickerFilterState, type: ItemTypeFilter, allowed?: AllowedItemTypes): ItemPickerFilterState {
+  return colorAxisApplies(type, allowed) ? { ...f, type } : { type, colorId: null, propertyId: null };
+}
+
 export interface ItemPickerRow {
   id: string;
   code: string;

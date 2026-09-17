@@ -77,6 +77,10 @@ describe("ItemPickerModal — liste ve süzgeçler", () => {
     expect(within(within(dialog).getByText("Saten").closest("tr") as HTMLElement).getByText("Tümü")).toBeInTheDocument();
     expect(within(dialog).getByText("Yüklü 4 ürün")).toBeInTheDocument();
     expect(within(dialog).getByText("Tüm ürünler yüklendi")).toBeInTheDocument();
+    // ⭐ üç tetik kapalıyken ADINI taşır ("Tümü" tek başına değil)
+    expect(trigger(dialog, "Tür")).toHaveTextContent("Tür: Tümü");
+    await waitFor(() => expect(trigger(dialog, "Renk")).toHaveTextContent("Renk: Tümü"));
+    expect(trigger(dialog, "Özellik")).toHaveTextContent("Özellik: Tümü");
   });
 
   it("(2a) ⭐ Tür FARE ile: tetik → 'İplik' → filter[itemType]=YARN; yalnız iplik listede", async () => {
@@ -86,7 +90,7 @@ describe("ItemPickerModal — liste ve süzgeçler", () => {
     await userEvent.click(await screen.findByRole("option", { name: "İplik" }));
     await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", itemType: "YARN" } })));
     await waitFor(() => expect(names(dialog)).toEqual(["Pamuk İplik"]));
-    expect(trigger(dialog, "Tür")).toHaveTextContent("İplik");
+    expect(trigger(dialog, "Tür")).toHaveTextContent("Tür: İplik"); // tetik metni süzgecin ADINI taşır
   });
 
   it("(2b) ⭐ Tür KLAVYE ile: odak → ↓ (açılır) → ↓ ↓ → Enter = 'Kumaş' → filter[itemType]=FABRIC", async () => {
@@ -98,7 +102,7 @@ describe("ItemPickerModal — liste ve süzgeçler", () => {
     await userEvent.keyboard("{ArrowDown}{ArrowDown}{Enter}");
     await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", itemType: "FABRIC" } })));
     await waitFor(() => expect(names(dialog)).toEqual(["Poplin", "Saten"]));
-    expect(trigger(dialog, "Tür")).toHaveTextContent("Kumaş");
+    expect(trigger(dialog, "Tür")).toHaveTextContent("Tür: Kumaş");
   });
 
   it("(3) ⭐ Renk 'Kırmızı' → filter[allowedColorId]; listesi boş ürünler de gelir (Saten, Etiket), Mavi'li iplik gitmez", async () => {
@@ -110,6 +114,7 @@ describe("ItemPickerModal — liste ve süzgeçler", () => {
     await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", allowedColorId: "c-red" } })));
     await waitFor(() => expect(names(dialog)).toEqual(["Poplin", "Saten", "Etiket Rulosu"]));
     expect(trigger(dialog, "Renk")).toHaveAttribute("title", expect.stringContaining("Listesi boş"));
+    expect(trigger(dialog, "Renk")).toHaveTextContent("Renk: Kırmızı");
   });
 
   it("(4) Özellik 'Yanmazlık' → filter[allowedPropertyId]; Tür ile BİRLİKTE gider", async () => {
@@ -200,6 +205,34 @@ describe("ItemPickerModal — seçim, katalog, kaynak", () => {
     await waitFor(() => expect(trigger(dialog, "Renk")).toBeInTheDocument());
     expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", itemType: "FABRIC" } }));
     expect(names(dialog)).toEqual(["Poplin", "Saten"]);
+  });
+
+  it("(11) ⭐ Tür=İplik → Renk/Özellik seçicileri ÇİZİLMEZ ve seçili renk SIFIRLANIR (istekte allowedColorId yok); Kumaş'a dönünce geri gelir; iplik satırında Renkler/Özellikler hücresi boş", async () => {
+    const dialog = await openModal();
+    await waitFor(() => expect(trigger(dialog, "Renk")).toBeInTheDocument());
+    await userEvent.click(trigger(dialog, "Renk"));
+    await userEvent.click(await screen.findByRole("option", { name: "Kırmızı" }));
+    await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", allowedColorId: "c-red" } })));
+    listCursor.mockClear();
+    await userEvent.click(trigger(dialog, "Tür"));
+    await userEvent.click(await screen.findByRole("option", { name: "İplik" }));
+    await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", itemType: "YARN" } })));
+    expect(within(dialog).queryByRole("combobox", { name: "Renk" })).toBeNull();
+    expect(within(dialog).queryByRole("combobox", { name: "Özellik" })).toBeNull();
+    const yarnRow = (await within(dialog).findByText("Pamuk İplik")).closest("tr") as HTMLElement;
+    expect(within(yarnRow).queryByText("Mavi")).toBeNull();
+    expect(within(yarnRow).queryByText("—")).toBeNull();
+    await userEvent.click(trigger(dialog, "Tür"));
+    await userEvent.click(await screen.findByRole("option", { name: "Kumaş" }));
+    await waitFor(() => expect(trigger(dialog, "Renk")).toHaveTextContent("Renk: Tümü"));
+  });
+
+  it("(12) allowedTypes=[YARN] kilidi → Renk/Özellik hiç çizilmez", async () => {
+    renderWithProviders(<ItemSelect value={null} onChange={() => {}} allowedTypes={["YARN"]} />);
+    await userEvent.click(screen.getByRole("button", { name: "Ürün seç (liste)" }));
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByText("Pamuk İplik");
+    expect(within(dialog).queryByRole("combobox")).toBeNull();
   });
 
   it("boş liste yönlendirme", async () => {

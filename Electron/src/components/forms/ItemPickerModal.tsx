@@ -22,9 +22,11 @@ import {
   ITEM_PICKER_FILTERED_EMPTY,
   ITEM_PICKER_INITIAL,
   ITEM_TYPE_LABEL,
+  colorAxisApplies,
   hasItemPickerFilter,
   itemTypeFilterOptions,
   lockedItemType,
+  withItemType,
   type AllowedItemTypes,
   type ItemPickerFilterState,
   type ItemPickerRow,
@@ -50,6 +52,7 @@ function typeBadgeVariant(t: ItemPickerRow["itemType"]): "default" | "secondary"
 }
 
 function ColorCells({ r }: { r: ItemPickerRow }) {
+  if (r.itemType !== "FABRIC") return null; // iplik/sarf renk taşımaz — hücre boş ("—" bile değil)
   if (r.colors.length === 0) return <span className="text-xs text-muted-foreground">Tümü</span>;
   return (
     <span className="flex flex-wrap gap-1">
@@ -77,19 +80,22 @@ function PickerRow({ r, onPick }: { r: ItemPickerRow; onPick: (row: ItemPickerRo
         <ColorCells r={r} />
       </TableCell>
       <TableCell className="py-1.5 text-xs">
-        {r.properties.length === 0 ? <span className="text-muted-foreground">—</span> : r.properties.join(", ") + (r.propertyMore > 0 ? ` +${r.propertyMore}` : "")}
+        {r.itemType !== "FABRIC" ? null : r.properties.length === 0 ? <span className="text-muted-foreground">—</span> : r.properties.join(", ") + (r.propertyMore > 0 ? ` +${r.propertyMore}` : "")}
       </TableCell>
     </TableRow>
   );
 }
+
+/** Tetik metni süzgecin ADINI taşır (kullanıcı 03:27: üç kutu kapalıyken "Tümü" ayırt edilmiyordu): "Renk: Tümü" · "Renk: Kırmızı". */
+const triggerText = (label: string, chosen: string | undefined) => `${label}: ${chosen ?? "Tümü"}`;
 
 /** Katalog seçicisi (Renk / Özellik): "Tümü" + katalog; katalog sığmadıysa (`null`) hiç çizilmez, liste çalışır. */
 function CatalogSelect({ label, value, options, onChange }: { label: string; value: string | null; options: CatalogOption[] | null; onChange: (v: string | null) => void }) {
   if (options === null) return null;
   return (
     <Select value={value ?? ITEM_PICKER_ANY} onValueChange={(v) => onChange(v === ITEM_PICKER_ANY ? null : v)}>
-      <SelectTrigger aria-label={label} title={CATALOG_HINT} className="w-44">
-        <SelectValue />
+      <SelectTrigger aria-label={label} title={CATALOG_HINT} className="w-48">
+        <SelectValue>{triggerText(label, options.find((o) => o.id === value)?.label)}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={ITEM_PICKER_ANY}>Tümü</SelectItem>
@@ -128,6 +134,7 @@ export function ItemPickerModal({ open, onOpenChange, onPick, allowedTypes }: Pr
   const typeOptions = itemTypeFilterOptions(allowedTypes);
   const locked = lockedItemType(allowedTypes);
   const title = locked ? `${ITEM_TYPE_LABEL[locked]} seç` : "Ürün seç";
+  const colorAxis = colorAxisApplies(filter.type, allowedTypes);
   const catalogs = useItemPickerCatalogs(open);
   const { rootRef, sentinelRef } = useInfiniteScroll({ hasMore: data.hasMore, isLoading: data.isFetchingNext, onLoadMore: data.fetchNext, enabled: open });
   const pick = (row: ItemPickerRow) => {
@@ -149,9 +156,9 @@ export function ItemPickerModal({ open, onOpenChange, onPick, allowedTypes }: Pr
             <Input aria-label="Ürün ara" placeholder="Kod, ad…" className="pl-8" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} autoFocus />
           </div>
           {!locked && (
-            <Select value={filter.type} onValueChange={(v) => setFilter((f) => ({ ...f, type: v as ItemTypeFilter }))}>
-              <SelectTrigger aria-label="Tür" className="w-40">
-                <SelectValue />
+            <Select value={filter.type} onValueChange={(v) => setFilter((f) => withItemType(f, v as ItemTypeFilter, allowedTypes))}>
+              <SelectTrigger aria-label="Tür" className="w-44">
+                <SelectValue>{triggerText("Tür", filter.type === "ALL" ? undefined : ITEM_TYPE_LABEL[filter.type])}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {typeOptions.map((o) => (
@@ -162,8 +169,12 @@ export function ItemPickerModal({ open, onOpenChange, onPick, allowedTypes }: Pr
               </SelectContent>
             </Select>
           )}
-          <CatalogSelect label="Renk" value={filter.colorId} options={catalogs.colors} onChange={(v) => setFilter((f) => ({ ...f, colorId: v }))} />
-          <CatalogSelect label="Özellik" value={filter.propertyId} options={catalogs.properties} onChange={(v) => setFilter((f) => ({ ...f, propertyId: v }))} />
+          {colorAxis && (
+            <>
+              <CatalogSelect label="Renk" value={filter.colorId} options={catalogs.colors} onChange={(v) => setFilter((f) => ({ ...f, colorId: v }))} />
+              <CatalogSelect label="Özellik" value={filter.propertyId} options={catalogs.properties} onChange={(v) => setFilter((f) => ({ ...f, propertyId: v }))} />
+            </>
+          )}
         </div>
         <div ref={rootRef} className="min-h-0 flex-1 overflow-auto rounded-md border">
           <Table>
