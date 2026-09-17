@@ -37,6 +37,8 @@ function ctx(over: Partial<OperationsVisibilityContext> = {}): OperationsVisibil
     dokumaEnabled: false,
     reportsClosedKeys: [],
     isReportOpen: () => true,
+    flagsReady: true,
+    flagsFailed: false,
     ...over,
   };
 }

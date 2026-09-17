@@ -28,6 +28,8 @@ vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
     // Rapor kapısı (K5) ctx'ten okur; bu test arama davranışını ölçer, kapıyı açık sabitler.
     reportsClosedKeys: [],
     isReportOpen: () => true,
+    flagsReady: true,
+    flagsFailed: false,
   }),
 }));
 vi.mock("@/hooks/useFavorites", () => ({

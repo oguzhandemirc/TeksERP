@@ -26,7 +26,7 @@ vi.mock("@/hooks/useRoleAccess", () => ({
 /** Bayrak yanıtı — gerçek ctx hook'u bunu okur. `reportsClosedKeys` sondaların çevirdiği tek düğme. */
 let flags: Record<string, unknown> = {};
 vi.mock("@/hooks/usePricingEnabled", () => ({
-  useFeatureFlags: () => ({ data: { data: flags } }),
+  useFeatureFlags: () => ({ data: { data: flags }, isSuccess: true, isError: false }),
   useShipmentConfirmationEnabled: () => false,
 }));
 vi.mock("@/pages/Operations/SackStore/service", () => ({ sackStoreService: {} }));

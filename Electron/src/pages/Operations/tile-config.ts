@@ -150,6 +150,14 @@ export interface OperationsVisibilityContext {
   reportsClosedKeys: readonly string[] | null;
   /** Rapor açık mı — katalogda olmayan anahtar KAPALI, liste okunamadıysa KAPALI. */
   isReportOpen: (key: string) => boolean;
+  /**
+   * Bayrak sorgusu SONUÇLANDI mı (başarı YA DA hata). Yüklenmemiş bayrak "kapalı" DEĞİL
+   * "bilinmiyor"dur: modül/rapor kapısı bunu okuyup BEKLER — yenilemede (HMR · Cmd+R · ilk
+   * giriş) ticaret yolu `?? false` ile kapalı okunup `/forbidden`a yönlendiriliyordu (2026-09-17).
+   */
+  flagsReady: boolean;
+  /** Sorgu HATA ile bitti: bayraklar bilinmiyor; kapılar yönlendirmez, gerçek kapı backend 403. */
+  flagsFailed: boolean;
 }
 
 export interface OperationsTile {

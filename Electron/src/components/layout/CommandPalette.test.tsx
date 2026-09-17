@@ -39,6 +39,8 @@ vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
     dokumaEnabled: false,
     reportsClosedKeys: [],
     isReportOpen: () => true,
+    flagsReady: true,
+    flagsFailed: false,
     ...regime,
   }),
 }));

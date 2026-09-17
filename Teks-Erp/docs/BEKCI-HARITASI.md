@@ -1006,6 +1006,7 @@ Kalan atlamalar üç biçimde ve strict hiçbirini görmez:
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Electron/src/components/ProtectedRoute.module.test.tsx` | Panel route MODÜL kapısı: bayrak kapalı + izin var + URL → /forbidden (bayrak izni ezer) · açık → çizilir · modülsüz ekran dokunulmaz · alt yol ebeveyne katlanır · izin kapısı önce. BAYRAK BEKLEME (2026-09-17, kullanıcı bulgusu "Erişim engellendi"): pending → ne çocuk ne yönlendirme · yüklendi+kapalı → /forbidden · yüklendi+açık → çocuk · sorgu HATA → çocuk (gerçek kapı backend 403, "bilinmiyor" ≠ "kapalı") · izin kapısı JWT'den, beklemez. | — | ✓B1 (bu commit) — `if (!flagsReady) return null` düşürüldü → PENDING kolu ❌ (pending'de FORBIDDEN çizildi) | |
 | `Electron/src/components/layout/CommandPalette.test.tsx` | Palet ekran davranışı: rapor sayfaları aramasız listede, izinsizde hiç çizilmez, alt başlık aranınca gelir, tam ad eşleşmesi ilk sırada, muhasebe kapa |  |  | ⚠️ yok |
 | `Electron/src/components/layout/command-entries.test.ts` | Katalog bütünlüğü: content-routes.tsx KAYNAK METNİ okunur; her statik route'un palet girişi var, Raporlar'ın 7 kategorisi + alt raporları katalogda, g |  |  | ⚠️ yok |
 | `Electron/src/lib/boss-menu.test.ts` | Patron görünümü daraltması iki ayaklı: isBossAllowedPath yalnız Operasyon+Rapor'a izin verir (segment sınırı, sorgu/hash/büyük harf atlatamaz) ve buil |  |  | ⚠️ yok |

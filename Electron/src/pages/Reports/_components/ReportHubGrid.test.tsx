@@ -19,7 +19,7 @@ import { ReportHubGrid } from "./ReportHubGrid";
 // Karo süzmesi (K5) gerçek bir katalog anahtarı ister; iskelet testi kapıyı AÇIK sabitler —
 // süzmenin kendisi `ReportsHub.gate.test.tsx`te ölçülür.
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
-  useOperationsVisibilityContext: () => ({ reportsClosedKeys: [], isReportOpen: () => true }),
+  useOperationsVisibilityContext: () => ({ reportsClosedKeys: [], isReportOpen: () => true, flagsReady: true, flagsFailed: false }),
 }));
 vi.mock("@/hooks/useFavorites", () => ({
   useFavorites: () => ({

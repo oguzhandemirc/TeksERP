@@ -56,6 +56,8 @@ function ctx(
     dokumaEnabled: false,
     reportsClosedKeys: [],
     isReportOpen: () => true,
+    flagsReady: true,
+    flagsFailed: false,
     ...over,
   };
 }

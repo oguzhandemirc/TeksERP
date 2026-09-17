@@ -21,6 +21,8 @@ vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
     financeEnabled: true, productionEnabled: true, ticaretEnabled: false, iplikEnabled: false,
     reportsClosedKeys: closed,
     isReportOpen: (key: string) => !closed.includes(key),
+    flagsReady: true,
+    flagsFailed: false,
   }),
 }));
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ isAdmin: true, hasPermission: () => true }) }));

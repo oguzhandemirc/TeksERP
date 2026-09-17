@@ -20,6 +20,8 @@ function ctx(over: Partial<OperationsVisibilityContext> = {}): OperationsVisibil
     dokumaEnabled: true,
     reportsClosedKeys: [],
     isReportOpen: () => true,
+    flagsReady: true,
+    flagsFailed: false,
     financeEnabled: true,
     productionEnabled: true,
     ticaretEnabled: true,

@@ -38,6 +38,8 @@ vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
     iplikEnabled: true,
     reportsClosedKeys: [],
     isReportOpen: () => true,
+    flagsReady: true,
+    flagsFailed: false,
     ...regime,
   }),
 }));
@@ -102,7 +104,7 @@ describe("Modüller → Raporlar bölümü", () => {
     const base: OperationsVisibilityContext = {
       shipmentConfirmationEnabled: false, depoMultiEnabled: false, devereEnabled: false, dokumaEnabled: false,
       financeEnabled: false, productionEnabled: true, ticaretEnabled: false, iplikEnabled: false,
-      reportsClosedKeys: [], isReportOpen: () => true,
+      reportsClosedKeys: [], isReportOpen: () => true, flagsReady: true, flagsFailed: false,
     };
     const fason = REPORT_CATALOG.find((r) => r.modul === "planlanan:fason")!;
     const finance = REPORT_CATALOG.find((r) => r.modul === "financeEnabled")!;

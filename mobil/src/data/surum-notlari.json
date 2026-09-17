@@ -26,6 +26,11 @@
       "maddeler": [
         {
           "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Mal Kabul ve Alış Siparişleri gibi modül ekranları sayfa yenilendiğinde ya da ilk girişte ara sıra “Erişim engellendi” gösteriyor, menüden tekrar girince açılıyordu — panel modül anahtarlarını sunucudan almadan karar veriyordu; artık anahtarlar gelene kadar bekler, kapalı modülün ekranı yine engellenir."
+        },
+        {
+          "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Panelde tarih girilen her yerde artık aynı takvim kutusu kullanılır (gün.ay.yıl yazılabilir, takvimden seçilebilir): liste süzgeçlerindeki tarih aralıkları, raporlardaki tarih şeridi ve formlardaki tarih alanları — tarayıcının eski tarih kutusu kalmadı; saat gereken yerlerde tarih takvimden, saat yanındaki kutudan girilir."
         },

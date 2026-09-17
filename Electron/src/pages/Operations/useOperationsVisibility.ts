@@ -55,6 +55,9 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
   // backend'in gerçekten boş dizi söylediği durumdur (fail-closed, K5).
   const reportsClosedKeys: readonly string[] | null = flagsQuery.data?.data?.reportsClosedKeys ?? null;
   const isReportOpen = useCallback((key: string) => isReportOpenWith(reportsClosedKeys, key), [reportsClosedKeys]);
+  // Tek kurulum noktası: karo · palet · route aynı "sonuçlandı mı"yı okur.
+  const flagsReady = flagsQuery.isSuccess || flagsQuery.isError;
+  const flagsFailed = flagsQuery.isError;
 
   // ⚠️ ÇIKIŞ BEKLEYEN SEVKİYAT SONDASI KALDIRILDI (2026-09-01, birleştirme).
   // 2026-08-22 kararı Sevk Kapısı karosunu SAF BAYRAĞA bağladı ve `sack-store/
@@ -73,5 +76,7 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
     dokumaEnabled,
     reportsClosedKeys,
     isReportOpen,
+    flagsReady,
+    flagsFailed,
   };
 }

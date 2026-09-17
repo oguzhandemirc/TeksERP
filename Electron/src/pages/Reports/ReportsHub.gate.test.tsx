@@ -29,6 +29,8 @@ const ctx = (): OperationsVisibilityContext => ({
   iplikEnabled: true,
   reportsClosedKeys: closed,
   isReportOpen: (key: string) => isReportOpenWith(closed, key),
+  flagsReady: true,
+  flagsFailed: false,
 });
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({ useOperationsVisibilityContext: () => ctx() }));
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ isAdmin: true, hasPermission: () => true }) }));

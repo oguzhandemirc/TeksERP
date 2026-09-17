@@ -61,17 +61,28 @@ export function ProtectedRoute({
   // yeni yüzey açılmaz). Karo ve palet zaten gizli; bu kapı üçüncü yolu (elle
   // yazılan URL) kapatır. Yol → modül aynası `lib/route-modules.ts`
   // (`SCREEN_CATALOG.modul`, bekçi `test_screen_catalog §4b`); modülsüz yol
-  // (çekirdek · planlanan · hub) dokunulmaz; bayrak yüklenene dek yön alan başına
-  // backend'le aynı (üretim AÇIK) — bugünkü route tablosu birebir kalır.
-  if (!isRouteModuleOpen(location.pathname, moduleCtx)) {
-    return <Navigate to="/forbidden" replace />;
-  }
-  // Rapor kapısı (Raporlar K5): modül kapısından SONRA, izin kapısından SONRA — süperadminin
-  // kapattığı rapor izni olan kullanıcıya da çizilmez (backend 403 REPORT_DISABLED ile aynı).
-  // Kategori hub'ı (iki segment) rapor değildir; bilinmeyen anahtar KAPALIDIR.
-  const reportKey = reportKeyOfPath(location.pathname);
-  if (reportKey !== null && !moduleCtx.isReportOpen(reportKey)) {
-    return <Navigate to="/forbidden" replace />;
+  // (çekirdek · planlanan · hub) dokunulmaz.
+  //
+  // ⚠️ BAYRAK YÜKLENENE DEK BEKLE (2026-09-17, kullanıcı bulgusu): yüklenmemiş bayrak
+  // "kapalı" değil "bilinmiyor"dur. Eskiden `?? false` ile kapalı okunup `replace` ile
+  // /forbidden'a yönlendiriliyordu — Mal Kabul / Alış Siparişleri yenilemede (HMR · Cmd+R ·
+  // ilk giriş) ara sıra "Erişim engellendi" veriyor, menüden dönünce düzeliyordu (üretim
+  // yolları `?? true` olduğu için onlarda görülmüyordu). İzin kapıları JWT'den okur, beklemez.
+  if (!moduleCtx.flagsReady) return null;
+  // Sorgu HATA verdiyse bayraklar bilinmiyor: yönlendirme YOK, route çizilir — gerçek kapı
+  // backend'dir (403 MODULE_DISABLED / REPORT_DISABLED); kapalı modülün ekranı boş/403 toast'ıyla
+  // kalır, bu "bilinmiyor"u "kapalı" diye okuyup yetkili kullanıcıyı dışarı atmaktan iyidir.
+  if (!moduleCtx.flagsFailed) {
+    if (!isRouteModuleOpen(location.pathname, moduleCtx)) {
+      return <Navigate to="/forbidden" replace />;
+    }
+    // Rapor kapısı (Raporlar K5): modül kapısından SONRA, izin kapısından SONRA — süperadminin
+    // kapattığı rapor izni olan kullanıcıya da çizilmez (backend 403 REPORT_DISABLED ile aynı).
+    // Kategori hub'ı (iki segment) rapor değildir; bilinmeyen anahtar KAPALIDIR.
+    const reportKey = reportKeyOfPath(location.pathname);
+    if (reportKey !== null && !moduleCtx.isReportOpen(reportKey)) {
+      return <Navigate to="/forbidden" replace />;
+    }
   }
 
   // Kimlik kapısı izinlerden SONRA: yetkisiz kullanıcı zaten yukarıda elendi,

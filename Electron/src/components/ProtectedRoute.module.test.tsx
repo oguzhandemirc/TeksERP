@@ -29,6 +29,8 @@ vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
     dokumaEnabled: false,
     reportsClosedKeys: [],
     isReportOpen: () => true,
+    flagsReady: true,
+    flagsFailed: false,
     financeEnabled: false,
     productionEnabled: true,
     ticaretEnabled: false,
@@ -114,6 +116,50 @@ describe("ProtectedRoute — modül kapısı", () => {
     permissions = ["item:read"];
     regime = { dokumaEnabled: true };
     renderAt("/operations/weaving-orders", "/operations/weaving-orders", "weavingorder:read");
+    expect(screen.getByText("FORBIDDEN-SAYFASI")).toBeInTheDocument();
+  });
+
+  // ── BAYRAK YÜKLENENE DEK BEKLE (2026-09-17, kullanıcı bulgusu, öncelik 1) ────────────────────
+  // Mal Kabul / Alış Siparişleri yenilemede (HMR · Cmd+R · ilk giriş) ara sıra "Erişim engellendi":
+  // bayrak sorgusu bitmeden `ticaretEnabled ?? false` KAPALI okunup `replace` ile /forbidden'a
+  // yönlendiriliyordu (üretim yolları `?? true` olduğu için orada görülmedi). Yüklenmemiş bayrak
+  // "bilinmiyor"dur: kapı bekler (null çizer). Sorgu HATA verdiyse yönlendirme yok, route çizilir —
+  // gerçek kapı backend 403.
+  // Negatif sonda (bir kezlik, geri alındı — sha commit mesajında): `if (!flagsReady) return null`
+  // düşürüldü → "PENDING → null" kolu ❌ (pending'de FORBIDDEN çizildi).
+  it("⭐ bayrak PENDING → ne çocuk ne yönlendirme (bekler)", () => {
+    regime = { flagsReady: false, flagsFailed: false, ticaretEnabled: false };
+    renderAt("/operations/goods-receipts", "/operations/goods-receipts", "goodsreceipt:read");
+    expect(screen.queryByText("EKRAN-ICERIGI")).toBeNull();
+    expect(screen.queryByText("FORBIDDEN-SAYFASI")).toBeNull();
+  });
+
+  it("⭐ yüklendi + KAPALI → /forbidden (bekleme kapıyı gevşetmedi)", () => {
+    regime = { flagsReady: true, flagsFailed: false, ticaretEnabled: false };
+    renderAt("/operations/goods-receipts", "/operations/goods-receipts", "goodsreceipt:read");
+    expect(screen.getByText("FORBIDDEN-SAYFASI")).toBeInTheDocument();
+  });
+
+  it("⭐ yüklendi + AÇIK → çocuk çizilir", () => {
+    regime = { flagsReady: true, flagsFailed: false, ticaretEnabled: true };
+    renderAt("/operations/goods-receipts", "/operations/goods-receipts", "goodsreceipt:read");
+    expect(screen.getByText("EKRAN-ICERIGI")).toBeInTheDocument();
+  });
+
+  it("⭐ sorgu HATA → yönlendirme YOK, çocuk çizilir (gerçek kapı backend 403; \"bilinmiyor\" ≠ \"kapalı\")", () => {
+    regime = { flagsReady: true, flagsFailed: true, ticaretEnabled: false, reportsClosedKeys: null, isReportOpen: () => false };
+    const r1 = renderAt("/operations/goods-receipts", "/operations/goods-receipts", "goodsreceipt:read");
+    expect(screen.getByText("EKRAN-ICERIGI")).toBeInTheDocument();
+    r1.unmount();
+    // rapor kapısı da aynı kabul: hata → çizilir
+    renderAt("/reports/sales/order-intake", "/reports/sales/order-intake", "report:sales");
+    expect(screen.getByText("EKRAN-ICERIGI")).toBeInTheDocument();
+  });
+
+  it("izin kapısı JWT'den okur, BEKLEMEZ: bayrak pending iken izinsiz kullanıcı yine /forbidden", () => {
+    permissions = ["item:read"];
+    regime = { flagsReady: false, flagsFailed: false, ticaretEnabled: false };
+    renderAt("/operations/goods-receipts", "/operations/goods-receipts", "goodsreceipt:read");
     expect(screen.getByText("FORBIDDEN-SAYFASI")).toBeInTheDocument();
   });
 });
