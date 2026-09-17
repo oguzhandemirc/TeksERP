@@ -27,7 +27,7 @@
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Mal Kabul ve Alış Siparişleri gibi modül ekranları sayfa yenilendiğinde ya da ilk girişte ara sıra “Erişim engellendi” gösteriyor, menüden tekrar girince açılıyordu — panel modül anahtarlarını sunucudan almadan karar veriyordu; artık anahtarlar gelene kadar bekler, kapalı modülün ekranı yine engellenir."
+          "metin": "Mal Kabul ve Alış Siparişleri gibi modül ekranları sayfa yenilendiğinde ya da ilk girişte ara sıra “Erişim engellendi” gösteriyor, menüden tekrar girince açılıyordu — panel modül anahtarlarını sunucudan almadan karar veriyordu; artık anahtarlar gelene kadar bekler, kapalı modülün ekranı yine engellenir. Operasyon, Tanımlar ve Raporlar ana sayfaları da anahtarlar gelene kadar gri yer tutucu kutular gösterir — kutular sonradan belirip kaybolmaz."
         },
         {
           "kapsam": "panel",

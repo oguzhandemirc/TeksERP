@@ -5,6 +5,7 @@ import { useOperationsVisibilityContext } from "./useOperationsVisibility";
 import { operationsTiles, type OperationsTile } from "./tile-config";
 import { operationGroups, type OperationGroupKey } from "./groups-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
+import { HubSkeleton } from "@/components/hub/HubSkeleton";
 
 // İstasyon/akış anlamına göre ton — verilmeyen kartlar grup içinde palet tonunu alır.
 const TILE_TONES: Record<string, string> = {
@@ -49,7 +50,9 @@ export function OperationsHubPage() {
         title="Operasyon"
       />
       <PageBody className="flex flex-col gap-8 p-6">
-        {operationGroups.map((group) => {
+        {/* Bayraklar gelene dek modüllü karo gizlenip sonra BELİRMEZ — iskelet (titreme sıfır). */}
+        {!visibilityCtx.flagsReady ? <HubSkeleton count={9} /> : null}
+        {visibilityCtx.flagsReady && operationGroups.map((group) => {
           const groupTiles = byGroup.get(group.key);
           if (!groupTiles || groupTiles.length === 0) return null;
           return (

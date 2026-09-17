@@ -5,6 +5,7 @@ import { useOperationsVisibilityContext } from "@/pages/Operations/useOperations
 import { definitionTiles, type DefinitionTile } from "./tile-config";
 import { definitionGroups, type DefinitionGroupKey } from "./groups-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
+import { HubSkeleton } from "@/components/hub/HubSkeleton";
 
 export function DefinitionsHubPage() {
   const { isAdmin, hasPermission, hasAnyPermission } = useRoleAccess();
@@ -36,7 +37,9 @@ export function DefinitionsHubPage() {
         title="Tanımlar"
       />
       <PageBody className="flex flex-col gap-8 p-6">
-        {definitionGroups.map((group) => {
+        {/* Bayraklar gelene dek modüllü karo gizlenip sonra BELİRMEZ — iskelet (titreme sıfır). */}
+        {!visibilityCtx.flagsReady ? <HubSkeleton count={8} className="xl:grid-cols-4" /> : null}
+        {visibilityCtx.flagsReady && definitionGroups.map((group) => {
           const groupTiles = tilesByGroup.get(group.key);
           if (!groupTiles || groupTiles.length === 0) return null;
 

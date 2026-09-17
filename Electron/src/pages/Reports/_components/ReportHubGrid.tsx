@@ -2,6 +2,7 @@ import { type LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
+import { HubSkeleton } from "@/components/hub/HubSkeleton";
 import { REPORT_BY_KEY } from "@/lib/report-catalog";
 import { reportKeyOfPath } from "@/lib/report-gate";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
@@ -55,7 +56,7 @@ export function groupBySinif(tiles: HubTile[]): {
 /** Domain alt-rapor hub'ı — tile grid layout, izin filtresi parent'ta yapılır. */
 export function ReportHubGrid({ title, description, tiles }: Props) {
   // Karo süzmesi (Raporlar K5): karonun adresi anahtarıdır; kapalı ya da bilinmeyen rapor çizilmez (fail-closed).
-  const { isReportOpen } = useOperationsVisibilityContext();
+  const { isReportOpen, flagsReady } = useOperationsVisibilityContext();
   const open = tiles.filter((t) => {
     const key = reportKeyOfPath(t.to);
     return key !== null && isReportOpen(key);
@@ -64,6 +65,17 @@ export function ReportHubGrid({ title, description, tiles }: Props) {
   // karoları, `/reports/<kategori>` iki segmentli) "Diğer"e düşmez — bölümsüz
   // listede kalır. Bir karoyu bölüm uğruna kaybetmek, kapatmaktan farksız olurdu.
   const { sections, unclassified, showSections } = groupBySinif(open);
+  // Liste yüklenene dek karolar "kapalı" değil "bilinmiyor" — iskelet çizilir, sonra belirme yok.
+  if (!flagsReady) {
+    return (
+      <PageShell>
+        <PageHeader title={title} description={description} />
+        <PageBody className="p-6">
+          <HubSkeleton count={tiles.length || 3} />
+        </PageBody>
+      </PageShell>
+    );
+  }
   if (!showSections) {
     // Kategoride tek sınıf varsa iki başlık göstermek gürültüdür: rapor sayısı
     // değişmediği hâlde ekran "iki grup" diye okunur.

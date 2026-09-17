@@ -5,6 +5,7 @@ import { useOperationsVisibilityContext } from "@/pages/Operations/useOperations
 import { categoryHasOpenReport } from "@/lib/report-gate";
 import { reportTiles } from "./tile-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
+import { HubSkeleton } from "@/components/hub/HubSkeleton";
 
 export function ReportsHubPage() {
   const { isAdmin, hasPermission } = useRoleAccess();
@@ -33,6 +34,8 @@ export function ReportsHubPage() {
         title="Raporlar"
       />
       <PageBody className="p-6">
+        {/* Bayraklar gelene dek kategori karoları gizlenip sonra BELİRMEZ — iskelet. */}
+        {!ctx.flagsReady ? <HubSkeleton count={9} /> : (
         <HubGrid>
           {tiles.map((tile, i) => (
             <HubCard
@@ -45,6 +48,7 @@ export function ReportsHubPage() {
             />
           ))}
         </HubGrid>
+        )}
       </PageBody>
     </PageShell>
   );
