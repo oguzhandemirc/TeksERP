@@ -9,8 +9,12 @@
 //    bağlı fason da `subcontractorId` ile hâlâ çözülür (uç imzası değişmedi)
 // §6 liste süzgeci `filter[customerId]=null` → yalnız bağsız; `=<id>` → yalnız o bağ
 // §7 global arama: bağlı fason satırının alt satırı "Cari: AD (KOD)", bağsızda null
+// §8 cari BİRLEŞTİRME (8030): tek taraflı profil survivor'a TAŞINIR; iki kartın da profili varsa önizleme
+//    blokçu + uygulama 409 "önce profilleri birleştirin" (sessiz SetNull/sıfırlama YOK)
+// §9 FK `onDelete: Restrict`: profili olan cari sert silinemez (PG 23503), bağ kaldırılınca silinir
 // Negatif sondalar (yazılırken kırmızı görüldü): `assertProfileCustomer` tip kolu kaldırılınca §2 ❌;
-// `findAll` `null` süzgeci kaldırılınca §6 Prisma P2007/P2023 ile ❌.
+// `findAll` `null` süzgeci kaldırılınca §6 ❌; merge haritasından `subcontractors` satırı silinince §8 ❌
+// (kaynak profili tombstone'a bakar kalır); FK SET NULL'a dönünce §9 ❌.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; temizlik yalnız `temizle`de.
 // Koşum: npx tsx scripts/test_subcontractor_customer_profile.ts
 // =============================================================================
@@ -26,6 +30,7 @@ import {
 import { customerService } from "../src/routes/customer.routes";
 import { resolveSupplierParty } from "../src/services/helpers/supplier-party.helper";
 import { searchService } from "../src/services/search.service";
+import { MasterDataMergeService } from "../src/services/master-data-merge.service";
 import { AppError } from "../src/utils/app-error";
 
 let pass = 0;
@@ -54,7 +59,7 @@ const fakeReq = (query: Record<string, unknown>) => ({ query } as unknown as Req
 const svc = new SubcontractorManagementService();
 const stamp = Date.now().toString(36);
 const T = `TEST-FSNPRF-${stamp}`;
-const ids = { cariSup: "", cariBoth: "", cariMus: "", cariPasif: "", subBagli: "", subBagsiz: "", subIkinci: "" };
+const ids = { cariSup: "", cariBoth: "", cariMus: "", cariPasif: "", subBagli: "", subBagsiz: "", subIkinci: "", cariM1: "", cariM2: "", cariM3: "" };
 
 type Row = { id: string; customer?: { id: string; code: string; name: string; type: string } | null };
 
@@ -141,6 +146,29 @@ async function main(): Promise<void> {
     const bagsiz = grup?.rows.find((r) => r.id === ids.subBagsiz);
     check("bağlı fason → subtitle 'Cari: AD (KOD)'", bagli?.subtitle === `Cari: ${T} BOTH A.Ş. (${T}-BOTH)`, bagli?.subtitle ?? "(satır yok)");
     check("bağsız fason → subtitle null", bagsiz !== undefined && bagsiz.subtitle === null);
+
+    console.log("\n§8 cari birleştirme: profil taşınır / iki profil 409");
+    ids.cariM1 = await cari("M1", "SUPPLIER");
+    ids.cariM2 = await cari("M2", "SUPPLIER");
+    ids.cariM3 = await cari("M3", "SUPPLIER");
+    const pM2 = (await svc.create({ code: `${T}-S7`, name: `${T} M2 Profili`, customerId: ids.cariM2 }, undefined)).data as Row;
+    const pv1 = await MasterDataMergeService.preview("customer", ids.cariM1, [ids.cariM2]);
+    check("tek taraflı profil (kaynakta) → önizleme blokçusuz", pv1.canMerge, pv1.blockers.map((b) => b.key).join(",") || "blokçu yok");
+    await MasterDataMergeService.merge("customer", { survivorId: ids.cariM1, sourceIds: [ids.cariM2], reason: "fason profili tasima sondasi", acknowledgedConflicts: pv1.conflicts.length });
+    const tasinan = await prisma.subcontractor.findUnique({ where: { id: pM2.id }, select: { customerId: true } });
+    check("⭐ profil survivor'a TAŞINDI (tombstone'a bakmıyor)", tasinan?.customerId === ids.cariM1, String(tasinan?.customerId));
+    await svc.create({ code: `${T}-S8`, name: `${T} M3 Profili`, customerId: ids.cariM3 }, undefined);
+    const pv2 = await MasterDataMergeService.preview("customer", ids.cariM1, [ids.cariM3]);
+    check("⭐ iki kartın da profili var → önizleme blokçu CONFLICT_SUBCONTRACTORS", !pv2.canMerge && pv2.blockers.some((b) => b.key === "CONFLICT_SUBCONTRACTORS"), pv2.blockers.map((b) => b.key).join(","));
+    const eMerge = await hata(() => MasterDataMergeService.merge("customer", { survivorId: ids.cariM1, sourceIds: [ids.cariM3], reason: "iki profil sondasi", acknowledgedConflicts: pv2.conflicts.length }));
+    check("uygulama katmanı 409 'önce profilleri birleştirin' (çift kapı)", status(eMerge) === 409 && msg(eMerge).includes("önce profilleri birleştirin"), msg(eMerge));
+    const m3Profil = await prisma.subcontractor.findFirst({ where: { code: `${T}-S8` }, select: { customerId: true } });
+    check("409'da hiçbir profil koparılmadı (sessiz SetNull yok)", m3Profil?.customerId === ids.cariM3 && tasinan?.customerId === ids.cariM1);
+
+    console.log("\n§9 FK onDelete Restrict");
+    const eDel = await hata(() => prisma.customer.delete({ where: { id: ids.cariM3 } }));
+    check("⭐ profili olan cari sert silinemez (FK Restrict)", eDel instanceof Prisma.PrismaClientKnownRequestError && eDel.code === "P2003", msg(eDel).slice(0, 60));
+    check("silme denemesinde profil bağlı kaldı", (await prisma.subcontractor.findFirst({ where: { code: `${T}-S8` }, select: { customerId: true } }))?.customerId === ids.cariM3);
   } finally {
     await temizle();
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

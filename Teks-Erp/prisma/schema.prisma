@@ -5583,10 +5583,12 @@ model Subcontractor {
   /// NULL = bağsız fason (bugünkü davranış aynen: fişte seçilir, kendi cari hesabına
   /// yazar). `@unique`: bir cariye en çok BİR fason profili. Bağlanan cari SUPPLIER
   /// ya da BOTH tipinde olmalı — kural serviste (`assertProfileCustomer`), DB'de değil.
+  /// FK `onDelete: Restrict` (CariAccount→Customer ile aynı): fason profili olan cari sert silinemez,
+  /// önce bağ kaldırılır — sessiz SetNull fail-open olurdu (1e kararı 2026-09-17, hard-delete guard bekçisi).
   customerId String? @unique @db.Uuid
 
   // Relations
-  customer                 Customer?                 @relation("SubcontractorCustomerProfile", fields: [customerId], references: [id])
+  customer                 Customer?                 @relation("SubcontractorCustomerProfile", fields: [customerId], references: [id], onDelete: Restrict)
   categories               SubcontractorToCategory[]
   dispatches               SubcontractorDispatch[]   @relation("DispatchSubcontractor")
   plannedDispatches        SubcontractorDispatch[]   @relation("DispatchPlannedSubcontractor")

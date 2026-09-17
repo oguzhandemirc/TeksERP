@@ -36,7 +36,7 @@ const subCtrl = new SubcontractorManagementController();
  *         description: "Bağlı cari (uuid ya da CSV); `null` = yalnız BAĞSIZ fasonlar (tedarikçi seçicisinin fason bacağı)"
  *         schema: { type: string }
  *     responses:
- *       200: { description: Liste (her satırda bağlı cari `customer {id,code,name,type}` ya da null) }
+ *       200: { description: "Liste — her satırda bağlı cari nesnesi customer (id, code, name, type) ya da null" }
  */
 subcontractorRouter.get("/", verifyToken, requireAnyPermission("subcontractor:read", ...MOBILE_FASON_READ, "mobile:hizli-is-emri"), subCtrl.findAll);
 

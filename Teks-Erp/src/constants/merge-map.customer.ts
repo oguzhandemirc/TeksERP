@@ -100,6 +100,22 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
     // atlıyor, satırlar tombstone bir müşteriye bakmaya devam ediyordu.
     { kind: "MOVE", model: "GoodsReceipt", table: "goods_receipts", column: "supplierId", label: "Mal kabul fişi (tedarikçi)" },
     { kind: "MOVE", model: "PurchaseOrder", table: "purchase_orders", column: "supplierId", label: "Alış siparişi (tedarikçi)" },
+    // Fason = carinin rolü (2026-09-17): profil kolonun kendisinde tekil (`Subcontractor.customerId @unique`).
+    // Tek taraflıysa profil survivor'a TAŞINIR; iki kartın da profili varsa 409 — sessiz SetNull/sıfırlama YOK,
+    // önce fason profilleri (Fason Firmalar → birleştir) birleştirilir.
+    {
+      kind: "CONFLICT",
+      model: "Subcontractor",
+      table: "subcontractors",
+      column: "customerId",
+      label: "Fason profili",
+      uniqueOn: ["customerId"],
+      policy: "BLOCK",
+      why:
+        "İki kartın da fason profili var — önce profilleri birleştirin. Fason profili sevk/kabul " +
+        "tarihçesinin sahibidir; iki profili tek karta bağlamak kısıtla imkânsız, birini sessizce " +
+        "koparmak ise tarihçeyi öksüz bırakır.",
+    },
     {
       kind: "CONFLICT",
       model: "CariAccount",
