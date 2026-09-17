@@ -412,7 +412,7 @@ describe("GoodsReceiptFormDialog — ham stok girişi ve kayıt geri bildirimi",
       <GoodsReceiptFormDialog open onOpenChange={() => {}} onCreated={() => {}} />,
     );
 
-    await user.click(await screen.findByText(/Ham stok olarak al/));
+    await user.click(await screen.findByText(/ham stok olarak alınsın/));
     await user.click(screen.getByText("stub-satır-gir"));
     await user.click(screen.getByText(/Fişi Oluştur/));
 
@@ -473,7 +473,7 @@ describe("GoodsReceiptFormDialog — ham stok girişi ve kayıt geri bildirimi",
       <GoodsReceiptFormDialog open onOpenChange={() => {}} onCreated={() => {}} />,
     );
 
-    await user.click(await screen.findByText(/Ham stok olarak al/));
+    await user.click(await screen.findByText(/ham stok olarak alınsın/));
     await user.click(screen.getByText("stub-satır-gir"));
     await user.click(screen.getByText(/Fişi Oluştur/));
 

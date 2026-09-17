@@ -30,10 +30,11 @@ vi.mock("@/components/forms/ReferenceSelect", () => ({ ReferenceSelect: () => nu
 vi.mock("@/components/forms/SupplierSelect", () => ({ SupplierSelect: () => null }));
 vi.mock("./LinePropertiesButton", () => ({ LinePropertiesButton: () => null }));
 vi.mock("@/hooks/useFoldValues", () => ({ useFoldValues: () => ({ values: [] }) }));
-// Ürün kutusu: tıklayınca iplik kalemini seçen stub (modal yerine)
+// Ürün kutusu: tıklayınca iplik kalemini seçen stub (modal yerine). EK 5: iplik satırı "İplik satırı ekle" ile doğar,
+// seçicisi "İplik kalemi" etiketli.
 vi.mock("@/components/forms/ItemSelect", () => ({
-  ItemSelect: (p: { value: string | null; onChange: (id: string) => void; "aria-label"?: string }) => (
-    <button type="button" aria-label={p["aria-label"]} onClick={() => p.onChange("yarn-1")}>{p.value ?? "Kumaş / iplik ara..."}</button>
+  ItemSelect: (p: { value: string | null; onChange: (id: string) => void; "aria-label"?: string; placeholder?: string }) => (
+    <button type="button" aria-label={p["aria-label"]} onClick={() => p.onChange("yarn-1")}>{p.value ?? p.placeholder}</button>
   ),
 }));
 const createGoodsReceipt = vi.fn();
@@ -56,7 +57,8 @@ const axiosLike = (lines: Array<{ lineNo: number; code: string; message: string 
 async function yarnLineWithQty() {
   const user = userEvent.setup();
   renderWithProviders(<GoodsReceiptFormDialog open onOpenChange={() => {}} onCreated={() => {}} />);
-  await user.click(screen.getByRole("button", { name: "Kumaş" })); // ItemSelect stub → iplik kalemi
+  await user.click(screen.getByRole("button", { name: "İplik satırı ekle" }));
+  await user.click(screen.getByRole("button", { name: "İplik kalemi" })); // ItemSelect stub → iplik kalemi
   const kg = await screen.findByRole("spinbutton", { name: "Miktar (kg)" });
   await user.clear(kg);
   await user.type(kg, "10");
@@ -92,7 +94,8 @@ describe("Mal kabul — doğrulama sınıfı hata satırda (C8)", () => {
     const user = userEvent.setup();
     createGoodsReceipt.mockRejectedValueOnce(axiosLike([{ lineNo: 1, code: "YARN_LOT_REQUIRED", message: "İplik satırında lot numarası zorunlu (ayar)." }]));
     renderWithProviders(<GoodsReceiptFormDialog open onOpenChange={onOpenChange} onCreated={() => {}} />);
-    await user.click(screen.getByRole("button", { name: "Kumaş" }));
+    await user.click(screen.getByRole("button", { name: "İplik satırı ekle" }));
+    await user.click(screen.getByRole("button", { name: "İplik kalemi" }));
     const kg = await screen.findByRole("spinbutton", { name: "Miktar (kg)" });
     await user.clear(kg);
     await user.type(kg, "10");

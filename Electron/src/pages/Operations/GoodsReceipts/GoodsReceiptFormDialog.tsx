@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -240,11 +239,12 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
             </div>
           </div>
 
-          {/* ── C2 — RAF SEÇİMİ (fiş SEVİYESİNDE, satır seviyesinde DEĞİL) ──
+          {/* ── C2 → EK 5: RAF SEÇİMİ fişin VARSAYILANI, satırda değiştirilebilir ──
               Ürünün niteliği kartındadır; buradaki soru topun hangi RAFA
-              gireceğidir. Satır bazına açmak "fiş bir kaptır" okumasını bozardı
-              (karışık fiş → iki farklı sekmeye düşen toplar); iki tür mal aynı
-              irsaliyeyle geldiyse ikinci fiş açılır.
+              gireceğidir. Eski "fiş bir kaptır" okuması kullanıcı kararıyla
+              (2026-09-17) satır bazına açıldı: kutu yeni kumaş satırlarının
+              Ham/Bitmiş anahtarını doldurur, satır kendi seçimini gövdede
+              `rawStock` olarak taşır (seçilmediyse gönderilmez → fiş kutusu).
               ⚠️ İPLİK BU SEÇİMDEN ETKİLENMEZ: `YarnStock` kalem × DEPO bazında
               kg tutar, raf/statü kavramı yoktur (backend'de de yazılı). */}
           <label className="flex cursor-pointer items-start gap-2 rounded-md border bg-muted/20 p-3">
@@ -255,10 +255,11 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
               onCheckedChange={(c) => setRawStockEntry(Boolean(c))}
             />
             <span className="text-sm">
-              Ham stok olarak al (işlenecek mal)
+              Yeni kumaş satırları ham stok olarak alınsın (işlenecek mal)
               <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                Toplar <b>Ham Stok</b> sekmesine düşer ve fasona sevk edilebilir. İşaretlenmezse
-                satılabilir bitmiş mal olarak <b>Bitmiş Depo</b>ya girer (varsayılan).
+                Kumaş satırlarındaki <b>Ham/Bitmiş</b> anahtarının varsayılanıdır; satırda değiştirilebilir. Ham toplar{" "}
+                <b>Ham Stok</b> sekmesine düşer ve fasona sevk edilebilir; bitmiş toplar satılabilir mal olarak{" "}
+                <b>Bitmiş Depo</b>ya girer (varsayılan).
               </span>
             </span>
           </label>
@@ -278,13 +279,10 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
               kalemleri kumaş sayar: iplik satırı renk/en/kat sorar, backend
               400 verir ve "kg" rozeti hiç çizilmez (sözleşme ReceiptLineRows
               Props yorumunda). */}
-          <ReceiptLineRows lines={lines} onChange={setLinesAndClear} yarnItemIds={yarnIds} lineIssues={lineIssues} />
+          <ReceiptLineRows lines={lines} onChange={setLinesAndClear} yarnItemIds={yarnIds} lineIssues={lineIssues} rawStockDefault={rawStockEntry} />
 
-          <div className="flex items-center justify-between">
-            <Button variant="ghost" size="sm" onClick={() => setLines((ls) => [...ls, emptyLine()])}>
-              <Plus className="mr-1 h-4 w-4" />
-              Satır ekle
-            </Button>
+          {/* Satır ekleme düğmeleri grupların kendisinde (EK 5) — burada yalnız özet. */}
+          <div className="flex items-center justify-end">
             {/* Canlı özet: operatör "20 tane" yazdığında kaç TOP doğacağını
                 kaydetmeden görsün — yanlış çarpan en pahalı hatadır. */}
             <p className="text-sm text-muted-foreground">

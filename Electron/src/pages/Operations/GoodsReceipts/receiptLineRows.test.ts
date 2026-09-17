@@ -116,16 +116,27 @@ describe("expandLines — iplik payload sözleşmesi", () => {
   });
 });
 
-// Bulgu C1 (2026-09-17): tablo modu satır türlerinden türer — üç mod, saf.
-describe("receiptLineMode — üç mod", () => {
-  it("kumaş-only / iplik-only / karma; boş tablo kumaş (eski görünüm)", async () => {
-    const { receiptLineMode, receiptLineHeaders } = await import("./receiptLineColumns");
-    expect(receiptLineMode(true, false)).toBe("fabric");
-    expect(receiptLineMode(false, true)).toBe("yarn");
-    expect(receiptLineMode(true, true)).toBe("mixed");
-    expect(receiptLineMode(false, false)).toBe("fabric");
-    expect(receiptLineHeaders("yarn")).not.toContain("Kg");
-    expect(receiptLineHeaders("mixed")).toContain("Kg");
+// EK 5 (2026-09-17): top sınıfı SATIR BAZLI — `rawStock` yalnız satırda seçildiyse gövdeye gider; iplikte HİÇ gitmez;
+// `lineKind` doğduğu grubu okur, ürün türü çözülünce ürün türü kazanır.
+describe("expandLines / lineKind — top sınıfı satır bazlı (EK 5)", () => {
+  it("rawStock null → anahtar gövdede YOK (fiş varsayılanı); true/false → aynen", () => {
+    const out = expandLines([line({ rawStock: null }), line({ rawStock: true }), line({ rawStock: false })]);
+    expect("rawStock" in out[0]!).toBe(false);
+    expect(out[1]).toMatchObject({ rawStock: true });
+    expect(out[2]).toMatchObject({ rawStock: false });
+  });
+
+  it("iplik satırı rawStock taşımaz — satırda true olsa bile", () => {
+    const out = expandLines([line({ itemId: "yarn-1", rawStock: true })], YARN);
+    expect(Object.keys(out[0]!)).not.toContain("rawStock");
+  });
+
+  it("lineKind: ürün türü > doğduğu grup > kumaş", async () => {
+    const { lineKind } = await import("./receiptLineTypes");
+    expect(lineKind(line({ itemId: "yarn-1", kind: "FABRIC" }), YARN)).toBe("YARN");
+    expect(lineKind(line({ itemId: "", kind: "YARN" }), YARN)).toBe("YARN");
+    expect(lineKind(line({ itemId: "fabric-1", kind: "YARN" }), YARN)).toBe("YARN"); // tür bilinmiyor → grup kazanır
+    expect(lineKind(line({ itemId: "fabric-1" }))).toBe("FABRIC");
+    expect(receiptTotals([line({ itemId: "", kind: "YARN", initialQty: 5, count: 2 }), line({ kind: "YARN", initialQty: 5, count: 2 })]).yarnKg).toBe(10);
   });
 });
-

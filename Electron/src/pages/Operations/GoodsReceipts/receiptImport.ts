@@ -19,8 +19,12 @@
 //    backend kanonikleştirir ama katalogda olmayan değer sessizce yazılırsa
 //    o toplar "4-KAT" filtresinde hiç görünmez (kök CLAUDE.md 2026-08-04
 //    dersi — filtre 0 satır döner, hata da log da çıkmaz).
+//
+// ④ **"HAM" KOLONU OPSİYONEL (EK 5, top sınıfı satır bazlı):** Evet/Hayır
+//    (E/H · 1/0 · true/false); boş = fişin varsayılanı (`rawStock: null`).
+//    Tanınmayan değer HATA (kural ①); iplik satırında dolu gelirse HATA (④).
 // =============================================================================
-import type { DraftLine } from "./ReceiptLineRows";
+import type { DraftLine } from "./receiptLineTypes";
 
 export interface ImportCatalogEntry {
   id: string;
@@ -60,7 +64,18 @@ export const IMPORT_HEADERS = [
   "Kat",
   "Birim Fiyat",
   "Adet",
+  "Ham",
 ] as const;
+
+/** "Ham" hücresi → top sınıfı: boş = null (fiş varsayılanı); tanınmayan metin → undefined (hata). */
+export function parseRawStockCell(v: unknown): boolean | null | undefined {
+  const t = norm(v).toUpperCase();
+  if (t === "") return null;
+  // ⚠️ `toUpperCase` ASCII: "bitmiş" → "BITMIŞ" (i→I); "BİTMİŞ" yazımı da kabul — iki biçim de listede.
+  if (["E", "EVET", "HAM", "1", "TRUE", "X"].includes(t)) return true;
+  if (["H", "HAYIR", "BİTMİŞ", "BITMIŞ", "BITMIS", "0", "FALSE"].includes(t)) return false;
+  return undefined;
+}
 
 const norm = (v: unknown): string =>
   typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
@@ -117,6 +132,7 @@ export function parseReceiptRows(
     const name = norm(raw["Kumaş Adı"]);
     const colorText = norm(raw["Renk"]);
     const foldText = norm(raw["Kat"]);
+    const rawStockText = norm(raw["Ham"]);
 
     // Tamamen boş satır: Excel dosyalarının sonunda olağandır, hata sayılmaz.
     if (!code && !name && !colorText && !norm(raw["Metre"])) return;
@@ -145,6 +161,7 @@ export function parseReceiptRows(
         norm(raw["En (cm)"]) && "En",
         norm(raw["Kg"]) && "Kg",
         foldText && "Kat",
+        rawStockText && "Ham",
       ].filter(Boolean);
       if (strays.length > 0) {
         errors.push({
@@ -181,6 +198,12 @@ export function parseReceiptRows(
       foldType = f;
     }
 
+    const rawStock = item.yarn ? null : parseRawStockCell(rawStockText);
+    if (rawStock === undefined) {
+      errors.push({ row: rowNo, reason: `Ham kolonu Evet/Hayır olmalı: ${rawStockText}` });
+      return;
+    }
+
     const rawCount = toNumber(raw["Adet"]);
     // Adet boşsa 1 — "adet yazmadım" demek "bir top geldi" demektir.
     const count = rawCount == null ? 1 : Math.floor(rawCount);
@@ -200,6 +223,8 @@ export function parseReceiptRows(
       unitPrice: toNumber(raw["Birim Fiyat"]),
       propertyIds: [],
       count,
+      kind: item.yarn ? "YARN" : "FABRIC",
+      rawStock,
     });
   });
 

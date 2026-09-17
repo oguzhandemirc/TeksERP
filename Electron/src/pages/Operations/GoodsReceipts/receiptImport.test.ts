@@ -110,4 +110,21 @@ describe("mal kabul Excel ayrıştırma", () => {
     expect(at(r.errors, 0).reason).toContain("İplik kalemi");
     expect(at(r.errors, 0).reason).toContain("Renk/En/Kat");
   });
+
+  // EK 5: "Ham" kolonu opsiyonel — satır bazlı top sınıfı; boş = fiş varsayılanı (null → gövdeye gitmez).
+  it("Ham kolonu: Evet/Hayır/boş → true/false/null; tanınmayan değer SEBEBİYLE red; satır türü kumaş doğar", () => {
+    const r = parseReceiptRows([row({ Ham: "Evet" }), row({ Ham: "h" }), row({}), row({ Ham: "belki" })], catalogs);
+    expect(r.lines.map((l) => l.rawStock)).toEqual([true, false, null]);
+    expect(r.lines.every((l) => l.kind === "FABRIC")).toBe(true);
+    expect(at(r.errors, 0)).toMatchObject({ row: 5 });
+    expect(at(r.errors, 0).reason).toContain("Ham kolonu");
+  });
+
+  it("iplik satırında Ham doluysa red (kural ④); boşsa iplik satırı YARN türüyle doğar, rawStock null", () => {
+    const bad = parseReceiptRows([{ "Kumaş Kodu": "IPL-000001", Metre: 500, Ham: "Evet" }], catalogs);
+    expect(bad.lines).toHaveLength(0);
+    expect(at(bad.errors, 0).reason).toContain("Ham");
+    const ok = parseReceiptRows([{ "Kumaş Kodu": "IPL-000001", Metre: 500 }], catalogs);
+    expect(at(ok.lines, 0)).toMatchObject({ kind: "YARN", rawStock: null });
+  });
 });
