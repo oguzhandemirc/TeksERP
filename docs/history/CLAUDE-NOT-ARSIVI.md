@@ -21,6 +21,53 @@
 
 ---
 
+## 2026-09-17 — Master veri kimlik tekilliği: bir tripwire'ın değeri ELEDİKLERİNDEDİR [ÇEKİRDEK]
+
+Kullanıcı kuralı: *"master veri sektör standardında olmalı; ilk fason tablosunda düşünemedik, geriye
+dönüp böyle problem yaşamayalım."* Beş kapı `docs/standart/MASTER-VERI-TASARIMI.md`te yazıldı;
+`test_master_data_kimlik_tekilligi` onlardan mekanik ölçülebilen üçünü ([MV-01] · [MV-02] · [MV-04])
+ölçer. Dört şey ölçüldü.
+
+**① ÖLÇÜTÜN İKİ TASLAĞI ELENDİ, VE ELEME ÖLÇÜLEREK YAPILDI.** [MV-02] "bir satırı iki master kimliğe
+XOR ile bağlama" der; sorun bunu ŞEMADAN nasıl göreceğimizdi.
+· *Ad eşleme* (`_xor` ile biten CHECK): 6 kısıt buldu, 5'i meşru — `cash_txn_account_xor` kasa ile
+  bankayı ayırır ve bir kasa ASLA banka hesabı olamaz. Ad, "aynı nesne olabilir mi" sorusunu
+  taşımıyor.
+· *"İki master tablo FK ile bağlanabiliyor mu"*: **10/10 sahte pozitif** (makine↔istasyon,
+  şube↔müşteri, aynı tabloya iki FK…). Çünkü HİYERARŞİ de bir FK'dır.
+· SEÇİLEN imza: iki master tablo arasında **1:1 KİMLİK BAĞI** — opsiyonel ve `@unique` bir FK.
+  "Bu profil O karttır" cümlesi ancak böyle kurulur; bir istasyondaki N makinenin FK'sı `@unique`
+  DEĞİLDİR. Şemada tam olarak BİR tane var: `Subcontractor.customerId → Customer`.
+⇒ *Bir tripwire'ın değeri bulduklarında değil ELEDİKLERİNDE ölçülür; 10'da 10 sahte pozitif veren
+bir kol ilk sıkışmada susturulur ve susturulan kapı, hiç olmayan kapıdan kötüdür.*
+
+**② İLK KOŞUM İKİNCİ BİR GERÇEK BORÇ BULDU.** `CariAccount` bilinen vakaydı; bekçi
+`WarpBeam.supplierId` (Customer) XOR `subcontractorId` (Subcontractor) çiftini de gösterdi — satın
+alınan levent bir TEDARİKÇİDEN ya da fason devereciden gelir ve **ikisi aynı firma olabilir**
+(şemanın kendi yorumu "TAM BİRİ" diyor). Aynı modeldeki `ownerCustomerId` ↔ `subcontractorId` çifti
+ise ihlal DEĞİL: emanet SAHİBİ ile İŞLEYEN taraf iki ayrı eksendir ve aynı satırda birlikte dolu
+olabilirler. ⇒ Beyanlar MODEL düzeyinde değil **ALAN ÇİFTİ** düzeyinde tutulur ve her biri bir
+SINIF iddiasıdır (`borç` ↔ `iki-rol`); model düzeyinde tek satır, iki farklı şeyi tek beyanla örter
+ve borcu görünmez kılardı.
+
+**③ "BEYANLI" İLE "ÇÖZÜLMÜŞ" AYNI ŞEY DEĞİL.** Kol yeşilken bile açık MV-02 borcu SAYISI basılır
+(bugün 2). Bir allowlist'in tehlikesi, zamanla borcu görünmez kılmasıdır; sayıyı her koşumda
+yazmak, muafiyetin bir KARAR olduğunu hatırlatır.
+
+**④ MASTER MODEL LİSTESİ ELLE YAZILMAZ.** Ölçüt `nameFold` taşıyan modeldir (23 model) — katlanmış
+ad gölgesi yalnız "gerçek dünyada bir nesneye karşılık gelen ve ADIYLA aranan" tablolara eklendi.
+Elle yazılmış bir liste, yeni bir master tablonun sessizce kapsam dışı kalması demekti; bu depoda
+elle yazılmış ilişki listesi D2 göçünde bir kez ısırmıştı.
+
+**Üç kol da İKİ YÖNLÜ** (ölü beyan da kırmızı) ve üç sonuçlu: §1 tablolardan biri boşsa ÖLÇÜLEMEDİ
+(körlük zemini), §3 çapa belgesindeki `[MV-01]` silinirse ÖLÇÜLEMEDİ — kuralsız bir allowlist
+onaylanmasın.
+
+**Sondalar (yedi, hepsi kırmızı/⏭ görüldü ve geri alındı):** çakışan ad+VKN çifti (katlama
+büyük/küçük harf duyarsız eşledi) · BAĞLI çift → kol YEŞİL kaldı (muafiyet POZİTİF yönde de
+ölçüldü) · yeni 1:1 kimlik bağı · yeni çift-master alan çifti · yeni tür enum'u · ölü tür beyanı ·
+çapa belgesinden `[MV-01]`in silinmesi.
+
 ## 2026-09-17 — Oturum sürümü: künye ilk kez KALICI bir satıra yazıldı [ÇEKİRDEK]
 
 Rol modeli kaldırma fazının dördüncü kolu ("sahada eski istemci var mı") ölçülemiyordu, çünkü

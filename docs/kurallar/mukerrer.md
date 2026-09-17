@@ -11,6 +11,7 @@
 ### Değişmezler
 
 
+- **[ÇEKİRDEK]** Tekillik TABLOLAR ARASI sorulur: aynı gerçek nesneyi iki master tabloda tutan bir tasarımda tek tablo içi `@@unique([nameFold])` çakışmayı GÖRMEZ; yeni bir master model, ROL bayrağı mı yoksa ayrı KİMLİK mi olduğu ölçülmeden doğmaz ve iki master tabloyu XOR ile bağlayan her alan çifti SINIFIYLA (borç ↔ iki-rol) beyan edilir. · bekçi: `scripts/test_master_data_kimlik_tekilligi.ts` <sub>(çapa: `docs/standart/MASTER-VERI-TASARIMI.md`)</sub>
 - **[ÇEKİRDEK]** Türkçe harf katlaması TEK helper'dan (`utils/tr-case.ts` `upperTr`/`lowerTr`; `"tr-TR"` yalnız orada yazılır) — AD içindir, KOD için `foldCodeForCompare` (i/İ); içe aktarımda KOD anahtarı `importKey` (= `foldCodeForCompare`, `services/import/import-key.ts`) — yazan (`import.service`) ↔ okuyan (adaptör `findExisting`) aynı helper'ı çağırır, tek yanlı taşıma bugün olmayan kusuru doğurur. · bekçi: `scripts/test_tr_case.ts (DB'siz; i/İ oracle + adaptör simetrisi)`
 - **[ÇEKİRDEK]** Birleştirme artık DEFTERLİ ve geri alınabilir: `MergeOperation` + kaynak künyesi + taşınan/silinen/zenginleşen referans satırları yazılır; geri alma en yeniden eskiye (LIFO) yapılır, adı çakışan kaynak için YENİ AD ister, geri yazılamayan satırı `skippedRows` olarak bildirir, defter öncesi birleştirmeyi reddeder. · bekçi: `test_master_data_merge_revert.ts` <sub>(arşiv:2026-09-12)</sub>- **[ÇEKİRDEK]** Ad mükerrerinin son hattı DB seddidir: `<tablo>_nameFold_key` UNIQUE. Ana veri BİRLEŞTİRMESİNE katılan tabloda partial (`WHERE "mergedIntoId" IS NULL` — mezar taşı aynı adı meşruen taşır), katılmayanda DÜZ UNIQUE. Sed uygulama guard'ının AYNASIDIR, ondan gevşek olamaz. · bekçi: `test_db_invariants PARTIAL_INDEXES + test_master_data_name_dup §10` <sub>(CLAUDE.md:78)</sub>
 - **[ÇEKİRDEK]** Uygulama bekçisi `assertNameNotDuplicate` KALDIRILMAZ — Türkçe, kod bilgili 409'u ('zaten var' ↔ 'PASİF, aktifleştirin') o verir. Ama KİLİTSİZ check-then-act'tir (`create()` tx bile açmaz): yarışı, `duplicateNameField` unutulmasını, içe aktarım fail-open'ını ve elle SQL'i yalnız DB seddi kapatır. · bekçi: `test_master_data_name_dup §9/§10` <sub>(CLAUDE.md:78)</sub>
@@ -62,7 +63,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_color_name_dup`, `test_tr_case`, `test_consistency`, `test_data_integrity_gaps`, `test_db_invariants`, `test_duplicate_detection`, `test_duplicate_rolls`, `test_fold_contract`, `test_item_code_case_uniqueness`, `test_master_data_merge`, `test_master_data_merge_conflicts`, `test_master_data_merge_fk_coverage`, `test_master_data_merge_race`, `test_master_data_merge_revert`, `test_master_data_name_dup`, `test_merge_field_picks`, `test_name_normalization`, `test_name_uppercase_storage`, `test_similar_names`, `test_subcontractor_management`, `test_turkish_search_fold`
+Backend: `test_color_name_dup`, `test_tr_case`, `test_consistency`, `test_data_integrity_gaps`, `test_db_invariants`, `test_duplicate_detection`, `test_duplicate_rolls`, `test_fold_contract`, `test_item_code_case_uniqueness`, `test_master_data_merge`, `test_master_data_merge_conflicts`, `test_master_data_merge_fk_coverage`, `test_master_data_merge_race`, `test_master_data_merge_revert`, `test_master_data_name_dup`, `test_merge_field_picks`, `test_name_normalization`, `test_name_uppercase_storage`, `test_similar_names`, `test_subcontractor_management`, `test_turkish_search_fold`, `test_master_data_kimlik_tekilligi`
 
 İstemci: `SimilarNamesWarning.test.tsx`⚠️, `similar-names-coverage.test.ts`⚠️, `searchFold.test.ts`
 
@@ -72,3 +73,4 @@ Backend: `test_color_name_dup`, `test_tr_case`, `test_consistency`, `test_data_i
 - 2026-08-22 · 2026-08-22 — SIFIRLAMA RAFA KALKTI: nameFold seddi YUMUŞAK KAPIYA çevrildi; mükerrer paneli tasarımı — `CLAUDE-NOT-ARSIVI.md:469-472`
 - 2026-08-22 · 2026-08-22 — MÜKERRER PANELİ v2 P1 UYGULANDI — `CLAUDE-NOT-ARSIVI.md:481-484`
 - 2026-08-25 · 2026-08-25 — Prod oturumunun üç "dev'de yapılacaklar" notu teyit edildi ve uygulandı (kur.ps1 · renk seddi · d — `CLAUDE-NOT-ARSIVI.md:810-839`
+- 2026-09-17 · 2026-09-17 — Master veri kimlik tekilliği: tekillik TABLOLAR ARASI sorulur [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-17 master veri
