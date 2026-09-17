@@ -14,7 +14,7 @@
  */
 export type QualityGradeRole = 'FIRST' | 'SECOND' | 'SCRAP';
 
-export type CompanyType = 'CUSTOMER' | 'SUBCONTRACTOR' | 'BOTH';
+export type CompanyType = 'CUSTOMER' | 'SUPPLIER' | 'BOTH';
 // ⚠️ BACKEND `enum StationType` İLE ELLE SENKRON (schema.prisma). 2026-09-03
 // drift taraması: dört değerin ÜÇÜ hayaletti ('PROCESS', 'PROCESS_QC',
 // 'WAREHOUSE' — backend'de YOK) ve gerçek değer 'INTERNAL' EKSİKTİ. Hayalet

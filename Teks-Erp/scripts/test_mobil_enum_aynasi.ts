@@ -122,10 +122,7 @@ export const sapmaMetni = (s: Sapma): string =>
 // ⛔ Buraya satır eklemek bir KARARDIR: "bu sapma bilinçli" demektir.
 // ─────────────────────────────────────────────────────────────────────────────
 const TABAN: Record<string, { sapma: string; gerekce: string }> = {
-  CompanyType: {
-    sapma: "GERİDE: SUPPLIER | FAZLA: SUBCONTRACTOR",
-    gerekce: "gerekçe ÖLÇÜLMEDİ — sahibi tablet alanı",
-  },
+  // CompanyType 2026-09-17'de HİZALANDI (D4: mobil SUBCONTRACTOR → SUPPLIER; fason artık carinin ROLÜ) — sapma yok, §1/§2 sert.
   TravelerCardStatus: {
     sapma: "GERİDE: REPRINTED",
     gerekce: "gerekçe ÖLÇÜLMEDİ — sahibi tablet alanı",
