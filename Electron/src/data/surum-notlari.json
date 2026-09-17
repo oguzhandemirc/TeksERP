@@ -25,9 +25,9 @@
       },
       "maddeler": [
         {
-          "kapsam": "panel",
+          "kapsam": "her-ikisi",
           "tip": "iyilestirme",
-          "metin": "Cari kartında roller artık ayrı ayrı tutulur: Müşteri, Tedarikçi ve Fason rolleri kartta üç işaret olarak kaydedilir; eski tip alanı bu rollerden türetilir ve mevcut kartlar kurulumda otomatik olarak rollerine ayrılır (Müşteri, Tedarikçi, Müşteri + Tedarikçi; fason profili bağlı kartlar Fason rolü alır). Cari listeleri role göre süzülebilir; bir karta fason profili bağlamak için kartın Tedarikçi rolü olmalıdır. Ekranlardaki rol seçimi ayrı bir güncellemeyle gelir; mevcut ekranlar aynen çalışır."
+          "metin": "Cari kartında roller artık ayrı ayrı tutulur: Müşteri, Tedarikçi ve Fason rolleri kartta üç işaret olarak kaydedilir; eski tip alanı bu rollerden türetilir ve mevcut kartlar kurulumda otomatik olarak rollerine ayrılır (Müşteri, Tedarikçi, Müşteri + Tedarikçi; fason profili bağlı kartlar Fason rolü alır). Cari listeleri role göre süzülebilir; bir karta fason profili bağlamak için kartın Tedarikçi rolü olmalıdır. Ekranlardaki rol seçimi ayrı bir güncellemeyle gelir; mevcut ekranlar aynen çalışır. Tablette Levent Sarım planında cari satırının alt etiketi de rollerden yazılır: Müşteri, Tedarikçi, Müşteri + Tedarikçi ve fason profili olan kartta “+ Fason”."
         },
         {
           "kapsam": "panel",

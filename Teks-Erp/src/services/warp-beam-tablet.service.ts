@@ -32,7 +32,8 @@ export interface WarpBeamTabletContextDto {
   machines: Array<{ id: string; code: string; name: string; stationName: string }>;
   warehouses: Array<{ id: string; name: string; isDefault: boolean }>;
   subcontractors: Array<{ id: string; name: string }>;
-  suppliers: Array<{ id: string; name: string; type: CompanyType }>;
+  /** Roller (İş Ortağı Rol Modeli D1): tablet alt etiketi bunlardan; `type` sıralama + eski tablet için kalır. */
+  suppliers: Array<{ id: string; name: string; type: CompanyType; isCustomerRole: boolean; isSupplierRole: boolean; isSubcontractorRole: boolean }>;
   /** Faz 2 (lot): çözgü kartlarının iplik kalemlerine ait AKTİF lotlar, türetilen bakiyeyle (allowlist: id/lotNo/itemId/balanceKg). */
   yarnLots: Array<{ id: string; lotNo: string; itemId: string; balanceKg: number }>;
   /** `devere.lotRequired` — form kapıyı SUNUCUDAN okur, tahmin etmez (1e A3 ek şart ②). */
@@ -51,7 +52,7 @@ export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTa
     listDevereMachines().then((r) => r.data),
     prisma.warehouse.findMany({ where: { isActive: true }, orderBy: [{ isDefault: "desc" }, { name: "asc" }], select: { id: true, name: true, isDefault: true } }),
     prisma.subcontractor.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    prisma.customer.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, type: true } }),
+    prisma.customer.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true, type: true, isCustomerRole: true, isSupplierRole: true, isSubcontractorRole: true } }),
   ]);
   const supplierRank = (t: CompanyType): number => (t === CompanyType.CUSTOMER ? 1 : 0);
   // Lotlar SIRALI (Promise.all dışında): önce kart ipliklerinin kümesi, sonra lot + bakiye (tek sorgu).
@@ -67,7 +68,7 @@ export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTa
       machines,
       warehouses,
       subcontractors,
-      suppliers: suppliers.map((c) => ({ id: c.id, name: c.name, type: c.type })).sort((a, b) => supplierRank(a.type) - supplierRank(b.type) || a.name.localeCompare(b.name, "tr")),
+      suppliers: suppliers.map((c) => ({ id: c.id, name: c.name, type: c.type, isCustomerRole: c.isCustomerRole, isSupplierRole: c.isSupplierRole, isSubcontractorRole: c.isSubcontractorRole })).sort((a, b) => supplierRank(a.type) - supplierRank(b.type) || a.name.localeCompare(b.name, "tr")),
       yarnLots: lotRows.map((l) => ({ id: l.id, lotNo: l.lotNo, itemId: l.itemId, balanceKg: Number(balances.get(l.id) ?? 0) })),
       lotRequired,
       loomMachines,

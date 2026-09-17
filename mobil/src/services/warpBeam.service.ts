@@ -47,7 +47,7 @@ export interface TabletContext {
   machines: { id: string; code: string; name: string; stationName: string }[];
   warehouses: { id: string; name: string; isDefault: boolean }[];
   subcontractors: { id: string; name: string }[];
-  suppliers: { id: string; name: string; type: 'CUSTOMER' | 'SUPPLIER' | 'BOTH' }[];
+  suppliers: { id: string; name: string; type: 'CUSTOMER' | 'SUPPLIER' | 'BOTH'; isCustomerRole: boolean; isSupplierRole: boolean; isSubcontractorRole: boolean }[];
   /** Faz 2 (lot): kart ipliklerinin aktif lotları, türetilen bakiyeyle. Eski sunucu göndermez → form lot sormaz. */
   yarnLots?: { id: string; lotNo: string; itemId: string; balanceKg: number }[];
   /** `devere.lotRequired` SUNUCUDAN — istemci tahmin etmez; alan yoksa false (bugünkü davranış). */

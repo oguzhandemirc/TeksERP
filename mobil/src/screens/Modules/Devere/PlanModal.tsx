@@ -15,6 +15,7 @@ import { colors, spacing, radius, typography } from '../../../theme';
 import type { WarpBeamOrigin } from '../../../services/warpBeam.service';
 import { ORIGIN_LABEL, theoreticalKg } from './beamPayload';
 import type { DevereScreenState } from './useDevereScreen';
+import { partnerRoleLabel } from '../../../lib/partnerRole';
 
 type PickerKind = 'spec' | 'subcontractor' | 'supplier' | null;
 
@@ -39,7 +40,8 @@ export default function PlanModal({ state }: { state: DevereScreenState }) {
     sublabel: `${s.code} · ${s.endsCount} tel${s.denier == null ? ' · denye YOK' : ''}`,
   }));
   const subOptions: PickerOption[] = (ctx?.subcontractors ?? []).map((s) => ({ value: s.id, label: s.name }));
-  const supOptions: PickerOption[] = (ctx?.suppliers ?? []).map((c) => ({ value: c.id, label: c.name, sublabel: c.type === 'CUSTOMER' ? 'müşteri kartı' : 'tedarikçi' }));
+  // Alt etiket ROLLERDEN (D1): tip türetilmiş ve fasonu taşımaz; fasoncu kart burada "+ Fason" ile görünür.
+  const supOptions: PickerOption[] = (ctx?.suppliers ?? []).map((c) => ({ value: c.id, label: c.name, sublabel: partnerRoleLabel(c) }));
   const spec = ctx?.warpSpecs.find((s) => s.id === f.warpSpecId) ?? null;
   const subName = ctx?.subcontractors.find((s) => s.id === f.subcontractorId)?.name ?? '';
   const supName = ctx?.suppliers.find((s) => s.id === f.supplierId)?.name ?? '';
