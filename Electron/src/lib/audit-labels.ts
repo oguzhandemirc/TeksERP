@@ -484,6 +484,8 @@ export const ENUM_LABELS: Record<string, string> = {
   SEMI_FINISHED: "Yarı Mamul",
   TAMBUR_MANUAL: "Tamburda Elle Eklendi",
   WEAVING: "Dokumadan İndi",
+  // StationKind.WARPING (devere, 2026-09-18) — tek anlam, çakışma yok.
+  WARPING: "Devere (Levent Sarım)",
   // KursunBypassCompletionSource
   TAMBUR_SCAN: "Tambur Okutması",
   DISTRIBUTION_LAST_STEP: "Dağıtımın Son Adımı",
@@ -830,7 +832,7 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   "WARP_BEAM.originKind": { IN_HOUSE: "İçeride sarıldı" },
   // StationKind.WEAVING (dokuma ⓪, 2026-09-14) — istasyon TÜRÜ; global `WEAVING`
   // RollEntrySource dilinde ("Dokumadan İndi", topun kaynağı). Ortak Türkçe YETMEZ.
-  "STATION.kind": { WEAVING: "Dokuma Tezgahı", WARPING: "Devere (Levent Sarım)" },
+  "STATION.kind": { WEAVING: "Dokuma Tezgahı" },
   // MachineSealState.OPEN (2026-09-14) — karne MÜHÜRSÜZ; global `OPEN` alış siparişi
   // dilinde ("Açık (mal bekleniyor)"). Ortak Türkçe YETMEZ.
   "MACHINE_SHIFT_STAT.sealState": { OPEN: "Açık (mühürsüz)" },
