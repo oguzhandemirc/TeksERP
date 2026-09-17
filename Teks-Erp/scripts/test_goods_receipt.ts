@@ -82,6 +82,7 @@ import {
   WarehouseEventType,
   YarnMovementKind,
 } from "@prisma/client";
+import type { Request } from "express";
 import { randomUUID } from "node:crypto";
 import prisma, { pool } from "../src/lib/prisma";
 import { goodsReceiptService } from "../src/services/goods-receipt.service";
@@ -1265,14 +1266,13 @@ async function main(): Promise<void> {
     );
     // L5c — Envanter sekmesi sınıflaması: yarı mamul top SEMI_FINISHED kapsamında, RAW_STOCK_PURE'da DEĞİL, RAW_STOCK
     // birleşiminde VAR; ham top tersi (test_semi_finished_entry §5 birleşim kuralının mal kabul ayağı).
+    // Sekme sınıflaması GERÇEK liste ucundan (`findAllRolls` + `filter[rollScope]`), özel `buildRollWhere`a uzanmadan.
     const lInv = new InventoryService();
     const lScopeIds = async (scope: string): Promise<string[]> => {
-      const where = (lInv as unknown as { buildRollWhere: (p: { filters: Record<string, string> }, f: readonly string[]) => Record<string, unknown> }).buildRollWhere(
-        { filters: { rollScope: scope, status: "ALL" } },
-        [],
-      );
-      const rows = await prisma.roll.findMany({ where: { AND: [where as never, { goodsReceiptId: lMixId }] }, select: { id: true } });
-      return rows.map((r) => r.id);
+      const res = await lInv.findAllRolls({
+        query: { "filter[rollScope]": scope, "filter[status]": "ALL", "filter[goodsReceiptId]": lMixId, pageSize: "100" },
+      } as unknown as Request);
+      return res.data.map((r) => r.id);
     };
     const lRawRollId = lMixRolls[0]!.id;
     const lSemiRollId = lMixRolls[3]!.id;
