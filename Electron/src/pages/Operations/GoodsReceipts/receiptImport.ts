@@ -20,11 +20,11 @@
 //    o toplar "4-KAT" filtresinde hiç görünmez (kök CLAUDE.md 2026-08-04
 //    dersi — filtre 0 satır döner, hata da log da çıkmaz).
 //
-// ④ **"HAM" KOLONU OPSİYONEL (EK 5, top sınıfı satır bazlı):** Evet/Hayır
-//    (E/H · 1/0 · true/false); boş = fişin varsayılanı (`rawStock: null`).
-//    Tanınmayan değer HATA (kural ①); iplik satırında dolu gelirse HATA (④).
+// ④ **"SINIF" KOLONU OPSİYONEL (EK 7, top sınıfı satır bazlı üçlü):** Ham /
+//    Yarı mamul / Bitmiş (H · Y · B de olur); boş = Bitmiş. Tanınmayan değer
+//    HATA (kural ①); iplik satırında dolu gelirse HATA (④).
 // =============================================================================
-import type { DraftLine } from "./receiptLineTypes";
+import { DEFAULT_LINE_CLASS, type DraftLine, type ReceiptLineClass } from "./receiptLineTypes";
 
 export interface ImportCatalogEntry {
   id: string;
@@ -64,16 +64,17 @@ export const IMPORT_HEADERS = [
   "Kat",
   "Birim Fiyat",
   "Adet",
-  "Ham",
+  "Sınıf",
 ] as const;
 
-/** "Ham" hücresi → top sınıfı: boş = null (fiş varsayılanı); tanınmayan metin → undefined (hata). */
-export function parseRawStockCell(v: unknown): boolean | null | undefined {
-  const t = norm(v).toUpperCase();
-  if (t === "") return null;
-  // ⚠️ `toUpperCase` ASCII: "bitmiş" → "BITMIŞ" (i→I); "BİTMİŞ" yazımı da kabul — iki biçim de listede.
-  if (["E", "EVET", "HAM", "1", "TRUE", "X"].includes(t)) return true;
-  if (["H", "HAYIR", "BİTMİŞ", "BITMIŞ", "BITMIS", "0", "FALSE"].includes(t)) return false;
+/** "Sınıf" hücresi → top sınıfı: boş = Bitmiş; tanınmayan metin → undefined (hata).
+ *  ⚠️ `toUpperCase` ASCII: "bitmiş" → "BITMIŞ" (i→I), "yarı" → "YARI" — Türkçe ve ASCII yazımların ikisi de listede. */
+export function parseLineClassCell(v: unknown): ReceiptLineClass | undefined {
+  const t = norm(v).toUpperCase().replace(/\s+/g, " ");
+  if (t === "") return DEFAULT_LINE_CLASS;
+  if (["H", "HAM", "RAW"].includes(t)) return "RAW";
+  if (["Y", "YARI MAMUL", "YARI MAMÜL", "YARIMAMUL", "SEMI", "SEMI_FINISHED"].includes(t)) return "SEMI_FINISHED";
+  if (["B", "BİTMİŞ", "BITMIŞ", "BITMIS", "FINISHED"].includes(t)) return "FINISHED";
   return undefined;
 }
 
@@ -132,7 +133,7 @@ export function parseReceiptRows(
     const name = norm(raw["Kumaş Adı"]);
     const colorText = norm(raw["Renk"]);
     const foldText = norm(raw["Kat"]);
-    const rawStockText = norm(raw["Ham"]);
+    const lineClassText = norm(raw["Sınıf"]);
 
     // Tamamen boş satır: Excel dosyalarının sonunda olağandır, hata sayılmaz.
     if (!code && !name && !colorText && !norm(raw["Metre"])) return;
@@ -161,7 +162,7 @@ export function parseReceiptRows(
         norm(raw["En (cm)"]) && "En",
         norm(raw["Kg"]) && "Kg",
         foldText && "Kat",
-        rawStockText && "Ham",
+        lineClassText && "Sınıf",
       ].filter(Boolean);
       if (strays.length > 0) {
         errors.push({
@@ -198,9 +199,9 @@ export function parseReceiptRows(
       foldType = f;
     }
 
-    const rawStock = item.yarn ? null : parseRawStockCell(rawStockText);
-    if (rawStock === undefined) {
-      errors.push({ row: rowNo, reason: `Ham kolonu Evet/Hayır olmalı: ${rawStockText}` });
+    const lineClass = item.yarn ? undefined : parseLineClassCell(lineClassText);
+    if (!item.yarn && lineClass === undefined) {
+      errors.push({ row: rowNo, reason: `Sınıf kolonu Ham / Yarı mamul / Bitmiş olmalı: ${lineClassText}` });
       return;
     }
 
@@ -224,7 +225,7 @@ export function parseReceiptRows(
       propertyIds: [],
       count,
       kind: item.yarn ? "YARN" : "FABRIC",
-      rawStock,
+      lineClass,
     });
   });
 

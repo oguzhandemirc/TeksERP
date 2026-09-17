@@ -7,7 +7,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { SupplierSelect } from "@/components/forms/SupplierSelect";
 import { supplierPartyPayload, type SupplierParty } from "@/components/forms/supplierParty";
 import { useMultiWarehouse, useDefaultWarehouse, WAREHOUSES_QUERY_KEY } from "@/hooks/useWarehouses";
@@ -16,7 +15,7 @@ import { expandLineKeys, localLineIssues, receiptLinesInvalidFrom, serverLineIss
 import { createGoodsReceipt } from "./service";
 import { receiptSuccessText } from "./receiptFeedback";
 import {
-  ReceiptLineRows, emptyLine, expandLines, receiptTotals, type DraftLine,
+  ReceiptLineRows, emptyLine, expandLines, lineKind, receiptTotals, type DraftLine,
 } from "./ReceiptLineRows";
 import { ReceiptImportButton } from "./ReceiptImportButton";
 import { useItemTypes, yarnIdsFrom } from "./useItemTypes";
@@ -55,9 +54,6 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
   // {kind, id} taşır ve gövdedeki XOR'u `supplierPartyPayload` kurar. Yalnız id
   // tutmak, fason firmayı sessizce müşteri-tipli cari olarak kaydederdi.
   const [supplier, setSupplier] = useState<SupplierParty | null>(null);
-  // C2 — "işlenecek mal": toplar `WAREHOUSE` yerine `STOCK` doğar. VARSAYILAN
-  // KAPALI = bugünkü davranış (satılabilir bitmiş mal alımı).
-  const [rawStockEntry, setRawStockEntry] = useState(false);
   const [deliveryNoteNo, setDeliveryNoteNo] = useState("");
   // Fiş TEK para birimlidir — satır fiyatları bu birimde. Karışık fiş, alış
   // faturasını iki para biriminde kesmeyi gerektirirdi (fatura tek birimli).
@@ -104,7 +100,8 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
         // XOR TEK NOKTADAN: iki anahtarı elle yazmak, bacak değiştiğinde
         // eskisini temizlemeyi unutmak demekti (iki tedarikçili kayıt).
         ...supplierPartyPayload(supplier),
-        rawStockEntry,
+        // EK 7: fiş kutusu YOK — top sınıfı her kumaş satırının `lineClass`ında (backend `rawStockEntry`i eski
+        // istemci için okur; panel göndermez → false, satır sınıfı kazanır).
         deliveryNoteNo: deliveryNoteNo || null,
         currency,
         // Fişin KENDİ idempotency anahtarı — çift tıklama/ağ kopması ikinci fiş
@@ -133,7 +130,7 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
             receiptNo: res.data.receiptNo,
             rollCount: res.data.totals?.rollCount ?? 0,
             yarnLineCount: res.data.totals?.yarnLineCount ?? 0,
-            rawStockEntry: res.data.rawStockEntry ?? rawStockEntry,
+            lineClasses: lines.filter((l) => l.itemId && lineKind(l, yarnIds) === "FABRIC").map((l) => l.lineClass ?? "FINISHED"),
             financeEnabled,
           }),
         );
@@ -147,7 +144,6 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
       setLines([emptyLine()]);
       setDeliveryNoteNo("");
       setSupplier(null);
-      setRawStockEntry(false);
       setPurchaseOrderId(null);
       // ⚠️ SENKRON SONUCU YUKARI TAŞINIR, TOAST'A DEĞİL: toast birkaç saniyede
       // kaybolur ve "fazla mal geldi" / "bu ürün siparişte yok" bilgisi hiçbir
@@ -239,30 +235,8 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
             </div>
           </div>
 
-          {/* ── C2 → EK 5: RAF SEÇİMİ fişin VARSAYILANI, satırda değiştirilebilir ──
-              Ürünün niteliği kartındadır; buradaki soru topun hangi RAFA
-              gireceğidir. Eski "fiş bir kaptır" okuması kullanıcı kararıyla
-              (2026-09-17) satır bazına açıldı: kutu yeni kumaş satırlarının
-              Ham/Bitmiş anahtarını doldurur, satır kendi seçimini gövdede
-              `rawStock` olarak taşır (seçilmediyse gönderilmez → fiş kutusu).
-              ⚠️ İPLİK BU SEÇİMDEN ETKİLENMEZ: `YarnStock` kalem × DEPO bazında
-              kg tutar, raf/statü kavramı yoktur (backend'de de yazılı). */}
-          <label className="flex cursor-pointer items-start gap-2 rounded-md border bg-muted/20 p-3">
-            <Checkbox
-              className="mt-0.5"
-              checked={rawStockEntry}
-              disabled={createM.isPending}
-              onCheckedChange={(c) => setRawStockEntry(Boolean(c))}
-            />
-            <span className="text-sm">
-              Yeni kumaş satırları ham stok olarak alınsın (işlenecek mal)
-              <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                Kumaş satırlarındaki <b>Ham/Bitmiş</b> anahtarının varsayılanıdır; satırda değiştirilebilir. Ham toplar{" "}
-                <b>Ham Stok</b> sekmesine düşer ve fasona sevk edilebilir; bitmiş toplar satılabilir mal olarak{" "}
-                <b>Bitmiş Depo</b>ya girer (varsayılan).
-              </span>
-            </span>
-          </label>
+          {/* EK 7 (kullanıcı kararı 2026-09-18): fiş düzeyi "ham stok" kutusu KALKTI — top sınıfı (Ham · Yarı mamul ·
+              Bitmiş) yalnız kumaş satırındaki anahtarda; yeni satır bir öncekini devralır. İPLİK ETKİLENMEZ. */}
 
           {/* İçe aktarma satırları EKLER, üstüne yazmaz — elle girilmiş bir
               kalem yüklemeyle sessizce kaybolmasın. */}
@@ -279,7 +253,7 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
               kalemleri kumaş sayar: iplik satırı renk/en/kat sorar, backend
               400 verir ve "kg" rozeti hiç çizilmez (sözleşme ReceiptLineRows
               Props yorumunda). */}
-          <ReceiptLineRows lines={lines} onChange={setLinesAndClear} yarnItemIds={yarnIds} lineIssues={lineIssues} rawStockDefault={rawStockEntry} />
+          <ReceiptLineRows lines={lines} onChange={setLinesAndClear} yarnItemIds={yarnIds} lineIssues={lineIssues} />
 
           {/* Satır ekleme düğmeleri grupların kendisinde (EK 5) — burada yalnız özet. */}
           <div className="flex items-center justify-end">

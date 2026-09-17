@@ -11,7 +11,8 @@
 // EK 5: karma tek ızgara ve çift anlamlı başlıklar GİTTİ — aynı fişte KUMAŞ kalemleri ve İPLİK kalemleri ayrı alt
 // tablo; boş grup çizilmez; her grubun kendi "… satırı ekle" düğmesi (ürün seçici o türe kilitli: satır doğduğu anda
 // tiplidir, tür değiştirmek = satırı silmek). Siparişten doldurma ve Excel satırları ürün türüne göre gruba düşer
-// (`useItemTypes` → `lineKind`). Top sınıfı SATIR BAZLI (fiş kutusu varsayılan).
+// (`useItemTypes` → `lineKind`). EK 7: top sınıfı SATIR BAZLI ve ÜÇLÜ (Ham · Yarı mamul · Bitmiş) — fiş kutusu KALKTI,
+// yeni kumaş satırı bir önceki kumaş satırının sınıfını miras alır (ilk satır bitmiş).
 // =============================================================================
 import { useEffect } from "react";
 import { Plus } from "lucide-react";
@@ -20,9 +21,9 @@ import { useFoldValues } from "@/hooks/useFoldValues";
 import { ReceiptFabricRow } from "./ReceiptFabricRow";
 import { ReceiptYarnRow } from "./ReceiptYarnRow";
 import { ADD_LINE_LABEL, GROUP_TITLE, receiptLineGridCols, receiptLineHeaders, type ReceiptLineKind } from "./receiptLineColumns";
-import { duplicateLine, emptyLine, lineKind, type DraftLine } from "./receiptLineTypes";
+import { DEFAULT_LINE_CLASS, duplicateLine, emptyLine, inheritedLineClass, lineKind, type DraftLine } from "./receiptLineTypes";
 
-export { emptyLine, duplicateLine, lineKind, type DraftLine } from "./receiptLineTypes";
+export { emptyLine, duplicateLine, lineKind, inheritedLineClass, type DraftLine, type ReceiptLineClass } from "./receiptLineTypes";
 
 interface Props {
   lines: DraftLine[];
@@ -31,18 +32,16 @@ interface Props {
   yarnItemIds?: ReadonlySet<string>;
   /** C8: satır anahtarı → hata metni (yerel lot doğrulaması ya da sunucu 400 `details.lines`). */
   lineIssues?: ReadonlyMap<string, string>;
-  /** Fişin "ham stok girişi" kutusu — yeni kumaş satırlarının top sınıfı VARSAYILANI. */
-  rawStockDefault?: boolean;
 }
 
 /** İplik satırının TAŞIYAMAYACAĞI alanlar dolu mu? (backend 400 kümesinin aynası) */
 function hasYarnStrays(l: DraftLine): boolean {
-  return Boolean(l.colorId) || l.width != null || l.weightKg != null || Boolean(l.foldType) || l.propertyIds.length > 0 || l.rawStock != null;
+  return Boolean(l.colorId) || l.width != null || l.weightKg != null || Boolean(l.foldType) || l.propertyIds.length > 0 || l.lineClass != null;
 }
 
 /** Kumaşa özgü alanları temizlenmiş kopya — iplik satırına geçişte uygulanır. */
 function clearYarnStrays(l: DraftLine): DraftLine {
-  return { ...l, colorId: null, width: null, weightKg: null, foldType: null, propertyIds: [], rawStock: null };
+  return { ...l, colorId: null, width: null, weightKg: null, foldType: null, propertyIds: [], lineClass: undefined };
 }
 
 function GroupHeader({ kind }: { kind: ReceiptLineKind }) {
@@ -57,7 +56,7 @@ function GroupHeader({ kind }: { kind: ReceiptLineKind }) {
   );
 }
 
-export function ReceiptLineRows({ lines, onChange, yarnItemIds, lineIssues, rawStockDefault = false }: Props) {
+export function ReceiptLineRows({ lines, onChange, yarnItemIds, lineIssues }: Props) {
   const { values: foldValues } = useFoldValues();
 
   // ⚠️ İPLİĞE GEÇEN SATIRIN KUMAŞ ALANLARI SIFIRLANIR (rota editörünün "istasyon değişince hedef sıfırlanır" kuralının
@@ -95,17 +94,18 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds, lineIssues, rawS
                 kind === "YARN" ? (
                   <ReceiptYarnRow key={l.key} {...rowProps(l)} issue={lineIssues?.get(l.key)} />
                 ) : (
-                  <ReceiptFabricRow key={l.key} {...rowProps(l)} foldValues={foldValues} rawStockDefault={rawStockDefault} />
+                  <ReceiptFabricRow key={l.key} {...rowProps(l)} foldValues={foldValues} />
                 ),
               )}
             </div>
           </section>
         ),
       )}
-      {/* Grup düğmeleri: satır DOĞDUĞU ANDA tiplidir (kumaş satırı → kumaş seçici; iplik satırı → iplik seçici). */}
+      {/* Grup düğmeleri: satır DOĞDUĞU ANDA tiplidir (kumaş satırı → kumaş seçici; iplik satırı → iplik seçici);
+          yeni kumaş satırı sınıfını bir önceki kumaş satırından devralır (EK 7). */}
       <div className="flex flex-wrap gap-2">
         {(["FABRIC", "YARN"] as const).map((kind) => (
-          <Button key={kind} type="button" variant="ghost" size="sm" onClick={() => onChange([...lines, emptyLine(kind)])}>
+          <Button key={kind} type="button" variant="ghost" size="sm" onClick={() => onChange([...lines, emptyLine(kind, inheritedLineClass(lines, yarnItemIds))])}>
             <Plus className="mr-1 h-4 w-4" />
             {ADD_LINE_LABEL[kind]}
           </Button>
@@ -145,8 +145,7 @@ export function receiptTotals(lines: DraftLine[], yarnItemIds?: ReadonlySet<stri
 }
 
 /** Taslak satırları → backend gövdesi. Adet N → N ayrı satır. İplik satırı kumaşa özgü anahtarları HİÇ taşımaz
- *  (backend `addYarnLine` 400 ile reddeder); kumaş satırı `rawStock`u yalnız satırda seçildiyse taşır (yoksa fişin
- *  varsayılanı — eski istemci sözleşmesi). */
+ *  (backend `addYarnLine` 400 ile reddeder); kumaş satırı `lineClass`ı HER ZAMAN taşır (fiş kutusu yok — satır tek yer). */
 export function expandLines(lines: DraftLine[], yarnItemIds?: ReadonlySet<string>) {
   return lines
     .filter((l) => l.itemId && l.initialQty > 0 && l.count > 0)
@@ -172,7 +171,7 @@ export function expandLines(lines: DraftLine[], yarnItemIds?: ReadonlySet<string
               foldType: l.foldType,
               unitPrice: l.unitPrice,
               propertyIds: l.propertyIds.length > 0 ? l.propertyIds : undefined,
-              ...(l.rawStock == null ? {} : { rawStock: l.rawStock }),
+              lineClass: l.lineClass ?? DEFAULT_LINE_CLASS,
               // Her TOP kendi idempotency anahtarını taşır (backend uuid bekler). Asıl koruma FİŞ seviyesindedir.
               clientToken: crypto.randomUUID(),
             },

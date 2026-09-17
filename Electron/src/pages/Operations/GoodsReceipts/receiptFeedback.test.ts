@@ -19,7 +19,7 @@
 // =============================================================================
 import { describe, it, expect } from "vitest";
 import { receiptShelfTab, receiptSuccessText } from "./receiptFeedback";
-import { resolveRollTabs } from "@/pages/Operations/Rolls/tabs-regime";
+import { resolveRollTabs, rollTabLabel } from "@/pages/Operations/Rolls/tabs-regime";
 
 /** Şeridin GERÇEKTEN çizdiği ad — beklentinin tek meşru kaynağı. */
 const stripLabel = (key: "RAW_STOCK" | "FINISHED_STOCK", financeEnabled: boolean): string => {
@@ -34,7 +34,7 @@ describe("receiptSuccessText", () => {
       receiptNo: "MK1508260001",
       rollCount: 3,
       yarnLineCount: 0,
-      rawStockEntry: false,
+      lineClasses: ["FINISHED"],
       financeEnabled: false,
     });
     expect(t).toContain("MK1508260001");
@@ -48,7 +48,7 @@ describe("receiptSuccessText", () => {
       receiptNo: "MK1508260002",
       rollCount: 3,
       yarnLineCount: 0,
-      rawStockEntry: true,
+      lineClasses: ["RAW"],
       financeEnabled: false,
     });
     expect(t).toContain(stripLabel("RAW_STOCK", false));
@@ -67,7 +67,7 @@ describe("receiptSuccessText", () => {
       receiptNo: "MK1508260010",
       rollCount: 2,
       yarnLineCount: 0,
-      rawStockEntry: false,
+      lineClasses: ["FINISHED"],
       financeEnabled: true,
     });
     expect(bitmis).toContain(stripLabel("FINISHED_STOCK", true));
@@ -79,7 +79,7 @@ describe("receiptSuccessText", () => {
       receiptNo: "MK1508260011",
       rollCount: 2,
       yarnLineCount: 0,
-      rawStockEntry: true,
+      lineClasses: ["RAW"],
       financeEnabled: true,
     });
     expect(ham).toContain(stripLabel("RAW_STOCK", true));
@@ -91,7 +91,7 @@ describe("receiptSuccessText", () => {
       receiptNo: "MK1508260003",
       rollCount: 0,
       yarnLineCount: 2,
-      rawStockEntry: false,
+      lineClasses: ["FINISHED"],
       financeEnabled: false,
     });
     expect(t).not.toContain("top");
@@ -104,7 +104,7 @@ describe("receiptSuccessText", () => {
       receiptNo: "MK1",
       rollCount: 4,
       yarnLineCount: 1,
-      rawStockEntry: true,
+      lineClasses: ["RAW"],
       financeEnabled: false,
     });
     expect(t).toContain("4 top");
@@ -118,7 +118,7 @@ describe("receiptSuccessText", () => {
         receiptNo: "MK9",
         rollCount: 0,
         yarnLineCount: 0,
-        rawStockEntry: false,
+        lineClasses: ["FINISHED"],
         financeEnabled: false,
       }),
     ).toBe("MK9 oluşturuldu.");
@@ -128,7 +128,7 @@ describe("receiptSuccessText", () => {
     const t = receiptSuccessText({
       rollCount: 1,
       yarnLineCount: 0,
-      rawStockEntry: false,
+      lineClasses: ["FINISHED"],
       financeEnabled: false,
     });
     expect(t).toContain("Mal kabul fişi oluşturuldu.");
@@ -140,7 +140,7 @@ describe("receiptSuccessText", () => {
       receiptNo: "MK2",
       rollCount: 1,
       yarnLineCount: 0,
-      rawStockEntry: true,
+      lineClasses: ["RAW"],
       financeEnabled: true,
     });
     expect(t).not.toMatch(/fason/i);
@@ -148,8 +148,25 @@ describe("receiptSuccessText", () => {
 
   it("sekme adı tek kaynaktan (şeridin çizdiği adın AYNISI, iki rejimde de)", () => {
     for (const financeEnabled of [false, true]) {
-      expect(receiptShelfTab(true, financeEnabled)).toBe(stripLabel("RAW_STOCK", financeEnabled));
-      expect(receiptShelfTab(false, financeEnabled)).toBe(stripLabel("FINISHED_STOCK", financeEnabled));
+      expect(receiptShelfTab("RAW", financeEnabled)).toBe(stripLabel("RAW_STOCK", financeEnabled));
+      expect(receiptShelfTab("FINISHED", financeEnabled)).toBe(stripLabel("FINISHED_STOCK", financeEnabled));
+      expect(receiptShelfTab("SEMI_FINISHED", financeEnabled)).toBe(rollTabLabel("SEMI_FINISHED", financeEnabled));
     }
+  });
+
+  // EK 7: satır sınıfı üçlü ve fişte karışık olabilir — cümle HER hedef sekmeyi sayar, tek sınıfta gerekçe notu.
+  it("⭐ EK 7 — yarı mamul satır Yarı Mamul sekmesini söyler; karışık fişte bütün hedef sekmeler yazılır, tek-sınıf notu yok", () => {
+    const semi = receiptSuccessText({ receiptNo: "MK3", rollCount: 2, yarnLineCount: 0, lineClasses: ["SEMI_FINISHED"], financeEnabled: false });
+    expect(semi).toContain(rollTabLabel("SEMI_FINISHED", false));
+    expect(semi).toMatch(/yarı mamul olarak alındı/);
+    const mixed = receiptSuccessText({ receiptNo: "MK4", rollCount: 5, yarnLineCount: 0, lineClasses: ["FINISHED", "RAW", "FINISHED", "SEMI_FINISHED"], financeEnabled: false });
+    expect(mixed).toContain("5 top");
+    expect(mixed).toContain(stripLabel("FINISHED_STOCK", false));
+    expect(mixed).toContain(stripLabel("RAW_STOCK", false));
+    expect(mixed).toContain(rollTabLabel("SEMI_FINISHED", false));
+    expect(mixed).toContain("sekmelerinde");
+    expect(mixed).not.toMatch(/olarak alındı/);
+    // Sınıf listesi boş (yalnız iplik) → varsayılan bitmiş sekmesi, kırılmaz.
+    expect(receiptSuccessText({ rollCount: 1, yarnLineCount: 0, lineClasses: [], financeEnabled: false })).toContain(stripLabel("FINISHED_STOCK", false));
   });
 });

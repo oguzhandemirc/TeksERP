@@ -1,8 +1,8 @@
 // =============================================================================
-// MAL KABUL — KUMAŞ satırı (EK 5): Kumaş · Renk · Metre (top başına) · En · Kg · Kat · Birim Fiyat · Özellik · Ham/Bitmiş · Adet
+// MAL KABUL — KUMAŞ satırı (EK 5/7): Kumaş · Renk · Metre (top başına) · En · Kg · Kat · Birim Fiyat · Özellik · Sınıf · Adet
 // =============================================================================
-// Hücre etiketleri `FABRIC_COLUMNS` sırasından (`cellLabel("FABRIC", i)`). Top sınıfı SATIR BAZLI: anahtar fişin
-// varsayılanını (`rawStockDefault`) devralır (`rawStock: null`), satırda değiştirilince açık boolean olur.
+// Hücre etiketleri `FABRIC_COLUMNS` sırasından (`cellLabel("FABRIC", i)`). Top sınıfı SATIR BAZLI ve ÜÇLÜ (EK 7):
+// Ham · Yarı mamul · Bitmiş; fiş kutusu YOK, yeni satır bir öncekini miras alır (`inheritedLineClass`).
 // =============================================================================
 import { Copy, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import type { Color } from "@/pages/Colors/types";
 import { cn } from "@/lib/utils";
 import { LinePropertiesButton } from "./LinePropertiesButton";
 import { cellLabel, receiptLineGridCols } from "./receiptLineColumns";
-import type { DraftLine } from "./receiptLineTypes";
+import { DEFAULT_LINE_CLASS, LINE_CLASS_LABEL, RECEIPT_LINE_CLASSES, type DraftLine, type ReceiptLineClass } from "./receiptLineTypes";
 
 const L = (i: number) => cellLabel("FABRIC", i);
 
@@ -28,32 +28,34 @@ export interface RowProps {
 
 interface FabricProps extends RowProps {
   foldValues: ReadonlyArray<{ code: string; name: string }>;
-  /** Fişin "ham stok girişi" kutusu — satır anahtarının VARSAYILANI. */
-  rawStockDefault: boolean;
 }
 
-/** İki durumlu anahtar: Ham · Bitmiş — `aria-label="Top sınıfı"`, basılı durum `aria-pressed`. */
-function RawStockToggle({ value, onChange }: { value: boolean; onChange: (raw: boolean) => void }) {
-  const seg = (raw: boolean, text: string) => (
-    <button
-      type="button"
-      aria-pressed={value === raw}
-      className={cn("h-8 flex-1 rounded-sm px-1 text-[11px] font-medium transition-colors", value === raw ? (raw ? "bg-amber-200 text-amber-950 dark:bg-amber-900 dark:text-amber-100" : "bg-emerald-200 text-emerald-950 dark:bg-emerald-900 dark:text-emerald-100") : "text-muted-foreground hover:bg-muted")}
-      onClick={() => onChange(raw)}
-    >
-      {text}
-    </button>
-  );
+const CLASS_ACTIVE: Record<ReceiptLineClass, string> = {
+  RAW: "bg-amber-200 text-amber-950 dark:bg-amber-900 dark:text-amber-100",
+  SEMI_FINISHED: "bg-sky-200 text-sky-950 dark:bg-sky-900 dark:text-sky-100",
+  FINISHED: "bg-emerald-200 text-emerald-950 dark:bg-emerald-900 dark:text-emerald-100",
+};
+
+/** Üç durumlu anahtar: Ham · Yarı mamul · Bitmiş — `aria-label="Top sınıfı"`, basılı durum `aria-pressed`. */
+function LineClassToggle({ value, onChange }: { value: ReceiptLineClass; onChange: (cls: ReceiptLineClass) => void }) {
   return (
-    <div role="group" aria-label={L(8)} title="Ham: işlenmek üzere alınan mal (Ham Stok). Bitmiş: satılabilir depo. Fiş kutusu yeni satırların varsayılanıdır." className="flex h-9 items-center gap-0.5 rounded-md border p-0.5">
-      {seg(true, "Ham")}
-      {seg(false, "Bitmiş")}
+    <div role="group" aria-label={L(8)} title="Ham: işlenmek üzere alınan mal (Ham Stok). Yarı mamul: dışarıda işlenmiş, burada bitirilecek (Yarı Mamul sekmesi). Bitmiş: satılabilir depo. Yeni satır bir öncekini devralır." className="flex h-9 items-center gap-0.5 rounded-md border p-0.5">
+      {RECEIPT_LINE_CLASSES.map((cls) => (
+        <button
+          key={cls}
+          type="button"
+          aria-pressed={value === cls}
+          className={cn("h-8 flex-1 rounded-sm px-1 text-[11px] font-medium transition-colors", value === cls ? CLASS_ACTIVE[cls] : "text-muted-foreground hover:bg-muted")}
+          onClick={() => onChange(cls)}
+        >
+          {LINE_CLASS_LABEL[cls]}
+        </button>
+      ))}
     </div>
   );
 }
 
-export function ReceiptFabricRow({ line: l, onPatch, onDuplicate, onRemove, removeDisabled, foldValues, rawStockDefault }: FabricProps) {
-  const raw = l.rawStock ?? rawStockDefault;
+export function ReceiptFabricRow({ line: l, onPatch, onDuplicate, onRemove, removeDisabled, foldValues }: FabricProps) {
   return (
     <div className={`grid ${receiptLineGridCols("FABRIC")} items-center gap-2`} data-testid="receipt-line-fabric">
       <ItemSelect value={l.itemId || null} onChange={(v) => onPatch({ itemId: v ?? "" })} placeholder="Kumaş ara..." aria-label={L(0)} allowedTypes={["FABRIC"]} />
@@ -74,7 +76,7 @@ export function ReceiptFabricRow({ line: l, onPatch, onDuplicate, onRemove, remo
       )}
       <Input type="number" min={0} step="0.0001" placeholder="—" aria-label={L(6)} value={l.unitPrice ?? ""} onChange={(e) => onPatch({ unitPrice: e.target.value ? Number(e.target.value) : null })} />
       <LinePropertiesButton aria-label={L(7)} itemId={l.itemId} value={l.propertyIds} onChange={(v) => onPatch({ propertyIds: v })} />
-      <RawStockToggle value={raw} onChange={(v) => onPatch({ rawStock: v })} />
+      <LineClassToggle value={l.lineClass ?? DEFAULT_LINE_CLASS} onChange={(v) => onPatch({ lineClass: v })} />
       <Input type="number" min={1} step="1" className="text-center font-medium" aria-label={L(9)} title="Kaç top doğsun (her biri bu metrede)" value={l.count} onChange={(e) => onPatch({ count: Math.max(1, Math.floor(Number(e.target.value) || 1)) })} />
       <RowActions onDuplicate={onDuplicate} onRemove={onRemove} removeDisabled={removeDisabled} />
     </div>

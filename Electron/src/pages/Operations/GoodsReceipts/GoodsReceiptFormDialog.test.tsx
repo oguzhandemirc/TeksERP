@@ -95,6 +95,14 @@ vi.mock("./ReceiptLineRows", async (importOriginal) => {
         >
           stub-satır-gir
         </button>
+        <button
+          type="button"
+          onClick={() =>
+            onChange([{ ...actual.emptyLine("FABRIC", "RAW"), itemId: "item-1", initialQty: 100, count: 1 }])
+          }
+        >
+          stub-ham-satır-gir
+        </button>
       </div>
     ),
   };
@@ -394,9 +402,9 @@ describe("GoodsReceiptFormDialog — alış siparişi bölümü", () => {
 });
 
 // =============================================================================
-// C2 (ham stok tiki) + B5 (toast "nereye düştü") — GÖVDEYE VE EKRANA ULAŞIYOR MU
+// EK 7 (satır sınıfı; fiş tiki YOK) + B5 (toast "nereye düştü") — GÖVDEYE VE EKRANA ULAŞIYOR MU
 // =============================================================================
-describe("GoodsReceiptFormDialog — ham stok girişi ve kayıt geri bildirimi", () => {
+describe("GoodsReceiptFormDialog — satır sınıfı ve kayıt geri bildirimi", () => {
   beforeEach(() => {
     financeEnabled = true;
     canReadPurchaseOrders = true;
@@ -406,24 +414,23 @@ describe("GoodsReceiptFormDialog — ham stok girişi ve kayıt geri bildirimi",
     });
   });
 
-  it("⭐ 'Ham stok olarak al' tiki GÖVDEYE ULAŞIR (özelliğin kesileceği yer)", async () => {
+  it("⭐ EK 7 — fiş düzeyi ham stok KUTUSU YOK; gövde `rawStockEntry` GÖNDERMEZ; satır sınıfı `lineClass` gövdeye ULAŞIR", async () => {
     const user = userEvent.setup();
     renderWithProviders(
       <GoodsReceiptFormDialog open onOpenChange={() => {}} onCreated={() => {}} />,
     );
-
-    await user.click(await screen.findByText(/ham stok olarak alınsın/));
-    await user.click(screen.getByText("stub-satır-gir"));
+    expect(screen.queryByText(/ham stok olarak/i)).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    await user.click(await screen.findByText("stub-ham-satır-gir"));
     await user.click(screen.getByText(/Fişi Oluştur/));
 
-    await vi.waitFor(() =>
-      expect(createGoodsReceipt).toHaveBeenCalledWith(
-        expect.objectContaining({ rawStockEntry: true }),
-      ),
-    );
+    await vi.waitFor(() => expect(createGoodsReceipt).toHaveBeenCalled());
+    const body = createGoodsReceipt.mock.calls[0]?.[0] as { rawStockEntry?: boolean; lines: Array<{ lineClass?: string }> };
+    expect("rawStockEntry" in body).toBe(false);
+    expect(body.lines[0]?.lineClass).toBe("RAW");
   });
 
-  it("tik atılmazsa varsayılan KAPALIDIR (bugünkü davranış)", async () => {
+  it("sınıf seçilmemiş satır BİTMİŞ gider (bugünkü davranış: satılabilir depo)", async () => {
     const user = userEvent.setup();
     renderWithProviders(
       <GoodsReceiptFormDialog open onOpenChange={() => {}} onCreated={() => {}} />,
@@ -432,11 +439,9 @@ describe("GoodsReceiptFormDialog — ham stok girişi ve kayıt geri bildirimi",
     await user.click(await screen.findByText("stub-satır-gir"));
     await user.click(screen.getByText(/Fişi Oluştur/));
 
-    await vi.waitFor(() =>
-      expect(createGoodsReceipt).toHaveBeenCalledWith(
-        expect.objectContaining({ rawStockEntry: false }),
-      ),
-    );
+    await vi.waitFor(() => expect(createGoodsReceipt).toHaveBeenCalled());
+    const body = createGoodsReceipt.mock.calls[0]?.[0] as { lines: Array<{ lineClass?: string }> };
+    expect(body.lines[0]?.lineClass).toBe("FINISHED");
   });
 
   it("⭐ B5 — toast HEDEF SEKMEYİ söyler ve sayıyı YANITTAN alır (taslaktan değil)", async () => {
@@ -459,12 +464,11 @@ describe("GoodsReceiptFormDialog — ham stok girişi ve kayıt geri bildirimi",
     expect(msg).not.toContain(stripLabel("FINISHED_STOCK", false));
   });
 
-  it("⭐ B5 — ham stok fişinde toast HAM STOK sekmesini söyler", async () => {
+  it("⭐ B5 — ham satırlı fişte toast HAM STOK sekmesini söyler (hedef satır sınıfından, EK 7)", async () => {
     createGoodsReceipt.mockResolvedValue({
       data: {
         id: "r1",
         receiptNo: "MK1508260002",
-        rawStockEntry: true,
         totals: { rollCount: 2, yarnLineCount: 0 },
       },
     });
@@ -473,8 +477,7 @@ describe("GoodsReceiptFormDialog — ham stok girişi ve kayıt geri bildirimi",
       <GoodsReceiptFormDialog open onOpenChange={() => {}} onCreated={() => {}} />,
     );
 
-    await user.click(await screen.findByText(/ham stok olarak alınsın/));
-    await user.click(screen.getByText("stub-satır-gir"));
+    await user.click(await screen.findByText("stub-ham-satır-gir"));
     await user.click(screen.getByText(/Fişi Oluştur/));
 
     await vi.waitFor(() => expect(toastSuccess).toHaveBeenCalled());

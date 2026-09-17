@@ -116,19 +116,28 @@ describe("expandLines — iplik payload sözleşmesi", () => {
   });
 });
 
-// EK 5 (2026-09-17): top sınıfı SATIR BAZLI — `rawStock` yalnız satırda seçildiyse gövdeye gider; iplikte HİÇ gitmez;
-// `lineKind` doğduğu grubu okur, ürün türü çözülünce ürün türü kazanır.
-describe("expandLines / lineKind — top sınıfı satır bazlı (EK 5)", () => {
-  it("rawStock null → anahtar gövdede YOK (fiş varsayılanı); true/false → aynen", () => {
-    const out = expandLines([line({ rawStock: null }), line({ rawStock: true }), line({ rawStock: false })]);
-    expect("rawStock" in out[0]!).toBe(false);
-    expect(out[1]).toMatchObject({ rawStock: true });
-    expect(out[2]).toMatchObject({ rawStock: false });
+// EK 7 (2026-09-18): top sınıfı SATIR BAZLI ve ÜÇLÜ — kumaş satırı `lineClass`ı HER ZAMAN taşır (yoksa bitmiş); iplikte
+// HİÇ gitmez; yeni kumaş satırı bir önceki kumaş satırının sınıfını miras alır; `lineKind` doğduğu grubu okur.
+describe("expandLines / lineKind / inheritedLineClass — top sınıfı üçlü (EK 7)", () => {
+  it("lineClass RAW/SEMI_FINISHED/FINISHED aynen; yoksa FINISHED (fiş kutusu yok)", () => {
+    const out = expandLines([line({ lineClass: "RAW" }), line({ lineClass: "SEMI_FINISHED" }), line({ lineClass: "FINISHED" }), line({})]);
+    expect(out.map((x) => (x as { lineClass?: string }).lineClass)).toEqual(["RAW", "SEMI_FINISHED", "FINISHED", "FINISHED"]);
+    expect(Object.keys(out[0]!)).not.toContain("rawStock");
   });
 
-  it("iplik satırı rawStock taşımaz — satırda true olsa bile", () => {
-    const out = expandLines([line({ itemId: "yarn-1", rawStock: true })], YARN);
-    expect(Object.keys(out[0]!)).not.toContain("rawStock");
+  it("iplik satırı lineClass taşımaz — satırda dolu olsa bile", () => {
+    const out = expandLines([line({ itemId: "yarn-1", lineClass: "RAW" })], YARN);
+    expect(Object.keys(out[0]!)).not.toContain("lineClass");
+  });
+
+  it("inheritedLineClass: son KUMAŞ satırının sınıfı (iplik atlanır); hiç yoksa FINISHED; emptyLine sınıfı taşır", async () => {
+    const { inheritedLineClass, emptyLine } = await import("./receiptLineTypes");
+    expect(inheritedLineClass([])).toBe("FINISHED");
+    expect(inheritedLineClass([line({ lineClass: "RAW" }), line({ itemId: "yarn-1" })], YARN)).toBe("RAW");
+    expect(inheritedLineClass([line({ lineClass: "RAW" }), line({ lineClass: "SEMI_FINISHED" })])).toBe("SEMI_FINISHED");
+    expect(emptyLine("FABRIC", "RAW").lineClass).toBe("RAW");
+    expect(emptyLine("YARN", "RAW").lineClass).toBeUndefined();
+    expect(emptyLine().lineClass).toBe("FINISHED");
   });
 
   it("lineKind: ürün türü > doğduğu grup > kumaş", async () => {

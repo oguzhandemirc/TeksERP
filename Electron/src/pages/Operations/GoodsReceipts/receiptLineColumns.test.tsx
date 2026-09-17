@@ -1,6 +1,6 @@
 // =============================================================================
 // BEKÇİ — Mal kabul satır editörü: TÜRE GÖRE İKİ ALT TABLO (EK 5) — başlık ↔ hücre eşleşmesi, boş grup çizilmez,
-// grup düğmesi satırı TİPLİ doğurur ve ürün seçici o türe kilitlidir, top sınıfı satır bazlı (fiş kutusu varsayılan),
+// grup düğmesi satırı TİPLİ doğurur ve ürün seçici o türe kilitlidir, top sınıfı satır bazlı ÜÇLÜ (EK 7: fiş kutusu yok, miras),
 // çift anlamlı eski başlıklar ("Miktar (m / kg)", "En (cm) / Bobin") kaynakta 0.
 // =============================================================================
 // Negatif sonda: `YARN_COLUMNS`ta Lot ile Kg yer değiştirince "hücre ↔ başlık" ❌; `emptyLine(kind)` kind'ı düşürünce
@@ -31,7 +31,7 @@ vi.mock("./LinePropertiesButton", () => ({
 
 const YARN = new Set(["yarn-1"]);
 const fabricLine = (o: Partial<DraftLine> = {}) => ({ ...emptyLine(), itemId: "fab-1", ...o });
-const yarnLine = () => ({ ...emptyLine(), itemId: "yarn-1" });
+const yarnLine = () => ({ ...emptyLine("YARN"), itemId: "yarn-1" });
 const headerTexts = (kind: "FABRIC" | "YARN") =>
   Array.from(screen.getByTestId(`receipt-line-headers-${kind}`).querySelectorAll("span")).map((s) => s.textContent).filter((t) => t);
 
@@ -44,7 +44,7 @@ function cellLabelAt(row: HTMLElement, i: number): string | null {
 
 describe("Mal kabul satır editörü — türe göre iki alt tablo (EK 5)", () => {
   it("sütun tablosu: kumaş 10 · iplik 6; her hücre etiketi kendi başlığının altında; iki tablonun grid şablonu farklı", () => {
-    expect(receiptLineHeaders("FABRIC")).toEqual(["Kumaş", "Renk", "Metre (top başına)", "En (cm)", "Kg", "Kat", "Birim Fiyat", "Özellik", "Ham/Bitmiş", "Adet"]);
+    expect(receiptLineHeaders("FABRIC")).toEqual(["Kumaş", "Renk", "Metre (top başına)", "En (cm)", "Kg", "Kat", "Birim Fiyat", "Özellik", "Sınıf", "Adet"]);
     expect(receiptLineHeaders("YARN")).toEqual(["İplik", "Lot", "Kg", "Bobin", "Birim Fiyat", "Adet"]);
     expect(cellLabel("YARN", 1)).toBe("Lot numarası");
     expect(cellLabel("FABRIC", 8)).toBe("Top sınıfı");
@@ -79,9 +79,19 @@ describe("Mal kabul satır editörü — türe göre iki alt tablo (EK 5)", () =
     await user.click(screen.getByRole("button", { name: "İplik satırı ekle" }));
     const next = onChange.mock.calls[0]![0] as DraftLine[];
     expect(next).toHaveLength(2);
-    expect(next[1]).toMatchObject({ kind: "YARN", itemId: "", rawStock: null });
+    expect(next[1]).toMatchObject({ kind: "YARN", itemId: "" });
+    expect(next[1]!.lineClass).toBeUndefined();
     await user.click(screen.getByRole("button", { name: "Kumaş satırı ekle" }));
-    expect((onChange.mock.calls[1]![0] as DraftLine[])[1]).toMatchObject({ kind: "FABRIC" });
+    expect((onChange.mock.calls[1]![0] as DraftLine[])[1]).toMatchObject({ kind: "FABRIC", lineClass: "FINISHED" });
+  });
+
+  it("⭐ EK 7 — yeni kumaş satırı bir ÖNCEKİ kumaş satırının sınıfını miras alır (fiş kutusu yok)", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    renderWithProviders(<ReceiptLineRows lines={[fabricLine({ lineClass: "RAW" }), fabricLine({ lineClass: "SEMI_FINISHED" }), yarnLine()]} onChange={onChange} yarnItemIds={YARN} />);
+    await user.click(screen.getByRole("button", { name: "Kumaş satırı ekle" }));
+    const next = onChange.mock.calls[0]![0] as DraftLine[];
+    expect(next[3]).toMatchObject({ kind: "FABRIC", lineClass: "SEMI_FINISHED" });
   });
 
   it("boş iplik satırı (ürün seçilmemiş) iplik tablosunda çizilir, seçicisi YARN kilitli, kumaş tablosu yok", () => {
@@ -91,24 +101,25 @@ describe("Mal kabul satır editörü — türe göre iki alt tablo (EK 5)", () =
     expect(screen.queryByTestId("receipt-group-FABRIC")).toBeNull();
   });
 
-  it("⭐ top sınıfı satır bazlı: anahtar fiş kutusunu (rawStockDefault) okur; satırda basınca yalnız o satır açık boolean alır", async () => {
+  it("⭐ top sınıfı ÜÇ durumlu ve satır bazlı: Ham · Yarı mamul · Bitmiş; basınca yalnız o satır değişir; fiş kutusu/varsayılan prop'u YOK", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    const a = fabricLine();
-    const b = fabricLine({ rawStock: false });
-    renderWithProviders(<ReceiptLineRows lines={[a, b]} onChange={onChange} yarnItemIds={YARN} rawStockDefault />);
+    const a = fabricLine({ lineClass: "RAW" });
+    const b = fabricLine();
+    renderWithProviders(<ReceiptLineRows lines={[a, b]} onChange={onChange} yarnItemIds={YARN} />);
     const groups = screen.getAllByRole("group", { name: "Top sınıfı" });
     expect(groups).toHaveLength(2);
-    expect(within(groups[0]!).getByRole("button", { name: "Ham" })).toHaveAttribute("aria-pressed", "true"); // null → varsayılan (ham)
-    expect(within(groups[1]!).getByRole("button", { name: "Bitmiş" })).toHaveAttribute("aria-pressed", "true"); // satır kendi seçimi
-    await user.click(within(groups[0]!).getByRole("button", { name: "Bitmiş" }));
+    expect(within(groups[0]!).getAllByRole("button").map((x) => x.textContent)).toEqual(["Ham", "Yarı mamul", "Bitmiş"]);
+    expect(within(groups[0]!).getByRole("button", { name: "Ham" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(groups[1]!).getByRole("button", { name: "Bitmiş" })).toHaveAttribute("aria-pressed", "true"); // emptyLine() → bitmiş
+    await user.click(within(groups[0]!).getByRole("button", { name: "Yarı mamul" }));
     const next = onChange.mock.calls[0]![0] as DraftLine[];
-    expect(next[0]).toMatchObject({ key: a.key, rawStock: false });
-    expect(next[1]).toMatchObject({ key: b.key, rawStock: false });
+    expect(next[0]).toMatchObject({ key: a.key, lineClass: "SEMI_FINISHED" });
+    expect(next[1]).toMatchObject({ key: b.key, lineClass: "FINISHED" }); // öbür satır dokunulmadı
   });
 
   it("iplik satırında top sınıfı anahtarı YOK (kg defteri raf taşımaz)", () => {
-    renderWithProviders(<ReceiptLineRows lines={[yarnLine()]} onChange={() => {}} yarnItemIds={YARN} rawStockDefault />);
+    renderWithProviders(<ReceiptLineRows lines={[yarnLine()]} onChange={() => {}} yarnItemIds={YARN} />);
     expect(screen.queryByRole("group", { name: "Top sınıfı" })).toBeNull();
   });
 
@@ -118,7 +129,7 @@ describe("Mal kabul satır editörü — türe göre iki alt tablo (EK 5)", () =
     for (const name of readdirSync(dir)) {
       if (!/\.tsx?$/.test(name) || name === path.basename(__filename)) continue;
       const src = readFileSync(path.join(dir, name), "utf8");
-      for (const needle of ["Miktar (m / kg)", "En (cm) / Bobin", "Renk / Lot", "receiptLineMode", "visibleColumnIndexes"]) {
+      for (const needle of ["Miktar (m / kg)", "En (cm) / Bobin", "Renk / Lot", "receiptLineMode", "visibleColumnIndexes", "rawStockDefault", "RawStockToggle"]) {
         if (src.includes(needle)) hits.push(`${name}: ${needle}`);
       }
     }

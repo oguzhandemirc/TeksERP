@@ -5,7 +5,7 @@
 // aynı fişte iki ayrı alt tablo — Kumaş kalemleri ve İplik kalemleri — her biri kendi başlığı ve hücre etiketiyle.
 // Başlık ve hücrenin erişilebilir etiketi (aria-label) AYNI satırdan okunur ki yeni bir sütun eklendiğinde biri
 // unutulamasın; vitest sıra eşleşmesini ölçer. Satır DOĞDUĞU ANDA tiplidir; tür değiştirmek = satırı silip öbür
-// gruptan açmak.
+// gruptan açmak. EK 7: "Sınıf" sütunu üç durumlu (Ham · Yarı mamul · Bitmiş) — fiş kutusu kalktı, satır tek yer.
 // =============================================================================
 export type ReceiptLineKind = "FABRIC" | "YARN";
 
@@ -28,7 +28,7 @@ export const FABRIC_COLUMNS: readonly ReceiptLineColumn[] = [
   { header: "Kat", label: "Kat" },
   { header: "Birim Fiyat", label: "Birim fiyat" },
   { header: "Özellik", label: "Özellik", align: "center" },
-  { header: "Ham/Bitmiş", label: "Top sınıfı", align: "center" },
+  { header: "Sınıf", label: "Top sınıfı", align: "center" },
   { header: "Adet", label: "Adet (doğacak top sayısı)", align: "center" },
 ];
 
@@ -60,7 +60,7 @@ export function cellLabel(kind: ReceiptLineKind, index: number): string {
 export function receiptLineGridCols(kind: ReceiptLineKind): string {
   return kind === "YARN"
     ? "grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_90px_80px_100px_64px_76px]"
-    : "grid-cols-[minmax(0,2fr)_minmax(0,1fr)_84px_74px_74px_88px_96px_60px_112px_60px_76px]";
+    : "grid-cols-[minmax(0,2fr)_minmax(0,1fr)_84px_74px_74px_88px_96px_60px_168px_60px_76px]";
 }
 
 export const GROUP_TITLE: Record<ReceiptLineKind, string> = { FABRIC: "Kumaş kalemleri", YARN: "İplik kalemleri" };

@@ -111,20 +111,21 @@ describe("mal kabul Excel ayrıştırma", () => {
     expect(at(r.errors, 0).reason).toContain("Renk/En/Kat");
   });
 
-  // EK 5: "Ham" kolonu opsiyonel — satır bazlı top sınıfı; boş = fiş varsayılanı (null → gövdeye gitmez).
-  it("Ham kolonu: Evet/Hayır/boş → true/false/null; tanınmayan değer SEBEBİYLE red; satır türü kumaş doğar", () => {
-    const r = parseReceiptRows([row({ Ham: "Evet" }), row({ Ham: "h" }), row({}), row({ Ham: "belki" })], catalogs);
-    expect(r.lines.map((l) => l.rawStock)).toEqual([true, false, null]);
+  // EK 7: "Sınıf" kolonu opsiyonel — satır bazlı top sınıfı üçlü; boş = Bitmiş.
+  it("Sınıf kolonu: Ham/Yarı mamul/Bitmiş/boş → RAW/SEMI_FINISHED/FINISHED/FINISHED; kısaltma H/Y/B; tanınmayan değer SEBEBİYLE red", () => {
+    const r = parseReceiptRows([row({ Sınıf: "Ham" }), row({ Sınıf: "yarı mamul" }), row({ Sınıf: "Bitmiş" }), row({}), row({ Sınıf: "Y" }), row({ Sınıf: "belki" })], catalogs);
+    expect(r.lines.map((l) => l.lineClass)).toEqual(["RAW", "SEMI_FINISHED", "FINISHED", "FINISHED", "SEMI_FINISHED"]);
     expect(r.lines.every((l) => l.kind === "FABRIC")).toBe(true);
-    expect(at(r.errors, 0)).toMatchObject({ row: 5 });
-    expect(at(r.errors, 0).reason).toContain("Ham kolonu");
+    expect(at(r.errors, 0)).toMatchObject({ row: 7 });
+    expect(at(r.errors, 0).reason).toContain("Sınıf kolonu");
   });
 
-  it("iplik satırında Ham doluysa red (kural ④); boşsa iplik satırı YARN türüyle doğar, rawStock null", () => {
-    const bad = parseReceiptRows([{ "Kumaş Kodu": "IPL-000001", Metre: 500, Ham: "Evet" }], catalogs);
+  it("iplik satırında Sınıf doluysa red (kural ④); boşsa iplik satırı YARN türüyle doğar, sınıfsız", () => {
+    const bad = parseReceiptRows([{ "Kumaş Kodu": "IPL-000001", Metre: 500, Sınıf: "Ham" }], catalogs);
     expect(bad.lines).toHaveLength(0);
-    expect(at(bad.errors, 0).reason).toContain("Ham");
+    expect(at(bad.errors, 0).reason).toContain("Sınıf");
     const ok = parseReceiptRows([{ "Kumaş Kodu": "IPL-000001", Metre: 500 }], catalogs);
-    expect(at(ok.lines, 0)).toMatchObject({ kind: "YARN", rawStock: null });
+    expect(at(ok.lines, 0)).toMatchObject({ kind: "YARN" });
+    expect(at(ok.lines, 0).lineClass).toBeUndefined();
   });
 });

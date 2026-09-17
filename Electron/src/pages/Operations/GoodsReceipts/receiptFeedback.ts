@@ -13,8 +13,9 @@
 // (`failed[]`: ürün pasif, kalem bulunamadı…). Taslaktan sayarsak toast "5 top
 // eklendi" der, envanterde 3 top vardır — sessiz ve tam ters bir sonuç.
 //
-// ⚠️ HEDEF C2'YE BAĞLIDIR: `rawStockEntry` fişi ham stok girişi yapar ve toplar
-// `STOCK` doğar → Kumaş Stoğu'nda ham stok sekmesine düşerler. Tek bir sekme adı
+// ⚠️ HEDEF SATIR SINIFINA BAĞLIDIR (EK 7): ham satır `STOCK` → ham stok sekmesi,
+// yarı mamul satır → Yarı Mamul sekmesi, bitmiş satır → depo sekmesi; aynı fişte
+// birden çok sınıf olabilir ⇒ cümle HER hedef sekmeyi sayar. Tek bir sekme adı
 // yazmak, kullanıcıyı doğru sekmede boş listeye bakarken bırakırdı.
 //
 // ⚠️⚠️ SEKME ADI SABİT YAZILMAZ, `rollTabLabel`DEN ÇÖZÜLÜR. İlk yazımda burada
@@ -34,6 +35,8 @@
 // Bekçi: `receiptFeedback.test.ts`.
 // =============================================================================
 import { rollTabLabel } from "@/pages/Operations/Rolls/tabs-regime";
+import type { RollTabKey } from "@/pages/Operations/Rolls/tabs-config";
+import type { ReceiptLineClass } from "./receiptLineTypes";
 
 export interface ReceiptOutcome {
   /** Yanıttaki fiş numarası — cümlenin başında belge kimliği durur. */
@@ -42,8 +45,8 @@ export interface ReceiptOutcome {
   rollCount: number;
   /** Yanıttaki iplik satırı sayısı (`totals.yarnLineCount`). */
   yarnLineCount: number;
-  /** Fiş "ham stok girişi" olarak açıldı mı (C2). */
-  rawStockEntry: boolean;
+  /** Fişteki kumaş satırlarının SINIFLARI (tekil; EK 7) — hedef sekme(ler) bundan çözülür. */
+  lineClasses: readonly ReceiptLineClass[];
   /**
    * `finance.enabled` — sekme ETİKETLERİNİ değiştirir (ticarette "Bitmiş Depo"
    * yerine "Depo"). Bayrak henüz yüklenmemişse `false` geçilir: fabrika
@@ -57,8 +60,10 @@ export interface ReceiptOutcome {
  * ADLA. Kaynak `tabs-regime` (şerit · komut paleti · özet indirmesi de onu
  * okur); burada ikinci bir sözlük tutulmaz.
  */
-export function receiptShelfTab(rawStockEntry: boolean, financeEnabled: boolean): string {
-  return rollTabLabel(rawStockEntry ? "RAW_STOCK" : "FINISHED_STOCK", financeEnabled);
+const SHELF_TAB: Record<ReceiptLineClass, RollTabKey> = { RAW: "RAW_STOCK", SEMI_FINISHED: "SEMI_FINISHED", FINISHED: "FINISHED_STOCK" };
+
+export function receiptShelfTab(cls: ReceiptLineClass, financeEnabled: boolean): string {
+  return rollTabLabel(SHELF_TAB[cls], financeEnabled);
 }
 
 /**
@@ -70,14 +75,12 @@ export function receiptShelfTab(rawStockEntry: boolean, financeEnabled: boolean)
  */
 export function receiptSuccessText(o: ReceiptOutcome): string {
   const head = o.receiptNo ? `${o.receiptNo} oluşturuldu.` : "Mal kabul fişi oluşturuldu.";
-  const shelf = receiptShelfTab(o.rawStockEntry, o.financeEnabled);
+  const classes = Array.from(new Set(o.lineClasses.length > 0 ? o.lineClasses : ["FINISHED" as const]));
+  const shelves = classes.map((c) => receiptShelfTab(c, o.financeEnabled));
   const parts: string[] = [];
   if (o.rollCount > 0) {
-    parts.push(
-      o.rawStockEntry
-        ? `${o.rollCount} top Kumaş Stoğu → ${shelf} sekmesinde (işlenecek mal olarak alındı).`
-        : `${o.rollCount} top Kumaş Stoğu → ${shelf} sekmesinde.`,
-    );
+    const note = classes.length === 1 && classes[0] === "RAW" ? " (işlenecek mal olarak alındı)" : classes.length === 1 && classes[0] === "SEMI_FINISHED" ? " (yarı mamul olarak alındı)" : "";
+    parts.push(`${o.rollCount} top Kumaş Stoğu → ${shelves.join(" · ")} ${shelves.length > 1 ? "sekmelerinde" : "sekmesinde"}${note}.`);
   }
   if (o.yarnLineCount > 0) {
     parts.push(`${o.yarnLineCount} iplik satırı İplik Stoku'na işlendi.`);

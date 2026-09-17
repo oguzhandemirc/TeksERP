@@ -118,7 +118,7 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange, sync }: Props) {
               {r?.rawStockEntry && (
                 <Badge
                   variant="outline"
-                  title={`Toplar işlenecek mal olarak alındı: Kumaş Stoğu → ${receiptShelfTab(true, financeEnabled)} sekmesinde`}
+                  title={`Toplar işlenecek mal olarak alındı: Kumaş Stoğu → ${receiptShelfTab("RAW", financeEnabled)} sekmesinde`}
                 >
                   Ham stok
                 </Badge>
