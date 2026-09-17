@@ -97,7 +97,8 @@ export function PaymentFormDialog({ open, direction, onOpenChange, onCreated }: 
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
             <Label>Cari</Label>
-            {/* Yalnız AKTİF kartlar (1e hükmü, dilim F): pasif kartın açık bakiyesi Mahsup ekranından kapatılır. */}
+            {/* Varsayılan liste AKTİF kartlar; pasif kartın AÇIK BAKİYESİNE tahsilat/ödeme meşrudur (uç `CariAccount.isActive`e
+                bakar, karta değil) — seçicideki "Durum: Pasif / Tümü" süzgeciyle seçilir, satır "(pasif)" rozeti taşır. */}
             <div className="mt-1">
               <CustomerPickerField variant="cari" value={customerId} onChange={setCustomerId} />
             </div>

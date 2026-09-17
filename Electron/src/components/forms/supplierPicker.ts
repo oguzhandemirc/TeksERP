@@ -28,6 +28,21 @@ export type PickerList = PickerMode | "customer-only" | "supplier-cari";
 export type PickerRoleFilter = RoleFilterPair;
 export const PICKER_ROLE_DEFAULTS: PickerRoleFilter = ROLE_FILTER_DEFAULTS;
 
+/** Durum süzgeci — YALNIZ cari kipi (muhasebe formları): varsayılan Aktif (liste temiz); Pasif/Tümü ile pasif kartın
+ *  AÇIK BAKİYESİNE tahsilat/ödeme girilebilir (uç `CariAccount.isActive`e bakar, karta değil — 1e hükmü, dilim F). */
+export type StatusFilter = "ACTIVE" | "INACTIVE" | "ALL";
+export const STATUS_OPTIONS: readonly { value: StatusFilter; label: string }[] = [
+  { value: "ACTIVE", label: "Aktif" },
+  { value: "INACTIVE", label: "Pasif" },
+  { value: "ALL", label: "Tümü" },
+];
+export const STATUS_DEFAULT: StatusFilter = "ACTIVE";
+export function statusFilters(s: StatusFilter): RoleServerFilters {
+  if (s === "ACTIVE") return { isActive: "true" };
+  if (s === "INACTIVE") return { isActive: "false" };
+  return {};
+}
+
 /** Sayfa token'ı — bacağı ve o bacaktaki konumu taşır; cari bacağı tek sorgudur (süzgeç `legsFor`tan). */
 export type PageToken = { leg: "customers"; cursor: string | null } | { leg: "subs"; page: number };
 

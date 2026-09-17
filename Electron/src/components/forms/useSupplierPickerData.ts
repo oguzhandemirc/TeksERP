@@ -20,11 +20,13 @@ import {
   firstPageToken,
   legsFor,
   nextPageToken,
+  statusFilters,
   subcontractorRow,
   type PageToken,
   type PickerList,
   type PickerPage,
   type PickerRoleFilter,
+  type StatusFilter,
 } from "./supplierPicker";
 
 interface Args {
@@ -36,10 +38,12 @@ interface Args {
   /** Tedarikçi (SUPPLIER/BOTH cari + fason) · müşteri (yalnız cari; ALL = CUSTOMER sonra BOTH) ·
    *  müşteri-only (dönüştürme görünümü: müşteri rolü var, tedarikçi rolü yok). */
   list?: PickerList;
+  /** Yalnız cari kipi: Durum süzgeci (Aktif · Pasif · Tümü); öbür kiplerde `includeInactive` tabanı geçerli. */
+  status?: StatusFilter;
 }
 
 async function fetchPage(token: PageToken, args: Args): Promise<PickerPage> {
-  const base = supplierListFilters(args.includeInactive);
+  const base = args.list === "cari" && args.status ? statusFilters(args.status) : supplierListFilters(args.includeInactive);
   const search = args.search ? { search: args.search } : {};
   try {
     if (token.leg === "customers") {
@@ -65,9 +69,9 @@ async function fetchPage(token: PageToken, args: Args): Promise<PickerPage> {
 }
 
 export function useSupplierPickerData(args: Args) {
-  const { open, search, filters, includeInactive, list = "supplier" } = args;
+  const { open, search, filters, includeInactive, list = "supplier", status } = args;
   const q = useInfiniteQuery({
-    queryKey: ["supplier-picker", list, search, filters.direction, filters.subcontractor, includeInactive],
+    queryKey: ["supplier-picker", list, search, filters.direction, filters.subcontractor, includeInactive, status ?? null],
     queryFn: ({ pageParam }) => fetchPage(pageParam, args),
     initialPageParam: firstPageToken(filters, list),
     getNextPageParam: (last) => nextPageToken(last, filters, list),

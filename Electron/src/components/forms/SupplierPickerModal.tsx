@@ -16,7 +16,7 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { cn } from "@/lib/utils";
 import { supplierLoadNotice, type SupplierParty } from "./supplierParty";
-import { PICKER_ROLE_DEFAULTS, type PickerList, type PickerMode, type PickerRoleFilter, type SupplierPickerRow } from "./supplierPicker";
+import { PICKER_ROLE_DEFAULTS, STATUS_DEFAULT, type PickerList, type PickerMode, type PickerRoleFilter, type StatusFilter, type SupplierPickerRow } from "./supplierPicker";
 import { isRoleFilterDirty } from "@/lib/partnerRoles";
 import { useSupplierPickerData } from "./useSupplierPickerData";
 import { SupplierPickerToolbar } from "./SupplierPickerToolbar";
@@ -101,12 +101,14 @@ export function SupplierPickerModal({ open, onOpenChange, onPick, includeInactiv
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput.trim(), 250);
   const [filters, setFilters] = useState<PickerRoleFilter>(PICKER_ROLE_DEFAULTS);
+  // Cari kipi: Durum süzgeci (varsayılan Aktif); öbür kipler `includeInactive` prop'uyla gelir.
+  const [status, setStatus] = useState<StatusFilter>(STATUS_DEFAULT);
   // Dönüştürme görünümü (yalnız tedarikçi kipi + customer:write): liste müşteri-only, satır → onay → BOTH.
   const canConvert = useCanConvertCustomer() && mode === "supplier" && !cariOnly;
   const [converting, setConverting] = useState(false);
   const [convertRow, setConvertRow] = useState<SupplierPickerRow | null>(null);
   const list: PickerList = converting ? "customer-only" : cariOnly && mode === "supplier" ? "supplier-cari" : mode;
-  const data = useSupplierPickerData({ open, search, filters, includeInactive, list });
+  const data = useSupplierPickerData({ open, search, filters, includeInactive, list, status: mode === "cari" ? status : undefined });
   const headers = HEADERS[list];
   const { rootRef, sentinelRef } = useInfiniteScroll({ hasMore: data.hasMore, isLoading: data.isFetchingNext, onLoadMore: data.fetchNext, enabled: open });
   const notice = supplierLoadNotice({ customersError: data.customersError, subcontractorsError: data.subcontractorsError, loading: data.isLoading });
@@ -120,7 +122,7 @@ export function SupplierPickerModal({ open, onOpenChange, onPick, includeInactiv
     setOpen(false);
   };
   const onRow = (r: SupplierPickerRow) => (converting ? setConvertRow(r) : pick({ kind: r.kind, id: r.id }));
-  const emptyText = search || (isRoleFilterDirty(filters) && !converting) ? SUPPLIER_PICKER_FILTERED_EMPTY : EMPTY[list];
+  const emptyText = search || ((isRoleFilterDirty(filters) || (mode === "cari" && status !== STATUS_DEFAULT)) && !converting) ? SUPPLIER_PICKER_FILTERED_EMPTY : EMPTY[list];
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -131,7 +133,7 @@ export function SupplierPickerModal({ open, onOpenChange, onPick, includeInactiv
           <DialogTitle>{TITLE[list].title}</DialogTitle>
           <DialogDescription>{TITLE[list].description}</DialogDescription>
         </DialogHeader>
-        <SupplierPickerToolbar mode={mode} converting={converting} searchInput={searchInput} onSearchInput={setSearchInput} filters={filters} onFilters={setFilters} onCreated={pick} />
+        <SupplierPickerToolbar mode={mode} converting={converting} searchInput={searchInput} onSearchInput={setSearchInput} filters={filters} onFilters={setFilters} onCreated={pick} status={mode === "cari" ? status : undefined} onStatus={setStatus} />
         {canConvert && (converting ? <ConvertBackLink onClick={() => setConverting(false)} /> : <ConvertCustomerLink onClick={() => setConverting(true)} />)}
         {notice && <p className={cn("text-xs", notice.tone === "error" ? "text-destructive" : "text-amber-700 dark:text-amber-500")}>{notice.message}</p>}
         <div ref={rootRef} className="min-h-0 flex-1 overflow-auto rounded-md border">
