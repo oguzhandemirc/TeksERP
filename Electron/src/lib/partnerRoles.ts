@@ -87,3 +87,21 @@ export function pickerCustomerFilters(mode: "supplier" | "customer", role: Direc
   if ((mode === "supplier" && role === "SUPPLIER") || (mode === "customer" && role === "CUSTOMER")) return { [own]: "true", [other]: "false" };
   return { [own]: "true" };
 }
+
+/** Yön × Fason seçimi — Cariler şeridi ve seçiciler AYNI çifti taşır (tek yüklem, kopya yok). */
+export interface RoleFilterPair {
+  direction: DirectionFilter;
+  subcontractor: SubcontractorFilter;
+}
+export const ROLE_FILTER_DEFAULTS: RoleFilterPair = { direction: "ALL", subcontractor: "ALL" };
+export const isRoleFilterDirty = (f: RoleFilterPair): boolean => f.direction !== "ALL" || f.subcontractor !== "ALL";
+
+/**
+ * BAĞSIZ fason bacağı (`filter[customerId]=null`) ne zaman sorulur: yalnız Yön = Tümü ve Fason ≠ Yapmayan.
+ * Bağsız profilin kartı yok — yön süzgeci ona uygulanamaz; göç (D2) sonrası 0 satır, bacak eski kurulum güvencesi.
+ */
+export const unlinkedSubcontractorLegWanted = (f: RoleFilterPair): boolean => f.direction === "ALL" && f.subcontractor !== "NO";
+
+/** Seçicinin YÖN seçenekleri — kipin kendi rolü olmayan seçenek çizilmez (tedarikçi kipinde "Müşteri" yok). */
+export const pickerDirectionOptions = (mode: "supplier" | "customer"): readonly { value: DirectionFilter; label: string }[] =>
+  DIRECTION_OPTIONS.filter((o) => o.value !== (mode === "supplier" ? "CUSTOMER" : "SUPPLIER"));

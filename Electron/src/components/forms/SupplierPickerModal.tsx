@@ -5,7 +5,7 @@
 // renderer'ı senkron döngüye sokuyordu (kök neden kovalanmadı); yeniden yazım şüpheli üç parçayı
 // YAPISAL olarak dışarıda bırakır — yerleşik <select> yok (Radix `ui/select`, Dialog içinde emsal
 // `CustomerFormDialog`), `DataTable`/`useReactTable`/pagination cast'i yok, iki bağımsız sorgu yok
-// (`useSupplierPickerData` tek sonsuz sorgu). Kaydırma kabı TEK, sentinel dipte; arama + rol SUNUCUDA.
+// (`useSupplierPickerData` tek sonsuz sorgu). Kaydırma kabı TEK, sentinel dipte; arama + Yön × Fason SUNUCUDA.
 // =============================================================================
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
@@ -16,7 +16,8 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { cn } from "@/lib/utils";
 import { supplierLoadNotice, type SupplierParty } from "./supplierParty";
-import { type PickerList, type PickerMode, type SupplierPickerRow, type SupplierRoleFilter } from "./supplierPicker";
+import { PICKER_ROLE_DEFAULTS, type PickerList, type PickerMode, type PickerRoleFilter, type SupplierPickerRow } from "./supplierPicker";
+import { isRoleFilterDirty } from "@/lib/partnerRoles";
 import { useSupplierPickerData } from "./useSupplierPickerData";
 import { SupplierPickerToolbar } from "./SupplierPickerToolbar";
 import { ConvertBackLink, ConvertCustomerConfirm, ConvertCustomerLink, useCanConvertCustomer } from "./SupplierConvertCustomer";
@@ -96,13 +97,13 @@ function StatusLine({ count, hasMore, isFetchingNext }: { count: number; hasMore
 export function SupplierPickerModal({ open, onOpenChange, onPick, includeInactive = false, mode = "supplier", cariOnly = false }: Props) {
   const [searchInput, setSearchInput] = useState("");
   const search = useDebouncedValue(searchInput.trim(), 250);
-  const [role, setRole] = useState<SupplierRoleFilter>("ALL");
+  const [filters, setFilters] = useState<PickerRoleFilter>(PICKER_ROLE_DEFAULTS);
   // Dönüştürme görünümü (yalnız tedarikçi kipi + customer:write): liste müşteri-only, satır → onay → BOTH.
   const canConvert = useCanConvertCustomer() && mode === "supplier" && !cariOnly;
   const [converting, setConverting] = useState(false);
   const [convertRow, setConvertRow] = useState<SupplierPickerRow | null>(null);
   const list: PickerList = converting ? "customer-only" : cariOnly && mode === "supplier" ? "supplier-cari" : mode;
-  const data = useSupplierPickerData({ open, search, role, includeInactive, list });
+  const data = useSupplierPickerData({ open, search, filters, includeInactive, list });
   const headers = HEADERS[list];
   const { rootRef, sentinelRef } = useInfiniteScroll({ hasMore: data.hasMore, isLoading: data.isFetchingNext, onLoadMore: data.fetchNext, enabled: open });
   const notice = supplierLoadNotice({ customersError: data.customersError, subcontractorsError: data.subcontractorsError, loading: data.isLoading });
@@ -116,7 +117,7 @@ export function SupplierPickerModal({ open, onOpenChange, onPick, includeInactiv
     setOpen(false);
   };
   const onRow = (r: SupplierPickerRow) => (converting ? setConvertRow(r) : pick({ kind: r.kind, id: r.id }));
-  const emptyText = search || (role !== "ALL" && !converting) ? SUPPLIER_PICKER_FILTERED_EMPTY : EMPTY[list];
+  const emptyText = search || (isRoleFilterDirty(filters) && !converting) ? SUPPLIER_PICKER_FILTERED_EMPTY : EMPTY[list];
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -127,7 +128,7 @@ export function SupplierPickerModal({ open, onOpenChange, onPick, includeInactiv
           <DialogTitle>{TITLE[list].title}</DialogTitle>
           <DialogDescription>{TITLE[list].description}</DialogDescription>
         </DialogHeader>
-        <SupplierPickerToolbar mode={mode} list={list} converting={converting} searchInput={searchInput} onSearchInput={setSearchInput} role={role} onRole={setRole} onCreated={pick} />
+        <SupplierPickerToolbar mode={mode} converting={converting} searchInput={searchInput} onSearchInput={setSearchInput} filters={filters} onFilters={setFilters} onCreated={pick} />
         {canConvert && (converting ? <ConvertBackLink onClick={() => setConverting(false)} /> : <ConvertCustomerLink onClick={() => setConverting(true)} />)}
         {notice && <p className={cn("text-xs", notice.tone === "error" ? "text-destructive" : "text-amber-700 dark:text-amber-500")}>{notice.message}</p>}
         <div ref={rootRef} className="min-h-0 flex-1 overflow-auto rounded-md border">

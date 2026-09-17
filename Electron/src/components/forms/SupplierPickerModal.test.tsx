@@ -2,7 +2,7 @@
 // BEKÇİ — Tedarikçi seçici modalı v3 (kabul A): kutu → modal · rol FARE ve KLAVYE ile · tek bacak 500 ·
 // ALL'da bacak geçişi · arama · satır → forma · kaynak taraması (yerleşik <select> / DataTable YOK) ·
 // MÜŞTERİ-ONLY kart listelenmez (kullanıcı 2026-09-17 03:25) · dönüştürme kapısı (bağlantı → müşteri
-// listesi → onay → type BOTH → seçim) · izin yoksa bağlantı yok · tetik "Rol: …"
+// listesi → onay → type BOTH → seçim) · izin yoksa bağlantı yok · İKİ süzgeç "Yön: …" · "Fason: …" (16:43)
 // =============================================================================
 // Negatif sonda (kırmızı görüldü): modal ağacına `<select>` eklenince (7) ❌; `legsFor` Fason'da cari bacağını
 // kapatmayınca "yalnız fason" ❌; `legsFor("ALL")` cari bacağını filtresiz sorunca (1) "Yalnız Müşteri" ❌;
@@ -88,7 +88,8 @@ async function openModal(onChange: (v: unknown) => void = () => {}) {
   await within(dialog).findByText("Boyahane Ltd");
   return dialog;
 }
-const roleTrigger = (dialog: HTMLElement) => within(dialog).getByRole("combobox", { name: "Rol" });
+const yonTrigger = (dialog: HTMLElement) => within(dialog).getByRole("combobox", { name: "Yön" });
+const fasonTrigger = (dialog: HTMLElement) => within(dialog).getByRole("combobox", { name: "Fason" });
 
 describe("SupplierPickerModal v3", () => {
   it("(1) ⭐ kutuya tıkla → dialog; liste = tedarikçi + her ikisi + fason, MÜŞTERİ-ONLY YOK; 'Tümü' isteği filter[isSupplierRole]=true; kolonlar; sayfa 50", async () => {
@@ -111,36 +112,54 @@ describe("SupplierPickerModal v3", () => {
     expect(subsGetAll).toHaveBeenCalledWith(expect.objectContaining({ pageSize: 50 }));
     expect(within(dialog).getByText("Yüklü 3 kayıt")).toBeInTheDocument();
     expect(within(dialog).getByText("Tüm kayıtlar yüklendi")).toBeInTheDocument();
-    // Tetik kapalıyken süzgecin adını taşır.
-    expect(roleTrigger(dialog)).toHaveTextContent("Rol: Tümü");
+    // İki tetik kapalıyken süzgecin adını taşır; tek eksenli "Rol" kutusu YOK.
+    expect(yonTrigger(dialog)).toHaveTextContent("Yön: Tümü");
+    expect(fasonTrigger(dialog)).toHaveTextContent("Fason: Tümü");
+    expect(within(dialog).queryByRole("combobox", { name: "Rol" })).toBeNull();
   });
 
-  it("(2a) ⭐ rol FARE ile: 4 seçenek (Müşteri YOK); 'Tedarikçi' → yalnız tedarikçi rolü (isSupplierRole=true, isCustomerRole=false), fason sorulmaz, tetik 'Rol: Tedarikçi'; 'Fason' → yalnız fason", async () => {
+  it("(2a) ⭐ Yön FARE ile: 3 seçenek (Müşteri/Fason YOK); 'Tedarikçi' → yalnız tedarikçi rolü, bağsız fason bacağı sorulmaz, tetik 'Yön: Tedarikçi'", async () => {
     const dialog = await openModal();
     listCursor.mockClear();
     subsGetAll.mockClear();
-    await userEvent.click(roleTrigger(dialog));
-    expect((await screen.findAllByRole("option")).map((o) => o.textContent)).toEqual(["Tümü", "Tedarikçi", "Müşteri + Tedarikçi", "Fason"]);
+    await userEvent.click(yonTrigger(dialog));
+    expect((await screen.findAllByRole("option")).map((o) => o.textContent)).toEqual(["Tümü", "Tedarikçi", "Müşteri + Tedarikçi"]);
     await userEvent.click(screen.getByRole("option", { name: "Tedarikçi" }));
     await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", isSupplierRole: "true", isCustomerRole: "false" } })));
     await waitFor(() => expect(within(dialog).queryByText("Boyahane Ltd")).toBeNull());
     expect(within(dialog).getByText("İplik A.Ş.")).toBeInTheDocument();
     expect(within(dialog).queryByText("Yalnız Müşteri")).toBeNull();
     expect(subsGetAll).not.toHaveBeenCalled();
-    expect(roleTrigger(dialog)).toHaveTextContent("Rol: Tedarikçi");
-    listCursor.mockClear();
-    await userEvent.click(roleTrigger(dialog));
-    await userEvent.click(await screen.findByRole("option", { name: "Fason" }));
-    await within(dialog).findByText("Boyahane Ltd");
-    await waitFor(() => expect(within(dialog).queryByText("İplik A.Ş.")).toBeNull());
-    expect(listCursor).not.toHaveBeenCalled();
-    expect(roleTrigger(dialog)).toHaveTextContent("Rol: Fason");
+    expect(yonTrigger(dialog)).toHaveTextContent("Yön: Tedarikçi");
   });
 
-  it("(2b) ⭐ rol KLAVYE ile: tetik odak → ↓ (açılır) → ↓ ↓ → Enter = 'Müşteri + Tedarikçi' → iki bayrak da true", async () => {
+  it("(2c) ⭐ Fason FARE ile: 'Fason yapan' → cari bacağı isSubcontractorRole=true (fason rolü olan cari + bağsız fason bacağı); 'Yapmayan' → false ve bağsız bacak YOK", async () => {
     const dialog = await openModal();
     listCursor.mockClear();
-    roleTrigger(dialog).focus();
+    subsGetAll.mockClear();
+    await userEvent.click(fasonTrigger(dialog));
+    expect((await screen.findAllByRole("option")).map((o) => o.textContent)).toEqual(["Tümü", "Fason yapan", "Yapmayan"]);
+    await userEvent.click(screen.getByRole("option", { name: "Fason yapan" }));
+    await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", isSupplierRole: "true", isSubcontractorRole: "true" } })));
+    await within(dialog).findByText("Hem Alır Hem Satar");
+    await waitFor(() => expect(within(dialog).queryByText("İplik A.Ş.")).toBeNull());
+    await within(dialog).findByText("Boyahane Ltd");
+    expect(fasonTrigger(dialog)).toHaveTextContent("Fason: Fason yapan");
+    listCursor.mockClear();
+    subsGetAll.mockClear();
+    await userEvent.click(fasonTrigger(dialog));
+    await userEvent.click(await screen.findByRole("option", { name: "Yapmayan" }));
+    await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", isSupplierRole: "true", isSubcontractorRole: "false" } })));
+    await within(dialog).findByText("İplik A.Ş.");
+    await waitFor(() => expect(within(dialog).queryByText("Boyahane Ltd")).toBeNull());
+    expect(subsGetAll).not.toHaveBeenCalled();
+    expect(fasonTrigger(dialog)).toHaveTextContent("Fason: Yapmayan");
+  });
+
+  it("(2b) ⭐ Yön KLAVYE ile: tetik odak → ↓ (açılır) → ↓ ↓ → Enter = 'Müşteri + Tedarikçi' → iki bayrak da true", async () => {
+    const dialog = await openModal();
+    listCursor.mockClear();
+    yonTrigger(dialog).focus();
     await userEvent.keyboard("{ArrowDown}");
     await screen.findByRole("listbox");
     await userEvent.keyboard("{ArrowDown}{ArrowDown}{Enter}");
@@ -148,7 +167,7 @@ describe("SupplierPickerModal v3", () => {
     await within(dialog).findByText("Hem Alır Hem Satar");
     await waitFor(() => expect(within(dialog).queryByText("İplik A.Ş.")).toBeNull());
     expect(within(dialog).queryByText("Yalnız Müşteri")).toBeNull();
-    expect(roleTrigger(dialog)).toHaveTextContent("Rol: Müşteri + Tedarikçi");
+    expect(yonTrigger(dialog)).toHaveTextContent("Yön: Müşteri + Tedarikçi");
   });
 
   it("(3) arama sunucuya (iki bacak)", async () => {
@@ -213,7 +232,8 @@ describe("SupplierPickerModal v3", () => {
     expect(modal).not.toMatch(/<select\b|<option\b/);
     expect(modal + hook).not.toMatch(/DataTable|useReactTable|DataTablePagination|as unknown as/);
     expect((hook.match(/useInfiniteQuery\(/g) ?? []).length).toBe(1);
-    expect(modal).toMatch(/from "@\/components\/ui\/select"/);
+    // Radix Select: doğrudan ya da `LabeledSelect` (Yön × Fason) üzerinden — yerleşik <select> DEĞİL.
+    expect(modal).toMatch(/from "@\/components\/ui\/select"|from "\.\/LabeledSelect"/);
     expect(modal).toMatch(/useInfiniteScroll\(/);
   });
 

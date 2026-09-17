@@ -84,7 +84,7 @@ async function openModal(onChange: (v: unknown) => void = () => {}) {
   await within(dialog).findByText("Boyahane Ltd");
   return dialog;
 }
-const roleTrigger = (dialog: HTMLElement) => within(dialog).getByRole("combobox", { name: "Rol" });
+const yonTrigger = (dialog: HTMLElement) => within(dialog).getByRole("combobox", { name: "Yön" });
 
 describe("SupplierPickerModal v3 — dönüştürme + fason = carinin rolü", () => {
   // ── Dönüştürme kapısı: "bu müşteriden İLK KEZ alacağım" ──────────────────────────────────────────
@@ -101,7 +101,8 @@ describe("SupplierPickerModal v3 — dönüştürme + fason = carinin rolü", ()
     expect(subsGetAll).not.toHaveBeenCalled();
     expect(within(dialog).queryByText("İplik A.Ş.")).toBeNull();
     expect(within(dialog).queryByText("Boyahane Ltd")).toBeNull();
-    expect(within(dialog).queryByRole("combobox", { name: "Rol" })).toBeNull();
+    expect(within(dialog).queryByRole("combobox", { name: "Yön" })).toBeNull();
+    expect(within(dialog).queryByRole("combobox", { name: "Fason" })).toBeNull();
     expect(within(dialog).queryByRole("button", { name: "Yeni cari ekle" })).toBeNull();
     // Satır → onay (seçim HENÜZ yazılmadı)
     await userEvent.click(within(dialog).getByText("Yalnız Müşteri"));
@@ -119,7 +120,7 @@ describe("SupplierPickerModal v3 — dönüştürme + fason = carinin rolü", ()
     const again = await screen.findByRole("dialog");
     await within(again).findByText("Boyahane Ltd");
     expect(within(again).getByText("Tedarikçi seç")).toBeInTheDocument();
-    expect(within(again).getByRole("combobox", { name: "Rol" })).toBeInTheDocument();
+    expect(within(again).getByRole("combobox", { name: "Yön" })).toBeInTheDocument();
   });
 
   it("(10b) dönüştürme görünümünden 'Tedarikçi listesine dön' → tedarikçi listesi geri gelir", async () => {
@@ -129,7 +130,7 @@ describe("SupplierPickerModal v3 — dönüştürme + fason = carinin rolü", ()
     await userEvent.click(within(dialog).getByRole("button", { name: /Tedarikçi listesine dön/ }));
     await within(dialog).findByText("Boyahane Ltd");
     expect(within(dialog).queryByText("Yalnız Müşteri")).toBeNull();
-    expect(within(dialog).getByRole("combobox", { name: "Rol" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("combobox", { name: "Yön" })).toBeInTheDocument();
   });
 
   it("⭐ (11) customer:write YOKSA bağlantı hiç çizilmez (kart tipi değiştirmek cari yazma yetkisidir)", async () => {
@@ -160,8 +161,9 @@ describe("SupplierPickerModal v3 — dönüştürme + fason = carinin rolü", ()
     const dialog = await screen.findByRole("dialog");
     await within(dialog).findByText("Yalnız Müşteri");
     expect(within(dialog).queryByRole("button", { name: "Müşteri kartını tedarikçi de yap…" })).toBeNull();
-    expect(roleTrigger(dialog)).toHaveTextContent("Rol: Tümü");
-    await userEvent.click(roleTrigger(dialog));
+    expect(yonTrigger(dialog)).toHaveTextContent("Yön: Tümü");
+    expect(within(dialog).getByRole("combobox", { name: "Fason" })).toHaveTextContent("Fason: Tümü");
+    await userEvent.click(yonTrigger(dialog));
     expect((await screen.findAllByRole("option")).map((o) => o.textContent)).toEqual(["Tümü", "Müşteri", "Müşteri + Tedarikçi"]);
   });
 
@@ -192,7 +194,7 @@ describe("SupplierPickerModal v3 — dönüştürme + fason = carinin rolü", ()
     expect(subsGetAll).not.toHaveBeenCalled();
     expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", isSupplierRole: "true" } }));
     expect(within(dialog).queryByRole("button", { name: "Müşteri kartını tedarikçi de yap…" })).toBeNull();
-    await userEvent.click(roleTrigger(dialog));
+    await userEvent.click(yonTrigger(dialog));
     expect((await screen.findAllByRole("option")).map((o) => o.textContent)).toEqual(["Tümü", "Tedarikçi", "Müşteri + Tedarikçi"]);
     await userEvent.keyboard("{Escape}");
     await userEvent.click(within(dialog).getByText("İplik A.Ş."));

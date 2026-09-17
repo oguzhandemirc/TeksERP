@@ -1,30 +1,30 @@
 // =============================================================================
-// TEDARİKÇİ SEÇİCİ — araç şeridi: arama · rol (Radix Select, tetik "Rol: …") · hızlı ekleme
+// TEDARİKÇİ SEÇİCİ — araç şeridi: arama · İKİ süzgeç (Yön × Fason, `LabeledSelect`) · hızlı ekleme
 // =============================================================================
-// Rol tetiği kapalıyken de süzgecin ADINI taşır ("Rol: Tümü" / "Rol: Tedarikçi"; kullanıcı 03:27 —
-// yalnız "Tümü" yazan kutu hangi süzgeç olduğunu söylemiyordu). Açılır listede seçenek "Tümü" kalır.
-// Dönüştürme görünümünde rol ve hızlı ekleme çizilmez: liste zaten tek tip (CUSTOMER).
+// Rol modeli (kullanıcı 16:43): fason bir tür değil ROLDÜR — tek eksenli "Rol" menüsü kalktı, Cariler şeridiyle
+// aynı iki süzgeç: "Yön: Tümü" (kipin rolü taban) · "Fason: Tümü" (Fason yapan / Yapmayan). Tetik kapalıyken de
+// süzgecin adını taşır (kullanıcı 03:27). Seçim → sunucu süzgeci tek kaynaktan (`lib/partnerRoles`).
+// Dönüştürme görünümünde süzgeçler ve hızlı ekleme çizilmez: liste zaten tek küme (yalnız müşteri).
 // =============================================================================
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { LabeledSelect } from "./LabeledSelect";
+import { SUBCONTRACTOR_OPTIONS, pickerDirectionOptions, type DirectionFilter, type SubcontractorFilter } from "@/lib/partnerRoles";
 import type { SupplierParty } from "./supplierParty";
-import { roleFilterOptions, roleTriggerText, type PickerList, type PickerMode, type SupplierRoleFilter } from "./supplierPicker";
+import type { PickerMode, PickerRoleFilter } from "./supplierPicker";
 import { SupplierQuickCreate } from "./SupplierQuickCreate";
 
 interface Props {
   mode: PickerMode;
-  /** Rol seçeneklerinin okunduğu liste (kip ya da `supplier-cari`). */
-  list: PickerList;
   converting: boolean;
   searchInput: string;
   onSearchInput: (v: string) => void;
-  role: SupplierRoleFilter;
-  onRole: (r: SupplierRoleFilter) => void;
+  filters: PickerRoleFilter;
+  onFilters: (f: PickerRoleFilter) => void;
   onCreated: (party: SupplierParty) => void;
 }
 
-export function SupplierPickerToolbar({ mode, list, converting, searchInput, onSearchInput, role, onRole, onCreated }: Props) {
+export function SupplierPickerToolbar({ mode, converting, searchInput, onSearchInput, filters, onFilters, onCreated }: Props) {
   const searchLabel = converting ? "Müşteri kartı ara" : mode === "customer" ? "Müşteri ara" : "Tedarikçi ara";
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -34,18 +34,8 @@ export function SupplierPickerToolbar({ mode, list, converting, searchInput, onS
       </div>
       {!converting && (
         <>
-          <Select value={role} onValueChange={(v) => onRole(v as SupplierRoleFilter)}>
-            <SelectTrigger aria-label="Rol" className="w-52">
-              <SelectValue>{roleTriggerText(list, role)}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {roleFilterOptions(list).map((o) => (
-                <SelectItem key={o.value} value={o.value}>
-                  {o.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <LabeledSelect label="Yön" value={filters.direction} options={pickerDirectionOptions(mode)} onChange={(v) => onFilters({ ...filters, direction: v as DirectionFilter })} title="Ticari yön: kipin rolü taban; Müşteri + Tedarikçi = iki rolü de taşıyan" />
+          <LabeledSelect label="Fason" value={filters.subcontractor} options={SUBCONTRACTOR_OPTIONS} onChange={(v) => onFilters({ ...filters, subcontractor: v as SubcontractorFilter })} title="Fason iş yapan kartlar (aktif fason profili); bağsız fason firmaları yalnız Yön: Tümü'de" />
           <SupplierQuickCreate onCreated={onCreated} mode={mode} />
         </>
       )}

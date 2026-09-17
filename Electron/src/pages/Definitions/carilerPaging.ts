@@ -10,13 +10,10 @@
 // Fason bacağı (BAĞSIZ profiller — D2 göçünden sonra 0): yalnız Yön = Tümü ve Fason ≠ Yapmayan iken sorulur;
 // bağlı fason CARİ satırında "Fason" rozetiyle tek kez görünür.
 // =============================================================================
-import { directionFilters, subcontractorFilters, type DirectionFilter, type RoleServerFilters, type SubcontractorFilter } from "@/lib/partnerRoles";
+import { ROLE_FILTER_DEFAULTS, directionFilters, isRoleFilterDirty, subcontractorFilters, unlinkedSubcontractorLegWanted, type RoleFilterPair, type RoleServerFilters } from "@/lib/partnerRoles";
 
-export interface CariFilters {
-  direction: DirectionFilter;
-  subcontractor: SubcontractorFilter;
-}
-export const CARI_FILTER_DEFAULTS: CariFilters = { direction: "ALL", subcontractor: "ALL" };
+export type CariFilters = RoleFilterPair;
+export const CARI_FILTER_DEFAULTS: CariFilters = ROLE_FILTER_DEFAULTS;
 
 export interface CariQueryPlan {
   customers: boolean;
@@ -29,13 +26,13 @@ export interface CariQueryPlan {
 export function cariQueryPlan(f: CariFilters): CariQueryPlan {
   return {
     customers: true,
-    subcontractors: f.direction === "ALL" && f.subcontractor !== "NO",
+    subcontractors: unlinkedSubcontractorLegWanted(f),
     customerFilters: { ...directionFilters(f.direction), ...subcontractorFilters(f.subcontractor) },
   };
 }
 
 /** Şerit "süzgeç var mı" — temizle düğmesi ve boş metin bunu okur. */
-export const isCariFilterDirty = (f: CariFilters): boolean => f.direction !== "ALL" || f.subcontractor !== "ALL";
+export const isCariFilterDirty = isRoleFilterDirty;
 
 export interface CariMergeRow {
   kind: "CUSTOMER" | "SUBCONTRACTOR";

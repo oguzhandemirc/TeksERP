@@ -7,12 +7,13 @@
 // ROL MODELİ (2026-09-17): cari bacağı ROL BAYRAKLARIYLA süzülür (`filter[isSupplierRole]=true` …), `type`
 // okunmaz/yazılmaz; "rol seçimi → süzgeç" sorusunun tek kaynağı `lib/partnerRoles.ts` (`pickerCustomerFilters`).
 // Tedarikçi kipi MÜŞTERİ-ONLY kartı listelemez (kullanıcı 03:25); ilk alış için dönüştürme görünümü
-// (`customer-only`): kart seçilir, Tedarikçi ROLÜ eklenir, tedarikçi olarak seçilir.
+// (`customer-only`): kart seçilir, Tedarikçi ROLÜ eklenir, tedarikçi olarak seçilir. Süzgeç Cariler şeridiyle AYNI
+// iki eksen (Yön × Fason, kullanıcı 16:43) — tek eksenli "Rol" menüsü (fason bir türmüş gibi) KALKTI.
 // =============================================================================
 import type { Customer } from "@/pages/Customers/types";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 import type { SupplierParty, SupplierPartyKind } from "./supplierParty";
-import { partnerRoleLabels, partnerRoleText, pickerCustomerFilters, type DirectionFilter, type RoleServerFilters } from "@/lib/partnerRoles";
+import { ROLE_FILTER_DEFAULTS, partnerRoleLabels, partnerRoleText, pickerCustomerFilters, subcontractorFilters, unlinkedSubcontractorLegWanted, type DirectionFilter, type RoleFilterPair, type RoleServerFilters } from "@/lib/partnerRoles";
 
 export const SUPPLIER_PICKER_PAGE = 50;
 
@@ -22,30 +23,9 @@ export type PickerMode = "supplier" | "customer";
  *  tedarikçiler (`supplier-cari`: fason bacağı yok — fason profilinin "Bağlı cari" alanı). */
 export type PickerList = PickerMode | "customer-only" | "supplier-cari";
 
-/** Seçici rol kutusunun değeri — yön ya da fason bacağı. */
-export type SupplierRoleFilter = DirectionFilter | "SUBCONTRACTOR";
-
-type RoleOption = { value: SupplierRoleFilter; label: string };
-const BOTH_LABEL = `${partnerRoleLabels.customer} + ${partnerRoleLabels.supplier}`;
-/** Tedarikçi kipinde rol: Tümü · Tedarikçi · Müşteri + Tedarikçi · Fason — "Müşteri" seçeneği YOK (kural üstte). */
-export const SUPPLIER_ROLE_FILTER_OPTIONS: readonly RoleOption[] = [
-  { value: "ALL", label: "Tümü" },
-  { value: "SUPPLIER", label: partnerRoleLabels.supplier },
-  { value: "BOTH", label: BOTH_LABEL },
-  { value: "SUBCONTRACTOR", label: partnerRoleLabels.subcontractor },
-];
-/** Müşteri kipinde rol: Tümü · Müşteri · Müşteri + Tedarikçi (tedarikçi-only ve fason satışta anlamsız). */
-export const CUSTOMER_ROLE_FILTER_OPTIONS: readonly RoleOption[] = [
-  { value: "ALL", label: "Tümü" },
-  { value: "CUSTOMER", label: partnerRoleLabels.customer },
-  { value: "BOTH", label: BOTH_LABEL },
-];
-/** Yalnız cari tedarikçiler (fason profilinin "Bağlı cari" alanı): Fason seçeneği yok. */
-export const SUPPLIER_CARI_ROLE_FILTER_OPTIONS: readonly RoleOption[] = SUPPLIER_ROLE_FILTER_OPTIONS.filter((o) => o.value !== "SUBCONTRACTOR");
-export const roleFilterOptions = (list: PickerList) =>
-  list === "customer" || list === "customer-only" ? CUSTOMER_ROLE_FILTER_OPTIONS : list === "supplier-cari" ? SUPPLIER_CARI_ROLE_FILTER_OPTIONS : SUPPLIER_ROLE_FILTER_OPTIONS;
-/** Süzgeç tetiği kapalıyken de ADINI taşır: "Rol: Tümü" / "Rol: Tedarikçi" (kullanıcı 03:27; açılır listede "Tümü" kalır). */
-export const roleTriggerText = (list: PickerList, role: SupplierRoleFilter) => `Rol: ${roleFilterOptions(list).find((o) => o.value === role)?.label ?? "Tümü"}`;
+/** Seçici süzgeci — Cariler şeridiyle AYNI çift (Yön × Fason); fason bir tür değil roldür (kullanıcı 16:43). */
+export type PickerRoleFilter = RoleFilterPair;
+export const PICKER_ROLE_DEFAULTS: PickerRoleFilter = ROLE_FILTER_DEFAULTS;
 
 /** Sayfa token'ı — bacağı ve o bacaktaki konumu taşır; cari bacağı tek sorgudur (süzgeç `legsFor`tan). */
 export type PageToken = { leg: "customers"; cursor: string | null } | { leg: "subs"; page: number };
@@ -57,22 +37,26 @@ export interface PickerLegs {
   customerFilters: RoleServerFilters;
 }
 
-/** Listenin sorduğu bacaklar + cari süzgeci. Tedarikçi kipinde müşteri-only kart HİÇBİR yoldan gelmez:
- *  "Müşteri" rolü seçenek değildir; yine de gelirse "Tümü" gibi davranır (fail-closed). */
-export function legsFor(role: SupplierRoleFilter, list: PickerList = "supplier"): PickerLegs {
+/**
+ * Listenin sorduğu bacaklar + cari süzgeci. Kipin rolü tabandır (tedarikçi: `isSupplierRole=true`, müşteri:
+ * `isCustomerRole=true`); Yön kipin dışındaki seçeneği tanımaz (gelirse Tümü — fail-closed: müşteri-only asla);
+ * Fason süzgeci bayrağa iner. BAĞSIZ fason bacağı yalnız tedarikçi kipinde, Yön=Tümü ve Fason≠Yapmayan iken.
+ */
+export function legsFor(f: PickerRoleFilter, list: PickerList = "supplier"): PickerLegs {
   if (list === "customer-only") return { customers: true, subs: false, customerFilters: pickerCustomerFilters("customer", "CUSTOMER") };
-  if (list === "customer") {
-    const r: DirectionFilter = role === "CUSTOMER" || role === "BOTH" ? role : "ALL";
-    return { customers: true, subs: false, customerFilters: pickerCustomerFilters("customer", r) };
-  }
-  if (role === "SUBCONTRACTOR" && list === "supplier") return { customers: false, subs: true, customerFilters: {} };
-  // "Müşteri" tedarikçi kipinde seçenek değil — gelirse Tümü (fail-closed: müşteri-only asla, fason bacağı Tümü gibi).
-  const r: DirectionFilter = role === "SUPPLIER" || role === "BOTH" ? role : "ALL";
-  return { customers: true, subs: list === "supplier" && r === "ALL", customerFilters: pickerCustomerFilters("supplier", r) };
+  const mode: PickerMode = list === "customer" ? "customer" : "supplier";
+  const own = mode === "customer" ? "CUSTOMER" : "SUPPLIER";
+  const direction: DirectionFilter = f.direction === own || f.direction === "BOTH" ? f.direction : "ALL";
+  const norm: PickerRoleFilter = { direction, subcontractor: f.subcontractor };
+  return {
+    customers: true,
+    subs: list === "supplier" && unlinkedSubcontractorLegWanted(norm),
+    customerFilters: { ...pickerCustomerFilters(mode, direction), ...subcontractorFilters(f.subcontractor) },
+  };
 }
 
-export function firstPageToken(role: SupplierRoleFilter, list: PickerList = "supplier"): PageToken {
-  const l = legsFor(role, list);
+export function firstPageToken(f: PickerRoleFilter, list: PickerList = "supplier"): PageToken {
+  const l = legsFor(f, list);
   if (!l.customers) return { leg: "subs", page: 1 };
   return { leg: "customers", cursor: null };
 }
@@ -86,11 +70,11 @@ export interface PickerPage {
   error: boolean;
 }
 
-/** Sonraki token: aynı bacakta devam; cari bacağı bitince fason 1. sayfa (tedarikçi kipi ALL); hepsi bitince yok. */
-export function nextPageToken(page: PickerPage, role: SupplierRoleFilter, list: PickerList = "supplier"): PageToken | undefined {
+/** Sonraki token: aynı bacakta devam; cari bacağı bitince fason 1. sayfa (tedarikçi kipi, bağsız bacak istenmişse); hepsi bitince yok. */
+export function nextPageToken(page: PickerPage, f: PickerRoleFilter, list: PickerList = "supplier"): PageToken | undefined {
   if (page.next) return page.next;
   if (page.token.leg !== "customers") return undefined;
-  return legsFor(role, list).subs ? { leg: "subs", page: 1 } : undefined;
+  return legsFor(f, list).subs ? { leg: "subs", page: 1 } : undefined;
 }
 
 export interface SupplierPickerRow extends SupplierParty {

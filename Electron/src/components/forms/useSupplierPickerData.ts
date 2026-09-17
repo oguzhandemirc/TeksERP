@@ -24,13 +24,14 @@ import {
   type PageToken,
   type PickerList,
   type PickerPage,
-  type SupplierRoleFilter,
+  type PickerRoleFilter,
 } from "./supplierPicker";
 
 interface Args {
   open: boolean;
   search: string;
-  role: SupplierRoleFilter;
+  /** Yön × Fason (Cariler şeridiyle aynı çift). */
+  filters: PickerRoleFilter;
   includeInactive: boolean;
   /** Tedarikçi (SUPPLIER/BOTH cari + fason) · müşteri (yalnız cari; ALL = CUSTOMER sonra BOTH) ·
    *  müşteri-only (dönüştürme görünümü: yalnız type=CUSTOMER). */
@@ -48,7 +49,7 @@ async function fetchPage(token: PageToken, args: Args): Promise<PickerPage> {
         limit: SUPPLIER_PICKER_PAGE,
         sortBy: "name",
         sortOrder: "asc",
-        filters: { ...base, ...legsFor(args.role, args.list).customerFilters },
+        filters: { ...base, ...legsFor(args.filters, args.list).customerFilters },
         ...search,
       });
       const next = res.pagination.nextCursor;
@@ -64,12 +65,12 @@ async function fetchPage(token: PageToken, args: Args): Promise<PickerPage> {
 }
 
 export function useSupplierPickerData(args: Args) {
-  const { open, search, role, includeInactive, list = "supplier" } = args;
+  const { open, search, filters, includeInactive, list = "supplier" } = args;
   const q = useInfiniteQuery({
-    queryKey: ["supplier-picker", list, search, role, includeInactive],
+    queryKey: ["supplier-picker", list, search, filters.direction, filters.subcontractor, includeInactive],
     queryFn: ({ pageParam }) => fetchPage(pageParam, args),
-    initialPageParam: firstPageToken(role, list),
-    getNextPageParam: (last) => nextPageToken(last, role, list),
+    initialPageParam: firstPageToken(filters, list),
+    getNextPageParam: (last) => nextPageToken(last, filters, list),
     enabled: open,
     staleTime: 30_000,
   });

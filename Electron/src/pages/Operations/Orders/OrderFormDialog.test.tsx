@@ -62,7 +62,7 @@ describe("OrderFormDialog — müşteri modalı (①)", () => {
     // sunucuya iki bacak: önce CUSTOMER, sonra BOTH; fason sorgusu YOK
     await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", isCustomerRole: "true" } })));
     for (const call of listCursor.mock.calls) expect((call[0] as { filters: Record<string, string> }).filters).not.toHaveProperty("type");
-    const roleTrigger = within(dialog).getByRole("combobox", { name: "Rol" });
+    const roleTrigger = within(dialog).getByRole("combobox", { name: "Yön" });
     await userEvent.click(roleTrigger);
     const options = (await screen.findAllByRole("option")).map((o) => o.textContent);
     expect(options).toEqual(["Tümü", "Müşteri", "Müşteri + Tedarikçi"]);
