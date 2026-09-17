@@ -21,6 +21,8 @@ const createSubcontractorSchema = z.object({
   address: z.string().trim().max(500, "Adres en fazla 500 karakter olabilir").nullish(),
   isFavorite: z.boolean().optional(),
   categoryIds: z.array(z.string().uuid()).optional(),
+  // Fason = carinin rolü: bağlı cari (uuid) ya da null (bağsız). Tip/tekillik kuralı serviste.
+  customerId: z.string().uuid("Cari kimliği geçersiz").nullable().optional(),
 });
 
 const updateSubcontractorSchema = z.object({
@@ -32,6 +34,7 @@ const updateSubcontractorSchema = z.object({
   isActive: z.boolean().optional(),
   isFavorite: z.boolean().optional(),
   categoryIds: z.array(z.string().uuid()).optional(),
+  customerId: z.string().uuid("Cari kimliği geçersiz").nullable().optional(),
 });
 
 // ─── Category Schemas ───────────────────────────────────────────────────────

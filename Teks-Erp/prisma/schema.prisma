@@ -3409,6 +3409,8 @@ model Customer {
   templateRoutes   CustomerTemplateRoute[]
   standaloneLabels CustomerStandaloneLabel[]
   documentProfile  DocumentProfile?          @relation("CustomerDocProfile", fields: [documentProfileId], references: [id])
+  /// Bu carinin fason PROFİLİ (varsa) — "Fason iş yapar" rolü; bkz. Subcontractor.customerId.
+  subcontractor    Subcontractor?            @relation("SubcontractorCustomerProfile")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -5576,7 +5578,15 @@ model Subcontractor {
   /// kullanır (atanmamışsa genel ayar). Bkz. DocumentProfile.
   documentProfileId String? @db.Uuid
 
+  /// FASON = CARİNİN ROLÜ (SAP BP kalıbı, kullanıcı kararı 2026-09-17): fason kaydı
+  /// bir cari kartına bağlı PROFİLDİR; tablolar birleştirilmez, veri taşınmaz.
+  /// NULL = bağsız fason (bugünkü davranış aynen: fişte seçilir, kendi cari hesabına
+  /// yazar). `@unique`: bir cariye en çok BİR fason profili. Bağlanan cari SUPPLIER
+  /// ya da BOTH tipinde olmalı — kural serviste (`assertProfileCustomer`), DB'de değil.
+  customerId String? @unique @db.Uuid
+
   // Relations
+  customer                 Customer?                 @relation("SubcontractorCustomerProfile", fields: [customerId], references: [id])
   categories               SubcontractorToCategory[]
   dispatches               SubcontractorDispatch[]   @relation("DispatchSubcontractor")
   plannedDispatches        SubcontractorDispatch[]   @relation("DispatchPlannedSubcontractor")

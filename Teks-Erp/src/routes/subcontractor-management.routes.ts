@@ -31,8 +31,12 @@ const subCtrl = new SubcontractorManagementController();
  *       - in: query
  *         name: filter[isActive]
  *         schema: { type: string }
+ *       - in: query
+ *         name: filter[customerId]
+ *         description: "Bağlı cari (uuid ya da CSV); `null` = yalnız BAĞSIZ fasonlar (tedarikçi seçicisinin fason bacağı)"
+ *         schema: { type: string }
  *     responses:
- *       200: { description: Liste }
+ *       200: { description: Liste (her satırda bağlı cari `customer {id,code,name,type}` ya da null) }
  */
 subcontractorRouter.get("/", verifyToken, requireAnyPermission("subcontractor:read", ...MOBILE_FASON_READ, "mobile:hizli-is-emri"), subCtrl.findAll);
 
@@ -76,6 +80,7 @@ subcontractorRouter.get("/:id", verifyToken, requireAnyPermission("subcontractor
  *               address:     { type: string, nullable: true }
  *               isFavorite:  { type: boolean }
  *               categoryIds: { type: array, items: { type: string, format: uuid } }
+ *               customerId:  { type: string, format: uuid, nullable: true, description: "Bağlı cari kartı (fason = carinin rolü); cari SUPPLIER/BOTH olmalı (CUSTOMER → 400), aynı cariye ikinci profil 409; null/verilmezse bağsız" }
  *     responses:
  *       201: { description: Oluşturuldu }
  *       400: { description: Doğrulama hatası }
@@ -110,6 +115,7 @@ subcontractorRouter.post("/", verifyToken, requirePermission("subcontractor:writ
  *               isActive:    { type: boolean }
  *               isFavorite:  { type: boolean }
  *               categoryIds: { type: array, items: { type: string, format: uuid } }
+ *               customerId:  { type: string, format: uuid, nullable: true, description: "Bağlı cariyi kur/değiştir; null bağı kaldırır (profil silinmez)" }
  *     responses:
  *       200: { description: Güncellendi }
  *       404: { description: Bulunamadı }

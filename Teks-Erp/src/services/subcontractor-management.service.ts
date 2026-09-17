@@ -26,8 +26,52 @@ import {
   buildOrderByClause,
   buildPagination,
   resolveSortBy,
+  readIdCondition,
 } from "../utils/query-parser";
 import { Request } from "express";
+
+// =============================================================================
+// FASON = CARİNİN ROLÜ (kullanıcı kararı 2026-09-17, SAP BP kalıbı)
+// =============================================================================
+// `Subcontractor.customerId` fason kaydını bir cari kartına bağlar (PROFİL). Bağsız
+// fason bugünkü gibi çalışır; kural yalnız bağ kurulurken: cari VAR + AKTİF + tipi
+// SUPPLIER/BOTH (yalnız-müşteri karttan fason olmaz — önce "Müşteri + Tedarikçi"),
+// aynı cariye ikinci profil 409 (DB'de de `@unique`; yarışı P2002 → 409 karşılar).
+// Cari HESAP birleştirme bu dilimde YOK (ayrı script, dry-run → onay → --apply).
+// =============================================================================
+
+/** Liste/detay/yazma dönüşlerinde bağlı cari — hafif projeksiyon (Rol rozeti + "Bağlı cari" alanı). */
+const PROFILE_CUSTOMER_SELECT = { select: { id: true, code: true, name: true, type: true } } as const;
+const SUB_INCLUDE = { categories: { include: { category: true } }, customer: PROFILE_CUSTOMER_SELECT } as const;
+
+export const PROFILE_CUSTOMER_TYPE_MESSAGE =
+  "Yalnız müşteri tipli cari fason profili taşıyamaz — önce kartı Müşteri + Tedarikçi yapın.";
+export const PROFILE_CUSTOMER_TAKEN_MESSAGE = "Bu cari kartına bağlı bir fason profili zaten var.";
+
+/**
+ * Bağ kapısı: cari var + aktif + tipi SUPPLIER/BOTH; aynı cariye ikinci profil yok.
+ * `excludeId`: güncellemede kaydın kendi bağı tekilliğe takılmasın.
+ */
+async function assertProfileCustomer(customerId: string, excludeId?: string): Promise<void> {
+  const c = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true, name: true, type: true, isActive: true } });
+  if (!c) throw AppError.badRequest("Bağlanacak cari kartı bulunamadı.");
+  if (!c.isActive) throw AppError.badRequest(`"${c.name}" pasif durumda — pasif cariye fason profili bağlanamaz.`);
+  if (c.type === "CUSTOMER") throw AppError.badRequest(PROFILE_CUSTOMER_TYPE_MESSAGE);
+  const taken = await prisma.subcontractor.findFirst({
+    where: { customerId, ...(excludeId ? { id: { not: excludeId } } : {}) },
+    select: { id: true },
+  });
+  if (taken) throw AppError.conflict(PROFILE_CUSTOMER_TAKEN_MESSAGE);
+}
+
+/** Yarışta DB tekil index'i kazanır: P2002(customerId) → aynı 409 cümlesi. */
+function isProfileUniqueViolation(e: unknown): boolean {
+  return (
+    e instanceof Prisma.PrismaClientKnownRequestError &&
+    e.code === "P2002" &&
+    JSON.stringify((e.meta as { target?: unknown } | undefined)?.target ?? "").includes("customerId")
+  );
+}
 
 /**
  * Ad-mükerrer koruması (Türkçe-duyarsız; BaseService.assertNameNotDuplicate
@@ -426,6 +470,17 @@ export class SubcontractorManagementService {
     }
     delete (where as Record<string, unknown>).categoryId;
 
+    // customerId süzgeci ELLE okunur: `null` = BAĞSIZ fasonlar (tedarikçi seçicisinin
+    // fason bacağı — bağlı fason cari satırı olarak listelenir), aksi hâlde id/CSV.
+    const rawCustomerId = params.filters["customerId"];
+    delete (where as Record<string, unknown>).customerId;
+    if (rawCustomerId === "null") {
+      (where as Record<string, unknown>).customerId = null;
+    } else if (rawCustomerId !== undefined) {
+      const cond = readIdCondition(rawCustomerId);
+      if (cond !== null) (where as Record<string, unknown>).customerId = cond;
+    }
+
     const orderBy = buildOrderByClause(params.sortBy, params.sortOrder);
     const { skip, take } = buildPagination(params.page, params.pageSize);
 
@@ -435,9 +490,7 @@ export class SubcontractorManagementService {
         orderBy,
         skip,
         take,
-        include: {
-          categories: { include: { category: true } },
-        },
+        include: SUB_INCLUDE,
       }),
       prisma.subcontractor.count({ where }),
     ]);
@@ -457,9 +510,7 @@ export class SubcontractorManagementService {
   async findById(id: string): Promise<ApiResponse<unknown>> {
     const sub = await prisma.subcontractor.findUnique({
       where: { id },
-      include: {
-        categories: { include: { category: true } },
-      },
+      include: SUB_INCLUDE,
     });
     if (!sub) throw AppError.notFound("Fason firma bulunamadı");
     return { success: true, data: sub };
@@ -474,6 +525,8 @@ export class SubcontractorManagementService {
       address?: string | null;
       isFavorite?: boolean;
       categoryIds?: string[];
+      /** Bağlı cari (fason = carinin rolü); verilmezse/null → bağsız fason. */
+      customerId?: string | null;
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
@@ -485,6 +538,7 @@ export class SubcontractorManagementService {
       phone?: string | null;
       address?: string | null;
       isFavorite?: boolean;
+      customerId?: string | null;
       // Ad BÜYÜK normalize edilir (2026-08-19) — mükerrer kontrolü aynı
       // katlamayı kullanıyor; depolanan biçim ondan ayrışırsa kontrol kendi
       // yazdığı kaydı bulamaz.
@@ -505,6 +559,7 @@ export class SubcontractorManagementService {
     const address = normalizeAndValidateAddress(rest.address);
     if (address !== undefined) payload.address = address;
     if (typeof rest.isFavorite === "boolean") payload.isFavorite = rest.isFavorite;
+    if (rest.customerId !== undefined) payload.customerId = rest.customerId;
 
     // §18: kod tekilliği harf-duyarsız. TAM eşleşmeli aktif kayıt → 409; TAM
     // eşleşmeli pasif kayıt → diriltme; YALNIZ harf farkıyla eşleşme → 409
@@ -524,6 +579,7 @@ export class SubcontractorManagementService {
     if (payload.taxNumber != null) {
       await assertSubTaxAvailable(payload.taxNumber, existing ? existing.id : undefined);
     }
+    if (payload.customerId) await assertProfileCustomer(payload.customerId, existing ? existing.id : undefined);
 
     const sub = await prisma.$transaction(async (tx) => {
       let createdId: string;
@@ -561,8 +617,11 @@ export class SubcontractorManagementService {
       }
       return tx.subcontractor.findUnique({
         where: { id: createdId },
-        include: { categories: { include: { category: true } } },
+        include: SUB_INCLUDE,
       });
+    }).catch((e: unknown) => {
+      if (isProfileUniqueViolation(e)) throw AppError.conflict(PROFILE_CUSTOMER_TAKEN_MESSAGE);
+      throw e;
     });
 
     await AuditService.log({
@@ -574,6 +633,7 @@ export class SubcontractorManagementService {
         code: sub!.code,
         name: sub!.name,
         categoryIds,
+        ...(payload.customerId !== undefined ? { customerId: payload.customerId } : {}),
         ...(existing ? { reactivated: true } : {}),
       },
     });
@@ -598,6 +658,8 @@ export class SubcontractorManagementService {
       isActive?: boolean;
       isFavorite?: boolean;
       categoryIds?: string[]; // verilirse mevcut kategoriler tamamen değişir
+      /** Bağlı cari: uuid = bağla/değiştir · null = bağı kaldır · undefined = dokunma. */
+      customerId?: string | null;
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
@@ -606,7 +668,7 @@ export class SubcontractorManagementService {
     // F94: mutasyon öncesi before-state — audit oldData boş kalmasın.
     const before = await prisma.subcontractor.findUnique({
       where: { id },
-      select: { code: true, name: true, taxNumber: true, phone: true, address: true, isActive: true, isFavorite: true },
+      select: { code: true, name: true, taxNumber: true, phone: true, address: true, isActive: true, isFavorite: true, customerId: true },
     });
 
     // Update'te her alan tamamen optional. Gönderilmemişse undefined kalır
@@ -661,6 +723,10 @@ export class SubcontractorManagementService {
     ) {
       await assertSubTaxAvailable(rest.taxNumber, id);
     }
+    // Bağ yalnız gerçekten değişirken kapıdan geçer (aynı cariye yeniden yazmak no-op).
+    if (typeof rest.customerId === "string" && before && rest.customerId !== before.customerId) {
+      await assertProfileCustomer(rest.customerId, id);
+    }
 
     const sub = await prisma.$transaction(async (tx) => {
       await tx.subcontractor.update({ where: { id }, data: { ...rest, updatedById: userId ?? null } });
@@ -681,8 +747,11 @@ export class SubcontractorManagementService {
 
       return tx.subcontractor.findUnique({
         where: { id },
-        include: { categories: { include: { category: true } } },
+        include: SUB_INCLUDE,
       });
+    }).catch((e: unknown) => {
+      if (isProfileUniqueViolation(e)) throw AppError.conflict(PROFILE_CUSTOMER_TAKEN_MESSAGE);
+      throw e;
     });
 
     await AuditService.log({

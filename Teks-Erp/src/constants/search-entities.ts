@@ -163,7 +163,9 @@ export const SEARCH_ENTITIES: readonly SearchEntity[] = [
     permissions: ["subcontractor:read"],
     searchFields: ["name"],
     codeSearchFields: ["code", "taxNumber"],
-    select: { id: true, code: true, name: true, isActive: true },
+    // Bağlı cari (fason = carinin rolü) alt satırda görünsün — kartın hangi cariye ait olduğu
+    // paletten okunur; ayrı arama yolu AÇILMAZ (aynı ad iki grup üretirdi, çuval emsali).
+    select: { id: true, code: true, name: true, isActive: true, customer: { select: { code: true, name: true } } },
     orderBy: { name: "asc" },
     activeOnly: true,
   },

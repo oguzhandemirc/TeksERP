@@ -88,6 +88,13 @@ const nested = (v: unknown, key: string): string | null =>
  * Kova → palet satırı. Servis katmanında tutuluyor çünkü bu bir SUNUM kararı;
  * katalog "nerede aranır"ı, burası "nasıl görünür"ü söyler.
  */
+function linkedCustomerSubtitle(customer: unknown): string | null {
+  const name = nested(customer, "name");
+  if (!name) return null;
+  const code = nested(customer, "code");
+  return `Cari: ${name}${code ? ` (${code})` : ""}`;
+}
+
 const ROW_MAPPERS: Record<SearchEntityKey, RowMapper> = {
   customer: (r) => ({ id: String(r.id), title: String(r.name), subtitle: null, code: str(r.code) }),
   item: (r) => ({ id: String(r.id), title: String(r.name), subtitle: null, code: str(r.code) }),
@@ -119,7 +126,8 @@ const ROW_MAPPERS: Record<SearchEntityKey, RowMapper> = {
   subcontractor: (r) => ({
     id: String(r.id),
     title: String(r.name),
-    subtitle: null,
+    // Bağlı cari varsa "Cari: AD (KOD)" — bağsız fasonda alt satır yok (bugünkü görünüm).
+    subtitle: linkedCustomerSubtitle(r.customer),
     code: str(r.code),
   }),
   batch: (r) => ({
