@@ -56,6 +56,8 @@ const TAX_NUMBER_REGEX = /^\d{10,15}$/;
 
 /** Sunucu kuralıyla aynı cümle sınıfı: kart rolsüz olamaz. */
 export const NO_ROLE_MESSAGE = "En az bir rol seçin: Müşteri, Tedarikçi ya da Fason iş yapar.";
+/** Sunucu kuralı: fason profili Tedarikçi rolü ister (form Tedarikçi kutusunu otomatik işaretler + kilitler). */
+export const SUBCONTRACTOR_NEEDS_SUPPLIER_MESSAGE = "Fason iş yapan kart Tedarikçi rolü de taşır.";
 
 export const customerFormSchema = z.object({
   // Sınır DB kolonuyla birebir (Customer.name @db.VarChar(100)) — 101-200
@@ -95,7 +97,8 @@ export const customerFormSchema = z.object({
   // Belge şablon profili — boş = genel Belge Şablonları ayarı.
   documentProfileId: z.string().uuid().nullable().optional(),
   // Rol modeli (2026-09-17): `type` GÖNDERİLMEZ (sunucu türetir). İki ticari kutu gövdeye gider; fason rolü
-  // salt-okunur AYNA (profil bağı yazar) — "en az bir rol" kuralı üçünü birden okur.
+  // düzenlemede salt-okunur AYNA (profil bağı yazar), YENİ kartta üçüncü kutu (`subcontractorRole`: kart + profil
+  // tek işlemde doğar, kullanıcı 16:03) — "en az bir rol" kuralı üçünü birden okur.
   isCustomerRole: z.boolean(),
   isSupplierRole: z.boolean(),
   isSubcontractorRole: z.boolean(),
@@ -120,6 +123,9 @@ export const customerFormSchema = z.object({
 }).refine((v) => v.isCustomerRole || v.isSupplierRole || v.isSubcontractorRole, {
   message: NO_ROLE_MESSAGE,
   path: ["isCustomerRole"],
+}).refine((v) => !v.isSubcontractorRole || v.isSupplierRole, {
+  message: SUBCONTRACTOR_NEEDS_SUPPLIER_MESSAGE,
+  path: ["isSupplierRole"],
 });
 
 export type CustomerFormValues = z.infer<typeof customerFormSchema>;

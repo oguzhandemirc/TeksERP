@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { FormField } from "@/components/forms/FormField";
 import { partnerRoleLabels } from "@/lib/partnerRoles";
 import { useCustomerBranchesEnabled } from "@/hooks/usePricingEnabled";
-import { customerFormDefaults, customerFormSchema, type CustomerFormValues } from "./schema";
+import { customerFormDefaults, customerFormSchema, SUBCONTRACTOR_NEEDS_SUPPLIER_MESSAGE, type CustomerFormValues } from "./schema";
 import { CustomerBranchesDraftField } from "./CustomerBranchesDraftField";
 import { CustomerBranchesPanel } from "./CustomerBranchesPanel";
 import { CustomerItemAliasesPanel } from "./CustomerItemAliasesPanel";
@@ -93,6 +93,8 @@ export function CustomerFormDialog({
 
   const [confirmClose, setConfirmClose] = useState(false);
   const [activeTab, setActiveTab] = useState("info");
+  // Yeni kartta "Fason iş yapar" — gövdeye `subcontractorRole` gider (CustomersPage.buildCustomerPayload).
+  const fasonYeni = form.watch("isSubcontractorRole");
 
   useEffect(() => {
     if (open) {
@@ -138,15 +140,30 @@ export function CustomerFormDialog({
             excludeId={initial?.id}
           />
         </FormField>
-        {/* Rol modeli: tip seçimi yerine üç kutu; üçüncüsü (Fason iş yapar) profil bağıyla yazılır, burada ayna. */}
-        <FormField label="Roller" error={form.formState.errors.isCustomerRole} required hint={isEdit ? undefined : `${SUBCONTRACTOR_ROLE_LABEL} kaydettikten sonra işaretlenir`}>
+        {/* Rol modeli: tip seçimi yerine üç kutu. Yeni kartta üçüncüsü (Fason iş yapar) kart + profili TEK işlemde doğurur
+            (`subcontractorRole`); işaretliyse Tedarikçi otomatik + kilitli (sunucu kuralı). Düzenlemede üçüncü kutu aşağıdaki
+            panel (profil aç/pasif). */}
+        <FormField label="Roller" error={form.formState.errors.isCustomerRole ?? form.formState.errors.isSupplierRole} required hint={!isEdit && fasonYeni ? SUBCONTRACTOR_NEEDS_SUPPLIER_MESSAGE : undefined}>
           <div className="flex flex-wrap items-center gap-4 pt-1.5 text-sm">
             <label className="flex items-center gap-2">
               <input type="checkbox" disabled={requiredRole === "isCustomerRole"} {...form.register("isCustomerRole")} /> {partnerRoleLabels.customer}
             </label>
             <label className="flex items-center gap-2">
-              <input type="checkbox" disabled={requiredRole === "isSupplierRole"} {...form.register("isSupplierRole")} /> {partnerRoleLabels.supplier}
+              <input type="checkbox" disabled={requiredRole === "isSupplierRole" || (!isEdit && fasonYeni)} {...form.register("isSupplierRole")} /> {partnerRoleLabels.supplier}
             </label>
+            {!isEdit && (
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={fasonYeni}
+                  onChange={(e) => {
+                    form.setValue("isSubcontractorRole", e.target.checked, { shouldDirty: true });
+                    if (e.target.checked) form.setValue("isSupplierRole", true, { shouldDirty: true });
+                  }}
+                />{" "}
+                {SUBCONTRACTOR_ROLE_LABEL}
+              </label>
+            )}
           </div>
         </FormField>
       </div>

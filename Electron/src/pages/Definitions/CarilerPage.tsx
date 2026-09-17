@@ -76,7 +76,9 @@ export function CarilerPage() {
   const [page, setPage] = useState(1);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
   const [editSub, setEditSub] = useState<Subcontractor | null>(null);
-  const [createKind, setCreateKind] = useState<"CUSTOMER" | "SUBCONTRACTOR" | null>(null);
+  // Rol modeli (kullanıcı 15:50): TEK giriş "Yeni Cari" — fason profili kartın "Fason iş yapar" kutusuyla doğar;
+  // bağsız fason üretecek "Yeni Fason" yolu KALKTI. Fason formu burada yalnız DÜZENLEME için açılır.
+  const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), SEARCH_DEBOUNCE_MS);
@@ -172,16 +174,8 @@ export function CarilerPage() {
     mutationFn: (payload: Partial<Customer>) => customerService.create(payload),
     onSuccess: () => {
       toast.success("Kart oluşturuldu.");
-      setCreateKind(null);
+      setCreateOpen(false);
       void qc.invalidateQueries({ queryKey: ["customers"] });
-    },
-  });
-  const createSubM = useMutation({
-    mutationFn: (payload: Partial<Subcontractor>) => subcontractorService.create(payload),
-    onSuccess: () => {
-      toast.success("Kart oluşturuldu.");
-      setCreateKind(null);
-      void qc.invalidateQueries({ queryKey: ["subcontractors"] });
     },
   });
 
@@ -213,15 +207,9 @@ export function CarilerPage() {
         actions={
           <div className="flex gap-2">
             <PermissionGate permission="customer:write">
-              <Button size="sm" onClick={() => setCreateKind("CUSTOMER")}>
+              <Button size="sm" onClick={() => setCreateOpen(true)} title="Fason firma da buradan: kartta Fason iş yapar kutusu">
                 <Plus className="mr-1 h-4 w-4" />
                 Yeni Cari
-              </Button>
-            </PermissionGate>
-            <PermissionGate permission="subcontractor:write">
-              <Button variant="outline" size="sm" onClick={() => setCreateKind("SUBCONTRACTOR")}>
-                <Plus className="mr-1 h-4 w-4" />
-                Yeni Fason
               </Button>
             </PermissionGate>
           </div>
@@ -379,11 +367,11 @@ export function CarilerPage() {
       {/* Sahiplerinin form diyalogları — davranış eski sayfalarla BİREBİR;
           oluşturma initial=null (müşteri formu satır-içi şube editörünü açar). */}
       <CustomerFormDialog
-        open={Boolean(editCustomer) || createKind === "CUSTOMER"}
+        open={Boolean(editCustomer) || createOpen}
         onOpenChange={(v) => {
           if (!v) {
             setEditCustomer(null);
-            setCreateKind((k) => (k === "CUSTOMER" ? null : k));
+            setCreateOpen(false);
           }
         }}
         initial={editCustomer}
@@ -397,24 +385,18 @@ export function CarilerPage() {
         }}
       />
       <SubcontractorFormDialog
-        open={Boolean(editSub) || createKind === "SUBCONTRACTOR"}
+        open={Boolean(editSub)}
         onOpenChange={(v) => {
-          if (!v) {
-            setEditSub(null);
-            setCreateKind((k) => (k === "SUBCONTRACTOR" ? null : k));
-          }
+          if (!v) setEditSub(null);
         }}
         initial={editSub}
-        isSubmitting={updateSubM.isPending || createSubM.isPending}
+        isSubmitting={updateSubM.isPending}
         onSubmit={(values) => {
-          if (editSub) {
-            updateSubM.mutate({
-              id: editSub.id,
-              payload: buildSubcontractorPayload(values, editSub) as unknown as Partial<Subcontractor>,
-            });
-          } else {
-            createSubM.mutate(buildSubcontractorPayload(values, null) as unknown as Partial<Subcontractor>);
-          }
+          if (!editSub) return;
+          updateSubM.mutate({
+            id: editSub.id,
+            payload: buildSubcontractorPayload(values, editSub) as unknown as Partial<Subcontractor>,
+          });
         }}
       />
     </PageShell>

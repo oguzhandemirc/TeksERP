@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const NO_LINK_MESSAGE = "Fason profili bir cari kartına bağlı olmalı — Bağlı cari seçin ya da oluşturun.";
+
 export const subcontractorFormSchema = z.object({
   // Sınır DB kolonuyla birebir (Subcontractor.name @db.VarChar(100)) — panel
   // şeması tek doğrulama kapısı; gevşek sınır sessiz P2000 üretirdi.
@@ -30,8 +32,9 @@ export const subcontractorFormSchema = z.object({
   categoryIds: z
     .array(z.string())
     .min(1, "En az bir fason kategorisi seçilmeli"),
-  // Fason = carinin rolü: bağlı cari kartı (null = bağsız fason). Tip/tekillik kuralı sunucuda.
-  customerId: z.string().uuid().nullable(),
+  // Rol modeli (kullanıcı 15:50): fason PROFİLİ bir cari kartına BAĞLI doğar/kalır — bağsız kaydedilemez
+  // (bağsız fason üretmek modele ters; "Cari kart oluştur ve bağla" yolu kalır). Tip/tekillik kuralı sunucuda.
+  customerId: z.string({ message: NO_LINK_MESSAGE }).uuid({ message: NO_LINK_MESSAGE }),
 });
 
 export type SubcontractorFormValues = z.infer<typeof subcontractorFormSchema>;
@@ -45,5 +48,6 @@ export const subcontractorFormDefaults: SubcontractorFormValues = {
   isFavorite: false,
   documentProfileId: null,
   categoryIds: [],
-  customerId: null,
+  // Form değeri boş başlar; şema `uuid` ister — Kaydet bağsız geçmez.
+  customerId: null as unknown as string,
 };

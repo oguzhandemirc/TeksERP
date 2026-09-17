@@ -40,6 +40,13 @@ describe("cariQueryPlan — Yön × Fason (rol modeli 2026-09-17)", () => {
     expect(src).not.toMatch(/Alıcı|companyTypeLabels|\btype:\s*["'](CUSTOMER|SUPPLIER|BOTH)/);
     expect(src).toMatch(/LabeledSelect/);
   });
+
+  it("⭐ TEK giriş 'Yeni Cari': Cariler'de 'Yeni Fason' düğmesi ve bağsız fason yaratan yol YOK (fason formu yalnız düzenleme)", () => {
+    const src = readFileSync(resolve(__dirname, "CarilerPage.tsx"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    expect(src).toMatch(/Yeni Cari/);
+    expect(src).not.toMatch(/Yeni Fason|subcontractorService\.create|createKind|createSubM/);
+    expect(src).toMatch(/open=\{Boolean\(editSub\)\}/);
+  });
 });
 
 describe("mergeCariRows", () => {

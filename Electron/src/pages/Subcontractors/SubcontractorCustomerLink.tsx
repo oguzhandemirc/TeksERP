@@ -21,12 +21,14 @@ export const CREATE_AND_LINK_LABEL = "Cari kart oluştur ve bağla";
 interface Props {
   value: string | null;
   onChange: (customerId: string | null) => void;
+  /** Şema hatası (bağsız kaydedilemez) — FormField altında. */
+  error?: { message?: string };
   /** Kopyalanacak kart alanları — formun O ANKİ değerleri (kaydedilmemiş ad da kopyalanır). */
   source: { name: string; taxNumber: string; phone: string; address: string };
   disabled?: boolean;
 }
 
-export function SubcontractorCustomerLink({ value, onChange, source, disabled }: Props) {
+export function SubcontractorCustomerLink({ value, onChange, source, disabled, error }: Props) {
   const qc = useQueryClient();
   const createMut = useMutation({
     mutationFn: () =>
@@ -50,7 +52,7 @@ export function SubcontractorCustomerLink({ value, onChange, source, disabled }:
   });
   const canCreate = !value && source.name.trim().length > 0 && !disabled;
   return (
-    <FormField label="Bağlı cari" hint="Fason = carinin rolü: bağlanınca tedarikçi seçicide tek satır (cari) olur; boş = bağsız fason, bugünkü davranış">
+    <FormField label="Bağlı cari" required error={error} hint="Fason profili cari kartına bağlıdır: tedarikçi seçicide tek satır (cari) olur; bağsız kaydedilemez">
       <div className="flex flex-wrap items-center gap-2">
         <div className="min-w-[16rem] flex-1">
           <CustomerPickerField variant="supplier-cari" clearable value={value} onChange={onChange} disabled={disabled} />

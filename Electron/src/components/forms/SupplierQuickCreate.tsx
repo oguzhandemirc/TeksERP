@@ -66,6 +66,8 @@ export function SupplierQuickCreate({ onCreated, disabled, mode = "supplier" }: 
             ...customerCardPayload(v),
             isCustomerRole: v.isCustomerRole,
             isSupplierRole: v.isSupplierRole,
+            // "Fason iş yapar" işaretliyse kart + profil tek işlemde (sunucu `subcontractorRole`).
+            ...(v.isSubcontractorRole ? { subcontractorRole: true } : {}),
             isActive: true,
           } as Partial<Customer>);
         }}

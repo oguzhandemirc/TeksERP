@@ -41,7 +41,7 @@ export function SubcontractorFormDialog({
         isFavorite: initial.isFavorite,
         documentProfileId: initial.documentProfileId ?? null,
         categoryIds: initial.categories.map((c) => c.categoryId),
-        customerId: initial.customerId ?? null,
+        customerId: (initial.customerId ?? null) as unknown as string,
       }
     : subcontractorFormDefaults;
 
@@ -157,6 +157,7 @@ export function SubcontractorFormDialog({
               <SubcontractorCustomerLink
                 value={field.value ?? null}
                 onChange={field.onChange}
+                error={form.formState.errors.customerId}
                 source={{ name: form.watch("name") ?? "", taxNumber: form.watch("taxNumber") ?? "", phone: form.watch("phone") ?? "", address: form.watch("address") ?? "" }}
                 disabled={isSubmitting}
               />

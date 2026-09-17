@@ -1,13 +1,16 @@
 // =============================================================================
 // BEKÇİ — Cari kartı formu ROL MODELİ (D3, 2026-09-17): üç kutu · gövde bayrak · `type` GÖNDERİLMEZ · en az bir rol
 // =============================================================================
-// ① yeni kart: Müşteri işaretli gelir, Tedarikçi boş, "Fason iş yapar" kaydettikten sonra (ipucu); Kaydet →
-//    payload `isCustomerRole/isSupplierRole`, `type` YOK
+// ① yeni kart: ÜÇ kutu (Müşteri işaretli, Tedarikçi boş, Fason iş yapar boş); Kaydet → payload
+//    `isCustomerRole/isSupplierRole`, `type` YOK, `subcontractorRole` YOK (fason işaretsiz)
+// ①b yeni kartta "Fason iş yapar" işaretle → Tedarikçi otomatik işaretli + kilitli (ipucu); Kaydet → payload
+//    `subcontractorRole:true` (kart + profil tek işlem, kullanıcı 16:03)
 // ② `requiredRole` (hızlı ekleme): o kutu işaretli + kilitli; öbürü serbest
 // ③ düzenleme: kutular kartın bayraklarından; "Fason iş yapar" paneli var
-// ④ şema: iki ticari kutu boş ve fason rolü yok → "En az bir rol" hatası; fason rolü varsa geçer
+// ④ şema: hiç rol → "En az bir rol"; fason işaretli ama Tedarikçi değil → "Tedarikçi rolü de taşır"; fason+tedarikçi geçer
 // ⑤ kaynak taraması: formda `EnumSelect<CompanyType>` / `companyTypeLabels` yok; başlık "Yeni Cari"
-// Negatif sonda (kırmızı görüldü): payload'a `type: v.type` geri konunca ① ❌; şema refine kaldırılınca ④ ❌.
+// Negatif sonda (kırmızı görüldü): payload'a `type: v.type` geri konunca ① ❌; şema refine kaldırılınca ④ ❌;
+// payload'dan `subcontractorRole` düşünce ①b ❌.
 import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -16,7 +19,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import { CustomerFormDialog } from "./CustomerFormDialog";
 import { buildCustomerPayload } from "./CustomersPage";
-import { NO_ROLE_MESSAGE, customerFormDefaults, customerFormSchema } from "./schema";
+import { NO_ROLE_MESSAGE, SUBCONTRACTOR_NEEDS_SUPPLIER_MESSAGE, customerFormDefaults, customerFormSchema } from "./schema";
 import type { Customer } from "./types";
 
 // Ağır alt paneller/uyarılar stub: bu bekçi yalnız rol kutularını ve gövdeyi ölçer.
@@ -35,13 +38,14 @@ vi.mock("@/hooks/usePricingEnabled", () => ({ useCustomerBranchesEnabled: () => 
 const box = (name: string) => screen.getByRole("checkbox", { name });
 
 describe("CustomerFormDialog — rol modeli", () => {
-  it("⭐ ① yeni kart: Müşteri işaretli, Tedarikçi boş; Kaydet → gövde bayrak, `type` YOK", async () => {
+  it("⭐ ① yeni kart: ÜÇ kutu — Müşteri işaretli, Tedarikçi ve Fason iş yapar boş; Kaydet → gövde bayrak, `type`/`subcontractorRole` YOK", async () => {
     const onSubmit = vi.fn();
     renderWithProviders(<CustomerFormDialog open onOpenChange={() => {}} onSubmit={onSubmit} />);
     expect(screen.getByText("Yeni Cari")).toBeInTheDocument();
     expect(box("Müşteri")).toBeChecked();
     expect(box("Tedarikçi")).not.toBeChecked();
-    expect(screen.getByText(/Fason iş yapar kaydettikten sonra/)).toBeInTheDocument();
+    expect(box("Fason iş yapar")).not.toBeChecked();
+    expect(screen.queryByText(/kaydettikten sonra/)).toBeNull();
     expect(screen.queryByTestId("fason-paneli")).toBeNull();
     await userEvent.type(document.getElementById("name") as HTMLInputElement, "Boya A.Ş.");
     await userEvent.click(box("Tedarikçi"));
@@ -53,6 +57,27 @@ describe("CustomerFormDialog — rol modeli", () => {
     expect(payload).toMatchObject({ isCustomerRole: true, isSupplierRole: true });
     expect(payload).not.toHaveProperty("type");
     expect(payload).not.toHaveProperty("isSubcontractorRole");
+    expect(payload).not.toHaveProperty("subcontractorRole");
+  });
+
+  it("⭐ ①b yeni kartta 'Fason iş yapar' → Tedarikçi otomatik + kilitli, ipucu; Kaydet → payload subcontractorRole:true (kart + profil tek işlem)", async () => {
+    const onSubmit = vi.fn();
+    renderWithProviders(<CustomerFormDialog open onOpenChange={() => {}} onSubmit={onSubmit} />);
+    await userEvent.type(document.getElementById("name") as HTMLInputElement, "Boyahane A.Ş.");
+    await userEvent.click(box("Fason iş yapar"));
+    expect(box("Fason iş yapar")).toBeChecked();
+    expect(box("Tedarikçi")).toBeChecked();
+    expect(box("Tedarikçi")).toBeDisabled();
+    expect(screen.getByText(SUBCONTRACTOR_NEEDS_SUPPLIER_MESSAGE)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    const v = onSubmit.mock.calls[0]![0];
+    expect(v).toMatchObject({ isCustomerRole: true, isSupplierRole: true, isSubcontractorRole: true });
+    const payload = buildCustomerPayload(v, null) as Record<string, unknown>;
+    expect(payload).toMatchObject({ isSupplierRole: true, subcontractorRole: true });
+    expect(payload).not.toHaveProperty("isSubcontractorRole");
+    // Düzenlemede (initial var) subcontractorRole GİTMEZ — profil paneli yazar.
+    expect(buildCustomerPayload(v, { id: "c1", code: "K" } as Customer)).not.toHaveProperty("subcontractorRole");
   });
 
   it("⭐ ② requiredRole=isSupplierRole (tedarikçi seçicisinden): Tedarikçi işaretli + kilitli, Müşteri boş ve serbest", () => {
@@ -74,12 +99,15 @@ describe("CustomerFormDialog — rol modeli", () => {
     expect(screen.getByTestId("fason-paneli")).toHaveAttribute("data-supplier", "false");
   });
 
-  it("⭐ ④ şema: hiç rol → 'En az bir rol'; yalnız fason rolü → geçer; yalnız Tedarikçi → geçer", () => {
+  it("⭐ ④ şema: hiç rol → 'En az bir rol'; fason işaretli ama Tedarikçi değil → 'Tedarikçi rolü de taşır'; fason + tedarikçi → geçer; yalnız Tedarikçi → geçer", () => {
     const base = { ...customerFormDefaults, name: "X" };
     const none = customerFormSchema.safeParse({ ...base, isCustomerRole: false, isSupplierRole: false, isSubcontractorRole: false });
     expect(none.success).toBe(false);
     expect(none.success ? "" : none.error.issues.map((i) => i.message).join()).toContain(NO_ROLE_MESSAGE);
-    expect(customerFormSchema.safeParse({ ...base, isCustomerRole: false, isSupplierRole: false, isSubcontractorRole: true }).success).toBe(true);
+    const fasonsuzTed = customerFormSchema.safeParse({ ...base, isCustomerRole: false, isSupplierRole: false, isSubcontractorRole: true });
+    expect(fasonsuzTed.success).toBe(false);
+    expect(fasonsuzTed.success ? "" : fasonsuzTed.error.issues.map((i) => i.message).join()).toContain(SUBCONTRACTOR_NEEDS_SUPPLIER_MESSAGE);
+    expect(customerFormSchema.safeParse({ ...base, isCustomerRole: false, isSupplierRole: true, isSubcontractorRole: true }).success).toBe(true);
     expect(customerFormSchema.safeParse({ ...base, isCustomerRole: false, isSupplierRole: true, isSubcontractorRole: false }).success).toBe(true);
   });
 

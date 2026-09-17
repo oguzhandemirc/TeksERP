@@ -17,7 +17,7 @@ interface BranchCreatePayload {
   notes: string | null;
 }
 
-type CustomerWritePayload = Partial<Customer> & { branches?: BranchCreatePayload[] };
+type CustomerWritePayload = Partial<Customer> & { branches?: BranchCreatePayload[]; subcontractorRole?: true };
 
 export const buildCustomerPayload = (v: CustomerFormValues, initial: Customer | null): CustomerWritePayload => {
   // Şubeler yalnız OLUŞTURMADA gönderilir (müşteri + şubeler tek transaction'da doğar);
@@ -31,9 +31,11 @@ export const buildCustomerPayload = (v: CustomerFormValues, initial: Customer | 
     name: v.name,
     taxNumber: v.taxNumber || null,
     ...customerCardPayload(v),
-    // Rol modeli: `type` gönderilmez (sunucu türetir); fason rolü profil bağından — gövdede yok.
+    // Rol modeli: `type` gönderilmez (sunucu türetir). Fason rolü bayrağı gövdede YOK (profil bağı türetir);
+    // YENİ kartta "Fason iş yapar" → `subcontractorRole:true` (sunucu kart + profili tek tx'te doğurur).
     isCustomerRole: v.isCustomerRole,
     isSupplierRole: v.isSupplierRole,
+    ...(!initial && v.isSubcontractorRole ? { subcontractorRole: true } : {}),
     isActive: v.isActive,
     ...(branchRows.length > 0
       ? {
