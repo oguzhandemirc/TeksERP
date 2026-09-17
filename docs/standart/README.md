@@ -23,6 +23,7 @@ Karar hikâyeleri (tarih, ölçüm, hangi alternatif neden reddedildi) `docs/his
 | [`ILKELER.md`](ILKELER.md) | Katman-üstü ilkeler, isimlendirme, boyut felsefesi, kural yazma ölçütü |
 | [`BACKEND.md`](BACKEND.md) | Route / controller / service / helper / reports / jobs — katman sözleşmesi (§1–§2), servis metodu anatomisi (§3), biçim (§4), projeksiyon ve tip (§6), adlandırma (§7), boyut (§11) |
 | [`BACKEND-HTTP.md`](BACKEND-HTTP.md) | Backend'in **HTTP kenarı**: zarf ve hata şekli (§5), kapılar (§8), Zod (§9), Swagger (§10) — 2026-09-14'te `BACKEND.md`'den AİLE çizgisiyle bölündü, §numaraları korundu |
+| [`MASTER-VERI-TASARIMI.md`](MASTER-VERI-TASARIMI.md) | Master veri (ana veri) modeli tasarlarken beş kapı: kimlik ≠ rol · finans kimliği tek · operasyon verisi profile · çapraz-tablo tekillik · geriye dönüklük cümlesi (doğuş: fason tablosu vakası) |
 | [`VERITABANI.md`](VERITABANI.md) | Model şablonu (§1), model sınıfları (§2), künye FK (§3), index (§4), enum (§5), `///` gerekçe (§6), soft delete (§9), Decimal/zaman (§10), boyut (§13) |
 | [`VERITABANI-MIGRATION.md`](VERITABANI-MIGRATION.md) | Migration yazımı (§7) ve şema-dışı nesne envanteri (§8) — 2026-09-13'te `VERITABANI.md`'den bölündü, §7/§8 numaraları çapalar kopmasın diye korundu |
 | [`ELECTRON.md`](ELECTRON.md) | Panel: sayfa kalıbı, servis/şema/kolon dosyaları, izin aynası, boyut |
