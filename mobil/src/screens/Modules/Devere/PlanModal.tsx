@@ -3,29 +3,30 @@
 // =============================================================================
 // Alanlar backend `createSchema` ile birebir (`beamPayload.buildPlanPayload`). Plan
 // DÜZENLEME tablette yok: yanlış plan silinir (④ sınıfı) ve yeniden açılır.
+// Kart iskeleti `DevereSheet` (dört modal ortak) — genişlik/zemin/alt çubuk orada.
 // =============================================================================
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View } from 'react-native';
 import { Text, Button, TouchableRipple, SegmentedButtons } from 'react-native-paper';
-import AppModal from '../../../components/AppModal';
 import NumpadInput from '../../../components/NumpadInput';
 import ModalTextInput from '../../../components/ModalTextInput';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
-import { colors, spacing, radius, typography } from '../../../theme';
 import type { WarpBeamOrigin } from '../../../services/warpBeam.service';
 import { ORIGIN_LABEL, theoreticalKg } from './beamPayload';
+import DevereSheet, { sheet } from './devereSheet';
 import type { DevereScreenState } from './useDevereScreen';
 import { partnerRoleLabel } from '../../../lib/partnerRole';
 
 type PickerKind = 'spec' | 'subcontractor' | 'supplier' | null;
 
-export function Field({ label, value, placeholder, onPress }: { label: string; value: string; placeholder: string; onPress: () => void }) {
+export function Field({ label, value, placeholder, onPress, hint }: { label: string; value: string; placeholder: string; onPress: () => void; hint?: string }) {
   return (
     <View>
-      <Text style={styles.label}>{label}</Text>
-      <TouchableRipple onPress={onPress} style={styles.field} accessibilityRole="button">
-        <Text style={value ? styles.fieldText : styles.fieldPlaceholder}>{value || placeholder}</Text>
+      <Text style={sheet.label}>{label}</Text>
+      <TouchableRipple onPress={onPress} style={sheet.field} accessibilityRole="button">
+        <Text style={value ? sheet.fieldText : sheet.fieldPlaceholder}>{value || placeholder}</Text>
       </TouchableRipple>
+      {hint ? <Text style={sheet.hint}>{hint}</Text> : null}
     </View>
   );
 }
@@ -48,53 +49,66 @@ export default function PlanModal({ state }: { state: DevereScreenState }) {
   const nominal = spec ? theoreticalKg(spec.endsCount, spec.denier, Number(f.plannedLengthM.replace(',', '.'))) : null;
 
   return (
-    <AppModal visible={state.modal?.kind === 'plan'} onDismiss={state.closeModal} position="center">
-      <ScrollView keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Yeni levent planla</Text>
-        <Field label="Çözgü kartı" value={spec ? `${spec.code} — ${spec.name}` : ''} placeholder="Seçilmedi" onPress={() => setPicker('spec')} />
-        {spec && spec.denier == null ? <Text style={styles.warn}>Bu kartın ipliğinde denye yok — sarımda nominal kg hesaplanamaz (kartı düzelttirin).</Text> : null}
-        <Text style={styles.label}>Planlanan metre</Text>
-        <NumpadInput value={f.plannedLengthM} onChangeText={(t) => state.setPlanForm({ ...f, plannedLengthM: t })} allowDecimal numpadMaxLength={8} numpadLabel="Planlanan metre" placeholder="ör. 1200" style={styles.input} />
-        {nominal != null ? <Text style={styles.hint}>{`Nominal ≈ ${nominal} kg (tel × denye × m / 9.000.000)`}</Text> : null}
-        <Text style={styles.label}>Köken</Text>
-        <View>
-          <SegmentedButtons
-            value={f.originKind}
-            onValueChange={(v) => state.setPlanForm({ ...f, originKind: v as WarpBeamOrigin, subcontractorId: null, supplierId: null })}
-            buttons={(['IN_HOUSE', 'SUBCONTRACT', 'PURCHASED'] as WarpBeamOrigin[]).map((k) => ({ value: k, label: ORIGIN_LABEL[k] }))}
-          />
-        </View>
-        {f.originKind !== 'IN_HOUSE' ? (
-          <Field label={f.originKind === 'PURCHASED' ? 'Fasoncu (tedarikçi yerine)' : 'Fasoncu'} value={subName} placeholder="Seçilmedi" onPress={() => setPicker('subcontractor')} />
-        ) : null}
-        {f.originKind === 'PURCHASED' ? <Field label="Tedarikçi (cari)" value={supName} placeholder="Seçilmedi" onPress={() => setPicker('supplier')} /> : null}
-        <Text style={styles.label}>Metal levent no (isteğe bağlı)</Text>
-        <ModalTextInput value={f.physicalBeamNo} onChangeText={(t) => state.setPlanForm({ ...f, physicalBeamNo: t })} maxLength={32} placeholder="ör. L-12" style={styles.input} dense />
-        <Text style={styles.label}>Not (isteğe bağlı)</Text>
-        <ModalTextInput value={f.notes} onChangeText={(t) => state.setPlanForm({ ...f, notes: t })} maxLength={500} placeholder="—" style={styles.input} dense />
-        {state.formError ? <Text style={styles.error}>{state.formError}</Text> : null}
-        <View style={styles.actions}>
+    <DevereSheet
+      visible={state.modal?.kind === 'plan'}
+      onDismiss={state.closeModal}
+      title="Yeni levent planla"
+      subtitle="Plan tablette düzenlenmez — yanlış plan silinir, yeniden açılır."
+      footer={
+        <>
           <Button onPress={state.closeModal} disabled={state.busy}>Vazgeç</Button>
           <Button mode="contained" onPress={state.submitPlan} loading={state.busy} disabled={state.busy || !state.isOnline}>Planla</Button>
+        </>
+      }
+      overlays={
+        <>
+          <PickerModal visible={picker === 'spec'} title="Çözgü kartı seç" options={specOptions} selectedValue={f.warpSpecId ?? ''} loading={state.context.isLoading} emptyText="Aktif çözgü kartı yok — panelden tanımlanır." onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, warpSpecId: v }); setPicker(null); }} />
+          <PickerModal visible={picker === 'subcontractor'} title="Fasoncu seç" options={subOptions} selectedValue={f.subcontractorId ?? ''} loading={state.context.isLoading} onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, subcontractorId: v, supplierId: null }); setPicker(null); }} />
+          <PickerModal visible={picker === 'supplier'} title="Tedarikçi seç" options={supOptions} selectedValue={f.supplierId ?? ''} loading={state.context.isLoading} onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, supplierId: v, subcontractorId: null }); setPicker(null); }} />
+        </>
+      }
+    >
+      <View style={sheet.row}>
+        <View style={sheet.col}>
+          <Field label="Çözgü kartı" value={spec ? `${spec.code} — ${spec.name}` : ''} placeholder="Seçilmedi" onPress={() => setPicker('spec')} />
+          {spec && spec.denier == null ? <Text style={sheet.warn}>Bu kartın ipliğinde denye yok — sarımda nominal kg hesaplanamaz (kartı düzelttirin).</Text> : null}
         </View>
-      </ScrollView>
-
-      <PickerModal visible={picker === 'spec'} title="Çözgü kartı seç" options={specOptions} selectedValue={f.warpSpecId ?? ''} loading={state.context.isLoading} emptyText="Aktif çözgü kartı yok — panelden tanımlanır." onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, warpSpecId: v }); setPicker(null); }} />
-      <PickerModal visible={picker === 'subcontractor'} title="Fasoncu seç" options={subOptions} selectedValue={f.subcontractorId ?? ''} loading={state.context.isLoading} onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, subcontractorId: v, supplierId: null }); setPicker(null); }} />
-      <PickerModal visible={picker === 'supplier'} title="Tedarikçi seç" options={supOptions} selectedValue={f.supplierId ?? ''} loading={state.context.isLoading} onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, supplierId: v, subcontractorId: null }); setPicker(null); }} />
-    </AppModal>
+        <View style={sheet.col}>
+          <Text style={sheet.label}>Planlanan metre</Text>
+          <NumpadInput value={f.plannedLengthM} onChangeText={(t) => state.setPlanForm({ ...f, plannedLengthM: t })} allowDecimal numpadMaxLength={8} numpadLabel="Planlanan metre" placeholder="ör. 1200" style={sheet.input} />
+          {nominal != null ? <Text style={sheet.hint}>{`Nominal ≈ ${nominal} kg (tel × denye × m / 9.000.000)`}</Text> : null}
+        </View>
+      </View>
+      <Text style={sheet.label}>Köken</Text>
+      {/* Tam genişlik + küçük yazı: üç etiket kesilmez ("İçeri… Fas… Haz…" yasak). */}
+      <SegmentedButtons
+        value={f.originKind}
+        onValueChange={(v) => state.setPlanForm({ ...f, originKind: v as WarpBeamOrigin, subcontractorId: null, supplierId: null })}
+        buttons={(['IN_HOUSE', 'SUBCONTRACT', 'PURCHASED'] as WarpBeamOrigin[]).map((k) => ({ value: k, label: ORIGIN_LABEL[k], labelStyle: sheet.segmentLabel }))}
+      />
+      {f.originKind !== 'IN_HOUSE' ? (
+        <View style={sheet.row}>
+          <View style={sheet.col}>
+            <Field label={f.originKind === 'PURCHASED' ? 'Fasoncu (tedarikçi yerine)' : 'Fasoncu'} value={subName} placeholder="Seçilmedi" onPress={() => setPicker('subcontractor')} />
+          </View>
+          {f.originKind === 'PURCHASED' ? (
+            <View style={sheet.col}>
+              <Field label="Tedarikçi (cari)" value={supName} placeholder="Seçilmedi" onPress={() => setPicker('supplier')} />
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+      <View style={sheet.row}>
+        <View style={sheet.col}>
+          <Text style={sheet.label}>Metal levent no (isteğe bağlı)</Text>
+          <ModalTextInput value={f.physicalBeamNo} onChangeText={(t) => state.setPlanForm({ ...f, physicalBeamNo: t })} maxLength={32} placeholder="ör. L-12" style={sheet.input} dense />
+        </View>
+        <View style={sheet.col}>
+          <Text style={sheet.label}>Not (isteğe bağlı)</Text>
+          <ModalTextInput value={f.notes} onChangeText={(t) => state.setPlanForm({ ...f, notes: t })} maxLength={500} placeholder="—" style={sheet.input} dense />
+        </View>
+      </View>
+      {state.formError ? <Text style={sheet.error}>{state.formError}</Text> : null}
+    </DevereSheet>
   );
 }
-
-const styles = StyleSheet.create({
-  title: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.text, marginBottom: spacing.sm },
-  label: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: typography.weight.semibold, marginTop: spacing.sm },
-  field: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, backgroundColor: colors.surface, minHeight: 48, justifyContent: 'center' },
-  fieldText: { color: colors.text },
-  fieldPlaceholder: { color: colors.textMuted },
-  input: { backgroundColor: colors.surface },
-  hint: { fontSize: typography.size.sm, color: colors.textSecondary, marginTop: spacing.xs },
-  warn: { fontSize: typography.size.sm, color: colors.warningText, marginTop: spacing.xs },
-  error: { color: colors.dangerText, marginTop: spacing.sm },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.md },
-});
