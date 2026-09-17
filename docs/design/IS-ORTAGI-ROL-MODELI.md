@@ -49,6 +49,23 @@ yaşıyor. Sonuç:
 - **Tombstone profile kart ÜRETİLMEZ.** `mergedIntoId` dolu profil bir birleştirme artığıdır; ona
   kart açmak, birleştirmeyle kapatılmış bir kimliği geri diriltirdi.
 
+### 2.2 HESABIN TEK YAZARI — ölçülen açık delik (faz 2, dilim A)
+
+Göç hesapları karta topluyor; ama hesabı DOĞURAN yol hâlâ fason bacağını kabul ediyor.
+`ensureCariAccountTx` (`services/helpers/finance.helper.ts`) `subcontractorId` aldığında
+`kind: SUBCONTRACTOR` ile YENİ hesap açıyor ve bu yol beş çağrı noktasından ulaşılabilir
+(doğrulandı 2026-09-17: `invoice.service` ×3 — alış/mal kabul faturası · `payment.service`
+· `cheque.service` ×2 — karşı taraf ve ciro).
+
+⇒ **Göçten sonra bağlı bir fasona kesilen İLK fatura ikinci hesabı yeniden doğurur** ve "tek cari
+hesap" vaadi sessizce bozulur. Göç bunu ONARAMAZ: göç geçmişi toplar, geleceği kapatmaz.
+
+**Kural (dilim A, 1.3.2'ye ZORUNLU):** hesap açan tek yazar, tarafı ÖNCE ÇÖZER — gelen
+`subcontractorId` profilin kartına (`customerId`) çevrilir ve hesap KARTA açılır/bulunur
+(`kind: CUSTOMER`). Profil bağsızsa (göç koşmamış kurulum) eski yol aynen çalışır: varsayılan =
+bugünkü davranış. XOR CHECK'lere dokunulmaz; ekstre, yaşlandırma ve raporlar `cariId` ile
+çalıştığı için değişmez. Bekçi adı dilim inince buraya yazılır.
+
 ## 3. Saha güvencesi — bu fazın değişmezleri
 
 - **Şema yalnız EKLER.** Bayrak kolonları eklenir; `type` kalır; `subcontractorId` kolonu kalır.
@@ -57,6 +74,9 @@ yaşıyor. Sonuç:
   kayıt tek tek listelenir ve **kullanıcı koşar** (canlıda).
 - **Eski istemci kırılmaz** — `type` hâlâ dolu ve doğru.
 - **Prova kapısı** (§6) geçilmeden paket çıkmaz.
+- **Kolon/tablo/CHECK KALDIRMA bu sürümde YOK.** Faz 2'nin kuralı "yeni yazım kapatılır, okuma
+  kalır": yazma yolu fail-closed olur, okuyan her şey geriye dönük çalışmaya devam eder. Kaldırma
+  ayrı fazdır ve koşulu ÖLÇÜLÜR (§7).
 
 ## 4. Ölçülen zemin (saha dump'ı, 15 Eylül kopyası)
 
@@ -117,10 +137,43 @@ tekrarlanır: `migrate deploy` → dry-run (çıktı saklanır) → kullanıcı 
 0 değişiklik → panel/tablet paketi. Koşan KULLANICIDIR; reçete `docs/kurallar/surum-yayin.md`,
 runbook `docs/ops/IS-ORTAGI-ROL-GOCU.md`.
 
-## 7. Sonraki faz (bu fazın DIŞI)
+## 7. KALDIRMA FAZI (sonraki sürüm, 1.3.3+) — koşulu ÖLÇÜLÜR
 
-- `CariAccount.subcontractorId` kolonu ve iki CHECK (`cari_accounts_party_xor`,
-  `cari_accounts_kind_matches_party`) KALDIRILIR — ancak bu fazın göçü sahada koşup hesaplar tek
-  tarafa toplandıktan SONRA.
-- `Subcontractor.customerId` NOT NULL'a çekilir (bu fazda bağsız profil hâlâ meşru).
-- Kod öneki sorusu (`MUS…` tip bazlı önek) AYRI karardır; bu faz kod üretimine dokunmaz.
+Bu fazda hiçbir kolon, tablo ya da CHECK KALDIRILMAZ. Kaldırma ayrı bir sürümün işidir ve
+**açılış koşulu bir karar değil bir ÖLÇÜMDÜR.**
+
+### 7.1 Açılış koşulu — dört yeşil (hepsi aynı koşumda)
+
+`scripts/test_rol_modeli_kalinti.ts` (d9 yazacak; DB'li, ÜÇ SONUÇLU) fabrikanın dump KOPYASINDA
+koşar ve dördünü birden ölçer:
+
+1. **Bağsız fason profili = 0** (tombstone hariç — birleştirme artığına kart üretilmiyor, §2.1).
+2. **`cari_accounts.subcontractorId IS NOT NULL` = 0** — fason tarafına bağlı hesap kalmamış.
+3. **`Customer.type ≠ resolveCompanyType(roller)` = 0** — türetme ile saklanan değer ayrışmamış.
+4. **Sahada eski istemci = 0** — son 30 günde panel < 1.3.2 ya da tablet < 1.0.7 görülmemiş.
+   ⚠️ Oturum/cihaz kaydında SÜRÜM ALANI yoksa bu kol **ÖLÇÜLEMEDİ**dir: kırmızı değil, ⏭ beyanlı —
+   ve o hâlde **kaldırma fazı AÇILMAZ**, çünkü "görülmedi" ile "yok" aynı şey değildir. Alanı
+   eklemek kaldırmanın ÖN KOŞULUDUR.
+
+Dördü yeşil değilse faz açılmaz; üç yeşil + bir ölçülemedi de AÇMAZ.
+
+### 7.2 Migration sırası — üç AYRI migration, her biri kopyada prova
+
+Sıra bağlayıcıdır; her adım bir öncekinin bıraktığı durumu varsayar. Her migration
+`migrate dev --create-only` ile üretilir, çıktıdaki `DropForeignKey` satırları SİLİNİR ve fabrika
+dump'ının TAZE kopyasında prova edilir (restore → deploy → bekçiler → profil boot).
+
+| # | Adım | Eski istemci ne yapar |
+|---|---|---|
+| 1 | `cari_accounts`: önce `customerId NOT NULL`, sonra iki CHECK (`cari_accounts_party_xor`, `cari_accounts_kind_matches_party`) kaldırılır ve `subcontractorId` kolonu DROP | Hesabı `cariId` ile okuyan her istemci etkilenmez; yalnız `subcontractorId` alanını GÖNDEREN bir yazıcı kalmışsa 400 alır — koşul ②, böyle bir yazıcının sahada olmadığını ölçer |
+| 2 | `Customer.type` kolonu DROP + `CompanyType` enum DROP | ⚠️ EN RİSKLİ ADIM: `type` okuyan eski panel/tablet alanı `undefined` görür ve rozet/etiket boş kalır. Bu yüzden ÖN KOŞUL yalnız ④ değil, **panel ve mobilin `type` okumayı BIRAKTIĞININ ölçülmesidir** (faz 2 dilim C) |
+| 3 | `Subcontractor.customerId NOT NULL` | Bağsız profil yaratmaya çalışan eski istemci 400 alır; koşul ①, sahada bağsız profil kalmadığını ölçer |
+
+### 7.3 Kaldırılmayacak olan
+
+**`Subcontractor` tablosu KALIR.** Tam birleşme (profili `Customer`a eritmek) KULLANICI TARAFINDAN
+REDDEDİLDİ (2026-09-17): profil 12 operasyon ilişkisi taşıyor ve 27 panel + 27 mobil dosya okuyor;
+kimliği değiştirmek fason sevk/kabul geçmişini ve levent/dokuma/kartela bağlarını yeniden yazmak
+demekti. Rol modeli bunu zaten gerektirmiyor — kart KİMLİK, profil ROL VERİSİDİR.
+
+Kod öneki sorusu (`MUS…` tip bazlı önek) AYRI karardır; bu faz da kod üretimine dokunmaz.
