@@ -2,7 +2,8 @@
 // BEKÇİ — FASON = CARİNİN ROLÜ: `Subcontractor.customerId` profili (kullanıcı kararı 2026-09-17)
 // =============================================================================
 // §1 bağ kur (create/update) → liste/detay `customer {id,code,name,type}`; cari detayı `subcontractor {id,isActive}`
-// §2 yalnız-müşteri (CUSTOMER) cariye bağ → 400 "önce Müşteri + Tedarikçi" · pasif cari → 400 · yok → 400
+// §2 Tedarikçi ROLÜ olmayan (yalnız müşteri) cariye bağ → 400 "önce Tedarikçi rolü ekleyin" · pasif cari → 400 · yok → 400
+//    (rol modeli 2026-09-17: kural `type` değil `isSupplierRole` okur)
 // §3 aynı cariye ikinci profil → 409 (servis) + DB tekil index (doğrudan yazım P2002)
 // §4 bağı kaldır (null) / başka cariye taşı / aynı cariye yeniden yazmak no-op
 // §5 BAĞSIZ fasonun eski davranışı bayt-bayt: mal kabul XOR kapısı (`resolveSupplierParty`) aynen;
@@ -12,6 +13,8 @@
 // §8 cari BİRLEŞTİRME (8030): tek taraflı profil survivor'a TAŞINIR; iki kartın da profili varsa önizleme
 //    blokçu + uygulama 409 "önce profilleri birleştirin" (sessiz SetNull/sıfırlama YOK)
 // §9 FK `onDelete: Restrict`: profili olan cari sert silinemez (PG 23503), bağ kaldırılınca silinir
+// §10 rol modeli: `Customer.isSubcontractorRole` profil bağıyla AYNI tx'te — bağlanınca true, bağ kalkınca/
+//     taşınınca eski kart false, profil pasife alınınca false, yeniden aktive olunca true
 // Negatif sondalar (yazılırken kırmızı görüldü): `assertProfileCustomer` tip kolu kaldırılınca §2 ❌;
 // `findAll` `null` süzgeci kaldırılınca §6 ❌; merge haritasından `subcontractors` satırı silinince §8 ❌
 // (kaynak profili tombstone'a bakar kalır); FK SET NULL'a dönünce §9 ❌.
@@ -67,8 +70,13 @@ async function main(): Promise<void> {
   const engel = hedefDbEngeli();
   if (engel) throw new Error(`DURDURULDU: ${engel}`);
 
+  // Rol modeli: fikstür bayrakları tipten (backfill kuralıyla aynı) — kural `isSupplierRole` okur.
   const cari = async (suffix: string, type: "CUSTOMER" | "SUPPLIER" | "BOTH", isActive = true) =>
-    (await prisma.customer.create({ data: { code: `${T}-${suffix}`, name: `${T} ${suffix} A.Ş.`, type, isActive }, select: { id: true } })).id;
+    (await prisma.customer.create({
+      data: { code: `${T}-${suffix}`, name: `${T} ${suffix} A.Ş.`, type, isActive, isCustomerRole: type !== "SUPPLIER", isSupplierRole: type !== "CUSTOMER" },
+      select: { id: true },
+    })).id;
+  const fasonRolu = async (id: string) => (await prisma.customer.findUnique({ where: { id }, select: { isSubcontractorRole: true } }))?.isSubcontractorRole;
   ids.cariSup = await cari("SUP", "SUPPLIER");
   ids.cariBoth = await cari("BOTH", "BOTH");
   ids.cariMus = await cari("MUS", "CUSTOMER");
@@ -80,6 +88,7 @@ async function main(): Promise<void> {
     ids.subBagli = (r1.data as Row).id;
     const d1 = (await svc.findById(ids.subBagli)).data as Row;
     check("create(customerId) → detayda customer {id,code,name,type}", d1.customer?.id === ids.cariSup && d1.customer?.type === "SUPPLIER" && d1.customer?.code === `${T}-SUP`, JSON.stringify(d1.customer));
+    check("§10 bağlanınca kartın isSubcontractorRole=true (aynı tx)", (await fasonRolu(ids.cariSup)) === true);
     const r2 = await svc.create({ code: `${T}-S2`, name: `${T} Zımpara` }, undefined);
     ids.subBagsiz = (r2.data as Row).id;
     check("customerId verilmeyen create → bağsız (customer null)", (r2.data as Row).customer === null);
@@ -90,7 +99,8 @@ async function main(): Promise<void> {
 
     console.log("\n§2 tip/aktiflik/varlık kapısı");
     const eMus = await hata(() => svc.create({ code: `${T}-S3`, name: `${T} Yalnız Müşteri`, customerId: ids.cariMus }, undefined));
-    check("CUSTOMER tipli cariye bağ → 400 'önce Müşteri + Tedarikçi'", status(eMus) === 400 && msg(eMus) === PROFILE_CUSTOMER_TYPE_MESSAGE, msg(eMus));
+    check("Tedarikçi rolü olmayan cariye bağ → 400 'önce Tedarikçi rolü ekleyin'", status(eMus) === 400 && msg(eMus) === PROFILE_CUSTOMER_TYPE_MESSAGE && msg(eMus).includes("Tedarikçi rolü"), msg(eMus));
+    check("§10 400'de kartın fason rolü açılmadı", (await fasonRolu(ids.cariMus)) === false);
     check("400'de fason KAYDI doğmadı", (await prisma.subcontractor.count({ where: { code: `${T}-S3` } })) === 0);
     const ePasif = await hata(() => svc.update(ids.subBagsiz, { customerId: ids.cariPasif }, undefined));
     check("pasif cariye bağ → 400", status(ePasif) === 400 && msg(ePasif).includes("pasif"), msg(ePasif));
@@ -109,8 +119,17 @@ async function main(): Promise<void> {
     console.log("\n§4 bağı kaldır / taşı / no-op");
     await svc.update(ids.subBagli, { customerId: null }, undefined);
     check("update(customerId:null) → bağ kalktı, kayıt duruyor", (await prisma.subcontractor.findUnique({ where: { id: ids.subBagli }, select: { customerId: true, isActive: true } }))?.customerId === null);
+    check("§10 bağ kalkınca eski kartın fason rolü false", (await fasonRolu(ids.cariSup)) === false);
     await svc.update(ids.subBagli, { customerId: ids.cariBoth }, undefined);
     check("update(customerId:BOTH cari) → taşındı", (await prisma.subcontractor.findUnique({ where: { id: ids.subBagli }, select: { customerId: true } }))?.customerId === ids.cariBoth);
+    check("§10 taşınınca yeni kart true", (await fasonRolu(ids.cariBoth)) === true);
+    await svc.update(ids.subBagli, { isActive: false }, undefined);
+    check("§10 profil pasife alınınca kartın fason rolü false", (await fasonRolu(ids.cariBoth)) === false);
+    await svc.update(ids.subBagli, { isActive: true }, undefined);
+    check("§10 yeniden aktif → true", (await fasonRolu(ids.cariBoth)) === true);
+    await svc.remove(ids.subBagli, undefined);
+    check("§10 remove (soft) → false", (await fasonRolu(ids.cariBoth)) === false);
+    await svc.update(ids.subBagli, { isActive: true }, undefined);
     const noop = await hata(() => svc.update(ids.subBagli, { customerId: ids.cariBoth, name: `${T} Boyahane 2` }, undefined));
     check("aynı cariye yeniden yazmak no-op (409 yok)", noop === null, msg(noop));
     const r3 = await svc.create({ code: `${T}-S6`, name: `${T} Üçüncü`, customerId: ids.cariSup }, undefined);
@@ -157,6 +176,7 @@ async function main(): Promise<void> {
     await MasterDataMergeService.merge("customer", { survivorId: ids.cariM1, sourceIds: [ids.cariM2], reason: "fason profili tasima sondasi", acknowledgedConflicts: pv1.conflicts.length });
     const tasinan = await prisma.subcontractor.findUnique({ where: { id: pM2.id }, select: { customerId: true } });
     check("⭐ profil survivor'a TAŞINDI (tombstone'a bakmıyor)", tasinan?.customerId === ids.cariM1, String(tasinan?.customerId));
+    check("§10 birleştirme sonrası fason rolü profil gerçeğinden: survivor true, tombstone false", (await fasonRolu(ids.cariM1)) === true && (await fasonRolu(ids.cariM2)) === false);
     await svc.create({ code: `${T}-S8`, name: `${T} M3 Profili`, customerId: ids.cariM3 }, undefined);
     const pv2 = await MasterDataMergeService.preview("customer", ids.cariM1, [ids.cariM3]);
     check("⭐ iki kartın da profili var → önizleme blokçu CONFLICT_SUBCONTRACTORS", !pv2.canMerge && pv2.blockers.some((b) => b.key === "CONFLICT_SUBCONTRACTORS"), pv2.blockers.map((b) => b.key).join(","));
@@ -169,6 +189,10 @@ async function main(): Promise<void> {
     const eDel = await hata(() => prisma.customer.delete({ where: { id: ids.cariM3 } }));
     check("⭐ profili olan cari sert silinemez (FK Restrict)", eDel instanceof Prisma.PrismaClientKnownRequestError && eDel.code === "P2003", msg(eDel).slice(0, 60));
     check("silme denemesinde profil bağlı kaldı", (await prisma.subcontractor.findFirst({ where: { code: `${T}-S8` }, select: { customerId: true } }))?.customerId === ids.cariM3);
+  } catch (e) {
+    // Beklenmeyen fırlatma da KIRMIZIDIR — eskiden `finally` exit 0 basıp çökmeyi yutuyordu (ölçüldü 2026-09-17).
+    fail++;
+    console.log(`  ✗ FAIL: beklenmeyen hata — ${msg(e).slice(0, 300)}`);
   } finally {
     await temizle();
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

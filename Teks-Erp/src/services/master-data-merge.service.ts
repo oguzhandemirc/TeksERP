@@ -27,6 +27,7 @@
 
 import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
+import { syncSubcontractorRoleTx } from "./subcontractor-management.service";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { markTravelerCardsDirtyTx } from "./helpers/traveler-card-dirty.helper";
@@ -173,8 +174,14 @@ const META: Record<MergeEntity, EntityMeta> = {
     table: "customers",
     auditTable: "CUSTOMER",
     label: "müşteri",
-    // Müşteri tipi (YURTİÇİ/İHRACAT) belgeyi ve vergi davranışını değiştirir.
-    identityFields: [{ field: "type", label: "müşteri tipi" }],
+    // Rol modeli (2026-09-17): kimlik iki TİCARİ rol bayrağıdır (`type` bunların türetilmiş kopyası — eski
+    // "müşteri tipi" guard'ıyla birebir). Fason rolü kimlik DEĞİL: profil `subcontractors.customerId`
+    // kuralıyla taşınır/bloklanır ve bayrak claim'den sonra profil gerçeğinden yeniden türetilir; kimliğe
+    // konsaydı fason kartı fasonsuz karta hiç birleşemezdi (bayrak yalnız profil bağıyla yazılabilir).
+    identityFields: [
+      { field: "isCustomerRole", label: "Müşteri rolü" },
+      { field: "isSupplierRole", label: "Tedarikçi rolü" },
+    ],
   },
   item: {
     delegate: () => prisma.item as never,
@@ -760,6 +767,8 @@ export class MasterDataMergeService {
             "Kayıtlar bu sırada değişti — birleştirme geri alındı. Lütfen tekrar deneyin.",
           );
         }
+        // Rol modeli: fason profili survivor'a taşındıysa bayrak profil gerçeğinden türetilir (kaynaklar tombstone → false).
+        if (entity === "customer") await syncSubcontractorRoleTx(tx, [survivor.id, ...sourceIds]);
 
         // 8) ALAN SEÇİMİ (P2) — survivor'a kaynaktan seçilen değerleri yaz.
         // ⚠️ SIRA LOAD-BEARING: claim'den SONRA. Kaynaklar artık tombstone

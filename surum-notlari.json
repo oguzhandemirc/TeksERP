@@ -26,6 +26,11 @@
       "maddeler": [
         {
           "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Cari kartında roller artık ayrı ayrı tutulur: Müşteri, Tedarikçi ve Fason rolleri kartta üç işaret olarak kaydedilir; eski tip alanı bu rollerden türetilir ve mevcut kartlar kurulumda otomatik olarak rollerine ayrılır (Müşteri, Tedarikçi, Müşteri + Tedarikçi; fason profili bağlı kartlar Fason rolü alır). Cari listeleri role göre süzülebilir; bir karta fason profili bağlamak için kartın Tedarikçi rolü olmalıdır. Ekranlardaki rol seçimi ayrı bir güncellemeyle gelir; mevcut ekranlar aynen çalışır."
+        },
+        {
+          "kapsam": "panel",
           "tip": "yeni",
           "metin": "Fason firma artık cari kartının bir rolü: Cariler listesinde Rol sütununda “Fason” rozeti görünür; cari kartını düzenlerken “Fason iş yapar” kutusu işaretlenince o kart için fason profili açılır (kaldırılınca profil pasife alınır, silinmez; kutu yalnız Tedarikçi ya da Müşteri + Tedarikçi tipli kartta açıktır). Fason Firmalar sayfasında her firmanın “Bağlı cari” alanı var; bağsız firma için “Cari kart oluştur ve bağla” düğmesi tek tıkla tedarikçi tipli cari kart açar. Alış siparişi ve mal kabul tedarikçi penceresinde bağlı fason firması tek satır olarak (cari satırı, rozeti “Tedarikçi · Fason”) listelenir, ayrıca fason satırı çizilmez; bağsız fason firmaları eskisi gibi kendi satırlarıyla seçilir. Mevcut fason kayıtları ve cari hesaplar değişmez; cari hesap birleştirme ayrı bir adım olarak sonra gelir."
         },

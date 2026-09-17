@@ -14,6 +14,10 @@ import prisma from "../lib/prisma";
 import { OrderStatus, ShipmentDestination } from "@prisma/client";
 import { dailyCodePrefix, nextDailySeq, foldCodeForCompare } from "../utils/code-format";
 import { withBarcodeRetry } from "../utils/barcode-retry";
+import { parseQueryParams, readFilterList } from "../utils/query-parser";
+import { applyPartnerRoles, ROLE_FILTER_TO_FLAG, type PartnerRoles } from "./helpers/partner-roles.helper";
+import { validateAndShapeBranches } from "./helpers/customer-inline-branches.helper";
+import type { Request } from "express";
 
 /**
  * VKN (10 hane), TCKN (11 hane) ve yabancı VAT/EIN (12-15 hane) için ortak
@@ -65,120 +69,34 @@ async function nextCustomerCode(): Promise<string> {
   return `${prefix}${String(seq).padStart(4, "0")}`;
 }
 
-// =============================================================================
-// İç-içe (inline) şube oluşturma — create body'sinde opsiyonel `branches[]`
-// =============================================================================
-// Müşteri + sevk noktaları TEK istekte, TEK transaction'da doğar (Prisma
-// nested-create; order+lines emsali). "Önce müşteriyi kaydet, sonra şube ekle"
-// iki-adımlı akışını profesyonel tek adıma indirir.
-
-/** Tek create'te izin verilen azami inline şube sayısı (kötüye kullanım seddi). */
-const MAX_INLINE_BRANCHES = 50;
-
-/** Prisma nested-create'e verilecek beyaz-listeli CustomerBranch skaler şekli. */
-interface InlineBranchData {
-  code: string | null;
-  name: string;
-  address: string | null;
-  city: string | null;
-  district: string | null;
-  contactName: string | null;
-  contactPhone: string | null;
-  notes: string | null;
-  isActive: boolean;
-}
-
-/** Opsiyonel string alanı: boş/whitespace → null, uzunluk aşımı → 400 (1-tabanlı satır no'lu). */
-function optBranchStr(raw: unknown, label: string, max: number, idx: number): string | null {
-  if (raw === undefined || raw === null) return null;
-  if (typeof raw !== "string") {
-    throw AppError.badRequest(`${idx + 1}. şube: ${label} metin olmalı`);
-  }
-  const t = raw.trim();
-  if (t === "") return null;
-  if (t.length > max) {
-    throw AppError.badRequest(`${idx + 1}. şube: ${label} en fazla ${max} karakter olabilir`);
-  }
-  return t;
-}
-
-/**
- * Müşteri create body'sindeki opsiyonel `branches` alanını doğrular + şekillendirir:
- *   - yok/null/boş dizi → undefined (nested-create hiç gönderilmez);
- *   - dizi değilse veya bir satır bozuksa → 400 (Türkçe, 1-tabanlı satır no'lu);
- *   - her satır CustomerBranch skaler alanlarına indirgenir (MASS-ASSIGNMENT YOK —
- *     yalnız beyaz-listeli alanlar geçer; `customerId` ilişkiden gelir, `id`/tarih
- *     sistem alanları asla istemciden yazılmaz).
- * Sınırlar customer-branch.routes.ts createSchema ile birebir (tek-adım / iki-adım
- * şube ekleme aynı validasyonu görsün).
- */
-function validateAndShapeBranches(raw: unknown): InlineBranchData[] | undefined {
-  if (raw === undefined || raw === null) return undefined;
-  if (!Array.isArray(raw)) {
-    throw AppError.badRequest("Şubeler geçersiz (dizi bekleniyor)");
-  }
-  if (raw.length === 0) return undefined;
-  if (raw.length > MAX_INLINE_BRANCHES) {
-    throw AppError.badRequest(`Tek seferde en fazla ${MAX_INLINE_BRANCHES} şube eklenebilir`);
-  }
-  // Dizi içi ad + kod mükerrer kontrolü (Türkçe-duyarsız) — yeni müşteri
-  // olduğundan mevcut şube yok; iki-adım yolun guard'ı customer-branch.service'te.
-  const seenNames = new Map<string, number>();
-  const seenCodes = new Map<string, number>();
-  const shaped = raw.map((entry, idx): InlineBranchData => {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-      throw AppError.badRequest(`${idx + 1}. şube: geçersiz kayıt`);
-    }
-    const rec = entry as Record<string, unknown>;
-    if (typeof rec.name !== "string" || rec.name.trim() === "") {
-      throw AppError.badRequest(`${idx + 1}. şube: Şube adı zorunlu`);
-    }
-    const name = rec.name.trim();
-    // Sınırlar DB kolonlarıyla birebir (CustomerBranch.name VARCHAR(100) /
-    // code VARCHAR(50)) — aşan girdi Postgres P2000 (jenerik 400) yerine
-    // burada net, alan-adlı Türkçe 400 alsın; ayrıca atomik create'i boşa düşürmesin.
-    if (name.length > 100) {
-      throw AppError.badRequest(`${idx + 1}. şube: Şube adı en fazla 100 karakter olabilir`);
-    }
-    const nameKey = foldNameForCompare(name);
-    const firstIdx = seenNames.get(nameKey);
-    if (firstIdx !== undefined) {
-      throw AppError.badRequest(
-        `${idx + 1}. şube: '${name}' adı ${firstIdx + 1}. şubeyle aynı — şube adları tekrar edemez`,
-      );
-    }
-    seenNames.set(nameKey, idx);
-    const code = optBranchStr(rec.code, "İhracat kodu", 50, idx);
-    if (code) {
-      // §18: KOD katlaması yerel-BAĞIMSIZ olmalı — `foldNameForCompare` (tr-TR
-      // BÜYÜK) `i → İ` çevirdiği için "sip"/"SIP" çifti sessizce eşleşmezdi.
-      const codeKey = foldCodeForCompare(code);
-      const firstCodeIdx = seenCodes.get(codeKey);
-      if (firstCodeIdx !== undefined) {
-        throw AppError.badRequest(
-          `${idx + 1}. şube: '${code}' ihracat kodu ${firstCodeIdx + 1}. şubeyle aynı — şube ihracat kodları tekrar edemez`,
-        );
-      }
-      seenCodes.set(codeKey, idx);
-    }
-    return {
-      code,
-      name,
-      address: optBranchStr(rec.address, "Adres", 500, idx),
-      city: optBranchStr(rec.city, "Şehir", 80, idx),
-      district: optBranchStr(rec.district, "İlçe", 80, idx),
-      contactName: optBranchStr(rec.contactName, "İletişim kişisi", 120, idx),
-      contactPhone: optBranchStr(rec.contactPhone, "Telefon", 40, idx),
-      notes: optBranchStr(rec.notes, "Notlar", 500, idx),
-      isActive: rec.isActive === undefined ? true : Boolean(rec.isActive),
-    };
-  });
-  return shaped;
-}
-
 export class CustomerService extends BaseService {
   constructor(config: BaseServiceConfig) {
     super(config);
+  }
+
+  /**
+   * `filter[role]` (CSV: customer · supplier · subcontractor) → rol bayrakları OR. `safeFilters` bu anahtarı
+   * skaler süzgeçte düşürür (kolon değil), ham `filters`tan okunur; tanınmayan değer 400 (fail-closed).
+   * `filter[type]` eski istemci için çalışmaya devam eder (kolon süzgeci). `buildListWhere` tek nokta.
+   */
+  protected extraWhere(req: Request): Record<string, unknown> | undefined {
+    const { filters } = parseQueryParams(req);
+    const roles = readFilterList(filters.role);
+    if (roles.length === 0) return undefined;
+    const or = roles.map((r) => {
+      const flag = ROLE_FILTER_TO_FLAG[r.trim().toLowerCase()];
+      if (!flag) throw AppError.badRequest(`Geçersiz rol süzgeci: ${r} (customer, supplier, subcontractor).`);
+      return { [flag]: true };
+    });
+    return or.length === 1 ? or[0] : { OR: or };
+  }
+
+  /** Kartın mevcut rolleri (update'te gövdedeki eksik bayrak buradan tamamlanır). */
+  private async currentRoles(id: string): Promise<PartnerRoles | null> {
+    return prisma.customer.findUnique({
+      where: { id },
+      select: { isCustomerRole: true, isSupplierRole: true, isSubcontractorRole: true },
+    });
   }
 
   /**
@@ -304,6 +222,8 @@ export class CustomerService extends BaseService {
     // yazılır → super.create sanitize'ı korur (config.nestedCreateFields) ve
     // BaseService onu `{ create: [...] }`'e sarıp müşteriyle ATOMİK nested-create eder.
     this.normalizeDefaultDestination(data);
+    // Rol modeli: bayraklar gövdeden, `type` TÜRETİLİR (istemcinin `type`i yalnız rollere çevrilir).
+    applyPartnerRoles(data, null);
     const branches = validateAndShapeBranches(data.branches);
     return withBarcodeRetry(async () => {
       data.code = await nextCustomerCode();
@@ -330,6 +250,10 @@ export class CustomerService extends BaseService {
     // düş: BaseService.update nested-wrap YAPMAZ, ham dizi Prisma update'i bozardı.
     if ("branches" in data) delete data.branches;
     this.normalizeDefaultDestination(data);
+    // Rol modeli: gövdede rol ya da eski `type` varsa mevcut bayraklarla birleşir, `type` yeniden türetilir.
+    if ("isCustomerRole" in data || "isSupplierRole" in data || "isSubcontractorRole" in data || "type" in data) {
+      applyPartnerRoles(data, await this.currentRoles(id));
+    }
     this.applyStringFields(data, false);
     this.applyCardFields(data);
     const validated = this.validateTaxNumber(data.taxNumber);

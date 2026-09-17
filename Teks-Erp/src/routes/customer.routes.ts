@@ -68,7 +68,12 @@ router.use("/:customerId", standaloneLabelRoutes);
  *         description: Kod, isim veya vergi numarasında arama
  *       - in: query
  *         name: filter[type]
- *         schema: { type: string, enum: [CUSTOMER, SUPPLIER, SUBCONTRACTOR] }
+ *         description: "Eski istemci süzgeci — türetilmiş tip (CUSTOMER/SUPPLIER/BOTH); yeni istemci filter[role] kullanır"
+ *         schema: { type: string, enum: [CUSTOMER, SUPPLIER, BOTH] }
+ *       - in: query
+ *         name: filter[role]
+ *         description: "Rol süzgeci, CSV = OR: customer · supplier · subcontractor (rol bayrakları); tanınmayan değer 400"
+ *         schema: { type: string }
  *       - in: query
  *         name: filter[isActive]
  *         schema: { type: string, enum: [true, false] }
@@ -125,7 +130,10 @@ router.get("/:id", verifyToken, requireAnyPermission("customer:read", ...MOBILE_
  *               code: { type: string, example: "MUS-010" }
  *               name: { type: string, example: "Yeni Tekstil Ltd." }
  *               taxNumber: { type: string }
- *               type: { type: string, enum: [CUSTOMER, SUPPLIER, SUBCONTRACTOR], default: CUSTOMER }
+ *               isCustomerRole: { type: boolean, description: "Müşteri rolü (rol modeli 2026-09-17)" }
+ *               isSupplierRole: { type: boolean, description: "Tedarikçi rolü" }
+ *               isSubcontractorRole: { type: boolean, description: "Fason rolü — normalde fason profili bağı yazar" }
+ *               type: { type: string, enum: [CUSTOMER, SUPPLIER, BOTH], description: "TÜRETİLMİŞ (yalnız okunur); eski istemci gönderirse rollere çevrilir, en az bir rol zorunlu" }
  *               exportCode: { type: string, description: "İhracat kodu — sevk belgelerinde şube kodu yoksa basılır" }
  *               address: { type: string }
  *               city: { type: string }
@@ -165,7 +173,7 @@ router.post("/", verifyToken, requirePermission("customer:write"), controller.cr
  *             properties:
  *               name: { type: string }
  *               taxNumber: { type: string }
- *               type: { type: string, enum: [CUSTOMER, SUPPLIER, SUBCONTRACTOR] }
+ *               type: { type: string, enum: [CUSTOMER, SUPPLIER, BOTH] }
  *               exportCode: { type: string }
  *               address: { type: string }
  *               city: { type: string }

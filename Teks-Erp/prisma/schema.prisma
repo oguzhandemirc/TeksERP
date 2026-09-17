@@ -3375,7 +3375,17 @@ model Customer {
   contactPhone String?     @db.VarChar(40)
   email        String?     @db.VarChar(200)
   notes        String?
+  /// TÜRETİLMİŞ (İş Ortağı Rol Modeli, 2026-09-17): CUSTOMER/SUPPLIER/BOTH = `isCustomerRole`/`isSupplierRole`
+  /// bayraklarından, tek yazar `resolveCompanyType` (helpers/partner-roles.helper.ts). Kolon geriye dönük
+  /// okuyucular için KALIR; istemciden yazılamaz (servis gövdedeki `type`i rollere çevirir, sonra kendisi yazar).
   type         CompanyType @default(CUSTOMER)
+  /// İŞ ORTAĞI ROLLERİ (SAP BP sadeleştirilmiş) — kart tek, roller bayrak; en az biri doğru (servis kuralı).
+  /// Backfill: `type` CUSTOMER→müşteri, SUPPLIER→tedarikçi, BOTH→ikisi; fason profili bağlı kartta fason.
+  isCustomerRole      Boolean @default(false)
+  isSupplierRole      Boolean @default(false)
+  /// Fason rolü = aktif fason PROFİLİ (`Subcontractor.customerId`) — profil bağlanınca/aktifken true, bağ
+  /// kalkınca ya da profil pasife alınınca false (aynı tx, tek yazar SubcontractorManagementService).
+  isSubcontractorRole Boolean @default(false)
   isActive     Boolean     @default(true)
 
   /// Belge şablon profili — bu müşteriye basılan belgeler profil override'ını

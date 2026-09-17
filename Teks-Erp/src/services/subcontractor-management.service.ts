@@ -34,9 +34,11 @@ import { Request } from "express";
 // FASON = CARİNİN ROLÜ (kullanıcı kararı 2026-09-17, SAP BP kalıbı)
 // =============================================================================
 // `Subcontractor.customerId` fason kaydını bir cari kartına bağlar (PROFİL). Bağsız
-// fason bugünkü gibi çalışır; kural yalnız bağ kurulurken: cari VAR + AKTİF + tipi
-// SUPPLIER/BOTH (yalnız-müşteri karttan fason olmaz — önce "Müşteri + Tedarikçi"),
+// fason bugünkü gibi çalışır; kural yalnız bağ kurulurken: cari VAR + AKTİF + Tedarikçi
+// ROLÜ (`isSupplierRole`; rol modeli 2026-09-17 — fason satıcıdır, önce Tedarikçi rolü),
 // aynı cariye ikinci profil 409 (DB'de de `@unique`; yarışı P2002 → 409 karşılar).
+// `Customer.isSubcontractorRole` = aktif profil bağı — TÜRETİLİR (`syncSubcontractorRoleTx`, tek yazar):
+// bağlanınca/aktifken true, bağ kalkınca ya da profil pasife alınınca false, aynı tx.
 // Cari HESAP birleştirme bu dilimde YOK (ayrı script, dry-run → onay → --apply).
 // =============================================================================
 
@@ -45,7 +47,7 @@ const PROFILE_CUSTOMER_SELECT = { select: { id: true, code: true, name: true, ty
 const SUB_INCLUDE = { categories: { include: { category: true } }, customer: PROFILE_CUSTOMER_SELECT } as const;
 
 export const PROFILE_CUSTOMER_TYPE_MESSAGE =
-  "Yalnız müşteri tipli cari fason profili taşıyamaz — önce kartı Müşteri + Tedarikçi yapın.";
+  "Bu cari kartında Tedarikçi rolü yok — fason profili için önce Tedarikçi rolü ekleyin.";
 export const PROFILE_CUSTOMER_TAKEN_MESSAGE = "Bu cari kartına bağlı bir fason profili zaten var.";
 
 /**
@@ -53,15 +55,31 @@ export const PROFILE_CUSTOMER_TAKEN_MESSAGE = "Bu cari kartına bağlı bir faso
  * `excludeId`: güncellemede kaydın kendi bağı tekilliğe takılmasın.
  */
 async function assertProfileCustomer(customerId: string, excludeId?: string): Promise<void> {
-  const c = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true, name: true, type: true, isActive: true } });
+  const c = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true, name: true, isSupplierRole: true, isActive: true } });
   if (!c) throw AppError.badRequest("Bağlanacak cari kartı bulunamadı.");
   if (!c.isActive) throw AppError.badRequest(`"${c.name}" pasif durumda — pasif cariye fason profili bağlanamaz.`);
-  if (c.type === "CUSTOMER") throw AppError.badRequest(PROFILE_CUSTOMER_TYPE_MESSAGE);
+  if (!c.isSupplierRole) throw AppError.badRequest(PROFILE_CUSTOMER_TYPE_MESSAGE);
   const taken = await prisma.subcontractor.findFirst({
     where: { customerId, ...(excludeId ? { id: { not: excludeId } } : {}) },
     select: { id: true },
   });
   if (taken) throw AppError.conflict(PROFILE_CUSTOMER_TAKEN_MESSAGE);
+}
+
+/**
+ * `Customer.isSubcontractorRole` TEK YAZARI — gerçekten TÜRETİLİR: kartın AKTİF ve bağlı bir fason profili
+ * var mı (`Subcontractor.customerId = kart, isActive`). Profil bağı/aktifliği değişen her yol (fason servisi
+ * create/update/remove, cari birleştirme claim'i) aynı tx'te bunu çağırır; elle true/false yazılmaz.
+ */
+export async function syncSubcontractorRoleTx(
+  tx: Prisma.TransactionClient,
+  customerIds: ReadonlyArray<string | null | undefined>,
+): Promise<void> {
+  const ids = [...new Set(customerIds.filter((x): x is string => typeof x === "string" && x.length > 0))];
+  for (const id of ids) {
+    const active = await tx.subcontractor.findFirst({ where: { customerId: id, isActive: true }, select: { id: true } });
+    await tx.customer.update({ where: { id }, data: { isSubcontractorRole: active !== null } });
+  }
 }
 
 /** Yarışta DB tekil index'i kazanır: P2002(customerId) → aynı 409 cümlesi. */
@@ -615,6 +633,8 @@ export class SubcontractorManagementService {
           })),
         });
       }
+      // Rol modeli: bağlı kartın fason rolü profil ile birlikte doğar (reaktivasyonda da).
+      await syncSubcontractorRoleTx(tx, [payload.customerId]);
       return tx.subcontractor.findUnique({
         where: { id: createdId },
         include: SUB_INCLUDE,
@@ -730,6 +750,8 @@ export class SubcontractorManagementService {
 
     const sub = await prisma.$transaction(async (tx) => {
       await tx.subcontractor.update({ where: { id }, data: { ...rest, updatedById: userId ?? null } });
+      // Rol modeli: eski ve yeni bağın kartları profil gerçeğinden yeniden türetilir (aynı tx).
+      await syncSubcontractorRoleTx(tx, [before?.customerId, rest.customerId]);
 
       if (categoryIds !== undefined) {
         await tx.subcontractorToCategory.deleteMany({ where: { subcontractorId: id } });
@@ -771,11 +793,13 @@ export class SubcontractorManagementService {
     // F94: soft-delete öncesi before-state.
     const before = await prisma.subcontractor.findUnique({
       where: { id },
-      select: { code: true, name: true, taxNumber: true, phone: true, address: true, isActive: true, isFavorite: true },
+      select: { code: true, name: true, taxNumber: true, phone: true, address: true, isActive: true, isFavorite: true, customerId: true },
     });
-    const sub = await prisma.subcontractor.update({
-      where: { id },
-      data: { isActive: false },
+    const sub = await prisma.$transaction(async (tx) => {
+      const r = await tx.subcontractor.update({ where: { id }, data: { isActive: false } });
+      // Rol modeli: pasif profil fason rolü değildir.
+      await syncSubcontractorRoleTx(tx, [before?.customerId]);
+      return r;
     });
     await AuditService.log({
       userId,
