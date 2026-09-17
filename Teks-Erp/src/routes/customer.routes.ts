@@ -23,9 +23,9 @@ export const customerService = new CustomerService({
   // (rakam) ve eskiden bir müşteri ADI araması bu alanlara da varyant
   // üretiyordu — tamamen boşa giden koşullar. Kod-biçimli terimde koşarlar.
   codeSearchFields: ["code", "taxNumber", "exportCode"],
-  // Fason = carinin rolü (2026-09-17): liste/detayda bağlı fason PROFİLİ hafif (`{id}`) —
-  // Cariler'de "Fason" rol rozeti ve tedarikçi seçicide tek satır bundan okunur.
-  defaultInclude: { subcontractor: { select: { id: true } } },
+  // Fason = carinin rolü (2026-09-17): liste/detayda bağlı fason PROFİLİ hafif (`{id,isActive}`) —
+  // Cariler'de "Fason" rol rozeti ve tedarikçi seçicide tek satır bundan okunur; pasif profil rol DEĞİLDİR.
+  defaultInclude: { subcontractor: { select: { id: true, isActive: true } } },
   uniqueField: "code",
   duplicateNameField: "name",
   entityLabel: "müşteri",

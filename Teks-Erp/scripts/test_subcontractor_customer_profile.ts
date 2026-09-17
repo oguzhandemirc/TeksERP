@@ -1,7 +1,7 @@
 // =============================================================================
 // BEKÇİ — FASON = CARİNİN ROLÜ: `Subcontractor.customerId` profili (kullanıcı kararı 2026-09-17)
 // =============================================================================
-// §1 bağ kur (create/update) → liste/detay `customer {id,code,name,type}`; cari detayı `subcontractor {id}`
+// §1 bağ kur (create/update) → liste/detay `customer {id,code,name,type}`; cari detayı `subcontractor {id,isActive}`
 // §2 yalnız-müşteri (CUSTOMER) cariye bağ → 400 "önce Müşteri + Tedarikçi" · pasif cari → 400 · yok → 400
 // §3 aynı cariye ikinci profil → 409 (servis) + DB tekil index (doğrudan yazım P2002)
 // §4 bağı kaldır (null) / başka cariye taşı / aynı cariye yeniden yazmak no-op
@@ -78,8 +78,8 @@ async function main(): Promise<void> {
     const r2 = await svc.create({ code: `${T}-S2`, name: `${T} Zımpara` }, undefined);
     ids.subBagsiz = (r2.data as Row).id;
     check("customerId verilmeyen create → bağsız (customer null)", (r2.data as Row).customer === null);
-    const cariDetay = (await customerService.findById(ids.cariSup)).data as { subcontractor?: { id: string } | null };
-    check("cari detayı `subcontractor {id}` taşır (defaultInclude)", cariDetay.subcontractor?.id === ids.subBagli, JSON.stringify(cariDetay.subcontractor));
+    const cariDetay = (await customerService.findById(ids.cariSup)).data as { subcontractor?: { id: string; isActive: boolean } | null };
+    check("cari detayı `subcontractor {id,isActive}` taşır (defaultInclude)", cariDetay.subcontractor?.id === ids.subBagli && cariDetay.subcontractor?.isActive === true, JSON.stringify(cariDetay.subcontractor));
     const bagsizCari = (await customerService.findById(ids.cariBoth)).data as { subcontractor?: { id: string } | null };
     check("profilsiz cari → subcontractor null", bagsizCari.subcontractor === null);
 
