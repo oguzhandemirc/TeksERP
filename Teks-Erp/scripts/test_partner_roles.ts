@@ -8,6 +8,9 @@
 // §3 en az bir rol (400); geçersiz tip (400); fason rolü gövdeden YAZILAMAZ (düşer — tek yazar profil bağı)
 // §4 `filter[role]` CSV = OR; tanınmayan değer 400; `filter[type]` eski istemci için çalışır
 // §5 profil bağı → fason rolü + `type` değişmez; cari update gövdesi fason rolünü silemez
+// §6 KART + PROFİL TEK TX (kullanıcı 16:03): create `subcontractorRole:true` → profil kartla doğar (kod/ad karttan,
+//    `customerId` bağ, fason rolü true); Tedarikçi rolsüz → 400, kart doğmaz; aynı adda bağsız fason → 409 ve KART
+//    DA DOĞMAZ (tx geri alındı); `isSubcontractorRole:true` gövdesi tek başına profil doğurmaz
 // Negatif sondalar (kırmızı görüldü): `applyPartnerRoles`'ta fason rolü gövdeden geçirilince §3 ❌;
 // `CustomerService.extraWhere` kaldırılınca §4 ❌ (rol süzgeci sessizce düşer, müşteri-only satır gelir).
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; temizlik yalnız `temizle`de.
@@ -48,8 +51,10 @@ const fakeReq = (query: Record<string, unknown>) => ({ query } as unknown as Req
 
 type Flags = { id: string; type: string; isCustomerRole: boolean; isSupplierRole: boolean; isSubcontractorRole: boolean };
 const stamp = Date.now().toString(36);
-// Arama terimi tire İÇERMEZ: tireli terim KOD kovasına düşer (`isCodeLike`) ve ad araması koşmaz.
-const T = `TESTROL${stamp}`;
+// Arama terimi tire İÇERMEZ: tireli terim KOD kovasına düşer (`isCodeLike`) ve ad araması koşmaz. BÜYÜK harf:
+// sunucu adı büyütür — küçük harfli damga `startsWith` sayımlarını sessizce 0'a düşürüyordu (ölçüldü: tx sondası
+// yeşil kaldı; sayım vakumdu).
+const T = `TESTROL${stamp.toUpperCase()}`;
 const subSvc = new SubcontractorManagementService();
 const createdIds: string[] = [];
 
@@ -152,6 +157,21 @@ async function main(): Promise<void> {
     check("Tedarikçi rolü olmayan karta profil → 400", status(eProfMus) === 400 && msg(eProfMus).includes("Tedarikçi rolü"), msg(eProfMus));
     const cariDetay = (await customerService.findById(s1.id)).data as Record<string, unknown>;
     check("GET /customers projeksiyonu üç rolü taşır", typeof cariDetay.isCustomerRole === "boolean" && typeof cariDetay.isSupplierRole === "boolean" && typeof cariDetay.isSubcontractorRole === "boolean");
+
+    console.log("\n§6 kart + profil tek tx (subcontractorRole)");
+    const s6 = await create({ name: "s6", isSupplierRole: true, subcontractorRole: true });
+    const prof6 = await prisma.subcontractor.findFirst({ where: { customerId: s6.id }, select: { id: true, code: true, name: true, isActive: true } });
+    const kart6 = await prisma.customer.findUnique({ where: { id: s6.id }, select: { code: true, name: true } });
+    check("⭐ create(subcontractorRole) → profil kartla doğdu (kod/ad karttan, bağlı, aktif) ve fason rolü true", prof6 !== null && prof6.code === kart6?.code && prof6.name === kart6?.name && prof6.isActive && sig(s6) === "SUPPLIER:-SF", `${JSON.stringify(prof6)} ${sig(s6)}`);
+    const kartSayisiOnce = await prisma.customer.count({ where: { name: { startsWith: T } } });
+    check("sayım vakum değil (ön koşul): bu bekçinin kartları sayılıyor", kartSayisiOnce >= 5, `${kartSayisiOnce}`);
+    const e6 = await hata(() => create({ name: "s7", isCustomerRole: true, subcontractorRole: true }));
+    check("Tedarikçi rolsüz + subcontractorRole → 400 'önce Tedarikçi rolü', kart doğmadı", status(e6) === 400 && msg(e6).includes("Tedarikçi rolü") && (await prisma.customer.count({ where: { name: { startsWith: T } } })) === kartSayisiOnce, msg(e6));
+    await prisma.subcontractor.create({ data: { code: `${T}-BAGSIZ`, name: `${T} S8` } });
+    const e8 = await hata(() => create({ name: "s8", isSupplierRole: true, subcontractorRole: true }));
+    check("⭐ aynı adda bağsız fason varken → 409 yönlendirme ve KART DA DOĞMADI (tek tx geri alındı)", status(e8) === 409 && msg(e8).includes("Fason Firmalar") && (await prisma.customer.count({ where: { name: { startsWith: T } } })) === kartSayisiOnce, msg(e8));
+    const s9 = await create({ name: "s9", isSupplierRole: true, isSubcontractorRole: true });
+    check("isSubcontractorRole:true gövdesi (subcontractorRole olmadan) profil DOĞURMAZ, bayrak false", (await prisma.subcontractor.count({ where: { customerId: s9.id } })) === 0 && sig(s9) === "SUPPLIER:-S-");
   } catch (e) {
     fail++;
     console.log(`  ✗ FAIL: beklenmeyen hata — ${msg(e).slice(0, 300)}`);

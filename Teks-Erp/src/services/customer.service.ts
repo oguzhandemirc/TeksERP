@@ -5,7 +5,7 @@
 //   - create / update: taxNumber format kontrolü (VKN/TCKN + esnek yabancı VAT)
 // =============================================================================
 
-import { BaseService, BaseServiceConfig } from "./base.service";
+import { BaseService, BaseServiceConfig, withActor } from "./base.service";
 import { ApiResponse } from "../types/api.types";
 import { AppError } from "../utils/app-error";
 import { validateName, validateCode } from "../lib/string-validators";
@@ -16,6 +16,8 @@ import { dailyCodePrefix, nextDailySeq, foldCodeForCompare } from "../utils/code
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { parseQueryParams, readFilterList } from "../utils/query-parser";
 import { applyPartnerRoles, ROLE_FILTER_TO_FLAG, type PartnerRoles } from "./helpers/partner-roles.helper";
+import { createProfileForCustomerTx, PROFILE_CUSTOMER_TYPE_MESSAGE } from "./subcontractor-management.service";
+import { AuditService } from "./audit.service";
 import { validateAndShapeBranches } from "./helpers/customer-inline-branches.helper";
 import type { Request } from "express";
 
@@ -223,7 +225,11 @@ export class CustomerService extends BaseService {
     // BaseService onu `{ create: [...] }`'e sarıp müşteriyle ATOMİK nested-create eder.
     this.normalizeDefaultDestination(data);
     // Rol modeli: bayraklar gövdeden, `type` TÜRETİLİR (istemcinin `type`i yalnız rollere çevrilir).
-    applyPartnerRoles(data, null);
+    // `subcontractorRole: true` (kullanıcı 16:03): kart + fason PROFİLİ tek tx'te doğar; Tedarikçi rolü şart.
+    const wantsProfile = data.subcontractorRole === true;
+    delete data.subcontractorRole;
+    const roles = applyPartnerRoles(data, null);
+    if (wantsProfile && !roles.isSupplierRole) throw AppError.badRequest(PROFILE_CUSTOMER_TYPE_MESSAGE);
     const branches = validateAndShapeBranches(data.branches);
     return withBarcodeRetry(async () => {
       data.code = await nextCustomerCode();
@@ -236,8 +242,31 @@ export class CustomerService extends BaseService {
       }
       if (branches) data.branches = branches;
       else delete data.branches;
-      return super.create(data, userId);
+      return wantsProfile ? this.createWithProfile(data, userId) : super.create(data, userId);
     });
+  }
+
+  /**
+   * Kart + fason profili TEK TX. `BaseService.create` tx açmadığı için burada aynı adımlar (sanitize →
+   * ad normalize → ad-mükerrer → insert) tx'li tekrarlanır; audit iki kayda da tx DIŞINDA yazılır.
+   * Profil bağı bayrağı `syncSubcontractorRoleTx` ile türetilir (tek yazar korunur).
+   */
+  private async createWithProfile(rawData: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
+    const data = this.normalizeNameFields(this.sanitizeWriteData(rawData));
+    await this.assertNameNotDuplicate(data);
+    const prismaData = withActor({ ...data }, userId, "CREATE", "customer");
+    if (Array.isArray(prismaData.branches)) prismaData.branches = { create: prismaData.branches };
+    const { card, profile } = await prisma.$transaction(async (tx) => {
+      const c = (await tx.customer.create({ data: prismaData as never, include: { subcontractor: { select: { id: true, isActive: true } } } })) as unknown as {
+        id: string; code: string; name: string; taxNumber: string | null; contactPhone: string | null; address: string | null;
+      };
+      const p = await createProfileForCustomerTx(tx, c, userId);
+      const fresh = await tx.customer.findUnique({ where: { id: c.id }, include: { subcontractor: { select: { id: true, isActive: true } } } });
+      return { card: fresh as unknown as Record<string, unknown>, profile: p };
+    });
+    await AuditService.log({ userId, action: "CREATE", tableName: "CUSTOMER", recordId: card.id as string, newData: data });
+    await AuditService.log({ userId, action: "CREATE", tableName: "SUBCONTRACTOR", recordId: profile.id, newData: { code: profile.code, customerId: card.id, bornWithCard: true } });
+    return { success: true, data: card, message: "Kart ve fason profili oluşturuldu" };
   }
 
   async update(

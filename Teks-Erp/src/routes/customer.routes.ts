@@ -132,7 +132,8 @@ router.get("/:id", verifyToken, requireAnyPermission("customer:read", ...MOBILE_
  *               taxNumber: { type: string }
  *               isCustomerRole: { type: boolean, description: "Müşteri rolü (rol modeli 2026-09-17)" }
  *               isSupplierRole: { type: boolean, description: "Tedarikçi rolü" }
- *               isSubcontractorRole: { type: boolean, description: "Fason rolü — normalde fason profili bağı yazar" }
+ *               isSubcontractorRole: { type: boolean, description: "Fason rolü — gövdeden YAZILAMAZ (düşer); fason profili bağı türetir" }
+ *               subcontractorRole: { type: boolean, description: "Yalnız oluşturmada: true ise kart + fason profili TEK tx'te doğar (Tedarikçi rolü şart, yoksa 400; aynı adda bağsız fason varsa 409)" }
  *               type: { type: string, enum: [CUSTOMER, SUPPLIER, BOTH], description: "TÜRETİLMİŞ (yalnız okunur); eski istemci gönderirse rollere çevrilir, en az bir rol zorunlu" }
  *               exportCode: { type: string, description: "İhracat kodu — sevk belgelerinde şube kodu yoksa basılır" }
  *               address: { type: string }

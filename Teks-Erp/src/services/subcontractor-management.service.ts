@@ -82,6 +82,42 @@ export async function syncSubcontractorRoleTx(
   }
 }
 
+export const PROFILE_NAME_TAKEN_MESSAGE =
+  "Bu adda bir fason firması zaten var — Fason Firmalar sayfasından o profili bu karta bağlayın.";
+
+/**
+ * KART + PROFİL BİRLİKTE DOĞAR (kullanıcı 16:03): "Yeni Cari" formunda "Fason iş yapar" işaretliyse
+ * `POST /customers` tek tx'te kartı yazar ve bu fonksiyonla profili yaratır (kod/ad/vergi/telefon/adres
+ * karttan; kategori/favori sonradan Fason Firmalar'dan). Tedarikçi rolü şartı çağıranda (400). Aynı adda
+ * bağsız fason varsa DB seddi (`nameFold` partial unique) P2002 → 409 yönlendirme cümlesi.
+ */
+export async function createProfileForCustomerTx(
+  tx: Prisma.TransactionClient,
+  card: { id: string; code: string; name: string; taxNumber: string | null; contactPhone: string | null; address: string | null },
+  userId?: string,
+): Promise<{ id: string; code: string }> {
+  try {
+    const p = await tx.subcontractor.create({
+      data: {
+        code: card.code,
+        name: normalizeDisplayName(card.name),
+        taxNumber: card.taxNumber,
+        phone: card.contactPhone,
+        address: card.address,
+        customerId: card.id,
+        createdById: userId ?? null,
+        updatedById: userId ?? null,
+      },
+      select: { id: true, code: true },
+    });
+    await syncSubcontractorRoleTx(tx, [card.id]);
+    return p;
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") throw AppError.conflict(PROFILE_NAME_TAKEN_MESSAGE);
+    throw e;
+  }
+}
+
 /** Yarışta DB tekil index'i kazanır: P2002(customerId) → aynı 409 cümlesi. */
 function isProfileUniqueViolation(e: unknown): boolean {
   return (
