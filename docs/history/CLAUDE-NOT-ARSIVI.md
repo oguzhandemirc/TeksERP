@@ -10953,6 +10953,8 @@ Route kapısı beklemeye alınınca (24f2c1b6) karolarda aynı sınıfın yumuş
 
 ## 2026-09-17 — MASTER VERİ TASARIMI: kimlik ile rolü karıştırmak GÖÇ maliyetidir [ÇEKİRDEK]
 
+**Kullanıcı onayı 2026-09-18:** kural kök `CLAUDE.md` § Tek kaynak ve ayrışan yüzey'e İKİ CÜMLE olarak girdi (kısaltılmadı — XOR'lu çift bağ yasağı bedelin asıl yarısıdır).
+
 Kullanıcı kuralı (17:55): *"master veri sektör standardında olmalı; ilk fason tablosunda düşünemedik, geriye dönüp böyle problem yaşamayalım."* Vaka: fason firmaları `Customer`dan ayrı bir tabloda tanımlandı. Sonuç üç ayrı arıza DEĞİL, tek bir tasarım hatasının üç yüzüydü — aynı firma İKİ KİMLİK taşıdı · cari hesap iki tabloya XOR ile bağlandı (aynı firmanın borcu iki satırda görünebiliyordu) · ad/kod tekilliği yalnız tablo İÇİNDE ölçüldüğü için çapraz çakışma hiçbir kapıdan geçmedi. Düzeltmesi üç dilimlik bir faz + saha provası oldu (`docs/design/IS-ORTAGI-ROL-MODELI.md`).
 
 Kural (beş kapı, `docs/standart/MASTER-VERI-TASARIMI.md` [MV-01]…[MV-05]): ① KİMLİK ≠ ROL — nesne ileride başka rol de alabiliyorsa rol BAYRAK ya da profil olur, ayrı kimlik tablosu değil; tek seçimli tür enum'u ancak "ikisi aynı anda olamaz" ÖLÇÜLDÜKTEN sonra yazılır ② finans kimliği TEKTİR, XOR'lu çift bağ yasak ③ operasyon verisi role bağlı PROFİLE bağlanır ve profil kimliği değişmez (geçmiş yeniden yazılmaz) ④ kod/ad tekilliği TABLOLAR ARASI sorulur ⑤ geriye dönüklük cümlesi yazılmadan master veri şeması değişmez ("eski istemci ne yapar" + "türetilmiş alan ne zaman kalkar", ikincisi ÖLÇÜLEBİLİR koşulla).
