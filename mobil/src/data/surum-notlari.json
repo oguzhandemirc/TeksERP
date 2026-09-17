@@ -162,6 +162,11 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
+          "metin": "Cari kartı artık ROLLERLE çalışıyor. Bir firma aynı anda müşteriniz, tedarikçiniz ve fasoncunuz olabilir: kartta tek tip seçmek yerine hangi işi yaptığını işaretliyorsunuz — müşteri, tedarikçi ve “Fason iş yapar”. Fason firmalar artık ayrı bir kimlik değil: cari kartıyla TEK firma olarak görünüyor ve TEK cari hesabı oluyor, yani aynı firmanın borcu iki yerde ayrı ayrı durmuyor. Fason sevk ve kabul geçmişinin tamamı olduğu gibi kalır — hiçbir eski kayıt taşınmaz, silinmez ya da yeniden numaralanmaz. Cariler ekranında iki süzgeç var: ticari yön (müşteri / tedarikçi / ikisi) ve fason (iş yapan / yapmayan); her kartın rolleri satırda rozet olarak görünür. Bugünkü kayıtlarınız kendiliğinden doğru rollerle açılır: bugüne kadar müşteri olarak tutulan kart müşteri rolüyle, tedarikçi olarak tutulan kart tedarikçi rolüyle gelir ve hiçbir ekran davranışı değişmez. Fason kaydı bir cari karta bağlı değilse eskisi gibi çalışmaya devam eder; bunları cari kartıyla eşleştirmek yayın günü yapılan ayrı bir adımdır ve hangi kaydın neye bağlanacağını önce liste hâlinde görüp onaylarsınız."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
           "metin": "Dokuma raporlarına “Excel”, “PDF” ve “Yazdır” düğmeleri geldi (Randıman · Duruş Pareto · Vardiya Karnesi · Karne Listesi ve Mühür) — diğer raporlardaki şeridin aynısı, yeni bir çıktı düzeni yok. Çıktı ekranın aynasıdır: her satırın kaynağı (ölçülen / elle / simüle / boş tezgah) ve payda yoksa yazılan “ölçülemedi” beyanı kâğıda ve Excel'e de geçer; ölçülemeyen oran sıfıra çevrilmez, yoksa sıfır randımanla aynı görünürdü. Başlıkta rapor adı ve tarih penceresi yazar (vardiya karnesinde fabrika günü), dosya adı da bundan kurulur; kaynak kırılımı, ölçüm ufku ve mühür sayıları not olarak tablonun altına düşer. Duruş Pareto'da ayrı kovalar (mikro · sınıflandırılmamış · yuvası atanmamış) ikinci bir sayfada, vardiya karnesinde her vardiya kendi sayfasında çıkar. “PDF” düğmesi yalnız masaüstü uygulamasında görünür. Dokuma modülü kapalı kurulumda hiçbir şey değişmez."
         },
         {
