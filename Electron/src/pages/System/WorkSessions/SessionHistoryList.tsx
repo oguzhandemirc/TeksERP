@@ -4,7 +4,6 @@ import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { safeFormat } from "@/lib/format";
@@ -19,6 +18,7 @@ import {
 } from "./types";
 import { defaultRange } from "./activity-utils";
 import { SessionActivityList } from "./SessionActivityList";
+import { DateRangeInput } from "@/components/forms/DateRangeInput";
 
 const PAGE_SIZE = 25;
 
@@ -75,18 +75,14 @@ export function SessionHistoryList({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium">Oturumlar</span>
-        <Input
-          type="date"
-          className="h-9 w-40"
-          value={from}
-          onChange={(e) => { setFrom(e.target.value); setPage(1); }}
-        />
-        <span className="text-xs text-muted-foreground">—</span>
-        <Input
-          type="date"
-          className="h-9 w-40"
-          value={to}
-          onChange={(e) => { setTo(e.target.value); setPage(1); }}
+        <DateRangeInput
+          from={from}
+          to={to}
+          onFrom={(v) => { setFrom(v); setPage(1); }}
+          onTo={(v) => { setTo(v); setPage(1); }}
+          inputClassName="h-9 w-40"
+          fromLabel="Oturum tarihi başlangıcı"
+          toLabel="Oturum tarihi bitişi"
         />
       </div>
 

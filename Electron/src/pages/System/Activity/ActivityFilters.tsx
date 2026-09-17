@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -12,6 +11,7 @@ import {
 import { systemLogService } from "@/services/systemLogService";
 import { tableLabel, actionLabels } from "./labels";
 import type { SystemLogDomainAction } from "@/types/systemLog";
+import { DateRangeInput } from "@/components/forms/DateRangeInput";
 
 export interface ActivityFilterState {
   userId?: string;
@@ -105,25 +105,15 @@ export function ActivityFilters({ value, onChange }: Props) {
         </Select>
       </Field>
 
-      <Field label="Başlangıç">
-        <Input
-          type="date"
-          className="h-9 w-40"
-          value={value.dateFrom?.slice(0, 10) ?? ""}
-          onChange={(e) =>
-            set("dateFrom", e.target.value ? `${e.target.value}T00:00:00.000Z` : undefined)
-          }
-        />
-      </Field>
-
-      <Field label="Bitiş">
-        <Input
-          type="date"
-          className="h-9 w-40"
-          value={value.dateTo?.slice(0, 10) ?? ""}
-          onChange={(e) =>
-            set("dateTo", e.target.value ? `${e.target.value}T23:59:59.999Z` : undefined)
-          }
+      <Field label="Tarih aralığı">
+        <DateRangeInput
+          from={value.dateFrom?.slice(0, 10) ?? ""}
+          to={value.dateTo?.slice(0, 10) ?? ""}
+          onFrom={(v) => set("dateFrom", v ? `${v}T00:00:00.000Z` : undefined)}
+          onTo={(v) => set("dateTo", v ? `${v}T23:59:59.999Z` : undefined)}
+          inputClassName="h-9 w-40"
+          fromLabel="Başlangıç"
+          toLabel="Bitiş"
         />
       </Field>
 

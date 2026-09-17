@@ -21,6 +21,9 @@ import { describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import { eventBadgeClass, eventMeta, type WarehouseMovementRow } from "./movements";
+// Statik import: `vi.mock` hoist edilir, mock yine geçerli; modül yükü (takvim bileşeni dahil) test
+// zamanlayıcısının DIŞINDA kalır — `it` içindeki dinamik import 5 sn tavanını yük altında aşıyordu.
+import { WarehouseMovementsSheet } from "./WarehouseMovementsSheet";
 
 const BILINMEYEN = "YENI_TUR_2099";
 
@@ -71,7 +74,6 @@ describe("① saf helper — sözlükte olmayan tür", () => {
 
 describe("② bileşen — bilinmeyen türlü satır ekranı çökertmez", () => {
   it("⭐ satır çizilir ve ham kod ekranda okunur", async () => {
-    const { WarehouseMovementsSheet } = await import("./WarehouseMovementsSheet");
     const warehouse = { id: "wh-1", code: "DP-MERKEZ", name: "Merkez" } as unknown as Parameters<
       typeof WarehouseMovementsSheet
     >[0]["warehouse"];

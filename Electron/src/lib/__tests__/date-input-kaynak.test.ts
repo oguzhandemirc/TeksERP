@@ -3,13 +3,13 @@
 // =============================================================================
 // İki sonda (2026-09-17, kırmızı görüldü): ① herhangi bir dosyaya `<input type="date" />` eklenince "artmadı" ❌;
 // ② bir dosya DatePickerInput'a çevrilince "taban düşer" — sayı TABAN'ın altına iner ve bu test TABAN'ı düşürmeyi
-// ister (bilgi satırı). Son parti: TABAN = 0.
+// ister (bilgi satırı). Hedef TABAN = 0 — kalan 2, alış siparişi formunun iki tarih alanı (ayrı dilimde iner).
 import { describe, it, expect } from "vitest";
 import path from "node:path";
 import { nativeDateInputHits, yorumlariSoy, NATIVE_DATE_INPUT_RE } from "../date-input-kaynak";
 
-/** TABAN — parti parti düşer: 59 (ilk ölçüm 2026-09-17, yorumsuz; ham grep 76 idi) → … → 0. Sayı düşünce buraya YAZ (cırcır iki yönlü). */
-export const TABAN = 14;
+/** TABAN — parti parti düştü: 59 (ilk ölçüm 2026-09-17, yorumsuz; ham grep 76 idi) → 48 → 36 → 14 → 2 → hedef 0. Sayı düşünce buraya YAZ (cırcır iki yönlü). */
+export const TABAN = 2;
 
 const SRC = path.resolve(__dirname, "../..");
 

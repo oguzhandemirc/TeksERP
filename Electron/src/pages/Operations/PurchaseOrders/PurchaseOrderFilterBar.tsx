@@ -32,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import { SupplierSelect } from "@/components/forms/SupplierSelect";
 import type { SupplierParty } from "@/components/forms/supplierParty";
 import { poFilterControls, type PoFilterScope } from "./filterScope";
+import { DateRangeInput } from "@/components/forms/DateRangeInput";
 
 /** Canlı kovalar — "işi bitmemiş" siparişler. Backend CSV'yi `IN`'e çevirir. */
 export const LIVE_PO_STATUS = "OPEN,PARTIAL";
@@ -136,19 +137,14 @@ export function PurchaseOrderFilterBar({ value, onChange, scope = "orders" }: Pr
           </select>
 
           <span className="text-xs text-muted-foreground">Sipariş tarihi</span>
-          <Input
-            type="date"
-            className="w-36"
-            title="Sipariş tarihi başlangıcı"
-            value={value.dateFrom}
-            onChange={(e) => set("dateFrom", e.target.value)}
-          />
-          <Input
-            type="date"
-            className="w-36"
-            title="Sipariş tarihi bitişi"
-            value={value.dateTo}
-            onChange={(e) => set("dateTo", e.target.value)}
+          <DateRangeInput
+            from={value.dateFrom}
+            to={value.dateTo}
+            onFrom={(v) => set("dateFrom", v)}
+            onTo={(v) => set("dateTo", v)}
+            inputClassName="w-36"
+            fromLabel="Sipariş tarihi başlangıcı"
+            toLabel="Sipariş tarihi bitişi"
           />
         </>
       )}

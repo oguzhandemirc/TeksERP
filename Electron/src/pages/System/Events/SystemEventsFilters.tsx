@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { DateRangeInput } from "@/components/forms/DateRangeInput";
 import {
   Select,
   SelectContent,
@@ -86,35 +86,15 @@ export function SystemEventsFilters({ value, onChange }: Props) {
         </Select>
       </Field>
 
-      <Field label="Başlangıç">
-        <Input
-          type="date"
-          className="h-9 w-40"
-          value={value.dateFrom?.slice(0, 10) ?? ""}
-          onChange={(e) =>
-            onChange({
-              ...value,
-              dateFrom: e.target.value
-                ? `${e.target.value}T00:00:00.000Z`
-                : undefined,
-            })
-          }
-        />
-      </Field>
-
-      <Field label="Bitiş">
-        <Input
-          type="date"
-          className="h-9 w-40"
-          value={value.dateTo?.slice(0, 10) ?? ""}
-          onChange={(e) =>
-            onChange({
-              ...value,
-              dateTo: e.target.value
-                ? `${e.target.value}T23:59:59.999Z`
-                : undefined,
-            })
-          }
+      <Field label="Tarih aralığı">
+        <DateRangeInput
+          from={value.dateFrom?.slice(0, 10) ?? ""}
+          to={value.dateTo?.slice(0, 10) ?? ""}
+          onFrom={(v) => onChange({ ...value, dateFrom: v ? `${v}T00:00:00.000Z` : undefined })}
+          onTo={(v) => onChange({ ...value, dateTo: v ? `${v}T23:59:59.999Z` : undefined })}
+          inputClassName="h-9 w-40"
+          fromLabel="Başlangıç"
+          toLabel="Bitiş"
         />
       </Field>
 

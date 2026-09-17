@@ -30,7 +30,6 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { dayEndIso, dayStartIso } from "@/pages/Finance/Cheques/dates";
 import { listWarehouseMovements } from "./service";
@@ -52,6 +51,7 @@ import {
   type WarehouseEventType,
 } from "./movements";
 import type { Warehouse } from "./types";
+import { DateRangeInput } from "@/components/forms/DateRangeInput";
 
 const PAGE_SIZE = 50;
 
@@ -133,19 +133,14 @@ export function WarehouseMovementsSheet({ warehouse, onClose }: Props) {
                   </option>
                 ))}
               </select>
-              <Input
-                type="date"
-                className="w-36"
-                title="Başlangıç tarihi"
-                value={filter.dateFrom}
-                onChange={(e) => setFilter((f) => ({ ...f, dateFrom: e.target.value }))}
-              />
-              <Input
-                type="date"
-                className="w-36"
-                title="Bitiş tarihi"
-                value={filter.dateTo}
-                onChange={(e) => setFilter((f) => ({ ...f, dateTo: e.target.value }))}
+              <DateRangeInput
+                from={filter.dateFrom}
+                to={filter.dateTo}
+                onFrom={(v) => setFilter((f) => ({ ...f, dateFrom: v }))}
+                onTo={(v) => setFilter((f) => ({ ...f, dateTo: v }))}
+                inputClassName="w-36"
+                fromLabel="Başlangıç tarihi"
+                toLabel="Bitiş tarihi"
               />
               {filtered && (
                 <Button variant="ghost" size="sm" onClick={() => setFilter(EMPTY_MOVEMENT_FILTER)}>

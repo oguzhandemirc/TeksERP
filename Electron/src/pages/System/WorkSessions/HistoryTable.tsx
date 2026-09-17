@@ -3,7 +3,6 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -23,6 +22,7 @@ import { machineService } from "@/pages/Machines/service";
 import { stationService } from "@/pages/Stations/service";
 import { adminUserService } from "@/services/adminUserService";
 import { workSessionService } from "./service";
+import { DateRangeInput } from "@/components/forms/DateRangeInput";
 import {
   endReasonLabels,
   formatDurationMinutes,
@@ -166,24 +166,20 @@ export function HistoryTable() {
             </option>
           ))}
         </select>
-        <Input
-          type="date"
-          className="h-9 w-40"
-          value={from}
-          onChange={(e) => {
-            setFrom(e.target.value);
+        <DateRangeInput
+          from={from}
+          to={to}
+          onFrom={(v) => {
+            setFrom(v);
             resetPage();
           }}
-        />
-        <span className="text-xs text-muted-foreground">—</span>
-        <Input
-          type="date"
-          className="h-9 w-40"
-          value={to}
-          onChange={(e) => {
-            setTo(e.target.value);
+          onTo={(v) => {
+            setTo(v);
             resetPage();
           }}
+          inputClassName="h-9 w-40"
+          fromLabel="Oturum tarihi başlangıcı"
+          toLabel="Oturum tarihi bitişi"
         />
         <div className="ml-auto">
           <ListExportMenu
