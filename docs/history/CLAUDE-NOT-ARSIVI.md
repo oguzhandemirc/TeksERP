@@ -21,6 +21,58 @@
 
 ---
 
+## 2026-09-17 — Göç betiğinin ilişki listesi ELLE yazılmaz [ÇEKİRDEK]
+
+İş ortağı rol modelinin D2 dilimi: fason profillerini cari kartına bağlayan göç betiği. Beş
+ölçüm tasarımı değiştirdi ve üçü ancak KOD ÇALIŞINCA ortaya çıktı.
+
+**① İLİŞKİ LİSTESİ ELLE YAZILMAZ.** Plan "10 çocuk" diyordu; şema 9 model/alan çifti + bir
+özel durum gösterdi. İkisi elle yazılmış listede YOKTU:
+  • `ChequeEvent` bağını `counterCariId`de tutar (adı `cariId` DEĞİL) — betik
+    `Unknown argument cariId` ile ÇÖKTÜ, yani bu gürültülü bir hataydı;
+  • `Cheque.endorsedToCariId` (ciro hedefi) hiç listede yoktu — bu SESSİZ olurdu: bakiye
+    doğru çıkar, ciro bağı eski (artık pasif) hesabı göstermeye devam ederdi ve hiçbir sayaç
+    bozulmazdı.
+⇒ ***Bir modelin cari bağı "cariId" diye adlandırılmış olmak zorunda değildir ve bir model
+İKİ bağ taşıyabilir; model listesi tutan bir uygulama ikisini de kaçırır.*** Tablo artık
+model+alan çiftidir ve bekçi onu ŞEMAYLA İKİ YÖNLÜ birebirler.
+
+**② `CariBalance` TAŞINMAZ, TOPLANIR.** PK'sı `(cariId, currency)`; hedef hesapta aynı para
+biriminde satır varsa repoint PK çakışmasıdır. Sonda bunu somut gösterdi: toplama kolu
+düşürülünce `{TRY:350, USD:40}` → `{TRY:100}` oldu — **290 TL ve 40 USD sessizce kayboldu**,
+hiçbir hata satırı üretmeden.
+
+**③ İDEMPOTENTLİK BAYRAKLA DEĞİL DURUMLA ÖLÇÜLÜR.** Birleştirme sonrası eski hesap
+`subcontractorId`sini KORUMAK ZORUNDA (`cari_accounts_party_xor`: `customerId` da null
+olamaz), yani sorgu onu her koşumda yeniden bulur. Ayırt eden şey bir işaret değil BOŞLUK:
+pasif + hiç çocuk + hiç bakiye = taşınacak şey kalmamış. ⇒ ***"Daha önce koştum" bayrağı
+kaybolur; durumun kendisi kalır.***
+
+**④ TEKİL BİR REDDİN BÜTÜN GÖÇÜ DÜŞÜRMESİ EN KÖTÜ SONUÇTUR.** Kart üretimi aynı vergi
+numarasını ikinci müşteride reddeder (409) ve ilk yazımda bu istisna göçü ORTASINDA
+düşürüyordu: bir kısım profil kart almış, bir kısmı almamış. Artık ÖNERİ satırıdır ve koşum
+sürer. Vergi no eşleşmesi addan DAHA GÜÇLÜ bir "aynı firma" kanıtıdır ama kararı yine
+kullanıcı verir — betik hiçbir profili tahminle bağlamaz.
+
+**⑤ DEFTER SATIRININ POINTER'I ≠ İÇERİĞİ.** Plan "CariTransaction'a `note` izi" diyordu; o
+alan YOK ve tek aday `description` — ekstrede basılan, muhasebecinin yazdığı içerik. Göç izi
+oraya yazılsaydı sistem metni kullanıcı metninin yerine geçerdi. İz AUDIT'e yazıldı.
+⇒ ***Bir satırın POINTER'ını taşımak ile İÇERİĞİNİ değiştirmek ayrı işlerdir.***
+
+**Yan ders — CLI betiğinden değer import etmek.** Bekçi çocuk tablosunu göç betiğinden import
+ediyordu; import betiğin üst düzey `main()`ini ÇALIŞTIRDI, `pool.end()` çağırdı ve BEKÇİNİN
+havuzunu kapattı ("Cannot use a pool after calling end on the pool"). Tablo paylaşılan bir
+modüle taşındı. Aynı aileden: servisi `routes/customer.routes`tan import etmek express
+zincirini de çekiyordu ve betik ilk `console.log`a BİLE ulaşmadan asılıyordu.
+⇒ ***Bir modülden değer import etmek, onun bütün yan etkilerini de import etmektir.***
+
+**Ve bir kapı ölçüm dersi:** `--apply` hedef kapısının sondası önce ÇIKIŞ KODUNA bakıyordu —
+ama sahte kimlikle bağlantı zaten `AuthenticationFailed` verip 1 döndürüyor. Kapının iddiası
+reddin METNİYLE ölçülür. ⇒ ***Bir kapıyı çıkış koduyla ölçmek, aynı kodu üreten her şeyi o
+kapıya mal etmektir.***
+
+---
+
 ## 2026-09-16 — Yarış sondasının iddiası SONUCA değil DEĞİŞMEZE bağlanır [ÇEKİRDEK]
 
 CI `b70c9ffe` Backend kırmızısı: `test_production_flow_api §6` — "aynı topa eşzamanlı iki
