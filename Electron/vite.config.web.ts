@@ -23,6 +23,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
+/** Renderer sürümü — `X-Client-Version` başlığına gömülür (`src/lib/client-info.ts`); dev ve build'de aynı. */
+const APP_VERSION = (JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8")) as { version: string }).version;
+
 export default defineConfig(({ command }) => ({
   plugins: [react(), tailwindcss()],
   resolve: {
@@ -31,8 +34,9 @@ export default defineConfig(({ command }) => ({
       "@shared": fileURLToPath(new URL("./shared", import.meta.url)),
     },
   },
-  define:
-    command === "build"
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+    ...(command === "build"
       ? {
           "import.meta.env.VITE_API_BASE_URL": JSON.stringify(
             process.env.VITE_WEB_API_BASE_URL ?? "",
@@ -49,7 +53,8 @@ export default defineConfig(({ command }) => ({
               "",
           ),
         }
-      : undefined,
+      : {}),
+  },
   build: {
     outDir: "dist-web",
     emptyOutDir: true,

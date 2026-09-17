@@ -30,16 +30,23 @@ export const CLIENT_INFO_HEADERS = {
  *  ikisini ayrı eksen sayar — `client-version-policy.ts`). */
 export const CLIENT_KIND = IS_ELECTRON ? "electron" : "web";
 
-/** Sürüm main process'ten gelir (`window.api.appInfo.version`) ve bir kez okunur.
- *  Web build'inde `window.api` yoktur → sürüm YOK ve bu doğrudur: web paneli
- *  backend paketiyle BİRLİKTE deploy edilir, ayrı bir sürüm ekseni taşımaz. */
-let versionCache: string | null = null;
+/** Web build'inde sürüm derleme anında gömülür (`vite.config.web.ts` `define`, renderer `package.json`):
+ *  web paneli backend paketiyle birlikte dağıtılır, başlıktaki değer Electron ile AYNI eksendir (panel sürümü). */
+const WEB_VERSION: string | null = typeof __APP_VERSION__ === "string" && __APP_VERSION__ ? __APP_VERSION__ : null;
+
+/** Sürümsüz istek için üst sınır: login İLK istektir, `Session.clientVersion` damgası ilk istekte dolsun;
+ *  süre dolarsa istek başlıksız gider (sunucu sonraki istekte doldurur), asla düşmez. */
+export const VERSION_WAIT_MS = 300;
+
+/** Electron'da sürüm main process'ten gelir (`window.api.appInfo.version`) ve bir kez okunur. */
+let versionCache: string | null = IS_ELECTRON ? null : WEB_VERSION;
 let versionPromise: Promise<void> | null = null;
 
-function ensureVersion(): void {
-  if (versionCache !== null || versionPromise !== null) return;
+function ensureVersion(): Promise<void> | null {
+  if (versionCache !== null) return null;
+  if (versionPromise !== null) return versionPromise;
   const p = window.api?.appInfo?.version?.();
-  if (!p) return;
+  if (!p) return null;
   versionPromise = p
     .then((v) => {
       if (typeof v === "string" && v) versionCache = v;
@@ -47,20 +54,23 @@ function ensureVersion(): void {
     .catch(() => {
       /* künye best-effort — okunamazsa satır sürümsüz görünür */
     });
+  return versionPromise;
 }
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /**
  * İstek başlıklarına künyeyi yazar. Hiçbir hatası isteği düşürmez.
  *
- * İlk birkaç istek sürümsüz gidebilir (main process okuması asenkron) — sunucu
- * defteri sürümü "yeni değer geldiğinde" günceller, yani ilk dolu değerde
- * satır düzelir ve bir daha null'a düşmez.
+ * Sürüm henüz okunmadıysa en çok `VERSION_WAIT_MS` beklenir; dolmazsa istek sürümsüz gider —
+ * sunucu defteri sürümü "yeni değer geldiğinde" günceller, ilk dolu değerde satır düzelir.
  */
 export async function applyClientInfoHeaders(
   set: (name: string, value: string) => void,
 ): Promise<void> {
   try {
-    ensureVersion();
+    const pending = ensureVersion();
+    if (pending) await Promise.race([pending, sleep(VERSION_WAIT_MS)]);
     set(CLIENT_INFO_HEADERS.kind, CLIENT_KIND);
     if (versionCache) set(CLIENT_INFO_HEADERS.version, versionCache);
     const instanceId = await getOrCreateDeviceId();
