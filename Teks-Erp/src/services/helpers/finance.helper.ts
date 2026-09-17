@@ -238,15 +238,33 @@ export async function resolveExchangeRateTx(
  * taraf kolonunun tutarlılığını CHECK constraint zaten garanti ediyor ve
  * upsert'in update dalı burada anlamsız — cari alanları bu yoldan güncellenmez).
  */
-export async function ensureCariAccountTx(
+export type CariAccountParty = { customerId?: string | null; subcontractorId?: string | null };
+
+/**
+ * Cari hesabın TEK ADRESİ karttır: fason bacağı (`subcontractorId`) profilin bağlı kartına ÇÖZÜLÜR.
+ * Bağsız profil (göç koşulmamış kurulum) eskisi gibi fason hesabına gider — varsayılan = bugünkü davranış.
+ * Çözülmeseydi göçten sonra bağlı fasona kesilen fatura/ödeme/çek ikinci bir hesap doğururdu (1e ölçtü).
+ */
+export async function resolveAccountPartyTx(
   tx: Prisma.TransactionClient,
-  party: { customerId?: string | null; subcontractorId?: string | null },
-): Promise<{ id: string; defaultCurrency: Currency }> {
+  party: CariAccountParty,
+): Promise<{ customerId: string | null; subcontractorId: string | null }> {
   const customerId = party.customerId ?? null;
   const subcontractorId = party.subcontractorId ?? null;
-  if ((customerId === null) === (subcontractorId === null)) {
+  if (customerId || !subcontractorId) return { customerId, subcontractorId };
+  const profile = await tx.subcontractor.findUnique({ where: { id: subcontractorId }, select: { customerId: true } });
+  if (profile?.customerId) return { customerId: profile.customerId, subcontractorId: null };
+  return { customerId, subcontractorId };
+}
+
+export async function ensureCariAccountTx(
+  tx: Prisma.TransactionClient,
+  party: CariAccountParty,
+): Promise<{ id: string; defaultCurrency: Currency }> {
+  if ((party.customerId == null) === (party.subcontractorId == null)) {
     throw AppError.badRequest("Cari hesap için müşteri VEYA fason firma verilmeli (ikisi birden değil).");
   }
+  const { customerId, subcontractorId } = await resolveAccountPartyTx(tx, party);
 
   const where = customerId ? { customerId } : { subcontractorId: subcontractorId as string };
   const existing = await tx.cariAccount.findFirst({

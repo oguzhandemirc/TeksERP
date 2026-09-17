@@ -11,7 +11,7 @@ import { reasonOptions, type SebepSecenek } from "./reports/_secenekler";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
-import { D0, D, applyCariBalanceTx } from "./helpers/finance.helper";
+import { D0, D, applyCariBalanceTx, resolveAccountPartyTx } from "./helpers/finance.helper";
 import { assertPeriodOpenTx, lockCariPeriodScopeTx } from "./helpers/period-guard.helper";
 import { periodCloseService } from "./period-close.service";
 // H2 (2026-08-14): "Gecikmiş" kolonunun TEK kaynağı yaşlandırma çekirdeği —
@@ -212,25 +212,25 @@ export class CariService {
     },
     userId?: string,
   ): Promise<ApiResponse<{ id: string }>> {
-    const customerId = input.customerId ?? null;
-    const subcontractorId = input.subcontractorId ?? null;
-    if ((customerId === null) === (subcontractorId === null)) {
+    if ((input.customerId == null) === (input.subcontractorId == null)) {
       throw AppError.badRequest("Müşteri VEYA fason firma seçilmeli (ikisi birden değil).");
     }
 
     // Taraf gerçekten var mı + aktif mi (dış referans doğrulaması).
-    if (customerId) {
-      const c = await prisma.customer.findUnique({ where: { id: customerId }, select: { isActive: true } });
+    if (input.customerId) {
+      const c = await prisma.customer.findUnique({ where: { id: input.customerId }, select: { isActive: true } });
       if (!c) throw AppError.badRequest("Müşteri bulunamadı.");
       if (!c.isActive) throw AppError.badRequest("Müşteri pasif durumda.");
     } else {
       const s = await prisma.subcontractor.findUnique({
-        where: { id: subcontractorId as string },
+        where: { id: input.subcontractorId as string },
         select: { isActive: true },
       });
       if (!s) throw AppError.badRequest("Fason firma bulunamadı.");
       if (!s.isActive) throw AppError.badRequest("Fason firma pasif durumda.");
     }
+    // Hesabın tek adresi kart: bağlı fason profili kartına çözülür (lazy yolla aynı çözücü).
+    const { customerId, subcontractorId } = await resolveAccountPartyTx(prisma, input);
 
     const dup = await prisma.cariAccount.findFirst({
       where: customerId ? { customerId } : { subcontractorId: subcontractorId as string },

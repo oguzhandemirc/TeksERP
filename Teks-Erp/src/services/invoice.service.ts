@@ -36,6 +36,7 @@ import {
   nextInvoiceNoTx,
   resolveExchangeRateTx,
   ensureCariAccountTx,
+  resolveAccountPartyTx,
   applyCariBalanceTx,
   deriveInvoiceDueDate,
 } from "./helpers/finance.helper";
@@ -685,12 +686,12 @@ export class InvoiceService {
     // fallback'ini uyguluyor). Kural TEK KAYNAKTA: `deriveInvoiceDueDate`.
     // ⚠️ Cari HENÜZ AÇILMAMIŞ olabilir (lazy): o zaman `null` → vade YOK.
     // Uydurma vade yazmak, hiç anlaşılmamış bir vadeyi anlaşılmış göstermekti.
+    // Vade, hesabın YAŞADIĞI yerden okunur: bağlı fason profilinin hesabı karttadır (`resolveAccountPartyTx`).
+    const party = await resolveAccountPartyTx(prisma, { customerId: receipt.supplierId, subcontractorId: receipt.subcontractorId });
     const supplierCari =
-      receipt.supplierId || receipt.subcontractorId
+      party.customerId || party.subcontractorId
         ? await prisma.cariAccount.findFirst({
-            where: receipt.supplierId
-              ? { customerId: receipt.supplierId }
-              : { subcontractorId: receipt.subcontractorId! },
+            where: party.customerId ? { customerId: party.customerId } : { subcontractorId: party.subcontractorId! },
             select: { paymentTermDays: true },
           })
         : null;

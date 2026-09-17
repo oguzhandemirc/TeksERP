@@ -1102,12 +1102,15 @@ async function main(): Promise<void> {
       kInvRow?.type === "PURCHASE" && kInvRow?.status === "DRAFT",
       `${kInvRow?.type}/${kInvRow?.status}`,
     );
+    // Cari hesabın tek adresi KART (rol modeli faz 2): profil bağlıysa hesap kartta (kind=CUSTOMER), bağsızsa eski yol.
+    const kProfil = await prisma.subcontractor.findUniqueOrThrow({ where: { id: dye.id }, select: { customerId: true } });
+    const kBeklenen = kProfil.customerId
+      ? kInvRow?.cari?.kind === "CUSTOMER" && kInvRow?.cari?.customerId === kProfil.customerId && kInvRow?.cari?.subcontractorId === null
+      : kInvRow?.cari?.kind === "SUBCONTRACTOR" && kInvRow?.cari?.subcontractorId === dye.id && kInvRow?.cari?.customerId === null;
     check(
-      "K6b) ⭐ Taslak FASON carisine bağlandı (kind=SUBCONTRACTOR, customerId NULL)",
-      kInvRow?.cari?.kind === "SUBCONTRACTOR" &&
-        kInvRow?.cari?.subcontractorId === dye.id &&
-        kInvRow?.cari?.customerId === null,
-      `kind=${kInvRow?.cari?.kind} sub=${kInvRow?.cari?.subcontractorId?.slice(0, 8)}`,
+      `K6b) ⭐ Taslak fason carisine bağlandı — profil ${kProfil.customerId ? "BAĞLI → hesap KARTTA (kind=CUSTOMER)" : "BAĞSIZ → fason hesabı (kind=SUBCONTRACTOR)"}`,
+      kBeklenen,
+      `kind=${kInvRow?.cari?.kind} cust=${kInvRow?.cari?.customerId?.slice(0, 8)} sub=${kInvRow?.cari?.subcontractorId?.slice(0, 8)}`,
     );
   }
 
