@@ -28,6 +28,7 @@ import { bordroBlockReason, buildChequeBordro, totalsByCurrency } from "./cheque
 import { KIND_LABEL } from "./labels";
 import { parseYmdLocal, ymd } from "./dates";
 import type { ChequeRow } from "./service";
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
 
 interface Props {
   /** SEÇİLİ satırlar — ekrandaki listeden gelir. */
@@ -109,12 +110,7 @@ export function ChequeBordroDialog({ rows, open, onOpenChange }: Props) {
           </div>
           <div>
             <Label>Bordro tarihi</Label>
-            <Input
-              type="date"
-              className="mt-1"
-              value={dateYmd}
-              onChange={(e) => setDateYmd(e.target.value)}
-            />
+            <DatePickerInput aria-label="Bordro tarihi" className="mt-1" value={dateYmd} onChange={setDateYmd} />
             {!dateOk && (
               <p className="mt-1 text-xs text-amber-700 dark:text-amber-500">
                 Bordro tarihi gerekli — kâğıdın düzenlenme günü olarak basılır.

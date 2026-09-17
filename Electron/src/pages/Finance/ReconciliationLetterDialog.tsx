@@ -27,7 +27,6 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
@@ -36,6 +35,7 @@ import {
   reconciliationBlockReason,
 } from "./reconciliationLetter";
 import { createReconciliationLetter, money, type CariRow } from "./service";
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
 
 interface Props {
   cari: CariRow;
@@ -128,12 +128,7 @@ export function ReconciliationLetterDialog({
 
         <div>
           <Label>Bakiye tarihi (kesit)</Label>
-          <Input
-            type="date"
-            className="mt-1"
-            value={asOfYmd}
-            onChange={(e) => setAsOfYmd(e.target.value)}
-          />
+          <DatePickerInput aria-label="Bakiye tarihi (kesit)" className="mt-1" value={asOfYmd} onChange={setAsOfYmd} />
           <p className="mt-1 text-xs text-muted-foreground">
             Seçilen GÜN DAHİLDİR: o günün hareketleri bakiyeye girer. Düzenleme tarihi ayrıca
             bugün olarak basılır.

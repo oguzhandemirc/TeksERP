@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { cariPickerService } from "./Allocations/service";
 import type { CariRow } from "./service";
+import { DateRangeInput } from "@/components/forms/DateRangeInput";
 import {
   EMPTY_PAYMENT_FILTERS,
   PAYMENT_METHOD_LABEL,
@@ -96,19 +97,14 @@ export function PaymentsFilterBar({ value, onChange }: Props) {
       </select>
 
       <span className="text-xs text-muted-foreground">Tarih</span>
-      <Input
-        type="date"
-        className="w-36"
-        title="Ödeme tarihi başlangıcı"
-        value={value.from}
-        onChange={(e) => set("from", e.target.value)}
-      />
-      <Input
-        type="date"
-        className="w-36"
-        title="Ödeme tarihi bitişi"
-        value={value.to}
-        onChange={(e) => set("to", e.target.value)}
+      <DateRangeInput
+        from={value.from}
+        to={value.to}
+        onFrom={(v) => set("from", v)}
+        onTo={(v) => set("to", v)}
+        inputClassName="w-36"
+        fromLabel="Ödeme tarihi başlangıcı"
+        toLabel="Ödeme tarihi bitişi"
       />
 
       {/* Temizle YALNIZ bir şey seçiliyken çıkar — hep duran bir düğme, hiçbir

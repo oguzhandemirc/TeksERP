@@ -44,6 +44,7 @@ import { KIND_LABEL } from "./labels";
 import { ymd } from "./dates";
 import { createChequeDeliveryNote, type ChequeRow } from "./service";
 import { money, type Currency } from "../service";
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
 
 interface Props {
   /** SEÇİLİ satırlar — ekrandaki listeden gelir. */
@@ -147,12 +148,7 @@ export function ChequeOfficialBordroDialog({ rows, open, onOpenChange }: Props) 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label>Teslim tarihi</Label>
-            <Input
-              type="date"
-              className="mt-1"
-              value={dateYmd}
-              onChange={(e) => setDateYmd(e.target.value)}
-            />
+            <DatePickerInput aria-label="Teslim tarihi" className="mt-1" value={dateYmd} onChange={setDateYmd} />
             <p className="mt-1 text-xs text-muted-foreground">
               Belge numarasının günü de budur (BRD + gün + sıra).
             </p>

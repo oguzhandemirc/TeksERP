@@ -33,12 +33,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import type { Currency } from "../service";
 import { CariPicker } from "./CariPicker";
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import {
   PERIOD_CURRENCIES,
   closePeriod,
@@ -160,13 +160,7 @@ export function ClosePeriodDialog({ open, onOpenChange }: Props) {
 
             <div>
               <Label>Dönem sonu (bu gün dahil)</Label>
-              <Input
-                type="date"
-                className="mt-1"
-                max={todayYmd}
-                value={periodEnd}
-                onChange={(e) => setPeriodEnd(e.target.value)}
-              />
+              <DatePickerInput aria-label="Dönem sonu (bu gün dahil)" className="mt-1" max={todayYmd} value={periodEnd} onChange={setPeriodEnd} />
             </div>
 
             <div className="col-span-2 flex flex-wrap items-center gap-2">

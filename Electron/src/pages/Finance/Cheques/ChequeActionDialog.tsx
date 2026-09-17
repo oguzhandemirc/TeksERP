@@ -56,6 +56,7 @@ import {
 import { DOCTYPE_LABEL, cariName } from "./labels";
 import { dayStartIso, fmtDate, ymd } from "./dates";
 import { allocationBlockReason, type ChequeActionDef } from "./transitions";
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
 
 interface Props {
   row: ChequeRow;
@@ -301,12 +302,7 @@ export function ChequeActionDialog({ row, def, open, onOpenChange, onDone }: Pro
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>İşlem tarihi</Label>
-              <Input
-                type="date"
-                className="mt-1"
-                value={eventDate}
-                onChange={(e) => setEventDate(e.target.value)}
-              />
+              <DatePickerInput aria-label="İşlem tarihi" className="mt-1" value={eventDate} onChange={setEventDate} />
               {!eventIso && (
                 // Kapalı onay düğmesinin sebebi EKRANDA yazar; sessizce kapalı
                 // bir düğme kullanıcıyı "bozuk" sonucuna götürür.

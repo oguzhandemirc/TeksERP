@@ -32,6 +32,7 @@ import { CashAccountPicker, type CashAccountOption } from "../PeriodClose/CashAc
 import { dayStartIso, ymd } from "../Cheques/dates";
 import { cashTxnErrorText, transferCash } from "./service";
 import { amountHint, parseAmount, transferBlockReason, transferReady } from "./cashTxnRules";
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
 
 interface Props {
   open: boolean;
@@ -131,7 +132,7 @@ export function CashTransferDialog({ open, onOpenChange, onCreated }: Props) {
           </div>
           <div>
             <Label className="text-xs">İşlem tarihi</Label>
-            <Input type="date" className="mt-1" value={txnDate} onChange={(e) => setTxnDate(e.target.value)} />
+            <DatePickerInput aria-label="İşlem tarihi" className="mt-1" value={txnDate} onChange={setTxnDate} />
           </div>
 
           <div className="col-span-2">

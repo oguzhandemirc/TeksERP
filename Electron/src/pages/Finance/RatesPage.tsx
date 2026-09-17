@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionGate } from "@/components/PermissionGate";
 import { listRates, createRate, fetchTcmbRates, type Currency } from "./service";
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
 
 // TL kur tablosuna GİRMEZ: kendi para birimimizin kendine kuru 1'dir ve backend
 // bunu koda gömer. Listede göstermek "girmeyi unuttum mu" sorusu doğururdu.
@@ -65,7 +66,7 @@ export function RatesPage() {
           <div className="flex items-end gap-3 rounded-md border bg-muted/30 p-4">
             <div>
               <Label className="text-xs">Tarih</Label>
-              <Input type="date" className="mt-1" value={rateDate} onChange={(e) => setRateDate(e.target.value)} />
+              <DatePickerInput aria-label="Tarih" className="mt-1" value={rateDate} onChange={setRateDate} />
             </div>
             <div>
               <Label className="text-xs">Para birimi</Label>

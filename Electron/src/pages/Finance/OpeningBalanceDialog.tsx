@@ -34,6 +34,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { money, setOpeningBalance, type CariRow, type Currency } from "./service";
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
 
 function errorText(error: unknown): string {
   if (axios.isAxiosError(error)) {
@@ -132,13 +133,7 @@ export function OpeningBalanceDialog({ cari, initialCurrency, open, onOpenChange
           </div>
           <div>
             <Label className="text-xs">Devir tarihi</Label>
-            <Input
-              type="date"
-              className="mt-1"
-              max={ymdLocal(new Date())}
-              value={txnDate}
-              onChange={(e) => setTxnDate(e.target.value)}
-            />
+            <DatePickerInput aria-label="Devir tarihi" className="mt-1" max={ymdLocal(new Date())} value={txnDate} onChange={setTxnDate} />
           </div>
           <div>
             <Label className="text-xs">Tutar</Label>

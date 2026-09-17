@@ -16,7 +16,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -30,6 +29,7 @@ import { findActiveDevirRowId } from "./statementDevir";
 import { statementTargetOf, type StatementTarget } from "./statementLink";
 import { InvoiceDetailDialog } from "./InvoiceDetailDialog";
 import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import {
   getStatement,
   cancelOpeningBalance,
@@ -212,11 +212,11 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
             </div>
             <div>
               <Label className="text-xs">Başlangıç</Label>
-              <Input type="date" className="mt-1" value={from} onChange={(e) => setFrom(e.target.value)} />
+              <DatePickerInput aria-label="Başlangıç" className="mt-1" value={from} onChange={setFrom} />
             </div>
             <div>
               <Label className="text-xs">Bitiş</Label>
-              <Input type="date" className="mt-1" value={to} onChange={(e) => setTo(e.target.value)} />
+              <DatePickerInput aria-label="Bitiş" className="mt-1" value={to} onChange={setTo} />
             </div>
             {/* Dışa aktarım — izin kapısı YOK: ekranı açabilen kişi zaten bu
                 rakamları görüyor, dosya yalnız aynı görünümü taşınabilir hâle

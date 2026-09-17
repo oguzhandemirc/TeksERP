@@ -55,6 +55,7 @@ import { money } from "../service";
 import type { Currency } from "../service";
 import { createCheque, type ChequeDocType, type ChequeKind } from "./service";
 import { dayStartIso, ymd } from "./dates";
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
 
 const CURRENCIES: Currency[] = ["TRY", "USD", "EUR", "GBP", "RUB"];
 
@@ -264,12 +265,7 @@ export function ChequeFormDialog({ open, initialKind, onOpenChange, onCreated }:
 
           <div className="col-span-2">
             <Label>İşlem tarihi</Label>
-            <Input
-              type="date"
-              className="mt-1"
-              value={postingDate}
-              onChange={(e) => setPostingDate(e.target.value)}
-            />
+            <DatePickerInput aria-label="İşlem tarihi" className="mt-1" value={postingDate} onChange={setPostingDate} />
             {/* Geçiş diyaloglarındaki dil: bu tarihin NEREYE yazıldığı ekranda
                 söylenir — kullanıcı "keşideyle aynı şey" sanmasın. */}
             <p className="mt-1 text-xs text-muted-foreground">
@@ -280,12 +276,7 @@ export function ChequeFormDialog({ open, initialKind, onOpenChange, onCreated }:
 
           <div>
             <Label>Keşide tarihi</Label>
-            <Input
-              type="date"
-              className="mt-1"
-              value={issueDate}
-              onChange={(e) => setIssueDate(e.target.value)}
-            />
+            <DatePickerInput aria-label="Keşide tarihi" className="mt-1" value={issueDate} onChange={setIssueDate} />
             {/* Eski yardım metni kuru keşideye bağlıyordu — YANLIŞTI; kur işlem
                 tarihinden çözülür. Keşide artık yalnız kâğıdın bilgisidir. */}
             <p className="mt-1 text-xs text-muted-foreground">
@@ -295,7 +286,7 @@ export function ChequeFormDialog({ open, initialKind, onOpenChange, onCreated }:
           </div>
           <div>
             <Label>Vade</Label>
-            <Input type="date" className="mt-1" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            <DatePickerInput aria-label="Vade" className="mt-1" value={dueDate} onChange={setDueDate} />
           </div>
 
           <div>

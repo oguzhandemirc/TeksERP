@@ -13,6 +13,7 @@
 import { RotateCcw, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { DateRangeInput } from "@/components/forms/DateRangeInput";
 
 /** Canlı kovalar — alınan tarafın üçü + verdiğimiz çekin ödenmemiş hâli. */
 export const LIVE_STATUS = "PORTFOLIO,AT_BANK,ENDORSED,ISSUED";
@@ -123,19 +124,14 @@ export function ChequeFilterBar({ value, onChange }: Props) {
         ))}
       </select>
       <span className="text-xs text-muted-foreground">Vade</span>
-      <Input
-        type="date"
-        className="w-36"
-        title="Vade başlangıcı"
-        value={value.dueFrom}
-        onChange={(e) => set("dueFrom", e.target.value)}
-      />
-      <Input
-        type="date"
-        className="w-36"
-        title="Vade bitişi"
-        value={value.dueTo}
-        onChange={(e) => set("dueTo", e.target.value)}
+      <DateRangeInput
+        from={value.dueFrom}
+        to={value.dueTo}
+        onFrom={(v) => set("dueFrom", v)}
+        onTo={(v) => set("dueTo", v)}
+        inputClassName="w-36"
+        fromLabel="Vade başlangıcı"
+        toLabel="Vade bitişi"
       />
       {isFilterDirty(value) && (
         <Button variant="ghost" size="sm" onClick={() => onChange(EMPTY_FILTERS)}>

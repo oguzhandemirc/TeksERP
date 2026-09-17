@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { CashAccountPicker, type CashAccountOption } from "../PeriodClose/CashAccountPicker";
 import { EMPTY_FILTERS, KIND_LABEL, isFilterDirty, type CashTxnFilterState } from "./cashTxnRules";
+import { DateRangeInput } from "@/components/forms/DateRangeInput";
 
 interface Props {
   value: CashTxnFilterState;
@@ -83,19 +84,14 @@ export function CashTxnFilterBar({ value, account, onAccountChange, onChange }: 
       </select>
 
       <span className="text-xs text-muted-foreground">Tarih</span>
-      <Input
-        type="date"
-        className="w-36"
-        title="İşlem tarihi başlangıcı"
-        value={value.from}
-        onChange={(e) => set("from", e.target.value)}
-      />
-      <Input
-        type="date"
-        className="w-36"
-        title="İşlem tarihi bitişi"
-        value={value.to}
-        onChange={(e) => set("to", e.target.value)}
+      <DateRangeInput
+        from={value.from}
+        to={value.to}
+        onFrom={(v) => set("from", v)}
+        onTo={(v) => set("to", v)}
+        inputClassName="w-36"
+        fromLabel="İşlem tarihi başlangıcı"
+        toLabel="İşlem tarihi bitişi"
       />
 
       {/* Temizle YALNIZ bir şey seçiliyken çıkar — hep duran bir düğme, hiçbir

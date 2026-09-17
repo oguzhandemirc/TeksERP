@@ -15,6 +15,7 @@ import { itemService } from "@/pages/Items/service";
 import type { Customer } from "@/pages/Customers/types";
 import type { Item } from "@/pages/Items/types";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import {
   useItemPriceSuggestion,
   priceKindForInvoiceType,
@@ -732,12 +733,7 @@ function InvoiceFormBody({
         <div className="flex flex-wrap items-start gap-3">
           <div>
             <Label>Vade tarihi (opsiyonel)</Label>
-            <Input
-              type="date"
-              className="mt-1 w-44"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-            />
+            <DatePickerInput aria-label="Vade tarihi (opsiyonel)" className="mt-1 w-44" value={dueDate} onChange={setDueDate} />
             {terms.settled && terms.termDays !== null && dueDate !== "" &&
               dueDate === appliedDueSuggestion && (
                 <p className="mt-1 text-[11px] text-muted-foreground">

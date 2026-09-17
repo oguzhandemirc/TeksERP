@@ -36,13 +36,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { CashAccountPicker, cashAccountLabel, type CashAccountOption } from "./CashAccountPicker";
 import { closeCashPeriod, fmtCashMoney, getCashPeriodPreview, CASH_KIND_LABEL } from "./cashService";
 import { formatDayKey, formatInstant, lastDayOfPreviousMonth, lastDayOfPreviousYear, ymd } from "./service";
+import { DatePickerInput } from "@/components/forms/DatePickerInput";
 
 interface Props {
   open: boolean;
@@ -120,13 +120,7 @@ export function CashClosePeriodDialog({ open, onOpenChange }: Props) {
 
             <div>
               <Label>Dönem sonu (bu gün dahil)</Label>
-              <Input
-                type="date"
-                className="mt-1"
-                max={todayYmd}
-                value={periodEnd}
-                onChange={(e) => setPeriodEnd(e.target.value)}
-              />
+              <DatePickerInput aria-label="Dönem sonu (bu gün dahil)" className="mt-1" max={todayYmd} value={periodEnd} onChange={setPeriodEnd} />
             </div>
 
             <div className="flex items-end">
