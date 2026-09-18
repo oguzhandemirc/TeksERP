@@ -245,12 +245,16 @@ main()
     try {
       const all = [...created, ...createdColors];
       await prisma.duplicateReview.deleteMany({ where: { OR: [{ aId: { in: all } }, { bId: { in: all } }] } });
-      await prisma.customer.updateMany({ where: { id: { in: created } }, data: { mergedIntoId: null } });
+      // Tombstone'u DİRİLTMEDEN sil: `mergedIntoId: null` yazmak canlı `nameFold` seddine çarpıyordu (A ve B aynı ad)
+      // → hata yutuluyor, 5 kart kalıyordu (ölçüldü 2026-09-18). Sıra: önce kaynaklar (mergedIntoId dolu), sonra kalanlar.
+      await prisma.customer.deleteMany({ where: { id: { in: created }, mergedIntoId: { not: null } } });
       await prisma.customer.deleteMany({ where: { id: { in: created } } });
-      await prisma.color.updateMany({ where: { id: { in: createdColors } }, data: { mergedIntoId: null } });
+      await prisma.color.deleteMany({ where: { id: { in: createdColors }, mergedIntoId: { not: null } } });
       await prisma.color.deleteMany({ where: { id: { in: createdColors } } });
     } catch (err) {
-      console.error("cleanup hatası:", err);
+      // Kalıntı bırakan teardown KIRMIZI verir (yeşil + kalıntı en kötü sonuç).
+      fail++;
+      console.error("cleanup hatası (kalıntı = kırmızı):", err);
     }
     if (fail > 0) console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();
