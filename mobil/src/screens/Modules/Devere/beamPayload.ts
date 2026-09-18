@@ -191,6 +191,20 @@ export function theoreticalKg(endsCount: number, denier: number | null, lengthM:
 /** Sunucu `assertPhysicalBeamFreeTx` aynası (tr_fold = `foldSearchText`, canlı durumlar READY · SHIPPED_OUT · MOUNTED): aynı gövdede canlı çözgü varsa ERKEN UYARI metni; kilit değil — sunucu 409 `WARP_BEAM_PHYSICAL_BUSY` kalır. */
 const PHYSICAL_LIVE: ReadonlySet<WarpBeamStatus> = new Set(['READY', 'SHIPPED_OUT', 'MOUNTED']);
 const PHYSICAL_LIVE_LABEL: Partial<Record<WarpBeamStatus, string>> = { READY: 'hazır duruyor', SHIPPED_OUT: 'fasonda', MOUNTED: 'tezgahta' };
+/** Tek devere makinesi varsa onun id'si (SAR sayfa 2 ön-seçimi); 0 ya da >1 makine → null (operatör seçer). */
+export function soleMachineId(machines: readonly { id: string }[]): string | null {
+  return machines.length === 1 ? machines[0]!.id : null;
+}
+
+/** Bağlamdaki EN SON leventin çözgü kartı (Plan modalı ön-dolgusu; `createdAt` en yeni) — liste boşsa null. */
+export function lastPlannedWarpSpecId(beams: readonly { warpSpec: { id: string }; createdAt: string }[]): string | null {
+  let enYeni: { warpSpec: { id: string }; createdAt: string } | null = null;
+  for (const b of beams) {
+    if (!enYeni || new Date(b.createdAt).getTime() > new Date(enYeni.createdAt).getTime()) enYeni = b;
+  }
+  return enYeni?.warpSpec.id ?? null;
+}
+
 export function physicalBeamBusyWarning(physicalBeamNo: string | null | undefined, beams: readonly Pick<WarpBeam, 'id' | 'beamNo' | 'physicalBeamNo' | 'status'>[], ownBeamId: string | null = null): string | null {
   const no = (physicalBeamNo ?? '').trim();
   if (!no) return null;

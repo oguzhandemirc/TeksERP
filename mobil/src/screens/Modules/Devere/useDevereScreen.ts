@@ -10,7 +10,7 @@ import { warpBeamService, type WarpBeam } from '../../../services/warpBeam.servi
 import { usePermissions } from '../../../hooks/usePermission';
 import { useIsOnline, useOfflineReason } from '../../../offline/hooks';
 import type { BeamAttempt } from './devereAttempt';
-import { isSameLocalDay } from './beamPayload';
+import { isSameLocalDay, lastPlannedWarpSpecId, soleMachineId } from './beamPayload';
 import { BEAMS_KEY, CONTEXT_KEY, useBeamMutations } from './useBeamMutations';
 import { useBeamForms, type FormModal } from './useBeamForms';
 import { useMountForm } from './useMountForm';
@@ -46,7 +46,16 @@ export function useDevereScreen() {
 
   const mutations = useBeamMutations({ attemptRef, onDone: () => setModal(null), onCollision: setCollision });
   const defaultWarehouseId = context.data?.warehouses.find((w) => w.isDefault)?.id ?? context.data?.warehouses[0]?.id ?? null;
-  const forms = useBeamForms({ attemptRef, mutations, defaultWarehouseId, open: setModal, current: modal?.kind === 'plan' || modal?.kind === 'wind' ? modal : null, lotRequired: context.data?.lotRequired ?? false });
+  const forms = useBeamForms({
+    attemptRef,
+    mutations,
+    defaultWarehouseId,
+    open: setModal,
+    current: modal?.kind === 'plan' || modal?.kind === 'wind' ? modal : null,
+    lotRequired: context.data?.lotRequired ?? false,
+    soleMachineId: soleMachineId(context.data?.machines ?? []),
+    lastWarpSpecId: lastPlannedWarpSpecId([...(planned.data ?? []), ...(ready.data ?? [])]),
+  });
   const closeModal = useCallback(() => {
     setModal(null);
     forms.clearFormError();

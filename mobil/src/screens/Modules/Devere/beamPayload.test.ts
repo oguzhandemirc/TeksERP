@@ -1,4 +1,4 @@
-import { beamActionsEnabled, buildPlanPayload, buildWindPayload, classifyBeamFailure, initialWindForm, isSameLocalDay, linesTotalKg, physicalBeamBusyWarning, theoreticalKg, validatePlan, validateWind, validateWindPage, windPageKeys, windPhysicalNos, EMPTY_PLAN, STATUS_LABEL, type WindForm } from './beamPayload';
+import { beamActionsEnabled, buildPlanPayload, buildWindPayload, classifyBeamFailure, initialWindForm, isSameLocalDay, lastPlannedWarpSpecId, linesTotalKg, physicalBeamBusyWarning, soleMachineId, theoreticalKg, validatePlan, validateWind, validateWindPage, windPageKeys, windPhysicalNos, EMPTY_PLAN, STATUS_LABEL, type WindForm } from './beamPayload';
 
 const line = (qtyKg: string, reasonCode: string | null = null, warehouseId: string | null = 'w1', lotId: string | null = null) => ({ key: `k${qtyKg}`, warehouseId, qtyKg, reasonCode, lotId });
 
@@ -219,5 +219,24 @@ describe('gövde çakışması ERKEN uyarısı — sunucu assertPhysicalBeamFree
     expect(windPhysicalNos(null, { count: '2', physicalBeamNoPrefix: 'R7' })).toEqual(['R7-2']);
     expect(windPhysicalNos(null, { count: '3', physicalBeamNoPrefix: '' })).toEqual([]);
     expect(windPhysicalNos('T1', { count: '1', physicalBeamNoPrefix: 'R7' })).toEqual(['T1']);
+  });
+});
+
+// ⭐ NEGATİF SONDA (2026-09-18, bir kezlik): `soleMachineId` >1 makinede id döndürdü → §ön-seçim/1 ❌;
+//    `lastPlannedWarpSpecId` createdAt yerine liste sırası aldı → §ön-seçim/2 ❌.
+describe('ön-seçim yardımcıları (+0/−1 dokunuş)', () => {
+  it('1 tek devere makinesi → id; 0 ya da >1 → null (operatör seçer)', () => {
+    expect(soleMachineId([{ id: 'm1' }])).toBe('m1');
+    expect(soleMachineId([])).toBeNull();
+    expect(soleMachineId([{ id: 'm1' }, { id: 'm2' }])).toBeNull();
+  });
+  it('2 son leventin çözgü kartı EN YENİ createdAt\'e göre (liste sırası değil); boş → null', () => {
+    const beams = [
+      { warpSpec: { id: 's-eski' }, createdAt: '2026-09-18T08:00:00.000Z' },
+      { warpSpec: { id: 's-yeni' }, createdAt: '2026-09-18T10:00:00.000Z' },
+      { warpSpec: { id: 's-orta' }, createdAt: '2026-09-18T09:00:00.000Z' },
+    ];
+    expect(lastPlannedWarpSpecId(beams)).toBe('s-yeni');
+    expect(lastPlannedWarpSpecId([])).toBeNull();
   });
 });

@@ -18,11 +18,15 @@ interface Deps {
   current: FormModal | null;
   /** `devere.lotRequired` sunucudan (bağlam ucu); alan yoksa false. */
   lotRequired: boolean;
+  /** Tek devere makinesi → SAR açılışında ön-seçili (IN_HOUSE); yoksa null (+0/−1 dokunuş). */
+  soleMachineId: string | null;
+  /** Bağlamdaki son leventin çözgü kartı → Plan açılışında ön-dolu; yoksa null. */
+  lastWarpSpecId: string | null;
 }
 
 const toNum = (s: string): number => Number(s.replace(',', '.'));
 
-export function useBeamForms({ attemptRef, mutations, defaultWarehouseId, open, current, lotRequired }: Deps) {
+export function useBeamForms({ attemptRef, mutations, defaultWarehouseId, open, current, lotRequired, soleMachineId, lastWarpSpecId }: Deps) {
   const [planForm, setPlanFormState] = useState<PlanForm>(EMPTY_PLAN);
   const [windForm, setWindFormState] = useState<WindForm | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -38,16 +42,19 @@ export function useBeamForms({ attemptRef, mutations, defaultWarehouseId, open, 
   }, []);
 
   const openPlan = useCallback(() => {
-    setPlanForm(EMPTY_PLAN);
+    // Son çözgü kartı ön-dolu (aynı kartla arka arkaya plan olağan); operatör değiştirebilir.
+    setPlanForm({ ...EMPTY_PLAN, warpSpecId: lastWarpSpecId });
     open({ kind: 'plan' });
-  }, [open, setPlanForm]);
+  }, [open, setPlanForm, lastWarpSpecId]);
 
   const openWind = useCallback(
     (beam: WarpBeam) => {
-      setWindForm(initialWindForm(beam, defaultWarehouseId));
+      const taban = initialWindForm(beam, defaultWarehouseId);
+      // Tek devere makinesi + IN_HOUSE → makine ön-seçili (tek seçenek için dokunuş gereksiz).
+      setWindForm(beam.originKind === 'IN_HOUSE' && soleMachineId ? { ...taban, machineId: soleMachineId } : taban);
       open({ kind: 'wind', beam });
     },
-    [defaultWarehouseId, open, setWindForm]
+    [defaultWarehouseId, open, setWindForm, soleMachineId]
   );
 
   const submitPlan = useCallback(() => {

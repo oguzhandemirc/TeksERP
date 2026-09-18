@@ -13,7 +13,7 @@ import type { WarpBeam } from '../../../services/warpBeam.service';
 
 const beam = { id: 'b1', beamNo: 'LV1', originKind: 'IN_HOUSE', plannedLengthM: 900, warpSpec: { id: 's1', code: 'C', name: 'N', endsCount: 100, yarnItem: { id: 'y', code: 'Y', name: 'Y', linearDensityDen: 150 } } } as unknown as WarpBeam;
 
-function setup(lotRequired = false) {
+function setup(lotRequired = false, { soleMachineId = null, lastWarpSpecId = null }: { soleMachineId?: string | null; lastWarpSpecId?: string | null } = {}) {
   const plan = { mutate: jest.fn() };
   const wind = { mutate: jest.fn() };
   const attemptRef = { current: null };
@@ -26,6 +26,8 @@ function setup(lotRequired = false) {
         open: () => {},
         current: { kind: 'wind', beam },
         lotRequired: p.lotRequired,
+        soleMachineId,
+        lastWarpSpecId,
       }),
     { initialProps: { lotRequired } },
   );
@@ -65,6 +67,24 @@ describe('useBeamForms formError', () => {
     act(() => hook.result.current.submitWind());
     expect(hook.result.current.formError).toBeNull();
     expect(wind.mutate).toHaveBeenCalledTimes(1);
+  });
+
+  it('§4 ⭐ ön-seçim: tek makine SAR açılışında IN_HOUSE kökende ön-seçili, çoklu makinede null', () => {
+    const { hook } = setup(false, { soleMachineId: 'm1' });
+    act(() => hook.result.current.openWind(beam));
+    expect(hook.result.current.windForm?.machineId).toBe('m1');
+    const { hook: h2 } = setup(false, { soleMachineId: null });
+    act(() => h2.result.current.openWind(beam));
+    expect(h2.result.current.windForm?.machineId).toBeNull();
+  });
+
+  it('§4b ön-seçim: son çözgü kartı Plan açılışında ön-dolu, yoksa boş', () => {
+    const { hook } = setup(false, { lastWarpSpecId: 's-son' });
+    act(() => hook.result.current.openPlan());
+    expect(hook.result.current.planForm.warpSpecId).toBe('s-son');
+    const { hook: h2 } = setup(false, {});
+    act(() => h2.result.current.openPlan());
+    expect(h2.result.current.planForm.warpSpecId).toBeNull();
   });
 
   it('§3b plan tarafı aynı sözleşme: hata → alan değişimi düşürür → geçince mutate', () => {
