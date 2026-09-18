@@ -454,3 +454,14 @@ export function permissionsWithoutScreen(): string[] {
   const exempt = new Set(SCREENLESS_PERMISSIONS.map((e) => e.code));
   return PERMISSION_CATALOG.map((p) => p.code).filter((c) => !used.has(c) && !exempt.has(c));
 }
+
+/**
+ * MOBİL KARO İZİNLERİ — her tablet ekranının (karo) `requires` kümesi, YETENEK izinleri (`capabilities`: geri alma,
+ * düzeltme, ana veri) HARİÇ. "Saha operatörü" rol şablonunun tek kaynağı (`role-template-catalog` SAHA_OPERATORU):
+ * yeni karo katalogda doğunca şablon kendiliğinden genişler, elle sayılmaz; yetenek izni sızmaz (bekçi ölçer).
+ */
+export function mobileScreenPermissionCodes(): string[] {
+  const out = new Set<string>();
+  for (const e of SCREEN_CATALOG) if (e.app === "mobile") for (const c of e.requires) out.add(c);
+  return [...out].sort();
+}

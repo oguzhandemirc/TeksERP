@@ -31,6 +31,7 @@
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
+import { SCREEN_CATALOG, mobileScreenPermissionCodes } from "../src/constants/screen-catalog";
 import {
   ROLE_TEMPLATE_CATALOG,
   LEGACY_TEMPLATE_NAME_TO_CODE,
@@ -184,6 +185,18 @@ async function main(): Promise<void> {
     bagimlilikIhlali.length === 0,
     bagimlilikIhlali.join(" | "),
   );
+
+  console.log("\n=== §2c SAHA OPERATÖRÜ: bütün karolar, YETENEK yok — katalogdan TÜRETİLİR ===");
+  // Saha bulgusu (d9/d5 2026-09-18): yönetici karo izinlerini tek tek ekliyordu; wildcard şablon yetenekleri de verir.
+  // Sonda: `codes` elle listeye çevrilince (bir karo eksik) "türetim ≡ katalog" ❌; bir yetenek kodu eklenince "yetenek sızmadı" ❌.
+  const saha = ROLE_TEMPLATE_CATALOG.find((r) => r.code === "SAHA_OPERATORU");
+  const mobilEkranlar = SCREEN_CATALOG.filter((e) => e.app === "mobile");
+  const karoIzinleri = new Set(mobilEkranlar.flatMap((e) => [...e.requires]));
+  const yetenekIzinleri = new Set(mobilEkranlar.flatMap((e) => e.capabilities.map((c) => c.code)).filter((c) => !karoIzinleri.has(c)));
+  check("SAHA_OPERATORU şablonu var, mode list, en az 15 karo", !!saha && saha.mode === "list" && saha.codes.length >= 15, `${saha?.codes.length ?? 0} izin`);
+  check("⭐ türetim ≡ ekran kataloğu: codes = ∪ mobil ekran `requires` (elle liste değil; yeni karo gelince kendiliğinden genişler)", !!saha && JSON.stringify([...saha.codes].sort()) === JSON.stringify([...karoIzinleri].sort()) && JSON.stringify([...saha.codes]) === JSON.stringify(mobileScreenPermissionCodes()));
+  check("⭐ YETENEK izni sızmadı (tambur-duzelt · dokuma-geri-al · devere-iptal · kk1-desen · kk1-yari-mamul …) ve wildcard yok", !!saha && saha.codes.every((c) => !yetenekIzinleri.has(c) && c !== "mobile:*") && yetenekIzinleri.size >= 5, `${yetenekIzinleri.size} yetenek`);
+  check("her kod izin kataloğunda var (şablon ölü izin taşımaz)", !!saha && saha.codes.every((c) => izinKodlari.has(c)));
 
   console.log("\n=== §3 DB UZLAŞTIRMASI ===");
   // ⚠️ ÖN KOŞULU TEST KENDİSİ KURAR — "backend'i yeniden başlatın" beklemez.

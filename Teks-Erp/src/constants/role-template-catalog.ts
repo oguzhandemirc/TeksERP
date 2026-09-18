@@ -34,6 +34,7 @@
 // =============================================================================
 
 import { PERMISSION_CATALOG } from "./permission-catalog";
+import { mobileScreenPermissionCodes } from "./screen-catalog";
 
 export type RoleTemplateEntry = {
   /** Kalıcı kimlik. Fabrika adı değiştirse de bu sabit kalır — DB'de `@unique`. */
@@ -610,6 +611,16 @@ const MOBILE_ROLES: readonly RoleTemplateEntry[] = [
     description: "Telefondan yeni kumaş/ürün tanımı (kod · tip · izinli renk ve özellik)",
     mode: "list",
     codes: ["mobile:kumas", "item:read", "property:read", "quality:read"],
+  },
+  {
+    // Saha bulgusu (d9/d5, 2026-09-18): yönetici her operatöre karo izinlerini TEK TEK ekliyordu; `MOBILE_ALL` wildcard
+    // ise geri alma/düzeltme YETENEKLERİNİ de verir (mobile:tambur-duzelt · dokuma-geri-al · devere-iptal · kk1-desen…).
+    // Bu şablon "bütün karolar, yetenek yok": ekran kataloğundan TÜRETİLİR (elle sayılmaz), yeni karo gelince genişler.
+    code: "SAHA_OPERATORU",
+    name: "Saha operatörü (tüm tablet karoları)",
+    description: "Tabletteki bütün ekranlar (karolar); geri alma/düzeltme/ana veri yetenekleri ayrı verilir",
+    mode: "list",
+    codes: mobileScreenPermissionCodes(),
   },
   { code: "MOBILE_ALL", name: "Mobil — Tüm Ekranlar", description: "Tüm mobil ekranlar (wildcard)", mode: "list", codes: ["mobile:*"] },
 ];
