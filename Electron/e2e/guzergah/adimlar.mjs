@@ -1863,7 +1863,7 @@ export const ADIMLAR = [
     async bekle() {},
     dogrula: [
       { ad: "(a) iade almış sevkiyatta geri alma ENGELLİ: sebep metni 'iade alınmış', düğme pasif (storno ≠ iade)", sql: `SELECT 1`, oku: () => `${/iade alınmış/.test(n2Olcum.engelMetni) ? 1 : 0}:${n2Olcum.engelDugmePasif}`, beklenen: "1:true" },
-      { ad: "(b) ÇEKİRDEK KURALI (yıkıcı işlemde etkilenen HER kayıt listelenir, soyut sayı yetmez): önizleme çuval NUMARASINI göstermeli — bugün yalnız '1 çuval · 1 top' sayısı (payload `sacks[].sackNo` taşıyor, ekran basmıyor) → İHLAL; düğme rejime göre", sql: `SELECT 1`, oku: () => `${n2Olcum.onizlemeBarkod}:${n2Olcum.dugmeEtiketi}`, beklenen: (v) => /^1:(Geri Al ve Kapat|Sevki Geri Al)$/.test(v) },
+      { ad: "(b) önizleme etkilenen çuvalı NUMARASIYLA listeler (çekirdek: her kayıt, soyut sayı yetmez — 2a90cad9 öncesi yalnız sayı basılıyordu); düğme rejime göre", sql: `SELECT 1`, oku: () => `${n2Olcum.onizlemeBarkod}:${n2Olcum.dugmeEtiketi}`, beklenen: (v) => /^1:(Geri Al ve Kapat|Sevki Geri Al)$/.test(v) },
       { ad: "sevkiyat artık DISPATCHED değil; `dispatchedAt` NULL'lanMADI (damga korunur, ters kayıt); olay defteri DISPATCHED + UNDISPATCHED (shipment_events)",
         sql: `SELECT s.status::text st, (s."dispatchedAt" IS NOT NULL) d, string_agg(e.type::text, ',' ORDER BY e."createdAt") ev FROM shipments s LEFT JOIN shipment_events e ON e."shipmentId"=s.id WHERE s.id=$1 GROUP BY s.status, s."dispatchedAt"`,
         params: () => [n2Olcum.sevkId], oku: (r) => `${r[0]?.st}:${r[0]?.d}:${r[0]?.ev}`, beklenen: (v) => /^(PLANNED|CANCELLED):true:.*DISPATCHED,UNDISPATCHED/.test(v) },
@@ -1937,7 +1937,7 @@ export const ADIMLAR = [
     async bekle() {},
     dogrula: [
       { ad: "operatör: fatura 403 · sevk geri al 403 · takılı top kurtar 403 (SoD üçlüsü)", sql: `SELECT 1`, oku: () => `${p1Olcum.fatura}:${p1Olcum.geriAl}:${p1Olcum.kurtar}`, beklenen: "403:403:403" },
-      { ad: "403 mesajı gereken yetkiyi ADIYLA söyler; `details.code` YOK (bulgu — çekirdek 'kod details.code altında')", sql: `SELECT 1`, oku: () => `${/finance:write/.test(p1Olcum.mesaj) ? 1 : 0}:${p1Olcum.kod}`, beklenen: (v) => /^1:/.test(v) },
+      { ad: "403 mesajı gereken yetkiyi ADIYLA söyler ve `details.code=PERMISSION_DENIED` taşır (0e760284 öncesi kod yoktu)", sql: `SELECT 1`, oku: () => `${/finance:write/.test(p1Olcum.mesaj) ? 1 : 0}:${p1Olcum.kod}`, beklenen: "1:PERMISSION_DENIED" },
       { ad: "invoices değişmedi", sql: `SELECT 1`, oku: () => p1Olcum.faturaSonra - p1Olcum.faturaOnce, beklenen: 0 },
     ],
   },
