@@ -158,7 +158,7 @@ const MUAF: Record<string, { gerekce: string; izinli: string[] }> = {
     gerekce:
       "Backend `constants/audit-field-labels.ts`in AYNASI — aynı sınıf, aynı " +
       "gerekçe: alan adı → Türkçe ETİKET sözlüğü, katalog kodu taşımaz.",
-    izinli: ["Kalite", "Alt top kalitesi", "Kalan parçanın kalitesi"],
+    izinli: ["Kalite", "Alt top kalitesi", "Kalan parçanın kalitesi", "Kalite durumu", "Kalite notu", "Kalite kararı tarihi"],
   },
   "Electron/src/lib/import/template.ts": {
     gerekce:
@@ -182,7 +182,7 @@ const MUAF: Record<string, { gerekce: string; izinli: string[] }> = {
     gerekce:
       "Alan adı → Türkçe ETİKET sözlüğü. Değerler kullanıcıya gösterilen metindir, " +
       "katalog kodu DEĞİL; burada kod hiç bulunmaz.",
-    izinli: ["Kalite", "Alt top kalitesi", "Kalan parçanın kalitesi"],
+    izinli: ["Kalite", "Alt top kalitesi", "Kalan parçanın kalitesi", "Kalite durumu", "Kalite notu", "Kalite kararı tarihi"],
   },
   "Teks-Erp/src/services/inventory.service.ts": {
     gerekce:

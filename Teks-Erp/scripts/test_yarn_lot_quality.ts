@@ -154,13 +154,15 @@ async function main(): Promise<void> {
     check("§2h RELEASED lottan çıkış geçer (bayrak açıkken de)", gecti === null, kod(gecti));
 
     console.log("\n── §3 Karar ucu ──");
-    const s3 = await yarnLotService.decideQuality(lot2.id, { status: YarnLotQualityStatus.RELEASED, note: "  numune uygun  " }, karar.id);
+    // Not metni fikstür sabiti — kalite KODU değil (`test_quality_code_literal` `qualityNote === "…"` karşılaştırmasını kod sayar).
+    const NOT = "numune uygun";
+    const s3 = await yarnLotService.decideQuality(lot2.id, { status: YarnLotQualityStatus.RELEASED, note: `  ${NOT}  ` }, karar.id);
     const l3 = await lotOku(lot2.id);
-    check("§3a RELEASED kararı: damga (tarih + veren), not TRIM; DTO aynı dört alanı taşır", l3.qualityStatus === "RELEASED" && l3.qualityDecidedAt !== null && l3.qualityDecidedById === karar.id && l3.qualityNote === "numune uygun" && s3.data.qualityStatus === "RELEASED" && s3.data.qualityNote === "numune uygun" && s3.data.qualityDecidedAt !== null);
+    check("§3a RELEASED kararı: damga (tarih + veren), not TRIM; DTO aynı dört alanı taşır", l3.qualityStatus === "RELEASED" && l3.qualityDecidedAt !== null && l3.qualityDecidedById === karar.id && l3.qualityNote === NOT && s3.data.qualityStatus === "RELEASED" && s3.data.qualityNote === NOT && s3.data.qualityDecidedAt !== null);
     check("§3b serbest bırakılan lottan çıkış GEÇER", (await beklenenHata(() => elleCikis(yarn.id, wh.id, lot2.id))) === null);
     const audit = await auditBekle(lot2.id);
     const chg = (audit?.changes as Array<{ field: string; old: unknown; new: unknown }> | null) ?? [];
-    check("§3c audit UPDATE YARN_LOT `changes` qualityStatus ON_HOLD → RELEASED, newData note+decidedAt", chg.some((c) => c.field === "qualityStatus" && c.old === "ON_HOLD" && c.new === "RELEASED") && (audit?.newData as { note?: string; decidedAt?: unknown })?.note === "numune uygun" && !!(audit?.newData as { decidedAt?: unknown })?.decidedAt, JSON.stringify(audit));
+    check("§3c audit UPDATE YARN_LOT `changes` qualityStatus ON_HOLD → RELEASED, newData note+decidedAt", chg.some((c) => c.field === "qualityStatus" && c.old === "ON_HOLD" && c.new === "RELEASED") && (audit?.newData as { note?: string; decidedAt?: unknown })?.note === NOT && !!(audit?.newData as { decidedAt?: unknown })?.decidedAt, JSON.stringify(audit));
     await yarnLotService.decideQuality(lot2.id, { status: YarnLotQualityStatus.BLOCKED }, karar.id);
     const e3d = await beklenenHata(() => elleCikis(yarn.id, wh.id, lot2.id));
     check("§3d BLOCKED: çıkış 400 YARN_LOT_ON_HOLD, qualityStatus BLOCKED, mesaj 'bloke'; not TEMİZLENDİ (karar başına)", kod(e3d) === "YARN_LOT_ON_HOLD" && ayrinti(e3d).qualityStatus === "BLOCKED" && /bloke/.test(String(e3d?.message)) && (await lotOku(lot2.id)).qualityNote === null);

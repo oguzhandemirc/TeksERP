@@ -28,7 +28,6 @@ import { requireIplikEnabled } from "../middlewares/module.middleware";
 import { yarnService } from "../services/yarn.service";
 import { yarnLotService } from "../services/yarn-lot.service";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
-import { AppError } from "../utils/app-error";
 import { readFilterList } from "../utils/query-parser";
 
 const router = Router();
@@ -253,16 +252,12 @@ router.get("/lots", requirePermission("warehouse:read"), async (req, res, next) 
         supplierId: z.string().uuid().optional(),
         search: z.string().max(100).optional(),
         isActive: z.enum(["true", "false"]).optional(),
-        /** Kalite durumu — CSV (`RELEASED,ON_HOLD`); tanınmayan değer 400 (fail-closed). */
+        /** Kalite durumu — CSV (`RELEASED,ON_HOLD`); tanınmayan değer Zod 400 (fail-closed). */
         qualityStatus: z.string().max(100).optional(),
       })
       .strict()
       .parse(req.query);
-    const qualityStatus = readFilterList(q.qualityStatus).map((v) => {
-      const parsed = z.nativeEnum(YarnLotQualityStatus).safeParse(v);
-      if (!parsed.success) throw AppError.badRequest(`Tanınmayan kalite durumu: ${v}`, { code: "YARN_LOT_QUALITY_STATUS_INVALID" });
-      return parsed.data;
-    });
+    const qualityStatus = z.array(z.nativeEnum(YarnLotQualityStatus)).parse(readFilterList(q.qualityStatus));
     res.json(await yarnLotService.list({ ...q, qualityStatus, isActive: q.isActive === undefined ? undefined : q.isActive === "true" }));
   } catch (e) {
     next(e);
