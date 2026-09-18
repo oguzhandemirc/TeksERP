@@ -428,6 +428,10 @@ function main(): void {
       resolver: "resolveYarnOutOnInvoiceEnabled",
       ebeveyn: "ticaret+iplik",
     },
+    // Z1 üretim belge zinciri (2026-09-18): üç kapı `helpers/production-chain-gates.helper` yalnız resolver okur.
+    readDevereBeamWeavingLinkRequired: { resolver: "resolveBeamWeavingLinkRequired", ebeveyn: "ticaret+iplik+devere" },
+    readDokumaRunWeavingOrderRequired: { resolver: "resolveRunWeavingOrderRequired", ebeveyn: "üretim+dokuma" },
+    readDokumaOrderLineLinkRequired: { resolver: "resolveOrderLineLinkRequired", ebeveyn: "üretim+dokuma" },
   };
 
   const servisKodu = yorumlariSok(fs.readFileSync(SERVIS, "utf8"));

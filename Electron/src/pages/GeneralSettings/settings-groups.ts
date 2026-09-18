@@ -93,6 +93,8 @@ export interface SettingsModuleState {
   depoMultiEnabled: boolean;
   /** Devere HAM bayrak — üretime/ipliğe BAĞLI DEĞİL (K3; `useOperationsVisibility` aynası). */
   devereEnabled: boolean;
+  /** Dokuma — ETKİN değer `production && dokuma` (backend `requireDokumaEnabled` aynası); Z1 alt bayraklarının kilidi. */
+  dokumaEnabled: boolean;
 }
 
 /**
@@ -116,6 +118,7 @@ export function resolveSettingsModuleState(
     iplikEnabled: ticaretEnabled && (flags?.iplikEnabled ?? false),
     depoMultiEnabled: flags?.depoMultiEnabled ?? false,
     devereEnabled: flags?.devereEnabled ?? false,
+    dokumaEnabled: (flags?.productionEnabled ?? true) && (flags?.dokumaEnabled ?? false),
   };
 }
 

@@ -32,6 +32,10 @@ import { AuditService } from "./audit.service";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { assertWeavingOrderReplayAlive } from "./helpers/token-replay.helper";
 import { markWeavingOrderInProgressTx, nextWeavingOrderNumberTx } from "./helpers/weaving-order.helper";
+import { assertOrderLinesLinkableTx, normalizeOrderLineLinks, type NormalizedOrderLineLink } from "./helpers/weaving-order-links.helper";
+import { assertOrderLineLinkGate } from "./helpers/production-chain-gates.helper";
+import { assertNoOpenRunsTx, assertRefs, throwClaimFailureTx } from "./helpers/weaving-order-guards.helper";
+import { countRollsOfWeavingOrder } from "./helpers/weaving-order-of-roll.helper";
 import {
   OPEN_RUN_WHERE,
   WEAVING_ORDER_SELECT,
@@ -53,6 +57,15 @@ export { markWeavingOrderInProgressTx };
 /** Audit modül adı — dokuma işinin kendi geçmişi burada okunur. */
 const WEAVING_ORDER_TABLE = "WEAVING_ORDER";
 
+/** Z1 ③b replace: mevcut bağ kümesi silinir, yenisi yazılır (aynı tx). Pivot audit'i EBEVEYN eylemde
+ *  (`weavingOrderAuditView.orderLines`), o yüzden yazıcı bu (audit'li) dosyada durur. */
+async function replaceOrderLineLinksTx(tx: Prisma.TransactionClient, weavingOrderId: string, links: NormalizedOrderLineLink[]): Promise<void> {
+  await tx.weavingOrderToOrderLine.deleteMany({ where: { weavingOrderId } });
+  if (links.length > 0) {
+    await tx.weavingOrderToOrderLine.createMany({ data: links.map((l) => ({ weavingOrderId, orderLineId: l.orderLineId, allocatedM: l.allocatedM })) });
+  }
+}
+
 /** Düzenlenebilir / kapatılabilir / iptal edilebilir durumlar. */
 export const WEAVING_ORDER_OPEN_STATUSES: readonly WeavingOrderStatus[] = [
   WeavingOrderStatus.PLANNED,
@@ -63,6 +76,9 @@ export interface WeavingOrderListParams {
   status?: WeavingOrderStatus[];
   itemId?: string | { in: string[] } | null;
   subcontractorId?: string | null;
+  /** Z1: bu sipariş satırına / bu siparişin herhangi bir satırına bağlı işler (pivot üzerinden). */
+  orderLineId?: string | null;
+  orderId?: string | null;
   search?: string | null;
   cursor?: string | null;
   limit?: number | null;
@@ -71,67 +87,12 @@ export interface WeavingOrderListParams {
 
 // ── ② tx-dışı ucuz doğrulama ────────────────────────────────────────────────
 
-/** Referansların varlığı ve türü — FK 500'ü yerine operatör dilinde 400. */
-async function assertRefs(f: {
-  itemId: string;
-  colorId: string | null;
-  warpSpecId: string | null;
-  subcontractorId: string | null;
-}): Promise<void> {
-  const item = await prisma.item.findUnique({ where: { id: f.itemId }, select: { itemType: true, isActive: true } });
-  if (!item || !item.isActive) throw AppError.badRequest("Kumaş kartı bulunamadı ya da pasif");
-  if (item.itemType !== ItemType.FABRIC) throw AppError.badRequest("Dokuma işi yalnız KUMAŞ kartına açılır");
-  if (f.colorId) {
-    const n = await prisma.color.count({ where: { id: f.colorId, isActive: true } });
-    if (n === 0) throw AppError.badRequest("Renk bulunamadı ya da pasif");
-  }
-  if (f.warpSpecId) {
-    const n = await prisma.warpSpec.count({ where: { id: f.warpSpecId, isActive: true } });
-    if (n === 0) throw AppError.badRequest("Çözgü kartı bulunamadı ya da pasif");
-  }
-  if (f.subcontractorId) {
-    const n = await prisma.subcontractor.count({ where: { id: f.subcontractorId, isActive: true } });
-    if (n === 0) throw AppError.badRequest("Fasoncu bulunamadı ya da pasif");
-  }
-}
-
-/** Açık koşumları ADIYLA döner — 409 yükü `{code, machines[], runIds[]}`. */
-async function assertNoOpenRunsTx(tx: Prisma.TransactionClient, weavingOrderId: string, eylem: string): Promise<void> {
-  const open = await tx.machineRun.findMany({
-    where: { weavingOrderId, ...OPEN_RUN_WHERE },
-    select: { id: true, productionLineNo: true, machine: { select: { code: true, name: true } } },
-    orderBy: { startedAt: "asc" },
-  });
-  if (open.length === 0) return;
-  const machines = open.map((r) => ({
-    runId: r.id,
-    machineCode: r.machine.code,
-    machineName: r.machine.name,
-    productionLineNo: r.productionLineNo,
-  }));
-  const adlar = [...new Set(machines.map((m) => m.machineName))].join(", ");
-  throw AppError.conflict(
-    `Açık koşum varken dokuma işi ${eylem} — önce koşumları kapatın: ${adlar}`,
-    { code: "WEAVING_ORDER_HAS_OPEN_RUNS", machines, runIds: open.map((r) => r.id) },
-  );
-}
-
-/** Claim düştü → taze oku: yok → 404, var → 409 (durum adıyla). */
-async function throwClaimFailureTx(tx: Prisma.TransactionClient, id: string, eylem: string, code: string): Promise<never> {
-  const fresh = await tx.weavingOrder.findUnique({ where: { id }, select: { status: true, weavingOrderNumber: true } });
-  if (!fresh) throw AppError.notFound("Dokuma işi bulunamadı");
-  throw AppError.conflict(
-    `${fresh.weavingOrderNumber} ${WEAVING_ORDER_STATUS_LABEL[fresh.status]} — ${eylem}`,
-    { code, status: fresh.status },
-  );
-}
-
-// ── Okuma ──────────────────────────────────────────────────────────────────
-
 export async function getWeavingOrder(id: string): Promise<ApiResponse<WeavingOrderDto>> {
   const row = await prisma.weavingOrder.findUnique({ where: { id }, select: WEAVING_ORDER_SELECT });
   if (!row) throw AppError.notFound("Dokuma işi bulunamadı");
-  return { success: true, data: toWeavingOrderDto(row) };
+  // Y3 TÜRETİLMİŞ: top → indirme → koşum → iş (kolon yok; zincir TEK dosyada — `weaving-order-of-roll.helper`). Yalnız detayda.
+  const producedRollCount = await countRollsOfWeavingOrder(prisma, id);
+  return { success: true, data: { ...toWeavingOrderDto(row), producedRollCount } };
 }
 
 /** Cursor'lu liste — süzme SUNUCUDA, en yeni önce. Özet (`totalEstimate`) aynı where'den. */
@@ -143,6 +104,8 @@ export async function listWeavingOrders(
   if (params.status && params.status.length > 0) where.status = { in: params.status };
   if (params.itemId) where.itemId = params.itemId;
   if (params.subcontractorId) where.subcontractorId = params.subcontractorId;
+  if (params.orderLineId) where.orderLineLinks = { some: { orderLineId: params.orderLineId } };
+  else if (params.orderId) where.orderLineLinks = { some: { orderLine: { orderId: params.orderId } } };
   const term = params.search?.trim();
   if (term) {
     where.OR = buildTextSearch<Prisma.WeavingOrderWhereInput>(term, {
@@ -194,6 +157,9 @@ export async function createWeavingOrder(
   };
   assertWeavingParty(fields.executionKind, fields.subcontractorId);
   assertWeavingDateOrder(fields.plannedStartDate, fields.plannedEndDate);
+  // Z1 (Y1): sipariş satırı bağları — gövde vermezse boş küme (eski istemci: stoka dokuma, bugünkü davranış).
+  const orderLines = normalizeOrderLineLinks(input.orderLines ?? []);
+  await assertOrderLineLinkGate(prisma, orderLines.length);
 
   if (input.clientToken) {
     const replay = await prisma.weavingOrder.findUnique({
@@ -217,13 +183,14 @@ export async function createWeavingOrder(
   }
 
   await assertRefs(fields);
+  await assertOrderLinesLinkableTx(prisma, orderLines);
 
   const created = await withBarcodeRetry(
     () =>
       prisma.$transaction(async (tx) => {
         // Kilit üretecin ilk ifadesi; bundan önce tx'te başka ifade YOK.
         const weavingOrderNumber = await nextWeavingOrderNumberTx(tx, new Date());
-        return tx.weavingOrder.create({
+        const row = await tx.weavingOrder.create({
           data: {
             ...fields,
             weavingOrderNumber,
@@ -232,8 +199,10 @@ export async function createWeavingOrder(
             createdById: userId ?? null,
             updatedById: userId ?? null,
           },
-          select: WEAVING_ORDER_SELECT,
+          select: { id: true },
         });
+        await replaceOrderLineLinksTx(tx, row.id, orderLines);
+        return tx.weavingOrder.findUniqueOrThrow({ where: { id: row.id }, select: WEAVING_ORDER_SELECT });
       }),
     undefined,
     // Yalnız numara çakışması retry'a girer; `clientToken` çakışması kalıcıdır.
@@ -261,10 +230,16 @@ export async function updateWeavingOrder(
   userId?: string,
 ): Promise<ApiResponse<WeavingOrderDto>> {
   const patch = normalizeWeavingOrderFields(input);
-  if (Object.keys(patch).length === 0) throw AppError.badRequest("Güncellenecek alan yok");
+  // Z1 (Y1): `orderLines` verildiyse küme replace (③b); verilmediyse bağlara dokunulmaz.
+  const orderLines = input.orderLines !== undefined ? normalizeOrderLineLinks(input.orderLines) : null;
+  if (Object.keys(patch).length === 0 && orderLines === null) throw AppError.badRequest("Güncellenecek alan yok");
 
   const before = await prisma.weavingOrder.findUnique({ where: { id }, select: WEAVING_ORDER_SELECT });
   if (!before) throw AppError.notFound("Dokuma işi bulunamadı");
+  if (orderLines !== null) {
+    await assertOrderLineLinkGate(prisma, orderLines.length);
+    await assertOrderLinesLinkableTx(prisma, orderLines);
+  }
 
   const merged = {
     itemId: patch.itemId ?? before.itemId,
@@ -285,6 +260,7 @@ export async function updateWeavingOrder(
       data: { ...patch, updatedById: userId ?? null },
     });
     if (claim.count === 0) await throwClaimFailureTx(tx, id, "düzenlenemez", "WEAVING_ORDER_NOT_EDITABLE");
+    if (orderLines !== null) await replaceOrderLineLinksTx(tx, id, orderLines);
     return tx.weavingOrder.findUniqueOrThrow({ where: { id }, select: WEAVING_ORDER_SELECT });
   });
 

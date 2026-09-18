@@ -21,6 +21,7 @@ import { requireDokumaEnabled } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { closeMachineRun, openMachineRun, revokeMachineRun } from "../services/machine-run.service";
 import { listOpenMachineRuns } from "../services/loom-list.service";
+import { machineRunTabletContext } from "../services/helpers/machine-run-suggest.helper";
 
 const router = Router();
 
@@ -64,6 +65,32 @@ const openListSchema = z
  *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
  *       404: { description: Makine yok }
  */
+/**
+ * @openapi
+ * /api/machine-runs/tablet-context:
+ *   get:
+ *     tags: [MachineRuns]
+ *     summary: Koşum açma bağlamı (Z1) — takılı leventin işi ÖN-DOLGU olarak + açık içeride işler
+ *     description: >
+ *       Sunucu koşumu OTOMATİK BAĞLAMAZ; tablet `suggestedWeavingOrderId`yi forma ön-doldurur, operatör onaylar
+ *       (+0 dokunuş). `weavingOrders` = PLANNED/IN_PROGRESS ∧ IN_HOUSE (kapıyla aynı küme).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: machineId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{ suggestedWeavingOrderId, suggestedFrom, mountedBeam, weavingOrders }" }
+ *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ *       404: { description: Makine yok }
+ */
+router.get("/tablet-context", requireAnyPermission("loom:run", ...MOBILE_DOKUMA), async (req, res, next) => {
+  try {
+    const q = z.object({ machineId: z.string().uuid() }).strict().parse(req.query);
+    res.json({ success: true, data: await machineRunTabletContext(q.machineId) });
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.get("/", requireAnyPermission("loom:run", "loom:doff", ...MOBILE_DOKUMA), async (req, res, next) => {
   try {
     const q = openListSchema.parse(req.query);

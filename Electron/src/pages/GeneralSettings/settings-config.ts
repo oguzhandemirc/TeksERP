@@ -398,7 +398,8 @@ export type SettingsModuleKey =
   | "ticaretEnabled"
   | "iplikEnabled"
   | "depoMultiEnabled"
-  | "devereEnabled";
+  | "devereEnabled"
+  | "dokumaEnabled";
 
 /** Bölüm = SALT YERLEŞİM (başlık + sıra). Rejim kapısı taşımaz — bkz. yukarıdaki gerekçe. */
 export interface SettingsSection {
@@ -1214,6 +1215,42 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Operatör", "Yönetim"],
         desc: "Kapalıyken (varsayılan) tüketim yalnız elle yazılır; KK1 kaydı hiç değişmez. Açıkken tezgahtan inen top (dokuma modülü, indirme bağı) kaydedilince indirme anında o tezgahta bağlı her levente ayrı bir tüketim satırı düşer: çözgü metre = kumaş metre ÷ (1 − take-up); take-up çözgü kartından, boşsa çözgü = kumaş sayılır ve uyarı verilir; çok hatlı tezgahta top metresi hat payı olarak düşer. Leventte kalan yetmezse kalana kadar yazılır, KK1 engellenmez, fark uyarıda söylenir. Top iptal edilince tüketim ters kayıtla geri döner; fire (hurda) topta geri dönmez — çözgü gerçekten tüketilmiştir. Yalnız levent tezgah bağı defteri açıkken anlamlıdır.",      },
+      {
+        key: "devereBeamWeavingLinkRequired",
+        title: "Levent sarımında dokuma işi zorunlu olsun",
+        summary: "Levent planlanırken/sarılırken hangi dokuma işi için sarıldığı seçilmeden kayıt alınmaz.",
+        defaultOn: false,
+        audience: ["Operatör", "Yönetim"],
+        desc: "Kapalıyken (varsayılan) dokuma işi isteğe bağlıdır: stoğa ya da serbest levent sarılır, raporda \"işsiz levent\" olarak ayrı görünür. Açıkken levent bir dokuma işine (planlı ya da devam eden, içeride dokunan) bağlanmadan kaydedilemez; tablet takılı tezgahın işini ön-doldurur, tek dokunuşla değiştirilir. Çözgü kartı işinkinden farklıysa kayıt reddedilmez, uyarı verilir.",
+      },
+    ],
+  },
+  {
+    id: "dokuma",
+    label: "Dokuma",
+    icon: Factory,
+    description: "Dokuma işi, tezgah koşumu ve sipariş bağı katılık ayarları.",
+    keywords: "dokuma işi tezgah koşum sipariş satırı bağ zincir levent",
+    kind: "flags",
+    section: "production",
+    moduleKey: "dokumaEnabled",
+    flags: [
+      {
+        key: "dokumaRunWeavingOrderRequired",
+        title: "Tezgah koşumu dokuma işine bağlı açılsın",
+        summary: "Tezgahta koşum açılırken dokuma işi seçilmeden kayıt alınmaz.",
+        defaultOn: false,
+        audience: ["Operatör", "Yönetim"],
+        desc: "Kapalıyken (varsayılan) koşum işsiz de açılır (stoka dokuma), raporda \"işsiz koşum\" olarak ayrı görünür. Açıkken koşum bir dokuma işine bağlanmadan açılamaz; tablet takılı leventin işini ön-doldurur, operatör onaylar ya da tek dokunuşla değiştirir. Duruş ve top indirme koşumun işini kendiliğinden alır, ayrıca sorulmaz.",
+      },
+      {
+        key: "dokumaOrderLineLinkRequired",
+        title: "Dokuma işi sipariş satırına bağlı olsun",
+        summary: "Dokuma işi en az bir sipariş satırına bağlanmadan kaydedilmez.",
+        defaultOn: false,
+        audience: ["Planlamacı", "Yönetim"],
+        desc: "Kapalıyken (varsayılan) sipariş bağı isteğe bağlıdır: stoka dokuma işi açılır, hub ekranında ayrı sekmede durur. Açıkken dokuma işi en az bir sipariş satırına (isteğe bağlı planlanan metreyle) bağlanmadan kaydedilemez; bir iş birden çok satırı besleyebilir. Fasona verilen işler de aynı kurala tabidir.",
+      },
     ],
   },
   // Depo/satın alma bayrakları bilinçli olarak Muhasebe sekmesinde DEĞİL: bu

@@ -277,6 +277,10 @@ export const updateSchema = z.strictObject({
   // devere.autoConsume — tezgahtan doğan top leventten otomatik tüketim (default false = elle). Backend ENFORCE.
   devereAutoConsume: z.boolean().optional(),
   dokumaEnabled: z.boolean().optional(),
+  // Z1 üretim belge zinciri — üç davranış bayrağı (varsayılan false = bağ opsiyonel). Backend ENFORCE.
+  devereBeamWeavingLinkRequired: z.boolean().optional(),
+  dokumaRunWeavingOrderRequired: z.boolean().optional(),
+  dokumaOrderLineLinkRequired: z.boolean().optional(),
   // reports.closedKeys — KAPALI raporların anahtar listesi (`REPORT_CATALOG` anahtarları).
   // ⚠️ Anahtar doğrulaması BURADA DEĞİL serviste: tanınmayan anahtar 400 `REPORT_KEY_UNKNOWN`
   // ile ADIYLA reddedilir; Zod'un `z.enum(29 anahtar)` hâli yalnız "geçersiz değer" derdi ve

@@ -36,6 +36,7 @@ import {
 import { toWarpBeamDto, toWarpBeamEventDto, type WarpBeamDto, type WarpBeamEventDto } from "./helpers/warp-beam-dto.helper";
 import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";
 import { resolvePartyToCardTx } from "./helpers/party-card.helper";
+import { assertWeavingOrderLinkableTx, warpSpecMismatchWarning } from "./helpers/production-chain-gates.helper";
 
 const WARP_BEAM_TABLE = "WARP_BEAM";
 const WARP_BEAM_EVENT_TABLE = "WARP_BEAM_EVENT";
@@ -48,6 +49,8 @@ export { toWarpBeamDto, toWarpBeamEventDto, warpBeamRemainingM, type WarpBeamDto
 export interface WarpBeamListParams {
   status?: WarpBeamStatus[];
   warpSpecId?: string | null;
+  /** Z1 (Y2): bu dokuma işi için sarılan/planlanan leventler. */
+  weavingOrderId?: string | null;
   originKind?: WarpBeamOrigin | null;
   search?: string | null;
   cursor?: string | null;
@@ -60,6 +63,7 @@ export async function listWarpBeams(params: WarpBeamListParams): Promise<CursorP
   const where: Prisma.WarpBeamWhereInput = {};
   if (params.status && params.status.length > 0) where.status = { in: params.status };
   if (params.warpSpecId) where.warpSpecId = params.warpSpecId;
+  if (params.weavingOrderId) where.weavingOrderId = params.weavingOrderId;
   if (params.originKind) where.originKind = params.originKind;
   const term = params.search?.trim();
   if (term) {
@@ -140,6 +144,8 @@ export interface WarpBeamCreateInput {
   supplierId?: string | null;
   /** G3 emanet: sahibi olan müşteri — CONSIGNED'da zorunlu, öteki kökenlerde serbest; yalnız CREATE'te (E2b). */
   ownerCustomerId?: string | null;
+  /** Z1 (Y2): bu levent hangi dokuma işi için — opsiyonel; açık + IN_HOUSE iş, çözgü kartı farklıysa uyarı. */
+  weavingOrderId?: string | null;
   physicalBeamNo?: string | null;
   notes?: string | null;
   clientToken?: string | null;
@@ -190,6 +196,9 @@ export async function createWarpBeam(input: WarpBeamCreateInput, userId?: string
   }
   await assertSpecActive(input.warpSpecId);
   await assertParties(party);
+  const weavingOrderId = input.weavingOrderId ?? null;
+  const wo = weavingOrderId ? await assertWeavingOrderLinkableTx(prisma, weavingOrderId) : null;
+  const warnings = wo ? [warpSpecMismatchWarning({ warpSpecId: input.warpSpecId }, wo)].filter((w): w is string => w !== null) : [];
   const created = await withBarcodeRetry(
     () =>
       prisma.$transaction(async (tx) => {
@@ -205,6 +214,7 @@ export async function createWarpBeam(input: WarpBeamCreateInput, userId?: string
             physicalBeamNo: input.physicalBeamNo?.trim() || null,
             notes: input.notes?.trim() || null,
             ...party,
+            weavingOrderId,
             clientToken: input.clientToken ?? null,
             createdById: userId ?? null,
             updatedById: userId ?? null,
@@ -216,8 +226,8 @@ export async function createWarpBeam(input: WarpBeamCreateInput, userId?: string
     (err) => Array.isArray(err.meta?.target) && (err.meta.target as string[]).includes("beamNo"),
   );
   await AuditService.log({ userId, action: "CREATE", tableName: WARP_BEAM_TABLE, recordId: created.id, newData: { beamNo: created.beamNo, warpSpecId: created.warpSpecId, originKind: created.originKind, plannedLengthM: Number(created.plannedLengthM) } });
-  // K5b: plan = rezervasyon, RED YOK — gövde doluysa/çift planlıysa UYARI (sarımda çıkacak 409 şimdiden söylenir).
-  const warnings = await physicalBeamPlanWarningsTx(prisma, created.id, created.physicalBeamNo);
+  // K5b: plan = rezervasyon, RED YOK — gövde doluysa/çift planlıysa UYARI (sarımda çıkacak 409 şimdiden söylenir); Z1 çözgü kartı uyarısıyla aynı dizide.
+  warnings.push(...(await physicalBeamPlanWarningsTx(prisma, created.id, created.physicalBeamNo)));
   return { success: true, data: toWarpBeamDto(created), message: `${created.beamNo} planlandı`, ...(warnings.length > 0 ? { warnings } : {}) };
 }
 
@@ -245,12 +255,17 @@ export async function updateWarpBeam(id: string, input: WarpBeamUpdateInput, use
   );
   if (input.warpSpecId) await assertSpecActive(input.warpSpecId);
   await assertParties(party);
+  // Z1 (Y2): iş bağı yalnız PLANNED'da düzenlenir; verilirse açık + IN_HOUSE olmalı (400), çözgü kartı farkı uyarı.
+  const weavingOrderId = input.weavingOrderId === undefined ? current.weavingOrderId : input.weavingOrderId;
+  const wo = weavingOrderId && weavingOrderId !== current.weavingOrderId ? await assertWeavingOrderLinkableTx(prisma, weavingOrderId) : null;
+  const warnings = wo ? [warpSpecMismatchWarning({ warpSpecId: input.warpSpecId ?? current.warpSpecId }, wo)].filter((w): w is string => w !== null) : [];
   const data: Prisma.WarpBeamUpdateManyMutationInput = {
     ...(input.warpSpecId ? { warpSpecId: input.warpSpecId } : {}),
     ...(input.plannedLengthM !== undefined ? { plannedLengthM: normalizePlanned(input.plannedLengthM) } : {}),
     ...(input.physicalBeamNo !== undefined ? { physicalBeamNo: input.physicalBeamNo?.trim() || null } : {}),
     ...(input.notes !== undefined ? { notes: input.notes?.trim() || null } : {}),
     ...party,
+    ...(input.weavingOrderId !== undefined ? { weavingOrderId } : {}),
     updatedById: userId ?? null,
   };
   const updated = await prisma.$transaction(async (tx) => {
@@ -259,7 +274,7 @@ export async function updateWarpBeam(id: string, input: WarpBeamUpdateInput, use
     return tx.warpBeam.findUniqueOrThrow({ where: { id }, select: WARP_BEAM_SELECT });
   });
   await AuditService.log({ userId, action: "UPDATE", tableName: WARP_BEAM_TABLE, recordId: id, oldData: { plannedLengthM: Number(current.plannedLengthM), originKind: current.originKind }, newData: { plannedLengthM: Number(updated.plannedLengthM), originKind: updated.originKind } });
-  const warnings = await physicalBeamPlanWarningsTx(prisma, id, updated.physicalBeamNo);
+  warnings.push(...(await physicalBeamPlanWarningsTx(prisma, id, updated.physicalBeamNo)));
   return { success: true, data: toWarpBeamDto(updated), message: `${updated.beamNo} güncellendi`, ...(warnings.length > 0 ? { warnings } : {}) };
 }
 

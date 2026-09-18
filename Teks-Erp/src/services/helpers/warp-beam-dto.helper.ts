@@ -59,6 +59,9 @@ export interface WarpBeamDto {
   warpSpec: { id: string; code: string; name: string; endsCount: number; yarnItem: { id: string; code: string; name: string; linearDensityDen: number | null } };
   subcontractor: { id: string; name: string } | null;
   supplier: { id: string; name: string } | null;
+  /** Z1 (Y2): bağlı dokuma işi — null = serbest/stoğa levent (meşru; raporda "işsiz levent"). */
+  weavingOrderId: string | null;
+  weavingOrder: { id: string; weavingOrderNumber: string } | null;
   /** WOUND satırı (bir levent bir kez doğar); PLANNED/CANCELLED'da null olabilir. */
   wound: WarpBeamEventDto | null;
   /** Σ işaret × lengthM — Faz 1b'de WOUND − WOUND_CANCEL. */
@@ -127,6 +130,8 @@ export function toWarpBeamDto(r: WarpBeamRow, remainingM?: number): WarpBeamDto 
     warpSpec: { ...r.warpSpec, yarnItem: { ...r.warpSpec.yarnItem, linearDensityDen: num(r.warpSpec.yarnItem.linearDensityDen) } },
     subcontractor: r.subcontractor,
     supplier: r.supplier,
+    weavingOrderId: r.weavingOrderId,
+    weavingOrder: r.weavingOrder,
     wound: wound ? toWarpBeamEventDto(wound) : null,
     // Listede WOUND tek satırdır; iptalde CANCELLED durumu kalanı 0 yapar (WOUND_CANCEL listeye çekilmez).
     remainingM: remainingM ?? (r.status === WarpBeamStatus.READY && wound?.lengthM ? Number(wound.lengthM) : 0),

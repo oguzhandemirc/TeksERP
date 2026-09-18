@@ -1614,6 +1614,7 @@ model WarpBeam {
   beamNo         String         @unique @db.VarChar(32)
   clientToken    String?        @unique @db.Uuid
   warpSpecId     String         @db.Uuid
+  weavingOrderId String?        @db.Uuid
   status         WarpBeamStatus @default(PLANNED)
   /// Plan metresi — yalnız PLANNED'da düzenlenir; gerçek metre WOUND satırında.
   plannedLengthM Decimal        @db.Decimal(12, 3)
@@ -1645,6 +1646,8 @@ model WarpBeam {
   subcontractor Subcontractor?  @relation("WarpBeamSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
   supplier      Customer?       @relation("WarpBeamSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
   ownerCustomer Customer?       @relation("WarpBeamOwner", fields: [ownerCustomerId], references: [id], onDelete: Restrict)
+  /// Z1 (Y2): "bu levent hangi iş için sarıldı" — OPSİYONEL (stoğa/serbest levent meşru); yalnız aktif IN_HOUSE iş.
+  weavingOrder  WeavingOrder?   @relation("WarpBeamWeavingOrder", fields: [weavingOrderId], references: [id], onDelete: Restrict)
   events        WarpBeamEvent[]
   yarnMovements YarnMovement[]
   /// Fason sevk kalemleri (F1) — fiziksel çıkış belgesi; olay defteri `SHIP_OUT` bu kaleme bağlanır.
@@ -1662,6 +1665,7 @@ model WarpBeam {
   @@index([supplierId])
   @@index([ownerCustomerId])
   @@index([currentMachineId])
+  @@index([weavingOrderId])
   @@index([setKey])
   @@map("warp_beams")
 }
@@ -1828,6 +1832,9 @@ model WeavingOrder {
   /// Bu işi hangi tezgah koşumları icra etti. `SUBCONTRACTED` işte BOŞ kalır —
   /// fasona verilen dokumanın koşumu bizde tutulmaz.
   machineRuns    MachineRun[]   @relation("MachineRunWeavingOrder")
+  /// Z1 (2026-09-18): sipariş satırı bağı PİVOT (bir iş birden çok satırı besleyebilir); levent bağı `WarpBeam.weavingOrderId`.
+  orderLineLinks WeavingOrderToOrderLine[]
+  warpBeams      WarpBeam[]     @relation("WarpBeamWeavingOrder")
   /// Fason dokuma (G2): levent/iplik bu iş adına fasona gider, TOP makbuzla döner.
   subcontractorDispatches SubcontractorDispatch[] @relation("DispatchWeavingOrder")
   subcontractorReceipts   SubcontractorReceipt[]  @relation("ReceiptWeavingOrder")
@@ -3700,6 +3707,7 @@ model OrderLine {
   item                  Item                                @relation(fields: [itemId], references: [id])
   color                 Color?                              @relation(fields: [colorId], references: [id])
   workOrderLinks        WorkOrderToOrderLine[]
+  weavingOrderLinks     WeavingOrderToOrderLine[]
   requiredProperties    OrderLineRequiredProperty[]
   sackAllocations       SackAllocation[]
   directShipAllocations SubcontractorDirectShipAllocation[]
@@ -4131,6 +4139,28 @@ model WorkOrderToOrderLine {
   @@index([orderLineId])
   @@index([workOrderId, unlinkedAt])
   @@map("work_order_to_order_lines")
+}
+
+/// Z1 (2026-09-18) — DOKUMA İŞİ ↔ SİPARİŞ SATIRI pivotu (Y1 = PİVOT: bir dokuma işi birden çok sipariş satırını
+/// besleyebilir; `WorkOrderToOrderLine` emsali). ③b SAF YAPILANDIRMA pivotu: parasal/ticari/kalite sonucu yok,
+/// replace ile değişir, değişiklik audit'e yazılır. Her bağ OPSİYONEL doğar (stoka dokuma meşru); zorunluluk
+/// `dokuma.orderLineLinkRequired` bayrağıyla (varsayılan kapalı = bugünkü davranış).
+model WeavingOrderToOrderLine {
+  id             String   @id @default(uuid()) @db.Uuid
+  weavingOrderId String   @db.Uuid
+  orderLineId    String   @db.Uuid
+  /// Bu satır için planlanan metre — opsiyonel (tahsis bilinmiyorsa null; `plannedM` HEDEFTİR, tetik değil).
+  allocatedM     Decimal? @db.Decimal(12, 3)
+
+  weavingOrder WeavingOrder @relation(fields: [weavingOrderId], references: [id], onDelete: Restrict)
+  orderLine    OrderLine    @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([weavingOrderId, orderLineId])
+  @@index([orderLineId])
+  @@map("weaving_order_to_order_lines")
 }
 
 // =============================================================================

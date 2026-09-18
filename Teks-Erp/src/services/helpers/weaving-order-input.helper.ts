@@ -7,6 +7,7 @@
 // =============================================================================
 
 import { Prisma, WeavingExecutionKind, WeavingOrderStatus } from "@prisma/client";
+import { ORDER_LINE_LINK_SELECT, orderLineLinksAuditView, toOrderLineLinkDto, type OrderLineLinkInput, type WeavingOrderLineLinkDto } from "./weaving-order-links.helper";
 import { AppError } from "../../utils/app-error";
 
 /** Açık koşum yüklemi — `machine_runs` sedinin (`endedAt`+`revokedAt`) aynası. */
@@ -36,7 +37,9 @@ export const WEAVING_ORDER_SELECT = {
   color: { select: { id: true, code: true, name: true } },
   warpSpec: { select: { id: true, code: true, name: true } },
   subcontractor: { select: { id: true, code: true, name: true } },
-  _count: { select: { machineRuns: { where: OPEN_RUN_WHERE } } },
+  // Z1: sipariş satırı bağları (pivot) — liste + detay aynı projeksiyon; levent sayısı Y2 bağından.
+  orderLineLinks: { select: ORDER_LINE_LINK_SELECT, orderBy: { createdAt: "asc" as const } },
+  _count: { select: { machineRuns: { where: OPEN_RUN_WHERE }, warpBeams: true } },
 } satisfies Prisma.WeavingOrderSelect;
 
 export type WeavingOrderRow = Prisma.WeavingOrderGetPayload<{ select: typeof WEAVING_ORDER_SELECT }>;
@@ -65,6 +68,13 @@ export interface WeavingOrderDto {
   subcontractor: { id: string; code: string; name: string } | null;
   /** Kapanışı engelleyen açık koşum sayısı (`endedAt IS NULL AND revokedAt IS NULL`). */
   openRunCount: number;
+  /** Z1 (Y1): bağlı sipariş satırları — boş dizi = stoka dokuma (meşru). */
+  orderLines: WeavingOrderLineLinkDto[];
+  orderLineCount: number;
+  /** Z1 (Y2): bu iş için sarılan/planlanan levent sayısı. */
+  warpBeamCount: number;
+  /** Z1 (Y3, TÜRETİLMİŞ): bu işten doğan (indirme bağlı, iptal edilmemiş) top sayısı — yalnız detayda. */
+  producedRollCount?: number;
 }
 
 export interface WeavingOrderCreateInput {
@@ -77,6 +87,8 @@ export interface WeavingOrderCreateInput {
   plannedStartDate?: string | Date | null;
   plannedEndDate?: string | Date | null;
   notes?: string | null;
+  /** Z1 (Y1): sipariş satırı bağları — verilirse küme REPLACE (③b), `[]` temizler; yoksa dokunulmaz. */
+  orderLines?: OrderLineLinkInput[];
   clientToken?: string | null;
 }
 
@@ -105,10 +117,14 @@ export function toWeavingOrderDto(row: WeavingOrderRow): WeavingOrderDto {
   const { _count, closedById: _c, cancelledById: _x, ...rest } = row;
   void _c;
   void _x;
+  const { orderLineLinks, ...scalar } = rest;
   return {
-    ...rest,
+    ...scalar,
     plannedM: row.plannedM === null ? null : Number(row.plannedM),
     openRunCount: _count.machineRuns,
+    orderLines: orderLineLinks.map(toOrderLineLinkDto),
+    orderLineCount: orderLineLinks.length,
+    warpBeamCount: _count.warpBeams,
   };
 }
 
@@ -126,6 +142,7 @@ export function weavingOrderAuditView(row: WeavingOrderRow): Record<string, unkn
     plannedEndDate: row.plannedEndDate,
     notes: row.notes,
     cancelReason: row.cancelReason,
+    orderLines: orderLineLinksAuditView(row.orderLineLinks),
   };
 }
 

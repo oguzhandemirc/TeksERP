@@ -19,6 +19,11 @@ export type WeavingOrderOfRoll = {
   via: "DOFF" | "RECEIPT";
 };
 
+/** Z1 (Y3 türetme, kolon yok): bu işten indirme yoluyla doğan (iptal edilmemiş) top sayısı — aynı zincir, aynı dosya. */
+export async function countRollsOfWeavingOrder(db: Db, weavingOrderId: string): Promise<number> {
+  return db.roll.count({ where: { doffEvent: { revokedAt: null, machineRun: { weavingOrderId } } } });
+}
+
 /** Top hiçbir dokuma işine bağlı değilse `null` (uydurulmaz). */
 export async function weavingOrderOfRoll(db: Db, rollId: string): Promise<WeavingOrderOfRoll | null> {
   const roll = await db.roll.findUnique({

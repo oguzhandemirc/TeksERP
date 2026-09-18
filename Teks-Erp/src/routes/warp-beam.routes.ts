@@ -44,6 +44,8 @@ const createSchema = z
     supplierId: uuidOrNull,
     /** G3 emanet: sahibi olan müşteri (CONSIGNED'da zorunlu). Yalnız CREATE — PATCH şeması bu alanı ÇIKARIR (E2b). */
     ownerCustomerId: uuidOrNull,
+    /** Z1 (Y2): hangi dokuma işi için — opsiyonel (açık + IN_HOUSE iş; çözgü kartı farkı `warnings`). */
+    weavingOrderId: uuidOrNull,
     physicalBeamNo: z.string().max(32).nullable().optional(),
     notes: z.string().max(500).nullable().optional(),
     clientToken: z.string().uuid().nullable().optional(),
@@ -69,6 +71,8 @@ const windSchema = z
     physicalBeamNoPrefix: z.string().trim().max(28).nullable().optional(),
     /** G1c: fasona sardırılan levent → o fasoncuya giden iplik kalemi (opsiyonel; servis 400 kapısı). */
     dispatchItemId: z.string().uuid().nullable().optional(),
+    /** Z1 (Y2): sarım anında iş bağı (verilirse plana yazılır); `devere.beamWeavingLinkRequired` açıkken zorunlu. */
+    weavingOrderId: uuidOrNull,
   })
   .strict();
 const cancelSchema = z.object({ reason: z.string().trim().min(3, "Gerekçe en az 3 karakter").max(300) }).strict();
@@ -77,6 +81,8 @@ const listSchema = z
   .object({
     status: z.string().optional(),
     warpSpecId: z.string().uuid().optional(),
+    // Z1: bu dokuma işi için sarılan/planlanan leventler.
+    weavingOrderId: z.string().uuid().optional(),
     originKind: z.nativeEnum(WarpBeamOrigin).optional(),
     search: z.string().max(100).optional(),
     cursor: z.string().optional(),
@@ -90,7 +96,7 @@ const listSchema = z
  * /api/warp-beams:
  *   get:
  *     tags: [WarpBeams]
- *     summary: Levent listesi (cursor; süzme sunucuda — durum CSV · çözgü kartı · köken · arama)
+ *     summary: Levent listesi (cursor; süzme sunucuda — durum CSV · çözgü kartı · köken · dokuma işi (Z1) · arama)
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Liste }
@@ -100,7 +106,7 @@ router.get("/", requireAnyPermission("warpbeam:read", ...MOBILE_DEVERE), async (
   try {
     const q = listSchema.parse(req.query);
     const status = readFilterList(q.status).filter((s): s is WarpBeamStatus => (Object.values(WarpBeamStatus) as string[]).includes(s));
-    res.json(await listWarpBeams({ status, warpSpecId: q.warpSpecId, originKind: q.originKind, search: q.search, cursor: q.cursor, limit: q.limit, withTotal: q.withTotal === "true" }));
+    res.json(await listWarpBeams({ status, warpSpecId: q.warpSpecId, weavingOrderId: q.weavingOrderId, originKind: q.originKind, search: q.search, cursor: q.cursor, limit: q.limit, withTotal: q.withTotal === "true" }));
   } catch (e) {
     next(e);
   }

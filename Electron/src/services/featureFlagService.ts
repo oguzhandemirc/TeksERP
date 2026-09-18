@@ -310,6 +310,10 @@ export interface FeatureFlags {
   devereMountTrackingRequired: boolean;
   /** Devere Faz 4: tezgahtan doğan top (KK1 WEAVING + indirme bağı) bağlı leventlerden otomatik tüketim düşer — varsayılan kapalı (elle). */
   devereAutoConsume: boolean;
+  /** Z1 üretim belge zinciri (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bağ opsiyonel (bugünkü davranış). */
+  devereBeamWeavingLinkRequired: boolean;
+  dokumaRunWeavingOrderRequired: boolean;
+  dokumaOrderLineLinkRequired: boolean;
   /** Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme).
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI, tezgah izlemenin KARDEŞİ: bu alan HAM
    *  değerdir; etkin değer `production && dokuma` (`useOperationsVisibilityContext`). */

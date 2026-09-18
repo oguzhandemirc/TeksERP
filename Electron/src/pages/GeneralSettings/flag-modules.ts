@@ -64,7 +64,7 @@ export type PlanlananModulSahibi = "planlanan:fason" | "planlanan:kartela";
  */
 export type HideableModule = Exclude<
   ModuleFlagKey,
-  "kumasTeknikEnabled" | "tezgahEnabled" | "dokumaEnabled" | "emanetEnabled"
+  "kumasTeknikEnabled" | "tezgahEnabled" | "emanetEnabled"
 >;
 
 export type FlagOwner = HideableModule | "cekirdek" | PlanlananModulSahibi;
@@ -103,6 +103,10 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   devereMountTrackingRequired: "devereEnabled",
   // Devere Faz 4 (2026-09-15): otomatik tüketim devere modülünün davranış bayrağı.
   devereAutoConsume: "devereEnabled",
+  // Z1 üretim belge zinciri (2026-09-18): levent→iş bağı devere'nin, koşum→iş ve iş→sipariş bağı dokumanın davranış bayrağı.
+  devereBeamWeavingLinkRequired: "devereEnabled",
+  dokumaRunWeavingOrderRequired: "dokumaEnabled",
+  dokumaOrderLineLinkRequired: "dokumaEnabled",
 
   // --- ÜRETİM (`operations/work-orders` · KK1 · Tambur · Kurşun · Parti) -----
   targetQuantityEnabled: "productionEnabled",

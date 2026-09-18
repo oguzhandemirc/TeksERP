@@ -46,6 +46,11 @@ const createWeavingOrderSchema = z
     plannedStartDate: dateOrNull,
     plannedEndDate: dateOrNull,
     notes: z.string().max(500).nullable().optional(),
+    // Z1 (Y1): sipariş satırı bağları — verilirse küme REPLACE (`[]` temizler); yoksa dokunulmaz. Seçici ucu: order-lines/available.
+    orderLines: z
+      .array(z.object({ orderLineId: z.string().uuid(), allocatedM: z.union([z.number(), z.string()]).nullable().optional() }).strict())
+      .max(200)
+      .optional(),
     clientToken: z.string().uuid().nullable().optional(),
   })
   .strict();
@@ -59,6 +64,9 @@ const listWeavingOrdersSchema = z
     status: z.string().optional(),
     itemId: z.string().optional(),
     subcontractorId: z.string().uuid().optional(),
+    // Z1: sipariş satırı / sipariş bağıyla süz (pivot).
+    orderLineId: z.string().uuid().optional(),
+    orderId: z.string().uuid().optional(),
     search: z.string().max(100).optional(),
     cursor: z.string().optional(),
     limit: z.coerce.number().int().min(1).max(100).optional(),
@@ -85,6 +93,8 @@ function parseStatuses(raw: string | undefined): WeavingOrderStatus[] {
  *       - { in: query, name: status, schema: { type: string }, description: "CSV — PLANNED,IN_PROGRESS,COMPLETED,CANCELLED" }
  *       - { in: query, name: itemId, schema: { type: string }, description: "CSV kumaş id" }
  *       - { in: query, name: subcontractorId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: orderLineId, schema: { type: string, format: uuid }, description: "Z1 — bu sipariş satırına bağlı işler" }
+ *       - { in: query, name: orderId, schema: { type: string, format: uuid }, description: "Z1 — bu siparişin herhangi bir satırına bağlı işler" }
  *       - { in: query, name: search, schema: { type: string } }
  *       - { in: query, name: cursor, schema: { type: string } }
  *       - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100 } }
@@ -104,6 +114,8 @@ router.get(
         status: parseStatuses(q.status),
         itemId: readIdCondition(q.itemId),
         subcontractorId: q.subcontractorId ?? null,
+        orderLineId: q.orderLineId ?? null,
+        orderId: q.orderId ?? null,
         search: q.search ?? null,
         cursor: q.cursor ?? null,
         limit: q.limit ?? null,

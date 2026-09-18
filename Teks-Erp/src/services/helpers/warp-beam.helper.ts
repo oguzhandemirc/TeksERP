@@ -65,6 +65,9 @@ export const WARP_BEAM_SELECT = {
   warpSpec: { select: { id: true, code: true, name: true, endsCount: true, yarnItem: { select: { id: true, code: true, name: true, linearDensityDen: true } } } },
   subcontractor: { select: { id: true, name: true } },
   supplier: { select: { id: true, name: true } },
+  // Z1 (Y2): bu levent hangi dokuma işi için — opsiyonel.
+  weavingOrderId: true,
+  weavingOrder: { select: { id: true, weavingOrderNumber: true } },
   // Faz 3: "şu an nerede" — yalnız MOUNTED'da dolu.
   currentMachineId: true,
   currentPosition: true,

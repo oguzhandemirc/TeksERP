@@ -231,6 +231,10 @@ export const SETTING_KEYS = {
    *  ÜRETİME BAĞIMLI (`MODULE_DEPENDENCIES`), tezgah izlemenin KARDEŞİ — fasona
    *  dokutan firmada dokuma işi var tezgah yok (DOKUMA-IS-EMRI §2.5). */
   DOKUMA_ENABLED: "dokuma.enabled",
+  /** Z1 ÜRETİM BELGE ZİNCİRİ (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bugünkü davranış (bağ opsiyonel). */
+  DEVERE_BEAM_WEAVING_LINK_REQUIRED: "devere.beamWeavingLinkRequired",
+  DOKUMA_RUN_WEAVING_ORDER_REQUIRED: "dokuma.runWeavingOrderRequired",
+  DOKUMA_ORDER_LINE_LINK_REQUIRED: "dokuma.orderLineLinkRequired",
   /**
    * KAPALI raporların anahtar listesi (JSON `string[]`, `REPORT_CATALOG` anahtarları).
    *
@@ -1435,6 +1439,12 @@ export interface FeatureFlags {
   /** Devere Faz 3: bağlamada yöntem + başlangıç zorunlu mu (varsayılan KAPALI). */
   devereMountTrackingRequired: boolean;
   devereAutoConsume: boolean;
+  /** Z1: levent sarımında dokuma işi bağı zorunlu (varsayılan KAPALI = serbest levent meşru). HAM; etkin `devere && bayrak`. */
+  devereBeamWeavingLinkRequired: boolean;
+  /** Z1: tezgah koşumu dokuma işine bağlı açılmalı (varsayılan KAPALI = stoka dokuma meşru). HAM; etkin `dokuma && bayrak`. */
+  dokumaRunWeavingOrderRequired: boolean;
+  /** Z1: dokuma işi en az bir sipariş satırına bağlı olmalı (varsayılan KAPALI). HAM; etkin `dokuma && bayrak`. */
+  dokumaOrderLineLinkRequired: boolean;
   /** Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme).
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI: bu alan HAM değerdir; etkin değer
    *  `production && dokuma` ve kapının içinde çözülür. */
@@ -1858,6 +1868,9 @@ export class SystemSettingService {
       devereMountTracking: await readDevereMountTracking(cacheClient),
       devereMountTrackingRequired: await readDevereMountTrackingRequired(cacheClient),
       devereAutoConsume: await readDevereAutoConsume(cacheClient),
+      devereBeamWeavingLinkRequired: await readDevereBeamWeavingLinkRequired(cacheClient),
+      dokumaRunWeavingOrderRequired: await readDokumaRunWeavingOrderRequired(cacheClient),
+      dokumaOrderLineLinkRequired: await readDokumaOrderLineLinkRequired(cacheClient),
       dokumaEnabled: await readDokumaEnabled(cacheClient),
       // ⚠️ ÜÇ SONUÇLU okumanın panele TAŞINAN hâli: ölçülemedi ⇒ `null`. Boş diziye
       // düşürmek, bozuk bir satırda paneli "hepsi açık" diye çizdirirdi.
@@ -2366,6 +2379,24 @@ export class SystemSettingService {
         throw AppError.badRequest("devereAutoConsume boolean olmalı");
       }
       await this.set(SETTING_KEYS.DEVERE_AUTO_CONSUME, input.devereAutoConsume, "Devere: tezgahtan doğan top leventten otomatik tüketim düşer", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "devereBeamWeavingLinkRequired")) {
+      if (typeof input.devereBeamWeavingLinkRequired !== "boolean") {
+        throw AppError.badRequest("devereBeamWeavingLinkRequired boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.DEVERE_BEAM_WEAVING_LINK_REQUIRED, input.devereBeamWeavingLinkRequired, "Devere: levent sarımında dokuma işi bağı zorunlu", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "dokumaRunWeavingOrderRequired")) {
+      if (typeof input.dokumaRunWeavingOrderRequired !== "boolean") {
+        throw AppError.badRequest("dokumaRunWeavingOrderRequired boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.DOKUMA_RUN_WEAVING_ORDER_REQUIRED, input.dokumaRunWeavingOrderRequired, "Dokuma: tezgah koşumu dokuma işine bağlı açılır", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "dokumaOrderLineLinkRequired")) {
+      if (typeof input.dokumaOrderLineLinkRequired !== "boolean") {
+        throw AppError.badRequest("dokumaOrderLineLinkRequired boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.DOKUMA_ORDER_LINE_LINK_REQUIRED, input.dokumaOrderLineLinkRequired, "Dokuma: dokuma işi en az bir sipariş satırına bağlı", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "dokumaEnabled")) {
@@ -3846,6 +3877,27 @@ export async function readDevereAutoConsume(tx?: Pick<typeof prisma, "systemSett
   return asBoolean(setting?.value);
 }
 
+/** Z1: levent sarımında dokuma işi bağı zorunlu mu? Default FALSE (serbest levent meşru — bugünkü davranış). HAM değer. */
+export async function readDevereBeamWeavingLinkRequired(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_BEAM_WEAVING_LINK_REQUIRED }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
+
+/** Z1: tezgah koşumu dokuma işine bağlı açılmalı mı? Default FALSE (stoka dokuma meşru — bugünkü davranış). HAM değer. */
+export async function readDokumaRunWeavingOrderRequired(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({ where: { key: SETTING_KEYS.DOKUMA_RUN_WEAVING_ORDER_REQUIRED }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
+
+/** Z1: dokuma işi en az bir sipariş satırına bağlı olmalı mı? Default FALSE (stoka dokuma meşru). HAM değer. */
+export async function readDokumaOrderLineLinkRequired(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({ where: { key: SETTING_KEYS.DOKUMA_ORDER_LINE_LINK_REQUIRED }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
+
 /** Dokuma işi modülü açık mı? Default FALSE (satır yoksa kapalı — dünkü davranış:
  *  fabrika dokumuyor, kumaş hazır geliyor). HAM değer döner; ön koşulu (production)
  *  `requireDokumaEnabled` ölçer. */
@@ -4643,6 +4695,27 @@ export async function resolveGoodsReceiptRequirePriceEnabled(
 }
 
 /** Kurşun bypass düzeni — ETKİN değer (`üretim && bayrak`). */
+/** Z1 — levent sarımında iş bağı zorunlu mu — ETKİN değer (`ticaret && iplik && devere && bayrak`; devere modülü
+ *  ticaret+ipliğe bağlıdır, `requireDevereEnabled` ile aynı ön koşul zinciri). */
+export async function resolveBeamWeavingLinkRequired(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  if (!(await readTicaretEnabled(tx))) return false;
+  if (!(await readIplikEnabled(tx))) return false;
+  if (!(await readDevereEnabled(tx))) return false;
+  return readDevereBeamWeavingLinkRequired(tx);
+}
+
+/** Z1 — koşumda iş zorunlu mu — ETKİN değer (`üretim && dokuma && bayrak`). */
+export async function resolveRunWeavingOrderRequired(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  if (!(await readProductionEnabled(tx)) || !(await readDokumaEnabled(tx))) return false;
+  return readDokumaRunWeavingOrderRequired(tx);
+}
+
+/** Z1 — dokuma işinde sipariş satırı bağı zorunlu mu — ETKİN değer (`üretim && dokuma && bayrak`). */
+export async function resolveOrderLineLinkRequired(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  if (!(await readProductionEnabled(tx)) || !(await readDokumaEnabled(tx))) return false;
+  return readDokumaOrderLineLinkRequired(tx);
+}
+
 export async function resolveKursunBypassEnabled(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {

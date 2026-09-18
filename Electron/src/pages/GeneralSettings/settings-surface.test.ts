@@ -79,6 +79,7 @@ describe("§1 üç yüzeyin dağılımı", () => {
     expect(idsOf("flags")).toEqual([
       "customers",
       "devere",
+      "dokuma",
       "finance",
       "kartela",
       "orders",

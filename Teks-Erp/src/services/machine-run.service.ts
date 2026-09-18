@@ -32,6 +32,7 @@ import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { assertProductionLineFree, resolveOpenContext, resolveRunStamp } from "./helpers/machine-run-open.helper";
 import { runOpenBeamWarning } from "./helpers/warp-beam-mount.helper";
 import { markWeavingOrderInProgressTx } from "./helpers/weaving-order.helper";
+import { assertRunWeavingOrderGate } from "./helpers/production-chain-gates.helper";
 import type { ApiResponse } from "../types/api.types";
 
 const TABLE = "MACHINE_RUN";
@@ -151,6 +152,8 @@ export async function openMachineRun(
   }
 
   const { machine, itemId, colorId } = await resolveOpenContext(input);
+  // Z1: `dokuma.runWeavingOrderRequired` açıkken işsiz koşum 400; kapalıyken bağsız koşum bugünkü gibi meşru.
+  await assertRunWeavingOrderGate(prisma, input.weavingOrderId ?? null);
   const started = resolveRunStamp(input.startedAt, "başlangıç zamanı");
   const warnings = started.warning ? [started.warning] : [];
   await assertProductionLineFree(machine, input.productionLineNo, started.value);

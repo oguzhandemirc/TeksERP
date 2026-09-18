@@ -799,6 +799,8 @@ async function main() {
     iplikEnabled: { middleware: "requireIplikEnabled", selfGate: "readIplikEnabled(" },
     // Devere Faz 2 A2: `devere` ayar kategorisi `moduleKey: "devereEnabled"` taşır.
     devereEnabled: { middleware: "requireDevereEnabled", selfGate: "readDevereEnabled(" },
+    // Z1 (2026-09-18): `dokuma` ayar kategorisi `moduleKey: "dokumaEnabled"` taşır (koşum/sipariş bağı bayrakları).
+    dokumaEnabled: { middleware: "requireDokumaEnabled", selfGate: "readDokumaEnabled(" },
     depoMultiEnabled: {
       middleware: "requireDepoMultiEnabled",
       selfGate: "readDepoMultiEnabled(",

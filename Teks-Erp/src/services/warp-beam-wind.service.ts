@@ -23,6 +23,7 @@ import { assertReturnReasonTx, kg, lotWarnings, siblingsOf, windResult, writeWou
 export type { WindResultDto };
 import { toWarpBeamDto, toWarpBeamEventDto, type WarpBeamDto, type WarpBeamEventDto } from "./warp-beam.service";
 import { resolveOwnerFromLotsTx } from "./helpers/emanet-owner.helper";
+import { assertBeamWeavingLinkGate, assertWeavingOrderLinkableTx, warpSpecMismatchWarning } from "./helpers/production-chain-gates.helper";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 
@@ -58,6 +59,9 @@ export interface WindWarpBeamInput {
   dispatchItemId?: string | null;
   /** RAŞEL TAKIMI (#23): kaç levent birlikte sarıldı (1..24; DEFAULT 1 = bugün). N>1 → N−1 kardeş aynı tx'te doğar, iplik ÷ N. */
   count?: number | null;
+  /** Z1 (Y2): sarım anında iş bağı — verilirse plana yazılır (açık + IN_HOUSE iş), verilmezse plandaki kalır;
+   *  `devere.beamWeavingLinkRequired` açıkken işsiz sarım 400. Kardeşler (takım) aynı bağı alır. */
+  weavingOrderId?: string | null;
   /** Takımda gövde numarası öneki → `${önek}-${k}`; ilkinin kendi gövde no'su varsa korunur. */
   physicalBeamNoPrefix?: string | null;
 }
@@ -128,6 +132,14 @@ export async function windWarpBeam(id: string, input: WindWarpBeamInput, userId?
   const issuesSorted = [...issues].sort((a, b) => a.warehouseId.localeCompare(b.warehouseId) || (a.lotId ?? "").localeCompare(b.lotId ?? ""));
   const returnsSorted = [...returns].sort((a, b) => a.warehouseId.localeCompare(b.warehouseId) || a.reasonCode.localeCompare(b.reasonCode) || (a.lotId ?? "").localeCompare(b.lotId ?? ""));
   const warnings = inHouse ? await lotWarnings(issuesSorted, returnsSorted) : [];
+  // Z1 (Y2): iş bağı — gövde > plandaki; bayrak açıkken işsiz sarım 400; çözgü kartı farkı uyarı (red değil).
+  const weavingOrderId = input.weavingOrderId !== undefined ? input.weavingOrderId : beam.weavingOrderId;
+  await assertBeamWeavingLinkGate(prisma, weavingOrderId);
+  if (weavingOrderId && weavingOrderId !== beam.weavingOrderId) {
+    const wo = await assertWeavingOrderLinkableTx(prisma, weavingOrderId);
+    const w = warpSpecMismatchWarning(beam, wo);
+    if (w) warnings.push(w);
+  }
   // K6 — dip iadesi cağlığa yüklenenden FAZLA olamaz (fiziksel imkânsız; net tüketim eksiye düşerdi).
   const issueKg = issuesSorted.reduce((acc, l) => acc.plus(kg(l.qtyKg, "İplik çıkış kg")), D(0));
   const returnKg = returnsSorted.reduce((acc, l) => acc.plus(kg(l.qtyKg, "Dip iade kg")), D(0));
@@ -158,8 +170,8 @@ export async function windWarpBeam(id: string, input: WindWarpBeamInput, userId?
   const wound = await prisma.$transaction(async (tx) => {
     if (input.machineId) await assertDevereMachineTx(tx, input.machineId);
     if (input.dispatchItemId) await assertYarnDispatchItemTx(tx, input.dispatchItemId, { subcontractorId: beam.subcontractorId, yarnItemId });
-    if (setKey || firstPhysical !== beam.physicalBeamNo || ownerCustomerId !== beam.ownerCustomerId) {
-      await tx.warpBeam.updateMany({ where: { id, status: WarpBeamStatus.PLANNED }, data: { setKey, physicalBeamNo: firstPhysical, ownerCustomerId } });
+    if (setKey || firstPhysical !== beam.physicalBeamNo || ownerCustomerId !== beam.ownerCustomerId || weavingOrderId !== beam.weavingOrderId) {
+      await tx.warpBeam.updateMany({ where: { id, status: WarpBeamStatus.PLANNED }, data: { setKey, physicalBeamNo: firstPhysical, ownerCustomerId, weavingOrderId } });
     }
     const first = await writeWoundTx(tx, { id, endsCount: beam.warpSpec.endsCount }, ctx, { issues: issueShares[0], returns: returnShares[0] });
     for (let k = 2; k <= count; k++) {
@@ -167,7 +179,7 @@ export async function windWarpBeam(id: string, input: WindWarpBeamInput, userId?
       await assertPhysicalBeamFreeTx(tx, null, physicalBeamNo, `${beam.beamNo} takımı ${k}. levent`);
       // k. kardeş AYNI tx'te PLANNED doğar (8029 sıralı LV no; klon: kart/köken/taraf/plan m/not) ve hemen sarılır.
       const sib = await tx.warpBeam.create({
-        data: { beamNo: await nextBeamNoTx(tx, new Date()), warpSpecId: beam.warpSpecId, status: WarpBeamStatus.PLANNED, plannedLengthM: beam.plannedLengthM, physicalBeamNo, notes: beam.notes, originKind: beam.originKind, subcontractorId: beam.subcontractorId, supplierId: beam.supplierId, ownerCustomerId, setKey, createdById: userId ?? null },
+        data: { beamNo: await nextBeamNoTx(tx, new Date()), warpSpecId: beam.warpSpecId, status: WarpBeamStatus.PLANNED, plannedLengthM: beam.plannedLengthM, physicalBeamNo, notes: beam.notes, originKind: beam.originKind, subcontractorId: beam.subcontractorId, supplierId: beam.supplierId, ownerCustomerId, weavingOrderId, setKey, createdById: userId ?? null },
         select: { id: true, beamNo: true },
       });
       await writeWoundTx(tx, { id: sib.id, endsCount: beam.warpSpec.endsCount }, { ...ctx, clientToken: null }, { issues: issueShares[k - 1], returns: returnShares[k - 1] });
