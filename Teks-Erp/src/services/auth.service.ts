@@ -373,8 +373,10 @@ export class AuthService {
       isDesktopClient(ctx?.clientType) &&
       !permissions.some((p) => !p.startsWith("mobile:"))
     ) {
+      // Kanal reddi izin reddinden AYRI kod: istemci "yetki iste" değil "doğru uygulamayı aç" der.
       throw AppError.forbidden(
         "Bu hesabın masaüstü paneline erişimi yok. Yalnızca mobil uygulamada kullanılabilir.",
+        { code: "CHANNEL_DENIED", channel: "desktop" },
       );
     }
 

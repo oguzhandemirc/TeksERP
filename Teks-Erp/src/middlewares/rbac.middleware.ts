@@ -7,10 +7,18 @@
 //
 // Wildcard: "admin:*" verilen kullanıcı tüm "admin:..." izinlerini sağlar.
 // "*" tüm izinleri sağlar (süper admin için tek-tek liste yerine).
+//
+// 403 gövdesi `details.code` taşır (kural: hata kodu `details.code` altında, `body.code` hep undefined):
+//   PERMISSION_DENIED + `details.required` (tek izin) ya da `details.requiredAny` (izinlerden biri) —
+//   istemci "hangi yetki eksik"i metni ayrıştırmadan okur; metin aynen kaldı (koda bakmayan istemci aynı).
+//   Kanal reddi (mobil-only hesap masaüstüne giremez) AYRI koddur: `auth.service` CHANNEL_DENIED.
 // =============================================================================
 
 import { Request, Response, NextFunction } from "express";
 import { AppError } from "../utils/app-error";
+
+/** Yetki reddi kodu — `details.code`; kanal reddi (`CHANNEL_DENIED`) ve modül kapalı (`MODULE_DISABLED`) ayrı sınıflardır. */
+export const RBAC_DENIED_CODE = "PERMISSION_DENIED";
 
 /**
  * Kullanıcı izinleri arasında required iznin karşılanıp karşılanmadığını kontrol eder.
@@ -58,9 +66,10 @@ export const requirePermission = (requiredPermission: string) => {
 
     if (!matchesPermission(req.user.permissions, requiredPermission)) {
       return next(
-        AppError.forbidden(
-          `Bu işlem için '${requiredPermission}' yetkisi gerekli.`
-        )
+        AppError.forbidden(`Bu işlem için '${requiredPermission}' yetkisi gerekli.`, {
+          code: RBAC_DENIED_CODE,
+          required: requiredPermission,
+        })
       );
     }
 
@@ -83,9 +92,10 @@ export const requireAnyPermission = (...requiredPermissions: string[]) => {
 
     if (!hasAny) {
       return next(
-        AppError.forbidden(
-          `Bu işlem için şu yetkilerden birine ihtiyacınız var: ${requiredPermissions.join(", ")}`
-        )
+        AppError.forbidden(`Bu işlem için şu yetkilerden birine ihtiyacınız var: ${requiredPermissions.join(", ")}`, {
+          code: RBAC_DENIED_CODE,
+          requiredAny: [...requiredPermissions],
+        })
       );
     }
 

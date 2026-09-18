@@ -37,6 +37,36 @@ export const swaggerOptions: swaggerJSDoc.Options = {
                     bearerFormat: 'JWT',
                 },
             },
+            schemas: {
+                // 403 gövdesi — hata kodu `details.code` altındadır (`body.code` hep undefined; kural).
+                ForbiddenError: {
+                    type: 'object',
+                    properties: {
+                        success: { type: 'boolean', example: false },
+                        message: { type: 'string', description: 'Operatör dilinde sebep (Türkçe)' },
+                        details: {
+                            type: 'object',
+                            properties: {
+                                code: {
+                                    type: 'string',
+                                    enum: ['PERMISSION_DENIED', 'CHANNEL_DENIED', 'MODULE_DISABLED', 'REPORT_DISABLED', 'REPORT_GATE_UNAVAILABLE', 'TOTP_ENROLLMENT_REQUIRED'],
+                                    description: 'PERMISSION_DENIED: eksik izin (`required` ya da `requiredAny`) · CHANNEL_DENIED: hesap bu kanala kapalı (`channel`) · MODULE_DISABLED: modül kapalı (`modul`)',
+                                },
+                                required: { type: 'string', description: 'PERMISSION_DENIED — gereken izin kodu' },
+                                requiredAny: { type: 'array', items: { type: 'string' }, description: 'PERMISSION_DENIED — izinlerden biri yeter' },
+                                channel: { type: 'string', enum: ['desktop', 'mobile'] },
+                                modul: { type: 'string' },
+                            },
+                        },
+                    },
+                },
+            },
+            responses: {
+                Forbidden: {
+                    description: 'Yetki / kanal / modül reddi — `details.code` ayırt eder',
+                    content: { 'application/json': { schema: { $ref: '#/components/schemas/ForbiddenError' } } },
+                },
+            },
         },
         security: [
             {
