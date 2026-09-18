@@ -32,7 +32,7 @@
         {
           "kapsam": "panel",
           "tip": "iyilestirme",
-          "metin": "Cari kartı ve cari hesap birleşti: Cariler'de kart formuna Finans bölümü geldi (vade günü, para birimi, vergi dairesi, risk limiti ve salt okunur açık bakiye) — muhasebe okuma yetkisi olan görür, yazma yetkisi olan düzenler; terimler kartta bir kez girilir, faturada vade ve para birimi kartın hesabından kendiliğinden önerilir (kod eşlemesi kalktı, hesabı olmayan kartta alan boş kalır). Cari Hesaplar listesi varsayılan olarak yalnız hareketi olan hesapları gösterir (Durum: Hareketli · Tümü); yeni hesap ayrıca açılmaz, kart kaydedilince kendiliğinden doğar."
+          "metin": "Cari kartı ve cari hesap birleşti: Cariler'de kart formuna Finans bölümü geldi (vade günü, para birimi, vergi dairesi, risk limiti ve salt okunur açık bakiye) — muhasebe okuma yetkisi olan görür, yazma yetkisi olan düzenler. Terimler kartta bir kez girilir; fatura ve tahsilat formlarında vade ile para birimi kartın hesabından kendiliğinden gelir (hesabı olmayan kartta alan boş kalır). Ön muhasebe modülü açık kurulumlarda kart kaydedilince cari hesabı da onunla birlikte doğar: Cari Hesaplar listesi varsayılan olarak yalnız hareketi olan hesapları gösterir (Durum: Hareketli · Tümü) ve listeden elle hesap açma kalktı. Mevcut kartların hesapları kurulumda tek seferlik bir adımla tamamlanır."
         },
         {
           "kapsam": "panel",
@@ -103,11 +103,6 @@
           "kapsam": "her-ikisi",
           "tip": "yeni",
           "metin": "Üretim belgeleri birbirini görür: dokuma işi sipariş satırlarına bağlanabilir (bir iş birden çok satırı besleyebilir, satır başına planlanan metre isteğe bağlı), levent hangi dokuma işi için sarıldığını taşıyabilir ve tezgahta koşum açılırken takılı leventin işi kendiliğinden önerilir (operatör onaylar ya da değiştirir). Üç bağ da isteğe bağlıdır ve varsayılan davranış değişmez: stoka dokuma, serbest levent ve işsiz koşum eskisi gibi kaydedilir. İsteyen kurulum Ayarlar → Özellik Anahtarları’ndan üç ayrı kuralı açar: “Levent sarımında dokuma işi zorunlu olsun” (Devere / Levent), “Tezgah koşumu dokuma işine bağlı açılsın” ve “Dokuma işi sipariş satırına bağlı olsun” (yeni Dokuma bölümü); açıkken eksik bağ kaydı Türkçe bir uyarıyla reddeder. Leventin çözgü kartı işin kartından farklıysa kayıt reddedilmez, uyarı verilir. Tezgahtan inen top hangi dokuma işinden geldiğini indirme kaydından bilir; ayrıca sorulmaz. Panelde bu bağlar ilgili formlarda görünür: Dokuma İşi penceresinde Sipariş satırları bölümü (mevcut açık satırlardan seçilir, iş listesinde Sipariş sütunu ve süzgeci), Leventler'de plan ve sarım pencerelerinde Dokuma işi alanı (listede sütun ve süzgeç), top detayında Dokuma İşi satırı; kural açıksa alan zorunlu işaretlenir ve nedeni altında yazar. Mevcut kayıtlar olduğu gibi kalır."
-        },
-        {
-          "kapsam": "panel",
-          "tip": "iyilestirme",
-          "metin": "Cari kartı açılınca cari hesabı da onunla birlikte doğar (ön muhasebe modülü açık kurulumlarda); vade, para birimi, vergi dairesi ve risk limiti kart formundan muhasebe yetkisiyle girilir ve fatura/tahsilat formları vadeyi kartın hesabından doğrudan okur. Cari Hesaplar listesine \"hareketi olanlar\" süzgeci geldi; listeden elle hesap açma kalktı (hesap kartla doğar). Mevcut kartların hesapları kurulumda tek seferlik göç adımıyla tamamlanır."
         },
         {
           "kapsam": "her-ikisi",
