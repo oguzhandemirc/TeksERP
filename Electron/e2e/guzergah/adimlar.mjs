@@ -68,7 +68,7 @@ const j5Olcum = { cariId: null, kasaNotlari: null, kasaSatir600: null, kdvNotlar
 const m1Olcum = { paletSayisi: null, karoSayisi: null, apiKapali: null, apiKapaliKod: null, apiAcik: null, kategoriKaroVar: null };
 const m3Olcum = { sahipAlani: null, barkod: null, cuval: null, okut: null, sevkDurum: null, sevkKod: null, sevkTopVar: null, acikSahipAlani: null };
 const m2Olcum = { kilitSayisi: null, kilitSonra: null, apiDurum: null, apiKod: null, paletDokuma: null, acikDurum: null };
-const l4Olcum = { musteriId: null, notMusteri: null, notHedef: null, notHedefSerh: null, temizSonraMusteri: null, iptalSebepSecici: null, iptalSebepIpucu: null, iptalUyari: null };
+const l4Olcum = { tani: null, istekSayisi: null, suzgecliIstek: null, musteriId: null, notMusteri: null, notHedef: null, notHedefSerh: null, temizSonraMusteri: null, iptalSebepSecici: null, iptalSebepIpucu: null, iptalUyari: null };
 const k1Olcum = { beamNo: null, isNo: null, sevkOnceKg: null, sevkUyari: null };
 const k3Olcum = { isNo: null, onceKg: null, donusSonraKg: null, fasondaDonus: null, fasondaStorno: null };
 const n3Olcum = { docNo: null, sevkId: null, bakiyeOnce: null, sevkMetreOnce: null, sevkMetreSonra: null };
@@ -90,6 +90,9 @@ const MODUL_ANAHTARLARI = ["productionEnabled", "financeEnabled", "ticaretEnable
 /** Rapor eksen çoklu seçicisi (ReportMultiSelect): etiketle aç → seçeneği tıkla → tetikleyici metni değişene dek bekle. */
 async function eksenSec(page, etiket, secenekAdi) {
   const tetik = page.getByLabel(etiket, { exact: true }).filter({ visible: true }).first();
+  // Tetikleyici seçenekler gelene dek PASİFTİR (`disabled={list.length===0}`) — ilk cevabın geldiğinin tek güvenilir işareti.
+  await tetik.waitFor({ state: "visible", timeout: 20_000 });
+  for (let i = 0; i < 40 && (await tetik.isDisabled()); i++) await page.waitForTimeout(500);
   for (let deneme = 0; deneme < 2; deneme++) {
     await tetik.click({ timeout: 15_000 });
     const madde = page.getByRole("button", { name: secenekAdi, exact: true }).filter({ visible: true }).last();
@@ -129,8 +132,10 @@ export const ADIMLAR = [
   {
     id: "A2", rol: "S", gerektirir: ["A1"],
     yol: "Sistem → Özellik Anahtarları → Devere / Levent → 'Levent tezgah bağı defteri' AÇ · 'Tezgahtan inen top leventten otomatik düşsün' AÇ → Kaydet → Yenile", rota: "system/feature-flags",
-    async yap({ git, tikla, gor, page }) {
-      await git("Özellik Anahtarları"); await tikla("Devere / Levent");
+    async yap({ git, gor, page }) {
+      await git("Özellik Anahtarları");
+      // Kategori düğmesi TAM adla ve görünür: kalıcı Modüller sekmesinde "Devere / levent modülünü aç" metni aynı kökü taşır.
+      await page().getByText("Devere / Levent", { exact: true }).filter({ visible: true }).first().click({ timeout: 15_000 });
       const kutu = (baslik) => page().locator("label", { hasText: baslik }).locator('input[type="checkbox"]').filter({ visible: true }).first();
       for (const b of ["Levent tezgah bağı defteri", "Tezgahtan inen top leventten otomatik düşsün"]) {
         const k = kutu(b); await gor(k);
@@ -656,7 +661,7 @@ export const ADIMLAR = [
     async yap({ git, tikla, gor, page, api, sql }) {
       const anahtar = async (acik) => {
         await git("Özellik Anahtarları");
-        await tikla("Devere / Levent");
+        await page().getByText("Devere / Levent", { exact: true }).filter({ visible: true }).first().click({ timeout: 15_000 });
         // Satır: <label> (başlık + özet + rozet) içinde native checkbox — sekmeler kalıcı olduğundan yalnız görünür olan.
         const sw = page().locator("label", { hasText: "İplik lotu zorunlu olsun" }).locator('input[type="checkbox"]').filter({ visible: true }).first();
         await gor(sw);
@@ -1509,6 +1514,9 @@ export const ADIMLAR = [
     yol: "Raporlar → Sipariş Karnesi (Müşteri çoklu seçici · Müşteri varsayılanı: Yurtiçi → şerhler → X temizle) · Sipariş İptal Karnesi (İptal sebebi ekseni)", rota: "reports/sales/order-intake",
     async yap({ git, gor, sql, page }) {
       l4Olcum.musteriId = (await sql(`SELECT id FROM customers WHERE name=$1`, [buyukTr(AD.musteri)]))[0]?.id ?? null;
+      const istekler = []; const dinle = (r) => { if (r.url().includes("/reports/sales/order-intake")) istekler.push(r.url().replace(/^.*order-intake/, "")); };
+      const dinleC = async (r) => { if (r.url().includes("/reports/sales/order-intake")) istekler.push(`→${r.status()} ${(await r.text().catch(() => "")).slice(0, 120)}`); };
+      page().on("request", dinle); page().on("response", dinleC);
       await git("Sipariş Karnesi");
       await gor(page().getByLabel("Müşteri", { exact: true }).filter({ visible: true }).first(), { sure: 20_000 });
       await gor(page().getByText(/Bu rapor nasıl okunur|Sipariş/).filter({ visible: true }).last(), { sure: 20_000 }); await page().waitForTimeout(800);
@@ -1517,7 +1525,15 @@ export const ADIMLAR = [
       await page().getByLabel("Müşteri varsayılanı", { exact: true }).filter({ visible: true }).first().click({ timeout: 15_000 });
       await page().getByRole("option", { name: /Yurtiçi/ }).first().click({ timeout: 15_000 });
       await page().getByText(/SÜZGEÇ — Sevk hedefi/).filter({ visible: true }).first().waitFor({ timeout: 10_000 }).catch(() => undefined);
+      // Müşteri şerhi etiketini CEVAPTAKİ seçeneklerden alır — süzülmüş sorgu dönene dek görünmez, onu da bekle.
+      await page().getByText(/SÜZGEÇ — Müşteri: /).filter({ visible: true }).first().waitFor({ timeout: 15_000 }).catch(() => undefined);
       const m1 = await page().locator("body").innerText();
+      await page().waitForTimeout(2500); // yeni anahtarlı sorgu (varsa) gitsin
+      page().off("request", dinle); page().off("response", dinleC);
+      const gidenler = istekler.filter((x) => x.startsWith("?"));
+      l4Olcum.istekSayisi = gidenler.length;
+      l4Olcum.suzgecliIstek = gidenler.filter((x) => /customerId=/.test(x) && /destination=DOMESTIC/.test(x)).length;
+      l4Olcum.tani = `tetik=${(await page().getByLabel("Müşteri", { exact: true }).filter({ visible: true }).first().textContent().catch(() => "?"))?.trim()} | ${(m1.match(/SÜZGEÇ[^\n]*/g) ?? []).join(" || ")}`;
       l4Olcum.notMusteri = /SÜZGEÇ — Müşteri: .*MÜŞTERİ/.test(m1) ? 1 : 0;
       l4Olcum.notHedef = /SÜZGEÇ — Sevk hedefi: Yurtiçi/.test(m1) ? 1 : 0;
       l4Olcum.notHedefSerh = /Müşteri kartındaki VARSAYILAN hedef — sevkin fiili hedefi değil/.test(m1) ? 1 : 0;
@@ -1535,7 +1551,8 @@ export const ADIMLAR = [
     },
     async bekle({ gor, page }) { await gor(page().getByText("Sipariş İptal Karnesi").filter({ visible: true }).first()); },
     dogrula: [
-      { ad: "Sipariş Karnesi şerhleri: Müşteri + Sevk hedefi (Yurtiçi) + 'müşteri varsayılanı, fiili hedef değil' (ekran)", sql: `SELECT 1`, oku: () => `${l4Olcum.notMusteri}:${l4Olcum.notHedef}:${l4Olcum.notHedefSerh}`, beklenen: "1:1:1" },
+      { ad: "Sipariş Karnesi şerhleri: Sevk hedefi (Yurtiçi) + 'müşteri varsayılanı, fiili hedef değil' (ekran; müşteri şerhi aşağıdaki ihlale bağlı)", sql: `SELECT 1`, oku: () => `${l4Olcum.notHedef}:${l4Olcum.notHedefSerh} [${l4Olcum.tani}]`, beklenen: (v) => v.startsWith("1:1") },
+      { ad: "SESSİZ ALLOWLİST İHLALİ: sayfanın sunucuya gönderdiği isteklerden en az biri customerId+destination taşımalı — `reportsClient.getReport` yalnız tarih/compare anahtarlarını yazıyor, eksen süzgeçleri DÜŞÜYOR (ekran şerh basıyor, sayılar süzülmemiş)", sql: `SELECT 1`, oku: () => `${l4Olcum.suzgecliIstek}/${l4Olcum.istekSayisi} süzgeçli istek`, beklenen: (v) => !/^0\//.test(v) },
       { ad: "X ile temizleyince müşteri şerhi düşer (ekran)", sql: `SELECT 1`, oku: () => l4Olcum.temizSonraMusteri, beklenen: 0 },
       { ad: "GET /reports/sales/order-intake?customerId&destination=DOMESTIC → meta.secenekler.customerId TEST Müşteri'yi listeler; özet 1 sipariş / 100 m (E1)",
         uc: () => `/api/reports/sales/order-intake?dateFrom=${encodeURIComponent(new Date(Date.now() - 7 * 864e5).toISOString())}&dateTo=${encodeURIComponent(new Date().toISOString())}&customerId=${l4Olcum.musteriId}&destination=DOMESTIC`,
