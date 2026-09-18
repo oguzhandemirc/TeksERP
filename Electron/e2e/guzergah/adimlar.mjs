@@ -59,6 +59,7 @@ const c8Olcum = { uiKapali: null, satirKirmizi: null, apiDurum: null, apiKod: nu
 const e2Olcum = { rotaSablonu: null };
 const e3Olcum = { uyumluBaska: null, ikinciMusteri: null, gorunenMusteri: null };
 const g1Olcum = { tedarikciAlaniVar: null };
+const i4Olcum = { barkod: null, digerMusteri: null, digerOnce: null, testOnce: null, onizlemeSahipVar: null, redDurum: null, redKod: null, redTopVar: null, redSahipVar: null, tostSahipVar: null, ikinciDurum: null, sevkNo: null };
 
 const MODUL_ANAHTARLARI = ["productionEnabled", "financeEnabled", "ticaretEnabled", "iplikEnabled", "depoMultiEnabled", "kumasTeknikEnabled", "tezgahEnabled", "devereEnabled", "dokumaEnabled", "emanetEnabled"];
 
@@ -860,6 +861,102 @@ export const ADIMLAR = [
         sql: `SELECT wb."originKind" o, (wb."ownerCustomerId" IS NOT NULL) sahip, (wb."supplierId" IS NULL AND wb."subcontractorId" IS NULL) bos, wb."plannedLengthM"::text m, wb.status FROM warp_beams wb JOIN customers c ON c.id=wb."ownerCustomerId" WHERE c.name=$1 ORDER BY wb."createdAt" DESC LIMIT 1`,
         params: [buyukTr(AD.musteri)], oku: (r) => r.map((x) => `${x.o}:${x.sahip}:${x.bos}:${x.m}:${x.status}`).join("|"), beklenen: (v) => /^CONSIGNED:true:true:200(\.0+)?:PLANNED$/.test(v) },
       { ad: "emanette tedarikçi alanı ÇİZİLMEDİ (ekran)", sql: `SELECT 1`, oku: () => g1Olcum.tedarikciAlaniVar, beklenen: 0 },
+    ],
+  },
+  {
+    id: "I4", rol: "P", gerektirir: ["B1", "B3"],
+    yol: "Kumaş Stoğu → Ham Stok → Manuel Top Ekle (Sahibi: TEST Müşteri) → Paketleme / Çuvallar → Yeni Çuval (müşterisiz) → barkod okut → Sevk Et → BAŞKA müşteri → 409 → TEST Müşteri → kurulur",
+    rota: "operations/sack-content-edit",
+    async yap({ git, tikla, gor, sql, page }) {
+      // 1) Emanet top — G2'nin tablet yolu (Ham Giriş) panelde "Manuel Top Ekle"dir; aynı `rolls.ownerCustomerId` satırını üretir.
+      await git("Kumaş Stoğu");
+      const hamTab = page().getByRole("tab", { name: "Ham Stok" }).first();
+      if (await hamTab.count()) { await hamTab.click({ timeout: 10_000 }); await page().waitForTimeout(400); }
+      await tikla("Manuel Top Ekle");
+      const md = page().getByRole("dialog").filter({ hasText: "Manuel Top Ekle" }).last(); await gor(md);
+      await md.getByRole("combobox").filter({ hasText: "Kumaş ara" }).first().click({ timeout: 15_000 });
+      const kAra = page().getByPlaceholder("Ara (kod, isim, vergi no)"); await gor(kAra);
+      await kAra.fill(AD.kumasKod); await page().waitForTimeout(700);
+      await page().locator("[cmdk-item]").filter({ hasText: AD.kumasKod }).first().click({ timeout: 15_000 });
+      await md.locator("#initialQty").fill("25");
+      // Sahibi seçicisi yalnız emanet modülü açıkken çizilir — bulunamazsa adım kırmızı (M3 kapatıp yeniden ölçer).
+      await md.getByText("Sahibi (emanet mal ise müşteri)", { exact: false }).first().locator("xpath=following::button[1]").click({ timeout: 15_000 });
+      const sm = page().getByRole("dialog").filter({ has: page().getByPlaceholder("Ara (ad veya kod)") }).last(); await gor(sm);
+      await sm.getByPlaceholder("Ara (ad veya kod)").fill(AD.musteri); await page().waitForTimeout(700);
+      // Satır "KOD — AD" tek metin düğümüdür (G1'deki seçiciden farklı) → tam eşleşme değil içerme.
+      await sm.getByText(buyukTr(AD.musteri), { exact: false }).first().click({ timeout: 15_000 });
+      await sm.waitFor({ state: "detached", timeout: 15_000 }).catch(() => undefined);
+      await md.getByRole("button", { name: "Ekle", exact: true }).click({ timeout: 15_000 });
+      // Tekrar koşumda "aynı kumaş/metraj az önce girildi" mükerrer uyarısı çıkar (ürün davranışı) → onayla.
+      const yineDe = md.getByRole("button", { name: /yine de kaydet/ });
+      if (await yineDe.waitFor({ state: "visible", timeout: 4_000 }).then(() => true, () => false)) await yineDe.click({ timeout: 15_000 });
+      await md.waitFor({ state: "detached", timeout: 20_000 });
+      const top = await sql(`SELECT r.barcode FROM rolls r JOIN customers c ON c.id=r."ownerCustomerId" WHERE c.name=$1 AND r."sackId" IS NULL AND r."shipmentId" IS NULL ORDER BY r."createdAt" DESC LIMIT 1`, [buyukTr(AD.musteri)]);
+      i4Olcum.barkod = top[0]?.barcode ?? null;
+      if (!i4Olcum.barkod) throw new Error("emanet top DB'de bulunamadı (Manuel Top Ekle yazmadı mı?)");
+      // 2) Müşterisiz çuval + okut — çuvalın müşterisi olsaydı diyalog cariyi KİLİTLER, "başka müşteri" seçilemezdi.
+      await git("Paketleme / Çuvallar");
+      await tikla("Yeni Çuval");
+      const nd = page().getByRole("dialog").filter({ hasText: "Yeni Çuval Aç" }).last(); await gor(nd);
+      await nd.getByRole("button", { name: /Çuval Aç/ }).click({ timeout: 15_000 });
+      await nd.waitFor({ state: "detached", timeout: 20_000 });
+      const okut = page().getByPlaceholder("Top / kartela barkodu okut"); await gor(okut, { sure: 20_000 });
+      await okut.fill(i4Olcum.barkod); await okut.press("Enter");
+      // Kalıcı "Kumaş Stoğu" sekmesi aynı barkodu GİZLİ DOM'da taşır → yalnız görünür olan.
+      await gor(page().getByText(i4Olcum.barkod, { exact: false }).filter({ visible: true }).first(), { sure: 20_000 });
+      // 3) Sevk Et → BAŞKA gerçek müşteri (TEST öneki dışındaki ilk aktif müşteri).
+      const diger = await sql(`SELECT name FROM customers WHERE "isActive" AND name NOT LIKE $1 AND type IN ('CUSTOMER','BOTH') ORDER BY name LIMIT 1`, [`${ONEK}%`]);
+      i4Olcum.digerMusteri = diger[0]?.name ?? null;
+      if (!i4Olcum.digerMusteri) throw new Error("başka müşteri yok");
+      // Gerçek müşterinin fabrika verisinden sevkiyatları vardır → mutlak sayı değil FARK ölçülür.
+      const sevkSay = async (ad) => Number((await sql(`SELECT count(*)::int n FROM shipments s JOIN customers c ON c.id=s."customerId" WHERE c.name=$1`, [ad]))[0].n);
+      i4Olcum.digerOnce = await sevkSay(i4Olcum.digerMusteri); i4Olcum.testOnce = await sevkSay(buyukTr(AD.musteri));
+      await tikla("Sevk Et");
+      const sd = page().getByRole("dialog").filter({ hasText: /Sevkiyat/ }).last(); await gor(sd);
+      const musteriSec = async (ad) => {
+        // Diyalogdaki İLK combobox müşteri seçicisidir; seçim sonrası metni cari adı olur, "müşteri" kelimesiyle aranamaz.
+        await sd.getByRole("combobox").first().click({ timeout: 15_000 });
+        const ara = page().getByPlaceholder("Ara (kod, isim, vergi no)"); await gor(ara);
+        await ara.fill(ad); await page().waitForTimeout(800);
+        await page().locator("[cmdk-item]").filter({ hasText: ad }).first().click({ timeout: 15_000 });
+        await page().waitForTimeout(1200); // önizleme sorgusu
+      };
+      await musteriSec(i4Olcum.digerMusteri);
+      i4Olcum.onizlemeSahipVar = await sd.getByText(/emanet|sahib/i).count();
+      const sevkYaniti = () => page().waitForResponse((r) => r.request().method() === "POST" && /\/api\/shipping\/shipments(\?|$)/.test(r.url()), { timeout: 30_000 });
+      const [red] = await Promise.all([sevkYaniti(), sd.getByRole("button", { name: "Sevk Et", exact: true }).click({ timeout: 15_000 })]);
+      i4Olcum.redDurum = red.status();
+      const rg = await red.json().catch(() => ({}));
+      i4Olcum.redKod = rg?.details?.code ?? rg?.error?.code ?? null;
+      const metin = JSON.stringify(rg);
+      i4Olcum.redTopVar = metin.includes(i4Olcum.barkod) ? 1 : 0;
+      i4Olcum.redSahipVar = metin.includes(buyukTr(AD.musteri)) ? 1 : 0;
+      await page().waitForTimeout(800);
+      const tost = page().locator("[data-sonner-toast]").filter({ hasText: i4Olcum.barkod });
+      i4Olcum.tostSahipVar = (await tost.count()) ? 1 : 0;
+      // 4) Aynı diyalogda TEST Müşteri → kurulur (confirmationEnabled=false ⇒ doğrudan DISPATCHED).
+      await musteriSec(buyukTr(AD.musteri));
+      const [ok] = await Promise.all([sevkYaniti(), sd.getByRole("button", { name: "Sevk Et", exact: true }).click({ timeout: 15_000 })]);
+      i4Olcum.ikinciDurum = ok.status();
+      const og = await ok.json().catch(() => ({}));
+      i4Olcum.sevkNo = og?.data?.shipmentNo ?? null;
+      await page().waitForTimeout(800);
+      for (let i = 0; i < 3 && (await page().getByRole("dialog").count()); i++) { await page().keyboard.press("Escape"); await page().waitForTimeout(300); }
+    },
+    async bekle({ gor, page }) {
+      // Ekranda: ilk deneme reddedildi (toast barkodu taşır) — ölçüm `tostSahipVar`; ikinci deneme sevk numarası üretti.
+      if (i4Olcum.sevkNo) await gor(page().getByText(i4Olcum.sevkNo, { exact: false }).filter({ visible: true }).first(), { sure: 20_000 }).catch(() => undefined);
+    },
+    dogrula: [
+      { ad: "başka müşteriye Sevk Et → 409 OWNER_MISMATCH", sql: `SELECT 1`, oku: () => `${i4Olcum.redDurum}:${i4Olcum.redKod}`, beklenen: "409:OWNER_MISMATCH" },
+      { ad: "409 gövdesi etkilenen top barkodunu ve sahibi (TEST Müşteri) listeler", sql: `SELECT 1`, oku: () => `${i4Olcum.redTopVar}:${i4Olcum.redSahipVar}`, beklenen: "1:1" },
+      { ad: "ekrandaki toast barkodu taşır (soyut sayı değil)", sql: `SELECT 1`, oku: () => i4Olcum.tostSahipVar, beklenen: 1 },
+      { ad: "ÖNİZLEME sahiplik çatışmasını göstermiyor (bulgu: red yalnız Sevk Et'te)", sql: `SELECT 1`, oku: () => i4Olcum.onizlemeSahipVar, beklenen: 0 },
+      { ad: "başka müşteride sevkiyat DOĞMADI (fark 0); TEST Müşteri'de +1 sevkiyat, DISPATCHED (shipments)",
+        sql: `SELECT (SELECT count(*) FROM shipments s JOIN customers c ON c.id=s."customerId" WHERE c.name=$1)::int diger, (SELECT count(*) FROM shipments s JOIN customers c ON c.id=s."customerId" WHERE c.name=$2)::int test, (SELECT status::text FROM shipments s JOIN customers c ON c.id=s."customerId" WHERE c.name=$2 ORDER BY s."createdAt" DESC LIMIT 1) durum`,
+        params: () => [i4Olcum.digerMusteri, buyukTr(AD.musteri)], oku: (r) => `${r[0].diger - i4Olcum.digerOnce}:${r[0].test - i4Olcum.testOnce}:${r[0].durum}`, beklenen: (v) => /^0:1:DISPATCHED$/.test(v) },
+      { ad: "emanet top sahibine sevk edildi (rolls.status=SHIPPED, sahip korunur)",
+        sql: `SELECT r.status::text st, (r."shipmentId" IS NOT NULL) sevkte FROM rolls r WHERE r.barcode=$1`, params: () => [i4Olcum.barkod], oku: (r) => `${r[0]?.st}:${r[0]?.sevkte}`, beklenen: "SHIPPED:true" },
     ],
   },
 ];

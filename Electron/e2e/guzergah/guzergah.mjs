@@ -147,8 +147,12 @@ async function rolIleAc(rol) {
   // "Sunucu adresi ayarları" diyaloğundan E2E backend'ine ÇEVRİLİR.
   await page.route(`${PANEL_VARSAYILAN_API}**`, (route) => route.abort("blockedbyclient"));
   const k = KULLANICI[rol];
-  await page.getByPlaceholder("ör. admin").waitFor({ timeout: 40_000 });
+  // Varsayılan adres engelli olduğundan ekran iki hâlde açılabilir: form (sonda
+  // henüz sürüyor) ya da "Sunucuya ulaşılamadı" paneli (sonda düştü). Dişli
+  // ikisinde de var; adres yazılınca yeniden sondalanır ve form gelir.
+  await page.getByRole("button", { name: "Sunucu adresi ayarları" }).waitFor({ timeout: 40_000 });
   await sunucuAdresiniAyarla();
+  await page.getByPlaceholder("ör. admin").waitFor({ timeout: 30_000 });
   await page.getByPlaceholder("ör. admin").fill(k.username);
   await page.locator('input[type="password"]').first().fill(k.password);
   await page.keyboard.press("Enter");
@@ -253,7 +257,8 @@ for (const adim of secili) {
     for (const d of adim.dogrula ?? []) {
       const satir = { ad: d.ad, ok: false, beklenen: String(d.beklenen), gorulen: null };
       try {
-        const gorulen = d.sql ? await sql(d.sql, d.params ?? []) : (await api(adim.rol === "S" ? "P" : adim.rol, d.uc)).govde;
+        const params = typeof d.params === "function" ? d.params() : (d.params ?? []); // koşumda öğrenilen değer (barkod, sevk no) fonksiyonla gelir
+        const gorulen = d.sql ? await sql(d.sql, params) : (await api(adim.rol === "S" ? "P" : adim.rol, d.uc)).govde;
         const deger = d.oku ? d.oku(gorulen) : gorulen;
         satir.gorulen = typeof deger === "object" ? JSON.stringify(deger).slice(0, 200) : String(deger);
         satir.ok = typeof d.beklenen === "function" ? Boolean(d.beklenen(deger)) : deger === d.beklenen || String(deger) === String(d.beklenen);
@@ -264,6 +269,7 @@ for (const adim of secili) {
     if (kayit.durum === "kirmizi") kayit.hata = "backend doğrulaması tutmadı";
   } catch (e) {
     kayit.hata = String(e?.message ?? e).split("\n")[0].slice(0, 400);
+    kayit.hataAyrinti = String(e?.message ?? e).slice(0, 2000); // Playwright çağrı günlüğü (hangi locator, neden) burada
     ATLANDI.add(adim.id);
   } finally {
     kayit.sure_ms = Date.now() - t0;

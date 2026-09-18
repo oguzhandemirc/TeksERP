@@ -107,7 +107,7 @@
 | **I1** · T · Sevkiyat (tartı/paket) → Açık Siparişler ⏳(d5) | TEST-S1 seç → Paketlemeye Geç. | "Çuvallar (0)". | — | — |
 | **I2** · T · Yeni Çuval → Top Okut → Elle kg 38 → Etiket bas ⏳(d5)/✋ | H3 topu; kantar yoksa "Elle kg gir" 38. | Çuval dolu; etiket önizlemesinde iç not HÂLÂ var (beklenen). | `sacks` → 1 (`weightKg=38`, `weightSource=MANUAL`); top çuvalda. | ① Elle kg aksiyon menüsünde. |
 | **I3** · T · Hemen Sevk Et (1) ⏳(d5) | Sevkiyat kurulur. | Sevk Çıkışı'nda "Planlı". | `shipments` → 1 `PLANNED`; `sack_allocations` → sevk anında (I5'te). | — |
-| **I4** · P · Paketleme / Çuvallar → Yeni Çuval (EMANET top) → Sevkiyat Kur → BAŞKA müşteri ⏳ | G2 emanet topunu koy; başka müşteriye "Sevk Et". | 409: önizlemede top barkodu ve sahibi "TEST Müşteri"; TEST Müşteri seçilince kurulur. | HTTP 409 `details.code` emanet; `shipments` değişmedi; ikinci denemede +1. | — |
+| **I4** · P · Kumaş Stoğu → Ham Stok → **Manuel Top Ekle** (Sahibi: TEST Müşteri, 25 m) → Paketleme / Çuvallar → **Yeni Çuval** (müşterisiz) → barkod okut → **Sevk Et** → BAŞKA gerçek müşteri ✅ | Emanet top panelden doğar (G2'nin tablet ikizi; `rolls.ownerCustomerId`). Çuval **müşterisiz** açılır — müşterili çuvalda diyalog cariyi KİLİTLER, "başka müşteri" seçilemez. "Sevk Et" → 409 toast; aynı diyalogda TEST Müşteri → tekrar "Sevk Et". | Toast: "1 top başka müşterinin emanet malı — sevkiyat … bu müşteriye açılamaz: <barkod> (TESTK MÜŞTERİ)". **Önizleme paneli çatışmayı GÖSTERMEZ** (yalnız sipariş uyarıları) — red ilk kez "Sevk Et"te görülür (çıkarım). İkinci deneme `shipping.confirmationEnabled=false` ⇒ doğrudan DISPATCHED. Tekrar koşumda "Bu top az önce girilmiş olabilir" mükerrer uyarısı çıkar → "yine de kaydet" (ürün davranışı, iyi). | HTTP 409 `details.code=OWNER_MISMATCH`, `details.rolls[{barcode, owner}]`; başka müşteride `shipments` farkı 0; TEST Müşteri'de +1 `DISPATCHED`; `rolls.status=SHIPPED`, sahip korunur. | ① Kapı `performDispatchTx`te — `POST /shipments/preview` sahiplik kapısını çağırmıyor; operatör çatışmayı önizlemede değil redde görür. ③ **K** (sevkiyat) önizleme `assertOwnerMatchesTx`i de koşsun (uyarı satırı: "N top başka müşterinin emanet malı"), red sürpriz olmasın. |
 | **I5** · T · Sevk Çıkışı → Sevk Et → Çıkışı Onayla ⏳(d5) | Onay sayfası → Çıkışı Onayla. | Toast "Çıkış verildi — stok bina dışı"; geçmişte satır. | `shipments.status=DISPATCHED`, `dispatchedAt` dolu; `shipment_events` → DISPATCHED; `sack_allocations` → 1; `rolls.status=SHIPPED`; stok defteri çıkış satırı. | — |
 | **I6** · P · Sevkiyatlar → satır → belge ✋ | "Sevk İrsaliyesi" önizlemesi. | Şeritte firma · irsaliye no · tarih; rakamlar BRÜT. | `GET /api/printed-documents/…` (uç ölçülecek) → `printed_documents` 1. | — |
 | **I7** · P · İade Takibi → Yeni İade ⏳ | Barkod → Sorgula → 10 m iade, neden → İade Gir. | İade satırı; "İade İrsaliyesi"; sevk rakamı DEĞİŞMEZ (brüt). | `roll_returns` → 1 (10 m); `shipments` çıkış rakamı aynı; `shipment_events` iade satırı. | — |
@@ -173,7 +173,7 @@ Her dal ana zincirin verisine dayanır (`gerektirir`). Kod harfleri N–T; sür�
 | **O3** · T · Dolu gövdeye sarım (D5) | Gövdesi dolu leventi SAR. | 409 "gövdesinde canlı bir çözgü var". | `warp_beam_events` değişmedi. |
 | **O4** · P · Kapalı modülün ucu (M2 açıkken dokuma) | Dokuma İşleri'ne doğrudan git; `POST /api/weaving-orders`. | Karo yok; uç 403 `MODULE_DISABLED` (`details.code`). | HTTP 403, `details.code=MODULE_DISABLED`; `weaving_orders` değişmedi. |
 | **O5** · T · Çevrimdışıyken aynı kaydı iki kez gönder (F5) | Kuyruk iki kez tetiklensin. | Tek top; ikinci deneme replay (aynı `clientToken`). | `rolls` → 1; token dört durumlu replay (`token-replay.helper`). |
-| **O6** · P · Emanet topu başka müşteriye sevk (I4) | I4. | 409 + etkilenen kayıt listesi (barkod + sahip). | `details.code` emanet kapısı; `shipments` değişmedi. |
+| **O6** · P · Emanet topu başka müşteriye sevk (I4) ✅ | I4. | 409 + etkilenen kayıt listesi (barkod + sahip) — toast'ta; önizlemede DEĞİL (I4 çıkarımı). | `details.code=OWNER_MISMATCH`, `details.rolls`; `shipments` farkı 0. |
 | **O7** · P · Sipariş kalemi birimsiz kaydetme | E1'de birimi boş bırak. | 400 Türkçe mesaj, alan adı. | `order_lines` değişmedi. |
 | **O8** · P · Kapanmış siparişten ikinci fiş (bayat önbellek, C3) | C2'den 30 sn içinde Yeni Mal Kabul → aynı sipariş (listede hâlâ) → kalemler dolar → lot ver → Fişi Oluştur. | **Beklenen (fail-closed):** sunucu fazla teslimi keser (4xx, satır adıyla). Bugün ÖLÇÜLMEDİ. | `goods_receipts` → 1 kalır; `yarn_movements` → +120 YOK; `purchase_orders.receivedQty ≤ qty`. |
 
@@ -237,6 +237,7 @@ Her madde bir DİLİM adayıdır; 1e iş mantığı önceliğiyle sıralar. Davr
 | **B** | Talep → icra zinciri: `WeavingOrder.orderLineId?` (Y1) + `WarpBeam.weavingOrderId?` (Y2), ikisi de opsiyonel ön-dolum kaynağı — D1/F1/F2'de +0 dokunuşla iş bağı; "bu sipariş için kaç metre dokundu" | D1 · F1 · F2 | 6e · 5e §3.1/§8 |
 | **B** | Tedarikçi fatura eşleme: n irsaliye → 1 fatura + fiyat/miktar toleransı, fark varsa BLOKE (`Invoice.goodsReceiptId` tekil → pivot ya da satır bağı) | C5 | 9b [1][2] |
 | **B** | Kalite kabul / karantina: iplik lotu kabulde `KALİTE BEKLİYOR`, kullanım kararıyla stoğa (`YarnLot` yalnız `isActive`) | C2 | 9b [3][4][5] |
+| **K** | Sevkiyat önizlemesi emanet sahiplik çatışmasını göstermiyor: `POST /shipping/shipments/preview` `assertOwnerMatchesTx`i çağırmaz, kapı yalnız `performDispatchTx`te — operatör çatışmayı önizlemede değil "Sevk Et" reddinde (409 toast) görür; çözüm önizlemeye uyarı satırı | I4 · O6 | d9 |
 | **O** | KK1 doff bağında desen/renk/sahip ön-dolu (doff → koşum → iş; `DOFF_SELECT` genişler) — en büyük dokunuş kazancı (F4 −3) | F4 · G2 | 6e |
 | **O** | Ödeme koşulu (vade) ve para birimi KARTTA doğsun, PO ve faturaya insin; `dueDate` otomatik | B1 · C1 · C6 · J4 | 9b |
 | **O** | Ödeme/tahsilat girişinde açık fatura listesi + varsayılan FIFO (`PaymentAllocation` var, UI tek ekrana) | C7 · J3 | 9b |
@@ -279,7 +280,7 @@ PO onay/release adımı · zamanlanmış rapor gönderimi · backflush (otomatik
 
 | Kapsam | Adım sayısı | Otomatik ✅ | Yazılacak ⏳ | Elle ✋ |
 |---|---|---|---|---|
-| Ana zincir A–M (panel) | 43 | 19 (A1 · B1–B4 · C1–C8 · D0 · E1–E3 · F1 · G1 — ~4 dk; roller S · P · M) | 15 | 9 (belge önizleme, yazıcı, Wi-Fi, Excel/PDF) |
+| Ana zincir A–M (panel) | 43 | 20 (A1 · B1–B4 · C1–C8 · D0 · E1–E3 · F1 · G1 · I4 — ~4,5 dk; roller S · P · M) | 14 | 9 (belge önizleme, yazıcı, Wi-Fi, Excel/PDF) |
 | Ana zincir (tablet, d5) | 17 | 0 | 17 | — |
 | Dallar N–T | 30 | 0 | 27 | 3 |
 
