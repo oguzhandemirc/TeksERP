@@ -54,6 +54,18 @@ const REMOVAL_MARKER = /(kalk|kaldır|removed|supersed|süpersed|\beski\b|öncek
 // tsx, ts'ten ÖNCE denenmeli (tsx? ile) yoksa 'foo.tsx' → 'foo.ts' yanlış eşleşir.
 const PATH_RE = /(docs|Teks-Erp|Electron|mobil)\/[A-Za-z0-9._/-]+\.(md|tsx?|sql|mjs)/g;
 
+/**
+ * ⚠️ İKİNCİ KOL — KARDEŞ ATFI (2026-09-18). `PATH_RE` depo KÖKÜNDEN yazılmış yolu
+ * arar; `docs/design/A.md` içinden `[B](B.md)` diye yazılan **aynı dizin** atfı ona
+ * HİÇ uğramaz ve ölü olsa bile sessizce geçerdi (ölçüldü: iki sahte link eklendi,
+ * yalnız kökten yazılan kırmızı verdi). Bu biçim `docs/design` ve `docs/standart`
+ * kardeş atıflarının BASKIN biçimidir — yani kör nokta, kapının en çok kullanıldığı
+ * yerdeydi. Kol markdown link HEDEFİNİ okur ve dosyanın KENDİ dizinine göre çözer.
+ */
+const MD_LINK_RE = /\[[^\]]*\]\(([^)\s]+)\)/g;
+/** Dış bağlantı · çapa · mutlak yol — kapının konusu değil. */
+const LINK_SKIP_RE = /^(?:[a-z][a-z0-9+.-]*:|#|\/)/i;
+
 const SKIP_DIRS = new Set(["node_modules", ".git", ".expo", "dist", "build", ".next"]);
 const SKIP_PATHS = ["docs/history/", "docs/akademik/"];
 const SKIP_FILES = new Set(["GEREKSIZ-ADAYLAR.md"]); // geçici karar-aidi (bilerek bayat-sembol tartışır)
@@ -129,6 +141,21 @@ for (const file of mdFiles) {
         continue;
       }
       deadLinks.push({ file: rel, line: i + 1, path: p, text: line.trim().slice(0, 130) });
+    }
+
+    // [GATE] Ölü KARDEŞ atfı — markdown link hedefi, dosyanın KENDİ dizinine göre
+    for (const m of line.matchAll(MD_LINK_RE)) {
+      const hedef = m[1].split("#")[0];
+      if (!hedef || LINK_SKIP_RE.test(m[1])) continue;
+      if (!/\.(md|tsx?|sql|mjs)$/.test(hedef)) continue;
+      if (PATH_RE.test(hedef)) { PATH_RE.lastIndex = 0; continue; } // birinci kolun işi
+      PATH_RE.lastIndex = 0;
+      if (existsSync(join(dirname(file), hedef))) continue;
+      if (plannedAt >= 0 && plannedAt < (m.index ?? 0)) {
+        plannedLinks.push({ file: rel, line: i + 1, path: hedef });
+        continue;
+      }
+      deadLinks.push({ file: rel, line: i + 1, path: `${hedef} (kardeş atfı — ${rel.replace(/\/[^/]+$/, "")}/ altında aranır)`, text: line.trim().slice(0, 130) });
     }
     // İleri referans GERÇEKLEŞMİŞ mi (dosya artık var) — başlık fosilleşmiş demektir;
     // muafiyet o satırda artık kör nokta yaratıyor, bakım sinyali olarak bildir.
