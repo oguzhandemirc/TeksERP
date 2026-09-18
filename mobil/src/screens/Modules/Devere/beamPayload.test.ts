@@ -1,4 +1,4 @@
-import { beamActionsEnabled, buildPlanPayload, buildWindPayload, classifyBeamFailure, initialWindForm, isSameLocalDay, lastPlannedWarpSpecId, linesTotalKg, physicalBeamBusyWarning, soleMachineId, soleWeavingOrderId, theoreticalKg, validatePlan, validateWind, validateWindPage, windDefaultFor, windFormWithDefault, windPageKeys, windPhysicalNos, EMPTY_PLAN, STATUS_LABEL, type WindDefault, type WindForm } from './beamPayload';
+import { beamActionsEnabled, buildPlanPayload, buildWindPayload, classifyBeamFailure, initialWindForm, isSameLocalDay, lastPlannedWarpSpecId, linesTotalKg, physicalBeamBusyWarning, soleMachineId, soleWeavingOrderId, theoreticalKg, validatePlan, validateWind, validateWindPage, windDefaultFor, windFormWithDefault, windPageKeys, windPhysicalNos, yarnQualityWarning, EMPTY_PLAN, STATUS_LABEL, YARN_QUALITY_LABEL, type WindDefault, type WindForm } from './beamPayload';
 
 const line = (qtyKg: string, reasonCode: string | null = null, warehouseId: string | null = 'w1', lotId: string | null = null) => ({ key: `k${qtyKg}`, warehouseId, qtyKg, reasonCode, lotId });
 
@@ -297,5 +297,20 @@ describe('windFormWithDefault / windDefaultFor — Z5 SAR ön-dolgu (yalnız ön
     expect(windDefaultFor([def], 's1')).toBe(def);
     expect(windDefaultFor([def], 's-yok')).toBeUndefined();
     expect(windDefaultFor(undefined, 's1')).toBeUndefined();
+  });
+});
+
+// ⭐ NEGATİF SONDA: `yarnQualityWarning` ON_HOLD/BLOCKED'a null dönerse bekletmedeki lot uyarısız seçilir
+//    (sunucu yine 400 verir ama operatör erken görmez).
+describe('yarn lot kalite durumu — SAR rozet + uyarı (yarnQualityHold)', () => {
+  it('1 etiketler: RELEASED→Serbest · ON_HOLD→Bekletmede · BLOCKED→Bloke', () => {
+    expect(YARN_QUALITY_LABEL).toEqual({ RELEASED: 'Serbest', ON_HOLD: 'Bekletmede', BLOCKED: 'Bloke' });
+  });
+  it('2 uyarı yalnız ON_HOLD/BLOCKED için', () => {
+    expect(yarnQualityWarning('ON_HOLD')).toMatch(/BEKLETMEDE/);
+    expect(yarnQualityWarning('BLOCKED')).toMatch(/BLOKE/);
+    expect(yarnQualityWarning('RELEASED')).toBeNull();
+    expect(yarnQualityWarning(undefined)).toBeNull();
+    expect(yarnQualityWarning(null)).toBeNull();
   });
 });

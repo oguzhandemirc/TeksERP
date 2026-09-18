@@ -7,7 +7,23 @@
 // (sunucu 400 verir; form hiç kurmaz). Nominal kg ön hesabı sunucu formülünün aynasıdır.
 // =============================================================================
 import type { PlanWarpBeamRequest, WarpBeam, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, WindWarpBeamRequest } from '../../../services/warpBeam.service';
+import type { YarnLotQualityStatus } from '../../../types/models';
 import { foldSearchText } from '../../../utils/searchFold';
+
+// İplik lotu kalite durumu — SAR lot seçicisinde rozet (yarnQualityHold AÇIKken); ON_HOLD/BLOCKED çıkışını
+// sunucu 400 `YARN_LOT_ON_HOLD` ile reddeder, tablet erken UYARIR (tahmin etmez, kapı sunucudan).
+export const YARN_QUALITY_LABEL: Record<YarnLotQualityStatus, string> = {
+  RELEASED: 'Serbest',
+  ON_HOLD: 'Bekletmede',
+  BLOCKED: 'Bloke',
+};
+
+/** Seçilen lot ON_HOLD/BLOCKED ise erken uyarı metni; RELEASED/undefined → null (uyarı yok). */
+export function yarnQualityWarning(status: YarnLotQualityStatus | undefined | null): string | null {
+  if (status === 'ON_HOLD') return 'Bu lot kalite BEKLETMEDE — sunucu bu lottan iplik çıkışını reddeder.';
+  if (status === 'BLOCKED') return 'Bu lot kalite BLOKE — sunucu bu lottan iplik çıkışını reddeder.';
+  return null;
+}
 
 export const ORIGIN_LABEL: Record<WarpBeamOrigin, string> = {
   IN_HOUSE: 'İçeride sarılacak',

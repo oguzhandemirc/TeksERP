@@ -12,7 +12,15 @@ import NumpadInput from '../../../components/NumpadInput';
 import PickerModal from '../../../components/PickerModal';
 import ReasonPresetPicker from '../../../components/reasonPresets/ReasonPresetPicker';
 import { colors, spacing, radius, typography } from '../../../theme';
-import type { YarnLineDraft } from './beamPayload';
+import type { YarnLotQualityStatus } from '../../../types/models';
+import { YARN_QUALITY_LABEL, yarnQualityWarning, type YarnLineDraft } from './beamPayload';
+
+// Rozet rengi: Serbest yeşil · Bekletmede amber · Bloke kırmızı (yalnız `qualityHold` açıkken çizilir).
+const QUALITY_BADGE_COLOR: Record<YarnLotQualityStatus, string> = {
+  RELEASED: colors.success,
+  ON_HOLD: colors.warning,
+  BLOCKED: colors.danger,
+};
 
 interface Props {
   title: string;
@@ -22,9 +30,11 @@ interface Props {
   onChange: (lines: YarnLineDraft[]) => void;
   disabled?: boolean;
   /** Faz 2: kartın ipliğine ait aktif lotlar; `undefined` = eski sunucu, lot seçici ÇİZİLMEZ (form birebir eski). */
-  lots?: { id: string; lotNo: string; balanceKg: number }[];
+  lots?: { id: string; lotNo: string; balanceKg: number; qualityStatus?: YarnLotQualityStatus }[];
   /** `devere.lotRequired` (sunucudan): "Lot yok" seçeneği çizilmez. */
   lotRequired?: boolean;
+  /** `yarnQualityHold` (sunucudan): kalite bekletme etkin — lot seçicide durum rozeti + ON_HOLD/BLOCKED uyarısı. Kapalıysa rozet/uyarı yok. */
+  qualityHold?: boolean;
 }
 
 const NO_LOT = '__no_lot__';
@@ -32,10 +42,12 @@ const NO_LOT = '__no_lot__';
 let seq = 1;
 const nextKey = (): string => `l${Date.now().toString(36)}-${seq++}`;
 
-export default function YarnLinesEditor({ title, lines, warehouses, withReason, onChange, disabled, lots, lotRequired }: Props) {
+export default function YarnLinesEditor({ title, lines, warehouses, withReason, onChange, disabled, lots, lotRequired, qualityHold }: Props) {
   const [pickerFor, setPickerFor] = useState<string | null>(null);
   const [lotPickerFor, setLotPickerFor] = useState<string | null>(null);
   const lotLabel = (id: string | null) => (id ? (lots?.find((l) => l.id === id)?.lotNo ?? '?') : 'Lot yok');
+  // Seçili lotun kalite durumu (yalnız `qualityHold` açıkken anlamlı) → satır altı uyarı.
+  const lotStatus = (id: string | null): YarnLotQualityStatus | undefined => (id ? lots?.find((l) => l.id === id)?.qualityStatus : undefined);
   const multi = warehouses.length > 1;
   const defaultWarehouseId = warehouses[0]?.id ?? null;
   const update = (key: string, patch: Partial<YarnLineDraft>) => onChange(lines.map((l) => (l.key === key ? { ...l, ...patch } : l)));
@@ -65,6 +77,9 @@ export default function YarnLinesEditor({ title, lines, warehouses, withReason, 
             <NumpadInput value={l.qtyKg} onChangeText={(t) => update(l.key, { qtyKg: t })} allowDecimal numpadMaxLength={8} numpadLabel={`${title} kg`} placeholder="kg" style={styles.kg} editable={!disabled} />
             <IconButton icon="close" onPress={() => remove(l.key)} disabled={disabled} accessibilityLabel="Satırı kaldır" />
           </View>
+          {qualityHold && yarnQualityWarning(lotStatus(l.lotId)) ? (
+            <Text style={styles.warn}>⚠ {yarnQualityWarning(lotStatus(l.lotId))}</Text>
+          ) : null}
           {withReason ? (
             <ReasonPresetPicker kind="WARP_RETURN" value={{ code: l.reasonCode, text: '' }} onChange={(v) => update(l.key, { reasonCode: v.code })} placeholder="Dip iade sebebi" disabled={disabled} />
           ) : null}
@@ -77,7 +92,13 @@ export default function YarnLinesEditor({ title, lines, warehouses, withReason, 
         title="İplik lotu seç"
         options={[
           ...(lotRequired ? [] : [{ value: NO_LOT, label: 'Lot yok', sublabel: 'lotsuz çıkış — levent lot izlemesine girmez' }]),
-          ...(lots ?? []).map((lot) => ({ value: lot.id, label: lot.lotNo, sublabel: `${lot.balanceKg} kg` })),
+          ...(lots ?? []).map((lot) => ({
+            value: lot.id,
+            label: lot.lotNo,
+            sublabel: `${lot.balanceKg} kg`,
+            // Kalite rozeti yalnız `qualityHold` açıkken (Serbest/Bekletmede/Bloke).
+            badge: qualityHold && lot.qualityStatus ? { text: YARN_QUALITY_LABEL[lot.qualityStatus], color: QUALITY_BADGE_COLOR[lot.qualityStatus] } : undefined,
+          })),
         ]}
         selectedValue={lines.find((l) => l.key === lotPickerFor)?.lotId ?? NO_LOT}
         emptyText="Bu ipliğin aktif lotu yok — mal kabulde lot numarası yazılınca doğar."
@@ -113,4 +134,5 @@ const styles = StyleSheet.create({
   fieldPlaceholder: { color: colors.textMuted },
   kg: { flex: 1, backgroundColor: colors.surface },
   empty: { fontSize: typography.size.sm, color: colors.textMuted },
+  warn: { fontSize: typography.size.sm, color: colors.danger, fontWeight: typography.weight.medium },
 });

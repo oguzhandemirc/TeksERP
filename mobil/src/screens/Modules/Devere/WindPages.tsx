@@ -75,7 +75,7 @@ export function MakinePage({ beam, f, set, state, onPickMachine }: WindPageProps
   return (
     <>
       <SheetField label="Devere makinesi" value={machineName} placeholder={machines.length ? 'Seçilmedi' : 'Makine yok'} onPress={onPickMachine} hint={machines.length ? undefined : NO_DEVERE_MACHINE_HINT} />
-      <YarnLinesEditor title={lotRequired ? 'Brüt iplik çıkışı (cağlık) — lot ZORUNLU' : 'Brüt iplik çıkışı (cağlık)'} lines={f.issues} warehouses={ctx?.warehouses ?? []} withReason={false} onChange={(issues) => set({ issues })} disabled={state.busy} lots={lots} lotRequired={lotRequired} />
+      <YarnLinesEditor title={lotRequired ? 'Brüt iplik çıkışı (cağlık) — lot ZORUNLU' : 'Brüt iplik çıkışı (cağlık)'} lines={f.issues} warehouses={ctx?.warehouses ?? []} withReason={false} onChange={(issues) => set({ issues })} disabled={state.busy} lots={lots} lotRequired={lotRequired} qualityHold={ctx?.yarnQualityHold} />
     </>
   );
 }
@@ -86,7 +86,7 @@ export function DipPage({ beam, f, set, state }: WindPageProps) {
   const lots = ctx?.yarnLots ? ctx.yarnLots.filter((l) => l.itemId === beam.warpSpec.yarnItem.id) : undefined;
   return (
     <>
-      <YarnLinesEditor title="Dip iadesi" lines={f.returns} warehouses={ctx?.warehouses ?? []} withReason onChange={(returns) => set({ returns })} disabled={state.busy} lots={lots} />
+      <YarnLinesEditor title="Dip iadesi" lines={f.returns} warehouses={ctx?.warehouses ?? []} withReason onChange={(returns) => set({ returns })} disabled={state.busy} lots={lots} qualityHold={ctx?.yarnQualityHold} />
       <View style={sheet.row}>
         <View style={sheet.col}>
           <Text style={sheet.label}>Kopuş adedi (isteğe bağlı)</Text>
