@@ -99,6 +99,24 @@ export function useDevereMountTrackingRequired(): boolean {
   return q.data?.data?.devereMountTrackingRequired ?? false;
 }
 
+/** Z1: levent sarımında dokuma işi zorunlu mu (`devere.beamWeavingLinkRequired`). Yüklenene dek KAPALI = bugünkü davranış (serbest levent). Panelde yalnız zorunlu işareti/ipucu; kesin hat sunucu 400. */
+export function useDevereBeamWeavingLinkRequired(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.devereBeamWeavingLinkRequired ?? false;
+}
+
+/** Z1: tezgah koşumu dokuma işine bağlı mı açılsın (`dokuma.runWeavingOrderRequired`). Yüklenene dek KAPALI = bugünkü davranış (işsiz koşum). */
+export function useDokumaRunWeavingOrderRequired(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.dokumaRunWeavingOrderRequired ?? false;
+}
+
+/** Z1: dokuma işi sipariş satırına bağlı mı olsun (`dokuma.orderLineLinkRequired`). Yüklenene dek KAPALI = bugünkü davranış (stoka dokuma). */
+export function useDokumaOrderLineLinkRequired(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.dokumaOrderLineLinkRequired ?? false;
+}
+
 export function useDemoModeEnabled(): boolean {
   const q = useFeatureFlags();
   return q.data?.data?.demoModeEnabled ?? false;

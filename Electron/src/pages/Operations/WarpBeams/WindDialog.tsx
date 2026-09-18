@@ -10,7 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useMultiWarehouse } from "@/hooks/useWarehouses";
-import { useDevereLotRequired } from "@/hooks/usePricingEnabled";
+import { useDevereBeamWeavingLinkRequired, useDevereLotRequired } from "@/hooks/usePricingEnabled";
 import { listYarnLots } from "@/pages/Operations/Yarn/service";
 import { reasonPresetService } from "@/pages/ReasonPresets/service";
 import { warpBeamService, type WindPayload } from "./service";
@@ -68,6 +68,7 @@ export function WindDialog({ target, isPending, onClose, onConfirm }: Props) {
   // Devere Faz 2: çözgü ipliğinin aktif lotları (türetilen bakiyeyle) + lot zorunluluğu ayarı.
   const lotsQ = useQuery({ queryKey: ["yarn", "lots", target.warpSpec.yarnItem.id, "wind"], queryFn: () => listYarnLots({ itemId: target.warpSpec.yarnItem.id, isActive: true, limit: 200 }), enabled: inHouse });
   const lotRequired = useDevereLotRequired();
+  const weavingLinkRequired = useDevereBeamWeavingLinkRequired();
   const lots = lotsQ.data?.data ?? [];
   const lotsOk = (ls: YarnLineDraft[]) => !lotRequired || ls.every((l) => l.lotId !== "");
   const nominal = theoreticalKg(target.warpSpec.endsCount, target.warpSpec.yarnItem.linearDensityDen, Number(lengthM));
@@ -105,7 +106,7 @@ export function WindDialog({ target, isPending, onClose, onConfirm }: Props) {
             <YarnLinesEditor title="Dönen bobin dipleri (ayrı satır, sebep zorunlu)" lines={returns} onChange={setReturns} warehouses={warehouses} multiWarehouse={multiWarehouse} reasons={returnReasons} lots={lots} />
           </>
         )}
-        <WeavingOrderPicker value={weavingOrderId} onChange={setWeavingOrderId} />
+        <WeavingOrderPicker value={weavingOrderId} onChange={setWeavingOrderId} required={weavingLinkRequired} />
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isPending}>
             Vazgeç

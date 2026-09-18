@@ -19,7 +19,7 @@ import { customerService } from "@/pages/Customers/service";
 import type { Customer } from "@/pages/Customers/types";
 import { warpBeamPlanDefaults, warpBeamPlanSchema, type WarpBeamPlanValues } from "./schema";
 import { WARP_BEAM_ORIGIN_LABEL, type WarpBeam, type WarpBeamOrigin } from "./types";
-import { useEmanetEnabled } from "@/hooks/usePricingEnabled";
+import { useDevereBeamWeavingLinkRequired, useEmanetEnabled } from "@/hooks/usePricingEnabled";
 
 type Form = UseFormReturn<WarpBeamPlanValues>;
 
@@ -113,6 +113,7 @@ interface Props {
 
 export function WarpBeamFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
   const tokenRef = useRef(crypto.randomUUID());
+  const weavingLinkRequired = useDevereBeamWeavingLinkRequired();
   return (
     <EntityFormDialog<WarpBeamPlanValues>
       open={open}
@@ -138,7 +139,7 @@ export function WarpBeamFormDialog({ open, onOpenChange, initial, onSubmit, isSu
           <FormField label="Plan metresi" error={form.formState.errors.plannedLengthM} required>
             <Input type="number" min={1} step="0.001" {...form.register("plannedLengthM")} />
           </FormField>
-          <WeavingOrderField control={form.control} error={form.formState.errors.weavingOrderId} />
+          <WeavingOrderField control={form.control} error={form.formState.errors.weavingOrderId} required={weavingLinkRequired} />
           <OriginFields form={form} editing={Boolean(initial)} />
           <FormField label="Metal gövde no" error={form.formState.errors.physicalBeamNo} hint="Numarasız fabrikada boş kalır; aynı gövdede iki canlı çözgü olmaz.">
             <Input {...form.register("physicalBeamNo")} />

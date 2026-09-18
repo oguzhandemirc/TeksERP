@@ -10,6 +10,7 @@
 import { useRef } from "react";
 import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { useOperationsVisibilityContext } from "../useOperationsVisibility";
+import { useDokumaOrderLineLinkRequired } from "@/hooks/usePricingEnabled";
 import { weavingOrderFormDefaults, weavingOrderFormSchema, type WeavingOrderFormValues } from "./schema";
 import { FabricFields, PartyFields, PlanFields } from "./WeavingOrderFormFields";
 import { WeavingOrderLinesSection } from "./WeavingOrderLinesSection";
@@ -42,6 +43,7 @@ function buildDefaults(initial?: WeavingOrder | null): WeavingOrderFormValues {
 export function WeavingOrderFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
   const tokenRef = useRef(crypto.randomUUID());
   const { devereEnabled } = useOperationsVisibilityContext();
+  const orderLineRequired = useDokumaOrderLineLinkRequired();
   return (
     <EntityFormDialog<WeavingOrderFormValues>
       open={open}
@@ -56,7 +58,7 @@ export function WeavingOrderFormDialog({ open, onOpenChange, initial, onSubmit, 
       {(form) => (
         <>
           <FabricFields form={form} devereEnabled={devereEnabled} />
-          <WeavingOrderLinesSection form={form} initialLines={initial?.orderLines ?? []} />
+          <WeavingOrderLinesSection form={form} initialLines={initial?.orderLines ?? []} required={orderLineRequired} />
           <PartyFields form={form} />
           <PlanFields form={form} />
         </>
