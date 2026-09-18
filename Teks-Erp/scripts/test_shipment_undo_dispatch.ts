@@ -72,7 +72,8 @@ interface UndoPreview {
   blockReason: string | null;
   sackCount: number;
   rollCount: number;
-  sacks: { sackNo: string; rollCount: number }[];
+  sacks: { sackNo: string; rollCount: number; rolls: { id: string; barcode: string | null; meters: number; ownerName: string | null; returnTo: string }[] }[];
+  looseRolls: { barcode: string | null }[];
   affectedOrders: string[];
   returnTargets: { status: string; rollCount: number }[];
   voidsDispatchNote: boolean;
@@ -188,6 +189,14 @@ async function main() {
     const p1 = await preview();
     check("önizleme: geri alınabilir", p1.canUndo === true && p1.blockReason === null, String(p1.blockReason));
     check("önizleme: 1 çuval / 2 top somut", p1.sackCount === 1 && p1.rollCount === 2 && p1.sacks[0]?.sackNo === sack.sackNo);
+    // Yıkıcı önizleme HER kaydı listeler: çuvalın topları barkod · metre · sahibi · döneceği rafla (soyut sayı yetmez).
+    const satirlar = p1.sacks[0]?.rolls ?? [];
+    const byBarcode = Object.fromEntries(satirlar.map((r) => [String(r.barcode), r]));
+    check(
+      "önizleme: çuvalın TOPLARI somut — 2 satır, barkod + döneceği raf (R1 → WAREHOUSE, R2 → A1_STOCK), sahipsiz",
+      satirlar.length === 2 && byBarcode[String(rWarehouse.barcode)]?.returnTo === "WAREHOUSE" && byBarcode[String(rA1.barcode)]?.returnTo === "A1_STOCK" && byBarcode[String(rA1.barcode)]?.meters === 50 && satirlar.every((r) => r.ownerName === null) && p1.looseRolls.length === 0,
+      JSON.stringify(satirlar.map((r) => [r.barcode, r.returnTo])),
+    );
     check("önizleme: etkilenen sipariş listeleniyor", p1.affectedOrders.includes(order.orderNumber), p1.affectedOrders.join(","));
     check("önizleme: irsaliyenin iptal olacağı söyleniyor", p1.voidsDispatchNote === true);
     const targets = Object.fromEntries(p1.returnTargets.map((t) => [t.status, t.rollCount]));

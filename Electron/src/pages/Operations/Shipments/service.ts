@@ -90,6 +90,16 @@ export interface CancelPreview {
   affectedOrders: { orderNumber: string; qty: string }[];
 }
 
+export interface UndoAffectedRoll {
+  id: string;
+  barcode: string | null;
+  meters: number;
+  /** Emanet sahibi (G3); null = bizim mal. */
+  ownerName: string | null;
+  /** Döneceği raf (`RollStatus`). */
+  returnTo: string;
+}
+
 /**
  * Storno (Sevki Geri Al) önizleme yanıtı — backend getUndoDispatchPreview aynası.
  *
@@ -110,7 +120,10 @@ export interface UndoDispatchPreview {
   sackCount: number;
   rollCount: number;
   swatchCount: number;
-  sacks: { id: string; sackNo: string; rollCount: number }[];
+  /** Yıkıcı önizleme HER kaydı listeler: çuval + içindeki toplar (barkod · metre · emanet sahibi · döneceği raf). */
+  sacks: { id: string; sackNo: string; rollCount: number; rolls?: UndoAffectedRoll[] }[];
+  /** Çuvalsız (doğrudan sevkiyata bağlı) toplar — bugün boş; eski sunucu alanı göndermez. */
+  looseRolls?: UndoAffectedRoll[];
   affectedOrders: string[];
   voidsDispatchNote: boolean;
   /**

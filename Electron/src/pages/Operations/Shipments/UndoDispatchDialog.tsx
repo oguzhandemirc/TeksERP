@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/forms/FormField";
 import { rollStatusLabels, type RollStatus } from "@/types/enums";
 import { shipmentService } from "./service";
+import { UndoAffectedList } from "./UndoAffectedList";
 
 interface Props {
   /** Geri alınacak sevkiyat id'si — null ise dialog kapalı. */
@@ -148,6 +149,8 @@ export function UndoDispatchDialog({ shipmentId, onOpenChange }: Props) {
                 </>
               )}
             </div>
+
+            <UndoAffectedList preview={p} />
 
             {p.returnTargets.length > 0 && (
               <div className="rounded-md border">

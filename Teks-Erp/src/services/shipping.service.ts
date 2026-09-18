@@ -3675,11 +3675,30 @@ export class ShippingService {
         customer: { select: { name: true } },
         branch: { select: { name: true } },
         _count: { select: { sacks: true, rolls: true, swatches: true } },
-        sacks: { select: { id: true, sackNo: true, _count: { select: { rolls: true } } } },
+        sacks: { orderBy: { seq: "asc" }, select: { id: true, sackNo: true, _count: { select: { rolls: true } } } },
+        // Yıkıcı önizleme: etkilenen HER top somut (barkod · sahibi · döneceği raf) — soyut sayı yetmez.
+        // `SHIPPED` filtresi mutasyonun kümesiyle aynı (`undoDispatch` yalnız sevkteki topları döndürür).
+        rolls: { where: { status: RollStatus.SHIPPED }, orderBy: { barcode: "asc" }, select: { id: true, sackId: true, barcode: true, currentQty: true, preShipStatus: true, ownerCustomer: { select: { name: true } } } },
         orders: { select: { order: { select: { orderNumber: true } } } },
       },
     });
     if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
+    const rollRow = (r: (typeof shipment.rolls)[number]) => ({
+      id: r.id,
+      barcode: r.barcode,
+      meters: Number(r.currentQty),
+      /** Emanet sahibi (G3); null = bizim mal — sevk müşterisi başlıkta. */
+      ownerName: r.ownerCustomer?.name ?? null,
+      /** Döneceği raf (`preShipStatus`; eski/legacy sevkte null → WAREHOUSE). */
+      returnTo: r.preShipStatus ?? RollStatus.WAREHOUSE,
+    });
+    const rollsBySack = new Map<string, ReturnType<typeof rollRow>[]>();
+    const looseRolls: ReturnType<typeof rollRow>[] = [];
+    for (const r of shipment.rolls) {
+      const row = rollRow(r);
+      if (r.sackId) (rollsBySack.get(r.sackId) ?? rollsBySack.set(r.sackId, []).get(r.sackId)!).push(row);
+      else looseRolls.push(row);
+    }
 
     const [activeReturnCount, sameDayOnly, confirmationEnabled] = await Promise.all([
       prisma.rollReturn.count({ where: { fromShipmentId: shipmentId, cancelledAt: null } }),
@@ -3721,7 +3740,9 @@ export class ShippingService {
         sackCount: shipment._count.sacks,
         rollCount: shipment._count.rolls,
         swatchCount: shipment._count.swatches,
-        sacks: shipment.sacks.map((s) => ({ id: s.id, sackNo: s.sackNo, rollCount: s._count.rolls })),
+        sacks: shipment.sacks.map((s) => ({ id: s.id, sackNo: s.sackNo, rollCount: s._count.rolls, rolls: rollsBySack.get(s.id) ?? [] })),
+        /** Çuvalsız (doğrudan sevkiyata bağlı) toplar — bugün boş küme; varsa listelenir, gizlenmez. */
+        looseRolls,
         affectedOrders: [...new Set(shipment.orders.map((o) => o.order.orderNumber))],
         // Sevk irsaliyesi İPTAL (VOIDED) olacak — kullanıcı bunu onaydan ÖNCE bilmeli.
         voidsDispatchNote: true,
