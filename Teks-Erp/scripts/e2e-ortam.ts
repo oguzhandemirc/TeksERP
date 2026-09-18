@@ -25,7 +25,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { cocukOrtami } from "./lib/hedef-db-kapisi";
+import { cocukOrtami, fixtureHedefEngeli, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 const DB_ADI = process.env.E2E_DB_NAME ?? "tekserp_d9e2e_test";
 const DB_KALIP = /^tekserp_[a-z0-9]+e2e_test$/;
@@ -48,11 +48,20 @@ function dur(mesaj: string): never {
   process.exit(1);
 }
 
-/** Ad kapısı — FAIL-CLOSED: kalıba uymayan ad hiçbir alt komutu koşturamaz. */
+/**
+ * Ad kapısı — FAIL-CLOSED ve İKİ KATLI. Bu betik kendi DB hedefini KURAR (DATABASE_URL'i
+ * kendisi yazar), o yüzden `.env`i okuyan ortak kapı tek başına yetmez:
+ *   ① yerel kalıp: `_test` ile bitmek ve `e2e` damgası ZORUNLU — fabrikanın canlı yedeği
+ *     (ve herhangi bir `_dev`) yapısal olarak giremez;
+ *   ② ORTAK kapılar (`hedefDbEngeli` üretim adı · `fixtureHedefEngeli` fixture kalıbı) —
+ *     kurulan hedef `DATABASE_URL`e yazıldıktan SONRA sorulur; `test_script_guards §10b`
+ *     kendi hedefini kuran her betikte bu çağrıyı arar (kapısız hedef kurma tavanı).
+ */
 function adKapisi(): void {
-  // Kalıp `_test` ile bitmeyi ve `e2e` damgasını ZORLAR — fabrikanın canlı yedeği
-  // (ve herhangi bir `_dev`) yapısal olarak bu kalıba giremez; ikinci bir ad listesi gerekmez.
   if (!DB_KALIP.test(DB_ADI)) dur(`E2E DB adı kalıba uymuyor: ${DB_ADI} (beklenen ${DB_KALIP})`);
+  process.env.DATABASE_URL = dbUrl(DB_ADI);
+  const engel = hedefDbEngeli() ?? fixtureHedefEngeli();
+  if (engel) dur(engel);
 }
 
 function pg(arac: string, args: string[], opts: { input?: string; sessiz?: boolean } = {}): string {
@@ -121,9 +130,7 @@ async function kur(): Promise<void> {
 // ── fixture ──────────────────────────────────────────────────────────────────
 // Test kullanıcıları + kataloglar + tüm modüller AÇIK. Sistem hesabına DOKUNMAZ.
 async function fixture(): Promise<void> {
-  adKapisi();
-  process.env.DATABASE_URL = dbUrl(DB_ADI);
-  // Prisma istemcisi DATABASE_URL'i modül yüklenirken okur → dinamik import.
+  adKapisi(); // DATABASE_URL'i de yazar — Prisma istemcisi onu modül yüklenirken okur → dinamik import.
   const { default: prisma, pool } = await import("../src/lib/prisma");
   const { reconcilePermissionCatalog } = await import("../src/jobs/permission-catalog.job");
   const { reconcileReasonPresets } = await import("../src/jobs/reason-preset-catalog.job");
@@ -190,7 +197,6 @@ async function fixture(): Promise<void> {
 // Parola YALNIZ stdout'a (tek satır JSON). Dosyaya yazılmaz; sürücü bellekte tutar.
 async function sistemHesabi(): Promise<void> {
   adKapisi();
-  process.env.DATABASE_URL = dbUrl(DB_ADI);
   const { default: prisma, pool } = await import("../src/lib/prisma");
   const { provisionSuperadmin } = await import("./superadmin-olustur");
   try {
