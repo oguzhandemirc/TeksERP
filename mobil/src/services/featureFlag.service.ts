@@ -34,6 +34,10 @@ export interface FeatureFlags {
   /** Devere Faz 3: levent tezgah bağı defteri (`devere.mountTracking`) — default FALSE (satır-yok değeri).
    *  Tezgah ekranı "Levent" paneli ve Levent Sarım "Tezgahta" sekmesi yalnız AÇIKKEN çizilir. */
   devereMountTracking: boolean;
+  /** Z1 üretim belge zinciri: açıkken tezgah koşumu bir dokuma işine bağlanmalı (`dokuma.runWeavingOrderRequired`) — default FALSE (bugünkü davranış). */
+  dokumaRunWeavingOrderRequired: boolean;
+  /** Açıkken levent planı/sarımı bir dokuma işine bağlanmalı (`devere.beamWeavingLinkRequired`) — default FALSE. */
+  devereBeamWeavingLinkRequired: boolean;
   pricingEnabled: boolean;
   targetQuantityEnabled: boolean;
   /** KK1 ham kumaş girişinde "en (cm)" alanı gösterilsin mi (default false). */
@@ -151,6 +155,8 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   emanetEnabled: false,
   // Backend satır-yok değeri FALSE — kapalıyken Tezgah/Levent ekranları Faz 1b ile birebir.
   devereMountTracking: false,
+  dokumaRunWeavingOrderRequired: false,
+  devereBeamWeavingLinkRequired: false,
   pricingEnabled: false,
   targetQuantityEnabled: false,
   rawWidthEnabled: false,

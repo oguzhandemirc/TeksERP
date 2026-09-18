@@ -46,6 +46,12 @@ describe('runPayload — koşum aç (§3.4 (1))', () => {
     expect(validateRunOpen({ ...EMPTY_RUN_FORM, targetUnitsPerMin: '0' }).ok).toBe(false);
     expect(validateRunOpen({ ...EMPTY_RUN_FORM, targetUnitsPerMin: '12.5' }).ok).toBe(false);
     expect(validateRunOpen({ ...EMPTY_RUN_FORM, targetUnitsPerMin: '10001' }).ok).toBe(false);
+  });
+
+  it('⭐ dokumaRunWeavingOrderRequired açıkken iş zorunlu (sunucu 400 istemci ikizi); kapalıyken serbest', () => {
+    expect(validateRunOpen({ ...EMPTY_RUN_FORM }, true).ok).toBe(false);
+    expect(validateRunOpen({ ...EMPTY_RUN_FORM, weavingOrderId: 'wo1' }, true).ok).toBe(true);
+    expect(validateRunOpen({ ...EMPTY_RUN_FORM }, false).ok).toBe(true);
     expect(buildOpenRunPayload({ ...EMPTY_RUN_FORM, targetUnitsPerMin: '420' }, ctx).targetUnitsPerMin).toBe(420);
   });
   it('⭐ atkı sıklığı (ham atkı/cm): boş → null (metre türetilmez); ondalık kabul; 0/negatif/aşırı red', () => {
