@@ -642,7 +642,12 @@
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Yeni Mal Kabul: bir fiş kaydedilip sipariş kapandıktan hemen sonra yeni fiş açılınca kapanmış sipariş seçicide hâlâ görünüyor, bekleyen kalemlerin “Gelen” sütunu eski kalanla (0) geliyor ve satırlar yeniden doluyordu. Artık fiş kaydı ve fiş iptali sipariş listesini ve bekleyen kalemleri tazeler; sipariş seçici her açılışta güncel listeyi okur; kalemlerin kendiliğinden dolması bekleyen kalemler güncel okunana kadar bekler. Tablet ön-dolgu: sistemin zaten bildiği bilgiler artık ekrana kendiliğinden gelir, elle yeniden girilmez. Ham Giriş’te “Hangi indirmeden?” listesinden bir indirme seçilince desen ve renk o koşumdan (yoksa dokuma işinden) ön-dolar; koşum açarken atkı sıklığı aynı desenin son koşumundan, hedef devir makine kartından önerilir ve hangi tezgahtan geldiği söylenir; Levent Sarım’da SAR formu aynı çözgü kartının son sarımındaki makine, depo, lot ve kg satırlarını öneri olarak getirir. Hiçbiri kilitli değildir, değiştirilebilir; bilinmeyen değer boş bırakılır, uydurulmaz. Panelde kumaş kartına “Varsayılan çözgü kartı” alanı geldi (Devere açıkken): Yeni Dokuma İşi’nde kumaş seçilince çözgü kartı bundan ön-dolar, boş bırakılırsa sunucu da aynı varsayılanı uygular. Tablet ekranlarındaki ön-dolgu ayrı bir tablet sürümüyle gelir. Tezgahta duruş bildirirken en sık dört sebep tek dokunuşla seçilebilir: Sebep kataloğunda (Tezgah duruş sebepleri) sıralamanın ilk dört aktif sebebi “hızlı sebep” sayılır — dörtlüyü değiştirmek için katalogdaki sırayı değiştirmek yeter, ayrı ayar yoktur."
+          "metin": "Yeni Mal Kabul: bir fiş kaydedilip sipariş kapandıktan hemen sonra yeni fiş açılınca kapanmış sipariş seçicide hâlâ görünüyor, bekleyen kalemlerin “Gelen” sütunu eski kalanla (0) geliyor ve satırlar yeniden doluyordu. Artık fiş kaydı ve fiş iptali sipariş listesini ve bekleyen kalemleri tazeler; sipariş seçici her açılışta güncel listeyi okur; kalemlerin kendiliğinden dolması bekleyen kalemler güncel okunana kadar bekler."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "Tezgahta duruş bildirirken en sık dört sebep tek dokunuşla seçilebilir: Sebep kataloğunda (Tezgah duruş sebepleri) sıralamanın ilk dört aktif sebebi “hızlı sebep” sayılır — dörtlüyü değiştirmek için katalogdaki sırayı değiştirmek yeter, ayrı ayar yoktur."
         },
         {
           "kapsam": "panel",
