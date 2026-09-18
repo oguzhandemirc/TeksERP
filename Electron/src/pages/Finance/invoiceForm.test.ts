@@ -170,6 +170,16 @@ describe("payloadLines — hangi satır gider", () => {
   });
 });
 
+describe("buildUpdateBody — fiş kümesi (REPLACE yalnız değişimde)", () => {
+  const base = { lines: [], dueDate: "", externalNo: "", notes: "" };
+  it("küme aynı (sıra farklı) → anahtar HİÇ gönderilmez; değişti → gönderilir; boşaltıldı → [] gönderilir", () => {
+    expect("goodsReceiptIds" in buildUpdateBody({ ...base, goodsReceiptIds: ["b", "a"], initialGoodsReceiptIds: ["a", "b"] })).toBe(false);
+    expect(buildUpdateBody({ ...base, goodsReceiptIds: ["a", "c"], initialGoodsReceiptIds: ["a", "b"] }).goodsReceiptIds).toEqual(["a", "c"]);
+    expect(buildUpdateBody({ ...base, goodsReceiptIds: [], initialGoodsReceiptIds: ["a"] }).goodsReceiptIds).toEqual([]);
+    expect("goodsReceiptIds" in buildUpdateBody(base)).toBe(false);
+  });
+});
+
 describe("buildUpdateBody — PATCH gövdesi", () => {
   it("⭐ SAHA SENARYOSU: 0 fiyatlı taslağa fiyat girilir ve gövdeye YANSIR", () => {
     const init = initialFromDetail(DRAFT);

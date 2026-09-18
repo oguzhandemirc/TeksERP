@@ -309,7 +309,47 @@ export interface InvoiceDetail extends Omit<InvoiceRow, "cari"> {
     subcontractor: { id: string; code: string; name: string; taxNumber: string | null } | null;
   };
   goodsReceipt: { id: string; receiptNo: string; deliveryNoteNo: string | null } | null;
+  /** Bağlı fişlerin TAMAMI (n ≥ 1; tekil `goodsReceipt` yalnız n=1'de dolu). Eski backend alanı göndermez. */
+  goodsReceipts?: InvoiceGoodsReceiptRef[];
+  /** Fatura ↔ fişler TOPLAM karşılaştırması — fişsiz faturada null; kontrol kapalıyken `exceeded` hep false. */
+  receiptMatch?: InvoiceReceiptMatch | null;
   lines: InvoiceLineRow[];
+}
+
+export interface InvoiceGoodsReceiptRef {
+  id: string;
+  receiptNo: string;
+  deliveryNoteNo: string | null;
+  receivedAt: string;
+  status: "ACTIVE" | "CANCELLED";
+  currency: Currency;
+}
+
+export interface InvoiceReceiptDifference {
+  kind: "QTY" | "AMOUNT";
+  invoice: number;
+  receipts: number;
+  diffPct: number;
+  tolerancePct: number;
+  exceeded: boolean;
+}
+
+export interface InvoiceReceiptMatch {
+  checked: boolean;
+  qtyTolerancePct: number;
+  priceTolerancePct: number;
+  differences: InvoiceReceiptDifference[];
+}
+
+/**
+ * N MAL KABUL FİŞİNDEN ALIŞ TASLAĞI — `POST /api/finance/invoices/draft-from-goods-receipts`.
+ * Kalemleri SUNUCU birleştirir (fiyat zinciri tek-fiş yoluyla aynı); aynı cari / para birimi / açık fiş kontrolleri
+ * tek yerde (400 GOODS_RECEIPT_PARTY_MISMATCH · GOODS_RECEIPT_CURRENCY_MISMATCH · GOODS_RECEIPT_NOT_LINKABLE, 409
+ * GOODS_RECEIPT_ALREADY_INVOICED). Panel n çağrı YAPMAZ.
+ */
+export async function createDraftFromGoodsReceipts(goodsReceiptIds: string[]) {
+  const res = await apiClient.post("/api/finance/invoices/draft-from-goods-receipts", { goodsReceiptIds });
+  return res.data as { data: { id: string; docNo: string }; message?: string; warnings?: string[] };
 }
 
 export async function getInvoice(id: string): Promise<InvoiceDetail> {
@@ -492,6 +532,8 @@ export async function createInvoice(body: {
   returnGroupId?: string | null;
   /** Kaynak mal kabul fişi — aynı kural, alış tarafı. */
   goodsReceiptId?: string | null;
+  /** Bağlı fiş KÜMESİ (yalnız ALIŞ); panel taslağı `createDraftFromGoodsReceipts` ile doğurur, burada genelde boş. */
+  goodsReceiptIds?: string[];
   lines: InvoiceLineInput[];
   clientToken?: string;
 }) {
@@ -555,6 +597,8 @@ export async function updateInvoice(
     externalNo?: string | null;
     notes?: string | null;
     exchangeRate?: number;
+    /** Fiş kümesi REPLACE (`[]` temizler) — yalnız TASLAK + ALIŞ; değişmeyen küme gönderilmez (`buildUpdateBody`). */
+    goodsReceiptIds?: string[];
   },
 ) {
   const res = await apiClient.patch(`/api/finance/invoices/${id}`, body);

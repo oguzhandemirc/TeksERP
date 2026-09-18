@@ -19,7 +19,8 @@
 // YOKTUR: formda düzenlenebilir görünmeleri "kaydettim ama değişmedi" yalanı
 // olurdu, bu yüzden düzenleme modunda salt-okunur çizilirler.
 // =============================================================================
-import type { Currency, InvoiceDetail, InvoiceLineInput, InvoiceType } from "./service";
+import type { Currency, InvoiceDetail, InvoiceLineInput, InvoiceType, InvoiceGoodsReceiptRef } from "./service";
+import { sameIdSet } from "./invoiceReceipts";
 import { shouldApplySuggestion } from "@/hooks/useItemPriceSuggestion";
 
 /** Hesabın bacağı — yalnız DÜZENLEMEDE anlamlı (eski fason kind'lı hesap salt-okunur çizilir); yeni fatura hep karta kesilir. */
@@ -50,6 +51,10 @@ export interface InvoiceFormInitial {
   dueDate: string;
   notes: string;
   lines: InvoiceFormLine[];
+  /** Bağlı mal kabul fişleri (yalnız ALIŞ). Eski DTO'da yok → boş. */
+  goodsReceiptIds?: string[];
+  /** Aynı fişlerin etiket bilgisi (fiş no · irsaliye) — alanın altındaki özet için. */
+  goodsReceipts?: InvoiceGoodsReceiptRef[];
   /**
    * Para birimini KAYNAK BELGE (ya da kayıtlı fatura) dayattı mı?
    *
@@ -92,6 +97,8 @@ export function initialFromDetail(inv: InvoiceDetail): InvoiceFormInitial {
     externalNo: inv.externalNo ?? "",
     dueDate: ymdFromIso(inv.dueDate),
     notes: inv.notes ?? "",
+    goodsReceiptIds: inv.goodsReceipts?.map((r) => r.id) ?? (inv.goodsReceipt ? [inv.goodsReceipt.id] : []),
+    goodsReceipts: inv.goodsReceipts ?? [],
     // Satır KİMLİĞİ DB satırının id'si: `crypto.randomUUID()` her render'da yeni
     // anahtar üretip alanların odağını kaybettirirdi.
     lines: inv.lines.map((l) => ({
@@ -139,6 +146,7 @@ export interface InvoiceUpdateBody {
   dueDate: string | null;
   externalNo: string | null;
   notes: string | null;
+  goodsReceiptIds?: string[];
 }
 
 /**
@@ -159,12 +167,17 @@ export function buildUpdateBody(state: {
   dueDate: string;
   externalNo: string;
   notes: string;
+  /** Formdaki fiş kümesi; `initialGoodsReceiptIds` ile AYNI ise anahtar hiç gönderilmez (REPLACE yalnız değişimde). */
+  goodsReceiptIds?: string[];
+  initialGoodsReceiptIds?: string[];
 }): InvoiceUpdateBody {
+  const receiptsChanged = state.goodsReceiptIds !== undefined && !sameIdSet(state.goodsReceiptIds, state.initialGoodsReceiptIds ?? []);
   return {
     lines: payloadLines(state.lines),
     dueDate: state.dueDate ? state.dueDate : null,
     externalNo: state.externalNo.trim() ? state.externalNo.trim() : null,
     notes: state.notes.trim() ? state.notes.trim() : null,
+    ...(receiptsChanged ? { goodsReceiptIds: state.goodsReceiptIds } : {}),
   };
 }
 

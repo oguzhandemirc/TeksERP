@@ -154,9 +154,10 @@ export type GoodsReceiptCreateData = Omit<GoodsReceiptDetail, "purchaseOrder"> &
   purchaseOrder?: ReceiptPurchaseOrderSync | null;
 };
 
-export async function listGoodsReceipts(params: { page: number; pageSize: number; search?: string }) {
+export async function listGoodsReceipts(params: { page: number; pageSize: number; search?: string; /** `filter[k]=v` — süzme sunucuda (invoiced · supplierId · status …). */ filter?: Record<string, string> }) {
+  const filter = Object.fromEntries(Object.entries(params.filter ?? {}).map(([k, v]) => [`filter[${k}]`, v]));
   const res = await apiClient.get("/api/goods-receipts", {
-    params: { page: params.page, pageSize: params.pageSize, ...(params.search ? { search: params.search } : {}) },
+    params: { page: params.page, pageSize: params.pageSize, ...(params.search ? { search: params.search } : {}), ...filter },
   });
   return res.data as { data: GoodsReceiptListRow[]; pagination: { total: number; totalPages: number } };
 }

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
+import { InvoiceReceiptsSection } from "./InvoiceReceiptsSection";
 import { customerService } from "@/pages/Customers/service";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import { itemService } from "@/pages/Items/service";
@@ -97,6 +98,8 @@ interface Props {
    * göstermek "kaydettim ama değişmedi" yalanı olurdu.
    */
   editInvoiceId?: string | null;
+  /** Fiş seçimiyle sunucuda doğan taslağın id'si — çağıran formu o taslağın DÜZENLEMESİNE açar. */
+  onDraftCreated?: (id: string) => void;
 }
 
 /** Satır tipi tek kaynakta (saf katman) — `invoiceForm.InvoiceFormLine`. */
@@ -341,7 +344,7 @@ function InvoiceLineRow({
  * dosyanın kendi kuralı). Bu yüzden yükleme/hata/uygunluk kapıları BURADA,
  * formun kendisi `InvoiceFormBody`'de.
  */
-export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill, editInvoiceId }: Props) {
+export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill, editInvoiceId, onDraftCreated }: Props) {
   const editQ = useQuery({
     // Anahtar detay diyaloğuyla PAYLAŞILIR: aynı taslağı iki yüzey de aynı
     // cache satırından okur (kaydetme sonrası tek invalidate ikisini de tazeler).
@@ -400,12 +403,13 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill, edit
       onOpenChange={onOpenChange}
       onSaved={onCreated}
       prefill={prefill}
+      onDraftCreated={onDraftCreated}
     />
   );
 }
 
 function InvoiceFormBody({
-  open, onOpenChange, onSaved, prefill, initial, edit,
+  open, onOpenChange, onSaved, prefill, initial, edit, onDraftCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -415,6 +419,7 @@ function InvoiceFormBody({
   initial?: InvoiceFormInitial;
   /** Dolu ise PATCH yolu (kayıtlı taslak). */
   edit?: { id: string; docNo: string };
+  onDraftCreated?: (id: string) => void;
 }) {
   // ⚠️ Ön-doldurma YALNIZ başlangıç değeridir; çağıran diyaloğu koşullu mount
   // eder (her açılış taze bileşen). Prop'u render fazında senkronlamak,
@@ -442,6 +447,8 @@ function InvoiceFormBody({
   // otomatik taslağın "sipariş fiyatı çelişkili — kontrol edin" notu kullanıcı
   // sadece fiyat düzeltip kaydettiğinde sessizce silinirdi.
   const [notes, setNotes] = useState(initial?.notes ?? "");
+  // Bağlı mal kabul fişleri (yalnız ALIŞ): yeni faturada seçim taslağı SUNUCUDA doğurur, düzenlemede küme PATCH'lenir.
+  const [goodsReceiptIds, setGoodsReceiptIds] = useState<string[]>(initial?.goodsReceiptIds ?? []);
   // Vade alanına en son YAZDIĞIMIZ öneri — kullanıcı dokunduysa artık eşleşmez
   // ve alana bir daha dokunulmaz (fiyat önerisiyle aynı saf yüklem).
   const [appliedDueSuggestion, setAppliedDueSuggestion] = useState<string | null>(null);
@@ -594,7 +601,7 @@ function InvoiceFormBody({
    * aittir; güncelleme zaten kaydın kimliğiyle (id) adreslenir.
    */
   const updateM = useMutation({
-    mutationFn: () => updateInvoice(edit!.id, buildUpdateBody({ lines, dueDate, externalNo, notes })),
+    mutationFn: () => updateInvoice(edit!.id, buildUpdateBody({ lines, dueDate, externalNo, notes, goodsReceiptIds, initialGoodsReceiptIds: initial?.goodsReceiptIds ?? [] })),
     onSuccess: (r) => {
       toast.success(r.message ?? "Taslak güncellendi.");
       onSaved();
@@ -702,6 +709,19 @@ function InvoiceFormBody({
             )}
           </div>
         </div>
+
+        {/* ALIŞ + cari kartı: bağlı mal kabul fişleri (isteğe bağlı; bağsız alış eskisi gibi). */}
+        {type === "PURCHASE" && isCustomerParty && (
+          <InvoiceReceiptsSection
+            mode={isEdit ? "edit" : "create"}
+            supplierId={customerId}
+            value={goodsReceiptIds}
+            onChange={setGoodsReceiptIds}
+            linked={initial?.goodsReceipts}
+            onDraftCreated={(id) => { onSaved(); onOpenChange(false); onDraftCreated?.(id); }}
+            disabled={saving}
+          />
+        )}
 
         <div className="flex flex-wrap items-start gap-3">
           <div>

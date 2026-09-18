@@ -382,7 +382,7 @@ export function InvoicesPage() {
         )}
       </PageBody>
 
-      <InvoiceFormDialog open={formOpen} onOpenChange={setFormOpen} onCreated={invalidate} />
+      <InvoiceFormDialog open={formOpen} onOpenChange={setFormOpen} onCreated={invalidate} onDraftCreated={(id) => { setFormOpen(false); setEditId(id); }} />
 
       {/* TASLAK DÜZENLEME — aynı form, PATCH yolunda. Koşullu mount: her açılış
           taze bileşen (form durumu kapanınca ölür, bir sonraki taslağa taşmaz). */}

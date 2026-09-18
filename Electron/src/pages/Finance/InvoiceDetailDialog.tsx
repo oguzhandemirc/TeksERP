@@ -22,6 +22,8 @@
 // donar, taslağın resmi kaydı yoktur ve düğme "yok" bir şeyi vaat ederdi.
 // =============================================================================
 import { useQuery } from "@tanstack/react-query";
+import { InvoiceReceiptMatchBand } from "./InvoiceReceiptMatchBand";
+import { receiptLabel } from "./invoiceReceipts";
 import { Pencil, Printer } from "lucide-react";
 import {
   Dialog,
@@ -233,6 +235,7 @@ export function InvoiceDetailDialog({
                 </Button>
               )}
             </div>
+            <InvoiceReceiptMatchBand match={inv.receiptMatch} currency={cur} />
 
             {/* ── Künye ─────────────────────────────────────────────────── */}
             <div className="grid grid-cols-2 gap-3 rounded-md border p-3 sm:grid-cols-3">
@@ -273,6 +276,9 @@ export function InvoiceDetailDialog({
                       : undefined
                   }
                 />
+              )}
+              {(inv.goodsReceipts?.length ?? 0) > 1 && (
+                <Field label="Kaynak (mal kabul fişleri)" value={inv.goodsReceipts!.map(receiptLabel).join(" · ")} />
               )}
               {inv.shipment && (
                 <Field

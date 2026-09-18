@@ -32,7 +32,7 @@
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Mal kabulde hatalı bir satır artık sessizce atlanmaz: renk pasif ya da ürünün izinli renk listesinde değilse, özellik pasif ya da izinli değilse, birim fiyat zorunluyken fiyat çözülemiyorsa ya da satırların toplamı siparişte ısmarlananı aşıyorsa fiş hiç açılmaz, hata ilgili satırın yanında yazılır ve pencere açık kalır (önceki sürümde bu durumlarda içi boş bir fiş doğuyor ve yalnız kısa bir uyarı geçip gidiyordu)."
+          "metin": "Mal kabulde hatalı bir satır artık sessizce atlanmaz: renk pasif ya da ürünün izinli renk listesinde değilse, özellik pasif ya da izinli değilse, birim fiyat zorunluyken fiyat çözülemiyorsa ya da satırların toplamı siparişte ısmarlananı aşıyorsa fiş hiç açılmaz, hata ilgili satırın yanında yazılır ve pencere açık kalır (önceki sürümde bu durumlarda içi boş bir fiş doğuyor ve yalnız kısa bir uyarı geçip gidiyordu). Alış faturası taslağı birden çok mal kabul fişine bağlanabilir: Yeni Fatura penceresinde tür Alış ve cari seçilince Mal kabul fişleri alanı gelir, o carinin faturalanmamış fişleri listelenir ve satıra dokunarak eklenir ya da çıkarılır; fişler seçilince taslak fişlerin kalemleriyle kendiliğinden oluşur ve düzenlemeye açılır. Taslak düzenlenirken fiş kümesi değiştirilebilir (kalemler yeniden yazılmaz). Fatura detayında bağlı fişler listelenir; fatura toplamı fişlerin toplamından tolerans ayarının üstünde ayrışıyorsa sarı bir uyarı farkı yazar ve onay bu farkı söyleyerek durur. Fiş seçilmezse alış faturası eskisi gibi bağsız kesilir."
         },
         {
           "kapsam": "tablet",
