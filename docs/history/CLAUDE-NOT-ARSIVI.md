@@ -10878,6 +10878,11 @@ Ders: **"tren kesişimi"** — iki oturumun aynı dosyaya birer satır eklemesi 
 
 **Vitest** `receiptLineColumns.test.tsx` 4/4: kumaş-only başlık bayt bayt · karma başlık · iplik ve kumaş satırının HER hücresi aynı dizindeki başlığın etiketini taşır · bobin placeholder + adet title; negatif sonda: "Renk / Lot" → "Renk" ① ❌, Lot hücresine yanlış dizin etiketi ② ❌ görüldü. GoodsReceipts vitest 74/74.
 
+## 2026-09-18 — Levent gövde no: plan anında UYARI, red yok (kullanıcı bulgusu 03:30 "aynı gövde no hata vermiyor", 1e kararı K5b) [ÇEKİRDEK]
+
+**Ölçüm (1e):** gövde tekilliği tasarım gereği yalnız CANLI leventte (`physical_live_uq` READY/SHIPPED_OUT/MOUNTED; `assertPhysicalBeamFreeTx` yalnız SAR anında, K5); `createWarpBeam`/`updateWarpBeam` gövdeyi sorgusuz yazıyordu → kullanıcı LV…0005 ve 0006'yı T1 ile planladı, T1'de LV…0001 MOUNTED; hata sarımda çıkıyordu — doğru ama geç ve sessiz. **Karar:** plan = rezervasyon, RED YOK; plan/düzenle anında `ApiResponse.warnings` (rota kapsaması emsali): ① gövdede canlı levent varsa adı + durumu (HAZIR/FASONDA/TAKILI) "ancak gövde boşalınca sarılabilir", ② aynı gövdeye başka PLANNED varsa "N planlı levent var: … — sırayla sarılır". Canlı sorgusu tek helper'a çekildi (`findLivePhysicalBeamTx`; `assertPhysicalBeamFreeTx` onu okuyup fırlatır, `physicalBeamPlanWarningsTx` uyarır — aynı tr_fold yüklemi, iki kapı ayrışamaz). Panel `useWarpBeamMutations.settle` zaten her `warnings`i ayrı toast basıyordu (ölçüldü) — ölçüm bekçisi eklendi. Tablet tarafı d5'te.
+**Ölçüldü:** `test_warp_beam_lifecycle` 40/0 — §12b-a dolu gövdeye plan 201 + uyarı canlı adıyla (tr_fold BÜYÜK harf), §12b-b çift plan ikinci uyarı, §12b-c gövde boşalınca uyarı yok / geri yazınca yine var; sondalar: helper [] → 3 ❌, create yayılımı düşünce 2 ❌. Panel `useWarpBeamMutations.test` 2/2 (sonda: settle döngüsü düşünce ① ❌).
+
 ## 2026-09-18 — `StationKind.WARPING` (Devere): istasyon türü keşfedilebilirlik için, motor yeteneği okur (kullanıcı bulgusu 02:35, 1e kararı) [ÇEKİRDEK]
 
 **Bulgu (kullanıcı):** "devere makinesini nereden ekleyeceğim göremedim — istasyon ekleyip içine makine ekliyorduk, devere istasyonu yok." Devere makinesi zaten `Station.producesWarpBeam` istasyonunun makinesiydi; istasyon formunda yalnız "Levent sarar" kutusu vardı, Görev Türü listesinde Devere yoktu ⇒ keşfedilemiyordu.

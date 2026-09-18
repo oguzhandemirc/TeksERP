@@ -29,16 +29,49 @@ export function siblingPhysicalNo(prefix: string | null, k: number, own: string 
   return `${prefix}-${k}`.slice(0, 32);
 }
 
+const NIL_UUID = "00000000-0000-0000-0000-000000000000";
+
+/** Aynı gövde numarasında (tr_fold) başka bir CANLI çözgü (READY/SHIPPED_OUT/MOUNTED) — tek sorgu; fırlatan (sarım) ve
+ *  uyaran (plan) kapı bunu okur. `warp_beams_physical_live_uq` ile aynı yüklem. */
+export async function findLivePhysicalBeamTx(client: Pick<Tx, "$queryRaw">, beamId: string | null, physicalBeamNo: string | null): Promise<{ beamNo: string; status: string } | null> {
+  if (!physicalBeamNo) return null;
+  const rows = await client.$queryRaw<Array<{ beamNo: string; status: string }>>`
+    SELECT "beamNo", status::text AS status FROM warp_beams
+    WHERE public.tr_fold("physicalBeamNo") = public.tr_fold(${physicalBeamNo}) AND status IN ('READY', 'SHIPPED_OUT', 'MOUNTED') AND id <> ${beamId ?? NIL_UUID}::uuid
+    LIMIT 1`;
+  return rows[0] ?? null;
+}
+
 /** Aynı gövde numarasında (tr_fold) başka bir CANLI çözgü varsa 409 — `warp_beams_physical_live_uq` ikinci hattır (tx içi de çağrılır). */
 export async function assertPhysicalBeamFreeTx(client: Pick<Tx, "$queryRaw">, beamId: string | null, physicalBeamNo: string | null, beamNo: string): Promise<void> {
-  if (!physicalBeamNo) return;
-  const rows = await client.$queryRaw<Array<{ beamNo: string }>>`
-    SELECT "beamNo" FROM warp_beams
-    WHERE public.tr_fold("physicalBeamNo") = public.tr_fold(${physicalBeamNo}) AND status IN ('READY', 'SHIPPED_OUT', 'MOUNTED') AND id <> ${beamId ?? "00000000-0000-0000-0000-000000000000"}::uuid
-    LIMIT 1`;
-  if (rows[0]) {
-    throw AppError.conflict(`"${physicalBeamNo}" gövdesinde canlı bir çözgü var: ${rows[0].beamNo} — ${beamNo} sarılamaz; gövdeyi boşaltın ya da başka gövde yazın.`, { code: "WARP_BEAM_PHYSICAL_BUSY", busyBeamNo: rows[0].beamNo });
+  const live = await findLivePhysicalBeamTx(client, beamId, physicalBeamNo);
+  if (live) {
+    throw AppError.conflict(`"${physicalBeamNo}" gövdesinde canlı bir çözgü var: ${live.beamNo} — ${beamNo} sarılamaz; gövdeyi boşaltın ya da başka gövde yazın.`, { code: "WARP_BEAM_PHYSICAL_BUSY", busyBeamNo: live.beamNo });
   }
+}
+
+const LIVE_STATUS_TR: Record<string, string> = { READY: "HAZIR", SHIPPED_OUT: "FASONDA", MOUNTED: "TAKILI" };
+
+/**
+ * PLAN ANI UYARISI (K5b, kullanıcı bulgusu 2026-09-18): plan = rezervasyon, gövde tekilliği yalnız CANLI leventte
+ * (`physical_live_uq`), bu yüzden plan/düzenle REDDETMEZ — ama sarımda çıkacak 409'u şimdiden söyler
+ * (`ApiResponse.warnings`, rota kapsaması emsali). İkinci uyarı: aynı gövdeye planlanmış başka PLANNED levent(ler).
+ */
+export async function physicalBeamPlanWarningsTx(client: Pick<Tx, "$queryRaw">, beamId: string, physicalBeamNo: string | null): Promise<string[]> {
+  if (!physicalBeamNo) return [];
+  const warnings: string[] = [];
+  const live = await findLivePhysicalBeamTx(client, beamId, physicalBeamNo);
+  if (live) {
+    warnings.push(`"${physicalBeamNo}" gövdesinde ${live.beamNo} canlı (${LIVE_STATUS_TR[live.status] ?? live.status}) — bu levent ancak gövde boşalınca sarılabilir.`);
+  }
+  const planned = await client.$queryRaw<Array<{ beamNo: string }>>`
+    SELECT "beamNo" FROM warp_beams
+    WHERE public.tr_fold("physicalBeamNo") = public.tr_fold(${physicalBeamNo}) AND status = 'PLANNED' AND id <> ${beamId}::uuid
+    ORDER BY "beamNo" LIMIT 10`;
+  if (planned.length > 0) {
+    warnings.push(`"${physicalBeamNo}" için ${planned.length + 1} planlı levent var: ${planned.map((p) => p.beamNo).join(", ")} ve bu levent — sırayla sarılır.`);
+  }
+  return warnings;
 }
 
 /** İplik satırlarının k. pay kopyası (miktar ÷ N, kuruş sonda) — depo/lot/sebep aynen. */

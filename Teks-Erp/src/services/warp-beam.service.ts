@@ -15,6 +15,7 @@
 import { Prisma, WarpBeamOrigin, WarpBeamStatus, YarnMovementKind } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
+import { physicalBeamPlanWarningsTx } from "./helpers/warp-beam-set.helper";
 import { ApiResponse } from "../types/api.types";
 import { CursorPaginatedResponse } from "./base.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
@@ -215,7 +216,9 @@ export async function createWarpBeam(input: WarpBeamCreateInput, userId?: string
     (err) => Array.isArray(err.meta?.target) && (err.meta.target as string[]).includes("beamNo"),
   );
   await AuditService.log({ userId, action: "CREATE", tableName: WARP_BEAM_TABLE, recordId: created.id, newData: { beamNo: created.beamNo, warpSpecId: created.warpSpecId, originKind: created.originKind, plannedLengthM: Number(created.plannedLengthM) } });
-  return { success: true, data: toWarpBeamDto(created), message: `${created.beamNo} planlandı` };
+  // K5b: plan = rezervasyon, RED YOK — gövde doluysa/çift planlıysa UYARI (sarımda çıkacak 409 şimdiden söylenir).
+  const warnings = await physicalBeamPlanWarningsTx(prisma, created.id, created.physicalBeamNo);
+  return { success: true, data: toWarpBeamDto(created), message: `${created.beamNo} planlandı`, ...(warnings.length > 0 ? { warnings } : {}) };
 }
 
 /** E2b: `ownerCustomerId` DOĞUM niteliğidir — PATCH gövdesinden yazılamaz (route şeması strict, burada da tip dışı). */
@@ -256,7 +259,8 @@ export async function updateWarpBeam(id: string, input: WarpBeamUpdateInput, use
     return tx.warpBeam.findUniqueOrThrow({ where: { id }, select: WARP_BEAM_SELECT });
   });
   await AuditService.log({ userId, action: "UPDATE", tableName: WARP_BEAM_TABLE, recordId: id, oldData: { plannedLengthM: Number(current.plannedLengthM), originKind: current.originKind }, newData: { plannedLengthM: Number(updated.plannedLengthM), originKind: updated.originKind } });
-  return { success: true, data: toWarpBeamDto(updated), message: `${updated.beamNo} güncellendi` };
+  const warnings = await physicalBeamPlanWarningsTx(prisma, id, updated.physicalBeamNo);
+  return { success: true, data: toWarpBeamDto(updated), message: `${updated.beamNo} güncellendi`, ...(warnings.length > 0 ? { warnings } : {}) };
 }
 
 /** ④ sınıfı hard delete: deftere HİÇ yazmamış taslak (PLANNED — hiç olayı, hiç iplik satırı yok). Atomik claim. */

@@ -208,6 +208,18 @@ async function main(): Promise<void> {
     const e12 = await beklenenHata(() => windWarpBeam(p9.data.id, { lengthM: 40, kgSource: WarpKgSource.THEORETICAL }));
     check("§12 ⭐ ikinci READY aynı gövde (tr_fold: küçük harf) → 409 WARP_BEAM_PHYSICAL_BUSY (ham P2002 değil), meşgul levent adıyla", kod(e12) === "WARP_BEAM_PHYSICAL_BUSY" && String((e12?.details as { busyBeamNo?: string } | undefined)?.busyBeamNo) === p8.data.beamNo, kod(e12));
 
+    // §12b K5b (kullanıcı bulgusu 2026-09-18): plan = rezervasyon, RED YOK — ama plan/düzenle anında UYARI: gövdede canlı
+    // levent varsa ve/veya aynı gövdeye başka PLANNED varsa `warnings` dolu; gövde temizlenince boş. Sonda:
+    // `physicalBeamPlanWarningsTx` [] dönerse §12b-a/b/c kırmızı; create'ten `warnings` yayılımı düşerse §12b-a kırmızı.
+    console.log("\n── §12b K5b plan anı UYARI (red yok) ──");
+    const p10 = await createWarpBeam({ warpSpecId: spec.id, plannedLengthM: 30, originKind: WarpBeamOrigin.SUBCONTRACT, subcontractorId: sub.id, physicalBeamNo: govde.toUpperCase() });
+    beamIds.push(p10.data.id);
+    const w10 = p10.warnings ?? [];
+    check("§12b-a ⭐ dolu gövdeye PLAN → 201 + warnings[0] canlı leventi (HAZIR) adıyla söyler (tr_fold: BÜYÜK harf)", p10.data.status === WarpBeamStatus.PLANNED && w10.length >= 1 && w10[0]!.includes(p8.data.beamNo) && /HAZIR/.test(w10[0]!), w10.join(" | ") || "uyarı yok");
+    check("§12b-b ⭐ aynı gövdede ÖNCEDEN planlı levent (p9) varken ikinci uyarı: planlı liste p9'u sayar", w10.length === 2 && w10[1]!.includes(p9.data.beamNo) && /2 planlı/.test(w10[1]!), w10[1] ?? "ikinci uyarı yok");
+    const u10 = await updateWarpBeam(p10.data.id, { physicalBeamNo: `${TAG}-BOS-GOVDE` });
+    check("§12b-c düzenle: gövde boş bir numaraya çevrilince uyarı YOK; aynı gövdeye geri yazılınca yine VAR", (u10.warnings ?? []).length === 0 && ((await updateWarpBeam(p10.data.id, { physicalBeamNo: govde })).warnings ?? []).length === 2, `${(u10.warnings ?? []).length}`);
+
     console.log("\n── §13 K4 kanonik kilit sırası (ters depo sırasıyla paralel sarım) ──");
     let kilitHatasi = 0;
     for (let tur = 0; tur < 6; tur++) {
