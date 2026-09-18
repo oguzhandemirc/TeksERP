@@ -28,7 +28,7 @@ import type { AddressInfo } from "node:net";
 import { CariTxnSource, Currency, Prisma } from "@prisma/client";
 import app from "../src/app";
 import prisma, { pool } from "../src/lib/prisma";
-import { cocukOrtami, hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { cocukOrtami, hedefDbAdi, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { AuthService } from "../src/services/auth.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
@@ -141,7 +141,8 @@ async function main(): Promise<void> {
     const sahte = spawnSync(process.execPath, [path.join(ROOT, "node_modules/.bin/tsx"), path.join(ROOT, "scripts/migrate_cari_accounts_backfill.ts"), "--apply"], { encoding: "utf8", env: cocukOrtami({ DATABASE_URL: "postgresql://bekci@127.0.0.1:1/tekserp_sahte_canli?schema=public" }), timeout: 60_000 });
     check("§2e ⭐ `_test` dışı hedef + `--apply` `--canli-onay`sız → ⛔ çıkış 2 (DB'ye bağlanmadan)", sahte.status === 2 && /--canli-onay/.test(sahte.stdout), `${sahte.status} ${sahte.stdout.trim().slice(0, 120)}`);
     const kapali = spawnSync(process.execPath, [path.join(ROOT, "node_modules/.bin/tsx"), path.join(ROOT, "scripts/migrate_cari_accounts_backfill.ts")], { encoding: "utf8", env: cocukOrtami({}), timeout: 120_000 });
-    check("§2f dry-run çıkış 0, 'hiçbir şey yazılmadı' der, hedef DB adını basar", kapali.status === 0 && /hiçbir şey yazılmadı/.test(kapali.stdout) && /hedef tekserp_/.test(kapali.stdout), `${kapali.status}`);
+    // Hedef adı SABİT ÖNEK değil (`tekserp_`), script'in kendi türetmesiyle (`hedefDbAdi`) — CI DB'si `teks_ci` (koşum yeri farkı: yerelde yeşil, CI kırmızı).
+    check("§2f dry-run çıkış 0, 'hiçbir şey yazılmadı' der, hedef DB adını basar", kapali.status === 0 && /hiçbir şey yazılmadı/.test(kapali.stdout) && kapali.stdout.includes(`hedef ${hedefDbAdi()}`), `${kapali.status} · ${hedefDbAdi()}`);
 
     console.log("\n── §3 Liste süzgeci ──");
     const acc1 = (await hesap(k1.data.id))[0]!;
