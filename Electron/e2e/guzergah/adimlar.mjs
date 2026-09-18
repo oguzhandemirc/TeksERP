@@ -65,6 +65,9 @@ const j2Olcum = { docNo: null, belgeAcildi: null, belgeDocNoVar: null, belge25Va
 const j3Olcum = { docNo: null, kasaOnce: null, makbuzAcildi: null, makbuz600Var: null };
 const j4Olcum = { cariId: null, faturaSatiri: null, tahsilatSatiri: null, toplamOnce: null, toplamSonra: null, satirSonra: null, filtreSecenek: null };
 const j5Olcum = { cariId: null, kasaNotlari: null, kasaSatir600: null, kdvNotlari: null, kdvCariSecici: null };
+const m1Olcum = { paletSayisi: null, karoSayisi: null, apiKapali: null, apiKapaliKod: null, apiAcik: null, kategoriKaroVar: null };
+const m3Olcum = { sahipAlani: null, barkod: null, cuval: null, okut: null, sevkDurum: null, sevkKod: null, sevkTopVar: null, acikSahipAlani: null };
+const m2Olcum = { kilitSayisi: null, kilitSonra: null, apiDurum: null, apiKod: null, paletDokuma: null, acikDurum: null };
 const j1Olcum = { sevkNo: null, sevkId: null, tur: null, cariMetin: null, cariKilitli: null, satir: null, miktar: null, birim: null };
 const i4Olcum = { barkod: null, digerMusteri: null, digerOnce: null, testOnce: null, onizlemeSahipVar: null, redDurum: null, redKod: null, redTopVar: null, redSahipVar: null, tostSahipVar: null, ikinciDurum: null, sevkNo: null };
 
@@ -1253,6 +1256,191 @@ export const ADIMLAR = [
       { ad: "GET /reports/finance/vat-summary yön=SALES oran=20.00 → %20 satırı: KDV = matrah × 0,20; meta.secenekler.oran dolu; cariId KABUL EDİLMEZ (strict)",
         uc: () => `/api/reports/finance/vat-summary?dateFrom=${encodeURIComponent(new Date(Date.now() - 7 * 864e5).toISOString())}&dateTo=${encodeURIComponent(new Date().toISOString())}&yon=SALES&oran=20.00`,
         oku: (g) => { const r = (g?.data?.sales?.currencies ?? []).flatMap((c) => c.rows).find((x) => x.vatRate === "20.00" && !x.isReturn); return `${r && Math.abs(Number(r.vat) - Number(r.base) * 0.2) < 0.01 ? 1 : 0}:${(g?.meta?.secenekler?.oran ?? []).length > 0 ? 1 : 0}`; }, beklenen: "1:1" },
+    ],
+  },
+  {
+    id: "M1", rol: "S",
+    yol: "Sistem → Modüller → Raporlar → 'Kalite Karnesi' anahtarını KAPAT", rota: "system/module-profile",
+    async yap({ git, gor, page }) {
+      await git("Modüller");
+      const satir = page().locator('[data-testid="rapor-satir:quality/scorecard"]').first(); await gor(satir, { sure: 20_000 });
+      await satir.scrollIntoViewIfNeeded();
+      const kutu = satir.locator('input[type="checkbox"]').first();
+      if (await kutu.isChecked()) { await kutu.click({ timeout: 15_000 }); await page().waitForTimeout(1200); }
+    },
+    async bekle({ page }) {
+      const kutu = page().locator('[data-testid="rapor-satir:quality/scorecard"] input[type="checkbox"]').first();
+      if (await kutu.isChecked()) throw new Error("anahtar hâlâ açık");
+    },
+    dogrula: [
+      { ad: "reports.closedKeys = [quality/scorecard] (GET /api/feature-flags)", uc: "/api/feature-flags", oku: (g) => (g?.data?.reportsClosedKeys ?? []).join(","), beklenen: "quality/scorecard" },
+      { ad: "system_settings satırı", sql: `SELECT value::text v FROM system_settings WHERE key='reports.closedKeys'`, oku: (r) => r[0]?.v ?? null, beklenen: (v) => typeof v === "string" && v.includes("quality/scorecard") },
+    ],
+  },
+  {
+    id: "M1b", rol: "P", gerektirir: ["M1"],
+    yol: "Yönetici: ⌘K 'Kalite Karnesi' → yok · Raporlar → Kalite → karo yok · API 403 REPORT_DISABLED", rota: "reports/quality",
+    async yap({ git, api, page }) {
+      // Palet: kapalı rapor aranınca çıkmamalı.
+      const kutu = page().getByPlaceholder("Sayfa, rapor, ayar ara...");
+      const acici = page().getByText("Ara veya komut", { exact: false }).first();
+      if (await acici.count()) await acici.click({ timeout: 10_000 }); else await page().keyboard.press("Meta+k");
+      await kutu.waitFor({ timeout: 10_000 }); await kutu.fill("Kalite Karnesi"); await page().waitForTimeout(700);
+      m1Olcum.paletSayisi = await page().locator("[cmdk-item]").filter({ hasText: /^Kalite Karnesi$/ }).count();
+      await page().keyboard.press("Escape"); await page().waitForTimeout(300);
+      // Hub → Kalite kategorisi: karo çizilmemeli (kategori diğer kalite raporlarıyla açık kalır).
+      await git("Raporlar");
+      const kategori = page().getByRole("link", { name: /^Kalite$/ }).or(page().getByText("Kalite", { exact: true })).filter({ visible: true }).first();
+      m1Olcum.kategoriKaroVar = await kategori.count();
+      if (m1Olcum.kategoriKaroVar) { await kategori.click({ timeout: 10_000 }); await page().waitForTimeout(800); }
+      m1Olcum.karoSayisi = await page().getByText("Kalite Karnesi", { exact: true }).filter({ visible: true }).count();
+      const r = await api(`/api/reports/quality/scorecard`);
+      m1Olcum.apiKapali = r.status; m1Olcum.apiKapaliKod = r.govde?.details?.code ?? null;
+    },
+    async bekle({ gor, page }) { await gor(page().getByText(/Fire Karnesi|Kalite/).filter({ visible: true }).first()); },
+    dogrula: [
+      { ad: "palet 'Kalite Karnesi' listelemez (ekran)", sql: `SELECT 1`, oku: () => m1Olcum.paletSayisi, beklenen: 0 },
+      { ad: "Raporlar → Kalite: karo çizilmez (ekran)", sql: `SELECT 1`, oku: () => m1Olcum.karoSayisi, beklenen: 0 },
+      { ad: "uç 403 REPORT_DISABLED (fail-closed; 404 değil — varlık doğrulanır)", sql: `SELECT 1`, oku: () => `${m1Olcum.apiKapali}:${m1Olcum.apiKapaliKod}`, beklenen: "403:REPORT_DISABLED" },
+    ],
+  },
+  {
+    id: "M1c", rol: "S", gerektirir: ["M1"],
+    yol: "Sistem → Modüller → 'Kalite Karnesi' anahtarını tekrar AÇ → uç 200", rota: "system/module-profile",
+    async yap({ git, gor, api, page }) {
+      await git("Modüller");
+      const satir = page().locator('[data-testid="rapor-satir:quality/scorecard"]').first(); await gor(satir, { sure: 20_000 });
+      await satir.scrollIntoViewIfNeeded();
+      const kutu = satir.locator('input[type="checkbox"]').first();
+      if (!(await kutu.isChecked())) { await kutu.click({ timeout: 15_000 }); await page().waitForTimeout(1200); }
+      m1Olcum.apiAcik = (await api(`/api/reports/quality/scorecard`)).status;
+    },
+    async bekle({ page }) {
+      const kutu = page().locator('[data-testid="rapor-satir:quality/scorecard"] input[type="checkbox"]').first();
+      if (!(await kutu.isChecked())) throw new Error("anahtar hâlâ kapalı");
+    },
+    dogrula: [
+      { ad: "closedKeys boş (GET /api/feature-flags)", uc: "/api/feature-flags", oku: (g) => (g?.data?.reportsClosedKeys ?? []).length, beklenen: 0 },
+      { ad: "uç yeniden 200", sql: `SELECT 1`, oku: () => m1Olcum.apiAcik, beklenen: 200 },
+    ],
+  },
+  {
+    id: "M3", rol: "S",
+    yol: "Sistem → Modüller → 'Emanet / konsinye mülkiyet modülünü aç' KAPAT → Kaydet (modül anahtarları Özellik Anahtarları'nda DEĞİL, Modüller sayfasında)", rota: "system/module-profile",
+    async yap({ git, gor, page }) {
+      await git("Modüller");
+      const sw = page().locator("label", { hasText: "Emanet / konsinye mülkiyet modülünü aç" }).locator('input[type="checkbox"]').filter({ visible: true }).first(); await gor(sw);
+      if (await sw.isChecked()) await sw.click();
+      const kaydet = page().getByRole("button", { name: "Kaydet", exact: true }).filter({ visible: true }).first();
+      if (await kaydet.isEnabled()) { await kaydet.click({ timeout: 15_000 }); await page().waitForTimeout(1500); }
+    },
+    async bekle() {},
+    dogrula: [
+      { ad: "emanetEnabled=false (GET /api/feature-flags)", uc: "/api/feature-flags", oku: (g) => g?.data?.emanetEnabled, beklenen: false },
+    ],
+  },
+  {
+    id: "M3b", rol: "P", gerektirir: ["M3"],
+    yol: "Yönetici: Kumaş Stoğu → Manuel Top Ekle → 'Sahibi' alanı ÇİZİLMEZ · API: kapalı modülde emanet top müşterisiz çuvala → başka müşteriye sevk → yine 409 (kapalı modül kapıyı KALDIRMAZ)", rota: "operations/rolls",
+    async yap({ git, tikla, gor, api, sql, page }) {
+      await git("Kumaş Stoğu");
+      const hamTab = page().getByRole("tab", { name: "Ham Stok" }).first();
+      if (await hamTab.count()) { await hamTab.click({ timeout: 10_000 }); await page().waitForTimeout(400); }
+      await tikla("Manuel Top Ekle");
+      const md = page().getByRole("dialog").filter({ hasText: "Manuel Top Ekle" }).last(); await gor(md);
+      m3Olcum.sahipAlani = await md.getByText("Sahibi (emanet mal ise müşteri)", { exact: false }).count();
+      await md.getByRole("button", { name: "İptal", exact: true }).click({ timeout: 10_000 });
+      await md.waitFor({ state: "detached", timeout: 10_000 }).catch(() => undefined);
+      // API: I7'de iade edilip depoya dönen emanet top (sahibi korunmuş) → müşterisiz çuval → başka müşteriye sevk.
+      const top = await sql(`SELECT r.barcode FROM rolls r JOIN customers c ON c.id=r."ownerCustomerId" WHERE c.name=$1 AND r.status IN ('WAREHOUSE','STOCK') AND r."sackId" IS NULL AND r."shipmentId" IS NULL ORDER BY r."updatedAt" DESC LIMIT 1`, [buyukTr(AD.musteri)]);
+      m3Olcum.barkod = top[0]?.barcode ?? null;
+      if (!m3Olcum.barkod) throw new Error("depoda serbest emanet top yok (I4/I7 koşmadı mı?)");
+      const diger = (await sql(`SELECT id FROM customers WHERE "isActive" AND name NOT LIKE $1 AND type IN ('CUSTOMER','BOTH') ORDER BY name LIMIT 1`, [`${ONEK}%`]))[0]?.id;
+      const c = await api(`/api/shipping/sacks`, { method: "POST", body: JSON.stringify({ clientToken: crypto.randomUUID() }) });
+      m3Olcum.cuval = c.status; const sackId = c.govde?.data?.id;
+      if (!sackId) throw new Error(`çuval açılamadı: ${c.status} ${JSON.stringify(c.govde).slice(0, 200)}`);
+      const o = await api(`/api/shipping/sacks/${sackId}/scan`, { method: "POST", body: JSON.stringify({ barcode: m3Olcum.barkod }) });
+      m3Olcum.okut = o.status;
+      const sv = await api(`/api/shipping/shipments`, { method: "POST", body: JSON.stringify({ sackIds: [sackId], customerId: diger, orderless: true, destination: "DOMESTIC", clientToken: crypto.randomUUID() }) });
+      m3Olcum.sevkDurum = sv.status; m3Olcum.sevkKod = sv.govde?.details?.code ?? null; m3Olcum.sevkTopVar = JSON.stringify(sv.govde ?? {}).includes(m3Olcum.barkod) ? 1 : 0;
+    },
+    async bekle() {},
+    dogrula: [
+      { ad: "Manuel Top Ekle: 'Sahibi' alanı çizilmez (ekran)", sql: `SELECT 1`, oku: () => m3Olcum.sahipAlani, beklenen: 0 },
+      { ad: "çuval açıldı (201/200) ve emanet top okutuldu (200)", sql: `SELECT 1`, oku: () => `${m3Olcum.cuval}:${m3Olcum.okut}`, beklenen: (v) => /^20[01]:20[01]$/.test(v) },
+      { ad: "KAPALI modülde de başka müşteriye sevk 409 OWNER_MISMATCH, top listelenir — kapalı modül kapıyı kaldırmaz", sql: `SELECT 1`, oku: () => `${m3Olcum.sevkDurum}:${m3Olcum.sevkKod}:${m3Olcum.sevkTopVar}`, beklenen: "409:OWNER_MISMATCH:1" },
+      { ad: "emanet top hâlâ sahibinde, sevk edilmedi (rolls)", sql: `SELECT (r."ownerCustomerId" IS NOT NULL) sahip, (r."shipmentId" IS NULL) sevksiz FROM rolls r WHERE r.barcode=$1`, params: () => [m3Olcum.barkod], oku: (r) => `${r[0]?.sahip}:${r[0]?.sevksiz}`, beklenen: "true:true" },
+    ],
+  },
+  {
+    id: "M3c", rol: "S", gerektirir: ["M3"],
+    yol: "Sistem → Modüller → Emanet modülünü tekrar AÇ", rota: "system/module-profile",
+    async yap({ git, gor, page }) {
+      await git("Modüller");
+      const sw = page().locator("label", { hasText: "Emanet / konsinye mülkiyet modülünü aç" }).locator('input[type="checkbox"]').filter({ visible: true }).first(); await gor(sw);
+      if (!(await sw.isChecked())) await sw.click();
+      const kaydet = page().getByRole("button", { name: "Kaydet", exact: true }).filter({ visible: true }).first();
+      if (await kaydet.isEnabled()) { await kaydet.click({ timeout: 15_000 }); await page().waitForTimeout(1500); }
+    },
+    async bekle() {},
+    dogrula: [
+      { ad: "emanetEnabled=true (GET /api/feature-flags)", uc: "/api/feature-flags", oku: (g) => g?.data?.emanetEnabled, beklenen: true },
+    ],
+  },
+  {
+    id: "M2", rol: "S",
+    yol: "Sistem → Modüller → 'Dokuma işi modülünü aç' KAPAT → Kaydet → Raporlar bölümünde dokuma satırları kilit bandıyla pasif", rota: "system/module-profile",
+    async yap({ git, gor, page }) {
+      await git("Modüller");
+      const sw = page().locator("label", { hasText: "Dokuma işi modülünü aç" }).locator('input[type="checkbox"]').filter({ visible: true }).first(); await gor(sw);
+      if (await sw.isChecked()) await sw.click();
+      const kaydet = page().getByRole("button", { name: "Kaydet", exact: true }).filter({ visible: true }).first();
+      if (await kaydet.isEnabled()) { await kaydet.click({ timeout: 15_000 }); await page().waitForTimeout(1500); }
+      // Aynı sayfanın Raporlar bölümü: dokuma raporları kilit bandı alır (anahtar pasif).
+      m2Olcum.kilitSayisi = await page().locator('[data-testid^="rapor-kilit:dokuma/"]').count();
+    },
+    async bekle() {},
+    dogrula: [
+      { ad: "dokumaEnabled=false (GET /api/feature-flags)", uc: "/api/feature-flags", oku: (g) => g?.data?.dokumaEnabled, beklenen: false },
+      { ad: "Raporlar bölümünde 4 dokuma raporu (randıman · duruş pareto · vardiya karnesi · karne) kilit bandıyla pasif (ekran)", sql: `SELECT 1`, oku: () => m2Olcum.kilitSayisi, beklenen: 4 },
+    ],
+  },
+  {
+    id: "M2b", rol: "P", gerektirir: ["M2"],
+    yol: "Yönetici: ⌘K 'Dokuma İşleri' → yok · GET /api/weaving-orders → 403 MODULE_DISABLED (tablet Bölüm Seçimi: d5)", rota: "operations/weaving-orders",
+    async yap({ api, page }) {
+      const kutu = page().getByPlaceholder("Sayfa, rapor, ayar ara...");
+      const acici = page().getByText("Ara veya komut", { exact: false }).first();
+      if (await acici.count()) await acici.click({ timeout: 10_000 }); else await page().keyboard.press("Meta+k");
+      await kutu.waitFor({ timeout: 10_000 }); await kutu.fill("Dokuma İşleri"); await page().waitForTimeout(700);
+      m2Olcum.paletDokuma = await page().locator("[cmdk-item]").filter({ hasText: /^Dokuma İşleri$/ }).count();
+      await page().keyboard.press("Escape");
+      const r = await api(`/api/weaving-orders?limit=1`);
+      m2Olcum.apiDurum = r.status; m2Olcum.apiKod = r.govde?.details?.code ?? null;
+    },
+    async bekle() {},
+    dogrula: [
+      { ad: "palet 'Dokuma İşleri' listelemez (ekran)", sql: `SELECT 1`, oku: () => m2Olcum.paletDokuma, beklenen: 0 },
+      { ad: "GET /api/weaving-orders → 403 MODULE_DISABLED", sql: `SELECT 1`, oku: () => `${m2Olcum.apiDurum}:${m2Olcum.apiKod}`, beklenen: "403:MODULE_DISABLED" },
+    ],
+  },
+  {
+    id: "M2c", rol: "S", gerektirir: ["M2"],
+    yol: "Sistem → Modüller → Dokuma modülünü tekrar AÇ → uç 200", rota: "system/module-profile",
+    async yap({ git, gor, api, page }) {
+      await git("Modüller");
+      const sw = page().locator("label", { hasText: "Dokuma işi modülünü aç" }).locator('input[type="checkbox"]').filter({ visible: true }).first(); await gor(sw);
+      if (!(await sw.isChecked())) await sw.click();
+      const kaydet = page().getByRole("button", { name: "Kaydet", exact: true }).filter({ visible: true }).first();
+      if (await kaydet.isEnabled()) { await kaydet.click({ timeout: 15_000 }); await page().waitForTimeout(1500); }
+      m2Olcum.acikDurum = (await api(`/api/weaving-orders?limit=1`)).status;
+      m2Olcum.kilitSonra = await page().locator('[data-testid^="rapor-kilit:dokuma/"]').count();
+    },
+    async bekle() {},
+    dogrula: [
+      { ad: "dokumaEnabled=true (GET /api/feature-flags)", uc: "/api/feature-flags", oku: (g) => g?.data?.dokumaEnabled, beklenen: true },
+      { ad: "GET /api/weaving-orders yeniden 200", sql: `SELECT 1`, oku: () => m2Olcum.acikDurum, beklenen: 200 },
+      { ad: "kilit bandı kalktı (ekran)", sql: `SELECT 1`, oku: () => m2Olcum.kilitSonra, beklenen: 0 },
     ],
   },
 ];
