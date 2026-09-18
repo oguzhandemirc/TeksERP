@@ -15,6 +15,19 @@ Kullanıcı testi güzergâhının **tablet adımlarını** gerçek cihazda (ya 
 | `ekran-agaci.mjs` | uiautomator XML'ini **paketsiz** ayrıştırır (`ayristir`), `bul/hepsiniBul/esle` seçicilerle düğüm arar, `dokunulabilir` metin düğümünün clickable atasını bulur, `ozet` log çıktısı. |
 | `surucu.mjs` | Ekran eylemleri (`bekle/bekleYok/tik/tikXY/yaz/numpadYaz/kaydir/ekran`) + adım koşucusu `kos()` → `sonuc.json` + görüntü klasörü. |
 | `api.mjs` | Backend doğrulama istemcisi (`fetch`, `X-Client-Type: web`) — "ekranda ne var" değil "**deftere ne yazıldı**". |
+| `guzergah.mjs` | Tablet koşucusu (d9'un panel sürücüsünün — `Electron/e2e/guzergah` — ikizi): d9 ortamını (`e2e-ortam.ts`) okur, cihazı bağlar, `adimlar.mjs`'i `kos()` ile koşar, backend `pg` (yeni paket YOK) ile `sql` doğrular. |
+| `adimlar.mjs` | Tablet adımları (A3·D1·D2 …) — `id` + `dogrula` d9'unkiyle AYNI, `yap` gövdesi adb fiilleriyle. |
+| `kos-sozlesme.mjs` | Sözleşme öz-testi: `kos()` çıktısı d9 `sonuc.json` biçimiyle birebir mi (`node` ile, cihazsız). |
+
+## Ortak E2E DSL (d9 ile) — `kos()` sözleşmesi
+
+Panel (d9) ve tablet sürücüsü AYNI adım nesnesini ve AYNI `sonuc.json`ı üretir; 1e iki raporu yan yana okur.
+
+- **Adım:** `{ id, rol('P'|'M'|'S'|'T'), yol, gerektirir?:string[], yap(ctx), bekle?(ctx), dogrula?:[{ad, uc|sql, params?, oku?, beklenen}] }`. `id` güzergâh harf+sayı, İKİ SÜRÜCÜDE AYNI; `dogrula` (backend) AYNI; `yap` gövdesi cihaza özgü.
+- **Üç değer:** `yesil · kirmizi · atlandi`. `gerektirir`deki bir id kırmızı/atlandıysa adım **atlandı** (kırmızı değil — "ölçemedim" ile "bozuk" ayrı).
+- **`beklenen`** sabit (=== / String eşitliği) ya da yüklem fonksiyonu; **`oku`** opsiyonel.
+- **Çıktı:** `out/<zaman>/sonuc.json` = `{ zaman, api, db, ozet:{yesil,kirmizi,atlandi}, adimlar:[{id,rol,yol,durum,sure_ms,dogrulama:[{ad,ok,beklenen,gorulen}],hata,ekran}] }` + adım başına PNG.
+- **Fiiller (ctx):** `git(key)` karo · `tikla(ad)` düğme/desc · `yaz`/`numpad` · `sec(alan,satır)` picker · `gor(metin)` görünür bekle · `bekle(ms)` · `ekran(ad)` · `api` · `sql`.
 
 ## RN → uiautomator eşlemesi (ÖLÇÜLDÜ 2026-09-18, Expo 54 / RN 0.81, emülatör API 15)
 
@@ -38,18 +51,25 @@ KENDİ `bounds` merkezine `tikXY` ile dokun.
 ## Koşum
 
 ```
-# emülatör (sürücü geliştirme; kendi izole backend'i):
+# 1) d9 ortamı (Teks-Erp/ içinden), bir kez + ayrı terminalde sunucu:
+cd Teks-Erp && npx tsx scripts/e2e-ortam.ts kur
+cd Teks-Erp && npx tsx scripts/e2e-ortam.ts sunucu      # backend :4110
+
+# 2) emülatör + TEST APK:
 ~/Library/Android/sdk/emulator/emulator -avd Medium_Tablet -no-snapshot-load &
 adb install -r <TEST-APK>
-node scripts/surucu/<güzergah>.mjs        # adım DSL'i + kos()
 
-# gerçek cihaz (kullanıcı testi devamı, backend :4000):
-adb -s <seri> ...   # Cihaz('<seri>')
+# 3) tablet güzergâhı (mobil/ içinden):
+node scripts/surucu/guzergah.mjs               # bütün T adımları
+node scripts/surucu/guzergah.mjs A3 D1 D2      # seçili
+#   --seri=<adb seri> · --host=<Mac LAN IP> (gerçek cihaz; emülatörde 10.0.2.2)
+
+# sözleşme öz-testi (cihazsız):
+node scripts/surucu/kos-sozlesme.mjs
 ```
 
-Adım DSL'i: `{ id:'D1', ad, yap: async (s)=>{...}, bekle?:[seçici…], dogrula?: async (api,s)=>{...} }`
-— `kos(s, adimlar, { api, durdurKirmizida })` her adımın önce/sonra görüntüsünü alır,
-kırmızıda `-hata.png` + `-agac.txt` düşer, `sonuc.json` yazar.
+`guzergah.mjs` cihazı bağlar, `adimlar.mjs`'i `kos()` ile koşar; her adımın görüntüsü alınır,
+kırmızıda `-agac.txt` düşer, `out/<zaman>/sonuc.json` d9 biçiminde yazılır (üst düzey ↑).
 
 ## Prova (2026-09-18, Medium_Tablet emülatör, Devere sayfalı Sar)
 

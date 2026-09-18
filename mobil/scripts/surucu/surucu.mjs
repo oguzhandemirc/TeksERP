@@ -145,55 +145,120 @@ export class Surucu {
   agacOzeti() {
     return ozet(this.sonDugumler.length ? this.sonDugumler : this.agac(), { enCok: 120 });
   }
+
+  /**
+   * BEŞ FİİL — panel sürücüsüyle (d9 `Electron/e2e/guzergah`) ORTAK sözlük, cihaz karşılıkları.
+   * Adım dosyası (`adimlar.mjs`) bunları kullanır; `id` + `dogrula` iki sürücüde AYNI, gövde farklı.
+   */
+  fiiller() {
+    return {
+      /** Bölüm Seçimi karosuna dokun (testID `modul-karo-<key>`; menü açıksa kapat). */
+      git: async (key, { ms = 8000 } = {}) => {
+        if (this.varMi({ desc: 'Menüyü kapat' })) await this.tik({ desc: 'Menüyü kapat' });
+        await this.tik({ id: `modul-karo-${key}` }, { ms });
+      },
+      /** Düğme/satır dokun — önce accessibilityLabel (desc), olmazsa görünen metin. */
+      tikla: async (ad, { ms = 8000 } = {}) => {
+        if (this.varMi({ desc: ad })) return this.tik({ desc: ad }, { ms });
+        return this.tik({ icerir: ad }, { ms });
+      },
+      /** Alana yaz (ASCII; numpad'li sayılar için `numpadYaz`). */
+      yaz: (sec, deger) => this.yaz(sec, String(deger)),
+      numpad: (sec, deger) => this.numpadYaz(sec, deger),
+      /** PickerModal: alanı aç, satır seç (satır desc'i tam etiket). */
+      sec: async (alanSec, satirDesc) => {
+        await this.tik(alanSec);
+        await this.tik({ desc: satirDesc });
+      },
+      /** "Bekle:" satırının makine karşılığı — görünür olmasını bekle. */
+      gor: (sec, { ms = 15000 } = {}) => this.bekle(typeof sec === 'string' ? { icerir: sec } : sec, { ms }),
+      bekle: (ms) => uyu(ms),
+      ekran: (ad) => this.ekran(ad),
+      surucu: this,
+    };
+  }
 }
 
 function secStr(sec) {
   return Object.fromEntries(Object.entries(sec).map(([k, v]) => [k, v instanceof RegExp ? String(v) : v]));
 }
 
-// ── Adım koşucusu ────────────────────────────────────────────────────────────
+// ── Adım koşucusu — d9 panel sürücüsüyle ORTAK sözleşme (sonuc.json birebir) ──
 /**
+ * Adım: `{ id, rol, yol, gerektirir?, yap(ctx), bekle?(ctx), dogrula?:[{ad, uc|sql, params?, oku?, beklenen}] }`.
+ * Üç değerli: yesil · kirmizi · atlandi (ön koşulu düşen adım "kırmızı" değil "atlandı"). `dogrula` satırı
+ * `{ad, ok, beklenen, gorulen}` üretir; `beklenen` sabit ya da yüklem. Sonuç d9 biçimi:
+ * `{ zaman, api, db, ozet:{yesil,kirmizi,atlandi}, adimlar:[…] }`.
  * @param {Surucu} s
- * @param {Array<{id:string, ad?:string, yap?:(s:Surucu, ctx:any)=>Promise<void>, bekle?:object[], dogrula?:(api:any, s:Surucu, ctx:any)=>Promise<any>}>} adimlar
- * @param {{ api?: any, ctx?: any, durdurKirmizida?: boolean }} ayar
+ * @param {Array<object>} adimlar
+ * @param {{ ciktiDizini: string, api: {get:(y:string)=>Promise<any>}, sql?: (q:string,p?:any[])=>Promise<any[]>, apiUrl?: string, dbName?: string, ctx?: object, adimZamanAsimiMs?: number }} ayar
  */
-export async function kos(s, adimlar, { api, ctx = {}, durdurKirmizida = false } = {}) {
-  const sonuc = { baslangic: new Date().toISOString(), cihaz: s.cihaz.seri ?? null, adimlar: [] };
+export async function kos(s, adimlar, { ciktiDizini, api, sql, apiUrl = null, dbName = null, ctx = {}, adimZamanAsimiMs = 90_000 } = {}) {
+  mkdirSync(ciktiDizini, { recursive: true });
+  const zaman = new Date().toISOString().replace(/[:.]/g, '-');
+  const sonuclar = [];
+  const atlandi = new Set();
+  const f = s.fiiller();
   for (const adim of adimlar) {
-    const bas = Date.now();
-    const kayit = { id: adim.id, ad: adim.ad ?? '', durum: 'yesil', sureMs: 0, hata: null, dogrulama: null, ekran: {} };
-    s.log(`▶ ${adim.id} ${adim.ad ?? ''}`);
-    try {
-      kayit.ekran.once = s.ekran(`${adim.id}-once`);
-      if (adim.yap) await adim.yap(s, ctx);
-      for (const sec of adim.bekle ?? []) await s.bekle(sec, { ms: sec.ms ?? 8000 });
-      kayit.ekran.sonra = s.ekran(`${adim.id}-sonra`);
-      if (adim.dogrula) kayit.dogrulama = await adim.dogrula(api, s, ctx);
-      s.log(`  ✅ ${adim.id} (${Date.now() - bas} ms)`);
-    } catch (e) {
-      kayit.durum = 'kirmizi';
-      kayit.hata = e instanceof Error ? e.message : String(e);
-      try {
-        kayit.ekran.hata = s.ekran(`${adim.id}-hata`);
-        writeFileSync(join(s.ekranDizini, `${adim.id}-agac.txt`), s.agacOzeti());
-      } catch {
-        /* görüntü alınamadıysa hata metni yeter */
-      }
-      s.log(`  ❌ ${adim.id}: ${kayit.hata}`);
-      if (durdurKirmizida) {
-        kayit.sureMs = Date.now() - bas;
-        sonuc.adimlar.push(kayit);
-        break;
-      }
+    const t0 = Date.now();
+    const kayit = { id: adim.id, rol: adim.rol ?? null, yol: adim.yol ?? '', durum: 'kirmizi', sure_ms: 0, dogrulama: [], hata: null, ekran: null };
+    const onKosulEksik = (adim.gerektirir ?? []).filter((g) => atlandi.has(g) || sonuclar.find((x) => x.id === g)?.durum === 'kirmizi');
+    if (onKosulEksik.length) {
+      kayit.durum = 'atlandi';
+      kayit.hata = `ön koşul düştü: ${onKosulEksik.join(', ')}`;
+      atlandi.add(adim.id);
+      sonuclar.push(kayit);
+      s.log(`⏭  ${adim.id} atlandı — ${kayit.hata}`);
+      continue;
     }
-    kayit.sureMs = Date.now() - bas;
-    sonuc.adimlar.push(kayit);
+    const adimCtx = { ...f, api, sql, ...ctx };
+    try {
+      await Promise.race([
+        (async () => {
+          if (adim.yap) await adim.yap(adimCtx);
+          if (adim.bekle) await adim.bekle(adimCtx);
+        })(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error(`adım ${adimZamanAsimiMs / 1000} sn'de bitmedi`)), adimZamanAsimiMs)),
+      ]);
+      for (const d of adim.dogrula ?? []) {
+        const satir = { ad: d.ad, ok: false, beklenen: typeof d.beklenen === 'function' ? '<yüklem>' : String(d.beklenen), gorulen: null };
+        try {
+          const gorulen = d.sql ? await sql(d.sql, d.params ?? []) : await api.get(d.uc);
+          const deger = d.oku ? d.oku(gorulen) : gorulen;
+          satir.gorulen = typeof deger === 'object' ? JSON.stringify(deger).slice(0, 200) : String(deger);
+          satir.ok = typeof d.beklenen === 'function' ? Boolean(d.beklenen(deger)) : deger === d.beklenen || String(deger) === String(d.beklenen);
+        } catch (e) {
+          satir.gorulen = `HATA: ${String(e).slice(0, 200)}`;
+        }
+        kayit.dogrulama.push(satir);
+      }
+      kayit.durum = kayit.dogrulama.every((d) => d.ok) ? 'yesil' : 'kirmizi';
+      if (kayit.durum === 'kirmizi' && kayit.dogrulama.length) kayit.hata = 'backend doğrulaması tutmadı';
+    } catch (e) {
+      kayit.hata = String(e?.message ?? e).split('\n')[0].slice(0, 400);
+      atlandi.add(adim.id);
+    } finally {
+      kayit.sure_ms = Date.now() - t0;
+      try {
+        kayit.ekran = `${adim.id}.png`;
+        s.cihaz.ekran(ciktiDizini, adim.id);
+        if (kayit.durum !== 'yesil') writeFileSync(join(ciktiDizini, `${adim.id}-agac.txt`), s.agacOzeti());
+      } catch {
+        kayit.ekran = null;
+      }
+      sonuclar.push(kayit);
+      const isaret = kayit.durum === 'yesil' ? '✅' : kayit.durum === 'atlandi' ? '⏭ ' : '❌';
+      s.log(`${isaret} ${adim.id} · ${adim.rol ?? '?'} · ${adim.yol ?? ''}  (${(kayit.sure_ms / 1000).toFixed(1)} sn)${kayit.hata ? ` — ${kayit.hata}` : ''}`);
+      for (const d of kayit.dogrulama) s.log(`     ${d.ok ? '✓' : '✗'} ${d.ad}: beklenen ${d.beklenen} · görülen ${d.gorulen}`);
+    }
   }
-  sonuc.bitis = new Date().toISOString();
-  sonuc.ozet = {
-    yesil: sonuc.adimlar.filter((a) => a.durum === 'yesil').length,
-    kirmizi: sonuc.adimlar.filter((a) => a.durum === 'kirmizi').length,
+  const ozetSonuc = {
+    yesil: sonuclar.filter((x) => x.durum === 'yesil').length,
+    kirmizi: sonuclar.filter((x) => x.durum === 'kirmizi').length,
+    atlandi: sonuclar.filter((x) => x.durum === 'atlandi').length,
   };
-  writeFileSync(join(s.ekranDizini, 'sonuc.json'), JSON.stringify(sonuc, null, 2));
+  const sonuc = { zaman, api: apiUrl, db: dbName, ozet: ozetSonuc, adimlar: sonuclar };
+  writeFileSync(join(ciktiDizini, 'sonuc.json'), JSON.stringify(sonuc, null, 2));
+  s.log(`\n=== Sonuç: ${ozetSonuc.yesil} yeşil · ${ozetSonuc.kirmizi} kırmızı · ${ozetSonuc.atlandi} atlandı → ${ciktiDizini}/sonuc.json ===`);
   return sonuc;
 }
