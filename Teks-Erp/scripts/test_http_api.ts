@@ -20,6 +20,8 @@ import app from "../src/app";
 import prisma from "../src/lib/prisma";
 import { ensureTestAdmin } from "./fixture-test-user";
 
+import { cleanupTestCustomers } from "./fixture-customer-cleanup";
+
 let pass = 0;
 let fail = 0;
 function check(label: string, ok: boolean, extra = "") {
@@ -204,15 +206,8 @@ async function main() {
       check(`[403] GET ${rt.path} yetkisiz`, forbidden.status === 403, `status=${forbidden.status} (${rt.guard})`);
     }
   } finally {
-    // Z-A: kart hesabıyla doğar (finans açıkken) — hesap (Restrict FK) karttan ÖNCE; yoksa `.catch` kalıntı gizler.
-    const kartlar = [createdCustomerId, dupCustomerId].filter((x): x is string => !!x);
-    if (kartlar.length > 0) await prisma.cariAccount.deleteMany({ where: { customerId: { in: kartlar } } }).catch(() => {});
-    if (createdCustomerId) {
-      await prisma.customer.delete({ where: { id: createdCustomerId } }).catch(() => {});
-    }
-    if (dupCustomerId) {
-      await prisma.customer.delete({ where: { id: dupCustomerId } }).catch(() => {});
-    }
+    // Z-A: kart hesabıyla doğar (finans açıkken) — hesap karttan ÖNCE, hata YUTULMAZ (kalıntı = kırmızı).
+    await cleanupTestCustomers([createdCustomerId, dupCustomerId]);
     if (lowUserId) {
       await prisma.userPermission.deleteMany({ where: { userId: lowUserId } }).catch(() => {});
       // ⚠️ ÖNCE OTURUMLAR. `sessions_userId_fkey` RESTRICT'tir ve test bu

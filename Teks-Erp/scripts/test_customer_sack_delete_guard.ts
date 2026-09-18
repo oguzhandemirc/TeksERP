@@ -13,6 +13,8 @@ import prisma from "../src/lib/prisma";
 import { CustomerService } from "../src/services/customer.service";
 import { dailyCodePrefix, nextDailySeq } from "../src/utils/code-format";
 
+import { cleanupTestCustomers } from "./fixture-customer-cleanup";
+
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = "") {
   if (ok) { pass++; console.log(`✅ ${label}${extra ? " — " + extra : ""}`); }
@@ -75,7 +77,7 @@ async function main() {
     check("müşteri artık DB'de yok", goneNow === null);
   } finally {
     await prisma.sack.deleteMany({ where: { id: sack.id } }).catch(() => {});
-    await prisma.customer.deleteMany({ where: { id: customer.id } }).catch(() => {});
+    await cleanupTestCustomers([customer.id]); // hesap → şube → kart, hata yutulmaz
   }
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

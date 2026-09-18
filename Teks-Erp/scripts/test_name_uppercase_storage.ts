@@ -17,6 +17,7 @@
 // "IPLIK" DEĞİL. Barkod/kod tarafında kural TERSİDİR (ASCII), karıştırma.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
+import { cleanupTestCustomers } from "./fixture-customer-cleanup";
 import {
   normalizeDisplayName,
   foldNameForCompare,
@@ -169,7 +170,7 @@ async function main(): Promise<void> {
       .deleteMany({ where: { subcontractorId: { in: cleanup.subIds } } })
       .catch(() => {});
     await prisma.subcontractor.deleteMany({ where: { id: { in: cleanup.subIds } } }).catch(() => {});
-    await prisma.customer.deleteMany({ where: { id: { in: cleanup.customerIds } } }).catch(() => {});
+    await cleanupTestCustomers(cleanup.customerIds); // Z-A: hesap karttan önce, hata yutulmaz
   }
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();

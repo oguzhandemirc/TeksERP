@@ -12,6 +12,19 @@ import { AppError } from "./app-error";
 
 const MAX_ATTEMPTS = 5;
 
+/**
+ * P2002'nin hedefi KOD kolonu mu — yalnız o retry'a değer (taze sıra no ile çözülür). Başka bir tekillik
+ * (ör. `nameFold` canlı seddi, vergi no) retry ile ÇÖZÜLMEZ: beş deneme boşa döner ve operatör yanıltıcı
+ * "Barkod üretimi 5 denemede başarısız" 409'u görür (ölçüldü 2026-09-18: kalıntı kart aynı adla ikinci
+ * koşumda tam bunu üretti). Hedef Prisma'da dizi (`["code"]`) ya da index adı string'i olabilir.
+ */
+export function p2002TargetsCode(err: Prisma.PrismaClientKnownRequestError, codeField = "code"): boolean {
+  const t = (err.meta as { target?: unknown } | undefined)?.target;
+  const parts = Array.isArray(t) ? t.map(String) : typeof t === "string" ? [t] : [];
+  if (parts.length === 0) return true; // hedef bilinmiyor → geriye uyumlu: retry
+  return parts.some((p) => p === codeField || p.toLowerCase().includes(`_${codeField.toLowerCase()}_`) || p.toLowerCase().endsWith(`_${codeField.toLowerCase()}_key`));
+}
+
 export async function withBarcodeRetry<T>(
   fn: () => Promise<T>,
   maxAttempts: number = MAX_ATTEMPTS,

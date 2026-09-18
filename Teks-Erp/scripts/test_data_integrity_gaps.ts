@@ -24,6 +24,7 @@ import { ProductRecipeService } from "../src/services/product-recipe.service";
 import { RouteService, ROUTE_SERVICE_CONFIG } from "../src/services/route.service";
 import { ItemService } from "../src/services/item.service";
 import { ColorService } from "../src/services/color.service";
+import { cleanupTestCustomers } from "./fixture-customer-cleanup";
 
 let pass = 0;
 let fail = 0;
@@ -166,8 +167,8 @@ async function main() {
     await prisma.permissionTemplate.deleteMany({ where: { id: { in: made.templateIds } } }).catch(() => {});
     await prisma.userPermission.deleteMany({ where: { userId: { in: made.userIds } } }).catch(() => {});
     await prisma.user.deleteMany({ where: { id: { in: made.userIds } } }).catch(() => {});
-    await prisma.customerBranch.deleteMany({ where: { customerId: { in: made.customerIds } } }).catch(() => {});
-    await prisma.customer.deleteMany({ where: { id: { in: made.customerIds } } }).catch(() => {});
+    // Z-A: kart hesabıyla doğar — hesap → şube → kart; hata YUTULMAZ.
+    await cleanupTestCustomers(made.customerIds);
   }
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

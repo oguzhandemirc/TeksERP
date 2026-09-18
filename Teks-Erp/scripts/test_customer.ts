@@ -17,6 +17,7 @@ import prisma from "../src/lib/prisma";
 import { CustomerService } from "../src/services/customer.service";
 import { AppError } from "../src/utils/app-error";
 import type { Request } from "express";
+import { cleanupTestCustomers } from "./fixture-customer-cleanup";
 
 let pass = 0;
 let fail = 0;
@@ -284,10 +285,9 @@ async function main() {
     const longLeak = await prisma.customer.findFirst({ where: { name: "TEST Uzun Şube Adı" } });
     check("uzun-ad reddi → müşteri sızmadı", longLeak === null);
   } finally {
-    // Kendi yarattığını temizle (audit log SystemLog'da kalır — append-only).
-    for (const id of createdIds) {
-      await prisma.customer.delete({ where: { id } }).catch(() => {});
-    }
+    // Kendi yarattığını temizle (audit log SystemLog'da kalır — append-only). Z-A: kart hesabıyla doğar —
+    // hesap karttan önce; hata YUTULMAZ (kalıntı = kırmızı, sonraki paketi vergi-no seddiyle düşürüyordu).
+    await cleanupTestCustomers(createdIds);
   }
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

@@ -25,6 +25,7 @@ import {
   SubcontractorCategoryService,
 } from "../src/services/subcontractor-management.service";
 import { CustomerBranchService } from "../src/services/customer-branch.service";
+import { cleanupTestCustomers } from "./fixture-customer-cleanup";
 
 let pass = 0;
 let fail = 0;
@@ -405,8 +406,7 @@ async function main() {
     // Cleanup — test kendi yarattığını siler (FK sırasına dikkat).
     await prisma.machine.deleteMany({ where: { id: { in: created.machineIds } } }).catch(() => {});
     await prisma.station.deleteMany({ where: { id: { in: created.stationIds } } }).catch(() => {});
-    await prisma.customerBranch.deleteMany({ where: { customerId: { in: created.customerIds } } }).catch(() => {});
-    await prisma.customer.deleteMany({ where: { id: { in: created.customerIds } } }).catch(() => {});
+    await cleanupTestCustomers(created.customerIds); // Z-A: hesap → şube → kart, hata yutulmaz
     await prisma.subcontractorToCategory.deleteMany({ where: { subcontractorId: { in: created.subIds } } }).catch(() => {});
     await prisma.subcontractor.deleteMany({ where: { id: { in: created.subIds } } }).catch(() => {});
     await prisma.subcontractorCategory.deleteMany({ where: { id: { in: created.subCatIds } } }).catch(() => {});

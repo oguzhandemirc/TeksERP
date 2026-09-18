@@ -11,9 +11,9 @@ import { AppError } from "../utils/app-error";
 import { validateName, validateCode } from "../lib/string-validators";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import prisma from "../lib/prisma";
-import { OrderStatus, ShipmentDestination } from "@prisma/client";
+import { OrderStatus, Prisma, ShipmentDestination } from "@prisma/client";
 import { dailyCodePrefix, nextDailySeq, foldCodeForCompare } from "../utils/code-format";
-import { withBarcodeRetry } from "../utils/barcode-retry";
+import { p2002TargetsCode, withBarcodeRetry } from "../utils/barcode-retry";
 import { parseQueryParams, readFilterList } from "../utils/query-parser";
 import { applyPartnerRoles, roleListWhere, type PartnerRoles } from "./helpers/partner-roles.helper";
 import { createProfileForCustomerTx, PROFILE_CUSTOMER_TYPE_MESSAGE } from "./subcontractor-management.service";
@@ -227,19 +227,28 @@ export class CustomerService extends BaseService {
     const roles = applyPartnerRoles(data, null);
     if (wantsProfile && !roles.isSupplierRole) throw AppError.badRequest(PROFILE_CUSTOMER_TYPE_MESSAGE);
     const branches = validateAndShapeBranches(data.branches);
-    return withBarcodeRetry(async () => {
-      data.code = await nextCustomerCode();
-      this.applyStringFields(data, true);
-      this.applyCardFields(data);
-      const validated = this.validateTaxNumber(data.taxNumber);
-      if (validated !== undefined) {
-        data.taxNumber = validated;
-        await this.assertTaxNumberAvailable(validated);
+    // Retry YALNIZ kod çakışmasına (taze sıra no çözer); `nameFold` canlı seddi / vergi no P2002'si retry ile çözülmez —
+    // beş boş deneme + "Barkod üretimi başarısız" yerine dürüst 409 (ad-mükerrer guard'ı yarışta ya da kalıntıda kaçırmış olabilir).
+    try {
+      return await withBarcodeRetry(async () => {
+        data.code = await nextCustomerCode();
+        this.applyStringFields(data, true);
+        this.applyCardFields(data);
+        const validated = this.validateTaxNumber(data.taxNumber);
+        if (validated !== undefined) {
+          data.taxNumber = validated;
+          await this.assertTaxNumberAvailable(validated);
+        }
+        if (branches) data.branches = branches;
+        else delete data.branches;
+        return this.createCardTx(data, userId, { wantsProfile, finance: opts?.finance ?? null });
+      }, undefined, (err) => p2002TargetsCode(err), "Müşteri kodu");
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        throw AppError.conflict(`'${String(data.name ?? "").trim()}' adında bir müşteri zaten var (ad tekildir; büyük/küçük harf ve boşluk farkı sayılmaz).`, { code: "CUSTOMER_NAME_DUPLICATE" });
       }
-      if (branches) data.branches = branches;
-      else delete data.branches;
-      return this.createCardTx(data, userId, { wantsProfile, finance: opts?.finance ?? null });
-    });
+      throw e;
+    }
   }
 
   /**

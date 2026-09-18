@@ -20,6 +20,8 @@ import { buildTextSearch } from "../src/utils/query-parser";
 import { CustomerService } from "../src/services/customer.service";
 import { Prisma } from "@prisma/client";
 
+import { cleanupTestCustomers } from "./fixture-customer-cleanup";
+
 let pass = 0;
 let fail = 0;
 function check(label: string, cond: boolean, extra = ""): void {
@@ -210,7 +212,7 @@ async function main(): Promise<void> {
       .deleteMany({ where: { itemId: { in: createdItems } } })
       .catch(() => {});
     await prisma.item.deleteMany({ where: { id: { in: createdItems } } }).catch(() => {});
-    await prisma.customer.deleteMany({ where: { id: { in: created } } }).catch(() => {});
+    await cleanupTestCustomers(created); // hesap → şube → kart, hata yutulmaz
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

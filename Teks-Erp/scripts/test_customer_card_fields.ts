@@ -17,6 +17,7 @@ import prisma from "../src/lib/prisma";
 import { CustomerService } from "../src/services/customer.service";
 import { AppError } from "../src/utils/app-error";
 import type { Request } from "express";
+import { cleanupTestCustomers } from "./fixture-customer-cleanup";
 
 let pass = 0;
 let fail = 0;
@@ -176,9 +177,8 @@ async function main() {
     const nfRow = await prisma.customer.findUnique({ where: { id: nfId }, select: { defaultDestination: true } });
     check("8e alan gönderilmedi → null (bugünkü davranış)", nfRow?.defaultDestination === null);
   } finally {
-    for (const id of createdIds) {
-      await prisma.customer.delete({ where: { id } }).catch(() => {});
-    }
+    // Z-A: kart hesabıyla doğar — hesap karttan önce; hata YUTULMAZ (kalıntı = kırmızı).
+    await cleanupTestCustomers(createdIds);
   }
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
