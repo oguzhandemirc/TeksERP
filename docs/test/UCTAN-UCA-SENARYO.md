@@ -17,6 +17,9 @@
 - **Seçici modalları 50'şer yükler:** TEST kayıtları ilk sayfada değildir — tedarikçi/ürün/müşteri modalında ÖNCE arama kutusuna ("Kod, ad…" / "Ad / kod / vergi no ara…") adı yaz, sonra satıra tıkla. Güzergâhın eski metninde bu adım yoktu; kullanıcı da yaşadı (1e).
 - **Sürücü ön koşulu ÜÇ SONUÇLU:** koşucu başlamadan E2E DB'sinin ağaçtaki migration'larla hizalı olduğunu ölçer; geri kalmışsa koşum "kırmızı" değil **ÖLÇÜLEMEZ** der ve durur (ölçüldü 2026-09-18: `StationKind.WARPING` e2e DB'de yoktu, D0 sessizce 400 aldı — ürün hatası sanılabilirdi). Çare `e2e-ortam.ts kur` (idempotent).
 - **"Bilinen ve beklenen"** (kırmızı DEĞİL, not): çuval etiketinde iç not bu sürümde hâlâ basılır · panelde levent olay/tüketim satırları için ayrı ekran yok (yalnız "Tezgah kaydını geri al" listesinde).
+- **"Bilerek kırmızı" (İHLAL ölçümü):** üç adım ürün düzelene kadar KIRMIZI kalır ve bu kırmızı sürücü/ortam hatası DEĞİL, §3.1'de dilimi olan bir bulgudur — **N6** (iade sonrası fatura taslağı NET) · **N2(b)** (sevki geri al önizlemesi çuval no basmıyor) · **L4** (rapor eksen süzgeçleri sunucuya gitmiyor). Bir koşum raporunda bu üçü dışında kırmızı görürsen sınıfını yaz (ürün / ortam / sürücü).
+- **Koşum düzeni:** tam zincir tek komut — `cd Electron && E2E_ONEK=TESTx node e2e/guzergah/guzergah.mjs` (~17 dk, 51 adım, rol başına yeniden giriş; `<id…>` ile alt küme). Sıra dizi sırasıdır (I4 → J1 → I7 → N6 → J2 → J3 → J4 → J5 → M1 → M3 → M2 → L4 → K1 → K3 → N3 → O7 → N1 → N2 → S3 · S4 · T1 → P1 · P5 · P4); adımlar aynı önekte tekrar koşabilir (fark ölçümü `…Once`). Ortam yenilemesi: `kur` (migration'lar) → `npx prisma generate` → backend (yalnız kendi PID) → `npx electron-vite build` (`out/` bayatsa ekran güzergâhtan sapar).
+- **Sürücü tuzakları (ölçüldü):** kalıcı sekmeler aynı metni gizli DOM'da taşır → `filter({ visible: true })` ve TAM ad · seçici satırı "KOD — AD" tek düğüm → içerme eşleşmesi · rapor eksen seçicisi `eksenSec()` (seçenekler gelene dek pasif; seçim tetikleyiciye yansıyana dek bekle) · şerh/metin ölçümleri sabit uyku değil `getByText(...).waitFor` · giriş ekranı "Sunucuya ulaşılamadı" paneliyle açılabilir (adres kaydı sondayı tetiklemez → "Sunucuyu Ara") · satır menüleri sağ tık · operatör hesabı masaüstü kanalına kapalı (API sondası tablet kanalıyla) · Playwright çağrı günlüğü `sonuc.json.hataAyrinti`.
 
 ---
 
@@ -288,10 +291,14 @@ PO onay/release adımı · zamanlanmış rapor gönderimi · backflush (otomatik
 
 | Kapsam | Adım sayısı | Otomatik ✅ | Yazılacak ⏳ | Elle ✋ |
 |---|---|---|---|---|
-| Ana zincir A–M (panel) | 43 | 33 (A1 · A2 · B1–B4 · C1–C8 · D0 · E1–E3 · F1 · G1 · I4 · J1 · I7 · J2–J5 · K1 · K3 · L4 · M1–M3 [her biri 3 alt adım: kapat S · ölç P · aç S] — ~10 dk; roller S · P · M; koşum sırası I4 → J1 → I7 → N6 → J2 → J3 → J4 → J5 → M1 → M3 → M2; **TESTM tam koşum 2026-09-18 (39 adım, ~13 dk): 38 yeşil · 1 kırmızı (N6 = İHLAL)**; sonra A2 · N1 · N3 · O7 eklendi, yeşil) | 1 | 9 (belge önizleme, yazıcı, Wi-Fi, Excel/PDF) |
+| Ana zincir A–M (panel) | 43 | 33 (A1 · A2 · B1–B4 · C1–C8 · D0 · E1–E3 · F1 · G1 · I4 · J1 · I7 · J2–J5 · K1 · K3 · L4 · M1–M3 [her biri 3 alt adım: kapat S · ölç P · aç S]; roller S · P · M) | 1 | 9 (belge önizleme, yazıcı, Wi-Fi, Excel/PDF) |
 | Ana zincir (tablet, d5) | 17 | 0 | 17 | — |
 | Dallar N–T | 31 | 17 (N1 · N2 · N3 · O7 · P1(+P2/P3) · P4 · P5 · S3 · S4 · T1 ayrı adım; N5 · O2 · O4 · O6 zincir içinde; N6 · N2(b) · L4 ❌ İHLAL ölçüyor) | 11 (tablet: N4 · O1 · O3 · O5 · Q1–Q4 · R1–R3 · S1 · S6 · T2) | 3 |
 
-**Sayılar ölçülecektir:** bu tablo belge yazıldığı andaki plandır (2026-09-18); sürücü her koşumda `sonuc.json` üretir ve gerçek kapsam ORADAN okunur — bir koşumun çıktısından kapsam iddiası türetilmez, popülasyonu bu belge tanımlar.
+**Son tam koşum (2026-09-18, önek TESTN, origin/main `fd6bedf7` + P/S/T):** 51 adım · **46 yeşil · 4 kırmızı** (N6 · N2b bilerek; A2 ve L4 sürücü — A2 düzeltildi, L4 düzeltilince gerçek İHLAL ortaya çıktı → artık bilerek kırmızı 3) · 0 atlandı · ~17 dk. Sürücü her koşumda `sonuc.json` üretir ve gerçek kapsam ORADAN okunur — bir koşumun çıktısından kapsam iddiası türetilmez, popülasyonu bu belge tanımlar.
+
+**Bulgu sayacı (§3.1, d9 sürücü koşumları):** B 2 (iade sonrası fatura taslağı net · rapor eksen süzgeçleri sunucuya gitmiyor) · K 11 · veri boşluğu 1 (iptallerde sebep kodu yok). Dağıtım 1e'nin sabah listesinde.
 
 **Kabul ölçütü (test bitti demek için):** ① A–M ana zincir yeşil ya da her kırmızının sınıfı yazılı (ürün hatası / ortam / belge farkı) · ② N–T dallarından en az O · P · S tam · ③ kapanış listesi (3.1–3.3) 1e tarafından dilimlere çevrilmiş · ④ tablet ve panel `sonuc.json`ları aynı DB'de, aynı gün.
+
+**Durum (2026-09-18 sabah):** ① ✅ panel A–M yeşil, her kırmızının sınıfı yazılı · ② panelde ölçülebilen O (O2 · O4 · O6 · O7) · P (P1–P5) · S (S3 · S4) ✅; O1/O3/O5 · S1/S6 tablet/tezgah verisi bekler · ③ 1e sabah listesinde (01 · 6e · 5e/9b dilimleri) ⏳ · ④ tablet `sonuc.json` d5'te (UiScrollable sonrası) ⏳.
