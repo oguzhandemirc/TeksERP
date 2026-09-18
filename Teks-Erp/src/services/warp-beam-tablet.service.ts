@@ -12,7 +12,7 @@ import { yarnLotBalancesTx } from "./helpers/yarn-lot.helper";
 import { readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, resolveBeamWeavingLinkRequired } from "./system-setting.service";
 import { listOpenInHouseWeavingOrders, type MachineRunTabletContextDto } from "./helpers/machine-run-suggest.helper";
 import { readDevereAutoConsume, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired } from "./system-setting.service";
-import { lastWindDefaults, type LastWindDefault } from "./helpers/tablet-prefill.helper";
+import { lastWindDefaults, type LastWindDefault } from "./helpers/warp-beam-wind-defaults.helper";
 
 /**
  * Tablet form bağlamı — TEK uç, TEK izin (`mobile:devere`), DEVERE-LEVENT-TARAMASI §11 D2.
