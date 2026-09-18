@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertTriangle, ChevronRight, Palette, Sparkles } from "lucide-react";
+import { AlertTriangle, ChevronRight, Palette, Ruler, Sparkles } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
@@ -30,6 +30,10 @@ import {
 } from "./schema";
 import { buildItemPayload, itemCarriesAllowedLists } from "./itemPayload.helper";
 import { AllowedColorsDialog } from "./AllowedColorsDialog";
+import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
+import { warpSpecService } from "@/pages/WarpSpecs/service";
+import type { WarpSpec } from "@/pages/WarpSpecs/types";
+import { useDevereEnabled } from "@/hooks/usePricingEnabled";
 import { AllowedPropertiesDialog } from "./AllowedPropertiesDialog";
 
 import { RecordInfoButton } from "@/components/RecordInfoButton";
@@ -64,6 +68,7 @@ export function ItemFormDialog({
         unit: initial.unit,
         isActive: initial.isActive,
         linearDensityDen: initial.linearDensityDen ?? "",
+        warpSpecId: initial.warpSpecId ?? "",
         allowedColorIds: initial.allowedColors?.map((c) => c.colorId) ?? [],
         allowedPropertyIds:
           initial.allowedProperties?.map((p) => p.propertyId) ?? [],
@@ -85,6 +90,7 @@ export function ItemFormDialog({
   }, [open, initial?.id]);
 
   const itemType = form.watch("itemType");
+  const devereEnabled = useDevereEnabled();
   const derivedUnit = unitForItemType[itemType] ?? "MT";
 
   useEffect(() => {
@@ -244,6 +250,31 @@ export function ItemFormDialog({
                 inputMode="decimal"
                 placeholder="150"
                 {...form.register("linearDensityDen")}
+              />
+            </FormField>
+          )}
+
+          {/* E4 (2026-09-18): kumaşın varsayılan çözgü kartı — dokuma işi formu ve sunucu ön-dolumu buradan okur;
+              yalnız KUMAŞ + devere açıkken çizilir (kapalıyken alan hiç yok = bugünkü form). */}
+          {itemType === ItemType.FABRIC && devereEnabled && (
+            <FormField label="Varsayılan çözgü kartı (opsiyonel)" error={form.formState.errors.warpSpecId} hint="Dokuma işi açarken çözgü kartı bundan ön-dolar; boş = her işte elle seçilir">
+              <Controller
+                control={form.control}
+                name="warpSpecId"
+                render={({ field }) => (
+                  <EntityPickerModal<WarpSpec>
+                    value={field.value || null}
+                    onChange={(id) => field.onChange(id ?? "")}
+                    service={warpSpecService}
+                    queryKey="warp-specs-item-default"
+                    getLabel={(w) => w.name}
+                    getSubLabel={(w) => w.code}
+                    icon={Ruler}
+                    nullable
+                    noneLabel="Çözgü kartı yok"
+                    placeholder="Çözgü kartı seç"
+                  />
+                )}
               />
             </FormField>
           )}

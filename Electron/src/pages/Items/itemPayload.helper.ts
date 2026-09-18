@@ -28,6 +28,8 @@ export function buildItemPayload(
     // temizlemenin tek yolu budur (alan yalnız YARN'da çizilir, diğer
     // tiplerde zaten boş kalır).
     linearDensityDen: v.linearDensityDen.trim() === "" ? null : v.linearDensityDen.trim(),
+    // E4: çözgü kartı yalnız KUMAŞ taşır; öteki tiplerde `null` gider (sunucu FABRIC dışını 400'ler, boş = temizle).
+    warpSpecId: v.itemType === ItemType.FABRIC && v.warpSpecId ? v.warpSpecId : null,
   };
   const lists = itemCarriesAllowedLists(v.itemType)
     ? { allowedColorIds: v.allowedColorIds, allowedPropertyIds: v.allowedPropertyIds }

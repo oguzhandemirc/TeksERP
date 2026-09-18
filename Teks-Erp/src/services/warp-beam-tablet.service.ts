@@ -11,6 +11,8 @@ import { listDevereMachines, listLoomMachines } from "./warp-beam.service";
 import { yarnLotBalancesTx } from "./helpers/yarn-lot.helper";
 import { readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, resolveBeamWeavingLinkRequired } from "./system-setting.service";
 import { listOpenInHouseWeavingOrders, type MachineRunTabletContextDto } from "./helpers/machine-run-suggest.helper";
+import { readDevereAutoConsume, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired } from "./system-setting.service";
+import { lastWindDefaults, type LastWindDefault } from "./helpers/tablet-prefill.helper";
 
 /**
  * Tablet form bağlamı — TEK uç, TEK izin (`mobile:devere`), DEVERE-LEVENT-TARAMASI §11 D2.
@@ -49,6 +51,10 @@ export interface WarpBeamTabletContextDto {
   weavingOrders: MachineRunTabletContextDto["weavingOrders"];
   /** `devere.beamWeavingLinkRequired` ETKİN değeri — form zorunluluğu SUNUCUDAN okur, tahmin etmez; sunucu da 400 verir. */
   beamWeavingLinkRequired: boolean;
+  /** Z5/E8: `devere.autoConsume` — kapalıysa tablet KK1 sonrası "çözgü tüketimi yazılmadı (ayar kapalı)" bilgisini basar. */
+  autoConsume: boolean;
+  /** Z5/E6: çözgü kartı başına son IN_HOUSE sarımın makine + iplik satırları — SAR formu ön-dolumu, yalnız öneri. */
+  lastWindDefaults: LastWindDefault[];
 }
 
 export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTabletContextDto>> {
@@ -68,6 +74,8 @@ export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTa
   const [loomMachines, mountTracking, mountTrackingRequired] = [await listLoomMachines().then((r) => r.data), await readDevereMountTracking(), await readDevereMountTrackingRequired()];
   const weavingOrders = await listOpenInHouseWeavingOrders(prisma);
   const beamWeavingLinkRequired = await resolveBeamWeavingLinkRequired();
+  const autoConsume = await readDevereAutoConsume();
+  const windDefaults = await lastWindDefaults(prisma, specs.map((w) => w.id));
   return {
     success: true,
     data: {
@@ -83,6 +91,8 @@ export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTa
       mountTrackingRequired,
       weavingOrders,
       beamWeavingLinkRequired,
+      autoConsume,
+      lastWindDefaults: windDefaults,
     },
   };
 }

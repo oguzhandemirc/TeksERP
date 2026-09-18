@@ -23,6 +23,7 @@ import { AppError } from "../utils/app-error";
 import { factoryDayEnd, factoryDayStart, resolveRangeEnd, resolveRangeStart } from "../constants/time";
 import { MACHINE_RUN_SELECT, type MachineRunDto } from "./machine-run.service";
 import { DOFF_SELECT, type DoffEventDto } from "./machine-doff.service";
+import { DOFF_PREFILL_SELECT, doffPrefill, type DoffPrefill } from "./helpers/tablet-prefill.helper";
 import type { ApiResponse } from "../types/api.types";
 
 /** Liste tavanı — bir tezgahın günlük indirmesi onlarcadır; tavan sayıyı DEĞİL listeyi kırpar. */
@@ -50,10 +51,12 @@ export async function listOpenMachineRuns(machineId: string): Promise<ApiRespons
   return { success: true, data: rows, meta: { total, truncated: total > rows.length } };
 }
 
-export type DoffListRow = DoffEventDto & { rollCount: number };
+/** Z5/E2: satır koşum → iş zincirinden `weavingOrder` · `item` · `color` taşır (KK1 ön-dolum; yalnız öneri). */
+export type DoffListRow = DoffEventDto & { rollCount: number } & DoffPrefill;
 
-function withRollCount(rows: Array<DoffEventDto & { _count: { rolls: number } }>): DoffListRow[] {
-  return rows.map(({ _count, ...r }) => ({ ...r, rollCount: _count.rolls }));
+type DoffListSource = DoffEventDto & { _count: { rolls: number } } & Prisma.DoffEventGetPayload<{ select: typeof DOFF_PREFILL_SELECT }>;
+function withRollCount(rows: DoffListSource[]): DoffListRow[] {
+  return rows.map(({ _count, machineRun, ...r }) => ({ ...r, rollCount: _count.rolls, ...doffPrefill({ machineRun }) }));
 }
 
 /**
@@ -67,7 +70,7 @@ export async function listDoffsForDay(args: { machineId: string; date?: string |
   const where: Prisma.DoffEventWhereInput = { machineId: args.machineId, revokedAt: null, doffedAt: { gte: dayStart, lte: dayEnd } };
   const rows = await prisma.doffEvent.findMany({
     where,
-    select: { ...DOFF_SELECT, _count: { select: { rolls: true } } },
+    select: { ...DOFF_SELECT, ...DOFF_PREFILL_SELECT, _count: { select: { rolls: true } } },
     orderBy: [{ doffedAt: "desc" }, { createdAt: "desc" }],
     take: LOOM_LIST_TAKE,
   });
@@ -92,7 +95,7 @@ export async function listUnlinkedDoffs(args: { machineId?: string | null; since
   };
   const rows = await prisma.doffEvent.findMany({
     where,
-    select: { ...DOFF_SELECT, _count: { select: { rolls: true } } },
+    select: { ...DOFF_SELECT, ...DOFF_PREFILL_SELECT, _count: { select: { rolls: true } } },
     orderBy: [{ doffedAt: "desc" }, { createdAt: "desc" }],
     take: LOOM_LIST_TAKE,
   });

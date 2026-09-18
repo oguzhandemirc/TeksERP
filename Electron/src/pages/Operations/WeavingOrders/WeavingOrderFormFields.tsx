@@ -4,6 +4,8 @@
 // ⚠️ Çözgü kartı seçici yalnız DEVERE modülü açıkken çizilir: `/api/warp-specs`
 // `requireDevereEnabled` arkasındadır, kapalı kurulumda seçici 403 yerdi.
 // =============================================================================
+import { useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Controller, type UseFormReturn } from "react-hook-form";
 import { Package, Palette, Handshake, Ruler } from "lucide-react";
 import { FormField } from "@/components/forms/FormField";
@@ -26,7 +28,20 @@ import { DatePickerInput } from "@/components/forms/DatePickerInput";
 type Form = UseFormReturn<WeavingOrderFormValues>;
 
 /** Kumaş · renk · (devere açıksa) çözgü kartı. */
+/** E4 ön-dolum: kumaş seçilince kartın varsayılan çözgü kartı alana yazılır — YALNIZ alan boşken (kullanıcı seçimi ezilmez);
+ *  sunucu da boş gönderilirse aynı varsayılanı uygular (`createWeavingOrder`), yani ekranda görünen = kaydedilecek. */
+function useItemWarpSpecPrefill(form: Form, enabled: boolean): void {
+  const itemId = form.watch("itemId");
+  const q = useQuery({ queryKey: ["items", "ref-select-by-id", itemId], queryFn: () => itemService.getById(itemId), enabled: enabled && Boolean(itemId) });
+  const suggested = q.data?.data?.warpSpecId ?? null;
+  useEffect(() => {
+    if (!enabled || !suggested) return;
+    if (!form.getValues("warpSpecId")) form.setValue("warpSpecId", suggested, { shouldDirty: true });
+  }, [enabled, suggested, form]);
+}
+
 export function FabricFields({ form, devereEnabled }: { form: Form; devereEnabled: boolean }) {
+  useItemWarpSpecPrefill(form, devereEnabled);
   const err = form.formState.errors;
   return (
     <>

@@ -137,6 +137,9 @@ router.get("/devere-machines", requireAnyPermission("warpbeam:read", ...MOBILE_D
  *     tags: [WarpBeams]
  *     summary: Tablet form bağlamı — çözgü kartları · devere makineleri · depolar · fasoncular · tedarikçi adayları · açık içeride dokuma işleri (Z1 `weavingOrders`) + `beamWeavingLinkRequired` (id+ad, opt-in allowlist; tek izin `mobile:devere`)
  *     security: [{ bearerAuth: [] }]
+ *     description: >
+ *       Z5 ön-dolgu alanları (yalnız öneri, eski istemci etkilenmez): `autoConsume` (devere.autoConsume aynası) ·
+ *       `lastWindDefaults[]` (çözgü kartı başına son IN_HOUSE sarımın machineId + yarnIssues/yarnReturns satırları).
  *     responses:
  *       200: { description: Bağlam }
  *       403: { description: Devere modülü kapalı (MODULE_DISABLED) ya da yetki yok }

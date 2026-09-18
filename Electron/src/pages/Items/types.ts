@@ -26,6 +26,8 @@ export interface Item {
   isActive: boolean;
   /** İplik inceliği (denye). Yalnız YARN'da dolu; çözgü kartı bunu ister. */
   linearDensityDen: string | null;
+  /** KUMAŞ → varsayılan çözgü kartı (E4, 2026-09-18): dokuma işi formu ve sunucu ön-dolum kaynağı; yalnız FABRIC. */
+  warpSpecId?: string | null;
   /** Saha (mobil KK1) "yeni desen" olarak açtı → admin gözden geçirmesi bekleniyor. */
   pendingReview?: boolean;
   /** Item'a uygulanabilir özellikler (kataloğu). Boşsa = serbest. */
@@ -45,6 +47,8 @@ export interface ItemCreatePayload {
   isActive?: boolean;
   /** Denye — boş bırakılırsa `null` gider (kolon nullable, FABRIC'te anlamsız). */
   linearDensityDen?: string | null;
+  /** Varsayılan çözgü kartı — yalnız KUMAŞ; boş = `null` (temizler). */
+  warpSpecId?: string | null;
   /** Düzenlemede admin onayı: kaydedince saha işareti temizlenir (false). */
   pendingReview?: boolean;
   allowedPropertyIds?: string[];

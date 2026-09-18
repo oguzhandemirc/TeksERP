@@ -603,6 +603,11 @@
           "kapsam": "panel",
           "tip": "yeni",
           "metin": "İstasyon kartında Görev Türü listesine “Devere (Levent Sarım)” eklendi (Devere modülü açıkken görünür): devere makinesi artık bu türde bir istasyon açıp içine makine ekleyerek tanımlanır; tür seçilince “Levent sarar” yeteneği kendiliğinden işaretlenir. Levent sarım ekranı makineyi yine bu yeteneğe göre listeler — “Diğer” türünde “Levent sarar” işaretli mevcut istasyonlar aynen çalışmaya devam eder. Devere istasyonu rota şablonuna ve iş emri rotasına eklenemez (levent, topun rotasında bir adım değildir) ve tablette oturum açmaz."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "iyilestirme",
+          "metin": "Tablet ön-dolgu: sistemin zaten bildiği bilgiler artık ekrana kendiliğinden gelir, elle yeniden girilmez. Ham Giriş’te “Hangi indirmeden?” listesinden bir indirme seçilince desen ve renk o koşumdan (yoksa dokuma işinden) ön-dolar; koşum açarken atkı sıklığı aynı desenin son koşumundan, hedef devir makine kartından önerilir ve hangi tezgahtan geldiği söylenir; Levent Sarım’da SAR formu aynı çözgü kartının son sarımındaki makine, depo, lot ve kg satırlarını öneri olarak getirir. Hiçbiri kilitli değildir, değiştirilebilir; bilinmeyen değer boş bırakılır, uydurulmaz. Panelde kumaş kartına “Varsayılan çözgü kartı” alanı geldi (Devere açıkken): Yeni Dokuma İşi’nde kumaş seçilince çözgü kartı bundan ön-dolar, boş bırakılırsa sunucu da aynı varsayılanı uygular. Tablet ekranlarındaki ön-dolgu ayrı bir tablet sürümüyle gelir."
         }
       ]
     },

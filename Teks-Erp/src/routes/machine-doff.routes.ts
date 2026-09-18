@@ -55,7 +55,9 @@ const listSchema = z
  *       günü (varsayılan 3, tavan 30); `machineId` opsiyonel — masa KK1 her tezgahın indirmesini
  *       görür (bağ açık liste seçimidir). Aksi hâlde `machineId` ZORUNLU ve liste o makinenin
  *       `date` (varsayılan bugün) fabrika günündeki indirmeleridir; geri alınmışlar kapsam dışı.
- *       Liste 200'de kırpılır, `meta.total` kırpılmaz (`meta.truncated`).
+ *       Liste 200'de kırpılır, `meta.total` kırpılmaz (`meta.truncated`). Z5 ön-dolgu (yalnız öneri): her satır
+ *       koşum → iş zincirinden `weavingOrder {id, weavingOrderNumber}` · `item {id, code, name}` · `color {id, name}`
+ *       taşır (koşumun deseni işin kumaşını ezer; koşumsuz doff'ta üçü null).
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: query

@@ -36,6 +36,7 @@ import { assertOrderLinesLinkableTx, normalizeOrderLineLinks, type NormalizedOrd
 import { assertOrderLineLinkGate } from "./helpers/production-chain-gates.helper";
 import { assertNoOpenRunsTx, assertRefs, throwClaimFailureTx } from "./helpers/weaving-order-guards.helper";
 import { countRollsOfWeavingOrder } from "./helpers/weaving-order-of-roll.helper";
+import { itemDefaultWarpSpecId } from "./helpers/tablet-prefill.helper";
 import {
   OPEN_RUN_WHERE,
   WEAVING_ORDER_SELECT,
@@ -146,8 +147,8 @@ export async function createWeavingOrder(
   const f = normalizeWeavingOrderFields(input);
   const fields = {
     itemId: input.itemId,
-    colorId: f.colorId ?? null,
-    warpSpecId: f.warpSpecId ?? null,
+    // E4 (ön-dolum): çözgü kartı verilmezse kumaş kartının varsayılanı (`Item.warpSpecId`); `null` açıkça "kartsız".
+    colorId: f.colorId ?? null, warpSpecId: f.warpSpecId ?? (input.warpSpecId === undefined ? await itemDefaultWarpSpecId(prisma, input.itemId) : null),
     plannedM: f.plannedM ?? null,
     executionKind: input.executionKind,
     subcontractorId: f.subcontractorId ?? null,

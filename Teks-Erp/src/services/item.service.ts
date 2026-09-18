@@ -46,6 +46,8 @@ export interface ItemCreateInput {
    * anlamlıdır ve çözgü kartı açmanın ön koşuludur.
    */
   linearDensityDen?: string | number | null;
+  /** KUMAŞ → varsayılan ÇÖZGÜ KARTI (E4, 2026-09-18): dokuma işi ve levent planı ön-dolum kaynağı; yalnız FABRIC. */
+  warpSpecId?: string | null;
   allowedColorIds?: string[];
   allowedPropertyIds?: string[];
 }
@@ -125,6 +127,14 @@ async function nextItemCode(): Promise<string> {
   return `${ITEM_CODE_PREFIX}${String(seq).padStart(ITEM_CODE_DIGITS, "0")}`;
 }
 
+/** E4: `warpSpecId` yalnız KUMAŞ kartında ve aktif bir çözgü kartını göstermeli (400); `null` temizler, `undefined` dokunmaz. */
+async function assertWarpSpecAssignable(itemType: string | undefined, warpSpecId: string | null | undefined): Promise<void> {
+  if (warpSpecId === undefined || warpSpecId === null) return;
+  if (itemType !== undefined && itemType !== "FABRIC") throw AppError.badRequest("Çözgü kartı yalnız KUMAŞ kartına bağlanır", { code: "ITEM_WARP_SPEC_FABRIC_ONLY" });
+  const n = await prisma.warpSpec.count({ where: { id: warpSpecId, isActive: true } });
+  if (n === 0) throw AppError.badRequest("Çözgü kartı bulunamadı ya da pasif", { code: "WARP_SPEC_NOT_FOUND" });
+}
+
 export class ItemService extends BaseService {
   /**
    * İLİŞKİ SÜZGECİ (ürün seçici modalı, 2026-09-17): `filter[allowedColorId]` = "bu rengi ALABİLECEĞİM
@@ -160,6 +170,7 @@ export class ItemService extends BaseService {
     opts?: { pendingReview?: boolean },
   ): Promise<ApiResponse<unknown>> {
     const input = data as unknown as ItemCreateInput;
+    await assertWarpSpecAssignable(input.itemType, input.warpSpecId);
 
     // Stok kodu hibrit: boş bırakıldıysa backend STK-NNNNNN üretir; kullanıcı
     // girdiyse manuel kod aynen kabul edilir (trim + regex + max 32).
@@ -291,6 +302,7 @@ export class ItemService extends BaseService {
                 ...(input.linearDensityDen !== undefined
                   ? { linearDensityDen: input.linearDensityDen }
                   : {}),
+                ...(input.warpSpecId !== undefined ? { warpSpecId: input.warpSpecId } : {}),
                 allowedColors:
                   allowedColorIds.length > 0
                     ? { create: allowedColorIds.map((colorId) => ({ colorId })) }
@@ -319,6 +331,7 @@ export class ItemService extends BaseService {
               ...(input.linearDensityDen !== undefined
                 ? { linearDensityDen: input.linearDensityDen }
                 : {}),
+              ...(input.warpSpecId !== undefined ? { warpSpecId: input.warpSpecId } : {}),
               // Yalnız iç quick-create (saha KK1) opt'u işaretler; public gövde etkisiz.
               ...(opts?.pendingReview ? { pendingReview: true } : {}),
               allowedColors:
@@ -403,6 +416,11 @@ export class ItemService extends BaseService {
           `'${k}' alanı güncellenemez. Yeni bir ürün tanımlayın.`,
         );
       }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(data, "warpSpecId")) {
+      const cur = await prisma.item.findUnique({ where: { id }, select: { itemType: true } });
+      await assertWarpSpecAssignable(cur?.itemType, data.warpSpecId as string | null | undefined);
     }
 
     // name güncelleniyorsa length + trim kontrolü

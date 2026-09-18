@@ -69,6 +69,13 @@ describe("buildItemPayload", () => {
     expect("pendingReview" in p).toBe(false);
   });
 
+  // E4 (2026-09-18): varsayılan çözgü kartı yalnız KUMAŞ taşır; boş/iplik → null (sunucu FABRIC dışını 400'ler).
+  it("warpSpecId: kumaşta aynen gider, boşsa null (temizle), iplikte her zaman null", () => {
+    expect(buildItemPayload(values({ itemType: ItemType.FABRIC, warpSpecId: "ws-1" }), false).warpSpecId).toBe("ws-1");
+    expect(buildItemPayload(values({ itemType: ItemType.FABRIC, warpSpecId: "" }), true).warpSpecId).toBeNull();
+    expect(buildItemPayload(values({ itemType: ItemType.YARN, warpSpecId: "ws-1" }), false).warpSpecId).toBeNull();
+  });
+
   it("denye boşken null gider — kolonu temizlemenin tek yolu ('' Decimal'de geçersiz)", () => {
     const p = buildItemPayload(values({ itemType: ItemType.YARN }), false);
     expect(p.linearDensityDen).toBeNull();

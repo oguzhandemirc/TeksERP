@@ -54,6 +54,8 @@ export const makeItemFormSchema = (isEdit: boolean) =>
         (v) => v === "" || /^\d+(\.\d{1,4})?$/.test(v),
         "Denye en fazla 4 ondalık basamak taşıyabilir",
       ),
+    /** Kumaşın varsayılan çözgü kartı (E4) — yalnız FABRIC'te çizilir, boş = kartsız. */
+    warpSpecId: z.string(),
     allowedColorIds: z.array(z.string()),
     allowedPropertyIds: z.array(z.string()),
   });
@@ -67,6 +69,7 @@ export const itemFormDefaults: ItemFormValues = {
   unit: "MT",
   isActive: true,
   linearDensityDen: "",
+  warpSpecId: "",
   allowedColorIds: [],
   allowedPropertyIds: [],
 };
