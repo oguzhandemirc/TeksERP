@@ -2,7 +2,7 @@
 // BACKEND DOĞRULAMA İSTEMCİSİ — adım sonunda "sunucuda ne oldu" (fetch; Node 18+)
 // =============================================================================
 // Sürücü ekrana bakar, bu sınıf deftere: ör. D1 sonrası `GET /warp-beams?status=PLANNED`
-// listesinde TEST-M1 gövdeli plan var mı. Token klasik `/auth/login` ile (admin/şifre);
+// listesinde ONEK-M1 gövdeli plan var mı. Token klasik `/api/auth/login` ile (kullanıcı/şifre);
 // üstbilgi `X-Client-Type: web` (panel yolu) — tabletin oturumuna DOKUNMAZ.
 // =============================================================================
 export class Api {
@@ -12,7 +12,7 @@ export class Api {
   }
 
   async giris(username, password) {
-    const r = await this.istek('POST', '/auth/login', { username, password }, { yetkisiz: true });
+    const r = await this.istek('POST', '/api/auth/login', { username, password }, { yetkisiz: true });
     this.token = r.data?.token ?? r.token;
     if (!this.token) throw new Error(`login token yok: ${JSON.stringify(r).slice(0, 200)}`);
     return r;

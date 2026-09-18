@@ -10,6 +10,10 @@
 // sec(alan,satırDesc) picker · gor(metin) görünür bekle · bekle(ms) · ekran(ad) · api · sql · ctx.
 // =============================================================================
 
+// d9 kanonu (E2E_ONEK): fixture adları sabit DEĞİL, ortam önekinden türer; ikimiz de
+// aynı `process.env.E2E_ONEK ?? 'TEST'`i okuruz (DB'de TESTD…TESTJ setleri bu yüzden).
+const ONEK = process.env.E2E_ONEK ?? 'TEST';
+
 export const ADIMLAR = [
   {
     id: 'A3',
@@ -39,10 +43,10 @@ export const ADIMLAR = [
       await ctx.gor('Levent Sarım');
       await ctx.tikla('Yeni levent');
       await ctx.gor('Yeni levent planla');
-      // Çözgü kartı seç (TEST-CK1 satırı picker'da), planlanan metre, gövde no.
-      await ctx.sec({ icerir: 'Çözgü kartı' }, ctx.cozguKartiDesc ?? 'TEST-CK1');
+      // Çözgü kartı seç (ONEK-CK1 satırı picker'da), planlanan metre, gövde no.
+      await ctx.sec({ icerir: 'Çözgü kartı' }, ctx.cozguKartiDesc ?? `${ONEK}-CK1`);
       await ctx.numpad({ icerir: 'Planlanan metre' }, '500');
-      await ctx.yaz({ icerir: 'Metal levent no' }, 'TEST-M1');
+      await ctx.yaz({ icerir: 'Metal levent no' }, `${ONEK}-M1`);
       await ctx.tikla('Planla');
     },
     async bekle(ctx) {
@@ -50,9 +54,9 @@ export const ADIMLAR = [
     },
     dogrula: [
       {
-        ad: 'TEST-M1 gövdeli PLANNED levent doğdu',
+        ad: `${ONEK}-M1 gövdeli PLANNED levent doğdu`,
         sql: "SELECT count(*)::int AS n FROM warp_beams WHERE public.tr_fold(\"physicalBeamNo\") = public.tr_fold($1) AND status = 'PLANNED'",
-        params: ['TEST-M1'],
+        params: [`${ONEK}-M1`],
         oku: (rows) => rows[0].n,
         beklenen: (v) => v >= 1,
       },
@@ -71,8 +75,8 @@ export const ADIMLAR = [
       await ctx.tikla('İleri');
       await ctx.gor('Makine · iplik');
       // Makine tek ise ön-seçili (db2cb15e); değilse seç. Lot + kg.
-      if (ctx.surucu.varMi({ desc: 'Seçilmedi' })) await ctx.sec({ desc: 'Seçilmedi' }, ctx.makineDesc ?? 'DV1');
-      await ctx.sec({ icerir: 'Lot yok' }, ctx.lotDesc ?? 'TEST-L1');
+      if (ctx.surucu.varMi({ desc: 'Seçilmedi' })) await ctx.sec({ desc: 'Seçilmedi' }, ctx.makineDesc ?? `${ONEK}-DV1`);
+      await ctx.sec({ icerir: 'Lot yok' }, ctx.lotDesc ?? `${ONEK}-L1`);
       await ctx.numpad({ text: 'kg' }, '30');
       await ctx.tikla('İleri');
       await ctx.gor('Özet');
@@ -85,7 +89,7 @@ export const ADIMLAR = [
       {
         ad: 'levent READY (sarıldı)',
         sql: "SELECT count(*)::int AS n FROM warp_beams WHERE public.tr_fold(\"physicalBeamNo\") = public.tr_fold($1) AND status = 'READY'",
-        params: ['TEST-M1'],
+        params: [`${ONEK}-M1`],
         oku: (rows) => rows[0].n,
         beklenen: (v) => v >= 1,
       },
