@@ -61,6 +61,8 @@ const e3Olcum = { uyumluBaska: null, ikinciMusteri: null, gorunenMusteri: null }
 const g1Olcum = { tedarikciAlaniVar: null };
 const i7Olcum = { barkod: null, sevkId: null, onceMetre: null, onceTop: null, sonraMetre: null, sonraTop: null, iadeMetre: null, iadeSayi: null };
 const n6Olcum = { sevkId: null, satir: null, metre: null, belgeMetre: null };
+const j2Olcum = { docNo: null, belgeAcildi: null, belgeDocNoVar: null, belge25Var: null };
+const j3Olcum = { docNo: null, kasaOnce: null, makbuzAcildi: null, makbuz600Var: null };
 const j1Olcum = { sevkNo: null, sevkId: null, tur: null, cariMetin: null, cariKilitli: null, satir: null, miktar: null, birim: null };
 const i4Olcum = { barkod: null, digerMusteri: null, digerOnce: null, testOnce: null, onizlemeSahipVar: null, redDurum: null, redKod: null, redTopVar: null, redSahipVar: null, tostSahipVar: null, ikinciDurum: null, sevkNo: null };
 
@@ -1054,9 +1056,10 @@ export const ADIMLAR = [
   {
     id: "N6", rol: "M", gerektirir: ["I7"],
     yol: "API · iade SONRASI sevkiyattan fatura taslağı önizlemesi — satırlar BRÜT (25 m) olmalı; resmi belge brütleştirir, taslak kurucu brütleştirmiyor", rota: "operations/accounting-dispatch",
-    async yap({ api }) {
-      n6Olcum.sevkId = i7Olcum.sevkId;
-      if (!n6Olcum.sevkId) throw new Error("I7'nin sevkiyatı yok");
+    async yap({ api, sql }) {
+      // Aynı süreçte I7 koşmadıysa: TEST Müşteri'nin iade almış son sevkiyatı.
+      n6Olcum.sevkId = i7Olcum.sevkId ?? (await sql(`SELECT s.id FROM shipments s JOIN customers c ON c.id=s."customerId" WHERE c.name=$1 AND EXISTS (SELECT 1 FROM roll_returns rr WHERE rr."fromShipmentId"=s.id AND rr."cancelledAt" IS NULL) ORDER BY s."createdAt" DESC LIMIT 1`, [buyukTr(AD.musteri)]))[0]?.id ?? null;
+      if (!n6Olcum.sevkId) throw new Error("iade almış sevkiyat yok (I7 koşmadı mı?)");
       const taslak = (await api(`/api/finance/shipments/${n6Olcum.sevkId}/invoice-draft-lines`)).govde?.data ?? {};
       const satirlar = taslak.lines ?? [];
       n6Olcum.satir = satirlar.length;
@@ -1067,6 +1070,105 @@ export const ADIMLAR = [
     dogrula: [
       { ad: "BRÜT KURALI: iade sonrası fatura taslağı satırları sevk rakamını (25 m) taşımalı — belge özeti brüt, taslak kurucu `roll.shipmentId`den okuyor (shipment-auto-draft.helper collectShipmentInvoiceDraftLines)",
         sql: `SELECT 1`, oku: () => `taslak:${n6Olcum.satir} satır/${n6Olcum.metre} m · belge özeti:${n6Olcum.belgeMetre} m`, beklenen: (v) => /^taslak:1 satır\/25 m · belge özeti:25 m$/.test(v) },
+    ],
+  },
+  {
+    id: "J2", rol: "M", gerektirir: ["J1"],
+    yol: "Muhasebe → Faturalar → taslak satırı → Onayla → 'Onayla ve deftere işle' → Detay → Belgeyi aç (önizleme)", rota: "finance/invoices",
+    async yap({ git, gor, sql, page }) {
+      const t = await sql(`SELECT i."docNo" FROM invoices i JOIN cari_accounts ca ON ca.id=i."cariId" JOIN customers c ON c.id=ca."customerId" WHERE c.name=$1 AND i.type='SALES' AND i.status='DRAFT' ORDER BY i."createdAt" DESC LIMIT 1`, [buyukTr(AD.musteri)]);
+      j2Olcum.docNo = t[0]?.docNo ?? null;
+      if (!j2Olcum.docNo) throw new Error("TEST Müşteri'nin taslak satış faturası yok (J1 koşmadı mı?)");
+      await git("Faturalar");
+      await page().getByPlaceholder("Belge no / cari ara").filter({ visible: true }).first().fill(j2Olcum.docNo);
+      await page().waitForTimeout(800);
+      const satir = page().getByRole("row").filter({ hasText: j2Olcum.docNo }).filter({ visible: true }).first(); await gor(satir);
+      await satir.getByRole("button", { name: "Onayla", exact: true }).click({ timeout: 15_000 });
+      const onay = page().getByRole("dialog").filter({ hasText: /deftere işle/ }).last(); await gor(onay);
+      await onay.getByRole("button", { name: "Onayla ve deftere işle" }).click({ timeout: 15_000 });
+      await onay.waitFor({ state: "detached", timeout: 15_000 });
+      await page().waitForTimeout(800);
+      // Belge önizlemesi: detay → "Belgeyi aç" → iframe (yazdırma ✋ — insan gözü).
+      await satir.getByRole("button", { name: "Detay", exact: false }).click({ timeout: 15_000 });
+      const det = page().getByRole("dialog").filter({ hasText: j2Olcum.docNo }).last(); await gor(det);
+      await det.getByRole("button", { name: "Belgeyi aç" }).click({ timeout: 15_000 });
+      const bd = page().getByRole("dialog").filter({ hasText: `Fatura — ${j2Olcum.docNo}` }).last(); await gor(bd, { sure: 20_000 });
+      const cerceve = bd.locator("iframe").first();
+      await cerceve.waitFor({ state: "visible", timeout: 20_000 });
+      await page().waitForTimeout(1200);
+      const govde = await bd.frameLocator("iframe").locator("body").innerText().catch(() => "");
+      j2Olcum.belgeAcildi = govde.length > 0 ? 1 : 0;
+      j2Olcum.belgeDocNoVar = govde.includes(j2Olcum.docNo) ? 1 : 0;
+      j2Olcum.belge25Var = /25/.test(govde) ? 1 : 0;
+      await page().keyboard.press("Escape"); await page().waitForTimeout(300);
+    },
+    async bekle({ gor, page }) {
+      const satir = page().getByRole("row").filter({ hasText: j2Olcum.docNo }).filter({ visible: true }).first();
+      await gor(satir); await gor(satir.getByText(/Onaylı|Onaylandı|CONFIRMED/i).first(), { sure: 15_000 }).catch(() => undefined);
+    },
+    dogrula: [
+      { ad: "fatura ONAYLI, no korunur, onay damgası (invoices)", sql: `SELECT status::text st, ("confirmedAt" IS NOT NULL) d, "grandTotal"::text g FROM invoices WHERE "docNo"=$1`, params: () => [j2Olcum.docNo], oku: (r) => `${r[0]?.st}:${r[0]?.d}:${r[0]?.g}`, beklenen: (v) => /^CONFIRMED:true:1200(\.0+)?$/.test(v) },
+      { ad: "satırlarda birim dolu (invoice_lines.unit NOT NULL)", sql: `SELECT count(*)::int n, bool_and(l.unit IS NOT NULL AND l.unit<>'') u FROM invoice_lines l JOIN invoices i ON i.id=l."invoiceId" WHERE i."docNo"=$1`, params: () => [j2Olcum.docNo], oku: (r) => `${r[0].n}:${r[0].u}`, beklenen: "1:true" },
+      { ad: "cari deftere 1 satır: müşteri BORÇLU (debit 1.200), kaynak INVOICE (cari_transactions)",
+        sql: `SELECT count(*)::int n, sum(t.debit)::text b, sum(t.credit)::text a, max(t."sourceType"::text) k FROM cari_transactions t JOIN invoices i ON i.id=t."invoiceId" WHERE i."docNo"=$1`, params: () => [j2Olcum.docNo], oku: (r) => `${r[0].n}:${r[0].b}:${r[0].a}:${r[0].k}`, beklenen: (v) => /^1:1200(\.0+)?:0(\.0+)?:INVOICE$/.test(v) },
+      { ad: "belge önizlemesi açıldı, fatura no ve 25 m belgede (ekran)", sql: `SELECT 1`, oku: () => `${j2Olcum.belgeAcildi}:${j2Olcum.belgeDocNoVar}:${j2Olcum.belge25Var}`, beklenen: "1:1:1" },
+    ],
+  },
+  {
+    id: "J3", rol: "M", gerektirir: ["J2"],
+    yol: "Muhasebe → Tahsilat / Ödeme → Tahsilat (TEST Müşteri · kasa · nakit · 600 = yarısı) → satırda Makbuz önizleme → Fatura Kapama (Tahsilat → Satış)", rota: "finance/payments",
+    async yap({ git, gor, sql, page }) {
+      const t = await sql(`SELECT i."docNo" FROM invoices i JOIN cari_accounts ca ON ca.id=i."cariId" JOIN customers c ON c.id=ca."customerId" WHERE c.name=$1 AND i.type='SALES' AND i.status='CONFIRMED' ORDER BY i."confirmedAt" DESC LIMIT 1`, [buyukTr(AD.musteri)]);
+      j3Olcum.docNo = t[0]?.docNo ?? null;
+      if (!j3Olcum.docNo) throw new Error("onaylı satış faturası yok (J2 koşmadı mı?)");
+      j3Olcum.kasaOnce = Number((await sql(`SELECT COALESCE(max(balance),0)::text b FROM cash_boxes WHERE name=$1`, [buyukTr(AD.kasa)]))[0].b);
+      await git("Tahsilat / Ödeme");
+      await page().getByRole("button", { name: "Tahsilat", exact: true }).click({ timeout: 15_000 });
+      const d = page().getByRole("dialog").filter({ hasText: "Yeni Tahsilat" }).last(); await gor(d);
+      await d.getByRole("button", { name: "Cari seç (liste)", exact: true }).click({ timeout: 15_000 });
+      const cm = page().getByRole("dialog").filter({ hasText: /Cari seç/ }).last(); await gor(cm);
+      await cm.getByRole("textbox").first().fill(AD.musteri);
+      await page().waitForTimeout(700);
+      await cm.getByRole("row").filter({ hasText: buyukTr(AD.musteri) }).first().click({ timeout: 15_000 });
+      await cm.waitFor({ state: "detached", timeout: 15_000 }).catch(() => undefined);
+      const kasaSec = d.locator("select").filter({ has: page().locator("option", { hasText: /Seçin/ }) }).first();
+      const kasaAdayi = kasaSec.locator("option").filter({ hasText: buyukTr(AD.kasa) }).first();
+      await kasaSec.selectOption({ label: (await ((await kasaAdayi.count()) ? kasaAdayi : kasaSec.locator("option").filter({ hasText: /Kasa ·/ }).first()).textContent()) });
+      await d.locator("select").filter({ has: page().locator("option", { hasText: /Nakit/ }) }).first().selectOption("CASH");
+      await d.locator('input[type="number"]').first().fill("600"); // 1.200 / 2
+      await d.getByRole("button", { name: /Tahsilat Kaydet/ }).click({ timeout: 15_000 });
+      await d.waitFor({ state: "detached", timeout: 20_000 });
+      await page().waitForTimeout(800);
+      // Makbuz: kayıt anında donar, satırdan önizlenir (yazdırma ✋).
+      const satir = page().getByRole("row").filter({ hasText: buyukTr(AD.musteri) }).filter({ hasText: "600" }).filter({ visible: true }).first(); await gor(satir);
+      await satir.getByTitle("Makbuzu yazdır / önizle").click({ timeout: 15_000 });
+      const md = page().getByRole("dialog").filter({ hasText: /Makbuz — / }).last(); await gor(md, { sure: 20_000 });
+      await md.locator("iframe").first().waitFor({ state: "visible", timeout: 20_000 }); await page().waitForTimeout(1200);
+      const govde = await md.frameLocator("iframe").locator("body").innerText().catch(() => "");
+      j3Olcum.makbuzAcildi = govde.length > 0 ? 1 : 0; j3Olcum.makbuz600Var = /600/.test(govde) ? 1 : 0;
+      await page().keyboard.press("Escape"); await page().waitForTimeout(300);
+      // Fatura Kapama: Yön Tahsilat → cari → tahsilatı seç → sığan tutar → kapat
+      await git("Fatura Kapama");
+      await page().locator("select").filter({ has: page().locator("option", { hasText: /Tahsilat → Satış/ }) }).first().selectOption("IN");
+      await page().getByRole("combobox").filter({ hasText: /Müşteri \/ fason ara/ }).first().click({ timeout: 15_000 });
+      await page().getByPlaceholder("Ara (kod, isim, vergi no)").fill(AD.musteri);
+      await page().waitForTimeout(800);
+      await page().getByRole("option").filter({ hasText: buyukTr(AD.musteri) }).first().click({ timeout: 15_000 });
+      await page().waitForTimeout(800);
+      await page().getByRole("button").filter({ hasText: /600/ }).first().click({ timeout: 15_000 });
+      await page().getByTitle("Bu faturaya sığabilecek en büyük tutarı yaz").first().click({ timeout: 15_000 });
+      await page().getByRole("button", { name: /Faturaları kapat \(1/ }).click({ timeout: 15_000 });
+      await page().waitForTimeout(1000);
+    },
+    async bekle({ gor, page }) {
+      await gor(page().getByText(/kapatıldı|Kapama kaydedildi|kapandı/i).first(), { sure: 10_000 }).catch(() => undefined);
+    },
+    dogrula: [
+      { ad: "tahsilat kaydı IN nakit 600, kasaya bağlı (payments)", sql: `SELECT p.direction::text d, p.method::text m, p.amount::text a, (p."cashBoxId" IS NOT NULL) k FROM payments p JOIN cari_accounts ca ON ca.id=p."cariId" JOIN customers c ON c.id=ca."customerId" WHERE c.name=$1 AND p.direction='IN' ORDER BY p."createdAt" DESC LIMIT 1`, params: [buyukTr(AD.musteri)], oku: (r) => `${r[0]?.d}:${r[0]?.m}:${r[0]?.a}:${r[0]?.k}`, beklenen: (v) => /^IN:CASH:600(\.0+)?:true$/.test(v) },
+      { ad: "kasa bakiyesi +600 (cash_boxes.balance; cari tahsilatı cash_transactions'a YAZMAZ — C7 bulgusu)", sql: `SELECT COALESCE(max(balance),0)::text b FROM cash_boxes WHERE name=$1`, params: [buyukTr(AD.kasa)], oku: (r) => Number(r[0].b) - j3Olcum.kasaOnce, beklenen: (v) => Math.abs(v - 600) < 0.01 },
+      { ad: "cari ekstre: fatura 1.200 borç − tahsilat 600 alacak = 600 (cari_transactions Σ)", sql: `SELECT COALESCE(SUM(t.debit - t.credit),0)::text bakiye FROM cari_transactions t JOIN cari_accounts a ON a.id=t."cariId" JOIN customers c ON c.id=a."customerId" WHERE c.name=$1`, params: [buyukTr(AD.musteri)], oku: (r) => Number(r[0].bakiye), beklenen: (v) => Math.abs(v - 600) < 0.01 },
+      { ad: "kapama: faturaya 600 bağlandı, açık 600 (payment_allocations)", sql: `SELECT COALESCE(SUM(pa.amount),0)::text s FROM payment_allocations pa JOIN invoices i ON i.id=pa."invoiceId" WHERE i."docNo"=$1`, params: () => [j3Olcum.docNo], oku: (r) => Number(r[0].s), beklenen: (v) => Math.abs(v - 600) < 0.01 },
+      { ad: "makbuz önizlemesi açıldı, 600 makbuzda (ekran)", sql: `SELECT 1`, oku: () => `${j3Olcum.makbuzAcildi}:${j3Olcum.makbuz600Var}`, beklenen: "1:1" },
     ],
   },
 ];

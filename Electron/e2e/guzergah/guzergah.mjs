@@ -152,6 +152,13 @@ async function rolIleAc(rol) {
   // ikisinde de var; adres yazılınca yeniden sondalanır ve form gelir.
   await page.getByRole("button", { name: "Sunucu adresi ayarları" }).waitFor({ timeout: 40_000 });
   await sunucuAdresiniAyarla();
+  // Ürün davranışı (ölçüldü 2026-09-18): erişilebilirlik sondası yalnız açılışta koşar; adres
+  // kaydedilince YENİDEN SONDALANMAZ → panel "Sunucuya ulaşılamadı"da kalır, insan "Sunucuyu Ara"ya basar.
+  for (let i = 0; i < 3; i++) {
+    if (await page.getByPlaceholder("ör. admin").waitFor({ timeout: 6_000 }).then(() => true, () => false)) break;
+    const ara = page.getByRole("button", { name: "Sunucuyu Ara" });
+    if (await ara.count()) await ara.first().click({ timeout: 5_000 }).catch(() => undefined);
+  }
   await page.getByPlaceholder("ör. admin").waitFor({ timeout: 30_000 });
   await page.getByPlaceholder("ör. admin").fill(k.username);
   await page.locator('input[type="password"]').first().fill(k.password);
