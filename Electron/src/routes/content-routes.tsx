@@ -45,6 +45,7 @@ import { RandimanPage } from "@/pages/Reports/Dokuma/RandimanPage";
 import { DurusParetoPage } from "@/pages/Reports/Dokuma/DurusParetoPage";
 import { VardiyaKarnesiPage } from "@/pages/Reports/Dokuma/VardiyaKarnesiPage";
 import { KarnePage } from "@/pages/Reports/Dokuma/KarnePage";
+import { ProductionChainPage } from "@/pages/Reports/Dokuma/ProductionChainPage";
 import { AgingReportPage } from "@/pages/Reports/Finance/AgingReportPage";
 import { CashBookPage } from "@/pages/Reports/Finance/CashBookPage";
 import { ChequeDuePage } from "@/pages/Reports/Finance/ChequeDuePage";
@@ -1200,6 +1201,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="report:production">
         <KarnePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/dokuma/zincir",
+    element: (
+      <ProtectedRoute requirePermission="report:production">
+        <ProductionChainPage />
       </ProtectedRoute>
     ),
   },

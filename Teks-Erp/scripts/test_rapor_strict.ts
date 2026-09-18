@@ -15,6 +15,7 @@ import path from "node:path";
 import { yorumlariSok } from "./lib/regime-gate-scan";
 import { compareRangeSchema, dateRangeSchema, emptyQuerySchema } from "../src/services/reports/_shared";
 import { batchSearchQuerySchema, operatorPerformanceQuerySchema, travelerTraceQuerySchema } from "../src/routes/reports/production.routes";
+import { productionChainQuerySchema } from "../src/routes/reports/dokuma.report.routes";
 
 let pass = 0;
 let fail = 0;
@@ -65,6 +66,7 @@ check("§2a parametresiz uçlar (`emptyQuerySchema`): {} geçer, {zzz:'1'} red",
 check("§2b batch-search: {q:'P01'} geçer, {q, sunucu:'x'} red, 101 karakter red", !red(batchSearchQuerySchema, { q: "P01" }) && red(batchSearchQuerySchema, { q: "P01", sunucu: "x" }) && red(batchSearchQuerySchema, { q: "a".repeat(101) }));
 check("§2c ⭐ operator-performance: limit 'abc' → RED (sessiz 50 YOK); limit yok → geçer; 201 red; bilinmeyen anahtar red", red(operatorPerformanceQuerySchema, { limit: "abc" }) && !red(operatorPerformanceQuerySchema, {}) && red(operatorPerformanceQuerySchema, { limit: "201" }) && red(operatorPerformanceQuerySchema, { foo: "1" }) && operatorPerformanceQuerySchema.parse({ limit: "25" }).limit === 25);
 check("§2d traveler-trace: rollId zorunlu uuid, fazladan anahtar red", red(travelerTraceQuerySchema, {}) && red(travelerTraceQuerySchema, { rollId: "x" }) && red(travelerTraceQuerySchema, { rollId: "11111111-1111-4111-8111-111111111111", foo: "1" }) && !red(travelerTraceQuerySchema, { rollId: "11111111-1111-4111-8111-111111111111" }));
+check("§2e zincir (Z3): süzgeçsiz geçer, durum kapalı enum, gecikmis yalnız 'true', fazladan anahtar red", !red(productionChainQuerySchema, {}) && !red(productionChainQuerySchema, { durum: "GECIKMIS", gecikmis: "true" }) && red(productionChainQuerySchema, { durum: "YOK" }) && red(productionChainQuerySchema, { gecikmis: "false" }) && red(productionChainQuerySchema, { from: "2026-01-01" }));
 check("§2e ortak şemalar strict: dateRangeSchema/compareRangeSchema bilinmeyen anahtarı reddeder", red(dateRangeSchema, { installationId: "1" }) && red(compareRangeSchema, { installationId: "1" }));
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

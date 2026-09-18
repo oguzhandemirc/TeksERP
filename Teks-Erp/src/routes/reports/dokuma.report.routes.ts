@@ -16,6 +16,9 @@ import { requirePermission } from "../../middlewares/rbac.middleware";
 import { requireReportOpen } from "../../middlewares/report.middleware";
 import { requireDokumaEnabled } from "../../middlewares/module.middleware";
 import { durusParetoReport, efficiencyReport, shiftScorecardReport, type WithSuzgec } from "../../services/reports/dokuma.report.service";
+import { reportEnvelope, resolveDateRange, splitOptions } from "../../services/reports/_shared";
+import { filterEcho, musteriEkseni } from "../../services/reports/_filters";
+import { getProductionChain, CHAIN_STATUSES } from "../../services/reports/production-chain.report.service";
 
 const router = Router();
 router.use(verifyToken, requireDokumaEnabled);
@@ -54,6 +57,35 @@ const paretoSchema = z.object({ from: YMD, to: YMD, machineId: z.string().uuid("
  *       200: { description: "Randıman raporu (satırlar · toplam · kaynakKirilimi · meta.ufuk · meta.leventler seçici kaynağı · süzgeçliyse kökte suzgec)" }
  *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
  */
+/**
+ * @openapi
+ * /api/reports/dokuma/zincir:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Üretim Zinciri hub'ı — açık sipariş satırı → iş emri (adım) → dokuma işi (Σkoşum/plan) → levent (kalan); bağsız kovalar (işsiz levent · siparişsiz dokuma · dışarıdan top) kendi sayımından; devere kapalıysa levent alanı dönmez
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri ekseni — CSV (a,b); boş = tümü" }
+ *       - { in: query, name: durum, schema: { type: string, enum: [BEKLEYEN, DEVAM, GECIKMIS, TAMAMLANAN] }, description: "Satır durumu (kapalı seçici); yoksa tümü" }
+ *       - { in: query, name: gecikmis, schema: { type: string, enum: ["true"] }, description: "Yalnız gecikmiş satırlar" }
+ *     responses:
+ *       200: { description: "Rapor zarfı — data.satirlar · satirOmitted (tavan 500) · kovalar · ozet · moduller.devere; meta.secenekler.customerId; süzgeçliyse suzgec (+dusenSatir)" }
+ *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
+ */
+/** Z3 üretim zinciri: müşteri CSV · durum (kapalı enum) · gecikmis ("true" = yalnız gecikmişler). Tarih YOK (anlık fotoğraf). */
+export const productionChainQuerySchema = z.object({ customerId: musteriEkseni.customerId, durum: z.enum(CHAIN_STATUSES).optional(), gecikmis: z.enum(["true"]).optional() }).strict();
+const CHAIN_FILTER_KEYS = ["customerId", "durum", "gecikmis"] as const;
+
+router.get("/zincir", requireReportOpen("dokuma/zincir"), guard, async (req, res, next) => {
+  try {
+    const input = productionChainQuerySchema.parse(req.query);
+    const { data, secenekler, dusenSatir } = splitOptions(await getProductionChain(input));
+    res.status(200).json(reportEnvelope(data, resolveDateRange({}), null, { suzgec: filterEcho(input, CHAIN_FILTER_KEYS, dusenSatir), secenekler }));
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.get("/randiman", requireReportOpen("dokuma/randiman"), guard, async (req, res, next) => {
   try {
     const { byLine, ...q } = aralikSchema.parse(req.query);

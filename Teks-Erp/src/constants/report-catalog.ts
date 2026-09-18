@@ -125,6 +125,9 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "dokuma/karne", baslik: "Karne Listesi ve Mühür", soru: "Hangi vardiya karneleri mühürlendi, hangileri hâlâ açık?",
     sinif: "gelismis", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 7, tarih: "aralik-gun",
     panelYolu: "reports/dokuma/karne", uc: null, kapiTasiyici: null, yuzey: "yaprak-yabanci-uc" },
+  { key: "dokuma/zincir", baslik: "Üretim Zinciri", soru: "Hangi sipariş kalemi zincirin neresinde ve nerede takıldı?",
+    sinif: "basit", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: null, tarih: "yok",
+    panelYolu: "reports/dokuma/zincir", uc: "/api/reports/dokuma/zincir", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/zincir" }], yuzey: "yaprak" },
 
   // ── ÖN MUHASEBE ───────────────────────────────────────────────────────────
   { key: "finance/aging", baslik: "Cari Yaşlandırma", soru: "Cari bakiyeler bu tarihte hangi vade kovalarında duruyor?",

@@ -38,6 +38,11 @@
 `test_rapor_kapisi` · `test_screen_catalog` §9c/§9e (karo ↔ `modul` iki yönlü) ·
 `Electron ham-tarih-girdisi.test.ts` §3 (`tarih:"yok"` ⇒ tarih kutusu çizilmez).
 
+> ⚠️ **Uygulama notu (9b, 2026-09-18, 1e onayı):** yol `reports/dokuma/zincir`, katalog anahtarı `dokuma/zincir`, uç
+> `/api/reports/dokuma/zincir` — `test_rapor_katalogu §4` katalog `modul`unun KATEGORİ satırının modülüyle eşit olmasını
+> ister; `reports/production` productionEnabled'dır, dokuma kapısı (§6) için rapor **Dokuma Raporları** kategorisinde açıldı.
+> İçerik, süzgeçler ve kapanış ölçütü aynen.
+
 ## 2. MODÜL BAYRAĞI — `dokumaEnabled`, **devere AYRI ele alınır**
 
 Katalog **TEK** `modul` alanı taşır; hub iki modülün verisini gösterir (`dokuma.enabled`,

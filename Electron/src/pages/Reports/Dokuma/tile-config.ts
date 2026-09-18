@@ -1,4 +1,4 @@
-import { Gauge, ListChecks, ClipboardList, Timer } from "lucide-react";
+import { Gauge, ListChecks, ClipboardList, Link2, Timer } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
 
 /**
@@ -7,6 +7,13 @@ import type { HubTile } from "../_components/ReportHubGrid";
  * Karo yalnız `dokuma.enabled` açıkken çizilir (`dokuma-regime.ts`).
  */
 export const dokumaReportTiles: HubTile[] = [
+  {
+    key: "zincir",
+    title: "Üretim Zinciri",
+    description: "Sipariş satırı → iş emri → dokuma işi → levent: nerede, ne kadar ilerledi, nerede takıldı; bağsız kayıtlar ayrı",
+    icon: Link2,
+    to: "/reports/dokuma/zincir",
+  },
   {
     key: "randiman",
     title: "Randıman",

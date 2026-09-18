@@ -29,7 +29,7 @@ describe("rejim (Raporlar hub'ı karosu)", () => {
   });
   it("alt raporlar üç segmentli adres taşır (ReportSideRail şartı) ve kategori kayıtlı", () => {
     for (const t of reportCategoryTiles.dokuma ?? []) expect(t.to.split("/").filter(Boolean)).toHaveLength(3);
-    expect(reportCategoryTiles.dokuma?.length).toBe(4);
+    expect(reportCategoryTiles.dokuma?.length).toBe(5);
   });
 });
 

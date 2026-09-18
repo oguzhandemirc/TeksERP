@@ -40,6 +40,8 @@ const AXES_BY_REPORT: Record<string, readonly string[]> = {
   "customer/order-profile": ["customerId", "destination"],
   // Fasonda hedef ekseni yok: sevk müşteriye değil firmaya gider.
   "subcontract/scorecard": ["subcontractorId", "itemId", "colorId"],
+  // Z3 üretim zinciri: yalnız müşteri ekseni; durum + gecikmiş eksen değil (kapalı seçici / anahtar), sunucuda süzülür.
+  "dokuma/zincir": ["customerId"],
 };
 
 /**

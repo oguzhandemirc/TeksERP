@@ -10,6 +10,7 @@
 // =============================================================================
 import type { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
+import { K18_DEAD_STATUSES } from "../batch.service";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -39,4 +40,16 @@ export async function weavingOrderOfRoll(db: Db, rollId: string): Promise<Weavin
   const receiptWo = roll.parentReceipt?.cancelledAt ? null : roll.parentReceipt?.weavingOrderId ?? null;
   if (receiptWo) return { weavingOrderId: receiptWo, via: "RECEIPT" };
   return null;
+}
+
+/** Z3: fasonda dokunan işlerin KABUL edilen metresi (makbuz zinciri, iptal edilmemiş makbuz, ölü olmayan top) — iş başına Σ ilk metre. */
+export async function receivedMetersByWeavingOrder(db: Db, weavingOrderIds: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (weavingOrderIds.length === 0) return out;
+  const rolls = await db.roll.findMany({
+    where: { status: { notIn: K18_DEAD_STATUSES }, parentReceipt: { cancelledAt: null, weavingOrderId: { in: weavingOrderIds } } },
+    select: { initialQty: true, parentReceipt: { select: { weavingOrderId: true } } },
+  });
+  for (const r of rolls) { const id = r.parentReceipt?.weavingOrderId; if (id) out.set(id, (out.get(id) ?? 0) + Number(r.initialQty)); }
+  return out;
 }

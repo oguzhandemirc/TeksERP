@@ -14,7 +14,9 @@ import prisma from "../../lib/prisma";
 import { factoryDayStart } from "../../constants/time";
 import { K18_DEAD_STATUSES } from "../batch.service";
 import { ACTIVE_LINE } from "../helpers/order-line-scope.helper";
+import { ACTIVE_ORDER_LINK } from "../helpers/order-link.helper";
 import { computeLineLedgerTx } from "../helpers/order-status.helper";
+import { receivedMetersByWeavingOrder } from "../helpers/weaving-order-of-roll.helper";
 import { remainingByBeam } from "../helpers/warp-beam.helper";
 import { readDevereEnabled } from "../system-setting.service";
 import { droppedRows, optionList, type Secenekler, type WithSecenekler } from "./_secenekler";
@@ -109,10 +111,7 @@ async function wovenMetersByOrder(orders: Array<{ id: string; executionKind: Wea
     const runs = await prisma.machineRun.groupBy({ by: ["weavingOrderId"], where: { weavingOrderId: { in: inHouseIds }, revokedAt: null }, _sum: { producedM: true } });
     for (const r of runs) if (r.weavingOrderId) out.set(r.weavingOrderId, num(r._sum.producedM));
   }
-  if (subIds.length > 0) {
-    const rolls = await prisma.roll.findMany({ where: { status: { notIn: K18_DEAD_STATUSES }, parentReceipt: { cancelledAt: null, weavingOrderId: { in: subIds } } }, select: { initialQty: true, parentReceipt: { select: { weavingOrderId: true } } } });
-    for (const r of rolls) { const id = r.parentReceipt?.weavingOrderId; if (id) out.set(id, (out.get(id) ?? 0) + num(r.initialQty)); }
-  }
+  if (subIds.length > 0) for (const [id, m] of await receivedMetersByWeavingOrder(prisma, subIds)) out.set(id, (out.get(id) ?? 0) + m);
   return out;
 }
 
@@ -143,7 +142,7 @@ export async function getProductionChain(input: ChainInput = {}): Promise<ChainR
       item: { select: { id: true, name: true } },
       color: { select: { id: true, name: true } },
       workOrderLinks: {
-        where: { unlinkedAt: null, workOrder: { status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] } } },
+        where: { ...ACTIVE_ORDER_LINK, workOrder: { status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] } } },
         select: { workOrder: { select: { id: true, workOrderNumber: true, status: true, createdAt: true, steps: { select: { stepSequence: true, status: true, station: { select: { name: true } } } } } } },
       },
       weavingOrderLinks: {
