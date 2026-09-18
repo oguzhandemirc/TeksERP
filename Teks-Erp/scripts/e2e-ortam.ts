@@ -226,10 +226,11 @@ function sunucu(): void {
   adKapisi();
   if (!dbVarMi()) dur(`${DB_ADI} yok — önce \`kur\``);
   const jwt = process.env.E2E_JWT_SECRET ?? randomBytes(32).toString("hex");
-  console.log(`→ backend :${API_PORT} · DB ${DB_ADI}`);
+  console.log(`→ backend ${process.env.E2E_HOST ?? "127.0.0.1"}:${API_PORT} · DB ${DB_ADI}`);
   const cocuk = spawn("npx", ["tsx", "src/server.ts"], {
     cwd: KOK, stdio: "inherit",
-    env: cocukOrtami({ PORT: API_PORT, HOST: "127.0.0.1", DATABASE_URL: dbUrl(DB_ADI), JWT_SECRET: jwt, NODE_ENV: "development" }),
+    // HOST varsayılan yerel; GERÇEK tablet için `E2E_HOST=0.0.0.0` (LAN'a açılır — test kopyası, kısa pencere).
+    env: cocukOrtami({ PORT: API_PORT, HOST: process.env.E2E_HOST ?? "127.0.0.1", DATABASE_URL: dbUrl(DB_ADI), JWT_SECRET: jwt, NODE_ENV: "development" }),
   });
   const kapat = (): void => { cocuk.kill("SIGTERM"); };
   process.on("SIGINT", kapat);

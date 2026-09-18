@@ -53,6 +53,9 @@ async function istasyonaMakineEkle(page, istasyonAdi) {
 const kartIciDugme = (metin, dugme) =>
   `xpath=(//*[.//*[normalize-space()=${JSON.stringify(metin)}] and .//button[contains(normalize-space(.), ${JSON.stringify(dugme)})]])[last()]//button[contains(normalize-space(.), ${JSON.stringify(dugme)})]`;
 
+/** C8'in adım içi ölçümleri — `dogrula` kapanışlardan okur (uç GET'i yetmez, POST sonucu gerekir). */
+const c8Olcum = { uiKapali: null, satirKirmizi: null, apiDurum: null, apiKod: null, fisArtti: null };
+
 const MODUL_ANAHTARLARI = ["productionEnabled", "financeEnabled", "ticaretEnabled", "iplikEnabled", "depoMultiEnabled", "kumasTeknikEnabled", "tezgahEnabled", "devereEnabled", "dokumaEnabled", "emanetEnabled"];
 
 export const ADIMLAR = [
@@ -573,6 +576,61 @@ export const ADIMLAR = [
       { ad: "kapama: faturanın açık tutarı yarıya (payment_allocations 6.120)",
         sql: `SELECT COALESCE(SUM(pa.amount),0)::text a FROM payment_allocations pa JOIN invoices i ON i.id=pa."invoiceId" JOIN goods_receipts gr ON gr.id=i."goodsReceiptId" WHERE gr."deliveryNoteNo"=$1`, params: [AD.irsaliye],
         oku: (r) => Number(r[0].a), beklenen: (v) => Math.abs(v - 6120) < 0.01 },
+    ],
+  },
+
+  {
+    id: "C8", rol: "S", gerektirir: ["B2", "C2"],
+    yol: "Sistem → Özellik Anahtarları → Devere / Levent → \"İplik lotu zorunlu olsun\" AÇ → Mal Kabul lot boş → Fişi Oluştur → anahtarı KAPAT", rota: "settings/flags",
+    async yap({ git, tikla, gor, page, api, sql }) {
+      const anahtar = async (acik) => {
+        await git("Özellik Anahtarları");
+        await tikla("Devere / Levent");
+        // Satır: <label> (başlık + özet + rozet) içinde native checkbox — sekmeler kalıcı olduğundan yalnız görünür olan.
+        const sw = page().locator("label", { hasText: "İplik lotu zorunlu olsun" }).locator('input[type="checkbox"]').filter({ visible: true }).first();
+        await gor(sw);
+        if ((await sw.isChecked()) !== acik) await sw.click();
+        const kaydet = page().getByRole("button", { name: "Kaydet", exact: true }).filter({ visible: true }).first();
+        if (await kaydet.isEnabled()) { await kaydet.click({ timeout: 15_000 }); await page().waitForTimeout(1200); }
+      };
+      await anahtar(true);
+      const bayrak = (await api("/api/feature-flags")).govde?.data?.devereLotRequired;
+      if (bayrak !== true) throw new Error(`anahtar AÇILMADI (API devereLotRequired=${bayrak})`);
+      // Mal Kabul: siparişsiz, iplik satırı, lot BOŞ
+      await git("Mal Kabul");
+      await tikla("Yeni Mal Kabul");
+      const d = page().getByRole("dialog").filter({ hasText: "Yeni Mal Kabul" }).last(); await gor(d);
+      const depo = d.locator("select").filter({ has: page().locator("option", { hasText: /Depo seçin/ }) }).first();
+      if (await depo.count() && !(await depo.inputValue())) await depo.selectOption({ index: 1 });
+      // Form boş bir KUMAŞ satırıyla açılır (iplik satırı bazen taslaktan kalır) — yoksa "İplik satırı ekle".
+      if (!(await d.getByText("İplik ara", { exact: false }).count())) await d.getByRole("button", { name: "İplik satırı ekle" }).click({ timeout: 15_000 });
+      await d.getByText("İplik ara", { exact: false }).first().click({ timeout: 15_000 });
+      const um = page().getByRole("dialog").filter({ hasText: /seç/ }).last(); await gor(um);
+      await um.getByPlaceholder("Kod, ad").fill(AD.iplik);
+      await page().waitForTimeout(700);
+      await um.getByRole("row").filter({ hasText: buyukTr(AD.iplik) }).first().click({ timeout: 15_000 });
+      await um.waitFor({ state: "detached", timeout: 15_000 }).catch(() => undefined);
+      await d.getByLabel("Miktar (kg)").first().fill("5");
+      await page().waitForTimeout(400);
+      const olustur = d.getByRole("button", { name: /Fişi Oluştur/ });
+      c8Olcum.uiKapali = await olustur.isDisabled();               // ekran: lot boşken düğme kapalı mı
+      const lotKutusu = d.getByLabel("Lot numarası").first();
+      c8Olcum.satirKirmizi = (await lotKutusu.getAttribute("aria-invalid")) === "true";
+      await page().keyboard.press("Escape"); await page().waitForTimeout(300);
+      // Sunucu tarafı: aynı gövdeyi UI'yi ATLAYARAK gönder — satır düşer mi, 400 mü?
+      const depoId = (await sql(`SELECT id FROM warehouses WHERE "isActive" ORDER BY "createdAt" LIMIT 1`))[0]?.id;
+      const itemId = (await sql(`SELECT id FROM items WHERE code=$1`, [AD.iplikKod]))[0]?.id;
+      const oncekiFis = (await sql(`SELECT count(*)::int n FROM goods_receipts`))[0].n;
+      const r = await api("/api/goods-receipts", { method: "POST", body: JSON.stringify({ warehouseId: depoId, lines: [{ itemId, initialQty: 5, lotNo: null }] }) });
+      c8Olcum.apiDurum = r.status; c8Olcum.apiKod = r.govde?.details?.code ?? r.govde?.error?.code ?? null;
+      c8Olcum.fisArtti = (await sql(`SELECT count(*)::int n FROM goods_receipts`))[0].n - oncekiFis;
+      await anahtar(false);
+    },
+    dogrula: [
+      { ad: "ekran: lot boşken satır kırmızı ve Fişi Oluştur KAPALI", sql: `SELECT 1`, oku: () => `${c8Olcum.satirKirmizi}:${c8Olcum.uiKapali}`, beklenen: "true:true" },
+      { ad: "sunucu FAIL-CLOSED: lotsuz iplik satırı 400 + kod, fiş DOĞMADI (satır sessizce düşmez)", sql: `SELECT 1`,
+        oku: () => `${c8Olcum.apiDurum}:${c8Olcum.apiKod}:${c8Olcum.fisArtti}`, beklenen: (v) => /^400:(YARN_LOT_REQUIRED|RECEIPT_LINES_INVALID):0$/.test(v) },
+      { ad: "anahtar geri KAPALI (GET /api/feature-flags)", uc: "/api/feature-flags", oku: (g) => g?.data?.devereLotRequired, beklenen: false },
     ],
   },
 
