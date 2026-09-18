@@ -135,8 +135,15 @@ async function main(): Promise<void> {
     const p = await createWarpBeam({ warpSpecId: spec.id, plannedLengthM: 100, originKind: WarpBeamOrigin.IN_HOUSE });
     beamIds.push(p.data.id);
     await windWarpBeam(p.data.id, { lengthM: 100, kgSource: WarpKgSource.WEIGHED, machineId: devereM.id, yarnIssues: [{ warehouseId: wh.id, qtyKg: 12 }], yarnReturns: [{ warehouseId: wh.id, qtyKg: 1, reasonCode: "DEPOYA_IADE" }] });
-    await prisma.systemSetting.update({ where: { key: SETTING_KEYS.DEVERE_AUTO_CONSUME }, data: { value: "false" } });
-    const ctx1 = await getWarpBeamTabletContext();
+    // Bayrak KAPAMA kendi try/finally'sinde: ölçüm biter bitmez açık değer geri gelir (`bekci-bayrak-upsert-try-icinde`
+    // kuralı) — dış finally de fotoğrafı geri koyar; iki hat, sıradaki bekçi (`test_warp_beam_auto_consume`) miras almasın.
+    let ctx1: Awaited<ReturnType<typeof getWarpBeamTabletContext>>;
+    try {
+      await prisma.systemSetting.update({ where: { key: SETTING_KEYS.DEVERE_AUTO_CONSUME }, data: { value: "false" } });
+      ctx1 = await getWarpBeamTabletContext();
+    } finally {
+      await prisma.systemSetting.update({ where: { key: SETTING_KEYS.DEVERE_AUTO_CONSUME }, data: { value: "true" } }).catch(() => undefined);
+    }
     const d = ctx1.data.lastWindDefaults.find((x) => x.warpSpecId === spec.id);
     // ── §5 E3 bağı: koşum tablet bağlamı (01 Z1 ucu) önerileri TAŞIR ─────────
     const ctxRun = await machineRunTabletContext(loom1.id);
@@ -144,6 +151,12 @@ async function main(): Promise<void> {
 
     check("§4b ⭐ son sarım: makine + brüt çıkış (12 kg, depo) + dip iadesi (1 kg, DEPOYA_IADE) ayrı listelerde; autoConsume kapalı aynası false", ctx1.data.autoConsume === false && d?.machineId === devereM.id && d?.yarnIssues.length === 1 && d?.yarnIssues[0]?.qtyKg === 12 && d?.yarnIssues[0]?.warehouseId === wh.id && d?.yarnReturns.length === 1 && d?.yarnReturns[0]?.qtyKg === 1 && d?.yarnReturns[0]?.reasonCode === "DEPOYA_IADE", JSON.stringify(d));
   } finally {
+    // Bayraklar EN ÖNCE geri (fikstür temizliği yarım kalsa bile sıradaki bekçiye bayrak sızmasın).
+    for (const key of FLAGS) {
+      const eski = foto.find((f) => f.key === key);
+      if (eski) await prisma.systemSetting.upsert({ where: { key }, create: { key, value: eski.value as Prisma.InputJsonValue }, update: { value: eski.value as Prisma.InputJsonValue } }).catch(() => undefined);
+      else await prisma.systemSetting.deleteMany({ where: { key } }).catch(() => undefined);
+    }
     await prisma.doffEvent.deleteMany({ where: { machineId: { in: [loom1.id, loom2.id] } } }).catch(() => undefined);
     await prisma.machineRun.deleteMany({ where: { machineId: { in: [loom1.id, loom2.id] } } }).catch(() => undefined);
     await prisma.yarnMovement.deleteMany({ where: { OR: [{ warpBeamId: { in: beamIds } }, { itemId: yarn.id }] } }).catch(() => undefined);
@@ -160,11 +173,6 @@ async function main(): Promise<void> {
     await prisma.machineSpec.deleteMany({ where: { machineId: { in: [loom1.id, loom2.id, devereM.id] } } }).catch(() => undefined);
     await prisma.machine.deleteMany({ where: { stationId: { in: [stWeave.id, stDevere.id] } } }).catch(() => undefined);
     await prisma.station.deleteMany({ where: { id: { in: [stWeave.id, stDevere.id] } } }).catch(() => undefined);
-    for (const key of FLAGS) {
-      const eski = foto.find((f) => f.key === key);
-      if (eski) await prisma.systemSetting.update({ where: { key }, data: { value: eski.value as Prisma.InputJsonValue } }).catch(() => undefined);
-      else await prisma.systemSetting.deleteMany({ where: { key } }).catch(() => undefined);
-    }
   }
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
