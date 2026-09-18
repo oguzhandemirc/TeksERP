@@ -283,6 +283,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   ROLL_PRODUCTION_TIMESTAMPS_BACKFILL: "Top üretim damgaları geriye dönük dolduruldu (betik)",
   ROLL_WAREHOUSE_BACKFILL: "Top depo bağı geriye dönük dolduruldu (betik)",
   TAMBUR_UNDO_CANCEL_MARKER_BACKFILL: "Tambur geri alma iptal işareti dolduruldu (betik)",
+  CASH_LEDGER_PAYMENT_BACKFILL: "Kasa defteri geçmiş satırları dolduruldu (betik)",
 
   // ── SYSTEM · servis keşfi (kurulum kimliği) ──
   INSTALLATION_ID_CREATED: "Kurulum kimliği oluşturuldu",
@@ -603,6 +604,8 @@ export const ENUM_LABELS: Record<string, string> = {
   TRANSFER_IN: "Virman (gelen)",
   TRANSFER_OUT: "Virman (giden)",
   OPENING: "Açılış / Devir",
+  // Tek yazar (2026-09-18): carili tahsilatın kasa defteri satırı; PAYMENT (ödeme satırı) CariTxnSource ile ORTAK — CASH_TRANSACTION.kind override'ı
+  COLLECTION: "Tahsilat",
   // ChequeStatus (metinler `Cheques/labels.STATUS_LABEL` ile aynı anlamda)
   PORTFOLIO: "Elimizde (portföy)",
   AT_BANK: "Bankada (tahsilde)",
@@ -834,6 +837,8 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   "MACHINE_STOP_EVENT.lossClass": { MINOR: "Mikro duruş (eşik altı)" },
   // WarpBeamOrigin.IN_HOUSE "içeride SARILDI" — WeavingExecutionKind'ın "kendi tezgahımızda"sı levent için yanlış (devere 1b)
   "WARP_BEAM.originKind": { IN_HOUSE: "İçeride sarıldı" },
+  // CashTxnKind.PAYMENT "ödeme satırı (çıkış)" — CariTxnSource.PAYMENT'ın "Tahsilat / Ödeme"si kasa türünde yanlış (tek yazar, 2026-09-18)
+  "CASH_TRANSACTION.kind": { PAYMENT: "Ödeme" },
   // StationKind.WEAVING (dokuma ⓪, 2026-09-14) — istasyon TÜRÜ; global `WEAVING`
   // RollEntrySource dilinde ("Dokumadan İndi", topun kaynağı). Ortak Türkçe YETMEZ.
   "STATION.kind": { WEAVING: "Dokuma Tezgahı" },
@@ -871,6 +876,10 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
  * şişmiş bir liste kapının kendisi olur.
  */
 export const SHARED_ENUM_VALUES: Record<string, string> = {
+  // ── Kasa tek yazar (2026-09-18)
+  PAYMENT:
+    "CariTxnSource(cari hareketinin kaynağı: tahsilat ya da ödeme) ve CashTxnKind(kasa defterinde ÖDEME satırı, çıkış) — ortak Türkçe YETMEZ: " +
+    "CASH_TRANSACTION.kind override'ı 'Ödeme' ile ayrıldı (2026-09-18)",
   // ── Fason F1 polimorfik kalem (2026-09-14)
   ROLL: "StockCountLineKind(sayım satırı top) ve SubcontractorDispatchItemKind(fason sevk kalemi top) — ikisi de kalemin TOP olduğunu söyler; ortak Türkçe doğru",
   // ── Devere 1b (2026-09-14)

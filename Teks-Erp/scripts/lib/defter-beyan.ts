@@ -200,9 +200,11 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/cheque.service.ts", sembol: "writeEventTx" }],
     ["src/services/cheque.service.ts"]),
 
-  D("CashTransaction", "kasa/banka defteri", { tur: "DURUM_IPTAL", kolon: "cancelledAt" },
-    [{ dosya: "src/services/cash-transaction.service.ts", sembol: "cancel" }],
-    ["src/services/cash-transaction.service.ts"], { yari: true }),
+  // Tek yazar (2026-09-18): satırı ve bakiyeyi yalnız helper yazar/geri alır; kasa hareketi, virman VE carili tahsilat/ödeme
+  // (kind COLLECTION/PAYMENT, `paymentId`) aynı kapıdan geçer — ödeme satırının iptali ödemenin iptalidir.
+  D("CashTransaction", "kasa/banka defteri (masraf · gelir · virman · açılış · carili tahsilat/ödeme)", { tur: "DURUM_IPTAL", kolon: "cancelledAt" },
+    [{ dosya: "src/services/helpers/cash-ledger.helper.ts", sembol: "cancelCashTxTx" }],
+    ["src/services/helpers/cash-ledger.helper.ts"], { yari: true }),
 
   D("YarnMovement", "iplik stok defteri; devere 1b çiftleri: çözgü çıkışı ↔ tersi · dip iadesi ↔ tersi (brüt çıkış + ayrı iade, §3.7); fason G1 çiftleri: fasona çıkış ↔ iptali · fasondan dönüş ↔ iptali (kalem bağı `dispatchItemId`, fasondaki bakiye TÜRETİLİR)",
     { tur: "KARSI_OLAY", enumAdi: "YarnMovementKind", ciftler: [["ADJUST_IN", "ADJUST_OUT"], ["IN", "OUT"], ["WARP_ISSUE", "WARP_ISSUE_REVERSAL"], ["WARP_RETURN", "WARP_RETURN_REVERSAL"], ["SUBCONTRACT_OUT", "SUBCONTRACT_OUT_CANCEL"], ["SUBCONTRACT_RETURN", "SUBCONTRACT_RETURN_CANCEL"]] },

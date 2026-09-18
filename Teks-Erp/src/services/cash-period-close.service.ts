@@ -118,7 +118,7 @@ async function measureTx(
     FROM (
       SELECT CASE WHEN direction = 'IN' THEN amount ELSE -amount END AS t
         FROM payments
-        WHERE status <> 'CANCELLED' AND ${col} = ${scope.accountId}::uuid AND "paymentDate" < ${cut}
+        WHERE status <> 'CANCELLED' AND ${col} = ${scope.accountId}::uuid AND "paymentDate" < ${cut} AND NOT EXISTS (SELECT 1 FROM cash_transactions ctp WHERE ctp."paymentId" = payments.id)
       UNION ALL
       SELECT CASE WHEN direction = 'IN' THEN amount ELSE -amount END AS t
         FROM cash_transactions
@@ -616,13 +616,13 @@ export class CashPeriodCloseService {
         -- iptal ters satırıyla kendi anında düşer, zaman-çıpası bozulmaz)
         SELECT CASE WHEN direction = 'IN' THEN amount ELSE -amount END AS t
           FROM payments
-          WHERE ${col} = ${scope.accountId}::uuid AND "paymentDate" < ${from} ${pLow}
+          WHERE ${col} = ${scope.accountId}::uuid AND "paymentDate" < ${from} ${pLow} AND NOT EXISTS (SELECT 1 FROM cash_transactions ctp WHERE ctp."paymentId" = payments.id)
         UNION ALL
         -- 1b) TAHSİLAT İPTALİ — ters satır, İPTAL anında
         SELECT CASE WHEN direction = 'IN' THEN -amount ELSE amount END AS t
           FROM payments
           WHERE status = 'CANCELLED' AND "cancelledAt" IS NOT NULL
-            AND ${col} = ${scope.accountId}::uuid AND "cancelledAt" < ${from} ${cLow} ${pOrigInWindow}
+            AND ${col} = ${scope.accountId}::uuid AND "cancelledAt" < ${from} ${cLow} ${pOrigInWindow} AND NOT EXISTS (SELECT 1 FROM cash_transactions ctp WHERE ctp."paymentId" = payments.id)
         UNION ALL
         -- 2) KASA HAREKETİ — asıl satır
         SELECT CASE WHEN direction = 'IN' THEN amount ELSE -amount END AS t

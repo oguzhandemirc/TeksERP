@@ -722,10 +722,11 @@ async function main(): Promise<void> {
       if (!r.writes) continue;
       scanned.push({ file: path.relative(servicesDir, full), guarded: r.guards });
     }
-    // Körlük zemini: üç yazar biliniyor (payment · cash-transaction · cheque).
+    // Körlük zemini: TEK yazar biliniyor (2026-09-18 tek yazar dilimi: helpers/cash-ledger.helper.ts) — başka dosya
+    // bakiye yazıyorsa tek yazar sözleşmesi bozulmuştur (test_cash_single_writer §0 da ölçer).
     check(
-      "§9a Körlük zemini: kasa/banka bakiyesi yazan servisler bulundu",
-      scanned.length >= 3,
+      "§9a Körlük zemini: kasa/banka bakiyesi yazan servisler bulundu (TEK yazar: cash-ledger.helper)",
+      scanned.length >= 1 && scanned.every((s) => s.file.endsWith("cash-ledger.helper.ts")),
       `bulunan=${scanned.length} → ${scanned.map((s) => s.file).join(", ")}`,
     );
     const unguarded = scanned.filter((s) => !s.guarded);

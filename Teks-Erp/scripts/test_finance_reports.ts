@@ -916,6 +916,7 @@ main()
         await prisma.invoiceLine.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
         await prisma.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
       }
+      if (paymentIds.length) await prisma.cashTransaction.deleteMany({ where: { paymentId: { in: paymentIds } } }); // tek yazar: ödeme satırı FK RESTRICT
       if (paymentIds.length) await prisma.payment.deleteMany({ where: { id: { in: paymentIds } } });
       if (cashTxnIds.length) await prisma.cashTransaction.deleteMany({ where: { id: { in: cashTxnIds } } });
       if (cariIds.length) {

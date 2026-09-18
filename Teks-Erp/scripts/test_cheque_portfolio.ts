@@ -492,7 +492,7 @@ async function main(): Promise<void> {
     LEFT JOIN (
       SELECT "bankAccountId", SUM(t) AS toplam FROM (
         SELECT "bankAccountId", SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS t
-          FROM payments WHERE status <> 'CANCELLED' AND "bankAccountId" IS NOT NULL GROUP BY "bankAccountId"
+          FROM payments WHERE status <> 'CANCELLED' AND "bankAccountId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM cash_transactions ctp WHERE ctp."paymentId" = payments.id) GROUP BY "bankAccountId"
         UNION ALL
         SELECT "bankAccountId", SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS t
           FROM cash_transactions WHERE status <> 'CANCELLED' AND "bankAccountId" IS NOT NULL GROUP BY "bankAccountId"

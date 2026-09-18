@@ -97,6 +97,8 @@ export interface PaymentRow {
     customer: { code: string; name: string } | null;
     subcontractor: { code: string; name: string } | null;
   };
+  /** Kasa/banka defterindeki satırı (tek yazar, 2026-09-18) — eski backend göndermez; backfill öncesi eski ödemelerde null. */
+  cashTransaction?: { id: string; docNo: string; txnDate: string; status: "ACTIVE" | "CANCELLED" } | null;
 }
 
 export interface AccountRow {

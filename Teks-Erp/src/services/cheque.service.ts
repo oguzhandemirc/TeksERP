@@ -39,9 +39,9 @@
 //   DEPOSIT_CANCEL → hiçbir defter oynamaz (DEPOSIT de oynatmamıştı); durum PORTFOLIO,
 //                    başlık bankası düşer — dönem kapısı/8028 kilidi ÇAĞRILMAZ
 //
-// ⚠️ KASA/BANKA BAKİYESİNİN ÜÇÜNCÜ YAZARI BURASIDIR (Payment · CashTransaction ·
-// ChequeEvent). `scripts/test_consistency.ts` §23/§24 formülü bu üçünü BİRLİKTE
-// toplar — genişletilmezse İLK çek tahsilatında mevcut bekçi "drift" raporlar.
+// ⚠️ Kasa/banka bakiyesini oynatan ÜÇ DEFTER var (CashTransaction — ödeme satırları dahil · ChequeEvent · backfill
+// öncesi satırsız Payment); bakiye YAZIMI ise tek yerde: `helpers/cash-ledger.helper.moveAccountBalanceTx`.
+// `scripts/test_consistency.ts` §23/§24 formülü üçünü birlikte toplar (ödeme terimi yalnız satırsız ödemeler).
 // =============================================================================
 import {
   Prisma,
@@ -66,6 +66,7 @@ import { assertCashBalanceCoversTx } from "./helpers/cash-balance-guard.helper";
 import { buildTurkishSearch } from "../utils/query-parser";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import type { ApiResponse } from "../types/api.types";
+import { moveAccountBalanceTx as moveLedgerAccountBalanceTx } from "./helpers/cash-ledger.helper";
 
 // -----------------------------------------------------------------------------
 // BELGE NUMARASI
@@ -318,17 +319,9 @@ async function loadAccountTx(
   return { name };
 }
 
-/** Kasa/banka bakiyesini ATOMİK oynatır (okuyup-yazmak eşzamanlıyı yutardı). */
-async function moveAccountBalanceTx(
-  tx: Prisma.TransactionClient,
-  ref: AccountRef,
-  delta: Prisma.Decimal,
-): Promise<void> {
-  if (ref.cashBoxId) {
-    await tx.cashBox.update({ where: { id: ref.cashBoxId }, data: { balance: { increment: delta } } });
-  } else if (ref.bankAccountId) {
-    await tx.bankAccount.update({ where: { id: ref.bankAccountId }, data: { balance: { increment: delta } } });
-  }
+/** Kasa/banka bakiyesi TEK YAZARDAN oynar (`cash-ledger.helper`); çekin defteri `ChequeEvent`tir, bakiye primitifi ortaktır. */
+async function moveAccountBalanceTx(tx: Prisma.TransactionClient, ref: AccountRef, delta: Prisma.Decimal): Promise<void> {
+  await moveLedgerAccountBalanceTx(tx, ref, delta);
 }
 
 /** Cari referansını çözer: doğrudan `cariId` ya da müşteri/fason üzerinden lazy açılış. */

@@ -137,7 +137,10 @@ function main(): void {
   // Bugünkü 29 dosyanın tamamı `helpers/` ve `jobs/` altında: audit'leri ÇAĞIRAN eylemde
   // (aynı `EBEVEYN_EYLEMDE` kalıbı, dosya düzeyinde). Sayı ARTAMAZ — yeni bir yazıcı dosya
   // audit'siz doğarsa kırmızı; azalırsa taban entegratörde düşer.
-  const AUDITSIZ_YAZICI_TABAN = 29;
+  // 29 → 30 (2026-09-18, 1e onayı 16:58): `helpers/cash-ledger.helper.ts` — kasa/banka defterinin TEK YAZARI, tx İÇİNDE;
+  // audit'i çağıran servis basar (payment.service · cash-transaction.service · cheque.service) — EBEVEYN_EYLEMDE kalıbı.
+  // Model beyanı DEĞİL (CashTransaction zaten uç katmanında audit'li → §3 ölü beyan sayar), dosya düzeyi beyanlı sınıf ekleme.
+  const AUDITSIZ_YAZICI_TABAN = 30;
   const auditsizYazici: string[] = [];
   for (const [rel, s] of metin) {
     if (auditDosya.has(rel) || /tableName:\s*"/.test(s)) continue;

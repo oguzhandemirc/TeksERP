@@ -28,7 +28,17 @@ export const KIND_LABEL: Record<CashTxnKind, string> = {
   OPENING: "Açılış",
   TRANSFER_OUT: "Virman (çıkan)",
   TRANSFER_IN: "Virman (giren)",
+  COLLECTION: "Tahsilat",
+  PAYMENT: "Ödeme",
 };
+
+/** Ödemeden doğan satır: iptali ÖDEMENİN iptalidir (tek yazar) — burada iptal düğmesi çizilmez, kaynak bağı çizilir. */
+export const isPaymentLedgerRow = (r: { paymentId?: string | null }): boolean => Boolean(r.paymentId);
+
+/** Kaynak tahsilat/ödemeye gidiş — Tahsilat/Ödeme listesi belge no ile aranır. */
+export const paymentSearchPath = (docNo: string): string => `/finance/payments?search=${encodeURIComponent(docNo)}`;
+/** Kasa defteri satırına gidiş — Kasa Hareketleri belge no ile aranır. */
+export const cashTxnSearchPath = (docNo: string): string => `/finance/cash-transactions?search=${encodeURIComponent(docNo)}`;
 
 export const STATUS_LABEL: Record<CashTxnStatus, string> = {
   ACTIVE: "Aktif",

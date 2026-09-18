@@ -5,7 +5,7 @@
 // + audit. Dördü ayrı yazılırsa biri patladığında para "kasadan çıkmış ama
 // cariye işlenmemiş" halde kalır ve bunu fark etmenin tek yolu ay sonu sayımıdır.
 // =============================================================================
-import { Prisma, PaymentDirection, PaymentMethod, PaymentStatus, Currency, CariTxnSource, PrintedDocType } from "@prisma/client";
+import { Prisma, PaymentDirection, PaymentMethod, PaymentStatus, Currency, CariTxnSource, PrintedDocType, CashTxnKind } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -34,6 +34,7 @@ import { assertCashBalanceCoversTx } from "./helpers/cash-balance-guard.helper";
 import { buildTurkishSearch, isEnumMember, readFilterList, readIdCondition } from "../utils/query-parser";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import type { ApiResponse } from "../types/api.types";
+import { applyCashTxTx, cancelCashTxTx, moveAccountBalanceTx } from "./helpers/cash-ledger.helper";
 
 export interface CreatePaymentInput {
   direction: PaymentDirection;
@@ -298,29 +299,18 @@ export class PaymentService {
 
         await applyCariBalanceTx(tx, cari.id, currency, isIn ? amount.negated() : amount);
 
-        // ⚠️ EKSİ KASA ENGELİ (finance.blockNegativeCashEnabled, default KAPALI):
-        // yalnız İLERİ yönde para ÇIKARAN kasa yazımı kapılanır — banka MUAF
-        // (kredili mevduat meşru), `cancel` (storno) MUAF (yanlış tahsilat
-        // "kasa yetmez" diye iptal edilemez kalmasın). Guard bakiyeyi FOR
-        // UPDATE ile kilitleyip okur; aşağıdaki increment aynı tx'te aynı
-        // satıra yazar → araya ikinci bir çekim giremez (TOCTOU kapalı).
-        if (!isIn) {
-          await assertCashBalanceCoversTx(tx, { cashBoxId: input.cashBoxId ?? null, amount });
-        }
-
-        // Kasa/banka: para girdiyse artar, çıktıysa azalır.
-        const accDelta = isIn ? amount : amount.negated();
-        if (hasCash) {
-          await tx.cashBox.update({
-            where: { id: input.cashBoxId as string },
-            data: { balance: { increment: accDelta } },
-          });
-        } else {
-          await tx.bankAccount.update({
-            where: { id: input.bankAccountId as string },
-            data: { balance: { increment: accDelta } },
-          });
-        }
+        // KASA/BANKA DEFTERİ — TEK YAZAR: satır (COLLECTION/PAYMENT, paymentId bağı) + bakiye helper'dan; eksi-kasa
+        // kapısı (yalnız çıkan kasa hareketi) ve dönem kapısı helper'ın içinde. Cari defter ile kasa defteri aynı tx'te doğar.
+        await applyCashTxTx(tx, {
+          kind: isIn ? CashTxnKind.COLLECTION : CashTxnKind.PAYMENT,
+          cashBoxId: hasCash ? (input.cashBoxId as string) : null,
+          bankAccountId: hasCash ? null : (input.bankAccountId as string),
+          currency, exchangeRate: rate, amount, txnDate: paymentDate,
+          description: `${docNo}${input.reference ? ` — ${input.reference}` : ""}`,
+          reference: input.reference ?? null,
+          paymentId: payment.id,
+          createdById: userId ?? null,
+        });
 
         // ⚠️ MAKBUZ KAYIT ANINDA DONAR (faturadan farklı olarak taslak yok):
         // para EL DEĞİŞTİRDİĞİ an makbuz verilir; "onay" diye ikinci bir adım
@@ -465,11 +455,16 @@ export class PaymentService {
 
       await applyCariBalanceTx(tx, p.cariId, p.currency, isIn ? D(p.amount) : D(p.amount).negated());
 
-      const accDelta = isIn ? D(p.amount).negated() : D(p.amount);
-      if (p.cashBoxId) {
-        await tx.cashBox.update({ where: { id: p.cashBoxId }, data: { balance: { increment: accDelta } } });
-      } else if (p.bankAccountId) {
-        await tx.bankAccount.update({ where: { id: p.bankAccountId }, data: { balance: { increment: accDelta } } });
+      // Kasa defteri satırı DURUM_IPTAL + bakiye geri — tek yazardan. Backfill öncesi eski ödemede satır yoktur: bakiye
+      // eski yazar tarafından işlenmişti, yalnız geri alınır (`moveAccountBalanceTx`), satır uydurulmaz.
+      const ledgerRow = await tx.cashTransaction.findUnique({
+        where: { paymentId: p.id },
+        select: { id: true, docNo: true, direction: true, amount: true, cashBoxId: true, bankAccountId: true, txnDate: true },
+      });
+      if (ledgerRow) {
+        await cancelCashTxTx(tx, [ledgerRow], { reason, userId, alreadyMessage: `${p.docNo} kasa defteri satırı zaten iptal edilmiş.` });
+      } else if (p.cashBoxId || p.bankAccountId) {
+        await moveAccountBalanceTx(tx, { cashBoxId: p.cashBoxId, bankAccountId: p.bankAccountId }, isIn ? D(p.amount).negated() : D(p.amount));
       }
 
       // Storno → makbuz İPTAL filigranıyla VOIDED. Belge silinmez: elinde
@@ -591,6 +586,7 @@ export class PaymentService {
           reference: true,
           cashBox: { select: { id: true, name: true } },
           bankAccount: { select: { id: true, name: true } },
+          cashTransaction: { select: { id: true, docNo: true, txnDate: true, status: true } },
           cari: {
             select: {
               id: true,

@@ -8682,6 +8682,8 @@ model Payment {
 
   transactions CariTransaction[]
   allocations  PaymentAllocation[]
+  /// Kasa/banka defterindeki satırı (tek yazar) — backfill öncesi eski ödemelerde yok.
+  cashTransaction CashTransaction?
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -8841,6 +8843,11 @@ enum CashTxnKind {
   /// (`transferGroupId` ile bağlı): biri OUT, diğeri IN.
   TRANSFER_OUT
   TRANSFER_IN
+  /// Carili TAHSİLAT — ödemenin (Payment, IN) kasa/banka defteri satırı; tek yazar dilimi (2026-09-18).
+  /// Ödeme kaydında doğar, ödemenin iptaliyle CANCELLED olur; kendi başına iptal EDİLEMEZ.
+  COLLECTION
+  /// Carili ÖDEME — ödemenin (Payment, OUT) kasa/banka defteri satırı.
+  PAYMENT
   /// Açılış/devir bakiyesi — sisteme geçişte kasada/bankada var olan para.
   /// Bakiye elle YAZILMAZ (generic CRUD'da `stripBalance` engelliyor); açılış
   /// da bir HAREKETTİR, böylece "bu para nereden geldi" defterden okunur.
@@ -8882,6 +8889,10 @@ model CashTransaction {
   /// Virmanın İKİ satırını bağlar (aynı uçta doğarlar). Tekil hareketlerde NULL.
   transferGroupId String? @db.Uuid
 
+  /// Kaynak tahsilat/ödeme (COLLECTION/PAYMENT satırlarında dolu) — ödeme başına TEK satır (@unique);
+  /// bakiye yalnız bu defterden türer, `Payment` bakiyeye doğrudan yazmaz (tek yazar, 2026-09-18).
+  paymentId String? @unique @db.Uuid
+
   cancelledAt   DateTime? @db.Timestamptz
   cancelledById String?   @db.Uuid
   cancelReason  String?   @db.VarChar(300)
@@ -8891,6 +8902,7 @@ model CashTransaction {
 
   cashBox     CashBox?     @relation(fields: [cashBoxId], references: [id], onDelete: Restrict)
   bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  payment     Payment?     @relation(fields: [paymentId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz

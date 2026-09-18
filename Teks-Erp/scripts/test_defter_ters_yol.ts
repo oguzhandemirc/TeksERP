@@ -79,7 +79,10 @@ function fiksturMu(rel: string): boolean {
 }
 
 /** Doğrudan (funnel'ı atlayarak) defter yazan script'lerin SINIFI. */
-const SCRIPT_SINIFI: Record<string, "SEED" | "DEMO" | "DENETIM_REPRO"> = {
+const SCRIPT_SINIFI: Record<string, "SEED" | "DEMO" | "DENETIM_REPRO" | "GECMIS_DOLDURMA"> = {
+  // Geçmiş doldurma (tek yazar dilimi, 2026-09-18): satırsız eski ödemelere kasa defteri satırı; dry-run varsayılan, --apply,
+  // bakiyeye dokunmaz, paymentId @unique ile idempotent (funnel'ı BİLEREK atlar: bakiye zaten eski yazar tarafından işlenmiş).
+  "scripts/migrate_cash_ledger_backfill.ts": "GECMIS_DOLDURMA",
   "scripts/seed-demo-shipments.ts": "SEED",
   "scripts/seed-kk2-test.ts": "SEED",
   "scripts/seed-load-scale.ts": "SEED",

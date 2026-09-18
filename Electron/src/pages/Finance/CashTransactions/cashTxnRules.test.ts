@@ -50,6 +50,9 @@ import {
   withSign,
   type AccountLike,
   type CashTxnFilterState,
+  isPaymentLedgerRow,
+  paymentSearchPath,
+  cashTxnSearchPath,
 } from "./cashTxnRules";
 import type { CashTxnRow } from "./service";
 
@@ -330,5 +333,20 @@ describe("§6 karo ↔ route hizası", () => {
     // Karodaki `permissionAny: ["finance:read"]` ile birebir aynı olmalı.
     expect(routes.slice(at, at + 300)).toContain('requirePermission="finance:read"');
     expect(routes.slice(at, at + 300)).toContain("<CashTransactionsPage />");
+  });
+});
+
+describe("tek yazar (2026-09-18) — ödeme türleri ve kaynak bağı", () => {
+  it("KIND_LABEL yedi türü de taşır; ödeme türleri Türkçe", () => {
+    expect(Object.keys(KIND_LABEL).sort()).toEqual(["COLLECTION", "EXPENSE", "INCOME", "OPENING", "PAYMENT", "TRANSFER_IN", "TRANSFER_OUT"]);
+    expect(KIND_LABEL.COLLECTION).toBe("Tahsilat");
+    expect(KIND_LABEL.PAYMENT).toBe("Ödeme");
+  });
+  it("ödeme satırı ayrımı ve gidiş yolları belge no'yu URL-kodlar", () => {
+    expect(isPaymentLedgerRow({ paymentId: "p1" })).toBe(true);
+    expect(isPaymentLedgerRow({ paymentId: null })).toBe(false);
+    expect(isPaymentLedgerRow({})).toBe(false);
+    expect(paymentSearchPath("TH 1/2")).toBe("/finance/payments?search=TH%201%2F2");
+    expect(cashTxnSearchPath("KH-1")).toBe("/finance/cash-transactions?search=KH-1");
   });
 });

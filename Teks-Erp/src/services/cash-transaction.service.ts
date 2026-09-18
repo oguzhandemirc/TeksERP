@@ -20,29 +20,16 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
-import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { D, resolveExchangeRateTx } from "./helpers/finance.helper";
 import { assertCashPeriodOpenTx, assertCashPeriodsOpenTx } from "./helpers/cash-period-guard.helper";
-import { assertCashBalanceCoversTx } from "./helpers/cash-balance-guard.helper";
+import { applyCashTxTx, cancelCashTxTx, KIND_DIRECTION, nextCashNoTx, type AccountRef } from "./helpers/cash-ledger.helper";
 import { buildTurkishSearch } from "../utils/query-parser";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import type { ApiResponse } from "../types/api.types";
 
-const CASH_PREFIX = "KH";
-
-/** Türün yönü — CHECK constraint ile AYNI kural (tek kaynak burada). */
-const KIND_DIRECTION: Record<CashTxnKind, PaymentDirection> = {
-  EXPENSE: PaymentDirection.OUT,
-  TRANSFER_OUT: PaymentDirection.OUT,
-  INCOME: PaymentDirection.IN,
-  TRANSFER_IN: PaymentDirection.IN,
-  OPENING: PaymentDirection.IN,
-};
-
-export interface AccountRef {
-  cashBoxId?: string | null;
-  bankAccountId?: string | null;
-}
+// Tür→yön, belge no ve bakiye yazımı TEK YAZAR helper'ında (`cash-ledger.helper`); burada yeniden dışa verilir.
+export { KIND_DIRECTION };
+export type { AccountRef };
 
 export interface CashTxnInput extends AccountRef {
   kind: Extract<CashTxnKind, "EXPENSE" | "INCOME" | "OPENING">;
@@ -98,14 +85,7 @@ function assertCashTxnReplay(
   );
 }
 
-async function nextCashNo(tx: Prisma.TransactionClient, date: Date): Promise<string> {
-  const prefix = dailyCodePrefix(CASH_PREFIX, date);
-  const rows = await tx.cashTransaction.findMany({
-    where: { docNo: { gte: prefix, startsWith: prefix } },
-    select: { docNo: true },
-  });
-  return buildDailyCode(CASH_PREFIX, nextDailySeq(rows.map((r) => r.docNo), prefix), date);
-}
+const nextCashNo = nextCashNoTx;
 
 /** Hesabı çözer + aktifliğini doğrular; para birimini DÖNER (tek kaynak). */
 async function loadAccount(
@@ -136,18 +116,7 @@ async function loadAccount(
   return { currency: acc.currency, name: acc.name };
 }
 
-/** Kasa/banka bakiyesini atomik oynatır (okuyup-yazmak eşzamanlıyı yutardı). */
-async function moveAccountBalance(
-  tx: Prisma.TransactionClient,
-  ref: AccountRef,
-  delta: Prisma.Decimal,
-): Promise<void> {
-  if (ref.cashBoxId) {
-    await tx.cashBox.update({ where: { id: ref.cashBoxId }, data: { balance: { increment: delta } } });
-  } else if (ref.bankAccountId) {
-    await tx.bankAccount.update({ where: { id: ref.bankAccountId }, data: { balance: { increment: delta } } });
-  }
-}
+// Bakiye yazımı TEK yerde: `cash-ledger.helper.moveAccountBalanceTx` (applyCashTxTx / cancelCashTxTx içinden).
 
 /**
  * KANONİK HESAP ANAHTARI — bakiye satır-kilidi SIRASININ tek kaynağı (Sınıf 3).
@@ -282,37 +251,14 @@ export class CashTransactionService {
           }
         }
 
-        const docNo = await nextCashNo(tx, txnDate);
-        const row = await tx.cashTransaction.create({
-          data: {
-            docNo,
-            kind: input.kind,
-            direction: KIND_DIRECTION[input.kind],
-            cashBoxId: input.cashBoxId ?? null,
-            bankAccountId: input.bankAccountId ?? null,
-            currency: acc.currency,
-            exchangeRate: rate,
-            amount,
-            amountTry: amount.mul(rate).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP),
-            txnDate,
-            category: input.category?.trim() || null,
-            description: input.description?.trim() || null,
-            reference: input.reference?.trim() || null,
-            createdById: userId ?? null,
-            clientToken: input.clientToken ?? null,
-          },
-          select: { id: true, docNo: true },
+        // Satır + bakiye TEK YAZARDAN (eksi-kasa kapısı çıkan kasa hareketinde ve dönem kapısı helper'ın içinde).
+        const row = await applyCashTxTx(tx, {
+          kind: input.kind, cashBoxId: input.cashBoxId ?? null, bankAccountId: input.bankAccountId ?? null,
+          currency: acc.currency, exchangeRate: rate, amount, txnDate,
+          category: input.category, description: input.description, reference: input.reference,
+          createdById: userId ?? null, clientToken: input.clientToken ?? null,
         });
-
-        const signed = KIND_DIRECTION[input.kind] === PaymentDirection.IN ? amount : amount.negated();
-        // ⚠️ EKSİ KASA ENGELİ (finance.blockNegativeCashEnabled, default KAPALI):
-        // yalnız ÇIKAN türde (EXPENSE) ve yalnız KASA — banka MUAF, `cancel`
-        // (ters yön) MUAF. Guard FOR UPDATE ile okur; increment aynı tx'te.
-        if (KIND_DIRECTION[input.kind] === PaymentDirection.OUT) {
-          await assertCashBalanceCoversTx(tx, { cashBoxId: input.cashBoxId ?? null, amount });
-        }
-        await moveAccountBalance(tx, input, signed);
-        return row;
+        return { id: row.id, docNo: row.docNo };
           }),
         undefined,
         // Belge numarası yarışı (P2002 `docNo`) RETRY EDİLİR; `clientToken`
@@ -414,66 +360,22 @@ export class CashTransactionService {
         }
         const amountTry = amount.mul(rate).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
         const groupId = crypto.randomUUID();
-        const outNo = await nextCashNo(tx, txnDate);
-
-        const outRow = await tx.cashTransaction.create({
-          data: {
-            docNo: outNo,
-            kind: CashTxnKind.TRANSFER_OUT,
-            direction: PaymentDirection.OUT,
-            cashBoxId: from.cashBoxId,
-            bankAccountId: from.bankAccountId,
-            currency: fromAcc.currency,
-            exchangeRate: rate,
-            amount,
-            amountTry,
-            txnDate,
-            description: input.description?.trim() || `Virman → ${toAcc.name}`,
-            transferGroupId: groupId,
-            createdById: userId ?? null,
-            clientToken: input.clientToken ?? null,
-          },
-          select: { id: true, docNo: true },
-        });
-        // ⚠️ İkinci numara İLK satır yazıldıktan SONRA çözülür — aynı gün ilk
-        // virmansa iki bacak da aynı sırayı alırdı (nextDailySeq canlı okur).
-        const inNo = await nextCashNo(tx, txnDate);
-        const inRow = await tx.cashTransaction.create({
-          data: {
-            docNo: inNo,
-            kind: CashTxnKind.TRANSFER_IN,
-            direction: PaymentDirection.IN,
-            cashBoxId: to.cashBoxId,
-            bankAccountId: to.bankAccountId,
-            currency: toAcc.currency,
-            exchangeRate: rate,
-            amount,
-            amountTry,
-            txnDate,
-            description: input.description?.trim() || `Virman ← ${fromAcc.name}`,
-            transferGroupId: groupId,
-            createdById: userId ?? null,
-          },
-          select: { id: true, docNo: true },
-        });
-
-        // ⚠️ KİLİT SIRASI KANONİK, ROL SIRASI DEĞİL (Sınıf 3 — `accountLockKey`
-        // yorumundaki gerekçe): from→to sırası ayna çiftte ABBA deadlock'uydu.
+        // İki bacak KANONİK kilit sırasında yazılır (ABBA kapalı); her bacak satır + bakiye tek yazardan.
+        // Belge no sırası bacak sırasına göre değişebilir; yanıt her zaman [ÇIKAN, GİREN] döner.
         const legs = [
-          { ref: from, delta: amount.negated() },
-          { ref: to, delta: amount },
+          { ref: from, kind: CashTxnKind.TRANSFER_OUT, acc: fromAcc, description: input.description?.trim() || `Virman → ${toAcc.name}`, clientToken: input.clientToken ?? null },
+          { ref: to, kind: CashTxnKind.TRANSFER_IN, acc: toAcc, description: input.description?.trim() || `Virman ← ${fromAcc.name}`, clientToken: null },
         ].sort((x, y) => compareLockKeys(accountLockKey(x.ref), accountLockKey(y.ref)));
+        const written = new Map<CashTxnKind, { id: string; docNo: string }>();
         for (const leg of legs) {
-          // ⚠️ EKSİ KASA ENGELİ — yalnız ÇIKAN bacak ve yalnız KASA (banka
-          // muaf; helper kendisi süzer). Guard'ın FOR UPDATE kilidi BİLEREK
-          // kanonik sıralı döngünün İÇİNDE alınır: döngü dışında erken alınsa
-          // ayna virman çifti (kasa→X ‖ X→kasa) kilitleri ters sırada isteyip
-          // ABBA deadlock'u üretirdi (`accountLockKey` gerekçesinin guard ikizi).
-          if (leg.delta.isNegative()) {
-            await assertCashBalanceCoversTx(tx, { cashBoxId: leg.ref.cashBoxId ?? null, amount });
-          }
-          await moveAccountBalance(tx, leg.ref, leg.delta);
+          written.set(leg.kind, await applyCashTxTx(tx, {
+            kind: leg.kind, cashBoxId: leg.ref.cashBoxId ?? null, bankAccountId: leg.ref.bankAccountId ?? null,
+            currency: leg.acc.currency, exchangeRate: rate, amount, txnDate, description: leg.description,
+            transferGroupId: groupId, createdById: userId ?? null, clientToken: leg.clientToken,
+          }));
         }
+        const outRow = written.get(CashTxnKind.TRANSFER_OUT)!;
+        const inRow = written.get(CashTxnKind.TRANSFER_IN)!;
         return { ids: [outRow.id, inRow.id], docNos: [outRow.docNo, inRow.docNo], groupId };
           }),
         undefined,
@@ -516,9 +418,13 @@ export class CashTransactionService {
     const result = await prisma.$transaction(async (tx) => {
       const target = await tx.cashTransaction.findUnique({
         where: { id },
-        select: { id: true, docNo: true, transferGroupId: true, status: true },
+        select: { id: true, docNo: true, transferGroupId: true, status: true, paymentId: true },
       });
       if (!target) throw AppError.notFound("Kayıt bulunamadı.");
+      // Tek yazar: ödemeden doğan satırın iptali ÖDEMENİN iptalidir — buradan iptal edilirse cari defter ile kasa defteri ayrışır.
+      if (target.paymentId) {
+        throw AppError.conflict(`${target.docNo} bir tahsilat/ödemenin kasa defteri satırıdır — iptali Tahsilat/Ödeme ekranından yapılır.`, { code: "CASH_TXN_FROM_PAYMENT" });
+      }
 
       // Virmansa grubun TAMAMI; değilse yalnız kendisi.
       const scope = target.transferGroupId
@@ -531,45 +437,20 @@ export class CashTransactionService {
             select: { id: true, docNo: true, direction: true, amount: true, cashBoxId: true, bankAccountId: true, txnDate: true },
           });
 
-      const claimed = await tx.cashTransaction.updateMany({
-        where: { id: { in: scope.map((r) => r.id) }, status: PaymentStatus.ACTIVE },
-        data: {
-          status: PaymentStatus.CANCELLED,
-          cancelledAt: new Date(),
-          cancelledById: userId ?? null,
-          cancelReason: reason?.trim() || null,
-        },
-      });
-      if (claimed.count === 0) throw AppError.conflict(`${target.docNo} zaten iptal edilmiş.`);
-      if (claimed.count !== scope.length) {
-        throw AppError.conflict("Virmanın bacakları bu sırada değişti — yenileyip tekrar deneyin.");
-      }
-
-      // ⚠️ KASA/BANKA DÖNEM KİLİDİ — İPTALDE ÇIPA ORİJİNAL `txnDate`, `now`
-      // DEĞİL (payment.cancel ile aynı gerekçe): kasa defteri toplam-bazlıdır,
-      // iptal satırı CANCELLED'a çekip GEÇMİŞ sayfanın toplamından düşürür.
-      // Kapalı dönemin fişini iptal etmek o sayfayı değiştirmektir. Virman iki
-      // bacaklı → ÇOĞUL helper (sırasız çift kilit ayna çiftte deadlock'tu).
-      await assertCashPeriodsOpenTx(
-        tx,
-        scope.map((r) => ({ cashBoxId: r.cashBoxId, bankAccountId: r.bankAccountId, txnDate: r.txnDate })),
-      );
-
-      // ⚠️ KİLİT SIRASI KANONİK (Sınıf 3): virman iptali iki hesabın bakiyesine
-      // dokunur ve `scope` satırları veri sırasıyla gelir — ayna çiftin iptali
-      // (ya da iptal ‖ virman) paralel koşarsa sırasız güncelleme ABBA üretirdi.
-      // Virman yazımıyla (transfer'deki `legs.sort`) AYNI anahtar uzayı: iki yol
-      // aynı iki satırı her zaman aynı sırayla kilitler.
+      // ⚠️ KİLİT SIRASI KANONİK (Sınıf 3): virman iptali iki hesabın bakiyesine dokunur — yazımla (transfer `legs.sort`)
+      // AYNI anahtar uzayı, aynı sıra. Claim (ACTIVE→CANCELLED) + dönem kapısı (çıpa orijinal txnDate) + bakiye geri TEK
+      // YAZARDAN (`cancelCashTxTx`); satır silinmez, CANCELLED'a çekilir (DURUM_IPTAL).
       const orderedScope = [...scope].sort((x, y) =>
         compareLockKeys(
           accountLockKey({ cashBoxId: x.cashBoxId, bankAccountId: x.bankAccountId }),
           accountLockKey({ cashBoxId: y.cashBoxId, bankAccountId: y.bankAccountId }),
         ),
       );
-      for (const row of orderedScope) {
-        const back = row.direction === PaymentDirection.IN ? D(row.amount).negated() : D(row.amount);
-        await moveAccountBalance(tx, { cashBoxId: row.cashBoxId, bankAccountId: row.bankAccountId }, back);
-      }
+      await cancelCashTxTx(tx, orderedScope, {
+        reason, userId,
+        alreadyMessage: `${target.docNo} zaten iptal edilmiş.`,
+        changedMessage: "Virmanın bacakları bu sırada değişti — yenileyip tekrar deneyin.",
+      });
       return { ids: scope.map((r) => r.id), docNos: scope.map((r) => r.docNo) };
     });
 
@@ -639,6 +520,8 @@ export class CashTransactionService {
           transferGroupId: true,
           cashBox: { select: { id: true, name: true } },
           bankAccount: { select: { id: true, name: true } },
+          paymentId: true,
+          payment: { select: { id: true, docNo: true, direction: true, cari: { select: { id: true, customer: { select: { name: true } }, subcontractor: { select: { name: true } } } } } },
         },
         orderBy: [{ txnDate: "desc" }, { createdAt: "desc" }],
         skip: (page - 1) * pageSize,

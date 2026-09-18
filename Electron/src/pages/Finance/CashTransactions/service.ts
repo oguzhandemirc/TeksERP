@@ -28,7 +28,8 @@ import axios from "axios";
 import type { Currency } from "../service";
 import { buildListQuery, type CashTxnFilterState } from "./cashTxnRules";
 
-export type CashTxnKind = "EXPENSE" | "INCOME" | "OPENING" | "TRANSFER_OUT" | "TRANSFER_IN";
+/** COLLECTION (tahsilat) · PAYMENT (ödeme): carili ödemenin kasa defteri satırı — tek yazar dilimi (2026-09-18); ödeme iptaliyle iptal olur. */
+export type CashTxnKind = "EXPENSE" | "INCOME" | "OPENING" | "TRANSFER_OUT" | "TRANSFER_IN" | "COLLECTION" | "PAYMENT";
 export type CashTxnStatus = "ACTIVE" | "CANCELLED";
 export type CashTxnDirection = "IN" | "OUT";
 
@@ -49,6 +50,9 @@ export interface CashTxnRow {
   transferGroupId: string | null;
   cashBox: { id: string; name: string } | null;
   bankAccount: { id: string; name: string } | null;
+  /** Kaynak tahsilat/ödeme (yalnız COLLECTION/PAYMENT satırlarında); eski backend alanı göndermez. */
+  paymentId?: string | null;
+  payment?: { id: string; docNo: string; direction: CashTxnDirection; cari: { id: string; name: string } } | null;
 }
 
 type Paged<T> = { data: T[]; pagination: { total: number; page: number; totalPages: number } };

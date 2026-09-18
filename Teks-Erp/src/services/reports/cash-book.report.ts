@@ -306,7 +306,7 @@ function movementsCte(): Prisma.Sql {
         JOIN cari_accounts ca ON ca.id = p."cariId"
         LEFT JOIN customers cu ON cu.id = ca."customerId"
         LEFT JOIN subcontractors sc ON sc.id = ca."subcontractorId"
-       WHERE COALESCE(p."cashBoxId", p."bankAccountId") IS NOT NULL
+       WHERE COALESCE(p."cashBoxId", p."bankAccountId") IS NOT NULL AND NOT EXISTS (SELECT 1 FROM cash_transactions ctp WHERE ctp."paymentId" = p.id)
 
       UNION ALL
       -- 1b) TAHSİLAT İPTALİ — ters hareket, İPTAL ANINDA
@@ -320,29 +320,39 @@ function movementsCte(): Prisma.Sql {
         LEFT JOIN customers cu ON cu.id = ca."customerId"
         LEFT JOIN subcontractors sc ON sc.id = ca."subcontractorId"
        WHERE p.status = 'CANCELLED' AND p."cancelledAt" IS NOT NULL
-         AND COALESCE(p."cashBoxId", p."bankAccountId") IS NOT NULL
+         AND COALESCE(p."cashBoxId", p."bankAccountId") IS NOT NULL AND NOT EXISTS (SELECT 1 FROM cash_transactions ctp WHERE ctp."paymentId" = p.id)
 
       UNION ALL
-      -- 2) KASA HAREKETİ (carisiz: masraf · gelir · virman · açılış)
-      SELECT ct.id::text, 'CASH_TXN', ct."docNo", ct."txnDate",
+      -- 2) KASA HAREKETİ (masraf · gelir · virman · açılış · TEK YAZAR sonrası carili tahsilat/ödeme satırı)
+      -- Ödemeden doğan satır (paymentId) rapora PAYMENT olarak çıkar: belge no ödemenin, tür ödeme yöntemi, cari adı —
+      -- eski istemci ve kırılım kovaları bayt bayt aynı kalır; kaynak tablo değişti, yüzey değişmedi.
+      SELECT ct.id::text, CASE WHEN ct."paymentId" IS NULL THEN 'CASH_TXN' ELSE 'PAYMENT' END, COALESCE(p2."docNo", ct."docNo"), ct."txnDate",
              COALESCE(ct."cashBoxId", ct."bankAccountId")::text,
-             ct.direction::text, ct.amount, ct.kind::text, NULL,
-             COALESCE(ct.description, ct.category), ct.reference,
-             (ct.status = 'CANCELLED'), ct.category, NULL::text
+             ct.direction::text, ct.amount, COALESCE(p2.method::text, ct.kind::text), COALESCE(cu3.name, sc3.name),
+             CASE WHEN ct."paymentId" IS NULL THEN COALESCE(ct.description, ct.category) ELSE COALESCE(p2.notes, ct.description) END, ct.reference,
+             (ct.status = 'CANCELLED'), CASE WHEN ct."paymentId" IS NULL THEN ct.category ELSE NULL::text END, ca3.id::text
         FROM cash_transactions ct
+        LEFT JOIN payments p2 ON p2.id = ct."paymentId"
+        LEFT JOIN cari_accounts ca3 ON ca3.id = p2."cariId"
+        LEFT JOIN customers cu3 ON cu3.id = ca3."customerId"
+        LEFT JOIN subcontractors sc3 ON sc3.id = ca3."subcontractorId"
        WHERE COALESCE(ct."cashBoxId", ct."bankAccountId") IS NOT NULL
 
       UNION ALL
-      -- 2b) KASA HAREKETİ İPTALİ
-      SELECT ct.id::text || ':C', 'CASH_TXN_CANCEL', ct."docNo", ct."cancelledAt",
+      -- 2b) KASA HAREKETİ İPTALİ (ödeme satırında PAYMENT_CANCEL)
+      SELECT ct.id::text || ':C', CASE WHEN ct."paymentId" IS NULL THEN 'CASH_TXN_CANCEL' ELSE 'PAYMENT_CANCEL' END, COALESCE(p4."docNo", ct."docNo"), ct."cancelledAt",
              COALESCE(ct."cashBoxId", ct."bankAccountId")::text,
              CASE WHEN ct.direction = 'IN' THEN 'OUT' ELSE 'IN' END,
-             ct.amount, ct.kind::text, NULL,
+             ct.amount, COALESCE(p4.method::text, ct.kind::text), COALESCE(cu4.name, sc4.name),
              COALESCE(ct."cancelReason", 'İptal'), ct.reference, TRUE,
              -- ⚠️ ASLININ kategorisi (cancelReason DEĞİL) — iptal çiftinin
              -- kırılımda netleşmesi tam olarak buna dayanır (dosya başlığı).
-             ct.category, NULL::text
+             CASE WHEN ct."paymentId" IS NULL THEN ct.category ELSE NULL::text END, ca4.id::text
         FROM cash_transactions ct
+        LEFT JOIN payments p4 ON p4.id = ct."paymentId"
+        LEFT JOIN cari_accounts ca4 ON ca4.id = p4."cariId"
+        LEFT JOIN customers cu4 ON cu4.id = ca4."customerId"
+        LEFT JOIN subcontractors sc4 ON sc4.id = ca4."subcontractorId"
        WHERE ct.status = 'CANCELLED' AND ct."cancelledAt" IS NOT NULL
          AND COALESCE(ct."cashBoxId", ct."bankAccountId") IS NOT NULL
 

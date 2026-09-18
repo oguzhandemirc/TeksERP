@@ -26,6 +26,11 @@
       "maddeler": [
         {
           "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Kasa ve banka bakiyesi artık tek defterden yürür: her tahsilat ve ödeme, Kasa Hareketleri'nde Tahsilat ya da Ödeme türünde kendi satırıyla görünür (kaynak belge tıklanır), iptal edilince o satır iptal görünür ve bakiye geri gelir. Tahsilat/Ödeme listesinde kasa defteri satırı sütunu geldi. Eski kayıtlar için defter satırları kurulum sırasında toplu olarak oluşturulur; bakiyeler değişmez."
+        },
+        {
+          "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Raporlarda müşteri, kumaş, renk, fasoncu, iptal sebebi ve sevk hedefi süzgeçleri artık gerçekten uygulanıyor: Sipariş Karnesi, Talep Analizi, Sipariş→Teslim, İptal Karnesi, Müşteri ve Fason karneleri ile üretim karnelerinde seçilen süzgeç sunucuya gitmiyor, ekran süzgeç satırını yazarken rakamlar herkesin toplamı çıkıyordu. Ayrıca bir süzgeç sunucuda uygulanmazsa süzgeç satırı bunu açıkça söyler. Finans ve dokuma raporları zaten doğru çalışıyordu."
         },

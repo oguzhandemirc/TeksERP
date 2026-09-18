@@ -15,7 +15,8 @@ import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { money } from "../service";
 import { fmtDate } from "../Cheques/dates";
-import { DIRECTION_TONE, KIND_LABEL, STATUS_LABEL, accountNameOf, withSign } from "./cashTxnRules";
+import { useDrillTarget } from "@/components/layout/tabs/use-tab-target";
+import { DIRECTION_TONE, KIND_LABEL, STATUS_LABEL, accountNameOf, isPaymentLedgerRow, paymentSearchPath, withSign } from "./cashTxnRules";
 import type { CashTxnRow } from "./service";
 
 interface Props {
@@ -36,6 +37,7 @@ export function CashTxnTable({ rows, onCancel }: Props) {
             <th className="px-3 py-2 text-right">Tutar</th>
             <th className="px-3 py-2 text-left">Kategori</th>
             <th className="px-3 py-2 text-left">Açıklama</th>
+            <th className="px-3 py-2 text-left">Kaynak</th>
             <th className="px-3 py-2 text-left">Durum</th>
             <th className="px-3 py-2" />
           </tr>
@@ -62,6 +64,7 @@ export function CashTxnTable({ rows, onCancel }: Props) {
                   {r.description ?? "—"}
                   {r.reference && <span className="ml-1 text-xs">· {r.reference}</span>}
                 </td>
+                <td className="px-3 py-2">{r.payment ? <PaymentLink payment={r.payment} /> : <span className="text-muted-foreground">—</span>}</td>
                 <td className="px-3 py-2">
                   {cancelled ? (
                     <Badge className="bg-muted text-muted-foreground">{STATUS_LABEL.CANCELLED}</Badge>
@@ -70,7 +73,7 @@ export function CashTxnTable({ rows, onCancel }: Props) {
                   )}
                 </td>
                 <td className="px-3 py-2 text-right">
-                  {!cancelled && (
+                  {!cancelled && !isPaymentLedgerRow(r) && (
                     <PermissionGate permission="finance:payment">
                       <Button variant="outline" size="sm" onClick={() => onCancel(r)}>
                         <Ban className="mr-1 h-3.5 w-3.5" />
@@ -85,5 +88,16 @@ export function CashTxnTable({ rows, onCancel }: Props) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** Ödemeden doğan satırın kaynağı — tıklayınca Tahsilat/Ödeme listesi o belge no ile açılır (yerinde; orta tık yeni sekme). */
+function PaymentLink({ payment }: { payment: NonNullable<CashTxnRow["payment"]> }) {
+  const drill = useDrillTarget(paymentSearchPath(payment.docNo));
+  return (
+    <button type="button" className="text-left text-primary hover:underline" title="Tahsilat/Ödeme kaydını aç" onClick={drill.onClick} onAuxClick={drill.onAuxClick} onContextMenu={drill.onContextMenu}>
+      <span className="font-mono text-xs">{payment.docNo}</span>
+      <span className="ml-1 text-xs text-muted-foreground">{payment.direction === "IN" ? "Tahsilat" : "Ödeme"} · {payment.cari.name}</span>
+    </button>
   );
 }

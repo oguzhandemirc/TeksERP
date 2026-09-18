@@ -19,7 +19,7 @@
 // =============================================================================
 
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeftRight, BookOpen, Receipt } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -40,7 +40,9 @@ const PAGE_SIZE = 100;
 export function CashTransactionsPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const [filters, setFilters] = useState<CashTxnFilterState>(EMPTY_FILTERS);
+  // Bağdan gelen açılış (`?search=KH…`): arama kutusu tohumlanır, sonrası yerel durum (bağ paylaşımı değil, geliş).
+  const [sp] = useSearchParams();
+  const [filters, setFilters] = useState<CashTxnFilterState>(() => ({ ...EMPTY_FILTERS, search: sp.get("search") ?? "" }));
   const [account, setAccount] = useState<CashAccountOption | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);

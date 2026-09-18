@@ -651,6 +651,7 @@ main()
         if (allPayIds.length > 0) {
           await prisma.printedDocument.deleteMany({ where: { sourceId: { in: allPayIds } } });
           await prisma.cariTransaction.deleteMany({ where: { paymentId: { in: allPayIds } } });
+          await prisma.cashTransaction.deleteMany({ where: { paymentId: { in: allPayIds } } }); // tek yazar: ödeme satırı FK RESTRICT
           await prisma.payment.deleteMany({ where: { id: { in: allPayIds } } });
         }
       }

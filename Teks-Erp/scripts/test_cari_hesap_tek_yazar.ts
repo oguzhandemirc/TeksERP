@@ -188,6 +188,7 @@ async function temizle(): Promise<void> {
   }
   if (paymentIds.length > 0) {
     await prisma.cariTransaction.deleteMany({ where: { paymentId: { in: paymentIds } } });
+    await prisma.cashTransaction.deleteMany({ where: { paymentId: { in: paymentIds } } }); // tek yazar: ödeme satırı FK RESTRICT
     await prisma.payment.deleteMany({ where: { id: { in: paymentIds } } });
   }
   const cariler = await prisma.cariAccount.findMany({

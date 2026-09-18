@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { useDrillTarget } from "@/components/layout/tabs/use-tab-target";
+import { cashTxnSearchPath } from "./CashTransactions/cashTxnRules";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Ban, ArrowDownLeft, ArrowUpRight, Printer } from "lucide-react";
@@ -25,7 +28,9 @@ const PAGE_SIZE = 100;
 
 export function PaymentsPage() {
   const qc = useQueryClient();
-  const [filters, setFilters] = useState<PaymentFilterState>(EMPTY_PAYMENT_FILTERS);
+  // Kasa Hareketleri'nden bağla gelince (`?search=TH…`) arama tohumlanır; sonrası yerel durum.
+  const [sp] = useSearchParams();
+  const [filters, setFilters] = useState<PaymentFilterState>(() => ({ ...EMPTY_PAYMENT_FILTERS, search: sp.get("search") ?? "" }));
   const [formOpen, setFormOpen] = useState(false);
   const [formDirection, setFormDirection] = useState<"IN" | "OUT">("IN");
   const [cancelTarget, setCancelTarget] = useState<PaymentRow | null>(null);
@@ -111,6 +116,7 @@ export function PaymentsPage() {
                   <th className="px-3 py-2 text-left">Cari</th>
                   <th className="px-3 py-2 text-left">Yöntem</th>
                   <th className="px-3 py-2 text-left">Kasa / Banka</th>
+                  <th className="px-3 py-2 text-left">Kasa defteri</th>
                   <th className="px-3 py-2 text-left">Tarih</th>
                   <th className="px-3 py-2 text-right">Tutar</th>
                   <th className="px-3 py-2" />
@@ -130,6 +136,7 @@ export function PaymentsPage() {
                     <td className="px-3 py-2 text-muted-foreground">
                       {p.cashBox?.name ?? p.bankAccount?.name ?? "—"}
                     </td>
+                    <td className="px-3 py-2">{p.cashTransaction ? <CashLedgerLink docNo={p.cashTransaction.docNo} /> : <span className="text-xs text-muted-foreground" title="Defter satırı yok — geçmiş kayıt (backfill bekliyor) ya da eski sunucu">—</span>}</td>
                     <td className="px-3 py-2 whitespace-nowrap">
                       {new Date(p.paymentDate).toLocaleDateString("tr-TR")}
                     </td>
@@ -212,5 +219,15 @@ export function PaymentsPage() {
         writePermission="finance:payment"
       />
     </PageShell>
+  );
+}
+
+/** Ödemenin kasa/banka defteri satırı — tıklayınca Kasa Hareketleri o belge no ile açılır. */
+function CashLedgerLink({ docNo }: { docNo: string }) {
+  const drill = useDrillTarget(cashTxnSearchPath(docNo));
+  return (
+    <button type="button" className="font-mono text-xs text-primary hover:underline" title="Kasa defteri satırını aç" onClick={drill.onClick} onAuxClick={drill.onAuxClick} onContextMenu={drill.onContextMenu}>
+      {docNo}
+    </button>
   );
 }
