@@ -1,10 +1,12 @@
-import { EMPTY_DOFF_FORM, buildDoffPayload, classifyDoffFailure, doffResultFeedback, validateDoffForm } from './doffPayload';
+import { EMPTY_DOFF_FORM, buildDoffPayload, classifyDoffFailure, doffResultFeedback, preselectMachineRunId, validateDoffForm } from './doffPayload';
 
 const ctx = { machineId: 'm1', productionLineNo: 2, pressedAtIso: '2026-09-14T10:00:00.000Z', clientToken: 'tok' };
 
 describe('validateDoffForm — backend openSchema ile aynı sınırlar, Türkçe mesaj', () => {
   it('parça sayısı boş/0/kesirli → red; 1..1000 → ok', () => {
-    expect(validateDoffForm({ ...EMPTY_DOFF_FORM }).ok).toBe(false);
+    // Varsayılan artık '1' (ön-seçim) — o yüzden BOŞ hâli açıkça kur.
+    expect(validateDoffForm({ ...EMPTY_DOFF_FORM, pieceCount: '' }).ok).toBe(false);
+    expect(validateDoffForm({ ...EMPTY_DOFF_FORM }).ok).toBe(true); // EMPTY_DOFF_FORM.pieceCount === '1'
     expect(validateDoffForm({ ...EMPTY_DOFF_FORM, pieceCount: '0' }).ok).toBe(false);
     expect(validateDoffForm({ ...EMPTY_DOFF_FORM, pieceCount: '1.5' }).ok).toBe(false);
     expect(validateDoffForm({ ...EMPTY_DOFF_FORM, pieceCount: '1001' }).ok).toBe(false);
@@ -72,5 +74,14 @@ describe('doffResultFeedback — kod büyük, replay ayrı cümle', () => {
   });
   it('⭐ replay BAYRAKTAN — mesaj metni değişse de ayrım kalır', () => {
     expect(doffResultFeedback('DF1', true).subtitle).toMatch(/zaten/);
+  });
+});
+
+// ⭐ NEGATİF SONDA (2026-09-18, bir kezlik): `preselectMachineRunId` >1 koşumda id döndürdü → §ön-seçim ❌.
+describe('preselectMachineRunId — tek açık koşum ön-seçimi', () => {
+  it('tek koşum → id; 0 ya da >1 → null', () => {
+    expect(preselectMachineRunId([{ id: 'r1' }])).toBe('r1');
+    expect(preselectMachineRunId([])).toBeNull();
+    expect(preselectMachineRunId([{ id: 'r1' }, { id: 'r2' }])).toBeNull();
   });
 });
