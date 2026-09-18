@@ -75,6 +75,12 @@ const n3Olcum = { docNo: null, sevkId: null, bakiyeOnce: null, sevkMetreOnce: nu
 const o7Olcum = { satirOnce: null, gecersizDurum: null, gecersizMesaj: null, urunsuzDurum: null, urunsuzMesaj: null, birimsizDurum: null, birimsizBirim: null, siparisNo: null };
 const n1Olcum = { beamNo: null, onceKg: null, sarimSonraKg: null, sarimDurum: null, onizlemeDip: null, sonraKg: null };
 const n2Olcum = { iadeliSevk: null, engelMetni: null, engelDugmePasif: null, sevkNo: null, sevkId: null, onizlemeBarkod: null, dugmeEtiketi: null };
+const s3Olcum = { cariId: null, kapanis: null, defter: null, satirTip: null };
+const s4Olcum = { api: null, defter: null, kaynaksiz: null, hareket: null };
+const t1Olcum = { minVersion: null, sahaMin: null, sahaN: null };
+const p1Olcum = { fatura: null, geriAl: null, kurtar: null, mesaj: null, kod: null, faturaOnce: null, faturaSonra: null };
+const p5Olcum = { yukselt: null, sistemKaldi: null, atama: null, atamaSatir: null };
+const p4Olcum = { surumOnce: null, surumSonra: null, kisitliDurum: null, kisitliKod: null, yenidenDurum: null, geriDurum: null, musteriOnce: null, musteriSonra: null };
 const j1Olcum = { sevkNo: null, sevkId: null, tur: null, cariMetin: null, cariKilitli: null, satir: null, miktar: null, birim: null };
 const i4Olcum = { barkod: null, digerMusteri: null, digerOnce: null, testOnce: null, onizlemeSahipVar: null, redDurum: null, redKod: null, redTopVar: null, redSahipVar: null, tostSahipVar: null, ikinciDurum: null, sevkNo: null };
 
@@ -1845,6 +1851,134 @@ export const ADIMLAR = [
         sql: `SELECT s.status::text st, (s."dispatchedAt" IS NOT NULL) d, string_agg(e.type::text, ',' ORDER BY e."createdAt") ev FROM shipments s LEFT JOIN shipment_events e ON e."shipmentId"=s.id WHERE s.id=$1 GROUP BY s.status, s."dispatchedAt"`,
         params: () => [n2Olcum.sevkId], oku: (r) => `${r[0]?.st}:${r[0]?.d}:${r[0]?.ev}`, beklenen: (v) => /^(PLANNED|CANCELLED):true:.*DISPATCHED,UNDISPATCHED/.test(v) },
       { ad: "toplar depoya döndü, sevk bağı kalktı (rolls)", sql: `SELECT count(*)::int n FROM rolls WHERE "shipmentId"=$1 AND status='SHIPPED'`, params: () => [n2Olcum.sevkId], oku: (r) => r[0].n, beklenen: 0 },
+    ],
+  },
+  {
+    id: "S3", rol: "M", gerektirir: ["N3"],
+    yol: "API · Cari ekstre (finance/statement) kapanışı = Σ cari_transactions (storno satırı DAHİL, silinmiş satır yok)", rota: "reports/finance/aging",
+    async yap({ api, sql }) {
+      s3Olcum.cariId = (await sql(`SELECT ca.id FROM cari_accounts ca JOIN customers c ON c.id=ca."customerId" WHERE c.name=$1`, [buyukTr(AD.musteri)]))[0]?.id ?? null;
+      if (!s3Olcum.cariId) throw new Error("cari hesap yok");
+      const from = new Date(Date.now() - 30 * 864e5).toISOString(), to = new Date(Date.now() + 864e5).toISOString();
+      const r = await api(`/api/reports/finance/statement?cariId=${s3Olcum.cariId}&currency=TRY&dateFrom=${encodeURIComponent(from)}&dateTo=${encodeURIComponent(to)}`);
+      s3Olcum.kapanis = Number(r.govde?.data?.closing ?? NaN);
+      s3Olcum.satirTip = (r.govde?.data?.rows ?? []).map((x) => x.sourceType).join(",");
+      s3Olcum.defter = Number((await sql(`SELECT COALESCE(SUM(debit - credit),0)::text b FROM cari_transactions WHERE "cariId"=$1`, [s3Olcum.cariId]))[0].b);
+    },
+    async bekle() {},
+    dogrula: [
+      { ad: "ekstre kapanışı = Σ defter (fatura 1.200 − tahsilat 600 − storno 1.200 = −600)", sql: `SELECT 1`, oku: () => `${s3Olcum.kapanis}=${s3Olcum.defter}`, beklenen: () => Math.abs(s3Olcum.kapanis - s3Olcum.defter) < 0.01 && Math.abs(s3Olcum.defter + 600) < 0.01 },
+      { ad: "ekstrede üç satır tipi: INVOICE · PAYMENT · INVOICE_CANCEL (ters satır GÖRÜNÜR, orijinal silinmedi)", sql: `SELECT 1`, oku: () => s3Olcum.satirTip, beklenen: (v) => /INVOICE/.test(v) && /PAYMENT/.test(v) && /INVOICE_CANCEL/.test(v) },
+    ],
+  },
+  {
+    id: "S4", rol: "P", gerektirir: ["C2"],
+    yol: "API · İplik lotu izi TEST-L1: `GET /api/yarn/lots` balanceKg = Σ yarn_movements (işaretli); her hareketin KAYNAĞI var (mal kabul · levent · fason kalemi)", rota: "operations/yarn",
+    async yap({ api, sql }) {
+      const r = await api(`/api/yarn/lots?search=${encodeURIComponent(AD.lot)}`);
+      s4Olcum.api = Number((r.govde?.data ?? []).find((x) => x.lotNo === AD.lot)?.balanceKg ?? NaN);
+      const d = (await sql(`SELECT COALESCE(SUM(CASE WHEN m.kind::text IN ('IN','ADJUST_IN','WARP_RETURN','SUBCONTRACT_RETURN','WARP_ISSUE_REVERSAL','SUBCONTRACT_OUT_CANCEL') THEN m."qtyKg" ELSE -m."qtyKg" END),0)::text k, count(*)::int n, count(*) FILTER (WHERE m."goodsReceiptId" IS NULL AND m."warpBeamId" IS NULL AND m."dispatchItemId" IS NULL AND m."stockCountId" IS NULL AND m."invoiceId" IS NULL)::int kaynaksiz, string_agg(DISTINCT m.kind::text, ',') tip FROM yarn_movements m JOIN yarn_lots l ON l.id=m."lotId" WHERE l."lotNo"=$1`, [AD.lot]))[0];
+      s4Olcum.defter = Number(d.k); s4Olcum.hareket = `${d.n}:${d.tip}`; s4Olcum.kaynaksiz = Number(d.kaynaksiz);
+    },
+    async bekle() {},
+    dogrula: [
+      { ad: "API balanceKg = Σ defter (bakiye AYRI kolona inmez, türetilir)", sql: `SELECT 1`, oku: () => `${s4Olcum.api}=${s4Olcum.defter}`, beklenen: () => Number.isFinite(s4Olcum.api) && Math.abs(s4Olcum.api - s4Olcum.defter) < 0.001 },
+      { ad: "her hareketin kaynağı var (mal kabul / levent / fason kalemi) — kaynaksız satır 0", sql: `SELECT 1`, oku: () => `${s4Olcum.hareket} kaynaksız:${s4Olcum.kaynaksiz}`, beklenen: (v) => /kaynaksız:0$/.test(v) },
+    ],
+  },
+  {
+    id: "T1", rol: "P",
+    yol: "API · `GET /api/client-policy/electron` minVersion, sahadaki en düşük `sessions.clientVersion`den (son 30 gün) BÜYÜK OLAMAZ", rota: "system",
+    async yap({ api, sql }) {
+      t1Olcum.minVersion = (await api(`/api/client-policy/electron`)).govde?.data?.minVersion ?? null;
+      const r = (await sql(`SELECT min(string_to_array("clientVersion", '.')::int[]) v, count(*)::int n FROM sessions WHERE "clientVersion" ~ '^\\d+\\.\\d+\\.\\d+$' AND "createdAt" > now() - interval '30 days'`))[0];
+      t1Olcum.sahaMin = r?.v ? r.v.join(".") : null; t1Olcum.sahaN = Number(r?.n ?? 0);
+    },
+    async bekle() {},
+    dogrula: [
+      { ad: "minVersion ≤ sahadaki en düşük istemci sürümü (yoksa ÖLÇÜLEMEDİ değil — kural yalnız kayıt varsa bağlar)", sql: `SELECT 1`,
+        oku: () => `min=${t1Olcum.minVersion} saha=${t1Olcum.sahaMin} (${t1Olcum.sahaN} oturum)`,
+        beklenen: () => { const c = (a, b) => { const x = a.split(".").map(Number), y = b.split(".").map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; }; return !!t1Olcum.minVersion && (t1Olcum.sahaN === 0 || c(t1Olcum.minVersion, t1Olcum.sahaMin) <= 0); } },
+    ],
+  },
+  {
+    id: "P1", rol: "P", gerektirir: ["I4"],
+    yol: "API (operatör kimliğiyle) · SoD üçlüsü: `finance:write` olmadan fatura · `shipping:undo-dispatch` olmadan sevk geri al · `roll:manual-adjust` olmadan takılı topu kurtar → üçü 403; tablo değişmez (P1+P2+P3)", rota: "system/permissions",
+    async yap({ apiRol, sql }) {
+      p1Olcum.faturaOnce = Number((await sql(`SELECT count(*)::int n FROM invoices`))[0].n);
+      const sevk = (await sql(`SELECT id FROM shipments WHERE status='DISPATCHED' ORDER BY "createdAt" DESC LIMIT 1`))[0]?.id;
+      const top = (await sql(`SELECT id FROM rolls ORDER BY "createdAt" DESC LIMIT 1`))[0]?.id;
+      const cari = (await sql(`SELECT ca.id FROM cari_accounts ca JOIN customers c ON c.id=ca."customerId" WHERE c.name=$1`, [buyukTr(AD.musteri)]))[0]?.id;
+      const a = await apiRol("T", `/api/finance/invoices`, { method: "POST", body: JSON.stringify({ type: "SALES", cariId: cari, currency: "TRY", lines: [{ description: "x", qty: 1, unit: "m", unitPrice: 1, vatRate: 20 }] }) });
+      p1Olcum.fatura = a.status; p1Olcum.mesaj = a.govde?.message ?? ""; p1Olcum.kod = a.govde?.details?.code ?? null;
+      const b = await apiRol("T", `/api/shipping/shipments/${sevk}/undo-dispatch`, { method: "POST", body: JSON.stringify({ reason: "yetkisiz deneme", releaseSacks: false }) });
+      p1Olcum.geriAl = b.status;
+      const c = await apiRol("T", `/api/rolls/${top}/rescue-stuck`, { method: "POST", body: JSON.stringify({ reason: "yetkisiz deneme" }) });
+      p1Olcum.kurtar = c.status;
+      p1Olcum.faturaSonra = Number((await sql(`SELECT count(*)::int n FROM invoices`))[0].n);
+    },
+    async bekle() {},
+    dogrula: [
+      { ad: "operatör: fatura 403 · sevk geri al 403 · takılı top kurtar 403 (SoD üçlüsü)", sql: `SELECT 1`, oku: () => `${p1Olcum.fatura}:${p1Olcum.geriAl}:${p1Olcum.kurtar}`, beklenen: "403:403:403" },
+      { ad: "403 mesajı gereken yetkiyi ADIYLA söyler; `details.code` YOK (bulgu — çekirdek 'kod details.code altında')", sql: `SELECT 1`, oku: () => `${/finance:write/.test(p1Olcum.mesaj) ? 1 : 0}:${p1Olcum.kod}`, beklenen: (v) => /^1:/.test(v) },
+      { ad: "invoices değişmedi", sql: `SELECT 1`, oku: () => p1Olcum.faturaSonra - p1Olcum.faturaOnce, beklenen: 0 },
+    ],
+  },
+  {
+    id: "P5", rol: "P", gerektirir: ["A1"],
+    yol: "API · sistem hesabı: (a) mevcut kullanıcı `isSystemAccount:true` ile YÜKSELTİLEMEZ (alan yazma yoluna girmez) · (b) sistem hesabına izin satırı ATANMAZ (`[\"*\"]` — grant doğmaz)", rota: "system/permissions",
+    async yap({ api, sql }) {
+      const ben = (await sql(`SELECT id FROM users WHERE username='e2e-yonetici'`))[0].id;
+      const sys = (await sql(`SELECT id FROM users WHERE "isSystemAccount" LIMIT 1`))[0]?.id;
+      const a = await api(`/api/admin/users/${ben}`, { method: "PATCH", body: JSON.stringify({ isSystemAccount: true }) });
+      p5Olcum.yukselt = a.status;
+      p5Olcum.sistemKaldi = Number((await sql(`SELECT count(*)::int n FROM users WHERE "isSystemAccount"`))[0].n);
+      if (sys) {
+        const izin = (await sql(`SELECT id FROM permissions WHERE code='customer:read' LIMIT 1`))[0]?.id;
+        const b = await api(`/api/admin/users/${sys}/permissions`, { method: "PUT", body: JSON.stringify({ permissionIds: izin ? [izin] : [] }) });
+        p5Olcum.atama = b.status;
+        p5Olcum.atamaSatir = Number((await sql(`SELECT count(*)::int n FROM user_permissions WHERE "userId"=$1`, [sys]))[0].n);
+      }
+    },
+    async bekle() {},
+    dogrula: [
+      { ad: "(a) isSystemAccount yazılamaz: yanıt 2xx/4xx fark etmez — sistem hesabı sayısı 1 kaldı (users)", sql: `SELECT 1`, oku: () => `${p5Olcum.yukselt}:${p5Olcum.sistemKaldi}`, beklenen: (v) => /:1$/.test(v) },
+      { ad: "(b) sistem hesabına izin satırı doğmaz (user_permissions 0) — yanıt kodu bilgi amaçlı", sql: `SELECT 1`, oku: () => `${p5Olcum.atama}:${p5Olcum.atamaSatir}`, beklenen: (v) => /:0$/.test(v) },
+    ],
+  },
+  {
+    id: "P4", rol: "P", gerektirir: ["B1"],
+    yol: "API · açık oturumda izin sökme: muhasebe (admin:users) e2e-yonetici'den `customer:write`i alır → yöneticinin AÇIK token'ı Yeni Cari'de anında 401 (tokenVersion bump) → yeniden giriş → 403 → izin geri", rota: "system/permissions",
+    async yap({ api, apiRol, sql, oturumuYenile }) {
+      const ben = (await sql(`SELECT id, "tokenVersion" v FROM users WHERE username='e2e-yonetici'`))[0];
+      p4Olcum.surumOnce = Number(ben.v);
+      p4Olcum.musteriOnce = Number((await sql(`SELECT count(*)::int n FROM customers`))[0].n);
+      const tumu = (await sql(`SELECT p.id FROM user_permissions up JOIN permissions p ON p.id=up."permissionId" WHERE up."userId"=$1`, [ben.id])).map((r) => r.id);
+      const eksik = (await sql(`SELECT p.id FROM user_permissions up JOIN permissions p ON p.id=up."permissionId" WHERE up."userId"=$1 AND p.code<>'customer:write'`, [ben.id])).map((r) => r.id);
+      if (tumu.length === eksik.length) throw new Error("e2e-yonetici'de customer:write zaten yok");
+      await api(`/api/customers?limit=1`); // açık oturum: token alınmış ve çalışıyor
+      try {
+        const sok = await apiRol("M", `/api/admin/users/${ben.id}/permissions`, { method: "PUT", body: JSON.stringify({ permissionIds: eksik }) });
+        if (sok.status >= 300) throw new Error(`izin sökme: ${sok.status} ${JSON.stringify(sok.govde).slice(0, 160)}`);
+        p4Olcum.surumSonra = Number((await sql(`SELECT "tokenVersion" v FROM users WHERE id=$1`, [ben.id]))[0].v);
+        // Eski token ile yaz → 401 (sürüm eskidi); yeniden giriş → 403 (izin yok)
+        const govde = { name: `${ONEK} P4 DENEME`, customerRole: true };
+        const eski = await api(`/api/customers`, { method: "POST", body: JSON.stringify(govde), tekrarYok: true });
+        p4Olcum.kisitliDurum = eski.status; p4Olcum.kisitliKod = eski.govde?.details?.code ?? eski.govde?.message ?? null;
+        const yeni = await api(`/api/customers`, { method: "POST", body: JSON.stringify(govde) }); // 401'de sarmalayıcı yeniden girer
+        p4Olcum.yenidenDurum = yeni.status;
+      } finally {
+        const geri = await apiRol("M", `/api/admin/users/${ben.id}/permissions`, { method: "PUT", body: JSON.stringify({ permissionIds: tumu }) });
+        p4Olcum.geriDurum = geri.status;
+      }
+      p4Olcum.musteriSonra = Number((await sql(`SELECT count(*)::int n FROM customers`))[0].n);
+      oturumuYenile(); // panel penceresinin token'ı da eskidi — sonraki P adımı yeniden girsin
+    },
+    async bekle() {},
+    dogrula: [
+      { ad: "izin sökülünce users.tokenVersion +1 (açık oturumlar düşer)", sql: `SELECT 1`, oku: () => p4Olcum.surumSonra - p4Olcum.surumOnce, beklenen: (v) => v >= 1 },
+      { ad: "eski token ile yazma ANINDA 401 (yeniden giriş istenir); yeniden girişte 403 (izin yok)", sql: `SELECT 1`, oku: () => `${p4Olcum.kisitliDurum}:${p4Olcum.yenidenDurum}`, beklenen: "401:403" },
+      { ad: "customers değişmedi; izinler geri yüklendi (2xx) ve customer:write yeniden var", sql: `SELECT count(*)::int n FROM user_permissions up JOIN permissions p ON p.id=up."permissionId" JOIN users u ON u.id=up."userId" WHERE u.username='e2e-yonetici' AND p.code='customer:write'`, oku: (r) => `${p4Olcum.musteriSonra - p4Olcum.musteriOnce}:${p4Olcum.geriDurum}:${r[0].n}`, beklenen: (v) => /^0:20\d:1$/.test(v) },
     ],
   },
 ];

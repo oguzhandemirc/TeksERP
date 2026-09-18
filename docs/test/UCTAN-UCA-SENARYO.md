@@ -182,11 +182,11 @@ Her dal ana zincirin verisine dayanır (`gerektirir`). Kod harfleri N–T; sür�
 
 | Adım | Yap | Bekle | Backend doğrulaması |
 |---|---|---|---|
-| **P1** · P (operatör izinli yönetici DEĞİL) · `shipping:invoice` olmadan Faturala | J1'i yetkisiz kullanıcıyla dene. | Düğme yok / 403. | HTTP 403 `PERMISSION_DENIED` (kod ölçülecek); `invoices` değişmedi. |
-| **P2** · P · `shipping:undo-dispatch` olmadan sevk geri al | N2'yi yetkisiz dene. | 403. | `shipments` değişmedi. |
-| **P3** · P · `roll:manual-adjust` olmadan Manuel Top Ekle | F6'yı yetkisiz dene. | 403. | `rolls` değişmedi. |
-| **P4** · P · İzin çıkarıldıktan sonra AÇIK oturum | Yetkilendirme'de e2e-yonetici'den `customer:write`i al; açık oturumda B1'i dene. | Anında 403 (JWT `tokenVersion` bump → yeniden giriş ya da 401). | `users.tokenVersion` +1; `sessions` iptal/yenileme; `customers` değişmedi. |
-| **P5** · S · Sistem hesabı panelden atanamaz | Yetkilendirme'de sistem hesabına rol ata. | Görünür ama kimlik teslim edilmez; atama reddedilir. | `user_permissions` değişmedi. |
+| **P1 (+P2+P3)** · P · API, operatör kimliğiyle (tablet kanalı — masaüstü kanalı operatöre KAPALI: "Bu hesabın masaüstü paneline erişimi yok" 403) ✅ | `POST /finance/invoices` (`finance:write`) · `POST /shipments/:id/undo-dispatch` (`shipping:undo-dispatch`) · `POST /rolls/:id/rescue-stuck` (`roll:manual-adjust`). | Üçü 403; mesaj gereken yetkiyi ADIYLA söyler ("Bu işlem için 'finance:write' yetkisi gerekli."). | **`details.code` YOK** (guzergâhın `PERMISSION_DENIED` beklentisi kodda yok — bulgu, küçük); `invoices` değişmedi. |
+| **P2** · P · `shipping:undo-dispatch` olmadan sevk geri al ✅ (P1 içinde) | — | 403. | `shipments` değişmedi. |
+| **P3** · P · `roll:manual-adjust` olmadan takılı topu kurtar ✅ (P1 içinde; Manuel Top Ekle `roll:write`/`mobile:kk1` ile açık — manual-adjust kesim/sayım/kurtarma yollarını korur) | — | 403. | `rolls` değişmedi. |
+| **P4** · P · API · muhasebe (`admin:users`) e2e-yonetici'den `customer:write`i alır; yöneticinin AÇIK token'ı ile Yeni Cari ✅ | `PUT /admin/users/:id/permissions` (eksik küme) → eski token `POST /customers` → yeniden giriş → tekrar → izinler geri (finally). | Eski token **anında 401** (sürüm eskidi, yeniden giriş); yeni girişte **403**. | `users.tokenVersion` +1; `customers` değişmedi; izin geri (106 satır). Sürücü notu: panel penceresinin token'ı da düşer → sonraki adım yeniden girer. |
+| **P5** · P · API ✅ | (a) `PATCH /admin/users/:ben {isSystemAccount:true}` · (b) `PUT /admin/users/:sysadmin/permissions`. | (a) 200 ama alan YAZILMADI (şemaya girmez) — sistem hesabı sayısı 1 kaldı; (b) **403** — sistem hesabına izin satırı doğmaz. | `users.isSystemAccount` tek satır; `user_permissions(sysadmin)` 0. |
 
 ### Q · Çoklu kullanıcı — iki tablet, aynı kaynak
 
@@ -211,8 +211,8 @@ Her dal ana zincirin verisine dayanır (`gerektirir`). Kod harfleri N–T; sür�
 |---|---|---|---|
 | **S1** · P · Randıman (L1) metre toplamı | TEST-TZ1, bugün. | Rapor metresi = indirilen toplar toplamı. | `Σ rolls.initialQty (entrySource=WEAVING, tezgah TEST-TZ1, bugün)` = rapor satırı; kaynak "ölçüldü/elle" bayrağı doff'tan. |
 | **S2** · P · Top İzleme (L5) | F4 topunun barkodu. | Doğum (KK1) → KK2 → Tambur → çuval → sevk → iade zinciri tam. | `roll_operations` + `roll_movements` + `shipment_events` + `roll_returns` sırası = ekrandaki zaman çizelgesi. |
-| **S3** · M · Cari ekstre (J4) | TEST Müşteri. | Bakiye = Σ fatura − Σ tahsilat ± storno. | `Σ cari_transactions` (VOIDED hariç değil — ters satır var) = ekstre bakiyesi. |
-| **S4** · P · İplik lotu izi (C4 → D2 → D3 → K1) | TEST-L1. | 120 − 30 + 1 − 45 + 3 − 20 + 5 − 5 = 29 kg. | `Σ yarn_movements (lot TEST-L1)` = 29; her hareketin kaynağı (mal kabul · sarım · dip · fason sevk · dönüş · storno). |
+| **S3** · M · API ekstre (`finance/statement`) ✅ | TEST Müşteri, N3 sonrası. | Kapanış −600 = 1.200 − 600 − 1.200 (storno). | `closing` = Σ `cari_transactions` (−600); satır tipleri INVOICE · PAYMENT · INVOICE_CANCEL — ters satır görünür, orijinal silinmedi. |
+| **S4** · P · API lot izi (`GET /yarn/lots` balanceKg) ✅ | TEST-L1 (panel zinciri: C2 120 − K1 20 + K3 5 − 5 − N1 30 + 1 + 30 − 1 = **100**; tablet D2/D3 dâhil olunca 29). | `balanceKg` = Σ işaretli `yarn_movements` (türetilir, kolon değil). | 12 hareket, hepsinin kaynağı var (`goodsReceiptId` · `warpBeamId` · `dispatchItemId`); kaynaksız 0. |
 | **S5** · P · Sipariş karnesi (L4) sevk ilerlemesi | TEST-S1. | Sevk edilen 40 m (BRÜT), iade 10 m ayrı kolon. | `sack_allocations` = 40; `roll_returns` = 10; karne brütü değiştirmez. |
 | **S6** · P · Vardiya karnesi (L3) duruş süresi | TEST-TZ1, bugün. | F3 duruşu süresiyle; mühürlü satır değişmez. | `machine_stop_events` toplamı = karne; mühür sonrası `PATCH` 409. |
 
@@ -220,7 +220,7 @@ Her dal ana zincirin verisine dayanır (`gerektirir`). Kod harfleri N–T; sür�
 
 | Adım | Yap | Bekle | Backend doğrulaması |
 |---|---|---|---|
-| **T1** · S · `minVersion`i sahadakinin ÜSTÜNE yazma denemesi | `client-policy` sabitini kod incelemesinde oku. | Kural: minVersion sahadakinden BÜYÜK OLAMAZ; kod yolu review'dan geçer (panelde ayar YOK). | `GET /api/client-policy/electron` `minVersion` ≤ `sessions.clientVersion` min (son 30 gün). |
+| **T1** · P · API ✅ | `GET /api/client-policy/electron`. | `minVersion` 1.0.0 ≤ sahadaki en düşük `sessions.clientVersion` 1.0.7 (148 oturum, 30 gün — fabrika kopyası). | Kural ölçülebilir; ihlal olsaydı kırmızı. |
 | **T2** · T · Eski JS paketiyle tablet (`minPaketTarihi`) | Eski paketi yükle, backend'i yeni tut. | Kilit yalnız güncelleme GERÇEKTEN kurulabilirse; çevrimdışıysa kilitlenmez. | `client-policy/mobil.minPaketTarihi` ↔ `Updates.createdAt`. |
 | **T3** · P · Panel ilk açılış "neler değişti" | Taze profil ile aç. | Diyalog bir kez; Tamam sonrası tekrar gelmez. | `surum-notlari.json` son tur = diyalog içeriği. |
 | **T4** · S · Kaldırma fazı kapısı | `test_rol_modeli_kalinti` kurulum kopyasında. | ④ kolu: pencere dolmadan ÖLÇÜLEMEDİ; 2026-10-17'den önce "AÇILABİLİR" yok. | `sessions.clientVersion` NULL sayısı son 30 gün. |
@@ -244,6 +244,7 @@ Her madde bir DİLİM adayıdır; 1e iş mantığı önceliğiyle sıralar. Davr
 | **K** | Sevkten doğan fatura taslağında cari kilitli değil (`disabled` yalnız düzenlemede) — kaynak sevkiyatı olan taslakta cari sevk müşterisine kilitlenmeli (tür de) | J1 | d9 |
 | **K** | Panel girişi: erişilebilirlik sondası yalnız açılışta koşar (`useServerReachability` mount); ⚙ diyalogdan adres kaydedilince YENİDEN SONDALANMAZ → "Sunucuya ulaşılamadı" paneli kalır, kullanıcı "Sunucuyu Ara"ya basmak zorunda — adres kaydı `recheck()` tetiklemeli | Giriş (sürücü ölçtü) | d9 |
 | **K** | Sevki geri al önizlemesi soyut sayı basıyor ("1 çuval · 1 top"); `undo-dispatch-preview` payload'ı `sacks[{sackNo, rollCount}]` taşıyor ama `UndoDispatchDialog` listelemiyor — çekirdek "etkilenen HER kayıt" kuralı için çuval no (+ top barkodları katlanır) çizilmeli | N2 | d9 |
+| **K** | 403 yetki reddi `details.code` taşımıyor (yalnız Türkçe mesaj) — istemci "modül kapalı" (`MODULE_DISABLED`) ile "yetki yok"u koddan ayıramıyor; `PERMISSION_DENIED` kodu eklenmeli (rbac.middleware) | P1 | d9 |
 | **O** | KK1 doff bağında desen/renk/sahip ön-dolu (doff → koşum → iş; `DOFF_SELECT` genişler) — en büyük dokunuş kazancı (F4 −3) | F4 · G2 | 6e |
 | **O** | Ödeme koşulu (vade) ve para birimi KARTTA doğsun, PO ve faturaya insin; `dueDate` otomatik | B1 · C1 · C6 · J4 | 9b |
 | **O** | Ödeme/tahsilat girişinde açık fatura listesi + varsayılan FIFO (`PaymentAllocation` var, UI tek ekrana) | C7 · J3 | 9b |
@@ -288,7 +289,7 @@ PO onay/release adımı · zamanlanmış rapor gönderimi · backflush (otomatik
 |---|---|---|---|---|
 | Ana zincir A–M (panel) | 43 | 33 (A1 · A2 · B1–B4 · C1–C8 · D0 · E1–E3 · F1 · G1 · I4 · J1 · I7 · J2–J5 · K1 · K3 · L4 · M1–M3 [her biri 3 alt adım: kapat S · ölç P · aç S] — ~10 dk; roller S · P · M; koşum sırası I4 → J1 → I7 → N6 → J2 → J3 → J4 → J5 → M1 → M3 → M2; **TESTM tam koşum 2026-09-18 (39 adım, ~13 dk): 38 yeşil · 1 kırmızı (N6 = İHLAL)**; sonra A2 · N1 · N3 · O7 eklendi, yeşil) | 1 | 9 (belge önizleme, yazıcı, Wi-Fi, Excel/PDF) |
 | Ana zincir (tablet, d5) | 17 | 0 | 17 | — |
-| Dallar N–T | 31 | 9 (N1 · N2 · N3 · O7 ayrı adım; N5 · O2 · O4 · O6 zincir içinde ölçülür; N6 ve N2(b) ❌ İHLAL ölçüyor) | 19 | 3 |
+| Dallar N–T | 31 | 17 (N1 · N2 · N3 · O7 · P1(+P2/P3) · P4 · P5 · S3 · S4 · T1 ayrı adım; N5 · O2 · O4 · O6 zincir içinde; N6 ve N2(b) ❌ İHLAL ölçüyor) | 11 (tablet: N4 · O1 · O3 · O5 · Q1–Q4 · R1–R3 · S1 · S6 · T2) | 3 |
 
 **Sayılar ölçülecektir:** bu tablo belge yazıldığı andaki plandır (2026-09-18); sürücü her koşumda `sonuc.json` üretir ve gerçek kapsam ORADAN okunur — bir koşumun çıktısından kapsam iddiası türetilmez, popülasyonu bu belge tanımlar.
 

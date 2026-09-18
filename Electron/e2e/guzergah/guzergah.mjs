@@ -112,7 +112,7 @@ async function apiGiris(rol) {
   const k = KULLANICI[rol];
   const r = await fetch(`${ortam.apiUrl}/api/auth/login`, {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ username: k.username, password: k.password, clientType: "web" }),
+    body: JSON.stringify({ username: k.username, password: k.password, clientType: rol === "T" ? "mobile" : "web" }), // operatör hesabı masaüstü kanalına kapalı (403) — tablet kanalıyla girer
   });
   const j = await r.json();
   if (!j?.data?.token) throw new Error(`API girişi başarısız (${rol}): ${r.status} ${j?.message ?? ""}`);
@@ -120,10 +120,17 @@ async function apiGiris(rol) {
   return j.data.token;
 }
 async function api(rol, yol, init = {}) {
-  const token = await apiGiris(rol);
-  const r = await fetch(`${ortam.apiUrl}${yol}`, { ...init, headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...(init.headers ?? {}) } });
-  const govde = await r.json().catch(() => null);
-  return { status: r.status, govde };
+  const istek = async () => {
+    const token = await apiGiris(rol);
+    const r = await fetch(`${ortam.apiUrl}${yol}`, { ...init, headers: { authorization: `Bearer ${token}`, "content-type": "application/json", ...(init.headers ?? {}) } });
+    return { status: r.status, govde: await r.json().catch(() => null) };
+  };
+  const ilk = await istek();
+  // Token geçersiz kaldıysa (izin değişimi tokenVersion'ı artırır — P4) bir kez yeniden giriş; ölçüm isteyen adım
+  // ilk cevabı `init.tekrarYok` ile alır.
+  if (ilk.status !== 401 || init.tekrarYok) return ilk;
+  apiToken.delete(rol);
+  return istek();
 }
 
 // ── Electron oturumu (rol başına bir uygulama) ───────────────────────────────
@@ -233,6 +240,8 @@ function fiiller() {
       return l;
     },
     diyalog: (baslik) => page.getByRole("dialog").filter({ hasText: baslik }).first(),
+    /** Bu rolün panel oturumunu düşür (izin/tokenVersion değişti) — bir sonraki adım yeniden giriş yapar. */
+    oturumuYenile: () => { acikRol = null; },
     bekle: (ms) => page.waitForTimeout(ms),
     page: () => page,
   };
@@ -255,7 +264,8 @@ for (const adim of secili) {
     // Önceki adımdan açık kalmış diyalog (kırmızıda düğmeye ulaşılamamış olabilir) sonraki adımı kilitlemesin.
     for (let i = 0; i < 3 && (await page.getByRole("dialog").count()); i++) { await page.keyboard.press("Escape"); await page.waitForTimeout(300); }
     const f = fiiller();
-    const ctx = { ...f, api: (yol, init) => api(adim.rol === "S" ? "P" : adim.rol, yol, init), sql, ortam, kullanici: KULLANICI[adim.rol] };
+    // `apiRol`: başka rolün kimliğiyle sonda (yetki dalları — operatör 403 alır mı?); adımın kendi rolü değişmez.
+    const ctx = { ...f, api: (yol, init) => api(adim.rol === "S" ? "P" : adim.rol, yol, init), apiRol: (rol, yol, init) => api(rol, yol, init), sql, ortam, kullanici: KULLANICI[adim.rol] };
     await Promise.race([
       (async () => { await adim.yap(ctx); await adim.bekle?.(ctx); })(),
       new Promise((_, rej) => setTimeout(() => rej(new Error(`adım ${ADIM_ZAMAN_ASIMI_MS / 1000} sn'de bitmedi`)), ADIM_ZAMAN_ASIMI_MS)),
@@ -283,7 +293,7 @@ for (const adim of secili) {
     kayit.sure_ms = Date.now() - t0;
     if (page) {
       kayit.ekran = `${adim.id}.png`;
-      await page.screenshot({ path: path.join(CIKTI, kayit.ekran), fullPage: false }).catch(() => undefined);
+      if (page) await page.screenshot({ path: path.join(CIKTI, kayit.ekran), fullPage: false }).catch(() => undefined);
     }
     sonuclar.push(kayit);
     const isaret = kayit.durum === "yesil" ? "✅" : kayit.durum === "atlandi" ? "⏭ " : "❌";
