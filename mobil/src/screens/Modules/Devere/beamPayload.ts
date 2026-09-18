@@ -121,18 +121,18 @@ export interface WindDefault {
 }
 
 /**
- * SAR açılış satır ön-dolgusu (Z5): çözgü kartının SON IN_HOUSE sarımından makine + iplik çıkış/dip satırları —
- * yalnız ÖNERİ, operatör her değeri değiştirir (kg dahil; yeniden tartılır). Yalnız IN_HOUSE'ta uygulanır; öneri
- * yoksa ya da köken IN_HOUSE değilse taban form korunur; öneride çıkış satırı yoksa tabanın tek boş satırı kalır
- * (operatör en az bir çıkış girer — `validateWindPage`).
+ * SAR açılış satır ön-dolgusu (Z5): çözgü kartının SON IN_HOUSE sarımından makine + iplik ÇIKIŞ satırlarının
+ * DEPO + LOT'u önerilir — yalnız ÖNERİ. kg BOŞ başlar (1e kararı): kg deftere giren ÖLÇÜMdür, önceki sarımın kg'i
+ * bu sarımın ağırlığı değildir ve dokunulmazsa yanlış sayı deftere iner ("Kg kaynağı: Tartıldı" ile de çelişir) —
+ * operatör tartıp girer. Dip iadesi ÖN-DOLDURULMAZ (boş-kg satır İleri'yi kilitler, iade istisnaidir). Yalnız
+ * IN_HOUSE'ta; öneri yoksa/başka kökende taban korunur; öneride çıkış yoksa tabanın tek boş satırı kalır.
  */
 export function windFormWithDefault(base: WindForm, originKind: WarpBeamOrigin, def: WindDefault | undefined): WindForm {
   if (originKind !== 'IN_HOUSE' || !def) return base;
   const issues = def.yarnIssues.length
-    ? def.yarnIssues.map((l, i) => ({ key: `i${i + 1}`, warehouseId: l.warehouseId, qtyKg: String(l.qtyKg), reasonCode: null, lotId: l.lotId }))
+    ? def.yarnIssues.map((l, i) => ({ key: `i${i + 1}`, warehouseId: l.warehouseId, qtyKg: '', reasonCode: null, lotId: l.lotId }))
     : base.issues;
-  const returns = def.yarnReturns.map((l, i) => ({ key: `r${i + 1}`, warehouseId: l.warehouseId, qtyKg: String(l.qtyKg), reasonCode: l.reasonCode, lotId: l.lotId }));
-  return { ...base, machineId: def.machineId ?? base.machineId, issues, returns };
+  return { ...base, machineId: def.machineId ?? base.machineId, issues };
 }
 
 /** Çözgü kartı için son sarım önerisini bul (yoksa undefined). */

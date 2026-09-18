@@ -279,11 +279,11 @@ describe('windFormWithDefault / windDefaultFor — Z5 SAR ön-dolgu (yalnız ön
     yarnIssues: [{ warehouseId: 'w9', lotId: 'l9', qtyKg: 12.5 }],
     yarnReturns: [{ warehouseId: 'w9', lotId: 'l9', qtyKg: 1, reasonCode: 'DIP' }],
   };
-  it('1 IN_HOUSE: makine + çıkış/dip satırları önerilir (qtyKg string’e döner)', () => {
+  it('1 IN_HOUSE: makine + çıkış satırının DEPO/LOT önerilir, kg BOŞ; dip iadesi ön-doldurulmaz', () => {
     const f = windFormWithDefault(base, 'IN_HOUSE', def);
     expect(f.machineId).toBe('m9');
-    expect(f.issues).toEqual([{ key: 'i1', warehouseId: 'w9', qtyKg: '12.5', reasonCode: null, lotId: 'l9' }]);
-    expect(f.returns).toEqual([{ key: 'r1', warehouseId: 'w9', qtyKg: '1', reasonCode: 'DIP', lotId: 'l9' }]);
+    expect(f.issues).toEqual([{ key: 'i1', warehouseId: 'w9', qtyKg: '', reasonCode: null, lotId: 'l9' }]);
+    expect(f.returns).toBe(base.returns); // dip iadesi ÖN-DOLDURULMAZ (yarnReturns yok sayılır)
   });
   it('2 öneri yoksa / IN_HOUSE değilse taban korunur', () => {
     expect(windFormWithDefault(base, 'IN_HOUSE', undefined)).toBe(base);
@@ -292,7 +292,6 @@ describe('windFormWithDefault / windDefaultFor — Z5 SAR ön-dolgu (yalnız ön
   it('3 boş çıkış listesi gelirse tabanın satırı korunur (en az bir çıkış)', () => {
     const f = windFormWithDefault(base, 'IN_HOUSE', { ...def, yarnIssues: [] });
     expect(f.issues).toBe(base.issues);
-    expect(f.returns).toHaveLength(1);
   });
   it('4 windDefaultFor: karta göre eşleşir, yoksa undefined; liste undefined güvenli', () => {
     expect(windDefaultFor([def], 's1')).toBe(def);

@@ -131,8 +131,8 @@ describe('useBeamForms — Z5 SAR ön-dolgu (lastWindDefaults)', () => {
     act(() => hook.result.current.openWind(beam));
     const f = hook.result.current.windForm!;
     expect(f.machineId).toBe('m9'); // öneri makinesi, soleMachineId 'm1' DEĞİL
-    expect(f.issues.map((l) => [l.warehouseId, l.lotId, l.qtyKg])).toEqual([['w9', 'l9', '12.5'], ['w8', null, '3']]);
-    expect(f.returns.map((l) => [l.warehouseId, l.lotId, l.qtyKg, l.reasonCode])).toEqual([['w9', 'l9', '1', 'DIP']]);
+    expect(f.issues.map((l) => [l.warehouseId, l.lotId, l.qtyKg])).toEqual([['w9', 'l9', ''], ['w8', null, '']]); // depo+lot dolu, kg BOŞ
+    expect(f.returns).toHaveLength(0); // dip iadesi ön-doldurulmaz
     // Kart eşleşmezse öneri yok → taban tek boş çıkış + soleMachineId.
     const { hook: h2 } = setup(false, { soleMachineId: 'm1', lastWindDefaults: [{ ...def, warpSpecId: 's-baska' }] });
     act(() => h2.result.current.openWind(beam)); // beam.warpSpec.id 's1' ≠ 's-baska'
