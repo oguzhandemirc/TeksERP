@@ -126,9 +126,9 @@
 
 | Adım | Yap | Bekle | Backend doğrulaması | Çıkarım |
 |---|---|---|---|---|
-| **K1** · P · Yeni Dokuma İşi (fasoncu) → Fason (sevk · kabul) → Sevk et ⏳ | Levent TEST-R-3 + iplik TEST İplik, TEST-L1, 20 kg → sevk. | "Sevkler (1)"; FasonYarnStrip giden 20 kg; lot kalanı 29. | `subcontractor_dispatches` → 1; `subcontractor_dispatch_items` → 2 (levent + iplik); `yarn_movements` → −20; `warp_beams.status=SHIPPED_OUT`. | ② **K** sevk edilen leventlerin gövde/durum rozeti. |
+| **K1** · P · Cariler → Yeni Cari "TEST Fasoncu" (**Fason iş yapar** kutusu; Tedarikçi rolü kendiliğinden işaretlenir) · Leventler → Yeni Levent (Köken **Hazır alındı**, Tedarikçi seç = TEST Tedarikçi, çözgü TEST-R, 300 m) → satırda **sağ tık → Sar (WOUND)** (300 m) · Dokuma İşleri → Yeni Dokuma İşi (Kim dokuyor **Fasonda dokunuyor** → Fasoncu seç) → satırda **sağ tık → Fason (sevk · kabul)** → **Sevk et (levent / iplik)** → levent kutusu + "İplik satırı" (TEST İplik · lot TEST-L1 · 20 kg) → "Sevk et (1 levent · 1 iplik satırı)" ✅ | Sevk seçicisi yalnız **READY** leventleri listeler — plan (PLANNED) yetmez, önce Sar. Hazır levent "TAM BİR taraf" ister (tedarikçi YA DA fasoncu) — form kırmızı şerhle söylüyor. Satır menüleri sağ tık (context menu). | "Sevkler (1)"; şeritte giden 20 kg. | `subcontractor_dispatches` → 1; `subcontractor_dispatch_items` → 2 (`WARP_BEAM` 300 + `YARN` 20); `yarn_movements` → `SUBCONTRACT_OUT` 20 (lot bakiyesi −20); `warp_beams.status=SHIPPED_OUT`; `subcontractors.customerId` → cari kartı, `customers.isSubcontractorRole`. | ① Fasoncu tek işlemde kart + profil (BP rol modeli) — iyi. ② **K** sevk edilen leventin gövde/durum rozeti (ölçülmedi). ③ sağ tık menüsü keşfedilmez — satırda "⋯" ikizi. |
 | **K2** · T · Fason Dokuma Kabul → iş → 35 m kabul ⏳(d5) | 1 satır 35 m → kabul. | "Makbuzlar (1)", "Doğan top 1"; Ham Stok'ta top (kaynak fason), sahibi boş. | `subcontractor_receipts` → 1; `rolls` → +1 (`entrySource` fason/dokuma, `ownerCustomerId` NULL). | ② **K** kabulde desen işten ön-dolu (ölçülecek). |
-| **K3** · P · sevk satırı → İplik döndü → Dönüşü geri al ⏳ | 5 kg, sebep → kaydet (önizleme); sonra geri al (gerekçe). | "5 kg → depo; fasonda kalan 20 → 15"; storno sonrası 20; defterde iki satır. | `yarn_movements` → +5 (dönüş) ve −5 (storno) — iki satır, silme yok; fasonda kalan 20. | — |
+| **K3** · P · Fason sayfası → iplik satırında **İplik döndü** (Dönen kg 5 · Sebep "Kalan iplik") → **Dönüşü kaydet** → **Dönüşü geri al** (dönüş satırı + gerekçe ≥ 3) ✅ | Sebep katalogdan (`YARN_SUBCONTRACT_RETURN`: Kalan iplik · Kalite · İş iptal). | Fasonda kalan 20 → 15 → (storno) 20. | `yarn_movements` → `SUBCONTRACT_RETURN` +5 ve `SUBCONTRACT_RETURN_CANCEL` −5 — **iki satır, silme yok**; lot bakiyesi başa döner. | ① Ters yol beyanlı tipli enum çifti — çekirdek kural ölçüldü. |
 
 ### L · Raporlar
 
@@ -285,7 +285,7 @@ PO onay/release adımı · zamanlanmış rapor gönderimi · backflush (otomatik
 
 | Kapsam | Adım sayısı | Otomatik ✅ | Yazılacak ⏳ | Elle ✋ |
 |---|---|---|---|---|
-| Ana zincir A–M (panel) | 43 | 30 (A1 · B1–B4 · C1–C8 · D0 · E1–E3 · F1 · G1 · I4 · J1 · I7 · J2–J5 · L4 · M1–M3 [her biri 3 alt adım: kapat S · ölç P · aç S] — ~10 dk; roller S · P · M; koşum sırası I4 → J1 → I7 → N6 → J2 → J3 → J4 → J5 → M1 → M3 → M2; **TESTL tam koşum 2026-09-18: 24 yeşil · 1 kırmızı (N6 = İHLAL); J4/J5 · L4 · M1–M3 ayrıca yeşil**) | 4 | 9 (belge önizleme, yazıcı, Wi-Fi, Excel/PDF) |
+| Ana zincir A–M (panel) | 43 | 32 (A1 · B1–B4 · C1–C8 · D0 · E1–E3 · F1 · G1 · I4 · J1 · I7 · J2–J5 · K1 · K3 · L4 · M1–M3 [her biri 3 alt adım: kapat S · ölç P · aç S] — ~10 dk; roller S · P · M; koşum sırası I4 → J1 → I7 → N6 → J2 → J3 → J4 → J5 → M1 → M3 → M2; **TESTL tam koşum 2026-09-18: 24 yeşil · 1 kırmızı (N6 = İHLAL); J4/J5 · K1/K3 · L4 · M1–M3 ayrıca yeşil**) | 2 | 9 (belge önizleme, yazıcı, Wi-Fi, Excel/PDF) |
 | Ana zincir (tablet, d5) | 17 | 0 | 17 | — |
 | Dallar N–T | 31 | 3 (N5 · O6 — I7/I4 içinde ölçülür; N6 — ayrı adım, ❌ İHLAL ölçüyor) | 25 | 3 |
 

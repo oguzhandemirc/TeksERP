@@ -17,7 +17,7 @@ const ONEK = process.env.E2E_ONEK ?? "TEST";
 /** Sunucu master-data adını Türkçe BÜYÜTEREK saklar (`name_uppercase_storage`); beklentiler de öyle yazılır. */
 export const buyukTr = (s) => s.replace(/i/g, "İ").replace(/ı/g, "I").toUpperCase();
 export const AD = {
-  musteri: `${ONEK} Müşteri`,
+  musteri: `${ONEK} Müşteri`, fasoncu: `${ONEK} Fasoncu`,
   tedarikci: `${ONEK} Tedarikçi`,
   iplik: `${ONEK} İplik`, iplikKod: `${ONEK}-IP`,
   kumas: `${ONEK} Kumaş`, kumasKod: `${ONEK}-KM`,
@@ -69,6 +69,8 @@ const m1Olcum = { paletSayisi: null, karoSayisi: null, apiKapali: null, apiKapal
 const m3Olcum = { sahipAlani: null, barkod: null, cuval: null, okut: null, sevkDurum: null, sevkKod: null, sevkTopVar: null, acikSahipAlani: null };
 const m2Olcum = { kilitSayisi: null, kilitSonra: null, apiDurum: null, apiKod: null, paletDokuma: null, acikDurum: null };
 const l4Olcum = { musteriId: null, notMusteri: null, notHedef: null, notHedefSerh: null, temizSonraMusteri: null, iptalSebepSecici: null, iptalSebepIpucu: null, iptalUyari: null };
+const k1Olcum = { beamNo: null, isNo: null, sevkOnceKg: null, sevkUyari: null };
+const k3Olcum = { isNo: null, onceKg: null, donusSonraKg: null, fasondaDonus: null, fasondaStorno: null };
 const j1Olcum = { sevkNo: null, sevkId: null, tur: null, cariMetin: null, cariKilitli: null, satir: null, miktar: null, birim: null };
 const i4Olcum = { barkod: null, digerMusteri: null, digerOnce: null, testOnce: null, onizlemeSahipVar: null, redDurum: null, redKod: null, redTopVar: null, redSahipVar: null, tostSahipVar: null, ikinciDurum: null, sevkNo: null };
 
@@ -1485,6 +1487,133 @@ export const ADIMLAR = [
       { ad: "GET /reports/sales/order-cancellation → meta.secenekler.reasonCode ve reasonFillPct (veri boşluğu ölçümü)",
         uc: () => `/api/reports/sales/order-cancellation?dateFrom=${encodeURIComponent(new Date(Date.now() - 30 * 864e5).toISOString())}&dateTo=${encodeURIComponent(new Date().toISOString())}`,
         oku: (g) => `${(g?.meta?.secenekler?.reasonCode ?? []).length}:${g?.data?.summary?.reasonFillPct}`, beklenen: (v) => /^\d+:\d+(\.\d+)?$/.test(v) },
+    ],
+  },
+  {
+    id: "K1", rol: "P", gerektirir: ["B1", "B3", "C2"],
+    yol: "Cariler → Yeni Cari (Fason iş yapar) · Leventler → Yeni Levent (Hazır alındı) → sağ tık → Sar (WOUND) · Dokuma İşleri → Yeni Dokuma İşi (Fasonda dokunuyor) → sağ tık → Fason (sevk · kabul) → Sevk et (levent + iplik TEST-L1 20 kg)", rota: "operations/weaving-orders",
+    async yap({ git, tikla, gor, sec, sql, page }) {
+      const secModal = async (d, tetik, ara) => {
+        await d.getByText(tetik, { exact: false }).first().click({ timeout: 15_000 });
+        const m = page().getByRole("dialog").filter({ has: page().getByPlaceholder("Ara (ad veya kod)") }).last(); await gor(m);
+        await m.getByPlaceholder("Ara (ad veya kod)").fill(ara); await page().waitForTimeout(700);
+        await m.getByText(buyukTr(ara), { exact: false }).first().click({ timeout: 15_000 });
+        await m.waitFor({ state: "detached", timeout: 15_000 }).catch(() => undefined);
+      };
+      // ① Fasoncu — cari kartında "Fason iş yapar" (BP rol modeli: fason = carinin rolü, tedarikçi rolü otomatik işaretlenir).
+      if (!(await sql(`SELECT 1 FROM customers WHERE name=$1`, [buyukTr(AD.fasoncu)])).length) {
+        await git("Cariler"); await tikla("Yeni Cari");
+        const d = page().getByRole("dialog").filter({ hasText: "Yeni Cari" }).last(); await gor(d);
+        await d.locator("#name").fill(AD.fasoncu);
+        await d.getByLabel("Fason iş yapar", { exact: true }).check();
+        await d.getByRole("button", { name: "Kaydet", exact: true }).click({ timeout: 15_000 });
+        await d.waitFor({ state: "detached", timeout: 15_000 }); await page().waitForTimeout(500);
+      }
+      // ② Hazır levent (PURCHASED) → Sar → READY. Sevk seçicisi yalnız READY leventleri listeler.
+      await git("Leventler"); await tikla("Yeni Levent");
+      const ld = page().getByRole("dialog").filter({ hasText: "Yeni Levent" }).last(); await gor(ld);
+      await sec(ld.getByRole("combobox").filter({ hasText: /İçeride sarıldı|Hazır|emanet|Fason/ }).first(), "Hazır alındı");
+      await secModal(ld, "Tedarikçi seç", AD.tedarikci); // hazır levent TAM BİR taraf ister: tedarikçi YA DA fasoncu
+      await secModal(ld, "Çözgü kartı seç", AD.cozgu);
+      await ld.locator('input[type="number"]').first().fill("300");
+      await ld.getByRole("button", { name: /Kaydet|Planla|Oluştur/ }).last().click({ timeout: 15_000 });
+      await ld.waitFor({ state: "detached", timeout: 15_000 }); await page().waitForTimeout(800);
+      const beam = await sql(`SELECT "beamNo" FROM warp_beams WHERE "originKind"='PURCHASED' AND status='PLANNED' ORDER BY "createdAt" DESC LIMIT 1`);
+      k1Olcum.beamNo = beam[0]?.beamNo ?? null; if (!k1Olcum.beamNo) throw new Error("hazır levent doğmadı");
+      const satir = page().getByRole("row").filter({ hasText: k1Olcum.beamNo }).filter({ visible: true }).first(); await gor(satir);
+      await satir.click({ button: "right", timeout: 15_000 });
+      await page().getByRole("menuitem", { name: /Sar \(WOUND\)/ }).click({ timeout: 15_000 });
+      const wd = page().getByRole("dialog").filter({ hasText: /— Sar/ }).last(); await gor(wd);
+      await wd.locator("#wb-length").fill("300");
+      await wd.getByRole("button", { name: "Sar", exact: true }).click({ timeout: 15_000 });
+      await wd.waitFor({ state: "detached", timeout: 20_000 }); await page().waitForTimeout(600);
+      // ③ Fason dokuma işi
+      await git("Dokuma İşleri"); await tikla("Yeni Dokuma İşi");
+      const d = page().getByRole("dialog").filter({ hasText: "Yeni Dokuma İşi" }).last(); await gor(d);
+      await secModal(d, "Kumaş seç", AD.kumas);
+      await secModal(d, "Çözgü kartı seç", AD.cozgu);
+      await sec(d.getByRole("combobox").filter({ hasText: /tezgah|fason/i }).first(), /Fasonda/);
+      await secModal(d, "Fasoncu seç", AD.fasoncu);
+      await d.locator("#plannedM").fill("100");
+      await d.getByRole("button", { name: /Kaydet|Oluştur/ }).last().click({ timeout: 15_000 });
+      await d.waitFor({ state: "detached", timeout: 15_000 }); await page().waitForTimeout(800);
+      const isKaydi = await sql(`SELECT w."weavingOrderNumber" n FROM weaving_orders w JOIN subcontractors s ON s.id=w."subcontractorId" WHERE s.name=$1 ORDER BY w."createdAt" DESC LIMIT 1`, [buyukTr(AD.fasoncu)]);
+      k1Olcum.isNo = isKaydi[0]?.n ?? null; if (!k1Olcum.isNo) throw new Error("fason dokuma işi doğmadı");
+      k1Olcum.sevkOnceKg = Number((await sql(`SELECT COALESCE(SUM(CASE WHEN m.kind::text IN ('IN','ADJUST_IN','WARP_RETURN','SUBCONTRACT_RETURN','WARP_ISSUE_REVERSAL','SUBCONTRACT_OUT_CANCEL') THEN m."qtyKg" ELSE -m."qtyKg" END),0)::text k FROM yarn_movements m JOIN yarn_lots l ON l.id=m."lotId" WHERE l."lotNo"=$1`, [AD.lot]))[0].k);
+      // ④ Fason sayfası → Sevk et
+      const isSatir = page().getByRole("row").filter({ hasText: k1Olcum.isNo }).filter({ visible: true }).first(); await gor(isSatir);
+      await isSatir.click({ button: "right", timeout: 15_000 });
+      await page().getByRole("menuitem", { name: /Fason \(sevk/ }).click({ timeout: 15_000 });
+      const sheet = page().getByRole("dialog").filter({ hasText: k1Olcum.isNo }).last(); await gor(sheet, { sure: 20_000 });
+      await sheet.getByRole("button", { name: /Sevk et/ }).first().click({ timeout: 15_000 });
+      const sd = page().getByRole("dialog").filter({ hasText: /fasona sevk et/ }).last(); await gor(sd, { sure: 20_000 });
+      await sd.locator("label", { hasText: k1Olcum.beamNo }).first().click({ timeout: 15_000 });
+      await sd.getByRole("button", { name: /İplik satırı/ }).click({ timeout: 15_000 });
+      await sd.getByRole("combobox").filter({ hasText: /İplik ara/ }).first().click({ timeout: 15_000 });
+      await page().getByPlaceholder("Ara (kod, isim, vergi no)").fill(AD.iplikKod); await page().waitForTimeout(800);
+      await page().locator("[cmdk-item]").filter({ hasText: AD.iplikKod }).first().click({ timeout: 15_000 });
+      await page().waitForTimeout(600);
+      await sec(sd.getByLabel("İplik lotu").first(), new RegExp(AD.lot));
+      await sd.getByLabel("İplik kg").first().fill("20");
+      await sd.getByRole("button", { name: /^Sevk et \(/ }).click({ timeout: 15_000 });
+      await sd.waitFor({ state: "detached", timeout: 20_000 }); await page().waitForTimeout(800);
+    },
+    async bekle({ gor, page }) {
+      const sheet = page().getByRole("dialog").filter({ hasText: k1Olcum.isNo }).last();
+      await gor(sheet.getByText(/Sevkler \(1\)/).first(), { sure: 15_000 });
+      await page().keyboard.press("Escape");
+    },
+    dogrula: [
+      { ad: "fason sevki 1; kalemler levent + iplik (subcontractor_dispatch_items)",
+        sql: `SELECT count(DISTINCT d.id)::int sevk, string_agg(i.kind::text, ',' ORDER BY i.kind::text) k, max(i."dispatchedQty")::text kg FROM subcontractor_dispatches d JOIN weaving_orders w ON w.id=d."weavingOrderId" JOIN subcontractor_dispatch_items i ON i."dispatchId"=d.id WHERE w."weavingOrderNumber"=$1 AND d."cancelledAt" IS NULL`,
+        params: () => [k1Olcum.isNo], oku: (r) => `${r[0].sevk}:${r[0].k}:${r[0].kg}`, beklenen: (v) => /^1:WARP_BEAM,YARN:(300|20)(\.0+)?$/.test(v) },
+      { ad: "levent fasonda (warp_beams.status=SHIPPED_OUT)", sql: `SELECT status::text s FROM warp_beams WHERE "beamNo"=$1`, params: () => [k1Olcum.beamNo], oku: (r) => r[0]?.s, beklenen: "SHIPPED_OUT" },
+      { ad: "iplik defteri: lot bakiyesi −20 (yarn_movements SUBCONTRACT_OUT)",
+        sql: `SELECT COALESCE(SUM(CASE WHEN m.kind::text IN ('IN','ADJUST_IN','WARP_RETURN','SUBCONTRACT_RETURN','WARP_ISSUE_REVERSAL','SUBCONTRACT_OUT_CANCEL') THEN m."qtyKg" ELSE -m."qtyKg" END),0)::text k, count(*) FILTER (WHERE m.kind::text='SUBCONTRACT_OUT')::int n FROM yarn_movements m JOIN yarn_lots l ON l.id=m."lotId" WHERE l."lotNo"=$1`,
+        params: [AD.lot], oku: (r) => `${(Number(r[0].k) - k1Olcum.sevkOnceKg).toFixed(3)}:${r[0].n}`, beklenen: (v) => /^-20\.000:[1-9]/.test(v) },
+      { ad: "fasoncu cari kartın rolü (subcontractors ↔ customers)", sql: `SELECT count(*)::int n FROM subcontractors s JOIN customers c ON c.id=s."customerId" WHERE c.name=$1 AND c."isSubcontractorRole"`, params: [buyukTr(AD.fasoncu)], oku: (r) => r[0].n, beklenen: 1 },
+    ],
+  },
+  {
+    id: "K3", rol: "P", gerektirir: ["K1"],
+    yol: "Dokuma İşleri → fason işi sağ tık → Fason (sevk · kabul) → iplik satırı 'İplik döndü' (5 kg, sebep) → Dönüşü kaydet → 'Dönüşü geri al' (gerekçe)", rota: "operations/weaving-orders",
+    async yap({ git, gor, sec, sql, page }) {
+      const kayit = await sql(`SELECT w."weavingOrderNumber" n FROM weaving_orders w JOIN subcontractors s ON s.id=w."subcontractorId" WHERE s.name=$1 ORDER BY w."createdAt" DESC LIMIT 1`, [buyukTr(AD.fasoncu)]);
+      k3Olcum.isNo = k1Olcum.isNo ?? kayit[0]?.n ?? null; if (!k3Olcum.isNo) throw new Error("fason dokuma işi yok (K1 koşmadı mı?)");
+      const lotBakiye = async () => Number((await sql(`SELECT COALESCE(SUM(CASE WHEN m.kind::text IN ('IN','ADJUST_IN','WARP_RETURN','SUBCONTRACT_RETURN','WARP_ISSUE_REVERSAL','SUBCONTRACT_OUT_CANCEL') THEN m."qtyKg" ELSE -m."qtyKg" END),0)::text k FROM yarn_movements m JOIN yarn_lots l ON l.id=m."lotId" WHERE l."lotNo"=$1`, [AD.lot]))[0].k);
+      k3Olcum.onceKg = await lotBakiye();
+      await git("Dokuma İşleri");
+      const isSatir = page().getByRole("row").filter({ hasText: k3Olcum.isNo }).filter({ visible: true }).first(); await gor(isSatir);
+      await isSatir.click({ button: "right", timeout: 15_000 });
+      await page().getByRole("menuitem", { name: /Fason \(sevk/ }).click({ timeout: 15_000 });
+      const sheet = page().getByRole("dialog").filter({ hasText: k3Olcum.isNo }).last(); await gor(sheet, { sure: 20_000 });
+      // İplik döndü — 5 kg, katalog sebebi
+      await sheet.getByRole("button", { name: "İplik döndü" }).first().click({ timeout: 15_000 });
+      const rd = page().getByRole("dialog").filter({ hasText: /iplik döndü/ }).last(); await gor(rd);
+      await rd.locator("#fyr-kg").fill("5");
+      await sec(rd.getByRole("combobox").filter({ hasText: /Sebep seç|Katalogda/ }).first(), /Kalan iplik/);
+      await rd.getByRole("button", { name: "Dönüşü kaydet" }).click({ timeout: 15_000 });
+      await rd.waitFor({ state: "detached", timeout: 20_000 }); await page().waitForTimeout(1200);
+      k3Olcum.donusSonraKg = await lotBakiye();
+      k3Olcum.fasondaDonus = (await sheet.innerText().catch(() => "")).includes("15") ? 1 : 0;
+      // Dönüşü geri al — açık dönüş satırı + gerekçe (≥3)
+      await sheet.getByRole("button", { name: "Dönüşü geri al" }).first().click({ timeout: 15_000 });
+      const cd = page().getByRole("dialog").filter({ hasText: /dönüşü geri al/ }).last(); await gor(cd);
+      const satirSec = cd.getByRole("combobox").filter({ hasText: /Satır seç/ }).first();
+      if (await satirSec.count()) { await satirSec.click(); await page().getByRole("option").first().click({ timeout: 10_000 }); }
+      await cd.locator("#fyrc-reason").fill("Test: yanlış satıra yazıldı");
+      await cd.getByRole("button", { name: "Dönüşü geri al" }).click({ timeout: 15_000 });
+      await cd.waitFor({ state: "detached", timeout: 20_000 }); await page().waitForTimeout(1200);
+      k3Olcum.fasondaStorno = (await sheet.innerText().catch(() => "")).includes("20") ? 1 : 0;
+      await page().keyboard.press("Escape");
+    },
+    async bekle() {},
+    dogrula: [
+      { ad: "dönüş sonrası lot bakiyesi +5 (ekranda fasonda kalan 20 → 15)", sql: `SELECT 1`, oku: () => `${(k3Olcum.donusSonraKg - k3Olcum.onceKg).toFixed(3)}:${k3Olcum.fasondaDonus}`, beklenen: "5.000:1" },
+      { ad: "storno sonrası bakiye başa döndü; defterde İKİ satır (SUBCONTRACT_RETURN + SUBCONTRACT_RETURN_CANCEL), silme YOK (yarn_movements)",
+        sql: `SELECT COALESCE(SUM(CASE WHEN m.kind::text IN ('IN','ADJUST_IN','WARP_RETURN','SUBCONTRACT_RETURN','WARP_ISSUE_REVERSAL','SUBCONTRACT_OUT_CANCEL') THEN m."qtyKg" ELSE -m."qtyKg" END),0)::text k, count(*) FILTER (WHERE m.kind::text='SUBCONTRACT_RETURN')::int d, count(*) FILTER (WHERE m.kind::text='SUBCONTRACT_RETURN_CANCEL')::int s FROM yarn_movements m JOIN yarn_lots l ON l.id=m."lotId" WHERE l."lotNo"=$1`,
+        params: [AD.lot], oku: (r) => `${(Number(r[0].k) - k3Olcum.onceKg).toFixed(3)}:${r[0].d}:${r[0].s}`, beklenen: (v) => /^0\.000:[1-9]\d*:[1-9]\d*$/.test(v) },
+      { ad: "ekranda fasonda kalan yeniden 20", sql: `SELECT 1`, oku: () => k3Olcum.fasondaStorno, beklenen: 1 },
     ],
   },
 ];
