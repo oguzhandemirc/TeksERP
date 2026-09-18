@@ -45,7 +45,7 @@ function LineChips({ entry }: { entry: DoffEntry }) {
 }
 
 function RunChips({ entry }: { entry: DoffEntry }) {
-  const { form, patch, openRuns, runsLoading } = entry;
+  const { form, selectRun, openRuns, runsLoading } = entry;
   if (runsLoading) return <ActivityIndicator />;
   if (openRuns.length === 0) {
     return (
@@ -57,13 +57,13 @@ function RunChips({ entry }: { entry: DoffEntry }) {
   }
   return (
     <View style={styles.chips}>
-      <Chip on={form.machineRunId === null} label="Koşumsuz" onPress={() => patch({ machineRunId: null })} />
+      <Chip on={form.machineRunId === null} label="Koşumsuz" onPress={() => selectRun(null)} />
       {openRuns.map((r) => (
         <Chip
           key={r.id}
           on={form.machineRunId === r.id}
           label={`Koşum ${fmtTime(r.startedAt)}${r.weavingOrderId ? '' : ' (iş emrisiz)'}`}
-          onPress={() => patch({ machineRunId: r.id })}
+          onPress={() => selectRun(r.id)}
         />
       ))}
     </View>

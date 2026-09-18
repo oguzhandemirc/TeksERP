@@ -21,12 +21,19 @@ export interface DoffFormState {
 }
 
 export const EMPTY_DOFF_FORM: DoffFormState = {
-  pieceCount: '',
+  // Parça sayısı VARSAYILAN 1: indirmelerin ezici çoğunluğu tek parçadır; operatör dokunmadan
+  // İndir'e basabilir, çok parçalı vardiyada değiştirir (+0/−1 dokunuş, davranış değişmez).
+  pieceCount: '1',
   counter: '',
   counterSource: 'OPERATOR',
   machineRunId: null,
   notes: '',
 };
+
+/** Tek açık koşum varsa onun id'si (doff formunda ön-seçim); 0 ya da >1 → null (operatör seçer / Koşumsuz). */
+export function preselectMachineRunId(openRuns: readonly { id: string }[]): string | null {
+  return openRuns.length === 1 ? openRuns[0]!.id : null;
+}
 
 export const PIECE_COUNT_MAX = 1000;
 export const NOTES_MAX = 300;

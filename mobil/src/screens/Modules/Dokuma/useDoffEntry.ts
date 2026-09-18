@@ -6,17 +6,46 @@
 // mutation online-only, çevrimdışıyken buton kilitli, kalıcı düşüş anlık toast.
 // `clientToken` mantıksal deneme başına bir kez (`doffAttempt.ts`).
 // =============================================================================
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Toast from 'react-native-toast-message';
 import { useSessionStore } from '../../../store/sessionStore';
 import { usePermissions } from '../../../hooks/usePermission';
 import { useIsOnline, useOfflineReason } from '../../../offline/hooks';
 import { doffFingerprint, tokenForDoff } from './doffAttempt';
-import { EMPTY_DOFF_FORM, validateDoffForm, type DoffFormState } from './doffPayload';
+import { EMPTY_DOFF_FORM, preselectMachineRunId, validateDoffForm, type DoffFormState } from './doffPayload';
 import { useDoffLists } from './useDoffLists';
 import { useDoffMeter } from './useDoffMeter';
 import { useDoffRevoke, useDoffSave } from './useDoffMutations';
 import type { DoffEvent, DoffListRow, OpenMachineRun } from '../../../services/doff.service';
+
+/**
+ * Koşum ön-seçimi: TEK açık koşum varsa kendiliğinden seçili (operatör dokunmadan İndir'e basar);
+ * operatör "Koşumsuz"u ya da başka koşumu seçince (`selectRun`) DOKUNULMUŞ sayılır ve ön-seçim tekrar
+ * ETMEZ. Hat değişince `resetPreselect` ile sıfırlanır. Effect (useFoldValues dersi) yalnız
+ * `runTouched` false iken ve KARARLI `openRuns` referansı değişince yazar.
+ */
+function useRunPreselect(openRuns: readonly OpenMachineRun[], lineNo: number, patch: (p: Partial<DoffFormState>) => void) {
+  const runTouched = useRef(false);
+  const prevLine = useRef(lineNo);
+  const selectRun = useCallback(
+    (id: string | null) => {
+      runTouched.current = true;
+      patch({ machineRunId: id });
+    },
+    [patch]
+  );
+  useEffect(() => {
+    // Hat değişince ön-seçim sıfırlanır (yeni hattın tek koşumu seçilebilsin).
+    if (prevLine.current !== lineNo) {
+      prevLine.current = lineNo;
+      runTouched.current = false;
+    }
+    if (runTouched.current) return;
+    const soleId = preselectMachineRunId(openRuns);
+    if (soleId) patch({ machineRunId: soleId });
+  }, [openRuns, lineNo, patch]);
+  return selectRun;
+}
 
 export function useDoffEntry() {
   const active = useSessionStore((s) => s.active);
@@ -32,6 +61,7 @@ export function useDoffEntry() {
   const patch = useCallback((p: Partial<DoffFormState>) => setForm((f) => ({ ...f, ...p })), []);
 
   const lists = useDoffLists(machineId, lineNo);
+  const selectRun = useRunPreselect(lists.openRuns, lineNo, patch);
   const meter = useDoffMeter();
   const readMeterIntoForm = useCallback(async () => {
     const r = await meter.readMeter();
@@ -43,7 +73,8 @@ export function useDoffEntry() {
     lineNo,
     form,
     // Parça sayısı SIFIRLANIR (§3.7/5); sayaç ve koşum bir sonraki indirme için durur.
-    onSaved: () => patch({ pieceCount: '', notes: '' }),
+    // Bir sonraki indirme için parça sayısı yine VARSAYILAN 1 (boş değil) — art arda tek parça indirmede dokunuş yok.
+    onSaved: () => patch({ pieceCount: '1', notes: '' }),
     onRunsStale: () => {
       lists.refetchRuns();
       patch({ machineRunId: null });
@@ -82,6 +113,7 @@ export function useDoffEntry() {
     setLineNo,
     form,
     patch,
+    selectRun,
     openRuns: lists.openRuns,
     runsLoading: lists.runsLoading,
     reading: meter.reading,
