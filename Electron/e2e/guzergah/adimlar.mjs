@@ -60,6 +60,8 @@ const e2Olcum = { rotaSablonu: null };
 const e3Olcum = { uyumluBaska: null, ikinciMusteri: null, gorunenMusteri: null };
 const g1Olcum = { tedarikciAlaniVar: null };
 const i7Olcum = { barkod: null, sevkId: null, onceMetre: null, onceTop: null, sonraMetre: null, sonraTop: null, iadeMetre: null, iadeSayi: null };
+const n6Olcum = { sevkId: null, satir: null, metre: null, belgeMetre: null };
+const j1Olcum = { sevkNo: null, sevkId: null, tur: null, cariMetin: null, cariKilitli: null, satir: null, miktar: null, birim: null };
 const i4Olcum = { barkod: null, digerMusteri: null, digerOnce: null, testOnce: null, onizlemeSahipVar: null, redDurum: null, redKod: null, redTopVar: null, redSahipVar: null, tostSahipVar: null, ikinciDurum: null, sevkNo: null };
 
 const MODUL_ANAHTARLARI = ["productionEnabled", "financeEnabled", "ticaretEnabled", "iplikEnabled", "depoMultiEnabled", "kumasTeknikEnabled", "tezgahEnabled", "devereEnabled", "dokumaEnabled", "emanetEnabled"];
@@ -961,6 +963,52 @@ export const ADIMLAR = [
     ],
   },
   {
+    id: "J1", rol: "M", gerektirir: ["I4"],
+    yol: "Muhasebe → Sevkiyatlar (Muhasebe) → satırda Faturala → Yeni Fatura (Taslak) → birim fiyat → Taslağı Oluştur", rota: "operations/accounting-dispatch",
+    async yap({ git, gor, sql, page }) {
+      const sevk = await sql(`SELECT s.id, s."shipmentNo" FROM shipments s JOIN customers c ON c.id=s."customerId" WHERE c.name=$1 AND s.status='DISPATCHED' ORDER BY s."createdAt" DESC LIMIT 1`, [buyukTr(AD.musteri)]);
+      j1Olcum.sevkNo = sevk[0]?.shipmentNo ?? null; j1Olcum.sevkId = sevk[0]?.id ?? null;
+      if (!j1Olcum.sevkNo) throw new Error("TEST Müşteri'nin sevk edilmiş sevkiyatı yok (I4 koşmadı mı?)");
+      await git("Sevkiyatlar (Muhasebe)");
+      const ara = page().getByPlaceholder("Sevkiyat no, sipariş no, firma"); await gor(ara);
+      await ara.fill(j1Olcum.sevkNo); await page().waitForTimeout(1200);
+      const satir = page().getByRole("row").filter({ hasText: j1Olcum.sevkNo }).filter({ visible: true }).first(); await gor(satir);
+      await satir.getByRole("button", { name: "Faturala" }).click({ timeout: 15_000 });
+      const d = page().getByRole("dialog").filter({ hasText: "Yeni Fatura (Taslak)" }).last(); await gor(d, { sure: 20_000 });
+      await page().waitForTimeout(600);
+      // Ölçüm: türetilebilen alanlar ön-dolu mu, kilitli mi (çıkarım K).
+      j1Olcum.tur = await d.locator("select").first().inputValue();
+      const cariAlani = d.getByText("Cari", { exact: true }).locator("xpath=following::button[1]");
+      j1Olcum.cariMetin = (await cariAlani.textContent().catch(() => "")) ?? "";
+      j1Olcum.cariKilitli = await cariAlani.isDisabled().catch(() => null);
+      const sayisal = d.locator('input[type="number"]');
+      j1Olcum.satir = Math.floor((await sayisal.count()) / 5); // satır başına 5 sayısal alan (miktar · fiyat · iskonto · KDV · tevkifat)
+      j1Olcum.miktar = await sayisal.nth(0).inputValue();
+      j1Olcum.birim = await d.getByPlaceholder("Ürün / hizmet açıklaması").first().locator("xpath=following::input[2]").inputValue().catch(() => null);
+      await sayisal.nth(1).fill("40"); // birim fiyat — fiyatlandırma kapalı, kart fiyatı yok → elle
+      await d.getByRole("button", { name: "Taslağı Oluştur" }).click({ timeout: 15_000 });
+      await d.waitFor({ state: "detached", timeout: 20_000 });
+      await page().waitForTimeout(800);
+    },
+    async bekle({ gor, page }) {
+      // Satırda artık "Faturala" yerine taslağa bağ (docNo) çizilir.
+      const satir = page().getByRole("row").filter({ hasText: j1Olcum.sevkNo }).filter({ visible: true }).first();
+      await gor(satir);
+      await gor(satir.getByText(/FAT|Taslak|SF/i).first(), { sure: 15_000 }).catch(() => undefined);
+    },
+    dogrula: [
+      { ad: "taslak fatura sevkiyata bağlı: SALES · DRAFT · cari TEST Müşteri (invoices)",
+        sql: `SELECT i.type::text t, i.status::text st, (c.name=$2) cari FROM invoices i JOIN cari_accounts ca ON ca.id=i."cariId" JOIN customers c ON c.id=ca."customerId" WHERE i."shipmentId"=$1 AND i.status<>'CANCELLED' ORDER BY i."createdAt" DESC LIMIT 1`,
+        params: () => [j1Olcum.sevkId, buyukTr(AD.musteri)], oku: (r) => `${r[0]?.t}:${r[0]?.st}:${r[0]?.cari}`, beklenen: "SALES:DRAFT:true" },
+      { ad: "fatura satırı sevk satırından: 25 m (BRÜT, iade düşülmedi) · birim dolu · fiyat 40 (invoice_lines)",
+        sql: `SELECT count(*)::int n, max(l.qty)::text q, max(l.unit) u, max(l."unitPrice")::text p FROM invoice_lines l JOIN invoices i ON i.id=l."invoiceId" WHERE i."shipmentId"=$1 AND i.status<>'CANCELLED'`,
+        params: () => [j1Olcum.sevkId], oku: (r) => `${r[0].n}:${r[0].q}:${r[0].u}:${r[0].p}`, beklenen: (v) => /^1:25(\.0+)?:\S+:40(\.0+)?$/.test(v) },
+      { ad: "formda tür SALES ön-dolu, cari sevk müşterisi ön-dolu (ekran)", sql: `SELECT 1`, oku: () => `${j1Olcum.tur}:${j1Olcum.cariMetin.includes(buyukTr(AD.musteri))}`, beklenen: "SALES:true" },
+      { ad: "ÇIKARIM K: cari alanı KİLİTLİ değil — sevkten gelen fatura başka cariye yazılabilir (ekran)", sql: `SELECT 1`, oku: () => j1Olcum.cariKilitli, beklenen: false },
+      { ad: "satır sayısı 1, miktar 25 ön-dolu (ekran)", sql: `SELECT 1`, oku: () => `${j1Olcum.satir}:${j1Olcum.miktar}`, beklenen: "1:25" },
+    ],
+  },
+  {
     id: "I7", rol: "P", gerektirir: ["I4"],
     yol: "Operasyon → İade Takibi → Yeni İade → barkod → Sorgula → neden → İade Al (I4'te sevk edilen emanet top)", rota: "operations/returns",
     async yap({ git, tikla, gor, sec, sql, api, page }) {
@@ -1001,6 +1049,24 @@ export const ADIMLAR = [
         beklenen: (v) => /^25\/1→25\/1 iade:25\/1$/.test(v) },
       { ad: "sevkiyat olay defterine iade satırı YAZILMAZ (iade kendi defteri) — shipment_events sabit",
         sql: `SELECT string_agg(type::text, ',' ORDER BY "createdAt") t FROM shipment_events WHERE "shipmentId"=$1`, params: () => [i7Olcum.sevkId], oku: (r) => r[0].t, beklenen: (v) => /^(PLANNED,)?DISPATCHED$/.test(String(v)) },
+    ],
+  },
+  {
+    id: "N6", rol: "M", gerektirir: ["I7"],
+    yol: "API · iade SONRASI sevkiyattan fatura taslağı önizlemesi — satırlar BRÜT (25 m) olmalı; resmi belge brütleştirir, taslak kurucu brütleştirmiyor", rota: "operations/accounting-dispatch",
+    async yap({ api }) {
+      n6Olcum.sevkId = i7Olcum.sevkId;
+      if (!n6Olcum.sevkId) throw new Error("I7'nin sevkiyatı yok");
+      const taslak = (await api(`/api/finance/shipments/${n6Olcum.sevkId}/invoice-draft-lines`)).govde?.data ?? {};
+      const satirlar = taslak.lines ?? [];
+      n6Olcum.satir = satirlar.length;
+      n6Olcum.metre = satirlar.reduce((t, l) => t + Number(l.qty ?? 0), 0);
+      n6Olcum.belgeMetre = (await api(`/api/shipping/shipments/${n6Olcum.sevkId}`)).govde?.data?.summary?.totalMeters ?? null;
+    },
+    async bekle() {},
+    dogrula: [
+      { ad: "BRÜT KURALI: iade sonrası fatura taslağı satırları sevk rakamını (25 m) taşımalı — belge özeti brüt, taslak kurucu `roll.shipmentId`den okuyor (shipment-auto-draft.helper collectShipmentInvoiceDraftLines)",
+        sql: `SELECT 1`, oku: () => `taslak:${n6Olcum.satir} satır/${n6Olcum.metre} m · belge özeti:${n6Olcum.belgeMetre} m`, beklenen: (v) => /^taslak:1 satır\/25 m · belge özeti:25 m$/.test(v) },
     ],
   },
 ];

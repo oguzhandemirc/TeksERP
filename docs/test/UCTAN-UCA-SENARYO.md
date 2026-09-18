@@ -116,7 +116,7 @@
 
 | Adım | Yap | Bekle | Backend doğrulaması | Çıkarım |
 |---|---|---|---|---|
-| **J1** · M · Sevkiyatlar (Muhasebe) → Faturala ⏳ | Tür satış, cari türü Müşteri, para birimi; satırlar sevkten → kaydet. | Faturalar'da taslak. | `invoices` → +1 (`shipmentId` dolu, `DRAFT`); `invoice_lines` = sevk satırları. | ③ **K** türetilebilen alan sorulmasın: tür=satış, cari=sevk müşterisi ön-dolu ve kilitli. |
+| **J1** · M · Operasyon → Sevkiyatlar (Muhasebe) → arama kutusuna sevk no → satırda **Faturala** → "Yeni Fatura (Taslak)" → Birim Fiyat 40 → **Taslağı Oluştur** ✅ | Zincirde J1 **I7'den ÖNCE** koşar (fatura sevkte, iade sonra — gerçek sıra; iade sonrası taslak N6'da ölçülür). Tür "Satış Faturası" ve Cari (TEST Müşteri) ÖN-DOLU gelir; satır 1: kumaş · 25 m · birim "m" · fiyat 0 (`finance.pricingEnabled=false`, kart fiyatı yok) → elle 40. | Toast "Taslak oluşturuldu"; satırda "Faturala" yerine taslağa bağ. | `invoices` → +1 (`shipmentId` dolu, `SALES`, `DRAFT`, `cariId` → TEST Müşteri); `invoice_lines` → 1 (qty 25, unit `m`, unitPrice 40). | ① Tür + cari + satırlar sevkten ön-dolu — iyi. ③ **K** cari alanı KİLİTLİ DEĞİL (ölçüldü: `disabled` yalnız düzenlemede) — sevkten doğan fatura başka cariye yazılabilir; kaynak sevkiyatı olan taslakta cari kilitlenmeli. |
 | **J2** · M · Faturayı onayla → yazdır ✋/⏳ | Onayla; önizle. | Fatura no; satırlarda birim (metre) dolu; Sevkiyatlar'da Fatura kolonu dolu. | `invoices.status=APPROVED`, `number` dolu; `invoice_lines.unit` NOT NULL. | ② **bilinçli karar** e-Fatura/e-Arşiv (GİB UBL) — bizde YOK. |
 | **J3** · M · Tahsilat ⏳ | TEST Müşteri, kasa, nakit, yarısı → kaydet → makbuz. | Makbuz; Kasa Hareketleri'nde satır. | `payments` → +1; `cash_transactions` → +1; `payment_allocations` → +1. | ③ C7 ile ortak: açık kalem seçimi girişte. |
 | **J4** · M · Raporlar → Cari Yaşlandırma → ekstre ⏳ | TEST Müşteri → "Cari ekstresi". | Fatura + tahsilat satırları; bakiye = fatura − tahsilat; belge tipi süzgeci özeti değiştirmez. | `GET /api/reports/finance/aging…` → bakiye = `cari_transactions` toplamı. | ② yaşlandırma kovaları `dueDate` ister → C6 vade eksiği burada görünür. |
@@ -163,6 +163,7 @@ Her dal ana zincirin verisine dayanır (`gerektirir`). Kod harfleri N–T; sür�
 | **N3** · M · J2 faturasını iptal (storno) | Faturalar → satır → "İptal". | Fatura `VOIDED`; cari bakiye eski hâline; sevk rakamı değişmez. | `invoices.status=VOIDED`; `cari_transactions` → ters satır (+1, silme yok); `shipments` aynı. |
 | **N4** · T · H3 kesimini ikinci kez geri al (LIFO) | Tambur → "Tambur İşlemini Geri Al". | Yalnız EN SON işlem geri alınır; önizleme etkilenen topu listeler. | `roll_operations` → ters kayıt bugüne; sıra LIFO; `finalizedAt` trigger'ı tutarlı. |
 | **N5** · P · İade sonrası sevk rakamı ✅ | I7 ölçtü (`GET /shipments/:id` summary önce/sonra). | BRÜT değişmedi (25→25); iade ayrı sayaç (`returnedMeters` 25). | `roll_returns` → 1; sevk özeti sabit. |
+| **N6** · M · İade SONRASI sevkiyattan fatura taslağı önizlemesi ❌ **İHLAL** | API: `GET /api/finance/shipments/:id/invoice-draft-lines` (I7'nin sevkiyatı). | Satırlar BRÜT (25 m) — sevk belgesiyle aynı küme. | **Ölçüldü:** taslak 0 satır / 0 m, aynı sevkiyatın `summary.totalMeters` 25 m. `collectShipmentInvoiceDraftLines` (`shipment-auto-draft.helper.ts`) `roll WHERE shipmentId` okur; iade `shipmentId`yi NULL'lar → top taslaktan düşer. Resmi belge (`collectShipmentDocContent`) `RollReturn` ile BRÜTLEŞTİRİR, taslak kurucu brütleştirmez — helper'ın "resmi belgeyle aynı küme" yorumu yanlış. İade satış iadesi faturasıyla (`SALES_RETURN`) kapanmalı, satış faturası 25 m kalmalı. |
 
 ### O · Hata yolları — 409 claim, zorunlu alan, gövde dolu, kapalı modül
 
@@ -239,6 +240,8 @@ Her madde bir DİLİM adayıdır; 1e iş mantığı önceliğiyle sıralar. Davr
 | **B** | Kalite kabul / karantina: iplik lotu kabulde `KALİTE BEKLİYOR`, kullanım kararıyla stoğa (`YarnLot` yalnız `isActive`) | C2 | 9b [3][4][5] |
 | **K** | Sevkiyat önizlemesi emanet sahiplik çatışmasını göstermiyor: `POST /shipping/shipments/preview` `assertOwnerMatchesTx`i çağırmaz, kapı yalnız `performDispatchTx`te — operatör çatışmayı önizlemede değil "Sevk Et" reddinde (409 toast) görür; çözüm önizlemeye uyarı satırı | I4 · O6 | d9 |
 | **K** | Kısmi iade yok: panel/tablet iade girişi top bazlı (`RollReturn.qty` = topun `currentQty`), "10 m geri geldi" için yol yok — sektörde iade satırı miktar taşır (kesim + iade iki adım, ya da iade satırında metraj) | I7 | d9 |
+| **K** | **BRÜT ihlali:** iade sonrası sevkiyattan fatura taslağı NET çıkıyor (0 satır) — `collectShipmentInvoiceDraftLines` `roll.shipmentId`den okur, iade bağı NULL'lar; resmi belge `RollReturn` ile brütleştiriyor, taslak kurucu brütleştirmiyor (çıkış yüzeyleri ayrıştı). Çare: taslak kurucu da `RollReturn(fromShipmentId, cancelledAt NULL)` satırlarını geri eklesin; iade `SALES_RETURN` faturasıyla kapanır | N6 · J1 | d9 |
+| **K** | Sevkten doğan fatura taslağında cari kilitli değil (`disabled` yalnız düzenlemede) — kaynak sevkiyatı olan taslakta cari sevk müşterisine kilitlenmeli (tür de) | J1 | d9 |
 | **O** | KK1 doff bağında desen/renk/sahip ön-dolu (doff → koşum → iş; `DOFF_SELECT` genişler) — en büyük dokunuş kazancı (F4 −3) | F4 · G2 | 6e |
 | **O** | Ödeme koşulu (vade) ve para birimi KARTTA doğsun, PO ve faturaya insin; `dueDate` otomatik | B1 · C1 · C6 · J4 | 9b |
 | **O** | Ödeme/tahsilat girişinde açık fatura listesi + varsayılan FIFO (`PaymentAllocation` var, UI tek ekrana) | C7 · J3 | 9b |
@@ -281,9 +284,9 @@ PO onay/release adımı · zamanlanmış rapor gönderimi · backflush (otomatik
 
 | Kapsam | Adım sayısı | Otomatik ✅ | Yazılacak ⏳ | Elle ✋ |
 |---|---|---|---|---|
-| Ana zincir A–M (panel) | 43 | 21 (A1 · B1–B4 · C1–C8 · D0 · E1–E3 · F1 · G1 · I4 · I7 — ~5 dk; roller S · P · M) | 13 | 9 (belge önizleme, yazıcı, Wi-Fi, Excel/PDF) |
+| Ana zincir A–M (panel) | 43 | 22 (A1 · B1–B4 · C1–C8 · D0 · E1–E3 · F1 · G1 · I4 · J1 · I7 — ~5,5 dk; roller S · P · M; koşum sırası I4 → J1 → I7) | 12 | 9 (belge önizleme, yazıcı, Wi-Fi, Excel/PDF) |
 | Ana zincir (tablet, d5) | 17 | 0 | 17 | — |
-| Dallar N–T | 30 | 0 | 27 | 3 |
+| Dallar N–T | 31 | 3 (N5 · O6 — I7/I4 içinde ölçülür; N6 — ayrı adım, ❌ İHLAL ölçüyor) | 25 | 3 |
 
 **Sayılar ölçülecektir:** bu tablo belge yazıldığı andaki plandır (2026-09-18); sürücü her koşumda `sonuc.json` üretir ve gerçek kapsam ORADAN okunur — bir koşumun çıktısından kapsam iddiası türetilmez, popülasyonu bu belge tanımlar.
 
