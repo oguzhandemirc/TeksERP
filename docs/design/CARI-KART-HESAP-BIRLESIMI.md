@@ -65,13 +65,19 @@ Bizdeki karşılık: `Customer` = general data + roles, `CariAccount` = company-
 
 ### 3.2 Terimler nerede yaşasın — ÖLÇÜLMÜŞ iki yol
 
-| | **A — hesapta kalır (ÖNERİLEN)** | **B — karta taşınır** |
+| | **A — hesapta kalır (SEÇİLDİ)** | **B — karta taşınır (reddedildi)** |
 |---|---|---|
 | Şema | değişiklik YOK | `Customer`a 3 yeni nullable kolon + veri göçü + eski kolonların kaldırma borcu |
 | Okuyucu | dokunulmaz (4 yer) | 4 okuyucu taşınır: `deriveInvoiceDueDate` (`finance.helper.ts:190`) · mal kabul taslağı (`invoice.service.ts:770`) · sevk otomatik taslağı (`shipment-auto-draft.helper.ts:364`) · `cari.service` yazma yolu |
 | "Tek kaynak" | sağlanır — hesap kartla 1:1 | sağlanır, ama geçiş penceresinde İKİ yer dolu olur |
 | Sektör kalıbı | birebir (company-code view) | ödeme koşulunu general data'ya çeker |
 | Kullanıcının gördüğü | **aynı**: kart formunda "Finans" bölümü | aynı |
+
+> ### ⛳ KARAR: **A** — 1e, 2026-09-18 11:40
+> Terimler `CariAccount`ta KALIR; hesap kartla 1:1 doğar; kart formundaki "Finans" bölümü onları
+> `finance:read`/`finance:write` ile düzenler. **B yolu REDDEDİLDİ** — getirisi §3.1(1) değişmezi
+> kurulduğu anda sıfırlanıyor, geriye yalnız veri göçü ve dört okuyucunun taşınması kalıyordu.
+> §6.2 bu yüzden **uygulanmaz**; belgede karşılaştırma kaydı olarak duruyor.
 
 ⇒ **Öneri A.** §3.1(1) sağlandığı anda "vade kartta doğmuyor" kusurunun sebebi ortadan kalkar; terimi
 fiziksel olarak taşımak aynı kazancı getirmez, yalnız göç ve okuyucu değişimi ekler. Şemadaki
@@ -142,7 +148,7 @@ kartsız" sayıları **DB ölçümüdür** ve bu oturum canlı/yedek veritabanı
 adımı dry-run çıktısından verir; belgeye o çıktı eklenir. 1e'nin "kartsız hesap 0 (rol modeli
 göçünden sonra)" bilgisi burada **alıntıdır, bu belgenin ölçümü değildir**.
 
-### 6.2 Yalnız B yolu seçilirse (göç)
+### 6.2 B yolu — REDDEDİLDİ (karar A, §3.2); kayıt olarak durur
 
 `Customer`a `paymentTermDays` · `defaultCurrency` · `taxOffice` (+ `riskLimit`) nullable eklenir →
 mevcut hesaplardan karta kopyalanır → dört okuyucu karta çevrilir → hesaptaki kolonlar

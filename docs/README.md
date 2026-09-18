@@ -22,12 +22,17 @@ Kanonik kaynak **kod + `CLAUDE.md` dosyaları**dır. 2026-09-05 yeniden yapılan
 
 | Klasör | İçerik | Güncellik |
 |---|---|---|
-| `kurallar/` | Alan kural dosyaları (24 + README) — üretildi 2026-09-05, sonra elle bakılır | Canlı |
+| `kurallar/` | Alan kural dosyaları (liste ve arşiv tarihleri: `kurallar/README.md`) — üretildi 2026-09-05, sonra elle bakılır | Canlı |
 | `standart/` | Kod yazım standardı (giriş `standart/README.md`, dosya listesi orada): `ILKELER` · `BACKEND` · `VERITABANI` · `VERITABANI-MIGRATION` · `ESZAMANLILIK` · `ESZAMANLILIK-ENVANTER` · `ELECTRON` · `MOBIL` · `KUTUPHANELER` · `TEST-VE-DERLEME` · `TEST-VE-DERLEME-BEKCI` · `TEST-VE-DERLEME-SINIRLAR` · `OLCUM-DISIPLINI` · `OLCUM-DISIPLINI-KAPI` · `OLCUM-DISIPLINI-KAPI-OLUMU` · `OLCUM-DISIPLINI-SINIFLAR` · `OLCUM-DISIPLINI-ORTAK-AGAC` · `OLCUM-DISIPLINI-ARAC` · `OLCUM-DISIPLINI-SUREC` · `OLCUM-DISIPLINI-YUKLEM` · `OLCUM-DISIPLINI-CIKARIM`. Olay-türevi kural değil, RUTİN konvansiyon; her kural `[kimlik] · zorlama · kanıt · devralınan` taşır | Canlı |
-| `design/` | Domain tasarımları (19) — yalnız CANLI olanlar; her birinin durum banner'ı 2026-09-05'te koda karşı doğrulandı. `SEKTOR-YOL-HARITASI.md` (2026-09-11) bir ÜRÜN belgesidir: 90 doğrulanmış eksik defter, karar bekliyor | Canlı |
-| `ops/` | Deploy/runbook/kurulum reçeteleri (24) — yalnız TEKRAR KOŞULAN olanlar | Operasyonel, bakımlı |
+| `design/` | Domain tasarımları (dizinin kendisi listedir) — yalnız CANLI olanlar; her birinin durum banner'ı 2026-09-05'te koda karşı doğrulandı. `SEKTOR-YOL-HARITASI.md` (2026-09-11) bir ÜRÜN belgesidir: 90 doğrulanmış eksik defter, karar bekliyor | Canlı |
+| `ops/` | Deploy/runbook/kurulum reçeteleri (dizinin kendisi listedir) — yalnız TEKRAR KOŞULAN olanlar | Operasyonel, bakımlı |
 | `qa/` | Manuel kabul senaryoları | Bakımlı |
 | `history/` | Arşiv (salt-okunur): karar notları tam metni, harcanmış tek-seferlik deploy/devir notları, tamamlanmış planlar, eski incelemeler, `denetim-2026-08/` (kök `audit/` kampanyası), `anlama-turu-2026-09-05/` | Donmuş; sayılar/satır referansları bayat |
+
+> **Kapısız sayı yazılmaz** (ölçüldü 2026-09-18): bu tablodaki üç dosya sayısı da bayatlamıştı —
+> `kurallar/` 24 yazıp 27 · `design/` 19 yazıp 42 · `ops/` 24 yazıp 27 taşıyordu. Sayıyı ölçen bir
+> kapı olmadığı için sayı DÜŞTÜ, yerine dizin/indeks yönlendirmesi kondu: okuyucu güncel sayıyı
+> dizinden alır, bayat bir sayıya inanmaz.
 
 > **Kural:** Tek seferlik bir belge (sürüm deploy notu, devir notu, tamamlanmış plan, harcanmış prompt) işi bitince `history/`e taşınır — `design/` ve `ops/` yalnız bugün okunacak belgeleri taşır. 2026-09-05'te 24 belge taşındı, 13 belge silindi (12'si komşu `PLAN.md §7`'den birebir üretilebilen denetim promptu, biri yanlış bilgi veren eski `TICARET-KURULUM` kopyası).
 
