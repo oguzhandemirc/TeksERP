@@ -27,6 +27,7 @@ export const AD = {
   devereIstasyon: `${ONEK} DEVERE`, devereMakine: `${ONEK}-DV1`,
   siparisNo: `${ONEK}-S1`,
   irsaliye: `IRS-${ONEK}-1`, lot: `${ONEK}-L1`,
+  kasa: `${ONEK} Kasa`, dekont: `Dekont ${ONEK}-1`,
 };
 
 /** "İstasyon" düğmesi → "Yeni İstasyon" diyaloğu: ad + görev türü → Kaydet. Aynı ad zaten listedeyse atlar. */
@@ -501,6 +502,77 @@ export const ADIMLAR = [
       { ad: "ekstrede 1 fatura satırı, bakiye NEGATİF (biz borçluyuz) (cari_transactions)",
         sql: `SELECT count(*)::int n, COALESCE(SUM(t.debit - t.credit),0)::text bakiye FROM cari_transactions t JOIN cari_accounts a ON a.id=t."cariId" JOIN customers c ON c.id=a."customerId" WHERE c.name=$1`, params: [buyukTr(AD.tedarikci)],
         oku: (r) => `${r[0].n}:${Number(r[0].bakiye) < 0 ? "NEG" : "POS"}`, beklenen: "1:NEG" },
+    ],
+  },
+
+  {
+    id: "C7", rol: "M", gerektirir: ["C6"],
+    yol: "Muhasebe → Tahsilat / Ödeme → Ödeme (kasa yoksa Kasa & Banka → Kasa ekle) → Fatura Kapama", rota: "finance/payments",
+    async yap({ git, gor, page }) {
+      // Kasa yoksa aç (fabrika kopyasında kasa/banka tanımı yok — güzergâhın "yoksa TEST Kasa aç" dalı).
+      await git("Kasa & Banka");
+      if (!(await page().getByText(buyukTr(AD.kasa), { exact: false }).count()) && !(await page().getByText(AD.kasa, { exact: false }).count())) {
+        await page().getByRole("button", { name: "Kasa ekle" }).click({ timeout: 15_000 });
+        const kd = page().getByRole("dialog").filter({ hasText: "Yeni Kasa" }).last(); await gor(kd);
+        await kd.locator("input").first().fill(AD.kasa);
+        await kd.getByRole("button", { name: "Kaydet", exact: true }).click({ timeout: 15_000 });
+        await kd.waitFor({ state: "detached", timeout: 15_000 });
+        await page().waitForTimeout(500);
+      }
+      // Ödeme
+      await git("Tahsilat / Ödeme");
+      await page().getByRole("button", { name: "Ödeme", exact: true }).click({ timeout: 15_000 });
+      const d = page().getByRole("dialog").filter({ hasText: "Yeni Ödeme" }).last(); await gor(d);
+      // "Cari türü" seçimi YOK — tek "Cari" seçici (9b'nin C7 ③ sadeleştirmesi ekranda uygulanmış) — belge notu.
+      await d.getByRole("button", { name: "Cari seç (liste)", exact: true }).click({ timeout: 15_000 });
+      const cm = page().getByRole("dialog").filter({ hasText: /Cari seç/ }).last(); await gor(cm);
+      await cm.getByRole("textbox").first().fill(AD.tedarikci);
+      await page().waitForTimeout(700);
+      await cm.getByRole("row").filter({ hasText: buyukTr(AD.tedarikci) }).first().click({ timeout: 15_000 });
+      await cm.waitFor({ state: "detached", timeout: 15_000 }).catch(() => undefined);
+      const kasaSec = d.locator("select").filter({ has: page().locator("option", { hasText: /Seçin/ }) }).first();
+      const kasaAdayi = kasaSec.locator("option").filter({ hasText: buyukTr(AD.kasa) }).first();
+      await kasaSec.selectOption({ label: (await ((await kasaAdayi.count()) ? kasaAdayi : kasaSec.locator("option").filter({ hasText: /Kasa ·/ }).first()).textContent()) });
+      await d.locator("select").filter({ has: page().locator("option", { hasText: /Havale/ }) }).first().selectOption("BANK_TRANSFER");
+      await d.locator('input[type="number"]').first().fill("6120"); // 12.240 / 2
+      await d.getByPlaceholder("Dekont no, çek no").fill(AD.dekont);
+      await d.getByRole("button", { name: /Ödeme Kaydet/ }).click({ timeout: 15_000 });
+      await d.waitFor({ state: "detached", timeout: 20_000 });
+      await page().waitForTimeout(600);
+      // Fatura Kapama: Yön Ödeme → cari → ödemeyi seç → faturaya sığan tutarı yaz → Faturaları kapat
+      await git("Fatura Kapama");
+      await page().locator("select").filter({ has: page().locator("option", { hasText: /Ödeme → Alış/ }) }).first().selectOption("OUT");
+      await page().getByRole("combobox").filter({ hasText: /Müşteri \/ fason ara/ }).first().click({ timeout: 15_000 });
+      await page().getByPlaceholder("Ara (kod, isim, vergi no)").fill(AD.tedarikci);
+      await page().waitForTimeout(800);
+      await page().getByRole("option").filter({ hasText: buyukTr(AD.tedarikci) }).first().click({ timeout: 15_000 });
+      await page().waitForTimeout(800);
+      await page().getByRole("button").filter({ hasText: /6\.120/ }).first().click({ timeout: 15_000 });
+      await page().getByTitle("Bu faturaya sığabilecek en büyük tutarı yaz").first().click({ timeout: 15_000 });
+      await page().getByRole("button", { name: /Faturaları kapat \(1/ }).click({ timeout: 15_000 });
+      await page().waitForTimeout(1000);
+    },
+    async bekle({ git, gor, page }) {
+      await git("Tahsilat / Ödeme");
+      // Liste referansı (dekont) GÖSTERMEZ: belge no · yön · cari · yöntem · kasa · tutar — belge notu.
+      const satir = page().getByRole("row").filter({ hasText: buyukTr(AD.tedarikci) }).filter({ hasText: /6\.120/ }).first();
+      await gor(satir);
+      await gor(satir.getByText("Ödeme", { exact: true }));
+      await gor(satir.getByText(buyukTr(AD.kasa), { exact: false }));
+    },
+    dogrula: [
+      { ad: "ödeme kaydı OUT 6.120 havale (payments)",
+        sql: `SELECT p.direction, p.method, p.amount::text a, (p."cashBoxId" IS NOT NULL) kasa FROM payments p WHERE p.reference=$1 OR p.notes=$1`, params: [AD.dekont],
+        oku: (r) => r.map((x) => `${x.direction}:${x.method}:${x.a}:${x.kasa}`).join("|"), beklenen: (v) => /^OUT:BANK_TRANSFER:6120(\.0+)?:true$/.test(v) },
+      // Carili ödeme `cash_transactions`a satır YAZMAZ — `CashBox.balance` iki yazarlıdır (Payment + CashTransaction);
+      // kasa defteri ekranı ikisini birden toplar (`test_consistency §23`). Ölçülen şey kasa BAKİYESİ.
+      { ad: "kasa bakiyesi 6.120 düştü (cash_boxes.balance, iki yazarlı denormalize)", sql: `SELECT balance::text b FROM cash_boxes WHERE name=$1`, params: [buyukTr(AD.kasa)], oku: (r) => Number(r[0]?.b), beklenen: (v) => Math.abs(v + 6120) < 0.01 },
+      { ad: "ekstre bakiyesi yarıya indi (cari_transactions Σ = −6.120)",
+        sql: `SELECT COALESCE(SUM(t.debit - t.credit),0)::text b FROM cari_transactions t JOIN cari_accounts a ON a.id=t."cariId" JOIN customers c ON c.id=a."customerId" WHERE c.name=$1`, params: [buyukTr(AD.tedarikci)],
+        oku: (r) => Number(r[0].b), beklenen: (v) => Math.abs(Math.abs(v) - 6120) < 0.01 },
+      { ad: "kapama: faturanın açık tutarı yarıya (payment_allocations 6.120)",
+        sql: `SELECT COALESCE(SUM(pa.amount),0)::text a FROM payment_allocations pa JOIN invoices i ON i.id=pa."invoiceId" JOIN goods_receipts gr ON gr.id=i."goodsReceiptId" WHERE gr."deliveryNoteNo"=$1`, params: [AD.irsaliye],
+        oku: (r) => Number(r[0].a), beklenen: (v) => Math.abs(v - 6120) < 0.01 },
     ],
   },
 
