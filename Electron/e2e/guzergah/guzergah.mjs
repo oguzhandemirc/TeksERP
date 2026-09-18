@@ -265,7 +265,8 @@ for (const adim of secili) {
       const satir = { ad: d.ad, ok: false, beklenen: String(d.beklenen), gorulen: null };
       try {
         const params = typeof d.params === "function" ? d.params() : (d.params ?? []); // koşumda öğrenilen değer (barkod, sevk no) fonksiyonla gelir
-        const gorulen = d.sql ? await sql(d.sql, params) : (await api(adim.rol === "S" ? "P" : adim.rol, d.uc)).govde;
+        const uc = typeof d.uc === "function" ? d.uc() : d.uc;
+        const gorulen = d.sql ? await sql(d.sql, params) : (await api(adim.rol === "S" ? "P" : adim.rol, uc)).govde;
         const deger = d.oku ? d.oku(gorulen) : gorulen;
         satir.gorulen = typeof deger === "object" ? JSON.stringify(deger).slice(0, 200) : String(deger);
         satir.ok = typeof d.beklenen === "function" ? Boolean(d.beklenen(deger)) : deger === d.beklenen || String(deger) === String(d.beklenen);

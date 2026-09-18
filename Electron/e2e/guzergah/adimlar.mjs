@@ -63,6 +63,8 @@ const i7Olcum = { barkod: null, sevkId: null, onceMetre: null, onceTop: null, so
 const n6Olcum = { sevkId: null, satir: null, metre: null, belgeMetre: null };
 const j2Olcum = { docNo: null, belgeAcildi: null, belgeDocNoVar: null, belge25Var: null };
 const j3Olcum = { docNo: null, kasaOnce: null, makbuzAcildi: null, makbuz600Var: null };
+const j4Olcum = { cariId: null, faturaSatiri: null, tahsilatSatiri: null, toplamOnce: null, toplamSonra: null, satirSonra: null, filtreSecenek: null };
+const j5Olcum = { cariId: null, kasaNotlari: null, kasaSatir600: null, kdvNotlari: null, kdvCariSecici: null };
 const j1Olcum = { sevkNo: null, sevkId: null, tur: null, cariMetin: null, cariKilitli: null, satir: null, miktar: null, birim: null };
 const i4Olcum = { barkod: null, digerMusteri: null, digerOnce: null, testOnce: null, onizlemeSahipVar: null, redDurum: null, redKod: null, redTopVar: null, redSahipVar: null, tostSahipVar: null, ikinciDurum: null, sevkNo: null };
 
@@ -1169,6 +1171,88 @@ export const ADIMLAR = [
       { ad: "cari ekstre: fatura 1.200 borç − tahsilat 600 alacak = 600 (cari_transactions Σ)", sql: `SELECT COALESCE(SUM(t.debit - t.credit),0)::text bakiye FROM cari_transactions t JOIN cari_accounts a ON a.id=t."cariId" JOIN customers c ON c.id=a."customerId" WHERE c.name=$1`, params: [buyukTr(AD.musteri)], oku: (r) => Number(r[0].bakiye), beklenen: (v) => Math.abs(v - 600) < 0.01 },
       { ad: "kapama: faturaya 600 bağlandı, açık 600 (payment_allocations)", sql: `SELECT COALESCE(SUM(pa.amount),0)::text s FROM payment_allocations pa JOIN invoices i ON i.id=pa."invoiceId" WHERE i."docNo"=$1`, params: () => [j3Olcum.docNo], oku: (r) => Number(r[0].s), beklenen: (v) => Math.abs(v - 600) < 0.01 },
       { ad: "makbuz önizlemesi açıldı, 600 makbuzda (ekran)", sql: `SELECT 1`, oku: () => `${j3Olcum.makbuzAcildi}:${j3Olcum.makbuz600Var}`, beklenen: "1:1" },
+    ],
+  },
+  {
+    id: "J4", rol: "M", gerektirir: ["J3"],
+    yol: "Raporlar → Cari Yaşlandırma → ekranda ara → satırda 'Cari ekstresi' → Cari Ekstre → Belge tipi süzgeci", rota: "reports/finance/aging",
+    async yap({ git, gor, sql, page }) {
+      j4Olcum.cariId = (await sql(`SELECT ca.id FROM cari_accounts ca JOIN customers c ON c.id=ca."customerId" WHERE c.name=$1`, [buyukTr(AD.musteri)]))[0]?.id ?? null;
+      if (!j4Olcum.cariId) throw new Error("TEST Müşteri'nin cari hesabı yok (J1/J2 koşmadı mı?)");
+      await git("Cari Yaşlandırma");
+      const ara = page().getByPlaceholder("Ekranda ara").filter({ visible: true }).first(); await gor(ara, { sure: 20_000 });
+      await ara.fill(AD.musteri); await page().waitForTimeout(800);
+      const satir = page().getByRole("row").filter({ hasText: buyukTr(AD.musteri) }).filter({ visible: true }).first(); await gor(satir, { sure: 20_000 });
+      await satir.getByTitle("Cari ekstresi").click({ timeout: 15_000 });
+      const d = page().getByRole("dialog").filter({ hasText: "Cari Ekstre" }).last(); await gor(d, { sure: 20_000 });
+      await d.getByText("Dönem toplamı").waitFor({ timeout: 20_000 }); await page().waitForTimeout(600);
+      const satirlar = d.locator("tbody tr");
+      const metin = async () => (await d.innerText().catch(() => "")) ?? "";
+      const m1 = await metin();
+      j4Olcum.faturaSatiri = (m1.match(/\bFatura\b/g) ?? []).length; j4Olcum.tahsilatSatiri = (m1.match(/Tahsilat \/ Ödeme/g) ?? []).length;
+      const toplam = async () => { const t = d.locator("tr", { hasText: "Dönem toplamı" }).last(); return ((await t.innerText()).split(/\t|\n/).filter(Boolean).pop() ?? "").trim(); };
+      j4Olcum.toplamOnce = await toplam();
+      // Belge tipi süzgeci yalnız dökümü daraltır; devir/bakiye/toplam dönemin tamamıdır (belge şerhi).
+      const bt = d.locator("select").filter({ has: page().locator("option", { hasText: /Tüm belgeler/ }) }).first();
+      j4Olcum.filtreSecenek = await bt.locator("option").count();
+      await bt.selectOption("PAYMENT"); await page().waitForTimeout(900);
+      j4Olcum.satirSonra = (await satirlar.count()) - 2; // devir satırı + "Dönem toplamı" satırı düşülür → yalnız hareketler
+      j4Olcum.toplamSonra = await toplam();
+      await page().keyboard.press("Escape"); await page().waitForTimeout(300);
+    },
+    async bekle({ gor, page }) {
+      await gor(page().getByRole("row").filter({ hasText: buyukTr(AD.musteri) }).filter({ visible: true }).first());
+    },
+    dogrula: [
+      { ad: "ekstrede fatura + tahsilat satırı; kapanış 600 (ekran)", sql: `SELECT 1`, oku: () => `${j4Olcum.faturaSatiri >= 1 ? 1 : 0}:${j4Olcum.tahsilatSatiri >= 1 ? 1 : 0}:${j4Olcum.toplamOnce}`, beklenen: (v) => /^1:1:600[,.]00/.test(v) },
+      { ad: "belge tipi süzgeci dökümü daraltır (1 satır) ama dönem toplamını DEĞİŞTİRMEZ (ekran)", sql: `SELECT 1`, oku: () => `${j4Olcum.satirSonra}:${j4Olcum.toplamSonra === j4Olcum.toplamOnce}`, beklenen: "1:true" },
+      { ad: "yaşlandırma: açık 600, hepsi VADESİZ kovasında (vade yok → C6/J1 vade eksiği burada görünür), defter = saklanan bakiye (GET /reports/finance/aging)",
+        uc: () => `/api/reports/finance/aging?cariId=${j4Olcum.cariId}`,
+        oku: (g) => { const r = (g?.data?.blocks ?? []).flatMap((b) => b.rows).find((x) => x.cariId === j4Olcum.cariId); return r ? `${r.openTotal}:${r.net?.noDueDate}:${r.reconDiff}:${r.ledgerBalance === r.storedBalance}` : "satır yok"; },
+        beklenen: (v) => /^600(\.00)?:600(\.00)?:0(\.00)?:true$/.test(v) },
+      { ad: "bakiye = cari_transactions Σ (600)", sql: `SELECT COALESCE(SUM(debit - credit),0)::text b FROM cari_transactions WHERE "cariId"=$1`, params: () => [j4Olcum.cariId], oku: (r) => Number(r[0].b), beklenen: (v) => Math.abs(v - 600) < 0.01 },
+    ],
+  },
+  {
+    id: "J5", rol: "M", gerektirir: ["J3"],
+    yol: "Raporlar → Kasa & Banka Defteri (Cari: TEST Müşteri · Yön: Yalnız giriş) · KDV Dönem Özeti (Yön: Satış · Oran: %20) — süzgeç şerhleri ekranda ve meta.secenekler'de; Excel ✋", rota: "reports/finance/cash-book",
+    async yap({ git, gor, sql, page }) {
+      j5Olcum.cariId = (await sql(`SELECT ca.id FROM cari_accounts ca JOIN customers c ON c.id=ca."customerId" WHERE c.name=$1`, [buyukTr(AD.musteri)]))[0]?.id ?? null;
+      // Kasa & Banka Defteri
+      await git("Kasa & Banka Defteri");
+      const cariDugme = page().getByLabel("Cari", { exact: true }).filter({ visible: true }).first(); await gor(cariDugme, { sure: 20_000 });
+      await cariDugme.click({ timeout: 15_000 });
+      await page().getByRole("button", { name: buyukTr(AD.musteri) }).first().click({ timeout: 15_000 });
+      await page().keyboard.press("Escape");
+      await page().locator("select").filter({ has: page().locator("option", { hasText: /Yalnız giriş/ }) }).filter({ visible: true }).first().selectOption("IN");
+      await page().waitForTimeout(1500);
+      const kasaMetin = await page().locator("main, body").first().innerText();
+      j5Olcum.kasaNotlari = [/SÜZGEÇ — Cari: .*MÜŞTERİ/.test(kasaMetin) ? 1 : 0, /SÜZGEÇ — Yön: Yalnız giriş/.test(kasaMetin) ? 1 : 0].join(":");
+      // Sayfa hesap ÖZETİ çizer (satır = kasa/banka hesabı; hareket dökümü hesabın defterinde) → TEST Kasa satırında 600 giriş.
+      j5Olcum.kasaSatir600 = await page().getByRole("row").filter({ hasText: buyukTr(AD.kasa) }).filter({ hasText: "600" }).filter({ visible: true }).count();
+      // KDV Dönem Özeti
+      await git("KDV Dönem Özeti");
+      const yon = page().locator("select").filter({ has: page().locator("option", { hasText: /Tüm yönler/ }) }).filter({ visible: true }).first(); await gor(yon, { sure: 20_000 });
+      await yon.selectOption("SALES");
+      const oran = page().locator("select").filter({ has: page().locator("option", { hasText: /Tüm oranlar/ }) }).filter({ visible: true }).first();
+      await oran.selectOption({ label: "%20" }).catch(() => undefined);
+      await page().waitForTimeout(1500);
+      const kdvMetin = await page().locator("main, body").first().innerText();
+      j5Olcum.kdvNotlari = [/SÜZGEÇ — Yön: Satış/.test(kdvMetin) ? 1 : 0, /SÜZGEÇ — KDV oranı: %20/.test(kdvMetin) ? 1 : 0].join(":");
+      j5Olcum.kdvCariSecici = await page().getByLabel("Cari", { exact: true }).filter({ visible: true }).count();
+    },
+    async bekle({ gor, page }) {
+      await gor(page().getByText("KDV Dönem Özeti").filter({ visible: true }).first());
+    },
+    dogrula: [
+      { ad: "Kasa defteri: cari + yön şerhleri ekranda; hesap özetinde TEST Kasa 600 giriş (ekran)", sql: `SELECT 1`, oku: () => `${j5Olcum.kasaNotlari}:${j5Olcum.kasaSatir600 >= 1 ? 1 : 0}`, beklenen: "1:1:1" },
+      { ad: "KDV özeti: yön + oran şerhleri ekranda; cari seçici YOK (ekran)", sql: `SELECT 1`, oku: () => `${j5Olcum.kdvNotlari}:${j5Olcum.kdvCariSecici}`, beklenen: "1:1:0" },
+      { ad: "GET /reports/finance/cash-book meta.secenekler cari listesinde TEST Müşteri; yön=IN toplam giriş ≥ 600",
+        uc: () => `/api/reports/finance/cash-book?dateFrom=${encodeURIComponent(new Date(Date.now() - 7 * 864e5).toISOString())}&dateTo=${encodeURIComponent(new Date().toISOString())}&cariId=${j5Olcum.cariId}&yon=IN`,
+        oku: (g) => `${(g?.meta?.secenekler?.cariId ?? []).some((o) => o.id === j5Olcum.cariId) ? 1 : 0}:${Number(g?.data?.totals?.totalIn ?? 0) >= 600 ? 1 : 0}`, beklenen: "1:1" },
+      { ad: "GET /reports/finance/vat-summary yön=SALES oran=20.00 → %20 satırı: KDV = matrah × 0,20; meta.secenekler.oran dolu; cariId KABUL EDİLMEZ (strict)",
+        uc: () => `/api/reports/finance/vat-summary?dateFrom=${encodeURIComponent(new Date(Date.now() - 7 * 864e5).toISOString())}&dateTo=${encodeURIComponent(new Date().toISOString())}&yon=SALES&oran=20.00`,
+        oku: (g) => { const r = (g?.data?.sales?.currencies ?? []).flatMap((c) => c.rows).find((x) => x.vatRate === "20.00" && !x.isReturn); return `${r && Math.abs(Number(r.vat) - Number(r.base) * 0.2) < 0.01 ? 1 : 0}:${(g?.meta?.secenekler?.oran ?? []).length > 0 ? 1 : 0}`; }, beklenen: "1:1" },
     ],
   },
 ];
