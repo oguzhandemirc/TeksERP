@@ -327,3 +327,12 @@ export function slugifyReasonCode(label: string): string {
   // KİMLİĞİ olduğu için boş bırakılamaz, çağıran benzersizleştirir.
   return code || "SEBEP";
 }
+
+/**
+ * HIZLI SEBEP (E7, kullanıcı ilkesi 2026-09-18 "daha kolay yol"): duruş anında tek dokunuşla seçilebilen sebepler.
+ * KOLON YOK — türetilir: o kind'ın AKTİF preset'lerinden `sortOrder`a göre ilk `QUICK_PICK_COUNT` tanesi `quickPick`
+ * alır. Fabrika hangi dördün hızlı olduğunu mevcut SIRALAMA ile seçer (`PATCH /reason-presets/reorder`), yeni bir
+ * ayar/bayrak doğmaz. Yalnız duruş kataloğu: öteki kind'lerde sıra hız değil anlam taşır.
+ */
+export const QUICK_PICK_COUNT = 4;
+export const QUICK_PICK_KINDS: readonly ReasonPresetKind[] = ["MACHINE_STOP"];

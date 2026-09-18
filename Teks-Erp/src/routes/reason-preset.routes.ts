@@ -71,6 +71,8 @@ const reorderSchema = z.object({
  *     description: |
  *       Varsayılan yalnız AKTİF satırları döner (operatör ekranı).
  *       `?includeInactive=true` düzenleme yüzeyi içindir — gizlenmiş satırlar da gelir.
+ *       E7 `quickPick` (türetilmiş, kolon değil): `MACHINE_STOP` kind'ının AKTİF ilk 4 satırı (sortOrder) true —
+ *       tablet duruş anında tek dokunuş düğmesi çizer; fabrika dörtlüyü `PATCH /reorder` ile seçer.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Sebep listesi }

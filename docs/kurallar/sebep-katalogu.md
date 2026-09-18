@@ -28,6 +28,7 @@
 
 ### Değişmezler
 
+- **[ÇEKİRDEK]** HIZLI SEBEP (E7, kullanıcı ilkesi 2026-09-18 "daha kolay yol") KOLON DEĞİL, sıralamadan TÜRETİLİR: `GET /reason-presets` satırı `quickPick` taşır — yalnız `QUICK_PICK_KINDS` (bugün `MACHINE_STOP`) için o kind'ın AKTİF satırlarından `sortOrder`a göre ilk `QUICK_PICK_COUNT` (4) tanesi true; pasif satır sayıma girmez, `includeInactive` işareti değiştirmez. Fabrika dörtlüyü mevcut `reorder` ile seçer; yeni ayar/bayrak/kolon doğmaz (tek kaynak `markQuickPicks`). · bekçi: `test_reason_quick_pick` (§1 saf · §2 liste+reorder; üç sonda) <sub>(6e, 1e E7; tablet d5)</sub>
 - **[ÇEKİRDEK]** Gizlenmiş (`isActive=false`) kod doğrulamada GEÇERLİ sayılır — gizleme bir görünürlük kararıdır, geçerlilik kararı değil; eski kayıtların kodu okunmaya devam eder. · bekçi: `test_reason_presets` <sub>(CLAUDE.md:73)</sub>
 - **[ÇEKİRDEK]** Sebep önbelleğinde TTL TAZELİKTİR, geçerlilik değil: bayat liste DE döner ve arka planda tazelenir (fabrikanın panelden eklediği sebep 60 sn dışında reddedilmez); kod kataloğuna düşme yalnız önbellek HİÇ dolmadıysa kalır (fail-closed). · bekçi: `test_reason_presets` (bayat üç yüklem + §3d soğuk dal) <sub>(CLAUDE.md:53)</sub>
 - **[ÇEKİRDEK]** `KIND_STORES_TEXT` true olan kind'ta satıra GÖRÜNEN metin de yazılır (bugün ÜÇ: ROLL_MANUAL_ENTRY · ROLL_CANCEL · ORDER_CANCEL); 2026-08-21'den beri satır KODU DA taşır, yani etiket düzenlemesi geçmiş raporu BÖLMEZ. 'Kod saklanmaz' anlamı düşmüştür. · bekçi: `derleme ("as const satisfies Record<ReasonPresetKind, boolean>" bağı)` <sub>(CLAUDE.md:78)</sub>
@@ -98,7 +99,7 @@
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_iade_enhancements`, `test_order_cancel_reason`, `test_reason_preset_kind_parity`, `test_reason_presets`, `test_roll_cancel_undo`⚠️, `test_roll_fold_and_reason`
+Backend: `test_iade_enhancements`, `test_order_cancel_reason`, `test_reason_preset_kind_parity`, `test_reason_presets`, `test_reason_quick_pick`, `test_roll_cancel_undo`⚠️, `test_roll_fold_and_reason`
 
 İstemci: `RollCancelModal.test.tsx`, `ReasonPresetPicker.test.tsx`, `varianceReasons.test.ts`⚠️, `useReasonPresets.test.tsx`, `reworkPayload.test.ts`, `reasonPreset.order.test.ts`
 

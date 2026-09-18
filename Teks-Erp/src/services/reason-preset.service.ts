@@ -28,7 +28,7 @@
 // =============================================================================
 
 import { MachineStopLossClass, Prisma, ReasonPresetKind, RollVarianceKind } from "@prisma/client";
-import { TAMBUR_UNDO_CANCEL_CODE, TAMBUR_UNDO_CANCEL_TEXT } from "../constants/reason-presets";
+import { TAMBUR_UNDO_CANCEL_CODE, TAMBUR_UNDO_CANCEL_TEXT, QUICK_PICK_COUNT, QUICK_PICK_KINDS } from "../constants/reason-presets";
 
 import prisma from "../lib/prisma";
 import {
@@ -57,6 +57,24 @@ export type ReasonPresetDto = {
   /** Yalnız `MACHINE_STOP`ta dolu (zorunlu, `MINOR` olamaz); diğer kind'lerde NULL. */
   stopLossClass: MachineStopLossClass | null;
 };
+
+/** Liste satırı: DTO + türetilmiş `quickPick` (E7) — kolon değil, sıralamadan (`markQuickPicks`). */
+export type ReasonPresetListRow = ReasonPresetDto & { quickPick: boolean };
+
+/**
+ * `quickPick` işaretini türetir (saf): `QUICK_PICK_KINDS` içindeki her kind için AKTİF satırlardan `sortOrder`
+ * (ardından `createdAt`, liste sırası) sırasına göre ilk `QUICK_PICK_COUNT` tanesi true; pasif satır hiç, öteki
+ * kind'ler hiç. Satırlar zaten `kind, sortOrder, createdAt` sıralı gelir; yine de kind başına sayılır.
+ */
+export function markQuickPicks<T extends Pick<ReasonPresetDto, "kind" | "isActive">>(rows: readonly T[]): Array<T & { quickPick: boolean }> {
+  const used = new Map<ReasonPresetKind, number>();
+  return rows.map((r) => {
+    if (!r.isActive || !QUICK_PICK_KINDS.includes(r.kind)) return { ...r, quickPick: false };
+    const n = used.get(r.kind) ?? 0;
+    used.set(r.kind, n + 1);
+    return { ...r, quickPick: n < QUICK_PICK_COUNT };
+  });
+}
 
 const SELECT = {
   id: true,
@@ -356,8 +374,8 @@ export const ReasonPresetService = {
   async list(params: {
     kind?: ReasonPresetKind;
     includeInactive?: boolean;
-  }): Promise<ReasonPresetDto[]> {
-    return prisma.reasonPreset.findMany({
+  }): Promise<ReasonPresetListRow[]> {
+    const rows = await prisma.reasonPreset.findMany({
       where: {
         ...(params.kind ? { kind: params.kind } : {}),
         ...(params.includeInactive ? {} : { isActive: true }),
@@ -365,6 +383,8 @@ export const ReasonPresetService = {
       select: SELECT,
       orderBy: [{ kind: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
     });
+    // E7: hızlı sebep işareti türetilir (kolon yok) — pasif satırlar sayıma girmez, `includeInactive` sonucu değiştirmez.
+    return markQuickPicks(rows);
   },
 
   async create(
