@@ -1551,8 +1551,8 @@ export const ADIMLAR = [
     },
     async bekle({ gor, page }) { await gor(page().getByText("Sipariş İptal Karnesi").filter({ visible: true }).first()); },
     dogrula: [
-      { ad: "Sipariş Karnesi şerhleri: Sevk hedefi (Yurtiçi) + 'müşteri varsayılanı, fiili hedef değil' (ekran; müşteri şerhi aşağıdaki ihlale bağlı)", sql: `SELECT 1`, oku: () => `${l4Olcum.notHedef}:${l4Olcum.notHedefSerh} [${l4Olcum.tani}]`, beklenen: (v) => v.startsWith("1:1") },
-      { ad: "SESSİZ ALLOWLİST İHLALİ: sayfanın sunucuya gönderdiği isteklerden en az biri customerId+destination taşımalı — `reportsClient.getReport` yalnız tarih/compare anahtarlarını yazıyor, eksen süzgeçleri DÜŞÜYOR (ekran şerh basıyor, sayılar süzülmemiş)", sql: `SELECT 1`, oku: () => `${l4Olcum.suzgecliIstek}/${l4Olcum.istekSayisi} süzgeçli istek`, beklenen: (v) => !/^0\//.test(v) },
+      { ad: "Sipariş Karnesi şerhleri: Sevk hedefi (Yurtiçi) + 'müşteri varsayılanı, fiili hedef değil' (ekran)", sql: `SELECT 1`, oku: () => `${l4Olcum.notHedef}:${l4Olcum.notHedefSerh} [${l4Olcum.tani}]`, beklenen: (v) => v.startsWith("1:1") },
+      { ad: "eksen süzgeçleri SUNUCUYA GİDİYOR: sayfanın gönderdiği isteklerden en az biri customerId+destination taşır (düzeltme öncesi 0/3 — `reportsClient.getReport` allowlist'i düşürüyordu; şimdi 1/3: ilk yükleme süzgeçsiz, seçimden sonraki süzgeçli)", sql: `SELECT 1`, oku: () => `${l4Olcum.suzgecliIstek}/${l4Olcum.istekSayisi} süzgeçli istek`, beklenen: (v) => !/^0\//.test(v) },
       { ad: "X ile temizleyince müşteri şerhi düşer (ekran)", sql: `SELECT 1`, oku: () => l4Olcum.temizSonraMusteri, beklenen: 0 },
       { ad: "GET /reports/sales/order-intake?customerId&destination=DOMESTIC → meta.secenekler.customerId TEST Müşteri'yi listeler; özet 1 sipariş / 100 m (E1)",
         uc: () => `/api/reports/sales/order-intake?dateFrom=${encodeURIComponent(new Date(Date.now() - 7 * 864e5).toISOString())}&dateTo=${encodeURIComponent(new Date().toISOString())}&customerId=${l4Olcum.musteriId}&destination=DOMESTIC`,
