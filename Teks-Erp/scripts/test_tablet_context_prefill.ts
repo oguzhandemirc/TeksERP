@@ -8,6 +8,7 @@
 //         (LAST_RUN yoksa); desen yokken yalnız devir; hiçbir veri yokken hepsi null (uydurulmaz).
 //   §3 E4: `Item.warpSpecId` yalnız KUMAŞ + aktif kart (400 iki kod); dokuma işi `warpSpecId` vermezse kartın
 //         varsayılanı, `null` verirse kartsız; pasif kart önerilmez.
+//   §5 E3 bağı: 01'in `machine-runs tablet-context` ucu Z5 önerilerini taşır (tek satır bağ, null-güvenli)
 //   §4 E6: devere tablet bağlamı `autoConsume` (ayar aynası) + `lastWindDefaults` (çözgü kartı başına SON IN_HOUSE
 //         sarımın makine/iplik/dip satırları; sarımsız kart listede yok).
 // Negatif sondalar (kırmızı görüldü): `doffPrefill` işin kumaşını koşumun deseninin ÖNÜNE alınca §1b ❌ ·
@@ -28,6 +29,7 @@ import { createWarpBeam } from "../src/services/warp-beam.service";
 import { windWarpBeam } from "../src/services/warp-beam-wind.service";
 import { getWarpBeamTabletContext } from "../src/services/warp-beam-tablet.service";
 import { runOpenSuggestions } from "../src/services/helpers/tablet-prefill.helper";
+import { machineRunTabletContext } from "../src/services/helpers/machine-run-suggest.helper";
 import { AppError } from "../src/utils/app-error";
 
 let pass = 0;
@@ -136,6 +138,10 @@ async function main(): Promise<void> {
     await prisma.systemSetting.update({ where: { key: SETTING_KEYS.DEVERE_AUTO_CONSUME }, data: { value: "false" } });
     const ctx1 = await getWarpBeamTabletContext();
     const d = ctx1.data.lastWindDefaults.find((x) => x.warpSpecId === spec.id);
+    // ── §5 E3 bağı: koşum tablet bağlamı (01 Z1 ucu) önerileri TAŞIR ─────────
+    const ctxRun = await machineRunTabletContext(loom1.id);
+    check("§5 ⭐ `machine-runs tablet-context` `suggested*`/`*Source`/`sourceMachineId` taşır (Z1 ucu + Z5 helper tek satır bağ); işsiz tezgahta null-güvenli", "suggestedUnitsPerCm" in ctxRun && "targetSource" in ctxRun && "sourceMachineId" in ctxRun && ctxRun.suggestedWeavingOrderId === null && ctxRun.suggestedUnitsPerCm === null, JSON.stringify({ u: ctxRun.suggestedUnitsPerCm, t: ctxRun.suggestedTargetUnitsPerMin, src: ctxRun.targetSource }));
+
     check("§4b ⭐ son sarım: makine + brüt çıkış (12 kg, depo) + dip iadesi (1 kg, DEPOYA_IADE) ayrı listelerde; autoConsume kapalı aynası false", ctx1.data.autoConsume === false && d?.machineId === devereM.id && d?.yarnIssues.length === 1 && d?.yarnIssues[0]?.qtyKg === 12 && d?.yarnIssues[0]?.warehouseId === wh.id && d?.yarnReturns.length === 1 && d?.yarnReturns[0]?.qtyKg === 1 && d?.yarnReturns[0]?.reasonCode === "DEPOYA_IADE", JSON.stringify(d));
   } finally {
     await prisma.doffEvent.deleteMany({ where: { machineId: { in: [loom1.id, loom2.id] } } }).catch(() => undefined);

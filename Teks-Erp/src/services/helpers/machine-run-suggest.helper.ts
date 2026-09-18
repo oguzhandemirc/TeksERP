@@ -10,10 +10,11 @@ import type { Prisma } from "@prisma/client";
 import { WarpBeamStatus, WeavingExecutionKind, WeavingOrderStatus } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
+import { runOpenSuggestions, type RunOpenSuggestions } from "./tablet-prefill.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
-export interface MachineRunTabletContextDto {
+export interface MachineRunTabletContextDto extends RunOpenSuggestions {
   suggestedWeavingOrderId: string | null;
   suggestedFrom: "MOUNTED_BEAM" | null;
   mountedBeam: { id: string; beamNo: string; weavingOrderId: string | null } | null;
@@ -58,5 +59,8 @@ export async function machineRunTabletContext(machineId: string, db: Db = prisma
   const machine = await db.machine.findUnique({ where: { id: machineId }, select: { id: true } });
   if (!machine) throw AppError.notFound("Makine bulunamadı");
   const suggestion = await suggestWeavingOrderForMachineTx(db, machineId);
-  return { ...suggestion, weavingOrders: await listOpenInHouseWeavingOrders(db) };
+  const weavingOrders = await listOpenInHouseWeavingOrders(db);
+  // Z5/E3 (6e): koşum açılış önerileri — önerilen işin deseniyle (yoksa yalnız devir); yalnız öneri, null-güvenli.
+  const suggestedItemId = weavingOrders.find((w) => w.id === suggestion.suggestedWeavingOrderId)?.item.id ?? null;
+  return { ...suggestion, weavingOrders, ...(await runOpenSuggestions(db, { machineId, itemId: suggestedItemId })) };
 }
