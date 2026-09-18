@@ -26,6 +26,11 @@
       "maddeler": [
         {
           "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Raporlarda müşteri, kumaş, renk, fasoncu, iptal sebebi ve sevk hedefi süzgeçleri artık gerçekten uygulanıyor: Sipariş Karnesi, Talep Analizi, Sipariş→Teslim, İptal Karnesi, Müşteri ve Fason karneleri ile üretim karnelerinde seçilen süzgeç sunucuya gitmiyor, ekran süzgeç satırını yazarken rakamlar herkesin toplamı çıkıyordu. Ayrıca bir süzgeç sunucuda uygulanmazsa süzgeç satırı bunu açıkça söyler. Finans ve dokuma raporları zaten doğru çalışıyordu."
+        },
+        {
+          "kapsam": "panel",
           "tip": "yeni",
           "metin": "Raporlar → Dokuma Raporları'na Üretim Zinciri geldi: her satır bir sipariş kalemini iş emri, dokuma işi ve leventle tek çizgide gösterir (durum, ilerleme, gecikme); hücreye tıklamak o belgeyi açar; işsiz levent, siparişsiz dokuma işi ve dışarıdan gelen toplar ayrı sekmede sayılır. Müşteri, durum ve yalnız gecikmişler süzgeçleri, Excel ve PDF çıktısı vardır. Devere modülü kapalıysa levent kolonu görünmez; dokuma modülü kapalıysa rapor hiç çizilmez."
         },

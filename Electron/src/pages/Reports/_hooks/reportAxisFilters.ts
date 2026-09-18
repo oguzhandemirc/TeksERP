@@ -116,10 +116,24 @@ interface AxisNoteInput {
   dusenSatir?: number;
   /** Rapora özgü ek şerh — yalnız SÜZGEÇ AÇIKKEN anlamlı olanlar (örn. ABC evreni). */
   ek?: string[];
+  /**
+   * Sunucunun süzgeç YANKISI (`suzgec`). Seçili bir eksen yankıda yoksa süzgeç sunucuya ULAŞMAMIŞ demektir
+   * ve şerh bunu söyler — "SÜZGEÇ — Müşteri: X" yazıp herkesin toplamını göstermek sessiz bir yalandır
+   * (yaşandı: istemci allowlist'i eksenleri düşürüyordu, d9 L4 2026-09-18). `undefined` = yankı hiç yok.
+   */
+  uygulanan?: object | null;
 }
 
+/** Sunucunun uygulamadığı seçili eksenler — yankı yoksa hepsi, varsa yankıda olmayanlar. */
+export function unappliedAxes(sel: Record<string, string[] | string>, eksenler: readonly string[], uygulanan: object | null | undefined): string[] {
+  const secili = eksenler.filter((a) => { const v = sel[a]; return Array.isArray(v) ? v.length > 0 : Boolean(v); });
+  return secili.filter((a) => !uygulanan || !(a in uygulanan));
+}
+
+export const unappliedNote = (labels: string[]): string => `⚠️ Sunucu şu süzgeci UYGULAMADI: ${labels.join(" · ")} — rakamlar süzülmemiş olabilir; sayfayı yenileyin, sürerse bildirin.`;
+
 /** Sayfanın süzgeç satırları: ekrana basılan liste ile çıktı meta'sı AYNI dizidir. */
-export function axisNotes({ eksenler, destination, secenekler, sel, dusenSatir, ek = [] }: AxisNoteInput): string[] {
+export function axisNotes({ eksenler, destination, secenekler, sel, dusenSatir, ek = [], uygulanan }: AxisNoteInput): string[] {
   const parts = eksenler.map((a) => ({
     eksen: AXIS_LABELS[a],
     degerler: labelsOf(secenekler?.[a], sel[a]),
@@ -137,7 +151,12 @@ export function axisNotes({ eksenler, destination, secenekler, sel, dusenSatir, 
   // çıktısı bayt bayt eski kalmalı.
   if (notes.length === 0) return notes;
   const dropped = droppedNote(dusenSatir);
-  return [...notes, ...ek, ...(dropped ? [dropped] : [])];
+  // Yankı YALNIZ verildiyse ölçülür (`uygulanan` anahtarı hiç geçilmediyse eski davranış): seçili eksen
+  // yankıda yoksa uyarı — süzgeç sunucuya ulaşmadı ya da uç o ekseni tanımıyor.
+  // `undefined` = yankı ÖLÇÜLMEDİ (eski çağıran / veri henüz yok) → eski çıktı; `null` = cevap geldi ama yankı YOK → hepsi uygulanmamış.
+  const eksik = uygulanan === undefined ? [] : unappliedAxes(sel, [...eksenler, ...(destination ? ["destination"] : [])], uygulanan);
+  const uyari = eksik.length > 0 ? [unappliedNote(eksik.map((a) => (a === "destination" ? DESTINATION_LABEL : AXIS_LABELS[a as AxisKey])))] : [];
+  return [...notes, ...ek, ...(dropped ? [dropped] : []), ...uyari];
 }
 
 // -----------------------------------------------------------------------------

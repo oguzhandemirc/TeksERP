@@ -11,7 +11,7 @@
 // =============================================================================
 import { describe, expect, it } from "vitest";
 import type { AxisKey, Destination } from "./reportAxisFilters";
-import { beamLotNotes, axisNotes, axisParams, droppedNote, filterNotes, labelsOf, parseCsv, toCsv } from "./reportAxisFilters";
+import { beamLotNotes, axisNotes, axisParams, droppedNote, filterNotes, labelsOf, parseCsv, toCsv, unappliedAxes, unappliedNote } from "./reportAxisFilters";
 
 describe("eksen süzgeci — saf yarı", () => {
   it("CSV ayrıştırma: boşluk kırpılır, tekrar elenir, sıra korunur", () => {
@@ -124,5 +124,24 @@ describe("beamLotNotes — levent/lot şerhleri", () => {
     expect(n[0]).toBe("SÜZGEÇ — Levent: L-77.");
     expect(n[1]).toBe("Süzgeç 3 leventle eşleşti.");
     expect(n).toHaveLength(2);
+  });
+});
+
+describe("sunucu yankısı — seçili eksen uygulanmadıysa şerh söyler (d9 L4)", () => {
+  it("⭐ yankı yok → seçili her eksen 'uygulanmadı'; yankı var → yalnız eksik olan; seçim yoksa boş", () => {
+    const sel = { customerId: ["c1"], itemId: [], destination: "EXPORT" as const };
+    expect(unappliedAxes(sel, ["customerId", "itemId", "destination"], undefined)).toEqual(["customerId", "destination"]);
+    expect(unappliedAxes(sel, ["customerId", "itemId", "destination"], { customerId: ["c1"] })).toEqual(["destination"]);
+    expect(unappliedAxes(sel, ["customerId", "itemId", "destination"], { customerId: ["c1"], destination: "EXPORT" })).toEqual([]);
+    expect(unappliedAxes({ customerId: [], itemId: [], destination: "" }, ["customerId"], undefined)).toEqual([]);
+  });
+  it("axisNotes: yankı verildi ve eksik → uyarı satırı sona eklenir; yankı anahtarı hiç geçilmedi → eski çıktı bayt bayt", () => {
+    const secenekler = { customerId: [{ id: "c1", ad: "Müşteri A" }] };
+    const sel = { customerId: ["c1"], itemId: [], colorId: [], subcontractorId: [], reasonCode: [], cariId: [], destination: "" as const };
+    const eski = axisNotes({ eksenler: ["customerId"], secenekler, sel });
+    expect(eski).toEqual(["SÜZGEÇ — Müşteri: Müşteri A."]);
+    expect(axisNotes({ eksenler: ["customerId"], secenekler, sel, uygulanan: { customerId: ["c1"] } })).toEqual(eski);
+    expect(axisNotes({ eksenler: ["customerId"], secenekler, sel, uygulanan: null })).toEqual([...eski, unappliedNote(["Müşteri"])]);
+    expect(axisNotes({ eksenler: ["customerId"], secenekler, sel, uygulanan: undefined })).toEqual(eski);
   });
 });

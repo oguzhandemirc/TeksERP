@@ -68,8 +68,8 @@ export function useAxisNotes(
   const suzgec = data?.suzgec;
   const { destination, ek } = opts;
   const notes = useMemo(
-    () => axisNotes({ eksenler, destination, secenekler, sel, dusenSatir: suzgec?.dusenSatir, ek }),
-    [eksenler, destination, secenekler, sel, suzgec, ek],
+    () => axisNotes({ eksenler, destination, secenekler, sel, dusenSatir: suzgec?.dusenSatir, ek, uygulanan: data ? (suzgec ?? null) : undefined }),
+    [eksenler, destination, secenekler, sel, suzgec, ek, data],
   );
   return { secenekler, notes };
 }
