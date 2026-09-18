@@ -32,9 +32,11 @@ export interface PlanForm {
   supplierId: string | null;
   physicalBeamNo: string;
   notes: string;
+  /** Z1: bağlı dokuma işi (opsiyonel, IN_HOUSE önerisi). */
+  weavingOrderId: string | null;
 }
 
-export const EMPTY_PLAN: PlanForm = { warpSpecId: null, plannedLengthM: '', originKind: 'IN_HOUSE', subcontractorId: null, supplierId: null, physicalBeamNo: '', notes: '' };
+export const EMPTY_PLAN: PlanForm = { warpSpecId: null, plannedLengthM: '', originKind: 'IN_HOUSE', subcontractorId: null, supplierId: null, physicalBeamNo: '', notes: '', weavingOrderId: null };
 
 export interface YarnLineDraft {
   key: string;
@@ -69,8 +71,10 @@ function nullable(s: string, max: number): string | null {
   return t.length > 0 ? t.slice(0, max) : null;
 }
 
-export function validatePlan(f: PlanForm): Validation {
+export function validatePlan(f: PlanForm, beamWeavingLinkRequired = false): Validation {
   if (!f.warpSpecId) return { ok: false, message: 'Çözgü kartı seçin.' };
+  // `devere.beamWeavingLinkRequired` (sunucudan) açıkken plan bir dokuma işine bağlanmalı (sunucu 400 ikizi).
+  if (beamWeavingLinkRequired && !f.weavingOrderId) return { ok: false, message: 'Bu kurulumda levent bir dokuma işine bağlanmalı — iş seçin.' };
   const m = num(f.plannedLengthM);
   if (m == null || m <= 0) return { ok: false, message: 'Planlanan metre 0’dan büyük olmalı.' };
   if (f.originKind === 'IN_HOUSE' && (f.subcontractorId || f.supplierId)) return { ok: false, message: 'İçeride sarımda fasoncu/tedarikçi seçilmez.' };
@@ -88,6 +92,7 @@ export function buildPlanPayload(f: PlanForm, clientToken: string): PlanWarpBeam
     supplierId: f.originKind === 'PURCHASED' ? f.supplierId : null,
     physicalBeamNo: nullable(f.physicalBeamNo, 32),
     notes: nullable(f.notes, 500),
+    weavingOrderId: f.weavingOrderId,
     clientToken,
   };
 }
@@ -167,7 +172,7 @@ export function linesTotalKg(lines: YarnLineDraft[]): number {
   return Math.round(lines.reduce((s, l) => s + (num(l.qtyKg) ?? 0), 0) * 1000) / 1000;
 }
 
-export function buildWindPayload(f: WindForm, originKind: WarpBeamOrigin, clientToken: string): WindWarpBeamRequest {
+export function buildWindPayload(f: WindForm, originKind: WarpBeamOrigin, clientToken: string, weavingOrderId?: string | null): WindWarpBeamRequest {
   const inHouse = originKind === 'IN_HOUSE';
   return {
     lengthM: num(f.lengthM) ?? 0,
@@ -177,9 +182,16 @@ export function buildWindPayload(f: WindForm, originKind: WarpBeamOrigin, client
     yarnReturns: inHouse ? f.returns.map((l) => ({ warehouseId: l.warehouseId ?? '', qtyKg: num(l.qtyKg) ?? 0, reasonCode: l.reasonCode ?? '', lotId: l.lotId })) : [],
     breakCount: inHouse && f.breakCount.trim() !== '' ? (num(f.breakCount) ?? null) : null,
     clientToken,
+    // Z1: plandaki dokuma işi bağı sarımda korunur (yalnız verildiğinde gönderilir — eski çağıran değişmez).
+    ...(weavingOrderId !== undefined ? { weavingOrderId } : {}),
     // Raşel takımı: adet 1 → alanlar GİDMEZ (istek bugünkü ile birebir).
     ...((setCount(f) ?? 1) > 1 ? { count: setCount(f) ?? 1, physicalBeamNoPrefix: f.physicalBeamNoPrefix.trim() || null } : {}),
   };
+}
+
+/** Tek açık dokuma işi varsa onun id'si (Plan "Dokuma işi" ön-seçimi); 0 ya da >1 → null. */
+export function soleWeavingOrderId(weavingOrders: readonly { id: string }[] | undefined): string | null {
+  return weavingOrders && weavingOrders.length === 1 ? weavingOrders[0]!.id : null;
 }
 
 /** Nominal kg = tel × denye × metre / 9.000.000 — sunucu formülünün AYNASI (ön hesap; sunucu yeniden hesaplar). */

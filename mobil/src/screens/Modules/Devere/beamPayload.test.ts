@@ -1,4 +1,4 @@
-import { beamActionsEnabled, buildPlanPayload, buildWindPayload, classifyBeamFailure, initialWindForm, isSameLocalDay, lastPlannedWarpSpecId, linesTotalKg, physicalBeamBusyWarning, soleMachineId, theoreticalKg, validatePlan, validateWind, validateWindPage, windPageKeys, windPhysicalNos, EMPTY_PLAN, STATUS_LABEL, type WindForm } from './beamPayload';
+import { beamActionsEnabled, buildPlanPayload, buildWindPayload, classifyBeamFailure, initialWindForm, isSameLocalDay, lastPlannedWarpSpecId, linesTotalKg, physicalBeamBusyWarning, soleMachineId, soleWeavingOrderId, theoreticalKg, validatePlan, validateWind, validateWindPage, windPageKeys, windPhysicalNos, EMPTY_PLAN, STATUS_LABEL, type WindForm } from './beamPayload';
 
 const line = (qtyKg: string, reasonCode: string | null = null, warehouseId: string | null = 'w1', lotId: string | null = null) => ({ key: `k${qtyKg}`, warehouseId, qtyKg, reasonCode, lotId });
 
@@ -24,8 +24,8 @@ describe('validatePlan / buildPlanPayload — createSchema aynası, köken XOR',
   });
   it('4 yük: virgüllü metre sayıya, boş metin null, taraf kökene göre budanır, token aynen', () => {
     const p = buildPlanPayload({ ...base, plannedLengthM: '1200,5', originKind: 'IN_HOUSE', subcontractorId: 'f1', physicalBeamNo: '  ', notes: 'n' }, 'tok');
-    expect(p).toEqual({ warpSpecId: 's1', plannedLengthM: 1200.5, originKind: 'IN_HOUSE', subcontractorId: null, supplierId: null, physicalBeamNo: null, notes: 'n', clientToken: 'tok' });
-    expect(Object.keys(p).sort()).toEqual(['clientToken', 'notes', 'originKind', 'physicalBeamNo', 'plannedLengthM', 'subcontractorId', 'supplierId', 'warpSpecId']);
+    expect(p).toEqual({ warpSpecId: 's1', plannedLengthM: 1200.5, originKind: 'IN_HOUSE', subcontractorId: null, supplierId: null, physicalBeamNo: null, notes: 'n', weavingOrderId: null, clientToken: 'tok' });
+    expect(Object.keys(p).sort()).toEqual(['clientToken', 'notes', 'originKind', 'physicalBeamNo', 'plannedLengthM', 'subcontractorId', 'supplierId', 'warpSpecId', 'weavingOrderId']);
   });
 });
 
@@ -238,5 +238,33 @@ describe('ön-seçim yardımcıları (+0/−1 dokunuş)', () => {
     ];
     expect(lastPlannedWarpSpecId(beams)).toBe('s-yeni');
     expect(lastPlannedWarpSpecId([])).toBeNull();
+  });
+});
+
+// ⭐ NEGATİF SONDA (2026-09-18, bir kezlik): `validatePlan` required kolu düşünce §Z4/1 ❌; `buildPlanPayload`
+//    weavingOrderId taşımayınca §Z4/2 ❌; `soleWeavingOrderId` >1 işte id → §Z4/3 ❌.
+describe('Z1 üretim belge zinciri — Plan dokuma işi', () => {
+  const base = { ...EMPTY_PLAN, warpSpecId: 's1', plannedLengthM: '1200' };
+  it('1 beamWeavingLinkRequired açıkken iş zorunlu; kapalıyken serbest', () => {
+    expect(validatePlan(base, true).ok).toBe(false);
+    expect(validatePlan({ ...base, weavingOrderId: 'wo1' }, true).ok).toBe(true);
+    expect(validatePlan(base, false).ok).toBe(true);
+  });
+  it('2 buildPlanPayload weavingOrderId taşır (null da açıkça)', () => {
+    expect(buildPlanPayload({ ...base, weavingOrderId: 'wo1' }, 'tok').weavingOrderId).toBe('wo1');
+    expect(buildPlanPayload(base, 'tok').weavingOrderId).toBeNull();
+    expect(Object.keys(buildPlanPayload(base, 'tok'))).toContain('weavingOrderId');
+  });
+  it('3 soleWeavingOrderId: tek iş → id; 0/>1/undefined → null', () => {
+    expect(soleWeavingOrderId([{ id: 'wo1' }])).toBe('wo1');
+    expect(soleWeavingOrderId([])).toBeNull();
+    expect(soleWeavingOrderId([{ id: 'wo1' }, { id: 'wo2' }])).toBeNull();
+    expect(soleWeavingOrderId(undefined)).toBeNull();
+  });
+  it('4 buildWindPayload weavingOrderId yalnız verildiğinde gider (eski çağıran değişmez)', () => {
+    const f: WindForm = { lengthM: '100', kgSource: 'WEIGHED', machineId: 'm1', issues: [], returns: [], breakCount: '', count: '1', physicalBeamNoPrefix: '' };
+    expect('weavingOrderId' in buildWindPayload(f, 'SUBCONTRACT', 'tok')).toBe(false);
+    expect(buildWindPayload(f, 'SUBCONTRACT', 'tok', 'wo1').weavingOrderId).toBe('wo1');
+    expect(buildWindPayload(f, 'SUBCONTRACT', 'tok', null).weavingOrderId).toBeNull();
   });
 });

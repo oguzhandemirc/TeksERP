@@ -13,7 +13,7 @@ import type { WarpBeam } from '../../../services/warpBeam.service';
 
 const beam = { id: 'b1', beamNo: 'LV1', originKind: 'IN_HOUSE', plannedLengthM: 900, warpSpec: { id: 's1', code: 'C', name: 'N', endsCount: 100, yarnItem: { id: 'y', code: 'Y', name: 'Y', linearDensityDen: 150 } } } as unknown as WarpBeam;
 
-function setup(lotRequired = false, { soleMachineId = null, lastWarpSpecId = null }: { soleMachineId?: string | null; lastWarpSpecId?: string | null } = {}) {
+function setup(lotRequired = false, { soleMachineId = null, lastWarpSpecId = null, soleWeavingOrderId = null, beamWeavingLinkRequired = false }: { soleMachineId?: string | null; lastWarpSpecId?: string | null; soleWeavingOrderId?: string | null; beamWeavingLinkRequired?: boolean } = {}) {
   const plan = { mutate: jest.fn() };
   const wind = { mutate: jest.fn() };
   const attemptRef = { current: null };
@@ -28,6 +28,8 @@ function setup(lotRequired = false, { soleMachineId = null, lastWarpSpecId = nul
         lotRequired: p.lotRequired,
         soleMachineId,
         lastWarpSpecId,
+        soleWeavingOrderId,
+        beamWeavingLinkRequired,
       }),
     { initialProps: { lotRequired } },
   );
@@ -85,6 +87,24 @@ describe('useBeamForms formError', () => {
     const { hook: h2 } = setup(false, {});
     act(() => h2.result.current.openPlan());
     expect(h2.result.current.planForm.warpSpecId).toBeNull();
+  });
+
+  it('§4c ⭐ Z1: tek dokuma işi Plan açılışında ön-seçili; beamWeavingLinkRequired açıkken iş seçilmeden mutate ÇAĞRILMAZ', () => {
+    const { hook } = setup(false, { soleWeavingOrderId: 'wo1' });
+    act(() => hook.result.current.openPlan());
+    expect(hook.result.current.planForm.weavingOrderId).toBe('wo1');
+
+    // Zorunlu + iş yok → submitPlan hata verir, mutate yok.
+    const { hook: h2, plan } = setup(false, { beamWeavingLinkRequired: true });
+    act(() => h2.result.current.openPlan());
+    act(() => h2.result.current.setPlanForm({ ...h2.result.current.planForm, warpSpecId: 's1', plannedLengthM: '500' }));
+    act(() => h2.result.current.submitPlan());
+    expect(h2.result.current.formError).toMatch(/dokuma işine bağlanmalı/);
+    expect(plan.mutate).not.toHaveBeenCalled();
+    // İş seçilince geçer.
+    act(() => h2.result.current.setPlanForm({ ...h2.result.current.planForm, weavingOrderId: 'wo9' }));
+    act(() => h2.result.current.submitPlan());
+    expect(plan.mutate).toHaveBeenCalledTimes(1);
   });
 
   it('§3b plan tarafı aynı sözleşme: hata → alan değişimi düşürür → geçince mutate', () => {

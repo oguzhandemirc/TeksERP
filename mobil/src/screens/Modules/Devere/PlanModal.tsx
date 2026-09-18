@@ -18,13 +18,14 @@ import { ORIGIN_LABEL, physicalBeamBusyWarning, theoreticalKg } from './beamPayl
 import type { DevereScreenState } from './useDevereScreen';
 import { partnerRoleLabel } from '../../../lib/partnerRole';
 
-type PickerKind = 'spec' | 'subcontractor' | 'supplier' | null;
+type PickerKind = 'spec' | 'subcontractor' | 'supplier' | 'weaving' | null;
 
-/** Üç seçici — kartın DIŞINDA portalda (`overlays`); seçim formu yazar ve kapanır. */
-function PlanPickers({ picker, setPicker, state, specOptions, subOptions, supOptions }: { picker: PickerKind; setPicker: (k: PickerKind) => void; state: DevereScreenState; specOptions: PickerOption[]; subOptions: PickerOption[]; supOptions: PickerOption[] }) {
+/** Seçiciler — kartın DIŞINDA portalda (`overlays`); seçim formu yazar ve kapanır. */
+function PlanPickers({ picker, setPicker, state, specOptions, subOptions, supOptions, weavingOptions }: { picker: PickerKind; setPicker: (k: PickerKind) => void; state: DevereScreenState; specOptions: PickerOption[]; subOptions: PickerOption[]; supOptions: PickerOption[]; weavingOptions: PickerOption[] }) {
   const f = state.planForm;
   return (
     <>
+      <PickerModal visible={picker === 'weaving'} title="Dokuma işi seç" options={weavingOptions} selectedValue={f.weavingOrderId ?? ''} loading={state.context.isLoading} emptyText="Açık dokuma işi yok — iş emrisiz planlayabilirsiniz." onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, weavingOrderId: v }); setPicker(null); }} />
       <PickerModal visible={picker === 'spec'} title="Çözgü kartı seç" options={specOptions} selectedValue={f.warpSpecId ?? ''} loading={state.context.isLoading} emptyText="Aktif çözgü kartı yok — panelden tanımlanır." onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, warpSpecId: v }); setPicker(null); }} />
       <PickerModal visible={picker === 'subcontractor'} title="Fasoncu seç" options={subOptions} selectedValue={f.subcontractorId ?? ''} loading={state.context.isLoading} onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, subcontractorId: v, supplierId: null }); setPicker(null); }} />
       <PickerModal visible={picker === 'supplier'} title="Tedarikçi seç" options={supOptions} selectedValue={f.supplierId ?? ''} loading={state.context.isLoading} onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, supplierId: v, subcontractorId: null }); setPicker(null); }} />
@@ -32,22 +33,36 @@ function PlanPickers({ picker, setPicker, state, specOptions, subOptions, supOpt
   );
 }
 
+/** Seçici seçenekleri + türetilmiş etiketler — bileşen gövdesi 80 satır sınırında kalsın. */
+function planFields(ctx: DevereScreenState['context']['data'], f: DevereScreenState['planForm']) {
+  const specOptions: PickerOption[] = (ctx?.warpSpecs ?? []).map((s) => ({ value: s.id, label: s.name, sublabel: `${s.code} · ${s.endsCount} tel${s.denier == null ? ' · denye YOK' : ''}` }));
+  const subOptions: PickerOption[] = (ctx?.subcontractors ?? []).map((s) => ({ value: s.id, label: s.name }));
+  // Alt etiket ROLLERDEN (D1): tip türetilmiş ve fasonu taşımaz; fasoncu kart burada "+ Fason" ile görünür.
+  const supOptions: PickerOption[] = (ctx?.suppliers ?? []).map((c) => ({ value: c.id, label: c.name, sublabel: partnerRoleLabel(c) }));
+  // Z1: Dokuma işi alanı YALNIZ sunucu `weavingOrders` gönderdiğinde çizilir (eski sunucu → alan yok, form birebir eski).
+  const weavingOrders = ctx?.weavingOrders;
+  const weavingOptions: PickerOption[] = (weavingOrders ?? []).map((w) => ({ value: w.id, label: w.weavingOrderNumber, sublabel: `${w.item.name}${w.warpSpec ? ` · ${w.warpSpec.code}` : ''}`, details: w.plannedM != null ? [`Hedef ${w.plannedM} m`] : ['Açık uçlu'] }));
+  const spec = ctx?.warpSpecs.find((s) => s.id === f.warpSpecId) ?? null;
+  return {
+    specOptions,
+    subOptions,
+    supOptions,
+    weavingOptions,
+    weavingOrders,
+    spec,
+    subName: ctx?.subcontractors.find((s) => s.id === f.subcontractorId)?.name ?? '',
+    supName: ctx?.suppliers.find((s) => s.id === f.supplierId)?.name ?? '',
+    nominal: spec ? theoreticalKg(spec.endsCount, spec.denier, Number(f.plannedLengthM.replace(',', '.'))) : null,
+    weavingRequired: ctx?.beamWeavingLinkRequired ?? false,
+    weavingLabel: weavingOrders?.find((w) => w.id === f.weavingOrderId)?.weavingOrderNumber ?? '',
+  };
+}
+
 export default function PlanModal({ state }: { state: DevereScreenState }) {
   const [picker, setPicker] = useState<PickerKind>(null);
   const f = state.planForm;
   const ctx = state.context.data;
-  const specOptions: PickerOption[] = (ctx?.warpSpecs ?? []).map((s) => ({
-    value: s.id,
-    label: s.name,
-    sublabel: `${s.code} · ${s.endsCount} tel${s.denier == null ? ' · denye YOK' : ''}`,
-  }));
-  const subOptions: PickerOption[] = (ctx?.subcontractors ?? []).map((s) => ({ value: s.id, label: s.name }));
-  // Alt etiket ROLLERDEN (D1): tip türetilmiş ve fasonu taşımaz; fasoncu kart burada "+ Fason" ile görünür.
-  const supOptions: PickerOption[] = (ctx?.suppliers ?? []).map((c) => ({ value: c.id, label: c.name, sublabel: partnerRoleLabel(c) }));
-  const spec = ctx?.warpSpecs.find((s) => s.id === f.warpSpecId) ?? null;
-  const subName = ctx?.subcontractors.find((s) => s.id === f.subcontractorId)?.name ?? '';
-  const supName = ctx?.suppliers.find((s) => s.id === f.supplierId)?.name ?? '';
-  const nominal = spec ? theoreticalKg(spec.endsCount, spec.denier, Number(f.plannedLengthM.replace(',', '.'))) : null;
+  const { specOptions, subOptions, supOptions, weavingOptions, weavingOrders, spec, subName, supName, nominal, weavingRequired, weavingLabel } = planFields(ctx, f);
   const busyWarning = physicalBeamBusyWarning(f.physicalBeamNo, state.physicalBusyBeams);
 
   return (
@@ -62,8 +77,16 @@ export default function PlanModal({ state }: { state: DevereScreenState }) {
           <Button mode="contained" onPress={state.submitPlan} loading={state.busy} disabled={state.busy || !state.isOnline}>Planla</Button>
         </>
       }
-      overlays={<PlanPickers picker={picker} setPicker={setPicker} state={state} specOptions={specOptions} subOptions={subOptions} supOptions={supOptions} />}
+      overlays={<PlanPickers picker={picker} setPicker={setPicker} state={state} specOptions={specOptions} subOptions={subOptions} supOptions={supOptions} weavingOptions={weavingOptions} />}
     >
+      {weavingOrders ? (
+        <SheetField
+          label={weavingRequired ? 'Dokuma işi (zorunlu)' : 'Dokuma işi (isteğe bağlı)'}
+          value={weavingLabel}
+          placeholder={weavingRequired ? 'Seçilmedi — bu kurulumda zorunlu' : 'İş emrisiz'}
+          onPress={() => setPicker('weaving')}
+        />
+      ) : null}
       <View style={sheet.row}>
         <View style={sheet.col}>
           <SheetField label="Çözgü kartı" value={spec ? `${spec.code} — ${spec.name}` : ''} placeholder="Seçilmedi" onPress={() => setPicker('spec')} />

@@ -32,6 +32,9 @@ export interface WarpBeam {
   notes: string | null;
   originKind: WarpBeamOrigin;
   warpSpec: { id: string; code: string; name: string; endsCount: number; yarnItem: { id: string; code: string; name: string; linearDensityDen: number | null } };
+  /** Z1: bağlı dokuma işi (plan/sarım anında set); eski sunucu göndermez → undefined. */
+  weavingOrder?: { id: string; weavingOrderNumber: string } | null;
+  weavingOrderId?: string | null;
   subcontractor: { id: string; name: string } | null;
   supplier: { id: string; name: string } | null;
   wound: WarpBeamEvent | null;
@@ -57,6 +60,17 @@ export interface TabletContext {
   /** `devere.mountTracking` / `devere.mountTrackingRequired` SUNUCUDAN; alan yoksa false. */
   mountTracking?: boolean;
   mountTrackingRequired?: boolean;
+  /** Z1 üretim belge zinciri: açık IN_HOUSE dokuma işleri (machine-run bağlamıyla aynı biçim) — Plan "Dokuma işi" seçicisi. Eski sunucu göndermez → alan çizilmez. */
+  weavingOrders?: {
+    id: string;
+    weavingOrderNumber: string;
+    status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+    plannedM: number | null;
+    item: { id: string; code: string; name: string };
+    warpSpec: { id: string; code: string; name: string } | null;
+  }[];
+  /** `devere.beamWeavingLinkRequired` ETKİN değeri SUNUCUDAN — form zorunluluğu buradan okur, tahmin etmez (sunucu da 400 verir). Alan yoksa false. */
+  beamWeavingLinkRequired?: boolean;
 }
 
 /** Backend `mountSchema` ile birebir (.strict). */
@@ -103,6 +117,8 @@ export interface PlanWarpBeamRequest {
   supplierId: string | null;
   physicalBeamNo: string | null;
   notes: string | null;
+  /** Z1: bağlı dokuma işi (opsiyonel); backend `createSchema` `uuidOrNull`. */
+  weavingOrderId: string | null;
   clientToken: string;
 }
 
@@ -121,6 +137,8 @@ export interface WindWarpBeamRequest {
   yarnIssues: YarnLineRequest[];
   yarnReturns: (YarnLineRequest & { reasonCode: string })[];
   breakCount: number | null;
+  /** Z1: sarım anında dokuma işi bağı (plandaki iş; backend `windSchema` `uuidOrNull`). */
+  weavingOrderId?: string | null;
   clientToken: string;
   /** Raşel takımı (#23): N adet → N−1 kardeş aynı işlemde doğar, iplik ÷ N; 1 ise alanlar GÖNDERİLMEZ (bugünkü istek). */
   count?: number;
