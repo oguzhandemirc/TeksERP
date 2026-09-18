@@ -10,6 +10,7 @@ import type { SuzgecEcho } from "./reports/_filters";
 import { reasonOptions, type SebepSecenek } from "./reports/_secenekler";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
+import { ensureCariAccountTx, resolveCariAccountByCustomerTx } from "./helpers/finance.helper";
 import { AuditService } from "./audit.service";
 import { D0, D, applyCariBalanceTx } from "./helpers/finance.helper";
 import { resolvePartyToCardTx } from "./helpers/party-card.helper";
@@ -89,6 +90,10 @@ export class CariService {
     roleWhere?: Prisma.CustomerWhereInput;
     /** Yalnız bakiyesi SIFIR OLMAYANLAR — "kimden alacağım var" sorusu. */
     onlyWithBalance?: boolean;
+    /** Yalnız HAREKETİ olan hesaplar (herhangi bir cari hareket; açılış bakiyesi dahil) — kartla doğan boş hesaplar listeyi şişirmesin (panel varsayılanı). Verilmezse hepsi (eski panel aynen). */
+    hasActivity?: boolean;
+    /** Belirli kartın hesabı (`readIdCondition`). */
+    customerId?: string | { in: string[] };
     /** Vadesi geçmiş açık tutarları da getir (H2). Bayrak verilmezse ek sorgu
      *  KOŞMAZ — bugünkü yol bayt-bayt aynı kalır. */
     withOverdue?: boolean;
@@ -117,6 +122,8 @@ export class CariService {
     if (params.onlyWithBalance) {
       where.balances = { some: { NOT: { balance: 0 } } };
     }
+    if (params.hasActivity) where.transactions = { some: {} };
+    if (params.customerId) where.customerId = params.customerId;
 
     const [rows, total] = await Promise.all([
       prisma.cariAccount.findMany({
@@ -189,24 +196,42 @@ export class CariService {
       include: { ...PARTY_SELECT, balances: { select: { currency: true, balance: true } } },
     });
     if (!row) throw AppError.notFound("Cari hesap bulunamadı.");
+    return { success: true, data: this.toRow(row) };
+  }
+
+  /**
+   * KART → HESAP (Z-A ④): fatura/ödeme formu hesabı kod aramasıyla değil buradan bulur. YARATMAZ —
+   * hesap yoksa 404 `CARI_ACCOUNT_MISSING` (kart doğuşu / göç script'i doldurur).
+   */
+  async findByCustomer(customerId: string): Promise<ApiResponse<CariListRow>> {
+    const ref = await resolveCariAccountByCustomerTx(prisma, customerId);
+    if (!ref) throw AppError.notFound("Bu kartın cari hesabı yok — kart hesabıyla doğar; eski kart için göç script'i koşulmalı.", { code: "CARI_ACCOUNT_MISSING", customerId });
+    return this.findById(ref.id);
+  }
+
+  /** Z-A ⑤: kartın hesabına terim yaz (hesap yoksa doğar — `ensureCariAccountTx`); doğrulama + audit `update` yolunda. */
+  async writeTermsForCustomer(customerId: string, input: Parameters<CariService["update"]>[1], userId?: string): Promise<string> {
+    const accId = await prisma.$transaction(async (tx) => (await ensureCariAccountTx(tx, { customerId })).id);
+    await this.update(accId, input, userId);
+    return accId;
+  }
+
+  private toRow(row: Prisma.CariAccountGetPayload<{ include: typeof PARTY_SELECT & { balances: { select: { currency: true; balance: true } } } }>): CariListRow {
     const p = partyOf(row);
     return {
-      success: true,
-      data: {
-        id: row.id,
-        kind: row.kind,
-        code: p.code,
-        roles: rolesOf(row),
-        name: p.name,
-        taxNumber: p.taxNumber,
-        taxOffice: row.taxOffice,
-        defaultCurrency: row.defaultCurrency,
-        paymentTermDays: row.paymentTermDays,
-        riskLimit: row.riskLimit,
-        notes: row.notes,
-        isActive: row.isActive,
-        balances: row.balances,
-      },
+      id: row.id,
+      kind: row.kind,
+      code: p.code,
+      roles: rolesOf(row),
+      name: p.name,
+      taxNumber: p.taxNumber,
+      taxOffice: row.taxOffice,
+      defaultCurrency: row.defaultCurrency,
+      paymentTermDays: row.paymentTermDays,
+      riskLimit: row.riskLimit,
+      notes: row.notes,
+      isActive: row.isActive,
+      balances: row.balances,
     };
   }
 

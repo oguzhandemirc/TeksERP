@@ -19,6 +19,7 @@ import { applyPartnerRoles, roleListWhere, type PartnerRoles } from "./helpers/p
 import { createProfileForCustomerTx, PROFILE_CUSTOMER_TYPE_MESSAGE } from "./subcontractor-management.service";
 import { AuditService } from "./audit.service";
 import { validateAndShapeBranches } from "./helpers/customer-inline-branches.helper";
+import { bornCariAccountTx, readCustomerFinance, writeCustomerFinanceTerms, type CustomerFinanceInput } from "./helpers/customer-finance-bridge.helper";
 import type { Request } from "express";
 
 /**
@@ -204,7 +205,9 @@ export class CustomerService extends BaseService {
 
   async create(
     data: Record<string, unknown>,
-    userId?: string
+    userId?: string,
+    /** Z-A: kart formunun "Finans" bölümü — route `finance:write` + modül kapısını geçirmiş, Zod doğrulamış. */
+    opts?: { finance?: CustomerFinanceInput | null }
   ): Promise<ApiResponse<unknown>> {
     // Müşteri kodu backend-authoritative: her zaman `MUS+GGAAYY+NNNN` günlük
     // sıralı üretilir; istemciden gelen `code` YOK SAYILIR (iki giriş noktası —
@@ -235,31 +238,49 @@ export class CustomerService extends BaseService {
       }
       if (branches) data.branches = branches;
       else delete data.branches;
-      return wantsProfile ? this.createWithProfile(data, userId) : super.create(data, userId);
+      return this.createCardTx(data, userId, { wantsProfile, finance: opts?.finance ?? null });
     });
   }
 
   /**
-   * Kart + fason profili TEK TX. `BaseService.create` tx açmadığı için burada aynı adımlar (sanitize →
-   * ad normalize → ad-mükerrer → insert) tx'li tekrarlanır; audit iki kayda da tx DIŞINDA yazılır.
-   * Profil bağı bayrağı `syncSubcontractorRoleTx` ile türetilir (tek yazar korunur).
+   * KART TEK TX (Z-A): kart (+ fason profili) (+ cari hesap — yalnız finans modülü AÇIKKEN, `bornCariAccountTx`).
+   * `BaseService.create` tx açmadığı için aynı adımlar (sanitize → ad normalize → ad-mükerrer → insert) burada
+   * tx'li koşar; audit her kayda tx DIŞINDA yazılır. Profil bağı bayrağı `syncSubcontractorRoleTx` ile türetilir.
+   * Terimler (`finance`) hesaba tx SONRASI `cariService.update` yoluyla yazılır (aynı doğrulama + aynı audit satırı).
    */
-  private async createWithProfile(rawData: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
+  private async createCardTx(rawData: Record<string, unknown>, userId: string | undefined, opts: { wantsProfile: boolean; finance: CustomerFinanceInput | null }): Promise<ApiResponse<unknown>> {
     const data = this.normalizeNameFields(this.sanitizeWriteData(rawData));
     await this.assertNameNotDuplicate(data);
     const prismaData = withActor({ ...data }, userId, "CREATE", "customer");
     if (Array.isArray(prismaData.branches)) prismaData.branches = { create: prismaData.branches };
-    const { card, profile } = await prisma.$transaction(async (tx) => {
+    const { card, profile, cariAccountId } = await prisma.$transaction(async (tx) => {
       const c = (await tx.customer.create({ data: prismaData as never, include: { subcontractor: { select: { id: true, isActive: true } } } })) as unknown as {
         id: string; code: string; name: string; taxNumber: string | null; contactPhone: string | null; address: string | null;
       };
-      const p = await createProfileForCustomerTx(tx, c, userId);
+      const p = opts.wantsProfile ? await createProfileForCustomerTx(tx, c, userId) : null;
+      const accId = await bornCariAccountTx(tx, c.id);
       const fresh = await tx.customer.findUnique({ where: { id: c.id }, include: { subcontractor: { select: { id: true, isActive: true } } } });
-      return { card: fresh as unknown as Record<string, unknown>, profile: p };
+      return { card: fresh as unknown as Record<string, unknown>, profile: p, cariAccountId: accId };
     });
     await AuditService.log({ userId, action: "CREATE", tableName: "CUSTOMER", recordId: card.id as string, newData: data });
-    await AuditService.log({ userId, action: "CREATE", tableName: "SUBCONTRACTOR", recordId: profile.id, newData: { code: profile.code, customerId: card.id, bornWithCard: true } });
-    return { success: true, data: card, message: "Kart ve fason profili oluşturuldu" };
+    if (profile) await AuditService.log({ userId, action: "CREATE", tableName: "SUBCONTRACTOR", recordId: profile.id, newData: { code: profile.code, customerId: card.id, bornWithCard: true } });
+    if (opts.finance && cariAccountId) await writeCustomerFinanceTerms(card.id as string, opts.finance, userId);
+    return { success: true, data: { ...card, cariAccountId }, message: profile ? "Kart ve fason profili oluşturuldu" : "Kayıt oluşturuldu" };
+  }
+
+  /** Z-A ⑤: kart PATCH gövdesindeki `finance` alt nesnesi — route izin + modül kapısını geçirmiş olmalı. */
+  async updateFinanceTerms(id: string, finance: CustomerFinanceInput, userId?: string): Promise<{ cariAccountId: string }> {
+    const exists = await prisma.customer.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) throw AppError.notFound("Müşteri bulunamadı");
+    return { cariAccountId: await writeCustomerFinanceTerms(id, finance, userId) };
+  }
+
+  /** Z-A ⑤ okuma: `finance:read` taşıyan istek için karta hesap kimliği + terimleri ekler (opt-in; yoksa DTO aynen). */
+  async findByIdFor(id: string, opts: { canReadFinance: boolean }): Promise<ApiResponse<unknown>> {
+    const base = await this.findById(id);
+    if (!base.success || !opts.canReadFinance) return base;
+    const finance = await readCustomerFinance(id);
+    return { ...base, data: { ...(base.data as Record<string, unknown>), cariAccountId: finance?.cariAccountId ?? null, finance } };
   }
 
   async update(

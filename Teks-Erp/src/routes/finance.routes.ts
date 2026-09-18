@@ -19,8 +19,9 @@ import { requireFinanceEnabled } from "../middlewares/finance.middleware";
 import { buildShipmentInvoiceDraftPreview } from "../services/helpers/shipment-auto-draft.helper";
 import { cariService } from "../services/cari.service";
 import { partnerRoleAccountWhere } from "../services/helpers/partner-roles.helper";
-import { parseQueryParams } from "../utils/query-parser";
+import { parseQueryParams, readFilterList, readIdCondition } from "../utils/query-parser";
 import type { Prisma } from "@prisma/client";
+import { AppError } from "../utils/app-error";
 import { invoiceService } from "../services/invoice.service";
 import { paymentService } from "../services/payment.service";
 import { cashTransactionService } from "../services/cash-transaction.service";
@@ -97,11 +98,33 @@ router.get("/cari", requirePermission("finance:read"), async (req, res, next) =>
       roleWhere: partnerRoleAccountWhere(parseQueryParams(req).filters) as Prisma.CustomerWhereInput | undefined,
       isActive: q.isActive === undefined ? undefined : q.isActive === "true",
       onlyWithBalance: q.onlyWithBalance === "true",
+      // Z-A: kartla doğan boş hesaplar — panel varsayılanı "Hareketli"; sunucu varsayılanı DEĞİŞMEZ (hepsi).
+      hasActivity: readFilterList(parseQueryParams(req).filters.hasActivity)[0] === "true",
+      customerId: readIdCondition(parseQueryParams(req).filters.customerId) ?? undefined,
       // H2 (2026-08-14): "Gecikmiş" kolonu — bayrak verilmeyince servis ek
       // sorgu KOŞMAZ (bugünkü yol bayt-bayt; bekçi kaynak taramasıyla kilitli).
       withOverdue: q.withOverdue === "true",
     });
     res.json({ success: true, ...result });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/finance/cari/by-customer/{customerId}:
+ *   get:
+ *     tags: [Finance]
+ *     summary: Kartın cari hesabı (Z-A tek yol — kod aramasıyla değil ID ile; hesap yoksa 404 CARI_ACCOUNT_MISSING, yaratmaz)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Cari hesap (terimler dahil) }
+ *       404: { description: CARI_ACCOUNT_MISSING }
+ */
+router.get("/cari/by-customer/:customerId", requirePermission("finance:read"), async (req, res, next) => {
+  try {
+    res.json(await cariService.findByCustomer(req.params.customerId as string));
   } catch (e) {
     next(e);
   }
@@ -145,8 +168,10 @@ router.get("/cari/:id/statement", requirePermission("finance:read"), async (req,
 
 router.post("/cari", requirePermission("finance:write"), async (req, res, next) => {
   try {
-    const body = cariCreateSchema.parse(req.body);
-    res.status(201).json(await cariService.create(body, req.user?.userId));
+    // Z-A: hesap KARTLA doğar — listeden elle hesap açma yolu kapandı (kaldırma §7 sınıfı, bu fazda 400).
+    // Şema yine doğrulanır ki eski istemcinin gövde hatası bu cümlenin arkasına saklanmasın.
+    cariCreateSchema.parse(req.body);
+    throw AppError.badRequest("Cari hesap kartla doğar — Cariler'den kart açın; hesap terimlerini kart formundaki Finans bölümünden düzenleyin.", { code: "CARI_ACCOUNT_BORN_WITH_CARD" });
   } catch (e) {
     next(e);
   }

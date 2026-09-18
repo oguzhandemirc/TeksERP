@@ -137,7 +137,7 @@ Bu fazda **kaldırılmaz** — [§7 sınıfı](IS-ORTAGI-ROL-MODELI.md) borcudur
 3. `cari.service.create` (elle hesap açma, `POST /api/finance/cari`) **kartsız taraf kabul etmez**;
    kart zaten hesapla doğduğu için bu uç yalnız eski kayıtların onarımı için kalır (ya da kapatılır —
    01'in ölçümü: uç bugün panelde kullanılıyor mu).
-4. **Göç script'i** `scripts/backfill_cari_accounts.ts` — dry-run varsayılan, `--apply`, idempotent
+4. **Göç script'i** `scripts/migrate_cari_accounts_backfill.ts` (1e adı; dry-run varsayılan, `--apply`, `_test` dışı hedefe `--canli-onay` fail-closed), idempotent
    (ikinci koşum 0 değişiklik), etkilenen her kartı listeler: hesabı olmayan aktif kartlara hesap açar.
    Fabrika kopyasında prova; **koşan kullanıcıdır** (canlı veri kuralı).
 5. Bekçi: hesapsız aktif kart = 0 · kartsız yeni hesap = 0 · vade iki kaynaktan okunmuyor (kaynak
@@ -184,4 +184,4 @@ ekstre). Mevcut kayıtlar için karşılık bayrak değil **göç script'idir** 
 | Vade kod aramasıyla bulunuyor | `Electron/src/pages/Finance/InvoiceFormDialog.tsx:181-188` |
 | Vade okuyucuları (4) | `finance.helper.ts:190` · `invoice.service.ts:770` · `shipment-auto-draft.helper.ts:364` · `cari.service.ts:262,317` |
 | Çağrı yerleri (3) | `cheque.service.ts:349` · `invoice.service.ts:371` · `payment.service.ts:199` |
-| Kart/hesap SAYILARI | **ÖLÇÜLEMEDİ** — DB ölçümü, Z-A dry-run çıktısıyla gelecek |
+| Kart/hesap SAYILARI | Z-A dry-run (`scripts/migrate_cari_accounts_backfill.ts`, 2026-09-18) — **01 test DB'si**: hesapsız aktif kart 7 (hepsi bekçi kalıntısı), hesapsız pasif 27, kartsız hesap 0, çift hesap 0. **Fabrika kopyası/canlı sayısı KULLANICININ dry-run koşumundan** yazılır (canlı veriye bu oturum koşmaz) |

@@ -3,10 +3,14 @@
 // =============================================================================
 
 import { Router } from "express";
+import { z } from "zod";
 import { BaseController } from "../controllers/base.controller";
 import { CustomerService } from "../services/customer.service";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { matchesPermission, requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { readFinanceEnabled } from "../services/system-setting.service";
+import { AppError } from "../utils/app-error";
+import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 
 const MOBILE_CUSTOMER_READ = ["mobile:tarti-paket", "mobile:sevkiyat", "mobile:fason-sevk", "mobile:fason-kabul", "mobile:tambur", "mobile:siparis", "mobile:hizli-is-emri"] as const;
 import branchRoutes from "./customer-branch.routes";
@@ -37,6 +41,35 @@ export const customerService = new CustomerService({
 
 const controller = new BaseController(customerService);
 const router = Router();
+
+// ── Z-A: kart formunun "Finans" bölümü (cari kart ↔ hesap birleşimi, karar A) ─────────────────────
+// Gövdedeki OPSİYONEL `finance` alt nesnesi hesaba yazılır (terimler HESAPTA kalır). İki kapı: `finance:write`
+// (403 PERMISSION_DENIED, required) ve `finance.enabled` (403 MODULE_DISABLED). Zod burada çünkü `sanitizeWriteData`
+// DMMF-dışı anahtarı SESSİZCE düşürür — alan iki uçta da sözleşmede. Okuma opt-in: `finance:read` taşıyan istek DTO'da
+// `cariAccountId` + `finance` görür; operasyon kullanıcısına muhasebe alanı sızmaz.
+const financeSubSchema = z
+  .object({
+    paymentTermDays: z.number().int().min(0).max(3650).nullable().optional(),
+    defaultCurrency: z.enum(["TRY", "USD", "EUR", "GBP", "RUB"]).optional(),
+    taxOffice: z.string().max(100).nullable().optional(),
+    riskLimit: z.union([z.number(), z.string()]).nullable().optional(),
+  })
+  .strict();
+
+async function takeFinanceSub(req: { body?: unknown; user?: { permissions: string[] } }): Promise<z.infer<typeof financeSubSchema> | null> {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  if (!("finance" in body)) return null;
+  const finance = financeSubSchema.nullable().parse(body.finance);
+  delete body.finance;
+  if (finance === null) return null;
+  if (!matchesPermission(req.user?.permissions ?? [], "finance:write")) {
+    throw AppError.forbidden("Cari terimleri (vade, para birimi, vergi dairesi, risk limiti) için 'finance:write' yetkisi gerekli.", { code: "PERMISSION_DENIED", required: "finance:write" });
+  }
+  if (!(await readFinanceEnabled())) {
+    throw AppError.forbidden("Ön muhasebe modülü bu kurulumda kapalı — cari terimleri yazılamaz. Genel Ayarlar → Modüller bölümünden açılabilir.", { code: "MODULE_DISABLED", modul: "finance" });
+  }
+  return finance;
+}
 
 router.use("/:customerId/branches", branchRoutes);
 // /api/customers/:customerId/{aliases/suggest, item-aliases/:itemId, color-aliases/:colorId}
@@ -109,7 +142,14 @@ router.get("/", verifyToken, requireAnyPermission("customer:read", ...MOBILE_CUS
 // lazımdır; okuma iznine bakmak görünürlüğü gereksiz genişletirdi.
 router.get("/similar-names", verifyToken, requirePermission("customer:write"), controller.similarNames);
 
-router.get("/:id", verifyToken, requireAnyPermission("customer:read", ...MOBILE_CUSTOMER_READ), controller.findById);
+router.get("/:id", verifyToken, requireAnyPermission("customer:read", ...MOBILE_CUSTOMER_READ), async (req, res, next) => {
+  try {
+    const result = await customerService.findByIdFor(assertValidUuid(req.params.id, "id"), { canReadFinance: matchesPermission(req.user?.permissions ?? [], "finance:read") });
+    res.status(result.success ? 200 : 404).json(result);
+  } catch (e) {
+    next(e);
+  }
+});
 
 /**
  * @openapi
@@ -151,7 +191,14 @@ router.get("/:id", verifyToken, requireAnyPermission("customer:read", ...MOBILE_
  *       409:
  *         description: Kod zaten mevcut
  */
-router.post("/", verifyToken, requirePermission("customer:write"), controller.create);
+router.post("/", verifyToken, requirePermission("customer:write"), async (req, res, next) => {
+  try {
+    const finance = await takeFinanceSub(req);
+    res.status(201).json(await customerService.create(req.body, req.user?.userId, { finance }));
+  } catch (e) {
+    next(e);
+  }
+});
 
 /**
  * @openapi
@@ -189,7 +236,21 @@ router.post("/", verifyToken, requirePermission("customer:write"), controller.cr
  *       200:
  *         description: Güncellendi
  */
-router.patch("/:id", verifyToken, requirePermission("customer:write"), controller.update);
+router.patch("/:id", verifyToken, requirePermission("customer:write"), async (req, res, next) => {
+  try {
+    const finance = await takeFinanceSub(req);
+    const id = assertValidUuid(req.params.id, "id");
+    const result = await customerService.update(id, req.body, req.user?.userId);
+    if (finance) {
+      const { cariAccountId } = await customerService.updateFinanceTerms(id, finance, req.user?.userId);
+      res.status(200).json({ ...result, data: { ...(result.data as Record<string, unknown>), cariAccountId } });
+      return;
+    }
+    res.status(200).json(result);
+  } catch (e) {
+    next(e);
+  }
+});
 
 /**
  * @openapi

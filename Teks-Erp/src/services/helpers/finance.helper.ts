@@ -252,6 +252,30 @@ export async function findCariAccountIdByCustomer(customerId: string): Promise<s
   return row?.id ?? null;
 }
 
+/**
+ * KART → HESAP tek çözücü (cari kart ↔ hesap birleşimi Z-A): kartın kendi hesabı YA DA kartın fason
+ * profiline eski bacaktan bağlı hesap (göç öncesi kayıt). Yaratmaz — okuma yolu; doğuş `ensureCariAccountTx`.
+ * Fatura/ödeme formu hesabı kod aramasıyla (`kind === party`) DEĞİL bu yolla bulur.
+ */
+/** Kartın hesap terimleri (Z-A opt-in DTO) — okuma tek yerden; hesap yoksa null. */
+export async function readCariTermsByCustomer(customerId: string): Promise<{ id: string; paymentTermDays: number | null; defaultCurrency: Currency; taxOffice: string | null; riskLimit: Prisma.Decimal | null; isActive: boolean } | null> {
+  const ref = await resolveCariAccountByCustomerTx(prisma, customerId);
+  if (!ref) return null;
+  return prisma.cariAccount.findUniqueOrThrow({ where: { id: ref.id }, select: { id: true, paymentTermDays: true, defaultCurrency: true, taxOffice: true, riskLimit: true, isActive: true } });
+}
+
+export async function resolveCariAccountByCustomerTx(
+  db: Pick<typeof prisma, "cariAccount">,
+  customerId: string,
+): Promise<{ id: string; isActive: boolean } | null> {
+  const row = await db.cariAccount.findFirst({
+    where: { OR: [{ customerId }, { subcontractor: { customerId } }] },
+    orderBy: { customerId: "desc" },
+    select: { id: true, isActive: true },
+  });
+  return row ?? null;
+}
+
 export async function ensureCariAccountTx(
   tx: Prisma.TransactionClient,
   party: CariAccountParty,
