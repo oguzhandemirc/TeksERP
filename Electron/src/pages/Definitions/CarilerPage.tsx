@@ -27,6 +27,7 @@
 // Sorgu planı + birleştirme + sayfa bilgisi saf katmanda (`carilerPaging`).
 // =============================================================================
 import { useEffect, useMemo, useState } from "react";
+import { useCustomerFinanceAccess } from "@/pages/Customers/CustomerFinanceSection";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Search, Plus, Pencil } from "lucide-react";
@@ -169,6 +170,8 @@ export function CarilerPage() {
   // kullanıcı eksik cariyi "yok" sanıp MÜKERRER KART açar (ticaret rejiminde
   // cari kartının tek giriş kapısı bu ekran).
   const isError = (plan.customers && customersQ.isError) || (plan.subcontractors && subsQ.isError);
+
+  const financeAccess = useCustomerFinanceAccess();
 
   const createCustomerM = useMutation({
     mutationFn: (payload: Partial<Customer>) => customerService.create(payload),
@@ -378,9 +381,9 @@ export function CarilerPage() {
         isSubmitting={updateCustomerM.isPending || createCustomerM.isPending}
         onSubmit={(values) => {
           if (editCustomer) {
-            updateCustomerM.mutate({ id: editCustomer.id, payload: buildCustomerPayload(values, editCustomer) });
+            updateCustomerM.mutate({ id: editCustomer.id, payload: buildCustomerPayload(values, editCustomer, financeAccess) as Partial<Customer> });
           } else {
-            createCustomerM.mutate(buildCustomerPayload(values, null));
+            createCustomerM.mutate(buildCustomerPayload(values, null, financeAccess) as Partial<Customer>);
           }
         }}
       />

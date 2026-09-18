@@ -361,6 +361,21 @@ export async function getInvoice(id: string): Promise<InvoiceDetail> {
 
 type Paged<T> = { data: T[]; pagination: { total: number; totalPages: number } };
 
+/**
+ * Kartın cari hesabı — Z-A TEK YOL (`GET /api/finance/cari/by-customer/:customerId`, kod aramasıyla DEĞİL). Hesap yoksa
+ * 404 `CARI_ACCOUNT_MISSING` → null (kart hesabıyla doğar; eski kart için göç script'i). Öteki hatalar yükselir.
+ */
+export async function getCariByCustomer(customerId: string): Promise<CariRow | null> {
+  try {
+    const res = await apiClient.get<{ data: CariRow }>(`/api/finance/cari/by-customer/${customerId}`, { suppressErrorToast: true } as never);
+    return res.data.data;
+  } catch (e) {
+    const status = (e as { response?: { status?: number } }).response?.status;
+    if (status === 404) return null;
+    throw e;
+  }
+}
+
 export async function listCari(params: {
   page: number;
   pageSize: number;

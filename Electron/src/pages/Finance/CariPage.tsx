@@ -11,6 +11,7 @@ import { LabeledSelect } from "@/components/forms/LabeledSelect";
 import { DIRECTION_OPTIONS, ROLE_FILTER_DEFAULTS, SUBCONTRACTOR_OPTIONS, directionFilters, isRoleFilterDirty, subcontractorFilters, type DirectionFilter, type RoleFilterPair, type SubcontractorFilter } from "@/lib/partnerRoles";
 import { cariRoleLabel, listCari, money, type CariRow } from "./service";
 import { StatementDialog } from "./StatementDialog";
+import { activityFilters, CARI_ACTIVITY_DEFAULT, CARI_ACTIVITY_OPTIONS, CARI_EMPTY_ACTIVE_HINT, CARI_EMPTY_ALL_HINT, type CariActivityFilter } from "./cariListFilters";
 import { CariEditDialog } from "./CariEditDialog";
 
 /**
@@ -40,17 +41,19 @@ export function CariPage() {
   // Rol modeli (dilim F): süzgeç Cariler şeridinin çifti (Yön × Fason) — hesap, KARTIN bayrağıyla süzülür.
   const [filters, setFilters] = useState<RoleFilterPair>(ROLE_FILTER_DEFAULTS);
   const [onlyWithBalance, setOnlyWithBalance] = useState(false);
+  // Z-B ④: varsayılan Hareketli — hesap kartla doğar, hareketsiz hesap listeyi şişirmesin; Tümü süzgeç göndermez.
+  const [activity, setActivity] = useState<CariActivityFilter>(CARI_ACTIVITY_DEFAULT);
   const [statementFor, setStatementFor] = useState<CariRow | null>(null);
   const [editFor, setEditFor] = useState<CariRow | null>(null);
 
   const q = useQuery({
-    queryKey: ["finance", "cari", search, filters.direction, filters.subcontractor, onlyWithBalance],
+    queryKey: ["finance", "cari", search, filters.direction, filters.subcontractor, onlyWithBalance, activity],
     queryFn: () =>
       listCari({
         page: 1,
         pageSize: 100,
         search: search || undefined,
-        filters: { ...directionFilters(filters.direction), ...subcontractorFilters(filters.subcontractor) },
+        filters: { ...directionFilters(filters.direction), ...subcontractorFilters(filters.subcontractor), ...activityFilters(activity) },
         onlyWithBalance,
         // "Gecikmiş" kolonu bu sayfanın parçası → daima istenir. Backend bunu
         // yaşlandırma ÇEKİRDEĞİNDEN üretir (tek kaynak); eski backend bayrağı
@@ -81,6 +84,8 @@ export function CariPage() {
         </div>
         <LabeledSelect label="Yön" value={filters.direction} options={DIRECTION_OPTIONS} onChange={(v) => setFilters((f) => ({ ...f, direction: v as DirectionFilter }))} title="Ticari yön: müşteri rolü / tedarikçi rolü / ikisi de" />
         <LabeledSelect label="Fason" value={filters.subcontractor} options={SUBCONTRACTOR_OPTIONS} onChange={(v) => setFilters((f) => ({ ...f, subcontractor: v as SubcontractorFilter }))} title="Fason iş yapan kartların hesapları" />
+
+        <LabeledSelect label="Durum" value={activity} options={CARI_ACTIVITY_OPTIONS} onChange={(v) => setActivity(v as CariActivityFilter)} title="Hareketli: en az bir cari hareketi olan hesaplar" />
         {isRoleFilterDirty(filters) && (
           <Button variant="ghost" size="sm" onClick={() => setFilters(ROLE_FILTER_DEFAULTS)}>
             Süzgeci temizle
@@ -115,12 +120,7 @@ export function CariPage() {
             </Button>
           </div>
         ) : rows.length === 0 ? (
-          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-            {/* Cari LAZY açılır — boş liste "bozuk" değil "henüz işlem yok" demektir
-                ve kullanıcı bunu bilmezse ekranı hatalı sanır. */}
-            Henüz cari hesap yok. Cari hesaplar ilk fatura ya da tahsilat kaydedildiğinde
-            kendiliğinden açılır.
-          </div>
+          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">{activity === "active" ? CARI_EMPTY_ACTIVE_HINT : CARI_EMPTY_ALL_HINT}</div>
         ) : (
           <div className="space-y-3">
             {/* İKİNCİ KATMAN — bayat satırlar duruyor: liste gizlenmez, uyarılır. */}

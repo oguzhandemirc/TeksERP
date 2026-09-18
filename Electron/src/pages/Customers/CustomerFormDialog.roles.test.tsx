@@ -33,7 +33,8 @@ vi.mock("./CustomerTemplateRoutesPanel", () => ({ CustomerTemplateRoutesPanel: (
 vi.mock("./CustomerStandaloneLabelsPanel", () => ({ CustomerStandaloneLabelsPanel: () => null }));
 vi.mock("@/components/RecordInfoButton", () => ({ RecordInfoButton: () => null }));
 vi.mock("./CustomerSubcontractorRole", async (orig) => ({ ...(await orig<typeof import("./CustomerSubcontractorRole")>()), CustomerSubcontractorRole: (p: { customer: { isSupplierRole: boolean } }) => <div data-testid="fason-paneli" data-supplier={String(p.customer.isSupplierRole)} /> }));
-vi.mock("@/hooks/usePricingEnabled", () => ({ useCustomerBranchesEnabled: () => false, usePricingEnabled: () => false }));
+vi.mock("@/hooks/usePricingEnabled", () => ({ useCustomerBranchesEnabled: () => false, usePricingEnabled: () => false, useFeatureFlags: () => ({ data: { data: { financeEnabled: false } } }) }));
+vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: () => false, hasAnyPermission: () => false, hasAllPermissions: () => false }) }));
 
 const box = (name: string) => screen.getByRole("checkbox", { name });
 

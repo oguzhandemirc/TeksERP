@@ -11,11 +11,10 @@ import { Label } from "@/components/ui/label";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
 import { InvoiceReceiptsSection } from "./InvoiceReceiptsSection";
-import { customerService } from "@/pages/Customers/service";
-import { subcontractorService } from "@/pages/Subcontractors/service";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { useCustomerTerms } from "./useCustomerTerms";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import {
   useItemPriceSuggestion,
@@ -28,9 +27,8 @@ import {
   type ItemPriceKind,
 } from "@/hooks/useItemPriceSuggestion";
 import {
-  createInvoice, getInvoice, listCari, money, updateInvoice,
-  INVOICE_TYPE_LABEL, type Currency, type InvoiceType,
-} from "./service";
+  createInvoice, getInvoice,  money, updateInvoice,
+  INVOICE_TYPE_LABEL, type Currency, type InvoiceType } from "./service";
 import {
   DEFAULT_INVOICE_CURRENCY,
   buildUpdateBody,
@@ -42,7 +40,6 @@ import {
   shouldApplyCurrencySuggestion,
   type InvoiceFormInitial,
   type InvoiceFormLine,
-  type PartyKind,
 } from "./invoiceForm";
 
 /**
@@ -150,61 +147,8 @@ function lineTotals(l: DraftLine) {
   return { net, vat, withholding };
 }
 
-/**
- * Seçili tarafın CARİ kartı — vade günü + varsayılan para birimi.
- *
- * Cari hesap LAZY açılır (ilk fatura/tahsilat anında) — kartı OLMAYABİLİR ve bu
- * meşrudur: o durumda öneri yoktur, alan boş kalır. Cari ucu partiye id ile
- * bakmadığı için zincir iki adımdır: parti kartı → kod → cari listesinde TAM kod
- * eşleşmesi (contains araması ada da çarpabilir; kod benzersizdir, kimlik odur).
- *
- * ⚠️ `defaultCurrency` de BURADAN okunur, ikinci bir sorgu açılmaz: aynı satır
- * zaten çekiliyor. Ayrı bir kanca yazmak, iki isteğin farklı anlarda settle
- * olup vade ile para biriminin farklı carilerden gelmesi riskini doğururdu.
- */
-function usePartyTermDays(party: PartyKind, partyId: string | null) {
-  // Bu diyalog yalnız finance rejiminde açılır; kapı yine de burada da durur —
-  // `/api/finance/cari` rejim kapılıdır, bayraksız kurulumda istek 403 üretirdi.
-  const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
-
-  const partyQ = useQuery({
-    queryKey: ["invoice-party-card", party, partyId],
-    queryFn: async () =>
-      party === "CUSTOMER"
-        ? (await customerService.getById(partyId as string)).data
-        : (await subcontractorService.getById(partyId as string)).data,
-    enabled: financeEnabled && Boolean(partyId),
-    staleTime: 60_000,
-  });
-  const code = partyQ.data?.code ?? null;
-
-  const cariQ = useQuery({
-    queryKey: ["invoice-party-cari-terms", party, code],
-    queryFn: () => listCari({ page: 1, pageSize: 50, search: code as string, kind: party }),
-    enabled: financeEnabled && Boolean(code),
-    staleTime: 60_000,
-  });
-  const row = code
-    ? cariQ.data?.data.find((r) => r.kind === party && r.code === code)
-    : undefined;
-
-  return {
-    /** Tarafın görünen adı — eski fason hesabı salt-okunur çizilirken. */
-    partyName: partyQ.data ? `${partyQ.data.name}${partyQ.data.code ? ` — ${partyQ.data.code}` : ""}` : null,
-    termDays: row?.paymentTermDays ?? null,
-    /**
-     * Carinin varsayılan para birimi — `CariAccount.defaultCurrency`.
-     *
-     * ⚠️ Kartı OLMAYAN caride `null` döner ve alana DOKUNULMAZ. Sessizce TRY'ye
-     * düşmek bugünkü hatanın ta kendisidir: USD'li müşteriye TRY fatura kesilir,
-     * kur 1 kalır ve defter ~30 kat yanlış olur.
-     */
-    defaultCurrency: (row?.defaultCurrency ?? null) as Currency | null,
-    // Sorgu HATASI "vade yok" demek değildir — settled olmadan alana dokunulmaz
-    // (bayat öneriyi hata anında temizlemek, yanlış anda veri silmek olurdu).
-    settled: Boolean(partyId) && partyQ.isSuccess && cariQ.isSuccess,
-  };
-}
+// Tarafın cari terimleri: TEK ÇÖZÜCÜ `useCustomerTerms` (Z-B ③) — kart id'sinden `by-customer`; kod aramasıyla eşleme KALKTI.
+const usePartyTermDays = useCustomerTerms;
 
 /**
  * Tek fatura satırı. Ayrı bileşen, süs değil: kalem başına iki kanca çalışır

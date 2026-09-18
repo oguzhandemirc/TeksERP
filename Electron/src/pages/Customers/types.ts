@@ -1,6 +1,11 @@
 import type { CompanyType } from "@/types/enums";
 
+import type { CustomerFinanceView } from "./customerFinance";
+
 export interface Customer {
+  /** Z-A opt-in: yalnız `finance:read` taşıyan isteğin `GET /customers/:id` cevabında; listede yok. */
+  cariAccountId?: string | null;
+  finance?: CustomerFinanceView | null;
   id: string;
   code: string;
   name: string;

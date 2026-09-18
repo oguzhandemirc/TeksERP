@@ -1,4 +1,6 @@
 import { CrudPage } from "@/components/layout/CrudPage";
+import { financeSubBody, type FinanceSubBody } from "./customerFinance";
+import { useCustomerFinanceAccess } from "./CustomerFinanceSection";
 import { customerColumns } from "./columns";
 import { customerService } from "./service";
 import { CustomerFormDialog } from "./CustomerFormDialog";
@@ -17,9 +19,9 @@ interface BranchCreatePayload {
   notes: string | null;
 }
 
-type CustomerWritePayload = Partial<Customer> & { branches?: BranchCreatePayload[]; subcontractorRole?: true };
+type CustomerWritePayload = Partial<Omit<Customer, "finance">> & { branches?: BranchCreatePayload[]; subcontractorRole?: true; finance?: FinanceSubBody };
 
-export const buildCustomerPayload = (v: CustomerFormValues, initial: Customer | null): CustomerWritePayload => {
+export const buildCustomerPayload = (v: CustomerFormValues, initial: Customer | null, finance: { canWrite: boolean; enabled: boolean } = { canWrite: false, enabled: false }): CustomerWritePayload => {
   // Şubeler yalnız OLUŞTURMADA gönderilir (müşteri + şubeler tek transaction'da doğar);
   // düzenlemede şubeler ayrı sekmeden yönetilir → payload'a eklenmez. Tamamen boş
   // taslak satırları (yanlışlıkla "Şube ekle") elenir — validasyon içerikli satırda
@@ -37,6 +39,8 @@ export const buildCustomerPayload = (v: CustomerFormValues, initial: Customer | 
     isSupplierRole: v.isSupplierRole,
     ...(!initial && v.isSubcontractorRole ? { subcontractorRole: true } : {}),
     isActive: v.isActive,
+    // Z-B: terimler HESAPTA — `finance{…}` alt nesnesi yalnız finance:write + modül açıkken (yoksa alt nesne yok, sunucu 403 vermez).
+    ...financeSubBody(v, finance),
     ...(branchRows.length > 0
       ? {
           branches: branchRows.map((b) => ({
@@ -55,6 +59,7 @@ export const buildCustomerPayload = (v: CustomerFormValues, initial: Customer | 
 };
 
 export function CustomersPage() {
+  const financeAccess = useCustomerFinanceAccess();
   return (
     <CrudPage<Customer>
       title="Müşteriler"
@@ -75,7 +80,8 @@ export function CustomersPage() {
           onOpenChange={onOpenChange}
           initial={initial}
           isSubmitting={isSubmitting}
-          onSubmit={(values) => onSubmit(buildCustomerPayload(values, initial))}
+          // Yazma gövdesi (finance alt nesnesi) okuma DTO'su değildir — CrudPage yalnız Partial<Customer> tanır.
+          onSubmit={(values) => onSubmit(buildCustomerPayload(values, initial, financeAccess) as Partial<Customer>)}
         />
       )}
     />

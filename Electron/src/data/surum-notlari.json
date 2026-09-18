@@ -31,6 +31,11 @@
         },
         {
           "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Cari kartı ve cari hesap birleşti: Cariler'de kart formuna Finans bölümü geldi (vade günü, para birimi, vergi dairesi, risk limiti ve salt okunur açık bakiye) — muhasebe okuma yetkisi olan görür, yazma yetkisi olan düzenler; terimler kartta bir kez girilir, faturada vade ve para birimi kartın hesabından kendiliğinden önerilir (kod eşlemesi kalktı, hesabı olmayan kartta alan boş kalır). Cari Hesaplar listesi varsayılan olarak yalnız hareketi olan hesapları gösterir (Durum: Hareketli · Tümü); yeni hesap ayrıca açılmaz, kart kaydedilince kendiliğinden doğar."
+        },
+        {
+          "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Raporlarda müşteri, kumaş, renk, fasoncu, iptal sebebi ve sevk hedefi süzgeçleri artık gerçekten uygulanıyor: Sipariş Karnesi, Talep Analizi, Sipariş→Teslim, İptal Karnesi, Müşteri ve Fason karneleri ile üretim karnelerinde seçilen süzgeç sunucuya gitmiyor, ekran süzgeç satırını yazarken rakamlar herkesin toplamı çıkıyordu. Ayrıca bir süzgeç sunucuda uygulanmazsa süzgeç satırı bunu açıkça söyler. Finans ve dokuma raporları zaten doğru çalışıyordu."
         },

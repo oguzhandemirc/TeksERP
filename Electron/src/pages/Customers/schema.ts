@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { financeFormDefaults, RISK_LIMIT_ERROR, riskLimitError, TERM_DAYS_ERROR, termDaysError } from "./customerFinance";
 
 /**
  * Tek-adım müşteri oluşturmada satır-içi şube taslağı. Kompakt alanlar (Ad zorunlu +
@@ -120,6 +121,11 @@ export const customerFormSchema = z.object({
       });
     })
     .default([]),
+  // Z-B Finans bölümü — hepsi metin; boş = dokunulmamış. Doğrulama `customerFinance.ts` (kart alanı DEĞİL, gövdede `finance{…}`).
+  financePaymentTermDays: z.string().default("").refine((s) => termDaysError(s) === null, { message: TERM_DAYS_ERROR }),
+  financeDefaultCurrency: z.string().default(""),
+  financeTaxOffice: z.string().max(100, "Vergi dairesi en fazla 100 karakter").default(""),
+  financeRiskLimit: z.string().default("").refine((s) => riskLimitError(s) === null, { message: RISK_LIMIT_ERROR }),
 }).refine((v) => v.isCustomerRole || v.isSupplierRole || v.isSubcontractorRole, {
   message: NO_ROLE_MESSAGE,
   path: ["isCustomerRole"],
@@ -149,6 +155,7 @@ export const customerFormDefaults: CustomerFormValues = {
   isSubcontractorRole: false,
   isActive: true,
   branches: [],
+  ...financeFormDefaults,
 };
 
 /**

@@ -24,7 +24,7 @@ import type { InvoiceDetail } from "./service";
 const getInvoice = vi.fn();
 const updateInvoice = vi.fn();
 const createInvoice = vi.fn();
-const listCari = vi.fn();
+const getCariByCustomer = vi.fn();
 
 vi.mock("./service", async (importOriginal) => {
   // `money` / `INVOICE_TYPE_LABEL` gibi saf yardımcılar GERÇEK kalır: ekrandaki
@@ -35,7 +35,7 @@ vi.mock("./service", async (importOriginal) => {
     getInvoice: (...a: unknown[]) => getInvoice(...a),
     updateInvoice: (...a: unknown[]) => updateInvoice(...a),
     createInvoice: (...a: unknown[]) => createInvoice(...a),
-    listCari: (...a: unknown[]) => listCari(...a),
+    getCariByCustomer: (...a: unknown[]) => getCariByCustomer(...a),
   };
 });
 
@@ -130,7 +130,7 @@ beforeEach(() => {
   flags.mockReturnValue({ data: { data: { financeEnabled: false, financeDefaultVatRate: 20 } } });
   getInvoice.mockResolvedValue(DRAFT);
   updateInvoice.mockResolvedValue({ data: { id: "inv-1" }, message: "Taslak güncellendi." });
-  listCari.mockResolvedValue({ data: [], pagination: { total: 0, totalPages: 1 } });
+  getCariByCustomer.mockResolvedValue(null); // hesap yok (404) → öneri yok
 });
 
 describe("düzenleme modu", () => {
@@ -245,7 +245,7 @@ describe("yeni fatura — taraf yalnız kart", () => {
   beforeEach(() => {
     flags.mockReturnValue({ data: { data: { financeEnabled: true, financeDefaultVatRate: 20 } } });
     getCustomerById.mockResolvedValue({ data: { id: "cus-9", code: "FSN-9", name: "BOYAHANE KART", isSubcontractorRole: true } });
-    listCari.mockResolvedValue({ data: [], pagination: { total: 0, totalPages: 1 } });
+    getCariByCustomer.mockResolvedValue(null); // hesap yok (404) → öneri yok
     createInvoice.mockResolvedValue({ data: { id: "inv-new" }, message: "ok" });
   });
 
@@ -273,9 +273,7 @@ describe("para birimi ön-dolumu", () => {
   beforeEach(() => {
     flags.mockReturnValue({ data: { data: { financeEnabled: true, financeDefaultVatRate: 20 } } });
     getCustomerById.mockResolvedValue({ data: { id: "cus-1", code: "MUS-1", name: "ARZU" } });
-    listCari.mockResolvedValue({
-      data: [
-        {
+    getCariByCustomer.mockResolvedValue({
           id: "cari-1",
           kind: "CUSTOMER",
           code: "MUS-1",
@@ -288,10 +286,7 @@ describe("para birimi ön-dolumu", () => {
           taxOffice: null,
           riskLimit: null,
           notes: null,
-        },
-      ],
-      pagination: { total: 1, totalPages: 1 },
-    });
+        });
   });
 
   it("⭐ dokunulmamış alan cari kartının para birimine döner (USD müşteriye TRY fatura yok)", async () => {
@@ -319,7 +314,7 @@ describe("para birimi ön-dolumu", () => {
     );
     expect(currencySelect().value).toBe("EUR");
     // Cari sorgusu settle olduktan sonra da EUR kalmalı.
-    await waitFor(() => expect(listCari).toHaveBeenCalled());
+    await waitFor(() => expect(getCariByCustomer).toHaveBeenCalledWith("cus-1"));
     await new Promise((r) => setTimeout(r, 20));
     expect(currencySelect().value).toBe("EUR");
   });
@@ -334,7 +329,7 @@ describe("para birimi ön-dolumu", () => {
       />,
     );
     fireEvent.change(currencySelect(), { target: { value: "GBP" } });
-    await waitFor(() => expect(listCari).toHaveBeenCalled());
+    await waitFor(() => expect(getCariByCustomer).toHaveBeenCalledWith("cus-1"));
     await new Promise((r) => setTimeout(r, 20));
     expect(currencySelect().value).toBe("GBP");
   });

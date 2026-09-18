@@ -18,6 +18,8 @@ import { partnerRoleLabels } from "@/lib/partnerRoles";
 import { useCustomerBranchesEnabled } from "@/hooks/usePricingEnabled";
 import { customerFormDefaults, customerFormSchema, SUBCONTRACTOR_NEEDS_SUPPLIER_MESSAGE, type CustomerFormValues } from "./schema";
 import { CustomerBranchesDraftField } from "./CustomerBranchesDraftField";
+import { CustomerFinanceSection, useCustomerFinanceAccess } from "./CustomerFinanceSection";
+import { financeFormDefaults } from "./customerFinance";
 import { CustomerBranchesPanel } from "./CustomerBranchesPanel";
 import { CustomerItemAliasesPanel } from "./CustomerItemAliasesPanel";
 import { CustomerColorAliasesPanel } from "./CustomerColorAliasesPanel";
@@ -58,8 +60,11 @@ export function CustomerFormDialog({
   // customers.branchesEnabled kapalıyken şube yüzeyleri (sekme + taslak) gizlenir;
   // mevcut şube verisi korunur, yalnız UI'dan kalkar.
   const branchesEnabled = useCustomerBranchesEnabled();
+  // Z-B: Finans bölümü yalnız finance:read + modül açıkken; yazma yetkisi yoksa salt-okunur (gövdeye alt nesne konmaz).
+  const financeAccess = useCustomerFinanceAccess();
   const defaults: CustomerFormValues = initial
     ? {
+        ...financeFormDefaults,
         name: initial.name,
         taxNumber: initial.taxNumber ?? "",
         exportCode: initial.exportCode ?? "",
@@ -281,6 +286,7 @@ export function CustomerFormDialog({
       {/* Üçüncü rol — kart kaydedildikten sonra (id var) anında yazan kutu (profil bağı); Tedarikçi kutusunun O ANKİ
           değeriyle açılır/kapanır (kayıt öncesi de: kural sunucudakiyle aynı). */}
       {isEdit && initial && <CustomerSubcontractorRole customer={{ ...initial, isSupplierRole: form.watch("isSupplierRole") }} />}
+      {financeAccess.canRead && <CustomerFinanceSection form={form as never} customerId={initial?.id ?? null} canWrite={financeAccess.canWrite} />}
     </>
   );
 
