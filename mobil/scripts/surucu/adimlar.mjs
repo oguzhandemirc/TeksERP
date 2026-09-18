@@ -30,7 +30,7 @@ export const ADIMLAR = [
       await ctx.gor('Levent Sarım');
     },
     dogrula: [
-      { ad: 'operatör oturumu backend’de tanınır (izin var)', uc: '/api/auth/me', oku: (g) => Boolean(g?.data?.id ?? g?.id), beklenen: true },
+      { ad: 'operatör oturumu backend’de tanınır (izin var)', uc: '/api/auth/me', oku: (g) => Boolean(g?.data?.userId ?? g?.data?.id ?? g?.id), beklenen: true },
     ],
   },
   {
@@ -39,7 +39,7 @@ export const ADIMLAR = [
     yol: 'Bölüm Seçimi → Levent Sarım → Yeni levent',
     gerektirir: ['B3', 'D0'],
     async yap(ctx) {
-      await ctx.git('devere');
+      await ctx.git('Devere');
       await ctx.gor('Levent Sarım');
       await ctx.tikla('Yeni levent');
       await ctx.gor('Yeni levent planla');
@@ -68,7 +68,7 @@ export const ADIMLAR = [
     yol: 'Levent Sarım → Planlı → SAR (sayfalı: ölçü · makine·iplik · özet)',
     gerektirir: ['D1'],
     async yap(ctx) {
-      await ctx.git('devere');
+      await ctx.git('Devere');
       await ctx.tikla('SAR');
       await ctx.gor('Ölçü');
       await ctx.numpad({ icerir: 'Sarılan metre' }, '500');

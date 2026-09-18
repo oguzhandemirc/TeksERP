@@ -77,3 +77,18 @@ Bölüm Seçimi → Levent Sarım → SAR → sayfalı sihirbaz (Ölçü · Maki
 uçtan uca sürücüyle koşuldu; makine/lot seçildi, kg girildi, ÖZET sayfasına ulaşıldı ve
 **gövde çakışması erken uyarısı** ("T1 gövdesinde LV… tezgahta — sarım reddedilir") özette
 doğrulandı. Kayıt YAZILMADI (Vazgeç). Görüntüler `scratchpad/surucu-devere/`.
+
+## Bilinen sınır — Sortable grid fold-altı kaydırma GÜVENİLMEZ (2026-09-18, gerçek tablet)
+
+Bölüm Seçimi karo ızgarası `react-native-sortables`tır; `input swipe` ile kaydırma KARARSIZ —
+fold-altı karolar (18 izinli operatörde `Levent Sarım`/`modul-karo-Devere` son satırda) bazen
+bulunur bazen bulunmaz, aynı çözgü kartı picker'ı da uzun listede güvenilir kaydırılamaz. Bu
+YÜZDEN A3→D2 tam otomatik yeşile ÇIKARILAMADI (karo ve ekranlar ÇALIŞIYOR — el ile kanıtlandı).
+Kanıtlanan yol: A3 giriş YEŞİL, D1 Levent Sarım → Yeni levent → Çözgü kartı picker'ına kadar
+(kısmi `out/*/sonuc.json`). ⇒ Sürücü fold-altı için `input swipe` yerine UiScrollable/
+scrollIntoView tabanlı GÜVENİLİR kaydırma ister (hardening ayrı iş). D9 PANEL sürücüsü (Electron
+DOM scroll) bu sınırı yaşamaz; A3→D2 yeşilini oradan almak daha güvenilir.
+
+Bu turda düzeltilen iki gerçek adimlar hatası: `git('devere')` → `git('Devere')` (karo testID
+`modul-karo-Devere`, registry key'i BÜYÜK) ve A3 dogrula `/api/auth/me` `data.userId` okur
+(uç `data.id` değil `userId` döndürür).
