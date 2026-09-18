@@ -13,6 +13,28 @@ import { cariRoleLabel, listCari, money, type CariRow } from "./service";
 import { StatementDialog } from "./StatementDialog";
 import { CariEditDialog } from "./CariEditDialog";
 
+/**
+ * Para birimi başına AYRI satır — tek sayıya indirmek 1000 USD ile 30.000 TL'yi toplamak olurdu.
+ * İşaret bakiyeyle aynı: POZİTİF = cari bize borçlu. Bakiye: yeşil/kırmızı; gecikmiş: alacağımız gecikti kırmızı,
+ * borcumuz gecikti amber.
+ */
+function MoneyStack({ items, tone }: { items: Array<{ currency: CariRow["defaultCurrency"]; amount: number | string }>; tone: "balance" | "overdue" }) {
+  if (items.length === 0) return <span className="text-muted-foreground">—</span>;
+  const cls = (v: number) =>
+    tone === "balance"
+      ? v > 0 ? "font-medium text-emerald-600" : "font-medium text-destructive"
+      : v > 0 ? "font-medium text-destructive" : "font-medium text-amber-600 dark:text-amber-400";
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      {items.map((it) => (
+        <span key={it.currency} className={cls(Number(it.amount))}>
+          {money(it.amount, it.currency)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export function CariPage() {
   const [search, setSearch] = useState("");
   // Rol modeli (dilim F): süzgeç Cariler şeridinin çifti (Yön × Fason) — hesap, KARTIN bayrağıyla süzülür.
@@ -150,50 +172,12 @@ export function CariPage() {
                         : "—"}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      {/* ⚠️ Para birimleri AYRI satırlarda — tek sayıya indirmek
-                          1000 USD ile 30.000 TL'yi toplamak olurdu. */}
-                      {c.balances.length === 0 ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : (
-                        <div className="flex flex-col items-end gap-0.5">
-                          {c.balances.map((b) => (
-                            <span
-                              key={b.currency}
-                              className={
-                                b.balance > 0 ? "font-medium text-emerald-600" : "font-medium text-destructive"
-                              }
-                            >
-                              {money(b.balance, b.currency)}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                      <MoneyStack items={c.balances.map((b) => ({ currency: b.currency, amount: b.balance }))} tone="balance" />
                     </td>
                     <td className="px-3 py-2 text-right">
-                      {/* Vadesi geçmiş AÇIK tutar — kaynağı yaşlandırma
-                          çekirdeğinin `overdueTotal`'ı (efektif vade + sanal
-                          FIFO mahsup DAHİL; Yaşlandırma raporuyla BİREBİR aynı
-                          rakam). İşaret bakiyeyle aynı: POZİTİF = bizim
-                          alacağımız gecikti (kırmızı), NEGATİF = bizim borcumuz
-                          gecikti (amber). Para birimleri AYRI satırlarda. */}
-                      {!c.overdue || c.overdue.length === 0 ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : (
-                        <div className="flex flex-col items-end gap-0.5">
-                          {c.overdue.map((o) => (
-                            <span
-                              key={o.currency}
-                              className={
-                                Number(o.amount) > 0
-                                  ? "font-medium text-destructive"
-                                  : "font-medium text-amber-600 dark:text-amber-400"
-                              }
-                            >
-                              {money(o.amount, o.currency)}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                      {/* Vadesi geçmiş AÇIK tutar — kaynağı yaşlandırma çekirdeğinin `overdueTotal`'ı (efektif vade +
+                          sanal FIFO mahsup DAHİL; Yaşlandırma raporuyla BİREBİR aynı rakam). */}
+                      <MoneyStack items={c.overdue ?? []} tone="overdue" />
                     </td>
                     <td className="px-3 py-2">
                       <div className="flex items-center justify-end gap-1">
