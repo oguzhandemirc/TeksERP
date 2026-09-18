@@ -13,7 +13,6 @@ import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { requireTicaretEnabled } from "../middlewares/module.middleware";
 import { parseQueryParams } from "../utils/query-parser";
-import { assertReceiptLinesValid } from "../services/helpers/goods-receipt-preflight.helper";
 
 const router = Router();
 
@@ -228,8 +227,7 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { lines } = z.object({ lines: z.array(lineSchema).min(1).max(500) }).parse(req.body);
-      // Ön-uçuş (C8): doğrulama sınıfı hata tek satır yazılmadan 400 RECEIPT_LINES_INVALID.
-      await assertReceiptLinesValid(lines);
+      // Ön-uçuş (C8) artık `addLines` İÇİNDE — fiyat zinciri ve sipariş bağlamı fişten okunur (beş sınıf daha, 2026-09-18).
       const result = await goodsReceiptService.addLines(req.params.id as string, lines, req.user?.userId);
       // ⚠️ İplik satırı `Roll` doğurmaz → `created.length` onu SAYMAZ. Yalnız
       // ona bakan mesaj, 5 kalem iplik girildiğinde "0 top eklendi" derdi ve

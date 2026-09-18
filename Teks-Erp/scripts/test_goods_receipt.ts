@@ -35,10 +35,10 @@
 //      birimi) ve YOL GÖSTERİR (hangi ayar, hangi ekrandan kapatılır).
 //      MUAFİYET SONDALARI: siparişsiz (serbest) fiş · fiş iptali (ters yol) ·
 //      `unitPrice: 0` (bedava numune "fiyat yok" DEĞİLDİR).
-//      PARÇALI SONUÇ: engellenen satır `failed[]`e sebebiyle düşer, SAĞLAM
-//      satır KALIR ("42 girdi, 8'ini yutma" kuralı) ve iki guard'ın SIRASI
-//      (önce fiyat = satırın kendi tutarlılığı, sonra sipariş kapsaması =
-//      bağlam) mekanik olarak kilitlidir.
+//      İKİ SINIF (2026-09-17 C8 · 2026-09-18 genişleme): DOĞRULAMA sınıfı (fiyat çözülemedi · siparişten
+//      fazla · renk/özellik/tür) ön-uçuşta HEPSİ toplanır ve 400 `RECEIPT_LINES_INVALID` `details.lines[]` ile
+//      HİÇBİR satır yazılmadan reddedilir (içi boş fiş doğmaz); KOŞU ANI hataları (yarış/409) satır-satır
+//      `failed[]`e düşer, sağlam satır kalır. Guard SIRASI (önce fiyat, sonra sipariş kapsaması) mekanik.
 //   K) ⭐ C4 (2026-08-15) — TEDARİKÇİ = müşteri-tipli cari **XOR** fason firma.
 //      Alış HER cariden yapılabilir (Logo/Mikro/SAP BP) ama TEK cariden. XOR
 //      ihlali 400 + İZ BIRAKMAZ; fason bacağı kolona yazılır; detay/liste İKİ
@@ -85,6 +85,7 @@ import {
 import type { Request } from "express";
 import { randomUUID } from "node:crypto";
 import prisma, { pool } from "../src/lib/prisma";
+import { AppError } from "../src/utils/app-error";
 import { goodsReceiptService } from "../src/services/goods-receipt.service";
 import { InventoryService } from "../src/services/inventory.service";
 import { invoiceService } from "../src/services/invoice.service";
@@ -256,18 +257,24 @@ async function main(): Promise<void> {
   const sarfReceipt = await goodsReceiptService.create({ warehouseId: wh.id });
   const sarfReceiptId = (sarfReceipt.data as { id: string }).id;
   receiptIds.push(sarfReceiptId);
-  const sarfOut = (await goodsReceiptService.addLines(sarfReceiptId, [
-    { itemId: sarfItem.id, initialQty: 25 },
-  ])) as unknown as { created: string[]; failed: Array<{ reason: string }> };
+  // 2026-09-18 (C8 genişlemesi): tür kapısı artık `addLines` İÇİNDEKİ ön-uçuşta — satır döngüsüne girmeden 400
+  // `RECEIPT_LINES_INVALID` (`ITEM_TYPE_NOT_ALLOWED`), `failed[]`e değil. Servis düzeyi çağrı da HTTP ile aynı sözleşme.
+  let sarfErr: AppError | null = null;
+  try {
+    await goodsReceiptService.addLines(sarfReceiptId, [{ itemId: sarfItem.id, initialQty: 25 }]);
+  } catch (e) {
+    sarfErr = e instanceof AppError ? e : null;
+  }
+  const sarfLines = (sarfErr?.details as { code?: string; lines?: Array<{ code: string; message: string }> } | undefined);
   check(
-    "A10) ⭐ SARF kalemi satırı REDDEDİLDİ (top doğmadı)",
-    sarfOut.created.length === 0 && sarfOut.failed.length === 1,
-    `created=${sarfOut.created.length} failed=${sarfOut.failed.length}`,
+    "A10) ⭐ SARF kalemi satırı ÖN-UÇUŞTA reddedildi: 400 RECEIPT_LINES_INVALID / ITEM_TYPE_NOT_ALLOWED (döngüye girmedi)",
+    sarfErr?.statusCode === 400 && sarfLines?.code === "RECEIPT_LINES_INVALID" && sarfLines?.lines?.[0]?.code === "ITEM_TYPE_NOT_ALLOWED",
+    `status=${sarfErr?.statusCode} code=${sarfLines?.code} line=${sarfLines?.lines?.[0]?.code}`,
   );
   check(
     "A10b) Red sebebi kalem TÜRÜNÜ söylüyor (operatör ne yapacağını bilsin)",
-    Boolean(sarfOut.failed[0]?.reason?.includes("top olarak eklenemez")),
-    sarfOut.failed[0]?.reason?.slice(0, 80) ?? "",
+    Boolean(sarfLines?.lines?.[0]?.message?.includes("sarf malzeme")),
+    sarfLines?.lines?.[0]?.message?.slice(0, 80) ?? "",
   );
   const sarfRolls = await prisma.roll.count({ where: { itemId: sarfItem.id } });
   check("A10c) ⭐ Sarf kaleminden HİÇ top doğmadı (envanter kirlenmedi)", sarfRolls === 0, `top=${sarfRolls}`);
@@ -687,6 +694,18 @@ async function main(): Promise<void> {
     };
     const reasonOf = (out: LinesOutJ, index: number): string =>
       out.failed.find((f) => f.index === index)?.reason ?? "";
+    /** Ön-uçuş 400'ü: `AppError` değilse null (beklenmeyen hata sondaya kaçmaz). */
+    const preflightErr = async (fn: () => Promise<unknown>): Promise<AppError | null> => {
+      try {
+        await fn();
+        return null;
+      } catch (e) {
+        return e instanceof AppError ? e : null;
+      }
+    };
+    type Issue = { lineNo: number; code: string; message: string };
+    const issuesOf = (e: AppError | null): Issue[] => ((e?.details as { code?: string; lines?: Issue[] } | undefined)?.lines ?? []);
+    const codeOf = (e: AppError | null): string | undefined => (e?.details as { code?: string } | undefined)?.code;
 
     // ── J1) ① FAZLA KABUL ENGELİ ──────────────────────────────────────────
     // J1a — KAPALI PARİTE: 100 ısmarlandı, 140 geldi → satır YAZILIR ve yalnız
@@ -712,14 +731,12 @@ async function main(): Promise<void> {
     await setFlag(OVER_KEY, true);
     const poOn = await mkOrder(jFab.id, 100);
     const rOn = await mkReceipt(poOn.id);
-    const outOn = (await goodsReceiptService.addLines(rOn, [
-      { itemId: jFab.id, initialQty: 140 },
-    ])) as unknown as LinesOutJ;
-    const onReason = reasonOf(outOn, 0);
+    const eOn = await preflightErr(() => goodsReceiptService.addLines(rOn, [{ itemId: jFab.id, initialQty: 140 }]));
+    const onReason = issuesOf(eOn)[0]?.message ?? "";
     check(
-      "J1c) ⭐ BAYRAK AÇIK: aşan satır REDDEDİLDİ ve failed[]'e SEBEBİYLE düştü",
-      outOn.created.length === 0 && outOn.failed.length === 1,
-      `created=${outOn.created.length} failed=${outOn.failed.length}`,
+      "J1c) ⭐ BAYRAK AÇIK: aşan satır ÖN-UÇUŞTA reddedildi — 400 RECEIPT_LINES_INVALID / OVER_RECEIPT lineNo 1 (döngüye girmedi)",
+      eOn?.statusCode === 400 && codeOf(eOn) === "RECEIPT_LINES_INVALID" && issuesOf(eOn)[0]?.code === "OVER_RECEIPT" && issuesOf(eOn)[0]?.lineNo === 1,
+      `status=${eOn?.statusCode} code=${codeOf(eOn)} line=${issuesOf(eOn)[0]?.code}`,
     );
     check(
       "J1d) ⭐ Mesaj SOMUT: kalem + sipariş no + ısmarlanan + gelmiş + bu satırla oluşacak",
@@ -757,28 +774,21 @@ async function main(): Promise<void> {
     // ve guard tam kendi fişinde delinirdi.
     const poSplit = await mkOrder(jFab.id, 100);
     const rSplit = await mkReceipt(poSplit.id);
-    const outSplit = (await goodsReceiptService.addLines(rSplit, [
-      { itemId: jFab.id, initialQty: 60 },
-      { itemId: jFab.id, initialQty: 60 },
-    ])) as unknown as LinesOutJ;
+    const eSplit = await preflightErr(() => goodsReceiptService.addLines(rSplit, [{ itemId: jFab.id, initialQty: 60 }, { itemId: jFab.id, initialQty: 60 }]));
     check(
-      "J1h) ⭐ ÇAĞRI-İÇİ SAYAÇ: 60 geçti, ikinci 60 aşımdan reddedildi",
-      outSplit.created.length === 1 &&
-        outSplit.failed.length === 1 &&
-        reasonOf(outSplit, 1).includes("60 m gelmiş"),
-      `created=${outSplit.created.length} failed=${outSplit.failed.length} · ${reasonOf(outSplit, 1).slice(0, 90)}`,
+      "J1h) ⭐ SATIRLAR ARASI TOPLAM ön-uçuşta: ikinci 60 aşım (lineNo 2, '60 m gelmiş'); HEPSİ YA DA HİÇBİRİ — ilk 60 da yazılmadı",
+      issuesOf(eSplit).length === 1 && issuesOf(eSplit)[0]?.lineNo === 2 && issuesOf(eSplit)[0]?.code === "OVER_RECEIPT" && (issuesOf(eSplit)[0]?.message ?? "").includes("60 m gelmiş") &&
+        (await prisma.roll.count({ where: { goodsReceiptId: rSplit } })) === 0,
+      `ihlal=${issuesOf(eSplit).length} · ${(issuesOf(eSplit)[0]?.message ?? "").slice(0, 90)}`,
     );
 
     // J1i — SİPARİŞTE HİÇ OLMAYAN ÜRÜN de engellenir, mesajı AYRIDIR.
-    const outUnmatched = (await goodsReceiptService.addLines(rEq, [
-      { itemId: jOther.id, initialQty: 5 },
-    ])) as unknown as LinesOutJ;
+    const eUnmatched = await preflightErr(() => goodsReceiptService.addLines(rEq, [{ itemId: jOther.id, initialQty: 5 }]));
+    const unmatchedMsg = issuesOf(eUnmatched)[0]?.message ?? "";
     check(
-      "J1i) ⭐ Siparişte OLMAYAN ürün reddedildi ve sebebi ayrı cümle ('siparişinde YOK')",
-      outUnmatched.created.length === 0 &&
-        reasonOf(outUnmatched, 0).includes("siparişinde YOK") &&
-        reasonOf(outUnmatched, 0).includes("Yanlış sipariş seçilmiş olabilir"),
-      reasonOf(outUnmatched, 0).slice(0, 120),
+      "J1i) ⭐ Siparişte OLMAYAN ürün ön-uçuşta reddedildi (OVER_RECEIPT) ve sebebi ayrı cümle ('siparişinde YOK')",
+      issuesOf(eUnmatched)[0]?.code === "OVER_RECEIPT" && unmatchedMsg.includes("siparişinde YOK") && unmatchedMsg.includes("Yanlış sipariş seçilmiş olabilir"),
+      unmatchedMsg.slice(0, 120),
     );
 
     // J1j — MUAFİYET: SİPARİŞSİZ (serbest) fiş. Bayrak AÇIKKEN bile geçer —
@@ -825,16 +835,13 @@ async function main(): Promise<void> {
 
     await setFlag(PRICE_KEY, true);
     const rPriceOn = await mkReceipt(null);
-    const outPriceOn = (await goodsReceiptService.addLines(rPriceOn, [
-      { itemId: jFab.id, initialQty: 10 },
-    ])) as unknown as LinesOutJ;
-    const priceReason = reasonOf(outPriceOn, 0);
+    const ePrice = await preflightErr(() => goodsReceiptService.addLines(rPriceOn, [{ itemId: jFab.id, initialQty: 10 }]));
+    const priceReason = issuesOf(ePrice)[0]?.message ?? "";
     check(
-      "J2b) ⭐ BAYRAK AÇIK: fiyatı çözülemeyen satır reddedildi (failed[] + iz yok)",
-      outPriceOn.created.length === 0 &&
-        outPriceOn.failed.length === 1 &&
+      "J2b) ⭐ BAYRAK AÇIK: fiyatı çözülemeyen satır ÖN-UÇUŞTA reddedildi (400 PRICE_REQUIRED + iz yok)",
+      codeOf(ePrice) === "RECEIPT_LINES_INVALID" && issuesOf(ePrice)[0]?.code === "PRICE_REQUIRED" &&
         (await prisma.roll.count({ where: { goodsReceiptId: rPriceOn } })) === 0,
-      `created=${outPriceOn.created.length}`,
+      `code=${codeOf(ePrice)} line=${issuesOf(ePrice)[0]?.code}`,
     );
     check(
       "J2c) ⭐ Mesaj SOMUT + YOL GÖSTERİYOR (kalem + para birimi + iki çıkış yolu + ayar)",
@@ -886,40 +893,41 @@ async function main(): Promise<void> {
     );
 
     // J2g — İPLİK satırı da aynı kapıdan geçer: guard satır TİPİNDEN bağımsız.
-    const outYarn = (await goodsReceiptService.addLines(rPriceOn, [
-      { itemId: jYarn.id, initialQty: 40 },
-    ])) as unknown as LinesOutJ;
+    const eYarn = await preflightErr(() => goodsReceiptService.addLines(rPriceOn, [{ itemId: jYarn.id, initialQty: 40 }]));
     const yarnRows = await prisma.yarnMovement.count({ where: { goodsReceiptId: rPriceOn } });
     check(
-      "J2g) ⭐ Fiyatsız İPLİK satırı da reddedildi ve defterde hareket doğmadı",
-      outYarn.createdYarn.length === 0 && outYarn.failed.length === 1 && yarnRows === 0,
-      `iplik=${outYarn.createdYarn.length} hareket=${yarnRows}`,
+      "J2g) ⭐ Fiyatsız İPLİK satırı da ön-uçuşta reddedildi (PRICE_REQUIRED) ve defterde hareket doğmadı",
+      issuesOf(eYarn)[0]?.code === "PRICE_REQUIRED" && yarnRows === 0,
+      `kod=${issuesOf(eYarn)[0]?.code} hareket=${yarnRows}`,
     );
 
     // ── J3) PARÇALI SONUÇ + GUARD SIRASI (ikisi birden açık) ──────────────
     await setFlag(OVER_KEY, true);
     const poMix = await mkOrder(jFab.id, 100);
     const rMix = await mkReceipt(poMix.id);
-    const outMix = (await goodsReceiptService.addLines(rMix, [
-      { itemId: jFab.id, initialQty: 50, unitPrice: 10 }, // sağlam
-      { itemId: jFab.id, initialQty: 10 }, // fiyat yok
-      { itemId: jFab.id, initialQty: 80, unitPrice: 10 }, // 50+80 > 100 → aşım
-      { itemId: jFab.id, initialQty: 500 }, // hem fiyatsız hem aşım
-    ])) as unknown as LinesOutJ;
+    const eMix = await preflightErr(() =>
+      goodsReceiptService.addLines(rMix, [
+        { itemId: jFab.id, initialQty: 50, unitPrice: 10 }, // sağlam
+        { itemId: jFab.id, initialQty: 10 }, // fiyat yok
+        { itemId: jFab.id, initialQty: 80, unitPrice: 10 }, // 50+80 > 100 → aşım (2. satır sayılmaz: kendi ihlalinde düştü)
+        { itemId: jFab.id, initialQty: 500 }, // hem fiyatsız hem aşım
+      ]),
+    );
+    const mix = issuesOf(eMix);
     check(
-      "J3a) ⭐ PARÇALI SONUÇ: sağlam satır KALDI, üçü sebebiyle atlandı (yutulmadı)",
-      outMix.created.length === 1 && outMix.failed.length === 3,
-      `created=${outMix.created.length} failed=${outMix.failed.length}`,
+      "J3a) ⭐ HEPSİ YA DA HİÇBİRİ: üç ihlal TEK 400'de listelendi (lineNo 2·3·4), sağlam 1. satır da YAZILMADI",
+      mix.length === 3 && mix.map((i) => i.lineNo).join(",") === "2,3,4" && (await prisma.roll.count({ where: { goodsReceiptId: rMix } })) === 0,
+      `ihlal=${mix.map((i) => `${i.lineNo}:${i.code}`).join(" ")}`,
     );
     check(
       "J3b) Sebepler AYRIŞIYOR: 2. satır fiyat, 3. satır sipariş kapsaması",
-      reasonOf(outMix, 1).includes("birim fiyat çözülemedi") && reasonOf(outMix, 2).includes("ısmarlandı"),
-      `${reasonOf(outMix, 1).slice(0, 40)} || ${reasonOf(outMix, 2).slice(0, 40)}`,
+      mix[0]?.code === "PRICE_REQUIRED" && mix[1]?.code === "OVER_RECEIPT" && (mix[1]?.message ?? "").includes("ısmarlandı"),
+      `${mix[0]?.code} || ${mix[1]?.code}`,
     );
     check(
       "J3c) ⭐ SIRA SÖZLEŞMESİ: iki guard da ihlal edilince ÖNCE fiyat söylenir (satırın kendi tutarlılığı)",
-      reasonOf(outMix, 3).includes("birim fiyat çözülemedi"),
-      reasonOf(outMix, 3).slice(0, 90),
+      mix[2]?.code === "PRICE_REQUIRED" && (mix[2]?.message ?? "").includes("birim fiyat çözülemedi"),
+      (mix[2]?.message ?? "").slice(0, 90),
     );
 
     check(

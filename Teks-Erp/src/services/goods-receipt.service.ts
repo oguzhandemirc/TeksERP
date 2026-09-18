@@ -36,8 +36,7 @@ import {
   PurchaseOrderStatus,
   RollEntrySource,
   RollStatus,
-  YarnMovementKind,
-} from "@prisma/client";
+  YarnMovementKind, Currency } from "@prisma/client";
 import { unitLabel } from "../constants/item-unit";
 import { registerPrintedDocBuilder } from "./printed-document.service";
 import { renderGoodsReceiptHtml, type GoodsReceiptDoc } from "./document-render/warehouse-doc.html";
@@ -49,7 +48,7 @@ import { resolveItemPricesFor } from "./item-price.service";
 import { applyYarnMovementTx } from "./yarn.service";
 import { reverseGoodsReceiptYarnTx } from "./helpers/yarn-receipt-reversal.helper";
 import { ensureYarnLotTx, normalizeLotNo } from "./helpers/yarn-lot.helper";
-import { assertReceiptLinesValid, YARN_LOT_REQUIRED_MESSAGE } from "./helpers/goods-receipt-preflight.helper";
+import { assertReceiptLinesValid, overReceiptMessage, priceRequiredMessage, qtyText, YARN_LOT_REQUIRED_MESSAGE, type PreflightContext } from "./helpers/goods-receipt-preflight.helper";
 import { yarnMovementSign } from "./helpers/yarn-sign.helper";
 // J1 — iki OPT-IN katılık bayrağı (ikisi de varsayılan KAPALI; kapalıyken tek
 // maliyet ayar okumasıdır ve davranış bayt-bayt bugünküdür).
@@ -387,7 +386,6 @@ export function describeOverReceipt(sync: PurchaseOrderSyncResult | null | undef
 const D0 = new Prisma.Decimal(0);
 
 /** Kullanıcıya basılan miktar: decimal.js sondaki sıfırları zaten atar. */
-const qtyText = (v: Prisma.Decimal, unit: string): string => `${v.toString()} ${unit}`;
 
 /**
  * Bir sipariş kaleminin KALAN KAPASİTESİ — damga tahsisinin defteri (J2).
@@ -553,23 +551,9 @@ function assertNotOverReceipt(
 ): void {
   const ordered = ctx.ordered.get(itemId) ?? D0;
   const already = (ctx.received.get(itemId) ?? D0).plus(ctx.pending.get(itemId) ?? D0);
-  const after = already.plus(qty);
-  if (after.lte(ordered)) return;
-
-  const tail =
-    `"Siparişten fazla mal kabulünü engelle" ayarı açık — fazlayı kaydetmek için siparişe bağlı OLMAYAN ` +
-    `ayrı bir mal kabul fişi açın, siparişi düzeltin ya da Ayarlar > Depo & Satın Alma'dan ayarı kapatın.`;
-
-  if (ordered.isZero()) {
-    throw AppError.badRequest(
-      `"${itemName}" ${ctx.orderNo} siparişinde YOK (ısmarlanan 0), bu satırla ${qtyText(qty, unit)} girilecek. ` +
-        `Yanlış sipariş seçilmiş olabilir. ${tail}`,
-    );
-  }
-  throw AppError.badRequest(
-    `"${itemName}": ${ctx.orderNo} siparişinde ${qtyText(ordered, unit)} ısmarlandı, ${qtyText(already, unit)} gelmiş; ` +
-      `bu satırla ${qtyText(after, unit)} olur (${qtyText(after.minus(ordered), unit)} fazla). ${tail}`,
-  );
+  if (already.plus(qty).lte(ordered)) return;
+  // Metin TEK yerde (preflight helper) — ön-uçuş aynı cümleyi satıra bağlar.
+  throw AppError.badRequest(overReceiptMessage({ orderNo: ctx.orderNo, itemName, ordered, already, qty, unit }));
 }
 
 /**
@@ -593,11 +577,43 @@ function assertLinePriceResolved(
   currency: string,
 ): void {
   if (price != null) return;
-  throw AppError.badRequest(
-    `"${itemName}": birim fiyat çözülemedi — satırda fiyat yok ve kalem kartında ${currency} alış fiyatı tanımlı değil. ` +
-      `"Mal kabul satırında birim fiyat zorunlu" ayarı açık — satıra fiyatı girin, kalemin ${currency} alış fiyatını ` +
-      `Tanımlar > Kalem Fiyatları'ndan tanımlayın ya da Ayarlar > Depo & Satın Alma'dan ayarı kapatın.`,
-  );
+  throw AppError.badRequest(priceRequiredMessage(itemName, currency)); // metin TEK yerde (preflight helper)
+}
+
+/**
+ * Satır fiyat zinciri — TEK KAYNAK (ön-uçuş + döngü guard'ı aynı fonksiyondan okur, ikinci zincir yok):
+ * satırın kendi fiyatı > siparişin anlaşılan fiyatı > kalem kartı (tedarikçi istisnası > varsayılan) > null.
+ */
+async function resolveLinePrices(
+  lines: GoodsReceiptLineInput[],
+  p: { purchaseOrderId: string | null; supplierId: string | null; currency: Currency },
+): Promise<{ priceFor: (line: GoodsReceiptLineInput) => Prisma.Decimal.Value | null; contract: Awaited<ReturnType<typeof loadContractPrices>> }> {
+  const priceNeeded = [...new Set(lines.filter((l) => l.unitPrice == null).map((l) => l.itemId))];
+  const priceMap =
+    priceNeeded.length > 0
+      ? await resolveItemPricesFor({ itemIds: priceNeeded, kind: PriceKind.PURCHASE, currency: p.currency, customerId: p.supplierId })
+      : null;
+  const contract = await loadContractPrices(priceNeeded.length > 0 ? p.purchaseOrderId : null);
+  const priceFor = (line: GoodsReceiptLineInput): Prisma.Decimal.Value | null =>
+    line.unitPrice ?? contract.priceOf(line.itemId) ?? priceMap?.get(line.itemId)?.price ?? null;
+  return { priceFor, contract };
+}
+
+/**
+ * Ön-uçuş bağlamı — bayraklar + fiyat zinciri + sipariş bağlamı BİR kurucudan; `create` (başlık açılmadan) ve
+ * `addLines` aynı kurucuyu çağırır. `loadPurchaseOrderContext` advisory kilit (8027) alır ve HİÇBİR tx'in içinde
+ * çağrılmaz — bu kurucu da tx dışındadır (aşağıdaki sipariş bağlamı yorumu aynen geçerli).
+ */
+async function buildPreflightContext(
+  lines: GoodsReceiptLineInput[],
+  p: { purchaseOrderId: string | null; supplierId: string | null; currency: Currency },
+): Promise<{ ctx: PreflightContext; priceFor: (line: GoodsReceiptLineInput) => Prisma.Decimal.Value | null; contract: Awaited<ReturnType<typeof loadContractPrices>>; orderCtx: PurchaseOrderReceiptContext | null; blockOverReceipt: boolean; requirePrice: boolean }> {
+  const { priceFor, contract } = await resolveLinePrices(lines, p);
+  const requirePrice = await resolveGoodsReceiptRequirePriceEnabled();
+  const blockOverReceipt = p.purchaseOrderId ? await resolvePurchaseBlockOverReceiptEnabled() : false;
+  const orderCtx = p.purchaseOrderId ? await loadPurchaseOrderContext(p.purchaseOrderId) : null;
+  const overReceipt = blockOverReceipt && orderCtx ? { orderNo: orderCtx.orderNo, ordered: orderCtx.ordered, received: orderCtx.received } : null;
+  return { ctx: { requirePrice, priceFor, currency: p.currency, overReceipt }, priceFor, contract, orderCtx, blockOverReceipt, requirePrice };
 }
 
 /**
@@ -647,9 +663,13 @@ export class GoodsReceiptService {
    * sormaz; sözleşme yine de açıktır).
    */
   async create(input: GoodsReceiptCreateInput, userId?: string): Promise<ApiResponse<unknown>> {
-    // ÖN-UÇUŞ (C8, 2026-09-17): doğrulama sınıfı satır hataları fiş BAŞLIĞI açılmadan 400 — içi boş fiş doğmaz.
-    // `failed[]` yalnız koşu anı (yarış/kilit) hataları için kalır.
-    if (input.lines?.length) await assertReceiptLinesValid(input.lines);
+    // ÖN-UÇUŞ (C8, 2026-09-17; beş sınıf daha 2026-09-18): doğrulama sınıfı satır hataları fiş BAŞLIĞI açılmadan 400 —
+    // içi boş fiş doğmaz. Bağlam (fiyat zinciri · sipariş ordered/received) GİRDİDEN kurulur; `addLines` başlık açıldıktan
+    // sonra aynı kurucuyu bir kez daha çağırır (iki küçük okuma; doğruluk > tasarruf). `failed[]` yalnız koşu anı (yarış/kilit).
+    if (input.lines?.length) {
+      const pre = await buildPreflightContext(input.lines, { purchaseOrderId: input.purchaseOrderId ?? null, supplierId: input.supplierId ?? null, currency: input.currency ?? "TRY" });
+      await assertReceiptLinesValid(input.lines, pre.ctx);
+    }
     const warehouse = await prisma.warehouse.findUnique({
       where: { id: input.warehouseId },
       select: { id: true, name: true, isActive: true },
@@ -800,7 +820,7 @@ export class GoodsReceiptService {
     });
 
     const lineResult: AddLinesResult = input.lines?.length
-      ? await this.addLines(receipt.id, input.lines, userId)
+      ? await this.addLines(receipt.id, input.lines, userId, { preflightDone: true })
       : { created: [], createdYarn: [], failed: [], purchaseOrder: null };
 
     return {
@@ -863,7 +883,7 @@ export class GoodsReceiptService {
    * ⚠️ Baştaki statü kontrolü HIZLI YOLDUR (UX) — asıl sed her satır tx'inin
    * içindeki `claimActiveReceiptTx`tir (Sınıf 4, I1).
    */
-  async addLines(receiptId: string, lines: GoodsReceiptLineInput[], userId?: string): Promise<AddLinesResult> {
+  async addLines(receiptId: string, lines: GoodsReceiptLineInput[], userId?: string, opts: { preflightDone?: boolean } = {}): Promise<AddLinesResult> {
     const receipt = await prisma.goodsReceipt.findUnique({
       where: { id: receiptId },
       // ⚠️ `supplierId` + `currency` fiyat ÖN-DOLUMU (D2) için okunur: fiyat
@@ -917,30 +937,11 @@ export class GoodsReceiptService {
     // alış fiyatı SAKLANAMAZ. Fason bacaklı fişte `receipt.supplierId` NULL
     // olduğu için zincir doğal olarak KART VARSAYILANINA düşer — uydurma bir
     // eşleme (örn. aynı adlı müşteriyi aramak) yanlış fiyatı sessizce yazardı.
-    const priceNeeded = [...new Set(lines.filter((l) => l.unitPrice == null).map((l) => l.itemId))];
-    const priceMap =
-      priceNeeded.length > 0
-        ? await resolveItemPricesFor({
-            itemIds: priceNeeded,
-            kind: PriceKind.PURCHASE,
-            currency: receipt.currency,
-            customerId: receipt.supplierId,
-          })
-        : null;
-    // ── SÖZLEŞME (SİPARİŞ) FİYATI — KART FİYATININ ÖNÜNDE ────────────────────
-    // ⚠️ KATMANIN YERİ BURASIDIR, FATURA DEĞİL. Kart fiyatı bu satırda
-    // `Roll.purchasePrice`e DONUYOR; katman yalnız faturada dursaydı
-    // (2026-08-15 öncesi hâli) fatura zinciri ilk terimde durur ve sözleşme
-    // fiyatına HİÇ inmezdi — yani anlaşılan rakam, tam da anlaşıldığı
-    // senaryoda sessizce terk edilirdi. Gerekçe + ölçüm:
-    // `helpers/contract-price.helper.ts` başlığı.
-    // ⚠️ TEK SORGU ve yalnız fiş bir siparişe BAĞLIYSA koşar (siparişsiz
-    // üretici yolunda tek sorgu bile eklenmez); satır sayısından bağımsızdır.
-    const contract = await loadContractPrices(
-      priceNeeded.length > 0 ? receipt.purchaseOrderId : null,
-    );
-    const priceFor = (line: GoodsReceiptLineInput): Prisma.Decimal.Value | null =>
-      line.unitPrice ?? contract.priceOf(line.itemId) ?? priceMap?.get(line.itemId)?.price ?? null;
+    // Fiyat zinciri + bayraklar + sipariş bağlamı TEK kurucudan; `POST /:id/lines` yolunda ön-uçuş BURADA (tam bağlamla),
+    // `create` yolunda başlık açılmadan zaten koştu (`preflightDone`). Sipariş bağlamının kısıtları aşağıdaki yorumda.
+    const pre = await buildPreflightContext(lines, { purchaseOrderId: receipt.purchaseOrderId, supplierId: receipt.supplierId, currency: receipt.currency });
+    if (!opts.preflightDone) await assertReceiptLinesValid(lines, pre.ctx);
+    const { priceFor, contract } = pre;
 
     // Kalem TÜRLERİ TEK sorguda okunur (N+1 yok — 500 satırlık fişte satır
     // başına lookup perf kuralı 7/9 ihlali olurdu). Bulunamayan kalem burada
@@ -971,8 +972,7 @@ export class GoodsReceiptService {
     // yolunda tek ek sorgu bile koşmaz. Enforcement reader kalıbı gereği ayar
     // okuması cache'sizdir: panelden kapatılan bayrak bir sonraki fişte anında
     // etkisizleşir (acil kapatma yolu).
-    const requirePrice = await resolveGoodsReceiptRequirePriceEnabled();
-    const blockOverReceipt = receipt.purchaseOrderId ? await resolvePurchaseBlockOverReceiptEnabled() : false;
+    const { requirePrice, blockOverReceipt, orderCtx } = pre;
     // ── SİPARİŞ BAĞLAMI (J1 guard'ı ① + J2 damgası ②) ──────────────────────
     // ⚠️ BAYRAKTAN BAĞIMSIZ YÜKLENİR ve bu J2 ile geldi: damga bir DAVRANIŞ
     // değil bir İZDİR (koşulsuz yazılır, hiçbir satırı reddetmez) — bayrağın
@@ -990,7 +990,7 @@ export class GoodsReceiptService {
     // kilit sırası her yolda AYNI (önce advisory, sonra satır) ve ABBA yok;
     // buradan çağrılan senkronu satır kilidinin altına taşımak o sırayı tersine
     // çevirir ve iki alt sistem arasında deadlock doğurur.
-    const orderCtx = receipt.purchaseOrderId ? await loadPurchaseOrderContext(receipt.purchaseOrderId) : null;
+    // (çağrı artık `buildPreflightContext` içinde — yukarıdaki kısıtlar aynen geçerli)
     const overCtx = blockOverReceipt ? orderCtx : null;
 
     // ── C2: TOPUN DOĞACAĞI RAF ────────────────────────────────────────────
