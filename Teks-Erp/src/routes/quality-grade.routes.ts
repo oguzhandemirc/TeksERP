@@ -27,6 +27,9 @@ const MOBILE_QUALITY_READ = [
   "mobile:iade",
   "mobile:depo",
   "mobile:sevkiyat",
+  // Fason Dokuma Kabul: Top kabul sayfalı formunda kalite alanı katalogdan seçilir (serbest metin kalktı,
+  // 2026-09-18) — operatörün JWT'sinde quality:read olmayabilir; yalnız LİSTE okuma.
+  "mobile:fason-kabul",
 ] as const;
 
 // QualityGrade.targetStatus / returnTargetStatus = RollStatus enum; Tambur çıktısı bu
