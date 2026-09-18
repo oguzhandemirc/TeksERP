@@ -76,6 +76,24 @@ const KUNYEDEN = process.argv.includes("--kunyeden");
 const liste = (dizi, tavan = 6) =>
   dizi.slice(0, tavan).join(" · ") + (dizi.length > tavan ? ` … (ilk ${tavan}/${dizi.length})` : "");
 
+/**
+ * Metni KARŞILAŞTIRILABİLİR hâle getirir: etiketleri at, küçük harfe (tr) indir,
+ * kesme/tırnak/noktalama ve boşluğu sadeleştir. §9b (kodda içeriliyor mu) ve §10
+ * (aynı cümle iki kez mi) AYNI soruyu sorar ⇒ yüklem tek yerde yaşar.
+ * ⚠️ ÖNCE ETİKETLER: ekran metni JSX/HTML içinde `<b>…</b>` ile bölünür ve operatör
+ * o etiketleri GÖRMEZ. Sadeleştirmeden atılmazsa kapı, doğru kopyalanmış bir cümleyi
+ * bile "kodda yok" sayar (ölçüldü 2026-09-15: yedek saati cümlesi `<b>` yüzünden
+ * kırmızı verdi).
+ */
+const sadeles = (t) => String(t ?? "")
+  .replace(/<[^>]*>/g, " ")
+  .toLocaleLowerCase("tr")
+  .replace(/[’'`´]/g, "'")
+  .replace(/[“”"]/g, "")
+  .replace(/[.,;:!?()[\]{}<>/\\|—–-]/g, " ")
+  .replace(/\s+/g, " ")
+  .trim();
+
 const arg = (ad) => {
   const p = process.argv.find((a) => a.startsWith(`--${ad}=`));
   return p ? p.slice(ad.length + 3) : null;
@@ -426,18 +444,6 @@ console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı (§9a kısa ad · §9b 
       { alinti: "kapsam sevk irsaliyesi ve muhasebe fişidir", gerekce: "Belge kapsamının anlatımı; ekranda bu cümle yazmaz." },
       { alinti: "kapanışın fire kalanıdır, kapanışı tümden geri alın", gerekce: "Reddin GEREKÇESİNİN özeti; sunucu mesajı farklı kurulur (parça/kapanış adlarıyla)." },
     ];
-    // ⚠️ ÖNCE ETİKETLER: ekran metni JSX/HTML içinde `<b>…</b>` ile bölünür ve
-    // operatör o etiketleri GÖRMEZ. Sadeleştirmeden atılmazsa kapı, doğru
-    // kopyalanmış bir cümleyi bile "kodda yok" sayar (ölçüldü: yedek saati
-    // cümlesi `<b>` yüzünden kırmızı verdi).
-    const sadeles = (t) => t
-      .replace(/<[^>]*>/g, " ")
-      .toLocaleLowerCase("tr")
-      .replace(/[’'`´]/g, "'")
-      .replace(/[“”"]/g, "")
-      .replace(/[.,;:!?()[\]{}<>/\\|—–-]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
     const govdeSade = sadeles(govde);
     const uzunAdaylar = new Map();
     for (const y of yayinlar) {
@@ -471,6 +477,72 @@ console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı (§9a kısa ad · §9b 
     check("etiket muafiyet sınıfları kapalı kümede", MUAF_ETIKETLER.every((x) => MUAF_SINIFLARI.has(x.sinif)),
       MUAF_ETIKETLER.filter((x) => !MUAF_SINIFLARI.has(x.sinif)).map((x) => String(x.sinif)).join(" · "));
   }
+}
+
+console.log("\n§10 — TEKRAR (aynı cümle iki kez: birleştirme artefaktı)");
+// ⚠️ NEDEN VAR: bir yayının maddeleri tur boyunca BİRLEŞTİRİLİR (aynı ekranın iki
+// dilimi tek maddede toplanır). Birleştirici parça parça çalıştığında aynı paragrafı
+// İKİ KEZ bırakabiliyor; sonuç okuyana yeni bir şey söylemez ama maddeyi iki katına
+// çıkarır ve gözle okunurken FARK EDİLMEZ (üç kez fark edilmedi). Ölçüldü 2026-09-18:
+// #122, bir başka maddenin (#120) TAM METNİNİ taşıyordu; bulgunun ardından koşulan
+// tekrar taraması #3'te 1.189, #4'te 1.419 karakter madde-İÇİ tekrar buldu — ikisi de
+// 3,3–3,7 KB'lik maddelerdi ve biri (#3) SAR penceresini #4 ile ÇELİŞEN bir biçimde
+// anlatıyordu (kapının yakaladığı tekrar, çelişkiyi de görünür kıldı).
+//
+// ⚠️ YÜKLEM normalize CÜMLE eşitliğidir (`sadeles`). Beyanlı sınır: YARIM cümle
+// tekrarını ölçmez — artefakt bütün paragrafı kopyaladığı için cümle düzeyi yetti.
+// ⚠️ Eşik 20 normalize karakter. Ölçülen taban (onarım sonrası): madde içi tekrar
+// EŞİKSİZ de 0 · maddeler arası 3 çift (52 · 42 · 10 karakter) — ilki ikisi meşru
+// güvence cümlesi (BEYANLI), üçüncüsü ("düzeltildi") eşiğin altında · yayınlar arası 0.
+{
+  const EN_AZ = 20;
+  /**
+   * Beyanlı muafiyet — BİLEREK birden çok maddede tekrarlanan güvence cümleleri.
+   * Ölü satır da kırmızıdır (beyan ↔ madde iki yönlü).
+   */
+  const TEKRAR_MUAFLARI = [
+    { cumle: "Kayıt ağ olmadan kuyruklanmaz, gitmezse anında söyler.", gerekce: "Tabletin çevrimdışı davranışı; her tablet ekranı maddesi TEK BAŞINA okunur, ortak bir yere taşınamaz." },
+    { cumle: "Modül kapalı kurulumda hiçbir şey değişmez.", gerekce: "Modüle bağlı maddenin kapanış güvencesi; okuyucu yalnız ilgilendiği maddeyi okur." },
+  ];
+  const cumleler = (t) => String(t ?? "").split(/(?<=[.!?])\s+/).map(sadeles).filter((c) => c.length >= EN_AZ);
+  const muafCumleler = new Set(TEKRAR_MUAFLARI.map((x) => sadeles(x.cumle)));
+
+  // ① MADDE İÇİ — muafiyeti YOK: bir madde kendini tekrar etmez (taban eşiksiz de 0).
+  const icTekrar = [];
+  let maddeSayisi = 0;
+  let cumleSayisi = 0;
+  const yerler = new Map();
+  for (const y of yayinlar) {
+    (y.maddeler ?? []).forEach((m, i) => {
+      maddeSayisi++;
+      const cs = cumleler(m.metin);
+      cumleSayisi += cs.length;
+      const sayac = new Map();
+      for (const c of cs) sayac.set(c, (sayac.get(c) ?? 0) + 1);
+      for (const [c, n] of sayac) {
+        if (n > 1) icTekrar.push(`${y.id}#${i + 1} ×${n} (${c.length}) ${JSON.stringify(c.slice(0, 60))}`);
+      }
+      // ② MADDELER ARASI (aynı yayın ya da iki ayrı yayın — ikisi de aynı kusuru gösterir)
+      for (const c of new Set(cs)) yerler.set(c, (yerler.get(c) ?? []).concat(`${y.id}#${i + 1}`));
+    });
+  }
+  check("körlük zemini: madde ve cümle okundu", maddeSayisi > 0 && cumleSayisi > 0,
+    `${maddeSayisi} madde · ${cumleSayisi} cümle (eşik ${EN_AZ} karakter) · ${TEKRAR_MUAFLARI.length} beyanlı tekrar`, true);
+  check("⭐ bir madde AYNI cümleyi iki kez yazmıyor", icTekrar.length === 0,
+    `${icTekrar.length} iç tekrar: ${liste(icTekrar)}`
+      + " — birleştirme artefaktı: kopyayı DÜŞÜR (bu kolun muafiyeti YOK)");
+
+  const capraz = [];
+  for (const [c, yer] of yerler) {
+    if (yer.length < 2 || muafCumleler.has(c)) continue;
+    capraz.push(`(${c.length}) ${JSON.stringify(c.slice(0, 60))} → ${yer.join(", ")}`);
+  }
+  check("⭐ aynı cümle iki ayrı maddede yok ya da BEYANLI", capraz.length === 0,
+    `${capraz.length} tekrar: ${liste(capraz)}`
+      + " — konuyu TEK maddede topla; bilerek tekrarlanan güvence cümlesiyse TEKRAR_MUAFLARI'na gerekçesiyle yaz");
+  const oluTekrarMuaf = TEKRAR_MUAFLARI.filter((x) => (yerler.get(sadeles(x.cumle)) ?? []).length < 2);
+  check("ölü TEKRAR muafiyeti yok (beyan ↔ madde iki yönlü)", oluTekrarMuaf.length === 0,
+    oluTekrarMuaf.map((x) => JSON.stringify(x.cumle)).join(" · "));
 }
 
 // --- Yayın kapısı (argümanla ya da künyeden) -----------------------------
