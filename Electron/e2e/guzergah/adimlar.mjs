@@ -1022,7 +1022,7 @@ export const ADIMLAR = [
       { ad: "başka müşteriye Sevk Et → 409 OWNER_MISMATCH", sql: `SELECT 1`, oku: () => `${i4Olcum.redDurum}:${i4Olcum.redKod}`, beklenen: "409:OWNER_MISMATCH" },
       { ad: "409 gövdesi etkilenen top barkodunu ve sahibi (TEST Müşteri) listeler", sql: `SELECT 1`, oku: () => `${i4Olcum.redTopVar}:${i4Olcum.redSahipVar}`, beklenen: "1:1" },
       { ad: "ekrandaki toast barkodu taşır (soyut sayı değil)", sql: `SELECT 1`, oku: () => i4Olcum.tostSahipVar, beklenen: 1 },
-      { ad: "ÖNİZLEME sahiplik çatışmasını göstermiyor (bulgu: red yalnız Sevk Et'te)", sql: `SELECT 1`, oku: () => i4Olcum.onizlemeSahipVar, beklenen: 0 },
+      { ad: "ÖNİZLEME sahiplik çatışmasını Sevk Et'ten ÖNCE gösterir (emanet uyarısı; eski davranış 0 idi — K bulgusu kapandı)", sql: `SELECT 1`, oku: () => i4Olcum.onizlemeSahipVar, beklenen: (v) => v >= 1 },
       { ad: "başka müşteride sevkiyat DOĞMADI (fark 0); TEST Müşteri'de +1 sevkiyat, DISPATCHED (shipments)",
         sql: `SELECT (SELECT count(*) FROM shipments s JOIN customers c ON c.id=s."customerId" WHERE c.name=$1)::int diger, (SELECT count(*) FROM shipments s JOIN customers c ON c.id=s."customerId" WHERE c.name=$2)::int test, (SELECT status::text FROM shipments s JOIN customers c ON c.id=s."customerId" WHERE c.name=$2 ORDER BY s."createdAt" DESC LIMIT 1) durum`,
         params: () => [i4Olcum.digerMusteri, buyukTr(AD.musteri)], oku: (r) => `${r[0].diger - i4Olcum.digerOnce}:${r[0].test - i4Olcum.testOnce}:${r[0].durum}`, beklenen: (v) => /^0:1:DISPATCHED$/.test(v) },
@@ -1121,7 +1121,7 @@ export const ADIMLAR = [
   },
   {
     id: "N6", rol: "M", gerektirir: ["I7"],
-    yol: "API · iade SONRASI sevkiyattan fatura taslağı önizlemesi — satırlar BRÜT (25 m) olmalı; resmi belge brütleştirir, taslak kurucu brütleştirmiyor", rota: "operations/accounting-dispatch",
+    yol: "API · iade SONRASI sevkiyattan fatura taslağı önizlemesi — satırlar BRÜT (25 m): resmi belge ile aynı küme (7fae2716 öncesi taslak NET çıkıyordu)", rota: "operations/accounting-dispatch",
     async yap({ api, sql }) {
       // Aynı süreçte I7 koşmadıysa: TEST Müşteri'nin iade almış son sevkiyatı.
       n6Olcum.sevkId = i7Olcum.sevkId ?? (await sql(`SELECT s.id FROM shipments s JOIN customers c ON c.id=s."customerId" WHERE c.name=$1 AND EXISTS (SELECT 1 FROM roll_returns rr WHERE rr."fromShipmentId"=s.id AND rr."cancelledAt" IS NULL) ORDER BY s."createdAt" DESC LIMIT 1`, [buyukTr(AD.musteri)]))[0]?.id ?? null;
@@ -1134,7 +1134,7 @@ export const ADIMLAR = [
     },
     async bekle() {},
     dogrula: [
-      { ad: "BRÜT KURALI: iade sonrası fatura taslağı satırları sevk rakamını (25 m) taşımalı — belge özeti brüt, taslak kurucu `roll.shipmentId`den okuyor (shipment-auto-draft.helper collectShipmentInvoiceDraftLines)",
+      { ad: "BRÜT KURALI: iade sonrası fatura taslağı satırları sevk rakamını (25 m) taşır — belge özetiyle aynı (collectShipmentInvoiceDraftLines RollReturn ile brütleştirir)",
         sql: `SELECT 1`, oku: () => `taslak:${n6Olcum.satir} satır/${n6Olcum.metre} m · belge özeti:${n6Olcum.belgeMetre} m`, beklenen: (v) => /^taslak:1 satır\/25 m · belge özeti:25 m$/.test(v) },
     ],
   },
