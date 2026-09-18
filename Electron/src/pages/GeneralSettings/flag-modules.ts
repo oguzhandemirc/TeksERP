@@ -153,6 +153,8 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   yarnBlockNegativeBalanceEnabled: "iplikEnabled",
   // İplik lotu kalite bekletme (2026-09-18): etkin değer sunucuda ticaret ∧ iplik — panelde iplik ETKİN değerdir, kilit bandı aynı kapıyı gösterir.
   goodsReceiptYarnQualityHoldEnabled: "iplikEnabled",
+  // İptalde sebep zorunlu (2026-09-18): top iptali üretim modülünün davranış bayrağı.
+  productionCancelReasonRequired: "productionEnabled",
 
   // --- FASON / KARTELA — anahtarları HENÜZ YOK ------------------------------
   // Üretime asmak YANLIŞ modülü kapatırdı: fason tasarımda ayrı bir modüldür

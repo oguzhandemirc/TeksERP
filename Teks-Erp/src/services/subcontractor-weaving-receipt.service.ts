@@ -43,6 +43,8 @@ export async function previewCancelWeavingReceipt(receiptId: string): Promise<Ap
       cancelledAt: r.cancelledAt,
       bornRolls: r.bornRolls.map((x) => ({ ...x, initialQty: Number(x.initialQty), blocks: x.status !== RollStatus.CANCELLED })),
       canCancel: !r.cancelledAt && alive.length === 0,
+      /** Makbuz iptalinde sebep HER ZAMAN zorunlu (`reasonSchema` min 3) — bayraktan bağımsız. */
+      reasonRequired: true,
       aliveCount: alive.length,
     },
   };

@@ -103,6 +103,10 @@ export function BulkCancelRollsDialog({ open, onOpenChange, rolls, onDone }: Pro
   const allowed = rows.filter((x) => x.preview?.canCancel !== false);
   const blocked = rows.filter((x) => x.preview?.canCancel === false);
   const labelled = allowed.filter((x) => x.preview?.labelPrinted);
+  // İptalde sebep zorunluluğu (bayrak) SUNUCUDAN okunur, tahmin edilmez: önizlemelerden biri bile `reasonRequired`
+  // diyorsa (bayrak kurulum geneli — hepsi aynı) İPTAL kipinde sebep seçilmeden düğme kapalı; fire ayrı karar, etkilenmez.
+  const reasonRequired = mode === "CANCEL" && rows.some((x) => x.preview?.reasonRequired === true);
+  const reasonMissing = reasonRequired && reasonCode === "";
 
   const run = async () => {
     const targets = allowed;
@@ -225,10 +229,18 @@ export function BulkCancelRollsDialog({ open, onOpenChange, rolls, onDone }: Pro
             })}
         </div>
 
-        {/* Sebep OPSİYONEL (2026-08-06 kuralı): zorunlu tutmak eldivenli operatörü
-            rastgele kategori seçmeye itiyor, o cevap da cevapsızlıktan kötü. */}
+        {/* Sebep varsayılan OPSİYONEL (2026-08-06 kuralı: zorunlu tutmak eldivenli operatörü rastgele kategori
+            seçmeye itiyor); `production.cancelReasonRequired` AÇIKKEN sunucu önizlemesi zorunlu der, alan yıldızlanır. */}
         <div className="grid gap-1">
-          <label className="text-xs text-muted-foreground">Sebep (isteğe bağlı)</label>
+          <label className="text-xs text-muted-foreground">
+            {reasonRequired ? (
+              <>
+                Sebep <span className="text-destructive">*</span> (zorunlu — ayar: iptalde sebep zorunlu)
+              </>
+            ) : (
+              "Sebep (isteğe bağlı)"
+            )}
+          </label>
           <select
             className="h-8 rounded-md border bg-background px-2 text-sm"
             value={reasonCode}
@@ -312,7 +324,7 @@ export function BulkCancelRollsDialog({ open, onOpenChange, rolls, onDone }: Pro
           <Button
             variant={isScrap ? "default" : "destructive"}
             className={isScrap ? "bg-amber-600 text-white hover:bg-amber-700" : undefined}
-            disabled={busy || previewsLoading || allowed.length === 0}
+            disabled={busy || previewsLoading || allowed.length === 0 || reasonMissing}
             onClick={() => void run()}
           >
             {busy

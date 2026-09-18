@@ -249,6 +249,7 @@ export const updateSchema = z.strictObject({
   goodsReceiptRequirePriceEnabled: z.boolean().optional(),
   // goodsReceipt.yarnQualityHoldEnabled — iplik lotu kalite bekletme (default false). Backend ENFORCE.
   goodsReceiptYarnQualityHoldEnabled: z.boolean().optional(),
+  productionCancelReasonRequired: z.boolean().optional(),
   // finance.allowZeroPriceLineEnabled — sıfır fiyatlı fatura satırıyla onaya izin
   // (promosyon/numune). İzin verilen SIFIRDIR, boş fiyat değil; negatif yine red.
   financeAllowZeroPriceLineEnabled: z.boolean().optional(),

@@ -315,6 +315,8 @@ export interface RollCancelPreview {
   blockReason: string | null;
   /** İstasyonda/iş emrinde aktif — pencere bunu ayrıca gösterir. */
   requiresConfirm: boolean;
+  /** `production.cancelReasonRequired` etkin — sebep alanı zorunlu işaretlenir, kapı sunucuda (400 CANCEL_REASON_REQUIRED). Eski sunucu göndermez → opsiyonel. */
+  reasonRequired?: boolean;
   activeAt: {
     stepId: string;
     stationName: string | null;

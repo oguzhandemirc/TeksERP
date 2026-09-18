@@ -1010,7 +1010,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     description: "Sahadaki mobil istasyon ekranlarının davranışı.",
     keywords:
       "KK1 ham en genişlik cm fason talimat boyahane notu sevk mobil operatör saha kalite tambur metraj aşım fazla ölçüm açık kumaş top " +
-      "kurşun dağıtım bypass makine atama kağıt fason dönüş tambur onay kurşun sırası",
+      "kurşun dağıtım bypass makine atama kağıt fason dönüş tambur onay kurşun sırası top iptal sebep zorunlu gerekçe",
     kind: "flags",
     section: "production",
     flags: [
@@ -1152,6 +1152,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Operatör", "Yönetim"],
         desc: "Tambur'da bir kapanışı TÜMDEN geri almak (o kesimden çıkan tüm topları iptal edip kaynağı diriltmek) iş emrinin geçmişini yeniden yazar; bu yüzden zaten ayrı bir yetki (roll:manual-adjust) ve zorunlu sebep ister. Bu ayar AÇIKKEN ek olarak süre sınırı koyar: kapanış bugün yapıldıysa geri alınabilir, dünkü bir kapanış geri alınamaz. Varsayılan KAPALI — asıl koruma zaten parçaların kendisindedir (çuvala okutulmuş / sevke girmiş / yeniden kesilmiş parça hiçbir koşulda geri alınamaz) ve sert bir süre sınırı, dün akşam yapılmış bir hatayı sabah düzeltmeyi imkânsız kılarak yeni bir çıkmaz üretebilir. TEK PARÇA iptali bu ayardan ETKİLENMEZ.",
+      },
+      {
+        key: "productionCancelReasonRequired",
+        group: "Top iptali",
+        title: "Top iptalinde sebep zorunlu olsun",
+        summary: "Açıkken top iptali sebep (katalogdan ya da metin) girilmeden kaydedilmez; kapalıyken sebep isteğe bağlı.",
+        defaultOn: false,
+        audience: ["Operatör", "Depocu", "Yönetim"],
+        desc: "Kapalıyken (varsayılan) top iptalinde sebep isteğe bağlıdır — bugünkü davranış (eldivenli operatörü rastgele kategori seçmeye itmemek için). Açıkken panel Toplar → İptal penceresi ve tablet Top İptal ekranı sebebi zorunlu işaretler, sunucu sebepsiz iptali reddeder (kod CANCEL_REASON_REQUIRED). İş emri, dokuma işi, levent ve fason iptallerinde sebep zaten her zaman zorunludur; bu anahtar yalnız top iptalini etkiler. Fire (hurda) kararı ayrı ekrandır, etkilenmez.",
       },
     ],
   },

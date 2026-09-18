@@ -138,6 +138,24 @@ describe("BulkCancelRollsDialog", () => {
     expect(cancel).toHaveBeenCalledWith("T-1", undefined);
   });
 
+  it("⭐ sunucu `reasonRequired: true` derse İPTAL düğmesi sebep seçilmeden KAPALI, alan yıldızlı (bayrak kapalıyken eski davranış)", async () => {
+    cancelPreview.mockImplementation((id: string) => Promise.resolve(preview(id, { reasonRequired: true })));
+    renderDialog([roll("T-1")]);
+    const btn = await screen.findByRole("button", { name: /1 topu stoktan kaldır/ });
+    await screen.findByText(/zorunlu — ayar: iptalde sebep zorunlu/);
+    expect(btn).toBeDisabled();
+    fireEvent.click(btn);
+    expect(cancel).not.toHaveBeenCalled();
+  });
+
+  it("`reasonRequired` alanı YOKSA (eski sunucu) sebep isteğe bağlı kalır, düğme açık", async () => {
+    cancelPreview.mockImplementation((id: string) => Promise.resolve(preview(id)));
+    renderDialog([roll("T-1")]);
+    const btn = await screen.findByRole("button", { name: /1 topu stoktan kaldır/ });
+    await screen.findByText(/Sebep \(isteğe bağlı\)/);
+    expect(btn).not.toBeDisabled();
+  });
+
   it("etiketli top ENGEL DEĞİL — onay kutusu yok, yine de gönderilir", async () => {
     cancelPreview.mockImplementation((id: string) =>
       Promise.resolve(preview(id, { labelPrinted: true, labelPrintedAt: "2026-08-24T16:32:00Z" })),

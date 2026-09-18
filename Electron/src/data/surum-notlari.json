@@ -107,6 +107,11 @@
         {
           "kapsam": "her-ikisi",
           "tip": "yeni",
+          "metin": "Yeni ayar: Özellik Anahtarları → Üretim — Saha → “Top iptalinde sebep zorunlu olsun” (varsayılan kapalı). Açıkken panel Toplar → İptal penceresi ve tablet top iptali sebep seçilmeden kaydetmez, sunucu sebepsiz iptali reddeder; kapalıyken sebep isteğe bağlı kalır. İş emri, dokuma işi, levent ve fason iptallerinde sebep zaten her zaman zorunludur; fire (hurda) kararı etkilenmez."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "yeni",
           "metin": "İplik lotlarına kalite bekletme geldi (Ayarlar → Özellik Anahtarları → İplik → “Mal kabulde doğan iplik lotu kalite bekletmede doğsun”, varsayılan kapalı; yalnız ticaret ve iplik modülü açık kurulumlarda etkili). Açıkken mal kabulde doğan iplik lotu kalite bekletmede doğar ve serbest bırakılmadan levent sarımına, iplik çıkışına ve fasona iplik sevkine giremez; giriş, iade ve fiş iptalleri serbest kalır, elle açılan lot serbest doğar. Karar (serbest bırak, bekletmeye al, bloke et) kalite yetkisiyle lot üstünden verilir; kararın tarihi ve veren kişi lotta kalır. Tablet Levent Sarım ekranındaki lot listesi lotun durumunu taşır; bekletmedeki ya da bloke lot seçilirse sunucu sarımı reddeder ve sebebi yazar. Kapalıyken hiçbir davranış değişmez."
         },
         {

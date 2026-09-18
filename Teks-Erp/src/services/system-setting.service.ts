@@ -148,6 +148,8 @@ export const SETTING_KEYS = {
   GOODS_RECEIPT_REQUIRE_PRICE_ENABLED: "goodsReceipt.requirePriceEnabled",
   /** İplik lotu kalite bekletme (2026-09-18): açıkken mal kabulde doğan lot ON_HOLD doğar, ON_HOLD/BLOKE lota çıkış 400. Varsayılan KAPALI. */
   GOODS_RECEIPT_YARN_QUALITY_HOLD_ENABLED: "goodsReceipt.yarnQualityHoldEnabled",
+  /** İptalde sebep zorunlu (top iptali; sebep alanı OPSİYONEL olan tek üretim iptal ucu) — varsayılan false = bugünkü. */
+  PRODUCTION_CANCEL_REASON_REQUIRED: "production.cancelReasonRequired",
   /** SIFIR fiyatlı fatura satırıyla ONAYA izin ver (default FALSE = sıfır fiyat
    *  reddedilir). Promosyon/numune/bedelsiz sevk içindir. ⚠️ İzin verilen şey
    *  SIFIRDIR, boş/çözülemeyen fiyat DEĞİL: "0 yazdım" bir karardır, "fiyat
@@ -1407,6 +1409,8 @@ export interface FeatureFlags {
   goodsReceiptRequirePriceEnabled: boolean;
   /** İplik lotu kalite bekletme: mal kabulde doğan lot ON_HOLD doğar; ON_HOLD/BLOCKED lota çıkış 400 (varsayılan KAPALI = bugünkü). HAM; etkin `ticaret && iplik && bayrak`. */
   goodsReceiptYarnQualityHoldEnabled: boolean;
+  /** İptalde sebep zorunlu (kullanıcı kararı 2026-09-18): top iptalinde sebep metni ya da katalog kodu şart; varsayılan false. */
+  productionCancelReasonRequired: boolean;
   /** Sıfır fiyatlı fatura satırıyla onaya izin ver (default false). İzin
    *  verilen SIFIRDIR, boş/çözülemeyen fiyat değil; negatif her hâlükârda red. */
   financeAllowZeroPriceLineEnabled: boolean;
@@ -1864,6 +1868,7 @@ export class SystemSettingService {
       purchaseBlockOverReceiptEnabled: await readPurchaseBlockOverReceiptEnabled(cacheClient),
       goodsReceiptRequirePriceEnabled: await readGoodsReceiptRequirePriceEnabled(cacheClient),
       goodsReceiptYarnQualityHoldEnabled: await readGoodsReceiptYarnQualityHoldEnabled(cacheClient),
+      productionCancelReasonRequired: await readProductionCancelReasonRequired(cacheClient),
       financeAllowZeroPriceLineEnabled: await readFinanceAllowZeroPriceLineEnabled(cacheClient),
       financeFutureDatedDocumentBlockEnabled:
         await readFinanceFutureDatedDocumentBlockEnabled(cacheClient),
@@ -2252,6 +2257,12 @@ export class SystemSettingService {
         throw AppError.badRequest("goodsReceiptYarnQualityHoldEnabled boolean olmalı");
       }
       await this.set(SETTING_KEYS.GOODS_RECEIPT_YARN_QUALITY_HOLD_ENABLED, input.goodsReceiptYarnQualityHoldEnabled, "Mal kabulde doğan iplik lotu kalite bekletmede doğar; bekletmedeki/bloke lota çıkış yazılamaz", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "productionCancelReasonRequired")) {
+      if (typeof input.productionCancelReasonRequired !== "boolean") {
+        throw AppError.badRequest("productionCancelReasonRequired boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.PRODUCTION_CANCEL_REASON_REQUIRED, input.productionCancelReasonRequired, "Top iptalinde sebep (metin ya da katalog kodu) zorunlu", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "financeAllowZeroPriceLineEnabled")) {
@@ -3737,6 +3748,13 @@ export async function readGoodsReceiptYarnQualityHoldEnabled(tx?: Pick<typeof pr
   return asBoolean(setting?.value);
 }
 
+/** İptalde sebep zorunlu. Default FALSE (satır yoksa sebep opsiyonel — bugünkü davranış, ölçüldü). HAM değer. */
+export async function readProductionCancelReasonRequired(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({ where: { key: SETTING_KEYS.PRODUCTION_CANCEL_REASON_REQUIRED }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
+
 export async function readGoodsReceiptRequirePriceEnabled(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
@@ -4767,6 +4785,12 @@ export async function resolvePurchaseBlockOverReceiptEnabled(
 export async function resolveInvoiceMatchToleranceEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   if (!(await readFinanceEnabled(tx))) return false;
   return readFinanceInvoiceMatchTolerance(tx);
+}
+
+/** İptalde sebep zorunluluğu ETKİN mi (`üretim && bayrak`) — top iptal kapısı ve önizleme `reasonRequired` bunu okur. */
+export async function resolveCancelReasonRequired(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  if (!(await readProductionEnabled(tx))) return false;
+  return readProductionCancelReasonRequired(tx);
 }
 
 /** İplik lotu kalite bekletme ETKİN mi (`ticaret && iplik && bayrak`) — doğuş ON_HOLD + çıkış kapısı bunu okur. */

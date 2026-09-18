@@ -50,6 +50,7 @@ import {
   readKk1WeightEntryEnabled,
   readKk1DuplicateGuardEnabled,
   readQualityGradeRequiredEnabled,
+  resolveCancelReasonRequired,
 } from "./system-setting.service";
 import {
   parseQueryParams,
@@ -148,6 +149,7 @@ import {
   WarehouseEventType,
 } from "@prisma/client";
 import { resolveReasonCode } from "./reason-preset.service";
+import { assertCancelReasonTx } from "./helpers/cancel-reason.helper";
 // Fire sebebi metin SAKLAMAYAN bir kind'tır → sapma kataloğunun senkron kapısı.
 import { validateVarianceReason } from "../constants/variance-reasons";
 // G2 (2026-08-14): tekil top iptali alış siparişi rollup'ını tetikler.
@@ -368,6 +370,8 @@ export interface RollCancelPreview {
   canCancel: boolean;
   /** canCancel=false ise neden (Türkçe, softDelete mesajıyla aynı). */
   blockReason: string | null;
+  /** `production.cancelReasonRequired` etkin mi — form sebep alanını zorunlu işaretler; kapı sunucuda (400 CANCEL_REASON_REQUIRED). */
+  reasonRequired: boolean;
   /**
    * İstasyonda / iş emrinde aktif top mu? true ise iptal için bilinçli onay
    * (confirmActive) ŞART — uyarısız sessiz iptali engeller.
@@ -3390,6 +3394,7 @@ export class InventoryService {
         canCancel,
         blockReason,
         requiresConfirm,
+        reasonRequired: await resolveCancelReasonRequired(),
         activeAt,
         openMovementCount,
         labelPrinted: roll.labelPrintedAt != null,
@@ -3443,6 +3448,8 @@ export class InventoryService {
     const isScrap = opts?.mode === "SCRAP";
     const targetStatus = isScrap ? RollStatus.SCRAP : RollStatus.CANCELLED;
     const actionLabel = isScrap ? "fire edildi" : "iptal edildi";
+    // İptalde sebep zorunluluğu (bayrak): yalnız İPTAL — fire ayrı karar, kapsam dışı. Yazımdan ÖNCE, tek kapı.
+    if (!isScrap) await assertCancelReasonTx(prisma, { reason: opts?.reason, reasonCode: opts?.reasonCode }, "Top iptali");
     const existing = await prisma.roll.findUnique({ where: { id } });
     if (!existing) {
       throw AppError.notFound("Top bulunamadı");

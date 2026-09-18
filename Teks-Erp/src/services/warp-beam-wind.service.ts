@@ -202,6 +202,8 @@ export interface CancelWoundPreviewDto {
   /** Ters kayıtla depoya DÖNECEK çıkışlar (kalem × depo, net) ve DÜŞECEK dip iadeleri (× sebep). */
   issueReversals: Array<{ warehouse: { id: string; name: string }; lot: { id: string; lotNo: string } | null; qtyKg: number }>;
   returnReversals: Array<{ warehouse: { id: string; name: string }; lot: { id: string; lotNo: string } | null; reasonCode: string; qtyKg: number }>;
+  /** Sarım iptalinde gerekçe HER ZAMAN zorunlu (`cancelSchema` min 3) — bayraktan bağımsız; istemci tek alandan okur. */
+  reasonRequired: true;
 }
 
 type YarnGroup = Map<string, { warehouseId: string; warehouseName: string; lot: { id: string; lotNo: string } | null; reasonCode: string | null; qty: Prisma.Decimal }>;
@@ -239,6 +241,7 @@ export async function cancelWoundPreview(id: string): Promise<ApiResponse<Cancel
       wound: beam.events[0] ? toWarpBeamEventDto(beam.events[0]) : null,
       issueReversals: [...issues.values()].filter((g) => g.qty.gt(0)).map((g) => ({ warehouse: { id: g.warehouseId, name: g.warehouseName }, lot: g.lot, qtyKg: Number(g.qty) })),
       returnReversals: [...returns.values()].filter((g) => g.qty.gt(0)).map((g) => ({ warehouse: { id: g.warehouseId, name: g.warehouseName }, lot: g.lot, reasonCode: g.reasonCode ?? "", qtyKg: Number(g.qty) })),
+      reasonRequired: true,
     },
   };
 }

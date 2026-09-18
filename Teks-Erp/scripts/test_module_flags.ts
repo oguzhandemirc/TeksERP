@@ -436,6 +436,8 @@ function main(): void {
     readFinanceInvoiceMatchTolerance: { resolver: "resolveInvoiceMatchToleranceEnabled", ebeveyn: "finans" },
     // İplik lotu kalite bekletme (2026-09-18): doğuş + çıkış kapısı yalnız resolver okur.
     readGoodsReceiptYarnQualityHoldEnabled: { resolver: "resolveYarnQualityHoldEnabled", ebeveyn: "ticaret+iplik" },
+    // İptalde sebep zorunlu (2026-09-18): top iptal kapısı + önizleme yalnız resolver okur.
+    readProductionCancelReasonRequired: { resolver: "resolveCancelReasonRequired", ebeveyn: "üretim" },
   };
 
   const servisKodu = yorumlariSok(fs.readFileSync(SERVIS, "utf8"));
