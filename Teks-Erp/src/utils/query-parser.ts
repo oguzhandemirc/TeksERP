@@ -41,6 +41,30 @@ export function isCursorRequested(req: Request): boolean {
  * yönlendirilir. Çok büyük listeler için cursor pagination (`?mode=cursor`)
  * kullanılmalı.
  */
+/** Liste sözlüğü — bu adlar süzgeç DEĞİL, sayfalama/sıralama/arama/tarih/cursor bayraklarıdır; çıplak gelmeleri meşru. */
+export const LIST_QUERY_RESERVED: ReadonlySet<string> = new Set([
+  "page", "pageSize", "sortBy", "sortOrder", "search", "dateField", "dateFrom", "dateTo",
+  "cursor", "limit", "mode", "withTotal", "withSummary", "withArchived", "withOrderDetail", "includeInactive",
+]);
+
+/**
+ * ÇIPLAK SÜZGEÇ FAIL-CLOSED (kullanıcı bulgusu 2026-09-18, d9 sürücüsü): `?status=OPEN` gibi TANINAN bir süzgeç adı
+ * `filter[status]` yerine çıplak gelirse liste sessizce HEPSİNİ dönüyordu — yanlış süzülmüş liste, hiç süzülmemişten
+ * kötüdür (operatör daraltılmış sanır). Tanınan ad (`recognized`: modelin skaler alanları ya da ucun okuduğu süzgeç
+ * adları) çıplak gelirse 400 `BARE_FILTER_PARAM`, mesaj doğru yazımı söyler. Sözlükteki (`LIST_QUERY_RESERVED`) ve
+ * ucun kendi okuduğu (`bareAllowed`) adlar serbest.
+ */
+export function assertNoBareFilterParams(req: Request, recognized: Iterable<string>, bareAllowed: Iterable<string> = []): void {
+  const known = new Set(recognized);
+  const allowed = new Set(bareAllowed);
+  const bare = Object.keys(req.query).filter((k) => !k.startsWith("filter[") && !LIST_QUERY_RESERVED.has(k) && !allowed.has(k) && known.has(k));
+  if (bare.length === 0) return;
+  throw AppError.badRequest(
+    `Süzgeç çıplak gönderilemez: ${bare.map((k) => `\`${k}\``).join(", ")} — \`filter[${bare[0]}]=…\` biçimini kullanın (çıplak ad sessizce yok sayılırdı).`,
+    { code: "BARE_FILTER_PARAM", params: bare, hint: bare.map((k) => `filter[${k}]`) },
+  );
+}
+
 export function parseQueryParams(req: Request): QueryParams {
   const page = Math.max(1, parseInt(req.query.page as string, 10) || DEFAULT_PAGE);
   const rawPageSize = parseInt(req.query.pageSize as string, 10) || DEFAULT_PAGE_SIZE;

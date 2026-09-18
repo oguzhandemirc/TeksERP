@@ -16,8 +16,7 @@ import {
   buildOrderByClause,
   buildPagination,
   isCursorRequested,
-  applyDateRange,
-} from "../utils/query-parser";
+  applyDateRange, assertNoBareFilterParams } from "../utils/query-parser";
 import {
   decodeDynamicCursor,
   dynamicCursorWhere,
@@ -475,7 +474,13 @@ export class BaseService {
     return extra ? { AND: [built, extra] } : built;
   }
 
+  /** Çıplak süzgeç kapısı (fail-closed): modelin skaler alanı `filter[...]` sarmalı olmadan gelirse 400 (`assertNoBareFilterParams`). */
+  protected assertListQueryShape(req: Request): void {
+    assertNoBareFilterParams(req, sortableFieldsFor(this.config.modelName) ?? []);
+  }
+
   protected async findAllOffset(req: Request): Promise<PaginatedResponse<unknown>> {
+    this.assertListQueryShape(req);
     const params = parseQueryParams(req);
     params.sortBy = this.safeSortBy(params.sortBy || "createdAt");
     const where = this.buildListWhere(params, req);
@@ -525,6 +530,7 @@ export class BaseService {
    *   sıfırlamalı (`useDataTable` zaten sortBy değişiminde refetch ediyor).
    */
   protected async findAllCursor(req: Request): Promise<CursorPaginatedResponse<unknown>> {
+    this.assertListQueryShape(req);
     const params = parseQueryParams(req);
     const rawLimit = parseInt(req.query.limit as string, 10) || 50;
     const limit = Math.min(Math.max(1, rawLimit), 200);

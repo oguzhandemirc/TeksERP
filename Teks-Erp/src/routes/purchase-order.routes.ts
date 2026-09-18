@@ -38,12 +38,12 @@
 // =============================================================================
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
-import { purchaseOrderService } from "../services/purchase-order.service";
+import { purchaseOrderService, PURCHASE_ORDER_FILTER_NAMES } from "../services/purchase-order.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { requireTicaretEnabled } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
-import { isCursorRequested, parseQueryParams } from "../utils/query-parser";
+import { isCursorRequested, parseQueryParams, assertNoBareFilterParams } from "../utils/query-parser";
 
 const router = Router();
 
@@ -119,6 +119,7 @@ const updateSchema = z.object({
  *       - in: query
  *         name: filter[status]
  *         schema: { type: string, enum: [OPEN, PARTIAL, CLOSED, CANCELLED] }
+ *         description: "Çıplak `status=` 400 BARE_FILTER_PARAM (sessizce yok sayılmaz; `filter[status]` kullanın)"
  *       - in: query
  *         name: dateFrom
  *         schema: { type: string, format: date-time }
@@ -132,6 +133,8 @@ const updateSchema = z.object({
  */
 router.get("/", requireAnyPermission(...READ_PERMS), async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // Çıplak `?status=` sessizce yok sayılıyordu (kullanıcı bulgusu 2026-09-18) — bu ucun okuduğu süzgeç adları fail-closed.
+    assertNoBareFilterParams(req, PURCHASE_ORDER_FILTER_NAMES);
     const { page, pageSize, filters, search, dateFrom, dateTo } = parseQueryParams(req);
     const cursorMode = isCursorRequested(req);
     const { rows, total, nextCursor } = await purchaseOrderService.list({

@@ -517,6 +517,9 @@ function assertPoReplay(
   );
 }
 
+/** Liste ucunun okuduğu süzgeç adları — çıplak (`?status=`) gelirse 400 (`assertNoBareFilterParams`); okuyucu + kapı aynı liste. */
+export const PURCHASE_ORDER_FILTER_NAMES = ["status", "supplierId", "subcontractorId"] as const;
+
 export class PurchaseOrderService {
   // ---------------------------------------------------------------------------
   // Doğrulamalar
