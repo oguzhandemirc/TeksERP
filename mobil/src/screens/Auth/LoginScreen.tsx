@@ -12,6 +12,7 @@ import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../store/authStore';
 import { authService, type LoginMethod } from '../../services/auth.service';
 import { useAlphaKeyboardPref } from './useAlphaKeyboardPref';
+import { sanitizeAlphaInput, sanitizeNumericInput } from './loginInput';
 import { isLoginLocked } from '../../services/api';
 import { authActions } from '../../services/authActions';
 import { pinServerIdentityAfterLogin } from '../../services/serverIdentity';
@@ -350,7 +351,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
       const isList = methodRef.current === 'list';
       if ((isList && !selectedUserRef.current) || submittingRef.current) return;
       const cap = isList ? PASSWORD_MAX : PIN_LENGTH;
-      const digits = text.replace(/\D/g, '').slice(0, cap);
+      const digits = sanitizeNumericInput(text, cap);
       setPin(digits);
       setError('');
       // Yalnız salt-PIN 6 hanede oto-gönderir; şifrede kullanıcı butonla gönderir.
@@ -358,6 +359,23 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
     },
     [submitPinByMethod],
   );
+
+  // Harfli klavye (ABC): parola ALFASAYISALdır — `handlePinChange`in `\D` süzmesi harfleri düşürür ve
+  // yanlış parola gönderilir. Bu yol rakam SÜZMEZ, yalnız uzunluğu sınırlar. Salt liste+kullanıcı modunda
+  // görünür (oto-gönderim yok; kullanıcı Giriş / klavye "done" ile gönderir).
+  const handleAlphaChange = useCallback((text: string) => {
+    if (!selectedUserRef.current || submittingRef.current) return;
+    setPin(sanitizeAlphaInput(text, PASSWORD_MAX));
+    setError('');
+  }, []);
+
+  // Klavye türü değişince yarım girilen değer TAŞINMAZ — harfli↔sayısal arası karışık parola oluşmasın
+  // (ABC'de "abc" yazıp 123'e geçince numpad üstüne eklerdi). Tercih yine cihazda hatırlanır (hook).
+  const handleToggleKeyboard = useCallback(() => {
+    setPin('');
+    setError('');
+    toggleAlphaKeyboard();
+  }, [toggleAlphaKeyboard]);
 
   // Telefon modu: görünmez TextInput'a odaklanıp Android sayı klavyesini açar.
   // Klavye dışarı dokunarak kapatıldığında EditText odakta kalır; aynı input'a
@@ -561,7 +579,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
   const alphaToggle = activeMethod === 'list' ? (
     <TouchableRipple
       testID="login-abc-toggle"
-      onPress={toggleAlphaKeyboard}
+      onPress={handleToggleKeyboard}
       disabled={submitting}
       rippleColor="rgba(99,102,241,0.25)"
       borderless
@@ -580,7 +598,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
         <TextInput
           ref={alphaInputRef}
           value={pin}
-          onChangeText={handlePinChange}
+          onChangeText={handleAlphaChange}
           keyboardType="default"
           secureTextEntry
           maxLength={PASSWORD_MAX}
