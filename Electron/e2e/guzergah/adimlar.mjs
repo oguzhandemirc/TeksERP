@@ -74,6 +74,7 @@ const k3Olcum = { isNo: null, onceKg: null, donusSonraKg: null, fasondaDonus: nu
 const n3Olcum = { docNo: null, sevkId: null, bakiyeOnce: null, sevkMetreOnce: null, sevkMetreSonra: null };
 const o7Olcum = { satirOnce: null, gecersizDurum: null, gecersizMesaj: null, urunsuzDurum: null, urunsuzMesaj: null, birimsizDurum: null, birimsizBirim: null, siparisNo: null };
 const n1Olcum = { beamNo: null, onceKg: null, sarimSonraKg: null, sarimDurum: null, onizlemeDip: null, sonraKg: null };
+const n2Olcum = { iadeliSevk: null, engelMetni: null, engelDugmePasif: null, sevkNo: null, sevkId: null, onizlemeBarkod: null, dugmeEtiketi: null };
 const j1Olcum = { sevkNo: null, sevkId: null, tur: null, cariMetin: null, cariKilitli: null, satir: null, miktar: null, birim: null };
 const i4Olcum = { barkod: null, digerMusteri: null, digerOnce: null, testOnce: null, onizlemeSahipVar: null, redDurum: null, redKod: null, redTopVar: null, redSahipVar: null, tostSahipVar: null, ikinciDurum: null, sevkNo: null };
 
@@ -1785,6 +1786,65 @@ export const ADIMLAR = [
       { ad: "iplik defteri: WARP_ISSUE 30 + WARP_RETURN 1 + ters satırlar (WARP_ISSUE_REVERSAL · WARP_RETURN_REVERSAL) — silme yok, bakiye başa",
         sql: `SELECT string_agg(m.kind::text || ':' || m."qtyKg"::text, ',' ORDER BY m."createdAt") k FROM yarn_movements m JOIN yarn_lots l ON l.id=m."lotId" JOIN warp_beams wb ON wb.id=m."warpBeamId" WHERE l."lotNo"=$1 AND wb."beamNo"=$2`,
         params: () => [AD.lot, n1Olcum.beamNo], oku: (r) => `${r[0]?.k}|${(n1Olcum.sonraKg - n1Olcum.onceKg).toFixed(3)}`, beklenen: (v) => /WARP_ISSUE:30/.test(v) && /WARP_RETURN:1/.test(v) && /WARP_ISSUE_REVERSAL:30/.test(v) && /WARP_RETURN_REVERSAL:1/.test(v) && /\|0\.000$/.test(v) },
+    ],
+  },
+  {
+    id: "N2", rol: "M", gerektirir: ["I7"],
+    yol: "Operasyon → Sevkiyatlar → (a) iade almış sevkiyat → Detay → 'Sevki Geri Al' → ENGEL 'iade alınmış' · (b) taze sevkiyat (API) → 'Sevki Geri Al' → önizleme + gerekçe → geri al (storno ≠ iade; SoD `shipping:undo-dispatch`)", rota: "operations/shipments",
+    async yap({ git, gor, sql, api, page }) {
+      // (a) iade almış sevkiyat — geri alma ENGELLİ olmalı (iade ile storno karışmaz)
+      const iadeli = await sql(`SELECT s.id, s."shipmentNo" FROM shipments s JOIN customers c ON c.id=s."customerId" WHERE c.name=$1 AND s.status='DISPATCHED' AND EXISTS (SELECT 1 FROM roll_returns rr WHERE rr."fromShipmentId"=s.id AND rr."cancelledAt" IS NULL) ORDER BY s."createdAt" DESC LIMIT 1`, [buyukTr(AD.musteri)]);
+      n2Olcum.iadeliSevk = iadeli[0]?.shipmentNo ?? null;
+      if (!n2Olcum.iadeliSevk) throw new Error("iade almış sevkiyat yok (I7 koşmadı mı?)");
+      await git("Sevkiyatlar");
+      const ara = page().getByPlaceholder("Sevkiyat no, firma, plaka").filter({ visible: true }).first(); await gor(ara);
+      const sevkAc = async (no) => {
+        await ara.fill(no); await page().waitForTimeout(1200);
+        await page().getByRole("row").filter({ hasText: no }).filter({ visible: true }).first().click({ timeout: 15_000 });
+        const sheet = page().getByRole("dialog").filter({ hasText: no }).last(); await gor(sheet, { sure: 20_000 });
+        await sheet.getByRole("button", { name: "Sevki Geri Al" }).click({ timeout: 15_000 });
+        const d = page().getByRole("dialog").filter({ hasText: `Sevki Geri Al — ${no}` }).last(); await gor(d, { sure: 20_000 });
+        await page().waitForTimeout(1200);
+        return { sheet, d };
+      };
+      const a = await sevkAc(n2Olcum.iadeliSevk);
+      n2Olcum.engelMetni = (await a.d.locator("p.text-destructive").first().textContent().catch(() => "")) ?? "";
+      n2Olcum.engelDugmePasif = await a.d.getByRole("button", { name: /Geri Al/ }).last().isDisabled();
+      for (let i = 0; i < 2; i++) { await page().keyboard.press("Escape"); await page().waitForTimeout(300); }
+      // (b) taze sevkiyat: M3b'nin çuvaldaki emanet topu (yoksa API ile yeni top) → TEST Müşteri'ye sevk (DISPATCHED)
+      const musteriId = (await sql(`SELECT id FROM customers WHERE name=$1`, [buyukTr(AD.musteri)]))[0].id;
+      let sackId = (await sql(`SELECT r."sackId" FROM rolls r JOIN customers c ON c.id=r."ownerCustomerId" WHERE c.name=$1 AND r."sackId" IS NOT NULL AND r."shipmentId" IS NULL ORDER BY r."updatedAt" DESC LIMIT 1`, [buyukTr(AD.musteri)]))[0]?.sackId ?? null;
+      if (!sackId) {
+        const kumas = (await sql(`SELECT id FROM items WHERE code=$1`, [AD.kumasKod]))[0].id;
+        const top = await api(`/api/rolls/initial-entry`, { method: "POST", body: JSON.stringify({ itemId: kumas, initialQty: 12, clientToken: crypto.randomUUID() }) });
+        const barkod = top.govde?.data?.barcode; if (!barkod) throw new Error(`top açılamadı: ${top.status}`);
+        const c = await api(`/api/shipping/sacks`, { method: "POST", body: JSON.stringify({ clientToken: crypto.randomUUID() }) });
+        sackId = c.govde?.data?.id; if (!sackId) throw new Error(`çuval açılamadı: ${c.status}`);
+        const o = await api(`/api/shipping/sacks/${sackId}/scan`, { method: "POST", body: JSON.stringify({ barcode: barkod }) });
+        if (o.status >= 300) throw new Error(`okutma: ${o.status} ${JSON.stringify(o.govde).slice(0, 160)}`);
+      }
+      const sv = await api(`/api/shipping/shipments`, { method: "POST", body: JSON.stringify({ sackIds: [sackId], customerId: musteriId, orderless: true, destination: "DOMESTIC", clientToken: crypto.randomUUID() }) });
+      n2Olcum.sevkNo = sv.govde?.data?.shipmentNo ?? null; n2Olcum.sevkId = sv.govde?.data?.id ?? null;
+      if (!n2Olcum.sevkNo) throw new Error(`taze sevkiyat kurulamadı: ${sv.status} ${JSON.stringify(sv.govde).slice(0, 200)}`);
+      // Önizleme ÇUVAL düzeyinde listeler (çuval no + top adedi) — sevkiyatın birimi çuvaldır; barkod değil çuval no aranır.
+      const cuvalNo = (await sql(`SELECT s."sackNo" FROM sacks s WHERE s.id=$1`, [sackId]))[0]?.sackNo ?? "∅";
+      const b = await sevkAc(n2Olcum.sevkNo);
+      n2Olcum.onizlemeBarkod = (await b.d.innerText()).includes(cuvalNo) ? 1 : 0;
+      await b.d.getByPlaceholder("Örn: araç yüklenmeden").fill("Test: araç yüklenmeden onaylandı");
+      const dugme = b.d.getByRole("button", { name: /Geri Al/ }).last();
+      n2Olcum.dugmeEtiketi = ((await dugme.textContent()) ?? "").trim();
+      await dugme.click({ timeout: 15_000 });
+      await b.d.waitFor({ state: "detached", timeout: 20_000 }); await page().waitForTimeout(1000);
+      for (let i = 0; i < 2 && (await page().getByRole("dialog").count()); i++) { await page().keyboard.press("Escape"); await page().waitForTimeout(300); }
+    },
+    async bekle() {},
+    dogrula: [
+      { ad: "(a) iade almış sevkiyatta geri alma ENGELLİ: sebep metni 'iade alınmış', düğme pasif (storno ≠ iade)", sql: `SELECT 1`, oku: () => `${/iade alınmış/.test(n2Olcum.engelMetni) ? 1 : 0}:${n2Olcum.engelDugmePasif}`, beklenen: "1:true" },
+      { ad: "(b) ÇEKİRDEK KURALI (yıkıcı işlemde etkilenen HER kayıt listelenir, soyut sayı yetmez): önizleme çuval NUMARASINI göstermeli — bugün yalnız '1 çuval · 1 top' sayısı (payload `sacks[].sackNo` taşıyor, ekran basmıyor) → İHLAL; düğme rejime göre", sql: `SELECT 1`, oku: () => `${n2Olcum.onizlemeBarkod}:${n2Olcum.dugmeEtiketi}`, beklenen: (v) => /^1:(Geri Al ve Kapat|Sevki Geri Al)$/.test(v) },
+      { ad: "sevkiyat artık DISPATCHED değil; `dispatchedAt` NULL'lanMADI (damga korunur, ters kayıt); olay defteri DISPATCHED + UNDISPATCHED (shipment_events)",
+        sql: `SELECT s.status::text st, (s."dispatchedAt" IS NOT NULL) d, string_agg(e.type::text, ',' ORDER BY e."createdAt") ev FROM shipments s LEFT JOIN shipment_events e ON e."shipmentId"=s.id WHERE s.id=$1 GROUP BY s.status, s."dispatchedAt"`,
+        params: () => [n2Olcum.sevkId], oku: (r) => `${r[0]?.st}:${r[0]?.d}:${r[0]?.ev}`, beklenen: (v) => /^(PLANNED|CANCELLED):true:.*DISPATCHED,UNDISPATCHED/.test(v) },
+      { ad: "toplar depoya döndü, sevk bağı kalktı (rolls)", sql: `SELECT count(*)::int n FROM rolls WHERE "shipmentId"=$1 AND status='SHIPPED'`, params: () => [n2Olcum.sevkId], oku: (r) => r[0].n, beklenen: 0 },
     ],
   },
 ];
