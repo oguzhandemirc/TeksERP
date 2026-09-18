@@ -76,6 +76,22 @@ const i4Olcum = { barkod: null, digerMusteri: null, digerOnce: null, testOnce: n
 
 const MODUL_ANAHTARLARI = ["productionEnabled", "financeEnabled", "ticaretEnabled", "iplikEnabled", "depoMultiEnabled", "kumasTeknikEnabled", "tezgahEnabled", "devereEnabled", "dokumaEnabled", "emanetEnabled"];
 
+
+/** Rapor eksen çoklu seçicisi (ReportMultiSelect): etiketle aç → seçeneği tıkla → tetikleyici metni değişene dek bekle. */
+async function eksenSec(page, etiket, secenekAdi) {
+  const tetik = page.getByLabel(etiket, { exact: true }).filter({ visible: true }).first();
+  for (let deneme = 0; deneme < 2; deneme++) {
+    await tetik.click({ timeout: 15_000 });
+    const madde = page.getByRole("button", { name: secenekAdi, exact: true }).filter({ visible: true }).last();
+    await madde.waitFor({ state: "visible", timeout: 10_000 });
+    await madde.click({ timeout: 10_000 });
+    await page.keyboard.press("Escape");
+    const tamam = await tetik.filter({ hasText: secenekAdi }).waitFor({ state: "visible", timeout: 5_000 }).then(() => true, () => false);
+    if (tamam) return true;
+  }
+  return false;
+}
+
 export const ADIMLAR = [
   // ── A · HAZIRLIK ────────────────────────────────────────────────────────────
   {
@@ -1226,24 +1242,29 @@ export const ADIMLAR = [
       j5Olcum.cariId = (await sql(`SELECT ca.id FROM cari_accounts ca JOIN customers c ON c.id=ca."customerId" WHERE c.name=$1`, [buyukTr(AD.musteri)]))[0]?.id ?? null;
       // Kasa & Banka Defteri
       await git("Kasa & Banka Defteri");
-      const cariDugme = page().getByLabel("Cari", { exact: true }).filter({ visible: true }).first(); await gor(cariDugme, { sure: 20_000 });
-      await cariDugme.click({ timeout: 15_000 });
-      await page().getByRole("button", { name: buyukTr(AD.musteri) }).first().click({ timeout: 15_000 });
-      await page().keyboard.press("Escape");
+      // Önce ilk yükleme bitsin: sayfa açılışta tarih varsayılanını URL'ye yazar; o yazım sırasında seçilen eksen süzgeci
+      // SİLİNİYOR (TESTM'de ölçüldü — veri arttıkça ilk yükleme uzuyor, seçim yarışa yeniliyor). İnsan da yüklenmesini bekler.
+      await gor(page().getByText("Hesap Özeti").filter({ visible: true }).first(), { sure: 20_000 }); await page().waitForTimeout(800);
+      await gor(page().getByLabel("Cari", { exact: true }).filter({ visible: true }).first(), { sure: 20_000 });
+      if (!(await eksenSec(page(), "Cari", buyukTr(AD.musteri)))) throw new Error("cari ekseni seçilemedi (tetikleyici 'Tümü' kaldı)");
       await page().locator("select").filter({ has: page().locator("option", { hasText: /Yalnız giriş/ }) }).filter({ visible: true }).first().selectOption("IN");
-      await page().waitForTimeout(1500);
-      const kasaMetin = await page().locator("main, body").first().innerText();
+      // Şerhler sorgu cevabıyla çizilir — sabit bekleme yerine görünene dek (10 sn) bekle.
+      await page().getByText(/SÜZGEÇ — Yön: Yalnız giriş/).filter({ visible: true }).first().waitFor({ timeout: 10_000 }).catch(() => undefined);
+      await page().getByText(/SÜZGEÇ — Cari: /).filter({ visible: true }).first().waitFor({ timeout: 10_000 }).catch(() => undefined);
+      const kasaMetin = await page().locator("body").innerText();
       j5Olcum.kasaNotlari = [/SÜZGEÇ — Cari: .*MÜŞTERİ/.test(kasaMetin) ? 1 : 0, /SÜZGEÇ — Yön: Yalnız giriş/.test(kasaMetin) ? 1 : 0].join(":");
       // Sayfa hesap ÖZETİ çizer (satır = kasa/banka hesabı; hareket dökümü hesabın defterinde) → TEST Kasa satırında 600 giriş.
       j5Olcum.kasaSatir600 = await page().getByRole("row").filter({ hasText: buyukTr(AD.kasa) }).filter({ hasText: "600" }).filter({ visible: true }).count();
       // KDV Dönem Özeti
       await git("KDV Dönem Özeti");
       const yon = page().locator("select").filter({ has: page().locator("option", { hasText: /Tüm yönler/ }) }).filter({ visible: true }).first(); await gor(yon, { sure: 20_000 });
+      await gor(page().getByText(/Satış KDV|Bu özet nasıl okunur/).filter({ visible: true }).first(), { sure: 20_000 }); await page().waitForTimeout(800);
       await yon.selectOption("SALES");
       const oran = page().locator("select").filter({ has: page().locator("option", { hasText: /Tüm oranlar/ }) }).filter({ visible: true }).first();
       await oran.selectOption({ label: "%20" }).catch(() => undefined);
-      await page().waitForTimeout(1500);
-      const kdvMetin = await page().locator("main, body").first().innerText();
+      // Şerh, seçenekler gelene dek ham kodu ("20.00") basar, sonra etikete ("%20") döner — etiketi bekle.
+      await page().getByText(/SÜZGEÇ — KDV oranı: %20/).filter({ visible: true }).first().waitFor({ timeout: 10_000 }).catch(() => undefined);
+      const kdvMetin = await page().locator("body").innerText();
       j5Olcum.kdvNotlari = [/SÜZGEÇ — Yön: Satış/.test(kdvMetin) ? 1 : 0, /SÜZGEÇ — KDV oranı: %20/.test(kdvMetin) ? 1 : 0].join(":");
       j5Olcum.kdvCariSecici = await page().getByLabel("Cari", { exact: true }).filter({ visible: true }).count();
     },
@@ -1452,29 +1473,28 @@ export const ADIMLAR = [
     async yap({ git, gor, sql, page }) {
       l4Olcum.musteriId = (await sql(`SELECT id FROM customers WHERE name=$1`, [buyukTr(AD.musteri)]))[0]?.id ?? null;
       await git("Sipariş Karnesi");
-      const musteri = page().getByLabel("Müşteri", { exact: true }).filter({ visible: true }).first(); await gor(musteri, { sure: 20_000 });
-      await musteri.click({ timeout: 15_000 });
-      await page().getByRole("button", { name: buyukTr(AD.musteri) }).first().click({ timeout: 15_000 });
-      await page().keyboard.press("Escape");
+      await gor(page().getByLabel("Müşteri", { exact: true }).filter({ visible: true }).first(), { sure: 20_000 });
+      await gor(page().getByText(/Bu rapor nasıl okunur|Sipariş/).filter({ visible: true }).last(), { sure: 20_000 }); await page().waitForTimeout(800);
+      if (!(await eksenSec(page(), "Müşteri", buyukTr(AD.musteri)))) throw new Error("müşteri ekseni seçilemedi");
       // Sevk hedefi: shadcn Select — etiketi "Müşteri varsayılanı" (niteleyici etikette).
       await page().getByLabel("Müşteri varsayılanı", { exact: true }).filter({ visible: true }).first().click({ timeout: 15_000 });
       await page().getByRole("option", { name: /Yurtiçi/ }).first().click({ timeout: 15_000 });
-      await page().waitForTimeout(1500);
-      const m1 = await page().locator("main, body").first().innerText();
+      await page().getByText(/SÜZGEÇ — Sevk hedefi/).filter({ visible: true }).first().waitFor({ timeout: 10_000 }).catch(() => undefined);
+      const m1 = await page().locator("body").innerText();
       l4Olcum.notMusteri = /SÜZGEÇ — Müşteri: .*MÜŞTERİ/.test(m1) ? 1 : 0;
       l4Olcum.notHedef = /SÜZGEÇ — Sevk hedefi: Yurtiçi/.test(m1) ? 1 : 0;
       l4Olcum.notHedefSerh = /Müşteri kartındaki VARSAYILAN hedef — sevkin fiili hedefi değil/.test(m1) ? 1 : 0;
       // Seçimi temizle (X) → müşteri şerhi düşer.
       await page().getByTitle("Süzgeci temizle").filter({ visible: true }).first().click({ timeout: 15_000 });
       await page().waitForTimeout(1200);
-      l4Olcum.temizSonraMusteri = /SÜZGEÇ — Müşteri:/.test(await page().locator("main, body").first().innerText()) ? 1 : 0;
+      l4Olcum.temizSonraMusteri = /SÜZGEÇ — Müşteri:/.test(await page().locator("body").innerText()) ? 1 : 0;
       // Sipariş İptal Karnesi: sebep ekseni — bu kurulumda iptallerde sebep kodu yok → seçici pasif + ipucu; sayfa oranı uyarır.
       await git("Sipariş İptal Karnesi");
       const sebep = page().getByLabel("İptal sebebi", { exact: true }).filter({ visible: true }).first(); await gor(sebep, { sure: 20_000 });
       await page().waitForTimeout(1200);
       l4Olcum.iptalSebepSecici = await sebep.isDisabled();
       l4Olcum.iptalSebepIpucu = (await sebep.innerText()).trim();
-      l4Olcum.iptalUyari = /sebep kodu/.test(await page().locator("main, body").first().innerText()) ? 1 : 0;
+      l4Olcum.iptalUyari = /sebep kodu/.test(await page().locator("body").innerText()) ? 1 : 0;
     },
     async bekle({ gor, page }) { await gor(page().getByText("Sipariş İptal Karnesi").filter({ visible: true }).first()); },
     dogrula: [
