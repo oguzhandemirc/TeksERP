@@ -54,6 +54,7 @@ export function useDevereScreen() {
     current: modal?.kind === 'plan' || modal?.kind === 'wind' ? modal : null,
     lotRequired: context.data?.lotRequired ?? false,
     soleMachineId: soleMachineId(context.data?.machines ?? []),
+    lastWindDefaults: context.data?.lastWindDefaults ?? [],
     lastWarpSpecId: lastPlannedWarpSpecId([...(planned.data ?? []), ...(ready.data ?? [])]),
     soleWeavingOrderId: soleWeavingOrderId(context.data?.weavingOrders),
     beamWeavingLinkRequired: context.data?.beamWeavingLinkRequired ?? false,

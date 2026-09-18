@@ -4,7 +4,7 @@
 import { useCallback, useState, type MutableRefObject } from 'react';
 import type { WarpBeam } from '../../../services/warpBeam.service';
 import { planFingerprint, tokenForBeam, windFingerprint, type BeamAttempt } from './devereAttempt';
-import { EMPTY_PLAN, initialWindForm, validatePlan, validateWind, type PlanForm, type WindForm } from './beamPayload';
+import { EMPTY_PLAN, initialWindForm, validatePlan, validateWind, windDefaultFor, windFormWithDefault, type PlanForm, type WindDefault, type WindForm } from './beamPayload';
 import type { useBeamMutations } from './useBeamMutations';
 
 type Mutations = ReturnType<typeof useBeamMutations>;
@@ -20,6 +20,8 @@ interface Deps {
   lotRequired: boolean;
   /** Tek devere makinesi → SAR açılışında ön-seçili (IN_HOUSE); yoksa null (+0/−1 dokunuş). */
   soleMachineId: string | null;
+  /** Z5: çözgü kartı başına son IN_HOUSE sarım önerileri (SAR satır ön-dolgusu); boş → yalnız `soleMachineId` düşer. */
+  lastWindDefaults: readonly WindDefault[];
   /** Bağlamdaki son leventin çözgü kartı → Plan açılışında ön-dolu; yoksa null. */
   lastWarpSpecId: string | null;
   /** Tek açık dokuma işi → Plan açılışında ön-seçili; yoksa null (Z1). */
@@ -30,7 +32,7 @@ interface Deps {
 
 const toNum = (s: string): number => Number(s.replace(',', '.'));
 
-export function useBeamForms({ attemptRef, mutations, defaultWarehouseId, open, current, lotRequired, soleMachineId, lastWarpSpecId, soleWeavingOrderId, beamWeavingLinkRequired }: Deps) {
+export function useBeamForms({ attemptRef, mutations, defaultWarehouseId, open, current, lotRequired, soleMachineId, lastWindDefaults, lastWarpSpecId, soleWeavingOrderId, beamWeavingLinkRequired }: Deps) {
   const [planForm, setPlanFormState] = useState<PlanForm>(EMPTY_PLAN);
   const [windForm, setWindFormState] = useState<WindForm | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -54,11 +56,13 @@ export function useBeamForms({ attemptRef, mutations, defaultWarehouseId, open, 
   const openWind = useCallback(
     (beam: WarpBeam) => {
       const taban = initialWindForm(beam, defaultWarehouseId);
-      // Tek devere makinesi + IN_HOUSE → makine ön-seçili (tek seçenek için dokunuş gereksiz).
-      setWindForm(beam.originKind === 'IN_HOUSE' && soleMachineId ? { ...taban, machineId: soleMachineId } : taban);
+      // Önce çözgü kartının SON sarım önerisi (makine + iplik satırları); yoksa tek devere makinesi ön-seçimi.
+      const oneri = windFormWithDefault(taban, beam.originKind, windDefaultFor(lastWindDefaults, beam.warpSpec.id));
+      const machineId = oneri.machineId ?? (beam.originKind === 'IN_HOUSE' ? soleMachineId : null);
+      setWindForm({ ...oneri, machineId });
       open({ kind: 'wind', beam });
     },
-    [defaultWarehouseId, open, setWindForm, soleMachineId]
+    [defaultWarehouseId, open, setWindForm, soleMachineId, lastWindDefaults]
   );
 
   const submitPlan = useCallback(() => {

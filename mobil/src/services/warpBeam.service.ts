@@ -73,6 +73,13 @@ export interface TabletContext {
   }[];
   /** `devere.beamWeavingLinkRequired` ETKİN değeri SUNUCUDAN — form zorunluluğu buradan okur, tahmin etmez (sunucu da 400 verir). Alan yoksa false. */
   beamWeavingLinkRequired?: boolean;
+  /** Z5/E6: çözgü kartı başına SON IN_HOUSE sarımın makine + iplik satırları — SAR açılış ÖNERİSİ (operatör değiştirir). Eski sunucu göndermez → ön-dolgu yok. */
+  lastWindDefaults?: {
+    warpSpecId: string;
+    machineId: string | null;
+    yarnIssues: { warehouseId: string; lotId: string | null; qtyKg: number }[];
+    yarnReturns: { warehouseId: string; lotId: string | null; qtyKg: number; reasonCode: string }[];
+  }[];
 }
 
 /** Backend `mountSchema` ile birebir (.strict). */

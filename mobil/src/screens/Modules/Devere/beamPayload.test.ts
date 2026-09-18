@@ -1,4 +1,4 @@
-import { beamActionsEnabled, buildPlanPayload, buildWindPayload, classifyBeamFailure, initialWindForm, isSameLocalDay, lastPlannedWarpSpecId, linesTotalKg, physicalBeamBusyWarning, soleMachineId, soleWeavingOrderId, theoreticalKg, validatePlan, validateWind, validateWindPage, windPageKeys, windPhysicalNos, EMPTY_PLAN, STATUS_LABEL, type WindForm } from './beamPayload';
+import { beamActionsEnabled, buildPlanPayload, buildWindPayload, classifyBeamFailure, initialWindForm, isSameLocalDay, lastPlannedWarpSpecId, linesTotalKg, physicalBeamBusyWarning, soleMachineId, soleWeavingOrderId, theoreticalKg, validatePlan, validateWind, validateWindPage, windDefaultFor, windFormWithDefault, windPageKeys, windPhysicalNos, EMPTY_PLAN, STATUS_LABEL, type WindDefault, type WindForm } from './beamPayload';
 
 const line = (qtyKg: string, reasonCode: string | null = null, warehouseId: string | null = 'w1', lotId: string | null = null) => ({ key: `k${qtyKg}`, warehouseId, qtyKg, reasonCode, lotId });
 
@@ -266,5 +266,37 @@ describe('Z1 üretim belge zinciri — Plan dokuma işi', () => {
     expect('weavingOrderId' in buildWindPayload(f, 'SUBCONTRACT', 'tok')).toBe(false);
     expect(buildWindPayload(f, 'SUBCONTRACT', 'tok', 'wo1').weavingOrderId).toBe('wo1');
     expect(buildWindPayload(f, 'SUBCONTRACT', 'tok', null).weavingOrderId).toBeNull();
+  });
+});
+
+// ⭐ NEGATİF SONDA: `windFormWithDefault` IN_HOUSE dalı kaldırılınca §5 KIRMIZI (öneri yok sayılır);
+//    `qtyKg: String(...)` yerine sayı bırakılınca form tipi/İleri kırılır; `def.machineId ?? base` kaldırılınca makine düşer.
+describe('windFormWithDefault / windDefaultFor — Z5 SAR ön-dolgu (yalnız öneri)', () => {
+  const base = initialWindForm({ plannedLengthM: 900, originKind: 'IN_HOUSE' }, 'w1');
+  const def: WindDefault = {
+    warpSpecId: 's1',
+    machineId: 'm9',
+    yarnIssues: [{ warehouseId: 'w9', lotId: 'l9', qtyKg: 12.5 }],
+    yarnReturns: [{ warehouseId: 'w9', lotId: 'l9', qtyKg: 1, reasonCode: 'DIP' }],
+  };
+  it('1 IN_HOUSE: makine + çıkış/dip satırları önerilir (qtyKg string’e döner)', () => {
+    const f = windFormWithDefault(base, 'IN_HOUSE', def);
+    expect(f.machineId).toBe('m9');
+    expect(f.issues).toEqual([{ key: 'i1', warehouseId: 'w9', qtyKg: '12.5', reasonCode: null, lotId: 'l9' }]);
+    expect(f.returns).toEqual([{ key: 'r1', warehouseId: 'w9', qtyKg: '1', reasonCode: 'DIP', lotId: 'l9' }]);
+  });
+  it('2 öneri yoksa / IN_HOUSE değilse taban korunur', () => {
+    expect(windFormWithDefault(base, 'IN_HOUSE', undefined)).toBe(base);
+    expect(windFormWithDefault(base, 'SUBCONTRACT', def)).toBe(base);
+  });
+  it('3 boş çıkış listesi gelirse tabanın satırı korunur (en az bir çıkış)', () => {
+    const f = windFormWithDefault(base, 'IN_HOUSE', { ...def, yarnIssues: [] });
+    expect(f.issues).toBe(base.issues);
+    expect(f.returns).toHaveLength(1);
+  });
+  it('4 windDefaultFor: karta göre eşleşir, yoksa undefined; liste undefined güvenli', () => {
+    expect(windDefaultFor([def], 's1')).toBe(def);
+    expect(windDefaultFor([def], 's-yok')).toBeUndefined();
+    expect(windDefaultFor(undefined, 's1')).toBeUndefined();
   });
 });

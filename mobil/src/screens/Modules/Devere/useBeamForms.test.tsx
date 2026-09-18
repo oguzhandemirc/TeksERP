@@ -13,7 +13,10 @@ import type { WarpBeam } from '../../../services/warpBeam.service';
 
 const beam = { id: 'b1', beamNo: 'LV1', originKind: 'IN_HOUSE', plannedLengthM: 900, warpSpec: { id: 's1', code: 'C', name: 'N', endsCount: 100, yarnItem: { id: 'y', code: 'Y', name: 'Y', linearDensityDen: 150 } } } as unknown as WarpBeam;
 
-function setup(lotRequired = false, { soleMachineId = null, lastWarpSpecId = null, soleWeavingOrderId = null, beamWeavingLinkRequired = false }: { soleMachineId?: string | null; lastWarpSpecId?: string | null; soleWeavingOrderId?: string | null; beamWeavingLinkRequired?: boolean } = {}) {
+function setup(
+  lotRequired = false,
+  { soleMachineId = null, lastWarpSpecId = null, soleWeavingOrderId = null, beamWeavingLinkRequired = false, lastWindDefaults = [] }: { soleMachineId?: string | null; lastWarpSpecId?: string | null; soleWeavingOrderId?: string | null; beamWeavingLinkRequired?: boolean; lastWindDefaults?: import('./beamPayload').WindDefault[] } = {},
+) {
   const plan = { mutate: jest.fn() };
   const wind = { mutate: jest.fn() };
   const attemptRef = { current: null };
@@ -27,6 +30,7 @@ function setup(lotRequired = false, { soleMachineId = null, lastWarpSpecId = nul
         current: { kind: 'wind', beam },
         lotRequired: p.lotRequired,
         soleMachineId,
+        lastWindDefaults,
         lastWarpSpecId,
         soleWeavingOrderId,
         beamWeavingLinkRequired,
@@ -117,5 +121,22 @@ describe('useBeamForms formError', () => {
     act(() => hook.result.current.submitPlan());
     expect(hook.result.current.formError).toBeNull();
     expect(plan.mutate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useBeamForms — Z5 SAR ön-dolgu (lastWindDefaults)', () => {
+  it('§5 ⭐ kartın son sarım önerisi makine + iplik satırlarını doldurur (öneri makinesi soleMachineId’i yener); kart eşleşmezse taban+soleMachineId', () => {
+    const def = { warpSpecId: 's1', machineId: 'm9', yarnIssues: [{ warehouseId: 'w9', lotId: 'l9', qtyKg: 12.5 }, { warehouseId: 'w8', lotId: null, qtyKg: 3 }], yarnReturns: [{ warehouseId: 'w9', lotId: 'l9', qtyKg: 1, reasonCode: 'DIP' }] };
+    const { hook } = setup(false, { soleMachineId: 'm1', lastWindDefaults: [def] });
+    act(() => hook.result.current.openWind(beam));
+    const f = hook.result.current.windForm!;
+    expect(f.machineId).toBe('m9'); // öneri makinesi, soleMachineId 'm1' DEĞİL
+    expect(f.issues.map((l) => [l.warehouseId, l.lotId, l.qtyKg])).toEqual([['w9', 'l9', '12.5'], ['w8', null, '3']]);
+    expect(f.returns.map((l) => [l.warehouseId, l.lotId, l.qtyKg, l.reasonCode])).toEqual([['w9', 'l9', '1', 'DIP']]);
+    // Kart eşleşmezse öneri yok → taban tek boş çıkış + soleMachineId.
+    const { hook: h2 } = setup(false, { soleMachineId: 'm1', lastWindDefaults: [{ ...def, warpSpecId: 's-baska' }] });
+    act(() => h2.result.current.openWind(beam)); // beam.warpSpec.id 's1' ≠ 's-baska'
+    const g = h2.result.current.windForm!;
+    expect([g.machineId, g.issues.length, g.issues[0]!.qtyKg, g.returns.length]).toEqual(['m1', 1, '', 0]);
   });
 });

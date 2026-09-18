@@ -112,6 +112,34 @@ export function initialWindForm(beam: { plannedLengthM: number; originKind: Warp
   };
 }
 
+/** Z5/E6 SAR ön-dolgu önerisi: çözgü kartının son IN_HOUSE sarımı (tablet-context `lastWindDefaults` satırı). */
+export interface WindDefault {
+  warpSpecId: string;
+  machineId: string | null;
+  yarnIssues: { warehouseId: string; lotId: string | null; qtyKg: number }[];
+  yarnReturns: { warehouseId: string; lotId: string | null; qtyKg: number; reasonCode: string }[];
+}
+
+/**
+ * SAR açılış satır ön-dolgusu (Z5): çözgü kartının SON IN_HOUSE sarımından makine + iplik çıkış/dip satırları —
+ * yalnız ÖNERİ, operatör her değeri değiştirir (kg dahil; yeniden tartılır). Yalnız IN_HOUSE'ta uygulanır; öneri
+ * yoksa ya da köken IN_HOUSE değilse taban form korunur; öneride çıkış satırı yoksa tabanın tek boş satırı kalır
+ * (operatör en az bir çıkış girer — `validateWindPage`).
+ */
+export function windFormWithDefault(base: WindForm, originKind: WarpBeamOrigin, def: WindDefault | undefined): WindForm {
+  if (originKind !== 'IN_HOUSE' || !def) return base;
+  const issues = def.yarnIssues.length
+    ? def.yarnIssues.map((l, i) => ({ key: `i${i + 1}`, warehouseId: l.warehouseId, qtyKg: String(l.qtyKg), reasonCode: null, lotId: l.lotId }))
+    : base.issues;
+  const returns = def.yarnReturns.map((l, i) => ({ key: `r${i + 1}`, warehouseId: l.warehouseId, qtyKg: String(l.qtyKg), reasonCode: l.reasonCode, lotId: l.lotId }));
+  return { ...base, machineId: def.machineId ?? base.machineId, issues, returns };
+}
+
+/** Çözgü kartı için son sarım önerisini bul (yoksa undefined). */
+export function windDefaultFor(defaults: readonly WindDefault[] | undefined, warpSpecId: string): WindDefault | undefined {
+  return defaults?.find((d) => d.warpSpecId === warpSpecId);
+}
+
 /** Adet 1..24 tam sayı; boş/geçersiz → null. */
 export function setCount(f: Pick<WindForm, 'count'>): number | null {
   const n = Number(f.count.trim());
