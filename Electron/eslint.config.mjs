@@ -315,7 +315,9 @@ export default [
   // TS parser ile lint edilir (aksi halde `type` import'u parse error verir).
   // Boyut kuralları BİLEREK yok: bekçi uzun ve konuşkandır, orada kural gürültüdür.
   {
-    files: ["e2e/**/*.{ts,tsx}", "playwright.config.ts", "vitest.config.ts"],
+    // `e2e/guzergah/*.mjs` (güzergâh sürücüsü) aynı Node bağlamı — kapsam dışı kalsaydı
+    // `npx eslint` onu varsayılan yapılandırmayla (node globals YOK) tarardı.
+    files: ["e2e/**/*.{ts,tsx,mjs}", "playwright.config.ts", "vitest.config.ts"],
     languageOptions: {
       parser: tsParser,
       parserOptions: { ecmaVersion: "latest", sourceType: "module" },
