@@ -135,7 +135,7 @@ router.get("/devere-machines", requireAnyPermission("warpbeam:read", ...MOBILE_D
  * /api/warp-beams/tablet-context:
  *   get:
  *     tags: [WarpBeams]
- *     summary: Tablet form bağlamı — çözgü kartları · devere makineleri · depolar · fasoncular · tedarikçi adayları (id+ad, opt-in allowlist; tek izin `mobile:devere`)
+ *     summary: Tablet form bağlamı — çözgü kartları · devere makineleri · depolar · fasoncular · tedarikçi adayları · açık içeride dokuma işleri (Z1 `weavingOrders`) + `beamWeavingLinkRequired` (id+ad, opt-in allowlist; tek izin `mobile:devere`)
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Bağlam }

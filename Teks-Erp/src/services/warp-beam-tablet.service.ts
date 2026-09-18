@@ -9,7 +9,8 @@ import { ApiResponse } from "../types/api.types";
 import { resolveDenier } from "../constants/warp-beam";
 import { listDevereMachines, listLoomMachines } from "./warp-beam.service";
 import { yarnLotBalancesTx } from "./helpers/yarn-lot.helper";
-import { readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired } from "./system-setting.service";
+import { readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, resolveBeamWeavingLinkRequired } from "./system-setting.service";
+import { listOpenInHouseWeavingOrders, type MachineRunTabletContextDto } from "./helpers/machine-run-suggest.helper";
 
 /**
  * Tablet form bağlamı — TEK uç, TEK izin (`mobile:devere`), DEVERE-LEVENT-TARAMASI §11 D2.
@@ -44,6 +45,10 @@ export interface WarpBeamTabletContextDto {
   mountTracking: boolean;
   /** `devere.mountTrackingRequired` — Tak formunda yöntem zorunlu (sunucu da 400 verir). */
   mountTrackingRequired: boolean;
+  /** Z1 (Y2): Plan/Sar formundaki "Dokuma işi" seçicisi — açık (PLANNED/IN_PROGRESS) ∧ IN_HOUSE işler; koşum bağlamıyla AYNI biçim. */
+  weavingOrders: MachineRunTabletContextDto["weavingOrders"];
+  /** `devere.beamWeavingLinkRequired` ETKİN değeri — form zorunluluğu SUNUCUDAN okur, tahmin etmez; sunucu da 400 verir. */
+  beamWeavingLinkRequired: boolean;
 }
 
 export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTabletContextDto>> {
@@ -61,6 +66,8 @@ export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTa
   const balances = await yarnLotBalancesTx(prisma, lotRows.map((l) => l.id));
   const lotRequired = await readDevereLotRequired();
   const [loomMachines, mountTracking, mountTrackingRequired] = [await listLoomMachines().then((r) => r.data), await readDevereMountTracking(), await readDevereMountTrackingRequired()];
+  const weavingOrders = await listOpenInHouseWeavingOrders(prisma);
+  const beamWeavingLinkRequired = await resolveBeamWeavingLinkRequired();
   return {
     success: true,
     data: {
@@ -74,6 +81,8 @@ export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTa
       loomMachines,
       mountTracking,
       mountTrackingRequired,
+      weavingOrders,
+      beamWeavingLinkRequired,
     },
   };
 }

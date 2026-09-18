@@ -28,6 +28,7 @@ import { createWarpBeam, listWarpBeams, updateWarpBeam } from "../src/services/w
 import { windWarpBeam } from "../src/services/warp-beam-wind.service";
 import { openMachineRun } from "../src/services/machine-run.service";
 import { machineRunTabletContext } from "../src/services/helpers/machine-run-suggest.helper";
+import { getWarpBeamTabletContext } from "../src/services/warp-beam-tablet.service";
 import { AppError } from "../src/utils/app-error";
 
 let pass = 0;
@@ -196,6 +197,8 @@ async function main(): Promise<void> {
     await prisma.warpBeam.update({ where: { id: b3.data.id }, data: { status: WarpBeamStatus.READY, currentMachineId: null, currentPosition: null } });
     const e5 = await hata(() => machineRunTabletContext("00000000-0000-0000-0000-000000000000"));
     check("olmayan makine → 404", status(e5) === 404);
+    const devereBaglam = (await getWarpBeamTabletContext()).data;
+    check("⭐ levent tablet bağlamı `weavingOrders` (aynı küme/biçim) + `beamWeavingLinkRequired` (etkin, şu an false) taşır", devereBaglam.weavingOrders.some((w) => w.id === wo1.id && w.item.id === ids.item) && !devereBaglam.weavingOrders.some((w) => w.id === woSub.id || w.id === woKapali.id) && devereBaglam.beamWeavingLinkRequired === false);
 
     console.log("\n§6 Y3 kolon yok (şema taraması)");
     const schema = readFileSync(join(__dirname, "..", "prisma", "schema.prisma"), "utf8");
