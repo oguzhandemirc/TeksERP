@@ -1,0 +1,281 @@
+# Uçtan Uca Test Senaryosu — güzergâh, dallar, backend doğrulaması, çıkarım
+
+> **Ne:** kullanıcı testi güzergâhının (`kullanici-testi.html`, 2026-09-15 yayını, A–M) genişletilmiş ve makineleşmiş hâli. Her adımın DÖRT kolonu var: **Yap** (ekranda nereye, ne) · **Bekle** (ekranda ne görünmeli) · **Backend doğrulaması** (hangi uç/tablo, beklenen sayı) · **Çıkarım** (① saha sürtünmesi → "daha kolay yol var mı?" · ② sektör → bizde eksik · ③ bizde fazla → sadeleştir).
+> **Neden dört kolon:** kullanıcı kuralı 2026-09-18 — *"test ederken çıkarım yapacak mısın? Amacımız işi de geliştirmek; çözüm yollarımızı her zaman daha kolay sunmak hedefimiz."* "N yeşil / M kırmızı" tek başına eksik rapordur; "K çıkarım, E sektör eksiği, S sadeleştirme" olmadan test bitmiş sayılmaz.
+> **Sürücüler:** panel adımları `Electron/e2e/guzergah/adimlar.mjs` (koşum `node e2e/guzergah/guzergah.mjs <id…>`), tablet adımları d5'in sürücüsünde — **aynı id, aynı `dogrula` şeması**. Bir adımın sürücü durumu: ✅ otomatik koşuyor · ⏳ yazılacak · ✋ elle (insan gözü gerekir: belge önizlemesi, yazıcı, Wi-Fi).
+> **Ortam:** `cd Teks-Erp && npx tsx scripts/e2e-ortam.ts kur` (fabrika dump kopyası `tekserp_d9e2e_test` + migrate + fixture) · `… sunucu` (backend :4110) — kullanıcının 4000/Electron'una DOKUNULMAZ. Roller: **P** panel-yönetici (`e2e-yonetici`) · **M** muhasebe · **S** sistem hesabı (parola yalnız koşum belleğinde) · **T** tablet operatörü.
+> **Adlar:** her kayıt `TEST` önekli (`E2E_ONEK` ile değişir, aynı DB'de yeniden koşum için). ⚠️ Sunucu master-data adını **Türkçe BÜYÜTEREK** saklar: "TEST Müşteri" listede **TEST MÜŞTERİ** görünür — kırmızı değil, kural (`name_uppercase_storage`).
+
+Çıkarım kaynakları: 9b [`CIKARIM-TANIM-ALIS-FINANS.md`](CIKARIM-TANIM-ALIS-FINANS.md) (B · C · J · L, 2026-09-18) · 6e [`CIKARIM-DEVERE-DOKUMA.md`](CIKARIM-DEVERE-DOKUMA.md) (D · F · G · K, 2026-09-18) · d9 sürücü koşumları (2026-09-18). Sektör atıfları: SAP MM/QM/PP, Datatex NOW, BMSvision/WeaveMaster; `docs/design/URETIM-BELGE-ZINCIRI.md` §1.2/§1.3/§4/§6 (5e). Etiket: **B** büyük · **O** orta · **K** küçük.
+
+---
+
+## 0 · Okuma kuralları
+
+- **Sıra önemli:** adımlar birbirinin verisini kullanır (`gerektirir`). Ön koşulu düşen adım **kırmızı değil ATLANDI**dır ve sebebi yazılır — "ölçemedim" ile "bozuk" aynı satıra düşmez.
+- **Backend doğrulaması ekrandan bağımsızdır:** ekran yeşil ama tablo yanlışsa adım KIRMIZI. Tablo adları `schema.prisma` `@@map`; uçlar `/api/…`. "ölçülecek" yazan hücre henüz doğrulanmamış bir iddiadır, kodu okumadan doldurulmadı.
+- **Seçici modalları 50'şer yükler:** TEST kayıtları ilk sayfada değildir — tedarikçi/ürün/müşteri modalında ÖNCE arama kutusuna ("Kod, ad…" / "Ad / kod / vergi no ara…") adı yaz, sonra satıra tıkla. Güzergâhın eski metninde bu adım yoktu; kullanıcı da yaşadı (1e).
+- **"Bilinen ve beklenen"** (kırmızı DEĞİL, not): çuval etiketinde iç not bu sürümde hâlâ basılır · panelde levent olay/tüketim satırları için ayrı ekran yok (yalnız "Tezgah kaydını geri al" listesinde).
+
+---
+
+## 1 · Ana zincir (A–M)
+
+### A · Hazırlık
+
+| Adım | Yap | Bekle | Backend doğrulaması | Çıkarım |
+|---|---|---|---|---|
+| **A1** · S · Sistem → Yapılandırma → Modüller ✅ | Sistem hesabıyla gir; Modüller ve Raporlar bölümlerine bak. | Başlık "Modüller"; on modül açık; Raporlar bölümünde 30 satır, her birinde Basit/Gelişmiş rozeti. | `GET /api/feature-flags` → on modül anahtarı `true`, `reportsClosedKeys` boş. | ① Sistem hesabı ayrı giriş; yönetici bu sayfayı göremez (doğru: kimlik kilidi). ③ — |
+| **A2** · S · Özellik Anahtarları → Devere / Levent ⏳ | "Levent tezgah bağı defteri" AÇ · "Tezgahtan inen top leventten otomatik düşsün" AÇ · kaydet (ayar şifresi). | İki satır açık; yenilenince değişmez. | `system_settings` → `devere.mountTracking`/`devere.autoConsume` (anahtar adları ölçülecek) `true`. | ① Ayar şifresi her kaydette; ③ — |
+| **A3** · T · Ayarlar → Güncelleme · API Sunucusu ✋/⏳ | Sürümü oku; API adresini gör; operatör hesabıyla gir. | "Çalışan sürüm" 1.0.7 · Native 54.3; Bölüm Seçimi'nde 8 karo. | `GET /api/client-policy/mobil` → `minVersion` sahadakinden küçük; `sessions` → operatörün oturumu `deviceType=MOBILE`, `clientVersion` dolu (2026-09-17'den beri). | ① Adres elle; ② — ; ③ — |
+
+### B · Tanımlar
+
+| Adım | Yap | Bekle | Backend doğrulaması | Çıkarım |
+|---|---|---|---|---|
+| **B1** · P · Tanımlar → İş Ortakları → Cariler → **Yeni Cari** ✅ | ① Ad "TEST Müşteri", Roller ☑ Müşteri, Sevk varsayılanı Yurtiçi → Kaydet. ② Ad "TEST Tedarikçi", ☑ Tedarikçi → Kaydet. Listede bulmak için arama kutusuna yaz. | İki satır, Rol sütununda rozet (Müşteri / Tedarikçi); "Yön: Tedarikçi" yalnız tedarikçiyi, "Fason: Fason yapan" göçle gelen fason kartlarını gösterir; "Yeni Fason" düğmesi YOK. | `customers` → 2 satır: `isCustomerRole/isSupplierRole` doğru, `defaultDestination=DOMESTIC` (müşteride); `subcontractors` → 0 (fason profili doğmadı); `cari_accounts` → 0 (hesap ilk belgeyle açılır — C6). | ① 4 dokunuş derinlik; "Sevk varsayılanı" kart açılırken sorulur (ilk sevkte sorulabilir). ② **O** SAP vendor master: ödeme koşulu · para birimi · IBAN · vergi dairesi KARTTA doğar; bizde bunlar `cari_accounts`ta ve o kayıt ilk fatura/ödemeyle doğuyor → vade/para birimi kart açılırken YOK. ③ **B** üç rol kutusu + `type` (türetilmiş) + `CariAccount.kind` — aynı sorunun üç cevabı; kaldırma fazı planlı (`IS-ORTAGI-ROL-MODELI.md` §7). |
+| **B2** · P · Tanımlar → Ürün Kataloğu → Ürünler → **Yeni** ✅ | Ad "TEST İplik", Tip İplik, Denye 150, "Elle gir" → Stok Kodu TEST-IP → Oluştur. İkinci: Tip Kumaş, TEST-KM, "TEST Kumaş". | Birim ipliğe otomatik KG; "Tür: İplik" yalnız ipliği gösterir, Renk/Özellik süzgeçleri gizlenir. **Not:** güzergâh "Yeni Ürün" der, düğme **"Yeni"** (diyalog başlığı "Yeni Ürün"). | `items` → `TEST-IP: YARN/KG/150`, `TEST-KM: FABRIC/MT`. | ① Kod otomatik, birim tipten — iyi. ② **K** alternatif birim (kg ↔ bobin), min stok / yeniden sipariş seviyesi, tedarikçi malzeme kodu — bizde bobin yalnız hareket kolonu, min stok YOK. ③ — |
+| **B3** · P · Üretim & Kalite → Çözgü Kartları → Yeni ⏳ | Kod TEST-CK1, ad "TEST Çözgü", iplik → TEST İplik, Tel 2000, Take-up 8 → kaydet. | Listede satır; take-up görünür. | `warp_specs` → 1 satır, `yarnItemId` = TEST-IP, `takeUpPct=8`. | ② **K** çözgü kg/m (tel × denye ÷ 9.000) kartta türetilmiş gösterilsin; bizde hesap yalnız sarımda. |
+| **B4** · P · Üretim İstasyonları → dokuma istasyonu → Makine ekle ⏳ | Ad "TEST-TZ1", levent yuva 1 → kaydet (dokuma istasyonu yoksa önce aç). | İstasyon kartında TEST-TZ1 · Aktif. | `machines` → 1 satır `warpBeamSlots=1`, `stationId` dokuma istasyonu. | ① Önce istasyon kartı bulunmalı (bağlam doğru). ② **K** iş merkezi: hedef devir + vardiya kapasitesi — `MachineSpec` var, alanları ölçülecek. |
+
+### C · İplik geldi — alış zinciri
+
+| Adım | Yap | Bekle | Backend doğrulaması | Çıkarım |
+|---|---|---|---|---|
+| **C0** · P · Cariler → Yeni Cari (tedarikçi) ✅ (B1 ile) | B1'in ikinci kartı. Vergi No 1234567890. | Rol "Tedarikçi"; Muhasebe → Cari Hesaplar'da HENÜZ yok. | `cari_accounts` → 0 (C6'da 1). | ③ **K** Güzergâhta iki kez tanım (B1 + C0): tek giriş; diyalog başlığı rolü söylesin ("Yeni Tedarikçi"). |
+| **C1** · P · Depo & Paketleme → Alış Siparişleri → Yeni Sipariş ✅ | Tedarikçi kutusu → modal → **ara** → TEST Tedarikçi; TRY; beklenen +3 gün; Not "TEST-AS1"; kalem: Ürün kutusu → modal → **ara** → TEST İplik, 120, 85, "1. parti" → "Siparişi aç (1 kalem)". | Listede "Bekliyor"; "Ne bekliyorum?" 120 / 0 / 120. **Not:** "Not (opsiyonel)" etiketi kutuya bağlı değil; birim fiyat kutusunun erişilebilir adı yok (yalnız "—") — erişilebilirlik borcu (K). | `purchase_orders` → `OPEN`, `TRY`; `purchase_order_lines` → `qty=120`, `unitPrice=85`; `goods_receipts` → 0. | ① Birim fiyat elle; beklenen tarih sipariş başına. ② **O** SAP PO: fiyat info record/son alıştan, ödeme koşulu tedarikçiden, teslim tarihi KALEM başına — bizde PO'da vade YOK, kalemde tarih YOK, son fiyat önerisi YOK. ③ **koru** onay/release adımı yok — küçük fabrika için doğru. |
+| **C2** · P · Mal Kabul → Yeni Mal Kabul ⏳ | Alış siparişi → TEST siparişi (tedarikçi kilitlenir, kalemler dolar: 120 kg × 85). Depo seç. İrsaliye IRS-TEST-1. Lot ÖNCE boş bırak → "Fişi Oluştur" kapalı/kırmızı olmalı (lot zorunlu açıksa); sonra Lot TEST-L1, Bobin 24 → Fişi Oluştur. | Fiş listede: tedarikçi · IRS-TEST-1 · 120 kg iplik · Aktif. Alış Siparişleri'nde "Tamamlandı"; detayda bağlı fiş. | `goods_receipts` → 1 (`purchaseOrderId` dolu, `supplierRef=IRS-TEST-1`); `yarn_lots` → TEST-L1 `supplierId` dolu; `yarn_movements` → +120 kg (kaynak mal kabul); `purchase_orders.status=CLOSED`. | ① Siparişten doldurma iyi; lot hatası satırda kırmızı (erken) iyi. ② **B** SAP GR: fazla teslim toleransı + QM 01 muayene → kalite stoğu → kullanım kararı; Datatex karantina. Bizde iplik doğrudan kullanılabilir stoğa düşer: kalite kabul/karantina statüsü YOK (`YarnLot` yalnız `isActive`); iç lot ↔ tedarikçi lotu ayrımı yok (**K**). Fazla teslim denetimi (`receivedQty > qty`) **ölçülecek**. |
+| **C3** · P · Mal Kabul → ikinci kez ⏳ | Aynı siparişi seç → "Kalemleri siparişten doldur". | "0 satır eklendi" / satır gelmez; iptal. | `goods_receipts` → hâlâ 1. | ③ **K** kapalı sipariş "Yeni Mal Kabul"da hiç listelenmesin. |
+| **C4** · P · İplik Kg-Stok → Stok · Lotlar ⏳ | Stok: TEST İplik 120 kg → hareket dökümü; Lotlar: TEST-L1. | Üç görünüm tutarlı; lot satırında tedarikçi dolu. | `GET /api/yarn-stock…` (uç adı ölçülecek) bakiye 120 = `yarn_movements` toplamı. | ② **K** iplik lotundan başlayan izlenebilirlik (lot → levent → top) tek raporda — bizde `batch-trace` TOP partisinden; iplikten başlayan iz **ölçülecek**. |
+| **C5** · P · Mal Kabul → fiş → Görüntüle / Bas · Alış Faturası Oluştur ✋/⏳ | Belgeyi önizle; "Alış Faturası Oluştur"; Muhasebe → Faturalar. | Belgede tedarikçi + irsaliye + 120 × 85; fatura Taslak, 10.200 + KDV. | `invoices` → 1 (`type` alış, `status=DRAFT`, `goodsReceiptId` dolu); `invoice_lines` → 1. | ② **B** SAP MIRO: n irsaliye → 1 fatura, fiyat/miktar toleransı, fark varsa BLOKE — bizde `Invoice.goodsReceiptId` tekil (n:1 YOK), PO↔fatura fiyat denetimi YOK. ③ **K** "Onayla" fiş detayından da verilsin. |
+| **C6** · M · Faturalar → Onayla · Cari Hesaplar → Düzenle → Ekstre ⏳ | Onayla; TEST Tedarikçi artık listede → TRY, vade 30 → Kaydet; Ekstre. | Fatura Onaylı; hesap kendiliğinden açılmış; bakiye NEGATİF; ekstrede fatura satırı. | `invoices.status=APPROVED`; `cari_accounts` → 1 (`kind`, `paymentTermDays=30`); `cari_transactions` → 1 fatura satırı, `dueDate` (vadesiz açıldıysa NULL — **çıkarım**). | ① Hesap faturayla doğuyor, vade sonra düzeltiliyor → o faturanın `dueDate`i vadesiz. ② **O** vade tedarikçi kartından faturaya iner. ③ **B** Cariler ↔ Cari Hesaplar iki ekran, iki kimlik: finans alanları Cariler kartına sekme; hesap kartla doğsun. |
+| **C7** · M · Tahsilat / Ödeme → Ödeme ⏳ | Cari türü Müşteri(!) → TEST Tedarikçi; kasa (yoksa "TEST Kasa" aç); Havale; tutar faturanın yarısı; "Dekont TEST-1" → Kaydet → makbuz; Fatura Kapama'da eşle. | Ödeme listede Yön "Ödeme"; ekstre bakiyesi yarıya; Fatura Kapama'da açık tutar yarıya. | `payments` → 1; `cash_transactions` → 1; `payment_allocations` → 1 (`amount` = yarısı); `cari_transactions` → 2. | ① "Cari türü **Müşteri** → tedarikçi" anlaşılmaz metin (`CariKind` CUSTOMER tedarikçiyi de kapsıyor); eşleme AYRI ekranda. ② **O** SAP F-53/Logo: ödeme girerken açık kalemler listelenir, FIFO kapanır — tek ekran. ③ **O** ödeme diyaloğuna açık fatura listesi + varsayılan FIFO; "Cari türü" seçimi kalksın (karttan türer). |
+| **C8** · S+P · "İplik lotu zorunlu" AÇ → lot boş fiş ⏳ | Anahtarı aç; Mal Kabul'de lot boş → Fişi Oluştur. | Toast "1 satır atlandı: … lot zorunlu"; fiş SATIRSIZ; anahtarı kapat, fişi iptal et. | `goods_receipts` → satırsız 1 fiş (`status` sonra CANCELLED). | ③ **O** Sunucu satırı **sessizce düşürür**, fiş satırsız doğar → fail-closed olmalı: lot zorunluysa fiş oluşmaz, hata satırda (satır kırmızı zaten var). |
+
+### D · Levent sarımı ve tezgaha takma (tablet)
+
+| Adım | Yap | Bekle | Backend doğrulaması | Çıkarım |
+|---|---|---|---|---|
+| **D0** · P · Üretim İstasyonları → Yeni İstasyon (DEVERE) ⏳ | Ad DEVERE, tür Devere (WARPING; yetenek ön-dolar) → Kaydet; Makine ekle DV1. | Tablette Levent Sarım başlığı "1 devere makinesi"; D2 seçicisinde DV1. | `stations` → 1 (`producesWarpBeam=true`); `machines` → DV1. | ① İki form, ~9 dokunuş. ② **K** "istasyon + ilk makine" tek adımda. ③ **K** türe göre ilgisiz yetenek kutuları "Gelişmiş" altına. |
+| **D1** · T · Levent Sarım → Yeni levent ⏳(d5) | Çözgü TEST Çözgü, 500 m, köken IN_HOUSE, metal no TEST-M1 → Planla. | "Planlı (1)". | `warp_beams` → 1 `status=PLANNED`, `plannedMeters=500`. | ① Her açılış boş form; son kart hatırlanmıyor; ~6 dokunuş. ② **B** (5e Y2) `WarpBeam.weavingOrderId?` — iş seçilince kart + metre ön-dolar (+0 dokunuş); **K** son kullanılan çözgü kartı ön-dolu. ③ **K** köken varsayılan IN_HOUSE ve katlanır. |
+| **D2** · T · Planlı → SAR ⏳(d5) | 500 m, adet 1, iplik çıkışı: depo, TEST-L1, 30 kg; dip 1 kg (sebep); devere makinesi → Sarımı Kaydet. | "Bugün sarılan"; panelde TEST-L1 kalan 91 kg. | `warp_beams.status=READY`; `yarn_movements` → −30 (çıkış) + 1 (dip iadesi); lot bakiyesi 91; `warp_beam_events` → WOUND. | ① Makine seçici ön-dolu değil; dip iadesi sebep zorunlu; ~10 dokunuş. ② **O** son sarımın lot/depo/kg'sini ön-doldur. ③ **K** tek makine ön-seç; tek sebepli katalogda sebep sorulmasın. |
+| **D3** · T · Yeni levent → SAR (raşel takımı) ⏳(d5) | 300 m plan; SAR: adet 3, önek TEST-R, 300 m, 45 kg TEST-L1, dip 3 → kaydet. | Üç levent (TEST-R-1/2/3), her biri 15 kg + 1 kg dip payı; lot kalanı 49. | `warp_beams` → +3, `bodyNo` TEST-R-1..3; lot bakiyesi 49. | ② eksik yok. ③ **K** önek boşsa gövde no türet. |
+| **D4** · T · Tezgahta → TAK ⏳(d5) | Tezgah TEST-TZ1, sayaç boş → TAK. | "Tezgahta (1)"; panelde Leventler: TEST-TZ1 · yuva 1 · TAKILI. | `warp_beams` → `status=MOUNTED`, `currentMachineId`=TEST-TZ1, `slot=1`; `warp_beam_events` → MOUNTED. | ① Takma devere tabletinden; fiziksel iş tezgah başında. ② **O** tezgah tabletinde "TAK". ③ **K** yöntem satırı bayrak kapalıyken gizli. |
+| **D5** · P · Leventler → TEST-R-2 → Planı düzenle → gövde TEST-R-1 ⏳ | Dolu gövde yaz → kaydet; tablette bu leventi SAR. | Plan KABUL + amber uyarı "gövdesinde … canlı"; sarımda 409 "gövdesinde canlı bir çözgü var". | `warp_beams` → plan kaydedildi; SAR → HTTP 409, `warp_beam_events` değişmedi. | ② **K** uyarının listede kalıcı rozeti (toast kaçarsa iz yok). |
+
+### E · Sipariş → iş emri
+
+| Adım | Yap | Bekle | Backend doğrulaması | Çıkarım |
+|---|---|---|---|---|
+| **E1** · P · Satış & Planlama → Siparişler → Yeni Sipariş ⏳ | TEST Müşteri, TEST-S1, termin +7, kalem TEST Kumaş 100 metre → kaydet. | Listede TEST-S1; "Sevk İlerlemesi 0". | `orders` → 1; `order_lines` → 1 (`unit=METER` zorunlu). | — |
+| **E2** · P · Sipariş detayı → kalem → "İş emri oluştur (1)" ⏳ | Rota şablonu (dokuma/kurşun/tambur), hedef 100 → kaydet. | İş emri no; listede Müşteri "TEST Müşteri", Sipariş TEST-S1. | `work_orders` → 1 (`type` bağın aynası); `work_order_to_order_lines` → 1. | — |
+| **E3** · P · İş emri → Bağlı Sipariş(ler) → gerçek bir siparişi de bağla ⏳ | "Bağla (1)". | "TEST Müşteri +1" rozeti; tooltip iki ad. | `work_order_to_order_lines` → 2. | — |
+
+### F · Dokuma — koşum, duruş, indirme, otomatik çözgü tüketimi
+
+| Adım | Yap | Bekle | Backend doğrulaması | Çıkarım |
+|---|---|---|---|---|
+| **F1** · P · Dokuma İşleri → Yeni Dokuma İşi ⏳ | TEST Kumaş, renk yok, çözgü TEST Çözgü, kendi tezgahı, hedef 100 → kaydet. | Dokuma No; durum planlı/hazır. | `weaving_orders` → 1. | ① Çözgü kartı kumaştan türemiyor; sipariş bağı YOK; ~6 dokunuş. ② **B** (5e Y1) siparişten "dokuma işi aç" (kumaş + hedef + termin ön-dolu); **O** kumaş kartına varsayılan çözgü kartı. ③ **K** plan tarihleri katlanır. |
+| **F2** · T · Tezgah → TEST-TZ1 → Koşum Aç ⏳(d5) | İş emrine bağlı koşum; levent panelinde TEST-M1 · kalan 500. | Koşum açık · saat; levent satırı doğru. | `machine_runs` → 1 açık (`endedAt` NULL), `weavingOrderId` dolu. | ① Liste tüm açık işler; atkı sıklığı/devir elle, boşsa metre türemez (sessiz). ② **O** atkı sıklığı kumaş kartından, hedef devir `MachineSpec`ten ön-dolu; **B** takılı leventin işi ön-seçili. ③ **K** açık iş listesi tezgahın çözgüsüne göre sıralı. |
+| **F3** · T · Duruş paneli ⏳(d5) | Duruş Bildir → 10 dk → Çalıştı → Sebep ata. | Panelde Tezgah Duruşları: TEST-TZ1, süre, sebep, Kaynak "tablet". | `machine_stop_events` → 1 (`reasonCode` dolu, `source=TABLET`). | ① Bildir: modal + onay (2 dokunuş). ② **O** duruş anında hızlı sebep düğmeleri (`quickPick`). ③ **K** "Duruş Bildir" modalsız başlasın. |
+| **F4** · T · İndirme → Ham Giriş (doff bağı) ⏳(d5) | Hat 1, parça 1, sayaç 40 → indir; Ham Giriş → "dokuma mı? Evet" → indirmeyi seç → Desen TEST Kumaş, 40 m → Kaydet ve Etiket Bas. | Kayıt + mavi toast "çözgü tüketimi ≈ 43,5 m"; Leventler → TEST-M1 kalan ≈ 456,5. | `doff_events` → 1; `rolls` → 1 (`entrySource=WEAVING`, `doffEventId` dolu); levent tüketim defteri (`warp_beam_events` CONSUMED) → 43,5; `warp_beams.remainingMeters` ≈ 456,5. | ① ~12 dokunuş, iki ekran; koşum çipi tek koşumda bile elle; desen elle (doff→koşum→iş biliniyor). ② **O** KK1'de doff seçilince desen/renk ön-dolu; **K** doff listesi bu tezgah önce; `autoConsume` kapalıyken "tüketim yazılmadı" bilgisi. ③ **O** tezgah ekranında "İndir ve topu doğur" kısa yolu; **K** tek koşum ön-seçili, parça varsayılan 1. |
+| **F5** · T · Wi-Fi kapalı → 20 m top → Wi-Fi açık ✋ | Aynı yol. | Toast barkodla gelir (kuyruktan); levent kalanı ≈ 434,8. | `rolls` → +1 (`clientToken` tek, replay yok); levent kalanı. | ② eksik yok. |
+| **F6** · P · Kumaş Stoğu → Ham Stok → Manuel Top Ekle · tablette Sök ⏳ | 30 m/150 en ekle; tablette leventi Sök (kalan boş); tekrar 10 m ekle. | İlk eklemede tüketim toast'ı (≈32,6); sökme sonrası "bağlı levent yok, tüketim yazılmadı" uyarısı. | `warp_beam_events` → CONSUMED 32,6 + UNMOUNTED; ikinci topta CONSUMED yok. | ③ **K** Sök'te kalan boşsa kaynak sorulmasın. |
+| **F7** · P · 40 m topu Stoktan Kaldır (CANCEL) → İptali Geri Al ⏳ | Önizleme → "1 topu stoktan kaldır"; Top Detayı → İptali Geri Al. | İptalde ters tüketim (CONSUMED_CANCEL); geri almada yeniden tüketim; kalan her adımda tutarlı. | `rolls.status` CANCELLED → ACTIVE; `warp_beam_events` → CONSUMED, CONSUMED_CANCEL, CONSUMED (üç satır, hiçbiri silinmez); `remainingMeters` başa döner. | ③ **K** geri alma iki yol (top detayı / levent menüsü) — tek kapı + yardım metni. |
+
+### G · Emanet
+
+| Adım | Yap | Bekle | Backend doğrulaması | Çıkarım |
+|---|---|---|---|---|
+| **G1** · P · Leventler → Yeni Levent (emanet) ⏳ | Köken "Müşterinin emanet leventi" → sahibi TEST Müşteri, TEST Çözgü, 200 m. | "Emanet" rozeti; tedarikçi/fasoncu alanları kapalıydı. | `warp_beams` → `origin=CONSIGNED`, `ownerCustomerId` dolu, `supplierId`/`subcontractorId` NULL. | ② eksik yok. |
+| **G2** · T · Ham Giriş (dışarıdan) → emanet sahibi ⏳(d5) | Sahibi TEST Müşteri, TEST Kumaş 25 m; ikinci top sahipsiz 15 m. | Seçici yalnız müşterileri listeler; ilk top emanet rozetli. | `rolls` → 2: `ownerCustomerId` dolu / NULL. | ② **K** doff'a bağlı topta sahip işten türesin. |
+
+### H · Kurşun ve tambur (tablet)
+
+| Adım | Yap | Bekle | Backend doğrulaması | Çıkarım |
+|---|---|---|---|---|
+| **H1** · P · Kurşun Planlama → Havuz → makine sekmesi ⏳ | TEST işini bir kurşun makinesine taşı. | İş makine sekmesinde; havuzdan düşer. | `work_orders`/planlama tablosu (ad ölçülecek) → `machineId` dolu. | — |
+| **H2** · T · Kurşun → Tara ⏳(d5) | F4 topunun barkodu; hata metresi 2 → kaydet. | KK2 geçti; panelde "Tambur Bekleyen". | `roll_operations` → PROCESS_QC; `roll_errors` → 2 m; `rolls.status` tambur bekliyor. | — |
+| **H3** · T · Tambur → Açık İşler → Kes → Geri Al → Kes → Bitir ⏳(d5) | 40 m, TEST Müşteri, Kalite 1 → Kes (Depoya Ekle); "Tambur İşlemini Geri Al" (önizle) → tekrar Kes → Bitir. | Geri almada önizleme etkilenen topu listeler; defter satırı silinmez; "Tüm toplar finalize"; Bitmiş Depo'da 40 m top. | `rolls.status=WAREHOUSE`, `finalizedAt` trigger yazdı; `roll_operations` → CUT, CUT ters kaydı, CUT (silme yok); `roll_movements` depo girişi. | — |
+| **H4** · T · Tambur → Manuel Ekle → Geri Al ⏳(d5) | 12 m, sebep, aynı parti → ekle; "Elle Eklenen Topu Geri Al". | Bitmiş Depo'da 12 m ikinci top; geri alınca durum geçişi. | `rolls` → +1 (`entrySource` manuel), geri almada `status=CANCELLED` (hard delete YOK). | — |
+
+### I · Çuval, sevkiyat, irsaliye, iade
+
+| Adım | Yap | Bekle | Backend doğrulaması | Çıkarım |
+|---|---|---|---|---|
+| **I1** · T · Sevkiyat (tartı/paket) → Açık Siparişler ⏳(d5) | TEST-S1 seç → Paketlemeye Geç. | "Çuvallar (0)". | — | — |
+| **I2** · T · Yeni Çuval → Top Okut → Elle kg 38 → Etiket bas ⏳(d5)/✋ | H3 topu; kantar yoksa "Elle kg gir" 38. | Çuval dolu; etiket önizlemesinde iç not HÂLÂ var (beklenen). | `sacks` → 1 (`weightKg=38`, `weightSource=MANUAL`); top çuvalda. | ① Elle kg aksiyon menüsünde. |
+| **I3** · T · Hemen Sevk Et (1) ⏳(d5) | Sevkiyat kurulur. | Sevk Çıkışı'nda "Planlı". | `shipments` → 1 `PLANNED`; `sack_allocations` → sevk anında (I5'te). | — |
+| **I4** · P · Paketleme / Çuvallar → Yeni Çuval (EMANET top) → Sevkiyat Kur → BAŞKA müşteri ⏳ | G2 emanet topunu koy; başka müşteriye "Sevk Et". | 409: önizlemede top barkodu ve sahibi "TEST Müşteri"; TEST Müşteri seçilince kurulur. | HTTP 409 `details.code` emanet; `shipments` değişmedi; ikinci denemede +1. | — |
+| **I5** · T · Sevk Çıkışı → Sevk Et → Çıkışı Onayla ⏳(d5) | Onay sayfası → Çıkışı Onayla. | Toast "Çıkış verildi — stok bina dışı"; geçmişte satır. | `shipments.status=DISPATCHED`, `dispatchedAt` dolu; `shipment_events` → DISPATCHED; `sack_allocations` → 1; `rolls.status=SHIPPED`; stok defteri çıkış satırı. | — |
+| **I6** · P · Sevkiyatlar → satır → belge ✋ | "Sevk İrsaliyesi" önizlemesi. | Şeritte firma · irsaliye no · tarih; rakamlar BRÜT. | `GET /api/printed-documents/…` (uç ölçülecek) → `printed_documents` 1. | — |
+| **I7** · P · İade Takibi → Yeni İade ⏳ | Barkod → Sorgula → 10 m iade, neden → İade Gir. | İade satırı; "İade İrsaliyesi"; sevk rakamı DEĞİŞMEZ (brüt). | `roll_returns` → 1 (10 m); `shipments` çıkış rakamı aynı; `shipment_events` iade satırı. | — |
+
+### J · Muhasebe
+
+| Adım | Yap | Bekle | Backend doğrulaması | Çıkarım |
+|---|---|---|---|---|
+| **J1** · M · Sevkiyatlar (Muhasebe) → Faturala ⏳ | Tür satış, cari türü Müşteri, para birimi; satırlar sevkten → kaydet. | Faturalar'da taslak. | `invoices` → +1 (`shipmentId` dolu, `DRAFT`); `invoice_lines` = sevk satırları. | ③ **K** türetilebilen alan sorulmasın: tür=satış, cari=sevk müşterisi ön-dolu ve kilitli. |
+| **J2** · M · Faturayı onayla → yazdır ✋/⏳ | Onayla; önizle. | Fatura no; satırlarda birim (metre) dolu; Sevkiyatlar'da Fatura kolonu dolu. | `invoices.status=APPROVED`, `number` dolu; `invoice_lines.unit` NOT NULL. | ② **bilinçli karar** e-Fatura/e-Arşiv (GİB UBL) — bizde YOK. |
+| **J3** · M · Tahsilat ⏳ | TEST Müşteri, kasa, nakit, yarısı → kaydet → makbuz. | Makbuz; Kasa Hareketleri'nde satır. | `payments` → +1; `cash_transactions` → +1; `payment_allocations` → +1. | ③ C7 ile ortak: açık kalem seçimi girişte. |
+| **J4** · M · Raporlar → Cari Yaşlandırma → ekstre ⏳ | TEST Müşteri → "Cari ekstresi". | Fatura + tahsilat satırları; bakiye = fatura − tahsilat; belge tipi süzgeci özeti değiştirmez. | `GET /api/reports/finance/aging…` → bakiye = `cari_transactions` toplamı. | ② yaşlandırma kovaları `dueDate` ister → C6 vade eksiği burada görünür. |
+| **J5** · M · Kasa & Banka Defteri · KDV Dönem Özeti ✋/⏳ | Kasa: cari + yön Giriş; KDV: yön Satış + oran; Excel al. | Süzgeç şerhleri ekranda ve Excel meta'da; KDV'de cari seçici YOK. | `GET /api/reports/finance/cash-ledger…` / `…/vat-summary…` `meta.secenekler` dolu. | — |
+
+### K · Fason dokuma ve fasona iplik
+
+| Adım | Yap | Bekle | Backend doğrulaması | Çıkarım |
+|---|---|---|---|---|
+| **K1** · P · Yeni Dokuma İşi (fasoncu) → Fason (sevk · kabul) → Sevk et ⏳ | Levent TEST-R-3 + iplik TEST İplik, TEST-L1, 20 kg → sevk. | "Sevkler (1)"; FasonYarnStrip giden 20 kg; lot kalanı 29. | `subcontractor_dispatches` → 1; `subcontractor_dispatch_items` → 2 (levent + iplik); `yarn_movements` → −20; `warp_beams.status=SHIPPED_OUT`. | ② **K** sevk edilen leventlerin gövde/durum rozeti. |
+| **K2** · T · Fason Dokuma Kabul → iş → 35 m kabul ⏳(d5) | 1 satır 35 m → kabul. | "Makbuzlar (1)", "Doğan top 1"; Ham Stok'ta top (kaynak fason), sahibi boş. | `subcontractor_receipts` → 1; `rolls` → +1 (`entrySource` fason/dokuma, `ownerCustomerId` NULL). | ② **K** kabulde desen işten ön-dolu (ölçülecek). |
+| **K3** · P · sevk satırı → İplik döndü → Dönüşü geri al ⏳ | 5 kg, sebep → kaydet (önizleme); sonra geri al (gerekçe). | "5 kg → depo; fasonda kalan 20 → 15"; storno sonrası 20; defterde iki satır. | `yarn_movements` → +5 (dönüş) ve −5 (storno) — iki satır, silme yok; fasonda kalan 20. | — |
+
+### L · Raporlar
+
+| Adım | Yap | Bekle | Backend doğrulaması | Çıkarım |
+|---|---|---|---|---|
+| **L1** · P · Dokuma → Randıman ⏳ | Son 7 gün; Tezgah TEST-TZ1; Levent TEST-M1; lot TEST-L1 (Enter). | Seçenekler pencerede geçen leventler; seçince liste daralmaz; "n satır kapsam dışı" notu; Kaynak ölçüldü/elle. | `GET /api/reports/weaving/efficiency?…` `meta.secenekler` + `meta.dusenSatir`. | ② **K** kayıtlı rapor süzgeci (SAP variant). |
+| **L2** · P · Randıman → Excel · PDF · Yazdır ✋ | Üçünü al. | Dosya adında tarih penceresi; başlıkta süzgeç satırı; "ölçülemedi" metin. | — | — |
+| **L3** · P · Duruş Pareto · Vardiya Karnesi · Karne Listesi ve Mühür ⏳ | Pareto tezgah süzgeci; karnede gün + vardiya; ⋯ → Mühürle. | F3 duruşu Pareto'da; mühür sonrası "Mühürlü" +1, satır donar. | `machine_shift_stat_seals` → +1; mühürlü satır `PATCH` → 409. | ③ **K** mühür düğmesi satırda görünür (tek dokunuş). |
+| **L4** · P · Sipariş Karnesi · Sipariş İptal Karnesi ⏳ | Müşteri çoklu seçici; hedef Yurtiçi; iptal karnesinde sebep. Seçimi temizle. | "müşteri varsayılanı" niteleyicisi; "sebep yalnız payı süzer" şerhi; temizleyince adres çubuğunda anahtar kalmaz. | `meta.secenekler` ve `meta.varsayilan` (ad ölçülecek). | — |
+| **L5** · P · Raporlar hub · Top İzleme ✋ | Kategori sayfaları; her yaprakta "bu rapor neyi cevaplar". | Bölümleme karo gizlemez; özet şeridi tablodan önce. | `REPORT_CATALOG` 30 satır = ekrandaki karo sayısı. | — |
+
+### M · Süperadmin — görünürlük ve modül kapatma
+
+| Adım | Yap | Bekle | Backend doğrulaması | Çıkarım |
+|---|---|---|---|---|
+| **M1** · S+P · Modüller → Raporlar → "Kalite Karnesi" kapat ⏳ | Kaydet (ayar şifresi); yönetici: Raporlar → Kalite; ⌘K "Kalite Karnesi"; adres `/reports/quality/scorecard`. | Karo yok, palette çıkmaz, doğrudan adres yetkisiz sayfası; tekrar aç → döner. | `system_settings.reports.closedKeys` = `["quality/scorecard"]`; ilgili uç → 403 `REPORT_DISABLED`; açınca 200. | — |
+| **M2** · S+P+T · "Dokuma" modülünü kapat → Raporlar → tekrar aç ⏳ | Dokuma rapor satırları; tablette Bölüm Seçimi. | Satırlar kilit bandıyla pasif; tablette Tezgah/Levent Sarım karoları kaybolur, açılınca döner. | `dokuma.enabled=false` → dokuma uçları 403 `MODULE_DISABLED`; `GET /api/feature-flags` tablet için aynı. | — |
+| **M3** · S+P+T · "Emanet" modülünü kapat → sahip seçicileri → tekrar aç ⏳ | Panel Manuel Top Ekle; tablet Ham Giriş. | Seçiciler kaybolur; G2 emanet topu rozetiyle durur; I4 sevk kapısı yine çalışır. | `emanet.enabled=false`; emanet sevk kapısı (I4) yine 409 — kapalı modül kapıyı KALDIRMAZ. | — |
+
+---
+
+## 2 · Dallar — güzergâhta olmayan, sistemin sözünü ölçen adımlar
+
+Her dal ana zincirin verisine dayanır (`gerektirir`). Kod harfleri N–T; sürücü hepsini ⏳ (yazılacak) sayar.
+
+### N · İptal ve geri alma — storno ≠ iade, ters kayıt siler mi?
+
+| Adım | Yap | Bekle | Backend doğrulaması |
+|---|---|---|---|
+| **N1** · P · D2 leventinin sarımını geri al (WOUND_CANCEL) | Leventler → satır menüsü → "Sarımı geri al" (gerekçe). | Levent PLANNED'a döner; iplik lotu kalanı +30 −1 (dip iadesi geri). | `warp_beam_events` → WOUND, WOUND_CANCEL (iki satır); `yarn_movements` → ters satırlar (silme yok); lot bakiyesi 120. |
+| **N2** · P · I5 sevkini geri al (`shipping:undo-dispatch`) | Sevkiyatlar → satır → "Sevki geri al" (SoD: yalnız Muhasebe/Süpervizör). | Sevk PLANNED'a döner; toplar depoya; irsaliye no korunur. | `shipments.status=PLANNED`, `dispatchedAt` NULL'lanMAZ (ters kayıt bugüne); `shipment_events` → UNDO satırı; `sack_allocations` geri; `rolls.status=WAREHOUSE`. |
+| **N3** · M · J2 faturasını iptal (storno) | Faturalar → satır → "İptal". | Fatura `VOIDED`; cari bakiye eski hâline; sevk rakamı değişmez. | `invoices.status=VOIDED`; `cari_transactions` → ters satır (+1, silme yok); `shipments` aynı. |
+| **N4** · T · H3 kesimini ikinci kez geri al (LIFO) | Tambur → "Tambur İşlemini Geri Al". | Yalnız EN SON işlem geri alınır; önizleme etkilenen topu listeler. | `roll_operations` → ters kayıt bugüne; sıra LIFO; `finalizedAt` trigger'ı tutarlı. |
+| **N5** · P · İade sonrası sevk rakamı | I7'den sonra sevk belgesini yeniden aç. | BRÜT değişmedi; iade ayrı belge. | `roll_returns` → 1; `shipments` çıkış toplamı sabit. |
+
+### O · Hata yolları — 409 claim, zorunlu alan, gövde dolu, kapalı modül
+
+| Adım | Yap | Bekle | Backend doğrulaması |
+|---|---|---|---|
+| **O1** · P+T · Aynı topu iki tabletten aynı anda KK2'ye al | İki oturumda aynı barkod → kaydet. | Biri kaydeder, öteki 409 "tekrar deneyin / zaten geçti". | `roll_operations` → tek PROCESS_QC satırı (atomik claim, count===0 → 409). |
+| **O2** · P · Lot zorunlu açıkken lot boş mal kabul (C8'in fail-closed hâli) | C8 ile aynı. | **Beklenen davranış (çıkarım):** fiş OLUŞMAZ, satır kırmızı. Bugünkü: satır düşer, fiş satırsız doğar. | `goods_receipts` → 0 (hedef) / 1 satırsız (bugün) — fark raporlanır. |
+| **O3** · T · Dolu gövdeye sarım (D5) | Gövdesi dolu leventi SAR. | 409 "gövdesinde canlı bir çözgü var". | `warp_beam_events` değişmedi. |
+| **O4** · P · Kapalı modülün ucu (M2 açıkken dokuma) | Dokuma İşleri'ne doğrudan git; `POST /api/weaving-orders`. | Karo yok; uç 403 `MODULE_DISABLED` (`details.code`). | HTTP 403, `details.code=MODULE_DISABLED`; `weaving_orders` değişmedi. |
+| **O5** · T · Çevrimdışıyken aynı kaydı iki kez gönder (F5) | Kuyruk iki kez tetiklensin. | Tek top; ikinci deneme replay (aynı `clientToken`). | `rolls` → 1; token dört durumlu replay (`token-replay.helper`). |
+| **O6** · P · Emanet topu başka müşteriye sevk (I4) | I4. | 409 + etkilenen kayıt listesi (barkod + sahip). | `details.code` emanet kapısı; `shipments` değişmedi. |
+| **O7** · P · Sipariş kalemi birimsiz kaydetme | E1'de birimi boş bırak. | 400 Türkçe mesaj, alan adı. | `order_lines` değişmedi. |
+
+### P · Yetki — SoD üçlüsü, kapalı izin
+
+| Adım | Yap | Bekle | Backend doğrulaması |
+|---|---|---|---|
+| **P1** · P (operatör izinli yönetici DEĞİL) · `shipping:invoice` olmadan Faturala | J1'i yetkisiz kullanıcıyla dene. | Düğme yok / 403. | HTTP 403 `PERMISSION_DENIED` (kod ölçülecek); `invoices` değişmedi. |
+| **P2** · P · `shipping:undo-dispatch` olmadan sevk geri al | N2'yi yetkisiz dene. | 403. | `shipments` değişmedi. |
+| **P3** · P · `roll:manual-adjust` olmadan Manuel Top Ekle | F6'yı yetkisiz dene. | 403. | `rolls` değişmedi. |
+| **P4** · P · İzin çıkarıldıktan sonra AÇIK oturum | Yetkilendirme'de e2e-yonetici'den `customer:write`i al; açık oturumda B1'i dene. | Anında 403 (JWT `tokenVersion` bump → yeniden giriş ya da 401). | `users.tokenVersion` +1; `sessions` iptal/yenileme; `customers` değişmedi. |
+| **P5** · S · Sistem hesabı panelden atanamaz | Yetkilendirme'de sistem hesabına rol ata. | Görünür ama kimlik teslim edilmez; atama reddedilir. | `user_permissions` değişmedi. |
+
+### Q · Çoklu kullanıcı — iki tablet, aynı kaynak
+
+| Adım | Yap | Bekle | Backend doğrulaması |
+|---|---|---|---|
+| **Q1** · T×2 · Aynı operatör iki tablette giriş | İkinci giriş. | Politikaya göre kick (ilk tablet 401 "başka cihazdan giriş") ya da notify 409 `SESSION_EXISTS`. | `sessions` → eski `revokedAt`+`NEW_LOGIN` (kick) / iki aktif (confirmKick). |
+| **Q2** · T×2 · İki tablet aynı leventi TAK | D4'ü iki tabletten. | Biri MOUNTED, öteki 409. | `warp_beams` tek `currentMachineId`; `warp_beam_events` tek MOUNTED. |
+| **Q3** · T×2 · Aynı top iki çuvala | I2'yi iki tabletten. | İkinci 409 "top zaten çuvalda". | `rolls.sackId` tek. |
+| **Q4** · P+T · Panel topu iptal ederken tablet KK2 alıyor | F7 + H2 aynı anda. | Biri kazanır; öteki 409; defter tutarlı. | `roll_operations`/`rolls.status` çelişkisiz; atomik claim. |
+
+### R · Çevrimdışı / yeniden bağlanma (tablet)
+
+| Adım | Yap | Bekle | Backend doğrulaması |
+|---|---|---|---|
+| **R1** · T · Wi-Fi kapalı → 3 top gir → aç | Ham Giriş ×3. | Üçü kuyruktan gider; toast barkodlarla; sıra korunur. | `rolls` → +3, `clientEnteredAt` iki yönlü (gönderim değil giriş zamanı). |
+| **R2** · T · Kuyrukta kesin 4xx | Geçersiz desenle kuyruğa al → aç. | Kayıt düşer, kullanıcıya NEDEN gösterilir; token yapışmaz. | `rolls` değişmedi; ikinci deneme YENİ token. |
+| **R3** · T · Sunucu 5xx/zaman aşımı sonrası tekrar | Backend'i kısa süre durdur → gönder → başlat. | Aynı token ile tekrar; tek kayıt. | `rolls` → 1 (replay). |
+
+### S · Rapor doğrulamaları — sayılar defterle tutarlı mı?
+
+| Adım | Yap | Bekle | Backend doğrulaması |
+|---|---|---|---|
+| **S1** · P · Randıman (L1) metre toplamı | TEST-TZ1, bugün. | Rapor metresi = indirilen toplar toplamı. | `Σ rolls.initialQty (entrySource=WEAVING, tezgah TEST-TZ1, bugün)` = rapor satırı; kaynak "ölçüldü/elle" bayrağı doff'tan. |
+| **S2** · P · Top İzleme (L5) | F4 topunun barkodu. | Doğum (KK1) → KK2 → Tambur → çuval → sevk → iade zinciri tam. | `roll_operations` + `roll_movements` + `shipment_events` + `roll_returns` sırası = ekrandaki zaman çizelgesi. |
+| **S3** · M · Cari ekstre (J4) | TEST Müşteri. | Bakiye = Σ fatura − Σ tahsilat ± storno. | `Σ cari_transactions` (VOIDED hariç değil — ters satır var) = ekstre bakiyesi. |
+| **S4** · P · İplik lotu izi (C4 → D2 → D3 → K1) | TEST-L1. | 120 − 30 + 1 − 45 + 3 − 20 + 5 − 5 = 29 kg. | `Σ yarn_movements (lot TEST-L1)` = 29; her hareketin kaynağı (mal kabul · sarım · dip · fason sevk · dönüş · storno). |
+| **S5** · P · Sipariş karnesi (L4) sevk ilerlemesi | TEST-S1. | Sevk edilen 40 m (BRÜT), iade 10 m ayrı kolon. | `sack_allocations` = 40; `roll_returns` = 10; karne brütü değiştirmez. |
+| **S6** · P · Vardiya karnesi (L3) duruş süresi | TEST-TZ1, bugün. | F3 duruşu süresiyle; mühürlü satır değişmez. | `machine_stop_events` toplamı = karne; mühür sonrası `PATCH` 409. |
+
+### T · Sürüm / OTA — eski istemci ne yapar?
+
+| Adım | Yap | Bekle | Backend doğrulaması |
+|---|---|---|---|
+| **T1** · S · `minVersion`i sahadakinin ÜSTÜNE yazma denemesi | `client-policy` sabitini kod incelemesinde oku. | Kural: minVersion sahadakinden BÜYÜK OLAMAZ; kod yolu review'dan geçer (panelde ayar YOK). | `GET /api/client-policy/electron` `minVersion` ≤ `sessions.clientVersion` min (son 30 gün). |
+| **T2** · T · Eski JS paketiyle tablet (`minPaketTarihi`) | Eski paketi yükle, backend'i yeni tut. | Kilit yalnız güncelleme GERÇEKTEN kurulabilirse; çevrimdışıysa kilitlenmez. | `client-policy/mobil.minPaketTarihi` ↔ `Updates.createdAt`. |
+| **T3** · P · Panel ilk açılış "neler değişti" | Taze profil ile aç. | Diyalog bir kez; Tamam sonrası tekrar gelmez. | `surum-notlari.json` son tur = diyalog içeriği. |
+| **T4** · S · Kaldırma fazı kapısı | `test_rol_modeli_kalinti` kurulum kopyasında. | ④ kolu: pencere dolmadan ÖLÇÜLEMEDİ; 2026-10-17'den önce "AÇILABİLİR" yok. | `sessions.clientVersion` NULL sayısı son 30 gün. |
+
+---
+
+## 3 · Kapanış — eksikler, sadeleştirmeler, korunacaklar
+
+Her madde bir DİLİM adayıdır; 1e iş mantığı önceliğiyle sıralar. Davranış değişikliği **bayrağın arkasında** doğar, bayrağın varsayılanı = bugünkü davranış (kullanıcı 2026-09-18: *"birden fazla yol koyarız, flag'lerle seçtiririz"*).
+
+### 3.1 Eksikler — sektörde var, bizde yok
+
+| Etiket | Eksik | Adım | Kaynak |
+|---|---|---|---|
+| **B** | Talep → icra zinciri: `WeavingOrder.orderLineId?` (Y1) + `WarpBeam.weavingOrderId?` (Y2), ikisi de opsiyonel ön-dolum kaynağı — D1/F1/F2'de +0 dokunuşla iş bağı; "bu sipariş için kaç metre dokundu" | D1 · F1 · F2 | 6e · 5e §3.1/§8 |
+| **B** | Tedarikçi fatura eşleme: n irsaliye → 1 fatura + fiyat/miktar toleransı, fark varsa BLOKE (`Invoice.goodsReceiptId` tekil → pivot ya da satır bağı) | C5 | 9b [1][2] |
+| **B** | Kalite kabul / karantina: iplik lotu kabulde `KALİTE BEKLİYOR`, kullanım kararıyla stoğa (`YarnLot` yalnız `isActive`) | C2 | 9b [3][4][5] |
+| **O** | KK1 doff bağında desen/renk/sahip ön-dolu (doff → koşum → iş; `DOFF_SELECT` genişler) — en büyük dokunuş kazancı (F4 −3) | F4 · G2 | 6e |
+| **O** | Ödeme koşulu (vade) ve para birimi KARTTA doğsun, PO ve faturaya insin; `dueDate` otomatik | B1 · C1 · C6 · J4 | 9b |
+| **O** | Ödeme/tahsilat girişinde açık fatura listesi + varsayılan FIFO (`PaymentAllocation` var, UI tek ekrana) | C7 · J3 | 9b |
+| **O** | PO kalemine teslim tarihi + son alış fiyatı önerisi | C1 | 9b |
+| **O** | Koşum açılışında atkı sıklığı (kumaş kartı) + hedef devir (`MachineSpec`) ekranda ön-dolu; metre türetimi sessiz kalmasın | F2 | 6e |
+| **O** | Kumaş kartına varsayılan çözgü kartı | F1 | 6e |
+| **O** | Tezgah tabletinde "TAK" (levent paneli) | D4 | 6e |
+| **O** | Son sarımdan iplik lot/depo/kg ön-dolumu | D2 | 6e |
+| **O** | Duruş anında hızlı sebep düğmeleri (`quickPick`), bildirimde modal yok | F3 | 6e |
+| **O** | Fazla teslim toleransı — `receivedQty > qty` denetimi **önce ölç** | C2 | 9b |
+| **K** | İç lot ↔ tedarikçi lot no ayrımı; iplik lotundan başlayan izlenebilirlik raporu (**ölçülecek**) | C2 · C4 | 9b |
+| **K** | Alternatif birim / min stok; çözgü kg/m türetilmiş alan; kayıtlı rapor süzgeci | B2 · B3 · L1 | 9b |
+| **K** | D5 uyarısının listede kalıcı rozeti · D1 son çözgü kartı · F4 tek koşum ön-seçili + parça 1 · `autoConsume` kapalı bilgisi · doff listesi tezgaha göre · G2 sahip işten · K1 levent rozeti | D1 · D5 · F4 · G2 · K1 | 6e |
+| **K** | Erişilebilirlik: PO formunda "Not" etiketi bağsız, birim fiyat kutusu adsız (sürücü yer tutucuyla buluyor) | C1 | d9 |
+| **bilinçli karar** | e-Fatura/e-Arşiv (GİB UBL) — TR zorunluluğu, kapsam kullanıcıya | J2 | 9b |
+
+### 3.2 Sadeleştirmeler — bizde fazla
+
+| Etiket | Sadeleştirme | Adım | Kaynak |
+|---|---|---|---|
+| **B** | Cariler + Cari Hesaplar TEK kart: finans alanları Cariler'e sekme, hesap kartla doğar; "Cari türü" seçimi arayüzden kalkar. Kök: `Customer.type` + üç rol + `CariAccount.kind` — aynı sorunun üç cevabı (kaldırma fazı `IS-ORTAGI-ROL-MODELI.md` §7) | B1 · C6 · C7 · J3 | 9b |
+| **O** | C8 sessiz satır düşürme yerine FAIL-CLOSED: lot zorunluysa fiş oluşmaz, hata satırda | C8 · O2 | 9b |
+| **O** | F4 tek fiziksel olay iki ekran → tezgah ekranında "İndir ve topu doğur" kısa yolu (KK1 alanları varsayılanla, sonradan düzeltilebilir) | F4 | 6e |
+| **K** | Diyalog başlıkları rolü söylesin ("Yeni Tedarikçi"); B1/C0 tek giriş; J1'de türetilebilen alanlar sorulmasın; kapalı PO "Yeni Mal Kabul"da listelenmesin; "Onayla" fiş detayından; mühür satırda görünür | C0 · J1 · C3 · C5 · L3 | 9b |
+| **K** | D0 türe göre ilgisiz yetenek kutuları "Gelişmiş"; D4 yöntem satırı bayrak kapalıyken gizli; F1 plan tarihleri katlanır; D2 tek makine ön-seç + tek sebepli katalogda sebep sorulmasın; D3 önek boşsa gövde no türet; F3 "Duruş Bildir" modalsız; F6 kalan boşsa kaynak sorulmasın; F7 geri alma tek kapı; F2 açık iş listesi tezgahın çözgüsüne göre | D0 · D2 · D3 · D4 · F1 · F2 · F3 · F6 · F7 | 6e |
+| **K** | Güzergâh metni ekranla hizalansın: B2 düğmesi "Yeni" (belge "Yeni Ürün" diyor); adların BÜYÜK saklandığı not; seçici modallarında "arama kutusuna yaz" adımı | B2 · B1 · C1 | d9 |
+
+### 3.3 Koru — sektörde var, burada gereksiz (eklenmesin)
+
+PO onay/release adımı · zamanlanmış rapor gönderimi · backflush (otomatik iplik düşümü — parti başına değişen tüketim, §1.3) · ters kayıt doktrini (sektörün üstünde, dokunulmaz).
+
+---
+
+## 4 · Sürücü kapsamı ve ölçüm durumu
+
+| Kapsam | Adım sayısı | Otomatik ✅ | Yazılacak ⏳ | Elle ✋ |
+|---|---|---|---|---|
+| Ana zincir A–M (panel) | 43 | 4 (A1 · B1 · B2 · C1) | 30 | 9 (belge önizleme, yazıcı, Wi-Fi, Excel/PDF) |
+| Ana zincir (tablet, d5) | 17 | 0 | 17 | — |
+| Dallar N–T | 30 | 0 | 27 | 3 |
+
+**Sayılar ölçülecektir:** bu tablo belge yazıldığı andaki plandır (2026-09-18); sürücü her koşumda `sonuc.json` üretir ve gerçek kapsam ORADAN okunur — bir koşumun çıktısından kapsam iddiası türetilmez, popülasyonu bu belge tanımlar.
+
+**Kabul ölçütü (test bitti demek için):** ① A–M ana zincir yeşil ya da her kırmızının sınıfı yazılı (ürün hatası / ortam / belge farkı) · ② N–T dallarından en az O · P · S tam · ③ kapanış listesi (3.1–3.3) 1e tarafından dilimlere çevrilmiş · ④ tablet ve panel `sonuc.json`ları aynı DB'de, aynı gün.
