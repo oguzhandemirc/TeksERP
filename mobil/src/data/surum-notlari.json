@@ -27,7 +27,7 @@
         {
           "kapsam": "tablet",
           "tip": "duzeltme",
-          "metin": "Levent Sarım ekranındaki pencereler (Yeni levent · SAR · Tezgaha tak · Sil / İptal) artık düzgün bir kart içinde açılır: beyaz zemin, geniş sütun, başlık şeridi ve alt düğmeler kartın içinde — form gri perdenin üstünde yüzmüyor, düğmeler sayfanın “Yeni levent” çubuğuyla çakışmıyor. SAR penceresinde sayılar iki sütun (metre · adet · kg kaynağı · makine), iplik satırları tam genişlik; “Köken” seçenekleri kesilmeden tam adıyla okunur. Devere makinesi tanımlı değilse alan gizlenmez, altında kurulum yolu yazar."
+          "metin": "Levent Sarım ekranındaki pencereler (Yeni levent · SAR · Tezgaha tak · Sil / İptal) artık düzgün bir kart içinde açılır: beyaz zemin, geniş sütun, başlık şeridi ve alt düğmeler kartın içinde — form gri perdenin üstünde yüzmüyor, düğmeler sayfanın “Yeni levent” çubuğuyla çakışmıyor. SAR penceresinde sayılar iki sütun (metre · adet · kg kaynağı · makine), iplik satırları tam genişlik; “Köken” seçenekleri kesilmeden tam adıyla okunur. Devere makinesi tanımlı değilse alan gizlenmez, altında kurulum yolu yazar. Tezgah ekranındaki pencereler (koşum aç/kapat, duruş bildir ve sebep ata, geri alma, levent sök/tüket/bitir, çakışma uyarıları) artık düzgün bir kart içinde açılır: zemin, kenar boşluğu ve düğmeler kartın içinde sabit; “Koşum aç” üç sayfalı oldu (İş & Desen · Ayarlar · Özet) ve eksik bir değer İleri’ye basınca aynı sayfada yazılır; ölçüm kaynağı düğmelerinin yazıları kesilmez."
         },
         {
           "kapsam": "her-ikisi",

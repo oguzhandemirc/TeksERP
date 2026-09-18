@@ -7,7 +7,7 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, Button, ActivityIndicator, SegmentedButtons } from 'react-native-paper';
-import AppModal from '../../../components/AppModal';
+import ModuleSheet, { sheet } from '../../../components/ModuleSheet';
 import NumpadInput from '../../../components/NumpadInput';
 import { colors, spacing, radius, typography } from '../../../theme';
 import type { WarpLengthSource } from '../../../services/warpBeam.service';
@@ -17,8 +17,9 @@ import { useBeamPanel, type BeamPanelState } from './useBeamPanel';
 
 const SOURCES = (Object.keys(LENGTH_SOURCE_LABEL) as WarpLengthSource[]).filter((k) => k !== 'WEIGHED');
 
+/** Ölçüm kaynağı — segment tam genişlik, etiket KESİLMEZ (`sheet.segmentLabel`; sığmazsa PickerModal'a döner). */
 function SourcePicker({ value, onChange }: { value: WarpLengthSource; onChange: (v: WarpLengthSource) => void }) {
-  return <SegmentedButtons value={value} onValueChange={(v) => onChange(v as WarpLengthSource)} buttons={SOURCES.map((k) => ({ value: k, label: LENGTH_SOURCE_LABEL[k] }))} />;
+  return <SegmentedButtons value={value} onValueChange={(v) => onChange(v as WarpLengthSource)} buttons={SOURCES.map((k) => ({ value: k, label: LENGTH_SOURCE_LABEL[k], labelStyle: sheet.segmentLabel }))} />;
 }
 
 function BeamModal({ state }: { state: BeamPanelState }) {
@@ -28,39 +29,45 @@ function BeamModal({ state }: { state: BeamPanelState }) {
   const title = kind === 'dismount' ? `${beam.beamNo} — tezgahtan sök` : kind === 'consume' ? `${beam.beamNo} — tüketim yaz` : `${beam.beamNo} — bitir (levent dibi)`;
   const confirm = kind === 'dismount' ? 'SÖK' : kind === 'consume' ? 'YAZ' : 'BİTİR';
   return (
-    <AppModal visible onDismiss={state.close} position="center">
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.body}>{`${beam.warpSpecCode} · yuva ${beam.position ?? '—'} · kalan ${beam.remainingM} m`}</Text>
+    <ModuleSheet
+      visible
+      onDismiss={state.close}
+      title={title}
+      subtitle={`${beam.warpSpecCode} · yuva ${beam.position ?? '—'} · kalan ${beam.remainingM} m`}
+      size="sm"
+      footer={
+        <>
+          <Button onPress={state.close} disabled={state.pending}>Vazgeç</Button>
+          <Button mode="contained" buttonColor={kind === 'exhaust' ? colors.danger : undefined} onPress={state.submit} loading={state.pending} disabled={state.pending || !state.isOnline}>{confirm}</Button>
+        </>
+      }
+    >
       {kind === 'dismount' ? (
         <>
-          <Text style={styles.label}>Ölçülen kalan (m, isteğe bağlı — boşsa defterdeki kalan)</Text>
-          <NumpadInput value={state.dismountForm.remainingM} onChangeText={(t) => state.setDismountForm({ ...state.dismountForm, remainingM: t })} allowDecimal numpadMaxLength={9} numpadLabel="Ölçülen kalan" placeholder="—" style={styles.input} />
-          <Text style={styles.label}>Ölçüm kaynağı</Text>
+          <Text style={sheet.label}>Ölçülen kalan (m, isteğe bağlı — boşsa defterdeki kalan)</Text>
+          <NumpadInput value={state.dismountForm.remainingM} onChangeText={(t) => state.setDismountForm({ ...state.dismountForm, remainingM: t })} allowDecimal numpadMaxLength={9} numpadLabel="Ölçülen kalan" placeholder="—" style={sheet.input} />
+          <Text style={sheet.label}>Ölçüm kaynağı</Text>
           <SourcePicker value={state.dismountForm.lengthSource} onChange={(v) => state.setDismountForm({ ...state.dismountForm, lengthSource: v })} />
-          <Text style={styles.hint}>Levent hazır stoğa döner; açık koşum varken son levent sökülemez.</Text>
+          <Text style={sheet.hint}>Levent hazır stoğa döner; açık koşum varken son levent sökülemez.</Text>
         </>
       ) : kind === 'consume' ? (
         <>
-          <Text style={styles.label}>Tüketilen metre</Text>
-          <NumpadInput value={state.consumeForm.lengthM} onChangeText={(t) => state.setConsumeForm({ ...state.consumeForm, lengthM: t })} allowDecimal numpadMaxLength={9} numpadLabel="Tüketilen metre" placeholder="ör. 250" style={styles.input} />
-          <Text style={styles.label}>Ölçüm kaynağı</Text>
+          <Text style={sheet.label}>Tüketilen metre</Text>
+          <NumpadInput value={state.consumeForm.lengthM} onChangeText={(t) => state.setConsumeForm({ ...state.consumeForm, lengthM: t })} allowDecimal numpadMaxLength={9} numpadLabel="Tüketilen metre" placeholder="ör. 250" style={sheet.input} />
+          <Text style={sheet.label}>Ölçüm kaynağı</Text>
           <SourcePicker value={state.consumeForm.lengthSource} onChange={(v) => state.setConsumeForm({ ...state.consumeForm, lengthSource: v })} />
         </>
       ) : (
         <>
-          <Text style={styles.label}>Artık (m, isteğe bağlı — boşsa 0 sayılır)</Text>
-          <NumpadInput value={state.exhaustForm.residualM} onChangeText={(t) => state.setExhaustForm({ ...state.exhaustForm, residualM: t })} allowDecimal numpadMaxLength={9} numpadLabel="Artık" placeholder="0" style={styles.input} />
-          <Text style={styles.label}>Ölçüm kaynağı</Text>
+          <Text style={sheet.label}>Artık (m, isteğe bağlı — boşsa 0 sayılır)</Text>
+          <NumpadInput value={state.exhaustForm.residualM} onChangeText={(t) => state.setExhaustForm({ ...state.exhaustForm, residualM: t })} allowDecimal numpadMaxLength={9} numpadLabel="Artık" placeholder="0" style={sheet.input} />
+          <Text style={sheet.label}>Ölçüm kaynağı</Text>
           <SourcePicker value={state.exhaustForm.lengthSource} onChange={(v) => state.setExhaustForm({ ...state.exhaustForm, lengthSource: v })} />
-          <Text style={styles.hint}>Bitiş son kayıttır: kalan sıfırlanır, yuva boşalır. Tartı ve dispozisyon panelden.</Text>
+          <Text style={sheet.hint}>Bitiş son kayıttır: kalan sıfırlanır, yuva boşalır. Tartı ve dispozisyon panelden.</Text>
         </>
       )}
-      {state.error ? <Text style={styles.error}>{state.error}</Text> : null}
-      <View style={styles.actions}>
-        <Button onPress={state.close} disabled={state.pending}>Vazgeç</Button>
-        <Button mode="contained" buttonColor={kind === 'exhaust' ? colors.danger : undefined} onPress={state.submit} loading={state.pending} disabled={state.pending || !state.isOnline}>{confirm}</Button>
-      </View>
-    </AppModal>
+      {state.error ? <Text style={sheet.error}>{state.error}</Text> : null}
+    </ModuleSheet>
   );
 }
 
@@ -101,11 +108,5 @@ const styles = StyleSheet.create({
   grow: { flex: 1 },
   code: { fontWeight: typography.weight.semibold, color: colors.text },
   meta: { fontSize: typography.size.sm, color: colors.textSecondary },
-  title: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.text, marginBottom: spacing.sm },
-  body: { color: colors.textSecondary, marginBottom: spacing.sm },
-  label: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: typography.weight.semibold, marginTop: spacing.sm },
-  input: { backgroundColor: colors.surface },
-  hint: { fontSize: typography.size.sm, color: colors.textSecondary, marginTop: spacing.xs },
   error: { color: colors.dangerText, marginTop: spacing.sm },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.md },
 });

@@ -4,8 +4,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { Text, Button, ActivityIndicator, Icon } from 'react-native-paper';
-import AppModal from '../../../components/AppModal';
-import ModalTextInput from '../../../components/ModalTextInput';
+import RevokeReasonModal from './RevokeReasonModal';
 import { colors, spacing, radius, typography } from '../../../theme';
 import type { DoffEntry, DoffListRow } from './useDoffEntry';
 
@@ -38,16 +37,6 @@ function Row({ row, canRevoke, onRevoke }: { row: DoffListRow; canRevoke: boolea
 
 export default function DoffTodayList({ entry }: { entry: DoffEntry }) {
   const [target, setTarget] = useState<DoffListRow | null>(null);
-  const [reason, setReason] = useState('');
-  const close = () => {
-    setTarget(null);
-    setReason('');
-  };
-  const confirm = () => {
-    if (!target) return;
-    entry.revoke(target.id, reason.trim());
-    close();
-  };
   return (
     <View style={styles.grow}>
       <View style={styles.header}>
@@ -73,17 +62,18 @@ export default function DoffTodayList({ entry }: { entry: DoffEntry }) {
         />
       )}
 
-      <AppModal visible={target !== null} onDismiss={close} position="center">
-        <Text style={styles.modalTitle}>{target ? `${target.code} geri alınsın mı?` : ''}</Text>
-        <Text style={styles.meta}>İndirme damgayla geri alınır; defter satırı silinmez. Sebep zorunlu.</Text>
-        <ModalTextInput label="Sebep" value={reason} onChangeText={setReason} maxLength={300} autoFocus mode="outlined" />
-        <View style={styles.modalActions}>
-          <Button onPress={close} disabled={entry.revoking}>Vazgeç</Button>
-          <Button mode="contained" onPress={confirm} disabled={reason.trim().length === 0 || entry.revoking} loading={entry.revoking}>
-            Geri Al
-          </Button>
-        </View>
-      </AppModal>
+      <RevokeReasonModal
+        visible={target !== null}
+        title={target ? `${target.code} geri alınsın mı?` : ''}
+        hint="İndirme damgayla geri alınır; defter satırı silinmez. Sebep zorunlu."
+        busy={entry.revoking}
+        minLength={1}
+        onClose={() => setTarget(null)}
+        onConfirm={(reason) => {
+          if (target) entry.revoke(target.id, reason);
+          setTarget(null);
+        }}
+      />
     </View>
   );
 }
@@ -100,6 +90,4 @@ const styles = StyleSheet.create({
   empty: { color: colors.textMuted, textAlign: 'center', padding: spacing.lg },
   errorBox: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center', margin: spacing.lg, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.dangerContainer },
   errorText: { flex: 1, color: colors.dangerText },
-  modalTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.text, marginBottom: spacing.sm },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.md },
 });

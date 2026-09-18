@@ -1,18 +1,23 @@
 // =============================================================================
-// KOŞUM AÇ — iş emri (opsiyonel) · desen/renk (işten ön-dolu, kilitli değil) · hedef devir · atkı sıklığı
+// KOŞUM AÇ — SAYFALI (PagedSheet): ① İş & Desen · ② Ayarlar · ③ Özet
 // =============================================================================
-import React, { useMemo, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Text, Button, TouchableRipple, ActivityIndicator } from 'react-native-paper';
+// Gövde ekranın %70'ini aşıyordu (5 alan + uzun etiketler) → sayfa başına tek konu (kullanıcı
+// kuralı 2026-09-18). İş emri (opsiyonel) seçilince desen/renk ön-dolar, kilitli değil.
+// Doğrulama İleri'de O SAYFADA yazılır (`validateRunOpen`); Kaydet = `submitOpen` (kendi
+// doğrulaması ve yapışkan token'ı aynen). Seçiciler `PickerModal` (`overlays`, kartın üstünde).
+// =============================================================================
+import React, { useMemo, useRef, useState } from 'react';
+import { Text, ActivityIndicator } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
-import AppModal from '../../../components/AppModal';
+import PagedSheet, { SummaryRow, type SheetPage } from '../../../components/PagedSheet';
+import { SheetField, sheet } from '../../../components/ModuleSheet';
 import NumpadInput from '../../../components/NumpadInput';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
 import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
 import { itemService } from '../../../services/item.service';
 import { colorService } from '../../../services/color.service';
-import { colors, spacing, radius, typography } from '../../../theme';
-import { prefillFromOrder } from './runPayload';
+import { colors } from '../../../theme';
+import { prefillFromOrder, validateRunOpen } from './runPayload';
 import type { RunPanelState } from './useRunPanel';
 
 type PickerKind = 'order' | 'item' | 'color' | null;
@@ -31,19 +36,19 @@ function useOrderOptions(state: RunPanelState): PickerOption[] {
   );
 }
 
-function Field({ label, value, placeholder, onPress }: { label: string; value: string; placeholder: string; onPress: () => void }) {
-  return (
-    <View>
-      <Text style={styles.label}>{label}</Text>
-      <TouchableRipple onPress={onPress} style={styles.field} accessibilityRole="button">
-        <Text style={value ? styles.fieldText : styles.fieldPlaceholder}>{value || placeholder}</Text>
-      </TouchableRipple>
-    </View>
-  );
+/** Her AÇILIŞTA sayfa 1'den: PagedSheet sayfa durumunu içinde tutar; açılış sayısı `key` olur.
+ *  Kapanışta anahtar değişmez → kapanış animasyonu korunur. */
+function useOpenSequence(open: boolean): number {
+  const seq = useRef(0);
+  const wasOpen = useRef(false);
+  if (open && !wasOpen.current) seq.current += 1;
+  wasOpen.current = open;
+  return seq.current;
 }
 
 export default function RunOpenModal({ state }: { state: RunPanelState }) {
   const [picker, setPicker] = useState<PickerKind>(null);
+  const openSeq = useOpenSequence(state.openModal);
   const orderOptions = useOrderOptions(state);
   const itemsQuery = useQuery({
     queryKey: ['items', 'dokuma', 'FABRIC'],
@@ -63,24 +68,42 @@ export default function RunOpenModal({ state }: { state: RunPanelState }) {
   const colorOptions: PickerOption[] = (colorsQuery.data?.data ?? []).map((c) => ({ value: c.id, label: c.name, sublabel: c.code }));
   const f = state.form;
   const orderLabel = state.orders.find((o) => o.id === f.weavingOrderId)?.weavingOrderNumber ?? '';
+  const close = () => state.setOpenModal(false);
+
+  const pages = buildRunOpenPages(state, orderLabel, setPicker);
 
   return (
-    <AppModal visible={state.openModal} onDismiss={() => state.setOpenModal(false)} position="center">
-      <Text style={styles.title}>Koşum aç</Text>
-      {state.ordersLoading ? <ActivityIndicator /> : null}
-      {state.ordersError ? <Text style={styles.error}>İş emri listesi yüklenemedi — emirsiz koşum açılabilir.</Text> : null}
-      <Field label="Dokuma işi (isteğe bağlı — numune koşumu meşru)" value={orderLabel} placeholder="İş emrisiz" onPress={() => setPicker('order')} />
-      <Field label="Desen" value={f.itemLabel} placeholder="Seçilmedi" onPress={() => setPicker('item')} />
-      <Field label="Renk" value={f.colorLabel} placeholder="Renk yok (ham)" onPress={() => setPicker('color')} />
-      <Text style={styles.label}>Hedef devir (atkı/dk) — boş: makine tanımındaki yedek</Text>
-      <NumpadInput value={f.targetUnitsPerMin} onChangeText={(t) => state.setForm({ ...f, targetUnitsPerMin: t })} allowDecimal={false} numpadMaxLength={5} numpadLabel="Hedef devir" placeholder="ör. 420" style={styles.input} />
-      <Text style={styles.label}>Atkı sıklığı (ham, atkı/cm) — boş: metre türetilmez</Text>
-      <NumpadInput value={f.unitsPerCm} onChangeText={(t) => state.setForm({ ...f, unitsPerCm: t })} allowDecimal numpadMaxLength={7} numpadLabel="Atkı sıklığı" placeholder="ör. 24.5" style={styles.input} />
-      <View style={styles.actions}>
-        <Button onPress={() => state.setOpenModal(false)} disabled={state.opening}>Vazgeç</Button>
-        <Button mode="contained" onPress={state.submitOpen} loading={state.opening} disabled={state.opening}>Koşumu Aç</Button>
-      </View>
+    <PagedSheet
+      key={openSeq}
+      visible={state.openModal}
+      onDismiss={close}
+      onCancel={close}
+      onSubmit={state.submitOpen}
+      submitLabel="Koşumu Aç"
+      busy={state.opening}
+      title="Koşum aç"
+      pages={pages}
+      overlays={<RunOpenPickers state={state} picker={picker} setPicker={setPicker} orderOptions={orderOptions} itemOptions={itemOptions} colorOptions={colorOptions} itemsLoading={itemsQuery.isLoading} colorsLoading={colorsQuery.isLoading} />}
+    />
+  );
+}
 
+interface PickersProps {
+  state: RunPanelState;
+  picker: PickerKind;
+  setPicker: (k: PickerKind) => void;
+  orderOptions: PickerOption[];
+  itemOptions: PickerOption[];
+  colorOptions: PickerOption[];
+  itemsLoading: boolean;
+  colorsLoading: boolean;
+}
+
+/** Üç seçici — kartın DIŞINDA (overlays), iş emri seçilince desen/renk ön-dolar. */
+function RunOpenPickers({ state, picker, setPicker, orderOptions, itemOptions, colorOptions, itemsLoading, colorsLoading }: PickersProps) {
+  const f = state.form;
+  return (
+    <>
       <PickerModal
         visible={picker === 'order'}
         title="Dokuma işi seç"
@@ -99,7 +122,7 @@ export default function RunOpenModal({ state }: { state: RunPanelState }) {
         title="Desen seç"
         options={itemOptions}
         selectedValue={f.itemId ?? ''}
-        loading={itemsQuery.isLoading}
+        loading={itemsLoading}
         onDismiss={() => setPicker(null)}
         onSelect={(v) => {
           state.setForm({ ...f, itemId: v, itemLabel: itemOptions.find((o) => o.value === v)?.label ?? '' });
@@ -111,24 +134,63 @@ export default function RunOpenModal({ state }: { state: RunPanelState }) {
         title="Renk seç"
         options={colorOptions}
         selectedValue={f.colorId ?? ''}
-        loading={colorsQuery.isLoading}
+        loading={colorsLoading}
         onDismiss={() => setPicker(null)}
         onSelect={(v) => {
           state.setForm({ ...f, colorId: v, colorLabel: colorOptions.find((o) => o.value === v)?.label ?? '' });
           setPicker(null);
         }}
       />
-    </AppModal>
+    </>
   );
 }
 
-const styles = StyleSheet.create({
-  title: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.text, marginBottom: spacing.sm },
-  label: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: typography.weight.semibold, marginTop: spacing.sm },
-  field: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: spacing.md, backgroundColor: colors.surface, minHeight: 48, justifyContent: 'center' },
-  fieldText: { color: colors.text },
-  fieldPlaceholder: { color: colors.textMuted },
-  input: { backgroundColor: colors.surface },
-  error: { color: colors.dangerText },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.md },
-});
+/** Sayfa başına tek konu: ① İş & Desen ② Ayarlar (İleri'de `validateRunOpen`) ③ Özet. */
+function buildRunOpenPages(state: RunPanelState, orderLabel: string, setPicker: (k: PickerKind) => void): SheetPage[] {
+  const f = state.form;
+  return [
+    {
+      key: 'is',
+      title: 'İş & Desen',
+      render: () => (
+        <>
+          {state.ordersLoading ? <ActivityIndicator /> : null}
+          {state.ordersError ? <Text style={sheet.error}>İş emri listesi yüklenemedi — emirsiz koşum açılabilir.</Text> : null}
+          <SheetField label="Dokuma işi (isteğe bağlı — numune koşumu meşru)" value={orderLabel} placeholder="İş emrisiz" onPress={() => setPicker('order')} />
+          <SheetField label="Desen" value={f.itemLabel} placeholder="Seçilmedi" onPress={() => setPicker('item')} />
+          <SheetField label="Renk" value={f.colorLabel} placeholder="Renk yok (ham)" onPress={() => setPicker('color')} />
+        </>
+      ),
+    },
+    {
+      key: 'ayar',
+      title: 'Ayarlar',
+      render: () => (
+        <>
+          <Text style={sheet.label}>Hedef devir (atkı/dk) — boş: makine tanımındaki yedek</Text>
+          <NumpadInput value={f.targetUnitsPerMin} onChangeText={(t) => state.setForm({ ...f, targetUnitsPerMin: t })} allowDecimal={false} numpadMaxLength={5} numpadLabel="Hedef devir" placeholder="ör. 420" style={sheet.input} />
+          <Text style={sheet.label}>Atkı sıklığı (ham, atkı/cm) — boş: metre türetilmez</Text>
+          <NumpadInput value={f.unitsPerCm} onChangeText={(t) => state.setForm({ ...f, unitsPerCm: t })} allowDecimal numpadMaxLength={7} numpadLabel="Atkı sıklığı" placeholder="ör. 24.5" style={sheet.input} />
+        </>
+      ),
+      validate: () => {
+        const v = validateRunOpen(f);
+        return v.ok ? null : v.message;
+      },
+    },
+    {
+      key: 'ozet',
+      title: 'Özet',
+      render: () => (
+        <>
+          <SummaryRow label="Dokuma işi" value={orderLabel || 'İş emrisiz (numune)'} />
+          <SummaryRow label="Desen" value={f.itemLabel} />
+          <SummaryRow label="Renk" value={f.colorLabel || 'Renk yok (ham)'} />
+          <SummaryRow label="Hedef devir (atkı/dk)" value={f.targetUnitsPerMin || 'makine yedeği'} />
+          <SummaryRow label="Atkı sıklığı (atkı/cm)" value={f.unitsPerCm || 'türetilmez'} />
+          <Text style={sheet.hint}>Açıldıktan sonra terimler donar; bu hattın indirmeleri koşuma bağlanır.</Text>
+        </>
+      ),
+    },
+  ];
+}

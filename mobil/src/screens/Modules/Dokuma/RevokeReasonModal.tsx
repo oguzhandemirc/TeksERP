@@ -1,53 +1,58 @@
 // =============================================================================
-// GERİ ALMA MODALİ — sebep zorunlu (koşum ve duruş paylaşır; damga, defter satırı düşer)
+// GERİ ALMA MODALİ — sebep zorunlu (koşum · duruş · indirme paylaşır; damga, defter satırı düşer)
+// =============================================================================
+// Tek kart (`ModuleSheet`, 2026-09-18 iskeleti). `minLength`: koşum/duruş 3, indirme 1 —
+// eskiden DoffTodayList kendi kopyasını taşıyordu, tek bileşen.
 // =============================================================================
 import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Text, Button } from 'react-native-paper';
-import AppModal from '../../../components/AppModal';
+import { Button } from 'react-native-paper';
+import ModuleSheet, { sheet } from '../../../components/ModuleSheet';
 import ModalTextInput from '../../../components/ModalTextInput';
-import { colors, spacing, typography } from '../../../theme';
 
 interface Props {
   visible: boolean;
   title: string;
   hint: string;
   busy: boolean;
+  /** Sebebin en az uzunluğu (kırpılmış). Varsayılan 3. */
+  minLength?: number;
   onClose: () => void;
   onConfirm: (reason: string) => void;
 }
 
-export default function RevokeReasonModal({ visible, title, hint, busy, onClose, onConfirm }: Props) {
+export default function RevokeReasonModal({ visible, title, hint, busy, minLength = 3, onClose, onConfirm }: Props) {
   const [reason, setReason] = useState('');
   const close = () => {
     setReason('');
     onClose();
   };
+  const ok = reason.trim().length >= minLength;
   return (
-    <AppModal visible={visible} onDismiss={close} position="center">
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.meta}>{hint}</Text>
-      <ModalTextInput label="Sebep" value={reason} onChangeText={setReason} maxLength={300} autoFocus mode="outlined" />
-      <View style={styles.actions}>
-        <Button onPress={close} disabled={busy}>Vazgeç</Button>
-        <Button
-          mode="contained"
-          disabled={reason.trim().length < 3 || busy}
-          loading={busy}
-          onPress={() => {
-            onConfirm(reason.trim());
-            setReason('');
-          }}
-        >
-          Geri Al
-        </Button>
-      </View>
-    </AppModal>
+    <ModuleSheet
+      visible={visible}
+      onDismiss={close}
+      title={title}
+      subtitle={hint}
+      size="sm"
+      footer={
+        <>
+          <Button onPress={close} disabled={busy} testID="revoke-vazgec">Vazgeç</Button>
+          <Button
+            mode="contained"
+            disabled={!ok || busy}
+            loading={busy}
+            testID="revoke-onay"
+            onPress={() => {
+              onConfirm(reason.trim());
+              setReason('');
+            }}
+          >
+            Geri Al
+          </Button>
+        </>
+      }
+    >
+      <ModalTextInput label="Sebep" value={reason} onChangeText={setReason} maxLength={300} autoFocus mode="outlined" style={sheet.input} testID="revoke-sebep" />
+    </ModuleSheet>
   );
 }
-
-const styles = StyleSheet.create({
-  title: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.text, marginBottom: spacing.sm },
-  meta: { fontSize: typography.size.sm, color: colors.textSecondary },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.md },
-});

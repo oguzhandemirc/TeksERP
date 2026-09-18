@@ -4,7 +4,7 @@
 import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Text, Button } from 'react-native-paper';
-import AppModal from '../../../components/AppModal';
+import ModuleSheet, { sheet } from '../../../components/ModuleSheet';
 import { colors, spacing, radius, typography } from '../../../theme';
 import type { DoffEntry } from './useDoffEntry';
 import { useRunPanel } from './useRunPanel';
@@ -50,14 +50,21 @@ export default function RunPanel({ entry }: { entry: DoffEntry }) {
           setRevokeId(null);
         }}
       />
-      <AppModal visible={state.collision !== null} onDismiss={state.dismissCollision} position="center" dismissable={false}>
-        <Text style={styles.title}>Bu deneme başka bir koşumla çakıştı</Text>
-        <Text style={styles.meta}>{state.collision?.message}</Text>
-        <View style={styles.actions}>
-          <Button onPress={state.dismissCollision}>Vazgeç</Button>
-          <Button mode="contained" onPress={state.resendAsNew}>Yeni koşum olarak aç</Button>
-        </View>
-      </AppModal>
+      <ModuleSheet
+        visible={state.collision !== null}
+        onDismiss={state.dismissCollision}
+        dismissable={false}
+        size="sm"
+        title="Bu deneme başka bir koşumla çakıştı"
+        footer={
+          <>
+            <Button onPress={state.dismissCollision}>Vazgeç</Button>
+            <Button mode="contained" onPress={state.resendAsNew}>Yeni koşum olarak aç</Button>
+          </>
+        }
+      >
+        <Text style={sheet.body_}>{state.collision?.message}</Text>
+      </ModuleSheet>
     </View>
   );
 }
@@ -68,6 +75,4 @@ const styles = StyleSheet.create({
   grow: { flex: 1, minWidth: 160 },
   heading: { fontSize: typography.size.base, fontWeight: typography.weight.semibold, color: colors.text },
   meta: { fontSize: typography.size.sm, color: colors.textSecondary },
-  title: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.text, marginBottom: spacing.sm },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.md },
 });
