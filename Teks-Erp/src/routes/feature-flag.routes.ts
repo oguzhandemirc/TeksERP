@@ -213,6 +213,10 @@ export const updateSchema = z.strictObject({
   // default 20). Yalnız ÖN-DOLUM: fatura formunun yeni satırı + mal kabulden
   // üretilen alış taslağı bu değerle açılır, satırda değiştirilebilir.
   financeDefaultVatRate: z.number().min(0).max(100).optional(),
+  // n irsaliye → 1 fatura (2026-09-18): onayda fiş toleransı (default false = kontrol yok) + iki eşik (null = varsayılan 0).
+  financeInvoiceMatchTolerance: z.boolean().optional(),
+  financeInvoiceQtyTolerancePct: z.number().min(0).max(100).nullable().optional(),
+  financeInvoicePriceTolerancePct: z.number().min(0).max(100).nullable().optional(),
   // ---------------------------------------------------------------------------
   // TİCARET/MUHASEBE REJİM ANAHTARLARI (2026-08-14, dalga 1 — yalnız KAYIT)
   // ---------------------------------------------------------------------------

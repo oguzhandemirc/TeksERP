@@ -241,6 +241,10 @@ export interface FeatureFlags {
    *  ÖN-DOLUM — fatura formunun yeni satırı ve mal kabulden üretilen alış
    *  taslağı bu değerle açılır; satırda değiştirilebilir. */
   financeDefaultVatRate: number;
+  /** n irsaliye → 1 fatura (2026-09-18): onayda fiş toleransı (varsayılan kapalı = kontrol yok) + iki eşik (%; varsayılan 0). */
+  financeInvoiceMatchTolerance: boolean;
+  financeInvoiceQtyTolerancePct: number;
+  financeInvoicePriceTolerancePct: number;
   // --- TİCARET/MUHASEBE REJİM ANAHTARLARI (2026-08-14, dalga 1) --------------
   // ⚠️ Dokuzu da default FALSE ve backend'de bugün HİÇBİR servis okumuyor
   // (bilinçli ara durum): dört kapı önce kurulur, guard/otomasyon sonraki

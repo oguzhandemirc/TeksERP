@@ -85,6 +85,10 @@ export const SETTING_KEYS = {
    *  kullanıcı satırda her zaman değiştirebilir, backend satır bazında geleni
    *  kabul etmeye devam eder. */
   FINANCE_DEFAULT_VAT_RATE: "finance.defaultVatRate",
+  /** n irsaliye → 1 fatura (2026-09-18): fatura ↔ bağlı fişler tolerans kontrolü (ONAY anı). Varsayılan KAPALI = kontrol yok. */
+  FINANCE_INVOICE_MATCH_TOLERANCE: "finance.invoiceMatchTolerance",
+  FINANCE_INVOICE_QTY_TOLERANCE_PCT: "finance.invoiceQtyTolerancePct",
+  FINANCE_INVOICE_PRICE_TOLERANCE_PCT: "finance.invoicePriceTolerancePct",
   // ===========================================================================
   // TİCARET/MUHASEBE REJİM ANAHTARLARI (2026-08-14, dalga 1 — YALNIZ KAYIT)
   // ===========================================================================
@@ -1367,6 +1371,11 @@ export interface FeatureFlags {
   /** Fatura satırının varsayılan KDV oranı, % (0-100; default 20). Yalnız
    *  ön-dolum — kullanıcı satırda değiştirebilir. */
   financeDefaultVatRate: number;
+  /** Fatura onayında bağlı mal kabul fişleriyle miktar/tutar toleransı ölçülsün mü (varsayılan KAPALI = kontrol yok). HAM; etkin `finance && bayrak`. */
+  financeInvoiceMatchTolerance: boolean;
+  /** Miktar / tutar sapma üst sınırı (%; 0 = fark kabul edilmez). Yalnız bayrak açıkken anlamlı. */
+  financeInvoiceQtyTolerancePct: number;
+  financeInvoicePriceTolerancePct: number;
   // --- TİCARET/MUHASEBE REJİM ANAHTARLARI (2026-08-14, dalga 1) --------------
   // ⚠️ Dokuzu da default FALSE ve bugün HİÇBİR servis okumuyor (bilinçli ara
   // durum — bkz. SETTING_KEYS bloğundaki gerekçe). Davranışı bağlayan dalga
@@ -1839,6 +1848,9 @@ export class SystemSettingService {
       financeEnabled: await readFinanceEnabled(cacheClient),
       financeBlockNegativeCashEnabled: await readFinanceBlockNegativeCashEnabled(cacheClient),
       financeDefaultVatRate: await readFinanceDefaultVatRate(cacheClient),
+      financeInvoiceMatchTolerance: await readFinanceInvoiceMatchTolerance(cacheClient),
+      financeInvoiceQtyTolerancePct: await readFinanceInvoiceQtyTolerancePct(cacheClient),
+      financeInvoicePriceTolerancePct: await readFinanceInvoicePriceTolerancePct(cacheClient),
       financeRiskLimitBlockEnabled: await readFinanceRiskLimitBlockEnabled(cacheClient),
       financeAutoDraftFromShipmentEnabled:
         await readFinanceAutoDraftFromShipmentEnabled(cacheClient),
@@ -2057,8 +2069,10 @@ export class SystemSettingService {
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
     input: Omit<
       Partial<FeatureFlags>,
-      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm"
+      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct"
     > & {
+      financeInvoiceQtyTolerancePct?: number | null;
+      financeInvoicePriceTolerancePct?: number | null;
       /** null = fabrika varsayılanına dön (1 cm). */
       shippingAllocWidthToleranceCm?: number | null;
       fasonShrinkTolerancePct?: number | null;
@@ -2128,6 +2142,27 @@ export class SystemSettingService {
         "Fatura satırının varsayılan KDV oranı, % (yalnız ön-dolum; satırda değiştirilebilir)",
         userId
       );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeInvoiceMatchTolerance")) {
+      if (typeof input.financeInvoiceMatchTolerance !== "boolean") {
+        throw AppError.badRequest("financeInvoiceMatchTolerance boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.FINANCE_INVOICE_MATCH_TOLERANCE, input.financeInvoiceMatchTolerance, "Muhasebe: fatura onayında bağlı mal kabul fişleriyle miktar/tutar toleransı", userId);
+    }
+    // `0` geçerli ("fark kabul edilmez"); `null` = alanı temizledim → fabrika varsayılanı (0).
+    if (Object.prototype.hasOwnProperty.call(input, "financeInvoiceQtyTolerancePct")) {
+      const v = input.financeInvoiceQtyTolerancePct;
+      if (v !== null && (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 100)) {
+        throw AppError.badRequest("Fatura ↔ mal kabul miktar toleransı 0 ile 100 arasında olmalı (yüzde)");
+      }
+      await this.set(SETTING_KEYS.FINANCE_INVOICE_QTY_TOLERANCE_PCT, v === null ? DEFAULT_INVOICE_TOLERANCE_PCT : v, "Fatura ↔ mal kabul miktar toleransı (yüzde)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "financeInvoicePriceTolerancePct")) {
+      const v = input.financeInvoicePriceTolerancePct;
+      if (v !== null && (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 100)) {
+        throw AppError.badRequest("Fatura ↔ mal kabul tutar toleransı 0 ile 100 arasında olmalı (yüzde)");
+      }
+      await this.set(SETTING_KEYS.FINANCE_INVOICE_PRICE_TOLERANCE_PCT, v === null ? DEFAULT_INVOICE_TOLERANCE_PCT : v, "Fatura ↔ mal kabul tutar toleransı (yüzde)", userId);
     }
 
     // -------------------------------------------------------------------------
@@ -3585,6 +3620,30 @@ export async function readFinanceDefaultVatRate(
   return parsed;
 }
 
+/** n irsaliye → 1 fatura: tolerans kontrolü bayrağı. Default FALSE (satır yoksa kontrol YOK — bugünkü davranış). HAM değer. */
+export async function readFinanceInvoiceMatchTolerance(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({ where: { key: SETTING_KEYS.FINANCE_INVOICE_MATCH_TOLERANCE }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
+
+export const DEFAULT_INVOICE_TOLERANCE_PCT = 0;
+async function readTolerancePct(key: string, tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({ where: { key }, select: { value: true } });
+  const parsed = asNumber(setting?.value);
+  if (parsed === null || !Number.isFinite(parsed) || parsed < 0 || parsed > 100) return DEFAULT_INVOICE_TOLERANCE_PCT;
+  return parsed;
+}
+/** Miktar sapma üst sınırı (%). Default 0. */
+export async function readFinanceInvoiceQtyTolerancePct(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  return readTolerancePct(SETTING_KEYS.FINANCE_INVOICE_QTY_TOLERANCE_PCT, tx);
+}
+/** Tutar sapma üst sınırı (%). Default 0. */
+export async function readFinanceInvoicePriceTolerancePct(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  return readTolerancePct(SETTING_KEYS.FINANCE_INVOICE_PRICE_TOLERANCE_PCT, tx);
+}
+
 // =============================================================================
 // TİCARET/MUHASEBE REJİM OKUYUCULARI (2026-08-14, dalga 1 — HENÜZ ÇAĞIRAN YOK)
 // =============================================================================
@@ -4684,6 +4743,12 @@ export async function resolvePurchaseBlockOverReceiptEnabled(
 ): Promise<boolean> {
   if (!(await readTicaretEnabled(tx))) return false;
   return readPurchaseBlockOverReceiptEnabled(tx);
+}
+
+/** n irsaliye → 1 fatura: tolerans kontrolü ETKİN mi (`finance && bayrak`); eşikler ham okunur. */
+export async function resolveInvoiceMatchToleranceEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  if (!(await readFinanceEnabled(tx))) return false;
+  return readFinanceInvoiceMatchTolerance(tx);
 }
 
 /** Mal kabulde fiyat zorunlu mu — ETKİN değer (`ticaret && bayrak`). */

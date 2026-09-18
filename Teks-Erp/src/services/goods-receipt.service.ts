@@ -1562,10 +1562,24 @@ export class GoodsReceiptService {
     // ⚠️ KOD ↔ METİN kovası AYRI (2026-09-01): fiş/irsaliye numarası KATLANMAZ
     // (kod kovası, ham kolon); yalnız serbest metin `notesFold` gölgesine gider.
     // İkisi tek kovadayken var olmayan `receiptNoFold`a soruluyordu → 500.
-    const where = buildWhereClause(params.filters, ["notes"], params.search, [
+    // n irsaliye → 1 fatura (2026-09-18): `filter[invoiced]=false` = iptal edilmemiş faturaya (pivot ya da eski kolon)
+    // bağlı OLMAYAN AKTİF fişler — fatura formundaki fiş seçicisi; `true` tersi. Kolon değil, ilişki yüklemi.
+    const { invoiced, ...columnFilters } = params.filters;
+    const where = buildWhereClause(columnFilters, ["notes"], params.search, [
       "receiptNo",
       "deliveryNoteNo",
     ]);
+    if (invoiced === "false" || invoiced === "true") {
+      const activeInvoice = {
+        OR: [
+          { invoices: { some: { status: { not: InvoiceStatus.CANCELLED } } } },
+          { invoiceLinks: { some: { invoice: { status: { not: InvoiceStatus.CANCELLED } } } } },
+        ],
+      } satisfies Prisma.GoodsReceiptWhereInput;
+      where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), invoiced === "false" ? { status: GoodsReceiptStatus.ACTIVE, NOT: activeInvoice } : activeInvoice];
+    } else if (invoiced !== undefined) {
+      throw AppError.badRequest("filter[invoiced] true ya da false olmalı.");
+    }
     // ⚠️ TARİH ARALIĞI (2026-08-15): `applyDateRange` bu serviste HİÇ
     // çağrılmıyordu → `dateFrom` gönderen istemci filtresinin çalıştığını
     // sanıyor, liste TAM dönüyordu (sessiz yanlış cevap; "bu tedarikçiden bu ay

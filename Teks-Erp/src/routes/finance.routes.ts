@@ -425,6 +425,8 @@ const invoiceCreateSchema = z
     directShipmentId: z.string().uuid().nullable().optional(),
     returnGroupId: z.string().uuid().nullable().optional(),
     subcontractorReceiptId: z.string().uuid().nullable().optional(),
+    // n irsaliye → 1 fatura (2026-09-18): bağlı mal kabul fişleri (küme; kapılar serviste — aynı cari/para birimi/açık fiş).
+    goodsReceiptIds: z.array(z.string().uuid()).max(100).optional(),
     clientToken: z.string().uuid().optional(),
   })
   .strict();
@@ -439,6 +441,7 @@ router.get("/invoices", requirePermission("finance:read"), async (req, res, next
       type: q.type as never,
       status: q.status as never,
       cariId: q.cariId,
+      goodsReceiptId: q.goodsReceiptId,
       from: q.from ? new Date(q.from) : undefined,
       to: q.to ? new Date(q.to) : undefined,
     });
@@ -498,6 +501,36 @@ router.post("/invoices/from-goods-receipt/:id", requirePermission("finance:write
   }
 });
 
+/**
+ * @openapi
+ * /api/finance/invoices/draft-from-goods-receipts:
+ *   post:
+ *     tags: [Finance]
+ *     summary: n mal kabul fişinden TEK alış faturası taslağı (n irsaliye → 1 fatura)
+ *     description: >
+ *       Fişlerin kalemleri tek taslakta birleşir (aynı kalem/renk/fiyat toplanır; fiyat zinciri tek-fiş yoluyla aynı).
+ *       Kapılar: aynı tedarikçi (karta çözülmüş) · aynı para birimi · fiş açık ve faturalanmamış. Tek fiş = eski yol.
+ *       Bağ pivot `InvoiceToGoodsReceipt`; tek fişte `goodsReceiptId` kolonu da dolar (eski istemci/okuyucu).
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { type: object, required: [goodsReceiptIds], properties: { goodsReceiptIds: { type: array, items: { type: string, format: uuid } } } }
+ *     responses:
+ *       201: { description: Taslak oluşturuldu }
+ *       400: { description: "GOODS_RECEIPT_PARTY_MISMATCH · GOODS_RECEIPT_CURRENCY_MISMATCH · GOODS_RECEIPT_NOT_LINKABLE" }
+ *       409: { description: "GOODS_RECEIPT_ALREADY_INVOICED — fiş başka aktif faturaya bağlı" }
+ */
+router.post("/invoices/draft-from-goods-receipts", requirePermission("finance:write"), async (req, res, next) => {
+  try {
+    const b = z.object({ goodsReceiptIds: z.array(z.string().uuid()).min(1).max(100) }).strict().parse(req.body);
+    res.status(201).json(await invoiceService.createDraftFromGoodsReceipts(b.goodsReceiptIds, req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.patch("/invoices/:id", requirePermission("finance:write"), async (req, res, next) => {
   try {
     const b = z
@@ -507,6 +540,8 @@ router.patch("/invoices/:id", requirePermission("finance:write"), async (req, re
         externalNo: z.string().max(64).nullable().optional(),
         notes: z.string().max(500).nullable().optional(),
         exchangeRate: decimalString.optional(),
+        // n irsaliye → 1 fatura: bağlı fişler REPLACE (`[]` temizler); yalnız taslakta.
+        goodsReceiptIds: z.array(z.string().uuid()).max(100).optional(),
       })
       .strict()
       .parse(req.body);

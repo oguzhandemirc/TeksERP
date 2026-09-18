@@ -40,6 +40,23 @@ import {
   deriveInvoiceDueDate,
 } from "./helpers/finance.helper";
 import { resolvePartyToCardTx } from "./helpers/party-card.helper";
+import {
+  INVOICE_RECEIPT_SELECT,
+  assertReceiptMatchTx,
+  assertReceiptsLinkableTx,
+  lockReceiptsTx,
+  normalizeInvoiceReceiptIds,
+  receiptMatchTx,
+  toInvoiceReceiptDto,
+} from "./helpers/invoice-receipts.helper";
+
+/** n irsaliye → 1 fatura — TEK YAZAR: pivot REPLACE + `goodsReceiptId` kolonu (n=1 → o fiş; n≠1 → null). Pivot audit'i
+ *  ebeveyn fatura eyleminde (bu dosya audit'lidir); helper yalnız doğrular/okur. */
+async function writeInvoiceReceiptsTx(tx: Prisma.TransactionClient, invoiceId: string, receiptIds: string[]): Promise<void> {
+  await tx.invoiceToGoodsReceipt.deleteMany({ where: { invoiceId } });
+  if (receiptIds.length > 0) await tx.invoiceToGoodsReceipt.createMany({ data: receiptIds.map((goodsReceiptId) => ({ invoiceId, goodsReceiptId })) });
+  await tx.invoice.update({ where: { id: invoiceId }, data: { goodsReceiptId: receiptIds.length === 1 ? receiptIds[0] : null } });
+}
 import { printedDocumentService, registerPrintedDocBuilder } from "./printed-document.service";
 import {
   readFinanceAllowZeroPriceLineEnabled,
@@ -105,6 +122,8 @@ export interface CreateInvoiceInput {
   returnGroupId?: string | null;
   subcontractorReceiptId?: string | null;
   goodsReceiptId?: string | null;
+  /** n irsaliye → 1 fatura (2026-09-18): bağlı mal kabul fişleri — küme REPLACE; `goodsReceiptId` ile birleşir (tek yazar pivot). */
+  goodsReceiptIds?: string[] | null;
   clientToken?: string | null;
 }
 
@@ -142,6 +161,8 @@ function describeYarnOut(effects: YarnLedgerEffect[], verb = "stoktan düşüld�
 const LIST_SELECT = {
   id: true,
   docNo: true,
+  // n irsaliye → 1 fatura: bağlı fişler (pivot) — liste + detay `goodsReceipts[]` olarak basar; tekil `goodsReceipt` eski panel için kalır.
+  goodsReceiptLinks: INVOICE_RECEIPT_SELECT,
   type: true,
   status: true,
   currency: true,
@@ -364,6 +385,13 @@ export class InvoiceService {
         if (rate.lte(0)) throw AppError.badRequest("Kur sıfır veya negatif olamaz.");
 
         await this.assertSourceFree(tx, input);
+        // n irsaliye → 1 fatura: fişler kilitlenir, cari/para birimi/açık-fiş kapıları; pivot yazımı create'ten sonra.
+        const receiptIds = normalizeInvoiceReceiptIds(input) ?? [];
+        await lockReceiptsTx(tx, receiptIds);
+        if (receiptIds.length > 0) {
+          const cariRow = await tx.cariAccount.findUniqueOrThrow({ where: { id: cari.id }, select: { customerId: true, subcontractorId: true } });
+          await assertReceiptsLinkableTx(tx, { receiptIds, invoiceId: null, type: input.type, currency, cari: cariRow });
+        }
 
         const docNo = await nextInvoiceNoTx(tx, input.type, issueDate);
         const totals = computeInvoiceTotals(input.lines);
@@ -414,6 +442,7 @@ export class InvoiceService {
           },
           select: { id: true, docNo: true },
         });
+        if (receiptIds.length > 0) await writeInvoiceReceiptsTx(tx, invoice.id, receiptIds);
         return invoice;
       });
 
@@ -469,62 +498,14 @@ export class InvoiceService {
    * kesilir/sevk edilirse tedarikçiye borcumuz değişmez. Topun giriş metrajı
    * kolonu da olmaz — tambur geri alması onu aşımda yukarı çeker (hüküm §10.6).
    */
-  async createDraftFromGoodsReceipt(
-    goodsReceiptId: string,
-    userId?: string,
-  ): Promise<ApiResponse<{ id: string; docNo: string }>> {
-    const receipt = await prisma.goodsReceipt.findUnique({
-      where: { id: goodsReceiptId },
-      select: {
-        id: true,
-        receiptNo: true,
-        status: true,
-        currency: true,
-        supplierId: true,
-        // C4 (2026-08-15) — FASON TEDARİKÇİ BACAĞI. Fatura katmanı iki tarafı
-        // zaten taşıyor (`CreateInvoiceInput.subcontractorId` →
-        // `ensureCariAccountTx` CariKind.SUBCONTRACTOR); eksik olan tek şey bu
-        // select'ti. Okunmasaydı fason firmadan alınan mal "tedarikçi
-        // seçilmemiş" diye 400 alır ve o fişten fatura kesmenin HİÇBİR yolu
-        // olmazdı (generic uç `.strict()` şemasında `goodsReceiptId` kabul
-        // etmiyor → bağsız fatura da kesilemez).
-        subcontractorId: true,
-        deliveryNoteNo: true,
-        createdAt: true,
-        // ⚠️ SÖZLEŞME FİYATI KATMANI (2026-08-15) — satış tarafının aynası.
-        // Bağ olmadan sipariş fiyatı sorulamaz; alan olmadan da o soru hiç
-        // sorulmuyordu (`invoice.service` içinde "purchaseOrder" kelimesi HİÇ
-        // geçmiyordu — bu, C1'in alış tarafındaki boşluğuydu).
-        purchaseOrderId: true,
-      },
-    });
-    if (!receipt) throw AppError.notFound("Mal kabul fişi bulunamadı.");
-    if (receipt.status === "CANCELLED") {
-      throw AppError.conflict(`${receipt.receiptNo} iptal edilmiş — faturası kesilemez.`);
-    }
-    if (!receipt.supplierId && !receipt.subcontractorId) {
-      throw AppError.badRequest(
-        `${receipt.receiptNo} fişinde tedarikçi seçilmemiş — alış faturası için tedarikçi gerekli.`,
-      );
-    }
-
-    // ── SATIRLAR TEK KAYNAKTAN (Sınıf 5, 2026-08-14) ────────────────────────
-    // ⚠️ İPLİK SATIRLARI DA FATURAYA GİRER (aynı günün denetim bulgusu,
-    // KRİTİK). Eskiden buradaki select YALNIZ `rolls` okuyordu: karma bir fişte
-    // (2 top kumaş + 500 kg iplik) taslak SADECE kumaşı taşıyor, iplik ne satır
-    // ne uyarı olarak görünüyordu → cari borç eksik kalıyor, iplik depoda ama
-    // karşılığında yükümlülük yok; hata da log da çıkmıyordu. Düzeltme önce
-    // buraya ikinci bir el-yazımı select olarak girdi; aynı akşam satır okuma
-    // `assembleReceiptLines`e TEKLEŞTİ — tabloya giden her kopya, bir sonraki
-    // satır tipinde (CONSUMABLE) aynı deliği yeniden açar.
-    //
-    // Süzgeçler assembler SÖZLEŞMESİNİN tüketici tarafı:
-    //  • Kumaşta CANCELLED dışarıda — iptal "bu mal hiç gelmedi" demektir
-    //    (softDelete qtyOut=0 semantiği); faturaya girerse gelmeyen mala para
-    //    ödenir.
-    //  • İplikte yalnız `IN` — fiş iptali `ADJUST_OUT` yazar ve aynı fiş bağını
-    //    taşır; süzgeç olmasa ters kayıt da faturaya satır olarak girerdi
-    //    (iptalli fiş yukarıda zaten reddediliyor; bu derinlik savunmasıdır).
+  /**
+   * Bir fişin faturalanacak satırlarını `groups` haritasına ekler (tek fiş yolu bayt-bayt; n fiş aynı haritayı
+   * paylaşır). Döner: sözleşme fiyatı sayaçları + kabul metrajı kaynak haritası (uyarı notları için).
+   */
+  private async receiptLineGroups(
+    receipt: { id: string; receiptNo: string; currency: Currency; supplierId: string | null; subcontractorId: string | null; purchaseOrderId: string | null },
+    groups: Map<string, { itemId: string; description: string; qty: Prisma.Decimal; unitPrice: Prisma.Decimal; unit: string }>,
+  ): Promise<{ contract: Awaited<ReturnType<typeof loadContractPrices>>; receiptQty: Awaited<ReturnType<typeof receiptQtyByRollTx>> }> {
     const asm = await goodsReceiptService.assembleReceiptLines(receipt.id);
     const fabricLines = asm.lines.filter(
       (l): l is ReceiptFabricLine => l.kind === "FABRIC" && l.status !== RollStatus.CANCELLED,
@@ -619,10 +600,7 @@ export class InvoiceService {
       return q.qty;
     };
 
-    const groups = new Map<
-      string,
-      { itemId: string; description: string; qty: Prisma.Decimal; unitPrice: Prisma.Decimal; unit: string }
-    >();
+    // `groups` çağırandan gelir (n fiş aynı haritada birleşir; aynı kalem/renk/fiyat satırları toplanır).
     for (const r of fabricLines) {
       // Sıra: satırın donmuş fiyatı > SİPARİŞ fiyatı > kalem kartı > 0.
       const price = D(r.purchasePrice ?? contractPriceOf(r.itemId) ?? priceMap?.get(r.itemId)?.price ?? 0);
@@ -678,6 +656,100 @@ export class InvoiceService {
     // eski hardcode, sıfır fark). Electron fatura formunun yeni satırı da aynı
     // ayardan okur — oran iki yerde ayrı sürüklenmez. Yalnız ÖN-DOLUM: taslak
     // satırında değiştirilebilir, `confirm` satır bazında geleni kullanır.
+    return { contract, receiptQty };
+  }
+
+  async createDraftFromGoodsReceipt(
+    goodsReceiptId: string,
+    userId?: string,
+  ): Promise<ApiResponse<{ id: string; docNo: string }>> {
+    return this.createDraftFromGoodsReceipts([goodsReceiptId], userId);
+  }
+
+  /**
+   * n İRSALİYE → 1 FATURA (2026-09-18): birden çok fişin kalemleri TEK taslakta birleşir (aynı kalem/renk/fiyat
+   * satırları toplanır). Kapılar tek yerde: aynı tedarikçi (karta çözülmüş) · aynı para birimi · fiş açık ve
+   * faturalanmamış (`assertReceiptsLinkableTx`, createDraft tx'inde). Tek fiş = eski yol bayt-bayt.
+   */
+  async createDraftFromGoodsReceipts(
+    goodsReceiptIds: string[],
+    userId?: string,
+  ): Promise<ApiResponse<{ id: string; docNo: string }>> {
+    const ids = [...new Set(goodsReceiptIds)];
+    if (ids.length === 0) throw AppError.badRequest("En az bir mal kabul fişi seçin.");
+    const receipts = await prisma.goodsReceipt.findMany({
+      where: { id: { in: ids } },
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        receiptNo: true,
+        status: true,
+        currency: true,
+        supplierId: true,
+        // C4 (2026-08-15) — FASON TEDARİKÇİ BACAĞI. Fatura katmanı iki tarafı
+        // zaten taşıyor (`CreateInvoiceInput.subcontractorId` →
+        // `ensureCariAccountTx` CariKind.SUBCONTRACTOR); eksik olan tek şey bu
+        // select'ti. Okunmasaydı fason firmadan alınan mal "tedarikçi
+        // seçilmemiş" diye 400 alır ve o fişten fatura kesmenin HİÇBİR yolu
+        // olmazdı (generic uç `.strict()` şemasında `goodsReceiptId` kabul
+        // etmiyor → bağsız fatura da kesilemez).
+        subcontractorId: true,
+        deliveryNoteNo: true,
+        createdAt: true,
+        // ⚠️ SÖZLEŞME FİYATI KATMANI (2026-08-15) — satış tarafının aynası.
+        // Bağ olmadan sipariş fiyatı sorulamaz; alan olmadan da o soru hiç
+        // sorulmuyordu (`invoice.service` içinde "purchaseOrder" kelimesi HİÇ
+        // geçmiyordu — bu, C1'in alış tarafındaki boşluğuydu).
+        purchaseOrderId: true,
+      },
+    });
+    if (receipts.length !== ids.length) throw AppError.notFound("Mal kabul fişi bulunamadı.");
+    const receipt = receipts[0]!;
+    for (const r of receipts) {
+      if (r.status === "CANCELLED") throw AppError.conflict(`${r.receiptNo} iptal edilmiş — faturası kesilemez.`);
+      if (!r.supplierId && !r.subcontractorId) {
+        throw AppError.badRequest(`${r.receiptNo} fişinde tedarikçi seçilmemiş — alış faturası için tedarikçi gerekli.`);
+      }
+      if (r.currency !== receipt.currency) {
+        throw AppError.badRequest(`${r.receiptNo} fişinin para birimi (${r.currency}) ${receipt.receiptNo} ile aynı değil.`, { code: "GOODS_RECEIPT_CURRENCY_MISMATCH" });
+      }
+    }
+    // Tedarikçi eşitliği KARTA çözülerek (bağlı fason profili = kartı): ilk fişin kartı ölçüt.
+    const firstCard = await resolvePartyToCardTx(prisma, { customerId: receipt.supplierId, subcontractorId: receipt.subcontractorId });
+    for (const r of receipts.slice(1)) {
+      const card = await resolvePartyToCardTx(prisma, { customerId: r.supplierId, subcontractorId: r.subcontractorId });
+      if (card.customerId !== firstCard.customerId || card.subcontractorId !== firstCard.subcontractorId) {
+        throw AppError.badRequest(`${r.receiptNo} fişinin tedarikçisi ${receipt.receiptNo} ile aynı değil — tek faturada tek tedarikçi.`, { code: "GOODS_RECEIPT_PARTY_MISMATCH" });
+      }
+    }
+
+    // ── SATIRLAR TEK KAYNAKTAN (Sınıf 5, 2026-08-14) ────────────────────────
+    // ⚠️ İPLİK SATIRLARI DA FATURAYA GİRER (aynı günün denetim bulgusu,
+    // KRİTİK). Eskiden buradaki select YALNIZ `rolls` okuyordu: karma bir fişte
+    // (2 top kumaş + 500 kg iplik) taslak SADECE kumaşı taşıyor, iplik ne satır
+    // ne uyarı olarak görünüyordu → cari borç eksik kalıyor, iplik depoda ama
+    // karşılığında yükümlülük yok; hata da log da çıkmıyordu. Düzeltme önce
+    // buraya ikinci bir el-yazımı select olarak girdi; aynı akşam satır okuma
+    // `assembleReceiptLines`e TEKLEŞTİ — tabloya giden her kopya, bir sonraki
+    // satır tipinde (CONSUMABLE) aynı deliği yeniden açar.
+    //
+    // Süzgeçler assembler SÖZLEŞMESİNİN tüketici tarafı:
+    //  • Kumaşta CANCELLED dışarıda — iptal "bu mal hiç gelmedi" demektir
+    //    (softDelete qtyOut=0 semantiği); faturaya girerse gelmeyen mala para
+    //    ödenir.
+    //  • İplikte yalnız `IN` — fiş iptali `ADJUST_OUT` yazar ve aynı fiş bağını
+    //    taşır; süzgeç olmasa ters kayıt da faturaya satır olarak girerdi
+    //    (iptalli fiş yukarıda zaten reddediliyor; bu derinlik savunmasıdır).
+    const groups = new Map<string, { itemId: string; description: string; qty: Prisma.Decimal; unitPrice: Prisma.Decimal; unit: string }>();
+    let pricedItems = 0;
+    let conflictItems = 0;
+    const receiptQty = new Map<string, Awaited<ReturnType<typeof receiptQtyByRollTx>> extends Map<string, infer V> ? V : never>();
+    for (const r of receipts) {
+      const part = await this.receiptLineGroups(r, groups);
+      pricedItems += part.contract.pricedItems.size;
+      conflictItems += part.contract.conflictItems.size;
+      for (const [k, v] of part.receiptQty) receiptQty.set(k, v);
+    }
     const defaultVatRate = await readFinanceDefaultVatRate();
 
     // ── VADE ÖN-DOLUMU (2026-08-15) ─────────────────────────────────────────
@@ -709,9 +781,11 @@ export class InvoiceService {
         currency: receipt.currency,
         issueDate: receipt.createdAt,
         dueDate,
-        externalNo: receipt.deliveryNoteNo,
-        notes: `${receipt.receiptNo} mal kabul fişinden üretildi.`,
-        goodsReceiptId: receipt.id,
+        // n fiş: irsaliye no'ları birleşik (64 karakter sınırı), not fiş listesini taşır; bağ pivot + tek fişte kolon.
+        externalNo: receipts.map((r) => r.deliveryNoteNo).filter((n): n is string => Boolean(n)).join(", ").slice(0, 64) || null,
+        notes: `${receipts.map((r) => r.receiptNo).join(", ")} mal kabul ${receipts.length > 1 ? "fişlerinden" : "fişinden"} üretildi.`,
+        goodsReceiptId: receipts.length === 1 ? receipt.id : null,
+        goodsReceiptIds: receipts.map((r) => r.id),
         lines: [...groups.values()].map((g) => ({
           itemId: g.itemId,
           description: g.description,
@@ -731,10 +805,7 @@ export class InvoiceService {
     // görünmez cevaptır.
     // "0 kalemde kullanıldı" YAZILMAZ: sıfır bir bilgi değil gürültüdür ve
     // çelişki cümlesinin önünde durup onu zayıflatır (kural helper'da).
-    const priceNote = describeContractPricing({
-      pricedItems: contract.pricedItems.size,
-      conflictItems: contract.conflictItems.size,
-    });
+    const priceNote = describeContractPricing({ pricedItems, conflictItems });
     const draft = priceNote ? { ...created, message: `${created.message ?? ""}${priceNote}` } : created;
     // Ufuk-öncesi fiş topu: kabul metrajı defterden değil giriş kolonundan okundu — beyan.
     const receiptQtyNote = receiptQtyWarning(receiptQty);
@@ -792,6 +863,8 @@ export class InvoiceService {
       externalNo?: string | null;
       notes?: string | null;
       exchangeRate?: Prisma.Decimal.Value;
+      /** n irsaliye → 1 fatura: bağlı fişler REPLACE (`[]` temizler; yoksa dokunulmaz). */
+      goodsReceiptIds?: string[];
     },
     userId?: string,
   ): Promise<ApiResponse<{ id: string }>> {
@@ -813,11 +886,18 @@ export class InvoiceService {
       // Claim SONRASI içerik tx İÇİNDE taze yüklenir (`confirm` ile aynı desen).
       const existing = await tx.invoice.findUniqueOrThrow({
         where: { id },
-        select: { exchangeRate: true },
+        select: { exchangeRate: true, type: true, currency: true, cari: { select: { customerId: true, subcontractorId: true } } },
       });
 
       const rate = input.exchangeRate != null ? D(input.exchangeRate) : D(existing.exchangeRate);
       if (rate.lte(0)) throw AppError.badRequest("Kur sıfır veya negatif olamaz.");
+      // n irsaliye → 1 fatura: `goodsReceiptIds` verildiyse küme REPLACE (kilit + kapılar + tek yazar).
+      if (input.goodsReceiptIds !== undefined) {
+        const receiptIds = [...new Set(input.goodsReceiptIds)];
+        await lockReceiptsTx(tx, receiptIds);
+        await assertReceiptsLinkableTx(tx, { receiptIds, invoiceId: id, type: existing.type, currency: existing.currency, cari: existing.cari });
+        await writeInvoiceReceiptsTx(tx, id, receiptIds);
+      }
 
       if (input.lines) {
         if (input.lines.length === 0) throw AppError.badRequest("Fatura en az bir satır içermeli.");
@@ -964,6 +1044,7 @@ export class InvoiceService {
           shipmentId: true,
           directShipmentId: true,
           goodsReceiptId: true,
+          goodsReceiptLinks: { select: { goodsReceiptId: true } },
         },
       });
       // ⚠️ KAYNAK FİŞ SATIR KİLİDİYLE OKUNUR (Sınıf 4, 2026-08-14 akşam).
@@ -979,14 +1060,16 @@ export class InvoiceService {
       // iptal tarafı goods_receipts (claim) → fatura OKUMASI (kilitsiz) — ortak
       // kilitli kaynak tek olduğu için ABBA çevrimi yok. (Zaman fonksiyonu yok
       // → `-- tz-ok` gerekmez.)
-      if (inv.goodsReceiptId) {
+      // n irsaliye → 1 fatura: bağlı fişlerin TAMAMI (pivot + eski kolon) kilitlenir ve iptal kontrolü hepsinde.
+      const linkedReceiptIds = [...new Set([...(inv.goodsReceiptId ? [inv.goodsReceiptId] : []), ...inv.goodsReceiptLinks.map((l) => l.goodsReceiptId)])].sort();
+      if (linkedReceiptIds.length > 0) {
         const grRows = await tx.$queryRaw<Array<{ receiptNo: string; status: string }>>`
           SELECT "receiptNo", "status"::text AS "status"
-          FROM "goods_receipts" WHERE "id" = ${inv.goodsReceiptId}::uuid
-          FOR UPDATE
+          FROM "goods_receipts" WHERE "id" = ANY(${linkedReceiptIds}::uuid[])
+          ORDER BY "id" FOR UPDATE
         `;
-        const gr = grRows[0];
-        if (gr && gr.status === GoodsReceiptStatus.CANCELLED) {
+        const gr = grRows.find((r) => r.status === GoodsReceiptStatus.CANCELLED);
+        if (gr) {
           throw AppError.conflict(
             `${inv.docNo}: kaynak mal kabul fişi ${gr.receiptNo} İPTAL EDİLMİŞ — ` +
               `bu fatura onaylanamaz (mal fiilen girmedi). Faturayı iptal edin.`,
@@ -998,6 +1081,8 @@ export class InvoiceService {
         where: { invoiceId: id },
         select: { qty: true, unitPrice: true, discountRate: true, vatRate: true, withholdingRate: true, description: true },
       });
+      // n irsaliye → 1 fatura: `finance.invoiceMatchTolerance` açıkken fatura ↔ bağlı fişler tolerans kapısı (defter anı).
+      await assertReceiptMatchTx(tx, inv.docNo, { receiptIds: linkedReceiptIds, lines: lineRows });
       if (lineRows.length === 0) throw AppError.badRequest("Satırsız fatura onaylanamaz.");
       // ── FİYAT SEDDİ (finance.allowZeroPriceLineEnabled) ────────────────────
       // VARSAYILAN (bayrak KAPALI) davranış bayt-bayt korunur: `<= 0` olan İLK
@@ -1601,6 +1686,8 @@ export class InvoiceService {
     cariId?: string;
     from?: Date;
     to?: Date;
+    /** n irsaliye → 1 fatura: bu fişe bağlı faturalar (pivot). */
+    goodsReceiptId?: string;
   }) {
     const page = Math.max(1, params.page ?? 1);
     const pageSize = Math.min(200, Math.max(1, params.pageSize ?? 50));
@@ -1608,6 +1695,7 @@ export class InvoiceService {
     if (params.type) where.type = params.type;
     if (params.status) where.status = params.status;
     if (params.cariId) where.cariId = params.cariId;
+    if (params.goodsReceiptId) where.goodsReceiptLinks = { some: { goodsReceiptId: params.goodsReceiptId } };
     if (params.from || params.to) {
       where.issueDate = { ...(params.from ? { gte: params.from } : {}), ...(params.to ? { lte: params.to } : {}) };
     }
@@ -1634,7 +1722,7 @@ export class InvoiceService {
       prisma.invoice.count({ where }),
     ]);
     return {
-      data,
+      data: data.map(({ goodsReceiptLinks, ...r }) => ({ ...r, goodsReceipts: goodsReceiptLinks.map(toInvoiceReceiptDto) })),
       pagination: { total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) },
     };
   }
@@ -1647,7 +1735,11 @@ export class InvoiceService {
       select: DETAIL_SELECT,
     });
     if (!row) throw AppError.notFound("Fatura bulunamadı.");
-    return { success: true, data: row };
+    const { goodsReceiptLinks, ...rest } = row;
+    const receiptIds = goodsReceiptLinks.map((l) => l.goodsReceipt.id);
+    // Tolerans karşılaştırması BİLGİ olarak (taslakta sarı uyarı); kapı ONAY'da (`assertReceiptMatchTx`).
+    const receiptMatch = await receiptMatchTx(prisma, { receiptIds, lines: row.lines });
+    return { success: true, data: { ...rest, goodsReceipts: goodsReceiptLinks.map(toInvoiceReceiptDto), receiptMatch } };
   }
 }
 

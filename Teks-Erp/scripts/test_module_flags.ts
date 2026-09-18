@@ -432,6 +432,8 @@ function main(): void {
     readDevereBeamWeavingLinkRequired: { resolver: "resolveBeamWeavingLinkRequired", ebeveyn: "ticaret+iplik+devere" },
     readDokumaRunWeavingOrderRequired: { resolver: "resolveRunWeavingOrderRequired", ebeveyn: "üretim+dokuma" },
     readDokumaOrderLineLinkRequired: { resolver: "resolveOrderLineLinkRequired", ebeveyn: "üretim+dokuma" },
+    // n irsaliye → 1 fatura (2026-09-18): onay toleransı muhasebe modülünün davranış bayrağı.
+    readFinanceInvoiceMatchTolerance: { resolver: "resolveInvoiceMatchToleranceEnabled", ebeveyn: "finans" },
   };
 
   const servisKodu = yorumlariSok(fs.readFileSync(SERVIS, "utf8"));
@@ -483,7 +485,8 @@ function main(): void {
     const govde = middlewareGovdeAnalizi(SERVIS, resolver);
     check(
       `§8b ${resolver} tanımlı ve modül şalterini okuyor`,
-      govde.bulundu && govde.okuyucular.some((o) => /^read(Production|Ticaret)Enabled$/.test(o.ad)),
+      // Modül şalterleri: üretim · ticaret · muhasebe (`REGIME_GATES` ile aynı küme; finans 2026-09-18'de eklendi).
+      govde.bulundu && govde.okuyucular.some((o) => /^read(Production|Ticaret|Finance)Enabled$/.test(o.ad)),
       govde.bulundu
         ? `gövdedeki okuyucular: ${govde.okuyucular.map((o) => o.ad).join(", ") || "(hiç)"}`
         : "fonksiyon bulunamadı",

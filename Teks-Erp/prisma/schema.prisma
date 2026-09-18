@@ -8194,6 +8194,7 @@ model GoodsReceipt {
   rolls                 Roll[]
   movements             WarehouseMovement[]
   invoices              Invoice[]
+  invoiceLinks          InvoiceToGoodsReceipt[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -8411,6 +8412,8 @@ model Invoice {
   directShipment       DirectShipment?       @relation(fields: [directShipmentId], references: [id], onDelete: Restrict)
   subcontractorReceipt SubcontractorReceipt? @relation(fields: [subcontractorReceiptId], references: [id], onDelete: Restrict)
   goodsReceipt         GoodsReceipt?         @relation(fields: [goodsReceiptId], references: [id], onDelete: Restrict)
+  /// n irsaliye → 1 fatura (2026-09-18): pivot; `goodsReceiptId` kolonu tek fişte AYRICA dolar (eski okuyucu), n>1 fişte NULL.
+  goodsReceiptLinks    InvoiceToGoodsReceipt[]
 
   lines         InvoiceLine[]
   /// Paket D — iplik faturasının stok hareketi bağı (opsiyonel; iplik dışı
@@ -8437,6 +8440,28 @@ model Invoice {
   @@index([subcontractorReceiptId])
   @@index([goodsReceiptId])
   @@map("invoices")
+}
+
+/// n İRSALİYE → 1 FATURA (2026-09-18) — alış faturası birden çok mal kabul fişini kapatır (sektör: SAP MM fatura
+/// doğrulama). ③b SAF YAPILANDIRMA pivotu: gövde `goodsReceiptIds` REPLACE, audit ebeveyn fatura eyleminde. Tek yazar
+/// `helpers/invoice-receipts.helper.ts` — `Invoice.goodsReceiptId` kolonu tek fişte AYRICA yazılır (eski istemci/okuyucu),
+/// backfill migration'da (`ON CONFLICT DO NOTHING`). "Bir fiş → en çok BİR iptal edilmemiş fatura" servis kapısı (409,
+/// `goods_receipts FOR UPDATE`). Kolonun kaldırılması §7 sınıfı sonraki faz.
+model InvoiceToGoodsReceipt {
+  id             String @id @default(uuid()) @db.Uuid
+  invoiceId      String @db.Uuid
+  goodsReceiptId String @db.Uuid
+
+  /// Pivot faturayla YAŞAR (③b yapılandırma satırı, defter değil): fatura sert silindiğinde (④ taslak) bağ da düşer — Cascade.
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  goodsReceipt GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([invoiceId, goodsReceiptId])
+  @@index([goodsReceiptId])
+  @@map("invoice_to_goods_receipts")
 }
 
 /// Fatura satırı — `itemId` OPSİYONEL.

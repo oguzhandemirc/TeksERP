@@ -574,10 +574,10 @@ async function main(): Promise<void> {
     const EXPECTED_KEYS = [
       "cancelReason", "cancelledAt", "cari", "confirmedAt", "createdAt", "currency",
       "directShipment", "discountTotal", "docNo", "dueDate", "exchangeRate", "externalNo",
-      "goodsReceipt", "grandTotal", "grandTotalTry", "id", "issueDate", "lines", "notes",
-      "paidTotal", "returnGroupId", "shipment", "status", "subcontractorReceipt",
+      "goodsReceipt", "goodsReceipts", "grandTotal", "grandTotalTry", "id", "issueDate", "lines", "notes",
+      "paidTotal", "receiptMatch", "returnGroupId", "shipment", "status", "subcontractorReceipt",
       "subtotal", "type", "updatedAt", "vatTotal", "withholdingTotal",
-    ];
+    ]; // n irsaliye → 1 fatura (2026-09-18): `goodsReceipts[]` + `receiptMatch` eklendi (test_invoice_receipts ölçer)
     check(
       "§13a ⭐ detay anahtar kümesi SABİT (alan düşürme/ekleme bekçisiz geçemez)",
       JSON.stringify(Object.keys(data).sort()) === JSON.stringify(EXPECTED_KEYS),
