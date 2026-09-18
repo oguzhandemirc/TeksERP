@@ -145,7 +145,7 @@ import {
   buildNextDynamicCursor,
 } from "../utils/cursor";
 import { assertWorkOrderBound } from "./helpers/dispatch-header.helper";
-import { assertOwnerMatchesTx } from "./helpers/emanet-owner.helper";
+import { assertOwnerMatchesTx, previewOwnerMismatches } from "./helpers/emanet-owner.helper";
 
 // Re-export saf primitifler (geriye uyum — eskiden bu dosyada tanımlıydı).
 export {
@@ -2717,7 +2717,8 @@ export class ShippingService {
       return { id: s.id, sackNo: s.sackNo, weightKg: s.weightKg != null ? Number(s.weightKg) : null, rollCount: s.rolls.length, totalMeters: Number(m) };
     });
 
-    const warnings: string[] = [];
+    // Sahiplik (G3 emanet): dispatch'teki 409 `OWNER_MISMATCH` kapısının önizleme ikizi — RED DEĞİL uyarı + liste.
+    const { ownerMismatches, warnings } = await previewOwnerMismatches(prisma, { sackIds, customerId: data.customerId ?? null });
     let lines: { lineId: string; orderNumber: string; item: string; color: string | null; width: number | null; need: number; allocated: number }[] = [];
     let surplusMeters = Number(totalMeters);
 
@@ -2779,6 +2780,8 @@ export class ShippingService {
         sacks: sackRows,
         lines,
         warnings,
+        /** Sahiplik uyuşmazlığı (G3): `[{barcode, owner}]`; boş = sorun yok. Eski istemci alanı görmez, `warnings` metnini basar. */
+        ownerMismatches,
         totals: { totalMeters: Number(totalMeters), sackCount: sacks.length, surplusMeters: Math.max(0, surplusMeters) },
       },
     };

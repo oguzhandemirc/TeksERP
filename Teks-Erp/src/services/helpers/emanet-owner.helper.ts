@@ -12,6 +12,8 @@
 //      sevk `executeDirectShip`; kartela/kalan kapanışı müşteriye çıkış değildir — ölçüldü) bu kapıdan geçer:
 //      çuvaldaki/sevkteki topun owner'ı dolu ∧ ≠ sevk müşterisi ⇒ 409, etkilenen HER top barkoduyla listelenir.
 //      Bayraktan BAĞIMSIZ: veri varsa çalışır (bayrak sonradan kapatılsa emanet mal yanlış müşteriye gitmez).
+//      Aynı soruyu sevk ÖNİZLEMESİ de sorar (`findOwnerMismatches`, red değil uyarı + `ownerMismatches[]`) —
+//      yüklem TEK yerde yaşar ki önizleme "geçer" derken dispatch 409 vermesin.
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
@@ -55,18 +57,57 @@ export async function resolveOwnerFromBeamsTx(tx: Pick<Tx, "subcontractorDispatc
   return singleOwner(items.map((i) => i.warpBeam?.ownerCustomerId ?? null), "Fason dokuma makbuzu");
 }
 
-/** ③ Sevk sahiplik kapısı — etkilenen HER top listelenir (soyut sayı yetmez). */
-export async function assertOwnerMatchesTx(tx: Pick<Tx, "roll">, input: { rollIds: string[]; customerId: string; belge: string }): Promise<void> {
-  if (input.rollIds.length === 0) return;
-  const clash = await tx.roll.findMany({
-    where: { id: { in: input.rollIds }, ownerCustomerId: { not: null }, NOT: { ownerCustomerId: input.customerId } },
+export interface OwnerMismatchRow {
+  barcode: string | null;
+  owner: string | null;
+}
+
+/**
+ * ③ Sahiplik uyuşmazlığı — TEK YÜKLEM: owner dolu ∧ ≠ sevk müşterisi. Kapı (409) ve önizleme (uyarı) aynı listeyi
+ * okur; `customerId` null ise (müşteri henüz seçilmedi) owner'lı her top listelenir — sahibi dışında kimseye gidemez.
+ */
+export async function findOwnerMismatches(
+  db: Pick<Tx, "roll">,
+  input: { rollIds?: string[]; sackIds?: string[]; customerId: string | null },
+): Promise<OwnerMismatchRow[]> {
+  const scope: Prisma.RollWhereInput[] = [];
+  if (input.rollIds && input.rollIds.length > 0) scope.push({ id: { in: input.rollIds } });
+  if (input.sackIds && input.sackIds.length > 0) scope.push({ sackId: { in: input.sackIds } });
+  if (scope.length === 0) return [];
+  const clash = await db.roll.findMany({
+    where: { OR: scope, ownerCustomerId: { not: null }, ...(input.customerId ? { NOT: { ownerCustomerId: input.customerId } } : {}) },
     select: { barcode: true, ownerCustomer: { select: { name: true } } },
     orderBy: { barcode: "asc" },
   });
+  return clash.map((r) => ({ barcode: r.barcode, owner: r.ownerCustomer?.name ?? null }));
+}
+
+/** Uyuşmazlık listesinin operatör cümlesi — kapı mesajı ve önizleme uyarısı aynı metni basar. */
+export function ownerMismatchText(rows: OwnerMismatchRow[], belge: string): string {
+  const clashText = rows.map((r) => `${r.barcode ?? "?"} (${r.owner ?? "?"})`).join(", ");
+  return `${rows.length} top başka müşterinin emanet malı — ${belge} bu müşteriye açılamaz: ${clashText}`;
+}
+
+/**
+ * Önizleme ikizi: aynı liste, RED DEĞİL uyarı — operatör "Sevk Et"e basmadan görsün. Müşteri seçilmemişse owner'lı
+ * her top "yalnız sahibine" diye listelenir. `warnings` önekli metin (`[OWNER_MISMATCH] …`), eski istemci onu basar.
+ */
+export async function previewOwnerMismatches(
+  db: Pick<Tx, "roll">,
+  input: { sackIds: string[]; customerId: string | null },
+): Promise<{ ownerMismatches: OwnerMismatchRow[]; warnings: string[] }> {
+  const ownerMismatches = await findOwnerMismatches(db, { sackIds: input.sackIds, customerId: input.customerId });
+  if (ownerMismatches.length === 0) return { ownerMismatches, warnings: [] };
+  const warning = input.customerId
+    ? `[OWNER_MISMATCH] ${ownerMismatchText(ownerMismatches, "sevkiyat")} — Sevk Et reddedilir.`
+    : `[OWNER_MISMATCH] ${ownerMismatches.length} top müşterinin EMANET malı (${ownerMismatches.map((r) => `${r.barcode ?? "?"} (${r.owner ?? "?"})`).join(", ")}) — yalnız sahibine sevk edilebilir.`;
+  return { ownerMismatches, warnings: [warning] };
+}
+
+/** ③ Sevk sahiplik kapısı — etkilenen HER top listelenir (soyut sayı yetmez). */
+export async function assertOwnerMatchesTx(tx: Pick<Tx, "roll">, input: { rollIds: string[]; customerId: string; belge: string }): Promise<void> {
+  if (input.rollIds.length === 0) return;
+  const clash = await findOwnerMismatches(tx, { rollIds: input.rollIds, customerId: input.customerId });
   if (clash.length === 0) return;
-  const clashText = clash.map((r) => `${r.barcode} (${r.ownerCustomer?.name ?? "?"})`).join(", ");
-  throw AppError.conflict(`${clash.length} top başka müşterinin emanet malı — ${input.belge} bu müşteriye açılamaz: ${clashText}`, {
-    code: "OWNER_MISMATCH",
-    rolls: clash.map((r) => ({ barcode: r.barcode, owner: r.ownerCustomer?.name ?? null })),
-  });
+  throw AppError.conflict(ownerMismatchText(clash, input.belge), { code: "OWNER_MISMATCH", rolls: clash });
 }

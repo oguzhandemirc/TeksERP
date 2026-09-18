@@ -15,6 +15,8 @@
 //      KALITIR · A+B lotları karışık → 409 OWNER_MISMATCH (levent PLANNED kalır, iplik defterine yazılmaz) ·
 //      KK1 owner A · fason dokuma sevkindeki leventten `resolveOwnerFromBeamsTx` → A
 //   §3 SEVK KAPISI — [A'nın topu, ownersız top] müşteri B → 409 OWNER_MISMATCH yalnız A'nın barkodu listelenir;
+//      §3c–§3e ÖNİZLEME (`POST /shipping/shipments/preview`, 2026-09-18): aynı yüklem (`findOwnerMismatches`) RED değil
+//      `warnings` `[OWNER_MISMATCH] …` + `ownerMismatches[{barcode, owner}]`; müşteri A ⇒ boş; müşteri seçilmemiş ⇒ liste
 //      müşteri A → geçer; hepsi ownersız → geçer (bugünkü davranış)
 //   §4 DB sedleri — CONSIGNED ownersız 23514 · CONSIGNED + supplier 23514 · IN_HOUSE + owner OK (mülkiyet ≠ köken)
 //   §5 E2b — `updateWarpBeam` gövdesine owner sızdırılsa bile owner DEĞİŞMEZ; lot update owner almaz
@@ -23,6 +25,7 @@
 //
 // NEGATİF SONDALAR (kırmızı görülerek, 2026-09-15):
 //   · `assertOwnerMatchesTx` `NOT: { ownerCustomerId }` yüklemi düşürülünce §3a/§3b ❌
+//   · `findOwnerMismatches` `[]` dönünce §3a/§3c/§3e ❌ (kapı ve önizleme aynı yüklemden — biri susarsa ikisi susar; ölçüldü 2026-09-18)
 //   · `assertEmanetWritableTx` bayrak kontrolü düşürülünce §1a/§1b/§1c ❌
 //   · `singleOwner` çoklu-owner 409'u düşürülünce §2d ❌
 //   · `roll-tablet.service` `select`e `taxNumber` eklenip map'e geçirilince §6c ❌ · bayrak kontrolü düşürülünce §6b ❌
@@ -39,6 +42,7 @@ import { windWarpBeam } from "../src/services/warp-beam-wind.service";
 import { YarnLotService } from "../src/services/yarn-lot.service";
 import { InventoryService } from "../src/services/inventory.service";
 import { assertOwnerMatchesTx, resolveOwnerFromBeamsTx } from "../src/services/helpers/emanet-owner.helper";
+import { shippingService } from "../src/services/shipping.service";
 import { getRollTabletContext } from "../src/services/roll-tablet.service";
 import { AppError } from "../src/utils/app-error";
 import { fixtureWarehouseId } from "./fixture-warehouse";
@@ -129,7 +133,7 @@ async function main(): Promise<void> {
   const patos = await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } });
   if (!patos) throw new Error("Seed fixture eksik (PATOS)");
   const whId = await fixtureWarehouseId();
-  const ids = { st: "", mk: "", custA: "", custB: "", custP: "", yarn: "", spec: "", lots: [] as string[], beams: [] as string[], rolls: [] as string[], wo: "", sub: "", dispatch: "" };
+  const ids = { st: "", mk: "", custA: "", custB: "", custP: "", yarn: "", spec: "", lots: [] as string[], beams: [] as string[], rolls: [] as string[], sacks: [] as string[], wo: "", sub: "", dispatch: "" };
   const setFlag = (key: string, v: boolean) => prisma.systemSetting.upsert({ where: { key }, create: { key, value: String(v) }, update: { value: String(v) } });
 
   try {
@@ -202,6 +206,19 @@ async function main(): Promise<void> {
     check("§3a ⭐ [A'nın topu + ownersız top] → müşteri B: 409 OWNER_MISMATCH, YALNIZ A'nın barkodu listelenir", kod(e3a) === "OWNER_MISMATCH" && clash.length === 1 && clash[0]?.barcode === rA.data.barcode, JSON.stringify(clash));
     check("§3b müşteri A → geçer · hepsi ownersız → geçer", (await beklenenHata(() => prisma.$transaction((tx) => assertOwnerMatchesTx(tx, { rollIds: [rA.data.id, r0.data.id], customerId: custA.id, belge: "x" })))) === null && (await beklenenHata(() => prisma.$transaction((tx) => assertOwnerMatchesTx(tx, { rollIds: [r0.data.id], customerId: custB.id, belge: "x" })))) === null);
 
+    // §3c–§3e önizleme ikizi: A'nın topu + ownersız top TEK çuvalda, müşteri B'ye önizleme.
+    const sk = await prisma.sack.create({ data: { sackNo: `${TAG}-SK1`, seq: 1 }, select: { id: true } });
+    ids.sacks.push(sk.id);
+    await prisma.roll.updateMany({ where: { id: { in: [rA.data.id, r0.data.id] } }, data: { sackId: sk.id } });
+    type Onizleme = { data: { warnings: string[]; ownerMismatches: Array<{ barcode: string | null; owner: string | null }> } };
+    const pB = (await shippingService.previewCreateShipment({ sackIds: [sk.id], customerId: custB.id })) as Onizleme;
+    check("§3c ⭐ önizleme müşteri B: RED DEĞİL — `warnings` `[OWNER_MISMATCH] …` + `ownerMismatches` yalnız A'nın barkodu", pB.data.warnings.some((w) => w.startsWith("[OWNER_MISMATCH]") && w.includes(String(rA.data.barcode))) && pB.data.ownerMismatches.length === 1 && pB.data.ownerMismatches[0]?.barcode === rA.data.barcode, JSON.stringify(pB.data.warnings));
+    const pA = (await shippingService.previewCreateShipment({ sackIds: [sk.id], customerId: custA.id })) as Onizleme;
+    check("§3d önizleme müşteri A (sahibi): uyarı yok, liste boş", pA.data.ownerMismatches.length === 0 && !pA.data.warnings.some((w) => w.startsWith("[OWNER_MISMATCH]")));
+    const pN = (await shippingService.previewCreateShipment({ sackIds: [sk.id], customerId: null })) as Onizleme;
+    check("§3e önizleme müşterisiz: owner'lı top 'yalnız sahibine' diye listelenir (ownersız top listede değil)", pN.data.ownerMismatches.length === 1 && pN.data.warnings.some((w) => w.startsWith("[OWNER_MISMATCH]") && /yalnız sahibine/.test(w)));
+    await prisma.roll.updateMany({ where: { id: { in: [rA.data.id, r0.data.id] } }, data: { sackId: null } });
+
     console.log("\n── §4 DB sedleri ──");
     check("§4a CONSIGNED ownersız → 23514 · CONSIGNED + supplier → 23514",
       (await pgHata(() => prisma.$executeRaw`INSERT INTO warp_beams (id, "beamNo", "warpSpecId", status, "plannedLengthM", "originKind", "createdAt", "updatedAt") VALUES (gen_random_uuid(), ${`${TAG}-X1`}, ${spec.id}::uuid, 'PLANNED', 1, 'CONSIGNED', now(), now())`)) === "23514" &&
@@ -233,7 +250,7 @@ async function main(): Promise<void> {
   process.exit(fail > 0 ? 1 : 0);
 }
 
-async function temizle(ids: { st: string; mk: string; custA: string; custB: string; custP: string; yarn: string; spec: string; lots: string[]; beams: string[]; rolls: string[]; wo: string; sub: string; dispatch: string }, foto: Array<{ key: string; value: Prisma.JsonValue }>): Promise<void> {
+async function temizle(ids: { st: string; mk: string; custA: string; custB: string; custP: string; yarn: string; spec: string; lots: string[]; beams: string[]; rolls: string[]; sacks: string[]; wo: string; sub: string; dispatch: string }, foto: Array<{ key: string; value: Prisma.JsonValue }>): Promise<void> {
   if (ids.dispatch) { await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: ids.dispatch } }); await prisma.subcontractorDispatch.deleteMany({ where: { id: ids.dispatch } }); }
   if (ids.wo) await prisma.weavingOrder.deleteMany({ where: { id: ids.wo } });
   if (ids.sub) await prisma.subcontractor.deleteMany({ where: { id: ids.sub } });
@@ -243,6 +260,8 @@ async function temizle(ids: { st: string; mk: string; custA: string; custB: stri
   await prisma.yarnLot.deleteMany({ where: { id: { in: ids.lots } } });
   if (ids.spec) await prisma.warpSpec.deleteMany({ where: { id: ids.spec } });
   if (ids.yarn) await prisma.item.deleteMany({ where: { id: ids.yarn } });
+  await prisma.roll.updateMany({ where: { id: { in: ids.rolls } }, data: { sackId: null } });
+  await prisma.sack.deleteMany({ where: { id: { in: ids.sacks } } });
   await prisma.rollOperation.deleteMany({ where: { rollId: { in: ids.rolls } } });
   await prisma.rollMovement.deleteMany({ where: { rollId: { in: ids.rolls } } });
   await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: ids.rolls } } });
