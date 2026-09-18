@@ -1,4 +1,4 @@
-import { beamActionsEnabled, buildPlanPayload, buildWindPayload, classifyBeamFailure, initialWindForm, isSameLocalDay, theoreticalKg, validatePlan, validateWind, EMPTY_PLAN, STATUS_LABEL, type WindForm } from './beamPayload';
+import { beamActionsEnabled, buildPlanPayload, buildWindPayload, classifyBeamFailure, initialWindForm, isSameLocalDay, linesTotalKg, physicalBeamBusyWarning, theoreticalKg, validatePlan, validateWind, validateWindPage, windPageKeys, windPhysicalNos, EMPTY_PLAN, STATUS_LABEL, type WindForm } from './beamPayload';
 
 const line = (qtyKg: string, reasonCode: string | null = null, warehouseId: string | null = 'w1', lotId: string | null = null) => ({ key: `k${qtyKg}`, warehouseId, qtyKg, reasonCode, lotId });
 
@@ -161,5 +161,63 @@ describe('raşel takımı (#23) — adet', () => {
     expect(validateWind({ ...base, count: '25' }, 'IN_HOUSE').ok).toBe(false);
     expect(validateWind({ ...base, count: 'a' }, 'IN_HOUSE').ok).toBe(false);
     expect(buildWindPayload({ ...base, count: '2' }, 'IN_HOUSE', 'tok').physicalBeamNoPrefix).toBeNull();
+  });
+});
+
+// ⭐ NEGATİF SONDA (2026-09-18, bir kezlik): `validateWindPage('makine')` makine kapısı düşürüldü → §sayfa/2 ❌ ve
+//    (zincir aynı olduğu için) §wind/2 ❌; `physicalBeamBusyWarning` katlamasız karşılaştırdı → §gövde/1 ❌.
+describe('sayfalı Sar — validateWindPage ↔ validateWind AYNI zincir', () => {
+  const inHouse: WindForm = { lengthM: '1180', kgSource: 'WEIGHED', machineId: 'm1', issues: [line('50')], returns: [], breakCount: '', count: '1', physicalBeamNoPrefix: '' };
+  it('1 sayfa anahtarları: IN_HOUSE ölçü·makine·dip, fason/hazır yalnız ölçü', () => {
+    expect(windPageKeys('IN_HOUSE')).toEqual(['olcu', 'makine', 'dip']);
+    expect(windPageKeys('SUBCONTRACT')).toEqual(['olcu']);
+    expect(windPageKeys('PURCHASED')).toEqual(['olcu']);
+  });
+  it('2 ⭐ her hata KENDİ sayfasında çıkar, öteki sayfalar temiz (İleri kilidi doğru sayfada)', () => {
+    expect(validateWindPage({ ...inHouse, lengthM: '0' }, false, 'olcu').ok).toBe(false);
+    expect(validateWindPage({ ...inHouse, lengthM: '0' }, false, 'makine').ok).toBe(true);
+    expect(validateWindPage({ ...inHouse, machineId: null }, false, 'makine')).toEqual({ ok: false, message: 'Devere makinesi seçin.' });
+    expect(validateWindPage({ ...inHouse, machineId: null }, false, 'olcu').ok).toBe(true);
+    expect(validateWindPage({ ...inHouse, issues: [line('50', null, 'w1', null)] }, true, 'makine').ok).toBe(false);
+    expect(validateWindPage({ ...inHouse, returns: [line('51', 'TELEF')] }, false, 'dip').ok).toBe(false);
+    expect(validateWindPage({ ...inHouse, returns: [line('51', 'TELEF')] }, false, 'makine').ok).toBe(true);
+    expect(validateWindPage({ ...inHouse, breakCount: '1.5' }, false, 'dip').ok).toBe(false);
+  });
+  it('3 bütün = sayfaların sırayla zinciri: ilk hatalı sayfanın mesajı döner', () => {
+    const f = { ...inHouse, lengthM: '0', machineId: null };
+    expect(validateWind(f, 'IN_HOUSE')).toEqual(validateWindPage(f, false, 'olcu'));
+    expect(validateWind({ ...inHouse, machineId: null }, 'IN_HOUSE')).toEqual({ ok: false, message: 'Devere makinesi seçin.' });
+    expect(validateWind(inHouse, 'IN_HOUSE')).toEqual({ ok: true });
+  });
+  it('4 özet kg toplamı virgüllü/boş satırı sayar, 3 haneye yuvarlar', () => {
+    expect(linesTotalKg([line('50,5'), line(''), line('0.25')])).toBe(50.75);
+    expect(linesTotalKg([])).toBe(0);
+  });
+});
+
+describe('gövde çakışması ERKEN uyarısı — sunucu assertPhysicalBeamFreeTx aynası (tr_fold · canlı durumlar)', () => {
+  const beams = [
+    { id: 'a', beamNo: 'LV1809260001', physicalBeamNo: 'T1', status: 'READY' as const },
+    { id: 'b', beamNo: 'LV1809260002', physicalBeamNo: 'T2', status: 'MOUNTED' as const },
+    { id: 'c', beamNo: 'LV1809260003', physicalBeamNo: 'T3', status: 'SHIPPED_OUT' as const },
+    { id: 'd', beamNo: 'LV1809260004', physicalBeamNo: 'T4', status: 'CANCELLED' as const },
+  ];
+  it('1 ⭐ katlamalı eşleşme (küçük/büyük · boşluk · Türkçe harf) ve durum sözcüğü', () => {
+    expect(physicalBeamBusyWarning('t1', beams)).toBe('t1 gövdesinde LV1809260001 hazır duruyor — sarım reddedilir; gövdeyi boşaltın ya da başka gövde yazın.');
+    expect(physicalBeamBusyWarning(' T2 ', beams)).toContain('LV1809260002 tezgahta');
+    expect(physicalBeamBusyWarning('T3', beams)).toContain('LV1809260003 fasonda');
+  });
+  it('2 canlı olmayan (CANCELLED) levent uyarmaz; boş/farklı gövde null; kendi id\'si dışlanır', () => {
+    expect(physicalBeamBusyWarning('T4', beams)).toBeNull();
+    expect(physicalBeamBusyWarning('', beams)).toBeNull();
+    expect(physicalBeamBusyWarning(null, beams)).toBeNull();
+    expect(physicalBeamBusyWarning('T9', beams)).toBeNull();
+    expect(physicalBeamBusyWarning('T1', beams, 'a')).toBeNull();
+  });
+  it('3 sarımda doğacak gövdeler: k=1 kendi, k≥2 önek-k (önek yoksa yalnız kendi); adet 1 önek yok sayılır', () => {
+    expect(windPhysicalNos('T1', { count: '3', physicalBeamNoPrefix: 'R7' })).toEqual(['T1', 'R7-2', 'R7-3']);
+    expect(windPhysicalNos(null, { count: '2', physicalBeamNoPrefix: 'R7' })).toEqual(['R7-2']);
+    expect(windPhysicalNos(null, { count: '3', physicalBeamNoPrefix: '' })).toEqual([]);
+    expect(windPhysicalNos('T1', { count: '1', physicalBeamNoPrefix: 'R7' })).toEqual(['T1']);
   });
 });

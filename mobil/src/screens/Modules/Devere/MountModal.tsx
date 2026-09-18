@@ -3,15 +3,15 @@
 // =============================================================================
 // Makine listesi bağlam ucundan (`loomMachines`, yuva sayısıyla); yuva 1..slots; yöntem
 // `mountTrackingRequired` açıkken zorunlu (başlangıç saati "şimdi" gider). Kural `tezgahPayload`ta.
+// TEK KART (`ModuleSheet`): dört alan, sayfalamaya gerek yok.
 // =============================================================================
 import React, { useState } from 'react';
 import { View } from 'react-native';
 import { Text, Button, SegmentedButtons } from 'react-native-paper';
 import NumpadInput from '../../../components/NumpadInput';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
-import DevereSheet, { sheet } from './devereSheet';
+import ModuleSheet, { SheetField, sheet } from '../../../components/ModuleSheet';
 import type { WarpBeamMountMethod } from '../../../services/warpBeam.service';
-import { Field } from './PlanModal';
 import { MOUNT_METHOD_LABEL } from './tezgahPayload';
 import type { MountFormState } from './useMountForm';
 
@@ -32,7 +32,7 @@ export default function MountModal({ state, loomMachines, methodRequired, isOnli
   const machine = loomMachines.find((m) => m.id === f.machineId) ?? null;
   const options: PickerOption[] = loomMachines.map((m) => ({ value: m.id, label: m.name, sublabel: `${m.code} · ${m.stationName} · ${m.warpBeamSlots} yuva` }));
   return (
-    <DevereSheet
+    <ModuleSheet
       visible
       onDismiss={state.close}
       title={`${beam.beamNo} — tezgaha tak`}
@@ -49,7 +49,7 @@ export default function MountModal({ state, loomMachines, methodRequired, isOnli
     >
       <View style={sheet.row}>
         <View style={sheet.col}>
-          <Field label="Tezgah / makine" value={machine ? `${machine.code} — ${machine.name}` : ''} placeholder={loomMachines.length ? 'Seçilmedi' : 'Levent tüketen istasyonda makine yok'} onPress={() => setPicker(true)} />
+          <SheetField label="Tezgah / makine" value={machine ? `${machine.code} — ${machine.name}` : ''} placeholder={loomMachines.length ? 'Seçilmedi' : 'Levent tüketen istasyonda makine yok'} onPress={() => setPicker(true)} />
         </View>
         <View style={sheet.col}>
           <Text style={sheet.label}>{`Yuva (1..${state.slots ?? '?'})`}</Text>
@@ -69,7 +69,7 @@ export default function MountModal({ state, loomMachines, methodRequired, isOnli
         </View>
       </View>
       {state.error ? <Text style={sheet.error}>{state.error}</Text> : null}
-    </DevereSheet>
+    </ModuleSheet>
   );
 }
 

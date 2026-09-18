@@ -33,6 +33,12 @@ export function useDevereScreen() {
   const mountTracking = context.data?.mountTracking === true;
   const live = useQuery({ queryKey: [...BEAMS_KEY, 'LIVE'], queryFn: () => warpBeamService.list(['READY', 'MOUNTED'], 100), staleTime: 15_000, enabled: mountTracking });
   const mountForm = useMountForm({ loomMachines: context.data?.loomMachines ?? [], methodRequired: context.data?.mountTrackingRequired === true, onDone: () => void live.refetch() });
+  // Gövde çakışması ERKEN uyarısı (sunucu `assertPhysicalBeamFreeTx` aynası): canlı levent = READY · SHIPPED_OUT (ready) ∪ MOUNTED (live).
+  const physicalBusyBeams = useMemo(() => {
+    const seen = new Map<string, WarpBeam>();
+    for (const b of [...(ready.data ?? []), ...(live.data ?? [])]) seen.set(b.id, b);
+    return [...seen.values()];
+  }, [ready.data, live.data]);
   const todayWound = useMemo(() => {
     const now = new Date();
     return (ready.data ?? []).filter((b) => b.wound && isSameLocalDay(b.wound.createdAt, now));
@@ -57,6 +63,7 @@ export function useDevereScreen() {
     plannedLoading: planned.isLoading,
     plannedError: planned.isError,
     todayWound,
+    physicalBusyBeams,
     readyLoading: ready.isLoading,
     refresh: () => {
       void planned.refetch();

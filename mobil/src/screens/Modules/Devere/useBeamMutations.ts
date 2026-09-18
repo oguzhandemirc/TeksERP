@@ -27,6 +27,13 @@ function ok(text1: string, text2?: string) {
   Toast.show({ type: 'success', text1, text2, visibilityTime: 5000 });
 }
 
+/** Sunucu uyarıları (`ApiResponse.warnings`, ör. `WARP_BEAM_PHYSICAL_BUSY` gövde dolu) kayıt SONRASI amber toast — başarı yeşiline gömülmez. */
+export function showBeamWarnings(warnings: readonly string[] | undefined, text1: string) {
+  const list = (warnings ?? []).map((w) => w.trim()).filter((w) => w.length > 0);
+  if (list.length === 0) return;
+  Toast.show({ type: 'warning', text1, text2: list.join(' · '), visibilityTime: 8000 });
+}
+
 export function useBeamMutations({ attemptRef, onDone, onCollision }: Deps) {
   const qc = useQueryClient();
   const invalidatePresets = useInvalidateReasonPresets();
@@ -51,7 +58,8 @@ export function useBeamMutations({ attemptRef, onDone, onCollision }: Deps) {
     mutationFn: (args: { form: PlanForm; token: string; fingerprint: string }) => warpBeamService.plan(buildPlanPayload(args.form, args.token)),
     onSuccess: (res) => {
       attemptRef.current = onBeamSucceeded();
-      ok(res.message ?? `${res.data?.beamNo ?? 'Levent'} planlandı`, res.warnings?.[0]);
+      ok(res.message ?? `${res.data?.beamNo ?? 'Levent'} planlandı`);
+      showBeamWarnings(res.warnings, `${res.data?.beamNo ?? 'Levent'} planlandı — uyarı`);
       onDone();
       invalidateList();
     },
@@ -67,7 +75,8 @@ export function useBeamMutations({ attemptRef, onDone, onCollision }: Deps) {
       warpBeamService.wind(args.beamId, buildWindPayload(args.form, args.originKind, args.token)),
     onSuccess: (res) => {
       attemptRef.current = onBeamSucceeded();
-      ok(res.message ?? 'Levent sarıldı', res.warnings?.[0]);
+      ok(res.message ?? 'Levent sarıldı');
+      showBeamWarnings(res.warnings, 'Sarım kaydedildi — uyarı');
       onDone();
       invalidateList();
     },
