@@ -6,7 +6,7 @@
 // Doğrulama İleri'de O SAYFADA yazılır (`validateRunOpen`); Kaydet = `submitOpen` (kendi
 // doğrulaması ve yapışkan token'ı aynen). Seçiciler `PickerModal` (`overlays`, kartın üstünde).
 // =============================================================================
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Text, ActivityIndicator } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import PagedSheet, { SummaryRow, type SheetPage } from '../../../components/PagedSheet';
@@ -14,6 +14,7 @@ import { SheetField, sheet } from '../../../components/ModuleSheet';
 import NumpadInput from '../../../components/NumpadInput';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
 import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
+import { useOpenSequence } from '../../../hooks/useOpenSequence';
 import { itemService } from '../../../services/item.service';
 import { colorService } from '../../../services/color.service';
 import { colors } from '../../../theme';
@@ -34,16 +35,6 @@ function useOrderOptions(state: RunPanelState): PickerOption[] {
       })),
     [state.orders]
   );
-}
-
-/** Her AÇILIŞTA sayfa 1'den: PagedSheet sayfa durumunu içinde tutar; açılış sayısı `key` olur.
- *  Kapanışta anahtar değişmez → kapanış animasyonu korunur. */
-function useOpenSequence(open: boolean): number {
-  const seq = useRef(0);
-  const wasOpen = useRef(false);
-  if (open && !wasOpen.current) seq.current += 1;
-  wasOpen.current = open;
-  return seq.current;
 }
 
 export default function RunOpenModal({ state }: { state: RunPanelState }) {

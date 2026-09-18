@@ -4,12 +4,14 @@
 // Yalnız `isDoffLinkVisible` doğruysa mount edilir (KK1Screen karar verir).
 // Liste `GET /machine-doffs?unlinked=true` (makine VERİLMEZ — masa KK1 hepsini
 // görür; tezgah başı eşleşmesini backend denetler). Cevap yoksa bağ null kalır.
+// Seçici `PickerModal` (2026-09-18 iskeleti: elle liste modalı yok); "Bağsız kaydet"
+// listenin üstünde `leadingAction`. Evet/Hayır ikilisi KK1 formunun kendi alanıdır, modal değil.
 // =============================================================================
 import React, { useState } from 'react';
-import { View, StyleSheet, FlatList } from 'react-native';
-import { Text, TouchableRipple, Button, ActivityIndicator } from 'react-native-paper';
+import { View, StyleSheet } from 'react-native';
+import { Text, TouchableRipple, Button } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
-import AppModal from '../../../components/AppModal';
+import PickerModal from '../../../components/PickerModal';
 import { doffService } from '../../../services/doff.service';
 import { colors, spacing, radius, typography } from '../../../theme';
 import { doffRowLabel, type DoffLinkState } from './doffLink';
@@ -50,13 +52,12 @@ export default function DoffLinkPicker({ value, onChange, onBeforeOpen }: Props)
       </View>
       {value.weaving && (
         <View style={styles.row}>
-          <Text style={styles.hint} numberOfLines={2}>
-            {selected ? doffRowLabel(selected) : 'İndirme seçilmedi — bağsız (doff\'suz top) kaydedilir.'}
-          </Text>
+          <Text style={styles.hint}>{selected ? doffRowLabel(selected) : "İndirme seçilmedi — bağsız (doff'suz top) kaydedilir."}</Text>
           <Button
             compact
             mode="outlined"
             icon="format-list-bulleted"
+            testID="doff-link-ac"
             onPress={() => {
               onBeforeOpen?.();
               setOpen(true);
@@ -67,61 +68,44 @@ export default function DoffLinkPicker({ value, onChange, onBeforeOpen }: Props)
         </View>
       )}
 
-      <AppModal visible={open} onDismiss={() => setOpen(false)} position="center">
-        <Text style={styles.title}>Bağlanmamış indirmeler (son 3 gün)</Text>
-        {q.isLoading ? (
-          <ActivityIndicator />
-        ) : q.isError ? (
-          <Text style={styles.error}>Liste yüklenemedi — bu bir “indirme yok” cevabı DEĞİLDİR.</Text>
-        ) : (
-          <FlatList
-            data={rows}
-            keyExtractor={(r) => r.id}
-            style={styles.list}
-            ListEmptyComponent={<Text style={styles.hint}>Bağlanmamış indirme yok.</Text>}
-            renderItem={({ item }) => (
-              <TouchableRipple
-                onPress={() => {
-                  onChange({ weaving: true, doffEventId: item.id });
-                  setOpen(false);
-                }}
-                style={[styles.item, item.id === value.doffEventId && styles.itemOn]}
-              >
-                <Text style={styles.itemText}>{doffRowLabel(item)}</Text>
-              </TouchableRipple>
-            )}
-          />
-        )}
-        <View style={styles.actions}>
-          <Button
-            onPress={() => {
-              onChange({ weaving: true, doffEventId: null });
-              setOpen(false);
-            }}
-          >
-            Bağsız kaydet
-          </Button>
-          <Button onPress={() => setOpen(false)}>Kapat</Button>
-        </View>
-      </AppModal>
+      <PickerModal
+        visible={open}
+        title="Bağlanmamış indirmeler (son 3 gün)"
+        options={rows.map((r) => ({ value: r.id, label: doffRowLabel(r) }))}
+        selectedValue={value.doffEventId ?? ''}
+        loading={q.isLoading}
+        emptyText={q.isError ? 'Liste yüklenemedi — bu bir “indirme yok” cevabı DEĞİLDİR.' : 'Bağlanmamış indirme yok.'}
+        onRefresh={() => void q.refetch()}
+        refreshing={q.isFetching}
+        refreshError={q.isError}
+        refreshErrorMessage="Liste yüklenemedi"
+        leadingAction={{
+          label: 'Bağsız kaydet',
+          sublabel: "İndirme seçilmeden — doff'suz top",
+          icon: 'link-off',
+          onPress: () => {
+            onChange({ weaving: true, doffEventId: null });
+            setOpen(false);
+          },
+        }}
+        onSelect={(id) => {
+          onChange({ weaving: true, doffEventId: id });
+          setOpen(false);
+        }}
+        onDismiss={() => setOpen(false)}
+      />
     </View>
   );
 }
 
+// Evet/Hayır ikilisi KK1 form alanı (modal değil) — chip stili KK1 formundakiyle aynı.
 const styles = StyleSheet.create({
   wrap: { gap: spacing.sm, marginTop: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   label: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: typography.weight.semibold },
   hint: { flex: 1, fontSize: typography.size.sm, color: colors.textMuted },
-  error: { color: colors.dangerText },
   chip: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.full, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.surface, minHeight: 44, justifyContent: 'center' },
   chipOn: { backgroundColor: colors.brandContainer, borderColor: colors.brand },
   chipText: { color: colors.text },
   chipTextOn: { color: colors.brandDark, fontWeight: typography.weight.semibold },
-  title: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.text, marginBottom: spacing.sm },
-  list: { maxHeight: 360 },
-  item: { padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.xs, backgroundColor: colors.surface },
-  itemOn: { backgroundColor: colors.brandContainer, borderColor: colors.brand },
-  itemText: { color: colors.text },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.md },
 });

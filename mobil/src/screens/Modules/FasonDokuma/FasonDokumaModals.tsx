@@ -1,59 +1,187 @@
 // =============================================================================
-// FASON DOKUMA KABUL — "Top kabul" (satırlar) ve "Levent döndü" modalları
+// FASON DOKUMA KABUL — "Top kabul" SAYFALI (PagedSheet) · "Levent döndü" TEK KART (ModuleSheet)
+// =============================================================================
+// Top kabul: ① İrsaliye ② Top 1 … Top N (satır başına sayfa; İleri'de `validateReceiptRow` O sayfada)
+// ③ Özet + Kaydet. Hücreler kırılmaz (satır bir sayfa); kalite serbest metin DEĞİL — kalite
+// kataloğundan `PickerModal` (KK1 ile aynı kaynak, değer = kod, backend ≤16). Native klavye yok.
+// Kısmi kabulde düşen satırlar formda kalır ve ① ile ③'te kutuda listelenir (mevcut karar).
 // =============================================================================
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, Button, TextInput, IconButton } from 'react-native-paper';
-import AppModal from '../../../components/AppModal';
+import { View } from 'react-native';
+import { Text, Button } from 'react-native-paper';
+import { useQuery } from '@tanstack/react-query';
+import ModuleSheet, { SheetField, sheet } from '../../../components/ModuleSheet';
+import PagedSheet, { SummaryRow, type SheetPage } from '../../../components/PagedSheet';
+import ModalTextInput from '../../../components/ModalTextInput';
 import NumpadInput from '../../../components/NumpadInput';
 import PickerModal from '../../../components/PickerModal';
-import { colors, spacing, typography } from '../../../theme';
+import { useOpenSequence } from '../../../hooks/useOpenSequence';
+import { qualityGradeService } from '../../../services/qualityGrade.service';
 import { EMPTY_RECEIPT_ROW, validateReceiptRow, validateReturn, type ReceiptRowForm } from './receiptPayload';
 import type { FasonDokumaState } from './useFasonDokuma';
 
-function Row({ r, i, onChange, onRemove, removable }: { r: ReceiptRowForm; i: number; onChange: (p: Partial<ReceiptRowForm>) => void; onRemove: () => void; removable: boolean }) {
-  const v = validateReceiptRow(r);
+const QUALITY_NONE = 'Belirsiz';
+
+function FailedBox({ messages }: { messages: string[] }) {
+  if (messages.length === 0) return null;
   return (
-    <View style={styles.row}>
-      <Text style={styles.rowNo}>{i + 1}</Text>
-      <NumpadInput value={r.initialQty} onChangeText={(t) => onChange({ initialQty: t })} numpadLabel={`Satır ${i + 1} metre`} placeholder="metre *" style={styles.cell} />
-      <NumpadInput value={r.width} onChangeText={(t) => onChange({ width: t })} numpadLabel="En (cm)" placeholder="en" style={styles.cell} />
-      <NumpadInput value={r.weightKg} onChangeText={(t) => onChange({ weightKg: t })} numpadLabel="Kg" placeholder="kg" style={styles.cell} />
-      <TextInput mode="outlined" dense value={r.qualityGrade} onChangeText={(t) => onChange({ qualityGrade: t })} placeholder="kalite" maxLength={16} style={styles.cellSmall} />
-      <IconButton icon="delete-outline" onPress={onRemove} disabled={!removable} accessibilityLabel="Satırı sil" />
-      {!v.ok ? <Text style={styles.err}>{v.message}</Text> : null}
+    <View style={sheet.box}>
+      <Text style={sheet.warn}>Düşen satırlar formda kaldı — doğan toplar kabul edildi (kısmi kabul):</Text>
+      {messages.map((m) => (
+        <Text key={m} style={sheet.line}>{m}</Text>
+      ))}
     </View>
   );
 }
 
-export function ReceiveModal({ state }: { state: FasonDokumaState }) {
-  const ok = state.rows.length > 0 && state.rows.every((r) => validateReceiptRow(r).ok);
-  const set = (i: number, p: Partial<ReceiptRowForm>) => state.setRows(state.rows.map((r, k) => (k === i ? { ...r, ...p } : r)));
+interface RowPageProps {
+  row: ReceiptRowForm;
+  index: number;
+  count: number;
+  qualityLabel: (code: string) => string;
+  onChange: (p: Partial<ReceiptRowForm>) => void;
+  onPickQuality: () => void;
+  onAdd: () => void;
+  onRemove: () => void;
+}
+
+/** Bir top = bir sayfa: metre zorunlu, en/kg isteğe bağlı, kalite katalogdan. */
+function RowPage({ row, index, count, qualityLabel, onChange, onPickQuality, onAdd, onRemove }: RowPageProps) {
   return (
-    <AppModal visible={state.modal === 'receive'} onDismiss={() => state.setModal(null)} position="center" contentStyle={styles.wide}>
-      <Text style={styles.title}>{state.order?.weavingOrderNumber} — dönen topları kabul et</Text>
-      <Text style={styles.hint}>Her satır bir TOP olarak doğar (kumaş {state.order?.item.name}, {state.order?.color?.name ?? 'renksiz'}); ölçüm ve etiket KK1'de. Renk işin rengidir.</Text>
-      {state.failedMessages.length > 0 ? (
-        <View style={styles.failedBox}>
-          <Text style={styles.failedTitle}>Düşen satırlar formda kaldı — doğan toplar kabul edildi (kısmi kabul):</Text>
-          {state.failedMessages.map((m) => <Text key={m} style={styles.failedLine}>{m}</Text>)}
+    <>
+      <Text style={sheet.label}>Metre *</Text>
+      <NumpadInput value={row.initialQty} onChangeText={(t) => onChange({ initialQty: t })} numpadLabel={`Top ${index + 1} metre`} placeholder="ör. 120" style={sheet.input} />
+      <View style={sheet.row}>
+        <View style={sheet.col}>
+          <Text style={sheet.label}>En (cm)</Text>
+          <NumpadInput value={row.width} onChangeText={(t) => onChange({ width: t })} numpadLabel="En (cm)" placeholder="—" style={sheet.input} />
         </View>
-      ) : null}
-      <TextInput mode="outlined" dense label="İrsaliye no (fasoncunun)" value={state.manifestNo} onChangeText={state.setManifestNo} maxLength={64} style={styles.manifest} />
-      <ScrollView style={styles.rows}>
-        {state.rows.map((r, i) => (
-          <Row key={i} r={r} i={i} onChange={(p) => set(i, p)} onRemove={() => state.setRows(state.rows.filter((_, k) => k !== i))} removable={state.rows.length > 1} />
-        ))}
-      </ScrollView>
-      <View style={styles.actions}>
-        <Button icon="plus" onPress={() => state.setRows([...state.rows, { ...EMPTY_RECEIPT_ROW }])} disabled={state.busy}>Satır</Button>
-        <View style={styles.spacer} />
-        <Button onPress={() => state.setModal(null)} disabled={state.busy}>Vazgeç</Button>
-        <Button mode="contained" onPress={() => state.receive.mutate()} loading={state.receive.isPending} disabled={!ok || state.busy || !state.isOnline}>
-          {state.rows.length} topu kabul et
-        </Button>
+        <View style={sheet.col}>
+          <Text style={sheet.label}>Kg</Text>
+          <NumpadInput value={row.weightKg} onChangeText={(t) => onChange({ weightKg: t })} numpadLabel="Kg" placeholder="—" style={sheet.input} />
+        </View>
       </View>
-    </AppModal>
+      <SheetField label="Kalite" value={row.qualityGrade ? qualityLabel(row.qualityGrade) : ''} placeholder={QUALITY_NONE} onPress={onPickQuality} />
+      <View style={sheet.footerLeft}>
+        <Button icon="plus" onPress={onAdd} testID="kabul-satir-ekle">Top ekle</Button>
+        <Button icon="delete-outline" onPress={onRemove} disabled={count <= 1} testID="kabul-satir-sil">Bu topu sil</Button>
+      </View>
+    </>
+  );
+}
+
+interface PagesArgs {
+  state: FasonDokumaState;
+  qualityLabel: (code: string) => string;
+  setRow: (i: number, p: Partial<ReceiptRowForm>) => void;
+  onPickQuality: (i: number) => void;
+}
+
+/** ① İrsaliye · ② Top i (satır başına sayfa, İleri'de doğrulama) · ③ Özet. */
+function buildReceivePages({ state, qualityLabel, setRow, onPickQuality }: PagesArgs): SheetPage[] {
+  const rows = state.rows;
+  const rowPages: SheetPage[] = rows.map((r, i) => ({
+    key: `top-${i}`,
+    title: `Top ${i + 1}`,
+    render: () => (
+      <RowPage
+        row={r}
+        index={i}
+        count={rows.length}
+        qualityLabel={qualityLabel}
+        onChange={(p) => setRow(i, p)}
+        onPickQuality={() => onPickQuality(i)}
+        onAdd={() => state.setRows([...rows.slice(0, i + 1), { ...EMPTY_RECEIPT_ROW }, ...rows.slice(i + 1)])}
+        onRemove={() => state.setRows(rows.filter((_, k) => k !== i))}
+      />
+    ),
+    validate: () => {
+      const v = validateReceiptRow(r);
+      return v.ok ? null : v.message;
+    },
+  }));
+  return [
+    {
+      key: 'irsaliye',
+      title: 'İrsaliye',
+      render: () => (
+        <>
+          <FailedBox messages={state.failedMessages} />
+          <ModalTextInput mode="outlined" dense label="İrsaliye no (fasoncunun)" value={state.manifestNo} onChangeText={state.setManifestNo} maxLength={64} style={sheet.input} testID="kabul-irsaliye" />
+          <Text style={sheet.hint}>İsteğe bağlı. Her top KK1'de ölçülür ve etiketlenir; renk işin rengidir.</Text>
+        </>
+      ),
+    },
+    ...rowPages,
+    {
+      key: 'ozet',
+      title: 'Özet',
+      render: () => (
+        <>
+          <FailedBox messages={state.failedMessages} />
+          <SummaryRow label="İrsaliye no" value={state.manifestNo} />
+          <SummaryRow label="Top sayısı" value={rows.length} />
+          {rows.map((r, i) => (
+            <SummaryRow
+              key={i}
+              label={`Top ${i + 1}`}
+              value={`${r.initialQty || '—'} m · en ${r.width || '—'} · ${r.weightKg || '—'} kg · ${r.qualityGrade ? qualityLabel(r.qualityGrade) : QUALITY_NONE}`}
+            />
+          ))}
+          <Text style={sheet.hint}>Kaydedince her satır bir TOP olarak doğar; kısmi kabulde düşen satırlar formda kalır.</Text>
+        </>
+      ),
+    },
+  ];
+}
+
+export function ReceiveModal({ state }: { state: FasonDokumaState }) {
+  const open = state.modal === 'receive';
+  const openSeq = useOpenSequence(open);
+  const [qualityRow, setQualityRow] = useState<number | null>(null);
+  const grades = useQuery({ queryKey: ['quality-grades', 'active'], queryFn: () => qualityGradeService.list({ pageSize: 100 }), enabled: open, staleTime: 10 * 60_000 });
+  const gradeRows = grades.data?.data ?? [];
+  const qualityLabel = (code: string) => gradeRows.find((g) => g.code === code)?.name ?? code;
+  const setRow = (i: number, p: Partial<ReceiptRowForm>) => state.setRows(state.rows.map((r, k) => (k === i ? { ...r, ...p } : r)));
+  const ok = state.rows.length > 0 && state.rows.every((r) => validateReceiptRow(r).ok);
+  const o = state.order;
+  return (
+    <PagedSheet
+      key={openSeq}
+      visible={open}
+      onDismiss={() => state.setModal(null)}
+      onCancel={() => state.setModal(null)}
+      onSubmit={() => state.receive.mutate()}
+      submitLabel={`${state.rows.length} topu kabul et`}
+      busy={state.receive.isPending}
+      submitDisabled={!ok || state.busy || !state.isOnline}
+      title={`${o?.weavingOrderNumber ?? ''} — dönen topları kabul et`}
+      subtitle={`Kumaş ${o?.item.name ?? ''} · ${o?.color?.name ?? 'renksiz'} — her satır bir TOP olarak doğar`}
+      pages={buildReceivePages({ state, qualityLabel, setRow, onPickQuality: setQualityRow })}
+      overlays={
+        <PickerModal
+          visible={qualityRow !== null}
+          title="Kalite"
+          options={gradeRows.map((g) => ({ value: g.code, label: g.name, sublabel: g.code }))}
+          selectedValue={qualityRow !== null ? (state.rows[qualityRow]?.qualityGrade ?? '') : ''}
+          loading={grades.isLoading}
+          emptyText="Kalite kataloğu boş — Belirsiz bırakın."
+          leadingAction={{
+            label: `${QUALITY_NONE} — kalite girilmedi`,
+            icon: 'close-circle-outline',
+            onPress: () => {
+              if (qualityRow !== null) setRow(qualityRow, { qualityGrade: '' });
+              setQualityRow(null);
+            },
+          }}
+          onDismiss={() => setQualityRow(null)}
+          onSelect={(code) => {
+            if (qualityRow !== null) setRow(qualityRow, { qualityGrade: code });
+            setQualityRow(null);
+          }}
+        />
+      }
+    />
   );
 }
 
@@ -64,47 +192,47 @@ export function ReturnModal({ state }: { state: FasonDokumaState }) {
   const [lengthM, setLengthM] = useState('');
   const beam = beams.find((b) => b.id === beamId) ?? null;
   const v = beam ? validateReturn(lengthM, beam.sentM) : { ok: false as const, message: 'Levent seçin' };
+  const close = () => state.setModal(null);
   return (
-    <AppModal visible={state.modal === 'return'} onDismiss={() => state.setModal(null)} position="center">
-      <Text style={styles.title}>{state.order?.weavingOrderNumber} — levent döndü</Text>
-      <Text style={styles.hint}>Dönen metre gideni aşamaz; fark fasoncuda kalan/çekilen çözgüdür. Levent HAZIR'a döner.</Text>
-      <Button mode="outlined" onPress={() => setPicker(true)} style={styles.manifest}>{beam ? `${beam.beamNo} · sevk ${beam.dispatchNo} · ${beam.sentM} m gitti` : 'Levent seç'}</Button>
-      <NumpadInput value={lengthM} onChangeText={setLengthM} numpadLabel="Dönen metre" placeholder="dönen metre" style={styles.manifest} />
-      {!v.ok && beam ? <Text style={styles.err}>{v.message}</Text> : null}
-      <View style={styles.actions}>
-        <View style={styles.spacer} />
-        <Button onPress={() => state.setModal(null)} disabled={state.busy}>Vazgeç</Button>
-        <Button mode="contained" loading={state.returnBeam.isPending} disabled={!v.ok || !beam || state.busy || !state.isOnline} onPress={() => beam && state.returnBeam.mutate({ dispatchId: beam.dispatchId, warpBeamId: beam.id, lengthM: Number(lengthM) })}>
-          Dönüşü kaydet
-        </Button>
-      </View>
-      <PickerModal
-        visible={picker}
-        title="Dönen levent"
-        options={beams.map((b) => ({ value: b.id, label: b.beamNo, sublabel: `sevk ${b.dispatchNo}`, details: [`${b.sentM} m gitti`] }))}
-        selectedValue={beamId}
-        emptyText="Bu işte dönmemiş levent yok."
-        onDismiss={() => setPicker(false)}
-        onSelect={(id) => { setBeamId(id); setPicker(false); }}
-      />
-    </AppModal>
+    <ModuleSheet
+      visible={state.modal === 'return'}
+      onDismiss={close}
+      size="sm"
+      title={`${state.order?.weavingOrderNumber ?? ''} — levent döndü`}
+      subtitle="Dönen metre gideni aşamaz; fark fasoncuda kalan/çekilen çözgüdür. Levent HAZIR'a döner."
+      footer={
+        <>
+          <Button onPress={close} disabled={state.busy}>Vazgeç</Button>
+          <Button
+            mode="contained"
+            loading={state.returnBeam.isPending}
+            disabled={!v.ok || !beam || state.busy || !state.isOnline}
+            onPress={() => beam && state.returnBeam.mutate({ dispatchId: beam.dispatchId, warpBeamId: beam.id, lengthM: Number(lengthM) })}
+            testID="donus-kaydet"
+          >
+            Dönüşü kaydet
+          </Button>
+        </>
+      }
+      overlays={
+        <PickerModal
+          visible={picker}
+          title="Dönen levent"
+          options={beams.map((b) => ({ value: b.id, label: b.beamNo, sublabel: `sevk ${b.dispatchNo}`, details: [`${b.sentM} m gitti`] }))}
+          selectedValue={beamId}
+          emptyText="Bu işte dönmemiş levent yok."
+          onDismiss={() => setPicker(false)}
+          onSelect={(id) => {
+            setBeamId(id);
+            setPicker(false);
+          }}
+        />
+      }
+    >
+      <SheetField label="Dönen levent" value={beam ? `${beam.beamNo} · sevk ${beam.dispatchNo} · ${beam.sentM} m gitti` : ''} placeholder="Levent seç" onPress={() => setPicker(true)} />
+      <Text style={sheet.label}>Dönen metre</Text>
+      <NumpadInput value={lengthM} onChangeText={setLengthM} numpadLabel="Dönen metre" placeholder="ör. 180" style={sheet.input} />
+      {!v.ok && beam ? <Text style={sheet.error}>{v.message}</Text> : null}
+    </ModuleSheet>
   );
 }
-
-const styles = StyleSheet.create({
-  wide: { width: '92%', maxHeight: '90%' },
-  title: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.text, marginBottom: spacing.xs },
-  hint: { fontSize: typography.size.sm, color: colors.textSecondary, marginBottom: spacing.sm },
-  failedBox: { backgroundColor: colors.warningContainer, padding: spacing.sm, borderRadius: 8, marginBottom: spacing.sm },
-  failedTitle: { fontWeight: typography.weight.semibold, color: colors.text },
-  failedLine: { color: colors.text },
-  manifest: { marginBottom: spacing.sm },
-  rows: { maxHeight: 360 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xs, flexWrap: 'wrap' },
-  rowNo: { width: 22, color: colors.textSecondary },
-  cell: { flex: 1, minWidth: 90, backgroundColor: colors.surface },
-  cellSmall: { width: 90, backgroundColor: colors.surface },
-  err: { width: '100%', color: colors.dangerText, fontSize: typography.size.sm },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
-  spacer: { flex: 1 },
-});
