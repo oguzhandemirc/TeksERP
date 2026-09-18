@@ -10,7 +10,7 @@ import { warpBeamService, type WarpBeam } from '../../../services/warpBeam.servi
 import { usePermissions } from '../../../hooks/usePermission';
 import { useIsOnline, useOfflineReason } from '../../../offline/hooks';
 import type { BeamAttempt } from './devereAttempt';
-import { isSameLocalDay, lastPlannedWarpSpecId, soleMachineId } from './beamPayload';
+import { isSameLocalDay, lastPlannedWarpSpecId, soleMachineId, soleWeavingOrderId } from './beamPayload';
 import { BEAMS_KEY, CONTEXT_KEY, useBeamMutations } from './useBeamMutations';
 import { useBeamForms, type FormModal } from './useBeamForms';
 import { useMountForm } from './useMountForm';
@@ -55,6 +55,8 @@ export function useDevereScreen() {
     lotRequired: context.data?.lotRequired ?? false,
     soleMachineId: soleMachineId(context.data?.machines ?? []),
     lastWarpSpecId: lastPlannedWarpSpecId([...(planned.data ?? []), ...(ready.data ?? [])]),
+    soleWeavingOrderId: soleWeavingOrderId(context.data?.weavingOrders),
+    beamWeavingLinkRequired: context.data?.beamWeavingLinkRequired ?? false,
   });
   const closeModal = useCallback(() => {
     setModal(null);

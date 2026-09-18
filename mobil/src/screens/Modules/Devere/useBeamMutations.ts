@@ -71,8 +71,8 @@ export function useBeamMutations({ attemptRef, onDone, onCollision }: Deps) {
 
   const wind = useMutation({
     networkMode: 'always',
-    mutationFn: (args: { beamId: string; originKind: WarpBeamOrigin; form: WindForm; token: string; fingerprint: string }) =>
-      warpBeamService.wind(args.beamId, buildWindPayload(args.form, args.originKind, args.token)),
+    mutationFn: (args: { beamId: string; originKind: WarpBeamOrigin; form: WindForm; token: string; fingerprint: string; weavingOrderId?: string | null }) =>
+      warpBeamService.wind(args.beamId, buildWindPayload(args.form, args.originKind, args.token, args.weavingOrderId)),
     onSuccess: (res) => {
       attemptRef.current = onBeamSucceeded();
       ok(res.message ?? 'Levent sarıldı');
