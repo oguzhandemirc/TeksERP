@@ -23,28 +23,37 @@ interface Deps {
 const toNum = (s: string): number => Number(s.replace(',', '.'));
 
 export function useBeamForms({ attemptRef, mutations, defaultWarehouseId, open, current, lotRequired }: Deps) {
-  const [planForm, setPlanForm] = useState<PlanForm>(EMPTY_PLAN);
-  const [windForm, setWindForm] = useState<WindForm | null>(null);
+  const [planForm, setPlanFormState] = useState<PlanForm>(EMPTY_PLAN);
+  const [windForm, setWindFormState] = useState<WindForm | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  // Yerel doğrulama satırı alan değişince ve doğrulama GEÇİNCE düşer — yoksa sunucunun 409 toast'ıyla
+  // eski kırmızı satır yan yana kalıyordu (gerçek cihaz bulgusu 2026-09-18 03:12).
+  const setPlanForm = useCallback((f: PlanForm) => {
+    setPlanFormState(f);
+    setFormError(null);
+  }, []);
+  const setWindForm = useCallback((f: WindForm | null) => {
+    setWindFormState(f);
+    setFormError(null);
+  }, []);
 
   const openPlan = useCallback(() => {
     setPlanForm(EMPTY_PLAN);
-    setFormError(null);
     open({ kind: 'plan' });
-  }, [open]);
+  }, [open, setPlanForm]);
 
   const openWind = useCallback(
     (beam: WarpBeam) => {
       setWindForm(initialWindForm(beam, defaultWarehouseId));
-      setFormError(null);
       open({ kind: 'wind', beam });
     },
-    [defaultWarehouseId, open]
+    [defaultWarehouseId, open, setWindForm]
   );
 
   const submitPlan = useCallback(() => {
     const v = validatePlan(planForm);
     if (!v.ok) return setFormError(v.message);
+    setFormError(null);
     const fingerprint = planFingerprint({ warpSpecId: planForm.warpSpecId ?? '', originKind: planForm.originKind, plannedLengthM: toNum(planForm.plannedLengthM) });
     mutations.plan.mutate({ form: planForm, token: tokenForBeam(attemptRef.current, fingerprint), fingerprint });
   }, [planForm, mutations.plan, attemptRef]);
@@ -53,6 +62,7 @@ export function useBeamForms({ attemptRef, mutations, defaultWarehouseId, open, 
     if (current?.kind !== 'wind' || !windForm) return;
     const v = validateWind(windForm, current.beam.originKind, lotRequired);
     if (!v.ok) return setFormError(v.message);
+    setFormError(null);
     const fingerprint = windFingerprint({ beamId: current.beam.id, lengthM: toNum(windForm.lengthM) });
     mutations.wind.mutate({ beamId: current.beam.id, originKind: current.beam.originKind, form: windForm, token: tokenForBeam(attemptRef.current, fingerprint), fingerprint });
   }, [current, windForm, mutations.wind, attemptRef, lotRequired]);

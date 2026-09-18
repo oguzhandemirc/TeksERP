@@ -1,6 +1,7 @@
 import React from 'react';
 import { BaseToast, ErrorToast, ToastConfig } from 'react-native-toast-message';
 import { View, Text, TouchableOpacity } from 'react-native';
+import { colors } from '../theme';
 
 /** `undoable` toast'unun `props` alanı — geri alınabilir işlem bildirimi. */
 interface UndoableToastProps {
@@ -91,6 +92,29 @@ export const toastConfig: ToastConfig = {
         fontSize: 14,
         color: '#1e40af' // Blue 800
       }}
+    />
+  ),
+  // AMBER UYARI — kayıt BAŞARILI ama sunucu `ApiResponse.warnings` döndü (ör. gövde dolu, sarım reddedilecek).
+  // Başarı yeşiliyle karışmasın, hata kırmızısı da olmasın: renkler tema jetonlarından.
+  warning: (props) => (
+    <BaseToast
+      {...props}
+      style={{
+        borderLeftColor: colors.warning,
+        borderLeftWidth: 10,
+        minHeight: 84,
+        height: 'auto',
+        backgroundColor: colors.surface,
+        shadowColor: colors.text,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
+        elevation: 8,
+      }}
+      contentContainerStyle={{ paddingHorizontal: 15, paddingVertical: 14 }}
+      text1Style={{ fontSize: 16, fontWeight: '700', color: colors.warningDark }}
+      text2NumberOfLines={0}
+      text2Style={{ fontSize: 14, color: colors.warningText }}
     />
   ),
   /**

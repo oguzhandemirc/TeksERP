@@ -3,7 +3,7 @@
 // =============================================================================
 // İptal önizlemesi zorunlu (§11 D3): depoya dönecek çıkış satırları depo ADIYLA, düşecek
 // dip iadeleri sebep ADIYLA; buton önizleme gelmeden kilitli (panel `CancelDialog` aynası).
-// İptal terminaldir — PLANNED'a dönüş yok, ekran bunu söyler.
+// İptal terminaldir — PLANNED'a dönüş yok, ekran bunu söyler. Üçü de TEK KART (`ModuleSheet` sm).
 // =============================================================================
 import React, { useState } from 'react';
 import { View } from 'react-native';
@@ -12,7 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import ModalTextInput from '../../../components/ModalTextInput';
 import { warpBeamService } from '../../../services/warpBeam.service';
 import { colors } from '../../../theme';
-import DevereSheet, { sheet } from './devereSheet';
+import ModuleSheet, { sheet } from '../../../components/ModuleSheet';
 import type { DevereScreenState } from './useDevereScreen';
 
 export const CANCEL_REASON_MIN = 3;
@@ -30,7 +30,7 @@ function CancelModal({ state }: { state: DevereScreenState }) {
   const p = preview.data;
   const canSubmit = !!p && reason.trim().length >= CANCEL_REASON_MIN && !state.busy && state.isOnline;
   return (
-    <DevereSheet
+    <ModuleSheet
       visible
       onDismiss={state.closeModal}
       size="sm"
@@ -62,7 +62,7 @@ function CancelModal({ state }: { state: DevereScreenState }) {
       ) : null}
       <Text style={sheet.label}>Gerekçe (en az 3 karakter)</Text>
       <ModalTextInput value={reason} onChangeText={setReason} maxLength={300} placeholder="Neden iptal?" style={sheet.input} dense />
-    </DevereSheet>
+    </ModuleSheet>
   );
 }
 
@@ -70,7 +70,7 @@ function DeleteModal({ state }: { state: DevereScreenState }) {
   const beam = state.modal?.kind === 'delete' ? state.modal.beam : null;
   if (!beam) return null;
   return (
-    <DevereSheet
+    <ModuleSheet
       visible
       onDismiss={state.closeModal}
       size="sm"
@@ -85,13 +85,13 @@ function DeleteModal({ state }: { state: DevereScreenState }) {
       }
     >
       <Text style={sheet.body_}>Hiç olayı ve iplik satırı yok — plan silinir, numara geri gelmez. Yanlış planı düzeltmenin yolu budur.</Text>
-    </DevereSheet>
+    </ModuleSheet>
   );
 }
 
 function CollisionModal({ state }: { state: DevereScreenState }) {
   return (
-    <DevereSheet
+    <ModuleSheet
       visible={state.collision !== null}
       onDismiss={state.dismissCollision}
       dismissable={false}
@@ -105,7 +105,7 @@ function CollisionModal({ state }: { state: DevereScreenState }) {
       }
     >
       <Text style={sheet.body_}>{state.collision ?? ''}</Text>
-    </DevereSheet>
+    </ModuleSheet>
   );
 }
 

@@ -3,31 +3,32 @@
 // =============================================================================
 // Alanlar backend `createSchema` ile birebir (`beamPayload.buildPlanPayload`). Plan
 // DÜZENLEME tablette yok: yanlış plan silinir (④ sınıfı) ve yeniden açılır.
-// Kart iskeleti `DevereSheet` (dört modal ortak) — genişlik/zemin/alt çubuk orada.
+// TEK KART (`ModuleSheet`): gövde kısa, sayfalamaya gerek yok. Gövde no yazılırken canlı
+// leventlere karşı ERKEN uyarı (sunucu 409 aynası) — Planla kilitlenmez, uyarır.
 // =============================================================================
 import React, { useState } from 'react';
 import { View } from 'react-native';
-import { Text, Button, TouchableRipple, SegmentedButtons } from 'react-native-paper';
+import { Text, Button, SegmentedButtons } from 'react-native-paper';
 import NumpadInput from '../../../components/NumpadInput';
 import ModalTextInput from '../../../components/ModalTextInput';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
+import ModuleSheet, { SheetField, sheet } from '../../../components/ModuleSheet';
 import type { WarpBeamOrigin } from '../../../services/warpBeam.service';
-import { ORIGIN_LABEL, theoreticalKg } from './beamPayload';
-import DevereSheet, { sheet } from './devereSheet';
+import { ORIGIN_LABEL, physicalBeamBusyWarning, theoreticalKg } from './beamPayload';
 import type { DevereScreenState } from './useDevereScreen';
 import { partnerRoleLabel } from '../../../lib/partnerRole';
 
 type PickerKind = 'spec' | 'subcontractor' | 'supplier' | null;
 
-export function Field({ label, value, placeholder, onPress, hint }: { label: string; value: string; placeholder: string; onPress: () => void; hint?: string }) {
+/** Üç seçici — kartın DIŞINDA portalda (`overlays`); seçim formu yazar ve kapanır. */
+function PlanPickers({ picker, setPicker, state, specOptions, subOptions, supOptions }: { picker: PickerKind; setPicker: (k: PickerKind) => void; state: DevereScreenState; specOptions: PickerOption[]; subOptions: PickerOption[]; supOptions: PickerOption[] }) {
+  const f = state.planForm;
   return (
-    <View>
-      <Text style={sheet.label}>{label}</Text>
-      <TouchableRipple onPress={onPress} style={sheet.field} accessibilityRole="button">
-        <Text style={value ? sheet.fieldText : sheet.fieldPlaceholder}>{value || placeholder}</Text>
-      </TouchableRipple>
-      {hint ? <Text style={sheet.hint}>{hint}</Text> : null}
-    </View>
+    <>
+      <PickerModal visible={picker === 'spec'} title="Çözgü kartı seç" options={specOptions} selectedValue={f.warpSpecId ?? ''} loading={state.context.isLoading} emptyText="Aktif çözgü kartı yok — panelden tanımlanır." onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, warpSpecId: v }); setPicker(null); }} />
+      <PickerModal visible={picker === 'subcontractor'} title="Fasoncu seç" options={subOptions} selectedValue={f.subcontractorId ?? ''} loading={state.context.isLoading} onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, subcontractorId: v, supplierId: null }); setPicker(null); }} />
+      <PickerModal visible={picker === 'supplier'} title="Tedarikçi seç" options={supOptions} selectedValue={f.supplierId ?? ''} loading={state.context.isLoading} onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, supplierId: v, subcontractorId: null }); setPicker(null); }} />
+    </>
   );
 }
 
@@ -47,9 +48,10 @@ export default function PlanModal({ state }: { state: DevereScreenState }) {
   const subName = ctx?.subcontractors.find((s) => s.id === f.subcontractorId)?.name ?? '';
   const supName = ctx?.suppliers.find((s) => s.id === f.supplierId)?.name ?? '';
   const nominal = spec ? theoreticalKg(spec.endsCount, spec.denier, Number(f.plannedLengthM.replace(',', '.'))) : null;
+  const busyWarning = physicalBeamBusyWarning(f.physicalBeamNo, state.physicalBusyBeams);
 
   return (
-    <DevereSheet
+    <ModuleSheet
       visible={state.modal?.kind === 'plan'}
       onDismiss={state.closeModal}
       title="Yeni levent planla"
@@ -60,17 +62,11 @@ export default function PlanModal({ state }: { state: DevereScreenState }) {
           <Button mode="contained" onPress={state.submitPlan} loading={state.busy} disabled={state.busy || !state.isOnline}>Planla</Button>
         </>
       }
-      overlays={
-        <>
-          <PickerModal visible={picker === 'spec'} title="Çözgü kartı seç" options={specOptions} selectedValue={f.warpSpecId ?? ''} loading={state.context.isLoading} emptyText="Aktif çözgü kartı yok — panelden tanımlanır." onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, warpSpecId: v }); setPicker(null); }} />
-          <PickerModal visible={picker === 'subcontractor'} title="Fasoncu seç" options={subOptions} selectedValue={f.subcontractorId ?? ''} loading={state.context.isLoading} onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, subcontractorId: v, supplierId: null }); setPicker(null); }} />
-          <PickerModal visible={picker === 'supplier'} title="Tedarikçi seç" options={supOptions} selectedValue={f.supplierId ?? ''} loading={state.context.isLoading} onDismiss={() => setPicker(null)} onSelect={(v) => { state.setPlanForm({ ...f, supplierId: v, subcontractorId: null }); setPicker(null); }} />
-        </>
-      }
+      overlays={<PlanPickers picker={picker} setPicker={setPicker} state={state} specOptions={specOptions} subOptions={subOptions} supOptions={supOptions} />}
     >
       <View style={sheet.row}>
         <View style={sheet.col}>
-          <Field label="Çözgü kartı" value={spec ? `${spec.code} — ${spec.name}` : ''} placeholder="Seçilmedi" onPress={() => setPicker('spec')} />
+          <SheetField label="Çözgü kartı" value={spec ? `${spec.code} — ${spec.name}` : ''} placeholder="Seçilmedi" onPress={() => setPicker('spec')} />
           {spec && spec.denier == null ? <Text style={sheet.warn}>Bu kartın ipliğinde denye yok — sarımda nominal kg hesaplanamaz (kartı düzelttirin).</Text> : null}
         </View>
         <View style={sheet.col}>
@@ -89,11 +85,11 @@ export default function PlanModal({ state }: { state: DevereScreenState }) {
       {f.originKind !== 'IN_HOUSE' ? (
         <View style={sheet.row}>
           <View style={sheet.col}>
-            <Field label={f.originKind === 'PURCHASED' ? 'Fasoncu (tedarikçi yerine)' : 'Fasoncu'} value={subName} placeholder="Seçilmedi" onPress={() => setPicker('subcontractor')} />
+            <SheetField label={f.originKind === 'PURCHASED' ? 'Fasoncu (tedarikçi yerine)' : 'Fasoncu'} value={subName} placeholder="Seçilmedi" onPress={() => setPicker('subcontractor')} />
           </View>
           {f.originKind === 'PURCHASED' ? (
             <View style={sheet.col}>
-              <Field label="Tedarikçi (cari)" value={supName} placeholder="Seçilmedi" onPress={() => setPicker('supplier')} />
+              <SheetField label="Tedarikçi (cari)" value={supName} placeholder="Seçilmedi" onPress={() => setPicker('supplier')} />
             </View>
           ) : null}
         </View>
@@ -102,6 +98,7 @@ export default function PlanModal({ state }: { state: DevereScreenState }) {
         <View style={sheet.col}>
           <Text style={sheet.label}>Metal levent no (isteğe bağlı)</Text>
           <ModalTextInput value={f.physicalBeamNo} onChangeText={(t) => state.setPlanForm({ ...f, physicalBeamNo: t })} maxLength={32} placeholder="ör. L-12" style={sheet.input} dense />
+          {busyWarning ? <Text style={sheet.warn} testID="plan-govde-uyari">{busyWarning}</Text> : null}
         </View>
         <View style={sheet.col}>
           <Text style={sheet.label}>Not (isteğe bağlı)</Text>
@@ -109,6 +106,6 @@ export default function PlanModal({ state }: { state: DevereScreenState }) {
         </View>
       </View>
       {state.formError ? <Text style={sheet.error}>{state.formError}</Text> : null}
-    </DevereSheet>
+    </ModuleSheet>
   );
 }

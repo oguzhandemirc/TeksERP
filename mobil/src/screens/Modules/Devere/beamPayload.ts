@@ -6,7 +6,8 @@
 // ≥1 brüt çıkış satırı ZORUNLU; diğer kökenlerde makine ve iplik satırı HİÇ gönderilmez
 // (sunucu 400 verir; form hiç kurmaz). Nominal kg ön hesabı sunucu formülünün aynasıdır.
 // =============================================================================
-import type { PlanWarpBeamRequest, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, WindWarpBeamRequest } from '../../../services/warpBeam.service';
+import type { PlanWarpBeamRequest, WarpBeam, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, WindWarpBeamRequest } from '../../../services/warpBeam.service';
+import { foldSearchText } from '../../../utils/searchFold';
 
 export const ORIGIN_LABEL: Record<WarpBeamOrigin, string> = {
   IN_HOUSE: 'İçeride sarılacak',
@@ -122,17 +123,27 @@ function validateLines(lines: YarnLineDraft[], label: string, needsReason: boole
   return { ok: true };
 }
 
-export function validateWind(f: WindForm, originKind: WarpBeamOrigin, lotRequired = false): Validation {
-  const m = num(f.lengthM);
-  if (m == null || m <= 0) return { ok: false, message: 'Sarılan metre 0’dan büyük olmalı.' };
-  if (setCount(f) == null) return { ok: false, message: 'Adet 1..24 arasında tam sayı olmalı.' };
-  if (originKind !== 'IN_HOUSE') return { ok: true };
-  if (!f.machineId) return { ok: false, message: 'Devere makinesi seçin.' };
-  if (f.issues.length === 0) return { ok: false, message: 'En az bir brüt iplik çıkışı satırı gerekir.' };
-  // `devere.lotRequired` SUNUCUDAN okunur; istemci kapısı yalnız erken uyarı (sunucu 400 zaten verir).
-  if (lotRequired && f.issues.some((l) => !l.lotId)) return { ok: false, message: 'Lot zorunlu: her iplik çıkış satırında lot seçin.' };
-  const i = validateLines(f.issues, 'İplik çıkışı', false);
-  if (!i.ok) return i;
+/** Sayfalı Sar formunun doğrulama sayfaları: ölçü (metre · adet) · makine + brüt çıkış · dip iadesi + kopuş. Fason/hazır kökende yalnız ölçü. */
+export type WindPageKey = 'olcu' | 'makine' | 'dip';
+export function windPageKeys(originKind: WarpBeamOrigin): WindPageKey[] {
+  return originKind === 'IN_HOUSE' ? ['olcu', 'makine', 'dip'] : ['olcu'];
+}
+
+/** Tek sayfanın doğrulaması — `PagedSheet` İleri'de sorar; `validateWind` sayfaları sırayla zincirler (aynı sıra, aynı mesajlar). */
+export function validateWindPage(f: WindForm, lotRequired: boolean, page: WindPageKey): Validation {
+  if (page === 'olcu') {
+    const m = num(f.lengthM);
+    if (m == null || m <= 0) return { ok: false, message: 'Sarılan metre 0’dan büyük olmalı.' };
+    if (setCount(f) == null) return { ok: false, message: 'Adet 1..24 arasında tam sayı olmalı.' };
+    return { ok: true };
+  }
+  if (page === 'makine') {
+    if (!f.machineId) return { ok: false, message: 'Devere makinesi seçin.' };
+    if (f.issues.length === 0) return { ok: false, message: 'En az bir brüt iplik çıkışı satırı gerekir.' };
+    // `devere.lotRequired` SUNUCUDAN okunur; istemci kapısı yalnız erken uyarı (sunucu 400 zaten verir).
+    if (lotRequired && f.issues.some((l) => !l.lotId)) return { ok: false, message: 'Lot zorunlu: her iplik çıkış satırında lot seçin.' };
+    return validateLines(f.issues, 'İplik çıkışı', false);
+  }
   const r = validateLines(f.returns, 'Dip iadesi', true);
   if (!r.ok) return r;
   const issueKg = f.issues.reduce((s, l) => s + (num(l.qtyKg) ?? 0), 0);
@@ -141,6 +152,19 @@ export function validateWind(f: WindForm, originKind: WarpBeamOrigin, lotRequire
   const bc = f.breakCount.trim() === '' ? null : num(f.breakCount);
   if (bc != null && (bc < 0 || !Number.isInteger(bc))) return { ok: false, message: 'Kopuş adedi tam sayı olmalı.' };
   return { ok: true };
+}
+
+export function validateWind(f: WindForm, originKind: WarpBeamOrigin, lotRequired = false): Validation {
+  for (const page of windPageKeys(originKind)) {
+    const v = validateWindPage(f, lotRequired, page);
+    if (!v.ok) return v;
+  }
+  return { ok: true };
+}
+
+/** Özet için kg toplamı (satır sayısıyla) — yalnız sayısal satırlar. */
+export function linesTotalKg(lines: YarnLineDraft[]): number {
+  return Math.round(lines.reduce((s, l) => s + (num(l.qtyKg) ?? 0), 0) * 1000) / 1000;
 }
 
 export function buildWindPayload(f: WindForm, originKind: WarpBeamOrigin, clientToken: string): WindWarpBeamRequest {
@@ -162,6 +186,27 @@ export function buildWindPayload(f: WindForm, originKind: WarpBeamOrigin, client
 export function theoreticalKg(endsCount: number, denier: number | null, lengthM: number): number | null {
   if (denier == null || !(lengthM > 0) || !(endsCount > 0)) return null;
   return Math.round(((endsCount * denier * lengthM) / 9_000_000) * 1000) / 1000;
+}
+
+/** Sunucu `assertPhysicalBeamFreeTx` aynası (tr_fold = `foldSearchText`, canlı durumlar READY · SHIPPED_OUT · MOUNTED): aynı gövdede canlı çözgü varsa ERKEN UYARI metni; kilit değil — sunucu 409 `WARP_BEAM_PHYSICAL_BUSY` kalır. */
+const PHYSICAL_LIVE: ReadonlySet<WarpBeamStatus> = new Set(['READY', 'SHIPPED_OUT', 'MOUNTED']);
+const PHYSICAL_LIVE_LABEL: Partial<Record<WarpBeamStatus, string>> = { READY: 'hazır duruyor', SHIPPED_OUT: 'fasonda', MOUNTED: 'tezgahta' };
+export function physicalBeamBusyWarning(physicalBeamNo: string | null | undefined, beams: readonly Pick<WarpBeam, 'id' | 'beamNo' | 'physicalBeamNo' | 'status'>[], ownBeamId: string | null = null): string | null {
+  const no = (physicalBeamNo ?? '').trim();
+  if (!no) return null;
+  const fold = foldSearchText(no);
+  if (!fold) return null;
+  const busy = beams.find((b) => b.id !== ownBeamId && PHYSICAL_LIVE.has(b.status) && !!b.physicalBeamNo && foldSearchText(b.physicalBeamNo) === fold);
+  return busy ? `${no} gövdesinde ${busy.beamNo} ${PHYSICAL_LIVE_LABEL[busy.status] ?? 'canlı'} — sarım reddedilir; gövdeyi boşaltın ya da başka gövde yazın.` : null;
+}
+
+/** Sarımda doğacak gövde numaraları — sunucu `siblingPhysicalNo` aynası: k=1 leventin kendi gövdesi, k≥2 `${önek}-${k}` (önek yoksa yok). */
+export function windPhysicalNos(own: string | null, f: Pick<WindForm, 'count' | 'physicalBeamNoPrefix'>): string[] {
+  const n = setCount(f) ?? 1;
+  const prefix = f.physicalBeamNoPrefix.trim();
+  const nos: string[] = own ? [own] : [];
+  if (n > 1 && prefix) for (let k = 2; k <= n; k++) nos.push(`${prefix}-${k}`.slice(0, 32));
+  return nos;
 }
 
 export type BeamFailureAction =
