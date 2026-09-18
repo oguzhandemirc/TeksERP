@@ -241,6 +241,8 @@ for (const adim of secili) {
   }
   try {
     await rolIleAc(adim.rol);
+    // Önceki adımdan açık kalmış diyalog (kırmızıda düğmeye ulaşılamamış olabilir) sonraki adımı kilitlemesin.
+    for (let i = 0; i < 3 && (await page.getByRole("dialog").count()); i++) { await page.keyboard.press("Escape"); await page.waitForTimeout(300); }
     const f = fiiller();
     const ctx = { ...f, api: (yol, init) => api(adim.rol === "S" ? "P" : adim.rol, yol, init), sql, ortam, kullanici: KULLANICI[adim.rol] };
     await Promise.race([

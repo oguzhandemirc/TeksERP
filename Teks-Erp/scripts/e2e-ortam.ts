@@ -142,6 +142,10 @@ async function fixture(): Promise<void> {
     await reconcileReasonPresets();
 
     const parola = (): string => randomBytes(9).toString("base64url");
+    // ⚠️ TABLET OPERATÖRÜ SAYISAL PAROLA: tablet giriş ekranının şifre alanı `number-pad`
+    // (LoginScreen "şifre değişken uzunlukta, NUMERİK") — alfanümerik parolayla operatör
+    // tablete UI'dan HİÇ giremez (d5 ölçtü 2026-09-18). 12 hane rastgele rakam.
+    const sayisalParola = (): string => Array.from(randomBytes(12), (b) => String(b % 10)).join("");
     // `setUserPermissions` ID ister, kod değil — katalog uzlaştırıldıktan sonra tablodan okunur.
     const tumIzinIdleri = (await prisma.permission.findMany({ select: { id: true } })).map((p) => p.id);
     const kullanicilar: Record<string, { username: string; password: string }> = {};
@@ -151,7 +155,7 @@ async function fixture(): Promise<void> {
       { anahtar: "operator", username: "e2e-operator", fullName: "TEST E2E Operatör", tumIzin: false, operator: true },
     ];
     for (const t of tanimlar) {
-      const p = parola();
+      const p = t.operator ? sayisalParola() : parola();
       const mevcut = await prisma.user.findUnique({ where: { username: t.username }, select: { id: true } });
       let id: string;
       if (mevcut) {
@@ -184,7 +188,11 @@ async function fixture(): Promise<void> {
       where: { key: SETTING_KEYS.REPORTS_CLOSED_KEYS }, update: { value: [] }, create: { key: SETTING_KEYS.REPORTS_CLOSED_KEYS, value: [], description: "E2E fixture" },
     });
 
-    const ortam = { apiUrl: `http://127.0.0.1:${API_PORT}`, dbUrl: dbUrl(DB_ADI), dbName: DB_ADI, kullanicilar, yazildi: new Date().toISOString() };
+    const ortam = {
+      apiUrl: `http://127.0.0.1:${API_PORT}`, dbUrl: dbUrl(DB_ADI), dbName: DB_ADI, kullanicilar,
+      not: "operator parolası SAYISALDIR (tablet number-pad); PIN/kart ortam dosyasına YAZILMAZ",
+      yazildi: new Date().toISOString(),
+    };
     fs.writeFileSync(ORTAM_DOSYASI, JSON.stringify(ortam, null, 2), { mode: 0o600 });
     console.log(`✅ fixture: ${tanimlar.length} kullanıcı · ${modulAnahtarlari.length} modül açık · ortam → ${ORTAM_DOSYASI}`);
   } finally {
