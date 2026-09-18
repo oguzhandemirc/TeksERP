@@ -59,6 +59,7 @@ const c8Olcum = { uiKapali: null, satirKirmizi: null, apiDurum: null, apiKod: nu
 const e2Olcum = { rotaSablonu: null };
 const e3Olcum = { uyumluBaska: null, ikinciMusteri: null, gorunenMusteri: null };
 const g1Olcum = { tedarikciAlaniVar: null };
+const i7Olcum = { barkod: null, sevkId: null, onceMetre: null, onceTop: null, sonraMetre: null, sonraTop: null, iadeMetre: null, iadeSayi: null };
 const i4Olcum = { barkod: null, digerMusteri: null, digerOnce: null, testOnce: null, onizlemeSahipVar: null, redDurum: null, redKod: null, redTopVar: null, redSahipVar: null, tostSahipVar: null, ikinciDurum: null, sevkNo: null };
 
 const MODUL_ANAHTARLARI = ["productionEnabled", "financeEnabled", "ticaretEnabled", "iplikEnabled", "depoMultiEnabled", "kumasTeknikEnabled", "tezgahEnabled", "devereEnabled", "dokumaEnabled", "emanetEnabled"];
@@ -957,6 +958,49 @@ export const ADIMLAR = [
         params: () => [i4Olcum.digerMusteri, buyukTr(AD.musteri)], oku: (r) => `${r[0].diger - i4Olcum.digerOnce}:${r[0].test - i4Olcum.testOnce}:${r[0].durum}`, beklenen: (v) => /^0:1:DISPATCHED$/.test(v) },
       { ad: "emanet top sahibine sevk edildi (rolls.status=SHIPPED, sahip korunur)",
         sql: `SELECT r.status::text st, (r."shipmentId" IS NOT NULL) sevkte FROM rolls r WHERE r.barcode=$1`, params: () => [i4Olcum.barkod], oku: (r) => `${r[0]?.st}:${r[0]?.sevkte}`, beklenen: "SHIPPED:true" },
+    ],
+  },
+  {
+    id: "I7", rol: "P", gerektirir: ["I4"],
+    yol: "Operasyon → İade Takibi → Yeni İade → barkod → Sorgula → neden → İade Al (I4'te sevk edilen emanet top)", rota: "operations/returns",
+    async yap({ git, tikla, gor, sec, sql, api, page }) {
+      // Hedef: I4'ün sevk ettiği top (aynı süreçte koşmadıysa DB'den son SHIPPED emanet top).
+      const aday = await sql(`SELECT r.barcode, r."shipmentId" sid FROM rolls r JOIN customers c ON c.id=r."ownerCustomerId" WHERE c.name=$1 AND r.status='SHIPPED' AND r."shipmentId" IS NOT NULL ORDER BY r."updatedAt" DESC LIMIT 1`, [buyukTr(AD.musteri)]);
+      i7Olcum.barkod = i4Olcum.barkod && aday.find((a) => a.barcode === i4Olcum.barkod) ? i4Olcum.barkod : (aday[0]?.barcode ?? null);
+      i7Olcum.sevkId = aday.find((a) => a.barcode === i7Olcum.barkod)?.sid ?? null;
+      if (!i7Olcum.barkod) throw new Error("sevk edilmiş emanet top yok (I4 koşmadı mı?)");
+      const ozet = async () => (await api(`/api/shipping/shipments/${i7Olcum.sevkId}`)).govde?.data?.summary ?? {};
+      const o1 = await ozet(); i7Olcum.onceMetre = o1.totalMeters ?? null; i7Olcum.onceTop = o1.rollCount ?? null;
+      await git("İade Takibi");
+      await tikla("Yeni İade");
+      const d = page().getByRole("dialog").filter({ hasText: "İade Girişi" }).last(); await gor(d);
+      await d.getByPlaceholder("Sevk edilmiş top barkodu").fill(i7Olcum.barkod);
+      await d.getByRole("button", { name: "Sorgula" }).click({ timeout: 15_000 });
+      await gor(d.getByText(i7Olcum.barkod, { exact: false }).first(), { sure: 20_000 });
+      // Sipariş adayı varsa zorunlu (siparişsiz sevkte yok); neden katalogdan.
+      const sip = d.getByRole("combobox").filter({ hasText: "Sipariş seçin" });
+      if (await sip.count()) { await sip.first().click({ timeout: 10_000 }); await page().getByRole("option").first().click({ timeout: 10_000 }); }
+      await sec(d.getByRole("combobox").filter({ hasText: "Neden seçin" }).first(), /Hasarlı/);
+      await d.getByRole("button", { name: "İade Al", exact: true }).click({ timeout: 15_000 });
+      await d.waitFor({ state: "detached", timeout: 20_000 });
+      await page().waitForTimeout(800);
+      const o2 = await ozet(); i7Olcum.sonraMetre = o2.totalMeters ?? null; i7Olcum.sonraTop = o2.rollCount ?? null; i7Olcum.iadeMetre = o2.returnedMeters ?? null; i7Olcum.iadeSayi = o2.returnedCount ?? null;
+    },
+    async bekle({ gor, page }) {
+      await gor(page().getByRole("row").filter({ hasText: i7Olcum.barkod }).filter({ visible: true }).first(), { sure: 20_000 });
+    },
+    dogrula: [
+      { ad: "iade defteri: 1 satır, 25 m, sevkiyat bağı + neden (roll_returns)",
+        sql: `SELECT count(*)::int n, max(rr.qty)::text q, bool_and(rr."fromShipmentId" IS NOT NULL) sevk, bool_and(rr."reasonId" IS NOT NULL) neden FROM roll_returns rr JOIN rolls r ON r.id=rr."rollId" WHERE r.barcode=$1`,
+        params: () => [i7Olcum.barkod], oku: (r) => `${r[0].n}:${r[0].q}:${r[0].sevk}:${r[0].neden}`, beklenen: (v) => /^1:25(\.0+)?:true:true$/.test(v) },
+      { ad: "top depoya döndü, sevk/çuval bağı temiz, emanet sahibi KORUNDU (rolls)",
+        sql: `SELECT r.status::text st, (r."shipmentId" IS NULL AND r."sackId" IS NULL) bos, (r."ownerCustomerId" IS NOT NULL) sahip FROM rolls r WHERE r.barcode=$1`,
+        params: () => [i7Olcum.barkod], oku: (r) => `${r[0]?.st}:${r[0]?.bos}:${r[0]?.sahip}`, beklenen: (v) => /^(WAREHOUSE|A1_STOCK):true:true$/.test(v) },
+      { ad: "SEVK RAKAMI BRÜT — iade sonrası sevkiyat özeti değişmedi; iade ayrı sayaçta (GET /shipments/:id summary)",
+        sql: `SELECT 1`, oku: () => `${i7Olcum.onceMetre}/${i7Olcum.onceTop}→${i7Olcum.sonraMetre}/${i7Olcum.sonraTop} iade:${i7Olcum.iadeMetre}/${i7Olcum.iadeSayi}`,
+        beklenen: (v) => /^25\/1→25\/1 iade:25\/1$/.test(v) },
+      { ad: "sevkiyat olay defterine iade satırı YAZILMAZ (iade kendi defteri) — shipment_events sabit",
+        sql: `SELECT string_agg(type::text, ',' ORDER BY "createdAt") t FROM shipment_events WHERE "shipmentId"=$1`, params: () => [i7Olcum.sevkId], oku: (r) => r[0].t, beklenen: (v) => /^(PLANNED,)?DISPATCHED$/.test(String(v)) },
     ],
   },
 ];

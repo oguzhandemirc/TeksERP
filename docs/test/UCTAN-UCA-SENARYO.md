@@ -110,7 +110,7 @@
 | **I4** · P · Kumaş Stoğu → Ham Stok → **Manuel Top Ekle** (Sahibi: TEST Müşteri, 25 m) → Paketleme / Çuvallar → **Yeni Çuval** (müşterisiz) → barkod okut → **Sevk Et** → BAŞKA gerçek müşteri ✅ | Emanet top panelden doğar (G2'nin tablet ikizi; `rolls.ownerCustomerId`). Çuval **müşterisiz** açılır — müşterili çuvalda diyalog cariyi KİLİTLER, "başka müşteri" seçilemez. "Sevk Et" → 409 toast; aynı diyalogda TEST Müşteri → tekrar "Sevk Et". | Toast: "1 top başka müşterinin emanet malı — sevkiyat … bu müşteriye açılamaz: <barkod> (TESTK MÜŞTERİ)". **Önizleme paneli çatışmayı GÖSTERMEZ** (yalnız sipariş uyarıları) — red ilk kez "Sevk Et"te görülür (çıkarım). İkinci deneme `shipping.confirmationEnabled=false` ⇒ doğrudan DISPATCHED. Tekrar koşumda "Bu top az önce girilmiş olabilir" mükerrer uyarısı çıkar → "yine de kaydet" (ürün davranışı, iyi). | HTTP 409 `details.code=OWNER_MISMATCH`, `details.rolls[{barcode, owner}]`; başka müşteride `shipments` farkı 0; TEST Müşteri'de +1 `DISPATCHED`; `rolls.status=SHIPPED`, sahip korunur. | ① Kapı `performDispatchTx`te — `POST /shipments/preview` sahiplik kapısını çağırmıyor; operatör çatışmayı önizlemede değil redde görür. ③ **K** (sevkiyat) önizleme `assertOwnerMatchesTx`i de koşsun (uyarı satırı: "N top başka müşterinin emanet malı"), red sürpriz olmasın. |
 | **I5** · T · Sevk Çıkışı → Sevk Et → Çıkışı Onayla ⏳(d5) | Onay sayfası → Çıkışı Onayla. | Toast "Çıkış verildi — stok bina dışı"; geçmişte satır. | `shipments.status=DISPATCHED`, `dispatchedAt` dolu; `shipment_events` → DISPATCHED; `sack_allocations` → 1; `rolls.status=SHIPPED`; stok defteri çıkış satırı. | — |
 | **I6** · P · Sevkiyatlar → satır → belge ✋ | "Sevk İrsaliyesi" önizlemesi. | Şeritte firma · irsaliye no · tarih; rakamlar BRÜT. | `GET /api/printed-documents/…` (uç ölçülecek) → `printed_documents` 1. | — |
-| **I7** · P · İade Takibi → Yeni İade ⏳ | Barkod → Sorgula → 10 m iade, neden → İade Gir. | İade satırı; "İade İrsaliyesi"; sevk rakamı DEĞİŞMEZ (brüt). | `roll_returns` → 1 (10 m); `shipments` çıkış rakamı aynı; `shipment_events` iade satırı. | — |
+| **I7** · P · Operasyon → İade Takibi → **Yeni İade** → barkod → **Sorgula** → İade Nedeni → **İade Al** ✅ | I4'te sevk edilen emanet top (25 m). **Kısmi metraj alanı YOK** — iade TOP bazlıdır, top bütün döner (güzergâhın "10 m"si panelde yok; kısmi iade = önce kesim, ayrı karar). Siparişsiz sevkte "Sipariş" alanı çizilmez. | Listede satır: TESTK MÜŞTERİ · barkod · 25 · Hasarlı · Teslim Alan; toast "İade alındı — top Hazır Depo'ya eklendi". "İade İrsaliyesi" ✋ (belge). | `roll_returns` → 1 (qty 25, `fromShipmentId`, `reasonId`); `rolls.status=WAREHOUSE`, sevk/çuval bağı NULL, **`ownerCustomerId` korunur**; `GET /shipments/:id` `summary.totalMeters` 25→25 (BRÜT), `returnedMeters` 0→25 ayrı sayaç; `shipment_events` SABİT (PLANNED, DISPATCHED) — iade kendi defterinde, sevk olay defterine yazılmaz. | ① Sevk rakamı brüt, iade ayrı sayaçta — doğru. ② **K** kısmi iade (top yarım geri gelir) — bugün yolu yok; sektörde iade satırı miktar taşır. |
 
 ### J · Muhasebe
 
@@ -162,7 +162,7 @@ Her dal ana zincirin verisine dayanır (`gerektirir`). Kod harfleri N–T; sür�
 | **N2** · P · I5 sevkini geri al (`shipping:undo-dispatch`) | Sevkiyatlar → satır → "Sevki geri al" (SoD: yalnız Muhasebe/Süpervizör). | Sevk PLANNED'a döner; toplar depoya; irsaliye no korunur. | `shipments.status=PLANNED`, `dispatchedAt` NULL'lanMAZ (ters kayıt bugüne); `shipment_events` → UNDO satırı; `sack_allocations` geri; `rolls.status=WAREHOUSE`. |
 | **N3** · M · J2 faturasını iptal (storno) | Faturalar → satır → "İptal". | Fatura `VOIDED`; cari bakiye eski hâline; sevk rakamı değişmez. | `invoices.status=VOIDED`; `cari_transactions` → ters satır (+1, silme yok); `shipments` aynı. |
 | **N4** · T · H3 kesimini ikinci kez geri al (LIFO) | Tambur → "Tambur İşlemini Geri Al". | Yalnız EN SON işlem geri alınır; önizleme etkilenen topu listeler. | `roll_operations` → ters kayıt bugüne; sıra LIFO; `finalizedAt` trigger'ı tutarlı. |
-| **N5** · P · İade sonrası sevk rakamı | I7'den sonra sevk belgesini yeniden aç. | BRÜT değişmedi; iade ayrı belge. | `roll_returns` → 1; `shipments` çıkış toplamı sabit. |
+| **N5** · P · İade sonrası sevk rakamı ✅ | I7 ölçtü (`GET /shipments/:id` summary önce/sonra). | BRÜT değişmedi (25→25); iade ayrı sayaç (`returnedMeters` 25). | `roll_returns` → 1; sevk özeti sabit. |
 
 ### O · Hata yolları — 409 claim, zorunlu alan, gövde dolu, kapalı modül
 
@@ -238,6 +238,7 @@ Her madde bir DİLİM adayıdır; 1e iş mantığı önceliğiyle sıralar. Davr
 | **B** | Tedarikçi fatura eşleme: n irsaliye → 1 fatura + fiyat/miktar toleransı, fark varsa BLOKE (`Invoice.goodsReceiptId` tekil → pivot ya da satır bağı) | C5 | 9b [1][2] |
 | **B** | Kalite kabul / karantina: iplik lotu kabulde `KALİTE BEKLİYOR`, kullanım kararıyla stoğa (`YarnLot` yalnız `isActive`) | C2 | 9b [3][4][5] |
 | **K** | Sevkiyat önizlemesi emanet sahiplik çatışmasını göstermiyor: `POST /shipping/shipments/preview` `assertOwnerMatchesTx`i çağırmaz, kapı yalnız `performDispatchTx`te — operatör çatışmayı önizlemede değil "Sevk Et" reddinde (409 toast) görür; çözüm önizlemeye uyarı satırı | I4 · O6 | d9 |
+| **K** | Kısmi iade yok: panel/tablet iade girişi top bazlı (`RollReturn.qty` = topun `currentQty`), "10 m geri geldi" için yol yok — sektörde iade satırı miktar taşır (kesim + iade iki adım, ya da iade satırında metraj) | I7 | d9 |
 | **O** | KK1 doff bağında desen/renk/sahip ön-dolu (doff → koşum → iş; `DOFF_SELECT` genişler) — en büyük dokunuş kazancı (F4 −3) | F4 · G2 | 6e |
 | **O** | Ödeme koşulu (vade) ve para birimi KARTTA doğsun, PO ve faturaya insin; `dueDate` otomatik | B1 · C1 · C6 · J4 | 9b |
 | **O** | Ödeme/tahsilat girişinde açık fatura listesi + varsayılan FIFO (`PaymentAllocation` var, UI tek ekrana) | C7 · J3 | 9b |
@@ -280,7 +281,7 @@ PO onay/release adımı · zamanlanmış rapor gönderimi · backflush (otomatik
 
 | Kapsam | Adım sayısı | Otomatik ✅ | Yazılacak ⏳ | Elle ✋ |
 |---|---|---|---|---|
-| Ana zincir A–M (panel) | 43 | 20 (A1 · B1–B4 · C1–C8 · D0 · E1–E3 · F1 · G1 · I4 — ~4,5 dk; roller S · P · M) | 14 | 9 (belge önizleme, yazıcı, Wi-Fi, Excel/PDF) |
+| Ana zincir A–M (panel) | 43 | 21 (A1 · B1–B4 · C1–C8 · D0 · E1–E3 · F1 · G1 · I4 · I7 — ~5 dk; roller S · P · M) | 13 | 9 (belge önizleme, yazıcı, Wi-Fi, Excel/PDF) |
 | Ana zincir (tablet, d5) | 17 | 0 | 17 | — |
 | Dallar N–T | 30 | 0 | 27 | 3 |
 
