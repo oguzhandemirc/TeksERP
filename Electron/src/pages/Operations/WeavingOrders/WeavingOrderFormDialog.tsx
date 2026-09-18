@@ -12,6 +12,7 @@ import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { useOperationsVisibilityContext } from "../useOperationsVisibility";
 import { weavingOrderFormDefaults, weavingOrderFormSchema, type WeavingOrderFormValues } from "./schema";
 import { FabricFields, PartyFields, PlanFields } from "./WeavingOrderFormFields";
+import { WeavingOrderLinesSection } from "./WeavingOrderLinesSection";
 import { isoToDay, type WeavingOrder } from "./types";
 
 interface Props {
@@ -34,6 +35,7 @@ function buildDefaults(initial?: WeavingOrder | null): WeavingOrderFormValues {
     plannedStartDate: isoToDay(initial.plannedStartDate),
     plannedEndDate: isoToDay(initial.plannedEndDate),
     notes: initial.notes ?? "",
+    orderLines: (initial.orderLines ?? []).map((l) => ({ orderLineId: l.orderLineId, allocatedM: l.allocatedM == null ? "" : String(l.allocatedM) })),
   };
 }
 
@@ -54,6 +56,7 @@ export function WeavingOrderFormDialog({ open, onOpenChange, initial, onSubmit, 
       {(form) => (
         <>
           <FabricFields form={form} devereEnabled={devereEnabled} />
+          <WeavingOrderLinesSection form={form} initialLines={initial?.orderLines ?? []} />
           <PartyFields form={form} />
           <PlanFields form={form} />
         </>

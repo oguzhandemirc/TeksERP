@@ -41,6 +41,29 @@ export interface WeavingOrder {
   subcontractor: Ref | null;
   /** Kapanışı engelleyen açık koşum sayısı (backend `endedAt IS NULL AND revokedAt IS NULL`). */
   openRunCount: number;
+  /** Z1 (01): sipariş satırı bağları — küme REPLACE, boş = bağsız (stoka dokuma meşru). Eski backend göndermez → opsiyonel okunur. */
+  orderLines?: WeavingOrderLineLink[];
+  orderLineCount?: number;
+  /** Z1 (01): bu işten doğan top sayısı (türetilmiş). */
+  producedRollCount?: number;
+}
+
+/** Dokuma işi → sipariş satırı bağı — Z1 DTO'nun (`WeavingOrderLineLinkDto`, 6c461334) aynası, İÇ İÇE. `allocatedM`
+ *  isteğe bağlı tahsis (null = miktarsız bağ); açık metre = quantity − shippedQty (sunucu ayrıca göndermez). */
+export interface WeavingOrderLineLink {
+  id: string;
+  orderLineId: string;
+  allocatedM: number | null;
+  orderLine: {
+    id: string;
+    quantity: number;
+    shippedQty: number;
+    unit: string;
+    /** Satır iptal edilmişse damga — bağ tarihte kalır, formda "iptal" rozetiyle gösterilir. */
+    cancelledAt: string | null;
+    order: { id: string; orderNumber: string; customer: { id: string; name: string } };
+    item: { id: string; code: string; name: string };
+  };
 }
 
 export interface WeavingStatusMeta {

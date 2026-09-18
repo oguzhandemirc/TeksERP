@@ -5,6 +5,7 @@
 // Fason/hazır alım kökeninde iplik satırı YOK (iplik tüketimi bizim defterde değil, §3.9).
 // =============================================================================
 import { useMemo, useState } from "react";
+import { WeavingOrderPicker } from "./WeavingOrderField";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -29,6 +30,25 @@ function toLines(lines: YarnLineDraft[], withReason: boolean) {
   return lines.map((l) => ({ warehouseId: l.warehouseId, qtyKg: Number(l.qtyKg), lotId: l.lotId || null, ...(withReason ? { reasonCode: l.reasonCode } : {}) }));
 }
 
+interface WindDraft {
+  lengthM: string; kgSource: WarpKgSource; inHouse: boolean; machineId: string; issues: YarnLineDraft[]; returns: YarnLineDraft[];
+  breakCount: string; clientToken: string; weavingOrderId: string; count: string; prefix: string;
+}
+
+/** Diyalog taslağı → uç gövdesi (saf). Adet 1 → raşel alanları GİDMEZ (bugünkü istek bayt bayt); bağ "" → null. */
+export function buildWindPayload(d: WindDraft): WindPayload {
+  return {
+    lengthM: Number(d.lengthM),
+    kgSource: d.kgSource,
+    machineId: d.inHouse ? d.machineId : null,
+    ...(d.inHouse ? { yarnIssues: toLines(d.issues, false), yarnReturns: toLines(d.returns, true) as WindPayload["yarnReturns"] } : {}),
+    breakCount: d.breakCount === "" ? null : Number(d.breakCount),
+    clientToken: d.clientToken,
+    weavingOrderId: d.weavingOrderId || null,
+    ...(Number(d.count) > 1 ? { count: Number(d.count), physicalBeamNoPrefix: d.prefix.trim() || null } : {}),
+  };
+}
+
 export function WindDialog({ target, isPending, onClose, onConfirm }: Props) {
   const [clientToken] = useState(() => crypto.randomUUID());
   const inHouse = target.originKind === "IN_HOUSE";
@@ -39,6 +59,7 @@ export function WindDialog({ target, isPending, onClose, onConfirm }: Props) {
   const [issues, setIssues] = useState<YarnLineDraft[]>([]);
   const [returns, setReturns] = useState<YarnLineDraft[]>([]);
   const [count, setCount] = useState("1");
+  const [weavingOrderId, setWeavingOrderId] = useState(target.weavingOrder?.id ?? "");
   const [prefix, setPrefix] = useState("");
   const { multiWarehouse, warehouses } = useMultiWarehouse();
   const machines = useQuery({ queryKey: ["warp-beams", "devere-machines"], queryFn: () => warpBeamService.devereMachines(), enabled: inHouse });
@@ -84,6 +105,7 @@ export function WindDialog({ target, isPending, onClose, onConfirm }: Props) {
             <YarnLinesEditor title="Dönen bobin dipleri (ayrı satır, sebep zorunlu)" lines={returns} onChange={setReturns} warehouses={warehouses} multiWarehouse={multiWarehouse} reasons={returnReasons} lots={lots} />
           </>
         )}
+        <WeavingOrderPicker value={weavingOrderId} onChange={setWeavingOrderId} />
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isPending}>
             Vazgeç
@@ -91,16 +113,7 @@ export function WindDialog({ target, isPending, onClose, onConfirm }: Props) {
           <Button
             disabled={!ok || isPending}
             onClick={() =>
-              onConfirm({
-                lengthM: Number(lengthM),
-                kgSource,
-                machineId: inHouse ? machineId : null,
-                ...(inHouse ? { yarnIssues: toLines(issues, false), yarnReturns: toLines(returns, true) as WindPayload["yarnReturns"] } : {}),
-                breakCount: breakCount === "" ? null : Number(breakCount),
-                clientToken,
-                // Raşel takımı: adet 1 → alanlar GİDMEZ (bugünkü istek bayt bayt).
-                ...(Number(count) > 1 ? { count: Number(count), physicalBeamNoPrefix: prefix.trim() || null } : {}),
-              })
+              onConfirm(buildWindPayload({ lengthM, kgSource, inHouse, machineId, issues, returns, breakCount, clientToken, weavingOrderId, count, prefix }))
             }
           >
             Sar

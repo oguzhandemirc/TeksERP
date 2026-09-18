@@ -24,9 +24,11 @@ export function listWarpBeams(params: CursorParams): Promise<CursorPaginatedResp
   const status = csv(params.filters.status);
   const warpSpecId = csv(params.filters.warpSpecId);
   const originKind = csv(params.filters.originKind);
+  const weavingOrderId = csv(params.filters.weavingOrderId);
   if (status) sp.set("status", status);
   if (warpSpecId) sp.set("warpSpecId", warpSpecId);
   if (originKind) sp.set("originKind", originKind);
+  if (weavingOrderId) sp.set("filter[weavingOrderId]", weavingOrderId); // sunucu `readFilterList` (01 sözleşmesi)
   return apiClient.get<CursorPaginatedResponse<WarpBeam>>(`${BASE}?${sp.toString()}`).then((r) => r.data);
 }
 
@@ -40,6 +42,8 @@ export interface WarpBeamPlanPayload {
   ownerCustomerId?: string | null;
   physicalBeamNo: string | null;
   notes: string | null;
+  /** Z1 (01): opsiyonel dokuma işi bağı; çözgü kartı işinkinden farklıysa sunucu `WARP_SPEC_MISMATCH` uyarır (bağ kurulur). */
+  weavingOrderId?: string | null;
 }
 
 export interface YarnLinePayload {
@@ -60,6 +64,8 @@ export interface WindPayload {
   /** Raşel takımı (#23): N adet → N−1 kardeş aynı işlemde; 1 ise gönderilmez. */
   count?: number;
   physicalBeamNoPrefix?: string | null;
+  /** Z1 (01): sarımda da bağ kurulabilir (plan diyaloğunda seçilmediyse). */
+  weavingOrderId?: string | null;
 }
 
 export interface DevereMachine {

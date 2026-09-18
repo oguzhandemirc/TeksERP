@@ -16,6 +16,7 @@
 // =============================================================================
 import apiClient from "@/services/apiClient";
 import type { ApiResponse, CursorPaginatedResponse, CursorParams } from "@/types/api";
+import type { CrudService } from "@/services/crudService";
 import type { WeavingExecutionKind, WeavingOrder } from "./types";
 
 const BASE = "/api/weaving-orders";
@@ -35,9 +36,15 @@ export function listWeavingOrders(params: CursorParams): Promise<CursorPaginated
   const status = csv(params.filters.status);
   const itemId = csv(params.filters.itemId);
   const sub = csv(params.filters.subcontractorId);
+  // Z1 (01): sipariş / sipariş satırı süzgeçleri (`filter[orderId]` · `filter[orderLineId]`).
+  const orderId = csv(params.filters.orderId);
+  const orderLineId = csv(params.filters.orderLineId);
   if (status) sp.set("status", status);
   if (itemId) sp.set("itemId", itemId);
   if (sub) sp.set("subcontractorId", sub);
+  // Dokuma işi ucu DÜZ query okur (`orderId=` · `orderLineId=`; 01 sözleşmesi, route zod) — levent ucundaki `filter[weavingOrderId]`ten farklı.
+  if (orderId) sp.set("orderId", orderId);
+  if (orderLineId) sp.set("orderLineId", orderLineId);
   return apiClient.get<CursorPaginatedResponse<WeavingOrder>>(`${BASE}?${sp.toString()}`).then((r) => r.data);
 }
 
@@ -51,6 +58,8 @@ export interface WeavingOrderPayload {
   plannedStartDate: string | null;
   plannedEndDate: string | null;
   notes: string | null;
+  /** Z1 (01): küme REPLACE — gönderilen dizi bağların tamamıdır; `[]` bağsız. */
+  orderLines?: Array<{ orderLineId: string; allocatedM: number | null }>;
 }
 
 export const weavingOrderService = {
@@ -67,3 +76,6 @@ export const weavingOrderService = {
   cancel: (id: string, reason: string) =>
     apiClient.post<ApiResponse<WeavingOrder>>(`${BASE}/${id}/cancel`, { reason }).then((r) => r.data),
 };
+
+/** Seçici adaptörü: `EntityPickerModal` yalnız `listCursor` + `getById` çağırır (ölçüldü) — CRUD'un kalanı gerekmez. */
+export const weavingOrderPickerService = weavingOrderService as unknown as CrudService<WeavingOrder>;

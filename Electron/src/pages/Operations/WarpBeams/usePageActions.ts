@@ -17,6 +17,7 @@ export function toPlanPayload(v: WarpBeamPlanValues, opts: { forUpdate?: boolean
     ...(opts.forUpdate ? {} : { ownerCustomerId: v.ownerCustomerId || null }),
     physicalBeamNo: v.physicalBeamNo?.trim() || null,
     notes: v.notes?.trim() || null,
+    weavingOrderId: v.weavingOrderId || null,
   };
 }
 

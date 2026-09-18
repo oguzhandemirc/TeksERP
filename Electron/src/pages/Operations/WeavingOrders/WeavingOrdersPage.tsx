@@ -27,6 +27,8 @@ import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
 import { useDataTable } from "@/hooks/useDataTable";
 import { itemService } from "@/pages/Items/service";
 import { subcontractorService } from "@/pages/Subcontractors/service";
+import { orderService } from "@/pages/Operations/Orders/service";
+import type { Order } from "@/pages/Operations/Orders/types";
 import { weavingOrderColumns } from "./columns";
 import { weavingOrderService } from "./service";
 import { WeavingOrderFormDialog } from "./WeavingOrderFormDialog";
@@ -46,6 +48,8 @@ const FILTERS: FilterDef[] = [
   // Kumaş seçici yalnız KUMAŞ kalemlerini listeler (backend zaten YARN'ı reddeder).
   { kind: "multi-lookup", key: "itemId", label: "Kumaş", service: itemService, queryKey: "items-weaving-filter", extraFilters: { itemType: "FABRIC" } },
   { kind: "lookup", key: "subcontractorId", label: "Fasoncu", service: subcontractorService, queryKey: "subcontractors-weaving-filter" },
+  // Z2: bağlı sipariş — `filter[orderId]` (Z1 ucu). Etiket sipariş no (Order'da `name` yok).
+  { kind: "lookup", key: "orderId", label: "Sipariş", service: orderService, queryKey: "orders-weaving-filter", getLabel: (o) => (o as unknown as Order).orderNumber },
 ];
 
 /** Diyalog anahtarı: `null` kapalı · `"new"` oluştur · kayıt = düzenle. */

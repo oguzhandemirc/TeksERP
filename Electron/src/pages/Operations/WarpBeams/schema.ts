@@ -10,6 +10,8 @@ export const warpBeamPlanSchema = z
     supplierId: z.string().optional().or(z.literal("")),
     /** G3 emanet: sahip müşteri — CONSIGNED'da zorunlu; yalnız yeni planda gönderilir (düzenlemede PATCH almaz). */
     ownerCustomerId: z.string().optional().or(z.literal("")),
+    /** Z2: opsiyonel dokuma işi bağı. */
+    weavingOrderId: z.string().optional().or(z.literal("")),
     physicalBeamNo: z.string().max(32, "En fazla 32 karakter").optional().or(z.literal("")),
     notes: z.string().max(500, "Not en fazla 500 karakter olabilir").optional().or(z.literal("")),
   })
@@ -33,6 +35,7 @@ export const warpBeamPlanDefaults: WarpBeamPlanValues = {
   subcontractorId: "",
   supplierId: "",
   ownerCustomerId: "",
+  weavingOrderId: "",
   physicalBeamNo: "",
   notes: "",
 };

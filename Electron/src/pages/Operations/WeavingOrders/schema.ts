@@ -19,6 +19,20 @@ export const weavingOrderFormSchema = z
     plannedStartDate: z.string().optional().or(z.literal("")),
     plannedEndDate: z.string().optional().or(z.literal("")),
     notes: z.string().max(500, "Not en fazla 500 karakter olabilir").optional().or(z.literal("")),
+    /** Z2: sipariş satırı bağları — tahsis metresi METİN taşır (boş = miktarsız bağ). */
+    orderLines: z
+      .array(
+        z.object({
+          orderLineId: z.string().min(1),
+          allocatedM: z
+            .string()
+            .trim()
+            .refine((v) => v === "" || Number(v) > 0, "Tahsis metresi sıfırdan büyük olmalı")
+            .optional()
+            .or(z.literal("")),
+        }),
+      )
+      .default([]),
   })
   .superRefine((v, ctx) => {
     if (v.executionKind === "SUBCONTRACTED" && !v.subcontractorId) {
@@ -44,4 +58,5 @@ export const weavingOrderFormDefaults: WeavingOrderFormValues = {
   plannedStartDate: "",
   plannedEndDate: "",
   notes: "",
+  orderLines: [],
 };

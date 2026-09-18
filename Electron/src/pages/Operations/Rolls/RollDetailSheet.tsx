@@ -399,6 +399,21 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                     )}
                   </div>
 
+                  {/* DOKUMA İŞİ (Z2) — tezgahtan inen topta indirme → koşum → iş zincirinden
+                      TÜRETİLİR; elle yazılmaz, salt-okunur. Dokuma kökenli olmayan topta çizilmez. */}
+                  {(r.entrySource === "WEAVING" || detail?.weavingOrder) && (
+                    <>
+                      <div className="text-xs text-muted-foreground">Dokuma İşi</div>
+                      <div className="text-xs" data-testid="roll-weaving-order">
+                        {detail?.weavingOrder ? (
+                          <span className="font-mono">{detail.weavingOrder.weavingOrderNumber}</span>
+                        ) : (
+                          <span className="text-muted-foreground">— (işsiz koşum)</span>
+                        )}
+                      </div>
+                    </>
+                  )}
+
                   <div className="text-xs text-muted-foreground">Ekleyen</div>
                   <div className="text-xs">
                     {detail?.createdBy?.fullName ?? detail?.createdBy?.username ?? (

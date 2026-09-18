@@ -37,6 +37,12 @@ export const warpBeamColumns: ColumnDef<WarpBeam>[] = [
     ),
   },
   {
+    // Z2: "bu levent hangi iş için sarıldı" (Z1 DTO `weavingOrder`); bağsız = serbest levent.
+    id: "weavingOrder",
+    header: "Dokuma işi",
+    cell: ({ row }) => (row.original.weavingOrder ? <span className="font-mono text-xs">{row.original.weavingOrder.weavingOrderNumber}</span> : <span className="text-muted-foreground">—</span>),
+  },
+  {
     id: "origin",
     header: "Köken",
     cell: ({ row }) => {

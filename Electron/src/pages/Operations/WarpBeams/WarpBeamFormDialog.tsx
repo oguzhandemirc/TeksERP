@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
+import { WeavingOrderField } from "./WeavingOrderField";
 import { warpSpecService } from "@/pages/WarpSpecs/service";
 import type { WarpSpec } from "@/pages/WarpSpecs/types";
 import { subcontractorService } from "@/pages/Subcontractors/service";
@@ -31,6 +32,7 @@ function buildDefaults(initial?: WarpBeam | null): WarpBeamPlanValues {
     subcontractorId: initial.subcontractorId ?? "",
     supplierId: initial.supplierId ?? "",
     ownerCustomerId: initial.ownerCustomerId ?? "",
+    weavingOrderId: initial.weavingOrder?.id ?? "",
     physicalBeamNo: initial.physicalBeamNo ?? "",
     notes: initial.notes ?? "",
   };
@@ -136,6 +138,7 @@ export function WarpBeamFormDialog({ open, onOpenChange, initial, onSubmit, isSu
           <FormField label="Plan metresi" error={form.formState.errors.plannedLengthM} required>
             <Input type="number" min={1} step="0.001" {...form.register("plannedLengthM")} />
           </FormField>
+          <WeavingOrderField control={form.control} error={form.formState.errors.weavingOrderId} />
           <OriginFields form={form} editing={Boolean(initial)} />
           <FormField label="Metal gövde no" error={form.formState.errors.physicalBeamNo} hint="Numarasız fabrikada boş kalır; aynı gövdede iki canlı çözgü olmaz.">
             <Input {...form.register("physicalBeamNo")} />

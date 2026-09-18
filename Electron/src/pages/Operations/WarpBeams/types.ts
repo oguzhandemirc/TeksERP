@@ -74,6 +74,8 @@ export interface WarpBeam {
   currentMachineId: string | null;
   currentPosition: number | null;
   currentMachine: { id: string; code: string; name: string } | null;
+  /** Z1 (01): "bu levent hangi iş için sarıldı" — opsiyonel bağ; eski backend göndermez → opsiyonel okunur. */
+  weavingOrder?: { id: string; weavingOrderNumber: string } | null;
 }
 
 export interface CancelWoundPreview {

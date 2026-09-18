@@ -26,6 +26,11 @@ export function buildPayload(v: WeavingOrderFormValues): WeavingOrderPayload {
     plannedStartDate: plannedToIso(v.plannedStartDate),
     plannedEndDate: plannedToIso(v.plannedEndDate),
     notes: (v.notes ?? "").trim() || null,
+    // Z2: küme REPLACE; boş dizi = bağsız. Tahsis metni boşsa miktarsız bağ (null), "0" bağ değil hata (şema).
+    orderLines: (v.orderLines ?? []).map((l) => {
+      const m = (l.allocatedM ?? "").trim();
+      return { orderLineId: l.orderLineId, allocatedM: m === "" ? null : Number(m) };
+    }),
   };
 }
 

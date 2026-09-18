@@ -19,6 +19,8 @@ import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { useDataTable } from "@/hooks/useDataTable";
 import { useDevereMountTracking } from "@/hooks/usePricingEnabled";
+import { weavingOrderPickerService } from "@/pages/Operations/WeavingOrders/service";
+import type { WeavingOrder } from "@/pages/Operations/WeavingOrders/types";
 import { warpSpecService } from "@/pages/WarpSpecs/service";
 import { warpBeamColumns } from "./columns";
 import { warpBeamService } from "./service";
@@ -35,6 +37,8 @@ const FILTERS: FilterDef[] = [
   { kind: "multi-select", key: "status", label: "Durum", options: WARP_BEAM_STATUSES.map((s) => ({ value: s, label: WARP_BEAM_STATUS_META[s].label })) },
   { kind: "select", key: "originKind", label: "Köken", options: (Object.keys(WARP_BEAM_ORIGIN_LABEL) as WarpBeamOrigin[]).map((k) => ({ value: k, label: WARP_BEAM_ORIGIN_LABEL[k] })) },
   { kind: "lookup", key: "warpSpecId", label: "Çözgü kartı", service: warpSpecService, queryKey: "warp-specs-beam-filter" },
+  // Z2: `filter[weavingOrderId]` (Z1 ucu) — etiket dokuma no.
+  { kind: "lookup", key: "weavingOrderId", label: "Dokuma işi", service: weavingOrderPickerService, queryKey: "weaving-orders-beam-filter", getLabel: (w) => (w as unknown as WeavingOrder).weavingOrderNumber },
 ];
 
 const swallow = () => undefined;

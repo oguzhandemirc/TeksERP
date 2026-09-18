@@ -24,6 +24,25 @@ export const weavingOrderColumns: ColumnDef<WeavingOrder>[] = [
     ),
   },
   {
+    // Z2: bağlı sipariş satırları — sayı + ilk müşteri (türetilmiş; Z1 DTO `orderLineCount`/`orderLines`).
+    id: "orders",
+    header: "Sipariş",
+    cell: ({ row }) => {
+      const lines = row.original.orderLines ?? [];
+      const n = row.original.orderLineCount ?? lines.length;
+      if (n === 0) return <span className="text-muted-foreground">—</span>;
+      const customers = Array.from(new Set(lines.map((l) => l.orderLine.order.customer.name)));
+      return (
+        <span className="flex flex-col text-xs">
+          <span>{n} satır</span>
+          {customers.length > 0 && (
+            <span className="text-muted-foreground">{customers.length === 1 ? customers[0] : `${customers[0]} +${customers.length - 1}`}</span>
+          )}
+        </span>
+      );
+    },
+  },
+  {
     id: "party",
     header: "Kim dokuyor",
     cell: ({ row }) => {
