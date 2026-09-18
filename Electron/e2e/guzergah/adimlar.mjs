@@ -71,6 +71,9 @@ const m2Olcum = { kilitSayisi: null, kilitSonra: null, apiDurum: null, apiKod: n
 const l4Olcum = { musteriId: null, notMusteri: null, notHedef: null, notHedefSerh: null, temizSonraMusteri: null, iptalSebepSecici: null, iptalSebepIpucu: null, iptalUyari: null };
 const k1Olcum = { beamNo: null, isNo: null, sevkOnceKg: null, sevkUyari: null };
 const k3Olcum = { isNo: null, onceKg: null, donusSonraKg: null, fasondaDonus: null, fasondaStorno: null };
+const n3Olcum = { docNo: null, sevkId: null, bakiyeOnce: null, sevkMetreOnce: null, sevkMetreSonra: null };
+const o7Olcum = { satirOnce: null, gecersizDurum: null, gecersizMesaj: null, urunsuzDurum: null, urunsuzMesaj: null, birimsizDurum: null, birimsizBirim: null, siparisNo: null };
+const n1Olcum = { beamNo: null, onceKg: null, sarimSonraKg: null, sarimDurum: null, onizlemeDip: null, sonraKg: null };
 const j1Olcum = { sevkNo: null, sevkId: null, tur: null, cariMetin: null, cariKilitli: null, satir: null, miktar: null, birim: null };
 const i4Olcum = { barkod: null, digerMusteri: null, digerOnce: null, testOnce: null, onizlemeSahipVar: null, redDurum: null, redKod: null, redTopVar: null, redSahipVar: null, tostSahipVar: null, ikinciDurum: null, sevkNo: null };
 
@@ -116,6 +119,33 @@ export const ADIMLAR = [
   },
 
   // ── B · TANIMLAR ────────────────────────────────────────────────────────────
+  {
+    id: "A2", rol: "S", gerektirir: ["A1"],
+    yol: "Sistem → Özellik Anahtarları → Devere / Levent → 'Levent tezgah bağı defteri' AÇ · 'Tezgahtan inen top leventten otomatik düşsün' AÇ → Kaydet → Yenile", rota: "system/feature-flags",
+    async yap({ git, tikla, gor, page }) {
+      await git("Özellik Anahtarları"); await tikla("Devere / Levent");
+      const kutu = (baslik) => page().locator("label", { hasText: baslik }).locator('input[type="checkbox"]').filter({ visible: true }).first();
+      for (const b of ["Levent tezgah bağı defteri", "Tezgahtan inen top leventten otomatik düşsün"]) {
+        const k = kutu(b); await gor(k);
+        if (!(await k.isChecked())) await k.click();
+      }
+      const kaydet = page().getByRole("button", { name: "Kaydet", exact: true }).filter({ visible: true }).first();
+      if (await kaydet.isEnabled()) { await kaydet.click({ timeout: 15_000 }); await page().waitForTimeout(1500); }
+      // Yenile → sunucudan okunan değer aynı mı (taslak değil, kaydedilmiş)?
+      await page().getByRole("button", { name: "Yenile" }).filter({ visible: true }).first().click({ timeout: 10_000 }).catch(() => undefined);
+      await page().waitForTimeout(1200);
+    },
+    async bekle({ page }) {
+      for (const b of ["Levent tezgah bağı defteri", "Tezgahtan inen top leventten otomatik düşsün"]) {
+        const k = page().locator("label", { hasText: b }).locator('input[type="checkbox"]').filter({ visible: true }).first();
+        if (!(await k.isChecked())) throw new Error(`"${b}" yenileme sonrası kapalı`);
+      }
+    },
+    dogrula: [
+      { ad: "devere.mountTracking ve devere.autoConsume = true (system_settings)", sql: `SELECT key, value::text v FROM system_settings WHERE key IN ('devere.mountTracking','devere.autoConsume') ORDER BY key`, oku: (r) => r.map((x) => `${x.key}=${x.v}`).join(","), beklenen: "devere.autoConsume=true,devere.mountTracking=true" },
+      { ad: "GET /api/feature-flags aynı iki anahtar true; ayar şifresi bu kurulumda KAPALI (settingsPasswordRequired=false → kaydette şifre sorulmaz)", uc: "/api/feature-flags", oku: (g) => `${g?.data?.devereMountTracking}:${g?.data?.devereAutoConsume}:${g?.data?.settingsPasswordRequired}`, beklenen: "true:true:false" },
+    ],
+  },
   {
     id: "B1", rol: "P",
     yol: "Tanımlar → İş Ortakları → Cariler → Yeni Cari", rota: "definitions/cariler",
@@ -1634,6 +1664,127 @@ export const ADIMLAR = [
         sql: `SELECT COALESCE(SUM(CASE WHEN m.kind::text IN ('IN','ADJUST_IN','WARP_RETURN','SUBCONTRACT_RETURN','WARP_ISSUE_REVERSAL','SUBCONTRACT_OUT_CANCEL') THEN m."qtyKg" ELSE -m."qtyKg" END),0)::text k, count(*) FILTER (WHERE m.kind::text='SUBCONTRACT_RETURN')::int d, count(*) FILTER (WHERE m.kind::text='SUBCONTRACT_RETURN_CANCEL')::int s FROM yarn_movements m JOIN yarn_lots l ON l.id=m."lotId" WHERE l."lotNo"=$1`,
         params: [AD.lot], oku: (r) => `${(Number(r[0].k) - k3Olcum.onceKg).toFixed(3)}:${r[0].d}:${r[0].s}`, beklenen: (v) => /^0\.000:[1-9]\d*:[1-9]\d*$/.test(v) },
       { ad: "ekranda fasonda kalan yeniden 20", sql: `SELECT 1`, oku: () => k3Olcum.fasondaStorno, beklenen: 1 },
+    ],
+  },
+  {
+    id: "N3", rol: "M", gerektirir: ["J3"],
+    yol: "Muhasebe → Faturalar → onaylı satış faturası → 'İptal (storno)' → onay (gerekçe alanı YOK) — cari deftere ters kayıt, kapama serbest kalır, sevk rakamı değişmez", rota: "finance/invoices",
+    async yap({ git, gor, sql, api, page }) {
+      const t = await sql(`SELECT i."docNo", i."shipmentId" sid FROM invoices i JOIN cari_accounts ca ON ca.id=i."cariId" JOIN customers c ON c.id=ca."customerId" WHERE c.name=$1 AND i.type='SALES' AND i.status='CONFIRMED' ORDER BY i."confirmedAt" DESC LIMIT 1`, [buyukTr(AD.musteri)]);
+      n3Olcum.docNo = t[0]?.docNo ?? null; n3Olcum.sevkId = t[0]?.sid ?? null;
+      if (!n3Olcum.docNo) throw new Error("onaylı satış faturası yok (J2 koşmadı mı?)");
+      n3Olcum.bakiyeOnce = Number((await sql(`SELECT COALESCE(SUM(t.debit - t.credit),0)::text b FROM cari_transactions t JOIN cari_accounts a ON a.id=t."cariId" JOIN customers c ON c.id=a."customerId" WHERE c.name=$1`, [buyukTr(AD.musteri)]))[0].b);
+      n3Olcum.sevkMetreOnce = n3Olcum.sevkId ? ((await api(`/api/shipping/shipments/${n3Olcum.sevkId}`)).govde?.data?.summary?.totalMeters ?? null) : null;
+      await git("Faturalar");
+      await page().getByPlaceholder("Belge no / cari ara").filter({ visible: true }).first().fill(n3Olcum.docNo);
+      await page().waitForTimeout(800);
+      const satir = page().getByRole("row").filter({ hasText: n3Olcum.docNo }).filter({ visible: true }).first(); await gor(satir);
+      await satir.getByRole("button", { name: /İptal \(storno\)/ }).click({ timeout: 15_000 });
+      const d = page().getByRole("dialog").filter({ hasText: "Faturayı iptal et (storno)" }).last(); await gor(d);
+      await gor(d.getByText(/TERS kayıt yazılır .* Orijinal satır silinmez/));
+      await d.getByRole("button", { name: "İptal et", exact: true }).click({ timeout: 15_000 });
+      await d.waitFor({ state: "detached", timeout: 20_000 }); await page().waitForTimeout(800);
+      n3Olcum.sevkMetreSonra = n3Olcum.sevkId ? ((await api(`/api/shipping/shipments/${n3Olcum.sevkId}`)).govde?.data?.summary?.totalMeters ?? null) : null;
+    },
+    async bekle({ gor, page }) {
+      const satir = page().getByRole("row").filter({ hasText: n3Olcum.docNo }).filter({ visible: true }).first();
+      await gor(satir); await gor(satir.getByText(/İptal/).first(), { sure: 15_000 }).catch(() => undefined);
+    },
+    dogrula: [
+      { ad: "fatura CANCELLED, iptal damgası (invoices) — durum geçişi, silme yok", sql: `SELECT status::text st, ("cancelledAt" IS NOT NULL) d FROM invoices WHERE "docNo"=$1`, params: () => [n3Olcum.docNo], oku: (r) => `${r[0]?.st}:${r[0]?.d}`, beklenen: "CANCELLED:true" },
+      { ad: "cari defter: INVOICE satırı DURUR + INVOICE_CANCEL ters satır (credit 1.200); bakiye 600 → −600 (tahsilat açıkta kaldı)",
+        sql: `SELECT count(*) FILTER (WHERE t."sourceType"::text='INVOICE')::int f, count(*) FILTER (WHERE t."sourceType"::text='INVOICE_CANCEL')::int c, COALESCE(SUM(t.debit - t.credit),0)::text b FROM cari_transactions t JOIN cari_accounts a ON a.id=t."cariId" JOIN customers c ON c.id=a."customerId" WHERE c.name=$1`,
+        params: [buyukTr(AD.musteri)], oku: (r) => `${r[0].f}:${r[0].c}:${(Number(r[0].b) - n3Olcum.bakiyeOnce).toFixed(2)}`, beklenen: (v) => /^[1-9]\d*:[1-9]\d*:-1200\.00$/.test(v) },
+      { ad: "kapama SİLİNMEDİ, damgayla çözüldü (payment_allocations.revokedAt) — tahsilat 600 yeniden açık", sql: `SELECT count(*)::int n, count(*) FILTER (WHERE pa."revokedAt" IS NOT NULL)::int r FROM payment_allocations pa JOIN invoices i ON i.id=pa."invoiceId" WHERE i."docNo"=$1`, params: () => [n3Olcum.docNo], oku: (r) => `${r[0].n}:${r[0].r}`, beklenen: (v) => /^([1-9]\d*):\1$/.test(v) },
+      { ad: "sevk rakamı DEĞİŞMEDİ (fatura stornosu sevkiyata dokunmaz)", sql: `SELECT 1`, oku: () => `${n3Olcum.sevkMetreOnce}→${n3Olcum.sevkMetreSonra}`, beklenen: (v) => /^(\d+)→\1$/.test(v) },
+    ],
+  },
+  {
+    id: "O7", rol: "P", gerektirir: ["B1", "B2"],
+    yol: "API · Sipariş kalemi birim kuralı: geçersiz birim → 400 Türkçe mesaj · ürünsüz+birimsiz → 400 · birimsiz ama ürünlü → ürün kartından kopyalanır (sessiz MT YOK)", rota: "orders",
+    async yap({ api, sql }) {
+      const musteri = (await sql(`SELECT id FROM customers WHERE name=$1`, [buyukTr(AD.musteri)]))[0]?.id;
+      const kumas = (await sql(`SELECT id FROM items WHERE code=$1`, [AD.kumasKod]))[0]?.id;
+      if (!musteri || !kumas) throw new Error("TEST müşteri/kumaş yok");
+      o7Olcum.satirOnce = Number((await sql(`SELECT count(*)::int n FROM order_lines`))[0].n);
+      const gonder = (lines) => api(`/api/orders`, { method: "POST", body: JSON.stringify({ customerId: musteri, lines }) });
+      const a = await gonder([{ itemId: kumas, quantity: 10, unit: "BOBIN" }]);
+      o7Olcum.gecersizDurum = a.status; o7Olcum.gecersizMesaj = a.govde?.message ?? "";
+      const b = await gonder([{ quantity: 10 }]);
+      o7Olcum.urunsuzDurum = b.status; o7Olcum.urunsuzMesaj = b.govde?.message ?? "";
+      const c = await gonder([{ itemId: kumas, quantity: 7 }]);
+      o7Olcum.birimsizDurum = c.status; o7Olcum.siparisNo = c.govde?.data?.orderNumber ?? null;
+      if (o7Olcum.siparisNo) o7Olcum.birimsizBirim = (await sql(`SELECT l.unit::text u FROM order_lines l JOIN orders o ON o.id=l."orderId" WHERE o."orderNumber"=$1`, [o7Olcum.siparisNo]))[0]?.u ?? null;
+    },
+    async bekle() {},
+    dogrula: [
+      { ad: "geçersiz birim (BOBIN) → 400, Türkçe mesaj birimi ve seçenekleri söyler", sql: `SELECT 1`, oku: () => `${o7Olcum.gecersizDurum}:${/Geçersiz kalem birimi: BOBIN \(MT, KG veya ADET\)/.test(o7Olcum.gecersizMesaj) ? 1 : 0}`, beklenen: "400:1" },
+      { ad: "ürünsüz + birimsiz kalem → 400 'birimi çözülemedi — ürün seçilmemiş'", sql: `SELECT 1`, oku: () => `${o7Olcum.urunsuzDurum}:${/birimi çözülemedi/.test(o7Olcum.urunsuzMesaj) ? 1 : 0}`, beklenen: "400:1" },
+      { ad: "birimsiz ama ürünlü kalem → 201, birim ürün kartından MT (sessiz varsayılan değil, kopya)", sql: `SELECT 1`, oku: () => `${o7Olcum.birimsizDurum}:${o7Olcum.birimsizBirim}`, beklenen: (v) => /^20[01]:MT$/.test(v) },
+      { ad: "iki red kalem yazmadı: order_lines yalnız +1 (üçüncü sipariş)", sql: `SELECT count(*)::int n FROM order_lines`, oku: (r) => r[0].n - o7Olcum.satirOnce, beklenen: 1 },
+    ],
+  },
+  {
+    id: "N1", rol: "P", gerektirir: ["B3", "D0", "C2"],
+    yol: "Leventler → Yeni Levent (İçeride sarıldı, TEST-R, 200 m) → sağ tık Sar (WOUND): makine TEST-DV1 · iplik çıkışı lot TEST-L1 30 kg · dönen dip 1 kg (sebep) → sağ tık 'Sarımı iptal et' (önizleme + gerekçe) — tablet D1/D2'nin panel ikizi + WOUND_CANCEL", rota: "operations/warp-beams",
+    async yap({ git, tikla, gor, sec, sql, page }) {
+      const lotBakiye = async () => Number((await sql(`SELECT COALESCE(SUM(CASE WHEN m.kind::text IN ('IN','ADJUST_IN','WARP_RETURN','SUBCONTRACT_RETURN','WARP_ISSUE_REVERSAL','SUBCONTRACT_OUT_CANCEL') THEN m."qtyKg" ELSE -m."qtyKg" END),0)::text k FROM yarn_movements m JOIN yarn_lots l ON l.id=m."lotId" WHERE l."lotNo"=$1`, [AD.lot]))[0].k);
+      n1Olcum.onceKg = await lotBakiye();
+      await git("Leventler"); await tikla("Yeni Levent");
+      const ld = page().getByRole("dialog").filter({ hasText: "Yeni Levent" }).last(); await gor(ld);
+      await sec(ld.getByRole("combobox").filter({ hasText: /İçeride sarıldı|Hazır|emanet|Fason/ }).first(), "İçeride sarıldı");
+      await ld.getByText("Çözgü kartı seç", { exact: false }).first().click({ timeout: 15_000 });
+      const cm = page().getByRole("dialog").filter({ has: page().getByPlaceholder("Ara (ad veya kod)") }).last(); await gor(cm);
+      await cm.getByPlaceholder("Ara (ad veya kod)").fill(AD.cozgu); await page().waitForTimeout(700);
+      await cm.getByText(buyukTr(AD.cozgu), { exact: false }).first().click({ timeout: 15_000 });
+      await cm.waitFor({ state: "detached", timeout: 15_000 }).catch(() => undefined);
+      await ld.locator('input[type="number"]').first().fill("200");
+      await ld.getByRole("button", { name: /Kaydet|Planla|Oluştur/ }).last().click({ timeout: 15_000 });
+      await ld.waitFor({ state: "detached", timeout: 15_000 }); await page().waitForTimeout(800);
+      n1Olcum.beamNo = (await sql(`SELECT wb."beamNo" FROM warp_beams wb JOIN warp_specs ws ON ws.id=wb."warpSpecId" WHERE wb."originKind"='IN_HOUSE' AND wb.status='PLANNED' AND ws.code=$1 ORDER BY wb."createdAt" DESC LIMIT 1`, [AD.cozguKod]))[0]?.beamNo ?? null;
+      if (!n1Olcum.beamNo) throw new Error("içeride sarılacak levent doğmadı");
+      // Sar
+      const satir = page().getByRole("row").filter({ hasText: n1Olcum.beamNo }).filter({ visible: true }).first(); await gor(satir);
+      await satir.click({ button: "right", timeout: 15_000 });
+      await page().getByRole("menuitem", { name: /Sar \(WOUND\)/ }).click({ timeout: 15_000 });
+      const wd = page().getByRole("dialog").filter({ hasText: /— Sar/ }).last(); await gor(wd);
+      await wd.locator("#wb-length").fill("200");
+      await sec(wd.getByRole("combobox").filter({ hasText: /Makine seç|Yükleniyor/ }).first(), new RegExp(AD.devereMakine));
+      await wd.getByRole("button", { name: "Satır", exact: true }).nth(0).click({ timeout: 10_000 }); // iplik çıkışı
+      await sec(wd.getByLabel("İplik lotu").nth(0), new RegExp(AD.lot));
+      await wd.getByPlaceholder("kg").nth(0).fill("30");
+      await wd.getByRole("button", { name: "Satır", exact: true }).nth(1).click({ timeout: 10_000 }); // dönen dip
+      await sec(wd.getByLabel("İplik lotu").nth(1), new RegExp(AD.lot));
+      await wd.getByPlaceholder("kg").nth(1).fill("1");
+      await wd.getByRole("combobox").filter({ hasText: /Dip nereye gitti/ }).first().click({ timeout: 10_000 });
+      await page().getByRole("option").first().click({ timeout: 10_000 });
+      await wd.getByRole("button", { name: "Sar", exact: true }).click({ timeout: 15_000 });
+      await wd.waitFor({ state: "detached", timeout: 20_000 }); await page().waitForTimeout(1000);
+      n1Olcum.sarimSonraKg = await lotBakiye();
+      n1Olcum.sarimDurum = (await sql(`SELECT status::text s FROM warp_beams WHERE "beamNo"=$1`, [n1Olcum.beamNo]))[0]?.s ?? null;
+      // Sarımı iptal et — önizleme dip iadesini ADIYLA listeler, gerekçe zorunlu
+      await satir.click({ button: "right", timeout: 15_000 });
+      await page().getByRole("menuitem", { name: /Sarımı iptal et/ }).click({ timeout: 15_000 });
+      const cd = page().getByRole("dialog").filter({ hasText: /sarımı iptal edilsin mi/ }).last(); await gor(cd);
+      await page().waitForTimeout(800);
+      n1Olcum.onizlemeDip = await cd.getByText(/dip iadesi düşer/).count();
+      await cd.locator("#wb-cancel-reason").fill("Test: yanlış levente sarıldı");
+      await cd.getByRole("button", { name: "Sarımı İptal Et" }).click({ timeout: 15_000 });
+      await cd.waitFor({ state: "detached", timeout: 20_000 }); await page().waitForTimeout(1000);
+      n1Olcum.sonraKg = await lotBakiye();
+    },
+    async bekle({ gor, page }) {
+      const satir = page().getByRole("row").filter({ hasText: n1Olcum.beamNo }).filter({ visible: true }).first();
+      // Kural (dokuma.md): iptal edilen levent CANCELLED'dır, PLANNED'a DÖNMEZ (bir levent bir kez doğar, yenisi açılır).
+      await gor(satir); await gor(satir.getByText(/İptal/).first(), { sure: 15_000 });
+    },
+    dogrula: [
+      { ad: "sarım: levent READY oldu; lot bakiyesi −29 (30 çıkış, 1 dip iadesi)", sql: `SELECT 1`, oku: () => `${n1Olcum.sarimDurum}:${(n1Olcum.sarimSonraKg - n1Olcum.onceKg).toFixed(3)}`, beklenen: "READY:-29.000" },
+      { ad: "iptal önizlemesi dip iadesini ADIYLA listeledi (soyut sayı değil)", sql: `SELECT 1`, oku: () => n1Olcum.onizlemeDip, beklenen: (v) => v >= 1 },
+      { ad: "iptal sonrası levent CANCELLED (terminal — PLANNED'a dönmez, `one_wound_uq`); olay defteri WOUND + WOUND_CANCEL iki satır (warp_beam_events)", sql: `SELECT wb.status::text s, string_agg(e.kind, ',' ORDER BY e."createdAt") k FROM warp_beams wb LEFT JOIN warp_beam_events e ON e."beamId"=wb.id WHERE wb."beamNo"=$1 GROUP BY wb.status`, params: () => [n1Olcum.beamNo], oku: (r) => `${r[0]?.s}:${r[0]?.k}`, beklenen: "CANCELLED:WOUND,WOUND_CANCEL" },
+      { ad: "iplik defteri: WARP_ISSUE 30 + WARP_RETURN 1 + ters satırlar (WARP_ISSUE_REVERSAL · WARP_RETURN_REVERSAL) — silme yok, bakiye başa",
+        sql: `SELECT string_agg(m.kind::text || ':' || m."qtyKg"::text, ',' ORDER BY m."createdAt") k FROM yarn_movements m JOIN yarn_lots l ON l.id=m."lotId" JOIN warp_beams wb ON wb.id=m."warpBeamId" WHERE l."lotNo"=$1 AND wb."beamNo"=$2`,
+        params: () => [AD.lot, n1Olcum.beamNo], oku: (r) => `${r[0]?.k}|${(n1Olcum.sonraKg - n1Olcum.onceKg).toFixed(3)}`, beklenen: (v) => /WARP_ISSUE:30/.test(v) && /WARP_RETURN:1/.test(v) && /WARP_ISSUE_REVERSAL:30/.test(v) && /WARP_RETURN_REVERSAL:1/.test(v) && /\|0\.000$/.test(v) },
     ],
   },
 ];
