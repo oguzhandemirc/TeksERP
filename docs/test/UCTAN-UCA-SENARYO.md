@@ -76,7 +76,7 @@
 
 | Adım | Yap | Bekle | Backend doğrulaması | Çıkarım |
 |---|---|---|---|---|
-| **F1** · P · Dokuma İşleri → Yeni Dokuma İşi ⏳ | TEST Kumaş, renk yok, çözgü TEST Çözgü, kendi tezgahı, hedef 100 → kaydet. | Dokuma No; durum planlı/hazır. | `weaving_orders` → 1. | ① Çözgü kartı kumaştan türemiyor; sipariş bağı YOK; ~6 dokunuş. ② **B** (5e Y1) siparişten "dokuma işi aç" (kumaş + hedef + termin ön-dolu); **O** kumaş kartına varsayılan çözgü kartı. ③ **K** plan tarihleri katlanır. |
+| **F1** · P · Dokuma İşleri → Yeni Dokuma İşi ✅ | "Kumaş seç" → modal (ara) → TEST Kumaş; renk yok; "Çözgü kartı seç" → modal (başlığı yalnız "Seç") → TEST Çözgü; Kim dokuyor "Kendi tezgahımızda" (varsayılan); Hedef metre 100 → Kaydet. | Dokuma No (DK…); rozet **"Planlandı"** (belge "planlı/hazır" der); Hedef 100 m. | `weaving_orders` → 1. | ① Çözgü kartı kumaştan türemiyor; sipariş bağı YOK; ~6 dokunuş. ② **B** (5e Y1) siparişten "dokuma işi aç" (kumaş + hedef + termin ön-dolu); **O** kumaş kartına varsayılan çözgü kartı. ③ **K** plan tarihleri katlanır. |
 | **F2** · T · Tezgah → TEST-TZ1 → Koşum Aç ⏳(d5) | İş emrine bağlı koşum; levent panelinde TEST-M1 · kalan 500. | Koşum açık · saat; levent satırı doğru. | `machine_runs` → 1 açık (`endedAt` NULL), `weavingOrderId` dolu. | ① Liste tüm açık işler; atkı sıklığı/devir elle, boşsa metre türemez (sessiz). ② **O** atkı sıklığı kumaş kartından, hedef devir `MachineSpec`ten ön-dolu; **B** takılı leventin işi ön-seçili. ③ **K** açık iş listesi tezgahın çözgüsüne göre sıralı. |
 | **F3** · T · Duruş paneli ⏳(d5) | Duruş Bildir → 10 dk → Çalıştı → Sebep ata. | Panelde Tezgah Duruşları: TEST-TZ1, süre, sebep, Kaynak "tablet". | `machine_stop_events` → 1 (`reasonCode` dolu, `source=TABLET`). | ① Bildir: modal + onay (2 dokunuş). ② **O** duruş anında hızlı sebep düğmeleri (`quickPick`). ③ **K** "Duruş Bildir" modalsız başlasın. |
 | **F4** · T · İndirme → Ham Giriş (doff bağı) ⏳(d5) | Hat 1, parça 1, sayaç 40 → indir; Ham Giriş → "dokuma mı? Evet" → indirmeyi seç → Desen TEST Kumaş, 40 m → Kaydet ve Etiket Bas. | Kayıt + mavi toast "çözgü tüketimi ≈ 43,5 m"; Leventler → TEST-M1 kalan ≈ 456,5. | `doff_events` → 1; `rolls` → 1 (`entrySource=WEAVING`, `doffEventId` dolu); levent tüketim defteri (`warp_beam_events` CONSUMED) → 43,5; `warp_beams.remainingMeters` ≈ 456,5. | ① ~12 dokunuş, iki ekran; koşum çipi tek koşumda bile elle; desen elle (doff→koşum→iş biliniyor). ② **O** KK1'de doff seçilince desen/renk ön-dolu; **K** doff listesi bu tezgah önce; `autoConsume` kapalıyken "tüketim yazılmadı" bilgisi. ③ **O** tezgah ekranında "İndir ve topu doğur" kısa yolu; **K** tek koşum ön-seçili, parça varsayılan 1. |
@@ -88,7 +88,7 @@
 
 | Adım | Yap | Bekle | Backend doğrulaması | Çıkarım |
 |---|---|---|---|---|
-| **G1** · P · Leventler → Yeni Levent (emanet) ⏳ | Köken "Müşterinin emanet leventi" → sahibi TEST Müşteri, TEST Çözgü, 200 m. | "Emanet" rozeti; tedarikçi/fasoncu alanları kapalıydı. | `warp_beams` → `origin=CONSIGNED`, `ownerCustomerId` dolu, `supplierId`/`subcontractorId` NULL. | ② eksik yok. |
+| **G1** · P · Leventler → Yeni Levent (emanet) ✅ | Köken "Müşterinin emanet leventi" → sahibi TEST Müşteri, TEST Çözgü, 200 m. | "Emanet" rozeti; tedarikçi/fasoncu alanları kapalıydı. | `warp_beams` → `origin=CONSIGNED`, `ownerCustomerId` dolu, `supplierId`/`subcontractorId` NULL. | ② eksik yok. |
 | **G2** · T · Ham Giriş (dışarıdan) → emanet sahibi ⏳(d5) | Sahibi TEST Müşteri, TEST Kumaş 25 m; ikinci top sahipsiz 15 m. | Seçici yalnız müşterileri listeler; ilk top emanet rozetli. | `rolls` → 2: `ownerCustomerId` dolu / NULL. | ② **K** doff'a bağlı topta sahip işten türesin. |
 
 ### H · Kurşun ve tambur (tablet)
@@ -279,7 +279,7 @@ PO onay/release adımı · zamanlanmış rapor gönderimi · backflush (otomatik
 
 | Kapsam | Adım sayısı | Otomatik ✅ | Yazılacak ⏳ | Elle ✋ |
 |---|---|---|---|---|
-| Ana zincir A–M (panel) | 43 | 17 (A1 · B1–B4 · C1–C8 · D0 · E1–E3 — ~3,5 dk; roller S · P · M) | 17 | 9 (belge önizleme, yazıcı, Wi-Fi, Excel/PDF) |
+| Ana zincir A–M (panel) | 43 | 19 (A1 · B1–B4 · C1–C8 · D0 · E1–E3 · F1 · G1 — ~4 dk; roller S · P · M) | 15 | 9 (belge önizleme, yazıcı, Wi-Fi, Excel/PDF) |
 | Ana zincir (tablet, d5) | 17 | 0 | 17 | — |
 | Dallar N–T | 30 | 0 | 27 | 3 |
 

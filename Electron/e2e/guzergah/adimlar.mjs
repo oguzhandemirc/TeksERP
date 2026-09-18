@@ -58,6 +58,7 @@ const c8Olcum = { uiKapali: null, satirKirmizi: null, apiDurum: null, apiKod: nu
 
 const e2Olcum = { rotaSablonu: null };
 const e3Olcum = { uyumluBaska: null, ikinciMusteri: null, gorunenMusteri: null };
+const g1Olcum = { tedarikciAlaniVar: null };
 
 const MODUL_ANAHTARLARI = ["productionEnabled", "financeEnabled", "ticaretEnabled", "iplikEnabled", "depoMultiEnabled", "kumasTeknikEnabled", "tezgahEnabled", "devereEnabled", "dokumaEnabled", "emanetEnabled"];
 
@@ -778,6 +779,87 @@ export const ADIMLAR = [
         params: [AD.siparisNo], oku: (r) => `${r[0].n}:${r[0].m}`, beklenen: "2:2" },
       { ad: "listede görünen müşteri (çıkarım: asıl müşteri mi, yeni bağlanan mı?)", sql: `SELECT 1`,
         oku: () => `${e3Olcum.gorunenMusteri} (yeni bağlanan: ${e3Olcum.ikinciMusteri})`, beklenen: (v) => typeof v === "string" && v.length > 0 },
+    ],
+  },
+
+  // ── F · DOKUMA (panel adımları) ────────────────────────────────────────────
+  {
+    id: "F1", rol: "P", gerektirir: ["B2", "B3"],
+    yol: "Operasyon → Üretim & Fason → Dokuma İşleri → Yeni Dokuma İşi", rota: "operations/weaving-orders",
+    async yap({ git, tikla, gor, page }) {
+      await git("Dokuma İşleri");
+      await tikla("Yeni Dokuma İşi");
+      const d = page().getByRole("dialog").filter({ hasText: "Yeni Dokuma İşi" }).last(); await gor(d);
+      // EntityPicker modalı: başlık her yerde verilmemiş ("Seç") — modal arama kutusuyla tanınır.
+      const secModal = async (tetik, _baslik, ara) => {
+        await d.getByText(tetik, { exact: false }).first().click({ timeout: 15_000 });
+        const m = page().getByRole("dialog").filter({ has: page().getByPlaceholder("Ara (ad veya kod)") }).last(); await gor(m);
+        await m.getByPlaceholder("Ara (ad veya kod)").fill(ara);
+        await page().waitForTimeout(700);
+        await m.getByText(buyukTr(ara), { exact: true }).first().click({ timeout: 15_000 });
+        await m.waitFor({ state: "detached", timeout: 15_000 }).catch(() => undefined);
+      };
+      await secModal("Kumaş seç", "Dokunacak kumaşı seç", AD.kumas);
+      await secModal("Çözgü kartı seç", "Çözgü kartı seç", AD.cozgu);
+      // Kim dokuyor: varsayılan "Kendi tezgahımızda" (IN_HOUSE) — değilse seç.
+      const kim = d.getByRole("combobox").filter({ hasText: /tezgah|fason/i }).first();
+      if (await kim.count() && !/Kendi tezgah/i.test((await kim.textContent()) ?? "")) { await kim.click(); await page().getByRole("option", { name: /Kendi tezgah/ }).click(); }
+      await d.locator("#plannedM").fill("100");
+      await d.getByRole("button", { name: /Kaydet|Oluştur/ }).last().click({ timeout: 15_000 });
+      await d.waitFor({ state: "detached", timeout: 15_000 });
+      await page().waitForTimeout(600);
+    },
+    async bekle({ gor, page }) {
+      const satir = page().getByRole("row").filter({ hasText: buyukTr(AD.kumas) }).first();
+      await gor(satir);
+      await gor(satir.getByText(/Planlandı|Planlı|Hazır/).first()); // rozet "Planlandı" (belge "planlı/hazır")
+      await gor(satir.getByText(/100\s*m/).first());
+    },
+    dogrula: [
+      { ad: "dokuma işi doğdu: kumaş + çözgü kartı + IN_HOUSE + hedef 100 (weaving_orders)",
+        sql: `SELECT wo."executionKind" k, wo.status, wo."plannedM"::text m, ws.code ck FROM weaving_orders wo JOIN items i ON i.id=wo."itemId" LEFT JOIN warp_specs ws ON ws.id=wo."warpSpecId" WHERE i.code=$1 ORDER BY wo."createdAt" DESC LIMIT 1`,
+        params: [AD.kumasKod], oku: (r) => r.map((x) => `${x.k}:${x.status}:${x.m}:${x.ck}`).join("|"), beklenen: (v) => new RegExp(`^IN_HOUSE:(PLANNED|READY):100(\\.0+)?:${AD.cozguKod}$`).test(v) },
+    ],
+  },
+
+  // ── G · EMANET (panel) ──────────────────────────────────────────────────────
+  {
+    id: "G1", rol: "P", gerektirir: ["B1", "B3"],
+    yol: "Operasyon → Üretim & Fason → Leventler → Yeni Levent (emanet)", rota: "operations/warp-beams",
+    async yap({ git, tikla, sec, gor, page }) {
+      await git("Leventler");
+      await tikla("Yeni Levent");
+      const d = page().getByRole("dialog").filter({ hasText: "Yeni Levent (plan)" }).last(); await gor(d);
+      await sec(d.getByRole("combobox").filter({ hasText: /İçeride sarıldı|Hazır|emanet|Fason/ }).first(), "Müşterinin emanet leventi");
+      // Sahibi (müşteri) — yalnız emanette görünür; tedarikçi/fasoncu alanları KAPALI olmalı.
+      g1Olcum.tedarikciAlaniVar = await d.getByText("Tedarikçi (cari)", { exact: false }).count();
+      await d.getByText("Sahip müşteri seç", { exact: false }).first().click({ timeout: 15_000 });
+      const sm = page().getByRole("dialog").filter({ has: page().getByPlaceholder("Ara (ad veya kod)") }).last(); await gor(sm);
+      await sm.getByPlaceholder("Ara (ad veya kod)").fill(AD.musteri);
+      await page().waitForTimeout(700);
+      await sm.getByText(buyukTr(AD.musteri), { exact: true }).first().click({ timeout: 15_000 });
+      await sm.waitFor({ state: "detached", timeout: 15_000 }).catch(() => undefined);
+      await d.getByText("Çözgü kartı seç", { exact: false }).first().click({ timeout: 15_000 });
+      const cm = page().getByRole("dialog").filter({ has: page().getByPlaceholder("Ara (ad veya kod)") }).last(); await gor(cm);
+      await cm.getByPlaceholder("Ara (ad veya kod)").fill(AD.cozgu);
+      await page().waitForTimeout(700);
+      await cm.getByText(buyukTr(AD.cozgu), { exact: true }).first().click({ timeout: 15_000 });
+      await cm.waitFor({ state: "detached", timeout: 15_000 }).catch(() => undefined);
+      await d.locator('input[type="number"]').first().fill("200");
+      await d.getByRole("button", { name: /Kaydet|Planla|Oluştur/ }).last().click({ timeout: 15_000 });
+      await d.waitFor({ state: "detached", timeout: 15_000 });
+      await page().waitForTimeout(600);
+    },
+    async bekle({ gor, page }) {
+      const satir = page().getByRole("row").filter({ hasText: buyukTr(AD.musteri) }).first();
+      await gor(satir);
+      await gor(satir.getByText(/Emanet/i).first());
+    },
+    dogrula: [
+      { ad: "emanet levent: CONSIGNED + sahip TEST Müşteri, tedarikçi/fasoncu NULL, 200 m (warp_beams)",
+        sql: `SELECT wb."originKind" o, (wb."ownerCustomerId" IS NOT NULL) sahip, (wb."supplierId" IS NULL AND wb."subcontractorId" IS NULL) bos, wb."plannedLengthM"::text m, wb.status FROM warp_beams wb JOIN customers c ON c.id=wb."ownerCustomerId" WHERE c.name=$1 ORDER BY wb."createdAt" DESC LIMIT 1`,
+        params: [buyukTr(AD.musteri)], oku: (r) => r.map((x) => `${x.o}:${x.sahip}:${x.bos}:${x.m}:${x.status}`).join("|"), beklenen: (v) => /^CONSIGNED:true:true:200(\.0+)?:PLANNED$/.test(v) },
+      { ad: "emanette tedarikçi alanı ÇİZİLMEDİ (ekran)", sql: `SELECT 1`, oku: () => g1Olcum.tedarikciAlaniVar, beklenen: 0 },
     ],
   },
 ];
