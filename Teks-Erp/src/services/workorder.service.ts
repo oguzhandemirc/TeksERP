@@ -1104,7 +1104,7 @@ export class WorkOrderService {
         include: {
           steps:      { include: { station: true }, orderBy: { stepSequence: "asc" } },
           orderLinks: {
-            where: ACTIVE_ORDER_LINK,
+            where: ACTIVE_ORDER_LINK, orderBy: { createdAt: "asc" },
             include: {
               orderLine: {
                 include: {
@@ -1203,6 +1203,7 @@ export class WorkOrderService {
         steps:      { include: { station: true }, orderBy: { stepSequence: "asc" } },
         orderLinks: {
           where: ACTIVE_ORDER_LINK,
+          orderBy: { createdAt: "asc" },
           include: {
             orderLine: {
               include: {
@@ -1285,7 +1286,7 @@ export class WorkOrderService {
         where: { clientToken: woInput.clientToken },
         include: {
           steps:      { include: { station: true }, orderBy: { stepSequence: "asc" } },
-          orderLinks: { where: ACTIVE_ORDER_LINK, include: { orderLine: { include: { order: { include: { customer: true } }, item: true, color: true } } } },
+          orderLinks: { where: ACTIVE_ORDER_LINK, orderBy: { createdAt: "asc" }, include: { orderLine: { include: { order: { include: { customer: true } }, item: true, color: true } } } },
           routeTemplate: true,
         },
       });
@@ -1648,6 +1649,7 @@ export class WorkOrderService {
         ? {
             orderLinks: {
               where: ACTIVE_ORDER_LINK,
+              orderBy: { createdAt: "asc" },
               select: {
                 orderLineId: true,
                 orderLine: {
@@ -1664,7 +1666,7 @@ export class WorkOrderService {
         : {
             // Müşteri kolonu: bağdaki müşteri AYNI sorguda (yalnız id+ad; koparılmış bağ
             // `ACTIVE_ORDER_LINK` ile dışarıda). Rollup `rollupWorkOrderCustomers`.
-            orderLinks: { where: ACTIVE_ORDER_LINK, select: { orderLineId: true, orderLine: { select: { order: { select: WO_LIST_ORDER_CUSTOMER } } } } },
+            orderLinks: { where: ACTIVE_ORDER_LINK, orderBy: { createdAt: "asc" }, select: { orderLineId: true, createdAt: true, orderLine: { select: { order: { select: WO_LIST_ORDER_CUSTOMER } } } } },
           }),
     } satisfies Prisma.WorkOrderSelect;
 
@@ -2035,6 +2037,7 @@ export class WorkOrderService {
         },
         orderLinks: {
           where: ACTIVE_ORDER_LINK,
+          orderBy: { createdAt: "asc" },
           include: {
             orderLine: {
               include: {
@@ -3555,7 +3558,7 @@ export class WorkOrderService {
       where: { id },
       include: {
         steps: true,
-        orderLinks: { where: ACTIVE_ORDER_LINK, include: { orderLine: true } },
+        orderLinks: { where: ACTIVE_ORDER_LINK, orderBy: { createdAt: "asc" }, include: { orderLine: true } },
       },
     });
 
@@ -5943,7 +5946,7 @@ export class WorkOrderService {
         include: {
           steps: { include: { station: true }, orderBy: { stepSequence: "asc" } },
           orderLinks: {
-            where: ACTIVE_ORDER_LINK,
+            where: ACTIVE_ORDER_LINK, orderBy: { createdAt: "asc" },
             include: {
               orderLine: {
                 include: {
@@ -6825,6 +6828,7 @@ export class WorkOrderService {
         },
         orderLinks: {
           where: ACTIVE_ORDER_LINK,
+          orderBy: { createdAt: "asc" },
           include: {
             orderLine: {
               include: {

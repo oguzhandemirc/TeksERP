@@ -1,14 +1,14 @@
 // =============================================================================
 // İş emri listesi — "Müşteri" hücresi (saf): 0 → "—" · 1 → ad · 2+ → ilk ad + "+N" (tooltip: hepsi)
 // =============================================================================
-// Kaynak liste satırındaki `customers` (DISTINCT, ad sıralı, ≤5) + `customerCount` (toplam).
+// Kaynak liste satırındaki `customers` (DISTINCT, BAĞLANMA sıralı — ilk bağlanan = birincil, ≤5) + `customerCount` (toplam).
 // Önizleme 5'i aşan toplam için `+N` toplamdan hesaplanır, önizleme uzunluğundan değil.
 // Export (Excel/CSV) aynı metni virgülle birleştirir; 5'ten fazlası "… (+N)" ile beyan edilir.
 // =============================================================================
 import type { WorkOrder } from "./types";
 
 export interface CustomerCellView {
-  /** İlk (ad sırasında) müşteri; yoksa null → "—". */
+  /** Birincil müşteri = ilk bağlanan (sunucu sırası); yoksa null → "—". */
   first: string | null;
   /** İlk dışında kalan müşteri sayısı (toplamdan); 0 → rozet yok. */
   extra: number;
