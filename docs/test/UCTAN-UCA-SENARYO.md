@@ -69,8 +69,8 @@
 | Adım | Yap | Bekle | Backend doğrulaması | Çıkarım |
 |---|---|---|---|---|
 | **E1** · P · Satış & Planlama → Siparişler → Yeni Sipariş ✅ | Müşteri kutusu → modal → **ara** → TEST Müşteri; Sipariş No kutusuna tıkla (elle girişe döner) TEST-S1; kalem (form bir boş satırla açılır, "Sipariş Kalemi Ekle" ikinci satır olur): "Kumaş seç" → modal başlığı **"Kumaş seç"** → ara → TEST Kumaş, 100, birim m → Sipariş Oluştur. | Listede TEST-S1; "Sevk İlerlemesi 0". | `orders` → 1; `order_lines` → 1 (`unit=METER` zorunlu). | — |
-| **E2** · P · Sipariş detayı → kalem → "İş emri oluştur (1)" ⏳ | Rota şablonu (dokuma/kurşun/tambur), hedef 100 → kaydet. | İş emri no; listede Müşteri "TEST Müşteri", Sipariş TEST-S1. | `work_orders` → 1 (`type` bağın aynası); `work_order_to_order_lines` → 1. | — |
-| **E3** · P · İş emri → Bağlı Sipariş(ler) → gerçek bir siparişi de bağla ⏳ | "Bağla (1)". | "TEST Müşteri +1" rozeti; tooltip iki ad. | `work_order_to_order_lines` → 2. | — |
+| **E2** · P · Sipariş detayı → kalemi seç ("Kalemi iş emri için seç") → "İş emri oluştur (1)" ✅ | Yeni İş Emri sayfası (kendi sekmesi): Hedef Kumaş + "Sipariş: 1 kalem" ön-dolu; "Kayıtlı rota seç…" → modal "Rota Şablonu Seç" → şablon → "İş Emri Oluştur". | İş emri no (IE…); listede Tip "Siparişe Özel", Müşteri "TEST MÜŞTERİ", **Sipariş kolonu bağlı MİKTAR** ("100 m" — belge "TEST-S1" der; no arama kutusundan bulunur). **Not:** "Hedef 100 m" alanı bayrağa bağlı (`targetQuantityEnabled`), kapalıysa ekranda YOK. Fabrika şablonlarında dokuma adımı yok — "KURŞUN+TAMBUR" seçilir. | `work_orders` → `ORDER_PRODUCTION:PLANNED`; `work_order_to_order_lines` → 1; `work_order_steps` ≥ 1. | ① Rota ZORUNLU ve boş başlar; şablon modalı arama+liste, iyi. |
+| **E3** · P · İş emri detayı → "Sipariş Bağla" → gerçek bir müşteri → Bağla ✅ | Diyalog yalnız UYUMLU (aynı kumaş) açık kalemleri listeler → TEST kumaşı başka siparişte yok → **"Uyumlu açık sipariş yok."** → diyalogun kendi yolu "+ Yeni Sipariş Oluştur" (hızlı form: Müşteri = gerçek bir kart, Metraj 50) → "Oluştur ve Bağla". | Listede Müşteri **"<yeni bağlanan> +1"** ve Sipariş 150 m — belge "TEST Müşteri +1" der; **asıl (ilk) müşteri rozetin arkasına düşüyor** (çıkarım K). | `work_order_to_order_lines` → 2 satır, 2 farklı müşteri; `orders` → +1 (`orderNumber` otomatik). | ① Uyumlu sipariş yoksa hızlı sipariş formu tek diyalogda — iyi. ③ **K** (d9) çoklu bağda listenin gösterdiği "birincil" müşteri ilk bağlanan (iş emrini doğuran) olmalı, sonradan eklenen değil. |
 
 ### F · Dokuma — koşum, duruş, indirme, otomatik çözgü tüketimi
 
@@ -254,6 +254,8 @@ Her madde bir DİLİM adayıdır; 1e iş mantığı önceliğiyle sıralar. Davr
 | **O** | Fiş kaydedilince sipariş seçicisinin önbelleği anında geçersizlensin (`staleTime` 30 sn içinde kapanmış sipariş listede kalıyor, "Gelen 0 kg" gösteriyor) | C3 · O8 | d9 |
 | **K** | Tanınmayan sorgu parametresi (`status=` yerine `filter[status]`) sessizce yok sayılıyor — fail-closed kuralı 400 der; en azından liste uçlarında ölç | C3 | d9 |
 | **K** | Tablet operatörü parolası sayısal olmak zorunda (number-pad) — kullanıcı formunda ipucu/doğrulama yok; yönetici alfanümerik verir, operatör giremez | A3 | d5 |
+| **K** | "Saha operatörü (tüm tablet karoları)" izin şablonu yok — varsayılan operatör izinleri yalnız KK1/KK2/Tambur; devere/dokuma/sevkiyat açan fabrikada her operatöre tek tek eklenir | A3 | d5 · d9 |
+| **K** | Çoklu sipariş bağında İş Emirleri listesi "birincil" müşteri olarak son bağlananı gösteriyor; iş emrini doğuran ilk müşteri rozetin arkasında kalıyor | E3 | d9 |
 | **bilinçli karar** | e-Fatura/e-Arşiv (GİB UBL) — TR zorunluluğu, kapsam kullanıcıya | J2 | 9b |
 
 ### 3.2 Sadeleştirmeler — bizde fazla
@@ -277,7 +279,7 @@ PO onay/release adımı · zamanlanmış rapor gönderimi · backflush (otomatik
 
 | Kapsam | Adım sayısı | Otomatik ✅ | Yazılacak ⏳ | Elle ✋ |
 |---|---|---|---|---|
-| Ana zincir A–M (panel) | 43 | 15 (A1 · B1–B4 · C1–C8 · D0 · E1 — ~3 dk; roller S · P · M) | 19 | 9 (belge önizleme, yazıcı, Wi-Fi, Excel/PDF) |
+| Ana zincir A–M (panel) | 43 | 17 (A1 · B1–B4 · C1–C8 · D0 · E1–E3 — ~3,5 dk; roller S · P · M) | 17 | 9 (belge önizleme, yazıcı, Wi-Fi, Excel/PDF) |
 | Ana zincir (tablet, d5) | 17 | 0 | 17 | — |
 | Dallar N–T | 30 | 0 | 27 | 3 |
 

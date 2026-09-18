@@ -56,6 +56,9 @@ const kartIciDugme = (metin, dugme) =>
 /** C8'in adım içi ölçümleri — `dogrula` kapanışlardan okur (uç GET'i yetmez, POST sonucu gerekir). */
 const c8Olcum = { uiKapali: null, satirKirmizi: null, apiDurum: null, apiKod: null, fisArtti: null };
 
+const e2Olcum = { rotaSablonu: null };
+const e3Olcum = { uyumluBaska: null, ikinciMusteri: null, gorunenMusteri: null };
+
 const MODUL_ANAHTARLARI = ["productionEnabled", "financeEnabled", "ticaretEnabled", "iplikEnabled", "depoMultiEnabled", "kumasTeknikEnabled", "tezgahEnabled", "devereEnabled", "dokumaEnabled", "emanetEnabled"];
 
 export const ADIMLAR = [
@@ -669,6 +672,112 @@ export const ADIMLAR = [
         sql: `SELECT o."orderNumber" no, l.quantity::text q, l.unit FROM orders o JOIN order_lines l ON l."orderId"=o.id JOIN customers c ON c.id=o."customerId" WHERE o."orderNumber"=$1 AND c.name=$2`,
         params: [AD.siparisNo, buyukTr(AD.musteri)], oku: (r) => r.map((x) => `${x.no}:${x.q}:${x.unit}`).join("|"),
         beklenen: (v) => new RegExp(`^${AD.siparisNo}:100(\\.0+)?:MT$`).test(v) },
+    ],
+  },
+
+  {
+    id: "E2", rol: "P", gerektirir: ["E1"],
+    yol: "Siparişler → TEST-S1 satırı (detay) → kalemi seç → İş emri oluştur (1) → Yeni İş Emri: rota şablonu, hedef 100 → kaydet", rota: "operations/work-orders/new",
+    async yap({ git, gor, page }) {
+      await git("Siparişler");
+      await page().getByPlaceholder("Sipariş no").filter({ visible: true }).first().fill(AD.siparisNo);
+      await page().waitForTimeout(700);
+      await page().getByRole("row").filter({ hasText: AD.siparisNo }).first().click({ timeout: 15_000 });
+      const sheet = page().getByRole("dialog").last(); await gor(sheet);
+      await sheet.getByLabel("Kalemi iş emri için seç").first().click({ timeout: 15_000 });
+      await sheet.getByRole("button", { name: /İş emri oluştur \(1\)/ }).click({ timeout: 15_000 });
+      // Yeni İş Emri sayfası (kendi sekmesinde): Hedef Kumaş + "Sipariş: 1 kalem" ön-dolu.
+      await gor(page().getByRole("heading", { name: "Yeni İş Emri" }).first());
+      await gor(page().getByText(/Sipariş: 1 kalem/).first());
+      // Üretim Rotası ZORUNLU: "Kayıtlı rota seç…" → dokuma/kurşun/tambur içeren şablon (yoksa ilk şablon).
+      await page().getByText("Kayıtlı rota seç", { exact: false }).first().click({ timeout: 15_000 });
+      const rm = page().getByRole("dialog").filter({ hasText: "Rota Şablonu Seç" }).last(); await gor(rm);
+      const secenekler = rm.locator("li button, button").filter({ hasNotText: /Boş başla|Kapat|İptal/ });
+      await secenekler.first().waitFor({ timeout: 15_000 });
+      const adlar = await secenekler.allTextContents();
+      const tercih = adlar.findIndex((a) => /tambur|dokuma|kurşun|kursun/i.test(a));
+      await secenekler.nth(tercih >= 0 ? tercih : 0).click({ timeout: 15_000 });
+      e2Olcum.rotaSablonu = (adlar[tercih >= 0 ? tercih : 0] ?? "").trim().slice(0, 60) || null;
+      await rm.waitFor({ state: "detached", timeout: 15_000 }).catch(() => undefined);
+      await page().waitForTimeout(800);
+      // ⚠️ Belge "Hedef 100 m" der — hedef alanı bayrağa bağlı (`targetQuantityEnabled`), kapalıysa ekranda YOK;
+      // "100 m açık" bağlı sipariş kaleminden gelir (sağ önizleme). Belge notu.
+      await page().getByRole("button", { name: "İş Emri Oluştur", exact: true }).click({ timeout: 15_000 });
+      await page().waitForTimeout(1500);
+    },
+    async bekle({ git, gor, page }) {
+      await git("İş Emirleri");
+      const ara = page().getByPlaceholder(/ara/i).filter({ visible: true }).first();
+      await ara.fill(AD.siparisNo);
+      await page().waitForTimeout(800);
+      const satir = page().getByRole("row").filter({ hasText: buyukTr(AD.musteri) }).first();
+      await gor(satir);
+      // Sipariş kolonu sipariş NO değil bağlı MİKTARI gösterir ("100 m"); no arama kutusundan bulunur — belge notu.
+      await gor(satir.getByText(/100\s*m/).first());
+      await gor(satir.getByText("Siparişe Özel", { exact: false }));
+    },
+    dogrula: [
+      { ad: "iş emri doğdu, tipi bağın aynası, siparişe bağlı (work_orders/work_order_to_order_lines)",
+        sql: `SELECT wo.type, wo.status, count(l.id)::int n FROM work_orders wo JOIN work_order_to_order_lines l ON l."workOrderId"=wo.id JOIN order_lines ol ON ol.id=l."orderLineId" JOIN orders o ON o.id=ol."orderId" WHERE o."orderNumber"=$1 GROUP BY wo.id, wo.type, wo.status`,
+        params: [AD.siparisNo], oku: (r) => r.map((x) => `${x.type}:${x.status}:${x.n}`).join("|"), beklenen: (v) => /^ORDER[A-Z_]*:[A-Z_]+:1$/.test(v) },
+      { ad: "rota adımları var (≥1) ve şablon adı", sql: `SELECT count(s.id)::int n FROM work_orders wo JOIN work_order_to_order_lines l ON l."workOrderId"=wo.id JOIN order_lines ol ON ol.id=l."orderLineId" JOIN orders o ON o.id=ol."orderId" JOIN work_order_steps s ON s."workOrderId"=wo.id WHERE o."orderNumber"=$1`,
+        params: [AD.siparisNo], oku: (r) => `${r[0].n}:${e2Olcum.rotaSablonu}`, beklenen: (v) => /^[1-9]\d*:.+$/.test(v) },
+    ],
+  },
+
+  {
+    id: "E3", rol: "P", gerektirir: ["E2"],
+    yol: "İş Emirleri → iş emri detayı → \"Sipariş Bağla\" → gerçek bir müşterinin açık siparişi → Bağla (1)", rota: "operations/work-orders",
+    async yap({ git, gor, page }) {
+      await git("İş Emirleri");
+      await page().getByPlaceholder(/ara/i).filter({ visible: true }).first().fill(AD.siparisNo);
+      await page().waitForTimeout(800);
+      await page().getByRole("row").filter({ hasText: buyukTr(AD.musteri) }).first().click({ timeout: 15_000 });
+      await page().waitForTimeout(1000);
+      await page().getByRole("button", { name: /Sipariş Bağla/ }).first().click({ timeout: 15_000 });
+      const d = page().getByRole("dialog").filter({ hasText: /Sipariş Bağla —/ }).last(); await gor(d);
+      // Listede yalnız UYUMLU kalemler (aynı kumaş): TEST kumaşı yalnız TEST-S1'de → "Uyumlu açık sipariş yok."
+      // Ekranın kendi yolu: "+ Yeni Sipariş Oluştur" (hızlı form) → GERÇEK bir müşteri, metraj → "Oluştur ve Bağla".
+      await page().waitForTimeout(1000);
+      const satirlar = d.locator("tbody tr").filter({ hasNotText: buyukTr(AD.musteri) });
+      e3Olcum.uyumluBaska = await satirlar.count();
+      if (e3Olcum.uyumluBaska > 0) {
+        await satirlar.first().locator('[role="checkbox"]').first().click({ timeout: 15_000 });
+        await d.getByRole("button", { name: /Bağla \(1\)/ }).click({ timeout: 15_000 });
+      } else {
+        await d.getByRole("button", { name: /Yeni Sipariş Oluştur/ }).click({ timeout: 15_000 });
+        await d.getByRole("combobox").filter({ hasText: /Müşteri/ }).first().click({ timeout: 15_000 });
+        const ara = page().getByPlaceholder("Ara (kod, isim, vergi no)");
+        await ara.fill("");
+        await page().waitForTimeout(800);
+        // cmdk listesi: öğeler `[cmdk-item]` (role=option her sürümde yok); "(yok)" ve TEST kartları hariç ilk GERÇEK müşteri.
+        const aday = page().locator("[cmdk-item], [role='option']").filter({ hasNotText: /\(yok\)/ }).filter({ hasNotText: ONEK }).first();
+        e3Olcum.ikinciMusteri = ((await aday.textContent()) ?? "").trim().slice(0, 40);
+        await aday.click({ timeout: 15_000 });
+        await d.getByPlaceholder("Metraj").fill("50");
+        await d.getByRole("button", { name: "Oluştur ve Bağla" }).click({ timeout: 20_000 });
+      }
+      await d.waitFor({ state: "detached", timeout: 20_000 });
+      await page().waitForTimeout(800);
+      await page().keyboard.press("Escape");
+    },
+    async bekle({ git, gor, page }) {
+      await git("İş Emirleri");
+      await page().getByPlaceholder(/ara/i).filter({ visible: true }).first().fill(AD.siparisNo);
+      await page().waitForTimeout(800);
+      // ⚠️ Bağdan sonra Müşteri kolonu "<YENİ bağlanan> +1" gösteriyor — TEST Müşteri rozetin arkasına düşüyor
+      // (belge "TEST Müşteri +1" der). İlk/asıl müşteri görünür kalmalı — çıkarım (K). Satır kumaşla bulunur.
+      const satir = page().getByRole("row").filter({ hasText: buyukTr(AD.kumas) }).filter({ hasText: /\+1/ }).first();
+      await gor(satir);
+      e3Olcum.gorunenMusteri = ((await satir.getByRole("cell").nth(5).textContent()) ?? "").trim().slice(0, 40);
+      await gor(satir.getByText(/150\s*m/).first()); // 100 + 50 m bağlı toplam
+    },
+    dogrula: [
+      { ad: "iş emrinde İKİ sipariş bağı, iki farklı müşteri (work_order_to_order_lines)",
+        sql: `SELECT count(DISTINCT l."orderLineId")::int n, count(DISTINCT o."customerId")::int m FROM work_orders wo JOIN work_order_to_order_lines l ON l."workOrderId"=wo.id JOIN order_lines ol ON ol.id=l."orderLineId" JOIN orders o ON o.id=ol."orderId" WHERE wo.id IN (SELECT l2."workOrderId" FROM work_order_to_order_lines l2 JOIN order_lines ol2 ON ol2.id=l2."orderLineId" JOIN orders o2 ON o2.id=ol2."orderId" WHERE o2."orderNumber"=$1)`,
+        params: [AD.siparisNo], oku: (r) => `${r[0].n}:${r[0].m}`, beklenen: "2:2" },
+      { ad: "listede görünen müşteri (çıkarım: asıl müşteri mi, yeni bağlanan mı?)", sql: `SELECT 1`,
+        oku: () => `${e3Olcum.gorunenMusteri} (yeni bağlanan: ${e3Olcum.ikinciMusteri})`, beklenen: (v) => typeof v === "string" && v.length > 0 },
     ],
   },
 ];

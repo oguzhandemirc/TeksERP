@@ -147,7 +147,12 @@ async function fixture(): Promise<void> {
     // tablete UI'dan HİÇ giremez (d5 ölçtü 2026-09-18). 12 hane rastgele rakam.
     const sayisalParola = (): string => Array.from(randomBytes(12), (b) => String(b % 10)).join("");
     // `setUserPermissions` ID ister, kod değil — katalog uzlaştırıldıktan sonra tablodan okunur.
-    const tumIzinIdleri = (await prisma.permission.findMany({ select: { id: true } })).map((p) => p.id);
+    const tumIzinler = await prisma.permission.findMany({ select: { id: true, code: true } });
+    const tumIzinIdleri = tumIzinler.map((p) => p.id);
+    // Tablet operatörü: güzergâh sekiz karoyu ister (Ham Giriş · Kurşun · Tambur · Sevkiyat · Sevk Çıkışı ·
+    // Tezgah · Levent Sarım · Fason Dokuma Kabul) — varsayılan operatör izinleri yalnız KK1/KK2/Tambur verir
+    // (d5 ölçtü 2026-09-18: Devere karosu yoktu). Bütün `mobile:*` izinleri, YÖNETİM izinleri değil.
+    const mobilIzinIdleri = tumIzinler.filter((p) => p.code.startsWith("mobile:")).map((p) => p.id);
     const kullanicilar: Record<string, { username: string; password: string }> = {};
     const tanimlar: Array<{ anahtar: string; username: string; fullName: string; tumIzin: boolean; operator: boolean }> = [
       { anahtar: "yonetici", username: "e2e-yonetici", fullName: "TEST E2E Yönetici", tumIzin: true, operator: false },
@@ -171,6 +176,8 @@ async function fixture(): Promise<void> {
       }
       if (t.tumIzin) {
         await PermissionManagementService.setUserPermissions(id, tumIzinIdleri, undefined);
+      } else if (t.operator) {
+        await PermissionManagementService.setUserPermissions(id, mobilIzinIdleri, undefined);
       }
       kullanicilar[t.anahtar] = { username: t.username, password: p };
     }
