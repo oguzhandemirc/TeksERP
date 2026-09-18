@@ -26,6 +26,11 @@
       "maddeler": [
         {
           "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Yeni Tahsilat / Yeni Ödeme penceresinde cari seçilince o carinin açık faturaları aynı pencerede listelenir (kalan, vade, geciken). Bir satırın yanındaki Tümü düğmesi tutarı ön-doldurur; FIFO dağıt ve Tümünü kapat düğmeleri birden çok faturayı tek tıkla eşler. Kaydet, ödemeyi yazıp seçili faturalara bağlar; hiç seçim yapılmazsa ödeme önceki sürümlerdeki gibi bağsız kaydedilir (ek zorunlu adım yok). Eşlenen toplam tutarı ya da bir faturanın açığını aşıyorsa Kaydet kilitlenir ve sebebi yazılır."
+        },
+        {
+          "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Mal kabulde hatalı bir satır artık sessizce atlanmaz: renk pasif ya da ürünün izinli renk listesinde değilse, özellik pasif ya da izinli değilse, birim fiyat zorunluyken fiyat çözülemiyorsa ya da satırların toplamı siparişte ısmarlananı aşıyorsa fiş hiç açılmaz, hata ilgili satırın yanında yazılır ve pencere açık kalır (önceki sürümde bu durumlarda içi boş bir fiş doğuyor ve yalnız kısa bir uyarı geçip gidiyordu)."
         },

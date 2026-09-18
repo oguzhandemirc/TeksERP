@@ -150,7 +150,9 @@ export async function getCari(id: string): Promise<CariRow> {
 }
 
 export async function listOpenInvoices(params: {
-  cariId: string;
+  /** İkisinden TAM BİRİ: hesap kimliği (Fatura Kapama) ya da müşteri kartı (ödeme diyaloğu — hesabı bilmez; hesap yoksa boş liste). */
+  cariId?: string;
+  customerId?: string;
   currency: Currency;
   direction: Direction;
   /** Verilirse her satıra FIFO `suggested` eklenir — yalnız ÖNERİ. */

@@ -387,6 +387,15 @@ async function main(): Promise<void> {
     const row = open.data.find((r) => r.id === inv1);
     check("§1c Fatura hâlâ AÇIK listede", Boolean(row), row ? `açık=${row.openTotal}` : "yok");
     check("§1d Açık tutar 700", row?.openTotal === "700");
+    // 2026-09-18 (9b, ödeme diyaloğu açık fatura listesi): uç MÜŞTERİ KARTIYLA da sorulur — salt okunur çözüm, hesap YARATMAZ.
+    const byCustomer = await paymentAllocationService.listOpenInvoices({ customerId: customer.id, currency: "TRY", direction: PaymentDirection.IN });
+    check("§1e ⭐ customerId ile aynı liste (cariId ile birebir)", JSON.stringify(byCustomer.data.map((r) => [r.id, r.openTotal])) === JSON.stringify(open.data.map((r) => [r.id, r.openTotal])) && byCustomer.totalOpen === open.totalOpen);
+    const n0 = await prisma.cariAccount.count();
+    const ghost = await paymentAllocationService.listOpenInvoices({ customerId: "00000000-0000-4000-8000-000000000000", currency: "TRY", direction: PaymentDirection.IN });
+    check("§1f ⭐ hesabı olmayan müşteri → boş liste, hesap YARATILMADI", ghost.data.length === 0 && ghost.totalOpen === "0" && (await prisma.cariAccount.count()) === n0);
+    let xor: unknown = null;
+    try { await paymentAllocationService.listOpenInvoices({ cariId: cari.id, customerId: customer.id, currency: "TRY" }); } catch (e) { xor = e; }
+    check("§1g ikisi birden → 400 (XOR)", xor instanceof AppError && xor.statusCode === 400);
   }
 
   // ── §2 ÇOKLU KAPAMA ──────────────────────────────────────────────────────

@@ -9,6 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
 import { createPayment, listCashBoxes, listBankAccounts, money, type Currency } from "./service";
+import { allocateBulk } from "./Allocations/service";
+import { PaymentOpenInvoices } from "./PaymentOpenInvoices";
+import { PaymentAccountSelect } from "./PaymentAccountSelect";
+import { usePaymentAllocation } from "./usePaymentAllocation";
 
 interface Props {
   open: boolean;
@@ -51,18 +55,22 @@ export function PaymentFormDialog({ open, direction, onOpenChange, onCreated }: 
   // reddedilecek bir kombinasyon kurma imkânı vermek olurdu.
   const currency = (selected?.currency ?? "TRY") as Currency;
 
+  // Açık fatura eşlemesi (2026-09-18): seçim yoksa bağsız ödeme (bugünkü davranış).
+  const alloc = usePaymentAllocation({ customerId, currency, direction, accountSelected: Boolean(selected), amount, setAmount });
   useEffect(() => {
     if (!open) {
       setAmount(0);
       setReference("");
+      alloc.reset();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const valid = Boolean(selected) && amount > 0 && Boolean(customerId);
+  const valid = Boolean(selected) && amount > 0 && Boolean(customerId) && alloc.blockReason === null;
 
   const createM = useMutation({
-    mutationFn: () =>
-      createPayment({
+    mutationFn: async () => {
+      const created = await createPayment({
         direction,
         method,
         customerId,
@@ -72,7 +80,15 @@ export function PaymentFormDialog({ open, direction, onOpenChange, onCreated }: 
         bankAccountId: selected?.kind === "BANK" ? selected.id : null,
         reference: reference || null,
         clientToken: crypto.randomUUID(),
-      }),
+      });
+      // Seçim varsa aynı adımda faturaya eşle (mevcut motor `PaymentAllocation`); yoksa bugünkü gibi bağsız.
+      const paymentId = (created.data as { id?: string } | undefined)?.id;
+      if (alloc.items.length > 0 && paymentId) {
+        await allocateBulk({ paymentId, items: alloc.bulkItems() });
+        return { ...created, message: `${created.message ?? "Kaydedildi."} ${alloc.items.length} fatura eşlendi.` };
+      }
+      return created;
+    },
     onSuccess: (r) => {
       toast.success(r.message ?? "Kaydedildi.");
       onCreated();
@@ -104,34 +120,7 @@ export function PaymentFormDialog({ open, direction, onOpenChange, onCreated }: 
             </div>
           </div>
 
-          <div>
-            <Label>Kasa / Banka</Label>
-            <select
-              className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
-              value={accountId}
-              onChange={(e) => setAccountId(e.target.value)}
-            >
-              <option value="">Seçin…</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.kind === "CASH" ? "Kasa" : "Banka"} · {a.name} ({a.currency})
-                </option>
-              ))}
-            </select>
-            {accountsError && (
-              <p className="mt-1 text-xs text-destructive">
-                Kasa/banka listesi okunamadı — bu “tanım yok” DEMEK DEĞİLDİR. Yeni kasa açmayın;
-                diyaloğu kapatıp tekrar açın.
-              </p>
-            )}
-            {accountsResolved && accounts.length === 0 && (
-              // Boş liste "bozuk" değil "henüz tanım yok" demektir — kullanıcıyı
-              // doğru ekrana yönlendirmeden bırakmak en sık şikâyet sebebi.
-              <p className="mt-1 text-xs text-amber-700 dark:text-amber-500">
-                Kasa/banka tanımı yok. Önce Muhasebe → Kasa &amp; Banka ekranından ekleyin.
-              </p>
-            )}
-          </div>
+          <PaymentAccountSelect accounts={accounts} value={accountId} onChange={setAccountId} isError={accountsError} resolved={accountsResolved} />
           <div>
             <Label>Yöntem</Label>
             <select
@@ -149,10 +138,13 @@ export function PaymentFormDialog({ open, direction, onOpenChange, onCreated }: 
           <div>
             <Label>Tutar ({currency})</Label>
             <Input
-              type="number" min={0} step="0.01"
+              type="number" min={0} step="0.01" aria-label="Tutar"
               className="mt-1"
               value={amount || ""}
-              onChange={(e) => setAmount(Number(e.target.value))}
+              onChange={(e) => {
+                alloc.touchAmount();
+                setAmount(Number(e.target.value));
+              }}
             />
           </div>
           <div>
@@ -165,6 +157,25 @@ export function PaymentFormDialog({ open, direction, onOpenChange, onCreated }: 
             />
           </div>
         </div>
+
+        {customerId && selected && (
+          <PaymentOpenInvoices
+            rows={alloc.rows}
+            totalOpen={alloc.totalOpen}
+            isLoading={alloc.isLoading}
+            isError={alloc.isError}
+            currency={currency}
+            drafts={alloc.drafts}
+            distributed={alloc.distributed}
+            amount={amount}
+            blockReason={alloc.blockReason}
+            disabled={createM.isPending}
+            onDraftChange={alloc.onDraftChange}
+            onFillMax={alloc.onFillMax}
+            onFifo={alloc.onFifo}
+            onCloseAll={alloc.onCloseAll}
+          />
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>İptal</Button>

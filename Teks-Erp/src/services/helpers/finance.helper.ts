@@ -6,6 +6,7 @@
 // kendi servislerinde.
 // =============================================================================
 import { Prisma, CariKind, Currency, InvoiceType } from "@prisma/client";
+import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { resolvePartyToCardTx } from "./party-card.helper";
 import { dailyCodePrefix, nextDailySeq } from "../../utils/code-format";
@@ -242,6 +243,15 @@ export async function resolveExchangeRateTx(
 export type CariAccountParty = { customerId?: string | null; subcontractorId?: string | null };
 
 /** Cari hesabın TEK ADRESİ karttır: fason bacağı `resolvePartyToCardTx` ile bağlı kartına çözülür (kopya yok). */
+/**
+ * Müşteri kartından cari hesabın kimliği — SALT OKUNUR (yaratmaz). Okuma uçları (açık fatura listesi) hesap açmasın:
+ * hesap ilk fatura/ödemeyle doğar (`ensureCariAccountTx`); yoksa "açık fatura yok" doğru cevaptır. Aynı `where`.
+ */
+export async function findCariAccountIdByCustomer(customerId: string): Promise<string | null> {
+  const row = await prisma.cariAccount.findFirst({ where: { customerId }, select: { id: true } });
+  return row?.id ?? null;
+}
+
 export async function ensureCariAccountTx(
   tx: Prisma.TransactionClient,
   party: CariAccountParty,

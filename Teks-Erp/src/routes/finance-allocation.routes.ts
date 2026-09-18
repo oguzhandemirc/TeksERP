@@ -49,7 +49,10 @@ router.get("/open-invoices", requirePermission("finance:read"), async (req, res,
   try {
     const q = z
       .object({
-        cariId: z.string().uuid(),
+        // İkisinden TAM BİRİ (servis XOR'u 400 ile ölçer): `cariId` (Fatura Kapama) ya da `customerId` (ödeme diyaloğu —
+        // kartı bilir, hesabı değil; hesap yoksa boş liste, YARATMAZ).
+        cariId: z.string().uuid().optional(),
+        customerId: z.string().uuid().optional(),
         currency: currencyEnum,
         direction: directionEnum.optional(),
         amount: decimalString.optional(),
@@ -57,7 +60,8 @@ router.get("/open-invoices", requirePermission("finance:read"), async (req, res,
       })
       .parse(req.query);
     const result = await paymentAllocationService.listOpenInvoices({
-      cariId: q.cariId,
+      cariId: q.cariId ?? null,
+      customerId: q.customerId ?? null,
       currency: q.currency,
       direction: q.direction,
       amount: q.amount ?? null,

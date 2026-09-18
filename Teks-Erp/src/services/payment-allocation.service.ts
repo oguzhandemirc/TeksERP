@@ -38,7 +38,7 @@ import { Prisma, InvoiceStatus, InvoiceType, PaymentStatus, PaymentDirection, Ch
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
-import { D, D0 } from "./helpers/finance.helper";
+import { D, D0, findCariAccountIdByCustomer } from "./helpers/finance.helper";
 // ⚠️ Çek durum adları TEK KAYNAK: `cheque.service` sözlüğü ("Ekranda ve hata
 // mesajında okunan durum adları"). Buraya ikinci bir sözlük yazmak, aynı
 // durumun iki farklı adla anılmasına giden en kısa yoldur.
@@ -961,7 +961,9 @@ export class PaymentAllocationService {
    * (sonuncusu unique, yani eşitlik tam olarak bozulur).
    */
   async listOpenInvoices(params: {
-    cariId: string;
+    /** İkisinden TAM BİRİ: hesap kimliği ya da müşteri kartı (ödeme diyaloğu kartı bilir, hesabı değil — salt okunur çözülür; hesap yoksa boş liste). */
+    cariId?: string | null;
+    customerId?: string | null;
     currency: Currency;
     /** `IN` → satış faturaları, `OUT` → alış faturaları (yön kuralının aynası). */
     direction?: PaymentDirection;
@@ -969,6 +971,11 @@ export class PaymentAllocationService {
     amount?: Prisma.Decimal.Value | null;
     limit?: number;
   }): Promise<{ data: OpenInvoiceRow[]; totalOpen: string }> {
+    if ((params.cariId == null) === (params.customerId == null)) {
+      throw AppError.badRequest("Açık fatura listesi için cari hesap VEYA müşteri kartı verilmeli (ikisi birden değil).");
+    }
+    const cariId = params.cariId ?? (await findCariAccountIdByCustomer(params.customerId as string));
+    if (!cariId) return { data: [], totalOpen: "0" };
     const limit = Math.min(500, Math.max(1, params.limit ?? 200));
     const types: InvoiceType[] =
       params.direction === PaymentDirection.IN
@@ -991,7 +998,7 @@ export class PaymentAllocationService {
     >`
       SELECT "id", "docNo", "type", "currency", "issueDate", "dueDate", "grandTotal", "paidTotal"
         FROM "invoices"
-       WHERE "cariId" = ${params.cariId}::uuid
+       WHERE "cariId" = ${cariId}::uuid
          AND "currency" = ${params.currency}::"Currency"
          AND "status" = 'CONFIRMED'
          AND "paidTotal" < "grandTotal"
