@@ -189,9 +189,9 @@ async function main(): Promise<void> {
     let dbNowAfter: Date;
     globalThis.Date = KaymisDate as DateConstructor;
     try {
-      dbNowBefore = (await prisma.$queryRaw<Array<{ now: Date }>>`SELECT now() AS now`)[0]!.now;
+      dbNowBefore = (await prisma.$queryRaw<Array<{ now: Date }>>`SELECT now() AS now -- tz-ok: DB saati okuması, damgayla aynı kaynak`)[0]!.now;
       d8 = await doff(loom.id);
-      dbNowAfter = (await prisma.$queryRaw<Array<{ now: Date }>>`SELECT now() AS now`)[0]!.now;
+      dbNowAfter = (await prisma.$queryRaw<Array<{ now: Date }>>`SELECT now() AS now -- tz-ok: DB saati okuması, damgayla aynı kaynak`)[0]!.now;
     } finally {
       globalThis.Date = RealDate;
     }

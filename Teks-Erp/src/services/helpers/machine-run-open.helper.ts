@@ -40,7 +40,7 @@ export function resolveRunStamp(declared: Date | null | undefined, label: string
 
 /** DB saati — `createdAt` varsayılanlarıyla (`now()`) aynı kaynak; tek satırlık okuma, tx'e girmez. */
 export async function readDbNow(client: Pick<typeof prisma, "$queryRaw"> = prisma): Promise<Date> {
-  const rows = await client.$queryRaw<Array<{ now: Date }>>`SELECT now() AS now`;
+  const rows = await client.$queryRaw<Array<{ now: Date }>>`SELECT now() AS now -- tz-ok: doffedAt timestamptz, createdAt varsayılanıyla aynı DB saati`;
   return rows[0]!.now;
 }
 
