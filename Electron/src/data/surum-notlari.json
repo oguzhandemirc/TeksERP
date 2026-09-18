@@ -618,6 +618,9 @@
           "kapsam": "her-ikisi",
           "tip": "iyilestirme",
           "metin": "Tablet ön-dolgu: sistemin zaten bildiği bilgiler artık ekrana kendiliğinden gelir, elle yeniden girilmez. Ham Giriş’te “Hangi indirmeden?” listesinden bir indirme seçilince desen ve renk o koşumdan (yoksa dokuma işinden) ön-dolar; koşum açarken atkı sıklığı aynı desenin son koşumundan, hedef devir makine kartından önerilir ve hangi tezgahtan geldiği söylenir; Levent Sarım’da SAR formu aynı çözgü kartının son sarımındaki makine, depo, lot ve kg satırlarını öneri olarak getirir. Hiçbiri kilitli değildir, değiştirilebilir; bilinmeyen değer boş bırakılır, uydurulmaz. Panelde kumaş kartına “Varsayılan çözgü kartı” alanı geldi (Devere açıkken): Yeni Dokuma İşi’nde kumaş seçilince çözgü kartı bundan ön-dolar, boş bırakılırsa sunucu da aynı varsayılanı uygular. Tablet ekranlarındaki ön-dolgu ayrı bir tablet sürümüyle gelir."
+          "kapsam": "tablet",
+          "tip": "duzeltme",
+          "metin": "Giriş ekranında kullanıcı+şifre yönteminde artık harfli parola girilebilir: tablette (yatay) sayı tuş takımının üstündeki “ABC” düğmesi sistem klavyesini açar (parola gizli görünür), “123” ile geri dönülür; hangi klavyeyi seçtiğiniz o tablette hatırlanır. Telefonda kullanıcı+şifre alanı doğrudan harfli klavye açar. Daha önce giriş alanı yalnız rakam kabul ettiği için harfli parolası olan operatör tabletten giremiyordu; hızlı PIN girişi eskisi gibi sayısaldır."
         }
       ]
     },

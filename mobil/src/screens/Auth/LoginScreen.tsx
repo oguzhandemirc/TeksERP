@@ -11,6 +11,7 @@ import Toast from 'react-native-toast-message';
 import * as Haptics from 'expo-haptics';
 import { useAuthStore } from '../../store/authStore';
 import { authService, type LoginMethod } from '../../services/auth.service';
+import { useAlphaKeyboardPref } from './useAlphaKeyboardPref';
 import { isLoginLocked } from '../../services/api';
 import { authActions } from '../../services/authActions';
 import { pinServerIdentityAfterLogin } from '../../services/serverIdentity';
@@ -90,6 +91,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
 
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [pin, setPin] = useState('');
+  const { alphaKeyboard, toggleAlphaKeyboard } = useAlphaKeyboardPref();
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
@@ -179,6 +181,7 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
   const selectedUserRef = useRef(selectedUser);
   const methodRef = useRef<LoginMethod>(activeMethod);
   const pinInputRef = useRef<TextInput>(null);
+  const alphaInputRef = useRef<TextInput>(null);
   useEffect(() => {
     pinRef.current = pin;
   }, [pin]);
@@ -500,7 +503,9 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
               ref={pinInputRef}
               value={pin}
               onChangeText={handlePinChange}
-              keyboardType="number-pad"
+              // Liste+şifre alfanümerik olabilir → varsayılan klavye + gizli metin; salt-PIN sayısal kalır.
+              keyboardType={activeMethod === 'list' ? 'default' : 'number-pad'}
+              secureTextEntry={activeMethod === 'list'}
               maxLength={PASSWORD_MAX}
               autoFocus
               caretHidden
@@ -551,9 +556,54 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
     </>
   );
 
+  // Liste+şifre modunda "ABC ↔ 123" geçişi: harfli parola için sistem klavyesi (K bulgusu 2026-09-18).
+  // Salt-PIN/kart modunda geçiş çıkmaz (PIN sayısaldır). Tercih cihazda hatırlanır.
+  const alphaToggle = activeMethod === 'list' ? (
+    <TouchableRipple
+      testID="login-abc-toggle"
+      onPress={toggleAlphaKeyboard}
+      disabled={submitting}
+      rippleColor="rgba(99,102,241,0.25)"
+      borderless
+      style={styles.alphaToggle}
+      accessibilityRole="button"
+      accessibilityLabel={alphaKeyboard ? 'Sayısal klavyeye dön' : 'Harfli klavyeye geç'}
+    >
+      <Text style={styles.alphaToggleText}>{alphaKeyboard ? '123' : 'ABC'}</Text>
+    </TouchableRipple>
+  ) : null;
+
+  const alphaKeyboardSurface = (
+    <TouchableRipple onPress={() => alphaInputRef.current?.focus()} disabled={!selectedUser || submitting} rippleColor="rgba(99,102,241,0.25)" borderless style={styles.alphaSurface}>
+      <View>
+        <Text style={styles.alphaSurfaceHint}>{selectedUser ? 'Harfli klavye açık — parolayı yazın' : 'Önce kullanıcı seçin'}</Text>
+        <TextInput
+          ref={alphaInputRef}
+          value={pin}
+          onChangeText={handlePinChange}
+          keyboardType="default"
+          secureTextEntry
+          maxLength={PASSWORD_MAX}
+          autoFocus
+          importantForAutofill="no"
+          autoComplete="off"
+          autoCorrect={false}
+          editable={!submitting && !!selectedUser}
+          returnKeyType="done"
+          onSubmitEditing={() => selectedUser && void submit(pin, selectedUser)}
+          placeholder="Parola"
+          placeholderTextColor="rgba(255,255,255,0.35)"
+          style={styles.alphaInput}
+        />
+      </View>
+    </TouchableRipple>
+  );
+
   const numpad = (
     <View style={[styles.numpad, isCompact && styles.numpadCompact]}>
-      {NUMPAD_ROWS.map((row, ri) => (
+      {alphaToggle}
+      {activeMethod === 'list' && alphaKeyboard ? alphaKeyboardSurface : null}
+      {activeMethod === 'list' && alphaKeyboard ? null : NUMPAD_ROWS.map((row, ri) => (
         <View key={ri} style={[styles.numpadRow, isCompact && styles.numpadRowCompact]}>
           {row.map((cell, ci) => {
             if (cell.type === 'empty') {
@@ -1369,6 +1419,11 @@ const styles = StyleSheet.create({
   pwSubmitText: { color: '#fff', fontSize: 18, fontWeight: '800' },
 
   numpad: { gap: 14, maxWidth: 460, alignSelf: 'center', width: '100%' },
+  alphaToggle: { alignSelf: 'flex-end', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.bgSoft, minHeight: 44, justifyContent: 'center' },
+  alphaToggleText: { color: COLORS.text, fontSize: 15, fontWeight: '700', letterSpacing: 1 },
+  alphaSurface: { borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.bgSoft, padding: 18, gap: 10, minHeight: 120, justifyContent: 'center' },
+  alphaSurfaceHint: { color: COLORS.subtext, fontSize: 14 },
+  alphaInput: { color: COLORS.text, fontSize: 20, borderBottomWidth: 1, borderBottomColor: COLORS.accentLight, paddingVertical: 8 },
   numpadCompact: { gap: 10, maxWidth: 360 },
   numpadRow: { flexDirection: 'row', gap: 14 },
   numpadRowCompact: { gap: 10 },
