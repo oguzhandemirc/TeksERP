@@ -96,6 +96,16 @@ const pg = new PgClient({ connectionString: ortam.dbUrl.replace(/\?schema=public
 await pg.connect();
 const sql = async (q, params = []) => (await pg.query(q, params)).rows;
 
+// ŞEMA HİZASI — ÖN KOŞUL, ÜÇ SONUÇLU. E2E DB'si ağaçtaki migration'ların gerisindeyse
+// adımlar "ürün hatası" gibi görünen 400'ler alır (ölçüldü 2026-09-18: `StationKind.WARPING`
+// e2e DB'de yoktu, D0 sessizce 400 aldı). Geri kalmış DB'de koşum "kırmızı" değil ÖLÇÜLEMEZ.
+{
+  const klasorler = fs.readdirSync(path.join(BACKEND_KOK, "prisma/migrations")).filter((d) => /^\d{14}_/.test(d)).sort();
+  const uygulanan = new Set((await sql(`SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL`)).map((r) => r.migration_name));
+  const eksik = klasorler.filter((k) => !uygulanan.has(k));
+  if (eksik.length) dur(`ÖLÇÜLEMEZ: E2E DB'si ağaçtan ${eksik.length} migration geride (ilk: ${eksik[0]}) — \`npx tsx scripts/e2e-ortam.ts kur\` (idempotent) koş`);
+}
+
 const apiToken = new Map(); // rol → Bearer (doğrulama çağrıları için ayrı WEB oturumu)
 async function apiGiris(rol) {
   if (apiToken.has(rol)) return apiToken.get(rol);

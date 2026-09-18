@@ -15,6 +15,7 @@
 - **Sıra önemli:** adımlar birbirinin verisini kullanır (`gerektirir`). Ön koşulu düşen adım **kırmızı değil ATLANDI**dır ve sebebi yazılır — "ölçemedim" ile "bozuk" aynı satıra düşmez.
 - **Backend doğrulaması ekrandan bağımsızdır:** ekran yeşil ama tablo yanlışsa adım KIRMIZI. Tablo adları `schema.prisma` `@@map`; uçlar `/api/…`. "ölçülecek" yazan hücre henüz doğrulanmamış bir iddiadır, kodu okumadan doldurulmadı.
 - **Seçici modalları 50'şer yükler:** TEST kayıtları ilk sayfada değildir — tedarikçi/ürün/müşteri modalında ÖNCE arama kutusuna ("Kod, ad…" / "Ad / kod / vergi no ara…") adı yaz, sonra satıra tıkla. Güzergâhın eski metninde bu adım yoktu; kullanıcı da yaşadı (1e).
+- **Sürücü ön koşulu ÜÇ SONUÇLU:** koşucu başlamadan E2E DB'sinin ağaçtaki migration'larla hizalı olduğunu ölçer; geri kalmışsa koşum "kırmızı" değil **ÖLÇÜLEMEZ** der ve durur (ölçüldü 2026-09-18: `StationKind.WARPING` e2e DB'de yoktu, D0 sessizce 400 aldı — ürün hatası sanılabilirdi). Çare `e2e-ortam.ts kur` (idempotent).
 - **"Bilinen ve beklenen"** (kırmızı DEĞİL, not): çuval etiketinde iç not bu sürümde hâlâ basılır · panelde levent olay/tüketim satırları için ayrı ekran yok (yalnız "Tezgah kaydını geri al" listesinde).
 
 ---
@@ -35,8 +36,8 @@
 |---|---|---|---|---|
 | **B1** · P · Tanımlar → İş Ortakları → Cariler → **Yeni Cari** ✅ | ① Ad "TEST Müşteri", Roller ☑ Müşteri, Sevk varsayılanı Yurtiçi → Kaydet. ② Ad "TEST Tedarikçi", ☑ Tedarikçi → Kaydet. Listede bulmak için arama kutusuna yaz. | İki satır, Rol sütununda rozet (Müşteri / Tedarikçi); "Yön: Tedarikçi" yalnız tedarikçiyi, "Fason: Fason yapan" göçle gelen fason kartlarını gösterir; "Yeni Fason" düğmesi YOK. | `customers` → 2 satır: `isCustomerRole/isSupplierRole` doğru, `defaultDestination=DOMESTIC` (müşteride); `subcontractors` → 0 (fason profili doğmadı); `cari_accounts` → 0 (hesap ilk belgeyle açılır — C6). | ① 4 dokunuş derinlik; "Sevk varsayılanı" kart açılırken sorulur (ilk sevkte sorulabilir). ② **O** SAP vendor master: ödeme koşulu · para birimi · IBAN · vergi dairesi KARTTA doğar; bizde bunlar `cari_accounts`ta ve o kayıt ilk fatura/ödemeyle doğuyor → vade/para birimi kart açılırken YOK. ③ **B** üç rol kutusu + `type` (türetilmiş) + `CariAccount.kind` — aynı sorunun üç cevabı; kaldırma fazı planlı (`IS-ORTAGI-ROL-MODELI.md` §7). |
 | **B2** · P · Tanımlar → Ürün Kataloğu → Ürünler → **Yeni** ✅ | Ad "TEST İplik", Tip İplik, Denye 150, "Elle gir" → Stok Kodu TEST-IP → Oluştur. İkinci: Tip Kumaş, TEST-KM, "TEST Kumaş". | Birim ipliğe otomatik KG; "Tür: İplik" yalnız ipliği gösterir, Renk/Özellik süzgeçleri gizlenir. **Not:** güzergâh "Yeni Ürün" der, düğme **"Yeni"** (diyalog başlığı "Yeni Ürün"). | `items` → `TEST-IP: YARN/KG/150`, `TEST-KM: FABRIC/MT`. | ① Kod otomatik, birim tipten — iyi. ② **K** alternatif birim (kg ↔ bobin), min stok / yeniden sipariş seviyesi, tedarikçi malzeme kodu — bizde bobin yalnız hareket kolonu, min stok YOK. ③ — |
-| **B3** · P · Üretim & Kalite → Çözgü Kartları → Yeni ⏳ | Kod TEST-CK1, ad "TEST Çözgü", iplik → TEST İplik, Tel 2000, Take-up 8 → kaydet. | Listede satır; take-up görünür. | `warp_specs` → 1 satır, `yarnItemId` = TEST-IP, `takeUpPct=8`. | ② **K** çözgü kg/m (tel × denye ÷ 9.000) kartta türetilmiş gösterilsin; bizde hesap yalnız sarımda. |
-| **B4** · P · Üretim İstasyonları → dokuma istasyonu → Makine ekle ⏳ | Ad "TEST-TZ1", levent yuva 1 → kaydet (dokuma istasyonu yoksa önce aç). | İstasyon kartında TEST-TZ1 · Aktif. | `machines` → 1 satır `warpBeamSlots=1`, `stationId` dokuma istasyonu. | ① Önce istasyon kartı bulunmalı (bağlam doğru). ② **K** iş merkezi: hedef devir + vardiya kapasitesi — `MachineSpec` var, alanları ölçülecek. |
+| **B3** · P · Üretim & Kalite → Çözgü Kartları → Yeni ✅ | Kod TEST-CK1, ad "TEST Çözgü", iplik → TEST İplik, Tel 2000, Take-up 8 → kaydet. | Listede satır; take-up görünür. | `warp_specs` → 1 satır, `yarnItemId` = TEST-IP, `takeUpPct=8`. | ② **K** çözgü kg/m (tel × denye ÷ 9.000) kartta türetilmiş gösterilsin; bizde hesap yalnız sarımda. |
+| **B4** · P · Üretim İstasyonları → dokuma istasyonu → Makine ekle ✅ | Ad "TEST-TZ1", levent yuva 1 → kaydet (dokuma istasyonu yoksa önce aç — sürücü belirleyici olsun diye "TEST DOKUMA" istasyonunu açar). **Not:** üst düğme "İstasyon" (belge "Yeni İstasyon" der; diyalog başlığı öyle); liste görünümünde satır düğmesi "+ Makine", kart görünümünde "Makine ekle". | İstasyon satırında/kartında TEST-TZ1 · Aktif. | `machines` → 1 satır `warpBeamSlots=1`, `stationId` dokuma istasyonu. | ① Önce istasyon kartı bulunmalı (bağlam doğru). ② **K** iş merkezi: hedef devir + vardiya kapasitesi — `MachineSpec` var, alanları ölçülecek. |
 
 ### C · İplik geldi — alış zinciri
 
@@ -56,7 +57,7 @@
 
 | Adım | Yap | Bekle | Backend doğrulaması | Çıkarım |
 |---|---|---|---|---|
-| **D0** · P · Üretim İstasyonları → Yeni İstasyon (DEVERE) ⏳ | Ad DEVERE, tür Devere (WARPING; yetenek ön-dolar) → Kaydet; Makine ekle DV1. | Tablette Levent Sarım başlığı "1 devere makinesi"; D2 seçicisinde DV1. | `stations` → 1 (`producesWarpBeam=true`); `machines` → DV1. | ① İki form, ~9 dokunuş. ② **K** "istasyon + ilk makine" tek adımda. ③ **K** türe göre ilgisiz yetenek kutuları "Gelişmiş" altına. |
+| **D0** · P · Üretim İstasyonları → İstasyon (DEVERE) ✅ | Ad DEVERE, tür Devere (WARPING; yetenek ön-dolar) → Kaydet; Makine ekle DV1. | Tablette Levent Sarım başlığı "1 devere makinesi"; D2 seçicisinde DV1. | `stations` → 1 (`producesWarpBeam=true`); `machines` → DV1. | ① İki form, ~9 dokunuş. ② **K** "istasyon + ilk makine" tek adımda. ③ **K** türe göre ilgisiz yetenek kutuları "Gelişmiş" altına. |
 | **D1** · T · Levent Sarım → Yeni levent ⏳(d5) | Çözgü TEST Çözgü, 500 m, köken IN_HOUSE, metal no TEST-M1 → Planla. | "Planlı (1)". | `warp_beams` → 1 `status=PLANNED`, `plannedMeters=500`. | ① Her açılış boş form; son kart hatırlanmıyor; ~6 dokunuş. ② **B** (5e Y2) `WarpBeam.weavingOrderId?` — iş seçilince kart + metre ön-dolar (+0 dokunuş); **K** son kullanılan çözgü kartı ön-dolu. ③ **K** köken varsayılan IN_HOUSE ve katlanır. |
 | **D2** · T · Planlı → SAR ⏳(d5) | 500 m, adet 1, iplik çıkışı: depo, TEST-L1, 30 kg; dip 1 kg (sebep); devere makinesi → Sarımı Kaydet. | "Bugün sarılan"; panelde TEST-L1 kalan 91 kg. | `warp_beams.status=READY`; `yarn_movements` → −30 (çıkış) + 1 (dip iadesi); lot bakiyesi 91; `warp_beam_events` → WOUND. | ① Makine seçici ön-dolu değil; dip iadesi sebep zorunlu; ~10 dokunuş. ② **O** son sarımın lot/depo/kg'sini ön-doldur. ③ **K** tek makine ön-seç; tek sebepli katalogda sebep sorulmasın. |
 | **D3** · T · Yeni levent → SAR (raşel takımı) ⏳(d5) | 300 m plan; SAR: adet 3, önek TEST-R, 300 m, 45 kg TEST-L1, dip 3 → kaydet. | Üç levent (TEST-R-1/2/3), her biri 15 kg + 1 kg dip payı; lot kalanı 49. | `warp_beams` → +3, `bodyNo` TEST-R-1..3; lot bakiyesi 49. | ② eksik yok. ③ **K** önek boşsa gövde no türet. |
@@ -67,7 +68,7 @@
 
 | Adım | Yap | Bekle | Backend doğrulaması | Çıkarım |
 |---|---|---|---|---|
-| **E1** · P · Satış & Planlama → Siparişler → Yeni Sipariş ⏳ | TEST Müşteri, TEST-S1, termin +7, kalem TEST Kumaş 100 metre → kaydet. | Listede TEST-S1; "Sevk İlerlemesi 0". | `orders` → 1; `order_lines` → 1 (`unit=METER` zorunlu). | — |
+| **E1** · P · Satış & Planlama → Siparişler → Yeni Sipariş ✅ | Müşteri kutusu → modal → **ara** → TEST Müşteri; Sipariş No kutusuna tıkla (elle girişe döner) TEST-S1; kalem (form bir boş satırla açılır, "Sipariş Kalemi Ekle" ikinci satır olur): "Kumaş seç" → modal başlığı **"Kumaş seç"** → ara → TEST Kumaş, 100, birim m → Sipariş Oluştur. | Listede TEST-S1; "Sevk İlerlemesi 0". | `orders` → 1; `order_lines` → 1 (`unit=METER` zorunlu). | — |
 | **E2** · P · Sipariş detayı → kalem → "İş emri oluştur (1)" ⏳ | Rota şablonu (dokuma/kurşun/tambur), hedef 100 → kaydet. | İş emri no; listede Müşteri "TEST Müşteri", Sipariş TEST-S1. | `work_orders` → 1 (`type` bağın aynası); `work_order_to_order_lines` → 1. | — |
 | **E3** · P · İş emri → Bağlı Sipariş(ler) → gerçek bir siparişi de bağla ⏳ | "Bağla (1)". | "TEST Müşteri +1" rozeti; tooltip iki ad. | `work_order_to_order_lines` → 2. | — |
 
@@ -272,7 +273,7 @@ PO onay/release adımı · zamanlanmış rapor gönderimi · backflush (otomatik
 
 | Kapsam | Adım sayısı | Otomatik ✅ | Yazılacak ⏳ | Elle ✋ |
 |---|---|---|---|---|
-| Ana zincir A–M (panel) | 43 | 4 (A1 · B1 · B2 · C1) | 30 | 9 (belge önizleme, yazıcı, Wi-Fi, Excel/PDF) |
+| Ana zincir A–M (panel) | 43 | 8 (A1 · B1 · B2 · B3 · B4 · C1 · D0 · E1 — 68 sn) | 26 | 9 (belge önizleme, yazıcı, Wi-Fi, Excel/PDF) |
 | Ana zincir (tablet, d5) | 17 | 0 | 17 | — |
 | Dallar N–T | 30 | 0 | 27 | 3 |
 

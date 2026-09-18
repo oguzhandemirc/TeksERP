@@ -22,7 +22,34 @@ export const AD = {
   iplik: `${ONEK} İplik`, iplikKod: `${ONEK}-IP`,
   kumas: `${ONEK} Kumaş`, kumasKod: `${ONEK}-KM`,
   alisNotu: `${ONEK}-AS1`,
+  cozgu: `${ONEK} Çözgü`, cozguKod: `${ONEK}-CK1`,
+  dokumaIstasyon: `${ONEK} DOKUMA`, tezgah: `${ONEK}-TZ1`,
+  devereIstasyon: `${ONEK} DEVERE`, devereMakine: `${ONEK}-DV1`,
+  siparisNo: `${ONEK}-S1`,
 };
+
+/** "İstasyon" düğmesi → "Yeni İstasyon" diyaloğu: ad + görev türü → Kaydet. Aynı ad zaten listedeyse atlar. */
+async function istasyonAc(page, tikla, yaz, sec, diyalog, gor, ad, gorevTuru) {
+  if (await page().getByRole("row").filter({ hasText: buyukTr(ad) }).count()) return;
+  await tikla("İstasyon", { exact: true });
+  const d = diyalog("Yeni İstasyon"); await gor(d);
+  await yaz(d.locator("#name"), ad);
+  await sec(d.getByRole("combobox").nth(1), gorevTuru); // Görev Türü (ikinci combobox; ilki Tip)
+  await tikla("Kaydet", { icinde: d, exact: true });
+  await d.waitFor({ state: "detached", timeout: 15_000 });
+  await page().waitForTimeout(800);
+}
+
+/** İstasyon satırı (liste) ya da kartı (kart görünümü) içindeki makine ekleme düğmesi. */
+async function istasyonaMakineEkle(page, istasyonAdi) {
+  const satir = page.getByRole("row").filter({ hasText: istasyonAdi }).first();
+  if (await satir.count()) return satir.getByRole("button", { name: /Makine/ }).first().click({ timeout: 15_000 });
+  return page.locator(kartIciDugme(istasyonAdi, "Makine ekle")).first().click({ timeout: 15_000 });
+}
+
+/** XPath: `metin`i içeren EN İÇ kapsayıcının içindeki `dugme` — kart içi "Makine ekle" gibi. */
+const kartIciDugme = (metin, dugme) =>
+  `xpath=(//*[.//*[normalize-space()=${JSON.stringify(metin)}] and .//button[contains(normalize-space(.), ${JSON.stringify(dugme)})]])[last()]//button[contains(normalize-space(.), ${JSON.stringify(dugme)})]`;
 
 const MODUL_ANAHTARLARI = ["productionEnabled", "financeEnabled", "ticaretEnabled", "iplikEnabled", "depoMultiEnabled", "kumasTeknikEnabled", "tezgahEnabled", "devereEnabled", "dokumaEnabled", "emanetEnabled"];
 
@@ -79,7 +106,7 @@ export const ADIMLAR = [
     },
     async bekle({ gor, page }) {
       // Listede iki satır, Rol sütununda rozetler — arama kutusuyla daraltarak (insan da öyle bulur).
-      const ara = page().getByPlaceholder("Ad / kod / vergi no ara");
+      const ara = page().getByPlaceholder("Ad / kod / vergi no ara").filter({ visible: true }).first();
       for (const [ad, rozet] of [[AD.musteri, "Müşteri"], [AD.tedarikci, "Tedarikçi"]]) {
         await ara.fill(ad);
         await page().waitForTimeout(700);
@@ -129,6 +156,90 @@ export const ADIMLAR = [
     ],
   },
 
+  {
+    id: "B3", rol: "P", gerektirir: ["B2"],
+    yol: "Tanımlar → Üretim & Kalite → Çözgü Kartları → Yeni", rota: "warp-specs",
+    async yap({ git, tikla, yaz, diyalog, gor, page }) {
+      await git("Çözgü Kartları");
+      await tikla("Yeni", { exact: true });
+      const d = diyalog("Yeni Çözgü Kartı"); await gor(d);
+      await yaz(d.locator("#code"), AD.cozguKod);
+      await yaz(d.locator("#name"), AD.cozgu);
+      // Çözgü ipliği: "İplik seç" → modal → ara → satır
+      await d.getByRole("button", { name: /İplik seç/ }).click({ timeout: 15_000 });
+      const im = diyalog("Çözgü ipliği seç"); await gor(im);
+      await im.getByPlaceholder("Ara (ad veya kod)").fill(AD.iplik);
+      await page().waitForTimeout(700);
+      await im.getByText(buyukTr(AD.iplik), { exact: true }).first().click({ timeout: 15_000 });
+      await im.waitFor({ state: "detached", timeout: 15_000 }).catch(() => undefined);
+      await yaz(d.locator("#endsCount"), "2000");
+      await yaz(d.locator("#takeUpPct"), "8");
+      await tikla("Kaydet", { icinde: d, exact: true });
+      await d.waitFor({ state: "detached", timeout: 15_000 });
+      await page().waitForTimeout(400);
+    },
+    async bekle({ gor, page }) {
+      // Sekmeler kalıcı: önceki sayfaların arama kutuları DOM'da kalır → yalnız görünür olan.
+      await page().getByPlaceholder("Kod veya ad ara").filter({ visible: true }).first().fill(AD.cozguKod);
+      await page().waitForTimeout(600);
+      await gor(page().getByRole("row").filter({ hasText: AD.cozguKod }).first());
+    },
+    dogrula: [
+      { ad: "çözgü kartı: iplik TEST-IP, tel 2000, take-up 8 (warp_specs)",
+        sql: `SELECT ws."endsCount" tel, ws."takeUpPct"::text tu, i.code iplik FROM warp_specs ws JOIN items i ON i.id=ws."yarnItemId" WHERE ws.code=$1`,
+        params: [AD.cozguKod], oku: (r) => r.map((x) => `${x.iplik}:${x.tel}:${x.tu}`).join("|"),
+        beklenen: (v) => new RegExp(`^${AD.iplikKod}:2000:8(\\.0+)?$`).test(v) },
+    ],
+  },
+  {
+    id: "B4", rol: "P", gerektirir: [],
+    yol: "Tanımlar → Üretim & Kalite → Üretim İstasyonları → dokuma istasyonu → Makine ekle", rota: "stations",
+    async yap({ git, tikla, yaz, sec, diyalog, gor, page }) {
+      await git("Üretim İstasyonları");
+      // Güzergâh: "dokuma istasyonu yoksa önce aç" — belirleyici olsun diye TEST dokuma istasyonu açılır.
+      // ⚠️ Belge "Yeni İstasyon" der, düğme "İstasyon" (diyalog başlığı "Yeni İstasyon") — belge notu.
+      await istasyonAc(page, tikla, yaz, sec, diyalog, gor, AD.dokumaIstasyon, "Dokuma Tezgahı");
+      // Liste görünümünde satırdaki "+ Makine" (kart görünümünde "Makine ekle") — ikisi de denenir.
+      await istasyonaMakineEkle(page(), buyukTr(AD.dokumaIstasyon));
+      const d = diyalog("Yeni Makine"); await gor(d);
+      await yaz(d.locator("#name"), AD.tezgah);
+      const yuva = d.locator("#warpBeamSlots");
+      if (await yuva.count()) await yuva.fill("1");
+      await tikla("Kaydet", { icinde: d, exact: true });
+      await d.waitFor({ state: "detached", timeout: 15_000 });
+      await page().waitForTimeout(500);
+    },
+    async bekle({ gor, page }) { await gor(page().getByText(buyukTr(AD.tezgah), { exact: true }).first()); },
+    dogrula: [
+      { ad: "tezgah dokuma istasyonunda, 1 levent yuvası (machines/stations)",
+        sql: `SELECT s.kind, s."consumesWarpBeam" c, m."warpBeamSlots" y FROM machines m JOIN stations s ON s.id=m."stationId" WHERE m.name=$1`,
+        params: [buyukTr(AD.tezgah)], oku: (r) => r.map((x) => `${x.kind}:${x.c}:${x.y}`).join("|"), beklenen: "WEAVING:true:1" },
+    ],
+  },
+  {
+    id: "D0", rol: "P", gerektirir: [],
+    yol: "Tanımlar → Üretim İstasyonları → İstasyon (DEVERE) → Makine ekle (DV1)", rota: "stations",
+    async yap({ git, tikla, yaz, sec, diyalog, gor, page }) {
+      await git("Üretim İstasyonları");
+      // Devere artık bir görev TÜRÜ (WARPING): seçilince "levent sarar" yeteneği ön-dolar.
+      await istasyonAc(page, tikla, yaz, sec, diyalog, gor, AD.devereIstasyon, "Devere (Levent Sarım)");
+      await istasyonaMakineEkle(page(), buyukTr(AD.devereIstasyon));
+      const d = diyalog("Yeni Makine"); await gor(d);
+      await yaz(d.locator("#name"), AD.devereMakine);
+      await tikla("Kaydet", { icinde: d, exact: true });
+      await d.waitFor({ state: "detached", timeout: 15_000 });
+      await page().waitForTimeout(500);
+    },
+    async bekle({ gor, page }) { await gor(page().getByText(buyukTr(AD.devereMakine), { exact: true }).first()); },
+    dogrula: [
+      { ad: "devere istasyonu levent SARAR, makinesi bağlı (stations/machines)",
+        sql: `SELECT s.kind, s."producesWarpBeam" p, count(m.id)::int n FROM stations s LEFT JOIN machines m ON m."stationId"=s.id AND m.name=$2 WHERE s.name=$1 GROUP BY s.kind, s."producesWarpBeam"`,
+        params: [buyukTr(AD.devereIstasyon), buyukTr(AD.devereMakine)], oku: (r) => r.map((x) => `${x.kind}:${x.p}:${x.n}`).join("|"), beklenen: "WARPING:true:1" },
+      { ad: "tablet devere makinesini görür (GET /api/warp-beams/devere-machines)", uc: "/api/warp-beams/devere-machines",
+        oku: (g) => (g?.data ?? []).filter((m) => m.name === buyukTr(AD.devereMakine)).length, beklenen: 1 },
+    ],
+  },
+
   // ── C · İPLİK GELDİ ─────────────────────────────────────────────────────────
   {
     id: "C1", rol: "P", gerektirir: ["B1", "B2"],
@@ -169,6 +280,44 @@ export const ADIMLAR = [
         params: [buyukTr(AD.tedarikci), AD.alisNotu],
         oku: (r) => r.map((x) => `${x.status}:${x.currency}:${x.q}:${x.p}`).join(" | "), beklenen: (v) => /^OPEN:TRY:120(\.0+)?:85(\.0+)?$/.test(v) },
       { ad: "henüz mal kabul YOK (kalan 120)", sql: `SELECT count(*)::int n FROM goods_receipts gr JOIN purchase_orders po ON po.id=gr."purchaseOrderId" WHERE po.notes=$1`, params: [AD.alisNotu], oku: (r) => r[0].n, beklenen: 0 },
+    ],
+  },
+
+  // ── E · SİPARİŞ → İŞ EMRİ ───────────────────────────────────────────────────
+  {
+    id: "E1", rol: "P", gerektirir: ["B1", "B2"],
+    yol: "Operasyon → Satış & Planlama → Siparişler → Yeni Sipariş", rota: "operations/orders",
+    async yap({ git, tikla, diyalog, gor, page }) {
+      await git("Siparişler");
+      await tikla("Yeni Sipariş");
+      const d = diyalog("Yeni Sipariş"); await gor(d);
+      await tikla("Müşteri seç (liste)", { icinde: d, exact: true });
+      const mm = page().getByRole("dialog").filter({ hasText: /Müşteri seç|Cari seç/ }).last(); await gor(mm);
+      await mm.getByRole("textbox").first().fill(AD.musteri);
+      await page().waitForTimeout(700);
+      await mm.getByRole("row").filter({ hasText: buyukTr(AD.musteri) }).first().click({ timeout: 15_000 });
+      await mm.waitFor({ state: "detached", timeout: 15_000 }).catch(() => undefined);
+      // Sipariş No: alan odaklanınca elle girişe döner.
+      const no = d.locator("#orderNumber"); await no.click(); await no.fill(AD.siparisNo);
+      // Kalem: Kumaş seç → modal → ara → satır; miktar 100; birim m (varsayılan)
+      // Form bir boş kalem satırıyla açılır — "Sipariş Kalemi Ekle" ikinci satır olurdu.
+      await d.getByRole("button", { name: "Kumaş seç", exact: true }).first().click({ timeout: 15_000 });
+      const km = page().getByRole("dialog").filter({ hasText: /Kumaş seç|Ürün seç/ }).last(); await gor(km);
+      await km.getByPlaceholder("Kod, ad").fill(AD.kumas);
+      await page().waitForTimeout(700);
+      await km.getByRole("row").filter({ hasText: buyukTr(AD.kumas) }).first().click({ timeout: 15_000 });
+      await km.waitFor({ state: "detached", timeout: 15_000 }).catch(() => undefined);
+      await d.getByLabel("Miktar").first().fill("100");
+      await tikla("Sipariş Oluştur", { icinde: d, exact: true });
+      await d.waitFor({ state: "detached", timeout: 20_000 });
+      await page().waitForTimeout(600);
+    },
+    async bekle({ gor, page }) { await gor(page().getByText(AD.siparisNo, { exact: true }).first()); },
+    dogrula: [
+      { ad: "sipariş + 1 kalem 100 m, birim METER zorunlu (orders/order_lines)",
+        sql: `SELECT o."orderNumber" no, l.quantity::text q, l.unit FROM orders o JOIN order_lines l ON l."orderId"=o.id JOIN customers c ON c.id=o."customerId" WHERE o."orderNumber"=$1 AND c.name=$2`,
+        params: [AD.siparisNo, buyukTr(AD.musteri)], oku: (r) => r.map((x) => `${x.no}:${x.q}:${x.unit}`).join("|"),
+        beklenen: (v) => new RegExp(`^${AD.siparisNo}:100(\\.0+)?:MT$`).test(v) },
     ],
   },
 ];
