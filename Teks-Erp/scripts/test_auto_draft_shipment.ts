@@ -35,6 +35,10 @@
 //      "kg" basılmaz (1000 m'ye kg etiketi aynı yalanın tersi olurdu)
 //      NEGATİF SONDA (2026-09-13, ölçüldü): `collectUnmeasuredAllocationWarnings`
 //      `[]`e sabitlendi → §9b/§9c kırmızı (2 ❌); sha256 ile birebir geri yüklendi.
+//   §10 ⭐ BRÜT — iade SONRASI taslak/önizleme sevk anındaki kümeyi taşır (iade `Roll.shipmentId`yi
+//      NULL'lar; `RollReturn` satırından geri eklenir, belge/özetle aynı kural); iade ayrı belgeyle
+//      (satış iadesi) kapanır, taslak NET'e DÜŞMEZ. NEGATİF SONDA (2026-09-18, ölçüldü):
+//      `collectReturnedRollsGross` `[]` dönünce §10c/§10d kırmızı (2 ❌; §10b ön koşul yeşil kalır — iade gerçekten oldu); geri alındı.
 //
 // NEGATİF SONDA (2026-08-14 — koşuldu, kırmızı GÖRÜLDÜ, dosya shasum ile
 // birebir geri yüklendi: dc724ae3…). `shipping.service.
@@ -60,6 +64,8 @@ import { Currency, InvoiceStatus, InvoiceType, PriceKind, RollStatus, ShipmentSt
 import prisma, { pool } from "../src/lib/prisma";
 import { shippingService } from "../src/services/shipping.service";
 import { collectShipmentInvoiceDraftLines } from "../src/services/helpers/shipment-auto-draft.helper";
+import { returnService } from "../src/services/return.service";
+import bcrypt from "bcryptjs";
 import { InventoryService } from "../src/services/inventory.service";
 import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
 import { SETTING_KEYS, readFinanceDefaultVatRate } from "../src/services/system-setting.service";
@@ -82,6 +88,7 @@ function check(label: string, ok: boolean, detail = ""): void {
 const TAG = `TEST-ADS-${Date.now()}`;
 const rollIds: string[] = [];
 const shipmentIds: string[] = [];
+let userId: string | null = null;
 const orderIds: string[] = [];
 const itemIds: string[] = [];
 let customerId: string | null = null;
@@ -489,6 +496,29 @@ async function main(): Promise<void> {
     check("§9d Otomatik taslağın satırı da 'm'", kgInv?.lines[0]?.unit === "m", String(kgInv?.lines[0]?.unit));
   }
 
+  // ── §10 ⭐ BRÜT: iade sonrası taslak sevk anındaki kümeyi taşır ──────────
+  {
+    // İadeyi teslim alan personel: kendi fikstürü (`username` iş anahtarı; ortamda kullanıcı ARANMAZ).
+    const teslimAlan = await prisma.user.create({ data: { username: `${TAG}-iade`.toLowerCase(), fullName: `${TAG} iade`, passwordHash: await bcrypt.hash("test123", 4), isActive: true }, select: { id: true } });
+    userId = teslimAlan.id;
+    const g1 = await makeRoll(itemA.id, 40, wh.id, { colorId: color.id, width: 150 });
+    const g2 = await makeRoll(itemA.id, 35, wh.id, { colorId: color.id, width: 150 });
+    const g3 = await makeRoll(itemB.id, 20, wh.id);
+    const gShip = await quickShip([g1, g2, g3], customer.id);
+    const once = await collectShipmentInvoiceDraftLines(gShip.data.id, customer.id, Currency.TRY);
+    const toplam = (r: typeof once) => r.lines.reduce((a, l) => a.plus(l.qty), D(0)).toNumber();
+    check("§10a Zemin: sevk anı önizlemesi 2 satır / 95 m", once.lines.length === 2 && toplam(once) === 95, `${once.lines.length} satır · ${toplam(once)} m`);
+    await returnService.createReturn({ rollId: g2, reasonText: `${TAG} kumaş hatası` }, teslimAlan.id);
+    const canli = await prisma.roll.findUnique({ where: { id: g2 }, select: { shipmentId: true } });
+    check("§10b Ön koşul: iade topu sevkiyattan AYRILDI (shipmentId null) — ölçüm anlamlı", canli?.shipmentId === null);
+    const sonra = await collectShipmentInvoiceDraftLines(gShip.data.id, customer.id, Currency.TRY);
+    check("§10c ⭐ İade SONRASI önizleme BRÜT: yine 2 satır / 95 m (net 60'a DÜŞMEDİ)", sonra.lines.length === 2 && toplam(sonra) === 95, `${sonra.lines.length} satır · ${toplam(sonra)} m`);
+    const aLine = sonra.lines.find((l) => l.itemId === itemA.id);
+    check("§10d İade edilen topun metresi kendi satırında (Kumaş A 75 m = 40 + 35)", aLine != null && aLine.qty.toNumber() === 75, String(aLine?.qty));
+    const gInv = await prisma.invoice.findFirst({ where: { shipmentId: gShip.data.id }, select: { lines: { select: { qty: true } } } });
+    check("§10e Sevk anında doğan otomatik taslak da 95 m (iade onu DEĞİŞTİRMEZ)", gInv != null && gInv.lines.reduce((a, l) => a + Number(l.qty), 0) === 95, String(gInv?.lines.map((l) => Number(l.qty))));
+  }
+
   // ── §6 KÖRLÜK ZEMİNİ ────────────────────────────────────────────────────
   // "İhlal bulunamadı" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın:
   // fixture gerçekten kurulmadıysa yukarıdaki tüm sayımlar vakumen doğrudur.
@@ -541,6 +571,7 @@ main()
       await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
     }
     if (rollIds.length > 0) {
+      await prisma.rollReturn.deleteMany({ where: { rollId: { in: rollIds } } });
       await prisma.roll.updateMany({ where: { id: { in: rollIds } }, data: { sackId: null, shipmentId: null } });
       await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: rollIds } } });
       await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
@@ -559,6 +590,11 @@ main()
     }
     if (colorId) await prisma.color.deleteMany({ where: { id: colorId } });
     if (customerId) await prisma.customer.deleteMany({ where: { id: customerId } });
+    if (userId) {
+      // İade teslim alanın audit izi kullanıcıya FK ile bağlı (`system_logs_userId_fkey`) — fikstür kullanıcısıyla birlikte gider.
+      await prisma.systemLog.deleteMany({ where: { userId } });
+      await prisma.user.deleteMany({ where: { id: userId } });
+    }
     if (shipmentIds.length > 0 || invIds.length > 0) {
       await prisma.systemLog.deleteMany({ where: { recordId: { in: [...shipmentIds, ...invIds] } } });
     }

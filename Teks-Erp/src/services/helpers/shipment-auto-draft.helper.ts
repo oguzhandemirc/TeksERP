@@ -115,6 +115,53 @@ export interface ShipmentDraftLinesResult {
   warnings: string[];
 }
 
+type DraftRollRow = {
+  id: string;
+  itemId: string;
+  colorId: string | null;
+  currentQty: Prisma.Decimal;
+  width: Prisma.Decimal | null;
+  item: { name: string };
+  color: { name: string } | null;
+  ownerCustomerId: string | null;
+  barcode: string | null;
+};
+
+/**
+ * BRÜTLEŞTİRME — iade edilmiş toplar sevk anındaki metrajlarıyla taslağa GERİ EKLENİR
+ * (`collectShipmentDocContent` ile aynı kural). İade `Roll.shipmentId`yi NULL'lar; yalnız canlı
+ * küme okunursa taslak NET çıkar ve iade ikinci kez (SALES_RETURN belgesiyle) düşüldüğünde çift
+ * düşüm doğar. Canlı id kümesiyle dedup: iki sorgu arasında commit olan iade iki kez sayılmasın.
+ */
+async function collectReturnedRollsGross(shipmentId: string, liveIds: Set<string>): Promise<DraftRollRow[]> {
+  const returned = await prisma.rollReturn.findMany({
+    where: { fromShipmentId: shipmentId, cancelledAt: null },
+    select: {
+      rollId: true,
+      itemId: true,
+      colorId: true,
+      qty: true,
+      width: true,
+      item: { select: { name: true } },
+      color: { select: { name: true } },
+      roll: { select: { barcode: true, ownerCustomerId: true } },
+    },
+  });
+  return returned
+    .filter((rr) => !liveIds.has(rr.rollId))
+    .map((rr) => ({
+      id: rr.rollId,
+      itemId: rr.itemId,
+      colorId: rr.colorId,
+      currentQty: rr.qty,
+      width: rr.width,
+      item: { name: rr.item?.name ?? "" },
+      color: rr.color ? { name: rr.color.name } : null,
+      ownerCustomerId: rr.roll.ownerCustomerId,
+      barcode: rr.roll.barcode,
+    }));
+}
+
 /**
  * EXPORT (C1): panelin "Sevkiyattan Fatura Taslağı" diyaloğu da AYNI satır
  * kurucusunu kullanabilsin diye dışa açıldı (`finance.routes` önizleme ucu) —
@@ -129,9 +176,10 @@ export async function collectShipmentInvoiceDraftLines(
   // Hayalet toplar DIŞARIDA — resmi belgenin (`collectShipmentDocContent`)
   // kullandığı kümenin AYNISI. `SHIPPED` bu kümede YOK, yani sevk edilmiş
   // toplar sayılır (sack-invariants.helper başlığı).
-  const rolls = await prisma.roll.findMany({
+  const liveRolls = await prisma.roll.findMany({
     where: { shipmentId, status: { notIn: SACK_ABSENT_STATUSES } },
     select: {
+      id: true,
       itemId: true,
       colorId: true,
       currentQty: true,
@@ -142,6 +190,7 @@ export async function collectShipmentInvoiceDraftLines(
       barcode: true,
     },
   });
+  const rolls = [...liveRolls, ...(await collectReturnedRollsGross(shipmentId, new Set(liveRolls.map((r) => r.id))))];
   if (rolls.length === 0) return { lines: [], orderPriced: 0, orderConflicts: 0, warnings: [] };
   const warnings = await collectUnmeasuredAllocationWarnings(shipmentId);
   // G3 emanet (E4b): müşterinin kendi malı satılmaz — satır YİNE yazılır (fatura muhasebe kararı), uyarı basılır.
