@@ -150,7 +150,14 @@ const ModuleCard = React.memo(function ModuleCard({
 }) {
   const color = moduleAccents[meta.key as MobileScreenKey];
   return (
-    <View style={[styles.card, { borderTopColor: color.tint, height }]}>
+    // testID (→ Android resource-id) + accessibilityLabel (→ content-desc): saha test sürücüsü
+    // karoyu adıyla bulur (metin düğümü tıklanamaz; kararlı bir tutamaç gerek). Bkz. scripts/surucu.
+    <View
+      testID={`modul-karo-${meta.key}`}
+      accessibilityLabel={meta.label}
+      accessibilityRole="button"
+      style={[styles.card, { borderTopColor: color.tint, height }]}
+    >
       <View style={[styles.cardInner, compact && styles.cardInnerPhone]}>
         <View
           style={[

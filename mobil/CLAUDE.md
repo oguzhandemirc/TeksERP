@@ -46,6 +46,7 @@ node ../deploy/mobil-yayinla.mjs --musteri=<kod> --paket=ota-cikti/<kod>/<rv>/<d
 - **Yeni modül modalı `ModuleSheet` (tek kart) ya da `PagedSheet` (sayfalı) — üçüncü biçim yok** (kullanıcı 2026-09-18): gövde ekranın %70'inden uzunsa SAYFALI (adım göstergesi · Geri/İleri · son sayfa Kaydet + ÖZET; İleri'de hata O SAYFADA yazılır, sayfa değişmez), kısaysa TEK KART; düğmeler kartın İÇİNDE sabit, `AppModal`i `contentStyle`siz çağıran form yazılmaz; kesik metin yasak, chip/çoklu seçim yok, seçici daima `PickerModal` (`overlays`). Stil sözlüğü `sheet` (yerel StyleSheet kopyası YOK).
 - Liste: varsayılan cursor + sonsuz kaydırma (`useInfiniteQuery` + `FlashList` `onEndReached`, threshold 0.6); modal listesi `RemoteListSheet`; "Önceki/Sonraki" pager YOK. Hata mesajları Türkçe.
 - Yerleşim hatasında tahmin değil ölçüm: `adb exec-out screencap` + `uiautomator dump`.
+- **Tablet test sürücüsü** (`scripts/surucu/`, YENİ PAKET YOK): kullanıcı testi güzergâhının tablet adımlarını adb ile koşturup adım başına yeşil/kırmızı + görüntü + backend doğrulaması üretir. Seçici önceliği `accessibilityLabel`→content-desc > `testID`→resource-id (paket öneki YOK) > `<Text>`→text; sürücünün adlayacağı düğüme `testID`/`accessibilityLabel` konur (menü karoları `modul-karo-<key>`, PagedSheet düğmeleri `paged-*`). `input text` ASCII-only (TR düşer) — veri `TEST-` önekli; koşum reçetesi `scripts/surucu/README.md`.
 
 ## Paketler
 
