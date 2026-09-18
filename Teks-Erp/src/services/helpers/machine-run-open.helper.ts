@@ -38,6 +38,22 @@ export function resolveRunStamp(declared: Date | null | undefined, label: string
   };
 }
 
+/** DB saati — `createdAt` varsayılanlarıyla (`now()`) aynı kaynak; tek satırlık okuma, tx'e girmez. */
+export async function readDbNow(client: Pick<typeof prisma, "$queryRaw"> = prisma): Promise<Date> {
+  const rows = await client.$queryRaw<Array<{ now: Date }>>`SELECT now() AS now`;
+  return rows[0]!.now;
+}
+
+/**
+ * İndirme damgası — beyan varken `resolveRunStamp` (kullanıcı zamanı); beyan YOKKEN DB saati.
+ * Neden: `beamsMountedDuring` takma satırının `createdAt`ini (DB saati) bu damgayla karşılaştırır;
+ * iki saat arasındaki ms farkı aynı saniyedeki takma→indirme sırasını tersine çevirebiliyordu.
+ */
+export async function resolveDoffStamp(declared: Date | null | undefined): Promise<StampResolution> {
+  if (declared) return resolveRunStamp(declared, "indirme zamanı");
+  return { value: await readDbNow(), warning: null };
+}
+
 export interface OpenContext {
   machine: { id: string; code: string };
   itemId: string | null;

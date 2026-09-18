@@ -82,6 +82,8 @@ async function main(): Promise<void> {
   const top = async (doffEventId: string, m: number) => {
     const r = await inventory.createInitialEntry({ itemId: fabric.id, initialQty: m }, undefined, null, false, { forcedEntrySource: RollEntrySource.WEAVING, doffEventId });
     rollIds.push((r.data as { id: string }).id);
+    // Helper'ın boş dönüşü SESSİZDİR (yalnız uyarı): kırmızıda "bayrak mı, saat mı, levent mi" ayrımı bu satırdan okunur.
+    for (const w of r.warnings ?? []) if (/bağlı levent yoktu/.test(w)) console.log(`   ⚠ helper boş döndü: ${w}`);
     return r;
   };
   try {
@@ -170,6 +172,35 @@ async function main(): Promise<void> {
     const r7b = await top(d7b, 100);
     const c7 = [...(await consumedOf((r7a.data as { id: string }).id)), ...(await consumedOf((r7b.data as { id: string }).id))];
     check("§7 ⭐ 2 hat: her top 100 ÷ 2 = 50 m kumaş → 62,5 m çözgü; iki top toplamı 125 = tam boy (çift sayım yok), uyarı 'hat payı'", c7.length === 2 && c7.every((c) => c.fabricLengthM?.equals(50) && c.lengthM?.equals(62.5)) && (await kalan(b4)) === 875 && (r7a.warnings ?? []).some((w) => /hat payı/.test(w)));
+
+    console.log("\n── §8 Beyansız doff damgası DB SAATİNDEN: Node saati 5 sn geride olsa da takma→indirme sırası bozulmaz ──");
+    // Takma satırının `createdAt`i DB saatidir; beyansız `doffedAt` Node saatinden gelirse iki saat karşılaştırılır ve
+    // Node'un geride kaldığı her ms'de "indirme takmadan önce" görünür → helper boş döner (bir CI treninde 11 kırmızı).
+    const b8 = await sar(600);
+    await mountBeam(b8, { machineId: loom.id, position: 1 }); // tek hatlı tezgah; yuva 1 §6'da boşaldı (b3 söküldü)
+    const RealDate = Date;
+    const KAYMA_MS = -5_000;
+    class KaymisDate extends RealDate {
+      constructor(...args: unknown[]) { if (args.length === 0) super(RealDate.now() + KAYMA_MS); else super(...(args as [number])); }
+      static override now(): number { return RealDate.now() + KAYMA_MS; }
+    }
+    let d8: string;
+    let dbNowBefore: Date;
+    let dbNowAfter: Date;
+    globalThis.Date = KaymisDate as DateConstructor;
+    try {
+      dbNowBefore = (await prisma.$queryRaw<Array<{ now: Date }>>`SELECT now() AS now`)[0]!.now;
+      d8 = await doff(loom.id);
+      dbNowAfter = (await prisma.$queryRaw<Array<{ now: Date }>>`SELECT now() AS now`)[0]!.now;
+    } finally {
+      globalThis.Date = RealDate;
+    }
+    const doff8 = await prisma.doffEvent.findUniqueOrThrow({ where: { id: d8 }, select: { doffedAt: true } });
+    const damgaDbAraliginda = doff8.doffedAt.getTime() >= dbNowBefore.getTime() - 1_000 && doff8.doffedAt.getTime() <= dbNowAfter.getTime() + 1_000;
+    check("§8a ⭐ beyansız doffedAt DB saatinden (Node 5 sn geride iken bile DB `now()` aralığında)", damgaDbAraliginda, `doffedAt=${doff8.doffedAt.toISOString()} db=[${dbNowBefore.toISOString()} … ${dbNowAfter.toISOString()}]`);
+    const r8 = await top(d8, 60);
+    const c8 = (await consumedOf((r8.data as { id: string }).id)).filter((c) => c.beamId === b8);
+    check("§8b ⭐ Node saati geride olsa da CONSUMED yazıldı (takma DB saatinde < indirme DB saatinde)", c8.length === 1 && (await kalan(b8)) === 525, `consumed=${c8.length} kalan=${await kalan(b8)}`);
   } finally {
     await prisma.warpBeamEvent.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: rollIds } } });

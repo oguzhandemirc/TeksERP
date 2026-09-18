@@ -11107,6 +11107,19 @@ d9 sürücü bulgusu (01): çoklu sipariş bağında liste "Müşteri" kolonunun
 
 d9 sürücü bulgusu N2b (kullanıcı kararı, 01): `UndoDispatchDialog` "1 çuval · 1 top" soyut sayısı basıyordu; çekirdek kural "yıkıcı işlemde etkilenen HER kayıt listelenir" ihlaldeydi. Backend `getUndoDispatchPreview` `sacks[]`e `rolls[{id, barcode, meters, ownerName, returnTo}]` (mutasyonun döndürdüğü `SHIPPED` kümesi, `preShipStatus` → döneceği raf, emanet sahibi) ve `looseRolls[]` (çuvalsız — bugün boş, varsa gizlenmez) ekledi; `rollCount` eski istemci için kaldı. Panel: saf `undoAffectedRows` (`undo-affected.ts`) + `UndoAffectedList` bileşeni — çuval satırı altında top satırları (barkod · metre · Emanet: X · → raf); eski sunucu alanı göndermezse çuval no yine basılır, top satırları boş. Eski istemci: yeni alanları görmez, sayıları basmaya devam eder. Bekçi `test_shipment_undo_dispatch` [2] (R1 → WAREHOUSE, R2 → A1_STOCK somut), vitest `undo-affected.test.ts` 4 ✓.
 
+## 2026-09-18 — Beyansız indirme damgası DB saatinden: karşılaştırılan iki damga TEK saat kaynağından [ÇEKİRDEK]
+
+`test_warp_beam_auto_consume` bir iniş treninde (#239, paketle çakışan koşum) 11 kırmızı verdi; tek başına ve
+sonraki trende 19/19. d9 ölçtü: kırmızı 11 = tam olarak CONSUMED satırı bekleyen yüklemler, yani KK1 doğdu ama
+`autoConsumeForRollTx` boş döndü. Komşu 5 dosya (3 tur) kalıntı bırakmıyor; ayar önbelleksiz; koşum sıralı ⇒ kalan tek
+sessiz yol `BEAMS_MOUNTED_DURING_SQL`: takma satırının `createdAt`i DB saati (tx başlangıcı), beyansız `doffedAt` ise
+`resolveRunStamp` → `new Date()` (Node saati). Docker VM saati host yükü altında ileri atınca (paketle çakışma) "indirme
+takmadan önce" görünür, helper "bağlı levent yoktu" uyarısıyla boş döner. Uyarı loglanmadığından kesin kanıt yok; ama
+Node saati 5 sn geri alınınca eski kod AYNI imzayı verdi (helper boş, consumed=0). Karar: beyan yokken damga DB `now()`
+(`readDbNow`, tx dışı tek satır), beyan varken kullanıcı zamanı olduğu gibi; SQL değişmedi; `resolveRunStamp` koşum
+başlangıç/bitiş ve duruş yollarında olduğu gibi kaldı (yalnız doff dalı). Ders: bir defter satırının damgası başka bir
+defter satırının damgasıyla karşılaştırılıyorsa ikisi de aynı saatten gelmeli — "kronoloji `createdAt`tir" bunu zaten söyler.
+
 ## 2026-09-18 — 403 yetki reddi `details.code` taşır: PERMISSION_DENIED · CHANNEL_DENIED [ÇEKİRDEK]
 
 Kullanıcı kararı (01): yetki reddi yalnız Türkçe cümleyle geliyordu, istemci "hangi yetki eksik"i metinden ayrıştırmak zorundaydı ve kanal reddi (mobil-only hesap masaüstüne giremez) izin reddiyle aynı görünüyordu. `rbac.middleware`: `requirePermission` → `{ code: PERMISSION_DENIED, required }`, `requireAnyPermission` → `{ code: PERMISSION_DENIED, requiredAny[] }` (`RBAC_DENIED_CODE` sabiti tek kaynak); `auth.service` masaüstü kanal reddi → `{ code: CHANNEL_DENIED, channel: "desktop" }` — ayrı kod, çünkü eylem farklı (yetki iste ≠ doğru uygulamayı aç). Kural gereği `details.code` (`body.code` hep undefined). Mesaj metinleri bayt bayt aynı — panel `apiClient` bugün yalnız `ACCESS_ASSERTION*` koduna bakar, mobil koda bakmaz ⇒ eski/yeni istemci davranışı değişmez; kod isteyen ekran (yetki iste düğmesi, kanal yönlendirmesi) ayrı dilim. Swagger `components.schemas.ForbiddenError` (enum: PERMISSION_DENIED · CHANNEL_DENIED · MODULE_DISABLED · REPORT_DISABLED · REPORT_GATE_UNAVAILABLE · TOTP_ENROLLMENT_REQUIRED) + `responses.Forbidden`. Bekçi `test_rbac_error_codes` (saf, sahte req/next; 14 ölçüm), iki sonda kırmızı. Yan not: `test_permission_catalog` (`requirePermission` çağrı sayımı) ve `test_route_auth_coverage` etkilenmedi.

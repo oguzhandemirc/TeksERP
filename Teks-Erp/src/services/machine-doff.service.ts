@@ -31,7 +31,7 @@ import { isClientTokenP2002, p2002Mentions } from "../utils/p2002";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { assertDoffReplayAlive } from "./helpers/token-replay.helper";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
-import { resolveRunStamp } from "./helpers/machine-run-open.helper";
+import { resolveDoffStamp } from "./helpers/machine-run-open.helper";
 import { assertProductionLineValid } from "./helpers/production-line.helper";
 import { deriveRunWarnings, nextDoffCodeTx, WARN_RUN_WITHOUT_ORDER } from "./helpers/machine-doff-open.helper";
 import type { ApiResponse } from "../types/api.types";
@@ -148,7 +148,7 @@ export async function openDoff(input: OpenDoffInput, userId?: string): Promise<O
   }
   // ② Bağlam (tx dışı okuma) · ③ damga.
   const ctx = await resolveDoffContext(input);
-  const stamp = resolveRunStamp(input.doffedAt, "indirme zamanı");
+  const stamp = await resolveDoffStamp(input.doffedAt);
   const warnings = [...ctx.warnings, ...(stamp.warning ? [stamp.warning] : [])];
 
   let created: DoffEventDto;
