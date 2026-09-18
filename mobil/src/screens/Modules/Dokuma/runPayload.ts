@@ -49,7 +49,10 @@ export function prefillFromOrder(f: RunOpenForm, o: WeavingOrderSummary | null):
 
 export type RunValidation = { ok: true } | { ok: false; message: string };
 
-export function validateRunOpen(f: RunOpenForm): RunValidation {
+export function validateRunOpen(f: RunOpenForm, weavingRequired = false): RunValidation {
+  // `dokumaRunWeavingOrderRequired` açıkken koşum bir dokuma işine bağlanmalı (sunucu 400 ikizi;
+  // bayrak kapalıysa — bugünkü davranış — serbest). Alan adı sunucu bayrağıyla birebir.
+  if (weavingRequired && !f.weavingOrderId) return { ok: false, message: 'Bu tezgahta koşum bir dokuma işine bağlanmalı — iş seçin.' };
   const t = f.targetUnitsPerMin.trim();
   if (t !== '') {
     const n = Number(t);

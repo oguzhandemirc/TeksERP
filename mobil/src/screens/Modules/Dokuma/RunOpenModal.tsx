@@ -104,7 +104,7 @@ function RunOpenPickers({ state, picker, setPicker, orderOptions, itemOptions, c
         emptyText="Açık dokuma işi yok — emirsiz koşum açabilirsiniz."
         onDismiss={() => setPicker(null)}
         onSelect={(v) => {
-          state.setForm(prefillFromOrder(f, state.orders.find((o) => o.id === v) ?? null));
+          state.selectOrder(prefillFromOrder(f, state.orders.find((o) => o.id === v) ?? null));
           setPicker(null);
         }}
       />
@@ -147,7 +147,13 @@ function buildRunOpenPages(state: RunPanelState, orderLabel: string, setPicker: 
         <>
           {state.ordersLoading ? <ActivityIndicator /> : null}
           {state.ordersError ? <Text style={sheet.error}>İş emri listesi yüklenemedi — emirsiz koşum açılabilir.</Text> : null}
-          <SheetField label="Dokuma işi (isteğe bağlı — numune koşumu meşru)" value={orderLabel} placeholder="İş emrisiz" onPress={() => setPicker('order')} />
+          <SheetField
+            label={state.weavingRequired ? 'Dokuma işi (zorunlu)' : 'Dokuma işi (isteğe bağlı — numune koşumu meşru)'}
+            value={orderLabel}
+            placeholder={state.weavingRequired ? 'Seçilmedi — bu tezgahta zorunlu' : 'İş emrisiz'}
+            hint={state.suggestedFrom === 'MOUNTED_BEAM' && f.weavingOrderId ? 'Takılı leventin işinden ön-seçildi — değiştirilebilir.' : undefined}
+            onPress={() => setPicker('order')}
+          />
           <SheetField label="Desen" value={f.itemLabel} placeholder="Seçilmedi" onPress={() => setPicker('item')} />
           <SheetField label="Renk" value={f.colorLabel} placeholder="Renk yok (ham)" onPress={() => setPicker('color')} />
         </>

@@ -45,6 +45,14 @@ export function useDevereMountTracking(): boolean {
 
 /** Emanet (konsinye mülkiyet) modülü açık mı? Default FALSE — KK1 "Sahibi" seçicisi bayrak
  *  yüklenene dek çizilmez (fail-closed: kapalı kurulumda ekran bugünküyle birebir). */
+export function useDokumaRunWeavingRequired(): boolean {
+  return useFeatureFlags().data?.dokumaRunWeavingOrderRequired ?? DEFAULT_FEATURE_FLAGS.dokumaRunWeavingOrderRequired;
+}
+
+export function useDevereBeamWeavingRequired(): boolean {
+  return useFeatureFlags().data?.devereBeamWeavingLinkRequired ?? DEFAULT_FEATURE_FLAGS.devereBeamWeavingLinkRequired;
+}
+
 export function useEmanetEnabled(): boolean {
   return useFeatureFlags().data?.emanetEnabled ?? DEFAULT_FEATURE_FLAGS.emanetEnabled;
 }
