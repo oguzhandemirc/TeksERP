@@ -68,6 +68,7 @@ const j5Olcum = { cariId: null, kasaNotlari: null, kasaSatir600: null, kdvNotlar
 const m1Olcum = { paletSayisi: null, karoSayisi: null, apiKapali: null, apiKapaliKod: null, apiAcik: null, kategoriKaroVar: null };
 const m3Olcum = { sahipAlani: null, barkod: null, cuval: null, okut: null, sevkDurum: null, sevkKod: null, sevkTopVar: null, acikSahipAlani: null };
 const m2Olcum = { kilitSayisi: null, kilitSonra: null, apiDurum: null, apiKod: null, paletDokuma: null, acikDurum: null };
+const l4Olcum = { musteriId: null, notMusteri: null, notHedef: null, notHedefSerh: null, temizSonraMusteri: null, iptalSebepSecici: null, iptalSebepIpucu: null, iptalUyari: null };
 const j1Olcum = { sevkNo: null, sevkId: null, tur: null, cariMetin: null, cariKilitli: null, satir: null, miktar: null, birim: null };
 const i4Olcum = { barkod: null, digerMusteri: null, digerOnce: null, testOnce: null, onizlemeSahipVar: null, redDurum: null, redKod: null, redTopVar: null, redSahipVar: null, tostSahipVar: null, ikinciDurum: null, sevkNo: null };
 
@@ -1441,6 +1442,49 @@ export const ADIMLAR = [
       { ad: "dokumaEnabled=true (GET /api/feature-flags)", uc: "/api/feature-flags", oku: (g) => g?.data?.dokumaEnabled, beklenen: true },
       { ad: "GET /api/weaving-orders yeniden 200", sql: `SELECT 1`, oku: () => m2Olcum.acikDurum, beklenen: 200 },
       { ad: "kilit bandı kalktı (ekran)", sql: `SELECT 1`, oku: () => m2Olcum.kilitSonra, beklenen: 0 },
+    ],
+  },
+  {
+    id: "L4", rol: "P", gerektirir: ["E1"],
+    yol: "Raporlar → Sipariş Karnesi (Müşteri çoklu seçici · Müşteri varsayılanı: Yurtiçi → şerhler → X temizle) · Sipariş İptal Karnesi (İptal sebebi ekseni)", rota: "reports/sales/order-intake",
+    async yap({ git, gor, sql, page }) {
+      l4Olcum.musteriId = (await sql(`SELECT id FROM customers WHERE name=$1`, [buyukTr(AD.musteri)]))[0]?.id ?? null;
+      await git("Sipariş Karnesi");
+      const musteri = page().getByLabel("Müşteri", { exact: true }).filter({ visible: true }).first(); await gor(musteri, { sure: 20_000 });
+      await musteri.click({ timeout: 15_000 });
+      await page().getByRole("button", { name: buyukTr(AD.musteri) }).first().click({ timeout: 15_000 });
+      await page().keyboard.press("Escape");
+      // Sevk hedefi: shadcn Select — etiketi "Müşteri varsayılanı" (niteleyici etikette).
+      await page().getByLabel("Müşteri varsayılanı", { exact: true }).filter({ visible: true }).first().click({ timeout: 15_000 });
+      await page().getByRole("option", { name: /Yurtiçi/ }).first().click({ timeout: 15_000 });
+      await page().waitForTimeout(1500);
+      const m1 = await page().locator("main, body").first().innerText();
+      l4Olcum.notMusteri = /SÜZGEÇ — Müşteri: .*MÜŞTERİ/.test(m1) ? 1 : 0;
+      l4Olcum.notHedef = /SÜZGEÇ — Sevk hedefi: Yurtiçi/.test(m1) ? 1 : 0;
+      l4Olcum.notHedefSerh = /Müşteri kartındaki VARSAYILAN hedef — sevkin fiili hedefi değil/.test(m1) ? 1 : 0;
+      // Seçimi temizle (X) → müşteri şerhi düşer.
+      await page().getByTitle("Süzgeci temizle").filter({ visible: true }).first().click({ timeout: 15_000 });
+      await page().waitForTimeout(1200);
+      l4Olcum.temizSonraMusteri = /SÜZGEÇ — Müşteri:/.test(await page().locator("main, body").first().innerText()) ? 1 : 0;
+      // Sipariş İptal Karnesi: sebep ekseni — bu kurulumda iptallerde sebep kodu yok → seçici pasif + ipucu; sayfa oranı uyarır.
+      await git("Sipariş İptal Karnesi");
+      const sebep = page().getByLabel("İptal sebebi", { exact: true }).filter({ visible: true }).first(); await gor(sebep, { sure: 20_000 });
+      await page().waitForTimeout(1200);
+      l4Olcum.iptalSebepSecici = await sebep.isDisabled();
+      l4Olcum.iptalSebepIpucu = (await sebep.innerText()).trim();
+      l4Olcum.iptalUyari = /sebep kodu/.test(await page().locator("main, body").first().innerText()) ? 1 : 0;
+    },
+    async bekle({ gor, page }) { await gor(page().getByText("Sipariş İptal Karnesi").filter({ visible: true }).first()); },
+    dogrula: [
+      { ad: "Sipariş Karnesi şerhleri: Müşteri + Sevk hedefi (Yurtiçi) + 'müşteri varsayılanı, fiili hedef değil' (ekran)", sql: `SELECT 1`, oku: () => `${l4Olcum.notMusteri}:${l4Olcum.notHedef}:${l4Olcum.notHedefSerh}`, beklenen: "1:1:1" },
+      { ad: "X ile temizleyince müşteri şerhi düşer (ekran)", sql: `SELECT 1`, oku: () => l4Olcum.temizSonraMusteri, beklenen: 0 },
+      { ad: "GET /reports/sales/order-intake?customerId&destination=DOMESTIC → meta.secenekler.customerId TEST Müşteri'yi listeler; özet 1 sipariş / 100 m (E1)",
+        uc: () => `/api/reports/sales/order-intake?dateFrom=${encodeURIComponent(new Date(Date.now() - 7 * 864e5).toISOString())}&dateTo=${encodeURIComponent(new Date().toISOString())}&customerId=${l4Olcum.musteriId}&destination=DOMESTIC`,
+        oku: (g) => `${(g?.meta?.secenekler?.customerId ?? []).some((o) => o.id === l4Olcum.musteriId) ? 1 : 0}:${g?.data?.summary?.orderCount}:${g?.data?.summary?.totalQty}`, beklenen: (v) => /^1:[1-9]\d*:(100|150|\d+)$/.test(v) },
+      { ad: "İptal Karnesi: sebep ekseni — kurulumda iptal sebebi kodu YOK → seçici pasif + 'Pencerede sebep yok'; sayfa 'sebep kodu' oranını uyarır (ekran)", sql: `SELECT 1`, oku: () => `${l4Olcum.iptalSebepSecici}:${l4Olcum.iptalSebepIpucu}:${l4Olcum.iptalUyari}`, beklenen: (v) => /^(true:Pencerede sebep yok:1|false:.*:\d)$/.test(v) },
+      { ad: "GET /reports/sales/order-cancellation → meta.secenekler.reasonCode ve reasonFillPct (veri boşluğu ölçümü)",
+        uc: () => `/api/reports/sales/order-cancellation?dateFrom=${encodeURIComponent(new Date(Date.now() - 30 * 864e5).toISOString())}&dateTo=${encodeURIComponent(new Date().toISOString())}`,
+        oku: (g) => `${(g?.meta?.secenekler?.reasonCode ?? []).length}:${g?.data?.summary?.reasonFillPct}`, beklenen: (v) => /^\d+:\d+(\.\d+)?$/.test(v) },
     ],
   },
 ];
