@@ -28,6 +28,8 @@ export interface PreflightLine {
   colorId?: string | null;
   propertyIds?: string[];
   unitPrice?: number | null;
+  /** İdempotency anahtarı — aynı token'la DOĞMUŞ top varsa satır REPLAY'dir: zaten `received`te sayılır, OVER_RECEIPT toplamına bir daha girmez. */
+  clientToken?: string;
 }
 
 /** Siparişten fazla kabul için sipariş bağlamının ön-uçuşa gereken kesiti (servisin `PurchaseOrderReceiptContext`i). */
@@ -105,6 +107,9 @@ export async function collectReceiptLineIssues(lines: PreflightLine[], ctx: Pref
   const lotRequired = hasYarn ? await readDevereLotRequired() : false;
   const catalog = await loadFabricCatalog(lines, info);
   // OVER_RECEIPT: bu istekteki ÖNCEKİ satırların toplamı — hepsi ya da hiçbiri yazıldığı için hepsi sayılır.
+  // ⚠️ REPLAY SAYILMAZ: token'ı zaten bir topa yazılmış satır `received`te duruyor; bir daha eklenirse mal kamyondayken
+  // MEŞRU satır 400 yer (test_roll_po_line_trace §9e — döngüdeki `res.idempotent` kuralının ön-uçuş aynası).
+  const replayed = await replayedTokens(ctx.overReceipt ? lines : []);
   const running = new Map<string, Prisma.Decimal>();
   const issues: ReceiptLineIssue[] = [];
   lines.forEach((l, i) => {
@@ -125,7 +130,7 @@ export async function collectReceiptLineIssues(lines: PreflightLine[], ctx: Pref
     if (ctx.requirePrice && ctx.priceFor && ctx.priceFor(l) == null) {
       return issues.push({ lineNo, code: "PRICE_REQUIRED", message: priceRequiredMessage(it.name, ctx.currency ?? "TRY") });
     }
-    if (ctx.overReceipt) {
+    if (ctx.overReceipt && !(l.clientToken && replayed.has(l.clientToken))) {
       const qty = new Prisma.Decimal(l.initialQty);
       const ordered = ctx.overReceipt.ordered.get(l.itemId) ?? new Prisma.Decimal(0);
       const already = (ctx.overReceipt.received.get(l.itemId) ?? new Prisma.Decimal(0)).plus(running.get(l.itemId) ?? new Prisma.Decimal(0));
@@ -137,6 +142,14 @@ export async function collectReceiptLineIssues(lines: PreflightLine[], ctx: Pref
     return undefined;
   });
   return issues;
+}
+
+/** Bu istekteki satırlardan hangileri daha önce top doğurmuş (aynı `clientToken`) — tek sorgu. */
+async function replayedTokens(lines: PreflightLine[]): Promise<Set<string>> {
+  const tokens = lines.map((l) => l.clientToken).filter((t): t is string => Boolean(t));
+  if (tokens.length === 0) return new Set();
+  const rows = await prisma.roll.findMany({ where: { clientToken: { in: tokens } }, select: { clientToken: true } });
+  return new Set(rows.map((r) => r.clientToken as string));
 }
 
 interface FabricCatalog {

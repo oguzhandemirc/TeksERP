@@ -84,6 +84,7 @@ import { goodsReceiptService } from "../src/services/goods-receipt.service";
 import { purchaseOrderService } from "../src/services/purchase-order.service";
 import { InventoryService } from "../src/services/inventory.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
+import { AppError } from "../src/utils/app-error";
 
 let pass = 0;
 let fail = 0;
@@ -471,14 +472,24 @@ async function main(): Promise<void> {
         c2.failed.length === 0 && c2.created.length === 2,
         `created=${c2.created.length} failed=${c2.failed.length}${c2.failed[0] ? ` sebep="${c2.failed[0].reason.slice(0, 70)}"` : ""}`,
       );
+      // C8 fail-closed (2026-09-18): aşım artık ön-uçuşta yakalanır → 400 `RECEIPT_LINES_INVALID`
+      // + `details.lines[].code = OVER_RECEIPT`; satır `failed[]`e düşmez, fişe HİÇ yazılmaz.
+      const rollsBefore = await prisma.roll.count({ where: { goodsReceiptId: r } });
+      let overErr: AppError | null = null;
+      try {
+        await goodsReceiptService.addLines(r, [{ itemId: itemA, initialQty: 10 }]);
+      } catch (e) {
+        overErr = e instanceof AppError ? e : null;
+      }
+      const overDetails = overErr?.details as { code?: string; lines?: Array<{ lineNo: number; code: string }> } | undefined;
       check(
-        "§9f) J1 AÇIK: aşım guard'ı hâlâ ÇALIŞIYOR (gerçek fazlalık reddedilir)",
-        (
-          (await goodsReceiptService.addLines(r, [
-            { itemId: itemA, initialQty: 10 },
-          ])) as unknown as LinesOut
-        ).failed.length === 1,
-        "10 m fazla → reddedildi",
+        "§9f) J1 AÇIK: aşım guard'ı hâlâ ÇALIŞIYOR — 400 RECEIPT_LINES_INVALID / OVER_RECEIPT, fişe satır yazılmadı",
+        overErr?.statusCode === 400 &&
+          overDetails?.code === "RECEIPT_LINES_INVALID" &&
+          overDetails.lines?.length === 1 &&
+          overDetails.lines[0]!.code === "OVER_RECEIPT" &&
+          (await prisma.roll.count({ where: { goodsReceiptId: r } })) === rollsBefore,
+        overErr ? `${overErr.statusCode} ${overDetails?.code} ${overDetails?.lines?.map((l) => l.code).join(",")}` : "hata fırlamadı — 10 m fazla YAZILDI",
       );
     } finally {
       await setFlag(OVER_KEY, false);

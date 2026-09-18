@@ -56,7 +56,7 @@ import { reverseGoodsReceiptYarnTx } from "../src/services/helpers/yarn-receipt-
 import { yarnMovementSign } from "../src/services/helpers/yarn-sign.helper";
 import { goodsReceiptService } from "../src/services/goods-receipt.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
-import type { AppError } from "../src/utils/app-error";
+import { AppError } from "../src/utils/app-error";
 
 import { ensureIplikModuluAcik } from "./fixture-module-flags";
 
@@ -448,12 +448,24 @@ async function main(): Promise<void> {
   // ATLIYORDU (ölçüldü: hareket=1, failed=[]). Aynı kalem bir kapıdan
   // reddedilip diğerinden sessizce deftere giriyorsa, "bu kalem kullanımdan
   // kaldırıldı" kararı fiilen uygulanmıyor demektir.
-  const passiveRes = await goodsReceiptService.addLines(mixedData.id, [{ itemId: yarnPassive.id, initialQty: 40 }]);
+  // C8 fail-closed (2026-09-18): pasif kalem ön-uçuşta yakalanır → 400 `RECEIPT_LINES_INVALID` +
+  // `details.lines[].code = ITEM_INACTIVE` (eski sözleşme: satır `failed[]`e düşerdi). İki kapı yine aynı cevabı verir.
+  let passiveErr: AppError | null = null;
+  try {
+    await goodsReceiptService.addLines(mixedData.id, [{ itemId: yarnPassive.id, initialQty: 40 }]);
+  } catch (e) {
+    passiveErr = e instanceof AppError ? e : null;
+  }
+  const passiveDetails = passiveErr?.details as { code?: string; lines?: Array<{ code: string; message: string }> } | undefined;
   const passiveMoves = await prisma.yarnMovement.count({ where: { itemId: yarnPassive.id } });
   check(
-    "6j2) ⭐ PASİF iplik kalemi mal kabulden GEÇMİYOR (kumaş yoluyla aynı sertlik)",
-    passiveRes.createdYarn.length === 0 && passiveRes.failed.length === 1 && passiveRes.failed[0]!.reason.includes("pasif"),
-    passiveRes.failed[0]?.reason.slice(0, 70) ?? `yazılan=${passiveRes.createdYarn.length}`,
+    "6j2) ⭐ PASİF iplik kalemi mal kabulden GEÇMİYOR — 400 RECEIPT_LINES_INVALID / ITEM_INACTIVE (kumaş yoluyla aynı sertlik)",
+    passiveErr?.statusCode === 400 &&
+      passiveDetails?.code === "RECEIPT_LINES_INVALID" &&
+      passiveDetails.lines?.length === 1 &&
+      passiveDetails.lines[0]!.code === "ITEM_INACTIVE" &&
+      passiveDetails.lines[0]!.message.includes("pasif"),
+    passiveErr ? `${passiveErr.statusCode} ${passiveDetails?.code} ${passiveDetails?.lines?.[0]?.code}` : "hata fırlamadı — pasif kalem YAZILDI",
   );
   check("6j3) ⭐ Pasif kalem deftere HİÇ satır yazmadı", passiveMoves === 0, `${passiveMoves}`);
 

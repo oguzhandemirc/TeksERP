@@ -10,11 +10,13 @@
 //   §10 pasif özellik → PROPERTY_INVALID · §11 fiyat zorunlu bayrağı + fiyatsız satır (kartta fiyat yok) → PRICE_REQUIRED ·
 //   §12 siparişe bağlı fiş + engel bayrağı: iki satır TOPLAMI ısmarlananı aşar → OVER_RECEIPT lineNo 2, fiş YOK ·
 //   §13 iki bayrak kapalı → aynı satırlar geçer (failed boş). Hepsinde fiş başlığı doğmaz (hepsi ya da hiçbiri).
+//   §14 REPLAY (aynı clientToken) satırı OVER_RECEIPT toplamına GİRMEZ (replay 50 + yeni 50 = 100 geçer; 10 m fazla 400).
 //   NEGATİF SONDA (2026-09-18): `fabricLineIssue` renk kolu düşer → §8/§9 ❌; `running` toplamı düşer → §12 ❌.
 // NEGATİF SONDALAR (ölçüldü): `create`teki `assertReceiptLinesValid` çağrısı düşer → §1a/§1b/§2a/§3a/§4a/§5a ❌ (6; başlık
 //   doğar, failed[]) · ön-uçuşta `lotRequired` hep false → aynı 6 ❌ (lotsuz satır satır düzeyinde düşer, fiş yine doğar).
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Bayraklar fotoğrafına döner. Fikstür `TEST-GRP-<pid>`.
 // =============================================================================
+import crypto from "node:crypto";
 import { Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
@@ -131,11 +133,23 @@ async function main(): Promise<void> {
     check("§12b mesaj ısmarlanan/gelmiş/fazla söyler", /100 m ısmarlandı, 60 m gelmiş; bu satırla 110 m olur \(10 m fazla\)/.test(String((e12 as { lines?: { message?: string }[] } | null)?.lines?.[0]?.message ?? "")));
     check("§12c tam 100 (60 + 40) geçer", (await hata(() => assertReceiptLinesValid([{ itemId: fabric.id, initialQty: 60 }, { itemId: fabric.id, initialQty: 40 }], { overReceipt: { orderNo: "PO", ordered: new Map([[fabric.id, new Prisma.Decimal(100)]]), received: new Map() } }))) === null);
 
+    console.log("── §14 REPLAY satırı OVER_RECEIPT toplamına GİRMEZ (test_roll_po_line_trace §9e aynası) ──");
+    const po14 = await prisma.purchaseOrder.create({ data: { orderNo: `${TAG}-PO14`, orderDate: new Date(), lines: { create: [{ lineNo: 1, itemId: fabric.id, qty: 100 }] } }, select: { id: true } });
+    const t14 = crypto.randomUUID();
+    const r14 = (await goodsReceiptService.create({ warehouseId: wh.id, deliveryNoteNo: `${TAG}-14`, purchaseOrderId: po14.id, lines: [{ itemId: fabric.id, initialQty: 50, clientToken: t14 }] })) as { data: { id: string } };
+    receiptIds.push(r14.data.id);
+    const e14 = await hata(() => goodsReceiptService.addLines(r14.data.id, [{ itemId: fabric.id, initialQty: 50, clientToken: t14 }, { itemId: fabric.id, initialQty: 50, clientToken: crypto.randomUUID() }]));
+    const rolls14 = await prisma.roll.count({ where: { goodsReceiptId: r14.data.id } });
+    check("§14a ⭐ replay 50 + yeni 50 = ısmarlanan 100 → 400 YOK, fişte 2 top (replay yeniden yazılmadı)", e14 === null && rolls14 === 2, e14 ? `${e14.status} ${e14.code} ${e14.lines?.map((l) => l.code).join(",")}` : `top=${rolls14}`);
+    const e14b = await hata(() => goodsReceiptService.addLines(r14.data.id, [{ itemId: fabric.id, initialQty: 10 }]));
+    check("§14b kontrol: gerçek fazlalık (10 m) hâlâ 400 OVER_RECEIPT", e14b?.status === 400 && e14b.code === "RECEIPT_LINES_INVALID" && e14b.lines?.[0]?.code === "OVER_RECEIPT", `${e14b?.status} ${e14b?.code}`);
+
     console.log("── §13 iki bayrak kapalı → bayt bayt eski (satırlar geçer) ──");
     await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.PURCHASE_BLOCK_OVER_RECEIPT_ENABLED } });
+    const n13 = await fisSayisi();
     const r13 = (await goodsReceiptService.create({ warehouseId: wh.id, deliveryNoteNo: `${TAG}-13`, purchaseOrderId: po.id, lines: [{ itemId: fabric.id, initialQty: 60 }, { itemId: fabric.id, initialQty: 50 }] })) as { data: { id: string; failed: unknown[] } };
     receiptIds.push(r13.data.id);
-    check("§13a engel kapalı: 110 m siparişe karşı fiş doğar, failed boş (uyarı başka kanal)", r13.data.failed.length === 0 && (await fisSayisi()) === n0 + 3);
+    check("§13a engel kapalı: 110 m siparişe karşı fiş doğar, failed boş (uyarı başka kanal)", r13.data.failed.length === 0 && (await fisSayisi()) === n13 + 1);
   } finally {
     const rolls = await prisma.roll.findMany({ where: { itemId: { in: items } }, select: { id: true } });
     rollIds.push(...rolls.map((r) => r.id));
@@ -148,8 +162,8 @@ async function main(): Promise<void> {
     await prisma.yarnLot.deleteMany({ where: { itemId: yarn.id } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...receiptIds, ...rollIds] } } });
     await prisma.goodsReceipt.deleteMany({ where: { deliveryNoteNo: { startsWith: TAG } } }).catch(() => undefined);
-    await prisma.purchaseOrderLine.deleteMany({ where: { purchaseOrderId: po.id } }).catch(() => undefined);
-    await prisma.purchaseOrder.deleteMany({ where: { id: po.id } }).catch(() => undefined);
+    await prisma.purchaseOrderLine.deleteMany({ where: { purchaseOrder: { orderNo: { startsWith: TAG } } } }).catch(() => undefined);
+    await prisma.purchaseOrder.deleteMany({ where: { orderNo: { startsWith: TAG } } }).catch(() => undefined);
     await prisma.itemAllowedColor.deleteMany({ where: { itemId: { in: items } } }).catch(() => undefined);
     await prisma.color.deleteMany({ where: { id: { in: [colorOk.id, colorOther.id, colorPasif.id] } } }).catch(() => undefined);
     await prisma.fabricProperty.deleteMany({ where: { id: propPasif.id } }).catch(() => undefined);
