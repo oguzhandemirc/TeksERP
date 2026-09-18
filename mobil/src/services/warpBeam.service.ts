@@ -8,7 +8,7 @@
 // =============================================================================
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
-import type { WarpBeamMountMethod, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, WarpLengthSource } from '../types/models';
+import type { WarpBeamMountMethod, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, WarpLengthSource, YarnLotQualityStatus } from '../types/models';
 
 export type { WarpBeamMountMethod, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, WarpLengthSource };
 
@@ -52,7 +52,9 @@ export interface TabletContext {
   subcontractors: { id: string; name: string }[];
   suppliers: { id: string; name: string; type: 'CUSTOMER' | 'SUPPLIER' | 'BOTH'; isCustomerRole: boolean; isSupplierRole: boolean; isSubcontractorRole: boolean }[];
   /** Faz 2 (lot): kart ipliklerinin aktif lotları, türetilen bakiyeyle. Eski sunucu göndermez → form lot sormaz. */
-  yarnLots?: { id: string; lotNo: string; itemId: string; balanceKg: number }[];
+  yarnLots?: { id: string; lotNo: string; itemId: string; balanceKg: number; qualityStatus?: YarnLotQualityStatus }[];
+  /** Kalite bekletme etkin mi — rozet/uyarı için; kapı sunucuda. */
+  yarnQualityHold?: boolean;
   /** `devere.lotRequired` SUNUCUDAN — istemci tahmin etmez; alan yoksa false (bugünkü davranış). */
   lotRequired?: boolean;
   /** Faz 3 (E3): levent BAĞLANABİLEN makineler (yuva sayısıyla). Eski sunucu göndermez → sekme yok. */

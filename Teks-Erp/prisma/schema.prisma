@@ -9491,6 +9491,14 @@ model YarnLot {
   supplierId String? @db.Uuid
   notes      String? @db.VarChar(300)
   isActive   Boolean @default(true)
+  /// KALİTE BEKLETME (2026-09-18; SAP QM kalite denetim stoğu → serbest/bloke): RELEASED varsayılan = bugünkü davranış.
+  /// `goodsReceipt.yarnQualityHoldEnabled` açıkken mal kabulde doğan lot ON_HOLD doğar; ON_HOLD/BLOCKED lota çıkış
+  /// (OUT · WARP_ISSUE · SUBCONTRACT_OUT) yazılamaz (400 `YARN_LOT_ON_HOLD`). Karar iş kararıdır → kalıcı kolon
+  /// (`qualityDecidedAt/ById`), audit ayrıca; tek yazar `yarnLotService.decideQuality`.
+  qualityStatus     YarnLotQualityStatus @default(RELEASED)
+  qualityDecidedAt  DateTime?            @db.Timestamptz
+  qualityDecidedById String?             @db.Uuid
+  qualityNote       String?              @db.VarChar(300)
   /// G3 EMANET — bu lot müşterinin ipliği (mal bizim değil); doğum niteliği (lot create), PATCH'ten yazılamaz.
   /// Bu lottan sarılan levent owner'ı kalıtır (`resolveOwnerFromLotsTx`).
   ownerCustomerId String? @db.Uuid
@@ -9510,7 +9518,16 @@ model YarnLot {
   @@unique([itemId, lotNo])
   @@index([supplierId])
   @@index([ownerCustomerId])
+  @@index([qualityStatus])
   @@map("yarn_lots")
+}
+
+/// İplik lotu kalite durumu (2026-09-18): RELEASED serbest (varsayılan) · ON_HOLD kalite bekletmede (mal kabulde doğuş,
+/// bayrak açıkken) · BLOCKED bloke (karar). Çıkış kapısı `assertLotQualityReleasedTx`.
+enum YarnLotQualityStatus {
+  RELEASED
+  ON_HOLD
+  BLOCKED
 }
 
 /// Fiyatın YÖNÜ — alış mı satış mı.

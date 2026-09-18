@@ -146,6 +146,8 @@ export const SETTING_KEYS = {
    *  ticari bir olay değildir) ve bedelsiz kalemler için kaçış yolu
    *  `financeAllowZeroPriceLineEnabled`tir — ikisi birlikte düşünülür. */
   GOODS_RECEIPT_REQUIRE_PRICE_ENABLED: "goodsReceipt.requirePriceEnabled",
+  /** İplik lotu kalite bekletme (2026-09-18): açıkken mal kabulde doğan lot ON_HOLD doğar, ON_HOLD/BLOKE lota çıkış 400. Varsayılan KAPALI. */
+  GOODS_RECEIPT_YARN_QUALITY_HOLD_ENABLED: "goodsReceipt.yarnQualityHoldEnabled",
   /** SIFIR fiyatlı fatura satırıyla ONAYA izin ver (default FALSE = sıfır fiyat
    *  reddedilir). Promosyon/numune/bedelsiz sevk içindir. ⚠️ İzin verilen şey
    *  SIFIRDIR, boş/çözülemeyen fiyat DEĞİL: "0 yazdım" bir karardır, "fiyat
@@ -1403,6 +1405,8 @@ export interface FeatureFlags {
    *  MUAF: ters/iptal satırları. Bedelsiz kalem kaçışı
    *  `financeAllowZeroPriceLineEnabled`tir. */
   goodsReceiptRequirePriceEnabled: boolean;
+  /** İplik lotu kalite bekletme: mal kabulde doğan lot ON_HOLD doğar; ON_HOLD/BLOCKED lota çıkış 400 (varsayılan KAPALI = bugünkü). HAM; etkin `ticaret && iplik && bayrak`. */
+  goodsReceiptYarnQualityHoldEnabled: boolean;
   /** Sıfır fiyatlı fatura satırıyla onaya izin ver (default false). İzin
    *  verilen SIFIRDIR, boş/çözülemeyen fiyat değil; negatif her hâlükârda red. */
   financeAllowZeroPriceLineEnabled: boolean;
@@ -1859,6 +1863,7 @@ export class SystemSettingService {
       yarnBlockNegativeBalanceEnabled: await readYarnBlockNegativeBalanceEnabled(cacheClient),
       purchaseBlockOverReceiptEnabled: await readPurchaseBlockOverReceiptEnabled(cacheClient),
       goodsReceiptRequirePriceEnabled: await readGoodsReceiptRequirePriceEnabled(cacheClient),
+      goodsReceiptYarnQualityHoldEnabled: await readGoodsReceiptYarnQualityHoldEnabled(cacheClient),
       financeAllowZeroPriceLineEnabled: await readFinanceAllowZeroPriceLineEnabled(cacheClient),
       financeFutureDatedDocumentBlockEnabled:
         await readFinanceFutureDatedDocumentBlockEnabled(cacheClient),
@@ -2241,6 +2246,12 @@ export class SystemSettingService {
         "Mal kabul satırında birim fiyat zorunlu (çözülemezse 400; ters/iptal satırları muaf)",
         userId
       );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "goodsReceiptYarnQualityHoldEnabled")) {
+      if (typeof input.goodsReceiptYarnQualityHoldEnabled !== "boolean") {
+        throw AppError.badRequest("goodsReceiptYarnQualityHoldEnabled boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.GOODS_RECEIPT_YARN_QUALITY_HOLD_ENABLED, input.goodsReceiptYarnQualityHoldEnabled, "Mal kabulde doğan iplik lotu kalite bekletmede doğar; bekletmedeki/bloke lota çıkış yazılamaz", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "financeAllowZeroPriceLineEnabled")) {
@@ -3719,6 +3730,13 @@ export async function readPurchaseBlockOverReceiptEnabled(
 }
 
 /** Mal kabul satırında birim fiyat zorunlu mu? Default false. */
+/** İplik lotu kalite bekletme. Default FALSE (satır yoksa lot RELEASED doğar, kapı koşmaz — bugünkü davranış). HAM değer. */
+export async function readGoodsReceiptYarnQualityHoldEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({ where: { key: SETTING_KEYS.GOODS_RECEIPT_YARN_QUALITY_HOLD_ENABLED }, select: { value: true } });
+  return asBoolean(setting?.value);
+}
+
 export async function readGoodsReceiptRequirePriceEnabled(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
@@ -4749,6 +4767,13 @@ export async function resolvePurchaseBlockOverReceiptEnabled(
 export async function resolveInvoiceMatchToleranceEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   if (!(await readFinanceEnabled(tx))) return false;
   return readFinanceInvoiceMatchTolerance(tx);
+}
+
+/** İplik lotu kalite bekletme ETKİN mi (`ticaret && iplik && bayrak`) — doğuş ON_HOLD + çıkış kapısı bunu okur. */
+export async function resolveYarnQualityHoldEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  if (!(await readTicaretEnabled(tx))) return false;
+  if (!(await readIplikEnabled(tx))) return false;
+  return readGoodsReceiptYarnQualityHoldEnabled(tx);
 }
 
 /** Mal kabulde fiyat zorunlu mu — ETKİN değer (`ticaret && bayrak`). */

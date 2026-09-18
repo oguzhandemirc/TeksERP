@@ -78,7 +78,7 @@ const ALLOW = {
   subcontractors: ["id", "name"],
   suppliers: ["id", "name", "type", "isCustomerRole", "isSupplierRole", "isSubcontractorRole"],
   // Faz 2 A3: lot adayları — allowlist `map`; `notes`/`supplierId` sızmaz.
-  yarnLots: ["id", "lotNo", "itemId", "balanceKg"],
+  yarnLots: ["id", "lotNo", "itemId", "balanceKg", "qualityStatus"],
   // Faz 3 E3: bağlanabilir makineler — allowlist `map`; `productionLineCount`/`isActive` sızmaz.
   loomMachines: ["id", "code", "name", "stationName", "warpBeamSlots"],
 } as const;

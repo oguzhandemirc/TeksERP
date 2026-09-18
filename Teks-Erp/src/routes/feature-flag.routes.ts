@@ -247,6 +247,8 @@ export const updateSchema = z.strictObject({
   // ⚠️ ACİL KAPATMA anahtarı — fiyatı henüz belli olmayan mal depoda beklerse
   // kabul hiç yapılamaz.
   goodsReceiptRequirePriceEnabled: z.boolean().optional(),
+  // goodsReceipt.yarnQualityHoldEnabled — iplik lotu kalite bekletme (default false). Backend ENFORCE.
+  goodsReceiptYarnQualityHoldEnabled: z.boolean().optional(),
   // finance.allowZeroPriceLineEnabled — sıfır fiyatlı fatura satırıyla onaya izin
   // (promosyon/numune). İzin verilen SIFIRDIR, boş fiyat değil; negatif yine red.
   financeAllowZeroPriceLineEnabled: z.boolean().optional(),

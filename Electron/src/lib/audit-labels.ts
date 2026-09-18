@@ -632,6 +632,10 @@ export const ENUM_LABELS: Record<string, string> = {
   // G3 emanet (2026-09-15): müşterinin emanet leventi (mal bizim değil; taraf `ownerCustomerId`).
   CONSIGNED: "Müşterinin emanet leventi",
   THEORETICAL: "Nominal (hesap)",
+  // YarnLotQualityStatus (iplik lotu kalite bekletme, 2026-09-18)
+  RELEASED: "Serbest",
+  ON_HOLD: "Kalite bekletmede",
+  BLOCKED: "Bloke",
   WARP_ISSUE: "Çözgü çıkışı (levente sarım)",
   WARP_ISSUE_REVERSAL: "Çözgü çıkışı iptali",
   WARP_RETURN: "Levent dibi iadesi",

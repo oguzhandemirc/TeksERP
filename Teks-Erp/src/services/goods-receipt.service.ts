@@ -1251,7 +1251,7 @@ export class GoodsReceiptService {
       // CANCELLED fişe iplik satırı DOĞMAZ.
       await this.claimActiveReceiptTx(tx, receipt.id, receipt.receiptNo);
       // Lot doğuşu tek kapı: `[kalem, lotNo]` upsert, 8029 kilidi (tedarikçi yalnız ilk doğuşta yazılır).
-      const lot = lotNo ? await ensureYarnLotTx(tx, { itemId: line.itemId, lotNo, supplierId: receipt.supplierId, userId }) : null;
+      const lot = lotNo ? await ensureYarnLotTx(tx, { itemId: line.itemId, lotNo, source: "RECEIPT", supplierId: receipt.supplierId, userId }) : null;
       const applied = await applyYarnMovementTx(tx, {
         itemId: line.itemId,
         warehouseId: receipt.warehouseId,

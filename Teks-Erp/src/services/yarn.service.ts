@@ -44,7 +44,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { yarnMovementSign } from "./helpers/yarn-sign.helper";
 import { assertYarnBalanceCoversTx } from "./helpers/yarn-balance-guard.helper";
-import { assertLotMatchesItemTx, normalizeLotNo, yarnLotBalancesTx } from "./helpers/yarn-lot.helper";
+import { assertLotMatchesItemTx, assertLotQualityReleasedTx, normalizeLotNo, yarnLotBalancesTx } from "./helpers/yarn-lot.helper";
 import { readIplikEnabled } from "./system-setting.service";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import { buildTurkishSearch } from "../utils/query-parser";
@@ -194,6 +194,8 @@ export async function applyYarnMovementTx(tx: Tx, input: YarnMovementTxInput): P
   // belge stornosu; guard oraya GENİŞLETİLMEZ (test_yarn_stock §10).
   // Lot beyanı varsa önce KİMLİK: lot bu kalemin mi, aktif mi (çapraz-tablo CHECK yok).
   if (input.lotId) await assertLotMatchesItemTx(tx, input.lotId, input.itemId);
+  // Kimlikten sonra KALİTE: bekletmedeki/bloke lottan çıkış yok (yalnız çıkış türleri, bayrak etkinse).
+  if (input.lotId) await assertLotQualityReleasedTx(tx, input.lotId, input.kind);
   await assertYarnBalanceCoversTx(tx, {
     itemId: input.itemId,
     warehouseId: input.warehouseId,

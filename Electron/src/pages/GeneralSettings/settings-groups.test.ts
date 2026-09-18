@@ -261,7 +261,7 @@ describe("⭐ rejim kapısı — anahtarın kendisi asla kapının arkasında ol
     ]);
     expect(
       (SETTINGS_CATEGORIES.find((c) => c.id === "yarn")?.flags ?? []).map((f) => f.key),
-    ).toEqual(["yarnBlockNegativeBalanceEnabled"]);
+    ).toEqual(["yarnBlockNegativeBalanceEnabled", "goodsReceiptYarnQualityHoldEnabled"]);
   });
 
   it("kilit bandındaki modül adı backend AYNASINDAN gelir", () => {

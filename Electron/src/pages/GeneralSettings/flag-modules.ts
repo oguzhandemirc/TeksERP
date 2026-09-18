@@ -151,6 +151,8 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
 
   // --- İPLİK (kg defteri) ---------------------------------------------------
   yarnBlockNegativeBalanceEnabled: "iplikEnabled",
+  // İplik lotu kalite bekletme (2026-09-18): etkin değer sunucuda ticaret ∧ iplik — panelde iplik ETKİN değerdir, kilit bandı aynı kapıyı gösterir.
+  goodsReceiptYarnQualityHoldEnabled: "iplikEnabled",
 
   // --- FASON / KARTELA — anahtarları HENÜZ YOK ------------------------------
   // Üretime asmak YANLIŞ modülü kapatırdı: fason tasarımda ayrı bir modüldür

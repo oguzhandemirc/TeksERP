@@ -9,10 +9,21 @@
 // `lotNo` irsaliyedeki metindir: AYRIŞTIRILMAZ, normalize EDİLMEZ (büyük/küçük harf,
 // boşluk yapısı korunur) — yalnız çevresi TRIM edilir, boş → null (1e ek şart ①).
 // =============================================================================
-import { Prisma } from "@prisma/client";
+import { Prisma, YarnLotQualityStatus, YarnMovementKind } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { lockCodeScopeTx } from "./code-unique.helper";
 import { yarnInboundKinds } from "./yarn-sign.helper";
+import { resolveYarnQualityHoldEnabled } from "../system-setting.service";
+
+/** Lotun doğum yeri: kalite bekletme yalnız MAL KABULDE doğan lota uygulanır; elle açılan lot serbest doğar. */
+export type YarnLotBirthSource = "RECEIPT" | "MANUAL";
+
+/** Kalite kapısının baktığı ÇIKIŞ türleri — giriş, iade, storno ve sayım düzeltmesi bekletmeden etkilenmez. */
+export const YARN_LOT_QUALITY_GATED_KINDS: ReadonlySet<YarnMovementKind> = new Set<YarnMovementKind>([
+  YarnMovementKind.OUT,
+  YarnMovementKind.WARP_ISSUE,
+  YarnMovementKind.SUBCONTRACT_OUT,
+]);
 
 /** İrsaliye metni olduğu gibi; çevresindeki boşluk değil. Boş/yalnız boşluk → null. */
 export function normalizeLotNo(raw: string | null | undefined): string | null {
@@ -28,7 +39,7 @@ export function normalizeLotNo(raw: string | null | undefined): string | null {
  */
 export async function ensureYarnLotTx(
   tx: Prisma.TransactionClient,
-  input: { itemId: string; lotNo: string; supplierId?: string | null; ownerCustomerId?: string | null; userId?: string | null },
+  input: { itemId: string; lotNo: string; source: YarnLotBirthSource; supplierId?: string | null; ownerCustomerId?: string | null; userId?: string | null },
 ): Promise<{ id: string; lotNo: string; created: boolean }> {
   await lockCodeScopeTx(tx, "yarnLot", `${input.itemId}|${input.lotNo}`);
   const existing = await tx.yarnLot.findUnique({
@@ -39,11 +50,36 @@ export async function ensureYarnLotTx(
     if (!existing.isActive) throw AppError.badRequest(`"${existing.lotNo}" lotu pasif — bu lota giriş yazılamaz; lotu aktifleştirin ya da başka lot numarası girin.`, { code: "YARN_LOT_INACTIVE", lotId: existing.id });
     return { id: existing.id, lotNo: existing.lotNo, created: false };
   }
+  // Bekletme yalnız mal kabulde doğan lota: bayrak etkinse ON_HOLD doğar (karar damgası yok — henüz karar verilmedi).
+  const onHold = input.source === "RECEIPT" && (await resolveYarnQualityHoldEnabled(tx));
   const created = await tx.yarnLot.create({
-    data: { itemId: input.itemId, lotNo: input.lotNo, supplierId: input.supplierId ?? null, ownerCustomerId: input.ownerCustomerId ?? null, createdById: input.userId ?? null, updatedById: input.userId ?? null },
+    data: {
+      itemId: input.itemId, lotNo: input.lotNo, supplierId: input.supplierId ?? null, ownerCustomerId: input.ownerCustomerId ?? null,
+      qualityStatus: onHold ? YarnLotQualityStatus.ON_HOLD : YarnLotQualityStatus.RELEASED,
+      createdById: input.userId ?? null, updatedById: input.userId ?? null,
+    },
     select: { id: true, lotNo: true },
   });
   return { ...created, created: true };
+}
+
+/**
+ * Kalite kapısı: bekletmedeki/bloke lottan ÇIKIŞ yazılamaz (OUT · WARP_ISSUE · SUBCONTRACT_OUT). Bayrak
+ * kapalıyken tek sorgu bile koşmaz (bugünkü davranış); gate'siz türlerde de koşmaz. Tek yazar kapısının
+ * (`applyYarnMovementTx`) içinden çağrılır ki yarın eklenen çağıran kapısız doğmasın.
+ */
+export async function assertLotQualityReleasedTx(tx: Prisma.TransactionClient, lotId: string, kind: YarnMovementKind): Promise<void> {
+  if (!YARN_LOT_QUALITY_GATED_KINDS.has(kind)) return;
+  if (!(await resolveYarnQualityHoldEnabled(tx))) return;
+  const lot = await tx.yarnLot.findUnique({ where: { id: lotId }, select: { lotNo: true, qualityStatus: true } });
+  if (!lot || lot.qualityStatus === YarnLotQualityStatus.RELEASED) return;
+  const etiket = lot.qualityStatus === YarnLotQualityStatus.BLOCKED ? "bloke" : "kalite bekletmede";
+  throw AppError.badRequest(`"${lot.lotNo}" lotu ${etiket} — serbest bırakılmadan bu lottan çıkış yazılamaz.`, {
+    code: "YARN_LOT_ON_HOLD",
+    lotId,
+    lotNo: lot.lotNo,
+    qualityStatus: lot.qualityStatus,
+  });
 }
 
 /**

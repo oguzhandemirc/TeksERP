@@ -19,6 +19,7 @@
 // ters kayıtla (ADJUST_OUT/ADJUST_IN) kapatılır. Bir `PATCH /movements/:id`
 // eklemek geçmişi yeniden yazmak olurdu.
 // =============================================================================
+import { YarnLotQualityStatus } from "@prisma/client";
 import { Router } from "express";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
@@ -27,6 +28,8 @@ import { requireIplikEnabled } from "../middlewares/module.middleware";
 import { yarnService } from "../services/yarn.service";
 import { yarnLotService } from "../services/yarn-lot.service";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
+import { AppError } from "../utils/app-error";
+import { readFilterList } from "../utils/query-parser";
 
 const router = Router();
 
@@ -250,10 +253,17 @@ router.get("/lots", requirePermission("warehouse:read"), async (req, res, next) 
         supplierId: z.string().uuid().optional(),
         search: z.string().max(100).optional(),
         isActive: z.enum(["true", "false"]).optional(),
+        /** Kalite durumu — CSV (`RELEASED,ON_HOLD`); tanınmayan değer 400 (fail-closed). */
+        qualityStatus: z.string().max(100).optional(),
       })
       .strict()
       .parse(req.query);
-    res.json(await yarnLotService.list({ ...q, isActive: q.isActive === undefined ? undefined : q.isActive === "true" }));
+    const qualityStatus = readFilterList(q.qualityStatus).map((v) => {
+      const parsed = z.nativeEnum(YarnLotQualityStatus).safeParse(v);
+      if (!parsed.success) throw AppError.badRequest(`Tanınmayan kalite durumu: ${v}`, { code: "YARN_LOT_QUALITY_STATUS_INVALID" });
+      return parsed.data;
+    });
+    res.json(await yarnLotService.list({ ...q, qualityStatus, isActive: q.isActive === undefined ? undefined : q.isActive === "true" }));
   } catch (e) {
     next(e);
   }
@@ -310,6 +320,32 @@ router.patch("/lots/:id", requirePermission("yarn:write"), async (req, res, next
       .strict()
       .parse(req.body ?? {});
     res.json(await yarnLotService.update(assertValidUuid(req.params.id, "id"), body, req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/yarn/lots/{id}/quality:
+ *   patch:
+ *     tags: [Yarn]
+ *     summary: Lot kalite kararı — RELEASED / ON_HOLD / BLOCKED (karar damgalanır); izin `quality:write`, pasif lot 400
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Karar yazıldı }
+ *       400: { description: YARN_LOT_INACTIVE }
+ */
+router.patch("/lots/:id/quality", requirePermission("quality:write"), async (req, res, next) => {
+  try {
+    const body = z
+      .object({
+        status: z.nativeEnum(YarnLotQualityStatus),
+        note: z.string().max(300).nullable().optional(),
+      })
+      .strict()
+      .parse(req.body ?? {});
+    res.json(await yarnLotService.decideQuality(assertValidUuid(req.params.id, "id"), body, req.user?.userId));
   } catch (e) {
     next(e);
   }

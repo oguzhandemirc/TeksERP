@@ -268,6 +268,8 @@ export interface FeatureFlags {
   purchaseBlockOverReceiptEnabled: boolean;
   /** Mal kabul satırında birim fiyat zorunlu (default false; çözülemezse 400). */
   goodsReceiptRequirePriceEnabled: boolean;
+  /** İplik lotu kalite bekletme (2026-09-18): mal kabulde doğan lot bekletmede doğar; bekletmede/bloke lota çıkış yazılamaz — varsayılan kapalı. */
+  goodsReceiptYarnQualityHoldEnabled: boolean;
   /** Sıfır fiyatlı fatura satırıyla onaya izin ver (default false). İzin
    *  verilen SIFIRDIR, boş fiyat değil; negatif fiyat her hâlükârda reddedilir. */
   financeAllowZeroPriceLineEnabled: boolean;

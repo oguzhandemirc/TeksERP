@@ -611,7 +611,8 @@ async function main(): Promise<void> {
   );
   // ⚠️ UYDURMA İZİN KODU KATALOGDA OLMAZ → Admin dışı HERKES 403 alır ve sebep
   // ekranda yazmaz. Kod bir yazım hatasıyla ("warehouse:reed") sessizce ölür.
-  const ALLOWED_CODES = new Set(["warehouse:read", "yarn:write"]);
+  // `quality:write`: lot kalite kararı (2026-09-18) — mevcut katalog kodu, yeni izin açılmadı.
+  const ALLOWED_CODES = new Set(["warehouse:read", "yarn:write", "quality:write"]);
   const usedCodes = [...routeSrc.matchAll(/requirePermission\("([^"]+)"\)/g)].map((m) => m[1]!);
   const unknown = usedCodes.filter((c) => !ALLOWED_CODES.has(c));
   check(

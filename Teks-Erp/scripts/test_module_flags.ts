@@ -434,6 +434,8 @@ function main(): void {
     readDokumaOrderLineLinkRequired: { resolver: "resolveOrderLineLinkRequired", ebeveyn: "üretim+dokuma" },
     // n irsaliye → 1 fatura (2026-09-18): onay toleransı muhasebe modülünün davranış bayrağı.
     readFinanceInvoiceMatchTolerance: { resolver: "resolveInvoiceMatchToleranceEnabled", ebeveyn: "finans" },
+    // İplik lotu kalite bekletme (2026-09-18): doğuş + çıkış kapısı yalnız resolver okur.
+    readGoodsReceiptYarnQualityHoldEnabled: { resolver: "resolveYarnQualityHoldEnabled", ebeveyn: "ticaret+iplik" },
   };
 
   const servisKodu = yorumlariSok(fs.readFileSync(SERVIS, "utf8"));

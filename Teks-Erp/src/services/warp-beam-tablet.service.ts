@@ -3,13 +3,13 @@
 // =============================================================================
 // Salt okuma; yazıcı değil. Ayrı dosya: `warp-beam.service` 300 satır tavanını aşmasın.
 // =============================================================================
-import { CompanyType } from "@prisma/client";
+import { CompanyType, YarnLotQualityStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { ApiResponse } from "../types/api.types";
 import { resolveDenier } from "../constants/warp-beam";
 import { listDevereMachines, listLoomMachines } from "./warp-beam.service";
 import { yarnLotBalancesTx } from "./helpers/yarn-lot.helper";
-import { readDevereAutoConsume, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, resolveBeamWeavingLinkRequired } from "./system-setting.service";
+import { readDevereAutoConsume, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, resolveBeamWeavingLinkRequired, resolveYarnQualityHoldEnabled } from "./system-setting.service";
 import { listOpenInHouseWeavingOrders, type MachineRunTabletContextDto } from "./helpers/machine-run-suggest.helper";
 import { lastWindDefaults, type LastWindDefault } from "./helpers/warp-beam-wind-defaults.helper";
 
@@ -37,9 +37,11 @@ export interface WarpBeamTabletContextDto {
   /** Roller (İş Ortağı Rol Modeli D1): tablet alt etiketi bunlardan; `type` sıralama + eski tablet için kalır. */
   suppliers: Array<{ id: string; name: string; type: CompanyType; isCustomerRole: boolean; isSupplierRole: boolean; isSubcontractorRole: boolean }>;
   /** Faz 2 (lot): çözgü kartlarının iplik kalemlerine ait AKTİF lotlar, türetilen bakiyeyle (allowlist: id/lotNo/itemId/balanceKg). */
-  yarnLots: Array<{ id: string; lotNo: string; itemId: string; balanceKg: number }>;
+  yarnLots: Array<{ id: string; lotNo: string; itemId: string; balanceKg: number; qualityStatus: YarnLotQualityStatus }>;
   /** `devere.lotRequired` — form kapıyı SUNUCUDAN okur, tahmin etmez (1e A3 ek şart ②). */
   lotRequired: boolean;
+  /** Kalite bekletme ETKİN mi (ticaret+iplik+bayrak) — tablet rozeti gösterir, bekletmedeki lotu sunucu reddeder (400 `YARN_LOT_ON_HOLD`). */
+  yarnQualityHold: boolean;
   /** Faz 3 (E3): levent BAĞLANABİLEN makineler (istasyonu levent tüketen), yuva sayısıyla — Tak formu (allowlist). */
   loomMachines: Array<{ id: string; code: string; name: string; stationName: string; warpBeamSlots: number }>;
   /** `devere.mountTracking` — "Tezgahta" sekmesi yalnız açıkken çizilir; alan yoksa/false = bugünkü ekran. */
@@ -67,9 +69,10 @@ export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTa
   const supplierRank = (t: CompanyType): number => (t === CompanyType.CUSTOMER ? 1 : 0);
   // Lotlar SIRALI (Promise.all dışında): önce kart ipliklerinin kümesi, sonra lot + bakiye (tek sorgu).
   const yarnItemIds = [...new Set(specs.map((w) => w.yarnItemId))];
-  const lotRows = yarnItemIds.length > 0 ? await prisma.yarnLot.findMany({ where: { isActive: true, itemId: { in: yarnItemIds } }, orderBy: { lotNo: "asc" }, select: { id: true, lotNo: true, itemId: true } }) : [];
+  const lotRows = yarnItemIds.length > 0 ? await prisma.yarnLot.findMany({ where: { isActive: true, itemId: { in: yarnItemIds } }, orderBy: { lotNo: "asc" }, select: { id: true, lotNo: true, itemId: true, qualityStatus: true } }) : [];
   const balances = await yarnLotBalancesTx(prisma, lotRows.map((l) => l.id));
   const lotRequired = await readDevereLotRequired();
+  const yarnQualityHold = await resolveYarnQualityHoldEnabled();
   const [loomMachines, mountTracking, mountTrackingRequired] = [await listLoomMachines().then((r) => r.data), await readDevereMountTracking(), await readDevereMountTrackingRequired()];
   const weavingOrders = await listOpenInHouseWeavingOrders(prisma);
   const beamWeavingLinkRequired = await resolveBeamWeavingLinkRequired();
@@ -83,8 +86,9 @@ export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTa
       warehouses,
       subcontractors,
       suppliers: suppliers.map((c) => ({ id: c.id, name: c.name, type: c.type, isCustomerRole: c.isCustomerRole, isSupplierRole: c.isSupplierRole, isSubcontractorRole: c.isSubcontractorRole })).sort((a, b) => supplierRank(a.type) - supplierRank(b.type) || a.name.localeCompare(b.name, "tr")),
-      yarnLots: lotRows.map((l) => ({ id: l.id, lotNo: l.lotNo, itemId: l.itemId, balanceKg: Number(balances.get(l.id) ?? 0) })),
+      yarnLots: lotRows.map((l) => ({ id: l.id, lotNo: l.lotNo, itemId: l.itemId, balanceKg: Number(balances.get(l.id) ?? 0), qualityStatus: l.qualityStatus })),
       lotRequired,
+      yarnQualityHold,
       loomMachines,
       mountTracking,
       mountTrackingRequired,

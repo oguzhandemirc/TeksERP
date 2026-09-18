@@ -133,6 +133,9 @@ export type WarpKgSource = 'WEIGHED' | 'THEORETICAL';
 // Backend `WarpBeamMountMethod` · `WarpLengthSource` aynası (devere Faz 3, DEVERE-LEVENT-TARAMASI §4.1).
 export type WarpBeamMountMethod = 'TYING_IN' | 'DRAWING_IN' | 'HARNESS_CHANGE';
 export type WarpLengthSource = 'LOOM_COUNTER' | 'DIAMETER' | 'WEIGHED' | 'ESTIMATED';
+// Backend `YarnLotQualityStatus` aynası (iplik lotu kalite bekletme): levent sarımı lot listesinde rozet;
+// ON_HOLD/BLOCKED lot seçilirse sunucu 400 `YARN_LOT_ON_HOLD` döner — tablet tahmin etmez.
+export type YarnLotQualityStatus = 'RELEASED' | 'ON_HOLD' | 'BLOCKED';
 
 // =============================================================================
 // Master data — Color, FabricProperty
