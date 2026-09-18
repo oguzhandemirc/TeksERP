@@ -9,9 +9,8 @@ import { ApiResponse } from "../types/api.types";
 import { resolveDenier } from "../constants/warp-beam";
 import { listDevereMachines, listLoomMachines } from "./warp-beam.service";
 import { yarnLotBalancesTx } from "./helpers/yarn-lot.helper";
-import { readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, resolveBeamWeavingLinkRequired } from "./system-setting.service";
+import { readDevereAutoConsume, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, resolveBeamWeavingLinkRequired } from "./system-setting.service";
 import { listOpenInHouseWeavingOrders, type MachineRunTabletContextDto } from "./helpers/machine-run-suggest.helper";
-import { readDevereAutoConsume, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired } from "./system-setting.service";
 import { lastWindDefaults, type LastWindDefault } from "./helpers/warp-beam-wind-defaults.helper";
 
 /**
