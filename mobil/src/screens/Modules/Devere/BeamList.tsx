@@ -11,7 +11,12 @@ import {
 } from "react-native-paper";
 import { colors, spacing, radius, typography } from "../../../theme";
 import type { WarpBeam } from "../../../services/warpBeam.service";
-import { ORIGIN_LABEL, STATUS_LABEL, beamActionsEnabled } from "./beamPayload";
+import {
+  ORIGIN_LABEL,
+  STATUS_LABEL,
+  beamActionsEnabled,
+  physicalBeamBusyWarning,
+} from "./beamPayload";
 import type { DevereScreenState } from "./useDevereScreen";
 import MountedTab from "./MountedTab";
 
@@ -28,6 +33,11 @@ function Row({ beam, state }: { beam: WarpBeam; state: DevereScreenState }) {
   const planned = beam.status === "PLANNED";
   const locked = !state.isOnline || state.busy;
   const shippedOut = beam.status === "SHIPPED_OUT";
+  // Planlı leventin gövdesi başka canlı leventte dolu ise KALICI uyarı rozeti (SAR anında 409 gelecek —
+  // operatör listede önceden görsün, boşuna SAR açmasın). Ölçüt sunucu `assertPhysicalBeamFreeTx` aynası.
+  const bodyBusyWarning = planned
+    ? physicalBeamBusyWarning(beam.physicalBeamNo, state.physicalBusyBeams, beam.id)
+    : null;
   return (
     <View style={styles.rowCard}>
       <View style={styles.grow}>
@@ -36,7 +46,11 @@ function Row({ beam, state }: { beam: WarpBeam; state: DevereScreenState }) {
           {shippedOut ? (
             <Text style={styles.badge}>{STATUS_LABEL[beam.status]}</Text>
           ) : null}
+          {bodyBusyWarning ? (
+            <Text style={styles.busyBadge} testID="beam-govde-rozet">{`Gövde dolu · ${beam.physicalBeamNo}`}</Text>
+          ) : null}
         </View>
+        {bodyBusyWarning ? <Text style={styles.busyHint}>{bodyBusyWarning}</Text> : null}
         <Text
           style={styles.meta}
         >{`${beam.warpSpec.code} — ${beam.warpSpec.name} · ${beam.warpSpec.endsCount} tel`}</Text>
@@ -189,6 +203,16 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     overflow: "hidden",
   },
+  busyBadge: {
+    fontSize: typography.size.sm,
+    color: colors.dangerText,
+    backgroundColor: colors.dangerContainer,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.sm,
+    overflow: "hidden",
+  },
+  busyHint: { fontSize: typography.size.sm, color: colors.dangerText, marginTop: 2 },
   meta: { fontSize: typography.size.sm, color: colors.textSecondary },
   actions: { flexDirection: "row", gap: spacing.sm, alignItems: "center" },
   tallButton: { height: 48 },
