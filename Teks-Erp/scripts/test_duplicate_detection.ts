@@ -92,6 +92,17 @@ async function main(): Promise<void> {
 
   // ── §2 Fixture + tarama ───────────────────────────────────────────────────
   console.log("\n── §2 Tarama: kesin ad · kimlik · bulanık ad ──");
+  // SÜPÜRME: yarım kalmış eski koşumun `TDUP*` kartları (damga koşum başına; id listesi ölünce `finally` onları
+  // bulamaz) bulanık ad grubunu şişirir ("Şahin Tekstil" 2 yerine 4 kayıt) — ölçüm kendi kalıntısına takılmasın.
+  // Sıra FK'ya göre: inceleme satırı → hesap (Z-A: kart hesapla doğabilir) → kart/renk/ürün.
+  const eskiKart = await prisma.customer.findMany({ where: { code: { startsWith: "TDUP" }, NOT: { code: { startsWith: TAG } } }, select: { id: true } });
+  if (eskiKart.length > 0) {
+    const eskiIds = eskiKart.map((c) => c.id);
+    await prisma.duplicateReview.deleteMany({ where: { OR: [{ aId: { in: eskiIds } }, { bId: { in: eskiIds } }] } });
+    await prisma.cariAccount.deleteMany({ where: { customerId: { in: eskiIds } } });
+    await prisma.customer.deleteMany({ where: { id: { in: eskiIds } } });
+    console.log(`⚠️ süpürme: ${eskiIds.length} eski TDUP kartı silindi (yarım kalmış koşum kalıntısı)`);
+  }
   const custA = await prisma.customer.create({ data: { code: `${TAG}-CA`, name: `${TAG} Şahin Tekstil A.Ş.`, taxNumber: "123 456 78 90" }, select: { id: true } });
   // B: çekirdek kelimede TEK HARF farkı (SAHİM) → skor tam %90 bandında kalsın ki §4
   // eşik testi gerçekten bir şey ölçsün (çekirdekler birebir aynıysa eşik ne olursa

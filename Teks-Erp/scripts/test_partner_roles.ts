@@ -184,8 +184,11 @@ async function main(): Promise<void> {
 }
 
 async function temizle(): Promise<void> {
+  const kartWhere = { OR: [{ name: { startsWith: T } }, { code: { startsWith: T } }] };
   await prisma.subcontractor.deleteMany({ where: { OR: [{ code: { startsWith: T } }, { customer: { name: { startsWith: T } } }] } });
-  await prisma.customer.deleteMany({ where: { OR: [{ name: { startsWith: T } }, { code: { startsWith: T } }] } });
+  // Z-A: kart hesabıyla doğar (finans açıkken) — hesap (Restrict FK) karttan ÖNCE gider; hareket/bakiye yok (boş doğar).
+  await prisma.cariAccount.deleteMany({ where: { OR: [{ customer: kartWhere }, { subcontractor: { code: { startsWith: T } } }] } });
+  await prisma.customer.deleteMany({ where: kartWhere });
 }
 
 main().catch(async (e) => {

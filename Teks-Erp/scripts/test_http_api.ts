@@ -204,6 +204,9 @@ async function main() {
       check(`[403] GET ${rt.path} yetkisiz`, forbidden.status === 403, `status=${forbidden.status} (${rt.guard})`);
     }
   } finally {
+    // Z-A: kart hesabıyla doğar (finans açıkken) — hesap (Restrict FK) karttan ÖNCE; yoksa `.catch` kalıntı gizler.
+    const kartlar = [createdCustomerId, dupCustomerId].filter((x): x is string => !!x);
+    if (kartlar.length > 0) await prisma.cariAccount.deleteMany({ where: { customerId: { in: kartlar } } }).catch(() => {});
     if (createdCustomerId) {
       await prisma.customer.delete({ where: { id: createdCustomerId } }).catch(() => {});
     }
