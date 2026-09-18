@@ -321,7 +321,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // birebir); `yarn:write`/`warehouse:write` ekran İÇİ yetenektir.
   { key: "operations/goods-receipts", app: "desktop", modul: "ticaretEnabled", title: "Mal Kabul", requires: ["goods-receipt:read"], capabilities: ["goods-receipt:write"] },
   { key: "operations/purchase-orders", app: "desktop", modul: "ticaretEnabled", title: "Alış Siparişleri", requires: ["purchase-order:read", "purchase-order:write"], capabilities: [] },
-  { key: "operations/yarn-stock", app: "desktop", modul: "iplikEnabled", title: "İplik Stoğu", requires: ["warehouse:read"], capabilities: ["yarn:write"] },
+  { key: "operations/yarn-stock", app: "desktop", modul: "iplikEnabled", title: "İplik Stoğu", requires: ["warehouse:read"], capabilities: ["yarn:write", "quality:write"] },
   { key: "operations/stock-counts", app: "desktop", modul: "ticaretEnabled", title: "Stok Sayımı", requires: ["warehouse:read"], capabilities: ["warehouse:write"] },
   { key: "operations/warehouse-transfers", app: "desktop", modul: "depoMultiEnabled", title: "Depo Transferi", requires: ["warehouse:transfer"], capabilities: [] },
   { key: "definitions/warehouses", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Depolar", requires: ["warehouse:read"], capabilities: ["warehouse:write"] },

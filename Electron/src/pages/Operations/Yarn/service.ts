@@ -29,6 +29,7 @@
 // Birine CSV göndermek 400 "Geçersiz kimlik" verir. Karıştırma.
 // =============================================================================
 import apiClient from "@/services/apiClient";
+import type { YarnLotQualityStatus } from "./yarnLotQuality";
 
 /** Backend `YarnMovementKind` enum'unun aynası (Electron backend'i import edemez). */
 export type YarnMovementKind = "IN" | "OUT" | "ADJUST_IN" | "ADJUST_OUT" | "WARP_ISSUE" | "WARP_ISSUE_REVERSAL" | "WARP_RETURN" | "WARP_RETURN_REVERSAL" | "SUBCONTRACT_OUT" | "SUBCONTRACT_OUT_CANCEL" | "SUBCONTRACT_RETURN" | "SUBCONTRACT_RETURN_CANCEL";
@@ -78,6 +79,12 @@ export interface YarnLotRow {
   ownerCustomerId?: string | null;
   ownerCustomer?: { id: string; name: string } | null;
   balanceKg: number;
+  /** Kalite bekletme (2026-09-18): RELEASED · ON_HOLD · BLOCKED; eski backend göndermez → Serbest sayılır (`lotQualityOf`). */
+  qualityStatus?: YarnLotQualityStatus | null;
+  qualityNote?: string | null;
+  /** Kararın damgası (tarih + veren) — her karar notu ve damgayı yeniden yazar. */
+  qualityDecidedAt?: string | null;
+  qualityDecidedById?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -88,7 +95,7 @@ export interface YarnLotListResponse {
   pagination: { nextCursor: string | null; hasMore: boolean; limit: number };
 }
 
-export async function listYarnLots(params: { limit?: number; cursor?: string; itemId?: string; supplierId?: string; search?: string; isActive?: boolean }): Promise<YarnLotListResponse> {
+export async function listYarnLots(params: { limit?: number; cursor?: string; itemId?: string; supplierId?: string; search?: string; isActive?: boolean; /** Düz CSV (`RELEASED,ON_HOLD`) — `/stocks` ile aynı sözleşme. */ qualityStatus?: string }): Promise<YarnLotListResponse> {
   const res = await apiClient.get("/api/yarn/lots", {
     params: {
       ...(params.limit ? { limit: params.limit } : {}),
@@ -97,6 +104,7 @@ export async function listYarnLots(params: { limit?: number; cursor?: string; it
       ...(params.supplierId ? { supplierId: params.supplierId } : {}),
       ...(params.search ? { search: params.search } : {}),
       ...(params.isActive !== undefined ? { isActive: params.isActive ? "true" : "false" } : {}),
+      ...(params.qualityStatus ? { qualityStatus: params.qualityStatus } : {}),
     },
   });
   return res.data as YarnLotListResponse;
@@ -110,6 +118,12 @@ export async function createYarnLot(body: { itemId: string; lotNo: string; suppl
 export async function updateYarnLot(id: string, body: { notes?: string | null; isActive?: boolean; supplierId?: string | null }): Promise<{ success: boolean; data: YarnLotRow }> {
   const res = await apiClient.patch(`/api/yarn/lots/${id}`, body);
   return res.data as { success: boolean; data: YarnLotRow };
+}
+
+/** Kalite geçişi — `PATCH /api/yarn/lots/:id/quality` (izin `quality:write`); not yalnız Bloke'de sorulur, sunucu her geçişte kabul eder. */
+export async function setYarnLotQuality(id: string, body: { status: YarnLotQualityStatus; note?: string | null }): Promise<{ success: boolean; data: YarnLotRow; message?: string }> {
+  const res = await apiClient.patch(`/api/yarn/lots/${id}/quality`, body);
+  return res.data as { success: boolean; data: YarnLotRow; message?: string };
 }
 
 // ⚠️ Yanıt tipleri "…ListResponse" adını taşır, "…Page" DEĞİL: bu klasörde

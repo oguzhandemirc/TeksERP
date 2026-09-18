@@ -2,7 +2,8 @@
 // İPLİK LOTLARI — "Lotlar" sekmesi (devere Faz 2): liste (türetilen bakiye) · elle aç · pasife al
 // =============================================================================
 // Lot DURUM kaydıdır, bakiyesi hareketlerden türetilir (sunucu). Silme yok — pasife alma.
-// Süzme sunucuda (kalem · arama · aktiflik), cursor'lu; izin: liste `warehouse:read`, yazma `yarn:write`.
+// Süzme sunucuda (kalem · arama · aktiflik · kalite CSV), cursor'lu; izin: liste `warehouse:read`, yazma `yarn:write`,
+// kalite geçişi `quality:write` (rozet + satır menüsü: `YarnLotQualityMenu`).
 // =============================================================================
 import { useState } from "react";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -19,7 +20,10 @@ import type { Item } from "@/pages/Items/types";
 import { customerService } from "@/pages/Customers/service";
 import type { Customer } from "@/pages/Customers/types";
 import { useEmanetEnabled } from "@/hooks/usePricingEnabled";
+import { LabeledSelect } from "@/components/forms/LabeledSelect";
 import { YARN_ITEM_FILTER } from "./YarnFilterBar";
+import { YarnLotQualityMenu } from "./YarnLotQualityMenu";
+import { lotQualityOf, qualityFilterParam, YARN_LOT_QUALITY, YARN_LOT_QUALITY_FILTER_ALL, YARN_LOT_QUALITY_FILTER_OPTIONS } from "./yarnLotQuality";
 import { createYarnLot, listYarnLots, updateYarnLot, type YarnLotRow } from "./service";
 import { kg } from "./qty";
 
@@ -30,10 +34,11 @@ export function YarnLotsPanel() {
   const [itemId, setItemId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showPassive, setShowPassive] = useState(false);
+  const [quality, setQuality] = useState(YARN_LOT_QUALITY_FILTER_ALL);
   const [creating, setCreating] = useState(false);
   const q = useInfiniteQuery({
-    queryKey: [...LOTS_KEY, itemId, search, showPassive],
-    queryFn: ({ pageParam }) => listYarnLots({ limit: 50, cursor: pageParam, itemId: itemId ?? undefined, search: search || undefined, isActive: showPassive ? undefined : true }),
+    queryKey: [...LOTS_KEY, itemId, search, showPassive, quality],
+    queryFn: ({ pageParam }) => listYarnLots({ limit: 50, cursor: pageParam, itemId: itemId ?? undefined, search: search || undefined, isActive: showPassive ? undefined : true, qualityStatus: qualityFilterParam(quality) }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.pagination.nextCursor ?? undefined,
   });
@@ -54,6 +59,7 @@ export function YarnLotsPanel() {
           <ReferenceSelect<Item> value={itemId} onChange={setItemId} service={itemService} queryKey="items-yarn-lots" getLabel={(it) => `${it.code} — ${it.name}`} placeholder="İplik (hepsi)" extraFilters={YARN_ITEM_FILTER} />
         </div>
         <Input className="w-56" placeholder="Lot no / kalem ara" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Lot ara" />
+        <LabeledSelect label="Kalite" value={quality} options={YARN_LOT_QUALITY_FILTER_OPTIONS} onChange={setQuality} />
         <label className="flex items-center gap-1 text-sm">
           <input type="checkbox" checked={showPassive} onChange={(e) => setShowPassive(e.target.checked)} /> Pasifleri de göster
         </label>
@@ -70,7 +76,7 @@ export function YarnLotsPanel() {
       ) : rows.length === 0 ? (
         <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">Lot yok — lotlar mal kabulde iplik satırına lot numarası yazılınca kendiliğinden doğar; elle de açılabilir.</div>
       ) : (
-        <LotTable rows={rows} onToggle={(r) => toggle.mutate(r)} busy={toggle.isPending} />
+        <LotTable rows={rows} onToggle={(r) => toggle.mutate(r)} busy={toggle.isPending} onDone={invalidate} />
       )}
       {q.hasNextPage && (
         <Button variant="outline" size="sm" onClick={() => void q.fetchNextPage()} disabled={q.isFetchingNextPage}>
@@ -82,7 +88,7 @@ export function YarnLotsPanel() {
   );
 }
 
-function LotTable({ rows, onToggle, busy }: { rows: YarnLotRow[]; onToggle: (r: YarnLotRow) => void; busy: boolean }) {
+function LotTable({ rows, onToggle, busy, onDone }: { rows: YarnLotRow[]; onToggle: (r: YarnLotRow) => void; busy: boolean; onDone: () => void }) {
   return (
         <div className="overflow-hidden rounded-md border">
       <table className="w-full text-sm">
@@ -93,6 +99,7 @@ function LotTable({ rows, onToggle, busy }: { rows: YarnLotRow[]; onToggle: (r: 
             <th className="p-2 text-left">Tedarikçi</th>
             <th className="p-2 text-right">Bakiye (kg)</th>
             <th className="p-2 text-left">Durum</th>
+            <th className="p-2 text-left">Kalite</th>
             <th className="p-2" />
           </tr>
         </thead>
@@ -110,7 +117,16 @@ function LotTable({ rows, onToggle, busy }: { rows: YarnLotRow[]; onToggle: (r: 
               {/* Türetilen bakiye — sunucu Σ hareket; eksi görünüyorsa mutabakat §41 kırmızıdır. */}
               <td className="p-2 text-right tabular-nums">{kg(r.balanceKg)}</td>
               <td className="p-2">{r.isActive ? <Badge variant="outline">Aktif</Badge> : <Badge variant="secondary">Pasif</Badge>}</td>
+              <td className="p-2">
+                <Badge variant="outline" className={YARN_LOT_QUALITY[lotQualityOf(r)].cls} title={r.qualityNote ?? undefined}>{YARN_LOT_QUALITY[lotQualityOf(r)].label}</Badge>
+                {(r.qualityNote || r.qualityDecidedAt) && (
+                  <div className="max-w-[16rem] truncate text-xs text-muted-foreground" title={r.qualityNote ?? undefined}>
+                    {r.qualityDecidedAt ? new Date(r.qualityDecidedAt).toLocaleDateString("tr-TR") : null}{r.qualityDecidedAt && r.qualityNote ? " · " : ""}{r.qualityNote}
+                  </div>
+                )}
+              </td>
               <td className="p-2 text-right">
+                <YarnLotQualityMenu row={r} onDone={onDone} />
                 <PermissionGate permission="yarn:write">
                   <Button size="sm" variant="ghost" onClick={() => onToggle(r)} disabled={busy}>
                     {r.isActive ? "Pasife al" : "Aktifleştir"}

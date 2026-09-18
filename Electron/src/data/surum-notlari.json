@@ -27,6 +27,11 @@
         {
           "kapsam": "panel",
           "tip": "yeni",
+          "metin": "İplik Stoğu → Lotlar sekmesine kalite bekletme geldi: her lot satırında Serbest, Bekletmede ya da Bloke rozeti görünür; satır menüsünden Serbest bırak ve Bekletmeye al tek tıkla yapılır, Bloke et sebep notu ve onay ister (not satırda görünür). Kalite süzgeci lotları duruma göre daraltır (Serbest + Bekletmede birlikte seçilebilir). Kalite geçişi kalite yazma yetkisi ister; mevcut lotlar Serbest olarak devam eder, hiçbir şey değişmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
           "metin": "Yeni Tahsilat / Yeni Ödeme penceresinde cari seçilince o carinin açık faturaları aynı pencerede listelenir (kalan, vade, geciken). Bir satırın yanındaki Tümü düğmesi tutarı ön-doldurur; FIFO dağıt ve Tümünü kapat düğmeleri birden çok faturayı tek tıkla eşler. Kaydet, ödemeyi yazıp seçili faturalara bağlar; hiç seçim yapılmazsa ödeme önceki sürümlerdeki gibi bağsız kaydedilir (ek zorunlu adım yok). Eşlenen toplam tutarı ya da bir faturanın açığını aşıyorsa Kaydet kilitlenir ve sebebi yazılır."
         },
         {
