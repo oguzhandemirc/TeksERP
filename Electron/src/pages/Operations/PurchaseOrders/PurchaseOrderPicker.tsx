@@ -60,7 +60,10 @@ export function PurchaseOrderPicker({ value, onChange, supplier, disabled, class
         status: LIVE_PO_STATUS,
         ...supplierPartyQuery(supplier),
       }),
-    staleTime: 30_000,
+    // Bulgu 2026-09-18: 30 sn `staleTime` kapanan siparişi seçicide tutuyordu (fiş kaydı listeyi bayatlatır). Liste
+    // her açılışta TAZE okunur; önbellek yalnız aynı diyalog içinde tekrar render için.
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const rows = q.data?.data ?? [];

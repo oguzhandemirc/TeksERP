@@ -58,6 +58,12 @@ interface Props {
   disabled?: boolean;
 }
 
+/** Otomatik doldurma kapısı (saf): sipariş var · form açık · detay TAZE (fetch bitti) · bu sipariş için henüz doldurulmadı.
+ *  `isFetching` şartı önbellekteki fiş-öncesi kalanla doldurmayı önler (bulgu 2026-09-18). */
+export function shouldAutoFill(a: { poId: string | null; disabled: boolean; isFetching: boolean; filledFor: string | null }): boolean {
+  return Boolean(a.poId) && !a.disabled && !a.isFetching && a.filledFor !== a.poId;
+}
+
 export function GoodsReceiptOrderSection({
   value,
   onChange,
@@ -77,6 +83,9 @@ export function GoodsReceiptOrderSection({
     queryKey: ["purchase-order", value],
     queryFn: () => getPurchaseOrder(value as string),
     enabled: visible && Boolean(value),
+    // Bekleyen kalemler her açılışta TAZE: önbellekteki eski kalan (fiş öncesi) "GELEN 0" gösterip satırları yeniden
+    // doldururdu (bulgu 2026-09-18). Otomatik doldurma ayrıca `isFetching` bitene dek bekler (`shouldAutoFill`).
+    refetchOnMount: "always",
   });
   const po = detailQ.data;
 
@@ -120,12 +129,11 @@ export function GoodsReceiptOrderSection({
   // `mergeFilledLines` elle girileni silmez). "Siparişsiz"e dönüş satırları SİLMEZ. Düğme kalır, ikincil: yeniden ekler.
   const autoFilledFor = useRef<string | null>(null);
   useEffect(() => {
-    if (!po || disabled) return;
-    if (autoFilledFor.current === po.id) return;
-    autoFilledFor.current = po.id;
+    if (!shouldAutoFill({ poId: po?.id ?? null, disabled: Boolean(disabled), isFetching: detailQ.isFetching, filledFor: autoFilledFor.current })) return;
+    autoFilledFor.current = po!.id;
     if (pending.length > 0) handleFill();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- yalnız sipariş DEĞİŞİNCE bir kez; pending o anki kalanlardır
-  }, [po?.id, disabled]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sipariş başına bir kez, TAZE veri gelince; pending o anki kalanlardır
+  }, [po?.id, disabled, detailQ.isFetching]);
 
   if (!visible) return null;
 

@@ -9,11 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SupplierSelect } from "@/components/forms/SupplierSelect";
 import { supplierPartyPayload, type SupplierParty } from "@/components/forms/supplierParty";
-import { useMultiWarehouse, useDefaultWarehouse, WAREHOUSES_QUERY_KEY } from "@/hooks/useWarehouses";
+import { useMultiWarehouse, useDefaultWarehouse } from "@/hooks/useWarehouses";
 import { useDevereLotRequired, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { expandLineKeys, localLineIssues, receiptLinesInvalidFrom, serverLineIssues } from "./receiptLineIssues";
 import { createGoodsReceipt } from "./service";
 import { receiptSuccessText } from "./receiptFeedback";
+import { invalidateReceiptSideEffects } from "./receiptInvalidation";
 import {
   ReceiptLineRows, emptyLine, expandLines, lineKind, receiptTotals, type DraftLine,
 } from "./ReceiptLineRows";
@@ -135,12 +136,8 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
           }),
         );
       }
-      void qc.invalidateQueries({ queryKey: ["goods-receipts"] });
-      void qc.invalidateQueries({ queryKey: ["rolls"] });
-      // İplik satırı `YarnMovement` doğurur — İplik Stoku ekranı ["yarn", …]
-      // anahtarlarını kullanır; invalidate edilmezse bakiye bayat kalır.
-      void qc.invalidateQueries({ queryKey: ["yarn"] });
-      void qc.invalidateQueries({ queryKey: WAREHOUSES_QUERY_KEY });
+      // Fiş üç sipariş sorgusunu da bayatlatır (kapanan sipariş seçicide kalmasın) — tek liste, `receiptInvalidation`.
+      invalidateReceiptSideEffects(qc);
       setLines([emptyLine()]);
       setDeliveryNoteNo("");
       setSupplier(null);

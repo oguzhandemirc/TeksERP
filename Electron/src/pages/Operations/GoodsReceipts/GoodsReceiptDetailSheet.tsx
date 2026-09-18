@@ -15,6 +15,7 @@ import {
 import { rollStatusLabels, type RollStatus } from "@/types/enums";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { receiptShelfTab } from "./receiptFeedback";
+import { invalidateReceiptSideEffects } from "./receiptInvalidation";
 import { InvoiceDetailDialog } from "@/pages/Finance/InvoiceDetailDialog";
 import { cancelGoodsReceipt, createInvoiceFromReceipt, getGoodsReceipt } from "./service";
 import type { ReceiptDetailYarnLine } from "./service";
@@ -95,12 +96,9 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange, sync }: Props) {
     mutationFn: (reason: string) => cancelGoodsReceipt(id!, reason),
     onSuccess: (res) => {
       toast.success(res.message ?? "Fiş iptal edildi.");
-      void qc.invalidateQueries({ queryKey: ["goods-receipts"] });
+      // İptal siparişi yeniden AÇAR (kalan kalemler geri gelir) — sipariş sorguları da bayatlar; tek liste.
+      invalidateReceiptSideEffects(qc);
       void qc.invalidateQueries({ queryKey: ["goods-receipt", id] });
-      void qc.invalidateQueries({ queryKey: ["rolls"] });
-      // İptal, iplik satırlarını ters kayıtla (ADJUST_OUT) düşer — İplik Stoku
-      // ekranı ["yarn", …] anahtarlarını kullanır; bakiye bayat kalmasın.
-      void qc.invalidateQueries({ queryKey: ["yarn"] });
       setConfirmCancel(false);
     },
   });
