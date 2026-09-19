@@ -52,6 +52,19 @@ export interface RollCancelPreview {
   labelPrinted: boolean;
   /** Etiketin basıldığı an (ISO) — "10:48'de bastınız" diyebilmek için. */
   labelPrintedAt: string | null;
+  /**
+   * `production.cancelReasonRequired` etkin — sebep girilmeden iptal düğmesi kapalı; kapı sunucuda
+   * (400 `CANCEL_REASON_REQUIRED`). ESKİ sunucu alanı göndermez → `undefined` = bugünkü davranış (opsiyonel).
+   */
+  reasonRequired?: boolean;
+}
+
+export const CANCEL_REASON_REQUIRED_CODE = 'CANCEL_REASON_REQUIRED';
+
+/** Sunucu "sebep zorunlu" dedi (bayrak açık, sebep boş) — iptal modalı aynı top için yeniden açılır. */
+export function isCancelReasonRequiredError(err: unknown): boolean {
+  const e = err as { status?: number | string; details?: { code?: string } } | null;
+  return e?.status === 400 && e?.details?.code === CANCEL_REASON_REQUIRED_CODE;
 }
 
 export interface RollCursorPage {

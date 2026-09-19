@@ -1,53 +1,28 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, useWindowDimensions } from 'react-native';
-import {
-  Text,
-  Button,
-  Icon,
-  ActivityIndicator,
-  TouchableRipple,
-  TextInput as PaperTextInput,
-} from 'react-native-paper';
+import { StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Button, Icon, Text, TouchableRipple } from 'react-native-paper';
 
-import AppModal from './AppModal';
-import { CANCEL_MIN_REASON } from '../constants/cancelReasons';
+import ModuleSheet, { sheet } from './ModuleSheet';
+import ModalTextInput from './ModalTextInput';
+import ReasonPresetManagerSheet from './reasonPresets/ReasonPresetManagerSheet';
+import { mainConfirmLocked, reasonRequiredOf, typedReasonOf } from './rollCancelRules';
 import { useReasonPresets } from '../hooks/useReasonPresets';
 import { usePermissions } from '../hooks/usePermission';
-import ReasonPresetManagerSheet from './reasonPresets/ReasonPresetManagerSheet';
 import type { RollCancelPreview } from '../services/roll.service';
 import type { Roll } from '../types/models';
-import { colors } from '../theme';
+import { colors, radius, spacing, typography } from '../theme';
 
 // =============================================================================
-// TOP İPTAL ONAYI — okutulan/seçilen bir topu stoktan düşürmeden önceki tek kapı.
-//
-// ⚠️ ORTAK BİLEŞEN: KK1 (Ham Giriş "Sil") ve Depo ("Stoktan Kaldır") aynı ucu
-// (`DELETE /rolls/:id`) aynı guard'larla çağırır. Kopyalanırsa iki ekran aynı
-// işlem için farklı uyarı gösterir ve ölü etiket kuralı bir tarafta sessizce
-// eksik kalır — guard backend'de olduğu için hata da vermez, yalnız operatör
-// uyarılmamış olur. Yeni bir iptal yüzeyi eklerken bu bileşeni kullan.
-//
-// Üç ayrı eksen:
-//   • `canCancel=false`  → hard-block (sevk/fason/tüketim) — onay butonu YOK.
-//   • `requiresConfirm`  → mal bir istasyonda/iş emrinde aktif (sistem İÇİ etki).
-//   • `labelPrinted`     → topun üstünde fiziksel etiket var (sistem DIŞI etki).
-// Bir top ikisini birden tetikleyebilir.
-//
-// ── SADELEŞTİRME (2026-08-06, saha geri bildirimi) ──────────────────────────
-// Ölü etiket uyarısı KENDİ KENARLIKLI KUTUSUNDA, kendi başlığı ve ikonuyla
-// çiziliyordu; içine "İptal sebebi (zorunlu)" + 6 uzun chip + gizli metin kutusu
-// da girince ekranda MODAL İÇİNDE MODAL görünüyordu (sahadan gelen şikâyet birebir
-// buydu: "iki modal üst üste çıkıyor"). Üç değişiklik:
-//   [1] Kart kalktı — uyarı tek satırlık kehribar bir cümle. Kimlik bloğu da
-//       etiketli üç satırdan iki satıra indi (barkod + "ürün · metraj · en").
-//   [2] SEBEP OPSİYONEL ve KAPALI başlar. Zorunluluk operatörü rastgele kategori
-//       seçmeye itiyordu ve o cevap, cevapsızlıktan kötüdür (denetimde dolu
-//       görünür, hiçbir şey söylemez — `manualReasons.ts` ile aynı ders).
-//       Backend de gevşetildi: sebepsiz iptal geçer, `cancelReason` NULL kalır.
-//   [3] Chip DOKUNUNCA İPTAL EDER — "seç, sonra onayla" iki dokunuşu kalktı.
-//       Emniyeti chip'in kendisi değil, sonrasındaki GERİ AL sağlar (KK1 toast'ı
-//       → `POST /rolls/:id/restore-cancel`). Bu yüzden chip başlığı ne yaptığını
-//       AÇIKÇA yazar; "Sebep" gibi nötr bir başlık seçim sanılırdı.
+// TOP İPTAL ONAYI — okutulan/seçilen bir topu stoktan düşürmeden önceki tek kapı (tek kart, `ModuleSheet`).
+// ⚠️ ORTAK BİLEŞEN: KK1 ("Sil") ve Depo ("Stoktan Kaldır") aynı ucu (`DELETE /rolls/:id`) aynı guard'larla
+// çağırır; kopyalanırsa iki ekran aynı işlem için farklı uyarı gösterir. Yeni iptal yüzeyi bunu kullanır.
+// Üç eksen: `canCancel=false` hard-block (onay yok) · `requiresConfirm` istasyonda aktif (sistem İÇİ etki) ·
+// `labelPrinted` kâğıt topun üstünde (sistem DIŞI etki) — bir top ikisini birden tetikleyebilir.
+// SEBEP varsayılan OPSİYONEL ve kapalı başlar (zorunlu tutmak operatörü rastgele kategori seçmeye itiyordu; o
+// cevap cevapsızlıktan kötü). `production.cancelReasonRequired` AÇIKKEN zorunluluk SUNUCUDAN okunur — önizleme
+// `reasonRequired` ya da 400 reddi (`submitError`) — tahmin edilmez; eski sunucu alanı göndermez → opsiyonel.
+// Chip DOKUNUNCA İPTAL EDER (tek dokunuş; emniyet sonrasındaki GERİ AL) ve sebebi kendisi taşır — zorunlu kipte
+// de açık kalır; ana düğme yalnız serbest metinle ("Diğer…") çalışır, sebep yokken kilitli.
 // =============================================================================
 
 export interface RollCancelModalProps {
@@ -59,20 +34,15 @@ export interface RollCancelModalProps {
   /** Çevrimdışı → önizleme yok; iptal kuyruğa alınır, bağlanınca uygulanır. */
   offline: boolean;
   loading: boolean;
+  /** Sunucu reddi (400 CANCEL_REASON_REQUIRED) — satır olarak çizilir, sebep alanı zorunlu açılır; null = yok. */
+  submitError?: string | null;
   onDismiss: () => void;
   /**
-   * Sebep OPSİYONEL (2026-08-06): seçilmediyse `undefined` gider ve kayıt
-   * sebepsiz iptal olarak düşer. ⚠️ Çağıran, etiketli topta `confirmLabelPrinted`
-   * bayrağını KENDİ önizlemesinden türetir — eskiden "sebep varsa onay da vardır"
-   * diye çıkarılıyordu ve sebep opsiyonelleşince o çıkarım sessizce 409 üretirdi.
+   * Sebep seçilmediyse `undefined` gider. ⚠️ Çağıran, etiketli topta `confirmLabelPrinted`
+   * bayrağını KENDİ önizlemesinden türetir — "sebep varsa onay da vardır" çıkarımı geçersiz.
    */
   onConfirm: (reason?: string) => void;
-  /**
-   * Başlık/onay metnini çağıran bağlama uyarlar. Varsayılan KK1'in dilidir
-   * ("Topu iptal et?" / "İptal Et"); Depo aynı işlemi operatörün diliyle
-   * "Stoktan kaldır?" diye sorar. Yalnız SÖZCÜK değişir — guard'lar, sebep
-   * zorunluluğu ve uyarı kutuları her iki yüzeyde de birebir aynıdır.
-   */
+  /** Başlık/onay sözcükleri çağıranın dilinde (KK1 "İptal Et" · Depo "Stoktan Kaldır"); guard'lar aynı. */
   copy?: RollCancelCopy;
 }
 
@@ -100,6 +70,157 @@ function activeAtText(activeAt: RollCancelPreview['activeAt']): string {
   return `Bu top ${wo} iş emrinin "${station}" adımında aktif.`;
 }
 
+/** Kimlik satırı: "ürün · renk · 125 mt · 180 cm" — operatörün karşılaştırdığı şey barkod, gerisi teyit. */
+function metaLine(roll: Roll): string {
+  return [
+    [roll.item?.name, roll.color?.name].filter(Boolean).join(' · ') || null,
+    `${roll.initialQty} mt`,
+    roll.width != null ? `${roll.width} cm` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+interface StatusProps {
+  offline: boolean;
+  previewLoading: boolean;
+  blocked: boolean;
+  needsConfirm: boolean;
+  labelPrinted: boolean;
+  preview: RollCancelPreview | null;
+  previewError: Error | null;
+  hint: string;
+}
+
+/** Önizleme durumu — çevrimdışı · yükleniyor · engelli · istasyonda aktif · sade açıklama; biri çizilir. */
+function PreviewStatus(p: StatusProps) {
+  if (p.offline) {
+    return (
+      <View style={styles.warnBox}>
+        <Icon source="wifi-off" size={18} color={colors.warningDark} />
+        <View style={styles.grow}>
+          <Text style={styles.warnText}>Çevrimdışısın — durum önizlemesi yok.</Text>
+          <Text style={styles.warnSub}>
+            İptal sıraya alınır, bağlanınca uygulanır. Top bu sırada bir istasyonda aktifleştiyse
+            sunucu reddedebilir.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+  if (p.previewLoading) {
+    return (
+      <View style={styles.previewLoadingRow}>
+        <ActivityIndicator size="small" color={colors.textSecondary} />
+        <Text style={styles.previewLoadingText}>Durum kontrol ediliyor…</Text>
+      </View>
+    );
+  }
+  if (p.blocked) {
+    return (
+      <View style={styles.blockBox}>
+        <Icon source="information-outline" size={18} color={colors.danger} />
+        <Text style={styles.blockText}>{p.preview?.blockReason}</Text>
+      </View>
+    );
+  }
+  if (p.needsConfirm) {
+    return (
+      <View style={styles.warnBox}>
+        <Icon source="alert" size={18} color={colors.warningDark} />
+        <View style={styles.grow}>
+          <Text style={styles.warnText}>{activeAtText(p.preview?.activeAt ?? null)}</Text>
+          <Text style={styles.warnSub}>
+            İptal edilirse bu adımdan düşülür ve adım durumu geri sarılır. Yine de iptal etmek istiyor
+            musun?
+          </Text>
+        </View>
+      </View>
+    );
+  }
+  return (
+    <>
+      {p.previewError && (
+        <Text style={styles.previewErrText}>Durum doğrulanamadı — yine de deneyebilirsin.</Text>
+      )}
+      {/* Etiket uyarısı varken genel açıklama BASTIRILIR: iki metin aynı anda okunmuyor. */}
+      {!p.labelPrinted && <Text style={styles.hint}>{p.hint}</Text>}
+    </>
+  );
+}
+
+interface ReasonProps {
+  required: boolean;
+  disabled: boolean;
+  otherText: string;
+  onOtherText: (t: string) => void;
+  onPick: (reason: string) => void;
+  onEditPresets: () => void;
+  confirmWord: string;
+}
+
+/** Sebep alanı: chip'ler DOĞRUDAN iptal eder; "Diğer…" metni ana düğmeyle gider. */
+function ReasonSection(p: ReasonProps) {
+  const [otherOpen, setOtherOpen] = useState(false);
+  // Liste SUNUCUDAN (fabrika düzenler); çevrimdışında son liste, o da yoksa APK zemini. Kayda `fullText` yazılır.
+  const { presets, isFallback } = useReasonPresets('ROLL_CANCEL');
+  const { has } = usePermissions();
+  const canEditPresets = has('roll:manual-adjust') || has('mobile:tambur-duzelt');
+  return (
+    <View style={styles.reasonWrap}>
+      <Text style={styles.reasonLabel}>
+        {p.required
+          ? 'Sebep * — zorunlu (ayar: iptalde sebep zorunlu). Dokununca iptal olur.'
+          : 'Sebebi seç — dokununca iptal olur'}
+      </Text>
+      <View style={styles.reasonChips}>
+        {presets.map((c) => (
+          <TouchableRipple
+            key={c.code}
+            onPress={() => p.onPick(c.fullText ?? c.label)}
+            disabled={p.disabled}
+            style={styles.reasonChip}
+            borderless
+          >
+            <Text style={styles.reasonChipText}>{c.label}</Text>
+          </TouchableRipple>
+        ))}
+        {/* ⚠️ Satır içi kalem YOK: chip'ler topu İPTAL EDER; düzenleme ayrı yüzeyde (ManagerSheet). */}
+        {canEditPresets && !isFallback && (
+          <TouchableRipple
+            onPress={p.onEditPresets}
+            style={styles.reasonChip}
+            borderless
+            accessibilityLabel="Hazır iptal sebeplerini düzenle"
+          >
+            <Text style={styles.reasonChipText}>✏️ Sebepleri düzenle</Text>
+          </TouchableRipple>
+        )}
+        <TouchableRipple
+          onPress={() => setOtherOpen((v) => !v)}
+          style={[styles.reasonChip, otherOpen && styles.reasonChipOn]}
+          borderless
+        >
+          <Text style={[styles.reasonChipText, otherOpen && styles.reasonChipTextOn]}>Diğer…</Text>
+        </TouchableRipple>
+      </View>
+      {otherOpen && (
+        <ModalTextInput
+          mode="outlined"
+          dense
+          autoFocus
+          placeholder={`Sebebi yaz, sonra "${p.confirmWord}" düğmesine bas`}
+          value={p.otherText}
+          onChangeText={p.onOtherText}
+          maxLength={500}
+          style={sheet.input}
+          testID="cancel-other-text"
+        />
+      )}
+    </View>
+  );
+}
+
 export default function RollCancelModal({
   roll,
   preview,
@@ -107,321 +228,155 @@ export default function RollCancelModal({
   previewError,
   offline,
   loading,
+  submitError = null,
   onDismiss,
   onConfirm,
   copy = KK1_COPY,
 }: RollCancelModalProps) {
-  const { width: winW } = useWindowDimensions();
-  const sheetWidth = Math.min(winW * 0.9, 460);
-
   // Önizleme henüz gelmedi → güvenli tarafta kal (onay butonu beklemede).
   const blocked = !offline && !!preview && !preview.canCancel;
   const needsConfirm = !!preview && preview.canCancel && preview.requiresConfirm;
-
-  // ── ÖLÜ ETİKET EKSENİ (2026-08-05) ────────────────────────────────────────
-  // `needsConfirm`'den AYRI soru: o "mal bir istasyonda mı" (sistem içi etki),
-  // bu "sahaya geçersiz bir kâğıt bırakıyor muyum" (sistem DIŞI etki). Bir top
-  // ikisini birden tetikleyebilir; ikisi de kendi uyarısını gösterir.
   const labelPrinted = !offline && !!preview && preview.canCancel && preview.labelPrinted;
+  const reasonRequired = reasonRequiredOf(preview, offline) || !!submitError;
 
-  // Sebep KAPALI başlar ve opsiyoneldir (bkz. dosya başı [2]). Açıkken chip'ler
-  // ekranın yarısını kaplıyor ve operatör onu zorunlu alan sanıyordu.
   const [reasonOpen, setReasonOpen] = useState(false);
-  const [otherOpen, setOtherOpen] = useState(false);
   const [otherText, setOtherText] = useState('');
-  // Hazır iptal sebepleri artık düzenlenebilir katalogdan gelir.
-  const { presets: cancelPresets, isFallback: cancelPresetsOffline } =
-    useReasonPresets('ROLL_CANCEL');
-  const { has: hasPermission } = usePermissions();
-  const canEditPresets =
-    hasPermission('roll:manual-adjust') || hasPermission('mobile:tambur-duzelt');
   const [managerOpen, setManagerOpen] = useState(false);
-  // Modal her açılışta temiz başlamalı — önceki topun sebebi yenisine sızmasın.
+  // Her açılışta temiz — önceki topun sebebi yenisine sızmasın.
   useEffect(() => {
     if (roll) {
       setReasonOpen(false);
-      setOtherOpen(false);
       setOtherText('');
     }
   }, [roll?.id]);
 
-  // Hard-block iken hiç gönderme. Önizleme yüklenirken de kilitle ki operatör
-  // requiresConfirm bilinmeden iptal etmesin. Offline'da önizleme yok → kilitleme
-  // (kuyruğa alınır, backend replay'de güvenliği uygular).
-  // ⚠️ SEBEP ARTIK KİLİT DEĞİL: iptal tek dokunuşta bitmeli.
+  // Hard-block'ta hiç gönderme; önizleme yüklenirken kilitle. Çevrimdışında önizleme yok → kilitleme (kuyruk).
   const confirmDisabled = loading || (!offline && previewLoading) || blocked;
-
-  /** Tek çıkış kapısı — chip'ler de ana buton da buradan geçer. */
+  const typedReason = typedReasonOf(otherText);
+  const mainLocked = confirmDisabled || mainConfirmLocked({ reasonRequired, typedReason });
   const submit = (reason?: string) => {
     if (confirmDisabled) return;
     onConfirm(reason);
   };
-  // Serbest metin yalnız anlamlıysa gider; kısa doldurma sebepsiz sayılır
-  // (backend de aynı elemeyi yapar — iki katman aynı şeyi söylesin).
-  const typed = otherText.trim();
-  const typedReason = typed.length >= CANCEL_MIN_REASON ? typed : undefined;
 
-  // Onay rengi/etiketi duruma göre.
-  const accent = blocked
-    ? colors.danger
-    : needsConfirm || labelPrinted
-      ? colors.warningDark
-      : '#dc2626';
-  const confirmColor = needsConfirm || labelPrinted ? colors.warningDark : '#dc2626';
-  // Etiketli iptalde onay metni "kâğıdı söktüm" beyanını taşır ve yan yana
-  // düzende kesiliyordu ("Etiketi Söktüm, İpta…") → o durumda butonlar alt alta.
+  const warn = needsConfirm || labelPrinted;
+  // Etiketli iptalde onay metni "kâğıdı söktüm" beyanını taşır; yan yana kesiliyordu → alt alta, Vazgeç ALTTA
+  // (baş parmağın en kolay eriştiği yer en zararsız aksiyon).
   const confirmLabel = labelPrinted
     ? `Etiketi söktüm — ${copy.confirm}`
     : needsConfirm
       ? `Yine de ${copy.confirm}`
       : copy.confirm;
-  const stackedActions = labelPrinted;
   const confirmButton = blocked ? null : (
     <Button
       mode="contained"
-      buttonColor={confirmColor}
-      textColor="#fff"
+      buttonColor={warn ? colors.warningDark : colors.dangerDark}
+      textColor={colors.textOnDark}
       icon="trash-can-outline"
       onPress={() => submit(typedReason)}
       loading={loading}
-      disabled={confirmDisabled}
-      style={rollCancelStyles.actionBtn}
-      contentStyle={rollCancelStyles.actionBtnContent}
+      disabled={mainLocked}
+      style={styles.actionBtn}
+      contentStyle={styles.actionBtnContent}
+      testID="cancel-onay"
     >
       {confirmLabel}
     </Button>
   );
 
-  // Kimlik satırı: "ALP · Kırmızı · 125 mt · 180 cm". Etiketli üç satır yerine tek
-  // satır — operatörün karşılaştırdığı şey barkod, gerisi teyit.
-  const metaLine = roll
-    ? [
-        [roll.item?.name, roll.color?.name].filter(Boolean).join(' · ') || null,
-        `${roll.initialQty} mt`,
-        roll.width != null ? `${roll.width} cm` : null,
-      ]
-        .filter(Boolean)
-        .join(' · ')
-    : '';
-
   return (
-    <AppModal visible={!!roll} onDismiss={onDismiss} dismissable={!loading}>
-      <View style={[rollCancelStyles.sheet, { width: sheetWidth }]}>
-        <View
-          style={[
-            rollCancelStyles.iconCircle,
-            needsConfirm && { backgroundColor: '#fffbeb' },
-          ]}
-        >
-          <Icon
-            source={blocked ? 'cancel' : 'alert-circle-outline'}
-            size={36}
-            color={accent}
-          />
-        </View>
-        <Text variant="titleLarge" style={rollCancelStyles.title}>
-          {blocked ? copy.blockedTitle : copy.title}
-        </Text>
-
-        {roll && (
-          <View style={rollCancelStyles.idBox}>
-            <Text style={rollCancelStyles.idBarcode} numberOfLines={1}>
-              {roll.barcode ?? '—'}
-            </Text>
-            <Text style={rollCancelStyles.idMeta} numberOfLines={2}>
-              {metaLine}
-            </Text>
-          </View>
-        )}
-
-        {/* Önizleme durum bölümü */}
-        {offline ? (
-          <View style={rollCancelStyles.warnBox}>
-            <Icon source="wifi-off" size={18} color={colors.warningDark} />
-            <View style={{ flex: 1 }}>
-              <Text style={rollCancelStyles.warnText}>
-                Çevrimdışısın — durum önizlemesi yok.
-              </Text>
-              <Text style={rollCancelStyles.warnSub}>
-                İptal sıraya alınır, bağlanınca uygulanır. Top bu sırada bir
-                istasyonda aktifleştiyse sunucu reddedebilir.
-              </Text>
-            </View>
-          </View>
-        ) : previewLoading ? (
-          <View style={rollCancelStyles.previewLoadingRow}>
-            <ActivityIndicator size="small" color="#64748b" />
-            <Text style={rollCancelStyles.previewLoadingText}>
-              Durum kontrol ediliyor…
-            </Text>
-          </View>
-        ) : blocked ? (
-          <View style={rollCancelStyles.blockBox}>
-            <Icon source="information-outline" size={18} color={colors.danger} />
-            <Text style={rollCancelStyles.blockText}>{preview!.blockReason}</Text>
-          </View>
-        ) : needsConfirm ? (
-          <View style={rollCancelStyles.warnBox}>
-            <Icon source="alert" size={18} color={colors.warningDark} />
-            <View style={{ flex: 1 }}>
-              <Text style={rollCancelStyles.warnText}>
-                {activeAtText(preview!.activeAt)}
-              </Text>
-              <Text style={rollCancelStyles.warnSub}>
-                İptal edilirse bu adımdan düşülür ve adım durumu geri sarılır.
-                Yine de iptal etmek istiyor musun?
-              </Text>
-            </View>
-          </View>
-        ) : (
-          <>
-            {previewError && (
-              <Text style={rollCancelStyles.previewErrText}>
-                Durum doğrulanamadı — yine de deneyebilirsin.
-              </Text>
-            )}
-            {/* Etiket uyarısı varken genel açıklama BASTIRILIR: iki ayrı metin
-                aynı anda okunmuyor ve önemli olan hangisi belirsizleşiyordu. */}
-            {!labelPrinted && <Text style={rollCancelStyles.hint}>{copy.hint}</Text>}
-          </>
-        )}
-
-        {/* ── ÖLÜ ETİKET UYARISI ──────────────────────────────────────────────
-            Etiket basmak fiziksel dünyada geri alınamaz; kayıt geri alınabilir.
-            Bu satır tam o farkı söyler: kâğıt topun üstünde KALACAK. Sahada olan
-            buydu — uyarı yoktu, kayıt öldü, kâğıt kaldı, aynı top saatler sonra
-            ikinci bir barkodla yeniden girildi.
-            ⚠️ Kutu değil SATIR: kendi kenarlığı + başlığıyla çizilince modal
-            içinde ikinci bir modal gibi okunuyordu. */}
-        {labelPrinted && (
-          <View style={rollCancelStyles.warnRow}>
-            <Icon source="label-off-outline" size={18} color={colors.warningDark} />
-            <Text style={rollCancelStyles.warnRowText}>
-              Etiketi basıldı — iptal etmeden önce kâğıdı toptan sök.
-            </Text>
-          </View>
-        )}
-
-        {/* ── SEBEP (opsiyonel, kapalı başlar) ────────────────────────────────
-            Kapalıyken tek satır; açıkken chip'ler DOĞRUDAN iptal eder. */}
-        {!blocked &&
-          (reasonOpen ? (
-            <View style={rollCancelStyles.reasonWrap}>
-              <Text style={rollCancelStyles.reasonLabel}>
-                Sebebi seç — dokununca iptal olur
-              </Text>
-              <View style={rollCancelStyles.reasonChips}>
-                {/* Liste SUNUCUDAN gelir (fabrika düzenleyebilsin); çevrimdışında
-                    cihazdaki son liste, o da yoksa APK'ya gömülü zemin. Kayda
-                    yazılan değer `fullText`tir — geçmişle gruplama ona dayanır. */}
-                {cancelPresets.map((p) => (
-                  <TouchableRipple
-                    key={p.code}
-                    onPress={() => submit(p.fullText ?? p.label)}
-                    disabled={confirmDisabled}
-                    style={rollCancelStyles.reasonChip}
-                    borderless
-                  >
-                    <Text style={rollCancelStyles.reasonChipText}>{p.label}</Text>
-                  </TouchableRipple>
-                ))}
-                {/* Serbest yazım kaldırılmadı, "Diğer"in altına alındı: hazır
-                    seçenek sürtünmeyi kaldırır ve veriyi sayılabilir yapar, ama
-                    katalog dışı gerçek durumlar da olur. Tek dokunuşla iptal
-                    EDEMEZ — yazılacak metin var, onayı aşağıdaki buton verir. */}
-                {/* ⚠️ Satır içi kalem YOK: bu chip'ler DOKUNUNCA TOPU İPTAL EDER.
-                    Yıkıcı bir aksiyonun yanına düzenleme tuşu koymak, ıskalanan
-                    her dokunuşu iptal edilmiş bir top yapardı. Düzenleme ayrı
-                    yüzeyde (ReasonPresetManagerSheet). */}
-                {canEditPresets && !cancelPresetsOffline && (
-                  <TouchableRipple
-                    onPress={() => setManagerOpen(true)}
-                    style={rollCancelStyles.reasonChip}
-                    borderless
-                    accessibilityLabel="Hazır iptal sebeplerini düzenle"
-                  >
-                    <Text style={rollCancelStyles.reasonChipText}>✏️ Sebepleri düzenle</Text>
-                  </TouchableRipple>
-                )}
-                <TouchableRipple
-                  onPress={() => setOtherOpen((v) => !v)}
-                  style={[
-                    rollCancelStyles.reasonChip,
-                    otherOpen && rollCancelStyles.reasonChipOn,
-                  ]}
-                  borderless
-                >
-                  <Text
-                    style={[
-                      rollCancelStyles.reasonChipText,
-                      otherOpen && rollCancelStyles.reasonChipTextOn,
-                    ]}
-                  >
-                    Diğer…
-                  </Text>
-                </TouchableRipple>
-              </View>
-              {otherOpen && (
-                <PaperTextInput
-                  mode="outlined"
-                  dense
-                  autoFocus
-                  placeholder="Sebebi yaz, sonra alttaki butona bas"
-                  value={otherText}
-                  onChangeText={setOtherText}
-                  maxLength={500}
-                  style={rollCancelStyles.reasonInput}
-                />
-              )}
-            </View>
-          ) : (
-            <TouchableRipple
-              onPress={() => setReasonOpen(true)}
-              style={rollCancelStyles.reasonToggle}
-              borderless
-            >
-              <View style={rollCancelStyles.reasonToggleInner}>
-                <Icon source="comment-plus-outline" size={16} color="#64748b" />
-                <Text style={rollCancelStyles.reasonToggleText}>
-                  Sebep ekle (opsiyonel)
-                </Text>
-              </View>
-            </TouchableRipple>
-          ))}
-
-        {/* Yatay sıra (Vazgeç solda) KORUNUR — kas hafızası. Yalnız etiketli
-            iptalde alt alta geçilir, çünkü onay metni "kâğıdı söktüm" beyanını
-            taşıyor ve yan yana düzende kesiliyordu ("Etiketi Söktüm, İpta…").
-            Yığılmış düzende Vazgeç ALTTA: baş parmağın en kolay eriştiği yer en
-            zararsız aksiyon olmalı. */}
-        <View style={stackedActions ? rollCancelStyles.actionsStacked : rollCancelStyles.actions}>
-          {stackedActions && confirmButton}
+    <ModuleSheet
+      visible={!!roll}
+      onDismiss={onDismiss}
+      dismissable={!loading}
+      size="sm"
+      title={blocked ? copy.blockedTitle : copy.title}
+      footer={
+        <View style={labelPrinted ? styles.actionsStacked : styles.actions}>
+          {labelPrinted && confirmButton}
           <Button
             mode="outlined"
             onPress={onDismiss}
             disabled={loading}
-            style={rollCancelStyles.actionBtn}
-            contentStyle={rollCancelStyles.actionBtnContent}
+            style={styles.actionBtn}
+            contentStyle={styles.actionBtnContent}
           >
             {blocked ? 'Kapat' : 'Vazgeç'}
           </Button>
-          {!stackedActions && confirmButton}
+          {!labelPrinted && confirmButton}
         </View>
-      </View>
+      }
+      overlays={
+        <ReasonPresetManagerSheet
+          visible={managerOpen}
+          kind="ROLL_CANCEL"
+          onDismiss={() => setManagerOpen(false)}
+        />
+      }
+    >
+      {roll && (
+        <View style={rollCancelStyles.idBox}>
+          <Text style={rollCancelStyles.idBarcode} numberOfLines={1}>
+            {roll.barcode ?? '—'}
+          </Text>
+          <Text style={rollCancelStyles.idMeta} numberOfLines={2}>
+            {metaLine(roll)}
+          </Text>
+        </View>
+      )}
 
-      <ReasonPresetManagerSheet
-        visible={managerOpen}
-        kind="ROLL_CANCEL"
-        onDismiss={() => setManagerOpen(false)}
+      <PreviewStatus
+        offline={offline}
+        previewLoading={previewLoading}
+        blocked={blocked}
+        needsConfirm={needsConfirm}
+        labelPrinted={labelPrinted}
+        preview={preview}
+        previewError={previewError}
+        hint={copy.hint}
       />
-    </AppModal>
+
+      {/* Ölü etiket: kayıt geri alınır, kâğıt topun üstünde KALIR — kutu değil satır (kart-içinde-kart olmasın). */}
+      {labelPrinted && (
+        <View style={styles.warnRow}>
+          <Icon source="label-off-outline" size={18} color={colors.warningDark} />
+          <Text style={styles.warnRowText}>Etiketi basıldı — iptal etmeden önce kâğıdı toptan sök.</Text>
+        </View>
+      )}
+
+      {!blocked &&
+        (reasonOpen || reasonRequired ? (
+          <ReasonSection
+            key={roll?.id}
+            required={reasonRequired}
+            disabled={confirmDisabled}
+            otherText={otherText}
+            onOtherText={setOtherText}
+            onPick={submit}
+            onEditPresets={() => setManagerOpen(true)}
+            confirmWord={copy.confirm}
+          />
+        ) : (
+          <TouchableRipple onPress={() => setReasonOpen(true)} style={styles.reasonToggle} borderless>
+            <View style={styles.reasonToggleInner}>
+              <Icon source="comment-plus-outline" size={16} color={colors.textSecondary} />
+              <Text style={styles.reasonToggleText}>Sebep ekle (opsiyonel)</Text>
+            </View>
+          </TouchableRipple>
+        ))}
+
+      {submitError ? (
+        <Text style={sheet.error} testID="cancel-form-error">
+          {submitError}
+        </Text>
+      ) : null}
+    </ModuleSheet>
   );
 }
 
 /**
- * Görsel dil — stil adları bilerek JENERİK (sheet/title/infoBox/actions), çünkü
- * KK1'in "AYRI TOP" çakışma modalı da bunu paylaşır. İkinci bir kopya blok,
- * onay modalları arasında sessiz görsel ayrışma üretirdi.
+ * ⚠️ KK1'in "Aynı top mu, ayrı top mu?" çakışma modalıyla PAYLAŞILAN görsel dil (sheet · iconCircle · title ·
+ * idBox ailesi) — iki onay yüzeyi barkodu aynı biçimde gösterir; ikinci kopya sessiz görsel ayrışma üretirdi.
  */
 export const rollCancelStyles = StyleSheet.create({
   sheet: {
@@ -443,7 +398,6 @@ export const rollCancelStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: { fontWeight: '700', color: '#0f172a', textAlign: 'center' },
-  // ── Kimlik bloğu: barkod + tek satır özet (eski 3 etiketli satırın yerine) ──
   idBox: {
     backgroundColor: '#f8fafc',
     borderRadius: 10,
@@ -459,106 +413,34 @@ export const rollCancelStyles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   idMeta: { fontSize: 13.5, color: '#475569', fontWeight: '600', textAlign: 'center' },
-  // ⚠️ `idBox` KK1'in "Aynı top mu, ayrı top mu?" çakışma modalıyla PAYLAŞILIR —
-  // iki onay yüzeyi de barkodu aynı biçimde gösterir. Eski etiketli `infoBox`
-  // ailesi (Barkod/Ürün/Metraj satırları) 2026-08-06'da ikisinden de düştü.
-  hint: {
-    fontSize: 13,
-    color: '#64748b',
-    lineHeight: 18,
-    textAlign: 'center',
-  },
-  actions: { flexDirection: 'row', gap: 10, marginTop: 4 },
-  // Etiketli iptal: onay metni uzun → alt alta, tam genişlik.
-  actionsStacked: { flexDirection: 'column', gap: 8, marginTop: 4 },
-  actionBtn: { flex: 1, borderRadius: 10 },
+});
+
+const styles = StyleSheet.create({
+  grow: { flex: 1 },
+  hint: { fontSize: typography.size.sm, color: colors.textSecondary, lineHeight: 18, textAlign: 'center' },
+  actions: { flex: 1, flexDirection: 'row', gap: spacing.sm },
+  actionsStacked: { flex: 1, flexDirection: 'column', gap: spacing.sm },
+  actionBtn: { flex: 1, borderRadius: radius.md },
   actionBtnContent: { height: 48 },
-  previewLoadingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 4,
-  },
-  previewLoadingText: { fontSize: 13, color: '#64748b' },
-  previewErrText: {
-    fontSize: 12,
-    color: colors.warningDark,
-    textAlign: 'center',
-  },
-  // Engelli (hard-block): kırmızı bilgi kutusu
-  blockBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    backgroundColor: '#fef2f2',
-    borderRadius: 10,
-    padding: 12,
-  },
-  blockText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#991b1b',
-    fontWeight: '600',
-    lineHeight: 18,
-  },
-  // İstasyonda aktif uyarısı: kehribar kutu
-  warnBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    backgroundColor: '#fffbeb',
-    borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#fde68a',
-  },
-  warnText: {
-    fontSize: 14,
-    color: '#92400e',
-    fontWeight: '700',
-    lineHeight: 19,
-  },
-  warnSub: {
-    fontSize: 12.5,
-    color: '#b45309',
-    lineHeight: 17,
-    marginTop: 3,
-  },
-  // ── Ölü etiket: KUTU DEĞİL SATIR (kart-içinde-kart görünümü kalktı) ──
-  warnRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 2,
-  },
-  warnRowText: {
-    flex: 1,
-    fontSize: 13.5,
-    color: '#92400e',
-    fontWeight: '700',
-    lineHeight: 18,
-  },
-  // ── Sebep: kapalı tetik + açık chip alanı ──
-  reasonToggle: { alignSelf: 'center', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10 },
+  previewLoadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingVertical: spacing.xs },
+  previewLoadingText: { fontSize: typography.size.sm, color: colors.textSecondary },
+  previewErrText: { fontSize: typography.size.xs, color: colors.warningDark, textAlign: 'center' },
+  blockBox: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, backgroundColor: colors.dangerContainer, borderRadius: radius.md, padding: spacing.md },
+  blockText: { flex: 1, fontSize: typography.size.sm, color: colors.dangerText, fontWeight: typography.weight.semibold, lineHeight: 18 },
+  warnBox: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, backgroundColor: colors.warningContainer, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.warning },
+  warnText: { fontSize: typography.size.base, color: colors.warningText, fontWeight: typography.weight.bold, lineHeight: 19 },
+  warnSub: { fontSize: typography.size.sm, color: colors.warningText, lineHeight: 17, marginTop: 3 },
+  warnRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: 2 },
+  warnRowText: { flex: 1, fontSize: typography.size.sm, color: colors.warningText, fontWeight: typography.weight.bold, lineHeight: 18 },
+  reasonToggle: { alignSelf: 'center', borderRadius: radius.sm, paddingVertical: 6, paddingHorizontal: 10 },
   reasonToggleInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  reasonToggleText: { fontSize: 13, color: '#64748b', fontWeight: '700' },
-  reasonWrap: { gap: 8 },
-  reasonLabel: { fontSize: 12.5, fontWeight: '700', color: '#64748b' },
-  reasonChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  reasonChip: {
-    borderWidth: 1,
-    borderColor: '#fcd34d',
-    backgroundColor: '#fffbeb',
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    // 44dp: chip artık SEÇİM değil AKSİYON (dokununca iptal eder) — eldivenli
-    // parmak için ana butonlara yaklaşan bir hedef alanı hak ediyor.
-    minHeight: 44,
-    justifyContent: 'center',
-  },
+  reasonToggleText: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: typography.weight.bold },
+  reasonWrap: { gap: spacing.sm },
+  reasonLabel: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, color: colors.textSecondary },
+  reasonChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  // 44dp: chip SEÇİM değil AKSİYON (dokununca iptal eder) — eldivenli parmak için ana düğmeye yakın hedef.
+  reasonChip: { borderWidth: 1, borderColor: colors.warning, backgroundColor: colors.warningContainer, borderRadius: 999, paddingHorizontal: 14, minHeight: 44, justifyContent: 'center' },
   reasonChipOn: { backgroundColor: colors.warningDark, borderColor: colors.warningDark },
-  reasonChipText: { fontSize: 13.5, color: '#92400e', fontWeight: '700' },
-  reasonChipTextOn: { color: '#fff' },
-  reasonInput: { backgroundColor: '#fff' },
+  reasonChipText: { fontSize: typography.size.sm, color: colors.warningText, fontWeight: typography.weight.bold },
+  reasonChipTextOn: { color: colors.textOnDark },
 });

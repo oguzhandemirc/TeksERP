@@ -33,6 +33,7 @@ import DetailSheet, {
   type SummaryItem,
 } from '../../../components/DetailSheet';
 import RollCancelModal from '../../../components/RollCancelModal';
+import { useCancelRejection } from '../../../hooks/useCancelRejection';
 import CancelledRollSheet from '../../../components/CancelledRollSheet';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
@@ -139,6 +140,8 @@ export default function DepoScreen() {
   const qc = useQueryClient();
   const isOnline = useIsOnline();
   const [cancelTarget, setCancelTarget] = useState<RollListItem | null>(null);
+  // Sunucu "sebep zorunlu" reddi (400 CANCEL_REASON_REQUIRED) → modal aynı top için yeniden açılır.
+  const cancelRejection = useCancelRejection<RollListItem>();
   /** Okutulan barkod iptalli çıktı → teşhis + geri alma paneli. */
   const [cancelledRoll, setCancelledRoll] = useState<Roll | null>(null);
 
@@ -393,8 +396,14 @@ export default function DepoScreen() {
         text2: isOnline ? undefined : 'Çevrimdışı — sync bekliyor',
       });
     },
-    onError: (err) => {
+    onError: (err, vars) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      // Sebep zorunlu reddi toast DEĞİL modal: operatör sebebi orada seçer, aynı top yeniden gönderilir.
+      const reopen = cancelRejection.catchRejection(err, vars.id);
+      if (reopen) {
+        setCancelTarget(reopen);
+        return;
+      }
       Toast.show({ type: 'error', text1: 'Kaldırılamadı', text2: err.message });
     },
     // Optimistic satır düşürme YOK (KK1'den bilinçli fark): burada liste
@@ -425,6 +434,7 @@ export default function DepoScreen() {
       if (!cancelTarget) return;
       // Hard-block'ta hiç gönderme (buton zaten çizilmiyor; ikinci hat).
       if (cancelPreview && !cancelPreview.canCancel) return;
+      cancelRejection.arm(cancelTarget);
       cancelMutation.mutate({
         id: cancelTarget.id,
         confirmActive: cancelPreview?.requiresConfirm ?? false,
@@ -435,7 +445,7 @@ export default function DepoScreen() {
       });
       setCancelTarget(null);
     },
-    [cancelTarget, cancelPreview, cancelMutation],
+    [cancelTarget, cancelPreview, cancelMutation, cancelRejection],
   );
 
   const listLoading = isSwatchMode ? kartelaStockQuery.isLoading : rollsQuery.isLoading;
@@ -697,7 +707,11 @@ export default function DepoScreen() {
         previewError={cancelPreviewQuery.isError ? (cancelPreviewQuery.error as Error) : null}
         offline={!isOnline}
         loading={cancelMutation.isPending}
-        onDismiss={() => setCancelTarget(null)}
+        submitError={cancelRejection.messageFor(cancelTarget?.id)}
+        onDismiss={() => {
+          setCancelTarget(null);
+          cancelRejection.clear();
+        }}
         onConfirm={confirmCancel}
         copy={REMOVE_FROM_STOCK_COPY}
       />

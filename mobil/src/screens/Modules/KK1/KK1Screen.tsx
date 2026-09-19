@@ -53,6 +53,7 @@ import {
   DUPLICATE_CHOICE_NEW,
   type DuplicateEntryChoice,
 } from '../../../constants/duplicateEntryChoice';
+import { useCancelRejection } from '../../../hooks/useCancelRejection';
 import RollCancelModal, {
   rollCancelStyles,
 } from '../../../components/RollCancelModal';
@@ -654,6 +655,8 @@ export default function KK1Screen() {
   }, []);
   // Scrap onay modal'ı — native Alert yerine kendi modalımız (alert telefon yönünü değiştiriyordu).
   const [scrapTarget, setScrapTarget] = useState<Roll | null>(null);
+  // Sunucu "sebep zorunlu" reddi (400 CANCEL_REASON_REQUIRED) → modal aynı top için yeniden açılır.
+  const cancelRejection = useCancelRejection<Roll>();
   // react-native-modal aynı anda iki modal'ı doğru stack edemiyor (Android Dialog
   // çakışması). Drawer / history açıkken scrap tıklanırsa hedef ref'e yazılır,
   // önce mevcut modal kapanır, onModalHide'da scrapTarget set edilir.
@@ -1176,10 +1179,16 @@ export default function KK1Screen() {
         props: { actionLabel: 'GERİ AL', onAction: () => undoScrap(vars.id) },
       });
     },
-    onError: (err, _vars, context) => {
+    onError: (err, vars, context) => {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       context?.snapshots.forEach(([key, data]) => qc.setQueryData(key, data));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      // Sebep zorunlu reddi toast DEĞİL modal: operatör sebebi orada seçer, aynı top yeniden gönderilir.
+      const reopen = cancelRejection.catchRejection(err, vars.id);
+      if (reopen) {
+        setScrapTarget(reopen);
+        return;
+      }
       Toast.show({
         type: 'error',
         text1: 'İptal edilemedi',
@@ -1235,6 +1244,7 @@ export default function KK1Screen() {
       // etiketli topu reddeder; bu fail-closed davranış BİLİNÇLİ (operatör o
       // uyarıyı hiç görmemiştir).
       const confirmLabelPrinted = cancelPreview?.labelPrinted ?? false;
+      cancelRejection.arm(scrapTarget);
       scrapMutation.mutate({
         id: scrapTarget.id,
         confirmActive,
@@ -1243,7 +1253,7 @@ export default function KK1Screen() {
       });
       setScrapTarget(null);
     },
-    [scrapTarget, cancelPreview, scrapMutation],
+    [scrapTarget, cancelPreview, scrapMutation, cancelRejection],
   );
 
 
@@ -2512,7 +2522,11 @@ export default function KK1Screen() {
         }
         offline={!isOnline}
         loading={scrapMutation.isPending}
-        onDismiss={() => setScrapTarget(null)}
+        submitError={cancelRejection.messageFor(scrapTarget?.id)}
+        onDismiss={() => {
+          setScrapTarget(null);
+          cancelRejection.clear();
+        }}
         onConfirm={confirmScrap}
       />
 
