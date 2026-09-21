@@ -220,6 +220,9 @@ export async function resolveScan(kind: BarcodeKind, code: string): Promise<Scan
           note: "Bu belge için ayrı bir detay ekranı yok.",
           actions: [],
         };
+      case "SHIPMENT":
+        // Sevkiyat no bugün yalnız İade Girişi kapsamında çözülür; genel okutmada eşleşme yok.
+        return notFound(kind, code);
       case "UNKNOWN":
       default:
         // Tek tip kod kalıbı: bilinmeyen prefix = eşleşme yok.

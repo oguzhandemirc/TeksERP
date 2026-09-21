@@ -15,6 +15,11 @@ describe("classifyBarcode — prefix → tür", () => {
   it("CV → SACK", () => {
     expect(classifyBarcode("CV1207260001").kind).toBe("SACK");
   });
+  it("SVK → SHIPMENT (iade girişi 'sevkiyatın tamamı' kapsamı)", () => {
+    expect(classifyBarcode("svk2109260003").kind).toBe("SHIPMENT");
+    expect(BARCODE_FORMATS.SHIPMENT.test("SVK2109260003")).toBe(true);
+  });
+
   it("FS/FK/KS/KK → DISPATCH_DOC", () => {
     expect(classifyBarcode("FS1207260123").kind).toBe("DISPATCH_DOC");
     expect(classifyBarcode("FK1207260089").kind).toBe("DISPATCH_DOC");

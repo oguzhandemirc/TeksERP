@@ -31,6 +31,11 @@
         },
         {
           "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "İade girişi tek pencerede dört kapsam: top barkodu, çuval kodu (CV…) ya da sevkiyat numarası (SVK…) okutunca tür kendiliğinden anlaşılır; barkod yoksa “Çuval”, “Sevkiyat” ya da “Sevk partisi” çipinden listeden seçersiniz (parti için cari → parti). Sevkiyat ve parti kapsamında tüm çuvallar gelir, iade alınacak toplar çuval çuval işaretlenir; neden bir kez girilir, sipariş sevkiyat başına seçilir. Parti birden çok sevkiyatla gitmişse her sevkiyat için ayrı iade irsaliyesi oluşur ve alt şeritte kaç top, kaç metre ve kaç iade belgesi oluşacağı görünür. Depoda bekleyen (henüz sevk edilmemiş) çuvallar iade kapsamına girmez."
+        },
+        {
+          "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Kasa ve banka bakiyesi artık tek defterden yürür: her tahsilat ve ödeme, Kasa Hareketleri'nde Tahsilat ya da Ödeme türünde kendi satırıyla görünür (kaynak belge tıklanır), iptal edilince o satır iptal görünür ve bakiye geri gelir. Tahsilat/Ödeme listesinde kasa defteri satırı sütunu geldi. Eski kayıtlar için defter satırları kurulum sırasında toplu olarak oluşturulur; bakiyeler değişmez."
         },

@@ -92,6 +92,50 @@ export interface SackReturnLookupResult {
   returnGradingEnabled: boolean;
 }
 
+/** Sevkiyat / sevk partisi kapsamı — sunucu `return-scope.helper` (sevkiyat başına grup). */
+export interface ReturnScopeOrder {
+  id: string;
+  orderNumber: string;
+  status: string;
+  deadline: string | null;
+  /** Bu siparişin satırına uyan top id'leri — aday küme istemcide seçime göre süzülür. */
+  rollIds: string[];
+}
+export interface ReturnScopeSack {
+  id: string;
+  sackNo: string;
+  packageNo: number | null;
+  packingGroupName: string | null;
+  rolls: ReturnLookupRoll[];
+}
+export interface ReturnScopeGroup {
+  shipment: { id: string; shipmentNo: string; dispatchedAt: string | null };
+  customer: { id: string; code: string; name: string } | null;
+  branch: { id: string; name: string } | null;
+  sacks: ReturnScopeSack[];
+  orders: ReturnScopeOrder[];
+}
+export type ShipmentReturnLookupResult = ReturnScopeGroup & { returnGradingEnabled: boolean };
+export interface LotReturnLookupResult {
+  lot: { id: string; name: string };
+  customer: { id: string; code: string; name: string } | null;
+  groups: ReturnScopeGroup[];
+  returnGradingEnabled: boolean;
+}
+export interface CreateReturnBatchPayload {
+  groups: { rollIds: string[]; orderId?: string | null }[];
+  reasonId?: string | null;
+  reasonText?: string | null;
+  note?: string | null;
+  qualityGradeId?: string | null;
+}
+export interface CreateReturnBatchResult {
+  done: { returnGroupId: string; rollCount: number; appliedStatus: string }[];
+  failed: { index: number; message: string } | null;
+  skipped: number;
+  rollCount: number;
+}
+
 export interface CreateReturnPayload {
   /** Tekil iade. Çoklu iadede `rollIds` gönderilir — en az biri zorunlu. */
   rollId?: string;
@@ -134,6 +178,22 @@ export const returnsService = {
     apiClient
       .get<ApiResponse<ReturnLookupResult>>(`/api/returns/lookup?barcode=${encodeURIComponent(barcode)}`)
       .then((r) => r.data),
+
+  /** Sevkiyatın tamamı — numara (SVK…) ya da id. */
+  lookupShipment: (q: { shipmentNo?: string; shipmentId?: string }): Promise<ApiResponse<ShipmentReturnLookupResult>> => {
+    const p = new URLSearchParams();
+    if (q.shipmentNo) p.set("shipmentNo", q.shipmentNo);
+    if (q.shipmentId) p.set("shipmentId", q.shipmentId);
+    return apiClient.get<ApiResponse<ShipmentReturnLookupResult>>(`/api/returns/lookup-shipment?${p.toString()}`).then((r) => r.data);
+  },
+  /** Sevk partisinin sevk edilmiş çuvalları — sevkiyat başına gruplu. */
+  lookupLot: (packingGroupId: string): Promise<ApiResponse<LotReturnLookupResult>> =>
+    apiClient
+      .get<ApiResponse<LotReturnLookupResult>>(`/api/returns/lookup-lot?packingGroupId=${encodeURIComponent(packingGroupId)}`)
+      .then((r) => r.data),
+  /** Toplu iade — grup = tek sevkiyat; sevkiyat başına bir belge. */
+  createBatch: (body: CreateReturnBatchPayload): Promise<ApiResponse<CreateReturnBatchResult>> =>
+    apiClient.post<ApiResponse<CreateReturnBatchResult>>(`/api/returns/batch`, body).then((r) => r.data),
 
   /** Çuval kodu okut → çuvalın sevk edilmiş topları (toplu iade girişi). */
   lookupSack: (sackCode: string): Promise<ApiResponse<SackReturnLookupResult>> =>

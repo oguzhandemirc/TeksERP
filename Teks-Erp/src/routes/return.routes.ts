@@ -106,6 +106,64 @@ router.post(
 
 /**
  * @openapi
+ * /api/returns/batch:
+ *   post:
+ *     tags: [Returns]
+ *     summary: Toplu iade — sevkiyat / sevk partisi kapsamı; grup = tek sevkiyat, sevkiyat başına bir iade belgesi
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [groups]
+ *             properties:
+ *               groups: { type: array, items: { type: object, properties: { rollIds: { type: array, items: { type: string } }, orderId: { type: string, nullable: true } } } }
+ *               reasonId: { type: string, nullable: true }
+ *               reasonText: { type: string, nullable: true }
+ *               note: { type: string, nullable: true }
+ *               qualityGradeId: { type: string, nullable: true }
+ *     responses:
+ *       201: { description: "İade alındı — done/failed/skipped ile grup sonuçları" }
+ *       400: { description: İlk grup reddedildi (hiçbir şey yazılmadı) }
+ */
+router.post(
+  "/batch",
+  verifyToken,
+  requireAnyPermission("return:write", "mobile:iade"),
+  controller.createBatch
+);
+
+/**
+ * @openapi
+ * /api/returns/lookup-shipment:
+ *   get:
+ *     tags: [Returns]
+ *     summary: Bir sevkiyatın iade alınabilir topları (çuval çuval) + siparişler
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: shipmentNo, schema: { type: string } }
+ *       - { in: query, name: shipmentId, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Kapsam }
+ *       400: { description: Sevk edilmemiş / iade alınacak top yok }
+ * /api/returns/lookup-lot:
+ *   get:
+ *     tags: [Returns]
+ *     summary: Bir sevk partisinin sevk edilmiş çuvalları — sevkiyat başına gruplu
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: packingGroupId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Kapsam }
+ *       400: { description: Partide sevk edilmiş top yok }
+ */
+router.get("/lookup-shipment", verifyToken, requireAnyPermission("return:write", "mobile:iade"), controller.lookupShipment);
+router.get("/lookup-lot", verifyToken, requireAnyPermission("return:write", "mobile:iade"), controller.lookupLot);
+
+/**
+ * @openapi
  * /api/returns:
  *   get:
  *     tags: [Returns]

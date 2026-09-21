@@ -19,6 +19,7 @@ const KIND_LABEL: Record<BarcodeKind, string> = {
   TRAVELER_CARD: "Refakat Kartı",
   SWATCH: "Kartela",
   SACK: "Çuval",
+  SHIPMENT: "Sevkiyat",
   DISPATCH_DOC: "Belge",
   UNKNOWN: "Kod",
 };

@@ -52,7 +52,7 @@ const D0 = () => new Prisma.Decimal(0);
 
 // item kesin; renk/en ikisi de doluysa eşit olmalı, biri null ise gevşek eşleşir
 // (shipping.service.allocate ile aynı semantik — fungible spec havuzu).
-function specMatch(
+export function specMatch(
   a: { itemId: string; colorId: string | null; width: Prisma.Decimal | null },
   b: { itemId: string; colorId: string | null; width: Prisma.Decimal | null }
 ): boolean {
@@ -672,6 +672,65 @@ export class ReturnService {
       message: multi
         ? `İade alındı — ${created.ids.length} top ${shelfLabel} eklendi (tek irsaliye)`
         : `İade alındı — top ${shelfLabel} eklendi`,
+    };
+  }
+
+  /**
+   * TOPLU İADE — sevkiyat/sevk partisi kapsamı: her grup TEK sevkiyattır ve KENDİ
+   * `createReturn` çağrısı (= kendi tx'i, kendi iade belgesi) olarak koşar; neden/not/
+   * kalite hepsine ortak, sipariş grup başına. Gruplar SIRAYLA işlenir: ilk grup
+   * düşerse hata aynen fırlar (hiçbir şey yazılmadı); sonraki bir grup düşerse
+   * tamamlananlar geçerli belgelerdir (her biri kendi başına tutarlı) ve sonuç
+   * `failed` ile hangi grupta durulduğunu, `skipped` ile işlenmeyenleri SÖYLER —
+   * sessiz kısmi başarı yok. Tek belgede iki sevkiyat karıştırılmaz (brüt kuralı).
+   */
+  async createReturnBatch(
+    input: {
+      groups: { rollIds: string[]; orderId?: string | null }[];
+      reasonId?: string | null;
+      reasonText?: string | null;
+      note?: string | null;
+      qualityGradeId?: string | null;
+    },
+    userId?: string
+  ): Promise<ApiResponse<unknown>> {
+    if (!userId) throw AppError.unauthorized();
+    const groups = input.groups.filter((g) => g.rollIds.length > 0);
+    if (groups.length === 0) throw AppError.badRequest("İade alınacak top seçilmeli");
+    if (groups.length > 50) throw AppError.badRequest("Tek seferde en fazla 50 sevkiyattan iade alınabilir");
+
+    const done: { returnGroupId: string; rollCount: number; appliedStatus: string }[] = [];
+    let failed: { index: number; message: string } | null = null;
+    for (let i = 0; i < groups.length; i += 1) {
+      const g = groups[i]!;
+      try {
+        const res = await this.createReturn(
+          {
+            rollIds: g.rollIds,
+            orderId: g.orderId ?? null,
+            reasonId: input.reasonId ?? null,
+            reasonText: input.reasonText ?? null,
+            note: input.note ?? null,
+            qualityGradeId: input.qualityGradeId ?? null,
+          },
+          userId
+        );
+        const d = res.data as { id: string; appliedStatus: string; rollCount?: number };
+        done.push({ returnGroupId: d.id, rollCount: d.rollCount ?? 1, appliedStatus: d.appliedStatus });
+      } catch (err) {
+        if (i === 0) throw err;
+        failed = { index: i, message: err instanceof AppError ? err.message : "İade alınamadı" };
+        break;
+      }
+    }
+    const rollCount = done.reduce((n, d) => n + d.rollCount, 0);
+    const skipped = failed ? groups.length - failed.index - 1 : 0;
+    return {
+      success: true,
+      data: { done, failed, skipped, rollCount },
+      message: failed
+        ? `${done.length} iade belgesi oluşturuldu (${rollCount} top); ${failed.index + 1}. sevkiyatta durdu: ${failed.message}${skipped > 0 ? ` — ${skipped} sevkiyat işlenmedi` : ""}`
+        : `İade alındı — ${rollCount} top, ${done.length} iade belgesi (sevkiyat başına bir belge)`,
     };
   }
 

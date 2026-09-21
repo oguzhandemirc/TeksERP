@@ -31,9 +31,16 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   /** Seçilen çuvalın kodu — çağıran mevcut `lookupSack` akışını başlatır. */
   onPick: (sackNo: string) => void;
+  /**
+   * "Sevkiyatın tamamı" (2026-09-22) — verilirse sevkiyat satırında ikinci bir düğme
+   * çizilir; çağıran `lookupShipment` kapsamını açar. Verilmezse bugünkü çuval yolu.
+   */
+  onPickShipment?: (shipmentId: string) => void;
+  /** `mode="shipment"`: liste doğrudan sevkiyat seçtirir (çuval adımı yok). */
+  mode?: "sack" | "shipment";
 }
 
-export function ShipmentReturnPicker({ open, onOpenChange, onPick }: Props) {
+export function ShipmentReturnPicker({ open, onOpenChange, onPick, onPickShipment, mode = "sack" }: Props) {
   const [search, setSearch] = useState("");
   const [shipmentId, setShipmentId] = useState<string | null>(null);
 
@@ -62,7 +69,9 @@ export function ShipmentReturnPicker({ open, onOpenChange, onPick }: Props) {
           <DialogDescription>
             {shipmentId
               ? "İade edilen mal hangi çuvaldan çıktıysa onu seçin — sonraki adımda topları tek tek işaretleyeceksiniz."
-              : "Malın çıktığı sevkiyatı bulun. Barkod okutmanız gerekmez."}
+              : mode === "shipment"
+                ? "Sevkiyatı seçin; bütün çuvalları iade kapsamına gelir, topları sonra işaretlersiniz."
+                : "Malın çıktığı sevkiyatı bulun. Barkod okutmanız gerekmez."}
           </DialogDescription>
         </DialogHeader>
 
@@ -87,19 +96,33 @@ export function ShipmentReturnPicker({ open, onOpenChange, onPick }: Props) {
                 </p>
               ) : (
                 (listQ.data ?? []).map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    className="flex w-full items-center gap-3 border-b px-3 py-2 text-left text-sm last:border-0 hover:bg-muted/50"
-                    onClick={() => setShipmentId(s.id)}
-                  >
-                    <span className="font-mono">{s.shipmentNo}</span>
-                    <span className="min-w-0 flex-1 truncate">{s.customerName}</span>
-                    <span className="whitespace-nowrap text-xs text-muted-foreground">
-                      {s.dispatchedAt ? safeFormat(s.dispatchedAt, "dd.MM.yyyy") : "—"}
-                    </span>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  </button>
+                  <div key={s.id} className="flex items-stretch border-b last:border-0">
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left text-sm hover:bg-muted/50"
+                      onClick={() => (mode === "shipment" && onPickShipment ? (onPickShipment(s.id), close()) : setShipmentId(s.id))}
+                    >
+                      <span className="font-mono">{s.shipmentNo}</span>
+                      <span className="min-w-0 flex-1 truncate">{s.customerName}</span>
+                      <span className="whitespace-nowrap text-xs text-muted-foreground">
+                        {s.dispatchedAt ? safeFormat(s.dispatchedAt, "dd.MM.yyyy") : "—"}
+                      </span>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </button>
+                    {mode === "sack" && onPickShipment && (
+                      <button
+                        type="button"
+                        className="shrink-0 border-l px-3 text-xs text-primary hover:bg-muted/50"
+                        title="Sevkiyatın tamamını iade kapsamına al"
+                        onClick={() => {
+                          onPickShipment(s.id);
+                          close();
+                        }}
+                      >
+                        Tamamı
+                      </button>
+                    )}
+                  </div>
                 ))
               )}
             </div>

@@ -128,12 +128,12 @@ export function ReturnsPage() {
           value={scanBarcode}
           onChange={setScanBarcode}
           onScan={startReturnScan}
-          placeholder="Top barkodu veya çuval kodu okut → iade gir"
+          placeholder="Top · çuval · sevkiyat kodu okut → iade gir"
           // İki kod türü de kabul edilir — diyalogdaki kutu zaten ikisini de
           // çözüyor (classifyBarcode). Yalnız ROLL kabul etmek, çuval kodunu
           // okutan operatöre "yanlış kod" uyarısı verirken AYNI kodun diyalog
           // içinde çalıştığı tuhaf bir tutarsızlık üretiyordu.
-          expectPrefix={["ROLL", "SACK"]}
+          expectPrefix={["ROLL", "SACK", "SHIPMENT"]}
           submitLabel="İade Gir"
         />
       </PermissionGate>

@@ -11159,3 +11159,16 @@ Saha geri bildirimi (ilk günün ardından): "sevk edilmiş bir partiyi tekrar a
 **Ekran (aynı gün):** çip şeridi yerine parti LİSTESİ — dört özet kartı (açık parti · havuz çuval/top · havuz m · havuz kg; `GET /packing-groups/summary`), sabit "Partisiz çuvallar (havuz)" satırı (boşken soluk, kaybolmaz), durum segmenti Açık · Sevk edilmiş · Tümü, ad/not araması (`foldedIncludes`), sıralanabilir başlıklar (`trCompare` sayı-duyarlı, tartısız sona), geri oku seviye seviye (parti içi → liste → kapı). "Eşleşen" sütunu yalnız içerik süzgeci varken; "Yeni Çuval" listedeki tek cariyi ön-doldurur, kapıdayken doldurmaz.
 
 **Ölçüldü:** `autoCloseLotsForSacksTx` gövdesi kapatılınca `test_sevk_partisi` §13 dört kontrolle kırmızı. Tuzak kaydı: iki anahtar tek özellik — `packing.groupMode = sevk-partisi` yazılıp `packing.groupsEnabled` kapalı kalınca şerit hiç çizilmiyor (kullanıcı ilk denemede takıldı; birleştirme kararı bekliyor).
+
+## 2026-09-22 — İade girişi dört kapsam tek pencere: top · çuval · sevkiyat · sevk partisi; sevkiyat başına bir belge [ÇEKİRDEK]
+
+Kullanıcı sorusu: "iadelerin hepsini bir ekrandan kontrol edelim mi; çuval iade, top iade, parti iade gibi kaç katman?" ve "tek inputtan hepsine mi sorgu, yoksa kullanıcıya tür mü seçtirelim?"
+
+**Karar (kullanıcı, "pratik olanı yap"):** yeni ekran değil, mevcut İade Al penceresine KAPSAM. Karma giriş: **okutan hiç seçmez** (tek kutu, ön ek kesin: `T…` top · `CV…` çuval · `SVK…` sevkiyat — `BarcodeKind` `SHIPMENT` eklendi), **arayan çipten girer** (Çuval → sevkiyat/çuval seçici · Sevkiyat → liste, "Tamamı" · Sevk partisi → cari → parti; partinin barkodu yok). Çip süzgeç değil: giriş yolu + okutulan türün göstergesi. Yalnız "tür seçtir" fazladan tık ve 400 kaynağı; yalnız "tek kutu" parti yolu için yetmez.
+
+**Mekanizma:** dört yol tek modele iner (`returnScope.ts`: sevkiyat başına grup → çuval → top; varsayılan seçim TÜMÜ); iade daima top satırı; sipariş sevkiyat başına (sunucu siparişleri `rollIds` ile döner, istemci "seçili topların hepsine uyan"ı süzer — kapı yine `createReturn`da); **sevkiyat başına bir iade belgesi**: `createReturn`in tek-sevkiyat kuralı (test_return_bulk_group [10]) korunur, çok sevkiyat `createReturnBatch` sırayla çağırır — ilk grup düşerse hata (yazma yok), sonraki düşerse tamamlananlar geçerli belge, `failed`/`skipped` açık. Yeni uçlar `GET /api/returns/lookup-shipment` · `lookup-lot` (helper `return-scope.helper.ts`, `specMatch` tek kaynak export) · `POST /api/returns/batch`. Havuzdaki/planlı çuval iade konusu değil.
+
+**Ekran:** `ReturnEntryDialog` yeniden yazıldı (`useReturnEntry` + `ReturnScopeChips` + `ReturnScopeGroups` + `ReturnCommonFields` + `ReturnLotPicker`; `ShipmentReturnPicker` "Tamamı"); `ReturnSackCard`/`ReturnRollCard` kalktı (tek liste bileşeni). Alt şerit "N top · M m · K iade belgesi".
+
+**Ölçüldü:** `test_return_scope` 15/15; negatif sonda: boş çuval süzgeci kaldırılınca §1 ❌, ilk-grup-fırlat silinince §5 ❌. jsdom uçtan uca: parti → iki sevkiyat → `createBatch` yükü grup başına sipariş (aday olmayan grupta null).
+

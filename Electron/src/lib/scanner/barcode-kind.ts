@@ -20,6 +20,7 @@ export type BarcodeKind =
   | "TRAVELER_CARD"
   | "SWATCH"
   | "SACK"
+  | "SHIPMENT"
   | "DISPATCH_DOC"
   | "UNKNOWN";
 
@@ -30,6 +31,9 @@ export const BARCODE_FORMATS = {
   TRAVELER_CARD: /^(?:IE|RK)\d{6}\d{4}$/,
   SWATCH: /^KRT\d{6}\d{4}$/,
   SACK: /^CV\d{6}\d{4}$/,
+  // Sevkiyat no (`SVK` + GGAAYY + NNNN, `shipping.service.nextShipmentNo`) — irsaliyeden
+  // yazılır/okutulur; iade girişinde "sevkiyatın tamamı" kapsamını açar.
+  SHIPMENT: /^SVK\d{6}\d{4}$/,
 } as const;
 
 // Prefix-çapalı sınıflandırma. Sıra: daha uzun/özgül prefix'ler önce (KRT, KS/KK
@@ -39,6 +43,7 @@ const PREFIX_RULES: Array<{ re: RegExp; kind: BarcodeKind }> = [
   { re: /^IE\d/, kind: "TRAVELER_CARD" }, // iş emri kartı (tek kod) — WO'yu açar
   { re: /^RK/, kind: "TRAVELER_CARD" }, // eski/legacy kart
   { re: /^CV/, kind: "SACK" },
+  { re: /^SVK/, kind: "SHIPMENT" },
   { re: /^(FS|FK|KS|KK)/, kind: "DISPATCH_DOC" },
   { re: /^T\d/, kind: "ROLL" },
 ];

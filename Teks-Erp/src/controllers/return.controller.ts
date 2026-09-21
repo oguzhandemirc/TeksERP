@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { ReturnService } from "../services/return.service";
+import { lookupLotForReturn, lookupShipmentForReturn } from "../services/helpers/return-scope.helper";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import "../types/express-augment";
 
@@ -22,6 +23,29 @@ const createReturnSchema = z.object({
   message: "İade alınacak top seçilmeli (rollId veya rollIds)",
   path: ["rollId"],
 });
+
+// Toplu iade (sevkiyat / sevk partisi kapsamı): grup = tek sevkiyatın topları.
+const createReturnBatchSchema = z.object({
+  groups: z
+    .array(
+      z.object({
+        rollIds: z.array(z.string().uuid("Geçersiz top ID")).min(1).max(200),
+        orderId: z.string().uuid("Geçersiz sipariş ID").optional().nullable(),
+      }),
+    )
+    .min(1, "En az bir grup")
+    .max(50),
+  reasonId: z.string().uuid("Geçersiz neden ID").optional().nullable(),
+  reasonText: z.string().trim().max(500).optional().nullable(),
+  note: z.string().trim().max(1000).optional().nullable(),
+  qualityGradeId: z.string().uuid("Geçersiz kalite ID").optional().nullable(),
+});
+const lookupShipmentSchema = z
+  .object({
+    shipmentNo: z.string().trim().min(1).max(64).optional(),
+    shipmentId: z.string().uuid("Geçersiz sevkiyat ID").optional(),
+  })
+  .refine((v) => Boolean(v.shipmentNo) || Boolean(v.shipmentId), { message: "shipmentNo ya da shipmentId gerekli" });
 
 const cancelReturnSchema = z.object({
   reason: z.string().trim().min(3, "İptal sebebi en az 3 karakter olmalı").max(500),
@@ -68,6 +92,31 @@ export class ReturnController {
     } catch (e) {
       next(e);
     }
+  };
+
+  createBatch = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = createReturnBatchSchema.parse(req.body ?? {});
+      res.status(201).json(await this.service.createReturnBatch(body, req.user?.userId));
+    } catch (e) { next(e); }
+  };
+
+  // ---- Kapsam sorguları (sevkiyat · sevk partisi) — helper, servis değil ------
+  lookupShipment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const q = lookupShipmentSchema.parse({
+        shipmentNo: typeof req.query.shipmentNo === "string" ? req.query.shipmentNo : undefined,
+        shipmentId: typeof req.query.shipmentId === "string" ? req.query.shipmentId : undefined,
+      });
+      res.status(200).json(await lookupShipmentForReturn(q));
+    } catch (e) { next(e); }
+  };
+
+  lookupLot = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const id = z.string().uuid("Geçersiz sevk partisi ID").parse(req.query.packingGroupId);
+      res.status(200).json(await lookupLotForReturn(id));
+    } catch (e) { next(e); }
   };
 
   /** İade Takibi raporu — filtre + toplam. */
