@@ -137,6 +137,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
     codes: [
       "shipping:read",
       "shipping:write",
+      // Sevk partisi yönetimi (aç/kapat/sil/numara ez) — depo-sevkiyat rolünün işi.
+      "shipping:packing-lot",
       "return:read",
       "return:write",
       "kartela:read",

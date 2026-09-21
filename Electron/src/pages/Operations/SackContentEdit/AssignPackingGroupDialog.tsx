@@ -104,11 +104,14 @@ export function AssignPackingGroupDialog({
   sacks,
   onOpenChange,
   onDone,
+  lot = false,
 }: {
   /** null = kapalı. Seçili DEPO çuvalları. */
   sacks: SackSearchRow[] | null;
   onOpenChange: (open: boolean) => void;
   onDone: () => void;
+  /** Sevk partisi modu: "Partiye Al / Transfer" — hedefte yeni ambalaj no, kaynakta boşluk. */
+  lot?: boolean;
 }) {
   const { open, rows, hedef, setHedef, ad, setAd, not, setNot, openGroups, mut, engel } =
     useAssignGroup(sacks, onOpenChange, onDone);
@@ -118,11 +121,12 @@ export function AssignPackingGroupDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Boxes className="h-4 w-4" /> Parti Ata
+            <Boxes className="h-4 w-4" /> {lot ? "Partiye Al / Transfer" : "Parti Ata"}
           </DialogTitle>
           <DialogDescription>
-            {rows.length} çuval bir hazırlık grubuna alınacak. Grup bir rezervasyon
-            değildir: stok düşmez, çuval kilitlenmez, sevk akışı değişmez.
+            {lot
+              ? `${rows.length} çuval seçilen sevk partisine alınacak ve orada YENİ ambalaj numarası alacak. Başka bir partiden geliyorsa eski numarası o partide boşluk olarak kalır (geri verilmez).`
+              : `${rows.length} çuval bir hazırlık grubuna alınacak. Grup bir rezervasyon değildir: stok düşmez, çuval kilitlenmez, sevk akışı değişmez.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -130,6 +134,7 @@ export function AssignPackingGroupDialog({
           <p className="rounded-md border border-warning/40 bg-warning/5 px-3 py-2 text-xs">{engel}</p>
         ) : (
           <TargetForm
+            lot={lot}
             hedef={hedef}
             setHedef={setHedef}
             openGroups={openGroups}
@@ -156,6 +161,7 @@ export function AssignPackingGroupDialog({
 /** Diyaloğun gövdesi — hedef seçimi + (yeni grupta) ad/not. Ayrı bileşen: ana
  *  fonksiyon 80 satır sınırının altında kalsın (lint tavanı). */
 function TargetForm({
+  lot,
   hedef,
   setHedef,
   openGroups,
@@ -164,6 +170,7 @@ function TargetForm({
   not,
   setNot,
 }: {
+  lot: boolean;
   hedef: string;
   setHedef: (v: string) => void;
   openGroups: PackingGroup[];
@@ -181,10 +188,10 @@ function TargetForm({
           value={hedef}
           onChange={(e) => setHedef(e.target.value)}
         >
-          <option value="yeni">Yeni grup (numarayı sistem verir)</option>
+          <option value="yeni">{lot ? "Yeni sevk partisi (numarayı sistem verir)" : "Yeni grup (numarayı sistem verir)"}</option>
           {openGroups.map((g) => (
             <option key={g.id} value={g.id}>
-              {g.name} — {g.sackCount} çuval
+              {g.name} — {g.sackCount} {lot ? "açık çuval" : "çuval"}
             </option>
           ))}
         </select>

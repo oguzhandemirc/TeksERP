@@ -67,6 +67,20 @@ const SACKS_KOLONLARI: ColumnDef<SackSearchRow>[] = [
     cell: ({ row }) => <span className="font-mono text-xs">{row.original.sackNo}</span>,
   },
   {
+    // SEVK PARTİSİ içi ambalaj no (2026-09-21) — skaler kolon, SIRALANABİLİR (keyset
+    // cursor ifade eder). Grup modunda `sacksKolonlari(…, lotMode=false)` bu sütunu düşürür.
+    id: "packageNo",
+    accessorKey: "packageNo",
+    header: () => <SortableHeader field="packageNo" label="Ambalaj No" />,
+    meta: { label: "Ambalaj No", exportValue: (s) => (s.packageNo != null ? String(s.packageNo) : "") },
+    cell: ({ row }) =>
+      row.original.packageNo != null ? (
+        <span className="font-semibold tabular-nums">{row.original.packageNo}</span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  {
     id: "customer",
     header: "Müşteri",
     meta: { label: "Müşteri" },
@@ -254,6 +268,6 @@ const SACKS_KOLONLARI: ColumnDef<SackSearchRow>[] = [
  * ŞUBE KOLONU YALNIZ ŞUBE AÇIKSA (2026-09-07). Kapalı kurulumda kolon hep "—"
  * basıyor ve tabloyu boşuna genişletiyordu; `SacksListView` bayrağı sorar.
  */
-export function sacksKolonlari(subeAcik: boolean): ColumnDef<SackSearchRow>[] {
-  return subeAcik ? SACKS_KOLONLARI : SACKS_KOLONLARI.filter((c) => c.id !== "branch");
+export function sacksKolonlari(subeAcik: boolean, lotMode = false): ColumnDef<SackSearchRow>[] {
+  return SACKS_KOLONLARI.filter((c) => (subeAcik || c.id !== "branch") && (lotMode || c.id !== "packageNo"));
 }

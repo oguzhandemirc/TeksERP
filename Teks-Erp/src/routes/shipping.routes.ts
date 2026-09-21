@@ -10,6 +10,9 @@ const router = Router();
 const READ = requireAnyPermission("shipping:read", "shipping:write", "mobile:tarti-paket", "mobile:sevkiyat");
 // Yazma: web sevkiyat yazma veya mobil paket/sevkiyat ekranları
 const WRITE = requireAnyPermission("shipping:write", "mobile:tarti-paket", "mobile:sevkiyat");
+// Sevk partisi YÖNETİMİ (kapat · yeniden aç · sil · ambalaj no ez) — çuval açan/okutan
+// herkesin işi değil; belgeye basılan kimliği değiştirir. Tablet bu fazda dışarıda.
+const LOT_MANAGE = requireAnyPermission("shipping:packing-lot");
 // Muhasebe okuma: sevk fişi + Excel export (satış raporu izni de erişebilir).
 const ACCOUNTING_READ = requireAnyPermission("shipping:read", "shipping:write", "report:sales");
 // Fatura işareti: muhasebeciye `shipping:write` VERİLMEZ (o izin sevkiyat iptalini de
@@ -300,6 +303,68 @@ router.post("/packing-groups/:id/sacks", verifyToken, WRITE, controller.addSacks
  *     responses: { 200: { description: Güncellendi } }
  */
 router.patch("/packing-groups/:id", verifyToken, WRITE, controller.updatePackingGroup);
+/**
+ * @openapi
+ * /api/shipping/packing-groups/{id}:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Tek paketleme grubu / sevk partisi (özet)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses: { 200: { description: Grup } }
+ *   delete:
+ *     tags: [Shipping]
+ *     summary: Hiç çuvalı olmamış sevk partisini sil (taslak)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Silindi }
+ *       400: { description: "Sevk partisi modu kapalı (PACKING_LOT_MODE_OFF)" }
+ *       409: { description: "Çuvalı olan parti silinmez (PACKING_LOT_NOT_EMPTY)" }
+ */
+router.get("/packing-groups/:id", verifyToken, READ, controller.getPackingGroup);
+router.delete("/packing-groups/:id", verifyToken, LOT_MANAGE, controller.deletePackingGroup);
+/**
+ * @openapi
+ * /api/shipping/packing-groups/{id}/close:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Sevk partisini kapat (açık çuval varken de izinli)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Kapatıldı }
+ *       409: { description: "Zaten kapalı (PACKING_LOT_ALREADY_CLOSED)" }
+ * /api/shipping/packing-groups/{id}/reopen:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Kapalı sevk partisini yeniden aç
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Yeniden açıldı }
+ *       409: { description: "Zaten açık (PACKING_LOT_ALREADY_OPEN)" }
+ */
+router.post("/packing-groups/:id/close", verifyToken, LOT_MANAGE, controller.closePackingGroup);
+router.post("/packing-groups/:id/reopen", verifyToken, LOT_MANAGE, controller.reopenPackingGroup);
+/**
+ * @openapi
+ * /api/shipping/sacks/{id}/package-no:
+ *   patch:
+ *     tags: [Shipping]
+ *     summary: Çuvalın ambalaj numarasını ez (mod otomatik-ezilebilir / elle)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Yazıldı }
+ *       409: { description: "Numara dolu (PACKAGE_NO_TAKEN) / çuval havuzda değil" }
+ */
+router.patch("/sacks/:id/package-no", verifyToken, LOT_MANAGE, controller.setSackPackageNo);
 // Çuval içeriği düzeltme (rol/kartela çıkar/taşı)
 router.post("/rolls/:rollId/remove-from-sack", verifyToken, WRITE, controller.removeRollFromSack);
 router.post("/rolls/:rollId/move-sack", verifyToken, WRITE, controller.moveRollToSack);

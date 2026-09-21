@@ -3,7 +3,7 @@
 // Çalıştır: npx tsx scripts/test_sack_label.ts
 //
 // Doğrulananlar:
-//   1. Katalog: FIELD_CATALOG[SACK] var, 10 alan, ürün/renk alanı YOK
+//   1. Katalog: FIELD_CATALOG[SACK] var, 12 alan (2026-09-21: +packageNo +packingGroupName), ürün/renk alanı YOK
 //   2. Birleşik katalog: paylaşılan key'lerin kinds dizisine SACK eklendi
 //   3. payload.barcode === payload.sackNo === Sack.sackNo (TEK KOD kuralı)
 //   4. rollCount/lengthMeters ölü topu (CANCELLED/SCRAP) SAYMAZ
@@ -48,7 +48,7 @@ async function main(): Promise<void> {
   // ── 1) Katalog ────────────────────────────────────────────────────────────
   const sackKeys = SACK_FIELDS.map((f) => f.key);
   check("1a) FIELD_CATALOG[SACK] tanımlı", !!FIELD_CATALOG[LabelKind.SACK]);
-  check("1b) SACK kataloğu 10 alan", sackKeys.length === 10, sackKeys.join(","));
+  check("1b) SACK kataloğu 12 alan", sackKeys.length === 12, sackKeys.join(","));
   check(
     "1c) çuval kataloğunda ÜRÜN/RENK alanı YOK (karışık içerik)",
     !sackKeys.some((k) => k.startsWith("item") || k.startsWith("color")),

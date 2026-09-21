@@ -121,10 +121,27 @@ export const sackHubService = {
       .then((r) => r.data),
 
   // ── Paketleme grubu (çalışma yaftası) ──────────────────────────────────────
-  /** Bir carinin CANLI grupları (havuzda çuvalı olanlar). Ölü grup dönmez. */
-  listPackingGroups: (customerId: string): Promise<ApiResponse<PackingGroup[]>> =>
+  /** Bir carinin CANLI grupları (havuzda çuvalı olanlar). Ölü grup dönmez.
+   *  Sevk partisi modunda `status`: OPEN (varsayılan) · CLOSED · ALL. */
+  listPackingGroups: (customerId: string, status?: "OPEN" | "CLOSED" | "ALL"): Promise<ApiResponse<PackingGroup[]>> =>
     apiClient
-      .get<ApiResponse<PackingGroup[]>>(`/api/shipping/packing-groups?customerId=${encodeURIComponent(customerId)}`)
+      .get<ApiResponse<PackingGroup[]>>(
+        `/api/shipping/packing-groups?customerId=${encodeURIComponent(customerId)}${status ? `&status=${status}` : ""}`,
+      )
+      .then((r) => r.data),
+
+  // ── Sevk partisi (yaşam döngüsü + ambalaj no) ───────────────────────────────
+  closePackingGroup: (groupId: string): Promise<ApiResponse<PackingGroup>> =>
+    apiClient.post<ApiResponse<PackingGroup>>(`/api/shipping/packing-groups/${groupId}/close`).then((r) => r.data),
+  reopenPackingGroup: (groupId: string): Promise<ApiResponse<PackingGroup>> =>
+    apiClient.post<ApiResponse<PackingGroup>>(`/api/shipping/packing-groups/${groupId}/reopen`).then((r) => r.data),
+  /** Hiç çuvalı olmamış parti (taslak) silinir; çuvalı olan 409. */
+  deletePackingGroup: (groupId: string): Promise<ApiResponse<{ id: string }>> =>
+    apiClient.delete<ApiResponse<{ id: string }>>(`/api/shipping/packing-groups/${groupId}`).then((r) => r.data),
+  /** Ambalaj numarasını ez (mod otomatik-ezilebilir / elle); çakışma 409. */
+  setSackPackageNo: (sackId: string, packageNo: number): Promise<ApiResponse<{ id: string; packageNo: number }>> =>
+    apiClient
+      .patch<ApiResponse<{ id: string; packageNo: number }>>(`/api/shipping/sacks/${sackId}/package-no`, { packageNo })
       .then((r) => r.data),
 
   /** "Parti Ata" — seçili çuvallardan YENİ grup. `name` verilirse otomatik
@@ -181,12 +198,22 @@ export const sackHubService = {
   /** Yeni depo çuvalı aç — müşteri/şube OPSİYONEL (müşterisiz genel stok da olur).
    *  clientToken: deneme başına bir kez üretilir; retry aynı token'la → backend
    *  mükerrer boş çuval yerine ilk açılanı döner (idempotent replay, A4). */
-  openSack: (body: { customerId?: string | null; branchId?: string | null; clientToken?: string }): Promise<ApiResponse<OpenedSack>> =>
+  openSack: (body: {
+    customerId?: string | null;
+    branchId?: string | null;
+    clientToken?: string;
+    /** Sevk partisi: çuval bu partide doğar ve numara alır (yalnız parti modunda gönderilir). */
+    packingGroupId?: string | null;
+    /** Ezme/elle numara — mod izin veriyorsa. */
+    packageNo?: number | null;
+  }): Promise<ApiResponse<OpenedSack>> =>
     apiClient
       .post<ApiResponse<OpenedSack>>(`/api/shipping/sacks`, {
         ...(body.customerId ? { customerId: body.customerId } : {}),
         ...(body.branchId ? { branchId: body.branchId } : {}),
         ...(body.clientToken ? { clientToken: body.clientToken } : {}),
+        ...(body.packingGroupId ? { packingGroupId: body.packingGroupId } : {}),
+        ...(body.packageNo != null ? { packageNo: body.packageNo } : {}),
       })
       .then((r) => r.data),
 

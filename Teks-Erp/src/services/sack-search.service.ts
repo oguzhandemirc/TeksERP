@@ -605,7 +605,8 @@ function dokumSatiri(
  * Yeni alan eklerken: kolon `select`te DE olmalı — `buildNextDynamicCursor`
  * cursor değerini satırdan okur.
  */
-const SACK_SORTABLE = ["createdAt", "sackNo", "notes", "weightKg"] as const;
+// `packageNo` (2026-09-21) — sevk partisi içi sıra; skaler kolon, keyset cursor'la ifade edilir.
+const SACK_SORTABLE = ["createdAt", "sackNo", "notes", "weightKg", "packageNo"] as const;
 type SackSortField = (typeof SACK_SORTABLE)[number];
 /** NULL taşıyabilen sıralama kolonları → `nulls: "last"` + cursor'da null fazı. */
 const SACK_NULLABLE_SORT = new Set<SackSortField>(["notes", "weightKg"]);
@@ -658,6 +659,7 @@ export class SackSearchService {
         id: true,
         sackNo: true,
         seq: true,
+        packageNo: true,
         weightKg: true,
         createdAt: true,
         // Yorum listede yalnız KIRPILMIŞ önizleme olarak döner (aşağıda notePreview:
@@ -739,6 +741,7 @@ export class SackSearchService {
         id: s.id,
         sackNo: s.sackNo,
         seq: s.seq,
+        packageNo: s.packageNo, // sevk partisi içi ambalaj no; partisiz/grup modunda null
         weightKg: s.weightKg === null ? null : Number(s.weightKg),
         createdAt: s.createdAt,
         // Yorum var mı (💬 göstergesi) + ilk 80 karakter (satır ipucu).

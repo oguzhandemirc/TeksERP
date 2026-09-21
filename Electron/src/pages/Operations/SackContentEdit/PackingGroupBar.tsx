@@ -137,7 +137,7 @@ export function PackingGroupBar({ customerId }: { customerId: string | null }) {
         </div>
       )}
 
-      <GrupDuzenleDialog
+      <PackingGroupEditDialog
         grup={duzenle}
         onOpenChange={(o) => !o && setDuzenle(null)}
         onDone={() => {
@@ -154,14 +154,17 @@ export function PackingGroupBar({ customerId }: { customerId: string | null }) {
  * artık o grubu tarif etmiyor ve sayacı da ileri taşımamalı. Pencere bunu
  * cümleyle söyler, kullanıcı sürprizle karşılaşmasın.
  */
-function GrupDuzenleDialog({
+export function PackingGroupEditDialog({
   grup,
   onOpenChange,
   onDone,
+  lot = false,
 }: {
   grup: PackingGroup | null;
   onOpenChange: (open: boolean) => void;
   onDone: () => void;
+  /** Sevk partisi modu: ad BELGEYE BASILIR — açıklama cümlesi buna göre. */
+  lot?: boolean;
 }) {
   const open = grup !== null;
   const [ad, setAd] = useState("");
@@ -194,9 +197,11 @@ function GrupDuzenleDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Grubu düzenle</DialogTitle>
+          <DialogTitle>{lot ? "Sevk partisini düzenle" : "Grubu düzenle"}</DialogTitle>
           <DialogDescription>
-            Grup adı ve notu yalnız EKRANDA görünür — çuval etiketine ve irsaliyeye basılmaz.
+            {lot
+              ? "Parti adı, ayar açıksa irsaliye/çeki listesine ve çuval etiketine basılır — müşterinin göreceği bir addır."
+              : "Grup adı ve notu yalnız EKRANDA görünür — çuval etiketine ve irsaliyeye basılmaz."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">

@@ -9,6 +9,9 @@ import type {
   ShippingOrderCoverage,
   ShippingInvoiceMode,
   PackingGroupNumbering,
+  PackingGroupMode,
+  PackageNoMode,
+  PackageNumbering,
   SackDumpNameMode,
 } from "@/lib/shipping-flags";
 import {
@@ -404,6 +407,22 @@ export interface FeatureFlags {
   packingGroupsEnabled: boolean;
   /** Grup numara rejimi: 'artan' (default) | 'bosluk-doldur'. */
   packingGroupNumbering: PackingGroupNumbering;
+  /** Grup davranış modu: 'grup' (default = bugünkü) | 'sevk-partisi'. */
+  packingGroupMode: PackingGroupMode;
+  /** Ambalaj no 0'dan mı başlar (default false). */
+  packageNoStartsAtZero: boolean;
+  /** Ambalaj no atama modu (default 'otomatik-ezilebilir'). */
+  packageNoMode: PackageNoMode;
+  /** Ambalaj no sayaç rejimi (default 'artan'). */
+  packageNumbering: PackageNumbering;
+  /** Son açık çuval sevk edilince parti kapanır (default false). */
+  packingLotAutoClose: boolean;
+  /** Partisiz çuval açma yasak (default false). */
+  packingLotRequired: boolean;
+  /** Kısmi sevk serbest (default TRUE). */
+  packingLotPartialDispatch: boolean;
+  /** Belgede parti adı + ambalaj no kolonu (default false). */
+  shippingDocPackingLot: boolean;
   /** Çuval/grup içerik dökümünde ad: 'ikisi' (default) | 'bizdeki' | 'musterideki'. */
   sackDumpNameMode: SackDumpNameMode;
   /** Tahsiste EN toleransı açık mı (default false = tam eşitlik). Kumaş ve renk KESİN. */

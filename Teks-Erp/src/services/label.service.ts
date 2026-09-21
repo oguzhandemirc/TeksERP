@@ -1596,6 +1596,8 @@ export class LabelService {
         customerId: true,
         customer: { select: { name: true } },
         branch: { select: { name: true } },
+        packageNo: true,
+        packingGroup: { select: { name: true } },
         rolls: {
           where: { status: { notIn: SACK_ABSENT_STATUSES } },
           select: { currentQty: true },
@@ -1638,6 +1640,8 @@ export class LabelService {
       branchName: sack.branch?.name ?? null,
       // Çok satırlı yorum etiket hücresinde satır taşırmasın → tek satıra düzleştir.
       sackNote: sack.notes ? sack.notes.replace(/\s*\n+\s*/g, " · ").trim() : null,
+      packageNo: sack.packageNo ?? null,
+      packingGroupName: sack.packingGroup?.name ?? null,
     };
     return { success: true, data: payload };
   }

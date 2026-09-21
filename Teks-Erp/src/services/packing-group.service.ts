@@ -32,6 +32,14 @@
 // yerinde durduğu için hazırlık grubu da olduğu gibi geri gelir. Storno'nun
 // sözleşmesi "mal HİÇ ÇIKMADI"dır; hazırlığın da hiç bozulmamış olması doğru
 // cevaptır.
+//
+// ── SEVK PARTİSİ MODU (2026-09-21, `packing.groupMode = sevk-partisi`) ─────
+// Aynı tablo, ikinci DAVRANIŞ (docs/design/SEVK-PARTISI-TASARIM.md): grup bir
+// yafta değil KAPTIR — açık/kapalı durum taşır, boş doğar ve yaşar, parti sırası
+// geri verilmez (adı belgeye basılır), her çuval parti içinde bir AMBALAJ NO alır
+// ve sevk edildikten sonra da partide numarasıyla kalır. Yukarıdaki "numara park
+// yeridir / grup görünmez olur" cümleleri YALNIZ grup moduna aittir; moda göre
+// dallanan tek yüklem `liveGroupWhere`, tek ayar demeti `readPackingLotSettings`.
 // =============================================================================
 
 import { Prisma } from "@prisma/client";
@@ -45,14 +53,17 @@ import {
   readPackingGroupsEnabled,
 } from "./system-setting.service";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
+import { markLotLabelsStale } from "./packing-lot.service";
 import {
   GROUP_WITH_SACKS_SELECT,
-  LIVE_GROUP_WHERE,
   PackingGroupDto,
   assertGroupNameFreeTx,
   claimSacksIntoGroupTx,
   formatPackingGroupName,
+  liveGroupWhere,
   nextPackingGroupSeqTx,
+  packageNoStart,
+  readPackingLotSettings,
   toDto,
 } from "./helpers/packing-group.helper";
 
@@ -73,18 +84,78 @@ async function assertPackingGroupsEnabled(): Promise<void> {
   });
 }
 
+export type PackingGroupListStatus = "OPEN" | "CLOSED" | "ALL";
+
+/**
+ * `createWithSacks` replay'i (clientToken). GÖVDE KAPISI (F117): aynı token BAŞKA bir
+ * yükle gelirse cached kaydı dönmek YANLIŞ cevaptır — operatör "atadım" sanır, seçtiği
+ * çuvallar gruplanmamış kalır. Kimlik: cari + ÇUVAL KÜMESİ. REPLAY'İN DÖRDÜNCÜ DURUMU:
+ * token'lı grup bu arada BOŞALMIŞSA (grup modu) cached kaydı dönmek yanlış cevaptır —
+ * operatöre boş bir grup gösterirdi; parti modunda boş parti MEŞRUDUR, kapı yok.
+ */
+async function replayCreateWithSacks(
+  clientToken: string,
+  customerId: string,
+  sackIds: string[],
+  lotMode: boolean,
+): Promise<ApiResponse<PackingGroupDto> | null> {
+  const replay = await prisma.packingGroup.findUnique({ where: { clientToken }, select: GROUP_WITH_SACKS_SELECT });
+  if (!replay) return null;
+  assertReplayPayloadMatches(
+    [
+      { ad: "customerId", mevcut: replay.customerId, gelen: customerId },
+      {
+        ad: "sackIds",
+        mevcut: [...replay.sacks.map((sk) => sk.id)].sort().join(","),
+        gelen: [...sackIds].sort().join(","),
+      },
+    ],
+    "Bu istemci anahtarı BAŞKA bir çuval kümesiyle kullanılmış — listeyi yenileyip yeniden deneyin.",
+  );
+  if (replay.sacks.length === 0 && !lotMode) {
+    throw AppError.conflict(
+      "Bu grup daha önce oluşturulmuş ama içinde havuz çuvalı kalmamış — " +
+        "çuvalları yeniden seçip yeni bir grup oluşturun.",
+      { code: "PACKING_GROUP_REPLAY_EMPTY" },
+    );
+  }
+  return { success: true, data: toDto(replay), message: "Grup zaten oluşturulmuş" };
+}
+
+
 export const PackingGroupService = {
   /**
    * Bir carinin CANLI grupları. Ölü grup (havuzda çuvalı kalmamış) listelenmez —
    * silinmediği için hâlâ DB'dedir, yalnız hiçbir yüzeyden görünmez.
    */
-  async list(customerId: string): Promise<ApiResponse<PackingGroupDto[]>> {
+  async list(
+    customerId: string,
+    opts: { status?: PackingGroupListStatus } = {},
+  ): Promise<ApiResponse<PackingGroupDto[]>> {
+    const lot = await readPackingLotSettings();
+    // Parti modunda `status` süzgeci: AÇIK (varsayılan) · KAPALI · TÜMÜ. Grup
+    // modunda süzgeç YOK — canlılık türetilmiş, bayat parametre sessizce yutulmaz.
+    if (lot.mode !== "sevk-partisi" && opts.status && opts.status !== "OPEN") {
+      throw AppError.badRequest("Durum süzgeci yalnız sevk partisi modunda var", { code: "PACKING_LOT_MODE_OFF" });
+    }
+    const status = opts.status ?? "OPEN";
+    const where: Prisma.PackingGroupWhereInput =
+      lot.mode === "sevk-partisi"
+        ? { customerId, ...(status === "ALL" ? {} : { status }) }
+        : { ...liveGroupWhere("grup"), customerId };
     const rows = await prisma.packingGroup.findMany({
-      where: { ...LIVE_GROUP_WHERE, customerId },
+      where,
       select: GROUP_WITH_SACKS_SELECT,
       orderBy: [{ seq: "asc" }, { createdAt: "asc" }],
     });
     return { success: true, data: rows.map(toDto) };
+  },
+
+  /** Tek parti/grup (parti içi ekranın başlığı). */
+  async get(groupId: string): Promise<ApiResponse<PackingGroupDto>> {
+    const row = await prisma.packingGroup.findUnique({ where: { id: groupId }, select: GROUP_WITH_SACKS_SELECT });
+    if (!row) throw AppError.notFound("Grup bulunamadı");
+    return { success: true, data: toDto(row) };
   },
 
   /**
@@ -103,41 +174,15 @@ export const PackingGroupService = {
     userId?: string;
   }): Promise<ApiResponse<PackingGroupDto>> {
     await assertPackingGroupsEnabled();
+    const lot = await readPackingLotSettings();
+    const lotMode = lot.mode === "sevk-partisi";
     const sackIds = [...new Set(input.sackIds)];
-    if (sackIds.length === 0) throw AppError.badRequest("En az bir çuval seçin");
+    // Parti modunda BOŞ PARTİ MEŞRUDUR (K5: "sevk partisi oluştur" → içine çuval açılır).
+    if (sackIds.length === 0 && !lotMode) throw AppError.badRequest("En az bir çuval seçin");
 
     if (input.clientToken) {
-      const replay = await prisma.packingGroup.findUnique({
-        where: { clientToken: input.clientToken },
-        select: GROUP_WITH_SACKS_SELECT,
-      });
-      if (replay) {
-        // GÖVDE KAPISI (F117): aynı token BAŞKA bir yükle gelirse cached kaydı
-        // dönmek YANLIŞ cevaptır — operatör "atadım" sanır, seçtiği çuvallar
-        // gruplanmamış kalır. Kimlik: cari + ÇUVAL KÜMESİ.
-        assertReplayPayloadMatches(
-          [
-            { ad: "customerId", mevcut: replay.customerId, gelen: input.customerId },
-            {
-              ad: "sackIds",
-              mevcut: [...replay.sacks.map((sk) => sk.id)].sort().join(","),
-              gelen: [...sackIds].sort().join(","),
-            },
-          ],
-          "Bu istemci anahtarı BAŞKA bir çuval kümesiyle kullanılmış — listeyi yenileyip yeniden deneyin.",
-        );
-        // REPLAY'İN DÖRDÜNCÜ DURUMU: token'lı grup bu arada BOŞALMIŞSA cached
-        // kaydı dönmek yanlış cevaptır — operatöre boş bir grup gösterirdi ve
-        // seçtiği çuvallar gruplanmamış kalırdı. Doğru hamle yeni bir deneme.
-        if (replay.sacks.length === 0) {
-          throw AppError.conflict(
-            "Bu grup daha önce oluşturulmuş ama içinde havuz çuvalı kalmamış — " +
-              "çuvalları yeniden seçip yeni bir grup oluşturun.",
-            { code: "PACKING_GROUP_REPLAY_EMPTY" },
-          );
-        }
-        return { success: true, data: toDto(replay), message: "Grup zaten oluşturulmuş" };
-      }
+      const cached = await replayCreateWithSacks(input.clientToken, input.customerId, sackIds, lotMode);
+      if (cached) return cached;
     }
 
     const mode = await readPackingGroupNumbering();
@@ -146,10 +191,10 @@ export const PackingGroupService = {
     const created = await prisma.$transaction(async (tx) => {
       // Elle ad verildiyse sayaç HİÇ ÇALIŞMAZ (kilit de alınmaz): "Cuma tırı"
       // bir sıra numarası değildir ve sonraki otomatik numarayı zıplatmamalı.
-      const seq = manualName ? null : await nextPackingGroupSeqTx(tx, input.customerId, mode);
-      const name = manualName ?? formatPackingGroupName(seq as number);
+      const seq = manualName ? null : await nextPackingGroupSeqTx(tx, input.customerId, mode, lot.mode);
+      const name = manualName ?? formatPackingGroupName(seq as number, lot.mode);
 
-      await assertGroupNameFreeTx(tx, input.customerId, name, null);
+      await assertGroupNameFreeTx(tx, input.customerId, name, { exceptId: null, groupMode: lot.mode });
 
       const group = await tx.packingGroup.create({
         data: {
@@ -160,15 +205,20 @@ export const PackingGroupService = {
           clientToken: input.clientToken ?? null,
           createdById: input.userId ?? null,
           updatedById: input.userId ?? null,
+          // Sayaç ilk çuvalın numarasından başlar (K3); grup modunda okunmaz.
+          nextPackageNo: packageNoStart(lot.startsAtZero),
         },
         select: { id: true },
       });
 
-      await claimSacksIntoGroupTx(tx, {
-        customerId: input.customerId,
-        sackIds,
-        groupId: group.id,
-      });
+      if (sackIds.length > 0) {
+        await claimSacksIntoGroupTx(tx, {
+          customerId: input.customerId,
+          sackIds,
+          groupId: group.id,
+          lot: lotMode ? { numbering: lot.numbering, startsAtZero: lot.startsAtZero } : null,
+        });
+      }
 
       return tx.packingGroup.findUniqueOrThrow({
         where: { id: group.id },
@@ -193,18 +243,28 @@ export const PackingGroupService = {
     userId?: string,
   ): Promise<ApiResponse<PackingGroupDto>> {
     await assertPackingGroupsEnabled();
+    const lot = await readPackingLotSettings();
+    const lotMode = lot.mode === "sevk-partisi";
     const ids = [...new Set(sackIds)];
     if (ids.length === 0) throw AppError.badRequest("En az bir çuval seçin");
 
     const group = await prisma.packingGroup.findUnique({
       where: { id: groupId },
-      select: { id: true, customerId: true, name: true, sacks: { where: { shipmentId: null }, select: { id: true } } },
+      select: { id: true, customerId: true, name: true, status: true, sacks: { where: { shipmentId: null }, select: { id: true } } },
     });
     if (!group) throw AppError.notFound("Grup bulunamadı");
-    // ÖLÜ GRUP DİRİLTİLMEZ: boşalmış bir gruba çuval eklemek, geçen haftanın
-    // notunu bugünkü çuvallara yapıştırırdı. Ölü grup zaten hiçbir listede yok;
-    // buraya ancak elde kalmış bayat bir id ile gelinir.
-    if (group.sacks.length === 0) {
+    if (lotMode) {
+      // KAPALI PARTİYE ÇUVAL GİRMEZ — önce yeniden açılır (K5). Boş açık parti
+      // MEŞRU, ölü-grup kapısı burada yok.
+      if (group.status !== "OPEN") {
+        throw AppError.conflict(`${group.name} kapalı — çuval eklemek için partiyi yeniden açın.`, {
+          code: "PACKING_LOT_CLOSED",
+        });
+      }
+    } else if (group.sacks.length === 0) {
+      // ÖLÜ GRUP DİRİLTİLMEZ: boşalmış bir gruba çuval eklemek, geçen haftanın
+      // notunu bugünkü çuvallara yapıştırırdı. Ölü grup zaten hiçbir listede yok;
+      // buraya ancak elde kalmış bayat bir id ile gelinir.
       throw AppError.conflict(
         "Bu grup boşalmış (içinde havuz çuvalı kalmamış) — yeni bir grup oluşturun.",
         { code: "PACKING_GROUP_DEAD" },
@@ -212,13 +272,19 @@ export const PackingGroupService = {
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-      await claimSacksIntoGroupTx(tx, { customerId: group.customerId, sackIds: ids, groupId });
+      await claimSacksIntoGroupTx(tx, {
+        customerId: group.customerId,
+        sackIds: ids,
+        groupId,
+        lot: lotMode ? { numbering: lot.numbering, startsAtZero: lot.startsAtZero } : null,
+      });
       return tx.packingGroup.findUniqueOrThrow({
         where: { id: groupId },
         select: GROUP_WITH_SACKS_SELECT,
       });
     });
 
+    if (lotMode) await markLotLabelsStale(group.customerId, ids);
     await AuditService.log({
       userId,
       action: "UPDATE",
@@ -226,7 +292,7 @@ export const PackingGroupService = {
       recordId: groupId,
       newData: { addedSackIds: ids },
     });
-    return { success: true, data: toDto(updated), message: "Çuvallar gruba eklendi" };
+    return { success: true, data: toDto(updated), message: lotMode ? `Çuvallar ${group.name} partisine alındı` : "Çuvallar gruba eklendi" };
   },
 
   /**
@@ -239,7 +305,8 @@ export const PackingGroupService = {
     if (ids.length === 0) throw AppError.badRequest("En az bir çuval seçin");
     const res = await prisma.sack.updateMany({
       where: { id: { in: ids }, shipmentId: null },
-      data: { packingGroupId: null },
+      // Partiden çıkan çuvalın numarası da düşer (grup modunda zaten NULL).
+      data: { packingGroupId: null, packageNo: null },
     });
     await AuditService.log({
       userId,
@@ -260,6 +327,7 @@ export const PackingGroupService = {
     userId?: string,
   ): Promise<ApiResponse<PackingGroupDto>> {
     await assertPackingGroupsEnabled();
+    const lot = await readPackingLotSettings();
     const current = await prisma.packingGroup.findUnique({
       where: { id: groupId },
       select: { id: true, customerId: true, name: true, seq: true, note: true },
@@ -272,8 +340,9 @@ export const PackingGroupService = {
       if (!name) throw AppError.badRequest("Grup adı boş olamaz");
       // Ad ELLE değiştirildi → `seq` DÜŞER. Numara artık bu grubu tarif etmiyor;
       // `seq` bırakılsaydı sayaç "3. Grup" diye bir grup varmış gibi davranır ve
-      // ekranda hiç görünmeyen bir numarayı rezerve ederdi.
-      await assertGroupNameFreeTx(prisma, current.customerId, name, groupId);
+      // ekranda hiç görünmeyen bir numarayı rezerve ederdi. (Parti modunda sayaç
+      // kapalı partilere de baktığı için numara yine geri verilmez.)
+      await assertGroupNameFreeTx(prisma, current.customerId, name, { exceptId: groupId, groupMode: lot.mode });
       data.name = name;
       data.seq = null;
     }
@@ -295,4 +364,3 @@ export const PackingGroupService = {
     return { success: true, data: toDto(row), message: "Grup güncellendi" };
   },
 };
-

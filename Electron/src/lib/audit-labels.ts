@@ -845,6 +845,11 @@ const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   // MachineSealState.OPEN (2026-09-14) — karne MÜHÜRSÜZ; global `OPEN` alış siparişi
   // dilinde ("Açık (mal bekleniyor)"). Ortak Türkçe YETMEZ.
   "MACHINE_SHIFT_STAT.sealState": { OPEN: "Açık (mühürsüz)" },
+  // PackingGroupStatus (sevk partisi, 2026-09-21) — `OPEN`/`CLOSED` PurchaseOrderStatus
+  // ile ÇAKIŞIR; global cevap alış siparişi dilinde ("mal bekleniyor" / "tamamlandı")
+  // ve parti için YANLIŞ: parti kapanınca hiçbir şey "tamamlanmış" olmaz, yalnız
+  // listeden düşer ve yeniden açılabilir.
+  "packing_groups.status": { OPEN: "Açık", CLOSED: "Kapalı" },
 };
 
 /**
@@ -935,8 +940,11 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
 
   // ── Ortak Türkçe YETMEYEN — FIELD_ENUM_OVERRIDES ile ayrılmış ──────────────
   OPEN:
-    "PurchaseOrderStatus('Açık (mal bekleniyor)') ve MachineSealState(karne mühürsüz) — ortak cevap karne için YANLIŞ; " +
-    "MACHINE_SHIFT_STAT.sealState override'ı ile ayrıldı (2026-09-14)",
+    "PurchaseOrderStatus('Açık (mal bekleniyor)'), MachineSealState(karne mühürsüz) ve PackingGroupStatus(sevk partisi) — ortak cevap karne ve parti için YANLIŞ; " +
+    "MACHINE_SHIFT_STAT.sealState ve packing_groups.status override'ları ile ayrıldı (2026-09-14 · 2026-09-21)",
+  CLOSED:
+    "PurchaseOrderStatus('Kapandı (tamamlandı)') ve PackingGroupStatus — ortak cevap parti için YANLIŞ (kapalı parti tamamlanmış değil, yeniden açılabilir); " +
+    "packing_groups.status override'ı ile ayrıldı (2026-09-21)",
   PURCHASE:
     "InvoiceType('Alış Faturası') ve PriceKind — ortak cevap PriceKind için YANLIŞ; " +
     "ITEM_PRICE.kind override'ı ile ayrıldı (bu kusur 2026 öncesinde ELLE yakalandı, bekçisi yoktu)",

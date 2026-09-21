@@ -23,13 +23,15 @@ import { qualityGradeService } from "@/pages/QualityGrades/service";
 import { sackTagService } from "@/pages/SackTags/service";
 import { sackHubService } from "./service";
 import { sacksKolonlari } from "./sacksColumns";
-import { useCustomerBranchesEnabled, usePackingGroupsEnabled } from "@/hooks/usePricingEnabled";
+import { useCustomerBranchesEnabled, usePackingGroupMode, usePackingGroupsEnabled } from "@/hooks/usePricingEnabled";
 import { SackContentDumpMenu } from "./SackContentDumpMenu";
 import { fromDumpRows } from "./sackDump";
 import { RollLocateCard } from "./RollLocateCard";
 import { PickListPrintDialog } from "./PickListPrintDialog";
 import { CreateShipmentDialog } from "./CreateShipmentDialog";
 import { PackingGroupBar } from "./PackingGroupBar";
+import { PackingLotBar } from "./PackingLotBar";
+import { isLotMode } from "./packingLotUi";
 import { AssignPackingGroupDialog } from "./AssignPackingGroupDialog";
 import { WeighSackDialog } from "./WeighSackDialog";
 import { SackDetailSheet } from "./SackDetailSheet";
@@ -212,6 +214,8 @@ export function SacksListView({ onEditSack }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   const subeAcik = useCustomerBranchesEnabled();
   const groupsEnabled = usePackingGroupsEnabled();
+  // Sevk partisi modu (2026-09-21): şerit, sütun ve "Partiye Al" sözü buna göre.
+  const lotMode = isLotMode(groupsEnabled, usePackingGroupMode());
   const [located, setLocated] = useState<LocatedRoll | null>(null);
   const [pickListIds, setPickListIds] = useState<string[] | null>(null);
   const [shipSacks, setShipSacks] = useState<SackSearchRow[] | null>(null);
@@ -226,7 +230,7 @@ export function SacksListView({ onEditSack }: Props) {
   const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<SackSearchRow>({
     queryKey: "sack-search",
     fetchFn: sackHubService.listSacks,
-    columns: sacksKolonlari(subeAcik),
+    columns: sacksKolonlari(subeAcik, lotMode),
     defaultPageSize: 50,
     // Yalnız depodaki (sevk edilmemiş) çuvallar seçilebilir → havuzdan sevk kurulur.
     enableSelection: (row) => isWarehouseSack(row.original),
@@ -329,7 +333,7 @@ export function SacksListView({ onEditSack }: Props) {
       {/* PAKETLEME GRUBU ŞERİDİ — yalnız bayrak açık VE tek cari seçiliyken.
           Gruplar cariye özeldir; çok carili listede iki farklı "P1" yan yana
           gelir ve numara benzersizmiş yanılgısı üretirdi. */}
-      {groupsEnabled && <PackingGroupBar customerId={tekCariId} />}
+      {groupsEnabled && (lotMode ? <PackingLotBar customerId={tekCariId} /> : <PackingGroupBar customerId={tekCariId} />)}
 
       {located && <RollLocateCard roll={located} onClear={() => setLocated(null)} />}
 
@@ -419,10 +423,10 @@ export function SacksListView({ onEditSack }: Props) {
                 variant="outline"
                 className="gap-1.5"
                 disabled={rows.length === 0}
-                title="Seçili çuvalları bir hazırlık grubuna al (rezervasyon değil)"
+                title={lotMode ? "Seçili çuvalları bir sevk partisine al / başka partiye taşı (yeni ambalaj no alır)" : "Seçili çuvalları bir hazırlık grubuna al (rezervasyon değil)"}
                 onClick={() => setGroupSacks(rows)}
               >
-                <Boxes className="h-4 w-4" /> Parti Ata ({rows.length})
+                <Boxes className="h-4 w-4" /> {lotMode ? "Partiye Al" : "Parti Ata"} ({rows.length})
               </Button>
             )}
             {/* DAĞIT — kullanıcının kafasındaki "listeden çuval sil" işi. Gerçekte
@@ -451,6 +455,7 @@ export function SacksListView({ onEditSack }: Props) {
       <PickListPrintDialog sackIds={pickListIds} onOpenChange={(o) => !o && setPickListIds(null)} />
       <AssignPackingGroupDialog
         sacks={groupSacks}
+        lot={lotMode}
         onOpenChange={(o) => !o && setGroupSacks(null)}
         onDone={() => table.resetRowSelection()}
       />

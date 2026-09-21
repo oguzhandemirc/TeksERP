@@ -59,12 +59,19 @@ export interface PackingGroup {
   name: string;
   seq: number | null;
   note: string | null;
+  /** Havuzdaki (sevk edilmemiş) çuval sayısı. */
   sackCount: number;
   rollCount: number;
   swatchCount: number;
   totalQty: number;
   weightKg: number | null;
   createdAt: string;
+  /** Sevk partisi alanları (2026-09-21) — grup modunda OPEN / null / 0 döner. */
+  status: "OPEN" | "CLOSED";
+  closedAt: string | null;
+  /** Sevkiyata bağlanmış, partide numarasıyla kalan çuval sayısı. */
+  shippedSackCount: number;
+  nextPackageNo: number;
 }
 
 /** Liste satırındaki grup çipi — ad SUNUCUDAN gelir, id'den türetilmez. */
@@ -162,6 +169,8 @@ export interface SackSearchRow {
   id: string;
   sackNo: string;
   seq: number | null;
+  /** Sevk partisi içi ambalaj no (partisiz/grup modunda null). */
+  packageNo?: number | null;
   weightKg: number | null;
   createdAt: string;
   customer: SackCustomerRef | null;
@@ -388,6 +397,10 @@ export interface OpenedSack {
   branchId: string | null;
   branchName: string | null;
   branchCode: string | null;
+  /** Sevk partisi (2026-09-21) — partisiz çuvalda null; eski backend göndermez. */
+  packingGroupId?: string | null;
+  packingGroupName?: string | null;
+  packageNo?: number | null;
 }
 
 /** Scan cevabı — okutulan kod top mu kartela mı + hangi çuvala bağlandı. */
@@ -542,6 +555,10 @@ export interface EditorTarget {
   branchCode: string | null;
   /** true = "Yeni Çuval" ile az önce açıldı (boş başlar). */
   isNew?: boolean;
+  /** Sevk partisi — başlık rozeti + "Yeni Çuval"ın aynı partiye açılması için. */
+  packingGroupId?: string | null;
+  packingGroupName?: string | null;
+  packageNo?: number | null;
 }
 
 /** Toplu dağıtma önizlemesi — etkilenen HER top satır olarak gelir. */

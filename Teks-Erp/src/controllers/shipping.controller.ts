@@ -7,6 +7,7 @@ import { getStampContext } from "../services/helpers/work-session.helper";
 import { detectMismatchesForSacks } from "../services/helpers/sack-content-mismatch.helper";
 import { SackTagService, MAX_BULK_TAG_SACKS } from "../services/sack-tag.service";
 import { PackingGroupService } from "../services/packing-group.service";
+import { PackingLotService } from "../services/packing-lot.service";
 import { HEX_RE } from "../services/helpers/sack-tag.helper";
 import "../types/express-augment";
 
@@ -20,6 +21,9 @@ const openSackSchema = z.object({
   // İdempotency (A4): istemci mantıksal deneme başına bir kez üretir; retry'de
   // aynı token → mevcut çuval cached döner. Opsiyonel (eski istemci geri uyumu).
   clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
+  // Sevk partisi (2026-09-21): çuval partide doğar; `packageNo` yalnız ezme/elle modunda.
+  packingGroupId: z.string().uuid("Geçersiz sevk partisi ID").nullable().optional(),
+  packageNo: z.number().int("Ambalaj no tam sayı olmalı").min(0, "Ambalaj no negatif olamaz").max(999_999).nullable().optional(),
 });
 const scanSchema = z.object({ barcode: z.string().trim().min(1, "Barkod gerekli").max(64) });
 
@@ -42,7 +46,9 @@ const tagUpdateSchema = z
 const MAX_GROUP_SACKS = 500;
 const packingGroupCreateSchema = z.object({
   customerId: z.string().uuid("Geçersiz müşteri ID"),
-  sackIds: z.array(z.string().uuid("Geçersiz çuval ID")).min(1, "En az bir çuval seçin").max(MAX_GROUP_SACKS),
+  // Boş küme yalnız SEVK PARTİSİ modunda geçer (boş parti); grup modunda servis
+  // "En az bir çuval seçin" der — kural iş kuralıdır, tek yerden söylenir.
+  sackIds: z.array(z.string().uuid("Geçersiz çuval ID")).max(MAX_GROUP_SACKS).default([]),
   /** Verilirse otomatik numara ÜRETİLMEZ (override) — sayaç da ilerlemez. */
   name: z.string().trim().min(1).max(64).optional(),
   note: z.string().trim().max(500).optional(),
@@ -57,6 +63,10 @@ const packingGroupUpdateSchema = z
     note: z.string().trim().max(500).nullable().optional(),
   })
   .strict();
+const packingGroupListStatusSchema = z.enum(["OPEN", "CLOSED", "ALL"]).optional();
+const sackPackageNoSchema = z.object({
+  packageNo: z.number().int("Ambalaj no tam sayı olmalı").min(0, "Ambalaj no negatif olamaz").max(999_999),
+});
 
 /** Tekil: çuvalın iz kümesini DEĞİŞTİR (replace). Boş dizi = tüm izleri kaldır. */
 const sackTagsSchema = z.object({ tagIds: z.array(z.string().uuid("Geçersiz etiket ID")).max(50) });
@@ -232,7 +242,10 @@ export class ShippingController {
     try {
       const body = openSackSchema.parse(req.body);
       const result = await this.service.openSack(
-        { customerId: body.customerId ?? null, branchId: body.branchId ?? null, weightKg: body.weightKg, sackNo: body.sackNo, clientToken: body.clientToken ?? null },
+        {
+          customerId: body.customerId ?? null, branchId: body.branchId ?? null, weightKg: body.weightKg, sackNo: body.sackNo, clientToken: body.clientToken ?? null,
+          packingGroupId: body.packingGroupId ?? null, packageNo: body.packageNo ?? null,
+        },
         req.user?.userId,
         // Elle-tartı kısıtı yalnız HTTP yolunda uygulanır (F221) — izin listesi
         // buradan geçer, dahili çağrılar (script/job/servis) etkilenmez.
@@ -318,7 +331,41 @@ export class ShippingController {
   listPackingGroups = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const customerId = z.string().uuid("Geçersiz müşteri ID").parse(req.query.customerId);
-      res.status(200).json(await PackingGroupService.list(customerId));
+      const status = packingGroupListStatusSchema.parse(req.query.status);
+      res.status(200).json(await PackingGroupService.list(customerId, { status }));
+    } catch (e) { next(e); }
+  };
+
+  getPackingGroup = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(await PackingGroupService.get(req.params.id as string));
+    } catch (e) { next(e); }
+  };
+
+  // ---- Sevk partisi (yaşam döngüsü + ambalaj no) ------------------------------
+
+  closePackingGroup = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(await PackingLotService.close(req.params.id as string, req.user?.userId));
+    } catch (e) { next(e); }
+  };
+
+  reopenPackingGroup = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(await PackingLotService.reopen(req.params.id as string, req.user?.userId));
+    } catch (e) { next(e); }
+  };
+
+  deletePackingGroup = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(await PackingLotService.remove(req.params.id as string, req.user?.userId));
+    } catch (e) { next(e); }
+  };
+
+  setSackPackageNo = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = sackPackageNoSchema.parse(req.body ?? {});
+      res.status(200).json(await PackingLotService.setPackageNo(req.params.id as string, body.packageNo, req.user?.userId));
     } catch (e) { next(e); }
   };
 

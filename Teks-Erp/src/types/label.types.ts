@@ -97,6 +97,10 @@ export interface LabelPayload {
   branchName?: string | null;
   /** Çuval yorumu (iç not) — şablona sürüklenmişse basılır, boşsa eleman atlanır. */
   sackNote?: string | null;
+  /** Sevk partisi içi ambalaj no (partisiz çuvalda null → eleman atlanır). */
+  packageNo?: number | null;
+  /** Sevk partisi adı (SP-3 / "Cuma tırı"); partisiz çuvalda null. */
+  packingGroupName?: string | null;
 }
 
 export interface SwatchLabelPayload {

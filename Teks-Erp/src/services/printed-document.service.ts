@@ -27,6 +27,7 @@ import {
   readShippingDocItemNameMode,
   readShippingDocCekiNameMode,
   readShippingDocProductColorSplit,
+  readShippingDocPackingLot,
   sanitizeDocumentsConfig,
   type CompanyLetterhead,
   type DocumentConfig,
@@ -195,6 +196,8 @@ export interface BuilderEntry {
       cekiNameMode?: ShippingDocCekiNameMode;
       /** Ürün listesinde müşteri rengi ayrı sütun mu. */
       productColorSplit?: boolean;
+      /** Çuval/çeki listesinde ambalaj no + sevk partisi kolonu (`shipping.docPackingLot`). */
+      packingLot?: boolean;
     },
   ) => string;
 }
@@ -347,6 +350,7 @@ async function buildRenderExtras(
   itemNameMode: ShippingDocItemNameMode;
   cekiNameMode: ShippingDocCekiNameMode;
   productColorSplit: boolean;
+  packingLot: boolean;
 }> {
   let qrDataUrl: string | null = null;
   if (snapshot.docConfigOverride?.qr) {
@@ -371,6 +375,7 @@ async function buildRenderExtras(
     itemNameMode: await readShippingDocItemNameMode(),
     cekiNameMode: await readShippingDocCekiNameMode(),
     productColorSplit: await readShippingDocProductColorSplit(),
+    packingLot: await readShippingDocPackingLot(),
   };
 }
 

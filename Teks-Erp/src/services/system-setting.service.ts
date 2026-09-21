@@ -457,6 +457,22 @@ export const SETTING_KEYS = {
   PACKING_GROUPS_ENABLE: "packing.groupsEnabled",
   /** Grup numarası sayacının rejimi: `artan` (default) | `bosluk-doldur`. */
   PACKING_GROUP_NUMBERING: "packing.groupNumbering",
+  /** Grup davranışı ↔ SEVK PARTİSİ davranışı: `grup` (default = bugünkü) | `sevk-partisi`. */
+  PACKING_GROUP_MODE: "packing.groupMode",
+  /** Parti içi ambalaj numarası 0'dan mı başlar (default false = 1'den). */
+  PACKAGE_NO_STARTS_AT_ZERO: "packing.packageNoStartsAtZero",
+  /** Ambalaj no atama modu: `otomatik` | `otomatik-ezilebilir` (default) | `elle`. */
+  PACKAGE_NO_MODE: "packing.packageNoMode",
+  /** Ambalaj no sayaç rejimi: `artan` (default; geri verilmez) | `bosluk-doldur`. */
+  PACKAGE_NUMBERING: "packing.packageNumbering",
+  /** Son açık çuval sevk edilince sevk partisi kendiliğinden kapansın mı (default false). */
+  PACKING_LOT_AUTO_CLOSE: "packing.lotAutoClose",
+  /** Partisiz çuval açma yasak mı (default false). Açıkken tablet çuval açamaz. */
+  PACKING_LOT_REQUIRED: "packing.lotRequired",
+  /** Partinin bir alt kümesi sevk edilebilir mi (default TRUE = kısmi sevk serbest). */
+  PACKING_LOT_PARTIAL_DISPATCH: "packing.lotPartialDispatch",
+  /** İrsaliye/çeki listesine parti adı + ambalaj no kolonu (default false = bugünkü belge). */
+  SHIPPING_DOC_PACKING_LOT: "shipping.docPackingLot",
   /** Tahsiste EN toleransı açık mı (default false = tam eşitlik, bugünkü davranış). */
   SHIPPING_ALLOC_WIDTH_TOLERANCE_ENABLED: "shipping.allocWidthToleranceEnabled",
   /** Tolerans değeri (cm). Yalnız yukarıdaki bayrak açıkken uygulanır. */
@@ -810,6 +826,43 @@ export const PACKING_GROUP_NUMBERINGS: PackingGroupNumbering[] = [
 ];
 /** Varsayılan `artan` — sahanın istediği rejim (boşalan numaraya geri dönme). */
 export const DEFAULT_PACKING_GROUP_NUMBERING: PackingGroupNumbering = "artan";
+
+/**
+ * Paketleme grubunun DAVRANIŞ MODU (2026-09-21 saha isteği, `docs/design/SEVK-PARTISI-TASARIM.md`).
+ *
+ *  • `grup` (VARSAYILAN = bugünkü): grup bir çalışma yaftasıdır — canlılık çocuk
+ *    satırdan türetilir, boşalan grup görünmez olur, numarası yeniden kullanılır,
+ *    çuvala parti-içi numara verilmez.
+ *  • `sevk-partisi`: grup açık/kapalı DURUM taşır, boş parti yaşar, parti sırası
+ *    geri verilmez, her çuval parti içinde bir AMBALAJ NO alır; belgeye basılabilir.
+ *
+ * `packing.groupsEnabled` KAPALIYKEN bu ayarın anlamı yoktur — tek çözücü
+ * `effectivePackingGroupMode` (§3.6), enforcement noktaları ham okuyucuyu çağırmaz.
+ */
+export type PackingGroupMode = "grup" | "sevk-partisi";
+export const PACKING_GROUP_MODES: PackingGroupMode[] = ["grup", "sevk-partisi"];
+export const DEFAULT_PACKING_GROUP_MODE: PackingGroupMode = "grup";
+
+/**
+ * Parti içi AMBALAJ NUMARASININ atanma modu (yalnız `sevk-partisi` modunda okunur).
+ *  • `otomatik` — sayaç verir, kullanıcı değiştiremez.
+ *  • `otomatik-ezilebilir` (VARSAYILAN) — sayaç verir, kullanıcı ezebilir (parti içinde tekil).
+ *  • `elle` — numara kullanıcıdan gelir, boş bırakılamaz.
+ */
+export type PackageNoMode = "otomatik" | "otomatik-ezilebilir" | "elle";
+export const PACKAGE_NO_MODES: PackageNoMode[] = ["otomatik", "otomatik-ezilebilir", "elle"];
+export const DEFAULT_PACKAGE_NO_MODE: PackageNoMode = "otomatik-ezilebilir";
+
+/**
+ * Ambalaj no sayaç rejimi (yalnız `sevk-partisi` modunda okunur).
+ *  • `artan` (VARSAYILAN) — sevk edilen/çıkarılan çuvalın numarası ASLA geri verilmez;
+ *    sayaç `PackingGroup.nextPackageNo` tek satır UPDATE … RETURNING ile ilerler.
+ *  • `bosluk-doldur` — açık çuvalların tutmadığı en küçük numara verilir; sevk edilmiş
+ *    çuvalın numarası yeniden doğabilir (sahanın bilinçli tercihi).
+ */
+export type PackageNumbering = "artan" | "bosluk-doldur";
+export const PACKAGE_NUMBERINGS: PackageNumbering[] = ["artan", "bosluk-doldur"];
+export const DEFAULT_PACKAGE_NUMBERING: PackageNumbering = "artan";
 
 /**
  * Çuval/grup İÇERİK DÖKÜMÜNDE (Excel + PDF) kumaş ve renk adı hangi dilden basılır.
@@ -1535,6 +1588,22 @@ export interface FeatureFlags {
   packingGroupsEnabled: boolean;
   /** Grup numara rejimi: 'artan' (default) | 'bosluk-doldur'. */
   packingGroupNumbering: PackingGroupNumbering;
+  /** Grup davranış modu: 'grup' (default = bugünkü) | 'sevk-partisi'. */
+  packingGroupMode: PackingGroupMode;
+  /** Ambalaj no 0'dan mı başlar (default false = 1'den). */
+  packageNoStartsAtZero: boolean;
+  /** Ambalaj no atama modu: 'otomatik' | 'otomatik-ezilebilir' (default) | 'elle'. */
+  packageNoMode: PackageNoMode;
+  /** Ambalaj no sayaç rejimi: 'artan' (default) | 'bosluk-doldur'. */
+  packageNumbering: PackageNumbering;
+  /** Son açık çuval sevk edilince parti kendiliğinden kapanır (default false). */
+  packingLotAutoClose: boolean;
+  /** Partisiz çuval açma 400 (default false). */
+  packingLotRequired: boolean;
+  /** Partinin alt kümesi sevk edilebilir (default TRUE). */
+  packingLotPartialDispatch: boolean;
+  /** İrsaliye/çeki listesinde parti adı + ambalaj no kolonu (default false). */
+  shippingDocPackingLot: boolean;
   /** Çuval/grup içerik dökümünde ad: 'ikisi' (default) | 'bizdeki' | 'musterideki'. */
   sackDumpNameMode: SackDumpNameMode;
   /** Tahsiste EN toleransı açık mı (default false = tam eşitlik). */
@@ -1927,6 +1996,14 @@ export class SystemSettingService {
       shippingDocProductColorSplit: await readShippingDocProductColorSplit(cacheClient),
       packingGroupsEnabled: await readPackingGroupsEnabled(cacheClient),
       packingGroupNumbering: await readPackingGroupNumbering(cacheClient),
+      packingGroupMode: await readPackingGroupMode(cacheClient),
+      packageNoStartsAtZero: await readPackageNoStartsAtZero(cacheClient),
+      packageNoMode: await readPackageNoMode(cacheClient),
+      packageNumbering: await readPackageNumbering(cacheClient),
+      packingLotAutoClose: await readPackingLotAutoClose(cacheClient),
+      packingLotRequired: await readPackingLotRequired(cacheClient),
+      packingLotPartialDispatch: await readPackingLotPartialDispatch(cacheClient),
+      shippingDocPackingLot: await readShippingDocPackingLot(cacheClient),
       sackDumpNameMode: await readSackDumpNameMode(cacheClient),
       shippingAllocWidthToleranceEnabled: await readShippingAllocWidthToleranceEnabled(cacheClient),
       shippingAllocWidthToleranceCm: await readShippingAllocWidthToleranceCm(cacheClient),
@@ -2879,6 +2956,65 @@ export class SystemSettingService {
         "Grup numarası: artan (boşalan numaraya dönme) / bosluk-doldur (en küçük boş)",
         userId
       );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "packingGroupMode")) {
+      const v = input.packingGroupMode;
+      if (typeof v !== "string" || !PACKING_GROUP_MODES.includes(v as PackingGroupMode)) {
+        throw AppError.badRequest("Paketleme grubu modu 'grup' veya 'sevk-partisi' olmalı");
+      }
+      await this.set(SETTING_KEYS.PACKING_GROUP_MODE, v, "Paketleme grubu davranışı: grup (yafta) / sevk-partisi (durumlu, ambalaj numaralı)", userId);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "packageNoStartsAtZero")) {
+      if (typeof input.packageNoStartsAtZero !== "boolean") {
+        throw AppError.badRequest("packageNoStartsAtZero boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.PACKAGE_NO_STARTS_AT_ZERO, String(input.packageNoStartsAtZero), "Ambalaj numarası 0'dan başlar (kapalı = 1'den)", userId);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "packageNoMode")) {
+      const v = input.packageNoMode;
+      if (typeof v !== "string" || !PACKAGE_NO_MODES.includes(v as PackageNoMode)) {
+        throw AppError.badRequest("Ambalaj no modu 'otomatik', 'otomatik-ezilebilir' veya 'elle' olmalı");
+      }
+      await this.set(SETTING_KEYS.PACKAGE_NO_MODE, v, "Ambalaj no atama: otomatik / otomatik-ezilebilir / elle", userId);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "packageNumbering")) {
+      const v = input.packageNumbering;
+      if (typeof v !== "string" || !PACKAGE_NUMBERINGS.includes(v as PackageNumbering)) {
+        throw AppError.badRequest("Ambalaj no rejimi 'artan' veya 'bosluk-doldur' olmalı");
+      }
+      await this.set(SETTING_KEYS.PACKAGE_NUMBERING, v, "Ambalaj no sayacı: artan (geri verilmez) / bosluk-doldur (en küçük boş)", userId);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "packingLotAutoClose")) {
+      if (typeof input.packingLotAutoClose !== "boolean") {
+        throw AppError.badRequest("packingLotAutoClose boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.PACKING_LOT_AUTO_CLOSE, String(input.packingLotAutoClose), "Son açık çuval sevk edilince sevk partisi kendiliğinden kapanır", userId);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "packingLotRequired")) {
+      if (typeof input.packingLotRequired !== "boolean") {
+        throw AppError.badRequest("packingLotRequired boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.PACKING_LOT_REQUIRED, String(input.packingLotRequired), "Partisiz çuval açma yasak (tablet çuval açamaz)", userId);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "packingLotPartialDispatch")) {
+      if (typeof input.packingLotPartialDispatch !== "boolean") {
+        throw AppError.badRequest("packingLotPartialDispatch boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.PACKING_LOT_PARTIAL_DISPATCH, String(input.packingLotPartialDispatch), "Sevk partisinin alt kümesi sevk edilebilir (kapalı = parti bütün gider)", userId);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "shippingDocPackingLot")) {
+      if (typeof input.shippingDocPackingLot !== "boolean") {
+        throw AppError.badRequest("shippingDocPackingLot boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.SHIPPING_DOC_PACKING_LOT, String(input.shippingDocPackingLot), "İrsaliye/çeki listesine parti adı + ambalaj no kolonu", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "kursunBypassEnabled")) {
@@ -4634,6 +4770,115 @@ export async function readPackingGroupNumbering(
   return DEFAULT_PACKING_GROUP_NUMBERING;
 }
 
+/** Grup davranış modu (HAM okuyucu; enforcement `effectivePackingGroupMode` kullanır). Satır yoksa / değer kümede değilse `grup`. */
+export async function readPackingGroupMode(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<PackingGroupMode> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.PACKING_GROUP_MODE },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (typeof v === "string" && PACKING_GROUP_MODES.includes(v as PackingGroupMode)) {
+    return v as PackingGroupMode;
+  }
+  return DEFAULT_PACKING_GROUP_MODE;
+}
+
+/** Ambalaj no 0'dan mı başlar. Satır yoksa false (1'den). */
+export async function readPackageNoStartsAtZero(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.PACKAGE_NO_STARTS_AT_ZERO },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Ambalaj no atama modu. Satır yoksa / değer kümede değilse `otomatik-ezilebilir`. */
+export async function readPackageNoMode(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<PackageNoMode> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.PACKAGE_NO_MODE },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (typeof v === "string" && PACKAGE_NO_MODES.includes(v as PackageNoMode)) {
+    return v as PackageNoMode;
+  }
+  return DEFAULT_PACKAGE_NO_MODE;
+}
+
+/** Ambalaj no sayaç rejimi. Satır yoksa / değer kümede değilse `artan`. */
+export async function readPackageNumbering(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<PackageNumbering> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.PACKAGE_NUMBERING },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (typeof v === "string" && PACKAGE_NUMBERINGS.includes(v as PackageNumbering)) {
+    return v as PackageNumbering;
+  }
+  return DEFAULT_PACKAGE_NUMBERING;
+}
+
+/** Son açık çuval sevk edilince parti kapanır mı. Satır yoksa false. */
+export async function readPackingLotAutoClose(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.PACKING_LOT_AUTO_CLOSE },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Partisiz çuval açma yasak mı. Satır yoksa false. */
+export async function readPackingLotRequired(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.PACKING_LOT_REQUIRED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Kısmi sevk serbest mi. Satır yoksa TRUE (bugünkü davranış: sevk serbest). */
+export async function readPackingLotPartialDispatch(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.PACKING_LOT_PARTIAL_DISPATCH },
+    select: { value: true },
+  });
+  if (!setting) return true;
+  return asBoolean(setting.value);
+}
+
+/** Belgede parti adı + ambalaj no kolonu. Satır yoksa false (bugünkü belge). */
+export async function readShippingDocPackingLot(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SHIPPING_DOC_PACKING_LOT },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
 export async function readKursunBypassEnabled(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {
@@ -4822,6 +5067,20 @@ export async function resolveBeamWeavingLinkRequired(tx?: Pick<typeof prisma, "s
 export async function resolveRunWeavingOrderRequired(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   if (!(await readProductionEnabled(tx)) || !(await readDokumaEnabled(tx))) return false;
   return readDokumaRunWeavingOrderRequired(tx);
+}
+
+/**
+ * Sevk partisi — paketleme grubunun ETKİN davranış modu: `packing.groupsEnabled`
+ * kapalıyken daima `grup` (parti kolonları boş durur, ayar sessiz kalır). Parti moduna
+ * bağlı altı ayarın enforcement noktaları ÖNCE bunu sorar. ⚠️ Adı `resolve*` DEĞİL:
+ * ebeveyni bir MODÜL şalteri değil davranış bayrağıdır (`packing.groupsEnabled`),
+ * §8b'nin modül-altı resolver tablosuna girmez.
+ */
+export async function effectivePackingGroupMode(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<PackingGroupMode> {
+  if (!(await readPackingGroupsEnabled(tx))) return "grup";
+  return readPackingGroupMode(tx);
 }
 
 /** Z1 — dokuma işinde sipariş satırı bağı zorunlu mu — ETKİN değer (`üretim && dokuma && bayrak`). */

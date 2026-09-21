@@ -21,6 +21,9 @@ export interface ShipmentDocSack {
   seq: number;
   sackNo: string | null;
   weightKg: number | null;
+  /** Sevk partisi (2026-09-21) — eski backend göndermez, partisiz çuvalda null. */
+  packageNo?: number | null;
+  packingGroupName?: string | null;
   productSummary: {
     itemName: string;
     colorName: string | null;
@@ -140,6 +143,8 @@ export function SackBreakdown({ sacks, totalKg }: { sacks: ShipmentDocSack[]; to
               <span>
                 Çuval #{s.seq}
                 {s.sackNo ? ` · ${s.sackNo}` : ""}
+                {s.packageNo != null ? ` · Ambalaj No ${s.packageNo}` : ""}
+                {s.packingGroupName ? ` · ${s.packingGroupName}` : ""}
               </span>
               <span className="tabular-nums">
                 {s.weightKg != null ? `${NUMKG.format(s.weightKg)} kg` : "—"} brüt

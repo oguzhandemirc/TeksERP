@@ -6174,6 +6174,11 @@ model Sack {
   /// ("mal hiç çıkmadı" sözleşmesiyle tutarlı). Alanı sevkte NULL'lamak,
   /// tam da kaçınmak istediğimiz "her çıkış yoluna bir kanca" işiydi.
   packingGroupId String?        @db.Uuid
+  /// Parti içi AMBALAJ NO (sevk partisi modu): çuval partide doğarken ya da partiye
+  /// alınırken verilir, partiden çıkınca NULL. `seq`ten AYRI — seq sevkiyat-içi sıradır
+  /// ve sevkiyatla doğar; packageNo partiye aittir ve sevkte KALIR (belgeye basılır).
+  /// Tekillik parti içinde DB'de (`@@unique`), NULL'lar çakışmaz (havuz/grup modu).
+  packageNo    Int?
   /// Çuvalın bulunduğu depo (2026-08-14, ticaret paketi). NULLABLE — fabrika
   /// sıfır-fark: tek depolu kurulumda hiçbir yüzey okumaz, eski satırlar NULL
   /// kalabilir. Doğumda damgalanır (openSack/split), NULL kalmış eski çuval İLK
@@ -6249,6 +6254,8 @@ model Sack {
 
   // Sevkiyat içinde çuval sırası benzersiz (NULL'lar çakışmaz — havuz çuvalları seq=NULL).
   @@unique([shipmentId, seq])
+  // Parti içinde ambalaj no benzersiz (NULL'lar çakışmaz — partisiz/numarasız çuval).
+  @@unique([packingGroupId, packageNo])
   // O-22: Roll/Swatch↔Sack↔Shipment tutarlılık invariant'ının FK hedefi. Bu unique
   // sayesinde rolls & swatches'a composite FK (sackId, shipmentId) -> sacks(id,
   // shipmentId) kurulur (DEFERRABLE, raw-SQL). MATCH SIMPLE: shipmentId NULL (havuz
@@ -6399,6 +6406,13 @@ model SackTagAssignment {
 /// Paketleme grubu — bir carinin havuzdaki çuvallarını "aynı sevke hazırlananlar"
 /// diye ayıran çalışma yaftası. Katalog DEĞİL (fabrika yönetmez, operatör anlık
 /// açar), defter DEĞİL (satır güncellenir) — mutasyona uğrayan çalışma nesnesi.
+/// Sevk partisi yaşam döngüsü (yalnız `packing.groupMode = sevk-partisi`yken okunur;
+/// grup modunda satır OPEN doğar ve canlılık çocuk satırdan türetilir).
+enum PackingGroupStatus {
+  OPEN
+  CLOSED
+}
+
 model PackingGroup {
   id String @id @default(uuid()) @db.Uuid
 
@@ -6434,6 +6448,18 @@ model PackingGroup {
   /// olduğu için "P2'yi bul" araması anlamsızdır, not araması anlamlıdır.
   note String? @db.VarChar(500)
 
+  /// SEVK PARTİSİ modunda canlılık BU alandır (`liveGroupWhere`): boş parti yaşar,
+  /// kapalı parti listeden düşer. Grup modunda okunmaz (türetilmiş canlılık).
+  status PackingGroupStatus @default(OPEN)
+  /// "EN SON ne zaman kapandı" — yeniden açılınca NULL'LANMAZ (dispatchedAt kalıbı);
+  /// güncel gerçek `status`tadır.
+  closedAt   DateTime? @db.Timestamptz
+  closedById String?   @db.Uuid
+  /// Parti içi AMBALAJ NO sayacı (`packing.packageNumbering = artan`): tek yazar
+  /// `UPDATE … SET "nextPackageNo" = "nextPackageNo" + 1 RETURNING` — kilitsiz, atomik.
+  /// Parti doğarken `packing.packageNoStartsAtZero`a göre 0 ya da 1 yazılır.
+  nextPackageNo Int @default(1)
+
   createdById String? @db.Uuid
   updatedById String? @db.Uuid
 
@@ -6449,6 +6475,8 @@ model PackingGroup {
 
   /// Sayaç ve liste sorgusu: "bu carinin grupları" (eşitlik önce, sıra sonra).
   @@index([customerId, seq])
+  /// Parti listesi: "bu carinin AÇIK partileri".
+  @@index([customerId, status])
   @@map("packing_groups")
 }
 

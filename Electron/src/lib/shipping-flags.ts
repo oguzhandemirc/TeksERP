@@ -201,6 +201,69 @@ export const PACKING_GROUP_NUMBERING_OPTIONS: ReadonlyArray<{
 ];
 
 /**
+ * SEVK PARTİSİ ayarları (2026-09-21). Backend aynası: `system-setting.service.ts` →
+ * `PACKING_GROUP_MODES` / `PACKAGE_NO_MODES` / `PACKAGE_NUMBERINGS`.
+ */
+export type PackingGroupMode = "grup" | "sevk-partisi";
+export const PACKING_GROUP_MODE_OPTIONS: ReadonlyArray<{
+  value: PackingGroupMode;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: "grup",
+    label: "Paketleme grubu (varsayılan)",
+    hint: "Bugünkü davranış: grup bir çalışma yaftasıdır — çuvalı kilitlemez, boşalınca görünmez olur, numarası yeniden kullanılır, çuvala parti-içi numara verilmez.",
+  },
+  {
+    value: "sevk-partisi",
+    label: "Sevk partisi",
+    hint: "Grup açık/kapalı durum taşır, boş parti yaşar, parti numarası geri verilmez; partide açılan her çuval bir AMBALAJ NUMARASI alır ve belgeye basılabilir. Partinin bir kısmı sevk edilir, parti yaşamaya devam eder.",
+  },
+];
+
+export type PackageNoMode = "otomatik" | "otomatik-ezilebilir" | "elle";
+export const PACKAGE_NO_MODE_OPTIONS: ReadonlyArray<{
+  value: PackageNoMode;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: "otomatik",
+    label: "Otomatik",
+    hint: "Sayaç verir, kullanıcı değiştiremez.",
+  },
+  {
+    value: "otomatik-ezilebilir",
+    label: "Otomatik, ezilebilir (varsayılan)",
+    hint: "Sayaç verir; kullanıcı çuval açarken ya da sonra numarayı değiştirebilir. Aynı partide iki çuval aynı numarayı alamaz.",
+  },
+  {
+    value: "elle",
+    label: "Elle",
+    hint: "Numara kullanıcıdan gelir, boş bırakılamaz. Sayaç ilerlemez.",
+  },
+];
+
+export type PackageNumbering = "artan" | "bosluk-doldur";
+export const PACKAGE_NUMBERING_OPTIONS: ReadonlyArray<{
+  value: PackageNumbering;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: "artan",
+    label: "Artan (varsayılan)",
+    hint: "Sevk edilen ya da partiden çıkarılan çuvalın numarası ASLA geri verilmez; boşluk kalır. Sahadaki fiziksel etiketle çakışma olmaz.",
+  },
+  {
+    value: "bosluk-doldur",
+    label: "Boşluğu doldur",
+    hint: "Yeni çuval, açık çuvalların tutmadığı en küçük numarayı alır. ⚠️ Sevk edilmiş bir çuvalın numarası yeniden doğabilir.",
+  },
+];
+
+/**
  * Çuval/grup İÇERİK DÖKÜMÜNDE kumaş+renk adı hangi dilden basılır.
  * Backend aynası: `system-setting.service.ts` → `SACK_DUMP_NAME_MODES`.
  */

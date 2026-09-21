@@ -112,6 +112,13 @@ export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValu
     // (şablonda alan dursa bile yorumsuz çuvalda yer kaplamaz).
     case "sackNote":
       return str(payload.sackNote);
+    // Sevk partisi: numara başlık sınıfı (sahada uzaktan okunur), parti adı satır.
+    case "packageNo":
+      return payload.packageNo == null
+        ? NONE
+        : { value: formatNumber(payload.packageNo), present: true, role: "headline" };
+    case "packingGroupName":
+      return str(payload.packingGroupName);
 
     case "printedAt":
       return { value: formatDate(payload.printedAt), present: !!payload.printedAt, role: "row" };

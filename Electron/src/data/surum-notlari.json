@@ -26,6 +26,11 @@
       "maddeler": [
         {
           "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sevk partisi: Paketleme / Çuvallar ekranında cariyi seçip “Sevk Partisi Oluştur” diyorsunuz; parti boş açılır, çuvallar partinin içinde “Yeni Çuval” ile açılır ve her çuval parti içinde bir ambalaj numarası alır (1'den başlar; ayarla 0'dan başlatılabilir, elle yazılabilir ya da tamamen elle verilebilir). Partiden istediğiniz çuvalları seçip sevk edersiniz, kalanlar partide kalır; sevk edilen çuval numarasıyla partide görünmeye devam eder ve numarası bir daha verilmez. Parti elle kapatılır (ayarla son çuval gidince kendiliğinden kapanır), kapalı parti yeniden açılabilir, hiç çuvalı olmamış parti silinebilir. Çuvalı başka partiye taşıyınca yeni numara alır. Genel Ayarlar’da “Paketleme grubu davranışı” ayarı “Sevk partisi” seçilince açılır — kapalıyken paketleme grubu bugünkü gibi çalışır. İsteğe bağlı: irsaliye ve çeki listesine parti adı + ambalaj no kolonu, çuval etiketine “Ambalaj No” ve “Sevk Partisi” alanı. Yeni yetki: “Sevk partisi açıp kapatabilir” (Depo & Sevkiyat rolünde). Tablet bu sürümde partiyi grup gibi görüp seçer."
+        },
+        {
+          "kapsam": "panel",
           "tip": "iyilestirme",
           "metin": "Kasa ve banka bakiyesi artık tek defterden yürür: her tahsilat ve ödeme, Kasa Hareketleri'nde Tahsilat ya da Ödeme türünde kendi satırıyla görünür (kaynak belge tıklanır), iptal edilince o satır iptal görünür ve bakiye geri gelir. Tahsilat/Ödeme listesinde kasa defteri satırı sütunu geldi. Eski kayıtlar için defter satırları kurulum sırasında toplu olarak oluşturulur; bakiyeler değişmez."
         },

@@ -55,6 +55,7 @@
 //   8030  MERGE_LOCK_NS              services/master-data-merge.service.ts         master-data birleştirme
 //   8031  PACKING_GROUP_LOCK_NS      services/helpers/packing-group.helper.ts      paketleme grubu numara sayacı
 //   8032  WEAVING_ORDER_LOCK_NS      services/helpers/weaving-order.helper.ts      dokuma işi numara sayacı
+//   8033  PACKAGE_NO_LOCK_NS         services/helpers/packing-group.helper.ts      sevk partisi ambalaj no (ezme/elle/boşluk-doldur)
 // İKİ KURAL: ① Aynı uzaydan birden çok kilit alan tx anahtarları SIRALI alır
 // (aşağıdaki `assertPeriodsOpenTx` bunun tek meşru kapısıdır — tekil guard'ı
 // bir tx'te İKİ KEZ elle çağırmak YASAK ve `cheque.bounce` vakasında canlı

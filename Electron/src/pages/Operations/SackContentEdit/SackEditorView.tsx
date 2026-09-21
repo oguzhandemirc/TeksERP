@@ -94,19 +94,24 @@ export function SackEditorView({
   // 4xx'te de yenilenir (orada hiçbir şey yazılmadığı kesin), ağ/5xx'te YAPIŞIR
   // (timeout "yazılmadı" demek DEĞİLDİR → aynı token replay'e düşer).
   const nextSackToken = useRef(crypto.randomUUID());
+  // Sevk partisi (2026-09-21): çuval bir partideyse "Yeni Çuval" AYNI partiye açılır ve
+  // sıradaki ambalaj numarasını alır ("yeni çuvala geç" — K6 senaryosu). Cari partiden.
   const newSackMut = useMutation({
     mutationFn: () =>
       sackHubService.openSack({
-        customerId: target.customerId,
-        branchId: target.branchId,
+        customerId: target.packingGroupId ? null : target.customerId,
+        branchId: target.packingGroupId ? null : target.branchId,
         clientToken: nextSackToken.current,
+        packingGroupId: target.packingGroupId ?? null,
       }),
     onSuccess: (res) => {
       nextSackToken.current = crypto.randomUUID();
       invalidateSackHub(qc);
       toast.success(
-        `Çuval açıldı: ${res.data.sackNo}` +
-          (res.data.customerName ? ` · ${res.data.customerName}` : " · müşterisiz (genel stok)"),
+        res.data.packageNo != null && res.data.packingGroupName
+          ? `Çuval açıldı: ${res.data.sackNo} · ${res.data.packingGroupName} · Ambalaj No ${res.data.packageNo}`
+          : `Çuval açıldı: ${res.data.sackNo}` +
+              (res.data.customerName ? ` · ${res.data.customerName}` : " · müşterisiz (genel stok)"),
       );
       onSwitchSack({
         sackId: res.data.id,
@@ -117,6 +122,9 @@ export function SackEditorView({
         branchName: res.data.branchName,
         branchCode: res.data.branchCode,
         isNew: true,
+        packingGroupId: res.data.packingGroupId ?? null,
+        packingGroupName: res.data.packingGroupName ?? null,
+        packageNo: res.data.packageNo ?? null,
       });
     },
     onError: (e: unknown) => {
@@ -141,6 +149,12 @@ export function SackEditorView({
           <div>
             <div className="flex items-center gap-2">
               <span className="font-mono text-base font-semibold">{target.sackNo}</span>
+              {target.packingGroupName && (
+                <Badge variant="default" className="gap-1 text-[10px]" title="Sevk partisi · ambalaj no">
+                  {target.packingGroupName}
+                  {target.packageNo != null ? ` · No ${target.packageNo}` : ""}
+                </Badge>
+              )}
               {target.customerName ? (
                 <Badge variant="secondary" className="gap-1 text-[10px]">
                   <UserRound className="h-3 w-3" /> {target.customerName}
@@ -175,14 +189,16 @@ export function SackEditorView({
             className="gap-1"
             disabled={newSackMut.isPending}
             title={
-              target.customerName
-                ? `Aynı cariye (${target.customerName}) yeni çuval aç ve doldurmaya devam et`
-                : "Müşterisiz (genel stok) yeni çuval aç ve doldurmaya devam et"
+              target.packingGroupName
+                ? `${target.packingGroupName} partisinde sıradaki çuvalı aç (yeni ambalaj no) ve doldurmaya devam et`
+                : target.customerName
+                  ? `Aynı cariye (${target.customerName}) yeni çuval aç ve doldurmaya devam et`
+                  : "Müşterisiz (genel stok) yeni çuval aç ve doldurmaya devam et"
             }
             onClick={() => newSackMut.mutate()}
           >
             <PackagePlus className="h-4 w-4" />
-            {newSackMut.isPending ? "Açılıyor…" : "Yeni Çuval"}
+            {newSackMut.isPending ? "Açılıyor…" : target.packingGroupName ? "Yeni Çuvala Geç" : "Yeni Çuval"}
           </Button>
           <Button variant="outline" size="sm" onClick={() => void contentsQ.refetch()} disabled={contentsQ.isFetching}>
             <RefreshCw className={cn("mr-1 h-4 w-4", contentsQ.isFetching && "animate-spin")} /> Yenile

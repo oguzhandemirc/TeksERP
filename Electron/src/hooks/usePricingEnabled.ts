@@ -10,6 +10,8 @@ import {
   type ShipmentOrderRequirement,
   type ShippingInvoiceMode,
   type SackDumpNameMode,
+  type PackingGroupMode,
+  type PackageNoMode,
 } from "@/lib/shipping-flags";
 
 const QUERY_KEY = ["feature-flags"];
@@ -248,6 +250,37 @@ export function useKursunBypassEnabled(): boolean {
 export function usePackingGroupsEnabled(): boolean {
   const q = useFeatureFlags();
   return q.data?.data?.packingGroupsEnabled ?? false;
+}
+
+/**
+ * Paketleme grubunun ETKİN davranış modu (sevk partisi, 2026-09-21). Grup bayrağı
+ * kapalıyken ya da yüklenene kadar `grup` — ekran bugünkü düz/grup yüzeyine düşer
+ * (fail yönü `usePackingGroupsEnabled` ile aynı gerekçeyle KAPALI).
+ */
+export function usePackingGroupMode(): PackingGroupMode {
+  const q = useFeatureFlags();
+  const f = q.data?.data;
+  if (!f?.packingGroupsEnabled) return "grup";
+  return f.packingGroupMode === "sevk-partisi" ? "sevk-partisi" : "grup";
+}
+
+/** Ambalaj no atama modu (yalnız sevk partisi modunda anlamlı). Varsayılan ezilebilir. */
+export function usePackageNoMode(): PackageNoMode {
+  const q = useFeatureFlags();
+  const v = q.data?.data?.packageNoMode;
+  return v === "otomatik" || v === "elle" ? v : "otomatik-ezilebilir";
+}
+
+/** Partisiz çuval açma yasak mı (`packing.lotRequired`). Yüklenene kadar false. */
+export function usePackingLotRequired(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.packingLotRequired ?? false;
+}
+
+/** Kısmi sevk serbest mi (`packing.lotPartialDispatch`). Yüklenene kadar TRUE (bugünkü). */
+export function usePackingLotPartialDispatch(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.packingLotPartialDispatch ?? true;
 }
 
 /** Çuval/grup içerik dökümünde ad rejimi VARSAYILANI (pencere tek seferlik ezebilir). */

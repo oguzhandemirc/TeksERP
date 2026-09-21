@@ -689,6 +689,10 @@ export const DOC_DEFS: DocDef[] = [
         label: "Çuval Listesi",
         columns: [
           { key: "code", label: "Çuval no" },
+          // SEVK PARTİSİ (2026-09-21) — kolonlar yalnız "İrsaliye ve çeki listesinde parti
+          // adı + ambalaj numarası" ayarı AÇIKKEN basılır; burası başlık + gizleme içindir.
+          { key: "packageNo", label: "Ambalaj no (sevk partisi)" },
+          { key: "packingGroupName", label: "Sevk partisi" },
           { key: "totalMeters", label: "Metre toplamı" },
           { key: "totalKg", label: "Kg toplamı" },
           { key: "packageCount", label: "Top adedi" },
@@ -708,6 +712,8 @@ export const DOC_DEFS: DocDef[] = [
         label: "Çeki Listesi",
         columns: [
           { key: "sackCode", label: "Çuval no" },
+          { key: "packageNo", label: "Ambalaj no (sevk partisi)" },
+          { key: "packingGroupName", label: "Sevk partisi" },
           { key: "barcode", label: "Barkod no" },
           { key: "batchNumber", label: "Parti no" },
           { key: "desen", label: "Desen" },

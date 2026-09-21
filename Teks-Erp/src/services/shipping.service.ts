@@ -123,8 +123,19 @@ import {
 import { recomputeOrderStatusForOrdersTx, touchOrderLinesTx } from "./helpers/order-status.helper";
 import { ACTIVE_LINE } from "./helpers/order-line-scope.helper";
 import { ACTIVE_TAG_SELECT, ACTIVE_TAG_WHERE, toTagBadges } from "./helpers/sack-tag.helper";
+import {
+  assertPackageNoFreeTx,
+  assertPackageNoInputAllowed,
+  readPackingLotSettings,
+  reservePackageNosTx,
+} from "./helpers/packing-group.helper";
+import {
+  assertWholeLotDispatchTx,
+  autoCloseLotsForSacksTx,
+  reopenLotsForSacksTx,
+} from "./packing-lot.service";
 import { buildHideCancelledWhere } from "./helpers/hidden-status.helper";
-import { collectBoundKeys } from "./helpers/label-context-fit";
+import { sackFieldsAppearOnLabel } from "./helpers/sack-label-stale.helper";
 import { ApiResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
 import type { Request } from "express";
@@ -351,14 +362,15 @@ export class ShippingService {
   /** A4 replay: token'la daha önce açılmış çuvalı openSack yanıt şekliyle döner. */
   private async readOpenSackReplay(
     clientToken: string,
-    gelen: { customerId?: string | null; branchId?: string | null },
+    gelen: { customerId?: string | null; branchId?: string | null; packingGroupId?: string | null },
   ): Promise<ApiResponse<unknown> | null> {
     const s = await prisma.sack.findUnique({
       where: { clientToken },
       select: {
-        id: true, sackNo: true, weightKg: true, customerId: true, branchId: true,
+        id: true, sackNo: true, weightKg: true, customerId: true, branchId: true, packingGroupId: true, packageNo: true,
         customer: { select: { name: true } },
         branch: { select: { name: true, code: true } },
+        packingGroup: { select: { name: true } },
       },
     });
     if (!s) return null;
@@ -372,6 +384,10 @@ export class ShippingService {
       [
         { ad: "customerId", mevcut: s.customerId, gelen: gelen.customerId },
         { ad: "branchId", mevcut: s.branchId, gelen: gelen.branchId },
+        // Parti farkı da gerçek farktır: A partisi için açılan çuval B'ye okutulmasın.
+        ...(gelen.packingGroupId !== undefined
+          ? [{ ad: "packingGroupId", mevcut: s.packingGroupId, gelen: gelen.packingGroupId }]
+          : []),
       ],
       "Bu istemci anahtarı FARKLI bir müşteri/şube için açılmış bir çuvala ait. " +
         "Ekranı yenileyip çuvalı tekrar açın.",
@@ -382,6 +398,7 @@ export class ShippingService {
       data: {
         id: s.id, sackNo: s.sackNo, weightKg: s.weightKg, customerId: s.customerId, branchId: s.branchId,
         customerName: s.customer?.name ?? null, branchName: s.branch?.name ?? null, branchCode: s.branch?.code ?? null,
+        packingGroupId: s.packingGroupId, packageNo: s.packageNo, packingGroupName: s.packingGroup?.name ?? null,
       },
       message: "Çuval açıldı",
     };
@@ -391,9 +408,17 @@ export class ShippingService {
    * Yeni çuval aç (depoda). shipmentId NULL, seq NULL. Müşteri OPSİYONEL — bilinen sipariş
    * için atanabilir, yoksa boş (genel stok); müşteri/şube sevk kurulurken de atanır. Çuval
    * sistem kodu (sackNo) otomatik üretilir. Mühür yok — depoda her an düzenlenebilir.
+   *
+   * SEVK PARTİSİ (`packing.groupMode = sevk-partisi`): `packingGroupId` verilirse çuval o
+   * partide DOĞAR ve ambalaj numarasını aynı tx'te alır (sayaç ya da `packageNo` ezme —
+   * `assertPackageNoInputAllowed` moda göre karar verir); cari partinin carisidir. Grup
+   * modunda bu iki alan 400 (fail-closed). `packing.lotRequired` açıkken partisiz açma 400.
    */
   async openSack(
-    data: { customerId?: string | null; branchId?: string | null; weightKg?: number | null; sackNo?: string | null; clientToken?: string | null },
+    data: {
+      customerId?: string | null; branchId?: string | null; weightKg?: number | null; sackNo?: string | null; clientToken?: string | null;
+      packingGroupId?: string | null; packageNo?: number | null;
+    },
     userId?: string,
     /** F221 deseni — verilmezse elle-tartı kısıtı ATLANIR (dahili çağrı). */
     opts?: { permissions?: string[] }
@@ -409,10 +434,43 @@ export class ShippingService {
         permissions: opts?.permissions,
       });
     }
+    // ── Sevk partisi kapısı — REPLAY'DEN ÖNCE: cari partiden çözülür, gate onu kıyaslar ──
+    const lot = await readPackingLotSettings();
+    let lotGroup: { id: string; customerId: string; name: string } | null = null;
+    if (lot.mode !== "sevk-partisi") {
+      if (data.packingGroupId || data.packageNo != null) {
+        throw AppError.badRequest("Sevk partisi modu kapalı — çuval partide açılamaz (ayar: Paketleme grubu davranışı)", {
+          code: "PACKING_LOT_MODE_OFF",
+        });
+      }
+    } else if (data.packingGroupId) {
+      const g = await prisma.packingGroup.findUnique({
+        where: { id: data.packingGroupId },
+        select: { id: true, customerId: true, name: true, status: true },
+      });
+      if (!g) throw AppError.notFound("Sevk partisi bulunamadı");
+      if (g.status !== "OPEN") {
+        throw AppError.conflict(`${g.name} kapalı — çuval açmak için partiyi yeniden açın.`, { code: "PACKING_LOT_CLOSED" });
+      }
+      if (data.customerId && data.customerId !== g.customerId) {
+        throw AppError.badRequest("Çuvalın carisi partinin carisinden farklı olamaz");
+      }
+      assertPackageNoInputAllowed(lot.noMode, data.packageNo);
+      lotGroup = { id: g.id, customerId: g.customerId, name: g.name };
+      data = { ...data, customerId: g.customerId };
+    } else if (lot.required) {
+      throw AppError.badRequest("Her çuval bir sevk partisinde açılmalı (ayar: partisiz çuval yasak)", {
+        code: "PACKING_LOT_REQUIRED",
+      });
+    } else if (data.packageNo != null) {
+      throw AppError.badRequest("Ambalaj numarası yalnız bir sevk partisinde açılan çuvala verilir");
+    }
     // İdempotent replay (A4): aynı token'la tekrar gelen istek (timeout-retry /
     // çift dokunuş) yeni BOŞ çuval açmaz — ilk denemede açılan çuvalı döner.
     if (data.clientToken) {
-      const cached = await this.readOpenSackReplay(data.clientToken, { customerId: data.customerId, branchId: data.branchId });
+      const cached = await this.readOpenSackReplay(data.clientToken, {
+        customerId: data.customerId, branchId: data.branchId, packingGroupId: data.packingGroupId ?? null,
+      });
       if (cached) return cached;
     }
     if (data.weightKg != null && !(data.weightKg > 0)) {
@@ -447,7 +505,10 @@ export class ShippingService {
     }
 
     const manualSackNo = data.sackNo?.trim() || null;
-    let sack: { id: string; sackNo: string; weightKg: Prisma.Decimal | null; customerId: string | null; branchId: string | null };
+    let sack: {
+      id: string; sackNo: string; weightKg: Prisma.Decimal | null; customerId: string | null; branchId: string | null;
+      packingGroupId: string | null; packageNo: number | null;
+    };
     try {
       sack = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
@@ -457,8 +518,24 @@ export class ShippingService {
         // yüzey okumaz — sıfır görünür fark; çok depoluda "bu depoda hangi çuvallar"
         // ve çuval-bütün transferin guard'ı buradan beslenir.
         const sackWarehouseId = await resolveTargetWarehouseId(tx, null);
+        // Ambalaj no ÇUVALDAN ÖNCE ayrılır ama AYNI tx'te: sackNo yarışı tx'i geri
+        // sararsa sayaç da geri sarar (boşluk kalmaz). Kilit (8033, ezmede) tx'in
+        // bu partiye dokunan İLK ifadesidir — üstteki okumalar sequence/depo.
+        let packageNo: number | null = null;
+        if (lotGroup) {
+          if (data.packageNo != null) {
+            await assertPackageNoFreeTx(tx, { groupId: lotGroup.id, packageNo: data.packageNo, exceptSackId: null });
+            packageNo = data.packageNo;
+          } else {
+            [packageNo] = await reservePackageNosTx(tx, {
+              groupId: lotGroup.id, count: 1, numbering: lot.numbering, startsAtZero: lot.startsAtZero,
+            });
+          }
+        }
         return tx.sack.create({
           data: {
+            packingGroupId: lotGroup?.id ?? null,
+            packageNo,
             sackNo,
             clientToken: data.clientToken ?? null,
             customerId,
@@ -476,7 +553,7 @@ export class ShippingService {
               ? { weightSource: SackWeightSource.MANUAL, weighedById: userId ?? null, weighedAt: new Date() }
               : {}),
           },
-          select: { id: true, sackNo: true, weightKg: true, customerId: true, branchId: true },
+          select: { id: true, sackNo: true, weightKg: true, customerId: true, branchId: true, packingGroupId: true, packageNo: true },
         });
       }),
       undefined,
@@ -497,7 +574,9 @@ export class ShippingService {
     } catch (err) {
       // Yarış replay'i: pre-check ile create arası aynı token'lı ikinci istek kazandıysa.
       if (data.clientToken && p2002Mentions(err, /clientToken/i)) {
-        const cached = await this.readOpenSackReplay(data.clientToken, { customerId: data.customerId, branchId: data.branchId });
+        const cached = await this.readOpenSackReplay(data.clientToken, {
+          customerId: data.customerId, branchId: data.branchId, packingGroupId: data.packingGroupId ?? null,
+        });
         if (cached) return cached;
       }
       throw err;
@@ -507,12 +586,12 @@ export class ShippingService {
       action: "CREATE",
       tableName: "SACK",
       recordId: sack.id,
-      newData: { sackNo: sack.sackNo, customerId, branchId },
+      newData: { sackNo: sack.sackNo, customerId, branchId, packingGroupId: sack.packingGroupId, packageNo: sack.packageNo },
     });
     return {
       success: true,
-      data: { ...sack, customerName, branchName, branchCode },
-      message: "Çuval açıldı",
+      data: { ...sack, customerName, branchName, branchCode, packingGroupName: lotGroup?.name ?? null },
+      message: lotGroup && sack.packageNo != null ? `Çuval açıldı — ${lotGroup.name} · Ambalaj No ${sack.packageNo}` : "Çuval açıldı",
     };
   }
 
@@ -2374,6 +2453,10 @@ export class ShippingService {
       toStatus: ShipmentStatus.PLANNED,
       userId: p.userId ?? null,
     });
+    // Sevk partisi: "parti bütün gider" kapısı CLAIM'DEN ÖNCE (açık küme henüz
+    // değişmemişken); otomatik kapanış claim'den SONRA (açık çuval kalmadıysa).
+    const lot = await readPackingLotSettings(tx);
+    await assertWholeLotDispatchTx(tx, p.sackIds, lot.partialDispatch);
     // Atomik claim + seq ata (+ müşterisiz çuvala müşteri/şube backfill).
     for (let i = 0; i < p.sackIds.length; i++) {
       const claimed = await tx.sack.updateMany({
@@ -2382,6 +2465,7 @@ export class ShippingService {
       });
       if (claimed.count !== 1) throw AppError.conflict("Çuvallardan biri az önce başka bir sevkiyata girdi — yenileyin.");
     }
+    await autoCloseLotsForSacksTx(tx, p.sackIds, lot.mode === "sevk-partisi" && lot.autoClose, p.userId);
     // İçerik shipmentId açıkça (composite FK deferred → commit'te doğrulanır).
     await tx.roll.updateMany({ where: { sackId: { in: p.sackIds } }, data: { shipmentId: created.id } });
     await tx.swatch.updateMany({ where: { sackId: { in: p.sackIds } }, data: { shipmentId: created.id } });
@@ -2890,6 +2974,8 @@ export class ShippingService {
     let izAdd: AllocationAuditTrail | null = null;
     await prisma.$transaction(async (tx) => {
       await touchShipmentPlannedTx(tx, shipmentId);
+      const lot = await readPackingLotSettings(tx);
+      await assertWholeLotDispatchTx(tx, sackIds, lot.partialDispatch);
       const maxSeqRow = await tx.sack.findFirst({ where: { shipmentId }, orderBy: { seq: "desc" }, select: { seq: true } });
       let seq = (maxSeqRow?.seq ?? 0) + 1;
       for (const sackId of sackIds) {
@@ -2897,6 +2983,7 @@ export class ShippingService {
         if (claimed.count !== 1) throw AppError.conflict("Çuvallardan biri az önce başka bir sevkiyata girdi — yenileyin.");
         seq += 1;
       }
+      await autoCloseLotsForSacksTx(tx, sackIds, lot.mode === "sevk-partisi" && lot.autoClose, userId);
       await tx.roll.updateMany({ where: { sackId: { in: sackIds } }, data: { shipmentId } });
       await tx.swatch.updateMany({ where: { sackId: { in: sackIds } }, data: { shipmentId } });
       const orderRows = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
@@ -2919,6 +3006,8 @@ export class ShippingService {
       await touchShipmentPlannedTx(tx, shipmentId);
       const claimed = await tx.sack.updateMany({ where: { id: sackId, shipmentId }, data: { shipmentId: null, seq: null } });
       if (claimed.count !== 1) throw AppError.conflict("Çuval bu sırada çıkarıldı — yenileyin");
+      const lot = await readPackingLotSettings(tx);
+      await reopenLotsForSacksTx(tx, [sackId], lot.mode === "sevk-partisi");
       await tx.roll.updateMany({ where: { sackId }, data: { shipmentId: null } });
       await tx.swatch.updateMany({ where: { sackId }, data: { shipmentId: null } });
       const orderRows = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
@@ -3198,44 +3287,8 @@ export class ShippingService {
    * koşul fail-closed ile basılmaz).
    */
   private async sackNoteAppearsOnLabel(customerId: string | null): Promise<boolean> {
-    const select = {
-      name: true,
-      rawCode: true,
-      isActive: true,
-      deletedAt: true,
-      variants: { select: { elements: true } },
-    } as const;
-    type Tpl = { name: string; rawCode: Prisma.JsonValue | null; isActive: boolean; deletedAt: Date | null; variants: { elements: Prisma.JsonValue }[] };
-    const usable = (t: Tpl | null | undefined): Tpl | null =>
-      t && t.isActive && t.deletedAt == null ? t : null;
-
-    let tpl: Tpl | null = null;
-    if (customerId) {
-      const route = await prisma.customerTemplateRoute.findUnique({
-        where: { customerId_kind: { customerId, kind: LabelKind.SACK } },
-        select: { template: { select } },
-      });
-      tpl = usable(route?.template);
-    }
-    if (!tpl) {
-      const def = await prisma.labelContextDefault.findUnique({
-        where: { kind: LabelKind.SACK },
-        select: { template: { select } },
-      });
-      tpl = usable(def?.template);
-    }
-    if (!tpl) return false;
-
-    if (collectBoundKeys({ name: tpl.name, variants: tpl.variants }).has("sackNote")) return true;
-    // Uzman raw-code override: kanvas hiç çizilmez, `{{sackNote}}` yer tutucusu
-    // doldurulur (`label-rawcode`). Dil bilinmediği için TÜM diller taranır.
-    const raw = tpl.rawCode;
-    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-      for (const v of Object.values(raw)) {
-        if (typeof v === "string" && v.includes("sackNote")) return true;
-      }
-    }
-    return false;
+    // Gövde alan-parametreli helper'a taşındı (sevk partisi alanları da aynı soruyu sorar).
+    return sackFieldsAppearOnLabel(customerId, ["sackNote"]);
   }
 
   /** Çuval yorumunu oku — yorum sheet'i içerik listesi çekmeden notu alsın. */
@@ -3594,7 +3647,11 @@ export class ShippingService {
     // Çuvallar depoya döner; içerik shipmentId null.
     await tx.roll.updateMany({ where: { shipmentId }, data: { shipmentId: null } });
     await tx.swatch.updateMany({ where: { shipmentId }, data: { shipmentId: null } });
+    const returning = await tx.sack.findMany({ where: { shipmentId }, select: { id: true } });
     await tx.sack.updateMany({ where: { shipmentId }, data: { shipmentId: null, seq: null } });
+    // Sevk partisi: geri gelen çuvalın kapalı partisi kendiliğinden açılır (operatör görsün).
+    const lot = await readPackingLotSettings(tx);
+    await reopenLotsForSacksTx(tx, returning.map((r) => r.id), lot.mode === "sevk-partisi");
     await recomputeOrderStatusForOrdersTx(tx, orderIds);
   }
 
@@ -4600,7 +4657,7 @@ export class ShippingService {
         sacks: {
           orderBy: { seq: "asc" },
           select: {
-            id: true, sackNo: true, seq: true, weightKg: true,
+            id: true, sackNo: true, seq: true, weightKg: true, packageNo: true, packingGroup: { select: { name: true } },
             // ADLİ/DETAY görünüm — hayalet BURADA FİLTRELENMEZ, aksine `status` ile
             // görünür kılınır: "ne oldu?" sorusunun cevabı bu ekranda okunur ve
             // operatörün topu çuvaldan çıkarma yolu buradan geçer. Filtrelemek sorunu
@@ -4783,6 +4840,8 @@ export class ShippingService {
       }
       return {
         id: sk.id, sackNo: sk.sackNo, seq: sk.seq, weightKg: sk.weightKg,
+        // Sevk partisi (2026-09-21) — detay/önizleme rozeti; partisiz çuvalda null.
+        packageNo: sk.packageNo, packingGroupName: sk.packingGroup?.name ?? null,
         rolls: grossRolls,
         swatches: sk.swatches,
         productSummary: [...summaryMap.values()],
@@ -5331,7 +5390,9 @@ async function collectShipmentDocContent(
         // `qualityGradeId`/`qualityGrade` (2026-09-13) — "müşterideki ad" POLİTİKA
         // anahtarı (`QualityGrade.skipCustomerName`). İkisi birden: FK canlı topta
         // dolu, kod eski/iade satırlarında tek kalan olabilir.
-        select: { id: true, seq: true, sackNo: true, weightKg: true, rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, currentQty: true, width: true, itemId: true, colorId: true, qualityGradeId: true, qualityGrade: true, item: { select: { name: true } }, color: { select: { name: true } }, batch: { select: { batchNumber: true } } } } },
+        // `packageNo`/`packingGroup.name` (2026-09-21, sevk partisi) — belgeye yalnız
+        // `shipping.docPackingLot` açıkken basılır; snapshot'a her zaman girer (donuk içerik).
+        select: { id: true, seq: true, sackNo: true, weightKg: true, packageNo: true, packingGroup: { select: { name: true } }, rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, currentQty: true, width: true, itemId: true, colorId: true, qualityGradeId: true, qualityGrade: true, item: { select: { name: true } }, color: { select: { name: true } }, batch: { select: { batchNumber: true } } } } },
       },
     },
   });
@@ -5494,7 +5555,10 @@ async function collectShipmentDocContent(
       g.totalMeters = g.totalMeters.plus(r.currentQty);
       productMap.set(stokAdi, g);
     }
-    return { code: sk.sackNo ?? `#${sk.seq}`, seq: sk.seq ?? 0, totalMeters: Number(sackMeters), totalKg: sk.weightKg != null ? Number(sk.weightKg) : 0, packageCount: sk.rolls.length };
+    return {
+      code: sk.sackNo ?? `#${sk.seq}`, seq: sk.seq ?? 0, totalMeters: Number(sackMeters), totalKg: sk.weightKg != null ? Number(sk.weightKg) : 0, packageCount: sk.rolls.length,
+      packageNo: sk.packageNo ?? null, packingGroupName: sk.packingGroup?.name ?? null,
+    };
   });
 
   // ⚠️ ÇEKİ SATIRI TOP BAŞINADIR — orada karışıklık sorusu YOKTUR, politika
@@ -5503,7 +5567,7 @@ async function collectShipmentDocContent(
   const cekiRows = sacksGross.flatMap((sk) =>
     sk.rolls.map((r, idx) => {
       const skips = namePolicy.skips(r.qualityGradeId, r.qualityGrade);
-      return { rollId: r.id, sackCode: sk.sackNo ?? `#${sk.seq}`, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", customerDesen: skips ? null : customerNames.itemName(r.itemId, r.colorId), customerVaryant: skips ? null : customerNames.colorName(r.colorId), width: r.width != null ? Number(r.width) : null, meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0, batchNumber: r.batch?.batchNumber ?? null };
+      return { rollId: r.id, sackCode: sk.sackNo ?? `#${sk.seq}`, packageNo: sk.packageNo ?? null, packingGroupName: sk.packingGroup?.name ?? null, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", customerDesen: skips ? null : customerNames.itemName(r.itemId, r.colorId), customerVaryant: skips ? null : customerNames.colorName(r.colorId), width: r.width != null ? Number(r.width) : null, meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0, batchNumber: r.batch?.batchNumber ?? null };
     })
   );
 

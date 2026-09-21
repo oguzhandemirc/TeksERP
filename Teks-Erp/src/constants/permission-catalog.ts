@@ -127,6 +127,9 @@ export const PERMISSION_CATALOG = [
   // GEÇMİŞ bir sevkiyatın sipariş defterini değiştirmemeli). Onarım irsaliyenin
   // yeni bir sürümünü doğurur; sahadaki yöneticiye bilinçli olarak atanır.
   { code: "shipping:repair-allocation", module: "LOGISTICS", category: "web", description: "Siparişe yazılamamış sevkiyatların defterini onarma (irsaliye v+1 doğurur)" },
+  // Sevk partisi yönetimi — `shipping:write`ten AYRI: çuval açan/okutan herkes parti
+  // açıp kapatmasın, numara ezmesin, partiler arası taşımasın (belgeye basılan kimlik).
+  { code: "shipping:packing-lot", module: "LOGISTICS", category: "web", description: "Sevk partisi aç/kapat/yeniden aç/sil/adlandır, çuval transferi, ambalaj no ezme" },
   { code: "return:read", module: "LOGISTICS", category: "web", description: "İade takibi raporu görüntüleme" },
   { code: "return:write", module: "LOGISTICS", category: "web", description: "İade alma + iade nedeni kataloğu oluşturma/düzenleme/silme" },
   // ── Ticaret paketi: çoklu depo + mal kabul (2026-08-13) ────────────────────

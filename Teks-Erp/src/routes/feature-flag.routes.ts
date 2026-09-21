@@ -363,6 +363,14 @@ export const updateSchema = z.strictObject({
   shippingDocProductColorSplit: z.boolean().optional(),
   packingGroupsEnabled: z.boolean().optional(),
   packingGroupNumbering: z.enum(["artan", "bosluk-doldur"]).optional(),
+  packingGroupMode: z.enum(["grup", "sevk-partisi"]).optional(),
+  packageNoStartsAtZero: z.boolean().optional(),
+  packageNoMode: z.enum(["otomatik", "otomatik-ezilebilir", "elle"]).optional(),
+  packageNumbering: z.enum(["artan", "bosluk-doldur"]).optional(),
+  packingLotAutoClose: z.boolean().optional(),
+  packingLotRequired: z.boolean().optional(),
+  packingLotPartialDispatch: z.boolean().optional(),
+  shippingDocPackingLot: z.boolean().optional(),
   sackDumpNameMode: z.enum(["ikisi", "bizdeki", "musterideki"]).optional(),
   // shipping.allocWidthTolerance* — tahsiste EN toleransı (default kapalı = tam eşitlik).
   // ⚠️ Kumaş ve renk toleranstan ETKİLENMEZ.

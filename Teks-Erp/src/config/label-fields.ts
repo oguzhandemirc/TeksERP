@@ -133,6 +133,10 @@ export const SACK_FIELDS: readonly FieldDef[] = [
   // Çuval notu — iç not. Şablona SÜRÜKLENMEZSE basılmaz (kanvas modeli gereği
   // varsayılan kapalı); not boşsa eleman baskıda atlanır (present:false).
   { key: "sackNote",     defaultLabel: "Çuval Notu",    type: "text" },
+  // Sevk partisi (2026-09-21): parti içi ambalaj no + parti adı. Opt-in — şablona
+  // sürüklenmezse basılmaz; partisiz çuvalda boş → eleman atlanır (present:false).
+  { key: "packageNo",    defaultLabel: "Ambalaj No",    type: "number" },
+  { key: "packingGroupName", defaultLabel: "Sevk Partisi", type: "text" },
   { key: "printedAt",    defaultLabel: "Baskı Tarihi",  type: "date" },
 ] as const;
 

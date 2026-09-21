@@ -26,6 +26,9 @@ Envanterin tek kaynağı `Teks-Erp/src/services/helpers/period-guard.helper.ts` 
 | 8028 | `CASH_PERIOD_CLOSE_LOCK_NS` | `helpers/cash-period-guard.helper.ts:53` | kasa/banka dönem kapanışı |
 | 8029 | `CODE_UNIQUE_LOCK_NS` | `helpers/code-unique.helper.ts:55` | kod tekilliği |
 | 8030 | `MERGE_LOCK_NS` | `master-data-merge.service.ts:56` | master-data birleştirme (tek global anahtar) |
+| 8031 | `PACKING_GROUP_LOCK_NS` | `helpers/packing-group.helper.ts` | paketleme grubu / sevk partisi numara sayacı (cari başına) |
+| 8032 | `WEAVING_ORDER_LOCK_NS` | `helpers/weaving-order.helper.ts` | dokuma işi numara sayacı |
+| 8033 | `PACKAGE_NO_LOCK_NS` | `helpers/packing-group.helper.ts` | sevk partisi ambalaj no — yalnız ezme/elle/boşluk-doldur yolları (parti başına) |
 
 Bu tablo bir ÖZETTİR; kanonik envanter `period-guard.helper.ts` başlığındadır ve `test_advisory_lock_namespaces` ikisini birden ölçer.
 
