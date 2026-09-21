@@ -845,15 +845,6 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Yalnız “Paketleme grubu davranışı” SEVK PARTİSİ iken anlamlıdır. Kapalı (varsayılan): partide açılan ilk çuval 1 numarasını alır — müşteriye giden çeki listeleri sektörde 1’den başlar. Açık: ilk çuval 0 olur. Yalnız YENİ açılan partileri etkiler; açık partilerin sayacı değişmez.",
       },
       {
-        key: "packingLotAutoClose",
-        title: "Son çuval sevk edilince sevk partisi kendiliğinden kapansın",
-        summary: "Partinin açık çuvalı kalmayınca parti KAPALI olur; storno çuvalı geri getirirse yeniden açılır.",
-        defaultOn: false,
-        audience: ["Sevkiyat", "Depocu"],
-        group: "Sevk partisi",
-        desc: "Yalnız SEVK PARTİSİ modunda anlamlıdır. Kapalı (varsayılan): parti yalnız “Partiyi kapat” ile kapanır; bütün çuvalları gitmiş boş parti açık listede durmaya devam eder. Açık: son açık çuval sevkiyata bağlanınca parti aynı işlemde KAPALI olur ve listeden düşer. Bir sevk geri alınıp çuval partiye dönerse parti kendiliğinden yeniden AÇILIR (kapalı partide sevk edilmemiş çuval kalamaz).",
-      },
-      {
         key: "packingLotRequired",
         title: "Her çuval bir sevk partisinde doğsun",
         summary: "Partisiz çuval açma engellenir. ⚠️ Tablet çuval açamaz.",
@@ -932,7 +923,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: PACKING_GROUP_MODE_OPTIONS,
         audience: ["Sevkiyat", "Depocu"],
         group: "Sevk partisi",
-        desc: "Yalnız “Paketleme grubu” ayarı açıkken bir anlamı vardır. “Paketleme grubu” (varsayılan, BUGÜNKÜ DAVRANIŞ): grup yaftadır — boşalınca görünmez olur, numarası yeniden kullanılır, çuvala numara verilmez. “Sevk partisi”: sevkiyat elemanı cariyi seçer, parti açar (boş doğar), partide çuval açar; her çuval parti içinde bir AMBALAJ NUMARASI alır; partiden seçilen çuvallar sevk edilir, parti yaşamaya devam eder ve elle (ya da ayarla otomatik) kapanır. Sevk edilmiş çuval partide numarasıyla kalır. ⚠️ Moddan moda geçiş mevcut gruplara dokunmaz: eski gruplar AÇIK parti sayılır, çuvallarına numara VERİLMEZ (operatör “yeniden numarala” der). Tablet bu sürümde partiyi grup gibi görür ve seçer.",
+        desc: "Yalnız “Paketleme grubu” ayarı açıkken bir anlamı vardır. “Paketleme grubu” (varsayılan, BUGÜNKÜ DAVRANIŞ): grup yaftadır — boşalınca görünmez olur, numarası yeniden kullanılır, çuvala numara verilmez. “Sevk partisi”: sevkiyat elemanı cariyi seçer, parti açar (boş doğar), partide çuval açar; her çuval parti içinde bir AMBALAJ NUMARASI alır; partiden seçilen çuvallar sevk edilir, parti yaşamaya devam eder; son çuvalı da sevk edilince parti “sevk edildi” olur, listeden düşer ve adı/numarası yeni bir partiye yeniden verilebilir. Sevk edilen çuvallar bu ekranda izlenmez (Sevkiyatlar ekranı). ⚠️ Moddan moda geçiş mevcut gruplara dokunmaz: eski gruplar AÇIK parti sayılır, çuvallarına numara VERİLMEZ (operatör “yeniden numarala” der). Tablet bu sürümde partiyi grup gibi görür ve seçer.",
       },
       {
         enumKey: "packageNoMode",

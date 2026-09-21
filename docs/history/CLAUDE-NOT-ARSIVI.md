@@ -11150,3 +11150,12 @@ Kullanıcı kararı (1e sözleşmesi; 6e'den devir, 01): `production.cancelReaso
 
 **Sonraki:** tablet fazı (parti seçip çuval açma) ayrı karar; geçiş script'i `scripts/migrate_packing_groups_to_lots.ts` (dry-run; boşalmış grupları CLOSED'a çeker, numara VERMEZ).
 
+## 2026-09-22 — Sevk partisi: durum SEVKTEN türer, elle kapatma yok; ad/numara AÇIK partiler arasında tekil [ÇEKİRDEK]
+
+Saha geri bildirimi (ilk günün ardından): "sevk edilmiş bir partiyi tekrar aynı isimle açabilmek istiyorlar; sevk edilenleri buradan takip etmek istemiyorlar; bir çuval doğası gereği işleme açıktır, gönderildiyse zaten çuval yoktur; benzersiz kod isimden gelmemeli."
+
+**Değişen:** 2026-09-21'in K5'i ("elle kapat + `packing.lotAutoClose`") GEÇERSİZ → `packing.lotAutoClose` KALDIRILDI, `close`/`reopen` uçları KALDIRILDI. `PackingGroupStatus.CLOSED` artık "sevk edildi" demektir ve yalnız sevk tx'i yazar (`autoCloseLotsForSacksTx`, koşulsuz parti modunda); storno/iptal `OPEN`a döndürür. Parti sırası (`nextPackingGroupSeqTx`) parti modunda da canlı (OPEN) partilere bakar — sevk edilmiş SP-1'in numarası `bosluk-doldur`da, adı her rejimde yeni partiye verilebilir; iki AÇIK parti aynı adı alamaz; kimlik `id`. Parti satırı yalnız açık çuval sayısını basar ("3 çuval"); sevk edilenler için "Sevkiyatlar" bağlantısı (`/operations/shipments?filter[customerId]=…`).
+
+**Ekran (aynı gün):** çip şeridi yerine parti LİSTESİ — dört özet kartı (açık parti · havuz çuval/top · havuz m · havuz kg; `GET /packing-groups/summary`), sabit "Partisiz çuvallar (havuz)" satırı (boşken soluk, kaybolmaz), durum segmenti Açık · Sevk edilmiş · Tümü, ad/not araması (`foldedIncludes`), sıralanabilir başlıklar (`trCompare` sayı-duyarlı, tartısız sona), geri oku seviye seviye (parti içi → liste → kapı). "Eşleşen" sütunu yalnız içerik süzgeci varken; "Yeni Çuval" listedeki tek cariyi ön-doldurur, kapıdayken doldurmaz.
+
+**Ölçüldü:** `autoCloseLotsForSacksTx` gövdesi kapatılınca `test_sevk_partisi` §13 dört kontrolle kırmızı. Tuzak kaydı: iki anahtar tek özellik — `packing.groupMode = sevk-partisi` yazılıp `packing.groupsEnabled` kapalı kalınca şerit hiç çizilmiyor (kullanıcı ilk denemede takıldı; birleştirme kararı bekliyor).

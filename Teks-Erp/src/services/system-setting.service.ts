@@ -465,8 +465,6 @@ export const SETTING_KEYS = {
   PACKAGE_NO_MODE: "packing.packageNoMode",
   /** Ambalaj no sayaç rejimi: `artan` (default; geri verilmez) | `bosluk-doldur`. */
   PACKAGE_NUMBERING: "packing.packageNumbering",
-  /** Son açık çuval sevk edilince sevk partisi kendiliğinden kapansın mı (default false). */
-  PACKING_LOT_AUTO_CLOSE: "packing.lotAutoClose",
   /** Partisiz çuval açma yasak mı (default false). Açıkken tablet çuval açamaz. */
   PACKING_LOT_REQUIRED: "packing.lotRequired",
   /** Partinin bir alt kümesi sevk edilebilir mi (default TRUE = kısmi sevk serbest). */
@@ -1596,8 +1594,6 @@ export interface FeatureFlags {
   packageNoMode: PackageNoMode;
   /** Ambalaj no sayaç rejimi: 'artan' (default) | 'bosluk-doldur'. */
   packageNumbering: PackageNumbering;
-  /** Son açık çuval sevk edilince parti kendiliğinden kapanır (default false). */
-  packingLotAutoClose: boolean;
   /** Partisiz çuval açma 400 (default false). */
   packingLotRequired: boolean;
   /** Partinin alt kümesi sevk edilebilir (default TRUE). */
@@ -2000,7 +1996,6 @@ export class SystemSettingService {
       packageNoStartsAtZero: await readPackageNoStartsAtZero(cacheClient),
       packageNoMode: await readPackageNoMode(cacheClient),
       packageNumbering: await readPackageNumbering(cacheClient),
-      packingLotAutoClose: await readPackingLotAutoClose(cacheClient),
       packingLotRequired: await readPackingLotRequired(cacheClient),
       packingLotPartialDispatch: await readPackingLotPartialDispatch(cacheClient),
       shippingDocPackingLot: await readShippingDocPackingLot(cacheClient),
@@ -2987,13 +2982,6 @@ export class SystemSettingService {
         throw AppError.badRequest("Ambalaj no rejimi 'artan' veya 'bosluk-doldur' olmalı");
       }
       await this.set(SETTING_KEYS.PACKAGE_NUMBERING, v, "Ambalaj no sayacı: artan (geri verilmez) / bosluk-doldur (en küçük boş)", userId);
-    }
-
-    if (Object.prototype.hasOwnProperty.call(input, "packingLotAutoClose")) {
-      if (typeof input.packingLotAutoClose !== "boolean") {
-        throw AppError.badRequest("packingLotAutoClose boolean olmalı");
-      }
-      await this.set(SETTING_KEYS.PACKING_LOT_AUTO_CLOSE, String(input.packingLotAutoClose), "Son açık çuval sevk edilince sevk partisi kendiliğinden kapanır", userId);
     }
 
     if (Object.prototype.hasOwnProperty.call(input, "packingLotRequired")) {
@@ -4828,18 +4816,6 @@ export async function readPackageNumbering(
     return v as PackageNumbering;
   }
   return DEFAULT_PACKAGE_NUMBERING;
-}
-
-/** Son açık çuval sevk edilince parti kapanır mı. Satır yoksa false. */
-export async function readPackingLotAutoClose(
-  tx?: Pick<typeof prisma, "systemSetting">,
-): Promise<boolean> {
-  const client = tx ?? prisma;
-  const setting = await client.systemSetting.findUnique({
-    where: { key: SETTING_KEYS.PACKING_LOT_AUTO_CLOSE },
-    select: { value: true },
-  });
-  return asBoolean(setting?.value);
 }
 
 /** Partisiz çuval açma yasak mı. Satır yoksa false. */

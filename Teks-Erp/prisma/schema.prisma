@@ -6408,6 +6408,9 @@ model SackTagAssignment {
 /// açar), defter DEĞİL (satır güncellenir) — mutasyona uğrayan çalışma nesnesi.
 /// Sevk partisi yaşam döngüsü (yalnız `packing.groupMode = sevk-partisi`yken okunur;
 /// grup modunda satır OPEN doğar ve canlılık çocuk satırdan türetilir).
+/// OPEN = sevk edilmemiş çuvalı var ya da yeni doğdu · CLOSED = "sevk edildi" — son
+/// çuvalı sevk edilince SEVK TX'İNDE yazılır, storno geri getirince OPEN'a döner;
+/// elle değişmez (saha kararı 2026-09-22). Ad/numara tekilliği yalnız OPEN'lar arasında.
 enum PackingGroupStatus {
   OPEN
   CLOSED
@@ -6449,10 +6452,10 @@ model PackingGroup {
   note String? @db.VarChar(500)
 
   /// SEVK PARTİSİ modunda canlılık BU alandır (`liveGroupWhere`): boş parti yaşar,
-  /// kapalı parti listeden düşer. Grup modunda okunmaz (türetilmiş canlılık).
+  /// "sevk edildi" parti listeden düşer. Grup modunda okunmaz (türetilmiş canlılık).
   status PackingGroupStatus @default(OPEN)
-  /// "EN SON ne zaman kapandı" — yeniden açılınca NULL'LANMAZ (dispatchedAt kalıbı);
-  /// güncel gerçek `status`tadır.
+  /// "EN SON ne zaman sevk edildi (tamamlandı)" — storno ile yeniden açılınca
+  /// NULL'LANMAZ (dispatchedAt kalıbı); güncel gerçek `status`tadır.
   closedAt   DateTime? @db.Timestamptz
   closedById String?   @db.Uuid
   /// Parti içi AMBALAJ NO sayacı (`packing.packageNumbering = artan`): tek yazar

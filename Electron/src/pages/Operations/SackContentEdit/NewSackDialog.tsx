@@ -25,14 +25,20 @@ import {
 import { Input } from "@/components/ui/input";
 import { sackHubService } from "./service";
 import { invalidateSackHub } from "./useSackData";
-import { isLotMode, newSackLotTarget, packageNoField, parsePackageNoInput } from "./packingLotUi";
-import { CUSTOMERLESS_FILTER_VALUE, UNGROUPED_FILTER_VALUE, type EditorTarget, type OpenedSack, type PackingGroup } from "./types";
+import { isLotMode, newSackLotTarget, packageNoField, parsePackageNoInput, singleCustomerFromFilter } from "./packingLotUi";
+import { UNGROUPED_FILTER_VALUE, type EditorTarget, type OpenedSack, type PackingGroup } from "./types";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Çuval açıldıktan sonra editöre geç. */
   onCreated: (target: EditorTarget) => void;
+  /**
+   * Cari ön-dolumu: liste TEK cariye süzülmüş ve o liste EKRANDAYSA açık. Giriş
+   * kapısındayken (Tüm Çuvallar / Tüm Cariler karoları) KAPALI — URL'de bayat bir
+   * süzgeç kalsa bile operatörün seçmediği bir cari sessizce dolmasın.
+   */
+  prefillCustomer?: boolean;
 }
 
 /**
@@ -41,26 +47,32 @@ interface Props {
  * seçilebilir. Açılınca doğrudan editöre geçilir (top okutulur). Çözülmüş ad/kod backend
  * yanıtından gelir → editör hedefi fetch'siz kurulur.
  */
-export function NewSackDialog({ open, onOpenChange, onCreated }: Props) {
+export function NewSackDialog({ open, onOpenChange, onCreated, prefillCustomer = true }: Props) {
   const qc = useQueryClient();
   const [searchParams] = useSearchParams();
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [branchId, setBranchId] = useState<string | null>(null);
   // Sevk partisi (2026-09-21) — durum ve kurallar `useNewSackLot`ta.
-  const lot = useNewSackLot(open, customerId, searchParams);
+  const lot = useNewSackLot(open, customerId, searchParams, prefillCustomer);
   const { lotMode, noField, target, noParse, noMissing } = lot;
   // İdempotency (A4) — ManualEntryDialog emsali: her açılışta taze token, deneme
   // içinde sabit → retry mükerrer boş çuval açmaz (backend replay).
   const [clientToken, setClientToken] = useState(() => crypto.randomUUID());
   const branchesEnabled = useCustomerBranchesEnabled();
 
+  // Liste TEK cariye süzülmüşse (kapıdan cari seçildi) çuval o cariye açılır —
+  // operatör içinde bulunduğu cariyi ikinci kez seçmez (saha bulgusu 2026-09-21).
+  const urlCustomerId = prefillCustomer ? singleCustomerFromFilter(searchParams) : null;
   useEffect(() => {
     if (!open) {
       setCustomerId(null);
       setBranchId(null);
     } else {
       setClientToken(crypto.randomUUID()); // yeni açılış = yeni mantıksal deneme
+      setCustomerId(urlCustomerId);
     }
+    // `urlCustomerId` yalnız açılış anında okunur (pencere açıkken süzgeç değişmez).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const mut = useMutation({
@@ -187,18 +199,14 @@ function CustomerFields({
  * listede seçili çip (`filter[packingGroupId]`); cari partiden çözülür. Numara alanı moda
  * göre (`packageNoField`): yok / opsiyonel / zorunlu. Grup modunda hepsi etkisiz.
  */
-function useNewSackLot(open: boolean, customerId: string | null, searchParams: URLSearchParams) {
+function useNewSackLot(open: boolean, customerId: string | null, searchParams: URLSearchParams, prefillCustomer: boolean) {
   const lotMode = isLotMode(usePackingGroupsEnabled(), usePackingGroupMode());
   const lotRequired = usePackingLotRequired();
   const noField = packageNoField(usePackageNoMode());
   const selectedChip = searchParams.get("filter[packingGroupId]") ?? "";
   const [lotId, setLotId] = useState<string | null>(null);
   const [packageNoRaw, setPackageNoRaw] = useState("");
-  const customerFilter = (searchParams.get("filter[customerId]") ?? "")
-    .split(",")
-    .map((v) => v.trim())
-    .filter((v) => v && v !== CUSTOMERLESS_FILTER_VALUE);
-  const lotCustomerId = customerId ?? (customerFilter.length === 1 ? customerFilter[0] : null) ?? null;
+  const lotCustomerId = customerId ?? (prefillCustomer ? singleCustomerFromFilter(searchParams) : null);
   const lots = useQuery({
     queryKey: ["packing-groups", lotCustomerId, "OPEN"],
     queryFn: () => sackHubService.listPackingGroups(lotCustomerId!, "OPEN"),

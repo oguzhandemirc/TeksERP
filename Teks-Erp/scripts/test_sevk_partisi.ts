@@ -8,7 +8,7 @@
 //   §1 (DB'siz) "canlı grup" yüklemi TEK KAYNAK: `sacks: { some: { shipmentId: null } }` literali
 //      yalnız helper'da; servisler `liveGroupWhere(mode)`den geçer
 //   §2 (DB'siz) 8033 `PACKAGE_NO_LOCK_NS` envanterde; `bosluk-doldur` dalında kilit ilk ifade
-//   §3 GRUP MODUNDA (varsayılan) parti uçları kapalı: openSack+packingGroupId 400 · close 400 ·
+//   §3 GRUP MODUNDA (varsayılan) parti uçları kapalı: openSack+packingGroupId 400 · özet 400 ·
 //      boş grup 400 · liste `status` süzgeci 400 — davranış bayt bayt eski (negatif sonda)
 //   §4 Boş parti doğar ve YAŞAR (OPEN · listede · nextPackageNo = 1); eski grup P1 sayaçta sayılır → SP-2
 //   §5 Çuval partide doğar: openSack({packingGroupId}) → 1, 2, 3; cari partinin carisi
@@ -18,13 +18,14 @@
 //   §8 `packageNoStartsAtZero`: yeni parti 0'dan başlar
 //   §9 `artan`: partiden çıkan çuvalın numarası GERİ VERİLMEZ; `bosluk-doldur`: en küçük boş
 //  §10 Transfer (addSacks başka partiye): hedefte yeni numara, kaynakta boşluk; zaten üye → 409
-//  §11 Kapat / yeniden aç: CLOSED listeden düşer, kapalıya çuval 409, reopen; iki kez kapat 409;
-//      `closedAt` yeniden açılınca NULL'LANMAZ
-//  §12 Sil: boş parti silinir; çuvalı olan 409 PACKING_LOT_NOT_EMPTY
-//  §13 Parti sırası KAPALI partilere de bakar (hepsi kapalıyken yeni parti en büyük+1, 1 değil)
-//  §14 Kısmi sevk: alt küme sevk edilir, çuval partide numarasıyla KALIR, parti OPEN;
+//  §11 Sil: boş parti silinir; çuvalı olan 409 PACKING_LOT_NOT_EMPTY; iki AÇIK parti aynı adı alamaz
+//  §12 Kısmi sevk: alt küme sevk edilir, çuval partide numarasıyla KALIR (üyelik), parti OPEN;
 //      `lotPartialDispatch=false` → alt küme 400 PACKING_LOT_WHOLE, tam küme OK
-//  §15 `lotAutoClose`: son açık çuval gidince CLOSED; planlı sevk iptali çuvalı geri getirince OPEN
+//  §13 Durum SEVKTEN TÜRER (elle kapat YOK, 2026-09-22): son açık çuval gidince CLOSED ("sevk
+//      edildi") + closedAt; OPEN listesinden düşer; ona çuval açılamaz/alınamaz (409)
+//  §14 Sevk edilmiş partinin ADI ve NUMARASI yeni partiye verilebilir (kimlik `id`): `artan`
+//      canlı en büyük+1, `bosluk-doldur` sevk edilmişin numarasını döndürür; iki AÇIK aynı ad 409
+//  §15 Planlı sevk iptali → parti yeniden OPEN (closedAt korunur), numaralar aynı
 //  §16 Eşzamanlı sayaç: iki paralel tx `reservePackageNosTx(artan)` → farklı numaralar
 //  §17 DB unique: aynı partide aynı packageNo → P2002 (son sed)
 //  §18 `lotRequired`: partisiz açma 400 PACKING_LOT_REQUIRED, partide OK
@@ -33,8 +34,8 @@
 //   (a) `reservePackageNosTx` artan dalı `RETURNING` yerine `findFirst max+1` yapıldı → §16 KIRMIZI
 //   (b) `claimSacksIntoGroupTx`in numaralama bloğu (`reservePackageNosTx` + döngü) kapatıldı → §10 KIRMIZI
 //       (transfer/havuzdan-al numara vermedi; yalnız `packageNo: null` düşürmek ISIRMAZ — döngü ezer, ölçüldü)
-//   (c) `autoCloseLotsForSacksTx` `enabled` kapısı kaldırıldı → §14 KIRMIZI (parti kapanmamalıyken kapandı)
-//   (d) `nextPackingGroupSeqTx` lot dalı silindi → §13 KIRMIZI
+//   (c) `autoCloseLotsForSacksTx` gövdesi kapatıldı → §13 KIRMIZI (son çuval gitti, parti OPEN kaldı)
+//   (d) `nextPackingGroupSeqTx` `liveGroupWhere(groupMode)` yerine `LIVE_GROUP_WHERE` (türetilmiş) → §4 KIRMIZI (boş parti sayılmaz)
 //   (e) `openSack` lot kapısında `PACKING_LOT_MODE_OFF` dalı silindi → §3 KIRMIZI
 //   Hepsi geri alındığında yeşil.
 // =============================================================================
@@ -193,7 +194,6 @@ async function main(): Promise<void> {
     await setFlag(SETTING_KEYS.PACKAGE_NO_MODE, "otomatik-ezilebilir");
     await setFlag(SETTING_KEYS.PACKAGE_NUMBERING, "artan");
     await setFlag(SETTING_KEYS.PACKAGE_NO_STARTS_AT_ZERO, "false");
-    await setFlag(SETTING_KEYS.PACKING_LOT_AUTO_CLOSE, "false");
     await setFlag(SETTING_KEYS.PACKING_LOT_REQUIRED, "false");
     await setFlag(SETTING_KEYS.PACKING_LOT_PARTIAL_DISPATCH, "true");
 
@@ -205,7 +205,7 @@ async function main(): Promise<void> {
     check("§3 grup modunda ad P1, packageNo NULL, status OPEN (okunmaz)", gGrup.name === "P1" && (await readSack(sGrup.id)).packageNo === null && gGrup.status === "OPEN");
     await expectErr("§3 ⭐ grup modunda openSack+packingGroupId 400 PACKING_LOT_MODE_OFF",
       () => ship.openSack({ packingGroupId: gGrup.id }), 400, "PACKING_LOT_MODE_OFF");
-    await expectErr("§3 grup modunda close 400", () => PackingLotService.close(gGrup.id), 400, "PACKING_LOT_MODE_OFF");
+    await expectErr("§3 grup modunda özet ucu 400", () => PackingLotService.customerSummary(customerId), 400, "PACKING_LOT_MODE_OFF");
     await expectErr("§3 grup modunda liste status=CLOSED 400", () => PackingGroupService.list(customerId, { status: "CLOSED" }), 400);
     await prisma.sack.update({ where: { id: sGrup.id }, data: { packingGroupId: null } });
 
@@ -277,39 +277,17 @@ async function main(): Promise<void> {
     await PackingGroupService.addSacks(p2.id, [havuz.id]);
     check("§10 havuzdan al: numara 2", (await readSack(havuz.id)).packageNo === 2);
 
-    // ---- §11: kapat / yeniden aç ------------------------------------------------
-    await PackingLotService.close(p2.id);
-    const g2c = await readGroup(p2.id);
-    check("§11 CLOSED + closedAt", g2c.status === "CLOSED" && g2c.closedAt !== null);
-    const openList = (await PackingGroupService.list(customerId)).data ?? [];
-    const closedList = (await PackingGroupService.list(customerId, { status: "CLOSED" })).data ?? [];
-    check("§11 ⭐ kapalı parti OPEN listesinde yok, CLOSED listesinde var", !openList.some((g) => g.id === p2.id) && closedList.some((g) => g.id === p2.id));
-    await expectErr("§11 kapalıya openSack 409 PACKING_LOT_CLOSED", () => ship.openSack({ packingGroupId: p2.id }), 409, "PACKING_LOT_CLOSED");
-    await expectErr("§11 kapalıya addSacks 409", () => PackingGroupService.addSacks(p2.id, [a42.id]), 409, "PACKING_LOT_CLOSED");
-    await expectErr("§11 iki kez kapat 409", () => PackingLotService.close(p2.id), 409, "PACKING_LOT_ALREADY_CLOSED");
-    await PackingLotService.reopen(p2.id);
-    const g2o = await readGroup(p2.id);
-    check("§11 reopen → OPEN, closedAt KORUNUR", g2o.status === "OPEN" && g2o.closedAt !== null);
-    await expectErr("§11 açığı yeniden aç 409", () => PackingLotService.reopen(p2.id), 409, "PACKING_LOT_ALREADY_OPEN");
-
-    // ---- §12: sil ----------------------------------------------------------------
+    // ---- §11: sil ----------------------------------------------------------------
     const pBos = await createLot();
     const del = await PackingLotService.remove(pBos.id);
-    check("§12 boş parti silindi", del.success && (await prisma.packingGroup.findUnique({ where: { id: pBos.id } })) === null);
-    await expectErr("§12 ⭐ çuvalı olan parti silinmez 409", () => PackingLotService.remove(p2.id), 409, "PACKING_LOT_NOT_EMPTY");
+    check("§11 boş parti silindi", del.success && (await prisma.packingGroup.findUnique({ where: { id: pBos.id } })) === null);
+    await expectErr("§11 ⭐ çuvalı olan parti silinmez 409", () => PackingLotService.remove(p2.id), 409, "PACKING_LOT_NOT_EMPTY");
+    await expectErr("§11 açık parti adı tekil: ikinci 'Cuma' 409", async () => {
+      await createLot("Cuma");
+      await createLot("Cuma");
+    }, 409, "PACKING_GROUP_NAME_TAKEN");
 
-    // ---- §13: parti sırası kapalıya da bakar ----------------------------------------
-    // Şu an seq: P1(grup) · SP-2(p1) · SP-3(p0) · SP-4(p2); SP-5 SİLİNDİ (taslak — hiç belgeye
-    // girmedi, numarası yeniden verilir). Hepsini kapat: yeni parti 1 DEĞİL, en büyük+1 = 5.
-    await PackingLotService.close(p1.id);
-    await PackingLotService.close(p0.id);
-    await PackingLotService.close(p2.id);
-    await PackingLotService.close(gGrup.id);
-    const p5 = await createLot();
-    check("§13 ⭐ kapalı partiler sayılır (SP-5; silinen taslağın 5'i yeniden verilir)", p5.seq === 5 && p5.name === "SP-5", p5.name);
-    await PackingLotService.reopen(p1.id);
-
-    // ---- §14: kısmi sevk -------------------------------------------------------------
+    // ---- §12: kısmi sevk -------------------------------------------------------------
     // p1 açık çuvalları: a1(1) a3(20) a10→p2'ye gitti; a11(11) e40(40) a41(41) b2(2) a42(42). Dolu olsunlar.
     const p1Open = await prisma.sack.findMany({ where: { packingGroupId: p1.id, shipmentId: null }, select: { id: true } });
     for (const s of p1Open) await fillSack(s.id);
@@ -317,24 +295,41 @@ async function main(): Promise<void> {
     const sh1 = (await ship.createShipment({ sackIds: sub, customerId, orderless: true })).data as { id: string };
     shipmentIds.push(sh1.id);
     const a1s = await readSack(a1.id);
-    check("§14 ⭐ sevk edilen çuval partide numarasıyla KALIR", a1s.shipmentId === sh1.id && a1s.packingGroupId === p1.id && a1s.packageNo === 1);
+    check("§12 ⭐ sevk edilen çuval partide numarasıyla KALIR (üyelik silinmez)", a1s.shipmentId === sh1.id && a1s.packingGroupId === p1.id && a1s.packageNo === 1);
     const p1AfterDto = (await PackingGroupService.get(p1.id)).data as GroupDto;
-    check("§14 parti OPEN, özet: açık 5 · sevk edilen 2", p1AfterDto.status === "OPEN" && p1AfterDto.shippedSackCount === 2 && p1AfterDto.sackCount === 5, `${p1AfterDto.sackCount}/${p1AfterDto.shippedSackCount}`);
-    await expectErr("§14 sevk edilmiş çuvalın numarası donmuş (setPackageNo 409)", () => PackingLotService.setPackageNo(a1.id, 99), 409);
+    check("§12 parti OPEN, özet: açık 5 · sevk edilen 2", p1AfterDto.status === "OPEN" && p1AfterDto.shippedSackCount === 2 && p1AfterDto.sackCount === 5, `${p1AfterDto.sackCount}/${p1AfterDto.shippedSackCount}`);
+    await expectErr("§12 sevk edilmiş çuvalın numarası donmuş (setPackageNo 409)", () => PackingLotService.setPackageNo(a1.id, 99), 409);
     await setFlag(SETTING_KEYS.PACKING_LOT_PARTIAL_DISPATCH, "false");
-    await expectErr("§14 ⭐ kısmi sevk kapalı → alt küme 400 PACKING_LOT_WHOLE",
+    await expectErr("§12 ⭐ kısmi sevk kapalı → alt küme 400 PACKING_LOT_WHOLE",
       () => ship.createShipment({ sackIds: [a11.id], customerId, orderless: true }), 400, "PACKING_LOT_WHOLE");
     const rest = (await prisma.sack.findMany({ where: { packingGroupId: p1.id, shipmentId: null }, select: { id: true } })).map((s) => s.id);
-    // ---- §15: otomatik kapanış + iptalle yeniden açılma ------------------------------
-    await setFlag(SETTING_KEYS.PACKING_LOT_AUTO_CLOSE, "true");
+
+    // ---- §13: durum SEVKTEN türer — son çuval gidince "sevk edildi", iptalle yeniden açık ----
     const sh2 = (await ship.createShipment({ sackIds: rest, customerId, orderless: true })).data as { id: string };
     shipmentIds.push(sh2.id);
-    check("§14 tam küme sevk OK", !!sh2.id);
-    check("§15 ⭐ son açık çuval gidince parti CLOSED", (await readGroup(p1.id)).status === "CLOSED");
+    check("§12 tam küme sevk OK", !!sh2.id);
+    const p1Closed = await readGroup(p1.id);
+    check("§13 ⭐ son açık çuval gidince parti CLOSED (sevk edildi) + closedAt", p1Closed.status === "CLOSED" && p1Closed.closedAt !== null);
+    const openList = (await PackingGroupService.list(customerId)).data ?? [];
+    const closedList = (await PackingGroupService.list(customerId, { status: "CLOSED" })).data ?? [];
+    check("§13 ⭐ sevk edilmiş parti OPEN listesinde yok, CLOSED listesinde var", !openList.some((g) => g.id === p1.id) && closedList.some((g) => g.id === p1.id));
+    await expectErr("§13 sevk edilmiş partiye openSack 409 PACKING_LOT_CLOSED", () => ship.openSack({ packingGroupId: p1.id }), 409, "PACKING_LOT_CLOSED");
+    await expectErr("§13 sevk edilmiş partiye addSacks 409", () => PackingGroupService.addSacks(p1.id, [a42.id]), 409, "PACKING_LOT_CLOSED");
+    // ---- §14: ad ve numara SEVK EDİLMİŞ partiden sonra yeniden verilir (kimlik `id`) ----
+    // Canlı (OPEN) seq'ler: P1(1) · SP-3(p0) · SP-4(p2) · Cuma(seq null); SP-2 (p1) sevk edildi → 2 boşta.
+    // `artan` rejimi canlı en büyük+1 verir: 5. (SP-2'nin numarası ancak `bosluk-doldur`da döner.)
+    const pNext = await createLot();
+    check("§14 artan: canlı en büyük+1 (SP-5), sevk edilmiş parti sayılmaz", pNext.seq === 5 && pNext.name === "SP-5", pNext.name);
+    await setFlag(SETTING_KEYS.PACKING_GROUP_NUMBERING, "bosluk-doldur");
+    const pReuse = await createLot();
+    check("§14 ⭐ bosluk-doldur: sevk edilmiş SP-2'nin numarası yeniden verildi", pReuse.seq === 2 && pReuse.name === "SP-2", pReuse.name);
+    await setFlag(SETTING_KEYS.PACKING_GROUP_NUMBERING, "artan");
+    check("§14 ⭐ aynı AD iki farklı kimlikte (biri sevk edildi, biri açık)", pReuse.name === p1Closed.name && pReuse.id !== p1.id);
+    await expectErr("§14 iki AÇIK parti aynı adı alamaz (elle ad) 409", () => createLot("SP-2"), 409, "PACKING_GROUP_NAME_TAKEN");
+    // ---- §15: planlı sevk iptali → parti yeniden AÇIK, numaralar aynı ------------------
     await ship.cancelShipment(sh2.id);
     const back = await readSack(a11.id);
-    check("§15 ⭐ planlı sevk iptali → parti OPEN, numara aynı", (await readGroup(p1.id)).status === "OPEN" && back.shipmentId === null && back.packageNo === 11 && back.packingGroupId === p1.id);
-    await setFlag(SETTING_KEYS.PACKING_LOT_AUTO_CLOSE, "false");
+    check("§15 ⭐ iptal → parti OPEN, closedAt korunur, numara aynı", (await readGroup(p1.id)).status === "OPEN" && (await readGroup(p1.id)).closedAt !== null && back.shipmentId === null && back.packageNo === 11 && back.packingGroupId === p1.id);
     await setFlag(SETTING_KEYS.PACKING_LOT_PARTIAL_DISPATCH, "true");
 
     // ---- §16: eşzamanlı sayaç ------------------------------------------------------

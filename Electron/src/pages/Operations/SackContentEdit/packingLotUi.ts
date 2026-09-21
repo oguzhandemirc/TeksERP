@@ -1,5 +1,5 @@
 import type { PackageNoMode, PackingGroupMode } from "@/lib/shipping-flags";
-import type { PackingGroup } from "./types";
+import { CUSTOMERLESS_FILTER_VALUE, type PackingGroup } from "./types";
 
 /**
  * SEVK PARTİSİ — panel yüzeyinin saf kuralları (2026-09-21). Bileşenler buradan
@@ -27,12 +27,18 @@ export function packageNoField(mode: PackageNoMode): { shown: boolean; required:
   }
 }
 
-/** Çip altyazısı: açık N · sevk edilen M (0 ise sevk kısmı düşer). */
-export function lotChipSummary(g: Pick<PackingGroup, "sackCount" | "shippedSackCount" | "totalQty">): string {
-  const parts = [`${g.sackCount} açık`];
-  if (g.shippedSackCount > 0) parts.push(`${g.shippedSackCount} sevk`);
-  const m = g.totalQty.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
-  return `${parts.join(" · ")} · ${m} m`;
+/**
+ * Satır etiketi: açık partide "N çuval" (sevk edilenler bu ekranda İZLENMEZ — yeri
+ * Sevkiyatlar; saha 2026-09-22); "sevk edildi" partide "M çuval sevk edildi".
+ */
+export function lotSackLabel(g: Pick<PackingGroup, "status" | "sackCount" | "shippedSackCount">): string {
+  if (g.status === "CLOSED") return `${g.shippedSackCount} çuval sevk edildi`;
+  return `${g.sackCount} çuval`;
+}
+
+/** Durum etiketi — CLOSED "sevk edildi"dir, "kapalı" değil (elle kapatma yok). */
+export function lotStatusLabel(status: PackingGroup["status"]): string {
+  return status === "CLOSED" ? "SEVK EDİLDİ" : "AÇIK";
 }
 
 /** Yalnız HİÇ çuvalı olmamış parti silinebilir (taslak sınıfı); diğeri kapatılır. */
@@ -65,4 +71,13 @@ export function parsePackageNoInput(raw: string): { value: number | null; error:
   const n = Number(t);
   if (n > 999_999) return { value: null, error: "Ambalaj no çok büyük" };
   return { value: n, error: null };
+}
+
+/** `filter[customerId]` TEK cari ise onu döner (CSV ve müşterisiz sentineli dışlanır). */
+export function singleCustomerFromFilter(searchParams: URLSearchParams): string | null {
+  const ids = (searchParams.get("filter[customerId]") ?? "")
+    .split(",")
+    .map((v) => v.trim())
+    .filter((v) => v && v !== CUSTOMERLESS_FILTER_VALUE);
+  return ids.length === 1 ? (ids[0] ?? null) : null;
 }

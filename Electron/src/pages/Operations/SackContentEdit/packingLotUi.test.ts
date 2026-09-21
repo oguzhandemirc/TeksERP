@@ -5,11 +5,15 @@
 //   §3 `lotDeletable`: yalnız hiç çuvalı olmamış parti
 //   §4 `newSackLotTarget`: seçili parti hedef; `lotRequired` + parti yok → engel metni
 //   §5 `parsePackageNoInput`: boş → null; kesirli/negatif → hata; tam sayı → sayı
-//   §6 kaynak metni: `SacksListView` şeridi MODA göre seçer; `NewSackDialog` numarayı
-//      `packageNoField`ten okur (elle karar yok); `openSack` gövdesi `packingGroupId`yi
-//      yalnız doluyken gönderir (grup modunda bayt bayt eski istek)
-//   §7 kaynak metni: parti çipi menüsünde kapat / yeniden aç / sil üçlüsü var ve sil
-//      `lotDeletable` kapısından geçer
+//   §6 kaynak metni: `SacksListView` parti modunda PARTİ BAŞLIĞI, grup modunda çip şeridi
+//      çizer; `NewSackDialog` numarayı `packageNoField`ten okur (elle karar yok); `openSack`
+//      gövdesi `packingGroupId`yi yalnız doluyken gönderir (grup modunda bayt bayt eski istek)
+//   §7 kaynak metni: parti menüsünde KAPAT/YENİDEN AÇ YOK (durum sevkten türer), sil `lotDeletable`
+//      kapısından geçer; sayfa parti modunda cariye girince PARTİ LİSTESİ çizer, geri oku
+//      önce parti listesine döner (2026-09-22 kullanıcı kararı: çip değil liste); liste
+//      "Sevkiyatlar" bağlantısı taşır (sevk edilenler burada izlenmez)
+//   §8 sütun kümesi bağlama göre: "Ambalaj No" yalnız parti modunda, "Eşleşen" yalnız içerik
+//      süzgeci (kumaş/renk/kalite/en) varken (süzgeçsiz "—" gürültüsü kalktı, saha 2026-09-21)
 // ⭐ NEGATİF SONDA (ölçüldü 2026-09-21): `isLotMode` `groupsEnabled` kapısı silinince §1 ❌;
 //    `lotDeletable` `shippedSackCount` şartı silinince §3 ❌; `service.ts`te packingGroupId
 //    koşulsuz gönderilince §6c ❌.
@@ -17,7 +21,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isLotMode, lotChipSummary, lotDeletable, newSackLotTarget, packageNoField, parsePackageNoInput } from "./packingLotUi";
+import { isLotMode, lotDeletable, lotSackLabel, lotStatusLabel, newSackLotTarget, packageNoField, parsePackageNoInput } from "./packingLotUi";
+import { hasContentFilter, sacksKolonlari } from "./sacksColumns";
 
 const src = (f: string) => readFileSync(join(__dirname, f), "utf-8");
 
@@ -38,8 +43,10 @@ describe("sevk partisi — saf yüklemler", () => {
     expect(lotDeletable({ sackCount: 0, shippedSackCount: 0 })).toBe(true);
     expect(lotDeletable({ sackCount: 1, shippedSackCount: 0 })).toBe(false);
     expect(lotDeletable({ sackCount: 0, shippedSackCount: 3 })).toBe(false);
-    expect(lotChipSummary({ sackCount: 2, shippedSackCount: 0, totalQty: 100 })).toBe("2 açık · 100 m");
-    expect(lotChipSummary({ sackCount: 2, shippedSackCount: 3, totalQty: 1234.5 })).toContain("3 sevk");
+    // Sevk edilenler bu ekranda izlenmez: açık partide yalnız açık sayı; "sevk edildi" partide giden sayı.
+    expect(lotSackLabel({ status: "OPEN", sackCount: 2, shippedSackCount: 3 })).toBe("2 çuval");
+    expect(lotSackLabel({ status: "CLOSED", sackCount: 0, shippedSackCount: 12 })).toBe("12 çuval sevk edildi");
+    expect(lotStatusLabel("CLOSED")).toBe("SEVK EDİLDİ");
   });
 
   it("§4 newSackLotTarget", () => {
@@ -59,9 +66,9 @@ describe("sevk partisi — saf yüklemler", () => {
 });
 
 describe("sevk partisi — kaynak metni kapıları", () => {
-  it("§6a SacksListView şeridi moda göre seçer", () => {
+  it("§6a SacksListView parti modunda başlık, grup modunda çip şeridi", () => {
     const s = src("SacksListView.tsx");
-    expect(s).toMatch(/lotMode \? <PackingLotBar/);
+    expect(s).toMatch(/lotMode\s*\?\s*tekCariId && groupFilter && <PackingLotHeader/);
     expect(s).toMatch(/: <PackingGroupBar/);
   });
   it("§6b NewSackDialog numara alanını packageNoField'tan okur", () => {
@@ -74,11 +81,41 @@ describe("sevk partisi — kaynak metni kapıları", () => {
     expect(s).toMatch(/\.\.\.\(body\.packingGroupId \? \{ packingGroupId: body\.packingGroupId \} : \{\}\)/);
     expect(s).not.toMatch(/packingGroupId: body\.packingGroupId,/);
   });
-  it("§7 parti çipi menüsü: kapat / yeniden aç / sil ve sil kapısı", () => {
-    const s = src("PackingLotBar.tsx");
-    expect(s).toContain("closePackingGroup");
-    expect(s).toContain("reopenPackingGroup");
+  it("§7 parti menüsü: elle kapat/aç YOK, sil kapısı var", () => {
+    const s = src("PackingLotHeader.tsx");
+    expect(s).not.toContain("closePackingGroup");
+    expect(s).not.toContain("reopenPackingGroup");
     expect(s).toContain("deletePackingGroup");
     expect(s).toMatch(/lotDeletable\(/);
+    expect(src("service.ts")).not.toMatch(/packing-groups\/\$\{groupId\}\/(close|reopen)/);
+  });
+  it("§7b sayfa: parti modunda cariye girince parti LİSTESİ; geri oku önce listeye", () => {
+    const page = src("SackContentEditPage.tsx");
+    expect(page).toMatch(/const lotList = !gateOpen && lotMode && !!singleCustomer && !groupFilter;/);
+    expect(page).toMatch(/lotList \? \(\s*<PackingLotListView/);
+    expect(page).toMatch(/lotMode && singleCustomer && groupFilter\s*\?\s*\(\) => setGroupFilter\(null\)/);
+    expect(page).toMatch(/onBack=\{onBack\}/);
+    const list = src("PackingLotListView.tsx");
+    // Havuz satırı SABİT ve boşken kaybolmaz; parti satırı "N açık · M sevk".
+    expect(list).toMatch(/<UngroupedRow /);
+    expect(list).toMatch(/lotSackLabel\(lot\)/);
+    expect(list).not.toMatch(/empty && null/);
+    expect(list).toMatch(/operations\/shipments\?filter\[customerId\]=/);
+  });
+});
+
+describe("sütun kümesi bağlama göre", () => {
+  const ids = (cols: ReturnType<typeof sacksKolonlari>) => cols.map((c) => c.id ?? (c as { accessorKey?: string }).accessorKey);
+  it("§8 Ambalaj No yalnız parti modunda, Eşleşen yalnız içerik süzgeciyle", () => {
+    expect(ids(sacksKolonlari(true, false, false))).not.toContain("packageNo");
+    expect(ids(sacksKolonlari(true, true, false))).toContain("packageNo");
+    expect(ids(sacksKolonlari(true, true, false))).not.toContain("match");
+    expect(ids(sacksKolonlari(true, true, true))).toContain("match");
+  });
+  it("§8 hasContentFilter: kumaş / renk / kalite / en; cari ya da kapsam SAYILMAZ", () => {
+    expect(hasContentFilter(new URLSearchParams("filter[customerId]=x&filter[scope]=POOL"))).toBe(false);
+    expect(hasContentFilter(new URLSearchParams("filter[itemId]=a"))).toBe(true);
+    expect(hasContentFilter(new URLSearchParams("filter[widthMax]=150"))).toBe(true);
+    expect(hasContentFilter(new URLSearchParams("filter[colorId]="))).toBe(false);
   });
 });

@@ -66,12 +66,20 @@ export interface PackingGroup {
   totalQty: number;
   weightKg: number | null;
   createdAt: string;
-  /** Sevk partisi alanları (2026-09-21) — grup modunda OPEN / null / 0 döner. */
+  /** Sevk partisi alanları (2026-09-21) — grup modunda OPEN / null / 0 döner.
+   *  `CLOSED` = "sevk edildi": son çuvalı sevk edilince sunucu yazar, elle değişmez. */
   status: "OPEN" | "CLOSED";
   closedAt: string | null;
   /** Sevkiyata bağlanmış, partide numarasıyla kalan çuval sayısı. */
   shippedSackCount: number;
   nextPackageNo: number;
+}
+
+/** Cari çalışma alanı özeti (sevk partisi modu) — `GET /packing-groups/summary`. */
+export interface PackingLotCustomerSummary {
+  ungrouped: { sackCount: number; rollCount: number; totalQty: number; weightKg: number | null };
+  openLotCount: number;
+  closedLotCount: number;
 }
 
 /** Liste satırındaki grup çipi — ad SUNUCUDAN gelir, id'den türetilmez. */

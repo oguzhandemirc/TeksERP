@@ -22,7 +22,7 @@ import { colorService } from "@/pages/Colors/service";
 import { qualityGradeService } from "@/pages/QualityGrades/service";
 import { sackTagService } from "@/pages/SackTags/service";
 import { sackHubService } from "./service";
-import { sacksKolonlari } from "./sacksColumns";
+import { hasContentFilter, sacksKolonlari } from "./sacksColumns";
 import { useCustomerBranchesEnabled, usePackingGroupMode, usePackingGroupsEnabled } from "@/hooks/usePricingEnabled";
 import { SackContentDumpMenu } from "./SackContentDumpMenu";
 import { fromDumpRows } from "./sackDump";
@@ -30,7 +30,7 @@ import { RollLocateCard } from "./RollLocateCard";
 import { PickListPrintDialog } from "./PickListPrintDialog";
 import { CreateShipmentDialog } from "./CreateShipmentDialog";
 import { PackingGroupBar } from "./PackingGroupBar";
-import { PackingLotBar } from "./PackingLotBar";
+import { PackingLotHeader } from "./PackingLotHeader";
 import { isLotMode } from "./packingLotUi";
 import { AssignPackingGroupDialog } from "./AssignPackingGroupDialog";
 import { WeighSackDialog } from "./WeighSackDialog";
@@ -230,7 +230,7 @@ export function SacksListView({ onEditSack }: Props) {
   const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<SackSearchRow>({
     queryKey: "sack-search",
     fetchFn: sackHubService.listSacks,
-    columns: sacksKolonlari(subeAcik, lotMode),
+    columns: sacksKolonlari(subeAcik, lotMode, hasContentFilter(searchParams)),
     defaultPageSize: 50,
     // Yalnız depodaki (sevk edilmemiş) çuvallar seçilebilir → havuzdan sevk kurulur.
     enableSelection: (row) => isWarehouseSack(row.original),
@@ -283,6 +283,7 @@ export function SacksListView({ onEditSack }: Props) {
   const tekCariId = cariFiltresi.length === 1 ? (cariFiltresi[0] ?? null) : null;
 
   const scopeFilter = searchParams.get("filter[scope]") ?? "";
+  const groupFilter = searchParams.get("filter[packingGroupId]") ?? "";
   const showDispatchedHint =
     !query.isLoading &&
     search.trim().length > 0 &&
@@ -333,7 +334,12 @@ export function SacksListView({ onEditSack }: Props) {
       {/* PAKETLEME GRUBU ŞERİDİ — yalnız bayrak açık VE tek cari seçiliyken.
           Gruplar cariye özeldir; çok carili listede iki farklı "P1" yan yana
           gelir ve numara benzersizmiş yanılgısı üretirdi. */}
-      {groupsEnabled && (lotMode ? <PackingLotBar customerId={tekCariId} /> : <PackingGroupBar customerId={tekCariId} />)}
+      {/* Parti modunda çuval listesi bir PARTİNİN içidir (parti listesi ayrı görünüm);
+          başlık partiyi ve menüsünü taşır. Grup modunda çip şeridi bugünkü gibi. */}
+      {groupsEnabled &&
+        (lotMode
+          ? tekCariId && groupFilter && <PackingLotHeader customerId={tekCariId} groupFilter={groupFilter} />
+          : <PackingGroupBar customerId={tekCariId} />)}
 
       {located && <RollLocateCard roll={located} onClear={() => setLocated(null)} />}
 

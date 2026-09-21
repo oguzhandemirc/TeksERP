@@ -268,6 +268,19 @@ const SACKS_KOLONLARI: ColumnDef<SackSearchRow>[] = [
  * ŞUBE KOLONU YALNIZ ŞUBE AÇIKSA (2026-09-07). Kapalı kurulumda kolon hep "—"
  * basıyor ve tabloyu boşuna genişletiyordu; `SacksListView` bayrağı sorar.
  */
-export function sacksKolonlari(subeAcik: boolean, lotMode = false): ColumnDef<SackSearchRow>[] {
-  return SACKS_KOLONLARI.filter((c) => (subeAcik || c.id !== "branch") && (lotMode || c.id !== "packageNo"));
+/** İçerik süzgeci (kumaş · renk · kalite · en) URL'de var mı — "Eşleşen" sütunu yalnız o zaman anlamlı. */
+export const CONTENT_FILTER_KEYS = ["filter[itemId]", "filter[colorId]", "filter[qualityGrade]", "filter[widthMin]", "filter[widthMax]"] as const;
+export function hasContentFilter(searchParams: URLSearchParams): boolean {
+  return CONTENT_FILTER_KEYS.some((k) => (searchParams.get(k) ?? "").trim() !== "");
+}
+
+/**
+ * Kolon kümesi bağlama göre: şube kapalıysa "Şube" düşer, parti modu kapalıysa
+ * "Ambalaj No" düşer, içerik süzgeci yokken "Eşleşen" düşer (süzgeçsiz hep "—" basıyordu —
+ * gürültü; saha 2026-09-21).
+ */
+export function sacksKolonlari(subeAcik: boolean, lotMode = false, contentFilter = false): ColumnDef<SackSearchRow>[] {
+  return SACKS_KOLONLARI.filter(
+    (c) => (subeAcik || c.id !== "branch") && (lotMode || c.id !== "packageNo") && (contentFilter || c.id !== "match"),
+  );
 }

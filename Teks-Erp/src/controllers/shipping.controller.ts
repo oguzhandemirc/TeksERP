@@ -336,6 +336,13 @@ export class ShippingController {
     } catch (e) { next(e); }
   };
 
+  packingLotSummary = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const customerId = z.string().uuid("Geçersiz müşteri ID").parse(req.query.customerId);
+      res.status(200).json(await PackingLotService.customerSummary(customerId));
+    } catch (e) { next(e); }
+  };
+
   getPackingGroup = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       res.status(200).json(await PackingGroupService.get(req.params.id as string));
@@ -343,18 +350,6 @@ export class ShippingController {
   };
 
   // ---- Sevk partisi (yaşam döngüsü + ambalaj no) ------------------------------
-
-  closePackingGroup = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      res.status(200).json(await PackingLotService.close(req.params.id as string, req.user?.userId));
-    } catch (e) { next(e); }
-  };
-
-  reopenPackingGroup = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    try {
-      res.status(200).json(await PackingLotService.reopen(req.params.id as string, req.user?.userId));
-    } catch (e) { next(e); }
-  };
 
   deletePackingGroup = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {

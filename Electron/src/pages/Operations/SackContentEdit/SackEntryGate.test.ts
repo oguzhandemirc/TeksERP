@@ -102,7 +102,12 @@ describe("giriş kapısı yerleşimi — §3", () => {
     // kendi düğmesini geri koymak zorunda kalırdı (iki geri tuşu geri gelirdi).
     expect(gateSource).toMatch(/step:\s*SackGateStep/);
     expect(gateSource).not.toMatch(/useState<"choice"/);
-    expect(pageSource).toMatch(/onBack=\{gateStep === "customers"/);
+    // 2026-09-21: ok ÜÇ dallı — cari listesi → karolar · liste (kapıdan gelindiyse) →
+    // gelinen adım (`returnStep`) · aksi hâlde varsayılan. Kapıya dönüş süzgeci temizler.
+    expect(pageSource).toMatch(/const onBack =\s*gateStep === "customers"/);
+    expect(pageSource).toMatch(/onBack=\{onBack\}/);
+    expect(pageSource).toMatch(/!gateOpen && returnStep\s*\?\s*\(\) => backToGate\(returnStep\)/);
+    expect(pageSource).toMatch(/next\.delete\("filter\[customerId\]"\)/);
   });
 
   it("⭐ karolar SOLA DAYALI (kap ortalanmıyor)", () => {

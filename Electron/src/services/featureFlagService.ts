@@ -415,8 +415,6 @@ export interface FeatureFlags {
   packageNoMode: PackageNoMode;
   /** Ambalaj no sayaç rejimi (default 'artan'). */
   packageNumbering: PackageNumbering;
-  /** Son açık çuval sevk edilince parti kapanır (default false). */
-  packingLotAutoClose: boolean;
   /** Partisiz çuval açma yasak (default false). */
   packingLotRequired: boolean;
   /** Kısmi sevk serbest (default TRUE). */

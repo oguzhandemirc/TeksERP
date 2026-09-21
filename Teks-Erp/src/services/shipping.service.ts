@@ -2454,7 +2454,7 @@ export class ShippingService {
       userId: p.userId ?? null,
     });
     // Sevk partisi: "parti bütün gider" kapısı CLAIM'DEN ÖNCE (açık küme henüz
-    // değişmemişken); otomatik kapanış claim'den SONRA (açık çuval kalmadıysa).
+    // değişmemişken); "sevk edildi" durumu claim'den SONRA (açık çuval kalmadıysa).
     const lot = await readPackingLotSettings(tx);
     await assertWholeLotDispatchTx(tx, p.sackIds, lot.partialDispatch);
     // Atomik claim + seq ata (+ müşterisiz çuvala müşteri/şube backfill).
@@ -2465,7 +2465,7 @@ export class ShippingService {
       });
       if (claimed.count !== 1) throw AppError.conflict("Çuvallardan biri az önce başka bir sevkiyata girdi — yenileyin.");
     }
-    await autoCloseLotsForSacksTx(tx, p.sackIds, lot.mode === "sevk-partisi" && lot.autoClose, p.userId);
+    await autoCloseLotsForSacksTx(tx, p.sackIds, lot.mode === "sevk-partisi", p.userId);
     // İçerik shipmentId açıkça (composite FK deferred → commit'te doğrulanır).
     await tx.roll.updateMany({ where: { sackId: { in: p.sackIds } }, data: { shipmentId: created.id } });
     await tx.swatch.updateMany({ where: { sackId: { in: p.sackIds } }, data: { shipmentId: created.id } });
@@ -2983,7 +2983,7 @@ export class ShippingService {
         if (claimed.count !== 1) throw AppError.conflict("Çuvallardan biri az önce başka bir sevkiyata girdi — yenileyin.");
         seq += 1;
       }
-      await autoCloseLotsForSacksTx(tx, sackIds, lot.mode === "sevk-partisi" && lot.autoClose, userId);
+      await autoCloseLotsForSacksTx(tx, sackIds, lot.mode === "sevk-partisi", userId);
       await tx.roll.updateMany({ where: { sackId: { in: sackIds } }, data: { shipmentId } });
       await tx.swatch.updateMany({ where: { sackId: { in: sackIds } }, data: { shipmentId } });
       const orderRows = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });

@@ -145,7 +145,7 @@ const CAP_LABEL: Record<string, string> = {
   "shipping:write": "Sevkiyat düzenleyebilir",
   "shipping:invoice": "Fatura işareti koyabilir (riskli)",
   "shipping:undo-dispatch": "Sevki geri alabilir (riskli)",
-  "shipping:packing-lot": "Sevk partisi açıp kapatabilir, ambalaj no ezebilir",
+  "shipping:packing-lot": "Sevk partisi silebilir, ambalaj no ezebilir",
   "kartela:write": "Kartela işlemi yapabilir",
   "label:print": "Etiket basabilir",
   "label:read": "Etiket önizleyebilir",

@@ -18,7 +18,6 @@ import {
   readPackageNoMode,
   readPackageNoStartsAtZero,
   readPackageNumbering,
-  readPackingLotAutoClose,
   readPackingLotPartialDispatch,
   readPackingLotRequired,
   effectivePackingGroupMode,
@@ -73,9 +72,10 @@ export const LIVE_GROUP_WHERE = {
 
 /**
  * "Canlı grup" — TEK KAYNAK, moda göre. Grup modunda çocuk satırdan türetilir
- * (boşalan grup görünmez olur); sevk partisi modunda AÇIK durumdur (boş parti
- * yaşar, kapalı parti düşer). Üç tüketici (liste · sayaç · ad tekilliği) buradan
- * geçer; `sacks: { some: { shipmentId: null } }` elle kopyalanmaz.
+ * (boşalan grup görünmez olur); sevk partisi modunda `status = OPEN`dır — bu durum
+ * elle değil SEVKTEN türer (son çuval sevk edilince CLOSED = "sevk edildi", storno
+ * geri getirince OPEN) ve boş parti doğduğunda OPEN olduğu için YAŞAR. Üç tüketici
+ * (liste · sayaç · ad tekilliği) buradan geçer; literal elle kopyalanmaz.
  */
 export function liveGroupWhere(mode: PackingGroupMode): Prisma.PackingGroupWhereInput {
   return mode === "sevk-partisi" ? { status: "OPEN" } : LIVE_GROUP_WHERE;
@@ -91,7 +91,6 @@ export interface PackingLotSettings {
   numbering: PackageNumbering;
   noMode: PackageNoMode;
   startsAtZero: boolean;
-  autoClose: boolean;
   required: boolean;
   partialDispatch: boolean;
 }
@@ -101,14 +100,13 @@ export async function readPackingLotSettings(
 ): Promise<PackingLotSettings> {
   const mode = await effectivePackingGroupMode(tx);
   if (mode !== "sevk-partisi") {
-    return { mode, numbering: "artan", noMode: "otomatik-ezilebilir", startsAtZero: false, autoClose: false, required: false, partialDispatch: true };
+    return { mode, numbering: "artan", noMode: "otomatik-ezilebilir", startsAtZero: false, required: false, partialDispatch: true };
   }
   return {
     mode,
     numbering: await readPackageNumbering(tx),
     noMode: await readPackageNoMode(tx),
     startsAtZero: await readPackageNoStartsAtZero(tx),
-    autoClose: await readPackingLotAutoClose(tx),
     required: await readPackingLotRequired(tx),
     partialDispatch: await readPackingLotPartialDispatch(tx),
   };
@@ -158,22 +156,13 @@ export async function nextPackingGroupSeqTx(
 ): Promise<number> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${PACKING_GROUP_LOCK_NS}::int, hashtext(${customerId}))`;
 
-  // SEVK PARTİSİ: parti adı belgeye basılır (K7) → numara KİMLİKTİR, geri verilmez.
-  // Sayaç carinin BÜTÜN partilerine bakar (kapalı dahil), rejim ayarı okunmaz.
-  if (groupMode === "sevk-partisi") {
-    const top = await tx.packingGroup.findFirst({
-      where: { customerId, seq: { not: null } },
-      select: { seq: true },
-      orderBy: { seq: "desc" },
-    });
-    return (top?.seq ?? 0) + 1;
-  }
-
   // Sayaç YALNIZ `seq` taşıyan CANLI grupları okur. Elle adlandırılmış grup
   // (`seq: null`, ör. "Cuma tırı") sayacı ileri taşımaz — bir sıra numarası
-  // değildir. Ölü grup da sayılmaz: numarası boşa çıkmıştır.
+  // değildir. Ölü grup da sayılmaz: numarası boşa çıkmıştır. SEVK PARTİSİ modunda
+  // canlı = OPEN (sevk edilmemiş): sevk edilmiş SP-1'in numarası/adı yeni partiye
+  // yeniden verilebilir (saha kararı 2026-09-22 — kimlik `id`dir, ad değil).
   const live = await tx.packingGroup.findMany({
-    where: { ...liveGroupWhere("grup"), customerId, seq: { not: null } },
+    where: { ...liveGroupWhere(groupMode), customerId, seq: { not: null } },
     select: { seq: true },
     orderBy: { seq: "asc" },
   });

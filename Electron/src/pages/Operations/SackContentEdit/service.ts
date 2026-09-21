@@ -12,6 +12,7 @@ import type {
   OpenedSack,
   OpenOrder,
   PackingGroup,
+  PackingLotCustomerSummary,
   PickListRow,
   SackContentDumpSack,
   SackCustomerBucket,
@@ -131,10 +132,14 @@ export const sackHubService = {
       .then((r) => r.data),
 
   // ── Sevk partisi (yaşam döngüsü + ambalaj no) ───────────────────────────────
-  closePackingGroup: (groupId: string): Promise<ApiResponse<PackingGroup>> =>
-    apiClient.post<ApiResponse<PackingGroup>>(`/api/shipping/packing-groups/${groupId}/close`).then((r) => r.data),
-  reopenPackingGroup: (groupId: string): Promise<ApiResponse<PackingGroup>> =>
-    apiClient.post<ApiResponse<PackingGroup>>(`/api/shipping/packing-groups/${groupId}/reopen`).then((r) => r.data),
+  /** Tek parti/grup (parti içi başlık). */
+  getPackingGroup: (groupId: string): Promise<ApiResponse<PackingGroup>> =>
+    apiClient.get<ApiResponse<PackingGroup>>(`/api/shipping/packing-groups/${groupId}`).then((r) => r.data),
+  /** Cari çalışma alanı özeti: partisiz havuz + açık/kapalı parti sayısı. */
+  packingLotSummary: (customerId: string): Promise<ApiResponse<PackingLotCustomerSummary>> =>
+    apiClient
+      .get<ApiResponse<PackingLotCustomerSummary>>(`/api/shipping/packing-groups/summary?customerId=${encodeURIComponent(customerId)}`)
+      .then((r) => r.data),
   /** Hiç çuvalı olmamış parti (taslak) silinir; çuvalı olan 409. */
   deletePackingGroup: (groupId: string): Promise<ApiResponse<{ id: string }>> =>
     apiClient.delete<ApiResponse<{ id: string }>>(`/api/shipping/packing-groups/${groupId}`).then((r) => r.data),

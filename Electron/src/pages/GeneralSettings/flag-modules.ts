@@ -194,7 +194,6 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   packageNoStartsAtZero: "cekirdek",
   packageNoMode: "cekirdek",
   packageNumbering: "cekirdek",
-  packingLotAutoClose: "cekirdek",
   packingLotRequired: "cekirdek",
   packingLotPartialDispatch: "cekirdek",
   shippingDocPackingLot: "cekirdek",
