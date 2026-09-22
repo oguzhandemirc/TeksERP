@@ -16,6 +16,7 @@ import {
   OFFSITE_QUERY_KEY,
 } from "./service";
 import { useOffsiteStatus } from "./hooks";
+import { offsiteCardView } from "./offsiteState";
 
 /**
  * OFFSITE YEDEK KARTI — "yedeklerim başka bir yerde mi" sorusunun tek yüzeyi.
@@ -90,8 +91,8 @@ export function OffsiteBackupCard() {
   const o = data.offsite;
   const cfg = data.config;
   const missing = o.missingCount ?? 0;
-  // Üç durum: hiç ayarlanmamış · ayarlı ama sorunlu · sağlıklı.
-  const state: "yok" | "sorun" | "iyi" = !o.configured ? "yok" : o.ok && missing === 0 ? "iyi" : "sorun";
+  // Üç durum: hiç ayarlanmamış · ayarlı ama sorunlu (eksik / düşen tur / BAYAT) · sağlıklı.
+  const { state, lastOkLine, staleLine } = offsiteCardView(o);
 
   const remoteValue = remote ?? cfg.remote;
   const localValue = localDir ?? cfg.localDir;
@@ -121,13 +122,17 @@ export function OffsiteBackupCard() {
                 <p className="text-sm text-amber-700 dark:text-amber-500">
                   {missing > 0
                     ? `${missing} yedeğin uzak kopyası YOK.`
-                    : (o.warnings?.[0] ?? "Son süpürme tamamlanamadı.")}
+                    : (staleLine ?? o.warnings?.[0] ?? "Son süpürme tamamlanamadı.")}
                 </p>
               ) : (
                 <p className="text-sm text-muted-foreground">
                   Yerel {o.localCount} · Uzak {o.remoteCount} · Eksik yok
                   {o.finishedAt ? ` · son süpürme ${new Date(o.finishedAt).toLocaleTimeString("tr-TR")}` : ""}
                 </p>
+              )}
+              {/* Reboot'a dayanan kalıcı satır: "kaç saattir kopya yok" sorusunun cevabı. */}
+              {state !== "yok" && (
+                <p className={`text-xs ${staleLine ? "text-red-600" : "text-muted-foreground"}`}>{lastOkLine}</p>
               )}
             </div>
           </div>

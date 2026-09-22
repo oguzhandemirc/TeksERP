@@ -5010,6 +5010,33 @@ model MergeOperationRef {
 }
 
 // =============================================================================
+// JOB STATE — zamanlanmış işin SON durumu (iş başına TEK satır)
+// =============================================================================
+// Durum tablosudur, defter değil: "son başarılı koşum ne zaman, kaç turdur
+// düşüyor" sorusunu REBOOT'tan bağımsız yanıtlar. Yazan yalnız `jobs/*`
+// (sistem işi, audit muafiyeti beyanlı). Geçmiş `SystemLog`ta (reportJobFailure).
+// =============================================================================
+model JobState {
+  id  String @id @default(uuid()) @db.Uuid
+  /// İş adı — `reportJobFailure`daki kısa adla aynı ("offsite-sweep").
+  job String @unique @db.VarChar(60)
+
+  lastRunAt DateTime? @db.Timestamptz
+  /// Son BAŞARILI koşum — bayatlık ("N saattir kopya yok") buradan türer.
+  lastOkAt  DateTime? @db.Timestamptz
+  lastError String?   @db.VarChar(1000)
+  /// Son başarıdan beri art arda kaç koşum düştü; başarıda sıfırlanır.
+  consecutiveFailures Int   @default(0)
+  /// Son koşumun özet sonucu (sayılar/uyarılar) — şema işe göre değişir.
+  lastResult          Json?
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt      @db.Timestamptz
+
+  @@map("job_states")
+}
+
+// =============================================================================
 // SYSTEM SETTING — runtime'da güncellenebilir konfigürasyon (key-value)
 // =============================================================================
 // Admin (admin:settings) okur/yazar.

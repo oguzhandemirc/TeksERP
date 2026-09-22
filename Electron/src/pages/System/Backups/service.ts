@@ -190,6 +190,13 @@ export interface OffsiteStatus {
     durationMs?: number;
     finishedAt?: string;
     warnings?: string[];
+    /** Kalıcı durum (`JobState`, reboot'a dayanır) — bayatlık kararı SUNUCUDA. */
+    lastOkAt?: string | null;
+    lastRunAt?: string | null;
+    stale?: boolean;
+    staleAfterHours?: number;
+    consecutiveFailures?: number;
+    lastError?: string | null;
   };
   config: {
     remote: string;

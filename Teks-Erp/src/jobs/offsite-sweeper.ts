@@ -19,7 +19,8 @@
 // kopyayı tamamlar. İki mekanizma birbirinin yokluğunu telafi eder.
 // =============================================================================
 
-import { sweepOffsiteBackups, recordSweep } from "../services/helpers/offsite-backup.helper";
+import { sweepOffsiteBackups, recordSweep, OFFSITE_JOB } from "../services/helpers/offsite-backup.helper";
+import { recordJobRun } from "../services/helpers/job-state.helper";
 import { reportJobFailure } from "./job-failure";
 import { bilgi, uyari } from "../lib/logger";
 
@@ -50,6 +51,15 @@ async function sweepOnce(): Promise<void> {
   try {
     const res = await sweepOffsiteBackups();
     recordSweep(res);
+    // Kalıcı durum: hedef tanımlıysa her tur yazılır ("son başarılı kopya" +
+    // ardışık hata). Hedef yoksa koşum sayılmaz — kurulum eksiği, iş hatası değil.
+    if (res.configured) {
+      await recordJobRun(OFFSITE_JOB, {
+        ok: res.ok,
+        error: res.ok ? null : res.warnings.join(" | "),
+        result: { localCount: res.localCount, remoteCount: res.remoteCount, missingCount: res.missing.length, durationMs: res.durationMs },
+      }).catch((err) => uyari("offsite", `durum satırı yazılamadı: ${err instanceof Error ? err.message : String(err)}`));
+    }
 
     if (!res.configured) {
       // Hedef yoksa bu bir İŞ HATASI değil, bir KURULUM eksiğidir: her saat

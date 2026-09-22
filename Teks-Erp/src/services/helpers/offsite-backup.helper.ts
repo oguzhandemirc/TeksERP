@@ -37,6 +37,10 @@ import {
   PRE_RESTORE_PREFIX,
 } from "./backup-naming.helper";
 import { readOffsiteRemote } from "../system-setting.service";
+import { readJobState } from "./job-state.helper";
+import { OFFSITE_JOB, offsiteStateFields } from "./offsite-state.helper";
+
+export { OFFSITE_JOB, OFFSITE_STALE_AFTER_MS } from "./offsite-state.helper";
 
 /**
  * Kopyalanacak dosya adı ön ekleri — `backup-naming.helper` TEK KAYNAĞINDAN.
@@ -345,10 +349,9 @@ export async function sweepOffsiteBackups(): Promise<OffsiteSweepResult> {
 }
 
 // ── Son süpürme durumu — /api/admin/health için ──────────────────────────────
-// Bellekte tutulur, DB'ye yazılmaz: bu "şu anki sürecin gördüğü son durum"dur.
-// Kalıcı iz zaten iki yerde var — başarısızlık `reportJobFailure` ile SystemLog'a
-// düşer, ve gerçek kanıt uzak hedefteki dosyaların KENDİSİDİR. Üçüncü bir kayıt
-// yeri üçüncü bir gerçek demekti.
+// Bellekteki `lastSweep` "şu anki sürecin gördüğü son tur"dur (eksik listesi,
+// uyarılar). "Son BAŞARILI kopya ne zaman / kaç turdur düşüyor" ise `JobState`
+// satırında yaşar (2026-09-22): reboot'ta kaybolmaz ve panel bayatlığı görür.
 let lastSweep: OffsiteSweepResult | null = null;
 
 export function recordSweep(r: OffsiteSweepResult): void {
@@ -356,12 +359,16 @@ export function recordSweep(r: OffsiteSweepResult): void {
 }
 
 export async function getOffsiteHealth(): Promise<Record<string, unknown>> {
+  // Durum satırı okunamazsa sağlık ucu düşmez: alanlar "bilinmiyor" (bayat) döner.
+  const persisted = await readJobState(OFFSITE_JOB).catch(() => null);
   if (!lastSweep) {
     const remote = await readOffsiteRemote().catch(() => "");
-    return { offsite: { configured: remote.length > 0, state: "henüz-koşmadı" } };
+    const configured = remote.length > 0;
+    return { offsite: { configured, state: "henüz-koşmadı", ...offsiteStateFields(persisted, configured) } };
   }
   return {
     offsite: {
+      ...offsiteStateFields(persisted, lastSweep.configured),
       configured: lastSweep.configured,
       ok: lastSweep.ok,
       localCount: lastSweep.localCount,

@@ -58,4 +58,6 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
     gerekce: "özellik DEĞERİ ebeveyn özellikle birlikte yazılır; audit ebeveynin ucunda `tableName: \"FABRIC_PROPERTY\"` ile (route katmanı)" },
   { model: "ShiftInstance", sinif: "SISTEM_ISI",
     gerekce: "vardiya takvimi `jobs/shift-calendar.job` tarafından üretilir; kullanıcı eylemi yok, audit'in öznesi olacak kullanıcı da yok" },
+  { model: "JobState", sinif: "SISTEM_ISI",
+    gerekce: "zamanlanmış işin son durumu (`helpers/job-state.helper`, yazan `jobs/*`); saatlik üzerine yazılan tek satır, geçmişi `SystemLog` (reportJobFailure) taşır" },
 ];
