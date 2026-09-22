@@ -45,6 +45,15 @@ eşit mi"dir.
 *(Vaka 2026-09-22: `test_subcontractor_code_autogen` beklentiyi
 `seriesCodePrefix("subcontractor")`tan alıyordu; katalogdaki ön ek `FSN`→`XYZ`
 yapılınca bekçi **12/12 yeşil** kaldı.)*
+**Kardeş biçim — TAM PAKET koşumu ağacın FOTOĞRAFINI çeker.** Koşum sürerken
+ağacı düzenlemek, ölçümü ölçülenin İÇİNE sokar: paket, dosyanın koşum ANINDAKİ
+hâlini okur ve çıktı ne o anın ne de bitişin doğru fotoğrafıdır.
+*(Vaka 2026-09-22: `npm test` koşarken aynı ağaçta bir sürüm sabiti denenip geri
+alındı; paket `test_client_policy`yi KIRMIZI raporladı, temiz ağaçta 17/17
+yeşildi. Kırmızı koddan değil ELİMDEN geliyordu.)*
+> Paket koşumu bir **pencere**dir: başladıktan sonra ağaç dondurulur, düzenleme
+> koşum bitene kadar bekler. Beklemek istemiyorsan izole bir ağaçta koştur.
+
 ⚠️ **Çare her zaman "bekçiyi düzeltmek" değildir.** O vakada ön ek değişince kodun
 da değişmesi **doğru davranıştı** — yani bekçi yanlış şeyi ölçmüyordu, İDDİASI
 ölçtüğünden büyüktü. Üç adım: ① iddiayı ölçtüğü kadar daralt · ② ölçülmeyen ekseni

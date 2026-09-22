@@ -116,6 +116,21 @@ boş; import da eklenince ❌2 geldi. ② bir servisin kod üretimi kaldırıld�
 bekçiyi çökmeye dayanıklı yaz (beklenen patlamayı yakalayıp ❌ üret). İkincisi
 tercih edilir: ürün kodu gerçekten patlarsa kapı yine kırmızı verir.
 
+**Üçüncü biçim — kırmızı BAŞKA BİR KONTROLDEN gelir.** Çökme yok, mutasyon
+uygulandı, sonda ısırdı — ama ısıran kapı, ölçmek istediğin kapı DEĞİL. Bu en
+sinsisidir, çünkü ekranda "sonda geçerli" görünür.
+**Ayırt edici:** ❌ satırının GEREKÇESİNİ oku, yalnız varlığını değil — beklediğin
+hata kodu/mesajı mı geldi?
+*(Vaka 2026-09-22: "okutulan seri düzenlenemez" kapısı `swatch` üstünde
+sondalandı ve kırmızı verdi; ama gelen kod `NUMBER_SERIES_COUNTER_NOT_SCOPED`ti,
+yani ısıran ÖNCEKİ kapıydı — kartelanın sayaç beyanı yoktu. Sonda, ölçmek
+istediği kapı kaldırıldığında bile kırmızı kalıyordu. `shipment`a çevrilince —
+her iki kapıyı da geçen tek seri — mutasyon "KABUL EDİLDİ" verdi ve sonda
+gerçekten ölçmeye başladı.)*
+**Kurtarma:** sondanın hedefini, ÖLÇÜLEN KAPIDAN BAŞKA hiçbir kapının
+reddetmediği bir örnek üstünde kur. Örnek bulunamıyorsa kapı zaten başka bir
+kapının gölgesindedir ve bunu BEYAN et.
+
 ### Zıt iki cevap = ortam farkı
 Aynı script, aynı ağaç, aynı saniye **zıt iki cevap** veriyorsa bu bir kapı hatası
 değil bir **ortam farkıdır** — ve ortam farkı her zaman bulunabilir. Çelişkiyi

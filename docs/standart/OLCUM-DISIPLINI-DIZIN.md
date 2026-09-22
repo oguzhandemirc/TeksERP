@@ -21,7 +21,7 @@ kalamaz). ⇒ **Dizin bayatlayamaz; bayatlatmayı deneyen commit durur.** İlk d
 bir kereye mahsus üretildi (2026-09-13); bundan sonrasını üreteç değil KAPI tutar —
 üretece bağlı bir dizin, üreteç koşulmadığı gün sessizce bayatlardı.
 
-Sayı bir ölçümdür ve bu satır da kapı altındadır: **155 başlık / 11 dosya**
+Sayı bir ölçümdür ve bu satır da kapı altındadır: **156 başlık / 11 dosya**
 (ölçüldü 2026-09-14; kapı her koşumda yeniden sayar ve sayı tutmazsa kırmızı verir).
 
 ⚙️ **MÜKERRER TARAMASI (dizinin ilk kullanımı, 2026-09-14):** 147 başlık çiftlenip
@@ -138,6 +138,7 @@ açan kişi tabloyu yine baştan sona okur.**
 |  | § Pencerenin BOŞ olduğunu ölçmek, DOĞRU AĞAÇTA olduğunu ölçmek değildir | (`OLCUM-DISIPLINI-ORTAK-AGAC.md`) |
 |  | § INDEX'ten okuyan bir kapının sondası, ATILABİLİR bir indekse kurulur | (`OLCUM-DISIPLINI-ORTAK-AGAC.md`) |
 |  | § KATMAN 2 · Ölçümden sonraki adım | (`OLCUM-DISIPLINI-CIKARIM.md`) |
+|  | § Ölçüm YAPILDI ama sonuca BAĞLANMADI — basılan sayı, kullanılan sayı değildir | (`OLCUM-DISIPLINI-CIKARIM.md`) |
 | 10 | § Doğru gözlemden yanlış mekanizma çıkarmak | (`OLCUM-DISIPLINI-CIKARIM.md`) |
 | 11 | § İki sayı yan yana durunca aynı birimde sanılır | (`OLCUM-DISIPLINI-CIKARIM.md`) |
 |  | § Damgayı, ÖLÇTÜĞÜN SİSTEMİN saat diliminde oku — kendi sezginde değil | (`OLCUM-DISIPLINI-CIKARIM.md`) |
@@ -205,7 +206,7 @@ açan kişi tabloyu yine baştan sona okur.**
 | [`OLCUM-DISIPLINI-SUREC.md`](OLCUM-DISIPLINI-SUREC.md) | komutun SÜRECİ ve ORTAMI (5 başlık) |
 | [`OLCUM-DISIPLINI-SINIFLAR.md`](OLCUM-DISIPLINI-SINIFLAR.md) | KATMAN 1b — ölçümün KURGUSU (31 başlık) |
 | [`OLCUM-DISIPLINI-ORTAK-AGAC.md`](OLCUM-DISIPLINI-ORTAK-AGAC.md) | KATMAN 1c — PAYLAŞILAN AĞAÇ, ÇOK OTURUM (8 başlık) |
-| [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) | KATMAN 2 — ölçümden sonraki adım (32 başlık) |
+| [`OLCUM-DISIPLINI-CIKARIM.md`](OLCUM-DISIPLINI-CIKARIM.md) | KATMAN 2 — ölçümden sonraki adım (33 başlık) |
 | [`OLCUM-DISIPLINI-KAPI.md`](OLCUM-DISIPLINI-KAPI.md) | ölçümü KAPIYA çevirmek (11 başlık) |
 | [`OLCUM-DISIPLINI-KAPI-OLUMU.md`](OLCUM-DISIPLINI-KAPI-OLUMU.md) | kapının ÖLÜMÜ, kırmızının okunması (12 başlık) |
 

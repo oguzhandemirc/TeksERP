@@ -12,6 +12,23 @@
 
 Buradaki her sınıfta **ölçüm geçerlidir**. Yanlış olan, ölçümden sonra atılan adım.
 
+### Ölçüm YAPILDI ama sonuca BAĞLANMADI — basılan sayı, kullanılan sayı değildir
+Ölçüm doğru koştu, doğru cevabı verdi, ekrana bile bastı — ve bir sonraki adım
+onu OKUMADAN çalıştı. *"Önce ölç"* diye yazılmış bir dizi, ölçümü bir **dallanmaya
+bağlamıyorsa** ölçümü kullanmaz; yalnız gösterir.
+**Ayırt edici:** ölçümün çıktısı ile onu izleyen adım arasında bir `if` / `&&` /
+erken çıkış VAR MI? Yoksa sıralama bir niyettir, sed değil.
+*(Vaka 2026-09-22: "bu commit origin'e inmiş mi" kontrolü `reset --hard` ile AYNI
+komut bloğunda koşturuldu. Kontrol `⚠️ ata DEĞİL` bastı, reset yine de çalıştı ve
+sekiz commit'lik dal geri alındı — `reflog`dan kurtarıldı. Reçete zaten
+*"sıfırlamadan ÖNCE doğrula"* diyordu; sıra YAZILMIŞTI, koşula BAĞLANMAMIŞTI.)*
+**Kurtarma:** yıkıcı adımı ölçümün çıktısına koşullu yap (`... && yıkıcı-adım`),
+ya da ölçümü ayrı bir koşumda yapıp sonucu GÖZLE okuyup öyle devam et. İkisi
+arasında tercih, adımın geri alınabilirliğine göre verilir.
+> Bu sınıf yalnız `git` için değil: `--apply` bayrağı, `DROP`, dosya silme,
+> yayın komutu — hepsinde *"önce kontrol ettim"* cümlesi, kontrolün SONUCUNUN
+> adımı durdurabildiği gösterilmeden delil sayılmaz.
+
 ### 10 · Doğru gözlemden yanlış mekanizma çıkarmak
 Gözlem doğrulanabiliyor; **açıklama** doğrulanmıyor ama doğrulanmış sanılıyor.
 *(Vaka 2026-09-12: aynı doğru kapı gözlemini paylaşan üç oturum, üç ayrı uydurma
