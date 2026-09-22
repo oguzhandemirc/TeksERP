@@ -14,6 +14,7 @@
 // =============================================================================
 
 import type { PrintedDocStatus } from "@prisma/client";
+import { pickExportCode } from "../helpers/shipment-destination.helper";
 import type { PrintedDocSnapshot } from "../printed-document.service";
 import {
   resolveDocStyle,
@@ -200,7 +201,7 @@ export function renderFasonDirectShipHtml(
   // MÜŞTERİ (Malın Gittiği) — doğrudan sevkin asıl alıcısı; section toggle'dan
   // bağımsız DAİMA gösterilir (irsaliyenin muhatabı).
   const cust = doc.customer;
-  const custShipCode = cust ? (cust.branchCode ?? cust.exportCode) : null;
+  const custShipCode = cust ? pickExportCode({ branchCode: cust.branchCode, customerExportCode: cust.exportCode }) : null;
   const custBox = cust
     ? `<div class="box"><div class="box-t">MÜŞTERİ (Malın Gittiği)</div>
         <div class="row"><span>Adı:</span><b>${esc(cust.name)}</b></div>

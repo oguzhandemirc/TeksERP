@@ -22,6 +22,36 @@ export interface ResolvedShipmentDestination {
   source: ShipmentDestinationSource | null;
 }
 
+/** Sevk ekranının okuduğu kilit — yön + kaynak + gösterilecek ihracat kodu + hızlı sevk engeli. */
+export interface ShipmentDestinationLock extends ResolvedShipmentDestination {
+  exportCode: string | null;
+  /** Doluysa Hızlı Sevk bu sevk adresinde yapılamaz; metin sunucunun 400'üyle aynı. */
+  quickShipBlockedReason: string | null;
+}
+
+/**
+ * Sevk belgesindeki TEK "İhracat Kodu" satırının değeri: şube ihracat kodu önce,
+ * boşsa carinin ihracat kodu. Belge render'ı ve sevk ekranı AYNI yardımcıyı çağırır.
+ */
+export function pickExportCode(codes: { branchCode?: string | null; customerExportCode?: string | null }): string | null {
+  return codes.branchCode ?? codes.customerExportCode ?? null;
+}
+
+/** Ekranda gösterilecek ihracat kodu — yalnız yurtdışı sevkte; yurtiçinde kod gösterilmez. */
+export function exportCodeForDestination(
+  destination: ShipmentDestination | null,
+  codes: { branchCode?: string | null; customerExportCode?: string | null },
+): string | null {
+  return destination === "EXPORT" ? pickExportCode(codes) : null;
+}
+
+/** Hızlı Sevkin ihracat reddi — sunucu 400'ü ve ekrandaki pasif düğme gerekçesi bu metni kullanır. */
+export function quickShipExportMessage(source: ShipmentDestinationSource | null): string {
+  const kim = source === "BRANCH" ? "Bu şube" : source === "CUSTOMER" ? "Bu cari" : null;
+  return (kim ? `${kim} ihracat olarak kilitli; h` : "H") +
+    "ızlı sevk ihracatta yapılamaz (çuvallar tartılmalı). Çuval açıp tartarak sevk edin.";
+}
+
 /**
  * Gövdeden gelen yön girdisi (şube formu, satır-içi şube): alan yok → undefined
  * (dokunma) · null/"" → null (yön yok) · DOMESTIC|EXPORT → değer · başka her şey 400.
@@ -67,4 +97,21 @@ export async function resolveShipmentDestination(
     branchDestination = branch.defaultDestination;
   }
   return pickShipmentDestination({ branchDestination, customerDestination: customer.defaultDestination });
+}
+
+/** Sevk ekranı ucu: zincir `resolveShipmentDestination`dan, kod `exportCodeForDestination`dan. */
+export async function readShipmentDestinationLock(
+  db: Db,
+  input: { customerId: string; branchId?: string | null },
+): Promise<ShipmentDestinationLock> {
+  const kilit = await resolveShipmentDestination(db, input);
+  const customer = await db.customer.findUnique({ where: { id: input.customerId }, select: { exportCode: true } });
+  const branch = input.branchId
+    ? await db.customerBranch.findUnique({ where: { id: input.branchId }, select: { code: true } })
+    : null;
+  return {
+    ...kilit,
+    exportCode: exportCodeForDestination(kilit.destination, { branchCode: branch?.code, customerExportCode: customer?.exportCode }),
+    quickShipBlockedReason: kilit.destination === "EXPORT" ? quickShipExportMessage(kilit.source) : null,
+  };
 }

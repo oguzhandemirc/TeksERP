@@ -564,6 +564,16 @@ export class ShippingController {
     } catch (e) { next(e); }
   };
 
+  getDestinationLock = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const q = z.object({
+        customerId: z.string().uuid("Geçersiz müşteri ID"),
+        branchId: z.string().uuid("Geçersiz şube ID").optional(),
+      }).parse(req.query);
+      res.status(200).json(await this.service.getDestinationLock(q.customerId, q.branchId ?? null));
+    } catch (e) { next(e); }
+  };
+
   listCustomerPoolSacks = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const customerId = z.string().uuid("Geçersiz müşteri ID").parse(req.query.customerId);

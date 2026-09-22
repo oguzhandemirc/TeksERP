@@ -139,6 +139,8 @@ import { markSackLabelsStaleOnCustomerChangeTx, sackFieldsAppearOnLabel } from "
 import { formatSackSeqLabel, nextPoolPackageNoTx, readSackSeqFormat, readSackSeqStart } from "./helpers/sack-seq.helper";
 import { ApiResponse } from "../types/api.types";
 import {
+  quickShipExportMessage,
+  readShipmentDestinationLock,
   resolveShipmentDestination,
   type ResolvedShipmentDestination,
   type ShipmentDestinationSource,
@@ -1832,6 +1834,11 @@ export class ShippingService {
     return { success: true, data };
   }
 
+  /** Sevk ekranının yön kilidi (panel + tablet aynı uç): yön, kaynak, ihracat kodu, hızlı sevk engeli. */
+  async getDestinationLock(customerId: string, branchId: string | null): Promise<ApiResponse<unknown>> {
+    return { success: true, data: await readShipmentDestinationLock(prisma, { customerId, branchId }) };
+  }
+
   /**
    * Bir müşterinin depo çuvalları (sevkiyata atanmamış) — içerikleriyle. Paketleme
    * workspace'inin canlı kaynağı (çuval aç/okut/tart).
@@ -2696,12 +2703,7 @@ export class ShippingService {
     const weighRequired = await readShippingWeighRequiredEnabled();
     const assertQuickShipAllowed = (destination: ShipmentDestination, lockSource: ShipmentDestinationSource | null): void => {
       if (destination === ShipmentDestination.EXPORT) {
-        const kim = lockSource === "BRANCH" ? "Bu şube" : lockSource === "CUSTOMER" ? "Bu cari" : null;
-        throw AppError.badRequest(
-          (kim ? `${kim} ihracat olarak kilitli; h` : "H") +
-            "ızlı sevk ihracatta yapılamaz (çuvallar tartılmalı). Çuval açıp tartarak sevk edin.",
-          { code: "QUICK_SHIP_EXPORT_UNSUPPORTED", source: lockSource },
-        );
+        throw AppError.badRequest(quickShipExportMessage(lockSource), { code: "QUICK_SHIP_EXPORT_UNSUPPORTED", source: lockSource });
       }
       if (!weighRequired) return;
       throw AppError.badRequest(

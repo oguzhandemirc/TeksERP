@@ -6,6 +6,8 @@
 //   2. DB: iki yön de boş → null (ilk sevk) · cari dolu → CUSTOMER · şube dolu →
 //      BRANCH (carinin yönünü EZER) · şube boş → cariye düşer · pasif şube de yönünü taşır.
 //   3. Fail-closed: başka carinin şubesi → 400 · olmayan cari → 404.
+//   5. Sevk ekranı ucu: ihracat kodu yalnız EXPORT'ta (şube > cari), gizlenen kod silinmez,
+//      hızlı sevk engel gerekçesi. 6. İki belge render'ı ihracat kodunu `pickExportCode`dan alır.
 //   4. `customers.branchesEnabled` KAPALI iken şube taşıyan sevkiyatta şubenin yönü
 //      uygulanır (zincir bayrağı okumaz). Bayrak gerçekten kapalı okunamazsa
 //      ÖLÇÜLEMEDİ basılır ve koşum kırmızıdır — "uyumlu" sayılmaz.
@@ -13,6 +15,8 @@
 //   ① zincirde şube/cari sırası ters → 1b, 2c, 4 KIRMIZI (3 başarısız)
 //   ② şube sorgusundan `customerId` koşulu düştü → 3a KIRMIZI
 //   ③ 4'te bayrak `true` yazıldı → ÖLÇÜLEMEDİ basıldı, çıkış 1
+//   ④ render'a elle `??` zinciri geri kondu → §6 ❌ (ilk hâli yorumdaki zinciri de sayıyordu)
+//   ⑤ exportCodeForDestination yönden bağımsız → 5d/5e/5h ❌
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { CustomerService } from "../src/services/customer.service";
@@ -21,9 +25,14 @@ import {
   readCustomerBranchesEnabled,
 } from "../src/services/system-setting.service";
 import {
+  exportCodeForDestination,
+  pickExportCode,
   pickShipmentDestination,
+  readShipmentDestinationLock,
   resolveShipmentDestination,
 } from "../src/services/helpers/shipment-destination.helper";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { AppError } from "../src/utils/app-error";
 import { cleanupTestCustomers } from "./fixture-customer-cleanup";
 
@@ -73,6 +82,9 @@ async function main() {
     createdIds.push(ihr.id);
     const subeYurtici = await prisma.customerBranch.create({ data: { customerId: ihr.id, name: `TEST Şube Yİ ${ts}`, defaultDestination: "DOMESTIC" }, select: { id: true } });
     const subeBos = await prisma.customerBranch.create({ data: { customerId: ihr.id, name: `TEST Şube Boş ${ts}` }, select: { id: true } });
+    await prisma.customer.update({ where: { id: ihr.id }, data: { exportCode: `EXP-C-${ts}` } });
+    await prisma.customer.update({ where: { id: bos.id }, data: { exportCode: `EXP-Y-${ts}` } });
+    const subeKodlu = await prisma.customerBranch.create({ data: { customerId: ihr.id, name: `TEST Şube Kod ${ts}`, code: `EXP-B-${ts}` }, select: { id: true } });
     const subePasif = await prisma.customerBranch.create({ data: { customerId: bos.id, name: `TEST Şube Pasif ${ts}`, defaultDestination: "EXPORT", isActive: false }, select: { id: true } });
 
     // 2) DB zinciri
@@ -86,6 +98,30 @@ async function main() {
     check("2d şube boş → cariye düşer (CUSTOMER/EXPORT)", r4.destination === "EXPORT" && r4.source === "CUSTOMER", JSON.stringify(r4));
     const r5 = await resolveShipmentDestination(prisma, { customerId: bos.id, branchId: subePasif.id });
     check("2e pasif şube yönünü taşır (BRANCH/EXPORT)", r5.destination === "EXPORT" && r5.source === "BRANCH", JSON.stringify(r5));
+
+    // 5) sevk ekranı ucu — ihracat kodu yalnız yurtdışında, belgeyle aynı çözüm
+    const l1 = await readShipmentDestinationLock(prisma, { customerId: ihr.id });
+    check("5a EXPORT cari → kod cariden", l1.destination === "EXPORT" && l1.exportCode === `EXP-C-${ts}`, JSON.stringify(l1));
+    check("5b EXPORT → hızlı sevk engel gerekçesi dolu, kaynağı söylüyor", !!l1.quickShipBlockedReason?.startsWith("Bu cari ihracat olarak kilitli"), String(l1.quickShipBlockedReason));
+    const l2 = await readShipmentDestinationLock(prisma, { customerId: ihr.id, branchId: subeKodlu.id });
+    check("5c şube ihracat kodu cariden ÖNCE", l2.exportCode === `EXP-B-${ts}` && l2.source === "CUSTOMER", JSON.stringify(l2));
+    const l3 = await readShipmentDestinationLock(prisma, { customerId: ihr.id, branchId: subeYurtici.id });
+    check("5d yön YURTİÇİ → kod GÖSTERİLMEZ (cari kodu dolu olsa da)", l3.destination === "DOMESTIC" && l3.exportCode === null && l3.quickShipBlockedReason === null, JSON.stringify(l3));
+    const l4 = await readShipmentDestinationLock(prisma, { customerId: bos.id });
+    check("5e zincir boş → yön null, kod null (dolu kod gizli ama silinmedi)", l4.destination === null && l4.exportCode === null, JSON.stringify(l4));
+    const bosKod = await prisma.customer.findUnique({ where: { id: bos.id }, select: { exportCode: true } });
+    check("5f gizlenen kod yerinde", bosKod?.exportCode === `EXP-Y-${ts}`);
+    check("5g saf: pickExportCode şube > cari", pickExportCode({ branchCode: "B", customerExportCode: "C" }) === "B" && pickExportCode({ branchCode: null, customerExportCode: "C" }) === "C");
+    check("5h saf: exportCodeForDestination yalnız EXPORT", exportCodeForDestination("DOMESTIC", { customerExportCode: "C" }) === null && exportCodeForDestination("EXPORT", { customerExportCode: "C" }) === "C");
+
+    // 6) tek çözüm — iki belge render'ı ihracat kodunu yardımcıdan alır, elle `??` zinciri yok
+    for (const f of ["shipment-dispatch.html.ts", "fason-direct-ship.html.ts"]) {
+      // Yorumlar ayıklanır: açıklama metnindeki `branchCode ?? customerExportCode` kod değildir.
+      const src = readFileSync(join(__dirname, "../src/services/document-render", f), "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+      check(`6 ${f} pickExportCode'u çağırır, elle zincir yok`, src.includes("pickExportCode(") && !/branchCode\s*\?\?\s*\w*\.?(customerExportCode|exportCode)/.test(src));
+    }
 
     // 3) fail-closed
     const e1 = await expectError(() => resolveShipmentDestination(prisma, { customerId: bos.id, branchId: subeYurtici.id }));

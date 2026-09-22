@@ -44,6 +44,7 @@ import {
 import { DOC_FIELD_CATALOGS, docFieldCss } from "./doc-fields";
 import { fmtDate } from "./fmt-date";
 import { formatSackSeqLabel, type SackSeqFormat } from "../helpers/sack-seq.helper";
+import { pickExportCode } from "../helpers/shipment-destination.helper";
 
 /** Belge etiketleri — cfg.language: tr | en | auto (auto → EXPORT sevkiyatta EN). */
 const LABELS = {
@@ -457,7 +458,7 @@ export function renderShipmentDispatchHtml(
   const showDirection = sectionOn(cfg.sections, "direction");
   const showProcedure = sectionOn(cfg.sections, "procedureCode");
   const showOrders = sectionOn(cfg.sections, "orders");
-  const shipCode = h.branchCode ?? h.customerExportCode;
+  const shipCode = pickExportCode({ branchCode: h.branchCode, customerExportCode: h.customerExportCode });
   const customerSub = [
     showTaxNo && h.customerTaxNumber ? `${L.taxNo}: ${esc(h.customerTaxNumber)}` : "",
     showBranchName && h.branchName ? `${L.branch}: ${esc(h.branchName)}` : "",

@@ -33,6 +33,7 @@ import prisma from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";
 import { CustomerService } from "../src/services/customer.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
+import { readShipmentDestinationLock } from "../src/services/helpers/shipment-destination.helper";
 import { AppError } from "../src/utils/app-error";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 import { cleanupTestCustomers } from "./fixture-customer-cleanup";
@@ -205,6 +206,8 @@ async function main() {
     e7b?.statusCode === 400 && kod(e7b) === "QUICK_SHIP_EXPORT_UNSUPPORTED" && e7b.message.startsWith("Bu cari ihracat olarak kilitli"),
     e7b?.message ?? "hata yok",
   );
+  const kilit7 = await readShipmentDestinationLock(prisma, { customerId: c7e });
+  check("7d ekrandaki pasif düğme gerekçesi = sunucunun 400 metni", !!e7b && kilit7.quickShipBlockedReason === e7b.message, String(kilit7.quickShipBlockedReason));
 
   // 8) eşzamanlı iki ilk sevk
   for (const [etiket, rakip, istek, beklenen] of [
