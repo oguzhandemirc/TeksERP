@@ -138,6 +138,11 @@ import { buildHideCancelledWhere } from "./helpers/hidden-status.helper";
 import { markSackLabelsStaleOnCustomerChangeTx, sackFieldsAppearOnLabel } from "./helpers/sack-label-stale.helper";
 import { formatSackSeqLabel, nextPoolPackageNoTx, readSackSeqFormat, readSackSeqStart } from "./helpers/sack-seq.helper";
 import { ApiResponse } from "../types/api.types";
+import {
+  resolveShipmentDestination,
+  type ResolvedShipmentDestination,
+  type ShipmentDestinationSource,
+} from "./helpers/shipment-destination.helper";
 import type { CursorPaginatedResponse } from "./base.service";
 import type { Request } from "express";
 import { uyari } from "../lib/logger";
@@ -241,6 +246,32 @@ const SHIPPABLE_ROLL_WHERE = {
 //
 // `export` ETME: modül-private kalmalı — export edilirse başka servisler tx'siz
 // çağırabilir ve "tx içinde global client" sorunu başka dosyada yeniden doğar.
+/** Sevkiyat kurulurken verilen yön kararı; `firstChoice` doluysa karta/şubeye yazıldı. */
+interface ShipmentDestinationDecision {
+  destination: ShipmentDestination;
+  /** Yön kilitten geldiyse kaynağı (şube/cari); ilk seçim ya da örtük yurtiçi ise null. */
+  lockSource: ShipmentDestinationSource | null;
+  /** Kilitliyken istemci farklı yön gönderdiyse `ApiResponse.warnings` satırı. */
+  warning: string | null;
+  firstChoice: { tableName: "CUSTOMER" | "CUSTOMER_BRANCH"; recordId: string; destination: ShipmentDestination } | null;
+}
+
+const DESTINATION_WORD: Record<ShipmentDestination, string> = { DOMESTIC: "yurtiçi", EXPORT: "yurtdışı" };
+
+/** Kilit mesajı — uyarı (kilitli değer kullanıldı) ve 409 (reddedildi) aynı cümleyi paylaşır. */
+function destinationLockMessage(
+  istenen: ShipmentDestination,
+  kilit: ResolvedShipmentDestination,
+  kullanildi = true,
+): string {
+  const kilitli = DESTINATION_WORD[kilit.destination ?? ShipmentDestination.DOMESTIC];
+  const kim = kilit.source === "BRANCH" ? "bu şube" : "bu cari";
+  return (
+    `Seçilen ${DESTINATION_WORD[istenen]}; ${kim} ${kilitli} olarak kilitli` +
+    (kullanildi ? `, ${kilitli} kullanıldı.` : ". Yön cari/şube kartından değiştirilir.")
+  );
+}
+
 async function nextShipmentNo(tx: Prisma.TransactionClient): Promise<string> {
   // `createdAt` DE getirilir: sayacın kapsamı "bu biçim yürürlüğe girdikten sonra
   // doğanlar"dır (`number-series.service` C0). Sorgu kümesi DEĞİŞMEDİ — filtreyi
@@ -2240,8 +2271,8 @@ export class ShippingService {
     const orderIds = [...new Set(data.orderIds ?? [])];
     const branchId = data.branchId ?? null;
     const { sacks } = await this.loadSacksForShipment(sackIds, { customerId: data.customerId, branchId });
-    const destination = data.destination ?? ShipmentDestination.DOMESTIC;
-    await this.assertWeighed(sacks, destination);
+    // Yön tx içinde çözülür (kilit + ilk sevk yazımı); tartı kapısı çözülen yönle orada koşar.
+    const weighRequired = await readShippingWeighRequiredEnabled();
     // SİPARİŞ BAĞI KAPISI — tx'ten ÖNCE (girdi guard'ı). `block` rejiminde
     // sipariş yoksa ve niyet beyan edilmediyse 400; diğer rejimlerde no-op.
     const orderRequirement = await resolveOrderRequirement();
@@ -2250,7 +2281,7 @@ export class ShippingService {
     // Sevk onayı KAPALI (varsayılan) → aynı adımda dispatch; AÇIK → PLANNED kalır (Sevk Kapısı).
     const confirmationEnabled = await readShipmentConfirmationEnabled();
 
-    let result: { id: string; shipmentNo: string };
+    let result: { id: string; shipmentNo: string; yon: ShipmentDestinationDecision };
     let tahsisIzi: AllocationAuditTrail | null = null;
     /** Kapsama kapısının `warn` metni — tx içinde üretilir, yanıtta taşınır. */
     let kapsamaNotu: string | null = null;
@@ -2262,7 +2293,8 @@ export class ShippingService {
           customerId: data.customerId,
           branchId,
           orderIds,
-          destination,
+          requestedDestination: data.destination,
+          assertDestination: (d) => assertSacksWeighed(sacks, d, weighRequired),
           procedureCode: data.procedureCode,
           plateNumber: data.plateNumber,
           driverName: data.driverName,
@@ -2272,11 +2304,12 @@ export class ShippingService {
           orderless: data.orderless,
           userId,
         });
+
         // Tahsis izi çekirdekten TAŞINIR (tx dışında `flushAllocationAudit`e
         // gider). Çekirdek onu döndürmeseydi audit sessizce boş kalırdı.
         tahsisIzi = core.iz;
         kapsamaNotu = core.kapsamaUyarisi;
-        return { id: core.id, shipmentNo: core.shipmentNo };
+        return { id: core.id, shipmentNo: core.shipmentNo, yon: core.yon };
       }),
       undefined,
       (err) => {
@@ -2294,6 +2327,7 @@ export class ShippingService {
       throw err;
     }
     await this.flushAllocationAudit(tahsisIzi, userId);
+    await this.logFirstShipmentDestination(result.yon, result.id, userId);
     const dispatched = !confirmationEnabled;
     // ── TAHSİSSİZ SEVK GÖRÜNÜR OLSUN (BULGU-T3-002) ─────────────────────────
     // Sipariş seçilmeden kurulan sevkiyat hiçbir sipariş satırına yazılmaz:
@@ -2318,7 +2352,8 @@ export class ShippingService {
     // önizlemede vardı; tablet Paketleme `orderIds: undefined` gönderdiği için
     // sahadaki asıl yol onu hiç görmüyordu.
     if (kapsamaNotu) warnings.push(kapsamaNotu);
-    await AuditService.log({ userId, action: "CREATE", tableName: "SHIPMENT", recordId: result.id, newData: { shipmentNo: result.shipmentNo, customerId: data.customerId, branchId, sackIds, orderIds, orderless: data.orderless === true, destination, dispatched } });
+    if (result.yon.warning) warnings.push(result.yon.warning);
+    await AuditService.log({ userId, action: "CREATE", tableName: "SHIPMENT", recordId: result.id, newData: { shipmentNo: result.shipmentNo, customerId: data.customerId, branchId, sackIds, orderIds, orderless: data.orderless === true, destination: result.yon.destination, dispatched } });
     // Otomatik fatura taslağı — YALNIZ gerçekten sevk edildiyse. PLANNED bir
     // sevkiyat "mal çıktı" demez; onay açıkken taslak `dispatchShipment`'te doğar.
     const draftNote = dispatched ? await this.maybeAutoDraftInvoiceAfterDispatch(result.id, userId) : null;
@@ -2348,7 +2383,10 @@ export class ShippingService {
       customerId: string;
       branchId: string | null;
       orderIds: string[];
-      destination: ShipmentDestination;
+      /** İstemcinin gönderdiği yön; kilitliyse kullanılmaz, boşsa İLK SEÇİMDİR. */
+      requestedDestination?: ShipmentDestination;
+      /** Çözülen yönle koşan kapı (tartı) — tx içinde, yazımdan önce. */
+      assertDestination: (destination: ShipmentDestination, lockSource: ShipmentDestinationSource | null) => void;
       procedureCode?: string | null;
       plateNumber?: string | null;
       driverName?: string | null;
@@ -2365,7 +2403,15 @@ export class ShippingService {
     iz: AllocationAuditTrail | null;
     /** `shipping.orderCoverage` `warn` iken üretilen metin; yoksa null. */
     kapsamaUyarisi: string | null;
+    yon: ShipmentDestinationDecision;
   }> {
+    const yon = await this.decideShipmentDestinationTx(tx, {
+      customerId: p.customerId,
+      branchId: p.branchId,
+      requested: p.requestedDestination,
+      userId: p.userId,
+    });
+    p.assertDestination(yon.destination, yon.lockSource);
     const shipmentNo = await nextShipmentNo(tx);
     const created = await tx.shipment.create({
       // ⚠️ Künye (Faz A2) `dispatchedById`den FARKLI bilgidir: sevkiyat
@@ -2377,7 +2423,7 @@ export class ShippingService {
         customerId: p.customerId,
         branchId: p.branchId,
         status: ShipmentStatus.PLANNED,
-        destination: p.destination,
+        destination: yon.destination,
         procedureCode: p.procedureCode?.trim() || null,
         // Sıra ön eki burada DONAR — ekran ve belge bu kolonu okur.
         sackSeqPrefix: await readShippingSackSeqPrefix(tx),
@@ -2451,7 +2497,67 @@ export class ShippingService {
         orderless: p.orderless,
       });
     }
-    return { ...created, iz, kapsamaUyarisi };
+    return { ...created, iz, kapsamaUyarisi, yon };
+  }
+
+  /**
+   * Sevk yönü KARARI — tx içinde, `resolveShipmentDestination(tx)` ile (TOCTOU ve
+   * tx tutarken global client okuması yok). Kilitliyse istek yok sayılır ve farkı
+   * UYARI olur; zincir boşsa açık istek İLK SEÇİMDİR ve zincirin boş kaldığı en
+   * alt seviyeye (şube varsa şube, yoksa cari) atomik claim ile yazılır. İstek
+   * yoksa kart boş kalır ve sevkiyat bugünkü gibi yurtiçi doğar.
+   */
+  private async decideShipmentDestinationTx(
+    tx: Prisma.TransactionClient,
+    p: { customerId: string; branchId: string | null; requested?: ShipmentDestination; userId?: string },
+  ): Promise<ShipmentDestinationDecision> {
+    const kilit = await resolveShipmentDestination(tx, { customerId: p.customerId, branchId: p.branchId });
+    if (kilit.destination) {
+      const warning = p.requested && p.requested !== kilit.destination ? destinationLockMessage(p.requested, kilit) : null;
+      return { destination: kilit.destination, lockSource: kilit.source, warning, firstChoice: null };
+    }
+    if (!p.requested) return { destination: ShipmentDestination.DOMESTIC, lockSource: null, warning: null, firstChoice: null };
+    const target = p.branchId
+      ? { tableName: "CUSTOMER_BRANCH" as const, recordId: p.branchId }
+      : { tableName: "CUSTOMER" as const, recordId: p.customerId };
+    const claimed = p.branchId
+      ? await tx.customerBranch.updateMany({
+          where: { id: p.branchId, customerId: p.customerId, defaultDestination: null },
+          data: { defaultDestination: p.requested, updatedById: p.userId ?? null },
+        })
+      : await tx.customer.updateMany({
+          where: { id: p.customerId, defaultDestination: null },
+          data: { defaultDestination: p.requested, updatedById: p.userId ?? null },
+        });
+    if (claimed.count === 1) {
+      return { destination: p.requested, lockSource: null, warning: null, firstChoice: { ...target, destination: p.requested } };
+    }
+    // Yarışı başka bir ilk sevk kazandı — kazananı tx içinde TAZE oku.
+    const fresh = await resolveShipmentDestination(tx, { customerId: p.customerId, branchId: p.branchId });
+    if (fresh.destination === p.requested) return { destination: p.requested, lockSource: fresh.source, warning: null, firstChoice: null };
+    throw AppError.conflict(
+      fresh.destination
+        ? `${destinationLockMessage(p.requested, fresh, false)} Sevkiyatı yeniden kurun.`
+        : "Sevk yönü az önce değişti — yenileyip tekrar deneyin.",
+      { code: "SHIPMENT_DESTINATION_LOCKED", destination: fresh.destination, source: fresh.source },
+    );
+  }
+
+  /** İlk sevkte karta/şubeye yazılan yön — audit tx DIŞINDA, best-effort. */
+  private async logFirstShipmentDestination(
+    yon: ShipmentDestinationDecision,
+    shipmentId: string,
+    userId?: string,
+  ): Promise<void> {
+    if (!yon.firstChoice) return;
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: yon.firstChoice.tableName,
+      recordId: yon.firstChoice.recordId,
+      oldData: { defaultDestination: null },
+      newData: { defaultDestination: yon.firstChoice.destination, kind: "FIRST_SHIPMENT_DESTINATION", shipmentId },
+    });
   }
 
   /**
@@ -2564,7 +2670,6 @@ export class ShippingService {
     if (!data.customerId) throw AppError.badRequest("Müşteri seçilmeli");
     const orderIds = [...new Set(data.orderIds ?? [])];
     const branchId = data.branchId ?? null;
-    const destination = data.destination ?? ShipmentDestination.DOMESTIC;
 
     // ⚠️ TARTI İSTEYEN HER REJİM HIZLI SEVKİ KAPATIR ve çuval yeni doğduğu için
     // tartısı YOKTUR. İki kaynak: (a) ihracat (her zaman, bayraktan bağımsız),
@@ -2574,16 +2679,25 @@ export class ShippingService {
     // GÖRÜNMEZ, tek tx içinde doğar — kg alanı eklemek hızlı sevkin varlık
     // sebebini (üç ekran → bir ekran) yok ederdi. Bayrağı açan kurulum bu bedeli
     // bilerek kabul eder; sürüm notunda operatör diliyle yazılıdır.
+    // Yön tx içinde çözülür: ihracat olarak kilitli cari/şubede Hızlı Sevk KAPALIDIR.
     const weighRequired = await readShippingWeighRequiredEnabled();
-    if (destination === ShipmentDestination.EXPORT || weighRequired) {
+    const assertQuickShipAllowed = (destination: ShipmentDestination, lockSource: ShipmentDestinationSource | null): void => {
+      if (destination === ShipmentDestination.EXPORT) {
+        const kim = lockSource === "BRANCH" ? "Bu şube" : lockSource === "CUSTOMER" ? "Bu cari" : null;
+        throw AppError.badRequest(
+          (kim ? `${kim} ihracat olarak kilitli; h` : "H") +
+            "ızlı sevk ihracatta yapılamaz (çuvallar tartılmalı). Çuval açıp tartarak sevk edin.",
+          { code: "QUICK_SHIP_EXPORT_UNSUPPORTED", source: lockSource },
+        );
+      }
+      if (!weighRequired) return;
       throw AppError.badRequest(
-        destination === ShipmentDestination.EXPORT
-          ? "İhracat sevkiyatı çuval tartısı ister — Paketleme / Çuvallar ekranından çuvalı açıp tartın, sonra sevkiyatı kurun."
-          : "Bu kurulumda sevk öncesi çuval tartısı zorunlu — Hızlı Sevk çuvalı görünmeden ürettiği için tartılamaz. " +
-              "Paketleme / Çuvallar ekranından çuvalı açıp tartın, sonra sevkiyatı kurun.",
-        { code: destination === ShipmentDestination.EXPORT ? "EXPORT_WEIGH_REQUIRED" : "WEIGH_REQUIRED" },
+        "Bu kurulumda sevk öncesi çuval tartısı zorunlu — Hızlı Sevk çuvalı görünmeden ürettiği için tartılamaz. " +
+          "Paketleme / Çuvallar ekranından çuvalı açıp tartın, sonra sevkiyatı kurun.",
+        { code: "WEIGH_REQUIRED" },
       );
-    }
+    };
+    if (weighRequired) assertQuickShipAllowed(ShipmentDestination.DOMESTIC, null);
     // SİPARİŞ BAĞI KAPISI — `createShipment` ile AYNI yüklem (kaçış kapısı yok).
     const orderRequirement = await resolveOrderRequirement();
     assertOrderLinkAllowed(orderRequirement, { orderIds, orderless: data.orderless });
@@ -2621,7 +2735,7 @@ export class ShippingService {
     }
 
     // `iz` = tahsis iz defteri (çekirdekten taşınır, tx DIŞINDA flush edilir).
-    let result: { id: string; shipmentNo: string; iz: AllocationAuditTrail | null };
+    let result: { id: string; shipmentNo: string; iz: AllocationAuditTrail | null; yon: ShipmentDestinationDecision };
     try {
       result = await withBarcodeRetry(
         () =>
@@ -2653,7 +2767,8 @@ export class ShippingService {
               customerId: data.customerId,
               branchId,
               orderIds,
-              destination,
+              requestedDestination: data.destination,
+              assertDestination: assertQuickShipAllowed,
               procedureCode: data.procedureCode,
               plateNumber: data.plateNumber,
               driverName: data.driverName,
@@ -2685,12 +2800,13 @@ export class ShippingService {
     // Ayrışması, "aynı çekirdek aynı defteri tutar" varsayımını sessizce bozardı:
     // hızlı sevkle giden mal tahsis geçmişinde görünmezdi.
     await this.flushAllocationAudit(result.iz, userId);
+    await this.logFirstShipmentDestination(result.yon, result.id, userId);
     await AuditService.log({
       userId,
       action: "CREATE",
       tableName: "SHIPMENT",
       recordId: result.id,
-      newData: { kind: "QUICK_FROM_ROLLS", shipmentNo: result.shipmentNo, customerId: data.customerId, rollCount: rollIds.length, orderIds, orderless: data.orderless === true },
+      newData: { kind: "QUICK_FROM_ROLLS", shipmentNo: result.shipmentNo, customerId: data.customerId, rollCount: rollIds.length, orderIds, orderless: data.orderless === true, destination: result.yon.destination },
     });
     // Hızlı sevk de ORTAK kancayı çağırır — çuvaldan sevkle davranış ayrışmasın.
     const draftNote = dispatched ? await this.maybeAutoDraftInvoiceAfterDispatch(result.id, userId) : null;
@@ -2703,6 +2819,7 @@ export class ShippingService {
       orderless: data.orderless,
     });
     if (quickOrderlessNote) quickWarnings.push(quickOrderlessNote);
+    if (result.yon.warning) quickWarnings.push(result.yon.warning);
     return {
       success: true,
       data: {
@@ -2963,10 +3080,24 @@ export class ShippingService {
     return { success: true, data: {}, message: "Çuval sevkiyattan çıkarıldı (depoya döndü)" };
   }
 
-  /** Yurtiçi/yurtdışı kapsamını değiştir (PLANNED). */
+  /**
+   * PLANNED sevkiyatın yönünü değiştir. Yön kilitliyse YALNIZ kilitli değere izin
+   * verilir (sevkiyatı karta hizalamak için); farklı değer 409 + kaynak. Zincir boşsa
+   * serbest ve karta yazmaz — ilk seçim yalnız sevkiyat KURULURKEN yazılır.
+   */
   async setDestination(shipmentId: string, destination: ShipmentDestination, userId?: string): Promise<ApiResponse<unknown>> {
     await prisma.$transaction(async (tx) => {
       await touchShipmentPlannedTx(tx, shipmentId);
+      const sh = await tx.shipment.findUnique({ where: { id: shipmentId }, select: { customerId: true, branchId: true } });
+      if (!sh) throw AppError.notFound("Sevkiyat bulunamadı");
+      const kilit = await resolveShipmentDestination(tx, { customerId: sh.customerId, branchId: sh.branchId });
+      if (kilit.destination && kilit.destination !== destination) {
+        throw AppError.conflict(destinationLockMessage(destination, kilit, false), {
+          code: "SHIPMENT_DESTINATION_LOCKED",
+          destination: kilit.destination,
+          source: kilit.source,
+        });
+      }
       await tx.shipment.update({ where: { id: shipmentId }, data: { destination } });
     });
     await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "DESTINATION", destination } });

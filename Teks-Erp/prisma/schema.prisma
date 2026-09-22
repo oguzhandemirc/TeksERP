@@ -3383,9 +3383,9 @@ model Customer {
   city         String?     @db.VarChar(80)
   district     String?     @db.VarChar(80)
   country      String?     @db.VarChar(80)
-  /// Sevk hedefi VARSAYILANI (yurtiçi/yurtdışı) — KİLİT değil: sevkiyat formu buradan
-  /// başlar, operatör değiştirebilir; `Shipment.destination` kendi değerini saklar
-  /// (defter: geçmiş sevkler cari değişince değişmez). NULL = varsayılan yok (bugünkü ekran).
+  /// Sevk yönü KİLİDİ (yurtiçi/yurtdışı) — şubenin yönü boşsa sevkiyat bu yönle kurulur,
+  /// operatör değiştiremez (çözüm: `resolveShipmentDestination`). NULL = ilk sevkte seçilir
+  /// ve buraya yazılır. `Shipment.destination` kendi değerini dondurur (geçmiş değişmez).
   defaultDestination ShipmentDestination?
   contactName  String?     @db.VarChar(120)
   contactPhone String?     @db.VarChar(40)
