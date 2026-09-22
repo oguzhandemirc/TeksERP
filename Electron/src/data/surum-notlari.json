@@ -703,6 +703,11 @@
           "kapsam": "panel",
           "tip": "yeni",
           "metin": "Yetkilendirme → Rol Şablonları’na “Saha operatörü (tüm tablet karoları)” şablonu geldi: tabletteki bütün ekranları tek tıkla verir, geri alma / düzeltme / ana veri yetkilerini (ör. Tambur saha düzeltmesi, top indirme geri alma, sarım iptali, yeni desen açma) vermez — onlar ayrıca verilir. Şablon kurulumda kendiliğinden gelir ve tablete yeni bir ekran eklendiğinde kendiliğinden genişler; “Mobil — Tüm Ekranlar” şablonu (yetkilerle birlikte) aynen durur."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Sistem → Yedekler ekranındaki makine dışı yedek kartına “Son başarılı kopya” satırı geldi: yedeklerin uzak hedefe en son ne zaman başarıyla kopyalandığı (tarih, saat, kaç saat önce). Kopyalama 6 saatten uzun süredir başarısızsa kart kırmızıya döner; kaç tur üst üste düştüğünü ve son hatanın ne olduğunu yazar. Bu bilgi sunucu yeniden başlasa da kaybolmuyor. Eskiden yalnız son denemenin sonucu görünüyordu; bir internet kesintisinden sonra ne kadar süredir kopya alınamadığı anlaşılamıyordu."
         }
       ]
     },

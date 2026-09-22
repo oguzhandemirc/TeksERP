@@ -11135,3 +11135,48 @@ Kullanıcı kararı (01): yetki reddi yalnız Türkçe cümleyle geliyordu, iste
 ## 2026-09-18 — İptalde sebep zorunlu bayrağı: ölçüm + tek kapı + önizleme `reasonRequired` [PROFİL]
 
 Kullanıcı kararı (1e sözleşmesi; 6e'den devir, 01): `production.cancelReasonRequired` — varsayılan KAPALI = bugünkü davranış (2026-08-06 kuralı: eldivenli operatörü rastgele kategori seçmeye itmek cevapsızlıktan kötü; fabrika isterse açar). ÖLÇÜM (sözleşmenin "sebep alanı taşıyan HER iptal ucu" maddesi): iş emri iptali (reason min 3) · dokuma işi (min 1) · levent sarım/olay/tüketim (min 3) · fason dokuma sevk/makbuz (min 3) ZATEN zorunlu — bayrak onlara dokunmaz; sevkiyat iptali · çuval çıkarma · PLANNED levent silme sebep alanı TAŞIMAZ (alan eklemek sözleşme değişikliği — kapsam dışı, 1e'ye rapor); mal kabul/alış siparişi iptali opsiyonel ama TİCARET kategorisi (üretim bayrağı değil). Dolayısıyla bayrağın tek yolu TOP İPTALİ. Kapı `helpers/cancel-reason.helper.ts` `assertCancelReasonTx(db, {reason, reasonCode}, belge)` — `inventory.service.softDelete`te `existing` okunmadan önce, yalnız `!isScrap` (fire ayrı karar) → 400 `CANCEL_REASON_REQUIRED`; `hasCancelReason` = trim'li metin ya da katalog kodu. Önizlemeler `reasonRequired` taşır: top (`resolveCancelReasonRequired` = üretim ∧ bayrak), levent sarım ve fason makbuz sabit `true` — istemci hepsini aynı alandan okur. Panel `BulkCancelRollsDialog`: önizleme true diyorsa alan yıldızlı, sebep seçilmeden düğme kapalı; alan yoksa (eski sunucu) bugünkü gibi. Tablet `RollCancelModal` d5 (sözleşme yazıldı). Reçete: SETTING_KEYS + reader + FeatureFlags + setter bloğu + zod + RESOLVER_ALTI + Electron featureFlagService/flag-modules (`productionEnabled`)/settings-config "Üretim — Saha" satırı. Bekçi `test_cancel_reason_required` §0–§3 (17 ölçüm), iki sonda kırmızı. Şemasız.
+
+## 2026-09-22 — Fabrika log incelemesi: pm2 tek ev (logrotate reboot'ta kayboluyordu) [ÇEKİRDEK]
+
+Kullanıcı isteği (08, SSH ile SAHINSRV): `C:\TeksERP\logs` incelendi — 6 günde 0 adet 5xx, 0 restart; ama
+`backend-out-0.log` 11 MB ve rotasyon 15.09'dan beri yok. Kök neden: `kur.ps1` `C:\TeksERP\pm2` + `pm2-home`
+kullanıyor, açılış görevi `C:\Etkili-Yazilim\pm2-boot.cmd` ise `C:\Etkili-Yazilim\pm2-home`den `resurrect`
+ediyordu; Windows'ta tek daemon (tek pipe) var ve modüller daemon'u başlatan evden yüklenir — 15.09 reboot'unda
+daemon Etkili evinden kalkınca `pm2-logrotate` (TeksERP evinde kurulu, 10M/14 gün/gece 00:00) yüklenmedi.
+Düzeltme (kullanıcı seçimi "a, şimdi"): `pm2-boot.cmd` → TeksERP evi (eski dosya `pm2-boot.cmd.2026-09-22.orig-yedek`);
+eski daemon `pm2 kill`, sonra AÇILIŞ GÖREVİNİN KENDİSİ tetiklendi (`Start-ScheduledTask`, SYSTEM) — reboot yolu
+birebir ölçüldü, elle başlatma değil; kesinti 6 sn; `pm2 ls`te backend + `pm2-logrotate online`, `pm2 save` TeksERP
+evine. Ders: iki kurulum evi = iki gerçek; hangisinin canlı olduğunu `pm2 ls` modül tablosu söyler, klasör değil.
+Seçilmeyen seçenekler: (c) `/health`+304 satırlarını morgan `skip` ile logdan düşürmek (52.589 isteğin %57'si) ·
+(d) `kur.ps1 [9/9]` logrotate kontrolü — ikisi borç.
+
+## 2026-09-22 — Offsite gdrive kendi OAuth istemcisine geçti (rclone ortak client_id 2026'da kapanıyor) [ÇEKİRDEK]
+
+Hata logunda her süpürmede rclone NOTICE: "shared Google Drive client_id … being retired … will stop working
+during 2026". `C:\TeksERP\rclone.conf`ta `client_id` yoktu. Kullanıcı seçimi (a): kendi istemci. Yapılan (08,
+kullanıcının Chrome profili CDP ile sürüldü — Chrome 136+ varsayılan profilde uzaktan kumanda portunu reddettiği
+için profil kopyalandı; passkey doğrulamasını kullanıcı verdi): Cloud Console proje `tekserp-yedek` · Drive API ·
+Google Auth Platform "TeksERP Yedek" External → **In production** (Google ana sayfa + gizlilik + kullanım şartları
+URL'si ve yetkili alan istedi: `etkiliyazilim.com`; `/gizlilik` sayfası henüz 404, kullanıcı borcu) · Desktop
+client `rclone-sahinsrv`. Sunucuda tek script (RDP, Drive sahibinin açık oturumu): conf yedeği
+(`rclone.conf.2026-09-22.eski-kimlik`) → `[gdrive]`e client_id/secret → `rclone config reconnect gdrive:` → `lsd`
+doğrulama; kimlik taşıyan script kendini sildi (kalan kopya SSH'tan silindi). Ders: OAuth'ta KİMLİK (istemci)
+ile İZİN (kaynak sahibi) iki ayrı hesaptır — istemciyi geliştirici açar, izni klasör sahibi verir; şifre
+gerekmedi çünkü izin veren oturum sunucuda zaten açıktı. Testing modunda kalan uygulamanın token'ı 7 günde
+ölür; "In production" şart.
+
+## 2026-09-22 — Offsite "son başarılı kopya" kalıcı: `JobState` + bayatlık tek kaynak + panel satırı [ÇEKİRDEK]
+
+19.09 14:00–15:59 fabrika interneti kesildi, iki süpürme DNS'ten düştü, 16:00'da toparladı — kimse görmedi:
+sonuç yalnız bellekteydi (`lastSweep`), reboot'ta "henüz koşmadı", panel yalnız SON turu gösteriyordu.
+Kullanıcı seçimi (b; c=Telegram/e-posta sonra): `JobState` (iş başına tek satır: `lastRunAt · lastOkAt ·
+lastError · consecutiveFailures · lastResult`; audit muafiyeti SISTEM_ISI; `SystemSetting`e yazılmadı çünkü
+o yol audit'li ve saatlik audit satırı gürültü olurdu) · `helpers/job-state.helper` (upsert; tek process +
+yeniden-giriş kilidi ⇒ yarış yok) · `helpers/offsite-state.helper` saf: `jobStaleness` — hiç başarı yok ⇒
+bayat (fail-closed), eşik 6 sa TEK kaynak, `configured:false`ta bayatlık yok · `getOffsiteHealth` iki dalda
+`lastOkAt · stale · consecutiveFailures · lastError` · panel `offsiteState.ts` türetme: eski sunucu `stale`
+göndermezse bayat sayılmaz (kırmızı üretmez), kartta "Son başarılı kopya: dd.MM HH:mm (N sa önce)".
+Ölçüm: 19.09 kesintisi sonda DB'de yeniden oynatıldı — 16:30 taze, 19:30 bayat, 16:00 başarısında sayaç 0.
+Ders: "son tur ne dedi" ile "en son ne zaman İYİYDİ" farklı sorulardır; ikincisi yoksa kesintinin süresi
+ölçülemez ve bellekte tutulan durum reboot'la yalan söyler. Kod: dal `08-offsite-durum` (feat(yedek) commit'i).
+
