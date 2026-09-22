@@ -820,7 +820,31 @@ export const DEFAULT_SHIPPING_DOC_CEKI_NAME_MODE: ShippingDocCekiNameMode = "dev
  */
 export type ShippingSackSeqPrefix = string;
 export const SHIPPING_SACK_SEQ_PREFIX_MAX = 8;
+/**
+ * OKUMA/TEMİZLİK yüklemi — GENİŞ ve öyle KALMALI.
+ *
+ * ⚠️ DARALTMAYIN: bu yüklem `sanitizeSackSeqPrefix` üzerinden OKUMA yolunda da
+ * koşuyor ve sevk anında DONMUŞ ön eki de süzüyor (`sack-seq.helper`). Burayı
+ * daraltmak, kayıtlı `SP/` gibi bir ön eki taşıyan ESKİ SEVKİYATLARIN belgesini
+ * bugün boş gösterirdi — yani geçmişi geriye dönük değiştirirdi, ki bütün bu
+ * işin yasakladığı şey tam olarak budur.
+ */
 export const SHIPPING_SACK_SEQ_PREFIX_RE = /^[\p{L}\p{N}\-_./ ]{0,8}$/u;
+
+/**
+ * YAZMA yüklemi — DAR. Dosya/sayfa adını kıran karakterleri dışarıda bırakır.
+ *
+ * ⚠️ ÖLÇÜLDÜ 2026-09-22: yasaklanması gereken küme `/ \ : * ? [ ]` idi, ama
+ * bunlardan YALNIZ `/` zaten kabul ediliyordu — kalan altısı geniş yüklemde de
+ * yoktu. Yani gerçek maruziyet TEK karakter.
+ * Mekanizma: `pdf.ipc.safeFileName` `[^\p{L}\p{N}\-_. ]` dışındaki her şeyi
+ * `_` yapar ve `dumpSheets.sheetBase` `: \ / ? * [ ]`i boşluğa çevirir ⇒ `A/B`
+ * ile `A B` AYNI dosya/sayfa adına düşer ve iki sevkiyat üst üste yazılabilir.
+ *
+ * ⚠️ Türkçe harf KALIR: ön ek etiket metnidir, OKUTULMAZ — barkod uzayının
+ * ASCII kuralı buraya uzanmaz.
+ */
+export const SHIPPING_SACK_SEQ_PREFIX_WRITE_RE = /^[\p{L}\p{N}\-_. ]{0,8}$/u;
 export const DEFAULT_SHIPPING_SACK_SEQ_PREFIX: ShippingSackSeqPrefix = "";
 /** Ön ek temizliği — geçersiz/boşluk-only değer boş sayılır (fail-safe: sayı yine basılır). */
 export function sanitizeSackSeqPrefix(v: unknown): string {
@@ -3071,8 +3095,12 @@ export class SystemSettingService {
     }
     if (Object.prototype.hasOwnProperty.call(input, "shippingSackSeqPrefix")) {
       const v = input.shippingSackSeqPrefix;
-      if (typeof v !== "string" || !SHIPPING_SACK_SEQ_PREFIX_RE.test(v)) {
-        throw AppError.badRequest(`Çuval sırası ön eki en çok ${SHIPPING_SACK_SEQ_PREFIX_MAX} karakter: harf, rakam, - _ . / ve boşluk`);
+      // YAZMA yüklemi DAR (okuma yüklemi geniş kalır — eski değer bozulmaz).
+      if (typeof v !== "string" || !SHIPPING_SACK_SEQ_PREFIX_WRITE_RE.test(v)) {
+        throw AppError.badRequest(
+          `Çuval sırası ön eki en çok ${SHIPPING_SACK_SEQ_PREFIX_MAX} karakter: harf, rakam, - _ . ve boşluk ` +
+            "(eğik çizgi dosya adını kırar).",
+        );
       }
       await this.set(SETTING_KEYS.SHIPPING_SACK_SEQ_PREFIX, sanitizeSackSeqPrefix(v), "Sevkiyat içi çuval sırası ön eki (serbest metin, ≤8)", userId);
     }

@@ -13,7 +13,11 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { formatSackSeqLabel, POOL_PACKAGE_NO_LOCK_NS } from "../src/services/helpers/sack-seq.helper";
-import { sanitizeSackSeqPrefix } from "../src/services/system-setting.service";
+import {
+  sanitizeSackSeqPrefix,
+  SHIPPING_SACK_SEQ_PREFIX_RE,
+  SHIPPING_SACK_SEQ_PREFIX_WRITE_RE,
+} from "../src/services/system-setting.service";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = "") {
@@ -64,6 +68,27 @@ check("§4 uzay 8035", POOL_PACKAGE_NO_LOCK_NS === 8035);
 const envanter = readFileSync(join(SRC, "services/helpers/period-guard.helper.ts"), "utf-8");
 check("§4 8035 envanterde", /\/\/\s+8035\s+POOL_PACKAGE_NO_LOCK_NS/.test(envanter));
 check("§4 openSack partisiz dalda helper'ı çağırır", /packageNo = await nextPoolPackageNoTx\(tx, customerId\);/.test(ship));
+
+// ── §5 ÖN EK DESENİ: yazma DAR, okuma GENİŞ (Faz C4) ──────────────────────
+// ⚠️ İKİ YÜKLEM ve ayrımı LOAD-BEARING: `sanitizeSackSeqPrefix` OKUMA yolunda
+// da koşuyor ve sevk anında DONMUŞ ön eki de süzüyor. Okuma yüklemini
+// daraltmak, `SP/` gibi bir ön ekle sevk edilmiş ESKİ sevkiyatların belgesini
+// bugün boş gösterirdi — geçmişi geriye dönük değiştirmek, bu işin yasağı.
+check("§5 \u2b50 YAZMA yüklemi eğik çizgiyi REDDEDER (dosya adını kırar)",
+  !SHIPPING_SACK_SEQ_PREFIX_WRITE_RE.test("SP/"));
+check("§5 \u2b50 OKUMA yüklemi eski değeri HÂLÂ kabul eder (geçmiş bozulmaz)",
+  SHIPPING_SACK_SEQ_PREFIX_RE.test("SP/") && sanitizeSackSeqPrefix("SP/") === "SP/");
+check("§5 Türkçe harf yazmada da KALIR (ön ek okutulmaz, barkod uzayı değil)",
+  SHIPPING_SACK_SEQ_PREFIX_WRITE_RE.test("ÇUVAL") && SHIPPING_SACK_SEQ_PREFIX_WRITE_RE.test("Şİ-"));
+check("§5 meşru ön ekler yazmada kabul edilir (kapı her şeyi reddetmiyor)",
+  ["SP", "SP-", "S.P", "SP 1", "A_B", ""].every((v) => SHIPPING_SACK_SEQ_PREFIX_WRITE_RE.test(v)));
+// \u26a0\ufe0f ÖLÇÜLDÜ: yasaklanması istenen küme `/ \\ : * ? [ ]` idi ama geniş
+// yüklemde YALNIZ `/` vardı; kalan altısı zaten dışarıdaydı. Sayı beyan edilir
+// ki sonraki okuyan "altı karakter kaldırıldı" sanmasın.
+const ZATEN_YOKTU = ["\\", ":", "*", "?", "[", "]"];
+check("§5 kalan altı karakter ZATEN kabul edilmiyordu (maruziyet tek karakterdi)",
+  ZATEN_YOKTU.every((c) => !SHIPPING_SACK_SEQ_PREFIX_RE.test(`SP${c}`)),
+  ZATEN_YOKTU.join(" "));
 
 console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);

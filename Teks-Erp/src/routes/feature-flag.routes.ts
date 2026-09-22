@@ -373,7 +373,9 @@ export const updateSchema = z.strictObject({
   // Sevkiyat içi çuval sırası etiketi + partisiz ambalaj no rejimi (2026-09-22).
   shippingSackSeqOnDoc: z.boolean().optional(),
   // Serbest metin (≤8): harf · rakam · - _ . / · boşluk — belgeye HTML kaçışıyla girer.
-  shippingSackSeqPrefix: z.string().max(8).regex(/^[\p{L}\p{N}\-_./ ]*$/u, "Yalnız harf, rakam, - _ . / ve boşluk").optional(),
+  // ⚠️ Eğik çizgi YOK: `pdf.ipc.safeFileName` ve `dumpSheets.sheetBase` onu
+  // `_`/boşluğa çevirir ⇒ iki sevkiyat AYNI dosya adına düşer (ölçüldü).
+  shippingSackSeqPrefix: z.string().max(8).regex(/^[\p{L}\p{N}\-_. ]*$/u, "Yalnız harf, rakam, - _ . ve boşluk").optional(),
   shippingSackSeqPrefixLive: z.boolean().optional(),
   shippingSackSeqStart: z.number().int().min(0).max(999).nullable().optional(),
   shippingSackSeqShowTotal: z.boolean().optional(),
