@@ -1,0 +1,76 @@
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { kilitMetni, kullaniciCozebilir } from "./lockText";
+import type { NumberSeriesRow } from "./types";
+
+/**
+ * Seri tablosu. ⚠️ KİLİTLİ SATIR DA ÇİZİLİR — süzgeç YOK. Gerekçe sayfanın
+ * başlığında; burada yalnız uygulanıyor.
+ */
+export function NumberingTable({
+  rows,
+  onEdit,
+}: {
+  rows: NumberSeriesRow[];
+  onEdit: (row: NumberSeriesRow) => void;
+}) {
+  return (
+    <div className="overflow-hidden rounded-md border">
+      <table className="w-full text-sm">
+        <thead className="bg-muted/50 text-xs text-muted-foreground">
+          <tr>
+            <th className="p-2 text-left">Seri</th>
+            <th className="p-2 text-left">Ön ek</th>
+            <th className="hidden p-2 text-left sm:table-cell">Tarih</th>
+            <th className="hidden p-2 text-left sm:table-cell">Hane</th>
+            <th className="p-2 text-left">Örnek</th>
+            <th className="p-2 text-right">Düzenle</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <NumberingRow key={r.key} row={r} onEdit={onEdit} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function NumberingRow({
+  row,
+  onEdit,
+}: {
+  row: NumberSeriesRow;
+  onEdit: (row: NumberSeriesRow) => void;
+}) {
+  const kilit = row.lockKind ? kilitMetni(row.lockKind) : null;
+  return (
+    <tr className="border-t">
+      <td className="p-2">
+        <div className="font-medium">{row.label}</div>
+        {kilit && row.lockKind && (
+          <div className="mt-0.5 flex items-center gap-1.5">
+            {/* Kullanıcının KENDİ çözebileceği kilit vurgulu rozet alır. */}
+            <Badge
+              variant={kullaniciCozebilir(row.lockKind) ? "default" : "secondary"}
+              className="px-1 py-0 text-[10px]"
+            >
+              {kilit.rozet}
+            </Badge>
+            <span className="text-xs text-muted-foreground">{kilit.neZaman}</span>
+          </div>
+        )}
+      </td>
+      <td className="p-2 font-mono text-xs">{row.prefix}</td>
+      <td className="hidden p-2 text-xs sm:table-cell">{row.dateSegment}</td>
+      <td className="hidden p-2 text-xs sm:table-cell">{row.digits}</td>
+      <td className="p-2 font-mono text-xs">{row.preview}</td>
+      <td className="p-2 text-right">
+        <Button size="sm" variant="outline" disabled={!row.editable} onClick={() => onEdit(row)}>
+          Düzenle
+        </Button>
+      </td>
+    </tr>
+  );
+}

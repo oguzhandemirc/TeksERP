@@ -73,6 +73,7 @@ import { ModuleProfilePage } from "@/pages/System/ModuleProfile/ModuleProfilePag
 import { ActivityPage } from "@/pages/System/Activity/ActivityPage";
 import { GeneralSettingsPage } from "@/pages/GeneralSettings/GeneralSettingsPage";
 import { FeatureFlagsPage } from "@/pages/GeneralSettings/FeatureFlagsPage";
+import { NumberingPage } from "@/pages/GeneralSettings/Numbering/NumberingPage";
 import { UpdatePage } from "@/pages/System/UpdatePage";
 import {
   SETTINGS_ADMIN_PERMISSION,
@@ -757,6 +758,18 @@ export const contentRoutes: RouteObject[] = [
     // (2026-09-04). Kapı Genel Ayarlar'ınkinden DAR: `settings:workstation`
     // burada yeterli DEĞİL (bu satırlar sunucuya yazılır, tüm fabrikayı
     // etkiler); "Bu Bilgisayar" bölümünün gerekçesi buraya uzanmaz.
+    // Numara biçimi — DAVRANIŞ bayraklarından ayrı ekran (Faz C): bayrak "nasıl
+    // çalışıyor", numara biçimi "kayıtlar hangi kimlikle doğuyor" sorusudur ve
+    // geri alınamaz nitelikte (basılmış belge değişmez). Kendi izni + ayar
+    // şifresi; kapı ucun kendisinde de var.
+    path: "system/numbering",
+    element: (
+      <ProtectedRoute requirePermission="settings:numbering">
+        <NumberingPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
     path: "system/feature-flags",
     element: (
       <ProtectedRoute requirePermission="admin:settings">

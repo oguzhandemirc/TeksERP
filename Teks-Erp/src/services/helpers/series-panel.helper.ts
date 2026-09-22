@@ -99,6 +99,8 @@ export function listSeries(): Array<
     lockedReason?: string;
     lockKind?: SeriesLockKind;
     panelGroup?: "sevkiyat";
+    /** Etki cümlesinin BİRİMİ — panel bunu KOPYALAMAZ, okur. */
+    countBirim?: "kayıt" | "belge";
     preview: string;
   }
 > {
@@ -116,6 +118,7 @@ export function listSeries(): Array<
       editable: lock === null,
       ...(lock ? { lockedReason: lock.reason, lockKind: lock.kind } : {}),
       ...(e.panelGroup ? { panelGroup: e.panelGroup } : {}),
+      ...(e.countTable ? { countBirim: e.countTable.birim } : {}),
       preview: previewSeriesCode(fmt),
     };
   });

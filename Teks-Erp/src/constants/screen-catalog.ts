@@ -241,6 +241,9 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // ticaret, iplik ve muhasebe kategorilerine dağılır ve kategori bazında
   // KİLİTLENİR (`SettingsCategory.moduleKey`), gizlenmez.
   { key: "system/feature-flags", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Özellik Anahtarları", requires: ["admin:settings"], capabilities: [] },
+  // Numaralandırma — numara BİÇİMİ veri olduğundan panelden yönetilir (Faz C).
+  // Çekirdek: her kurulumda numara üretilir, kapatılabilir bir modüle ait değil.
+  { key: "system/numbering", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Numaralandırma", requires: ["settings:numbering"], capabilities: [] },
   // Güncelleme — bu bilgisayardaki sürüm/güncelleme durumu. `settings:workstation`
   // DE yeter (yerel donanımını kuran personel); route çoklu kapılı olduğu için
   // bekçinin route çözücüsü bu satırı zaten göremez, giriş TAMLIK için var.

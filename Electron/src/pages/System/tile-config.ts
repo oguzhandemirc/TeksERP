@@ -1,4 +1,4 @@
-import { Activity, Archive, Blocks, Cpu, DatabaseBackup, DatabaseZap, Download, FileCode2, Gauge, MapPin, Search, Settings as SettingsIcon, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone } from "lucide-react";
+import { Activity, Archive, Hash, Blocks, Cpu, DatabaseBackup, DatabaseZap, Download, FileCode2, Gauge, MapPin, Search, Settings as SettingsIcon, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone } from "lucide-react";
 
 export type SystemTileGroup = "activity" | "monitoring" | "archive" | "config";
 
@@ -222,6 +222,15 @@ export const systemTiles: SystemTile[] = [
     // FABRİKANIN kendi tercihleri — modül anahtarlarından AYRI ekran
     // (2026-09-04): "firmadaki yetkilinin düzenleyebileceği flaglar ayrı bir
     // yerde olsun". Aynı kabuk, farklı yüzey (`SettingsSurface`).
+    key: "numbering",
+    title: "Numaralandırma",
+    description: "Sevkiyat · çuval · sevk partisi · iade belge numaralarının ön eki ve biçimi",
+    icon: Hash,
+    to: "/system/numbering",
+    group: "config",
+    permission: "settings:numbering",
+  },
+  {
     key: "feature-flags",
     title: "Özellik Anahtarları",
     description: "Sipariş/sevkiyat, üretim, kalite ve muhasebe davranışını belirleyen ayarlar",
