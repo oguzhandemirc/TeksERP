@@ -147,7 +147,7 @@ import {
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002, p2002Mentions } from "../utils/p2002";
 import { normalizeScanCode } from "../utils/code-format";
-import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
+import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
 // Per-roll split'te taşınan toplar için yeni SD dispatch numarası (aynı sequence).
 import { nextPrefixedSequenceTx, SubcontractorService } from "./subcontractor.service";
 
@@ -617,7 +617,8 @@ export class WorkOrderService {
    */
   async generateWorkOrderNumber(): Promise<string> {
     const now = new Date();
-    const prefix = seriesCodePrefix("workOrder", now);
+    const fmt = resolveSeriesFormat("workOrder");
+    const prefix = seriesPrefix(fmt, now);
 
     // Retry loop — nadiren de olsa unique çakışma olursa tekrar dene
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -630,11 +631,12 @@ export class WorkOrderService {
         select: { workOrderNumber: true },
       });
       const seq = seriesSeqFrom(
+      fmt,
         todays.map((w) => w.workOrderNumber),
         prefix,
       );
 
-      const candidate = buildSeriesCode("workOrder", seq, now);
+      const candidate = formatSeriesCode(fmt, seq, now);
 
       const exists = await prisma.workOrder.findUnique({ where: { workOrderNumber: candidate } });
       if (!exists) return candidate;
@@ -7013,7 +7015,8 @@ export class WorkOrderService {
 
     // Manifest (çeki listesi) no: CL + GGAAYY + NNNN (örn CL1207260001)
     const now = new Date();
-    const prefix = seriesCodePrefix("manifest", now);
+    const fmt = resolveSeriesFormat("manifest");
+    const prefix = seriesPrefix(fmt, now);
 
     // manifestNo @unique + günlük sequence TÜM WO'lar arasında paylaşımlı —
     // eşzamanlı iki basım aynı NNN'i hesaplardı; projedeki diğer tüm belge
@@ -7029,10 +7032,11 @@ export class WorkOrderService {
         select: { manifestNo: true },
       });
       const seq = seriesSeqFrom(
+      fmt,
         todays.map((m) => m.manifestNo),
         prefix,
       );
-      const manifestNo = buildSeriesCode("manifest", seq, now);
+      const manifestNo = formatSeriesCode(fmt, seq, now);
 
       return prisma.manifest.create({
         data: {

@@ -48,8 +48,9 @@ export interface NumberSeriesCatalogEntry {
   /**
    * ÜRETEÇ BAĞI — bu satır üreteci SÜRÜYOR mu, yoksa yalnız TARİF mi ediyor?
    *
-   * Normalde katalog satırı üreteci SÜRER: üreteç ön eki `seriesCodePrefix`ten,
-   * haneyi `buildSeriesCode`tan alır. Alan VARSA bu bağ YOKTUR — üreteç kodu
+   * Normalde katalog satırı üreteci SÜRER: üreteç biçimi `resolveSeriesFormat`
+   * ile bir kez okur, ön eki `seriesPrefix`ten, haneyi `formatSeriesCode`tan
+   * alır. Alan VARSA bu bağ YOKTUR — üreteç kodu
    * kendi literalleriyle kurar ve katalog satırı yalnız sınıflandırma/tarif
    * içindir. Beyan ZORUNLU çünkü beyansız hâli SESSİZ BİR YALANDIR: panel
    * satırı gösterir, fabrika biçimi değiştirdiğini sanır, üreteç eski kodu

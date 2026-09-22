@@ -39,6 +39,7 @@ import {
   type NumberSeriesFormat,
 } from "./helpers/series-format.helper";
 import { nextDailySeq, normalizeScanCode } from "../utils/code-format";
+import { nextCounterCandidate, nextCounterSeq } from "./helpers/series-counter.helper";
 
 // ── ÖNBELLEK ────────────────────────────────────────────────────────────────
 // `nextNumberTx` bir tx'in İÇİNDEN senkron okur: burada DB'ye gidilirse interaktif
@@ -185,7 +186,7 @@ export async function nextSeriesNo(
     ? rows.filter((r) => typeof r === "object" && r !== null && r.createdAt >= since)
     : rows;
 
-  let seq = nextDailySeq(scoped.map(rowCode), fullPrefix);
+  let seq = seriesSeqFrom(fmt, scoped.map(rowCode), fullPrefix);
 
   // ── ÇAKIŞMA ATLAMASI: kapsam daraltması sayacı 1'e döndürebilir ──────────────
   // Aynı gün biçim değiştirilip GERİ alınırsa kapsam boşalır ve sıra 1'den başlar;
@@ -194,10 +195,15 @@ export async function nextSeriesNo(
   // davranışı yazılı beyan ediyor) — yani kendi kendine onarmaz.
   if (since && hasCreatedAt) {
     const taken = new Set(rows.map(rowCode).filter((c): c is string => typeof c === "string"));
-    const startSeq = seq;
+    // ⚠️ SINIR **DENEME** SAYAR, sıra birimi değil (ölçüldü 2026-09-23: eski
+    // `seq - startSeq >= SKIP_LIMIT` birim sayıyordu ⇒ adım 10'da sınır sessizce
+    // 10 kat daralırdı). Atlama da ADIM kadar ilerler; 1'er ilerlemek serinin
+    // kendi dizisinin DIŞINDA numara üretirdi.
+    let deneme = 0;
     while (taken.has(`${fullPrefix}${String(seq).padStart(fmt.digits, "0")}`)) {
-      seq += 1;
-      if (seq - startSeq >= SKIP_LIMIT) {
+      seq = nextCounterCandidate(fmt, seq);
+      deneme += 1;
+      if (deneme >= SKIP_LIMIT) {
         throw AppError.conflict(
           `"${key}" serisinde sıradaki numara bulunamadı: ${SKIP_LIMIT} ardışık kod dolu. ` +
             "Numara biçimi ayarını kontrol edin.",
@@ -209,28 +215,38 @@ export async function nextSeriesNo(
   return `${fullPrefix}${String(seq).padStart(fmt.digits, "0")}`;
 }
 
-/**
- * `dailyCodePrefix` yerine geçen İKİZ — çağıran ön eki artık literal yazmaz, serinin
- * ANAHTARINI yazar. Sorgu kalıbı aynen korunur: `where: { gte, startsWith }`.
- */
-export function seriesCodePrefix(key: string, date: Date = new Date()): string {
-  return seriesPrefix(resolveSeriesFormat(key), date);
-}
+// ⚠️ `seriesCodePrefix(key)` ve `buildSeriesCode(key)` KALDIRILDI (D2①): ikisi de
+// anahtardan KENDİ okumasını yapıyordu, yani bir üreteç ön eki bir okumadan,
+// kodu BAŞKA bir okumadan alıyordu. Arada bir önbellek tazelemesi olursa ön ek
+// eski sürümden, hane/adım yeni sürümden gelirdi — "iki okuma" sınıfı. Doğru
+// kalıp TEK okumadır ve üç adım o okumayı paylaşır:
+//     const fmt = resolveSeriesFormat(key);
+//     const prefix = seriesPrefix(fmt, date);
+//     const seq = seriesSeqFrom(fmt, codes, prefix);
+//     return formatSeriesCode(fmt, seq, date);
+// Sarmalayıcıları bekçiyle YASAKLAMAK yerine SİLMEK bilinçli: var olmayan bir
+// fonksiyon yanlış kullanılamaz (bekçi unutulabilir, imza unutulamaz).
 
-/** `buildDailyCode` ikizi — hane sayısı da seriden gelir (dolgu 1 ise dolgu yok). */
-export function buildSeriesCode(key: string, seq: number, date: Date = new Date()): string {
-  return formatSeriesCode(resolveSeriesFormat(key), seq, date);
-}
-
 /**
- * `nextDailySeq` ikizi — listeden SAYISAL max + 1.
+ * Sıradaki SIRA — listeden sayısal max, üstüne serinin SAYAÇ AYARI.
  *
- * ⚠️ Burada yeniden dışa açılmasının sebebi mimari: `utils/code-format.ts`'i YALNIZ
- * bu servis import eder (bekçi `test_number_series_tek_kaynak`), yoksa yarın biri
- * ön eki gene literal yazar ve seri tablosu sessizce devre dışı kalır.
+ * ⚠️ İLK PARAMETRE BİÇİMİN KENDİSİ, anahtar DEĞİL: ön eki kuran okuma ile sayacı
+ * kuran okuma AYNI olmak zorunda. Anahtar geçilseydi fonksiyon ikinci kez
+ * önbelleği okurdu ve arada TTL tazelemesi olursa ön ek bir sürümden, adım
+ * başka bir sürümden gelirdi — D1①'de kapatılan "iki okuma" sınıfının aynısı.
+ *
+ * ⚠️ `utils/code-format.ts`'i YALNIZ bu servis import eder (bekçi
+ * `test_number_series §7`), yoksa yarın biri ön eki gene literal yazar ve seri
+ * tablosu sessizce devre dışı kalır.
  */
-export function seriesSeqFrom(codes: Array<string | null | undefined>, fullPrefix: string): number {
-  return nextDailySeq(codes, fullPrefix);
+export function seriesSeqFrom(
+  fmt: NumberSeriesFormat,
+  codes: Array<string | null | undefined>,
+  fullPrefix: string,
+): number {
+  // `nextDailySeq` max+1 döner; sayaç çekirdeği MAKSİMUMU ister (başlangıç ve
+  // adım "bir sonraki"yi kendisi kurar).
+  return nextCounterSeq(fmt, nextDailySeq(codes, fullPrefix) - 1, fullPrefix);
 }
 
 /** Sıradaki SIRA numarası (kodu kendi kuran yollar için — top barkodu, kartela). */
@@ -241,7 +257,7 @@ export async function nextSeriesSeq(
 ): Promise<{ seq: number; fullPrefix: string; fmt: NumberSeriesFormat }> {
   const fmt = resolveSeriesFormat(key);
   const fullPrefix = seriesPrefix(fmt, date);
-  return { seq: nextDailySeq(await loadCodes(fullPrefix), fullPrefix), fullPrefix, fmt };
+  return { seq: seriesSeqFrom(fmt, await loadCodes(fullPrefix), fullPrefix), fullPrefix, fmt };
 }
 
 // ── SINIFLANDIRMA (Faz B'nin yemi) ──────────────────────────────────────────

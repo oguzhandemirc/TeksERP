@@ -61,7 +61,8 @@ import {
   type BuiltDocContent,
   type PrintedDocDb,
 } from "./printed-document.service";
-import { buildSeriesCode, nextSeriesNo, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
+import { formatSeriesCode, nextSeriesNo, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
+import type { NumberSeriesFormat } from "./helpers/series-format.helper";
 import { renderFasonCekiHtml } from "./document-render/fason-ceki.html";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { resolveDispatchCancelBlockReason } from "./helpers/subcontractor-cancel.helper";
@@ -133,14 +134,21 @@ import { hasRoll, isRollItem } from "./helpers/dispatch-item-kind.helper";
 
 // Export: workorder.service per-roll split'te taşınan toplar için yeni FS dispatch
 // numarası üretirken yeniden kullanır (aynı sequence kaynağı).
+/**
+ * ⚠️ SIRA ile BİÇİM BİRLİKTE döner: kodu kuran çağıran, ön eki kuran okumanın
+ * AYNISINI kullanmak zorunda. Yalnız sayı dönseydi çağıran biçimi İKİNCİ kez
+ * okurdu ve arada bir önbellek tazelemesi olursa ön ek bir sürümden, hane/adım
+ * başka bir sürümden gelirdi ("iki okuma" sınıfı).
+ */
 export async function nextPrefixedSequenceTx(
   tx: Prisma.TransactionClient,
   table: "subcontractorDispatch" | "subcontractorReceipt",
   date: Date
-): Promise<number> {
+): Promise<{ seq: number; fmt: NumberSeriesFormat }> {
   // Ön ek artık literal değil: tablo adı AYNI ZAMANDA numara serisinin anahtarıdır
   // (`number-series-catalog`), yani sevk/kabul ön ekleri fabrikaya göre değişebilir.
-  const fullPrefix = seriesCodePrefix(table, date);
+  const fmt = resolveSeriesFormat(table);
+  const fullPrefix = seriesPrefix(fmt, date);
 
   // O-21: collation-güvenli — gte (index seek) + startsWith (tam-prefix, collation-
   // bağımsız) ile günün TÜM kayıtlarını çek, sayısal max'ı JS'te reduce et. Eski
@@ -151,13 +159,13 @@ export async function nextPrefixedSequenceTx(
       where: { dispatchNo: { gte: fullPrefix, startsWith: fullPrefix } },
       select: { dispatchNo: true },
     });
-    return seriesSeqFrom(rows.map((r) => r.dispatchNo), fullPrefix);
+    return { seq: seriesSeqFrom(fmt, rows.map((r) => r.dispatchNo), fullPrefix), fmt };
   }
   const rows = await tx.subcontractorReceipt.findMany({
     where: { receiptNo: { gte: fullPrefix, startsWith: fullPrefix } },
     select: { receiptNo: true },
   });
-  return seriesSeqFrom(rows.map((r) => r.receiptNo), fullPrefix);
+  return { seq: seriesSeqFrom(fmt, rows.map((r) => r.receiptNo), fullPrefix), fmt };
 }
 
 async function logTravelerScan(
@@ -1316,8 +1324,8 @@ export class SubcontractorService {
 
       // Dispatch numarası
       const now = new Date();
-      const seq = await nextPrefixedSequenceTx(tx, "subcontractorDispatch", now);
-      const dispatchNo = buildSeriesCode("subcontractorDispatch", seq, now);
+      const { seq, fmt } = await nextPrefixedSequenceTx(tx, "subcontractorDispatch", now);
+      const dispatchNo = formatSeriesCode(fmt, seq, now);
 
       const dispatch = await tx.subcontractorDispatch.create({
         data: {
@@ -3093,8 +3101,8 @@ export class SubcontractorService {
         })) > 0;
 
       const now = new Date();
-      const seq = await nextPrefixedSequenceTx(tx, "subcontractorReceipt", now);
-      const receiptNo = buildSeriesCode("subcontractorReceipt", seq, now);
+      const { seq, fmt } = await nextPrefixedSequenceTx(tx, "subcontractorReceipt", now);
+      const receiptNo = formatSeriesCode(fmt, seq, now);
 
       const receipt = await tx.subcontractorReceipt.create({
         data: {

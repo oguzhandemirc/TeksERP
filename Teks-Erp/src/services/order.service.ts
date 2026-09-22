@@ -35,7 +35,7 @@ import { resolveReasonCode } from "./reason-preset.service";
 import { isMeasuredLine, openLineWhere, someOpenLine } from "./helpers/order-line-scope.helper";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { validate as isUuidString } from "uuid";
-import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
+import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
 
 // MASS-ASSIGNMENT WHITELIST'leri (M-3): route'larda Zod yok (BaseController ham
 // body); muhasebe/kimlik alanları (status, shippedQty, completedAt,
@@ -1963,7 +1963,8 @@ export class OrderService extends BaseService {
 
     // Sipariş no: SIP + GGAAYY + NNNN (örn SIP1207260001) — tek tip kod kalıbı.
     const today = new Date();
-    const prefix = seriesCodePrefix("order", today);
+    const fmt = resolveSeriesFormat("order");
+    const prefix = seriesPrefix(fmt, today);
 
     // HEADER + SATIR WHITELIST (M-3): orderNumber/status/shippedQty gibi
     // muhasebe alanları istemciden yazılamaz; bilinmeyen anahtarlar atılır.
@@ -2072,11 +2073,12 @@ export class OrderService extends BaseService {
       });
       // Numeric tail max: sabit-genişlik kuyruk, lex-sort taşmasına karşı NUMERIC.
       const seq = seriesSeqFrom(
+      fmt,
         todaysOrders.map((o) => o.orderNumber),
         prefix,
       );
       return this.delegate.create({
-        data: { ...prismaData, orderNumber: buildSeriesCode("order", seq, today) },
+        data: { ...prismaData, orderNumber: formatSeriesCode(fmt, seq, today) },
         ...(this.config.defaultInclude
           ? { include: this.config.defaultInclude }
           : {}),

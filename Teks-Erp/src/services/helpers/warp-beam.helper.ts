@@ -3,7 +3,7 @@
 // =============================================================================
 import { Prisma, WarpBeamOrigin } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
-import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "../number-series.service";
+import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "../number-series.service";
 import { lockCodeScopeTx } from "./code-unique.helper";
 import { warpBeamLengthSign, type WarpBeamEventKind } from "../../constants/warp-beam";
 
@@ -84,10 +84,11 @@ export type WarpBeamEventRow = Prisma.WarpBeamEventGetPayload<{ select: typeof W
 
 /** Sıradaki levent numarası — 8029 kilidi bu fonksiyonun İLK ifadesidir (`nextDoffCodeTx` emsali). */
 export async function nextBeamNoTx(tx: Prisma.TransactionClient, date: Date): Promise<string> {
-  const prefix = seriesCodePrefix("warpBeam", date);
+  const fmt = resolveSeriesFormat("warpBeam");
+  const prefix = seriesPrefix(fmt, date);
   await lockCodeScopeTx(tx, WARP_BEAM_CODE_SCOPE, prefix);
   const codes = await tx.warpBeam.findMany({ where: { beamNo: { gte: prefix, startsWith: prefix } }, select: { beamNo: true } });
-  return buildSeriesCode("warpBeam", seriesSeqFrom(codes.map((c) => c.beamNo), prefix), date);
+  return formatSeriesCode(fmt, seriesSeqFrom(fmt, codes.map((c) => c.beamNo), prefix), date);
 }
 
 export interface OriginParty {

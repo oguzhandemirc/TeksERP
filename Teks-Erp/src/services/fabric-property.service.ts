@@ -22,7 +22,7 @@ import { BaseService } from "./base.service";
 import { ApiResponse } from "../types/api.types";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
-import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
+import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { deriveCapabilityFlags } from "./station-capability.service";
 import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
@@ -38,16 +38,18 @@ const PROPERTY_CODE_PREFIX = "OZL";
 async function nextPropertyCode(): Promise<string> {
   // ⚠️ TEK TARİH — `nextCustomerCode` gerekçesi ("iki tarih" sınıfı).
   const now = new Date();
-  const prefix = seriesCodePrefix("fabricProperty", now);
+  const fmt = resolveSeriesFormat("fabricProperty");
+  const prefix = seriesPrefix(fmt, now);
   const todays = await prisma.fabricProperty.findMany({
     where: { code: { gte: prefix, startsWith: prefix } },
     select: { code: true },
   });
   const seq = seriesSeqFrom(
+      fmt,
     todays.map((p) => p.code),
     prefix,
   );
-  return buildSeriesCode("fabricProperty", seq, now);
+  return formatSeriesCode(fmt, seq, now);
 }
 
 /** SEÇİM tipli özelliğin değer satırı — istemci sözleşmesi (DÜZ, nested write DEĞİL). */

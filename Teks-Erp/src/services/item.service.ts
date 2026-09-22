@@ -23,7 +23,7 @@ import {
   normalizeItemName,
   foldNameForCompare,
 } from "./helpers/name-normalize.helper";
-import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
+import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 import {
@@ -120,16 +120,18 @@ async function nextItemCode(): Promise<string> {
   // ⚠️ TEK TARİH — bugün `NONE` olduğu için tarih koda GİRMİYOR, ama seri artık
   // VERİ: biri panelden tarih segmenti açarsa iki `new Date()` gece yarısı ayrışır.
   const now = new Date();
-  const prefix = seriesCodePrefix("item", now);
+  const fmt = resolveSeriesFormat("item");
+  const prefix = seriesPrefix(fmt, now);
   const rows = await prisma.item.findMany({
     where: { code: { gte: prefix, startsWith: prefix } },
     select: { code: true },
   });
   const seq = seriesSeqFrom(
+      fmt,
     rows.map((r) => r.code).filter((c) => ITEM_CODE_SCAN_RE.test(c)),
     prefix,
   );
-  return buildSeriesCode("item", seq, now);
+  return formatSeriesCode(fmt, seq, now);
 }
 
 /** E4: `warpSpecId` yalnız KUMAŞ kartında ve aktif bir çözgü kartını göstermeli (400); `null` temizler, `undefined` dokunmaz. */

@@ -31,7 +31,7 @@ import {
   SubcontractorCategoryService,
   SubcontractorManagementService,
 } from "../src/services/subcontractor-management.service";
-import { matchesSeries, resolveSeriesFormat, seriesCodePrefix } from "../src/services/number-series.service";
+import { matchesSeries, resolveSeriesFormat, seriesPrefix } from "../src/services/number-series.service";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0;
@@ -83,7 +83,7 @@ async function main(): Promise<void> {
     const k2 = await dene(() => kategoriServisi.create({ name: `${DAMGA} Kategori 2` }));
     if (k1) kategoriler.push(kimlik(k1));
     if (k2) kategoriler.push(kimlik(k2));
-    const katOnek = seriesCodePrefix("subcontractorCategory");
+    const katOnek = seriesPrefix(resolveSeriesFormat("subcontractorCategory"));
     check("§1 ⭐ kategori KODSUZ create'te doğdu (sunucu üretti)", k1 !== null && k2 !== null);
     check("§1 kategori kodu serinin ön ekiyle başlıyor", !!k1 && kod(k1).startsWith(katOnek),
       k1 ? `${kod(k1)} (ön ek ${katOnek})` : "kayıt yok");
@@ -99,7 +99,7 @@ async function main(): Promise<void> {
     const f2 = await dene(() => firmaServisi.create({ name: `${DAMGA} Firma 2` }));
     if (f1) firmalar.push(kimlik(f1));
     if (f2) firmalar.push(kimlik(f2));
-    const fsnOnek = seriesCodePrefix("subcontractor");
+    const fsnOnek = seriesPrefix(resolveSeriesFormat("subcontractor"));
     check("§1 ⭐ fason firma KODSUZ create'te doğdu (sunucu üretti)", f1 !== null && f2 !== null);
     check("§1 firma kodu serinin ön ekiyle başlıyor", !!f1 && kod(f1).startsWith(fsnOnek),
       f1 ? `${kod(f1)} (ön ek ${fsnOnek})` : "kayıt yok");

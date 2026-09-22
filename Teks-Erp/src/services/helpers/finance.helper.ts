@@ -9,7 +9,7 @@ import { Prisma, CariKind, Currency, InvoiceType } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { resolvePartyToCardTx } from "./party-card.helper";
-import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "../number-series.service";
+import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "../number-series.service";
 
 /** Sıfır Decimal — float aritmetiği YASAK (perf/doğruluk kuralı). */
 export const D0 = (): Prisma.Decimal => new Prisma.Decimal(0);
@@ -42,12 +42,13 @@ export async function nextInvoiceNoTx(
   type: InvoiceType,
   date: Date,
 ): Promise<string> {
-  const full = seriesCodePrefix(INVOICE_SERIES[type], date);
+  const fmt = resolveSeriesFormat(INVOICE_SERIES[type]);
+  const full = seriesPrefix(fmt, date);
   const rows = await tx.invoice.findMany({
     where: { docNo: { gte: full, startsWith: full } },
     select: { docNo: true },
   });
-  return buildSeriesCode(INVOICE_SERIES[type], seriesSeqFrom(rows.map((r) => r.docNo), full), date);
+  return formatSeriesCode(fmt, seriesSeqFrom(fmt, rows.map((r) => r.docNo), full), date);
 }
 
 /** Tahsilat "TH", ödeme "OD" (varsayılan; ön ekler `number_series`ten). */
@@ -57,12 +58,13 @@ export async function nextPaymentNoTx(
   date: Date,
 ): Promise<string> {
   const seriesKey = direction === "IN" ? "paymentIn" : "paymentOut";
-  const full = seriesCodePrefix(seriesKey, date);
+  const fmt = resolveSeriesFormat(seriesKey);
+  const full = seriesPrefix(fmt, date);
   const rows = await tx.payment.findMany({
     where: { docNo: { gte: full, startsWith: full } },
     select: { docNo: true },
   });
-  return buildSeriesCode(seriesKey, seriesSeqFrom(rows.map((r) => r.docNo), full), date);
+  return formatSeriesCode(fmt, seriesSeqFrom(fmt, rows.map((r) => r.docNo), full), date);
 }
 
 // -----------------------------------------------------------------------------

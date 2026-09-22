@@ -22,7 +22,7 @@ import { Prisma, RollEntrySource, RollStatus, WeavingExecutionKind } from "@pris
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
-import { buildSeriesCode } from "./number-series.service";
+import { formatSeriesCode } from "./number-series.service";
 import { AuditService } from "./audit.service";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { InventoryService } from "./inventory.service";
@@ -122,10 +122,10 @@ export async function dispatchForWeaving(input: WeavingDispatchInput, userId?: s
   const created = await prisma.$transaction(async (tx) => {
     const wo = await claimSubcontractedWeavingOrderTx(tx, input.weavingOrderId, userId);
     const now = new Date();
-    const seq = await nextPrefixedSequenceTx(tx, "subcontractorDispatch", now);
+    const { seq, fmt } = await nextPrefixedSequenceTx(tx, "subcontractorDispatch", now);
     const dispatch = await tx.subcontractorDispatch.create({
       data: {
-        dispatchNo: buildSeriesCode("subcontractorDispatch", seq, now),
+        dispatchNo: formatSeriesCode(fmt, seq, now),
         weavingOrderId: wo.id,
         subcontractorId: wo.subcontractorId,
         plateNumber: input.plateNumber ?? null,
@@ -230,10 +230,10 @@ export async function receiveForWeaving(input: WeavingReceiptInput, userId?: str
   const header = await prisma.$transaction(async (tx) => {
     const wo = await claimSubcontractedWeavingOrderTx(tx, input.weavingOrderId, userId);
     const now = new Date();
-    const seq = await nextPrefixedSequenceTx(tx, "subcontractorReceipt", now);
+    const { seq, fmt } = await nextPrefixedSequenceTx(tx, "subcontractorReceipt", now);
     const receipt = await tx.subcontractorReceipt.create({
       data: {
-        receiptNo: buildSeriesCode("subcontractorReceipt", seq, now),
+        receiptNo: formatSeriesCode(fmt, seq, now),
         clientToken: input.clientToken ?? null,
         manifestNo: input.manifestNo ?? null,
         weavingOrderId: wo.id,

@@ -20,7 +20,7 @@ import { AppError } from "../utils/app-error";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { buildSeriesCode, seriesCodePrefix, seriesSeqFrom } from "./number-series.service";
+import { formatSeriesCode, resolveSeriesFormat, seriesPrefix, seriesSeqFrom } from "./number-series.service";
 import { applyDateRange, buildWhereClause } from "../utils/query-parser";
 import { ROLL_STATUS_TR } from "../constants/status-labels";
 import { postStockMoves } from "./helpers/warehouse-ledger.helper";
@@ -63,12 +63,13 @@ export interface TransferCreateInput {
 
 async function nextTransferNo(tx: Prisma.TransactionClient): Promise<string> {
   const now = new Date();
-  const prefix = seriesCodePrefix("warehouseTransfer", now);
+  const fmt = resolveSeriesFormat("warehouseTransfer");
+  const prefix = seriesPrefix(fmt, now);
   const rows = await tx.warehouseTransfer.findMany({
     where: { transferNo: { gte: prefix, startsWith: prefix } },
     select: { transferNo: true },
   });
-  return buildSeriesCode("warehouseTransfer", seriesSeqFrom(rows.map((r) => r.transferNo), prefix), now);
+  return formatSeriesCode(fmt, seriesSeqFrom(fmt, rows.map((r) => r.transferNo), prefix), now);
 }
 
 /**
